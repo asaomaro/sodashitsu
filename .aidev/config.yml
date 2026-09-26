@@ -7,10 +7,13 @@
 # 3本目（20260926-named-session）: 名前付き session の新しい入口（`wtm token reset --session`・`wtm session list`・
 # `wtm session delete`）を、ビルド済みの `wtm`（packages/server/dist/main.js）で一時ディレクトリに対して一巡させる。
 # 4本目（20260926-agent-skill-file）: `wtmctl skill` が、誰も待ち受けていない接続先のままでもビルド済みの wtmctl から skill ファイルと同じ内容を出すこと。
+# 5本目（20260926-named-session-ui）: CLI の入口の `WTM_SESSION` を、ビルド済みの `wtm` で確かめる（名前付き session の token だけを作り直し、
+# 規則外の値は何も作らずに終了コード 2）。`main.ts` は単体テストできない（読み込むと起動する）ので、配線はここで見る。
 smokeCommands:
   - pnpm -s build && pnpm -s smoke
   - pnpm --filter @wtm/cli run smoke
   - d=$(mktemp -d) && mkdir -p "$d/sessions/smoke" && node packages/server/dist/main.js token reset --session smoke --state-dir "$d" && test -f "$d/sessions/smoke/auth.json" && node packages/server/dist/main.js session list --state-dir "$d" | grep -q '^smoke ' && node packages/server/dist/main.js session delete smoke --state-dir "$d" && test ! -e "$d/sessions/smoke"; rc=$?; rm -rf "$d"; exit $rc
   - WTMCTL_URL=http://127.0.0.1:9 node packages/cli/dist/main.js skill | cmp - packages/cli/skills/wtmctl/SKILL.md
+  - d=$(mktemp -d) && mkdir -p "$d/sessions/smoke" && WTM_SESSION=smoke node packages/server/dist/main.js token reset --state-dir "$d" && test -f "$d/sessions/smoke/auth.json" && test ! -e "$d/auth.json" && { WTM_SESSION=a/b node packages/server/dist/main.js token reset --state-dir "$d" 2>/dev/null; test $? -eq 2; } && test ! -e "$d/auth.json"; rc=$?; rm -rf "$d"; exit $rc
 smokeTimeoutSec: 180
 tracker: none

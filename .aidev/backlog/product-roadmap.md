@@ -259,10 +259,27 @@ parent: 20260918-web-terminal-multiplexer
       止める経路を持たず、`wtm.lock` の pid へシグナルを送る形は pid の再利用で無関係なプロセスを止めうるので、止めるための
       安全な経路（認証つき等）の設計が要る。今は Ctrl+C か `wtm session list` の pid へ `kill`〔D8〕 (needs: 20260926-named-session)
       （出典: .aidev/works/20260926-named-session/decisions.md D1）。
-- [ ] 名前付き session の残り（画面と既定）: ブラウザの画面での session 名の表示・session の切り替え（herdr の `session attach`。
+- [x] 名前付き session の残り（画面と既定）: ブラウザの画面での session 名の表示・session の切り替え（herdr の `session attach`。
       Web 版では別の URL〔ポート〕を開くことに当たる）、session ごとのポートの記憶（名前だけで同じポートに起動し直す）、
       環境変数での既定の session の選択（herdr の `HERDR_SESSION`）〔D8〕 (needs: 20260926-named-session)
       （出典: .aidev/works/20260926-named-session/decisions.md D1・requirements.md の対象外）。
+      → 着地: 20260926-named-session-ui（feature/named-session-ui）。表示は `HostInfo.sessionName`（`packages/protocol/src/model.ts`）を
+      サイドバーの `session: <名前> ⇄`（`packages/web/src/components/Sidebar.vue`）とタイトルの `[名前]`（`serverSession/documentTitle.ts`）に。
+      切り替えは認証済み WS の `server.sessions`（`packages/server/src/persist/namedSession.ts` `listServerSessions`）と一覧のダイアログ
+      （`components/SessionSwitchDialog.vue`。新しいタブで `noopener,noreferrer`。URL は `serverSession/sessionTarget.ts`）。同じブラウザの複数ログインの
+      ために名前付き session の Cookie を `wtm_session_<名前>` に（`auth/AuthService.ts` `sessionCookieName`）。ポートは状態ディレクトリの
+      `serve.json`（`persist/ServeRecordFile.ts`。全 session が書き、名前付きだけが `--port` 無しの起動で読む。`composeServer.ts` `withRememberedPort`）。
+      `WTM_SESSION` は `wtm serve`・`wtm token reset` の既定（`cliArgs.ts` `applySessionEnv`）と名前付き session の pane の環境（`session/paneEnv.ts`）。
+      実測: `pnpm -s test` 4239 本 green（origin/main を取り込んだ後。取り込む前は 4085 本）・smoke pass（5 本。5 本目に `WTM_SESSION` を追加）・
+      負の確認 10 変異すべて検知＋点検中の変異。独立点検（タスク 11 件・cross）・独立 review 2 ラウンド（should 1・nit 4）。E2E・実機のブラウザは未検証
+      （`docs/verification.md` に手動確認）。`docs/herdr-parity.md` H33 を更新済み。
+- [ ] 名前付き session の残り（画面の続き）: ログイン画面（認証前）での session 名の表示、session の一覧のキー操作（アクション・キーバインド）と
+      モバイルの 1 列表示での表示・切り替え、記憶の無い初回の起動で空いているポートを選ぶこと、`--host`・`--cert` 等ポート以外の記憶、
+      `wtm session list` へのポート・URL の表示〔D8〕 (needs: 20260926-named-session-ui)（出典: .aidev/works/20260926-named-session-ui/requirements.md の対象外）。
+- [ ] 同じホスト名で並行して動かす名前付きでない wtm（`--state-dir` を分ける）・別の根の同じ名前の session の Cookie の衝突（片方にログインすると
+      他方がログアウトされる。名前付き session は 20260926-named-session-ui で分けた）〔D8〕 (needs: 20260926-named-session-ui)
+      （出典: .aidev/works/20260926-named-session-ui/decisions.md D1・review.md cross）。大文字小文字を区別しない FS で綴りを変えて開いた
+      名前付き session が一覧で current にならない件もあわせて見る。
 - [x] セッション永続化の拡張: 画面履歴の保存と再生（opt-in）〔D8〕 (needs: 20260918-web-terminal-multiplexer)
       （出典: .aidev/works/20260918-web-terminal-multiplexer/research.md。2026-09-23、4分割した一部）。
       → 着地: 20260926-screen-history-replay（feature/screen-history-replay）。herdr の `[experimental] pane_history` に当たる

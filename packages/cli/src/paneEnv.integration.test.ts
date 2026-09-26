@@ -46,7 +46,54 @@ const INHERITED = {
   WTMCTL_URL: "http://127.0.0.1:1",
   WTM_SERVER_URL: "http://stale.invalid:2",
   WTM_AGENT_REPORT_SOCKET: "/stale/agent-report.sock",
+  WTM_SESSION: "inherited-session", // 20260926-named-session-ui（AC15）
 } as const;
+
+/** pane に 1 つの環境変数を `<NAME=値>`（無ければ unset）で印刷させ、画面に出た値を返す（20260926-named-session-ui）。 */
+async function paneVar(
+  ctx: { url: string; token: string; store: FsSessionStore },
+  paneId: string,
+  name: string,
+): Promise<string> {
+  await quiet(() =>
+    runPaneRun(
+      {
+        kind: "pane-run",
+        opts: { url: ctx.url, token: ctx.token },
+        paneId,
+        command: `printf '<${name}=%s>\\n' "\${${name}-unset}"`,
+      },
+      ctx.store,
+    ),
+  );
+  const re = new RegExp(`<${name}=([^%<>]*)>`);
+  const deadline = Date.now() + 10_000;
+  let last = "";
+  for (;;) {
+    try {
+      last = await quiet(() =>
+        runPaneRead(
+          {
+            kind: "pane-read",
+            opts: { url: ctx.url, token: undefined },
+            paneId,
+            follow: false,
+            raw: false,
+            timeoutMs: 3_000,
+          },
+          ctx.store,
+        ),
+      );
+    } catch {
+      // 最初の SNAPSHOT が遅れたときも締め切りまで読み直す。
+    }
+    const m = re.exec(last);
+    if (m) return m[1]!;
+    if (Date.now() > deadline)
+      throw new Error(`${name} not observed; last read: ${JSON.stringify(last)}`);
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
 
 // printf の `${VAR-unset}` は POSIX のシェルの構文なので、Windows では走らせず、pane のシェルは /bin/sh に固定する。
 describe.skipIf(process.platform === "win32")("pane の環境変数（実サーバ・実 PTY）", () => {
@@ -145,6 +192,12 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
     expect(socketOf(line)).not.toBe(INHERITED.WTM_AGENT_REPORT_SOCKET);
   }, 30_000);
 
+  it("既定の session の pane には、サーバを起動した環境の WTM_SESSION を渡さない（20260926-named-session-ui の AC15）", async () => {
+    const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token } }, store));
+    const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
+    expect(await paneVar({ url, token, store }, first, "WTM_SESSION")).toBe("unset");
+  }, 30_000);
+
   it("wtmctl で作った workspace の pane も同じ（AC7・AC9）", async () => {
     const created = await quiet(() =>
       runWorkspaceCreate(
@@ -159,3 +212,52 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
     expect(socketOf(line)).not.toBe(INHERITED.WTM_AGENT_REPORT_SOCKET);
   }, 30_000);
 });
+
+/** 20260926-named-session-ui（AC15）：名前付き session の pane には WTM_SESSION=<名前>（受け継いだ別の値より勝つ）。 */
+describe.skipIf(process.platform === "win32")(
+  "名前付き session の pane の WTM_SESSION（実サーバ・実 PTY）",
+  () => {
+    let server: ComposedServer;
+    let stateDir: string;
+    let sessionDir: string;
+    let ctx: { url: string; token: string; store: FsSessionStore };
+    let saved: string | undefined;
+
+    beforeAll(async () => {
+      saved = process.env["WTM_SESSION"];
+      process.env["WTM_SESSION"] = "inherited-session";
+      stateDir = await mkdtemp(join(tmpdir(), "wtmctl-paneenv-named-"));
+      server = await composeServerOnFreePort({
+        host: "127.0.0.1",
+        stateDir,
+        session: "work",
+        origin: [],
+        shell: "/bin/sh",
+      });
+      const port = (server.httpServer.server.address() as AddressInfo).port;
+      if (!server.freshToken) throw new Error("expected a freshly generated token");
+      sessionDir = await mkdtemp(join(tmpdir(), "wtmctl-paneenv-named-session-"));
+      ctx = {
+        url: `http://127.0.0.1:${port}`,
+        token: server.freshToken,
+        store: new FsSessionStore(join(sessionDir, "session.json")),
+      };
+    }, 30_000);
+
+    afterAll(async () => {
+      if (saved === undefined) delete process.env["WTM_SESSION"];
+      else process.env["WTM_SESSION"] = saved;
+      await server?.close();
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(sessionDir, { recursive: true, force: true });
+    });
+
+    it("起動時に作られた最初の pane に WTM_SESSION=work が入る", async () => {
+      const snap = await quiet(() =>
+        runSnapshot({ kind: "snapshot", opts: { url: ctx.url, token: ctx.token } }, ctx.store),
+      );
+      const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
+      expect(await paneVar(ctx, first, "WTM_SESSION")).toBe("work");
+    }, 30_000);
+  },
+);

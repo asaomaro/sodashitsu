@@ -1,7 +1,10 @@
 import type { Dirent } from "node:fs";
 import { lstat, readdir, rename, rm } from "node:fs/promises";
+import { hostname } from "node:os";
 import { join } from "node:path";
+import type { ServerSessionEntry } from "@wtm/protocol";
 import { ConfigError } from "../configError.js";
+import { readServeRecord, type ServeRecord } from "./ServeRecordFile.js";
 import { StateDirInUseError, StateDirLock } from "./StateDirLock.js";
 
 /**
@@ -12,7 +15,7 @@ export const DEFAULT_SESSION_NAME = "default";
 export const SESSIONS_DIR = "sessions";
 export const MAX_SESSION_NAME_BYTES = 64;
 
-const SESSION_NAME_RULE =
+export const SESSION_NAME_RULE =
   "session の名前は 1〜64 文字の ASCII の英数字と . _ - だけで、. / .. ・先頭の - ・末尾の . ・Windows の予約名（con・nul・com1 等）は使えません。";
 
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
@@ -90,6 +93,40 @@ export async function listSessions(base: string): Promise<SessionEntry[]> {
   for (const name of names)
     entries.push(await entryFor(name, join(base, SESSIONS_DIR, name), false));
   return entries;
+}
+
+/**
+ * `server.sessions`（20260926-named-session-ui の design「一覧」）。`listSessions` の各項目に、いま繋いでいる session か（`current`）と、
+ * 開くための情報（`endpoint`）を付ける。`endpoint` は、動いていて（ロックの持ち主がこのホスト）、起動の記録（`serve.json`）の pid と
+ * ホスト名がロックの持ち主と一致するときだけ——前の起動の記録・記録を書かない古い版の起動・`wtm token reset` がロックを持っている間を
+ * 取り違えない。**状態ディレクトリのパス・pid・ホスト名は返さない**（AC5）。
+ */
+export async function listServerSessions(
+  root: string,
+  currentSessionName: string | undefined,
+  readRecord: (stateDir: string) => Promise<ServeRecord | undefined> = readServeRecord,
+  thisHost: string = hostname(),
+): Promise<ServerSessionEntry[]> {
+  const out: ServerSessionEntry[] = [];
+  for (const entry of await listSessions(root)) {
+    const current = entry.default
+      ? currentSessionName === undefined
+      : entry.name === currentSessionName;
+    const item: ServerSessionEntry = {
+      name: entry.name,
+      default: entry.default,
+      running: entry.running,
+      current,
+    };
+    if (entry.running && entry.host === undefined && entry.pid !== undefined) {
+      const record = await readRecord(entry.stateDir);
+      if (record !== undefined && record.pid === entry.pid && record.hostname === thisHost) {
+        item.endpoint = { port: record.port, https: record.https, host: record.host };
+      }
+    }
+    out.push(item);
+  }
+  return out;
 }
 
 export type SessionDeleteErrorCode =

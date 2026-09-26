@@ -144,6 +144,41 @@ describe("wtm session list / delete・wtm token reset --session（20260926-named
     expect(existsSync(join(base, "auth.json"))).toBe(false);
   });
 
+  it("token reset は WTM_SESSION から選んだ名前でも同じく work だけを作り直す（20260926-named-session-ui の AC13）", async () => {
+    await mkSession("work");
+    const io = captureIo();
+    await runTokenReset(base, "work", io, "env");
+    expect(io.outs[0]).toMatch(/^wtm: new token: /);
+    expect(existsSync(join(base, "sessions", "work", "auth.json"))).toBe(true);
+    expect(existsSync(join(base, "auth.json"))).toBe(false);
+  });
+
+  it("WTM_SESSION から選んだ名前が無い・動いているときは、案内に WTM_SESSION を添える（20260926-named-session-ui の AC14）", async () => {
+    await expect(runTokenReset(base, "wrok", captureIo(), "env")).rejects.toMatchObject({
+      hint: expect.stringContaining("WTM_SESSION"),
+    });
+    await expect(runTokenReset(base, "wrok", captureIo(), "flag")).rejects.toMatchObject({
+      hint: expect.not.stringContaining("WTM_SESSION"),
+    });
+    const lock = new StateDirLock(await mkSession("work"));
+    await lock.acquire();
+    held.push(lock);
+    await expect(runTokenReset(base, "work", captureIo(), "env")).rejects.toMatchObject({
+      hint: expect.stringContaining("WTM_SESSION"),
+    });
+  });
+
+  it("WTM_SESSION=default で既定の session が動いているときは、WTM_SESSION の案内を添えない（既定の session として扱う）", async () => {
+    await mkdir(base, { recursive: true });
+    const lock = new StateDirLock(base);
+    await lock.acquire();
+    held.push(lock);
+    await expect(runTokenReset(base, "default", captureIo(), "env")).rejects.toMatchObject({
+      message: expect.stringContaining("cannot reset the token"),
+      hint: expect.not.stringContaining("WTM_SESSION"),
+    });
+  });
+
   it("token reset --session は、その session の wtm serve が動いていれば断る（ConfigError）", async () => {
     const lock = new StateDirLock(await mkSession("work"));
     await lock.acquire();

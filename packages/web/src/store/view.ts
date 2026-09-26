@@ -1,4 +1,4 @@
-import type { SessionFocus, WorkspaceGroup, WorktreeEntry, WorktreeListResult } from "@wtm/protocol";
+import type { ServerSessionEntry, SessionFocus, WorkspaceGroup, WorktreeEntry, WorktreeListResult } from "@wtm/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import type { Mode } from "../keys/actions.js";
@@ -212,7 +212,9 @@ export type DialogContext =
   // 設定（通知・表示・端末。20260921-herdr-settings-gaps）。値はそれぞれのストアが持つので文脈は空。
   | { kind: "settings" }
   // はじめの案内（20260926-settings-onboarding）。選択は下書きでダイアログが持つので文脈は空。
-  | { kind: "onboarding" };
+  | { kind: "onboarding" }
+  // session の一覧（20260926-named-session-ui）。**サーバへ聞いてから開く**（`worktreeOpen` と同じ）。
+  | { kind: "sessionSwitch"; sessions: ServerSessionEntry[] };
 
 /**
  * このクライアントの表示・モード・接続状態（architecture.md「store/view」）。

@@ -11,6 +11,7 @@ import { registerWorktreeMethods } from "./worktree.js";
 import { registerAgentIntegrationMethods } from "./agentIntegration.js";
 import { registerAgentMethods } from "./agent.js";
 import { registerAttachMethods } from "./attach.js";
+import { registerServerSessionMethods } from "./serverSessions.js";
 
 export type { MethodDeps } from "./deps.js";
 
@@ -29,4 +30,5 @@ export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): v
   registerAgentIntegrationMethods(surface, deps);
   registerAgentMethods(surface, deps); // 20260926-agent-prompt-send-keys
   registerAttachMethods(surface, deps); // 20260926-pane-direct-connect
+  registerServerSessionMethods(surface, deps); // 20260926-named-session-ui
 }

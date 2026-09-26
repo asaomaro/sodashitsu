@@ -122,6 +122,16 @@ const spaces = computed<SpaceRow[]>(() => {
 /** 全体のメニューが開いているか（`PaneFrame` の枠のボタンと同じく `aria-expanded` で伝える）。 */
 const globalMenuOpen = computed(() => view.contextMenu?.target.kind === "global");
 
+/**
+ * 上端の session のボタン（20260926-named-session-ui の AC2）。名前付き session なら常に、既定の session は名前付き session が
+ * 1 つでもあるとき（切り替えの入口）だけ出す。押すと session の一覧（`SessionSwitchDialog`）。
+ */
+const sessionLabel = computed(() => {
+  const name = session.host?.sessionName;
+  if (name !== undefined) return name;
+  return session.namedSessionCount > 0 ? "default" : null;
+});
+
 /** 並び順の表示名。内部の値（`grouped` / `priority`）をそのまま出さない（decisions.md D6）。 */
 const AGENT_SORT_LABEL: Record<AgentSort, string> = { grouped: "グループ順", priority: "優先度順" };
 
@@ -378,6 +388,20 @@ watch(
 
 <template>
   <nav ref="el" class="sidebar" :class="{ 'sidebar-collapsed': view.sidebarCollapsed }" :style="view.sidebarCollapsed ? {} : { width: `${view.sidebarWidth}px` }">
+    <div v-if="sessionLabel !== null" class="sidebar-session">
+      <button
+        type="button"
+        class="sidebar-btn sidebar-session-btn"
+        aria-haspopup="dialog"
+        :aria-label="`session: ${sessionLabel}（押すと session の一覧）`"
+        :title="`session: ${sessionLabel}`"
+        @click="actions?.openSessionSwitcher()"
+        @keydown="onButtonKeydown"
+      >
+        <template v-if="view.sidebarCollapsed">⇄</template>
+        <template v-else>session: {{ sessionLabel }} ⇄</template>
+      </button>
+    </div>
     <section class="sidebar-spaces" aria-label="spaces">
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-header">
         <span class="sidebar-section-title">spaces</span>
@@ -665,6 +689,22 @@ watch(
 .sidebar-btn-right,
 .sidebar-sort-btn {
   margin-left: auto;
+}
+.sidebar-session {
+  flex: none;
+  padding: 0.2em 0.8em;
+  /* 右端のつまみ（.sidebar-divider）の分を空ける（.sidebar-section-header と同じ）。 */
+  padding-right: calc(0.8em + 6px);
+  border-bottom: 1px solid var(--wtm-menu-border, #44475a);
+}
+/* 畳んだ幅（3em）では左右の余白を詰めて ⇄ が … に切れないようにする。 */
+.sidebar-collapsed .sidebar-session {
+  padding-inline: 0.2em;
+}
+.sidebar-session-btn {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sidebar-collapse-btn {
   padding: 0.2em 0.5em;

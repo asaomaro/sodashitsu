@@ -237,6 +237,36 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       });
   }
 
+  // --- session の一覧と切り替え（20260926-named-session-ui。herdr の `session attach`）----------------
+
+  /** 名前付き session の数を取り直す（hello のたび。サイドバーの入口の表示条件）。失敗は黙って前の値のまま。 */
+  refreshServerSessions(): Promise<void> {
+    return this.conn
+      .request("server.sessions", {})
+      .then((r) => this.session.setNamedSessionCount(r.sessions.filter((e) => !e.default).length))
+      .catch(() => undefined);
+  }
+
+  /** 一覧のダイアログを開く。**先にサーバへ聞く**（開く時点の一覧）。 */
+  openSessionSwitcher(): void {
+    this.conn
+      .request("server.sessions", {})
+      .then((r) => {
+        this.session.setNamedSessionCount(r.sessions.filter((e) => !e.default).length);
+        this.view.openDialogWithContext({ kind: "sessionSwitch", sessions: r.sessions });
+      })
+      .catch(() => this.view.toast("session の一覧を取れませんでした"));
+  }
+
+  /**
+   * 別の session の画面を新しいタブで開き、ダイアログを閉じる。別の session は別のオリジンなので、開いた先はその session の Cookie が
+   * 無ければログイン画面になる。`noopener,noreferrer`：開いた先から元のページ（`window.opener`）を操作させず、URL も渡さない。
+   */
+  openServerSession(url: string): void {
+    window.open(url, "_blank", "noopener,noreferrer");
+    this.view.closeDialog();
+  }
+
   // --- worktree（20260920-git-worktree-actions）-------------------------------
 
   /** 作成のダイアログを開く。**先にサーバへ聞く**——パスのプレビューに根とリポジトリ名が要るため。 */

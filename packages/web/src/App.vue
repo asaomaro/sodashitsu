@@ -9,6 +9,7 @@ import HelpDialog from "./components/HelpDialog.vue";
 import LoginView from "./components/LoginView.vue";
 import NameDialog from "./components/NameDialog.vue";
 import OnboardingDialog from "./components/OnboardingDialog.vue";
+import SessionSwitchDialog from "./components/SessionSwitchDialog.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
 import PaneLayout from "./components/PaneLayout.vue";
 import PrefixIndicator from "./components/PrefixIndicator.vue";
@@ -84,6 +85,7 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
     <WorktreeCreateDialog />
     <WorktreeOpenDialog />
     <GroupPickerDialog />
+    <SessionSwitchDialog />
     <ConfirmDialog />
     <SettingsDialog />
     <HelpDialog />

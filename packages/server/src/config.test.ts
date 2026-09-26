@@ -231,3 +231,57 @@ describe("stateDirInUseError（同じ state-dir の二重起動。D103）", () =
     expect(err.hint).toContain("wtm serve を止めてから wtm token reset");
   });
 });
+
+/** 20260926-named-session-ui（AC13・AC16）。 */
+describe("resolveServeOptions の session の根・出所・ポートの出所（20260926-named-session-ui）", () => {
+  const env = { XDG_STATE_HOME: "/xdg" } as NodeJS.ProcessEnv;
+
+  it("session の根は --state-dir か既定の場所（名前付きでも根は変わらない）", () => {
+    expect(resolveServeOptions({ stateDir: "/s", session: "work" }, env, "linux").sessionRoot).toBe("/s");
+    expect(resolveServeOptions({}, env, "linux").sessionRoot).toBe(join("/xdg", "web-tn-multiplexer"));
+    expect(resolveServeOptions({ session: "work" }, env, "linux").sessionRoot).toBe(join("/xdg", "web-tn-multiplexer"));
+  });
+
+  it("名前の出所は名前付きのときだけ（無指定は flag。default は既定なので undefined）", () => {
+    expect(resolveServeOptions({ stateDir: "/s", session: "work" }, env, "linux").sessionSource).toBe("flag");
+    expect(resolveServeOptions({ stateDir: "/s", session: "work", sessionSource: "env" }, env, "linux").sessionSource).toBe("env");
+    expect(resolveServeOptions({ stateDir: "/s", session: "default", sessionSource: "env" }, env, "linux").sessionSource).toBeUndefined();
+    expect(resolveServeOptions({ stateDir: "/s" }, env, "linux").sessionSource).toBeUndefined();
+  });
+
+  it("ポートの出所：--port は flag、無ければ default（記録で差し替えるのは composeServer）", () => {
+    expect(resolveServeOptions({ port: "9000" }, env, "linux").portSource).toBe("flag");
+    expect(resolveServeOptions({}, env, "linux").portSource).toBe("default");
+    expect(resolveServeOptions({ session: "work" }, env, "linux").portSource).toBe("default");
+  });
+});
+
+describe("bindFailureHint の記録したポートの案内（20260926-named-session-ui の AC16）", () => {
+  it("記録したポートなら、その旨と --port を先に添える（元の案内も残す）", () => {
+    const hint = bindFailureHint(sysError("listen", "EADDRINUSE"), { port: 7781, sessionName: "work" });
+    expect(hint).toContain("ポート 7781 は session work が前回使ったポート");
+    expect(hint).toContain("--port で別のポートを指定すると、次からはそのポートを使います");
+    expect(hint!.endsWith(listenFailureHint("EADDRINUSE")!)).toBe(true);
+  });
+
+  it("記録を渡さなければ今までどおり。案内の無い失敗には添えない", () => {
+    expect(bindFailureHint(sysError("listen", "EADDRINUSE"), undefined)).toBe(listenFailureHint("EADDRINUSE"));
+    expect(bindFailureHint(sysError("listen", "EMFILE"), { port: 7781, sessionName: "work" })).toBeUndefined();
+    expect(bindFailureHint(sysError("open", "EACCES"), { port: 7781, sessionName: "work" })).toBeUndefined();
+  });
+});
+
+describe("stateDirInUseError の WTM_SESSION の案内（20260926-named-session-ui の AC14）", () => {
+  const inUse = { pid: 4242, lockPath: "/s/wtm.lock" };
+  it("WTM_SESSION から選んだ名前付き session なら、その旨と --session default を添える", () => {
+    for (const command of ["serve", "token-reset"] as const) {
+      const err = stateDirInUseError(inUse, "/s", command, "work");
+      expect(err.hint).toContain("session work は環境変数 WTM_SESSION から選びました");
+      expect(err.hint).toContain("--session default");
+    }
+  });
+  it("渡さなければ添えない（今までどおり）", () => {
+    expect(stateDirInUseError(inUse, "/s", "serve").hint).not.toContain("WTM_SESSION");
+    expect(stateDirInUseError(inUse, "/s", "token-reset").hint).not.toContain("WTM_SESSION");
+  });
+});

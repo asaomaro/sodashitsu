@@ -130,6 +130,33 @@ export interface HostInfo {
   os: "linux" | "windows";
   windowsBuild: number | null;
   hostname: string;
+  /** 名前付き session のときだけ、その名前（`wtm serve --session <名前>`・`WTM_SESSION`。既定の session では項目ごと無い。20260926-named-session-ui）。 */
+  sessionName?: string;
+}
+
+/** session の一覧の 1 項目の、開くための情報（20260926-named-session-ui）。URL はブラウザが決める（いまのページのホスト名はブラウザしか知らない）。 */
+export interface ServerSessionEndpoint {
+  /** 待ち受けているポート。 */
+  port: number;
+  /** TLS で待ち受けているか（`https:` で開く）。 */
+  https: boolean;
+  /** 待ち受けのホスト（`--host`。角括弧なし。`0.0.0.0`・`::` は全インタフェース）。 */
+  host: string;
+}
+
+/**
+ * `server.sessions` の 1 項目（同じ session の根の既定の session と名前付き session。20260926-named-session-ui）。
+ * **token・Cookie・状態ディレクトリのパス・pid は持たない**（AC5）。
+ */
+export interface ServerSessionEntry {
+  /** 既定の session は `"default"`。 */
+  name: string;
+  default: boolean;
+  running: boolean;
+  /** この接続のサーバの session か。 */
+  current: boolean;
+  /** 動いていて、起動の記録がいまのロックの持ち主のものと分かるときだけ。 */
+  endpoint?: ServerSessionEndpoint;
 }
 
 export interface SessionFocus {

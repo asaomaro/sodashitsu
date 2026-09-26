@@ -918,3 +918,153 @@ describe.skipIf(process.platform === "win32")("composeServer — 画面履歴（
     expect(await readFile(join(stateDir, "server.log"), "utf8")).toContain("pane history save failed");
   }, 60_000);
 });
+
+/** 20260926-named-session-ui（AC1・AC4・AC8・AC10〜AC12・AC14）。 */
+describe("composeServer — 名前付き session の表示・一覧・Cookie・ポートの記憶", () => {
+  const cleanups: (() => Promise<void>)[] = [];
+  afterEach(async () => {
+    for (const fn of cleanups.splice(0)) await fn();
+  });
+  async function tempBase(): Promise<string> {
+    const base = await makeTempDir("wtm-compose-named-ui-");
+    cleanups.push(() => rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+    return base;
+  }
+  async function readRecord(dir: string): Promise<{ port: number; pid: number; https: boolean; host: string }> {
+    return JSON.parse(await readFile(join(dir, "serve.json"), "utf8")) as { port: number; pid: number; https: boolean; host: string };
+  }
+
+  it("名前付き session はスナップショットの host に名前を載せ、Cookie の名前を分け、一覧で自分を current として開くための情報を返す。既定の session は名前を載せない（AC1・AC4・AC8）", async () => {
+    const base = await tempBase();
+    const def = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: base, origin: [] });
+    cleanups.unshift(() => def.close());
+    const work = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: base, session: "work", origin: [] });
+    cleanups.unshift(() => work.close());
+
+    expect(work.session.snapshot().host.sessionName).toBe("work");
+    expect("sessionName" in def.session.snapshot().host).toBe(false);
+
+    // ログインの Cookie の名前（名前付きは wtm_session_work、既定は wtm_session のまま）
+    const login = async (server: typeof work): Promise<string> => {
+      const origin = `http://127.0.0.1:${server.options.port}`;
+      const res = await fetch(`${origin}/api/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin, host: `127.0.0.1:${server.options.port}` },
+        body: JSON.stringify({ token: server.freshToken }),
+      });
+      expect(res.status).toBe(204);
+      return res.headers.get("set-cookie")!.split(";")[0]!;
+    };
+    const workCookie = await login(work);
+    expect(workCookie.startsWith("wtm_session_work=")).toBe(true);
+    expect((await login(def)).startsWith("wtm_session=")).toBe(true);
+
+    // 認証済みの WebSocket で server.sessions を取る
+    const port = work.options.port;
+    const origin = `http://127.0.0.1:${port}`;
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { cookie: workCookie, origin, host: `127.0.0.1:${port}` } });
+    await new Promise<void>((resolve, reject) => {
+      ws.once("open", () => resolve());
+      ws.once("error", reject);
+    });
+    cleanups.unshift(async () => {
+      ws.close();
+    });
+    const hello = (await requestUntilMatchingId(ws, "h1", "client.hello", { protocol: 1, kind: "desktop" })) as { snapshot: { host: { sessionName?: string } } };
+    expect(hello.snapshot.host.sessionName).toBe("work");
+    const result = (await requestUntilMatchingId(ws, "s1", "server.sessions", {})) as { sessions: unknown[] };
+    expect(result.sessions).toEqual([
+      { name: "default", default: true, running: true, current: false, endpoint: { port: def.options.port, https: false, host: "127.0.0.1" } },
+      { name: "work", default: false, running: true, current: true, endpoint: { port, https: false, host: "127.0.0.1" } },
+    ]);
+    // 既定の session の Cookie だけでは名前付き session の /ws に入れない（別の session の Cookie は読まない）
+    const defCookie = workCookie.replace(/^wtm_session_work=/, "wtm_session=");
+    const rejected = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { cookie: defCookie, origin, host: `127.0.0.1:${port}` } });
+    const status = await new Promise<number | undefined>((resolve) => {
+      rejected.once("unexpected-response", (_req, res) => resolve(res.statusCode));
+      rejected.once("open", () => resolve(101));
+      rejected.once("error", () => resolve(undefined));
+    });
+    rejected.terminate();
+    expect(status).toBe(401);
+  }, 30_000);
+
+  it("名前付き session は待ち受けたポートを記録し、--port の無い次の起動でそのポートを使う。--port を付ければそのポートで記録も変わる（AC10・AC16 の出所）", async () => {
+    const base = await tempBase();
+    const dir = join(base, "sessions", "work");
+    const first = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: base, session: "work", origin: [] });
+    const p = first.options.port;
+    expect(first.options.portSource).toBe("flag");
+    expect(await readRecord(dir)).toMatchObject({ port: p, pid: process.pid, https: false, host: "127.0.0.1" });
+    await first.close();
+
+    // 記録したポートを試すので、閉じたポート p を固定して取り直す（その間に別のプロセスが p を取ると EADDRINUSE で落ちうる。
+    // 番号を先に取る競合——20260926-load-flaky-tests の D3——と同じ型だが、記録したポートを使うこと自体が確かめたい振る舞いなので避けない）。
+    const again = await composeServer({ host: "127.0.0.1", stateDir: base, session: "work", origin: [] });
+    expect(again.options.port).toBe(p);
+    expect(again.options.portSource).toBe("remembered");
+    await again.listen();
+    cleanups.unshift(() => again.close());
+    expect(again.httpServer.server.address()).toMatchObject({ port: p });
+    await again.close();
+    cleanups.shift();
+
+    const moved = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: base, session: "work", origin: [] });
+    cleanups.unshift(() => moved.close());
+    expect(moved.options.port).not.toBe(p); // 別の空きポート（--port 付き）
+    expect((await readRecord(dir)).port).toBe(moved.options.port);
+  }, 30_000);
+
+  it("記録が壊れている・範囲外なら既定の 7780（止まらない）。既定の session は記録があっても 7780（AC11・AC12）", async () => {
+    const base = await tempBase();
+    const dir = join(base, "sessions", "work");
+    await mkdir(dir, { recursive: true });
+    for (const raw of ["{broken", JSON.stringify({ schema: 1, pid: 1, hostname: "h", port: 70000, https: false, host: "127.0.0.1" })]) {
+      await writeFile(join(dir, "serve.json"), raw);
+      const s = await composeServer({ host: "127.0.0.1", stateDir: base, session: "work", origin: [] });
+      expect(s.options.port).toBe(7780);
+      expect(s.options.portSource).toBe("default");
+    }
+    await writeFile(join(base, "serve.json"), JSON.stringify({ schema: 1, pid: 1, hostname: "h", port: 9999, https: false, host: "127.0.0.1" }));
+    const def = await composeServer({ host: "127.0.0.1", stateDir: base, origin: [] });
+    expect(def.options.port).toBe(7780);
+    expect(def.options.portSource).toBe("default");
+    const defDefault = await composeServer({ host: "127.0.0.1", stateDir: base, session: "default", origin: [] });
+    expect(defDefault.options.port).toBe(7780);
+  });
+
+  it("既定の session も待ち受けたポートを記録する（一覧の開くための情報。AC12）", async () => {
+    const base = await tempBase();
+    const def = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: base, origin: [] });
+    cleanups.unshift(() => def.close());
+    expect((await readRecord(base)).port).toBe(def.options.port);
+  });
+
+  it("起動の記録を書けなくても起動は続き、失敗はログに残る", async () => {
+    const base = await tempBase();
+    await mkdir(join(base, "serve.json", "blocker"), { recursive: true }); // ディレクトリがあると rename で置き換えられない
+    const def = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: base, origin: [] });
+    cleanups.unshift(() => def.close());
+    expect(def.httpServer.server.listening).toBe(true);
+    expect(await readFile(join(base, "server.log"), "utf8")).toContain("cannot write serve.json");
+  });
+
+  it("WTM_SESSION から選んだ名前付き session が使用中なら、案内に WTM_SESSION を添える（AC14）", async () => {
+    const base = await tempBase();
+    const first = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: base, session: "work", origin: [] });
+    cleanups.unshift(() => first.close());
+    const second = await composeServer({ host: "127.0.0.1", stateDir: base, session: "work", sessionSource: "env", port: "1", origin: [] });
+    const err = await second.listen().then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ConfigError);
+    expect((err as ConfigError).hint).toContain("WTM_SESSION");
+    const third = await composeServer({ host: "127.0.0.1", stateDir: base, session: "work", port: "1", origin: [] }); // ロックで断られるので bind しない
+    const err2 = await third.listen().then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect((err2 as ConfigError).hint).not.toContain("WTM_SESSION");
+  });
+});

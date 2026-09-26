@@ -14,6 +14,21 @@ const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 日（design「永続化�
 /** in-memory の延長を、この間隔より頻繁には auth.json へ書かない（毎リクエストの書き込みを避ける）。 */
 const TOUCH_PERSIST_INTERVAL_MS = 5 * 60 * 1000;
 
+/**
+ * ログインの Cookie の名前（20260926-named-session-ui の design「Cookie」）。Cookie はポートで分かれない（RFC 6265 8.5）ので、同じホスト名の
+ * 別ポートの session が同じ名前を使うと、片方にログインすると他方がログアウトされる。名前付き session は `wtm_session_<名前>` にする
+ * （名前の文字——ASCII 英数字と `.` `_` `-`。`persist/namedSession.ts` `sessionNameProblem`——は Cookie の名前の token に収まる）。
+ * 既定の session は今までどおり `wtm_session`（既存のログインを保つ）。
+ */
+export function sessionCookieName(sessionName: string | undefined): string {
+  return sessionName === undefined ? SESSION_COOKIE_NAME : `${SESSION_COOKIE_NAME}_${sessionName}`;
+}
+
+export interface AuthServiceOptions {
+  /** Cookie の名前（既定 `SESSION_COOKIE_NAME`。`sessionCookieName` で決める）。 */
+  cookieName?: string;
+}
+
 export interface UpgradeRequestInfo {
   headers: Record<string, string | undefined>;
   remoteAddress: string;
@@ -59,7 +74,14 @@ export class DefaultAuthService implements AuthService {
   private readonly liveSessionIds = new Map<string, string>(); // sessionId -> idHash
   private readonly revokedListeners = new Set<(sessionId: string) => void>();
 
-  constructor(private readonly file: AuthFile) {}
+  private readonly cookieName: string;
+
+  constructor(
+    private readonly file: AuthFile,
+    opts: AuthServiceOptions = {},
+  ) {
+    this.cookieName = opts.cookieName ?? SESSION_COOKIE_NAME;
+  }
 
   authorizeUpgrade: AuthorizeUpgrade = async (req) => {
     const sessionId = this.parseSessionIdFromCookie(req.headers["cookie"]);
@@ -185,7 +207,7 @@ export class DefaultAuthService implements AuthService {
       const eq = part.indexOf("=");
       if (eq === -1) continue;
       const name = part.slice(0, eq).trim();
-      if (name !== SESSION_COOKIE_NAME) continue;
+      if (name !== this.cookieName) continue;
       // 認証前の誰でも任意の Cookie を送れる。`%` の並びが壊れた値（`%E0%A4%A` 等）で `decodeURIComponent` が投げると、
       // `/api/session`・`/api/logout`・`/ws` の想定外の失敗（error 行）になっていたので、セッション無しとして扱う（D103）。
       try {
@@ -199,13 +221,13 @@ export class DefaultAuthService implements AuthService {
 
   buildSetCookieHeader(sessionId: string, secure: boolean): string {
     const maxAge = Math.floor(SESSION_TTL_MS / 1000);
-    const parts = [`${SESSION_COOKIE_NAME}=${encodeURIComponent(sessionId)}`, "Path=/", "HttpOnly", "SameSite=Strict", `Max-Age=${maxAge}`];
+    const parts = [`${this.cookieName}=${encodeURIComponent(sessionId)}`, "Path=/", "HttpOnly", "SameSite=Strict", `Max-Age=${maxAge}`];
     if (secure) parts.push("Secure");
     return parts.join("; ");
   }
 
   buildClearCookieHeader(secure: boolean): string {
-    const parts = [`${SESSION_COOKIE_NAME}=`, "Path=/", "HttpOnly", "SameSite=Strict", "Max-Age=0"];
+    const parts = [`${this.cookieName}=`, "Path=/", "HttpOnly", "SameSite=Strict", "Max-Age=0"];
     if (secure) parts.push("Secure");
     return parts.join("; ");
   }

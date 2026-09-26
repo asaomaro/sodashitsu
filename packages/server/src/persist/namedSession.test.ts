@@ -8,11 +8,14 @@ import { makeTempDir } from "./atomicFile.js";
 import {
   deleteSession,
   findExactEntry,
+  listServerSessions,
   listSessions,
   resolveSessionStateDir,
   SessionDeleteError,
   sessionNameProblem,
 } from "./namedSession.js";
+import { hostname } from "node:os";
+import { writeServeRecord } from "./ServeRecordFile.js";
 import { STATE_DIR_LOCK_FILE, StateDirLock } from "./StateDirLock.js";
 
 describe("sessionNameProblem（名前の規則）", () => {
@@ -266,5 +269,116 @@ describe("listSessions・deleteSession（一覧と削除）", () => {
       code: "not-found",
     });
     await expect(findExactEntry(entries, "work", hit)).rejects.toBeInstanceOf(SessionDeleteError);
+  });
+});
+
+/** 20260926-named-session-ui（AC4・AC5）。 */
+describe("listServerSessions（server.sessions の一覧）", () => {
+  let base: string;
+  const held: StateDirLock[] = [];
+  beforeEach(async () => {
+    base = await makeTempDir("wtm-named-srv-");
+  });
+  afterEach(async () => {
+    for (const l of held.splice(0)) await l.release();
+    await rm(base, { recursive: true, force: true });
+  });
+  const mkSession = async (name: string): Promise<string> => {
+    const dir = join(base, "sessions", name);
+    await mkdir(dir, { recursive: true });
+    return dir;
+  };
+  const run = async (dir: string): Promise<void> => {
+    const lock = new StateDirLock(dir);
+    await lock.acquire();
+    held.push(lock);
+  };
+  const record = (
+    port: number,
+    over: Partial<{ pid: number; hostname: string; https: boolean; host: string }> = {},
+  ) => ({
+    pid: process.pid,
+    hostname: hostname(),
+    port,
+    https: false,
+    host: "127.0.0.1",
+    ...over,
+  });
+
+  it("動いていて記録の pid・ホスト名がロックの持ち主と一致する session にだけ開くための情報を付ける", async () => {
+    await run(base);
+    await writeServeRecord(base, record(7780));
+    const work = await mkSession("work");
+    await run(work);
+    await writeServeRecord(work, record(7781, { https: true, host: "0.0.0.0" }));
+    const stale = await mkSession("stale"); // 動いているが記録は前の起動（別の pid）
+    await run(stale);
+    await writeServeRecord(stale, record(7782, { pid: process.pid + 100000 }));
+    const otherHostRec = await mkSession("otherrec"); // 記録のホスト名が違う
+    await run(otherHostRec);
+    await writeServeRecord(otherHostRec, record(7783, { hostname: "not-this-host-for-test" }));
+    const norec = await mkSession("norec"); // 動いているが記録が無い（古い版・token reset の間）
+    await run(norec);
+    const stopped = await mkSession("stopped"); // 止まっている（記録は残っている）
+    await writeServeRecord(stopped, record(7784));
+
+    const list = await listServerSessions(base, "work");
+    expect(list).toEqual([
+      {
+        name: "default",
+        default: true,
+        running: true,
+        current: false,
+        endpoint: { port: 7780, https: false, host: "127.0.0.1" },
+      },
+      { name: "norec", default: false, running: true, current: false },
+      { name: "otherrec", default: false, running: true, current: false },
+      { name: "stale", default: false, running: true, current: false },
+      { name: "stopped", default: false, running: false, current: false },
+      {
+        name: "work",
+        default: false,
+        running: true,
+        current: true,
+        endpoint: { port: 7781, https: true, host: "0.0.0.0" },
+      },
+    ]);
+  });
+
+  it("別のホストのロック（別のコンテナ）の session には、記録があっても付けない", async () => {
+    const dir = await mkSession("remote");
+    await writeFile(join(dir, STATE_DIR_LOCK_FILE), "7\nsome-other-host-for-test\n");
+    // 記録はこのホストのもの（pid も一致）にして、ロックが別のホストであることだけで弾かれることを確かめる
+    await writeServeRecord(dir, record(7785, { pid: 7 }));
+    const remote = (await listServerSessions(base, undefined)).find((e) => e.name === "remote");
+    expect(remote).toEqual({ name: "remote", default: false, running: true, current: false });
+  });
+
+  it("current は既定の session なら名前が無いとき、名前付きなら名前が一致するとき", async () => {
+    await mkSession("work");
+    expect((await listServerSessions(base, undefined)).map((e) => [e.name, e.current])).toEqual([
+      ["default", true],
+      ["work", false],
+    ]);
+    expect((await listServerSessions(base, "work")).map((e) => [e.name, e.current])).toEqual([
+      ["default", false],
+      ["work", true],
+    ]);
+  });
+
+  it("状態ディレクトリのパス・pid・ホスト名を返さない（項目のキーは決まった集合だけ。AC5）", async () => {
+    await run(base);
+    await writeServeRecord(base, record(7780));
+    const w = await mkSession("w");
+    await run(w);
+    for (const e of await listServerSessions(base, undefined)) {
+      const expected = e.endpoint
+        ? ["current", "default", "endpoint", "name", "running"]
+        : ["current", "default", "name", "running"];
+      expect(Object.keys(e).sort()).toEqual(expected);
+      if (e.endpoint) expect(Object.keys(e.endpoint).sort()).toEqual(["host", "https", "port"]);
+      expect(JSON.stringify(e)).not.toContain(base);
+      expect(JSON.stringify(e)).not.toContain(String(process.pid));
+    }
   });
 });
