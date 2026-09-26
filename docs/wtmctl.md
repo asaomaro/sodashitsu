@@ -31,6 +31,8 @@ wtmctl pane input <paneId> <text>          # Enter を付けずに送る
 wtmctl pane run <paneId> <command>         # command と改行を送る
 wtmctl pane read <paneId> [--follow] [--raw] [--timeout <ms>]
 wtmctl pane attach <paneId> [--takeover]   # 手元の端末をその pane に直結する（Ctrl+B q で切り離す）
+wtmctl pane observe <paneId>               # pane の画面を NDJSON で流し続ける（閲覧専用）
+wtmctl pane control <paneId> [--takeover] [--cols <N>] [--rows <N>]   # NDJSON で流し、stdin の NDJSON で操作する
 wtmctl snapshot
 wtmctl watch [--json]
 wtmctl agent list
@@ -69,6 +71,76 @@ wtmctl pane attach p2 --takeover   # 既に別の端末が直結していれば�
   標準入力か標準出力が端末でない（`not_a_tty`）は 1。使い方の誤りは 2。
   どの終わり方でも、手元の端末のモード（色・カーソルの表示と形・スクロール領域・マウスの報告・bracketed paste 等）を戻し、代替画面から出る。
   `SIGTERM`・`SIGHUP` で止められたときは切り離しと同じに扱う。
+
+## pane の NDJSON ストリーム（`pane observe`・`pane control`）
+
+別のプログラム（pane の画面を別の UI へ中継するブリッジ・エージェントを操る自動化）が `wtmctl` を子プロセスとして起動し、
+stdout を 1 行ずつ JSON として読む（`control` は stdin に 1 行 1 コマンドを書く）ための形。人が端末で使うなら `pane attach`。
+
+```bash
+wtmctl pane observe p2                                      # 閲覧専用。何本でも同時に動かせる
+wtmctl pane control p2 --cols 120 --rows 40                 # 書き込み可能（所有者は pane に 1 つ）
+wtmctl pane control p2 --takeover                           # 既に所有者（pane attach か control）がいれば奪う
+```
+
+### stdout の記録（observe・control 共通）
+
+```jsonc
+{"type":"terminal.frame","seq":1,"encoding":"ansi","width":120,"height":40,"full":true,"bytes":"<base64>"}
+{"type":"terminal.frame","seq":2,"encoding":"ansi","width":120,"height":40,"full":false,"bytes":"<base64>"}
+{"type":"terminal.closed","reason":"pane_closed"}
+```
+
+- `bytes` は pane の出力（ANSI の列を UTF-8 にしたもの）の base64。`full: true` は**見えている画面の描き直し**（つないだ最初と、下の「読み手が遅いとき」の再開時）で、
+  それまでの画面を捨ててこれで描き直す。`full: false` はその後に pane が出した出力をそのまま区切ったもの。
+- `seq` はフレームごとに 1 から 1 ずつ増える。`width`/`height` はその時点の pane の大きさ（大きさが変われば以後のフレームから変わる）。
+- pane の出力に含まれる端末への問い合わせ（DA・カーソル位置の報告・色の問い合わせ等）は取り除く——答えるのはサーバだけ（`pane attach` と同じ）。
+  受け取った列を端末エミュレータに流しても、エミュレータの答えが二重に pane へ届かない。
+- 終わりは `terminal.closed` の 1 行。`reason` は `pane_closed`（pane のプロセスが終わった・pane が閉じられた）・`released`（control が所有を返した）・
+  `taken_over`（control が奪われた）・`connection_closed`（サーバ側から切れた）。
+- **読み手が遅いとき**: stdout の書き出し待ちが 1 MiB を超えると、wtmctl はサーバからの受信を止める。その間の出力はサーバが捨て、読み手が追いつくと
+  `full: true` の描き直しから続く（wtmctl のメモリは増え続けない。切断もしない）。`pane control` はその間 stdin も読まない
+  （奪われた知らせを読めないまま入力を送り続けないため。書いた行は、終わる前に追いつけば処理する）。
+
+### `pane observe`
+
+- 閲覧専用。サーバへ送るのは購読だけで、所有者・大きさ・入力には触れない。何本同時に動かしても、互いにも `pane attach`・`pane control`・ブラウザにも影響しない。
+- 大きさは持たない（pane の大きさのフレームが届く）。
+
+### `pane control`
+
+- pane の所有者になり、pane の大きさを `--cols`×`--rows`（既定 120×40・1〜1000）にしてからフレームを流す。所有者は `pane attach` と共通で、
+  **pane に 1 つ**。既に所有者がいれば `pane_attached` で終わり、`--takeover` なら奪う（奪われた側の `pane attach` は `attach_taken_over`、
+  `pane control` は `terminal.closed`（`taken_over`）の後に `attach_taken_over` で終わる）。
+- stdin に 1 行 1 コマンド（JSON）を書く:
+
+| コマンド | 動作 |
+|---|---|
+| `{"type":"terminal.input","text":"ls\r"}` | 文字列を UTF-8 で pane へ送る（Enter は `\r`） |
+| `{"type":"terminal.input","bytes":"Aw=="}` | base64 を戻した列を送る（例は Ctrl-C） |
+| `{"type":"terminal.resize","cols":100,"rows":30}` | pane の大きさを変える（1〜1000） |
+| `{"type":"terminal.release"}` | 所有を返して終わる |
+
+- 不正な行はサーバに何も送らず、stderr に `wtmctl: pane control input ignored: <理由>` を 1 行出して次の行へ進む。不正になるのは:
+  UTF-8・JSON として正しくない（先頭の BOM・全角空白を含む）／オブジェクトでない／`type` が無い・文字列でない・上の 3 つ以外（`terminal.scroll` は未対応として不正）／
+  知らないキーがある（`terminal.resize` の `cell_width_px`・`cell_height_px` は 0 以上の整数なら受け付けて使わない。そうでなければ不正）／
+  `text` と `bytes` の両方かどちらも無い／`text` が文字列でない／`bytes` が正規の base64 でない／`cols`・`rows` が 1〜1000 の整数でない／
+  1 行が 1 MiB を超える（次の改行まで捨てる）。空白（space・tab・CR）だけの行は黙って無視する。
+  stderr を読まない相手でメモリを使い続けないよう、stderr の書き出し待ちが 64 KiB を超えている間は警告を捨てる。
+- `terminal.release`・stdin の終わり・`SIGINT`/`SIGTERM`/`SIGHUP` で所有を返し、`terminal.closed`（`released`）を出して終了コード 0。
+  所有を返すと、pane の大きさはその tab の大きさを決めているブラウザの大きさへ戻る（`pane attach` の切り離しと同じ）。
+- 所有者は**安全の境界ではない**（`pane attach` と同じ。認証済みの接続は今までどおり pane に書ける）。observe・control ともブラウザと同じ認証と
+  `/ws`（Origin/Host の検査つき）だけを使い、ログインしていなければ stdout に何も書かずに失敗する。
+
+### 終了コード
+
+- 0: `pane_closed`・`released`。
+- 1: `taken_over`（`attach_taken_over`）・`connection_closed`・stdout に書けなくなった（`output_closed`。`terminal.closed` は書かない）。
+  始まる前の失敗（`not_found`・`pane_attached`・未ログイン等）は stdout に何も書かない。エラーは stderr に `{"error":{"code","message"}}`。
+- `pane control` で解放（`terminal.release`・stdin の終わり・シグナル）を始めた後に届いた奪取・切断・pane の終わりは、`released`・終了コード 0 として終える。
+- 2: 使い方の誤り（`--cols 0` 等）。
+- `pane observe` はシグナルを受け止めない。止めるなら `SIGTERM` 等で終わらせる（`terminal.closed` は出ず、終了コードはシグナルによる）。
+  所有を持たないので、止めても pane とほかのクライアントには何も起きない。
 
 ## エージェント（`agent`）
 
@@ -259,11 +331,11 @@ skill は、最初に pane の中にいるか（`WTM_PANE_ID` があるか）を
 pane の中の wtmctl（`WTM_PANE_ID` と `WTM_SERVER_URL` があり、接続先の origin が `WTM_SERVER_URL` と同じ）は、次の操作の対象が**自分の pane**、
 または**それを含む tab・workspace** のとき、操作の要求を送らずに `self_target`（終了コード 1）で終わる。
 
-`pane close`・`pane input`・`pane run`・`pane attach`・`tab close`・`workspace close`・`agent prompt`・`agent send-keys`・`agent start`
+`pane close`・`pane input`・`pane run`・`pane attach`・`pane control`・`tab close`・`workspace close`・`agent prompt`・`agent send-keys`・`agent start`
 
 - 自分の pane を閉じると自分が終わり、自分の pane への入力・prompt は自分の入力欄に混ざり、自分の pane への直結は出力が自分に返って流れ続けるため。
   エージェントを名前で指しても、その pane が自分なら断る。
-- 読み取り・分割・名前付け（`pane read`・`pane split`・`snapshot`・`watch`・`agent list/get/wait/read/rename` 等）は断らない。
+- 読み取り・分割・名前付け（`pane read`・`pane observe`・`pane split`・`snapshot`・`watch`・`agent list/get/wait/read/rename` 等）は断らない。
 - 意図してやるとき（人が自分の pane を閉じる等）は `WTM_PANE_ID` を空にして打つ: `WTM_PANE_ID= wtmctl pane close "$WTM_PANE_ID"`。
   別のサーバ（`--url`・`WTMCTL_URL` で別の origin）につなぐときは効かない。ループバックの名前（`localhost`・`127.0.0.1`・`[::1]`）の違いと既定のポートの
   省略は同じサーバとみなす（`WTMCTL_URL=http://localhost:7780` を export していても外れない）。ループバック以外の名前（TLS の証明書の名前・LAN の IP 等）で
@@ -282,8 +354,22 @@ herdr の `terminal attach <terminal_id> [--takeover]` に相当する（`docs/h
   手元の端末も主画面に出て、直結前の画面に出力が重なる。kitty keyboard のフラグ・modifyOtherKeys は切り離しても戻さない
   （pane のエージェントがそれを有効にしていた場合、切り離した後に手元のシェルのキー入力の符号化が戻らないことがある）。
 - 直結中のサーバ側のスクロール（ホイール・PageUp/PageDown で遡る）は無い。対象は pane ID だけ（`agent attach <name>` は無い）。
-- 閲覧専用の `terminal session observe`・NDJSON で制御する `terminal session control` は無い（出力を追うだけなら `pane read --follow --raw`）。
+- 閲覧専用の `terminal session observe`・NDJSON で制御する `terminal session control` は、`pane observe`・`pane control` が相当する（下）。
 - Windows の端末からの直結は確かめていない（herdr はネイティブ Windows では直結できない）。
+
+### `pane observe`・`pane control`
+
+herdr の `terminal session observe <target> [--cols N] [--rows N]`・`terminal session control <target> [--takeover] [--cols N] [--rows N]` に相当する
+（`docs/herdr-parity.md` の H40）。同じ点: 記録の形（`terminal.frame` の `seq`・`encoding`・`width`・`height`・`full`・`bytes` と `terminal.closed`）・
+複数の観測者・観測者は入力・大きさ・奪取の権限を持たない・control の所有者は 1 つで `--takeover` で奪う・stdin の `terminal.input`（`text` か `bytes`。両方は不可）・
+`terminal.resize`・`terminal.release`・不正な行は stderr に出して読み飛ばす・stdin の終わりで所有を返す・control の `--cols/--rows` の既定 120×40。違い:
+
+- herdr のフレームはサーバが描き直した画面（観測者の `--cols/--rows` の大きさ）。wtmctl は **pane の生の出力を区切ったもの**で、`width`/`height` は pane の実際の大きさ。
+  そのため `pane observe` は `--cols/--rows` を持たない。
+- `terminal.scroll` は未対応（不正な行として読み飛ばす）。対象は pane ID だけ（herdr は terminal・agent も受ける）。
+- 大きさは 1〜1000（herdr は 1〜65535）。不正な行の検査が厳しい（知らないキー・非正規の base64・Unicode の空白や BOM も不正。herdr は知らないキーを無視する）。
+- 読み手が遅いとき、herdr は 30 秒書けなければ切るが、wtmctl は受信を止めて待ち、追いついたら描き直し（`full: true`）から続ける。
+- 終わり方の `reason` は「stdout の記録」、終了コードは「終了コード」の節のとおり（herdr はサーバがストリームを閉じた理由を `terminal.closed` の `reason` に載せ、終了コードは 0）。
 
 ### `agent`
 

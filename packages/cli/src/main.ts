@@ -15,6 +15,7 @@ import {
 } from "./commands/agent.js";
 import { runAgentStart } from "./commands/agentStart.js";
 import { runPaneAttach } from "./commands/attach.js";
+import { runPaneControl, runPaneObserve } from "./commands/sessionStream.js";
 import { runTabClose, runTabCreate } from "./commands/tab.js";
 import { runPaneClose, runPaneInput, runPaneRead, runPaneRun, runPaneSplit } from "./commands/pane.js";
 import { runLogin, runSnapshot, runWatch } from "./commands/session.js";
@@ -38,6 +39,9 @@ function printHelp(): void {
       "--wait は送信後 5 秒以内に working/blocked を観測できなければ agent_prompt_stalled で終わります。",
       "pane attach は手元の端末をその pane に直結します。Ctrl+B q で切り離し、Ctrl+B Ctrl+B で Ctrl+B を送ります。",
       "同じ pane に直結できるのは 1 つだけで、--takeover で既存の直結を奪えます。",
+      "pane observe は pane の画面を 1 行 1 記録の JSON（terminal.frame・最後に terminal.closed）で stdout へ流します（閲覧専用）。",
+      "pane control は同じ記録を流し、stdin の 1 行 1 コマンドの JSON（terminal.input/resize/release）で操作します",
+      "（既定 120x40・1〜1000。所有者は pane attach と共通で 1 つ、--takeover で奪えます）。",
       "agent start は前面がシェル自身だけの pane（sh/bash/dash/zsh/ksh/mksh）に、--kind の決まった実行ファイルと -- の後の引数を",
       "単一引用符で包んで打ち込み、名前を付けて idle になるまで待ちます（既定 30 秒。blocked なら agent_not_ready）。",
       "pane の中（WTM_PANE_ID と WTM_SERVER_URL があり、そのサーバにつなぐとき）は、自分の pane とそれを含む tab・workspace を閉じる・",
@@ -80,6 +84,10 @@ async function main(): Promise<void> {
       return runPaneRead(cmd, store);
     case "pane-attach":
       return runPaneAttach(cmd, store);
+    case "pane-observe":
+      return runPaneObserve(cmd, store);
+    case "pane-control":
+      return runPaneControl(cmd, store);
     case "snapshot":
       return runSnapshot(cmd, store);
     case "watch":
