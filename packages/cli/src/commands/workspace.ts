@@ -2,6 +2,7 @@ import type { ParamsOf } from "@wtm/protocol";
 import type { Command } from "../cliArgs.js";
 import { printJson } from "../output.js";
 import type { SessionStore } from "../session.js";
+import { assertNotSelfWorkspace } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 
 /**
@@ -29,7 +30,8 @@ export async function runWorkspaceCreate(cmd: WorkspaceCreateCmd, store: Session
 
 export async function runWorkspaceClose(cmd: WorkspaceCloseCmd, store: SessionStore): Promise<void> {
   const result = await withSession(cmd.opts, store, async (client) => {
-    await client.hello();
+    const hello = await client.hello();
+    assertNotSelfWorkspace(cmd.opts, hello.snapshot, cmd.workspaceId, "close"); // 自分の pane を含む workspace は閉じない（20260926-agent-skill-file）
     return client.request("workspace.close", { workspaceId: cmd.workspaceId });
   });
   printJson(result);

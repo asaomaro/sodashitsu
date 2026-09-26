@@ -3,6 +3,7 @@ import { AttachKeyFilter } from "../attachKeys.js";
 import { TerminalQueryFilter } from "../attachOutput.js";
 import type { Command } from "../cliArgs.js";
 import type { SessionStore } from "../session.js";
+import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 import { RpcFailure, type WtmClient } from "../wsClient.js";
 
@@ -97,6 +98,8 @@ export async function runPaneAttach(
   store: SessionStore,
   term: AttachTerminal = processTerminal(),
 ): Promise<void> {
+  // 自分の pane に直結すると、直結の出力が自分の pane に書かれて流れ続ける（20260926-agent-skill-file）。端末を触る前・接続する前に断る。
+  assertNotSelfPane(cmd.opts, cmd.paneId, "attach to");
   if (!term.isTTY) {
     throw new RpcFailure("not_a_tty", "pane attach needs a terminal on both stdin and stdout");
   }

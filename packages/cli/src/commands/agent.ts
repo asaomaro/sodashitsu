@@ -16,6 +16,7 @@ import { stripAnsi } from "../ansiStrip.js";
 import type { Command } from "../cliArgs.js";
 import { printJson, printLine } from "../output.js";
 import type { SessionStore } from "../session.js";
+import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 import { RpcFailure, type WtmClient } from "../wsClient.js";
 import { readPaneSnapshot } from "./pane.js";
@@ -314,6 +315,7 @@ export async function runAgentPrompt(cmd: AgentPromptCmd, store: SessionStore): 
     const events = new EventFeed();
     const hello = await client.hello(events.push);
     const target = resolveAgentTarget(hello.snapshot, cmd.paneId);
+    assertNotSelfPane(cmd.opts, target.paneId, "send a prompt to the agent in"); // 名前で指しても自分の pane なら断る（20260926-agent-skill-file）
     const workspaces = workspacesByTab(hello.snapshot);
     if (!cmd.wait) {
       const result = await client.request("agent.prompt", {
@@ -340,6 +342,7 @@ export async function runAgentSendKeys(cmd: AgentSendKeysCmd, store: SessionStor
   const paneId = await withSession(cmd.opts, store, async (client) => {
     const hello = await client.hello();
     const target = resolveAgentTarget(hello.snapshot, cmd.paneId);
+    assertNotSelfPane(cmd.opts, target.paneId, "send keys to the agent in"); // 同上（20260926-agent-skill-file）
     await client.request("agent.send_keys", {
       paneId: target.paneId,
       instanceId: target.agent.instanceId,

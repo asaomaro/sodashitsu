@@ -2,6 +2,7 @@ import type { ParamsOf } from "@wtm/protocol";
 import type { Command } from "../cliArgs.js";
 import { printJson } from "../output.js";
 import type { SessionStore } from "../session.js";
+import { assertNotSelfTab } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 
 /** `tab create` / `close`（design.md「`workspace create` / `tab create` / `pane split`」節・
@@ -23,7 +24,8 @@ export async function runTabCreate(cmd: TabCreateCmd, store: SessionStore): Prom
 
 export async function runTabClose(cmd: TabCloseCmd, store: SessionStore): Promise<void> {
   const result = await withSession(cmd.opts, store, async (client) => {
-    await client.hello();
+    const hello = await client.hello();
+    assertNotSelfTab(cmd.opts, hello.snapshot, cmd.tabId, "close"); // 自分の pane を含む tab は閉じない（20260926-agent-skill-file）
     return client.request("tab.close", { tabId: cmd.tabId });
   });
   printJson(result);

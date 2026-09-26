@@ -43,6 +43,7 @@ import { AgentMonitor } from "./agent/AgentMonitor.js";
 import { AgentStarter } from "./agent/AgentStarter.js";
 import { DefaultManifestStore, type ManifestStore } from "./agent/ManifestStore.js";
 import { FsManifestSource } from "./infra/FsManifestSource.js";
+import { paneServerUrl } from "./util/net.js";
 
 export interface ComposedServer {
   httpServer: HttpServer;
@@ -158,6 +159,8 @@ export async function composeServer(
   const integrationFile = new FsIntegrationFile(options.stateDir);
   const agentIntegrationInstaller = new FsAgentIntegrationInstaller(agentHookScriptFor());
   const agentIntegrations = await DefaultAgentIntegrationService.load(agentIntegrationInstaller, integrationFile, bus);
+  /** pane の環境の `WTM_SERVER_URL`（`listen()` で待ち受けた後に決める。それまでは undefined）。`SessionService` が読むので、それより前に宣言する。 */
+  let paneUrl: string | undefined;
   const session = new SessionService({
     model,
     terminals,
@@ -169,6 +172,8 @@ export async function composeServer(
     defaultCwd,
     agentReportSocketPath,
     getAutoResumeEnabled: agentIntegrations.getAutoResumeEnabled,
+    // pane の中の wtmctl の接続先（20260926-agent-skill-file）。待ち受けた後（`listen()` の 1.）に決まる。pane を起動するのはその後。
+    serverUrlForPanes: () => paneUrl,
     // 新しく開く場所（herdr の `terminal.new_cwd`）。「引き継ぐ」は元の pane の前面プロセスの cwd をその時点で読み直す。
     newCwdDeps: makeNewCwdDeps({
       terminals,
@@ -280,6 +285,9 @@ export async function composeServer(
             resolve();
           });
         });
+        // 1'. pane の中の wtmctl の接続先（20260926-agent-skill-file）。ポートは実際に待ち受けたもの（パイプ等で数でなければ `options.port`）。
+        const bound = httpServer.server.address();
+        paneUrl = paneServerUrl(secure ? "https" : "http", options.host, typeof bound === "object" && bound !== null ? bound.port : options.port);
         // 2. token（初回だけ作る。表示は呼び出し側が行う——この後で失敗しても `freshToken` は読める）。
         const { created, token } = await auth.ensureToken();
         freshToken = created ? token : undefined;

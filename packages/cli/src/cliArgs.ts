@@ -8,7 +8,11 @@ import { AGENT_STATUSES, type AgentStatus } from "./agentStatus.js";
  * 必須の位置引数の欠落・余分な位置引数・`--direction`/`--ratio`/`--timeout` 等の値が不正。
  */
 
-const USAGE = [
+/**
+ * 各コマンドの 1 行（`wtmctl help` の一覧・使い方の誤りの案内・skill ファイルとの食い違いの検査〔`skill.test.ts`〕が同じものを見る。
+ * 20260926-agent-skill-file で `main.ts` の `printHelp` の一覧をここへ一本化した）。
+ */
+export const USAGE_LINES: readonly string[] = [
   "wtmctl login --url <URL> --token <TOKEN>",
   "wtmctl workspace create [--cwd <path>] [--label <text>] [--url <URL>] [--token <TOKEN>]",
   "wtmctl workspace close <workspaceId> [--url <URL>] [--token <TOKEN>]",
@@ -31,8 +35,10 @@ const USAGE = [
   "wtmctl agent send-keys <target> <key>... [--url <URL>] [--token <TOKEN>]",
   "wtmctl agent rename <target> <name>|--clear [--url <URL>] [--token <TOKEN>]",
   "wtmctl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [--url <URL>] [--token <TOKEN>] [-- <args>...]",
-  "（<target> は pane ID か、agent rename で付けた名前）",
-].join("\n");
+  "wtmctl skill",
+];
+
+const USAGE = [...USAGE_LINES, "（<target> は pane ID か、agent rename で付けた名前）"].join("\n");
 
 export const DEFAULT_URL = "http://127.0.0.1:7780";
 
@@ -45,13 +51,25 @@ export class CliUsageError extends Error {
   }
 }
 
+/**
+ * pane の中で動いている wtmctl の呼び出し元（20260926-agent-skill-file）。サーバが pane の環境に入れた `WTM_PANE_ID`・`WTM_SERVER_URL` から作る。
+ * 自分の pane への操作の歯止め（`selfGuard.ts`）が使う。
+ */
+export interface CallerPane {
+  paneId: string;
+  serverUrl: string;
+}
+
 export interface GlobalOpts {
   url: string;
   token: string | undefined;
+  /** pane の中（`WTM_PANE_ID` と `WTM_SERVER_URL` がどちらも空でない）ときだけある。 */
+  caller?: CallerPane;
 }
 
 export type Command =
   | { kind: "help" }
+  | { kind: "skill" }
   | { kind: "login"; opts: GlobalOpts }
   | { kind: "workspace-create"; opts: GlobalOpts; cwd: string | undefined; label: string | undefined }
   | { kind: "workspace-close"; opts: GlobalOpts; workspaceId: string }
@@ -150,12 +168,19 @@ function parseFlags(rest: readonly string[], spec: FlagSpec): ParsedFlags {
   return { positionals, values: outValues, bools: outBools, multi: outMulti };
 }
 
-/** `--url`/`--token` を取り出す（全コマンド共通）。 */
+/**
+ * `--url`/`--token` を取り出す（全コマンド共通）。接続先は `--url` → `WTMCTL_URL` → `WTM_SERVER_URL`（サーバが pane の環境に入れる、その pane の
+ * サーバの URL）→ 既定の順（20260926-agent-skill-file）。利用者が明示した設定を、サーバの推定より上にする。
+ */
 function globalOptsFrom(values: Map<string, string>, env: NodeJS.ProcessEnv): GlobalOpts {
-  return {
-    url: values.get("--url") ?? env["WTMCTL_URL"] ?? DEFAULT_URL,
+  const paneId = env["WTM_PANE_ID"];
+  const serverUrl = env["WTM_SERVER_URL"];
+  const opts: GlobalOpts = {
+    url: values.get("--url") ?? env["WTMCTL_URL"] ?? (serverUrl ? serverUrl : DEFAULT_URL),
     token: values.get("--token") ?? env["WTMCTL_TOKEN"],
   };
+  if (paneId && serverUrl) opts.caller = { paneId, serverUrl };
+  return opts;
 }
 
 function parsePositiveInt(raw: string, flag: string): number {
@@ -192,6 +217,12 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
   const URL_TOKEN: FlagSpec = { values: ["--url", "--token"] };
 
   switch (word0) {
+    // 20260926-agent-skill-file。skill ファイルを出すだけ（サーバへつながない）。引数・オプションは取らない。
+    case "skill": {
+      const { positionals } = parseFlags(argv.slice(1), {});
+      rejectExtra(positionals, 0, "wtmctl skill");
+      return { kind: "skill" };
+    }
     case "login": {
       const { positionals, values } = parseFlags(argv.slice(1), URL_TOKEN);
       rejectExtra(positionals, 0, USAGE);
