@@ -109,12 +109,14 @@ wtmctl agent read reviewer --lines 120
 - エージェントが `blocked`（承認・質問）なら、`agent read` で画面を読み、**答える前に利用者に確かめる**（何を承認するかは利用者が決める）。
 - 他のエージェントの作業中（`working`）に割り込まない。
 - `pane attach`（手元の端末を pane に直結する）・`watch`・`pane read --follow` は人が対話的に使うもので、終わらない。エージェントは使わない。
+- `pane observe`・`pane control` は別のプログラム（ブリッジ）が pane の画面を 1 行 1 JSON で読み続ける・stdin の JSON で操作するためのもので、pane が終わるか
+  control を返すまで終わらない。エージェントが画面を読むなら `pane read`・`agent read`、入力するなら `pane input`・`agent prompt` を使う。
 - token・cookie・`~/.wtmctl` の中身を読まない・書き出さない。
 
 ## 自分の pane の歯止め（`self_target`）
 
 pane の中の wtmctl は、次の操作の対象が**自分の pane**（`$WTM_PANE_ID`）か、**それを含む tab・workspace** のとき、何もせずに `self_target`（終了コード 1）で断る:
-`pane close`・`pane input`・`pane run`・`pane attach`・`tab close`・`workspace close`・`agent prompt`・`agent send-keys`・`agent start`。
+`pane close`・`pane input`・`pane run`・`pane attach`・`pane control`・`tab close`・`workspace close`・`agent prompt`・`agent send-keys`・`agent start`。
 
 自分の pane を閉じると自分が終わり、自分の pane への入力は自分の入力欄に混ざる。断られたら、対象の ID を取り違えていないかを見直す。
 この歯止めは誤操作を止めるだけで、安全の境界ではない。**利用者に明示的に頼まれない限り、回避しない**（`WTM_PANE_ID` を空にして打つと効かなくなる）。
@@ -128,7 +130,8 @@ pane の中の wtmctl は、次の操作の対象が**自分の pane**（`$WTM_P
 - 接続: `wtmctl login`（利用者が打つ）
 - workspace: `wtmctl workspace create`・`wtmctl workspace close`・`wtmctl workspace rename`
 - tab: `wtmctl tab create`・`wtmctl tab close`
-- pane: `wtmctl pane split`・`wtmctl pane close`・`wtmctl pane input`・`wtmctl pane run`・`wtmctl pane read`・`wtmctl pane attach`
+- pane: `wtmctl pane split`・`wtmctl pane close`・`wtmctl pane input`・`wtmctl pane run`・`wtmctl pane read`・`wtmctl pane attach`・
+  `wtmctl pane observe`・`wtmctl pane control`
 - 状態: `wtmctl snapshot`・`wtmctl watch`
 - エージェント: `wtmctl agent list`・`wtmctl agent get`・`wtmctl agent wait`・`wtmctl agent read`・`wtmctl agent prompt`・`wtmctl agent send-keys`・
   `wtmctl agent rename`・`wtmctl agent start`

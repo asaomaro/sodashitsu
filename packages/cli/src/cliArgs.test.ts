@@ -227,6 +227,63 @@ describe("parseArgs — pane attach", () => {
   });
 });
 
+// 20260926-pane-observe-control。
+describe("parseArgs — pane observe / pane control", () => {
+  it("observe は paneId と --url/--token だけ", () => {
+    expect(parseArgs(["pane", "observe", "p1", "--url", "http://h:1", "--token", "t"], noEnv)).toEqual({
+      kind: "pane-observe",
+      opts: { url: "http://h:1", token: "t" },
+      paneId: "p1",
+    });
+  });
+  it("control の既定は 120x40・--takeover 無し（AC6）", () => {
+    expect(parseArgs(["pane", "control", "p1"], noEnv)).toEqual({
+      kind: "pane-control",
+      opts: { url: DEFAULT_URL, token: undefined },
+      paneId: "p1",
+      takeover: false,
+      cols: 120,
+      rows: 40,
+    });
+  });
+  it("control の --takeover・--cols・--rows（上限ちょうど 1000 と下限 1）", () => {
+    expect(parseArgs(["pane", "control", "p1", "--takeover", "--cols", "1000", "--rows", "1"], noEnv)).toMatchObject({
+      kind: "pane-control",
+      takeover: true,
+      cols: 1000,
+      rows: 1,
+    });
+  });
+  it.each([
+    [["pane", "observe"]],
+    [["pane", "observe", "p1", "p2"]],
+    [["pane", "observe", "p1", "--cols", "80"]],
+    [["pane", "observe", "p1", "--rows", "24"]],
+    [["pane", "observe", "p1", "--takeover"]],
+    [["pane", "control"]],
+    [["pane", "control", "p1", "p2"]],
+    [["pane", "control", "p1", "--cols", "0"]],
+    [["pane", "control", "p1", "--cols", "1001"]],
+    [["pane", "control", "p1", "--rows", "1001"]],
+    [["pane", "control", "p1", "--rows", "-5"]],
+    [["pane", "control", "p1", "--cols", "8.5"]],
+    [["pane", "control", "p1", "--cols", "abc"]],
+    [["pane", "control", "p1", "--cols"]],
+    [["pane", "control", "p1", "--scroll"]],
+  ])("%j は使用誤り（AC6）", (argv) => {
+    expect(() => parseArgs(argv, noEnv)).toThrow(CliUsageError);
+  });
+  it.each(["0", "1001", "-5", "8.5", "abc"])("--cols %s の案内は範囲つきの同じ文言", (v) => {
+    try {
+      parseArgs(["pane", "control", "p1", "--cols", v], noEnv);
+      throw new Error("expected a usage error");
+    } catch (err) {
+      expect(err).toBeInstanceOf(CliUsageError);
+      expect((err as CliUsageError).hint).toBe("--cols は 1〜1000 の整数にしてください。");
+    }
+  });
+});
+
 describe("parseArgs — snapshot/watch", () => {
   it("snapshot に余分な位置引数は拒否する", () => {
     expect(() => parseArgs(["snapshot", "extra"], noEnv)).toThrow(CliUsageError);
