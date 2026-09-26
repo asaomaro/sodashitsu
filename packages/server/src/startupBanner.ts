@@ -15,6 +15,8 @@ export interface StartupInfo {
   session?: NamedSessionInfo | undefined;
   /** `--pane-history` で起動したときだけ、画面履歴の保存先（20260926-screen-history-replay）。 */
   paneHistoryPath?: string | undefined;
+  /** 名前付き session の起動の記録のポートで待ち受けたときだけ true（20260926-named-session-ui の AC16）。 */
+  portRemembered?: boolean | undefined;
 }
 
 /**
@@ -26,7 +28,14 @@ export interface StartupInfo {
  */
 export function startupLines(info: StartupInfo): string[] {
   const lines = [`wtm: listening on ${formatUrlHost(info.host)} port ${info.port} (${info.scheme})`];
-  if (info.session !== undefined) lines.push(`wtm: session ${info.session.name}（状態ディレクトリ: ${info.session.stateDir}）`);
+  if (info.session !== undefined) {
+    lines.push(`wtm: session ${info.session.name}（状態ディレクトリ: ${info.session.stateDir}）${info.session.fromEnv === true ? "（WTM_SESSION）" : ""}`);
+    if (info.portRemembered === true) {
+      lines.push(
+        `wtm: session ${info.session.name} が前回使ったポート ${info.port} で待ち受けています（別のポートにするには --port。次からはそのポートを使います）`,
+      );
+    }
+  }
   if (info.paneHistoryPath !== undefined) {
     lines.push(`wtm: 画面履歴を保存します（--pane-history）: ${info.paneHistoryPath}。pane の出力（秘密を含みうる）がディスクに残ります`);
   }
@@ -69,6 +78,8 @@ export interface NamedSessionInfo {
   name: string;
   stateDir: string;
   stateDirBase?: string | undefined;
+  /** 名前を `WTM_SESSION` から選んだときだけ true（20260926-named-session-ui）。 */
+  fromEnv?: boolean | undefined;
 }
 
 /** 名前付き session なら `--session`（と `--state-dir` を渡して起動したならその絶対パス）付き。付けないと別の session の token を作り直してしまう。 */

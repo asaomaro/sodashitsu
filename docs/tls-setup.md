@@ -437,8 +437,21 @@ wtm session delete lan                                      # 動いていない
 
 - **`--session` を付けなければ何も変わらない**。今までの状態（`session.json`・`auth.json` 等）は動かさず、そのまま
   既定の session として使う。`--session default` は付けないのと同じ。
-- 名前付き session も**既定のポートは 7780**。並行して動かすなら `--port` を分ける（同じポートは `EADDRINUSE` で止まる）。
+- 名前付き session も**初めての起動の既定のポートは 7780**。並行して動かすなら `--port` を分ける（同じポートは `EADDRINUSE` で止まる）。
   同じ名前の 2 つ目は `wtm.lock` で止まる（既定の session と同じ）。
+- **ポートは session ごとに覚える**（20260926-named-session-ui）：待ち受けに成功したポートを状態ディレクトリの `serve.json`（0600。
+  pid・ホスト名・ポート・TLS か・待ち受けのホスト。秘密は含まない）に書き、名前付き session は次に `--port` を付けずに起動すると
+  そのポートを使う（`wtm: session lan が前回使ったポート 8443 で待ち受けています…` と出る）。`--port` を付ければそれを使い、記録も
+  変わる。記録が無い・壊れていれば 7780。そのポートが使用中なら案内に「前回使ったポート」と `--port` が出る。**既定の session
+  （`--session` 無し）は記録を書くが起動には使わない**（今までどおり `--port` が無ければ 7780）。覚えるのはポートだけ
+  （`--host`・`--cert` 等は毎回渡す）。
+- **環境変数 `WTM_SESSION`**（herdr の `HERDR_SESSION`）：`--session` を付けない `wtm serve`・`wtm token reset` は `WTM_SESSION` の
+  名前を使う（`--session` が優先。空は無いのと同じ、`default` は既定の session）。規則外の値は何も作らずに終了コード 2。
+  `wtm session list`・`delete` は見ない。名前付き session の pane には `WTM_SESSION=<その名前>` が入る（サーバを起動した環境の値は
+  pane に渡さない。既定の session の pane には無い）ので、pane の中のスクリプトは自分の session を知れる。pane の中で
+  `wtm serve` を打つと同じ session を選ぶので `wtm.lock` で止まる（案内に `WTM_SESSION` から選んだことと `--session default` が出る）。
+  **`--state-dir` を付けて起動した session では、pane に渡るのは名前だけ**（根のパスは渡らない）ので、pane の中の `wtm` にも同じ
+  `--state-dir` を付ける（付けないと既定の根の同じ名前の session を指す）。
 - 起動すると `wtm: listening on …` の次の行に `wtm: session lan（状態ディレクトリ: …）` と出る。token を作り直す案内も
   `wtm token reset --session lan`（`--state-dir` を渡して起動したなら `--state-dir …` も）になる（`--session` を付けずに
   作り直すと、既定の session の token が変わる）。`wtm token reset --session <名前>` は、その名前付き session が
@@ -462,12 +475,39 @@ wtm session delete lan                                      # 動いていない
 - **herdr との違い**：
   - **動いている session を止めるコマンドは無い**（herdr の `herdr session stop <name>`）。その `wtm serve` を起動した端末で
     Ctrl+C するか、`wtm session list` に出る pid に `kill <pid>`（SIGTERM で `session.json` を書いて終わる）。
-  - **`attach` は無い**。別の session は別の URL（ポート）なので、その URL をブラウザで開く。画面での session 名の表示・
-    切り替え、session ごとのポートの記憶、環境変数（herdr の `HERDR_SESSION`）での既定の選択も無い（後続。
-    `.aidev/backlog/product-roadmap.md`）。
+  - **`attach` の代わりに、画面の session の一覧から別の session を新しいタブで開く**（下の「画面での session の表示と切り替え」）。
+    別の session は別の URL（ポート）で、開いた先ではその session のログイン（token）が要る。
+  - `WTM_SESSION` の空は「無い」として扱う（herdr は空を誤りにする。`export WTM_SESSION=` で外せるようにした）。
+  - ポートの記憶は本製品だけのもの（herdr は socket なのでポートが無い）。
   - `--state-dir` と併せられる（herdr の状態の置き場所は設定ディレクトリ固定）。
   - wtmctl は URL で繋ぐので、名前付き session には `--url http://127.0.0.1:<そのポート>` を渡す（ログインのキャッシュは
     URL ごとなので混ざらない）。
+
+### 画面での session の表示と切り替え（20260926-named-session-ui）
+
+- 名前付き session の画面では、デスクトップのサイドバーの最上段に `session: <名前> ⇄` のボタンが出て、ブラウザのタブのタイトルが
+  `<ホスト名> [<名前>]: <workspace>` になる。既定の session はタイトルが今までどおりで、ボタンは名前付き session が 1 つでもあるとき
+  だけ `session: default ⇄` と出る（1 つも無ければ画面は今までどおり）。サイドバーを畳んでいるときは `⇄` だけ（名前はツールチップ）。
+- ボタン（クリック・Enter・Space）で **session の一覧**が開く。同じ状態ディレクトリの根の session（既定と名前付き）が並び、動いていて
+  開ける session を ↑↓（j/k）で選んで Enter（またはクリック）すると**新しいブラウザのタブ**で開く。Esc・閉じるボタン・外側のクリックで
+  何も開かずに閉じ、フォーカスはボタンへ戻る。開けない session は理由を出す：いま開いている／止まっている（起動のコマンド。`--state-dir` で起動した session なら同じ `--state-dir` を足す）／
+  このマシンのブラウザからだけ開ける（ループバックで待ち受け）／開く先が分からない（`serve.json` が無い・古い版で起動した・別のマシン〔コンテナ〕で動いている・`wtm token reset` の途中等）。
+- 一覧はログイン済みの接続でだけ取れ、名前・動いているか・ポート・TLS か・待ち受けのホストだけを返す（token・Cookie・状態
+  ディレクトリのパスは返さない）。**別の session を開いてもログインは引き継がない**——開いた先ではその session の token でログインする。
+- **同じブラウザで複数の session にログインしたままでいられる**：名前付き session のログインの Cookie は `wtm_session_<名前>`
+  （既定の session は今までどおり `wtm_session`）。Cookie はポートで分かれないので、以前は同じホスト名の別ポートの session に
+  ログインすると他方がログアウトされた。名前付きでない並行起動（`--state-dir` を分けて同じホスト名で開く）は今も同じ Cookie を
+  使うので、同じブラウザでは片方ずつしかログインしていられない（名前付き session にすれば分かれる）。Cookie の名前は session の名前だけで
+  決まるので、`--state-dir` の違う根で**同じ名前**の session（`--state-dir A --session work` と `--state-dir B --session work`）を同じホスト名で
+  開いても上書きし合う（名前を変える）。
+- **開く URL の決め方と限界**：ループバックで待ち受ける session は待ち受けのホスト（`127.0.0.1` 等）で開き、いまのページを
+  ループバック以外（LAN の IP 等）で開いているときは開けないとする。全インタフェース（`0.0.0.0`・`::`）の session は、いまのページが
+  ループバックなら `127.0.0.1`／`[::1]`、そうでなければいまのページのホスト名で開く。特定のアドレスで待ち受ける session はそのアドレス。
+  次の場合は開いた先が拒否する（ログインの画面が 403 の理由を出す）か、別のマシンを指す：いまのページを `--origin` で足した名前
+  （ポート転送・リバースプロキシ・Tailscale の名前）・`--host` に付けた名前・`os.hostname()` と違う名前（FQDN・mDNS）で開いている
+  （相手の session に同じ `--origin` を付けるか、IP アドレスで開く）、ループバックへのポート転送（`ssh -L`・devcontainer 等）で
+  `localhost` を開いている（転送していない先のポートはブラウザ側のマシンを指す）。
+- モバイルの 1 列表示にはサイドバーの session のボタンと一覧は無い（タブのタイトルの `[<名前>]` は付く）。キーの割り当ても無い（後続。`.aidev/backlog/product-roadmap.md`）。
 
 ### worktree の作成先（`--worktree-dir`）
 

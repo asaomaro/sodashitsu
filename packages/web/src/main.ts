@@ -23,6 +23,7 @@ import { ToneSound } from "./notify/ToneSound.js";
 import { Connection } from "./net/Connection.js";
 import { InputGate } from "./net/InputGate.js";
 import type { ConnectionPort, TerminalSinkPort } from "./net/ports.js";
+import { documentTitle } from "./serverSession/documentTitle.js";
 import { StoreAdapter } from "./store/StoreAdapter.js";
 import { sweepMarkSeen, useSeenStore } from "./store/seen.js";
 import { useSessionStore } from "./store/session.js";
@@ -206,6 +207,8 @@ connection.onOpened(() => viewSync.onConnectionOpened());
 // サーバは接続ごとに新しい clientId を振り、前の接続のテーマを持たない（色の問い合わせの答えに使う。20260921-theme-settings の design D6）。
 // 起動の直後の `start()` は接続より前で送れないので、接続の直後に今のテーマを届ける経路はここだけ（接続中の変化は `apply` が送る）。
 connection.onOpened(() => themeController.resend());
+// 名前付き session の数（サイドバーの session の入口。20260926-named-session-ui）。`actionDispatcher` は下で作るので、呼ぶ時点で読む。
+connection.onOpened(() => void actionDispatcherBox.current?.refreshServerSessions());
 // 閉じてから次の hello が通るまでは、`client.view`・`pane.subscribe` を送らない（D107）。
 connection.onClosed(() => viewSync.onConnectionClosed());
 
@@ -295,10 +298,11 @@ watch(() => [...session.panes.values()].map((p) => p.agent?.completionSeq ?? -1)
 window.addEventListener("focus", markVisibleAgentsSeen);
 
 // ブラウザのタブのタイトル（H14／AC4）：`{hostname}: {workspace}`。どちらか欠けていれば既定の "wtm"。
+// 名前付き session はその名前を添える（20260926-named-session-ui の AC3。`documentTitle`）。
 watch(
-  () => [session.host?.hostname, view.workspaceId ? session.workspaces.get(view.workspaceId)?.label : null] as const,
-  ([hostname, workspaceLabel]) => {
-    document.title = hostname && workspaceLabel ? `${hostname}: ${workspaceLabel}` : "wtm";
+  () => [session.host?.hostname, session.host?.sessionName, view.workspaceId ? session.workspaces.get(view.workspaceId)?.label : null] as const,
+  ([hostname, sessionName, workspaceLabel]) => {
+    document.title = documentTitle(hostname, sessionName, workspaceLabel);
   },
 );
 

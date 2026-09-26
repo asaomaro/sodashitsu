@@ -51,6 +51,8 @@ pnpm --filter @wtm/e2e test
   `wtm session list [--json]`、token の作り直しは `wtm token reset --session <名前>`、消すのは（止めてから）
   `wtm session delete <名前>`。名前は 1〜64 文字の ASCII の英数字と `.` `_` `-`（詳しくは `docs/tls-setup.md`
   「名前付き session」）。止めるコマンドは無い（Ctrl+C か `wtm session list` の pid に `kill`）。
+  名前付き session はポートを覚え（`--port` 無しの起動で前回のポート）、`WTM_SESSION` で既定の session を選べ、画面のサイドバーの
+  `session: <名前> ⇄` から別の session を新しいタブで開ける（20260926-named-session-ui。詳しくは `docs/tls-setup.md`「画面での session の表示と切り替え」）。
 - **画面履歴**（`wtm serve --pane-history`。既定は無効。20260926-screen-history-replay）：付けて動かしたサーバを止めて起動し直すと、
   pane に前回の画面と「前回のセッションの画面」の区切りの行が出る。付けずに起動すると `session-history.json` を消す（詳しくは
   `docs/tls-setup.md`「画面履歴の保存と再生」）。
@@ -382,6 +384,16 @@ pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` 
       元の pane へ戻り（打った文字が元の pane に出る）、`ls -d /tmp/wtm-scrollback-*` が何も見つけない。元の pane を `Ctrl+B z` で拡大表示にしてから同じ操作をすると、抜けた後も元の pane が
       拡大表示のまま。`vim` を開いた中（代替画面）で `Ctrl+B e` を押しても、vim を開く前の履歴が開く。`EDITOR='code -w'` のような
       引数付きの値でも開ける（VS Code の Remote 等で `code` が使える環境だけ）。エディタの pane を `Ctrl+B x` で閉じても一時ファイルは消える。
+- [ ] 名前付き session の画面・ポートの記憶・`WTM_SESSION`（20260926-named-session-ui。E2E・実機のブラウザでは未検証。Linux・WSL2 の手順。
+      Windows ネイティブは下の節）：`wtm serve`（既定の session）と `wtm serve --session work --port 7781` を並行して起動し、**同じブラウザ**で
+      `http://127.0.0.1:7780/` と `http://127.0.0.1:7781/` の両方にログインする。`work` のタブのタイトルが `<ホスト名> [work]: …` で
+      サイドバーの最上段に `session: work ⇄` が、既定の session のタブに `session: default ⇄` が出ること、**片方にログインしても他方が
+      ログアウトされない**こと（両方のタブを再読み込みしてもログイン画面にならない）を確かめる。既定の session のタブで `session: default ⇄` を
+      Tab で選んで Enter → 一覧が開き `work` が選ばれていること、Enter で新しいタブに `http://127.0.0.1:7781/` が開くこと（ポップアップとして
+      止められない）、もう一度開いて Esc で閉じるとフォーカスがボタンに戻ること（続けて Enter でまた開く）を確かめる。`work` を Ctrl+C で止め、
+      `wtm serve --session work`（`--port` 無し）で起動し直すと 7781 で待ち受け `wtm: session work が前回使ったポート 7781 …` の行が出ること。
+      `work` を止めて `WTM_SESSION=work wtm token reset` が `work` の token を作り直すこと、`WTM_SESSION=a/b wtm serve` が何も作らずに
+      止まり終了コード `2` で案内に `WTM_SESSION` が出ること、`work` の pane で `echo $WTM_SESSION` が `work` を、既定の session の pane では空を出すこと。
 - [ ] Windows の named pipe の権限限定（`AgentReportSocket`。design D5）：Unix の `chmod 0600` に
       相当する対策が Windows では未実装（既知の制約。同 work の decisions.md 参照）。Windows
       ネイティブで確認する場合、同じホストの別ユーザーから report socket へ接続できないことを
@@ -445,6 +457,15 @@ WSL2 を経由せず、Windows 上で直接 `node.exe` を実行して `wtm serv
       と `wtm serve --session "work."` は何も作らずに止まり `$LASTEXITCODE` が `2`。`work` の wtm を Ctrl+C で止めてから
       `wtm session delete work` を実行し、`…\sessions\work` が消えること（`$LASTEXITCODE` が `0`）、既定の session
       （`wtm serve`）の workspace・token がそのままであることを確かめる。
+- [ ] 名前付き session の画面・ポートの記憶・`WTM_SESSION`（20260926-named-session-ui。E2E・実機のブラウザでは未検証）：
+      既定の session（`wtm serve`）と `wtm serve --session work --port 7781` を並行して起動し、ブラウザで両方にログインする。
+      `work` のタブのタイトルが `<ホスト名> [work]: …` でサイドバーの最上段に `session: work ⇄` が出ること、既定の session のタブにも
+      `session: default ⇄` が出ること、**片方にログインしても他方がログアウトされない**こと（再読み込みしてもログイン画面にならない）を
+      確かめる。`session: default ⇄` を押して一覧を開き、`work` を Enter で選ぶと新しいタブで `http://127.0.0.1:7781/` が開くこと、Esc で
+      閉じるとフォーカスがボタンに戻ることを確かめる。`work` を Ctrl+C で止め、`wtm serve --session work`（`--port` 無し）で起動し直すと
+      7781 で待ち受け「前回使ったポート」の行が出ること。PowerShell で `$env:WTM_SESSION="work"; wtm token reset` が `work` の token を
+      作り直すこと（`work` を止めてから）、`$env:WTM_SESSION="a/b"; wtm serve` が何も作らずに止まり `$LASTEXITCODE` が `2` で案内に
+      `WTM_SESSION` が出ること、`work` の pane で `echo $env:WTM_SESSION` が `work` を出すこと。終わったら `Remove-Item Env:WTM_SESSION`。
 - [ ] 落ちて残ったロックを取り直す（pid の生死の判定。D103）：`Get-Content "$env:LOCALAPPDATA\web-tn-multiplexer\wtm.lock"`
       で中身（1 行目が wtm の pid、2 行目がホスト名）を見て、`Stop-Process -Id <1 行目の pid> -Force` で wtm を強制終了する
       （落ちたときと同じく、ロックを消さずに終わる）。`Test-Path "$env:LOCALAPPDATA\web-tn-multiplexer\wtm.lock"` が `True`

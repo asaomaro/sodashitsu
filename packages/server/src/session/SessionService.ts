@@ -108,6 +108,8 @@ export interface SessionServiceOptions {
    * 環境に入れる。待ち受けた後に決まる（`composeServer` の `listen()`）ので、組み立て時の値ではなく関数で受け取る。省略時は入れない。
    */
   serverUrlForPanes?: (() => string | undefined) | undefined;
+  /** 名前付き session の名前（20260926-named-session-ui）。pane の環境の `WTM_SESSION` に入れる。既定の session では省く。 */
+  sessionName?: string | undefined;
 }
 
 /**
@@ -134,6 +136,7 @@ export class SessionService {
   private readonly agentReportSocketPath: string | undefined;
   private readonly getAutoResumeEnabled: () => boolean;
   private readonly serverUrlForPanes: () => string | undefined;
+  private readonly sessionName: string | undefined;
   private readonly scrollbackEditorEnv: { tmpRoot: string | undefined; platform: NodeJS.Platform; env: NodeJS.ProcessEnv };
   /** 開いているスクロールバックのエディタの pane → 開いた元の pane・開く前の拡大表示・一時ディレクトリ（20260926-edit-scrollback）。 */
   private readonly scrollbackEditors = new Map<PaneId, { sourcePaneId: PaneId; previousZoomedPaneId: PaneId | null; dir: string }>();
@@ -180,6 +183,7 @@ export class SessionService {
     this.agentReportSocketPath = opts.agentReportSocketPath;
     this.getAutoResumeEnabled = opts.getAutoResumeEnabled ?? (() => true);
     this.serverUrlForPanes = opts.serverUrlForPanes ?? (() => undefined);
+    this.sessionName = opts.sessionName;
     this.scrollbackEditorEnv = {
       tmpRoot: opts.scrollbackEditor?.tmpRoot,
       platform: opts.scrollbackEditor?.platform ?? process.platform,
@@ -1049,7 +1053,12 @@ export class SessionService {
    * サーバの環境から受け継いだ `WTMCTL_URL`・`WTMCTL_TOKEN` と古い `WTM_*` は渡さない（`buildPaneEnv`）。
    */
   private envForPane(paneId: PaneId): Record<string, string> {
-    return buildPaneEnv(process.env, { paneId, serverUrl: this.serverUrlForPanes(), agentReportSocketPath: this.agentReportSocketPath });
+    return buildPaneEnv(process.env, {
+      paneId,
+      serverUrl: this.serverUrlForPanes(),
+      agentReportSocketPath: this.agentReportSocketPath,
+      sessionName: this.sessionName,
+    });
   }
 
   /**

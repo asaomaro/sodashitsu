@@ -11,6 +11,7 @@ describe("buildPaneEnv", () => {
     WTM_PANE_ID: "p99",
     WTM_SERVER_URL: "http://old:2",
     WTM_AGENT_REPORT_SOCKET: "/old/agent-report.sock",
+    WTM_SESSION: "inherited",
     UNSET: undefined,
   } as NodeJS.ProcessEnv;
 
@@ -69,5 +70,40 @@ describe("buildPaneEnv", () => {
     const base = { WTMCTL_TOKEN: "t" } as NodeJS.ProcessEnv;
     buildPaneEnv(base, { paneId: "p1" }, "linux");
     expect(base).toEqual({ WTMCTL_TOKEN: "t" });
+  });
+});
+
+/** 20260926-named-session-ui（AC15）。 */
+describe("buildPaneEnv の WTM_SESSION", () => {
+  it("名前付き session なら WTM_SESSION に入れる（受け継いだ別の値より勝つ）", () => {
+    const env = buildPaneEnv(
+      { PATH: "/usr/bin", WTM_SESSION: "other" } as NodeJS.ProcessEnv,
+      { paneId: "p1", sessionName: "work" },
+      "linux",
+    );
+    expect(env["WTM_SESSION"]).toBe("work");
+  });
+
+  it("既定の session では入れず、受け継いだ値も渡さない", () => {
+    const env = buildPaneEnv(
+      { PATH: "/usr/bin", WTM_SESSION: "work" } as NodeJS.ProcessEnv,
+      { paneId: "p1" },
+      "linux",
+    );
+    expect("WTM_SESSION" in env).toBe(false);
+    expect(env["PATH"]).toBe("/usr/bin");
+  });
+
+  it("win32 では大文字小文字を区別せずに落とし、linux では別の変数として残す", () => {
+    const base = { Wtm_Session: "x", wtm_session: "y" } as NodeJS.ProcessEnv;
+    expect(buildPaneEnv(base, { paneId: "p1", sessionName: "work" }, "win32")).toEqual({
+      WTM_PANE_ID: "p1",
+      WTM_SESSION: "work",
+    });
+    expect(buildPaneEnv(base, { paneId: "p1" }, "linux")).toEqual({
+      Wtm_Session: "x",
+      wtm_session: "y",
+      WTM_PANE_ID: "p1",
+    });
   });
 });

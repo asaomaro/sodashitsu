@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { ConfigError, stateDirInUseError } from "./config.js";
+import { ConfigError, sessionFromEnvNote, stateDirInUseError } from "./config.js";
 import { DefaultAuthService } from "./auth/AuthService.js";
 import { FsAuthFile } from "./persist/AuthFile.js";
 import { StateDirInUseError, StateDirLock } from "./persist/StateDirLock.js";
@@ -75,20 +75,25 @@ export async function runTokenReset(
   base: string,
   session: string | undefined,
   io: CommandIo,
+  /** 名前を `WTM_SESSION` から選んだか（案内にその旨を添える。20260926-named-session-ui）。 */
+  sessionSource?: "flag" | "env",
 ): Promise<void> {
   const dir = resolveSessionStateDir(base, session);
+  const fromEnv = sessionSource === "env" && dir !== base ? session : undefined;
   // 名前付き session は、在るものだけ（打ち間違えた名前で新しい session を作らない。作るのは wtm serve --session）。
   if (dir !== base && !(await isDirectory(dir))) {
     throw new ConfigError(
       `no such session: ${session}`,
-      `session ${session} はありません（${dir}）。wtm session list で名前を確かめてください（名前付き session を作るのは wtm serve --session ${session}）。`,
+      `session ${session} はありません（${dir}）。wtm session list で名前を確かめてください（名前付き session を作るのは wtm serve --session ${session}）。` +
+        (fromEnv !== undefined ? sessionFromEnvNote(fromEnv) : ""),
     );
   }
   const lock = new StateDirLock(dir);
   try {
     await lock.acquire();
   } catch (err) {
-    if (err instanceof StateDirInUseError) throw stateDirInUseError(err, dir, "token-reset");
+    if (err instanceof StateDirInUseError)
+      throw stateDirInUseError(err, dir, "token-reset", fromEnv);
     throw err;
   }
   try {

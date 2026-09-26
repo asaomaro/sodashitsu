@@ -19,6 +19,15 @@ export const useSessionStore = defineStore("session", () => {
   const groups = ref(new Map<string, WorkspaceGroup>());
   const focus = ref<SessionFocus | null>(null);
   const limits = ref<SessionLimits>({ scrollbackLines: 5000 });
+  /**
+   * 同じ session の根の名前付き session の数（`server.sessions` の結果。20260926-named-session-ui）。既定の session のサイドバーに
+   * session の入口を出すかを決める。hello のたびと一覧を開くたびに取り直す（失敗したら前の値のまま）。
+   */
+  const namedSessionCount = ref(0);
+
+  function setNamedSessionCount(n: number): void {
+    namedSessionCount.value = n;
+  }
 
   function applySnapshot(s: SessionSnapshot, myClientId: string): void {
     protocolVersion.value = s.protocol;
@@ -108,6 +117,8 @@ export const useSessionStore = defineStore("session", () => {
     groups,
     focus,
     limits,
+    namedSessionCount,
+    setNamedSessionCount,
     applySnapshot,
     hasSizeAuthority,
     workspaceUpserted,

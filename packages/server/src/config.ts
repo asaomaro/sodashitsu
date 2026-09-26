@@ -23,6 +23,18 @@ export interface ServeOptions {
   stateDir: string;
   /** 名前付き session で起動したときだけその名前（`--session default`・指定なしは `undefined`。20260926-named-session）。 */
   sessionName: string | undefined;
+  /**
+   * 名前付き session の名前の出所（名前付きのときだけ。既定の session——指定なし・`default`・`WTM_SESSION=default`——は undefined）。
+   * `"env"` は `WTM_SESSION`（20260926-named-session-ui）。
+   */
+  sessionSource: "flag" | "env" | undefined;
+  /** session の根（既定の session の状態ディレクトリ。`--state-dir` か OS の既定）。session の一覧の走査に使う（20260926-named-session-ui）。 */
+  sessionRoot: string;
+  /**
+   * ポートの出所（20260926-named-session-ui）。`"flag"`＝`--port`・`"default"`＝既定の 7780・`"remembered"`＝名前付き session の
+   * 起動の記録（`serve.json`）。`resolveServeOptions` は flag か default を返し、`composeServer` が記録を読んで remembered に差し替える。
+   */
+  portSource: "flag" | "default" | "remembered";
   scrollbackLines: number;
   shell: string | undefined;
   /** 20260924-worktree-dir-config。既定値の解決はしない（`shell` と同じ。既定は `defaultWorktreeRoot()` 側に委ねる）。 */
@@ -42,6 +54,8 @@ export interface RawServeArgs {
   origin?: string[];
   stateDir?: string;
   session?: string;
+  /** `session` の出所（20260926-named-session-ui。`cliArgs.ts` が入れる）。無ければ flag とみなす。 */
+  sessionSource?: "flag" | "env";
   scrollback?: string;
   shell?: string;
   worktreeDir?: string;
@@ -136,7 +150,8 @@ export function resolveServeOptions(args: RawServeArgs, env: NodeJS.ProcessEnv =
 
   // 名前付き session（20260926-named-session）：`--state-dir`（無ければ既定）の下の `sessions/<name>`。規則外の名前はここで
   // ConfigError（ロック・ログ等を作る前）。
-  const stateDir = resolveSessionStateDir(args.stateDir ?? defaultStateDir(env, os), args.session);
+  const sessionRoot = args.stateDir ?? defaultStateDir(env, os);
+  const stateDir = resolveSessionStateDir(sessionRoot, args.session);
   const sessionName = args.session === undefined || args.session === DEFAULT_SESSION_NAME ? undefined : args.session;
   if (os !== "win32") {
     const socketPath = agentReportSocketPathFor(stateDir, os);
@@ -159,6 +174,9 @@ export function resolveServeOptions(args: RawServeArgs, env: NodeJS.ProcessEnv =
     extraOrigins: (args.origin ?? []).map(parseOrigin),
     stateDir,
     sessionName,
+    sessionSource: sessionName === undefined ? undefined : (args.sessionSource ?? "flag"),
+    sessionRoot,
+    portSource: args.port === undefined ? "default" : "flag",
     scrollbackLines: parseScrollback(args.scrollback),
     shell: args.shell,
     worktreeDir: args.worktreeDir,
@@ -180,8 +198,20 @@ export function isBindFailure(err: unknown): err is NodeJS.ErrnoException {
  * `listen()` の失敗の案内（`main.ts` が終了コード 2 の `ConfigError` にする）。待ち受けの段階の失敗（`isBindFailure`）で、
  * 利用者が直せるもの（`listenFailureHint`）だけに案内を返し、それ以外（bind の後の失敗・想定外の失敗）は `undefined`。
  */
-export function bindFailureHint(err: unknown): string | undefined {
-  return isBindFailure(err) ? listenFailureHint(err.code) : undefined;
+export function bindFailureHint(err: unknown, remembered?: { port: number; sessionName: string }): string | undefined {
+  if (!isBindFailure(err)) return undefined;
+  const hint = listenFailureHint(err.code);
+  if (hint === undefined || remembered === undefined) return hint;
+  // 記録したポート（20260926-named-session-ui の AC16）。`--port` を付けていないので、どこから来たポートかを先に言う。
+  return (
+    `ポート ${remembered.port} は session ${remembered.sessionName} が前回使ったポートです（記録: serve.json）。` +
+    `--port で別のポートを指定すると、次からはそのポートを使います。${hint}`
+  );
+}
+
+/** `WTM_SESSION` から選んだ名前付き session の案内に添える 1 文（20260926-named-session-ui）。 */
+export function sessionFromEnvNote(sessionName: string): string {
+  return `session ${sessionName} は環境変数 WTM_SESSION から選びました（既定の session なら --session default）。`;
 }
 
 /**
@@ -193,7 +223,10 @@ export function stateDirInUseError(
   inUse: { pid: number; lockPath: string; otherHost?: string | undefined },
   stateDir: string,
   command: "serve" | "token-reset",
+  /** `WTM_SESSION` から選んだ名前付き session なら、その名前（20260926-named-session-ui）。 */
+  sessionFromEnv?: string | undefined,
 ): ConfigError {
+  const envNote = sessionFromEnv !== undefined ? sessionFromEnvNote(sessionFromEnv) : "";
   const who = inUse.otherHost !== undefined ? `pid ${inUse.pid} on ${inUse.otherHost}` : `pid ${inUse.pid}`;
   const stale =
     inUse.otherHost !== undefined
@@ -206,6 +239,7 @@ export function stateDirInUseError(
       [
         "同じ --state-dir を別の wtm（wtm serve か wtm token reset）が使っています（wtm serve を 2 つ動かすと全シェルを二重に起動し、session.json・auth.json を互いに上書きします）。",
         "別のポートで並行して動かすなら、--session <名前> で別の名前付き session にするか、--state-dir に別のディレクトリを指定してください。",
+        envNote,
         stale,
       ].join(""),
     );
@@ -215,6 +249,7 @@ export function stateDirInUseError(
     [
       "wtm serve が動いている間は token を作り直せません（動いている側は古い token のまま新しい token を受け付けず、",
       "次のログイン等で auth.json を古い token に書き戻します）。wtm serve を止めてから wtm token reset を実行し、もう一度起動してください。",
+      envNote,
       stale,
     ].join(""),
   );

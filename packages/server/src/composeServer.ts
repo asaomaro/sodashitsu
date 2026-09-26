@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { platform } from "node:os";
+import { hostname as osHostname, platform } from "node:os";
 import type { HostInfo } from "@wtm/protocol";
 import { ConfigError, type RawServeArgs, type ServeOptions, agentReportSocketPathFor, resolveServeOptions, stateDirInUseError } from "./config.js";
 import { FileLogger, type Logger } from "./log/Logger.js";
@@ -19,7 +19,9 @@ import { FsAuthFile } from "./persist/AuthFile.js";
 import { FsPaneHistoryFile, type PaneHistoryEntry } from "./persist/PaneHistoryFile.js";
 import { PaneHistoryRecorder } from "./session/PaneHistoryRecorder.js";
 import { StateDirInUseError, StateDirLock } from "./persist/StateDirLock.js";
-import { DefaultAuthService } from "./auth/AuthService.js";
+import { DefaultAuthService, sessionCookieName } from "./auth/AuthService.js";
+import { readServeRecord, writeServeRecord } from "./persist/ServeRecordFile.js";
+import { listServerSessions } from "./persist/namedSession.js";
 import { DefaultOriginPolicy } from "./auth/OriginPolicy.js";
 import { OriginRejectionLog } from "./auth/OriginRejectionLog.js";
 import { DefaultLoginRateLimiter } from "./auth/LoginRateLimiter.js";
@@ -102,7 +104,7 @@ export async function composeServer(
   /** テスト用の差し替え（結合テストが定期保存を短い間隔で観測する。20260926-screen-history-replay）。 */
   internal: { paneHistorySaveIntervalMs?: number } = {},
 ): Promise<ComposedServer> {
-  const options = resolveServeOptions(rawArgs);
+  const options = await withRememberedPort(resolveServeOptions(rawArgs), rawArgs);
   const logger = new FileLogger(join(options.stateDir, "server.log"));
 
   // 同じ state-dir の wtm を 2 つ動かさない（D103）。取るのは `listen()` の最初。放すときの失敗はログに残すだけ。
@@ -111,7 +113,8 @@ export async function composeServer(
   // auth.json はここでは読まない——ロックを取ってから `listen()` で読む（D103）。組み立てとロックの間に `wtm token reset`
   // （ロックを取って作り直す）が走ると、先に読んだ古い token をメモリに持ったまま起動し、新しい token を受け付けず、次の
   // ログイン等で auth.json を古い token に書き戻していた（独立点検で dist で再現）。
-  const auth = new DefaultAuthService(authFile);
+  // 名前付き session の Cookie の名前は session ごと（Cookie はポートで分かれない。20260926-named-session-ui の design「Cookie」）。
+  const auth = new DefaultAuthService(authFile, { cookieName: sessionCookieName(options.sessionName) });
 
   // 証明書の読み込み・解釈の失敗は設定の誤りとして終了コード 2 にする。token はまだ作っていないので失わない（D102）。
   const cert = options.cert ? await readPem(options.cert, "--cert") : undefined;
@@ -150,7 +153,13 @@ export async function composeServer(
   const persist = new DefaultPersistScheduler(async () => {
     await sessionFile.save(toSessionFileData(session));
   });
-  const host: HostInfo = { os: platform() === "win32" ? "windows" : "linux", windowsBuild: null, hostname: (await import("node:os")).hostname() };
+  const host: HostInfo = {
+    os: platform() === "win32" ? "windows" : "linux",
+    windowsBuild: null,
+    hostname: osHostname(),
+    // 名前付き session のときだけ（ブラウザの表示。20260926-named-session-ui の AC1）。既定の session では項目ごと入れない。
+    ...(options.sessionName !== undefined ? { sessionName: options.sessionName } : {}),
+  };
   // 「起動した場所」。新しい workspace の以前の場所と、新しく開く場所の方針「起動した場所」・代わりの 2 段目は同じ値
   // （2 か所で別々に持たない。20260921-new-terminal-cwd の design D6）。
   const defaultCwd = process.cwd();
@@ -174,6 +183,7 @@ export async function composeServer(
     getAutoResumeEnabled: agentIntegrations.getAutoResumeEnabled,
     // pane の中の wtmctl の接続先（20260926-agent-skill-file）。待ち受けた後（`listen()` の 1.）に決まる。pane を起動するのはその後。
     serverUrlForPanes: () => paneUrl,
+    sessionName: options.sessionName, // pane の環境の WTM_SESSION（20260926-named-session-ui）
     // 新しく開く場所（herdr の `terminal.new_cwd`）。「引き継ぐ」は元の pane の前面プロセスの cwd をその時点で読み直す。
     newCwdDeps: makeNewCwdDeps({
       terminals,
@@ -210,7 +220,17 @@ export async function composeServer(
   const sizeAuthority = new DefaultSizeAuthority(clients, session, bus); // bus: pane.attach_changed（20260926-pane-direct-connect）
   const surface = new ControlSurface(logger);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
-  registerAllMethods(surface, { session, clients, sizeAuthority, terminals, worktrees, agentIntegrations, gitPoller, agentStarter });
+  registerAllMethods(surface, {
+    session,
+    clients,
+    sizeAuthority,
+    terminals,
+    worktrees,
+    agentIntegrations,
+    gitPoller,
+    agentStarter,
+    serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
+  });
   const wsServer = new WsServerWs(httpServer.server, originRejections, auth.authorizeUpgrade, logger);
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
   wsServer.setReady(false);
@@ -268,7 +288,9 @@ export async function composeServer(
       try {
         await lock.acquire();
       } catch (err) {
-        if (err instanceof StateDirInUseError) throw stateDirInUseError(err, options.stateDir, "serve");
+        if (err instanceof StateDirInUseError) {
+          throw stateDirInUseError(err, options.stateDir, "serve", options.sessionSource === "env" ? options.sessionName : undefined);
+        }
         throw err;
       }
       try {
@@ -287,7 +309,12 @@ export async function composeServer(
         });
         // 1'. pane の中の wtmctl の接続先（20260926-agent-skill-file）。ポートは実際に待ち受けたもの（パイプ等で数でなければ `options.port`）。
         const bound = httpServer.server.address();
-        paneUrl = paneServerUrl(secure ? "https" : "http", options.host, typeof bound === "object" && bound !== null ? bound.port : options.port);
+        const boundPort = typeof bound === "object" && bound !== null ? bound.port : options.port;
+        paneUrl = paneServerUrl(secure ? "https" : "http", options.host, boundPort);
+        // 1''. 起動の記録（20260926-named-session-ui）。名前付き session のポートの記憶と、session の一覧の開くための情報に使う。書けなくても続ける。
+        await writeServeRecord(options.stateDir, { pid: process.pid, hostname: osHostname(), port: boundPort, https: secure, host: options.host }).catch(
+          (err: unknown) => logger.warn("cannot write serve.json", { error: err instanceof Error ? err.message : String(err) }),
+        );
         // 2. token（初回だけ作る。表示は呼び出し側が行う——この後で失敗しても `freshToken` は読める）。
         const { created, token } = await auth.ensureToken();
         freshToken = created ? token : undefined;
@@ -360,6 +387,16 @@ export async function composeServer(
       }
     },
   };
+}
+
+/**
+ * 名前付き session で `--port` が無ければ、起動の記録（`serve.json`）のポートを使う（20260926-named-session-ui の design「ポートの記憶」）。
+ * 記録が使えなければ（無い・読めない・壊れている）今までどおり。既定の session は記録を読まない（`--port` が無ければ 7780）。
+ */
+async function withRememberedPort(options: ServeOptions, rawArgs: RawServeArgs): Promise<ServeOptions> {
+  if (options.sessionName === undefined || rawArgs.port !== undefined) return options;
+  const record = await readServeRecord(options.stateDir);
+  return record === undefined ? options : { ...options, port: record.port, portSource: "remembered" };
 }
 
 /** `--cert`/`--key` の PEM を読む。読めなければ設定の誤り（終了コード 2）にする。 */

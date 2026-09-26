@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs } from "./cliArgs.js";
+import { applySessionEnv, parseArgs } from "./cliArgs.js";
 import { ConfigError } from "./config.js";
 
 /** 投げた ConfigError の message（投げなければ失敗）。 */
@@ -110,5 +110,66 @@ describe("parseArgs（CLI の引数）", () => {
     expect(() => parseArgs(["serve", "--nope"])).toThrow(ConfigError);
     expect(() => parseArgs(["token", "reset", "--state-dir"])).toThrow(ConfigError);
     for (const argv of [[], ["help"], ["--help"], ["-h"]]) expect(parseArgs(argv).command).toBe("help");
+  });
+});
+
+/** 20260926-named-session-ui（AC13・AC14）。 */
+describe("applySessionEnv（WTM_SESSION）", () => {
+  const env = (v: string | undefined): NodeJS.ProcessEnv => (v === undefined ? {} : { WTM_SESSION: v });
+
+  it("wtm serve に --session が無ければ WTM_SESSION を session にし、出所を env にする", () => {
+    const parsed = applySessionEnv(parseArgs(["serve", "--port", "9000"]), env("work"));
+    expect(parsed).toMatchObject({ command: "serve", session: "work", sessionSource: "env", serve: { session: "work", sessionSource: "env", port: "9000" } });
+  });
+
+  it("wtm token reset も同じ", () => {
+    expect(applySessionEnv(parseArgs(["token", "reset"]), env("work"))).toMatchObject({ command: "token-reset", session: "work", sessionSource: "env" });
+  });
+
+  it("--session は WTM_SESSION より優先する（出所は flag）", () => {
+    const parsed = applySessionEnv(parseArgs(["serve", "--session", "other"]), env("work"));
+    expect(parsed).toMatchObject({ session: "other", sessionSource: "flag", serve: { session: "other", sessionSource: "flag" } });
+    // 規則外の WTM_SESSION も --session があれば見ない
+    expect(applySessionEnv(parseArgs(["token", "reset", "--session", "other"]), env("a/b")).session).toBe("other");
+  });
+
+  it("無い・空なら何もしない（既定の session）", () => {
+    for (const v of [undefined, ""]) {
+      const parsed = applySessionEnv(parseArgs(["serve"]), env(v));
+      expect(parsed.session).toBeUndefined();
+      expect(parsed.sessionSource).toBeUndefined();
+      expect(parsed.serve.session).toBeUndefined();
+    }
+  });
+
+  it("default は既定の session（名前として渡し、状態ディレクトリの解決が既定にする）", () => {
+    expect(applySessionEnv(parseArgs(["serve"]), env("default"))).toMatchObject({ session: "default", serve: { session: "default" } });
+  });
+
+  it.each(["a/b", "..", ".", "-x", "x.", "con", "x".repeat(65), "日本語"])("規則外の値 %j は ConfigError で、案内に WTM_SESSION が出る", (v) => {
+    let err: unknown;
+    try {
+      applySessionEnv(parseArgs(["serve"]), env(v));
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(ConfigError);
+    expect((err as ConfigError).message).toContain("WTM_SESSION");
+    expect((err as ConfigError).hint).toContain("WTM_SESSION");
+    expect(() => applySessionEnv(parseArgs(["token", "reset"]), env(v))).toThrow(ConfigError);
+  });
+
+  it("wtm session list・delete・help は WTM_SESSION を見ない（規則外でも投げない）", () => {
+    for (const argv of [["session", "list"], ["session", "delete", "work"], ["help"]]) {
+      const parsed = parseArgs(argv);
+      expect(applySessionEnv(parsed, env("a/b"))).toBe(parsed);
+      expect(applySessionEnv(parsed, env("work"))).toBe(parsed);
+    }
+  });
+
+  it("parseArgs の --session は出所を flag にする", () => {
+    expect(parseArgs(["serve", "--session", "w"])).toMatchObject({ sessionSource: "flag", serve: { sessionSource: "flag" } });
+    expect(parseArgs(["token", "reset", "--session", "w"]).sessionSource).toBe("flag");
+    expect(parseArgs(["serve"]).sessionSource).toBeUndefined();
   });
 });

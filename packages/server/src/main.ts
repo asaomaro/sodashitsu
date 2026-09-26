@@ -3,7 +3,7 @@ import { bindFailureHint, defaultStateDir, ConfigError } from "./config.js";
 import { composeServer } from "./composeServer.js";
 import type { RawServeArgs } from "./config.js";
 import { type CommandIo, runSessionDelete, runSessionList, runTokenReset } from "./sessionCommands.js";
-import { parseArgs } from "./cliArgs.js";
+import { applySessionEnv, parseArgs } from "./cliArgs.js";
 import { OsNetworkInfo } from "./infra/OsNetworkInfo.js";
 import { lastChanceTokenLines, startupLines } from "./startupBanner.js";
 import { join, resolve } from "node:path";
@@ -24,9 +24,13 @@ function printHelp(): void {
 
 async function runServe(args: RawServeArgs): Promise<void> {
   const server = await composeServer(args);
-  const { sessionName, stateDir } = server.options;
+  const { sessionName, stateDir, sessionSource, portSource } = server.options;
   const sessionInfo =
-    sessionName !== undefined ? { name: sessionName, stateDir, stateDirBase: args.stateDir !== undefined ? resolve(args.stateDir) : undefined } : undefined;
+    sessionName !== undefined
+      ? { name: sessionName, stateDir, stateDirBase: args.stateDir !== undefined ? resolve(args.stateDir) : undefined, fromEnv: sessionSource === "env" }
+      : undefined;
+  // 名前付き session の記録したポート（20260926-named-session-ui の AC16）。表示と待ち受けの失敗の案内に添える。
+  const remembered = portSource === "remembered" && sessionName !== undefined ? { port: server.options.port, sessionName } : undefined;
   const { host, port } = server.options;
   // **作った token は必ず一度表示する**（D102・D103）。token は bind の直後に作り auth.json に保存するので、この後に何が
   // 起きても——`listen()` の後段の失敗（最初のシェルを起動できない等）・成功した後の表示の組み立ての失敗（インタフェースの
@@ -83,7 +87,7 @@ async function runServe(args: RawServeArgs): Promise<void> {
       // 終了コード 2 にする（判定は `config.ts` の `bindFailureHint`）。同じ state-dir の wtm が動いている（`wtm.lock`）は
       // `listen()` が既に `ConfigError` にしている。それ以外（想定外の失敗）はそのまま投げる（終了コード 1。原因を
       // 握りつぶさない）。
-      const hint = bindFailureHint(err);
+      const hint = bindFailureHint(err, remembered);
       if (hint === undefined) throw err;
       throw new ConfigError(`cannot listen on ${formatUrlHost(host)}:${port}: ${(err as Error).message}`, hint);
     }
@@ -102,6 +106,7 @@ async function runServe(args: RawServeArgs): Promise<void> {
       freshToken: server.freshToken,
       session: sessionInfo,
       paneHistoryPath: server.options.paneHistory ? join(server.options.stateDir, PANE_HISTORY_FILE_NAME) : undefined,
+      portRemembered: remembered !== undefined,
     });
     for (const line of lines) console.log(line);
     tokenShown = true; // `startupLines` は作った token を必ず含む（URL が 1 つも無くても）
@@ -122,11 +127,12 @@ async function main(): Promise<void> {
   try {
     // 引数の誤り（未知のオプション・値の無いオプション）も ConfigError として終了コード 2 にする（以前は try の外で
     // 投げていたため、スタックトレースつきの終了コード 1 になっていた。D102 の実物の CLI の確認で発見）。
-    const parsed = parseArgs(process.argv.slice(2));
+    // `--session` が無ければ `WTM_SESSION`（serve・token reset だけ。20260926-named-session-ui）。
+    const parsed = applySessionEnv(parseArgs(process.argv.slice(2)), process.env);
     if (parsed.command === "serve") {
       await runServe(parsed.serve);
     } else if (parsed.command === "token-reset") {
-      await runTokenReset(parsed.stateDir ?? defaultStateDir(), parsed.session, consoleIo);
+      await runTokenReset(parsed.stateDir ?? defaultStateDir(), parsed.session, consoleIo, parsed.sessionSource);
     } else if (parsed.command === "session-list") {
       process.exitCode = await runSessionList(parsed.stateDir ?? defaultStateDir(), parsed.json === true, consoleIo);
     } else if (parsed.command === "session-delete") {

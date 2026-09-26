@@ -6,6 +6,7 @@ import type { SizeAuthority } from "../../clients/SizeAuthority.js";
 import type { TerminalManager } from "../../terminal/TerminalManager.js";
 import type { AgentIntegrationService } from "../../agent/AgentIntegrationService.js";
 import type { AgentStarter } from "../../agent/AgentStarter.js";
+import type { ServerSessionEntry } from "@wtm/protocol";
 
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
 export interface MethodDeps {
@@ -21,4 +22,6 @@ export interface MethodDeps {
   gitPoller: GitInfoPoller;
   /** `agent.start`（20260926-agent-start）。無ければ `agent.start` を登録しない（decisions.md D7）。 */
   agentStarter?: AgentStarter;
+  /** `server.sessions`（20260926-named-session-ui）。無ければ空の一覧を返す。 */
+  serverSessions?: () => Promise<ServerSessionEntry[]>;
 }

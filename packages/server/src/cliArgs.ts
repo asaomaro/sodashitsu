@@ -1,4 +1,5 @@
 import { ConfigError, type RawServeArgs } from "./config.js";
+import { SESSION_NAME_RULE, sessionNameProblem } from "./persist/namedSession.js";
 
 export interface ParsedArgs {
   command: "serve" | "token-reset" | "session-list" | "session-delete" | "help";
@@ -10,7 +11,12 @@ export interface ParsedArgs {
   sessionTarget?: string | undefined;
   /** `--json`（session だけ）。 */
   json?: boolean;
+  /** `session` の出所（`--session`＝flag・`WTM_SESSION`＝env。20260926-named-session-ui）。無ければ既定の session。 */
+  sessionSource?: "flag" | "env" | undefined;
 }
+
+/** 既定の session を選ぶ環境変数（herdr の `HERDR_SESSION`。20260926-named-session-ui）。 */
+export const SESSION_ENV_VAR = "WTM_SESSION";
 
 const USAGE =
   "使い方: wtm serve [--host H] [--port P] [--cert F] [--key F] [--origin O]... [--state-dir D] [--session NAME] [--scrollback N] [--shell S] [--worktree-dir D] [--pane-history] / wtm token reset [--state-dir D] [--session NAME] / wtm session list [--state-dir D] [--json] / wtm session delete NAME [--state-dir D] [--json]";
@@ -73,6 +79,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--session":
         session = next();
         serve.session = session;
+        serve.sessionSource = "flag";
         break;
       case "--json":
         json = true;
@@ -98,7 +105,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   if (command !== "session" && json) throw new ConfigError(`--json is not an option of wtm ${command === "token" ? "token reset" : command}`, USAGE);
   if (command === "serve") {
     if (words.length > 0) throw new ConfigError(`unexpected argument for wtm serve: ${words[0]}`, USAGE);
-    return { command: "serve", serve, stateDir, session };
+    return { command: "serve", serve, stateDir, session, ...(session !== undefined ? { sessionSource: "flag" as const } : {}) };
   }
   if (command === "session") return parseSessionCommand(words, serveOnlyOptions, session, stateDir, json, serve);
   if (words.length === 0) throw new ConfigError("missing subcommand: wtm token <reset>", USAGE);
@@ -109,7 +116,36 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       `wtm token reset で使えるオプションは --session と --state-dir だけです（${serveOnlyOptions[0]} は wtm serve のオプション）。`,
     );
   }
-  return { command: "token-reset", serve, stateDir, session };
+  return { command: "token-reset", serve, stateDir, session, ...(session !== undefined ? { sessionSource: "flag" as const } : {}) };
+}
+
+/**
+ * `wtm serve`・`wtm token reset` で `--session` が無ければ、環境変数 `WTM_SESSION` の値を session の名前にする（herdr の `HERDR_SESSION`。
+ * 20260926-named-session-ui の design「WTM_SESSION」）。`main.ts` だけが呼ぶ——サーバを組み立てる `composeServer` は環境変数の session を
+ * 見ない（テスト・smoke が開発者のシェルの値で別の状態ディレクトリを使わないため）。
+ * - 無い・空は何もしない（herdr は空を誤りにするが、`export WTM_SESSION=` で外せるようにした。decisions D3）。
+ * - `default` は既定の session（`resolveSessionStateDir` が既定にする）。
+ * - 規則外は `ConfigError`（終了コード 2。何も作らず・読まない）で、値の出所が `WTM_SESSION` であることを示す。
+ * - `wtm session list`・`delete` は名前を明示して受け取るので見ない。
+ */
+export function applySessionEnv(parsed: ParsedArgs, env: NodeJS.ProcessEnv): ParsedArgs {
+  if (parsed.command !== "serve" && parsed.command !== "token-reset") return parsed;
+  if (parsed.session !== undefined) return parsed;
+  const value = env[SESSION_ENV_VAR];
+  if (value === undefined || value === "") return parsed;
+  const problem = sessionNameProblem(value); // `default` は規則に合う（既定の session の別名）
+  if (problem !== undefined) {
+    throw new ConfigError(
+      `invalid ${SESSION_ENV_VAR}: ${JSON.stringify(value)} (${problem})`,
+      `環境変数 ${SESSION_ENV_VAR} の値が session の名前の規則に合いません。${SESSION_NAME_RULE}${SESSION_ENV_VAR} を外すか空にするか、--session で名前を指定してください。`,
+    );
+  }
+  return {
+    ...parsed,
+    session: value,
+    sessionSource: "env",
+    serve: { ...parsed.serve, session: value, sessionSource: "env" },
+  };
 }
 
 /** `wtm session list` / `wtm session delete <name>`（20260926-named-session）。使えるオプションは --state-dir と --json だけ。 */

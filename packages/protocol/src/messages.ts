@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentInfo, AgentIntegrationKind, Pane, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
+import type { AgentInfo, AgentIntegrationKind, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
 import { THEME_NAMES } from "./theme.js";
 
 /**
@@ -393,6 +393,15 @@ export type WorktreeRemoveParams = z.infer<typeof WorktreeRemoveParams>;
 /** `model.ts` の `AgentIntegrationKind` と値を揃える（別の型なので同期がずれないよう並びも揃える）。 */
 const agentIntegrationKind = z.enum(["claude", "codex", "cursor", "copilot", "devin", "droid", "grok", "qwen"]);
 
+// --- session の一覧（20260926-named-session-ui。herdr の `session list` を画面から）------------------
+
+/** 同じ session の根の session の一覧（認証済みの接続だけ。token・パスは返さない）。 */
+export const ServerSessionsParams = z.object({});
+export type ServerSessionsParams = z.infer<typeof ServerSessionsParams>;
+export interface ServerSessionsResult {
+  sessions: ServerSessionEntry[];
+}
+
 export const AgentIntegrationStatusParams = z.object({});
 export type AgentIntegrationStatusParams = z.infer<typeof AgentIntegrationStatusParams>;
 
@@ -545,6 +554,7 @@ export const METHOD_SCHEMAS = {
   "agent.send_keys": AgentSendKeysParams,
   "agent.rename": AgentRenameParams,
   "agent.start": AgentStartParams,
+  "server.sessions": ServerSessionsParams,
 } as const;
 
 export type MethodName = keyof typeof METHOD_SCHEMAS;
@@ -605,6 +615,7 @@ export interface MethodResultMap {
   "agent.send_keys": Record<string, never>;
   "agent.rename": AgentRenameResult;
   "agent.start": AgentStartResult;
+  "server.sessions": ServerSessionsResult;
 }
 
 export type ParamsOf<M extends MethodName> = z.infer<(typeof METHOD_SCHEMAS)[M]>;

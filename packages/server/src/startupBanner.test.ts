@@ -102,3 +102,27 @@ describe("lastChanceTokenLines", () => {
     expect(lines.join("\n")).toContain("wtm token reset");
   });
 });
+
+/** 20260926-named-session-ui（AC16・WTM_SESSION の表示）。 */
+describe("startupLines の記録したポート・WTM_SESSION", () => {
+  const named = { ...base, host: "127.0.0.1", scheme: "http" as const, port: 7781, freshToken: undefined };
+
+  it("記録したポートで待ち受けたら、session の行の次にその旨と --port を出す", () => {
+    const lines = startupLines({ ...named, session: { name: "work", stateDir: "/s/sessions/work" }, portRemembered: true });
+    expect(lines.slice(0, 3)).toEqual([
+      "wtm: listening on 127.0.0.1 port 7781 (http)",
+      "wtm: session work（状態ディレクトリ: /s/sessions/work）",
+      "wtm: session work が前回使ったポート 7781 で待ち受けています（別のポートにするには --port。次からはそのポートを使います）",
+    ]);
+  });
+
+  it("記録を使っていなければ出さない", () => {
+    const lines = startupLines({ ...named, session: { name: "work", stateDir: "/s/sessions/work" }, portRemembered: false });
+    expect(lines.some((l) => l.includes("前回使ったポート"))).toBe(false);
+  });
+
+  it("WTM_SESSION から選んだ名前なら session の行の末尾に（WTM_SESSION）", () => {
+    const lines = startupLines({ ...named, session: { name: "work", stateDir: "/s/sessions/work", fromEnv: true } });
+    expect(lines[1]).toBe("wtm: session work（状態ディレクトリ: /s/sessions/work）（WTM_SESSION）");
+  });
+});

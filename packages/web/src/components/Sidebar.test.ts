@@ -55,7 +55,7 @@ function makeConnection(): ConnectionPort & { requests: [MethodName, unknown][] 
 
 function makeActions() {
   // 20260923-workspace-grouping。
-  return { openContextMenu: vi.fn(), run: vi.fn(), toggleGroupCollapsed: vi.fn(), moveWorkspacesByDrag: vi.fn() };
+  return { openContextMenu: vi.fn(), run: vi.fn(), toggleGroupCollapsed: vi.fn(), moveWorkspacesByDrag: vi.fn(), openSessionSwitcher: vi.fn() };
 }
 
 function mountSidebar(conn: ConnectionPort, actions?: Partial<ReturnType<typeof makeActions>>, opts: { attachTo?: boolean } = {}) {
@@ -1064,5 +1064,70 @@ describe("Sidebar — pane D&D のドロップ先（サイドバーの workspace
     session.workspaceUpserted(makeWorkspace("w1"));
     const wrapper = mountSidebar(makeConnection());
     expect(wrapper.get(".sidebar-spaces .sidebar-row").classes()).not.toContain("sidebar-row-pane-drop-target");
+  });
+});
+
+/** 20260926-named-session-ui（AC2・AC17・AC-I1・AC-I3）。 */
+describe("Sidebar — session のボタン", () => {
+  const HOST = { os: "linux" as const, windowsBuild: null, hostname: "h" };
+
+  it("名前付き session なら上端に session の名前のボタンを出し、押すと一覧を開く", async () => {
+    const session = useSessionStore(pinia);
+    session.host = { ...HOST, sessionName: "work" };
+    const actions = { openSessionSwitcher: vi.fn() };
+    const wrapper = mountSidebar(makeConnection(), actions);
+    const btn = wrapper.get(".sidebar-session-btn");
+    expect(btn.text()).toContain("session: work");
+    expect(btn.attributes("aria-haspopup")).toBe("dialog");
+    expect(btn.attributes("aria-label")).toBe("session: work（押すと session の一覧）");
+    // 最上段（spaces より前）
+    expect(wrapper.element.firstElementChild?.classList.contains("sidebar-session")).toBe(true);
+    await btn.trigger("click");
+    expect(actions.openSessionSwitcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("既定の session は、名前付き session が無ければ出さず（今までどおり）、あれば default として出す", async () => {
+    const session = useSessionStore(pinia);
+    session.host = HOST;
+    const wrapper = mountSidebar(makeConnection());
+    expect(wrapper.find(".sidebar-session").exists()).toBe(false);
+    session.setNamedSessionCount(1);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get(".sidebar-session-btn").text()).toContain("session: default");
+  });
+
+  it("折りたたみ中は文字を出さず、名前は aria-label と title に出す", async () => {
+    const session = useSessionStore(pinia);
+    session.host = { ...HOST, sessionName: "work" };
+    useViewStore(pinia).toggleSidebar(); // localStorage は beforeEach で消してあるので、畳んだ状態になる
+    expect(useViewStore(pinia).sidebarCollapsed).toBe(true);
+    const wrapper = mountSidebar(makeConnection());
+    const btn = wrapper.get(".sidebar-session-btn");
+    expect(btn.text()).toBe("⇄");
+    expect(btn.attributes("aria-label")).toContain("session: work");
+    expect(btn.attributes("title")).toBe("session: work");
+  });
+
+  it("ボタンの Enter・Space は window のキーの経路へ二重に渡さない（ネイティブのクリックに任せる。AC-I3）", async () => {
+    const session = useSessionStore(pinia);
+    session.host = { ...HOST, sessionName: "work" };
+    const wrapper = mountSidebar(makeConnection(), {}, { attachTo: true });
+    const seen: string[] = [];
+    const onWindow = (ev: KeyboardEvent): void => {
+      seen.push(ev.key);
+    };
+    window.addEventListener("keydown", onWindow);
+    try {
+      const btn = wrapper.get(".sidebar-session-btn").element;
+      for (const key of ["Enter", " "]) {
+        const ev = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+        btn.dispatchEvent(ev);
+        expect(ev.defaultPrevented).toBe(false);
+      }
+      expect(seen).toEqual([]);
+    } finally {
+      window.removeEventListener("keydown", onWindow);
+      wrapper.unmount();
+    }
   });
 });

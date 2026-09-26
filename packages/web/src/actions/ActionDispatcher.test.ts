@@ -2190,3 +2190,65 @@ describe("ActionDispatcher — agentDelta/focusAgentIndex（previous_agent/next_
     expect(conn.requests).toEqual([]);
   });
 });
+
+/** 20260926-named-session-ui（AC2・AC7）。 */
+describe("session の一覧と切り替え", () => {
+  const SESSIONS = [
+    { name: "default", default: true, running: true, current: true },
+    { name: "work", default: false, running: true, current: false, endpoint: { port: 7781, https: false, host: "127.0.0.1" } },
+    { name: "lan", default: false, running: false, current: false },
+  ];
+  const flush = async (): Promise<void> => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  };
+
+  it("refreshServerSessions：名前付き session の数を入れる（失敗は前の値のまま）", async () => {
+    const conn = makeConnection();
+    conn.resolveWith["server.sessions"] = { sessions: SESSIONS };
+    const { dispatcher } = makeDispatcher(conn);
+    const session = useSessionStore(pinia);
+    expect(session.namedSessionCount).toBe(0);
+    await dispatcher.refreshServerSessions();
+    expect(conn.requests).toEqual([["server.sessions", {}]]);
+    expect(session.namedSessionCount).toBe(2);
+    conn.rejectWith["server.sessions"] = "internal";
+    await dispatcher.refreshServerSessions();
+    expect(session.namedSessionCount).toBe(2);
+  });
+
+  it("openSessionSwitcher：一覧を取ってからダイアログを開き、数も更新する。失敗は開かずに知らせる", async () => {
+    const conn = makeConnection();
+    conn.resolveWith["server.sessions"] = { sessions: SESSIONS };
+    const { dispatcher } = makeDispatcher(conn);
+    const view = useViewStore(pinia);
+    dispatcher.openSessionSwitcher();
+    await flush();
+    expect(view.dialogContext).toEqual({ kind: "sessionSwitch", sessions: SESSIONS });
+    expect(view.openDialog).toBe("sessionSwitch");
+    expect(useSessionStore(pinia).namedSessionCount).toBe(2);
+    view.closeDialog();
+
+    conn.rejectWith["server.sessions"] = "internal";
+    dispatcher.openSessionSwitcher();
+    await flush();
+    expect(view.dialogContext).toBeNull();
+    expect(view.toasts.map((t) => t.message)).toContain("session の一覧を取れませんでした");
+  });
+
+  it("openServerSession：新しいタブで noopener,noreferrer で開き、ダイアログを閉じる", () => {
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    const view = useViewStore(pinia);
+    view.openDialogWithContext({ kind: "sessionSwitch", sessions: SESSIONS });
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    try {
+      dispatcher.openServerSession("http://127.0.0.1:7781/");
+      expect(open).toHaveBeenCalledWith("http://127.0.0.1:7781/", "_blank", "noopener,noreferrer");
+      expect(view.openDialog).toBeNull();
+    } finally {
+      open.mockRestore();
+    }
+  });
+});
