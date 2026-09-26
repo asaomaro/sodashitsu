@@ -1,5 +1,6 @@
 import { AGENT_START_KINDS } from "@wtm/protocol";
 import { AGENT_STATUSES, type AgentStatus } from "./agentStatus.js";
+import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
 
 /**
  * `wtmctl` の引数解釈（design.md「インターフェース/データ構造・コマンド一覧」）。`main.ts` から分けたのは
@@ -21,6 +22,8 @@ const USAGE = [
   "wtmctl pane run <paneId> <command> [--url <URL>] [--token <TOKEN>]",
   "wtmctl pane read <paneId> [--follow] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
   "wtmctl pane attach <paneId> [--takeover] [--url <URL>] [--token <TOKEN>]",
+  "wtmctl pane observe <paneId> [--url <URL>] [--token <TOKEN>]",
+  "wtmctl pane control <paneId> [--takeover] [--cols <N>] [--rows <N>] [--url <URL>] [--token <TOKEN>]",
   "wtmctl snapshot [--url <URL>] [--token <TOKEN>]",
   "wtmctl watch [--json] [--url <URL>] [--token <TOKEN>]",
   "wtmctl agent list [--url <URL>] [--token <TOKEN>]",
@@ -64,6 +67,9 @@ export type Command =
   | { kind: "pane-run"; opts: GlobalOpts; paneId: string; command: string }
   | { kind: "pane-read"; opts: GlobalOpts; paneId: string; follow: boolean; raw: boolean; timeoutMs: number }
   | { kind: "pane-attach"; opts: GlobalOpts; paneId: string; takeover: boolean }
+  // 20260926-pane-observe-control（herdr の terminal session observe/control）。
+  | { kind: "pane-observe"; opts: GlobalOpts; paneId: string }
+  | { kind: "pane-control"; opts: GlobalOpts; paneId: string; takeover: boolean; cols: number; rows: number }
   | { kind: "snapshot"; opts: GlobalOpts }
   | { kind: "watch"; opts: GlobalOpts; json: boolean }
   | { kind: "agent-list"; opts: GlobalOpts }
@@ -319,7 +325,38 @@ function parsePane(sub: string | undefined, rest: readonly string[], env: NodeJS
     rejectExtra(positionals, 1, USAGE);
     return { kind: "pane-attach", opts: globalOptsFrom(values, env), paneId, takeover: bools.has("--takeover") };
   }
+  // 20260926-pane-observe-control（herdr の terminal session observe/control）。observe は大きさを持たない（decisions D2）。
+  if (sub === "observe") {
+    const { positionals, values } = parseFlags(rest, URL_TOKEN);
+    const paneId = requirePositional(positionals, 0, "paneId", USAGE);
+    rejectExtra(positionals, 1, USAGE);
+    return { kind: "pane-observe", opts: globalOptsFrom(values, env), paneId };
+  }
+  if (sub === "control") {
+    const { positionals, values, bools } = parseFlags(rest, { values: [...URL_TOKEN.values!, "--cols", "--rows"], bools: ["--takeover"] });
+    const paneId = requirePositional(positionals, 0, "paneId", USAGE);
+    rejectExtra(positionals, 1, USAGE);
+    const colsRaw = values.get("--cols");
+    const rowsRaw = values.get("--rows");
+    return {
+      kind: "pane-control",
+      opts: globalOptsFrom(values, env),
+      paneId,
+      takeover: bools.has("--takeover"),
+      cols: colsRaw === undefined ? DEFAULT_CONTROL_SIZE.cols : parseStreamDimension(colsRaw, "--cols"),
+      rows: rowsRaw === undefined ? DEFAULT_CONTROL_SIZE.rows : parseStreamDimension(rowsRaw, "--rows"),
+    };
+  }
   throw new CliUsageError(`unknown subcommand: wtmctl pane ${sub ?? ""}`.trimEnd(), USAGE);
+}
+
+/** `pane control` の `--cols/--rows`（1〜1000。decisions D6）。 */
+function parseStreamDimension(raw: string, flag: string): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_STREAM_DIMENSION) {
+    throw new CliUsageError(`invalid value for ${flag}: ${raw}`, `${flag} は 1〜${MAX_STREAM_DIMENSION} の整数にしてください。`);
+  }
+  return n;
 }
 
 /** Node のタイマーの上限（2^31-1ms）。超えると 1ms に丸められて即座に時間切れになる。 */

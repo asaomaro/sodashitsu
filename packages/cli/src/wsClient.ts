@@ -49,6 +49,13 @@ export interface WtmClient {
   onSnapshot(cb: (paneId: string, cols: number, rows: number, text: string) => void): void;
   /** サーバ側が接続を閉じた（想定していない切断）ときに1回だけ呼ばれる。`close()` を自分で呼んだ場合は呼ばれない。 */
   onClose(cb: (code: number, reason: string) => void): void;
+  /**
+   * 受信を止める（`ws` の `pause()`。20260926-pane-observe-control D4）。読み手が遅いときに使い、サーバの流量制御（出力を捨て、
+   * 再開したら SNAPSHOT）に任せる。止める前に受け取って溜めてあるぶんのメッセージ（イベント等）は、止めた後も届きうる。
+   */
+  pause(): void;
+  /** 受信を再開する（`ws` の `resume()`）。 */
+  resume(): void;
   close(): void;
 }
 
@@ -57,6 +64,8 @@ const REQUEST_TIMEOUT_MS = 10_000;
 interface PendingRequest {
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
+  /** 時間切れのタイマー。自分で閉じたら消す（応答の来ない要求のタイマーでプロセスを残さない）。 */
+  timer: ReturnType<typeof setTimeout>;
 }
 
 interface RawEnvelope {
@@ -81,7 +90,7 @@ export class WsWtmClient implements WtmClient {
   private readonly closeListeners: ((code: number, reason: string) => void)[] = [];
   private closedBySelf = false;
 
-  constructor(private readonly ws: Pick<WebSocket, "on" | "send" | "close">) {
+  constructor(private readonly ws: Pick<WebSocket, "on" | "send" | "close" | "pause" | "resume">) {
     ws.on("message", (data: Buffer, isBinary: boolean) => {
       if (isBinary) this.handleBinary(new Uint8Array(data));
       else this.handleText(data.toString("utf8"));
@@ -145,6 +154,7 @@ export class WsWtmClient implements WtmClient {
           clearTimeout(timer);
           reject(e);
         },
+        timer,
       });
       this.ws.send(JSON.stringify({ id, method, params }));
     });
@@ -179,8 +189,20 @@ export class WsWtmClient implements WtmClient {
     this.closeListeners.push(cb);
   }
 
+  pause(): void {
+    this.ws.pause();
+  }
+
+  resume(): void {
+    this.ws.resume();
+  }
+
   close(): void {
     this.closedBySelf = true;
+    // 応答が来ないまま残った要求（例: 詰まったサーバへの pane.detach）の時間切れのタイマーでプロセスを最大 10 秒残さない
+    // （20260926-pane-observe-control の review ラウンド 1）。要求の Promise は決着しないまま捨てる（閉じた後に待つ呼び出し側は無い）。
+    for (const req of this.pending.values()) clearTimeout(req.timer);
+    this.pending.clear();
     this.ws.close(1000, "done");
   }
 }

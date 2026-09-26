@@ -11,7 +11,7 @@
  * セッションキャッシュ（既定 `~/.wtmctl/session.json`）は `HOME`（Windows は `USERPROFILE`）を差し替えて
  * 一時ディレクトリへ逃がし、実行者の実際のキャッシュに触れない。
  */
-import { execFile } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -108,6 +108,111 @@ async function smokeAttach(server: ComposedServer, paneId: string, url: string, 
     if (out.lastIndexOf("\x1b[?1049l") < out.lastIndexOf(marker)) throw new Error(`pane attach did not leave the alternate screen: ${JSON.stringify(out.slice(-300))}`);
   } finally {
     if (exitCode === null) pty.kill();
+  }
+}
+
+/** 子プロセスの stdout を行ごとに集め、終了コードを覚える。 */
+function track(child: ChildProcess): { lines: string[]; stderr(): string; exitCode(): number | null } {
+  const lines: string[] = [];
+  let buf = "";
+  let err = "";
+  let code: number | null = null;
+  child.stdout!.setEncoding("utf8");
+  child.stdout!.on("data", (d: string) => {
+    buf += d;
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) !== -1) {
+      lines.push(buf.slice(0, nl));
+      buf = buf.slice(nl + 1);
+    }
+  });
+  child.stderr!.setEncoding("utf8");
+  child.stderr!.on("data", (d: string) => {
+    err += d;
+  });
+  // 'exit' は stdout を読み切る前にも出うるので、stdio が閉じた後の 'close' で確定させる（最後の terminal.closed を取りこぼさない）。
+  child.on("close", (c) => {
+    if (buf !== "") lines.push(buf);
+    buf = "";
+    code = c ?? -1;
+  });
+  return { lines, stderr: () => err, exitCode: () => code };
+}
+
+interface SmokeFrame {
+  type: string;
+  seq?: number;
+  width?: number;
+  height?: number;
+  full?: boolean;
+  bytes?: string;
+  reason?: string;
+}
+
+const framesOf = (lines: string[]): SmokeFrame[] =>
+  lines.map((l, i) => {
+    try {
+      return JSON.parse(l) as SmokeFrame;
+    } catch {
+      throw new Error(`stdout line ${i + 1} is not JSON: ${JSON.stringify(l.slice(0, 200))}`);
+    }
+  });
+const frameText = (lines: string[]): string =>
+  framesOf(lines)
+    .filter((f) => f.type === "terminal.frame")
+    .map((f) => Buffer.from(f.bytes ?? "", "base64").toString("utf8"))
+    .join("");
+
+/**
+ * 20260926-pane-observe-control: ビルド済みの `wtmctl pane observe` と `pane control` を子プロセス（stdin/stdout はパイプ）として動かし、
+ * observe の最初の行が full の画面・control が pane の大きさを変えたこと（所有者になった）・stdin の NDJSON の入力の往復・release で終了コード 0・pane の close で observe が
+ * pane_closed で終了コード 0 になり、どちらのプロセスも自分で終わることを確かめる。
+ */
+async function smokeStreams(server: ComposedServer, basePaneId: string, url: string, env: NodeJS.ProcessEnv): Promise<void> {
+  const split = await runCli(["pane", "split", basePaneId, "--direction", "down", "--url", url], env);
+  if (split.exitCode !== 0) throw new Error(`pane split failed (exit ${split.exitCode}): ${split.stderr}`);
+  const paneId = (JSON.parse(split.stdout) as { pane: { id: string } }).pane.id;
+  const size = (): string => {
+    const p = server.session.getPane(paneId);
+    return p ? `${p.cols}x${p.rows}` : "gone";
+  };
+  const observe = spawn(process.execPath, [CLI_ENTRY, "pane", "observe", paneId, "--url", url], { env, stdio: ["ignore", "pipe", "pipe"] });
+  const control = spawn(process.execPath, [CLI_ENTRY, "pane", "control", paneId, "--cols", "100", "--rows", "30", "--url", url], {
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const obs = track(observe);
+  const ctl = track(control);
+  // control が先に終わった後の書き込みの失敗（EPIPE）で smoke ごと落ちず、下の until の文言で失敗させる。
+  control.stdin!.on("error", () => undefined);
+  try {
+    await until(() => obs.lines.length > 0, `pane observe printed nothing: ${obs.stderr()}`);
+    const first = framesOf(obs.lines)[0]!;
+    if (first.type !== "terminal.frame" || first.seq !== 1 || first.full !== true) throw new Error(`pane observe's first record is not a full frame: ${obs.lines[0]}`);
+    await until(() => size() === "100x30" && ctl.lines.length > 0, `pane control did not take the size (pane ${size()}): ${ctl.stderr()}`);
+    const marker = `wtmctl-smoke-stream-${Date.now()}`;
+    control.stdin!.write(`${JSON.stringify({ type: "terminal.input", text: `echo ${marker}\r` })}\n`);
+    control.stdin!.write('{"type":"terminal.bogus"}\n');
+    await until(() => hasOutputLine(frameText(obs.lines), marker), `pane observe did not see the control input: ${JSON.stringify(frameText(obs.lines).slice(-300))}`);
+    await until(() => hasOutputLine(frameText(ctl.lines), marker), "pane control did not see its own input");
+    if (!ctl.stderr().includes("wtmctl: pane control input ignored: unknown command type")) throw new Error(`pane control did not warn about the invalid line: ${ctl.stderr()}`);
+    control.stdin!.write('{"type":"terminal.release"}\n');
+    await until(() => ctl.exitCode() !== null, "pane control did not exit after terminal.release");
+    const ctlLast = framesOf(ctl.lines).at(-1);
+    if (ctl.exitCode() !== 0 || ctlLast?.type !== "terminal.closed" || ctlLast.reason !== "released") {
+      throw new Error(`pane control should end released with exit 0 (exit ${ctl.exitCode()}): ${ctl.lines.at(-1)} ${ctl.stderr()}`);
+    }
+    if (!server.session.getPane(paneId)) throw new Error("the pane was closed by releasing");
+    const closed = await runCli(["pane", "close", paneId, "--url", url], env);
+    if (closed.exitCode !== 0) throw new Error(`pane close failed (exit ${closed.exitCode}): ${closed.stderr}`);
+    await until(() => obs.exitCode() !== null, "pane observe did not exit after the pane was closed");
+    const obsLast = framesOf(obs.lines).at(-1);
+    if (obs.exitCode() !== 0 || obsLast?.type !== "terminal.closed" || obsLast.reason !== "pane_closed") {
+      throw new Error(`pane observe should end pane_closed with exit 0 (exit ${obs.exitCode()}): ${obs.lines.at(-1)} ${obs.stderr()}`);
+    }
+  } finally {
+    if (obs.exitCode() === null) observe.kill();
+    if (ctl.exitCode() === null) control.kill();
   }
 }
 
@@ -233,6 +338,8 @@ async function main(): Promise<void> {
     console.log("smoke(cli): wtmctl pane attach refuses a non-terminal (not_a_tty)");
     await smokeAttach(server, pane.id, url, env);
     console.log("smoke(cli): wtmctl pane attach ok (in a real PTY: size 100x30, echo round trip, resize 90x25, Ctrl+B q exit 0, left the alternate screen)");
+    await smokeStreams(server, pane.id, url, env);
+    console.log("smoke(cli): wtmctl pane observe/control ok (pipes: full first frame, control size 100x30, NDJSON input round trip, invalid line warned, release exit 0, observe pane_closed exit 0)");
 
     console.log("smoke(cli): PASS");
     process.exitCode = 0;
