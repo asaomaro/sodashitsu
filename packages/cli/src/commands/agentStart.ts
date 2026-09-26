@@ -4,6 +4,7 @@ import type { AgentView } from "../agentStatus.js";
 import type { Command } from "../cliArgs.js";
 import { printJson } from "../output.js";
 import type { SessionStore } from "../session.js";
+import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 import { RpcFailure, type WtmClient } from "../wsClient.js";
 import { EventFeed, viewOf, workspacesByTab } from "./agent.js";
@@ -57,6 +58,7 @@ export async function runAgentStart(
   store: SessionStore,
   deps: AgentStartDeps = REAL_DEPS,
 ): Promise<void> {
+  assertNotSelfPane(cmd.opts, cmd.paneId, "start an agent in"); // 自分の pane に打ち込まない（20260926-agent-skill-file。接続する前に断る）
   const agent = await withSession(cmd.opts, store, async (client): Promise<AgentView> => {
     const events = new EventFeed();
     const hello = await client.hello(events.push);

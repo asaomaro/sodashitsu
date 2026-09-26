@@ -11,7 +11,8 @@ wtmctl login --url http://127.0.0.1:7780 --token <TOKEN>   # session cookie を 
 export WTMCTL_URL=http://127.0.0.1:7780                    # 以後 --url を省ける（既定もこの値）
 ```
 
-- 各コマンドは `--url` / `--token`（または環境変数 `WTMCTL_URL` / `WTMCTL_TOKEN`）を受ける。
+- 各コマンドは `--url` / `--token`（または環境変数 `WTMCTL_URL` / `WTMCTL_TOKEN`）を受ける。wtm の pane の中では、`--url`・`WTMCTL_URL` が無ければ
+  その pane を動かしているサーバ（pane の環境の `WTM_SERVER_URL`）につなぐ（下の「pane の中から使う」）。
   保存済みのセッションが失効していて token が分かれば、1 回だけ再ログインしてやり直す。
 - 成功は終了コード 0（結果は stdout に JSON／テキスト）、サーバ・待ち合わせのエラーは 1（stderr に
   `{"error":{"code","message"}}`）、使い方の誤りは 2。
@@ -40,6 +41,7 @@ wtmctl agent prompt <target> <text> [--wait] [--until working|blocked|idle|done|
 wtmctl agent send-keys <target> <key>...
 wtmctl agent rename <target> <name>|--clear
 wtmctl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [-- <args>...]
+wtmctl skill                               # エージェントに wtmctl の使い方を教える Markdown（skill ファイル）を出す
 ```
 
 ## pane への直結（`pane attach`）
@@ -207,6 +209,67 @@ wtmctl agent read "$pane" --lines 40
 wtmctl agent send-keys "$pane" esc                         # 取り消す（答えるなら例えば y や enter）
 ```
 
+## エージェントに教える（skill ファイル）と、pane の中から使う
+
+### skill ファイル（`wtmctl skill`）
+
+`wtmctl skill` は、コーディングエージェント（Claude Code・Codex 等）に wtmctl の使い方と作法を教える Markdown（skill ファイル）を標準出力に書く
+（サーバにはつながない。中身はリポジトリの `packages/cli/skills/wtmctl/SKILL.md` で、使っている wtmctl と同じ版のもの）。wtmctl を更新したら入れ直す。
+
+```bash
+# Claude Code（利用者全体）。プロジェクトだけなら <プロジェクト>/.claude/skills/wtmctl/ に置く
+mkdir -p ~/.claude/skills/wtmctl && wtmctl skill > ~/.claude/skills/wtmctl/SKILL.md
+# skill の仕組みの無いエージェント（Codex 等）は、プロジェクトか利用者の指示（AGENTS.md 等）に貼る（先頭の --- で囲んだ front matter は除く）
+wtmctl skill | awk 'NR==1&&/^---$/{f=1;next} f&&/^---$/{f=0;next} !f' >> AGENTS.md
+```
+
+skill は、最初に pane の中にいるか（`WTM_PANE_ID` があるか）を確かめ、無ければ止まるようエージェントに指示する（wtm の外のエージェントが
+自分のものでない session を操作しないため）。ほかに教えること: 構文の正典は `wtmctl help`・ID は応答の JSON から読む・隣の pane を作って
+コマンドを走らせ結果を読む手順・エージェントを起動して prompt を送り待つ手順・自分が作っていないものを閉じない・`timeout` 等の後に確かめずに
+送り直さない・承認ダイアログには利用者に確かめてから答える・token をコマンド行や会話に書かない・認証されていなければ利用者に `wtmctl login` を頼む。
+
+### pane の環境変数
+
+サーバは pane を起動するとき、次の変数を入れる（サーバが管理する変数で、サーバを起動した環境から受け継いだ同名の値は使わない）。
+
+| 変数 | 中身 |
+|---|---|
+| `WTM_PANE_ID` | その pane の ID（`p3` 等）。pane の中にいる印を兼ねる（herdr の `HERDR_ENV=1`・`HERDR_PANE_ID` に当たる） |
+| `WTM_SERVER_URL` | その pane を動かしているサーバへ wtmctl がつなげる URL（URL にできない待ち受け〔ゾーン付きの IPv6 等〕では入れない）。待ち受けが `0.0.0.0` なら `http(s)://127.0.0.1:<port>`、`::` なら `[::1]`、それ以外は待ち受けのホスト。ポートは実際に待ち受けているもの |
+| `WTM_AGENT_REPORT_SOCKET` | 公式フック連携の report の socket（あれば） |
+
+サーバを起動した環境の `WTMCTL_URL`・`WTMCTL_TOKEN` は pane に**渡さない**（別のサーバを指していることがあり、token は秘密なので pane の全プロセスと
+エージェントの記録に流さない。Windows では大文字小文字を区別せずに取り除く）。pane の環境に token・cookie は入らない。
+
+### 接続先と認証
+
+- 接続先は `--url` → `WTMCTL_URL` → `WTM_SERVER_URL` → `http://127.0.0.1:7780` の順。pane の中では何も付けずにその pane のサーバにつながる
+  （名前付き session・`--port` で別のポートのサーバでも）。
+- TLS で全インタフェースに待ち受けるサーバでは、`WTM_SERVER_URL` は `https://127.0.0.1:<port>`（`::` なら `https://[::1]:<port>`）になるので、証明書に `127.0.0.1`（`::1`）が要る（mkcert の例は
+  `docs/tls-setup.md`）。無ければ pane の中で `WTMCTL_URL` に証明書の名前の URL を export する（そのときは下の歯止めが効かなくなる）。自己署名・mkcert の CA は Node に教える
+  （`NODE_EXTRA_CA_CERTS`。pane の外と同じ）。
+- pane のシェルの初期化（`.bashrc` 等）で `WTMCTL_URL` を export していると、そちらが `WTM_SERVER_URL` より優先される。
+- 認証は pane の外と同じく、利用者が `wtmctl login` で保存した session cookie（`~/.wtmctl`）を使う。cookie は URL の origin ごとに保存されるので、
+  **pane の中の接続先と同じ origin で** login しておく（`http://localhost:7780` で login していても、`http://127.0.0.1:7780` では見つからない）。
+  まだなら、利用者が `wtmctl login --url <URL> --token <TOKEN>` を打つ（`<URL>` は pane の中の `echo "$WTM_SERVER_URL"` の値。pane の外の端末には
+  この変数が無いので値そのものを渡す。skill はエージェントに、その値を示して利用者に頼ませる）。
+
+### 自分の pane への操作の歯止め（`self_target`）
+
+pane の中の wtmctl（`WTM_PANE_ID` と `WTM_SERVER_URL` があり、接続先の origin が `WTM_SERVER_URL` と同じ）は、次の操作の対象が**自分の pane**、
+または**それを含む tab・workspace** のとき、操作の要求を送らずに `self_target`（終了コード 1）で終わる。
+
+`pane close`・`pane input`・`pane run`・`pane attach`・`tab close`・`workspace close`・`agent prompt`・`agent send-keys`・`agent start`
+
+- 自分の pane を閉じると自分が終わり、自分の pane への入力・prompt は自分の入力欄に混ざり、自分の pane への直結は出力が自分に返って流れ続けるため。
+  エージェントを名前で指しても、その pane が自分なら断る。
+- 読み取り・分割・名前付け（`pane read`・`pane split`・`snapshot`・`watch`・`agent list/get/wait/read/rename` 等）は断らない。
+- 意図してやるとき（人が自分の pane を閉じる等）は `WTM_PANE_ID` を空にして打つ: `WTM_PANE_ID= wtmctl pane close "$WTM_PANE_ID"`。
+  別のサーバ（`--url`・`WTMCTL_URL` で別の origin）につなぐときは効かない。ループバックの名前（`localhost`・`127.0.0.1`・`[::1]`）の違いと既定のポートの
+  省略は同じサーバとみなす（`WTMCTL_URL=http://localhost:7780` を export していても外れない）。ループバック以外の名前（TLS の証明書の名前・LAN の IP 等）で
+  同じサーバを指した `WTMCTL_URL` では、同じサーバだと見分けられないので**効かない**（何も表示しない）。
+- **安全の境界ではない**。誤操作を止めるだけで、環境変数を消せば効かず、認証済みの接続は今までどおりどの pane にも書ける。
+
 ## herdr との対応と違い
 
 ### `pane attach`
@@ -252,3 +315,14 @@ herdr の `agent list` / `agent get` / `agent wait` / `agent read` / `agent prom
   `invalid_key`）と、`--until` の既定・300ms の遅延 Enter・5 秒の活動の確認・終了コードは herdr と同じ。
 - 本物の Claude Code 等での送信は確かめていない（bracketed paste を有効にする偽のエージェントでの結合テストだけ。
   `.aidev/works/20260926-agent-prompt-send-keys/test-result.md`）。
+
+### skill ファイル・pane の環境変数
+
+herdr の agent skill（`skills/herdr/SKILL.md`・`herdr --skill`）と pane の環境（`HERDR_ENV` 等）に相当する（`docs/herdr-parity.md` の H39）。違い:
+
+- skill は `wtmctl skill` で出す（herdr は `herdr --skill`）。中身は本製品のコマンドに合わせて書き直した日本語のもの。`npx skills add` 等の配布は無い。
+- pane の中にいる印は `WTM_PANE_ID`（herdr は `HERDR_ENV=1`）。接続先は socket のパスではなく URL（`WTM_SERVER_URL`）で、認証は利用者の login の
+  キャッシュ（herdr の socket はファイルの権限で守られ、認証が無い）。`HERDR_WORKSPACE_ID`・`HERDR_TAB_ID`・`HERDR_BIN_PATH` に当たる変数は無い。
+- herdr の `--current`・`pane split` の対象の省略（呼び出し元の pane を既定にする）・`pane current` は無い。`"$WTM_PANE_ID"` を明示して渡す。
+- 自分の pane への操作を断る `self_target` は本製品だけ（herdr は断らない）。
+- サーバを起動した環境の `WTMCTL_URL`・`WTMCTL_TOKEN` を pane に渡さない（herdr は管理する変数を上書きするが、token に当たるものは無い）。

@@ -3,7 +3,7 @@
  * `wtmctl` のエントリポイント（design.md「インターフェース/データ構造・コマンド一覧」）。
  * `parseArgs` → 対応する `commands/*` を呼ぶ → 例外は `reportAndExit` が終了コードへ変換する（T11）。
  */
-import { parseArgs } from "./cliArgs.js";
+import { parseArgs, USAGE_LINES } from "./cliArgs.js";
 import {
   runAgentGet,
   runAgentList,
@@ -21,34 +21,15 @@ import { runLogin, runSnapshot, runWatch } from "./commands/session.js";
 import { runWorkspaceClose, runWorkspaceCreate, runWorkspaceRename } from "./commands/workspace.js";
 import { reportAndExit } from "./output.js";
 import { FsSessionStore } from "./session.js";
+import { runSkill } from "./skill.js";
 
 function printHelp(): void {
   console.log(
     [
-      "wtmctl login --url <URL> --token <TOKEN>",
-      "wtmctl workspace create [--cwd <path>] [--label <text>] [--url <URL>] [--token <TOKEN>]",
-      "wtmctl workspace close <workspaceId> [--url <URL>] [--token <TOKEN>]",
-      "wtmctl workspace rename <workspaceId> <label> [--url <URL>] [--token <TOKEN>]",
-      "wtmctl tab create [--workspace <id>] [--label <text>] [--url <URL>] [--token <TOKEN>]",
-      "wtmctl tab close <tabId> [--url <URL>] [--token <TOKEN>]",
-      "wtmctl pane split <paneId> --direction right|down [--ratio <0.05-0.95>] [--url <URL>] [--token <TOKEN>]",
-      "wtmctl pane close <paneId> [--url <URL>] [--token <TOKEN>]",
-      "wtmctl pane input <paneId> <text> [--url <URL>] [--token <TOKEN>]",
-      "wtmctl pane run <paneId> <command> [--url <URL>] [--token <TOKEN>]",
-      "wtmctl pane read <paneId> [--follow] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
-      "wtmctl pane attach <paneId> [--takeover] [--url <URL>] [--token <TOKEN>]",
-      "wtmctl snapshot [--url <URL>] [--token <TOKEN>]",
-      "wtmctl watch [--json] [--url <URL>] [--token <TOKEN>]",
-      "wtmctl agent list [--url <URL>] [--token <TOKEN>]",
-      "wtmctl agent get <target> [--url <URL>] [--token <TOKEN>]",
-      "wtmctl agent wait <target> [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
-      "wtmctl agent read <target> [--lines <N>] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
-      "wtmctl agent prompt <target> <text> [--wait] [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
-      "wtmctl agent send-keys <target> <key>... [--url <URL>] [--token <TOKEN>]",
-      "wtmctl agent rename <target> <name>|--clear [--url <URL>] [--token <TOKEN>]",
-      "wtmctl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [--url <URL>] [--token <TOKEN>] [-- <args>...]",
+      // 一覧は `cliArgs.ts` の `USAGE_LINES`（skill ファイルとの食い違いの検査も同じものを見る。20260926-agent-skill-file）。
+      ...USAGE_LINES,
       "",
-      "環境変数: WTMCTL_URL（既定 http://127.0.0.1:7780）・WTMCTL_TOKEN",
+      "環境変数: WTMCTL_URL（無ければ WTM_SERVER_URL、それも無ければ http://127.0.0.1:7780）・WTMCTL_TOKEN",
       "",
       "pane input/pane run は、実プロセスへ実際に届いたことまでは保証しません（INPUT フレームに ack はありません）。",
       "agent の <target> は pane ID か、agent rename で付けた名前です（名前は英小文字で始まる 1〜32 文字の [a-z0-9_-]）。",
@@ -59,6 +40,9 @@ function printHelp(): void {
       "同じ pane に直結できるのは 1 つだけで、--takeover で既存の直結を奪えます。",
       "agent start は前面がシェル自身だけの pane（sh/bash/dash/zsh/ksh/mksh）に、--kind の決まった実行ファイルと -- の後の引数を",
       "単一引用符で包んで打ち込み、名前を付けて idle になるまで待ちます（既定 30 秒。blocked なら agent_not_ready）。",
+      "pane の中（WTM_PANE_ID と WTM_SERVER_URL があり、そのサーバにつなぐとき）は、自分の pane とそれを含む tab・workspace を閉じる・",
+      "入力する・直結する・エージェントを動かす操作を self_target で断ります（WTM_PANE_ID を空にすると効きません）。",
+      "wtmctl skill はエージェントに wtmctl の使い方を教える Markdown（skill ファイル）を出します。",
     ].join("\n"),
   );
 }
@@ -69,6 +53,7 @@ async function main(): Promise<void> {
     printHelp();
     return;
   }
+  if (cmd.kind === "skill") return runSkill(); // サーバへつながない（セッションのキャッシュも読まない）
   const store = new FsSessionStore();
   switch (cmd.kind) {
     case "login":

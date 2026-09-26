@@ -184,3 +184,45 @@ describe("runPaneRead", () => {
     expect(mockedPrintRaw).toHaveBeenCalledWith("bold");
   });
 });
+
+describe("自分の pane の歯止め（20260926-agent-skill-file。AC11・AC13・AC14）", () => {
+  const IN_P1 = { ...OPTS, caller: { paneId: "p1", serverUrl: "http://127.0.0.1:7780" } };
+
+  it.each([
+    ["pane close", () => runPaneClose({ kind: "pane-close", opts: IN_P1, paneId: "p1" }, store)],
+    ["pane input", () => runPaneInput({ kind: "pane-input", opts: IN_P1, paneId: "p1", text: "x" }, store)],
+    ["pane run", () => runPaneRun({ kind: "pane-run", opts: IN_P1, paneId: "p1", command: "x" }, store)],
+  ])("%s p1 は接続せずに self_target", async (_label, run) => {
+    await expect(run()).rejects.toMatchObject({ code: "self_target", message: expect.stringContaining("WTM_PANE_ID= wtmctl") });
+    expect(mockedWithSession).not.toHaveBeenCalled();
+  });
+
+  it("別の pane（p2）なら送る", async () => {
+    const client = fakeClient({ panes: ["p1", "p2"] });
+    mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
+    await runPaneClose({ kind: "pane-close", opts: IN_P1, paneId: "p2" }, store);
+    await runPaneRun({ kind: "pane-run", opts: IN_P1, paneId: "p2", command: "ls" }, store);
+    expect(client.request).toHaveBeenCalledWith("pane.close", { paneId: "p2" });
+    expect(client.sendInput).toHaveBeenCalledWith("p2", new TextEncoder().encode("ls\n"));
+  });
+
+  it("接続先が pane のサーバと別の origin なら断らない", async () => {
+    const client = fakeClient({ panes: ["p1"] });
+    mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
+    await runPaneInput({ kind: "pane-input", opts: { ...IN_P1, url: "http://127.0.0.1:7781" }, paneId: "p1", text: "x" }, store);
+    expect(client.sendInput).toHaveBeenCalled();
+  });
+
+  it("自分の pane の split・read は断らない", async () => {
+    const client = fakeClient({ panes: ["p1"], requestImpl: () => ({ pane: { id: "p2" } }) });
+    mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
+    await runPaneSplit({ kind: "pane-split", opts: IN_P1, paneId: "p1", direction: "right", ratio: undefined }, store);
+    expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p1", direction: "right" });
+
+    const readPromise = runPaneRead({ kind: "pane-read", opts: IN_P1, paneId: "p1", follow: false, raw: false, timeoutMs: 1000 }, store);
+    await vi.waitFor(() => expect(client.request).toHaveBeenCalledWith("pane.subscribe", expect.objectContaining({ paneId: "p1" })));
+    client.emitSnapshot("p1", 80, 24, "hello");
+    await readPromise;
+    expect(mockedPrintLine).toHaveBeenCalledWith("hello");
+  });
+});

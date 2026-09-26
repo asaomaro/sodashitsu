@@ -3,6 +3,7 @@ import { stripAnsi } from "../ansiStrip.js";
 import type { Command } from "../cliArgs.js";
 import { printJson, printLine, printRaw } from "../output.js";
 import type { SessionStore } from "../session.js";
+import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 import { RpcFailure, type WtmClient } from "../wsClient.js";
 
@@ -29,6 +30,7 @@ export async function runPaneSplit(cmd: PaneSplitCmd, store: SessionStore): Prom
 }
 
 export async function runPaneClose(cmd: PaneCloseCmd, store: SessionStore): Promise<void> {
+  assertNotSelfPane(cmd.opts, cmd.paneId, "close"); // 自分の pane は閉じない（20260926-agent-skill-file。接続する前に断る）
   const result = await withSession(cmd.opts, store, async (client) => {
     await client.hello();
     return client.request("pane.close", { paneId: cmd.paneId });
@@ -49,6 +51,7 @@ async function requirePaneExists(client: WtmClient, paneId: string): Promise<voi
 }
 
 export async function runPaneInput(cmd: PaneInputCmd, store: SessionStore): Promise<void> {
+  assertNotSelfPane(cmd.opts, cmd.paneId, "send input to"); // 自分の入力欄に混ざる（20260926-agent-skill-file）
   await withSession(cmd.opts, store, async (client) => {
     await requirePaneExists(client, cmd.paneId);
     client.sendInput(cmd.paneId, new TextEncoder().encode(cmd.text));
@@ -57,6 +60,7 @@ export async function runPaneInput(cmd: PaneInputCmd, store: SessionStore): Prom
 }
 
 export async function runPaneRun(cmd: PaneRunCmd, store: SessionStore): Promise<void> {
+  assertNotSelfPane(cmd.opts, cmd.paneId, "run a command in"); // 同上（20260926-agent-skill-file）
   await withSession(cmd.opts, store, async (client) => {
     await requirePaneExists(client, cmd.paneId);
     client.sendInput(cmd.paneId, new TextEncoder().encode(`${cmd.command}\n`));

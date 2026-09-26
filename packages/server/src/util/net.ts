@@ -111,6 +111,20 @@ export function formatUrlHost(host: string): string {
   return bare.includes(":") ? `[${bare}]` : bare;
 }
 
+/**
+ * pane の中の wtmctl が、このサーバへつなげる URL（`scheme://host:port`。末尾の `/` なし。20260926-agent-skill-file）。pane の環境の
+ * `WTM_SERVER_URL` に入れる。全インタフェース（`0.0.0.0`・`::`）で待ち受けているときは、その族のループバック（`127.0.0.1`・`[::1]`）——
+ * Origin の方針（`OriginPolicy`）は `localhost`・`127.0.0.1`・`::1` を常に許す。それ以外は待ち受けのホストそのもの（`localhost` は
+ * 名前のまま。待ち受けた側と同じ名前を引けば届く）。`--origin` は使わない（ポート転送・プロキシの先はこのマシンの中から届くとは限らない）。
+ * URL にできないもの（ゾーン付きの IPv6 等）は `undefined`。
+ */
+export function paneServerUrl(scheme: "http" | "https", host: string, port: number): string | undefined {
+  const bare = unbracketHost(host);
+  const target = isWildcardHost(bare) ? (bare === "::" ? "::1" : "127.0.0.1") : bare;
+  const url = `${scheme}://${formatUrlHost(target)}:${port}`;
+  return tryUrl(url) === undefined ? undefined : url;
+}
+
 const REQUEST_TARGET_BASE = "http://internal.invalid";
 
 /**

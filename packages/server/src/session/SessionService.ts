@@ -27,6 +27,7 @@ import { NotFoundError, SessionModel } from "./SessionModel.js";
 import * as Layout from "./LayoutTree.js";
 import { resumeCommandFor } from "../agent/resumeCommand.js";
 import { resolveNewCwd, type NewCwdDeps } from "./newCwd.js";
+import { buildPaneEnv } from "./paneEnv.js";
 import { AUTO_LABEL_TIMEOUT_MS, autoWorkspaceLabel, defaultWorkspaceLabelDeps, folderLabelOf, type WorkspaceLabelDeps } from "./workspaceLabel.js";
 import { withTimeout } from "./withTimeout.js";
 import { monotonicNow } from "../log/LogThrottle.js";
@@ -100,6 +101,11 @@ export interface SessionServiceOptions {
    * design D3）。省略時は既定 ON（herdr の `resume_agents_on_restore` の既定に合わせる）。
    */
   getAutoResumeEnabled?: (() => boolean) | undefined;
+  /**
+   * pane の中の wtmctl がこのサーバへつなげる URL（20260926-agent-skill-file）。pane を起動するたびに読み、あれば `WTM_SERVER_URL` として
+   * 環境に入れる。待ち受けた後に決まる（`composeServer` の `listen()`）ので、組み立て時の値ではなく関数で受け取る。省略時は入れない。
+   */
+  serverUrlForPanes?: (() => string | undefined) | undefined;
 }
 
 /**
@@ -125,6 +131,7 @@ export class SessionService {
   private readonly workspaceLabelDeps: WorkspaceLabelDeps;
   private readonly agentReportSocketPath: string | undefined;
   private readonly getAutoResumeEnabled: () => boolean;
+  private readonly serverUrlForPanes: () => string | undefined;
   private readonly scrollbackEditorEnv: { tmpRoot: string | undefined; platform: NodeJS.Platform; env: NodeJS.ProcessEnv };
   /** 開いているスクロールバックのエディタの pane → 開いた元の pane・開く前の拡大表示・一時ディレクトリ（20260926-edit-scrollback）。 */
   private readonly scrollbackEditors = new Map<PaneId, { sourcePaneId: PaneId; previousZoomedPaneId: PaneId | null; dir: string }>();
@@ -170,6 +177,7 @@ export class SessionService {
     this.clock = opts.clock ?? { now: monotonicNow };
     this.agentReportSocketPath = opts.agentReportSocketPath;
     this.getAutoResumeEnabled = opts.getAutoResumeEnabled ?? (() => true);
+    this.serverUrlForPanes = opts.serverUrlForPanes ?? (() => undefined);
     this.scrollbackEditorEnv = {
       tmpRoot: opts.scrollbackEditor?.tmpRoot,
       platform: opts.scrollbackEditor?.platform ?? process.platform,
@@ -1035,11 +1043,11 @@ export class SessionService {
    * hook スクリプトが「どの pane の・どの会話か」を報告するために使う。socket が無い（起動に失敗した等）
    * 環境では `WTM_AGENT_REPORT_SOCKET` を渡さない——hook 側は env が無ければ無害に何もしない。
    * 全 pane に常に付ける（起動時点でその pane が Claude Code/Codex を動かすかは分からないため）。
+   * `WTM_SERVER_URL`（20260926-agent-skill-file）は pane の中の wtmctl の既定の接続先で、`WTM_PANE_ID` と合わせて自分の pane への操作の歯止めにも使う。
+   * サーバの環境から受け継いだ `WTMCTL_URL`・`WTMCTL_TOKEN` と古い `WTM_*` は渡さない（`buildPaneEnv`）。
    */
   private envForPane(paneId: PaneId): Record<string, string> {
-    const env: Record<string, string> = { ...(process.env as Record<string, string>), WTM_PANE_ID: paneId };
-    if (this.agentReportSocketPath) env.WTM_AGENT_REPORT_SOCKET = this.agentReportSocketPath;
-    return env;
+    return buildPaneEnv(process.env, { paneId, serverUrl: this.serverUrlForPanes(), agentReportSocketPath: this.agentReportSocketPath });
   }
 
   /**

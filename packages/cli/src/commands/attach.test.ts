@@ -464,3 +464,20 @@ describe("processTerminal（実物の process への配線）", () => {
     expect(process.listeners("SIGHUP")).not.toContain(cb);
   });
 });
+
+describe("runPaneAttach — 自分の pane（20260926-agent-skill-file。AC11）", () => {
+  it("自分の pane には、端末を触らず・接続せずに self_target", async () => {
+    const term = fakeTerminal();
+    const own = {
+      ...cmd(),
+      opts: { ...OPTS, caller: { paneId: "p1", serverUrl: "http://127.0.0.1:7780" } },
+    };
+    await expect(runPaneAttach(own, store, term)).rejects.toMatchObject({
+      code: "self_target",
+      message: expect.stringContaining("WTM_PANE_ID= wtmctl"),
+    });
+    expect(mockedWithSession).not.toHaveBeenCalled();
+    expect(term.writes).toEqual([]);
+    expect(term.raw).toEqual([]);
+  });
+});
