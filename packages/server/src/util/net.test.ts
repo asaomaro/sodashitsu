@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accessUrls, formatUrlHost, isLoopbackHost, isWildcardHost, lanIpv4Addresses, requestPathname, unbracketHost } from "./net.js";
+import { accessUrls, formatUrlHost, isLoopbackHost, isWildcardHost, lanIpv4Addresses, paneServerUrl, requestPathname, unbracketHost } from "./net.js";
 
 describe("isLoopbackHost", () => {
   it("recognizes loopback forms", () => {
@@ -206,5 +206,23 @@ describe("unbracketHost / formatUrlHost（D102：角括弧の処理を 1 か所�
     expect(formatUrlHost("::1")).toBe("[::1]");
     expect(formatUrlHost("[::1]")).toBe("[::1]");
     expect(formatUrlHost("0.0.0.0")).toBe("0.0.0.0");
+  });
+});
+
+describe("paneServerUrl（pane の環境の WTM_SERVER_URL。20260926-agent-skill-file）", () => {
+  it.each([
+    ["http", "127.0.0.1", 7780, "http://127.0.0.1:7780"],
+    ["http", "0.0.0.0", 7781, "http://127.0.0.1:7781"],
+    ["https", "::", 8443, "https://[::1]:8443"],
+    ["http", "::1", 7780, "http://[::1]:7780"],
+    ["http", "[::1]", 7780, "http://[::1]:7780"],
+    ["http", "localhost", 7780, "http://localhost:7780"],
+    ["https", "192.168.1.50", 8443, "https://192.168.1.50:8443"],
+    ["https", "myhost.lan", 443, "https://myhost.lan:443"],
+  ] as const)("%s %s:%d -> %s", (scheme, host, port, expected) => {
+    expect(paneServerUrl(scheme, host, port)).toBe(expected);
+  });
+  it("URL にできないホスト（ゾーン付きの IPv6）は undefined", () => {
+    expect(paneServerUrl("https", "fe80::1%eth0", 8443)).toBeUndefined();
   });
 });

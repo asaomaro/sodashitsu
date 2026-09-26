@@ -286,3 +286,113 @@ describe("runAgentRename", () => {
     expect(h.client.request).not.toHaveBeenCalled();
   });
 });
+
+describe("自分の pane の歯止め（20260926-agent-skill-file。AC11・AC14）", () => {
+  // 呼び出し元は p2（reviewer の居る pane）。接続先は pane のサーバと同じ origin。
+  const IN_P2 = { ...OPTS, caller: { paneId: "p2", serverUrl: "http://127.0.0.1:7780" } };
+
+  async function refusal(p: Promise<unknown>): Promise<RpcFailure> {
+    try {
+      await p;
+    } catch (err) {
+      if (err instanceof RpcFailure) return err;
+      throw err;
+    }
+    throw new Error("expected self_target");
+  }
+
+  it.each([
+    ["reviewer", false],
+    ["p2", false],
+    ["reviewer", true],
+  ])("agent prompt %s（--wait=%s）は自分の pane なので送らない", async (target, wait) => {
+    const h = harness();
+    const err = await refusal(
+      runAgentPrompt(
+        {
+          kind: "agent-prompt",
+          opts: IN_P2,
+          paneId: target,
+          text: "hi",
+          wait,
+          until: [],
+          timeoutMs: undefined,
+        },
+        store,
+      ),
+    );
+    expect(err.code).toBe("self_target");
+    expect(err.message).toContain("WTM_PANE_ID= wtmctl");
+    expect(h.client.request).not.toHaveBeenCalled();
+  });
+
+  it.each(["reviewer", "p2"])("agent send-keys %s は自分の pane なので送らない", async (target) => {
+    const h = harness();
+    const err = await refusal(
+      runAgentSendKeys(
+        { kind: "agent-send-keys", opts: IN_P2, paneId: target, keys: ["esc"] },
+        store,
+      ),
+    );
+    expect(err.code).toBe("self_target");
+    expect(h.client.request).not.toHaveBeenCalled();
+  });
+
+  it("別の pane のエージェントへは送る", async () => {
+    const h = harness(() => ({ agent: agent() }));
+    await runAgentPrompt(
+      {
+        kind: "agent-prompt",
+        opts: IN_P2,
+        paneId: "p1",
+        text: "hi",
+        wait: false,
+        until: [],
+        timeoutMs: undefined,
+      },
+      store,
+    );
+    await runAgentSendKeys(
+      { kind: "agent-send-keys", opts: IN_P2, paneId: "p1", keys: ["esc"] },
+      store,
+    );
+    expect(h.client.request).toHaveBeenCalledWith(
+      "agent.prompt",
+      expect.objectContaining({ paneId: "p1" }),
+    );
+    expect(h.client.request).toHaveBeenCalledWith(
+      "agent.send_keys",
+      expect.objectContaining({ paneId: "p1" }),
+    );
+  });
+
+  it("別のサーバにつなぐときは断らない", async () => {
+    const h = harness(() => ({ agent: REVIEWER }));
+    await runAgentSendKeys(
+      {
+        kind: "agent-send-keys",
+        opts: { ...IN_P2, url: "http://127.0.0.1:7781" },
+        paneId: "reviewer",
+        keys: ["esc"],
+      },
+      store,
+    );
+    expect(h.client.request).toHaveBeenCalledWith(
+      "agent.send_keys",
+      expect.objectContaining({ paneId: "p2" }),
+    );
+  });
+
+  it("自分の pane の agent get・rename は断らない", async () => {
+    const h = harness(() => ({ agent: REVIEWER }));
+    await runAgentGet({ kind: "agent-get", opts: IN_P2, paneId: "reviewer" }, store);
+    await runAgentRename(
+      { kind: "agent-rename", opts: IN_P2, paneId: "reviewer", name: "me" },
+      store,
+    );
+    expect(h.client.request).toHaveBeenCalledWith(
+      "agent.rename",
+      expect.objectContaining({ paneId: "p2" }),
+    );
+  });
+});

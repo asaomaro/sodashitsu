@@ -284,3 +284,17 @@ describe("runAgentStart", () => {
     expect(await result).toBe("connection_closed");
   });
 });
+
+describe("runAgentStart — 自分の pane（20260926-agent-skill-file。AC11）", () => {
+  it("自分の pane には接続せずに self_target", async () => {
+    const own = {
+      ...CMD,
+      opts: { ...CMD.opts, caller: { paneId: "p3", serverUrl: "http://127.0.0.1:7780" } },
+    };
+    await expect(runAgentStart(own, store, deps)).rejects.toMatchObject({
+      code: "self_target",
+      message: expect.stringContaining("WTM_PANE_ID= wtmctl"),
+    });
+    expect(mockedWithSession).not.toHaveBeenCalled();
+  });
+});

@@ -75,3 +75,8 @@ autonomous（humanGates なし）のため、方針は承認者を待たずに�
   既存のコマンドは要求の時間切れで待ちを終えるものがあるため。サーバ側から切れた場合も、`withSession` が最後に `close()` するので残らない。
 - 不正な行の警告は stderr の書き出し待ちが 64 KiB を超えている間は捨てる（`MAX_WARN_PENDING_BYTES`）。
 - control の入力の背圧（pane が読まないとサーバの PTY の書き込みキューが増える）は既存の INPUT の経路と同じ性質で、サーバを変えない本作業の範囲外。backlog に起こす。
+
+## D14: main の 20260926-agent-skill-file に合わせ、`pane control` に `self_target` の歯止めを足す（deliver の取り込み時）
+
+- 自分の pane を control すると、自分の出力が自分の pane に書かれて流れ続け、入力は自分の入力欄に混ざる（`pane attach` と同じ理由）。接続する前に断る。
+  observe は読み取り（`pane read` と同じ扱い）なので断らない。skill ファイルのコマンド一覧と歯止めの一覧にも足した。

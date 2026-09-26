@@ -11,6 +11,7 @@ import {
   type ClosedReason,
   type LineEvent,
 } from "../sessionStream.js";
+import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 import { RpcFailure, type WtmClient } from "../wsClient.js";
 
@@ -336,6 +337,9 @@ export async function runPaneControl(
   store: SessionStore,
   io: StreamIo = processStreamIo(),
 ): Promise<void> {
+  // 自分の pane を制御すると、自分の出力が自分の pane に書かれて流れ続け、入力は自分の入力欄に混ざる（`pane attach` と同じ歯止め。
+  // 20260926-agent-skill-file の self_target）。接続する前に断る。observe は読み取りなので断らない。
+  assertNotSelfPane(cmd.opts, cmd.paneId, "control");
   await withSession(cmd.opts, store, async (client) => {
     const { paneId } = cmd;
     const stream = new PaneStream(client, paneId, io);

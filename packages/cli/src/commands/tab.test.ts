@@ -64,3 +64,29 @@ describe("runTabClose", () => {
     expect(client.request).toHaveBeenCalledWith("tab.close", { tabId: "t1" });
   });
 });
+
+describe("runTabClose — 自分の pane を含む tab（20260926-agent-skill-file。AC12）", () => {
+  const IN_P1 = { ...OPTS, caller: { paneId: "p1", serverUrl: "http://127.0.0.1:7780" } };
+  const snapshot = { panes: [{ id: "p1", tabId: "t1" }, { id: "p2", tabId: "t2" }], tabs: [{ id: "t1", workspaceId: "w1" }, { id: "t2", workspaceId: "w1" }] };
+
+  it("自分の pane を含む tab は tab.close を送らずに self_target", async () => {
+    const client = fakeClient(() => ({}));
+    (client.hello as ReturnType<typeof vi.fn>).mockResolvedValue({ clientId: "c1", snapshot });
+    mockedWithSession.mockImplementation(async (_opts, _store, fn) => fn(client));
+
+    await expect(runTabClose({ kind: "tab-close", opts: IN_P1, tabId: "t1" }, store)).rejects.toMatchObject({
+      code: "self_target",
+      message: expect.stringContaining("WTM_PANE_ID= wtmctl"),
+    });
+    expect(client.request).not.toHaveBeenCalled();
+  });
+
+  it("別の tab は閉じる", async () => {
+    const client = fakeClient(() => ({}));
+    (client.hello as ReturnType<typeof vi.fn>).mockResolvedValue({ clientId: "c1", snapshot });
+    mockedWithSession.mockImplementation(async (_opts, _store, fn) => fn(client));
+
+    await runTabClose({ kind: "tab-close", opts: IN_P1, tabId: "t2" }, store);
+    expect(client.request).toHaveBeenCalledWith("tab.close", { tabId: "t2" });
+  });
+});

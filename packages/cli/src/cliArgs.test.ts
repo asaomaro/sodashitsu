@@ -438,3 +438,42 @@ describe("parseArgs — agent rename", () => {
     expect(() => parseArgs(argv, noEnv)).toThrow(CliUsageError);
   });
 });
+
+describe("parseArgs — pane の中の接続先と呼び出し元（20260926-agent-skill-file）", () => {
+  const inPane = { WTM_PANE_ID: "p1", WTM_SERVER_URL: "http://127.0.0.1:7790" } as NodeJS.ProcessEnv;
+
+  it("--url > WTMCTL_URL > WTM_SERVER_URL > 既定（AC10）", () => {
+    const env = { ...inPane, WTMCTL_URL: "http://envhost:2" } as NodeJS.ProcessEnv;
+    expect(parseArgs(["snapshot", "--url", "http://flag:3"], env)).toMatchObject({ opts: { url: "http://flag:3" } });
+    expect(parseArgs(["snapshot"], env)).toMatchObject({ opts: { url: "http://envhost:2" } });
+    expect(parseArgs(["snapshot"], inPane)).toMatchObject({ opts: { url: "http://127.0.0.1:7790" } });
+    expect(parseArgs(["snapshot"], { WTM_SERVER_URL: "" } as NodeJS.ProcessEnv)).toMatchObject({ opts: { url: DEFAULT_URL } });
+  });
+
+  it("WTM_PANE_ID と WTM_SERVER_URL がどちらもあれば caller を持つ", () => {
+    expect(parseArgs(["snapshot"], inPane)).toEqual({
+      kind: "snapshot",
+      opts: { url: "http://127.0.0.1:7790", token: undefined, caller: { paneId: "p1", serverUrl: "http://127.0.0.1:7790" } },
+    });
+  });
+
+  it.each([
+    ["WTM_PANE_ID が空", { WTM_PANE_ID: "", WTM_SERVER_URL: "http://127.0.0.1:7790" }],
+    ["WTM_PANE_ID が無い", { WTM_SERVER_URL: "http://127.0.0.1:7790" }],
+    ["WTM_SERVER_URL が無い", { WTM_PANE_ID: "p1" }],
+    ["WTM_SERVER_URL が空", { WTM_PANE_ID: "p1", WTM_SERVER_URL: "" }],
+  ])("%s なら caller を持たない（AC13）", (_label, env) => {
+    const cmd = parseArgs(["snapshot"], env as NodeJS.ProcessEnv);
+    expect(cmd.kind).toBe("snapshot");
+    expect(cmd.kind === "snapshot" ? Object.keys(cmd.opts).sort() : []).toEqual(["token", "url"]);
+  });
+});
+
+describe("parseArgs — skill", () => {
+  it("skill -> { kind: skill }（接続先を持たない）", () => {
+    expect(parseArgs(["skill"], noEnv)).toEqual({ kind: "skill" });
+  });
+  it.each([[["skill", "extra"]], [["skill", "--x"]], [["skill", "--url", "http://h:1"]]])("%j は使い方の誤り（AC6）", (argv) => {
+    expect(() => parseArgs(argv, noEnv)).toThrow(CliUsageError);
+  });
+});

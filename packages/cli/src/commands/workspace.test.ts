@@ -86,3 +86,29 @@ describe("runWorkspaceRename", () => {
     expect(client.request).toHaveBeenCalledWith("workspace.rename", { workspaceId: "w1", label: "new" });
   });
 });
+
+describe("runWorkspaceClose — 自分の pane を含む workspace（20260926-agent-skill-file。AC12）", () => {
+  const IN_P1 = { ...OPTS, caller: { paneId: "p1", serverUrl: "http://127.0.0.1:7780" } };
+  const snapshot = { panes: [{ id: "p1", tabId: "t1" }, { id: "p2", tabId: "t2" }], tabs: [{ id: "t1", workspaceId: "w1" }, { id: "t2", workspaceId: "w2" }] };
+
+  it("自分の pane を含む workspace は workspace.close を送らずに self_target", async () => {
+    const client = fakeClient(() => ({}));
+    (client.hello as ReturnType<typeof vi.fn>).mockResolvedValue({ clientId: "c1", snapshot });
+    mockedWithSession.mockImplementation(async (_opts, _store, fn) => fn(client));
+
+    await expect(runWorkspaceClose({ kind: "workspace-close", opts: IN_P1, workspaceId: "w1" }, store)).rejects.toMatchObject({
+      code: "self_target",
+      message: expect.stringContaining("WTM_PANE_ID= wtmctl"),
+    });
+    expect(client.request).not.toHaveBeenCalled();
+  });
+
+  it("別の workspace は閉じる", async () => {
+    const client = fakeClient(() => ({}));
+    (client.hello as ReturnType<typeof vi.fn>).mockResolvedValue({ clientId: "c1", snapshot });
+    mockedWithSession.mockImplementation(async (_opts, _store, fn) => fn(client));
+
+    await runWorkspaceClose({ kind: "workspace-close", opts: IN_P1, workspaceId: "w2" }, store);
+    expect(client.request).toHaveBeenCalledWith("workspace.close", { workspaceId: "w2" });
+  });
+});

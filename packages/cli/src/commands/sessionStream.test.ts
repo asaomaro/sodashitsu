@@ -1013,3 +1013,26 @@ describe("runPaneControl（20260926-pane-observe-control）", () => {
     expect(records(io).map((r) => r.type)).toEqual(["terminal.frame"]);
   });
 });
+
+describe("自分の pane（20260926-agent-skill-file の self_target）", () => {
+  const caller = { paneId: "p1", serverUrl: "http://127.0.0.1:7780" };
+
+  it("control は自分の pane には接続せずに self_target", async () => {
+    const io = fakeIo();
+    await expect(
+      runPaneControl({ ...controlCmd(), opts: { ...OPTS, caller } }, store, io),
+    ).rejects.toMatchObject({ code: "self_target" });
+    expect(mockedWithSession).not.toHaveBeenCalled();
+    expect(io.out).toEqual([]);
+  });
+
+  it("observe は読み取りなので自分の pane でも断らない", async () => {
+    const client = fakeClient();
+    useClient(client);
+    const io = fakeIo();
+    const running = runPaneObserve({ ...observeCmd, opts: { ...OPTS, caller } }, store, io);
+    await waitSubscribed(client);
+    client.emitEvent({ event: "pane.closed", data: { paneId: "p1" } } as ServerEvent);
+    await expect(running).resolves.toBeUndefined();
+  });
+});

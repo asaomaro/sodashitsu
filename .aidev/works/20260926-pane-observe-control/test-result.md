@@ -140,3 +140,17 @@ smoke: pass (exit 0, 3 本)
 ```
 
 着地の判定はラウンド 2 の結果による。このラウンドでは失敗が発生していない。
+
+## deliver 前（origin/main 2875ad2 の取り込み後）
+
+- 取り込んだ 20260926-agent-skill-file に合わせた: `printHelp` の一覧は `USAGE_LINES` に一本化されていたので競合を解き、skill ファイル（`packages/cli/skills/wtmctl/SKILL.md`）の
+  コマンド一覧に `pane observe`・`pane control` を足した（`skill.test.ts` の全コマンドの検査が要求）。`pane control` にも `pane attach` と同じ `self_target` の歯止めを足した
+  （observe は読み取りなので断らない。単体テスト 2 件。decisions D14）。docs の歯止めの節も更新。
+- `pnpm -s build` → exit 0、`pnpm -s typecheck` → exit 0、全体 `pnpm -s test` 1 回 → exit 0:
+
+```
+ Test Files  208 passed (208)
+      Tests  4142 passed (4142)
+```
+
+- `aidev smoke` → `smoke: pass (exit 0, 4 本)`（observe/control の手順を含む）。
