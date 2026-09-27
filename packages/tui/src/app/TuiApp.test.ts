@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fakeIo } from "../testing/fakeIo.js";
 import type { TuiTarget } from "../types.js";
 import { TuiApp } from "./TuiApp.js";
-import { RESTORE_SEQUENCE, TerminalModes } from "./terminalModes.js";
+import { enterSequence, RESTORE_SEQUENCE, TerminalModes } from "./terminalModes.js";
 
 /** 接続しない（T1 の骨組みの確認用。login は呼ばれない前提）。 */
 class BareApp extends TuiApp {
@@ -91,5 +91,24 @@ describe("TerminalModes", () => {
     };
     expect(() => modes.restore()).not.toThrow();
     expect(io.rawMode).toBe(false);
+  });
+});
+
+describe("enterSequence と RESTORE_SEQUENCE", () => {
+  it("有効にした DEC のモード（CSI ? n h）は全て RESTORE で戻す（CSI ? n l）", () => {
+    const set = [...enterSequence(true).matchAll(/\[\?([0-9;]+)h/g)].flatMap((m) =>
+      m[1]!.split(";"),
+    );
+    expect(set.length).toBeGreaterThan(0);
+    for (const mode of set) expect(RESTORE_SEQUENCE).toContain(`\x1b[?${mode}l`);
+    // カーソルを隠した（?25l）ら表示に戻す。
+    expect(enterSequence(false)).toContain("\x1b[?25l");
+    expect(RESTORE_SEQUENCE).toContain("\x1b[?25h");
+  });
+
+  it("端末でなくても初回の知らせ（token）は標準エラーへ出す", async () => {
+    const io = fakeIo({ isTTY: false });
+    expect(await new BareApp({ ...target, startupNotice: "token: xyz" }, io).run()).toBe(1);
+    expect(io.errors()).toContain("token: xyz");
   });
 });

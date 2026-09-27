@@ -3,11 +3,27 @@ import type { TuiIo, TuiSignal } from "../types.js";
 const FALLBACK_SIZE = { cols: 80, rows: 24 };
 const SIGNALS: readonly TuiSignal[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 
-/** 本物の端末とプロセス（`packages/cli/src/commands/attach.ts` の `processTerminal()` を写した）。 */
-export function processIo(): TuiIo {
-  const { stdin, stdout, stderr } = process;
-  // 端末が先に閉じた（SIGHUP 等）後の書き込み・読み取りの失敗（EIO）で落ちないようにする。
+export interface ProcessStreams {
+  stdin: NodeJS.ReadStream;
+  stdout: NodeJS.WriteStream;
+  stderr: NodeJS.WriteStream;
+}
+
+/**
+ * 本物の端末とプロセス（`packages/cli/src/commands/attach.ts` の `processTerminal()` を写した）。`streams` はテスト用の差し替え。
+ */
+export function processIo(
+  streams: ProcessStreams = {
+    stdin: process.stdin,
+    stdout: process.stdout,
+    stderr: process.stderr,
+  },
+): TuiIo {
+  const { stdin, stdout, stderr } = streams;
+  // 端末が先に閉じた（SIGHUP 等）後の書き込み・読み取りの失敗（EIO）で落ちないようにする。**raw を外した後も外さない**——
+  // モードを戻す書き込みの失敗は、raw を外した後（非同期）に error として届く。受け手が無いと未処理の例外で落ちる（attach.ts と同じ穴）。
   const ignoreError = (): void => undefined;
+  let guarded = false;
   return {
     isTTY: Boolean(stdin.isTTY && stdout.isTTY),
     size: () =>
@@ -15,17 +31,14 @@ export function processIo(): TuiIo {
         ? { cols: stdout.columns, rows: stdout.rows }
         : FALLBACK_SIZE,
     setRawMode: (on) => {
-      if (on) {
+      if (on && !guarded) {
+        guarded = true;
         stdout.on("error", ignoreError);
         stdin.on("error", ignoreError);
       }
       if (stdin.isTTY) stdin.setRawMode(on);
       if (on) stdin.resume();
-      else {
-        stdin.pause();
-        stdout.off("error", ignoreError);
-        stdin.off("error", ignoreError);
-      }
+      else stdin.pause();
     },
     write: (data) => {
       stdout.write(data);

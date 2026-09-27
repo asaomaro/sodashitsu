@@ -116,6 +116,9 @@ export class TuiApp {
   }
 
   run(): Promise<number> {
+    // 初回の token など（ブラウザ用。二度と出ない）は、代替画面に入る前に標準エラーへ（design「起動と終了」）。
+    // 端末でなく端末版を開けないときも出す——ここで出さないと token は二度と得られない。
+    if (this.target.startupNotice) this.io.writeError(`${this.target.startupNotice}\n`);
     if (!this.io.isTTY) {
       this.io.writeError("soda: the terminal UI needs a terminal on both stdin and stdout\n");
       return Promise.resolve(1);
@@ -123,14 +126,14 @@ export class TuiApp {
     const done = new Promise<number>((resolve) => {
       this.resolveExit = resolve;
     });
-    // 初回の token など（ブラウザ用。二度と出ない）は、代替画面に入る前に標準エラーへ（design「起動と終了」）。
-    if (this.target.startupNotice) this.io.writeError(`${this.target.startupNotice}\n`);
     this.disposers.push(this.io.onExit(() => this.modes.restore()));
     this.disposers.push(this.io.onSignal(() => this.detach()));
     this.disposers.push(
       this.io.onFatal((err) => this.finish(1, `soda: unexpected error: ${describeError(err)}\n`)),
     );
     try {
+      // TODO(05-tui-features)：`tui.mouseCapture` は prefs.get の前なので、ここでは常に既定（有効）。受け取った後の切り替え（マウスの報告の
+      // 有効・無効を出し直す）は 05 の設定画面と一緒に配線する（.aidev/works/20260927-cli-mode/05-tui-features）。
       this.modes.enable(this.prefs.mouseCapture);
       this.start();
     } catch (err) {

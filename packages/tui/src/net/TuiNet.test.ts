@@ -132,4 +132,16 @@ describe("TuiNet（接続・再ログイン。AC10・AC11・AC12）", () => {
     // 閉じた後の試みは決着しない socket / 要求で止まり、本物の socket は作らない。
     expect(sockets).toHaveLength(1);
   });
+
+  it("detach の後の stop は client.detach を送り直さない", async () => {
+    const { net, sockets } = setup(async () => "sid=1");
+    await net.start();
+    await flush();
+    sockets[0]!.open();
+    sockets[0]!.reply({ clientId: "c1", snapshot: snapshot() });
+    await flush();
+    void net.detach(10);
+    net.stop();
+    expect(sockets[0]!.requests("client.detach")).toHaveLength(1);
+  });
 });

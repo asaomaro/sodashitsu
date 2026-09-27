@@ -48,6 +48,7 @@ export class TuiNet implements StorePort {
   /** 今の「再接続中」の間に、サーバが生きているかをログインで確かめたか。 */
   private probedThisOutage = false;
   private stopped = false;
+  private detachSent = false;
 
   constructor(
     private readonly target: TuiTarget,
@@ -106,7 +107,8 @@ export class TuiNet implements StorePort {
   stop(): void {
     if (this.stopped) return;
     this.stopped = true;
-    this.conn.request("client.detach", {}).catch(() => undefined);
+    // 切り離し（`detach`）で送った後なら送り直さない。
+    if (!this.detachSent) this.conn.request("client.detach", {}).catch(() => undefined);
   }
 
   // --- StorePort ---
@@ -163,6 +165,7 @@ export class TuiNet implements StorePort {
 
   /** `client.detach` を送り、サーバが閉じるのを待つ（最大 `timeoutMs`）。 */
   async detach(timeoutMs = 1000): Promise<void> {
+    this.detachSent = true;
     await Promise.race([
       this.conn.request("client.detach", {}).catch(() => undefined),
       new Promise((resolve) => setTimeout(resolve, timeoutMs).unref?.()),
