@@ -20,9 +20,9 @@ import {
 } from "./machineRules.js";
 
 /**
- * `wtm machine add/list/rename/enable/disable/remove`（20260927-multi-host-machines の design「wtm machine」・herdr の `herdr machine`）。
+ * `soda machine add/list/rename/enable/disable/remove`（20260927-multi-host-machines の design「soda machine」・herdr の `herdr machine`）。
  * 登録簿（状態ディレクトリの根の `machines.json`）だけを読み書きする。`add` だけが保存の前に ssh で中継に繋いで確かめる。名前の変更・無効化・
- * 削除はリモートに何もしない（リモートの `wtm serve` と pane は動いたまま）。動いている手元の `wtm serve` は 1〜2 秒で変化に気づく。
+ * 削除はリモートに何もしない（リモートの `soda serve` と pane は動いたまま）。動いている手元の `soda serve` は 1〜2 秒で変化に気づく。
  * 終了コード: 0 成功／1 確かめの失敗・登録簿が読めない・書けない／2 引数の誤り・規則の違反・知らない id（`ConfigError`）。
  */
 export interface MachineCommandDeps {
@@ -75,7 +75,7 @@ function findById(data: MachineCatalogData, id: string): MachineProfile {
   if (!m)
     throw new ConfigError(
       `no such machine id: ${id}`,
-      "id は wtm machine list で確かめてください（名前ではなく id を指定します）。",
+      "id は soda machine list で確かめてください（名前ではなく id を指定します）。",
     );
   return m;
 }
@@ -90,11 +90,11 @@ export async function runMachineCommand(
     return await run(cmd, root, io, deps);
   } catch (err) {
     if (err instanceof MachineCommandFailure) {
-      io.err(`wtm: ${err.message}`);
+      io.err(`soda: ${err.message}`);
       return err.exitCode;
     }
     if (err instanceof CatalogError) {
-      io.err(`wtm: cannot save the machine list: ${err.message}`);
+      io.err(`soda: cannot save the machine list: ${err.message}`);
       return 1;
     }
     // 書き込みの失敗（EACCES・ENOSPC 等）も「書けない」＝ 1（スタックトレースを出さない）。
@@ -103,7 +103,7 @@ export async function runMachineCommand(
       typeof (err as NodeJS.ErrnoException).code === "string" &&
       !(err instanceof ConfigError)
     ) {
-      io.err(`wtm: cannot save the machine list: ${err.message}`);
+      io.err(`soda: cannot save the machine list: ${err.message}`);
       return 1;
     }
     throw err; // ConfigError は main が終了コード 2（案内つき）にする
@@ -180,7 +180,7 @@ async function run(
         if (data.machines.length >= MAX_MACHINES)
           throw new ConfigError(
             `at most ${MAX_MACHINES} machines can be saved`,
-            "使わないマシンを wtm machine remove で消してください。",
+            "使わないマシンを soda machine remove で消してください。",
           );
       };
       checkRules(await readForWrite(root));
@@ -192,17 +192,17 @@ async function run(
         enabled: true,
       };
       io.out(
-        `checking ${shellQuote(cmd.target)} (ssh … wtm bridge${session !== undefined ? ` --session ${session}` : ""}) …`,
+        `checking ${shellQuote(cmd.target)} (ssh … soda bridge${session !== undefined ? ` --session ${session}` : ""}) …`,
       );
       const probed = await (deps.probe ?? ((p: MachineProfile) => probeMachine(p, deps.link)))(
         profile,
       );
       if (!probed.ok) {
-        io.err(`wtm: cannot reach wtm on ${cmd.target}: ${probed.failure.message}`);
-        io.err("wtm: the machine was not saved.");
+        io.err(`soda: cannot reach soda on ${cmd.target}: ${probed.failure.message}`);
+        io.err("soda: the machine was not saved.");
         io.err(`hint: check plain SSH first: ssh ${shellQuote(cmd.target)}`);
         io.err(
-          `hint: start the server on that machine: wtm serve${session !== undefined ? ` --session ${session}` : ""}`,
+          `hint: start the server on that machine: soda serve${session !== undefined ? ` --session ${session}` : ""}`,
         );
         return 1;
       }
@@ -211,7 +211,7 @@ async function run(
       checkRules(fresh);
       await saveCatalog(root, { version: 1, machines: [...fresh.machines, profile] });
       io.out(`saved machine ${profile.id} (${profile.label})`);
-      io.out("a running wtm serve connects to it within a few seconds");
+      io.out("a running soda serve connects to it within a few seconds");
       return 0;
     }
     case "rename": {
@@ -246,7 +246,7 @@ async function run(
       const data = await readForWrite(root);
       const m = findById(data, cmd.id);
       await saveCatalog(root, { version: 1, machines: data.machines.filter((x) => x.id !== m.id) });
-      io.out(`removed machine ${m.id} (${m.label}); its remote wtm serve keeps running`);
+      io.out(`removed machine ${m.id} (${m.label}); its remote soda serve keeps running`);
       return 0;
     }
   }

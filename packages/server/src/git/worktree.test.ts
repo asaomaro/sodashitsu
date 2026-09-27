@@ -43,16 +43,16 @@ describe("parseWorktreeListPorcelain", () => {
 
 describe("repoNameFromGitCommonDir", () => {
   it(".git ならその親の名前", () => {
-    expect(repoNameFromGitCommonDir("/home/me/wtm/.git")).toBe("wtm");
+    expect(repoNameFromGitCommonDir("/home/me/soda/.git")).toBe("soda");
   });
 
   it("bare（<名前>.git）なら .git を落とした名前", () => {
-    expect(repoNameFromGitCommonDir("/srv/repos/wtm.git")).toBe("wtm");
+    expect(repoNameFromGitCommonDir("/srv/repos/soda.git")).toBe("soda");
   });
 
   // 直下で実行すると `--git-common-dir` は相対の `.git` を返す。絶対化しないと名前が `.` になる。
   it("相対のまま渡すと名前が取れないので、resolveCommonDir で絶対化する", () => {
     expect(repoNameFromGitCommonDir(".git")).toBe("repo"); // 絶対化を忘れた場合の保険
-    expect(repoNameFromGitCommonDir(resolveCommonDir("/home/me/wtm", ".git"))).toBe("wtm");
+    expect(repoNameFromGitCommonDir(resolveCommonDir("/home/me/soda", ".git"))).toBe("soda");
   });
 });

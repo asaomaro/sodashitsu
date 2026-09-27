@@ -7,7 +7,7 @@ import type { TerminalManager } from "../../terminal/TerminalManager.js";
 import type { AgentIntegrationService } from "../../agent/AgentIntegrationService.js";
 import type { AgentStarter } from "../../agent/AgentStarter.js";
 import type { MetadataService } from "../../metadata/MetadataService.js";
-import type { MachineStatus, ServerSessionEntry } from "@wtm/protocol";
+import type { MachineStatus, ServerSessionEntry } from "@sodashitsu/protocol";
 import type { CommandService } from "../../commands/CommandService.js";
 import type { ImageUploads } from "../../image/ImageUploads.js";
 

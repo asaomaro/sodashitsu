@@ -1,4 +1,4 @@
-import type { Pane, Tab, Workspace } from "@wtm/protocol";
+import type { Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { paneNameOf } from "../store/paneName.js";
 
 /**

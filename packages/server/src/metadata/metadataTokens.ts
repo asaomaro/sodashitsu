@@ -1,4 +1,4 @@
-import { RpcError, type MetadataTokenEntry } from "@wtm/protocol";
+import { RpcError, type MetadataTokenEntry } from "@sodashitsu/protocol";
 
 /**
  * 独自トークン（herdr の workspace / pane metadata tokens。20260927-sidebar-row-tokens）の**規則そのもの**——整え方・検査・帳簿。

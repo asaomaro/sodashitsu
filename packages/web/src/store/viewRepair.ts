@@ -1,4 +1,4 @@
-import type { Pane, Tab, Workspace } from "@wtm/protocol";
+import type { Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { depthFirstPaneIds } from "../term/layoutOrder.js";
 
 export interface ViewTarget {

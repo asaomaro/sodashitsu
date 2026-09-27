@@ -1,4 +1,4 @@
-import { DEFAULT_THEME_NAME, isThemeName, type ThemeName } from "@wtm/protocol";
+import { DEFAULT_THEME_NAME, isThemeName, type ThemeName } from "@sodashitsu/protocol";
 
 /**
  * テーマの名前の扱い（20260921-theme-settings）。**どのテーマを使うかの規則はここの 1 か所**——設定の store・`ThemeController`・設定ダイアログは

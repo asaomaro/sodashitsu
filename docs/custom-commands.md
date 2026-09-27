@@ -8,14 +8,14 @@
 
 ## 置き場所
 
-`wtm serve` の状態ディレクトリの `commands.json`。
+`soda serve` の状態ディレクトリの `commands.json`。
 
 | 起動の仕方 | ファイル |
 |---|---|
-| 既定（Linux・macOS） | `${XDG_STATE_HOME:-~/.local/state}/web-tn-multiplexer/commands.json` |
-| 既定（Windows ネイティブ） | `%LOCALAPPDATA%\web-tn-multiplexer\commands.json` |
+| 既定（Linux・macOS） | `${XDG_STATE_HOME:-~/.local/state}/sodashitsu/commands.json` |
+| 既定（Windows ネイティブ） | `%LOCALAPPDATA%\sodashitsu\commands.json` |
 | `--state-dir <dir>` | `<dir>/commands.json` |
-| 名前付き session（`--session work`・`WTM_SESSION=work`） | `<状態ディレクトリ>/sessions/work/commands.json`（session ごとに別のファイル） |
+| 名前付き session（`--session work`・`SODA_SESSION=work`） | `<状態ディレクトリ>/sessions/work/commands.json`（session ごとに別のファイル） |
 
 ファイルが無ければ独自コマンドは 0 件（エラーではない）。
 
@@ -27,8 +27,8 @@
     { "id": "lazygit", "type": "popup", "command": "lazygit", "description": "lazygit を開く", "width": "80%", "height": "80%" },
     { "id": "scratch", "type": "popup", "command": "exec \"${SHELL:-sh}\"", "description": "使い捨てのシェル" },
     { "id": "htop", "type": "pane", "command": "htop" },
-    { "id": "build", "type": "shell", "command": "make -C \"$WTM_ACTIVE_PANE_CWD\" > /tmp/wtm-build.log 2>&1", "description": "裏でビルド" },
-    { "id": "touch-ok", "type": "shell", "command": "touch /tmp/wtm-cmd-ok" }
+    { "id": "build", "type": "shell", "command": "make -C \"$SODA_ACTIVE_PANE_CWD\" > /tmp/soda-build.log 2>&1", "description": "裏でビルド" },
+    { "id": "touch-ok", "type": "shell", "command": "touch /tmp/soda-cmd-ok" }
   ]
 }
 ```
@@ -49,23 +49,23 @@
 
 コマンドは Unix で `/bin/sh -c '<command>'`（`shell` はログインシェルの `/bin/sh -lc`）、Windows ネイティブで
 `%ComSpec% /d /s /c "<command>"` として走る（Windows では環境変数は `%VAR%` の書き方）。作業場所はフォーカス中の pane の場所（無い・
-ディレクトリでなければ `wtm serve` を起動した場所）。
+ディレクトリでなければ `soda serve` を起動した場所）。
 
 ### コマンドに渡す環境変数
 
-pane と同じ環境（`wtm serve` の環境から `WTMCTL_TOKEN`・`WTMCTL_URL` を落とし、`WTM_SERVER_URL`・名前付き session の `WTM_SESSION`・公式フック連携の
-`WTM_AGENT_REPORT_SOCKET` などを足したもの）に、次を足す。
+pane と同じ環境（`soda serve` の環境から `SODACTL_TOKEN`・`SODACTL_URL` を落とし、`SODA_SERVER_URL`・名前付き session の `SODA_SESSION`・公式フック連携の
+`SODA_AGENT_REPORT_SOCKET` などを足したもの）に、次を足す。
 
 | 変数 | 値 |
 |---|---|
-| `WTM_ACTIVE_WORKSPACE_ID`・`WTM_ACTIVE_TAB_ID`・`WTM_ACTIVE_PANE_ID` | 走らせたときにフォーカスしていた workspace・tab・pane の id |
-| `WTM_ACTIVE_PANE_CWD` | その pane の場所 |
-| `WTM_COMMAND_ID` | 走らせたコマンドの `id` |
-| `WTM_PANE_ID` | `pane` の種類だけ（その新しい pane の id）。`popup`・`shell` には入らない（herdr と同じ） |
+| `SODA_ACTIVE_WORKSPACE_ID`・`SODA_ACTIVE_TAB_ID`・`SODA_ACTIVE_PANE_ID` | 走らせたときにフォーカスしていた workspace・tab・pane の id |
+| `SODA_ACTIVE_PANE_CWD` | その pane の場所 |
+| `SODA_COMMAND_ID` | 走らせたコマンドの `id` |
+| `SODA_PANE_ID` | `pane` の種類だけ（その新しい pane の id）。`popup`・`shell` には入らない（herdr と同じ） |
 
 ## 読み込みと読み直し
 
-- `wtm serve` の起動時に読む。書き換えたら**ブラウザで「設定を読み直す」（既定 `prefix+shift+r`）**を押すとサーバが読み直し、
+- `soda serve` の起動時に読む。書き換えたら**ブラウザで「設定を読み直す」（既定 `prefix+shift+r`）**を押すとサーバが読み直し、
   全てのブラウザの一覧が新しくなる。
 - **1 つでも規則に合わない所があるとファイル全体を採らない**（独自コマンドは 0 件になる。読み直しでは前の一覧も捨てる）。理由は
   サーバのログ（`server.log`）・設定画面の群「独自コマンド」・読み直しのトーストに出る（コマンドの文字列は理由に入れない）。
@@ -74,7 +74,7 @@ pane と同じ環境（`wtm serve` の環境から `WTMCTL_TOKEN`・`WTMCTL_URL`
 ## 安全
 
 - **ファイルは本人だけが書ける形に**（`chmod 600 commands.json`）。Linux・macOS では、シンボリックリンク・通常のファイルでない・
-  `wtm serve` を動かしているユーザー以外の持ち物・グループかその他が書き込める（`chmod g+w`/`o+w`）、のどれかなら採らない
+  `soda serve` を動かしているユーザー以外の持ち物・グループかその他が書き込める（`chmod g+w`/`o+w`）、のどれかなら採らない
   （他人がコマンドを差し込めるため）。グループかその他が読めるだけなら採るが、ログに警告を出す（トークンを書く人がいるため）。
 - **Windows ネイティブでは持ち主・権限を検査しない**（依存無しに ACL を読む手段が無い）。状態ディレクトリが利用者ごとの
   `%LOCALAPPDATA%` の下にあることに頼る。`--state-dir` で共有の場所を指すときは、そのフォルダの権限を自分で絞る。
@@ -86,7 +86,7 @@ pane と同じ環境（`wtm serve` の環境から `WTMCTL_TOKEN`・`WTMCTL_URL`
 
 - popup は開いたブラウザだけに出る。そのブラウザが切断・再読み込みすると popup のコマンドは止まる。ウィンドウの大きさを変えても
   popup の端末の大きさは変わらない。
-- `pane` の種類の pane はサーバを再起動すると普通のシェルの pane として戻る。更新時の引き継ぎ（`wtm handoff`）の後は、閉じても元の
+- `pane` の種類の pane はサーバを再起動すると普通のシェルの pane として戻る。更新時の引き継ぎ（`soda handoff`）の後は、閉じても元の
   pane・拡大表示には戻らない。
 - `plugin_action`（herdr のプラグインの操作）は無い。
 - Windows ネイティブでの起動は実機で確かめていない（`popup`・`pane` は node-pty に 1 本のコマンドライン `/d /s /c "<command>"` として渡し、node-pty が引用し直さないことだけを単体テストで確かめている）。

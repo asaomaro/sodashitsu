@@ -8,7 +8,7 @@
  */
 import { z } from "zod";
 import { parse as parseToml } from "smol-toml";
-import type { AgentState } from "@wtm/protocol";
+import type { AgentState } from "@sodashitsu/protocol";
 import type { ManifestSource } from "../infra/ManifestSource.js";
 import type { Logger } from "../log/Logger.js";
 import { convertRustRegex } from "./regexConvert.js";

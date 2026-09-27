@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DisplayState } from "@wtm/protocol";
+import type { DisplayState } from "@sodashitsu/protocol";
 import { computed } from "vue";
 import { useSettingsStore } from "../store/settings.js";
 import { stateGlyph, stateLabel } from "../store/stateIndicator.js";
@@ -65,16 +65,16 @@ const glyph = computed(() => (settings.statusSymbols ? stateGlyph(props.state) :
  * 条件（背景・hover・選択の行・モバイルの背景の上で 3:1）で寄せ、`uiTokens.test.ts` が全テーマで確かめる。
  */
 .state-icon[data-state="blocked"] {
-  color: var(--wtm-state-blocked, #ff6e6e);
+  color: var(--soda-state-blocked, #ff6e6e);
 }
 .state-icon[data-state="working"] {
-  color: var(--wtm-state-working, #f1fa8c);
+  color: var(--soda-state-working, #f1fa8c);
 }
 .state-icon[data-state="done"] {
-  color: var(--wtm-state-done, #50fa7b);
+  color: var(--soda-state-done, #50fa7b);
 }
 .state-icon[data-state="idle"] {
-  color: var(--wtm-state-idle, #8a9ad0);
+  color: var(--soda-state-idle, #8a9ad0);
 }
 /* 丸：記号「切」、またはエージェントが居ない行（以前の見た目。状態の無い丸は薄く）。 */
 .state-icon[data-symbols="off"]::before,

@@ -1,4 +1,4 @@
-import type { AgentInfo } from "@wtm/protocol";
+import type { AgentInfo } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { StartWait } from "./agentStartWait.js";
 

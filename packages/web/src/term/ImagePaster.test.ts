@@ -1,4 +1,4 @@
-import { IMAGE_CHUNK_BYTES, IMAGE_MAX_BYTES, type MethodName } from "@wtm/protocol";
+import { IMAGE_CHUNK_BYTES, IMAGE_MAX_BYTES, type MethodName } from "@sodashitsu/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { InputGate } from "../net/InputGate.js";
 import type { ConnectionPort } from "../net/ports.js";
@@ -34,7 +34,7 @@ function makeConn(opts: { path?: string; failOn?: { method: string; code: string
           ];
           return {};
         case "pane.image.commit":
-          return { path: opts.path ?? "/state/clipboard-images/wtm-image-x.png" };
+          return { path: opts.path ?? "/state/clipboard-images/soda-image-x.png" };
         default:
           return {};
       }
@@ -131,7 +131,7 @@ describe("ImagePaster（20260927-clipboard-image-paste）", () => {
     expect(s.requests[2]![1]).toMatchObject({ uploadId: "u1", offset: IMAGE_CHUNK_BYTES });
     expect(s.received()).toEqual(Array.from(new Uint8Array(await blob.arrayBuffer())));
     expect(s.sent).toEqual([
-      ["p1", "\x1b[200~/state/clipboard-images/wtm-image-x.png\x1b[201~"],
+      ["p1", "\x1b[200~/state/clipboard-images/soda-image-x.png\x1b[201~"],
       ["p1", "a"],
       ["p1", "b"],
     ]);
@@ -171,7 +171,7 @@ describe("ImagePaster（20260927-clipboard-image-paste）", () => {
       const s = setup({ clip: { image: pngBlob(20) }, term });
       s.paster.fromKey("p1", "\x16");
       await idle();
-      expect(s.sent).toEqual([["p1", "/state/clipboard-images/wtm-image-x.png"]]);
+      expect(s.sent).toEqual([["p1", "/state/clipboard-images/soda-image-x.png"]]);
     }
   });
 
@@ -236,7 +236,7 @@ describe("ImagePaster（20260927-clipboard-image-paste）", () => {
     s.paster.fromKey("p1", "\x16"); // 始めたときは bracketed
     s.setTerm(null);
     await idle();
-    expect(s.sent).toEqual([["p1", "\x1b[200~/state/clipboard-images/wtm-image-x.png\x1b[201~"]]);
+    expect(s.sent).toEqual([["p1", "\x1b[200~/state/clipboard-images/soda-image-x.png\x1b[201~"]]);
   });
 
   it("マシンを切り替えたら、前に始めた仕事は送らず・貼らず・溜めたキーも流さない。切り替えの後の仕事は動く", async () => {
@@ -249,7 +249,7 @@ describe("ImagePaster（20260927-clipboard-image-paste）", () => {
     expect(s.requests).toEqual([]);
     s.paster.fromKey("p1", "\x16");
     await idle();
-    expect(s.sent).toEqual([["p1", "\x1b[200~/state/clipboard-images/wtm-image-x.png\x1b[201~"]]);
+    expect(s.sent).toEqual([["p1", "\x1b[200~/state/clipboard-images/soda-image-x.png\x1b[201~"]]);
   });
 
   it("読み取り（許可の画面）で止まっている間に切り替えたら、保持をその場で捨てる（次のマシンの同じ id の pane へ打った文字を拾わない）", async () => {
@@ -341,7 +341,7 @@ describe("ImagePaster（20260927-clipboard-image-paste）", () => {
     s.gate.sendInput("p1", "b");
     await idle();
     expect(maxInFlight).toBe(1);
-    const P = "\x1b[200~/state/clipboard-images/wtm-image-x.png\x1b[201~";
+    const P = "\x1b[200~/state/clipboard-images/soda-image-x.png\x1b[201~";
     expect(s.sent).toEqual([
       ["p1", P],
       ["p1", "a"],
@@ -439,7 +439,7 @@ describe("ImagePaster（20260927-clipboard-image-paste）", () => {
     broken = false;
     paster.fromKey("p1", "\x16");
     await idle();
-    expect(c.sent.at(-1)).toEqual(["p1", "/state/clipboard-images/wtm-image-x.png"]);
+    expect(c.sent.at(-1)).toEqual(["p1", "/state/clipboard-images/soda-image-x.png"]);
   });
 
   it("保持は 20 秒（decisions D7）で作る", () => {

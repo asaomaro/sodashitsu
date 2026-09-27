@@ -7,8 +7,8 @@ import { PREFLIGHT_COMMAND_NAME, applySessionEnv, parseArgs } from "../cliArgs.j
 import { PREFLIGHT_COMMAND } from "./preflight.js";
 import { HANDOFF_EXIT_NOT_RUNNING, type HandoffCommandDeps, runHandoff } from "./handoffCommand.js";
 
-describe("wtm handoff の引数（cliArgs）", () => {
-  it("--state-dir・--session を受け、WTM_SESSION に従う", () => {
+describe("soda handoff の引数（cliArgs）", () => {
+  it("--state-dir・--session を受け、SODA_SESSION に従う", () => {
     expect(parseArgs(["handoff"])).toMatchObject({ command: "handoff" });
     expect(parseArgs(["handoff", "--state-dir", "/s", "--session", "work"])).toMatchObject({
       command: "handoff",
@@ -16,12 +16,12 @@ describe("wtm handoff の引数（cliArgs）", () => {
       session: "work",
       sessionSource: "flag",
     });
-    expect(applySessionEnv(parseArgs(["handoff"]), { WTM_SESSION: "env-s" })).toMatchObject({
+    expect(applySessionEnv(parseArgs(["handoff"]), { SODA_SESSION: "env-s" })).toMatchObject({
       session: "env-s",
       sessionSource: "env",
     });
     expect(
-      applySessionEnv(parseArgs(["handoff", "--session", "flag-s"]), { WTM_SESSION: "env-s" }),
+      applySessionEnv(parseArgs(["handoff", "--session", "flag-s"]), { SODA_SESSION: "env-s" }),
     ).toMatchObject({ session: "flag-s" });
   });
 
@@ -85,7 +85,7 @@ describe("runHandoff", () => {
   const refused = () => Object.assign(new Error("refused"), { code: "ECONNREFUSED" });
 
   it("受け付けられたら、入れ替わった新しいサーバが同じ id の結果を答えるまで待って 0（繋がらない間・前の結果は待つ）", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     const d = deps([
       JSON.stringify({ ok: true, id: "abcd", panes: 2 }),
       refused(),
@@ -100,7 +100,7 @@ describe("runHandoff", () => {
   });
 
   it("一部の pane を引き継げなかったら 1", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     const d = deps([
       JSON.stringify({ ok: true, id: "abcd", panes: 2 }),
       JSON.stringify({ lastHandoff: { id: "abcd", adopted: 1, dropped: 1, at: "t" } }),
@@ -111,7 +111,7 @@ describe("runHandoff", () => {
   });
 
   it("新しいサーバが時間内に答えなければ 1", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     const d = deps([JSON.stringify({ ok: true, id: "abcd", panes: 1 })], {
       completeTimeoutMs: 1000,
     });
@@ -121,23 +121,23 @@ describe("runHandoff", () => {
   });
 
   it("サーバが動いていなければ 3（何も送らない。AC12）", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     const d = deps([], { inspect: async () => undefined });
     const o = io();
     expect(await runHandoff(dir, undefined, o.io, undefined, d)).toBe(HANDOFF_EXIT_NOT_RUNNING);
     expect(d.asked).toEqual([]);
-    expect(o.err.join("\n")).toContain("no wtm serve is running");
+    expect(o.err.join("\n")).toContain("no soda serve is running");
   });
 
   it("別のホストで動いていれば 1", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     const d = deps([], { inspect: async () => ({ pid: 1, otherHost: "box" }) });
     expect(await runHandoff(dir, undefined, io().io, undefined, d)).toBe(1);
     expect(d.asked).toEqual([]);
   });
 
   it("拒否（preflight の失敗等）は理由を表示して 1（AC4）", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     const d = deps([
       JSON.stringify({
         ok: false,
@@ -153,7 +153,7 @@ describe("runHandoff", () => {
   });
 
   it("止まる途中のサーバの断り（stopping）では「動き続ける」と言わない（20260927-session-stop）", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     const d = deps([
       JSON.stringify({ ok: false, reason: "stopping", message: "the server is stopping" }),
     ]);
@@ -165,7 +165,7 @@ describe("runHandoff", () => {
   });
 
   it("受け付けた後に入れ替われなかった（status に error）なら、待たずに 1", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     const d = deps([
       JSON.stringify({ ok: true, id: "abcd", panes: 1 }),
       JSON.stringify({
@@ -178,21 +178,21 @@ describe("runHandoff", () => {
   });
 
   it("受け口に誰もいない（起動の途中）なら 1", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     const o = io();
     expect(await runHandoff(dir, undefined, o.io, undefined, deps([refused()]))).toBe(1);
     expect(o.err.join("\n")).toContain("does not accept a handoff");
   });
 
-  it("WTM_SESSION から選んだ session が無ければ、その旨を案内に添える", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+  it("SODA_SESSION から選んだ session が無ければ、その旨を案内に添える", async () => {
+    dir = await makeTempDir("soda-handoff-cmd-");
     await expect(runHandoff(dir, "nosuch", io().io, "env", deps([]))).rejects.toMatchObject({
-      hint: expect.stringContaining("WTM_SESSION"),
+      hint: expect.stringContaining("SODA_SESSION"),
     });
   });
 
   it("受け口が無い（古い版）なら 1", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     const d = deps([Object.assign(new Error("nope"), { code: "ENOENT" })]);
     const o = io();
     expect(await runHandoff(dir, undefined, o.io, undefined, d)).toBe(1);
@@ -200,7 +200,7 @@ describe("runHandoff", () => {
   });
 
   it("サーバが unsupported を答えたら・Windows では ConfigError（終了コード 2）", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     await expect(
       runHandoff(
         dir,
@@ -216,7 +216,7 @@ describe("runHandoff", () => {
   });
 
   it("名前付き session はその状態ディレクトリの socket に送る。無い session は ConfigError（AC10）", async () => {
-    dir = await makeTempDir("wtm-handoff-cmd-");
+    dir = await makeTempDir("soda-handoff-cmd-");
     await mkdir(join(dir, "sessions", "work"), { recursive: true });
     const d = deps([JSON.stringify({ ok: false, reason: "busy", message: "m" })]);
     expect(await runHandoff(dir, "work", io().io, "flag", d)).toBe(1);
@@ -232,7 +232,7 @@ describe.skipIf(process.platform === "win32")("askSocket（実物の handoff.soc
     const { askSocket } = await import("./handoffCommand.js");
     const { startHandoffSocket, handoffSocketPathFor } = await import("./HandoffSocket.js");
     const { MemoryLogger } = await import("../log/Logger.js");
-    const d = await makeTempDir("wtm-handoff-ask-");
+    const d = await makeTempDir("soda-handoff-ask-");
     try {
       const path = handoffSocketPathFor(d);
       await expect(askSocket(path, '{"op":"status"}', 1000)).rejects.toMatchObject({

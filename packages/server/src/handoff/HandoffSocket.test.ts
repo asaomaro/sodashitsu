@@ -29,7 +29,7 @@ describe.skipIf(process.platform === "win32")("startHandoffSocket", () => {
   });
 
   async function start(reply: HandoffReply) {
-    dir = await makeTempDir("wtm-handoff-sock-");
+    dir = await makeTempDir("soda-handoff-sock-");
     const requests: number[] = [];
     const stops: number[] = [];
     socket = await startHandoffSocket(
@@ -99,7 +99,7 @@ describe.skipIf(process.platform === "win32")("startHandoffSocket", () => {
   });
 
   it("残っていたファイル（execve の前の古い版の socket の残り）を消して待ち受け直す", async () => {
-    dir = await makeTempDir("wtm-handoff-sock-");
+    dir = await makeTempDir("soda-handoff-sock-");
     const path = handoffSocketPathFor(dir);
     await writeFile(path, ""); // 誰も待ち受けていない残り
     socket = await startHandoffSocket(

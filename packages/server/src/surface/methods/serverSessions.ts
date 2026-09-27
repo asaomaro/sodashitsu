@@ -1,4 +1,4 @@
-import { ServerSessionsParams } from "@wtm/protocol";
+import { ServerSessionsParams } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 

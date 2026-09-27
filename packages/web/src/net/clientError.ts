@@ -1,4 +1,4 @@
-import type { ErrorCode } from "@wtm/protocol";
+import type { ErrorCode } from "@sodashitsu/protocol";
 
 /**
  * サーバの `client.error`（要求 id の無いフレームへの通知。design「WebSocket の通信」のイベント表）を、利用者に見せる
@@ -34,21 +34,21 @@ const MESSAGES: Record<ErrorCode, string> = {
   // ロック済み worktree の削除（20260925-worktree-remove-locked）。`worktree_dirty` と同じ理由で
   // 防御的に登録（通常は `sendWorktreeRemove` が catch して `--force` の確認へ進む）。
   worktree_locked: "この worktree はロックされています。",
-  // エージェントへの入力（20260926-agent-prompt-send-keys）。今は外部操作（wtmctl）だけが送る方式で、ブラウザには
+  // エージェントへの入力（20260926-agent-prompt-send-keys）。今は外部操作（sodactl）だけが送る方式で、ブラウザには
   // 通常来ない——表が全 code の網羅を要求するので登録しておく（想定外の経路で表に出た場合の保険）。
   agent_not_found: "対象の pane・エージェントが見つかりませんでした（既に閉じられた・終了した等）。",
   agent_blocked: "エージェントが承認・質問の入力待ちのため、送りませんでした。",
   empty_agent_prompt: "送る内容が空です。",
   invalid_key: "知らないキーの名前が含まれていたため、何も送りませんでした。",
   agent_prompt_failed: "エージェントへの送信に失敗しました（端末が閉じた等）。",
-  // エージェントの名前（20260926-agent-start-rename）。今は wtmctl agent rename だけが送る方式で、ブラウザには通常来ない。
+  // エージェントの名前（20260926-agent-start-rename）。今は sodactl agent rename だけが送る方式で、ブラウザには通常来ない。
   invalid_agent_name: "エージェントの名前は英小文字で始まり、英小文字・数字・-・_ の 1〜32 文字にしてください。",
   agent_name_taken: "その名前は別のエージェントが使っています。",
-  // pane への直結（20260926-pane-direct-connect）。今は wtmctl pane attach だけが送る方式で、ブラウザには通常来ない——
+  // pane への直結（20260926-pane-direct-connect）。今は sodactl pane attach だけが送る方式で、ブラウザには通常来ない——
   // 表が全 code の網羅を要求するので登録しておく。
   pane_attached: "この pane には既に別の端末が直結しています。",
   not_attached: "この pane に直結していません。",
-  // エージェントの起動（20260926-agent-start）。今は wtmctl agent start だけが送る方式で、ブラウザには通常来ない。
+  // エージェントの起動（20260926-agent-start）。今は sodactl agent start だけが送る方式で、ブラウザには通常来ない。
   unsupported_agent_kind: "その種類のエージェントは起動できません。",
   invalid_agent_argument: "エージェントへの引数に制御文字が含まれるか、長すぎるため、何も送りませんでした。",
   invalid_agent_timeout: "起動を待つ時間が受け付ける範囲の外です。",
@@ -61,7 +61,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   command_failed: "独自コマンドを起動できませんでした。サーバのログを確かめてください。",
   command_popup_open: "popup がすでに開いています。先に閉じてください。",
   command_busy: "裏で走っている独自コマンドが多すぎます。終わるのを待ってください。",
-  // 独自トークンの報告（20260927-sidebar-row-tokens）。今は wtmctl の report-metadata だけが送る方式で、ブラウザには通常来ない。
+  // 独自トークンの報告（20260927-sidebar-row-tokens）。今は sodactl の report-metadata だけが送る方式で、ブラウザには通常来ない。
   invalid_metadata_source: "報告元（source）は英数字と : . _ - の 1〜80 文字にしてください。",
   invalid_metadata_ttl: "期限（ttl）は 1〜86400000 ミリ秒にしてください。",
   invalid_metadata_token: "独自トークンの名前・数が受け付ける範囲の外です。",

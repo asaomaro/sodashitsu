@@ -1,7 +1,7 @@
-import type { ServerEvent } from "@wtm/protocol";
+import type { ServerEvent } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "../session.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 import {
   ENTER_SCREEN,
   processTerminal,
@@ -20,7 +20,7 @@ const store = {} as SessionStore;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-interface FakeClient extends WtmClient {
+interface FakeClient extends SodaClient {
   emitEvent(evt: ServerEvent): void;
   emitOutput(paneId: string, text: string): void;
   emitClose(code: number, reason: string): void;
@@ -30,7 +30,7 @@ interface FakeClient extends WtmClient {
 interface FakeOptions {
   attachError?: RpcFailure;
   subscribeError?: RpcFailure;
-  /** subscribe の応答を返さない（切断で待ち中の要求が reject されない実物の WtmClient を模す）。 */
+  /** subscribe の応答を返さない（切断で待ち中の要求が reject されない実物の SodaClient を模す）。 */
   subscribeHangs?: boolean;
   /** detach の応答を返さない。 */
   detachHangs?: boolean;
@@ -207,7 +207,7 @@ describe("runPaneAttach（20260926-pane-direct-connect）", () => {
     expect(client.sendInput).toHaveBeenLastCalledWith("p1", enc.encode("x"));
     expect(client.requests.at(-1)).toEqual({ method: "pane.detach", params: { paneId: "p1" } });
     expectRestored(term);
-    expect(stderr).toHaveBeenCalledWith("wtmctl: detached from p1\n");
+    expect(stderr).toHaveBeenCalledWith("sodactl: detached from p1\n");
   });
 
   it("手元の大きさが変わると pane.attach_resize で追従する（AC3）", async () => {
@@ -498,7 +498,7 @@ describe("runPaneAttach — 自分の pane（20260926-agent-skill-file。AC11）
     };
     await expect(runPaneAttach(own, store, term)).rejects.toMatchObject({
       code: "self_target",
-      message: expect.stringContaining("WTM_PANE_ID= wtmctl"),
+      message: expect.stringContaining("SODA_PANE_ID= sodactl"),
     });
     expect(mockedWithSession).not.toHaveBeenCalled();
     expect(term.writes).toEqual([]);

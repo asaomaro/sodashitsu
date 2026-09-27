@@ -35,7 +35,7 @@ describe("HandoffController", () => {
   afterEach(async () => rm(dir, { recursive: true, force: true }));
 
   async function setup(overrides: Partial<HandoffControllerDeps> = {}) {
-    dir = await makeTempDir("wtm-handoff-ctl-");
+    dir = await makeTempDir("soda-handoff-ctl-");
     const calls: string[] = [];
     const replies: HandoffReply[] = [];
     let execNonce: string | undefined;

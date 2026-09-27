@@ -1,5 +1,5 @@
-Web ターミナルマルチプレクサ (wtm)
-Copyright (c) 2026 wtm contributors
+Sodashitsu（操舵室）— Web ターミナルマルチプレクサ（コマンド soda・sodactl）
+Copyright (c) 2026 Sodashitsu contributors
 
 This product includes agent-detection rule files derived from Herdr
 (https://github.com/herdrdev/herdr), Copyright (c) Ogulcan Celik and Herdr

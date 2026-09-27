@@ -1,4 +1,4 @@
-import type { Workspace } from "@wtm/protocol";
+import type { Workspace } from "@sodashitsu/protocol";
 import type { WorkspaceSort } from "./view.js";
 
 /**

@@ -2,7 +2,7 @@ import type { Dirent } from "node:fs";
 import { lstat, readdir, rename, rm } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
-import type { ServerSessionEntry } from "@wtm/protocol";
+import type { ServerSessionEntry } from "@sodashitsu/protocol";
 import { ConfigError } from "../configError.js";
 import { readServeRecord, type ServeRecord } from "./ServeRecordFile.js";
 import { StateDirInUseError, StateDirLock } from "./StateDirLock.js";
@@ -49,9 +49,9 @@ export function resolveSessionStateDir(base: string, name: string | undefined): 
 }
 
 /**
- * 動いている session の止め方の案内に出す `wtm session stop <名前>`（20260927-session-stop の AC13）。状態ディレクトリの根 `base` が既定
+ * 動いている session の止め方の案内に出す `soda session stop <名前>`（20260927-session-stop の AC13）。状態ディレクトリの根 `base` が既定
  * （`defaultBase`）でなければ `--state-dir` を添える——添えないと、案内をそのまま打ったときに既定の根を見に行き、止められない
- * （POSIX のシェルの単一引用符で包む）。`defaultBase` が無ければ添えない。**Windows では `undefined`**（`wtm session stop` は非対応。AC11）。
+ * （POSIX のシェルの単一引用符で包む）。`defaultBase` が無ければ添えない。**Windows では `undefined`**（`soda session stop` は非対応。AC11）。
  */
 export function sessionStopCommandFor(
   name: string,
@@ -64,14 +64,14 @@ export function sessionStopCommandFor(
     defaultBase !== undefined && resolve(base) !== resolve(defaultBase)
       ? ` --state-dir ${/^[\w@%+=:,./-]+$/.test(base) ? base : `'${base.replace(/'/g, `'\\''`)}'`}`
       : "";
-  return `wtm session stop ${name}${dirArg}`;
+  return `soda session stop ${name}${dirArg}`;
 }
 
 export interface SessionEntry {
   name: string;
   default: boolean;
   running: boolean;
-  /** running のときだけ（`wtm.lock` の持ち主）。 */
+  /** running のときだけ（`soda.lock` の持ち主）。 */
   pid?: number;
   /** 持ち主が別のホストのときだけ。 */
   host?: string;
@@ -88,7 +88,7 @@ async function entryFor(name: string, stateDir: string, isDefault: boolean): Pro
   return entry;
 }
 
-/** `sessions/` の中身（無ければ空）。`wtm session stop` も名前付き session の実エントリを探すのに使う。 */
+/** `sessions/` の中身（無ければ空）。`soda session stop` も名前付き session の実エントリを探すのに使う。 */
 export async function readSessionsDir(base: string): Promise<Dirent[]> {
   try {
     return await readdir(join(base, SESSIONS_DIR), { withFileTypes: true });
@@ -118,7 +118,7 @@ export async function listSessions(base: string): Promise<SessionEntry[]> {
 /**
  * `server.sessions`（20260926-named-session-ui の design「一覧」）。`listSessions` の各項目に、いま繋いでいる session か（`current`）と、
  * 開くための情報（`endpoint`）を付ける。`endpoint` は、動いていて（ロックの持ち主がこのホスト）、起動の記録（`serve.json`）の pid と
- * ホスト名がロックの持ち主と一致するときだけ——前の起動の記録・記録を書かない古い版の起動・`wtm token reset` がロックを持っている間を
+ * ホスト名がロックの持ち主と一致するときだけ——前の起動の記録・記録を書かない古い版の起動・`soda token reset` がロックを持っている間を
  * 取り違えない。**状態ディレクトリのパス・pid・ホスト名は返さない**（AC5）。
  */
 export async function listServerSessions(
@@ -182,12 +182,12 @@ export async function findExactEntry(
   }
   throw new SessionDeleteError(
     "spelling",
-    `session ${name} は実際の名前と綴りが一致しません。wtm session list が表示する綴りで指定してください`,
+    `session ${name} は実際の名前と綴りが一致しません。soda session list が表示する綴りで指定してください`,
   );
 }
 
 /**
- * 動いていない名前付き session の状態ディレクトリを丸ごと消す。ロックを取ってから消す（その間の起動は wtm.lock で止まる）。
+ * 動いていない名前付き session の状態ディレクトリを丸ごと消す。ロックを取ってから消す（その間の起動は soda.lock で止まる）。
  * `defaultBase` は止め方の案内に `--state-dir` を添えるかの判断に使う（`sessionStopCommandFor`）。
  */
 export async function deleteSession(
@@ -214,11 +214,11 @@ export async function deleteSession(
     if (err instanceof StateDirInUseError) {
       const who =
         err.otherHost !== undefined ? `pid ${err.pid} on ${err.otherHost}` : `pid ${err.pid}`;
-      // 落ちて残ったロック（別のホスト・作り直したコンテナ・pid の再利用）もここに来るので、wtm serve の案内と同じく消し方を添える
+      // 落ちて残ったロック（別のホスト・作り直したコンテナ・pid の再利用）もここに来るので、soda serve の案内と同じく消し方を添える
       const stale =
         err.otherHost !== undefined
-          ? `ロックは別のホスト（または別のコンテナ）${err.otherHost} のもので、その生死はここからは確かめられません。そちらで wtm が動いていなければ ${err.lockPath} を消してからやり直してください`
-          : `pid ${err.pid} が wtm でなければ（前の wtm が落ちた後に pid が再利用された）、${err.lockPath} を消してからやり直してください`;
+          ? `ロックは別のホスト（または別のコンテナ）${err.otherHost} のもので、その生死はここからは確かめられません。そちらで soda が動いていなければ ${err.lockPath} を消してからやり直してください`
+          : `pid ${err.pid} が soda でなければ（前の soda が落ちた後に pid が再利用された）、${err.lockPath} を消してからやり直してください`;
       const stopCommand = sessionStopCommandFor(name, base, defaultBase);
       throw new SessionDeleteError(
         "running",
@@ -230,7 +230,7 @@ export async function deleteSession(
     throw err;
   }
   // ロックを持ったまま、規則に合わない（一覧に出ない・--session で選べない）名前へ移してから消す。rm は中身を順に消すので、
-  // その場で消すと wtm.lock が先に消えた後に起動した wtm がロックを取れてしまう。
+  // その場で消すと soda.lock が先に消えた後に起動した soda がロックを取れてしまう。
   const doomed = join(sessionsDir, `${name}~deleting-${process.pid}-${Date.now()}`);
   try {
     await rename(dir, doomed);

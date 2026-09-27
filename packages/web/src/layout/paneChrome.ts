@@ -1,4 +1,4 @@
-import type { SplitDirection } from "@wtm/protocol";
+import type { SplitDirection } from "@sodashitsu/protocol";
 
 /**
  * pane の枠の描き分け（20260926-pane-frame-auto-mode。herdr の `ui.pane_borders`・`ui.pane_gaps`）。
@@ -28,7 +28,7 @@ export function childNeighbors(
 export interface PaneChrome {
   /** 外周の余白・選択の強調・名前のラベルを描くか。 */
   framed: boolean;
-  /** 辺ごとに余白（`--wtm-pane-gap`）を取るか。 */
+  /** 辺ごとに余白（`--soda-pane-gap`）を取るか。 */
   padded: PaneSides;
 }
 

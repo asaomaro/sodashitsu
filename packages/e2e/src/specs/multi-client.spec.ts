@@ -12,7 +12,7 @@ import { focusTerminal, typeLine } from "../support/keys.js";
 
 /**
  * ブラウザ自身の `client.hello` 応答から、そのページの `clientId` を CDP 経由で拾う準備をする
- *  （テストの検証専用の窓——WtmTestClient は別接続なので、ブラウザ自身の clientId は分からない）。
+ *  （テストの検証専用の窓——SodaTestClient は別接続なので、ブラウザ自身の clientId は分からない）。
  * **`await` してから `page.goto()` を呼ぶこと**（CDP の `Network.enable` を先に済ませておかないと、
  * 接続直後の最初のフレームを取りこぼす）。戻り値の関数（`waitForClientId`）を navigate の**後**に
  * 呼んで待つ——1 つの async 関数が「セットアップの Promise」と「フレーム待ちの Promise」の 2 段を
@@ -64,14 +64,14 @@ test("2つのブラウザが同じ pane を同時に見て、どちらからも�
 
   // page1 からの入力が、page2（別のブラウザ）にも見える（design「INPUT はどちらからでも受け付ける」＋
   // イベント／OUTPUT は全クライアントに配る）。
-  const markerFrom1 = `wtm-e2e-from-page1-${Date.now()}`;
+  const markerFrom1 = `soda-e2e-from-page1-${Date.now()}`;
   await focusTerminal(page1);
   await typeLine(page1, `echo ${markerFrom1}`);
   await client.waitForOutput(p1, markerFrom1);
 
   // page2 からも入力できる（design「INPUT はどちらからでも受け付ける」）。同時に、入力はサイズ権限を
   // 取る操作でもあるので、権限が page2 へ移ることも確かめる（design「サイズ権限」の「権限を取る操作」）。
-  const markerFrom2 = `wtm-e2e-from-page2-${Date.now()}`;
+  const markerFrom2 = `soda-e2e-from-page2-${Date.now()}`;
   await focusTerminal(page2);
   await typeLine(page2, `echo ${markerFrom2}`);
   await client.waitForOutput(p1, markerFrom2);

@@ -1,5 +1,5 @@
-import type { MethodName, ParamsOf, ResultOf, ServerEvent, ServerEventName, SessionSnapshot } from "@wtm/protocol";
-import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@wtm/protocol";
+import type { MethodName, ParamsOf, ResultOf, ServerEvent, ServerEventName, SessionSnapshot } from "@sodashitsu/protocol";
+import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@sodashitsu/protocol";
 import WebSocket from "ws";
 
 interface PendingRequest {
@@ -14,7 +14,7 @@ interface PendingRequest {
  * E2E の「サーバ側の状態を素早く作る／サーバが発行したイベントを検証する」用途に使う
  * （画面の検証そのものは Playwright の `page` を使う）。
  */
-export interface WtmTestClient {
+export interface SodaTestClient {
   request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>;
   /**
    * 既に溜まっている分を含めて、そのうち `needle` が現れるまで待つ（ポーリング）。
@@ -63,7 +63,7 @@ export interface WtmTestClient {
 
 let nextId = 1;
 
-export function createTestClient(ws: WebSocket): WtmTestClient {
+export function createTestClient(ws: WebSocket): SodaTestClient {
   const pending = new Map<string, PendingRequest>();
   const paneOutput = new Map<string, string>();
   const lastEvents = new Map<string, ServerEvent>();

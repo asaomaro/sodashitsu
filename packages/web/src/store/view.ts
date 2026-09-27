@@ -1,4 +1,4 @@
-import type { PopupDimension, ServerSessionEntry, SessionFocus, WorkspaceGroup, WorktreeEntry, WorktreeListResult } from "@wtm/protocol";
+import type { PopupDimension, ServerSessionEntry, SessionFocus, WorkspaceGroup, WorktreeEntry, WorktreeListResult } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import type { Mode } from "../keys/actions.js";
@@ -6,7 +6,7 @@ import type { ConnectionState } from "../net/ports.js";
 import type { MenuTarget } from "../term/MouseBridge.js";
 import type { Zone } from "../term/paneDragZone.js";
 
-const STORAGE_KEY = "wtm.view.v1";
+const STORAGE_KEY = "soda.view.v1";
 
 /**
  * 表示の記憶のキー（20260927-multi-host-machines）。workspace・tab の id はマシンごとの連番で、マシンをまたぐと衝突する（`w1` が両方にある）ので、
@@ -51,14 +51,14 @@ export type WorkspaceSort = "opened" | "name";
 
 /**
  * 表示位置（`STORAGE_KEY`）と違い、**タブの寿命を越えて残す好み**なので `localStorage` に置く。
- * 同じ流儀の先例：`store/seen.ts`（`wtm.seen.v1`）・`components/Toast.vue`（`wtm.hint.prefixHelp.v1`）。
+ * 同じ流儀の先例：`store/seen.ts`（`soda.seen.v1`）・`components/Toast.vue`（`soda.hint.prefixHelp.v1`）。
  */
-export const PREFS_KEY = "wtm.prefs.v1";
+export const PREFS_KEY = "soda.prefs.v1";
 /** キー一覧の案内（`components/Toast.vue`）を出した印。初回の案内（`store/onboarding.ts`）が既存の利用者の痕跡としても読む。 */
-export const PREFIX_HELP_HINT_KEY = "wtm.hint.prefixHelp.v1";
+export const PREFIX_HELP_HINT_KEY = "soda.hint.prefixHelp.v1";
 
 /**
- * `wtm.prefs.v1` の読み書きは**この 2 つに集約する**（20260920-agent-notifications の AC6）。
+ * `soda.prefs.v1` の読み書きは**この 2 つに集約する**（20260920-agent-notifications の AC6）。
  * 以前は `JSON.stringify({ agentSort: v })` で**オブジェクトごと置き換えて**いたので、
  * 項目を足しても**並び順を切り替えた瞬間に消えた**。複数のストアが同じキーを別々に
  * read-modify-write しないよう、所有者をここ 1 つにする。

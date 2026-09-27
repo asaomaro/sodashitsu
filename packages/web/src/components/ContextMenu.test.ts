@@ -1,4 +1,4 @@
-import type { Pane, Tab, Workspace } from "@wtm/protocol";
+import type { Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +10,7 @@ import ContextMenu from "./ContextMenu.vue";
 let pinia: Pinia;
 
 beforeEach(() => {
-  // view ストアは初期化時に `wtm.prefs.v1`（localStorage）を読む。消さないと
+  // view ストアは初期化時に `soda.prefs.v1`（localStorage）を読む。消さないと
   // 同じワーカーで先に走ったファイルの選択が持ち越される（20260920-sidebar-tabbar-controls）。
   localStorage.clear();
   pinia = createPinia();

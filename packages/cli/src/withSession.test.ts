@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "./session.js";
-import { AuthError, RpcFailure, type WtmClient } from "./wsClient.js";
+import { AuthError, RpcFailure, type SodaClient } from "./wsClient.js";
 import { UnauthenticatedError, withSession } from "./withSession.js";
 
 vi.mock("./httpAuth.js", () => ({ login: vi.fn() }));
@@ -15,7 +15,7 @@ import { connect } from "./wsClient.js";
 const mockedLogin = vi.mocked(login);
 const mockedConnect = vi.mocked(connect);
 
-function fakeClient(): WtmClient {
+function fakeClient(): SodaClient {
   return {
     hello: vi.fn(),
     request: vi.fn(),
@@ -25,7 +25,7 @@ function fakeClient(): WtmClient {
     onSnapshot: vi.fn(),
     onClose: vi.fn(),
     close: vi.fn(),
-  } as unknown as WtmClient;
+  } as unknown as SodaClient;
 }
 
 function memoryStore(initial: Record<string, string> = {}): SessionStore {
@@ -58,7 +58,7 @@ describe("withSession", () => {
 
   it("キャッシュ無し・token あり: login → store.set → connect → fn の順で実行し、client.close() を呼ぶ", async () => {
     const store = memoryStore();
-    mockedLogin.mockResolvedValue("wtm_session=fresh");
+    mockedLogin.mockResolvedValue("soda_session=fresh");
     const client = fakeClient();
     mockedConnect.mockResolvedValue(client);
     const fn = vi.fn().mockResolvedValue("ok");
@@ -67,14 +67,14 @@ describe("withSession", () => {
 
     expect(result).toBe("ok");
     expect(mockedLogin).toHaveBeenCalledWith(URL_, "tok");
-    expect(store.set).toHaveBeenCalledWith(URL_, "wtm_session=fresh");
-    expect(mockedConnect).toHaveBeenCalledWith(URL_, "wtm_session=fresh");
+    expect(store.set).toHaveBeenCalledWith(URL_, "soda_session=fresh");
+    expect(mockedConnect).toHaveBeenCalledWith(URL_, "soda_session=fresh");
     expect(fn).toHaveBeenCalledWith(client);
     expect(client.close).toHaveBeenCalledOnce();
   });
 
   it("キャッシュあり・接続成功: login は呼ばれない（AC7 の再利用）", async () => {
-    const store = memoryStore({ [URL_]: "wtm_session=cached" });
+    const store = memoryStore({ [URL_]: "soda_session=cached" });
     const client = fakeClient();
     mockedConnect.mockResolvedValue(client);
     const fn = vi.fn().mockResolvedValue("ok");
@@ -82,13 +82,13 @@ describe("withSession", () => {
     await withSession({ url: URL_, token: undefined }, store, fn);
 
     expect(mockedLogin).not.toHaveBeenCalled();
-    expect(mockedConnect).toHaveBeenCalledWith(URL_, "wtm_session=cached");
+    expect(mockedConnect).toHaveBeenCalledWith(URL_, "soda_session=cached");
   });
 
   it("キャッシュあり・AuthError・token あり: キャッシュを消して1回だけ再ログインし再試行する（FR12）", async () => {
-    const store = memoryStore({ [URL_]: "wtm_session=stale" });
+    const store = memoryStore({ [URL_]: "soda_session=stale" });
     mockedConnect.mockRejectedValueOnce(new AuthError("401")).mockResolvedValueOnce(fakeClient());
-    mockedLogin.mockResolvedValue("wtm_session=fresh");
+    mockedLogin.mockResolvedValue("soda_session=fresh");
     const fn = vi.fn().mockResolvedValue("ok");
 
     const result = await withSession({ url: URL_, token: "tok" }, store, fn);
@@ -96,12 +96,12 @@ describe("withSession", () => {
     expect(result).toBe("ok");
     expect(store.clear).toHaveBeenCalledWith(URL_);
     expect(mockedLogin).toHaveBeenCalledTimes(1);
-    expect(mockedConnect).toHaveBeenNthCalledWith(1, URL_, "wtm_session=stale");
-    expect(mockedConnect).toHaveBeenNthCalledWith(2, URL_, "wtm_session=fresh");
+    expect(mockedConnect).toHaveBeenNthCalledWith(1, URL_, "soda_session=stale");
+    expect(mockedConnect).toHaveBeenNthCalledWith(2, URL_, "soda_session=fresh");
   });
 
   it("キャッシュあり・AuthError・token 無し: 「期限切れ」の文言で UnauthenticatedError", async () => {
-    const store = memoryStore({ [URL_]: "wtm_session=stale" });
+    const store = memoryStore({ [URL_]: "soda_session=stale" });
     mockedConnect.mockRejectedValueOnce(new AuthError("401"));
 
     await expect(withSession({ url: URL_, token: undefined }, store, vi.fn())).rejects.toThrow(UnauthenticatedError);
@@ -110,7 +110,7 @@ describe("withSession", () => {
   });
 
   it("再ログイン自体が失敗したら、そのエラーをそのまま伝播する（再試行しない）", async () => {
-    const store = memoryStore({ [URL_]: "wtm_session=stale" });
+    const store = memoryStore({ [URL_]: "soda_session=stale" });
     mockedConnect.mockRejectedValueOnce(new AuthError("401"));
     mockedLogin.mockRejectedValue(new AuthError("login failed: HTTP 401"));
 
@@ -120,7 +120,7 @@ describe("withSession", () => {
   });
 
   it("AuthError 以外（RpcFailure 等）は再ログインせずそのまま伝播する", async () => {
-    const store = memoryStore({ [URL_]: "wtm_session=cached" });
+    const store = memoryStore({ [URL_]: "soda_session=cached" });
     mockedConnect.mockRejectedValueOnce(new RpcFailure("internal", "boom"));
 
     await expect(withSession({ url: URL_, token: "tok" }, store, vi.fn())).rejects.toThrow(RpcFailure);
@@ -129,7 +129,7 @@ describe("withSession", () => {
   });
 
   it("fn が投げても client.close() は呼ばれる", async () => {
-    const store = memoryStore({ [URL_]: "wtm_session=cached" });
+    const store = memoryStore({ [URL_]: "soda_session=cached" });
     const client = fakeClient();
     mockedConnect.mockResolvedValue(client);
     const fn = vi.fn().mockRejectedValue(new RpcFailure("not_found", "pane not found"));
@@ -141,8 +141,8 @@ describe("withSession", () => {
   it("--machine（opts.machine）があれば connect に渡す（20260927-multi-host-machines）", async () => {
     const client = fakeClient();
     mockedConnect.mockResolvedValue(client);
-    const store = memoryStore({ [URL_]: "wtm_session=cached" });
+    const store = memoryStore({ [URL_]: "soda_session=cached" });
     await withSession({ url: URL_, token: undefined, machine: "GPU" }, store, async () => "ok");
-    expect(mockedConnect).toHaveBeenCalledWith(URL_, "wtm_session=cached", "GPU");
+    expect(mockedConnect).toHaveBeenCalledWith(URL_, "soda_session=cached", "GPU");
   });
 });

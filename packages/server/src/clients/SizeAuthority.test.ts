@@ -1,4 +1,4 @@
-import { TERMINAL_PALETTES, type HostInfo, type ServerEvent } from "@wtm/protocol";
+import { TERMINAL_PALETTES, type HostInfo, type ServerEvent } from "@sodashitsu/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Disposable } from "../util/Disposable.js";
 import { MemoryLogger } from "../log/Logger.js";
@@ -109,7 +109,7 @@ describe("DefaultSizeAuthority — taking ownership", () => {
     expect(session.getPane(pane.id)?.cols).not.toBe(40);
   });
 
-  it("an external client (wtmctl) does not claim ownership on interaction, same as a mobile client without fit (20260923-external-control-api D4)", async () => {
+  it("an external client (sodactl) does not claim ownership on interaction, same as a mobile client without fit (20260923-external-control-api D4)", async () => {
     const { session, clients, authority } = ctx;
     const { tab, pane } = await session.createWorkspace("/home/u", "api");
     const client = clients.register("external");

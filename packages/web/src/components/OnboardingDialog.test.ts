@@ -129,12 +129,12 @@ describe("OnboardingDialog — 起動時に開く（AC1・AC2・AC5）", () => {
 
   it("既存の利用者のブラウザでは開かず、保存値も変えない", async () => {
     const prefs = JSON.stringify({ theme: "nord" });
-    const { wrapper, view } = boot({ "wtm.prefs.v1": prefs });
+    const { wrapper, view } = boot({ "soda.prefs.v1": prefs });
     view.onConnectionState("open");
     await flush(wrapper);
     expect(view.openDialog).toBeNull();
     expect(dialog(wrapper).open).toBe(false);
-    expect(localStorage.getItem("wtm.prefs.v1")).toBe(prefs);
+    expect(localStorage.getItem("soda.prefs.v1")).toBe(prefs);
   });
 
   it("ほかのダイアログが開いている間は待ち、閉じたら開く", async () => {
@@ -283,7 +283,7 @@ describe("OnboardingDialog — 選択の初期値（AC3・AC6）", () => {
   });
 
   it("開き直すと、現在の設定から始める（前回の選びかけを持ち越さない）", async () => {
-    const b = await openManually({ "wtm.prefs.v1": JSON.stringify({ theme: "nord" }) });
+    const b = await openManually({ "soda.prefs.v1": JSON.stringify({ theme: "nord" }) });
     expect((themeSelect(b).element as HTMLSelectElement).value).toBe("nord");
     await themeSelect(b).setValue("gruvbox");
     await b.wrapper.get("[data-onboarding-skip]").trigger("click");
@@ -295,7 +295,7 @@ describe("OnboardingDialog — 選択の初期値（AC3・AC6）", () => {
 
 describe("OnboardingDialog — 確定の反映（AC3・AC-I2）", () => {
   it("置いたあとで設定が変わっても、開いた時点の値を基準にする（何も変えずに確定しても自動の切替を外さない）", async () => {
-    const b = boot({ "wtm.prefs.v1": JSON.stringify({ theme: "dracula" }) });
+    const b = boot({ "soda.prefs.v1": JSON.stringify({ theme: "dracula" }) });
     const settings = useSettingsStore(pinia);
     settings.setTheme("nord");
     settings.setThemeAuto(true);
@@ -311,7 +311,7 @@ describe("OnboardingDialog — 確定の反映（AC3・AC-I2）", () => {
       themeAuto: true,
       notify: { toast: false, desktop: false, sound: true },
     };
-    const b = await openManually({ "wtm.prefs.v1": JSON.stringify(prefs) });
+    const b = await openManually({ "soda.prefs.v1": JSON.stringify(prefs) });
     await confirmBtn(b).trigger("click");
     expect(readPrefs()).toEqual({ ...prefs, onboarding: false });
     expect(b.view.openDialog).toBeNull();
@@ -329,7 +329,7 @@ describe("OnboardingDialog — 確定の反映（AC3・AC-I2）", () => {
 
   it("OS の明暗に合わせている間は注記を添え、同じテーマを選び直して確定すると合わせるのをやめてそのテーマにする", async () => {
     const b = await openManually({
-      "wtm.prefs.v1": JSON.stringify({ theme: "dracula", themeAuto: true }),
+      "soda.prefs.v1": JSON.stringify({ theme: "dracula", themeAuto: true }),
     });
     const select = themeSelect(b);
     expect(select.attributes("aria-describedby")).toBe("onboarding-theme-auto-note");
@@ -350,7 +350,7 @@ describe("OnboardingDialog — 確定の反映（AC3・AC-I2）", () => {
 
   it("前に開いたときの選び直しを持ち越さない（開き直して触らずに確定すれば、合わせたまま）", async () => {
     const b = await openManually({
-      "wtm.prefs.v1": JSON.stringify({ theme: "dracula", themeAuto: true }),
+      "soda.prefs.v1": JSON.stringify({ theme: "dracula", themeAuto: true }),
     });
     await themeSelect(b).setValue("dracula");
     await b.wrapper.get("[data-onboarding-skip]").trigger("click");
@@ -439,7 +439,7 @@ describe("OnboardingDialog — OS 通知と案内（AC9）", () => {
   it("保存が「入」でも許可が無ければ選択は外れて見え、何も変えずに確定しても保存値は変えない", async () => {
     const prefs = { notify: { toast: true, desktop: true, sound: false } };
     const b = await openManually(
-      { "wtm.prefs.v1": JSON.stringify(prefs) },
+      { "soda.prefs.v1": JSON.stringify(prefs) },
       { permission: "denied" },
     );
     expect((notifyBox(b, "desktop").element as HTMLInputElement).checked).toBe(false);
@@ -482,7 +482,7 @@ describe("OnboardingDialog — OS 通知と案内（AC9）", () => {
 
   it("入れていた OS 通知を外して確定すると切る", async () => {
     const b = await openManually(
-      { "wtm.prefs.v1": JSON.stringify({ notify: { toast: true, desktop: true, sound: false } }) },
+      { "soda.prefs.v1": JSON.stringify({ notify: { toast: true, desktop: true, sound: false } }) },
       { permission: "granted" },
     );
     expect((notifyBox(b, "desktop").element as HTMLInputElement).checked).toBe(true);
@@ -641,7 +641,7 @@ describe("OnboardingDialog — モバイル（AC10・D9）", () => {
 describe("OnboardingDialog — 設定画面から開き直す（AC6）", () => {
   it("既存の利用者でも設定画面から開け、スキップすれば設定は何も変わらない", async () => {
     const prefs = { theme: "nord", notify: { toast: false, desktop: false, sound: true } };
-    const b = boot({ "wtm.prefs.v1": JSON.stringify(prefs) });
+    const b = boot({ "soda.prefs.v1": JSON.stringify(prefs) });
     const settingsWrapper = mount(SettingsDialog, {
       global: {
         plugins: [pinia],

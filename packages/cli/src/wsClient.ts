@@ -8,10 +8,10 @@ import {
   type ParamsOf,
   type ResultOf,
   type ServerEvent,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 
 /**
- * `/ws` への接続と RPC・フレームの往復（design.md「`WtmClient`」節）。`packages/server/src/smoke.ts` の
+ * `/ws` への接続と RPC・フレームの往復（design.md「`SodaClient`」節）。`packages/server/src/smoke.ts` の
  * `createSmokeClient` と設計を揃えるが、コードは複製する（decisions.md D6：起動確認という硬いゲートを
  * リファクタで壊すリスクを避けるため）。
  */
@@ -34,7 +34,7 @@ export class RpcFailure extends Error {
   }
 }
 
-export interface WtmClient {
+export interface SodaClient {
   /**
    * `client.hello` を `kind: "external"` で送る（decisions.md D4）。`onEventAfterHello` を渡すと、hello の応答を
    * 受け取ったその場（同期）でイベントの購読に登録する——応答と同じ受信の塊で直後に届いたイベントも取りこぼさず、
@@ -81,7 +81,7 @@ interface RawEnvelope {
  * 振り分ける（`ws.once("message", ...)` を都度張り直すと、何も待っていない間に届いた message を
  * 取りこぼす。smoke.ts のコメント参照）。
  */
-export class WsWtmClient implements WtmClient {
+export class WsSodaClient implements SodaClient {
   private readonly pending = new Map<string, PendingRequest>();
   private nextId = 1;
   private readonly eventListeners: ((evt: ServerEvent) => void)[] = [];
@@ -213,7 +213,7 @@ export class WsWtmClient implements WtmClient {
  * `machine` を渡したとき（`--machine`。20260927-multi-host-machines）は `/ws?machine=…` に繋ぎ、404 は `RpcFailure("machine_not_found")`、
  * 503 は `RpcFailure("machine_unavailable")` にする。
  */
-export function connect(url: string, cookie: string, machine?: string): Promise<WtmClient> {
+export function connect(url: string, cookie: string, machine?: string): Promise<SodaClient> {
   return new Promise((resolve, reject) => {
     let u: URL;
     try {
@@ -223,7 +223,7 @@ export function connect(url: string, cookie: string, machine?: string): Promise<
       return;
     }
     const wsScheme = u.protocol === "https:" ? "wss:" : "ws:";
-    // `--machine`（20260927-multi-host-machines）: 手元の `wtm serve` がそのマシンへ中継する。
+    // `--machine`（20260927-multi-host-machines）: 手元の `soda serve` がそのマシンへ中継する。
     const wsUrl = `${wsScheme}//${u.host}/ws${machine !== undefined ? `?machine=${encodeURIComponent(machine)}` : ""}`;
     const origin = `${u.protocol}//${u.host}`;
     const ws = new WebSocket(wsUrl, { headers: { cookie, origin, host: u.host } });
@@ -235,7 +235,7 @@ export function connect(url: string, cookie: string, machine?: string): Promise<
     };
     const onOpen = (): void => {
       cleanup();
-      resolve(new WsWtmClient(ws));
+      resolve(new WsSodaClient(ws));
     };
     const onError = (err: Error): void => {
       cleanup();
@@ -254,11 +254,11 @@ export function connect(url: string, cookie: string, machine?: string): Promise<
         return;
       }
       if (machine !== undefined && res.statusCode === 404) {
-        reject(new RpcFailure("machine_not_found", `no enabled saved machine matches ${JSON.stringify(machine)} (check: wtm machine list)`));
+        reject(new RpcFailure("machine_not_found", `no enabled saved machine matches ${JSON.stringify(machine)} (check: soda machine list)`));
         return;
       }
       if (machine !== undefined && res.statusCode === 503) {
-        reject(new RpcFailure("machine_unavailable", `machine ${JSON.stringify(machine)} is not connected (or the local wtm serve is still starting)`));
+        reject(new RpcFailure("machine_unavailable", `machine ${JSON.stringify(machine)} is not connected (or the local soda serve is still starting)`));
         return;
       }
       // 401 以外（403=Origin/Host 拒否、503=起動中 等）は `statusCode` を持つ素の `Error` で reject する。

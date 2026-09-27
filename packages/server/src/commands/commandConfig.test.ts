@@ -219,7 +219,7 @@ describe("loadCommandsFile（AC1・AC3）", () => {
   let dir: string;
   let path: string;
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "wtm-commands-test-"));
+    dir = await mkdtemp(join(tmpdir(), "soda-commands-test-"));
     path = join(dir, "commands.json");
   });
   afterEach(async () => {

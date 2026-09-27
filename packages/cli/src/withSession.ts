@@ -1,7 +1,7 @@
 import type { GlobalOpts } from "./cliArgs.js";
 import { login } from "./httpAuth.js";
 import type { SessionStore } from "./session.js";
-import { AuthError, connect, type WtmClient } from "./wsClient.js";
+import { AuthError, connect, type SodaClient } from "./wsClient.js";
 
 /**
  * セッションキャッシュ＋1回だけの再ログイン（design.md「振る舞いの詳細・認証」節）。
@@ -12,7 +12,7 @@ import { AuthError, connect, type WtmClient } from "./wsClient.js";
  */
 export class UnauthenticatedError extends Error {}
 
-export async function withSession<T>(opts: GlobalOpts, store: SessionStore, fn: (client: WtmClient) => Promise<T>): Promise<T> {
+export async function withSession<T>(opts: GlobalOpts, store: SessionStore, fn: (client: SodaClient) => Promise<T>): Promise<T> {
   const cached = await store.get(opts.url);
   if (cached !== undefined) {
     try {
@@ -26,8 +26,8 @@ export async function withSession<T>(opts: GlobalOpts, store: SessionStore, fn: 
   if (!opts.token) {
     throw new UnauthenticatedError(
       cached === undefined
-        ? `no cached session for ${opts.url} and no --token/WTMCTL_TOKEN given (run "wtmctl login" or pass --token)`
-        : `session for ${opts.url} expired or was revoked, and no --token/WTMCTL_TOKEN given to relogin`,
+        ? `no cached session for ${opts.url} and no --token/SODACTL_TOKEN given (run "sodactl login" or pass --token)`
+        : `session for ${opts.url} expired or was revoked, and no --token/SODACTL_TOKEN given to relogin`,
     );
   }
   const cookie = await login(opts.url, opts.token);
@@ -35,7 +35,7 @@ export async function withSession<T>(opts: GlobalOpts, store: SessionStore, fn: 
   return connectAndRun(opts.url, cookie, fn, opts.machine);
 }
 
-async function connectAndRun<T>(url: string, cookie: string, fn: (client: WtmClient) => Promise<T>, machine: string | undefined): Promise<T> {
+async function connectAndRun<T>(url: string, cookie: string, fn: (client: SodaClient) => Promise<T>, machine: string | undefined): Promise<T> {
   // `--machine` が無ければ今までどおりの呼び方（20260927-multi-host-machines の AC15）。
   const client = machine === undefined ? await connect(url, cookie) : await connect(url, cookie, machine);
   try {

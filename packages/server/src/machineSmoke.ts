@@ -3,13 +3,13 @@
  * 保存した SSH のマシン（20260927-multi-host-machines の AC17）の起動確認。**ビルドした `dist/main.js`** を子プロセスで起動し、2 つの状態ディレクトリを
  * 「手元」「リモート」に見立てて通しで確かめ、後始末する（Linux/macOS。Windows では何もせず成功で終わる——中継の受け口が無い）:
  * - 偽の `ssh`（一時ディレクトリの実行可能なスクリプトを `PATH` の先頭に置く）: 渡された引数を記録し、`--` までを読み飛ばして宛先を捨て、続く
- *   `wtm bridge [...]` を `node <dist/main.js> bridge [...] --state-dir <リモートの根>` として実行する（本物の `wtm bridge` の子プロセス・標準入出力の素通し・
+ *   `soda bridge [...]` を `node <dist/main.js> bridge [...] --state-dir <リモートの根>` として実行する（本物の `soda bridge` の子プロセス・標準入出力の素通し・
  *   リモートの `bridge.sock` を通る）
- * - `wtm machine add` が確かめてから保存し（0）、`wtm machine list` に出る
- * - 手元の `wtm serve` が登録簿を読んで繋ぎ（`machine.list` が online）、`/ws?machine=<名前>` 越しに `client.hello`・`workspace.create`・echo の往復が
- *   リモートの `wtm serve` に届く（手元には作らない）
- * - 偽の `ssh` が受けた引数に `BatchMode=yes`・`--`・宛先・`wtm bridge` がある
- * `main.ts` は単体テストできない（読み込むと起動する）ので、`wtm machine`・`wtm bridge`・`wtm serve` のマシンの配線はここで見る。
+ * - `soda machine add` が確かめてから保存し（0）、`soda machine list` に出る
+ * - 手元の `soda serve` が登録簿を読んで繋ぎ（`machine.list` が online）、`/ws?machine=<名前>` 越しに `client.hello`・`workspace.create`・echo の往復が
+ *   リモートの `soda serve` に届く（手元には作らない）
+ * - 偽の `ssh` が受けた引数に `BatchMode=yes`・`--`・宛先・`soda bridge` がある
+ * `main.ts` は単体テストできない（読み込むと起動する）ので、`soda machine`・`soda bridge`・`soda serve` のマシンの配線はここで見る。
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
@@ -17,7 +17,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@wtm/protocol";
+import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@sodashitsu/protocol";
 import WebSocket from "ws";
 
 const MAIN = join(import.meta.dirname, "main.js");
@@ -85,8 +85,8 @@ function startServe(stateDir: string, port: number, env: NodeJS.ProcessEnv): Ser
   return { child, out: () => out, exited };
 }
 
-/** 子の wtm を実行して終わりを待つ（spawnSync は使わない——`/ws` のクライアントの閉じる握手に答えられなくなる。stopSmoke と同じ）。 */
-function runWtm(
+/** 子の soda を実行して終わりを待つ（spawnSync は使わない——`/ws` のクライアントの閉じる握手に答えられなくなる。stopSmoke と同じ）。 */
+function runSoda(
   args: string[],
   env: NodeJS.ProcessEnv,
 ): Promise<{ status: number | null; stdout: string; stderr: string }> {
@@ -176,16 +176,16 @@ async function stopChild(s: Serve | undefined): Promise<void> {
 }
 
 const FAKE_SSH = `#!/bin/sh
-# 20260927-multi-host-machines の machineSmoke の偽の ssh。引数を記録し、-- までを読み飛ばして宛先を捨て、wtm bridge をこのマシンで実行する。
-printf '%s\\n' "$@" > "$WTM_SMOKE_SSH_ARGS"
+# 20260927-multi-host-machines の machineSmoke の偽の ssh。引数を記録し、-- までを読み飛ばして宛先を捨て、soda bridge をこのマシンで実行する。
+printf '%s\\n' "$@" > "$SODA_SMOKE_SSH_ARGS"
 while [ "$#" -gt 0 ]; do
   if [ "$1" = "--" ]; then shift; break; fi
   shift
 done
 shift
-if [ "$1" != "wtm" ]; then echo "unexpected remote command: $*" >&2; exit 97; fi
+if [ "$1" != "soda" ]; then echo "unexpected remote command: $*" >&2; exit 97; fi
 shift
-exec "$WTM_SMOKE_NODE" "$WTM_SMOKE_MAIN" "$@" --state-dir "$WTM_SMOKE_REMOTE_ROOT"
+exec "$SODA_SMOKE_NODE" "$SODA_SMOKE_MAIN" "$@" --state-dir "$SODA_SMOKE_REMOTE_ROOT"
 `;
 
 async function main(): Promise<void> {
@@ -193,7 +193,7 @@ async function main(): Promise<void> {
     log("skipped (the bridge socket is not supported on Windows)");
     return;
   }
-  const root = await mkdtemp(join(tmpdir(), "wtm-machine-smoke-"));
+  const root = await mkdtemp(join(tmpdir(), "soda-machine-smoke-"));
   const localRoot = join(root, "local");
   const remoteRoot = join(root, "remote");
   const bin = join(root, "bin");
@@ -209,14 +209,14 @@ async function main(): Promise<void> {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       PATH: `${bin}${delimiter}${process.env["PATH"] ?? ""}`,
-      WTM_SMOKE_NODE: process.execPath,
-      WTM_SMOKE_MAIN: MAIN,
-      WTM_SMOKE_REMOTE_ROOT: remoteRoot,
-      WTM_SMOKE_SSH_ARGS: argsFile,
+      SODA_SMOKE_NODE: process.execPath,
+      SODA_SMOKE_MAIN: MAIN,
+      SODA_SMOKE_REMOTE_ROOT: remoteRoot,
+      SODA_SMOKE_SSH_ARGS: argsFile,
     };
-    delete env["WTM_SESSION"];
+    delete env["SODA_SESSION"];
 
-    // 1. リモートの wtm serve
+    // 1. リモートの soda serve
     const remotePort = await freePort();
     remote = startServe(remoteRoot, remotePort, env);
     const r = remote;
@@ -224,15 +224,15 @@ async function main(): Promise<void> {
       if (r.child.exitCode !== null) throw new Error(`the remote server exited:\n${r.out()}`);
       return /#token=([A-Za-z0-9_-]+)/.exec(r.out())?.[1];
     });
-    log(`remote wtm serve started (pid ${remote.child.pid})`);
+    log(`remote soda serve started (pid ${remote.child.pid})`);
 
-    // 2. wtm machine add（確かめてから保存）・list
-    const add = await runWtm(
+    // 2. soda machine add（確かめてから保存）・list
+    const add = await runSoda(
       ["machine", "add", "you@remote-box", "--label", "Remote", "--state-dir", localRoot],
       env,
     );
     if (add.status !== 0 || !/saved machine [0-9a-f]{32} \(Remote\)/.test(add.stdout))
-      throw new Error(`wtm machine add failed (exit ${add.status}):\n${add.stdout}${add.stderr}`);
+      throw new Error(`soda machine add failed (exit ${add.status}):\n${add.stdout}${add.stderr}`);
     const sshArgs = readFileSync(argsFile, "utf8")
       .split("\n")
       .filter((a) => a.length > 0);
@@ -240,15 +240,15 @@ async function main(): Promise<void> {
     if (
       !sshArgs.includes("BatchMode=yes") ||
       dd < 0 ||
-      sshArgs.slice(dd + 1).join(" ") !== "you@remote-box wtm bridge"
+      sshArgs.slice(dd + 1).join(" ") !== "you@remote-box soda bridge"
     )
       throw new Error(`unexpected ssh arguments: ${sshArgs.join(" ")}`);
-    const list = await runWtm(["machine", "list", "--state-dir", localRoot], env);
+    const list = await runSoda(["machine", "list", "--state-dir", localRoot], env);
     if (list.status !== 0 || !/\tRemote\tyou@remote-box\tdefault\tenabled/.test(list.stdout))
-      throw new Error(`wtm machine list: ${list.stdout}${list.stderr}`);
-    log("wtm machine add (probed over the fake ssh) and list ok");
+      throw new Error(`soda machine list: ${list.stdout}${list.stderr}`);
+    log("soda machine add (probed over the fake ssh) and list ok");
 
-    // 3. 手元の wtm serve が繋ぐ
+    // 3. 手元の soda serve が繋ぐ
     const localPort = await freePort();
     local = startServe(localRoot, localPort, env);
     const l = local;
@@ -265,7 +265,7 @@ async function main(): Promise<void> {
       }>("machine.list", {});
       return res.machines[0]?.state === "online" ? true : undefined;
     });
-    log("local wtm serve connected to the remote machine (machine.list: online)");
+    log("local soda serve connected to the remote machine (machine.list: online)");
 
     // 4. /ws?machine= 越しの通信
     const via = await connect(localPort, cookie, "?machine=Remote");
@@ -288,7 +288,7 @@ async function main(): Promise<void> {
       via.screen().includes("MACHINE-SMOKE-42") ? true : undefined,
     );
     shellPid = Number(/SHELL-PID-(\d+)/.exec(via.screen())?.[1]);
-    // リモートの wtm serve に直接繋いで、そこに作られたことを確かめる（中継を通ったことの肯定側）。
+    // リモートの soda serve に直接繋いで、そこに作られたことを確かめる（中継を通ったことの肯定側）。
     const direct = await connect(remotePort, await login(remotePort, remoteToken));
     const remoteSnap = await direct.request<{
       snapshot: { workspaces: { id: string; label: string }[] };
@@ -307,7 +307,7 @@ async function main(): Promise<void> {
     if (localSnap.snapshot.workspaces.some((w) => w.label === "machine-smoke"))
       throw new Error("the workspace was created on the local server");
     log(
-      `relay ok: hello (hostname ${hello.snapshot.host.hostname}), workspace.create and echo reached the remote wtm serve`,
+      `relay ok: hello (hostname ${hello.snapshot.host.hostname}), workspace.create and echo reached the remote soda serve`,
     );
     via.ws.close();
     home.ws.close();

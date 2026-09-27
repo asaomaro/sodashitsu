@@ -1,4 +1,4 @@
-import { ClientDetachParams, ClientFitParams, ClientHelloParams, ClientThemeParams, ClientViewParams } from "@wtm/protocol";
+import { ClientDetachParams, ClientFitParams, ClientHelloParams, ClientThemeParams, ClientViewParams } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 

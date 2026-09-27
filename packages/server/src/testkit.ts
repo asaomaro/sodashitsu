@@ -1,6 +1,6 @@
 /**
  * `packages/server` の公開面（05-e2e-docs T1。design には無い追加判断）。
- * このパッケージはこれまで CLI（`bin: wtm`）としてしか公開しておらず、外の package から import する経路が
+ * このパッケージはこれまで CLI（`bin: soda`）としてしか公開しておらず、外の package から import する経路が
  * 無かった。`packages/e2e` は `smoke.ts`（01・03-web-desktop T26）と同じ土台（実サーバをプロセス内で組み立て、
  * Playwright の実ブラウザから駆動する）で E2E を書くため、必要な最小限だけをここでバレル公開する
  * （`package.json` の `main`/`types` はこのファイルを指す）。
@@ -13,7 +13,7 @@ export type { RawServeArgs, ServeOptions } from "./config.js";
  */
 export { lanIpv4Addresses, type InterfaceAddress } from "./util/net.js";
 /**
- * node-pty の実装（20260926-pane-direct-connect）。cli の smoke が、ビルド済みの `wtmctl pane attach` を本物の端末（PTY）の中で
+ * node-pty の実装（20260926-pane-direct-connect）。cli の smoke が、ビルド済みの `sodactl pane attach` を本物の端末（PTY）の中で
  * 動かして raw モード・切り離しキーを確かめるのに使う（cli に node-pty を足さずに済む。decisions D5）。
  */
 export { NodePtyBackend } from "./pty/NodePtyBackend.js";

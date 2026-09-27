@@ -1,4 +1,4 @@
-import type { LayoutNode, Pane, Tab, Workspace } from "@wtm/protocol";
+import type { LayoutNode, Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { repairView, type SessionLike, type ViewTarget } from "./viewRepair.js";
 

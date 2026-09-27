@@ -1,7 +1,7 @@
 import { access, copyFile, mkdir, readFile, rm, constants as fsConstants } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import { homedir } from "node:os";
-import type { AgentIntegrationKind } from "@wtm/protocol";
+import type { AgentIntegrationKind } from "@sodashitsu/protocol";
 import { writeFileAtomic } from "../persist/atomicFile.js";
 
 /** 導入・解除・状態判定（20260923-agent-session-resume design「振る舞いの詳細・導入/解除」）。 */
@@ -12,7 +12,7 @@ export interface AgentIntegrationInstaller {
 }
 
 /** 本製品の hook エントリだと分かる目印。install/uninstall/status のすべてがこれで一致を見る（design D4）。 */
-const HOOK_SCRIPT_NAME = "wtm-agent-report.cjs";
+const HOOK_SCRIPT_NAME = "soda-agent-report.cjs";
 const MATCHER = "startup|resume";
 
 type JsonObject = Record<string, unknown>;
@@ -121,7 +121,7 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
   },
   copilot: {
     // glob ディレクトリ（`~/.copilot/hooks/*.json`）なので、利用者の既存ファイルは読まず専用ファイルを置く（design「振る舞いの詳細」）。
-    configFile: (_env, home) => join(home, ".copilot", "hooks", "wtm-agent-report.json"),
+    configFile: (_env, home) => join(home, ".copilot", "hooks", "soda-agent-report.json"),
     hooksDir: (_env, home) => join(home, ".copilot", "hooks"),
     binName: "copilot",
     entriesPath: ["hooks", "sessionStart"],
@@ -150,7 +150,7 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
   },
   grok: {
     // glob ディレクトリ（`~/.grok/hooks/*.json`）なので copilot と同じく専用ファイルを置く。
-    configFile: (_env, home) => join(home, ".grok", "hooks", "wtm-agent-report.json"),
+    configFile: (_env, home) => join(home, ".grok", "hooks", "soda-agent-report.json"),
     hooksDir: (_env, home) => join(home, ".grok", "hooks"),
     binName: "grok",
     entriesPath: ["hooks", "SessionStart"],
@@ -162,7 +162,7 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
     hooksDir: (_env, home) => join(home, ".qwen", "hooks"),
     binName: "qwen",
     entriesPath: ["hooks", "SessionStart"],
-    buildEntry: (scriptPath, kind) => ({ type: "command", command: hookCommand(scriptPath, kind), name: "wtm-agent-report", async: true }),
+    buildEntry: (scriptPath, kind) => ({ type: "command", command: hookCommand(scriptPath, kind), name: "soda-agent-report", async: true }),
     isOurs: isOursField("command"),
   },
 };

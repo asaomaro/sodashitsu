@@ -1,5 +1,5 @@
 {
-  "name": "@wtm/e2e",
+  "name": "@sodashitsu/e2e",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,8 +8,8 @@
     "test": "playwright test"
   },
   "dependencies": {
-    "@wtm/protocol": "workspace:*",
-    "@wtm/server": "workspace:*",
+    "@sodashitsu/protocol": "workspace:*",
+    "@sodashitsu/server": "workspace:*",
     "ws": "^8.21.3"
   },
   "devDependencies": {

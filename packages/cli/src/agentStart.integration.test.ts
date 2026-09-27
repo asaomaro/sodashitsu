@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { composeServerOnFreePort, type ComposedServer } from "@wtm/server";
+import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { runAgentGet, runAgentList } from "./commands/agent.js";
 import { runAgentStart } from "./commands/agentStart.js";
@@ -11,7 +11,7 @@ import { FsSessionStore } from "./session.js";
 import { RpcFailure } from "./wsClient.js";
 
 /**
- * `wtmctl agent start` を、実サーバ・実 PTY の bash／dash・実際の検出の上の偽の `claude` で確かめる（20260926-agent-start
+ * `sodactl agent start` を、実サーバ・実 PTY の bash／dash・実際の検出の上の偽の `claude` で確かめる（20260926-agent-start
  * AC1・AC2・AC7・AC8・AC10）。PATH の先頭に置いた `claude` は bash の `exec -a claude` で node の偽のエージェントを起動し、
  * 受け取った引数を記録する（検出は argv[0] で行う）。本物のエージェントは起動しない。
  */
@@ -62,7 +62,7 @@ function captureStdout(): { text(): string; restore(): void } {
 
 describe.skipIf(
   process.platform !== "linux" || !existsSync("/bin/bash") || !existsSync("/usr/bin/dash"),
-)("wtmctl agent start integration（実 PTY の bash／dash・偽の claude・実際の検出）", () => {
+)("sodactl agent start integration（実 PTY の bash／dash・偽の claude・実際の検出）", () => {
   let server: ComposedServer;
   let dir: string;
   let work: string;
@@ -147,7 +147,7 @@ describe.skipIf(
   }
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), "wtmctl-start-it-"));
+    dir = await mkdtemp(join(tmpdir(), "sodactl-start-it-"));
     work = join(dir, "work");
     argvLog = join(dir, "argv.jsonl");
     await Promise.all([mkdir(work), mkdir(join(dir, "bin"))]);

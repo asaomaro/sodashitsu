@@ -4,7 +4,7 @@
  * `ManifestStore.get` → `ManifestEngine.evaluate` → `AgentTracker.update` → `SessionService.updatePaneRuntime`
  * の1周期（architecture.md「5. エージェントの判定の1周期」）を回す。
  */
-import type { PaneId } from "@wtm/protocol";
+import type { PaneId } from "@sodashitsu/protocol";
 import type { Disposable } from "../util/Disposable.js";
 import type { EventBus } from "../bus/EventBus.js";
 import type { Logger } from "../log/Logger.js";

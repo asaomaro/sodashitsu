@@ -1,4 +1,4 @@
-import type { MethodName, ParamsOf, ResultOf } from "@wtm/protocol";
+import type { MethodName, ParamsOf, ResultOf } from "@sodashitsu/protocol";
 import { describe, expect, it, vi } from "vitest";
 import type { ConnectionPort, TerminalSinkPort } from "../net/ports.js";
 import { CommandPopupSession, type PopupTerminalLike } from "./CommandPopupSession.js";

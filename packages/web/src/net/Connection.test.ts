@@ -1,4 +1,4 @@
-import { encodeOutputFrame, encodeSnapshotFrame, type ServerEvent, type SessionSnapshot } from "@wtm/protocol";
+import { encodeOutputFrame, encodeSnapshotFrame, type ServerEvent, type SessionSnapshot } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Connection, type WebSocketLike } from "./Connection.js";
 import type { ConnectionState, StorePort, TerminalSinkPort } from "./ports.js";
@@ -681,7 +681,7 @@ describe("Connection", () => {
 
   /**
    * D107（独立点検 #1）：`/api/session` は 204（Host で見る）なのに `/ws`（Origin で見る）だけが 403 になる構成——前段のプロキシが
-   * Host を許可内の `127.0.0.1:7780` で渡し、ページの Origin（`https://wtm.example.com`）が許可されていない（`--origin` を付けずに
+   * Host を許可内の `127.0.0.1:7780` で渡し、ページの Origin（`https://soda.example.com`）が許可されていない（`--origin` を付けずに
    * 起動し直した）。ブラウザは upgrade の状態コードを見られないので、1006 → 204 → 繋ぎ直し、を理由を示さず繰り返していた。
    */
   describe("/api/session は 204 なのに /ws が開く前に閉じる試みが続く（D107）", () => {

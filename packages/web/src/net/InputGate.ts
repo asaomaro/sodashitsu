@@ -1,4 +1,4 @@
-import type { MethodName, ParamsOf, ResultOf } from "@wtm/protocol";
+import type { MethodName, ParamsOf, ResultOf } from "@sodashitsu/protocol";
 import type { ConnectionPort, InputOrigin, LoginResult } from "./ports.js";
 
 /** `InputGate.holdInput` の戻り値。保持を終える方法は 2 つ。 */

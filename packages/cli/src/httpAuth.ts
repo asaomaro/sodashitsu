@@ -2,7 +2,7 @@ import { AuthError } from "./wsClient.js";
 
 /**
  * `POST /api/login`（design.md「依拠する既存の事実」）。成功すれば `Set-Cookie` の先頭セグメント
- * （`wtm_session=...`）を返す。それ以外はすべて `AuthError`。
+ * （`soda_session=...`）を返す。それ以外はすべて `AuthError`。
  */
 export async function login(url: string, token: string, fetchImpl: typeof fetch = fetch): Promise<string> {
   const u = new URL(url);

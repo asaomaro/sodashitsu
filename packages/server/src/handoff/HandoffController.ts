@@ -17,7 +17,7 @@ import {
 export type HandoffFailureReason =
   | "unsupported"
   | "busy"
-  /** サーバが止まる途中（`wtm session stop`・Ctrl+C。20260927-session-stop）。 */
+  /** サーバが止まる途中（`soda session stop`・Ctrl+C。20260927-session-stop）。 */
   | "stopping"
   | "preflight_failed"
   | "pane_unavailable"
@@ -184,7 +184,7 @@ export class HandoffController {
     const nonce = random(16);
     let panes: HandoffPane[];
     try {
-      // 先に /ws を閉じる——読み取りを止めてから execve までの間に、ブラウザ・wtmctl の操作で pane が増えたり減ったりしない
+      // 先に /ws を閉じる——読み取りを止めてから execve までの間に、ブラウザ・sodactl の操作で pane が増えたり減ったりしない
       // （増えた pane の master は受け渡しに載らずに残り、減った pane の番号を新しい pane が使うと別のシェルを取り違える。cross の点検）。
       clientsClosed = true;
       d.closeClients();

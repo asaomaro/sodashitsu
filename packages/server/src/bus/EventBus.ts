@@ -1,4 +1,4 @@
-import type { ServerEvent } from "@wtm/protocol";
+import type { ServerEvent } from "@sodashitsu/protocol";
 import type { Disposable } from "../util/Disposable.js";
 export type { Disposable };
 

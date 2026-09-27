@@ -1,5 +1,5 @@
-import type { AgentStartResult } from "@wtm/protocol";
-import { RpcError } from "@wtm/protocol";
+import type { AgentStartResult } from "@sodashitsu/protocol";
+import { RpcError } from "@sodashitsu/protocol";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentStarter } from "../../agent/AgentStarter.js";
 import { MemoryLogger } from "../../log/Logger.js";

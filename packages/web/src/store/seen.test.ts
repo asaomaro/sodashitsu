@@ -1,7 +1,7 @@
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { aggregate, displayStateFor, shouldMarkSeen, sweepMarkSeen, useSeenStore } from "./seen.js";
-import type { AgentInfo, Pane } from "@wtm/protocol";
+import type { AgentInfo, Pane } from "@sodashitsu/protocol";
 
 let pinia: Pinia;
 

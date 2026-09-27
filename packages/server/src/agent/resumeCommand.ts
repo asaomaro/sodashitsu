@@ -1,4 +1,4 @@
-import type { AgentIntegrationKind } from "@wtm/protocol";
+import type { AgentIntegrationKind } from "@sodashitsu/protocol";
 
 /**
  * 会話/セッション ID として許す文字だけを通す（英数字・`-`・`_`・`.`・`/`）。Claude Code・Codex とも

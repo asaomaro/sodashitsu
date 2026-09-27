@@ -17,8 +17,8 @@ import {
 } from "./bridgeFrames.js";
 
 /**
- * リモートの `wtm serve` の中継の受け口（20260927-multi-host-machines の design「リモートの受け口」・decisions D3）。状態ディレクトリの
- * Unix ドメイン socket（0600＝同じ利用者だけ）で、`wtm bridge` が SSH の標準入出力と素通しで繋ぐ。1 本の socket の上に論理的な接続
+ * リモートの `soda serve` の中継の受け口（20260927-multi-host-machines の design「リモートの受け口」・decisions D3）。状態ディレクトリの
+ * Unix ドメイン socket（0600＝同じ利用者だけ）で、`soda bridge` が SSH の標準入出力と素通しで繋ぐ。1 本の socket の上に論理的な接続
  * （チャネル）を多重化し、各チャネルを `WsConnection` として `WsGateway` に渡す——`/ws` の 1 接続と同じもの（`client.hello` から）。
  * **受け口に繋がった接続は認証済みとして扱う**（繋げるのは状態ディレクトリを読める同じ利用者だけ。token はハッシュでしか保存されず読めない）。
  * Windows では置かない（呼び出し側が判断する）。新しい TCP の待ち受けは作らない。

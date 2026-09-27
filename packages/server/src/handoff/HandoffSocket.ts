@@ -9,7 +9,7 @@ import type { HandoffReply, HandoffStatus } from "./HandoffController.js";
  * サーバの制御の受け口（20260926-live-handoff の引き継ぎの指示として作り、20260927-session-stop で止める指示を足した。design「`handoff.sock`」・
  * decisions D3、20260927-session-stop の decisions D2）。状態ディレクトリの Unix ドメイン socket で、待ち受けたら 0600（同じ利用者だけ）。
  * 1 接続 1 行の JSON: `{"op":"handoff"}` → `HandoffReply`／`{"op":"status"}` → `HandoffStatus`／`{"op":"stop"}` → `StopReply`。
- * **ファイル名は `handoff.sock` のまま**（新しい CLI が古いサーバへ `wtm handoff` するときに見つけられるように）。
+ * **ファイル名は `handoff.sock` のまま**（新しい CLI が古いサーバへ `soda handoff` するときに見つけられるように）。
  * Windows では作らない（呼び出し側が判断する）。新しい TCP の待ち受けは作らない。
  */
 export const HANDOFF_SOCKET_FILE_NAME = "handoff.sock";

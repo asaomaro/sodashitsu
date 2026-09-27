@@ -28,7 +28,7 @@ export interface RunPreflightOptions {
   execPath?: string;
   /** Node の引数（既定 `process.execArgv`）。 */
   execArgv?: readonly string[];
-  /** wtm の入口（`dist/main.js`。既定 `process.argv[1]`）。 */
+  /** soda の入口（`dist/main.js`。既定 `process.argv[1]`）。 */
   entry?: string;
   timeoutMs?: number;
   spawn?: (command: string, args: readonly string[], env: NodeJS.ProcessEnv) => ChildProcess;
@@ -44,7 +44,7 @@ export function runPreflight(opts: RunPreflightOptions = {}): Promise<PreflightR
   if (entry === undefined)
     return Promise.resolve({
       ok: false,
-      message: "cannot tell where wtm was started from (process.argv[1])",
+      message: "cannot tell where soda was started from (process.argv[1])",
     });
   const timeoutMs = opts.timeoutMs ?? DEFAULT_PREFLIGHT_TIMEOUT_MS;
   const env = { ...process.env };
@@ -165,7 +165,7 @@ const defaultStageDeps = (): PreflightStageDeps => ({
 });
 
 /**
- * 子の側（`wtm __handoff-preflight [--stage 2 --probe <fd>:<dev>:<ino>:<pid>]`）。1 段目は PTY を開いて自分を 2 段目に入れ替え、
+ * 子の側（`soda __handoff-preflight [--stage 2 --probe <fd>:<dev>:<ino>:<pid>]`）。1 段目は PTY を開いて自分を 2 段目に入れ替え、
  * 2 段目は fd が残ったかを答える。答えは標準出力の 1 行の JSON（終了コード 0）。
  */
 export function runPreflightStage(

@@ -1,4 +1,4 @@
-import { RpcError } from "@wtm/protocol";
+import { RpcError } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { MemoryLogger } from "../../log/Logger.js";
 import { ControlSurface } from "../ControlSurface.js";

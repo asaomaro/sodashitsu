@@ -1,4 +1,4 @@
-import type { GitInfo, ServerEvent, Workspace, WorkspaceId } from "@wtm/protocol";
+import type { GitInfo, ServerEvent, Workspace, WorkspaceId } from "@sodashitsu/protocol";
 import type { EventBus } from "../bus/EventBus.js";
 import type { Disposable } from "../util/Disposable.js";
 import type { SessionService } from "../session/SessionService.js";

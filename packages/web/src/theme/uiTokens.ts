@@ -5,7 +5,7 @@ import {
   TERMINAL_PALETTES,
   THEME_APPEARANCE,
   type ThemeName,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 
 /**
  * 画面の枠の色（CSS 変数。20260921-theme-settings の design D3・表）。**dracula は今の値の定数**（`App.vue` の `:root` はその写しで、
@@ -14,25 +14,25 @@ import {
  */
 
 export const CSS_VARS = [
-  "--wtm-bg",
-  "--wtm-fg",
-  "--wtm-menu-bg",
-  "--wtm-menu-fg",
-  "--wtm-menu-border",
-  "--wtm-menu-active-bg",
-  "--wtm-menu-hover-bg",
-  "--wtm-accent",
-  "--wtm-accent-fg",
-  "--wtm-error-fg",
-  "--wtm-warn-fg",
-  "--wtm-state-blocked",
-  "--wtm-state-working",
-  "--wtm-state-done",
-  "--wtm-state-idle",
-  "--wtm-subtle-bg",
-  "--wtm-backdrop",
-  "--wtm-backdrop-strong",
-  "--wtm-pane-current",
+  "--soda-bg",
+  "--soda-fg",
+  "--soda-menu-bg",
+  "--soda-menu-fg",
+  "--soda-menu-border",
+  "--soda-menu-active-bg",
+  "--soda-menu-hover-bg",
+  "--soda-accent",
+  "--soda-accent-fg",
+  "--soda-error-fg",
+  "--soda-warn-fg",
+  "--soda-state-blocked",
+  "--soda-state-working",
+  "--soda-state-done",
+  "--soda-state-idle",
+  "--soda-subtle-bg",
+  "--soda-backdrop",
+  "--soda-backdrop-strong",
+  "--soda-pane-current",
 ] as const;
 export type CssVar = (typeof CSS_VARS)[number];
 
@@ -53,26 +53,26 @@ export const MUTED_TEXT_ALPHA = 0.7;
  */
 const DRACULA: UiTokens = {
   vars: {
-    "--wtm-bg": "#1e1f29",
-    "--wtm-fg": "#f8f8f2",
-    "--wtm-menu-bg": "#282a36",
-    "--wtm-menu-fg": "#f8f8f2",
-    "--wtm-menu-border": "#44475a",
-    "--wtm-menu-active-bg": "#44475a",
-    "--wtm-menu-hover-bg": "#343746",
-    "--wtm-accent": "#6070a1",
-    "--wtm-accent-fg": "#f8f8f2",
-    "--wtm-error-fg": "#ff5555",
-    "--wtm-warn-fg": "#ffb86c",
-    "--wtm-state-blocked": "#ff6e6e",
-    "--wtm-state-working": "#f1fa8c",
-    "--wtm-state-done": "#50fa7b",
-    "--wtm-state-idle": "#8a9ad0",
-    "--wtm-subtle-bg": "rgba(255, 255, 255, 0.08)",
-    "--wtm-backdrop": "rgba(0, 0, 0, 0.4)",
-    "--wtm-backdrop-strong": "rgba(0, 0, 0, 0.5)",
-    // 選ばれている pane の枠（以前は `--wtm-menu-border` を使っていた。decisions D15）。dracula は今の値のまま。
-    "--wtm-pane-current": "#44475a",
+    "--soda-bg": "#1e1f29",
+    "--soda-fg": "#f8f8f2",
+    "--soda-menu-bg": "#282a36",
+    "--soda-menu-fg": "#f8f8f2",
+    "--soda-menu-border": "#44475a",
+    "--soda-menu-active-bg": "#44475a",
+    "--soda-menu-hover-bg": "#343746",
+    "--soda-accent": "#6070a1",
+    "--soda-accent-fg": "#f8f8f2",
+    "--soda-error-fg": "#ff5555",
+    "--soda-warn-fg": "#ffb86c",
+    "--soda-state-blocked": "#ff6e6e",
+    "--soda-state-working": "#f1fa8c",
+    "--soda-state-done": "#50fa7b",
+    "--soda-state-idle": "#8a9ad0",
+    "--soda-subtle-bg": "rgba(255, 255, 255, 0.08)",
+    "--soda-backdrop": "rgba(0, 0, 0, 0.4)",
+    "--soda-backdrop-strong": "rgba(0, 0, 0, 0.5)",
+    // 選ばれている pane の枠（以前は `--soda-menu-border` を使っていた。decisions D15）。dracula は今の値のまま。
+    "--soda-pane-current": "#44475a",
   },
   colorScheme: "dark",
 };
@@ -281,9 +281,9 @@ export function overlay(rgba: string, base: string): string {
   return mixHex(hex, base, Number(m[4]));
 }
 
-/** 淡い面（`--wtm-subtle-bg`。半透明）を不透明な下地に重ねた色（検査の相手に使う）。 */
+/** 淡い面（`--soda-subtle-bg`。半透明）を不透明な下地に重ねた色（検査の相手に使う）。 */
 export function subtleOver(tokens: UiTokens, base: string): string {
-  return overlay(tokens.vars["--wtm-subtle-bg"], base);
+  return overlay(tokens.vars["--soda-subtle-bg"], base);
 }
 
 /** 白と黒のどちらとの比が大きいか（＝明るい色か）。 */
@@ -327,29 +327,29 @@ function build(name: Exclude<ThemeName, "dracula">): UiTokens {
   );
   return {
     vars: {
-      "--wtm-bg": bg,
-      "--wtm-fg": fg,
-      "--wtm-menu-bg": menuBg,
-      "--wtm-menu-fg": fg,
-      "--wtm-menu-border": p.surface0,
-      "--wtm-menu-active-bg": active,
-      "--wtm-menu-hover-bg": hover,
-      "--wtm-accent": accent,
-      "--wtm-accent-fg": accentFg,
-      "--wtm-error-fg": ensureContrast(p.red, [bg, menuBg, terminalBg], 4.5, away),
-      "--wtm-warn-fg": ensureContrast(p.peach, [menuBg, hover, active], 4.5, away),
-      "--wtm-state-blocked": ensureContrast(p.red, rows, 3, away),
-      "--wtm-state-working": ensureContrast(p.yellow, rows, 3, away),
-      "--wtm-state-done": ensureContrast(p.green, rows, 3, away),
-      "--wtm-state-idle": ensureContrast(p.overlay1, rows, 3, away),
-      "--wtm-subtle-bg": subtle,
+      "--soda-bg": bg,
+      "--soda-fg": fg,
+      "--soda-menu-bg": menuBg,
+      "--soda-menu-fg": fg,
+      "--soda-menu-border": p.surface0,
+      "--soda-menu-active-bg": active,
+      "--soda-menu-hover-bg": hover,
+      "--soda-accent": accent,
+      "--soda-accent-fg": accentFg,
+      "--soda-error-fg": ensureContrast(p.red, [bg, menuBg, terminalBg], 4.5, away),
+      "--soda-warn-fg": ensureContrast(p.peach, [menuBg, hover, active], 4.5, away),
+      "--soda-state-blocked": ensureContrast(p.red, rows, 3, away),
+      "--soda-state-working": ensureContrast(p.yellow, rows, 3, away),
+      "--soda-state-done": ensureContrast(p.green, rows, 3, away),
+      "--soda-state-idle": ensureContrast(p.overlay1, rows, 3, away),
+      "--soda-subtle-bg": subtle,
       // ダイアログの後ろの幕は黒——明るいテーマでもダイアログを浮かせる（research「実装時の注意」）。全テーマ同じ値。
-      "--wtm-backdrop": "rgba(0, 0, 0, 0.4)",
-      // 再接続の表示の幕は、その上に文字（--wtm-fg）を直に描く。明るいテーマの文字は暗いので、黒い幕では端末の背景の上で 4.5 に届かない
+      "--soda-backdrop": "rgba(0, 0, 0, 0.4)",
+      // 再接続の表示の幕は、その上に文字（--soda-fg）を直に描く。明るいテーマの文字は暗いので、黒い幕では端末の背景の上で 4.5 に届かない
       // （3.2〜3.5）——明るいテーマは白い幕にする（decisions D9）。
-      "--wtm-backdrop-strong": dark ? "rgba(0, 0, 0, 0.5)" : "rgba(255, 255, 255, 0.6)",
+      "--soda-backdrop-strong": dark ? "rgba(0, 0, 0, 0.5)" : "rgba(255, 255, 255, 0.6)",
       // 選ばれている pane の枠は、周りの背景（bg）と端末の背景に対して 3:1（どの pane に入力が行くかを示す状態の印。WCAG 1.4.11。decisions D15）。
-      "--wtm-pane-current": ensureContrast(p.surface0, [bg, terminalBg], 3, away),
+      "--soda-pane-current": ensureContrast(p.surface0, [bg, terminalBg], 3, away),
     },
     colorScheme: dark ? "dark" : "light",
   };

@@ -21,15 +21,15 @@ describe("isFreshBrowser（20260926-settings-onboarding の AC1・AC2・AC8）",
     expect(isFreshBrowser(storageOf({}))).toBe(true);
   });
 
-  it("wtm.prefs.v1 は中身が空のオブジェクトでも痕跡（キーを既定に戻した利用者は {} が残る）", () => {
-    expect(isFreshBrowser(storageOf({ "wtm.prefs.v1": "{}" }))).toBe(false);
+  it("soda.prefs.v1 は中身が空のオブジェクトでも痕跡（キーを既定に戻した利用者は {} が残る）", () => {
+    expect(isFreshBrowser(storageOf({ "soda.prefs.v1": "{}" }))).toBe(false);
   });
 
   it.each([
-    ["保存された設定", { "wtm.prefs.v1": JSON.stringify({ theme: "nord" }) }],
-    ["案内済み", { "wtm.prefs.v1": JSON.stringify({ onboarding: false }) }],
-    ["キー一覧の案内の表示済みの印", { "wtm.hint.prefixHelp.v1": "1" }],
-    ["エージェントの既読の記録", { "wtm.seen.v1": "{}" }],
+    ["保存された設定", { "soda.prefs.v1": JSON.stringify({ theme: "nord" }) }],
+    ["案内済み", { "soda.prefs.v1": JSON.stringify({ onboarding: false }) }],
+    ["キー一覧の案内の表示済みの印", { "soda.hint.prefixHelp.v1": "1" }],
+    ["エージェントの既読の記録", { "soda.seen.v1": "{}" }],
   ])("%s があれば false（既存の利用者）", (_label, entries) => {
     expect(isFreshBrowser(storageOf(entries))).toBe(false);
   });
@@ -39,8 +39,8 @@ describe("isFreshBrowser（20260926-settings-onboarding の AC1・AC2・AC8）",
     ["配列", "[]"],
     ["null", "null"],
     ["文字列", '"x"'],
-  ])("壊れた wtm.prefs.v1（%s）は痕跡があるとみなして false", (_label, raw) => {
-    expect(isFreshBrowser(storageOf({ "wtm.prefs.v1": raw }))).toBe(false);
+  ])("壊れた soda.prefs.v1（%s）は痕跡があるとみなして false", (_label, raw) => {
+    expect(isFreshBrowser(storageOf({ "soda.prefs.v1": raw }))).toBe(false);
   });
 
   it("localStorage を取れない（null）・読むと throw する環境では false", () => {
@@ -69,13 +69,13 @@ describe("useOnboardingStore", () => {
     setActivePinia(createPinia());
     const store = useOnboardingStore();
     expect(store.pendingAtStartup).toBe(true);
-    localStorage.setItem("wtm.hint.prefixHelp.v1", "1");
+    localStorage.setItem("soda.hint.prefixHelp.v1", "1");
     expect(useOnboardingStore().pendingAtStartup).toBe(true);
   });
 
   it("既存の利用者のブラウザでは false で、判定は何も書かない（AC2）", () => {
-    localStorage.setItem("wtm.prefs.v1", JSON.stringify({ theme: "nord" }));
-    localStorage.setItem("wtm.hint.prefixHelp.v1", "1");
+    localStorage.setItem("soda.prefs.v1", JSON.stringify({ theme: "nord" }));
+    localStorage.setItem("soda.hint.prefixHelp.v1", "1");
     const before = snapshotStorage();
     expect(Object.keys(before)).toHaveLength(2);
     setActivePinia(createPinia());

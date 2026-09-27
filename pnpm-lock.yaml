@@ -32,19 +32,19 @@ importers:
 
   packages/cli:
     dependencies:
-      '@wtm/protocol':
+      '@sodashitsu/protocol':
         specifier: workspace:*
         version: link:../protocol
       ws:
         specifier: ^8.21.3
         version: 8.21.3
     devDependencies:
+      '@sodashitsu/server':
+        specifier: workspace:*
+        version: link:../server
       '@types/ws':
         specifier: ^8.5.13
         version: 8.18.1
-      '@wtm/server':
-        specifier: workspace:*
-        version: link:../server
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
@@ -54,10 +54,10 @@ importers:
 
   packages/e2e:
     dependencies:
-      '@wtm/protocol':
+      '@sodashitsu/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@wtm/server':
+      '@sodashitsu/server':
         specifier: workspace:*
         version: link:../server
       ws:
@@ -89,7 +89,7 @@ importers:
 
   packages/server:
     dependencies:
-      '@wtm/protocol':
+      '@sodashitsu/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@xterm/addon-serialize':
@@ -130,7 +130,7 @@ importers:
 
   packages/web:
     dependencies:
-      '@wtm/protocol':
+      '@sodashitsu/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@xterm/addon-image':

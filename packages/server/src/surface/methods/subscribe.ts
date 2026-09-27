@@ -1,4 +1,4 @@
-import { PaneSubscribeParams, PaneUnsubscribeParams, RpcError } from "@wtm/protocol";
+import { PaneSubscribeParams, PaneUnsubscribeParams, RpcError } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 

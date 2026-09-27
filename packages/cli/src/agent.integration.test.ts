@@ -1,15 +1,15 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentInfo } from "@wtm/protocol";
-import { composeServerOnFreePort, type ComposedServer } from "@wtm/server";
+import type { AgentInfo } from "@sodashitsu/protocol";
+import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { runAgentGet, runAgentList, runAgentRead, runAgentWait } from "./commands/agent.js";
 import { runPaneRun, runPaneSplit } from "./commands/pane.js";
 import { FsSessionStore } from "./session.js";
 
 /**
- * `wtmctl agent` を実サーバ・実 PTY で確かめる（20260926-agent-automation-api tasks.md T6）。
+ * `sodactl agent` を実サーバ・実 PTY で確かめる（20260926-agent-automation-api tasks.md T6）。
  * エージェントの状態は `session.updatePaneRuntime` で注入する（シェルが前面の pane では AgentMonitor が上書きしない）。
  * `agent wait` が hello を終えたことを観測してから状態を変えるため、`connect` が返すクライアントの `hello` を包む。
  */
@@ -66,7 +66,7 @@ function agentInfo(patch: Partial<AgentInfo> = {}): AgentInfo {
   };
 }
 
-describe("wtmctl agent integration（実サーバ・実 PTY）", () => {
+describe("sodactl agent integration（実サーバ・実 PTY）", () => {
   let server: ComposedServer;
   let stateDir: string;
   let sessionDir: string;
@@ -77,7 +77,7 @@ describe("wtmctl agent integration（実サーバ・実 PTY）", () => {
   let workspaceId: string;
 
   beforeAll(async () => {
-    stateDir = await mkdtemp(join(tmpdir(), "wtmctl-agent-it-state-"));
+    stateDir = await mkdtemp(join(tmpdir(), "sodactl-agent-it-state-"));
     server = await composeServerOnFreePort({
       host: "127.0.0.1",
       stateDir,
@@ -85,7 +85,7 @@ describe("wtmctl agent integration（実サーバ・実 PTY）", () => {
     });
     if (!server.freshToken) throw new Error("expected a freshly generated token");
     url = `http://${server.options.host}:${server.options.port}`;
-    sessionDir = await mkdtemp(join(tmpdir(), "wtmctl-agent-it-session-"));
+    sessionDir = await mkdtemp(join(tmpdir(), "sodactl-agent-it-session-"));
     store = new FsSessionStore(join(sessionDir, "session.json"));
 
     const snap = server.session.snapshot();
@@ -185,7 +185,7 @@ describe("wtmctl agent integration（実サーバ・実 PTY）", () => {
     server.session.updatePaneRuntime(agentPaneId, {
       agent: agentInfo({ instanceId: "it-agent-2", state: "idle" }),
     });
-    const marker = `wtmctl-agent-read-${Date.now()}`;
+    const marker = `sodactl-agent-read-${Date.now()}`;
     const runOut = captureStdout();
     try {
       await runPaneRun(

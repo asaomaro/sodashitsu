@@ -1,4 +1,4 @@
-import { THEME_APPEARANCE, THEME_NAMES, type ThemeName } from "@wtm/protocol";
+import { THEME_APPEARANCE, THEME_NAMES, type ThemeName } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import {
   lightDarkOf,

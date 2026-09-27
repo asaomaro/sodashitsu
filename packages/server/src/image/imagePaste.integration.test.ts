@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { IMAGE_CHUNK_BYTES } from "@wtm/protocol";
+import { IMAGE_CHUNK_BYTES } from "@sodashitsu/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { composeServerOnFreePort } from "../composeServerOnFreePort.js";
@@ -95,7 +95,7 @@ describe("pane.image.*（実物の /ws。20260927-clipboard-image-paste）", () 
   });
 
   async function start(): Promise<{ server: ComposedServer; stateDir: string }> {
-    const stateDir = await makeTempDir("wtm-image-");
+    const stateDir = await makeTempDir("soda-image-");
     cleanups.push(() =>
       rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }),
     );
@@ -120,14 +120,14 @@ describe("pane.image.*（実物の /ws。20260927-clipboard-image-paste）", () 
   });
 
   it("起動したときに 24 時間より古い画像を消す（貼らなくなっても残さない）", async () => {
-    const stateDir = await makeTempDir("wtm-image-");
+    const stateDir = await makeTempDir("soda-image-");
     cleanups.push(() =>
       rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }),
     );
     const dir = join(stateDir, "clipboard-images");
     await mkdir(dir, { mode: 0o700 });
-    const old = join(dir, "wtm-image-20260101T000000Z-0123456789abcdef.png");
-    const fresh = join(dir, "wtm-image-20260101T000000Z-fedcba9876543210.png");
+    const old = join(dir, "soda-image-20260101T000000Z-0123456789abcdef.png");
+    const fresh = join(dir, "soda-image-20260101T000000Z-fedcba9876543210.png");
     await writeFile(old, "x");
     await writeFile(fresh, "y");
     const t = (Date.now() - 25 * 60 * 60 * 1000) / 1000;

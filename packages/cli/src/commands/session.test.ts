@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CliUsageError } from "../cliArgs.js";
 import type { SessionStore } from "../session.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 import { runLogin, runSnapshot, runWatch } from "./session.js";
 
 vi.mock("../withSession.js", () => ({ withSession: vi.fn() }));
@@ -17,7 +17,7 @@ const mockedLogin = vi.mocked(login);
 const mockedPrintJson = vi.mocked(printJson);
 const mockedPrintLine = vi.mocked(printLine);
 
-interface FakeClient extends WtmClient {
+interface FakeClient extends SodaClient {
   emitEvent(evt: unknown): void;
   emitClose(code: number, reason: string): void;
 }
@@ -50,14 +50,14 @@ beforeEach(() => {
 
 describe("runLogin", () => {
   it("login → store.set → printJson({ok:true})（withSession は使わない）", async () => {
-    mockedLogin.mockResolvedValue("wtm_session=abc");
+    mockedLogin.mockResolvedValue("soda_session=abc");
     const setSpy = vi.fn(async () => undefined);
     const s = { get: vi.fn(), set: setSpy, clear: vi.fn() } as unknown as SessionStore;
 
     await runLogin({ kind: "login", opts: { url: "http://127.0.0.1:7780", token: "tok" } }, s);
 
     expect(mockedLogin).toHaveBeenCalledWith("http://127.0.0.1:7780", "tok");
-    expect(setSpy).toHaveBeenCalledWith("http://127.0.0.1:7780", "wtm_session=abc");
+    expect(setSpy).toHaveBeenCalledWith("http://127.0.0.1:7780", "soda_session=abc");
     expect(mockedPrintJson).toHaveBeenCalledWith({ ok: true });
     expect(mockedWithSession).not.toHaveBeenCalled();
   });

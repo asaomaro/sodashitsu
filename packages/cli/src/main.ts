@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `wtmctl` のエントリポイント（design.md「インターフェース/データ構造・コマンド一覧」）。
+ * `sodactl` のエントリポイント（design.md「インターフェース/データ構造・コマンド一覧」）。
  * `parseArgs` → 対応する `commands/*` を呼ぶ → 例外は `reportAndExit` が終了コードへ変換する（T11）。
  */
 import { parseArgs, MACHINE_USAGE_LINE, USAGE_LINES } from "./cliArgs.js";
@@ -31,7 +31,7 @@ function printHelp(): void {
       ...USAGE_LINES,
       MACHINE_USAGE_LINE,
       "",
-      "環境変数: WTMCTL_URL（無ければ WTM_SERVER_URL、それも無ければ http://127.0.0.1:7780）・WTMCTL_TOKEN",
+      "環境変数: SODACTL_URL（無ければ SODA_SERVER_URL、それも無ければ http://127.0.0.1:7780）・SODACTL_TOKEN",
       "",
       "pane input/pane run は、実プロセスへ実際に届いたことまでは保証しません（INPUT フレームに ack はありません）。",
       "agent の <target> は pane ID か、agent rename で付けた名前です（名前は英小文字で始まる 1〜32 文字の [a-z0-9_-]）。",
@@ -45,14 +45,14 @@ function printHelp(): void {
       "（既定 120x40・1〜1000。所有者は pane attach と共通で 1 つ、--takeover で奪えます）。",
       "agent start は前面がシェル自身だけの pane（sh/bash/dash/zsh/ksh/mksh）に、--kind の決まった実行ファイルと -- の後の引数を",
       "単一引用符で包んで打ち込み、名前を付けて idle になるまで待ちます（既定 30 秒。blocked なら agent_not_ready）。",
-      "pane の中（WTM_PANE_ID と WTM_SERVER_URL があり、そのサーバにつなぐとき）は、自分の pane とそれを含む tab・workspace を閉じる・",
-      "入力する・直結する・エージェントを動かす操作を self_target で断ります（WTM_PANE_ID を空にすると効きません。--machine で別のマシンへ送るときも効きません）。",
-      "pane split・pane current の対象を省くと、pane の中では呼び出し元の pane（WTM_PANE_ID）、外ではサーバのフォーカスの pane です。",
-      "--current は呼び出し元の pane を明示します（WTM_PANE_ID が要ります。local 以外の --machine とは使えません）。接続先がその pane のサーバだと",
-      "確かめられないとき（WTMCTL_URL・--url が別の名前等）は caller_pane_unknown で断ります。同じサーバだと分かっていれば --pane で ID を渡し、",
-      "そうでなければ WTMCTL_URL・--url を外して WTM_SERVER_URL につないでください。",
+      "pane の中（SODA_PANE_ID と SODA_SERVER_URL があり、そのサーバにつなぐとき）は、自分の pane とそれを含む tab・workspace を閉じる・",
+      "入力する・直結する・エージェントを動かす操作を self_target で断ります（SODA_PANE_ID を空にすると効きません。--machine で別のマシンへ送るときも効きません）。",
+      "pane split・pane current の対象を省くと、pane の中では呼び出し元の pane（SODA_PANE_ID）、外ではサーバのフォーカスの pane です。",
+      "--current は呼び出し元の pane を明示します（SODA_PANE_ID が要ります。local 以外の --machine とは使えません）。接続先がその pane のサーバだと",
+      "確かめられないとき（SODACTL_URL・--url が別の名前等）は caller_pane_unknown で断ります。同じサーバだと分かっていれば --pane で ID を渡し、",
+      "そうでなければ SODACTL_URL・--url を外して SODA_SERVER_URL につないでください。",
       "pane current は pane の今の tabId・workspaceId を返します（pane を移しても古くなりません）。",
-      "wtmctl skill はエージェントに wtmctl の使い方を教える Markdown（skill ファイル）を出します。",
+      "sodactl skill はエージェントに sodactl の使い方を教える Markdown（skill ファイル）を出します。",
       "workspace/pane report-metadata はサイドバーの行の $名前 に出す独自トークンを設定（--token NAME=VALUE）・消去（--clear-token NAME）します。",
       "--token は値が = を含めば独自トークン、含まなければ接続の token です。値は前後の空白と制御文字を除いて 80 文字まで、空なら消去。",
       "--seq を付けると同じ --source の古い報告を無視し、--ttl-ms（1〜86400000）で期限が来ると消えます。値はサーバのメモリだけに持ちます。",

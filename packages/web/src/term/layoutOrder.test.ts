@@ -1,4 +1,4 @@
-import type { LayoutNode } from "@wtm/protocol";
+import type { LayoutNode } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { depthFirstPaneIds, neighborPaneId } from "./layoutOrder.js";
 

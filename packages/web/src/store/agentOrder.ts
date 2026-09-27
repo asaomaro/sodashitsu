@@ -1,4 +1,4 @@
-import type { DisplayState } from "@wtm/protocol";
+import type { DisplayState } from "@sodashitsu/protocol";
 import { STATE_PRIORITY } from "./seen.js";
 import type { AgentSort } from "./view.js";
 

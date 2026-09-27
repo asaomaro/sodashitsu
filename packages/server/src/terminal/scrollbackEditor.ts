@@ -15,7 +15,7 @@ export function scrollbackEditorArgv(
   platform: NodeJS.Platform,
   env: NodeJS.ProcessEnv,
 ): string[] | null {
-  if (platform !== "win32") return ["/bin/sh", "-c", UNIX_SCRIPT, "wtm-edit-scrollback", path];
+  if (platform !== "win32") return ["/bin/sh", "-c", UNIX_SCRIPT, "soda-edit-scrollback", path];
   const editor = [env["VISUAL"], env["EDITOR"]].find((v) => v !== undefined && v.trim() !== "");
   if (editor === undefined) return null;
   const argv = splitWindowsCommandLine(editor);
@@ -54,7 +54,7 @@ export async function writeScrollbackFile(
   root: string = tmpdir(),
   write: typeof writeFile = writeFile,
 ): Promise<{ dir: string; path: string }> {
-  const dir = await mkdtemp(join(root, "wtm-scrollback-"));
+  const dir = await mkdtemp(join(root, "soda-scrollback-"));
   const path = join(dir, "scrollback.txt");
   try {
     await write(path, text, { encoding: "utf8", flag: "wx", mode: 0o600 });

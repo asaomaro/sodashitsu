@@ -6,7 +6,7 @@ import type { Disposable } from "../util/Disposable.js";
 
 const scrypt = promisify(scryptCb);
 
-export const SESSION_COOKIE_NAME = "wtm_session";
+export const SESSION_COOKIE_NAME = "soda_session";
 const TOKEN_BYTES = 24;
 const SESSION_ID_BYTES = 24;
 const SCRYPT_KEYLEN = 32;
@@ -16,9 +16,9 @@ const TOUCH_PERSIST_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
  * ログインの Cookie の名前（20260926-named-session-ui の design「Cookie」）。Cookie はポートで分かれない（RFC 6265 8.5）ので、同じホスト名の
- * 別ポートの session が同じ名前を使うと、片方にログインすると他方がログアウトされる。名前付き session は `wtm_session_<名前>` にする
+ * 別ポートの session が同じ名前を使うと、片方にログインすると他方がログアウトされる。名前付き session は `soda_session_<名前>` にする
  * （名前の文字——ASCII 英数字と `.` `_` `-`。`persist/namedSession.ts` `sessionNameProblem`——は Cookie の名前の token に収まる）。
- * 既定の session は今までどおり `wtm_session`（既存のログインを保つ）。
+ * 既定の session は今までどおり `soda_session`（既存のログインを保つ）。
  */
 export function sessionCookieName(sessionName: string | undefined): string {
   return sessionName === undefined ? SESSION_COOKIE_NAME : `${SESSION_COOKIE_NAME}_${sessionName}`;

@@ -1,4 +1,4 @@
-import type { MethodName, ParamsOf, ResultOf, ServerEvent, SessionSnapshot } from "@wtm/protocol";
+import type { MethodName, ParamsOf, ResultOf, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import type { WebSocketLike } from "./Connection.js";
 
 /**

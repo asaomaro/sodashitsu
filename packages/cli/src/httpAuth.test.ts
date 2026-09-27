@@ -12,17 +12,17 @@ describe("login", () => {
       expect(url).toBe("http://h:7780/api/login");
       expect(init.method).toBe("POST");
       expect(JSON.parse(init.body as string)).toEqual({ token: "t" });
-      return new Response(null, { status: 204, headers: { "set-cookie": "wtm_session=abc; Path=/; HttpOnly" } });
+      return new Response(null, { status: 204, headers: { "set-cookie": "soda_session=abc; Path=/; HttpOnly" } });
     });
     const cookie = await login("http://h:7780", "t", fetchImpl);
-    expect(cookie).toBe("wtm_session=abc");
+    expect(cookie).toBe("soda_session=abc");
   });
 
   it("Origin/Host ヘッダを url から組み立てて送る", async () => {
     let seenHeaders: Headers | undefined;
     const fetchImpl = fakeFetch((_url, init) => {
       seenHeaders = new Headers(init.headers);
-      return new Response(null, { status: 204, headers: { "set-cookie": "wtm_session=abc" } });
+      return new Response(null, { status: 204, headers: { "set-cookie": "soda_session=abc" } });
     });
     await login("http://127.0.0.1:9999", "t", fetchImpl);
     expect(seenHeaders?.get("origin")).toBe("http://127.0.0.1:9999");

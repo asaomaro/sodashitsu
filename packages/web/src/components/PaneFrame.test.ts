@@ -1,4 +1,4 @@
-import type { Pane } from "@wtm/protocol";
+import type { Pane } from "@sodashitsu/protocol";
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -682,7 +682,7 @@ describe("PaneFrame — 名前ラベルをドラッグしての分割・分割�
 
 // 20260926-pane-frame-auto-mode：枠の描画モード・隙間（辺ごとの余白。design「振る舞いの詳細」）。
 describe("PaneFrame — 枠の描画モードと隙間（AC1・AC6・AC-I5）", () => {
-  const GAP = "var(--wtm-pane-gap, 4px)";
+  const GAP = "var(--soda-pane-gap, 4px)";
   const padding = (w: ReturnType<typeof mountFrame>["wrapper"]) => {
     const st = (w.element as HTMLElement).style;
     return [st.paddingTop, st.paddingRight, st.paddingBottom, st.paddingLeft];

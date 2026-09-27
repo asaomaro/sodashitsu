@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { hostname as osHostname, platform } from "node:os";
-import type { HostInfo } from "@wtm/protocol";
+import type { HostInfo } from "@sodashitsu/protocol";
 import { ConfigError, type RawServeArgs, type ServeOptions, agentReportSocketPathFor, resolveServeOptions, stateDirInUseError } from "./config.js";
 import { FileLogger, type Logger } from "./log/Logger.js";
 import { EventBus } from "./bus/EventBus.js";
@@ -80,9 +80,9 @@ export interface ComposedServer {
    */
   readonly freshToken: string | undefined;
   /**
-   * 起動する（architecture.md「6. 起動と再起動後の復元」・D102・D103）：状態ディレクトリのロック（`wtm.lock`。生きている
-   * 別の wtm が持っていれば `ConfigError`）→ auth.json の読み込み（ロックの後。組み立ての時点では読まない）→ 待ち受け
-   * （bind。失敗したら reject）→ token の作成 → 復元（無ければ workspace を 1 つ作る）→ poller の開始 → `/ws` の受け付けの開始。ロックと bind を最初に行うので、同じ state-dir の wtm が既に
+   * 起動する（architecture.md「6. 起動と再起動後の復元」・D102・D103）：状態ディレクトリのロック（`soda.lock`。生きている
+   * 別の soda が持っていれば `ConfigError`）→ auth.json の読み込み（ロックの後。組み立ての時点では読まない）→ 待ち受け
+   * （bind。失敗したら reject）→ token の作成 → 復元（無ければ workspace を 1 つ作る）→ poller の開始 → `/ws` の受け付けの開始。ロックと bind を最初に行うので、同じ state-dir の soda が既に
    * 動いている起動（ポートが違っても）や待ち受けに失敗した起動は、token を作らず・シェルを起動せず・session.json と
    * auth.json に触れない。失敗したらロックを放してから reject する。
    */
@@ -92,7 +92,7 @@ export interface ComposedServer {
   /** 更新時の引き継ぎ（20260926-live-handoff）で起動したときの結果（`listen()` の後。引き継ぎでない起動は undefined）。 */
   readonly handoffResult: HandoffResult | undefined;
   /**
-   * 制御の socket（`handoff.sock`）の止める指示（`wtm session stop`。20260927-session-stop）を受けたときに呼ぶものを登録する。`main.ts` が停止の手順を渡す。
+   * 制御の socket（`handoff.sock`）の止める指示（`soda session stop`。20260927-session-stop）を受けたときに呼ぶものを登録する。`main.ts` が停止の手順を渡す。
    * 登録しなければ止める指示は `unsupported` で断る（smoke・テストで組み立てだけを使うとき）。呼ぶのは 1 回だけ（止まる途中の指示は呼ばずに答える）。
    */
   onStopRequest(fn: () => void): void;
@@ -139,10 +139,10 @@ export async function composeServer(
   const options = await withRememberedPort(resolveServeOptions(rawArgs), rawArgs);
   const logger = new FileLogger(join(options.stateDir, "server.log"));
 
-  // 同じ state-dir の wtm を 2 つ動かさない（D103）。取るのは `listen()` の最初。放すときの失敗はログに残すだけ。
+  // 同じ state-dir の soda を 2 つ動かさない（D103）。取るのは `listen()` の最初。放すときの失敗はログに残すだけ。
   const lock = new StateDirLock(options.stateDir, { logger });
   const authFile = new FsAuthFile(options.stateDir);
-  // auth.json はここでは読まない——ロックを取ってから `listen()` で読む（D103）。組み立てとロックの間に `wtm token reset`
+  // auth.json はここでは読まない——ロックを取ってから `listen()` で読む（D103）。組み立てとロックの間に `soda token reset`
   // （ロックを取って作り直す）が走ると、先に読んだ古い token をメモリに持ったまま起動し、新しい token を受け付けず、次の
   // ログイン等で auth.json を古い token に書き戻していた（独立点検で dist で再現）。
   // 名前付き session の Cookie の名前は session ごと（Cookie はポートで分かれない。20260926-named-session-ui の design「Cookie」）。
@@ -200,7 +200,7 @@ export async function composeServer(
   const integrationFile = new FsIntegrationFile(options.stateDir);
   const agentIntegrationInstaller = new FsAgentIntegrationInstaller(agentHookScriptFor());
   const agentIntegrations = await DefaultAgentIntegrationService.load(agentIntegrationInstaller, integrationFile, bus);
-  /** pane の環境の `WTM_SERVER_URL`（`listen()` で待ち受けた後に決める。それまでは undefined）。`SessionService` が読むので、それより前に宣言する。 */
+  /** pane の環境の `SODA_SERVER_URL`（`listen()` で待ち受けた後に決める。それまでは undefined）。`SessionService` が読むので、それより前に宣言する。 */
   let paneUrl: string | undefined;
   const session = new SessionService({
     model,
@@ -213,9 +213,9 @@ export async function composeServer(
     defaultCwd,
     agentReportSocketPath,
     getAutoResumeEnabled: agentIntegrations.getAutoResumeEnabled,
-    // pane の中の wtmctl の接続先（20260926-agent-skill-file）。待ち受けた後（`listen()` の 1.）に決まる。pane を起動するのはその後。
+    // pane の中の sodactl の接続先（20260926-agent-skill-file）。待ち受けた後（`listen()` の 1.）に決まる。pane を起動するのはその後。
     serverUrlForPanes: () => paneUrl,
-    sessionName: options.sessionName, // pane の環境の WTM_SESSION（20260926-named-session-ui）
+    sessionName: options.sessionName, // pane の環境の SODA_SESSION（20260926-named-session-ui）
     // 新しく開く場所（herdr の `terminal.new_cwd`）。「引き継ぐ」は元の pane の前面プロセスの cwd をその時点で読み直す。
     newCwdDeps: makeNewCwdDeps({
       terminals,
@@ -320,7 +320,7 @@ export async function composeServer(
       images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
     },
   });
-  // 中継の受け口（20260927-multi-host-machines）。ほかのマシンの `wtm serve` が SSH と `wtm bridge` 越しに繋ぐ、状態ディレクトリの 0600 の socket。
+  // 中継の受け口（20260927-multi-host-machines）。ほかのマシンの `soda serve` が SSH と `soda bridge` 越しに繋ぐ、状態ディレクトリの 0600 の socket。
   // 各チャネルは `/ws` の 1 接続と同じ（2 つ目の `WsGateway` に渡す）。待ち受けは `listen()` の最後（`/ws` と同じく復元の後）。
   const bridgeEndpoint = new BridgeEndpoint({ version: SERVER_VERSION, hostname: osHostname(), sessionName: options.sessionName ?? null }, logger);
   new WsGateway(bridgeEndpoint, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
@@ -480,7 +480,7 @@ export async function composeServer(
             resolve();
           });
         });
-        // 1'. pane の中の wtmctl の接続先（20260926-agent-skill-file）。ポートは実際に待ち受けたもの（パイプ等で数でなければ `options.port`）。
+        // 1'. pane の中の sodactl の接続先（20260926-agent-skill-file）。ポートは実際に待ち受けたもの（パイプ等で数でなければ `options.port`）。
         const bound = httpServer.server.address();
         const boundPort = typeof bound === "object" && bound !== null ? bound.port : options.port;
         boundPortValue = boundPort;
@@ -577,8 +577,8 @@ export async function composeServer(
         // 止まり始めた印（以後の止める指示は「既に止まる途中」、引き継ぎの指示は断る。20260927-session-stop）。受け付け済みの引き継ぎの
         // 最中（Ctrl+C 等のシグナル）なら、それが終わる（元に戻す）まで待つ——以前は最初に制御の socket を閉じ、その接続の終わりを待つことで同じ順序になっていた。
         await control.beginClosing();
-        // マシンへの ssh を閉じる（リモートの `wtm serve` と pane は動いたまま。AC5）。中継の接続には、ssh を閉じる前に手元の停止（1001）で閉じる
-        // （手元の `/ws` と同じ code にそろえる。ブラウザ・wtmctl はどちらも繋ぎ直しの扱いで、今は code で分けていない）。
+        // マシンへの ssh を閉じる（リモートの `soda serve` と pane は動いたまま。AC5）。中継の接続には、ssh を閉じる前に手元の停止（1001）で閉じる
+        // （手元の `/ws` と同じ code にそろえる。ブラウザ・sodactl はどちらも繋ぎ直しの扱いで、今は code で分けていない）。
         for (const set of relayed.values()) for (const conn of [...set]) conn.close(1001, "server shutting down");
         await machines.stop();
         // 閉じ始めたら新しい `/ws` を受け付けない（closeAll の後に届いた upgrade を通さない。D102）。
@@ -614,7 +614,7 @@ export async function composeServer(
         await images.dispose(); // 書いている途中の画像を書き終えてから（ロックを放す前に）
         // スクロールバックの一時ディレクトリ（20260926-edit-scrollback）。途中の処理が投げても消す。
         await session.disposeScrollbackEditors();
-        // 制御の socket はロックを放す直前まで開けておく——止まる途中に届いた 2 回目の `wtm session stop` が「既に止まる途中」と答えを受けて待てる
+        // 制御の socket はロックを放す直前まで開けておく——止まる途中に届いた 2 回目の `soda session stop` が「既に止まる途中」と答えを受けて待てる
         // （20260927-session-stop の decisions D4）。止まる途中の引き継ぎは `beginClosing` で断っている。
         // （`HandoffSocket.close()` は今は reject しないが、将来 reject してもロックを残さないよう握る）
         await handoffSocket?.close().catch(() => undefined);

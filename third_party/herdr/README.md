@@ -9,7 +9,7 @@
 - ライセンス: Apache License 2.0（`LICENSE` を同梱。herdr は 0.8.0 で AGPL-3.0-or-later から
   Apache-2.0 に変更している。詳細は `.aidev/works/20260918-web-terminal-multiplexer/research.md` F12.1）
 - 変更点: なし（無改変で取り込み）。本製品はこれらのファイルをそのまま読み込んで判定ルールとして使う
-  （`@wtm/server` の `agent/ManifestStore`）。ルールの記法は各ファイルの内容を参照。
+  （`@sodashitsu/server` の `agent/ManifestStore`）。ルールの記法は各ファイルの内容を参照。
 - 帰属表示: ルートの `NOTICE` を参照。
 
 判定ルールを更新するときは、herdr の該当コミットのハッシュをこの README に書き足すこと。

@@ -31,7 +31,7 @@ function run(argv: string[], env: NodeJS.ProcessEnv): Promise<{ code: number; st
 
 let work: string;
 beforeEach(async () => {
-  work = await mkdtemp(join(tmpdir(), "wtm-scrollback-test-"));
+  work = await mkdtemp(join(tmpdir(), "soda-scrollback-test-"));
 });
 afterEach(async () => {
   await rm(work, { recursive: true, force: true });
@@ -57,7 +57,7 @@ describe("scrollbackEditorArgv（Unix）", () => {
       "/bin/sh",
       "-c",
       'eval "${EDITOR:-vi} \\"\\$1\\""',
-      "wtm-edit-scrollback",
+      "soda-edit-scrollback",
       "/tmp/a b/scrollback.txt",
     ]);
   });
@@ -110,7 +110,7 @@ describe("scrollbackEditorArgv（Unix）", () => {
 });
 
 describe("scrollbackEditorArgv（Windows）", () => {
-  const path = "C:\\Users\\U Ser\\AppData\\Local\\Temp\\wtm-scrollback-x\\scrollback.txt";
+  const path = "C:\\Users\\U Ser\\AppData\\Local\\Temp\\soda-scrollback-x\\scrollback.txt";
 
   it("VISUAL を先に、無ければ EDITOR を、分解して末尾にパスを付ける（AC2）", () => {
     expect(
@@ -149,7 +149,7 @@ describe("writeScrollbackFile / removeScrollbackDir", () => {
       const b = await writeScrollbackFile("world\n", work);
       expect(a.dir).not.toBe(b.dir);
       expect(a.path).toBe(join(a.dir, "scrollback.txt"));
-      expect(a.dir.startsWith(join(work, "wtm-scrollback-"))).toBe(true);
+      expect(a.dir.startsWith(join(work, "soda-scrollback-"))).toBe(true);
       expect((await stat(a.dir)).mode & 0o777).toBe(0o700);
       expect((await stat(a.path)).mode & 0o777).toBe(0o600);
       expect(await readFile(a.path, "utf8")).toBe("hello\n");

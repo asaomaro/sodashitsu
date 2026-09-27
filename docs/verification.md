@@ -14,62 +14,62 @@ pnpm install
 pnpm -s build
 ```
 
-**`wtm` というコマンドは PATH に無い**（`@wtm/server` は公開していないワークスペースのパッケージで、上の手順では
+**`soda` というコマンドは PATH に無い**（`@sodashitsu/server` は公開していないワークスペースのパッケージで、上の手順では
 どこにも入らない）。実体は `packages/server/dist/main.js` で、リポジトリの直下で `node packages/server/dist/main.js serve …`
-のように起動する（使い方は `node packages/server/dist/main.js --help`）。**この docs の `wtm …` は
+のように起動する（使い方は `node packages/server/dist/main.js --help`）。**この docs の `soda …` は
 `node <リポジトリ>/packages/server/dist/main.js …` の略**。同じように打てるようにするなら：
 
 ```sh
 # bash / zsh（リポジトリの直下で実行する。~/.bashrc 等に書くなら $PWD ではなく実際のパスを書く）
-alias wtm="node $PWD/packages/server/dist/main.js"
+alias soda="node $PWD/packages/server/dist/main.js"
 ```
 
 ```powershell
 # PowerShell（Windows ネイティブ）。パスは自分の clone の場所に置き換える。関数は定義した窓でしか使えないので、
 # 別の窓でも使うなら $PROFILE に書く（notepad $PROFILE で開いてこの行を足す）
-function wtm { node "C:\src\web-tn-multiplexer\packages\server\dist\main.js" @args }
+function soda { node "C:\src\sodashitsu\packages\server\dist\main.js" @args }
 ```
 
 `packages/e2e` の自動 E2E（Linux・chromium 前提）は、いずれの OS でも参考として実行できる
 （Windows ネイティブでは `node-pty` の ConPTY 経由になるため、Linux の PTY 実装との違いが無いかの手がかりにもなる。
-WSL2 ではサーバは WSL の中で Linux として動き、Linux と同じ Unix の PTY を使う——design「WSL2」）。初回は Playwright の Chromium を入れておく（`pnpm --filter @wtm/e2e exec playwright install chromium`）。
+WSL2 ではサーバは WSL の中で Linux として動き、Linux と同じ Unix の PTY を使う——design「WSL2」）。初回は Playwright の Chromium を入れておく（`pnpm --filter @sodashitsu/e2e exec playwright install chromium`）。
 spec は 1 つずつ走る（`playwright.config.ts` の `workers: 1`。並列にすると CPU を取り合って落ち、性能計測の値も汚れる。
 decisions.md D104）ので、全体で数分かかる：
 
 ```sh
-pnpm --filter @wtm/e2e test
+pnpm --filter @sodashitsu/e2e test
 ```
 
 動かし方の注意（詳しくは `docs/tls-setup.md`「起動と運用の注意」）：
 
-- **同じ状態ディレクトリの `wtm serve` は 1 つしか動かせない**（ポートが違っても。`wtm.lock`）。手元用（7780）と
+- **同じ状態ディレクトリの `soda serve` は 1 つしか動かせない**（ポートが違っても。`soda.lock`）。手元用（7780）と
   LAN 用（8443）を並行して動かすなら、LAN 用に `--state-dir` で別のディレクトリを渡す（または `--session lan` で
   名前付き session にする。下の項目）。2 つ目は
-  `wtm: the state dir … is already in use by another wtm (pid …)` で止まる（終了コード 2）。
-- **名前付き session**（`wtm serve --session <名前>`。herdr の `--session` 相当。20260926-named-session）：状態は既定の状態
+  `soda: the state dir … is already in use by another soda (pid …)` で止まる（終了コード 2）。
+- **名前付き session**（`soda serve --session <名前>`。herdr の `--session` 相当。20260926-named-session）：状態は既定の状態
   ディレクトリの下の `sessions/<名前>/`。`--session` を付けなければ今までどおり。並行して動かすなら `--port` も分ける。一覧は
-  `wtm session list [--json]`、token の作り直しは `wtm token reset --session <名前>`、消すのは（止めてから）
-  `wtm session delete <名前>`。名前は 1〜64 文字の ASCII の英数字と `.` `_` `-`（詳しくは `docs/tls-setup.md`
-  「名前付き session」）。止めるのは `wtm session stop <名前>`（既定の session は `default`。Ctrl+C と同じ正常な停止。
+  `soda session list [--json]`、token の作り直しは `soda token reset --session <名前>`、消すのは（止めてから）
+  `soda session delete <名前>`。名前は 1〜64 文字の ASCII の英数字と `.` `_` `-`（詳しくは `docs/tls-setup.md`
+  「名前付き session」）。止めるのは `soda session stop <名前>`（既定の session は `default`。Ctrl+C と同じ正常な停止。
   Linux・macOS。20260927-session-stop）か、起動した端末で Ctrl+C。
-  名前付き session はポートを覚え（`--port` 無しの起動で前回のポート）、`WTM_SESSION` で既定の session を選べ、画面のサイドバーの
+  名前付き session はポートを覚え（`--port` 無しの起動で前回のポート）、`SODA_SESSION` で既定の session を選べ、画面のサイドバーの
   `session: <名前> ⇄` から別の session を新しいタブで開ける（20260926-named-session-ui。詳しくは `docs/tls-setup.md`「画面での session の表示と切り替え」）。
-- **画面履歴**（`wtm serve --pane-history`。既定は無効。20260926-screen-history-replay）：付けて動かしたサーバを止めて起動し直すと、
+- **画面履歴**（`soda serve --pane-history`。既定は無効。20260926-screen-history-replay）：付けて動かしたサーバを止めて起動し直すと、
   pane に前回の画面と「前回のセッションの画面」の区切りの行が出る。付けずに起動すると `session-history.json` を消す（詳しくは
   `docs/tls-setup.md`「画面履歴の保存と再生」）。
-- **更新時の引き継ぎ**（`wtm handoff`。Linux・macOS。20260926-live-handoff）：新しい版をビルドしてから `wtm handoff` を打つと、pane のプロセスを
-  止めずに動いている `wtm serve` がディスク上の wtm に入れ替わる（詳しくは `docs/tls-setup.md`「更新時の引き継ぎ」。Windows は非対応・macOS は未検証）。
-- **`wtm token reset` は `wtm serve` を止めてから**（動いている間は断る。終了コード 2）。
-- **`wtm serve` を起動した端末を閉じると wtm も終わる**（SIGHUP。`nohup` でも同じ）。検証の途中で端末を閉じるなら
+- **更新時の引き継ぎ**（`soda handoff`。Linux・macOS。20260926-live-handoff）：新しい版をビルドしてから `soda handoff` を打つと、pane のプロセスを
+  止めずに動いている `soda serve` がディスク上の soda に入れ替わる（詳しくは `docs/tls-setup.md`「更新時の引き継ぎ」。Windows は非対応・macOS は未検証）。
+- **`soda token reset` は `soda serve` を止めてから**（動いている間は断る。終了コード 2）。
+- **`soda serve` を起動した端末を閉じると soda も終わる**（SIGHUP。`nohup` でも同じ）。検証の途中で端末を閉じるなら
   tmux の中で動かす。
 - **scrollback は既定の「自動」でデスクトップのブラウザが 5,000 行（`--scrollback` で変えられる。上限 10,000）、
   スマートフォン等のモバイルのブラウザが 1,000 行**。ブラウザごとに設定（`prefix+s` の「端末」、モバイルは上のバーの「設定」）で
   選べ、数を選んだときは `--scrollback` の値で頭を押さえる（サーバのミラーは `--scrollback` の行数を持つ。メモリの目安は `docs/tls-setup.md`
   「scrollback の行数とメモリ（`--scrollback`）」）。
 - **`prefix+e` は、フォーカス中の pane のスクロールバックをサーバの `$EDITOR` で開く**（herdr の `edit_scrollback`。
-  20260926-edit-scrollback）。エディタは **`wtm serve` を起動したときの環境変数 `EDITOR`**（未設定・空なら `vi`。Windows ネイティブは
+  20260926-edit-scrollback）。エディタは **`soda serve` を起動したときの環境変数 `EDITOR`**（未設定・空なら `vi`。Windows ネイティブは
   `VISUAL`、無ければ `EDITOR`。どちらも無ければ開けずにトーストが出る）で、サーバの上の新しい pane に拡大表示で開く。エディタを
-  終えると元の pane へ戻る。一時ファイルは OS の一時ディレクトリの下の `wtm-scrollback-*`（本人だけが読める）に作り、閉じれば消える。
+  終えると元の pane へ戻る。一時ファイルは OS の一時ディレクトリの下の `soda-scrollback-*`（本人だけが読める）に作り、閉じれば消える。
 - **独自コマンド**（herdr の `[[keys.command]]`。20260927-custom-command-keys）：状態ディレクトリの `commands.json`（書き方・置き場所は
   `docs/custom-commands.md`。`chmod 600`）に書いたコマンドを、`prefix+s` の節「キー」の群「独自コマンド」で割り当てたキーで走らせる。
   書き換えたら `prefix+shift+r`（設定を読み直す）。コマンドはサーバの上で動く（ブラウザからコマンドの文字列は送らない）。
@@ -93,7 +93,7 @@ pnpm --filter @wtm/e2e test
   自動の名前のまま変えずに確定しても、名前は固定されない。worktree を開く・作ると、ブランチ名が付く（付けた名前として残る）。
   以前の版で保存した状態から起動すると、名前が「1」の workspace は自動の名前になる（自分で「1」と付けていた workspace も自動になる）。
 - **はじめの案内**（herdr の onboarding。20260926-settings-onboarding）：このブラウザで初めて本製品を開いたとき（保存された設定・キー一覧の
-  案内の印・エージェントの既読がどれも無いとき）だけ、接続が開いたあとに「wtm へようこそ」の案内が 1 回出る。ふつうの画面ではマウスの操作と、prefix・
+  案内の印・エージェントの既読がどれも無いとき）だけ、接続が開いたあとに「soda へようこそ」の案内が 1 回出る。ふつうの画面ではマウスの操作と、prefix・
   キー一覧・設定を開くキー（いまの割り当て）を、1 列の画面（幅 768px 未満）では上のバーの［設定］を案内し、テーマ・キーのプリセット（指で操作する
   端末では出ない）・エージェントの知らせ（画面の中・OS の通知・音）を
   選べる。［この設定ではじめる］で選んだ分だけが設定画面と同じ値で保存され（OS の通知を選んだときはブラウザが許可を求める）、エージェントの知らせの
@@ -126,15 +126,15 @@ pnpm --filter @wtm/e2e test
 ## Linux（CI・手元）
 
 **CI**：`pnpm -s typecheck && pnpm -s lint && pnpm -s test && pnpm -s build && pnpm -s smoke &&
-pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` はこの OS でのみ全 spec が
+pnpm --filter @sodashitsu/e2e test` が通ることを基準とする（`packages/e2e` はこの OS でのみ全 spec が
 自動で走る）。
 
 **手元の追加確認**（自動化していない項目）：
 
-- [ ] `wtm serve` を起動し、表示された `wtm: open http://127.0.0.1:7780/…` の URL をブラウザで開いてログインできる。
+- [ ] `soda serve` を起動し、表示された `soda: open http://127.0.0.1:7780/…` の URL をブラウザで開いてログインできる。
       期待：その状態ディレクトリで初めての起動なら `#token=…` 付きの URL が出て、開くとそのままログインする（token は
       この 1 回だけ表示されるので控えておく）。2 回目以降の起動は `#token=` の無い URL と「token を忘れた場合は…」の行に
-      なるので、開いたログイン画面に控えた token を入れる（控えていなければ、`wtm serve` を止めて `wtm token reset` で
+      なるので、開いたログイン画面に控えた token を入れる（控えていなければ、`soda serve` を止めて `soda token reset` で
       作り直してから起動し直す）。
 - [ ] vim・htop（`terminal-app.spec.ts` は htop がこの検証環境に無いため `top` で代替している。
       decisions.md D90）を実際に起動し、崩れずに全画面表示されることを目視で確認する。
@@ -175,15 +175,15 @@ pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` 
       決まり、pane の id は起動し直しても同じなので、開いたままのページの端末は 5,000 行のまま（`docs/tls-setup.md`
       「scrollback の行数とメモリ（`--scrollback`）」）。
 - [ ] 新しく開く場所（20260921-new-terminal-cwd）：設定の「端末」の「新しく開く場所」が「引き継ぐ」（既定）のまま、pane で
-      `mkdir -p /tmp/wtm-a && cd /tmp/wtm-a` を実行してから `Ctrl+B c`（名前を尋ねるので Enter）で新しい tab を開き、`pwd` を実行する。
-      期待：`/tmp/wtm-a`。元の pane に戻り、`Ctrl+B v`（分割）と `Ctrl+B N`（新しい workspace）でも同じく `pwd` が `/tmp/wtm-a`。
+      `mkdir -p /tmp/soda-a && cd /tmp/soda-a` を実行してから `Ctrl+B c`（名前を尋ねるので Enter）で新しい tab を開き、`pwd` を実行する。
+      期待：`/tmp/soda-a`。元の pane に戻り、`Ctrl+B v`（分割）と `Ctrl+B N`（新しい workspace）でも同じく `pwd` が `/tmp/soda-a`。
       pane の中で `bash` を入れ子に起動して `cd /tmp` してから作っても `/tmp`（いちばん外側のシェルではなく、前面のプロセスの場所を読む）。
-      次に設定で「ホーム」「サーバを起動した場所」を選び、それぞれ新しい tab で `pwd` がホーム・`wtm serve` を起動した場所になる
+      次に設定で「ホーム」「サーバを起動した場所」を選び、それぞれ新しい tab で `pwd` がホーム・`soda serve` を起動した場所になる
       （既に開いている pane の場所は変わらない）。「指定した場所」を選び、入力欄に `~/` を入れて Enter（保存されるだけでダイアログは
       閉じない）→ Esc で閉じて新しい tab を開く。期待：`pwd` がホーム。入力欄を `/nope` にして同じように新しい tab を開く。期待：
       「新しく開く場所が使えないため、代わりの場所で開きました（設定の「端末」で確かめてください）」のトーストが出て、その workspace の場所で開く。最後に「引き継ぐ」に戻す。worktree を開く操作（workspace のメニュー）は、どの方針でも worktree の場所で開く。
 - [ ] はじめの案内（20260926-settings-onboarding）：**新しいプロファイル（またはシークレットウィンドウ）**でログインして開く。期待：端末が出たあとに
-      「wtm へようこそ」の案内が出て、見出しにフォーカスがある。Tab でテーマ・キーのプリセット・知らせの選択・［スキップ］・［この設定ではじめる］を
+      「soda へようこそ」の案内が出て、見出しにフォーカスがある。Tab でテーマ・キーのプリセット・知らせの選択・［スキップ］・［この設定ではじめる］を
       順に辿れ、案内の外（サイドバー・pane）へは出ない。案内が出ている間に文字を打っても端末に入らない。テーマで Nord を、知らせで「音で知らせる」を
       選んで［この設定ではじめる］。期待：案内が閉じ、画面が Nord になり、**そのまま端末に文字を打てる**（フォーカスが端末へ戻る——起動確認が見るのは
       Esc で閉じる経路だけなので、［この設定ではじめる］で閉じる経路はここで見る）。ページを開き直す。期待：案内は出ない。`prefix+s` の末尾の［はじめの案内を開く］で開き直す。期待：テーマは
@@ -208,7 +208,7 @@ pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` 
       なる。nvim を起動すると、明るいテーマでは `:set background?` が `light` になる。
 - [ ] 色の個別の上書き（20260922-theme-custom-overrides）：
       （1）`prefix+s` で設定を開き、「テーマ」で Dracula を選ぶ（暗いテーマ）。折りたたみ「色の個別の上書き（上級者向け）」を開く。
-      「強調の色（フォーカスの枠等）」（`--wtm-accent` の行）の「暗いとき」の欄に `#ff0000` を入れて確定（Tab で欄から外れる、または Enter）。
+      「強調の色（フォーカスの枠等）」（`--soda-accent` の行）の「暗いとき」の欄に `#ff0000` を入れて確定（Tab で欄から外れる、または Enter）。
       期待：即座にダイアログの強調の色（フォーカスの枠など）が赤くなり、「「強調の色（フォーカスの枠等）」（暗いとき）を #ff0000 にしました。」と出る。
       （2）「テーマ」を Solarized Light（明るいテーマ）に替える。期待：さきほどの赤は消え、既定の色に戻る（「暗いとき」の上書きは
       明るいテーマには効かない）。「画面地の背景」の「明るいとき」の欄に `notacolor` と入れて確定。期待：「「画面地の背景」（明るいとき）：
@@ -255,7 +255,7 @@ pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` 
       を開き、`prefix+s` → 節「キー」で `alt+…` を含む割り当て（例：右へ分割に
       ［追加：直接］→ `Option+D` を割り当てる）を作る。期待：一覧の表示が、実際に押した物理キーの
       字（配列上で `D` の位置にある字）に置き換わる（QWERTY の `d` のままではない）。取り込み・
-      保存される chord 自体（`localStorage` の `wtm.prefs.v1`）は `alt+d` のまま変わらないこと
+      保存される chord 自体（`localStorage` の `soda.prefs.v1`）は `alt+d` のまま変わらないこと
       （表示専用。AC10 は自動で確かめ済みだが、実機の `localStorage` でも目視すると確実）。
       US 配列に戻す・`getLayoutMap()` の無いブラウザ（Firefox・Safari）で開き直すと、表示が
       QWERTY の位置の字（例 `alt+d`）に戻ること（AC9 の実機確認）。
@@ -273,27 +273,27 @@ pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` 
       ブラウザが先に受けること（AC14 の「効果が無いことが分かる」側）。
 - [ ] workspace の自動の名前（20260921-workspace-auto-label）：設定の「端末」の「新しく開く場所」が「引き継ぐ」（既定）で、ホームが git の
       リポジトリでないこと（`~` を見る手順のため）を前提に、
-      `Ctrl+B v` で分割した右の pane で `mkdir -p /tmp/wtm-repo/sub && git -C /tmp/wtm-repo init -q && cd /tmp/wtm-repo/sub` を実行してから `Ctrl+B N`
-      （新しい workspace）。期待：サイドバーの新しい行が `wtm-repo`（`sub` ではなくリポジトリの根の名前。「1」は一度も出ない）。
-      同じサーバを別のブラウザ（別のタブでよい）で開いていれば、そちらにも再読み込みなしで `wtm-repo` の行が出る。
+      `Ctrl+B v` で分割した右の pane で `mkdir -p /tmp/soda-repo/sub && git -C /tmp/soda-repo init -q && cd /tmp/soda-repo/sub` を実行してから `Ctrl+B N`
+      （新しい workspace）。期待：サイドバーの新しい行が `soda-repo`（`sub` ではなくリポジトリの根の名前。「1」は一度も出ない）。
+      同じサーバを別のブラウザ（別のタブでよい）で開いていれば、そちらにも再読み込みなしで `soda-repo` の行が出る。
       `Ctrl+B W` で名前を `mine` にして Enter → 両方のブラウザで `mine`。もう一度 `Ctrl+B W`（入力欄の下に「空にして確定すると、
-      自動の名前…に戻ります」と出る）で名前を消して Enter → 両方で `wtm-repo` に戻る。もう一度 `Ctrl+B W` を開くと「いまは自動の
+      自動の名前…に戻ります」と出る）で名前を消して Enter → 両方で `soda-repo` に戻る。もう一度 `Ctrl+B W` を開くと「いまは自動の
       名前です。」と出る（何も変えずに Enter しても、自動のまま——固定されない）。
-      `Ctrl+B v` で分割し、右の pane で `cd /tmp && mkdir -p wtm-plain && cd wtm-plain` → `Ctrl+B N` で `wtm-plain`。もう一度 `Ctrl+B v` で分割し、
+      `Ctrl+B v` で分割し、右の pane で `cd /tmp && mkdir -p soda-plain && cd soda-plain` → `Ctrl+B N` で `soda-plain`。もう一度 `Ctrl+B v` で分割し、
       右の pane で `cd ~` → `Ctrl+B N` で `~`（どちらも分割した pane で `cd` する——左上の pane で `cd` すると、その workspace の名前も移った先に
-      追従する。20260926-workspace-label-follow-cwd）。サイドバーの `wtm-plain` の
-      行を右クリックして「名前の変更」で `keep` と付ける（`Ctrl+B W` は表示中の workspace——いまは `~`——が対象）。最後に `wtm serve` を
-      止めて `rm -rf /tmp/wtm-repo/.git` してから起動し直す。期待：自動の名前だった `wtm-repo` の workspace は `sub`（git の外になったので
+      追従する。20260926-workspace-label-follow-cwd）。サイドバーの `soda-plain` の
+      行を右クリックして「名前の変更」で `keep` と付ける（`Ctrl+B W` は表示中の workspace——いまは `~`——が対象）。最後に `soda serve` を
+      止めて `rm -rf /tmp/soda-repo/.git` してから起動し直す。期待：自動の名前だった `soda-repo` の workspace は `sub`（git の外になったので
       フォルダ名）になり、`keep` はその名前のまま戻る。
-- [ ] workspace の名前と git の情報の追従（20260926-workspace-label-follow-cwd）：`mkdir -p /tmp/wtm-a /tmp/wtm-b/sub && git -C /tmp/wtm-a init -q -b main
-      && git -c user.name=wtm -c user.email=wtm@example.invalid -C /tmp/wtm-a commit -q --allow-empty -m a && git -C /tmp/wtm-b init -q -b other
-      && git -c user.name=wtm -c user.email=wtm@example.invalid -C /tmp/wtm-b commit -q --allow-empty -m b`
-      を用意し、名前を付けていない workspace の左上の pane で `cd /tmp/wtm-a`。期待：数秒のうちにサイドバーの行が `wtm-a`・ブランチ `main`。
-      `cd /tmp/wtm-b/sub` → `wtm-b`・`other`（同じサーバを開いたほかのブラウザでも再読み込みなしで同じ）。`cd /tmp` → `tmp` になりブランチの行が消える。
-      `Ctrl+B v` で分割し、右の pane で `cd /tmp/wtm-a` しても名前とブランチは変わらない。左の pane を閉じると、数秒のうちに `wtm-a`・`main` になる。
-      `Ctrl+B W` で `mine` と付けてから、残った pane で `cd /tmp/wtm-b` → 名前は `mine` のまま、ブランチだけ `other`。`Ctrl+B W` で名前を消して Enter → `wtm-b`
-      （開いた場所の名前ではない）。最後に `wtm serve` を止めて起動し直す → `wtm-b`・`other` で戻る。
-- [ ] claude・codex 以外のエージェント（AC6。実物で確かめたのは Claude Code と Codex だけ）：`wtm serve` の起動時のログの行
+- [ ] workspace の名前と git の情報の追従（20260926-workspace-label-follow-cwd）：`mkdir -p /tmp/soda-a /tmp/soda-b/sub && git -C /tmp/soda-a init -q -b main
+      && git -c user.name=soda -c user.email=soda@example.invalid -C /tmp/soda-a commit -q --allow-empty -m a && git -C /tmp/soda-b init -q -b other
+      && git -c user.name=soda -c user.email=soda@example.invalid -C /tmp/soda-b commit -q --allow-empty -m b`
+      を用意し、名前を付けていない workspace の左上の pane で `cd /tmp/soda-a`。期待：数秒のうちにサイドバーの行が `soda-a`・ブランチ `main`。
+      `cd /tmp/soda-b/sub` → `soda-b`・`other`（同じサーバを開いたほかのブラウザでも再読み込みなしで同じ）。`cd /tmp` → `tmp` になりブランチの行が消える。
+      `Ctrl+B v` で分割し、右の pane で `cd /tmp/soda-a` しても名前とブランチは変わらない。左の pane を閉じると、数秒のうちに `soda-a`・`main` になる。
+      `Ctrl+B W` で `mine` と付けてから、残った pane で `cd /tmp/soda-b` → 名前は `mine` のまま、ブランチだけ `other`。`Ctrl+B W` で名前を消して Enter → `soda-b`
+      （開いた場所の名前ではない）。最後に `soda serve` を止めて起動し直す → `soda-b`・`other` で戻る。
+- [ ] claude・codex 以外のエージェント（AC6。実物で確かめたのは Claude Code と Codex だけ）：`soda serve` の起動時のログの行
       `{"ts":"…","level":"info","msg":"agent manifests loaded","ok":22,"total":22}` で、判定のルールが 22 種すべて読めている
       ことを確かめる。手元で使っているエージェントがあれば 2〜3 種（例：`gemini`（Gemini CLI）・`opencode`（OpenCode）・
       `copilot`（GitHub Copilot CLI）・`cursor-agent`（Cursor Agent）・`amp`（Amp）・`qwen`（Qwen Code）。全部の名前は
@@ -328,7 +328,7 @@ pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` 
       非破壊マージ・復元時のコマンド投入を検証しているが、実物の CLI との結線は未検証）。
       設定の「エージェント連携」で対象を導入 → `~/.claude/settings.json`（Codex は
       `~/.codex/hooks.json`）に本製品のフックが1件追記されたことを確認 → pane で `claude`
-      （`codex`）を起動し、何かひとこと話しかける → `wtm serve` を Ctrl+C で止めて同じコマンドで
+      （`codex`）を起動し、何かひとこと話しかける → `soda serve` を Ctrl+C で止めて同じコマンドで
       起動し直す → その pane が自動で `claude --resume <id>`（`codex resume <id>`）を実行し、
       直前の会話が復元されることを確認する。あわせて：
       - 同じ cwd に Claude Code の pane を2つ以上開いた状態で確認し、両方が別々の会話として
@@ -350,7 +350,7 @@ pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` 
       - **Devin CLI だけ設定ファイルのパス（`~/.devin/hooks.json`）が推測値**（公式ドキュメントに
         記載が無かったため、同業他社 Droid の命名慣習から類推した。decisions.md D4）。実機で
         確認できる環境があれば、まずこのパスが正しいかどうかを優先して確かめる。
-      - GitHub Copilot CLI・Grok CLI は本製品専用のファイル（`wtm-agent-report.json`）を
+      - GitHub Copilot CLI・Grok CLI は本製品専用のファイル（`soda-agent-report.json`）を
         hooks ディレクトリへ新規作成する方式（他のエージェントは既存の設定ファイルへ追記する方式）。
         既存の他の hook 設定（あれば）が変更されないことも確認する。
 - [ ] pane 名の legend 表示（20260923-pane-name-dnd-swap。AC1〜AC3）：設定の「表示」で
@@ -377,44 +377,44 @@ pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` 
       同じ tab を開いておくと、一方の分割・分割解除がもう一方にも反映されること（AC10）。
       既存のキーバインドでの分割・pane を閉じる操作は変わらず使えること（AC11・AC-I3）。
 - [ ] 画面履歴の保存と再生（20260926-screen-history-replay。AC1・AC2・AC4・AC6 の手動確認。自動のテストは実 PTY の結合テストで同じ往復を見ている）：
-      `wtm serve --pane-history` で起動し、ブラウザで pane に `printf '\033[31mred-line\033[0m\n'; seq 1 200` を実行してから Ctrl+C で止める。
+      `soda serve --pane-history` で起動し、ブラウザで pane に `printf '\033[31mred-line\033[0m\n'; seq 1 200` を実行してから Ctrl+C で止める。
       `ls -l <状態ディレクトリ>/session-history.json` が `-rw-------`。同じく `--pane-history` を付けて起動し直してブラウザを開き直すと、
       その pane に赤い `red-line` と `1`〜`200`（上へスクロールして見える）、その下に薄い色の `--- 前回のセッションの画面（… に保存）---`、
       その下に新しいプロンプトが出る。pane で `vim` を開いたまま止めて起動し直すと、vim の画面ではなく vim を開く前の履歴が出る。
       続けて `--pane-history` を付けずに起動すると、`session-history.json` が消え、pane は空の新しいシェルになる。
 - [ ] 更新時の引き継ぎ（20260926-live-handoff。AC1〜AC5・AC7・AC8 の手動確認。自動では smoke〔`node packages/server/dist/handoffSmoke.js`〕が同じ往復を見ている）：
-      `wtm serve` で起動し、ブラウザで pane に `sleep 1000 & echo $$ $!` と `seq 1 200` を実行し、別の pane で `vim` を開いておく。
-      `pnpm build` の後に別の端末で `wtm handoff` → `handoff complete: N pane(s) kept running`。ブラウザは「再接続中…」の後に同じ画面に戻り、
+      `soda serve` で起動し、ブラウザで pane に `sleep 1000 & echo $$ $!` と `seq 1 200` を実行し、別の pane で `vim` を開いておく。
+      `pnpm build` の後に別の端末で `soda handoff` → `handoff complete: N pane(s) kept running`。ブラウザは「再接続中…」の後に同じ画面に戻り、
       `seq` の出力が上へスクロールして見え、`echo $$` が同じ pid を出し、`jobs` に `sleep` が残り、vim は描き直されて操作できる。
-      `ps -o pid,stat,cmd --ppid <wtm の pid>` で pane のシェルが同じ pid のまま。pane で `exit` すると pane が閉じる（その後の `ps` にそのシェルが
+      `ps -o pid,stat,cmd --ppid <soda の pid>` で pane のシェルが同じ pid のまま。pane で `exit` すると pane が閉じる（その後の `ps` にそのシェルが
       `<defunct>` で残るのは既知の制約）。`ls <状態ディレクトリ>` に `handoff.json` が残っていない。
       新しい版の確かめが通らない状態（例: `packages/server/dist/handoff/HandoffManifest.js` の `HANDOFF_FORMAT_VERSION` を一時的に 2 にする）で
-      `wtm handoff` → 終了コード 1 で `the handoff format differs` が出て、サーバは同じ pid のまま pane も動き続ける（確かめたら元に戻す）。
+      `soda handoff` → 終了コード 1 で `the handoff format differs` が出て、サーバは同じ pid のまま pane も動き続ける（確かめたら元に戻す）。
 - [ ] スクロールバックを `$EDITOR` で開く（20260926-edit-scrollback。AC1〜AC4・AC6・AC8。AC5・AC7 は単体テストで確かめる）：
-      `EDITOR=vim wtm serve …` で起動し、pane で `seq 1 3000` を実行してから `Ctrl+B e` を押す。期待：同じ tab に拡大表示の pane が
+      `EDITOR=vim soda serve …` で起動し、pane で `seq 1 3000` を実行してから `Ctrl+B e` を押す。期待：同じ tab に拡大表示の pane が
       開き、vim に 1〜3000 の行（スクロールバックに押し出された行を含む。末尾は `seq` の後のプロンプト）が色の制御列なしで出る。
       vim の中で `:!ls -ld "$(dirname %)" %` を実行すると、ディレクトリが `drwx------`、`scrollback.txt` が `-rw-------`
-      （場所は OS の一時ディレクトリ。`TMPDIR` を設定していなければ `/tmp/wtm-scrollback-*`）。`:q` で抜けると pane が閉じ、焦点が
-      元の pane へ戻り（打った文字が元の pane に出る）、`ls -d /tmp/wtm-scrollback-*` が何も見つけない。元の pane を `Ctrl+B z` で拡大表示にしてから同じ操作をすると、抜けた後も元の pane が
+      （場所は OS の一時ディレクトリ。`TMPDIR` を設定していなければ `/tmp/soda-scrollback-*`）。`:q` で抜けると pane が閉じ、焦点が
+      元の pane へ戻り（打った文字が元の pane に出る）、`ls -d /tmp/soda-scrollback-*` が何も見つけない。元の pane を `Ctrl+B z` で拡大表示にしてから同じ操作をすると、抜けた後も元の pane が
       拡大表示のまま。`vim` を開いた中（代替画面）で `Ctrl+B e` を押しても、vim を開く前の履歴が開く。`EDITOR='code -w'` のような
       引数付きの値でも開ける（VS Code の Remote 等で `code` が使える環境だけ）。エディタの pane を `Ctrl+B x` で閉じても一時ファイルは消える。
-- [ ] 名前付き session の画面・ポートの記憶・`WTM_SESSION`（20260926-named-session-ui。E2E・実機のブラウザでは未検証。Linux・WSL2 の手順。
-      Windows ネイティブは下の節）：`wtm serve`（既定の session）と `wtm serve --session work --port 7781` を並行して起動し、**同じブラウザ**で
+- [ ] 名前付き session の画面・ポートの記憶・`SODA_SESSION`（20260926-named-session-ui。E2E・実機のブラウザでは未検証。Linux・WSL2 の手順。
+      Windows ネイティブは下の節）：`soda serve`（既定の session）と `soda serve --session work --port 7781` を並行して起動し、**同じブラウザ**で
       `http://127.0.0.1:7780/` と `http://127.0.0.1:7781/` の両方にログインする。`work` のタブのタイトルが `<ホスト名> [work]: …` で
       サイドバーの最上段に `session: work ⇄` が、既定の session のタブに `session: default ⇄` が出ること、**片方にログインしても他方が
       ログアウトされない**こと（両方のタブを再読み込みしてもログイン画面にならない）を確かめる。既定の session のタブで `session: default ⇄` を
       Tab で選んで Enter → 一覧が開き `work` が選ばれていること、Enter で新しいタブに `http://127.0.0.1:7781/` が開くこと（ポップアップとして
       止められない）、もう一度開いて Esc で閉じるとフォーカスがボタンに戻ること（続けて Enter でまた開く）を確かめる。`work` を Ctrl+C で止め、
-      `wtm serve --session work`（`--port` 無し）で起動し直すと 7781 で待ち受け `wtm: session work が前回使ったポート 7781 …` の行が出ること。
-      `work` を止めて `WTM_SESSION=work wtm token reset` が `work` の token を作り直すこと、`WTM_SESSION=a/b wtm serve` が何も作らずに
-      止まり終了コード `2` で案内に `WTM_SESSION` が出ること、`work` の pane で `echo $WTM_SESSION` が `work` を、既定の session の pane では空を出すこと。
-- [ ] `wtm session stop`（20260927-session-stop。起動確認 `stopSmoke.js` で Linux の通しは確かめ済み。macOS は未検証。Linux・WSL2 の手順）：
-      `wtm serve --session work --port 7781 --pane-history` を tmux の別の窓等で起動し、ブラウザで pane に何か表示してから、別の端末で
-      `wtm session stop work` を打つ。`wtm: stopped session work` が出て `echo $?` が `0`、起動した窓に
-      `wtm: stop requested (wtm session stop), shutting down` が出てプロンプトに戻ること、`wtm session list` の `work` が `stopped` で、
-      もう一度の `wtm session stop work` が `session work is not running` と終了コード `3` になることを確かめる。同じ引数で起動し直すと
-      レイアウトと前回の画面が戻ること。`wtm session stop work --json` の 1 行の JSON、`wtm session stop nope` が終了コード `2`、
-      `work` の pane の中で `wtm session stop work` を打つとサーバとその pane のシェルごと止まる（結果の行が出なくてもよい）こと、`wtm handoff --session work` の
+      `soda serve --session work`（`--port` 無し）で起動し直すと 7781 で待ち受け `soda: session work が前回使ったポート 7781 …` の行が出ること。
+      `work` を止めて `SODA_SESSION=work soda token reset` が `work` の token を作り直すこと、`SODA_SESSION=a/b soda serve` が何も作らずに
+      止まり終了コード `2` で案内に `SODA_SESSION` が出ること、`work` の pane で `echo $SODA_SESSION` が `work` を、既定の session の pane では空を出すこと。
+- [ ] `soda session stop`（20260927-session-stop。起動確認 `stopSmoke.js` で Linux の通しは確かめ済み。macOS は未検証。Linux・WSL2 の手順）：
+      `soda serve --session work --port 7781 --pane-history` を tmux の別の窓等で起動し、ブラウザで pane に何か表示してから、別の端末で
+      `soda session stop work` を打つ。`soda: stopped session work` が出て `echo $?` が `0`、起動した窓に
+      `soda: stop requested (soda session stop), shutting down` が出てプロンプトに戻ること、`soda session list` の `work` が `stopped` で、
+      もう一度の `soda session stop work` が `session work is not running` と終了コード `3` になることを確かめる。同じ引数で起動し直すと
+      レイアウトと前回の画面が戻ること。`soda session stop work --json` の 1 行の JSON、`soda session stop nope` が終了コード `2`、
+      `work` の pane の中で `soda session stop work` を打つとサーバとその pane のシェルごと止まる（結果の行が出なくてもよい）こと、`soda handoff --session work` の
       直後（引き継ぎの最中）に打つと「引き継ぎが終わってからもう一度」の案内（時機によっては入れ替わりの途中で `did not accept a stop request` の案内）で `1` になり、サーバは動き続けることも見る。
 - [ ] Windows の named pipe の権限限定（`AgentReportSocket`。design D5）：Unix の `chmod 0600` に
       相当する対策が Windows では未実装（既知の制約。同 work の decisions.md 参照）。Windows
@@ -423,27 +423,27 @@ pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` 
 
 ## WSL2（手元）
 
-Windows 上の WSL2 で `wtm serve` を動かす構成。`docs/tls-setup.md`「手順3（WSL2 のみ）：LAN・スマートフォンへ出す」
+Windows 上の WSL2 で `soda serve` を動かす構成。`docs/tls-setup.md`「手順3（WSL2 のみ）：LAN・スマートフォンへ出す」
 の設定を先に済ませておく。
 
-- [ ] WSL2 内で `wtm serve` を起動し、**同じ Windows（母艦）のブラウザ**から表示された `wtm: open http://127.0.0.1:7780/…`
+- [ ] WSL2 内で `soda serve` を起動し、**同じ Windows（母艦）のブラウザ**から表示された `soda: open http://127.0.0.1:7780/…`
       の URL で開ける（既定の NAT モードでもここは追加設定なしで届く。research.md F9.6）。token の扱いは「Linux」の
       最初の項目と同じ（初回だけ `#token=…` 付き。2 回目以降はログイン画面に token を入れる）。
 - [ ] 別のマシンからの TLS 接続（AC11）：下の「別のマシンからの TLS 接続（AC11）」の「WSL2」（mirrored モードか
       NAT＋portproxy のどちらか）。
-- [ ] `pane.cwd` の復元（AC18）を確認する：workspace を作り、`cd` してから `wtm serve` を再起動し、
+- [ ] `pane.cwd` の復元（AC18）を確認する：workspace を作り、`cd` してから `soda serve` を再起動し、
       `pwd` で同じディレクトリに戻ることを確認する（design「再起動後の復元」の「pane の cwd」：Linux は `/proc/<pid>/cwd`
       から追従するので WSL2 でも同じ経路のはず——ここは Windows ネイティブと違う点なので、両方で
       確かめる価値がある）。
 
 ## Windows ネイティブ（WSL2 の母艦の Windows で直接）
 
-WSL2 を経由せず、Windows 上で直接 `node.exe` を実行して `wtm serve` を動かす構成
+WSL2 を経由せず、Windows 上で直接 `node.exe` を実行して `soda serve` を動かす構成
 （`node-pty` は `1.2.0-beta.15`。ConPTY 専用——winpty は使わない。`package.json`）。PowerShell で、リポジトリの直下から
-`node packages/server/dist/main.js serve`（以下の `wtm` は「前提」の PowerShell の関数）で起動する。
+`node packages/server/dist/main.js serve`（以下の `soda` は「前提」の PowerShell の関数）で起動する。
 
-- [ ] `wtm serve` を起動し、表示された `wtm: open http://127.0.0.1:7780/…` の URL でログインし（token の扱いは「Linux」の
-      最初の項目と同じ）、シェル（既定は `powershell.exe`。`--shell` で変えられる。design「起動オプション（`wtm serve`）」）が
+- [ ] `soda serve` を起動し、表示された `soda: open http://127.0.0.1:7780/…` の URL でログインし（token の扱いは「Linux」の
+      最初の項目と同じ）、シェル（既定は `powershell.exe`。`--shell` で変えられる。design「起動オプション（`soda serve`）」）が
       実際に起動して入出力できる。
 - [ ] pane の cwd 追従と、新しく開く場所の「引き継ぐ」（20260921-new-terminal-cwd）を確認する：**Windows は前面のプロセスの cwd を
       読めない**ので、「いまの場所」は**シェルが OSC 7 で知らせた場所**だけ（herdr も部分対応。`[H]windows-beta.mdx:62-70`）。
@@ -452,7 +452,7 @@ WSL2 を経由せず、Windows 上で直接 `node.exe` を実行して `wtm serv
       workspace を作った場所、新しい workspace はサーバを起動した場所で開いていた）。プロンプトで OSC 7 を出すようにしたシェルでは
       `cd` した先で開くはず（`file://host/C:/…` の形を `C:\…` に直して使う。20260921-new-terminal-cwd の decisions D7。**実機では未検証**——確かめたらここを更新する）。
       設定を「ホーム」にした新しい tab が `%USERPROFILE%` で開くことも確かめる。
-- [ ] workspace の自動の名前（20260921-workspace-auto-label）：起動時に作る最初の workspace が、`wtm serve` を起動した場所の名前
+- [ ] workspace の自動の名前（20260921-workspace-auto-label）：起動時に作る最初の workspace が、`soda serve` を起動した場所の名前
       （リポジトリの直下から起動したならリポジトリの根の名前）になる。Windows の既定の `powershell.exe` では「引き継ぐ」が `cd` に追従
       しない（上の項目）ので、場所は設定の「新しく開く場所」で選ぶ：「ホーム」にして新しい workspace → `~`（ホームが git のリポジトリでなければ）。「指定した場所」に `C:\` を
       入れて新しい workspace → `C:\`（フォルダ名の無い根はパスそのもの）。「指定した場所」に大小を変えたホームのパス（例
@@ -468,38 +468,38 @@ WSL2 を経由せず、Windows 上で直接 `node.exe` を実行して `wtm serv
       該当しないプロセスを起動しても誤検出しない／該当するプロセス名なら検出されることを確認する
       （`ProcessMatcher` の Windows 実装は `/proc` の代わりに自前でプロセス走査する。
       `packages/server/src/platform/WindowsProcessInspector.ts`）。
-- [ ] 同じ状態ディレクトリの二重起動を止める（`wtm.lock`。D103）：上の `wtm serve` を動かしたまま、別の PowerShell の窓で
-      `wtm serve --port 7781` を実行し（`wtm` の関数は定義した窓でしか使えない。`$PROFILE` に書いていなければ、その窓でも
-      「前提」の `function wtm …` を実行してから）、続けて `$LASTEXITCODE` を見る。`wtm token reset` も同じく。期待：どちらも何も起動・作成
-      せずに止まり、`wtm: the state dir …\web-tn-multiplexer is already in use by another wtm (pid …)`（`token reset` は
-      `wtm: cannot reset the token: the state dir … is in use by a running wtm (pid …)`）が出て、`$LASTEXITCODE` が `2`。
-- [ ] 名前付き session（20260926-named-session。Windows ネイティブでは未検証）：`wtm serve --session work --port 7781` を
-      実行し、`wtm: session work（状態ディレクトリ: …\web-tn-multiplexer\sessions\work）` の行と token 付きの URL が出ること、
-      別の PowerShell の窓で `wtm session list` を実行して `work` の行の status が `running`、行末に `(pid …)` と出ることを確かめる。
-      続けて同じ窓で `wtm session stop work` を実行すると、Windows では非対応の案内が出て `$LASTEXITCODE` が `2`、`work` の wtm は
-      動き続けること（`wtm session list` で `running` のまま。20260927-session-stop）。`wtm serve --session con`
-      と `wtm serve --session "work."` は何も作らずに止まり `$LASTEXITCODE` が `2`。`work` の wtm を Ctrl+C で止めてから
-      `wtm session delete work` を実行し、`…\sessions\work` が消えること（`$LASTEXITCODE` が `0`）、既定の session
-      （`wtm serve`）の workspace・token がそのままであることを確かめる。
-- [ ] 名前付き session の画面・ポートの記憶・`WTM_SESSION`（20260926-named-session-ui。E2E・実機のブラウザでは未検証）：
-      既定の session（`wtm serve`）と `wtm serve --session work --port 7781` を並行して起動し、ブラウザで両方にログインする。
+- [ ] 同じ状態ディレクトリの二重起動を止める（`soda.lock`。D103）：上の `soda serve` を動かしたまま、別の PowerShell の窓で
+      `soda serve --port 7781` を実行し（`soda` の関数は定義した窓でしか使えない。`$PROFILE` に書いていなければ、その窓でも
+      「前提」の `function soda …` を実行してから）、続けて `$LASTEXITCODE` を見る。`soda token reset` も同じく。期待：どちらも何も起動・作成
+      せずに止まり、`soda: the state dir …\sodashitsu is already in use by another soda (pid …)`（`token reset` は
+      `soda: cannot reset the token: the state dir … is in use by a running soda (pid …)`）が出て、`$LASTEXITCODE` が `2`。
+- [ ] 名前付き session（20260926-named-session。Windows ネイティブでは未検証）：`soda serve --session work --port 7781` を
+      実行し、`soda: session work（状態ディレクトリ: …\sodashitsu\sessions\work）` の行と token 付きの URL が出ること、
+      別の PowerShell の窓で `soda session list` を実行して `work` の行の status が `running`、行末に `(pid …)` と出ることを確かめる。
+      続けて同じ窓で `soda session stop work` を実行すると、Windows では非対応の案内が出て `$LASTEXITCODE` が `2`、`work` の soda は
+      動き続けること（`soda session list` で `running` のまま。20260927-session-stop）。`soda serve --session con`
+      と `soda serve --session "work."` は何も作らずに止まり `$LASTEXITCODE` が `2`。`work` の soda を Ctrl+C で止めてから
+      `soda session delete work` を実行し、`…\sessions\work` が消えること（`$LASTEXITCODE` が `0`）、既定の session
+      （`soda serve`）の workspace・token がそのままであることを確かめる。
+- [ ] 名前付き session の画面・ポートの記憶・`SODA_SESSION`（20260926-named-session-ui。E2E・実機のブラウザでは未検証）：
+      既定の session（`soda serve`）と `soda serve --session work --port 7781` を並行して起動し、ブラウザで両方にログインする。
       `work` のタブのタイトルが `<ホスト名> [work]: …` でサイドバーの最上段に `session: work ⇄` が出ること、既定の session のタブにも
       `session: default ⇄` が出ること、**片方にログインしても他方がログアウトされない**こと（再読み込みしてもログイン画面にならない）を
       確かめる。`session: default ⇄` を押して一覧を開き、`work` を Enter で選ぶと新しいタブで `http://127.0.0.1:7781/` が開くこと、Esc で
-      閉じるとフォーカスがボタンに戻ることを確かめる。`work` を Ctrl+C で止め、`wtm serve --session work`（`--port` 無し）で起動し直すと
-      7781 で待ち受け「前回使ったポート」の行が出ること。PowerShell で `$env:WTM_SESSION="work"; wtm token reset` が `work` の token を
-      作り直すこと（`work` を止めてから）、`$env:WTM_SESSION="a/b"; wtm serve` が何も作らずに止まり `$LASTEXITCODE` が `2` で案内に
-      `WTM_SESSION` が出ること、`work` の pane で `echo $env:WTM_SESSION` が `work` を出すこと。終わったら `Remove-Item Env:WTM_SESSION`。
-- [ ] 落ちて残ったロックを取り直す（pid の生死の判定。D103）：`Get-Content "$env:LOCALAPPDATA\web-tn-multiplexer\wtm.lock"`
-      で中身（1 行目が wtm の pid、2 行目がホスト名）を見て、`Stop-Process -Id <1 行目の pid> -Force` で wtm を強制終了する
-      （落ちたときと同じく、ロックを消さずに終わる）。`Test-Path "$env:LOCALAPPDATA\web-tn-multiplexer\wtm.lock"` が `True`
-      のままであることを確かめてから、もう一度 `wtm serve`。期待：`already in use` にならずに起動し（ロックの pid がもう動いて
+      閉じるとフォーカスがボタンに戻ることを確かめる。`work` を Ctrl+C で止め、`soda serve --session work`（`--port` 無し）で起動し直すと
+      7781 で待ち受け「前回使ったポート」の行が出ること。PowerShell で `$env:SODA_SESSION="work"; soda token reset` が `work` の token を
+      作り直すこと（`work` を止めてから）、`$env:SODA_SESSION="a/b"; soda serve` が何も作らずに止まり `$LASTEXITCODE` が `2` で案内に
+      `SODA_SESSION` が出ること、`work` の pane で `echo $env:SODA_SESSION` が `work` を出すこと。終わったら `Remove-Item Env:SODA_SESSION`。
+- [ ] 落ちて残ったロックを取り直す（pid の生死の判定。D103）：`Get-Content "$env:LOCALAPPDATA\sodashitsu\soda.lock"`
+      で中身（1 行目が soda の pid、2 行目がホスト名）を見て、`Stop-Process -Id <1 行目の pid> -Force` で soda を強制終了する
+      （落ちたときと同じく、ロックを消さずに終わる）。`Test-Path "$env:LOCALAPPDATA\sodashitsu\soda.lock"` が `True`
+      のままであることを確かめてから、もう一度 `soda serve`。期待：`already in use` にならずに起動し（ロックの pid がもう動いて
       いないので取り直す）、ロックの 1 行目が新しい pid になる。ブラウザで開き直すと構成が戻る。強制終了なので、pane のシェル
       （`powershell.exe`）・`conhost.exe` が残っていないかもタスク マネージャーで見る（上の node-pty の項目と同じ見方）。
-- [ ] コンソールを閉じたときの終わり方（D103）：`wtm serve` を動かしている PowerShell の窓（Windows Terminal ならそのタブ）を
-      右上の × で閉じる。10 秒ほど待ってから、新しい PowerShell で `Test-Path "$env:LOCALAPPDATA\web-tn-multiplexer\wtm.lock"`。
-      期待：`False`——wtm が閉じる合図（Node では SIGHUP）を受けて `session.json` を書き、ロックを放してから終わった（Windows は
-      コンソールを閉じると、約 10 秒後にプロセスを強制的に終わらせる）。その新しい窓で（`wtm` の関数を定義してから）起動し直し、
+- [ ] コンソールを閉じたときの終わり方（D103）：`soda serve` を動かしている PowerShell の窓（Windows Terminal ならそのタブ）を
+      右上の × で閉じる。10 秒ほど待ってから、新しい PowerShell で `Test-Path "$env:LOCALAPPDATA\sodashitsu\soda.lock"`。
+      期待：`False`——soda が閉じる合図（Node では SIGHUP）を受けて `session.json` を書き、ロックを放してから終わった（Windows は
+      コンソールを閉じると、約 10 秒後にプロセスを強制的に終わらせる）。その新しい窓で（`soda` の関数を定義してから）起動し直し、
       ブラウザで開くと、閉じる前の構成が戻る。
       `True` なら片付けが間に合わずに終わっている（次の起動はロックを取り直すので使えるが、結果として控えておく）。
 - [ ] 別のマシンからの TLS 接続（AC11）：下の「別のマシンからの TLS 接続（AC11）」の「Windows ネイティブ」。
@@ -516,45 +516,45 @@ AC16 の 3 環境それぞれで AC11 を確かめる（「Linux」「WSL2」「
 
 | | Linux・WSL2（bash） | Windows ネイティブ（PowerShell） |
 |---|---|---|
-| 証明書（`wtm.pem`・`wtm-key.pem`） | `~/wtm-cert` | `$HOME\wtm-cert` |
-| LAN 用の状態ディレクトリ（`--state-dir`） | `~/.local/state/wtm-lan` | `$env:LOCALAPPDATA\wtm-lan` |
+| 証明書（`soda.pem`・`soda-key.pem`） | `~/soda-cert` | `$HOME\soda-cert` |
+| LAN 用の状態ディレクトリ（`--state-dir`） | `~/.local/state/soda-lan` | `$env:LOCALAPPDATA\soda-lan` |
 
-LAN 用の状態ディレクトリを手元用（既定の状態ディレクトリ）と分けるので、手元用の `wtm serve` を止めずに並行して動かせる
-（同じ状態ディレクトリの 2 つ目は `already in use by another wtm` で起動しない）。**token の表示は、その状態ディレクトリで
-初めて起動したときの 1 回だけ**：初回は `wtm: open https://…/#token=…` の行が出て、開くとそのままログインする（token を
-控えておく）。2 回目以降（同じ環境で起動し直す・WSL2 で mirrored の後に NAT＋portproxy を試す等）は `wtm: open https://…/`
-と「token を忘れた場合は…」の行になるので、開いたログイン画面に控えた token を入れる。控えていなければ、その `wtm serve` を
-止めて `wtm token reset --state-dir ~/.local/state/wtm-lan`（Windows ネイティブは
-`wtm token reset --state-dir "$env:LOCALAPPDATA\wtm-lan"`）で作り直し（`wtm: new token: …` と出る）、起動し直す。
+LAN 用の状態ディレクトリを手元用（既定の状態ディレクトリ）と分けるので、手元用の `soda serve` を止めずに並行して動かせる
+（同じ状態ディレクトリの 2 つ目は `already in use by another soda` で起動しない）。**token の表示は、その状態ディレクトリで
+初めて起動したときの 1 回だけ**：初回は `soda: open https://…/#token=…` の行が出て、開くとそのままログインする（token を
+控えておく）。2 回目以降（同じ環境で起動し直す・WSL2 で mirrored の後に NAT＋portproxy を試す等）は `soda: open https://…/`
+と「token を忘れた場合は…」の行になるので、開いたログイン画面に控えた token を入れる。控えていなければ、その `soda serve` を
+止めて `soda token reset --state-dir ~/.local/state/soda-lan`（Windows ネイティブは
+`soda token reset --state-dir "$env:LOCALAPPDATA\soda-lan"`）で作り直し（`soda: new token: …` と出る）、起動し直す。
 
 ### 共通の準備
 
 - [ ] サーバのマシン（WSL2 は WSL2 の中、Windows ネイティブは PowerShell）で、ブラウザが開く IP を SAN に入れた証明書を
       上の場所に作る（`docs/tls-setup.md`「手順1」）。WSL2 では SAN に**母艦の** LAN の IP を入れる（WSL の 172.x ではない）。
       - Linux・WSL2：`mkcert -install`、続けて
-        `mkdir -p ~/wtm-cert && cd ~/wtm-cert && mkcert -cert-file wtm.pem -key-file wtm-key.pem 192.168.1.50 localhost 127.0.0.1`
+        `mkdir -p ~/soda-cert && cd ~/soda-cert && mkcert -cert-file soda.pem -key-file soda-key.pem 192.168.1.50 localhost 127.0.0.1`
       - Windows ネイティブ：`mkcert -install`、続けて
-        `New-Item -ItemType Directory -Force "$HOME\wtm-cert" | Out-Null; Set-Location "$HOME\wtm-cert"; mkcert -cert-file wtm.pem -key-file wtm-key.pem 192.168.1.50 localhost 127.0.0.1`
+        `New-Item -ItemType Directory -Force "$HOME\soda-cert" | Out-Null; Set-Location "$HOME\soda-cert"; mkcert -cert-file soda.pem -key-file soda-key.pem 192.168.1.50 localhost 127.0.0.1`
 
-      期待：その場所に `wtm.pem`・`wtm-key.pem` ができる。
+      期待：その場所に `soda.pem`・`soda-key.pem` ができる。
 - [ ] 別のマシンに mkcert の CA（サーバのマシンで `mkcert -CAROOT` が示すディレクトリの `rootCA.pem` だけ。
       `rootCA-key.pem` は渡さない）を入れる。入れ方は OS・ブラウザごとに違う（`docs/tls-setup.md`「手順1」の mkcert の節：
       PC は `rootCA.pem` を置いたディレクトリを `CAROOT` に指定して `mkcert -install`、Firefox は独自の証明書ストア、iOS はプロファイルを
       入れてから「証明書信頼設定」でオン、Android は利用者の CA として入れる）。WSL2 では、母艦の Windows のブラウザ
       （AC9 で使う）にも同じように入れる（CA は WSL2 の中の mkcert が作ったもので、Windows の信頼ストアには入っていない）。
       期待：後の手順で証明書の警告が出ない（自己署名で代えるなら警告が出るので、例外を承認して進む）。
-- [ ] 証明書なしでは LAN へ出せないことを確かめる：`wtm serve --host 0.0.0.0 --port 8443`。
-      期待：`wtm: cannot bind to non-loopback host "0.0.0.0" without a certificate` で終わる（終了コード 2）。
+- [ ] 証明書なしでは LAN へ出せないことを確かめる：`soda serve --host 0.0.0.0 --port 8443`。
+      期待：`soda: cannot bind to non-loopback host "0.0.0.0" without a certificate` で終わる（終了コード 2）。
 
 ### Linux
 
 - [ ] ファイアウォールを動かしていれば 8443/tcp を開ける（`docs/tls-setup.md`「手順4」の「Linux（ufw・firewalld）」）。
       期待：`sudo ufw status`（または `sudo firewall-cmd --list-ports`）に 8443/tcp が並ぶ。
 - [ ] 起動する：
-      `wtm serve --host 0.0.0.0 --port 8443 --cert ~/wtm-cert/wtm.pem --key ~/wtm-cert/wtm-key.pem --state-dir ~/.local/state/wtm-lan`。
-      期待：`wtm: listening on 0.0.0.0 port 8443 (https)`、続けて `wtm: open https://localhost:8443/…` と
-      `wtm: open https://192.168.1.50:8443/…`（LAN の IPv4 ごと）の行が出る（初回だけ `#token=…` 付き。この節の冒頭）。
-- [ ] 別のマシンのブラウザで `wtm: open https://192.168.1.50:8443/…` の行の URL を開く。
+      `soda serve --host 0.0.0.0 --port 8443 --cert ~/soda-cert/soda.pem --key ~/soda-cert/soda-key.pem --state-dir ~/.local/state/soda-lan`。
+      期待：`soda: listening on 0.0.0.0 port 8443 (https)`、続けて `soda: open https://localhost:8443/…` と
+      `soda: open https://192.168.1.50:8443/…`（LAN の IPv4 ごと）の行が出る（初回だけ `#token=…` 付き。この節の冒頭）。
+- [ ] 別のマシンのブラウザで `soda: open https://192.168.1.50:8443/…` の行の URL を開く。
       期待：証明書の警告なしで開き、端末が表示される（初回の `#token=…` 付きの URL ならそのまま。2 回目以降の URL なら
       ログイン画面に token を入れてから）。
 - [ ] 平文では入れないことを確かめる：別のマシンで `http://192.168.1.50:8443/` を開く。期待：開けない（エラーの画面）。
@@ -569,13 +569,13 @@ mirrored モード（`docs/tls-setup.md`「方法A」）か NAT＋portproxy（�
 - [ ] `.wslconfig` に `networkingMode=mirrored` を書き、`wsl --shutdown` の後に WSL2 を起動し直す。
       期待：WSL2 の `ip addr` に母艦の LAN の IP（例 192.168.1.50）が見える。
 - [ ] Hyper-V ファイアウォールで 8443 を開ける（管理者の PowerShell。`docs/tls-setup.md`「手順4」の
-      「WSL2 の mirrored モード」）：`New-NetFirewallHyperVRule -Name "wtm-8443" -DisplayName "wtm (8443)" -Direction Inbound -VMCreatorId '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -Protocol TCP -LocalPorts 8443`。
-      期待：`Get-NetFirewallHyperVRule -Name "wtm-8443"` で規則が表示される。
+      「WSL2 の mirrored モード」）：`New-NetFirewallHyperVRule -Name "soda-8443" -DisplayName "soda (8443)" -Direction Inbound -VMCreatorId '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -Protocol TCP -LocalPorts 8443`。
+      期待：`Get-NetFirewallHyperVRule -Name "soda-8443"` で規則が表示される。
 - [ ] WSL2 で起動する：
-      `wtm serve --host 0.0.0.0 --port 8443 --cert ~/wtm-cert/wtm.pem --key ~/wtm-cert/wtm-key.pem --state-dir ~/.local/state/wtm-lan`。
-      期待：`wtm: open https://192.168.1.50:8443/…`（母艦の LAN の IP）の行が出る（初回だけ `#token=…` 付き。Windows の
+      `soda serve --host 0.0.0.0 --port 8443 --cert ~/soda-cert/soda.pem --key ~/soda-cert/soda-key.pem --state-dir ~/.local/state/soda-lan`。
+      期待：`soda: open https://192.168.1.50:8443/…`（母艦の LAN の IP）の行が出る（初回だけ `#token=…` 付き。Windows の
       仮想アダプタの 172.x 等の行も並ぶことがある）。
-- [ ] 別のマシンのブラウザで `wtm: open https://192.168.1.50:8443/…` の行の URL を開く。期待：警告なしで開き、端末が
+- [ ] 別のマシンのブラウザで `soda: open https://192.168.1.50:8443/…` の行の URL を開く。期待：警告なしで開き、端末が
       表示される（2 回目以降の URL ならログイン画面に token を入れてから）。
 - [ ] 下の「共通：AC1〜AC9 の一巡（別のマシンのブラウザで）」と「共通：AC10・AC13・AC14・AC18（AC16）」。
 
@@ -586,29 +586,29 @@ mirrored モード（`docs/tls-setup.md`「方法A」）か NAT＋portproxy（�
       （`172.29.160.5` は WSL2 のシェルの `ip addr show eth0` で見た WSL2 の IP に置き換える）。
       期待：`netsh interface portproxy show v4tov4` に 0.0.0.0:8443 → WSL2 の IP の 8443 が並ぶ。
 - [ ] Windows のファイアウォールで 8443 を開ける（`docs/tls-setup.md`「手順4」の「WSL2 の NAT＋portproxy」）：
-      `New-NetFirewallRule -DisplayName "wtm (8443)" -Direction Inbound -Protocol TCP -LocalPort 8443 -Action Allow -Profile Private`。
+      `New-NetFirewallRule -DisplayName "soda (8443)" -Direction Inbound -Protocol TCP -LocalPort 8443 -Action Allow -Profile Private`。
       期待：`Get-NetConnectionProfile` の LAN の接続が `Private`（パブリックなら規則が効かない）。
 - [ ] WSL2 で起動する：
-      `wtm serve --host 0.0.0.0 --port 8443 --cert ~/wtm-cert/wtm.pem --key ~/wtm-cert/wtm-key.pem --state-dir ~/.local/state/wtm-lan --origin https://192.168.1.50:8443`。
-      期待：最初の `wtm: open` の行が `https://192.168.1.50:8443/…`（`--origin` の URL。初回だけ `#token=…` 付き）。
+      `soda serve --host 0.0.0.0 --port 8443 --cert ~/soda-cert/soda.pem --key ~/soda-cert/soda-key.pem --state-dir ~/.local/state/soda-lan --origin https://192.168.1.50:8443`。
+      期待：最初の `soda: open` の行が `https://192.168.1.50:8443/…`（`--origin` の URL。初回だけ `#token=…` 付き）。
       続く 172.x の行は母艦からしか開けない。
-- [ ] 別のマシンのブラウザで、最初の `wtm: open` の行の URL を開く。期待：警告なしで開き、端末が表示される
+- [ ] 別のマシンのブラウザで、最初の `soda: open` の行の URL を開く。期待：警告なしで開き、端末が表示される
       （2 回目以降の URL ならログイン画面に token を入れてから）。
 - [ ] 下の「共通：AC1〜AC9 の一巡（別のマシンのブラウザで）」と「共通：AC10・AC13・AC14・AC18（AC16）」。
 
 ### Windows ネイティブ
 
-- [ ] PowerShell で起動する（`wtm` は「前提」の PowerShell の関数）：
-      `wtm serve --host 0.0.0.0 --port 8443 --cert "$HOME\wtm-cert\wtm.pem" --key "$HOME\wtm-cert\wtm-key.pem" --state-dir "$env:LOCALAPPDATA\wtm-lan"`。
-      期待：`wtm: listening on 0.0.0.0 port 8443 (https)` と `wtm: open https://192.168.1.50:8443/…` の行が出る
+- [ ] PowerShell で起動する（`soda` は「前提」の PowerShell の関数）：
+      `soda serve --host 0.0.0.0 --port 8443 --cert "$HOME\soda-cert\soda.pem" --key "$HOME\soda-cert\soda-key.pem" --state-dir "$env:LOCALAPPDATA\soda-lan"`。
+      期待：`soda: listening on 0.0.0.0 port 8443 (https)` と `soda: open https://192.168.1.50:8443/…` の行が出る
       （初回だけ `#token=…` 付き。`vEthernet (WSL)` 等の Hyper-V の内部スイッチのアドレスは出ない）。`EACCES` で止まったら、そのポートは
       除外ポート範囲にある（`netsh interface ipv4 show excludedportrange protocol=tcp` で確かめ、範囲外のポートにする）。
-      `EADDRINUSE` なら、WSL2 の portproxy（NAT＋portproxy の手順）や mirrored モードの WSL2 の wtm が同じポートを使っていないか
+      `EADDRINUSE` なら、WSL2 の portproxy（NAT＋portproxy の手順）や mirrored モードの WSL2 の soda が同じポートを使っていないか
       確かめる（`netsh interface portproxy show v4tov4`）。
 - [ ] 初回の起動で出る Windows のファイアウォールのダイアログ（node.exe）で「プライベート ネットワーク」を許可する
       （`docs/tls-setup.md`「手順4」の「Windows ネイティブ」）。期待：`Get-NetConnectionProfile` の LAN の接続が
       `Private` で、node.exe にブロックの規則が無い。
-- [ ] 別のマシンのブラウザで `wtm: open https://192.168.1.50:8443/…` の行の URL を開く。期待：警告なしで開き、端末
+- [ ] 別のマシンのブラウザで `soda: open https://192.168.1.50:8443/…` の行の URL を開く。期待：警告なしで開き、端末
       （PowerShell）が表示される（2 回目以降の URL ならログイン画面に token を入れてから）。
 - [ ] 大文字のホスト名で開ける（D101。ホスト名の大文字・小文字を区別せずに比べる）：PowerShell で `hostname` を実行し
       （例 `DESKTOP-ABC1234`）、サーバのマシン（か、その名前で届く別のマシン）のブラウザで `https://DESKTOP-ABC1234:8443/` を
@@ -639,7 +639,7 @@ mirrored モード（`docs/tls-setup.md`「方法A」）か NAT＋portproxy（�
       ならないかはここで、太さと色はサイドバーの入力待ち・作業中・待機中の印で見る）。
 - [ ] AC8：ブラウザを閉じて開き直す。期待：workspace・tab・pane の構成と画面（scrollback を含む）が戻る。サイドバーの幅と
       折りたたみも、閉じる前のまま戻る（20260921-herdr-settings-gaps）。あわせて、ページを
-      開いたまま `wtm serve` を止めて同じコマンドで起動し直す。期待：「再接続中…」が重なった後に消え、workspace・tab・pane の
+      開いたまま `soda serve` を止めて同じコマンドで起動し直す。期待：「再接続中…」が重なった後に消え、workspace・tab・pane の
       構成が戻り、各 pane に新しいシェルのプロンプトが出る（起動し直すと pane のシェルは新しく起動し直されるので、前の画面と
       scrollback は戻らない。design「再起動後の復元（AC18・D7）」）。打った文字とその出力が出る（同じページのまま繋ぎ直しても、表示中の
       pane の出力が届く。D107）。
@@ -663,15 +663,15 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
       切り離す。「再接続」で戻る）・`Ctrl+B` の二度押し（`Ctrl+B` そのものを端末へ送る。`cat -v` を動かして `Ctrl+B` を 2 回押すと
       `^B` が出る。ブラウザの側の処理なので、Windows ネイティブの PowerShell（`cat -v` が無く、PSReadLine が `Ctrl+B` に何も割り
       当てていないことがある）では確かめず、Linux・WSL2 で確かめれば足りる）・`e`（スクロールバックをサーバの `$EDITOR` で開く。
-      エディタを終えると元の pane へ戻る。Windows ネイティブは `VISUAL` か `EDITOR` を設定して `wtm serve` を起動したときだけ開き、
+      エディタを終えると元の pane へ戻る。Windows ネイティブは `VISUAL` か `EDITOR` を設定して `soda serve` を起動したときだけ開き、
       どちらも無ければ「スクロールバックをエディタで開けませんでした」のトーストが出るのが正しい。20260926-edit-scrollback。
       「未対応（後続: …）」と出るキーはもう無い）。`s` は設定を開く。
 - [ ] 独自コマンド（20260927-custom-command-keys。Linux・WSL2 で確かめれば足りる。Windows ネイティブの `cmd.exe` の引用は未検証）：
-      `docs/custom-commands.md` の例（`popup` の `scratch`〔`exec "${SHELL:-sh}"`〕・`pane` の `htop`・`shell` の `touch-ok`〔`touch /tmp/wtm-cmd-ok`〕）を
+      `docs/custom-commands.md` の例（`popup` の `scratch`〔`exec "${SHELL:-sh}"`〕・`pane` の `htop`・`shell` の `touch-ok`〔`touch /tmp/soda-cmd-ok`〕）を
       `commands.json` に書き（`chmod 600`）、`prefix+shift+r` で読み直す。`prefix+s` の節「キー」の群「独自コマンド」に 3 つが出て、
       それぞれにキーを割り当てられる。期待：popup のキーで画面の中央に浮いた端末が開き、`Esc`・`ctrl+b` も popup のシェルに届き
       （下の pane・prefix は反応しない）、`exit` で閉じて元の pane にフォーカスが戻る。見出しの × でも閉じる。`pane` のキーで拡大表示の
-      htop が開き、`q` で閉じると元の pane・拡大表示に戻る。`shell` のキーで「走らせました」と出て `/tmp/wtm-cmd-ok` ができる。
+      htop が開き、`q` で閉じると元の pane・拡大表示に戻る。`shell` のキーで「走らせました」と出て `/tmp/soda-cmd-ok` ができる。
       `chmod 666 commands.json` にして読み直すと「書き込めます」の理由のトーストが出て群が案内に変わる。
 - [ ] AC14：マウスで、pane・tab・サイドバーの行のクリックで移る（M1）・pane の境界のドラッグ（M2）・右クリックのメニュー（M3。
       pane・pane の枠・tab・サイドバーの workspace）・文字を選ぶとコピーされ「コピーしました」と出る（M4）・ダブルクリックで単語を
@@ -688,7 +688,7 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
 - [ ] テーマ（20260921-theme-settings）：**macOS のブラウザ（Safari・Chrome）と Firefox で**、「Linux（CI・手元）」の手元の項目の
       「テーマ」「OS の明暗に合わせる」を行う（Chromium 以外のブラウザが描く入力欄の枠とフォーカスの枠・macOS の `<select>` の操作は、自動の
       テストで確かめていない）。
-- [ ] AC18：workspace・tab を作って名前を付け、分割し、pane で `cd` してから、`wtm serve` を Ctrl+C で止めて同じコマンドで
+- [ ] AC18：workspace・tab を作って名前を付け、分割し、pane で `cd` してから、`soda serve` を Ctrl+C で止めて同じコマンドで
       起動し直し、ブラウザで開き直す。期待：構成・名前・レイアウト・フォーカスが戻り、Linux・WSL2 では `pwd` が `cd` した場所に
       なる（Windows ネイティブの cwd は「Windows ネイティブ（WSL2 の母艦の Windows で直接）」の cwd の項目の制約のとおり）。
 
@@ -696,13 +696,13 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
 
 別のマシンのブラウザ（HTTPS）で行う。自動のテストはサーバの受け取り・保存と、ブラウザの部品を偽のクリップボードで確かめただけで、
 **実物のブラウザのクリップボード・許可の画面・本物のエージェントでは確かめていない**。画像は `<状態ディレクトリ>/clipboard-images/`
-（既定の状態ディレクトリは Linux・macOS で `${XDG_STATE_HOME:-~/.local/state}/web-tn-multiplexer`、Windows ネイティブで `%LOCALAPPDATA%\web-tn-multiplexer`。
+（既定の状態ディレクトリは Linux・macOS で `${XDG_STATE_HOME:-~/.local/state}/sodashitsu`、Windows ネイティブで `%LOCALAPPDATA%\sodashitsu`。
 名前付き session は `sessions/<名前>/` の下）に置かれる。
 **状態ディレクトリは自分だけが書ける場所に置く**（`--state-dir` を他人も書ける場所にすると、画像のディレクトリを確かめてから書くまでの間に
 差し替えられうる。decisions D9）。
 
 - [ ] Chromium（Chrome・Edge）：スクリーンショットをクリップボードに取り、pane で `cat -v` を動かして `Ctrl+V` を押す。期待：初めてなら
-      「クリップボードの表示」の許可の画面が出る（2 秒以内に答えないと、その回は画像無しとして `^V` が送られる——許可してからもう一度 `Ctrl+V`）。許可すると `^[[200~/…/clipboard-images/wtm-image-….png^[[201~` ではなく（`cat -v` は
+      「クリップボードの表示」の許可の画面が出る（2 秒以内に答えないと、その回は画像無しとして `^V` が送られる——許可してからもう一度 `Ctrl+V`）。許可すると `^[[200~/…/clipboard-images/soda-image-….png^[[201~` ではなく（`cat -v` は
       bracketed paste を有効にしないので）パスがそのまま出る。サーバでそのファイルが画像として開け、Linux・macOS・WSL2 では `ls -l` で `-rw-------`、ディレクトリは `drwx------`（Windows ネイティブでは
       権限を絞らず、利用者のディレクトリの権限に依る）。
 - [ ] 同じく、クリップボードにテキストだけがあるとき・許可を拒否したとき：`Ctrl+V` がそのまま届く。端末の行の規律は `Ctrl+V` を「次の 1 文字をそのまま通す」に
@@ -722,19 +722,19 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
 
 どちらもこの検証環境では実機で確かめていない（`docs/tls-setup.md` の手順は公式の docs に合わせて書いた）。使うなら、最後に
 「共通：AC1〜AC9 の一巡（別のマシンのブラウザで）」を行う。**先に、手元用（127.0.0.1:7780・既定の状態ディレクトリ）と、この節の
-AC11 の LAN 用（8443・`~/.local/state/wtm-lan`）の `wtm serve` を止めておく**——下の 2 つはポート 7780 と `~/.local/state/wtm-lan`
-を使うので、止めずに起動すると、同じ状態ディレクトリは `already in use by another wtm`（終了コード 2）、同じポートは `EADDRINUSE`
-（`--host 0.0.0.0` の 7780 も、127.0.0.1 の 7780 と重なる）で起動しない。`~/.local/state/wtm-lan` は 2 回目以降の起動なので、
+AC11 の LAN 用（8443・`~/.local/state/soda-lan`）の `soda serve` を止めておく**——下の 2 つはポート 7780 と `~/.local/state/soda-lan`
+を使うので、止めずに起動すると、同じ状態ディレクトリは `already in use by another soda`（終了コード 2）、同じポートは `EADDRINUSE`
+（`--host 0.0.0.0` の 7780 も、127.0.0.1 の 7780 と重なる）で起動しない。`~/.local/state/soda-lan` は 2 回目以降の起動なので、
 ログイン画面に控えた token を入れる。
 
 - [ ] Tailscale：`docs/tls-setup.md`「tailscale cert（Tailscale ネットワーク内。Let's Encrypt 由来）」の手順で、鍵の権限の方法1か2の
-      とおりに証明書を作り、`wtm serve --host 0.0.0.0 --port 7780 --cert <名前>.crt --key <名前>.key --origin https://<machine>.<tailnet>.ts.net:7780 --state-dir ~/.local/state/wtm-lan`
-      で起動する。期待：`cannot read --key` で止まらず、最初の `wtm: open` の行が `https://<machine>.<tailnet>.ts.net:7780/…`。
+      とおりに証明書を作り、`soda serve --host 0.0.0.0 --port 7780 --cert <名前>.crt --key <名前>.key --origin https://<machine>.<tailnet>.ts.net:7780 --state-dir ~/.local/state/soda-lan`
+      で起動する。期待：`cannot read --key` で止まらず、最初の `soda: open` の行が `https://<machine>.<tailnet>.ts.net:7780/…`。
       tailnet の別の端末でその URL を開くと、証明書の警告なしで開き、ログインできる。
-- [ ] リバースプロキシ：`docs/tls-setup.md`「リバースプロキシの後ろに置く」の nginx の例のとおりにプロキシを置き、wtm を
-      `wtm serve --host 127.0.0.1 --port 7780 --origin https://wtm.example.com --state-dir ~/.local/state/wtm-lan` で動かす。期待：
-      `https://wtm.example.com/` でログインでき、端末が出て入力できる。何も打たずに 2 分ほど置いてから打っても、すぐに届く（途中で
-      「再接続中…」が出ない。`/ws` の `proxy_read_timeout` が効いている）。`~/.local/state/wtm-lan/server.log` に `origin rejected`
+- [ ] リバースプロキシ：`docs/tls-setup.md`「リバースプロキシの後ろに置く」の nginx の例のとおりにプロキシを置き、soda を
+      `soda serve --host 127.0.0.1 --port 7780 --origin https://soda.example.com --state-dir ~/.local/state/soda-lan` で動かす。期待：
+      `https://soda.example.com/` でログインでき、端末が出て入力できる。何も打たずに 2 分ほど置いてから打っても、すぐに届く（途中で
+      「再接続中…」が出ない。`/ws` の `proxy_read_timeout` が効いている）。`~/.local/state/soda-lan/server.log` に `origin rejected`
       が出ない（出るなら、プロキシが `Host` を書き換えていないか。同じ節の `Host` の項目）。
 
 ### うまくいかないとき
@@ -742,7 +742,7 @@ AC11 の LAN 用（8443・`~/.local/state/wtm-lan`）の `wtm serve` を止め�
 - **ログインが 403 で断られる**（Origin の不一致）：ログイン画面に「このページのアドレス（…）からのログインを、サーバが
   許可していません」と、写せる形の `--origin <このページの Origin>` の行が出る——その行を今の起動オプションに加えて起動し直す
   （サーバのログにも `origin rejected` が出る。`docs/tls-setup.md`「手順2：Origin の許可（別マシンから繋ぐ場合の注意）」）。
-  この拒否は token とは関係ない（token はまだ確かめていない）ので、`wtm token reset` はしない。
+  この拒否は token とは関係ない（token はまだ確かめていない）ので、`soda token reset` はしない。
 - **ログイン済みのまま、端末の画面に「接続できません（このアドレスは許可されていません）」の枠が出る**（D106・D107）：ログイン
   （Cookie）は有効だが、このページのアドレスをサーバが許可していない（ページを開くときの確認 `/api/session` と WebSocket の `/ws`
   がどちらも 403。`--origin` で許可していた名前で開いたまま `--origin` を付けずに起動し直した・同じ名前の別のポート（転送した
@@ -760,7 +760,7 @@ AC11 の LAN 用（8443・`~/.local/state/wtm-lan`）の `wtm serve` を止め�
 - **開けない（タイムアウト）** ならファイアウォール（`docs/tls-setup.md`「手順4：ファイアウォール（構成ごと）」）。**証明書の警告**
   なら SAN と CA（「手順1：証明書を用意する」）。
 - **token を 1 分以内に 5 回間違えた**：その接続元からのログインが最大 1 分（1 時間に 20 回に達したら最大 1 時間）429 で断られる（画面にも
-  「ログインの失敗が続いたため、…」と出る。この間は正しい token でも入れない。wtm の再起動で数え直し。portproxy・リバース
+  「ログインの失敗が続いたため、…」と出る。この間は正しい token でも入れない。soda の再起動で数え直し。portproxy・リバース
   プロキシの後ろでは全員で共有。`docs/tls-setup.md`「リバースプロキシの後ろに置く」）。
 - **画面の下に短く出る通知（エラー）は日本語**で、何が起きたかを示す（D107）。たとえば 1 回で 1MB を超える貼り付けは
   「送った内容をサーバが受け付けませんでした（1 回の貼り付けが 1MB を超えた等）。その分は端末に届いていません。」——分けて貼る。
@@ -808,7 +808,7 @@ AC11 の LAN 用（8443・`~/.local/state/wtm-lan`）の `wtm serve` を止め�
 - [ ] ログイン画面の 2——失敗の続きすぎ：1 分以内に、違う token（1 文字等の短い誤りでよい）を続けて計 5 回入れた後の 6 回目
       （数えるのは接続元ごとの 1 分の間の失敗）。期待：「ログインの失敗が続いたため、
       サーバがログインを一時的に止めています（この間は正しい token でも入れません。…）」。1 分ほど待ってから次へ（待たずに
-      進むなら、wtm を起動し直すと数え直しになる）。
+      進むなら、soda を起動し直すと数え直しになる）。
 - [ ] ログイン画面の 3——サーバが止まっている：サーバを止めて（Ctrl+C）から「ログイン」。期待：「サーバに接続できません。…」。
       起動し直す。
 - [ ] ログイン画面の 4——ログインできる：正しい token（32 文字。PC の画面を見ながら打つ）を入れる。期待：「接続中…」が出て
@@ -897,7 +897,7 @@ p95 50ms 以内。大量出力（ビルドログ等）が流れる pane があ�
 計測のコマンド（Linux か WSL2 の、リポジトリの直下で）：
 
 ```sh
-pnpm --filter @wtm/e2e exec playwright test performance agent-detection --headed
+pnpm --filter @sodashitsu/e2e exec playwright test performance agent-detection --headed
 ```
 
 - `performance`・`agent-detection` は spec の絞り込み（Playwright の引数はファイルのパスに対する正規表現で、一致した spec だけが
@@ -912,7 +912,7 @@ pnpm --filter @wtm/e2e exec playwright test performance agent-detection --headed
   ソフトウェアの GL。GPU の名前（NVIDIA・AMD・Intel 等）なら GPU）：
 
   ```sh
-  pnpm --filter @wtm/e2e exec node -e "import('@playwright/test').then(async ({ chromium }) => { const b = await chromium.launch({ headless: false }); const p = await b.newPage(); console.log(await p.evaluate(() => { const g = document.createElement('canvas').getContext('webgl2'); return g.getParameter(g.getExtension('WEBGL_debug_renderer_info').UNMASKED_RENDERER_WEBGL); })); await b.close(); })"
+  pnpm --filter @sodashitsu/e2e exec node -e "import('@playwright/test').then(async ({ chromium }) => { const b = await chromium.launch({ headless: false }); const p = await b.newPage(); console.log(await p.evaluate(() => { const g = document.createElement('canvas').getContext('webgl2'); return g.getParameter(g.getExtension('WEBGL_debug_renderer_info').UNMASKED_RENDERER_WEBGL); })); await b.close(); })"
   ```
 
   WSL2 の Chromium はこれが `SwiftShader` になることがある（このサンドボックスも WSL2 で `SwiftShader`）。その場合、計測の値は
@@ -976,11 +976,11 @@ pnpm --filter @wtm/e2e exec playwright test performance agent-detection --headed
 確かめる途中で出会っても、不具合ではなく今の版の限界として扱うもの（直すなら後続の work）。herdr との機能の差と、確かめずに
 見送った項目は `docs/herdr-parity.md`「未検証のまま見送った項目」。
 
-- **更新時の引き継ぎ（`wtm handoff`）**：Windows は非対応、macOS は未検証。引き継いだ pane のシェルは終わるとサーバが終わるまで
+- **更新時の引き継ぎ（`soda handoff`）**：Windows は非対応、macOS は未検証。引き継いだ pane のシェルは終わるとサーバが終わるまで
   `<defunct>` で残る。確かめの後に新しい版が起動の途中で落ちると pane のプロセスは終わる（`docs/tls-setup.md`「更新時の引き継ぎ」）。
 - **接続が黙って切れている間（TCP の半開き）に打った文字は、黙って消える**（decisions.md D95）。スマートフォンのスリープ・
   Wi-Fi とモバイル回線の切り替え・ノート PC のスリープ等で、接続が実際には切れているのにブラウザがまだ気づいていない間は、
-  「再接続中…」が出ず、打った文字はどこにも届かない（サーバからのエコーが無いので画面にも出ない）。wtm は生存確認
+  「再接続中…」が出ず、打った文字はどこにも届かない（サーバからのエコーが無いので画面にも出ない）。soda は生存確認
   （WebSocket の ping 等のハートビート）を送らないので、気づくのはブラウザ・OS が切断を検知したとき（数十秒以上かかることが
   ある）。検知した後は「再接続中…」と「つながるまで入力できません」を重ねて出し、その間の入力を止める（溜めて後から送ることも
   しない。切断の瞬間をまたいで打てば、先頭が欠けることはある）。**スリープから戻った直後に打った文字が出なければ、ページを
@@ -1021,7 +1021,7 @@ pnpm --filter @wtm/e2e exec playwright test performance agent-detection --headed
 - **macOS と Windows ネイティブでは、新しく開く場所の「引き継ぐ」と、workspace の名前・git の情報が `cd` に追従しない（シェルが OSC 7 で知らせない限り）**
   （20260921-new-terminal-cwd の design D2・D4）。前面のプロセスの cwd を読めるのは Linux（WSL2 を含む）だけで、ほかの OS では
   シェルが OSC 7 で知らせた場所を使い、知らせなければ**元の pane を開いた場所**で開く（以前より元の pane に近い）。Windows の既定の
-  `powershell.exe` は OSC 7 を出さない。macOS の zsh が出すかは `wtm serve` の起動のしかたによる（pane は `wtm serve` の環境変数を
+  `powershell.exe` は OSC 7 を出さない。macOS の zsh が出すかは `soda serve` の起動のしかたによる（pane は `soda serve` の環境変数を
   引き継ぐので、ターミナル.app から起動すると `TERM_PROGRAM` が渡り、`/etc/zshrc_Apple_Terminal` が出す。未検証）。`cd` した先で
   開きたければ、プロンプトで OSC 7 を出すようにするか、設定の「新しく開く場所」を「指定した場所」にする。確かめ方は「Windows ネイティブ
   （WSL2 の母艦の Windows で直接）」の cwd の項目。workspace の名前と git の情報（20260926-workspace-label-follow-cwd）も同じ「いまの場所」を使うので、

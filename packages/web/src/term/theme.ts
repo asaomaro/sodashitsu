@@ -1,4 +1,4 @@
-import { DEFAULT_THEME, type TerminalPalette } from "@wtm/protocol";
+import { DEFAULT_THEME, type TerminalPalette } from "@sodashitsu/protocol";
 import type { ITheme } from "@xterm/xterm";
 
 const ANSI_NAMES = [
@@ -21,7 +21,7 @@ const ANSI_NAMES = [
 ] as const;
 
 /**
- * 端末の配色（`@wtm/protocol` の `TERMINAL_PALETTES` の 1 つ。サーバの色の問い合わせの答えと同じ値）を xterm.js の `ITheme` に変換する。
+ * 端末の配色（`@sodashitsu/protocol` の `TERMINAL_PALETTES` の 1 つ。サーバの色の問い合わせの答えと同じ値）を xterm.js の `ITheme` に変換する。
  * 選択の色は配色が持つときだけ渡す（dracula は持たない＝xterm.js の既定のまま。20260921-theme-settings の design D2）。
  */
 export function toXtermTheme(palette: TerminalPalette = DEFAULT_THEME): ITheme {

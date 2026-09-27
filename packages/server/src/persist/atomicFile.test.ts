@@ -7,7 +7,7 @@ import { rm } from "node:fs/promises";
 describe("writeFileAtomic / readFileWithBackup", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await makeTempDir("wtm-atomic-");
+    dir = await makeTempDir("soda-atomic-");
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });

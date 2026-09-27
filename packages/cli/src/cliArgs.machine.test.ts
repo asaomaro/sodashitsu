@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { CliUsageError, MACHINE_USAGE_LINE, parseArgs } from "./cliArgs.js";
 
-/** `wtmctl --machine <名前|id> <コマンド>`（20260927-multi-host-machines の T10）。 */
-const ENV_IN_PANE = { WTM_PANE_ID: "p3", WTM_SERVER_URL: "http://127.0.0.1:7780" };
+/** `sodactl --machine <名前|id> <コマンド>`（20260927-multi-host-machines の T10）。 */
+const ENV_IN_PANE = { SODA_PANE_ID: "p3", SODA_SERVER_URL: "http://127.0.0.1:7780" };
 
-describe("wtmctl --machine（T10）", () => {
+describe("sodactl --machine（T10）", () => {
   it("前置きの値を opts.machine に入れ、pane の中でも自分の pane の歯止め（caller）を外す", () => {
     const cmd = parseArgs(["--machine", "Build box", "agent", "list"], ENV_IN_PANE);
     expect(cmd).toMatchObject({

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "../session.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 import { runPaneClose, runPaneCurrent, runPaneInput, runPaneRead, runPaneReportMetadata, runPaneRun, runPaneSplit } from "./pane.js";
 
 vi.mock("../withSession.js", () => ({ withSession: vi.fn() }));
@@ -14,7 +14,7 @@ const mockedPrintJson = vi.mocked(printJson);
 const mockedPrintLine = vi.mocked(printLine);
 const mockedPrintRaw = vi.mocked(printRaw);
 
-interface FakeClient extends WtmClient {
+interface FakeClient extends SodaClient {
   emitSnapshot(paneId: string, cols: number, rows: number, text: string): void;
   emitOutput(paneId: string, chunk: Uint8Array): void;
   emitClose(code: number, reason: string): void;
@@ -121,7 +121,7 @@ describe("pane split・pane current の対象（20260927-caller-pane-default）"
 
   it.each([
     ["別の origin", { ...IN_P3, url: "http://127.0.0.1:7781" }],
-    ["WTM_SERVER_URL が無い", OPTS],
+    ["SODA_SERVER_URL が無い", OPTS],
   ])("%s なら split・current は接続せずに caller_pane_unknown、明示の ID なら通る（AC9）", async (_label, opts) => {
     await expect(runPaneSplit({ kind: "pane-split", opts, target: CALLER, direction: "right", ratio: undefined }, store)).rejects.toMatchObject({
       code: "caller_pane_unknown",
@@ -291,7 +291,7 @@ describe("自分の pane の歯止め（20260926-agent-skill-file。AC11・AC13�
     ["pane input", () => runPaneInput({ kind: "pane-input", opts: IN_P1, paneId: "p1", text: "x" }, store)],
     ["pane run", () => runPaneRun({ kind: "pane-run", opts: IN_P1, paneId: "p1", command: "x" }, store)],
   ])("%s p1 は接続せずに self_target", async (_label, run) => {
-    await expect(run()).rejects.toMatchObject({ code: "self_target", message: expect.stringContaining("WTM_PANE_ID= wtmctl") });
+    await expect(run()).rejects.toMatchObject({ code: "self_target", message: expect.stringContaining("SODA_PANE_ID= sodactl") });
     expect(mockedWithSession).not.toHaveBeenCalled();
   });
 

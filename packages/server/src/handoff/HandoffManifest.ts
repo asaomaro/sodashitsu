@@ -13,7 +13,7 @@ import { writeFileAtomic } from "../persist/atomicFile.js";
 export const HANDOFF_FORMAT_VERSION = 1;
 export const HANDOFF_FILE_NAME = "handoff.json";
 /** この execve が書いた受け渡しかを確かめる値（古い版が execve の環境に入れる）。新しい版は最初に `process.env` から消す。 */
-export const HANDOFF_NONCE_ENV = "WTM_HANDOFF_NONCE";
+export const HANDOFF_NONCE_ENV = "SODA_HANDOFF_NONCE";
 /** 書いてからこれを過ぎた受け渡しは使わない。 */
 export const HANDOFF_MAX_AGE_MS = 60_000;
 
@@ -41,7 +41,7 @@ export interface HandoffManifest {
   format: typeof HANDOFF_FORMAT_VERSION;
   /** 要求の id（CLI の `status` の突き合わせ）。 */
   id: string;
-  /** 環境変数 `WTM_HANDOFF_NONCE` と同じ値。 */
+  /** 環境変数 `SODA_HANDOFF_NONCE` と同じ値。 */
   nonce: string;
   /** 書いたプロセス（= execve の後の自分）。 */
   pid: number;
@@ -121,7 +121,7 @@ function parsePane(v: unknown): HandoffPane | undefined {
 }
 
 function isScrollbackDir(dir: string): boolean {
-  return isAbsolute(dir) && normalize(dir) === dir && basename(dir).startsWith("wtm-scrollback-");
+  return isAbsolute(dir) && normalize(dir) === dir && basename(dir).startsWith("soda-scrollback-");
 }
 
 function parseEditor(v: unknown): HandoffScrollbackEditor | undefined {
@@ -131,7 +131,7 @@ function parseEditor(v: unknown): HandoffScrollbackEditor | undefined {
     !isString(e["paneId"]) ||
     !isString(e["sourcePaneId"]) ||
     !isString(e["dir"]) ||
-    // 引き継いだ後に消すことがあるので、スクロールバックの一時ディレクトリの形（`mkdtemp(<root>/wtm-scrollback-)`）以外は受け付けない。
+    // 引き継いだ後に消すことがあるので、スクロールバックの一時ディレクトリの形（`mkdtemp(<root>/soda-scrollback-)`）以外は受け付けない。
     !isScrollbackDir(e["dir"])
   )
     return undefined;

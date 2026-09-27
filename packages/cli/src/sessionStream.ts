@@ -1,5 +1,5 @@
 /**
- * `wtmctl pane observe` / `pane control` の純粋な部品（20260926-pane-observe-control。herdr の terminal session observe/control）。
+ * `sodactl pane observe` / `pane control` の純粋な部品（20260926-pane-observe-control。herdr の terminal session observe/control）。
  * 記録（stdout の NDJSON）の組み立て・stdin の行の切り出し・コマンドの検査。接続と終わり方は `commands/sessionStream.ts`。
  */
 

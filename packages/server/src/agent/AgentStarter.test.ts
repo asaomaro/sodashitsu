@@ -1,5 +1,5 @@
-import type { AgentInfo, AgentStartParams, Pane } from "@wtm/protocol";
-import { RpcError } from "@wtm/protocol";
+import type { AgentInfo, AgentStartParams, Pane } from "@sodashitsu/protocol";
+import { RpcError } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ForegroundJob } from "../platform/ProcessInspector.js";
 import type { InputModes } from "../terminal/Mirror.js";

@@ -1,4 +1,4 @@
-import { TERMINAL_PALETTES, type TerminalPalette } from "@wtm/protocol";
+import { TERMINAL_PALETTES, type TerminalPalette } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { NodePtyBackend } from "../pty/NodePtyBackend.js";
 import { LinuxProcessInspector } from "../platform/LinuxProcessInspector.js";

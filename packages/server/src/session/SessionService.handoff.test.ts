@@ -1,4 +1,4 @@
-import type { HostInfo } from "@wtm/protocol";
+import type { HostInfo } from "@sodashitsu/protocol";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -264,9 +264,9 @@ describe("スクロールバックのエディタの対応の受け渡し（AC14
   afterEach(async () => rm(root, { recursive: true, force: true }));
 
   it("引き継いだ pane の対応だけを登録し直し、それ以外の一時ディレクトリは消す。登録した pane を閉じると今までどおり消えて焦点が戻る", async () => {
-    root = await mkdtemp(join(tmpdir(), "wtm-handoff-editor-"));
-    const kept = await mkdtemp(join(root, "wtm-scrollback-"));
-    const dropped = await mkdtemp(join(root, "wtm-scrollback-"));
+    root = await mkdtemp(join(tmpdir(), "soda-handoff-editor-"));
+    const kept = await mkdtemp(join(root, "soda-scrollback-"));
+    const dropped = await mkdtemp(join(root, "soda-scrollback-"));
     const terminals = new Terminals();
     const service = makeService(terminals, root);
     const { adoptedPaneIds } = await service.restore(sessionData(), {
@@ -291,8 +291,8 @@ describe("スクロールバックのエディタの対応の受け渡し（AC14
   });
 
   it("引き継いだが既に閉じた pane の一時ディレクトリは消し、登録しない", async () => {
-    root = await mkdtemp(join(tmpdir(), "wtm-handoff-editor-"));
-    const dir = await mkdtemp(join(root, "wtm-scrollback-"));
+    root = await mkdtemp(join(tmpdir(), "soda-handoff-editor-"));
+    const dir = await mkdtemp(join(root, "soda-scrollback-"));
     const terminals = new Terminals();
     const service = makeService(terminals, root);
     const { adoptedPaneIds } = await service.restore(sessionData(), {
@@ -309,8 +309,8 @@ describe("スクロールバックのエディタの対応の受け渡し（AC14
   });
 
   it("一時ディレクトリの場所（tmpRoot の直下）でないものは、登録も削除もしない", async () => {
-    root = await mkdtemp(join(tmpdir(), "wtm-handoff-editor-"));
-    const other = await mkdtemp(join(tmpdir(), "wtm-scrollback-"));
+    root = await mkdtemp(join(tmpdir(), "soda-handoff-editor-"));
+    const other = await mkdtemp(join(tmpdir(), "soda-scrollback-"));
     try {
       const terminals = new Terminals();
       const service = makeService(terminals, root);
@@ -332,8 +332,8 @@ describe("スクロールバックのエディタの対応の受け渡し（AC14
   });
 
   it("引き継いだエディタの pane を閉じると、開く前の拡大表示に戻る", async () => {
-    root = await mkdtemp(join(tmpdir(), "wtm-handoff-editor-"));
-    const dir = await mkdtemp(join(root, "wtm-scrollback-"));
+    root = await mkdtemp(join(tmpdir(), "soda-handoff-editor-"));
+    const dir = await mkdtemp(join(root, "soda-scrollback-"));
     const terminals = new Terminals();
     const service = makeService(terminals, root);
     const data = sessionData() as unknown as {

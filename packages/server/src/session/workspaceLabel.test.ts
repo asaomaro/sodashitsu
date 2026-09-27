@@ -250,7 +250,7 @@ describe("本物の一時ディレクトリ", () => {
     run("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], { cwd });
 
   it("git のリポジトリのサブディレクトリ・worktree のサブディレクトリ・git の無いフォルダ", async () => {
-    base = await realpath(await mkdtemp(join(tmpdir(), "wtm-label-")));
+    base = await realpath(await mkdtemp(join(tmpdir(), "soda-label-")));
     const repoDir = join(base, "my-repo");
     await mkdir(join(repoDir, "src", "deep"), { recursive: true });
     await git(repoDir, "init", "-q", "-b", "main");

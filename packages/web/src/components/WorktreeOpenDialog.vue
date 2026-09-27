@@ -141,15 +141,15 @@ function onKeydown(ev: KeyboardEvent): void {
 
 <style scoped>
 .worktree-open-dialog {
-  border: 1px solid var(--wtm-menu-border, #44475a);
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-menu-fg, #f8f8f2);
+  border: 1px solid var(--soda-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
   border-radius: 4px;
   min-width: 32em;
   padding: 1em;
 }
 .worktree-open-dialog::backdrop {
-  background: var(--wtm-backdrop, rgba(0, 0, 0, 0.4));
+  background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
 .worktree-open-dialog-title {
   margin: 0 0 0.6em;
@@ -180,7 +180,7 @@ function onKeydown(ev: KeyboardEvent): void {
 .worktree-open-dialog-delete {
   flex: none;
   background: none;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   color: inherit;
   font-size: 0.85em;
@@ -188,18 +188,18 @@ function onKeydown(ev: KeyboardEvent): void {
   cursor: pointer;
 }
 .worktree-open-dialog-delete:hover {
-  background: var(--wtm-error-fg, #ff5555);
-  border-color: var(--wtm-error-fg, #ff5555);
-  color: var(--wtm-bg, #1e1f29);
+  background: var(--soda-error-fg, #ff5555);
+  border-color: var(--soda-error-fg, #ff5555);
+  color: var(--soda-bg, #1e1f29);
 }
 .worktree-open-dialog-item:hover {
-  background: var(--wtm-menu-hover-bg, #343746);
+  background: var(--soda-menu-hover-bg, #343746);
 }
 /* `:hover` と詳細度をそろえ、後に置くことで選択中を勝たせる（`Sidebar.vue` と同じ形。review ラウンド1）。
  * そろえないと `:hover`（0,2,0）が `-selected`（0,1,0）に勝ち、**選択中の行にポインタが乗ると
  * 選択色が消えて、↑↓ で選んで Enter という主操作でどれが確定されるか読めなくなる**。 */
 .worktree-open-dialog-item.worktree-open-dialog-item-selected {
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
 }
 .worktree-open-dialog-path {
   font-size: 0.85em;

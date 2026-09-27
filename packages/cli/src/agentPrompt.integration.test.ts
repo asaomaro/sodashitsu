@@ -1,14 +1,14 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { composeServerOnFreePort, type ComposedServer } from "@wtm/server";
+import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { runAgentPrompt, runAgentSendKeys } from "./commands/agent.js";
 import { runPaneRun } from "./commands/pane.js";
 import { FsSessionStore } from "./session.js";
 
 /**
- * `wtmctl agent prompt --wait` / `agent send-keys` を、実サーバ・実 PTY・実際の検出の上の偽のエージェントで確かめる
+ * `sodactl agent prompt --wait` / `agent send-keys` を、実サーバ・実 PTY・実際の検出の上の偽のエージェントで確かめる
  * （20260926-agent-prompt-send-keys requirements AC13）。偽のエージェントは node のスクリプトを argv[0]=claude で起動し
  * （検出は argv[0] で行う）、bracketed paste を有効にして、受け取ったバイト列と時刻を記録する。Enter（CR）を受けたら
  * OSC タイトルを claude の working（braille 接頭辞）にし、`WORKING_MS` 後に idle（✳）へ戻す。
@@ -63,7 +63,7 @@ async function readReceived(logPath: string): Promise<Received[]> {
     .map((r) => ({ t: r.t, bytes: Buffer.from(r.hex, "hex") }));
 }
 
-describe("wtmctl agent prompt / send-keys integration（偽のエージェント・実 PTY・実際の検出）", () => {
+describe("sodactl agent prompt / send-keys integration（偽のエージェント・実 PTY・実際の検出）", () => {
   let server: ComposedServer;
   let dir: string;
   let store: FsSessionStore;
@@ -72,7 +72,7 @@ describe("wtmctl agent prompt / send-keys integration（偽のエージェント
   let logPath: string;
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), "wtmctl-prompt-it-"));
+    dir = await mkdtemp(join(tmpdir(), "sodactl-prompt-it-"));
     server = await composeServerOnFreePort({
       host: "127.0.0.1",
       stateDir: join(dir, "state"),

@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
-import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@wtm/protocol";
+import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@sodashitsu/protocol";
 import { makeTempDir } from "./persist/atomicFile.js";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 
@@ -17,7 +17,7 @@ describe.skipIf(process.platform === "win32")("composeServer — 独自コマン
   });
 
   async function start(commands: unknown, opts: { session?: string } = {}) {
-    const base = await makeTempDir("wtm-compose-cmd-");
+    const base = await makeTempDir("soda-compose-cmd-");
     cleanups.push(() => rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const stateDir = opts.session ? join(base, "sessions", opts.session) : base;
     await mkdir(stateDir, { recursive: true, mode: 0o700 });
@@ -139,15 +139,15 @@ describe.skipIf(process.platform === "win32")("composeServer — 独自コマン
     );
   }, 30_000);
 
-  it("shell は pane の場所で裏に走り、WTM_ACTIVE_*・WTM_COMMAND_ID が入る（AC7・AC10）", async () => {
-    const outDir = await makeTempDir("wtm-compose-cmd-out-");
+  it("shell は pane の場所で裏に走り、SODA_ACTIVE_*・SODA_COMMAND_ID が入る（AC7・AC10）", async () => {
+    const outDir = await makeTempDir("soda-compose-cmd-out-");
     cleanups.push(() => rm(outDir, { recursive: true, force: true }));
     const out = join(outDir, "out.txt");
     const { server, request, paneId } = await start([
       {
         id: "note",
         type: "shell",
-        command: `printf "%s|%s|%s" "$WTM_COMMAND_ID" "$WTM_ACTIVE_PANE_ID" "\${WTM_PANE_ID-unset}" > '${out}'`,
+        command: `printf "%s|%s|%s" "$SODA_COMMAND_ID" "$SODA_ACTIVE_PANE_ID" "\${SODA_PANE_ID-unset}" > '${out}'`,
       },
     ]);
     expect((await request("command.run", { commandId: "note", paneId })).result).toEqual({

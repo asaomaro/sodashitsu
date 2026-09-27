@@ -137,7 +137,7 @@ export interface HostInfo {
   os: "linux" | "windows";
   windowsBuild: number | null;
   hostname: string;
-  /** 名前付き session のときだけ、その名前（`wtm serve --session <名前>`・`WTM_SESSION`。既定の session では項目ごと無い。20260926-named-session-ui）。 */
+  /** 名前付き session のときだけ、その名前（`soda serve --session <名前>`・`SODA_SESSION`。既定の session では項目ごと無い。20260926-named-session-ui）。 */
   sessionName?: string;
 }
 
@@ -167,9 +167,9 @@ export interface ServerSessionEntry {
 }
 
 /**
- * 保存した SSH のマシン（20260927-multi-host-machines。herdr の saved SSH machines）の、手元の `wtm serve` から見た接続の状態。
+ * 保存した SSH のマシン（20260927-multi-host-machines。herdr の saved SSH machines）の、手元の `soda serve` から見た接続の状態。
  * `connecting` は初回の試み、`online` は中継の最初の応答（版の確かめ）を受けた後、`reconnecting` は切れて繋ぎ直している間、
- * `attention` は利用者の対応が要る失敗（認証・ホスト鍵・リモートに `wtm` が無い・リモートの `wtm serve` が動いていない・版が合わない）。
+ * `attention` は利用者の対応が要る失敗（認証・ホスト鍵・リモートに `soda` が無い・リモートの `soda serve` が動いていない・版が合わない）。
  */
 export type MachineState = "connecting" | "online" | "reconnecting" | "attention";
 

@@ -1,4 +1,4 @@
-import type { MachineStatus, SessionSnapshot } from "@wtm/protocol";
+import type { MachineStatus, SessionSnapshot } from "@sodashitsu/protocol";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";

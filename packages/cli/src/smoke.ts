@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `wtmctl` の起動確認（design.md「対象範囲」T14、`aidev-50-test`「この work が新しい入口を足したなら
+ * `sodactl` の起動確認（design.md「対象範囲」T14、`aidev-50-test`「この work が新しい入口を足したなら
  * smokeCommands に1行足す」）。`packages/server/src/smoke.ts` と同じ形（実サーバを空きポートで起動し、
  * ビルド済みの成果物〔`dist/main.js`〕を**子プロセスとして実際に起動して**一巡を確かめる。exit 0=pass、
  * 例外・想定外の結果で exit 1）。
@@ -8,7 +8,7 @@
  * `packages/server/src/smoke.ts` との違い：あちらは生の WebSocket 接続でプロトコル層を確かめるのに対し、
  * こちらは `node dist/main.js <args>` を子プロセスとして呼び、**利用者が実際に打つコマンドそのもの**が
  * 動くかを確かめる（CLI 引数解析・セッションキャッシュ・終了コードまで含めた「最初の使える状態」）。
- * セッションキャッシュ（既定 `~/.wtmctl/session.json`）は `HOME`（Windows は `USERPROFILE`）を差し替えて
+ * セッションキャッシュ（既定 `~/.sodactl/session.json`）は `HOME`（Windows は `USERPROFILE`）を差し替えて
  * 一時ディレクトリへ逃がし、実行者の実際のキャッシュに触れない。
  */
 import { execFile, spawn, type ChildProcess } from "node:child_process";
@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { composeServer, NodePtyBackend, type ComposedServer } from "@wtm/server";
+import { composeServer, NodePtyBackend, type ComposedServer } from "@sodashitsu/server";
 
 async function getFreePort(): Promise<number> {
   return new Promise((resolvePromise, rejectPromise) => {
@@ -67,7 +67,7 @@ function hasOutputLine(text: string, marker: string): boolean {
 }
 
 /**
- * 20260926-pane-direct-connect: ビルド済みの `wtmctl pane attach` を本物の端末（node-pty の PTY）の中で動かし、
+ * 20260926-pane-direct-connect: ビルド済みの `sodactl pane attach` を本物の端末（node-pty の PTY）の中で動かし、
  * 大きさが PTY の大きさに揃うこと・打鍵の往復・大きさの追従・`Ctrl+B q` で終了コード 0・pane が残ることを確かめる。
  */
 async function smokeAttach(server: ComposedServer, paneId: string, url: string, env: NodeJS.ProcessEnv): Promise<void> {
@@ -95,7 +95,7 @@ async function smokeAttach(server: ComposedServer, paneId: string, url: string, 
   };
   try {
     await until(() => size() === "100x30" && out.includes("\x1b[?1049h"), `pane attach did not take the terminal size (pane ${size()}): ${JSON.stringify(out.slice(-300))}`);
-    const marker = `wtmctl-smoke-attach-${Date.now()}`;
+    const marker = `sodactl-smoke-attach-${Date.now()}`;
     pty.write(`echo ${marker}\r`);
     await until(() => hasOutputLine(out, marker), `pane attach did not round-trip the input: ${JSON.stringify(out.slice(-300))}`);
     pty.resize(90, 25);
@@ -164,7 +164,7 @@ const frameText = (lines: string[]): string =>
     .join("");
 
 /**
- * 20260926-pane-observe-control: ビルド済みの `wtmctl pane observe` と `pane control` を子プロセス（stdin/stdout はパイプ）として動かし、
+ * 20260926-pane-observe-control: ビルド済みの `sodactl pane observe` と `pane control` を子プロセス（stdin/stdout はパイプ）として動かし、
  * observe の最初の行が full の画面・control が pane の大きさを変えたこと（所有者になった）・stdin の NDJSON の入力の往復・release で終了コード 0・pane の close で observe が
  * pane_closed で終了コード 0 になり、どちらのプロセスも自分で終わることを確かめる。
  */
@@ -190,12 +190,12 @@ async function smokeStreams(server: ComposedServer, basePaneId: string, url: str
     const first = framesOf(obs.lines)[0]!;
     if (first.type !== "terminal.frame" || first.seq !== 1 || first.full !== true) throw new Error(`pane observe's first record is not a full frame: ${obs.lines[0]}`);
     await until(() => size() === "100x30" && ctl.lines.length > 0, `pane control did not take the size (pane ${size()}): ${ctl.stderr()}`);
-    const marker = `wtmctl-smoke-stream-${Date.now()}`;
+    const marker = `sodactl-smoke-stream-${Date.now()}`;
     control.stdin!.write(`${JSON.stringify({ type: "terminal.input", text: `echo ${marker}\r` })}\n`);
     control.stdin!.write('{"type":"terminal.bogus"}\n');
     await until(() => hasOutputLine(frameText(obs.lines), marker), `pane observe did not see the control input: ${JSON.stringify(frameText(obs.lines).slice(-300))}`);
     await until(() => hasOutputLine(frameText(ctl.lines), marker), "pane control did not see its own input");
-    if (!ctl.stderr().includes("wtmctl: pane control input ignored: unknown command type")) throw new Error(`pane control did not warn about the invalid line: ${ctl.stderr()}`);
+    if (!ctl.stderr().includes("sodactl: pane control input ignored: unknown command type")) throw new Error(`pane control did not warn about the invalid line: ${ctl.stderr()}`);
     control.stdin!.write('{"type":"terminal.release"}\n');
     await until(() => ctl.exitCode() !== null, "pane control did not exit after terminal.release");
     const ctlLast = framesOf(ctl.lines).at(-1);
@@ -217,8 +217,8 @@ async function smokeStreams(server: ComposedServer, basePaneId: string, url: str
 }
 
 async function main(): Promise<void> {
-  const serverStateDir = await mkdtemp(join(tmpdir(), "wtmctl-smoke-state-"));
-  const homeDir = await mkdtemp(join(tmpdir(), "wtmctl-smoke-home-"));
+  const serverStateDir = await mkdtemp(join(tmpdir(), "sodactl-smoke-state-"));
+  const homeDir = await mkdtemp(join(tmpdir(), "sodactl-smoke-home-"));
   console.log(`smoke(cli): temp server state dir ${serverStateDir}, sandboxed HOME ${homeDir}`);
 
   // pane のシェルに本物のエージェント（この機械の claude 等）を起動させない（20260926-agent-start decisions.md D11）。
@@ -246,13 +246,13 @@ async function main(): Promise<void> {
     const created = await runCli(["workspace", "create", "--cwd", process.cwd(), "--label", "smoke", "--url", url, "--token", token], env);
     if (created.exitCode !== 0) throw new Error(`workspace create failed (exit ${created.exitCode}): ${created.stderr}`);
     const { pane, workspace, tab } = JSON.parse(created.stdout) as { pane: { id: string }; workspace: { id: string }; tab: { id: string } };
-    console.log(`smoke(cli): wtmctl workspace create ok (pane ${pane.id})`);
+    console.log(`smoke(cli): sodactl workspace create ok (pane ${pane.id})`);
 
     // 2回目以降は --token を渡さない：セッションキャッシュが再利用されることの確認を兼ねる（AC7）。
-    const marker = `wtmctl-smoke-${Date.now()}`;
+    const marker = `sodactl-smoke-${Date.now()}`;
     const ran = await runCli(["pane", "run", pane.id, `echo ${marker}`, "--url", url], env);
     if (ran.exitCode !== 0) throw new Error(`pane run failed (exit ${ran.exitCode}): ${ran.stderr}`);
-    console.log("smoke(cli): wtmctl pane run ok (no --token needed; cached session reused)");
+    console.log("smoke(cli): sodactl pane run ok (no --token needed; cached session reused)");
 
     let sawMarker = false;
     const deadline = Date.now() + 8_000;
@@ -263,22 +263,22 @@ async function main(): Promise<void> {
       else await new Promise((r) => setTimeout(r, 200));
     }
     if (!sawMarker) throw new Error(`pane read never showed marker "${marker}"`);
-    console.log("smoke(cli): wtmctl pane read ok (echo round trip confirmed)");
+    console.log("smoke(cli): sodactl pane read ok (echo round trip confirmed)");
 
     const snap = await runCli(["snapshot", "--url", url], env);
     if (snap.exitCode !== 0) throw new Error(`snapshot failed (exit ${snap.exitCode}): ${snap.stderr}`);
     const snapshot = JSON.parse(snap.stdout) as { panes: { id: string }[] };
     if (!snapshot.panes.some((p) => p.id === pane.id)) throw new Error("snapshot did not include the created pane");
-    console.log("smoke(cli): wtmctl snapshot ok");
+    console.log("smoke(cli): sodactl snapshot ok");
 
-    // 20260927-caller-pane-default: pane の中の環境（WTM_PANE_ID・WTM_SERVER_URL）を与えたビルド済みの wtmctl で、`pane current` が
-    // その pane の tab・workspace を返し、対象を省いた `pane split` がその pane の隣（同じ tab）に作ること。--url は渡さない（WTM_SERVER_URL につなぐ）。
+    // 20260927-caller-pane-default: pane の中の環境（SODA_PANE_ID・SODA_SERVER_URL）を与えたビルド済みの sodactl で、`pane current` が
+    // その pane の tab・workspace を返し、対象を省いた `pane split` がその pane の隣（同じ tab）に作ること。--url は渡さない（SODA_SERVER_URL につなぐ）。
     // フォーカスを別の workspace へ移しておく（呼び出し元とフォーカスの pane を別にし、フォーカスの pane に落ちる実装を見分ける。タスク点検 T5 の指摘）。
     const other = await runCli(["workspace", "create", "--label", "smoke-focus", "--url", url], env);
     if (other.exitCode !== 0) throw new Error(`workspace create failed (exit ${other.exitCode}): ${other.stderr}`);
     const otherWorkspaceId = (JSON.parse(other.stdout) as { workspace: { id: string } }).workspace.id;
-    const inPaneEnv: NodeJS.ProcessEnv = { ...env, WTM_PANE_ID: pane.id, WTM_SERVER_URL: url };
-    delete inPaneEnv["WTMCTL_URL"];
+    const inPaneEnv: NodeJS.ProcessEnv = { ...env, SODA_PANE_ID: pane.id, SODA_SERVER_URL: url };
+    delete inPaneEnv["SODACTL_URL"];
     const current = await runCli(["pane", "current"], inPaneEnv);
     if (current.exitCode !== 0) throw new Error(`pane current failed (exit ${current.exitCode}): ${current.stderr}`);
     const here = (JSON.parse(current.stdout) as { pane: { id: string; tabId: string; workspaceId: string | null } }).pane;
@@ -291,10 +291,10 @@ async function main(): Promise<void> {
     if (closedSibling.exitCode !== 0) throw new Error(`pane close failed (exit ${closedSibling.exitCode}): ${closedSibling.stderr}`);
     const closedOther = await runCli(["workspace", "close", otherWorkspaceId, "--url", url], env);
     if (closedOther.exitCode !== 0) throw new Error(`workspace close failed (exit ${closedOther.exitCode}): ${closedOther.stderr}`);
-    console.log(`smoke(cli): wtmctl pane current / pane split (caller pane, not the focused one) ok (tab ${here.tabId})`);
+    console.log(`smoke(cli): sodactl pane current / pane split (caller pane, not the focused one) ok (tab ${here.tabId})`);
 
     // 20260927-sidebar-row-tokens: 独自トークンの報告。`--token` を接続の token（= を含まない）と独自トークン（NAME=VALUE）の両方に使い、
-    // 値が整えられて snapshot の workspace・pane に載ること、消去で消えることを、ビルドした wtmctl で確かめる。**接続の token が実際に使われるよう、
+    // 値が整えられて snapshot の workspace・pane に載ること、消去で消えることを、ビルドした sodactl で確かめる。**接続の token が実際に使われるよう、
     // この 1 回はセッションのキャッシュの無い HOME で打つ**（キャッシュがあると `--token` は読まれない——`withSession.ts`。タスク点検 T11 の指摘）。
     const freshHome = join(homeDir, "fresh-home");
     await mkdir(freshHome, { recursive: true });
@@ -327,14 +327,14 @@ async function main(): Promise<void> {
     if (snapAfterClear.exitCode !== 0) throw new Error(`snapshot failed (exit ${snapAfterClear.exitCode}): ${snapAfterClear.stderr}`);
     const afterClear = JSON.parse(snapAfterClear.stdout) as { workspaces: { id: string; tokens?: unknown }[] };
     if (afterClear.workspaces.find((w) => w.id === workspace.id)?.tokens !== undefined) throw new Error("--clear-token did not clear the workspace token");
-    console.log("smoke(cli): wtmctl workspace/pane report-metadata ok (normalized, in snapshot, cleared, bad source refused)");
+    console.log("smoke(cli): sodactl workspace/pane report-metadata ok (normalized, in snapshot, cleared, bad source refused)");
 
     // エージェントを起動していないので空の一覧になる（`agent` コマンド群の配線とセッション再利用の確認）。
     const agents = await runCli(["agent", "list", "--url", url], env);
     if (agents.exitCode !== 0) throw new Error(`agent list failed (exit ${agents.exitCode}): ${agents.stderr}`);
     const listed = JSON.parse(agents.stdout) as { agents: unknown[] };
     if (!Array.isArray(listed.agents) || listed.agents.length !== 0) throw new Error(`agent list should be an empty agents array: ${agents.stdout}`);
-    console.log("smoke(cli): wtmctl agent list ok (no agents)");
+    console.log("smoke(cli): sodactl agent list ok (no agents)");
 
     // 20260926-agent-prompt-send-keys: ビルド済みの RPC（agent.prompt / agent.send_keys）までの配線を確かめる。
     // 検出したエージェントは居ないので状態を注入する（前面はシェルなので AgentMonitor は上書きしない）。prompt はシェルに
@@ -359,8 +359,8 @@ async function main(): Promise<void> {
     if (byId.exitCode !== 0 || (JSON.parse(byId.stdout) as { agent: { name: string | null } }).agent.name !== null) {
       throw new Error(`agent get by pane id should show no name after --clear (exit ${byId.exitCode}): ${byId.stdout} ${byId.stderr}`);
     }
-    console.log("smoke(cli): wtmctl agent rename ok (named, resolved by name, cleared)");
-    // 20260926-agent-start: ビルド済みの wtmctl → RPC agent.start → AgentStarter の配線。エージェントの居る pane には何も打ち込まず
+    console.log("smoke(cli): sodactl agent rename ok (named, resolved by name, cleared)");
+    // 20260926-agent-start: ビルド済みの sodactl → RPC agent.start → AgentStarter の配線。エージェントの居る pane には何も打ち込まず
     // agent_pane_busy（本物のエージェントは起動しない）。表に無い kind は使用誤り（2）。
     const badKind = await runCli(["agent", "start", "smoke-start", "--kind", "sh", "--pane", pane.id, "--url", url], env);
     if (badKind.exitCode !== 2) throw new Error(`agent start with an unknown kind should be a usage error (exit ${badKind.exitCode}): ${badKind.stderr}`);
@@ -369,11 +369,11 @@ async function main(): Promise<void> {
       throw new Error(`agent start on a pane with an agent should be agent_pane_busy (exit ${busy.exitCode}): ${busy.stdout} ${busy.stderr}`);
     }
     if (existsSync(stubMarker)) throw new Error("agent start must not have typed anything into the pane");
-    console.log("smoke(cli): wtmctl agent start ok (usage error for an unknown kind, agent_pane_busy on a pane with an agent)");
+    console.log("smoke(cli): sodactl agent start ok (usage error for an unknown kind, agent_pane_busy on a pane with an agent)");
     const keys = await runCli(["agent", "send-keys", pane.id, "C-c", "--url", url], env);
     if (keys.exitCode !== 0) throw new Error(`agent send-keys failed (exit ${keys.exitCode}): ${keys.stderr}`);
-    console.log("smoke(cli): wtmctl agent send-keys ok (the RPC accepted the keys)");
-    const promptMarker = `wtmctl-smoke-prompt-${Date.now()}`;
+    console.log("smoke(cli): sodactl agent send-keys ok (the RPC accepted the keys)");
+    const promptMarker = `sodactl-smoke-prompt-${Date.now()}`;
     const prompted = await runCli(["agent", "prompt", pane.id, `echo ${promptMarker}`, "--url", url], env);
     if (prompted.exitCode !== 0) throw new Error(`agent prompt failed (exit ${prompted.exitCode}): ${prompted.stderr}`);
     let sawPrompt = false;
@@ -386,18 +386,18 @@ async function main(): Promise<void> {
       else await new Promise((r) => setTimeout(r, 200));
     }
     if (!sawPrompt) throw new Error(`agent prompt was not submitted (marker "${promptMarker}" never printed)`);
-    console.log("smoke(cli): wtmctl agent prompt ok (submitted; the shell printed the marker)");
+    console.log("smoke(cli): sodactl agent prompt ok (submitted; the shell printed the marker)");
 
     // 20260926-pane-direct-connect: 端末でなければ繋がない（execFile の stdin は端末ではない）。
     const notTty = await runCli(["pane", "attach", pane.id, "--url", url], env);
     if (notTty.exitCode !== 1 || !notTty.stderr.includes("not_a_tty")) {
       throw new Error(`pane attach without a terminal should fail with not_a_tty (exit ${notTty.exitCode}): ${notTty.stderr}`);
     }
-    console.log("smoke(cli): wtmctl pane attach refuses a non-terminal (not_a_tty)");
+    console.log("smoke(cli): sodactl pane attach refuses a non-terminal (not_a_tty)");
     await smokeAttach(server, pane.id, url, env);
-    console.log("smoke(cli): wtmctl pane attach ok (in a real PTY: size 100x30, echo round trip, resize 90x25, Ctrl+B q exit 0, left the alternate screen)");
+    console.log("smoke(cli): sodactl pane attach ok (in a real PTY: size 100x30, echo round trip, resize 90x25, Ctrl+B q exit 0, left the alternate screen)");
     await smokeStreams(server, pane.id, url, env);
-    console.log("smoke(cli): wtmctl pane observe/control ok (pipes: full first frame, control size 100x30, NDJSON input round trip, invalid line warned, release exit 0, observe pane_closed exit 0)");
+    console.log("smoke(cli): sodactl pane observe/control ok (pipes: full first frame, control size 100x30, NDJSON input round trip, invalid line warned, release exit 0, observe pane_closed exit 0)");
 
     console.log("smoke(cli): PASS");
     process.exitCode = 0;

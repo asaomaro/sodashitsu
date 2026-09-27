@@ -1,7 +1,7 @@
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Workspace } from "@wtm/protocol";
-import { RpcError } from "@wtm/protocol";
+import type { Workspace } from "@sodashitsu/protocol";
+import { RpcError } from "@sodashitsu/protocol";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryLogger } from "../log/Logger.js";
 import type { SessionService } from "../session/SessionService.js";
@@ -39,8 +39,8 @@ describe("DefaultWorktreeService（本物の git を使う。既存の GitInfoPo
   let root: string;
 
   beforeEach(async () => {
-    repo = await makeTempDir("wtm-worktree-repo-");
-    root = await makeTempDir("wtm-worktree-root-");
+    repo = await makeTempDir("soda-worktree-repo-");
+    root = await makeTempDir("soda-worktree-root-");
     await runGit(repo, ["init", "-b", "main"]);
     await runGit(repo, ["config", "user.email", "t@example.com"]);
     await runGit(repo, ["config", "user.name", "t"]);
@@ -61,7 +61,7 @@ describe("DefaultWorktreeService（本物の git を使う。既存の GitInfoPo
 
   // 20260926-workspace-label-follow-cwd（review ラウンド 1）：開いた場所ではなく、最初の pane のいまの場所（サイドバーの git の情報と同じ）で git を走らせる。
   it("list・create は workspace のいまの場所（identityCwdOf）のリポジトリで行う（開いた場所ではない）", async () => {
-    const plain = await makeTempDir("wtm-worktree-plain-");
+    const plain = await makeTempDir("soda-worktree-plain-");
     const session = {
       getWorkspace: (): Workspace => ({ cwd: plain }) as Workspace, // 開いた場所は git の外
       identityCwdOf: (): string => repo, // 最初の pane はリポジトリへ移った
@@ -106,7 +106,7 @@ describe("DefaultWorktreeService（本物の git を使う。既存の GitInfoPo
 
   // ブランチだけが別の場所で使われていて、作成先は空いている場合。
   it("create：そのブランチが別の場所で使われていれば worktree_branch_in_use", async () => {
-    const elsewhere = join(await makeTempDir("wtm-worktree-else-"), "co");
+    const elsewhere = join(await makeTempDir("soda-worktree-else-"), "co");
     await runGit(repo, ["worktree", "add", "-q", "-b", "taken", elsewhere, "HEAD"]);
     await expect(make().create("w1", "taken")).rejects.toMatchObject({ code: "worktree_branch_in_use" });
   });
@@ -121,7 +121,7 @@ describe("DefaultWorktreeService（本物の git を使う。既存の GitInfoPo
   });
 
   it("git でないディレクトリなら not_a_git_repository", async () => {
-    const plain = await makeTempDir("wtm-worktree-plain-");
+    const plain = await makeTempDir("soda-worktree-plain-");
     await expect(make(plain).list("w1")).rejects.toMatchObject({ code: "not_a_git_repository" });
   });
 
@@ -135,8 +135,8 @@ describe("DefaultWorktreeService（本物の git を使う。既存の GitInfoPo
   // （`ActionDispatcher.confirmWorktreeOpen`）なので、ここが揃っていないと**作った worktree を一覧から
   // 選ぶと同じ場所に 2 つ目の workspace ができる**（AC6 が防ごうとした事象そのもの）。
   it("create：返すパスは、git が実際に記録したもの（root が symlink 経由でも一覧と一致する。AC6）", async () => {
-    const real = await makeTempDir("wtm-worktree-real-");
-    const link = join(await makeTempDir("wtm-worktree-link-"), "root");
+    const real = await makeTempDir("soda-worktree-real-");
+    const link = join(await makeTempDir("soda-worktree-link-"), "root");
     await symlink(real, link);
     const svc = new DefaultWorktreeService(sessionWith(repo), git, new MemoryLogger(), link, () => 0);
 
@@ -149,7 +149,7 @@ describe("DefaultWorktreeService（本物の git を使う。既存の GitInfoPo
 
   // `--git-common-dir` は成功するので、ここまで来ないと分からない（メニューの出し分けとは判定が違う）。
   it("create：コミットが 1 つも無い repo なら worktree_no_commits", async () => {
-    const empty = await makeTempDir("wtm-worktree-empty-");
+    const empty = await makeTempDir("soda-worktree-empty-");
     await runGit(empty, ["init", "-b", "main"]);
     await expect(make(empty).create("w1", "x")).rejects.toMatchObject({ code: "worktree_no_commits" });
   });
@@ -271,7 +271,7 @@ describe("DefaultWorktreeService（本物の git を使う。既存の GitInfoPo
     });
 
     it("既に worktree でない対象は worktree_not_a_worktree（AC9）", async () => {
-      const notAWorktree = await makeTempDir("wtm-worktree-not-a-worktree-");
+      const notAWorktree = await makeTempDir("soda-worktree-not-a-worktree-");
       const svc = new DefaultWorktreeService(sessionWith(repo), git, new MemoryLogger(), root, () => 0);
       await expect(svc.remove("w1", notAWorktree, false)).rejects.toMatchObject({ code: "worktree_not_a_worktree" });
     });
@@ -358,8 +358,8 @@ describe("classifyWorktreeRemoveError", () => {
 });
 
 describe("defaultWorktreeRoot", () => {
-  it("ホームの下の .wtm/worktrees を / 区切りで返す", () => {
-    expect(defaultWorktreeRoot("/home/me")).toBe("/home/me/.wtm/worktrees");
-    expect(defaultWorktreeRoot("C:\\Users\\me")).toBe("C:/Users/me/.wtm/worktrees");
+  it("ホームの下の .sodashitsu/worktrees を / 区切りで返す", () => {
+    expect(defaultWorktreeRoot("/home/me")).toBe("/home/me/.sodashitsu/worktrees");
+    expect(defaultWorktreeRoot("C:\\Users\\me")).toBe("C:/Users/me/.sodashitsu/worktrees");
   });
 });

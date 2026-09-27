@@ -82,7 +82,7 @@ describe("MachineCatalog（T5）", () => {
     for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
   });
   const tmp = async (): Promise<string> => {
-    const d = await makeTempDir("wtm-machines-");
+    const d = await makeTempDir("soda-machines-");
     dirs.push(d);
     return d;
   };

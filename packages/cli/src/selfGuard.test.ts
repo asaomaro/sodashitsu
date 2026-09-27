@@ -1,4 +1,4 @@
-import type { SessionSnapshot } from "@wtm/protocol";
+import type { SessionSnapshot } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import type { GlobalOpts } from "./cliArgs.js";
 import { assertNotSelfPane, assertNotSelfTab, assertNotSelfWorkspace } from "./selfGuard.js";
@@ -42,8 +42,8 @@ describe("assertNotSelfPane", () => {
     const err = selfTargetError(() => assertNotSelfPane(inPane, "p1", "close"));
     expect(err.code).toBe("self_target");
     expect(err.message).toContain("close pane p1");
-    expect(err.message).toContain("WTM_PANE_ID=p1");
-    expect(err.message).toContain('"WTM_PANE_ID= wtmctl');
+    expect(err.message).toContain("SODA_PANE_ID=p1");
+    expect(err.message).toContain('"SODA_PANE_ID= sodactl');
   });
   it("別の pane なら断らない", () => {
     expect(() => assertNotSelfPane(inPane, "p2", "close")).not.toThrow();
@@ -116,7 +116,7 @@ describe("assertNotSelfTab", () => {
     const err = selfTargetError(() => assertNotSelfTab(inPane, snapshot, "t1", "close"));
     expect(err.code).toBe("self_target");
     expect(err.message).toContain("close tab t1 because it contains");
-    expect(err.message).toContain("WTM_PANE_ID= wtmctl");
+    expect(err.message).toContain("SODA_PANE_ID= sodactl");
   });
   it("別の tab なら断らない", () => {
     expect(() => assertNotSelfTab(inPane, snapshot, "t2", "close")).not.toThrow();

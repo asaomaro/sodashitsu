@@ -87,7 +87,7 @@ describe("bridgeFrames（20260927-multi-host-machines T2）", () => {
     expect(across.push(cat(text("junk"), mk.subarray(0, 5)))).toEqual([]);
     expect(across.push(cat(mk.subarray(5), hello()))).toHaveLength(1);
     expect(BRIDGE_LIMITS.maxPreambleBytes).toBe(64 * 1024);
-    expect(BRIDGE_MARKER).toBe("WTM-BRIDGE 1\n");
+    expect(BRIDGE_MARKER).toBe("SODA-BRIDGE 1\n");
   });
 
   it("1 つのかたまりに入った多数の小さな枠・細かく分かれた大きな枠を、全部そのまま取り出す", () => {

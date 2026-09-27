@@ -13,7 +13,7 @@ import { focusedPaneIndex } from "../support/panes.js";
  *   prefix の 2 度押し・素通しの ctrl+b が端末へ送られたか、直接のキーが**端末へ届いていないか**を、アプリの見え方とは別に送る側で確かめる。
  * - 操作の結果は DOM（分割で増える `.pane-frame`・新しい tab の `.tab-bar-item`・prefix 中の `.prefix-indicator`・焦点の pane の位置・設定画面の状態と `role="status"` の文）。
  * - キー入力は Playwright の実物のキー（`page.keyboard.press`）。shift 付きの文字は**大文字で送る**（小文字＋shift は合成の形で、実物のキーボードとは `event.key` が違う。research F24）。
- * - 保存は `localStorage` の `wtm.prefs.v1` と、開き直した後の振る舞い。
+ * - 保存は `localStorage` の `soda.prefs.v1` と、開き直した後の振る舞い。
  */
 
 const dialog = (page: Page) => page.locator("dialog.settings-dialog");
@@ -33,7 +33,7 @@ async function openApp(page: Page, appServer: AppServer): Promise<() => SentInpu
   return sent;
 }
 
-/** `wtm.prefs.v1` を持たせた新しいブラウザで開く（保存された割り当てから始める）。 */
+/** `soda.prefs.v1` を持たせた新しいブラウザで開く（保存された割り当てから始める）。 */
 async function openWithPrefs(
   browser: Browser,
   appServer: AppServer,
@@ -45,7 +45,7 @@ async function openWithPrefs(
       origins: [
         {
           origin: appServer.origin,
-          localStorage: [{ name: "wtm.prefs.v1", value: JSON.stringify(prefs) }],
+          localStorage: [{ name: "soda.prefs.v1", value: JSON.stringify(prefs) }],
         },
       ],
     },
@@ -72,7 +72,7 @@ async function openRow(page: Page, id: string): Promise<void> {
 
 const storedKeys = (page: Page) =>
   page.evaluate(() => {
-    const raw = localStorage.getItem("wtm.prefs.v1");
+    const raw = localStorage.getItem("soda.prefs.v1");
     return raw ? ((JSON.parse(raw) as { keys?: unknown }).keys ?? null) : null;
   });
 
@@ -735,7 +735,7 @@ test("Keyboard Lock の switch：全画面でなければ `keyboard.lock()` は�
   // （`e2e-observe-browser.md`：ブラウザが実際に受けた呼び出しで見る。テスト自身のクライアント状態ではない）。
   await page.addInitScript(() => {
     const calls: string[] = [];
-    (window as unknown as { __wtmKeyboardCalls: string[] }).__wtmKeyboardCalls = calls;
+    (window as unknown as { __sodaKeyboardCalls: string[] }).__sodaKeyboardCalls = calls;
     const install = (): void => {
       const kb = (navigator as unknown as { keyboard?: { lock: (c?: string[]) => Promise<void>; unlock: () => void } })
         .keyboard;
@@ -766,7 +766,7 @@ test("Keyboard Lock の switch：全画面でなければ `keyboard.lock()` は�
   await expect(dialog(page)).not.toHaveAttribute("open", "");
 
   const calls = (await page.evaluate(
-    () => (window as unknown as { __wtmKeyboardCalls: string[] }).__wtmKeyboardCalls,
+    () => (window as unknown as { __sodaKeyboardCalls: string[] }).__sodaKeyboardCalls,
   )) as string[];
   expect(calls.some((c) => c.startsWith("lock:")), "全画面でないので lock() は一度も呼ばれない（AC-I12）").toBe(
     false,
@@ -789,7 +789,7 @@ test("Keyboard Lock の switch：全画面に入ると keyboard.lock() が LOCKE
   // `docs/verification.md` の手動確認へ（decisions D6）。ここで確かめるのは「呼ばれたか」だけ。
   await page.addInitScript(() => {
     const calls: string[] = [];
-    (window as unknown as { __wtmKeyboardCalls: string[] }).__wtmKeyboardCalls = calls;
+    (window as unknown as { __sodaKeyboardCalls: string[] }).__sodaKeyboardCalls = calls;
     const kb = (navigator as unknown as { keyboard?: { lock: (c?: string[]) => Promise<void>; unlock: () => void } })
       .keyboard;
     if (kb === undefined) return;
@@ -818,7 +818,7 @@ test("Keyboard Lock の switch：全画面に入ると keyboard.lock() が LOCKE
   await expect.poll(() => page.evaluate(() => document.fullscreenElement !== null)).toBe(true);
   await expect
     .poll(async () =>
-      page.evaluate(() => (window as unknown as { __wtmKeyboardCalls: string[] }).__wtmKeyboardCalls),
+      page.evaluate(() => (window as unknown as { __sodaKeyboardCalls: string[] }).__sodaKeyboardCalls),
     )
     .toContainEqual('lock:["KeyT","KeyN","KeyW","Tab","PageUp","PageDown"]');
 
@@ -826,7 +826,7 @@ test("Keyboard Lock の switch：全画面に入ると keyboard.lock() が LOCKE
   await expect.poll(() => page.evaluate(() => document.fullscreenElement !== null)).toBe(false);
   await expect
     .poll(async () =>
-      page.evaluate(() => (window as unknown as { __wtmKeyboardCalls: string[] }).__wtmKeyboardCalls),
+      page.evaluate(() => (window as unknown as { __sodaKeyboardCalls: string[] }).__sodaKeyboardCalls),
     )
     .toContainEqual("unlock");
 });
@@ -850,7 +850,7 @@ test.describe("モバイル", () => {
           {
             origin: appServer.origin,
             localStorage: [
-              { name: "wtm.prefs.v1", value: JSON.stringify({ keys: { prefix: "alt+x" } }) },
+              { name: "soda.prefs.v1", value: JSON.stringify({ keys: { prefix: "alt+x" } }) },
             ],
           },
         ],

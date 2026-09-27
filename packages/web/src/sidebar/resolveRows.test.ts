@@ -1,4 +1,4 @@
-import type { AgentInfo, GitInfo, Pane, Tab, Workspace } from "@wtm/protocol";
+import type { AgentInfo, GitInfo, Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LAYOUTS, type RowLayout } from "./rowLayout.js";
 import {

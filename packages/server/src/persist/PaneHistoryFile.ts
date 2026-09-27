@@ -119,7 +119,7 @@ export class FsPaneHistoryFile implements PaneHistoryFile {
    * 消す。本体を先に消し（失敗は投げる）、その後で、書いている途中で落ちて残った一時ディレクトリ（`writeFileAtomic` の `.tmp-*`。画面の
    * 内容を持ちうる）を片付ける（cross の独立点検。片付けの失敗は握りつぶす——本体を消せたかどうかを左右させない。review ラウンド 1）。
    * 片付けるのは `writeFileAtomic` が作る形（`.tmp-`＋6 文字の名前で、中身が `write` だけか空のディレクトリ）だけ——`--state-dir` は
-   * 任意の場所を指せるので、wtm と関係のないものを消さない（review ラウンド 1）。状態ディレクトリの `.tmp-*` は `session.json`・`auth.json` 等の
+   * 任意の場所を指せるので、soda と関係のないものを消さない（review ラウンド 1）。状態ディレクトリの `.tmp-*` は `session.json`・`auth.json` 等の
    * 書き込みも使うので、作られてから 10 分より新しいもの（書いている最中でありうる）は残す。呼ぶのは起動時だけ。
    */
   async clear(): Promise<boolean> {

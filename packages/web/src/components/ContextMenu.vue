@@ -212,9 +212,9 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onOutsideClick, 
   list-style: none;
   margin: 0;
   padding: 0.25em 0;
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-menu-fg, #f8f8f2);
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
+  border: 1px solid var(--soda-menu-border, #44475a);
   min-width: 12em;
   z-index: 1000;
 }
@@ -223,6 +223,6 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onOutsideClick, 
   cursor: pointer;
 }
 .context-menu-active {
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
 }
 </style>

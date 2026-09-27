@@ -246,7 +246,7 @@ export function loadRowLayout(area: SidebarArea, raw: unknown): RowLayout | null
     );
 }
 
-/** `wtm.prefs.v1` の `sidebarRows` を読む（値ごとに落とす）。 */
+/** `soda.prefs.v1` の `sidebarRows` を読む（値ごとに落とす）。 */
 export function loadSidebarRows(raw: unknown): SidebarRowsPrefs {
   const obj = isRecord(raw) ? raw : {};
   return {

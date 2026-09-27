@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createShutdown, type ShutdownDeps } from "./serveShutdown.js";
 
-/** `wtm serve` の停止の手順（20260927-session-stop の T3）。 */
+/** `soda serve` の停止の手順（20260927-session-stop の T3）。 */
 function setup(opts: { closeFails?: boolean; startup?: Promise<void> } = {}) {
   const events: string[] = [];
   let resolveExit: (code: number) => void = () => undefined;
@@ -30,7 +30,7 @@ describe("createShutdown", () => {
     expect(await a.exited).toBe(0);
     expect(a.events).toEqual([
       "token",
-      "log:wtm: stop requested (wtm session stop), shutting down",
+      "log:soda: stop requested (soda session stop), shutting down",
       "token",
       "close",
       "exit:0",
@@ -41,7 +41,7 @@ describe("createShutdown", () => {
     expect(await b.exited).toBe(0);
     expect(b.events).toEqual([
       "token",
-      "log:wtm: received SIGTERM, shutting down",
+      "log:soda: received SIGTERM, shutting down",
       "token",
       "close",
       "exit:0",
@@ -72,7 +72,7 @@ describe("createShutdown", () => {
     const a = setup({ startup });
     a.shutdown.stopRequest();
     a.shutdown.signal("SIGINT");
-    expect(a.events).toContain("error:wtm: received SIGINT again, exiting without waiting");
+    expect(a.events).toContain("error:soda: received SIGINT again, exiting without waiting");
     expect(a.events).toContain("exit:1");
     expect(a.events).not.toContain("close");
     release();
@@ -87,9 +87,9 @@ describe("createShutdown", () => {
     a.shutdown.signal("SIGTERM");
     expect(a.events).toEqual([
       "token",
-      "log:wtm: received SIGINT, shutting down",
+      "log:soda: received SIGINT, shutting down",
       "token",
-      "error:wtm: received SIGTERM again, exiting without waiting",
+      "error:soda: received SIGTERM again, exiting without waiting",
       "exit:1",
     ]);
     release();
@@ -112,6 +112,6 @@ describe("createShutdown", () => {
     const a = setup({ closeFails: true });
     a.shutdown.stopRequest();
     expect(await a.exited).toBe(1);
-    expect(a.events).toContain("error:wtm: error during shutdown");
+    expect(a.events).toContain("error:soda: error during shutdown");
   });
 });

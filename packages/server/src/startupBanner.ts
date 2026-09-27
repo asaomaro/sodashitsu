@@ -21,39 +21,39 @@ export interface StartupInfo {
 
 /**
  * 待ち受けに成功した後の表示（design「起動時の表示」・D101・D102・D103）。純関数（表示する行を返すだけ）。
- * - `wtm: listening on <host> port <port> (<scheme>)`（URL の形にしない。端末がリンクにして開けない `0.0.0.0` を開かせない）。
- * - 開ける URL（`accessUrls`）ごとに `wtm: open <URL>/`。token を作ったときだけ `#token=` を付ける。
+ * - `soda: listening on <host> port <port> (<scheme>)`（URL の形にしない。端末がリンクにして開けない `0.0.0.0` を開かせない）。
+ * - 開ける URL（`accessUrls`）ごとに `soda: open <URL>/`。token を作ったときだけ `#token=` を付ける。
  * - **URL が 1 つも組み立てられないとき（ゾーン付きの IPv6 の `--host` 等）も、作った token は必ず表示する**（以前は
  *   URL の組み立てが `Invalid URL` を投げ、token を一度も表示せずに終わっていた。D103）。
  */
 export function startupLines(info: StartupInfo): string[] {
-  const lines = [`wtm: listening on ${formatUrlHost(info.host)} port ${info.port} (${info.scheme})`];
+  const lines = [`soda: listening on ${formatUrlHost(info.host)} port ${info.port} (${info.scheme})`];
   if (info.session !== undefined) {
-    lines.push(`wtm: session ${info.session.name}（状態ディレクトリ: ${info.session.stateDir}）${info.session.fromEnv === true ? "（WTM_SESSION）" : ""}`);
+    lines.push(`soda: session ${info.session.name}（状態ディレクトリ: ${info.session.stateDir}）${info.session.fromEnv === true ? "（SODA_SESSION）" : ""}`);
     if (info.portRemembered === true) {
       lines.push(
-        `wtm: session ${info.session.name} が前回使ったポート ${info.port} で待ち受けています（別のポートにするには --port。次からはそのポートを使います）`,
+        `soda: session ${info.session.name} が前回使ったポート ${info.port} で待ち受けています（別のポートにするには --port。次からはそのポートを使います）`,
       );
     }
   }
   if (info.paneHistoryPath !== undefined) {
-    lines.push(`wtm: 画面履歴を保存します（--pane-history）: ${info.paneHistoryPath}。pane の出力（秘密を含みうる）がディスクに残ります`);
+    lines.push(`soda: 画面履歴を保存します（--pane-history）: ${info.paneHistoryPath}。pane の出力（秘密を含みうる）がディスクに残ります`);
   }
   const urls = accessUrls(info.scheme, info.host, info.port, info.lanAddresses, info.extraOrigins);
   if (urls.length === 0) {
-    lines.push("wtm: 開ける URL を表示できません（ゾーン付きの IPv6 アドレス等は URL にできません）。ブラウザで開く URL を --origin で渡すと、ここに表示します");
+    lines.push("soda: 開ける URL を表示できません（ゾーン付きの IPv6 アドレス等は URL にできません）。ブラウザで開く URL を --origin で渡すと、ここに表示します");
   }
   if (info.freshToken !== undefined) {
     if (urls.length === 0) {
-      lines.push(`wtm: token（今回作成）: ${info.freshToken}`);
-      lines.push("wtm: (token は今だけ表示します)");
+      lines.push(`soda: token（今回作成）: ${info.freshToken}`);
+      lines.push("soda: (token は今だけ表示します)");
     } else {
-      for (const url of urls) lines.push(`wtm: open ${url}/#token=${info.freshToken}`);
-      lines.push("wtm: (token 付きの URL は今だけ表示します)");
+      for (const url of urls) lines.push(`soda: open ${url}/#token=${info.freshToken}`);
+      lines.push("soda: (token 付きの URL は今だけ表示します)");
     }
   } else {
-    for (const url of urls) lines.push(`wtm: open ${url}/`);
-    lines.push(`wtm: token を忘れた場合は「${tokenResetCommand(info.session)}」で作り直せます`);
+    for (const url of urls) lines.push(`soda: open ${url}/`);
+    lines.push(`soda: token を忘れた場合は「${tokenResetCommand(info.session)}」で作り直せます`);
   }
   return lines;
 }
@@ -64,9 +64,9 @@ export function startupLines(info: StartupInfo): string[] {
  */
 export function lastChanceTokenLines(token: string, session?: NamedSessionInfo): string[] {
   return [
-    `wtm: token（今回作成・この表示が最後）: ${token}`,
+    `soda: token（今回作成・この表示が最後）: ${token}`,
     // 起動の失敗・表示の失敗・起動の途中の終了のシグナルのどれでも出すので、理由は問わない言い方にする。
-    `wtm: 起動を最後まで終えませんでしたが token は保存済みです。次の起動ではこの token でログインできます（失くしたら「${tokenResetCommand(session)}」で作り直せます）`,
+    `soda: 起動を最後まで終えませんでしたが token は保存済みです。次の起動ではこの token でログインできます（失くしたら「${tokenResetCommand(session)}」で作り直せます）`,
   ];
 }
 
@@ -78,15 +78,15 @@ export interface NamedSessionInfo {
   name: string;
   stateDir: string;
   stateDirBase?: string | undefined;
-  /** 名前を `WTM_SESSION` から選んだときだけ true（20260926-named-session-ui）。 */
+  /** 名前を `SODA_SESSION` から選んだときだけ true（20260926-named-session-ui）。 */
   fromEnv?: boolean | undefined;
 }
 
 /** 名前付き session なら `--session`（と `--state-dir` を渡して起動したならその絶対パス）付き。付けないと別の session の token を作り直してしまう。 */
 function tokenResetCommand(session: NamedSessionInfo | undefined): string {
-  if (session === undefined) return "wtm token reset";
+  if (session === undefined) return "soda token reset";
   const dir = session.stateDirBase;
-  return `wtm token reset${dir === undefined ? "" : ` --state-dir ${shellQuote(dir)}`} --session ${session.name}`;
+  return `soda token reset${dir === undefined ? "" : ` --state-dir ${shellQuote(dir)}`} --session ${session.name}`;
 }
 
 /** 案内に載せるパスの引用。展開されない単一引用符（bash・PowerShell の両方で文字どおり）。記号の無いパスは引用しない。 */

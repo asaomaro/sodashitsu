@@ -1,4 +1,4 @@
-import type { AgentInfo } from "@wtm/protocol";
+import type { AgentInfo } from "@sodashitsu/protocol";
 import { statusOf } from "./agentStatus.js";
 
 /**

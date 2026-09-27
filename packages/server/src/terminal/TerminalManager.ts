@@ -1,4 +1,4 @@
-import type { PaneId, TerminalPalette } from "@wtm/protocol";
+import type { PaneId, TerminalPalette } from "@sodashitsu/protocol";
 import type { PtyBackend, PtyProcess } from "../pty/PtyBackend.js";
 import type { ProcessInspector } from "../platform/ProcessInspector.js";
 import { DefaultTerminalHost, type TerminalHost } from "./TerminalHost.js";

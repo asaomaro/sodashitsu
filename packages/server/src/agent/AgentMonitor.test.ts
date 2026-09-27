@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { HostInfo } from "@wtm/protocol";
+import type { HostInfo } from "@sodashitsu/protocol";
 import type { Disposable } from "../util/Disposable.js";
 import { MemoryLogger } from "../log/Logger.js";
 import { EventBus } from "../bus/EventBus.js";

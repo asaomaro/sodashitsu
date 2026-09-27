@@ -1,18 +1,18 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ServerEvent } from "@wtm/protocol";
-import { composeServerOnFreePort, type ComposedServer } from "@wtm/server";
+import type { ServerEvent } from "@sodashitsu/protocol";
+import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { runPaneAttach, type AttachTerminal } from "./commands/attach.js";
 import { runPaneControl, runPaneObserve, type StreamIo } from "./commands/sessionStream.js";
 import { FsSessionStore } from "./session.js";
 import { UnauthenticatedError, withSession } from "./withSession.js";
-import { AuthError, connect, type WtmClient } from "./wsClient.js";
+import { AuthError, connect, type SodaClient } from "./wsClient.js";
 
 /**
- * `wtmctl pane observe` / `pane control` を実サーバ・実 PTY の上で、メモリ上の stdin/stdout から確かめる（20260926-pane-observe-control）。
- * ビルド済みの wtmctl を子プロセス（パイプ）で動かす確認は smoke（`smoke.ts`）が行う。
+ * `sodactl pane observe` / `pane control` を実サーバ・実 PTY の上で、メモリ上の stdin/stdout から確かめる（20260926-pane-observe-control）。
+ * ビルド済みの sodactl を子プロセス（パイプ）で動かす確認は smoke（`smoke.ts`）が行う。
  */
 
 interface Frame {
@@ -117,7 +117,7 @@ function hasOutputLine(text: string, marker: string): boolean {
     .some((l) => l.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").trim() === marker);
 }
 
-describe("wtmctl pane observe / pane control integration（実サーバ・実 PTY）", () => {
+describe("sodactl pane observe / pane control integration（実サーバ・実 PTY）", () => {
   let server: ComposedServer;
   let dir: string;
   let store: FsSessionStore;
@@ -125,7 +125,7 @@ describe("wtmctl pane observe / pane control integration（実サーバ・実 PT
   let token: string;
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), "wtmctl-stream-it-"));
+    dir = await mkdtemp(join(tmpdir(), "sodactl-stream-it-"));
     server = await composeServerOnFreePort({
       host: "127.0.0.1",
       stateDir: join(dir, "state"),
@@ -172,7 +172,7 @@ describe("wtmctl pane observe / pane control integration（実サーバ・実 PT
   };
 
   /** 所有者の変化（`pane.attach_changed`）を記録する別の接続。 */
-  async function watcher(): Promise<{ client: WtmClient; events: ServerEvent[] }> {
+  async function watcher(): Promise<{ client: SodaClient; events: ServerEvent[] }> {
     const cookie = (await store.get(url))!;
     const client = await connect(url, cookie);
     const events: ServerEvent[] = [];

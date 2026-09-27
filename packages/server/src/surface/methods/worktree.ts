@@ -1,4 +1,4 @@
-import { WorktreeCreateParams, WorktreeListParams, WorktreeRemoveParams } from "@wtm/protocol";
+import { WorktreeCreateParams, WorktreeListParams, WorktreeRemoveParams } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 

@@ -34,7 +34,7 @@ function sample(): SessionFileData {
 describe("FsSessionFile", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await makeTempDir("wtm-session-");
+    dir = await makeTempDir("soda-session-");
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });

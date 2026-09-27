@@ -5,7 +5,7 @@ import { PREFIX_HELP_HINT_KEY, PREFS_KEY, writePrefs } from "./view.js";
 
 /**
  * 初回の案内（20260926-settings-onboarding。herdr の `onboarding`）を出すかの判定と、案内済みの記録。
- * 案内済みは herdr と同じ名前・値（`onboarding = false`）で `wtm.prefs.v1` に持つ（decisions D4）。
+ * 案内済みは herdr と同じ名前・値（`onboarding = false`）で `soda.prefs.v1` に持つ（decisions D4）。
  */
 
 /** 読むだけの面（テストで偽物を渡す）。 */

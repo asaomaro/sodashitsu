@@ -90,7 +90,7 @@ describe("Toast — 初回 pane フォーカスの案内", () => {
     view.focusPane("p1");
     await wrapper.vm.$nextTick();
     expect(view.toasts).toHaveLength(0);
-    expect(localStorage.getItem("wtm.hint.prefixHelp.v1")).toBeNull();
+    expect(localStorage.getItem("soda.hint.prefixHelp.v1")).toBeNull();
     settings.setKeyBindings("help", ["prefix+?"]);
     view.focusPane("p2");
     await wrapper.vm.$nextTick();
@@ -98,7 +98,7 @@ describe("Toast — 初回 pane フォーカスの案内", () => {
   });
 
   it("localStorage に既に表示済みが記録されていれば出さない", async () => {
-    localStorage.setItem("wtm.hint.prefixHelp.v1", "1");
+    localStorage.setItem("soda.hint.prefixHelp.v1", "1");
     const view = useViewStore(pinia);
     const wrapper = mount(Toast, { global: { plugins: [pinia] } });
     view.focusPane("p1");

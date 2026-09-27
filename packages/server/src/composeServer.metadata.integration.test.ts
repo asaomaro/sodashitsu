@@ -2,7 +2,7 @@ import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
-import type { Pane, SessionSnapshot, Workspace } from "@wtm/protocol";
+import type { Pane, SessionSnapshot, Workspace } from "@sodashitsu/protocol";
 import { makeTempDir } from "./persist/atomicFile.js";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 import type { ComposedServer } from "./composeServer.js";
@@ -92,7 +92,7 @@ describe("composeServer: 独自トークンの報告", () => {
   });
 
   async function start(): Promise<{ server: ComposedServer; stateDir: string }> {
-    const stateDir = await makeTempDir("wtm-compose-metadata-");
+    const stateDir = await makeTempDir("soda-compose-metadata-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
     cleanups.push(() => server.close());

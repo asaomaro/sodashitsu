@@ -1,4 +1,4 @@
-import type { AgentInfo, Pane } from "@wtm/protocol";
+import type { AgentInfo, Pane } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { paneNameOf } from "./paneName.js";
 

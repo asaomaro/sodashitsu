@@ -1,14 +1,14 @@
-import { clampTerminalSize, type ServerEvent } from "@wtm/protocol";
+import { clampTerminalSize, type ServerEvent } from "@sodashitsu/protocol";
 import { AttachKeyFilter } from "../attachKeys.js";
 import { TerminalQueryFilter } from "../attachOutput.js";
 import type { Command } from "../cliArgs.js";
 import type { SessionStore } from "../session.js";
 import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 
 /**
- * `wtmctl pane attach <paneId> [--takeover]`（20260926-pane-direct-connect。herdr の terminal attach）。
+ * `sodactl pane attach <paneId> [--takeover]`（20260926-pane-direct-connect。herdr の terminal attach）。
  * 手元の端末を raw モード・代替画面にし、`pane.attach`（大きさを手元に合わせる）→ `pane.subscribe`（見えている画面＋以後の出力）
  * → INPUT（打鍵）で pane に直結する。終わり方は `Ctrl+B q`（0）・奪われた／pane の終了／接続断（1）。どの終わり方でも
  * 端末のモードと raw モードを戻してから返る（`reportAndExit` より前）。
@@ -104,11 +104,11 @@ export async function runPaneAttach(
     throw new RpcFailure("not_a_tty", "pane attach needs a terminal on both stdin and stdout");
   }
   await withSession(cmd.opts, store, (client) => attachSession(client, cmd, term));
-  process.stderr.write(`wtmctl: detached from ${cmd.paneId}\n`);
+  process.stderr.write(`sodactl: detached from ${cmd.paneId}\n`);
 }
 
 async function attachSession(
-  client: WtmClient,
+  client: SodaClient,
   cmd: PaneAttachCmd,
   term: AttachTerminal,
 ): Promise<void> {

@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { HostInfo, Workspace } from "@wtm/protocol";
+import type { HostInfo, Workspace } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Disposable } from "../util/Disposable.js";
 import { MemoryLogger } from "../log/Logger.js";
@@ -60,7 +60,7 @@ describe("DefaultGitInfoPoller", () => {
   let service: SessionService;
 
   beforeEach(async () => {
-    repoDir = await makeTempDir("wtm-gitpoller-");
+    repoDir = await makeTempDir("soda-gitpoller-");
     await runGit(repoDir, ["init", "-b", "main"]);
     await runGit(repoDir, ["config", "user.email", "t@example.com"]);
     await runGit(repoDir, ["config", "user.name", "t"]);
@@ -237,7 +237,7 @@ describe("DefaultGitInfoPoller — 最初の pane のいまの場所への追従
   let poller: DefaultGitInfoPoller;
 
   async function repo(branch: string): Promise<string> {
-    const dir = await makeTempDir("wtm-follow-");
+    const dir = await makeTempDir("soda-follow-");
     await runGit(dir, ["init", "-b", branch]);
     await runGit(dir, ["config", "user.email", "t@example.com"]);
     await runGit(dir, ["config", "user.name", "t"]);
@@ -450,7 +450,7 @@ describe("DefaultGitInfoPoller — 最初の pane のいまの場所への追従
 });
 
 async function mkdirTemp(): Promise<string> {
-  const dir = await makeTempDir("wtm-gitpoller-plain-");
+  const dir = await makeTempDir("soda-gitpoller-plain-");
   await mkdir(dir, { recursive: true });
   return dir;
 }

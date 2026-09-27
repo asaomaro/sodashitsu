@@ -1,8 +1,8 @@
-import type { AgentInfo, AgentState } from "@wtm/protocol";
+import type { AgentInfo, AgentState } from "@sodashitsu/protocol";
 import { stripAnsi } from "./ansiStrip.js";
 
 /**
- * `wtmctl agent` の判定（20260926-agent-automation-api design.md「`agentStatus.ts`」）。
+ * `sodactl agent` の判定（20260926-agent-automation-api design.md「`agentStatus.ts`」）。
  * 状態の名前は herdr の `agent_status`（`done` を含む 5 値）に揃える。
  */
 

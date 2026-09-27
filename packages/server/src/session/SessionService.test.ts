@@ -1,5 +1,5 @@
-import type { AgentInfo, GitInfo, HostInfo, LayoutNode, Workspace } from "@wtm/protocol";
-import { RpcError } from "@wtm/protocol";
+import type { AgentInfo, GitInfo, HostInfo, LayoutNode, Workspace } from "@sodashitsu/protocol";
+import { RpcError } from "@sodashitsu/protocol";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1297,9 +1297,9 @@ describe("SessionService — 新しく開く場所（newCwd）", () => {
   // **worktree を開く経路**（AC11・design D5）。明示した場所が方針に勝ち、代わりへも回さない。
   it("明示した cwd は newCwd に勝ち、検証も代わりもしない", async () => {
     const h = makeNewCwdService();
-    const r = await h.service.createWorkspace("/repo/.wtm/worktrees/feat", "feat", { policy: "home" });
-    expect(h.terminals.createOptions.at(-1)!.cwd).toBe("/repo/.wtm/worktrees/feat"); // 偽の isUsableDir では使えない場所でも
-    expect(r.workspace.cwd).toBe("/repo/.wtm/worktrees/feat");
+    const r = await h.service.createWorkspace("/repo/.sodashitsu/worktrees/feat", "feat", { policy: "home" });
+    expect(h.terminals.createOptions.at(-1)!.cwd).toBe("/repo/.sodashitsu/worktrees/feat"); // 偽の isUsableDir では使えない場所でも
+    expect(r.workspace.cwd).toBe("/repo/.sodashitsu/worktrees/feat");
     expect(r.cwdFallback).toBeUndefined();
   });
 
@@ -2333,7 +2333,7 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
 describe("SessionService — スクロールバックを $EDITOR で開く（20260926-edit-scrollback）", () => {
   let tmpRoot: string;
   beforeEach(async () => {
-    tmpRoot = await mkdtemp(join(tmpdir(), "wtm-edit-scrollback-svc-"));
+    tmpRoot = await mkdtemp(join(tmpdir(), "soda-edit-scrollback-svc-"));
   });
   afterEach(async () => {
     await rm(tmpRoot, { recursive: true, force: true });
@@ -2374,7 +2374,7 @@ describe("SessionService — スクロールバックを $EDITOR で開く（202
     const opts = terminals.createOptions[1]!;
     expect(opts.cwd).toBe("/home/u/api");
     expect(opts.shell).toBe("/bin/sh");
-    expect(opts.args?.slice(0, 3)).toEqual(["-c", 'eval "${EDITOR:-vi} \\"\\$1\\""', "wtm-edit-scrollback"]);
+    expect(opts.args?.slice(0, 3)).toEqual(["-c", 'eval "${EDITOR:-vi} \\"\\$1\\""', "soda-edit-scrollback"]);
     expect(events.map((e) => e.event)).toEqual(["pane.created", "layout.updated"]);
     expect((events[1]!.data as { tab: { zoomedPaneId: string | null } }).tab.zoomedPaneId).toBe(pane.id);
   });
@@ -2387,7 +2387,7 @@ describe("SessionService — スクロールバックを $EDITOR で開く（202
     const path = terminals.createOptions[1]!.args![3]!;
     const dirs = await readdir(tmpRoot);
     expect(dirs).toHaveLength(1);
-    expect(dirs[0]!.startsWith("wtm-scrollback-")).toBe(true);
+    expect(dirs[0]!.startsWith("soda-scrollback-")).toBe(true);
     expect(path).toBe(join(tmpRoot, dirs[0]!, "scrollback.txt"));
     expect(await readFile(path, "utf8")).toBe("line1\nline2\n");
   });
@@ -2643,7 +2643,7 @@ describe("SessionService — 独自コマンドの pane 種・文脈・環境（
     const service = makeService(terminals, bus, new FakePersistScheduler());
     return { terminals, events, service };
   }
-  const cmd = { shell: "/bin/sh", args: ["-c", "htop"], env: { WTM_COMMAND_ID: "htop", WTM_ACTIVE_PANE_ID: "p2" } };
+  const cmd = { shell: "/bin/sh", args: ["-c", "htop"], env: { SODA_COMMAND_ID: "htop", SODA_ACTIVE_PANE_ID: "p2" } };
 
   it("対象を分割した pane でコマンドを拡大表示で起動し、焦点を移す。環境は pane の環境に重ねる", async () => {
     const { terminals, events, service } = setupCmd();
@@ -2658,7 +2658,7 @@ describe("SessionService — 独自コマンドの pane 種・文脈・環境（
     expect(pane.cwd).toBe("/srv/x");
     const opts = terminals.createOptions.at(-1)!;
     expect(opts).toMatchObject({ cwd: "/srv/x", shell: "/bin/sh", args: ["-c", "htop"] });
-    expect(opts.env).toMatchObject({ WTM_PANE_ID: pane.id, WTM_COMMAND_ID: "htop", WTM_ACTIVE_PANE_ID: "p2" });
+    expect(opts.env).toMatchObject({ SODA_PANE_ID: pane.id, SODA_COMMAND_ID: "htop", SODA_ACTIVE_PANE_ID: "p2" });
     expect(events.map((e) => e.event)).toEqual(["pane.created", "layout.updated"]);
   });
 
@@ -2719,12 +2719,12 @@ describe("SessionService — 独自コマンドの pane 種・文脈・環境（
     expect(() => service.commandContext("p999")).toThrow(expect.objectContaining({ code: "not_found" }));
   });
 
-  it("commandEnv は ownPaneId を省くと WTM_PANE_ID を入れず、extra を足す", () => {
+  it("commandEnv は ownPaneId を省くと SODA_PANE_ID を入れず、extra を足す", () => {
     const { service } = setupCmd();
-    const env = service.commandEnv(undefined, { WTM_ACTIVE_PANE_ID: "p1", WTM_COMMAND_ID: "x" });
-    expect(env["WTM_PANE_ID"]).toBeUndefined();
-    expect(env).toMatchObject({ WTM_ACTIVE_PANE_ID: "p1", WTM_COMMAND_ID: "x" });
-    expect(service.commandEnv("p7", {})["WTM_PANE_ID"]).toBe("p7");
+    const env = service.commandEnv(undefined, { SODA_ACTIVE_PANE_ID: "p1", SODA_COMMAND_ID: "x" });
+    expect(env["SODA_PANE_ID"]).toBeUndefined();
+    expect(env).toMatchObject({ SODA_ACTIVE_PANE_ID: "p1", SODA_COMMAND_ID: "x" });
+    expect(service.commandEnv("p7", {})["SODA_PANE_ID"]).toBe("p7");
   });
 
   it("reservePaneId は pane と同じ番号の列から払い出す（衝突しない）", async () => {

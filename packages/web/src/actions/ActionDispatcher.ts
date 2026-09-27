@@ -1,4 +1,4 @@
-import type { AgentIntegrationInstallResult, AgentIntegrationKind, NewCwd } from "@wtm/protocol";
+import type { AgentIntegrationInstallResult, AgentIntegrationKind, NewCwd } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { KeyInputController, ActionPort, FocusPort } from "../keys/KeyInputController.js";
 import type { Action, CopyCommand, Dir } from "../keys/actions.js";
@@ -1209,8 +1209,8 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   /**
    * 設定を読み直す（herdr の `reload_config` 相当。20260922-appearance-settings-rest。AC13〜AC15）。
-   * `localStorage`（`wtm.prefs.v1`）から、`settings`・`view` 各ストアの `wtm.prefs.v1` 由来の値を
-   * 読み直して反映する。**`settings`/`view` 以外のストア（`session`・通知の設定・`wtm.seen.v1`）には
+   * `localStorage`（`soda.prefs.v1`）から、`settings`・`view` 各ストアの `soda.prefs.v1` 由来の値を
+   * 読み直して反映する。**`settings`/`view` 以外のストア（`session`・通知の設定・`soda.seen.v1`）には
    * 触れない**（design decisions D4）。workspace・tab・pane の構成・フォーカスも変えない（AC15）。
    */
   private reloadConfig(): void {

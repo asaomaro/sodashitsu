@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DEFAULT_THEME_NAME, THEME_APPEARANCE, THEME_NAMES, type ThemeName } from "@wtm/protocol";
+import { DEFAULT_THEME_NAME, THEME_APPEARANCE, THEME_NAMES, type ThemeName } from "@sodashitsu/protocol";
 import { computed, inject, nextTick, ref, watch } from "vue";
 import { DeviceKindKey, NotificationControllerKey } from "../injection.js";
 import { applyRecommended } from "../keys/assign.js";
@@ -230,7 +230,7 @@ function onNativeCancel(ev: Event): void {
     @cancel="onNativeCancel"
   >
     <h2 id="onboarding-title" ref="titleEl" class="onboarding-title" tabindex="-1">
-      wtm へようこそ
+      soda へようこそ
     </h2>
     <p class="onboarding-lead">
       コーディングエージェントのための、ブラウザで使う端末のワークスペースです。
@@ -339,13 +339,13 @@ function onNativeCancel(ev: Event): void {
   max-width: min(34em, calc(100% - 16px));
   max-height: calc(100% - 16px);
   padding: 1em;
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-fg, #f8f8f2);
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-fg, #f8f8f2);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 6px;
 }
 .onboarding-dialog::backdrop {
-  background: var(--wtm-backdrop, rgba(0, 0, 0, 0.4));
+  background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
 .onboarding-title {
   margin: 0 0 0.3em;
@@ -369,7 +369,7 @@ function onNativeCancel(ev: Event): void {
 }
 .onboarding-fieldset {
   margin: 0 0 0.8em;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.4em 0.8em 0.6em;
 }
@@ -412,14 +412,14 @@ function onNativeCancel(ev: Event): void {
   font: inherit;
   color: inherit;
   background: transparent;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.2em 0.8em;
   cursor: pointer;
 }
 .onboarding-primary {
-  background: var(--wtm-accent, #6070a1);
-  color: var(--wtm-accent-fg, #f8f8f2);
-  border-color: var(--wtm-accent, #6070a1);
+  background: var(--soda-accent, #6070a1);
+  color: var(--soda-accent-fg, #f8f8f2);
+  border-color: var(--soda-accent, #6070a1);
 }
 </style>

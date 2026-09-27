@@ -54,7 +54,7 @@ test("モバイルのエミュレーションで1列レイアウトが出て、p
   await client.request("pane.subscribe", { paneId: p2, scrollbackLines: 200 });
   await expect.poll(shown).toContain(p2);
   await page.locator(".xterm-helper-textarea").first().click();
-  const marker = `wtm-e2e-mobile-split-${Date.now()}`;
+  const marker = `soda-e2e-mobile-split-${Date.now()}`;
   await page.keyboard.type(marker);
   await page.keyboard.press("Enter");
   await client.waitForOutput(p2, marker);
@@ -115,7 +115,7 @@ test("表示する pane を切り替えても、隠れた pane の PTY の大き
   // 隠れた p1 が `client.view` に載っていれば、p1 の `pane.size_changed` はこのエコーより先にこのクライアントへ届いている。
   await client.request("pane.subscribe", { paneId: p2, scrollbackLines: 200 });
   await page.locator(".xterm-helper-textarea").first().click();
-  const marker = `wtm-e2e-hidden-size-${Date.now()}`;
+  const marker = `soda-e2e-hidden-size-${Date.now()}`;
   await page.keyboard.type(marker);
   await page.keyboard.press("Enter");
   await client.waitForOutput(p2, marker);
@@ -292,7 +292,7 @@ test("表示領域の大きさで client.view を申告して回転・追加キ�
   /** ブラウザから打った文字のエコーを待つ（同じ接続で、その前に送った `client.view` をサーバが処理し終えた印）。 */
   const syncViaEcho = async (label: string): Promise<void> => {
     await focusTerminal(page);
-    const marker = `wtm-e2e-${label}-${Date.now()}`;
+    const marker = `soda-e2e-${label}-${Date.now()}`;
     await typeLine(page, `echo ${marker}`);
     await client.waitForOutput(p1, marker);
   };
@@ -398,7 +398,7 @@ test("タッチのタップでは、出力の中の URL を開かない（M6。�
   await focusTerminal(page);
 
   // 開く先はテストのサーバ。画面を消して 1 行目に URL だけを出す。
-  const url = `${appServer.origin}/wtm-e2e-touch-link`;
+  const url = `${appServer.origin}/soda-e2e-touch-link`;
   await typeLine(page, `printf '\\e[H\\e[2J%s\\n' ${url}`);
   await client.waitForOutput(p1, `\x1b[2J${url}`); // printf の出力（打った行のエコーには ESC が無い）
 

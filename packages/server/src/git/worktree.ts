@@ -1,5 +1,5 @@
 import { basename, dirname, resolve } from "node:path";
-import type { WorktreeEntry } from "@wtm/protocol";
+import type { WorktreeEntry } from "@sodashitsu/protocol";
 
 /**
  * worktree の名前とパスの規則（20260920-git-worktree-actions）。
@@ -8,7 +8,7 @@ import type { WorktreeEntry } from "@wtm/protocol";
  * - `generatedBranchSlug` ← `generated_branch_slug`（`:21-32`）
  * - `parseWorktreeListPorcelain` ← `parse_worktree_list_porcelain`（`:425-492`）
  *
- * **ブランチ名 → パスの規則（`branchToPathSlug` / `defaultCheckoutPath`）は `@wtm/protocol` にある**
+ * **ブランチ名 → パスの規則（`branchToPathSlug` / `defaultCheckoutPath`）は `@sodashitsu/protocol` にある**
  * ——web も同じ規則でプレビューを出すため。
  */
 

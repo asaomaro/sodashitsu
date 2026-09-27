@@ -31,7 +31,7 @@ const reconnect = (): void => {
   justify-content: center;
   gap: 1em;
   min-height: 100vh;
-  background: var(--wtm-bg, #1e1f29);
-  color: var(--wtm-fg, #f8f8f2);
+  background: var(--soda-bg, #1e1f29);
+  color: var(--soda-fg, #f8f8f2);
 }
 </style>

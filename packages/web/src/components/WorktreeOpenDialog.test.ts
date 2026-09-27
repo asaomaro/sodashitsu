@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WorktreeEntry } from "@wtm/protocol";
+import type { WorktreeEntry } from "@sodashitsu/protocol";
 import { ActionDispatcherKey } from "../injection.js";
 import { useViewStore } from "../store/view.js";
 import WorktreeOpenDialog from "./WorktreeOpenDialog.vue";

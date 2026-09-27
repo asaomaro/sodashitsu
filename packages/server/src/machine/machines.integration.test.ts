@@ -9,7 +9,7 @@ import {
   FRAME_TYPE,
   IMAGE_CHUNK_BYTES,
   type MachineStatus,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { composeServerOnFreePort } from "../composeServerOnFreePort.js";
@@ -21,15 +21,15 @@ import { DEFAULT_IMAGE_UPLOAD_LIMITS } from "../image/ImageUploads.js";
 import type { ChildLike, SpawnFn } from "./MachineLink.js";
 
 /**
- * 2 つの実物の `composeServer`（手元・リモート）を同じプロセスで起こし、手元の `/ws?machine=` がリモートの `wtm serve` と今までと同じ通信を
- * 中継することを確かめる（20260927-multi-host-machines の T8）。ssh と `wtm bridge` の代わりに、リモートの `bridge.sock` へ直接繋ぐ偽の子を渡す
+ * 2 つの実物の `composeServer`（手元・リモート）を同じプロセスで起こし、手元の `/ws?machine=` がリモートの `soda serve` と今までと同じ通信を
+ * 中継することを確かめる（20260927-multi-host-machines の T8）。ssh と `soda bridge` の代わりに、リモートの `bridge.sock` へ直接繋ぐ偽の子を渡す
  * （本物の子プロセスの通しは smoke の `machineSmoke.ts`）。
  */
 vi.setConfig({ testTimeout: 30_000 });
 
 const MACHINE_ID = "c".repeat(32);
 
-/** ssh ＋ `wtm bridge` の代わり: 引数を記録し、`bridge.sock` と標準入出力を素通しで繋ぐ。 */
+/** ssh ＋ `soda bridge` の代わり: 引数を記録し、`bridge.sock` と標準入出力を素通しで繋ぐ。 */
 function fakeSshTo(
   bridgePath: () => string,
   calls: string[][],
@@ -52,7 +52,7 @@ function fakeSshTo(
       setImmediate(() => child.emit("close", code, null));
     };
     sock.on("error", () => {
-      stderr.write("wtm: no running wtm serve for session default\n");
+      stderr.write("soda: no running soda serve for session default\n");
       exit(3);
     });
     sock.on("close", () => exit(0));
@@ -172,8 +172,8 @@ describe.skipIf(process.platform === "win32")(
     });
 
     async function startPair(opts: { withMachine: boolean }) {
-      const remoteDir = await makeTempDir("wtm-machine-remote-");
-      const localDir = await makeTempDir("wtm-machine-local-");
+      const remoteDir = await makeTempDir("soda-machine-remote-");
+      const localDir = await makeTempDir("soda-machine-local-");
       cleanups.push(() =>
         rm(remoteDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }),
       );
@@ -219,7 +219,7 @@ describe.skipIf(process.platform === "win32")(
       };
     }
 
-    it("/ws?machine= で hello・workspace の作成・入出力がリモートの wtm serve に届く。名前でも id でも。machine.list と machine.changed", async () => {
+    it("/ws?machine= で hello・workspace の作成・入出力がリモートの soda serve に届く。名前でも id でも。machine.list と machine.changed", async () => {
       const { local, calls, remoteServer, localDir } = await startPair({ withMachine: true });
       const { cookie, port } = await login(local);
       const localWs = new Client((await openWs(port, "", cookie)) as WebSocket);
@@ -230,7 +230,7 @@ describe.skipIf(process.platform === "win32")(
       });
       expect(online).toEqual([{ id: MACHINE_ID, label: "Remote", state: "online", message: null }]);
       expect(calls[0]!.slice(0, 1)).toEqual(["ssh"]);
-      expect(calls[0]!.slice(-4)).toEqual(["--", "you@remote", "wtm", "bridge"]);
+      expect(calls[0]!.slice(-4)).toEqual(["--", "you@remote", "soda", "bridge"]);
 
       for (const q of ["?machine=Remote", `?machine=${MACHINE_ID}`]) {
         const c = new Client((await openWs(port, q, cookie)) as WebSocket);

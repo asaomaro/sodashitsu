@@ -1,4 +1,4 @@
-import { RpcError, type PaneReportMetadataParams, type WorkspaceReportMetadataParams } from "@wtm/protocol";
+import { RpcError, type PaneReportMetadataParams, type WorkspaceReportMetadataParams } from "@sodashitsu/protocol";
 import type { Disposable, EventBus } from "../bus/EventBus.js";
 import { monotonicNow } from "../log/LogThrottle.js";
 import type { Logger } from "../log/Logger.js";

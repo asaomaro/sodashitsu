@@ -1,4 +1,4 @@
-import type { AgentInfo, SessionSnapshot } from "@wtm/protocol";
+import type { AgentInfo, SessionSnapshot } from "@sodashitsu/protocol";
 import { RpcFailure } from "./wsClient.js";
 
 /**

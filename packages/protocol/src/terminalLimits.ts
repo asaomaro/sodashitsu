@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * 端末の大きさの上限（20260927-server-size-input-limits の design・decisions D2）。`/ws` から届く `cols/rows`
- * （`client.view`・`pane.attach`・`pane.attach_resize`）はサーバのスキーマがこれで断り、ブラウザと `wtmctl pane attach` は
+ * （`client.view`・`pane.attach`・`pane.attach_resize`）はサーバのスキーマがこれで断り、ブラウザと `sodactl pane attach` は
  * `clampTerminalSize` で丸めてから送る。値は herdr のクライアントの画面の上限（1 辺 4096・1,000,000 セル）と同じ。
  * 上限が無いと、1 通の要求でサーバのミラー（headless の xterm）が巨大な画面をその場で確保して落ち、全 pane を巻き込む。
  * SNAPSHOT のフレームは大きさを u16 で運ぶので、この上限はその内側に収まる。
@@ -25,7 +25,7 @@ export function withinCellLimit(v: { cols: number; rows: number }): boolean {
 export const CELL_LIMIT_MESSAGE = `cols × rows exceeds ${TERMINAL_CELLS_MAX} cells`;
 
 /**
- * 測った大きさを上限の内側に丸める（ブラウザ・`wtmctl pane attach` が送る前に使う）。各辺は 1〜`TERMINAL_SIZE_MAX` の整数（切り捨て。
+ * 測った大きさを上限の内側に丸める（ブラウザ・`sodactl pane attach` が送る前に使う）。各辺は 1〜`TERMINAL_SIZE_MAX` の整数（切り捨て。
  * NaN は 1・+∞ は上限）にし、面積が上限を超えるなら幅を保って行を減らす。
  */
 export function clampTerminalSize(cols: number, rows: number): { cols: number; rows: number } {

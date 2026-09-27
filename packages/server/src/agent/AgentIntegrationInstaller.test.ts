@@ -14,7 +14,7 @@ describe("FsAgentIntegrationInstaller", () => {
   let codexDir: string;
 
   beforeEach(async () => {
-    workDir = await makeTempDir("wtm-integration-installer-");
+    workDir = await makeTempDir("soda-integration-installer-");
     hookScriptSource = join(workDir, "agent-hook-report.cjs");
     await writeFile(hookScriptSource, "// fake hook script\n");
     claudeDir = join(workDir, "claude-home");
@@ -48,12 +48,12 @@ describe("FsAgentIntegrationInstaller", () => {
 
     const settings = JSON.parse(await readFile(join(claudeDir, "settings.json"), "utf8"));
     expect(settings.hooks.SessionStart).toHaveLength(1);
-    expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("wtm-agent-report.cjs");
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("soda-agent-report.cjs");
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("claude");
     expect(settings.hooks.SessionStart[0].hooks[0].async).toBe(true);
 
     // hook スクリプトが実際にコピーされている
-    const copied = await readFile(join(claudeDir, "hooks", "wtm-agent-report.cjs"), "utf8");
+    const copied = await readFile(join(claudeDir, "hooks", "soda-agent-report.cjs"), "utf8");
     expect(copied).toContain("fake hook script");
   });
 
@@ -119,7 +119,7 @@ describe("FsAgentIntegrationInstaller", () => {
     const after = JSON.parse(await readFile(settingsPath, "utf8"));
     expect(after.hooks.SessionStart).toHaveLength(1);
     expect(after.hooks.SessionStart[0].hooks[0].command).toBe("echo hi");
-    await expect(readFile(join(claudeDir, "hooks", "wtm-agent-report.cjs"))).rejects.toThrow();
+    await expect(readFile(join(claudeDir, "hooks", "soda-agent-report.cjs"))).rejects.toThrow();
   });
 
   it("uninstall reports 未導入 when nothing was installed", async () => {
@@ -139,7 +139,7 @@ describe("FsAgentIntegrationInstaller — 6エージェントの追加分", () =
   let home: string;
 
   beforeEach(async () => {
-    workDir = await makeTempDir("wtm-integration-installer-other-");
+    workDir = await makeTempDir("soda-integration-installer-other-");
     hookScriptSource = join(workDir, "agent-hook-report.cjs");
     await writeFile(hookScriptSource, "// fake hook script\n");
     home = join(workDir, "home");
@@ -160,7 +160,7 @@ describe("FsAgentIntegrationInstaller — 6エージェントの追加分", () =
     const settings = JSON.parse(await readFile(join(home, ".cursor", "hooks.json"), "utf8"));
     expect(settings.hooks.sessionStart).toHaveLength(1);
     const entry = settings.hooks.sessionStart[0];
-    expect(entry.command).toContain("wtm-agent-report.cjs");
+    expect(entry.command).toContain("soda-agent-report.cjs");
     expect(entry.command).toContain("cursor");
     expect(entry.hooks).toBeUndefined(); // ネスト無し（research F4）
 
@@ -181,11 +181,11 @@ describe("FsAgentIntegrationInstaller — 6エージェントの追加分", () =
     const installer = makeInstaller();
     expect(await installer.install("copilot")).toEqual({ ok: true, message: null });
 
-    const dedicated = JSON.parse(await readFile(join(hooksDir, "wtm-agent-report.json"), "utf8"));
+    const dedicated = JSON.parse(await readFile(join(hooksDir, "soda-agent-report.json"), "utf8"));
     expect(dedicated.hooks.sessionStart).toHaveLength(1);
     const entry = dedicated.hooks.sessionStart[0];
-    expect(entry.bash).toContain("wtm-agent-report.cjs");
-    expect(entry.powershell).toContain("wtm-agent-report.cjs");
+    expect(entry.bash).toContain("soda-agent-report.cjs");
+    expect(entry.powershell).toContain("soda-agent-report.cjs");
     expect(entry.timeoutSec).toBe(10);
 
     // 既存の他のファイルは無変更
@@ -203,7 +203,7 @@ describe("FsAgentIntegrationInstaller — 6エージェントの追加分", () =
     expect(settings.SessionStart).toHaveLength(1); // トップレベル直下（`hooks` ラップ無し）
     expect(settings.hooks).toBeUndefined();
     const entry = settings.SessionStart[0];
-    expect(entry.hooks[0].command).toContain("wtm-agent-report.cjs");
+    expect(entry.hooks[0].command).toContain("soda-agent-report.cjs");
     expect(entry.hooks[0].timeout).toBe(10);
     expect(entry.hooks[0].async).toBeUndefined();
 
@@ -235,10 +235,10 @@ describe("FsAgentIntegrationInstaller — 6エージェントの追加分", () =
     const installer = makeInstaller();
     expect(await installer.install("grok")).toEqual({ ok: true, message: null });
 
-    const dedicated = JSON.parse(await readFile(join(hooksDir, "wtm-agent-report.json"), "utf8"));
+    const dedicated = JSON.parse(await readFile(join(hooksDir, "soda-agent-report.json"), "utf8"));
     expect(dedicated.hooks.SessionStart).toHaveLength(1);
     const entry = dedicated.hooks.SessionStart[0];
-    expect(entry.command).toContain("wtm-agent-report.cjs");
+    expect(entry.command).toContain("soda-agent-report.cjs");
     expect(entry.hooks).toBeUndefined();
     expect(entry.timeout).toBe(10);
 
@@ -253,8 +253,8 @@ describe("FsAgentIntegrationInstaller — 6エージェントの追加分", () =
     const settings = JSON.parse(await readFile(join(home, ".qwen", "settings.json"), "utf8"));
     expect(settings.hooks.SessionStart).toHaveLength(1);
     const entry = settings.hooks.SessionStart[0];
-    expect(entry.command).toContain("wtm-agent-report.cjs");
-    expect(entry.name).toBe("wtm-agent-report");
+    expect(entry.command).toContain("soda-agent-report.cjs");
+    expect(entry.name).toBe("soda-agent-report");
     expect(entry.async).toBe(true);
   });
 

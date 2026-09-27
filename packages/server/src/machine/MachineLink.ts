@@ -19,7 +19,7 @@ import type { MachineProfile } from "./machineRules.js";
 import { SSH_COMMAND, sshArgsFor } from "./sshArgs.js";
 
 /**
- * 手元の `wtm serve` から 1 台のマシンへの **1 回の試み**（ssh の子プロセス 1 本の寿命）（20260927-multi-host-machines の design「手元の 1 台の接続」・
+ * 手元の `soda serve` から 1 台のマシンへの **1 回の試み**（ssh の子プロセス 1 本の寿命）（20260927-multi-host-machines の design「手元の 1 台の接続」・
  * architecture「設計判断」）。HELLO（版の確かめ）で online になり、切れたら失敗の分類を 1 回だけ報告して終わる。繋ぎ直しは `MachineManager` が
  * 新しい `MachineLink` を作る。**リモートから来るものは信用しない**: 枠の形・大きさ・チャネルの数・HELLO の形と時間を確かめ、外れたら ssh ごと切る。
  */
@@ -133,7 +133,7 @@ function withDetail(message: string, stderr: string): string {
 }
 
 /**
- * 失敗の分類（design「判定の順」）。最初に当たったもの: (1) spawn の失敗 → (2) 認証・ホスト鍵 → (3) リモートに wtm が無い → (4) リモートで wtm serve が
+ * 失敗の分類（design「判定の順」）。最初に当たったもの: (1) spawn の失敗 → (2) 認証・ホスト鍵 → (3) リモートに soda が無い → (4) リモートで soda serve が
  * 動いていない → (5) 枠・HELLO の違反・目印の前が上限超え → (6) 目印が来ないまま 0・1・2 で終わった → (7) それ以外は transient。
  * (3)〜(6) は HELLO を受ける前だけ（HELLO の後の終了はどの終了コードでも (7)）。
  */
@@ -173,7 +173,7 @@ export function classifyLinkFailure(end: LinkEnd): LinkFailure {
       return {
         kind: "attention",
         message: withDetail(
-          "リモートに wtm が見つかりません（リモートの PATH に wtm を入れてください）",
+          "リモートに soda が見つかりません（リモートの PATH に soda を入れてください）",
           end.stderr,
         ),
       };
@@ -182,21 +182,21 @@ export function classifyLinkFailure(end: LinkEnd): LinkFailure {
       return {
         kind: "attention",
         message: withDetail(
-          "リモートで wtm serve が動いていません（リモートで起動してください）",
+          "リモートで soda serve が動いていません（リモートで起動してください）",
           end.stderr,
         ),
       };
     if (end.protocolError !== undefined || end.preambleOverflow) {
       return {
         kind: "attention",
-        message: `リモートの wtm がこの版の中継に対応していません（リモートの wtm を更新してください）: ${end.protocolError ?? "no bridge marker"}`,
+        message: `リモートの soda がこの版の中継に対応していません（リモートの soda を更新してください）: ${end.protocolError ?? "no bridge marker"}`,
       };
     }
     if (!end.sawMarker && (end.exitCode === 0 || end.exitCode === 1 || end.exitCode === 2)) {
       return {
         kind: "attention",
         message: withDetail(
-          "リモートの wtm bridge が中継を始められませんでした（リモートの wtm の版と bridge.sock を確かめてください）",
+          "リモートの soda bridge が中継を始められませんでした（リモートの soda の版と bridge.sock を確かめてください）",
           end.stderr,
         ),
       };
@@ -370,7 +370,7 @@ export class MachineLink {
     return ch;
   }
 
-  /** 自分で閉じる（無効化・削除・停止）。リモートの `wtm serve` は止めない。 */
+  /** 自分で閉じる（無効化・削除・停止）。リモートの `soda serve` は止めない。 */
   close(): void {
     this.finish({ closedByUs: true });
   }

@@ -1,9 +1,9 @@
-import type { AgentInfo, DisplayState, Pane } from "@wtm/protocol";
+import type { AgentInfo, DisplayState, Pane } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
 /** 初回の案内（`store/onboarding.ts`）が既存の利用者の痕跡としても読む。 */
-export const SEEN_STORAGE_KEY = "wtm.seen.v1";
+export const SEEN_STORAGE_KEY = "soda.seen.v1";
 
 function loadFromStorage(): Record<string, number> {
   try {

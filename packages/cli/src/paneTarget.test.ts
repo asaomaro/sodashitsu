@@ -1,4 +1,4 @@
-import type { SessionSnapshot } from "@wtm/protocol";
+import type { SessionSnapshot } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import type { GlobalOpts } from "./cliArgs.js";
 import { paneTargetIdBeforeConnect, resolveCallerPane, resolveFocusedPane } from "./paneTarget.js";
@@ -13,7 +13,7 @@ const inPane: GlobalOpts = {
 const caller = (explicit: boolean) => ({ kind: "caller" as const, paneId: "p3", explicit });
 
 describe("resolveCallerPane", () => {
-  it("接続先が pane のサーバなら WTM_PANE_ID（ループバックの名前の違いは同じサーバ）", () => {
+  it("接続先が pane のサーバなら SODA_PANE_ID（ループバックの名前の違いは同じサーバ）", () => {
     expect(resolveCallerPane(inPane, caller(true))).toBe("p3");
     expect(resolveCallerPane({ ...inPane, url: "http://localhost:7780" }, caller(false))).toBe(
       "p3",
@@ -23,8 +23,8 @@ describe("resolveCallerPane", () => {
   it.each([
     ["別のポート", { ...inPane, url: "http://127.0.0.1:7781" }],
     ["別のホスト", { ...inPane, url: "https://myhost.lan:7780" }],
-    ["WTM_SERVER_URL が無い（caller なし）", { url: SERVER, token: undefined }],
-    ["WTM_SERVER_URL が読めない", { ...inPane, caller: { paneId: "p3", serverUrl: "not a url" } }],
+    ["SODA_SERVER_URL が無い（caller なし）", { url: SERVER, token: undefined }],
+    ["SODA_SERVER_URL が読めない", { ...inPane, caller: { paneId: "p3", serverUrl: "not a url" } }],
   ])("%s なら caller_pane_unknown（AC9）", (_label, opts) => {
     expect(() => resolveCallerPane(opts as GlobalOpts, caller(false))).toThrow(
       expect.objectContaining({
@@ -34,9 +34,9 @@ describe("resolveCallerPane", () => {
     );
   });
 
-  it("文面に WTM_PANE_ID と接続先を出し、WTM_SERVER_URL が無ければ (unset)", () => {
+  it("文面に SODA_PANE_ID と接続先を出し、SODA_SERVER_URL が無ければ (unset)", () => {
     expect(() => resolveCallerPane({ url: SERVER, token: undefined }, caller(true))).toThrow(
-      /WTM_PANE_ID=p3.*127\.0\.0\.1:7780.*WTM_SERVER_URL=\(unset\)\); if it is, pass the pane ID with --pane$/,
+      /SODA_PANE_ID=p3.*127\.0\.0\.1:7780.*SODA_SERVER_URL=\(unset\)\); if it is, pass the pane ID with --pane$/,
     );
   });
 });

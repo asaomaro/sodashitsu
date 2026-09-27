@@ -1,4 +1,4 @@
-import type { SessionSnapshot } from "@wtm/protocol";
+import type { SessionSnapshot } from "@sodashitsu/protocol";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { seenKeyFor, useSeenStore, SEEN_STORAGE_KEY } from "./seen.js";
@@ -51,23 +51,23 @@ const snap = (ws: string, tab: string, pane: string): SessionSnapshot => ({
 
 describe("表示の記憶のマシンごとの分け方", () => {
   it("ローカルは今までのキー、ほかのマシンは別のキー。rememberView・forgetStoredView は今のスコープだけ", () => {
-    expect(storedViewKeyFor("local")).toBe("wtm.view.v1");
-    expect(storedViewKeyFor("abc")).toBe("wtm.view.v1:abc");
+    expect(storedViewKeyFor("local")).toBe("soda.view.v1");
+    expect(storedViewKeyFor("abc")).toBe("soda.view.v1:abc");
     const view = useViewStore(pinia);
     view.setView("w1", "t1"); // ローカル
     view.setMachineScope("abc");
     view.rememberView("w5", "t9");
-    expect(JSON.parse(sessionStorage.getItem("wtm.view.v1")!)).toEqual({
+    expect(JSON.parse(sessionStorage.getItem("soda.view.v1")!)).toEqual({
       workspaceId: "w1",
       tabId: "t1",
     });
-    expect(JSON.parse(sessionStorage.getItem("wtm.view.v1:abc")!)).toEqual({
+    expect(JSON.parse(sessionStorage.getItem("soda.view.v1:abc")!)).toEqual({
       workspaceId: "w5",
       tabId: "t9",
     });
     view.forgetStoredView();
-    expect(sessionStorage.getItem("wtm.view.v1:abc")).toBeNull();
-    expect(sessionStorage.getItem("wtm.view.v1")).not.toBeNull();
+    expect(sessionStorage.getItem("soda.view.v1:abc")).toBeNull();
+    expect(sessionStorage.getItem("soda.view.v1")).not.toBeNull();
     view.setMachineScope("local");
   });
 

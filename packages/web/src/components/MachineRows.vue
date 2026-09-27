@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DisplayState } from "@wtm/protocol";
+import type { DisplayState } from "@sodashitsu/protocol";
 import { computed, inject } from "vue";
 import { MachineSwitcherKey } from "../injection.js";
 import { useMachinesStore } from "../store/machines.js";
@@ -96,7 +96,7 @@ function onButtonKeydown(ev: KeyboardEvent): void {
   cursor: pointer;
 }
 .machine-row:hover:not([aria-disabled="true"]) {
-  background: var(--wtm-menu-hover-bg, #343746);
+  background: var(--soda-menu-hover-bg, #343746);
 }
 /* 切れているマシンの行は無効な部品（`aria-disabled`）として薄く描く（最後の状態を「古い情報」と分かる形で。WCAG の対比の対象外）。 */
 .machine-row[aria-disabled="true"] {

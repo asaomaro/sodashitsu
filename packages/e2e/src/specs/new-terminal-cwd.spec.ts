@@ -22,7 +22,7 @@ import { watchShownPanes } from "../support/panes.js";
  *
  * **E2E は「読み直し」を見分けない**（`cd` から作成までにエージェントの監視が `Pane.cwd` を追従させると、読み直さなくても通る）。
  * 読み直しは `composeServer.integration.test.ts` とサーバの単体で見る。分割（AC3）は以前から Linux では追従していた（research F9）ので、
- * ここでは振る舞いを固定するだけ。方針は `storageState` で `wtm.prefs.v1` を先に入れる（`settings.spec.ts` の流儀）。AC-I3 だけは
+ * ここでは振る舞いを固定するだけ。方針は `storageState` で `soda.prefs.v1` を先に入れる（`settings.spec.ts` の流儀）。AC-I3 だけは
  * ダイアログをキーで操作して選ぶ。
  */
 
@@ -35,7 +35,7 @@ test.afterEach(async () => {
 
 /** 一時ディレクトリ（`pwd` と突き合わせるので実体のパス）。 */
 async function tempDir(tag: string): Promise<string> {
-  const dir = await realpath(await mkdtemp(join(tmpdir(), `wtm-e2e-cwd-${tag}-`)));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), `soda-e2e-cwd-${tag}-`)));
   tempDirs.push(dir);
   return dir;
 }
@@ -49,11 +49,11 @@ interface Opened {
   sent: () => SentInput[];
 }
 
-/** 新しいブラウザで開く。`prefs` があれば `wtm.prefs.v1` に入れておく（無ければ何も設定していない利用者）。 */
+/** 新しいブラウザで開く。`prefs` があれば `soda.prefs.v1` に入れておく（無ければ何も設定していない利用者）。 */
 async function openBrowser(browser: Browser, appServer: AppServer, prefs?: Record<string, unknown>): Promise<Opened> {
   const context = await browser.newContext(
     prefs
-      ? { storageState: { cookies: [], origins: [{ origin: appServer.origin, localStorage: [{ name: "wtm.prefs.v1", value: JSON.stringify(prefs) }] }] } }
+      ? { storageState: { cookies: [], origins: [{ origin: appServer.origin, localStorage: [{ name: "soda.prefs.v1", value: JSON.stringify(prefs) }] }] } }
       : {},
   );
   const page = await context.newPage();

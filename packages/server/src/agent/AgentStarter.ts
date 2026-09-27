@@ -8,7 +8,7 @@ import {
   RpcError,
   type AgentStartParams,
   type AgentStartResult,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 import type { ForegroundJob, ProcessInspector } from "../platform/ProcessInspector.js";
 import type { SessionService } from "../session/SessionService.js";
 import type { TerminalHost } from "../terminal/TerminalHost.js";

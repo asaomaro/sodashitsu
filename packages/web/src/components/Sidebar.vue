@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch } from "vue";
-import type { Workspace } from "@wtm/protocol";
+import type { Workspace } from "@sodashitsu/protocol";
 import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
@@ -603,9 +603,9 @@ watch(
   overflow-y: auto;
   /* `overflow-y` を指定すると `overflow-x` も `auto` に計算されるので、横は明示して止める（AC3）。 */
   overflow-x: hidden;
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-fg, #f8f8f2);
-  border-right: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-fg, #f8f8f2);
+  border-right: 1px solid var(--soda-menu-border, #44475a);
 }
 .sidebar-collapsed {
   width: 3em !important;
@@ -615,7 +615,7 @@ watch(
   padding: 0.5em 0;
 }
 .sidebar-agents {
-  border-top: 1px solid var(--wtm-menu-border, #44475a);
+  border-top: 1px solid var(--soda-menu-border, #44475a);
 }
 .sidebar-row {
   display: flex;
@@ -636,26 +636,26 @@ watch(
  * navigate の選択が同じ宣言で、しかもタブのアクティブと同じ色だったので見分けが付かなかった。
  * 持続する状態（表示中）は面、一時的なカーソル（navigate）は線にして、重なっても両方読めるようにする。 */
 .sidebar-row:hover {
-  background: var(--wtm-menu-hover-bg, #343746);
+  background: var(--soda-menu-hover-bg, #343746);
 }
 /* `.sidebar-row:hover` と詳細度をそろえ、後に置くことで表示中を勝たせる（一時的な状態で上書きしない）。 */
 .sidebar-row.sidebar-row-current {
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
 }
 .sidebar-row-selected {
-  outline: 1px solid var(--wtm-fg, #f8f8f2);
+  outline: 1px solid var(--soda-fg, #f8f8f2);
   outline-offset: -1px;
 }
 /* D&D のドロップ候補（20260923-workspace-grouping。`PaneFrame.vue` の `.pane-frame-edge-drop-target` と同じ考え方）。 */
 .sidebar-row.sidebar-row-drop-target {
-  outline: 2px solid var(--wtm-fg, #f8f8f2);
+  outline: 2px solid var(--soda-fg, #f8f8f2);
   outline-offset: -2px;
 }
 /* pane を D&D でこの workspace へ移す（20260924-pane-move-cross-tab。design「クライアント側:
  * ドロップ先の拡張」）。上の workspace 並べ替え用のドロップ候補とは別の見た目にする
  * （`PaneFrame.vue`/`TabBar.vue` と同じ accent 色）。 */
 .sidebar-row.sidebar-row-pane-drop-target {
-  outline: 2px dashed var(--wtm-accent, #8be9fd);
+  outline: 2px dashed var(--soda-accent, #8be9fd);
   outline-offset: -2px;
 }
 .sidebar-row-line1 {
@@ -703,7 +703,7 @@ watch(
 }
 .sidebar-unverified {
   flex: none;
-  color: var(--wtm-warn-fg, #ffb86c);
+  color: var(--soda-warn-fg, #ffb86c);
 }
 /* グループの折りたたみアイコン（20260923-workspace-grouping）。行のクリック領域とは別にする
  * （`@click.stop`）——アイコンを押しても行全体のクリック（フォーカス/折りたたみ）を二重に起こさない。 */
@@ -732,7 +732,7 @@ watch(
   padding-right: calc(0.8em + 6px);
 }
 .sidebar-section-header {
-  border-bottom: 1px solid var(--wtm-menu-border, #44475a);
+  border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
 /* 内容が短いときは下端へ寄る。`.sidebar` の overflow は動かさない（decisions.md D3）。 */
 .sidebar-footer {
@@ -746,7 +746,7 @@ watch(
 .sidebar-btn {
   font: inherit;
   font-size: 0.85em;
-  color: var(--wtm-fg, #f8f8f2);
+  color: var(--soda-fg, #f8f8f2);
   background: none;
   border: none;
   padding: 0.2em 0.4em;
@@ -755,7 +755,7 @@ watch(
   white-space: nowrap;
 }
 .sidebar-btn:hover {
-  background: var(--wtm-menu-hover-bg, #343746);
+  background: var(--soda-menu-hover-bg, #343746);
 }
 .sidebar-btn-right,
 .sidebar-sort-btn {
@@ -766,7 +766,7 @@ watch(
   padding: 0.2em 0.8em;
   /* 右端のつまみ（.sidebar-divider）の分を空ける（.sidebar-section-header と同じ）。 */
   padding-right: calc(0.8em + 6px);
-  border-bottom: 1px solid var(--wtm-menu-border, #44475a);
+  border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
 /* 畳んだ幅（3em）では左右の余白を詰めて ⇄ が … に切れないようにする。 */
 .sidebar-collapsed .sidebar-session {

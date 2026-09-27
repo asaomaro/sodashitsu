@@ -1,17 +1,17 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ServerEvent } from "@wtm/protocol";
-import { composeServerOnFreePort, type ComposedServer } from "@wtm/server";
+import type { ServerEvent } from "@sodashitsu/protocol";
+import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { runPaneAttach, type AttachTerminal } from "./commands/attach.js";
 import { FsSessionStore } from "./session.js";
 import { withSession } from "./withSession.js";
-import { connect, type WtmClient } from "./wsClient.js";
+import { connect, type SodaClient } from "./wsClient.js";
 
 /**
- * `wtmctl pane attach` を実サーバ・実 PTY の上で、偽の手元の端末から確かめる（20260926-pane-direct-connect）。
+ * `sodactl pane attach` を実サーバ・実 PTY の上で、偽の手元の端末から確かめる（20260926-pane-direct-connect）。
  * 実物の端末（raw モード）での確認は smoke（`smoke.ts`）が node-pty の上で行う。
  */
 
@@ -73,7 +73,7 @@ function hasOutputLine(text: string, marker: string): boolean {
     .some((l) => l.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").trim() === marker);
 }
 
-describe("wtmctl pane attach integration（実サーバ・実 PTY・偽の手元の端末）", () => {
+describe("sodactl pane attach integration（実サーバ・実 PTY・偽の手元の端末）", () => {
   let server: ComposedServer;
   let dir: string;
   let store: FsSessionStore;
@@ -81,7 +81,7 @@ describe("wtmctl pane attach integration（実サーバ・実 PTY・偽の手元
   let cookie: string;
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), "wtmctl-attach-it-"));
+    dir = await mkdtemp(join(tmpdir(), "sodactl-attach-it-"));
     server = await composeServerOnFreePort({
       host: "127.0.0.1",
       stateDir: join(dir, "state"),
@@ -112,7 +112,7 @@ describe("wtmctl pane attach integration（実サーバ・実 PTY・偽の手元
     paneId: string,
     cols: number,
     rows: number,
-  ): Promise<{ client: WtmClient; events: ServerEvent[]; output(): string }> {
+  ): Promise<{ client: SodaClient; events: ServerEvent[]; output(): string }> {
     const client = await connect(url, cookie);
     const events: ServerEvent[] = [];
     client.onEvent((e) => events.push(e));
@@ -234,7 +234,7 @@ describe("wtmctl pane attach integration（実サーバ・実 PTY・偽の手元
           data: { paneId, clientId: null },
         }),
       );
-      expect(stderr).toHaveBeenCalledWith(`wtmctl: detached from ${paneId}\n`);
+      expect(stderr).toHaveBeenCalledWith(`sodactl: detached from ${paneId}\n`);
     } finally {
       stderr.mockRestore();
       browser.client.close();

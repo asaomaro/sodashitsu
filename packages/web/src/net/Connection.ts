@@ -1,4 +1,4 @@
-import { decodeFrame, encodeInputFrame, FRAME_TYPE, type MethodName, type ParamsOf, type ResultOf } from "@wtm/protocol";
+import { decodeFrame, encodeInputFrame, FRAME_TYPE, type MethodName, type ParamsOf, type ResultOf } from "@sodashitsu/protocol";
 import type { ClientKind, ConnectionPort, LoginResult, StorePort, TerminalSinkPort } from "./ports.js";
 import { parseRetryAfter } from "./retryAfter.js";
 
@@ -336,7 +336,7 @@ export class Connection implements ConnectionPort {
       return;
     }
     if ("event" in msg) {
-      const event = msg as import("@wtm/protocol").ServerEvent;
+      const event = msg as import("@sodashitsu/protocol").ServerEvent;
       if (event.event === "pane.size_changed") {
         // OUTPUT/SNAPSHOT と同じく TerminalSinkPort へ（xterm.js の resize を Vue の反応を待たずに行う。D16 と同じ理由）。
         this.sink.onSizeChanged(event.data.paneId, event.data.cols, event.data.rows);
@@ -419,7 +419,7 @@ export class Connection implements ConnectionPort {
   /**
    * `/api/session` は 204（Cookie は有効・Host は許可内）なのに、WebSocket が開く前に閉じた（D107）。`/api/session` は Host で、
    * `/ws` は Origin で許すかを見るので、前段のプロキシが Host を許可内の名前（`127.0.0.1:7780` 等）で渡し、ページの Origin
-   * （`https://wtm.example.com` 等）が許可されていない構成（`--origin` を付けずに起動し直した）では、`/ws` だけが 403 になる。
+   * （`https://soda.example.com` 等）が許可されていない構成（`--origin` を付けずに起動し直した）では、`/ws` だけが 403 になる。
    * ブラウザは upgrade の状態コードを見られないので断定はできない——続いたら「再接続中…」に手がかりを添える（繋ぎ直しは続ける）。
    */
   private noteSocketFailedWhileSessionOk(): void {

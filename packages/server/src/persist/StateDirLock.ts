@@ -4,9 +4,9 @@ import { dirname, join, resolve } from "node:path";
 import type { Logger } from "../log/Logger.js";
 
 /** 状態ディレクトリの排他のロックのファイル名（中身は持ち主の pid とホスト名。D103）。 */
-export const STATE_DIR_LOCK_FILE = "wtm.lock";
+export const STATE_DIR_LOCK_FILE = "soda.lock";
 
-/** 同じ状態ディレクトリを、生きている別の wtm（または同じプロセスの別の実体・確かめられない別のホスト）が使っている。 */
+/** 同じ状態ディレクトリを、生きている別の soda（または同じプロセスの別の実体・確かめられない別のホスト）が使っている。 */
 export class StateDirInUseError extends Error {
   constructor(
     readonly pid: number,
@@ -59,7 +59,7 @@ export function isPidAlive(pid: number): boolean {
 const heldInThisProcess = new Set<string>();
 
 /**
- * 状態ディレクトリの排他のロック（`<状態ディレクトリ>/wtm.lock`。D103）。同じ `--state-dir` の wtm を 2 つ動かすと
+ * 状態ディレクトリの排他のロック（`<状態ディレクトリ>/soda.lock`。D103）。同じ `--state-dir` の soda を 2 つ動かすと
  * （ポートを変えれば bind は両方成功する——docs の手元用 7780 と LAN 用 8443 等）、全シェルを二重に起動し、
  * `session.json`・`auth.json` を互いに上書きし合うので、2 つ目を止める。
  * - `acquire()`：`wx`（無ければ作る・あれば失敗）で作り、自分の pid とホスト名を書く。既にあれば中身を見て、使用中なら
@@ -122,7 +122,7 @@ export class StateDirLock {
   }
 
   /**
-   * 読み取り専用で、ロックの持ち主が使用中か（`wtm session list`。20260926-named-session）。使用中なら持ち主、そうでなければ
+   * 読み取り専用で、ロックの持ち主が使用中か（`soda session list`。20260926-named-session）。使用中なら持ち主、そうでなければ
    * `undefined`（ロックが無い・中身を読めない・持ち主が生きていない）。ファイルもディレクトリも作らない・消さない。
    */
   async inspect(): Promise<{ pid: number; otherHost?: string } | undefined> {

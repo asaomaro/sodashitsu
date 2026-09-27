@@ -1,4 +1,4 @@
-import type { AgentIntegrationStatusResult } from "@wtm/protocol";
+import type { AgentIntegrationStatusResult } from "@sodashitsu/protocol";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useAgentIntegrationsStore } from "./agentIntegrations.js";

@@ -21,7 +21,7 @@ describe("AgentReportSocket", () => {
   let logger: MemoryLogger;
 
   beforeEach(async () => {
-    dir = await makeTempDir("wtm-agent-report-");
+    dir = await makeTempDir("soda-agent-report-");
     socketPath = join(dir, "agent-report.sock");
     logger = new MemoryLogger();
   });

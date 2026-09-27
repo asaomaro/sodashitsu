@@ -1,4 +1,4 @@
-import type { MethodName, ParamsOf, ResultOf } from "@wtm/protocol";
+import type { MethodName, ParamsOf, ResultOf } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InputGate } from "./InputGate.js";
 import type { ConnectionPort } from "./ports.js";

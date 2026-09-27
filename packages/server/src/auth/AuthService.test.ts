@@ -8,7 +8,7 @@ import { DefaultAuthService, SESSION_COOKIE_NAME, sessionCookieName } from "./Au
 describe("DefaultAuthService", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await makeTempDir("wtm-authsvc-");
+    dir = await makeTempDir("soda-authsvc-");
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -145,23 +145,23 @@ describe("DefaultAuthService", () => {
 describe("名前付き session の Cookie の名前", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await makeTempDir("wtm-authsvc-cookie-");
+    dir = await makeTempDir("soda-authsvc-cookie-");
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("既定の session は wtm_session のまま、名前付きは wtm_session_<名前>（互いに異なる）", () => {
-    expect(SESSION_COOKIE_NAME).toBe("wtm_session");
-    expect(sessionCookieName(undefined)).toBe("wtm_session");
-    expect(sessionCookieName("work")).toBe("wtm_session_work");
+  it("既定の session は soda_session のまま、名前付きは soda_session_<名前>（互いに異なる）", () => {
+    expect(SESSION_COOKIE_NAME).toBe("soda_session");
+    expect(sessionCookieName(undefined)).toBe("soda_session");
+    expect(sessionCookieName("work")).toBe("soda_session_work");
     expect(new Set([sessionCookieName(undefined), sessionCookieName("work"), sessionCookieName("lan"), sessionCookieName("A.b-c_1")]).size).toBe(4);
   });
 
   it("名前付き session の Set-Cookie・消す Cookie はその名前を使う", () => {
     const auth = new DefaultAuthService(new FsAuthFile(dir), { cookieName: sessionCookieName("work") });
-    expect(auth.buildSetCookieHeader("abc", false).startsWith("wtm_session_work=abc;")).toBe(true);
-    expect(auth.buildClearCookieHeader(false).startsWith("wtm_session_work=;")).toBe(true);
+    expect(auth.buildSetCookieHeader("abc", false).startsWith("soda_session_work=abc;")).toBe(true);
+    expect(auth.buildClearCookieHeader(false).startsWith("soda_session_work=;")).toBe(true);
   });
 
   it("自分の名前の Cookie だけを読む（別の session の Cookie だけなら未ログイン）", async () => {
@@ -171,17 +171,17 @@ describe("名前付き session の Cookie の名前", () => {
     if (!login.ok) throw new Error("unreachable");
     const id = login.sessionId;
     // 既定の session・別の名前付き session の Cookie に同じ値が入っていても読まない
-    expect(work.parseSessionIdFromCookie(`wtm_session=${id}`)).toBeUndefined();
-    expect(work.parseSessionIdFromCookie(`wtm_session_lan=${id}; wtm_session_workx=${id}`)).toBeUndefined();
-    expect(await work.authorizeUpgrade({ headers: { cookie: `wtm_session=${id}` }, remoteAddress: "127.0.0.1" })).toEqual({ ok: false });
+    expect(work.parseSessionIdFromCookie(`soda_session=${id}`)).toBeUndefined();
+    expect(work.parseSessionIdFromCookie(`soda_session_lan=${id}; soda_session_workx=${id}`)).toBeUndefined();
+    expect(await work.authorizeUpgrade({ headers: { cookie: `soda_session=${id}` }, remoteAddress: "127.0.0.1" })).toEqual({ ok: false });
     // 同じホストの全 Cookie が届いても（ブラウザはポートを問わず送る）、自分の名前のものを選ぶ
-    expect(work.parseSessionIdFromCookie(`wtm_session=other; wtm_session_work=${id}; wtm_session_lan=x`)).toBe(id);
-    expect(await work.authorizeUpgrade({ headers: { cookie: `wtm_session=other; wtm_session_work=${id}` }, remoteAddress: "127.0.0.1" })).toEqual({ ok: true, sessionId: id });
+    expect(work.parseSessionIdFromCookie(`soda_session=other; soda_session_work=${id}; soda_session_lan=x`)).toBe(id);
+    expect(await work.authorizeUpgrade({ headers: { cookie: `soda_session=other; soda_session_work=${id}` }, remoteAddress: "127.0.0.1" })).toEqual({ ok: true, sessionId: id });
   });
 
   it("既定の session は名前付き session の Cookie を読まない", () => {
     const def = new DefaultAuthService(new FsAuthFile(dir));
-    expect(def.parseSessionIdFromCookie("wtm_session_work=abc")).toBeUndefined();
-    expect(def.parseSessionIdFromCookie("wtm_session_work=abc; wtm_session=def")).toBe("def");
+    expect(def.parseSessionIdFromCookie("soda_session_work=abc")).toBeUndefined();
+    expect(def.parseSessionIdFromCookie("soda_session_work=abc; soda_session=def")).toBe("def");
   });
 });

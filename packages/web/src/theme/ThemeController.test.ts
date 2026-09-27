@@ -1,4 +1,4 @@
-import { TERMINAL_PALETTES, type TerminalPalette, type ThemeName } from "@wtm/protocol";
+import { TERMINAL_PALETTES, type TerminalPalette, type ThemeName } from "@sodashitsu/protocol";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { nextTick } from "vue";
@@ -78,8 +78,8 @@ describe("ThemeController.start", () => {
     const { controller, storage } = make();
     controller.start();
     const t = uiTokens("gruvbox-light");
-    expect(root.style.getPropertyValue("--wtm-menu-bg")).toBe(t.vars["--wtm-menu-bg"]);
-    expect(root.style.getPropertyValue("--wtm-state-working")).toBe(t.vars["--wtm-state-working"]);
+    expect(root.style.getPropertyValue("--soda-menu-bg")).toBe(t.vars["--soda-menu-bg"]);
+    expect(root.style.getPropertyValue("--soda-state-working")).toBe(t.vars["--soda-state-working"]);
     expect(root.style.colorScheme).toBe("light");
     expect(root.dataset["theme"]).toBe("gruvbox-light");
     expect(terminalThemes).toEqual([TERMINAL_PALETTES["gruvbox-light"]]);
@@ -93,11 +93,11 @@ describe("ThemeController.start", () => {
 
   it("1 回目は省略しない：控えが別のテーマの変数を当てていても、保存値が dracula なら dracula に当て直す", () => {
     const nord = uiTokens("nord");
-    root.style.setProperty("--wtm-menu-bg", nord.vars["--wtm-menu-bg"]); // theme-boot.js が古い控えから当てた状態
+    root.style.setProperty("--soda-menu-bg", nord.vars["--soda-menu-bg"]); // theme-boot.js が古い控えから当てた状態
     root.style.colorScheme = "light";
     const { controller } = make();
     controller.start();
-    expect(root.style.getPropertyValue("--wtm-menu-bg")).toBe("#282a36");
+    expect(root.style.getPropertyValue("--soda-menu-bg")).toBe("#282a36");
     expect(root.style.colorScheme).toBe("dark");
     expect(sent).toEqual(["dracula"]);
   });
@@ -133,8 +133,8 @@ describe("変化を追う", () => {
     settings.setTheme("nord");
     await nextTick();
     expect(root.dataset["theme"]).toBe("nord");
-    expect(storage.boot()?.fixed.vars["--wtm-menu-bg"]).toBe(
-      uiTokens("nord").vars["--wtm-menu-bg"],
+    expect(storage.boot()?.fixed.vars["--soda-menu-bg"]).toBe(
+      uiTokens("nord").vars["--soda-menu-bg"],
     );
     settings.setThemeAuto(true);
     await nextTick();
@@ -183,9 +183,9 @@ describe("変化を追う", () => {
   it("start の前に apply が呼ばれていても、start は同じ名前でも当て直す", () => {
     const { controller } = make();
     controller.apply("dracula");
-    root.style.removeProperty("--wtm-menu-bg");
+    root.style.removeProperty("--soda-menu-bg");
     controller.start();
-    expect(root.style.getPropertyValue("--wtm-menu-bg")).toBe("#282a36");
+    expect(root.style.getPropertyValue("--soda-menu-bg")).toBe("#282a36");
   });
 
   it("控えは保存された設定から作る——同じブラウザの別のタブで 1 つのテーマを変えていても、このタブで「暗いとき」を変えたときの控えはそれに揃う", async () => {
@@ -194,11 +194,11 @@ describe("変化を追う", () => {
     writePrefs({ theme: "nord" }); // 別のタブが保存した（このタブの store は dracula のまま）
     settings.setThemeDark("vesper");
     await nextTick();
-    expect(storage.boot()?.fixed.vars["--wtm-menu-bg"]).toBe(
-      uiTokens("nord").vars["--wtm-menu-bg"],
+    expect(storage.boot()?.fixed.vars["--soda-menu-bg"]).toBe(
+      uiTokens("nord").vars["--soda-menu-bg"],
     );
-    expect(storage.boot()?.dark.vars["--wtm-menu-bg"]).toBe(
-      uiTokens("vesper").vars["--wtm-menu-bg"],
+    expect(storage.boot()?.dark.vars["--soda-menu-bg"]).toBe(
+      uiTokens("vesper").vars["--soda-menu-bg"],
     );
   });
 
@@ -251,31 +251,31 @@ describe("色の上書き", () => {
   it("いま当たっているテーマの colorScheme に合う層だけが当たる（明るいテーマなら明るいときの上書き）", () => {
     writePrefs({ theme: "one-light" }); // colorScheme: light
     const { settings, controller } = make();
-    settings.setThemeOverride("light", "--wtm-accent", "#a6e3a1");
-    settings.setThemeOverride("dark", "--wtm-accent", "#89b4fa"); // 効かないはず（暗いときの上書き）
+    settings.setThemeOverride("light", "--soda-accent", "#a6e3a1");
+    settings.setThemeOverride("dark", "--soda-accent", "#89b4fa"); // 効かないはず（暗いときの上書き）
     controller.start();
-    expect(root.style.getPropertyValue("--wtm-accent")).toBe("#a6e3a1");
+    expect(root.style.getPropertyValue("--soda-accent")).toBe("#a6e3a1");
   });
 
   it("themeAuto の真偽ではなく colorScheme で選ぶ：auto が切のまま明るいテーマ 1 つを固定していても、明るいときの上書きが効く（AC3 の逸脱）", () => {
     writePrefs({ theme: "one-light", themeAuto: false });
     const { settings, controller } = make();
-    settings.setThemeOverride("light", "--wtm-bg", "#eff1f5");
+    settings.setThemeOverride("light", "--soda-bg", "#eff1f5");
     controller.start();
-    expect(root.style.getPropertyValue("--wtm-bg")).toBe("#eff1f5");
+    expect(root.style.getPropertyValue("--soda-bg")).toBe("#eff1f5");
   });
 
   it("上書きは、コントラスト調整済みの計算結果の上にそのまま当たる（AC2。再計算しない）", () => {
     writePrefs({ theme: "dracula" });
     const { settings, controller } = make();
-    const before = root.style.getPropertyValue("--wtm-menu-bg");
+    const before = root.style.getPropertyValue("--soda-menu-bg");
     expect(before).not.toBe("#000000"); // 上書き前は既定の値
-    settings.setThemeOverride("dark", "--wtm-menu-bg", "#000000");
+    settings.setThemeOverride("dark", "--soda-menu-bg", "#000000");
     controller.start();
-    expect(root.style.getPropertyValue("--wtm-menu-bg")).toBe("#000000");
+    expect(root.style.getPropertyValue("--soda-menu-bg")).toBe("#000000");
     // 上書きしていない変数は既定の値のまま（コントラスト調整の結果を維持）。
     const t = uiTokens("dracula");
-    expect(root.style.getPropertyValue("--wtm-accent")).toBe(t.vars["--wtm-accent"]);
+    expect(root.style.getPropertyValue("--soda-accent")).toBe(t.vars["--soda-accent"]);
   });
 
   it("apply() の『同じ名前なら省く』最適化は壊れない：テーマ名を変えずに上書きだけ変えても、applyOverrides() 経由で再適用される（研究 F5 の回帰）", async () => {
@@ -283,9 +283,9 @@ describe("色の上書き", () => {
     const { settings, controller } = make();
     controller.start();
     expect(sent).toEqual(["dracula"]); // 起動で 1 回送る
-    settings.setThemeOverride("dark", "--wtm-accent", "#ff0000");
+    settings.setThemeOverride("dark", "--soda-accent", "#ff0000");
     await nextTick();
-    expect(root.style.getPropertyValue("--wtm-accent")).toBe("#ff0000");
+    expect(root.style.getPropertyValue("--soda-accent")).toBe("#ff0000");
     // テーマ名は変わっていないので、端末の色・サーバへ送る名前は増えない（上書きは画面の枠だけに効く）。
     expect(sent).toEqual(["dracula"]);
     expect(terminalThemes).toEqual([TERMINAL_PALETTES["dracula"]]);
@@ -293,21 +293,21 @@ describe("色の上書き", () => {
 
   it("applyOverrides() は start() の前（applied が null）では何もしない", () => {
     const { settings, controller } = make();
-    settings.setThemeOverride("dark", "--wtm-accent", "#ff0000");
+    settings.setThemeOverride("dark", "--soda-accent", "#ff0000");
     expect(() => controller.applyOverrides()).not.toThrow();
-    expect(root.style.getPropertyValue("--wtm-accent")).toBe("");
+    expect(root.style.getPropertyValue("--soda-accent")).toBe("");
   });
 
   it("テーマを替えると、新しいテーマの colorScheme に合う層に切り替わる", async () => {
     writePrefs({ theme: "dracula" }); // dark
     const { settings, controller } = make();
-    settings.setThemeOverride("dark", "--wtm-accent", "#da0000");
-    settings.setThemeOverride("light", "--wtm-accent", "#11a000");
+    settings.setThemeOverride("dark", "--soda-accent", "#da0000");
+    settings.setThemeOverride("light", "--soda-accent", "#11a000");
     controller.start();
-    expect(root.style.getPropertyValue("--wtm-accent")).toBe("#da0000");
+    expect(root.style.getPropertyValue("--soda-accent")).toBe("#da0000");
     settings.setTheme("one-light"); // light
     await nextTick(); // effectiveTheme の変化を追う watch は非同期
-    expect(root.style.getPropertyValue("--wtm-accent")).toBe("#11a000");
+    expect(root.style.getPropertyValue("--soda-accent")).toBe("#11a000");
   });
 
   it("上書きが無ければ、従来どおりの値になる（回帰）", () => {
@@ -322,30 +322,30 @@ describe("色の上書き", () => {
   it("控え（writeBoot）にも上書きが入る", () => {
     writePrefs({
       theme: "dracula",
-      themeOverrides: { dark: { "--wtm-accent": "#ff00ff" } },
+      themeOverrides: { dark: { "--soda-accent": "#ff00ff" } },
     });
     const { controller, storage } = make();
     controller.start();
-    expect(storage.boot()?.fixed.vars["--wtm-accent"]).toBe("#ff00ff");
+    expect(storage.boot()?.fixed.vars["--soda-accent"]).toBe("#ff00ff");
   });
 
   it("上書きを変えると、控えも書き直される（開き直しでも一瞬既定の色が出ないよう。AC9）", async () => {
     writePrefs({ theme: "dracula" });
     const { settings, controller, storage } = make();
     controller.start();
-    expect(storage.boot()?.fixed.vars["--wtm-accent"]).not.toBe("#123456");
-    settings.setThemeOverride("dark", "--wtm-accent", "#123456");
+    expect(storage.boot()?.fixed.vars["--soda-accent"]).not.toBe("#123456");
+    settings.setThemeOverride("dark", "--soda-accent", "#123456");
     await nextTick(); // themeOverrides の変化を追う watch は非同期
-    expect(storage.boot()?.fixed.vars["--wtm-accent"]).toBe("#123456");
+    expect(storage.boot()?.fixed.vars["--soda-accent"]).toBe("#123456");
   });
 
   it("控えの上書きも保存された設定から作る——同じブラウザの別のタブが上書きを変えていても（このタブの store は古いまま）、このタブで書き直す控えはそれに揃う", async () => {
     writePrefs({ theme: "dracula" });
     const { settings, controller, storage } = make();
     controller.start();
-    writePrefs({ themeOverrides: { dark: { "--wtm-accent": "#1a2b3c" } } }); // 別のタブが保存した（このタブの store は追従前）
+    writePrefs({ themeOverrides: { dark: { "--soda-accent": "#1a2b3c" } } }); // 別のタブが保存した（このタブの store は追従前）
     settings.setThemeDark("vesper"); // このタブで何か別の設定を変え、writeBoot を起こす
     await nextTick();
-    expect(storage.boot()?.fixed.vars["--wtm-accent"]).toBe("#1a2b3c");
+    expect(storage.boot()?.fixed.vars["--soda-accent"]).toBe("#1a2b3c");
   });
 });

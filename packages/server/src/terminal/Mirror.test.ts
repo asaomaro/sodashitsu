@@ -1,4 +1,4 @@
-import { DEFAULT_THEME, TERMINAL_PALETTES } from "@wtm/protocol";
+import { DEFAULT_THEME, TERMINAL_PALETTES } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { XtermMirror, parseOsc7 } from "./Mirror.js";
 import { sanitizeHistoryAnsi } from "./historyAnsi.js";

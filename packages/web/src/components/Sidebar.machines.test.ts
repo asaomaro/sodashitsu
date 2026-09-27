@@ -5,7 +5,7 @@ import type {
   ResultOf,
   SessionSnapshot,
   Workspace,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -111,7 +111,7 @@ function mountWith(opts: { withMachines: boolean }) {
         id: C,
         label: "Build",
         state: "attention",
-        message: "リモートで wtm serve が動いていません",
+        message: "リモートで soda serve が動いていません",
       },
     ]);
     machines.applySummarySnapshot(B, remoteSnap());

@@ -44,7 +44,7 @@ const isMobile = isMobileViewport();
 
 /**
  * pane の枠・隙間の太さ（20260922-appearance-settings-rest。design「US4」）。`PaneFrame.vue`・
- * `Splitter.vue` はどちらも生の `4px` の代わりに `var(--wtm-pane-gap, 4px)` を読む——値そのもの
+ * `Splitter.vue` はどちらも生の `4px` の代わりに `var(--soda-pane-gap, 4px)` を読む——値そのもの
  * （px 数）はここ（`PANE_FRAME_THICKNESS_PX`）に1箇所だけ持ち、`.app-shell` の CSS 変数として
  * 配る（テーマの CSS 変数〔`ThemeController`〕と同じ「1箇所で決めて子孫へ配る」考え方。ただし
  * こちらは初回描画のちらつき防止が不要なので、`documentElement.style` への命令的な設定ではなく
@@ -56,7 +56,7 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
 <template>
   <LoginView v-if="view.authRequired" />
   <DetachedView v-else-if="view.connectionState === 'detached'" />
-  <div v-else class="app-shell" :style="{ '--wtm-pane-gap': paneGapPx }">
+  <div v-else class="app-shell" :style="{ '--soda-pane-gap': paneGapPx }">
     <MobileShell v-if="isMobile" />
     <template v-else>
       <Sidebar />
@@ -107,27 +107,27 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
  */
 :root {
   color-scheme: dark;
-  --wtm-bg: #1e1f29;
-  --wtm-fg: #f8f8f2;
-  --wtm-menu-bg: #282a36;
-  --wtm-menu-fg: #f8f8f2;
-  --wtm-menu-border: #44475a;
-  --wtm-menu-active-bg: #44475a;
-  /* 一時的なホバーの面。--wtm-menu-bg(#282a36) より明るく --wtm-menu-active-bg(#44475a) より暗い色にして、
+  --soda-bg: #1e1f29;
+  --soda-fg: #f8f8f2;
+  --soda-menu-bg: #282a36;
+  --soda-menu-fg: #f8f8f2;
+  --soda-menu-border: #44475a;
+  --soda-menu-active-bg: #44475a;
+  /* 一時的なホバーの面。--soda-menu-bg(#282a36) より明るく --soda-menu-active-bg(#44475a) より暗い色にして、
    * 表示中と取り違えないようにする。 */
-  --wtm-menu-hover-bg: #343746;
-  --wtm-accent: #6070a1;
-  --wtm-accent-fg: #f8f8f2;
-  --wtm-error-fg: #ff5555;
-  --wtm-warn-fg: #ffb86c;
-  --wtm-state-blocked: #ff6e6e;
-  --wtm-state-working: #f1fa8c;
-  --wtm-state-done: #50fa7b;
-  --wtm-state-idle: #8a9ad0;
-  --wtm-subtle-bg: rgba(255, 255, 255, 0.08);
-  --wtm-backdrop: rgba(0, 0, 0, 0.4);
-  --wtm-backdrop-strong: rgba(0, 0, 0, 0.5);
-  --wtm-pane-current: #44475a;
+  --soda-menu-hover-bg: #343746;
+  --soda-accent: #6070a1;
+  --soda-accent-fg: #f8f8f2;
+  --soda-error-fg: #ff5555;
+  --soda-warn-fg: #ffb86c;
+  --soda-state-blocked: #ff6e6e;
+  --soda-state-working: #f1fa8c;
+  --soda-state-done: #50fa7b;
+  --soda-state-idle: #8a9ad0;
+  --soda-subtle-bg: rgba(255, 255, 255, 0.08);
+  --soda-backdrop: rgba(0, 0, 0, 0.4);
+  --soda-backdrop-strong: rgba(0, 0, 0, 0.5);
+  --soda-pane-current: #44475a;
 }
 html,
 body,
@@ -136,8 +136,8 @@ body,
   margin: 0;
 }
 body {
-  background: var(--wtm-bg);
-  color: var(--wtm-fg);
+  background: var(--soda-bg);
+  color: var(--soda-fg);
   font-family: system-ui, sans-serif;
 }
 .app-shell {
@@ -158,7 +158,7 @@ body {
  * `border` はボックスの外寸を増やして内側の大きさを削り、`PaneLayout.vue` が測る葉の大きさ・PTY の
  * cols/rows まで変えてしまう。`outline` はボックスモデルに参加しないため、その心配が無い。 */
 .app-panes-outer-borders {
-  outline: 1px solid var(--wtm-menu-border, #44475a);
+  outline: 1px solid var(--soda-menu-border, #44475a);
   outline-offset: -1px;
 }
 </style>

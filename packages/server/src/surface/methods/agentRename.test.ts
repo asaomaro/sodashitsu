@@ -1,5 +1,5 @@
-import type { AgentInfo } from "@wtm/protocol";
-import { RpcError } from "@wtm/protocol";
+import type { AgentInfo } from "@sodashitsu/protocol";
+import { RpcError } from "@sodashitsu/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryLogger } from "../../log/Logger.js";
 import { ControlSurface } from "../ControlSurface.js";

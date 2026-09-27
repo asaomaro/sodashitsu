@@ -33,8 +33,8 @@ describe("branchToPathSlug", () => {
 
 describe("defaultCheckoutPath", () => {
   it("<root>/<repo>/<slug> の順に組み立てる", () => {
-    expect(defaultCheckoutPath("/home/me/.wtm/worktrees", "wtm", "worktree/brave-river")).toBe(
-      "/home/me/.wtm/worktrees/wtm/worktree-brave-river",
+    expect(defaultCheckoutPath("/home/me/.sodashitsu/worktrees", "soda", "worktree/brave-river")).toBe(
+      "/home/me/.sodashitsu/worktrees/soda/worktree-brave-river",
     );
   });
 

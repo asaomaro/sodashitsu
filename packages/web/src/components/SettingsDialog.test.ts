@@ -1,4 +1,4 @@
-import { THEME_NAMES, type AgentIntegrationInstallResult, type AgentIntegrationStatusResult } from "@wtm/protocol";
+import { THEME_NAMES, type AgentIntegrationInstallResult, type AgentIntegrationStatusResult } from "@sodashitsu/protocol";
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -999,7 +999,7 @@ describe("SettingsDialog — 色の個別の上書き", () => {
     expect(details.attributes("open")).toBeUndefined();
     expect(rows(wrapper)).toHaveLength(19);
     const first = rows(wrapper)[0]!;
-    expect(first.get("code").text()).toBe("--wtm-bg");
+    expect(first.get("code").text()).toBe("--soda-bg");
     expect(first.text()).toContain("画面地の背景");
     expect(first.findAll(".theme-override-input")).toHaveLength(2);
     expect(first.findAll(".theme-override-bucket-label").map((s) => s.text())).toEqual(["明るいとき", "暗いとき"]);
@@ -1008,18 +1008,18 @@ describe("SettingsDialog — 色の個別の上書き", () => {
   it("妥当な色を確定すると、即座に反映・保存される（確定ボタンは無い。AC2・AC-I2）", async () => {
     const { wrapper } = await openDialog();
     const settings = useSettingsStore(pinia);
-    const field = input(wrapper, "--wtm-accent", "light");
+    const field = input(wrapper, "--soda-accent", "light");
     await field.setValue("#a6e3a1");
     await field.trigger("change");
-    expect(settings.themeOverrides).toEqual({ light: { "--wtm-accent": "#a6e3a1" }, dark: {} });
-    expect(readPrefs()["themeOverrides"]).toEqual({ light: { "--wtm-accent": "#a6e3a1" } });
+    expect(settings.themeOverrides).toEqual({ light: { "--soda-accent": "#a6e3a1" }, dark: {} });
+    expect(readPrefs()["themeOverrides"]).toEqual({ light: { "--soda-accent": "#a6e3a1" } });
     expect(status(wrapper).text()).toContain("を #a6e3a1 にしました");
   });
 
   it("Enter でも確定する（IME 変換中は確定しない）", async () => {
     const { wrapper } = await openDialog();
     const settings = useSettingsStore(pinia);
-    const field = input(wrapper, "--wtm-accent", "dark");
+    const field = input(wrapper, "--soda-accent", "dark");
     // `setValue` は change も立てる（`typeInto` と同じ理由で input だけにする。打ちかけを作る）。
     field.element.value = "#ff0000";
     await field.trigger("input");
@@ -1028,13 +1028,13 @@ describe("SettingsDialog — 色の個別の上書き", () => {
     await field.trigger("keydown", { key: "Enter", keyCode: 229 }); // Safari は確定の keydown で isComposing が false
     expect(settings.themeOverrides.dark).toEqual({});
     await field.trigger("keydown", { key: "Enter" });
-    expect(settings.themeOverrides.dark).toEqual({ "--wtm-accent": "#ff0000" });
+    expect(settings.themeOverrides.dark).toEqual({ "--soda-accent": "#ff0000" });
   });
 
   it("無効な値は理由を示して拒否し、元の値（未入力なら空）へ戻す。反映も保存もしない（AC5）", async () => {
     const { wrapper } = await openDialog();
     const settings = useSettingsStore(pinia);
-    const field = input(wrapper, "--wtm-accent", "light");
+    const field = input(wrapper, "--soda-accent", "light");
     await field.setValue("notacolor");
     await field.trigger("change");
     expect(settings.themeOverrides.light).toEqual({});
@@ -1044,10 +1044,10 @@ describe("SettingsDialog — 色の個別の上書き", () => {
   });
 
   it("空欄で確定すると、既定へ戻す（無効値としては扱わない）", async () => {
-    useSettingsStore(pinia).setThemeOverride("light", "--wtm-accent", "#a6e3a1"); // 開く前に設定（開くたびに保存値から始める）
+    useSettingsStore(pinia).setThemeOverride("light", "--soda-accent", "#a6e3a1"); // 開く前に設定（開くたびに保存値から始める）
     const { wrapper } = await openDialog();
     const settings = useSettingsStore(pinia);
-    const field = input(wrapper, "--wtm-accent", "light");
+    const field = input(wrapper, "--soda-accent", "light");
     expect((field.element as HTMLInputElement).value).toBe("#a6e3a1");
     field.element.value = "";
     await field.trigger("input");
@@ -1059,29 +1059,29 @@ describe("SettingsDialog — 色の個別の上書き", () => {
   it("色ごとに「既定に戻す」ボタンがあり、上書き中だけ出る。押すとその 1 色だけ外れ、フォーカスは同じ行の入力欄へ（AC6・AC-I4）", async () => {
     const { wrapper } = await openDialog();
     const settings = useSettingsStore(pinia);
-    settings.setThemeOverride("light", "--wtm-accent", "#a6e3a1");
-    settings.setThemeOverride("light", "--wtm-bg", "#eff1f5");
+    settings.setThemeOverride("light", "--soda-accent", "#a6e3a1");
+    settings.setThemeOverride("light", "--soda-bg", "#eff1f5");
     await wrapper.vm.$nextTick();
-    const row = rows(wrapper)[7]!; // --wtm-accent の行
+    const row = rows(wrapper)[7]!; // --soda-accent の行
     const resetBtn = row.findAll("button").find((b) => b.text() === "既定に戻す")!;
     await resetBtn.trigger("click");
-    expect(settings.themeOverrides.light).toEqual({ "--wtm-bg": "#eff1f5" }); // ほかは残る
+    expect(settings.themeOverrides.light).toEqual({ "--soda-bg": "#eff1f5" }); // ほかは残る
     await wrapper.vm.$nextTick();
-    expect(document.activeElement).toBe(input(wrapper, "--wtm-accent", "light").element);
+    expect(document.activeElement).toBe(input(wrapper, "--soda-accent", "light").element);
     expect(row.findAll("button").some((b) => b.text() === "既定に戻す")).toBe(false); // ボタン自体が消える
   });
 
   it("すべての上書きを既定に戻すボタンは確認を挟み、やめると何も変わらず、戻すとすべて消える（AC7・AC-I2）", async () => {
     const { wrapper } = await openDialog();
     const settings = useSettingsStore(pinia);
-    settings.setThemeOverride("light", "--wtm-accent", "#a6e3a1");
-    settings.setThemeOverride("dark", "--wtm-bg", "#000000");
+    settings.setThemeOverride("light", "--soda-accent", "#a6e3a1");
+    settings.setThemeOverride("dark", "--soda-bg", "#000000");
     await wrapper.vm.$nextTick();
     const details = overridesDetails(wrapper);
     await details.get("[data-reset-all-overrides]").trigger("click");
     expect(document.activeElement).toBe(details.get("[data-confirm-no-overrides]").element); // 安全側
     await details.get("[data-confirm-no-overrides]").trigger("click");
-    expect(settings.themeOverrides).toEqual({ light: { "--wtm-accent": "#a6e3a1" }, dark: { "--wtm-bg": "#000000" } });
+    expect(settings.themeOverrides).toEqual({ light: { "--soda-accent": "#a6e3a1" }, dark: { "--soda-bg": "#000000" } });
     expect(document.activeElement).toBe(details.get("[data-reset-all-overrides]").element);
 
     await details.get("[data-reset-all-overrides]").trigger("click");
@@ -1112,11 +1112,11 @@ describe("SettingsDialog — 色の個別の上書き", () => {
     const summary = overridesDetails(wrapper).get("summary");
     (summary.element as HTMLElement).focus();
     await summary.trigger("click"); // <details> を開く（標準の Enter/Space・クリック相当）
-    const field = input(wrapper, "--wtm-bg", "light");
+    const field = input(wrapper, "--soda-bg", "light");
     (field.element as HTMLElement).focus();
     await field.setValue("#eff1f5");
     await field.trigger("keydown", { key: "Enter" });
-    expect(settings.themeOverrides.light).toEqual({ "--wtm-bg": "#eff1f5" });
+    expect(settings.themeOverrides.light).toEqual({ "--soda-bg": "#eff1f5" });
     // その入力欄のすぐ次に、同じ色の「既定に戻す」ボタンがある（DOM 順）。
     const row = rows(wrapper)[0]!;
     const resetBtn = row.findAll("button").find((b) => b.text() === "既定に戻す")!;
@@ -1129,11 +1129,11 @@ describe("SettingsDialog — 色の個別の上書き", () => {
   it("開き直すと、前回の結果の文・確認は持ち越さない", async () => {
     const { wrapper, view } = await openDialog();
     const settings = useSettingsStore(pinia);
-    const field = input(wrapper, "--wtm-accent", "light");
+    const field = input(wrapper, "--soda-accent", "light");
     await field.setValue("notacolor");
     await field.trigger("change");
     expect(status(wrapper).text()).not.toBe("");
-    settings.setThemeOverride("dark", "--wtm-bg", "#000000");
+    settings.setThemeOverride("dark", "--soda-bg", "#000000");
     await wrapper.vm.$nextTick();
     await overridesDetails(wrapper).get("[data-reset-all-overrides]").trigger("click");
     view.closeDialog();

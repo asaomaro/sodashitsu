@@ -82,19 +82,19 @@ describe("resolveServeOptions", () => {
 describe("defaultStateDir", () => {
   it("uses %LOCALAPPDATA% on Windows", () => {
     const dir = defaultStateDir({ LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local" }, "win32");
-    expect(dir).toContain("web-tn-multiplexer");
+    expect(dir).toContain("sodashitsu");
     expect(dir.startsWith("C:\\Users\\u\\AppData\\Local")).toBe(true);
   });
 
   it("uses XDG_STATE_HOME on Linux", () => {
     const dir = defaultStateDir({ XDG_STATE_HOME: "/home/u/.local/state" }, "linux");
-    expect(dir).toBe("/home/u/.local/state/web-tn-multiplexer");
+    expect(dir).toBe("/home/u/.local/state/sodashitsu");
   });
 });
 
 describe("resolveServeOptions の名前付き session（20260926-named-session）", () => {
   const env = { XDG_STATE_HOME: "/home/u/.local/state" };
-  const base = "/home/u/.local/state/web-tn-multiplexer";
+  const base = "/home/u/.local/state/sodashitsu";
 
   it("--session が無い・default なら既定の状態ディレクトリ（今までどおり）で、sessionName は undefined", () => {
     expect(resolveServeOptions({}, env, "linux")).toMatchObject({ stateDir: base, sessionName: undefined });
@@ -151,7 +151,7 @@ describe("listenFailureHint（待ち受けの失敗の案内。D102）", () => {
     expect(hint).toContain("別のプロセスが使っています");
     expect(hint).toContain("--state-dir");
     expect(hint).toContain("--port");
-    // 同じ state-dir の 2 つ目はポートを変えても wtm.lock で止まる（D103）ので、state-dir も分けるよう添える
+    // 同じ state-dir の 2 つ目はポートを変えても soda.lock で止まる（D103）ので、state-dir も分けるよう添える
     expect(hint).toContain("並行して動かすなら --state-dir も分け");
     expect(hint).toContain("--session <名前>"); // 20260926-named-session
   });
@@ -206,7 +206,7 @@ describe("isBindFailure / bindFailureHint（待ち受けの失敗の判定を 1 
 });
 
 describe("stateDirInUseError（同じ state-dir の二重起動。D103）", () => {
-  const inUse = { pid: 4242, lockPath: "/s/wtm.lock" };
+  const inUse = { pid: 4242, lockPath: "/s/soda.lock" };
 
   it("serve：使っている pid と、別の --state-dir を指定する案内・pid の再利用ならロックを消す案内", () => {
     const err = stateDirInUseError(inUse, "/s", "serve");
@@ -215,20 +215,20 @@ describe("stateDirInUseError（同じ state-dir の二重起動。D103）", () =
     expect(err.message).toContain("pid 4242");
     expect(err.hint).toContain("--state-dir に別のディレクトリ");
     expect(err.hint).toContain("--session <名前> で別の名前付き session"); // 20260926-named-session
-    expect(err.hint).toContain("/s/wtm.lock を消して");
+    expect(err.hint).toContain("/s/soda.lock を消して");
   });
 
   it("持ち主が別のホスト（別のコンテナ）なら、そのホスト名と、動いていなければロックを消す案内を出す（D103 の独立点検 #2）", () => {
     const err = stateDirInUseError({ ...inUse, otherHost: "container-b" }, "/s", "serve");
     expect(err.message).toContain("pid 4242 on container-b");
     expect(err.hint).toContain("container-b");
-    expect(err.hint).toContain("/s/wtm.lock を消して");
+    expect(err.hint).toContain("/s/soda.lock を消して");
   });
 
-  it("token reset：動いている wtm serve を止めてから実行するよう案内する", () => {
+  it("token reset：動いている soda serve を止めてから実行するよう案内する", () => {
     const err = stateDirInUseError(inUse, "/s", "token-reset");
     expect(err.message).toContain("pid 4242");
-    expect(err.hint).toContain("wtm serve を止めてから wtm token reset");
+    expect(err.hint).toContain("soda serve を止めてから soda token reset");
   });
 });
 
@@ -238,8 +238,8 @@ describe("resolveServeOptions の session の根・出所・ポートの出所�
 
   it("session の根は --state-dir か既定の場所（名前付きでも根は変わらない）", () => {
     expect(resolveServeOptions({ stateDir: "/s", session: "work" }, env, "linux").sessionRoot).toBe("/s");
-    expect(resolveServeOptions({}, env, "linux").sessionRoot).toBe(join("/xdg", "web-tn-multiplexer"));
-    expect(resolveServeOptions({ session: "work" }, env, "linux").sessionRoot).toBe(join("/xdg", "web-tn-multiplexer"));
+    expect(resolveServeOptions({}, env, "linux").sessionRoot).toBe(join("/xdg", "sodashitsu"));
+    expect(resolveServeOptions({ session: "work" }, env, "linux").sessionRoot).toBe(join("/xdg", "sodashitsu"));
   });
 
   it("名前の出所は名前付きのときだけ（無指定は flag。default は既定なので undefined）", () => {
@@ -271,17 +271,17 @@ describe("bindFailureHint の記録したポートの案内（20260926-named-ses
   });
 });
 
-describe("stateDirInUseError の WTM_SESSION の案内（20260926-named-session-ui の AC14）", () => {
-  const inUse = { pid: 4242, lockPath: "/s/wtm.lock" };
-  it("WTM_SESSION から選んだ名前付き session なら、その旨と --session default を添える", () => {
+describe("stateDirInUseError の SODA_SESSION の案内（20260926-named-session-ui の AC14）", () => {
+  const inUse = { pid: 4242, lockPath: "/s/soda.lock" };
+  it("SODA_SESSION から選んだ名前付き session なら、その旨と --session default を添える", () => {
     for (const command of ["serve", "token-reset"] as const) {
       const err = stateDirInUseError(inUse, "/s", command, "work");
-      expect(err.hint).toContain("session work は環境変数 WTM_SESSION から選びました");
+      expect(err.hint).toContain("session work は環境変数 SODA_SESSION から選びました");
       expect(err.hint).toContain("--session default");
     }
   });
   it("渡さなければ添えない（今までどおり）", () => {
-    expect(stateDirInUseError(inUse, "/s", "serve").hint).not.toContain("WTM_SESSION");
-    expect(stateDirInUseError(inUse, "/s", "token-reset").hint).not.toContain("WTM_SESSION");
+    expect(stateDirInUseError(inUse, "/s", "serve").hint).not.toContain("SODA_SESSION");
+    expect(stateDirInUseError(inUse, "/s", "token-reset").hint).not.toContain("SODA_SESSION");
   });
 });

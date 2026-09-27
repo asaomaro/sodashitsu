@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { TERMINAL_PALETTES } from "@wtm/protocol";
+import { TERMINAL_PALETTES } from "@sodashitsu/protocol";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
@@ -230,7 +230,7 @@ function stop(ev: Event): void {
   position: fixed;
   inset: 0;
   z-index: 900;
-  background: var(--wtm-backdrop, rgba(0, 0, 0, 0.4));
+  background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
 .command-popup {
   position: fixed;
@@ -238,10 +238,10 @@ function stop(ev: Event): void {
   flex-direction: column;
   box-sizing: border-box;
   padding: 4px 8px 8px;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-menu-fg, #f8f8f2);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
   overflow: hidden;
 }
 .command-popup-header {

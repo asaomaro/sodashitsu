@@ -1,4 +1,4 @@
-import type { ServerSessionEntry } from "@wtm/protocol";
+import type { ServerSessionEntry } from "@sodashitsu/protocol";
 
 /**
  * session の一覧の 1 項目を、このブラウザから開く URL か、開けない理由にする（20260926-named-session-ui の design「web」・AC6）。
@@ -8,7 +8,7 @@ import type { ServerSessionEntry } from "@wtm/protocol";
 export type SessionTarget =
   | { kind: "open"; url: string }
   | { kind: "current" }
-  /** 止まっている。`command` は起動のコマンド（既定の session も `--session default`——名前付き session の pane の `WTM_SESSION` に選ばせない）。 */
+  /** 止まっている。`command` は起動のコマンド（既定の session も `--session default`——名前付き session の pane の `SODA_SESSION` に選ばせない）。 */
   | { kind: "stopped"; command: string }
   /** ループバックで待ち受けていて、いまのホスト名がループバックでない（このマシンのブラウザからだけ開ける）。 */
   | { kind: "unreachable" }
@@ -49,14 +49,14 @@ function urlHost(host: string): string {
  *   付けた名前、`os.hostname()` と違う FQDN・mDNS の名前——全インタフェースの相手に出した URL は拒否される（相手のログインの画面が
  *   403 の理由を出す）。IP アドレスで開いていれば届く。
  * - ループバックへのポート転送（`ssh -L`・devcontainer 等）で `localhost` を開いているとき、ループバックの URL は**ブラウザ側のマシン**を
- *   指すので届かない（別のサービスに繋がりうる。開いた先は wtm のログインを求めるだけで、token は送らない）。
+ *   指すので届かない（別のサービスに繋がりうる。開いた先は soda のログインを求めるだけで、token は送らない）。
  */
 export function sessionTarget(entry: ServerSessionEntry, hereHostname: string): SessionTarget {
   if (entry.current) return { kind: "current" };
   if (!entry.running)
     return {
       kind: "stopped",
-      command: `wtm serve --session ${entry.name}`,
+      command: `soda serve --session ${entry.name}`,
     };
   const ep = entry.endpoint;
   if (ep === undefined) return { kind: "unknown" };

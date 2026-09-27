@@ -23,7 +23,7 @@ describe("ImageStore（20260927-clipboard-image-paste）", () => {
   let root: string;
   let dir: string;
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), "wtm-imgstore-"));
+    root = await mkdtemp(join(tmpdir(), "soda-imgstore-"));
     dir = join(root, "clipboard-images");
   });
   afterEach(async () => {
@@ -36,7 +36,7 @@ describe("ImageStore（20260927-clipboard-image-paste）", () => {
     expect(path.startsWith(dir + "/") || path.startsWith(dir + "\\")).toBe(true);
     const name = path.slice(dir.length + 1);
     expect(name).toMatch(IMAGE_FILE_NAME_RE);
-    expect(name).toMatch(/^wtm-image-20260927T101112Z-[0-9a-f]{16}\.png$/);
+    expect(name).toMatch(/^soda-image-20260927T101112Z-[0-9a-f]{16}\.png$/);
     expect(new Uint8Array(await readFile(path))).toEqual(PNG);
     const other = await store.save("image/jpeg", PNG);
     expect(other).not.toBe(path);
@@ -194,7 +194,7 @@ describe("ImageStore（20260927-clipboard-image-paste）", () => {
   it.runIf(posix)("後片付けはリンク・ディレクトリを消さない", async () => {
     const store = new ImageStore({ dir, maxFiles: 1 });
     await store.save("image/png", PNG);
-    const linkName = join(dir, "wtm-image-20000101T000000Z-0000000000000000.png");
+    const linkName = join(dir, "soda-image-20000101T000000Z-0000000000000000.png");
     const target = join(root, "target.png");
     await writeFile(target, "t");
     await symlink(target, linkName);

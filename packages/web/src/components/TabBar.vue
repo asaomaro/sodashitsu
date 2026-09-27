@@ -179,15 +179,15 @@ function onWheel(ev: WheelEvent): void {
   flex: none;
   display: flex;
   align-items: center;
-  background: var(--wtm-menu-bg, #282a36);
+  background: var(--soda-menu-bg, #282a36);
 }
 /* 区切り線は帯が接する側に置く（20260922-tabbar-pane-appearance）。上：pane 領域との境が下側。
  * 下：pane 領域との境が上側。 */
 .tab-bar-top {
-  border-bottom: 1px solid var(--wtm-menu-border, #44475a);
+  border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
 .tab-bar-bottom {
-  border-top: 1px solid var(--wtm-menu-border, #44475a);
+  border-top: 1px solid var(--soda-menu-border, #44475a);
 }
 /* 横スクロールはタブの列だけ。＋ は右端に残す（スクロールの向こうへ消えない）。 */
 .tab-bar-tabs {
@@ -201,14 +201,14 @@ function onWheel(ev: WheelEvent): void {
   flex: none;
   padding: 0.5em 0.8em;
   font: inherit;
-  color: var(--wtm-fg, #f8f8f2);
+  color: var(--soda-fg, #f8f8f2);
   background: none;
   /* 最後のタブが既に `border-right` を持つので、ここで左にも引くと境目だけ 2px になる（border は重ならない）。 */
   border: none;
   cursor: pointer;
 }
 .tab-bar-new:hover:not(:disabled) {
-  background: var(--wtm-menu-hover-bg, #343746);
+  background: var(--soda-menu-hover-bg, #343746);
 }
 .tab-bar-new:disabled {
   opacity: 0.4;
@@ -221,20 +221,20 @@ function onWheel(ev: WheelEvent): void {
   gap: 0.4em;
   padding: 0.5em 1em;
   font: inherit;
-  color: var(--wtm-fg, #f8f8f2);
+  color: var(--soda-fg, #f8f8f2);
   background: none;
   border: none;
-  border-right: 1px solid var(--wtm-menu-border, #44475a);
+  border-right: 1px solid var(--soda-menu-border, #44475a);
   cursor: pointer;
   white-space: nowrap;
 }
 .tab-bar-item-active {
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
 }
 /* D&D でのドロップ候補（20260924-pane-move-cross-tab。design「クライアント側: ドロップ先の拡張」）。
  * `PaneFrame.vue` の `.pane-frame-edge-drop-target` と同じ強調色。 */
 .tab-bar-item-drop-target {
-  outline: 2px dashed var(--wtm-accent, #8be9fd);
+  outline: 2px dashed var(--soda-accent, #8be9fd);
   outline-offset: -2px;
 }
 .tab-bar-zoomed {
@@ -250,7 +250,7 @@ function onWheel(ev: WheelEvent): void {
   white-space: nowrap;
   text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
-  color: var(--wtm-fg, #f8f8f2);
+  color: var(--soda-fg, #f8f8f2);
   opacity: 0.75;
   font-size: 0.9em;
 }

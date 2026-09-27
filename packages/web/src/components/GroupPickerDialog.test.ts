@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WorkspaceGroup } from "@wtm/protocol";
+import type { WorkspaceGroup } from "@sodashitsu/protocol";
 import { ActionDispatcherKey } from "../injection.js";
 import { useViewStore } from "../store/view.js";
 import GroupPickerDialog from "./GroupPickerDialog.vue";

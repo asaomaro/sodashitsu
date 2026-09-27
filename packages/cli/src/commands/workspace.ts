@@ -1,4 +1,4 @@
-import type { ParamsOf } from "@wtm/protocol";
+import type { ParamsOf } from "@sodashitsu/protocol";
 import type { Command } from "../cliArgs.js";
 import { printJson } from "../output.js";
 import type { SessionStore } from "../session.js";

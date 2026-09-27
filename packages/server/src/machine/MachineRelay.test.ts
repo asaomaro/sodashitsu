@@ -1,4 +1,4 @@
-import { encodeInputFrame, encodeOutputFrame, encodeSnapshotFrame } from "@wtm/protocol";
+import { encodeInputFrame, encodeOutputFrame, encodeSnapshotFrame } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import type { WsConnection } from "../ws/WsServer.js";
 import { machineSelectorOf } from "../ws/WsServerWs.js";

@@ -1,4 +1,4 @@
-import type { DisplayState } from "@wtm/protocol";
+import type { DisplayState } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { DISPLAY_STATES, stateGlyph, stateLabel } from "./stateIndicator.js";
 

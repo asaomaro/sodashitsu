@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WorktreeListResult } from "@wtm/protocol";
+import type { WorktreeListResult } from "@sodashitsu/protocol";
 import { ActionDispatcherKey } from "../injection.js";
 import { useViewStore } from "../store/view.js";
 import WorktreeCreateDialog from "./WorktreeCreateDialog.vue";
@@ -12,8 +12,8 @@ beforeEach(() => {
 });
 
 const INFO: WorktreeListResult = {
-  worktreeRoot: "/home/me/.wtm/worktrees",
-  repoName: "wtm",
+  worktreeRoot: "/home/me/.sodashitsu/worktrees",
+  repoName: "soda",
   suggestedBranch: "worktree/brave-river-0000",
   entries: [],
 };
@@ -44,10 +44,10 @@ describe("WorktreeCreateDialog（20260920-git-worktree-actions）", () => {
     const wrapper = mountDialog(makeActions());
     view.openDialogWithContext({ kind: "worktreeCreate", workspaceId: "w1", info: INFO });
     await wrapper.vm.$nextTick();
-    expect(wrapper.get(".worktree-dialog-preview-path").text()).toBe("/home/me/.wtm/worktrees/wtm/worktree-brave-river-0000");
+    expect(wrapper.get(".worktree-dialog-preview-path").text()).toBe("/home/me/.sodashitsu/worktrees/soda/worktree-brave-river-0000");
 
     await wrapper.get(".worktree-dialog-input").setValue("issue/137 Spaces");
-    expect(wrapper.get(".worktree-dialog-preview-path").text()).toBe("/home/me/.wtm/worktrees/wtm/issue-137-spaces");
+    expect(wrapper.get(".worktree-dialog-preview-path").text()).toBe("/home/me/.sodashitsu/worktrees/soda/issue-137-spaces");
   });
 
   it("確定すると入力したブランチ名を渡す（AC3）", async () => {

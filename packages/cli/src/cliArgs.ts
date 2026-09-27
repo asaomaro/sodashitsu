@@ -1,52 +1,52 @@
-import { AGENT_START_KINDS } from "@wtm/protocol";
+import { AGENT_START_KINDS } from "@sodashitsu/protocol";
 import { AGENT_STATUSES, type AgentStatus } from "./agentStatus.js";
 import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
 
 /**
- * `wtmctl` の引数解釈（design.md「インターフェース/データ構造・コマンド一覧」）。`main.ts` から分けたのは
+ * `sodactl` の引数解釈（design.md「インターフェース/データ構造・コマンド一覧」）。`main.ts` から分けたのは
  * 単体テストのため（`packages/server/src/cliArgs.ts` と同じ流儀）。誤りはどれも `CliUsageError`
  * （終了コード 2・使い方つき）：未知のオプション・値の無いオプション・未知の（サブ）コマンド・
  * 必須の位置引数の欠落・余分な位置引数・`--direction`/`--ratio`/`--timeout` 等の値が不正。
  */
 
 /**
- * 各コマンドの 1 行（`wtmctl help` の一覧・使い方の誤りの案内・skill ファイルとの食い違いの検査〔`skill.test.ts`〕が同じものを見る。
+ * 各コマンドの 1 行（`sodactl help` の一覧・使い方の誤りの案内・skill ファイルとの食い違いの検査〔`skill.test.ts`〕が同じものを見る。
  * 20260926-agent-skill-file で `main.ts` の `printHelp` の一覧をここへ一本化した）。
  */
 export const USAGE_LINES: readonly string[] = [
-  "wtmctl login --url <URL> --token <TOKEN>",
-  "wtmctl workspace create [--cwd <path>] [--label <text>] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl workspace close <workspaceId> [--url <URL>] [--token <TOKEN>]",
-  "wtmctl workspace rename <workspaceId> <label> [--url <URL>] [--token <TOKEN>]",
-  "wtmctl workspace report-metadata <workspaceId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl tab create [--workspace <id>] [--label <text>] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl tab close <tabId> [--url <URL>] [--token <TOKEN>]",
-  "wtmctl pane split [<paneId>|--pane <paneId>|--current] --direction right|down [--ratio <0.05-0.95>] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl pane current [--pane <paneId>|--current] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl pane close <paneId> [--url <URL>] [--token <TOKEN>]",
-  "wtmctl pane input <paneId> <text> [--url <URL>] [--token <TOKEN>]",
-  "wtmctl pane run <paneId> <command> [--url <URL>] [--token <TOKEN>]",
-  "wtmctl pane read <paneId> [--follow] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl pane attach <paneId> [--takeover] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl pane observe <paneId> [--url <URL>] [--token <TOKEN>]",
-  "wtmctl pane control <paneId> [--takeover] [--cols <N>] [--rows <N>] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl pane report-metadata <paneId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl snapshot [--url <URL>] [--token <TOKEN>]",
-  "wtmctl watch [--json] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl agent list [--url <URL>] [--token <TOKEN>]",
-  "wtmctl agent get <target> [--url <URL>] [--token <TOKEN>]",
-  "wtmctl agent wait <target> [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl agent read <target> [--lines <N>] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl agent prompt <target> <text> [--wait] [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
-  "wtmctl agent send-keys <target> <key>... [--url <URL>] [--token <TOKEN>]",
-  "wtmctl agent rename <target> <name>|--clear [--url <URL>] [--token <TOKEN>]",
-  "wtmctl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [--url <URL>] [--token <TOKEN>] [-- <args>...]",
-  "wtmctl skill",
+  "sodactl login --url <URL> --token <TOKEN>",
+  "sodactl workspace create [--cwd <path>] [--label <text>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl workspace close <workspaceId> [--url <URL>] [--token <TOKEN>]",
+  "sodactl workspace rename <workspaceId> <label> [--url <URL>] [--token <TOKEN>]",
+  "sodactl workspace report-metadata <workspaceId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl tab create [--workspace <id>] [--label <text>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl tab close <tabId> [--url <URL>] [--token <TOKEN>]",
+  "sodactl pane split [<paneId>|--pane <paneId>|--current] --direction right|down [--ratio <0.05-0.95>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl pane current [--pane <paneId>|--current] [--url <URL>] [--token <TOKEN>]",
+  "sodactl pane close <paneId> [--url <URL>] [--token <TOKEN>]",
+  "sodactl pane input <paneId> <text> [--url <URL>] [--token <TOKEN>]",
+  "sodactl pane run <paneId> <command> [--url <URL>] [--token <TOKEN>]",
+  "sodactl pane read <paneId> [--follow] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl pane attach <paneId> [--takeover] [--url <URL>] [--token <TOKEN>]",
+  "sodactl pane observe <paneId> [--url <URL>] [--token <TOKEN>]",
+  "sodactl pane control <paneId> [--takeover] [--cols <N>] [--rows <N>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl pane report-metadata <paneId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl snapshot [--url <URL>] [--token <TOKEN>]",
+  "sodactl watch [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent list [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent get <target> [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent wait <target> [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent read <target> [--lines <N>] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent prompt <target> <text> [--wait] [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent send-keys <target> <key>... [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent rename <target> <name>|--clear [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [--url <URL>] [--token <TOKEN>] [-- <args>...]",
+  "sodactl skill",
 ];
 
-/** `wtmctl --machine <名前|id> <コマンド> …`（20260927-multi-host-machines）の説明。前置きなので `USAGE_LINES`（コマンドの一覧）には入れない。 */
+/** `sodactl --machine <名前|id> <コマンド> …`（20260927-multi-host-machines）の説明。前置きなので `USAGE_LINES`（コマンドの一覧）には入れない。 */
 export const MACHINE_USAGE_LINE =
-  "wtmctl --machine <名前|id> <コマンド> …（手元の wtm serve に登録したマシン〔wtm machine〕へ送る。login・skill 以外）";
+  "sodactl --machine <名前|id> <コマンド> …（手元の soda serve に登録したマシン〔soda machine〕へ送る。login・skill 以外）";
 
 const USAGE = [
   ...USAGE_LINES,
@@ -81,7 +81,7 @@ export class CliUsageError extends Error {
 }
 
 /**
- * pane の中で動いている wtmctl の呼び出し元（20260926-agent-skill-file）。サーバが pane の環境に入れた `WTM_PANE_ID`・`WTM_SERVER_URL` から作る。
+ * pane の中で動いている sodactl の呼び出し元（20260926-agent-skill-file）。サーバが pane の環境に入れた `SODA_PANE_ID`・`SODA_SERVER_URL` から作る。
  * 自分の pane への操作の歯止め（`selfGuard.ts`）が使う。
  */
 export interface CallerPane {
@@ -92,9 +92,9 @@ export interface CallerPane {
 export interface GlobalOpts {
   url: string;
   token: string | undefined;
-  /** pane の中（`WTM_PANE_ID` と `WTM_SERVER_URL` がどちらも空でない）ときだけある。`--machine` のときは無い（ローカルの pane の id はリモートで意味を持たない）。 */
+  /** pane の中（`SODA_PANE_ID` と `SODA_SERVER_URL` がどちらも空でない）ときだけある。`--machine` のときは無い（ローカルの pane の id はリモートで意味を持たない）。 */
   caller?: CallerPane;
-  /** `--machine <名前|id>`（20260927-multi-host-machines）。手元の `wtm serve` の `/ws?machine=` で、そのマシンへ送る。 */
+  /** `--machine <名前|id>`（20260927-multi-host-machines）。手元の `soda serve` の `/ws?machine=` で、そのマシンへ送る。 */
   machine?: string;
 }
 
@@ -102,7 +102,7 @@ export interface GlobalOpts {
  * pane の対象の指定（20260927-caller-pane-default。herdr の `[<pane_id>|--pane ID|--current]`）。ID への解決は実行時（`paneTarget.ts`）——
  * 呼び出し元の pane は同じサーバかを確かめてから、フォーカスの pane は接続後の snapshot で決まるため。
  * - `id`: 位置引数か `--pane` で明示した pane。
- * - `caller`: 呼び出し元の pane（`WTM_PANE_ID`）。`explicit` は `--current` で明示したか（`--machine` での扱いが違う）。
+ * - `caller`: 呼び出し元の pane（`SODA_PANE_ID`）。`explicit` は `--current` で明示したか（`--machine` での扱いが違う）。
  * - `focused`: サーバのフォーカスの pane（pane の外・`--machine` で対象を省いたとき）。
  */
 export type PaneTarget =
@@ -225,15 +225,15 @@ function parseFlags(rest: readonly string[], spec: FlagSpec): ParsedFlags {
 }
 
 /**
- * `--url`/`--token` を取り出す（全コマンド共通）。接続先は `--url` → `WTMCTL_URL` → `WTM_SERVER_URL`（サーバが pane の環境に入れる、その pane の
+ * `--url`/`--token` を取り出す（全コマンド共通）。接続先は `--url` → `SODACTL_URL` → `SODA_SERVER_URL`（サーバが pane の環境に入れる、その pane の
  * サーバの URL）→ 既定の順（20260926-agent-skill-file）。利用者が明示した設定を、サーバの推定より上にする。
  */
 function globalOptsFrom(values: Map<string, string>, env: NodeJS.ProcessEnv): GlobalOpts {
-  const paneId = env["WTM_PANE_ID"];
-  const serverUrl = env["WTM_SERVER_URL"];
+  const paneId = env["SODA_PANE_ID"];
+  const serverUrl = env["SODA_SERVER_URL"];
   const opts: GlobalOpts = {
-    url: values.get("--url") ?? env["WTMCTL_URL"] ?? (serverUrl ? serverUrl : DEFAULT_URL),
-    token: values.get("--token") ?? env["WTMCTL_TOKEN"],
+    url: values.get("--url") ?? env["SODACTL_URL"] ?? (serverUrl ? serverUrl : DEFAULT_URL),
+    token: values.get("--token") ?? env["SODACTL_TOKEN"],
   };
   if (paneId && serverUrl) opts.caller = { paneId, serverUrl };
   return opts;
@@ -278,14 +278,14 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
     // 20260926-agent-skill-file。skill ファイルを出すだけ（サーバへつながない）。引数・オプションは取らない。
     case "skill": {
       const { positionals } = parseFlags(argv.slice(1), {});
-      rejectExtra(positionals, 0, "wtmctl skill");
+      rejectExtra(positionals, 0, "sodactl skill");
       return { kind: "skill" };
     }
     case "login": {
       const { positionals, values } = parseFlags(argv.slice(1), URL_TOKEN);
       rejectExtra(positionals, 0, USAGE);
       const opts = globalOptsFrom(values, env);
-      if (!opts.token) throw new CliUsageError("missing --token", "wtmctl login --url <URL> --token <TOKEN>");
+      if (!opts.token) throw new CliUsageError("missing --token", "sodactl login --url <URL> --token <TOKEN>");
       return { kind: "login", opts };
     }
     case "snapshot": {
@@ -332,10 +332,10 @@ function parseWorkspace(sub: string | undefined, rest: readonly string[], env: N
     return { kind: "workspace-rename", opts: globalOptsFrom(values, env), workspaceId, label };
   }
   if (sub === "report-metadata") {
-    const { targetId, opts, report } = parseReportMetadata(rest, env, "workspaceId", "wtmctl workspace report-metadata");
+    const { targetId, opts, report } = parseReportMetadata(rest, env, "workspaceId", "sodactl workspace report-metadata");
     return { kind: "workspace-report-metadata", opts, workspaceId: targetId, report };
   }
-  throw new CliUsageError(`unknown subcommand: wtmctl workspace ${sub ?? ""}`.trimEnd(), USAGE);
+  throw new CliUsageError(`unknown subcommand: sodactl workspace ${sub ?? ""}`.trimEnd(), USAGE);
 }
 
 function parseTab(sub: string | undefined, rest: readonly string[], env: NodeJS.ProcessEnv): Command {
@@ -351,16 +351,16 @@ function parseTab(sub: string | undefined, rest: readonly string[], env: NodeJS.
     rejectExtra(positionals, 1, USAGE);
     return { kind: "tab-close", opts: globalOptsFrom(values, env), tabId };
   }
-  throw new CliUsageError(`unknown subcommand: wtmctl tab ${sub ?? ""}`.trimEnd(), USAGE);
+  throw new CliUsageError(`unknown subcommand: sodactl tab ${sub ?? ""}`.trimEnd(), USAGE);
 }
 
-const PANE_SPLIT_USAGE = "wtmctl pane split [<paneId>|--pane <paneId>|--current] --direction right|down [--ratio N]";
-const PANE_CURRENT_USAGE = "wtmctl pane current [--pane <paneId>|--current]";
+const PANE_SPLIT_USAGE = "sodactl pane split [<paneId>|--pane <paneId>|--current] --direction right|down [--ratio N]";
+const PANE_CURRENT_USAGE = "sodactl pane current [--pane <paneId>|--current]";
 
 /**
  * 対象の指定（位置引数・`--pane`・`--current`・省略）を `PaneTarget` にする（20260927-caller-pane-default の design「引数の解釈」の表）。
- * 2 つ以上は使い方の誤り（herdr は後に書いたものが勝つが、取り違えを防ぐ）。`--current` は `WTM_PANE_ID` が要る（herdr の `--current requires HERDR_PANE_ID`）。
- * 省略は、pane の中（`WTM_PANE_ID` が空でない）なら呼び出し元、外ならフォーカスの pane。
+ * 2 つ以上は使い方の誤り（herdr は後に書いたものが勝つが、取り違えを防ぐ）。`--current` は `SODA_PANE_ID` が要る（herdr の `--current requires HERDR_PANE_ID`）。
+ * 省略は、pane の中（`SODA_PANE_ID` が空でない）なら呼び出し元、外ならフォーカスの pane。
  */
 function parsePaneTarget(
   positional: string | undefined,
@@ -375,9 +375,9 @@ function parsePaneTarget(
   if (given > 1) throw new CliUsageError("use only one of <paneId>, --pane and --current", usage);
   if (positional !== undefined) return { kind: "id", paneId: positional };
   if (flagPane !== undefined) return { kind: "id", paneId: flagPane };
-  const envPane = env["WTM_PANE_ID"];
+  const envPane = env["SODA_PANE_ID"];
   if (current) {
-    if (!envPane) throw new CliUsageError("--current requires WTM_PANE_ID (run inside a wtm pane)", usage);
+    if (!envPane) throw new CliUsageError("--current requires SODA_PANE_ID (run inside a soda pane)", usage);
     return { kind: "caller", paneId: envPane, explicit: true };
   }
   return envPane ? { kind: "caller", paneId: envPane, explicit: false } : { kind: "focused" };
@@ -469,10 +469,10 @@ function parsePane(sub: string | undefined, rest: readonly string[], env: NodeJS
     };
   }
   if (sub === "report-metadata") {
-    const { targetId, opts, report } = parseReportMetadata(rest, env, "paneId", "wtmctl pane report-metadata");
+    const { targetId, opts, report } = parseReportMetadata(rest, env, "paneId", "sodactl pane report-metadata");
     return { kind: "pane-report-metadata", opts, paneId: targetId, report };
   }
-  throw new CliUsageError(`unknown subcommand: wtmctl pane ${sub ?? ""}`.trimEnd(), USAGE);
+  throw new CliUsageError(`unknown subcommand: sodactl pane ${sub ?? ""}`.trimEnd(), USAGE);
 }
 
 /** `report-metadata` の `--seq`・`--ttl-ms`（0 以上の安全な整数。範囲の検査〔ttl は 1〜86400000〕はサーバ。herdr の CLI も u64 として読むだけ）。 */
@@ -644,11 +644,11 @@ function parseAgent(sub: string | undefined, rest: readonly string[], env: NodeJ
     return { kind: "agent-rename", opts: globalOptsFrom(values, env), paneId, name };
   }
   if (sub === "start") return parseAgentStart(rest, env);
-  throw new CliUsageError(`unknown subcommand: wtmctl agent ${sub ?? ""}`.trimEnd(), USAGE);
+  throw new CliUsageError(`unknown subcommand: sodactl agent ${sub ?? ""}`.trimEnd(), USAGE);
 }
 
 const AGENT_START_USAGE =
-  "wtmctl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [--url <URL>] [--token <TOKEN>] [-- <args>...]";
+  "sodactl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [--url <URL>] [--token <TOKEN>] [-- <args>...]";
 
 /** 20260926-agent-start（herdr の `agent start`）。最初の `--` より後はすべてエージェントへの引数で、オプションとして読まない。 */
 function parseAgentStart(rest: readonly string[], env: NodeJS.ProcessEnv): Command {
@@ -683,7 +683,7 @@ function parseAgentStart(rest: readonly string[], env: NodeJS.ProcessEnv): Comma
 function parseMachinePrefixed(argv: readonly string[], env: NodeJS.ProcessEnv): Command {
   const selector = argv[1];
   if (selector === undefined || selector.startsWith("--")) {
-    throw new CliUsageError("missing value for --machine", `${MACHINE_USAGE_LINE}\n（-- で始まる名前のマシンは id で指定してください。id は wtm machine list）`);
+    throw new CliUsageError("missing value for --machine", `${MACHINE_USAGE_LINE}\n（-- で始まる名前のマシンは id で指定してください。id は soda machine list）`);
   }
   if (selector.length === 0 || selector.length > MAX_MACHINE_SELECTOR_LENGTH) {
     throw new CliUsageError(`invalid value for --machine (1-${MAX_MACHINE_SELECTOR_LENGTH} characters)`, MACHINE_USAGE_LINE);
@@ -693,7 +693,7 @@ function parseMachinePrefixed(argv: readonly string[], env: NodeJS.ProcessEnv): 
   if (sub === undefined || sub === "help" || sub === "--help" || sub === "-h" || sub === "skill" || sub === "login" || sub === "--machine") {
     throw new CliUsageError(`--machine cannot be used with ${sub === undefined ? "no command" : sub}`, MACHINE_USAGE_LINE);
   }
-  // 別のマシンへの --current は、pane の外でも「--machine とは使えない」を理由にする（内側の解釈の「WTM_PANE_ID が要る」は誤誘導になる。
+  // 別のマシンへの --current は、pane の外でも「--machine とは使えない」を理由にする（内側の解釈の「SODA_PANE_ID が要る」は誤誘導になる。
   // --current を受けるのは pane のコマンドだけで、`agent start` の `--` の後のようにエージェントへの引数としては現れない）。
   if (selector !== "local" && sub === "pane" && rest.includes("--current")) {
     throw new CliUsageError("--current cannot be used with --machine (the calling pane belongs to this machine)", MACHINE_USAGE_LINE);
@@ -704,7 +704,7 @@ function parseMachinePrefixed(argv: readonly string[], env: NodeJS.ProcessEnv): 
   if (selector === "local") return cmd;
   const { caller: _caller, ...opts } = cmd.opts;
   void _caller;
-  // 呼び出し元の pane（手元の WTM_PANE_ID）はそのマシンの pane を指さない（herdr の `caller_pane_id` が --machine では None。20260927-caller-pane-default）。
+  // 呼び出し元の pane（手元の SODA_PANE_ID）はそのマシンの pane を指さない（herdr の `caller_pane_id` が --machine では None。20260927-caller-pane-default）。
   // --current は誤り、対象の省略はそのマシンのフォーカスの pane。
   if ("target" in cmd && cmd.target.kind === "caller") {
     // 上の `rest.includes("--current")` で先に断るので通常は届かない（explicit は --current からしか作られない）。解釈の順が変わったときの防御。

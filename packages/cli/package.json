@@ -1,10 +1,10 @@
 {
-  "name": "@wtm/cli",
+  "name": "@sodashitsu/cli",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "wtmctl": "./dist/main.js"
+    "sodactl": "./dist/main.js"
   },
   "scripts": {
     "build": "tsc -b",
@@ -13,12 +13,12 @@
     "smoke": "node --enable-source-maps dist/smoke.js"
   },
   "dependencies": {
-    "@wtm/protocol": "workspace:*",
+    "@sodashitsu/protocol": "workspace:*",
     "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@sodashitsu/server": "workspace:*",
     "@types/ws": "^8.5.13",
-    "@wtm/server": "workspace:*",
     "typescript": "^5.7.3",
     "vitest": "^5.0.1"
   }

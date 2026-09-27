@@ -152,15 +152,15 @@ function onKeydown(ev: KeyboardEvent): void {
 
 <style scoped>
 .confirm-dialog {
-  border: 1px solid var(--wtm-menu-border, #44475a);
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-menu-fg, #f8f8f2);
+  border: 1px solid var(--soda-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
   border-radius: 4px;
   min-width: 18em;
   padding: 1em;
 }
 .confirm-dialog::backdrop {
-  background: var(--wtm-backdrop, rgba(0, 0, 0, 0.4));
+  background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
 .confirm-dialog-message {
   margin: 0 0 1em;

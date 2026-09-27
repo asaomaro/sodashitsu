@@ -1,4 +1,4 @@
-import type { ServerSessionEntry } from "@wtm/protocol";
+import type { ServerSessionEntry } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { ControlSurface } from "../ControlSurface.js";
 import type { ClientSink } from "../../terminal/OutputFanout.js";

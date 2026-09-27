@@ -1,4 +1,4 @@
-import type { ServerSessionEntry } from "@wtm/protocol";
+import type { ServerSessionEntry } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { sessionTarget } from "./sessionTarget.js";
 
@@ -23,16 +23,16 @@ describe("sessionTarget", () => {
     });
   });
 
-  it("止まっていれば起動のコマンド（既定の session も --session default。pane の WTM_SESSION に選ばせない）", () => {
+  it("止まっていれば起動のコマンド（既定の session も --session default。pane の SODA_SESSION に選ばせない）", () => {
     expect(
       sessionTarget({ name: "work", default: false, running: false, current: false }, "localhost"),
-    ).toEqual({ kind: "stopped", command: "wtm serve --session work" });
+    ).toEqual({ kind: "stopped", command: "soda serve --session work" });
     expect(
       sessionTarget(
         { name: "default", default: true, running: false, current: false },
         "localhost",
       ),
-    ).toEqual({ kind: "stopped", command: "wtm serve --session default" });
+    ).toEqual({ kind: "stopped", command: "soda serve --session default" });
   });
 
   it("動いていて開くための情報が無ければ unknown", () => {

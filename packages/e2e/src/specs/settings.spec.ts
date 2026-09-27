@@ -16,7 +16,7 @@ import { watchPaneSubscribes } from "../support/panes.js";
  *   出ていないので、ブラウザが実際に求めた行数を見る——テスト自身の WebSocket クライアントではない。
  *
  * **「ブラウザを閉じて開き直す」は `storageState` を持ち越した新しい context で再現する**（research F34）。
- * `page.addInitScript` で `wtm.prefs.v1` を仕込むと再読み込みのたびに上書きされ、**保存を確かめたことにならない**（F35）ので使わない。
+ * `page.addInitScript` で `soda.prefs.v1` を仕込むと再読み込みのたびに上書きされ、**保存を確かめたことにならない**（F35）ので使わない。
  * ただの `context.close()` → `newContext()` は `localStorage` が空になる＝「別のブラウザ」（AC15）の再現に使う。
  */
 
@@ -75,7 +75,7 @@ async function launchBlockedAgent(appServer: AppServer): Promise<void> {
   const client = await appServer.openClient();
   const paneId = client.helloSnapshot()!.panes[0]!.id;
   await client.request("pane.subscribe", { paneId, scrollbackLines: 100 });
-  const dir = await mkdtemp(join(tmpdir(), "wtm-e2e-settings-"));
+  const dir = await mkdtemp(join(tmpdir(), "soda-e2e-settings-"));
   tempDirs.push(dir);
   const scriptPath = join(dir, "fake-claude.sh");
   const screen = [
@@ -151,16 +151,16 @@ test("設定：選んだ scrollback はその後に開く pane から効き、�
   await context.close();
 });
 
-/** `wtm.prefs.v1` を 1 回だけ仕込んだ context（`addInitScript` は再読み込みのたびに走り直すので使わない。research F35）。 */
+/** `soda.prefs.v1` を 1 回だけ仕込んだ context（`addInitScript` は再読み込みのたびに走り直すので使わない。research F35）。 */
 async function contextWithPrefs(browser: Browser, appServer: AppServer, value: string): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({
-    storageState: { cookies: [], origins: [{ origin: appServer.origin, localStorage: [{ name: "wtm.prefs.v1", value }] }] },
+    storageState: { cookies: [], origins: [{ origin: appServer.origin, localStorage: [{ name: "soda.prefs.v1", value }] }] },
   });
   const page = await context.newPage();
   await openApp(page, appServer);
   // **前提の確認**（判定ではない）：仕込んだ値がページに届いている。`origin` がずれると保存域は空になり、既定の判定が
   // 仕込みと無関係に通ってしまう。
-  expect(await page.evaluate(() => localStorage.getItem("wtm.prefs.v1")), "仕込みがページに届いている").toBe(value);
+  expect(await page.evaluate(() => localStorage.getItem("soda.prefs.v1")), "仕込みがページに届いている").toBe(value);
   return { context, page };
 }
 

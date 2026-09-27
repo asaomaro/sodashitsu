@@ -12,7 +12,7 @@ describe("FileLogger.flush（20260926-live-handoff）", () => {
   });
 
   it("それまでに出したログがファイルに書き終わってから解決する（出した順のまま）", async () => {
-    dir = await makeTempDir("wtm-logger-");
+    dir = await makeTempDir("soda-logger-");
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     const logger = new FileLogger(join(dir, "sub", "server.log"));
@@ -27,7 +27,7 @@ describe("FileLogger.flush（20260926-live-handoff）", () => {
   });
 
   it("書けなくても投げない", async () => {
-    dir = await makeTempDir("wtm-logger-");
+    dir = await makeTempDir("soda-logger-");
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const logger = new FileLogger(join(dir, "server.log", "\0bad"));
     logger.info("x");

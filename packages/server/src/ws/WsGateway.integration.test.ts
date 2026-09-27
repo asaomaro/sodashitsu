@@ -1,7 +1,7 @@
 import { createServer as createHttpServer, type Server as HttpServerType } from "node:http";
 import { connect } from "node:net";
-import type { HostInfo } from "@wtm/protocol";
-import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@wtm/protocol";
+import type { HostInfo } from "@sodashitsu/protocol";
+import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { MemoryLogger } from "../log/Logger.js";
@@ -86,7 +86,7 @@ async function startTestServer(
     gatewayLogger?: MemoryLogger;
   } = {},
 ): Promise<TestServer> {
-  const stateDir = await makeTempDir("wtm-ws-state-");
+  const stateDir = await makeTempDir("soda-ws-state-");
   const auth = new DefaultAuthService(new FsAuthFile(stateDir));
   await auth.initialize();
   const { token } = await auth.ensureToken();
@@ -114,7 +114,7 @@ async function startTestServer(
   registerAllMethods(surface, { session, clients, sizeAuthority, terminals, worktrees: stubWorktrees(), agentIntegrations: stubAgentIntegrations(), gitPoller: stubGitPoller() });
 
   // 実物の HttpServer（T16）を使う。/api/login 等を素の 404 ハンドラで済ませず、本物の配線で確かめる。
-  const webDistDir = await makeTempDir("wtm-ws-webdist-missing-");
+  const webDistDir = await makeTempDir("soda-ws-webdist-missing-");
   // Origin の検査と拒否のログは、composeServer と同じく HttpServer と WsServerWs で 1 つを共有する（D103）。
   const wsLogger = new MemoryLogger();
   const originGate = new OriginRejectionLog(wsLogger, origins);
@@ -295,7 +295,7 @@ describe("WsGateway (integration, real ws + real PTY)", () => {
   });
 
   it("Cookie の % の並びが壊れた upgrade は 401 で断り、error 行を書かない（D103）", async () => {
-    expect(await rawUpgrade(server.port, "/ws", ["Cookie: wtm_session=%E0%A4%A"])).toBe("HTTP/1.1 401 Unauthorized");
+    expect(await rawUpgrade(server.port, "/ws", ["Cookie: soda_session=%E0%A4%A"])).toBe("HTTP/1.1 401 Unauthorized");
     expect(server.wsLogger.lines.filter((l) => l.level === "error")).toEqual([]);
   });
 

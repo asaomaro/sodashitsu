@@ -65,19 +65,19 @@ describe("sessionNameProblem（名前の規則）", () => {
 
 describe("resolveSessionStateDir（状態ディレクトリの解決）", () => {
   it("名前が無い・default なら既定の状態ディレクトリそのもの（今までどおり）", () => {
-    expect(resolveSessionStateDir("/s/wtm", undefined)).toBe("/s/wtm");
-    expect(resolveSessionStateDir("/s/wtm", "default")).toBe("/s/wtm");
+    expect(resolveSessionStateDir("/s/soda", undefined)).toBe("/s/soda");
+    expect(resolveSessionStateDir("/s/soda", "default")).toBe("/s/soda");
   });
 
   it("名前付きは <base>/sessions/<name>", () => {
-    expect(resolveSessionStateDir("/s/wtm", "work")).toBe(join("/s/wtm", "sessions", "work"));
+    expect(resolveSessionStateDir("/s/soda", "work")).toBe(join("/s/soda", "sessions", "work"));
   });
 
   it("規則外の名前は ConfigError（規則を案内に含める）", () => {
     for (const bad of ["..", "../etc", "a/b", "", "con"]) {
-      expect(() => resolveSessionStateDir("/s/wtm", bad)).toThrow(ConfigError);
+      expect(() => resolveSessionStateDir("/s/soda", bad)).toThrow(ConfigError);
     }
-    expect(() => resolveSessionStateDir("/s/wtm", "../x")).toThrow(
+    expect(() => resolveSessionStateDir("/s/soda", "../x")).toThrow(
       expect.objectContaining({
         message: 'invalid session name: "../x" (使えない文字を含みます)',
         hint: expect.stringContaining("ASCII"),
@@ -90,7 +90,7 @@ describe("listSessions・deleteSession（一覧と削除）", () => {
   let base: string;
   const held: StateDirLock[] = [];
   beforeEach(async () => {
-    base = await makeTempDir("wtm-named-");
+    base = await makeTempDir("soda-named-");
   });
   afterEach(async () => {
     for (const l of held.splice(0)) await l.release();
@@ -177,7 +177,7 @@ describe("listSessions・deleteSession（一覧と削除）", () => {
   });
 
   it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
-    "delete は先に ~deleting- の名前へ移してから消す：消す途中で失敗しても元の名前は残らず（wtm.lock の無い半端な session を残さない）、remove-failed",
+    "delete は先に ~deleting- の名前へ移してから消す：消す途中で失敗しても元の名前は残らず（soda.lock の無い半端な session を残さない）、remove-failed",
     async () => {
       const dir = await mkSession("work");
       await mkdir(join(dir, "stuck"));
@@ -244,7 +244,7 @@ describe("listSessions・deleteSession（一覧と削除）", () => {
   it.skipIf(process.platform === "win32")(
     "delete はシンボリックリンクを辿らず消さない（リンク先が残る）",
     async () => {
-      const target = await makeTempDir("wtm-named-target-");
+      const target = await makeTempDir("soda-named-target-");
       try {
         await writeFile(join(target, "precious"), "x");
         await mkdir(join(base, "sessions"), { recursive: true });
@@ -278,7 +278,7 @@ describe("listServerSessions（server.sessions の一覧）", () => {
   let base: string;
   const held: StateDirLock[] = [];
   beforeEach(async () => {
-    base = await makeTempDir("wtm-named-srv-");
+    base = await makeTempDir("soda-named-srv-");
   });
   afterEach(async () => {
     for (const l of held.splice(0)) await l.release();
@@ -387,15 +387,15 @@ describe("listServerSessions（server.sessions の一覧）", () => {
 describe("sessionStopCommandFor（20260927-session-stop の AC13）", () => {
   it("既定の根なら --state-dir を添えず、違えば添える（空白・引用符は単一引用符で包む）", () => {
     expect(
-      sessionStopCommandFor("work", "/home/u/.local/state/wtm", "/home/u/.local/state/wtm"),
-    ).toBe("wtm session stop work");
-    expect(sessionStopCommandFor("default", "/s", "/home/u/.local/state/wtm")).toBe(
-      "wtm session stop default --state-dir /s",
+      sessionStopCommandFor("work", "/home/u/.local/state/soda", "/home/u/.local/state/soda"),
+    ).toBe("soda session stop work");
+    expect(sessionStopCommandFor("default", "/s", "/home/u/.local/state/soda")).toBe(
+      "soda session stop default --state-dir /s",
     );
     expect(sessionStopCommandFor("work", "/my dir/it's", "/d")).toBe(
-      "wtm session stop work --state-dir '/my dir/it'\\''s'",
+      "soda session stop work --state-dir '/my dir/it'\\''s'",
     );
-    expect(sessionStopCommandFor("work", "/s", undefined)).toBe("wtm session stop work");
+    expect(sessionStopCommandFor("work", "/s", undefined)).toBe("soda session stop work");
     // Windows では非対応なので案内しない（AC11）
     expect(sessionStopCommandFor("work", "/s", "/d", "win32")).toBeUndefined();
   });

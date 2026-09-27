@@ -1,4 +1,4 @@
-import { RpcError, type WorkspaceReportMetadataParams } from "@wtm/protocol";
+import { RpcError, type WorkspaceReportMetadataParams } from "@sodashitsu/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/EventBus.js";
 import { MemoryLogger } from "../log/Logger.js";

@@ -1,4 +1,4 @@
-import type { AgentInfo, Pane, Tab, Workspace } from "@wtm/protocol";
+import type { AgentInfo, Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { CLOSED_PANE_NAME, describeParts, describeTarget, type TargetLookup } from "./describe.js";
 

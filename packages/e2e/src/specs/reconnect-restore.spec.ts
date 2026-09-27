@@ -10,7 +10,7 @@ import { focusTerminal, grantClipboard, prefixKey, typeLine } from "../support/k
  * AC8・AC18 の E2E（05-e2e-docs T6）。design「受け入れ基準との対応」：
  * AC8「ブラウザを閉じても、サーバの PTY とミラーは動き続ける。再接続したら client.hello の snapshot で
  * 構成が戻り、client.view の SNAPSHOT で画面と scrollback が戻る」。
- * AC18「wtm serve を止めて再び起動し、ブラウザで再接続する。session.json から、workspace / tab / pane の
+ * AC18「soda serve を止めて再び起動し、ブラウザで再接続する。session.json から、workspace / tab / pane の
  * 構成・名前・レイアウト・フォーカスと各 pane の cwd（pwd で確認）が戻ることを確かめる」。
  */
 
@@ -24,7 +24,7 @@ test("ブラウザを閉じて（detach）再接続すると、構成と scrollb
 
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await client.request("pane.subscribe", { paneId: p1, scrollbackLines: 500 });
-  const marker = `wtm-e2e-before-detach-${Date.now()}`;
+  const marker = `soda-e2e-before-detach-${Date.now()}`;
   await typeLine(page1, `echo ${marker}`);
   await client.waitForOutput(p1, marker);
 
@@ -64,9 +64,9 @@ test("ブラウザを閉じて（detach）再接続すると、構成と scrollb
   await context2.close();
 });
 
-test("wtm serve を止めて再び起動しても、workspace/tab/pane の構成と各 pane の cwd が戻る（AC18）", async ({ browser, appServer }) => {
+test("soda serve を止めて再び起動しても、workspace/tab/pane の構成と各 pane の cwd が戻る（AC18）", async ({ browser, appServer }) => {
   const client = await appServer.openClient();
-  const workDir = await mkdtemp(join(tmpdir(), "wtm-e2e-ac18-"));
+  const workDir = await mkdtemp(join(tmpdir(), "soda-e2e-ac18-"));
   const created = await client.request("workspace.create", { cwd: workDir, label: "ac18-workspace" });
   await client.request("tab.rename", { tabId: created.tab.id, label: "ac18-tab" });
 
@@ -75,7 +75,7 @@ test("wtm serve を止めて再び起動しても、workspace/tab/pane の構成
   expect(wsBefore?.label).toBe("ac18-workspace");
   expect(wsBefore?.cwd).toBe(workDir);
 
-  await appServer.restart(); // 「wtm serve を止めて再び起動」（AC18）。同じ stateDir・同じポート、新しいトークン。
+  await appServer.restart(); // 「soda serve を止めて再び起動」（AC18）。同じ stateDir・同じポート、新しいトークン。
 
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -126,7 +126,7 @@ test("切断中は端末への入力を止めて表示し、再接続後は入�
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
   await focusTerminal(page);
-  const before = `wtm-before-${Date.now()}`;
+  const before = `soda-before-${Date.now()}`;
   await typeLine(page, `echo ${before}`);
   await client.waitForOutput(p1, before);
 
@@ -135,12 +135,12 @@ test("切断中は端末への入力を止めて表示し、再接続後は入�
   const overlay = page.locator(".reconnect-overlay");
   await expect(overlay).toBeVisible();
   await expect(overlay).toContainText("つながるまで入力できません");
-  const lost = `wtm-lost-${Date.now()}`;
+  const lost = `soda-lost-${Date.now()}`;
   await typeLine(page, `echo ${lost}`);
 
   allowConnect = true;
   await expect(overlay).toBeHidden({ timeout: 15_000 });
-  const after = `wtm-after-${Date.now()}`;
+  const after = `soda-after-${Date.now()}`;
   await typeLine(page, `echo ${after}`);
   await client.waitForOutput(p1, after);
 
@@ -179,7 +179,7 @@ for (const refused of [0, 2]) {
     await client.request("pane.subscribe", { paneId: p1, scrollbackLines: 200 });
     const ws = await routeRecordingWebSocket(page);
 
-    const before = `wtm-before-drop-${Date.now()}`;
+    const before = `soda-before-drop-${Date.now()}`;
     await openAndEcho(page, appServer, before);
     await expect.poll(() => ws.frames.output(0, p1), { timeout: 10_000 }).toContain(before); // 最初の接続ではブラウザに届く
 
@@ -196,7 +196,7 @@ for (const refused of [0, 2]) {
     await softExpect.poll(() => ws.frames.snapshots(1, p1).join("\n"), { message: "新しい接続で p1 の SNAPSHOT がブラウザに届く", timeout: 10_000 }).toContain(before);
 
     // 以後の出力：ブラウザから打ったコマンドは PTY に届き（以前の形でもここまでは通った）、その出力がブラウザにも届く。
-    const after = `wtm-after-drop-${Date.now()}`;
+    const after = `soda-after-drop-${Date.now()}`;
     await typeLine(page, `echo ${after}`);
     await client.waitForOutput(p1, after);
     await expect.poll(() => ws.frames.output(1, p1), { message: "新しい接続で p1 の OUTPUT がブラウザに届く", timeout: 10_000 }).toContain(after);
@@ -211,7 +211,7 @@ test("切り離し（prefix+q）の後に「再接続」ボタンで同じペー
   await client.request("pane.subscribe", { paneId: p1, scrollbackLines: 200 });
   const frames = await watchReceivedFrames(page); // 実物の WebSocket（CDP の Network.webSocketFrameReceived）
 
-  const before = `wtm-before-detach-${Date.now()}`;
+  const before = `soda-before-detach-${Date.now()}`;
   await openAndEcho(page, appServer, before);
   await expect.poll(() => frames.output(0, p1), { timeout: 10_000 }).toContain(before);
 
@@ -224,20 +224,20 @@ test("切り離し（prefix+q）の後に「再接続」ボタンで同じペー
   await softExpect.poll(() => frames.snapshots(1, p1).join("\n"), { message: "新しい接続で p1 の SNAPSHOT がブラウザに届く", timeout: 10_000 }).toContain(before);
 
   await focusTerminal(page);
-  const after = `wtm-after-reattach-${Date.now()}`;
+  const after = `soda-after-reattach-${Date.now()}`;
   await typeLine(page, `echo ${after}`);
   await client.waitForOutput(p1, after);
   await expect.poll(() => frames.output(1, p1), { message: "新しい接続で p1 の OUTPUT がブラウザに届く", timeout: 10_000 }).toContain(after);
 });
 
-test("wtm serve を止めて再び起動しても、同じページのまま繋ぎ直して、表示中の pane の画面と出力がブラウザに届く（AC8・AC18・D107）", async ({ page, appServer }) => {
+test("soda serve を止めて再び起動しても、同じページのまま繋ぎ直して、表示中の pane の画面と出力がブラウザに届く（AC8・AC18・D107）", async ({ page, appServer }) => {
   test.setTimeout(60_000);
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await client.request("pane.subscribe", { paneId: p1, scrollbackLines: 200 });
   const frames = await watchReceivedFrames(page);
 
-  const before = `wtm-before-restart-${Date.now()}`;
+  const before = `soda-before-restart-${Date.now()}`;
   await openAndEcho(page, appServer, before);
   await expect.poll(() => frames.output(0, p1), { timeout: 10_000 }).toContain(before);
 
@@ -258,7 +258,7 @@ test("wtm serve を止めて再び起動しても、同じページのまま繋�
   await softExpect.poll(() => frames.snapshots(connection, p1).length, { message: "新しい接続で p1 の SNAPSHOT がブラウザに届く", timeout: 10_000 }).toBeGreaterThan(0);
 
   await focusTerminal(page);
-  const after = `wtm-after-restart-${Date.now()}`;
+  const after = `soda-after-restart-${Date.now()}`;
   await typeLine(page, `echo ${after}`);
   await client2.waitForOutput(p1, after);
   await expect.poll(() => frames.output(connection, p1), { message: "新しい接続で p1 の OUTPUT がブラウザに届く", timeout: 10_000 }).toContain(after);

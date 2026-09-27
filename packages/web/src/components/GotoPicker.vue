@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DisplayState } from "@wtm/protocol";
+import type { DisplayState } from "@sodashitsu/protocol";
 import { computed, inject, nextTick, ref, watch } from "vue";
 import { ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
@@ -326,9 +326,9 @@ const onDialogKeydown = (ev: KeyboardEvent): void => {
    （T26）で、無条件の `display: flex` が UA の既定（閉じていれば `display: none`）を上書きし、
    閉じていても描画されてクリックを奪う不具合を発見した）。 */
 .goto-picker {
-  border: 1px solid var(--wtm-menu-border, #44475a);
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-menu-fg, #f8f8f2);
+  border: 1px solid var(--soda-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
   border-radius: 4px;
   width: min(36em, 90vw);
   max-height: 70vh;
@@ -340,7 +340,7 @@ const onDialogKeydown = (ev: KeyboardEvent): void => {
   gap: 0.5em;
 }
 .goto-picker::backdrop {
-  background: var(--wtm-backdrop, rgba(0, 0, 0, 0.4));
+  background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
 .goto-picker-search {
   display: flex;
@@ -356,7 +356,7 @@ const onDialogKeydown = (ev: KeyboardEvent): void => {
   font-size: 0.8em;
   padding: 0.1em 0.5em;
   border-radius: 999px;
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
 }
 .goto-picker-list {
   list-style: none;
@@ -373,7 +373,7 @@ const onDialogKeydown = (ev: KeyboardEvent): void => {
   cursor: pointer;
 }
 .goto-picker-row-selected {
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
 }
 .goto-picker-caret {
   width: 1em;
@@ -392,7 +392,7 @@ const onDialogKeydown = (ev: KeyboardEvent): void => {
 }
 .goto-picker-meta {
   font-size: 0.8em;
-  /* 0.6 では選ばれた行（--wtm-menu-active-bg）の上で 4.27:1 と WCAG 1.4.3 を割った。薄めて描く文字は 0.7 以上（20260921-theme-settings の
+  /* 0.6 では選ばれた行（--soda-menu-active-bg）の上で 4.27:1 と WCAG 1.4.3 を割った。薄めて描く文字は 0.7 以上（20260921-theme-settings の
    * decisions D2。`theme/uiTokens.ts` の MUTED_TEXT_ALPHA）。 */
   opacity: 0.7;
   overflow: hidden;

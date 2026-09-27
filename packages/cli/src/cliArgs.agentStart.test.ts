@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CliUsageError, parseArgs } from "./cliArgs.js";
 
-/** `wtmctl agent start` の引数（20260926-agent-start design「CLI の引数」。AC5・AC15）。 */
+/** `sodactl agent start` の引数（20260926-agent-start design「CLI の引数」。AC5・AC15）。 */
 
 const ENV = {};
 

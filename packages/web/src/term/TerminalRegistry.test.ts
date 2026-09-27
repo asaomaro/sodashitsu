@@ -1,4 +1,4 @@
-import { TERMINAL_PALETTES, type MethodName, type ParamsOf, type ResultOf } from "@wtm/protocol";
+import { TERMINAL_PALETTES, type MethodName, type ParamsOf, type ResultOf } from "@sodashitsu/protocol";
 import type { ITerminalAddon, ITheme } from "@xterm/xterm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KeyInputController } from "../keys/KeyInputController.js";

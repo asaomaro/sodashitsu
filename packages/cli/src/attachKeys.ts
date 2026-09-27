@@ -1,5 +1,5 @@
 /**
- * `wtmctl pane attach` の切り離しキー（20260926-pane-direct-connect。herdr の direct attach と同じ `Ctrl+B q`）。
+ * `sodactl pane attach` の切り離しキー（20260926-pane-direct-connect。herdr の direct attach と同じ `Ctrl+B q`）。
  * `Ctrl+B Ctrl+B` は `Ctrl+B` を 1 つ送り、`Ctrl+B` に続くそれ以外のバイトは両方を送る。接頭辞と次のバイトが別の読み取りに
  * 分かれて届いても同じに扱う（接頭辞で終わった読み取りは次の読み取りまで保留する）。
  */

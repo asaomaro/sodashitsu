@@ -1,10 +1,10 @@
 /**
  * `Retry-After`（429 の応答。RFC 9110 10.2.3）の読み取りと、待ち時間の正規化（D105）。`net/Connection` の `login` と
- * `LoginView` の表示が同じ規則を使う。wtm 自身は `Retry-After` を付けない（`LoginRateLimiter`）ので、値が入るのは前段の
+ * `LoginView` の表示が同じ規則を使う。soda 自身は `Retry-After` を付けない（`LoginRateLimiter`）ので、値が入るのは前段の
  * プロキシ等が付けた場合だけ。読めない・信じられない値は null にして、ログイン画面はサーバの制限から出す既定の文言に戻す。
  */
 
-/** これより長い待ち時間は信じない（null にする）。wtm の制限は最長 1 時間なので、前段のプロキシの値でも 1 日あれば足りる。 */
+/** これより長い待ち時間は信じない（null にする）。soda の制限は最長 1 時間なので、前段のプロキシの値でも 1 日あれば足りる。 */
 export const RETRY_AFTER_MAX_SECONDS = 24 * 60 * 60;
 
 /**

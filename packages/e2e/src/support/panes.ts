@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 /**
  * ブラウザが何をどう表示しているかを、ブラウザ側で確かめるためのテスト専用の道具（05-e2e-docs T13・decisions.md D104）。
  *
- * テスト自身の WebSocket クライアント（`WtmTestClient`）にイベントが届いても、**ブラウザがそれを反映したとは限らない**
+ * テスト自身の WebSocket クライアント（`SodaTestClient`）にイベントが届いても、**ブラウザがそれを反映したとは限らない**
  * （別の接続で、ブラウザのほうが遅れうる。CPU の混んだマシンでは特に）。ブラウザが持つ状態に依存する操作——巡回
  * （`prefix+Tab`。`ActionDispatcher.cyclePane` はブラウザが持つレイアウトの並びで次の pane を決める）・新しい pane へ
  * 切り替わった後の端末のクリック・goto の一覧（今の pane の行から選び始める）等——の前には、ブラウザ側に反映されたことを

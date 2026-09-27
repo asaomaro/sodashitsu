@@ -20,11 +20,11 @@ function captureIo(): CommandIo & { outs: string[]; errs: string[] } {
   return { outs, errs, out: (l) => outs.push(l), err: (l) => errs.push(l) };
 }
 
-describe("wtm session list / delete・wtm token reset --session（20260926-named-session）", () => {
+describe("soda session list / delete・soda token reset --session（20260926-named-session）", () => {
   let base: string;
   const held: StateDirLock[] = [];
   beforeEach(async () => {
-    base = await makeTempDir("wtm-sesscmd-");
+    base = await makeTempDir("soda-sesscmd-");
   });
   afterEach(async () => {
     for (const l of held.splice(0)) await l.release();
@@ -52,7 +52,7 @@ describe("wtm session list / delete・wtm token reset --session（20260926-named
 
   it("list は別のホストのロックに (pid N on host) を添える", async () => {
     const remote = await mkSession("remote");
-    await writeFile(join(remote, "wtm.lock"), "7\nsome-other-host-for-test\n");
+    await writeFile(join(remote, "soda.lock"), "7\nsome-other-host-for-test\n");
     const io = captureIo();
     await runSessionList(base, false, io);
     expect(io.outs[2]).toBe(
@@ -76,12 +76,12 @@ describe("wtm session list / delete・wtm token reset --session（20260926-named
     const work = await mkSession("work");
     const ok = captureIo();
     expect(await runSessionDelete(base, "work", false, ok)).toBe(0);
-    expect(ok.outs).toEqual([`wtm: deleted session work (${work})`]);
+    expect(ok.outs).toEqual([`soda: deleted session work (${work})`]);
     expect(existsSync(work)).toBe(false);
 
     const ng = captureIo();
     expect(await runSessionDelete(base, "work", false, ng)).toBe(1);
-    expect(ng.errs[0]).toMatch(/^wtm: session work はありません/);
+    expect(ng.errs[0]).toMatch(/^soda: session work はありません/);
 
     const json = captureIo();
     expect(await runSessionDelete(base, "default", true, json)).toBe(1);
@@ -107,11 +107,11 @@ describe("wtm session list / delete・wtm token reset --session（20260926-named
     await mkSession("work");
     const io = captureIo();
     await runTokenReset(base, "work", io);
-    expect(io.outs[0]).toMatch(/^wtm: new token: /);
+    expect(io.outs[0]).toMatch(/^soda: new token: /);
     expect(await readFile(join(base, "auth.json"), "utf8")).toBe(defaultAuth);
     const workAuth = await readFile(join(base, "sessions", "work", "auth.json"), "utf8");
     expect(workAuth).not.toBe(defaultAuth);
-    // 終えたらロックを放す（続けて同じ session の wtm serve・token reset が動ける）
+    // 終えたらロックを放す（続けて同じ session の soda serve・token reset が動ける）
     const next = new StateDirLock(join(base, "sessions", "work"));
     await next.acquire();
     await next.release();
@@ -123,15 +123,15 @@ describe("wtm session list / delete・wtm token reset --session（20260926-named
   });
 
   it.skipIf(process.platform === "win32")(
-    "token reset --session は wtm serve --session と同じくシンボリックリンクの session を辿る",
+    "token reset --session は soda serve --session と同じくシンボリックリンクの session を辿る",
     async () => {
-      const target = await makeTempDir("wtm-sesscmd-target-");
+      const target = await makeTempDir("soda-sesscmd-target-");
       try {
         await mkdir(join(base, "sessions"), { recursive: true });
         await symlink(target, join(base, "sessions", "link"));
         const io = captureIo();
         await runTokenReset(base, "link", io);
-        expect(io.outs[0]).toMatch(/^wtm: new token: /);
+        expect(io.outs[0]).toMatch(/^soda: new token: /);
         expect(existsSync(join(target, "auth.json"))).toBe(true);
       } finally {
         await rm(target, { recursive: true, force: true });
@@ -146,42 +146,42 @@ describe("wtm session list / delete・wtm token reset --session（20260926-named
     expect(existsSync(join(base, "auth.json"))).toBe(false);
   });
 
-  it("token reset は WTM_SESSION から選んだ名前でも同じく work だけを作り直す（20260926-named-session-ui の AC13）", async () => {
+  it("token reset は SODA_SESSION から選んだ名前でも同じく work だけを作り直す（20260926-named-session-ui の AC13）", async () => {
     await mkSession("work");
     const io = captureIo();
     await runTokenReset(base, "work", io, "env");
-    expect(io.outs[0]).toMatch(/^wtm: new token: /);
+    expect(io.outs[0]).toMatch(/^soda: new token: /);
     expect(existsSync(join(base, "sessions", "work", "auth.json"))).toBe(true);
     expect(existsSync(join(base, "auth.json"))).toBe(false);
   });
 
-  it("WTM_SESSION から選んだ名前が無い・動いているときは、案内に WTM_SESSION を添える（20260926-named-session-ui の AC14）", async () => {
+  it("SODA_SESSION から選んだ名前が無い・動いているときは、案内に SODA_SESSION を添える（20260926-named-session-ui の AC14）", async () => {
     await expect(runTokenReset(base, "wrok", captureIo(), "env")).rejects.toMatchObject({
-      hint: expect.stringContaining("WTM_SESSION"),
+      hint: expect.stringContaining("SODA_SESSION"),
     });
     await expect(runTokenReset(base, "wrok", captureIo(), "flag")).rejects.toMatchObject({
-      hint: expect.not.stringContaining("WTM_SESSION"),
+      hint: expect.not.stringContaining("SODA_SESSION"),
     });
     const lock = new StateDirLock(await mkSession("work"));
     await lock.acquire();
     held.push(lock);
     await expect(runTokenReset(base, "work", captureIo(), "env")).rejects.toMatchObject({
-      hint: expect.stringContaining("WTM_SESSION"),
+      hint: expect.stringContaining("SODA_SESSION"),
     });
   });
 
-  it("WTM_SESSION=default で既定の session が動いているときは、WTM_SESSION の案内を添えない（既定の session として扱う）", async () => {
+  it("SODA_SESSION=default で既定の session が動いているときは、SODA_SESSION の案内を添えない（既定の session として扱う）", async () => {
     await mkdir(base, { recursive: true });
     const lock = new StateDirLock(base);
     await lock.acquire();
     held.push(lock);
     await expect(runTokenReset(base, "default", captureIo(), "env")).rejects.toMatchObject({
       message: expect.stringContaining("cannot reset the token"),
-      hint: expect.not.stringContaining("WTM_SESSION"),
+      hint: expect.not.stringContaining("SODA_SESSION"),
     });
   });
 
-  it("token reset --session は、その session の wtm serve が動いていれば断る（ConfigError）", async () => {
+  it("token reset --session は、その session の soda serve が動いていれば断る（ConfigError）", async () => {
     const lock = new StateDirLock(await mkSession("work"));
     await lock.acquire();
     held.push(lock);
@@ -190,9 +190,9 @@ describe("wtm session list / delete・wtm token reset --session（20260926-named
     );
   });
 
-  // Windows では wtm session stop が非対応なので案内しない（下の sessionStopCommandFor のテスト）。
+  // Windows では soda session stop が非対応なので案内しない（下の sessionStopCommandFor のテスト）。
   it.skipIf(process.platform === "win32")(
-    "動いている session への delete・token reset は止め方（wtm session stop <名前>）を案内する（20260927-session-stop の AC13）",
+    "動いている session への delete・token reset は止め方（soda session stop <名前>）を案内する（20260927-session-stop の AC13）",
     async () => {
       const work = await mkSession("work");
       const lock = new StateDirLock(work);
@@ -204,36 +204,36 @@ describe("wtm session list / delete・wtm token reset --session（20260926-named
         `止めてから消してください（${sessionStopCommandFor("work", base, defaultStateDir())}）`,
       );
       await expect(runTokenReset(base, "work", captureIo())).rejects.toMatchObject({
-        hint: expect.stringContaining("wtm session stop work"),
+        hint: expect.stringContaining("soda session stop work"),
       });
       const baseLock = new StateDirLock(base);
       await baseLock.acquire();
       held.push(baseLock);
       await expect(runTokenReset(base, undefined, captureIo())).rejects.toMatchObject({
-        hint: expect.stringContaining("wtm session stop default"),
+        hint: expect.stringContaining("soda session stop default"),
       });
       // 既定でない根（テストの一時ディレクトリ）なので --state-dir を添える
       await expect(runTokenReset(base, "work", captureIo())).rejects.toMatchObject({
         hint: expect.stringContaining(sessionStopCommandFor("work", base, defaultStateDir())!),
       });
-      // WTM_SESSION から選んだ名前でも同じ名前を案内し、WTM_SESSION の案内も残す
+      // SODA_SESSION から選んだ名前でも同じ名前を案内し、SODA_SESSION の案内も残す
       await expect(runTokenReset(base, "work", captureIo(), "env")).rejects.toMatchObject({
         hint: expect.stringMatching(
-          /WTM_SESSION[\s\S]*wtm session stop work|wtm session stop work[\s\S]*WTM_SESSION/,
+          /SODA_SESSION[\s\S]*soda session stop work|soda session stop work[\s\S]*SODA_SESSION/,
         ),
       });
     },
   );
 
-  it("持ち主が別のホストなら、止め方（wtm session stop）は案内しない（そこからは止められない）", async () => {
+  it("持ち主が別のホストなら、止め方（soda session stop）は案内しない（そこからは止められない）", async () => {
     const work = await mkSession("work");
-    await writeFile(join(work, "wtm.lock"), "7\nsome-other-host-for-test\n");
+    await writeFile(join(work, "soda.lock"), "7\nsome-other-host-for-test\n");
     const del = captureIo();
     expect(await runSessionDelete(base, "work", false, del)).toBe(1);
     expect(del.errs[0]).toContain("some-other-host-for-test");
-    expect(del.errs[0]).not.toContain("wtm session stop");
+    expect(del.errs[0]).not.toContain("soda session stop");
     await expect(runTokenReset(base, "work", captureIo())).rejects.toMatchObject({
-      hint: expect.not.stringContaining("wtm session stop"),
+      hint: expect.not.stringContaining("soda session stop"),
     });
   });
 });

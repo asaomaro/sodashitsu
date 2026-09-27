@@ -14,7 +14,7 @@ import type { AddressInfo } from "node:net";
 import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@wtm/protocol";
+import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@sodashitsu/protocol";
 import { chromium } from "playwright";
 import WebSocket from "ws";
 import { composeServer } from "./composeServer.js";
@@ -185,7 +185,7 @@ async function checkOnboardingInRealBrowser(origin: string, token: string, marke
     await page.waitForSelector("dialog.onboarding-dialog[open]", { state: "detached", timeout: 5000 });
     const closed = await page.evaluate(() => ({
       focusedClass: document.activeElement?.className ?? null,
-      prefs: localStorage.getItem("wtm.prefs.v1"),
+      prefs: localStorage.getItem("soda.prefs.v1"),
     }));
     if (!String(closed.focusedClass).includes("xterm-helper-textarea")) {
       throw new Error(`focus did not return to the terminal after closing onboarding: ${JSON.stringify(closed)}`);
@@ -218,7 +218,7 @@ async function checkOnboardingInRealBrowser(origin: string, token: string, marke
 }
 
 async function main(): Promise<void> {
-  const stateDir = await mkdtemp(join(tmpdir(), "wtm-smoke-"));
+  const stateDir = await mkdtemp(join(tmpdir(), "soda-smoke-"));
   const port = await getFreePort();
   console.log(`smoke: starting server on 127.0.0.1:${port} (state dir ${stateDir})`);
   // 独自コマンド（20260927-custom-command-keys）：状態ディレクトリの commands.json を起動時に読み、popup の端末へ購読・入力が届くかを後で確かめる。
@@ -273,7 +273,7 @@ async function main(): Promise<void> {
     await client.requestResponse("3", "pane.subscribe", { paneId: created.pane.id, scrollbackLines: 200 });
     console.log("smoke: pane.subscribe ok");
 
-    const marker = `wtm-smoke-${Date.now()}`;
+    const marker = `soda-smoke-${Date.now()}`;
     ws.send(encodeInputFrame(created.pane.id, new TextEncoder().encode(`echo ${marker}\n`)));
     await client.waitForOutput(created.pane.id, marker, 8000);
     console.log("smoke: echo round trip ok");
@@ -285,7 +285,7 @@ async function main(): Promise<void> {
     }
     const popup = (await client.requestResponse("c2", "command.run", { commandId: "smoke-cat", paneId: created.pane.id, cols: 40, rows: 5 })) as { popupId: string };
     await client.requestResponse("c3", "pane.subscribe", { paneId: popup.popupId, scrollbackLines: 50 });
-    const popupMarker = `wtm-smoke-popup-${Date.now()}`;
+    const popupMarker = `soda-smoke-popup-${Date.now()}`;
     ws.send(encodeInputFrame(popup.popupId, new TextEncoder().encode(`${popupMarker}\n`)));
     await client.waitForOutput(popup.popupId, popupMarker, 8000);
     await client.requestResponse("c4", "command.popup_close", { popupId: popup.popupId });
@@ -295,12 +295,12 @@ async function main(): Promise<void> {
     // 実物のブラウザで開いて確かめる（T26。design「起動確認」に「配信の確認」を追加）。
     // 対象は同じ pane（`created.pane.id`）——`client.hello` の snapshot の focus が最後に作った workspace
     // （この smoke 自身が作った「smoke」workspace）を指すので、ブラウザは自動でこの pane を表示する。
-    const webMarker = `wtm-smoke-web-${Date.now()}`;
+    const webMarker = `soda-smoke-web-${Date.now()}`;
     await checkWebUiRendersAndAcceptsInput(origin, token, created.pane.id, webMarker);
     await client.waitForOutput(created.pane.id, webMarker, 8000);
     console.log("smoke(web): echo round trip ok（ブラウザでの入力が PTY まで届いた）");
 
-    const onboardingMarker = `wtm-smoke-onboarding-${Date.now()}`;
+    const onboardingMarker = `soda-smoke-onboarding-${Date.now()}`;
     await checkOnboardingInRealBrowser(origin, token, onboardingMarker);
     await client.waitForOutput(created.pane.id, onboardingMarker, 8000);
     console.log("smoke(web): はじめの案内を閉じたあと、クリックせずに打った文字が PTY まで届いた");

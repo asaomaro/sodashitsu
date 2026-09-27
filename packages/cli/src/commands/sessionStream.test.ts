@@ -1,8 +1,8 @@
-import type { ServerEvent } from "@wtm/protocol";
+import type { ServerEvent } from "@sodashitsu/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "../session.js";
 import { MAX_CONTROL_LINE_BYTES, OUTPUT_HIGH_WATERMARK_BYTES } from "../sessionStream.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 import {
   FLUSH_TIMEOUT_MS,
   MAX_WARN_PENDING_BYTES,
@@ -20,7 +20,7 @@ const OPTS = { url: "http://127.0.0.1:7780", token: undefined };
 const store = {} as SessionStore;
 const enc = new TextEncoder();
 
-interface FakeClient extends WtmClient {
+interface FakeClient extends SodaClient {
   emitEvent(evt: ServerEvent): void;
   emitOutput(paneId: string, text: string | Uint8Array): void;
   emitSnapshot(paneId: string, cols: number, rows: number, text: string): void;
@@ -32,7 +32,7 @@ interface FakeClient extends WtmClient {
 interface FakeOptions {
   attachError?: RpcFailure;
   subscribeError?: RpcFailure;
-  /** subscribe の応答を返さない（切断で待ち中の要求が reject されない実物の WtmClient を模す）。 */
+  /** subscribe の応答を返さない（切断で待ち中の要求が reject されない実物の SodaClient を模す）。 */
   subscribeHangs?: boolean;
   /** detach の応答を返さない。 */
   detachHangs?: boolean;
@@ -778,7 +778,7 @@ describe("runPaneControl（20260926-pane-observe-control）", () => {
     );
     expect(io.warnings).toHaveLength(7);
     for (const w of io.warnings) {
-      expect(w).toMatch(/^wtmctl: pane control input ignored: .+\n$/);
+      expect(w).toMatch(/^sodactl: pane control input ignored: .+\n$/);
     }
     expect(io.warnings[6]).toContain("terminal.scroll is not supported");
     expect(sentInputs(client)).toEqual(["ok"]);
@@ -798,7 +798,7 @@ describe("runPaneControl（20260926-pane-observe-control）", () => {
     io.input(huge.slice(600_000));
     io.input('\n{"type":"terminal.input","text":"next"}\n');
     expect(io.warnings).toEqual([
-      `wtmctl: pane control input ignored: line exceeds ${MAX_CONTROL_LINE_BYTES} bytes\n`,
+      `sodactl: pane control input ignored: line exceeds ${MAX_CONTROL_LINE_BYTES} bytes\n`,
     ]);
     expect(sentInputs(client)).toEqual(["next"]);
     io.input('{"type":"terminal.release"}\n');
@@ -1016,8 +1016,8 @@ describe("runPaneControl（20260926-pane-observe-control）", () => {
     notice({ code: "invalid_params" });
     notice({ code: "input_queue_full" }); // pane の無い知らせ（古い形）も制御中の pane のものとして出す
     expect(io.warnings).toEqual([
-      "wtmctl: pane control input dropped: pane p1 is not reading input (server input queue is full)\n",
-      "wtmctl: pane control input dropped: pane p1 is not reading input (server input queue is full)\n",
+      "sodactl: pane control input dropped: pane p1 is not reading input (server input queue is full)\n",
+      "sodactl: pane control input dropped: pane p1 is not reading input (server input queue is full)\n",
     ]);
     expect(io.out).toEqual(outBefore);
     // stderr の書き出し待ちが上限を超えている間は捨てる（不正な行の警告と同じ）。
@@ -1044,7 +1044,7 @@ describe("runPaneControl（20260926-pane-observe-control）", () => {
     const running = runPaneControl(controlCmd(), store, io);
     await waitSubscribed(client);
     expect(io.warnings).toEqual([
-      "wtmctl: pane control input dropped: pane p1 is not reading input (server input queue is full)\n",
+      "sodactl: pane control input dropped: pane p1 is not reading input (server input queue is full)\n",
     ]);
     io.input('{"type":"terminal.release"}\n');
     await running;

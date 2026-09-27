@@ -1,4 +1,4 @@
-import { TERMINAL_CELLS_MAX, TERMINAL_SIZE_MAX } from "@wtm/protocol";
+import { TERMINAL_CELLS_MAX, TERMINAL_SIZE_MAX } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import {
   FrameWriter,

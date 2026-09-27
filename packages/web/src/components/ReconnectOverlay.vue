@@ -74,8 +74,8 @@ const retry = (): void => {
   gap: 0.4em;
   align-items: center;
   justify-content: center;
-  background: var(--wtm-backdrop-strong, rgba(0, 0, 0, 0.5));
-  color: var(--wtm-fg, #f8f8f2);
+  background: var(--soda-backdrop-strong, rgba(0, 0, 0, 0.5));
+  color: var(--soda-fg, #f8f8f2);
   z-index: 900;
   pointer-events: none;
 }
@@ -90,8 +90,8 @@ const retry = (): void => {
   gap: 0.6em;
   width: min(36em, 90vw);
   padding: 1em 1.2em;
-  background: var(--wtm-menu-bg, #282a36);
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 6px;
   pointer-events: auto;
 }
@@ -101,11 +101,11 @@ const retry = (): void => {
 }
 .reconnect-overlay-rejected .reconnect-overlay-title {
   font-weight: bold;
-  color: var(--wtm-error-fg, #ff5555);
+  color: var(--soda-error-fg, #ff5555);
 }
 /* `--origin <Origin>` をそのまま写せるように、選択しやすく・折り返せる形で出す（ログイン画面の 403 と同じ。D105）。 */
 .reconnect-overlay-command {
-  background: var(--wtm-subtle-bg, rgba(255, 255, 255, 0.08));
+  background: var(--soda-subtle-bg, rgba(255, 255, 255, 0.08));
   padding: 0.3em 0.5em;
   border-radius: 3px;
   overflow-wrap: anywhere;

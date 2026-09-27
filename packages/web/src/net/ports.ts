@@ -1,4 +1,4 @@
-import type { ClientHelloParams, MethodName, ParamsOf, ResultOf, ServerEvent, SessionSnapshot } from "@wtm/protocol";
+import type { ClientHelloParams, MethodName, ParamsOf, ResultOf, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 
 /**
  * Web の port の型（architecture.md「Web の主要な型と port」）。Vue と Pinia を import しない
@@ -28,11 +28,11 @@ export type InputOrigin = "pointer";
 
 /**
  * `POST /api/login` の結果（D105）。失敗は理由ごとに分ける——以前は 204 以外を全て false にし、ログイン画面が 403
- * （Origin の不一致）も token の誤りと同じ文言で出していたため、利用者が token を疑って `wtm token reset` へ進んでいた。
+ * （Origin の不一致）も token の誤りと同じ文言で出していたため、利用者が token を疑って `soda token reset` へ進んでいた。
  * - `bad_token`：401。token が違う。
- * - `origin_rejected`：403。このページの Origin／Host をサーバが許可していない（`wtm serve --origin <Origin>` で許可する）。
+ * - `origin_rejected`：403。このページの Origin／Host をサーバが許可していない（`soda serve --origin <Origin>` で許可する）。
  * - `rate_limited`：429。失敗が続いたので受け付けていない（接続元の IP ごとに 1 分に 5 回・1 時間に 20 回。
- *   `LoginRateLimiter`）。`retryAfterSeconds` は応答の `Retry-After`（wtm 自身は付けない。前段のプロキシ等が付けた
+ *   `LoginRateLimiter`）。`retryAfterSeconds` は応答の `Retry-After`（soda 自身は付けない。前段のプロキシ等が付けた
  *   場合だけ）を `net/retryAfter` の規則で正規化したもの——1 以上 1 日以下の整数。無い・読めない・大きすぎるときは null。
  * - `http_error`：それ以外の状態（400・500 等）。
  * - `network_error`：応答が来ない（サーバに届かない・接続が切れた）。

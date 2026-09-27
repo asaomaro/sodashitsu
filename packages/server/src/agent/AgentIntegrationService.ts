@@ -1,4 +1,4 @@
-import type { AgentIntegrationKind, AgentIntegrationInstallResult, AgentIntegrationStatusResult } from "@wtm/protocol";
+import type { AgentIntegrationKind, AgentIntegrationInstallResult, AgentIntegrationStatusResult } from "@sodashitsu/protocol";
 import type { EventBus } from "../bus/EventBus.js";
 import type { IntegrationFile } from "../persist/IntegrationFile.js";
 import { defaultIntegrationFileData } from "../persist/IntegrationFile.js";

@@ -94,7 +94,7 @@ async function submitAndReadAlert(result: LoginResult): Promise<{ text: string; 
 
 /**
  * D105：失敗を理由ごとに示す。以前は全ての失敗を「ログインできませんでした」の 1 文で出していたため、Origin の不一致（403）の
- * 利用者が token の誤りと思い込み `wtm token reset` へ進んでいた。
+ * 利用者が token の誤りと思い込み `soda token reset` へ進んでいた。
  */
 describe("LoginView — 失敗の理由ごとの表示（D105）", () => {
   it("401（token の誤り）は token が違うと示す", async () => {

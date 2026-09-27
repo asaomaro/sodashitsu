@@ -1,4 +1,4 @@
-import { COMMAND_ID_RE, type CommandInfo } from "@wtm/protocol";
+import { COMMAND_ID_RE, type CommandInfo } from "@sodashitsu/protocol";
 import type { ActionDef, ActionId } from "./bindings.js";
 
 /**

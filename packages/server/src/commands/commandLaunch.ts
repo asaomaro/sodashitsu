@@ -1,5 +1,5 @@
 import { spawn as nodeSpawn } from "node:child_process";
-import type { CommandType } from "@wtm/protocol";
+import type { CommandType } from "@sodashitsu/protocol";
 
 /**
  * 独自コマンドの起動の仕方（20260927-custom-command-keys。herdr の `raw_command_argv`〔`src/platform/linux.rs`〕に合わせる）。

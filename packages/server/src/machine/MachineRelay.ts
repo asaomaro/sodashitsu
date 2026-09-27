@@ -1,10 +1,10 @@
-import { FRAME_TYPE } from "@wtm/protocol";
+import { FRAME_TYPE } from "@sodashitsu/protocol";
 import type { WsConnection } from "../ws/WsServer.js";
 import { truncateUtf8 } from "./bridgeFrames.js";
 import { realClock, type Clock, type LinkChannel, type MachineLink } from "./MachineLink.js";
 
 /**
- * ブラウザ・`wtmctl` の `/ws?machine=` の 1 接続を、そのマシンへの 1 チャネルとして中継する（20260927-multi-host-machines の design「中継」）。
+ * ブラウザ・`sodactl` の `/ws?machine=` の 1 接続を、そのマシンへの 1 チャネルとして中継する（20260927-multi-host-machines の design「中継」）。
  * 中身（要求・イベント・画面・入力）は解釈しない。ただしリモートから来るものは信用しない:
  * - TEXT は先頭（空白を除く）が `{` のものだけ、BINARY は OUTPUT・SNAPSHOT だけを通す（INPUT 等はブラウザへ流さない）。
  * - CLOSE の code は `1000・1001・1008・1011・1012・1013` だけ通し、ほかは 1011（4401 でブラウザをログイン画面へ飛ばさせない）。

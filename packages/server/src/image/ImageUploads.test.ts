@@ -1,4 +1,4 @@
-import { IMAGE_CHUNK_BYTES, IMAGE_MAX_BYTES, RpcError, type ImageMimeType } from "@wtm/protocol";
+import { IMAGE_CHUNK_BYTES, IMAGE_MAX_BYTES, RpcError, type ImageMimeType } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { ImageUploads, type ImageUploadLimits, type ImageUploadsClock } from "./ImageUploads.js";
 

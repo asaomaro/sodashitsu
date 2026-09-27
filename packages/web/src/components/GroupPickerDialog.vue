@@ -115,15 +115,15 @@ function onKeydown(ev: KeyboardEvent): void {
 
 <style scoped>
 .group-picker-dialog {
-  border: 1px solid var(--wtm-menu-border, #44475a);
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-menu-fg, #f8f8f2);
+  border: 1px solid var(--soda-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
   border-radius: 4px;
   min-width: 24em;
   padding: 1em;
 }
 .group-picker-dialog::backdrop {
-  background: var(--wtm-backdrop, rgba(0, 0, 0, 0.4));
+  background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
 .group-picker-dialog-title {
   margin: 0 0 0.6em;
@@ -142,10 +142,10 @@ function onKeydown(ev: KeyboardEvent): void {
   cursor: pointer;
 }
 .group-picker-dialog-item:hover {
-  background: var(--wtm-menu-hover-bg, #343746);
+  background: var(--soda-menu-hover-bg, #343746);
 }
 /* `:hover` と詳細度をそろえ、後に置くことで選択中を勝たせる（`WorktreeOpenDialog.vue` と同じ理由）。 */
 .group-picker-dialog-item.group-picker-dialog-item-selected {
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
 }
 </style>

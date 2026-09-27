@@ -1,4 +1,4 @@
-import { THEME_NAMES, type ThemeName } from "@wtm/protocol";
+import { THEME_NAMES, type ThemeName } from "@sodashitsu/protocol";
 import { createPinia } from "pinia";
 import { beforeEach, describe, expect, it } from "vitest";
 import bootSource from "../../public/theme-boot.js?raw";
@@ -118,7 +118,7 @@ describe("控えが無い・壊れているときは何もしない（起動で�
       "自動なのに組が無い",
       JSON.stringify({
         auto: true,
-        fixed: { vars: { "--wtm-bg": "#000000" }, colorScheme: "dark" },
+        fixed: { vars: { "--soda-bg": "#000000" }, colorScheme: "dark" },
       }),
     ],
   ] as const) {
@@ -133,18 +133,18 @@ describe("控えが無い・壊れているときは何もしない（起動で�
     expect(root.getAttribute("style")).toBeNull();
   });
 
-  it("--wtm- で始まらない名前・文字列でない値は当てない", () => {
+  it("--soda- で始まらない名前・文字列でない値は当てない", () => {
     const stored = JSON.stringify({
       auto: false,
       fixed: {
-        vars: { "--wtm-bg": "#101010", color: "red", "--wtm-fg": 3 },
+        vars: { "--soda-bg": "#101010", color: "red", "--soda-fg": 3 },
         colorScheme: "purple",
       },
     });
     runBoot({ stored, dark: true, root });
-    expect(root.style.getPropertyValue("--wtm-bg")).toBe("#101010");
+    expect(root.style.getPropertyValue("--soda-bg")).toBe("#101010");
     expect(root.style.getPropertyValue("color")).toBe("");
-    expect(root.style.getPropertyValue("--wtm-fg")).toBe("");
+    expect(root.style.getPropertyValue("--soda-fg")).toBe("");
     expect(root.style.colorScheme).toBe("");
   });
 });

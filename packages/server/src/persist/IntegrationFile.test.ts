@@ -6,7 +6,7 @@ import { defaultIntegrationFileData, FsIntegrationFile, type IntegrationFileData
 describe("FsIntegrationFile", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await makeTempDir("wtm-integrations-");
+    dir = await makeTempDir("soda-integrations-");
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });

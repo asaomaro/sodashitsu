@@ -10,7 +10,7 @@ import { probeMachine, runMachineCommand, shellQuote } from "./machineCommands.j
 import { MAX_MACHINES } from "./MachineCatalog.js";
 import { FakeChild, ManualClock } from "./testing.js";
 
-/** `wtm machine …`（20260927-multi-host-machines の T9）。確かめは差し替え、登録簿は本物の一時ディレクトリ。 */
+/** `soda machine …`（20260927-multi-host-machines の T9）。確かめは差し替え、登録簿は本物の一時ディレクトリ。 */
 const ID_A = "a".repeat(32);
 
 function io() {
@@ -19,7 +19,7 @@ function io() {
   return { out, err, io: { out: (l: string) => out.push(l), err: (l: string) => err.push(l) } };
 }
 
-describe("wtm machine の引数（T9）", () => {
+describe("soda machine の引数（T9）", () => {
   it("サブコマンドごとの形", () => {
     expect(parseMachineArgs(["add", "you@build", "--label", "Build"])).toEqual({
       sub: "add",
@@ -78,13 +78,13 @@ describe("wtm machine の引数（T9）", () => {
   });
 });
 
-describe("wtm machine の実行（T9）", () => {
+describe("soda machine の実行（T9）", () => {
   const dirs: string[] = [];
   afterEach(async () => {
     for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
   });
   const tmp = async (): Promise<string> => {
-    const d = await makeTempDir("wtm-machine-cmd-");
+    const d = await makeTempDir("soda-machine-cmd-");
     dirs.push(d);
     return d;
   };
@@ -144,7 +144,7 @@ describe("wtm machine の実行（T9）", () => {
     );
     expect(code).toBe(1);
     expect(t.err.join("\n")).toMatch(
-      /認証に失敗[\s\S]*not saved[\s\S]*ssh you@build[\s\S]*wtm serve/,
+      /認証に失敗[\s\S]*not saved[\s\S]*ssh you@build[\s\S]*soda serve/,
     );
     expect(await loadCatalog(root)).toEqual({ kind: "missing" });
   });
@@ -349,7 +349,7 @@ describe("probeMachine（T9）", () => {
         spawn: (cmd, args) => {
           const c = new FakeChild(cmd, args);
           setImmediate(() => {
-            c.stderr.write("wtm: no running wtm serve for session default\n");
+            c.stderr.write("soda: no running soda serve for session default\n");
             c.exit(3);
           });
           return c;

@@ -1,4 +1,4 @@
-import type { PaneId } from "@wtm/protocol";
+import type { PaneId } from "@sodashitsu/protocol";
 import type { Mirror } from "./Mirror.js";
 
 /** クライアントへの送信先（WsGateway が実装する。architecture.md「ClientSink」）。 */

@@ -37,13 +37,13 @@ describe("useViewStore — agents の並び順", () => {
   it("切り替えると localStorage に残り、新しいストアが読み戻す（タブを閉じて開き直しても残る）", () => {
     const store = useViewStore(pinia);
     store.toggleAgentSort();
-    expect(sessionStorage.getItem("wtm.prefs.v1")).toBeNull(); // 表示位置とは別の入れ物
+    expect(sessionStorage.getItem("soda.prefs.v1")).toBeNull(); // 表示位置とは別の入れ物
     const store2 = useViewStore(createPinia());
     expect(store2.agentSort).toBe("priority");
   });
 
   it("壊れた値が入っていたら grouped に落とす", () => {
-    localStorage.setItem("wtm.prefs.v1", JSON.stringify({ agentSort: "なにか" }));
+    localStorage.setItem("soda.prefs.v1", JSON.stringify({ agentSort: "なにか" }));
     expect(useViewStore(createPinia()).agentSort).toBe("grouped");
   });
 
@@ -61,7 +61,7 @@ describe("useViewStore — agents の並び順", () => {
 });
 
 // 20260922-appearance-settings-rest T1（design「インターフェース / データ構造」の `view.ts` 節）。
-// agents の並び順（上）と同じ形（wtm.prefs.v1・localStorage）。
+// agents の並び順（上）と同じ形（soda.prefs.v1・localStorage）。
 describe("useViewStore — workspace（spaces）の並び順", () => {
   it("既定は opened で、押すたびに name と行き来する", () => {
     const store = useViewStore(pinia);
@@ -75,13 +75,13 @@ describe("useViewStore — workspace（spaces）の並び順", () => {
   it("切り替えると localStorage に残り、新しいストアが読み戻す", () => {
     const store = useViewStore(pinia);
     store.toggleWorkspaceSort();
-    expect(sessionStorage.getItem("wtm.prefs.v1")).toBeNull(); // 表示位置とは別の入れ物
+    expect(sessionStorage.getItem("soda.prefs.v1")).toBeNull(); // 表示位置とは別の入れ物
     const store2 = useViewStore(createPinia());
     expect(store2.workspaceSort).toBe("name");
   });
 
   it("壊れた値が入っていたら opened に落とす", () => {
-    localStorage.setItem("wtm.prefs.v1", JSON.stringify({ workspaceSort: "なにか" }));
+    localStorage.setItem("soda.prefs.v1", JSON.stringify({ workspaceSort: "なにか" }));
     expect(useViewStore(createPinia()).workspaceSort).toBe("opened");
   });
 
@@ -111,9 +111,9 @@ describe("loadWorkspaceSort（AC3）", () => {
   });
 });
 
-// 20260920-agent-notifications の AC6：`wtm.prefs.v1` は複数の設定が同居するので、
+// 20260920-agent-notifications の AC6：`soda.prefs.v1` は複数の設定が同居するので、
 // **書き込みは併合でなければならない**。以前は全置換で、項目を足しても並び順を切り替えた瞬間に消えた。
-describe("wtm.prefs.v1 の読み書き（併合式）", () => {
+describe("soda.prefs.v1 の読み書き（併合式）", () => {
   it("writePrefs は既存の値を残したまま足す", () => {
     writePrefs({ a: 1 });
     writePrefs({ b: 2 });
@@ -144,9 +144,9 @@ describe("wtm.prefs.v1 の読み書き（併合式）", () => {
   });
 
   it("壊れた中身（配列・非オブジェクト）は空として扱う", () => {
-    localStorage.setItem("wtm.prefs.v1", JSON.stringify([1, 2]));
+    localStorage.setItem("soda.prefs.v1", JSON.stringify([1, 2]));
     expect(readPrefs()).toEqual({});
-    localStorage.setItem("wtm.prefs.v1", "{ not json");
+    localStorage.setItem("soda.prefs.v1", "{ not json");
     expect(readPrefs()).toEqual({});
   });
 
@@ -202,7 +202,7 @@ describe("useViewStore — setView / focusPane", () => {
   it("setView は sessionStorage にも保存する", () => {
     const store = useViewStore(pinia);
     store.setView("w1", "t1");
-    expect(sessionStorage.getItem("wtm.view.v1")).toBe(JSON.stringify({ workspaceId: "w1", tabId: "t1" }));
+    expect(sessionStorage.getItem("soda.view.v1")).toBe(JSON.stringify({ workspaceId: "w1", tabId: "t1" }));
   });
 
   it("focusPane", () => {
