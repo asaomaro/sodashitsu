@@ -1,1 +1,3 @@
 events:
+  - { ts: 2026-09-27T22:02:51Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T1, mode: delegated } }
+  - { ts: 2026-09-27T22:07:12Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T1, findings: 5 } }

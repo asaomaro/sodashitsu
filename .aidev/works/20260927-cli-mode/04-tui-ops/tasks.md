@@ -30,23 +30,23 @@
 
 ## タスク
 
-- [ ] T1: `TuiDispatcher` に全操作（web の 56 操作）を実装する（RPC・焦点の移り先・確認や入力欄が要るものは T2 の部品を呼ぶ口だけ先に）
+- [x] T1: `TuiDispatcher` に全操作（web の 56 操作）を実装する（RPC・焦点の移り先・確認や入力欄が要るものは T2 の部品を呼ぶ口だけ先に）
       対象: `packages/web/src/actions/ActionDispatcher.ts`・`packages/tui/src/actions/TuiDispatcher.ts`・`packages/client-core/src/keys/bindings.ts`
       依存: なし
       AC: AC5, AC8, AC-I3, AC-I4
-- [ ] T2: オーバーレイの枠組みと部品（入力欄・確認・メニュー・ヘルプ〔絞り込み〕）
+- [x] T2: オーバーレイの枠組みと部品（入力欄・確認・メニュー・ヘルプ〔絞り込み〕）
       対象: `packages/tui/src/modes/`（新規）・`packages/web/src/components/ConfirmDialog.vue`・`ContextMenu.vue`・`HelpOverlay`（web の該当部品。名前は未特定）
       依存: T1
       AC: AC5, AC-I1, AC-I2, AC-I4, AC-I5
-- [ ] T3: モード（navigate・goto・resize・copy〔選択・検索・コピー〕）と `edit_scrollback`
+- [x] T3: モード（navigate・goto・resize・copy〔選択・検索・コピー〕）と `edit_scrollback`
       対象: `packages/client-core/src/keys/NavigateMode.ts`・`CopyMode.ts`・`ResizeMode.ts`・`packages/web/src/term/`（copy の実装。名前は未特定）
       依存: T2
       AC: AC5, AC7, AC8, AC-I1, AC-I3
-- [ ] T4: マウスの全操作（焦点・境界のドラッグ・サイドバーと tab の操作と並べ替え・サイドバーの幅と区切り・pane の名前のドラッグでの入れ替え/分割/移動・右クリックのメニュー・ホイール・選択とコピー・リンク・pane への受け渡し）
+- [x] T4: マウスの全操作（焦点・境界のドラッグ・サイドバーと tab の操作と並べ替え・サイドバーの幅と区切り・pane の名前のドラッグでの入れ替え/分割/移動・右クリックのメニュー・ホイール・選択とコピー・リンク・pane への受け渡し）
       対象: `packages/tui/src/input/mouse.ts`（新規）・`packages/tui/src/layout/computeLayout.ts`・`packages/web/src/term/MouseBridge.ts`・`packages/web/src/term/paneDragZone.ts`
       依存: T2
       AC: AC7, AC9, AC-I1, AC-I5
-- [ ] T5: 狭い幅の 1 列表示（herdr の mobile 相当）
+- [x] T5: 狭い幅の 1 列表示（herdr の mobile 相当）
       対象: `packages/tui/src/layout/computeLayout.ts`・`scratchpad/herdr/src/client/shell/mobile.rs`（参考）
       依存: T2
       AC: AC2, AC5
