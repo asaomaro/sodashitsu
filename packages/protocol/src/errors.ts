@@ -57,7 +57,10 @@ export type ErrorCode =
   | "image_upload_busy"
   | "image_upload_rate_limited"
   | "image_upload_expired"
-  | "image_store_failed";
+  | "image_store_failed"
+  // 入力の書き込み待ちの上限（20260927-server-size-input-limits）。pane のプログラムが入力を読まず、サーバに溜まった入力が上限に達した。
+  // herdr は "pty input queue is full"（`pane_send_failed`）。
+  | "input_queue_full";
 
 export interface ProtocolError {
   code: ErrorCode;

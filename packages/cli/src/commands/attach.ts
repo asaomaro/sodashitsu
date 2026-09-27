@@ -1,4 +1,4 @@
-import type { ServerEvent } from "@wtm/protocol";
+import { clampTerminalSize, type ServerEvent } from "@wtm/protocol";
 import { AttachKeyFilter } from "../attachKeys.js";
 import { TerminalQueryFilter } from "../attachOutput.js";
 import type { Command } from "../cliArgs.js";
@@ -161,7 +161,9 @@ async function attachSession(
 
   const hello = await client.hello(onEvent);
   myClientId = hello.clientId;
-  const size = term.size();
+  // サーバのスキーマの上限（1 辺 4096・面積 1,000,000 セル）に丸める——上限の外は invalid_params で繋げない（20260927-server-size-input-limits）。
+  const measured = term.size();
+  const size = clampTerminalSize(measured.cols, measured.rows);
   // 失敗（not_found・pane_attached 等）はここで投げる——手元の端末はまだ触っていない。
   await client.request("pane.attach", {
     paneId,
@@ -229,7 +231,8 @@ async function attachSession(
     disposers.push(
       term.onResize(() => {
         if (ended) return;
-        const next = term.size();
+        const now = term.size();
+        const next = clampTerminalSize(now.cols, now.rows);
         // 奪われた後は not_attached になるが、それはイベントで分かるので無視する。
         client
           .request("pane.attach_resize", { paneId, cols: next.cols, rows: next.rows })

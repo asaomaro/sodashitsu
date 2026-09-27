@@ -21,6 +21,16 @@ export interface PtyProcess {
   onExit(cb: (e: { exitCode: number; signal?: number }) => void): Disposable;
   write(data: string | Uint8Array): void;
   /**
+   * `write` で受けたがまだ PTY へ書けていないバイト数（20260927-server-size-input-limits）。pane のプログラムが入力を読まない（raw モードで
+   * 固まった TUI 等）と増え続けるので、`TerminalHost.writeInput` が上限の判定に使う。測れない実装は持たないか undefined を返す（捨てない側に倒す）。
+   */
+  pendingWriteBytes?(): number | undefined;
+  /**
+   * その待ちの件数（`write` 1 回が 1 件。20260927-server-size-input-limits の decisions D9）。1 バイトずつの大量の書き込みはバイト数では小さくても件数ぶんのメモリを使うので、
+   * 上限の判定は件数にも手間を掛けて数える。数えられない実装は持たないか undefined（0 とみなす）。どちらも O(1) で返すこと（入力 1 通ごとに呼ぶ）。
+   */
+  pendingWriteChunks?(): number | undefined;
+  /**
    * `pixels` は端末の文字の領域の画素の大きさ（20260926-kitty-graphics design「5.」）。Unix では `TIOCGWINSZ` の `ws_xpixel`/`ws_ypixel` になる
    * （画像を出すツールが読む）。Windows（ConPTY）は無視する。
    */

@@ -14,6 +14,7 @@ import type { ClientSink } from "../../terminal/OutputFanout.js";
 import { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 import { registerAttachMethods } from "./attach.js";
+import { registerClientMethods } from "./client.js";
 
 /** 方式の登録だけを見る（20260926-pane-direct-connect）。所有者の規則そのものは `SizeAuthority.test.ts`。 */
 class SizedHost implements TerminalHost {
@@ -229,5 +230,134 @@ describe("pane.attach / pane.attach_resize / pane.detach（20260926-pane-direct-
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error("unreachable");
     expect(res.error.code).toBe("invalid_params");
+  });
+});
+
+// 20260927-server-size-input-limits の AC1〜AC3。上限の外の大きさはスキーマで断られ、ハンドラ（大きさを変える処理）に届かない。
+describe("大きさの上限（20260927-server-size-input-limits）", () => {
+  const huge = [
+    { cols: 100000, rows: 100000 },
+    { cols: 4097, rows: 24 },
+    { cols: 80, rows: 4097 },
+    { cols: 1000, rows: 1001 },
+  ];
+  /** 上限ちょうど（1 辺 4096・面積 1,000,000）。陽性の対照（T2 の点検）。 */
+  const edges = [
+    { cols: 4096, rows: 244 },
+    { cols: 244, rows: 4096 },
+    { cols: 1000, rows: 1000 },
+  ];
+
+  it("pane.attach・pane.attach_resize は invalid_params で、所有者にも大きさの変更にもならない（AC1・AC2）", async () => {
+    const ctx = await makeContext();
+    const a = ctx.clients.register("external");
+    for (const size of huge) {
+      const res = await ctx.surface.invoke({ clientId: a, sink: sink(a) }, "pane.attach", {
+        paneId: ctx.paneId,
+        ...size,
+      });
+      expect(res, JSON.stringify(size)).toMatchObject({
+        ok: false,
+        error: { code: "invalid_params" },
+      });
+    }
+    expect(ctx.sizeAuthority.attachOwner(ctx.paneId)).toBeNull();
+
+    // 上限ちょうどで所有者になってから、上限ちょうどの attach_resize は通り、上限の外は断る。
+    expect(
+      await ctx.surface.invoke({ clientId: a, sink: sink(a) }, "pane.attach", {
+        paneId: ctx.paneId,
+        cols: 4096,
+        rows: 244,
+      }),
+    ).toEqual({ ok: true, result: { cols: 4096, rows: 244 } });
+    for (const size of edges) {
+      expect(
+        await ctx.surface.invoke({ clientId: a, sink: sink(a) }, "pane.attach_resize", {
+          paneId: ctx.paneId,
+          ...size,
+        }),
+        JSON.stringify(size),
+      ).toEqual({ ok: true, result: {} });
+      const p = ctx.session.getPane(ctx.paneId)!;
+      expect([p.cols, p.rows]).toEqual([size.cols, size.rows]);
+    }
+    const sizeEvents = ctx.published.filter((e) => e.event === "pane.size_changed").length;
+    for (const size of huge) {
+      const res = await ctx.surface.invoke({ clientId: a, sink: sink(a) }, "pane.attach_resize", {
+        paneId: ctx.paneId,
+        ...size,
+      });
+      expect(res, JSON.stringify(size)).toMatchObject({
+        ok: false,
+        error: { code: "invalid_params" },
+      });
+    }
+    const after = ctx.session.getPane(ctx.paneId)!;
+    expect([after.cols, after.rows]).toEqual([1000, 1000]);
+    expect(ctx.published.filter((e) => e.event === "pane.size_changed")).toHaveLength(sizeEvents);
+  });
+
+  it("client.view は大きさ・件数が上限の外なら invalid_params で、表示も pane の大きさも変わらない（AC1・AC3）", async () => {
+    const ctx = await makeContext();
+    registerClientMethods(ctx.surface, {
+      session: ctx.session,
+      clients: ctx.clients,
+      sizeAuthority: ctx.sizeAuthority,
+    } as unknown as MethodDeps);
+    const d = ctx.clients.register("desktop");
+    const pane = ctx.session.getPane(ctx.paneId)!;
+    const tab = ctx.session.getTab(pane.tabId)!;
+    const view = (visible: unknown[]) => ({ workspaceId: tab.workspaceId, tabId: tab.id, visible });
+
+    for (const size of huge) {
+      const res = await ctx.surface.invoke(
+        { clientId: d, sink: sink(d) },
+        "client.view",
+        view([{ paneId: ctx.paneId, ...size }]),
+      );
+      expect(res, JSON.stringify(size)).toMatchObject({
+        ok: false,
+        error: { code: "invalid_params" },
+      });
+    }
+    const tooMany = Array.from({ length: 4097 }, () => ({
+      paneId: ctx.paneId,
+      cols: 80,
+      rows: 24,
+    }));
+    expect(
+      await ctx.surface.invoke({ clientId: d, sink: sink(d) }, "client.view", view(tooMany)),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "invalid_params" },
+    });
+    expect(ctx.clients.get(d)?.view ?? null).toBeNull();
+    expect(ctx.published.filter((e) => e.event === "pane.size_changed")).toHaveLength(0);
+
+    // 上限ちょうど（件数 4096・1 辺 4096・面積 1,000,000）は今までどおり受け付け、大きさを当てる。
+    const atLimit = Array.from({ length: 4096 }, () => ({
+      paneId: ctx.paneId,
+      cols: 80,
+      rows: 24,
+    }));
+    expect(
+      await ctx.surface.invoke({ clientId: d, sink: sink(d) }, "client.view", view(atLimit)),
+    ).toEqual({
+      ok: true,
+      result: {},
+    });
+    for (const size of edges) {
+      expect(
+        await ctx.surface.invoke(
+          { clientId: d, sink: sink(d) },
+          "client.view",
+          view([{ paneId: ctx.paneId, ...size }]),
+        ),
+        JSON.stringify(size),
+      ).toEqual({ ok: true, result: {} });
+      const now = ctx.session.getPane(ctx.paneId)!;
+      expect([now.cols, now.rows]).toEqual([size.cols, size.rows]);
+    }
   });
 });

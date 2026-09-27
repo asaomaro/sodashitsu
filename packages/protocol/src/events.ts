@@ -113,7 +113,8 @@ export interface SessionFocusChangedEvent {
 }
 export interface ClientErrorEvent {
   event: "client.error";
-  data: { code: string; message: string };
+  /** `paneId` は対象の pane が決まる知らせ（`input_queue_full`。20260927-server-size-input-limits）だけに載る。 */
+  data: { code: string; message: string; paneId?: string };
 }
 /** 導入状態・自動再開設定が変わったときに全クライアントへ配布する（20260923-agent-session-resume）。 */
 export interface AgentIntegrationChangedEvent {

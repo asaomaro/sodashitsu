@@ -78,7 +78,13 @@ interface TestServer {
 }
 
 async function startTestServer(
-  opts: { commandFor?: (index: number) => string; gatewayNow?: () => number; onClientGone?: (clientId: string) => void } = {},
+  opts: {
+    commandFor?: (index: number) => string;
+    gatewayNow?: () => number;
+    onClientGone?: (clientId: string) => void;
+    /** `WsGateway` に渡すロガー（入力を捨てたログの間引きを確かめる。20260927-server-size-input-limits）。 */
+    gatewayLogger?: MemoryLogger;
+  } = {},
 ): Promise<TestServer> {
   const stateDir = await makeTempDir("wtm-ws-state-");
   const auth = new DefaultAuthService(new FsAuthFile(stateDir));
@@ -115,7 +121,7 @@ async function startTestServer(
   const http = new HttpServer(auth, originGate, new DefaultLoginRateLimiter(), { webDistDir, logger: new MemoryLogger() });
   const httpServer = http.server;
   const wsServer = new WsServerWs(httpServer, originGate, auth.authorizeUpgrade, wsLogger);
-  new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, new MemoryLogger(), {
+  new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, opts.gatewayLogger ?? new MemoryLogger(), {
     ...(opts.gatewayNow ? { now: opts.gatewayNow } : {}),
     ...(opts.onClientGone ? { onClientGone: opts.onClientGone } : {}),
   });
@@ -618,6 +624,99 @@ describe("WsGateway — 不正なフレームの窓の時計（D106）", () => {
       await server.close();
     }
   }, 10000);
+});
+
+/**
+ * 20260927-server-size-input-limits の AC5〜AC7。pane が入力を読まない（raw モードで読まない子。固まった TUI の代わり）とき、サーバに溜まった入力が
+ * 上限（16 MiB）に達したら INPUT を書かずに捨て、送った接続へ `client.error`（input_queue_full・paneId）を同じ pane について 2 秒に 1 回だけ送る。
+ * 接続は閉じない。実物の node-pty に上限まで 1 回だけ書く（負荷試験ではない。pane は server.close で終わる）。
+ */
+describe("WsGateway — 読まない pane への入力の上限（20260927-server-size-input-limits）", () => {
+  it("上限の内側の 1 MiB の INPUT は書き、超えた分は捨てて 2 秒に 1 回だけ知らせ、接続は閉じない。ログも間引く", async () => {
+    let t = 0;
+    const gatewayLogger = new MemoryLogger();
+    const server = await startTestServer({
+      commandFor: () => "stty raw -echo; printf READY; exec sleep 30",
+      gatewayNow: () => t,
+      gatewayLogger,
+    });
+    let ws: WebSocket | undefined;
+    try {
+      ({ ws } = await server.connectAuthorized());
+      const inbox = makeInbox(ws);
+      const closed = nextClose(ws);
+      const texts: { id?: string; event?: string; data?: { code?: string; paneId?: string } }[] = [];
+      /** 印の要求（未知の方式）の応答が来るまでの JSON を集める。INPUT は届いた順に処理されるので、それより前の知らせは全部ここに入る。 */
+      const drainUntil = async (id: string): Promise<void> => {
+        request(ws!, id, "no.such_method", {});
+        for (;;) {
+          const msg = await Promise.race([inbox.next(), closed.then((code) => Promise.reject(new Error(`closed (${code})`)))]);
+          if (msg.isBinary) continue;
+          const parsed = JSON.parse(msg.data.toString("utf8")) as (typeof texts)[number];
+          if (parsed.id === id) return;
+          texts.push(parsed);
+        }
+      };
+      const notices = () => texts.filter((m) => m.event === "client.error");
+
+      request(ws, "h", "client.hello", { protocol: 1, kind: "desktop" });
+      request(ws, "c", "workspace.create", { cwd: process.cwd(), label: "stuck" });
+      let paneId = "";
+      for (;;) {
+        const m = JSON.parse((await inbox.next()).data.toString("utf8")) as { id?: string; result?: { pane?: { id: string } } };
+        if (m.id === "c") {
+          paneId = m.result!.pane!.id;
+          break;
+        }
+      }
+      request(ws, "s", "pane.subscribe", { paneId, scrollbackLines: 0 });
+      // raw にしてから書く（canonical のままだとカーネルが溢れた入力を捨てる）。READY は購読の前に出ていれば SNAPSHOT に、後なら OUTPUT に載る。
+      let screen = "";
+      while (!screen.includes("READY")) {
+        const msg = await inbox.next();
+        if (!msg.isBinary) continue;
+        const f = decodeFrame(new Uint8Array(msg.data));
+        if (f.type === FRAME_TYPE.SNAPSHOT) screen += f.text;
+        else if (f.type === FRAME_TYPE.OUTPUT) screen += new TextDecoder().decode(f.chunk);
+      }
+
+      const MiB = 1024 * 1024;
+      // 1 件あたり 256 バイトを上乗せして数えるので（decisions D9）、上限の内側の 15 通の 1 MiB は捨てずに書く（AC7）。
+      for (let i = 0; i < 15; i++) ws.send(encodeInputFrame(paneId, new Uint8Array(MiB).fill(0x61)));
+      await drainUntil("m1");
+      expect(notices()).toEqual([]);
+
+      // 上限に達した後は捨てる。64 KiB（カーネルの受け口より大きい）を 40 通（残りの約 1 MiB に 16 通ほど入り、後は捨てる）。知らせは 1 回だけ。
+      for (let i = 0; i < 40; i++) ws.send(encodeInputFrame(paneId, new Uint8Array(64 * 1024).fill(0x62)));
+      await drainUntil("m2");
+      expect(notices()).toEqual([
+        {
+          event: "client.error",
+          data: { code: "input_queue_full", message: expect.stringContaining(paneId), paneId },
+        },
+      ]);
+
+      // 間隔の内（1999ms）は知らせず、2 秒で再び知らせる。
+      t += 1999;
+      ws.send(encodeInputFrame(paneId, new Uint8Array(64 * 1024)));
+      await drainUntil("m3");
+      expect(notices()).toHaveLength(1);
+      t += 1;
+      ws.send(encodeInputFrame(paneId, new Uint8Array(64 * 1024)));
+      await drainUntil("m4");
+      expect(notices()).toHaveLength(2);
+
+      // 捨てた 20 通余りのうち、ログは窓（60 秒）の上限 20 行まで。
+      const dropLines = gatewayLogger.lines.filter((l) => l.msg === "dropped input to a pane that is not reading");
+      expect(dropLines).toHaveLength(20);
+      expect(dropLines[0]!.fields).toMatchObject({ paneId, bytes: 64 * 1024 });
+      // 接続は閉じていない（印の要求に応答が返り続けた）。
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+    } finally {
+      ws?.terminate();
+      await server.close();
+    }
+  }, 20_000);
 });
 
 /**
