@@ -33,6 +33,8 @@ export interface SessionModelHooks {
   onClientError?(code: string, message: string): void;
   onPrefsChanged?(data: PrefsChangedEvent["data"]): void;
   onAgentChanged?(paneId: string, prev: AgentInfo | null, next: AgentInfo | null): void;
+  /** スナップショットを当てた（`first` はこのプロセスで最初の 1 回。通知の判定済みの印に使う）。 */
+  onSnapshotApplied?(panes: { paneId: string; agent: AgentInfo | null }[], first: boolean): void;
 }
 
 export class SessionModel {
@@ -74,6 +76,8 @@ export class SessionModel {
     return () => this.listeners.delete(cb);
   }
 
+  private snapshots = 0;
+
   applySnapshot(s: SessionSnapshot, clientId: string): void {
     this.serverVersion = s.serverVersion;
     this.host = s.host;
@@ -95,6 +99,10 @@ export class SessionModel {
     }
     this.repair();
     this.emit();
+    this.hooks.onSnapshotApplied?.(
+      s.panes.map((p) => ({ paneId: p.id, agent: p.agent })),
+      this.snapshots++ === 0,
+    );
   }
 
   applyEvent(e: ServerEvent): void {

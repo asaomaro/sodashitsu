@@ -21,6 +21,8 @@ export type DialogContext =
   | { kind: "help" }
   | { kind: "goto" }
   | { kind: "settings" }
+  /** 端末版だけ：未処理の知らせの一覧（design「modes/」の「通知の一覧」）。 */
+  | { kind: "notifications" }
   | { kind: "worktreeCreate"; workspaceId: string; info: WorktreeListResult }
   | { kind: "worktreeOpen"; workspaceId: string; entries: WorktreeEntry[] }
   | {
@@ -60,6 +62,14 @@ export interface ContextMenuState {
 export interface Toast {
   id: number;
   message: string;
+  /** 押したときにすること（通知の「移動」。押したら知らせは消える）。 */
+  onClick?: () => void;
+}
+
+export interface ToastOptions {
+  onClick?: () => void;
+  /** 出しておく時間（既定 `TOAST_MS`）。 */
+  ms?: number;
 }
 
 /** 知らせを出しておく時間。 */
@@ -146,12 +156,21 @@ export class UiState {
     this.navigateMenuRequested = false;
   }
 
-  toast(message: string): number {
+  toast(message: string, opts: ToastOptions = {}): number {
     const id = this.nextToastId++;
-    this.toasts = [...this.toasts, { id, message }].slice(-3);
+    const t: Toast = { id, message, ...(opts.onClick ? { onClick: opts.onClick } : {}) };
+    this.toasts = [...this.toasts, t].slice(-3);
     this.emit();
-    this.setTimer(() => this.dismissToast(id), TOAST_MS);
+    this.setTimer(() => this.dismissToast(id), opts.ms ?? TOAST_MS);
     return id;
+  }
+
+  /** 知らせを押した（`onClick` があれば実行して消す）。 */
+  clickToast(id: number): void {
+    const t = this.toasts.find((x) => x.id === id);
+    if (!t) return;
+    this.dismissToast(id);
+    t.onClick?.();
   }
 
   dismissToast(id: number): void {

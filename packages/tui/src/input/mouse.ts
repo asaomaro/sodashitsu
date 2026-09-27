@@ -82,6 +82,8 @@ export interface MouseHost {
   setSidebarSpacesRows?(rows: number, persist: boolean): void;
   /** リンクを開く（M6。Ctrl＋クリック）。 */
   openLink?(url: string): void;
+  /** 知らせ（トースト）の当たり（押すと `ui.clickToast`）。 */
+  toastHits?(): readonly { id: number; x: number; y: number; w: number }[];
   /** マウスで選んだら離した時点でコピーするか（`tui.copyOnSelect`。省略は入）。 */
   copyOnSelect?(): boolean;
   /** サイドバーの区画をホイールで動かす（区画が一覧より低いとき）。 */
@@ -252,6 +254,13 @@ export class MouseController {
     const right = ev.button === 2;
     const left = ev.button === 0;
     this.selection = null;
+
+    // 知らせ（通知のトースト）：押すと対象へ（design「通知」）。ほかの部品より上に描いているので先に見る。
+    const toast = this.host.toastHits?.().find((t) => t.y === y && x >= t.x && x < t.x + t.w);
+    if (toast) {
+      if (left) ui.clickToast(toast.id);
+      return;
+    }
 
     // サイドバー
     if (layout.sidebar && x >= layout.sidebar.x && x < layout.sidebar.x + layout.sidebar.w) {

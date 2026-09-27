@@ -17,6 +17,10 @@ import { GotoDialog } from "../modes/GotoDialog.js";
 import { SettingsDialog } from "../modes/SettingsDialog.js";
 import { settingsSections } from "../settings/sections.js";
 import { SettingsWriter } from "../settings/SettingsWriter.js";
+import { NotificationController } from "../notify/NotificationController.js";
+import { NotificationList } from "../modes/NotificationList.js";
+import { describeDelivery, detectDelivery } from "../notify/terminalNotify.js";
+import type { ToastHit } from "../render/Renderer.js";
 import { ATTR } from "../render/color.js";
 import type { CursorState, Grid } from "../render/Screen.js";
 import { TuiCopyTarget } from "../term/CopyTarget.js";
@@ -138,6 +142,10 @@ export class TuiApp {
   private copyPaneId: string | null = null;
   /** 外側の端末へマウスの報告を出させているか（`tui.mouseCapture`）。 */
   private mouseOn = true;
+  /** 通知（05 の T3）。 */
+  readonly notify: NotificationController;
+  /** 直近のフレームの知らせの当たり（押すと対象へ）。 */
+  protected toastHits: ToastHit[] = [];
   /** 設定の書き込み（設定画面・05）。 */
   protected readonly settingsWriter: SettingsWriter;
   /** 外側の端末へ ?1003（ボタンを押していない動きの報告）を有効にしているか。 */
@@ -154,7 +162,12 @@ export class TuiApp {
   ) {
     this.modes = new TerminalModes(io);
     this.model = new SessionModel({
-      onPaneClosed: (paneId) => this.panes.paneClosed(paneId),
+      onPaneClosed: (paneId) => {
+        this.panes.paneClosed(paneId);
+        this.notify?.onPaneClosed(paneId);
+      },
+      onAgentChanged: (paneId, prev, next) => this.notify?.onAgentChanged(paneId, prev, next),
+      onSnapshotApplied: (panes, first) => this.notify?.onSnapshotApplied(panes, first),
       onPrefsChanged: (data) => this.prefs.apply(data.prefs, data.rev),
     });
     this.prefs = new PrefsModel(readTuiState(target.stateDir));
@@ -229,11 +242,23 @@ export class TuiApp {
       pasteText: (paneId, text) => this.pasteText(paneId, text),
       detach: () => this.detach(),
       toggleSidebar: () => this.toggleSidebar(),
-      focusNextNotification: () => this.notYet("通知の移動"),
+      focusNextNotification: () => this.notify.focusNext(),
       runCommand: () => this.notYet("独自コマンド"),
       pasteImage: () => this.notYet("画像の貼り付け"),
       setCommands: (r) => this.model.setCommands(r),
     });
+    this.notify = new NotificationController({
+      model: this.model,
+      ui: this.ui,
+      prefs: this.prefs,
+      env: io.env,
+      hasFocus: () => this.outerFocused,
+      isPaneVisible: (paneId) =>
+        (this.lastLayout ?? this.layout()).panes.some((b) => b.paneId === paneId),
+      write: (seq) => this.io.write(seq),
+      focusPane: (paneId) => this.dispatcher.focusPaneAcrossViews(paneId),
+    });
+    this.disposers.push(() => this.notify.dispose());
     this.overlays = new OverlayHost({
       ui: this.ui,
       model: this.model,
@@ -257,6 +282,7 @@ export class TuiApp {
         this.setLocalState({ sidebarSpacesRows: rows }, persist),
       openLink: (url) => this.openLink(url),
       copyOnSelect: () => this.prefs.copyOnSelect,
+      toastHits: () => this.toastHits,
       scrollSidebar: (section, delta) => {
         this.sidebarScroll[section] = Math.max(0, this.sidebarScroll[section] + delta);
         this.scheduleRender();
@@ -611,6 +637,7 @@ export class TuiApp {
         statusSymbols: () => this.prefs.statusSymbols,
       });
     if (ctx.kind === "settings") return this.settingsDialog();
+    if (ctx.kind === "notifications") return new NotificationList(this.ui, this.notify);
     return null;
   }
 
@@ -632,6 +659,7 @@ export class TuiApp {
           keymap: () => this.keymap,
           navigateKeymap: () => this.navigateKeymap,
           commandsProblem: () => this.model.commands.problem,
+          detectedDelivery: () => describeDelivery(detectDelivery(this.io.env)),
           scrollbackLimit: () => this.model.limits.scrollbackLines,
           agentIntegration: {
             status: () => this.model.agentIntegration,
@@ -782,13 +810,14 @@ export class TuiApp {
     };
     const result = this.renderer.render(layout, ctx, this.panes, {
       decorate: (grid) => this.decorate(grid, layout),
-      toasts: this.ui.toasts.map((t) => t.message),
+      toasts: this.ui.toasts.map((t) => ({ id: t.id, message: t.message, clickable: !!t.onClick })),
       overlay: (grid) => this.overlays.render(grid, this.theme),
     });
     this.sidebarHits = result.sidebarHits;
     this.tabHits = result.tabHits;
     this.newTabButton = result.newTabButton;
     this.tabBarHits = result.tabBar;
+    this.toastHits = result.toastHits;
     this.switchButton = result.switchButton;
     this.openRequestedNavigateMenu(layout);
     this.syncAnyMotion(layout);

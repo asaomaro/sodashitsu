@@ -18,7 +18,7 @@ export interface RenderExtras {
   /** pane の上の印（copy モードの選択・ドラッグの落とし先）。本物のカーソルを返せば焦点の pane のカーソルの代わりに置く。 */
   decorate?(grid: Grid): CursorState | null | undefined;
   /** 右下の知らせ。 */
-  toasts?: readonly string[];
+  toasts?: readonly { id: number; message: string; clickable?: boolean }[];
   /** オーバーレイ（ダイアログ・メニュー）。描いたら本物のカーソルの位置（入力欄が無ければ隠す）を返す。 */
   overlay?(grid: Grid): CursorState | null;
 }
@@ -28,6 +28,8 @@ export interface RenderResult {
   sidebarHits: SidebarHit[];
   tabHits: TabHit[];
   newTabButton: TabBarHits["newTab"];
+  /** 知らせの当たり。 */
+  toastHits: ToastHit[];
   /** tab バーの当たり（あふれたときの「‹」「›」・サイドバーを開く「»」を含む）。 */
   tabBar: TabBarHits;
   /** 1 列表示の「switch」（狭い幅のときだけ）。 */
@@ -79,6 +81,7 @@ export class Renderer {
         sidebarHits: [],
         tabHits: [],
         newTabButton: null,
+        toastHits: [],
         tabBar: { tabs: [], newTab: null },
         switchButton: null,
       };
@@ -144,8 +147,9 @@ export class Renderer {
       covered = true;
       if (decoCursor !== null) cursor = decoCursor;
     }
+    let toastHits: ToastHit[] = [];
     if (extras.toasts && extras.toasts.length > 0) {
-      paintToasts(grid, extras.toasts, ctx);
+      toastHits = paintToasts(grid, extras.toasts, ctx);
       covered = true;
     }
     const overlayCursor = extras.overlay?.(grid) ?? null;
@@ -161,6 +165,7 @@ export class Renderer {
       sidebarHits,
       tabHits,
       newTabButton: tabBar.newTab,
+      toastHits,
       tabBar,
       switchButton: narrow?.switchButton ?? null,
     };
@@ -181,16 +186,32 @@ function centerText(
 }
 
 /** 右下に知らせを積む（新しいものが下）。 */
-function paintToasts(grid: Grid, toasts: readonly string[], ctx: ChromeContext): void {
+/** 知らせの当たり（押すと対象へ。通知のトースト）。 */
+export interface ToastHit {
+  id: number;
+  x: number;
+  y: number;
+  w: number;
+}
+
+function paintToasts(
+  grid: Grid,
+  toasts: readonly { id: number; message: string; clickable?: boolean }[],
+  ctx: ChromeContext,
+): ToastHit[] {
+  const hits: ToastHit[] = [];
   const bg = ctx.theme.ui("--soda-menu-active-bg");
   const fg = ctx.theme.ui("--soda-menu-fg");
   const maxW = Math.max(10, Math.min(60, grid.w - 4));
   let y = grid.h - 2;
   for (let i = toasts.length - 1; i >= 0 && y >= 1; i--, y--) {
-    const text = ` ${truncate(toasts[i]!, maxW - 2)} `;
+    const t = toasts[i]!;
+    const text = ` ${truncate(t.clickable ? `${t.message} ▸` : t.message, maxW - 2)} `;
     const w = stringWidth(text);
     grid.text(grid.w - w - 1, y, text, fg, bg);
+    if (t.clickable) hits.push({ id: t.id, x: grid.w - w - 1, y, w });
   }
+  return hits;
 }
 
 /**

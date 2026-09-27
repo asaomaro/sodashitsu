@@ -115,6 +115,8 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
     { label: "キー割り当て", run: () => actions.run({ type: "help" }) },
     { label: "移動", run: () => actions.run({ type: "goto" }) },
     { label: "設定", run: () => actions.run({ type: "settings" }) },
+    // 端末版だけ：未処理の知らせの一覧（design の「通知の一覧」。web は知らせのトーストが残るので一覧を持たない）。
+    { label: "知らせの一覧", run: () => deps.ui.openDialogWithContext({ kind: "notifications" }) },
     { label: "切り離し", run: () => actions.run({ type: "detach" }) },
   ];
 }
