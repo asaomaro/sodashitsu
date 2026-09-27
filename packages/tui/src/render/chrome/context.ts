@@ -14,6 +14,8 @@ export interface ChromeContext {
   connection: ConnectionState;
   /** 右上に出す知らせ（初回の token 等。無ければ null）。 */
   notice: string | null;
+  /** navigate モードで選んでいる workspace（サイドバーで強調する）。 */
+  navigateSelection?: string | null;
   /** 短い警告（未接続で打鍵を送れない等）。接続の状態より優先して出す。 */
   alert?: string | null;
   session?: string | undefined;

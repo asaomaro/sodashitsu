@@ -26,6 +26,7 @@ interface Line {
   glyphState: Parameters<typeof stateColor>[1];
   text: string;
   selected: boolean;
+  navigated?: boolean;
   hit?: SidebarTarget;
 }
 
@@ -60,6 +61,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       glyphState: state,
       text: w.label,
       selected: w.id === model.workspaceId,
+      navigated: w.id === ctx.navigateSelection,
       hit: { kind: "workspace", workspaceId: w.id },
     };
   };
@@ -125,8 +127,10 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       grid.text(rect.x + 1, y, truncate(line.header, inner - 1), fg, bg, ATTR.dim);
       continue;
     }
-    const rowBg = line.selected ? activeBg : bg;
-    if (line.selected) grid.fill({ x: rect.x, y, w: inner, h: 1 }, fg, rowBg);
+    // navigate モードで選んでいる行はアクセントの色で（今の workspace の強調より優先）。
+    const rowBg = line.navigated ? theme.ui("--soda-accent") : line.selected ? activeBg : bg;
+    const rowFg = line.navigated ? theme.ui("--soda-accent-fg") : fg;
+    if (line.selected || line.navigated) grid.fill({ x: rect.x, y, w: inner, h: 1 }, rowFg, rowBg);
     let x = rect.x + 1 + line.indent;
     const room = rect.x + inner - x;
     if (room <= 0) continue;
@@ -138,7 +142,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       x,
       y,
       truncate(line.text, rect.x + inner - x),
-      fg,
+      rowFg,
       rowBg,
       line.selected ? ATTR.bold : 0,
     );

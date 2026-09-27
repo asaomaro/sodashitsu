@@ -1,4 +1,10 @@
-import { KeyRouter, type Action, type Mode, type ResolvedKeymap } from "@sodashitsu/client-core";
+import {
+  KeyRouter,
+  type Action,
+  type Mode,
+  type ResolvedKeymap,
+  type SubModeInterpreters,
+} from "@sodashitsu/client-core";
 import type { KeyInput } from "@sodashitsu/client-core";
 import { encodeKey, type PaneInputModes } from "./encode.js";
 
@@ -22,16 +28,22 @@ export class TuiKeys {
   constructor(
     keymap: ResolvedKeymap,
     private readonly target: KeyTarget,
+    /** navigate・copy・resize のキーの解釈（client-core の `NavigateMode`・`CopyMode`・`ResizeMode`）。 */
+    subModes: SubModeInterpreters = {},
   ) {
-    this.router = new KeyRouter(keymap, {
-      now: () => Date.now(),
-      setTimeout: (fn, ms) => {
-        const t = setTimeout(fn, ms);
-        t.unref?.();
-        return t;
+    this.router = new KeyRouter(
+      keymap,
+      {
+        now: () => Date.now(),
+        setTimeout: (fn, ms) => {
+          const t = setTimeout(fn, ms);
+          t.unref?.();
+          return t;
+        },
+        clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
       },
-      clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
-    });
+      subModes,
+    );
   }
 
   get mode(): Mode {

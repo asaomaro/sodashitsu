@@ -3,6 +3,13 @@ import type { Grid, Rect } from "../Screen.js";
 import { stringWidth, truncate } from "../width.js";
 import type { ChromeContext } from "./context.js";
 
+const MODE_BADGES: Partial<Record<ChromeContext["mode"], string>> = {
+  prefix: "PREFIX",
+  navigate: "NAVIGATE",
+  copy: "COPY",
+  resize: "RESIZE",
+};
+
 /** tab バーの tab の位置（04 のクリック・ドラッグが使う）。 */
 export interface TabHit {
   tabId: string;
@@ -21,11 +28,13 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabHit[
   grid.fill(rect, fg, bg);
   const end = rect.x + rect.w;
   let x = rect.x;
-  if (ctx.mode === "prefix") {
+  // prefix 待ち・モードの印（AC-I1。web の PrefixIndicator と同じく左端に）。
+  const badge = MODE_BADGES[ctx.mode];
+  if (badge) {
     x += grid.text(
       x,
       rect.y,
-      " PREFIX ",
+      ` ${badge} `,
       theme.ui("--soda-accent-fg"),
       theme.ui("--soda-accent"),
       ATTR.bold,

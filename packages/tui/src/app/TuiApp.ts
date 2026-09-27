@@ -1,5 +1,8 @@
 import {
+  CopyMode,
   InputGate,
+  NavigateMode,
+  ResizeMode,
   loadKeyPrefs,
   resolveKeymap,
   resolveNavigateKeymap,
@@ -8,7 +11,12 @@ import {
   type ResolvedKeymap,
   type ResolvedNavigateKeymap,
 } from "@sodashitsu/client-core";
-import { TuiDispatcher, type CopyTargetPort } from "../actions/TuiDispatcher.js";
+import { TuiDispatcher } from "../actions/TuiDispatcher.js";
+import { GotoDialog } from "../modes/GotoDialog.js";
+import { ATTR } from "../render/color.js";
+import type { CursorState, Grid } from "../render/Screen.js";
+import { TuiCopyTarget } from "../term/CopyTarget.js";
+import type { PaneTerminal } from "../term/PaneTerminal.js";
 import { osc52 } from "../clipboard.js";
 import { UiState, type DialogContext } from "../model/UiState.js";
 import { helpGroups } from "../modes/HelpDialog.js";
@@ -98,6 +106,10 @@ export class TuiApp {
   /** 今の割り当ての表（ヘルプ・navigate モードが引く）。 */
   protected keymap!: ResolvedKeymap;
   protected navigateKeymap!: ResolvedNavigateKeymap;
+  private readonly navigateMode = new NavigateMode();
+  private readonly copyMode = new CopyMode();
+  /** pane の headless ごとの copy モードの対象（捨てた headless のものは一緒に消える）。 */
+  private readonly copyTargets = new WeakMap<PaneTerminal, TuiCopyTarget>();
   /** オーバーレイ（ダイアログ・メニュー）。 */
   readonly overlays: OverlayHost;
 
@@ -128,12 +140,16 @@ export class TuiApp {
       () => this.scheduleRender(),
     );
     this.disposers.push(() => this.panes.dispose());
-    this.keys = new TuiKeys(this.resolvedKeymap(), {
-      paneModes: () => this.focusedPaneModes(),
-      sendToPane: (bytes) => this.sendToFocusedPane(bytes),
-      dispatch: (action) => this.dispatcher.dispatch(action),
-      dropped: () => this.inputDropped(),
-    });
+    this.keys = new TuiKeys(
+      this.resolvedKeymap(),
+      {
+        paneModes: () => this.focusedPaneModes(),
+        sendToPane: (bytes) => this.sendToFocusedPane(bytes),
+        dispatch: (action) => this.dispatcher.dispatch(action),
+        dropped: () => this.inputDropped(),
+      },
+      { navigate: this.navigateMode, copy: this.copyMode, resize: new ResizeMode() },
+    );
     this.keys.router.onModeChange(() => this.scheduleRender());
     this.ui = new UiState(this.model);
     this.disposers.push(this.ui.onChange(() => this.scheduleRender()));
@@ -316,6 +332,7 @@ export class TuiApp {
     this.keymapSource = JSON.stringify(raw ?? null);
     const keyPrefs = loadKeyPrefs(raw);
     this.navigateKeymap = resolveNavigateKeymap(keyPrefs.navigateKeys).keymap;
+    this.navigateMode.setKeymap(this.navigateKeymap);
     this.keymap = resolveKeymap(keyPrefs).keymap;
     return this.keymap;
   }
@@ -351,6 +368,8 @@ export class TuiApp {
     switch (ev.kind) {
       case "key":
         this.keys.handle(ev);
+        // モードの中のキー（copy のカーソル・navigate の選択）は画面を変える。
+        if (this.keys.mode !== "terminal") this.scheduleRender();
         return;
       case "paste": {
         const modes = this.focusedPaneModes();
@@ -434,8 +453,15 @@ export class TuiApp {
   }
 
   /** copy モードの対象（T3 で pane の headless の上に作る）。 */
-  protected copyTargetOf(_paneId: string): CopyTargetPort | undefined {
-    return undefined;
+  protected copyTargetOf(paneId: string): TuiCopyTarget | undefined {
+    const term = this.panes.get(paneId);
+    if (!term) return undefined;
+    let t = this.copyTargets.get(term);
+    if (!t) {
+      t = new TuiCopyTarget(term.term);
+      this.copyTargets.set(term, t);
+    }
+    return t;
   }
 
   /** 外側の端末のクリップボードへ書く（OSC 52。05 で手元の OS の道具・tmux の包みを足す）。 */
@@ -445,7 +471,9 @@ export class TuiApp {
   }
 
   /** ダイアログのうち、基本の部品（入力欄・確認・一覧・ヘルプ）以外のもの（goto。T3）。 */
-  protected extraOverlay(_ctx: DialogContext): Overlay | null {
+  protected extraOverlay(ctx: DialogContext): Overlay | null {
+    if (ctx.kind === "goto")
+      return new GotoDialog({ ui: this.ui, model: this.model, actions: this.dispatcher });
     return null;
   }
 
@@ -513,21 +541,74 @@ export class TuiApp {
       prefs: this.prefs,
       theme: this.theme,
       mode: this.keyMode(),
+      navigateSelection: this.ui.navigateSelection,
       connection: this.connectionState,
       notice: this.notice,
       alert: this.alert,
       session: this.target.session,
     };
     const result = this.renderer.render(layout, ctx, this.panes, {
+      decorate: (grid) => this.decorate(grid, layout),
       toasts: this.ui.toasts.map((t) => t.message),
       overlay: (grid) => this.overlays.render(grid, this.theme),
     });
     this.sidebarHits = result.sidebarHits;
     this.tabHits = result.tabHits;
+    this.openRequestedNavigateMenu(layout);
     this.io.write(result.output);
     // 見えている pane の既読を進める（外側の端末にフォーカスがあるときだけ。web の sweepMarkSeen と同じ規則）。
     const visible = new Set(layout.panes.map((b) => b.paneId));
     this.model.sweepSeen((id) => visible.has(id), this.outerFocused);
+  }
+
+  /** pane の上の印（copy モードの選択とカーソル）。何も描かなければ undefined。 */
+  protected decorate(grid: Grid, layout: LayoutResult): CursorState | null | undefined {
+    if (this.keys.mode !== "copy") return undefined;
+    const paneId = this.model.focusedPaneId;
+    const box = paneId ? layout.panes.find((b) => b.paneId === paneId) : undefined;
+    const target = paneId ? this.copyTargetOf(paneId) : undefined;
+    const term = paneId ? this.panes.get(paneId) : undefined;
+    if (!box || !target || !term) return undefined;
+    const top = term.term.buffer.active.viewportY;
+    const { content } = box;
+    const sel = target.selection();
+    if (sel) {
+      for (
+        let row = Math.max(sel.from.row, top);
+        row <= Math.min(sel.to.row, top + content.h - 1);
+        row++
+      ) {
+        const y = content.y + row - top;
+        const from = sel.linewise || row > sel.from.row ? 0 : sel.from.col;
+        const to = sel.linewise || row < sel.to.row ? content.w - 1 : sel.to.col;
+        for (let col = from; col <= Math.min(to, content.w - 1); col++)
+          grid.attrs[y * grid.w + content.x + col]! ^= ATTR.inverse;
+      }
+    }
+    const cy = target.cursor.row - top;
+    if (cy < 0 || cy >= content.h) return null;
+    return {
+      x: content.x + Math.min(target.cursor.col, content.w - 1),
+      y: content.y + cy,
+      visible: true,
+      style: "block",
+      blink: false,
+    };
+  }
+
+  /** navigate モードの Space（`navigate_open_menu`）：選んでいる workspace の行の横にメニューを開く（web の Sidebar と同じ役）。 */
+  private openRequestedNavigateMenu(layout: LayoutResult): void {
+    if (!this.ui.navigateMenuRequested) return;
+    this.ui.clearNavigateMenuRequest();
+    const workspaceId = this.ui.navigateSelection;
+    if (!workspaceId) return;
+    const hit = this.sidebarHits.find(
+      (h) => h.kind === "workspace" && h.workspaceId === workspaceId,
+    );
+    const at = hit
+      ? { x: layout.sidebar ? layout.sidebar.x + 2 : 0, y: hit.y + 1 }
+      : { x: 2, y: 2 };
+    this.ui.openContextMenu({ kind: "workspace", workspaceId }, at);
   }
 
   /** 切り離し（`prefix+q`・SIGHUP・SIGTERM・SIGINT）。`client.detach` を送れるなら送る。サーバとエージェントは動き続ける。 */
