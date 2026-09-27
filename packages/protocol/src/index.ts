@@ -10,3 +10,4 @@ export * from "./worktreePath.js";
 export * from "./messages.js";
 export * from "./events.js";
 export * from "./frames.js";
+export * from "./terminalLimits.js";

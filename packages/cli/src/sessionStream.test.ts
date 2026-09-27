@@ -1,9 +1,11 @@
+import { TERMINAL_CELLS_MAX, TERMINAL_SIZE_MAX } from "@wtm/protocol";
 import { describe, expect, it } from "vitest";
 import {
   FrameWriter,
   isCanonicalBase64,
   LineSplitter,
   MAX_CONTROL_LINE_BYTES,
+  MAX_STREAM_DIMENSION,
   parseControlLine,
   type LineEvent,
 } from "./sessionStream.js";
@@ -260,5 +262,14 @@ describe("parseControlLine（コマンドの検査。AC7・AC8・AC9・AC11）",
   it("UTF-8 として正しくない行は不正", () => {
     const r = parseControlLine(new Uint8Array([0x7b, 0xff, 0x7d]));
     expect(r).toEqual({ ok: false, reason: "line is not valid UTF-8" });
+  });
+});
+
+// 20260927-server-size-input-limits（cross の点検）。`pane control` の --cols/--rows・terminal.resize の最大は、サーバのスキーマの上限の内側でなければならない
+// （外なら最大の値が invalid_params で断られる）。1000×1000 はちょうど面積の上限。
+describe("MAX_STREAM_DIMENSION とサーバの上限", () => {
+  it("1 辺も面積もサーバの上限の内側", () => {
+    expect(MAX_STREAM_DIMENSION).toBeLessThanOrEqual(TERMINAL_SIZE_MAX);
+    expect(MAX_STREAM_DIMENSION * MAX_STREAM_DIMENSION).toBeLessThanOrEqual(TERMINAL_CELLS_MAX);
   });
 });

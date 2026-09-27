@@ -196,6 +196,61 @@ describe.skipIf(process.platform === "win32")("AdoptedPtyProcess（実物の PTY
     expect(received).toEqual(lines);
   });
 
+  // 20260927-server-size-input-limits の AC5。slave を raw にして読まないと、書けなかった分が自前の待ち行列に残り、pendingWriteBytes が返す。
+  it("slave が読まない（raw）間は書けなかった分を pendingWriteBytes が返し、読み始めると 0 に戻る", async () => {
+    const { master, slave } = nodePtyNative().open(80, 24);
+    const slaveIn = new ReadStream(slave); // manualStart なので 'data' を付けるまで読まない
+    slaveIn.setRawMode(true);
+    slaveIn.on("error", () => undefined);
+    const proc = new AdoptedPtyProcess(master, 4242, {
+      readExitStatus: () => undefined,
+      kill: () => undefined,
+      exitPollMs: 0,
+    });
+    cleanups.push(() => proc.kill());
+    cleanups.push(() => slaveIn.destroy());
+    expect(proc.pendingWriteBytes()).toBe(0);
+    expect(proc.pendingWriteChunks()).toBe(0);
+    const size = 1024 * 1024;
+    proc.write(new Uint8Array(size).fill(0x61));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(proc.pendingWriteBytes()).toBeGreaterThan(size - 256 * 1024);
+    // カーネルの受け口に入った分（書き終えた先頭の offset）は数えない。
+    expect(proc.pendingWriteBytes()).toBeLessThan(size);
+    const partial = proc.pendingWriteBytes();
+    for (let i = 0; i < 100; i++) proc.write("ab");
+    expect(proc.pendingWriteChunks()).toBe(101);
+    expect(proc.pendingWriteBytes()).toBe(partial + 200);
+    slaveIn.on("data", () => undefined);
+    await until(() => proc.pendingWriteBytes() === 0, "drained");
+  });
+
+  it("書き込み待ちが残ったまま slave が全部閉じたら、残りは書かれないので pendingWriteBytes は 0", async () => {
+    const { master, slave } = nodePtyNative().open(80, 24);
+    const slaveIn = new ReadStream(slave);
+    slaveIn.setRawMode(true);
+    slaveIn.on("error", () => undefined);
+    const proc = new AdoptedPtyProcess(master, 4242, {
+      readExitStatus: () => undefined,
+      kill: () => undefined,
+      exitPollMs: 0,
+      exitSettleMs: 0,
+    });
+    cleanups.push(() => proc.kill());
+    proc.write(new Uint8Array(1024 * 1024).fill(0x61));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(proc.pendingWriteBytes()).toBeGreaterThan(0);
+    slaveIn.destroy();
+    try {
+      closeSync(slave);
+    } catch {
+      // destroy が閉じた。
+    }
+    await until(() => proc.handoffFd() === undefined, "master closed");
+    expect(proc.pendingWriteBytes()).toBe(0);
+    expect(proc.pendingWriteChunks()).toBe(0);
+  });
+
   it("pause の間は onData が来ず、resume で届く", async () => {
     const { proc, slave } = pair();
     let got = "";

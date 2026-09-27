@@ -6,9 +6,10 @@ import type { ErrorCode } from "@wtm/protocol";
  * 等——をそのまま toast に出していた）。`message` は使わず `code`（design「エラーコード」）で引く。知らない code は
  * 汎用の文言にその code を添える（サーバが先に新しい code を足しても、何が起きたかの手がかりを残す）。
  *
- * 今のサーバが `client.error` で送るのは `invalid_params` だけ（`WsGateway.registerInvalidFrame`：解析できない JSON・
- * id／method の無い JSON・不正なバイナリ・INPUT 以外のバイナリ・1MB を超える INPUT）。この Web が送るフレームで実際に
- * 起きうるのは、1 回で 1MB を超える貼り付け（その INPUT はサーバが捨てる。design「大きすぎる入力（1MB 超）」）。
+ * 今のサーバが `client.error` で送るのは `invalid_params`（`WsGateway.registerInvalidFrame`：解析できない JSON・
+ * id／method の無い JSON・不正なバイナリ・INPUT 以外のバイナリ・1MB を超える INPUT）と `input_queue_full`（pane が入力を読まず、
+ * サーバに溜まった入力が上限に達したので INPUT を捨てた。20260927-server-size-input-limits）。この Web が送るフレームで実際に
+ * 起きうるのは、1 回で 1MB を超える貼り付け（その INPUT はサーバが捨てる。design「大きすぎる入力（1MB 超）」）と、固まった pane への入力。
  */
 const MESSAGES: Record<ErrorCode, string> = {
   invalid_params: "送った内容をサーバが受け付けませんでした（1 回の貼り付けが 1MB を超えた等）。その分は端末に届いていません。",
@@ -66,6 +67,8 @@ const MESSAGES: Record<ErrorCode, string> = {
   invalid_metadata_token: "独自トークンの名前・数が受け付ける範囲の外です。",
   metadata_token_limit: "独自トークンは 1 つの対象に 32 個までです。",
   metadata_sequence_source_limit: "seq 付きの報告元は 1 つの対象に 32 個までです。",
+  // 入力の書き込み待ちの上限（20260927-server-size-input-limits）。サーバは同じ pane について 2 秒に 1 回だけ送る。
+  input_queue_full: "この pane のプログラムが入力を読んでいないため、送った入力を捨てました（サーバに溜まった入力が上限に達しています）。",
 };
 
 /**

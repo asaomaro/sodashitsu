@@ -7,12 +7,19 @@ import type { ClientSink } from "../terminal/OutputFanout.js";
 import type { EventBus } from "../bus/EventBus.js";
 import type { AuthService } from "../auth/AuthService.js";
 import type { Logger } from "../log/Logger.js";
-import { monotonicNow } from "../log/LogThrottle.js";
+import { LogThrottle, monotonicNow } from "../log/LogThrottle.js";
 import type { WsConnection, WsServer } from "./WsServer.js";
 
 const INVALID_FRAME_WINDOW_MS = 10_000;
 const INVALID_FRAME_LIMIT = 10;
 const MAX_INPUT_FRAME_BYTES = 1024 * 1024; // design「大きすぎる入力（1MB 超）」
+/**
+ * 入力を捨てた知らせ（`input_queue_full`）を同じ接続・同じ pane へ送る間隔（20260927-server-size-input-limits の decisions D2）。固まった pane に
+ * 打ち続けると 1 打鍵ごとに捨てられるので、毎回は送らない（toast が画面を埋める）が、打ち続けている間は知らせが続く。
+ */
+export const INPUT_FULL_NOTICE_INTERVAL_MS = 2000;
+/** 知らせた時刻を覚える pane の数の上限（閉じた pane の分が溜まらないよう、超えたら忘れる）。 */
+const INPUT_FULL_NOTICE_PANES_MAX = 256;
 
 interface RequestEnvelope {
   id: string;
@@ -25,6 +32,8 @@ interface ConnState {
   sessionId: string;
   invalidFrameCount: number;
   invalidWindowStartedAt: number;
+  /** pane ごとの、入力を捨てた知らせを最後に送った時刻（`INPUT_FULL_NOTICE_INTERVAL_MS` の間引き）。 */
+  inputFullNoticeAt: Map<string, number>;
 }
 
 export interface WsGatewayOptions {
@@ -49,6 +58,8 @@ export class WsGateway {
   private readonly states = new Map<string, ConnState>();
   private readonly now: () => number;
   private readonly onClientGone: ((clientId: string) => void) | undefined;
+  /** 入力を捨てたログの間引き（読まない pane へ流し込み続けると 1 通ごとに書くことになる。D103 と同じ考え方）。 */
+  private readonly inputDropLog: LogThrottle;
 
   constructor(
     wsServer: WsServer,
@@ -63,6 +74,7 @@ export class WsGateway {
   ) {
     this.now = opts.now ?? monotonicNow;
     this.onClientGone = opts.onClientGone;
+    this.inputDropLog = new LogThrottle({ now: this.now });
     wsServer.onConnection((conn, sessionId) => this.handleConnection(conn, sessionId));
     auth.onSessionRevoked((sessionId) => this.handleSessionRevoked(sessionId));
   }
@@ -71,7 +83,13 @@ export class WsGateway {
     const clientId = this.clients.register();
     // 窓の始まりは「まだ無い」（-∞）にする：単調な時計はプロセスの起動からの経過なので、0 から始めると起動の直後の
     // 最初の窓が短くなる（D106）。
-    this.states.set(clientId, { conn, sessionId, invalidFrameCount: 0, invalidWindowStartedAt: Number.NEGATIVE_INFINITY });
+    this.states.set(clientId, {
+      conn,
+      sessionId,
+      invalidFrameCount: 0,
+      invalidWindowStartedAt: Number.NEGATIVE_INFINITY,
+      inputFullNoticeAt: new Map(),
+    });
 
     const sink: ClientSink = {
       clientId,
@@ -119,7 +137,13 @@ export class WsGateway {
       const host = this.terminals.get(decoded.paneId);
       if (!host) return; // 閉じた直後の pane への入力。エラーにはしない。
       this.sizeAuthority.noteInteraction(clientId, decoded.paneId);
-      host.write(decoded.bytes);
+      // pane が入力を読まず、サーバに溜まった入力が上限に達していれば、書かずに捨てて知らせる（20260927-server-size-input-limits）。
+      // 接続の読み取りは止めない——同じ接続で運ぶ他の pane の入力・RPC まで止まる（decisions D3）。`writeInput` を持たない host は今までどおり。
+      if (host.writeInput) {
+        if (!host.writeInput(decoded.bytes)) this.inputDropped(clientId, decoded.paneId, decoded.bytes.byteLength);
+      } else {
+        host.write(decoded.bytes);
+      }
     });
 
     conn.onText((text) => {
@@ -162,6 +186,37 @@ export class WsGateway {
       if (msg.method === "client.detach") conn.close(1000, "detached"); // このブラウザの接続だけを切る
     } else {
       conn.sendText(JSON.stringify({ id: msg.id, error: result.error }));
+    }
+  }
+
+  /**
+   * INPUT を捨てたとき（20260927-server-size-input-limits）。送った接続へ `client.error`（`input_queue_full`・paneId）を同じ pane について
+   * `INPUT_FULL_NOTICE_INTERVAL_MS` に 1 回だけ送り、ログは `LogThrottle` で間引く。不正なフレームではないので `registerInvalidFrame` に数えない
+   * （数えると、固まった pane に打ち続けたブラウザの接続が閉じられ、全 pane が巻き込まれる）。
+   */
+  private inputDropped(clientId: string, paneId: string, bytes: number): void {
+    const state = this.states.get(clientId);
+    if (!state) return;
+    const now = this.now();
+    const last = state.inputFullNoticeAt.get(paneId);
+    if (last === undefined || now - last >= INPUT_FULL_NOTICE_INTERVAL_MS) {
+      if (last === undefined && state.inputFullNoticeAt.size >= INPUT_FULL_NOTICE_PANES_MAX) state.inputFullNoticeAt.clear();
+      state.inputFullNoticeAt.set(paneId, now);
+      state.conn.sendText(
+        JSON.stringify({
+          event: "client.error",
+          data: { code: "input_queue_full", message: `pane ${paneId} is not reading input; dropped ${bytes} bytes`, paneId },
+        }),
+      );
+    }
+    const allowed = this.inputDropLog.take();
+    if (allowed) {
+      this.logger.warn("dropped input to a pane that is not reading", {
+        clientId,
+        paneId,
+        bytes,
+        ...(allowed.suppressed > 0 ? { suppressed: allowed.suppressed } : {}),
+      });
     }
   }
 

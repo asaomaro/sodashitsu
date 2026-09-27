@@ -92,6 +92,8 @@ export class AdoptedPtyProcess implements PtyProcess {
   private readonly exitListeners = new Set<(e: { exitCode: number; signal?: number }) => void>();
   private readonly deps: AdoptedPtyDeps;
   private readonly queue: { buf: Buffer; offset: number }[] = [];
+  /** `queue` のまだ書けていないバイト数（積む・書く・捨てる所で増減する。O(1) で返すため。decisions D9）。 */
+  private queuedBytes = 0;
   private writing = false;
   /** fd を閉じた（`kill`・読み取りの終わり）。 */
   private fdClosed = false;
@@ -142,7 +144,19 @@ export class AdoptedPtyProcess implements PtyProcess {
     const buf = typeof data === "string" ? Buffer.from(data, "utf8") : Buffer.from(data); // 写しを取る（書き終わる前に呼び出し側がバッファを使い回しても中身が変わらない）
     if (buf.length === 0) return;
     this.queue.push({ buf, offset: 0 });
+    this.queuedBytes += buf.length;
     if (!this.writing) this.drain();
+  }
+
+  /** まだ書けていない入力のバイト数（20260927-server-size-input-limits。`TerminalHost.writeInput` の上限の判定）。 */
+  pendingWriteBytes(): number {
+    if (this.fdClosed) return 0; // 閉じた後の残りは書かれない（`drain` が止まる）ので、待ちとして数えない
+    return this.queuedBytes;
+  }
+
+  /** その待ちの件数（decisions D9）。 */
+  pendingWriteChunks(): number {
+    return this.fdClosed ? 0 : this.queue.length;
   }
 
   /** 待ち行列を書く（master は非ブロッキングなので `EAGAIN` は少し待って書き直す。node-pty の `CustomWriteStream` と同じ）。 */
@@ -165,10 +179,12 @@ export class AdoptedPtyProcess implements PtyProcess {
         }
         // 端末が閉じた等。残りは捨てる（node-pty と同じ）。
         this.queue.length = 0;
+        this.queuedBytes = 0;
         this.writing = false;
         return;
       }
       head.offset += written;
+      this.queuedBytes -= written;
       if (head.offset >= head.buf.length) this.queue.shift();
       this.drain();
     });
@@ -197,6 +213,7 @@ export class AdoptedPtyProcess implements PtyProcess {
     if (!this.fdClosed) {
       this.fdClosed = true;
       this.queue.length = 0;
+      this.queuedBytes = 0;
       if (this.writing)
         this.destroyAfterWrite = true; // 書き込みの戻りで閉じる（`drain`）
       else this.stream.destroy();

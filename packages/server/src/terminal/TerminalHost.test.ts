@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PtyProcess } from "../pty/PtyBackend.js";
-import { DefaultTerminalHost } from "./TerminalHost.js";
+import {
+  DefaultTerminalHost,
+  INPUT_CHUNK_COST_BYTES,
+  MAX_PENDING_INPUT_BYTES,
+} from "./TerminalHost.js";
 import { encodePng } from "./png.js";
 
 /**
@@ -267,5 +271,146 @@ describe("DefaultTerminalHost と Kitty graphics（20260926-kitty-graphics の A
     host.dispose();
     await vi.advanceTimersByTimeAsync(10);
     expect(pty.writes).toEqual([]);
+  });
+});
+
+/** 書き込み待ちを返せる偽の PTY（20260927-server-size-input-limits）。`pending` を書き換えて、読まない pane の待ちを模す。 */
+class PendingPty extends FakePty {
+  pending = 0;
+  chunks = 0;
+  pendingWriteBytes(): number {
+    return this.pending;
+  }
+  pendingWriteChunks(): number {
+    return this.chunks;
+  }
+}
+
+function setupPending(pending: number): { pty: PendingPty; host: DefaultTerminalHost } {
+  const pty = new PendingPty();
+  pty.pending = pending;
+  return { pty, host: new DefaultTerminalHost("p1", pty, 80, 24, 1000) };
+}
+
+const bytes = (n: number) => new Uint8Array(n).fill(0x61);
+
+describe("DefaultTerminalHost の入力の上限（20260927-server-size-input-limits）", () => {
+  it("上限は 16 MiB、1 件あたり 256 バイトを上乗せして数える（decisions D2・D9）", () => {
+    expect(MAX_PENDING_INPUT_BYTES).toBe(16 * 1024 * 1024);
+    expect(INPUT_CHUNK_COST_BYTES).toBe(256);
+  });
+
+  it("待ち＋長さ＋1 件の手間がちょうど上限なら書き、1 バイトでも超えれば何も書かずに false（AC5・AC7）", () => {
+    const { pty, host } = setupPending(MAX_PENDING_INPUT_BYTES - 10 - INPUT_CHUNK_COST_BYTES);
+    expect(host.writeInput(bytes(11))).toBe(false);
+    expect(pty.writes).toEqual([]);
+    expect(host.writeInput(bytes(10))).toBe(true);
+    expect(pty.writes).toContain("a".repeat(10));
+    host.dispose();
+  });
+
+  it("文字列は UTF-8 のバイト数で数える", () => {
+    const { pty, host } = setupPending(MAX_PENDING_INPUT_BYTES - 2 - INPUT_CHUNK_COST_BYTES);
+    expect(host.writeInput("あ")).toBe(false); // 3 バイト
+    expect(host.writeInput("ab")).toBe(true);
+    expect(pty.writes).toEqual(["ab"]);
+    host.dispose();
+  });
+
+  it("待ちが上限を超えていても、空の入力は通す（書くものが無い）", () => {
+    const { host } = setupPending(MAX_PENDING_INPUT_BYTES * 2);
+    expect(host.writeInput(new Uint8Array(0))).toBe(true);
+    expect(host.writeInput("")).toBe(true);
+    host.dispose();
+  });
+
+  it("PTY の待ちの件数も数える: 1 バイトずつの大量の入力は、件数×256 バイトで上限に届く（review ラウンド 1 の must・decisions D9）", () => {
+    const { pty, host } = setupPending(0);
+    const fits = Math.floor(MAX_PENDING_INPUT_BYTES / (1 + INPUT_CHUNK_COST_BYTES));
+    pty.pending = fits - 1;
+    pty.chunks = fits - 1; // 1 バイトの書き込みが fits-1 件待っている
+    expect(host.inputBacklog()).toBe((fits - 1) * (1 + INPUT_CHUNK_COST_BYTES));
+    expect(host.writeInput("x")).toBe(true); // fits 件目は入る
+    pty.pending = fits;
+    pty.chunks = fits;
+    expect(host.writeInput("x")).toBe(false); // バイト数は 6.5 万ほどでも、件数で止まる
+    expect(pty.pending).toBeLessThan(70_000);
+    host.dispose();
+  });
+
+  it("待ちを返さない PTY では今までどおり書く（測れない＝捨てない。AC14）", () => {
+    const { pty, host } = setup();
+    expect(host.inputBacklog()).toBe(0);
+    // PTY の待ちを 0 とみなすので、上限ちょうどの入力を何度書いても断らない。
+    const atLimit = MAX_PENDING_INPUT_BYTES - INPUT_CHUNK_COST_BYTES;
+    expect(host.writeInput(bytes(atLimit))).toBe(true);
+    expect(host.writeInput(bytes(atLimit))).toBe(true);
+    expect(pty.writes).toHaveLength(2);
+    host.dispose();
+  });
+
+  it("モード付き入力の間に後回しにした入力も待ちに数える", async () => {
+    const MiB = 1024 * 1024;
+    const { pty, host } = setupPending(MAX_PENDING_INPUT_BYTES - Math.floor(1.5 * MiB));
+    const done = host.writeModal(PROMPT);
+    expect(host.writeInput(bytes(MiB))).toBe(true); // 後回しの待ちへ
+    expect(host.inputBacklog()).toBe(
+      MAX_PENDING_INPUT_BYTES - Math.floor(1.5 * MiB) + MiB + INPUT_CHUNK_COST_BYTES,
+    );
+    expect(host.writeInput(bytes(MiB))).toBe(false);
+    await vi.advanceTimersByTimeAsync(300);
+    await done;
+    expect(pty.writes).toEqual(["TEXT", "\r", "a".repeat(MiB)]);
+    expect(host.inputBacklog()).toBe(pty.pending); // 後回しの待ちを書いたら数から外す
+    host.dispose();
+  });
+
+  it("終了した端末では判定せず今までどおり write に任せる（知らせない）", async () => {
+    const { pty, host } = setupPending(0);
+    const done = host.writeModal(PROMPT); // 後回しの待ちを作ってから終わる
+    expect(host.writeInput("q")).toBe(true);
+    pty.pending = MAX_PENDING_INPUT_BYTES * 2;
+    expect(host.inputBacklog()).toBe(MAX_PENDING_INPUT_BYTES * 2 + 1 + INPUT_CHUNK_COST_BYTES);
+    pty.exit(0);
+    await done.catch(() => undefined);
+    expect(host.inputBacklog()).toBe(MAX_PENDING_INPUT_BYTES * 2); // 捨てた後回しの待ちは数えない
+    expect(host.writeInput(bytes(10))).toBe(true);
+    expect(pty.writes).toEqual(["a".repeat(10)]);
+    host.dispose();
+  });
+
+  it("モード付き入力は、待ちが上限を超えるなら何も書かずに input_queue_full で断り、後の入力は続ける（AC10）", async () => {
+    const { pty, host } = setupPending(MAX_PENDING_INPUT_BYTES - 4 - 2 * INPUT_CHUNK_COST_BYTES);
+    const done = host.writeModal(PROMPT); // "TEXT" + "\r" = 5 バイト・2 件
+    const failed = done.then(
+      () => null,
+      (e: unknown) => e,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const err = await failed;
+    expect(err).toMatchObject({ code: "input_queue_full" });
+    expect(pty.writes).toEqual([]);
+    // 断った後も次の入力は受け付ける（busy が残らない）。
+    pty.pending = 0;
+    expect(host.writeInput("x")).toBe(true);
+    expect(pty.writes).toEqual(["x"]);
+    host.dispose();
+  });
+
+  it("モード付き入力は、ちょうど上限なら書く", async () => {
+    const { pty, host } = setupPending(MAX_PENDING_INPUT_BYTES - 5 - 2 * INPUT_CHUNK_COST_BYTES);
+    const done = host.writeModal(PROMPT);
+    await vi.advanceTimersByTimeAsync(300);
+    await done;
+    expect(pty.writes).toEqual(["TEXT", "\r"]);
+    host.dispose();
+  });
+
+  it("問い合わせへのミラーの応答は、待ちが上限を超えていても書く（AC14）", async () => {
+    const { pty, host } = setupPending(MAX_PENDING_INPUT_BYTES * 2);
+    pty.output("\x1b[c");
+    await vi.advanceTimersByTimeAsync(10);
+    expect(pty.writes).toEqual(["\x1b[?1;2c"]);
+    host.dispose();
   });
 });

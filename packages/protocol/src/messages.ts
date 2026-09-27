@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
 import { THEME_NAMES } from "./theme.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
+import { CELL_LIMIT_MESSAGE, terminalDimension, VIEW_VISIBLE_PANES_MAX, withinCellLimit } from "./terminalLimits.js";
 
 /**
  * 方式（method）の定義。design.md「WebSocket の通信」の表と、architecture.md「方式の追加と変更」
@@ -39,7 +40,10 @@ export interface ClientHelloResult {
 export const ClientViewParams = z.object({
   workspaceId,
   tabId,
-  visible: z.array(z.object({ paneId, cols: z.number().int().positive(), rows: z.number().int().positive() })),
+  // 大きさは 1 辺 4096・面積 1,000,000 セル、件数は 4096 まで（20260927-server-size-input-limits。外れたら要求ごと invalid_params）。
+  visible: z
+    .array(z.object({ paneId, cols: terminalDimension, rows: terminalDimension }).refine(withinCellLimit, CELL_LIMIT_MESSAGE))
+    .max(VIEW_VISIBLE_PANES_MAX),
 });
 export type ClientViewParams = z.infer<typeof ClientViewParams>;
 
@@ -77,12 +81,15 @@ export type PaneUnsubscribeParams = z.infer<typeof PaneUnsubscribeParams>;
  * 直結の所有者になり、pane の大きさを `cols`×`rows` にする。別のクライアントが直結していれば、`takeover` が無い限り
  * `pane_attached`。所有者は pane ごとに高々 1 つで、直結中はブラウザのサイズ権限がその pane の大きさを変えない。
  */
-export const PaneAttachParams = z.object({
-  paneId,
-  cols: z.number().int().positive(),
-  rows: z.number().int().positive(),
-  takeover: z.boolean().optional(),
-});
+export const PaneAttachParams = z
+  .object({
+    paneId,
+    // 1 辺 4096・面積 1,000,000 セルまで（20260927-server-size-input-limits。`wtmctl` は 1〜1000 に絞るが、生の `/ws` からも巨大なミラーを作らせない）。
+    cols: terminalDimension,
+    rows: terminalDimension,
+    takeover: z.boolean().optional(),
+  })
+  .refine(withinCellLimit, CELL_LIMIT_MESSAGE);
 export type PaneAttachParams = z.infer<typeof PaneAttachParams>;
 export interface PaneAttachResult {
   cols: number;
@@ -90,11 +97,13 @@ export interface PaneAttachResult {
 }
 
 /** 所有者だけが大きさを変えられる（所有者でなければ `not_attached`）。 */
-export const PaneAttachResizeParams = z.object({
-  paneId,
-  cols: z.number().int().positive(),
-  rows: z.number().int().positive(),
-});
+export const PaneAttachResizeParams = z
+  .object({
+    paneId,
+    cols: terminalDimension,
+    rows: terminalDimension,
+  })
+  .refine(withinCellLimit, CELL_LIMIT_MESSAGE);
 export type PaneAttachResizeParams = z.infer<typeof PaneAttachResizeParams>;
 
 /** 所有者なら直結を終える（所有者でなければ何もしない）。 */

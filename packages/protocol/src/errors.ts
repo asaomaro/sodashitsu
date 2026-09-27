@@ -50,7 +50,10 @@ export type ErrorCode =
   | "invalid_metadata_ttl"
   | "invalid_metadata_token"
   | "metadata_token_limit"
-  | "metadata_sequence_source_limit";
+  | "metadata_sequence_source_limit"
+  // 入力の書き込み待ちの上限（20260927-server-size-input-limits）。pane のプログラムが入力を読まず、サーバに溜まった入力が上限に達した。
+  // herdr は "pty input queue is full"（`pane_send_failed`）。
+  | "input_queue_full";
 
 export interface ProtocolError {
   code: ErrorCode;
