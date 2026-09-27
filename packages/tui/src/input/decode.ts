@@ -157,7 +157,12 @@ export class InputDecoder {
   /** 確定まで待つ時間（CSI・SS3 の途中なら長め）。 */
   get waitMs(): number {
     const s = this.pending;
-    return /^\x1b\x1b?[[O]/.test(s) ? SEQUENCE_TIMEOUT_MS : ESC_TIMEOUT_MS;
+    const head = s.startsWith("\x1b\x1b")
+      ? s.slice(2, 3)
+      : s.startsWith("\x1b")
+        ? s.slice(1, 2)
+        : "";
+    return head === "[" || head === "O" ? SEQUENCE_TIMEOUT_MS : ESC_TIMEOUT_MS;
   }
 
   /** 確定を待っている列があるか（呼び出し側が `ESC_TIMEOUT_MS` 後に `flush()` する）。ペーストの途中は待たない（終わりまで持ち越す）。 */
