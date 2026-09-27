@@ -59,6 +59,11 @@ export interface FindOrStartDeps {
   hostname?: string;
   intervalMs?: number;
   timeoutMs?: number;
+  /**
+   * 動いているサーバの `serve.json` は合うのに `local-auth.json`（手元からのログインの秘密）が無い・別の pid のものが、この時間続いたら古い版のサーバとみなす
+   * （既定 2000ms）。新しい版は `serve.json` を書いた直後に `local-auth.json` を書くので、この猶予の間には揃う。
+   */
+  oldServerGraceMs?: number;
   /** 子が「使用中」で終わったときのやり直しを含めた、起動の試みの上限（既定 3）。 */
   maxStartAttempts?: number;
 }
@@ -156,8 +161,9 @@ export async function findOrStart(
     }
     if (ready.kind === "timeout") {
       // 末尾を見せるが、token の行は伏せる（エラーの案内に秘密を混ぜない）。token そのものは下の知らせとして一度だけ見せ、ファイルは空にする
-      // （サーバは止めないので、token はこの後どこにも出ない——ここで見せなければ失われる）。
-      const out = await takeServeOut(outPath);
+      // （サーバは止めないので、token はこの後どこにも出ない——ここで見せなければ失われる）。**起動した側だけ**が読む・空にする（起動しなかった側が
+      // 読むと、起動した側の token を横取りして消す）。
+      const out = started !== undefined ? await takeServeOut(outPath) : "";
       const tail = redactTokens(out).trim().split(/\r?\n/).slice(-20).join("\n");
       const notice = tokenNotice(out);
       throw new LaunchError(
@@ -214,6 +220,8 @@ async function waitReady(
   let login: { secret: string; cookie: string } | undefined;
   /** ローカルログインが断られた回数（401・403）。1 回目は `local-auth.json` を読み直してすぐやり直し、2 回目で諦める（回数の制限に掛けない）。 */
   let refusals = 0;
+  /** `serve.json` は合うのに手元からのログインの秘密が揃っていないのを最初に見た時刻（古い版のサーバの判定）。 */
+  let authMissingSince: number | undefined;
   for (;;) {
     if (started?.hasExited() === true) return { kind: "child-exited" };
     const holder = await new StateDirLock(stateDir).inspect();
@@ -222,6 +230,22 @@ async function waitReady(
     } else {
       const record = await readServeRecord(stateDir);
       const auth = await readLocalAuth(stateDir);
+      // 古い版の `soda serve`（手元からのログインの前の版）は `local-auth.json` を書かない。持ち主と `serve.json` が合うのに秘密が揃わないまま猶予が過ぎたら、
+      // 15 秒待たせずに案内して断る。
+      if (
+        serveRecordMatches(record, holder.pid, host) &&
+        (auth === undefined || auth.pid !== holder.pid)
+      ) {
+        authMissingSince ??= Date.now();
+        if (Date.now() - authMissingSince >= (deps.oldServerGraceMs ?? 2000)) {
+          throw new LaunchError(
+            `the running soda serve (pid ${holder.pid}) does not support connecting without a token (an older version)`,
+            "古い版の soda serve が動いています（引数なしの soda からの接続に対応していません）。止めてから（起動した端末で Ctrl+C・soda session stop 等）もう一度 soda を実行するか、soda handoff で新しい版に入れ替えてください。",
+          );
+        }
+      } else {
+        authMissingSince = undefined;
+      }
       if (
         serveRecordMatches(record, holder.pid, host) &&
         auth !== undefined &&

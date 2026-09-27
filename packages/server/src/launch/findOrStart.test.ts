@@ -1,5 +1,6 @@
 import { appendFileSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeTempDir } from "../persist/atomicFile.js";
@@ -181,13 +182,23 @@ describe("findOrStart", () => {
     let secondSpawned: () => void = () => undefined;
     const bothSpawned = new Promise<void>((r) => (secondSpawned = r));
     let loserExited = false;
+    // 負けた側が「使用中」で終わったのを見たら解ける（負荷の下でも順序を決める：最後の行はその後に書く）。
+    let loserSawExit: () => void = () => undefined;
+    const sawExit = new Promise<void>((r) => (loserSawExit = r));
     const order: string[] = [];
     const spawn = async (req: SpawnServeRequest): Promise<SpawnedServe> => {
       order.push(req.cwd);
       if (order.length === 2) {
         secondSpawned();
         // 負けた側は WMI の経路で起動した形（pid は間の cmd.exe なので持ち主と比べられない）——「使用中」で終わるのを見て、やり直しの経路を通る。
-        return { method: "wmi", pid: 1, hasExited: () => loserExited };
+        return {
+          method: "wmi",
+          pid: 1,
+          hasExited: () => {
+            if (loserExited) loserSawExit();
+            return loserExited;
+          },
+        };
       }
       void (async () => {
         await bothSpawned;
@@ -202,7 +213,7 @@ describe("findOrStart", () => {
         );
         appendFileSync(req.outPath, "soda: the state dir is already in use by another soda\n");
         loserExited = true;
-        await new Promise((r) => setTimeout(r, 400));
+        await sawExit;
         appendFileSync(req.outPath, "soda: (token 付きの URL は今だけ表示します)\n");
       })();
       return { method: "detached", pid: process.pid, hasExited: () => false };
@@ -236,6 +247,40 @@ describe("findOrStart", () => {
     expect(target.startupNotice).toBeUndefined();
     expect(await readFile(join(stateDir, "serve.out"), "utf8")).toContain("#token=OTHER"); // 取った側のために残す
   }, 8000);
+
+  // 02 の review：古い版の soda serve（local-auth.json を書かない）には 15 秒待たせずに案内して断る。
+  it("持ち主と serve.json は合うのに local-auth.json が猶予を過ぎても無ければ、古い版のサーバとして案内して断る", async () => {
+    const stateDir = await tempStateDir();
+    track(await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] }));
+    await rm(join(stateDir, "local-auth.json"));
+    const t0 = Date.now();
+    const err = await findOrStart(options(stateDir), {
+      spawnServe: noSpawn,
+      oldServerGraceMs: 200,
+      timeoutMs: 5000,
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(LaunchError);
+    expect((err as LaunchError).message).toContain("older version");
+    expect((err as LaunchError).hint).toContain("soda handoff");
+    expect(Date.now() - t0).toBeLessThan(3000);
+  });
+
+  // 02 の review：時間切れで serve.out を読んで token を見せるのは、起動した側だけ。
+  it("起動しなかった側の時間切れは serve.out を読まない・空にしない（起動した側の token を横取りしない）", async () => {
+    const stateDir = await tempStateDir();
+    // 生きている別のプロセス（このテストの親）が持ち主のロック。serve.json は無いので準備完了にならない。
+    await writeFile(join(stateDir, STATE_DIR_LOCK_FILE), `${process.ppid}\n${hostname()}\n`);
+    const out =
+      "soda: open http://127.0.0.1:1/#token=THEIRS\nsoda: (token 付きの URL は今だけ表示します)\n";
+    await writeFile(join(stateDir, "serve.out"), out);
+    const err = await findOrStart(options(stateDir), { spawnServe: noSpawn, timeoutMs: 300 }).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(LaunchError);
+    expect((err as LaunchError).message).toContain("did not become ready");
+    expect((err as LaunchError).hint).not.toContain("THEIRS");
+    expect(await readFile(join(stateDir, "serve.out"), "utf8")).toBe(out);
+  });
 
   it("最後の試行で子が「使用中」で終わっても、動いている持ち主へ繋ぐ（起動しなかった側なので token は出さない）", async () => {
     const stateDir = await tempStateDir();
@@ -407,8 +452,14 @@ describe("findOrStart", () => {
     );
     const out: string[] = [];
     const err: string[] = [];
-    const io = { out: (l: string) => out.push(l), err: (l: string) => err.push(l) };
+    let helps = 0;
+    const io = {
+      out: (l: string) => out.push(l),
+      err: (l: string) => err.push(l),
+      help: () => void helps++,
+    };
     const proc = {
+      isTty: true,
       env: {},
       cwd: process.cwd(),
       platform: process.platform,
@@ -427,6 +478,11 @@ describe("findOrStart", () => {
     expect(out).toEqual([
       `soda: connected to http://127.0.0.1:${server.options.port} (tui not yet available)`,
     ]);
+    // 終わるときにセッションを返す（auth.json にセッションが残らない。02 の review）。
+    const authJson = JSON.parse(await readFile(join(stateDir, "auth.json"), "utf8")) as {
+      sessions: unknown[];
+    };
+    expect(authJson.sessions).toEqual([]);
     const nested = await runTuiCommand(
       parseArgs(["--state-dir", stateDir]),
       placeholderEntry(io),
@@ -436,5 +492,40 @@ describe("findOrStart", () => {
     );
     expect(nested).toBe(1);
     expect(err.join("\n")).toContain("--allow-nested");
+    expect(helps).toBe(0);
+  });
+
+  // 02 の review：端末でなければサーバを起動せずに（起動の前に）断り、help を出して 2。
+  it("runTuiCommand: 標準入出力が端末でなければ、サーバを起動せずに一行の案内と help を出して 2（--state-dir・--session の形も同じ）", async () => {
+    const stateDir = await tempStateDir();
+    const err: string[] = [];
+    let helps = 0;
+    const io = { out: () => undefined, err: (l: string) => err.push(l), help: () => void helps++ };
+    const spawned: SpawnServeRequest[] = [];
+    const proc = {
+      isTty: false,
+      env: {},
+      cwd: process.cwd(),
+      platform: process.platform,
+      execPath: process.execPath,
+      execArgv: [],
+      mainPath: "/x/main.js",
+    };
+    for (const argv of [
+      [],
+      ["--state-dir", stateDir],
+      ["--session", "w", "--state-dir", stateDir],
+    ]) {
+      const code = await runTuiCommand(parseArgs(argv), placeholderEntry(io), io, proc, {
+        spawnServe: async (req) => {
+          spawned.push(req);
+          throw new Error("must not spawn");
+        },
+      });
+      expect(code, argv.join(" ")).toBe(2);
+    }
+    expect(spawned).toEqual([]);
+    expect(helps).toBe(3);
+    expect(err[0]).toContain("needs a terminal");
   });
 });

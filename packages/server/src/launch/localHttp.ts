@@ -69,6 +69,8 @@ export function postJson(
   path: string,
   body: unknown,
   timeoutMs = 5000,
+  /** 付ける Cookie（`name=value`。`/api/logout` 用）。 */
+  cookie?: string,
 ): Promise<PostResult> {
   const url = new URL(path, `${ep.baseUrl}/`);
   const payload = JSON.stringify(body);
@@ -83,6 +85,7 @@ export function postJson(
           "content-length": Buffer.byteLength(payload),
           origin: ep.origin,
           host: url.host,
+          ...(cookie !== undefined ? { cookie } : {}),
         },
         timeout: timeoutMs,
         ...connectionOptions(ep),

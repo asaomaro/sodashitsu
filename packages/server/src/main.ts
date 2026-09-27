@@ -140,7 +140,8 @@ async function main(): Promise<void> {
     const parsed = applySessionEnv(parseArgs(process.argv.slice(2)), process.env);
     if (parsed.command === "tui") {
       // 引数なしの `soda`（20260927-cli-mode）。端末版（`@sodashitsu/tui`）が出来るまでは、繋げたことを表示して終わる仮の入口（03-tui-core で差し替える）。
-      process.exitCode = await runTuiCommand(parsed, placeholderEntry(consoleIo), consoleIo, {
+      process.exitCode = await runTuiCommand(parsed, placeholderEntry(consoleIo), { ...consoleIo, help: printHelp }, {
+        isTty: process.stdin.isTTY === true && process.stdout.isTTY === true,
         env: process.env,
         cwd: process.cwd(),
         platform: process.platform,

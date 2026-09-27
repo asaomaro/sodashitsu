@@ -9,8 +9,10 @@ import type { TuiEntry } from "./tuiTarget.js";
 export async function runTuiCommand(
   parsed: ParsedArgs,
   entry: TuiEntry,
-  io: { err(line: string): void },
+  io: { err(line: string): void; help(): void },
   proc: {
+    /** 標準入力と標準出力がどちらも端末か。端末版は端末の中でしか動かない。 */
+    isTty: boolean;
     env: NodeJS.ProcessEnv;
     cwd: string;
     platform: NodeJS.Platform;
@@ -20,6 +22,15 @@ export async function runTuiCommand(
   },
   deps: FindOrStartDeps = {},
 ): Promise<number> {
+  // 端末でなければ（パイプ・リダイレクト・CI）**サーバを起動する前に**断る。以前は引数なしの soda は help を出して終わるだけだったので、スクリプトから
+  // 呼んでいた場合に裏でサーバが立ち上がらないようにする（02 の review）。`--session`・`--state-dir` を付けた形も同じ扱い。
+  if (!proc.isTty) {
+    io.err(
+      "soda: the terminal UI needs a terminal (stdin and stdout must be a TTY); showing help instead",
+    );
+    io.help();
+    return 2;
+  }
   let target;
   try {
     target = await findOrStart(

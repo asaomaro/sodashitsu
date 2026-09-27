@@ -1,4 +1,4 @@
-import { openWs } from "./localHttp.js";
+import { openWs, postJson } from "./localHttp.js";
 import type { TuiEntry } from "./tuiTarget.js";
 
 /**
@@ -59,6 +59,8 @@ export function placeholderEntry(io: {
       return 0;
     } finally {
       ws.close();
+      // 終わるときにセッションを返す（起動のたびにセッションが増えないように。02 の review）。端末版（03）の切り離し・終了も同じにする。
+      await postJson(target, "/api/logout", {}, 5000, cookie).catch(() => undefined);
     }
   };
 }
