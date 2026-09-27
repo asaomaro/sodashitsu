@@ -629,6 +629,41 @@ wtm serve --pane-history
   新しいシェルへの入力に化けない）。
 - 名前付き session（`--session`）では session ごとの状態ディレクトリに置く（`wtm session delete` で一緒に消える）。
 
+### 更新時の引き継ぎ（`wtm handoff`。Linux・macOS）
+
+wtm を新しい版に入れ替える（`git pull` して `pnpm build` した等）とき、`wtm serve` を止めて起動し直すと、各 pane のプロセス（シェル・
+実行中のビルドやテスト・Claude Code 等のエージェント）はすべて終わる。**`wtm handoff` を使うと、pane のプロセスを止めずに、動いている
+`wtm serve` をディスク上の wtm に入れ替える**（herdr の `herdr update --handoff` に当たる。20260926-live-handoff）。
+
+```bash
+# 新しい版をビルドしてから（wtm serve はそのまま動かしておく）
+wtm handoff
+# → wtm: handing off 3 pane(s) of pid 12345 to the wtm on disk…
+# → wtm: handoff complete: 3 pane(s) kept running
+wtm handoff --session work     # 名前付き session（WTM_SESSION でもよい。--state-dir も同じ）
+```
+
+- 入れ替わるのは同じプロセス（pid は変わらない）。起動した端末・`systemd` 等から見ても同じ `wtm serve` が動き続け、同じポートで待ち受け直す。
+  ブラウザは一度切れて「再接続中…」になり、数秒で同じ画面に戻る（ログインし直さない）。`wtm serve` の出力には起動の表示がもう一度出る。
+- pane のプロセス・pane の id・レイアウト・フォーカス・直前の画面とスクロールバックはそのまま。会話の自動再開のコマンドも画面履歴
+  （`--pane-history`）も流さない（プロセスが続いているため）。全画面のアプリ（vim・エージェントの TUI）は大きさの変化の合図で描き直す。
+- **入れ替える前に、新しい版を同じ Node で確かめる**（読み込めるか・引き継ぎの形式の版が合うか・その Node で PTY が入れ替わりをまたいで残るか）。
+  確かめられなければ何も変えずに断り、`wtm serve` はそのまま動き続ける（`wtm handoff` は理由を表示して終了コード 1）。
+- 終了コード：0 成功／1 断った・失敗・一部の pane を引き継げなかった／2 指定の誤り・非対応（Windows・`process.execve` の無い Node）／3 `wtm serve` が動いていない。
+- 指示の経路は状態ディレクトリの `handoff.sock`（0600。同じ利用者だけ）で、新しいネットワークの待ち受けは作らない。入れ替えの間だけ、
+  状態ディレクトリに `handoff.json`（0600。直前の画面の内容を含む）ができ、新しい版が読んだらすぐ消す。
+- 仕組み：Node.js の `process.execve`（Experimental）で同じプロセスを新しい版に置き換え、PTY の端末（close-on-exec の付いていない fd）を
+  そのまま持ち越す。herdr のように別のプロセスへ fd を送る（`SCM_RIGHTS`）のではない。
+- 既知の制約：
+  - **Windows では使えない**（`process.execve` が無く、ConPTY は fd でもない。herdr も非対応）。**macOS は未検証**（同じ仕組みで動く設計。
+    PTY の確かめは master と slave を区別できない弱いもの）。
+  - 引き継いだ pane のシェルが後で終わると、サーバが終わるまで `<defunct>`（ゾンビ）として残る（Node から回収できない。数は引き継いだ pane の数まで。
+    メモリは使わない）。その pane は今までどおり閉じる。終了コードは Linux では正しく出るが、macOS では 0 になる。
+  - 確かめの後に新しい版が起動の途中で落ちると、pane のプロセスは終わる（普通に起動し直したのと同じ結果。`session.json` は入れ替える前に保存済みなので、
+    次の起動でレイアウトは戻る）。
+  - 入れ替えの瞬間に多バイト文字の出力の途中だった pane では、その 1 文字が化けることがある。Kitty graphics の画像は引き継がない：
+    転送の途中だった画像は出ず、その残り（base64 の文字）が画面に文字として出ることがある。入れ替えの前に送った画像を、後から配置し直すこともできない。実行中の要求・購読・`wtmctl pane attach` の接続は切れる（繋ぎ直す）。
+
 ## リバースプロキシの後ろに置く
 
 TLS をリバースプロキシ（nginx 等）で終端し、wtm はループバックの HTTP で動かす構成。注意点：

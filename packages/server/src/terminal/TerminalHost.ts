@@ -36,9 +36,31 @@ export interface TerminalHost {
   lastOutputAt(): number;
   onExit(cb: (code: number) => void): Disposable;
   dispose(): void;
+  /**
+   * 更新時の引き継ぎ（20260926-live-handoff）の前に読み取りを止め、ミラーへの書き込みを待ってから、渡すもの（master の fd・大きさ・画面）を返す。
+   * 渡せない端末（Windows・fd を持たない PTY・止められない）は undefined（何も変えない）。
+   */
+  holdForHandoff?(): Promise<HandoffHold | undefined>;
+  /** この端末の PTY の master の fd（引き継ぎで渡せる PTY だけ。捨てた後は undefined）。 */
+  handoffFd?(): number | undefined;
+  /** `holdForHandoff` を戻す（引き継ぎをやめたとき）。 */
+  releaseHandoffHold?(): void;
+  /** 大きさを 1 行（小さければ 1 桁）減らして戻し、SIGWINCH で TUI に描き直させる（引き継いだ直後。herdr の nudge）。ミラーは変えない。 */
+  nudgeRedraw?(delayMs?: number): void;
+}
+
+/** `holdForHandoff` が返す、引き継ぎで渡すもの。 */
+export interface HandoffHold {
+  fd: number;
+  cols: number;
+  rows: number;
+  /** ミラーの `historyAnsi()`（通常の画面とスクロールバック）。 */
+  screen: string;
 }
 
 const PAUSE_THRESHOLD_BYTES = 1024 * 1024; // 1MB（design「流量制御」）
+/** `nudgeRedraw` の、減らしてから戻すまでの間（ms）。 */
+const NUDGE_DELAY_MS = 100;
 const enc = new TextEncoder();
 
 interface ModalJob {
@@ -57,7 +79,11 @@ export class DefaultTerminalHost implements TerminalHost {
   private readonly kitty = new KittyGraphicsTranslator();
   private readonly disposables: Disposable[] = [];
   private paused = false;
+  /** 引き継ぎのために読み取りを止めている（流量制御の `onDrained` で再開しない）。 */
+  private heldForHandoff = false;
   private disposed = false;
+  private cols: number;
+  private rows: number;
   /** モード付き入力を処理中（この間の入力は `queue` へ）。 */
   private busy = false;
   private inputClosed = false;
@@ -77,6 +103,8 @@ export class DefaultTerminalHost implements TerminalHost {
     /** 明暗の問い合わせに答える appearance（20260924-dark-mode-report）。省けば今までどおり dark（dracula）。 */
     appearance?: () => "light" | "dark",
   ) {
+    this.cols = cols;
+    this.rows = rows;
     this.mirror = new XtermMirror(cols, rows, scrollbackLines, palette, appearance);
     this.fanout = new DefaultOutputFanout(paneId, this.mirror);
 
@@ -97,7 +125,7 @@ export class DefaultTerminalHost implements TerminalHost {
       this.mirror.onDrained(() => {
         if (this.paused) {
           this.paused = false;
-          this.pty.resume();
+          if (!this.heldForHandoff) this.pty.resume();
         }
         this.fanout.retryStale();
       }),
@@ -232,9 +260,55 @@ export class DefaultTerminalHost implements TerminalHost {
   }
 
   resize(cols: number, rows: number): void {
+    this.cols = cols;
+    this.rows = rows;
     // 画素の大きさも伝える（Unix の `ws_xpixel`/`ws_ypixel`。画像を出すツールが読む。20260926-kitty-graphics design「5.」・decisions D3・D9）。
     this.pty.resize(cols, rows, windowPixels(cols, rows));
     this.mirror.resize(cols, rows);
+  }
+
+  async holdForHandoff(): Promise<HandoffHold | undefined> {
+    if (this.disposed || this.heldForHandoff) return undefined;
+    const fd = this.pty.handoffFd?.();
+    if (fd === undefined || this.pty.holdReading === undefined) return undefined;
+    this.heldForHandoff = true;
+    // 読み取り済みの分は `holdReading` の中で onData（→ ミラー）へ流し切られる。
+    if (!this.pty.holdReading()) {
+      this.heldForHandoff = false;
+      return undefined;
+    }
+    await this.mirror.flush();
+    // 待っている間に pane が終わった（捨てられた）なら、fd は閉じられている——渡さない。
+    if (this.disposed) return undefined;
+    return { fd, cols: this.cols, rows: this.rows, screen: this.mirror.historyAnsi() };
+  }
+
+  handoffFd(): number | undefined {
+    return this.disposed ? undefined : this.pty.handoffFd?.();
+  }
+
+  releaseHandoffHold(): void {
+    if (!this.heldForHandoff) return;
+    this.heldForHandoff = false;
+    if (this.disposed) return;
+    this.pty.releaseReading?.();
+    // 流量制御で止めていたなら、そのまま（`onDrained` が再開する）。
+    if (!this.paused) this.pty.resume();
+  }
+
+  nudgeRedraw(delayMs = NUDGE_DELAY_MS): void {
+    if (this.disposed) return;
+    const { cols, rows } = this;
+    if (rows > 2) this.pty.resize(cols, rows - 1, windowPixels(cols, rows - 1));
+    else if (cols > 4) this.pty.resize(cols - 1, rows, windowPixels(cols - 1, rows));
+    else return;
+    // 同じ瞬間に戻すと SIGWINCH が 1 つに畳まれ、アプリが読む大きさが変わっていないので描き直さないことがある（Node の tty の
+    // 'resize'・ncurses の KEY_RESIZE は大きさが変わったときだけ）。少し間を置いて戻す。その間に大きさが変わった（クライアントが繋いだ）なら戻さない。
+    const timer = setTimeout(() => {
+      if (this.disposed || this.cols !== cols || this.rows !== rows) return;
+      this.pty.resize(cols, rows, windowPixels(cols, rows));
+    }, delayMs);
+    timer.unref?.();
   }
 
   lastOutputAt(): number {

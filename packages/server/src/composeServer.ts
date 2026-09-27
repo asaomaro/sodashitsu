@@ -46,6 +46,11 @@ import { AgentStarter } from "./agent/AgentStarter.js";
 import { DefaultManifestStore, type ManifestStore } from "./agent/ManifestStore.js";
 import { FsManifestSource } from "./infra/FsManifestSource.js";
 import { paneServerUrl } from "./util/net.js";
+import { HANDOFF_NONCE_ENV, closeOrphanPtyMasters, takeHandoff } from "./handoff/HandoffManifest.js";
+import { HandoffController } from "./handoff/HandoffController.js";
+import { type HandoffSocket, handoffSocketPathFor, startHandoffSocket } from "./handoff/HandoffSocket.js";
+import { runPreflight } from "./handoff/preflight.js";
+import { type HandoffResult, adoptedSpecsOf, discardHandedOffPanes, discardRejectedPanes, finishTakenHandoff } from "./handoff/startup.js";
 
 export interface ComposedServer {
   httpServer: HttpServer;
@@ -73,6 +78,8 @@ export interface ComposedServer {
   listen(): Promise<void>;
   /** 止める。最後に状態ディレクトリのロックを放す（途中で失敗しても放す）。 */
   close(): Promise<void>;
+  /** 更新時の引き継ぎ（20260926-live-handoff）で起動したときの結果（`listen()` の後。引き継ぎでない起動は undefined）。 */
+  readonly handoffResult: HandoffResult | undefined;
 }
 
 function pickProcessInspector(): ProcessInspector {
@@ -241,6 +248,44 @@ export async function composeServer(
   let sessionLoaded = false;
   /** 公式フック連携の report を受け取るローカル socket（`listen()` で起動、`close()` で閉じる）。 */
   let agentReportSocket: AgentReportSocket | undefined;
+  /** 更新時の引き継ぎ（20260926-live-handoff）の指示の受け口（Linux/macOS。`listen()` で起動、`close()` で閉じる）。 */
+  let handoffSocket: HandoffSocket | undefined;
+  let handoffResult: HandoffResult | undefined;
+  /** 待ち受けたポート（`listen()` の 1'.）。 */
+  let boundPortValue = options.port;
+  const handoff = new HandoffController({
+    stateDir: options.stateDir,
+    logger,
+    panes: () => session.snapshot().panes.map((p) => ({ paneId: p.id, host: terminals.get(p.id) })),
+    scrollbackEditors: () => session.handoffScrollbackEditors(),
+    boundPort: () => boundPortValue,
+    pausePollers: async () => {
+      paneHistory?.stop();
+      gitPoller.stop();
+      await agentMonitor.stop();
+    },
+    resumePollers: () => {
+      gitPoller.start();
+      agentMonitor.start();
+      paneHistory?.start(internal.paneHistorySaveIntervalMs);
+    },
+    flushSession: () => persist.flush(),
+    closeClients: () => {
+      wsServer.setReady(false);
+      wsServer.closeAll(1012, "server restarting");
+    },
+    reopenClients: () => wsServer.setReady(true),
+    flushLog: () => logger.flush(),
+    preflight: () => runPreflight(),
+    // 同じ Node・同じ引数（ディスク上の同じ入口）で自分を置き換える。PTY の master は close-on-exec が無いので残る（research F2.2）。
+    execve: (nonce) =>
+      process.execve!(process.execPath, [process.execPath, ...process.execArgv, ...process.argv.slice(1)], {
+        ...process.env,
+        [HANDOFF_NONCE_ENV]: nonce,
+      }),
+    platform: platform(),
+    hasExecve: typeof process.execve === "function",
+  });
 
   /** 無効なら消して undefined。有効なら読み、使えなければ（無い・大きすぎる・壊れている・読めない）ログに残して undefined（AC4・AC7）。 */
   async function loadPaneHistory(): Promise<ReadonlyMap<string, PaneHistoryEntry> | undefined> {
@@ -280,6 +325,9 @@ export async function composeServer(
     get freshToken(): string | undefined {
       return freshToken;
     },
+    get handoffResult(): HandoffResult | undefined {
+      return handoffResult;
+    },
 
     async listen(): Promise<void> {
       // 0. 状態ディレクトリのロック（D103）。bind・token・復元より前に取る。ポートを変えれば bind は両方成功する
@@ -293,6 +341,30 @@ export async function composeServer(
         }
         throw err;
       }
+      // 0''. 更新時の引き継ぎ（20260926-live-handoff）の受け取り。環境変数と handoff.json は使っても使わなくても消す（AC8）。
+      //      自分で PTY を開く（復元）より前に行う——壊れた受け渡しのときに、このプロセスに残った master を閉じるため。
+      const taken = await takeHandoff(options.stateDir, process.env).catch((err: unknown): { kind: "broken"; reason: string } => ({
+        kind: "broken",
+        reason: err instanceof Error ? err.message : String(err),
+      }));
+      if (taken.kind === "none" && taken.removedStale) logger.info("removed a leftover handoff.json");
+      if (taken.kind === "broken") {
+        const closed = closeOrphanPtyMasters();
+        logger.error("handoff: the handoff data was unusable; closed the handed-off terminals and starting normally", { reason: taken.reason, closed });
+      }
+      if (taken.kind === "taken") {
+        // 確かめに通らなかった fd は、自分で PTY を開く前に手放す——後にすると、同じ番号を新しいシェルの master が使っていて、それを閉じてしまう。
+        if (taken.rejected.length > 0) discardRejectedPanes(taken.rejected, { logger });
+        // 受け渡しに載らなかった master（古い版で読み取りを止めた後に作られた pane 等）も、見えないシェルとして残さない（Linux）。
+        // これも PTY を開く前に行う——この時点でこのプロセスにある master は古い版から残ったものだけなので、受け渡しの fd 以外を閉じればよい
+        // （復元の後だと、閉じかけの端末の fd と取り違えうる。review ラウンド 1）。
+        const strays = closeOrphanPtyMasters({ keep: new Set(taken.panes.map((p) => p.fd)) });
+        if (strays > 0) logger.warn("handoff: closed terminals that were not part of the handoff", { closed: strays });
+      }
+      if (taken.kind === "taken" && taken.port !== options.port) {
+        logger.warn("handoff: listening on the configured port, which differs from the previous one", { previous: taken.port, port: options.port });
+      }
+      let takenPending = taken.kind === "taken" ? taken : undefined;
       try {
         // 0'. auth.json を読む（ロックを取った後。上記）。token は待ち受けに成功してから作る（D102）。
         await auth.initialize();
@@ -310,6 +382,7 @@ export async function composeServer(
         // 1'. pane の中の wtmctl の接続先（20260926-agent-skill-file）。ポートは実際に待ち受けたもの（パイプ等で数でなければ `options.port`）。
         const bound = httpServer.server.address();
         const boundPort = typeof bound === "object" && bound !== null ? bound.port : options.port;
+        boundPortValue = boundPort;
         paneUrl = paneServerUrl(secure ? "https" : "http", options.host, boundPort);
         // 1''. 起動の記録（20260926-named-session-ui）。名前付き session のポートの記憶と、session の一覧の開くための情報に使う。書けなくても続ける。
         await writeServeRecord(options.stateDir, { pid: process.pid, hostname: osHostname(), port: boundPort, https: secure, host: options.host }).catch(
@@ -327,10 +400,17 @@ export async function composeServer(
           },
           logger,
         );
-        // 3. 起動時の復元（design「起動と再起動後の復元」）。
+        // 3. 起動時の復元（design「起動と再起動後の復元」）。引き継ぎの起動なら、渡された PTY を新しいシェルの代わりに使う。
         const loaded = await sessionFile.load();
+        let adoptedPaneIds: ReadonlySet<string> = new Set();
         if (loaded.kind === "ok") {
-          await session.restore(loaded.data, { paneHistory: await loadPaneHistory() });
+          const adopted = takenPending !== undefined ? adoptedSpecsOf(takenPending) : undefined;
+          const paneHistoryEntries = await loadPaneHistory();
+          // ここから先は渡された fd の持ち主が端末（AdoptedPtyProcess）になりうる。失敗しても横から閉じない（プロセスの終わりか close() が閉じる）。
+          const pending = takenPending;
+          takenPending = undefined;
+          ({ adoptedPaneIds } = await session.restore(loaded.data, { paneHistory: paneHistoryEntries, adopted }));
+          takenPending = pending;
         } else {
           if (loaded.kind === "corrupt") logger.warn("session.json was corrupt; starting fresh", { backupPath: loaded.backupPath });
           // 新しく始める起動では pane の id を採番し直すので、古い画面履歴を新しい pane に取り違えないよう消す（AC5）。
@@ -338,11 +418,27 @@ export async function composeServer(
           await clearPaneHistory(options.paneHistory ? "session.json was not restored" : "pane history disabled");
           await session.ensureNotEmpty();
         }
+        if (takenPending !== undefined) {
+          const finished = takenPending;
+          takenPending = undefined; // 以後の失敗で二度閉じない
+          if (loaded.kind !== "ok") logger.error("handoff: session.json could not be restored; closing the handed-off terminals");
+          handoffResult = finishTakenHandoff(finished, adoptedPaneIds, { logger });
+          await session.adoptScrollbackEditors(finished.scrollbackEditors, adoptedPaneIds);
+          handoff.recordTaken(handoffResult);
+        }
         sessionLoaded = true;
         paneHistory?.start(internal.paneHistorySaveIntervalMs);
         // 4. poller。
         gitPoller.start();
         agentMonitor.start();
+        // 4.5. 更新時の引き継ぎの指示の受け口（Linux/macOS。20260926-live-handoff）。復元と poller の開始の後に置く——起動の途中の指示で、
+        //      復元の途中の session.json を保存したり、まだ始めていない poller を「再開」したりしないため。置けなくても起動は続ける。
+        if (platform() !== "win32") {
+          handoffSocket = await startHandoffSocket(handoffSocketPathFor(options.stateDir), handoff, logger).catch((err: unknown) => {
+            logger.warn("cannot start the handoff socket; live handoff is unavailable", { error: err instanceof Error ? err.message : String(err) });
+            return undefined;
+          });
+        }
         // 5. `/ws` の受け付けを始める。復元は bus にイベントを出さないので、ここより前に hello したクライアントは
         //    作りかけのスナップショットのまま取り残される（それまでは 503。ブラウザは間隔を空けて繋ぎ直す）。
         wsServer.setReady(true);
@@ -352,6 +448,9 @@ export async function composeServer(
         if (!sessionLoaded) persist.cancel();
         paneHistory?.stop();
         await agentReportSocket?.close();
+        await handoffSocket?.close();
+        // 引き継いだのに使う前に失敗した PTY は手放す（見えないプロセスを残さない）。
+        if (takenPending !== undefined) discardHandedOffPanes(takenPending.panes, { logger }); // 復元に入る前の失敗だけ
         await lock.release();
         throw err;
       }
@@ -362,6 +461,7 @@ export async function composeServer(
         // 閉じ始めたら新しい `/ws` を受け付けない（closeAll の後に届いた upgrade を通さない。D102）。
         wsServer.setReady(false);
         await agentReportSocket?.close();
+        await handoffSocket?.close();
         // 実行中の判定周期を待ってから terminals/session を破棄する（review 指摘。should。D51 の隣の
         // agent/AgentMonitor.ts 参照）。
         await agentMonitor.stop();

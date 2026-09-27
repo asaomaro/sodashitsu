@@ -1,5 +1,7 @@
 import * as nodePty from "node-pty";
 import type { Disposable, PtyBackend, PtyProcess, PtySpawnOptions } from "./PtyBackend.js";
+import { AdoptedPtyProcess } from "./AdoptedPtyProcess.js";
+import { type HandleBackedStream, restartHandleReading, stopHandleReading } from "./socketReading.js";
 
 /**
  * node-pty 1.2.0-beta.15 での実装（research.md F8.1）。
@@ -22,6 +24,12 @@ export class NodePtyBackend implements PtyBackend {
       ...(isWindows ? { useConptyDll } : {}),
     });
     return new NodePtyProcess(pty);
+  }
+
+  /** execve をまたいで引き継いだ master（20260926-live-handoff）。Windows（ConPTY）には fd が無いので使えない。 */
+  adopt(opts: { fd: number; pid: number }): PtyProcess {
+    if (process.platform === "win32") throw new Error("adopting a PTY is not supported on Windows");
+    return new AdoptedPtyProcess(opts.fd, opts.pid);
   }
 }
 
@@ -62,5 +70,29 @@ class NodePtyProcess implements PtyProcess {
 
   kill(): void {
     this.pty.kill();
+  }
+
+  /** node-pty（Unix）の master の fd（`UnixTerminal.fd`。close-on-exec が付いていないので execve の後も残る。research F2.3）。 */
+  handoffFd(): number | undefined {
+    if (process.platform === "win32") return undefined;
+    const fd = (this.pty as unknown as { fd?: unknown }).fd;
+    return typeof fd === "number" && Number.isInteger(fd) && fd >= 0 ? fd : undefined;
+  }
+
+  holdReading(): boolean {
+    const socket = this.socket();
+    return socket !== undefined && stopHandleReading(socket);
+  }
+
+  releaseReading(): void {
+    const socket = this.socket();
+    if (socket !== undefined) restartHandleReading(socket);
+  }
+
+  /** node-pty（Unix）が master を読む `tty.ReadStream`（`UnixTerminal._socket`。内部）。 */
+  private socket(): HandleBackedStream | undefined {
+    if (process.platform === "win32") return undefined;
+    const socket = (this.pty as unknown as { _socket?: HandleBackedStream })._socket;
+    return socket ?? undefined;
   }
 }

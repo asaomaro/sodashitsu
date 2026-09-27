@@ -2,15 +2,18 @@ import { ConfigError, type RawServeArgs } from "./config.js";
 import { SESSION_NAME_RULE, sessionNameProblem } from "./persist/namedSession.js";
 
 export interface ParsedArgs {
-  command: "serve" | "token-reset" | "session-list" | "session-delete" | "help";
+  command: "serve" | "token-reset" | "session-list" | "session-delete" | "handoff" | "handoff-preflight" | "help";
   serve: RawServeArgs;
   stateDir?: string | undefined;
-  /** `--session`（serve・token reset。20260926-named-session）。serve では `serve.session` にも入る。 */
+  /** `--session`（serve・token reset・handoff。20260926-named-session・20260926-live-handoff）。serve では `serve.session` にも入る。 */
   session?: string | undefined;
   /** `wtm session delete <name>` の名前。 */
   sessionTarget?: string | undefined;
   /** `--json`（session だけ）。 */
   json?: boolean;
+  /** 隠しコマンド `__handoff-preflight` の段（20260926-live-handoff。1 段目は引数なし・2 段目は `--stage 2 --probe <…>`）。 */
+  preflightStage?: 1 | 2;
+  preflightProbe?: string;
   /** `session` の出所（`--session`＝flag・`WTM_SESSION`＝env。20260926-named-session-ui）。無ければ既定の session。 */
   sessionSource?: "flag" | "env" | undefined;
 }
@@ -18,17 +21,21 @@ export interface ParsedArgs {
 /** 既定の session を選ぶ環境変数（herdr の `HERDR_SESSION`。20260926-named-session-ui）。 */
 export const SESSION_ENV_VAR = "WTM_SESSION";
 
+/** `handoff/preflight.ts` の `PREFLIGHT_COMMAND` と同じ（cliArgs は重い部品を読み込まないので、名前だけ持つ。テストで一致を確かめる）。 */
+export const PREFLIGHT_COMMAND_NAME = "__handoff-preflight";
+
 const USAGE =
-  "使い方: wtm serve [--host H] [--port P] [--cert F] [--key F] [--origin O]... [--state-dir D] [--session NAME] [--scrollback N] [--shell S] [--worktree-dir D] [--pane-history] / wtm token reset [--state-dir D] [--session NAME] / wtm session list [--state-dir D] [--json] / wtm session delete NAME [--state-dir D] [--json]";
+  "使い方: wtm serve [--host H] [--port P] [--cert F] [--key F] [--origin O]... [--state-dir D] [--session NAME] [--scrollback N] [--shell S] [--worktree-dir D] [--pane-history] / wtm token reset [--state-dir D] [--session NAME] / wtm session list [--state-dir D] [--json] / wtm session delete NAME [--state-dir D] [--json] / wtm handoff [--state-dir D] [--session NAME]";
 
 /**
- * CLI の引数を解釈する（`wtm serve [...]` / `wtm token reset [--state-dir D] [--session NAME]` / `wtm session list|delete`）。`main.ts` から分けたのは単体テストのため
+ * CLI の引数を解釈する（`wtm serve [...]` / `wtm token reset [--state-dir D] [--session NAME]` / `wtm session list|delete` /
+ * `wtm handoff [--state-dir D] [--session NAME]`（20260926-live-handoff）・隠しコマンド `__handoff-preflight`）。`main.ts` から分けたのは単体テストのため
  * （`main.ts` は読み込むと起動する）。誤りはどれも `ConfigError`（終了コード 2・使い方つき）：
  * - 未知のオプション・値の無いオプション。
  * - 未知のコマンド・サブコマンド（`wtm token rest` 等。以前は help を出して終了コード 0 だった。D103 の独立点検 #6）。
  *   コマンドが無い・`help`・`--help`・`-h` だけが help。
  * - `wtm serve` の余分な語、`wtm token reset` での `wtm serve` のオプション（`--host` 等。`--state-dir` と `--session` だけ使える）。
- * - `--json` は `wtm session` だけ、`--session` は `wtm serve`・`wtm token reset` だけ（20260926-named-session）。名前の規則は
+ * - `--json` は `wtm session` だけ、`--session` は `wtm serve`・`wtm token reset`・`wtm handoff` だけ（20260926-named-session）。名前の規則は
  *   ここでは見ない（状態ディレクトリを決める `resolveSessionStateDir` が見る）。
  * オプションとサブコマンドの語の順は問わない（`wtm token --state-dir D reset` も `reset` を拾う）。**以前は `reset` も
  * オプションとして読み `unknown option: reset` で終わり、`wtm token reset` が一度も動かなかった**（D103）。
@@ -37,7 +44,15 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   const [command, ...rest] = argv;
   const serve: RawServeArgs = { origin: [] };
   if (command === undefined || command === "help" || command === "--help" || command === "-h") return { command: "help", serve };
-  if (command !== "serve" && command !== "token" && command !== "session") throw new ConfigError(`unknown command: ${command}`, USAGE);
+  // 更新時の引き継ぎの前の確認（20260926-live-handoff の preflight）。動いているサーバが子として起動する隠しコマンドで、ヘルプに出さない。
+  if (command === PREFLIGHT_COMMAND_NAME) {
+    if (rest.length === 0) return { command: "handoff-preflight", serve, preflightStage: 1 };
+    if (rest.length === 4 && rest[0] === "--stage" && rest[1] === "2" && rest[2] === "--probe") {
+      return { command: "handoff-preflight", serve, preflightStage: 2, preflightProbe: rest[3]! };
+    }
+    throw new ConfigError(`invalid arguments for ${PREFLIGHT_COMMAND_NAME}`, USAGE);
+  }
+  if (command !== "serve" && command !== "token" && command !== "session" && command !== "handoff") throw new ConfigError(`unknown command: ${command}`, USAGE);
   let stateDir: string | undefined;
   let session: string | undefined;
   let json = false;
@@ -108,6 +123,13 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     return { command: "serve", serve, stateDir, session, ...(session !== undefined ? { sessionSource: "flag" as const } : {}) };
   }
   if (command === "session") return parseSessionCommand(words, serveOnlyOptions, session, stateDir, json, serve);
+  if (command === "handoff") {
+    // `wtm handoff [--state-dir D] [--session NAME]`（20260926-live-handoff）。`wtm serve` の他の指定は取らない。
+    const bad = serveOnlyOptions[0];
+    if (bad !== undefined) throw new ConfigError(`${bad} is not an option of wtm handoff`, `wtm handoff で使えるオプションは --state-dir と --session だけです。${USAGE}`);
+    if (words.length > 0) throw new ConfigError(`unexpected argument: ${words[0]}`, USAGE);
+    return { command: "handoff", serve, stateDir, session, ...(session !== undefined ? { sessionSource: "flag" as const } : {}) };
+  }
   if (words.length === 0) throw new ConfigError("missing subcommand: wtm token <reset>", USAGE);
   if (words[0] !== "reset" || words.length > 1) throw new ConfigError(`unknown subcommand: wtm token ${words.join(" ")}`, USAGE);
   if (serveOnlyOptions.length > 0) {
@@ -120,7 +142,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 }
 
 /**
- * `wtm serve`・`wtm token reset` で `--session` が無ければ、環境変数 `WTM_SESSION` の値を session の名前にする（herdr の `HERDR_SESSION`。
+ * `wtm serve`・`wtm token reset`・`wtm handoff` で `--session` が無ければ、環境変数 `WTM_SESSION` の値を session の名前にする（herdr の `HERDR_SESSION`。
  * 20260926-named-session-ui の design「WTM_SESSION」）。`main.ts` だけが呼ぶ——サーバを組み立てる `composeServer` は環境変数の session を
  * 見ない（テスト・smoke が開発者のシェルの値で別の状態ディレクトリを使わないため）。
  * - 無い・空は何もしない（herdr は空を誤りにするが、`export WTM_SESSION=` で外せるようにした。decisions D3）。
@@ -129,7 +151,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
  * - `wtm session list`・`delete` は名前を明示して受け取るので見ない。
  */
 export function applySessionEnv(parsed: ParsedArgs, env: NodeJS.ProcessEnv): ParsedArgs {
-  if (parsed.command !== "serve" && parsed.command !== "token-reset") return parsed;
+  if (parsed.command !== "serve" && parsed.command !== "token-reset" && parsed.command !== "handoff") return parsed;
   if (parsed.session !== undefined) return parsed;
   const value = env[SESSION_ENV_VAR];
   if (value === undefined || value === "") return parsed;

@@ -18,6 +18,8 @@ export const PANE_ENV_DROPPED: readonly string[] = [
   "WTM_SERVER_URL",
   "WTM_AGENT_REPORT_SOCKET",
   "WTM_SESSION",
+  // 更新時の引き継ぎの nonce（20260926-live-handoff）。起動の最初に process.env から消すが、pane へは念のため渡さない。
+  "WTM_HANDOFF_NONCE",
 ];
 
 export interface PaneEnvManaged {

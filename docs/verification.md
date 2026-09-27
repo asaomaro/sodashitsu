@@ -56,6 +56,8 @@ pnpm --filter @wtm/e2e test
 - **画面履歴**（`wtm serve --pane-history`。既定は無効。20260926-screen-history-replay）：付けて動かしたサーバを止めて起動し直すと、
   pane に前回の画面と「前回のセッションの画面」の区切りの行が出る。付けずに起動すると `session-history.json` を消す（詳しくは
   `docs/tls-setup.md`「画面履歴の保存と再生」）。
+- **更新時の引き継ぎ**（`wtm handoff`。Linux・macOS。20260926-live-handoff）：新しい版をビルドしてから `wtm handoff` を打つと、pane のプロセスを
+  止めずに動いている `wtm serve` がディスク上の wtm に入れ替わる（詳しくは `docs/tls-setup.md`「更新時の引き継ぎ」。Windows は非対応・macOS は未検証）。
 - **`wtm token reset` は `wtm serve` を止めてから**（動いている間は断る。終了コード 2）。
 - **`wtm serve` を起動した端末を閉じると wtm も終わる**（SIGHUP。`nohup` でも同じ）。検証の途中で端末を閉じるなら
   tmux の中で動かす。
@@ -376,6 +378,14 @@ pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` 
       その pane に赤い `red-line` と `1`〜`200`（上へスクロールして見える）、その下に薄い色の `--- 前回のセッションの画面（… に保存）---`、
       その下に新しいプロンプトが出る。pane で `vim` を開いたまま止めて起動し直すと、vim の画面ではなく vim を開く前の履歴が出る。
       続けて `--pane-history` を付けずに起動すると、`session-history.json` が消え、pane は空の新しいシェルになる。
+- [ ] 更新時の引き継ぎ（20260926-live-handoff。AC1〜AC5・AC7・AC8 の手動確認。自動では smoke〔`node packages/server/dist/handoffSmoke.js`〕が同じ往復を見ている）：
+      `wtm serve` で起動し、ブラウザで pane に `sleep 1000 & echo $$ $!` と `seq 1 200` を実行し、別の pane で `vim` を開いておく。
+      `pnpm build` の後に別の端末で `wtm handoff` → `handoff complete: N pane(s) kept running`。ブラウザは「再接続中…」の後に同じ画面に戻り、
+      `seq` の出力が上へスクロールして見え、`echo $$` が同じ pid を出し、`jobs` に `sleep` が残り、vim は描き直されて操作できる。
+      `ps -o pid,stat,cmd --ppid <wtm の pid>` で pane のシェルが同じ pid のまま。pane で `exit` すると pane が閉じる（その後の `ps` にそのシェルが
+      `<defunct>` で残るのは既知の制約）。`ls <状態ディレクトリ>` に `handoff.json` が残っていない。
+      新しい版の確かめが通らない状態（例: `packages/server/dist/handoff/HandoffManifest.js` の `HANDOFF_FORMAT_VERSION` を一時的に 2 にする）で
+      `wtm handoff` → 終了コード 1 で `the handoff format differs` が出て、サーバは同じ pid のまま pane も動き続ける（確かめたら元に戻す）。
 - [ ] スクロールバックを `$EDITOR` で開く（20260926-edit-scrollback。AC1〜AC4・AC6・AC8。AC5・AC7 は単体テストで確かめる）：
       `EDITOR=vim wtm serve …` で起動し、pane で `seq 1 3000` を実行してから `Ctrl+B e` を押す。期待：同じ tab に拡大表示の pane が
       開き、vim に 1〜3000 の行（スクロールバックに押し出された行を含む。末尾は `seq` の後のプロンプト）が色の制御列なしで出る。
@@ -916,6 +926,8 @@ pnpm --filter @wtm/e2e exec playwright test performance agent-detection --headed
 確かめる途中で出会っても、不具合ではなく今の版の限界として扱うもの（直すなら後続の work）。herdr との機能の差と、確かめずに
 見送った項目は `docs/herdr-parity.md`「未検証のまま見送った項目」。
 
+- **更新時の引き継ぎ（`wtm handoff`）**：Windows は非対応、macOS は未検証。引き継いだ pane のシェルは終わるとサーバが終わるまで
+  `<defunct>` で残る。確かめの後に新しい版が起動の途中で落ちると pane のプロセスは終わる（`docs/tls-setup.md`「更新時の引き継ぎ」）。
 - **接続が黙って切れている間（TCP の半開き）に打った文字は、黙って消える**（decisions.md D95）。スマートフォンのスリープ・
   Wi-Fi とモバイル回線の切り替え・ノート PC のスリープ等で、接続が実際には切れているのにブラウザがまだ気づいていない間は、
   「再接続中…」が出ず、打った文字はどこにも届かない（サーバからのエコーが無いので画面にも出ない）。wtm は生存確認
