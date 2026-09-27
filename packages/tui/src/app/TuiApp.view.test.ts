@@ -1,3 +1,4 @@
+import { decodeFrame } from "@sodashitsu/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fakeIo } from "../testing/fakeIo.js";
 import { FakeSocket } from "../testing/fakeSocket.js";
@@ -97,6 +98,32 @@ describe("TuiApp：大きさの申告と描画の予約（AC2・AC11）", () => 
     ws.event("prefs.changed", { prefs: { tui: { sidebarCols: 40 } }, rev: 5, byClientId: "x" });
     await vi.waitFor(() => expect(views()).toHaveLength(2));
     expect(views()[1]!.visible[0]!.cols).toBe(28); // (100-40)/2 = 30 − 罫線 2
+    app.finish(0);
+    await running;
+  });
+
+  it("prefix+b（toggle_sidebar）でサイドバーを畳み、申告し直す", async () => {
+    const { io, ws, app, running } = await started();
+    const views = () =>
+      ws.requests("client.view").map((r) => r.params as { visible: { cols: number }[] });
+    await vi.waitFor(() => expect(views()).toHaveLength(1));
+    io.type("\x02b");
+    await vi.waitFor(() => expect(views()).toHaveLength(2));
+    expect(views()[1]!.visible[0]!.cols).toBe(48); // 100/2 − 罫線 2
+    app.finish(0);
+    await running;
+  });
+
+  it("ESC 単独は 25ms 待って焦点の pane へ送る（INPUT フレーム）", async () => {
+    const { io, ws, app, running } = await started();
+    await vi.waitFor(() => expect(ws.requests("client.view")).toHaveLength(1));
+    const inputs = () => ws.sent.filter((m): m is Uint8Array => m instanceof Uint8Array);
+    io.type("\x1b");
+    expect(inputs()).toHaveLength(0);
+    await vi.waitFor(() => expect(inputs()).toHaveLength(1));
+    const frame = decodeFrame(inputs()[0]!);
+    expect(frame).toMatchObject({ paneId: "p1" });
+    expect(new TextDecoder().decode((frame as { bytes: Uint8Array }).bytes)).toBe("\x1b");
     app.finish(0);
     await running;
   });

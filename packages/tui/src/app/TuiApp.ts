@@ -1,7 +1,18 @@
-import { type ConnectionState, type Mode } from "@sodashitsu/client-core";
+import {
+  loadKeyPrefs,
+  resolveKeymap,
+  type Action,
+  type ConnectionState,
+  type Mode,
+  type ResolvedKeymap,
+} from "@sodashitsu/client-core";
+import { TuiDispatcher } from "../actions/TuiDispatcher.js";
+import { encodePaste, type PaneInputModes } from "../input/encode.js";
+import { ESC_TIMEOUT_MS, InputDecoder, type InputEvent } from "../input/decode.js";
+import { TuiKeys } from "../input/keys.js";
 import { clampTerminalSize, type SharedPrefs } from "@sodashitsu/protocol";
 import { computeLayout, type LayoutResult } from "../layout/computeLayout.js";
-import { readTuiState } from "../local/tuiState.js";
+import { readTuiState, writeTuiState } from "../local/tuiState.js";
 import { PrefsModel } from "../model/PrefsModel.js";
 import { SessionModel } from "../model/SessionModel.js";
 import { TuiNet, type TuiNetDeps } from "../net/TuiNet.js";
@@ -52,6 +63,11 @@ export class TuiApp {
   protected lastLayout: LayoutResult | null = null;
   protected sidebarHits: SidebarHit[] = [];
   protected tabHits: TabHit[] = [];
+  readonly keys: TuiKeys;
+  private readonly decoder = new InputDecoder();
+  private escTimer: ReturnType<typeof setTimeout> | null = null;
+  protected readonly dispatcher: TuiDispatcher;
+  private keymapSource = "";
 
   constructor(
     readonly target: TuiTarget,
@@ -77,6 +93,24 @@ export class TuiApp {
       () => this.scheduleRender(),
     );
     this.disposers.push(() => this.panes.dispose());
+    this.keys = new TuiKeys(this.resolvedKeymap(), {
+      paneModes: () => this.focusedPaneModes(),
+      sendToPane: (bytes) => this.sendToFocusedPane(bytes),
+      dispatch: (action) => this.dispatcher.dispatch(action),
+    });
+    this.keys.router.onModeChange(() => this.scheduleRender());
+    this.dispatcher = new TuiDispatcher({
+      model: this.model,
+      conn: {
+        request: (method, params) =>
+          this.net
+            ? this.net.conn.request(method, params)
+            : Promise.reject(new Error("not connected")),
+      },
+      detach: () => this.detach(),
+      toggleSidebar: () => this.toggleSidebar(),
+      unsupported: (action) => this.unsupported(action),
+    });
     this.disposers.push(this.model.onChange(() => this.onModelChange()));
     this.disposers.push(this.prefs.onChange(() => this.onPrefsChange()));
   }
@@ -118,7 +152,10 @@ export class TuiApp {
     this.disposers.push(() => {
       if (this.renderTimer !== null) clearTimeout(this.renderTimer);
       this.renderTimer = null;
+      if (this.escTimer !== null) clearTimeout(this.escTimer);
+      this.escTimer = null;
     });
+    this.disposers.push(this.io.onInput((bytes) => this.onInput(bytes)));
     const net = new TuiNet(
       this.target,
       {
@@ -137,15 +174,17 @@ export class TuiApp {
     void net.start();
   }
 
-  private showNotice(text: string | null): void {
+  private showNotice(text: string | null, ms = NOTICE_MS): void {
     if (!text) return;
-    this.notice = text.split("\n")[0] ?? null;
+    const line = text.split("\n")[0] ?? null;
+    this.notice = line;
+    this.scheduleRender();
     const timer = setTimeout(() => {
-      this.notice = null;
+      if (this.notice === line) this.notice = null;
       this.scheduleRender();
-    }, NOTICE_MS);
+    }, ms);
+    // unref：知らせの時間切れでプロセスを残さない（終えた後は `scheduleRender` が何もしない）。
     timer.unref?.();
-    this.disposers.push(() => clearTimeout(timer));
   }
 
   protected onConnectionState(s: ConnectionState): void {
@@ -182,6 +221,8 @@ export class TuiApp {
   }
 
   protected onPrefsChange(): void {
+    const source = JSON.stringify(this.prefs.shared.keys ?? null);
+    if (source !== this.keymapSource) this.keys.setKeymap(this.resolvedKeymap());
     const theme = this.prefs.theme;
     if (theme !== this.theme.name) {
       this.theme = new ThemeColors(theme);
@@ -192,9 +233,104 @@ export class TuiApp {
     this.scheduleRender();
   }
 
-  /** キーのモード（T5 で KeyRouter のモードを返す）。 */
+  /** キーのモード（prefix 待ちなら tab バーに `PREFIX`）。 */
   protected keyMode(): Mode {
-    return "terminal";
+    return this.keys.mode;
+  }
+
+  /** 共有の設定（`prefs.keys`）から解いた割り当ての表（web と同じ `loadKeyPrefs` → `resolveKeymap`。AC8）。 */
+  private resolvedKeymap(): ResolvedKeymap {
+    const raw = this.prefs.shared.keys;
+    this.keymapSource = JSON.stringify(raw ?? null);
+    return resolveKeymap(loadKeyPrefs(raw)).keymap;
+  }
+
+  // --- 入力 ---
+
+  private onInput(bytes: Uint8Array): void {
+    if (this.ended) return;
+    if (this.escTimer !== null) {
+      clearTimeout(this.escTimer);
+      this.escTimer = null;
+    }
+    for (const ev of this.decoder.feed(bytes)) this.handleInput(ev);
+    if (this.decoder.waiting) {
+      // ESC 単独か、列の途中で切れたか。少し待って確定する（design「input/decode.ts」）。
+      this.escTimer = setTimeout(() => {
+        this.escTimer = null;
+        for (const ev of this.decoder.flush()) this.handleInput(ev);
+      }, ESC_TIMEOUT_MS);
+    }
+  }
+
+  protected handleInput(ev: InputEvent): void {
+    if (this.ended || this.detaching) return;
+    switch (ev.kind) {
+      case "key":
+        this.keys.handle(ev);
+        return;
+      case "paste": {
+        const modes = this.focusedPaneModes();
+        if (modes) this.sendToFocusedPane(encodePaste(ev.text, modes));
+        return;
+      }
+      case "focus": {
+        this.outerFocused = ev.focused;
+        // pane がフォーカスの報告を求めていれば伝える（`CSI ? 1004 h`）。
+        const term = this.model.focusedPaneId
+          ? this.panes.get(this.model.focusedPaneId)
+          : undefined;
+        if (term?.modes.sendFocusMode) this.sendToFocusedPane(ev.focused ? "\x1b[I" : "\x1b[O");
+        this.scheduleRender();
+        return;
+      }
+      case "mouse":
+        this.handleMouse(ev);
+        return;
+    }
+  }
+
+  /** マウス（03 では pane のクリックで焦点を移すだけ。当たり判定とドラッグ・pane への受け渡しは 04 の `input/mouse.ts`）。 */
+  protected handleMouse(ev: Extract<InputEvent, { kind: "mouse" }>): void {
+    if (ev.action !== "down" || ev.button !== 0) return;
+    const box = this.lastLayout?.panes.find(
+      (b) =>
+        ev.x >= b.frame.x &&
+        ev.x < b.frame.x + b.frame.w &&
+        ev.y >= b.frame.y &&
+        ev.y < b.frame.y + b.frame.h,
+    );
+    if (!box || box.paneId === this.model.focusedPaneId) return;
+    this.model.focusPane(box.paneId);
+    this.net?.conn.request("pane.focus", { paneId: box.paneId }).catch(() => undefined);
+  }
+
+  private focusedPaneModes(): PaneInputModes | null {
+    const id = this.model.focusedPaneId;
+    if (!id || this.connectionState !== "open") return null;
+    const term = this.panes.get(id);
+    // 購読前（headless がまだ無い）でも送れるように、既定のモードで扱う。
+    return term ? term.modes : { applicationCursorKeysMode: false, bracketedPasteMode: false };
+  }
+
+  private sendToFocusedPane(bytes: string): void {
+    const id = this.model.focusedPaneId;
+    if (!id || !this.net) return;
+    this.net.conn.sendInput(id, bytes);
+  }
+
+  /** `toggle_sidebar`：折りたたみを切り替え、`tui-state.json` に残す（design「画面」）。 */
+  protected toggleSidebar(): void {
+    const next = { ...this.prefs.localState, sidebarCollapsed: !this.prefs.sidebarCollapsed };
+    this.prefs.setLocal(next);
+    writeTuiState(this.target.stateDir, next).catch(() => undefined);
+  }
+
+  /** まだ端末版に無い操作（04 で足す）。モードに入る操作はモードを戻す（解釈が無いまま入るとキーを奪う）。 */
+  protected unsupported(action: Action): void {
+    if (this.keys.mode !== "terminal" && this.keys.mode !== "prefix")
+      this.keys.router.setMode("terminal");
+    this.showNotice(`未対応の操作です: ${action.type}`, 2000);
   }
 
   /** 今の割り付け（純粋な `computeLayout` に今の大きさ・モデル・設定を渡す）。 */
