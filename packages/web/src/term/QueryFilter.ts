@@ -21,6 +21,11 @@ export function installQueryFilter(term: Terminal): void {
   parser.registerCsiHandler({ prefix: "?", intermediates: "$", final: "p" }, swallow);
   parser.registerCsiHandler({ prefix: ">", final: "q" }, swallow);
 
+  // XTSMGRAPHICS（CSI ? Pi ; Pa ; Pv S）。画像の addon（`imageAddon.ts`）が答えるので握りつぶす（20260926-kitty-graphics D4・D8）。
+  // 設定の操作（Pa=2・3。Sixel のパレットの上限を変える）も一緒に捨てる——サーバのミラーは答えないので交渉の相手がおらず、捨てておけば
+  // 後から接続したブラウザとも addon の状態がそろう。この登録は addon の読み込みより後でなければ効かない（`TerminalRegistry.create` の順序）。
+  parser.registerCsiHandler({ prefix: "?", final: "S" }, swallow);
+
   // DECRQSS（DCS $ q … ST）。
   parser.registerDcsHandler({ intermediates: "$", final: "q" }, swallow);
 

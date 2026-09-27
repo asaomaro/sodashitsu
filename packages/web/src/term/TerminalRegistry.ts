@@ -1,10 +1,11 @@
 import { Terminal } from "@xterm/xterm";
-import type { ITerminalOptions, ITheme } from "@xterm/xterm";
+import type { ITerminalAddon, ITerminalOptions, ITheme } from "@xterm/xterm";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { SearchAddon } from "@xterm/addon-search";
 import type { KeyInputController } from "../keys/KeyInputController.js";
 import type { ConnectionPort, TerminalSinkPort } from "../net/ports.js";
 import { installQueryFilter } from "./QueryFilter.js";
+import { createImageAddon } from "./imageAddon.js";
 import { RendererPool } from "./RendererPool.js";
 import { MouseBridge } from "./MouseBridge.js";
 import { XtermCopyTarget, type CopyTarget } from "./CopyTarget.js";
@@ -51,6 +52,11 @@ export interface TerminalRegistryOptions {
   getScrollbackLines?: () => number;
   /** 作る xterm.js の配色（いま使っているテーマ。20260921-theme-settings）。省略時は既定（dracula）。開いている端末は `setTheme` で替える。 */
   getTheme?: () => ITheme;
+  /**
+   * 端末内の画像の addon を作る（20260926-kitty-graphics）。省略時は実物（`@xterm/addon-image`）。`null` を返せば画像無し。
+   * 読み込みで投げた場合も画像無しで続ける。
+   */
+  createImageAddon?: () => ITerminalAddon | null;
   now?: () => number;
 }
 
@@ -209,12 +215,22 @@ export class TerminalRegistry implements TerminalSinkPort {
     const element = document.createElement("div");
     term.open(element);
 
-    installQueryFilter(term);
+    // 画像の addon（Sixel・iTerm2 のインライン画像。サーバが Kitty graphics を iTerm2 形式に作り直して送る）。
+    // 無くても端末は動くので、作れない・読み込めない環境（WebGL の上限と同じく GPU 等の制限）では画像無しで続ける。
+    try {
+      const image = (this.opts.createImageAddon ?? createImageAddon)();
+      if (image) term.loadAddon(image);
+    } catch {
+      // 画像無しで続ける
+    }
     const unicode11 = new Unicode11Addon();
     term.loadAddon(unicode11);
     term.unicode.activeVersion = "11";
     const search = new SearchAddon();
     term.loadAddon(search);
+    // 問い合わせの握りつぶしは addon を全部読み込んだ後に登録する（xterm.js のハンドラは後から登録したものが先に呼ばれる。
+    // 画像の addon は DA1・XTSMGRAPHICS に自分で答えるので、先に登録するとブラウザから応答が出る。20260926-kitty-graphics D8）。
+    installQueryFilter(term);
 
     this.keyDisposables.set(paneId, this.opts.keys.attach(term, paneId));
     this.mouseBridges.set(paneId, this.opts.createMouseBridge(term, paneId));

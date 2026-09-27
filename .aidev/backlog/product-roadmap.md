@@ -307,7 +307,14 @@ parent: 20260918-web-terminal-multiplexer
   一時ファイルとエディタの起動（`packages/server/src/terminal/scrollbackEditor.ts`。専用の 0700 のディレクトリに 0600 の新規ファイル、パスは `sh -c` の `$1` で渡す）・
   `Mirror.plainText()`（折り返しを戻す）。herdr との違いは `docs/herdr-parity.md` H11。
   実測: 全体テスト 3129 本 green × 2 回・smoke pass（2 本）・負の確認は test-result.md。review 通算 must 0・should 1・nit 2（いずれも解消）。
-- [ ] 端末機能の拡張: 端末内の画像表示（Kitty graphics。herdr H13）〔D8〕 (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/research.md。2026-09-26、スクロールバックを $EDITOR で開く分〔20260926-edit-scrollback〕と割った残り）
+- [x] 端末機能の拡張: 端末内の画像表示（Kitty graphics。herdr H13）〔D8〕 (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/research.md。2026-09-26、スクロールバックを $EDITOR で開く分〔20260926-edit-scrollback〕と割った残り）
+  → 着地: 20260926-kitty-graphics（feature/kitty-graphics）。**一部**: サーバが Kitty graphics（直接転送 `t=d`・PNG/生の画素/zlib・分割送信・`a=q/t/T/p`・`c`/`r`/`C=1`）を解釈し、
+  ブラウザの `@xterm/addon-image` 0.9.0 が描ける iTerm2 形式（セル数を指定）に作り直して送る（`packages/server/src/terminal/KittyGraphics.ts`・`TerminalHost.ts`）。Sixel・iTerm2 形式も表示。
+  応答はサーバだけ（`a=q`・`CSI 14/16 t`）、PTY の画素の大きさも設定。`t=f/t/s` は開かずにエラー。残り（削除・アニメーション・再接続での復元・流量等）は下の 3 行に割った。
+  実測: 全体テスト 4312 本 green・smoke pass（5 本）・負の確認は test-result.md。review 通算 must 0・should 2・nit 2（いずれも解消）。実物のブラウザでの描画は未検証（E2E を走らせない指示）。
+- [ ] 端末内の画像の残り（Kitty graphics の削除・アニメーション・Unicode placeholder・切り出し・重なり順）: `@xterm/xterm` 6.1 と `@xterm/addon-image` 0.10 の安定版が出たら、ブラウザで Kitty graphics を直接解釈する案（decisions D1 の案 A）へ移るかを見直す。応答はサーバだけ（D17）を保つ形が要る (needs: 20260926-kitty-graphics)（出典: .aidev/works/20260926-kitty-graphics/decisions.md D1）
+- [ ] 端末内の画像の再接続での復元: SNAPSHOT は文字だけなので、再接続・再読み込み・後から開いたブラウザでは画像が消える。サーバが保存している Kitty の画像と配置（位置・セル数）を覚えて SNAPSHOT の後に流し直すか (needs: 20260926-kitty-graphics)（出典: .aidev/works/20260926-kitty-graphics/requirements.md 対象外）
+- [ ] 端末内の画像の細部: (1) プログラムが直接出した Sixel・iTerm2 形式の画像では、サーバのミラーのカーソルが動かず、ブラウザ同士でも行数がフォントで変わる（サーバで大きさを読んでセル数を決め直す案）。(2) DA1 で Sixel の対応を告げるか（画像を使わないアプリへの影響の確認が要る）。(3) 基準のセル 9×17 px の代わりに、大きさを決める権利を持つブラウザのセルの画素を使うか（decisions D3）。(4) herdr の `[terminal].kitty_graphics` に当たる有効・無効の設定。(5) ブラウザへ送る PNG の上限 1.25 MiB（配信の stale の閾値 2MB の手前）を超える画像・続けて出る画像を送れるよう、画像のバイト数を流量制御に入れるか画像を別の経路で送る。生の画素の PNG 化（最大 4 MP で約 0.4 秒）を主スレッドの外へ出す。(6) ブラウザで画像を置けなかったとき・DECSDM（`CSI ? 80 h`）のときにサーバの画面のカーソルだけが下がる食い違い (needs: 20260926-kitty-graphics)（出典: .aidev/works/20260926-kitty-graphics/decisions.md D3・D4・D5・D13）
 - [ ] 配布と運用: 自己更新・更新チャネル、ログ、シェル補完〔D8〕 (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/research.md）
 - [ ] 規則・契約の一元化: レイアウトの隣と深さ優先の順・`/api/login` の状態コードの意味・ログインの制限の回数を `@wtm/protocol` に置き、server と web の二重持ちをなくす (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/review.md 統合 review ラウンド1 の nit）
 - [ ] AgentMonitor の判定の失敗のログを間引く（`LogThrottle`。Windows で前面プロセスの取得が詰まり続けると server.log が伸び続ける） (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/review.md 統合 review ラウンド1 の nit）

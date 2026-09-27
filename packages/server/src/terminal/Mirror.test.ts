@@ -454,3 +454,36 @@ describe("XtermMirror.historyAnsi（画面履歴として保存する内容。20
     mirror.dispose();
   });
 });
+
+describe("XtermMirror — 画素の大きさの問い合わせ（CSI 14 t・CSI 16 t。20260926-kitty-graphics の AC8）", () => {
+  it("基準のセル 9×17 で 1 回だけ答える（CSI 14 ; 2 t も同じ）。大きさを変えたら新しい大きさで答える", async () => {
+    const mirror = new XtermMirror(80, 24, 1000);
+    const responses: string[] = [];
+    mirror.onResponse((d) => responses.push(d));
+    await writeAndWait(mirror, "\x1b[14t");
+    expect(responses).toEqual([`\x1b[4;${24 * 17};${80 * 9}t`]);
+    responses.length = 0;
+    await writeAndWait(mirror, "\x1b[16t\x1b[14;2t");
+    expect(responses).toEqual(["\x1b[6;17;9t", `\x1b[4;${24 * 17};${80 * 9}t`]);
+    responses.length = 0;
+    mirror.resize(100, 30);
+    await writeAndWait(mirror, "\x1b[14t");
+    expect(responses).toEqual([`\x1b[4;${30 * 17};${100 * 9}t`]);
+    mirror.dispose();
+  });
+
+  it("他の CSI … t（18 t 等）は今までどおり xterm.js に任せる（headless だけのときと同じ応答）", async () => {
+    const xtermHeadless = (await import("@xterm/headless")).default;
+    const raw = new xtermHeadless.Terminal({ cols: 80, rows: 24, allowProposedApi: true });
+    const rawResponses: string[] = [];
+    raw.onData((d) => rawResponses.push(d));
+    await new Promise<void>((resolve) => raw.write("\x1b[18t\x1b[t\x1b[22;0t", resolve));
+    const mirror = new XtermMirror(80, 24, 1000);
+    const responses: string[] = [];
+    mirror.onResponse((d) => responses.push(d));
+    await writeAndWait(mirror, "\x1b[18t\x1b[t\x1b[22;0t");
+    expect(responses).toEqual(rawResponses);
+    raw.dispose();
+    mirror.dispose();
+  });
+});

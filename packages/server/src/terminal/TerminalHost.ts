@@ -3,6 +3,8 @@ import type { PtyProcess } from "../pty/PtyBackend.js";
 import type { Disposable } from "../util/Disposable.js";
 import { DefaultOutputFanout, type OutputFanout } from "./OutputFanout.js";
 import { XtermMirror, type InputModes, type Mirror } from "./Mirror.js";
+import { windowPixels } from "./cellPixels.js";
+import { KittyGraphicsTranslator, type TranslatedSegment } from "./KittyGraphics.js";
 
 /**
  * 端末のモードに合わせて作る入力（20260926-agent-prompt-send-keys design.md「`TerminalHost.writeModal` と後回し」）。
@@ -51,6 +53,8 @@ export class DefaultTerminalHost implements TerminalHost {
   readonly fanout: OutputFanout;
   private lastOutput = Date.now();
   private readonly exitListeners = new Set<(code: number) => void>();
+  /** 出力の Kitty graphics を読み分ける（20260926-kitty-graphics design「4.」）。 */
+  private readonly kitty = new KittyGraphicsTranslator();
   private readonly disposables: Disposable[] = [];
   private paused = false;
   private disposed = false;
@@ -77,11 +81,12 @@ export class DefaultTerminalHost implements TerminalHost {
     this.fanout = new DefaultOutputFanout(paneId, this.mirror);
 
     // PTY の出力は、同じ呼び出しの中で Mirror と OutputFanout の両方に渡す（design「流量制御と文字列の変換」）。
+    // Kitty graphics の画像は、ブラウザへは iTerm2 形式の画像、ミラーへは同じだけのカーソル移動として渡し、応答は PTY へ返す
+    // （20260926-kitty-graphics design「4.」）。画像を含まない出力は元の文字列のまま両方へ渡る。
     this.disposables.push(
       pty.onData((chunk) => {
         this.lastOutput = Date.now();
-        this.mirror.write(chunk);
-        this.fanout.push(enc.encode(chunk));
+        for (const seg of this.kitty.process(chunk)) this.deliver(seg);
         if (!this.paused && this.mirror.pendingBytes() > PAUSE_THRESHOLD_BYTES) {
           this.paused = true;
           this.pty.pause();
@@ -105,6 +110,30 @@ export class DefaultTerminalHost implements TerminalHost {
         for (const fn of [...this.exitListeners]) fn(e.exitCode);
       }),
     );
+  }
+
+  private deliver(seg: TranslatedSegment): void {
+    switch (seg.kind) {
+      case "text":
+        this.mirror.write(seg.text);
+        this.fanout.push(enc.encode(seg.text));
+        return;
+      case "image":
+        this.mirror.write(seg.mirror);
+        this.fanout.push(enc.encode(seg.client));
+        return;
+      case "response":
+        // ミラーがそれより前の出力を処理し終えた後に返す（同じ出力で先に来た問い合わせへのミラーの応答を追い越さない。decisions D6）。
+        this.mirror.write("", () => {
+          if (this.disposed) return;
+          try {
+            this.pty.write(seg.data);
+          } catch {
+            // 終了した PTY への書き込み。ミラーの書き込みのコールバックの中なので投げない（投げるとミラーの処理が止まる）。
+          }
+        });
+        return;
+    }
   }
 
   get pid(): number {
@@ -203,7 +232,8 @@ export class DefaultTerminalHost implements TerminalHost {
   }
 
   resize(cols: number, rows: number): void {
-    this.pty.resize(cols, rows);
+    // 画素の大きさも伝える（Unix の `ws_xpixel`/`ws_ypixel`。画像を出すツールが読む。20260926-kitty-graphics design「5.」・decisions D3・D9）。
+    this.pty.resize(cols, rows, windowPixels(cols, rows));
     this.mirror.resize(cols, rows);
   }
 
@@ -221,6 +251,7 @@ export class DefaultTerminalHost implements TerminalHost {
     this.disposed = true;
     this.closeInput();
     for (const d of this.disposables) d.dispose();
+    this.kitty.dispose();
     this.mirror.dispose();
     try {
       this.pty.kill();
