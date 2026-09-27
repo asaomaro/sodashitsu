@@ -229,3 +229,33 @@ describe("color・width", () => {
     expect(truncate("abc", 3)).toBe("abc");
   });
 });
+
+describe("pane の中身と chrome の指摘の直し", () => {
+  it("太字のパレット 0〜7 は明るい 8〜15 で描く（xterm.js の既定と同じ）", async () => {
+    const { PaneTerminal } = await import("../term/PaneTerminal.js");
+    const { paintPane } = await import("./paintPane.js");
+    const { Grid } = await import("./Screen.js");
+    const t = new PaneTerminal("p", 10, 1, 0);
+    try {
+      t.output(new TextEncoder().encode("\x1b[1;31mA\x1b[0;31mB\x1b[1;91mC"));
+      await t.flush();
+      const theme = new ThemeColors("dracula");
+      const g = new Grid(10, 1);
+      paintPane(g, t, { x: 0, y: 0, w: 10, h: 1 }, theme);
+      expect(g.cell(0, 0).fg).toBe(theme.ansi[9]);
+      expect(g.cell(1, 0).fg).toBe(theme.ansi[1]);
+      expect(g.cell(2, 0).fg).toBe(theme.ansi[9]);
+    } finally {
+      t.dispose();
+    }
+  });
+
+  it("結合文字（NFD）は直前のセルへまとめ、桁がずれない", async () => {
+    const { Grid } = await import("./Screen.js");
+    const g = new Grid(6, 1);
+    const nfd = "がx"; // が（NFD）＋ x
+    expect(g.text(0, 0, nfd, 0, 0)).toBe(3);
+    expect(g.cell(0, 0).ch).toBe("が");
+    expect(g.cell(2, 0).ch).toBe("x");
+  });
+});

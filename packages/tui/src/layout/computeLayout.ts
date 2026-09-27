@@ -77,7 +77,8 @@ export function computeLayout(input: LayoutInput): LayoutResult {
   const narrow = cols < input.narrowThreshold;
   let left = 0;
   let sidebar: Rect | undefined;
-  if (input.sidebarVisible && !narrow) {
+  // サイドバーは pane の場所を最低 MIN_COLS 桁残せるときだけ出す（`narrowThreshold` を小さく設定しても pane の幅が最小を割らない）。
+  if (input.sidebarVisible && !narrow && cols - MIN_COLS >= MIN_SIDEBAR) {
     const w = Math.max(MIN_SIDEBAR, Math.min(input.sidebarCols, cols - MIN_COLS));
     sidebar = { x: 0, y: 0, w, h: rows };
     left = w;

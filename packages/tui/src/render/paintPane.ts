@@ -30,11 +30,11 @@ export function paintPane(
       }
       const width = c.getWidth();
       if (width === 0) continue; // 全角の右半分（左の全角が書いた）
-      const fg = theme.paneColor(
-        c.isFgDefault() ? 0 : c.isFgPalette() ? 1 : 2,
-        c.getFgColor(),
-        false,
-      );
+      // 太字のパレット 0〜7 は明るい 8〜15 で描く（xterm.js の既定 `drawBoldTextInBrightColors: true`。web の画面と同じ色にする）。
+      const fgPalette = c.isFgPalette();
+      const fgValue =
+        fgPalette && c.isBold() && c.getFgColor() < 8 ? c.getFgColor() + 8 : c.getFgColor();
+      const fg = theme.paneColor(c.isFgDefault() ? 0 : fgPalette ? 1 : 2, fgValue, false);
       const bg = theme.paneColor(
         c.isBgDefault() ? 0 : c.isBgPalette() ? 1 : 2,
         c.getBgColor(),

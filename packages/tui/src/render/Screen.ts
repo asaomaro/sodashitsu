@@ -95,6 +95,14 @@ export class Grid {
     }
   }
 
+  /** 結合文字を (x, y) のセル（全角の右半分なら左の本体）へ足す。 */
+  private appendToCell(x: number, y: number, mark: string): void {
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
+    let i = y * this.w + x;
+    if (this.width[i] === 0 && x > 0) i -= 1;
+    this.ch[i] = (this.ch[i] ?? "") + mark;
+  }
+
   /** (x, y) を上書きする前に、そこに掛かっている全角の組の片割れを空白にする。 */
   private breakPairAt(x: number, y: number): void {
     const i = y * this.w + x;
@@ -129,7 +137,11 @@ export class Grid {
     for (const chr of s) {
       const cp = chr.codePointAt(0)!;
       const cw = charWidth(cp);
-      if (cw === 0) continue; // 結合文字・制御文字は自前の文字列では出さない
+      if (cw === 0) {
+        // 結合文字（NFD の濁点等）は直前に書いたセルへ足す（pane の中の xterm と同じく 1 セルにまとめる）。制御文字は出さない。
+        if (cp >= 0x20 && col > 0) this.appendToCell(x + col - 1, y, chr);
+        continue;
+      }
       if (col + cw > maxWidth) break;
       this.set(x + col, y, chr, cw, fg, bg, attrs);
       col += cw;

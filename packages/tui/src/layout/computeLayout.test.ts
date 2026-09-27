@@ -107,3 +107,12 @@ describe("computeLayout（AC2）", () => {
     expect(splitSize(40, Number.NaN)).toBe(20);
   });
 });
+
+describe("computeLayout：サイドバーの最小の場所", () => {
+  it("narrowThreshold を小さくしても、pane の場所が MIN_COLS を割るならサイドバーを出さない", () => {
+    for (let cols = 20; cols <= 40; cols++) {
+      const r = computeLayout({ ...base, cols, narrowThreshold: 0 });
+      expect(r.paneArea.w).toBeGreaterThanOrEqual(20);
+    }
+  });
+});
