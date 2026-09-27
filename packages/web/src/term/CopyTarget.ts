@@ -1,6 +1,6 @@
 import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal } from "@xterm/xterm";
-import type { CopyCommand } from "../keys/actions.js";
+import type { CopyCommand } from "@sodashitsu/client-core";
 
 export interface CopyResult {
   copiedText?: string;

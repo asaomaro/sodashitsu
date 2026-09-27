@@ -2,16 +2,16 @@
 import { DEFAULT_THEME_NAME, THEME_APPEARANCE, THEME_NAMES, type ThemeName } from "@sodashitsu/protocol";
 import { computed, inject, nextTick, ref, watch } from "vue";
 import { DeviceKindKey, NotificationControllerKey } from "../injection.js";
-import { applyRecommended } from "../keys/assign.js";
-import { KEY_PRESETS } from "../keys/presets.js";
+import { applyRecommended } from "@sodashitsu/client-core";
+import { KEY_PRESETS } from "@sodashitsu/client-core";
 import { isMobileViewport } from "../mobile/detect.js";
 import type { DesktopPermission } from "../notify/ports.js";
-import type { NotifyPrefs } from "../notify/policy.js";
+import type { NotifyPrefs } from "@sodashitsu/client-core";
 import { useNotificationsStore } from "../store/notifications.js";
 import { useOnboardingStore } from "../store/onboarding.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
-import { THEME_LABELS } from "../theme/themes.js";
+import { THEME_LABELS } from "@sodashitsu/client-core";
 
 /**
  * はじめの案内（20260926-settings-onboarding。herdr の onboarding）。`view.dialogContext.kind === "onboarding"` を扱う。

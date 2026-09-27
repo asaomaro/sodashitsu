@@ -3,7 +3,7 @@ import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPinia, type Pinia } from "pinia";
 import { ActionDispatcherKey, ConnectionKey, ViewSyncKey } from "../injection.js";
-import type { ConnectionPort } from "../net/ports.js";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import PaneLayout from "./PaneLayout.vue";

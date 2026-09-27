@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref, watch } from "vue";
 import { ConnectionKey } from "../injection.js";
-import type { LoginResult } from "../net/ports.js";
-import { normalizeRetryAfterSeconds } from "../net/retryAfter.js";
+import type { LoginResult } from "@sodashitsu/client-core";
+import { normalizeRetryAfterSeconds } from "@sodashitsu/client-core";
 import { useViewStore } from "../store/view.js";
 
 /**

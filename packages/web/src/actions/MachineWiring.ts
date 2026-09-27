@@ -1,7 +1,7 @@
 import type { MachineStatus } from "@sodashitsu/protocol";
 import type { Ref } from "vue";
-import type { MachineSummaryClientOptions } from "../net/MachineSummaryClient.js";
-import { LOCAL_MACHINE_ID, wsUrlFor } from "../net/machineUrl.js";
+import type { MachineSummaryClientOptions } from "@sodashitsu/client-core";
+import { LOCAL_MACHINE_ID, wsUrlFor } from "@sodashitsu/client-core";
 import type { useMachinesStore } from "../store/machines.js";
 import type { SwitchTarget } from "./MachineSwitcher.js";
 

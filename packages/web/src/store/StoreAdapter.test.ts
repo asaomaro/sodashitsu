@@ -1,7 +1,7 @@
 import type { AgentInfo, Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConnectionState } from "../net/ports.js";
+import type { ConnectionState } from "@sodashitsu/client-core";
 import { useCommandsStore } from "./commands.js";
 import { useSessionStore } from "./session.js";
 import { StoreAdapter } from "./StoreAdapter.js";

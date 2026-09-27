@@ -4,7 +4,7 @@ import { nextTick } from "vue";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
-import type { ConnectionPort } from "../net/ports.js";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { readPrefs, useViewStore, writePrefs } from "../store/view.js";
 import { useSettingsStore } from "../store/settings.js";

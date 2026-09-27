@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CSS_VARS, type CssVar } from "./uiTokens.js";
+import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
 import {
   CSS_VAR_LABELS,
   emptyThemeOverrides,

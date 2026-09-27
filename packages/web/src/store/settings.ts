@@ -1,7 +1,7 @@
 import type { NewCwd, ThemeName } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import { commandKeyDefs, type KeyTargetId } from "../keys/commandKeys.js";
+import { commandKeyDefs, type KeyTargetId } from "@sodashitsu/client-core";
 import { useCommandsStore } from "./commands.js";
 import {
   emptyKeyPrefs,
@@ -13,11 +13,11 @@ import {
   withoutNavigateBinding,
   withPrefix,
   type KeyPrefs,
-} from "../keys/keyPrefs.js";
-import { resolveKeymap, type ResolvedKeymap } from "../keys/keymap.js";
-import type { NavigateKeyId } from "../keys/navigateKeys.js";
-import { resolveNavigateKeymap, type ResolvedNavigateKeymap } from "../keys/navigateKeymap.js";
-import { loadThemePrefs, resolveTheme } from "../theme/themes.js";
+} from "@sodashitsu/client-core";
+import { resolveKeymap, type ResolvedKeymap } from "@sodashitsu/client-core";
+import type { NavigateKeyId } from "@sodashitsu/client-core";
+import { resolveNavigateKeymap, type ResolvedNavigateKeymap } from "@sodashitsu/client-core";
+import { loadThemePrefs, resolveTheme } from "@sodashitsu/client-core";
 import {
   emptyThemeOverrides,
   loadThemeOverrides,
@@ -27,7 +27,7 @@ import {
   type ThemeOverrideBucket,
   type ThemeOverrides,
 } from "../theme/themeOverrides.js";
-import type { CssVar } from "../theme/uiTokens.js";
+import type { CssVar } from "@sodashitsu/client-core";
 import { PANE_BORDERS, type PaneBorders } from "../layout/paneChrome.js";
 import { loadScrollbackPref, type ScrollbackPref } from "../term/scrollback.js";
 import {
@@ -37,7 +37,7 @@ import {
   MAX_TAB_BAR_RIGHT_ENTRIES,
   type TabBarPosition,
   type TabBarRightEntry,
-} from "../tabbar/tabBarRight.js";
+} from "@sodashitsu/client-core";
 import {
   effectiveLayout,
   loadSidebarRows,
@@ -45,7 +45,7 @@ import {
   type RowLayout,
   type SidebarArea,
   type SidebarRowsPrefs,
-} from "../sidebar/rowLayout.js";
+} from "@sodashitsu/client-core";
 import { readPrefs, writePrefs } from "./view.js";
 
 /**

@@ -4,7 +4,7 @@ import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 import { ConnectionKey, TerminalRegistryKey } from "../injection.js";
-import type { ConnectionPort, TerminalSinkPort } from "../net/ports.js";
+import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
 import { useCommandsStore } from "../store/commands.js";
 import { useViewStore } from "../store/view.js";
 import CommandPopup from "./CommandPopup.vue";

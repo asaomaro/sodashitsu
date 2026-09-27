@@ -3,7 +3,7 @@ import type { ActionDispatcher } from "./actions/ActionDispatcher.js";
 import type { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import type { KeyInputController } from "./keys/KeyInputController.js";
 import type { NotificationController } from "./notify/NotificationController.js";
-import type { ConnectionPort, DeviceKind } from "./net/ports.js";
+import type { ConnectionPort, DeviceKind } from "@sodashitsu/client-core";
 import type { TerminalRegistry } from "./term/TerminalRegistry.js";
 import type { ViewSync } from "./term/ViewSync.js";
 

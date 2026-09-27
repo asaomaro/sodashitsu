@@ -3,7 +3,7 @@ import { computed, inject, nextTick, ref, watch } from "vue";
 import { ActionDispatcherKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { type DialogContext, useViewStore } from "../store/view.js";
-import { linkedWorktreeChildrenOf } from "../store/workspaceGrouping.js";
+import { linkedWorktreeChildrenOf } from "@sodashitsu/client-core";
 
 /**
  * 閉じる確認ダイアログ（T23。design「ダイアログ」）。`view.dialogContext.kind === "confirmClose"` を扱う。

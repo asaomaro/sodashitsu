@@ -4,9 +4,9 @@ import { computed, inject, nextTick, ref, watch } from "vue";
 import { ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { aggregate, displayStateFor, useSeenStore } from "../store/seen.js";
-import { paneNameOf } from "../store/paneName.js";
+import { paneNameOf } from "@sodashitsu/client-core";
 import { useViewStore } from "../store/view.js";
-import { depthFirstPaneIds } from "../term/layoutOrder.js";
+import { depthFirstPaneIds } from "@sodashitsu/client-core";
 import StateIcon from "./StateIcon.vue";
 
 /**

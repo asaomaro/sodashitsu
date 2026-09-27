@@ -2,7 +2,7 @@ import type { PopupDimension, ServerSessionEntry, SessionFocus, WorkspaceGroup, 
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import type { AgentSort, Mode, WorkspaceSort } from "@sodashitsu/client-core";
-import type { ConnectionState } from "../net/ports.js";
+import type { ConnectionState } from "@sodashitsu/client-core";
 import type { MenuTarget } from "../term/MouseBridge.js";
 import type { Zone } from "../term/paneDragZone.js";
 

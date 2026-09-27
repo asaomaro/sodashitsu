@@ -1,4 +1,4 @@
-import { CSS_VARS, type CssVar } from "./uiTokens.js";
+import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
 
 /**
  * 色の個別の上書き（20260922-theme-custom-overrides。herdr の `[theme.custom]` 相当。design「インターフェース / データ構造」）。

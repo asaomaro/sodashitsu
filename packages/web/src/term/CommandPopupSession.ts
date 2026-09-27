@@ -1,5 +1,5 @@
-import type { ConnectionPort, TerminalSinkPort } from "../net/ports.js";
-import { errorCodeOf } from "../net/clientError.js";
+import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
+import { errorCodeOf } from "@sodashitsu/client-core";
 
 /** popup の端末に要る xterm.js の部分（テストで偽物を渡す）。 */
 export interface PopupTerminalLike {

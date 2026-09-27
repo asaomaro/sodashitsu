@@ -8,7 +8,7 @@ import {
   type NotifyKey,
   type NotifyPrefs,
   type QueuedNotification,
-} from "../notify/policy.js";
+} from "@sodashitsu/client-core";
 import { readPrefs, writePrefs } from "./view.js";
 
 /**

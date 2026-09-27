@@ -5,8 +5,8 @@ import { useNotificationsStore } from "../store/notifications.js";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
-import { describeParts, describeTarget } from "./describe.js";
-import { notifyKeyOf, routesFor, shouldQueue, snapshotKeys, type Audience, type NotifyKey, type NotifyKind } from "./policy.js";
+import { describeParts, describeTarget } from "@sodashitsu/client-core";
+import { notifyKeyOf, routesFor, shouldQueue, snapshotKeys, type Audience, type NotifyKey, type NotifyKind } from "@sodashitsu/client-core";
 import type { DesktopNotifierPort, DesktopPermission, SoundPort } from "./ports.js";
 
 /** `blocked` を知らせるまでの待ち（AC4）。この間に元へ戻ったら知らせない。 */

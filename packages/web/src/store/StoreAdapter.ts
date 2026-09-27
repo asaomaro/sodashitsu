@@ -1,10 +1,10 @@
 import type { AgentInfo, AgentIntegrationStatusResult, MachineStatus, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
-import type { ConnectionState, StorePort } from "../net/ports.js";
+import type { ConnectionState, StorePort } from "@sodashitsu/client-core";
 import { useCommandsStore } from "./commands.js";
 import { useSessionStore } from "./session.js";
 import { useViewStore } from "./view.js";
-import { repairView } from "./viewRepair.js";
+import { repairView } from "@sodashitsu/client-core";
 
 export interface StoreAdapterOptions {
   pinia: Pinia;

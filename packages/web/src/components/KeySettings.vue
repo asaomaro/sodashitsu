@@ -9,14 +9,14 @@ import {
   type AssignResult,
   type AssignTarget,
   type NavigateAssignTarget,
-} from "../keys/assign.js";
-import { ACTIONS, actionDef, type ActionGroup } from "../keys/bindings.js";
-import { COMMAND_GROUP, isCommandKeyId, type KeyTargetId } from "../keys/commandKeys.js";
+} from "@sodashitsu/client-core";
+import { ACTIONS, actionDef, type ActionGroup } from "@sodashitsu/client-core";
+import { COMMAND_GROUP, isCommandKeyId, type KeyTargetId } from "@sodashitsu/client-core";
 import { useCommandsStore } from "../store/commands.js";
-import { formatBinding, keyInputOf, type KeyboardEventLike } from "../keys/chord.js";
-import { displayBinding, type LayoutMap } from "../keys/chordDisplay.js";
-import { NAVIGATE_KEYS, navigateKeyDef, type NavigateKeyId } from "../keys/navigateKeys.js";
-import { KEY_PRESETS } from "../keys/presets.js";
+import { formatBinding, keyInputOf, type KeyboardEventLike } from "@sodashitsu/client-core";
+import { displayBinding, type LayoutMap } from "@sodashitsu/client-core";
+import { NAVIGATE_KEYS, navigateKeyDef, type NavigateKeyId } from "@sodashitsu/client-core";
+import { KEY_PRESETS } from "@sodashitsu/client-core";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import { isMacPlatform } from "../term/MouseBridge.js";

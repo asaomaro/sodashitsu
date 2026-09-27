@@ -15,7 +15,7 @@ import {
   PANE_FRAME_THICKNESS_PX,
   useSettingsStore,
 } from "./settings.js";
-import { DEFAULT_LAYOUTS } from "../sidebar/rowLayout.js";
+import { DEFAULT_LAYOUTS } from "@sodashitsu/client-core";
 import { readPrefs, writePrefs } from "./view.js";
 import { useCommandsStore } from "./commands.js";
 

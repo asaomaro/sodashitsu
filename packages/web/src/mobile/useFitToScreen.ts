@@ -1,6 +1,6 @@
 import type { Terminal } from "@xterm/xterm";
 import { computed, onBeforeUnmount, ref, watch, type Ref } from "vue";
-import type { ConnectionPort } from "../net/ports.js";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
 import { getCellSize } from "../term/measure.js";

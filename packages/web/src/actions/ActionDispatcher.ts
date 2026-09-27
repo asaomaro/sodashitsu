@@ -1,17 +1,17 @@
 import type { AgentIntegrationInstallResult, AgentIntegrationKind, NewCwd } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { KeyInputController, ActionPort, FocusPort } from "../keys/KeyInputController.js";
-import type { Action, CopyCommand, Dir } from "../keys/actions.js";
-import type { InputHold } from "../net/InputGate.js";
-import type { ConnectionPort } from "../net/ports.js";
+import type { Action, CopyCommand, Dir } from "@sodashitsu/client-core";
+import type { InputHold } from "@sodashitsu/client-core";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
-import { LOCAL_MACHINE_ID } from "../net/machineUrl.js";
+import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
-import { orderedAgentPaneIds, type AgentOrderEntry } from "../store/agentOrder.js";
-import { visibleWorkspaceIdsInOrder } from "../store/workspaceGrouping.js";
+import { orderedAgentPaneIds, type AgentOrderEntry } from "@sodashitsu/client-core";
+import { visibleWorkspaceIdsInOrder } from "@sodashitsu/client-core";
 import {
   buildNewCwd,
   loadNewCwdPath,
@@ -26,11 +26,11 @@ import {
 } from "../store/settings.js";
 import { loadAgentSort, loadSidebarCollapsed, loadSidebarWidth, loadWorkspaceSort, readPrefs, useViewStore } from "../store/view.js";
 import { loadScrollbackPref } from "../term/scrollback.js";
-import { loadTabBarPosition, loadTabBarRightEntries, loadTabBarRightSeparator } from "../tabbar/tabBarRight.js";
-import { loadSidebarRows } from "../sidebar/rowLayout.js";
-import { loadThemePrefs } from "../theme/themes.js";
-import { clientErrorMessage, errorCodeOf } from "../net/clientError.js";
-import { depthFirstPaneIds, neighborPaneId } from "../term/layoutOrder.js";
+import { loadTabBarPosition, loadTabBarRightEntries, loadTabBarRightSeparator } from "@sodashitsu/client-core";
+import { loadSidebarRows } from "@sodashitsu/client-core";
+import { loadThemePrefs } from "@sodashitsu/client-core";
+import { clientErrorMessage, errorCodeOf } from "@sodashitsu/client-core";
+import { depthFirstPaneIds, neighborPaneId } from "@sodashitsu/client-core";
 import type { MenuTarget, UiPort } from "../term/MouseBridge.js";
 import { readClipboard, writeClipboard } from "../term/clipboard.js";
 import type { TerminalRegistry } from "../term/TerminalRegistry.js";

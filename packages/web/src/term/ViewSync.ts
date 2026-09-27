@@ -1,5 +1,5 @@
 import type { Terminal } from "@xterm/xterm";
-import type { ConnectionPort } from "../net/ports.js";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { getCellSize as defaultGetCellSize, measure, type CellSize } from "./measure.js";
 import type { TerminalRegistry } from "./TerminalRegistry.js";
 

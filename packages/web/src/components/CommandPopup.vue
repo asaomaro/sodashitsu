@@ -4,7 +4,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { ConnectionKey, TerminalRegistryKey } from "../injection.js";
-import { clientErrorMessage } from "../net/clientError.js";
+import { clientErrorMessage } from "@sodashitsu/client-core";
 import { useCommandsStore } from "../store/commands.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";

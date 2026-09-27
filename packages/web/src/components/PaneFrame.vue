@@ -2,7 +2,7 @@
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { ActionDispatcherKey, TerminalRegistryKey } from "../injection.js";
 import { NO_NEIGHBORS, resolvePaneChrome, type PaneSide, type PaneSides } from "../layout/paneChrome.js";
-import { paneNameOf } from "../store/paneName.js";
+import { paneNameOf } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";

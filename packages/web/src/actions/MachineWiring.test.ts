@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import { trackMediaQuery } from "../mobile/detect.js";
-import type { MachineSummaryClientOptions } from "../net/MachineSummaryClient.js";
+import type { MachineSummaryClientOptions } from "@sodashitsu/client-core";
 import { useMachinesStore } from "../store/machines.js";
 import { MachineWiring, type SummaryClientLike } from "./MachineWiring.js";
 

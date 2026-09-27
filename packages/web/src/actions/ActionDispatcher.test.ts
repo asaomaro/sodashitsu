@@ -3,10 +3,10 @@ import type { AgentInfo, AgentIntegrationStatusResult, Pane, Tab, Workspace } fr
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KeyInputController } from "../keys/KeyInputController.js";
-import { KeyRouter, type KeyRouterClock } from "../keys/KeyRouter.js";
-import { DEFAULT_KEYMAP } from "../keys/keymap.js";
-import { clientErrorMessage } from "../net/clientError.js";
-import type { ConnectionPort } from "../net/ports.js";
+import { KeyRouter, type KeyRouterClock } from "@sodashitsu/client-core";
+import { DEFAULT_KEYMAP } from "@sodashitsu/client-core";
+import { clientErrorMessage } from "@sodashitsu/client-core";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { RendererPool, type WebglAddonLike } from "../term/RendererPool.js";
 import { TerminalRegistry } from "../term/TerminalRegistry.js";
 import { MouseBridge } from "../term/MouseBridge.js";
@@ -16,7 +16,7 @@ import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
-import { InputGate } from "../net/InputGate.js";
+import { InputGate } from "@sodashitsu/client-core";
 import { ActionDispatcher } from "./ActionDispatcher.js";
 
 let pinia: Pinia;

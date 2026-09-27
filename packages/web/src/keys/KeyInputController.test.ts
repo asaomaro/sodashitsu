@@ -1,13 +1,13 @@
 import { Terminal } from "@xterm/xterm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConnectionPort } from "../net/ports.js";
-import type { KeyInput, Mode } from "./actions.js";
+import type { ConnectionPort } from "@sodashitsu/client-core";
+import type { KeyInput, Mode } from "@sodashitsu/client-core";
 import { KeyInputController, type ActionPort, type FocusPort, type KeyboardEventLike, type ModeSink } from "./KeyInputController.js";
-import { KeyRouter, type KeyRouterClock } from "./KeyRouter.js";
-import { emptyKeyPrefs, type KeyPrefs } from "./keyPrefs.js";
-import { DEFAULT_KEYMAP, resolveKeymap } from "./keymap.js";
-import { NavigateMode } from "./NavigateMode.js";
-import { ResizeMode } from "./ResizeMode.js";
+import { KeyRouter, type KeyRouterClock } from "@sodashitsu/client-core";
+import { emptyKeyPrefs, type KeyPrefs } from "@sodashitsu/client-core";
+import { DEFAULT_KEYMAP, resolveKeymap } from "@sodashitsu/client-core";
+import { NavigateMode } from "@sodashitsu/client-core";
+import { ResizeMode } from "@sodashitsu/client-core";
 
 function ev(partial: Partial<KeyboardEventLike> & { key: string }): KeyboardEventLike {
   return {

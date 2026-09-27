@@ -5,8 +5,8 @@ import bootSource from "../../public/theme-boot.js?raw";
 import { useSettingsStore } from "../store/settings.js";
 import { writePrefs } from "../store/view.js";
 import { BOOT_KEY, ThemeController } from "./ThemeController.js";
-import { resolveTheme, type ThemePrefs } from "./themes.js";
-import { CSS_VARS, uiTokens } from "./uiTokens.js";
+import { resolveTheme, type ThemePrefs } from "@sodashitsu/client-core";
+import { CSS_VARS, uiTokens } from "@sodashitsu/client-core";
 
 /** `public/theme-boot.js` を、localStorage・matchMedia・document を差し替えて走らせる（ブラウザの <head> で走るのと同じ素の JS）。 */
 function runBoot(opts: {

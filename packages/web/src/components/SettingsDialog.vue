@@ -8,18 +8,18 @@ import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useNotificationsStore } from "../store/notifications.js";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore, type NewCwdPolicy, type PaneFrameThickness } from "../store/settings.js";
-import { DISPLAY_STATES, stateGlyph, stateLabel } from "../store/stateIndicator.js";
+import { DISPLAY_STATES, stateGlyph, stateLabel } from "@sodashitsu/client-core";
 import { useViewStore } from "../store/view.js";
 import { effectiveScrollback, scrollbackChoices, type ScrollbackPref } from "../term/scrollback.js";
-import { siblingThemes, THEME_LABELS } from "../theme/themes.js";
+import { siblingThemes, THEME_LABELS } from "@sodashitsu/client-core";
 import {
   MAX_TAB_BAR_RIGHT_ENTRIES,
   type DatetimeFormat,
   type TabBarPosition,
   type TabBarRightEntry,
-} from "../tabbar/tabBarRight.js";
+} from "@sodashitsu/client-core";
 import { CSS_VAR_LABELS, isValidCssColor, type ThemeOverrideBucket } from "../theme/themeOverrides.js";
-import { CSS_VARS, type CssVar } from "../theme/uiTokens.js";
+import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
 import KeySettings from "./KeySettings.vue";
 import SidebarRowsSettings from "./SidebarRowsSettings.vue";
 

@@ -146,6 +146,9 @@ importers:
 
   packages/web:
     dependencies:
+      '@sodashitsu/client-core':
+        specifier: workspace:*
+        version: link:../client-core
       '@sodashitsu/protocol':
         specifier: workspace:*
         version: link:../protocol

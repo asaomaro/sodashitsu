@@ -1,4 +1,4 @@
-import type { NotifyKind } from "./policy.js";
+import type { NotifyKind } from "@sodashitsu/client-core";
 import type { SoundPort, SoundResult } from "./ports.js";
 
 /**
