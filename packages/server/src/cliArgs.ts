@@ -3,7 +3,7 @@ import { SESSION_NAME_RULE, sessionNameProblem } from "./persist/namedSession.js
 import { parseMachineArgs, type MachineCommand } from "./machine/machineArgs.js";
 
 export interface ParsedArgs {
-  command: "serve" | "token-reset" | "session-list" | "session-delete" | "session-stop" | "handoff" | "handoff-preflight" | "bridge" | "machine" | "help";
+  command: "tui" | "serve" | "token-reset" | "session-list" | "session-delete" | "session-stop" | "handoff" | "handoff-preflight" | "bridge" | "machine" | "help";
   /** `soda machine …`（20260927-multi-host-machines）。 */
   machine?: MachineCommand;
   serve: RawServeArgs;
@@ -19,6 +19,8 @@ export interface ParsedArgs {
   preflightProbe?: string;
   /** `session` の出所（`--session`＝flag・`SODA_SESSION`＝env。20260926-named-session-ui）。無ければ既定の session。 */
   sessionSource?: "flag" | "env" | undefined;
+  /** 引数なしの `soda`（端末版）の `--allow-nested`（pane の中からでも開く。20260927-cli-mode）。 */
+  allowNested?: boolean;
 }
 
 /** 既定の session を選ぶ環境変数（herdr の `HERDR_SESSION`。20260926-named-session-ui）。 */
@@ -28,7 +30,7 @@ export const SESSION_ENV_VAR = "SODA_SESSION";
 export const PREFLIGHT_COMMAND_NAME = "__handoff-preflight";
 
 const USAGE =
-  "使い方: soda serve [--host H] [--port P] [--cert F] [--key F] [--origin O]... [--state-dir D] [--session NAME] [--scrollback N] [--shell S] [--worktree-dir D] [--pane-history] / soda token reset [--state-dir D] [--session NAME] / soda session list [--state-dir D] [--json] / soda session delete NAME [--state-dir D] [--json] / soda session stop NAME [--state-dir D] [--json] / soda handoff [--state-dir D] [--session NAME] / soda bridge [--session NAME] [--state-dir D] / soda machine add|list|rename|enable|disable|remove …";
+  "使い方: soda [--session NAME] [--state-dir D] [--allow-nested] / soda serve [--host H] [--port P] [--cert F] [--key F] [--origin O]... [--state-dir D] [--session NAME] [--scrollback N] [--shell S] [--worktree-dir D] [--pane-history] / soda token reset [--state-dir D] [--session NAME] / soda session list [--state-dir D] [--json] / soda session delete NAME [--state-dir D] [--json] / soda session stop NAME [--state-dir D] [--json] / soda handoff [--state-dir D] [--session NAME] / soda bridge [--session NAME] [--state-dir D] / soda machine add|list|rename|enable|disable|remove …";
 
 /**
  * CLI の引数を解釈する（`soda serve [...]` / `soda token reset [--state-dir D] [--session NAME]` / `soda session list|delete|stop` /
@@ -36,7 +38,7 @@ const USAGE =
  * （`main.ts` は読み込むと起動する）。誤りはどれも `ConfigError`（終了コード 2・使い方つき）：
  * - 未知のオプション・値の無いオプション。
  * - 未知のコマンド・サブコマンド（`soda token rest` 等。以前は help を出して終了コード 0 だった。D103 の独立点検 #6）。
- *   コマンドが無い・`help`・`--help`・`-h` だけが help。
+ *   `help`・`--help`・`-h` だけが help。コマンドが無い・先頭がオプションなら端末版（`tui`。20260927-cli-mode）。
  * - `soda serve` の余分な語、`soda token reset` での `soda serve` のオプション（`--host` 等。`--state-dir` と `--session` だけ使える）。
  * - `--json` は `soda session` だけ、`--session` は `soda serve`・`soda token reset`・`soda handoff` だけ（20260926-named-session）。名前の規則は
  *   ここでは見ない（状態ディレクトリを決める `resolveSessionStateDir` が見る）。
@@ -46,7 +48,9 @@ const USAGE =
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const [command, ...rest] = argv;
   const serve: RawServeArgs = { origin: [] };
-  if (command === undefined || command === "help" || command === "--help" || command === "-h") return { command: "help", serve };
+  if (command === "help" || command === "--help" || command === "-h") return { command: "help", serve };
+  // 引数なし・先頭がオプション（`soda --session work`）は端末版（20260927-cli-mode の design「findOrStart」1.）。
+  if (command === undefined || command.startsWith("-")) return parseTuiArgs(argv, serve);
   // 更新時の引き継ぎの前の確認（20260926-live-handoff の preflight）。動いているサーバが子として起動する隠しコマンドで、ヘルプに出さない。
   if (command === PREFLIGHT_COMMAND_NAME) {
     if (rest.length === 0) return { command: "handoff-preflight", serve, preflightStage: 1 };
@@ -151,7 +155,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 }
 
 /**
- * `soda serve`・`soda token reset`・`soda handoff` で `--session` が無ければ、環境変数 `SODA_SESSION` の値を session の名前にする（herdr の `HERDR_SESSION`。
+ * `soda serve`・`soda token reset`・`soda handoff`・引数なしの `soda` で `--session` が無ければ、環境変数 `SODA_SESSION` の値を session の名前にする（herdr の `HERDR_SESSION`。
  * 20260926-named-session-ui の design「SODA_SESSION」）。`main.ts` だけが呼ぶ——サーバを組み立てる `composeServer` は環境変数の session を
  * 見ない（テスト・smoke が開発者のシェルの値で別の状態ディレクトリを使わないため）。
  * - 無い・空は何もしない（herdr は空を誤りにするが、`export SODA_SESSION=` で外せるようにした。decisions D3）。
@@ -160,7 +164,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
  * - `soda session list`・`delete`・`stop` は名前を明示して受け取るので見ない（`stop` は pane の中の `SODA_SESSION` でその pane ごと止めないため。20260927-session-stop の decisions D3）。
  */
 export function applySessionEnv(parsed: ParsedArgs, env: NodeJS.ProcessEnv): ParsedArgs {
-  if (parsed.command !== "serve" && parsed.command !== "token-reset" && parsed.command !== "handoff") return parsed;
+  // 引数なしの `soda`（端末版）も `soda serve` と同じ規則で session を決める（見つける・起動する先を揃える。20260927-cli-mode）。
+  if (parsed.command !== "serve" && parsed.command !== "token-reset" && parsed.command !== "handoff" && parsed.command !== "tui") return parsed;
   if (parsed.session !== undefined) return parsed;
   const value = env[SESSION_ENV_VAR];
   if (value === undefined || value === "") return parsed;
@@ -224,4 +229,39 @@ function parseBridgeArgs(rest: readonly string[], serve: RawServeArgs): ParsedAr
     else throw new ConfigError(arg.startsWith("-") ? `unknown option: ${arg}` : `unexpected argument: ${arg}`, "使い方: soda bridge [--session NAME] [--state-dir D]");
   }
   return { command: "bridge", serve, stateDir, session };
+}
+
+/**
+ * 引数なしの `soda`（端末版。20260927-cli-mode）。手元の `soda serve` を見つけて（無ければ裏で起動して）繋ぐ。使えるオプションは `--session`・`--state-dir`・
+ * `--allow-nested` だけ（`soda serve` のほかのオプションは受けない——既に動いているサーバには効かないので、紛らわしい）。名前の規則は `resolveSessionStateDir` が見る。
+ */
+function parseTuiArgs(argv: readonly string[], serve: RawServeArgs): ParsedArgs {
+  let stateDir: string | undefined;
+  let session: string | undefined;
+  let allowNested = false;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    const next = (): string => {
+      const v = argv[++i];
+      if (v === undefined) throw new ConfigError(`missing value for ${arg}`, `${arg} には値が要ります。`);
+      return v;
+    };
+    if (arg === "--state-dir") {
+      stateDir = next();
+      serve.stateDir = stateDir;
+    } else if (arg === "--session") {
+      session = next();
+      serve.session = session;
+      serve.sessionSource = "flag";
+    } else if (arg === "--allow-nested") allowNested = true;
+    else throw new ConfigError(arg.startsWith("-") ? `unknown option: ${arg}` : `unexpected argument: ${arg}`, USAGE);
+  }
+  return {
+    command: "tui",
+    serve,
+    stateDir,
+    session,
+    ...(session !== undefined ? { sessionSource: "flag" as const } : {}),
+    ...(allowNested ? { allowNested: true } : {}),
+  };
 }

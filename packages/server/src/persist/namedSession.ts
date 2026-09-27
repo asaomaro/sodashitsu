@@ -140,13 +140,21 @@ export async function listServerSessions(
     };
     if (entry.running && entry.host === undefined && entry.pid !== undefined) {
       const record = await readRecord(entry.stateDir);
-      if (record !== undefined && record.pid === entry.pid && record.hostname === thisHost) {
+      if (serveRecordMatches(record, entry.pid, thisHost)) {
         item.endpoint = { port: record.port, https: record.https, host: record.host };
       }
     }
     out.push(item);
   }
   return out;
+}
+
+/**
+ * 起動の記録（`serve.json`）を「今動いているサーバの接続先」として信じてよいか：ロックの持ち主（生きている・このホスト）の pid と、記録の pid・ホスト名が一致する。
+ * `serve.json` は止まっても消さないので、記録だけで「動いている」とみなしてはいけない（research-startup §3.4）。`server.sessions` と引数なしの `soda`（20260927-cli-mode）が使う。
+ */
+export function serveRecordMatches(record: ServeRecord | undefined, holderPid: number, thisHost: string): record is ServeRecord {
+  return record !== undefined && record.pid === holderPid && record.hostname === thisHost;
 }
 
 export type SessionDeleteErrorCode =

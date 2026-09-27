@@ -16,10 +16,13 @@ import { runSessionStop } from "./stop/stopCommand.js";
 import { runBridge } from "./machine/bridgeCommand.js";
 import { runMachineCommand } from "./machine/machineCommands.js";
 import { MACHINE_USAGE } from "./machine/machineArgs.js";
+import { runTuiCommand } from "./launch/tuiCommand.js";
+import { placeholderEntry } from "./launch/placeholderEntry.js";
 
 function printHelp(): void {
   console.log(
     [
+      "soda [--session NAME] [--state-dir DIR] [--allow-nested]   (open the terminal UI; starts soda serve in the background if needed)",
       "soda serve [--host H] [--port P] [--cert FILE] [--key FILE] [--origin ORIGIN]...",
       "          [--state-dir DIR] [--session NAME] [--scrollback N] [--shell PATH] [--worktree-dir DIR] [--pane-history]",
       "soda token reset [--state-dir DIR] [--session NAME]",
@@ -135,7 +138,17 @@ async function main(): Promise<void> {
     // 投げていたため、スタックトレースつきの終了コード 1 になっていた。D102 の実物の CLI の確認で発見）。
     // `--session` が無ければ `SODA_SESSION`（serve・token reset だけ。20260926-named-session-ui）。
     const parsed = applySessionEnv(parseArgs(process.argv.slice(2)), process.env);
-    if (parsed.command === "serve") {
+    if (parsed.command === "tui") {
+      // 引数なしの `soda`（20260927-cli-mode）。端末版（`@sodashitsu/tui`）が出来るまでは、繋げたことを表示して終わる仮の入口（03-tui-core で差し替える）。
+      process.exitCode = await runTuiCommand(parsed, placeholderEntry(consoleIo), consoleIo, {
+        env: process.env,
+        cwd: process.cwd(),
+        platform: process.platform,
+        execPath: process.execPath,
+        execArgv: process.execArgv,
+        mainPath: process.argv[1]!,
+      });
+    } else if (parsed.command === "serve") {
       await runServe(parsed.serve);
     } else if (parsed.command === "token-reset") {
       await runTokenReset(parsed.stateDir ?? defaultStateDir(), parsed.session, consoleIo, parsed.sessionSource);
