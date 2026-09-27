@@ -88,7 +88,10 @@ export function encodeKey(ev: { key: KeyInput; raw: string }, modes: PaneInputMo
     if (modes.applicationKeypadMode) return raw;
     return k.key === "Enter" ? "\r" : k.key;
   }
-  if (isExtendedKeyRaw(raw)) return legacyBytes(k) ?? raw;
+  // 従来の列に直せないもの（Ctrl+1・Ctrl+, 等）は、modifyOtherKeys の無い xterm と同じく修飾を落として送る（Alt は ESC 前置で残す）。
+  // 拡張の列のまま pane へ送らない（pane の側は解さず、ごみとして画面に出る）。
+  if (isExtendedKeyRaw(raw))
+    return legacyBytes(k) ?? legacyBytes({ ...k, ctrl: false, meta: false }) ?? "";
   return raw;
 }
 

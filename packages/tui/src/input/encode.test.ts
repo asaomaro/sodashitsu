@@ -189,3 +189,11 @@ describe("encodeKey（03 の点検の指摘）", () => {
     expect(encodeKey(keyEv("\x1b[97;4u"), normal)).toBe("\x1bA");
   });
 });
+
+describe("encodeKey（03 ラウンド 2 の指摘）", () => {
+  it("従来の列に直せない modifyOtherKeys・CSI u は修飾を落として送り（Alt は ESC 前置）、拡張の列のまま送らない", () => {
+    expect(encodeKey(keyEv("\x1b[27;5;49~"), normal)).toBe("1"); // Ctrl+1
+    expect(encodeKey(keyEv("\x1b[44;5u"), normal)).toBe(","); // Ctrl+,
+    expect(encodeKey(keyEv("\x1b[44;7u"), normal)).toBe("\x1b,"); // Ctrl+Alt+,
+  });
+});

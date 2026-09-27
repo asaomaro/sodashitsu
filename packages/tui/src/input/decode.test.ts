@@ -88,10 +88,11 @@ describe("InputDecoder（キー。AC6・AC8）", () => {
     const d = new InputDecoder();
     expect(d.feed("\x1b")).toEqual([]);
     expect(chords(d.flush())).toEqual([["esc", "\x1b"]]);
-    expect(d.feed("\x1b[")).toEqual([]);
+    expect(d.feed("\x1b[1")).toEqual([]);
     expect(chords(d.flush())).toEqual([
       ["esc", "\x1b"],
       ["[", "["],
+      ["1", "1"],
     ]);
     expect(decode("\x1b\x1b")).toEqual([]); // 続き（ESC ESC [ A 等）を時間切れまで待つ
   });
@@ -188,19 +189,28 @@ describe("InputDecoder（03 の点検の指摘）", () => {
     expect(chords(decode("\x1b\x1b[A"))).toEqual([["alt+up", "\x1b\x1b[A"]]);
   });
 
-  it("Alt+] / Alt+P / Alt+_ / Alt+^ は打鍵として届く（続きが無ければ時間切れで、終わりの無い続きも時間切れで打鍵に）", () => {
+  it("Alt+] / Alt+P / Alt+_ / Alt+^ は待たずに打鍵として届き、続く文字（Ctrl+G を含む）も消えない", () => {
     for (const c of ["]", "P", "_", "^"]) {
       const d = new InputDecoder();
-      expect(d.feed(`\x1b${c}`)).toEqual([]);
-      expect(chords(d.flush()).map((x) => x[1])).toEqual([`\x1b${c}`]);
+      expect(chords(d.feed(`\x1b${c}`)).map((x) => x[1])).toEqual([`\x1b${c}`]);
+      expect(d.waiting).toBe(false);
     }
-    const d = new InputDecoder();
-    expect(d.feed("\x1b]ab")).toEqual([]);
-    expect(chords(d.flush())).toEqual([
+    expect(chords(decode("\x1b]ab"))).toEqual([
       ["alt+]", "\x1b]"],
       ["a", "a"],
       ["b", "b"],
     ]);
+    // 読みが分かれた Alt+] と Ctrl+G、同じ読みの中の Alt+] Ctrl+G（数字の無い OSC は形が正しくない）。
+    expect(chords(decode("\x1b]", "\x07"))).toEqual([
+      ["alt+]", "\x1b]"],
+      ["ctrl+g", "\x07"],
+    ]);
+    expect(chords(decode("\x1b]\x07"))).toEqual([
+      ["alt+]", "\x1b]"],
+      ["ctrl+g", "\x07"],
+    ]);
+    // 同じ読みで完結しない OSC は打鍵として出す（待たない）。
+    expect(chords(decode("\x1b]11;x")).map((x) => x[1])).toEqual(["\x1b]", "1", "1", ";", "x"]);
   });
 
   it("修飾つきの SS3（ESC O 5 P・ESC O 1;5 P）とキーパッド（DECKPAM の ESC O p 等）", () => {
@@ -224,5 +234,76 @@ describe("InputDecoder（03 の点検の指摘）", () => {
   it("CSI u の Shift＋英字は大文字のキー", () => {
     const ev = decode("\x1b[97;2u")[0];
     expect(ev).toMatchObject({ kind: "key", key: { key: "A", shift: true } });
+  });
+});
+
+describe("InputDecoder（03 ラウンド 2 の指摘）", () => {
+  it("Esc の直後のマウス・フォーカス・貼り付け・応答は、Esc を単独で出してから事象をそのまま読む", () => {
+    const esc: [string | null, string] = ["esc", "\x1b"];
+    const mouse = decode("\x1b", "\x1b[<0;5;5M");
+    expect(chords(mouse)).toEqual([esc]);
+    expect(mouse[1]).toMatchObject({ kind: "mouse", action: "down", x: 4, y: 4 });
+    const focus = decode("\x1b", "\x1b[I");
+    expect(chords(focus)).toEqual([esc]);
+    expect(focus[1]).toEqual({ kind: "focus", focused: true });
+    const paste = decode("\x1b", "\x1b[200~hi\x02x\x1b[201~");
+    expect(chords(paste)).toEqual([esc]);
+    expect(paste[1]).toEqual({ kind: "paste", text: "hi\x02x" });
+    // 貼り付けの始まりが読みで割れても。
+    const d = new InputDecoder();
+    const split = [...d.feed("\x1b\x1b[20"), ...d.feed("0~ok\x1b[201~")];
+    expect(split).toEqual([
+      expect.objectContaining({ kind: "key", raw: "\x1b" }),
+      { kind: "paste", text: "ok" },
+    ]);
+    // キーの列は Alt＋キーにまとめる（ESC ESC O A = Alt+↑）。
+    expect(chords(decode("\x1b\x1bOA"))).toEqual([["alt+up", "\x1b\x1bOA"]]);
+  });
+
+  it("待ちを 150ms に延ばすのは ESC [ / ESC O より先まで届いてから（Alt+[ / Alt+O は短い待ちで確定）", () => {
+    const d = new InputDecoder();
+    d.feed("\x1b[");
+    expect(d.waitMs).toBe(25);
+    expect(chords(d.flush())).toEqual([["alt+[", "\x1b["]]); // Alt+[（xterm の列そのもの）
+    d.feed("\x1bO");
+    expect(d.waitMs).toBe(25);
+    expect(chords(d.flush())).toEqual([["alt+shift+o", "\x1bO"]]);
+    d.feed("\x1b[1");
+    expect(d.waitMs).toBe(150);
+    d.flush();
+    d.feed("\x1b[<");
+    expect(d.waitMs).toBe(150);
+    d.flush();
+    d.feed("\x1bO5");
+    expect(d.waitMs).toBe(150);
+  });
+
+  it("SGR マウスの拡張ボタン（128〜）は左ボタンにしない（捨てる）", () => {
+    expect(decode("\x1b[<128;3;3M\x1b[<129;3;3m")).toEqual([]);
+  });
+
+  it("X10 形式のマウス（CSI M ＋ 3 バイト）を読み、文字として流さない", () => {
+    expect(decode("\x1b[M !!", "\x1b[M#!!")).toEqual([
+      {
+        kind: "mouse",
+        action: "down",
+        button: 0,
+        x: 0,
+        y: 0,
+        mods: { shift: false, alt: false, ctrl: false, meta: false },
+      },
+      {
+        kind: "mouse",
+        action: "up",
+        button: 0,
+        x: 0,
+        y: 0,
+        mods: { shift: false, alt: false, ctrl: false, meta: false },
+      },
+    ]);
+    // 3 バイトが割れて届いても待つ。
+    const d = new InputDecoder();
+    expect(d.feed("\x1b[M ")).toEqual([]);
+    expect(d.feed("!!")).toEqual([expect.objectContaining({ kind: "mouse" })]);
   });
 });

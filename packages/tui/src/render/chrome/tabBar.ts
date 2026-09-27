@@ -34,16 +34,17 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabHit[
     x += 1;
   }
 
-  // 右端：接続の状態（最優先）→ 知らせ → session 名。
-  const status =
-    ctx.connection === "reconnecting"
+  // 右端：短い警告 → 接続の状態 → 知らせ → session 名。
+  const status = ctx.alert
+    ? ctx.alert
+    : ctx.connection === "reconnecting"
       ? "再接続中…"
       : ctx.connection === "connecting"
         ? "接続中…"
         : ctx.connection === "rejected"
           ? "接続できません"
           : (ctx.notice ?? (ctx.session ? `session: ${ctx.session}` : ""));
-  const statusColor = ctx.connection === "open" ? fg : theme.ui("--soda-warn-fg");
+  const statusColor = ctx.connection === "open" && !ctx.alert ? fg : theme.ui("--soda-warn-fg");
   let rightStart = end;
   if (status !== "") {
     const text = truncate(status, Math.max(0, Math.floor(rect.w / 2)));

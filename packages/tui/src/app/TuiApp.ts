@@ -32,6 +32,8 @@ export interface TuiAppOptions {
 
 /** 描画の最短の間隔（60fps。design「描画の予約は最短 16ms」）。 */
 export const RENDER_INTERVAL_MS = 16;
+/** 接続が開いていない間の打鍵の知らせ。 */
+export const DROPPED_NOTICE = "未接続のため入力を送れません";
 /** 初回の知らせを tab バーに出しておく時間（design「起動と終了」）。 */
 const NOTICE_MS = 10_000;
 
@@ -57,6 +59,8 @@ export class TuiApp {
   private renderTimer: ReturnType<typeof setTimeout> | null = null;
   private lastRenderAt = -Infinity;
   private notice: string | null = null;
+  private alert: string | null = null;
+  private alertTimer: ReturnType<typeof setTimeout> | null = null;
   /** 外側の端末にフォーカスがあるか（フォーカスの報告で知る。報告が来ない端末ではありとみなす。design「通知」）。 */
   protected outerFocused = true;
   /** 直近のフレームの当たり判定（04 のマウスが使う）。 */
@@ -97,6 +101,7 @@ export class TuiApp {
       paneModes: () => this.focusedPaneModes(),
       sendToPane: (bytes) => this.sendToFocusedPane(bytes),
       dispatch: (action) => this.dispatcher.dispatch(action),
+      dropped: () => this.inputDropped(),
     });
     this.keys.router.onModeChange(() => this.scheduleRender());
     this.dispatcher = new TuiDispatcher({
@@ -175,6 +180,18 @@ export class TuiApp {
     this.disposers.push(() => net.stop());
     this.scheduleRender();
     void net.start();
+  }
+
+  private showAlert(text: string, ms = 2000): void {
+    this.alert = text;
+    this.scheduleRender();
+    if (this.alertTimer !== null) clearTimeout(this.alertTimer);
+    this.alertTimer = setTimeout(() => {
+      this.alertTimer = null;
+      this.alert = null;
+      this.scheduleRender();
+    }, ms);
+    this.alertTimer.unref?.();
   }
 
   private showNotice(text: string | null, ms = NOTICE_MS): void {
@@ -275,6 +292,7 @@ export class TuiApp {
       case "paste": {
         const modes = this.focusedPaneModes();
         if (modes) this.sendToFocusedPane(encodePaste(ev.text, modes));
+        else this.inputDropped();
         return;
       }
       case "focus": {
@@ -306,6 +324,11 @@ export class TuiApp {
     if (!box || box.paneId === this.model.focusedPaneId) return;
     this.model.focusPane(box.paneId);
     this.net?.conn.request("pane.focus", { paneId: box.paneId }).catch(() => undefined);
+  }
+
+  /** 送り先が無くて打鍵を捨てた。接続が開いていないなら短く知らせる（黙って捨てない）。 */
+  private inputDropped(): void {
+    if (this.connectionState !== "open") this.showAlert(DROPPED_NOTICE);
   }
 
   private focusedPaneModes(): PaneInputModes | null {
@@ -396,6 +419,7 @@ export class TuiApp {
       mode: this.keyMode(),
       connection: this.connectionState,
       notice: this.notice,
+      alert: this.alert,
       session: this.target.session,
     };
     const result = this.renderer.render(layout, ctx, this.panes);

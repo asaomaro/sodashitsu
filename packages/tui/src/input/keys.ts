@@ -7,6 +7,8 @@ export interface KeyTarget {
   paneModes(): PaneInputModes | null;
   sendToPane(bytes: string): void;
   dispatch(action: Action): void;
+  /** 送り先が無くて捨てた打鍵（未接続の知らせを出す）。 */
+  dropped?(): void;
 }
 
 /**
@@ -45,11 +47,17 @@ export class TuiKeys {
     switch (decision.kind) {
       case "pass": {
         const modes = this.target.paneModes();
-        if (modes) this.target.sendToPane(encodeKey(ev, modes));
+        if (!modes) {
+          this.target.dropped?.();
+          return;
+        }
+        const bytes = encodeKey(ev, modes);
+        if (bytes !== "") this.target.sendToPane(bytes);
         return;
       }
       case "send":
         if (this.target.paneModes()) this.target.sendToPane(decision.bytes);
+        else this.target.dropped?.();
         return;
       case "action":
         this.target.dispatch(decision.action);

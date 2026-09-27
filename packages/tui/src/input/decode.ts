@@ -26,8 +26,6 @@ export type InputEvent =
 export const ESC_TIMEOUT_MS = 25;
 /** CSI・SS3（マウスの報告を含む）の途中まで届いた列を待つ時間（遅い回線で列が割れても崩さない。herdr のマウス中の 150ms と同じ）。 */
 export const SEQUENCE_TIMEOUT_MS = 150;
-/** OSC・DCS 等の終わりを待つ最大の長さ（これを超えたら打鍵として出す。利用者の打鍵を捨て続けない）。 */
-const MAX_STRING_HOLD = 4096;
 
 const PASTE_START = "\x1b[200~";
 const PASTE_END = "\x1b[201~";
@@ -147,22 +145,22 @@ type Parsed = { event: InputEvent | null; length: number } | "incomplete";
 /**
  * 標準入力の列を事象に分解する（20260927-cli-mode の design「input/decode.ts」。状態を持つ：途中で切れた列・ブラケットペーストの本文を持ち越す）。
  * キー（C0・ESC 前置の Alt・CSI・SS3・modifyOtherKeys の `CSI 27`・CSI u）、SGR マウス（1006）、ブラケットペースト、フォーカス（CSI I/O）。
- * 外側の端末の問い合わせの応答（DA・DCS・OSC 等）は入力に混ぜず捨てる。ESC 単独は `ESC_TIMEOUT_MS` 待って `flush()` で確定する。
+ * 外側の端末の応答（CSI の DA・DECRPM 等と、同じ読みで完全に届いた OSC・DCS）は入力に混ぜず捨てる。ESC 単独は `ESC_TIMEOUT_MS` 待って `flush()` で確定する。
  */
 export class InputDecoder {
   private readonly utf8 = new TextDecoder();
   private pending = "";
   private paste: string | null = null;
 
-  /** 確定まで待つ時間（CSI・SS3 の途中なら長め）。 */
+  /**
+   * 確定まで待つ時間。CSI・SS3 が `ESC [` / `ESC O` より先まで届いている（引数・中間のバイトか、`ESC [<`・`ESC [M` まで来た）ときだけ長め
+   * （割れたマウスの列を崩さない）。`ESC [` / `ESC O` だけなら短い待ちで Alt+[ / Alt+O として確定する（xterm と同じ）。
+   * **残るあいまいさ**：Alt+[ / Alt+O の直後 25ms 以内に次の文字を打つと、列として読まれる（xterm 自身も区別できない）。
+   */
   get waitMs(): number {
-    const s = this.pending;
-    const head = s.startsWith("\x1b\x1b")
-      ? s.slice(2, 3)
-      : s.startsWith("\x1b")
-        ? s.slice(1, 2)
-        : "";
-    return head === "[" || head === "O" ? SEQUENCE_TIMEOUT_MS : ESC_TIMEOUT_MS;
+    const core = this.pending.startsWith("\x1b\x1b") ? this.pending.slice(1) : this.pending;
+    const sequence = core.startsWith("\x1b[") || core.startsWith("\x1bO");
+    return sequence && core.length > 2 ? SEQUENCE_TIMEOUT_MS : ESC_TIMEOUT_MS;
   }
 
   /** 確定を待っている列があるか（呼び出し側が `ESC_TIMEOUT_MS` 後に `flush()` する）。ペーストの途中は待たない（終わりまで持ち越す）。 */
@@ -222,6 +220,13 @@ export class InputDecoder {
         : "incomplete";
     }
     const next = s[1]!;
+    // `ESC [` / `ESC O` だけで時間切れ：Alt+[ / Alt+O（xterm が送る列そのもの）。
+    if ((next === "[" || next === "O") && s.length === 2 && force) {
+      return {
+        event: { kind: "key", key: singleKey(next, { ...NO_MODS, alt: true }), raw: `\x1b${next}` },
+        length: 2,
+      };
+    }
     if (next === "[") {
       const r = this.parseCsi(s);
       if (r !== "incomplete") return r;
@@ -229,15 +234,10 @@ export class InputDecoder {
     }
     if (next === "O") return this.parseSs3(s, force);
     if (next === "]" || next === "P" || next === "_" || next === "^") {
-      // OSC・DCS・APC・PM（外側の端末の応答）か、Alt+] 等の打鍵。続きが同じ読みで届き、終わり（BEL か ST）があるときだけ応答として捨てる。
-      // 続きが無い・終わりが来ないまま時間切れ（か長すぎる）なら打鍵として出す——利用者の打鍵を捨てない。
-      if (s.length > 2) {
-        const bel = next === "]" ? s.indexOf("\x07", 2) : -1;
-        const st = s.indexOf("\x1b\\", 2);
-        const ends = [bel >= 0 ? bel + 1 : -1, st >= 0 ? st + 2 : -1].filter((n) => n > 0);
-        if (ends.length > 0) return { event: null, length: Math.min(...ends) };
-      }
-      if (!force && s.length <= MAX_STRING_HOLD) return "incomplete";
+      // 端末版は外側の端末に問い合わせないので、ESC ] 等はふつう Alt+] 等の打鍵。完全で形の正しい OSC・DCS 等が同じ読みの中に
+      // 届いたときだけ（外側の端末が自分から送るもの）捨てる。待たない——続く BEL（Ctrl+G）等の打鍵を消さない。
+      const len = stringSequenceLength(s, next);
+      if (len !== null) return { event: null, length: len };
       return {
         event: { kind: "key", key: singleKey(next, { ...NO_MODS, alt: true }), raw: `\x1b${next}` },
         length: 2,
@@ -245,18 +245,21 @@ export class InputDecoder {
     }
     if (next === "\x1b") {
       // ESC ESC：Alt＋（続きのキー）。xterm（metaSendsEscape）では Alt+Esc・Ctrl+Alt+[ が ESC ESC になる。ESC ESC [ A 等は Alt＋矢印。
+      // **あいまいさ（残す）**：Esc を 2 回すばやく押す（同じ読みか 25ms 以内）と Ctrl+Alt+[ と区別できない（docs/tui-parity.md に書く）。
       const third = s[2];
+      const rest = s.slice(1);
+      // 続きがキー以外（貼り付けの始まり・マウス・フォーカス・応答）なら、前の ESC は単独の Escape、続きはそのまま読む。
+      if (rest.startsWith(PASTE_START)) return this.escapeThenRest();
+      if (PASTE_START.startsWith(rest) && !force) return "incomplete";
       if (third === "[" || third === "O") {
-        const inner = this.parseOne(s.slice(1), force);
+        const inner = this.parseOne(rest, force);
         if (inner === "incomplete") return "incomplete";
-        if (inner.event?.kind === "key") {
-          const key = { ...inner.event.key, alt: true };
-          return {
-            event: { kind: "key", key, raw: `\x1b${inner.event.raw}` },
-            length: inner.length + 1,
-          };
-        }
-        return { event: inner.event, length: inner.length + 1 };
+        if (inner.event === null || inner.event.kind !== "key") return this.escapeThenRest();
+        const key = { ...inner.event.key, alt: true };
+        return {
+          event: { kind: "key", key, raw: `\x1b${inner.event.raw}` },
+          length: inner.length + 1,
+        };
       }
       if (third === undefined && !force) return "incomplete";
       return {
@@ -337,6 +340,8 @@ export class InputDecoder {
         .map((n) => Number.parseInt(n, 10));
       if (b === undefined || x === undefined || y === undefined || [b, x, y].some(Number.isNaN))
         return { event: null, length };
+      // 拡張ボタン（128〜。戻る・進む等）は扱わない（左ボタンと取り違えない）。
+      if ((b & 128) !== 0) return { event: null, length };
       const mods: Mods = {
         shift: (b & 4) !== 0,
         alt: (b & 8) !== 0,
@@ -357,6 +362,33 @@ export class InputDecoder {
           mods,
         },
         length,
+      };
+    }
+    // X10 形式のマウス（`CSI M` ＋ 3 バイト。1006 を解さない端末）。
+    if (body === "" && final === "M") {
+      if (s.length < length + 3) return "incomplete";
+      const [cb, cx, cy] = [...s.slice(length, length + 3)].map((c) => c.codePointAt(0)! - 32);
+      const b = cb!;
+      const button = b & 3;
+      const wheel = (b & 64) !== 0;
+      const motion = (b & 32) !== 0;
+      const mods: Mods = {
+        shift: (b & 4) !== 0,
+        alt: (b & 8) !== 0,
+        ctrl: (b & 16) !== 0,
+        meta: false,
+      };
+      const action = wheel ? "wheel" : motion ? "move" : button === 3 ? "up" : "down";
+      return {
+        event: {
+          kind: "mouse",
+          action,
+          button: wheel ? 64 + button : button === 3 ? 0 : button,
+          x: cx! - 1,
+          y: cy! - 1,
+          mods,
+        },
+        length: length + 3,
       };
     }
     // 応答（DA `CSI ? … c`・kitty のフラグ `CSI ? … u`・DECRPM `CSI ? … $ y` 等）は入力に混ぜない。
@@ -399,4 +431,22 @@ export class InputDecoder {
     }
     return unknown();
   }
+}
+
+/**
+ * 完全で形の正しい OSC（`ESC ] 数字 … BEL|ST`）・DCS/APC/PM（`ESC P|_|^ 中身 ST`）の長さ。途中で C0（BEL 以外）が来る・終わりが無い・中身が空なら null。
+ */
+function stringSequenceLength(s: string, kind: string): number | null {
+  let i = 2;
+  if (kind === "]") {
+    while (i < s.length && s[i]! >= "0" && s[i]! <= "9") i++;
+    if (i === 2) return null;
+  }
+  for (let j = i; j < s.length; j++) {
+    const c = s.charCodeAt(j);
+    if (c === 0x07 && kind === "]") return j + 1;
+    if (c === 0x1b) return s[j + 1] === "\\" && j > 2 ? j + 2 : null;
+    if (c < 0x20) return null;
+  }
+  return null;
 }

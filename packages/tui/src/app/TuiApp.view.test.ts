@@ -127,4 +127,52 @@ describe("TuiApp：大きさの申告と描画の予約（AC2・AC11）", () => 
     app.finish(0);
     await running;
   });
+
+  it("確定の待ちは decoder.waitMs：ESC 単独は 25ms、途中まで届いた CSI は 150ms 待ってから送る（偽の時計）", async () => {
+    const { io, ws, app, running } = await started();
+    await vi.waitFor(() => expect(ws.requests("client.view")).toHaveLength(1));
+    const sent = () =>
+      ws.sent
+        .filter((m): m is Uint8Array => m instanceof Uint8Array)
+        .map((m) => new TextDecoder().decode((decodeFrame(m) as { bytes: Uint8Array }).bytes))
+        .join("");
+    vi.useFakeTimers();
+    try {
+      io.type("\x1b");
+      vi.advanceTimersByTime(24);
+      expect(sent()).toBe("");
+      vi.advanceTimersByTime(2);
+      expect(sent()).toBe("\x1b");
+      io.type("\x1b[1;5");
+      vi.advanceTimersByTime(100);
+      expect(sent()).toBe("\x1b"); // まだ待っている（25ms では確定しない）
+      io.type("A"); // 続きが届けば 1 つのキー（Ctrl+↑）
+      expect(sent()).toBe("\x1b\x1b[1;5A");
+      io.type("\x1b[1;");
+      vi.advanceTimersByTime(151);
+      expect(sent()).toBe("\x1b\x1b[1;5A\x1b[1;"); // 時間切れで Esc と残りの文字
+    } finally {
+      vi.useRealTimers();
+    }
+    app.finish(0);
+    await running;
+  });
+
+  it("接続が開いていない間の打鍵は捨て、tab バーに「未接続のため入力を送れません」と知らせる", async () => {
+    const { io, ws, app, running } = await started(100, 30);
+    await vi.waitFor(() => expect(ws.requests("client.view")).toHaveLength(1));
+    ws.close(1006);
+    await vi.waitFor(() => expect(app.connectionState).toBe("reconnecting"));
+    const before = ws.sent.length;
+    io.type("x");
+    expect(ws.sent.length).toBe(before);
+    const outer = new OuterTerminal(100, 30);
+    cleanup.push(() => outer.dispose());
+    await vi.waitFor(async () => {
+      await outer.write(io.output());
+      expect(outer.line(0)).toContain("未接続のため入力を送れません");
+    });
+    app.finish(0);
+    await running;
+  });
 });
