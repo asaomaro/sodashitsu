@@ -5,14 +5,18 @@ import { errorCodeOf } from "@sodashitsu/client-core";
  * web の設定の置き場所をサーバへ（20260927-cli-mode の design「設定」・decisions D3）。`main.ts` は読み込むと起動するので単体テストできない——判断をここに閉じ込める
  * （`MachineWiring` と同じ流儀）。localStorage（`soda.prefs.v1`）は起動時の表示用のキャッシュに下げ、読み書きの出入口は `store/view.ts` の `readPrefs`/`writePrefs` のまま。
  *
- * - 画面の接続の hello が通るたび（ローカルを向いているときだけ）`prefs.get`。サーバの `rev` が 0（一度も保存していない）で localStorage に共有の項目があれば、
- *   それを `prefs.set` で送る（初回の移行。送った値で手元を上書きしない）。そうでなければ手元の共有の項目をサーバの値で置き換え、各ストアへ当てる。
- * - 以後の変更（`writePrefs`）は共有の項目だけ `prefs.set`。繋がっていない・ほかのマシンを向いている間の変更は溜めて、次に繋がったときに送る（サーバの値より後の操作が勝つ）。
- * - `prefs.changed` は、最後に当てた rev より新しければ**送った本人のものも含めて**当てる（サーバの全体が正）。ただし、送ったがまだ返事の来ていない
- *   手元の変更（送信中）と溜めた変更は上に重ねる——ほかのクライアントの変更が先に届いても、自分の新しい値を古い値で戻さない（点検の must）。
- * - 送った変更が失敗したら、その項目の最後の書き込みのときだけ溜めに戻す（後の書き込みが成功した項目は戻さない——再接続で古い値を蘇らせない）。
- * - 初回の移行は、送った結果（ほかのクライアントが先に保存した項目を含む全体）を当てる。
- * - 端末ごとの項目（`sidebarWidth`・`sidebarCollapsed`）は送らない・置き換えない。
+ * 2 度の点検で競合の不具合が出たので、状態を少なく・規則を 1 つにした（ラウンド 2 の作り直し）:
+ * - 手元の値は 3 つの置き場だけ。`pending`（まだ送っていない・送ったが失敗した変更。項目ごとに最後の値）、`inflight`（送っている 1 回分。**同時に 1 回だけ**）、
+ *   `localOnly`（サーバが大きすぎると断った値。この画面の中だけで効かせる）。
+ * - サーバの全体（`prefs.get`・`prefs.changed`・`prefs.set` の返事）は、最後に当てた rev より新しければ**誰の変更でも**当てる。当てる値は
+ *   `サーバ ⊕ localOnly ⊕ inflight ⊕ pending`（まだ認められていない手元の値を上に重ねる）。受け取る前に届いた `prefs.changed` は最も新しいものを持っておき、受け取った後で当てる。
+ * - 送るのは `pending` を丸ごと 1 回分として（直列）。成功したら `inflight` を消して、溜まっていれば続けて送る。失敗したら `inflight` を `pending` へ戻す
+ *   （同じ項目のもっと新しい値が `pending` にあればそちらを残す）。次に繋がったとき・次に変更したときに送り直す。
+ * - 初回の移行: サーバの `rev` が 0 なら、localStorage の共有の項目を `pending` に入れてから送る（移行の種〔seed〕の印つき）。後でサーバが rev>0 になっていたら
+ *   （移行が失敗している間にほかのクライアントが先に移した）、利用者が書き直していない種は捨てる——rev 0 のときだけ移す（decisions D3）。
+ * - 大きすぎる（`invalid_params`）: 2 項目以上の 1 回分なら 1 項目ずつに分けて送り直し、1 項目でも断られたらその項目だけ `localOnly` にして知らせる（ほかの項目の同期は続く）。
+ *   その項目を次に書き直したら、もう一度送ってみる。
+ * - 端末ごとの項目（`sidebarWidth`・`sidebarCollapsed`）は送らない・置き換えない（`sharedOf`）。
  */
 export interface PrefsSyncDeps {
   getPrefs(): Promise<PrefsResult>;
@@ -31,28 +35,28 @@ export interface PrefsSyncDeps {
   toast(message: string): void;
 }
 
-/** 手元の 1 項目の書き込み（`seq` は書いた順。同じ項目の後の書き込みほど大きい）。 */
-interface LocalWrite {
-  seq: number;
+interface PendingValue {
   value: unknown;
+  /** 初回の移行で localStorage から入れた値（利用者が書き直していない）。 */
+  seed: boolean;
 }
 
 export class PrefsSync {
-  /** サーバの値を受け取り済みで、変更をすぐ送れるか。 */
+  /** この接続でサーバの値を受け取り済みで、送れるか。 */
   private synced = false;
   /** 最後に当てたサーバの rev。 */
   private rev = 0;
-  /** 書いた順の番号と、項目ごとの最後の書き込みの番号。 */
-  private seq = 0;
-  private readonly latest = new Map<string, number>();
-  /** 送ったが返事の来ていない変更（項目ごと。最後に送ったもの）。 */
-  private readonly inflight = new Map<string, LocalWrite>();
-  /** 送れていない変更（繋がっていない・ほかのマシンを向いている間・送信の失敗。項目ごとに最後の値だけ）。 */
-  private readonly pending = new Map<string, LocalWrite>();
-  /** 受け取る前（`prefs.get` の往復中）に届いた `prefs.changed` の最も新しいもの。受け取った後に rev が新しければ当てる。 */
+  private readonly pending = new Map<string, PendingValue>();
+  private inflight: Map<string, PendingValue> | null = null;
+  private readonly localOnly = new Map<string, unknown>();
+  /** 大きすぎると断られた 1 回分の項目。1 項目ずつ送り直す。 */
+  private readonly solo = new Set<string>();
+  /** 受け取る前（`prefs.get` の往復中）に届いた `prefs.changed` の最も新しいもの。 */
   private buffered: PrefsChangedEvent["data"] | undefined;
-  /** 接続ごとの印（古い接続の `prefs.get` の応答を捨てる）。 */
+  /** 接続ごとの印（古い接続の `prefs.get` の応答を捨てる・送信の失敗が接続の切り替えによるものかを見分ける）。 */
   private generation = 0;
+  /** 大きすぎるの知らせを出したか（同じ値で繰り返し出さない。書き直したら下ろす）。 */
+  private tooLargeShown = false;
 
   constructor(private readonly deps: PrefsSyncDeps) {}
 
@@ -64,24 +68,23 @@ export class PrefsSync {
     if (!this.deps.isLocal()) return;
     void this.deps
       .getPrefs()
-      .then(async (r) => {
+      .then((r) => {
         if (gen !== this.generation) return;
-        const local = this.deps.sharedOf(this.deps.readLocal());
-        if (r.rev === 0 && Object.keys(local).length > 0) {
-          // 初回の移行：このブラウザの値（と溜めた変更）をサーバへ。返ってきた全体（ほかのクライアントが先に保存した項目を含む）を当てる。
-          const writes = this.takePending();
-          const saved = await this.deps.setPrefs({ ...local, ...valuesOf(writes) }, 0);
-          if (gen !== this.generation) return;
-          this.synced = true;
-          this.accept(saved.prefs, saved.rev);
-          this.flushBuffered();
-          return;
+        if (r.rev === 0) {
+          // 初回の移行：まだ送っていない手元の値（利用者の変更）を優先し、それ以外の共有の項目を種として入れる。
+          for (const [k, value] of Object.entries(this.deps.sharedOf(this.deps.readLocal()))) {
+            if (!this.pending.has(k) && !this.localOnly.has(k))
+              this.pending.set(k, { value, seed: true });
+          }
+        } else {
+          for (const [k, p] of [...this.pending]) if (p.seed) this.pending.delete(k);
         }
         this.synced = true;
         this.accept(r.prefs, r.rev);
-        this.flushBuffered();
-        const writes = this.takePending();
-        if (writes.size > 0) this.send(writes);
+        const b = this.buffered;
+        this.buffered = undefined;
+        if (b !== undefined && b.rev > this.rev) this.accept(b.prefs, b.rev);
+        this.flush();
       })
       .catch(() => {
         // 受け取れなかった（切れた・古いサーバで方式が無い）。手元の値のまま動き、次の接続でやり直す。
@@ -98,18 +101,14 @@ export class PrefsSync {
   /** `writePrefs` の書き込み（`onPrefsWritten`）。 */
   onWritten(patch: Record<string, unknown>): void {
     const shared = this.deps.sharedOf(patch);
-    const writes = new Map<string, LocalWrite>();
-    for (const [k, value] of Object.entries(shared)) {
-      const w = { seq: ++this.seq, value };
-      this.latest.set(k, w.seq);
-      writes.set(k, w);
+    const keys = Object.keys(shared);
+    if (keys.length === 0) return;
+    for (const k of keys) {
+      this.localOnly.delete(k); // 書き直した（大きすぎた値ではなくなったかもしれない）。もう一度送ってみる
+      this.pending.set(k, { value: shared[k], seed: false });
     }
-    if (writes.size === 0) return;
-    if (!this.synced) {
-      for (const [k, w] of writes) this.pending.set(k, w);
-      return;
-    }
-    this.send(writes);
+    this.tooLargeShown = false;
+    this.flush();
   }
 
   /** `prefs.changed`（画面の接続に届いたもの）。 */
@@ -118,68 +117,68 @@ export class PrefsSync {
       if (this.buffered === undefined || data.rev > this.buffered.rev) this.buffered = data;
       return;
     }
-    if (data.rev <= this.rev) return;
-    this.accept(data.prefs, data.rev);
+    if (data.rev > this.rev) this.accept(data.prefs, data.rev);
   }
 
-  /** サーバの全体を受け取り、送信中・溜めた手元の変更を上に重ねて当てる。 */
+  /** サーバの全体を受け取り、まだ認められていない手元の値を上に重ねて当てる。 */
   private accept(prefs: Record<string, unknown>, rev: number): void {
     this.rev = rev;
-    const overlay = { ...prefs, ...valuesOf(this.inflight), ...valuesOf(this.pending) };
+    const overlay: Record<string, unknown> = { ...prefs };
+    for (const [k, v] of this.localOnly) overlay[k] = v;
+    for (const [k, p] of this.inflight ?? []) overlay[k] = p.value;
+    for (const [k, p] of this.pending) overlay[k] = p.value;
     this.deps.applyToStores(this.deps.replaceShared(overlay));
   }
 
-  private flushBuffered(): void {
-    const b = this.buffered;
-    this.buffered = undefined;
-    if (b !== undefined && b.rev > this.rev) this.accept(b.prefs, b.rev);
-  }
-
-  private takePending(): Map<string, LocalWrite> {
-    const writes = new Map(this.pending);
-    this.pending.clear();
-    return writes;
-  }
-
-  private send(writes: Map<string, LocalWrite>): void {
-    for (const [k, w] of writes) this.inflight.set(k, w);
+  /** 溜めた変更を 1 回分送る（同時に 1 回だけ）。 */
+  private flush(): void {
+    if (!this.synced || this.inflight !== null || this.pending.size === 0) return;
+    const batch = new Map<string, PendingValue>();
+    const soloKey = [...this.solo].find((k) => this.pending.has(k));
+    if (soloKey !== undefined) {
+      batch.set(soloKey, this.pending.get(soloKey)!);
+      this.pending.delete(soloKey);
+      this.solo.delete(soloKey);
+    } else {
+      for (const [k, p] of this.pending) batch.set(k, p);
+      this.pending.clear();
+    }
+    this.inflight = batch;
     const gen = this.generation;
+    const values: Record<string, unknown> = {};
+    for (const [k, p] of batch) values[k] = p.value;
     void this.deps
-      .setPrefs(valuesOf(writes), this.rev)
+      .setPrefs(values, this.rev)
       .then((r) => {
-        this.settle(writes, true);
-        // 変更の知らせ（`prefs.changed`）は返事より先に届くので、ふつうは当て済み。届かなかった（別の接続に替わった等）ときだけ当てる。
-        if (gen === this.generation && this.synced && r.rev > this.rev) this.accept(r.prefs, r.rev);
+        this.inflight = null;
+        // 変更の知らせ（`prefs.changed`）は返事より先に届くので、ふつうは当て済み。届かなかったときだけ当てる。
+        if (this.synced && gen === this.generation && r.rev > this.rev) this.accept(r.prefs, r.rev);
+        this.flush();
       })
       .catch((err: unknown) => {
+        this.inflight = null;
         if (errorCodeOf(err) === "invalid_params") {
-          this.settle(writes, true); // 送り直しても通らない。手元（この画面）では効いたまま
-          this.deps.toast(
-            "設定が大きすぎるため、サーバに保存できませんでした（この画面の中だけで効きます）。",
-          );
+          if (batch.size > 1) {
+            // どの項目が大きすぎたか分からない。1 項目ずつ送り直す。
+            for (const [k, p] of batch) {
+              if (!this.pending.has(k)) this.pending.set(k, p);
+              this.solo.add(k);
+            }
+          } else {
+            for (const [k, p] of batch) if (!this.pending.has(k)) this.localOnly.set(k, p.value);
+            if (!this.tooLargeShown) {
+              this.tooLargeShown = true;
+              this.deps.toast(
+                "設定が大きすぎるため、サーバに保存できませんでした（この画面の中だけで効きます）。",
+              );
+            }
+          }
+          this.flush();
           return;
         }
-        // 切れた等。次に繋がったときに送る。ただし**その項目の最後の書き込みだけ**（後の書き込みがあれば、それが送信中か溜めにある）。
-        this.settle(writes, false);
+        // 切れた等。戻して、次に繋がったとき・次に変更したときに送り直す（同じ項目のもっと新しい値が溜まっていればそちらを残す）。
+        for (const [k, p] of batch) if (!this.pending.has(k)) this.pending.set(k, p);
+        if (gen !== this.generation) this.flush(); // 送った後に接続が替わった（新しい接続が受け取り済みなら、そこで送る）
       });
   }
-
-  /** 送った変更の後始末。`ok` なら溜めから古い値を消す。失敗なら、最後の書き込みの項目だけ溜めへ戻す。 */
-  private settle(writes: Map<string, LocalWrite>, ok: boolean): void {
-    for (const [k, w] of writes) {
-      if (this.inflight.get(k)?.seq === w.seq) this.inflight.delete(k);
-      if (ok) {
-        const p = this.pending.get(k);
-        if (p !== undefined && p.seq < w.seq) this.pending.delete(k);
-      } else if (this.latest.get(k) === w.seq && !this.pending.has(k)) {
-        this.pending.set(k, w);
-      }
-    }
-  }
-}
-
-function valuesOf(writes: ReadonlyMap<string, LocalWrite>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, w] of writes) out[k] = w.value;
-  return out;
 }

@@ -38,7 +38,8 @@ function setup(
   server: { prefs: SharedPrefs; rev: number },
   opts: {
     local?: () => boolean;
-    failSet?: () => string | undefined;
+    /** 返すと、その code で prefs.set を失敗させる（送った patch を見て決められる）。 */
+    failSet?: (patch: Record<string, unknown>) => string | undefined;
     /** true なら prefs.set の返事を `release()` まで待たせる（送信中の状態を作る）。 */
     hold?: boolean;
   } = {},
@@ -54,7 +55,7 @@ function setup(
     getPrefs,
     setPrefs: async (patch, baseRev) => {
       if (opts.hold === true) await new Promise<void>((r) => held.push(r));
-      const fail = opts.failSet?.();
+      const fail = opts.failSet?.(patch);
       if (fail !== undefined) throw Object.assign(new Error(`${fail}: x`), { code: fail });
       sets.push({ patch, baseRev });
       server.prefs = { ...server.prefs, ...patch };
@@ -312,5 +313,227 @@ describe("PrefsSync（変更の送信・prefs.changed の反映）", () => {
     await flush();
     expect(toasts).toHaveLength(1);
     expect(toasts[0]).toContain("大きすぎる");
+  });
+});
+
+// ラウンド 2 の点検の筋書き（scratchpad/check-02T6r2 の S1〜S4）と、競合の守りごとの回帰テスト。
+describe("PrefsSync（移行・失敗・大きすぎるの競合）", () => {
+  it("S1: 移行の送信の返事を待つ間の変更も、続けて送る", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: "nord" }));
+    const server = { prefs: {} as SharedPrefs, rev: 0 };
+    const { sync, sets, release } = setup(server, { hold: true });
+    sync.onOpened();
+    await flush();
+    useSettingsStore(pinia).setStatusSymbols(false);
+    await release();
+    await release();
+    expect(sets.map((x) => x.patch)).toEqual([{ theme: "nord" }, { statusSymbols: false }]);
+    expect(server.prefs).toMatchObject({ theme: "nord", statusSymbols: false });
+  });
+
+  it("S2: 移行の送信が失敗しても、溜めた変更を捨てない。その間にほかのクライアントが移したら、利用者の変更だけ残して種は捨てる", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: "nord" }));
+    const state: { fail?: string } = {};
+    const server = { prefs: {} as SharedPrefs, rev: 0 };
+    const { sync, sets } = setup(server, { failSet: () => state.fail });
+    useSettingsStore(pinia).setStatusSymbols(false); // 繋がる前の変更
+    state.fail = "internal";
+    sync.onOpened();
+    await flush(); // 移行の送信が失敗
+    delete state.fail;
+    sync.onClosed();
+    server.prefs = { theme: "dracula", statusSymbols: true };
+    server.rev = 1; // ほかのクライアントが先に移した
+    sync.onOpened();
+    await flush();
+    expect(sets.map((x) => x.patch)).toEqual([{ statusSymbols: false }]);
+    expect(useSettingsStore(pinia).statusSymbols).toBe(false);
+    expect(useSettingsStore(pinia).theme).toBe("dracula");
+  });
+
+  it("S3: 大きすぎると断られた値は、この画面では効いたまま（ほかのクライアントの changed で戻さない）。知らせは 1 回", async () => {
+    const state: { fail?: string } = {};
+    const { sync, toasts } = setup({ prefs: {}, rev: 1 }, { failSet: () => state.fail });
+    sync.onOpened();
+    await flush();
+    state.fail = "invalid_params";
+    useSettingsStore(pinia).setStatusSymbols(false);
+    await flush();
+    sync.onChanged({ prefs: { theme: "nord" }, rev: 2, byClientId: "other" });
+    expect(useSettingsStore(pinia).statusSymbols).toBe(false);
+    expect(useSettingsStore(pinia).theme).toBe("nord");
+    expect(toasts).toHaveLength(1);
+  });
+
+  it("S4: 移行が大きすぎると断られても、1 項目ずつ送り直して同期を続け、ほかのクライアントの changed も当てる", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: "nord", statusSymbols: false }));
+    const server = { prefs: {} as SharedPrefs, rev: 0 };
+    let calls = 0;
+    const { sync, sets } = setup(server, {
+      failSet: () => (++calls === 1 ? "invalid_params" : undefined),
+    });
+    sync.onOpened();
+    await flush();
+    await flush();
+    expect(sets.map((x) => x.patch)).toEqual([{ theme: "nord" }, { statusSymbols: false }]);
+    sync.onChanged({
+      prefs: { theme: "dracula", statusSymbols: false },
+      rev: 9,
+      byClientId: "other",
+    });
+    expect(useSettingsStore(pinia).theme).toBe("dracula");
+  });
+
+  it("1 項目だけ大きすぎるなら、その項目だけ手元に残して、ほかの項目は送る。書き直せばもう一度送る", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: "nord", statusSymbols: false }));
+    const server = { prefs: {} as SharedPrefs, rev: 0 };
+    const state = { rejectTheme: true };
+    // 偽のサーバ：theme を含む送信を大きすぎるとして断る
+    const { sync, sets, toasts } = setup(server, {
+      failSet: (p) => (state.rejectTheme && "theme" in p ? "invalid_params" : undefined),
+    });
+    sync.onOpened();
+    await flush();
+    await flush();
+    expect(sets.map((x) => x.patch)).toEqual([{ statusSymbols: false }]);
+    expect(toasts).toHaveLength(1);
+    expect(useSettingsStore(pinia).theme).toBe("nord");
+    state.rejectTheme = false;
+    useSettingsStore(pinia).setTheme("tokyo-night");
+    await flush();
+    expect(sets.at(-1)?.patch).toMatchObject({ theme: "tokyo-night" });
+    // 書き直して保存できた後は、この画面だけの値（前の大きすぎた値）を重ねない——後のほかのクライアントの変更が当たる。
+    sync.onChanged({
+      prefs: { theme: "dracula", statusSymbols: false },
+      rev: 99,
+      byClientId: "other",
+    });
+    expect(useSettingsStore(pinia).theme).toBe("dracula");
+  });
+
+  it("送信は同時に 1 回だけ。送っている間の変更は、返事の後にまとめて送る", async () => {
+    const server = { prefs: {} as SharedPrefs, rev: 1 };
+    const { sync, sets, release } = setup(server, { hold: true });
+    sync.onOpened();
+    await flush();
+    const settings = useSettingsStore(pinia);
+    settings.setStatusSymbols(false);
+    await flush();
+    settings.setPaneGaps(false);
+    settings.setPaneOuterBorders(true);
+    await flush();
+    expect(sets).toEqual([]); // まだ 1 回目の返事を待っている
+    await release();
+    expect(sets.map((x) => x.patch)).toEqual([{ statusSymbols: false }]);
+    await release();
+    expect(sets.map((x) => x.patch)).toEqual([
+      { statusSymbols: false },
+      { paneGaps: false, paneOuterBorders: true },
+    ]);
+  });
+
+  it("受け取る前に届いた changed は、受け取った後で rev が新しければ当てる", async () => {
+    const server = { prefs: { theme: "nord" } as SharedPrefs, rev: 2 };
+    const { sync, getPrefs } = setup(server);
+    let resolveGet: (r: PrefsResult) => void = () => undefined;
+    getPrefs.mockImplementationOnce(() => new Promise<PrefsResult>((r) => (resolveGet = r)));
+    sync.onOpened();
+    sync.onChanged({ prefs: { theme: "dracula" }, rev: 3, byClientId: "other" });
+    resolveGet({ prefs: { theme: "nord" }, rev: 2 });
+    await flush();
+    expect(useSettingsStore(pinia).theme).toBe("dracula");
+  });
+
+  it("接続が替わった後に届いた古い接続の prefs.get の応答は捨てる", async () => {
+    const server = { prefs: { theme: "nord" } as SharedPrefs, rev: 2 };
+    const { sync, getPrefs } = setup(server);
+    let resolveOld: (r: PrefsResult) => void = () => undefined;
+    getPrefs.mockImplementationOnce(() => new Promise<PrefsResult>((r) => (resolveOld = r)));
+    sync.onOpened();
+    sync.onClosed();
+    sync.onOpened();
+    await flush();
+    resolveOld({ prefs: { theme: "dracula" }, rev: 9 });
+    await flush();
+    expect(useSettingsStore(pinia).theme).toBe("nord");
+  });
+
+  it("受け取る前に届いた changed が prefs.get の rev より古ければ当てない", async () => {
+    const server = { prefs: { theme: "nord" } as SharedPrefs, rev: 5 };
+    const { sync, getPrefs } = setup(server);
+    let resolveGet: (r: PrefsResult) => void = () => undefined;
+    getPrefs.mockImplementationOnce(() => new Promise<PrefsResult>((r) => (resolveGet = r)));
+    sync.onOpened();
+    sync.onChanged({ prefs: { theme: "dracula" }, rev: 3, byClientId: "other" });
+    resolveGet({ prefs: { theme: "nord" }, rev: 5 });
+    await flush();
+    expect(useSettingsStore(pinia).theme).toBe("nord");
+  });
+
+  it("送れずに溜まっている変更は、ほかのクライアントの changed の上にも重ねる（戻さない）", async () => {
+    const state: { fail?: string } = {};
+    const { sync } = setup({ prefs: {}, rev: 1 }, { failSet: () => state.fail });
+    sync.onOpened();
+    await flush();
+    state.fail = "internal";
+    useSettingsStore(pinia).setStatusSymbols(false); // 失敗して溜まる
+    await flush();
+    sync.onChanged({ prefs: { statusSymbols: true, theme: "nord" }, rev: 2, byClientId: "other" });
+    expect(useSettingsStore(pinia).statusSymbols).toBe(false);
+    expect(useSettingsStore(pinia).theme).toBe("nord");
+  });
+
+  it("送信の失敗を溜めに戻すとき、送っている間に書いた新しい値を古い値で上書きしない", async () => {
+    const state: { fail?: string } = {};
+    const { sync, sets, release } = setup(
+      { prefs: {}, rev: 1 },
+      { hold: true, failSet: () => state.fail },
+    );
+    sync.onOpened();
+    await flush();
+    const settings = useSettingsStore(pinia);
+    settings.setStatusSymbols(false); // 送信中（待たせる）
+    await flush();
+    settings.setStatusSymbols(true); // 送信中に書き直した（溜まる）
+    state.fail = "internal";
+    await release(); // 1 回目が失敗
+    delete state.fail;
+    sync.onClosed();
+    sync.onOpened();
+    await flush();
+    await release();
+    expect(sets.map((x) => x.patch)).toEqual([{ statusSymbols: true }]);
+  });
+
+  it("送信中に接続が替わり、古い接続の送信が失敗したら、新しい接続ですぐ送り直す", async () => {
+    const state: { fail?: string } = {};
+    const { sync, sets, release } = setup(
+      { prefs: {}, rev: 1 },
+      { hold: true, failSet: () => state.fail },
+    );
+    sync.onOpened();
+    await flush();
+    useSettingsStore(pinia).setStatusSymbols(false); // 送信中（待たせる）
+    await flush();
+    sync.onClosed();
+    sync.onOpened(); // 新しい接続は受け取り済み（送信中なので、まだ送らない）
+    await flush();
+    state.fail = "internal";
+    await release(); // 古い接続の送信が失敗
+    delete state.fail;
+    await release(); // 新しい接続での送り直し
+    expect(sets.map((x) => x.patch)).toEqual([{ statusSymbols: false }]);
+  });
+
+  it("大きすぎるの知らせは、1 回の操作につき 1 回（分けて送り直した項目がいくつ断られても）。次の操作でまた出す", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: "nord", statusSymbols: false }));
+    const { sync, toasts } = setup({ prefs: {}, rev: 0 }, { failSet: () => "invalid_params" });
+    sync.onOpened();
+    await flush();
+    await flush();
+    expect(toasts).toHaveLength(1);
+    useSettingsStore(pinia).setPaneGaps(false);
+    await flush();
+    expect(toasts).toHaveLength(2);
   });
 });
