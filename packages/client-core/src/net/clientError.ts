@@ -76,6 +76,9 @@ const MESSAGES: Record<ErrorCode, string> = {
   image_store_failed: "サーバに画像を保存できませんでした。サーバのログを確かめてください。",
   // 入力の書き込み待ちの上限（20260927-server-size-input-limits）。サーバは同じ pane について 2 秒に 1 回だけ送る。
   input_queue_full: "この pane のプログラムが入力を読んでいないため、送った入力を捨てました（サーバに溜まった入力が上限に達しています）。",
+  // サーバの停止（`server.stop`。20260927-cli-mode）。
+  server_busy: "サーバが更新の引き継ぎの最中のため、止めませんでした。少し待ってからやり直してください。",
+  server_stop_unsupported: "このサーバは画面からの停止を受け付けません。",
 };
 
 /**

@@ -60,7 +60,10 @@ export type ErrorCode =
   | "image_store_failed"
   // 入力の書き込み待ちの上限（20260927-server-size-input-limits）。pane のプログラムが入力を読まず、サーバに溜まった入力が上限に達した。
   // herdr は "pty input queue is full"（`pane_send_failed`）。
-  | "input_queue_full";
+  | "input_queue_full"
+  // サーバの停止（`server.stop`。20260927-cli-mode）。引き継ぎ（`soda handoff`）の最中は止めない。止める手順を持たない組み立て（smoke 等）は断る。
+  | "server_busy"
+  | "server_stop_unsupported";
 
 export interface ProtocolError {
   code: ErrorCode;

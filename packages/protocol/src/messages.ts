@@ -451,6 +451,97 @@ export interface MachineListResult {
   machines: MachineStatus[];
 }
 
+// --- 設定の共有とサーバの停止（20260927-cli-mode。design「インターフェース / データ構造」protocol）-----------------
+
+/** `prefs.set` の `patch` と、保存した設定全体の JSON の大きさの上限（バイト。超えたら `invalid_params`）。 */
+export const PREFS_MAX_BYTES = 256 * 1024;
+
+/** JSON にしたときの UTF-8 のバイト数。 */
+function jsonBytes(v: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(v)).byteLength;
+}
+
+/**
+ * 端末版の節（`SharedPrefs.tui`。外側の端末向けの好み。どの端末版でも同じ値を使ってよいので共有する）。値の検査はクライアントが読むときに行う
+ * （web の `load*` と同じく、壊れた値は既定へ落とす）。サーバは形を問わずに保存する。
+ */
+export const SharedTuiPrefs = z
+  .object({
+    mouseCapture: z.unknown(),
+    copyOnSelect: z.unknown(),
+    notifyDelivery: z.unknown(),
+    sidebarCols: z.unknown(),
+    narrowThreshold: z.unknown(),
+  })
+  .partial()
+  .passthrough();
+export type SharedTuiPrefs = z.infer<typeof SharedTuiPrefs>;
+
+/**
+ * 共有する設定（web の `soda.prefs.v1` から端末ごとの項目〔`sidebarWidth`・`sidebarCollapsed`〕を除いたもの）。**値の形はサーバで問わない**——
+ * 読む側（web の `load*`・端末版）が正規化するので、版の違うクライアントが混ざっても知らない項目・知らない値を捨てずに保存する（`passthrough`）。
+ * 項目名の一覧は型の手がかり（今の web が書く項目）。キー `__proto__` は zod が落とす（プロトタイプを差し替えない）。
+ */
+export const SharedPrefs = z
+  .object({
+    keys: z.unknown(),
+    theme: z.unknown(),
+    themeAuto: z.unknown(),
+    themeLight: z.unknown(),
+    themeDark: z.unknown(),
+    themeOverrides: z.unknown(),
+    statusSymbols: z.unknown(),
+    keyboardLockInFullscreen: z.unknown(),
+    paneFrameThickness: z.unknown(),
+    paneAgentNameVisible: z.unknown(),
+    tabBarPosition: z.unknown(),
+    tabBarRight: z.unknown(),
+    tabBarRightSeparator: z.unknown(),
+    paneOuterBorders: z.unknown(),
+    paneBorders: z.unknown(),
+    paneGaps: z.unknown(),
+    sidebarRows: z.unknown(),
+    scrollback: z.unknown(),
+    newCwdPolicy: z.unknown(),
+    newCwdPath: z.unknown(),
+    notify: z.unknown(),
+    notifyHintPending: z.unknown(),
+    notifyHintDone: z.unknown(),
+    agentSort: z.unknown(),
+    workspaceSort: z.unknown(),
+    collapsedAutoGroups: z.unknown(),
+    onboarding: z.unknown(),
+    tui: SharedTuiPrefs,
+  })
+  .partial()
+  .passthrough();
+export type SharedPrefs = z.infer<typeof SharedPrefs>;
+
+/** 端末ごとに持ち、共有しない項目（web の localStorage に残す。design「設定」）。 */
+export const DEVICE_LOCAL_PREF_KEYS = ["sidebarWidth", "sidebarCollapsed"] as const;
+
+/** 共有の設定を読む。`rev` は保存のたびに +1（0 = サーバが一度も保存していない。web の初回の移行の目印）。 */
+export const PrefsGetParams = z.object({});
+export type PrefsGetParams = z.infer<typeof PrefsGetParams>;
+export interface PrefsResult {
+  prefs: SharedPrefs;
+  rev: number;
+}
+
+/**
+ * 共有の設定を項目ごとに上書きする（浅いマージ。`keys` 等は項目ごとに丸ごと置き換え）。`baseRev` は送った側が見ていた rev（今は記録だけで拒まない。
+ * 最後の書き込みが勝つ）。保存した後の全体が `PREFS_MAX_BYTES` を超えるならサーバが `invalid_params` で断る。
+ */
+export const PrefsSetParams = z.object({
+  patch: SharedPrefs.refine((p) => jsonBytes(p) <= PREFS_MAX_BYTES, "prefs too large"),
+  baseRev: z.number().int().min(0).optional(),
+});
+export type PrefsSetParams = z.infer<typeof PrefsSetParams>;
+
+/** サーバを止める。応答を返してから通常の停止（SIGTERM・`soda session stop` と同じ手順）に入る。 */
+export const ServerStopParams = z.object({});
+export type ServerStopParams = z.infer<typeof ServerStopParams>;
+
 export const AgentIntegrationStatusParams = z.object({});
 export type AgentIntegrationStatusParams = z.infer<typeof AgentIntegrationStatusParams>;
 
@@ -668,6 +759,9 @@ export const METHOD_SCHEMAS = {
   "command.reload": CommandReloadParams,
   "command.run": CommandRunParams,
   "command.popup_close": CommandPopupCloseParams,
+  "prefs.get": PrefsGetParams,
+  "prefs.set": PrefsSetParams,
+  "server.stop": ServerStopParams,
 } as const;
 
 export type MethodName = keyof typeof METHOD_SCHEMAS;
@@ -740,6 +834,9 @@ export interface MethodResultMap {
   "command.reload": CommandListResult;
   "command.run": CommandRunResult;
   "command.popup_close": Record<string, never>;
+  "prefs.get": PrefsResult;
+  "prefs.set": PrefsResult;
+  "server.stop": Record<string, never>;
 }
 
 export type ParamsOf<M extends MethodName> = z.infer<(typeof METHOD_SCHEMAS)[M]>;
