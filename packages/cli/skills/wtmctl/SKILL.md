@@ -42,14 +42,19 @@ test -n "${WTM_PANE_ID:-}"
 
 - ID は workspace が `w1`、tab が `t1`、pane が `p1` の形。閉じたものの ID は使い回されない。**ID は推測せず、応答の JSON から読む**
   （`workspace create` は `.workspace.id`・`.tab.id`・`.pane.id`、`tab create` は `.tab.id`・`.pane.id`、`pane split` は `.pane.id`）。
-- 自分の pane は `$WTM_PANE_ID`。自分の tab・workspace は snapshot から引く:
+- 自分の pane は `$WTM_PANE_ID`。自分が**今**居る tab・workspace は `wtmctl pane current` で聞く（利用者が pane を別の tab・workspace へ移すことがあるので、
+  前に読んだ値を使い回さない）:
 
 ```bash
-wtmctl snapshot | jq -r --arg p "$WTM_PANE_ID" '.panes[] | select(.id == $p) | .tabId'
+wtmctl pane current --current | jq -r '.pane.tabId, .pane.workspaceId'
 wtmctl snapshot | jq '{workspaces: [.workspaces[] | {id, label}], tabs: [.tabs[] | {id, workspaceId, label}], panes: [.panes[] | {id, tabId, cwd}]}'
 ```
 
-- ブラウザで利用者が見ている pane（フォーカス）に頼らない。対象は必ず ID かエージェントの名前で指す。
+- 自分の pane を対象にするときは `--current` を付ける（`pane split`・`pane current`）。`caller_pane_unknown` で断られたら、接続先がこの pane のサーバだと
+  確かめられない（`WTMCTL_URL`・`--url` が別の名前や別のサーバを指している）。ID はサーバごとに別なので、別のサーバへ `$WTM_PANE_ID` を渡すと無関係な pane を
+  操作してしまう。利用者が設定した `WTMCTL_URL` を勝手に変えず、利用者に知らせて、同じサーバだと確かめられたときだけ `--pane "$WTM_PANE_ID"` で明示する。
+
+- ブラウザで利用者が見ている pane（フォーカス）に頼らない。対象は ID・エージェントの名前・`--current`（自分の pane）で指す。
 
 ## pane とエージェント
 
@@ -71,7 +76,7 @@ wtmctl snapshot | jq '{workspaces: [.workspaces[] | {id, label}], tabs: [.tabs[]
 利用者に場所を指定されていなければ、自分の pane を分けて隣に作る。workspace・tab は利用者に頼まれない限り作らない。
 
 ```bash
-p=$(wtmctl pane split "$WTM_PANE_ID" --direction right | jq -r .pane.id)   # 横長なら right、縦長なら down
+p=$(wtmctl pane split --current --direction right | jq -r .pane.id)   # 横長なら right、縦長なら down
 wtmctl pane run "$p" "cd $(printf %q "$PWD") && pnpm test; echo \"__wtm_done:\$?\""
 wtmctl pane read "$p" | tail -n 40
 ```
@@ -85,7 +90,7 @@ wtmctl pane read "$p" | tail -n 40
 ## エージェントを起動して作業を頼む
 
 ```bash
-p=$(wtmctl pane split "$WTM_PANE_ID" --direction right | jq -r .pane.id)
+p=$(wtmctl pane split --current --direction right | jq -r .pane.id)
 wtmctl agent start reviewer --kind codex --pane "$p"            # -- の後はエージェントへの引数
 wtmctl agent prompt reviewer "今の差分をレビューして、直すべき指摘だけを挙げて" --wait --timeout 600000
 wtmctl agent read reviewer --lines 120
@@ -139,7 +144,7 @@ pane の中の wtmctl は、次の操作の対象が**自分の pane**（`$WTM_P
 - 接続: `wtmctl login`（利用者が打つ）
 - workspace: `wtmctl workspace create`・`wtmctl workspace close`・`wtmctl workspace rename`・`wtmctl workspace report-metadata`
 - tab: `wtmctl tab create`・`wtmctl tab close`
-- pane: `wtmctl pane split`・`wtmctl pane close`・`wtmctl pane input`・`wtmctl pane run`・`wtmctl pane read`・`wtmctl pane attach`・
+- pane: `wtmctl pane split`・`wtmctl pane current`・`wtmctl pane close`・`wtmctl pane input`・`wtmctl pane run`・`wtmctl pane read`・`wtmctl pane attach`・
   `wtmctl pane observe`・`wtmctl pane control`・`wtmctl pane report-metadata`
 - 状態: `wtmctl snapshot`・`wtmctl watch`
 - エージェント: `wtmctl agent list`・`wtmctl agent get`・`wtmctl agent wait`・`wtmctl agent read`・`wtmctl agent prompt`・`wtmctl agent send-keys`・

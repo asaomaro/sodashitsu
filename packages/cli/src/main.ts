@@ -17,7 +17,7 @@ import { runAgentStart } from "./commands/agentStart.js";
 import { runPaneAttach } from "./commands/attach.js";
 import { runPaneControl, runPaneObserve } from "./commands/sessionStream.js";
 import { runTabClose, runTabCreate } from "./commands/tab.js";
-import { runPaneClose, runPaneInput, runPaneRead, runPaneReportMetadata, runPaneRun, runPaneSplit } from "./commands/pane.js";
+import { runPaneClose, runPaneCurrent, runPaneInput, runPaneRead, runPaneReportMetadata, runPaneRun, runPaneSplit } from "./commands/pane.js";
 import { runLogin, runSnapshot, runWatch } from "./commands/session.js";
 import { runWorkspaceClose, runWorkspaceCreate, runWorkspaceRename, runWorkspaceReportMetadata } from "./commands/workspace.js";
 import { reportAndExit } from "./output.js";
@@ -47,6 +47,11 @@ function printHelp(): void {
       "単一引用符で包んで打ち込み、名前を付けて idle になるまで待ちます（既定 30 秒。blocked なら agent_not_ready）。",
       "pane の中（WTM_PANE_ID と WTM_SERVER_URL があり、そのサーバにつなぐとき）は、自分の pane とそれを含む tab・workspace を閉じる・",
       "入力する・直結する・エージェントを動かす操作を self_target で断ります（WTM_PANE_ID を空にすると効きません。--machine で別のマシンへ送るときも効きません）。",
+      "pane split・pane current の対象を省くと、pane の中では呼び出し元の pane（WTM_PANE_ID）、外ではサーバのフォーカスの pane です。",
+      "--current は呼び出し元の pane を明示します（WTM_PANE_ID が要ります。local 以外の --machine とは使えません）。接続先がその pane のサーバだと",
+      "確かめられないとき（WTMCTL_URL・--url が別の名前等）は caller_pane_unknown で断ります。同じサーバだと分かっていれば --pane で ID を渡し、",
+      "そうでなければ WTMCTL_URL・--url を外して WTM_SERVER_URL につないでください。",
+      "pane current は pane の今の tabId・workspaceId を返します（pane を移しても古くなりません）。",
       "wtmctl skill はエージェントに wtmctl の使い方を教える Markdown（skill ファイル）を出します。",
       "workspace/pane report-metadata はサイドバーの行の $名前 に出す独自トークンを設定（--token NAME=VALUE）・消去（--clear-token NAME）します。",
       "--token は値が = を含めば独自トークン、含まなければ接続の token です。値は前後の空白と制御文字を除いて 80 文字まで、空なら消去。",
@@ -80,6 +85,8 @@ async function main(): Promise<void> {
       return runTabClose(cmd, store);
     case "pane-split":
       return runPaneSplit(cmd, store);
+    case "pane-current":
+      return runPaneCurrent(cmd, store);
     case "pane-close":
       return runPaneClose(cmd, store);
     case "pane-input":

@@ -26,7 +26,8 @@ wtmctl workspace rename <workspaceId> <label>
 wtmctl workspace report-metadata <workspaceId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>]
 wtmctl tab create [--workspace <id>] [--label <text>]
 wtmctl tab close <tabId>
-wtmctl pane split <paneId> --direction right|down [--ratio <0.05-0.95>]
+wtmctl pane split [<paneId>|--pane <paneId>|--current] --direction right|down [--ratio <0.05-0.95>]   # 省略時は下の「呼び出し元の pane」
+wtmctl pane current [--pane <paneId>|--current]                   # pane の今の tab・workspace を JSON で出す
 wtmctl pane close <paneId>
 wtmctl pane input <paneId> <text>          # Enter を付けずに送る
 wtmctl pane run <paneId> <command>         # command と改行を送る
@@ -347,6 +348,10 @@ skill は、最初に pane の中にいるか（`WTM_PANE_ID` があるか）を
 | `WTM_SERVER_URL` | その pane を動かしているサーバへ wtmctl がつなげる URL（URL にできない待ち受け〔ゾーン付きの IPv6 等〕では入れない）。待ち受けが `0.0.0.0` なら `http(s)://127.0.0.1:<port>`、`::` なら `[::1]`、それ以外は待ち受けのホスト。ポートは実際に待ち受けているもの |
 | `WTM_AGENT_REPORT_SOCKET` | 公式フック連携の report の socket（あれば） |
 
+workspace・tab の ID は環境変数に**入れない**（herdr の `HERDR_WORKSPACE_ID`・`HERDR_TAB_ID` に当たるものは無い）。pane は別の tab・workspace へ移せ
+（pane の ID は変わらない）、環境変数は起動した時の値のまま変わらないので、移された後に古い workspace を操作させてしまうため。今の値は
+`wtmctl pane current`（下）で聞く。
+
 サーバを起動した環境の `WTMCTL_URL`・`WTMCTL_TOKEN` は pane に**渡さない**（別のサーバを指していることがあり、token は秘密なので pane の全プロセスと
 エージェントの記録に流さない。Windows では大文字小文字を区別せずに取り除く）。pane の環境に token・cookie は入らない。
 
@@ -362,6 +367,34 @@ skill は、最初に pane の中にいるか（`WTM_PANE_ID` があるか）を
   **pane の中の接続先と同じ origin で** login しておく（`http://localhost:7780` で login していても、`http://127.0.0.1:7780` では見つからない）。
   まだなら、利用者が `wtmctl login --url <URL> --token <TOKEN>` を打つ（`<URL>` は pane の中の `echo "$WTM_SERVER_URL"` の値。pane の外の端末には
   この変数が無いので値そのものを渡す。skill はエージェントに、その値を示して利用者に頼ませる）。
+
+### 呼び出し元の pane を対象にする（`--current`・対象の省略・`pane current`）
+
+`pane split`・`pane current` の対象は、位置引数（`pane split` だけ）・`--pane <paneId>`・`--current` のどれか 1 つで指す（2 つ以上は使い方の誤り）。
+
+| 指し方 | 対象 |
+|---|---|
+| `<paneId>`・`--pane <paneId>` | その pane |
+| `--current` | 呼び出し元の pane（`WTM_PANE_ID`）。`WTM_PANE_ID` が無ければ使い方の誤り（終了コード 2） |
+| 省略（pane の中＝`WTM_PANE_ID` がある） | 呼び出し元の pane |
+| 省略（pane の外） | サーバのフォーカスの pane（`snapshot` の `.focus.paneId`。無ければ `not_found`） |
+
+```bash
+wtmctl pane split --current --direction right          # 自分の隣に pane を作る（pane の中なら --current を省いても同じ）
+wtmctl pane current | jq -r '.pane.tabId, .pane.workspaceId'
+wtmctl tab create --workspace "$(wtmctl pane current | jq -r .pane.workspaceId)"
+```
+
+- `pane current` は対象の pane（`snapshot` の `.panes[]` と同じ形）に `workspaceId` と `focused`（サーバのフォーカスの pane か）を足して `{"pane": {...}}` で出す。
+  `tabId`・`workspaceId` は打った時点のサーバの状態なので、pane が移された後でも今の値になる。何も変えない。
+- 呼び出し元の pane を使う（`--current`・pane の中での省略）のは、接続先がその pane を動かしているサーバだと確かめられるときだけ。確かめ方は下の歯止めと同じ
+  （接続先と `WTM_SERVER_URL` の origin を比べ、ループバックの名前は同じとみなす）。確かめられない（`WTMCTL_URL`・`--url` が別の origin・証明書の名前等、
+  `WTM_SERVER_URL` が無い）ときは、何も送らずに `caller_pane_unknown`（終了コード 1）で断る。ID はサーバごとに別で、別のサーバでは同じ ID が
+  無関係な pane を指すため。同じサーバだと分かっているとき（証明書の名前で同じサーバを指している等）だけ `--pane "$WTM_PANE_ID"` で明示し、
+  そうでなければ `WTMCTL_URL`・`--url` を外して `WTM_SERVER_URL` につなぐ（`WTM_SERVER_URL` が無い pane では `--pane` で明示するしかない）。
+- `--machine <名前|id>`（`local` 以外）では、`--current` は使い方の誤り、省略はそのマシンのフォーカスの pane（手元の `WTM_PANE_ID` はそのマシンの pane を指さない）。
+  `--machine local` は `--machine` が無いときと同じ。
+- 自分の pane を分ける・調べるのは歯止めの対象外（断らない）。
 
 ### 自分の pane への操作の歯止め（`self_target`）
 
@@ -456,7 +489,15 @@ herdr の agent skill（`skills/herdr/SKILL.md`・`herdr --skill`）と pane の
 
 - skill は `wtmctl skill` で出す（herdr は `herdr --skill`）。中身は本製品のコマンドに合わせて書き直した日本語のもの。`npx skills add` 等の配布は無い。
 - pane の中にいる印は `WTM_PANE_ID`（herdr は `HERDR_ENV=1`）。接続先は socket のパスではなく URL（`WTM_SERVER_URL`）で、認証は利用者の login の
-  キャッシュ（herdr の socket はファイルの権限で守られ、認証が無い）。`HERDR_WORKSPACE_ID`・`HERDR_TAB_ID`・`HERDR_BIN_PATH` に当たる変数は無い。
-- herdr の `--current`・`pane split` の対象の省略（呼び出し元の pane を既定にする）・`pane current` は無い。`"$WTM_PANE_ID"` を明示して渡す。
+  キャッシュ（herdr の socket はファイルの権限で守られ、認証が無い）。`HERDR_WORKSPACE_ID`・`HERDR_TAB_ID`・`HERDR_BIN_PATH` に当たる変数は無い（workspace・tab は `pane current` で聞く）。
+- `--current`・`pane split` の対象の省略・`pane current` は herdr と同じ（呼び出し元の pane・pane の外ではフォーカスの pane・`--machine` では呼び出し元を使わない）。違い:
+  - `--current` を受けるのは `pane split`・`pane current` だけ（herdr の `pane layout`・`process-info`・`neighbor`・`edges`・`focus`・`resize`・`zoom`・`swap` は
+    コマンド自体が無く、herdr の `pane input --right-click` は wtmctl の `pane input`〔文字の送信〕とは別物の右クリックの設定で、これも無い）。
+  - 位置引数・`--pane`・`--current` を 2 つ以上渡すと使い方の誤り（herdr は後に書いたものが勝つ）。
+  - `pane current --current` は `WTM_PANE_ID` が無ければ使い方の誤り（herdr はフォーカスの pane を返す）。
+  - 接続先がその pane のサーバだと確かめられないと `caller_pane_unknown` で断る（herdr は socket のパスでつなぐので、この確かめが要らない）。
+  - 出力は camelCase の `{"pane": {...}}`（herdr の `.result.pane` の snake_case の `PaneInfo`）。
+  - workspace・tab の ID の環境変数（`HERDR_WORKSPACE_ID`・`HERDR_TAB_ID`）は無い。`pane current` で今の値を聞く（herdr の値は起動時のまま `pane move` で古くなる）。
+    pane を移しても pane の ID は変わらないので、`WTM_PANE_ID` は古くならない（herdr は別の workspace への移動で pane の ID が変わり、古い ID を別名として残す）。
 - 自分の pane への操作を断る `self_target` は本製品だけ（herdr は断らない）。
 - サーバを起動した環境の `WTMCTL_URL`・`WTMCTL_TOKEN` を pane に渡さない（herdr は管理する変数を上書きするが、token に当たるものは無い）。
