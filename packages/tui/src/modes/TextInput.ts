@@ -79,7 +79,7 @@ export class TextInput {
       default:
         break;
     }
-    if (!k.alt && !k.meta && [...k.key].length === 1 && k.key >= " ") {
+    if (!k.alt && !k.meta && [...k.key].length === 1 && isPrintable(k.key)) {
       this.insert(k.key);
       return true;
     }
@@ -87,7 +87,7 @@ export class TextInput {
   }
 
   insert(text: string): void {
-    const add = [...text.replace(/[\r\n\t]+/g, " ")].filter((c) => c >= " ");
+    const add = [...text.replace(/[\r\n\t]+/g, " ")].filter(isPrintable);
     this.chars.splice(this.cursor, 0, ...add);
     this.cursor += add.length;
   }
@@ -110,4 +110,10 @@ export class TextInput {
     }
     return { text, cursorCol: before() };
   }
+}
+
+/** 名前に入れてよい文字か（C0・DEL・C1 の制御文字は入れない）。 */
+function isPrintable(c: string): boolean {
+  const cp = c.codePointAt(0)!;
+  return cp >= 0x20 && cp !== 0x7f && !(cp >= 0x80 && cp <= 0x9f);
 }

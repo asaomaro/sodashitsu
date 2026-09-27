@@ -221,6 +221,9 @@ export class TuiDispatcher {
       case "stopServer":
         this.ui.openDialogWithContext({ kind: "confirmStopServer", ...this.stopTarget() });
         return;
+      default:
+        // 網羅の検査：`Action` に種類が増えたらここで型が落ちる（web は `switch` に網羅の検査が無く、足し忘れが黙って無反応になっていた）。
+        action satisfies never;
     }
   }
 
@@ -542,8 +545,19 @@ export class TuiDispatcher {
     if (now.has(repoKey)) now.delete(repoKey);
     else now.add(repoKey);
     const collapsedAutoGroups = [...now];
-    this.host.prefs.apply({ ...this.host.prefs.shared, collapsedAutoGroups }, this.host.prefs.rev);
-    void this.conn.request("prefs.set", { patch: { collapsedAutoGroups } }).catch(() => undefined);
+    const before = this.host.prefs.shared;
+    const rev = this.host.prefs.rev;
+    this.host.prefs.apply({ ...before, collapsedAutoGroups }, rev);
+    this.conn
+      .request("prefs.set", { patch: { collapsedAutoGroups } })
+      .then((r) => {
+        if (r && typeof r.rev === "number") this.host.prefs.apply(r.prefs, r.rev);
+      })
+      .catch(() => {
+        // 保存できなければ元に戻して知らせる（黙って手元だけ変わったままにしない。04 の点検）。
+        if (this.host.prefs.rev === rev) this.host.prefs.apply(before, rev);
+        this.ui.toast("折りたたみを保存できませんでした");
+      });
   }
 
   // --- 閉じる ---
@@ -1038,10 +1052,9 @@ export class TuiDispatcher {
   }
 
   pasteIntoPane(paneId: string): void {
+    // 空・読めない（手元のクリップボードを読む道具は 05）は黙って何もしない（外側の端末の貼り付けはブラケットペーストで届く）。
     void this.host.readClipboard().then((text) => {
       if (text) this.host.pasteText(paneId, text);
-      else
-        this.ui.toast("クリップボードを読めませんでした（外側の端末の貼り付けを使ってください）");
     });
   }
 

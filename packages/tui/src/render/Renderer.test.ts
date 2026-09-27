@@ -106,6 +106,7 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
       "newWorkspace",
       "workspace",
       "workspace",
+      "sectionDivider",
       "agent",
     ]);
     expect(r.tabHits.map((h) => h.tabId)).toEqual(["t1"]);

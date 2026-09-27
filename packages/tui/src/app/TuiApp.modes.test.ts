@@ -103,4 +103,48 @@ describe("TuiApp：モード（navigate・copy・resize・goto。AC5・AC7・AC-
     await vi.waitFor(() => expect(h.app.ui.dialogContext).toBeNull());
     expect(h.app.model.focusedPaneId).toBe("p1");
   });
+
+  it("copy モードのまま別の pane へ移ると、元の pane の選択を消して末尾へ戻す（04 の点検）", async () => {
+    const h = await start();
+    const t = h.app.panes.get("p1")!;
+    t.snapshot(35, 27, Array.from({ length: 80 }, (_, i) => `line${i}`).join("\r\n"));
+    await t.flush();
+    const bottom = t.term.buffer.active.viewportY;
+    h.io.type("\x02[");
+    await vi.waitFor(() => expect(h.app.keys.mode).toBe("copy"));
+    h.io.type("v");
+    for (let i = 0; i < 40; i++) h.io.type("k");
+    expect(t.term.buffer.active.viewportY).toBeLessThan(bottom);
+    h.io.type("\x02l"); // copy モードの中でも prefix は効く
+    await vi.waitFor(() => expect(h.app.model.focusedPaneId).toBe("p2"));
+    expect(t.term.buffer.active.viewportY).toBe(bottom);
+    // 移った先の pane のカーソルは、前に copy モードで動かした古い位置でなく、その pane の今のカーソルから。
+    const copyOf = (id: string) =>
+      (
+        h.app as unknown as { copyTargetOf(id: string): { cursor: { row: number; col: number } } }
+      ).copyTargetOf(id);
+    const t2 = h.app.panes.get("p2")!;
+    expect(copyOf("p2").cursor).toEqual({
+      row: t2.term.buffer.active.baseY + t2.term.buffer.active.cursorY,
+      col: t2.term.buffer.active.cursorX,
+    });
+    // p2 で上へ動かしてから抜け、p2 に出力が増えた後に p1 の copy モードから p2 へ移る。
+    for (let i = 0; i < 3; i++) h.io.type("k");
+    h.io.type("q");
+    await vi.waitFor(() => expect(h.app.keys.mode).not.toBe("copy"));
+    t2.output(
+      new TextEncoder().encode(Array.from({ length: 40 }, (_, i) => `more${i}`).join("\r\n")),
+    );
+    await t2.flush();
+    h.io.type("\x02h");
+    await vi.waitFor(() => expect(h.app.model.focusedPaneId).toBe("p1"));
+    h.io.type("\x02[");
+    await vi.waitFor(() => expect(h.app.keys.mode).toBe("copy"));
+    h.io.type("\x02l");
+    await vi.waitFor(() => expect(h.app.model.focusedPaneId).toBe("p2"));
+    expect(copyOf("p2").cursor).toEqual({
+      row: t2.term.buffer.active.baseY + t2.term.buffer.active.cursorY,
+      col: t2.term.buffer.active.cursorX,
+    });
+  });
 });

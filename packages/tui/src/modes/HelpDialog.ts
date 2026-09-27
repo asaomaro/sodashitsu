@@ -11,7 +11,7 @@ import {
 import type { UiState } from "../model/UiState.js";
 import { ATTR } from "../render/color.js";
 import type { CursorState, Rect } from "../render/Screen.js";
-import { truncate } from "../render/width.js";
+import { stringWidth, truncate } from "../render/width.js";
 import {
   dialogColors,
   drawBox,
@@ -108,7 +108,7 @@ export function filterHelp(groups: HelpGroup[], query: string): HelpGroup[] {
 }
 
 /**
- * キー一覧（`prefix+?`）。web と同じ振る舞い（herdr の `route_overlay_key`）：**絞り込んでいないとき**は Esc・Enter・`?`・`q` で閉じ、
+ * キー一覧（`prefix+?`）。web と同じ振る舞い（herdr の `route_overlay_key`）：**絞り込んでいないとき**は Esc・Enter・`?` で閉じ、
  * j/k・↑↓・PageUp/PageDown・Home/End でスクロール、`/` で絞り込みに入る。**絞り込み中**は文字が入力欄へ入り、Esc で絞り込みの文字を消して抜け（閉じない）、
  * Enter は閉じ、↑↓・PageUp/PageDown はスクロールする。
  */
@@ -155,7 +155,7 @@ export class HelpDialog implements Overlay {
       if (this.query.handleKey(k)) this.scroll = 0;
       return;
     }
-    if (isEsc(k) || isEnter(k) || k.key === "?" || k.key === "q") return this.cancel();
+    if (isEsc(k) || isEnter(k) || k.key === "?") return this.cancel();
     if (k.key === "/") {
       this.filtering = true;
       return;
@@ -192,8 +192,8 @@ export class HelpDialog implements Overlay {
     // 1 行目：絞り込み欄
     const label = "絞り込み: ";
     grid.text(inner.x, inner.y, label, c.dim, c.bg);
-    const fieldX = inner.x + label.length;
-    const view = this.query.view(inner.w - label.length);
+    const fieldX = inner.x + stringWidth(label);
+    const view = this.query.view(inner.w - stringWidth(label));
     grid.text(
       fieldX,
       inner.y,

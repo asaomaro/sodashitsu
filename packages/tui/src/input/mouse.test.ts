@@ -225,4 +225,148 @@ describe("マウスの操作（AC9・AC-I5）", () => {
     h.io.type(down(30, 5) + up(30, 5));
     expect(h.inputs()).toEqual([]);
   });
+
+  it("上下の分割：下の pane の上辺（名前の行）は名前のドラッグ・焦点で、境界は上の pane の下辺（04 の点検）", async () => {
+    const snap = snapshot({
+      tabs: [
+        tab("t1", "w1", {
+          type: "split",
+          id: "s1",
+          dir: "down",
+          ratio: 0.5,
+          a: leaf("p1"),
+          b: leaf("p2"),
+        }),
+        tab("t2", "w2", leaf("p3")),
+      ],
+    });
+    const h = await start({ snapshot: snap });
+    const lower = (
+      h.app as unknown as { lastLayout: { panes: { paneId: string; frame: { y: number } }[] } }
+    ).lastLayout.panes.find((b) => b.paneId === "p2")!;
+    h.io.type(down(70, lower.frame.y) + up(70, lower.frame.y));
+    expect(h.app.model.focusedPaneId).toBe("p2");
+    expect(h.ws.requests("layout.set_split_ratio")).toEqual([]);
+    h.io.type(down(70, lower.frame.y - 1) + drag(70, 10) + up(70, 10));
+    expect(h.ws.requests("layout.set_split_ratio").length).toBeGreaterThan(0);
+  });
+
+  it("離す事象を取りこぼしたドラッグは次の押下・外側の端末を離れたときに捨てる（04 の点検）", async () => {
+    const h = await start();
+    h.io.type(down(63, 10) + drag(50, 10)); // 離さない
+    const n = h.ws.requests("layout.set_split_ratio").length;
+    h.io.type(down(70, 10) + up(70, 10));
+    expect(h.app.model.focusedPaneId).toBe("p2");
+    expect(h.ws.requests("layout.set_split_ratio")).toHaveLength(n);
+    h.io.type(down(63, 10) + "\x1b[O" + drag(40, 10));
+    expect(h.ws.requests("layout.set_split_ratio")).toHaveLength(n);
+    // オーバーレイを開いたら途中のドラッグを捨てる（閉じた後の動きで境界が動かない）。
+    h.io.type(down(63, 10));
+    h.app.ui.openDialogWithContext({ kind: "help" });
+    h.app.ui.closeDialog();
+    h.io.type(drag(40, 10) + up(40, 10));
+    expect(h.ws.requests("layout.set_split_ratio")).toHaveLength(n);
+  });
+
+  it("代替画面でマウスを求めていない pane のホイールは矢印キー（04 の点検）", async () => {
+    const h = await start();
+    const t = h.app.panes.get("p1")!;
+    t.output(new TextEncoder().encode("\x1b[?1049h"));
+    await t.flush();
+    h.io.type(wheelDown(30, 5) + `\x1b[<64;31;6M`);
+    expect(h.inputs()).toEqual(["\x1b[B\x1b[B\x1b[B", "\x1b[A\x1b[A\x1b[A"]);
+    // アプリケーションのカーソルキー（DECCKM）なら SS3 の形で送る。
+    t.output(new TextEncoder().encode("\x1b[?1h"));
+    await t.flush();
+    h.io.type(wheelDown(30, 5));
+    expect(h.inputs().at(-1)).toBe("\x1bOB\x1bOB\x1bOB");
+  });
+
+  it("pane の実際の大きさより外（切り取りの余白）の座標は端に寄せて送る（04 の点検）", async () => {
+    const h = await start();
+    const t = h.app.panes.get("p1")!;
+    t.snapshot(10, 5, "");
+    t.output(new TextEncoder().encode("\x1b[?1000;1006h"));
+    await t.flush();
+    h.io.type(down(50, 20) + up(50, 20));
+    expect(h.inputs()).toEqual(["\x1b[<0;10;5M", "\x1b[<0;10;5m"]);
+  });
+
+  it("全部の動きを求める pane（?1003）があれば外側の端末にも ?1003 を出し、ボタンを押していない動きを送る（04 の点検）", async () => {
+    const h = await start();
+    const t = h.app.panes.get("p1")!;
+    t.output(new TextEncoder().encode("\x1b[?1003;1006h"));
+    await t.flush();
+    h.app.renderNow();
+    expect(h.io.output()).toContain("\x1b[?1003h");
+    h.io.type("\x1b[<35;31;6M");
+    expect(h.inputs()).toEqual(["\x1b[<35;4;4M"]);
+    t.output(new TextEncoder().encode("\x1b[?1003l"));
+    await t.flush();
+    h.app.renderNow();
+    expect(h.io.output()).toContain("\x1b[?1003l");
+  });
+
+  it("Ctrl＋クリックで URL を開く（M6）", async () => {
+    const opened: string[] = [];
+    const h = await start({ openUrl: (u) => opened.push(u) });
+    const t = h.app.panes.get("p1")!;
+    t.snapshot(35, 27, "see https://example.com/a?b=1. ok");
+    await t.flush();
+    h.io.type("\x1b[<16;35;3M\x1b[<16;35;3m"); // Ctrl＋左（桁 34 は URL の中）
+    expect(opened).toEqual(["https://example.com/a?b=1"]);
+  });
+
+  it("サイドバーの spaces と agents の区切りのドラッグで区画の高さ（H19b・04 の点検）", async () => {
+    const snap = snapshot({
+      panes: [
+        pane("p1", "t1"),
+        pane("p2", "t1"),
+        pane("p3", "t2", {
+          agent: {
+            instanceId: "a",
+            kind: "claude",
+            label: "Claude",
+            state: "idle",
+            completionSeq: 0,
+            serverSeenSeq: 0,
+            verified: true,
+            since: 0,
+          },
+        }),
+      ],
+    });
+    const h = await start({ snapshot: snap });
+    h.app.renderNow();
+    const hits = (h.app as unknown as { sidebarHits: { kind: string; y: number }[] }).sidebarHits;
+    const div = hits.find((x) => x.kind === "sectionDivider")!;
+    h.io.type(down(3, div.y) + drag(3, div.y + 5) + up(3, div.y + 5));
+    expect(h.app.prefs.sidebarSpacesRows).toBe(div.y + 5);
+    // 描き直すと区切りがその位置へ動く（上の区画が 5 行広がる）。
+    h.app.renderNow();
+    const after = (h.app as unknown as { sidebarHits: { kind: string; y: number }[] }).sidebarHits;
+    expect(after.find((x) => x.kind === "sectionDivider")!.y).toBe(div.y + 5);
+  });
+
+  it("全角の行でもダブルクリックの単語と選択の写しがセルの列で合う（04 の点検）", async () => {
+    const h = await start();
+    const t = h.app.panes.get("p1")!;
+    t.snapshot(35, 27, "あいう foo-bar/baz end");
+    await t.flush();
+    // 「あいう 」は 7 セル → foo は桁 7〜。中身の x=27 から。
+    h.io.type(down(27 + 9, 2) + up(27 + 9, 2) + down(27 + 9, 2) + up(27 + 9, 2));
+    const b64 = (s: string) => Buffer.from(s).toString("base64");
+    await vi.waitFor(() => expect(h.io.output()).toContain(`\x1b]52;c;${b64("foo-bar/baz")}\x07`));
+    // 「い」（桁 2・3）から「う」の右半分（桁 5）まで：全角の組ごと写す。
+    h.io.type(down(27 + 2, 2) + drag(27 + 5, 2) + up(27 + 5, 2));
+    await vi.waitFor(() => expect(h.io.output()).toContain(`\x1b]52;c;${b64("いう")}\x07`));
+    // 終わりが全角の本体（「う」の桁 4）なら、選択の範囲は右半分（桁 5）まで含める（反転の表示が文字の半分で切れない）。
+    h.io.type(down(27 + 0, 2) + drag(27 + 4, 2));
+    const top = t.term.buffer.active.viewportY;
+    expect(h.app.mouse.selection).toMatchObject({
+      from: { row: top, col: 0 },
+      to: { row: top, col: 5 },
+    });
+    h.io.type(up(27 + 4, 2));
+  });
 });

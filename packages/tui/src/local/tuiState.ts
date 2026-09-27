@@ -14,6 +14,8 @@ export interface TuiState {
    * （03 の review）。環境変数 `SODA_TRUECOLOR` がこれより優先する。
    */
   colorMode?: "truecolor" | "256";
+  /** サイドバーの spaces の区画の行数（区切りのドラッグで変えた値）。 */
+  sidebarSpacesRows?: number;
 }
 
 export const TUI_STATE_FILE = "tui-state.json";
@@ -33,6 +35,9 @@ export function readTuiState(stateDir: string): TuiState {
       out.sidebarCols = r["sidebarCols"];
     if (typeof r["sidebarCollapsed"] === "boolean") out.sidebarCollapsed = r["sidebarCollapsed"];
     if (r["colorMode"] === "truecolor" || r["colorMode"] === "256") out.colorMode = r["colorMode"];
+    const spaces = r["sidebarSpacesRows"];
+    if (typeof spaces === "number" && Number.isInteger(spaces) && spaces > 0)
+      out.sidebarSpacesRows = spaces;
     return out;
   } catch {
     return {};

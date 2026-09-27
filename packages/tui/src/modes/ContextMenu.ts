@@ -124,6 +124,8 @@ export class ContextMenu implements Overlay {
   private active = 0;
   private rect: Rect | null = null;
   private pressed = false;
+  private scroll = 0;
+  private visible = Number.MAX_SAFE_INTEGER;
 
   constructor(
     private readonly menu: ContextMenuState,
@@ -136,7 +138,7 @@ export class ContextMenu implements Overlay {
 
   handleKey(k: KeyInput): void {
     const n = this.items().length;
-    if (isEsc(k) || k.key === "q") return this.cancel();
+    if (isEsc(k)) return this.cancel();
     if (isEnter(k) || k.key === " ") return this.activate(this.active);
     if (isDown(k) && n > 0) this.active = (this.active + 1) % n;
     else if (isUp(k) && n > 0) this.active = (this.active - 1 + n) % n;
@@ -145,16 +147,21 @@ export class ContextMenu implements Overlay {
   handleMouse(ev: OverlayMouse): boolean {
     if (!inside(this.rect, ev.x, ev.y)) return false;
     const index = ev.y - (this.rect!.y + 1);
-    if (index >= 0 && index < this.items().length) {
-      if (ev.action === "move") this.active = index;
+    if (index >= this.visible) return true; // 枠の下の罫線
+    const item = this.scroll + index;
+    if (index >= 0 && item < this.items().length) {
+      if (ev.action === "move") this.active = item;
       // 押して離したら実行する。開いた右クリックの離す事象（押したのはメニューの外）では実行しない。
       if (ev.action === "down" && ev.button === 0) {
-        this.active = index;
+        this.active = item;
         this.pressed = true;
       } else if (ev.action === "up" && this.pressed) {
         this.pressed = false;
-        this.activate(index);
+        this.activate(item);
       }
+    } else if (ev.action === "wheel") {
+      const n = this.items().length;
+      this.active = Math.max(0, Math.min(n - 1, this.active + (ev.button === 65 ? 1 : -1)));
     }
     return true;
   }
@@ -180,8 +187,12 @@ export class ContextMenu implements Overlay {
     const r = { x, y, w, h };
     this.rect = r;
     const inner = drawBox(grid, r, c);
-    items.slice(0, inner.h).forEach((item, i) => {
-      const on = i === this.active;
+    // 短い端末では見える分だけを出し、選んでいる項目が見えるようにずらす（見えない項目を選んで実行しない）。
+    this.visible = Math.max(1, inner.h);
+    if (this.active < this.scroll) this.scroll = this.active;
+    if (this.active >= this.scroll + this.visible) this.scroll = this.active - this.visible + 1;
+    items.slice(this.scroll, this.scroll + this.visible).forEach((item, i) => {
+      const on = i + this.scroll === this.active;
       grid.fill({ x: r.x + 1, y: inner.y + i, w: r.w - 2, h: 1 }, c.fg, on ? c.active : c.bg);
       grid.text(
         inner.x,

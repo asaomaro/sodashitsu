@@ -350,3 +350,68 @@ describe("一覧（worktree・グループ）", () => {
     expect(s.ui.dialogContext?.kind).toBe("worktreeCreate");
   });
 });
+
+describe("オーバーレイの点検の指摘（04）", () => {
+  it("入力欄は DEL・C1 の制御文字を入れない", () => {
+    const s = setup();
+    s.actions.run({ type: "renameTab" });
+    s.overlays.handleKey(key("ctrl+u"));
+    s.overlays.handlePaste("a\x7fb\x85c");
+    s.overlays.handleKey(ch("\x7f"));
+    s.overlays.handleKey(key("enter"));
+    expect(s.calls).toEqual([["tab.rename", { tabId: "t1", label: "abc" }]]);
+  });
+
+  it("キー一覧：q では閉じない（web と同じ）。絞り込みの欄は全角の見出しの幅の後ろから（カーソルも）", () => {
+    const s = setup();
+    s.actions.run({ type: "help" });
+    s.type("q");
+    expect(s.ui.dialogContext).toEqual({ kind: "help" });
+    s.type("/");
+    const g = new Grid(100, 30);
+    const cur = s.overlays.render(g, new ThemeColors("dracula"));
+    // 箱は x=1、内側は x=3。「絞り込み: 」は幅 10。
+    expect(cur).toMatchObject({ x: 13, visible: true });
+  });
+
+  it("一覧：見えている行の外（下の案内の行）を押しても実行しない", () => {
+    const s = setup();
+    // 30 行の画面に入りきらない数のグループ：案内の行の位置にも（見えていない）続きの項目がある。
+    const groups = Array.from({ length: 40 }, (_, i) => ({
+      id: `g${i + 1}`,
+      label: `G${i + 1}`,
+      collapsed: false,
+    }));
+    s.ui.openDialogWithContext({ kind: "addToGroup", workspaceId: "w2", groups });
+    const text = s.screen().split("\n");
+    const helpRow = text.findIndex((l) => l.includes("Enter で追加"));
+    s.overlays.handleMouse({ action: "down", button: 0, x: 40, y: helpRow });
+    expect(s.calls).toEqual([]);
+    const row = text.findIndex((l) => /\bG1\b/.test(l));
+    s.overlays.handleMouse({ action: "down", button: 0, x: 40, y: row });
+    expect(s.calls).toEqual([["group.add_member", { groupId: "g1", workspaceId: "w2" }]]);
+  });
+
+  it("短い端末のメニュー：見える分だけ出し、選んだ項目までずらす（見えない項目を実行しない）", () => {
+    const s = setup();
+    s.ui.openContextMenu({ kind: "pane", paneId: "p1" }, { x: 0, y: 0 });
+    const small = new Grid(40, 6); // 枠を除いて 4 項目
+    const theme = new ThemeColors("dracula");
+    s.overlays.render(small, theme);
+    for (let i = 0; i < 4; i++) s.overlays.handleKey(key("down"));
+    s.overlays.render(small, theme); // 1〜4 番目が見え、枠の下の罫線の位置には見えていない 5 番目がある
+    // 枠の下の罫線を押しても、見えていない次の項目を実行しない。
+    s.overlays.handleMouse({ action: "down", button: 0, x: 3, y: 5 });
+    s.overlays.handleMouse({ action: "up", button: 0, x: 3, y: 5 });
+    expect(s.calls).toEqual([]);
+    for (let i = 0; i < 2; i++) s.overlays.handleKey(key("down"));
+    s.overlays.render(small, theme);
+    const rows = Array.from({ length: 6 }, (_, y) => small.rowText(y)).join("\n");
+    expect(rows).toContain("閉じる"); // 7 番目（0 始まりの 6）が見えている
+    expect(rows).not.toContain("名前の変更");
+    s.overlays.handleMouse({ action: "down", button: 0, x: 3, y: 1 });
+    s.overlays.handleMouse({ action: "up", button: 0, x: 3, y: 1 });
+    // いちばん上に見えている項目（拡大表示）を実行した
+    expect(s.calls).toEqual([["pane.zoom", { paneId: "p1", mode: "toggle" }]]);
+  });
+});

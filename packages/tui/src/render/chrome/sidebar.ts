@@ -19,7 +19,9 @@ export type SidebarTarget =
   | { kind: "autoGroup"; repoKey: string }
   | { kind: "agent"; paneId: string }
   /** 「＋」（新しい workspace。herdr の M14）。`x` の桁だけが当たり。 */
-  | { kind: "newWorkspace"; x: number };
+  | { kind: "newWorkspace"; x: number }
+  /** spaces と agents の区切りの行（ドラッグで spaces の区画の高さ。herdr の H19b）。 */
+  | { kind: "sectionDivider" };
 export type SidebarHit = SidebarTarget & { y: number };
 
 interface Line {
@@ -47,7 +49,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   grid.fill({ x: rect.x, y: rect.y, w: inner, h: rect.h }, fg, bg);
   for (let y = rect.y; y < rect.y + rect.h; y++) grid.set(rect.x + inner, y, "│", 1, border, bg);
 
-  const lines: (Line | { header: string })[] = [{ header: "Spaces" }];
+  const lines: (Line | { header: string; divider?: true })[] = [{ header: "Spaces" }];
   const workspaces = [...model.workspaces.values()];
   const rows = groupedWorkspaceRows(
     workspaces,
@@ -97,8 +99,12 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     }
   }
   if (agentPanes.length > 0) {
-    lines.push({ header: "" });
-    lines.push({ header: "Agents" });
+    // spaces の区画の高さ（手元の tui-state の `sidebarSpacesRows`。無ければ中身の高さ＋1）。区切りの行は必ず見える所に置く。
+    const natural = lines.length + 1;
+    const spacesRows = Math.max(2, Math.min(prefs.sidebarSpacesRows ?? natural, rect.h - 2));
+    if (lines.length > spacesRows) lines.length = spacesRows;
+    while (lines.length < spacesRows) lines.push({ header: "" });
+    lines.push({ header: "Agents", divider: true });
     const order = orderedAgentPaneIds(
       agentPanes.map((p) => ({
         paneId: p.id,
@@ -126,6 +132,14 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     const line = lines[i]!;
     const y = rect.y + i;
     if ("header" in line) {
+      if (line.divider) {
+        // 区切りの行：罫線と見出し。ドラッグで区画の高さを変える。
+        for (let x = rect.x; x < rect.x + inner; x++)
+          grid.set(x, y, "─", 1, theme.ui("--soda-menu-border"), bg);
+        grid.text(rect.x + 1, y, ` ${truncate(line.header, inner - 4)} `, fg, bg, ATTR.dim);
+        hits.push({ y, kind: "sectionDivider" });
+        continue;
+      }
       grid.text(rect.x + 1, y, truncate(line.header, inner - 1), fg, bg, ATTR.dim);
       if (line.header === "Spaces" && inner >= 10) {
         const x = rect.x + inner - 2;

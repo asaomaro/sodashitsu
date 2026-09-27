@@ -78,6 +78,11 @@ export class PrefsModel {
     return this.local.sidebarCols ?? this.tuiNumber("sidebarCols", DEFAULT_SIDEBAR_COLS, 10, 200);
   }
 
+  /** サイドバーの spaces の区画の行数（手元の今の値。無ければ中身に合わせる）。 */
+  get sidebarSpacesRows(): number | undefined {
+    return this.local.sidebarSpacesRows;
+  }
+
   get sidebarCollapsed(): boolean {
     return this.local.sidebarCollapsed === true;
   }

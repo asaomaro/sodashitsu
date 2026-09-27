@@ -24,6 +24,7 @@ export async function startedApp(
     rows?: number;
     snapshot?: SessionSnapshot;
     respond?: Record<string, unknown>;
+    openUrl?: (url: string) => void;
   } = {},
 ) {
   const cols = opts.cols ?? 100;
@@ -31,6 +32,7 @@ export async function startedApp(
   const io = fakeIo({ cols, rows });
   const sockets: FakeSocket[] = [];
   const app = new TuiApp(testTarget, io, {
+    ...(opts.openUrl ? { openUrl: opts.openUrl } : {}),
     net: {
       createWebSocket: (ep) => (url) => {
         const s = new FakeSocket(url, ep.cookie());

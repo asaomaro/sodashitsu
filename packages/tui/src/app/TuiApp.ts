@@ -27,7 +27,8 @@ import { InputDecoder, type InputEvent } from "../input/decode.js";
 import { TuiKeys } from "../input/keys.js";
 import { clampTerminalSize, type SharedPrefs } from "@sodashitsu/protocol";
 import { computeLayout, type LayoutResult } from "../layout/computeLayout.js";
-import { readTuiState, writeTuiState } from "../local/tuiState.js";
+import { spawn } from "node:child_process";
+import { readTuiState, writeTuiState, type TuiState } from "../local/tuiState.js";
 import { PrefsModel } from "../model/PrefsModel.js";
 import { SessionModel } from "../model/SessionModel.js";
 import { TuiNet, type TuiNetDeps } from "../net/TuiNet.js";
@@ -50,6 +51,8 @@ import { TerminalModes } from "./terminalModes.js";
 const NO_HOLD = { release: () => undefined, cancel: () => undefined, discard: () => undefined };
 
 export interface TuiAppOptions {
+  /** リンクを開く（テスト用の差し替え。無ければ OS の道具）。 */
+  openUrl?: (url: string) => void;
   /** 接続の差し替え（テスト用）。 */
   net?: TuiNetDeps;
 }
@@ -113,6 +116,10 @@ export class TuiApp {
   protected navigateKeymap!: ResolvedNavigateKeymap;
   private readonly navigateMode = new NavigateMode();
   private readonly copyMode = new CopyMode();
+  /** copy モードの対象の pane（copy モードでなければ null）。 */
+  private copyPaneId: string | null = null;
+  /** 外側の端末へ ?1003（ボタンを押していない動きの報告）を有効にしているか。 */
+  private anyMotion = false;
   /** pane の headless ごとの copy モードの対象（捨てた headless のものは一緒に消える）。 */
   private readonly copyTargets = new WeakMap<PaneTerminal, TuiCopyTarget>();
   /** オーバーレイ（ダイアログ・メニュー）。 */
@@ -155,9 +162,23 @@ export class TuiApp {
       },
       { navigate: this.navigateMode, copy: this.copyMode, resize: new ResizeMode() },
     );
-    this.keys.router.onModeChange(() => this.scheduleRender());
+    this.keys.router.onModeChange((m) => {
+      // copy モードの対象の pane を覚える（焦点が移ったら元の pane を戻すため）。
+      this.copyPaneId =
+        m === "copy"
+          ? (this.copyPaneId ?? this.model.focusedPaneId)
+          : m === "prefix"
+            ? this.copyPaneId
+            : null;
+      this.scheduleRender();
+    });
     this.ui = new UiState(this.model);
-    this.disposers.push(this.ui.onChange(() => this.scheduleRender()));
+    this.disposers.push(
+      this.ui.onChange(() => {
+        if (this.ui.overlayOpen) this.mouse?.cancel(); // オーバーレイを開いたら途中のドラッグを捨てる
+        this.scheduleRender();
+      }),
+    );
     this.dispatcher = new TuiDispatcher({
       model: this.model,
       ui: this.ui,
@@ -195,6 +216,9 @@ export class TuiApp {
       sendToPane: (paneId, bytes) => this.sendToPane(paneId, bytes),
       writeClipboard: (text) => this.writeClipboard(text),
       setSidebarCols: (cols, persist) => this.setSidebarCols(cols, persist),
+      setSidebarSpacesRows: (rows, persist) =>
+        this.setLocalState({ sidebarSpacesRows: rows }, persist),
+      openLink: (url) => this.openLink(url),
       rpc: this.rpc,
       scheduleRender: () => this.scheduleRender(),
     });
@@ -320,6 +344,13 @@ export class TuiApp {
   }
 
   protected onModelChange(): void {
+    // copy モードのまま焦点が別の pane へ移ったら、元の pane の選択を消して末尾へ戻し、新しい pane のカーソルを合わせ直す（04 の点検）。
+    const focused = this.model.focusedPaneId;
+    if (this.copyPaneId !== null && focused !== this.copyPaneId) {
+      this.copyTargetOf(this.copyPaneId)?.leave();
+      if (focused) this.copyTargetOf(focused)?.resetCursor();
+      this.copyPaneId = focused;
+    }
     // ダイアログを開いている間に戻り先の pane が閉じられたら、戻す先を今の焦点へ差し替える（web の D97）。
     const back = this.ui.preDialogFocusPaneId;
     if (back !== null && !this.model.panes.has(back))
@@ -404,6 +435,7 @@ export class TuiApp {
       }
       case "focus": {
         this.outerFocused = ev.focused;
+        if (!ev.focused) this.mouse.cancel(); // 外側の端末を離れた：離す事象は届かないので、ドラッグを捨てる
         // pane がフォーカスの報告を求めていれば伝える（`CSI ? 1004 h`）。
         const term = this.model.focusedPaneId
           ? this.panes.get(this.model.focusedPaneId)
@@ -497,6 +529,47 @@ export class TuiApp {
     this.ui.toast(`${what}は端末版ではまだ使えません`);
   }
 
+  /** 手元の状態の一部を替える（`persist` なら `tui-state.json` に残す）。 */
+  protected setLocalState(patch: Partial<TuiState>, persist: boolean): void {
+    const next = { ...this.prefs.localState, ...patch };
+    this.prefs.setLocal(next);
+    if (persist) writeTuiState(this.target.stateDir, next).catch(() => undefined);
+  }
+
+  /**
+   * リンクを開く（M6）。手元なら OS の道具（`xdg-open`・`open`・`start`）で。SSH 越し（`SSH_CONNECTION`・`SSH_TTY`）では手元の画面で開けないので、
+   * 外側の端末のクリップボードへ写して知らせる。
+   */
+  protected openLink(url: string): void {
+    if (this.options.openUrl) {
+      this.options.openUrl(url);
+      return;
+    }
+    const env = this.io.env;
+    if (env["SSH_CONNECTION"] || env["SSH_TTY"]) {
+      void this.writeClipboard(url);
+      this.ui.toast(`リンクをコピーしました（SSH 越しなので手元では開けません）: ${url}`);
+      return;
+    }
+    const [cmd, args] =
+      this.io.platform === "darwin"
+        ? ["open", [url]]
+        : this.io.platform === "win32"
+          ? ["cmd", ["/c", "start", "", url]]
+          : ["xdg-open", [url]];
+    try {
+      const child = spawn(cmd, args as string[], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      child.on("error", () => this.ui.toast(`リンクを開けませんでした: ${url}`));
+      child.unref();
+    } catch {
+      this.ui.toast(`リンクを開けませんでした: ${url}`);
+    }
+  }
+
   /** サイドバーの幅（境界のドラッグ。離したら `tui-state.json` に残す）。 */
   protected setSidebarCols(cols: number, persist: boolean): void {
     const next = { ...this.prefs.localState, sidebarCols: Math.max(10, Math.min(cols, 200)) };
@@ -579,6 +652,7 @@ export class TuiApp {
     this.newTabButton = result.newTabButton;
     this.switchButton = result.switchButton;
     this.openRequestedNavigateMenu(layout);
+    this.syncAnyMotion(layout);
     this.io.write(result.output);
     // 見えている pane の既読を進める（外側の端末にフォーカスがあるときだけ。web の sweepMarkSeen と同じ規則）。
     const visible = new Set(layout.panes.map((b) => b.paneId));
@@ -631,6 +705,19 @@ export class TuiApp {
       style: "block",
       blink: false,
     };
+  }
+
+  /**
+   * 見えている pane のどれかが全部の動きを求めていれば（`?1003`）、外側の端末にもボタンを押していない動きを報告させる（無くなれば戻す）。
+   * 戻すのは `RESTORE_SEQUENCE` も行う。
+   */
+  private syncAnyMotion(layout: LayoutResult): void {
+    const want = layout.panes.some(
+      (b) => this.panes.get(b.paneId)?.modes.mouseTrackingMode === "any",
+    );
+    if (want === this.anyMotion) return;
+    this.anyMotion = want;
+    this.io.write(want ? "\x1b[?1003h" : "\x1b[?1003l");
   }
 
   /** navigate モードの Space（`navigate_open_menu`）：選んでいる workspace の行の横にメニューを開く（web の Sidebar と同じ役）。 */

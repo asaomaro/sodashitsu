@@ -329,6 +329,7 @@ export class ListDialog implements Overlay {
   private selected = 0;
   private rect: Rect | null = null;
   private rowsTop = 0;
+  private visibleRows = 0;
   private scroll = 0;
 
   constructor(
@@ -358,7 +359,12 @@ export class ListDialog implements Overlay {
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "down" && ev.button === 0) {
       const index = ev.y - this.rowsTop + this.scroll;
-      if (index >= 0 && index < this.rows().length && ev.y >= this.rowsTop) {
+      // 見えている行だけ（下の案内の行・見えていない行を実行しない）。
+      if (
+        ev.y >= this.rowsTop &&
+        ev.y < this.rowsTop + this.visibleRows &&
+        index < this.rows().length
+      ) {
         this.selected = index;
         this.accept();
       }
@@ -393,6 +399,7 @@ export class ListDialog implements Overlay {
     this.rect = r;
     const inner = drawBox(grid, r, c, title);
     const visible = Math.max(1, inner.h - 1);
+    this.visibleRows = visible;
     if (this.selected < this.scroll) this.scroll = this.selected;
     if (this.selected >= this.scroll + visible) this.scroll = this.selected - visible + 1;
     this.rowsTop = inner.y;

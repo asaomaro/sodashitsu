@@ -108,15 +108,105 @@ const flush = async () => {
   for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
 };
 
-describe("TuiDispatcher — 全操作が落ちずに扱われる（web の 56 操作）", () => {
-  it("カタログの全操作（添字つきは 1）を run しても投げない", () => {
+/**
+ * 全操作（カタログの 56 操作。添字つきは 1）の効果の表。**web の `ActionDispatcher` の同じ操作と同じ RPC・引数・ダイアログ**（焦点は p1・w1/t1〔p1|p2〕・w2/t2〔p3〕）。
+ * 表に無い操作があれば落ちる（足し忘れの検出）。
+ */
+const EFFECTS: Record<
+  string,
+  {
+    rpc?: [string, unknown];
+    dialog?: string;
+    host?: keyof DispatcherHost;
+    none?: true;
+    mode?: true;
+    toast?: true;
+  }
+> = {
+  help: { dialog: "help" },
+  detach: { host: "detach" },
+  settings: { host: "openSettings" },
+  open_notification_target: { host: "focusNextNotification" },
+  reload_config: { rpc: ["prefs.get", {}] },
+  stop_server: { dialog: "confirmStopServer" },
+  workspace_picker: { mode: true },
+  goto: { dialog: "goto" },
+  new_workspace: {
+    rpc: ["workspace.create", { newCwd: { policy: "follow", sourcePaneId: "p1" } }],
+  },
+  rename_workspace: { dialog: "renameWorkspace" },
+  close_workspace: { dialog: "confirmClose" },
+  new_worktree: { rpc: ["worktree.list", { workspaceId: "w1" }] },
+  new_tab: { dialog: "newTab" },
+  next_tab: { rpc: ["tab.focus", { tabId: "t1" }] },
+  previous_tab: { rpc: ["tab.focus", { tabId: "t1" }] },
+  switch_tab: { rpc: ["tab.focus", { tabId: "t1" }] },
+  rename_tab: { dialog: "renameTab" },
+  close_tab: { rpc: ["tab.close", { tabId: "t1" }] },
+  previous_workspace: { rpc: ["workspace.focus", { workspaceId: "w2" }] },
+  next_workspace: { rpc: ["workspace.focus", { workspaceId: "w2" }] },
+  move_tab_previous: { rpc: ["tab.move", { tabId: "t1", direction: "previous" }] },
+  move_tab_next: { rpc: ["tab.move", { tabId: "t1", direction: "next" }] },
+  move_workspace_previous: {
+    rpc: ["workspace.move", { workspaceId: "w1", direction: "previous" }],
+  },
+  move_workspace_next: { rpc: ["workspace.move", { workspaceId: "w1", direction: "next" }] },
+  previous_agent: { none: true },
+  next_agent: { none: true },
+  focus_agent: { none: true },
+  switch_workspace: { rpc: ["workspace.focus", { workspaceId: "w1" }] },
+  open_worktree: { rpc: ["worktree.list", { workspaceId: "w1" }] },
+  remove_worktree: { toast: true },
+  split_vertical: {
+    rpc: ["pane.split", { paneId: "p1", direction: "right", newCwd: { policy: "follow" } }],
+  },
+  split_horizontal: {
+    rpc: ["pane.split", { paneId: "p1", direction: "down", newCwd: { policy: "follow" } }],
+  },
+  focus_pane_left: { none: true },
+  focus_pane_down: { none: true },
+  focus_pane_up: { none: true },
+  focus_pane_right: { rpc: ["pane.focus", { paneId: "p2" }] },
+  swap_pane_left: { rpc: ["pane.swap", { paneId: "p1", direction: "left" }] },
+  swap_pane_down: { rpc: ["pane.swap", { paneId: "p1", direction: "down" }] },
+  swap_pane_up: { rpc: ["pane.swap", { paneId: "p1", direction: "up" }] },
+  swap_pane_right: { rpc: ["pane.swap", { paneId: "p1", direction: "right" }] },
+  cycle_pane_next: { rpc: ["pane.focus", { paneId: "p2" }] },
+  cycle_pane_previous: { rpc: ["pane.focus", { paneId: "p2" }] },
+  close_pane: { rpc: ["pane.close", { paneId: "p1" }] },
+  zoom: { rpc: ["pane.zoom", { paneId: "p1", mode: "toggle" }] },
+  resize_mode: { mode: true },
+  rename_pane: { dialog: "renamePane" },
+  copy_mode: { mode: true },
+  edit_scrollback: { rpc: ["pane.edit_scrollback", { paneId: "p1" }] },
+  toggle_sidebar: { host: "toggleSidebar" },
+  remote_image_paste: { host: "pasteImage" },
+  last_pane: { none: true },
+  resize_pane_left: { rpc: ["pane.resize", { paneId: "p1", direction: "left", amount: 0.05 }] },
+  resize_pane_down: { rpc: ["pane.resize", { paneId: "p1", direction: "down", amount: 0.05 }] },
+  resize_pane_up: { rpc: ["pane.resize", { paneId: "p1", direction: "up", amount: 0.05 }] },
+  resize_pane_right: { rpc: ["pane.resize", { paneId: "p1", direction: "right", amount: 0.05 }] },
+  swap_with_focused: { none: true },
+};
+
+describe("TuiDispatcher — 全操作の効果（web の 56 操作と同じ RPC・引数・ダイアログ）", () => {
+  it("表はカタログの全操作をちょうど覆う", () => {
+    expect(Object.keys(EFFECTS).sort()).toEqual(ACTIONS.map((d) => d.id).sort());
+    expect(ACTIONS).toHaveLength(56);
+  });
+
+  it.each(ACTIONS.map((d) => [d.id, d as ActionDef] as const))("%s", (id, def) => {
     const h = harness();
-    for (const def of ACTIONS) {
-      const d = def as ActionDef;
-      const action: Action = d.indexed ? d.action(1) : d.action;
-      expect(() => h.d.run(action), def.id).not.toThrow();
-      h.ui.closeDialog();
-    }
+    const action: Action = def.indexed ? def.action(1) : def.action;
+    h.d.run(action);
+    const e = EFFECTS[id]!;
+    if (e.rpc) expect(h.calls[0]).toEqual(e.rpc);
+    else if (!e.none && !e.mode) expect(h.calls).toEqual([]);
+    if (e.dialog) expect(h.ui.dialogContext?.kind).toBe(e.dialog);
+    else expect(h.ui.dialogContext).toBeNull();
+    if (e.host) expect(h.host[e.host]).toHaveBeenCalled();
+    if (e.none || e.mode) expect(h.calls).toEqual([]);
+    if (e.toast) expect(h.ui.toasts).toHaveLength(1);
   });
 });
 
@@ -801,6 +891,24 @@ describe("TuiDispatcher — グループ", () => {
     expect(h.ui.toasts[1]?.message).toBe(
       "グループは作成しましたが、workspace の追加に失敗しました。",
     );
+  });
+
+  it("自動グループの折りたたみを保存できなければ元に戻して知らせる（04 の点検）", async () => {
+    const h = harness(snapshot(), { "prefs.set": new Error("x") });
+    h.d.toggleAutoGroupCollapsed("/repo");
+    expect(h.prefs.collapsedAutoGroups.has("/repo")).toBe(true);
+    await flush();
+    expect(h.prefs.collapsedAutoGroups.has("/repo")).toBe(false);
+    expect(h.ui.toasts.map((t) => t.message)).toEqual(["折りたたみを保存できませんでした"]);
+  });
+
+  it("メニューの貼り付け：クリップボードが空・読めないなら黙って何もしない", async () => {
+    const h = harness();
+    h.host.readClipboard.mockResolvedValueOnce(null);
+    h.d.pasteIntoPane("p1");
+    await flush();
+    expect(h.host.pasteText).not.toHaveBeenCalled();
+    expect(h.ui.toasts).toEqual([]);
   });
 
   it("worktree の自動グループの折りたたみは共有の設定（prefs.set）", () => {
