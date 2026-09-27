@@ -34,27 +34,27 @@
 
 ## タスク
 
-- [ ] T1: `packages/tui` を作り、`runTui(target, io?)` の入口・`TuiApp` の骨組み・外側の端末のモードの有効化と復元（終了・シグナル・例外）を作る
+- [x] T1: `packages/tui` を作り、`runTui(target, io?)` の入口・`TuiApp` の骨組み・外側の端末のモードの有効化と復元（終了・シグナル・例外）を作る
       対象: `packages/client-core/package.json`（写す元）・`packages/cli/src/commands/attach.ts`（モードの復元の作法）・（新規 `packages/tui/`）
       依存: なし
       AC: AC3
-- [ ] T2: 接続（`ws` の注入・Cookie/Origin/Host・証明書の指紋・再ログイン・再接続）と `SessionModel`（イベントの適用・既読）
+- [x] T2: 接続（`ws` の注入・Cookie/Origin/Host・証明書の指紋・再ログイン・再接続）と `SessionModel`（イベントの適用・既読）
       対象: `packages/client-core/src/net/Connection.ts`・`packages/cli/src/wsClient.ts:210-273`・`packages/web/src/store/StoreAdapter.ts:102-157`・`packages/web/src/store/session.ts`
       依存: T1
       AC: AC10, AC11, AC12
-- [ ] T3: `PaneTerminal`（headless＋unicode11・SNAPSHOT/OUTPUT・モードの追跡）と購読の管理（見えている pane の subscribe/unsubscribe）
+- [x] T3: `PaneTerminal`（headless＋unicode11・SNAPSHOT/OUTPUT・モードの追跡）と購読の管理（見えている pane の subscribe/unsubscribe）
       対象: `packages/server/src/terminal/Mirror.ts:141-149,196`・`packages/web/src/term/TerminalRegistry.ts:258-259`・`packages/web/src/term/ViewSync.ts:44-58,96-111,152-156`
       依存: T2
       AC: AC6, AC3
-- [ ] T4: 割り付け（`computeLayout`）・`Screen`（差分描画）・`color.ts`・pane の中身と最小限の chrome（サイドバー・tab バー・枠）・大きさの申告と切り取り
+- [x] T4: 割り付け（`computeLayout`）・`Screen`（差分描画）・`color.ts`・pane の中身と最小限の chrome（サイドバー・tab バー・枠）・大きさの申告と切り取り
       対象: `packages/client-core/src/layout/layoutOrder.ts`・`packages/client-core/src/sidebar/*`・`packages/client-core/src/workspace/workspaceGrouping.ts`・`packages/client-core/src/theme/*`・`scratchpad/herdr/src/protocol/render_ansi.rs:578-603`（手順の参考）
       依存: T3
       AC: AC2, AC6, AC10, AC11
-- [ ] T5: 入力（`decode`・`KeyRouter`・pane へのキーの符号化・ブラケットペースト・フォーカスの報告）と `detach`・`focus_pane_*`・`toggle_sidebar`
+- [x] T5: 入力（`decode`・`KeyRouter`・pane へのキーの符号化・ブラケットペースト・フォーカスの報告）と `detach`・`focus_pane_*`・`toggle_sidebar`
       対象: `packages/client-core/src/keys/KeyRouter.ts`・`packages/client-core/src/keys/chord.ts`・`packages/cli/src/attachKeys.ts`
       依存: T3
       AC: AC3, AC6, AC-I5
-- [ ] T6: `soda`（引数なし）から `runTui` を呼ぶ（server の仮の入口を差し替え）・node-pty での結合テスト（起動・描画・切り離し・再び開く）。端末版の切り離し・終了で `/api/logout` を送る（02 の review ラウンド 2）。server の `launch/localHttp.ts` の証明書の照合の写しを `@sodashitsu/tui/pinnedTls` に寄せる。tui の devDependency の server との循環を解く
+- [x] T6: `soda`（引数なし）から `runTui` を呼ぶ（server の仮の入口を差し替え）・node-pty での結合テスト（起動・描画・切り離し・再び開く）。端末版の切り離し・終了で `/api/logout` を送る（02 の review ラウンド 2）。server の `launch/localHttp.ts` の証明書の照合の写しを `@sodashitsu/tui/pinnedTls` に寄せる。tui の devDependency の server との循環を解く
       対象: `packages/server/src/main.ts`・`packages/server/src/launch/findOrStart.ts`（02 で作ったもの）・`packages/server/package.json`
       依存: T4, T5
       AC: AC1, AC2, AC3, AC4

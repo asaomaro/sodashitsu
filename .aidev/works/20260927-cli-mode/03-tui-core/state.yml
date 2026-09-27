@@ -1,8 +1,8 @@
 schema: 11
 slug: 03-tui-core
 parent: 20260927-cli-mode
-current: tasks
-approved: []
+current: review
+approved: [tasks, coding, test, review]
 mode: autonomous
 profile: full
 humanGates: []
