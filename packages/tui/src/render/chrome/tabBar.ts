@@ -17,10 +17,16 @@ export interface TabHit {
   w: number;
 }
 
+/** tab バーの当たり：tab と「＋」（新しい tab。herdr の M14）。 */
+export interface TabBarHits {
+  tabs: TabHit[];
+  newTab: { x: number; w: number } | null;
+}
+
 /**
  * tab バー（1 行）：左端に prefix 待ちの `PREFIX`（AC-I1）、今の workspace の tab（表示中を強調）、右端に接続の状態・知らせ・session 名。
  */
-export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabHit[] {
+export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarHits {
   const { theme, model } = ctx;
   const bg = theme.ui("--soda-bg");
   const fg = theme.ui("--soda-fg");
@@ -62,7 +68,7 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabHit[
   }
 
   const hits: TabHit[] = [];
-  if (!model.workspaceId) return hits;
+  if (!model.workspaceId) return { tabs: hits, newTab: null };
   const tabs = model.tabsOf(model.workspaceId);
   tabs.forEach((t, i) => {
     if (x >= rightStart - 1) return;
@@ -80,5 +86,10 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabHit[
     hits.push({ tabId: t.id, x, w });
     x += w;
   });
-  return hits;
+  let newTab: TabBarHits["newTab"] = null;
+  if (x + 3 < rightStart) {
+    const w = grid.text(x + 1, rect.y, " + ", fg, activeBg, 0);
+    newTab = { x: x + 1, w };
+  }
+  return { tabs: hits, newTab };
 }

@@ -33,7 +33,8 @@ import { SessionModel } from "../model/SessionModel.js";
 import { TuiNet, type TuiNetDeps } from "../net/TuiNet.js";
 import type { ChromeContext } from "../render/chrome/context.js";
 import type { SidebarHit } from "../render/chrome/sidebar.js";
-import type { TabHit } from "../render/chrome/tabBar.js";
+import type { TabBarHits, TabHit } from "../render/chrome/tabBar.js";
+import { MouseController } from "../input/mouse.js";
 import { colorModeOf, ThemeColors } from "../render/color.js";
 import { Renderer } from "../render/Renderer.js";
 import {
@@ -90,6 +91,9 @@ export class TuiApp {
   protected lastLayout: LayoutResult | null = null;
   protected sidebarHits: SidebarHit[] = [];
   protected tabHits: TabHit[] = [];
+  protected newTabButton: TabBarHits["newTab"] = null;
+  /** マウスの操作。 */
+  readonly mouse: MouseController;
   readonly keys: TuiKeys;
   private readonly decoder = new InputDecoder();
   private escTimer: ReturnType<typeof setTimeout> | null = null;
@@ -177,6 +181,20 @@ export class TuiApp {
       actions: this.dispatcher,
       helpGroups: () => helpGroups(this.keymap, this.navigateKeymap),
       extra: (ctx) => this.extraOverlay(ctx),
+    });
+    this.mouse = new MouseController({
+      model: this.model,
+      ui: this.ui,
+      actions: this.dispatcher,
+      layout: () => this.lastLayout,
+      sidebarHits: () => this.sidebarHits,
+      tabHits: () => ({ tabs: this.tabHits, newTab: this.newTabButton }),
+      pane: (paneId) => this.panes.get(paneId),
+      sendToPane: (paneId, bytes) => this.sendToPane(paneId, bytes),
+      writeClipboard: (text) => this.writeClipboard(text),
+      setSidebarCols: (cols, persist) => this.setSidebarCols(cols, persist),
+      rpc: this.rpc,
+      scheduleRender: () => this.scheduleRender(),
     });
     this.disposers.push(this.model.onChange(() => this.onModelChange()));
     this.disposers.push(this.prefs.onChange(() => this.onPrefsChange()));
@@ -367,6 +385,10 @@ export class TuiApp {
     }
     switch (ev.kind) {
       case "key":
+        if (this.mouse.selection) {
+          this.mouse.selection = null; // 打鍵で選択の表示を消す（コピーは済んでいる）
+          this.scheduleRender();
+        }
         this.keys.handle(ev);
         // モードの中のキー（copy のカーソル・navigate の選択）は画面を変える。
         if (this.keys.mode !== "terminal") this.scheduleRender();
@@ -393,19 +415,9 @@ export class TuiApp {
     }
   }
 
-  /** マウス（03 では pane のクリックで焦点を移すだけ。当たり判定とドラッグ・pane への受け渡しは 04 の `input/mouse.ts`）。 */
+  /** マウス（`input/mouse.ts`。design「マウス」の全操作）。 */
   protected handleMouse(ev: Extract<InputEvent, { kind: "mouse" }>): void {
-    if (ev.action !== "down" || ev.button !== 0) return;
-    const box = this.lastLayout?.panes.find(
-      (b) =>
-        ev.x >= b.frame.x &&
-        ev.x < b.frame.x + b.frame.w &&
-        ev.y >= b.frame.y &&
-        ev.y < b.frame.y + b.frame.h,
-    );
-    if (!box || box.paneId === this.model.focusedPaneId) return;
-    this.model.focusPane(box.paneId);
-    this.net?.conn.request("pane.focus", { paneId: box.paneId }).catch(() => undefined);
+    this.mouse.handle(ev);
   }
 
   /** 送り先が無くて打鍵を捨てた。接続が開いていないなら短く知らせる（黙って捨てない）。 */
@@ -434,7 +446,7 @@ export class TuiApp {
   }
 
   /** pane へ入力を送る（関所を通す。新しい pane を待つ間は溜まる）。 */
-  protected sendToPane(paneId: string, bytes: string): void {
+  protected sendToPane(paneId: string, bytes: string | Uint8Array): void {
     if (this.gate) this.gate.sendInput(paneId, bytes);
     else this.net?.conn.sendInput(paneId, bytes);
   }
@@ -480,6 +492,13 @@ export class TuiApp {
   /** 端末版にまだ無い操作（05 で足す）。 */
   protected notYet(what: string): void {
     this.ui.toast(`${what}は端末版ではまだ使えません`);
+  }
+
+  /** サイドバーの幅（境界のドラッグ。離したら `tui-state.json` に残す）。 */
+  protected setSidebarCols(cols: number, persist: boolean): void {
+    const next = { ...this.prefs.localState, sidebarCols: Math.max(10, Math.min(cols, 200)) };
+    if (next.sidebarCols !== this.prefs.sidebarCols) this.prefs.setLocal(next);
+    if (persist) writeTuiState(this.target.stateDir, next).catch(() => undefined);
   }
 
   /** `toggle_sidebar`：折りたたみを切り替え、`tui-state.json` に残す（design「画面」）。 */
@@ -554,6 +573,7 @@ export class TuiApp {
     });
     this.sidebarHits = result.sidebarHits;
     this.tabHits = result.tabHits;
+    this.newTabButton = result.newTabButton;
     this.openRequestedNavigateMenu(layout);
     this.io.write(result.output);
     // 見えている pane の既読を進める（外側の端末にフォーカスがあるときだけ。web の sweepMarkSeen と同じ規則）。
@@ -563,7 +583,32 @@ export class TuiApp {
 
   /** pane の上の印（copy モードの選択とカーソル）。何も描かなければ undefined。 */
   protected decorate(grid: Grid, layout: LayoutResult): CursorState | null | undefined {
-    if (this.keys.mode !== "copy") return undefined;
+    let drew = false;
+    // マウスの選択（M4）
+    const msel = this.mouse.selection;
+    const mbox = msel ? layout.panes.find((b) => b.paneId === msel.paneId) : undefined;
+    const mterm = msel ? this.panes.get(msel.paneId) : undefined;
+    if (msel && mbox && mterm) {
+      invertRange(
+        grid,
+        mbox.content,
+        mterm.term.buffer.active.viewportY,
+        msel.from,
+        msel.to,
+        false,
+      );
+      drew = true;
+    }
+    // pane の名前のドラッグの落とし先（W01〜W03）
+    const drop = this.mouse.dropTarget;
+    if (drop?.kind === "pane") {
+      const r = drop.rect;
+      for (let y = r.y; y < r.y + r.h; y++)
+        for (let x = r.x; x < r.x + r.w; x++)
+          grid.bg[y * grid.w + x] = this.theme.ui("--soda-accent");
+      drew = true;
+    }
+    if (this.keys.mode !== "copy") return drew ? null : undefined;
     const paneId = this.model.focusedPaneId;
     const box = paneId ? layout.panes.find((b) => b.paneId === paneId) : undefined;
     const target = paneId ? this.copyTargetOf(paneId) : undefined;
@@ -572,19 +617,7 @@ export class TuiApp {
     const top = term.term.buffer.active.viewportY;
     const { content } = box;
     const sel = target.selection();
-    if (sel) {
-      for (
-        let row = Math.max(sel.from.row, top);
-        row <= Math.min(sel.to.row, top + content.h - 1);
-        row++
-      ) {
-        const y = content.y + row - top;
-        const from = sel.linewise || row > sel.from.row ? 0 : sel.from.col;
-        const to = sel.linewise || row < sel.to.row ? content.w - 1 : sel.to.col;
-        for (let col = from; col <= Math.min(to, content.w - 1); col++)
-          grid.attrs[y * grid.w + content.x + col]! ^= ATTR.inverse;
-      }
-    }
+    if (sel) invertRange(grid, content, top, sel.from, sel.to, sel.linewise);
     const cy = target.cursor.row - top;
     if (cy < 0 || cy >= content.h) return null;
     return {
@@ -650,4 +683,22 @@ export class TuiApp {
 export function describeError(err: unknown): string {
   if (err instanceof Error) return err.stack ?? err.message;
   return String(err);
+}
+
+/** pane の中身の上の範囲（絶対行）を反転して見せる。 */
+function invertRange(
+  grid: Grid,
+  content: { x: number; y: number; w: number; h: number },
+  top: number,
+  from: { row: number; col: number },
+  to: { row: number; col: number },
+  linewise: boolean,
+): void {
+  for (let row = Math.max(from.row, top); row <= Math.min(to.row, top + content.h - 1); row++) {
+    const y = content.y + row - top;
+    const a = linewise || row > from.row ? 0 : from.col;
+    const b = linewise || row < to.row ? content.w - 1 : to.col;
+    for (let col = a; col <= Math.min(b, content.w - 1); col++)
+      grid.attrs[y * grid.w + content.x + col]! ^= ATTR.inverse;
+  }
 }

@@ -102,7 +102,12 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     expect(outer.line(1)).toContain("shell-1");
     expect(outer.line(2)).toContain("hello from p1");
     expect(outer.line(3)).toContain("日本語 ok");
-    expect(r.sidebarHits.map((h) => h.kind)).toEqual(["workspace", "workspace", "agent"]);
+    expect(r.sidebarHits.map((h) => h.kind)).toEqual([
+      "newWorkspace",
+      "workspace",
+      "workspace",
+      "agent",
+    ]);
     expect(r.tabHits.map((h) => h.tabId)).toEqual(["t1"]);
     // 本物のカーソルは焦点の pane（p1）のカーソルの位置（中身の左上 + カーソル）。
     const p1Box = layout().panes.find((b) => b.paneId === "p1")!.content;

@@ -4,7 +4,7 @@ import type { PaneRegistry } from "../term/PaneRegistry.js";
 import type { ChromeContext } from "./chrome/context.js";
 import { paintFrame } from "./chrome/frame.js";
 import { paintSidebar, type SidebarHit } from "./chrome/sidebar.js";
-import { paintTabBar, type TabHit } from "./chrome/tabBar.js";
+import { paintTabBar, type TabBarHits, type TabHit } from "./chrome/tabBar.js";
 import type { ColorMode } from "./color.js";
 import { isCropped, paintPane } from "./paintPane.js";
 import { Grid, Screen, type CursorState } from "./Screen.js";
@@ -24,6 +24,7 @@ export interface RenderResult {
   output: string;
   sidebarHits: SidebarHit[];
   tabHits: TabHit[];
+  newTabButton: TabBarHits["newTab"];
 }
 
 /**
@@ -65,10 +66,16 @@ export class Renderer {
       centerText(grid, "端末が小さすぎます", theme.ui("--soda-fg"), theme.ui("--soda-bg"));
       this.lastGrid = null;
       this.lastPaint.clear();
-      return { output: this.screen.frame(grid, null), sidebarHits: [], tabHits: [] };
+      return {
+        output: this.screen.frame(grid, null),
+        sidebarHits: [],
+        tabHits: [],
+        newTabButton: null,
+      };
     }
     const sidebarHits = layout.sidebar ? paintSidebar(grid, layout.sidebar, ctx) : [];
-    const tabHits = paintTabBar(grid, layout.tabBar, ctx);
+    const tabBar = paintTabBar(grid, layout.tabBar, ctx);
+    const tabHits = tabBar.tabs;
 
     const prev =
       this.lastGrid && this.lastGrid.w === grid.w && this.lastGrid.h === grid.h
@@ -128,7 +135,12 @@ export class Renderer {
     if (covered) painted.clear();
     this.lastGrid = grid;
     this.lastPaint = painted;
-    return { output: this.screen.frame(grid, cursor), sidebarHits, tabHits };
+    return {
+      output: this.screen.frame(grid, cursor),
+      sidebarHits,
+      tabHits,
+      newTabButton: tabBar.newTab,
+    };
   }
 }
 

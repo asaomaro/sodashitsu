@@ -34,6 +34,7 @@
 | `packages/tui/src/render/Screen.ts` | `src/protocol/render_ansi.rs`（差分描画の手順：同期出力・全角の右隣の無効化・CUP の省略・最後のカーソル。20260927-cli-mode） |
 | `packages/tui/src/input/decode.ts` | `src/raw_input.rs`（方針に倣った：ESC 単独の時間切れ・マウス中の長い待ち・ブラケットペーストの判定。20260927-cli-mode） |
 | `packages/tui/src/input/encode.ts` | `src/input/encode.rs`（DECCKM に合わせたカーソルキーの付け替え。20260927-cli-mode） |
+| `packages/tui/src/input/mouseEncode.ts` | `src/input/encode.rs`（`encode_mouse_cb`：pane へのマウスの報告の符号化。20260927-cli-mode） |
 
 テストの一部（`ManifestEngine.test.ts`・`ProcessMatcher.test.ts`・`AgentTracker.test.ts`・
 `packages/server/src/git/worktree.test.ts`・`packages/protocol/src/worktreePath.test.ts`）にも、

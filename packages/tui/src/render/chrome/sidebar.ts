@@ -17,7 +17,9 @@ export type SidebarTarget =
   | { kind: "workspace"; workspaceId: string }
   | { kind: "group"; groupId: string }
   | { kind: "autoGroup"; repoKey: string }
-  | { kind: "agent"; paneId: string };
+  | { kind: "agent"; paneId: string }
+  /** 「＋」（新しい workspace。herdr の M14）。`x` の桁だけが当たり。 */
+  | { kind: "newWorkspace"; x: number };
 export type SidebarHit = SidebarTarget & { y: number };
 
 interface Line {
@@ -125,6 +127,11 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     const y = rect.y + i;
     if ("header" in line) {
       grid.text(rect.x + 1, y, truncate(line.header, inner - 1), fg, bg, ATTR.dim);
+      if (line.header === "Spaces" && inner >= 10) {
+        const x = rect.x + inner - 2;
+        grid.set(x, y, "+", 1, fg, activeBg);
+        hits.push({ y, kind: "newWorkspace", x });
+      }
       continue;
     }
     // navigate モードで選んでいる行はアクセントの色で（今の workspace の強調より優先）。
