@@ -293,6 +293,8 @@ export async function composeServer(
     metadata,
     images,
     prefs,
+    // `server.stop`（20260927-cli-mode）。制御の socket の止める指示と同じ受け付けと停止の手順（`control` は下で作る。呼ばれるのは待ち受けの後）。
+    stopServer: (reply) => control.stop(reply),
   });
   // `/ws?machine=<id|名前>` は認証の後にそのマシンへの中継へ（`WsServerWs` は router の関数だけを知る。architecture の境界）。
   // 中継の接続は `WsGateway` を通らないので、手元のセッションの失効（ログアウト・token の作り直し）で閉じる印をここで持つ（`WsGateway` と同じ 4401）。

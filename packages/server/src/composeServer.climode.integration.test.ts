@@ -1,13 +1,16 @@
+import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { PREFS_MAX_BYTES } from "@sodashitsu/protocol";
 import { makeTempDir } from "./persist/atomicFile.js";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 import type { ComposedServer } from "./composeServer.js";
+import { STATE_DIR_LOCK_FILE } from "./persist/StateDirLock.js";
 
 /**
- * 20260927-cli-mode の 02-server：サーバの口（`prefs.*`・`prefs.changed`）を実物の `composeServer`（乱数ポート・一時の状態ディレクトリ）で確かめる。
+ * 20260927-cli-mode の 02-server：サーバの口（`prefs.*`・`prefs.changed`・`server.stop`）を実物の `composeServer`（乱数ポート・一時の状態ディレクトリ）で確かめる。
  */
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -187,6 +190,26 @@ describe("composeServer: 02-server の口（20260927-cli-mode）", () => {
       const second = await start(stateDir);
       const b = await connect(second, await tokenLogin(second, token));
       expect(await b.request("prefs.get", {})).toEqual({ prefs: { theme: "nord" }, rev: 1 });
+    });
+  });
+
+  describe("server.stop（T3）", () => {
+    it("応答を返してから onStopRequest の停止の手順を呼ぶ。閉じるとロックが無く、接続は 1001 で閉じる", async () => {
+      const stateDir = await tempStateDir();
+      const server = await start(stateDir);
+      const a = await connect(server, await tokenLogin(server, server.freshToken!));
+      let closing: Promise<void> | undefined;
+      let calls = 0;
+      server.onStopRequest(() => {
+        calls++;
+        closing = server.close(); // main.ts の停止の手順と同じく close() を始める
+      });
+      const closed = new Promise<number>((resolve) => a.ws.once("close", (code) => resolve(code)));
+      expect(await a.request("server.stop", {})).toEqual({});
+      expect(await closed).toBe(1001);
+      await closing;
+      expect(calls).toBe(1);
+      expect(existsSync(join(stateDir, STATE_DIR_LOCK_FILE))).toBe(false);
     });
   });
 });
