@@ -1,3 +1,4 @@
+import { X509Certificate } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { hostname as osHostname, platform } from "node:os";
@@ -63,6 +64,7 @@ import { COMMANDS_FILE_NAME } from "./commands/commandConfig.js";
 import { CommandService } from "./commands/CommandService.js";
 import { MetadataService } from "./metadata/MetadataService.js";
 import { PrefsStore } from "./persist/PrefsStore.js";
+import { LocalLogin } from "./auth/LocalLogin.js";
 
 export interface ComposedServer {
   httpServer: HttpServer;
@@ -162,9 +164,11 @@ export async function composeServer(
   // Origin の検査と拒否のログは `/api/login` と `/ws` で 1 つを共有する（間引きの状態を分けない——同じブラウザが両方で
   // 拒否されても 1 回。`HttpServer`・`WsServerWs` の必須の依存。D102・D103）。
   const originRejections = new OriginRejectionLog(logger, origins, { extraOrigins: options.extraOrigins });
+  // 手元からのログイン（20260927-cli-mode。decisions D2）。秘密は `listen()` の待ち受けの後に作って `local-auth.json` へ書き、`close()` で消す。
+  const localLogin = new LocalLogin(options.stateDir);
   let httpServer: HttpServer;
   try {
-    httpServer = new HttpServer(auth, originRejections, rateLimiter, { webDistDir: webDistDirFor(), cert, key, logger });
+    httpServer = new HttpServer(auth, originRejections, rateLimiter, { webDistDir: webDistDirFor(), cert, key, logger, localLogin });
   } catch (err) {
     // `https.createServer` は証明書と秘密鍵をその場で解釈する（PEM でない・鍵が合わない等で投げる）。
     if (!secure) throw err;
@@ -173,6 +177,9 @@ export async function composeServer(
       "--cert と --key に、対になる PEM 形式の証明書と秘密鍵を指定してください（docs/tls-setup.md）。",
     );
   }
+
+  // 証明書の SHA-256 の指紋（`serve.json` の `certSha256`。20260927-cli-mode）。端末版は指紋が一致した証明書だけを受ける（`tls.PeerCertificate.fingerprint256` と同じ書式）。
+  const certSha256 = secure && cert !== undefined ? certFingerprint(cert) : undefined;
 
   const model = new SessionModel();
   const bus = new EventBus();
@@ -496,8 +503,17 @@ export async function composeServer(
         boundPortValue = boundPort;
         paneUrl = paneServerUrl(secure ? "https" : "http", options.host, boundPort);
         // 1''. 起動の記録（20260926-named-session-ui）。名前付き session のポートの記憶と、session の一覧の開くための情報に使う。書けなくても続ける。
-        await writeServeRecord(options.stateDir, { pid: process.pid, hostname: osHostname(), port: boundPort, https: secure, host: options.host }).catch(
-          (err: unknown) => logger.warn("cannot write serve.json", { error: err instanceof Error ? err.message : String(err) }),
+        await writeServeRecord(options.stateDir, {
+          pid: process.pid,
+          hostname: osHostname(),
+          port: boundPort,
+          https: secure,
+          host: options.host,
+          ...(certSha256 !== undefined ? { certSha256 } : {}),
+        }).catch((err: unknown) => logger.warn("cannot write serve.json", { error: err instanceof Error ? err.message : String(err) }));
+        // 1-2. 手元からのログインの秘密（20260927-cli-mode）。書けなくても起動は続ける（端末版が繋げないだけ。ブラウザは token で入れる）。
+        await localLogin.start().catch((err: unknown) =>
+          logger.warn("cannot write local-auth.json; `soda` without arguments cannot connect", { error: err instanceof Error ? err.message : String(err) }),
         );
         // 2. token（初回だけ作る。表示は呼び出し側が行う——この後で失敗しても `freshToken` は読める）。
         const { created, token } = await auth.ensureToken();
@@ -575,6 +591,7 @@ export async function composeServer(
         await agentReportSocket?.close();
         await handoffSocket?.close();
         if (bridgeListening) await bridgeEndpoint.close();
+        await localLogin.stop();
         // 引き継いだのに使う前に失敗した PTY は手放す（見えないプロセスを残さない）。
         if (takenPending !== undefined) discardHandedOffPanes(takenPending.panes, { logger }); // 復元に入る前の失敗だけ
         await lock.release();
@@ -629,6 +646,8 @@ export async function composeServer(
         // （`HandoffSocket.close()` は今は reject しないが、将来 reject してもロックを残さないよう握る）
         await handoffSocket?.close().catch(() => undefined);
         await bridgeEndpoint.close().catch(() => undefined); // 途中で投げても受け口を残さない（2 回目は何もしない）
+        // 手元からのログインの秘密を消す（20260927-cli-mode。止まったサーバの秘密を残さない。書いていなければ何もしない）。
+        await localLogin.stop();
         // session.json を書き終えてから放す（D103。持っていなければ——ロックで断られた起動等——何もしない）。
         await lock.release();
       }
@@ -644,6 +663,15 @@ async function withRememberedPort(options: ServeOptions, rawArgs: RawServeArgs):
   if (options.sessionName === undefined || rawArgs.port !== undefined) return options;
   const record = await readServeRecord(options.stateDir);
   return record === undefined ? options : { ...options, port: record.port, portSource: "remembered" };
+}
+
+/** 証明書（PEM。連なりなら先頭＝サーバの証明書）の SHA-256 の指紋（`AA:BB:…`）。解釈できなければ undefined（`https.createServer` が先に断っている）。 */
+function certFingerprint(pem: string): string | undefined {
+  try {
+    return new X509Certificate(pem).fingerprint256;
+  } catch {
+    return undefined;
+  }
 }
 
 /** `--cert`/`--key` の PEM を読む。読めなければ設定の誤り（終了コード 2）にする。 */

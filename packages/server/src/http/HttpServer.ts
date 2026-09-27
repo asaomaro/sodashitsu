@@ -5,6 +5,7 @@ import { extname, join, normalize, resolve, sep } from "node:path";
 import type { AuthService } from "../auth/AuthService.js";
 import type { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import type { LoginRateLimiter } from "../auth/LoginRateLimiter.js";
+import { isSameMachine, type LocalLoginVerifier } from "../auth/LocalLogin.js";
 import type { Logger } from "../log/Logger.js";
 import { LogThrottle } from "../log/LogThrottle.js";
 import { requestPathname } from "../util/net.js";
@@ -15,6 +16,8 @@ export interface HttpServerOptions {
   cert?: string | undefined;
   key?: string | undefined;
   logger: Logger;
+  /** 手元からのログイン（`POST /api/local-login`。20260927-cli-mode）。無ければその経路は 404（静的配信へ落とさない）。 */
+  localLogin?: LocalLoginVerifier | undefined;
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -91,6 +94,7 @@ export class HttpServer {
       return;
     }
     if (req.method === "POST" && pathname === "/api/login") return this.handleLogin(req, res);
+    if (req.method === "POST" && pathname === "/api/local-login") return this.handleLocalLogin(req, res);
     if (req.method === "POST" && pathname === "/api/logout") return this.handleLogout(req, res);
     if (req.method === "GET" && pathname === "/api/session") return this.handleSession(req, res);
     return this.handleStatic(req, res, pathname);
@@ -129,6 +133,55 @@ export class HttpServer {
       return;
     }
     res.setHeader("Set-Cookie", this.auth.buildSetCookieHeader(result.sessionId, this.secure));
+    res.statusCode = 204;
+    res.end();
+  }
+
+  /**
+   * 手元からのログイン（20260927-cli-mode の design「server」・decisions D2）。`/api/login` と同じ回数の制限と Origin/Host の検査を通した後、
+   * (1) 同じマシンからの接続（`remoteAddress` と `localAddress` が同じ。IPv4-mapped は揃えてから比べる）、(2) `local-auth.json` の秘密の一致、
+   * のときだけ通常の session cookie を出す。どちらの失敗も回数の制限に数える（別のマシンからの総当たりも、秘密の総当たりも同じ扱い）。
+   */
+  private async handleLocalLogin(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const verifier = this.opts.localLogin;
+    if (verifier === undefined) {
+      res.statusCode = 404;
+      res.end();
+      return;
+    }
+    const ip = this.clientIp(req);
+    if (this.rateLimiter.isBlocked(ip)) {
+      res.statusCode = 429;
+      res.end();
+      return;
+    }
+    const rejection = { path: "/api/local-login", remoteAddress: ip, origin: req.headers.origin, host: req.headers.host };
+    const admitted = this.originGate.admit(rejection, () => {
+      res.statusCode = 403;
+      res.end();
+    });
+    if (!admitted) return;
+    if (!isSameMachine(req.socket.remoteAddress, req.socket.localAddress)) {
+      this.rateLimiter.registerFailure(ip);
+      res.statusCode = 403;
+      res.end();
+      return;
+    }
+    const body = await readJsonBody(req).catch(() => null);
+    const secret = body && typeof body === "object" && "secret" in body ? (body as { secret: unknown }).secret : undefined;
+    if (typeof secret !== "string" || secret === "") {
+      res.statusCode = 400;
+      res.end();
+      return;
+    }
+    if (!verifier.verify(secret)) {
+      this.rateLimiter.registerFailure(ip);
+      res.statusCode = 401;
+      res.end();
+      return;
+    }
+    const sessionId = await this.auth.issueSession();
+    res.setHeader("Set-Cookie", this.auth.buildSetCookieHeader(sessionId, this.secure));
     res.statusCode = 204;
     res.end();
   }

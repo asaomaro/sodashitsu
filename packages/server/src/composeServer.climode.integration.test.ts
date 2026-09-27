@@ -1,5 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { X509Certificate } from "node:crypto";
 import { existsSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
@@ -8,9 +10,11 @@ import { makeTempDir } from "./persist/atomicFile.js";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 import type { ComposedServer } from "./composeServer.js";
 import { STATE_DIR_LOCK_FILE } from "./persist/StateDirLock.js";
+import { localAuthPath, readLocalAuth } from "./auth/LocalLogin.js";
+import { readServeRecord } from "./persist/ServeRecordFile.js";
 
 /**
- * 20260927-cli-mode の 02-server：サーバの口（`prefs.*`・`prefs.changed`・`server.stop`）を実物の `composeServer`（乱数ポート・一時の状態ディレクトリ）で確かめる。
+ * 20260927-cli-mode の 02-server：サーバの口（`prefs.*`・`prefs.changed`・`server.stop`・`/api/local-login`・`serve.json` の指紋）を実物の `composeServer`（乱数ポート・一時の状態ディレクトリ）で確かめる。
  */
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -37,8 +41,16 @@ describe("composeServer: 02-server の口（20260927-cli-mode）", () => {
     return stateDir;
   }
 
-  async function start(stateDir: string): Promise<ComposedServer> {
-    const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
+  async function start(
+    stateDir: string,
+    tls?: { cert: string; key: string },
+  ): Promise<ComposedServer> {
+    const server = await composeServerOnFreePort({
+      host: "127.0.0.1",
+      stateDir,
+      origin: [],
+      ...(tls ?? {}),
+    });
     let closed = false;
     const close = server.close.bind(server);
     server.close = async () => {
@@ -212,4 +224,125 @@ describe("composeServer: 02-server の口（20260927-cli-mode）", () => {
       expect(existsSync(join(stateDir, STATE_DIR_LOCK_FILE))).toBe(false);
     });
   });
+
+  describe("/api/local-login（T4）", () => {
+    async function localLogin(server: ComposedServer, secret: string): Promise<Response> {
+      const port = server.options.port;
+      const origin = `http://127.0.0.1:${port}`;
+      return fetch(`${origin}/api/local-login`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin, host: `127.0.0.1:${port}` },
+        body: JSON.stringify({ secret }),
+      });
+    }
+
+    it("local-auth.json（このプロセスの pid）の秘密で通常の cookie が出て、その cookie で /ws に繋がる。止めると秘密のファイルを消す", async () => {
+      const stateDir = await tempStateDir();
+      const server = await start(stateDir);
+      const rec = await readLocalAuth(stateDir);
+      expect(rec?.pid).toBe(process.pid);
+      const res = await localLogin(server, rec!.secret);
+      expect(res.status).toBe(204);
+      const setCookie = res.headers.get("set-cookie")!;
+      expect(setCookie).toMatch(/^soda_session=/);
+      expect(setCookie).toContain("HttpOnly");
+      const client = await connect(server, setCookie.split(";")[0]!);
+      expect(client.clientId).toBeTruthy();
+      client.ws.close();
+      await server.close();
+      expect(existsSync(localAuthPath(stateDir))).toBe(false);
+    });
+
+    it("秘密が違えば 401。失敗は /api/login と同じ回数の制限に数え、5 回で正しい秘密も 429", async () => {
+      const stateDir = await tempStateDir();
+      const server = await start(stateDir);
+      const rec = await readLocalAuth(stateDir);
+      for (let i = 0; i < 5; i++) expect((await localLogin(server, `wrong-${i}`)).status).toBe(401);
+      expect((await localLogin(server, rec!.secret)).status).toBe(429);
+      // 同じ制限を共有する（token のログインも止まる）
+      const port = server.options.port;
+      const origin = `http://127.0.0.1:${port}`;
+      const tokenRes = await fetch(`${origin}/api/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin, host: `127.0.0.1:${port}` },
+        body: JSON.stringify({ token: server.freshToken }),
+      });
+      expect(tokenRes.status).toBe(429);
+    });
+
+    it("秘密が無い・Origin が許可外なら通さない", async () => {
+      const stateDir = await tempStateDir();
+      const server = await start(stateDir);
+      const port = server.options.port;
+      const origin = `http://127.0.0.1:${port}`;
+      const noSecret = await fetch(`${origin}/api/local-login`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin, host: `127.0.0.1:${port}` },
+        body: "{}",
+      });
+      expect(noSecret.status).toBe(400);
+      const rec = await readLocalAuth(stateDir);
+      const badOrigin = await fetch(`${origin}/api/local-login`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://evil.example",
+          host: `127.0.0.1:${port}`,
+        },
+        body: JSON.stringify({ secret: rec!.secret }),
+      });
+      expect(badOrigin.status).toBe(403);
+    });
+  });
+
+  describe.skipIf(!hasOpenssl())("serve.json の certSha256（T4）", () => {
+    it("https で起動すると serve.json に証明書の SHA-256 の指紋を書く", async () => {
+      const stateDir = await tempStateDir();
+      const certDir = await tempStateDir();
+      const cert = join(certDir, "cert.pem");
+      const key = join(certDir, "key.pem");
+      execFileSync(
+        "openssl",
+        [
+          "req",
+          "-x509",
+          "-newkey",
+          "ec",
+          "-pkeyopt",
+          "ec_paramgen_curve:prime256v1",
+          "-nodes",
+          "-subj",
+          "/CN=127.0.0.1",
+          "-days",
+          "1",
+          "-keyout",
+          key,
+          "-out",
+          cert,
+        ],
+        { stdio: "ignore" },
+      );
+      await start(stateDir, { cert, key });
+      const record = await readServeRecord(stateDir);
+      expect(record?.https).toBe(true);
+      expect(record?.certSha256).toBe(
+        new X509Certificate(await readFile(cert, "utf8")).fingerprint256,
+      );
+    });
+
+    it("http では certSha256 を書かない", async () => {
+      const stateDir = await tempStateDir();
+      await start(stateDir);
+      expect(await readServeRecord(stateDir)).not.toHaveProperty("certSha256");
+    });
+  });
 });
+
+function hasOpenssl(): boolean {
+  try {
+    execFileSync("openssl", ["version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}

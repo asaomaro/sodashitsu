@@ -47,6 +47,11 @@ export interface AuthService {
   ensureToken(): Promise<{ created: boolean; token: string | undefined }>;
   resetToken(): Promise<string>;
   login(token: string): Promise<{ ok: true; sessionId: string } | { ok: false }>;
+  /**
+   * token を照合せずにセッションを発行する（手元からのログイン `POST /api/local-login` 専用。20260927-cli-mode）。照合（同じマシン・秘密の一致）は
+   * 呼び出し側の責任。発行したセッションは `login` のものと同じ扱い（14 日・ログアウト・token の作り直しで失効）。
+   */
+  issueSession(): Promise<string>;
   logout(sessionId: string): Promise<void>;
   /** 高速な確認（ディスクへの書き込みはしない）。有効なら内部の最終利用時刻だけ延ばす。 */
   verifySession(sessionId: string | undefined): boolean;
@@ -139,7 +144,11 @@ export class DefaultAuthService implements AuthService {
     const expected = Buffer.from(this.data.token.hash, "hex");
     const actual = (await scrypt(token, salt, SCRYPT_KEYLEN)) as Buffer;
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return { ok: false };
+    return { ok: true, sessionId: await this.issueSession() };
+  }
 
+  async issueSession(): Promise<string> {
+    await this.ensureLoaded();
     const sessionId = randomBytes(SESSION_ID_BYTES).toString("base64url");
     const idHash = sha256Hex(sessionId);
     const now = Date.now();
@@ -150,7 +159,7 @@ export class DefaultAuthService implements AuthService {
       sessions: [...this.data.sessions, { idHash, createdAt: new Date(now).toISOString(), lastSeenAt: new Date(now).toISOString() }],
     };
     await this.file.save(this.data);
-    return { ok: true, sessionId };
+    return sessionId;
   }
 
   async logout(sessionId: string): Promise<void> {

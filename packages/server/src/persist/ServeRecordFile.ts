@@ -21,6 +21,8 @@ export interface ServeRecord {
   https: boolean;
   /** 待ち受けのホスト（`--host`。角括弧なし）。 */
   host: string;
+  /** TLS のとき、証明書の SHA-256 の指紋（`AA:BB:…`。`tls.PeerCertificate.fingerprint256` と同じ書式。20260927-cli-mode）。端末版が繋ぐ先の確かめに使う。 */
+  certSha256?: string;
   savedAt: string;
 }
 
@@ -57,6 +59,7 @@ export function parseServeRecord(raw: string): ServeRecord | undefined {
   if (!isPort(r["port"])) return undefined;
   if (typeof r["https"] !== "boolean") return undefined;
   if (typeof r["host"] !== "string" || r["host"].length === 0) return undefined;
+  const certSha256 = r["certSha256"];
   return {
     schema: 1,
     pid: r["pid"],
@@ -64,6 +67,7 @@ export function parseServeRecord(raw: string): ServeRecord | undefined {
     port: r["port"],
     https: r["https"],
     host: r["host"],
+    ...(typeof certSha256 === "string" && certSha256 !== "" ? { certSha256 } : {}),
     savedAt: typeof r["savedAt"] === "string" ? r["savedAt"] : "",
   };
 }
