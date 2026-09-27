@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./pinnedTls": {
+      "types": "./dist/net/pinnedTls.d.ts",
+      "default": "./dist/net/pinnedTls.js"
     }
   },
   "scripts": {

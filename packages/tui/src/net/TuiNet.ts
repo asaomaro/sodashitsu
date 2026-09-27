@@ -10,6 +10,8 @@ import type { SessionModel } from "../model/SessionModel.js";
 import type { TuiTarget } from "../types.js";
 import {
   CertificateMismatchError,
+  lacksPin,
+  MissingCertificatePinError,
   nodeFetch,
   nodeWebSocketFactory,
   wsUrlOf,
@@ -28,9 +30,14 @@ export interface TuiNetHandlers {
 }
 
 export interface TuiNetDeps {
+  /** 時計（テスト用）。 */
+  now?: () => number;
   createWebSocket?: (ep: Endpoint) => (url: string) => WebSocketLike;
   fetchImpl?: (ep: Endpoint) => typeof fetch;
 }
+
+/** 再接続中にサーバが生きているかを確かめ直す間隔。 */
+export const PROBE_INTERVAL_MS = 10_000;
 
 /** 認証を求められて再ログインしても、開けないまま続いたら諦める回数。 */
 const MAX_RELOGIN_WITHOUT_OPEN = 3;
@@ -45,16 +52,20 @@ export class TuiNet implements StorePort {
   private cookie = "";
   private reloginInFlight = false;
   private reloginsWithoutOpen = 0;
-  /** 今の「再接続中」の間に、サーバが生きているかをログインで確かめたか。 */
-  private probedThisOutage = false;
+  /** 再接続中に、サーバが生きているかをログインで最後に確かめた時刻（開けたら null）。長い停止の間も間隔を空けて確かめ直す。 */
+  private lastProbeAt: number | null = null;
+  private probing = false;
   private stopped = false;
   private detachSent = false;
+
+  private readonly now: () => number;
 
   constructor(
     private readonly target: TuiTarget,
     private readonly h: TuiNetHandlers,
     deps: TuiNetDeps = {},
   ) {
+    this.now = deps.now ?? (() => Date.now());
     const ep: Endpoint = {
       baseUrl: target.baseUrl,
       origin: target.origin,
@@ -80,11 +91,20 @@ export class TuiNet implements StorePort {
       store: this,
       sink: h.sink,
       fetchImpl,
-      createWebSocket: (url) => (this.stopped ? idleSocket() : baseCreate(url)),
+      createWebSocket: (url) => {
+        if (this.stopped) return idleSocket();
+        try {
+          return baseCreate(url);
+        } catch (err) {
+          // 同期の失敗（https なのに指紋が無い等）を `Connection` のタイマーの中で投げさせない。
+          this.fatal(`soda: ${err instanceof Error ? err.message : String(err)}\n`);
+          return idleSocket();
+        }
+      },
     });
     this.conn.onOpened((clientId) => {
       this.reloginsWithoutOpen = 0;
-      this.probedThisOutage = false;
+      this.lastProbeAt = null;
       h.onOpened(clientId);
     });
     this.conn.onClosed(() => h.onClosed());
@@ -92,6 +112,10 @@ export class TuiNet implements StorePort {
 
   /** 最初のログイン → 接続。 */
   async start(): Promise<void> {
+    if (lacksPin(this.target)) {
+      this.fatal(`soda: ${new MissingCertificatePinError().message}\n`);
+      return;
+    }
     try {
       this.cookie = await this.target.login();
     } catch (err) {
@@ -128,16 +152,30 @@ export class TuiNet implements StorePort {
   onConnectionState(s: ConnectionState): void {
     if (this.stopped) return;
     this.h.onState(s);
-    if (s === "reconnecting" && !this.probedThisOutage) {
-      this.probedThisOutage = true;
-      // サーバが止まると秘密のファイルが消えてログインできなくなる。ログインできれば cookie を新しくして繋ぎ直しを続ける。
-      this.target.login().then(
-        (cookie) => {
-          this.cookie = cookie;
-        },
-        () => this.fatal("soda: the server has stopped (run `soda` again to start it)\n"),
-      );
-    }
+    if (s === "reconnecting") this.probeServer();
+  }
+
+  /**
+   * 再接続中に、サーバが生きているかをログインで確かめる（サーバが止まると秘密のファイルが消えてログインできなくなる）。ログインできれば
+   * cookie を新しくして繋ぎ直しを続ける。**停止が長引いても `PROBE_INTERVAL_MS` ごとに確かめ直す**（`Connection` は試みのたびに
+   * `reconnecting` を知らせる）——1 回目の確かめの後にサーバが止まっても「再接続中」のまま残らない。
+   */
+  private probeServer(): void {
+    const now = this.now();
+    if (this.probing || (this.lastProbeAt !== null && now - this.lastProbeAt < PROBE_INTERVAL_MS))
+      return;
+    this.probing = true;
+    this.lastProbeAt = now;
+    this.target.login().then(
+      (cookie) => {
+        this.probing = false;
+        this.cookie = cookie;
+      },
+      () => {
+        this.probing = false;
+        this.fatal("soda: the server has stopped (run `soda` again to start it)\n");
+      },
+    );
   }
 
   onOriginRejectSuspected(): void {

@@ -1,8 +1,18 @@
-import { request as httpRequest, type ClientRequestArgs, type IncomingMessage } from "node:http";
+import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { connect as tlsConnect, type ConnectionOptions, type TLSSocket } from "node:tls";
 import WebSocket from "ws";
 import type { WebSocketLike } from "@sodashitsu/client-core";
+import {
+  MissingCertificatePinError,
+  pinnedTlsConnection,
+  type CreateConnection,
+} from "./pinnedTls.js";
+
+export {
+  CertificateMismatchError,
+  MissingCertificatePinError,
+  pinnedTlsConnection,
+} from "./pinnedTls.js";
 
 /**
  * Node から手元の `soda serve` へ繋ぐ口（client-core の `Connection` に注入する。20260927-cli-mode の design「net/」）。
@@ -18,47 +28,14 @@ export interface Endpoint {
   cookie(): string;
 }
 
-type CreateConnection = NonNullable<ClientRequestArgs["createConnection"]>;
-
-/** 指紋で相手を確かめてから渡す TLS の接続（`http.request`・`ws` の `createConnection`）。 */
-export function pinnedTlsConnection(certSha256: string): CreateConnection {
-  const expected = certSha256.toUpperCase();
-  return (options, cb) => {
-    let done = false;
-    const finish = (err: Error | null, socket: TLSSocket): void => {
-      if (done) return;
-      done = true;
-      cb(err, socket);
-    };
-    const socket = tlsConnect({ ...(options as ConnectionOptions), rejectUnauthorized: false });
-    socket.once("secureConnect", () => {
-      const got = socket.getPeerCertificate().fingerprint256?.toUpperCase();
-      if (got !== expected) {
-        socket.destroy();
-        finish(new CertificateMismatchError(expected, got), socket);
-        return;
-      }
-      finish(null, socket);
-    });
-    socket.once("error", (err) => finish(err, socket));
-    return undefined;
-  };
-}
-
-export class CertificateMismatchError extends Error {
-  constructor(expected: string, got: string | undefined) {
-    super(
-      `the server certificate does not match serve.json (certSha256 ${expected}, got ${got ?? "none"})`,
-    );
-    this.name = "CertificateMismatchError";
-  }
+/** https なのに指紋が無い（serve.json が古い）か。あれば繋がない——検証を切った TLS で cookie を送らない。 */
+export function lacksPin(ep: Pick<Endpoint, "baseUrl" | "certSha256">): boolean {
+  return ep.baseUrl.startsWith("https:") && ep.certSha256 === undefined;
 }
 
 function connectionOptions(ep: Endpoint): { createConnection?: CreateConnection } {
   if (!ep.baseUrl.startsWith("https:")) return {};
-  // https なのに指紋が無い（serve.json が古い）なら繋がない——検証を切った TLS で cookie を送らない。
-  if (ep.certSha256 === undefined)
-    throw new Error("https without certSha256: refusing to connect without a pinned certificate");
+  if (ep.certSha256 === undefined) throw new MissingCertificatePinError();
   return { createConnection: pinnedTlsConnection(ep.certSha256) };
 }
 

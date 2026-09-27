@@ -144,4 +144,31 @@ describe("TuiNet（接続・再ログイン。AC10・AC11・AC12）", () => {
     net.stop();
     expect(sockets[0]!.requests("client.detach")).toHaveLength(1);
   });
+
+  it("停止が長引いても 10 秒ごとにログインで確かめ直し、途中でサーバが止まれば終える", async () => {
+    vi.useFakeTimers();
+    let alive = true;
+    const login = vi.fn(async () => {
+      if (!alive) throw new Error("gone");
+      return "sid=1";
+    });
+    const { net, h, sockets } = setup(login);
+    await net.start();
+    await vi.advanceTimersByTimeAsync(0);
+    sockets[0]!.open();
+    sockets[0]!.reply({ clientId: "c1", snapshot: snapshot() });
+    await vi.advanceTimersByTimeAsync(0);
+    sockets[0]!.close(1006);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(login).toHaveBeenCalledTimes(2); // 最初のログイン＋停止の確かめ（生きている）
+    alive = false;
+    // 繋ぎ直しの試みが失敗し続ける（開く前に閉じる）。
+    for (let i = 0; i < 8 && !h.onFatal.mock.calls.length; i++) {
+      await vi.advanceTimersByTimeAsync(5_000);
+      const last = sockets[sockets.length - 1]!;
+      if (last.readyState === 0) last.close(1006);
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(h.onFatal).toHaveBeenCalledWith(expect.stringContaining("stopped"));
+  });
 });
