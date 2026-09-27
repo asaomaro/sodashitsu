@@ -160,6 +160,35 @@ export class InputDecoder {
   private readonly utf8 = new TextDecoder();
   private pending = "";
   private paste: string | null = null;
+  /** 端末版が外側の端末へ問い合わせ（背景色の OSC 11）、応答を待っている間の締め切り（`now()` の値）。 */
+  private replyDeadline = 0;
+
+  constructor(private readonly now: () => number = () => Date.now()) {}
+
+  /**
+   * 外側の端末へ問い合わせた（OSC 11）。`ms` の間は、読みで割れた `ESC ] 1…` を応答の途中として待つ（Alt+] と文字として pane へ漏らさない。
+   * ESC の時間切れの確定でも待つ）。締め切りを過ぎたら、いつもの規則（Alt+]）に戻る。
+   */
+  expectReply(ms: number): void {
+    this.replyDeadline = this.now() + ms;
+  }
+
+  private get awaitingReply(): boolean {
+    return this.now() < this.replyDeadline;
+  }
+
+  /** 応答を待っている間の、割れた OSC の応答の頭（`ESC ]` か `ESC ] 1…` で、終わりも壊れた文字もまだ無い）。 */
+  private partialReply(s: string): boolean {
+    if (!this.awaitingReply || !s.startsWith("\x1b]")) return false;
+    if (s.length === 2) return true;
+    if (s[2] !== "1") return false;
+    for (let j = 3; j < s.length; j++) {
+      const c = s.charCodeAt(j);
+      if (c === 0x1b) return j === s.length - 1; // ST の ESC だけが届いた
+      if (c < 0x20) return false;
+    }
+    return true;
+  }
 
   /**
    * 確定まで待つ時間。CSI・SS3 が `ESC [` / `ESC O` より先まで届いている（引数・中間のバイトか、`ESC [<`・`ESC [M` まで来た）ときだけ長め
@@ -167,6 +196,9 @@ export class InputDecoder {
    * **残るあいまいさ**：Alt+[ / Alt+O の直後 25ms 以内に次の文字を打つと、列として読まれる（xterm 自身も区別できない）。
    */
   get waitMs(): number {
+    // 問い合わせの応答の途中なら、締め切りまで待つ（締め切りで確定し直す）。
+    if (this.partialReply(this.pending))
+      return Math.max(ESC_TIMEOUT_MS, this.replyDeadline - this.now());
     const core = this.pending.startsWith("\x1b\x1b") ? this.pending.slice(1) : this.pending;
     const sequence = core.startsWith("\x1b[") || core.startsWith("\x1bO");
     return sequence && core.length > 2 ? SEQUENCE_TIMEOUT_MS : ESC_TIMEOUT_MS;
@@ -243,9 +275,11 @@ export class InputDecoder {
     }
     if (next === "O") return this.parseSs3(s, force);
     if (next === "]" || next === "P" || next === "_" || next === "^") {
-      // 端末版は外側の端末に問い合わせないので、ESC ] 等はふつう Alt+] 等の打鍵。完全で形の正しい OSC・DCS 等が同じ読みの中に
-      // 届いたときだけ（外側の端末が自分から送るもの）捨てる。待たない——続く BEL（Ctrl+G）等の打鍵を消さない。
+      // ESC ] 等はふつう Alt+] 等の打鍵。完全で形の正しい OSC・DCS 等が同じ読みの中に届いたときは（外側の端末が送るもの）打鍵にしない。
+      // ふだんは待たない——続く BEL（Ctrl+G）等の打鍵を消さない。ただし端末版が背景色を問い合わせた（OSC 11）直後の締め切りまでは、
+      // 割れた `ESC ] 1…` を応答の途中として待つ（`expectReply`）。
       const len = stringSequenceLength(s, next);
+      if (len === null && this.partialReply(s)) return "incomplete";
       if (len !== null) {
         // 背景色の問い合わせ（`OSC 11 ; ?`）の応答だけは読む（明暗の判定）。ほかの応答は捨てる。
         const dark = next === "]" ? backgroundDarkness(s.slice(2, len)) : null;

@@ -213,26 +213,32 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     agentsH = Math.max(0, bodyH - 1 - spacesH - 1);
   } else spacesH = Math.max(0, bodyH - 1);
 
-  const revealIndex = (list: VisualRow[], match: (h: SidebarTarget) => boolean): number =>
-    list.findIndex((r) => r.sub === 0 && r.line.hit !== undefined && match(r.line.hit));
+  /** 見せる項目の最初の行と行数（複数行の項目は全部の行を見せる。見つからなければ -1）。 */
+  const revealRange = (
+    list: VisualRow[],
+    match: (h: SidebarTarget) => boolean,
+  ): [number, number] => {
+    const i = list.findIndex((r) => r.sub === 0 && r.line.hit !== undefined && match(r.line.hit));
+    return i < 0 ? [-1, 0] : [i, list[i]!.line.rows.length];
+  };
   scroll.spaces = fitScroll(
     scroll.spaces,
     spacesLines.length,
     spacesH,
-    scroll.reveal?.workspaceId
-      ? revealIndex(
+    ...(scroll.reveal?.workspaceId
+      ? revealRange(
           spacesLines,
           (h) => h.kind === "workspace" && h.workspaceId === scroll.reveal!.workspaceId,
         )
-      : -1,
+      : ([-1, 0] as [number, number])),
   );
   scroll.agents = fitScroll(
     scroll.agents,
     agentRows.length,
     agentsH,
-    scroll.reveal?.paneId
-      ? revealIndex(agentRows, (h) => h.kind === "agent" && h.paneId === scroll.reveal!.paneId)
-      : -1,
+    ...(scroll.reveal?.paneId
+      ? revealRange(agentRows, (h) => h.kind === "agent" && h.paneId === scroll.reveal!.paneId)
+      : ([-1, 0] as [number, number])),
   );
   scroll.reveal = null;
 
@@ -291,11 +297,19 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
 }
 
 /** 表示の位置を収める（`reveal` の行が隠れていれば見える所まで）。 */
-function fitScroll(offset: number, total: number, height: number, reveal: number): number {
+function fitScroll(
+  offset: number,
+  total: number,
+  height: number,
+  reveal: number,
+  revealRows = 1,
+): number {
   let o = Math.max(0, Math.min(offset, total - height));
   if (reveal >= 0 && height > 0) {
+    // 項目の全部の行（入らなければ頭から入る分）を見せる。
+    const last = reveal + Math.min(Math.max(1, revealRows), height) - 1;
     if (reveal < o) o = reveal;
-    else if (reveal >= o + height) o = reveal - height + 1;
+    else if (last >= o + height) o = last - height + 1;
   }
   return Math.max(0, o);
 }

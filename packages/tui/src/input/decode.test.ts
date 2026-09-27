@@ -323,3 +323,48 @@ describe("InputDecoder（03 ラウンド 2 の指摘）", () => {
     expect(d.feed("!!")).toEqual([expect.objectContaining({ kind: "mouse" })]);
   });
 });
+
+describe("InputDecoder：背景色の問い合わせの応答が読みで割れても打鍵にしない（05 T2 の点検）", () => {
+  it("問い合わせの直後は、割れた ESC ] 1… を ESC の時間切れでも待ち、続きで明暗として読む", () => {
+    let now = 1000;
+    const d = new InputDecoder(() => now);
+    d.expectReply(500);
+    expect(d.feed("\x1b]11;rgb:ffff/")).toEqual([]);
+    expect(d.waiting).toBe(true);
+    expect(d.waitMs).toBeGreaterThanOrEqual(400);
+    now += 30;
+    expect(d.flush()).toEqual([]); // ESC の時間切れでも確定しない
+    expect(d.feed("ffff/ffff\x1b")).toEqual([]);
+    expect(d.feed("\\x")).toEqual([
+      { kind: "colorScheme", dark: false },
+      expect.objectContaining({ kind: "key", raw: "x" }),
+    ]);
+  });
+
+  it("締め切りの後・問い合わせていないときは、いつもの規則（Alt+] と続きの文字）", () => {
+    let now = 0;
+    const d = new InputDecoder(() => now);
+    d.expectReply(500);
+    expect(d.feed("\x1b]1")).toEqual([]);
+    now = 600;
+    expect(chords(d.flush())).toEqual([
+      ["alt+]", "\x1b]"],
+      ["1", "1"],
+    ]);
+    const plain = new InputDecoder(() => 0);
+    expect(chords(plain.feed("\x1b]1"))).toEqual([
+      ["alt+]", "\x1b]"],
+      ["1", "1"],
+    ]);
+  });
+});
+
+describe("InputDecoder：応答を待つ間も、ほかの列（CSI 等）の待ちはいつもどおり", () => {
+  it("途中まで届いた CSI（ESC [ 1 …）は応答として待たない", () => {
+    const d = new InputDecoder(() => 0);
+    d.expectReply(500);
+    expect(d.feed("\x1b[1;")).toEqual([]);
+    expect(d.waitMs).toBeLessThan(500);
+    expect(d.flush().length).toBeGreaterThan(0);
+  });
+});

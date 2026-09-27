@@ -65,6 +65,8 @@ export interface TuiAppOptions {
 export const RENDER_INTERVAL_MS = 16;
 /** 接続が開いていない間の打鍵の知らせ。 */
 export const DROPPED_NOTICE = "未接続のため入力を送れません";
+/** 外側の端末への問い合わせ（背景色）の応答を、割れた列として待つ時間。 */
+export const REPLY_WAIT_MS = 500;
 /** 初回の知らせを tab バーに出しておく時間（design「起動と終了」）。 */
 const NOTICE_MS = 10_000;
 
@@ -291,6 +293,8 @@ export class TuiApp {
       // `tui.mouseCapture` は prefs.get の前なので、ここでは既定（有効）。受け取った後に切なら `onPrefsChange` が止める。
       this.mouseOn = this.prefs.mouseCapture;
       this.modes.enable(this.mouseOn);
+      // 起動の列で背景色を訊いた（OSC 11）。応答が読みで割れても打鍵にしないよう、少しの間は待つ。
+      this.decoder.expectReply(REPLY_WAIT_MS);
       this.start();
     } catch (err) {
       this.finish(1, `soda: ${describeError(err)}\n`);
@@ -469,13 +473,17 @@ export class TuiApp {
       this.escTimer = null;
     }
     for (const ev of this.decoder.feed(bytes)) this.handleInput(ev);
-    if (this.decoder.waiting) {
-      // ESC 単独か、列の途中で切れたか。少し待って確定する（design「input/decode.ts」）。
-      this.escTimer = setTimeout(() => {
-        this.escTimer = null;
-        for (const ev of this.decoder.flush()) this.handleInput(ev);
-      }, this.decoder.waitMs);
-    }
+    this.armEscTimer();
+  }
+
+  /** ESC 単独か、列の途中で切れたか。少し待って確定する（design「input/decode.ts」）。問い合わせの応答の途中なら締め切りまで待ち直す。 */
+  private armEscTimer(): void {
+    if (!this.decoder.waiting || this.ended) return;
+    this.escTimer = setTimeout(() => {
+      this.escTimer = null;
+      for (const ev of this.decoder.flush()) this.handleInput(ev);
+      this.armEscTimer();
+    }, this.decoder.waitMs);
   }
 
   protected handleInput(ev: InputEvent): void {

@@ -230,7 +230,12 @@ describe("マウス（04 ラウンド 2）", () => {
     h.app.renderNow();
     let text = await h.screen();
     expect(text).toContain("space-w1");
-    expect(text).not.toMatch(/^ {3}space-w20/m); // spaces の区画には無い（agents の行の workspace 名は別）
+    // spaces の区画（見出しの次の 5 行）には w1〜w5 だけ。agents の項目は 2 行（印・workspace・tab／エージェント名）。
+    const rows = text.split("\n").map((l) => l.slice(0, l.indexOf("│")).trimEnd());
+    expect(rows.slice(1, 5)).toEqual(["   space-w1", "   space-w2", "   space-w3", "   space-w4"]);
+    expect(rows[5]).toMatch(/^ {3}space-w5 +↓$/);
+    expect(rows[7]).toBe(" ○ space-w20 t-w20");
+    expect(rows[8]).toBe("   Claude");
     // navigate モードで下の workspace を選ぶと、そこまでずれる。
     h.io.type("\x02w");
     await vi.waitFor(() => expect(h.app.keys.mode).toBe("navigate"));

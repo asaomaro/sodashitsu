@@ -3,7 +3,7 @@ import { enterSequence, RESTORE_SEQUENCE } from "../app/terminalModes.js";
 import { systemDarkFromEnv } from "../app/TuiApp.js";
 import { PrefsModel } from "../model/PrefsModel.js";
 import { startedApp } from "../testing/appHarness.js";
-import { agent, pane, snapshot, workspace } from "../testing/fixtures.js";
+import { agent, leaf, pane, snapshot, tab, workspace } from "../testing/fixtures.js";
 import { rgbColor, ThemeColors } from "./color.js";
 import { parseCssColor } from "./cssColor.js";
 
@@ -16,6 +16,17 @@ describe("CSS の色の読み取り（色の上書き）", () => {
     expect(parseCssColor("rgb(100% 0% 50% / 0.5)")).toEqual({ r: 255, g: 0, b: 128 });
     expect(parseCssColor("hsl(120, 100%, 50%)")).toEqual({ r: 0, g: 255, b: 0 });
     expect(parseCssColor("RebeccaPurple")).toEqual({ r: 0x66, g: 0x33, b: 0x99 });
+    // web（ブラウザの CSS）が落とす値は通さない。
+    for (const bad of [
+      "rgb(1 2 3 4)",
+      "rgb(255, 50%, 0)",
+      "rgb(100% 0 0)",
+      "rgb(1, 2, 3 / 0.5)",
+      "rgb(1 2 3 /)",
+    ])
+      expect(parseCssColor(bad)).toBeNull();
+    expect(parseCssColor("rgb(1 2 3 / 50%)")).toEqual({ r: 1, g: 2, b: 3 });
+    expect(parseCssColor("rgba(1, 2, 3, 0.5)")).toEqual({ r: 1, g: 2, b: 3 });
     for (const bad of [
       "",
       "transparent",
@@ -82,6 +93,31 @@ describe("明暗の自動の切り替え", () => {
     expect(h.app.prefs.theme).toBe("dracula");
   });
 
+  it("背景色の応答が読みで割れても（ESC の時間切れをまたいでも）打鍵として pane へ送らない", async () => {
+    const h = await startedApp();
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    h.io.type("\x1b]11;rgb:ffff/ff");
+    await new Promise((r) => setTimeout(r, 80)); // ESC の時間切れ（25ms・長め 60ms）を過ぎる
+    h.io.type("ff/ffff\x07");
+    await vi.waitFor(() => expect(h.app.prefs.systemDark).toBe(false));
+    expect(h.ws.sent.filter((m) => m instanceof Uint8Array)).toEqual([]);
+  });
+
+  it("応答が来ないまま締め切りを過ぎたら、待っていた列はいつもの規則で打鍵として送る", async () => {
+    const h = await startedApp();
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    h.io.type("\x1b]1"); // 締め切りの内：応答の途中として待つ
+    await new Promise((r) => setTimeout(r, 100));
+    expect(h.ws.sent.filter((m) => m instanceof Uint8Array)).toEqual([]);
+    // 締め切り（起動から 500ms）を過ぎたら Alt+] と 1 として pane へ。
+    await vi.waitFor(
+      () => expect(h.ws.sent.filter((m) => m instanceof Uint8Array).length).toBeGreaterThan(0),
+      { timeout: 2000 },
+    );
+  });
+
   it("PrefsModel：色の上書きは端末版で読める色だけ", () => {
     const p = new PrefsModel();
     p.apply(
@@ -93,6 +129,29 @@ describe("明暗の自動の切り替え", () => {
 });
 
 describe("サイドバーの行の並び（sidebarRows。web と同じ client-core の resolveRows）", () => {
+  it("区画を動かして見せるときは、複数行の項目の全部の行を見せる", async () => {
+    const ids = Array.from({ length: 8 }, (_, i) => `w${i + 1}`);
+    const snap = snapshot({
+      workspaces: ids.map((id) => workspace(id, [`t-${id}`], { label: `ws-${id}` })),
+      tabs: ids.map((id) => tab(`t-${id}`, id, leaf(`p-${id}`))),
+      panes: ids.map((id) =>
+        pane(`p-${id}`, `t-${id}`, { agent: agent({ label: `Agent-${id}` }) }),
+      ),
+    });
+    const h = await startedApp({ snapshot: snap, rows: 20 });
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    h.app.prefs.setLocal({ sidebarSpacesRows: 12 }); // agents の区画は 4 行ほど（2 行の項目が 2 つ）
+    h.app.model.focusPane("p-w8");
+    h.app.renderNow();
+    const side = (await h.screen())
+      .split("\n")
+      .map((l) => l.slice(0, l.indexOf("│")))
+      .join("\n");
+    expect(side).toContain("ws-w8 t-w8");
+    expect(side).toContain("Agent-w8"); // 2 行目（枠の名前ではなくサイドバーの中）
+  });
+
   const closers: (() => Promise<void>)[] = [];
   afterEach(async () => {
     for (const c of closers.splice(0)) await c();

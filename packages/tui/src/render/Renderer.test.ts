@@ -97,8 +97,11 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     expect(outer.line(2)).toContain("beta");
     expect(text).toContain("Agents");
     // agents は web と同じ既定の行の並び（1 行目：印・workspace・tab、2 行目：名前・エージェント・未検証）。
-    expect(text).toContain("◐ beta t2");
-    expect(text).toMatch(/\n {3}Claude/);
+    const lines = text.split("\n");
+    const agents = lines.findIndex((l) => l.includes("Agents"));
+    const sidebarOf = (l: string) => l.slice(0, l.indexOf("│")).trimEnd();
+    expect(sidebarOf(lines[agents + 1]!)).toBe(" ◐ beta t2");
+    expect(sidebarOf(lines[agents + 2]!)).toBe("   Claude");
     expect(outer.line(0)).toContain("1:t1");
     expect(outer.line(0)).toContain("session: work");
     expect(outer.line(1)).toContain("shell-1");

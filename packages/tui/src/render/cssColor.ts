@@ -1,7 +1,8 @@
 /**
  * CSS の色の文字列を RGB へ読む（色の上書き〔`themeOverrides`〕を端末版で描くため。web はブラウザの CSS が読む）。
  * 読める形：`#rgb`・`#rgba`・`#rrggbb`・`#rrggbbaa`・`rgb()`/`rgba()`・`hsl()`/`hsla()`（カンマ区切りと空白区切り）・色の名前（CSS の 148 色）。
- * 透明度は端末に無いので捨てる（`transparent` と `currentcolor` 等は読めない＝null）。読めないものは web では効いても端末版では既定の色のまま。
+ * 透明度は端末に無いので捨てる（`transparent` と `currentcolor` 等は読めない＝null）。**web（ブラウザの CSS）が落とす値は通さない**——
+ * 端末版で入れた色がブラウザで読めないことが無いように（端末版で読めるのは CSS の色の一部。web では効いても端末版では既定の色のまま）。
  */
 export interface Rgb {
   r: number;
@@ -53,14 +54,24 @@ function alphaOk(s: string | undefined): boolean {
   return s === undefined || /^([+-]?(?:\d+\.?\d*|\.\d+))(%?)$/.test(s);
 }
 
-/** 関数の引数（カンマ区切りか、空白区切り＋`/ 透明度`）。 */
+/**
+ * 関数の引数（カンマ区切りか、空白区切り＋`/ 透明度`）。**CSS と同じく**、空白区切りで透明度を付けるなら `/` が要る（`rgb(1 2 3 4)` は読めない）。
+ */
 function args(body: string): string[] | null {
   const t = body.trim();
-  if (t.includes(",")) return t.split(",").map((x) => x.trim());
+  if (t.includes(",")) {
+    const parts = t.split(",").map((x) => x.trim());
+    return parts.length === 3 || parts.length === 4 ? parts : null;
+  }
   const [main, alpha, ...rest] = t.split("/");
   if (rest.length > 0 || main === undefined) return null;
   const parts = main.trim().split(/\s+/);
-  if (alpha !== undefined) parts.push(alpha.trim());
+  if (parts.length !== 3) return null;
+  if (alpha !== undefined) {
+    const a = alpha.trim();
+    if (a === "" || /\s/.test(a)) return null;
+    parts.push(a);
+  }
   return parts;
 }
 
@@ -98,8 +109,11 @@ export function parseCssColor(input: unknown): Rgb | null {
   const fn = /^(rgba?|hsla?)\((.*)\)$/.exec(s);
   if (!fn) return null;
   const parts = args(fn[2]!);
-  if (!parts || (parts.length !== 3 && parts.length !== 4) || !alphaOk(parts[3])) return null;
+  if (!parts || !alphaOk(parts[3])) return null;
   if (fn[1]!.startsWith("rgb")) {
+    // 数と % を混ぜない（CSS の rgb() は 3 つとも数か、3 つとも %）。
+    const pct = parts.slice(0, 3).map((p) => p.endsWith("%"));
+    if (pct.some((x) => x !== pct[0])) return null;
     const [r, g, b] = parts.slice(0, 3).map(channel);
     if (
       r === null ||
