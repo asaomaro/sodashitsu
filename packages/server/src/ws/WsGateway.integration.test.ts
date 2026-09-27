@@ -77,7 +77,9 @@ interface TestServer {
   wsLogger: MemoryLogger;
 }
 
-async function startTestServer(opts: { commandFor?: (index: number) => string; gatewayNow?: () => number } = {}): Promise<TestServer> {
+async function startTestServer(
+  opts: { commandFor?: (index: number) => string; gatewayNow?: () => number; onClientGone?: (clientId: string) => void } = {},
+): Promise<TestServer> {
   const stateDir = await makeTempDir("wtm-ws-state-");
   const auth = new DefaultAuthService(new FsAuthFile(stateDir));
   await auth.initialize();
@@ -113,7 +115,10 @@ async function startTestServer(opts: { commandFor?: (index: number) => string; g
   const http = new HttpServer(auth, originGate, new DefaultLoginRateLimiter(), { webDistDir, logger: new MemoryLogger() });
   const httpServer = http.server;
   const wsServer = new WsServerWs(httpServer, originGate, auth.authorizeUpgrade, wsLogger);
-  new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, new MemoryLogger(), opts.gatewayNow ? { now: opts.gatewayNow } : {});
+  new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, new MemoryLogger(), {
+    ...(opts.gatewayNow ? { now: opts.gatewayNow } : {}),
+    ...(opts.onClientGone ? { onClientGone: opts.onClientGone } : {}),
+  });
 
   const port = await listenOnFreePort(httpServer);
   originOpts.port = port;
@@ -651,3 +656,23 @@ function stubAgentIntegrations(): AgentIntegrationService {
     setAutoResume: () => Promise.reject(new Error("not used in this test")),
   };
 }
+
+describe("WsGateway — 接続の終わりの知らせ（20260927-custom-command-keys）", () => {
+  it("接続が閉じたら onClientGone をその接続の id で 1 度呼ぶ（その接続の popup を止めるため）", async () => {
+    const gone: string[] = [];
+    const server = await startTestServer({ onClientGone: (id) => gone.push(id) });
+    let ws: WebSocket | undefined;
+    try {
+      ({ ws } = await server.connectAuthorized());
+      const inbox = makeInbox(ws);
+      ws.send(JSON.stringify({ id: "h", method: "client.hello", params: { protocol: 1, kind: "desktop" } }));
+      const hello = JSON.parse((await inbox.next()).data.toString("utf8")) as { result: { clientId: string } };
+      expect(gone).toEqual([]);
+      ws.close();
+      await vi.waitFor(() => expect(gone).toEqual([hello.result.clientId]));
+    } finally {
+      ws?.terminate();
+      await server.close();
+    }
+  }, 10000);
+});

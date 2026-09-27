@@ -57,6 +57,8 @@ import { type HandoffSocket, handoffSocketPathFor, startHandoffSocket } from "./
 import { createControlRequests } from "./handoff/controlRequests.js";
 import { runPreflight } from "./handoff/preflight.js";
 import { type HandoffResult, adoptedSpecsOf, discardHandedOffPanes, discardRejectedPanes, finishTakenHandoff } from "./handoff/startup.js";
+import { COMMANDS_FILE_NAME } from "./commands/commandConfig.js";
+import { CommandService } from "./commands/CommandService.js";
 import { MetadataService } from "./metadata/MetadataService.js";
 
 export interface ComposedServer {
@@ -256,6 +258,10 @@ export async function composeServer(
   });
   machines.onChanged((list) => bus.publish({ event: "machine.changed", data: { machines: list } }));
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
+  // 独自コマンド（20260927-custom-command-keys）。状態ディレクトリ（名前付き session ではその session のもの）の commands.json。起動時に 1 度読む
+  // （まだ `/ws` を受け付けていないので `command.updated` を受け取る接続は無い）。読み直しは `command.reload`。
+  const commands = new CommandService({ filePath: join(options.stateDir, COMMANDS_FILE_NAME), session, terminals, bus, clients, logger });
+  await commands.reload();
   // 独自トークン（20260927-sidebar-row-tokens）。session へは MetadataTargets の口越しに書き、閉じた対象は bus で捨てる。`close()` で dispose。
   const metadata = new MetadataService({ targets: session, bus, logger });
   registerAllMethods(surface, {
@@ -269,6 +275,7 @@ export async function composeServer(
     agentStarter,
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
     machines: () => machines.listWhenLoaded(), // 20260927-multi-host-machines（最初の読み込みを待つ）
+    commands,
     metadata,
   });
   // `/ws?machine=<id|名前>` は認証の後にそのマシンへの中継へ（`WsServerWs` は router の関数だけを知る。architecture の境界）。
@@ -296,11 +303,15 @@ export async function composeServer(
   });
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
   wsServer.setReady(false);
-  new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger);
+  new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
+    onClientGone: (clientId) => commands.onClientGone(clientId), // その接続の popup を止める（20260927-custom-command-keys）
+  });
   // 中継の受け口（20260927-multi-host-machines）。ほかのマシンの `wtm serve` が SSH と `wtm bridge` 越しに繋ぐ、状態ディレクトリの 0600 の socket。
   // 各チャネルは `/ws` の 1 接続と同じ（2 つ目の `WsGateway` に渡す）。待ち受けは `listen()` の最後（`/ws` と同じく復元の後）。
   const bridgeEndpoint = new BridgeEndpoint({ version: SERVER_VERSION, hostname: osHostname(), sessionName: options.sessionName ?? null }, logger);
-  new WsGateway(bridgeEndpoint, surface, clients, sizeAuthority, terminals, bus, auth, logger);
+  new WsGateway(bridgeEndpoint, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
+    onClientGone: (clientId) => commands.onClientGone(clientId), // 中継の接続で開いた popup も止める
+  });
   let bridgeListening = false;
 
   let freshToken: string | undefined;
@@ -574,6 +585,8 @@ export async function composeServer(
         await bridgeEndpoint.close();
         await new Promise<void>((resolve) => httpServer.server.close(() => resolve()));
       } finally {
+        // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
+        commands.dispose();
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
         // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。
         metadata.dispose();

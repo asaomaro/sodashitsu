@@ -7,7 +7,7 @@ export interface CreatePaneOptions {
   cwd: string;
   shell?: string;
   /** `shell` を渡したときの引数（20260926-edit-scrollback）。省略は引数なし。 */
-  args?: string[];
+  args?: string[] | string;
   cols: number;
   rows: number;
   env?: Record<string, string>;

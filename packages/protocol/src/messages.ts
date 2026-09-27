@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
 import { THEME_NAMES } from "./theme.js";
+import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 
 /**
  * 方式（method）の定義。design.md「WebSocket の通信」の表と、architecture.md「方式の追加と変更」
@@ -508,6 +509,29 @@ export interface AgentStartResult {
   argv: string[];
 }
 
+// --- 独自コマンド（20260927-custom-command-keys。herdr の `[[keys.command]]`） -----------------------------
+
+/** 一覧（コマンドの文字列を含まない）。 */
+export const CommandListParams = z.object({});
+export type CommandListParams = z.infer<typeof CommandListParams>;
+/** サーバの `commands.json` を読み直す（`reload_config` から送る）。結果は全クライアントへ `command.updated` でも配る。 */
+export const CommandReloadParams = z.object({});
+export type CommandReloadParams = z.infer<typeof CommandReloadParams>;
+/**
+ * 独自コマンドを走らせる。受け取るのは id・フォーカス中の pane の id・popup の端末の大きさ（ブラウザが pane の領域から決める）だけで、
+ * **コマンドの文字列はブラウザから受け取らない**（サーバは id で `commands.json` の定義を引く）。宣言に無い項目は取り除かれる。
+ */
+export const CommandRunParams = z.object({
+  commandId: z.string().regex(COMMAND_ID_RE),
+  paneId,
+  cols: z.number().int().min(POPUP_RUN_SIZE_MIN).max(POPUP_RUN_SIZE_MAX).optional(),
+  rows: z.number().int().min(POPUP_RUN_SIZE_MIN).max(POPUP_RUN_SIZE_MAX).optional(),
+});
+export type CommandRunParams = z.infer<typeof CommandRunParams>;
+/** 自分が開いた popup を閉じる（コマンドを止める）。 */
+export const CommandPopupCloseParams = z.object({ popupId: paneId });
+export type CommandPopupCloseParams = z.infer<typeof CommandPopupCloseParams>;
+
 // --- 独自トークン（20260927-sidebar-row-tokens。herdr の workspace.report_metadata / pane.report_metadata） ----------------
 
 /** 1 回の要求の組の数の上限（重複を除く前。大きさの抑え。整えた後の上限〔16〕はサーバが見る）。 */
@@ -597,6 +621,10 @@ export const METHOD_SCHEMAS = {
   "agent.start": AgentStartParams,
   "server.sessions": ServerSessionsParams,
   "machine.list": MachineListParams,
+  "command.list": CommandListParams,
+  "command.reload": CommandReloadParams,
+  "command.run": CommandRunParams,
+  "command.popup_close": CommandPopupCloseParams,
 } as const;
 
 export type MethodName = keyof typeof METHOD_SCHEMAS;
@@ -661,6 +689,10 @@ export interface MethodResultMap {
   "agent.start": AgentStartResult;
   "server.sessions": ServerSessionsResult;
   "machine.list": MachineListResult;
+  "command.list": CommandListResult;
+  "command.reload": CommandListResult;
+  "command.run": CommandRunResult;
+  "command.popup_close": Record<string, never>;
 }
 
 export type ParamsOf<M extends MethodName> = z.infer<(typeof METHOD_SCHEMAS)[M]>;

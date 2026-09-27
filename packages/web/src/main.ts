@@ -228,6 +228,8 @@ connection.onOpened(() => void actionDispatcherBox.current?.refreshServerSession
 // 保存した SSH のマシン（20260927-multi-host-machines）: 切り替えの直後の `workspace.focus`、ローカルを向いているときのマシンの一覧。
 connection.onOpened(() => machineSwitcherBox.current?.onOpened());
 connection.onOpened(() => machineWiringBox.current?.onMainOpened());
+// 独自コマンドの一覧（20260927-custom-command-keys。サーバ全体の設定）。接続ごとに取り直す（切れている間の読み直しを取りこぼさない）。
+connection.onOpened(() => void actionDispatcherBox.current?.refreshCommands());
 // 閉じてから次の hello が通るまでは、`client.view`・`pane.subscribe` を送らない（D107）。
 connection.onClosed(() => viewSync.onConnectionClosed());
 

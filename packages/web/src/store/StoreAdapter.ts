@@ -1,6 +1,7 @@
 import type { AgentInfo, AgentIntegrationStatusResult, MachineStatus, ServerEvent, SessionSnapshot } from "@wtm/protocol";
 import type { Pinia } from "pinia";
 import type { ConnectionState, StorePort } from "../net/ports.js";
+import { useCommandsStore } from "./commands.js";
 import { useSessionStore } from "./session.js";
 import { useViewStore } from "./view.js";
 import { repairView } from "./viewRepair.js";
@@ -162,6 +163,13 @@ export class StoreAdapter implements StorePort {
         return;
       case "machine.changed":
         this.opts.onMachinesChanged?.(e.data.machines);
+        return;
+      // 独自コマンド（20260927-custom-command-keys）。
+      case "command.updated":
+        useCommandsStore(this.opts.pinia).setCatalog(e.data);
+        return;
+      case "command.popup_closed":
+        useCommandsStore(this.opts.pinia).notePopupClosed(e.data.popupId, e.data.exitCode);
         return;
     }
   }

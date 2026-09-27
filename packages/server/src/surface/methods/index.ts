@@ -13,6 +13,7 @@ import { registerAgentMethods } from "./agent.js";
 import { registerAttachMethods } from "./attach.js";
 import { registerServerSessionMethods } from "./serverSessions.js";
 import { registerMachineMethods } from "./machines.js";
+import { registerCommandMethods } from "./command.js";
 
 export type { MethodDeps } from "./deps.js";
 
@@ -33,4 +34,5 @@ export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): v
   registerAttachMethods(surface, deps); // 20260926-pane-direct-connect
   registerServerSessionMethods(surface, deps); // 20260926-named-session-ui
   registerMachineMethods(surface, deps); // 20260927-multi-host-machines
+  registerCommandMethods(surface, deps); // 20260927-custom-command-keys
 }

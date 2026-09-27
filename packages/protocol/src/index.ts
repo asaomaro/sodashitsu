@@ -5,6 +5,7 @@ export * from "./agentStart.js";
 export * from "./color.js";
 export * from "./theme.js";
 export * from "./errors.js";
+export * from "./commands.js";
 export * from "./worktreePath.js";
 export * from "./messages.js";
 export * from "./events.js";

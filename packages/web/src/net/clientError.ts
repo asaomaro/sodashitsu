@@ -55,6 +55,11 @@ const MESSAGES: Record<ErrorCode, string> = {
   agent_pane_busy: "起動先の pane でシェル以外のものが動いているため、何も送りませんでした。",
   unsupported_agent_shell: "起動先の pane のシェルには、まだ対応していません。",
   agent_start_input_failed: "エージェントの起動のための入力を送れませんでした（端末が閉じた等）。",
+  // 独自コマンド（20260927-custom-command-keys）。
+  command_not_found: "その独自コマンドはサーバの一覧にありません。設定を読み直してください（キー一覧の「設定を読み直す」）。",
+  command_failed: "独自コマンドを起動できませんでした。サーバのログを確かめてください。",
+  command_popup_open: "popup がすでに開いています。先に閉じてください。",
+  command_busy: "裏で走っている独自コマンドが多すぎます。終わるのを待ってください。",
   // 独自トークンの報告（20260927-sidebar-row-tokens）。今は wtmctl の report-metadata だけが送る方式で、ブラウザには通常来ない。
   invalid_metadata_source: "報告元（source）は英数字と : . _ - の 1〜80 文字にしてください。",
   invalid_metadata_ttl: "期限（ttl）は 1〜86400000 ミリ秒にしてください。",

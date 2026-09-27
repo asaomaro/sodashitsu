@@ -498,6 +498,7 @@ describe("KeyRouter.setKeymap — 割り当ての差し替え（AC8）", () => {
         prefix: "ctrl+a",
         bindings: { split_vertical: ["ctrl+alt+d"] },
         navigateKeys: {},
+        commands: {},
       }).keymap,
     );
     expect(router.handle(ctrlAlt("d"))).toEqual<KeyDecision>({ kind: "action", action: { type: "split", dir: "right" } });
@@ -512,7 +513,7 @@ describe("KeyRouter.setKeymap — 割り当ての差し替え（AC8）", () => {
     router.handle(ctrlB());
     expect(router.mode).toBe("prefix");
     router.setKeymap(
-      resolveKeymap({ prefix: null, bindings: { zoom: ["prefix+y"] }, navigateKeys: {} }).keymap,
+      resolveKeymap({ prefix: null, bindings: { zoom: ["prefix+y"] }, navigateKeys: {}, commands: {} }).keymap,
     );
     expect(router.mode).toBe("prefix"); // 進行中の prefix は変えない
     expect(router.handle(key({ key: "y" }))).toEqual<KeyDecision>({ kind: "action", action: { type: "zoom" } });

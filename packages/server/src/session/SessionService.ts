@@ -153,6 +153,11 @@ export class SessionService {
   private readonly scrollbackEditorEnv: { tmpRoot: string | undefined; platform: NodeJS.Platform; env: NodeJS.ProcessEnv };
   /** 開いているスクロールバックのエディタの pane → 開いた元の pane・開く前の拡大表示・一時ディレクトリ（20260926-edit-scrollback）。 */
   private readonly scrollbackEditors = new Map<PaneId, { sourcePaneId: PaneId; previousZoomedPaneId: PaneId | null; dir: string }>();
+  /**
+   * 独自コマンドの pane 種の pane → 開いた元の pane・開く前の拡大表示（20260927-custom-command-keys）。閉じたときの戻し方だけを持つ。
+   * 更新時の引き継ぎ（`handoffScrollbackEditors`）には載せない——引き継いだ後は普通の pane として閉じる（焦点・拡大表示は戻らない。backlog）。
+   */
+  private readonly commandPanes = new Map<PaneId, { sourcePaneId: PaneId; previousZoomedPaneId: PaneId | null }>();
   /** pane を閉じたときに始めた一時ディレクトリの削除（停止時に待つ）。 */
   private readonly scrollbackCleanups = new Set<Promise<void>>();
   /**
@@ -461,6 +466,7 @@ export class SessionService {
    */
   private publishPaneClosed(paneId: PaneId, successorPaneId: PaneId | undefined): void {
     this.resumeWrittenAt.delete(paneId); // 20260926-agent-start の review ラウンド 1（閉じた pane の記録を残さない）
+    this.commandPanes.delete(paneId); // 20260927-custom-command-keys
     const editor = this.scrollbackEditors.get(paneId);
     if (editor) {
       this.scrollbackEditors.delete(paneId);
@@ -680,27 +686,88 @@ export class SessionService {
     try {
       const current = this.requirePane(paneId); // 書いている間に閉じられていないか
       const argv = scrollbackEditorArgv(path, platform, env)!;
-      const newPaneId = this.model.reserveNextPaneId();
-      const spawn = await this.spawnForPane(newPaneId, current.cwd, { shell: argv[0]!, args: argv.slice(1) });
-      if (!spawn.ok) throw new RpcError("spawn_failed", `failed to start an editor for the scrollback of ${paneId}`);
-      let pane: Pane;
-      try {
-        ({ pane } = this.model.splitPane(paneId, "right", undefined, newPaneId, { cwd: current.cwd, shell: argv[0]!, cols: current.cols, rows: current.rows }));
-        this.model.zoomPane(newPaneId, "on");
-      } catch (err) {
-        this.terminals.dispose(newPaneId);
-        throw err;
-      }
-      this.scrollbackEditors.set(newPaneId, { sourcePaneId: paneId, previousZoomedPaneId, dir });
-      committed = true;
-      this.bus.publish({ event: "pane.created", data: { pane } });
-      this.bus.publish({ event: "layout.updated", data: { tab: this.requireTab(pane.tabId) } });
-      this.persist.touch();
-      if (spawn.alreadyExited) await this.closePaneAfterExit(pane.id, 0);
-      return { pane };
+      return await this.openZoomedCommandPane(
+        paneId,
+        current.cwd,
+        { shell: argv[0]!, args: argv.slice(1) },
+        `failed to start an editor for the scrollback of ${paneId}`,
+        (newPaneId) => {
+          this.scrollbackEditors.set(newPaneId, { sourcePaneId: paneId, previousZoomedPaneId, dir });
+          committed = true;
+        },
+      );
     } finally {
       if (!committed) await this.removeScrollbackDirQuietly(dir);
     }
+  }
+
+  /**
+   * 独自コマンドの `pane` 種（20260927-custom-command-keys。herdr の `type = "pane"`）。scrollback の編集と同じく、対象の pane を分割した新しい pane で
+   * コマンドを拡大表示で起動し、閉じたら焦点・拡大表示を開く前に戻す（`closePane`）。`command.env` は新しい pane の環境（`envForPane`）の上に重ねる。
+   */
+  async openCommandPane(paneId: PaneId, cwd: string, command: { shell: string; args: string[] | string; env: Record<string, string> }): Promise<{ pane: Pane }> {
+    const source = this.requirePane(paneId);
+    const previousZoomedPaneId = this.requireTab(source.tabId).zoomedPaneId;
+    return this.openZoomedCommandPane(paneId, cwd, command, `failed to start a custom command for ${paneId}`, (newPaneId) => {
+      this.commandPanes.set(newPaneId, { sourcePaneId: paneId, previousZoomedPaneId });
+    });
+  }
+
+  /**
+   * `editScrollback`・`openCommandPane` の共通（20260927-custom-command-keys で `editScrollback` から抜き出した）：新しい pane を予約してコマンドを起動し、
+   * 対象の pane を右に分割して拡大表示にする。`record` はモデルに入れた直後（イベントより前）に新しい pane の id で呼ぶ——閉じたときの戻し方の記録。
+   */
+  private async openZoomedCommandPane(
+    paneId: PaneId,
+    cwd: string,
+    command: { shell: string; args: string[] | string; env?: Record<string, string> },
+    failure: string,
+    record: (newPaneId: PaneId) => void,
+  ): Promise<{ pane: Pane }> {
+    const current = this.requirePane(paneId);
+    const newPaneId = this.model.reserveNextPaneId();
+    const spawn = await this.spawnForPane(newPaneId, cwd, command);
+    if (!spawn.ok) throw new RpcError("spawn_failed", failure);
+    let pane: Pane;
+    try {
+      ({ pane } = this.model.splitPane(paneId, "right", undefined, newPaneId, { cwd, shell: command.shell, cols: current.cols, rows: current.rows }));
+      this.model.zoomPane(newPaneId, "on");
+    } catch (err) {
+      this.terminals.dispose(newPaneId);
+      throw err;
+    }
+    record(newPaneId);
+    this.bus.publish({ event: "pane.created", data: { pane } });
+    this.bus.publish({ event: "layout.updated", data: { tab: this.requireTab(pane.tabId) } });
+    this.persist.touch();
+    if (spawn.alreadyExited) await this.closePaneAfterExit(pane.id, 0);
+    return { pane };
+  }
+
+  /** 独自コマンドの popup の id を払い出す（pane と同じ番号の列。20260927-custom-command-keys。popup はモデルに入らない）。 */
+  reservePaneId(): PaneId {
+    return this.model.reserveNextPaneId();
+  }
+
+  /**
+   * 独自コマンドを走らせる文脈（20260927-custom-command-keys）。pane・tab・workspace・作業場所は**モデルから引く**（ブラウザの値をそのまま使わない）。
+   * pane が無ければ `NotFoundError`（方式の層で `not_found`）。
+   */
+  commandContext(paneId: PaneId): { workspaceId: WorkspaceId; tabId: TabId; paneId: PaneId; cwd: string; defaultCwd: string } {
+    const pane = this.requirePane(paneId);
+    const tab = this.requireTab(pane.tabId);
+    return { workspaceId: tab.workspaceId, tabId: tab.id, paneId: pane.id, cwd: pane.cwd, defaultCwd: this.defaultCwd };
+  }
+
+  /** 独自コマンドの環境（pane と同じ規則。`ownPaneId` を省くと `WTM_PANE_ID` を入れない）。20260927-custom-command-keys。 */
+  commandEnv(ownPaneId: PaneId | undefined, extra: Readonly<Record<string, string>>): Record<string, string> {
+    return buildPaneEnv(process.env, {
+      paneId: ownPaneId,
+      serverUrl: this.serverUrlForPanes(),
+      agentReportSocketPath: this.agentReportSocketPath,
+      sessionName: this.sessionName,
+      extra,
+    });
   }
 
   /** 停止時（`composeServer.close`）: 開いたままのエディタの一時ディレクトリと、削除の途中のものを待って消す。 */
@@ -722,7 +789,8 @@ export class SessionService {
     const pane = this.model.getPane(paneId);
     const tabId = pane?.tabId;
     const workspaceId = tabId ? this.model.getTab(tabId)?.workspaceId : undefined; // tab が消える前に控える（D88）
-    const editor = this.scrollbackEditors.get(paneId);
+    // スクロールバックのエディタか独自コマンドの pane 種（20260927-custom-command-keys）なら、焦点・拡大表示を開く前に戻す。
+    const editor = this.scrollbackEditors.get(paneId) ?? this.commandPanes.get(paneId);
     const result = this.model.closePane(paneId, editor?.sourcePaneId);
     // エディタの pane なら、開く前の拡大表示に戻す（焦点は上の後継の希望で戻る。20260926-edit-scrollback）
     const zoomBack = editor?.previousZoomedPaneId;
@@ -1120,7 +1188,7 @@ export class SessionService {
   private async spawnForPane(
     paneId: PaneId,
     cwd: string,
-    command?: { shell: string; args: string[] },
+    command?: { shell: string; args: string[] | string; env?: Readonly<Record<string, string>> },
     seed?: string,
   ): Promise<{ ok: boolean; alreadyExited: boolean }> {
     const host = this.terminals.create(paneId, {
@@ -1128,7 +1196,8 @@ export class SessionService {
       cols: HEADLESS_COLS,
       rows: HEADLESS_ROWS,
       ...(command ? { shell: command.shell, args: command.args } : this.shell ? { shell: this.shell } : {}),
-      env: this.envForPane(paneId),
+      // 独自コマンドの pane 種は `WTM_ACTIVE_*` 等を重ねる（20260927-custom-command-keys）。
+      env: command?.env ? { ...this.envForPane(paneId), ...command.env } : this.envForPane(paneId),
     });
     // 画面履歴（20260926-screen-history-replay）：`create` と同じ同期区間でミラーへ書く——PTY の出力は非同期のイベントで届くので、
     // 新しいシェルの出力より前に並ぶ（research F6）。復元の間は `/ws` を受け付けないので、購読者は接続時の直列化でこれを受け取る。

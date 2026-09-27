@@ -108,3 +108,34 @@ describe("buildPaneEnv の WTM_SESSION", () => {
     });
   });
 });
+
+describe("buildPaneEnv の独自コマンド（20260927-custom-command-keys の AC10）", () => {
+  const base = {
+    PATH: "/usr/bin",
+    WTMCTL_TOKEN: "secret",
+    WTMCTL_URL: "http://x",
+    WTM_ACTIVE_PANE_ID: "p-old",
+    WTM_ACTIVE_WORKSPACE_ID: "w-old",
+    WTM_ACTIVE_TAB_ID: "t-old",
+    WTM_ACTIVE_PANE_CWD: "/old",
+    WTM_COMMAND_ID: "old",
+  };
+
+  it("paneId を省くと WTM_PANE_ID を入れない（popup・裏での実行）", () => {
+    const env = buildPaneEnv(
+      { ...base, WTM_PANE_ID: "p-inherited" },
+      { extra: { WTM_ACTIVE_PANE_ID: "p1" } },
+    );
+    expect(env["WTM_PANE_ID"]).toBeUndefined();
+    expect(env["WTM_ACTIVE_PANE_ID"]).toBe("p1");
+  });
+
+  it("extra を足し、受け継いだ古い WTM_ACTIVE_*・WTM_COMMAND_ID・wtmctl の設定は落とす", () => {
+    const env = buildPaneEnv(base, { paneId: "p2", extra: { WTM_COMMAND_ID: "build" } });
+    expect(env).toEqual({ PATH: "/usr/bin", WTM_PANE_ID: "p2", WTM_COMMAND_ID: "build" });
+  });
+
+  it("extra が無ければ今までと同じ（古い WTM_ACTIVE_* は普通の pane にも渡さない）", () => {
+    expect(buildPaneEnv(base, { paneId: "p3" })).toEqual({ PATH: "/usr/bin", WTM_PANE_ID: "p3" });
+  });
+});

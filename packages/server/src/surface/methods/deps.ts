@@ -8,6 +8,7 @@ import type { AgentIntegrationService } from "../../agent/AgentIntegrationServic
 import type { AgentStarter } from "../../agent/AgentStarter.js";
 import type { MetadataService } from "../../metadata/MetadataService.js";
 import type { MachineStatus, ServerSessionEntry } from "@wtm/protocol";
+import type { CommandService } from "../../commands/CommandService.js";
 
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
 export interface MethodDeps {
@@ -27,6 +28,8 @@ export interface MethodDeps {
   serverSessions?: () => Promise<ServerSessionEntry[]>;
   /** `machine.list`（20260927-multi-host-machines）。無ければ空の一覧を返す。 */
   machines?: () => MachineStatus[] | Promise<MachineStatus[]>;
+  /** 独自コマンド（20260927-custom-command-keys）。無ければ一覧は空で、popup の購読も受けない。 */
+  commands?: CommandService;
   /** 独自トークンの報告（20260927-sidebar-row-tokens）。無ければ `workspace.report_metadata`・`pane.report_metadata` を登録しない（`agentStarter` と同じ任意の依存）。 */
   metadata?: MetadataService;
 }

@@ -8,6 +8,7 @@ import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
 import { LOCAL_MACHINE_ID } from "../net/machineUrl.js";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
+import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
 import { orderedAgentPaneIds, type AgentOrderEntry } from "../store/agentOrder.js";
 import { visibleWorkspaceIdsInOrder } from "../store/workspaceGrouping.js";
@@ -62,6 +63,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   /** 保存した SSH のマシン（20260927-multi-host-machines）。ローカル以外を選んでいる間は session の一覧を使わない。 */
   private readonly machines: ReturnType<typeof useMachinesStore>;
   private readonly settings: ReturnType<typeof useSettingsStore>;
+  private readonly commands: ReturnType<typeof useCommandsStore>;
   private readonly registry: TerminalRegistry;
   private readonly keys: KeyInputController;
   private readonly input: ActionDispatcherOptions["input"];
@@ -77,6 +79,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.view = useViewStore(opts.pinia);
     this.machines = useMachinesStore(opts.pinia);
     this.settings = useSettingsStore(opts.pinia);
+    this.commands = useCommandsStore(opts.pinia);
     this.registry = opts.registry;
     this.keys = opts.keys;
   }
@@ -178,6 +181,9 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       case "reloadConfig":
         this.reloadConfig();
         return;
+      case "runCommand":
+        this.runCommand(action.commandId);
+        return;
       case "navigate":
         this.navigate(action.op, action.dir);
         return;
@@ -256,6 +262,59 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       .request("server.sessions", {})
       .then((r) => this.session.setNamedSessionCount(r.sessions.filter((e) => !e.default).length))
       .catch(() => undefined);
+  }
+
+  /** 独自コマンドの一覧を取り直す（20260927-custom-command-keys。接続ごとに `main.ts` が呼ぶ）。 */
+  refreshCommands(): Promise<void> {
+    return this.conn
+      .request("command.list", {})
+      .then((r) => this.commands.setCatalog(r))
+      .catch(() => undefined);
+  }
+
+  /**
+   * 独自コマンドを走らせる（20260927-custom-command-keys。herdr の `[[keys.command]]`）。送るのは id と、このブラウザでフォーカス中の pane だけ
+   * （コマンドの文字列はサーバの `commands.json` にある）。一覧に無い id（読み直しで消えた）・焦点の無いときは何もしない。
+   * - `shell`：裏で走らせ、「走らせました」を知らせる。
+   * - `pane`：scrollback の編集と同じく、応答の pane へ焦点を移す（入力は応答まで溜める）。
+   * - `popup`：浮いた端末の部品（`CommandPopup.vue`）を開く。大きさは部品が画面から決めて `command.run` を送る。
+   */
+  private runCommand(commandId: string): void {
+    const def = this.commands.catalog.find((c) => c.id === commandId);
+    const paneId = this.view.focusedPaneId;
+    if (!def || !paneId) return;
+    const label = def.description ?? def.id;
+    if (def.type === "popup") {
+      this.view.openDialogWithContext({
+        kind: "commandPopup",
+        commandId,
+        paneId,
+        title: label,
+        ...(def.width !== undefined ? { width: def.width } : {}),
+        ...(def.height !== undefined ? { height: def.height } : {}),
+      });
+      return;
+    }
+    if (def.type === "shell") {
+      this.conn
+        .request("command.run", { commandId, paneId })
+        .then(() => this.view.toast(`「${label}」を走らせました。`))
+        .catch((err: unknown) => this.view.toast(commandErrorMessage(err)));
+      return;
+    }
+    const hold = this.input?.holdInput(paneId);
+    this.conn
+      .request("command.run", { commandId, paneId })
+      .then((r) => {
+        const pane = r.type === "pane" ? r.pane : null;
+        // コマンドがすぐ終わると、応答の前に pane が閉じている（焦点は pane.closed の後継で元の pane に戻っている）
+        if (pane && this.session.panes.has(pane.id)) this.view.focusPane(pane.id);
+        this.releaseHold(hold, pane?.id ?? paneId);
+      })
+      .catch((err: unknown) => {
+        hold?.cancel();
+        this.view.toast(commandErrorMessage(err));
+      });
   }
 
   /** 一覧のダイアログを開く。**先にサーバへ聞く**（開く時点の一覧）。 */
@@ -1179,7 +1238,21 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.view.agentSort = loadAgentSort(raw);
     this.view.workspaceSort = loadWorkspaceSort(raw["workspaceSort"]);
     this.view.toast("設定を読み直しました。");
+    // 独自コマンド（20260927-custom-command-keys）：サーバに commands.json を読み直させる（結果は command.updated で全ブラウザへも配られる）。
+    this.conn
+      .request("command.reload", {})
+      .then((r) => {
+        this.commands.setCatalog(r);
+        if (r.problem !== null) this.view.toast(`独自コマンドの設定を読めませんでした：${r.problem}`);
+      })
+      .catch(() => this.view.toast("独自コマンドの設定を読み直せませんでした。"));
   }
+}
+
+/** 独自コマンドの失敗の文言（code から引く。サーバの生の message は使わない。20260927-custom-command-keys）。 */
+function commandErrorMessage(err: unknown): string {
+  const code = errorCodeOf(err);
+  return code ? clientErrorMessage(code) : "独自コマンドを走らせられませんでした。";
 }
 
 /**

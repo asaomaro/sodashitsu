@@ -8,6 +8,11 @@ import {
   prefixBytes,
 } from "./chord.js";
 import { NAVIGATE_KEYS, NAVIGATE_RESERVED_CHORDS, navigateKeyDef, type NavigateKeyId } from "./navigateKeys.js";
+import { COMMAND_ID_RE } from "@wtm/protocol";
+import { commandIdOf, isCommandKeyId, type KeyTargetId } from "./commandKeys.js";
+
+/** 保存しておく独自コマンドの割り当ての数の上限（一覧から消えたコマンドの分も残すので、際限なく溜めない）。 */
+export const COMMAND_BINDINGS_MAX = 200;
 
 /**
  * このブラウザに保存する割り当て（20260921-keybinding-customization。design「保存」・D2。navigate の
@@ -26,10 +31,15 @@ export interface KeyPrefs {
   /** 上書きした navigate モードの移動操作の割り当て（prefix なしの正規形の chord文字列。`[]` は「割り当てなし」）。
    *  `bindings` とは別の表（design D2）。20260923-navigate-mode-keys。 */
   navigateKeys: Partial<Record<NavigateKeyId, string[]>>;
+  /**
+   * 独自コマンドの割り当て（20260927-custom-command-keys）。鍵はコマンドの id（サーバの `commands.json` で持ち主が付けたもの）。既定が無いので、空の一覧は
+   * 持たない（「無い」と同じ）。**サーバの一覧に無い id の分も残す**（設定ファイルを直して戻せば効く）。解決（`resolveKeymap`）は一覧にある分だけを載せる。
+   */
+  commands: Record<string, string[]>;
 }
 
 export function emptyKeyPrefs(): KeyPrefs {
-  return { prefix: null, bindings: {}, navigateKeys: {} };
+  return { prefix: null, bindings: {}, navigateKeys: {}, commands: {} };
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -72,14 +82,23 @@ export function normalizeBinding(id: ActionId, raw: unknown): string | null {
   return formatBinding(b);
 }
 
-/** 割り当ての一覧を正規の文字列にし、無効・重複を落とす（順序は保つ）。 */
-function normalizeList(id: ActionId, raw: readonly unknown[]): string[] {
+/** 割り当ての一覧を正規の文字列にし、無効・重複を落とす（順序は保つ）。独自コマンドは範囲でない操作と同じ規則。 */
+function normalizeList(id: KeyTargetId, raw: readonly unknown[]): string[] {
   const list: string[] = [];
   for (const s of raw) {
-    const n = normalizeBinding(id, s);
+    const n = isCommandKeyId(id) ? normalizePlainBinding(s) : normalizeBinding(id, s);
     if (n !== null && !list.includes(n)) list.push(n);
   }
   return list;
+}
+
+/** 範囲でない割り当て（独自コマンド）を正規の文字列にする。規則は範囲でない操作の `normalizeBinding` と同じ。 */
+function normalizePlainBinding(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const b = parseBinding(raw);
+  if (b === null || b.range) return null;
+  if (b.via === "direct" && !isDirectChord(b.chord)) return null;
+  return formatBinding(b);
 }
 
 /**
@@ -122,6 +141,17 @@ export function loadKeyPrefs(raw: unknown): KeyPrefs {
       prefs.bindings[def.id] = list;
     }
   }
+  const storedCommands = raw["commands"];
+  if (isRecord(storedCommands)) {
+    for (const commandId of Object.keys(storedCommands).sort()) {
+      if (Object.keys(prefs.commands).length >= COMMAND_BINDINGS_MAX) break;
+      if (!COMMAND_ID_RE.test(commandId)) continue;
+      const value = storedCommands[commandId];
+      if (!Array.isArray(value)) continue;
+      const list = normalizeList(`command:${commandId}`, value);
+      if (list.length > 0) prefs.commands[commandId] = list;
+    }
+  }
   const storedNavigate = raw["navigate"];
   if (isRecord(storedNavigate)) {
     for (const def of NAVIGATE_KEYS) {
@@ -139,11 +169,14 @@ export function loadKeyPrefs(raw: unknown): KeyPrefs {
 /** 保存する形。差が無ければ undefined（`keys` ごと消す）。カタログの順に並べる。 */
 export function serializeKeyPrefs(
   p: KeyPrefs,
-): { prefix?: string; bindings?: Record<string, string[]>; navigate?: Record<string, string[]> } | undefined {
+):
+  | { prefix?: string; bindings?: Record<string, string[]>; navigate?: Record<string, string[]>; commands?: Record<string, string[]> }
+  | undefined {
   const out: {
     prefix?: string;
     bindings?: Record<string, string[]>;
     navigate?: Record<string, string[]>;
+    commands?: Record<string, string[]>;
   } = {};
   if (p.prefix !== null) out.prefix = p.prefix;
   const bindings: Record<string, string[]> = {};
@@ -158,7 +191,13 @@ export function serializeKeyPrefs(
     if (list !== undefined) navigate[def.id] = [...list];
   }
   if (Object.keys(navigate).length > 0) out.navigate = navigate;
-  return out.prefix === undefined && out.bindings === undefined && out.navigate === undefined
+  const commands: Record<string, string[]> = {};
+  for (const commandId of Object.keys(p.commands).sort()) {
+    const list = p.commands[commandId];
+    if (list !== undefined && list.length > 0) commands[commandId] = [...list];
+  }
+  if (Object.keys(commands).length > 0) out.commands = commands;
+  return out.prefix === undefined && out.bindings === undefined && out.navigate === undefined && out.commands === undefined
     ? undefined
     : out;
 }
@@ -167,9 +206,20 @@ export function serializeKeyPrefs(
  * ある操作の割り当てを差し替えた新しい `KeyPrefs`（store の setter の下請け）。無効な文字列は落とし（渡されたら反映しない）、
  * **既定と同じ内容になったら上書きを消す**（保存を最小に保ち、既定の更新が届く）。全部無効で空でない入力は、何も変えない。
  */
-export function withBindings(prefs: KeyPrefs, id: ActionId, list: readonly string[]): KeyPrefs {
+export function withBindings(prefs: KeyPrefs, id: KeyTargetId, list: readonly string[]): KeyPrefs {
   const norm = normalizeList(id, list);
   if (norm.length === 0 && list.length > 0) return prefs;
+  if (isCommandKeyId(id)) {
+    // 独自コマンドは既定が無いので、空は「上書きを消す」と同じ。
+    const commandId = commandIdOf(id);
+    if (!COMMAND_ID_RE.test(commandId)) return prefs;
+    // 保存しておく数の上限（読み込みと同じ）。新しいコマンドを足すときだけ見る（既にあるものの差し替え・削除は通す）。
+    if (norm.length > 0 && !Object.hasOwn(prefs.commands, commandId) && Object.keys(prefs.commands).length >= COMMAND_BINDINGS_MAX) return prefs;
+    const commands = { ...prefs.commands };
+    if (norm.length === 0) delete commands[commandId];
+    else commands[commandId] = norm;
+    return { ...prefs, commands };
+  }
   const bindings = { ...prefs.bindings };
   if (sameList(norm, actionDef(id)?.defaults ?? [])) delete bindings[id];
   else bindings[id] = norm;
@@ -185,7 +235,14 @@ export function withPrefix(prefs: KeyPrefs, chord: string | null): KeyPrefs {
 }
 
 /** ある操作の上書きを消す（既定へ戻す）。 */
-export function withoutBindings(prefs: KeyPrefs, id: ActionId): KeyPrefs {
+export function withoutBindings(prefs: KeyPrefs, id: KeyTargetId): KeyPrefs {
+  if (isCommandKeyId(id)) {
+    const commandId = commandIdOf(id);
+    if (!Object.hasOwn(prefs.commands, commandId)) return prefs;
+    const commands = { ...prefs.commands };
+    delete commands[commandId];
+    return { ...prefs, commands };
+  }
   if (prefs.bindings[id] === undefined) return prefs;
   const bindings = { ...prefs.bindings };
   delete bindings[id];

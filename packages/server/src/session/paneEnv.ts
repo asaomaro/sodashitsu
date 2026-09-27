@@ -20,10 +20,20 @@ export const PANE_ENV_DROPPED: readonly string[] = [
   "WTM_SESSION",
   // 更新時の引き継ぎの nonce（20260926-live-handoff）。起動の最初に process.env から消すが、pane へは念のため渡さない。
   "WTM_HANDOFF_NONCE",
+  // 独自コマンドに渡す変数（20260927-custom-command-keys）。独自コマンドの中でサーバを起動した等で残った古い値を渡さない。
+  "WTM_ACTIVE_WORKSPACE_ID",
+  "WTM_ACTIVE_TAB_ID",
+  "WTM_ACTIVE_PANE_ID",
+  "WTM_ACTIVE_PANE_CWD",
+  "WTM_COMMAND_ID",
 ];
 
 export interface PaneEnvManaged {
-  paneId: string;
+  /**
+   * `WTM_PANE_ID` に入れる pane の id。独自コマンドの popup・裏での実行（20260927-custom-command-keys）はモデルの pane ではないので省く
+   * （herdr の popup が `HERDR_PANE_ID` を渡さないのと同じ）。
+   */
+  paneId?: string | undefined;
   /** その pane を動かしているサーバへ wtmctl がつなげる URL（`paneServerUrl`）。無ければ入れない。 */
   serverUrl?: string | undefined;
   /** 公式フック連携の report の socket。無ければ入れない。 */
@@ -33,6 +43,8 @@ export interface PaneEnvManaged {
    * pane の中の `wtm token reset` 等が自分の session を既定にする）。既定の session では入れない。
    */
   sessionName?: string | undefined;
+  /** 最後に足す変数（独自コマンドの `WTM_ACTIVE_*`・`WTM_COMMAND_ID`。20260927-custom-command-keys）。 */
+  extra?: Readonly<Record<string, string>> | undefined;
 }
 
 export function buildPaneEnv(
@@ -50,9 +62,10 @@ export function buildPaneEnv(
     if (dropped.has(caseInsensitive ? key.toUpperCase() : key)) continue;
     env[key] = value;
   }
-  env["WTM_PANE_ID"] = managed.paneId;
+  if (managed.paneId !== undefined) env["WTM_PANE_ID"] = managed.paneId;
   if (managed.serverUrl) env["WTM_SERVER_URL"] = managed.serverUrl;
   if (managed.agentReportSocketPath) env["WTM_AGENT_REPORT_SOCKET"] = managed.agentReportSocketPath;
   if (managed.sessionName) env["WTM_SESSION"] = managed.sessionName;
+  if (managed.extra) Object.assign(env, managed.extra);
   return env;
 }

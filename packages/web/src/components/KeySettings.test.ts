@@ -2,6 +2,7 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { nextTick } from "vue";
+import { useCommandsStore } from "../store/commands.js";
 import { useSettingsStore } from "../store/settings.js";
 import { readPrefs, useViewStore } from "../store/view.js";
 import KeySettings from "./KeySettings.vue";
@@ -72,7 +73,7 @@ describe("KeySettings — 一覧（AC1）", () => {
     expect(document.querySelector(".keys-prefix .keys-binding")!.textContent).toBe("ctrl+b");
     expect(
       Array.from(document.querySelectorAll(".keys-group-name")).map((h) => h.textContent),
-    ).toEqual(["全体", "workspace / tab", "pane", "navigate モードの移動"]);
+    ).toEqual(["全体", "workspace / tab", "pane", "独自コマンド", "navigate モードの移動"]); // 独自コマンドが 0 件なら群の代わりに置き場所の案内（20260927-custom-command-keys）
     expect(document.querySelectorAll(".keys-details")).toHaveLength(57); // 50 + navigate 7（20260925-sidebar-keyboard-menu で navigate_open_menu が加わった。20260926-edit-scrollback で edit_scrollback が加わった）
     expect(summaryText("split_vertical")).toBe("prefix+v");
     expect(summaryText("switch_tab")).toBe("prefix+1..9");
@@ -611,7 +612,7 @@ describe("KeySettings — すべてを既定へ戻す（インラインの確認
     await settle();
     confirmYes()!.click();
     await settle();
-    expect(settings.keyPrefs).toEqual({ prefix: null, bindings: {}, navigateKeys: {} });
+    expect(settings.keyPrefs).toEqual({ prefix: null, bindings: {}, navigateKeys: {}, commands: {} });
     expect(settings.keymap.prefix).toBe("ctrl+b");
     expect(settings.keymap.bindingsOf("help")).toEqual(["prefix+?"]);
     expect(status()).toBe("すべての割り当てと prefix を既定へ戻しました。");
@@ -1309,7 +1310,7 @@ describe("KeySettings — navigate の既定へ戻す（AC5）", () => {
     await settle();
     document.querySelector<HTMLElement>("[data-confirm-yes]")!.click();
     await settle();
-    expect(settings.keyPrefs).toEqual({ prefix: null, bindings: {}, navigateKeys: {} });
+    expect(settings.keyPrefs).toEqual({ prefix: null, bindings: {}, navigateKeys: {}, commands: {} });
     expect(navSummaryText("navigate_pane_left")).toBe("h");
   });
 });
@@ -1329,5 +1330,128 @@ describe("KeySettings — navigate は絞り込みの対象に含まれる（AC1
     expect(
       Array.from(document.querySelectorAll(".keys-group-name")).map((h) => h.textContent),
     ).not.toContain("navigate モードの移動");
+  });
+});
+
+// 20260927-custom-command-keys：群「独自コマンド」（AC12）
+describe("KeySettings — 独自コマンド（AC12）", () => {
+  async function mountWithCommands() {
+    const commands = useCommandsStore(pinia);
+    commands.setCatalog({
+      commands: [
+        { id: "lazygit", type: "popup", description: "lazygit を開く" },
+        { id: "build", type: "shell" },
+      ],
+      problem: null,
+    });
+    const r = await mountKeys();
+    return { ...r, commands };
+  }
+
+  it("一覧の各コマンドが群「独自コマンド」に名前（説明か id）で並び、割り当てなしは「なし」。［既定に戻す］は出ない", async () => {
+    await mountWithCommands();
+    expect(Array.from(document.querySelectorAll(".keys-group-name")).map((h) => h.textContent)).toEqual([
+      "全体",
+      "workspace / tab",
+      "pane",
+      "独自コマンド",
+      "navigate モードの移動",
+    ]);
+    expect(row("command:lazygit").querySelector(".keys-action-label")!.textContent).toBe("lazygit を開く");
+    expect(row("command:build").querySelector(".keys-action-label")!.textContent).toBe("build");
+    expect(summaryText("command:build")).toBe("なし");
+    expect(document.querySelector(".keys-commands-note")).toBeNull();
+  });
+
+  it("既存の操作と同じ手順で追加・変更・削除でき、保存に残る", async () => {
+    const { settings } = await mountWithCommands();
+    addBtn("command:lazygit", "prefix").click();
+    await settle();
+    press(capture()!, "g", { altKey: true });
+    await settle();
+    expect(settings.keymap.bindingsOf("command:lazygit")).toEqual(["prefix+alt+g"]);
+    expect(status()).toBe("「lazygit を開く」に prefix+alt+g を割り当てました。");
+    expect((readPrefs()["keys"] as { commands: unknown }).commands).toEqual({ lazygit: ["prefix+alt+g"] });
+    changeBtn("command:lazygit", "prefix+alt+g").click();
+    await settle();
+    press(capture()!, "l", { altKey: true });
+    await settle();
+    expect(settings.keymap.bindingsOf("command:lazygit")).toEqual(["prefix+alt+l"]);
+    expect(row("command:lazygit").querySelector("[data-reset-action]")).toBeNull();
+    deleteBtn("command:lazygit", "prefix+alt+l").click();
+    await settle();
+    expect(settings.keymap.bindingsOf("command:lazygit")).toEqual([]);
+    expect(readPrefs()["keys"]).toBeUndefined();
+  });
+
+  it("既存の操作とぶつかれば理由を出して断り、「こちらへ移す」で移せる", async () => {
+    const { settings } = await mountWithCommands();
+    addBtn("command:build", "prefix").click();
+    await settle();
+    press(capture()!, "v");
+    await settle();
+    expect(status()).toContain("prefix+v は「右へ分割");
+    expect(settings.keymap.bindingsOf("command:build")).toEqual([]);
+    moveHereBtn()!.click();
+    await settle();
+    expect(settings.keymap.bindingsOf("command:build")).toEqual(["prefix+v"]);
+    expect(settings.keymap.bindingsOf("split_vertical")).not.toContain("prefix+v");
+    expect(status()).toContain("「build」へ移しました");
+  });
+
+  it("［変更］の後は新しい割り当ての［変更］へ、［削除］の後は同じ行の［追加：prefix の後］へフォーカスが移る（AC-I4）", async () => {
+    await mountWithCommands();
+    addBtn("command:lazygit", "prefix").click();
+    await settle();
+    press(capture()!, "g", { altKey: true });
+    await settle();
+    changeBtn("command:lazygit", "prefix+alt+g").click();
+    await settle();
+    press(capture()!, "l", { altKey: true });
+    await settle();
+    expect(document.activeElement).toBe(changeBtn("command:lazygit", "prefix+alt+l"));
+    deleteBtn("command:lazygit", "prefix+alt+l").click();
+    await settle();
+    expect(document.activeElement).toBe(addBtn("command:lazygit", "prefix"));
+  });
+
+  it("独自コマンドが持っているキーを操作に取り込むと、コマンドの名前で断り、「こちらへ移す」で操作へ移せる", async () => {
+    const { settings } = await mountWithCommands();
+    settings.setKeyBindings("command:lazygit", ["prefix+alt+g"]);
+    await settle();
+    addBtn("goto", "prefix").click();
+    await settle();
+    press(capture()!, "g", { altKey: true });
+    await settle();
+    expect(status()).toContain("「lazygit を開く」がすでに使っています");
+    moveHereBtn()!.click();
+    await settle();
+    expect(settings.keymap.bindingsOf("command:lazygit")).toEqual([]);
+    expect(settings.keymap.bindingsOf("goto")).toContain("prefix+alt+g");
+    expect(status()).toContain("「lazygit を開く」から「");
+  });
+
+  it("絞り込みは名前・群名で効く", async () => {
+    await mountWithCommands();
+    await typeFilter("独自");
+    expect(document.querySelectorAll('[data-action^="command:"]')).toHaveLength(2);
+    await typeFilter("lazygit");
+    expect(document.querySelectorAll('[data-action^="command:"]')).toHaveLength(1);
+  });
+
+  it("一覧が 0 件なら群の代わりに置き場所の案内、読めなかった理由があればそれも出す", async () => {
+    const commands = useCommandsStore(pinia);
+    commands.setCatalog({ commands: [], problem: "commands.json: 知らない項目です（env）" });
+    await mountKeys();
+    const note = document.querySelector(".keys-commands-note")!;
+    expect(note.textContent).toContain("commands.json");
+    expect(note.textContent).toContain("設定を読み直す」（ctrl+b shift+r）");
+    expect(note.querySelector(".keys-commands-problem")!.textContent).toContain("知らない項目です（env）");
+    expect(document.querySelectorAll('[data-action^="command:"]')).toHaveLength(0);
+    // 絞り込みが群名に当たらなければ案内も消える（0 件の群は見出しごと消える）。
+    await typeFilter("pane");
+    expect(document.querySelector(".keys-commands-note")).toBeNull();
+    await typeFilter("独自");
+    expect(document.querySelector(".keys-commands-note")).not.toBeNull();
   });
 });

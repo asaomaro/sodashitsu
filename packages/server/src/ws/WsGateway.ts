@@ -33,6 +33,11 @@ export interface WsGatewayOptions {
    * 合わせ直しで戻りうる（戻ると窓が終わらず、進むとすぐ終わる）。D103 の `LogThrottle` と同じ（D106）。テストで差し替える。
    */
   now?: () => number;
+  /**
+   * 接続が切れた後に呼ぶ（20260927-custom-command-keys：その接続が開いた独自コマンドの popup を止める）。`WsGateway` はコマンドの係を知らない
+   * （依存の向きを接続の層 → コマンドの層にしない。architecture.md）。
+   */
+  onClientGone?: ((clientId: string) => void) | undefined;
 }
 
 /**
@@ -43,6 +48,7 @@ export interface WsGatewayOptions {
 export class WsGateway {
   private readonly states = new Map<string, ConnState>();
   private readonly now: () => number;
+  private readonly onClientGone: ((clientId: string) => void) | undefined;
 
   constructor(
     wsServer: WsServer,
@@ -56,6 +62,7 @@ export class WsGateway {
     opts: WsGatewayOptions = {},
   ) {
     this.now = opts.now ?? monotonicNow;
+    this.onClientGone = opts.onClientGone;
     wsServer.onConnection((conn, sessionId) => this.handleConnection(conn, sessionId));
     auth.onSessionRevoked((sessionId) => this.handleSessionRevoked(sessionId));
   }
@@ -129,6 +136,11 @@ export class WsGateway {
       this.sizeAuthority.onClientGone(clientId);
       this.clients.unregister(clientId);
       this.states.delete(clientId);
+      try {
+        this.onClientGone?.(clientId);
+      } catch (err) {
+        this.logger.error("failed to clean up after a client", { clientId, error: String(err) });
+      }
     });
   }
 

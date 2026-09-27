@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import CommandPopup from "./components/CommandPopup.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
 import ContextMenu from "./components/ContextMenu.vue";
 import DetachedView from "./components/DetachedView.vue";
@@ -91,6 +92,7 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
     <HelpDialog />
     <OnboardingDialog />
     <GotoPicker />
+    <CommandPopup />
     <PrefixIndicator />
     <Toast />
     <ReconnectOverlay />

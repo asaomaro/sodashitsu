@@ -1,6 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { useCommandsStore } from "../store/commands.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import HelpDialog from "./HelpDialog.vue";
@@ -26,12 +27,35 @@ async function open(view: ReturnType<typeof useViewStore>, wrapper: ReturnType<t
 }
 
 describe("HelpDialog — 表示", () => {
-  it("4 つの群（全体・移動・workspace / tab・pane）を出す。custom は無い", async () => {
+  it("4 つの群（全体・移動・workspace / tab・pane）を出す。独自コマンドが無ければその群は出ない", async () => {
     const view = useViewStore(pinia);
     const wrapper = mountDialog();
     await open(view, wrapper);
     const names = wrapper.findAll(".help-dialog-group-name").map((el) => el.text());
     expect(names).toEqual(["全体", "移動", "workspace / tab", "pane"]);
+  });
+
+  it("独自コマンドは、割り当てのあるものだけを群「独自コマンド」に名前（説明か id）とキーで出す（20260927-custom-command-keys の AC14）", async () => {
+    const view = useViewStore(pinia);
+    const settings = useSettingsStore(pinia);
+    const commands = useCommandsStore(pinia);
+    commands.setCatalog({
+      commands: [
+        { id: "git", type: "popup", description: "lazygit を開く" },
+        { id: "build", type: "shell" },
+        { id: "unbound", type: "pane" },
+      ],
+      problem: null,
+    });
+    settings.setKeyBindings("command:git", ["prefix+alt+g"]);
+    settings.setKeyBindings("command:build", ["ctrl+alt+b", "prefix+alt+b"]);
+    const wrapper = mountDialog();
+    await open(view, wrapper);
+    expect(wrapper.findAll(".help-dialog-group-name").map((el) => el.text())).toEqual(["全体", "移動", "workspace / tab", "pane", "独自コマンド"]);
+    const label = (keys: string) => wrapper.findAll("dt").find((dt) => dt.text() === keys)?.element.nextElementSibling?.textContent;
+    expect(label("prefix+alt+g")).toBe("lazygit を開く");
+    expect(label("ctrl+alt+b / prefix+alt+b")).toBe("build"); // 割り当てた順
+    expect(wrapper.text()).not.toContain("unbound");
   });
 
   it("既定の表示：割り当てなしの行は灰色。「未対応（後続: ◯◯）」の行はもう無い（20260926-edit-scrollback で最後の e が昇格）", async () => {
