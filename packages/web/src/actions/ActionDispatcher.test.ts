@@ -2514,7 +2514,7 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     expect(view.toasts.at(-1)?.message).toContain("worktree のチェックアウトではありません");
   });
 
-  it("removeWorktree: linked worktree なら、今の場所を含む worktree の削除の確認を開く（取り消したら閉じる）", async () => {
+  function linkedSetup(cwd: string) {
     const conn = makeConnection();
     conn.resolveWith["worktree.list"] = {
       worktreeRoot: "/wt",
@@ -2527,13 +2527,50 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     };
     const session = useSessionStore(pinia);
     const view = useViewStore(pinia);
-    session.workspaceUpserted(makeWorkspace("w2", ["t1"], { cwd: "/wt/r/feat/sub", git: { branch: "feat", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: true } }));
+    session.workspaceUpserted(makeWorkspace("w2", ["t1"], { cwd, git: { branch: "feat", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: true } }));
     view.setView("w2", "t1");
-    const { dispatcher } = makeDispatcher(conn);
+    return { conn, view, ...makeDispatcher(conn) };
+  }
+
+  it("removeWorktree: linked worktree なら、今の場所と同じ場所の worktree の削除の確認を開く（取り消したら閉じる）", async () => {
+    const { conn, view, dispatcher } = linkedSetup("/wt/r/feat");
     dispatcher.run({ type: "removeWorktree" });
     await flush();
     expect(conn.requests).toEqual([["worktree.list", { workspaceId: "w2" }]]);
     expect(view.dialogContext).toEqual({ kind: "confirmWorktreeRemove", sourceWorkspaceId: "w2", path: "/wt/r/feat", openWorkspaceId: "w2", closeOnCancel: true });
+  });
+
+  // 点検の指摘（02 の修正）：部分一致で選ぶと、サーバ（完全一致でしか workspace を閉じない）と食い違う。一覧の行からの削除と同じ完全一致にする。
+  it("removeWorktree: 今の場所が worktree の中の下の場所なら（完全一致が無ければ）確認を開かずに知らせる", async () => {
+    const { view, dispatcher } = linkedSetup("/wt/r/feat/sub");
+    dispatcher.run({ type: "removeWorktree" });
+    await flush();
+    expect(view.dialogContext).toBeNull();
+    expect(view.toasts.at(-1)?.message).toContain("見つかりませんでした");
+  });
+
+  it("removeWorktree（キーから）: dirty で断られたら --force の確認へ closeOnCancel を引き継ぎ、ほかの失敗では一覧を開き直さない", async () => {
+    const { conn, view, dispatcher } = linkedSetup("/wt/r/feat");
+    dispatcher.run({ type: "removeWorktree" });
+    await flush();
+    conn.rejectWith["worktree.remove"] = "worktree_dirty";
+    dispatcher.confirmWorktreeRemove();
+    await flush();
+    expect(view.dialogContext).toMatchObject({ kind: "confirmWorktreeRemoveForce", reason: "dirty", closeOnCancel: true });
+    conn.rejectWith["worktree.remove"] = "worktree_failed";
+    const listCalls = conn.requests.filter(([m]) => m === "worktree.list").length;
+    dispatcher.confirmWorktreeRemoveForce();
+    await flush();
+    expect(view.dialogContext).toBeNull();
+    expect(conn.requests.filter(([m]) => m === "worktree.list").length).toBe(listCalls); // 一覧を開き直さない
+  });
+
+  // 点検の指摘（02 の修正）：herdr は linked worktree の workspace からは始めず案内する。
+  it("openWorktree: linked worktree の workspace からは一覧を開かずに知らせる", () => {
+    const { conn, view, dispatcher } = linkedSetup("/wt/r/feat");
+    dispatcher.run({ type: "openWorktree" });
+    expect(conn.requests).toEqual([]);
+    expect(view.toasts.at(-1)?.message).toContain("repo の本体");
   });
 
   it("swapWithFocused: メニューを開いた pane と焦点の pane を pane.swap_with で入れ替え、焦点を送り直す。キーからは直前の pane と。別の tab・同じ pane は何もしない", async () => {

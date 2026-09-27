@@ -36,9 +36,15 @@ const flush = async (): Promise<void> => {
 
 function setup(
   server: { prefs: SharedPrefs; rev: number },
-  opts: { local?: () => boolean; clientId?: string; failSet?: () => string | undefined } = {},
+  opts: {
+    local?: () => boolean;
+    failSet?: () => string | undefined;
+    /** true なら prefs.set の返事を `release()` まで待たせる（送信中の状態を作る）。 */
+    hold?: boolean;
+  } = {},
 ) {
-  const sets: { patch: SharedPrefs; baseRev: number }[] = [];
+  const sets: { patch: Record<string, unknown>; baseRev: number }[] = [];
+  const held: (() => void)[] = [];
   const toasts: string[] = [];
   const getPrefs = vi.fn(async (): Promise<PrefsResult> => ({
     prefs: { ...server.prefs },
@@ -47,6 +53,7 @@ function setup(
   const sync = new PrefsSync({
     getPrefs,
     setPrefs: async (patch, baseRev) => {
+      if (opts.hold === true) await new Promise<void>((r) => held.push(r));
       const fail = opts.failSet?.();
       if (fail !== undefined) throw Object.assign(new Error(`${fail}: x`), { code: fail });
       sets.push({ patch, baseRev });
@@ -55,7 +62,6 @@ function setup(
       return { prefs: { ...server.prefs }, rev: server.rev };
     },
     isLocal: opts.local ?? (() => true),
-    clientId: () => opts.clientId ?? "me",
     readLocal: () => readPrefs(),
     sharedOf: sharedPrefsOf,
     replaceShared: replaceSharedPrefs,
@@ -63,7 +69,11 @@ function setup(
     toast: (m) => toasts.push(m),
   });
   unsubscribe = onPrefsWritten((p) => sync.onWritten(p));
-  return { sync, sets, toasts, getPrefs };
+  const release = async (): Promise<void> => {
+    for (const r of held.splice(0)) r();
+    await flush();
+  };
+  return { sync, sets, toasts, getPrefs, release };
 }
 
 const stored = (): Record<string, unknown> =>
@@ -128,6 +138,18 @@ describe("PrefsSync（初回の移行）", () => {
     expect(settings.keymap.prefix).toBe("ctrl+a");
   });
 
+  // 点検の should（02 の修正）：移行の返事（ほかのクライアントが先に保存した項目を含む全体）を当てる。
+  it("移行の返事の全体（取得と移行の間にほかのクライアントが保存した項目を含む）を当てる", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: "nord" }));
+    const server = { prefs: { agentSort: "priority" } as SharedPrefs, rev: 1 };
+    const { sync, getPrefs } = setup(server);
+    getPrefs.mockResolvedValueOnce({ prefs: {}, rev: 0 }); // 取得の時点ではまだ誰も保存していなかった
+    sync.onOpened();
+    await flush();
+    expect(useViewStore(pinia).agentSort).toBe("priority");
+    expect(stored()).toEqual({ theme: "nord", agentSort: "priority" });
+  });
+
   it("rev 0 で localStorage が空なら何も送らない", async () => {
     const { sync, sets } = setup({ prefs: {}, rev: 0 });
     sync.onOpened();
@@ -159,7 +181,7 @@ describe("PrefsSync（変更の送信・prefs.changed の反映）", () => {
     expect(sets).toEqual([{ patch: { statusSymbols: false }, baseRev: 2 }]);
   });
 
-  it("ほかのクライアントの prefs.changed は置き換えて当てる。自分の変更・古い rev は当てない", async () => {
+  it("prefs.changed は、最後に当てた rev より新しければ（送った本人のものも）置き換えて当てる。古い rev は当てない", async () => {
     localStorage.setItem(PREFS_KEY, JSON.stringify({ sidebarCollapsed: true }));
     const { sync } = setup({ prefs: { theme: "nord" }, rev: 2 });
     sync.onOpened();
@@ -170,10 +192,75 @@ describe("PrefsSync（変更の送信・prefs.changed の反映）", () => {
     expect(stored()).toEqual({ theme: "dracula", sidebarCollapsed: true });
     sync.onChanged({ prefs: { theme: "nord" }, rev: 3, byClientId: "other" }); // 同じ rev（古い）
     expect(settings.theme).toBe("dracula");
-    sync.onChanged({ prefs: { theme: "nord" }, rev: 4, byClientId: "me" }); // 自分の変更
-    expect(settings.theme).toBe("dracula");
-    sync.onChanged({ prefs: { theme: "tokyo-night" }, rev: 5, byClientId: "other" });
+    sync.onChanged({ prefs: { theme: "tokyo-night" }, rev: 4, byClientId: "me" }); // 本人の変更の知らせもサーバの全体として当てる
     expect(settings.theme).toBe("tokyo-night");
+  });
+
+  // 点検の must（02 の修正）：自分の set の往復中にほかのクライアントの changed が届いても、自分の新しい値を古い値で戻さず、自分の知らせで確定する。
+  it("送信中の自分の変更は、先に届いたほかのクライアントの changed の上に重ね、自分の知らせで確定する", async () => {
+    const server = { prefs: { theme: "nord" } as SharedPrefs, rev: 2 };
+    const { sync, release } = setup(server, { hold: true });
+    sync.onOpened();
+    await flush();
+    const settings = useSettingsStore(pinia);
+    settings.setTheme("tokyo-night"); // 送信中（返事を待たせる）
+    await flush();
+    // ほかのクライアントが別の項目を保存した知らせ（サーバの全体の theme はまだ nord）
+    sync.onChanged({ prefs: { theme: "nord", statusSymbols: false }, rev: 3, byClientId: "other" });
+    expect(settings.theme).toBe("tokyo-night");
+    expect(settings.statusSymbols).toBe(false);
+    // 自分の保存の知らせ（返事より先に届く）
+    sync.onChanged({
+      prefs: { theme: "tokyo-night", statusSymbols: false, themeAuto: false },
+      rev: 4,
+      byClientId: "me",
+    });
+    await release();
+    expect(settings.theme).toBe("tokyo-night");
+    expect(stored()).toMatchObject({ theme: "tokyo-night", statusSymbols: false });
+    // 確定した後のほかの変更は当たる
+    sync.onChanged({
+      prefs: { theme: "dracula", statusSymbols: false },
+      rev: 5,
+      byClientId: "other",
+    });
+    expect(settings.theme).toBe("dracula");
+  });
+
+  // 点検の should（02 の修正）：接続中に失敗した書き込みは、後の書き込みが成功していれば再接続で送り直さない。
+  it("失敗した書き込みは、同じ項目の後の書き込みが成功していれば、再接続で古い値を送り直さない", async () => {
+    const state: { fail?: string } = {};
+    const { sync, sets } = setup({ prefs: {}, rev: 1 }, { failSet: () => state.fail });
+    sync.onOpened();
+    await flush();
+    const settings = useSettingsStore(pinia);
+    state.fail = "internal";
+    settings.setStatusSymbols(false); // 失敗（切れかけ等）
+    await flush();
+    delete state.fail;
+    settings.setStatusSymbols(true); // 成功
+    await flush();
+    expect(sets).toEqual([{ patch: { statusSymbols: true }, baseRev: 1 }]);
+    sync.onClosed();
+    sync.onOpened();
+    await flush();
+    expect(sets).toHaveLength(1); // 古い false を送り直さない
+    expect(settings.statusSymbols).toBe(true);
+  });
+
+  it("失敗した書き込みが最後の書き込みなら、再接続で送る", async () => {
+    const state: { fail?: string } = {};
+    const { sync, sets } = setup({ prefs: {}, rev: 1 }, { failSet: () => state.fail });
+    sync.onOpened();
+    await flush();
+    state.fail = "internal";
+    useSettingsStore(pinia).setStatusSymbols(false);
+    await flush();
+    delete state.fail;
+    sync.onClosed();
+    sync.onOpened();
+    await flush();
+    expect(sets).toEqual([{ patch: { statusSymbols: false }, baseRev: 1 }]);
   });
 
   it("受け取る前（接続前・切れている間）の prefs.changed は当てない", () => {

@@ -112,7 +112,7 @@ const confirm = (): void => {
  */
 const cancel = (): void => {
   const ctx = view.dialogContext;
-  if ((ctx?.kind === "confirmWorktreeRemove" && ctx.closeOnCancel !== true) || ctx?.kind === "confirmWorktreeRemoveForce") {
+  if ((ctx?.kind === "confirmWorktreeRemove" || ctx?.kind === "confirmWorktreeRemoveForce") && ctx.closeOnCancel !== true) {
     actions.openWorktree(ctx.sourceWorkspaceId);
     return;
   }

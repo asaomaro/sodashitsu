@@ -1,4 +1,4 @@
-import { TERMINAL_PALETTES } from "@sodashitsu/protocol";
+import { TERMINAL_PALETTES, type SharedPrefs } from "@sodashitsu/protocol";
 import type { ITerminalOptions } from "@xterm/xterm";
 // xterm.js の必須の CSS（canvas の重ね方・入力用 textarea の隠し方）。無いと描画用の canvas が端末の下へ
 // 押し出され、端末の中身が一切見えない（親の統合 test で発見。D96）。
@@ -252,9 +252,9 @@ connection.onClosed(() => viewSync.onConnectionClosed());
 // 設定の置き場所はサーバ（20260927-cli-mode の design「設定」）。接続のたびに受け取り（初回は移行）、以後の変更を送る。判断は `PrefsSync`。
 const prefsSync = new PrefsSync({
   getPrefs: () => conn.request("prefs.get", {}),
-  setPrefs: (patch, baseRev) => conn.request("prefs.set", { patch, baseRev }),
+  // 送るのは web のストアが `writePrefs` で書いた値そのもの（`SharedPrefs` の形で書いている。サーバは形を問わない）。
+  setPrefs: (patch, baseRev) => conn.request("prefs.set", { patch: patch as SharedPrefs, baseRev }),
   isLocal: () => machines.selectedId === LOCAL_MACHINE_ID,
-  clientId: () => session.clientId,
   readLocal: () => readPrefs(),
   sharedOf: sharedPrefsOf,
   replaceShared: replaceSharedPrefs,

@@ -61,7 +61,10 @@ export type ErrorCode =
   // 入力の書き込み待ちの上限（20260927-server-size-input-limits）。pane のプログラムが入力を読まず、サーバに溜まった入力が上限に達した。
   // herdr は "pty input queue is full"（`pane_send_failed`）。
   | "input_queue_full"
-  // サーバの停止（`server.stop`。20260927-cli-mode）。引き継ぎ（`soda handoff`）の最中は止めない。止める手順を持たない組み立て（smoke 等）は断る。
+  // サーバの停止（`server.stop`。20260927-cli-mode）。design の表に無い本製品の追加で、制御の socket の止める指示（`soda session stop`）の返事の
+  // `reason`（`busy`・`unsupported`。`handoff/HandoffSocket.ts` の `StopReply`）をそのまま RPC の code にしたもの:
+  // - `server_busy`: 更新の引き継ぎ（`soda handoff`）の最中なので止めない（引き継ぎと停止を並んで走らせない）。少し待てば通る。
+  // - `server_stop_unsupported`: 止める手順を登録していない組み立て（smoke・テスト等。`ComposedServer.onStopRequest` を呼んでいない）。`soda serve` では起きない。
   | "server_busy"
   | "server_stop_unsupported";
 

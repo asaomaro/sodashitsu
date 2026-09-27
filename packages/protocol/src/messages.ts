@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
-import { THEME_NAMES } from "./theme.js";
+import { THEME_NAMES, type ThemeName } from "./theme.js";
 import { IMAGE_CHUNK_BASE64_MAX, IMAGE_MIME_TYPES } from "./image.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 import { CELL_LIMIT_MESSAGE, terminalDimension, VIEW_VISIBLE_PANES_MAX, withinCellLimit } from "./terminalLimits.js";
@@ -462,60 +462,69 @@ function jsonBytes(v: unknown): number {
 }
 
 /**
- * 端末版の節（`SharedPrefs.tui`。外側の端末向けの好み。どの端末版でも同じ値を使ってよいので共有する）。値の検査はクライアントが読むときに行う
- * （web の `load*` と同じく、壊れた値は既定へ落とす）。サーバは形を問わずに保存する。
+ * 端末版の節（`SharedPrefs.tui`。外側の端末向けの好み。どの端末版でも同じ値を使ってよいので共有する）。
+ * 型は「行儀のよいクライアントが書く形」。**読む側は型を信じずに正規化する**（web の `load*` と同じく、壊れた値は既定へ落とす）。
  */
-export const SharedTuiPrefs = z
-  .object({
-    mouseCapture: z.unknown(),
-    copyOnSelect: z.unknown(),
-    notifyDelivery: z.unknown(),
-    sidebarCols: z.unknown(),
-    narrowThreshold: z.unknown(),
-  })
-  .partial()
-  .passthrough();
-export type SharedTuiPrefs = z.infer<typeof SharedTuiPrefs>;
+export interface SharedTuiPrefs {
+  mouseCapture?: boolean;
+  copyOnSelect?: boolean;
+  notifyDelivery?: "auto" | "osc9" | "osc99" | "osc777" | "bell" | "off";
+  /** サイドバーの既定の幅（列）。 */
+  sidebarCols?: number;
+  /** 1 列表示に切り替える幅（列）。 */
+  narrowThreshold?: number;
+  [key: string]: unknown;
+}
 
 /**
- * 共有する設定（web の `soda.prefs.v1` から端末ごとの項目〔`sidebarWidth`・`sidebarCollapsed`〕を除いたもの）。**値の形はサーバで問わない**——
- * 読む側（web の `load*`・端末版）が正規化するので、版の違うクライアントが混ざっても知らない項目・知らない値を捨てずに保存する（`passthrough`）。
- * 項目名の一覧は型の手がかり（今の web が書く項目）。キー `__proto__` は zod が落とす（プロトタイプを差し替えない）。
+ * 共有する設定（web の `soda.prefs.v1` から端末ごとの項目〔`sidebarWidth`・`sidebarCollapsed`〕を除いたもの）。型は web が書く形
+ * （`packages/web/src/store/{settings,view,notifications,onboarding}.ts` の保存の形。中身の細かい形は client-core の各 `load*`・`serialize*` が持つ）。
+ * **型は約束であって検査ではない**——サーバは値の形を問わずに保存し（下のスキーマ）、版の違うクライアントが混ざると知らない項目・壊れた値も届くので、
+ * 読む側は必ず `load*` で正規化する。
  */
-export const SharedPrefs = z
-  .object({
-    keys: z.unknown(),
-    theme: z.unknown(),
-    themeAuto: z.unknown(),
-    themeLight: z.unknown(),
-    themeDark: z.unknown(),
-    themeOverrides: z.unknown(),
-    statusSymbols: z.unknown(),
-    keyboardLockInFullscreen: z.unknown(),
-    paneFrameThickness: z.unknown(),
-    paneAgentNameVisible: z.unknown(),
-    tabBarPosition: z.unknown(),
-    tabBarRight: z.unknown(),
-    tabBarRightSeparator: z.unknown(),
-    paneOuterBorders: z.unknown(),
-    paneBorders: z.unknown(),
-    paneGaps: z.unknown(),
-    sidebarRows: z.unknown(),
-    scrollback: z.unknown(),
-    newCwdPolicy: z.unknown(),
-    newCwdPath: z.unknown(),
-    notify: z.unknown(),
-    notifyHintPending: z.unknown(),
-    notifyHintDone: z.unknown(),
-    agentSort: z.unknown(),
-    workspaceSort: z.unknown(),
-    collapsedAutoGroups: z.unknown(),
-    onboarding: z.unknown(),
-    tui: SharedTuiPrefs,
-  })
-  .partial()
-  .passthrough();
-export type SharedPrefs = z.infer<typeof SharedPrefs>;
+export interface SharedPrefs {
+  /** キーの割り当て（client-core の `serializeKeyPrefs` の形。既定との差だけ）。 */
+  keys?: Record<string, unknown>;
+  theme?: ThemeName;
+  themeAuto?: boolean;
+  themeLight?: ThemeName | null;
+  themeDark?: ThemeName | null;
+  /** 色の上書き（web の `serializeThemeOverrides` の形）。 */
+  themeOverrides?: Record<string, unknown>;
+  statusSymbols?: boolean;
+  keyboardLockInFullscreen?: boolean;
+  paneFrameThickness?: "thin" | "default" | "thick";
+  paneAgentNameVisible?: boolean;
+  tabBarPosition?: "top" | "bottom";
+  /** tab バーの右端（client-core の `TabBarRightEntry[]`）。 */
+  tabBarRight?: unknown[];
+  tabBarRightSeparator?: string;
+  paneOuterBorders?: boolean;
+  paneBorders?: "always" | "auto" | "off";
+  paneGaps?: boolean;
+  /** サイドバーの行の並び（client-core の `serializeSidebarRows` の形）。 */
+  sidebarRows?: Record<string, unknown>;
+  scrollback?: "auto" | number;
+  newCwdPolicy?: NewCwd["policy"];
+  newCwdPath?: string;
+  notify?: { toast?: boolean; desktop?: boolean; sound?: boolean };
+  notifyHintPending?: boolean;
+  notifyHintDone?: boolean;
+  agentSort?: "grouped" | "priority";
+  workspaceSort?: "opened" | "name";
+  collapsedAutoGroups?: string[];
+  onboarding?: boolean;
+  tui?: SharedTuiPrefs;
+  /** 知らない項目（新しい版のクライアントが書いたもの）も捨てずに持つ。 */
+  [key: string]: unknown;
+}
+
+/**
+ * `SharedPrefs` の実行時のスキーマ。**値の形はサーバで問わない**（オブジェクトであることだけ）——読む側が正規化するので、版の違うクライアントが混ざっても
+ * 知らない項目・知らない値を捨てずに保存する（`passthrough`）。キー `__proto__` は zod が落とす（プロトタイプを差し替えない）。型は上の `SharedPrefs` として
+ * 扱う（形を確かめていないので、`as` で型だけを付ける。読む側の正規化が前提）。
+ */
+export const SharedPrefs = z.object({ tui: z.object({}).passthrough().optional() }).passthrough() as unknown as z.ZodType<SharedPrefs>;
 
 /** 端末ごとに持ち、共有しない項目（web の localStorage に残す。design「設定」）。 */
 export const DEVICE_LOCAL_PREF_KEYS = ["sidebarWidth", "sidebarCollapsed"] as const;

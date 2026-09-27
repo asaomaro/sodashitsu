@@ -436,6 +436,17 @@ describe("ConfirmDialog — worktree の削除の確認（kind: confirmWorktreeR
     expect(actions.openWorktree).not.toHaveBeenCalled();
     expect(view.dialogContext).toBeNull();
   });
+
+  it("closeOnCancel の --force の確認も、取り消すと一覧へ戻らずに閉じる", async () => {
+    const view = useViewStore(pinia);
+    const actions = makeActions();
+    const wrapper = mountDialog(actions);
+    view.openDialogWithContext({ kind: "confirmWorktreeRemoveForce", sourceWorkspaceId: "w1", path: "/w/a", openWorkspaceId: "w1", reason: "dirty", closeOnCancel: true });
+    await wrapper.vm.$nextTick();
+    await wrapper.findAll("button")[0]!.trigger("click");
+    expect(actions.openWorktree).not.toHaveBeenCalled();
+    expect(view.dialogContext).toBeNull();
+  });
 });
 
 // 20260927-cli-mode（design D-7）。
@@ -464,6 +475,17 @@ describe("ConfirmDialog — サーバの停止・キーからの worktree の削
     const actions = makeActions();
     const wrapper = mountDialog(actions);
     view.openDialogWithContext({ kind: "confirmWorktreeRemove", sourceWorkspaceId: "w1", path: "/w/a", openWorkspaceId: "w1", closeOnCancel: true });
+    await wrapper.vm.$nextTick();
+    await wrapper.findAll("button")[0]!.trigger("click");
+    expect(actions.openWorktree).not.toHaveBeenCalled();
+    expect(view.dialogContext).toBeNull();
+  });
+
+  it("closeOnCancel の --force の確認も、取り消すと一覧へ戻らずに閉じる", async () => {
+    const view = useViewStore(pinia);
+    const actions = makeActions();
+    const wrapper = mountDialog(actions);
+    view.openDialogWithContext({ kind: "confirmWorktreeRemoveForce", sourceWorkspaceId: "w1", path: "/w/a", openWorkspaceId: "w1", reason: "dirty", closeOnCancel: true });
     await wrapper.vm.$nextTick();
     await wrapper.findAll("button")[0]!.trigger("click");
     expect(actions.openWorktree).not.toHaveBeenCalled();

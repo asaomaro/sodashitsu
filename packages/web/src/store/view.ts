@@ -255,6 +255,8 @@ export type DialogContext =
       path: string;
       openWorkspaceId: string | null;
       reason: "dirty" | "locked";
+      /** `confirmWorktreeRemove` から引き継ぐ（キーの `remove_worktree` から始めた削除は、取り消し・失敗でも一覧へ戻らない）。 */
+      closeOnCancel?: true;
     }
   // 手動グループ（20260923-workspace-grouping。herdr に前例が無い独自拡張）。
   // 新しいグループを作り、右クリック元の workspace をそのまま追加する（`NameDialog` を再利用）。

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { expandRange, formatBinding, parseBinding } from "./chord.js";
 import { ACTIONS, actionDef, actionFor, isActionId } from "./bindings.js";
 
-// 20260923-missing-keybinding-actions で足した12操作は herdr と同じく「既定は割り当てなし」
-// （`defaults: []`。research F1）——このリポジトリで初めて `defaults: []` を持つ操作になる。
+// 既定のキーが無い操作（`defaults: []`）。20260923-missing-keybinding-actions で足した12操作が最初で（herdr と同じく「既定は割り当てなし」。research F1）、
+// 20260923-workspace-grouping の 2 操作と 20260927-cli-mode の 5 操作を合わせて 19 個。
 const UNBOUND_BY_DEFAULT_IDS = [
   "previous_workspace",
   "next_workspace",
@@ -19,7 +19,8 @@ const UNBOUND_BY_DEFAULT_IDS = [
   "resize_pane_right",
   "move_workspace_previous",
   "move_workspace_next",
-  // 20260927-cli-mode（design D-7）。herdr と同じく既定は割り当てなし。
+  // 20260927-cli-mode（design D-7）。switch_workspace・open_worktree・remove_worktree は herdr と同じく既定なし。swap_with_focused は herdr では
+  // メニューの項目（キーの操作ではない）。stop_server は herdr の操作ではない（本製品の追加。押し間違えると全ての pane が止まるので既定なし・確認つき）。
   "stop_server",
   "switch_workspace",
   "open_worktree",
@@ -59,7 +60,7 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
 
   it("既定の割り当てはすべて `prefix+…` として読め、範囲になるのは範囲の操作（switch_tab・focus_agent・switch_workspace）だけ", () => {
     for (const a of ACTIONS) {
-      // `UNBOUND_BY_DEFAULT_IDS`（12個）は herdr と同じく既定が割り当てなし（`defaults: []`）。
+      // `UNBOUND_BY_DEFAULT_IDS`（19 個）は既定が割り当てなし（`defaults: []`）。
       if (UNBOUND_BY_DEFAULT_IDS.includes(a.id)) {
         expect(a.defaults.length, a.id).toBe(0);
         continue;

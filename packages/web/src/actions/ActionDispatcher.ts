@@ -232,7 +232,14 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         return;
       case "openWorktree": {
         const workspaceId = this.view.workspaceId;
-        if (workspaceId) this.openWorktree(workspaceId);
+        if (!workspaceId) return;
+        // herdr と同じく、linked worktree の workspace からは始めない（一覧は repo の本体から開く。herdr の
+        // 「New and open worktree actions start from the repo parent workspace.」）。
+        if (this.session.workspaces.get(workspaceId)?.git?.isLinkedWorktree === true) {
+          this.view.toast("worktree を開く操作は、repo の本体の workspace から始めてください。");
+          return;
+        }
+        this.openWorktree(workspaceId);
         return;
       }
       case "removeWorktree":
@@ -442,7 +449,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     const ctx = this.view.dialogContext;
     if (ctx?.kind !== "confirmWorktreeRemove") return;
     this.view.closeDialog();
-    this.sendWorktreeRemove(ctx.sourceWorkspaceId, ctx.path, false, ctx.openWorkspaceId);
+    this.sendWorktreeRemove(ctx.sourceWorkspaceId, ctx.path, false, ctx.openWorkspaceId, ctx.closeOnCancel === true);
   }
 
   /** dirty で通常の削除が失敗したあとの `--force` での再実行（AC7・AC8）。 */
@@ -450,7 +457,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     const ctx = this.view.dialogContext;
     if (ctx?.kind !== "confirmWorktreeRemoveForce") return;
     this.view.closeDialog();
-    this.sendWorktreeRemove(ctx.sourceWorkspaceId, ctx.path, true, ctx.openWorkspaceId);
+    this.sendWorktreeRemove(ctx.sourceWorkspaceId, ctx.path, true, ctx.openWorkspaceId, ctx.closeOnCancel === true);
   }
 
   /**
@@ -463,7 +470,14 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
    * （view の移動先は既存の `repairView` に任せる）。(2) RPC の応答を待つ間に別の操作で
    * 他のダイアログが開いていたら、それを奪わない。
    */
-  private sendWorktreeRemove(sourceWorkspaceId: string, path: string, force: boolean, openWorkspaceId: string | null): void {
+  private sendWorktreeRemove(
+    sourceWorkspaceId: string,
+    path: string,
+    force: boolean,
+    openWorkspaceId: string | null,
+    /** 一覧を経ずに始めた削除（キーの `remove_worktree`）。失敗しても一覧を開き直さず、`--force` の確認にも引き継ぐ。 */
+    closeOnCancel = false,
+  ): void {
     this.conn
       .request("worktree.remove", { workspaceId: sourceWorkspaceId, path, force })
       .then(() => {
@@ -489,6 +503,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
               path,
               openWorkspaceId,
               reason: code === "worktree_locked" ? "locked" : "dirty",
+              ...(closeOnCancel ? { closeOnCancel: true as const } : {}),
             });
           }
           return;
@@ -497,7 +512,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         this.view.toast(worktreeErrorMessage(err));
         // 何も変わっていないので、削除元の workspace は必ず生きている——一覧を開き直して戻す
         // （AC9・AC-I1）。他のダイアログを奪わないことだけ守る。
-        if (this.view.dialogContext === null) this.openWorktree(sourceWorkspaceId);
+        if (this.view.dialogContext === null && !closeOnCancel) this.openWorktree(sourceWorkspaceId);
       });
   }
 
@@ -1074,8 +1089,9 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /**
-   * `remove_worktree`（20260927-cli-mode。herdr と同じく今の workspace が linked worktree のときだけ）。一覧（`worktree.list`）から今の workspace の場所を含む
-   * worktree を引き、一覧を経ずに削除の確認を開く（取り消したら閉じる）。削除の流れ（dirty・ロックの `--force` の確認）は一覧の行からの削除と同じ。
+   * `remove_worktree`（20260927-cli-mode。herdr と同じく今の workspace が linked worktree のときだけ）。一覧（`worktree.list`）から、今の workspace の場所と
+   * **同じ場所**の worktree を引き（一覧の行からの削除と同じく完全一致。サーバは完全一致の workspace だけを閉じる）、一覧を経ずに削除の確認を開く（取り消したら閉じる）。
+   * 削除の流れ（dirty・ロックの `--force` の確認）は一覧の行からの削除と同じ。
    */
   private removeCurrentWorktree(): void {
     const workspaceId = this.view.workspaceId;
@@ -1088,7 +1104,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.conn
       .request("worktree.list", { workspaceId: ws.id })
       .then((info) => {
-        const entry = worktreeContaining(info.entries, ws.cwd);
+        const entry = info.entries.find((e) => e.path === ws.cwd);
         if (!entry) {
           this.view.toast("この workspace の worktree が一覧に見つかりませんでした。");
           return;
@@ -1337,24 +1353,6 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       })
       .catch(() => this.view.toast("独自コマンドの設定を読み直せませんでした。"));
   }
-}
-
-/** 区切り（`\\`・`/`）と末尾の `/` を揃えたパス（worktree の場所の比べ合わせ用）。 */
-function normalizePath(p: string): string {
-  const slashed = p.replace(/\\/g, "/");
-  return slashed.length > 1 ? slashed.replace(/\/+$/, "") : slashed;
-}
-
-/** `cwd` を含む worktree（一番深いもの）。無ければ undefined。 */
-export function worktreeContaining<T extends { path: string }>(entries: readonly T[], cwd: string): T | undefined {
-  const target = normalizePath(cwd);
-  let best: T | undefined;
-  for (const e of entries) {
-    const root = normalizePath(e.path);
-    if (target !== root && !target.startsWith(`${root}/`)) continue;
-    if (best === undefined || root.length > normalizePath(best.path).length) best = e;
-  }
-  return best;
 }
 
 /** 独自コマンドの失敗の文言（code から引く。サーバの生の message は使わない。20260927-custom-command-keys）。 */

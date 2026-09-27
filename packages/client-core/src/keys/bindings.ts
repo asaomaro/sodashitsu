@@ -68,7 +68,7 @@ export const ACTIONS = [
     defaults: ["prefix+shift+r"],
     action: { type: "reloadConfig" },
   },
-  // 20260927-cli-mode（design D-7）。押し間違えると全ての pane が止まるので既定は無し・確認つき。
+  // 20260927-cli-mode（design D-7）。herdr の操作ではない（端末版・画面からサーバを止める口として本製品が足した）。押し間違えると全ての pane が止まるので既定は無し・確認つき。
   {
     id: "stop_server",
     label: "サーバを止める",
