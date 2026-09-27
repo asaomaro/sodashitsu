@@ -39,7 +39,12 @@ export type ErrorCode =
   | "agent_start_input_failed"
   // pane への直結（20260926-pane-direct-connect）。名前は herdr の理由文（already has an attached client）に対応させる。
   | "pane_attached"
-  | "not_attached";
+  | "not_attached"
+  // 独自コマンド（20260927-custom-command-keys）。command_not_found・command_failed は herdr と同じ code。
+  | "command_not_found"
+  | "command_failed"
+  | "command_popup_open"
+  | "command_busy";
 
 export interface ProtocolError {
   code: ErrorCode;

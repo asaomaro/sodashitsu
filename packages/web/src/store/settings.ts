@@ -1,7 +1,8 @@
 import type { NewCwd, ThemeName } from "@wtm/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import type { ActionId } from "../keys/bindings.js";
+import { commandKeyDefs, type KeyTargetId } from "../keys/commandKeys.js";
+import { useCommandsStore } from "./commands.js";
 import {
   emptyKeyPrefs,
   loadKeyPrefs,
@@ -353,7 +354,9 @@ export const useSettingsStore = defineStore("settings", () => {
    * 解決した割り当ての表。`KeyRouter`（`main.ts` が変わるたびに差し替える）・キー一覧・トースト・通知の案内文が**同じ表**を見る。
    * 割り当てが変わったときだけ作り直す（押すたびには作らない）。
    */
-  const keymap = computed<ResolvedKeymap>(() => resolveKeymap(keyPrefs.value).keymap);
+  // 独自コマンド（20260927-custom-command-keys）の一覧も渡す——サーバの一覧が変われば表も作り直す（一覧に無いコマンドの割り当ては載らない）。
+  const commands = useCommandsStore();
+  const keymap = computed<ResolvedKeymap>(() => resolveKeymap(keyPrefs.value, commandKeyDefs(commands.catalog)).keymap);
   /**
    * navigate モードの6操作（20260923-navigate-mode-keys。design「store」）の解決した表。
    * `keyPrefs.navigateKeys` は `bindings`/`prefix` とは別の**内容**の表なので、専用の computed で分ける
@@ -473,12 +476,12 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   /** ある操作の割り当てを差し替える（空配列は「割り当てなし」）。既定と同じ内容になれば上書きを消す。 */
-  function setKeyBindings(id: ActionId, bindings: readonly string[]): void {
+  function setKeyBindings(id: KeyTargetId, bindings: readonly string[]): void {
     replaceKeyPrefs(withBindings(keyPrefs.value, id, bindings));
   }
 
   /** ある操作の上書きを消す（既定へ戻す。AC9）。 */
-  function resetKeyAction(id: ActionId): void {
+  function resetKeyAction(id: KeyTargetId): void {
     replaceKeyPrefs(withoutBindings(keyPrefs.value, id));
   }
 

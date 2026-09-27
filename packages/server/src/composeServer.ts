@@ -52,6 +52,8 @@ import { type HandoffSocket, handoffSocketPathFor, startHandoffSocket } from "./
 import { createControlRequests } from "./handoff/controlRequests.js";
 import { runPreflight } from "./handoff/preflight.js";
 import { type HandoffResult, adoptedSpecsOf, discardHandedOffPanes, discardRejectedPanes, finishTakenHandoff } from "./handoff/startup.js";
+import { COMMANDS_FILE_NAME } from "./commands/commandConfig.js";
+import { CommandService } from "./commands/CommandService.js";
 
 export interface ComposedServer {
   httpServer: HttpServer;
@@ -237,6 +239,10 @@ export async function composeServer(
   const sizeAuthority = new DefaultSizeAuthority(clients, session, bus); // bus: pane.attach_changed（20260926-pane-direct-connect）
   const surface = new ControlSurface(logger);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
+  // 独自コマンド（20260927-custom-command-keys）。状態ディレクトリ（名前付き session ではその session のもの）の commands.json。起動時に 1 度読む
+  // （まだ `/ws` を受け付けていないので `command.updated` を受け取る接続は無い）。読み直しは `command.reload`。
+  const commands = new CommandService({ filePath: join(options.stateDir, COMMANDS_FILE_NAME), session, terminals, bus, clients, logger });
+  await commands.reload();
   registerAllMethods(surface, {
     session,
     clients,
@@ -247,11 +253,14 @@ export async function composeServer(
     gitPoller,
     agentStarter,
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
+    commands,
   });
   const wsServer = new WsServerWs(httpServer.server, originRejections, auth.authorizeUpgrade, logger);
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
   wsServer.setReady(false);
-  new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger);
+  new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
+    onClientGone: (clientId) => commands.onClientGone(clientId), // その接続の popup を止める（20260927-custom-command-keys）
+  });
 
   let freshToken: string | undefined;
   /** 復元（または最初の workspace の作成）を済ませたか。済ませていない状態を session.json へ書かないために使う。 */
@@ -497,6 +506,8 @@ export async function composeServer(
         wsServer.closeAll(1001, "server shutting down");
         await new Promise<void>((resolve) => httpServer.server.close(() => resolve()));
       } finally {
+        // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
+        commands.dispose();
         // スクロールバックの一時ディレクトリ（20260926-edit-scrollback）。途中の処理が投げても消す。
         await session.disposeScrollbackEditors();
         // 制御の socket はロックを放す直前まで開けておく——止まる途中に届いた 2 回目の `wtm session stop` が「既に止まる途中」と答えを受けて待てる

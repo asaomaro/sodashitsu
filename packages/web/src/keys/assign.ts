@@ -28,6 +28,7 @@ import {
   type ResolvedKeymap,
 } from "./keymap.js";
 import { navigateKeyDef, NAVIGATE_RESERVED_CHORDS, type NavigateKeyId } from "./navigateKeys.js";
+import { isCommandKeyId, type KeyTargetId } from "./commandKeys.js";
 import { resolveNavigateKeymap, type ResolvedNavigateKeymap } from "./navigateKeymap.js";
 
 /**
@@ -38,7 +39,7 @@ import { resolveNavigateKeymap, type ResolvedNavigateKeymap } from "./navigateKe
 /** 何を割り当てようとしているか。`replacing` は置き換える割り当ての文字列（［変更］。追加なら省く）。 */
 export type AssignTarget =
   | { kind: "prefix" }
-  | { kind: "binding"; id: ActionId; via: "prefix" | "direct"; replacing?: string };
+  | { kind: "binding"; id: KeyTargetId; via: "prefix" | "direct"; replacing?: string };
 
 /**
  * 検証の結果。通れば `binding`（prefix なら chord・割り当てなら `prefix+shift+h` 等の正規形の文字列）。通らなければ画面に出す理由。
@@ -56,7 +57,7 @@ export type AssignResult =
        * owner が単一の（範囲でない）chord としてこの binding を持っているとき限定。範囲の操作の一部など、
        * 単一の chord として特定できないときは付けない（AC7）。
        */
-      conflict?: { ownerId: ActionId; via: "prefix" | "direct"; chord: string };
+      conflict?: { ownerId: KeyTargetId; via: "prefix" | "direct"; chord: string };
     };
 
 const IGNORE_SILENT: AssignResult = { ok: false, ignore: true, reason: "" };
@@ -66,8 +67,9 @@ function display(via: "prefix" | "direct", chord: string): string {
   return via === "prefix" ? `prefix+${chord}` : chord;
 }
 
-function labelOf(id: ActionId): string {
-  return actionDef(id)?.label ?? id;
+/** 範囲の操作か（独自コマンドは範囲にならない）。 */
+function isIndexed(id: KeyTargetId): boolean {
+  return !isCommandKeyId(id) && actionDef(id)?.indexed === true;
 }
 
 /**
@@ -112,13 +114,13 @@ function validatePrefix(km: ResolvedKeymap, chord: string): AssignResult {
   if (after !== null)
     return {
       ok: false,
-      reason: `${chord} は「${labelOf(after)}」の prefix の後のキーに使われているので、prefix にできません。`,
+      reason: `${chord} は「${km.labelOf(after)}」の prefix の後のキーに使われているので、prefix にできません。`,
     };
   const direct = km.ownerOf("direct", chord);
   if (direct !== null)
     return {
       ok: false,
-      reason: `${chord} は「${labelOf(direct)}」の直接のキーに使われているので、prefix にできません。`,
+      reason: `${chord} は「${km.labelOf(direct)}」の直接のキーに使われているので、prefix にできません。`,
     };
   return { ok: true, binding: chord };
 }
@@ -130,8 +132,7 @@ function validateBinding(
   chord: string,
 ): AssignResult {
   const { id, via } = target;
-  const def = actionDef(id);
-  const indexed = def?.indexed === true;
+  const indexed = isIndexed(id);
 
   // 形の規則（AC5・AC6 の (c)(d)(f)）。
   if (via === "direct") {
@@ -188,7 +189,7 @@ function validateBinding(
         : {};
       return {
         ok: false,
-        reason: `${display(via, c)} は「${labelOf(owner)}」がすでに使っています。`,
+        reason: `${display(via, c)} は「${km.labelOf(owner)}」がすでに使っています。`,
         ...conflict,
       }; // (a)
     }
@@ -213,7 +214,8 @@ function replacedChords(target: Extract<AssignTarget, { kind: "binding" }>): Set
 // ---------------------------------------------------------------------------------------------------------------------
 
 /** 何を既定へ戻すか。 */
-export type ResetTarget = { kind: "action"; id: ActionId } | { kind: "prefix" } | { kind: "all" };
+export type ResetTarget =
+  { kind: "action"; id: KeyTargetId } | { kind: "prefix" } | { kind: "all" };
 
 /** 戻せなかった既定の割り当て（別の操作が使っている・prefix と同じ）と理由。 */
 export interface SkippedBinding {
@@ -241,10 +243,11 @@ export function planReset(km: ResolvedKeymap, prefs: KeyPrefs, target: ResetTarg
     }
     case "action": {
       const next = withoutBindings(prefs, target.id);
-      const after = resolveKeymap(next).keymap;
+      const after = resolveKeymap(next, km.commands).keymap; // 独自コマンドの一覧を引き継ぐ（落とすとその割り当てとの重なりが見えない）
       const effective = new Set(after.bindingsOf(target.id));
       const skipped: SkippedBinding[] = [];
-      for (const binding of actionDef(target.id)?.defaults ?? []) {
+      const defaults = isCommandKeyId(target.id) ? [] : (actionDef(target.id)?.defaults ?? []); // 独自コマンドに既定は無い
+      for (const binding of defaults) {
         if (effective.has(binding)) continue;
         skipped.push({ binding, reason: whyNotRestored(after, binding) });
       }
@@ -259,7 +262,7 @@ function whyNotRestored(km: ResolvedKeymap, binding: string): string {
   if (b === null) return "読めない割り当てです";
   for (const c of b.range ? expandRange(b.chord) : [b.chord]) {
     const owner = km.ownerOf(b.via, c);
-    if (owner !== null) return `${display(b.via, c)} は「${labelOf(owner)}」が使っています`;
+    if (owner !== null) return `${display(b.via, c)} は「${km.labelOf(owner)}」が使っています`;
     if (c === km.prefix) return `prefix（${km.prefix}）と同じキーです`;
   }
   return "ほかの割り当てと重なっています";
@@ -328,7 +331,7 @@ export function applyRecommended(
       continue;
     }
     current = withBindings(current, id, [...working.bindingsOf(id), r.binding]);
-    working = resolveKeymap(current).keymap;
+    working = resolveKeymap(current, km.commands).keymap; // 独自コマンドの割り当てとの重なりも見る
     result.added.push(binding);
   }
   result.prefs = current;

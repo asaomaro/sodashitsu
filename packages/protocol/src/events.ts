@@ -1,5 +1,6 @@
 import type { AgentInfo, Pane, SessionFocus, Tab, Workspace, WorkspaceGroup } from "./model.js";
 import type { AgentIntegrationStatusResult } from "./messages.js";
+import type { CommandListResult } from "./commands.js";
 
 /**
  * イベント（design.md「WebSocket の通信」のイベント表。architecture.md の独立点検で data の形を確定）。
@@ -112,6 +113,20 @@ export interface AgentIntegrationChangedEvent {
   data: AgentIntegrationStatusResult;
 }
 
+/** 独自コマンドの一覧が変わった（読み直し。20260927-custom-command-keys）。全クライアントへ配る。 */
+export interface CommandUpdatedEvent {
+  event: "command.updated";
+  data: CommandListResult;
+}
+/**
+ * popup が閉じた（コマンドが終わった・閉じる要求・開いた接続の切断・サーバの停止。20260927-custom-command-keys）。`exitCode` はコマンドが
+ * 自分で終わったときだけ。全クライアントへ配るが、その popup を開いた接続以外は知らない id として無視する。
+ */
+export interface CommandPopupClosedEvent {
+  event: "command.popup_closed";
+  data: { popupId: string; exitCode?: number };
+}
+
 export type ServerEvent =
   | WorkspaceCreatedEvent
   | WorkspaceUpdatedEvent
@@ -133,6 +148,8 @@ export type ServerEvent =
   | PaneAttachChangedEvent
   | SessionFocusChangedEvent
   | ClientErrorEvent
-  | AgentIntegrationChangedEvent;
+  | AgentIntegrationChangedEvent
+  | CommandUpdatedEvent
+  | CommandPopupClosedEvent;
 
 export type ServerEventName = ServerEvent["event"];

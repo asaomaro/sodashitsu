@@ -1,4 +1,4 @@
-import type { ServerSessionEntry, SessionFocus, WorkspaceGroup, WorktreeEntry, WorktreeListResult } from "@wtm/protocol";
+import type { PopupDimension, ServerSessionEntry, SessionFocus, WorkspaceGroup, WorktreeEntry, WorktreeListResult } from "@wtm/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import type { Mode } from "../keys/actions.js";
@@ -214,7 +214,9 @@ export type DialogContext =
   // はじめの案内（20260926-settings-onboarding）。選択は下書きでダイアログが持つので文脈は空。
   | { kind: "onboarding" }
   // session の一覧（20260926-named-session-ui）。**サーバへ聞いてから開く**（`worktreeOpen` と同じ）。
-  | { kind: "sessionSwitch"; sessions: ServerSessionEntry[] };
+  | { kind: "sessionSwitch"; sessions: ServerSessionEntry[] }
+  // 独自コマンドの popup（20260927-custom-command-keys）。開く時点の名前と大きさの指定。`paneId` は走らせる基準の pane（フォーカス中）。
+  | { kind: "commandPopup"; commandId: string; paneId: string; title: string; width?: PopupDimension; height?: PopupDimension };
 
 /**
  * このクライアントの表示・モード・接続状態（architecture.md「store/view」）。

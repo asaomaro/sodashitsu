@@ -2,13 +2,15 @@
 import { computed, nextTick, ref, watch } from "vue";
 import { ACTIONS, type ActionGroup } from "../keys/bindings.js";
 import { navigateKeyDef, type NavigateKeyId } from "../keys/navigateKeys.js";
+import { COMMAND_GROUP } from "../keys/commandKeys.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 
 /**
  * キー一覧（T24。design「ダイアログ」「ヘルプ」。herdr `src/input/keybind_help.rs`
  * `keybind_help_groups()`/`filter_keybind_help_groups()` を移植——群（全体・移動・workspace / tab・pane）
- * ごとの一覧、`custom` 群は本製品にカスタムキーバインド（独自コマンド）が無いので常に出さない（D56 の訂正 8）。
+ * ごとの一覧。`custom` 群は、独自コマンド（20260927-custom-command-keys）のうち割り当てのあるものを群「独自コマンド」として出す
+ * （それまでは独自コマンドが無く常に出さなかった。D56 の訂正 8）。
  * **キーは現在の割り当て（`settings.keymap`）から作る**（20260921-keybinding-customization。design「案内の追従」・D8）——prefix の後のキーは `prefix+v`、直接のキーは
  * `ctrl+alt+d`、割り当てなしは「なし」。**移動の群（navigate モードの中の操作。当初6つの移動操作
  * のみだったが、20260925-sidebar-keyboard-menu で `navigate_open_menu`〔移動ではなくメニューを
@@ -88,6 +90,13 @@ const navigateEntries = computed<HelpEntry[]>(() => [
   { keys: "enter", label: "選んだ workspace を開く" },
 ]);
 
+/** 独自コマンドの行（割り当てのあるものだけ）。 */
+const commandEntries = computed<HelpEntry[]>(() =>
+  settings.keymap.commands
+    .map((c) => ({ keys: settings.keymap.bindingsOf(c.id).join(" / "), label: c.label }))
+    .filter((e) => e.keys !== ""),
+);
+
 // herdr の keybind_help_groups() の群分けに合わせる（D76）。先頭に prefix 自身の行（herdr の「prefix mode」の行と同じ）。
 const helpGroups = computed<HelpGroup[]>(() => [
   {
@@ -100,6 +109,8 @@ const helpGroups = computed<HelpGroup[]>(() => [
   { name: "移動", entries: navigateEntries.value },
   { name: "workspace / tab", entries: actionEntries("workspace / tab") },
   { name: "pane", entries: actionEntries("pane") },
+  // 独自コマンド（20260927-custom-command-keys。herdr の custom 群）。割り当てのあるものだけ、名前（説明か id）とキーで。無ければ群ごと出さない。
+  ...(commandEntries.value.length > 0 ? [{ name: COMMAND_GROUP, entries: commandEntries.value }] : []),
 ]);
 
 const SCROLL_LINE = 32;

@@ -148,6 +148,7 @@ describe("loadKeyPrefs — 壊れた保存値は値ごとに落とす（AC8）",
         prefix: "ctrl+a",
         bindings: {},
         navigateKeys: {},
+        commands: {},
       });
     }
   });
@@ -169,6 +170,7 @@ describe("serializeKeyPrefs", () => {
       prefix: "ctrl+a",
       bindings: { zoom: ["prefix+z", "ctrl+alt+z"], help: [], detach: ["prefix+d"] },
       navigateKeys: {},
+      commands: {},
     };
     const s = serializeKeyPrefs(p);
     expect(s).toEqual({
@@ -293,7 +295,7 @@ describe("loadKeyPrefs — navigate（AC1・AC2・AC6）", () => {
   it("navigate の形が違っても bindings/prefix は生かす", () => {
     for (const navigate of [[], "x", 42, null, true]) {
       const p = loadKeyPrefs({ prefix: "ctrl+a", navigate });
-      expect(p, JSON.stringify(navigate)).toEqual({ prefix: "ctrl+a", bindings: {}, navigateKeys: {} });
+      expect(p, JSON.stringify(navigate)).toEqual({ prefix: "ctrl+a", bindings: {}, navigateKeys: {}, commands: {} });
     }
   });
 
@@ -311,8 +313,8 @@ describe("loadKeyPrefs — navigate（AC1・AC2・AC6）", () => {
 
 describe("serializeKeyPrefs — navigate", () => {
   it("差が無ければ navigate キーごと消える", () => {
-    expect(serializeKeyPrefs({ prefix: null, bindings: {}, navigateKeys: {} })).toBeUndefined();
-    expect(serializeKeyPrefs({ prefix: "ctrl+a", bindings: {}, navigateKeys: {} })).toEqual({
+    expect(serializeKeyPrefs({ prefix: null, bindings: {}, navigateKeys: {}, commands: {} })).toBeUndefined();
+    expect(serializeKeyPrefs({ prefix: "ctrl+a", bindings: {}, navigateKeys: {}, commands: {} })).toEqual({
       prefix: "ctrl+a",
     });
   });
@@ -322,6 +324,7 @@ describe("serializeKeyPrefs — navigate", () => {
       prefix: null,
       bindings: {},
       navigateKeys: { navigate_pane_right: ["ctrl+l"], navigate_workspace_up: [] },
+      commands: {},
     };
     const s = serializeKeyPrefs(p);
     expect(s).toEqual({

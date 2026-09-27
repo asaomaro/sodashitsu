@@ -486,3 +486,26 @@ describe("TerminalRegistry と画像の addon（20260926-kitty-graphics の AC6�
     term.dispose();
   });
 });
+
+describe("TerminalRegistry.attachExternal（20260927-custom-command-keys の popup）", () => {
+  it("付けた id の OUTPUT・SNAPSHOT・大きさの変化は外の受け手へ回り、外すと届かない。別の受け手に差し替わっていれば外さない", () => {
+    const { registry } = makeRegistry({ capacity: 24 });
+    const got: string[] = [];
+    const sink = {
+      onOutput: (id: string) => got.push(`out:${id}`),
+      onSnapshot: (id: string, c: number, r: number, t: string) => got.push(`snap:${id}:${c}x${r}:${t}`),
+      onSizeChanged: (id: string, c: number, r: number) => got.push(`size:${id}:${c}x${r}`),
+    };
+    const detach = registry.attachExternal("p9", sink);
+    registry.onOutput("p9", new Uint8Array([1]));
+    registry.onSnapshot("p9", 10, 5, "x");
+    registry.onSizeChanged("p9", 11, 6);
+    registry.onOutput("p1", new Uint8Array([1])); // 付けていない id は今までどおり（端末が無ければ捨てる）
+    expect(got).toEqual(["out:p9", "snap:p9:10x5:x", "size:p9:11x6"]);
+    const other = { onOutput: () => got.push("other"), onSnapshot: () => undefined, onSizeChanged: () => undefined };
+    registry.attachExternal("p9", other);
+    detach(); // 差し替わっているので外さない
+    registry.onOutput("p9", new Uint8Array([1]));
+    expect(got.at(-1)).toBe("other");
+  });
+});

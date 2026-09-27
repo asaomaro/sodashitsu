@@ -2633,3 +2633,105 @@ describe("SessionService — スクロールバックを $EDITOR で開く（202
     ]);
   });
 });
+
+describe("SessionService — 独自コマンドの pane 種・文脈・環境（20260927-custom-command-keys の AC8・AC10）", () => {
+  function setupCmd() {
+    const terminals = new FakeTerminalManager();
+    const bus = new EventBus();
+    const events: { event: string; data: unknown }[] = [];
+    bus.subscribe((e) => events.push(e as { event: string; data: unknown }));
+    const service = makeService(terminals, bus, new FakePersistScheduler());
+    return { terminals, events, service };
+  }
+  const cmd = { shell: "/bin/sh", args: ["-c", "htop"], env: { WTM_COMMAND_ID: "htop", WTM_ACTIVE_PANE_ID: "p2" } };
+
+  it("対象を分割した pane でコマンドを拡大表示で起動し、焦点を移す。環境は pane の環境に重ねる", async () => {
+    const { terminals, events, service } = setupCmd();
+    const { tab, pane: first } = await service.createWorkspace("/home/u", "w");
+    const { pane: source } = await service.splitPane(first.id, "right", undefined);
+    events.length = 0;
+    const { pane } = await service.openCommandPane(source.id, "/srv/x", cmd);
+    const t = service.getTab(tab.id)!;
+    expect(Layout.leaves(t.layout)).toEqual([first.id, source.id, pane.id]);
+    expect(t.zoomedPaneId).toBe(pane.id);
+    expect(t.focusedPaneId).toBe(pane.id);
+    expect(pane.cwd).toBe("/srv/x");
+    const opts = terminals.createOptions.at(-1)!;
+    expect(opts).toMatchObject({ cwd: "/srv/x", shell: "/bin/sh", args: ["-c", "htop"] });
+    expect(opts.env).toMatchObject({ WTM_PANE_ID: pane.id, WTM_COMMAND_ID: "htop", WTM_ACTIVE_PANE_ID: "p2" });
+    expect(events.map((e) => e.event)).toEqual(["pane.created", "layout.updated"]);
+  });
+
+  it("コマンドが終わると pane が閉じ、焦点は対象へ・拡大表示は開く前（対象が拡大表示なら対象）へ戻る", async () => {
+    const { terminals, events, service } = setupCmd();
+    const { tab, pane: first } = await service.createWorkspace("/home/u", "w");
+    const { pane: source } = await service.splitPane(first.id, "right", undefined);
+    service.zoomPane(source.id, "on");
+    const { pane } = await service.openCommandPane(source.id, "/home/u", cmd);
+    events.length = 0;
+    terminals.hosts.get(pane.id)!.fireExit(0);
+    await vi.waitFor(() => expect(service.getPane(pane.id)).toBeUndefined());
+    const t = service.getTab(tab.id)!;
+    expect(t.focusedPaneId).toBe(source.id);
+    expect(t.zoomedPaneId).toBe(source.id);
+    expect(events.find((e) => e.event === "pane.closed")?.data).toEqual({ paneId: pane.id, successorPaneId: source.id });
+  });
+
+  it("利用者が閉じても戻る。閉じ方によらず戻し方の記録は消える（残さない）", async () => {
+    const { service } = setupCmd();
+    const records = () => (service as unknown as { commandPanes: Map<string, unknown> }).commandPanes;
+    const { workspace, tab, pane: first } = await service.createWorkspace("/home/u", "w");
+    const { pane: source } = await service.splitPane(first.id, "right", undefined);
+    const { pane } = await service.openCommandPane(source.id, "/home/u", cmd);
+    expect(records().size).toBe(1);
+    await service.closePane(pane.id);
+    expect(service.getTab(tab.id)!.focusedPaneId).toBe(source.id);
+    expect(service.getTab(tab.id)!.zoomedPaneId).toBeNull();
+    expect(records().size).toBe(0);
+    // tab ごと閉じる経路（publishPaneClosed）でも消える
+    const other = await service.createTab(workspace.id, undefined);
+    await service.openCommandPane(other.pane.id, "/home/u", cmd);
+    expect(records().size).toBe(1);
+    await service.closeTab(other.tab.id);
+    expect(records().size).toBe(0);
+  });
+
+  it("起動の失敗（猶予中の 0 以外の終了）は spawn_failed で、pane を残さない", async () => {
+    const { terminals, events, service } = setupCmd();
+    const { pane: source } = await service.createWorkspace("/home/u", "w");
+    events.length = 0;
+    terminals.nextSpawnFailure = 127;
+    await expect(service.openCommandPane(source.id, "/home/u", cmd)).rejects.toMatchObject({ code: "spawn_failed" });
+    expect(service.snapshot().panes).toHaveLength(1);
+    expect(events.filter((e) => e.event === "pane.created")).toEqual([]);
+  });
+
+  it("pane が無ければ not_found", async () => {
+    const { service } = setupCmd();
+    await service.createWorkspace("/home/u", "w");
+    await expect(service.openCommandPane("p999", "/home/u", cmd)).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("commandContext はモデルから workspace・tab・cwd を引き、既定の場所も返す", async () => {
+    const { service } = setupCmd();
+    const { workspace, tab, pane } = await service.createWorkspace("/home/u/api", "w");
+    expect(service.commandContext(pane.id)).toEqual({ workspaceId: workspace.id, tabId: tab.id, paneId: pane.id, cwd: "/home/u/api", defaultCwd: "/home/u" });
+    expect(() => service.commandContext("p999")).toThrow(expect.objectContaining({ code: "not_found" }));
+  });
+
+  it("commandEnv は ownPaneId を省くと WTM_PANE_ID を入れず、extra を足す", () => {
+    const { service } = setupCmd();
+    const env = service.commandEnv(undefined, { WTM_ACTIVE_PANE_ID: "p1", WTM_COMMAND_ID: "x" });
+    expect(env["WTM_PANE_ID"]).toBeUndefined();
+    expect(env).toMatchObject({ WTM_ACTIVE_PANE_ID: "p1", WTM_COMMAND_ID: "x" });
+    expect(service.commandEnv("p7", {})["WTM_PANE_ID"]).toBe("p7");
+  });
+
+  it("reservePaneId は pane と同じ番号の列から払い出す（衝突しない）", async () => {
+    const { service } = setupCmd();
+    const { pane } = await service.createWorkspace("/home/u", "w");
+    const id = service.reservePaneId();
+    const { pane: next } = await service.splitPane(pane.id, "right", undefined);
+    expect(new Set([pane.id, id, next.id]).size).toBe(3);
+  });
+});

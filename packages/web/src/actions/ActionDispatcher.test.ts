@@ -11,6 +11,7 @@ import { RendererPool, type WebglAddonLike } from "../term/RendererPool.js";
 import { TerminalRegistry } from "../term/TerminalRegistry.js";
 import { MouseBridge } from "../term/MouseBridge.js";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
+import { useCommandsStore } from "../store/commands.js";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
@@ -1072,7 +1073,8 @@ describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-a
     expect(session.workspaces).toEqual(workspacesBefore);
     expect(session.tabs).toEqual(tabsBefore);
     expect(session.panes).toEqual(panesBefore);
-    expect(conn.requests, "サーバへは何も送らない（ローカルの localStorage を読み直すだけ）").toEqual([]);
+    // 構成・フォーカスの要求は送らない。送るのは独自コマンドの読み直しだけ（20260927-custom-command-keys の F15）。
+    expect(conn.requests, "構成・フォーカスを変える要求は送らない").toEqual([["command.reload", {}]]);
   });
 });
 
@@ -2250,5 +2252,186 @@ describe("session の一覧と切り替え", () => {
     } finally {
       open.mockRestore();
     }
+  });
+});
+
+describe("ActionDispatcher — 独自コマンド（20260927-custom-command-keys）", () => {
+  function withCatalog() {
+    useCommandsStore(pinia).setCatalog({
+      commands: [
+        { id: "git", type: "popup", description: "lazygit", width: "80%" },
+        { id: "htop", type: "pane" },
+        { id: "build", type: "shell", description: "ビルド" },
+      ],
+      problem: null,
+    });
+  }
+
+  it("shell：id とフォーカス中の pane だけを送り、走らせたことを知らせる（AC7）", async () => {
+    withCatalog();
+    const conn = makeConnection();
+    conn.resolveWith["command.run"] = { type: "shell" };
+    const view = useViewStore(pinia);
+    view.focusPane("p1");
+    makeDispatcher(conn).dispatcher.run({ type: "runCommand", commandId: "build" });
+    await flush();
+    expect(conn.requests).toEqual([["command.run", { commandId: "build", paneId: "p1" }]]);
+    expect(view.toasts.map((t) => t.message)).toEqual(["「ビルド」を走らせました。"]);
+  });
+
+  it("失敗は code から引いた文言で知らせる（AC6）", async () => {
+    withCatalog();
+    const conn = makeConnection();
+    conn.rejectWith["command.run"] = "command_busy";
+    const view = useViewStore(pinia);
+    view.focusPane("p1");
+    makeDispatcher(conn).dispatcher.run({ type: "runCommand", commandId: "build" });
+    await flush();
+    expect(view.toasts.map((t) => t.message)).toEqual([clientErrorMessage("command_busy")]);
+  });
+
+  it("pane：応答の pane へ焦点を移す（AC8）。失敗ならトーストで焦点はそのまま", async () => {
+    withCatalog();
+    const conn = makeConnection();
+    conn.resolveWith["command.run"] = { type: "pane", pane: { id: "p2" } };
+    useSessionStore(pinia).paneUpserted(makePane("p2", "t1"));
+    const view = useViewStore(pinia);
+    view.focusPane("p1");
+    makeDispatcher(conn).dispatcher.run({ type: "runCommand", commandId: "htop" });
+    await flush();
+    expect(view.focusedPaneId).toBe("p2");
+
+    const failing = makeConnection();
+    failing.rejectWith["command.run"] = "spawn_failed";
+    view.focusPane("p1");
+    makeDispatcher(failing).dispatcher.run({ type: "runCommand", commandId: "htop" });
+    await flush();
+    expect(view.focusedPaneId).toBe("p1");
+    expect(view.toasts.map((t) => t.message)).toContain(clientErrorMessage("spawn_failed"));
+  });
+
+  it("pane：応答を待つ間に打った文字は新しい pane へ届き、失敗・応答の時点で閉じていれば元の pane へ（D99。editScrollback と同じ）", async () => {
+    withCatalog();
+    const view = useViewStore(pinia);
+    const session = useSessionStore(pinia);
+    // 1) 成功：拡大表示の新しい pane へ
+    const conn = makeConnection();
+    let resolveRun: (v: unknown) => void = () => undefined;
+    conn.request = function <M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
+      this.requests.push([method, params]);
+      return new Promise((r) => (resolveRun = r as (v: unknown) => void));
+    };
+    const gate = new InputGate(conn);
+    view.focusPane("p1");
+    const { registry, keys } = makeDispatcher(conn);
+    new ActionDispatcher({ conn, pinia, registry, keys, input: gate, notifications: { focusNext: () => undefined } }).run({ type: "runCommand", commandId: "htop" });
+    gate.sendInput("p1", "q");
+    expect(conn.sendInput).not.toHaveBeenCalled();
+    session.tabUpserted({ ...makeTab("t1", "w1", "p2"), zoomedPaneId: "p2" });
+    session.paneUpserted(makePane("p2", "t1"));
+    resolveRun({ type: "pane", pane: { id: "p2" } });
+    await flush();
+    expect(conn.sendInput).toHaveBeenCalledWith("p2", "q");
+    // 2) 失敗：元の pane へ
+    const failing = makeConnection();
+    failing.rejectWith["command.run"] = "spawn_failed";
+    const gate2 = new InputGate(failing);
+    view.focusPane("p1");
+    new ActionDispatcher({ conn: failing, pinia, registry, keys, input: gate2, notifications: { focusNext: () => undefined } }).run({ type: "runCommand", commandId: "htop" });
+    gate2.sendInput("p1", "x");
+    await flush();
+    expect(failing.sendInput).toHaveBeenCalledWith("p1", "x");
+    expect(view.focusedPaneId).toBe("p1");
+    // 3) 応答の時点で pane が閉じていた：焦点も入力も元の pane
+    const gone = makeConnection();
+    gone.resolveWith["command.run"] = { type: "pane", pane: { id: "p9" } };
+    const gate3 = new InputGate(gone);
+    new ActionDispatcher({ conn: gone, pinia, registry, keys, input: gate3, notifications: { focusNext: () => undefined } }).run({ type: "runCommand", commandId: "htop" });
+    gate3.sendInput("p1", "y");
+    await flush();
+    expect(view.focusedPaneId).toBe("p1");
+    expect(gone.sendInput).toHaveBeenCalledWith("p1", "y");
+  });
+
+  it("code の無い失敗・読み直しの失敗は汎用の文言で知らせる", async () => {
+    withCatalog();
+    const conn = makeConnection();
+    conn.request = function <M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
+      this.requests.push([method, params]);
+      return Promise.reject(new Error("socket closed"));
+    };
+    const view = useViewStore(pinia);
+    view.focusPane("p1");
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.run({ type: "runCommand", commandId: "build" });
+    dispatcher.run({ type: "reloadConfig" });
+    await flush();
+    expect(view.toasts.map((t) => t.message)).toEqual(
+      expect.arrayContaining(["独自コマンドを走らせられませんでした。", "独自コマンドの設定を読み直せませんでした。"]),
+    );
+  });
+
+  it("popup：要求は送らず、名前と大きさの指定（幅・高さ）を持って popup の部品を開く", () => {
+    useCommandsStore(pinia).setCatalog({ commands: [{ id: "g2", type: "popup", width: 90, height: "40%" }], problem: null });
+    const conn = makeConnection();
+    const view = useViewStore(pinia);
+    view.focusPane("p1");
+    makeDispatcher(conn).dispatcher.run({ type: "runCommand", commandId: "g2" });
+    expect(view.dialogContext).toEqual({ kind: "commandPopup", commandId: "g2", paneId: "p1", title: "g2", width: 90, height: "40%" });
+  });
+
+  it("popup：要求は送らず、名前と大きさの指定を持って popup の部品を開く（AC4）", () => {
+    withCatalog();
+    const conn = makeConnection();
+    const view = useViewStore(pinia);
+    view.focusPane("p1");
+    makeDispatcher(conn).dispatcher.run({ type: "runCommand", commandId: "git" });
+    expect(conn.requests).toEqual([]);
+    expect(view.openDialog).toBe("commandPopup");
+    expect(view.dialogContext).toEqual({ kind: "commandPopup", commandId: "git", paneId: "p1", title: "lazygit", width: "80%" });
+  });
+
+  it("一覧に無い id・焦点の無いときは何もしない（AC13）", async () => {
+    withCatalog();
+    const conn = makeConnection();
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.run({ type: "runCommand", commandId: "build" }); // 焦点なし
+    view.focusPane("p1");
+    dispatcher.run({ type: "runCommand", commandId: "gone" });
+    await flush();
+    expect(conn.requests).toEqual([]);
+    expect(view.openDialog).toBeNull();
+  });
+
+  it("refreshCommands は command.list で一覧を入れ、失敗しても投げず一覧を消さない", async () => {
+    const conn = makeConnection();
+    conn.resolveWith["command.list"] = { commands: [{ id: "a", type: "shell" }], problem: null };
+    const { dispatcher } = makeDispatcher(conn);
+    await dispatcher.refreshCommands();
+    const store = useCommandsStore(pinia);
+    expect(store.catalog).toEqual([{ id: "a", type: "shell" }]);
+    conn.rejectWith["command.list"] = "internal";
+    await expect(dispatcher.refreshCommands()).resolves.toBeUndefined();
+    expect(store.catalog).toEqual([{ id: "a", type: "shell" }]);
+  });
+
+  it("reload_config はサーバに読み直させ、一覧を置き換え、問題があれば知らせる（AC15）", async () => {
+    const conn = makeConnection();
+    conn.resolveWith["command.reload"] = { commands: [], problem: "commands.json: 知らない項目です（env）" };
+    const view = useViewStore(pinia);
+    withCatalog();
+    makeDispatcher(conn).dispatcher.run({ type: "reloadConfig" });
+    await flush();
+    expect(conn.requests).toContainEqual(["command.reload", {}]);
+    expect(useCommandsStore(pinia).catalog).toEqual([]);
+    expect(view.toasts.map((t) => t.message)).toContain("独自コマンドの設定を読めませんでした：commands.json: 知らない項目です（env）");
+
+    const ok = makeConnection();
+    ok.resolveWith["command.reload"] = { commands: [{ id: "a", type: "shell" }], problem: null };
+    view.toasts.splice(0);
+    makeDispatcher(ok).dispatcher.run({ type: "reloadConfig" });
+    await flush();
+    expect(view.toasts.map((t) => t.message)).toEqual(["設定を読み直しました。"]);
   });
 });

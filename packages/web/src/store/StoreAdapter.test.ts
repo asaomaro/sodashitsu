@@ -2,6 +2,7 @@ import type { AgentInfo, Pane, Tab, Workspace } from "@wtm/protocol";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionState } from "../net/ports.js";
+import { useCommandsStore } from "./commands.js";
 import { useSessionStore } from "./session.js";
 import { StoreAdapter } from "./StoreAdapter.js";
 import { useViewStore } from "./view.js";
@@ -307,6 +308,21 @@ describe("StoreAdapter", () => {
 
     const { adapter: withoutCallback } = makeAdapter();
     expect(() => withoutCallback.applyEvent({ event: "agent_integration.changed", data: status })).not.toThrow();
+  });
+
+  it("command.updated は独自コマンドの一覧を置き換え、command.popup_closed は閉じた控えに残す（20260927-custom-command-keys の AC15）", () => {
+    const { adapter } = makeAdapter();
+    const commands = useCommandsStore(pinia);
+    adapter.applyEvent({ event: "command.updated", data: { commands: [{ id: "git", type: "popup" }], problem: null } });
+    expect(commands.catalog).toEqual([{ id: "git", type: "popup" }]);
+    adapter.applyEvent({ event: "command.updated", data: { commands: [], problem: "commands.json: x" } });
+    expect(commands.catalog).toEqual([]);
+    expect(commands.problem).toBe("commands.json: x");
+    const seq = commands.closedSeq;
+    adapter.applyEvent({ event: "command.popup_closed", data: { popupId: "p9", exitCode: 2 } });
+    expect(commands.closedSeq).toBe(seq + 1);
+    expect(commands.takeClosed("p9")).toEqual({ closed: true, exitCode: 2 });
+    expect(commands.takeClosed("p9")).toEqual({ closed: false });
   });
 
   it("session.focus_changed", () => {

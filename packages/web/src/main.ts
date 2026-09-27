@@ -209,6 +209,8 @@ connection.onOpened(() => viewSync.onConnectionOpened());
 connection.onOpened(() => themeController.resend());
 // 名前付き session の数（サイドバーの session の入口。20260926-named-session-ui）。`actionDispatcher` は下で作るので、呼ぶ時点で読む。
 connection.onOpened(() => void actionDispatcherBox.current?.refreshServerSessions());
+// 独自コマンドの一覧（20260927-custom-command-keys。サーバ全体の設定）。接続ごとに取り直す（切れている間の読み直しを取りこぼさない）。
+connection.onOpened(() => void actionDispatcherBox.current?.refreshCommands());
 // 閉じてから次の hello が通るまでは、`client.view`・`pane.subscribe` を送らない（D107）。
 connection.onClosed(() => viewSync.onConnectionClosed());
 
