@@ -100,3 +100,12 @@ describe("エージェントへの入力のエラー（20260926-agent-prompt-sen
     expect(new Set(codes.map(clientErrorMessage)).size).toBe(codes.length);
   });
 });
+
+describe("入力の書き込み待ちの上限（20260927-server-size-input-limits）", () => {
+  it("input_queue_full は、pane が入力を読まず送った入力を捨てたことを日本語で示す（AC9）", () => {
+    const text = clientErrorMessage("input_queue_full");
+    expect(text).toContain("入力を読んでいない");
+    expect(text).toContain("捨てました");
+    expect(text).not.toContain("input_queue_full"); // 知らない code の汎用の文言ではない
+  });
+});

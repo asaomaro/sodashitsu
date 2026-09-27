@@ -1,4 +1,4 @@
-import type { PaneId, TerminalPalette } from "@wtm/protocol";
+import { RpcError, type PaneId, type TerminalPalette } from "@wtm/protocol";
 import type { PtyProcess } from "../pty/PtyBackend.js";
 import type { Disposable } from "../util/Disposable.js";
 import { DefaultOutputFanout, type OutputFanout } from "./OutputFanout.js";
@@ -28,7 +28,17 @@ export interface TerminalHost {
   readonly fanout: OutputFanout;
   write(input: Uint8Array | string): void;
   /**
-   * モード付き入力を書く。書き終えるまで（flush から最後の部分まで）に届いた `write`・`writeModal` は後回しにし、
+   * 利用者の入力（INPUT フレーム）を書く（20260927-server-size-input-limits）。まだ PTY へ書けていない入力（`inputBacklog`）＋今回の長さが
+   * `MAX_PENDING_INPUT_BYTES` を超えるなら、**何も書かずに** false を返す（途中まで書かない）。サーバ自身の書き込み（問い合わせへの応答）は通らない。
+   * テストの偽物は持たなくてよい（持たない host には呼び出し側が `write` する＝今までどおり）。
+   */
+  writeInput?(input: Uint8Array | string): boolean;
+  /**
+   * まだ PTY へ書けていない入力の量（後回しの待ち＋PTY の待ちの、バイト数＋件数×`INPUT_CHUNK_COST_BYTES`。PTY の分が測れなければ 0）。O(1)。
+   */
+  inputBacklog?(): number;
+  /**
+   * モード付き入力を書く。書き込み待ちが上限を超えるなら何も書かずに `input_queue_full` の RpcError で reject する。書き終えるまで（flush から最後の部分まで）に届いた `write`・`writeModal` は後回しにし、
    * 終わったら届いた順に書く。終了（dispose・PTY の終了）したら reject する。
    */
   writeModal(input: ModalInput): Promise<void>;
@@ -59,6 +69,16 @@ export interface HandoffHold {
 }
 
 const PAUSE_THRESHOLD_BYTES = 1024 * 1024; // 1MB（design「流量制御」）
+/**
+ * pane ごとの、まだ PTY へ書けていない利用者の入力の上限（20260927-server-size-input-limits の decisions D2）。1 通の INPUT の上限（1 MiB）の 16 倍（1 件ごとに `INPUT_CHUNK_COST_BYTES` を上乗せするので、1 MiB の INPUT は 15 通まで）——
+ * 数 MB の貼り付け・流し込みは読みの遅いプログラムにも届き、読まない pane（raw モードで固まった TUI 等）1 つあたりのメモリはここで止まる。
+ */
+export const MAX_PENDING_INPUT_BYTES = 16 * 1024 * 1024;
+/**
+ * 待ちの 1 件あたりに上乗せして数えるバイト数（decisions D9。node-pty の待ちの 1 件は中身とは別に約 200 バイトを使う）。1 バイトずつの大量の入力でも、
+ * 待ちは約 6.5 万件（実メモリ約 13 MB）で止まる。行ごとに 1 通送る数 MB の流し込み（80 字×3.7 万通≒12.5 MB）は通る。
+ */
+export const INPUT_CHUNK_COST_BYTES = 256;
 /** `nudgeRedraw` の、減らしてから戻すまでの間（ms）。 */
 const NUDGE_DELAY_MS = 100;
 const enc = new TextEncoder();
@@ -89,6 +109,9 @@ export class DefaultTerminalHost implements TerminalHost {
   private inputClosed = false;
   private activeModal: ModalJob | null = null;
   private readonly queue: QueuedInput[] = [];
+  /** `queue` の素の入力のバイト数と件数（`inputBacklog` を O(1) で出すため。decisions D9）。 */
+  private queuedRawBytes = 0;
+  private queuedRawCount = 0;
   private delayTimer: ReturnType<typeof setTimeout> | null = null;
   private wakeDelay: (() => void) | null = null;
 
@@ -168,9 +191,31 @@ export class DefaultTerminalHost implements TerminalHost {
     return this.pty.pid;
   }
 
+  writeInput(input: Uint8Array | string): boolean {
+    if (this.inputClosed) {
+      this.write(input); // 終了した端末は今までどおり（PTY が捨てる）。知らせない
+      return true;
+    }
+    const len = byteLengthOf(input);
+    if (len > 0 && this.inputBacklog() + len + INPUT_CHUNK_COST_BYTES > MAX_PENDING_INPUT_BYTES)
+      return false;
+    this.write(input);
+    return true;
+  }
+
+  inputBacklog(): number {
+    const ptyBytes = this.pty.pendingWriteBytes?.() ?? 0;
+    const ptyChunks = this.pty.pendingWriteChunks?.() ?? 0;
+    return (
+      this.queuedRawBytes + ptyBytes + (this.queuedRawCount + ptyChunks) * INPUT_CHUNK_COST_BYTES
+    );
+  }
+
   write(input: Uint8Array | string): void {
     if (this.busy) {
       this.queue.push({ kind: "raw", data: input });
+      this.queuedRawBytes += byteLengthOf(input);
+      this.queuedRawCount += 1;
       return;
     }
     this.pty.write(input);
@@ -196,6 +241,18 @@ export class DefaultTerminalHost implements TerminalHost {
         if (this.activeModal !== job) return;
       }
       const parts = job.input.build(this.mirror.inputModes());
+      // 読まない pane に積み続けない（20260927-server-size-input-limits）。何も書かずに断る（途中まで書くと Enter の無い入力が残る）。
+      const total = parts.reduce((n, p) => n + byteLengthOf(p), 0);
+      const backlog = this.inputBacklog();
+      if (
+        total > 0 &&
+        backlog + total + parts.length * INPUT_CHUNK_COST_BYTES > MAX_PENDING_INPUT_BYTES
+      ) {
+        throw new RpcError(
+          "input_queue_full",
+          `pane ${this.paneId} is not reading input (${backlog} bytes pending)`,
+        );
+      }
       for (let i = 0; i < parts.length; i++) {
         if (i > 0) {
           await this.delay(job.input.delayMs);
@@ -229,6 +286,10 @@ export class DefaultTerminalHost implements TerminalHost {
   private drainQueue(): void {
     while (this.queue.length > 0) {
       const next = this.queue.shift()!;
+      if (next.kind === "raw") {
+        this.queuedRawBytes -= byteLengthOf(next.data);
+        this.queuedRawCount -= 1;
+      }
       if (next.kind === "modal") {
         void this.runModal(next.job);
         return;
@@ -254,6 +315,8 @@ export class DefaultTerminalHost implements TerminalHost {
     for (const q of this.queue.splice(0)) {
       if (q.kind === "modal") q.job.reject(err);
     }
+    this.queuedRawBytes = 0;
+    this.queuedRawCount = 0;
     this.busy = false;
     if (this.delayTimer !== null) clearTimeout(this.delayTimer);
     this.wakeDelay?.();
@@ -333,4 +396,9 @@ export class DefaultTerminalHost implements TerminalHost {
       // 既に終了しているプロセスへの kill は無視する。
     }
   }
+}
+
+/** 入力のバイト数（文字列は UTF-8 のバイト数）。 */
+function byteLengthOf(input: Uint8Array | string): number {
+  return typeof input === "string" ? Buffer.byteLength(input, "utf8") : input.byteLength;
 }

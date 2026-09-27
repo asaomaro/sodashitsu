@@ -348,12 +348,36 @@ export async function runPaneControl(
     let owned = false;
     let releasing = false;
     /**
+     * stderr への警告。stderr を読まない相手だと書き出し待ちが際限なく溜まるので、上限を超えている間は捨てる
+     * （review ラウンド 1。stdout の D4 と同じく wtmctl のメモリを上限の範囲に留める）。
+     */
+    const warnLine = (line: string): void => {
+      if (io.errPending() > MAX_WARN_PENDING_BYTES) return;
+      io.warn(`${line}\n`);
+    };
+    /** 不正な行の警告。 */
+    const warn = (reason: string): void =>
+      warnLine(`wtmctl: pane control input ignored: ${reason}`);
+    /**
      * `pane.attach` が通るまではストリームにイベントを渡さず溜めておく（その間の pane の終わりで `terminal.closed` を書いてから attach の失敗を
      * 投げると、「始まる前の失敗は stdout に何も書かない」が破れる。pane が消えていれば attach が not_found を返す）。attach が通ったら溜めたものを
      * 順に渡す——`ws` は同じ受信の塊のメッセージを同期で配るので、attach の応答の直後のイベントは `await` の続きより先に届く（decisions D10）。
      */
     let pending: ServerEvent[] | null = [];
     const onEvent = (evt: ServerEvent): void => {
+      // サーバが入力を捨てた知らせ（20260927-server-size-input-limits）。pane が入力を読まず、サーバに溜まった入力が上限に達した。
+      // stdout の記録は変えず、stderr に出す（attach の前に届いても溜めずにすぐ出す。サーバは同じ pane について 2 秒に 1 回だけ送る）。
+      if (evt.event === "client.error") {
+        if (
+          evt.data.code === "input_queue_full" &&
+          (evt.data.paneId === undefined || evt.data.paneId === paneId)
+        ) {
+          warnLine(
+            `wtmctl: pane control input dropped: pane ${paneId} is not reading input (server input queue is full)`,
+          );
+        }
+        return;
+      }
       if (evt.event === "pane.attach_changed" && evt.data.paneId === paneId) {
         if (myClientId !== null && evt.data.clientId === myClientId) owned = true;
         else if (owned && evt.data.clientId !== null) stream.end("taken_over");
@@ -404,14 +428,6 @@ export async function runPaneControl(
         () => stream.end("released"),
         () => stream.end("released"),
       );
-    };
-    /**
-     * 不正な行の警告。stderr を読まない相手だと書き出し待ちが際限なく溜まるので、上限を超えている間は捨てる
-     * （review ラウンド 1。stdout の D4 と同じく wtmctl のメモリを上限の範囲に留める）。
-     */
-    const warn = (reason: string): void => {
-      if (io.errPending() > MAX_WARN_PENDING_BYTES) return;
-      io.warn(`wtmctl: pane control input ignored: ${reason}\n`);
     };
     const handle = (event: LineEvent): void => {
       if (releasing || stream.isEnded) return;

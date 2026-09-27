@@ -1001,6 +1001,55 @@ describe("runPaneControl（20260926-pane-observe-control）", () => {
     await running;
   });
 
+  // 20260927-server-size-input-limits の AC8。
+  it("制御中の pane の入力を捨てた知らせ（input_queue_full）は stderr に出し、stdout の記録は変えない。別の pane・別の code は出さない", async () => {
+    const client = fakeClient();
+    useClient(client);
+    const io = fakeIo();
+    const running = runPaneControl(controlCmd(), store, io);
+    await waitSubscribed(client);
+    const outBefore = [...io.out];
+    const notice = (data: { code: string; paneId?: string }): void =>
+      client.emitEvent({ event: "client.error", data: { message: "m", ...data } });
+    notice({ code: "input_queue_full", paneId: "p1" });
+    notice({ code: "input_queue_full", paneId: "p2" });
+    notice({ code: "invalid_params" });
+    notice({ code: "input_queue_full" }); // pane の無い知らせ（古い形）も制御中の pane のものとして出す
+    expect(io.warnings).toEqual([
+      "wtmctl: pane control input dropped: pane p1 is not reading input (server input queue is full)\n",
+      "wtmctl: pane control input dropped: pane p1 is not reading input (server input queue is full)\n",
+    ]);
+    expect(io.out).toEqual(outBefore);
+    // stderr の書き出し待ちが上限を超えている間は捨てる（不正な行の警告と同じ）。
+    io.errPendingBytes = MAX_WARN_PENDING_BYTES + 1;
+    notice({ code: "input_queue_full", paneId: "p1" });
+    expect(io.warnings).toHaveLength(2);
+    io.input('{"type":"terminal.release"}\n');
+    await running;
+  });
+
+  it("attach の応答より前に届いた入力を捨てた知らせも、溜めずにすぐ stderr に出す", async () => {
+    const client = fakeClient();
+    const io = fakeIo();
+    const request = client.request;
+    client.request = vi.fn((method: string, params: { paneId: string }) => {
+      if (method === "pane.attach")
+        client.emitEvent({
+          event: "client.error",
+          data: { code: "input_queue_full", message: "m", paneId: "p1" },
+        });
+      return request(method as never, params as never);
+    }) as unknown as typeof client.request;
+    useClient(client);
+    const running = runPaneControl(controlCmd(), store, io);
+    await waitSubscribed(client);
+    expect(io.warnings).toEqual([
+      "wtmctl: pane control input dropped: pane p1 is not reading input (server input queue is full)\n",
+    ]);
+    io.input('{"type":"terminal.release"}\n');
+    await running;
+  });
+
   it("stdout に書けなくなったら解放中でも output_closed で終わる", async () => {
     const client = fakeClient({ detachHangs: true });
     useClient(client);

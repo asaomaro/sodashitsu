@@ -227,6 +227,30 @@ describe("runPaneAttach（20260926-pane-direct-connect）", () => {
     await running;
   });
 
+  // 20260927-server-size-input-limits の AC15・AC4。サーバのスキーマの上限の外は invalid_params で繋げないので、送る前に丸める。
+  it("手元の大きさがサーバの上限（1 辺 4096・面積 1,000,000）を超えれば丸めて attach・attach_resize する", async () => {
+    const client = fakeClient();
+    useClient(client);
+    const term = fakeTerminal();
+    term.cols = 5000;
+    term.rows = 30;
+    const running = runPaneAttach(cmd(), store, term);
+    await waitAttached(client);
+    expect(client.requests[0]).toEqual({
+      method: "pane.attach",
+      params: { paneId: "p1", cols: 4096, rows: 30, takeover: false },
+    });
+
+    term.resizeTo(2000, 3000);
+    expect(client.requests.at(-1)).toEqual({
+      method: "pane.attach_resize",
+      params: { paneId: "p1", cols: 2000, rows: 500 },
+    });
+
+    term.type("\x02q");
+    await running;
+  });
+
   it("--takeover を pane.attach に渡し、別のクライアントが所有者になったら attach_taken_over で終わる（AC9・AC7）", async () => {
     const client = fakeClient();
     useClient(client);
