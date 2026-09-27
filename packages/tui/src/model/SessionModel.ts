@@ -1,5 +1,6 @@
 import type {
   AgentInfo,
+  AgentIntegrationStatusResult,
   DisplayState,
   HostInfo,
   Pane,
@@ -43,6 +44,8 @@ export class SessionModel {
   groups = new Map<string, WorkspaceGroup>();
   focus: SessionFocus | null = null;
   limits: SessionLimits = { scrollbackLines: 5000 };
+  /** 公式フック連携の状態（設定画面を開いたときの `agent_integration.status` と `agent_integration.changed`）。 */
+  agentIntegration: AgentIntegrationStatusResult | null = null;
 
   /** このクライアントの表示。 */
   workspaceId: string | null = null;
@@ -158,8 +161,12 @@ export class SessionModel {
       case "prefs.changed":
         this.hooks.onPrefsChanged?.(e.data);
         return;
+      case "agent_integration.changed":
+        // 公式フック連携の状態（設定画面の「エージェント連携」。web の `agentIntegrations` の store と同じ）。
+        this.agentIntegration = e.data;
+        return;
       default:
-        // machine.changed・command.*・agent_integration.changed・pane.attach_changed は 04/05 で扱う。
+        // machine.changed・command.*・pane.attach_changed は 05 の T4・T6 で扱う。
         return;
     }
   }

@@ -55,7 +55,6 @@ function setup(snap: SessionSnapshot = snapshot(), responses: Record<string, unk
     pasteText: vi.fn(),
     detach: vi.fn(),
     toggleSidebar: vi.fn(),
-    openSettings: vi.fn(),
     focusNextNotification: vi.fn(),
     runCommand: vi.fn(),
     pasteImage: vi.fn(),

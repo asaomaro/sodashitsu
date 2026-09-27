@@ -47,7 +47,6 @@ export interface DispatcherHost {
   /** 独自コマンドの一覧を受け取った（05 で使う）。 */
   setCommands?(catalog: CommandListResult): void;
   /** 設定画面（05）。 */
-  openSettings(): void;
   /** 次の通知へ（05）。 */
   focusNextNotification(): void;
   /** 独自コマンド（05）。 */
@@ -145,7 +144,8 @@ export class TuiDispatcher {
         this.host.detach();
         return;
       case "settings":
-        this.host.openSettings();
+        // 設定画面（web と同じく `settings` のダイアログ。05 の T1）。
+        this.ui.openDialogWithContext({ kind: "settings" });
         return;
       case "nextNotification":
         this.host.focusNextNotification();

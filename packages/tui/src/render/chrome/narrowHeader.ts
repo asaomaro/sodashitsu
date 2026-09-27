@@ -1,8 +1,7 @@
-import { stateGlyph } from "@sodashitsu/client-core";
 import { ATTR } from "../color.js";
 import type { Grid, Rect } from "../Screen.js";
 import { stringWidth, truncate } from "../width.js";
-import { stateColor, type ChromeContext } from "./context.js";
+import { glyphFor, stateColor, type ChromeContext } from "./context.js";
 import { MODE_BADGES, statusText } from "./tabBar.js";
 
 /** 1 列表示の上辺の「switch」（押すと選び直しの一覧。herdr の mobile の `mobile_switch`）。 */
@@ -67,7 +66,7 @@ export function paintNarrowHeader(grid: Grid, rect: Rect, ctx: ChromeContext): N
       : tab.label
     : "";
   const state = model.workspaceState(ws.id);
-  const glyph = stateGlyph(state);
+  const glyph = glyphFor(state, ctx.prefs.statusSymbols);
   if (glyph) grid.text(x + 1, rect.y, glyph, stateColor(theme, state), bg);
   x += 3;
   // 知らせ・session 名は右の余りに（名前と tab を優先）。

@@ -80,6 +80,8 @@ export interface MouseHost {
   setSidebarSpacesRows?(rows: number, persist: boolean): void;
   /** リンクを開く（M6。Ctrl＋クリック）。 */
   openLink?(url: string): void;
+  /** マウスで選んだら離した時点でコピーするか（`tui.copyOnSelect`。省略は入）。 */
+  copyOnSelect?(): boolean;
   /** サイドバーの区画をホイールで動かす（区画が一覧より低いとき）。 */
   scrollSidebar?(section: "spaces" | "agents", delta: number): void;
   /** あふれた tab バーの表示をずらす（「‹」「›」）。 */
@@ -614,7 +616,7 @@ export class MouseController {
 
   private copySelection(term: PaneTerminal): void {
     const sel = this.selection;
-    if (!sel) return;
+    if (!sel || this.host.copyOnSelect?.() === false) return;
     // セルの列で切り出し、折り返しの続きの行へは改行を入れない（copy モードと同じ。04 の点検）。
     const text = rangeText(term.term, sel.from, sel.to, false).replace(/[ ]+$/gm, "");
     if (text === "") return;

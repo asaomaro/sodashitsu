@@ -13,6 +13,9 @@ import {
 } from "@sodashitsu/client-core";
 import { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import { GotoDialog } from "../modes/GotoDialog.js";
+import { SettingsDialog } from "../modes/SettingsDialog.js";
+import { settingsSections } from "../settings/sections.js";
+import { SettingsWriter } from "../settings/SettingsWriter.js";
 import { ATTR } from "../render/color.js";
 import type { CursorState, Grid } from "../render/Screen.js";
 import { TuiCopyTarget } from "../term/CopyTarget.js";
@@ -129,6 +132,10 @@ export class TuiApp {
   private readonly copyMode = new CopyMode();
   /** copy モードの対象の pane（copy モードでなければ null）。 */
   private copyPaneId: string | null = null;
+  /** 外側の端末へマウスの報告を出させているか（`tui.mouseCapture`）。 */
+  private mouseOn = true;
+  /** 設定の書き込み（設定画面・05）。 */
+  protected readonly settingsWriter: SettingsWriter;
   /** 外側の端末へ ?1003（ボタンを押していない動きの報告）を有効にしているか。 */
   private anyMotion = false;
   /** pane の headless ごとの copy モードの対象（捨てた headless のものは一緒に消える）。 */
@@ -192,6 +199,12 @@ export class TuiApp {
       this.scheduleRender();
     });
     this.ui = new UiState(this.model);
+    this.settingsWriter = new SettingsWriter({
+      prefs: this.prefs,
+      conn: this.rpc,
+      toast: (m) => this.ui.toast(m),
+      setLocal: (patch) => this.setLocalState(patch as Partial<TuiState>, true),
+    });
     this.disposers.push(
       this.ui.onChange(() => {
         if (this.ui.overlayOpen) this.mouse?.cancel(); // オーバーレイを開いたら途中のドラッグを捨てる
@@ -211,7 +224,6 @@ export class TuiApp {
       pasteText: (paneId, text) => this.pasteText(paneId, text),
       detach: () => this.detach(),
       toggleSidebar: () => this.toggleSidebar(),
-      openSettings: () => this.notYet("設定画面"),
       focusNextNotification: () => this.notYet("通知の移動"),
       runCommand: () => this.notYet("独自コマンド"),
       pasteImage: () => this.notYet("画像の貼り付け"),
@@ -238,6 +250,7 @@ export class TuiApp {
       setSidebarSpacesRows: (rows, persist) =>
         this.setLocalState({ sidebarSpacesRows: rows }, persist),
       openLink: (url) => this.openLink(url),
+      copyOnSelect: () => this.prefs.copyOnSelect,
       scrollSidebar: (section, delta) => {
         this.sidebarScroll[section] = Math.max(0, this.sidebarScroll[section] + delta);
         this.scheduleRender();
@@ -271,9 +284,9 @@ export class TuiApp {
       this.io.onFatal((err) => this.finish(1, `soda: unexpected error: ${describeError(err)}\n`)),
     );
     try {
-      // TODO(05-tui-features)：`tui.mouseCapture` は prefs.get の前なので、ここでは常に既定（有効）。受け取った後の切り替え（マウスの報告の
-      // 有効・無効を出し直す）は 05 の設定画面と一緒に配線する（.aidev/works/20260927-cli-mode/05-tui-features）。
-      this.modes.enable(this.prefs.mouseCapture);
+      // `tui.mouseCapture` は prefs.get の前なので、ここでは既定（有効）。受け取った後に切なら `onPrefsChange` が止める。
+      this.mouseOn = this.prefs.mouseCapture;
+      this.modes.enable(this.mouseOn);
       this.start();
     } catch (err) {
       this.finish(1, `soda: ${describeError(err)}\n`);
@@ -388,6 +401,14 @@ export class TuiApp {
   }
 
   protected onPrefsChange(): void {
+    // `tui.mouseCapture` を実行中に切り替えた：外側の端末のマウスの報告を出し直す・止める。
+    const mouse = this.prefs.mouseCapture;
+    if (mouse !== this.mouseOn) {
+      this.mouseOn = mouse;
+      this.anyMotion = false;
+      this.mouse.cancel();
+      this.modes.setMouse(mouse);
+    }
     this.renderer.setColorMode(colorModeOf(this.io.env, this.prefs.colorMode));
     const source = JSON.stringify(this.prefs.shared.keys ?? null);
     if (source !== this.keymapSource) this.keys.setKeymap(this.resolvedKeymap());
@@ -548,8 +569,47 @@ export class TuiApp {
   /** ダイアログのうち、基本の部品（入力欄・確認・一覧・ヘルプ）以外のもの（goto。T3）。 */
   protected extraOverlay(ctx: DialogContext): Overlay | null {
     if (ctx.kind === "goto")
-      return new GotoDialog({ ui: this.ui, model: this.model, actions: this.dispatcher });
+      return new GotoDialog({
+        ui: this.ui,
+        model: this.model,
+        actions: this.dispatcher,
+        statusSymbols: () => this.prefs.statusSymbols,
+      });
+    if (ctx.kind === "settings") return this.settingsDialog();
     return null;
+  }
+
+  /** 設定画面（05 の T1）。開くたびにエージェント連携の状態を読み直す（サーバ全体の設定なので hello に乗らない。web と同じ）。 */
+  protected settingsDialog(): Overlay {
+    this.rpc
+      .request("agent_integration.status", {})
+      .then((status) => {
+        this.model.agentIntegration = status;
+        this.scheduleRender();
+      })
+      .catch(() => undefined);
+    return new SettingsDialog(
+      this.ui,
+      (message) =>
+        settingsSections({
+          prefs: this.prefs,
+          write: this.settingsWriter,
+          keymap: () => this.keymap,
+          navigateKeymap: () => this.navigateKeymap,
+          scrollbackLimit: () => this.model.limits.scrollbackLines,
+          agentIntegration: {
+            status: () => this.model.agentIntegration,
+            install: (kind) => this.rpc.request("agent_integration.install", { kind }),
+            uninstall: (kind) => this.rpc.request("agent_integration.uninstall", { kind }),
+            setAutoResume: (enabled) =>
+              this.rpc
+                .request("agent_integration.set_auto_resume", { enabled })
+                .then(() => undefined),
+          },
+          message,
+        }),
+      () => this.scheduleRender(),
+    );
   }
 
   /** 端末版にまだ無い操作（05 で足す）。 */

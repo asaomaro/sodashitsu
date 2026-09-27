@@ -20,6 +20,7 @@ export type DialogContext =
   | { kind: "confirmReplacePane"; paneId: string; targetPaneId: string }
   | { kind: "help" }
   | { kind: "goto" }
+  | { kind: "settings" }
   | { kind: "worktreeCreate"; workspaceId: string; info: WorktreeListResult }
   | { kind: "worktreeOpen"; workspaceId: string; entries: WorktreeEntry[] }
   | {

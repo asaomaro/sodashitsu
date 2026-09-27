@@ -1,15 +1,9 @@
 import type { DisplayState } from "@sodashitsu/protocol";
-import {
-  aggregate,
-  depthFirstPaneIds,
-  paneNameOf,
-  stateGlyph,
-  type KeyInput,
-} from "@sodashitsu/client-core";
+import { aggregate, depthFirstPaneIds, paneNameOf, type KeyInput } from "@sodashitsu/client-core";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
-import { stateColor } from "../render/chrome/context.js";
+import { glyphFor, stateColor } from "../render/chrome/context.js";
 import { ATTR } from "../render/color.js";
 import type { CursorState, Rect } from "../render/Screen.js";
 import { truncate } from "../render/width.js";
@@ -147,7 +141,15 @@ export class GotoDialog implements Overlay {
   private rowsTop = 0;
   private scroll = 0;
 
-  constructor(private readonly deps: { ui: UiState; model: SessionModel; actions: TuiDispatcher }) {
+  constructor(
+    private readonly deps: {
+      ui: UiState;
+      model: SessionModel;
+      actions: TuiDispatcher;
+      /** 状態を記号でも示すか（共有の設定 `statusSymbols`。省略は入）。 */
+      statusSymbols?: () => boolean;
+    },
+  ) {
     this.expanded = new Set(deps.model.workspaces.keys());
     this.selected = this.rows().find((r) => r.current)?.target ?? null;
   }
@@ -299,7 +301,7 @@ export class GotoDialog implements Overlay {
       const bg = on ? c.active : c.bg;
       grid.fill({ x: inner.x, y, w: inner.w, h: 1 }, c.fg, bg);
       let x = inner.x + row.depth * 2;
-      const glyph = stateGlyph(row.state);
+      const glyph = glyphFor(row.state, this.deps.statusSymbols?.() ?? true);
       if (glyph) grid.text(x, y, glyph, stateColor(theme, row.state), bg);
       x += 2;
       const w = grid.text(

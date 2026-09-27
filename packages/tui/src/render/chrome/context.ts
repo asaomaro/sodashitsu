@@ -1,5 +1,5 @@
 import type { DisplayState } from "@sodashitsu/protocol";
-import type { ConnectionState, Mode } from "@sodashitsu/client-core";
+import { stateGlyph, type ConnectionState, type Mode } from "@sodashitsu/client-core";
 import type { SessionModel } from "../../model/SessionModel.js";
 import type { PrefsModel } from "../../model/PrefsModel.js";
 import type { PackedColor, ThemeColors } from "../color.js";
@@ -25,6 +25,15 @@ export interface ChromeContext {
   sidebarScroll?: SidebarScroll;
   /** tab バーのあふれたときの表示の位置（同上）。 */
   tabScroll?: TabScroll;
+}
+
+/**
+ * 状態の記号（共有の設定 `statusSymbols` が切なら形を出さず色の点だけ。web の `StateIcon` が記号を消して色の点だけにするのと同じ。
+ * herdr の `ui.status_indicators = "dots"`）。
+ */
+export function glyphFor(state: DisplayState | null, symbols: boolean): string {
+  const g = stateGlyph(state);
+  return g === "" || symbols ? g : "●";
 }
 
 /** 状態の記号の色（web の `--soda-state-*`。unknown は idle と同じ）。 */

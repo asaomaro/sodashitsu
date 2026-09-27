@@ -9,6 +9,9 @@ import type { TuiIo } from "../types.js";
 /** マウスの報告（ボタンとドラッグ＋SGR の符号化）。`tui.mouseCapture` が偽なら出さない。 */
 export const ENABLE_MOUSE = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
 
+/** マウスの報告を止める（全部の種類と SGR の符号化）。 */
+export const DISABLE_MOUSE = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l";
+
 /**
  * 代替画面・画面の消去・カーソルを隠す・ブラケットペースト・フォーカスの報告・キーパッドのアプリケーションモード（DECKPAM。
  * キーパッドのキーを SS3 で受け、pane のキーパッドのモードに合わせて送り直すため）。
@@ -43,6 +46,12 @@ export class TerminalModes {
 
   get active(): boolean {
     return this.enabled;
+  }
+
+  /** マウスの報告を出し直す・止める（`tui.mouseCapture` を実行中に切り替えたとき）。 */
+  setMouse(on: boolean): void {
+    if (!this.enabled) return;
+    this.io.write(on ? ENABLE_MOUSE : DISABLE_MOUSE);
   }
 
   enable(mouse: boolean): void {

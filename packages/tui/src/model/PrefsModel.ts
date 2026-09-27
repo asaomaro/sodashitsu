@@ -5,8 +5,10 @@ import {
   type ThemeName,
 } from "@sodashitsu/protocol";
 import {
+  DEFAULT_NOTIFY_PREFS,
   loadThemePrefs,
   resolveTheme,
+  type NotifyPrefs,
   type AgentSort,
   type WorkspaceSort,
 } from "@sodashitsu/client-core";
@@ -16,11 +18,21 @@ import type { ColorModePref } from "../render/color.js";
 export const DEFAULT_SIDEBAR_COLS = 26;
 export const DEFAULT_NARROW_THRESHOLD = 64;
 
+/** 外側の端末への通知の出し方（`tui.notifyDelivery`。design「通知」）。 */
+export const NOTIFY_DELIVERIES = ["auto", "osc9", "osc99", "osc777", "bell", "off"] as const;
+export type NotifyDelivery = (typeof NOTIFY_DELIVERIES)[number];
+
 /**
  * 共有の設定（`prefs.get`・`prefs.changed`）と手元の状態（`tui-state.json`）を合わせた、端末版が使う値（20260927-cli-mode の
  * architecture「model/PrefsModel.ts」）。**型を信じずに正規化する**（版の違うクライアントが書いた値も届く。protocol の `SharedPrefs` の説明）。
  */
 export class PrefsModel {
+  /** サーバから受けた設定。 */
+  private server: SharedPrefs = {};
+  /** 送った後、まだ返事の無い変更（項目 → 値）。受けた設定の上に重ねて見せる（web の `PrefsSync` の `inflight` と同じ考え方）。 */
+  private readonly pending = new Map<string, { token: number; value: unknown }>();
+  private nextToken = 1;
+  /** `server` に `pending` を重ねたもの（読む側が見る値）。 */
   private raw: SharedPrefs = {};
   private revision = -1;
   private readonly listeners = new Set<() => void>();
@@ -36,8 +48,41 @@ export class PrefsModel {
   apply(prefs: SharedPrefs, rev: number): void {
     if (rev < this.revision) return;
     this.revision = rev;
-    this.raw = prefs && typeof prefs === "object" ? prefs : {};
+    this.server = prefs && typeof prefs === "object" ? prefs : {};
+    this.recompute();
     this.emit();
+  }
+
+  /**
+   * 手元で先に変える（送った変更の返事を待つ間）。返す関数は、送った結果で重ねを外す（`ok` なら受けた設定が正、失敗なら元に戻る）。
+   * 同じ項目を続けて変えたら、新しい方の返事でだけ外す（古い返事で新しい値を消さない）。
+   */
+  overlay(patch: Record<string, unknown>): () => void {
+    const token = this.nextToken++;
+    for (const [k, v] of Object.entries(patch)) this.pending.set(k, { token, value: v });
+    this.recompute();
+    this.emit();
+    return () => {
+      let changed = false;
+      for (const k of Object.keys(patch))
+        if (this.pending.get(k)?.token === token) {
+          this.pending.delete(k);
+          changed = true;
+        }
+      if (!changed) return;
+      this.recompute();
+      this.emit();
+    };
+  }
+
+  private recompute(): void {
+    if (this.pending.size === 0) {
+      this.raw = this.server;
+      return;
+    }
+    const merged: Record<string, unknown> = { ...this.server };
+    for (const [k, p] of this.pending) merged[k] = p.value;
+    this.raw = merged as SharedPrefs;
   }
 
   setLocal(next: TuiState): void {
@@ -91,11 +136,52 @@ export class PrefsModel {
     return this.tuiNumber("narrowThreshold", DEFAULT_NARROW_THRESHOLD, 0, 1000);
   }
 
-  get mouseCapture(): boolean {
+  /** 共有の `tui` 節（オブジェクトでなければ空）。 */
+  get tui(): Record<string, unknown> {
     const tui = this.raw.tui;
-    const v =
-      tui && typeof tui === "object" ? (tui as Record<string, unknown>)["mouseCapture"] : undefined;
-    return typeof v === "boolean" ? v : true;
+    return tui && typeof tui === "object" && !Array.isArray(tui)
+      ? (tui as Record<string, unknown>)
+      : {};
+  }
+
+  private tuiFlag(key: string, fallback: boolean): boolean {
+    const v = this.tui[key];
+    return typeof v === "boolean" ? v : fallback;
+  }
+
+  get mouseCapture(): boolean {
+    return this.tuiFlag("mouseCapture", true);
+  }
+
+  /** マウスで選んだら離した時点でコピーするか（既定は入）。 */
+  get copyOnSelect(): boolean {
+    return this.tuiFlag("copyOnSelect", true);
+  }
+
+  /** 外側の端末への通知の出し方（既定は auto＝端末を判定）。 */
+  get notifyDelivery(): NotifyDelivery {
+    const v = this.tui["notifyDelivery"];
+    return (NOTIFY_DELIVERIES as readonly unknown[]).includes(v) ? (v as NotifyDelivery) : "auto";
+  }
+
+  /** 共有の `tui.sidebarCols`（手元の今の幅を見ない。設定画面が出す値）。 */
+  get sharedSidebarCols(): number {
+    return this.tuiNumber("sidebarCols", DEFAULT_SIDEBAR_COLS, 10, 200);
+  }
+
+  /** 状態を色に加えて記号でも示すか（web の `loadStatusSymbols`。既定は入）。 */
+  get statusSymbols(): boolean {
+    return typeof this.raw.statusSymbols === "boolean" ? this.raw.statusSymbols : true;
+  }
+
+  /** 通知の種類（web の `loadNotifyPrefs` と同じ正規化）。 */
+  get notify(): NotifyPrefs {
+    const raw = this.raw.notify;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...DEFAULT_NOTIFY_PREFS };
+    const o = raw as Record<string, unknown>;
+    const pick = (k: keyof NotifyPrefs): boolean =>
+      typeof o[k] === "boolean" ? (o[k] as boolean) : DEFAULT_NOTIFY_PREFS[k];
+    return { toast: pick("toast"), desktop: pick("desktop"), sound: pick("sound") };
   }
 
   /** 色の出し方（手元の `tui-state.json` の `colorMode`。端末ごと。無ければ auto）。 */

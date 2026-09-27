@@ -23,6 +23,7 @@ export async function startedApp(
     cols?: number;
     rows?: number;
     snapshot?: SessionSnapshot;
+    /** 要求の方式ごとの応答（関数なら要求の params から作る）。 */
     respond?: Record<string, unknown>;
     openUrl?: (url: string) => void;
   } = {},
@@ -53,10 +54,12 @@ export async function startedApp(
   ws.send = (data) => {
     origSend(data);
     if (typeof data !== "string") return;
-    const msg = JSON.parse(data) as { id: string; method: string };
+    const msg = JSON.parse(data) as { id: string; method: string; params?: unknown };
     if (answered.has(msg.id)) return;
     answered.add(msg.id);
-    const result = opts.respond?.[msg.method] ?? {};
+    const r = opts.respond?.[msg.method];
+    const result =
+      typeof r === "function" ? (r as (params: unknown) => unknown)(msg.params) : (r ?? {});
     queueMicrotask(() => ws.onmessage?.({ data: JSON.stringify({ id: msg.id, result }) }));
   };
   const outer = new OuterTerminal(cols, rows);

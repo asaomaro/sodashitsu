@@ -110,6 +110,7 @@ export class Renderer {
           state: pane ? model.displayStateOf(pane) : null,
           focused,
           cropped: term ? isCropped(term, box.content) : false,
+          symbols: ctx.prefs.statusSymbols,
         },
         theme,
       );

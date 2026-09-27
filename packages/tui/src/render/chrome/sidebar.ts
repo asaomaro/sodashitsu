@@ -4,13 +4,12 @@ import {
   groupedWorkspaceRows,
   orderedAgentPaneIds,
   paneNameOf,
-  stateGlyph,
   visibleGroupMembers,
 } from "@sodashitsu/client-core";
 import { ATTR } from "../color.js";
 import type { Grid, Rect } from "../Screen.js";
 import { stringWidth, truncate } from "../width.js";
-import { stateColor, type ChromeContext } from "./context.js";
+import { glyphFor, stateColor, type ChromeContext } from "./context.js";
 
 /** サイドバーの行が何を指すか（04 のクリック・navigate が使う）。 */
 export type SidebarTarget =
@@ -80,7 +79,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     const state = model.workspaceState(w.id);
     return {
       indent,
-      glyph: stateGlyph(state),
+      glyph: glyphFor(state, prefs.statusSymbols),
       glyphState: state,
       text: w.label,
       selected: w.id === model.workspaceId,
@@ -132,7 +131,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       const state = model.displayStateOf(p);
       agentLines.push({
         indent: 0,
-        glyph: stateGlyph(state),
+        glyph: glyphFor(state, prefs.statusSymbols),
         glyphState: state,
         text: paneNameOf(p),
         selected: id === model.focusedPaneId,
