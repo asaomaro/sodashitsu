@@ -455,19 +455,27 @@ describe("ConfirmDialog — サーバの停止・キーからの worktree の削
     const view = useViewStore(pinia);
     const actions = makeActions();
     const wrapper = mountDialog(actions);
-    view.openDialogWithContext({ kind: "confirmStopServer" });
+    view.openDialogWithContext({ kind: "confirmStopServer", target: "devbox", remote: false });
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
     expect((wrapper.get("dialog").element as HTMLDialogElement).open).toBe(true);
-    expect(wrapper.text()).toContain("サーバを止めますか");
+    expect(wrapper.text()).toContain("このマシン（devbox）の soda serve を止めますか");
     expect(wrapper.findAll("button")[1]!.text()).toBe("止める");
     await wrapper.findAll("button")[1]!.trigger("click");
     expect(actions.confirmStopServer).toHaveBeenCalledTimes(1);
-    view.openDialogWithContext({ kind: "confirmStopServer" });
+    view.openDialogWithContext({ kind: "confirmStopServer", target: "devbox", remote: false });
     await wrapper.vm.$nextTick();
     await wrapper.findAll("button")[0]!.trigger("click");
     expect(view.dialogContext).toBeNull();
     expect(actions.openWorktree).not.toHaveBeenCalled();
+  });
+
+  it("confirmStopServer: 保存したマシンを向いていれば、そのマシンの名前で確かめる（02 の review）", async () => {
+    const view = useViewStore(pinia);
+    const wrapper = mountDialog(makeActions());
+    view.openDialogWithContext({ kind: "confirmStopServer", target: "GPU", remote: true });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.text()).toContain("保存したマシン「GPU」の soda serve を止めますか");
   });
 
   it("closeOnCancel の worktree の削除は、取り消すと一覧へ戻らずに閉じる", async () => {

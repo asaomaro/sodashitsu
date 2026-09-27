@@ -249,7 +249,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         this.swapWithFocused(action.paneId);
         return;
       case "stopServer":
-        this.view.openDialogWithContext({ kind: "confirmStopServer" });
+        this.view.openDialogWithContext({ kind: "confirmStopServer", ...this.stopTarget() });
         return;
     }
   }
@@ -1113,6 +1113,16 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         this.view.openDialogWithContext({ kind: "confirmWorktreeRemove", sourceWorkspaceId: ws.id, path: entry.path, openWorkspaceId: ws.id, closeOnCancel: true });
       })
       .catch((err: unknown) => this.view.toast(worktreeErrorMessage(err)));
+  }
+
+  /**
+   * `stop_server` で止まるサーバ（02 の review）。画面の接続が保存したマシンを向いていれば（`/ws?machine=`）、止まるのはそのマシンの `soda serve`
+   * （herdr に無い操作なので本製品の選択。リモートでも止められるままにし、確認で名前を言う）。ローカルはホスト名（無ければ「このマシン」）。
+   */
+  private stopTarget(): { target: string; remote: boolean } {
+    const id = this.machines.selectedId;
+    if (id !== LOCAL_MACHINE_ID) return { target: this.machines.statusOf(id)?.label ?? id, remote: true };
+    return { target: this.session.host?.hostname ?? "このマシン", remote: false };
   }
 
   /** `ConfirmDialog`（`kind: "confirmStopServer"`）が確定したときに呼ぶ（`stop_server`。20260927-cli-mode）。 */

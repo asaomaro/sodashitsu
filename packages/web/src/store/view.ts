@@ -265,7 +265,11 @@ export type DialogContext =
   // `worktreeOpen` と同じ「一覧から選ぶ」形。`groups` は開く時点のグループ一覧（GroupPickerDialog）。
   | { kind: "addToGroup"; workspaceId: string; groups: WorkspaceGroup[] }
   // サーバを止める確認（`stop_server`。20260927-cli-mode）。押し間違えると全ての pane が止まる。
-  | { kind: "confirmStopServer" }
+  /**
+   * `target` は止まるサーバの名前（ローカルならホスト名、保存したマシンを選んでいればそのマシンの名前）、`remote` は保存したマシンか（02 の review。
+   * 画面の接続が `/ws?machine=` を向いていれば、止まるのはそのマシンの `soda serve`——確認でどれが止まるかを言う）。
+   */
+  | { kind: "confirmStopServer"; target: string; remote: boolean }
   // 設定（通知・表示・端末。20260921-herdr-settings-gaps）。値はそれぞれのストアが持つので文脈は空。
   | { kind: "settings" }
   // はじめの案内（20260926-settings-onboarding）。選択は下書きでダイアログが持つので文脈は空。

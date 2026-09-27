@@ -51,7 +51,8 @@ const message = computed(() => {
       : "この worktree を削除しますか？";
   }
   if (ctx?.kind === "confirmStopServer") {
-    return "サーバを止めますか？ すべての pane のプロセスが終わり、繋いでいる画面はすべて切れます。";
+    const which = ctx.remote ? `保存したマシン「${ctx.target}」` : `このマシン（${ctx.target}）`;
+    return `${which}の soda serve を止めますか？ そのサーバのすべての pane のプロセスが終わり、繋いでいる画面はすべて切れます。`;
   }
   if (ctx?.kind === "confirmWorktreeRemoveForce") {
     // 20260925-worktree-remove-locked。reason で理由に応じた文言を出し分ける（AC5）。

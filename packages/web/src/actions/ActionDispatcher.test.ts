@@ -2606,7 +2606,7 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     const view = useViewStore(pinia);
     const { dispatcher } = makeDispatcher(conn);
     dispatcher.run({ type: "stopServer" });
-    expect(view.dialogContext).toEqual({ kind: "confirmStopServer" });
+    expect(view.dialogContext).toEqual({ kind: "confirmStopServer", target: "このマシン", remote: false });
     expect(conn.requests).toEqual([]);
     dispatcher.confirmStopServer();
     await flush();
@@ -2617,6 +2617,24 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     dispatcher.confirmStopServer();
     await flush();
     expect(view.toasts.at(-1)?.message).toBe(clientErrorMessage("server_busy"));
+  });
+
+  // 02 の review：画面の接続が保存したマシンを向いていれば、止まるのはそのマシンの soda serve。確認でどれが止まるかを言う。
+  it("stopServer: 確認の文脈に止まるサーバ（ローカルはホスト名・保存したマシンはその名前）を入れる", () => {
+    const conn = makeConnection();
+    const view = useViewStore(pinia);
+    const session = useSessionStore(pinia);
+    session.host = { os: "linux", windowsBuild: null, hostname: "devbox" };
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.run({ type: "stopServer" });
+    expect(view.dialogContext).toEqual({ kind: "confirmStopServer", target: "devbox", remote: false });
+    view.closeDialog();
+    const machines = useMachinesStore(pinia);
+    const id = "b".repeat(32);
+    machines.setMachines([{ id, label: "GPU", state: "online", message: null }]);
+    machines.select(id);
+    dispatcher.run({ type: "stopServer" });
+    expect(view.dialogContext).toEqual({ kind: "confirmStopServer", target: "GPU", remote: true });
   });
 
   it("confirmStopServer は確認の文脈でなければ何もしない", () => {
