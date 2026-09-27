@@ -95,7 +95,7 @@ describe("wtmctl main integration（実サーバ・実 PTY）", () => {
 
   it("pane split で新しい pane を作る（AC2）", async () => {
     const out = captureStdout();
-    await runPaneSplit({ kind: "pane-split", opts: { url, token: undefined }, paneId, direction: "right", ratio: undefined }, store);
+    await runPaneSplit({ kind: "pane-split", opts: { url, token: undefined }, target: { kind: "id", paneId }, direction: "right", ratio: undefined }, store);
     out.restore();
 
     const result = JSON.parse(out.text()) as { pane: { id: string } };

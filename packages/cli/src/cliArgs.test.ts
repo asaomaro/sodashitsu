@@ -126,7 +126,7 @@ describe("parseArgs — pane split", () => {
     expect(parseArgs(["pane", "split", "p1", "--direction", "right"], noEnv)).toEqual({
       kind: "pane-split",
       opts: { url: DEFAULT_URL, token: undefined },
-      paneId: "p1",
+      target: { kind: "id", paneId: "p1" },
       direction: "right",
       ratio: undefined,
     });
@@ -136,6 +136,53 @@ describe("parseArgs — pane split", () => {
   });
   it.each(["0.04", "0.96", "abc", "-1"])("--ratio %s は範囲外・非数値として拒否する", (bad) => {
     expect(() => parseArgs(["pane", "split", "p1", "--direction", "down", "--ratio", bad], noEnv)).toThrow(CliUsageError);
+  });
+});
+
+describe("parseArgs — pane の対象の指定（20260927-caller-pane-default）", () => {
+  const inPane = { WTM_PANE_ID: "p3", WTM_SERVER_URL: "http://127.0.0.1:7780" } as NodeJS.ProcessEnv;
+  const split = (args: string[], env: NodeJS.ProcessEnv) => parseArgs(["pane", "split", ...args, "--direction", "down"], env);
+
+  it("位置引数・--pane は明示の ID、--current は呼び出し元（AC2）", () => {
+    expect(split(["p2"], inPane)).toMatchObject({ kind: "pane-split", target: { kind: "id", paneId: "p2" } });
+    expect(split(["--pane", "p2"], inPane)).toMatchObject({ target: { kind: "id", paneId: "p2" } });
+    expect(split(["--current"], inPane)).toMatchObject({ target: { kind: "caller", paneId: "p3", explicit: true } });
+  });
+
+  it("省略は pane の中なら呼び出し元、外ならフォーカスの pane（AC1・AC12）", () => {
+    expect(split([], inPane)).toMatchObject({ target: { kind: "caller", paneId: "p3", explicit: false } });
+    expect(split([], noEnv)).toMatchObject({ target: { kind: "focused" } });
+    expect(split([], { WTM_PANE_ID: "" } as NodeJS.ProcessEnv)).toMatchObject({ target: { kind: "focused" } });
+    // WTM_SERVER_URL が無くても pane の中（呼び出し元）とみなす——同じサーバかは実行時に確かめて断る（AC9）。
+    expect(split([], { WTM_PANE_ID: "p3" } as NodeJS.ProcessEnv)).toMatchObject({ target: { kind: "caller", paneId: "p3", explicit: false } });
+  });
+
+  it.each([
+    [["p2", "--pane", "p4"]],
+    [["p2", "--current"]],
+    [["--pane", "p2", "--current"]],
+    [["p2", "p4"]],
+    [["--pane"]],
+  ])("pane split %j は使い方の誤り（AC3）", (args) => {
+    expect(() => split(args, inPane)).toThrow(CliUsageError);
+  });
+
+  it("--current は WTM_PANE_ID が無ければ使い方の誤り（AC4）", () => {
+    expect(() => split(["--current"], noEnv)).toThrow(/--current requires WTM_PANE_ID/);
+    expect(() => parseArgs(["pane", "current", "--current"], { WTM_PANE_ID: "" } as NodeJS.ProcessEnv)).toThrow(/--current requires WTM_PANE_ID/);
+  });
+
+  it("pane current は --pane・--current・省略を受け、位置引数は取らない（AC5・AC7）", () => {
+    expect(parseArgs(["pane", "current"], inPane)).toEqual({
+      kind: "pane-current",
+      opts: { url: "http://127.0.0.1:7780", token: undefined, caller: { paneId: "p3", serverUrl: "http://127.0.0.1:7780" } },
+      target: { kind: "caller", paneId: "p3", explicit: false },
+    });
+    expect(parseArgs(["pane", "current", "--current"], inPane)).toMatchObject({ target: { kind: "caller", explicit: true } });
+    expect(parseArgs(["pane", "current", "--pane", "p2"], inPane)).toMatchObject({ target: { kind: "id", paneId: "p2" } });
+    expect(parseArgs(["pane", "current"], noEnv)).toMatchObject({ target: { kind: "focused" } });
+    expect(() => parseArgs(["pane", "current", "p2"], inPane)).toThrow(CliUsageError);
+    expect(() => parseArgs(["pane", "current", "--pane", "p2", "--current"], inPane)).toThrow(CliUsageError);
   });
 });
 

@@ -21,7 +21,8 @@ export const USAGE_LINES: readonly string[] = [
   "wtmctl workspace report-metadata <workspaceId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>] [--url <URL>] [--token <TOKEN>]",
   "wtmctl tab create [--workspace <id>] [--label <text>] [--url <URL>] [--token <TOKEN>]",
   "wtmctl tab close <tabId> [--url <URL>] [--token <TOKEN>]",
-  "wtmctl pane split <paneId> --direction right|down [--ratio <0.05-0.95>] [--url <URL>] [--token <TOKEN>]",
+  "wtmctl pane split [<paneId>|--pane <paneId>|--current] --direction right|down [--ratio <0.05-0.95>] [--url <URL>] [--token <TOKEN>]",
+  "wtmctl pane current [--pane <paneId>|--current] [--url <URL>] [--token <TOKEN>]",
   "wtmctl pane close <paneId> [--url <URL>] [--token <TOKEN>]",
   "wtmctl pane input <paneId> <text> [--url <URL>] [--token <TOKEN>]",
   "wtmctl pane run <paneId> <command> [--url <URL>] [--token <TOKEN>]",
@@ -97,6 +98,18 @@ export interface GlobalOpts {
   machine?: string;
 }
 
+/**
+ * pane の対象の指定（20260927-caller-pane-default。herdr の `[<pane_id>|--pane ID|--current]`）。ID への解決は実行時（`paneTarget.ts`）——
+ * 呼び出し元の pane は同じサーバかを確かめてから、フォーカスの pane は接続後の snapshot で決まるため。
+ * - `id`: 位置引数か `--pane` で明示した pane。
+ * - `caller`: 呼び出し元の pane（`WTM_PANE_ID`）。`explicit` は `--current` で明示したか（`--machine` での扱いが違う）。
+ * - `focused`: サーバのフォーカスの pane（pane の外・`--machine` で対象を省いたとき）。
+ */
+export type PaneTarget =
+  | { kind: "id"; paneId: string }
+  | { kind: "caller"; paneId: string; explicit: boolean }
+  | { kind: "focused" };
+
 export type Command =
   | { kind: "help" }
   | { kind: "skill" }
@@ -109,7 +122,9 @@ export type Command =
   | { kind: "pane-report-metadata"; opts: GlobalOpts; paneId: string; report: MetadataReportArgs }
   | { kind: "tab-create"; opts: GlobalOpts; workspaceId: string | undefined; label: string | undefined }
   | { kind: "tab-close"; opts: GlobalOpts; tabId: string }
-  | { kind: "pane-split"; opts: GlobalOpts; paneId: string; direction: "right" | "down"; ratio: number | undefined }
+  | { kind: "pane-split"; opts: GlobalOpts; target: PaneTarget; direction: "right" | "down"; ratio: number | undefined }
+  // 20260927-caller-pane-default（herdr の pane current）。
+  | { kind: "pane-current"; opts: GlobalOpts; target: PaneTarget }
   | { kind: "pane-close"; opts: GlobalOpts; paneId: string }
   | { kind: "pane-input"; opts: GlobalOpts; paneId: string; text: string }
   | { kind: "pane-run"; opts: GlobalOpts; paneId: string; command: string }
@@ -339,18 +354,52 @@ function parseTab(sub: string | undefined, rest: readonly string[], env: NodeJS.
   throw new CliUsageError(`unknown subcommand: wtmctl tab ${sub ?? ""}`.trimEnd(), USAGE);
 }
 
+const PANE_SPLIT_USAGE = "wtmctl pane split [<paneId>|--pane <paneId>|--current] --direction right|down [--ratio N]";
+const PANE_CURRENT_USAGE = "wtmctl pane current [--pane <paneId>|--current]";
+
+/**
+ * 対象の指定（位置引数・`--pane`・`--current`・省略）を `PaneTarget` にする（20260927-caller-pane-default の design「引数の解釈」の表）。
+ * 2 つ以上は使い方の誤り（herdr は後に書いたものが勝つが、取り違えを防ぐ）。`--current` は `WTM_PANE_ID` が要る（herdr の `--current requires HERDR_PANE_ID`）。
+ * 省略は、pane の中（`WTM_PANE_ID` が空でない）なら呼び出し元、外ならフォーカスの pane。
+ */
+function parsePaneTarget(
+  positional: string | undefined,
+  values: Map<string, string>,
+  bools: Set<string>,
+  env: NodeJS.ProcessEnv,
+  usage: string,
+): PaneTarget {
+  const flagPane = values.get("--pane");
+  const current = bools.has("--current");
+  const given = [positional !== undefined, flagPane !== undefined, current].filter(Boolean).length;
+  if (given > 1) throw new CliUsageError("use only one of <paneId>, --pane and --current", usage);
+  if (positional !== undefined) return { kind: "id", paneId: positional };
+  if (flagPane !== undefined) return { kind: "id", paneId: flagPane };
+  const envPane = env["WTM_PANE_ID"];
+  if (current) {
+    if (!envPane) throw new CliUsageError("--current requires WTM_PANE_ID (run inside a wtm pane)", usage);
+    return { kind: "caller", paneId: envPane, explicit: true };
+  }
+  return envPane ? { kind: "caller", paneId: envPane, explicit: false } : { kind: "focused" };
+}
+
 function parsePane(sub: string | undefined, rest: readonly string[], env: NodeJS.ProcessEnv): Command {
   const URL_TOKEN: FlagSpec = { values: ["--url", "--token"] };
   if (sub === "split") {
-    const { positionals, values } = parseFlags(rest, { values: [...URL_TOKEN.values!, "--direction", "--ratio"] });
-    const paneId = requirePositional(positionals, 0, "paneId", USAGE);
-    rejectExtra(positionals, 1, USAGE);
+    const { positionals, values, bools } = parseFlags(rest, { values: [...URL_TOKEN.values!, "--direction", "--ratio", "--pane"], bools: ["--current"] });
+    rejectExtra(positionals, 1, PANE_SPLIT_USAGE);
+    const target = parsePaneTarget(positionals[0], values, bools, env, PANE_SPLIT_USAGE);
     const direction = values.get("--direction");
     if (direction !== "right" && direction !== "down") {
-      throw new CliUsageError("missing or invalid --direction (right|down)", "wtmctl pane split <paneId> --direction right|down [--ratio N]");
+      throw new CliUsageError("missing or invalid --direction (right|down)", PANE_SPLIT_USAGE);
     }
     const ratioRaw = values.get("--ratio");
-    return { kind: "pane-split", opts: globalOptsFrom(values, env), paneId, direction, ratio: ratioRaw === undefined ? undefined : parseRatio(ratioRaw) };
+    return { kind: "pane-split", opts: globalOptsFrom(values, env), target, direction, ratio: ratioRaw === undefined ? undefined : parseRatio(ratioRaw) };
+  }
+  if (sub === "current") {
+    const { positionals, values, bools } = parseFlags(rest, { values: [...URL_TOKEN.values!, "--pane"], bools: ["--current"] });
+    rejectExtra(positionals, 0, PANE_CURRENT_USAGE);
+    return { kind: "pane-current", opts: globalOptsFrom(values, env), target: parsePaneTarget(undefined, values, bools, env, PANE_CURRENT_USAGE) };
   }
   if (sub === "close") {
     const { positionals, values } = parseFlags(rest, URL_TOKEN);
@@ -644,11 +693,25 @@ function parseMachinePrefixed(argv: readonly string[], env: NodeJS.ProcessEnv): 
   if (sub === undefined || sub === "help" || sub === "--help" || sub === "-h" || sub === "skill" || sub === "login" || sub === "--machine") {
     throw new CliUsageError(`--machine cannot be used with ${sub === undefined ? "no command" : sub}`, MACHINE_USAGE_LINE);
   }
+  // 別のマシンへの --current は、pane の外でも「--machine とは使えない」を理由にする（内側の解釈の「WTM_PANE_ID が要る」は誤誘導になる。
+  // --current を受けるのは pane のコマンドだけで、`agent start` の `--` の後のようにエージェントへの引数としては現れない）。
+  if (selector !== "local" && sub === "pane" && rest.includes("--current")) {
+    throw new CliUsageError("--current cannot be used with --machine (the calling pane belongs to this machine)", MACHINE_USAGE_LINE);
+  }
   const cmd = parseArgs(rest, env);
   if (!("opts" in cmd)) throw new CliUsageError(`--machine cannot be used with ${sub}`, MACHINE_USAGE_LINE);
   // `local` は手元のサーバそのもの（サーバは `?machine=local` を行き先なしと同じに扱う）——自分の pane の歯止めを外さない。
   if (selector === "local") return cmd;
   const { caller: _caller, ...opts } = cmd.opts;
   void _caller;
+  // 呼び出し元の pane（手元の WTM_PANE_ID）はそのマシンの pane を指さない（herdr の `caller_pane_id` が --machine では None。20260927-caller-pane-default）。
+  // --current は誤り、対象の省略はそのマシンのフォーカスの pane。
+  if ("target" in cmd && cmd.target.kind === "caller") {
+    // 上の `rest.includes("--current")` で先に断るので通常は届かない（explicit は --current からしか作られない）。解釈の順が変わったときの防御。
+    if (cmd.target.explicit) {
+      throw new CliUsageError("--current cannot be used with --machine (the calling pane belongs to this machine)", MACHINE_USAGE_LINE);
+    }
+    return { ...cmd, target: { kind: "focused" }, opts: { ...opts, machine: selector } } as Command;
+  }
   return { ...cmd, opts: { ...opts, machine: selector } } as Command;
 }

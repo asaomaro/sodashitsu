@@ -2,6 +2,7 @@ import type { ParamsOf } from "@wtm/protocol";
 import { stripAnsi } from "../ansiStrip.js";
 import type { Command } from "../cliArgs.js";
 import { printJson, printLine, printRaw } from "../output.js";
+import { paneTargetIdBeforeConnect, resolveFocusedPane } from "../paneTarget.js";
 import type { SessionStore } from "../session.js";
 import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
@@ -15,20 +16,41 @@ import { RpcFailure, type WtmClient } from "../wsClient.js";
  */
 
 type PaneSplitCmd = Extract<Command, { kind: "pane-split" }>;
+type PaneCurrentCmd = Extract<Command, { kind: "pane-current" }>;
 type PaneCloseCmd = Extract<Command, { kind: "pane-close" }>;
 type PaneInputCmd = Extract<Command, { kind: "pane-input" }>;
 type PaneRunCmd = Extract<Command, { kind: "pane-run" }>;
 type PaneReadCmd = Extract<Command, { kind: "pane-read" }>;
 type PaneReportMetadataCmd = Extract<Command, { kind: "pane-report-metadata" }>;
 
+/**
+ * 対象は明示の ID・呼び出し元の pane・フォーカスの pane（20260927-caller-pane-default）。呼び出し元は接続する前に同じサーバかを確かめ、
+ * フォーカスは hello の snapshot で決める。自分の pane を分けるのは断らない（`self_target` の対象外）。
+ */
 export async function runPaneSplit(cmd: PaneSplitCmd, store: SessionStore): Promise<void> {
+  const knownPaneId = paneTargetIdBeforeConnect(cmd.opts, cmd.target);
   const result = await withSession(cmd.opts, store, async (client) => {
-    await client.hello();
-    const params: ParamsOf<"pane.split"> = { paneId: cmd.paneId, direction: cmd.direction };
+    const hello = await client.hello();
+    const paneId = knownPaneId ?? resolveFocusedPane(hello.snapshot);
+    const params: ParamsOf<"pane.split"> = { paneId, direction: cmd.direction };
     if (cmd.ratio !== undefined) params.ratio = cmd.ratio;
     return client.request("pane.split", params);
   });
   printJson(result);
+}
+
+/**
+ * 対象の pane の今の情報（herdr の `pane current`。20260927-caller-pane-default）。`tabId`・`workspaceId` は接続したときのサーバの状態から引くので、
+ * pane が別の tab・workspace へ移された後でも今の値になる（環境変数のように古くならない）。hello のほかは何も送らない。
+ */
+export async function runPaneCurrent(cmd: PaneCurrentCmd, store: SessionStore): Promise<void> {
+  const knownPaneId = paneTargetIdBeforeConnect(cmd.opts, cmd.target);
+  const snapshot = await withSession(cmd.opts, store, async (client) => (await client.hello()).snapshot);
+  const paneId = knownPaneId ?? resolveFocusedPane(snapshot);
+  const pane = snapshot.panes.find((p) => p.id === paneId);
+  if (pane === undefined) throw new RpcFailure("not_found", `pane not found: ${paneId}`);
+  const workspaceId = snapshot.tabs.find((t) => t.id === pane.tabId)?.workspaceId ?? null;
+  printJson({ pane: { ...pane, workspaceId, focused: snapshot.focus?.paneId === pane.id } });
 }
 
 export async function runPaneClose(cmd: PaneCloseCmd, store: SessionStore): Promise<void> {
