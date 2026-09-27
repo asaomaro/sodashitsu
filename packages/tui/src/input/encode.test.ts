@@ -4,8 +4,16 @@ import { InputDecoder } from "./decode.js";
 import { encodeKey, encodePaste, legacyBytes } from "./encode.js";
 import { TuiKeys } from "./keys.js";
 
-const normal = { applicationCursorKeysMode: false, bracketedPasteMode: false };
-const app = { applicationCursorKeysMode: true, bracketedPasteMode: true };
+const normal = {
+  applicationCursorKeysMode: false,
+  applicationKeypadMode: false,
+  bracketedPasteMode: false,
+};
+const app = {
+  applicationCursorKeysMode: true,
+  applicationKeypadMode: true,
+  bracketedPasteMode: true,
+};
 
 function keyEv(raw: string) {
   const ev = new InputDecoder().feed(raw)[0];
@@ -151,5 +159,33 @@ describe("TuiKeys（KeyRouter を通す。AC-I5）", () => {
     });
     for (const ev of new InputDecoder().feed("x")) if (ev.kind === "key") k.handle(ev);
     expect(sent).toEqual([]);
+  });
+});
+
+describe("encodeKey（03 の点検の指摘）", () => {
+  it("キーパッドは pane の DECKPAM に合わせる（SS3 のまま／文字）", () => {
+    expect(encodeKey(keyEv("\x1bOq"), app)).toBe("\x1bOq");
+    expect(encodeKey(keyEv("\x1bOq"), normal)).toBe("1");
+    expect(encodeKey(keyEv("\x1bOM"), normal)).toBe("\r");
+    expect(encodeKey(keyEv("\x1bOk"), normal)).toBe("+");
+  });
+
+  it("Ctrl+2〜8・Ctrl+/・Ctrl+- は xterm の従来のバイト。CSI u の Shift＋英字は大文字", () => {
+    const expected: [string, string][] = [
+      ["2", "\x00"],
+      ["3", "\x1b"],
+      ["4", "\x1c"],
+      ["5", "\x1d"],
+      ["6", "\x1e"],
+      ["7", "\x1f"],
+      ["8", "\x7f"],
+      ["/", "\x1f"],
+      ["-", "\x1f"],
+    ];
+    for (const [ch, bytes] of expected) {
+      expect(encodeKey(keyEv(`\x1b[27;5;${ch.charCodeAt(0)}~`), normal)).toBe(bytes);
+    }
+    expect(encodeKey(keyEv("\x1b[97;2u"), normal)).toBe("A");
+    expect(encodeKey(keyEv("\x1b[97;4u"), normal)).toBe("\x1bA");
   });
 });

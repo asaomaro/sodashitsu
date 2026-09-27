@@ -101,6 +101,9 @@ describe("enterSequence と RESTORE_SEQUENCE", () => {
     );
     expect(set.length).toBeGreaterThan(0);
     for (const mode of set) expect(RESTORE_SEQUENCE).toContain(`\x1b[?${mode}l`);
+    // キーパッドのアプリケーションモード（ESC =）は通常（ESC >）へ戻す。
+    expect(enterSequence(false)).toContain("\x1b=");
+    expect(RESTORE_SEQUENCE).toContain("\x1b>");
     // カーソルを隠した（?25l）ら表示に戻す。
     expect(enterSequence(false)).toContain("\x1b[?25l");
     expect(RESTORE_SEQUENCE).toContain("\x1b[?25h");

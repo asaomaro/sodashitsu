@@ -93,7 +93,7 @@ describe("InputDecoder（キー。AC6・AC8）", () => {
       ["esc", "\x1b"],
       ["[", "["],
     ]);
-    expect(chords(decode("\x1b\x1b"))).toEqual([["esc", "\x1b"]]); // 2 つ目は時間切れ待ち
+    expect(decode("\x1b\x1b")).toEqual([]); // 続き（ESC ESC [ A 等）を時間切れまで待つ
   });
 
   it("知らない CSI は Unidentified（元の列のまま pane へ）", () => {
@@ -173,5 +173,56 @@ describe("InputDecoder（マウス・貼り付け・フォーカス・応答）"
         "\x1b[?62;22c\x1b]11;rgb:0000/0000/0000\x1b\\\x1b]10;x\x07\x1bP>|xterm\x1b\\\x1b[?2026;2$ya",
       ),
     ).toEqual([expect.objectContaining({ kind: "key", raw: "a" })]);
+  });
+});
+
+describe("InputDecoder（03 の点検の指摘）", () => {
+  it("ESC ESC は Ctrl+Alt+[（＝Alt+Esc）。同じ読みでも時間切れでも。ESC ESC [ A は Alt+↑", () => {
+    expect(chords(decode("\x1b\x1bx"))).toEqual([
+      ["ctrl+alt+[", "\x1b\x1b"],
+      ["x", "x"],
+    ]);
+    const d = new InputDecoder();
+    expect(d.feed("\x1b\x1b")).toEqual([]);
+    expect(chords(d.flush())).toEqual([["ctrl+alt+[", "\x1b\x1b"]]);
+    expect(chords(decode("\x1b\x1b[A"))).toEqual([["alt+up", "\x1b\x1b[A"]]);
+  });
+
+  it("Alt+] / Alt+P / Alt+_ / Alt+^ は打鍵として届く（続きが無ければ時間切れで、終わりの無い続きも時間切れで打鍵に）", () => {
+    for (const c of ["]", "P", "_", "^"]) {
+      const d = new InputDecoder();
+      expect(d.feed(`\x1b${c}`)).toEqual([]);
+      expect(chords(d.flush()).map((x) => x[1])).toEqual([`\x1b${c}`]);
+    }
+    const d = new InputDecoder();
+    expect(d.feed("\x1b]ab")).toEqual([]);
+    expect(chords(d.flush())).toEqual([
+      ["alt+]", "\x1b]"],
+      ["a", "a"],
+      ["b", "b"],
+    ]);
+  });
+
+  it("修飾つきの SS3（ESC O 5 P・ESC O 1;5 P）とキーパッド（DECKPAM の ESC O p 等）", () => {
+    expect(chords(decode("\x1bO5P\x1bO1;2Q\x1bOq\x1bOM"))).toEqual([
+      ["ctrl+f1", "\x1bO5P"],
+      ["shift+f2", "\x1bO1;2Q"],
+      ["1", "\x1bOq"],
+      ["enter", "\x1bOM"],
+    ]);
+  });
+
+  it("CSI・SS3 の途中は長く待つ（マウスの列が割れても崩さない）。ESC 単独は短く", () => {
+    const d = new InputDecoder();
+    d.feed("\x1b");
+    expect(d.waitMs).toBe(25);
+    d.feed("[<0;1");
+    expect(d.waitMs).toBe(150);
+    expect(d.feed("0;5M")).toEqual([expect.objectContaining({ kind: "mouse", x: 9, y: 4 })]);
+  });
+
+  it("CSI u の Shift＋英字は大文字のキー", () => {
+    const ev = decode("\x1b[97;2u")[0];
+    expect(ev).toMatchObject({ kind: "key", key: { key: "A", shift: true } });
   });
 });

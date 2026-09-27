@@ -8,7 +8,7 @@ import {
 } from "@sodashitsu/client-core";
 import { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import { encodePaste, type PaneInputModes } from "../input/encode.js";
-import { ESC_TIMEOUT_MS, InputDecoder, type InputEvent } from "../input/decode.js";
+import { InputDecoder, type InputEvent } from "../input/decode.js";
 import { TuiKeys } from "../input/keys.js";
 import { clampTerminalSize, type SharedPrefs } from "@sodashitsu/protocol";
 import { computeLayout, type LayoutResult } from "../layout/computeLayout.js";
@@ -262,7 +262,7 @@ export class TuiApp {
       this.escTimer = setTimeout(() => {
         this.escTimer = null;
         for (const ev of this.decoder.flush()) this.handleInput(ev);
-      }, ESC_TIMEOUT_MS);
+      }, this.decoder.waitMs);
     }
   }
 
@@ -313,7 +313,13 @@ export class TuiApp {
     if (!id || this.connectionState !== "open") return null;
     const term = this.panes.get(id);
     // 購読前（headless がまだ無い）でも送れるように、既定のモードで扱う。
-    return term ? term.modes : { applicationCursorKeysMode: false, bracketedPasteMode: false };
+    return term
+      ? term.modes
+      : {
+          applicationCursorKeysMode: false,
+          applicationKeypadMode: false,
+          bracketedPasteMode: false,
+        };
   }
 
   private sendToFocusedPane(bytes: string): void {

@@ -24,6 +24,10 @@ export type InputEvent =
 
 /** ESC 単独を確定するまで待つ時間（design「input/decode.ts」）。 */
 export const ESC_TIMEOUT_MS = 25;
+/** CSI・SS3（マウスの報告を含む）の途中まで届いた列を待つ時間（遅い回線で列が割れても崩さない。herdr のマウス中の 150ms と同じ）。 */
+export const SEQUENCE_TIMEOUT_MS = 150;
+/** OSC・DCS 等の終わりを待つ最大の長さ（これを超えたら打鍵として出す。利用者の打鍵を捨て続けない）。 */
+const MAX_STRING_HOLD = 4096;
 
 const PASTE_START = "\x1b[200~";
 const PASTE_END = "\x1b[201~";
@@ -92,6 +96,19 @@ const TILDE_KEYS: Readonly<Record<number, string>> = {
   24: "F12",
 };
 
+/** キーパッド（DECKPAM で `ESC O x`）の終わり → [キー, code]。 */
+const KEYPAD_KEYS: Readonly<Record<string, readonly [string, string]>> = {
+  ...Object.fromEntries([..."pqrstuvwxy"].map((c, n) => [c, [String(n), `Numpad${n}`] as const])),
+  M: ["Enter", "NumpadEnter"],
+  j: ["*", "NumpadMultiply"],
+  k: ["+", "NumpadAdd"],
+  l: [",", "NumpadComma"],
+  m: ["-", "NumpadSubtract"],
+  n: [".", "NumpadDecimal"],
+  o: ["/", "NumpadDivide"],
+  X: ["=", "NumpadEqual"],
+};
+
 /** 1 文字（ESC 以外）のキー。C0 は ctrl＋文字、DEL は Backspace。 */
 function singleKey(ch: string, extra: Mods = NO_MODS): KeyInput {
   const c = ch.codePointAt(0)!;
@@ -119,7 +136,9 @@ function keyFromCode(code: number, mods: Mods): KeyInput {
   if (code === 9) return keyInput("Tab", mods);
   if (code === 27) return keyInput("Escape", mods);
   if (code === 127 || code === 8) return keyInput("Backspace", mods);
-  const ch = String.fromCodePoint(code);
+  let ch = String.fromCodePoint(code);
+  // CSI u の Shift＋英字は小文字のコードで届く。DOM と同じく大文字のキーにする（従来の列に直すと大文字になる）。
+  if (mods.shift && /^[a-z]$/.test(ch)) ch = ch.toUpperCase();
   return keyInput(ch, /^[A-Z]$/.test(ch) ? { ...mods, shift: true } : mods);
 }
 
@@ -134,6 +153,12 @@ export class InputDecoder {
   private readonly utf8 = new TextDecoder();
   private pending = "";
   private paste: string | null = null;
+
+  /** 確定まで待つ時間（CSI・SS3 の途中なら長め）。 */
+  get waitMs(): number {
+    const s = this.pending;
+    return /^\x1b\x1b?[[O]/.test(s) ? SEQUENCE_TIMEOUT_MS : ESC_TIMEOUT_MS;
+  }
 
   /** 確定を待っている列があるか（呼び出し側が `ESC_TIMEOUT_MS` 後に `flush()` する）。ペーストの途中は待たない（終わりまで持ち越す）。 */
   get waiting(): boolean {
@@ -197,27 +222,46 @@ export class InputDecoder {
       if (r !== "incomplete") return r;
       return force ? this.escapeThenRest() : "incomplete";
     }
-    if (next === "O") {
-      if (s.length < 3) return force ? this.escapeThenRest() : "incomplete";
-      const final = s[2]!;
-      const name = CSI_LETTER_KEYS[final];
-      const raw = s.slice(0, 3);
+    if (next === "O") return this.parseSs3(s, force);
+    if (next === "]" || next === "P" || next === "_" || next === "^") {
+      // OSC・DCS・APC・PM（外側の端末の応答）か、Alt+] 等の打鍵。続きが同じ読みで届き、終わり（BEL か ST）があるときだけ応答として捨てる。
+      // 続きが無い・終わりが来ないまま時間切れ（か長すぎる）なら打鍵として出す——利用者の打鍵を捨てない。
+      if (s.length > 2) {
+        const bel = next === "]" ? s.indexOf("\x07", 2) : -1;
+        const st = s.indexOf("\x1b\\", 2);
+        const ends = [bel >= 0 ? bel + 1 : -1, st >= 0 ? st + 2 : -1].filter((n) => n > 0);
+        if (ends.length > 0) return { event: null, length: Math.min(...ends) };
+      }
+      if (!force && s.length <= MAX_STRING_HOLD) return "incomplete";
       return {
-        event: { kind: "key", key: keyInput(name ?? "Unidentified", NO_MODS), raw },
-        length: 3,
+        event: { kind: "key", key: singleKey(next, { ...NO_MODS, alt: true }), raw: `\x1b${next}` },
+        length: 2,
       };
     }
-    if (next === "]" || next === "P" || next === "_" || next === "^") {
-      // OSC・DCS・APC・PM（外側の端末の応答）。終わり（BEL か ST）まで捨てる。
-      const bel = next === "]" ? s.indexOf("\x07", 2) : -1;
-      const st = s.indexOf("\x1b\\", 2);
-      const ends = [bel >= 0 ? bel + 1 : -1, st >= 0 ? st + 2 : -1].filter((n) => n > 0);
-      if (ends.length === 0) return force ? this.escapeThenRest() : "incomplete";
-      return { event: null, length: Math.min(...ends) };
-    }
     if (next === "\x1b") {
-      // ESC ESC：前の ESC を単独の Escape として確定し、後ろは次の列の頭として読む。
-      return { event: { kind: "key", key: keyInput("Escape", NO_MODS), raw: "\x1b" }, length: 1 };
+      // ESC ESC：Alt＋（続きのキー）。xterm（metaSendsEscape）では Alt+Esc・Ctrl+Alt+[ が ESC ESC になる。ESC ESC [ A 等は Alt＋矢印。
+      const third = s[2];
+      if (third === "[" || third === "O") {
+        const inner = this.parseOne(s.slice(1), force);
+        if (inner === "incomplete") return "incomplete";
+        if (inner.event?.kind === "key") {
+          const key = { ...inner.event.key, alt: true };
+          return {
+            event: { kind: "key", key, raw: `\x1b${inner.event.raw}` },
+            length: inner.length + 1,
+          };
+        }
+        return { event: inner.event, length: inner.length + 1 };
+      }
+      if (third === undefined && !force) return "incomplete";
+      return {
+        event: {
+          kind: "key",
+          key: keyInput("[", { ...NO_MODS, ctrl: true, alt: true }),
+          raw: "\x1b\x1b",
+        },
+        length: 2,
+      };
     }
     // ESC ＋ 1 文字 = Alt。
     const second = String.fromCodePoint(s.codePointAt(1)!);
@@ -228,6 +272,33 @@ export class InputDecoder {
   /** 時間切れで確定できない列の頭の ESC を Escape にし、残りは次の読みで普通の文字として扱う。 */
   private escapeThenRest(): Parsed {
     return { event: { kind: "key", key: keyInput("Escape", NO_MODS), raw: "\x1b" }, length: 1 };
+  }
+
+  /** SS3（`ESC O` ＋ [修飾] ＋ 終わり）。修飾は `ESC O 5 P`（古い xterm）と `ESC O 1 ; 5 P` の両方。キーパッド（DECKPAM）の列も読む。 */
+  private parseSs3(s: string, force: boolean): Parsed {
+    let i = 2;
+    while (i < s.length && /[0-9;]/.test(s[i]!)) i++;
+    if (i >= s.length) return force ? this.escapeThenRest() : "incomplete";
+    const final = s[i]!;
+    const raw = s.slice(0, i + 1);
+    const params = s
+      .slice(2, i)
+      .split(";")
+      .filter((p) => p !== "");
+    const mods = modsOf(
+      params.length > 0 ? Number.parseInt(params[params.length - 1]!, 10) : undefined,
+    );
+    const keypad = KEYPAD_KEYS[final];
+    if (keypad)
+      return {
+        event: { kind: "key", key: keyInput(keypad[0], mods, keypad[1]), raw },
+        length: i + 1,
+      };
+    const name = CSI_LETTER_KEYS[final];
+    return {
+      event: { kind: "key", key: keyInput(name ?? "Unidentified", mods), raw },
+      length: i + 1,
+    };
   }
 
   private parseCsi(s: string): Parsed {

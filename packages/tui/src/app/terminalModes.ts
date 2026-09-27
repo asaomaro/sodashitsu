@@ -9,9 +9,14 @@ import type { TuiIo } from "../types.js";
 /** マウスの報告（ボタンとドラッグ＋SGR の符号化）。`tui.mouseCapture` が偽なら出さない。 */
 export const ENABLE_MOUSE = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
 
-/** 代替画面・画面の消去・カーソルを隠す・ブラケットペースト・フォーカスの報告。 */
+/**
+ * 代替画面・画面の消去・カーソルを隠す・ブラケットペースト・フォーカスの報告・キーパッドのアプリケーションモード（DECKPAM。
+ * キーパッドのキーを SS3 で受け、pane のキーパッドのモードに合わせて送り直すため）。
+ */
 export function enterSequence(mouse: boolean): string {
-  return "\x1b[?1049h\x1b[H\x1b[2J\x1b[?25l\x1b[?2004h\x1b[?1004h" + (mouse ? ENABLE_MOUSE : "");
+  return (
+    "\x1b[?1049h\x1b[H\x1b[2J\x1b[?25l\x1b[?2004h\x1b[?1004h\x1b=" + (mouse ? ENABLE_MOUSE : "")
+  );
 }
 
 /**

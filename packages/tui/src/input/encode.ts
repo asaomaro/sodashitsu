@@ -3,6 +3,8 @@ import type { KeyInput } from "@sodashitsu/client-core";
 /** pane へ送る列を決めるのに要る pane のモード（headless の `modes` の一部）。 */
 export interface PaneInputModes {
   applicationCursorKeysMode: boolean;
+  /** DECKPAM（`ESC =`）。キーパッドの列を SS3 で送る。 */
+  applicationKeypadMode: boolean;
   bracketedPasteMode: boolean;
 }
 
@@ -22,13 +24,29 @@ function isExtendedKeyRaw(raw: string): boolean {
   return /^27;\d+;\d+~$/.test(body) || /^\d+(?:;\d+)?u$/.test(body);
 }
 
+/** xterm の Ctrl＋数字・記号（Ctrl+2 = NUL … Ctrl+8 = DEL・Ctrl+/ と Ctrl+- = US）。 */
+const CTRL_SPECIAL: Readonly<Record<string, string>> = {
+  " ": "\x00",
+  "@": "\x00",
+  "2": "\x00",
+  "3": "\x1b",
+  "4": "\x1c",
+  "5": "\x1d",
+  "6": "\x1e",
+  "7": "\x1f",
+  "8": "\x7f",
+  "/": "\x1f",
+  "-": "\x1f",
+  "?": "\x7f",
+};
+
 function ctrlByte(ch: string): string | null {
   const lower = ch.toLowerCase();
-  if (ch === " " || ch === "@" || ch === "2") return "\x00";
+  const special = CTRL_SPECIAL[ch];
+  if (special !== undefined) return special;
   if (lower >= "a" && lower <= "z" && lower.length === 1)
     return String.fromCharCode(lower.charCodeAt(0) - 96);
   if ("[\\]^_".includes(ch) && ch.length === 1) return String.fromCharCode(ch.charCodeAt(0) & 0x1f);
-  if (ch === "?") return "\x7f";
   return null;
 }
 
@@ -65,6 +83,11 @@ export function encodeKey(ev: { key: KeyInput; raw: string }, modes: PaneInputMo
   const final = CURSOR_FINALS[k.key];
   if (final && !k.ctrl && !k.alt && !k.shift && !k.meta)
     return `${modes.applicationCursorKeysMode ? "\x1bO" : "\x1b["}${final}`;
+  // キーパッド（外側は DECKPAM で SS3 を送る）：pane がキーパッドのモードなら SS3 のまま、そうでなければ文字（Enter は CR）。
+  if (k.code.startsWith("Numpad") && raw.startsWith("\x1bO") && !k.ctrl && !k.alt && !k.meta) {
+    if (modes.applicationKeypadMode) return raw;
+    return k.key === "Enter" ? "\r" : k.key;
+  }
   if (isExtendedKeyRaw(raw)) return legacyBytes(k) ?? raw;
   return raw;
 }
