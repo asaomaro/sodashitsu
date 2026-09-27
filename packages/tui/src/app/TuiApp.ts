@@ -1,12 +1,14 @@
 import {
+  InputGate,
   loadKeyPrefs,
   resolveKeymap,
-  type Action,
   type ConnectionState,
   type Mode,
   type ResolvedKeymap,
 } from "@sodashitsu/client-core";
-import { TuiDispatcher } from "../actions/TuiDispatcher.js";
+import { TuiDispatcher, type CopyTargetPort } from "../actions/TuiDispatcher.js";
+import { osc52 } from "../clipboard.js";
+import { UiState } from "../model/UiState.js";
 import { encodePaste, type PaneInputModes } from "../input/encode.js";
 import { InputDecoder, type InputEvent } from "../input/decode.js";
 import { TuiKeys } from "../input/keys.js";
@@ -21,9 +23,17 @@ import type { SidebarHit } from "../render/chrome/sidebar.js";
 import type { TabHit } from "../render/chrome/tabBar.js";
 import { colorModeOf, ThemeColors } from "../render/color.js";
 import { Renderer } from "../render/Renderer.js";
-import { PaneRegistry, type ViewCommit, type VisiblePane } from "../term/PaneRegistry.js";
+import {
+  PaneRegistry,
+  type RequestPort,
+  type ViewCommit,
+  type VisiblePane,
+} from "../term/PaneRegistry.js";
 import type { TuiIo, TuiTarget } from "../types.js";
 import { TerminalModes } from "./terminalModes.js";
+
+/** 関所が無いとき（接続の前）の保持：何もしない。 */
+const NO_HOLD = { release: () => undefined, cancel: () => undefined, discard: () => undefined };
 
 export interface TuiAppOptions {
   /** 接続の差し替え（テスト用）。 */
@@ -71,6 +81,14 @@ export class TuiApp {
   private readonly decoder = new InputDecoder();
   private escTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly dispatcher: TuiDispatcher;
+  readonly ui: UiState;
+  /** 要求の口（接続が無ければ reject）。 */
+  readonly rpc: RequestPort = {
+    request: (method, params) =>
+      this.net ? this.net.conn.request(method, params) : Promise.reject(new Error("not connected")),
+  };
+  /** 新しい pane を待つ間の入力を溜める関所（client-core の `InputGate`。接続を作ったときに作る）。 */
+  protected gate: InputGate | null = null;
   private keymapSource = "";
 
   constructor(
@@ -104,17 +122,25 @@ export class TuiApp {
       dropped: () => this.inputDropped(),
     });
     this.keys.router.onModeChange(() => this.scheduleRender());
+    this.ui = new UiState(this.model);
+    this.disposers.push(this.ui.onChange(() => this.scheduleRender()));
     this.dispatcher = new TuiDispatcher({
       model: this.model,
-      conn: {
-        request: (method, params) =>
-          this.net
-            ? this.net.conn.request(method, params)
-            : Promise.reject(new Error("not connected")),
-      },
+      ui: this.ui,
+      prefs: this.prefs,
+      conn: this.rpc,
+      input: { holdInput: (source) => (this.gate ? this.gate.holdInput(source) : NO_HOLD) },
+      keys: { setMode: (m) => this.keys.router.setMode(m) },
+      copyTarget: (paneId) => this.copyTargetOf(paneId),
+      writeClipboard: (text) => this.writeClipboard(text),
+      readClipboard: () => Promise.resolve(null),
+      pasteText: (paneId, text) => this.pasteText(paneId, text),
       detach: () => this.detach(),
       toggleSidebar: () => this.toggleSidebar(),
-      unsupported: (action) => this.unsupported(action),
+      openSettings: () => this.notYet("設定画面"),
+      focusNextNotification: () => this.notYet("通知の移動"),
+      runCommand: () => this.notYet("独自コマンド"),
+      pasteImage: () => this.notYet("画像の貼り付け"),
     });
     this.disposers.push(this.model.onChange(() => this.onModelChange()));
     this.disposers.push(this.prefs.onChange(() => this.onPrefsChange()));
@@ -177,6 +203,7 @@ export class TuiApp {
       this.options.net,
     );
     this.net = net;
+    this.gate = new InputGate(net.conn);
     this.disposers.push(() => net.stop());
     this.scheduleRender();
     void net.start();
@@ -347,8 +374,43 @@ export class TuiApp {
 
   private sendToFocusedPane(bytes: string): void {
     const id = this.model.focusedPaneId;
-    if (!id || !this.net) return;
-    this.net.conn.sendInput(id, bytes);
+    if (!id) return;
+    this.sendToPane(id, bytes);
+  }
+
+  /** pane へ入力を送る（関所を通す。新しい pane を待つ間は溜まる）。 */
+  protected sendToPane(paneId: string, bytes: string): void {
+    if (this.gate) this.gate.sendInput(paneId, bytes);
+    else this.net?.conn.sendInput(paneId, bytes);
+  }
+
+  /** pane へ貼り付ける（pane のブラケットペーストに合わせて包む）。 */
+  protected pasteText(paneId: string, text: string): void {
+    const term = this.panes.get(paneId);
+    const modes = term
+      ? term.modes
+      : {
+          applicationCursorKeysMode: false,
+          applicationKeypadMode: false,
+          bracketedPasteMode: false,
+        };
+    this.sendToPane(paneId, encodePaste(text, modes));
+  }
+
+  /** copy モードの対象（T3 で pane の headless の上に作る）。 */
+  protected copyTargetOf(_paneId: string): CopyTargetPort | undefined {
+    return undefined;
+  }
+
+  /** 外側の端末のクリップボードへ書く（OSC 52。05 で手元の OS の道具・tmux の包みを足す）。 */
+  protected writeClipboard(text: string): Promise<boolean> {
+    this.io.write(osc52(text));
+    return Promise.resolve(true);
+  }
+
+  /** 端末版にまだ無い操作（05 で足す）。 */
+  protected notYet(what: string): void {
+    this.ui.toast(`${what}は端末版ではまだ使えません`);
   }
 
   /** `toggle_sidebar`：折りたたみを切り替え、`tui-state.json` に残す（design「画面」）。 */
@@ -356,13 +418,6 @@ export class TuiApp {
     const next = { ...this.prefs.localState, sidebarCollapsed: !this.prefs.sidebarCollapsed };
     this.prefs.setLocal(next);
     writeTuiState(this.target.stateDir, next).catch(() => undefined);
-  }
-
-  /** まだ端末版に無い操作（04 で足す）。モードに入る操作はモードを戻す（解釈が無いまま入るとキーを奪う）。 */
-  protected unsupported(action: Action): void {
-    if (this.keys.mode !== "terminal" && this.keys.mode !== "prefix")
-      this.keys.router.setMode("terminal");
-    this.showNotice(`未対応の操作です: ${action.type}`, 2000);
   }
 
   /** 今の割り付け（純粋な `computeLayout` に今の大きさ・モデル・設定を渡す）。 */

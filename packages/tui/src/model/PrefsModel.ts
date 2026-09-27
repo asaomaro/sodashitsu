@@ -1,4 +1,9 @@
-import { DEFAULT_THEME_NAME, type SharedPrefs, type ThemeName } from "@sodashitsu/protocol";
+import {
+  DEFAULT_THEME_NAME,
+  type NewCwd,
+  type SharedPrefs,
+  type ThemeName,
+} from "@sodashitsu/protocol";
 import {
   loadThemePrefs,
   resolveTheme,
@@ -16,7 +21,7 @@ export const DEFAULT_NARROW_THRESHOLD = 64;
  */
 export class PrefsModel {
   private raw: SharedPrefs = {};
-  private rev = -1;
+  private revision = -1;
   private readonly listeners = new Set<() => void>();
 
   constructor(private local: TuiState = {}) {}
@@ -28,8 +33,8 @@ export class PrefsModel {
 
   /** サーバから受けた設定で置き換える（古い rev は捨てる）。 */
   apply(prefs: SharedPrefs, rev: number): void {
-    if (rev < this.rev) return;
-    this.rev = rev;
+    if (rev < this.revision) return;
+    this.revision = rev;
     this.raw = prefs && typeof prefs === "object" ? prefs : {};
     this.emit();
   }
@@ -41,6 +46,11 @@ export class PrefsModel {
 
   get localState(): TuiState {
     return this.local;
+  }
+
+  /** 受け取った設定の rev（まだ受け取っていなければ -1）。 */
+  get rev(): number {
+    return this.revision;
   }
 
   get shared(): SharedPrefs {
@@ -93,6 +103,32 @@ export class PrefsModel {
   get collapsedAutoGroups(): ReadonlySet<string> {
     const v = this.raw.collapsedAutoGroups;
     return new Set(Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : []);
+  }
+
+  /** 新しく開く場所の方針（web の `loadNewCwdPolicy` と同じ正規化。既定は「引き継ぐ」）。 */
+  get newCwdPolicy(): NewCwd["policy"] {
+    const v = this.raw.newCwdPolicy;
+    return v === "follow" || v === "home" || v === "current" || v === "path" ? v : "follow";
+  }
+
+  get newCwdPath(): string {
+    return typeof this.raw.newCwdPath === "string" ? this.raw.newCwdPath : "";
+  }
+
+  /**
+   * 作成の要求に載せる形（web の `buildNewCwd` と同じ）。`sourcePaneId` は「引き継ぐ」のときだけ載せる（null なら載せない → サーバが以前と同じ場所で開く）。
+   */
+  newCwd(sourcePaneId: string | null): NewCwd {
+    const policy = this.newCwdPolicy;
+    switch (policy) {
+      case "follow":
+        return sourcePaneId === null ? { policy } : { policy, sourcePaneId };
+      case "home":
+      case "current":
+        return { policy };
+      case "path":
+        return { policy, path: this.newCwdPath };
+    }
   }
 
   /** 購読で求める行数（`auto` はサーバの上限。数ならサーバの上限以下）。 */
