@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "../session.js";
 import type { WtmClient } from "../wsClient.js";
-import { runWorkspaceClose, runWorkspaceCreate, runWorkspaceRename } from "./workspace.js";
+import { runWorkspaceClose, runWorkspaceCreate, runWorkspaceRename, runWorkspaceReportMetadata } from "./workspace.js";
 
 vi.mock("../withSession.js", () => ({ withSession: vi.fn() }));
 vi.mock("../output.js", () => ({ printJson: vi.fn(), printLine: vi.fn() }));
@@ -84,6 +84,41 @@ describe("runWorkspaceRename", () => {
     await runWorkspaceRename({ kind: "workspace-rename", opts: OPTS, workspaceId: "w1", label: "new" }, store);
 
     expect(client.request).toHaveBeenCalledWith("workspace.rename", { workspaceId: "w1", label: "new" });
+  });
+});
+
+describe("runWorkspaceReportMetadata（20260927-sidebar-row-tokens の AC1・AC8）", () => {
+  it("hello の後に workspace.report_metadata を呼び、結果をそのまま printJson する。seq・ttlMs を渡す", async () => {
+    const order: string[] = [];
+    const client = fakeClient(() => ({}));
+    (client.hello as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      order.push("hello");
+      return { clientId: "c1", snapshot: {} };
+    });
+    (client.request as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      order.push("request");
+      return {};
+    });
+    mockedWithSession.mockImplementation(async (_opts, _store, fn) => fn(client));
+    const tokens = [{ name: "a", value: "1" }, { name: "b", value: null }];
+
+    await runWorkspaceReportMetadata({ kind: "workspace-report-metadata", opts: OPTS, workspaceId: "w1", report: { source: "ci", tokens, seq: 3, ttlMs: 10 } }, store);
+
+    expect(order).toEqual(["hello", "request"]);
+    expect(client.request).toHaveBeenCalledWith("workspace.report_metadata", { workspaceId: "w1", source: "ci", tokens, seq: 3, ttlMs: 10 });
+    expect(mockedPrintJson).toHaveBeenCalledWith({});
+  });
+
+  it("seq・ttlMs を省くとキーごと付けない（exactOptionalPropertyTypes）", async () => {
+    const client = fakeClient(() => ({}));
+    mockedWithSession.mockImplementation(async (_opts, _store, fn) => fn(client));
+
+    await runWorkspaceReportMetadata({ kind: "workspace-report-metadata", opts: OPTS, workspaceId: "w1", report: { source: "ci", tokens: [{ name: "a", value: "1" }] } }, store);
+
+    expect(client.request).toHaveBeenCalledWith("workspace.report_metadata", { workspaceId: "w1", source: "ci", tokens: [{ name: "a", value: "1" }] });
+    // toHaveBeenCalledWith は undefined の項目を同じと見るので、キーが無いことを直接見る（負の確認で見つけた穴）。
+    const params = (client.request as ReturnType<typeof vi.fn>).mock.calls[0]![1] as Record<string, unknown>;
+    expect(Object.keys(params).sort()).toEqual(["source", "tokens", "workspaceId"]);
   });
 });
 

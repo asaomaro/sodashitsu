@@ -6,6 +6,7 @@ import type { SizeAuthority } from "../../clients/SizeAuthority.js";
 import type { TerminalManager } from "../../terminal/TerminalManager.js";
 import type { AgentIntegrationService } from "../../agent/AgentIntegrationService.js";
 import type { AgentStarter } from "../../agent/AgentStarter.js";
+import type { MetadataService } from "../../metadata/MetadataService.js";
 import type { ServerSessionEntry } from "@wtm/protocol";
 
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
@@ -24,4 +25,6 @@ export interface MethodDeps {
   agentStarter?: AgentStarter;
   /** `server.sessions`（20260926-named-session-ui）。無ければ空の一覧を返す。 */
   serverSessions?: () => Promise<ServerSessionEntry[]>;
+  /** 独自トークンの報告（20260927-sidebar-row-tokens）。無ければ `workspace.report_metadata`・`pane.report_metadata` を登録しない（`agentStarter` と同じ任意の依存）。 */
+  metadata?: MetadataService;
 }

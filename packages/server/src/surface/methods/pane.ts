@@ -9,6 +9,7 @@ import {
   PaneMoveToTabParams,
   PaneRenameParams,
   PaneReplaceParams,
+  PaneReportMetadataParams,
   PaneResizeParams,
   PaneSplitParams,
   PaneSwapParams,
@@ -60,6 +61,18 @@ export function registerPaneMethods(surface: ControlSurface, deps: MethodDeps): 
       return {};
     },
   });
+
+  // 独自トークンの報告（20260927-sidebar-row-tokens。herdr の pane.report_metadata のうちトークンだけ）。
+  const metadata = deps.metadata;
+  if (metadata) {
+    surface.register("pane.report_metadata", {
+      schema: PaneReportMetadataParams,
+      handler: (_ctx, params) => {
+        metadata.reportPane(params);
+        return {};
+      },
+    });
+  }
 
   surface.register("pane.focus_direction", {
     schema: PaneFocusDirectionParams,

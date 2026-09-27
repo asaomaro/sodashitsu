@@ -21,6 +21,7 @@ import {
 import { CSS_VAR_LABELS, isValidCssColor, type ThemeOverrideBucket } from "../theme/themeOverrides.js";
 import { CSS_VARS, type CssVar } from "../theme/uiTokens.js";
 import KeySettings from "./KeySettings.vue";
+import SidebarRowsSettings from "./SidebarRowsSettings.vue";
 
 /**
  * 設定（20260921-herdr-settings-gaps の D7）。**見出しで 5 節（通知・テーマ・表示・端末・キー）に分けた 1 枚**（テーマは 20260921-theme-settings の
@@ -822,6 +823,10 @@ function onNativeCancel(ev: Event): void {
               />
             </label>
           </fieldset>
+        </li>
+        <!-- サイドバーの行の並び・見た目・条件（20260927-sidebar-row-tokens。herdr の [ui.sidebar.*].rows）。 -->
+        <li class="settings-row">
+          <SidebarRowsSettings />
         </li>
       </ul>
     </section>
