@@ -18,16 +18,18 @@ const MOUSE_ENCODING_MODES: Readonly<Record<number, MouseEncoding>> = {
   1016: "sgr-pixels",
 };
 
-type TermMarker = { readonly line: number; readonly isDisposed: boolean; dispose(): void };
-interface Hyperlink {
-  uri: string;
-  start: TermMarker;
-  startCol: number;
-  end: TermMarker;
-  endCol: number;
+/** `hyperlinkAt` が読む xterm の中の形（@xterm/headless 6.0.0）。 */
+interface XtermCore {
+  buffer?: {
+    lines: {
+      get(
+        row: number,
+      ): { loadCell(col: number, cell: unknown): { extended?: { urlId?: number } } } | undefined;
+    };
+    getNullCell(): unknown;
+  };
+  _oscLinkService?: { getLinkData(id: number): { uri?: string } | undefined };
 }
-/** 覚えておく OSC 8 のリンクの数。 */
-const MAX_HYPERLINKS = 500;
 
 /**
  * pane ごとの headless（20260927-cli-mode の design「term/PaneTerminal.ts」）。SNAPSHOT で作り直し（`\x1bc`＋本文。client-core の
@@ -96,78 +98,34 @@ export class PaneTerminal {
         return false;
       }),
     );
-    // OSC 8 のハイパーリンク（`OSC 8 ; params ; URI ST` で始まり、URI が空の OSC 8 で終わる）。headless の xterm はセルにリンクを持つが
-    // 読む API が無いので、始まりと終わりの位置をマーカーで覚える（Ctrl＋クリックで開く。M6・H09）。xterm 本体の処理は妨げない。
-    this.disposers.push(
-      parser.registerOscHandler(8, (data) => {
-        this.onHyperlink(data);
-        return false;
-      }),
-    );
     this.disposers.push(this.term.onWriteParsed(() => this.markDirty()));
     this.disposers.push(this.term.onScroll(() => this.markDirty()));
   }
 
-  /** OSC 8 のリンクの範囲（新しいものが後ろ。上限を超えたら古いものから捨てる）。 */
-  private readonly hyperlinks: Hyperlink[] = [];
-  private openLink: { uri: string; start: TermMarker; startCol: number } | null = null;
-
-  private onHyperlink(data: string): void {
-    const sep = data.indexOf(";");
-    const uri = sep < 0 ? "" : data.slice(sep + 1);
-    this.closeHyperlink();
-    if (uri === "") return;
-    const start = this.markCursor();
-    if (start) this.openLink = { uri, start, startCol: this.term.buffer.active.cursorX };
-  }
-
-  private closeHyperlink(): void {
-    const open = this.openLink;
-    this.openLink = null;
-    if (!open) return;
-    const end = this.markCursor();
-    if (!end) {
-      open.start.dispose();
-      return;
-    }
-    this.hyperlinks.push({ ...open, end, endCol: this.term.buffer.active.cursorX });
-    while (this.hyperlinks.length > MAX_HYPERLINKS) {
-      const old = this.hyperlinks.shift()!;
-      old.start.dispose();
-      old.end.dispose();
-    }
-  }
-
-  private markCursor(): TermMarker | undefined {
-    try {
-      return this.term.registerMarker(0) ?? undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  /** その位置（絶対行・セルの列）に掛かる OSC 8 のリンクの URI（無ければ null）。閉じていないリンクは今のカーソルまで。 */
+  /**
+   * その位置（今のバッファの絶対行・セルの列）の文字に付いている OSC 8 のハイパーリンクの URI（無ければ null。M6・H09）。
+   * **xterm がセルごとに持つリンクの id を読む**——リンクはそのリンクの中で書かれたセルにだけ付き、上書き（`\r` の後の書き直し・消去）で外れ、
+   * 代替画面とは別のバッファで、大きさを変えた折り返し直しにもセルと一緒に動く。だから今見えている文字が、そのリンクで書かれた文字のときだけ開く
+   * （始まりと終わりの位置だけを覚えると、上書き・代替画面・カーソルの移動・折り返し直しの後に見えない URL を開く。04 review ラウンド 2）。
+   * 公開の型に無いので xterm の中（`_core` の `buffer.lines`・`extended.urlId`・`_oscLinkService`。@xterm/headless 6.0.0 に固定）を読む。
+   * 読めない版では null（リンクを開かない側へ落とす）。
+   */
   hyperlinkAt(row: number, col: number): string | null {
-    const before = (r1: number, c1: number, r2: number, c2: number): boolean =>
-      r1 < r2 || (r1 === r2 && c1 < c2);
-    const buf = this.term.buffer.active;
-    const spans: { uri: string; sr: number; sc: number; er: number; ec: number }[] = [];
-    for (const h of this.hyperlinks)
-      if (!h.start.isDisposed && !h.end.isDisposed)
-        spans.push({ uri: h.uri, sr: h.start.line, sc: h.startCol, er: h.end.line, ec: h.endCol });
-    if (this.openLink && !this.openLink.start.isDisposed)
-      spans.push({
-        uri: this.openLink.uri,
-        sr: this.openLink.start.line,
-        sc: this.openLink.startCol,
-        er: buf.baseY + buf.cursorY,
-        ec: buf.cursorX,
-      });
-    for (let i = spans.length - 1; i >= 0; i--) {
-      const s = spans[i]!;
-      if (!before(row, col, s.sr, s.sc) && before(row, col, s.er, s.ec)) return s.uri;
+    try {
+      const core = (this.term as unknown as { _core?: XtermCore })._core;
+      const buffer = core?.buffer;
+      const line = buffer?.lines.get(row);
+      if (!core?._oscLinkService || !buffer || !line) return null;
+      // 読み出し先は新しいセル（`getNullCell()` は xterm が共有して使う空のセルなので、そこへ書き込まない）。
+      const CellData = (buffer.getNullCell() as { constructor: new () => unknown }).constructor;
+      const cell = line.loadCell(col, new CellData());
+      const id = cell.extended?.urlId;
+      if (typeof id !== "number" || id === 0) return null;
+      const uri = core._oscLinkService.getLinkData(id)?.uri;
+      return typeof uri === "string" && uri !== "" ? uri : null;
+    } catch {
+      return null;
     }
-    return null;
   }
 
   /** SNAPSHOT：大きさを合わせ、消してから書き直す（流量制御の回復でいつでも届く）。 */
@@ -260,12 +218,5 @@ export class PaneTerminal {
     this.cursorStyle = "block";
     this.cursorBlink = false;
     this.mouseEncoding = "default";
-    // RIS（SNAPSHOT の書き直しを含む）でリンクも消える（バッファを作り直すので位置が意味を失う）。
-    this.openLink?.start.dispose();
-    this.openLink = null;
-    for (const h of this.hyperlinks.splice(0)) {
-      h.start.dispose();
-      h.end.dispose();
-    }
   }
 }

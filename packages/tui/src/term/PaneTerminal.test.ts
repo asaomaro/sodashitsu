@@ -114,3 +114,81 @@ describe("PaneTerminal（AC6）", () => {
     expect(t.cursorBlink).toBe(false);
   });
 });
+
+describe("OSC 8 のハイパーリンク（今見えている文字がそのリンクで書かれた文字のときだけ。04 review ラウンド 2）", () => {
+  const e = (x: string) => new TextEncoder().encode(x);
+  const link = (uri: string, text: string) => `\x1b]8;;${uri}\x1b\\${text}\x1b]8;;\x1b\\`;
+  async function term(cols = 40, rows = 5): Promise<PaneTerminal> {
+    const t = new PaneTerminal("p", cols, rows, 100);
+    return t;
+  }
+
+  it("リンクの中で書いた文字だけ。前後の文字には付かない", async () => {
+    const t = await term();
+    t.output(e(`ab${link("https://x.example/", "click")} tail`));
+    await t.flush();
+    expect(t.hyperlinkAt(0, 1)).toBeNull();
+    expect(t.hyperlinkAt(0, 2)).toBe("https://x.example/");
+    expect(t.hyperlinkAt(0, 6)).toBe("https://x.example/");
+    expect(t.hyperlinkAt(0, 7)).toBeNull();
+    t.dispose();
+  });
+
+  it("上書き（\\r の後の書き直し・画面の消去）で外れる", async () => {
+    const t = await term();
+    t.output(e(`${link("https://evil.example/y", "progress")}\rDONE!!!!!`));
+    await t.flush();
+    expect(t.hyperlinkAt(0, 2)).toBeNull();
+    t.output(e(`\r\n${link("https://evil.example/x", "click")}\x1b[H\x1b[2Jplain text here`));
+    await t.flush();
+    const row = t.term.buffer.active.baseY;
+    for (let c = 0; c < 15; c++) expect(t.hyperlinkAt(row, c)).toBeNull();
+    t.dispose();
+  });
+
+  it("代替画面のリンクは通常の画面と別（代替画面の文字に通常の画面のリンクを当てない）", async () => {
+    const t = await term();
+    t.output(e(`${link("https://evil.example/z", "normal-link")}\r\n`));
+    t.output(e("\x1b[?1049h\x1b[Hvim content line"));
+    await t.flush();
+    expect(t.term.buffer.active.type).toBe("alternate");
+    expect(t.hyperlinkAt(0, 2)).toBeNull();
+    t.output(e("\x1b[?1049l"));
+    await t.flush();
+    expect(t.hyperlinkAt(0, 2)).toBe("https://evil.example/z");
+    t.dispose();
+  });
+
+  it("開いてから閉じるまでにカーソルが動いても、その間に書いていない行には付かない", async () => {
+    const t = await term();
+    t.output(
+      e(
+        "aaaa\r\nbbbb\r\ncccc\x1b[1;1H\x1b]8;;https://evil.example/w\x1b\\L\x1b[3;1H\x1b]8;;\x1b\\",
+      ),
+    );
+    await t.flush();
+    expect(t.hyperlinkAt(0, 0)).toBe("https://evil.example/w");
+    expect(t.hyperlinkAt(1, 2)).toBeNull();
+    expect(t.hyperlinkAt(2, 1)).toBeNull();
+    t.dispose();
+  });
+
+  it("大きさを変えて折り返し直すと、リンクは文字と一緒に動く", async () => {
+    const t = await term();
+    t.output(e(`${"x".repeat(30)}${link("https://a.example/", "LINKS")}\r\nnext`));
+    await t.flush();
+    t.resize(20, 5);
+    await t.flush();
+    const buf = t.term.buffer.active;
+    let found: { row: number; col: number } | null = null;
+    for (let r = 0; r < buf.length && !found; r++) {
+      const text = buf.getLine(r)?.translateToString(true) ?? "";
+      const c = text.indexOf("LINKS");
+      if (c >= 0) found = { row: r, col: c };
+    }
+    expect(found).not.toBeNull();
+    expect(t.hyperlinkAt(found!.row, found!.col)).toBe("https://a.example/");
+    expect(t.hyperlinkAt(found!.row, found!.col - 1)).toBeNull();
+    t.dispose();
+  });
+});
