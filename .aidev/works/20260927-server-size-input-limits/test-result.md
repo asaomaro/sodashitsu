@@ -8,6 +8,8 @@
   戻したファイルは毎回 cmp で一致、走らせた前後の `git status --porcelain` も一致（`scratchpad/mutate/run3.out`）。このラウンドの test 工程では失敗が発生していない。
 - `aidev smoke` — pass（8 本。`scratchpad/smoke2.log`。1 回目と同じ内容なので下の起動確認の節の出力を代表として残す）。
 
+- deliver で origin/main（#65 caller-pane-default）を取り込んだ後: build・typecheck exit 0、`pnpm -s test` **5053 passed**（272 files・exit=0）、`aidev smoke` pass（8 本）。
+
 以下はラウンド 1 の記録（残す）。
 
 
