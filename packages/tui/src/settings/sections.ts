@@ -1,5 +1,13 @@
 import {
+  CSS_VAR_LABELS,
+  CSS_VARS,
   DISPLAY_STATES,
+  emptyThemeOverrides,
+  loadThemeOverrides,
+  serializeThemeOverrides,
+  withOverride,
+  withoutOverride,
+  type ThemeOverrides,
   THEME_LABELS,
   loadTabBarPosition,
   loadTabBarRightEntries,
@@ -23,6 +31,7 @@ import {
 } from "@sodashitsu/protocol";
 import { NOTIFY_DELIVERIES, type NotifyDelivery, type PrefsModel } from "../model/PrefsModel.js";
 import type { ColorModePref } from "../render/color.js";
+import { isTuiColor } from "../render/cssColor.js";
 import {
   onOff,
   type ChoiceOption,
@@ -31,6 +40,7 @@ import {
   type SettingsSection,
 } from "./items.js";
 import { keySection, type KeySectionEnv } from "./keySection.js";
+import { sidebarRowsItems } from "./sidebarRowsItems.js";
 import type { SettingsWriter } from "./SettingsWriter.js";
 
 /**
@@ -236,10 +246,73 @@ function themeSection(env: SettingsEnv): SettingsSection {
         label: "いま使っているテーマ",
         value: THEME_LABELS[env.prefs.theme],
         disabled: true,
+        ...(tp.auto
+          ? {
+              note: `外側の端末の背景が${env.prefs.systemDark ? "暗い" : "明るい"}ため（背景色の問い合わせ OSC 11・COLORFGBG で判定）。`,
+            }
+          : {}),
       });
+      items.push(...overrideItems(env));
       return items;
     },
   };
+}
+
+/** 保存値の上書き（ほかのクライアントが書いた、端末版では読めない色も落とさずに持つ）。 */
+const anyColor = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
+const BUCKETS = [
+  ["light", "明るいとき"],
+  ["dark", "暗いとき"],
+] as const;
+
+/** 色の個別の上書き（web の SettingsDialog の「色の上書き」。明るいとき・暗いときの 2 層。空にすると既定へ戻す）。 */
+function overrideItems(env: SettingsEnv): SettingItem[] {
+  const current = loadThemeOverrides(env.prefs.shared.themeOverrides, anyColor);
+  const replace = (next: ThemeOverrides): void =>
+    env.write.setShared({ themeOverrides: serializeThemeOverrides(next) ?? null });
+  const items: SettingItem[] = [];
+  for (const [bucket, bucketLabel] of BUCKETS) {
+    items.push({ label: `色の上書き（${bucketLabel}）`, heading: true });
+    for (const key of CSS_VARS) {
+      const v = current[bucket][key];
+      const label = `「${CSS_VAR_LABELS[key]}」（${bucketLabel}）`;
+      items.push({
+        label: `  ${CSS_VAR_LABELS[key]}`,
+        value: v === undefined ? "既定" : isTuiColor(v) ? v : `${v}（端末版では読めない）`,
+        note: `${key}。#rrggbb・rgb()・hsl()・色の名前。空にすると既定へ戻します。`,
+        activate: () => ({
+          kind: "edit",
+          title: label,
+          initial: v ?? "",
+          commit: (text) => {
+            const raw = text.trim();
+            if (raw === "") {
+              if (v === undefined) return;
+              replace(withoutOverride(current, bucket, key));
+              return `${label}の上書きを外しました。`;
+            }
+            if (!isTuiColor(raw)) return `${label}：${raw} は色として読めません。`;
+            replace(withOverride(current, bucket, key, raw));
+            return `${label}を ${raw} にしました。`;
+          },
+        }),
+      });
+    }
+  }
+  items.push({
+    label: "  すべての上書きを既定に戻す",
+    disabled: serializeThemeOverrides(current) === undefined,
+    activate: () => ({
+      kind: "confirm",
+      title: "すべての色の上書きを既定へ戻しますか？（取り消せません）",
+      yesLabel: "既定に戻す",
+      yes: () => {
+        replace(emptyThemeOverrides());
+        return "すべての色の上書きを既定へ戻しました。";
+      },
+    }),
+  });
+  return items;
 }
 
 // --- 表示 ---
@@ -440,6 +513,7 @@ function displaySection(env: SettingsEnv): SettingsSection {
           }),
         },
       );
+      items.push(...sidebarRowsItems(env));
       return items;
     },
   };

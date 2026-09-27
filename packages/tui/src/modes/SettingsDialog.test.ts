@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CSS_VARS } from "@sodashitsu/client-core";
 import { PrefsModel } from "../model/PrefsModel.js";
+import { rgbColor, type ThemeColors } from "../render/color.js";
 import { SettingsWriter } from "../settings/SettingsWriter.js";
 import { startedApp } from "../testing/appHarness.js";
 import { agent, pane, snapshot } from "../testing/fixtures.js";
@@ -247,10 +249,11 @@ describe("設定画面", () => {
     await h.esc();
     await h.esc();
     let t = await h.text();
-    expect(t).toContain("◐ Claude");
+    expect(t).toContain("◐ w2 t2");
     h.app.prefs.apply({ statusSymbols: false }, 7);
     t = await h.text();
-    expect(t).toContain("● Claude");
+    expect(t).toContain("● w2 t2");
+    expect(t).not.toContain("◐");
   });
 });
 
@@ -445,5 +448,97 @@ describe("設定画面の点検の指摘（05 T1）", () => {
     h.io.type("\x1b\x04");
     h.app.renderNow();
     expect(await h.screen()).toContain("こちらへ移しますか");
+  });
+});
+
+describe("設定画面：色の上書き・サイドバーの行（05 の T2）", () => {
+  const closers: (() => Promise<void>)[] = [];
+  afterEach(async () => {
+    for (const c of closers.splice(0)) await c();
+  });
+  async function open() {
+    let stored: Record<string, unknown> = {};
+    let rev = 0;
+    const h = await startedApp({
+      respond: {
+        "prefs.set": (p: { patch: Record<string, unknown> }) => {
+          stored = { ...stored, ...p.patch };
+          return { prefs: stored, rev: ++rev };
+        },
+      },
+    });
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    h.io.type("\x02s");
+    await vi.waitFor(() => expect(h.app.ui.dialogContext).toEqual({ kind: "settings" }));
+    const patches = () =>
+      h.ws.requests("prefs.set").map((r) => (r.params as { patch: unknown }).patch);
+    const text = async () => {
+      h.app.renderNow();
+      return h.screen();
+    };
+    return { ...h, patches, text };
+  }
+
+  it("色の上書き（暗いとき）：読める色は保存して画面に効き、読めない色は理由を出す。空で外す", async () => {
+    const h = await open();
+    h.io.type("j" + ENTER); // テーマの節
+    // テーマ・明暗・いま使っている・（見出し）明るいとき 19・（見出し）暗いとき の「強調の色」まで。
+    const steps = 3 + CSS_VARS.length + CSS_VARS.indexOf("--soda-accent");
+    for (let i = 0; i < steps; i++) h.io.type(DOWN);
+    expect(await h.text()).toContain("強調の色");
+    h.io.type(ENTER + "var(--x)" + ENTER);
+    expect(await h.text()).toContain("は色として読めません");
+    expect(h.patches()).toEqual([]);
+    h.io.type(ENTER + "#ff0000" + ENTER);
+    expect(h.patches()).toEqual([{ themeOverrides: { dark: { "--soda-accent": "#ff0000" } } }]);
+    await vi.waitFor(() =>
+      expect((h.app as unknown as { theme: ThemeColors }).theme.ui("--soda-accent")).toBe(
+        rgbColor(255, 0, 0),
+      ),
+    );
+    h.io.type(ENTER + "\x15" + ENTER);
+    expect(h.patches()[1]).toEqual({ themeOverrides: null });
+  });
+
+  it("サイドバーの行：行を足し、トークンを足すと sidebarRows を丸ごと送る。既定に戻すは確認を挟む", async () => {
+    const h = await open();
+    h.io.type("jj" + ENTER); // 表示の節
+    h.io.type("\x1b[F"); // 末尾（agents の最後の行）
+    let t = await h.text();
+    expect(t).toContain("spaces の行（workspace）");
+    const lines = t.split("\n");
+    const row = lines.findIndex((l) => l.includes("spaces の行（workspace）"));
+    const col = [...lines[row]!].findIndex((_, i) =>
+      lines[row]!.slice(i).startsWith("spaces の行"),
+    );
+    h.io.type(`\x1b[<0;${col + 1};${row + 1}M\x1b[<0;${col + 1};${row + 1}m`);
+    h.io.type(ENTER); // 行を足す
+    expect(h.patches()).toEqual([
+      {
+        sidebarRows: {
+          spaces: [[{ token: "state_icon" }, { token: "workspace" }], [{ token: "git" }], []],
+        },
+      },
+    ]);
+    t = await h.text();
+    expect(t).toContain("3 行目");
+    // 3 行目にブランチを足す。
+    const l2 = t.split("\n");
+    const r3 = l2.findIndex((l) => l.includes("3 行目"));
+    const c3 = [...l2[r3]!].findIndex((_, i) => l2[r3]!.slice(i).startsWith("3 行目"));
+    h.io.type(`\x1b[<0;${c3 + 1};${r3 + 1}M\x1b[<0;${c3 + 1};${r3 + 1}m`);
+    h.io.type(ENTER); // トークンを足す（空の行なので先頭）
+    for (let i = 0; i < 3; i++) h.io.type(DOWN); // state_icon・state_text・workspace・branch
+    h.io.type(ENTER);
+    expect(h.patches()[1]).toEqual({
+      sidebarRows: {
+        spaces: [
+          [{ token: "state_icon" }, { token: "workspace" }],
+          [{ token: "git" }],
+          [{ token: "branch" }],
+        ],
+      },
+    });
   });
 });

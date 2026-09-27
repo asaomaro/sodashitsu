@@ -156,7 +156,8 @@ export class TuiApp {
       onPrefsChanged: (data) => this.prefs.apply(data.prefs, data.rev),
     });
     this.prefs = new PrefsModel(readTuiState(target.stateDir));
-    this.theme = new ThemeColors(this.prefs.theme);
+    this.prefs.setSystemDark(systemDarkFromEnv(io.env));
+    this.theme = new ThemeColors(this.prefs.theme, this.prefs.themeOverrides);
     this.renderer = new Renderer(
       colorModeOf(io.env, this.prefs.colorMode),
       io.platform !== "win32",
@@ -421,9 +422,13 @@ export class TuiApp {
     this.renderer.setColorMode(colorModeOf(this.io.env, this.prefs.colorMode));
     this.refreshKeymap();
     const theme = this.prefs.theme;
-    if (theme !== this.theme.name) {
-      this.theme = new ThemeColors(theme);
-      if (this.connectionState === "open")
+    const next = new ThemeColors(theme, this.prefs.themeOverrides);
+    if (next.key !== this.theme.key) {
+      const nameChanged = theme !== this.theme.name;
+      this.theme = next;
+      this.renderer.invalidate();
+      // pane の色の問い合わせにサーバが答える配色（web の ThemeController と同じく、テーマが変わったときだけ）。
+      if (nameChanged && this.connectionState === "open")
         this.net?.conn.request("client.theme", { theme }).catch(() => undefined);
     }
     this.commitView();
@@ -476,6 +481,11 @@ export class TuiApp {
   protected handleInput(ev: InputEvent): void {
     if (this.ended || this.detaching) return;
     // オーバーレイが開いている間のキー・貼り付け・マウスはオーバーレイへ（pane へは流さない。AC-I5）。
+    if (ev.kind === "colorScheme") {
+      // 外側の端末の明暗（テーマの自動の切り替え。web の prefers-color-scheme の代わり）。
+      this.prefs.setSystemDark(ev.dark);
+      return;
+    }
     if (ev.kind !== "focus" && this.overlays.active) {
       if (ev.kind === "key") this.overlays.handleKey(ev.key);
       else if (ev.kind === "paste") this.overlays.handlePaste(ev.text);
@@ -911,6 +921,16 @@ export function linkCommand(platform: string, url: string): { cmd: string; args:
   if (platform === "win32") return { cmd: "rundll32", args: ["url.dll,FileProtocolHandler", href] };
   if (platform === "darwin") return { cmd: "open", args: [href] };
   return { cmd: "xdg-open", args: [href] };
+}
+
+/**
+ * 起動時の明暗の見当（`COLORFGBG`＝`前景;背景` の背景が 7・9〜15 なら明るい）。無ければ暗い（web で matchMedia が無いときと同じ）。
+ * 外側の端末が `OSC 11` の問い合わせに答えれば、その応答で置き換える。
+ */
+export function systemDarkFromEnv(env: Readonly<Record<string, string | undefined>>): boolean {
+  const bg = Number((env["COLORFGBG"] ?? "").split(";").at(-1));
+  if (!Number.isInteger(bg) || bg < 0 || bg > 15) return true;
+  return !(bg === 7 || bg >= 9);
 }
 
 export function describeError(err: unknown): string {

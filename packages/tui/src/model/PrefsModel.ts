@@ -6,6 +6,8 @@ import {
 } from "@sodashitsu/protocol";
 import {
   DEFAULT_NOTIFY_PREFS,
+  loadThemeOverrides,
+  type ThemeOverrides,
   loadThemePrefs,
   resolveTheme,
   type NotifyPrefs,
@@ -14,6 +16,7 @@ import {
 } from "@sodashitsu/client-core";
 import type { TuiState } from "../local/tuiState.js";
 import type { ColorModePref } from "../render/color.js";
+import { isTuiColor } from "../render/cssColor.js";
 
 export const DEFAULT_SIDEBAR_COLS = 26;
 export const DEFAULT_NARROW_THRESHOLD = 64;
@@ -104,10 +107,28 @@ export class PrefsModel {
     return this.raw;
   }
 
+  /** 外側の端末が暗いか（`OSC 11` の応答・`CSI ? 997` の知らせ・`COLORFGBG`。分からなければ暗い）。 */
+  private dark = true;
+
+  get systemDark(): boolean {
+    return this.dark;
+  }
+
+  setSystemDark(dark: boolean): void {
+    if (dark === this.dark) return;
+    this.dark = dark;
+    this.emit();
+  }
+
+  /** 色の上書き（web と同じ正規化。色は端末版で読めるものだけ）。 */
+  get themeOverrides(): ThemeOverrides {
+    return loadThemeOverrides(this.raw.themeOverrides, isTuiColor);
+  }
+
   get theme(): ThemeName {
-    // OS の明暗は外側の端末から分からない（05 で OSC 11 から判定する）ので暗い扱い（web で matchMedia が無いときと同じ）。
+    // 明暗の自動の切り替えは外側の端末の明暗で（web の prefers-color-scheme の代わり）。
     try {
-      return resolveTheme(loadThemePrefs(this.raw as Record<string, unknown>), true);
+      return resolveTheme(loadThemePrefs(this.raw as Record<string, unknown>), this.dark);
     } catch {
       return DEFAULT_THEME_NAME;
     }

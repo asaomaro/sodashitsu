@@ -18,7 +18,10 @@ export const DISABLE_MOUSE = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l";
  */
 export function enterSequence(mouse: boolean): string {
   return (
-    "\x1b[?1049h\x1b[H\x1b[2J\x1b[?25l\x1b[?2004h\x1b[?1004h\x1b=" + (mouse ? ENABLE_MOUSE : "")
+    "\x1b[?1049h\x1b[H\x1b[2J\x1b[?25l\x1b[?2004h\x1b[?1004h\x1b=" +
+    (mouse ? ENABLE_MOUSE : "") +
+    // 明暗：変わったら知らせてもらい（?2031。対応する端末だけ）、今の背景色を訊く（OSC 11。テーマの自動の切り替え）。
+    "\x1b[?2031h\x1b]11;?\x1b\\"
   );
 }
 
@@ -31,7 +34,7 @@ export const RESTORE_SEQUENCE =
   // スクロール領域の解除（CSI r）はカーソルを左上へ動かすので、カーソルの退避（ESC 7）と復帰（ESC 8）で挟む。
   "\x1b[0m\x1b[?25h\x1b[0 q\x1b7\x1b[r\x1b8\x1b[?7h\x1b[?6l\x1b(B" +
   "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1016l" +
-  "\x1b[?1004l\x1b[?2004l\x1b[?1l\x1b>" +
+  "\x1b[?1004l\x1b[?2004l\x1b[?2031l\x1b[?1l\x1b>" +
   "\x1b[?1049l";
 
 /**

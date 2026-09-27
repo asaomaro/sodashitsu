@@ -37,3 +37,4 @@ export * from "./net/machineUrl.js";
 export * from "./net/ports.js";
 export * from "./net/retryAfter.js";
 export * from "./prefs/types.js";
+export * from "./theme/themeOverrides.js";

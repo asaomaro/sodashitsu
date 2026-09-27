@@ -24,7 +24,12 @@ export type InputEvent =
       mods: Mods;
     }
   | { kind: "paste"; text: string }
-  | { kind: "focus"; focused: boolean };
+  | { kind: "focus"; focused: boolean }
+  /**
+   * 外側の端末の明暗（`OSC 11 ; ?` への背景色の応答、または `CSI ? 2031 h` を有効にした端末の `CSI ? 997 ; 1|2 n`）。
+   * テーマの明暗の自動の切り替え（web の `prefers-color-scheme` の代わり）に使う。
+   */
+  | { kind: "colorScheme"; dark: boolean };
 
 /** ESC 単独を確定するまで待つ時間（design「input/decode.ts」）。 */
 export const ESC_TIMEOUT_MS = 25;
@@ -241,7 +246,11 @@ export class InputDecoder {
       // 端末版は外側の端末に問い合わせないので、ESC ] 等はふつう Alt+] 等の打鍵。完全で形の正しい OSC・DCS 等が同じ読みの中に
       // 届いたときだけ（外側の端末が自分から送るもの）捨てる。待たない——続く BEL（Ctrl+G）等の打鍵を消さない。
       const len = stringSequenceLength(s, next);
-      if (len !== null) return { event: null, length: len };
+      if (len !== null) {
+        // 背景色の問い合わせ（`OSC 11 ; ?`）の応答だけは読む（明暗の判定）。ほかの応答は捨てる。
+        const dark = next === "]" ? backgroundDarkness(s.slice(2, len)) : null;
+        return { event: dark === null ? null : { kind: "colorScheme", dark }, length: len };
+      }
       return {
         event: { kind: "key", key: singleKey(next, { ...NO_MODS, alt: true }), raw: `\x1b${next}` },
         length: 2,
@@ -396,6 +405,9 @@ export class InputDecoder {
         length: length + 3,
       };
     }
+    // 明暗の変化の知らせ（`CSI ? 997 ; 1 n` は暗い・`2` は明るい。contour・ghostty・kitty 等の ?2031）。
+    if (final === "n" && (body === "?997;1" || body === "?997;2"))
+      return { event: { kind: "colorScheme", dark: body === "?997;1" }, length };
     // 応答（DA `CSI ? … c`・kitty のフラグ `CSI ? … u`・DECRPM `CSI ? … $ y` 等）は入力に混ぜない。
     if (body.startsWith("?") || body.startsWith(">") || body.includes("$"))
       return { event: null, length };
@@ -454,4 +466,16 @@ function stringSequenceLength(s: string, kind: string): number | null {
     if (c < 0x20) return null;
   }
   return null;
+}
+
+/**
+ * `OSC 11 ; rgb:RRRR/GGGG/BBBB`（BEL か ST で終わる中身）から背景が暗いか。背景色の応答でなければ null。
+ * 明るさは相対輝度の近似（0.5 未満を暗い）。
+ */
+export function backgroundDarkness(seq: string): boolean | null {
+  const m = /^11;rgba?:([0-9a-f]{1,4})\/([0-9a-f]{1,4})\/([0-9a-f]{1,4})/i.exec(seq);
+  if (!m) return null;
+  const v = [m[1]!, m[2]!, m[3]!].map((h) => parseInt(h, 16) / (16 ** h.length - 1));
+  const lum = 0.2126 * v[0]! + 0.7152 * v[1]! + 0.0722 * v[2]!;
+  return lum < 0.5;
 }

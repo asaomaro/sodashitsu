@@ -1,5 +1,12 @@
 import { TERMINAL_PALETTES, type ThemeName } from "@sodashitsu/protocol";
-import { uiTokens, type CssVar } from "@sodashitsu/client-core";
+import {
+  mergeVars,
+  uiTokens,
+  type CssVar,
+  type ThemeOverrideLayer,
+  type ThemeOverrides,
+} from "@sodashitsu/client-core";
+import { parseCssColor } from "./cssColor.js";
 
 /**
  * 色（20260927-cli-mode の design「render/color.ts」）。セルの色は 1 つの数に詰める（格子を平たい配列で持つため。research §1.4）:
@@ -138,18 +145,46 @@ export class ThemeColors {
   readonly ansi: readonly PackedColor[];
   private readonly vars: Readonly<Record<CssVar, string>>;
 
-  constructor(readonly name: ThemeName) {
+  private readonly cache = new Map<CssVar, PackedColor>();
+
+  /**
+   * `overrides` は共有の設定の色の上書き（`themeOverrides`。web の `ThemeController` と同じく、テーマの明暗の層だけを重ねる）。
+   * 端末版で読めない色（`parseCssColor` が読めないもの）はテーマの色のまま。
+   */
+  constructor(
+    readonly name: ThemeName,
+    overrides?: ThemeOverrides,
+  ) {
     const pal = TERMINAL_PALETTES[name];
     this.paneFg = hexColor(pal.foreground);
     this.paneBg = hexColor(pal.background);
     this.cursor = hexColor(pal.cursor);
     this.ansi = pal.ansi.map(hexColor);
-    this.vars = uiTokens(name).vars;
+    const base = uiTokens(name);
+    const layer = overrides
+      ? base.colorScheme === "light"
+        ? overrides.light
+        : overrides.dark
+      : {};
+    const usable: ThemeOverrideLayer = {};
+    for (const [k, v] of Object.entries(layer) as [CssVar, string][])
+      if (parseCssColor(v)) usable[k] = v;
+    this.vars = mergeVars(base.vars, usable);
+    this.key = `${name}:${JSON.stringify(usable)}`;
   }
 
-  /** 画面の枠の色（`--soda-*`）。`rgba(...)` 等の読めない値は既定色。 */
+  /** テーマと効いている上書きを表す鍵（同じなら描き直しの必要が無い）。 */
+  readonly key: string;
+
+  /** 画面の枠の色（`--soda-*`）。読めない値は既定色（透明度は捨てる）。 */
   ui(v: CssVar): PackedColor {
-    return hexColor(this.vars[v]);
+    let c = this.cache.get(v);
+    if (c === undefined) {
+      const rgb = parseCssColor(this.vars[v]);
+      c = rgb ? rgbColor(rgb.r, rgb.g, rgb.b) : DEFAULT_COLOR;
+      this.cache.set(v, c);
+    }
+    return c;
   }
 
   /** pane のセルの前景（`kind`: 0 既定・1 パレット・2 RGB）。 */

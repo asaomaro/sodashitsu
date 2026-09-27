@@ -230,7 +230,7 @@ describe("マウス（04 ラウンド 2）", () => {
     h.app.renderNow();
     let text = await h.screen();
     expect(text).toContain("space-w1");
-    expect(text).not.toContain("space-w20");
+    expect(text).not.toMatch(/^ {3}space-w20/m); // spaces の区画には無い（agents の行の workspace 名は別）
     // navigate モードで下の workspace を選ぶと、そこまでずれる。
     h.io.type("\x02w");
     await vi.waitFor(() => expect(h.app.keys.mode).toBe("navigate"));

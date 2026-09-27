@@ -168,12 +168,28 @@ describe("InputDecoder（マウス・貼り付け・フォーカス・応答）"
     ]);
   });
 
-  it("外側の端末の応答（DA・OSC・DCS・DECRPM）は捨てる", () => {
+  it("外側の端末の応答（DA・OSC・DCS・DECRPM）は捨てる。背景色の応答（OSC 11）だけは明暗として読む", () => {
     expect(
       decode(
         "\x1b[?62;22c\x1b]11;rgb:0000/0000/0000\x1b\\\x1b]10;x\x07\x1bP>|xterm\x1b\\\x1b[?2026;2$ya",
       ),
-    ).toEqual([expect.objectContaining({ kind: "key", raw: "a" })]);
+    ).toEqual([
+      { kind: "colorScheme", dark: true },
+      expect.objectContaining({ kind: "key", raw: "a" }),
+    ]);
+  });
+
+  it("明暗：OSC 11 の背景色（1〜4 桁の 16 進）と CSI ? 997 ; 1|2 n（?2031 の知らせ）", () => {
+    expect(decode("\x1b]11;rgb:ffff/ffff/ffff\x07")).toEqual([
+      { kind: "colorScheme", dark: false },
+    ]);
+    expect(decode("\x1b]11;rgb:1e/1f/29\x1b\\")).toEqual([{ kind: "colorScheme", dark: true }]);
+    expect(decode("\x1b]11;rgba:f/f/f/f\x07")).toEqual([{ kind: "colorScheme", dark: false }]);
+    expect(decode("\x1b[?997;2n\x1b[?997;1n")).toEqual([
+      { kind: "colorScheme", dark: false },
+      { kind: "colorScheme", dark: true },
+    ]);
+    expect(decode("\x1b]11;?\x07")).toEqual([]);
   });
 });
 

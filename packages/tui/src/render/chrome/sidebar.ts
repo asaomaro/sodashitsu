@@ -1,12 +1,16 @@
-import type { Pane, Workspace } from "@sodashitsu/protocol";
+import type { DisplayState, Pane, Workspace } from "@sodashitsu/protocol";
 import {
   depthFirstPaneIds,
+  effectiveLayout,
+  loadSidebarRows,
+  resolveAgentLines,
+  resolveSpaceLines,
+  type ResolvedLine,
   groupedWorkspaceRows,
   orderedAgentPaneIds,
-  paneNameOf,
   visibleGroupMembers,
 } from "@sodashitsu/client-core";
-import { ATTR } from "../color.js";
+import { ATTR, hexColor, type PackedColor } from "../color.js";
 import type { Grid, Rect } from "../Screen.js";
 import { stringWidth, truncate } from "../width.js";
 import { glyphFor, stateColor, type ChromeContext } from "./context.js";
@@ -42,14 +46,63 @@ export interface SidebarScroll {
 const WORKSPACE_SORT_LABEL = { opened: "開いた順", name: "名前順" } as const;
 const AGENT_SORT_LABEL = { grouped: "グループ順", priority: "優先度順" } as const;
 
+/** 行の中の 1 つの部品（行の並びの 1 トークン）。`fg` が無ければ行の文字の色。 */
+interface Seg {
+  text: string;
+  fg?: PackedColor;
+  attrs?: number;
+}
+
+/** サイドバーの 1 項目（workspace・グループの見出し・エージェント）。`rows` は画面の行（2 行目からは字下げ）。 */
 interface Line {
   indent: number;
-  glyph: string;
-  glyphState: Parameters<typeof stateColor>[1];
-  text: string;
+  rows: Seg[][];
   selected: boolean;
   navigated?: boolean;
   hit?: SidebarTarget;
+}
+
+/** 画面の 1 行（項目の何行目か）。 */
+interface VisualRow {
+  line: Line;
+  sub: number;
+}
+
+/** 行の並びの解決の結果（client-core の `resolveSpaceLines`・`resolveAgentLines`。web の Sidebar と同じ）を部品へ。 */
+function segsOf(lines: ResolvedLine[], state: DisplayState | null, ctx: ChromeContext): Seg[][] {
+  const { theme, prefs } = ctx;
+  return lines.map((line) => {
+    const out: Seg[] = [];
+    for (const t of line) {
+      const style = t.style;
+      const attrs = (style.bold ? ATTR.bold : 0) | (style.dim ? ATTR.dim : 0);
+      const fg = style.fg !== undefined ? hexColor(style.fg) : undefined;
+      let seg: Seg | null;
+      switch (t.kind) {
+        case "state_icon": {
+          const glyph = glyphFor(state, prefs.statusSymbols);
+          // 状態が無くても印の欄は空けておく（web の StateIcon と同じく、名前の桁をそろえる）。
+          seg = { text: glyph === "" ? " " : glyph, fg: fg ?? stateColor(theme, state), attrs };
+          break;
+        }
+        case "git":
+          seg = {
+            text: t.branch ? `${t.branch} ${t.counts}` : t.counts,
+            attrs: attrs || ATTR.dim,
+            ...(fg !== undefined ? { fg } : {}),
+          };
+          break;
+        case "git_status":
+          seg = { text: t.counts, attrs: attrs || ATTR.dim, ...(fg !== undefined ? { fg } : {}) };
+          break;
+        case "text":
+          seg = t.text === "" ? null : { text: t.text, attrs, ...(fg !== undefined ? { fg } : {}) };
+          break;
+      }
+      if (seg) out.push(seg);
+    }
+    return out;
+  });
 }
 
 /**
@@ -75,13 +128,14 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     prefs.workspaceSort,
     prefs.collapsedAutoGroups,
   );
+  const layouts = loadSidebarRows(prefs.shared.sidebarRows);
+  const spacesLayout = effectiveLayout(layouts, "spaces");
+  const agentsLayout = effectiveLayout(layouts, "agents");
   const wsLine = (w: Workspace, indent: number): Line => {
     const state = model.workspaceState(w.id);
     return {
       indent,
-      glyph: glyphFor(state, prefs.statusSymbols),
-      glyphState: state,
-      text: w.label,
+      rows: segsOf(resolveSpaceLines(spacesLayout, { workspace: w, state }), state, ctx),
       selected: w.id === model.workspaceId,
       navigated: w.id === ctx.navigateSelection,
       hit: { kind: "workspace", workspaceId: w.id },
@@ -92,9 +146,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     else if (row.kind === "manualGroup") {
       lines.push({
         indent: 0,
-        glyph: row.group.collapsed ? "▸" : "▾",
-        glyphState: null,
-        text: row.group.label,
+        rows: [[{ text: row.group.collapsed ? "▸" : "▾" }, { text: row.group.label }]],
         selected: false,
         hit: { kind: "group", groupId: row.group.id },
       });
@@ -129,11 +181,15 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     for (const id of order) {
       const p = model.panes.get(id)!;
       const state = model.displayStateOf(p);
+      const tab = model.tabs.get(p.tabId);
+      const ws = tab ? model.workspaces.get(tab.workspaceId) : undefined;
       agentLines.push({
         indent: 0,
-        glyph: glyphFor(state, prefs.statusSymbols),
-        glyphState: state,
-        text: paneNameOf(p),
+        rows: segsOf(
+          resolveAgentLines(agentsLayout, { pane: p, tab, workspace: ws, agent: p.agent!, state }),
+          state,
+          ctx,
+        ),
         selected: id === model.focusedPaneId,
         hit: { kind: "agent", paneId: id },
       });
@@ -144,7 +200,10 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   const scroll = ctx.sidebarScroll ?? { spaces: 0, agents: 0, reveal: null };
   const bodyH = rect.h - 1; // 最下行は「«」
   const hits: SidebarHit[] = [];
-  const spacesLines = lines;
+  const visual = (list: Line[]): VisualRow[] =>
+    list.flatMap((line) => line.rows.map((_, sub) => ({ line, sub })));
+  const spacesLines = visual(lines);
+  const agentRows = visual(agentLines);
   let spacesH: number;
   let agentsH = 0;
   if (agentLines.length > 0) {
@@ -154,8 +213,8 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     agentsH = Math.max(0, bodyH - 1 - spacesH - 1);
   } else spacesH = Math.max(0, bodyH - 1);
 
-  const revealIndex = (list: Line[], match: (h: SidebarTarget) => boolean): number =>
-    list.findIndex((l) => l.hit !== undefined && match(l.hit));
+  const revealIndex = (list: VisualRow[], match: (h: SidebarTarget) => boolean): number =>
+    list.findIndex((r) => r.sub === 0 && r.line.hit !== undefined && match(r.line.hit));
   scroll.spaces = fitScroll(
     scroll.spaces,
     spacesLines.length,
@@ -169,10 +228,10 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   );
   scroll.agents = fitScroll(
     scroll.agents,
-    agentLines.length,
+    agentRows.length,
     agentsH,
     scroll.reveal?.paneId
-      ? revealIndex(agentLines, (h) => h.kind === "agent" && h.paneId === scroll.reveal!.paneId)
+      ? revealIndex(agentRows, (h) => h.kind === "agent" && h.paneId === scroll.reveal!.paneId)
       : -1,
   );
   scroll.reveal = null;
@@ -218,7 +277,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       grid.text(lx, y, label, fg, bg, ATTR.underline);
       hits.push({ y, kind: "sort", section: "agents", x: lx, w: lw });
     }
-    paintSection(grid, rect, inner, y + 1, agentsH, agentLines, scroll.agents, "agents", ctx, hits);
+    paintSection(grid, rect, inner, y + 1, agentsH, agentRows, scroll.agents, "agents", ctx, hits);
   }
 
   // 最下行：畳む「«」
@@ -248,7 +307,7 @@ function paintSection(
   inner: number,
   top: number,
   height: number,
-  lines: Line[],
+  rows: VisualRow[],
   offset: number,
   section: "spaces" | "agents",
   ctx: ChromeContext,
@@ -260,34 +319,31 @@ function paintSection(
   const activeBg = theme.ui("--soda-menu-active-bg");
   for (let i = 0; i < height; i++) {
     const y = top + i;
-    const line = lines[offset + i];
-    if (!line) {
+    const row = rows[offset + i];
+    if (!row) {
       hits.push({ y, kind: "area", section });
       continue;
     }
+    const { line, sub } = row;
     // navigate モードで選んでいる行はアクセントの色で（今の workspace の強調より優先）。
     const rowBg = line.navigated ? theme.ui("--soda-accent") : line.selected ? activeBg : bg;
     const rowFg = line.navigated ? theme.ui("--soda-accent-fg") : fg;
     if (line.selected || line.navigated) grid.fill({ x: rect.x, y, w: inner, h: 1 }, rowFg, rowBg);
-    let x = rect.x + 1 + line.indent;
-    const room = rect.x + inner - x;
     if (line.hit) hits.push({ y, section, ...line.hit });
     else hits.push({ y, kind: "area", section });
-    if (room <= 0) continue;
-    // 記号の欄は 2 桁（記号＋空白）。記号が無い行も桁をそろえる。
-    if (line.glyph !== "")
-      grid.text(x, y, line.glyph, stateColor(theme, line.glyphState), rowBg, 0, room);
-    x += 2;
-    grid.text(
-      x,
-      y,
-      truncate(line.text, rect.x + inner - x - 1),
-      rowFg,
-      rowBg,
-      line.selected ? ATTR.bold : 0,
-    );
+    // 1 行目は項目の頭から、2 行目からは状態の印の幅（2 桁）だけ下げる（web の line2 と同じ）。
+    let x = rect.x + 1 + line.indent + (sub > 0 ? 2 : 0);
+    const end = rect.x + inner - 1;
+    const segs = line.rows[sub]!;
+    segs.forEach((seg, k) => {
+      if (x >= end) return;
+      const text = truncate(seg.text, end - x);
+      const bold = line.selected && sub === 0 && seg.fg === undefined ? ATTR.bold : 0;
+      x += grid.text(x, y, text, seg.fg ?? rowFg, rowBg, (seg.attrs ?? 0) | bold, end - x);
+      if (k < segs.length - 1) x += 1;
+    });
   }
   if (offset > 0 && height > 0) grid.set(rect.x + inner - 1, top, "↑", 1, fg, bg);
-  if (offset + height < lines.length && height > 0)
+  if (offset + height < rows.length && height > 0)
     grid.set(rect.x + inner - 1, top + height - 1, "↓", 1, fg, bg);
 }
