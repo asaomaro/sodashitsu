@@ -1,6 +1,7 @@
-import type { ConnectionState, TerminalSinkPort } from "@sodashitsu/client-core";
+import { depthFirstPaneIds, type ConnectionState } from "@sodashitsu/client-core";
 import { SessionModel } from "../model/SessionModel.js";
 import { TuiNet, type TuiNetDeps } from "../net/TuiNet.js";
+import { PaneRegistry, type ViewCommit, type VisiblePane } from "../term/PaneRegistry.js";
 import type { TuiIo, TuiTarget } from "../types.js";
 import { TerminalModes } from "./terminalModes.js";
 
@@ -21,6 +22,7 @@ export class TuiApp {
   private resolveExit: (code: number) => void = () => undefined;
 
   readonly model: SessionModel;
+  readonly panes: PaneRegistry;
   protected net: TuiNet | null = null;
   connectionState: ConnectionState = "connecting";
 
@@ -30,7 +32,21 @@ export class TuiApp {
     protected readonly options: TuiAppOptions = {},
   ) {
     this.modes = new TerminalModes(io);
-    this.model = new SessionModel();
+    this.model = new SessionModel({
+      onPaneClosed: (paneId) => this.panes.paneClosed(paneId),
+    });
+    this.panes = new PaneRegistry(
+      {
+        request: (method, params) =>
+          this.net
+            ? this.net.conn.request(method, params)
+            : Promise.reject(new Error("not connected")),
+      },
+      () => this.model.limits.scrollbackLines,
+      () => this.onPaneDirty(),
+    );
+    this.disposers.push(() => this.panes.dispose());
+    this.disposers.push(this.model.onChange(() => this.onModelChange()));
   }
 
   run(): Promise<number> {
@@ -63,7 +79,7 @@ export class TuiApp {
       this.target,
       {
         model: this.model,
-        sink: this.sink(),
+        sink: this.panes,
         onState: (s) => this.onConnectionState(s),
         onOpened: (clientId) => this.onConnectionOpened(clientId),
         onClosed: () => this.onConnectionClosed(),
@@ -76,24 +92,47 @@ export class TuiApp {
     void net.start();
   }
 
-  /** pane の出力の受け口（T3 で pane の headless へ）。 */
-  protected sink(): TerminalSinkPort {
-    return {
-      onOutput: () => undefined,
-      onSnapshot: () => undefined,
-      onSizeChanged: () => undefined,
-    };
-  }
-
   protected onConnectionState(s: ConnectionState): void {
     this.connectionState = s;
     // サーバが閉じた `client.detach` の後（自分で切り離した）。
     if (s === "detached") this.finish(0);
   }
 
-  protected onConnectionOpened(_clientId: string): void {}
+  protected onConnectionOpened(_clientId: string): void {
+    this.panes.connectionOpened();
+    this.commitView();
+  }
 
-  protected onConnectionClosed(): void {}
+  protected onConnectionClosed(): void {
+    this.panes.connectionClosed();
+  }
+
+  protected onModelChange(): void {
+    this.commitView();
+  }
+
+  /** pane の headless の中身が変わった（T4 で描画を予約する）。 */
+  protected onPaneDirty(): void {}
+
+  /** 見えている pane と申告する大きさ（T4 で割り付けから求める。ここでは今の tab の pane をサーバの大きさのまま）。 */
+  protected visiblePanes(): VisiblePane[] {
+    const tab = this.model.currentTab();
+    if (!tab) return [];
+    const ids = tab.zoomedPaneId ? [tab.zoomedPaneId] : depthFirstPaneIds(tab.layout);
+    return ids.flatMap((paneId) => {
+      const p = this.model.panes.get(paneId);
+      return p ? [{ paneId, cols: p.cols, rows: p.rows }] : [];
+    });
+  }
+
+  /** 表示（`client.view`）と見えている pane の購読を今のモデルに合わせる。 */
+  protected commitView(): void {
+    if (this.ended) return;
+    const { workspaceId, tabId } = this.model;
+    if (!workspaceId || !tabId) return;
+    const view: ViewCommit = { workspaceId, tabId, visible: this.visiblePanes() };
+    this.panes.commit(view, (paneId) => this.model.panes.get(paneId));
+  }
 
   /** 切り離し（`prefix+q`・SIGHUP・SIGTERM・SIGINT）。`client.detach` を送れるなら送る。サーバとエージェントは動き続ける。 */
   detach(): void {
