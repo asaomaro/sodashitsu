@@ -1,1 +1,6 @@
 events:
+  - { ts: 2026-09-27T17:05:26Z, phase: tasks, event: start }
+  - { ts: 2026-09-27T17:05:26Z, phase: tasks, event: doccheck, metrics: { stage: start, phase: tasks, mode: same_session, size: 5808 } }
+  - { ts: 2026-09-27T17:05:26Z, phase: tasks, event: doccheck, metrics: { stage: report, phase: tasks, findings: 0 } }
+  - { ts: 2026-09-27T17:05:26Z, phase: tasks, event: approved, metrics: { tasks_planned: 7, tasks_anchored: 7, doc_check_rounds: 1, doc_check_findings: 0, doc_check_mode: same_session } }
+  - { ts: 2026-09-27T17:05:26Z, phase: coding, event: start }

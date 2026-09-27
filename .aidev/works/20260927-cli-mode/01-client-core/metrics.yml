@@ -1,1 +1,19 @@
 events:
+  - { ts: 2026-09-27T16:44:02Z, phase: tasks, event: start }
+  - { ts: 2026-09-27T16:44:26Z, phase: tasks, event: doccheck, metrics: { stage: start, phase: tasks, mode: same_session, size: 4293 } }
+  - { ts: 2026-09-27T16:44:26Z, phase: tasks, event: doccheck, metrics: { stage: report, phase: tasks, findings: 0 } }
+  - { ts: 2026-09-27T16:44:26Z, phase: tasks, event: approved, metrics: { tasks_planned: 3, tasks_anchored: 3, doc_check_rounds: 1, doc_check_findings: 0, doc_check_mode: same_session } }
+  - { ts: 2026-09-27T16:44:26Z, phase: coding, event: start }
+  - { ts: 2026-09-27T16:53:29Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T1, mode: delegated } }
+  - { ts: 2026-09-27T16:53:29Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T2, mode: delegated } }
+  - { ts: 2026-09-27T16:53:29Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T3, mode: delegated } }
+  - { ts: 2026-09-27T16:54:32Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T1, findings: 1 } }
+  - { ts: 2026-09-27T16:55:06Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T2, findings: 3 } }
+  - { ts: 2026-09-27T16:56:13Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T3, findings: 2 } }
+  - { ts: 2026-09-27T16:58:01Z, phase: coding, event: taskcheck, metrics: { stage: start, task: cross, mode: same_session } }
+  - { ts: 2026-09-27T16:58:01Z, phase: coding, event: taskcheck, metrics: { stage: report, task: cross, findings: 0 } }
+  - { ts: 2026-09-27T16:58:02Z, phase: coding, event: approved, metrics: { tasks_done: 3, unplanned_lookups: 0, task_checks: 3, task_check_findings: 6, task_check_mode: delegated } }
+  - { ts: 2026-09-27T16:58:02Z, phase: test, event: start, metrics: { marks: 0 } }
+  - { ts: 2026-09-27T17:05:16Z, phase: test, event: approved, metrics: { passed: 5211, failed: 0 } }
+  - { ts: 2026-09-27T17:05:16Z, phase: review, event: start, metrics: { marks: 2 } }
+  - { ts: 2026-09-27T17:05:16Z, phase: review, event: approved, metrics: { must: 0, should: 0, nit: 0 } }

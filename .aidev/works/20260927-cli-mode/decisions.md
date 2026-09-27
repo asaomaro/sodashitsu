@@ -29,3 +29,16 @@
 - **決定**: `switch_workspace_1..9`・`open_worktree`・`remove_worktree`・`swap_with_focused`・`stop_server` を共有の操作表に足し、web と端末版の両方に実装する。既定のキーは herdr と同じか「なし」で、既存の既定は変えない。
 - **理由・代替案**: 端末版だけに足すと、共有の設定画面に web で効かないキーが並ぶ。
 - **影響**: web の変更が増える（小さい）。
+
+## D5 client-core へ移したテストは node 環境で走る（01-client-core の coding）
+
+- **背景**: web の vitest は happy-dom。client-core のテストは既定の node 環境になる。
+- **決定**: そのままにする（移したテスト 32 ファイル・593 件は node 環境で全部通った。DOM に依存していない証拠にもなる）。`theme/uiTokens.test.ts` は web の .vue を読むので web に残した。
+  `Connection.ts` の既定の WebSocket・fetch は書き換えず、`@types/node` のグローバルの型で通した（tasks.md が許した形）。
+- **影響**: なし（件数は移動の前後で 5211 件のまま）。
+
+## D6 PR は squash で merge する
+
+- **背景**: 01 の T2 のコミット（0b505da）は単体では web がビルドできない中間状態（T3 で直る）。subtask ごとのコミットが多く、途中の状態を main の履歴に残す価値が小さい。
+- **決定**: deliver の merge は squash merge にする（main には 1 コミット）。
+- **影響**: bisect で中間の壊れた状態を踏まない。
