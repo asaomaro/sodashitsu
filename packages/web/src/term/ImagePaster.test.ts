@@ -136,7 +136,7 @@ describe("ImagePaster（20260927-clipboard-image-paste）", () => {
       ["p1", "b"],
     ]);
     expect(s.toasts).toEqual([]);
-  });
+  }, 15_000); // 1 片（768 KiB）を超える実物の Blob を base64 にする。単独で約 0.9 秒、並行の全体テストの負荷で 5.6 秒かかり既定の 5 秒を超えた（PR #67 マージ後の main）
 
   it("キー: 画像が無ければ fallback（\\x16）だけが、確かめている間に打ったキーより先に届く", async () => {
     const s = setup({ clip: { image: null } });
