@@ -1,3 +1,7 @@
+/*
+ * pane のモード（DECCKM）に合わせたカーソルキーの付け替えは herdr（https://github.com/herdrdev/herdr、commit da6bcd5969779bfe0396bcf89a8025d4375d611e）の
+ * `src/input/encode.rs` に倣った（Apache-2.0。TypeScript で書き直した。ルートの `NOTICE` を参照）。
+ */
 import type { KeyInput } from "@sodashitsu/client-core";
 
 /** pane へ送る列を決めるのに要る pane のモード（headless の `modes` の一部）。 */

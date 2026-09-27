@@ -11,6 +11,11 @@ export interface TuiTarget {
   certSha256?: string | undefined;
   /** ローカルログインして cookie（`name=value`）を返す。最初の接続と 4401/401 の再ログインの両方。失敗は reject。 */
   login(): Promise<string>;
+  /**
+   * サーバがまだ居るか（状態ディレクトリのロックの持ち主・`serve.json`・`local-auth.json` の pid が生きているか）。再接続の途中でログインできないときに、
+   * 本当に止まったのか（終える）・入れ替えや起動の途中なのか（繋ぎ直しを続ける）を見分ける。無ければログインの失敗を「止まった」とみなす。
+   */
+  isServerAlive?(): Promise<boolean>;
   /** `tui-state.json` を置く場所。 */
   stateDir: string;
   /** 名前付き session の名前（表示用）。既定の session は undefined。 */

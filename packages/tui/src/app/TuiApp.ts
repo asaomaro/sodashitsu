@@ -113,7 +113,10 @@ export class TuiApp {
     });
     this.prefs = new PrefsModel(readTuiState(target.stateDir));
     this.theme = new ThemeColors(this.prefs.theme);
-    this.renderer = new Renderer(colorModeOf(io.env), io.platform !== "win32");
+    this.renderer = new Renderer(
+      colorModeOf(io.env, this.prefs.colorMode),
+      io.platform !== "win32",
+    );
     this.panes = new PaneRegistry(
       {
         request: (method, params) =>
@@ -289,6 +292,7 @@ export class TuiApp {
   }
 
   protected onPrefsChange(): void {
+    this.renderer.setColorMode(colorModeOf(this.io.env, this.prefs.colorMode));
     const source = JSON.stringify(this.prefs.shared.keys ?? null);
     if (source !== this.keymapSource) this.keys.setKeymap(this.resolvedKeymap());
     const theme = this.prefs.theme;

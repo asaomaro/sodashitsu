@@ -191,4 +191,16 @@ describe("TuiApp：大きさの申告と描画の予約（AC2・AC11）", () => 
     app.finish(0);
     await running;
   });
+
+  it("共有の設定の tui.colorMode で色の出し方を切り替える（256 色 ⇄ truecolor。全部描き直す）", async () => {
+    const { io, ws, app, running } = await started();
+    await vi.waitFor(() => expect(io.output()).toContain("38;2;"));
+    ws.event("prefs.changed", { prefs: { tui: { colorMode: "256" } }, rev: 9, byClientId: "x" });
+    const mark = io.output().length;
+    await vi.waitFor(() => expect(io.output().slice(mark)).toContain("\x1b[2J"));
+    expect(io.output().slice(mark)).not.toContain("38;2;");
+    expect(io.output().slice(mark)).toContain("38;5;");
+    app.finish(0);
+    await running;
+  });
 });

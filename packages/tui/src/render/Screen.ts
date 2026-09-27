@@ -1,3 +1,8 @@
+/*
+ * 差分描画の手順（`Screen.frame`）は herdr（https://github.com/herdrdev/herdr、commit da6bcd5969779bfe0396bcf89a8025d4375d611e）の
+ * `src/protocol/render_ansi.rs`（`blit_frame_to_with_cursor_memory_and_clear_policy`・`blit_patch_to`。全角の右隣の無効化・隣り合う ASCII の CUP の省略・
+ * 同期出力・最後のカーソル）を TypeScript へ移したもの（Apache-2.0。無改変ではなく本製品の型に合わせて書き直した。ルートの `NOTICE` を参照）。
+ */
 import { charWidth } from "./width.js";
 import { DEFAULT_COLOR, sgrOf, type ColorMode, type PackedColor } from "./color.js";
 import type { CursorStyle } from "../term/PaneTerminal.js";
@@ -192,9 +197,16 @@ export class Screen {
   private lastShape = -1;
 
   constructor(
-    private readonly mode: ColorMode,
+    private mode: ColorMode,
     private readonly repeatImeAnchor = true,
   ) {}
+
+  /** 色の出し方を替える（次は全部描き直す）。 */
+  setColorMode(mode: ColorMode): void {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    this.invalidate();
+  }
 
   invalidate(): void {
     this.prev = null;

@@ -9,6 +9,7 @@ import type { ComposedServer } from "../composeServer.js";
 import { STATE_DIR_LOCK_FILE } from "../persist/StateDirLock.js";
 import {
   findOrStart,
+  isServerAlive,
   LaunchError,
   redactTokens,
   tokenNotice,
@@ -569,5 +570,45 @@ describe("findOrStart", () => {
       "soda: the terminal UI could not be loaded (Cannot find package '@sodashitsu/tui')",
     );
     expect(err.join("\n")).toContain("pnpm build");
+  });
+
+  // 03 の review：端末版の再接続の途中の「サーバが居るか」。ロックの持ち主・serve.json・local-auth.json のどれかの pid が生きていれば居る。
+  it("isServerAlive：ロック・serve.json・local-auth.json の生きている pid で判定する（どれも無い・死んだ pid なら居ない）", async () => {
+    const stateDir = await tempStateDir();
+    const dead = 2 ** 22 + 12345;
+    expect(await isServerAlive(stateDir, "h")).toBe(false);
+    const record = {
+      schema: 1,
+      pid: dead,
+      hostname: "h",
+      port: 1,
+      https: false,
+      host: "127.0.0.1",
+      savedAt: "",
+    };
+    await writeFile(join(stateDir, "serve.json"), JSON.stringify(record));
+    expect(await isServerAlive(stateDir, "h")).toBe(false);
+    await writeFile(
+      join(stateDir, "local-auth.json"),
+      JSON.stringify({ secret: "s", pid: process.pid, createdAt: "" }),
+    );
+    expect(await isServerAlive(stateDir, "h")).toBe(true); // 入れ替えの途中：秘密だけが新しいプロセスを指す
+    await writeFile(
+      join(stateDir, "local-auth.json"),
+      JSON.stringify({ secret: "s", pid: dead, createdAt: "" }),
+    );
+    await writeFile(join(stateDir, "serve.json"), JSON.stringify({ ...record, pid: process.pid }));
+    expect(await isServerAlive(stateDir, "h")).toBe(true);
+    expect(await isServerAlive(stateDir, "other-host")).toBe(false); // 別のホストの記録は見ない
+  });
+
+  it("isServerAlive：動いているサーバ（ロックの持ち主）は居る", async () => {
+    const stateDir = await tempStateDir();
+    const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
+    try {
+      expect(await isServerAlive(stateDir, "nobody")).toBe(true);
+    } finally {
+      await server.close();
+    }
   });
 });

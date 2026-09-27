@@ -30,6 +30,8 @@ export interface TuiNetHandlers {
 }
 
 export interface TuiNetDeps {
+  /** 待ち（テスト用）。 */
+  sleep?: (ms: number) => Promise<void>;
   /** 時計（テスト用）。 */
   now?: () => number;
   createWebSocket?: (ep: Endpoint) => (url: string) => WebSocketLike;
@@ -38,6 +40,12 @@ export interface TuiNetDeps {
 
 /** 再接続中にサーバが生きているかを確かめ直す間隔。 */
 export const PROBE_INTERVAL_MS = 10_000;
+
+/** ログインできないがサーバは居るとき、ログインをやり直すまでの間。 */
+export const RELOGIN_RETRY_MS = 2_000;
+
+/** サーバが居ないと見えてから、もう一度確かめるまでの間（handoff の入れ替えの空白を越える）。 */
+export const SERVER_GONE_GRACE_MS = 5_000;
 
 /** 認証を求められて再ログインしても、開けないまま続いたら諦める回数。 */
 const MAX_RELOGIN_WITHOUT_OPEN = 3;
@@ -60,6 +68,9 @@ export class TuiNet implements StorePort {
   private loggedOut = false;
   /** 終えた後も使える（止めた後の決着しない要求の包みを通さない）fetch。`/api/logout` に使う。 */
   private readonly rawFetch: typeof fetch;
+  /** 決まった cookie で送る fetch（入れ替えた古い cookie のログアウト）。 */
+  private readonly fetchWithCookie: (cookie: string) => typeof fetch;
+  private readonly sleep: (ms: number) => Promise<void>;
 
   private readonly now: () => number;
 
@@ -75,8 +86,11 @@ export class TuiNet implements StorePort {
       certSha256: target.certSha256,
       cookie: () => this.cookie,
     };
-    const baseFetch = (deps.fetchImpl ?? nodeFetch)(ep);
+    const fetchFactory = deps.fetchImpl ?? nodeFetch;
+    const baseFetch = fetchFactory(ep);
     this.rawFetch = baseFetch;
+    this.fetchWithCookie = (cookie) => fetchFactory({ ...ep, cookie: () => cookie });
+    this.sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms).unref?.()));
     const baseCreate = (deps.createWebSocket ?? nodeWebSocketFactory)(ep);
     const fetchImpl: typeof fetch = async (input, init) => {
       // 終えた後は何も始めない（`Connection` には止める口が無いので、決着しない要求で再接続の連鎖を止める）。
@@ -160,9 +174,12 @@ export class TuiNet implements StorePort {
   }
 
   /**
-   * 再接続中に、サーバが生きているかをログインで確かめる（サーバが止まると秘密のファイルが消えてログインできなくなる）。ログインできれば
-   * cookie を新しくして繋ぎ直しを続ける。**停止が長引いても `PROBE_INTERVAL_MS` ごとに確かめ直す**（`Connection` は試みのたびに
-   * `reconnecting` を知らせる）——1 回目の確かめの後にサーバが止まっても「再接続中」のまま残らない。
+   * 再接続中に、サーバが生きているかを確かめる。**停止が長引いても `PROBE_INTERVAL_MS` ごとに確かめ直す**（`Connection` は試みのたびに
+   * `reconnecting` を知らせる）。
+   * 1. 今の cookie がまだ通れば（`/api/session` が 204）、何も作らずに繋ぎ直しを続ける（セッションを増やさない）。
+   * 2. 通らなければログインし直す。cookie が替わったら古いものはログアウトする。
+   * 3. ログインもできなければ、**サーバが本当に居ないか**を `target.isServerAlive()`（状態ディレクトリのロックの持ち主・`serve.json`・`local-auth.json`）で
+   *    確かめ、居ないままなら少し置いてもう一度確かめてから終える（`soda handoff` の入れ替えの間・起動の途中は居るとみなして繋ぎ直しを続ける）。
    */
   private probeServer(): void {
     const now = this.now();
@@ -170,36 +187,96 @@ export class TuiNet implements StorePort {
       return;
     this.probing = true;
     this.lastProbeAt = now;
-    this.target.login().then(
-      (cookie) => {
-        this.probing = false;
-        this.cookie = cookie;
-      },
-      () => {
-        this.probing = false;
-        this.fatal("soda: the server has stopped (run `soda` again to start it)\n");
-      },
-    );
+    void this.probe().finally(() => {
+      this.probing = false;
+    });
+  }
+
+  private async probe(): Promise<void> {
+    if (await this.sessionAccepted()) return;
+    try {
+      const cookie = await this.target.login();
+      if (this.stopped) return;
+      const old = this.cookie;
+      this.cookie = cookie;
+      if (old !== "" && old !== cookie) void this.logoutCookie(old);
+      return;
+    } catch {
+      // 下でサーバが居るかを確かめる
+    }
+    if (this.stopped) return;
+    if (await this.serverGone())
+      this.fatal("soda: the server has stopped (run `soda` again to start it)\n");
+  }
+
+  /** 今の cookie でサーバがまだ受け付けるか（`GET /api/session` が 204）。届かなければ false。 */
+  private async sessionAccepted(): Promise<boolean> {
+    if (this.cookie === "") return false;
+    try {
+      const res = await this.rawFetch(`${this.target.baseUrl.replace(/\/$/, "")}/api/session`);
+      return res.status === 204;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * サーバが居ないか。`isServerAlive` を持たない繋ぎ先（テスト・古い呼び出し元）はログインの失敗をそのまま「居ない」とみなす。居ないと見えても
+   * `SERVER_GONE_GRACE_MS` 置いてもう一度確かめる（handoff の入れ替えの間の空白）。確かめる手段の失敗は「居る」側に倒す（勝手に終わらない）。
+   */
+  private async serverGone(): Promise<boolean> {
+    const alive = this.target.isServerAlive;
+    if (!alive) return true;
+    const check = (): Promise<boolean> => alive.call(this.target).catch(() => true);
+    if (await check()) return false;
+    await this.sleep(SERVER_GONE_GRACE_MS);
+    if (this.stopped) return false;
+    return !(await check());
+  }
+
+  /** 入れ替えた古い cookie のセッションを返す（失敗は気にしない）。 */
+  private async logoutCookie(cookie: string): Promise<void> {
+    await this.fetchWithCookie(cookie)(`${this.target.baseUrl.replace(/\/$/, "")}/api/logout`, {
+      method: "POST",
+    }).catch(() => undefined);
   }
 
   onOriginRejectSuspected(): void {
     // 手元のループバックへの接続なので Origin の拒否は起きない（findOrStart が通る Origin を渡す）。
   }
 
+  /**
+   * 401/4401 の後のログインのし直し。ログインできたのに開けないまま続いたら諦める（`MAX_RELOGIN_WITHOUT_OPEN`）。ログインそのものができないときは、
+   * サーバが本当に居ないときだけ終え、居れば（handoff の入れ替え・起動の途中）少し置いてやり直す。替えた古い cookie はログアウトする。
+   */
   private async relogin(): Promise<void> {
     if (this.reloginInFlight || this.stopped) return;
     this.reloginInFlight = true;
     try {
+      let cookie: string;
+      try {
+        cookie = await this.target.login();
+      } catch (err) {
+        if (this.stopped) return;
+        if (await this.serverGone()) {
+          this.fatal(
+            `soda: could not log in again: ${err instanceof Error ? err.message : String(err)}\n`,
+          );
+          return;
+        }
+        const retry = setTimeout(() => void this.relogin(), RELOGIN_RETRY_MS);
+        retry.unref?.();
+        return;
+      }
+      if (this.stopped) return;
       if (++this.reloginsWithoutOpen > MAX_RELOGIN_WITHOUT_OPEN) {
         this.fatal("soda: the server keeps refusing the local login\n");
         return;
       }
-      this.cookie = await this.target.login();
-      if (!this.stopped) this.conn.connect();
-    } catch (err) {
-      this.fatal(
-        `soda: could not log in again: ${err instanceof Error ? err.message : String(err)}\n`,
-      );
+      const old = this.cookie;
+      this.cookie = cookie;
+      if (old !== "" && old !== cookie) void this.logoutCookie(old);
+      this.conn.connect();
     } finally {
       this.reloginInFlight = false;
     }

@@ -11,6 +11,7 @@ import {
   type WorkspaceSort,
 } from "@sodashitsu/client-core";
 import type { TuiState } from "../local/tuiState.js";
+import type { ColorModePref } from "../render/color.js";
 
 export const DEFAULT_SIDEBAR_COLS = 26;
 export const DEFAULT_NARROW_THRESHOLD = 64;
@@ -90,6 +91,14 @@ export class PrefsModel {
     const v =
       tui && typeof tui === "object" ? (tui as Record<string, unknown>)["mouseCapture"] : undefined;
     return typeof v === "boolean" ? v : true;
+  }
+
+  /** 色の出し方（`tui.colorMode`。壊れた値は auto）。 */
+  get colorMode(): ColorModePref {
+    const tui = this.raw.tui;
+    const v =
+      tui && typeof tui === "object" ? (tui as Record<string, unknown>)["colorMode"] : undefined;
+    return v === "truecolor" || v === "256" ? v : "auto";
   }
 
   get workspaceSort(): WorkspaceSort {

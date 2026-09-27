@@ -203,6 +203,7 @@ export async function findOrStart(
         }
         throw new Error("local login was refused (the server may have stopped)");
       },
+      isServerAlive: () => isServerAlive(stateDir, host),
     };
   }
 }
@@ -374,4 +375,31 @@ export function tokenNotice(out: string): string | undefined {
     .split(/\r?\n/)
     .filter((l) => /#token=|token（今回作成|今だけ表示します/.test(l));
   return lines.length > 0 ? lines.join("\n") : undefined;
+}
+
+/**
+ * 状態ディレクトリのサーバがまだ居るか（端末版の再接続の途中の判定。03 の review）。状態ディレクトリのロックの持ち主が生きている、または `serve.json`・
+ * `local-auth.json` の pid（このホストのもの）が生きていれば居るとみなす——`soda handoff` の入れ替えの間は、ロックの持ち主・記録の片方だけが
+ * 新しいプロセスを指していることがある。どれも無ければ居ない。
+ */
+export async function isServerAlive(
+  stateDir: string,
+  host: string = osHostname(),
+): Promise<boolean> {
+  const holder = await new StateDirLock(stateDir).inspect();
+  if (holder !== undefined && holder.otherHost === undefined) return true;
+  const record = await readServeRecord(stateDir);
+  if (record !== undefined && record.hostname === host && pidAlive(record.pid)) return true;
+  const auth = await readLocalAuth(stateDir);
+  return auth !== undefined && pidAlive(auth.pid);
+}
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM：居るが別の利用者のもの（居るとみなす）。
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
 }

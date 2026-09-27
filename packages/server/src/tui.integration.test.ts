@@ -146,8 +146,12 @@ const COLS = 100;
 const ROWS = 30;
 
 /** 端末版の出力を外側の端末（headless）へ流し、画面を読む。 */
-function screen(io: FakeIo): { text(): Promise<string>; outer: OuterTerminal } {
-  const outer = new OuterTerminal(COLS, ROWS);
+function screen(
+  io: FakeIo,
+  cols = COLS,
+  rows = ROWS,
+): { text(): Promise<string>; outer: OuterTerminal } {
+  const outer = new OuterTerminal(cols, rows);
   let written = 0;
   return {
     outer,
@@ -277,6 +281,51 @@ describe("runTui（実サーバ・偽の外側の端末）", () => {
       s.outer.dispose();
       io.signal("SIGTERM");
       await running;
+    }
+  });
+
+  it("端末版 2 つを同時に繋ぐ：どちらも描き・打て、最後に操作した側の大きさになり、もう一方は切り取って ⋯ を出す。セッションはそのまま（AC11・AC12）", async () => {
+    const before = local.server.session.snapshot();
+    const paneId = before.focus!.paneId;
+    const a = fakeIo({ cols: 100, rows: 30 });
+    const b = fakeIo({ cols: 80, rows: 24 });
+    const sa = screen(a, 100, 30);
+    const sb = screen(b, 80, 24);
+    const ra = runTui(local.target, a);
+    const rb = runTui(local.target, b);
+    const wsLabel = before.workspaces.find((w) => w.id === before.focus!.workspaceId)!.label;
+    try {
+      await vi.waitFor(async () => expect(await sa.text()).toContain(wsLabel), { timeout: 15_000 });
+      await vi.waitFor(async () => expect(await sb.text()).toContain(wsLabel), { timeout: 15_000 });
+      // A が打つ → A の大きさ（100×30 の割り付けの中身）になり、B（80×24）は切り取る。
+      const ma = `TWO_A_${Date.now()}`;
+      a.type(`echo ${ma}\r`);
+      // 前のテストで分割してあるので、割り付けの幅は A・B の端末の幅から決まる（A のほうが広い）。
+      const cols = () => local.server.session.getPane(paneId)!.cols;
+      await vi.waitFor(async () => expect(await sa.text()).toContain(ma), { timeout: 15_000 });
+      await vi.waitFor(async () => expect(await sb.text()).toContain(ma), { timeout: 15_000 });
+      await vi.waitFor(async () => expect(await sb.text()).toContain("⋯"), { timeout: 15_000 });
+      // B が打つ → B の大きさへ移り、今度は A が切り取る側（余りを背景で埋めて ⋯）。
+      const mb = `TWO_B_${Date.now()}`;
+      b.type(`echo ${mb}\r`);
+      const colsA = cols();
+      await vi.waitFor(() => expect(cols()).toBeLessThan(colsA), { timeout: 15_000 });
+      await vi.waitFor(async () => expect(await sa.text()).toContain(mb), { timeout: 15_000 });
+      await vi.waitFor(async () => expect(await sa.text()).toContain("⋯"), { timeout: 15_000 });
+      a.type("\x02q");
+      b.type("\x02q");
+      expect(await ra).toBe(0);
+      expect(await rb).toBe(0);
+      const after = local.server.session.snapshot();
+      expect(after.panes.map((p) => p.id)).toEqual(before.panes.map((p) => p.id));
+      expect(after.workspaces.map((w) => w.id)).toEqual(before.workspaces.map((w) => w.id));
+    } finally {
+      sa.outer.dispose();
+      sb.outer.dispose();
+      a.signal("SIGTERM");
+      b.signal("SIGTERM");
+      await ra;
+      await rb;
     }
   });
 });

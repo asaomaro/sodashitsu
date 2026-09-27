@@ -25,6 +25,15 @@ describe("PrefsModel（共有の設定と手元の状態）", () => {
     expect(p.sidebarCols).toBe(40);
   });
 
+  it("tui.colorMode は auto・truecolor・256（壊れた値は auto）", () => {
+    const p = new PrefsModel();
+    expect(p.colorMode).toBe("auto");
+    p.apply({ tui: { colorMode: "256" } }, 1);
+    expect(p.colorMode).toBe("256");
+    p.apply({ tui: { colorMode: "rgb" as never } }, 2);
+    expect(p.colorMode).toBe("auto");
+  });
+
   it("古い rev は捨てる。テーマ・並び・スクロールバックを正規化する", () => {
     const p = new PrefsModel();
     p.apply({ theme: "nord", workspaceSort: "name", agentSort: "priority", scrollback: 200 }, 5);

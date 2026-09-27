@@ -473,6 +473,8 @@ export interface SharedTuiPrefs {
   sidebarCols?: number;
   /** 1 列表示に切り替える幅（列）。 */
   narrowThreshold?: number;
+  /** 色の出し方（`auto` は外側の端末から判定。SSH 越しで判定できないとき用）。 */
+  colorMode?: "auto" | "truecolor" | "256";
   [key: string]: unknown;
 }
 

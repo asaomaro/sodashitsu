@@ -40,6 +40,12 @@ export class Renderer {
     this.screen = new Screen(mode, repeatImeAnchor);
   }
 
+  setColorMode(mode: ColorMode): void {
+    this.screen.setColorMode(mode);
+    this.lastGrid = null;
+    this.lastPaint.clear();
+  }
+
   /** 次は全部描き直す（大きさの変化・外側の端末の再表示）。 */
   invalidate(): void {
     this.screen.invalidate();

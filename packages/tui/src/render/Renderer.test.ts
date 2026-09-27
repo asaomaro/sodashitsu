@@ -207,6 +207,20 @@ describe("color・width", () => {
     expect(colorModeOf({})).toBe("256");
   });
 
+  it("truecolor の判定を広げる（WT_SESSION・TERM の -direct・TERM_PROGRAM・kitty・SODA_TRUECOLOR）と設定の上書き", () => {
+    expect(colorModeOf({ WT_SESSION: "x" })).toBe("truecolor");
+    expect(colorModeOf({ TERM: "xterm-direct" })).toBe("truecolor");
+    for (const p of ["iTerm.app", "WezTerm", "vscode", "ghostty"])
+      expect(colorModeOf({ TERM_PROGRAM: p }), p).toBe("truecolor");
+    expect(colorModeOf({ TERM_PROGRAM: "Apple_Terminal" })).toBe("256");
+    expect(colorModeOf({ KITTY_WINDOW_ID: "1" })).toBe("truecolor");
+    expect(colorModeOf({ SODA_TRUECOLOR: "1" })).toBe("truecolor");
+    expect(colorModeOf({ SODA_TRUECOLOR: "0", COLORTERM: "truecolor" })).toBe("256");
+    expect(colorModeOf({ COLORTERM: "truecolor" }, "256")).toBe("256");
+    expect(colorModeOf({}, "truecolor")).toBe("truecolor");
+    expect(colorModeOf({ COLORTERM: "truecolor" }, "auto")).toBe("truecolor");
+  });
+
   it("RGB → 256 色は立方体と灰色の近いほう", () => {
     expect(rgbTo256(255, 0, 0)).toBe(196);
     expect(rgbTo256(0, 0, 0)).toBe(16);

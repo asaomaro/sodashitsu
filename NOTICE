@@ -30,6 +30,9 @@ file, per Apache License 2.0 section 4(b).
                                                        agent-detection/*.toml rule files)
     packages/server/src/git/worktree.ts             (from src/worktree.rs)
     packages/protocol/src/worktreePath.ts           (from src/worktree.rs)
+    packages/tui/src/render/Screen.ts               (from src/protocol/render_ansi.rs)
+    packages/tui/src/input/decode.ts                (approach of src/raw_input.rs)
+    packages/tui/src/input/encode.ts                (from src/input/encode.rs)
 
   Location in this repository (ported test cases, alongside this product's own tests):
     packages/server/src/agent/ManifestEngine.test.ts   (from src/detect/manifest/tests.rs)

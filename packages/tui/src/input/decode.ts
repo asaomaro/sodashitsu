@@ -1,3 +1,7 @@
+/*
+ * 入力の分解の方針（ESC 単独の時間切れ・マウス中の長い待ち・ブラケットペーストを丸ごとで判定）は herdr（https://github.com/herdrdev/herdr、
+ * commit da6bcd5969779bfe0396bcf89a8025d4375d611e）の `src/raw_input.rs` に倣った（Apache-2.0。TypeScript で書き直した。ルートの `NOTICE` を参照）。
+ */
 import type { KeyInput } from "@sodashitsu/client-core";
 
 /** 修飾（xterm の修飾の番号 m − 1 のビット：shift 1・alt 2・ctrl 4・meta 8）。 */

@@ -26,10 +26,37 @@ export function hexColor(hex: string): PackedColor {
 
 export type ColorMode = "truecolor" | "256";
 
-/** `COLORTERM=truecolor|24bit` なら RGB で、無ければ 256 色へ寄せる（design「render/color.ts」）。 */
-export function colorModeOf(env: Readonly<Record<string, string | undefined>>): ColorMode {
+/** 色の出し方の設定（共有の設定 `tui.colorMode`）。`auto` は外側の端末から判定する。 */
+export type ColorModePref = "auto" | "truecolor" | "256";
+
+/** truecolor を扱うと分かっている端末（`TERM_PROGRAM`）。SSH 越しでは届かないことが多いので、設定・`SODA_TRUECOLOR` でも指定できる。 */
+const TRUECOLOR_PROGRAMS: ReadonlySet<string> = new Set([
+  "iTerm.app",
+  "WezTerm",
+  "vscode",
+  "ghostty",
+]);
+
+/**
+ * RGB で出すか 256 色へ寄せるか（design「render/color.ts」。03 の review で判定を広げた）。設定（`tui.colorMode`）が `auto` 以外ならそれ。
+ * `auto` なら `SODA_TRUECOLOR=1`（`0` は 256 色）→ `COLORTERM=truecolor|24bit` → Windows Terminal（`WT_SESSION`）→ `TERM` が `-direct` で終わる →
+ * `TERM_PROGRAM` が truecolor の端末 → kitty（`KITTY_WINDOW_ID`）。どれでもなければ 256 色。
+ */
+export function colorModeOf(
+  env: Readonly<Record<string, string | undefined>>,
+  pref: ColorModePref = "auto",
+): ColorMode {
+  if (pref !== "auto") return pref;
+  const forced = env["SODA_TRUECOLOR"];
+  if (forced === "1") return "truecolor";
+  if (forced === "0") return "256";
   const ct = (env["COLORTERM"] ?? "").toLowerCase();
-  return ct === "truecolor" || ct === "24bit" ? "truecolor" : "256";
+  if (ct === "truecolor" || ct === "24bit") return "truecolor";
+  if (env["WT_SESSION"]) return "truecolor";
+  if ((env["TERM"] ?? "").endsWith("-direct")) return "truecolor";
+  if (TRUECOLOR_PROGRAMS.has(env["TERM_PROGRAM"] ?? "")) return "truecolor";
+  if (env["KITTY_WINDOW_ID"]) return "truecolor";
+  return "256";
 }
 
 const CUBE = [0, 95, 135, 175, 215, 255];
