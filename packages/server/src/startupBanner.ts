@@ -20,6 +20,13 @@ export interface StartupInfo {
 }
 
 /**
+ * 起動の表示（`startupLines`）の最後の行の目印（「今だけ表示します」か「token を忘れた場合は」）。引数なしの `soda`（`launch/findOrStart.ts`）は、裏で起動した子の
+ * `serve.out` にこの行が現れるまで準備完了とみなさない——`/ws` を受け付け始める（`listen()` の最後）のは表示より前なので、`/ws` だけを見ると token の行を
+ * 書く前に読んで失う。表示の最後の行を変えたらここも変える（`startupBanner.test.ts` が両方を突き合わせる）。
+ */
+export const STARTUP_DONE_RE = /今だけ表示します\)|token を忘れた場合は/;
+
+/**
  * 待ち受けに成功した後の表示（design「起動時の表示」・D101・D102・D103）。純関数（表示する行を返すだけ）。
  * - `soda: listening on <host> port <port> (<scheme>)`（URL の形にしない。端末がリンクにして開けない `0.0.0.0` を開かせない）。
  * - 開ける URL（`accessUrls`）ごとに `soda: open <URL>/`。token を作ったときだけ `#token=` を付ける。

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lastChanceTokenLines, startupLines } from "./startupBanner.js";
+import { lastChanceTokenLines, STARTUP_DONE_RE, startupLines } from "./startupBanner.js";
 
 const base = { scheme: "https" as const, port: 8443, extraOrigins: [], lanAddresses: ["192.168.1.50"] };
 
@@ -12,6 +12,20 @@ describe("startupLines（起動時の表示。D101・D102・D103）", () => {
       "soda: open https://192.168.1.50:8443/#token=TOK",
       "soda: (token 付きの URL は今だけ表示します)",
     ]);
+  });
+
+  // 20260927-cli-mode：引数なしの soda は最後の行の目印（STARTUP_DONE_RE）で「token を書き終えた」を知る。最後の行だけが当たること。
+  it("最後の行だけが起動の表示の終わりの目印に当たる（token の有無・URL の有無・名前付き session のどれでも）", () => {
+    const cases = [
+      startupLines({ ...base, host: "0.0.0.0", freshToken: "TOK" }),
+      startupLines({ ...base, host: "127.0.0.1", freshToken: undefined }),
+      startupLines({ ...base, host: "fe80::1%eth0", freshToken: "TOK" }),
+      startupLines({ ...base, host: "127.0.0.1", freshToken: "TOK", session: { name: "w", stateDir: "/s" }, portRemembered: true, paneHistoryPath: "/p" }),
+    ];
+    for (const lines of cases) {
+      expect(STARTUP_DONE_RE.test(lines.at(-1)!), lines.join("\n")).toBe(true);
+      for (const l of lines.slice(0, -1)) expect(STARTUP_DONE_RE.test(l), l).toBe(false);
+    }
   });
 
   it("token を作っていなければ URL だけと、token reset の案内", () => {

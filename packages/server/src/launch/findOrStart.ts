@@ -1,4 +1,4 @@
-import { mkdir, readFile, stat, truncate } from "node:fs/promises";
+import { mkdir, readFile, stat, truncate, writeFile } from "node:fs/promises";
 import { hostname as osHostname } from "node:os";
 import { join, resolve } from "node:path";
 import { resolveServeOptions, type RawServeArgs } from "../config.js";
@@ -7,6 +7,7 @@ import { serveRecordMatches } from "../persist/namedSession.js";
 import { readServeRecord } from "../persist/ServeRecordFile.js";
 import { StateDirLock } from "../persist/StateDirLock.js";
 import { paneServerUrl } from "../util/net.js";
+import { STARTUP_DONE_RE } from "../startupBanner.js";
 import { openWs, postJson, type LocalEndpoint } from "./localHttp.js";
 import {
   SERVE_OUT_FILE_NAME,
@@ -66,6 +67,7 @@ export interface FindOrStartDeps {
 export const NESTED_ENV_VAR = "SODA_PANE_ID";
 
 type Ready =
+  | { kind: "not-ours" }
   | { kind: "ready"; endpoint: LocalEndpoint; cookie: string }
   | { kind: "child-exited" }
   | { kind: "gone" }
@@ -90,8 +92,6 @@ export async function findOrStart(
   let started: SpawnedServe | undefined;
   let stopHint: string | undefined;
   let attempts = 0;
-  /** 同時起動のやり直しの前に `serve.out` で見た token の行（勝った側の子の出力。捨てずに最後に見せる）。 */
-  let carriedNotice = "";
 
   for (;;) {
     const holder = await new StateDirLock(stateDir).inspect();
@@ -110,6 +110,10 @@ export async function findOrStart(
         );
       }
       await mkdir(stateDir, { recursive: true });
+      // 起動のたびに `serve.out` を空から始める——前の起動の行（待ちの途中の Ctrl-C で読まれずに残った token 等）を見せない・混ぜない。
+      // 同時に起動したほかの `soda` の子の出力を消しうるのは、相手の子がロックを取って token を書き終えるまで（起動に数百 ms）の間に、こちらがロックの無いのを見てから
+      // ここへ来るまで（数 ms）だけ——実際には起きない幅として扱う。
+      await writeFile(outPath, "", { mode: 0o600 });
       started = await spawn({
         execPath: opts.execPath,
         args: [
@@ -127,16 +131,19 @@ export async function findOrStart(
       });
       stopHint = started.notice;
     }
-    const ready = await waitReady(stateDir, host, started, deps);
+    const ready = await waitReady(stateDir, host, started, outPath, deps);
     if (ready.kind === "gone") continue; // 見ていたサーバが止まった。もう一度探す（無ければ起動する）
+    if (ready.kind === "not-ours") {
+      started = undefined; // 起動しなかった側として、持ち主へ繋ぎ直す（token は見せない）
+      continue;
+    }
     if (ready.kind === "child-exited") {
       // 同時に起動した別の `soda` がロックを取った（こちらの子は使用中で終わった）なら、そのサーバへ繋ぎ直す（試行の回数を問わない——起動はしないので）。
-      // `serve.out` は 2 つの子が共有する。勝った側の子の初回の token の行もここにあるので、**読むだけで空にしない**（勝った側の `soda` が読む前に消さない）。
-      // 読めた token の行は持ち越して、繋げたときに見せる（どちらかの `soda` で必ず一度は見える）。
+      // `serve.out` は 2 つの子が共有する。勝った側の子の初回の token の行もここにあるが、**読みも空にもしない**——token を見せるのは、
+      // 起動した子が準備完了になった側（取った側）だけ（どちらの端末にも一度だけ出る。両方に出さない・読む前に消さない）。
       const other = await new StateDirLock(stateDir).inspect();
       if (other !== undefined) {
         started = undefined;
-        carriedNotice = tokenNotice(await readServeOut(outPath)) ?? carriedNotice;
         continue;
       }
       const out = (await takeServeOut(outPath)).trim();
@@ -152,7 +159,7 @@ export async function findOrStart(
       // （サーバは止めないので、token はこの後どこにも出ない——ここで見せなければ失われる）。
       const out = await takeServeOut(outPath);
       const tail = redactTokens(out).trim().split(/\r?\n/).slice(-20).join("\n");
-      const notice = tokenNotice(`${carriedNotice}\n${out}`);
+      const notice = tokenNotice(out);
       throw new LaunchError(
         `soda serve did not become ready within ${Math.round((deps.timeoutMs ?? 15_000) / 1000)} seconds`,
         [
@@ -163,9 +170,7 @@ export async function findOrStart(
       );
     }
     const startupNotice =
-      started !== undefined || carriedNotice !== ""
-        ? tokenNotice(`${carriedNotice}\n${await takeServeOut(outPath)}`)
-        : undefined;
+      started !== undefined ? tokenNotice(await takeServeOut(outPath)) : undefined;
     let cached: string | undefined = ready.cookie;
     const endpoint = ready.endpoint;
     return {
@@ -201,6 +206,7 @@ async function waitReady(
   stateDir: string,
   host: string,
   started: SpawnedServe | undefined,
+  outPath: string,
   deps: FindOrStartDeps,
 ): Promise<Ready> {
   const interval = deps.intervalMs ?? 50;
@@ -267,7 +273,17 @@ async function waitReady(
             const probe = await openWs(endpoint, login.cookie);
             if (probe.kind === "open") {
               probe.ws.close();
-              return { kind: "ready", endpoint, cookie: login.cookie };
+              // 起動した子が持ち主でない（同時に起動したほかの `soda` の子が先にロックを取った）なら、token はあちらが見せる。こちらは起動しなかった側として繋ぐ。
+              // WMI の経路は pid が間の `cmd.exe` なので比べられない（子が使用中で終わるのを待つ）。
+              if (
+                started?.method === "detached" &&
+                started.pid !== undefined &&
+                started.pid !== holder.pid
+              )
+                return { kind: "not-ours" };
+              // 起動した子の起動の表示（token の行）を書き終えるまでは待つ（`STARTUP_DONE_RE` の注記）。
+              if (started === undefined || STARTUP_DONE_RE.test(await readServeOut(outPath)))
+                return { kind: "ready", endpoint, cookie: login.cookie };
             }
             if (probe.kind === "status" && probe.status === 401) login = undefined; // cookie が効かない（作り直された等）。ログインからやり直す
             if (probe.kind === "error") rethrowIfCertMismatch(probe.error);

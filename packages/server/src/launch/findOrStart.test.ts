@@ -17,6 +17,7 @@ import { openWs } from "./localHttp.js";
 import { placeholderEntry } from "./placeholderEntry.js";
 import type { SpawnedServe, SpawnServeRequest } from "./spawnDetached.js";
 import { runTuiCommand } from "./tuiCommand.js";
+import { startupLines } from "../startupBanner.js";
 import { parseArgs } from "../cliArgs.js";
 
 /**
@@ -85,11 +86,16 @@ describe("findOrStart", () => {
           start: async (server) => {
             await server.listen();
             track(server);
-            if (server.freshToken !== undefined) {
-              out(`soda: listening on 127.0.0.1 port ${server.options.port} (http)`);
-              out(`soda: open http://127.0.0.1:${server.options.port}/#token=${server.freshToken}`);
-              out("soda: (token 付きの URL は今だけ表示します)");
-            }
+            // 実物の `soda serve`（main.ts）と同じく、待ち受けた後に起動の表示を書く。
+            for (const line of startupLines({
+              scheme: "http",
+              host: "127.0.0.1",
+              port: server.options.port,
+              extraOrigins: [],
+              lanAddresses: [],
+              freshToken: server.freshToken,
+            }))
+              out(line);
           },
         },
       ).catch((err: unknown) => {
@@ -166,17 +172,77 @@ describe("findOrStart", () => {
     expect(a.baseUrl).toBe(b.baseUrl);
     expect(calls.length).toBeGreaterThanOrEqual(1);
     expect(calls.length).toBeLessThanOrEqual(2);
-    // 初回の token は、負けた側がやり直す前に serve.out を空にして失わない（どちらかの soda で必ず見える）。
-    expect([a, b].some((t) => t.startupNotice?.includes("#token=") === true)).toBe(true);
   });
 
-  it("最後の試行で子が「使用中」で終わっても、動いている持ち主へ繋ぐ", async () => {
+  // ラウンド 2 の点検（順序を決めて再現）：両方が起動を決めた後、勝った側の子がロックを取って待ち受け、少し後に起動の表示（token）を書き、その後で負けた側の子が
+  // 「使用中」で終わる。token は起動した子が準備完了になった側（取った側）にだけ、ちょうど一度出る（負けた側が読んで消さない・負けた側にも出さない）。
+  it("同時の起動で、token は取った側にだけちょうど一度出る（負けた側は serve.out を読みも消しもしない）", async () => {
+    const stateDir = await tempStateDir();
+    let secondSpawned: () => void = () => undefined;
+    const bothSpawned = new Promise<void>((r) => (secondSpawned = r));
+    let loserExited = false;
+    const order: string[] = [];
+    const spawn = async (req: SpawnServeRequest): Promise<SpawnedServe> => {
+      order.push(req.cwd);
+      if (order.length === 2) {
+        secondSpawned();
+        // 負けた側は WMI の経路で起動した形（pid は間の cmd.exe なので持ち主と比べられない）——「使用中」で終わるのを見て、やり直しの経路を通る。
+        return { method: "wmi", pid: 1, hasExited: () => loserExited };
+      }
+      void (async () => {
+        await bothSpawned;
+        const server = track(
+          await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] }),
+        );
+        await new Promise((r) => setTimeout(r, 400)); // `/ws` は受け付け済み。起動の表示はまだ（実物の main.ts と同じ順）
+        // token の行を書く → 負けた側の子が「使用中」で終わる → 負けた側がそれを見るだけの間を置いてから、表示の最後の行を書く。
+        appendFileSync(
+          req.outPath,
+          `soda: listening on 127.0.0.1 port ${server.options.port} (http)\nsoda: open http://127.0.0.1:${server.options.port}/#token=TOK_A\n`,
+        );
+        appendFileSync(req.outPath, "soda: the state dir is already in use by another soda\n");
+        loserExited = true;
+        await new Promise((r) => setTimeout(r, 400));
+        appendFileSync(req.outPath, "soda: (token 付きの URL は今だけ表示します)\n");
+      })();
+      return { method: "detached", pid: process.pid, hasExited: () => false };
+    };
+    const dirA = await tempStateDir();
+    const dirB = await tempStateDir();
+    const [a, b] = await Promise.all([
+      findOrStart(options(stateDir, { cwd: dirA }), { spawnServe: spawn }),
+      findOrStart(options(stateDir, { cwd: dirB }), { spawnServe: spawn }),
+    ]);
+    expect(order).toHaveLength(2);
+    const winner = order[0] === dirA ? a : b;
+    const loser = order[0] === dirA ? b : a;
+    expect(winner.startupNotice).toContain("#token=TOK_A");
+    expect(loser.startupNotice).toBeUndefined();
+  });
+
+  it("起動した子が持ち主でなければ（同時に起動したほかの soda の子が先にロックを取った）、token を見せず・読まずに持ち主へ繋ぐ", async () => {
+    const stateDir = await tempStateDir();
+    const otherWon = async (req: SpawnServeRequest): Promise<SpawnedServe> => {
+      const server = track(
+        await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] }),
+      );
+      appendFileSync(
+        req.outPath,
+        `soda: open http://127.0.0.1:${server.options.port}/#token=OTHER\nsoda: (token 付きの URL は今だけ表示します)\n`,
+      );
+      return { method: "detached", pid: 1, hasExited: () => false }; // こちらの子（pid 1）はまだ終わっていない
+    };
+    const target = await findOrStart(options(stateDir), { spawnServe: otherWon });
+    expect(target.startupNotice).toBeUndefined();
+    expect(await readFile(join(stateDir, "serve.out"), "utf8")).toContain("#token=OTHER"); // 取った側のために残す
+  }, 8000);
+
+  it("最後の試行で子が「使用中」で終わっても、動いている持ち主へ繋ぐ（起動しなかった側なので token は出さない）", async () => {
     const stateDir = await tempStateDir();
     let server: ComposedServer | undefined;
     const loser = async (req: SpawnServeRequest): Promise<SpawnedServe> => {
       // 同時に別の soda がロックを取った状況：持ち主を立ててから、こちらの子は使用中で終わる。
       server = track(await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] }));
-      // serve.out は 2 つの子で共有する。勝った側の子の初回の token の行が先に書かれている。
       await writeFile(
         req.outPath,
         "soda: open http://127.0.0.1:1/#token=WINNERTOKEN\nsoda: (token 付きの URL は今だけ表示します)\nsoda: the state dir is already in use by another soda\n",
@@ -185,8 +251,39 @@ describe("findOrStart", () => {
     };
     const target = await findOrStart(options(stateDir), { spawnServe: loser, maxStartAttempts: 1 });
     expect(target.baseUrl).toBe(`http://127.0.0.1:${server!.options.port}`);
-    // 勝った側の token の行を、やり直しの前に捨てずに見せる。
-    expect(target.startupNotice).toContain("#token=WINNERTOKEN");
+    expect(target.startupNotice).toBeUndefined();
+  });
+
+  // ラウンド 2 の点検：待ちの途中の Ctrl-C で読まれずに残った前の起動の行を、次の起動で見せない。
+  it("前の起動の serve.out の行（読まれずに残った token 等）は、次の起動で見せない", async () => {
+    const stateDir = await tempStateDir();
+    await writeFile(
+      join(stateDir, "serve.out"),
+      "soda: open http://127.0.0.1:1/#token=OLDTOKEN\nsoda: (token 付きの URL は今だけ表示します)\n",
+    );
+    const target = await findOrStart(options(stateDir), { spawnServe: inProcessSpawn() });
+    expect(target.startupNotice).toContain("#token=");
+    expect(target.startupNotice).not.toContain("OLDTOKEN");
+  });
+
+  // ラウンド 2 の点検：`/ws` は起動の表示より先に受け付け始める。表示の最後の行が書かれるまで準備完了としない。
+  it("起動した子の起動の表示（最後の行）が書かれるまで準備完了としない（token の行を書く前に読んで失わない）", async () => {
+    const stateDir = await tempStateDir();
+    const slowBanner = async (req: SpawnServeRequest): Promise<SpawnedServe> => {
+      void (async () => {
+        const server = track(
+          await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] }),
+        );
+        await new Promise((r) => setTimeout(r, 400)); // 待ち受け・/ws は受け付け済み。表示はまだ
+        appendFileSync(
+          req.outPath,
+          `soda: open http://127.0.0.1:${server.options.port}/#token=${server.freshToken}\nsoda: (token 付きの URL は今だけ表示します)\n`,
+        );
+      })();
+      return { method: "detached", pid: process.pid, hasExited: () => false };
+    };
+    const target = await findOrStart(options(stateDir), { spawnServe: slowBanner });
+    expect(target.startupNotice).toContain("#token=");
   });
 
   it("ローカルログインが断られたら、秘密を読み直して 1 回だけやり直し、だめなら案内つきで断る（回数の制限まで繰り返さない）", async () => {

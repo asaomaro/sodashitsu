@@ -9,7 +9,7 @@ import { isPidAlive } from "../persist/StateDirLock.js";
  *   端末に出してから空にする（`findOrStart`）。
  * - Linux/WSL2/macOS: `detached: true`（POSIX では `setsid()`）で、端末を閉じた SIGHUP・SSH の切断が届かない別のセッションにする。
  * - Windows: 親が kill-on-close の Job（Windows Terminal・VS Code の統合端末）の中にいても抜けるよう、PowerShell から WMI の
- *   `Win32_Process.Create` で `cmd.exe /d /s /c "<node> <main> serve … >> serve.out 2>&1"` を起動する（herdr と同じ WMI）。WMI の子の環境は
+ *   `Win32_Process.Create` で `cmd.exe /d /v:off /s /c "<node> <main> serve … >> serve.out 2>&1"` を起動する（herdr と同じ WMI）。WMI の子の環境は
  *   利用者の既定の環境（この端末の環境ではない）。WMI が失敗したら detached の spawn に落とし、「端末を閉じるとサーバも止まることがある」と知らせる。
  */
 export const SERVE_OUT_FILE_NAME = "serve.out";
@@ -108,10 +108,10 @@ function spawnDetachedServe(req: SpawnServeRequest, spawn: typeof nodeSpawn): Sp
 
 /**
  * Windows のコマンドラインの 1 つの引数を引用する（`CommandLineToArgvW`・MSVCRT の規則。`"` の前の `\` は倍にし、`"` は `\"`）。
- * 空白・`"` を含まなければそのまま。
+ * 空白・`"` を含まなければそのまま（`force` なら必ず囲む）。
  */
-export function quoteWindowsArg(arg: string): string {
-  if (arg !== "" && !/[\s"]/.test(arg)) return arg;
+export function quoteWindowsArg(arg: string, force = false): string {
+  if (!force && arg !== "" && !/[\s"]/.test(arg)) return arg;
   let out = '"';
   let backslashes = 0;
   for (const ch of arg) {
@@ -149,9 +149,11 @@ export function windowsServeCommandLine(
     if (/[%"\r\n]/.test(p)) throw new Error(`cannot pass ${JSON.stringify(p)} through cmd.exe`);
   }
   const node = [execPath, ...args]
-    .map((a) => (CMD_META.test(a) && !/\s/.test(a) ? `"${a}"` : quoteWindowsArg(a)))
+    // 特別な文字を含む引数は必ず囲む（`quoteWindowsArg` の規則で。末尾の `\` を倍にして、閉じる `"` を逃がさない）。
+    .map((a) => quoteWindowsArg(a, CMD_META.test(a)))
     .join(" ");
-  return `cmd.exe /d /s /c "${node} >> "${outPath}" 2>&1"`;
+  // `/v:off`: 遅延展開（`!VAR!`）を切る（レジストリで既定を入れていても、`!` を含むパスを展開させない）。
+  return `cmd.exe /d /v:off /s /c "${node} >> "${outPath}" 2>&1"`;
 }
 
 /**

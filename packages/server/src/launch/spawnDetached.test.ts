@@ -34,7 +34,7 @@ describe("quoteWindowsArg（CommandLineToArgvW の規則）", () => {
 });
 
 describe("windowsServeCommandLine", () => {
-  it("cmd.exe /d /s /c で node を起動し、出力を serve.out へ追記させる", () => {
+  it("cmd.exe /d /v:off /s /c で node を起動し、出力を serve.out へ追記させる", () => {
     const line = windowsServeCommandLine(
       "C:\\Program Files\\nodejs\\node.exe",
       [
@@ -48,7 +48,7 @@ describe("windowsServeCommandLine", () => {
       "C:\\Users\\a b\\AppData\\Local\\sodashitsu\\sessions\\work\\serve.out",
     );
     expect(line).toBe(
-      'cmd.exe /d /s /c ""C:\\Program Files\\nodejs\\node.exe" C:\\repo\\packages\\server\\dist\\main.js serve --state-dir "C:\\Users\\a b\\AppData\\Local\\sodashitsu" --session work >> "C:\\Users\\a b\\AppData\\Local\\sodashitsu\\sessions\\work\\serve.out" 2>&1"',
+      'cmd.exe /d /v:off /s /c ""C:\\Program Files\\nodejs\\node.exe" C:\\repo\\packages\\server\\dist\\main.js serve --state-dir "C:\\Users\\a b\\AppData\\Local\\sodashitsu" --session work >> "C:\\Users\\a b\\AppData\\Local\\sodashitsu\\sessions\\work\\serve.out" 2>&1"',
     );
   });
   it('cmd.exe の特別な文字（& | < > ^ ( )）を含む引数は " で囲む（空白があってもなくても）', () => {
@@ -58,15 +58,26 @@ describe("windowsServeCommandLine", () => {
       "C:\\o&ut\\serve.out",
     );
     expect(line).toBe(
-      'cmd.exe /d /s /c "C:\\node\\node.exe "C:\\a&b\\main.js" serve --state-dir "C:\\x (y)\\s|t" --session "a^b<c>" >> "C:\\o&ut\\serve.out" 2>&1"',
+      'cmd.exe /d /v:off /s /c "C:\\node\\node.exe "C:\\a&b\\main.js" serve --state-dir "C:\\x (y)\\s|t" --session "a^b<c>" >> "C:\\o&ut\\serve.out" 2>&1"',
     );
     // 引数の部分（向け先の手前）に、囲まれていない特別な文字が残っていない（外側の対の " を外した中身の、" の外の部分だけを見る）。
-    const inner = line.slice('cmd.exe /d /s /c "'.length, line.indexOf(" >> "));
+    const inner = line.slice('cmd.exe /d /v:off /s /c "'.length, line.indexOf(" >> "));
     const outside = inner
       .split('"')
       .filter((_, i) => i % 2 === 0)
       .join("");
     expect(outside).not.toMatch(/[&|<>^()]/);
+  });
+
+  it('特別な文字と末尾の \\ を持つ引数は、囲んだうえで末尾の \\ を倍にする（閉じる " を逃がさない）', () => {
+    const line = windowsServeCommandLine("node.exe", ["C:\\a&b\\", "serve"], "C:\\out");
+    expect(line).toContain(' "C:\\a&b\\\\" serve ');
+  });
+
+  it("遅延展開を切る（/v:off）", () => {
+    expect(windowsServeCommandLine("node.exe", ["serve"], "C:\\out")).toMatch(
+      /^cmd\.exe \/d \/v:off \/s \/c /,
+    );
   });
 
   it('" を含む引数は cmd.exe の引用の数え方をずらすので投げる', () => {
@@ -86,9 +97,9 @@ describe("windowsServeCommandLine", () => {
 
 describe("wmiCreateScript / powerShellArgs", () => {
   it("Win32_Process.Create に単一引用符の文字列で渡し（' は ''）、窓を出さず、pid を出力する", () => {
-    const script = wmiCreateScript(`cmd.exe /d /s /c "x" it's`, "C:\\Users\\o'brien");
+    const script = wmiCreateScript(`cmd.exe /d /v:off /s /c "x" it's`, "C:\\Users\\o'brien");
     expect(script).toContain("Invoke-CimMethod -ClassName Win32_Process -MethodName Create");
-    expect(script).toContain(`CommandLine = 'cmd.exe /d /s /c "x" it''s'`);
+    expect(script).toContain(`CommandLine = 'cmd.exe /d /v:off /s /c "x" it''s'`);
     expect(script).toContain(`CurrentDirectory = 'C:\\Users\\o''brien'`);
     expect(script).toContain("ShowWindow = [uint16]0");
     expect(script).toContain("ProcessStartupInformation = $si");
