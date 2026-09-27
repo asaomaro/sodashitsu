@@ -8,7 +8,17 @@ import { paintTabBar, type TabHit } from "./chrome/tabBar.js";
 import type { ColorMode } from "./color.js";
 import { isCropped, paintPane } from "./paintPane.js";
 import { Grid, Screen, type CursorState } from "./Screen.js";
-import { stringWidth } from "./width.js";
+import { stringWidth, truncate } from "./width.js";
+
+/** chrome と pane の後に重ねて描くもの（オーバーレイ・知らせ・pane の上の印）。 */
+export interface RenderExtras {
+  /** pane の上の印（copy モードの選択・ドラッグの落とし先）。本物のカーソルを返せば焦点の pane のカーソルの代わりに置く。 */
+  decorate?(grid: Grid): CursorState | null | undefined;
+  /** 右下の知らせ。 */
+  toasts?: readonly string[];
+  /** オーバーレイ（ダイアログ・メニュー）。描いたら本物のカーソルの位置（入力欄が無ければ隠す）を返す。 */
+  overlay?(grid: Grid): CursorState | null;
+}
 
 export interface RenderResult {
   output: string;
@@ -37,7 +47,12 @@ export class Renderer {
     this.lastPaint.clear();
   }
 
-  render(layout: LayoutResult, ctx: ChromeContext, panes: PaneRegistry): RenderResult {
+  render(
+    layout: LayoutResult,
+    ctx: ChromeContext,
+    panes: PaneRegistry,
+    extras: RenderExtras = {},
+  ): RenderResult {
     const { theme, model } = ctx;
     const grid = new Grid(layout.cols, layout.rows, theme.ui("--soda-bg"));
     if (layout.tooSmall) {
@@ -88,6 +103,23 @@ export class Renderer {
       const msg = ctx.connection === "open" ? "workspace がありません" : "接続中…";
       centerText(grid, msg, theme.ui("--soda-fg"), theme.ui("--soda-bg"), layout.paneArea);
     }
+    // 重ねて描いたものがあれば、次のフレームは pane の中身を前の格子から写さない（重ねた絵まで写してしまう）。
+    let covered = false;
+    const decoCursor = extras.decorate?.(grid);
+    if (decoCursor !== undefined) {
+      covered = true;
+      if (decoCursor !== null) cursor = decoCursor;
+    }
+    if (extras.toasts && extras.toasts.length > 0) {
+      paintToasts(grid, extras.toasts, ctx);
+      covered = true;
+    }
+    const overlayCursor = extras.overlay?.(grid) ?? null;
+    if (overlayCursor) {
+      cursor = overlayCursor;
+      covered = true;
+    }
+    if (covered) painted.clear();
     this.lastGrid = grid;
     this.lastPaint = painted;
     return { output: this.screen.frame(grid, cursor), sidebarHits, tabHits };
@@ -105,4 +137,17 @@ function centerText(
   const x = area.x + Math.max(0, Math.floor((area.w - w) / 2));
   const y = area.y + Math.floor(area.h / 2);
   grid.text(x, y, text, fg, bg, 0, area.x + area.w - x);
+}
+
+/** 右下に知らせを積む（新しいものが下）。 */
+function paintToasts(grid: Grid, toasts: readonly string[], ctx: ChromeContext): void {
+  const bg = ctx.theme.ui("--soda-menu-active-bg");
+  const fg = ctx.theme.ui("--soda-menu-fg");
+  const maxW = Math.max(10, Math.min(60, grid.w - 4));
+  let y = grid.h - 2;
+  for (let i = toasts.length - 1; i >= 0 && y >= 1; i--, y--) {
+    const text = ` ${truncate(toasts[i]!, maxW - 2)} `;
+    const w = stringWidth(text);
+    grid.text(grid.w - w - 1, y, text, fg, bg);
+  }
 }

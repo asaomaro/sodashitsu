@@ -2,13 +2,18 @@ import {
   InputGate,
   loadKeyPrefs,
   resolveKeymap,
+  resolveNavigateKeymap,
   type ConnectionState,
   type Mode,
   type ResolvedKeymap,
+  type ResolvedNavigateKeymap,
 } from "@sodashitsu/client-core";
 import { TuiDispatcher, type CopyTargetPort } from "../actions/TuiDispatcher.js";
 import { osc52 } from "../clipboard.js";
-import { UiState } from "../model/UiState.js";
+import { UiState, type DialogContext } from "../model/UiState.js";
+import { helpGroups } from "../modes/HelpDialog.js";
+import type { Overlay } from "../modes/overlay.js";
+import { OverlayHost } from "../modes/OverlayHost.js";
 import { encodePaste, type PaneInputModes } from "../input/encode.js";
 import { InputDecoder, type InputEvent } from "../input/decode.js";
 import { TuiKeys } from "../input/keys.js";
@@ -90,6 +95,11 @@ export class TuiApp {
   /** 新しい pane を待つ間の入力を溜める関所（client-core の `InputGate`。接続を作ったときに作る）。 */
   protected gate: InputGate | null = null;
   private keymapSource = "";
+  /** 今の割り当ての表（ヘルプ・navigate モードが引く）。 */
+  protected keymap!: ResolvedKeymap;
+  protected navigateKeymap!: ResolvedNavigateKeymap;
+  /** オーバーレイ（ダイアログ・メニュー）。 */
+  readonly overlays: OverlayHost;
 
   constructor(
     readonly target: TuiTarget,
@@ -141,6 +151,13 @@ export class TuiApp {
       focusNextNotification: () => this.notYet("通知の移動"),
       runCommand: () => this.notYet("独自コマンド"),
       pasteImage: () => this.notYet("画像の貼り付け"),
+    });
+    this.overlays = new OverlayHost({
+      ui: this.ui,
+      model: this.model,
+      actions: this.dispatcher,
+      helpGroups: () => helpGroups(this.keymap, this.navigateKeymap),
+      extra: (ctx) => this.extraOverlay(ctx),
     });
     this.disposers.push(this.model.onChange(() => this.onModelChange()));
     this.disposers.push(this.prefs.onChange(() => this.onPrefsChange()));
@@ -263,6 +280,10 @@ export class TuiApp {
   }
 
   protected onModelChange(): void {
+    // ダイアログを開いている間に戻り先の pane が閉じられたら、戻す先を今の焦点へ差し替える（web の D97）。
+    const back = this.ui.preDialogFocusPaneId;
+    if (back !== null && !this.model.panes.has(back))
+      this.ui.retargetPreDialogFocus(this.model.focusedPaneId);
     this.commitView();
     this.scheduleRender();
   }
@@ -289,7 +310,10 @@ export class TuiApp {
   private resolvedKeymap(): ResolvedKeymap {
     const raw = this.prefs.shared.keys;
     this.keymapSource = JSON.stringify(raw ?? null);
-    return resolveKeymap(loadKeyPrefs(raw)).keymap;
+    const keyPrefs = loadKeyPrefs(raw);
+    this.navigateKeymap = resolveNavigateKeymap(keyPrefs.navigateKeys).keymap;
+    this.keymap = resolveKeymap(keyPrefs).keymap;
+    return this.keymap;
   }
 
   // --- 入力 ---
@@ -312,6 +336,14 @@ export class TuiApp {
 
   protected handleInput(ev: InputEvent): void {
     if (this.ended || this.detaching) return;
+    // オーバーレイが開いている間のキー・貼り付け・マウスはオーバーレイへ（pane へは流さない。AC-I5）。
+    if (ev.kind !== "focus" && this.overlays.active) {
+      if (ev.kind === "key") this.overlays.handleKey(ev.key);
+      else if (ev.kind === "paste") this.overlays.handlePaste(ev.text);
+      else this.overlays.handleMouse(ev);
+      this.scheduleRender();
+      return;
+    }
     switch (ev.kind) {
       case "key":
         this.keys.handle(ev);
@@ -408,6 +440,11 @@ export class TuiApp {
     return Promise.resolve(true);
   }
 
+  /** ダイアログのうち、基本の部品（入力欄・確認・一覧・ヘルプ）以外のもの（goto。T3）。 */
+  protected extraOverlay(_ctx: DialogContext): Overlay | null {
+    return null;
+  }
+
   /** 端末版にまだ無い操作（05 で足す）。 */
   protected notYet(what: string): void {
     this.ui.toast(`${what}は端末版ではまだ使えません`);
@@ -477,7 +514,10 @@ export class TuiApp {
       alert: this.alert,
       session: this.target.session,
     };
-    const result = this.renderer.render(layout, ctx, this.panes);
+    const result = this.renderer.render(layout, ctx, this.panes, {
+      toasts: this.ui.toasts.map((t) => t.message),
+      overlay: (grid) => this.overlays.render(grid, this.theme),
+    });
     this.sidebarHits = result.sidebarHits;
     this.tabHits = result.tabHits;
     this.io.write(result.output);

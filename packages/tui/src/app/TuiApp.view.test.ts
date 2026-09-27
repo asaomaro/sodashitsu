@@ -175,4 +175,20 @@ describe("TuiApp：大きさの申告と描画の予約（AC2・AC11）", () => 
     app.finish(0);
     await running;
   });
+
+  it("ダイアログを開いている間のキーは pane へ流さず、確定で RPC（prefix+shift+p で pane の名前の変更。AC-I5）", async () => {
+    const { io, ws, app, running } = await started();
+    await vi.waitFor(() => expect(ws.requests("client.view")).toHaveLength(1));
+    const inputs = () => ws.sent.filter((m) => m instanceof Uint8Array).length;
+    io.type("\x02P");
+    await vi.waitFor(() => expect(app.ui.dialogContext?.kind).toBe("renamePane"));
+    io.type("abc\r");
+    await vi.waitFor(() => expect(ws.requests("pane.rename")).toHaveLength(1));
+    expect(ws.requests("pane.rename")[0]!.params).toEqual({ paneId: "p1", label: "abc" });
+    expect(inputs()).toBe(0);
+    io.type("x");
+    await vi.waitFor(() => expect(inputs()).toBe(1));
+    app.finish(0);
+    await running;
+  });
 });
