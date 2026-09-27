@@ -1,0 +1,103 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fakeIo } from "../testing/fakeIo.js";
+import { FakeSocket } from "../testing/fakeSocket.js";
+import { snapshot } from "../testing/fixtures.js";
+import { OuterTerminal } from "../testing/outerTerminal.js";
+import type { TuiTarget } from "../types.js";
+import { TuiApp } from "./TuiApp.js";
+
+const target: TuiTarget = {
+  baseUrl: "http://127.0.0.1:9",
+  origin: "http://127.0.0.1:9",
+  login: async () => "sid=1",
+  stateDir: "/nonexistent-state-dir",
+  session: "work",
+};
+
+async function started(cols = 100, rows = 30) {
+  const io = fakeIo({ cols, rows });
+  const sockets: FakeSocket[] = [];
+  const app = new TuiApp(target, io, {
+    net: {
+      createWebSocket: (ep) => (url) => {
+        const s = new FakeSocket(url, ep.cookie());
+        sockets.push(s);
+        return s;
+      },
+      fetchImpl: () => async () => new Response(null, { status: 204 }),
+    },
+  });
+  const running = app.run();
+  await vi.waitFor(() => expect(sockets).toHaveLength(1));
+  const ws = sockets[0]!;
+  ws.open();
+  ws.reply({ clientId: "c1", snapshot: snapshot() });
+  return { io, app, ws, running };
+}
+
+describe("TuiApp：大きさの申告と描画の予約（AC2・AC11）", () => {
+  const cleanup: (() => void)[] = [];
+  afterEach(() => {
+    for (const fn of cleanup.splice(0)) fn();
+  });
+
+  it("自分の割り付けの pane の中身の大きさを client.view で申告し、端末の大きさが変わったら申告し直す", async () => {
+    const { io, app, ws, running } = await started();
+    const views = () => ws.requests("client.view").map((r) => r.params);
+    await vi.waitFor(() => expect(views()).toHaveLength(1));
+    // サイドバー 26 桁・tab バー 1 行・左右に半分ずつ（74 桁 → 37 + 37）・枠の罫線 1 桁/1 行。
+    expect(views()[0]).toEqual({
+      workspaceId: "w1",
+      tabId: "t1",
+      visible: [
+        { paneId: "p1", cols: 35, rows: 27 },
+        { paneId: "p2", cols: 35, rows: 27 },
+      ],
+    });
+    expect(
+      ws.requests("pane.subscribe").map((r) => (r.params as { paneId: string }).paneId),
+    ).toEqual(["p1", "p2"]);
+    io.resizeTo(120, 40);
+    await vi.waitFor(() => expect(views()).toHaveLength(2));
+    expect(views()[1]).toMatchObject({
+      visible: [
+        { paneId: "p1", cols: 45, rows: 37 },
+        { paneId: "p2", cols: 45, rows: 37 },
+      ],
+    });
+    app.finish(0);
+    expect(await running).toBe(0);
+  });
+
+  it("描画は変化をまとめて最短 16ms 間隔。画面にサイドバーの workspace と tab バーが出る", async () => {
+    const { io, app, running } = await started(80, 20);
+    const outer = new OuterTerminal(80, 20);
+    cleanup.push(() => outer.dispose());
+    await vi.waitFor(async () => {
+      await outer.write(io.output());
+      expect(outer.text()).toContain("w2");
+    });
+    expect(outer.line(1)).toContain("w1");
+    expect(outer.line(0)).toContain("1:t1");
+    // 同じ tick の多数の変化は 1 回の描画にまとまる。
+    const before = io.output().split("\x1b[?2026h").length;
+    for (let i = 0; i < 50; i++) app.scheduleRender();
+    await new Promise((r) => setTimeout(r, 40));
+    const after = io.output().split("\x1b[?2026h").length;
+    expect(after - before).toBe(1);
+    app.finish(0);
+    await running;
+  });
+
+  it("prefs.changed の tui.sidebarCols で割り付けし直す", async () => {
+    const { ws, app, running } = await started();
+    const views = () =>
+      ws.requests("client.view").map((r) => r.params as { visible: { cols: number }[] });
+    await vi.waitFor(() => expect(views()).toHaveLength(1));
+    ws.event("prefs.changed", { prefs: { tui: { sidebarCols: 40 } }, rev: 5, byClientId: "x" });
+    await vi.waitFor(() => expect(views()).toHaveLength(2));
+    expect(views()[1]!.visible[0]!.cols).toBe(28); // (100-40)/2 = 30 − 罫線 2
+    app.finish(0);
+    await running;
+  });
+});
