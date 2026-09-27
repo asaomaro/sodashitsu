@@ -6,7 +6,7 @@
 
 - `pnpm -s build` — exit 0
 - `pnpm -s typecheck` — exit 0（`pnpm -s` は失敗でも無出力なので終了コードで判定）
-- `pnpm -s test`（全体・vitest の全 project） — review ラウンド 1 の修正の後: 4804 passed / 1 failed（258 files）。落ちた 1 件は `composeServer.handoff.integration.test.ts` の「受け渡しに載らなかった PTY の master …」で `listen EADDRINUSE: address already in use 127.0.0.1:39570`（空きポートの取り合い。今回の変更と無関係）。単独で 1 回だけ再実行して 5/5 pass。取り込み直後（修正の前）の全体は 4800 passed / 0 failed / 0 skipped
+- `pnpm -s test`（全体・vitest の全 project） — 最終（origin/main edcf05b〔#61 custom-command-keys・#62〕を取り込んだ後）: 4974 passed / 1 failed / 0 skipped（269 files）。落ちた 1 件は `composeServer.integration.test.ts` の「名前付き session は待ち受けたポートを記録し…」で `expected 39686 not to be 39686`（空きポートが同じ番号に当たった。今回の変更と無関係）。単独で 1 回再実行して 38/38 pass。`aidev smoke` も取り込み後に 8 本 pass。それ以前: review ラウンド 1 の修正の後: 4804 passed / 1 failed（258 files）。落ちた 1 件は `composeServer.handoff.integration.test.ts` の「受け渡しに載らなかった PTY の master …」で `listen EADDRINUSE: address already in use 127.0.0.1:39570`（空きポートの取り合い。今回の変更と無関係）。単独で 1 回だけ再実行して 5/5 pass。取り込み直後（修正の前）の全体は 4800 passed / 0 failed / 0 skipped
 - `aidev smoke`（`.aidev/config.yml` の 8 本。8 本目が新しい `node packages/server/dist/machineSmoke.js`） — exit 0（8 本 pass）
 
 この work で足した主なテスト（すべて全体の実行に含まれる）:

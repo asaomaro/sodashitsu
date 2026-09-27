@@ -94,3 +94,5 @@ events:
   - { ts: 2026-09-27T09:41:29Z, phase: review, event: approved, metrics: { must: 1, should: 5, nit: 1, ac_total: 22, ac_covered: 22, tasks_no_ac: 0, tasks_ac_none: 0 } }
   - { ts: 2026-09-27T09:41:35Z, phase: review, event: approved, metrics: { must: 0, should: 4, nit: 1, ac_total: 22, ac_covered: 22, tasks_no_ac: 0, tasks_ac_none: 0, amend: yes } }
   - { ts: 2026-09-27T09:41:39Z, phase: deliver, event: start }
+  - { ts: 2026-09-27T09:47:32Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 8 } }
+  - { ts: 2026-09-27T09:47:48Z, phase: deliver, event: approved, metrics: { files_changed: 74, insertions: 8730, deletions: 88 } }
