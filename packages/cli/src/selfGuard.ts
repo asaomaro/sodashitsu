@@ -32,8 +32,11 @@ function serverKeyOf(url: string): string | undefined {
   }
 }
 
-/** 歯止めが効くときだけ、自分の pane の ID を返す。 */
-function selfPaneId(opts: GlobalOpts): string | undefined {
+/**
+ * 歯止めが効くときだけ、自分の pane の ID を返す。呼び出し元の pane を既定の対象にするとき（`paneTarget.ts`。20260927-caller-pane-default）も
+ * 同じ判定で「接続先がその pane のサーバか」を確かめる（判定を 2 つ持たない）。
+ */
+export function selfPaneId(opts: GlobalOpts): string | undefined {
   const caller = opts.caller;
   if (caller === undefined) return undefined;
   const target = serverKeyOf(opts.url);

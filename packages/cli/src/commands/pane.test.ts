@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "../session.js";
 import { RpcFailure, type WtmClient } from "../wsClient.js";
-import { runPaneClose, runPaneInput, runPaneRead, runPaneReportMetadata, runPaneRun, runPaneSplit } from "./pane.js";
+import { runPaneClose, runPaneCurrent, runPaneInput, runPaneRead, runPaneReportMetadata, runPaneRun, runPaneSplit } from "./pane.js";
 
 vi.mock("../withSession.js", () => ({ withSession: vi.fn() }));
 vi.mock("../output.js", () => ({ printJson: vi.fn(), printLine: vi.fn(), printRaw: vi.fn() }));
@@ -54,7 +54,7 @@ describe("runPaneSplit", () => {
     const client = fakeClient({ requestImpl: () => ({ pane: { id: "p2" } }) });
     mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
 
-    await runPaneSplit({ kind: "pane-split", opts: OPTS, paneId: "p1", direction: "right", ratio: 0.3 }, store);
+    await runPaneSplit({ kind: "pane-split", opts: OPTS, target: { kind: "id", paneId: "p1" }, direction: "right", ratio: 0.3 }, store);
 
     expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p1", direction: "right", ratio: 0.3 });
     expect(mockedPrintJson).toHaveBeenCalledWith({ pane: { id: "p2" } });
@@ -64,9 +64,107 @@ describe("runPaneSplit", () => {
     const client = fakeClient();
     mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
 
-    await runPaneSplit({ kind: "pane-split", opts: OPTS, paneId: "p1", direction: "down", ratio: undefined }, store);
+    await runPaneSplit({ kind: "pane-split", opts: OPTS, target: { kind: "id", paneId: "p1" }, direction: "down", ratio: undefined }, store);
 
     expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p1", direction: "down" });
+  });
+});
+
+describe("pane split・pane current の対象（20260927-caller-pane-default）", () => {
+  const IN_P3 = { ...OPTS, caller: { paneId: "p3", serverUrl: "http://127.0.0.1:7780" } };
+  const CALLER = { kind: "caller" as const, paneId: "p3", explicit: false };
+  const SNAPSHOT = {
+    panes: [
+      { id: "p3", tabId: "t2", label: null, cwd: "/w" },
+      { id: "p4", tabId: "t9", label: "x", cwd: "/x" },
+      { id: "p7", tabId: "t1", label: null, cwd: "/y" },
+    ],
+    tabs: [
+      { id: "t1", workspaceId: "w1" },
+      { id: "t2", workspaceId: "w2" },
+    ],
+    focus: { workspaceId: "w1", tabId: "t1", paneId: "p7" },
+    limits: { scrollbackLines: 5000 },
+  };
+  function clientWith(snapshot: unknown = SNAPSHOT): FakeClient {
+    const client = fakeClient({ requestImpl: () => ({ pane: { id: "p9" } }) });
+    (client.hello as ReturnType<typeof vi.fn>).mockResolvedValue({ clientId: "c1", snapshot });
+    mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
+    return client;
+  }
+
+  it("pane の中で対象を省いた split は呼び出し元の pane を分ける（AC1・AC14——自分の pane を分けるのは断らない）", async () => {
+    const client = clientWith();
+    await runPaneSplit({ kind: "pane-split", opts: IN_P3, target: CALLER, direction: "right", ratio: undefined }, store);
+    expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p3", direction: "right" });
+    await runPaneSplit({ kind: "pane-split", opts: IN_P3, target: { ...CALLER, explicit: true }, direction: "down", ratio: undefined }, store);
+    expect(client.request).toHaveBeenLastCalledWith("pane.split", { paneId: "p3", direction: "down" });
+  });
+
+  it("明示の ID は呼び出し元より優先して、その pane を分ける（AC2）", async () => {
+    const client = clientWith();
+    await runPaneSplit({ kind: "pane-split", opts: IN_P3, target: { kind: "id", paneId: "p4" }, direction: "down", ratio: undefined }, store);
+    expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p4", direction: "down" });
+  });
+
+  it("フォーカスの pane を分ける（pane の外・AC12）。フォーカスが無ければ not_found で pane.split を送らない（AC13）", async () => {
+    let client = clientWith();
+    await runPaneSplit({ kind: "pane-split", opts: OPTS, target: { kind: "focused" }, direction: "right", ratio: undefined }, store);
+    expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p7", direction: "right" });
+
+    client = clientWith({ ...SNAPSHOT, focus: null });
+    await expect(
+      runPaneSplit({ kind: "pane-split", opts: OPTS, target: { kind: "focused" }, direction: "right", ratio: undefined }, store),
+    ).rejects.toMatchObject({ code: "not_found" });
+    expect(client.request).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["別の origin", { ...IN_P3, url: "http://127.0.0.1:7781" }],
+    ["WTM_SERVER_URL が無い", OPTS],
+  ])("%s なら split・current は接続せずに caller_pane_unknown、明示の ID なら通る（AC9）", async (_label, opts) => {
+    await expect(runPaneSplit({ kind: "pane-split", opts, target: CALLER, direction: "right", ratio: undefined }, store)).rejects.toMatchObject({
+      code: "caller_pane_unknown",
+    });
+    await expect(runPaneCurrent({ kind: "pane-current", opts, target: { ...CALLER, explicit: true } }, store)).rejects.toMatchObject({
+      code: "caller_pane_unknown",
+    });
+    expect(mockedWithSession).not.toHaveBeenCalled();
+
+    const client = clientWith();
+    await runPaneSplit({ kind: "pane-split", opts, target: { kind: "id", paneId: "p3" }, direction: "right", ratio: undefined }, store);
+    expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p3", direction: "right" });
+    await runPaneCurrent({ kind: "pane-current", opts, target: { kind: "id", paneId: "p3" } }, store);
+    expect(mockedPrintJson).toHaveBeenLastCalledWith({ pane: expect.objectContaining({ id: "p3", workspaceId: "w2" }) });
+  });
+
+  it("pane current は呼び出し元の pane に今の workspaceId と focused を足して出し、hello のほかは送らない（AC5・AC8）", async () => {
+    const client = clientWith();
+    await runPaneCurrent({ kind: "pane-current", opts: IN_P3, target: CALLER }, store);
+    expect(mockedPrintJson).toHaveBeenCalledWith({
+      pane: { id: "p3", tabId: "t2", label: null, cwd: "/w", workspaceId: "w2", focused: false },
+    });
+    expect(client.request).not.toHaveBeenCalled();
+    expect(client.sendInput).not.toHaveBeenCalled();
+  });
+
+  it("pane current --pane は指した pane、省略（pane の外）はフォーカスの pane（AC7・AC12）。tab が無ければ workspaceId は null", async () => {
+    clientWith();
+    await runPaneCurrent({ kind: "pane-current", opts: IN_P3, target: { kind: "id", paneId: "p4" } }, store);
+    expect(mockedPrintJson).toHaveBeenLastCalledWith({ pane: { id: "p4", tabId: "t9", label: "x", cwd: "/x", workspaceId: null, focused: false } });
+    await runPaneCurrent({ kind: "pane-current", opts: OPTS, target: { kind: "focused" } }, store);
+    expect(mockedPrintJson).toHaveBeenLastCalledWith({ pane: { id: "p7", tabId: "t1", label: null, cwd: "/y", workspaceId: "w1", focused: true } });
+  });
+
+  it("pane current: 無い pane・フォーカスが無いときは not_found で何も出さない（AC7・AC13）", async () => {
+    clientWith();
+    await expect(runPaneCurrent({ kind: "pane-current", opts: IN_P3, target: { kind: "id", paneId: "p404" } }, store)).rejects.toMatchObject({
+      code: "not_found",
+      message: expect.stringContaining("p404"),
+    });
+    clientWith({ ...SNAPSHOT, focus: null });
+    await expect(runPaneCurrent({ kind: "pane-current", opts: OPTS, target: { kind: "focused" } }, store)).rejects.toMatchObject({ code: "not_found" });
+    expect(mockedPrintJson).not.toHaveBeenCalled();
   });
 });
 
@@ -216,7 +314,7 @@ describe("自分の pane の歯止め（20260926-agent-skill-file。AC11・AC13�
   it("自分の pane の split・read は断らない", async () => {
     const client = fakeClient({ panes: ["p1"], requestImpl: () => ({ pane: { id: "p2" } }) });
     mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
-    await runPaneSplit({ kind: "pane-split", opts: IN_P1, paneId: "p1", direction: "right", ratio: undefined }, store);
+    await runPaneSplit({ kind: "pane-split", opts: IN_P1, target: { kind: "id", paneId: "p1" }, direction: "right", ratio: undefined }, store);
     expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p1", direction: "right" });
 
     const readPromise = runPaneRead({ kind: "pane-read", opts: IN_P1, paneId: "p1", follow: false, raw: false, timeoutMs: 1000 }, store);
