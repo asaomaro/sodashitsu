@@ -1,12 +1,14 @@
 import { paneNameOf } from "@sodashitsu/client-core";
-import type { LayoutResult } from "../layout/computeLayout.js";
+import type { LayoutResult, PaneBox } from "../layout/computeLayout.js";
 import type { PaneRegistry } from "../term/PaneRegistry.js";
+import type { PaneTerminal } from "../term/PaneTerminal.js";
 import type { ChromeContext } from "./chrome/context.js";
 import { paintFrame } from "./chrome/frame.js";
 import { paintSidebar, type SidebarHit } from "./chrome/sidebar.js";
 import { paintNarrowHeader, type NarrowHeaderHits } from "./chrome/narrowHeader.js";
 import { paintTabBar, type TabBarHits, type TabHit } from "./chrome/tabBar.js";
-import type { ColorMode } from "./color.js";
+import type { ColorMode, ThemeColors } from "./color.js";
+import { paneScrollTrack, scrollbarThumb, scrollMetricsOf } from "./scrollbar.js";
 import { isCropped, paintPane } from "./paintPane.js";
 import { Grid, Screen, type CursorState } from "./Screen.js";
 import { stringWidth, truncate } from "./width.js";
@@ -26,6 +28,8 @@ export interface RenderResult {
   sidebarHits: SidebarHit[];
   tabHits: TabHit[];
   newTabButton: TabBarHits["newTab"];
+  /** tab バーの当たり（あふれたときの「‹」「›」・サイドバーを開く「»」を含む）。 */
+  tabBar: TabBarHits;
   /** 1 列表示の「switch」（狭い幅のときだけ）。 */
   switchButton: NarrowHeaderHits["switchButton"];
 }
@@ -75,10 +79,12 @@ export class Renderer {
         sidebarHits: [],
         tabHits: [],
         newTabButton: null,
+        tabBar: { tabs: [], newTab: null },
         switchButton: null,
       };
     }
-    const sidebarHits = layout.sidebar ? paintSidebar(grid, layout.sidebar, ctx) : [];
+    let sidebarHits =
+      layout.sidebar && !layout.sidebarOverlay ? paintSidebar(grid, layout.sidebar, ctx) : [];
     // 狭い幅は tab バーの代わりに 1 列表示の上辺（herdr の mobile）。
     const narrow = layout.narrow ? paintNarrowHeader(grid, layout.tabBar, ctx) : null;
     const tabBar: TabBarHits = narrow
@@ -111,6 +117,7 @@ export class Renderer {
         grid.fill(box.content, theme.paneFg, theme.paneBg);
         continue;
       }
+      paintScrollbar(grid, box, term, focused, theme);
       const key = `${box.content.x},${box.content.y},${box.content.w},${box.content.h},${theme.name}`;
       if (prev && !term.dirty && !focused && this.lastPaint.get(box.paneId) === key) {
         grid.copyFrom(prev, box.content);
@@ -127,6 +134,10 @@ export class Renderer {
     }
     // 重ねて描いたものがあれば、次のフレームは pane の中身を前の格子から写さない（重ねた絵まで写してしまう）。
     let covered = false;
+    if (layout.sidebar && layout.sidebarOverlay) {
+      sidebarHits = paintSidebar(grid, layout.sidebar, ctx);
+      covered = true;
+    }
     const decoCursor = extras.decorate?.(grid);
     if (decoCursor !== undefined) {
       covered = true;
@@ -149,6 +160,7 @@ export class Renderer {
       sidebarHits,
       tabHits,
       newTabButton: tabBar.newTab,
+      tabBar,
       switchButton: narrow?.switchButton ?? null,
     };
   }
@@ -178,4 +190,26 @@ function paintToasts(grid: Grid, toasts: readonly string[], ctx: ChromeContext):
     const w = stringWidth(text);
     grid.text(grid.w - w - 1, y, text, fg, bg);
   }
+}
+
+/**
+ * pane の右の罫線にスクロールバーのつまみ（herdr の `pane_scrollbars`。M9）。スクロールバックがあるときだけ。罫線を溝として使う
+ * （pane の中の桁を削らない。申告する大きさを変えない）。
+ */
+function paintScrollbar(
+  grid: Grid,
+  box: PaneBox,
+  term: PaneTerminal,
+  focused: boolean,
+  theme: ThemeColors,
+): void {
+  const m = scrollMetricsOf(term.term);
+  const track = paneScrollTrack(box, term);
+  if (!m || !track) return;
+  const thumb = scrollbarThumb(m, track);
+  if (!thumb) return;
+  const color = focused ? theme.ui("--soda-pane-current") : theme.ui("--soda-state-idle");
+  const x = box.frame.x + box.frame.w - 1;
+  for (let y = thumb.top; y < thumb.top + thumb.len; y++)
+    grid.set(x, y, "┃", 1, color, theme.ui("--soda-bg"));
 }

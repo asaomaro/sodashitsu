@@ -387,7 +387,8 @@ export class InputDecoder {
         event: {
           kind: "mouse",
           action,
-          button: wheel ? 64 + button : button === 3 ? 0 : button,
+          // 動きでボタン 3 は「押していない」（SGR と同じく -1。左ボタンのドラッグと取り違えない）。離しは 3 で届く（どのボタンか分からない）。
+          button: wheel ? 64 + button : motion && button === 3 ? -1 : button === 3 ? 0 : button,
           x: cx! - 1,
           y: cy! - 1,
           mods,

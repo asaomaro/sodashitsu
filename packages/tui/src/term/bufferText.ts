@@ -55,6 +55,24 @@ export function continuesOnNext(term: HeadlessTerminal, row: number): boolean {
   return term.buffer.active.getLine(row + 1)?.isWrapped === true;
 }
 
+/**
+ * 行末に入りきらなかった全角を次の行へ送ったときに残る、行末の空きセルか（xterm.js の `_translateBufferLineToStringWithWrap` と同じ判定）。
+ * 写すとき・探すときはこのセルを飛ばす（空白ではない。04 ラウンド 2 の点検）。
+ */
+export function wrapPadAtEnd(term: HeadlessTerminal, row: number): boolean {
+  if (!continuesOnNext(term, row)) return false;
+  const buf = term.buffer.active;
+  const cell = buf.getNullCell();
+  const last = buf.getLine(row)?.getCell(term.cols - 1, cell);
+  if (!last || last.getChars() !== "" || last.getWidth() !== 1) return false;
+  return (
+    buf
+      .getLine(row + 1)
+      ?.getCell(0, buf.getNullCell())
+      ?.getWidth() === 2
+  );
+}
+
 /** 行の `start`〜`end`（セルの列。`end` を含む）の文字。 */
 export function cellRangeText(
   term: HeadlessTerminal,
@@ -81,7 +99,8 @@ export function rangeText(
   for (let row = from.row; row <= to.row; row++) {
     const cont = row < to.row && continuesOnNext(term, row);
     const start = linewise || row > from.row ? 0 : from.col;
-    const end = linewise || row < to.row ? term.cols - 1 : to.col;
+    let end = linewise || row < to.row ? term.cols - 1 : to.col;
+    if (cont && wrapPadAtEnd(term, row)) end = Math.min(end, term.cols - 2);
     // 折り返しの途中の行は右の空白も文字の一部（行末で切れたところ）なので残す。
     out += cellRangeText(term, row, start, end, !cont);
     if (row < to.row && !cont) out += "\n";
@@ -89,7 +108,7 @@ export function rangeText(
   return out;
 }
 
-/** 論理行（折り返しをつないだ行）の文字と、各文字のセルの位置。 */
+/** 論理行（折り返しをつないだ行）の文字と、**UTF-16 の単位ごと**のセルの位置（`text` の添字 i の文字は `pos[i]` のセル。サロゲートの組・結合文字は同じセル）。 */
 export interface LogicalLine {
   text: string;
   pos: CellPos[];
@@ -112,11 +131,14 @@ export function logicalLine(
   let row = startRow;
   for (;;) {
     const cells = rowCells(term, row);
+    const pad = wrapPadAtEnd(term, row);
     cells.forEach((c, col) => {
       if (c.width === 0) return;
+      if (pad && col === term.cols - 1) return; // 次の行へ送った全角の前の空き
       const ch = c.ch === "" ? " " : c.ch;
-      for (const unit of ch) {
-        text += unit;
+      // `text` の添字と `pos` を UTF-16 の単位でそろえる（`for…of` は符号位置ごとなので、絵文字の後がずれる。04 ラウンド 2 の点検）。
+      for (let i = 0; i < ch.length; i++) {
+        text += ch[i];
         pos.push({ row, col });
       }
     });
@@ -155,4 +177,17 @@ export function wordRange(
   while (from > 0 && cls(from - 1) === k) from--;
   while (to + 1 < cells.length && cls(to + 1) === k) to++;
   return [snapCol(term, row, from), to];
+}
+
+/**
+ * 大小を区別しない比較のための畳み込み（符号位置ごとに小文字へ。**長さが変わる文字はそのまま**——`İ` の小文字は 2 単位になり、
+ * 畳んだ文字列の添字と `LogicalLine.pos` がずれる。04 ラウンド 2 の点検）。
+ */
+export function foldCase(s: string): string {
+  let out = "";
+  for (const ch of s) {
+    const lower = ch.toLowerCase();
+    out += lower.length === ch.length ? lower : ch;
+  }
+  return out;
 }

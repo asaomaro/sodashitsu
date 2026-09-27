@@ -102,13 +102,21 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     expect(outer.line(1)).toContain("shell-1");
     expect(outer.line(2)).toContain("hello from p1");
     expect(outer.line(3)).toContain("日本語 ok");
-    expect(r.sidebarHits.map((h) => h.kind)).toEqual([
+    // 何も無い行（"area"。ホイールでその区画を動かす）を除いた当たり。並び順と「«」（M14）のボタンもある。
+    expect(
+      r.sidebarHits
+        .filter((h) => h.kind !== "area")
+        .map((h) => (h.kind === "sort" ? `sort:${h.section}` : h.kind)),
+    ).toEqual([
       "newWorkspace",
+      "sort:spaces",
       "workspace",
       "workspace",
-      "sectionDivider",
+      "sectionDivider", // 狭いサイドバーでは agents の並び順のボタンは出さない（見出しと重なる）
       "agent",
+      "collapse",
     ]);
+    expect(outer.line(0)).toContain("開いた順");
     expect(r.tabHits.map((h) => h.tabId)).toEqual(["t1"]);
     // 本物のカーソルは焦点の pane（p1）のカーソルの位置（中身の左上 + カーソル）。
     const p1Box = layout().panes.find((b) => b.paneId === "p1")!.content;

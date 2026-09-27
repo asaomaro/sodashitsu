@@ -2,6 +2,7 @@ import type { CopyCommand } from "@sodashitsu/client-core";
 import type { CopyResult, CopyTargetPort } from "../actions/TuiDispatcher.js";
 import {
   classify,
+  foldCase,
   logicalLine,
   logicalStart,
   rangeText,
@@ -49,6 +50,11 @@ class TrackedPos {
   get row(): number {
     if (!this.marker) return this.fallbackRow;
     return this.marker.isDisposed ? 0 : this.marker.line;
+  }
+
+  /** その行がスクロールバックの切り詰めで消えた（位置はもう意味を持たない）。 */
+  get lost(): boolean {
+    return this.marker?.isDisposed === true;
   }
 
   get pos(): Position {
@@ -100,6 +106,8 @@ export class TuiCopyTarget implements CopyTargetPort {
 
   /** 今の選択（無ければ null）。 */
   selection(): Selection | null {
+    // 選び始めの行が切り詰めで消えたら選択ごと捨てる（先頭へ寄せると、選んでいない文字を写す。04 ラウンド 2 の点検）。
+    if (this.anchor?.lost) this.clearAnchor();
     if (!this.anchor) return null;
     const [from, to] = this.orderedRange();
     return { from, to, linewise: this.linewise };
@@ -314,7 +322,7 @@ export class TuiCopyTarget implements CopyTargetPort {
    */
   private runSearch(dir: 1 | -1): void {
     if (!this.searchTerm) return;
-    const needle = this.searchTerm.toLowerCase();
+    const needle = foldCase(this.searchTerm);
     const bottom = this.bottomRow();
     const lines: { line: ReturnType<typeof logicalLine>["line"]; startRow: number }[] = [];
     for (let row = 0; row <= bottom;) {
@@ -333,7 +341,7 @@ export class TuiCopyTarget implements CopyTargetPort {
     for (let step = 0; step <= lines.length; step++) {
       const li = (curIdx + dir * step + lines.length * 2) % lines.length;
       const l = lines[li]!;
-      const hay = l.line.text.toLowerCase();
+      const hay = foldCase(l.line.text);
       let idx: number;
       if (step === 0) {
         const from = at(l, here);

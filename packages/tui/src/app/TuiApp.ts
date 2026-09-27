@@ -33,8 +33,8 @@ import { PrefsModel } from "../model/PrefsModel.js";
 import { SessionModel } from "../model/SessionModel.js";
 import { TuiNet, type TuiNetDeps } from "../net/TuiNet.js";
 import type { ChromeContext } from "../render/chrome/context.js";
-import type { SidebarHit } from "../render/chrome/sidebar.js";
-import type { TabBarHits, TabHit } from "../render/chrome/tabBar.js";
+import type { SidebarHit, SidebarScroll } from "../render/chrome/sidebar.js";
+import type { TabBarHits, TabHit, TabScroll } from "../render/chrome/tabBar.js";
 import { MouseController } from "../input/mouse.js";
 import { colorModeOf, ThemeColors } from "../render/color.js";
 import { Renderer } from "../render/Renderer.js";
@@ -45,7 +45,7 @@ import {
   type VisiblePane,
 } from "../term/PaneRegistry.js";
 import type { TuiIo, TuiTarget } from "../types.js";
-import { TerminalModes } from "./terminalModes.js";
+import { ENABLE_MOUSE, TerminalModes } from "./terminalModes.js";
 
 /** 関所が無いとき（接続の前）の保持：何もしない。 */
 const NO_HOLD = { release: () => undefined, cancel: () => undefined, discard: () => undefined };
@@ -95,6 +95,17 @@ export class TuiApp {
   protected sidebarHits: SidebarHit[] = [];
   protected tabHits: TabHit[] = [];
   protected newTabButton: TabBarHits["newTab"] = null;
+  protected tabBarHits: TabBarHits = { tabs: [], newTab: null };
+  /** サイドバーの区画・tab バーの表示の位置（描くたびに収まる範囲へ寄せ直される）。 */
+  protected readonly sidebarScroll: SidebarScroll = { spaces: 0, agents: 0, reveal: null };
+  protected readonly tabScroll: TabScroll = { first: 0, reveal: true };
+  /** 前のフレームで見せた workspace・tab・pane・navigate の選択（変わったら区画・tab バーをそこまで動かす）。 */
+  private shown = {
+    workspaceId: null as string | null,
+    tabId: null as string | null,
+    paneId: null as string | null,
+    nav: null as string | null,
+  };
   protected switchButton: { x: number; w: number } | null = null;
   /** マウスの操作。 */
   readonly mouse: MouseController;
@@ -163,6 +174,14 @@ export class TuiApp {
       { navigate: this.navigateMode, copy: this.copyMode, resize: new ResizeMode() },
     );
     this.keys.router.onModeChange((m) => {
+      // copy モードから prefix で別のモード（navigate・resize 等）へ移ったら、copy の pane を末尾へ戻す（遡ったまま残さない。04 ラウンド 2 の点検）。
+      // 抜けるキー（y・q）の処理はモードが変わった後に同じ打鍵の中で走るので、戻すのはその後（先に選択を消すと y が写せない）。
+      if (this.copyPaneId !== null && m !== "copy" && m !== "prefix") {
+        const target = this.copyTargetOf(this.copyPaneId);
+        queueMicrotask(() => {
+          if (this.keys.mode !== "copy") target?.leave();
+        });
+      }
       // copy モードの対象の pane を覚える（焦点が移ったら元の pane を戻すため）。
       this.copyPaneId =
         m === "copy"
@@ -210,7 +229,7 @@ export class TuiApp {
       actions: this.dispatcher,
       layout: () => this.lastLayout,
       sidebarHits: () => this.sidebarHits,
-      tabHits: () => ({ tabs: this.tabHits, newTab: this.newTabButton }),
+      tabHits: () => this.tabBarHits,
       switchButton: () => this.switchButton,
       pane: (paneId) => this.panes.get(paneId),
       sendToPane: (paneId, bytes) => this.sendToPane(paneId, bytes),
@@ -219,6 +238,15 @@ export class TuiApp {
       setSidebarSpacesRows: (rows, persist) =>
         this.setLocalState({ sidebarSpacesRows: rows }, persist),
       openLink: (url) => this.openLink(url),
+      scrollSidebar: (section, delta) => {
+        this.sidebarScroll[section] = Math.max(0, this.sidebarScroll[section] + delta);
+        this.scheduleRender();
+      },
+      scrollTabs: (delta) => {
+        this.tabScroll.first = Math.max(0, this.tabScroll.first + delta);
+        this.tabScroll.reveal = false;
+        this.scheduleRender();
+      },
       rpc: this.rpc,
       scheduleRender: () => this.scheduleRender(),
     });
@@ -551,14 +579,13 @@ export class TuiApp {
       this.ui.toast(`リンクをコピーしました（SSH 越しなので手元では開けません）: ${url}`);
       return;
     }
-    const [cmd, args] =
-      this.io.platform === "darwin"
-        ? ["open", [url]]
-        : this.io.platform === "win32"
-          ? ["cmd", ["/c", "start", "", url]]
-          : ["xdg-open", [url]];
+    const command = linkCommand(this.io.platform, url);
+    if (!command) {
+      this.ui.toast(`このリンクは開きません（http・https・file だけ）: ${url}`);
+      return;
+    }
     try {
-      const child = spawn(cmd, args as string[], {
+      const child = spawn(command.cmd, command.args, {
         detached: true,
         stdio: "ignore",
         windowsHide: true,
@@ -584,6 +611,17 @@ export class TuiApp {
     writeTuiState(this.target.stateDir, next).catch(() => undefined);
   }
 
+  /** 見せる workspace・tab・pane・navigate の選択が変わったら、サイドバーの区画と tab バーをそこまで動かす。 */
+  private revealChanges(): void {
+    const { workspaceId, tabId, focusedPaneId } = this.model;
+    const nav = this.ui.navigateSelection;
+    const s = this.shown;
+    if (s.workspaceId !== workspaceId || s.nav !== nav || s.paneId !== focusedPaneId)
+      this.sidebarScroll.reveal = { workspaceId: nav ?? workspaceId, paneId: focusedPaneId };
+    if (s.tabId !== tabId) this.tabScroll.reveal = true;
+    this.shown = { workspaceId, tabId, paneId: focusedPaneId, nav };
+  }
+
   /** 今の割り付け（純粋な `computeLayout` に今の大きさ・モデル・設定を渡す）。 */
   protected layout(): LayoutResult {
     const { cols, rows } = this.io.size();
@@ -596,6 +634,7 @@ export class TuiApp {
       narrowThreshold: this.prefs.narrowThreshold,
       tab: tab ? { layout: tab.layout, zoomedPaneId: tab.zoomedPaneId } : null,
       focusedPaneId: this.model.focusedPaneId,
+      navigateOverlay: this.keys.mode === "navigate",
     });
   }
 
@@ -631,6 +670,7 @@ export class TuiApp {
     this.lastRenderAt = performance.now();
     const layout = this.layout();
     this.lastLayout = layout;
+    this.revealChanges();
     const ctx: ChromeContext = {
       model: this.model,
       prefs: this.prefs,
@@ -641,6 +681,8 @@ export class TuiApp {
       notice: this.notice,
       alert: this.alert,
       session: this.target.session,
+      sidebarScroll: this.sidebarScroll,
+      tabScroll: this.tabScroll,
     };
     const result = this.renderer.render(layout, ctx, this.panes, {
       decorate: (grid) => this.decorate(grid, layout),
@@ -650,6 +692,7 @@ export class TuiApp {
     this.sidebarHits = result.sidebarHits;
     this.tabHits = result.tabHits;
     this.newTabButton = result.newTabButton;
+    this.tabBarHits = result.tabBar;
     this.switchButton = result.switchButton;
     this.openRequestedNavigateMenu(layout);
     this.syncAnyMotion(layout);
@@ -712,12 +755,15 @@ export class TuiApp {
    * 戻すのは `RESTORE_SEQUENCE` も行う。
    */
   private syncAnyMotion(layout: LayoutResult): void {
-    const want = layout.panes.some(
-      (b) => this.panes.get(b.paneId)?.modes.mouseTrackingMode === "any",
-    );
+    const capture = this.prefs.mouseCapture;
+    const want =
+      capture &&
+      layout.panes.some((b) => this.panes.get(b.paneId)?.modes.mouseTrackingMode === "any");
     if (want === this.anyMotion) return;
     this.anyMotion = want;
-    this.io.write(want ? "\x1b[?1003h" : "\x1b[?1003l");
+    // `?1003l` はマウスの報告を全部止める端末がある（xterm は報告の種類を 1 つだけ持つ）。戻すときはボタンとドラッグの報告を出し直す
+    // （`tui.mouseCapture` が入のときだけ。04 ラウンド 2 の点検）。
+    this.io.write(want ? "\x1b[?1003h" : `\x1b[?1003l${capture ? ENABLE_MOUSE : ""}`);
   }
 
   /** navigate モードの Space（`navigate_open_menu`）：選んでいる workspace の行の横にメニューを開く（web の Sidebar と同じ役）。 */
@@ -769,6 +815,24 @@ export class TuiApp {
   get isEnded(): boolean {
     return this.ended;
   }
+}
+
+/**
+ * リンクを開く OS の道具と引数（M6）。http・https・file だけ（`URL` で読めて、その scheme のもの）。**シェルを通さない**——Windows は
+ * `cmd /c start` だと `&` などで任意のコマンドが走るので、`rundll32 url.dll,FileProtocolHandler`（シェルの解釈を通らない）を使う（04 ラウンド 2 の点検）。
+ */
+export function linkCommand(platform: string, url: string): { cmd: string; args: string[] } | null {
+  let href: string;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "http:" && u.protocol !== "https:" && u.protocol !== "file:") return null;
+    href = u.href;
+  } catch {
+    return null;
+  }
+  if (platform === "win32") return { cmd: "rundll32", args: ["url.dll,FileProtocolHandler", href] };
+  if (platform === "darwin") return { cmd: "open", args: [href] };
+  return { cmd: "xdg-open", args: [href] };
 }
 
 export function describeError(err: unknown): string {

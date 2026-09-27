@@ -147,4 +147,23 @@ describe("TuiApp：モード（navigate・copy・resize・goto。AC5・AC7・AC-
       col: t2.term.buffer.active.cursorX,
     });
   });
+
+  it("copy モードから prefix で navigate・resize へ移っても、copy の pane を末尾へ戻す（04 ラウンド 2）", async () => {
+    const h = await start();
+    const t = h.app.panes.get("p1")!;
+    t.snapshot(35, 27, Array.from({ length: 80 }, (_, i) => `line${i}`).join("\r\n"));
+    await t.flush();
+    const bottom = t.term.buffer.active.viewportY;
+    for (const next of ["w", "r"]) {
+      h.io.type("\x02[");
+      await vi.waitFor(() => expect(h.app.keys.mode).toBe("copy"));
+      for (let i = 0; i < 40; i++) h.io.type("k");
+      expect(t.term.buffer.active.viewportY).toBeLessThan(bottom);
+      h.io.type(`\x02${next}`);
+      await vi.waitFor(() => expect(h.app.keys.mode).not.toBe("copy"));
+      await vi.waitFor(() => expect(t.term.buffer.active.viewportY).toBe(bottom));
+      h.io.type("\x1b");
+      await vi.waitFor(() => expect(h.app.keys.mode).toBe("terminal"));
+    }
+  });
 });

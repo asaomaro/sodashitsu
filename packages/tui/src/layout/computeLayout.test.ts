@@ -89,6 +89,28 @@ describe("computeLayout（AC2）", () => {
     expect(r.panes.map((p) => p.paneId)).toEqual(["p2"]);
   });
 
+  it("狭い幅で焦点の pane がこの tab に無いときは先頭の pane だけ（分割の木ごと並べない。04 ラウンド 2）", () => {
+    const tabLayout = split("right", leaf("p1"), leaf("p2"));
+    for (const focusedPaneId of [null, "gone"]) {
+      const r = computeLayout({
+        ...base,
+        cols: 60,
+        tab: { layout: tabLayout, zoomedPaneId: null },
+        focusedPaneId,
+      });
+      expect(r.panes.map((p) => p.paneId)).toEqual(["p1"]);
+      expect(r.dividers).toEqual([]);
+    }
+  });
+
+  it("狭い幅の navigate モードはサイドバーを pane の上に重ねる（pane の割り付けは同じ）", () => {
+    const r = computeLayout({ ...base, cols: 50, navigateOverlay: true });
+    expect(r.sidebarOverlay).toBe(true);
+    expect(r.sidebar).toEqual({ x: 0, y: 1, w: 26, h: 29 });
+    expect(r.panes[0]!.frame).toEqual({ x: 0, y: 1, w: 50, h: 29 });
+    expect(computeLayout({ ...base, navigateOverlay: true }).sidebarOverlay).toBeUndefined();
+  });
+
   it("20×5 未満は小さすぎる", () => {
     expect(computeLayout({ ...base, cols: 19 }).tooSmall).toBe(true);
     expect(computeLayout({ ...base, rows: 4 }).tooSmall).toBe(true);

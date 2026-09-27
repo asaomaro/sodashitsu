@@ -147,4 +147,52 @@ describe("TuiCopyTarget（copy モード。AC7）", () => {
     await t.flush();
     expect(c.selectedText()).toBe(before);
   });
+
+  it("絵文字（サロゲートの組）の後の検索の一致も、その文字を選ぶ（04 ラウンド 2）", async () => {
+    const { c } = await withText("x😀😀😀 bar bar\r\n", 30);
+    c.apply({ op: "move", unit: "bufferTop", dir: -1 });
+    c.apply({ op: "searchStart", dir: 1 });
+    c.apply({ op: "searchInput", text: "bar" });
+    expect(c.selection()).toMatchObject({ from: { row: 0, col: 8 }, to: { row: 0, col: 10 } });
+    expect(c.selectedText()).toBe("bar");
+    c.apply({ op: "searchNext", reverse: false });
+    expect(c.selectedText()).toBe("bar");
+    expect(c.selection()).toMatchObject({ from: { row: 0, col: 12 } });
+  });
+
+  it("行末に入らず次の行へ送った全角の前の空きは写さず、検索でもまたげる（xterm と同じ）", async () => {
+    const { c } = await withText("abcdあいz\r\nq", 5, 4);
+    c.apply({ op: "move", unit: "bufferTop", dir: -1 });
+    c.apply({ op: "selectStart", linewise: true });
+    c.apply({ op: "move", unit: "line", dir: 1 });
+    expect(c.selectedText()).toBe("abcdあいz");
+    c.apply({ op: "clearOrExit" });
+    c.apply({ op: "move", unit: "bufferTop", dir: -1 });
+    c.apply({ op: "searchStart", dir: 1 });
+    c.apply({ op: "searchInput", text: "dあ" });
+    expect(c.selectedText()).toBe("dあ");
+  });
+
+  it("小文字にすると長さの変わる文字（İ）の後の一致もずれない", async () => {
+    const { c } = await withText("İİ foo bar\r\n", 20);
+    c.apply({ op: "move", unit: "bufferTop", dir: -1 });
+    c.apply({ op: "searchStart", dir: 1 });
+    c.apply({ op: "searchInput", text: "BAR" });
+    expect(c.selectedText()).toBe("bar");
+  });
+
+  it("選び始めの行が切り詰めで消えたら、選択ごと捨てる（無関係な文字を写さない）", async () => {
+    const t = new PaneTerminal("p", 20, 3, 2);
+    terms.push(t);
+    t.output(new TextEncoder().encode(Array.from({ length: 5 }, (_, i) => `L${i}`).join("\r\n")));
+    await t.flush();
+    const c = new TuiCopyTarget(t.term);
+    c.apply({ op: "move", unit: "bufferTop", dir: -1 });
+    c.apply({ op: "selectStart", linewise: true });
+    expect(c.selectedText()).not.toBe("");
+    t.output(new TextEncoder().encode("\r\nX1\r\nX2\r\nX3\r\nX4\r\nX5\r\nX6"));
+    await t.flush();
+    expect(c.selection()).toBeNull();
+    expect(c.apply({ op: "yank" })).toEqual({ exited: true });
+  });
 });

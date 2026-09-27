@@ -33,6 +33,11 @@ export interface LayoutInput {
   narrowThreshold: number;
   tab: { layout: LayoutNode; zoomedPaneId: string | null } | null;
   focusedPaneId: string | null;
+  /**
+   * 狭い幅で navigate モードのとき、サイドバーを pane の上に重ねて出す（herdr の mobile の switcher の役。選んでいる workspace が見える。
+   * 04 ラウンド 2 の点検）。pane の割り付けは変えない。
+   */
+  navigateOverlay?: boolean;
 }
 
 export interface LayoutResult {
@@ -42,6 +47,8 @@ export interface LayoutResult {
   tooSmall: boolean;
   narrow: boolean;
   sidebar?: Rect;
+  /** サイドバーを pane の上に重ねて出している（狭い幅の navigate モード）。 */
+  sidebarOverlay?: boolean;
   tabBar: Rect;
   /** tab の分割を置く場所。 */
   paneArea: Rect;
@@ -89,16 +96,23 @@ export function computeLayout(input: LayoutInput): LayoutResult {
   const dividers: Divider[] = [];
   const tab = input.tab;
   if (tab) {
-    const soloId = tab.zoomedPaneId ?? (narrow ? input.focusedPaneId : null);
+    let soloId = tab.zoomedPaneId ?? (narrow ? input.focusedPaneId : null);
+    // 狭い幅で焦点の pane が無い（この tab に無い）ときは先頭の pane を出す（分割の木ごと並べない）。
+    if (narrow && (soloId === null || !containsPane(tab.layout, soloId)))
+      soloId = firstPane(tab.layout);
     if (soloId !== null && containsPane(tab.layout, soloId)) panes.push(box(soloId, paneArea));
     else place(tab.layout, paneArea, panes, dividers);
   }
+  const overlay =
+    narrow && input.navigateOverlay === true
+      ? { x: 0, y: 1, w: Math.min(cols, Math.max(MIN_COLS, input.sidebarCols)), h: rows - 1 }
+      : undefined;
   return {
     cols,
     rows,
     tooSmall: false,
     narrow,
-    ...(sidebar ? { sidebar } : {}),
+    ...(sidebar ? { sidebar } : overlay ? { sidebar: overlay, sidebarOverlay: true } : {}),
     tabBar,
     paneArea,
     panes,
@@ -139,6 +153,10 @@ function place(node: LayoutNode, area: Rect, out: PaneBox[], dividers: Divider[]
     place(node.b, { ...area, y: area.y + ah, h: area.h - ah }, out, dividers);
     dividers.push({ splitId: node.id, dir: "down", x: area.x, y: area.y + ah, len: area.w, area });
   }
+}
+
+function firstPane(node: LayoutNode): string {
+  return node.type === "pane" ? node.paneId : firstPane(node.a);
 }
 
 function containsPane(node: LayoutNode, paneId: string): boolean {

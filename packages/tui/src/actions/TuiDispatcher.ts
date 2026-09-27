@@ -544,19 +544,34 @@ export class TuiDispatcher {
     const now = new Set(this.host.prefs.collapsedAutoGroups);
     if (now.has(repoKey)) now.delete(repoKey);
     else now.add(repoKey);
-    const collapsedAutoGroups = [...now];
+    this.saveSharedPrefs({ collapsedAutoGroups: [...now] }, "折りたたみを保存できませんでした");
+  }
+
+  /** spaces の並び順を 2 値で行き来する（web の `view.toggleWorkspaceSort`。サイドバーのボタン。herdr の M14）。 */
+  toggleWorkspaceSort(): void {
+    const next = this.host.prefs.workspaceSort === "opened" ? "name" : "opened";
+    this.saveSharedPrefs({ workspaceSort: next }, "並び順を保存できませんでした");
+  }
+
+  /** agents の並び順を 2 値で行き来する（web の `view.toggleAgentSort`）。 */
+  toggleAgentSort(): void {
+    const next = this.host.prefs.agentSort === "grouped" ? "priority" : "grouped";
+    this.saveSharedPrefs({ agentSort: next }, "並び順を保存できませんでした");
+  }
+
+  /** 共有の設定を手元で先に変えて送る。保存できなければ元に戻して知らせる（黙って手元だけ変わったままにしない。04 の点検）。 */
+  private saveSharedPrefs(patch: Record<string, unknown>, failure: string): void {
     const before = this.host.prefs.shared;
     const rev = this.host.prefs.rev;
-    this.host.prefs.apply({ ...before, collapsedAutoGroups }, rev);
+    this.host.prefs.apply({ ...before, ...patch }, rev);
     this.conn
-      .request("prefs.set", { patch: { collapsedAutoGroups } })
+      .request("prefs.set", { patch })
       .then((r) => {
         if (r && typeof r.rev === "number") this.host.prefs.apply(r.prefs, r.rev);
       })
       .catch(() => {
-        // 保存できなければ元に戻して知らせる（黙って手元だけ変わったままにしない。04 の点検）。
         if (this.host.prefs.rev === rev) this.host.prefs.apply(before, rev);
-        this.ui.toast("折りたたみを保存できませんでした");
+        this.ui.toast(failure);
       });
   }
 

@@ -74,4 +74,66 @@ describe("TuiApp：狭い幅の 1 列表示", () => {
       visible: [{ paneId: "p1" }, { paneId: "p2" }],
     });
   });
+
+  it("広い → 狭い（63 桁）で 1 列に、64 桁で元の割り付けに戻る（既定の境目 64）", async () => {
+    const h = await startedApp({ cols: 100, rows: 20 });
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    h.io.resizeTo(63, 20);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(2));
+    expect(h.ws.requests("client.view")[1]!.params).toMatchObject({
+      visible: [{ paneId: "p1", cols: 61 }],
+    });
+    h.io.resizeTo(64, 20);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(3));
+    expect(
+      (h.ws.requests("client.view")[2]!.params as { visible: unknown[] }).visible,
+    ).toHaveLength(2);
+  });
+
+  it("上辺：モードの印（tab バーと同じ）・tab の名前・接続の状態と session 名", async () => {
+    const h = await startedApp({ cols: 60, rows: 20 });
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    h.app.renderNow();
+    let line0 = (await h.screen()).split("\n")[0]!;
+    expect(line0).toContain("t1"); // tab が 1 つなら名前だけ
+    expect(line0).toContain("session: work");
+    h.io.type("\x02[");
+    await vi.waitFor(() => expect(h.app.keys.mode).toBe("copy"));
+    h.app.renderNow();
+    line0 = (await h.screen()).split("\n")[0]!;
+    expect(line0).toContain("COPY");
+    h.io.type("q");
+    h.app.connectionState = "rejected";
+    h.app.renderNow();
+    line0 = (await h.screen()).split("\n")[0]!;
+    expect(line0).toContain("接続できません");
+    // 繋がっていないときは名前より先に（名前・tab は出さない。tab バーと同じく警告を優先）。
+    expect(line0).not.toContain("t1");
+  });
+
+  it("navigate モードではサイドバーを pane の上に重ね、選んでいる workspace が見える（herdr の switcher）", async () => {
+    const h = await startedApp({ cols: 50, rows: 20 });
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    h.io.type("\x02w");
+    await vi.waitFor(() => expect(h.app.keys.mode).toBe("navigate"));
+    h.io.type("\x1b[B");
+    h.app.renderNow();
+    const text = await h.screen();
+    expect(text).toContain("Spaces");
+    expect(h.app.ui.navigateSelection).toBe("w2");
+    // 重ねたサイドバーの行を押すとその workspace へ。
+    const hits = (
+      h.app as unknown as { sidebarHits: { kind: string; y: number; workspaceId?: string }[] }
+    ).sidebarHits;
+    const w2 = hits.find((x) => x.kind === "workspace" && x.workspaceId === "w2")!;
+    h.io.type(`\x1b[<0;4;${w2.y + 1}M\x1b[<0;4;${w2.y + 1}m`);
+    await vi.waitFor(() => expect(h.app.model.workspaceId).toBe("w2"));
+    // pane の割り付け（申告する大きさ）は変えない。
+    expect(h.ws.requests("client.view").at(-1)!.params).toMatchObject({
+      visible: [{ cols: 48, rows: 17 }],
+    });
+  });
 });

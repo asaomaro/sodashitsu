@@ -9,7 +9,7 @@ import {
 } from "@sodashitsu/client-core";
 import { ATTR } from "../color.js";
 import type { Grid, Rect } from "../Screen.js";
-import { truncate } from "../width.js";
+import { stringWidth, truncate } from "../width.js";
 import { stateColor, type ChromeContext } from "./context.js";
 
 /** サイドバーの行が何を指すか（04 のクリック・navigate が使う）。 */
@@ -21,8 +21,27 @@ export type SidebarTarget =
   /** 「＋」（新しい workspace。herdr の M14）。`x` の桁だけが当たり。 */
   | { kind: "newWorkspace"; x: number }
   /** spaces と agents の区切りの行（ドラッグで spaces の区画の高さ。herdr の H19b）。 */
-  | { kind: "sectionDivider" };
-export type SidebarHit = SidebarTarget & { y: number };
+  | { kind: "sectionDivider" }
+  /** 並び順の切り替え（web の `sidebar-sort-btn`・herdr の `agent_sort_toggle`。M14）。`x`〜`x+w` だけが当たり。 */
+  | { kind: "sort"; section: "spaces" | "agents"; x: number; w: number }
+  /** サイドバーを畳む「«」（web の開閉のボタン・herdr の `sidebar_toggle`。M14）。 */
+  | { kind: "collapse"; x: number }
+  /** 区画の中の何も無い行（ホイールでその区画を動かす）。 */
+  | { kind: "area"; section: "spaces" | "agents" };
+export type SidebarHit = SidebarTarget & { y: number; section?: "spaces" | "agents" };
+
+/**
+ * サイドバーの区画の表示の位置（端末版の状態。描くたびに収まる範囲へ寄せ直す）。`reveal` の workspace・pane が隠れていれば見える所まで動かす
+ * （navigate の選択・今の workspace が変わったとき。区画の境界を上げても一覧を辿れる。04 ラウンド 2 の点検）。
+ */
+export interface SidebarScroll {
+  spaces: number;
+  agents: number;
+  reveal: { workspaceId?: string | null; paneId?: string | null } | null;
+}
+
+const WORKSPACE_SORT_LABEL = { opened: "開いた順", name: "名前順" } as const;
+const AGENT_SORT_LABEL = { grouped: "グループ順", priority: "優先度順" } as const;
 
 interface Line {
   indent: number;
@@ -49,7 +68,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   grid.fill({ x: rect.x, y: rect.y, w: inner, h: rect.h }, fg, bg);
   for (let y = rect.y; y < rect.y + rect.h; y++) grid.set(rect.x + inner, y, "│", 1, border, bg);
 
-  const lines: (Line | { header: string; divider?: true })[] = [{ header: "Spaces" }];
+  const lines: Line[] = [];
   const workspaces = [...model.workspaces.values()];
   const rows = groupedWorkspaceRows(
     workspaces,
@@ -98,13 +117,8 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       }
     }
   }
+  const agentLines: Line[] = [];
   if (agentPanes.length > 0) {
-    // spaces の区画の高さ（手元の tui-state の `sidebarSpacesRows`。無ければ中身の高さ＋1）。区切りの行は必ず見える所に置く。
-    const natural = lines.length + 1;
-    const spacesRows = Math.max(2, Math.min(prefs.sidebarSpacesRows ?? natural, rect.h - 2));
-    if (lines.length > spacesRows) lines.length = spacesRows;
-    while (lines.length < spacesRows) lines.push({ header: "" });
-    lines.push({ header: "Agents", divider: true });
     const order = orderedAgentPaneIds(
       agentPanes.map((p) => ({
         paneId: p.id,
@@ -116,7 +130,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     for (const id of order) {
       const p = model.panes.get(id)!;
       const state = model.displayStateOf(p);
-      lines.push({
+      agentLines.push({
         indent: 0,
         glyph: stateGlyph(state),
         glyphState: state,
@@ -127,25 +141,129 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     }
   }
 
+  // 区画の高さ：見出し 1 行＋spaces。agents があれば区切り 1 行＋agents、最下行は開閉のボタン。
+  const scroll = ctx.sidebarScroll ?? { spaces: 0, agents: 0, reveal: null };
+  const bodyH = rect.h - 1; // 最下行は「«」
   const hits: SidebarHit[] = [];
-  for (let i = 0; i < lines.length && i < rect.h; i++) {
-    const line = lines[i]!;
-    const y = rect.y + i;
-    if ("header" in line) {
-      if (line.divider) {
-        // 区切りの行：罫線と見出し。ドラッグで区画の高さを変える。
-        for (let x = rect.x; x < rect.x + inner; x++)
-          grid.set(x, y, "─", 1, theme.ui("--soda-menu-border"), bg);
-        grid.text(rect.x + 1, y, ` ${truncate(line.header, inner - 4)} `, fg, bg, ATTR.dim);
-        hits.push({ y, kind: "sectionDivider" });
-        continue;
-      }
-      grid.text(rect.x + 1, y, truncate(line.header, inner - 1), fg, bg, ATTR.dim);
-      if (line.header === "Spaces" && inner >= 10) {
-        const x = rect.x + inner - 2;
-        grid.set(x, y, "+", 1, fg, activeBg);
-        hits.push({ y, kind: "newWorkspace", x });
-      }
+  const spacesLines = lines;
+  let spacesH: number;
+  let agentsH = 0;
+  if (agentLines.length > 0) {
+    // spaces の区画の高さ（手元の tui-state の `sidebarSpacesRows`。無ければ中身の高さ＋1）。区切りの行は必ず見える所に置く。
+    const natural = spacesLines.length + 1;
+    spacesH = Math.max(1, Math.min((prefs.sidebarSpacesRows ?? natural + 1) - 1, bodyH - 3));
+    agentsH = Math.max(0, bodyH - 1 - spacesH - 1);
+  } else spacesH = Math.max(0, bodyH - 1);
+
+  const revealIndex = (list: Line[], match: (h: SidebarTarget) => boolean): number =>
+    list.findIndex((l) => l.hit !== undefined && match(l.hit));
+  scroll.spaces = fitScroll(
+    scroll.spaces,
+    spacesLines.length,
+    spacesH,
+    scroll.reveal?.workspaceId
+      ? revealIndex(
+          spacesLines,
+          (h) => h.kind === "workspace" && h.workspaceId === scroll.reveal!.workspaceId,
+        )
+      : -1,
+  );
+  scroll.agents = fitScroll(
+    scroll.agents,
+    agentLines.length,
+    agentsH,
+    scroll.reveal?.paneId
+      ? revealIndex(agentLines, (h) => h.kind === "agent" && h.paneId === scroll.reveal!.paneId)
+      : -1,
+  );
+  scroll.reveal = null;
+
+  // 見出し「Spaces」＋並び順＋「＋」
+  const headerY = rect.y;
+  grid.text(rect.x + 1, headerY, truncate("Spaces", inner - 1), fg, bg, ATTR.dim);
+  if (inner >= 10) {
+    const x = rect.x + inner - 2;
+    grid.set(x, headerY, "+", 1, fg, activeBg);
+    hits.push({ y: headerY, kind: "newWorkspace", x });
+    const label = WORKSPACE_SORT_LABEL[prefs.workspaceSort];
+    const lw = stringWidth(label);
+    const lx = x - 1 - lw;
+    if (lx > rect.x + 1 + stringWidth("Spaces")) {
+      grid.text(lx, headerY, label, fg, bg, ATTR.underline);
+      hits.push({ y: headerY, kind: "sort", section: "spaces", x: lx, w: lw });
+    }
+  }
+  paintSection(
+    grid,
+    rect,
+    inner,
+    headerY + 1,
+    spacesH,
+    spacesLines,
+    scroll.spaces,
+    "spaces",
+    ctx,
+    hits,
+  );
+
+  if (agentLines.length > 0) {
+    const y = headerY + 1 + spacesH;
+    // 区切りの行：罫線と見出しと並び順。ドラッグで区画の高さを変える。
+    for (let x = rect.x; x < rect.x + inner; x++) grid.set(x, y, "─", 1, border, bg);
+    grid.text(rect.x + 1, y, ` ${truncate("Agents", inner - 4)} `, fg, bg, ATTR.dim);
+    hits.push({ y, kind: "sectionDivider" });
+    const label = AGENT_SORT_LABEL[prefs.agentSort];
+    const lw = stringWidth(label);
+    const lx = rect.x + inner - 1 - lw;
+    if (lx > rect.x + 10) {
+      grid.text(lx, y, label, fg, bg, ATTR.underline);
+      hits.push({ y, kind: "sort", section: "agents", x: lx, w: lw });
+    }
+    paintSection(grid, rect, inner, y + 1, agentsH, agentLines, scroll.agents, "agents", ctx, hits);
+  }
+
+  // 最下行：畳む「«」
+  const by = rect.y + rect.h - 1;
+  const bx = rect.x + inner - 2;
+  if (rect.h >= 3 && bx > rect.x) {
+    grid.set(bx, by, "«", 1, fg, activeBg);
+    hits.push({ y: by, kind: "collapse", x: bx });
+  }
+  return hits;
+}
+
+/** 表示の位置を収める（`reveal` の行が隠れていれば見える所まで）。 */
+function fitScroll(offset: number, total: number, height: number, reveal: number): number {
+  let o = Math.max(0, Math.min(offset, total - height));
+  if (reveal >= 0 && height > 0) {
+    if (reveal < o) o = reveal;
+    else if (reveal >= o + height) o = reveal - height + 1;
+  }
+  return Math.max(0, o);
+}
+
+/** 区画の行を描く（`offset` 行目から `height` 行）。隠れている行があれば右端に ↑・↓。 */
+function paintSection(
+  grid: Grid,
+  rect: Rect,
+  inner: number,
+  top: number,
+  height: number,
+  lines: Line[],
+  offset: number,
+  section: "spaces" | "agents",
+  ctx: ChromeContext,
+  hits: SidebarHit[],
+): void {
+  const { theme } = ctx;
+  const bg = theme.ui("--soda-menu-bg");
+  const fg = theme.ui("--soda-menu-fg");
+  const activeBg = theme.ui("--soda-menu-active-bg");
+  for (let i = 0; i < height; i++) {
+    const y = top + i;
+    const line = lines[offset + i];
+    if (!line) {
+      hits.push({ y, kind: "area", section });
       continue;
     }
     // navigate モードで選んでいる行はアクセントの色で（今の workspace の強調より優先）。
@@ -154,6 +272,8 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     if (line.selected || line.navigated) grid.fill({ x: rect.x, y, w: inner, h: 1 }, rowFg, rowBg);
     let x = rect.x + 1 + line.indent;
     const room = rect.x + inner - x;
+    if (line.hit) hits.push({ y, section, ...line.hit });
+    else hits.push({ y, kind: "area", section });
     if (room <= 0) continue;
     // 記号の欄は 2 桁（記号＋空白）。記号が無い行も桁をそろえる。
     if (line.glyph !== "")
@@ -162,12 +282,13 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     grid.text(
       x,
       y,
-      truncate(line.text, rect.x + inner - x),
+      truncate(line.text, rect.x + inner - x - 1),
       rowFg,
       rowBg,
       line.selected ? ATTR.bold : 0,
     );
-    if (line.hit) hits.push({ y, ...line.hit });
   }
-  return hits;
+  if (offset > 0 && height > 0) grid.set(rect.x + inner - 1, top, "↑", 1, fg, bg);
+  if (offset + height < lines.length && height > 0)
+    grid.set(rect.x + inner - 1, top + height - 1, "↓", 1, fg, bg);
 }

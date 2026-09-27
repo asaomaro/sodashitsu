@@ -14,6 +14,15 @@ import {
   wordRange,
 } from "../term/bufferText.js";
 import type { PaneTerminal } from "../term/PaneTerminal.js";
+import {
+  offsetFromDragRow,
+  offsetFromRow,
+  paneScrollTrack,
+  scrollbarThumb,
+  scrollMetricsOf,
+  type ScrollMetrics,
+  type Track,
+} from "../render/scrollbar.js";
 import type { InputEvent } from "./decode.js";
 import { encodeMouse, type MouseTracking } from "./mouseEncode.js";
 
@@ -71,15 +80,29 @@ export interface MouseHost {
   setSidebarSpacesRows?(rows: number, persist: boolean): void;
   /** リンクを開く（M6。Ctrl＋クリック）。 */
   openLink?(url: string): void;
+  /** サイドバーの区画をホイールで動かす（区画が一覧より低いとき）。 */
+  scrollSidebar?(section: "spaces" | "agents", delta: number): void;
+  /** あふれた tab バーの表示をずらす（「‹」「›」）。 */
+  scrollTabs?(delta: number): void;
   rpc: RequestPort;
   scheduleRender(): void;
   now?(): number;
 }
 
 type Drag =
-  | { kind: "forward"; paneId: string }
-  | { kind: "select"; paneId: string; anchor: { row: number; col: number } }
-  | { kind: "divider"; divider: Divider; tabId: string }
+  /** pane へ渡している押下（最後に送った位置。捨てるときに離しを送る）。 */
+  | { kind: "forward"; paneId: string; button: number; col: number; row: number }
+  /** 選択。`word` はダブルクリックから押したまま動かした（単語単位に広げる。M5）。 */
+  | {
+      kind: "select";
+      paneId: string;
+      anchor: { row: number; col: number };
+      word?: { from: number; to: number };
+    }
+  /** 境界。`grab` は掴んだ位置と境界の差（掴んだだけでは動かさない）。 */
+  | { kind: "divider"; divider: Divider; tabId: string; grab: number; start: number }
+  /** pane のスクロールバーのつまみ（M9）。`grab` はつまみの上端から掴んだ位置までの行数。 */
+  | { kind: "scrollbar"; paneId: string; grab: number }
   | { kind: "sidebar" }
   /** サイドバーの spaces と agents の区切り（herdr の H19b）。 */
   | { kind: "section"; top: number }
@@ -102,7 +125,7 @@ export class MouseController {
   private drag: Drag | null = null;
   selection: MouseSelection | null = null;
   dropTarget: PaneDropTarget | null = null;
-  private lastClick: { at: number; x: number; y: number } | null = null;
+  private lastClick: { at: number; paneId: string; row: number; col: number } | null = null;
 
   constructor(private readonly host: MouseHost) {}
 
@@ -160,6 +183,24 @@ export class MouseController {
     return x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + c.h;
   }
 
+  /** pane の右の罫線のスクロールバー（スクロールバックがある pane の、中身の行の範囲）。 */
+  private scrollbarAt(
+    layout: LayoutResult,
+    x: number,
+    y: number,
+  ): { box: PaneBox; term: PaneTerminal; metrics: ScrollMetrics; track: Track } | undefined {
+    for (const box of layout.panes) {
+      if (x !== box.frame.x + box.frame.w - 1) continue;
+      const term = this.host.pane(box.paneId);
+      if (!term) continue;
+      const metrics = scrollMetricsOf(term.term);
+      const track = paneScrollTrack(box, term);
+      if (metrics && track && y >= track.y && y < track.y + track.h)
+        return { box, term, metrics, track };
+    }
+    return undefined;
+  }
+
   private dividerAt(layout: LayoutResult, x: number, y: number): Divider | undefined {
     return layout.dividers.find((d) =>
       d.dir === "right"
@@ -177,9 +218,15 @@ export class MouseController {
   private sidebarAt(x: number, y: number, layout: LayoutResult): SidebarHit | undefined {
     const s = layout.sidebar;
     if (!s || x < s.x || x >= s.x + s.w - 1) return undefined;
-    return this.host
-      .sidebarHits()
-      .find((h) => h.y === y && (h.kind !== "newWorkspace" || h.x === x));
+    const row = this.host.sidebarHits().filter((h) => h.y === y);
+    // 桁の決まったボタン（「＋」・並び順・「«」）を先に、無ければ行そのもの。
+    return (
+      row.find(
+        (h) =>
+          ((h.kind === "newWorkspace" || h.kind === "collapse") && h.x === x) ||
+          (h.kind === "sort" && x >= h.x && x < h.x + h.w),
+      ) ?? row.find((h) => h.kind !== "newWorkspace" && h.kind !== "collapse" && h.kind !== "sort")
+    );
   }
 
   // --- 押した ---
@@ -196,7 +243,7 @@ export class MouseController {
     // サイドバー
     if (layout.sidebar && x >= layout.sidebar.x && x < layout.sidebar.x + layout.sidebar.w) {
       if (x === layout.sidebar.x + layout.sidebar.w - 1) {
-        if (left) this.drag = { kind: "sidebar" };
+        if (left && !layout.sidebarOverlay) this.drag = { kind: "sidebar" };
         return;
       }
       const hit = this.sidebarAt(x, y, layout);
@@ -218,6 +265,10 @@ export class MouseController {
       else if (hit.kind === "autoGroup") actions.toggleAutoGroupCollapsed(hit.repoKey);
       else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
       else if (hit.kind === "newWorkspace") actions.run({ type: "newWorkspace" });
+      else if (hit.kind === "sort") {
+        if (hit.section === "spaces") actions.toggleWorkspaceSort();
+        else actions.toggleAgentSort();
+      } else if (hit.kind === "collapse") actions.run({ type: "toggleSidebar" });
       else if (hit.kind === "sectionDivider")
         this.drag = { kind: "section", top: layout.sidebar.y };
       return;
@@ -240,6 +291,19 @@ export class MouseController {
         return;
       }
       if (!left) return;
+      const bar = this.host.tabHits();
+      if (bar.expandSidebar && x === bar.expandSidebar.x) {
+        actions.run({ type: "toggleSidebar" });
+        return;
+      }
+      if (bar.scrollLeft && x === bar.scrollLeft.x) {
+        this.host.scrollTabs?.(-1);
+        return;
+      }
+      if (bar.scrollRight && x === bar.scrollRight.x) {
+        this.host.scrollTabs?.(1);
+        return;
+      }
       if (tab) {
         const t = model.tabs.get(tab.tabId);
         if (t) actions.switchToTab(t.workspaceId, t.id);
@@ -251,11 +315,29 @@ export class MouseController {
       return;
     }
 
-    // 分割の境界
+    // pane のスクロールバー（右の罫線。スクロールバックがあるとき。M9）。境界より先に見る（境界は右隣の pane の左の罫線でも掴める）。
+    const bar = left ? this.scrollbarAt(layout, x, y) : undefined;
+    if (bar) {
+      const thumb = scrollbarThumb(bar.metrics, bar.track);
+      let grab: number;
+      if (thumb && y >= thumb.top && y < thumb.top + thumb.len) grab = y - thumb.top;
+      else {
+        // 溝を押した：つまみの真ん中がそこへ来るまで飛び、そのままつまみを掴んだことにする。
+        this.scrollPaneTo(bar.term, offsetFromRow(bar.metrics, bar.track, y));
+        grab = Math.floor((thumb?.len ?? 1) / 2);
+      }
+      this.focus(bar.box.paneId);
+      this.drag = { kind: "scrollbar", paneId: bar.box.paneId, grab };
+      return;
+    }
+
+    // 分割の境界（掴んだ位置と境界の差を覚える。掴んだだけでは比率を変えない。04 ラウンド 2 の点検）
     const divider = left ? this.dividerAt(layout, x, y) : undefined;
     const tab = model.currentTab();
     if (divider && tab) {
-      this.drag = { kind: "divider", divider, tabId: tab.id };
+      const start = divider.dir === "right" ? x : y;
+      const edge = divider.dir === "right" ? divider.x : divider.y;
+      this.drag = { kind: "divider", divider, tabId: tab.id, grab: start - edge, start };
       return;
     }
 
@@ -280,10 +362,11 @@ export class MouseController {
       return;
     }
 
-    // pane の中身
+    // pane の中身（pane の実際の大きさの外＝切り取りの余白は端に寄せる。遡っているとき、余白の行が画面に無い行を指さない）
     const term = this.host.pane(paneId);
-    const col = x - box.content.x;
-    const row = y - box.content.y;
+    const inPane = term ? this.paneCoords(box, term, x, y) : null;
+    const col = inPane?.col ?? x - box.content.x;
+    const row = inPane?.row ?? y - box.content.y;
     const pane = model.panes.get(paneId);
     // Ctrl（macOS の端末では Cmd が Alt/Meta で届かないので Ctrl だけ）＋クリックでリンクを開く（M6）。pane がマウスを求めていても端末版が扱う。
     if (left && ev.mods.ctrl && term) {
@@ -303,29 +386,31 @@ export class MouseController {
     }
     this.focus(paneId);
     if (wantsMouse && term) {
-      const p = this.paneCoords(box, term, x, y);
-      if (p) this.forward(paneId, term, tracking, ev, p.col, p.row);
-      this.drag = { kind: "forward", paneId };
+      if (inPane) this.forward(paneId, term, tracking, ev, inPane.col, inPane.row);
+      this.drag = { kind: "forward", paneId, button: ev.button, col, row };
       return;
     }
     if (!left || !term) return;
     const abs = term.term.buffer.active.viewportY + row;
-    // ダブルクリック：単語を選んでコピー（M5）。
+    const cell = snapCol(term.term, abs, col);
+    // ダブルクリック：単語を選んでコピー（M5）。全角の左右どちらの半分を押しても同じ文字（セル）として数える。
     const now = this.now();
     const dbl =
       this.lastClick !== null &&
       now - this.lastClick.at < DOUBLE_CLICK_MS &&
-      this.lastClick.x === x &&
-      this.lastClick.y === y;
-    this.lastClick = { at: now, x, y };
+      this.lastClick.paneId === paneId &&
+      this.lastClick.row === abs &&
+      this.lastClick.col === cell;
+    this.lastClick = { at: now, paneId, row: abs, col: cell };
     if (dbl) {
       const [from, to] = wordRange(term.term, abs, col, "mouse");
       this.selection = { paneId, from: { row: abs, col: from }, to: { row: abs, col: to } };
-      this.copySelection(term);
+      // 押したまま動かせば単語単位に広げる（離したときにコピー。動かさずに離してもコピー）。
+      this.drag = { kind: "select", paneId, anchor: { row: abs, col: from }, word: { from, to } };
       this.host.scheduleRender();
       return;
     }
-    this.drag = { kind: "select", paneId, anchor: { row: abs, col: snapCol(term.term, abs, col) } };
+    this.drag = { kind: "select", paneId, anchor: { row: abs, col: cell } };
   }
 
   private focus(paneId: string): void {
@@ -365,6 +450,8 @@ export class MouseController {
         const p = box && term ? this.paneCoords(box, term, ev.x, ev.y) : null;
         if (box && term && p) {
           const { col, row } = p;
+          drag.col = col;
+          drag.row = row;
           this.forward(
             drag.paneId,
             term,
@@ -379,10 +466,30 @@ export class MouseController {
       case "select": {
         const box = layout.panes.find((b) => b.paneId === drag.paneId);
         const term = this.host.pane(drag.paneId);
-        if (box && term) {
-          const row =
-            term.term.buffer.active.viewportY + clamp(ev.y - box.content.y, 0, box.content.h - 1);
-          const col = snapCol(term.term, row, clamp(ev.x - box.content.x, 0, box.content.w - 1));
+        const p = box && term ? this.paneCoords(box, term, ev.x, ev.y) : null;
+        if (box && term && p) {
+          const row = term.term.buffer.active.viewportY + p.row;
+          const col = snapCol(term.term, row, p.col);
+          if (drag.word) {
+            // ダブルクリックから押したまま：単語単位に広げる（M5）。
+            const [wf, wt] = wordRange(term.term, row, col, "mouse");
+            const a = drag.anchor;
+            const back = row < a.row || (row === a.row && col < drag.word.from);
+            this.selection = back
+              ? {
+                  paneId: drag.paneId,
+                  from: { row, col: wf },
+                  to: { row: a.row, col: drag.word.to },
+                }
+              : {
+                  paneId: drag.paneId,
+                  from: { row: a.row, col: drag.word.from },
+                  to: { row, col: Math.max(wt, row === a.row ? drag.word.to : wt) },
+                };
+            if (done) this.copySelection(term);
+            this.host.scheduleRender();
+            break;
+          }
           const a = drag.anchor;
           // 終わりが全角の本体なら右半分まで含める。
           const w = rowCells(term.term, row)[col]?.width ?? 1;
@@ -404,12 +511,23 @@ export class MouseController {
       }
       case "divider": {
         const d = drag.divider;
-        const pos = d.dir === "right" ? ev.x - d.area.x : ev.y - d.area.y;
+        const at = d.dir === "right" ? ev.x : ev.y;
+        if (at === drag.start) break; // 掴んだ所から動いていない
+        const pos = at - drag.grab - (d.dir === "right" ? d.area.x : d.area.y);
         const total = d.dir === "right" ? d.area.w : d.area.h;
         const ratio = Math.min(0.95, Math.max(0.05, pos / total));
         void this.host.rpc
           .request("layout.set_split_ratio", { tabId: drag.tabId, splitId: d.splitId, ratio })
           .catch(() => undefined);
+        break;
+      }
+      case "scrollbar": {
+        const box = layout.panes.find((b) => b.paneId === drag.paneId);
+        const term = this.host.pane(drag.paneId);
+        const metrics = term ? scrollMetricsOf(term.term) : null;
+        const track = box && term ? paneScrollTrack(box, term) : null;
+        if (term && metrics && track)
+          this.scrollPaneTo(term, offsetFromDragRow(metrics, track, ev.y, drag.grab));
         break;
       }
       case "sidebar":
@@ -445,25 +563,52 @@ export class MouseController {
 
   private wheel(ev: MouseEv): void {
     const layout = this.host.layout();
-    if (!layout) return;
+    if (!layout || layout.tooSmall) return;
+    const horizontal = ev.button === 66 || ev.button === 67;
+    const down = ev.button === 65;
+    // tab バー：上下のホイールで前後の tab へ（herdr の H22b・web の TabBar）。
+    if (ev.y === layout.tabBar.y && ev.x >= layout.tabBar.x && !layout.narrow) {
+      if (!horizontal) this.host.actions.run({ type: "tabDelta", delta: down ? 1 : -1 });
+      return;
+    }
+    // サイドバー：区画の一覧を動かす（区画が一覧より低いとき）。
+    const side = layout.sidebar;
+    if (side && ev.x >= side.x && ev.x < side.x + side.w) {
+      const hit = this.sidebarAt(ev.x, ev.y, layout);
+      const section = hit?.section;
+      if (section && !horizontal)
+        this.host.scrollSidebar?.(section, down ? WHEEL_LINES : -WHEEL_LINES);
+      return;
+    }
     const box = this.paneAt(layout, ev.x, ev.y);
     if (!box || !this.inContent(box, ev.x, ev.y)) return;
     const term = this.host.pane(box.paneId);
     if (!term) return;
     const tracking = term.modes.mouseTrackingMode as MouseTracking;
     if (tracking !== "none" && !ev.mods.shift) {
-      this.forward(box.paneId, term, tracking, ev, ev.x - box.content.x, ev.y - box.content.y);
+      // pane の大きさに収めた座標で送る（横のホイール 66/67 もそのまま渡す）。
+      const p = this.paneCoords(box, term, ev.x, ev.y);
+      if (p) this.forward(box.paneId, term, tracking, ev, p.col, p.row);
       return;
     }
+    // マウスを求めていない pane では横のホイールは使わない（上へのホイールと取り違えない。04 ラウンド 2 の点検）。
+    if (horizontal) return;
     // マウスを求めていない代替画面（less・man 等）：矢印キーを 3 回送る（xterm の alternateScroll・herdr の AlternateScroll と同じ）。
     if (term.term.buffer.active.type === "alternate") {
-      const final = ev.button === 65 ? "B" : "A";
+      const final = down ? "B" : "A";
       const seq = `${term.modes.applicationCursorKeysMode ? "\x1bO" : "\x1b["}${final}`;
       this.host.sendToPane(box.paneId, seq.repeat(WHEEL_LINES));
       return;
     }
     // マウスを求めていない pane：スクロールバックを動かす（M8）。
-    term.term.scrollLines(ev.button === 65 ? WHEEL_LINES : -WHEEL_LINES);
+    term.term.scrollLines(down ? WHEEL_LINES : -WHEEL_LINES);
+    this.host.scheduleRender();
+  }
+
+  /** スクロールバーの位置（末尾からの行数）へ pane を動かす。 */
+  private scrollPaneTo(term: PaneTerminal, offsetFromBottom: number): void {
+    const buf = term.term.buffer.active;
+    term.term.scrollToLine(Math.max(0, buf.baseY - offsetFromBottom));
     this.host.scheduleRender();
   }
 
@@ -537,8 +682,29 @@ export class MouseController {
 
   /** ドラッグの途中でマウスの報告が途切れた（外側の端末の外で離した等）ときの後始末。 */
   cancel(): void {
+    const drag = this.drag;
     this.drag = null;
     this.dropTarget = null;
+    // pane へ押下を渡していたなら離しも送る（押したままのアプリを残さない。04 ラウンド 2 の点検）。
+    if (drag?.kind === "forward") {
+      const term = this.host.pane(drag.paneId);
+      if (term)
+        this.forward(
+          drag.paneId,
+          term,
+          term.modes.mouseTrackingMode as MouseTracking,
+          {
+            kind: "mouse",
+            action: "up",
+            button: drag.button,
+            x: 0,
+            y: 0,
+            mods: { shift: false, alt: false, ctrl: false, meta: false },
+          },
+          drag.col,
+          drag.row,
+        );
+    }
   }
 }
 
@@ -583,7 +749,9 @@ const URL_RE = /https?:\/\/[^\s"'<>`]+/g;
 export function urlAt(term: PaneTerminal, row: number, col: number): string | null {
   const start = logicalStart(term.term, row);
   const { line } = logicalLine(term.term, start);
-  const idx = line.pos.findIndex((p) => p.row === row && p.col >= col);
+  // 全角の右半分を押しても本体の文字に当てる（位置は UTF-16 の単位ごと。サロゲートの後もずれない）。
+  const cell = snapCol(term.term, row, col);
+  const idx = line.pos.findIndex((p) => p.row === row && p.col === cell);
   if (idx < 0) return null;
   for (const m of line.text.matchAll(URL_RE)) {
     const url = m[0].replace(/[.,;:!?)\]]+$/, "");
