@@ -35,31 +35,31 @@ design「インターフェース / データ構造」の protocol・server と�
 
 ## タスク
 
-- [ ] T1: protocol に `prefs.get`/`prefs.set`/`prefs.changed`/`server.stop` の型を足す
+- [x] T1: protocol に `prefs.get`/`prefs.set`/`prefs.changed`/`server.stop` の型を足す
       対象: `packages/protocol/src/messages.ts:604-743`・`packages/protocol/src/events.ts:144-168`
       依存: なし
       AC: AC11
-- [ ] T2: server に `PrefsStore` と `prefs.*` の方式を足す（保存・rev・配布・再起動後の復元）
+- [x] T2: server に `PrefsStore` と `prefs.*` の方式を足す（保存・rev・配布・再起動後の復元）
       対象: `packages/server/src/persist/`（新規 `PrefsStore.ts`）・`packages/server/src/surface/methods/index.ts`（新規 `prefs.ts`）・`packages/server/src/composeServer.ts`
       依存: T1
       AC: AC11
-- [ ] T3: `server.stop` の方式を足す
+- [x] T3: `server.stop` の方式を足す
       対象: `packages/server/src/surface/methods/`（新規 `server.ts`）・`packages/server/src/composeServer.ts:98,429`
       依存: T1
       AC: AC1
-- [ ] T4: ローカルログイン（`local-auth.json`・`POST /api/local-login`・`AuthService.issueSession`）と `serve.json` の `certSha256`
+- [x] T4: ローカルログイン（`local-auth.json`・`POST /api/local-login`・`AuthService.issueSession`）と `serve.json` の `certSha256`
       対象: `packages/server/src/auth/AuthService.ts:135-156`・`packages/server/src/http/HttpServer.ts:93-133`・`packages/server/src/persist/ServeRecordFile.ts:12-44`・（新規 `auth/LocalLogin.ts`）
       依存: なし
       AC: AC1, AC18
-- [ ] T5: 引数なしの `soda`（`cliArgs.ts`）と `findOrStart`・`spawnDetached`・`main.ts` の振り分け（仮の入口）
+- [x] T5: 引数なしの `soda`（`cliArgs.ts`）と `findOrStart`・`spawnDetached`・`main.ts` の振り分け（仮の入口）
       対象: `packages/server/src/cliArgs.ts:46-64`・`packages/server/src/main.ts`・`packages/server/src/persist/namedSession.ts:141-145`・`persist/StateDirLock.ts:208-212`・`commands/commandLaunch.ts:44-85`（新規 `launch/`）
       依存: T4
       AC: AC1
-- [ ] T6: web の設定の置き場所をサーバへ（接続時の取得・初回の移行・変更の送信・`prefs.changed` の反映・端末ごとの項目は残す）
+- [x] T6: web の設定の置き場所をサーバへ（接続時の取得・初回の移行・変更の送信・`prefs.changed` の反映・端末ごとの項目は残す）
       対象: `packages/web/src/store/view.ts:52-142`・`packages/web/src/store/settings.ts`・`packages/web/src/store/StoreAdapter.ts:102-157`
       依存: T2
       AC: AC11, AC19
-- [ ] T7: D-7 の操作を操作表に足し、web に実装する
+- [x] T7: D-7 の操作を操作表に足し、web に実装する
       対象: `packages/client-core/src/keys/bindings.ts`（01 で移したもの）・`packages/web/src/actions/ActionDispatcher.ts`・`packages/web/src/components/ContextMenu.vue:52-59`
       依存: T3
       AC: AC8, AC19
