@@ -57,7 +57,7 @@ import { paneServerUrl } from "./util/net.js";
 import { HANDOFF_NONCE_ENV, closeOrphanPtyMasters, takeHandoff } from "./handoff/HandoffManifest.js";
 import { HandoffController, type PreflightResult } from "./handoff/HandoffController.js";
 import { type HandoffSocket, handoffSocketPathFor, startHandoffSocket } from "./handoff/HandoffSocket.js";
-import { createControlRequests } from "./handoff/controlRequests.js";
+import { createControlRequests, type StopSource } from "./handoff/controlRequests.js";
 import { runPreflight } from "./handoff/preflight.js";
 import { type HandoffResult, adoptedSpecsOf, discardHandedOffPanes, discardRejectedPanes, finishTakenHandoff } from "./handoff/startup.js";
 import { COMMANDS_FILE_NAME } from "./commands/commandConfig.js";
@@ -98,7 +98,7 @@ export interface ComposedServer {
    * 制御の socket（`handoff.sock`）の止める指示（`soda session stop`。20260927-session-stop）を受けたときに呼ぶものを登録する。`main.ts` が停止の手順を渡す。
    * 登録しなければ止める指示は `unsupported` で断る（smoke・テストで組み立てだけを使うとき）。呼ぶのは 1 回だけ（止まる途中の指示は呼ばずに答える）。
    */
-  onStopRequest(fn: () => void): void;
+  onStopRequest(fn: (source: StopSource) => void): void;
 }
 
 function pickProcessInspector(): ProcessInspector {
@@ -283,7 +283,9 @@ export async function composeServer(
     logger,
   });
   // 共有の設定（20260927-cli-mode）。読むのは `listen()` のロックの後（auth.json と同じ）。保存できた変更は全クライアントへ配る。
-  const prefs = new PrefsStore(options.stateDir);
+  const prefs = new PrefsStore(options.stateDir, (err) =>
+    logger.error("prefs.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),
+  );
   prefs.onChange((state, byClientId) => bus.publish({ event: "prefs.changed", data: { prefs: state.prefs, rev: state.rev, byClientId } }));
   registerAllMethods(surface, {
     session,
@@ -301,7 +303,7 @@ export async function composeServer(
     images,
     prefs,
     // `server.stop`（20260927-cli-mode）。制御の socket の止める指示と同じ受け付けと停止の手順（`control` は下で作る。呼ばれるのは待ち受けの後）。
-    stopServer: (reply) => control.stop(reply),
+    stopServer: (reply) => control.stop(reply, "server.stop"),
   });
   // `/ws?machine=<id|名前>` は認証の後にそのマシンへの中継へ（`WsServerWs` は router の関数だけを知る。architecture の境界）。
   // 中継の接続は `WsGateway` を通らないので、手元のセッションの失効（ログアウト・token の作り直し）で閉じる印をここで持つ（`WsGateway` と同じ 4401）。
@@ -440,7 +442,7 @@ export async function composeServer(
     get handoffResult(): HandoffResult | undefined {
       return handoffResult;
     },
-    onStopRequest(fn: () => void): void {
+    onStopRequest(fn: (source: StopSource) => void): void {
       control.setStopHandler(fn);
     },
 

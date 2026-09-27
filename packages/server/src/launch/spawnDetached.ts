@@ -129,9 +129,16 @@ export function quoteWindowsArg(arg: string): string {
   return `${out}${"\\".repeat(backslashes * 2)}"`;
 }
 
+/** `cmd.exe` が `"` の外で特別に扱う文字（つなぐ・つなぐ・向け先・逃がし・かっこ）。 */
+const CMD_META = /[&|<>^()]/;
+
 /**
  * WMI で起動するコマンドライン（`cmd.exe` に出力を `serve.out` へ追記させる）。`cmd.exe /s /c "…"` は外側の `"` の対だけを外して中身をそのまま実行する。
- * **`%` と改行は扱わない**（`cmd.exe` は `"` の中でも `%VAR%` を展開する）——含まれていれば投げる（呼び出し側は detached の spawn に落とす）。
+ * - `cmd.exe` の特別な文字（`& | < > ^ ( )`）を含む引数は `"` で囲む——`"` の中では文字どおりに渡る（`CommandLineToArgvW` にとっても囲むだけで意味は同じ）。
+ * - **`%`・`"`・改行は扱わない**: `cmd.exe` は `"` の中でも `%VAR%` を展開し、引数の中の `"`（`\"`）は `cmd.exe` の引用の数え方をずらして後ろの特別な文字を
+ *   生かしてしまう。含まれていれば投げる（呼び出し側は detached の spawn に落とす）。Windows のパスは `"` を含めないので、実際に落ちるのは `%` を含むパスだけ。
+ * - 出力先は `>>`。`cmd.exe` の `>>` は末尾へ移ってから書くだけで追記の印（O_APPEND）では開かない——`serve.out` を空にした後の書き込みは元の位置に続き、
+ *   手前は NUL で埋まる（`findOrStart` は読むときに NUL を落とす）。
  */
 export function windowsServeCommandLine(
   execPath: string,
@@ -139,17 +146,19 @@ export function windowsServeCommandLine(
   outPath: string,
 ): string {
   for (const p of [execPath, ...args, outPath]) {
-    if (/[%\r\n]/.test(p)) throw new Error(`cannot pass ${JSON.stringify(p)} through cmd.exe`);
+    if (/[%"\r\n]/.test(p)) throw new Error(`cannot pass ${JSON.stringify(p)} through cmd.exe`);
   }
-  if (outPath.includes('"')) throw new Error("the output path must not contain a double quote");
-  const node = [execPath, ...args].map(quoteWindowsArg).join(" ");
-  // Windows のパスは `"` を含めない（ファイル名に使えない）ので、出力先は `"` で囲むだけでよい。
+  const node = [execPath, ...args]
+    .map((a) => (CMD_META.test(a) && !/\s/.test(a) ? `"${a}"` : quoteWindowsArg(a)))
+    .join(" ");
   return `cmd.exe /d /s /c "${node} >> "${outPath}" 2>&1"`;
 }
 
-/** PowerShell の単一引用符の文字列（`'` は `''`）。 */
-function psQuote(s: string): string {
-  return `'${s.replace(/'/g, "''")}'`;
+/**
+ * PowerShell の単一引用符の文字列。PowerShell は `'` のほか U+2018〜U+201B（‘ ’ ‚ ‛）も単一引用符として扱うので、どれも 2 つ重ねて文字どおりにする。
+ */
+export function psQuote(s: string): string {
+  return `'${s.replace(/['\u2018-\u201B]/g, "$&$&")}'`;
 }
 
 /**

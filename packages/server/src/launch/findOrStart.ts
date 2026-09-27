@@ -1,4 +1,4 @@
-import { mkdir, readFile, truncate } from "node:fs/promises";
+import { mkdir, readFile, stat, truncate } from "node:fs/promises";
 import { hostname as osHostname } from "node:os";
 import { join, resolve } from "node:path";
 import { resolveServeOptions, type RawServeArgs } from "../config.js";
@@ -90,6 +90,8 @@ export async function findOrStart(
   let started: SpawnedServe | undefined;
   let stopHint: string | undefined;
   let attempts = 0;
+  /** 同時起動のやり直しの前に `serve.out` で見た token の行（勝った側の子の出力。捨てずに最後に見せる）。 */
+  let carriedNotice = "";
 
   for (;;) {
     const holder = await new StateDirLock(stateDir).inspect();
@@ -128,11 +130,13 @@ export async function findOrStart(
     const ready = await waitReady(stateDir, host, started, deps);
     if (ready.kind === "gone") continue; // 見ていたサーバが止まった。もう一度探す（無ければ起動する）
     if (ready.kind === "child-exited") {
-      // 同時に起動した別の `soda` がロックを取った（こちらの子は使用中で終わった）なら、そのサーバへ繋ぎ直す。
+      // 同時に起動した別の `soda` がロックを取った（こちらの子は使用中で終わった）なら、そのサーバへ繋ぎ直す（試行の回数を問わない——起動はしないので）。
+      // `serve.out` は 2 つの子が共有する。勝った側の子の初回の token の行もここにあるので、**読むだけで空にしない**（勝った側の `soda` が読む前に消さない）。
+      // 読めた token の行は持ち越して、繋げたときに見せる（どちらかの `soda` で必ず一度は見える）。
       const other = await new StateDirLock(stateDir).inspect();
-      if (other !== undefined && attempts < maxAttempts) {
+      if (other !== undefined) {
         started = undefined;
-        await takeServeOut(outPath);
+        carriedNotice = tokenNotice(await readServeOut(outPath)) ?? carriedNotice;
         continue;
       }
       const out = (await takeServeOut(outPath)).trim();
@@ -144,21 +148,24 @@ export async function findOrStart(
       );
     }
     if (ready.kind === "timeout") {
-      const tail = (await readFile(outPath, "utf8").catch(() => ""))
-        .trim()
-        .split(/\r?\n/)
-        .slice(-20)
-        .join("\n");
+      // 末尾を見せるが、token の行は伏せる（エラーの案内に秘密を混ぜない）。token そのものは下の知らせとして一度だけ見せ、ファイルは空にする
+      // （サーバは止めないので、token はこの後どこにも出ない——ここで見せなければ失われる）。
+      const out = await takeServeOut(outPath);
+      const tail = redactTokens(out).trim().split(/\r?\n/).slice(-20).join("\n");
+      const notice = tokenNotice(`${carriedNotice}\n${out}`);
       throw new LaunchError(
         `soda serve did not become ready within ${Math.round((deps.timeoutMs ?? 15_000) / 1000)} seconds`,
         [
           tail !== "" ? `サーバの出力（末尾）:\n${tail}\n` : "",
+          notice !== undefined ? `${notice}\n` : "",
           `サーバは止めていません。${join(stateDir, "server.log")} を確かめ、少し待ってからもう一度 soda を実行してください。`,
         ].join(""),
       );
     }
     const startupNotice =
-      started !== undefined ? tokenNotice(await takeServeOut(outPath)) : undefined;
+      started !== undefined || carriedNotice !== ""
+        ? tokenNotice(`${carriedNotice}\n${await takeServeOut(outPath)}`)
+        : undefined;
     let cached: string | undefined = ready.cookie;
     const endpoint = ready.endpoint;
     return {
@@ -199,6 +206,8 @@ async function waitReady(
   const interval = deps.intervalMs ?? 50;
   const deadline = Date.now() + (deps.timeoutMs ?? 15_000);
   let login: { secret: string; cookie: string } | undefined;
+  /** ローカルログインが断られた回数（401・403）。1 回目は `local-auth.json` を読み直してすぐやり直し、2 回目で諦める（回数の制限に掛けない）。 */
+  let refusals = 0;
   for (;;) {
     if (started?.hasExited() === true) return { kind: "child-exited" };
     const holder = await new StateDirLock(stateDir).inspect();
@@ -241,6 +250,18 @@ async function waitReady(
             }
             if (res.status === 204 && res.cookie !== undefined)
               login = { secret: auth.secret, cookie: res.cookie };
+            else if (res.status === 401 || res.status === 403) {
+              refusals++;
+              if (refusals >= 2) {
+                throw new LaunchError(
+                  `local login was refused (HTTP ${res.status})`,
+                  res.status === 403
+                    ? "サーバがこの接続を同じマシンからのものと認めませんでした（中継・ポート転送の先のサーバには、引数なしの soda では繋げません）。"
+                    : "local-auth.json の秘密をサーバが受け付けませんでした。サーバが作り直している途中かもしれません。少し待ってからもう一度 soda を実行してください。",
+                );
+              }
+              continue; // 秘密を読み直して（ループの先頭で）すぐ 1 回だけやり直す
+            }
           }
           if (login !== undefined) {
             const probe = await openWs(endpoint, login.cookie);
@@ -272,11 +293,39 @@ function rethrowIfCertMismatch(err: unknown): void {
   }
 }
 
-/** `serve.out` を読んで空にする（初回の token を含むので残さない。子は追記で開いているので、以後の出力は先頭から続く）。 */
-async function takeServeOut(outPath: string): Promise<string> {
+/**
+ * `serve.out` を読む。WMI の経路（Windows の `cmd.exe` の `>>`）は追記の印（O_APPEND）で開かないので、空にした後の子の書き込みは元の位置に続き、
+ * 手前が NUL で埋まる——読むときに NUL を落とす。
+ */
+async function readServeOut(outPath: string): Promise<string> {
   const text = await readFile(outPath, "utf8").catch(() => "");
+  return text.replace(/\0+/g, "");
+}
+
+/**
+ * `serve.out` を読んで空にする（初回の token を含むので残さない。子は追記で開いているので、以後の出力は先頭から続く）。読んだ後・空にする前に子が書いた分を
+ * 失わないよう、大きさが読んだ分と同じときだけ空にし、増えていたら読み直す（それでも読んでから空にするまでの一瞬に書かれた分は失われうる。起動の表示は準備完了の
+ * 前に出終わっているので、ここで失われるのはその後の出力＝`server.log` にも残るもの）。
+ */
+async function takeServeOut(outPath: string): Promise<string> {
+  for (let i = 0; i < 3; i++) {
+    const raw = await readFile(outPath).catch(() => undefined);
+    if (raw === undefined) return "";
+    const size = (await stat(outPath).catch(() => undefined))?.size;
+    if (size !== undefined && size !== raw.length) continue; // 読んでいる間に書かれた。読み直す
+    await truncate(outPath, 0).catch(() => undefined);
+    return raw.toString("utf8").replace(/\0+/g, "");
+  }
+  const text = await readServeOut(outPath);
   await truncate(outPath, 0).catch(() => undefined);
   return text;
+}
+
+/** token を含む行の token を伏せる（エラーの案内に出す末尾用）。 */
+export function redactTokens(out: string): string {
+  return out
+    .replace(/#token=[^\s]+/g, "#token=<redacted>")
+    .replace(/(token（今回作成[^）]*）: ?)\S+/g, "$1<redacted>");
 }
 
 /** 起動の表示（`startupBanner.ts` の `startupLines`・`lastChanceTokenLines`）から、token を含む行と「今だけ表示」の注記だけを取り出す。無ければ undefined。 */

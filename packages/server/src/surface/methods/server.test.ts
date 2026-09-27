@@ -20,9 +20,11 @@ describe("server.stop", () => {
       pid: 1,
     });
     const order: string[] = [];
-    if (opts.handler !== false) control.setStopHandler(() => order.push("stop"));
+    if (opts.handler !== false) control.setStopHandler((source) => order.push(`stop:${source}`));
     const surface = new ControlSurface();
-    registerServerMethods(surface, { stopServer: (reply) => control.stop(reply) } as MethodDeps);
+    registerServerMethods(surface, {
+      stopServer: (reply) => control.stop(reply, "server.stop"),
+    } as MethodDeps);
     return { surface, control, order };
   }
 
@@ -36,10 +38,10 @@ describe("server.stop", () => {
     expect(order).toEqual(["reply"]); // まだ止め始めていない
     await new Promise<void>((r) => setImmediate(r));
     await new Promise<void>((r) => setImmediate(r));
-    expect(order).toEqual(["reply", "stop"]);
+    expect(order).toEqual(["reply", "stop:server.stop"]);
     expect(await surface.invoke(ctx, "server.stop", {})).toEqual({ ok: true, result: {} });
     await new Promise<void>((r) => setImmediate(r));
-    expect(order).toEqual(["reply", "stop"]);
+    expect(order).toEqual(["reply", "stop:server.stop"]);
   });
 
   it("引き継ぎの最中は server_busy で断り、止めない", async () => {

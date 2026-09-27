@@ -212,7 +212,9 @@ describe("composeServer: 02-server の口（20260927-cli-mode）", () => {
       const a = await connect(server, await tokenLogin(server, server.freshToken!));
       let closing: Promise<void> | undefined;
       let calls = 0;
-      server.onStopRequest(() => {
+      const sources: string[] = [];
+      server.onStopRequest((source) => {
+        sources.push(source);
         calls++;
         closing = server.close(); // main.ts の停止の手順と同じく close() を始める
       });
@@ -221,6 +223,7 @@ describe("composeServer: 02-server の口（20260927-cli-mode）", () => {
       expect(await closed).toBe(1001);
       await closing;
       expect(calls).toBe(1);
+      expect(sources).toEqual(["server.stop"]);
       expect(existsSync(join(stateDir, STATE_DIR_LOCK_FILE))).toBe(false);
     });
   });

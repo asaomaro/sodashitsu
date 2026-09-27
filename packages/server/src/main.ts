@@ -78,7 +78,7 @@ async function runServe(args: RawServeArgs): Promise<void> {
   });
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => stopper.signal(signal));
   // 制御の socket（handoff.sock）の止める指示（`soda session stop`）も同じ手順で止める。止まる途中の指示は何もしない（AC7）。
-  server.onStopRequest(() => stopper.stopRequest());
+  server.onStopRequest((source) => stopper.stopRequest(source));
 
   let listening = false;
   try {

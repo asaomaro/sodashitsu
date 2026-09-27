@@ -27,6 +27,14 @@ describe("normalizeAddress / isSameMachine", () => {
     expect(isSameMachine("192.168.1.10", "::ffff:192.168.1.10")).toBe(true);
   });
 
+  it("ループバック同士（127.0.0.0/8・::1）は同じマシンとみなす（--host 127.0.0.2 に 127.0.0.1 から繋ぐ）", () => {
+    expect(isSameMachine("127.0.0.1", "127.0.0.2")).toBe(true);
+    expect(isSameMachine("::ffff:127.0.0.1", "127.1.2.3")).toBe(true);
+    expect(isSameMachine("::1", "127.0.0.1")).toBe(true);
+    expect(isSameMachine("192.168.1.5", "127.0.0.1")).toBe(false);
+    expect(isSameMachine("127.0.0.1", "192.168.1.5")).toBe(false);
+  });
+
   it("別のアドレス（LAN の別の機械・別の形）や分からないときは同じマシンとみなさない", () => {
     expect(isSameMachine("192.168.1.5", "192.168.1.10")).toBe(false);
     expect(isSameMachine("::ffff:192.168.1.5", "::ffff:192.168.1.10")).toBe(false);

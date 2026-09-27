@@ -9,7 +9,10 @@ import { writeFileAtomic } from "../persist/atomicFile.js";
  * - サーバは起動ごとに 32 バイトの乱数の秘密を作り、状態ディレクトリの `local-auth.json`（0600。`{secret, pid, createdAt}`）に書く。止めるとき消す。
  * - `POST /api/local-login {secret}` は (1) 同じマシンからの接続（要求のソケットの `remoteAddress` と `localAddress` が同じ）、(2) 秘密の一致（定数時間の比較）
  *   のときだけ、通常の session cookie を出す（`HttpServer`）。
- * - 信頼の根拠は「状態ディレクトリを読めるのは同じ利用者だけ」（0600。Windows では `%LOCALAPPDATA%` の既定の ACL）。秘密を知っていても別のマシンからは通らない。
+ * - **信頼の根拠は秘密のほう**（「状態ディレクトリを読めるのは同じ利用者だけ」。0600。Windows では `%LOCALAPPDATA%` の既定の ACL）。
+ * - 同じマシンの判定は**二段目の守りにすぎない**。サーバに届いた TCP の両端を比べるだけなので、このマシンの上の中継（`ssh -L`・リバースプロキシ・
+ *   ポート転送・コンテナのポートの公開等）の後ろでは、別のマシンからの要求も「ループバックからの接続」に見えて通る。秘密が漏れていなければ通らないが、
+ *   「秘密を知っていても別のマシンからは通らない」とは言えない。
  */
 export const LOCAL_AUTH_FILE_NAME = "local-auth.json";
 const SECRET_BYTES = 32;
@@ -63,14 +66,26 @@ export function normalizeAddress(addr: string): string {
   return mapped ? mapped[1]! : a;
 }
 
-/** 同じマシンからの接続か（相手のアドレスが、こちらが受けたアドレスと同じ）。どちらかが分からなければ false。 */
+/** ループバックのアドレス（127.0.0.0/8・::1）か（`normalizeAddress` の後の形で見る）。 */
+function isLoopback(a: string): boolean {
+  return a === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a);
+}
+
+/**
+ * 同じマシンからの接続か: 相手のアドレスが、こちらが受けたアドレスと同じ。**両方がループバックなら同じとみなす**——`--host 127.0.0.2` で待ち受けると、
+ * 手元のクライアントの送り元は 127.0.0.1 になる（ループバックへはこのマシンの中からしか届かない）。どちらかが分からなければ false。
+ * 中継の後ろでは効かない（上の注記）。
+ */
 export function isSameMachine(
   remoteAddress: string | undefined,
   localAddress: string | undefined,
 ): boolean {
   if (remoteAddress === undefined || localAddress === undefined) return false;
   const remote = normalizeAddress(remoteAddress);
-  return remote !== "" && remote === normalizeAddress(localAddress);
+  const local = normalizeAddress(localAddress);
+  if (remote === "") return false;
+  if (isLoopback(remote) && isLoopback(local)) return true;
+  return remote === local;
 }
 
 /** `HttpServer` が使う照合の口（テストで差し替えられるよう最小にする）。 */

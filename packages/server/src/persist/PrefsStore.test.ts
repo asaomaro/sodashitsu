@@ -101,4 +101,43 @@ describe("PrefsStore", () => {
     expect(Object.keys(prefs)).toEqual(["theme"]);
     expect((prefs as Record<string, unknown>)["polluted"]).toBeUndefined();
   });
+
+  it("変更の知らせが投げても、保存済みの set は成功で返り、ほかの知らせ先も呼ばれる", async () => {
+    const errors: unknown[] = [];
+    const store = new PrefsStore(await tempDir(), (err) => errors.push(err));
+    await store.load();
+    const seen: number[] = [];
+    store.onChange(() => {
+      throw new Error("boom");
+    });
+    store.onChange((s) => seen.push(s.rev));
+    await expect(store.set({ a: 1 }, "c1")).resolves.toEqual({ prefs: { a: 1 }, rev: 1 });
+    expect(seen).toEqual([1]);
+    expect(errors).toHaveLength(1);
+  });
+
+  it("端末ごとの項目（sidebarWidth・sidebarCollapsed）は保存も配りもしない（set でも読み込みでも落とす）", async () => {
+    const dir = await tempDir();
+    const store = new PrefsStore(dir);
+    await store.load();
+    expect(
+      await store.set(
+        { theme: "x", sidebarWidth: 300, sidebarCollapsed: true } as Record<string, unknown>,
+        "c1",
+      ),
+    ).toEqual({
+      prefs: { theme: "x" },
+      rev: 1,
+    });
+    expect(JSON.parse(await readFile(join(dir, PREFS_FILE_NAME), "utf8")).prefs).toEqual({
+      theme: "x",
+    });
+    await writeFile(
+      join(dir, PREFS_FILE_NAME),
+      '{"schema":1,"rev":2,"prefs":{"theme":"y","sidebarWidth":200}}',
+    );
+    const again = new PrefsStore(dir);
+    await again.load();
+    expect(again.get()).toEqual({ prefs: { theme: "y" }, rev: 2 });
+  });
 });

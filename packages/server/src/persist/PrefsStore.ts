@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { PREFS_MAX_BYTES, type SharedPrefs } from "@sodashitsu/protocol";
+import { DEVICE_LOCAL_PREF_KEYS, PREFS_MAX_BYTES, type SharedPrefs } from "@sodashitsu/protocol";
 import { readFileWithBackup, writeFileAtomic } from "./atomicFile.js";
 
 /**
@@ -42,10 +42,17 @@ function parsePrefsFile(raw: string): PrefsState {
   return { rev, prefs: withoutProto(prefs as Record<string, unknown>) };
 }
 
-/** `JSON.parse` は `__proto__` を自前の項目として作る。コピーするときにプロトタイプを差し替えないよう落とす。 */
+const DEVICE_LOCAL = new Set<string>(DEVICE_LOCAL_PREF_KEYS);
+
+/**
+ * 保存してよい項目だけにする。`JSON.parse` は `__proto__` を自前の項目として作るので、コピーするときにプロトタイプを差し替えないよう落とす。
+ * 端末ごとの項目（`sidebarWidth`・`sidebarCollapsed`）もここで落とす——`passthrough` の schema は通してしまうので、共有しない約束をサーバの境界で守る
+ * （読み込みの時も通す。古い版・手で書いたファイルに残っていても配らない）。
+ */
 function withoutProto(src: Record<string, unknown>): SharedPrefs {
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(src)) if (k !== "__proto__") out[k] = v;
+  for (const [k, v] of Object.entries(src))
+    if (k !== "__proto__" && !DEVICE_LOCAL.has(k)) out[k] = v;
   return out;
 }
 
@@ -61,7 +68,11 @@ export class PrefsStore {
   private queue: Promise<unknown> = Promise.resolve();
   private readonly listeners = new Set<(state: PrefsState, byClientId: string) => void>();
 
-  constructor(stateDir: string) {
+  constructor(
+    stateDir: string,
+    /** 変更の知らせ（`onChange`）が投げたとき（ログに残す。既定は何もしない）。 */
+    private readonly onListenerError?: (err: unknown) => void,
+  ) {
     this.filePath = join(stateDir, PREFS_FILE_NAME);
     this.backupsDir = join(stateDir, "prefs-backups");
   }
@@ -102,7 +113,14 @@ export class PrefsStore {
       };
       await writeFileAtomic(this.filePath, `${JSON.stringify(data, null, 2)}\n`);
       this.state = next;
-      for (const fn of [...this.listeners]) fn(this.get(), byClientId);
+      // 保存は済んでいる。知らせる先が投げても set を失敗にしない（保存したのに失敗と答え、同じ変更を送り直させない）。
+      for (const fn of [...this.listeners]) {
+        try {
+          fn(this.get(), byClientId);
+        } catch (err) {
+          this.onListenerError?.(err);
+        }
+      }
       return this.get();
     };
     const result = this.queue.then(run, run);

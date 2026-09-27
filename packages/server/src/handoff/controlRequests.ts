@@ -20,9 +20,14 @@ export interface ControlRequestsDeps {
   pid?: number;
 }
 
+/** 止める指示の出所（停止のログに出す。20260927-cli-mode で `server.stop` が加わった）。 */
+export type StopSource = "session-stop" | "server.stop";
+
 export interface ControlRequests extends HandoffRequestHandler {
   /** 止める指示を受けたときに呼ぶもの（`main.ts` の停止の手順）。登録しなければ止める指示は `unsupported`。 */
-  setStopHandler(fn: () => void): void;
+  setStopHandler(fn: (source: StopSource) => void): void;
+  /** 止める指示。`source` は出所（既定は制御の socket＝`soda session stop`）。 */
+  stop(reply: (r: StopReply) => Promise<void>, source?: StopSource): Promise<void>;
   /**
    * 止まり始めた（`close()` の最初）。以後の止める指示は `alreadyStopping`、引き継ぎの指示は `stopping`。既に受け付けた引き継ぎの最中なら、
    * それが終わる（元に戻す）まで待ってから解決する——停止（保存・端末の破棄）と引き継ぎ（読み取りの停止・execve）を並んで走らせない。
@@ -33,13 +38,13 @@ export interface ControlRequests extends HandoffRequestHandler {
 
 export function createControlRequests(deps: ControlRequestsDeps): ControlRequests {
   const pid = deps.pid ?? process.pid;
-  let stopHandler: (() => void) | undefined;
+  let stopHandler: ((source: StopSource) => void) | undefined;
   let closing = false;
   return {
     get isClosing(): boolean {
       return closing;
     },
-    setStopHandler(fn: () => void): void {
+    setStopHandler(fn: (source: StopSource) => void): void {
       stopHandler = fn;
     },
     async beginClosing(): Promise<void> {
@@ -54,7 +59,7 @@ export function createControlRequests(deps: ControlRequestsDeps): ControlRequest
       }
       await deps.handoff.request(reply);
     },
-    async stop(reply: (r: StopReply) => Promise<void>): Promise<void> {
+    async stop(reply: (r: StopReply) => Promise<void>, source: StopSource = "session-stop"): Promise<void> {
       if (deps.handoff.isBusy) {
         await reply({ ok: false, reason: "busy", message: "a handoff is in progress" });
         return;
@@ -76,7 +81,7 @@ export function createControlRequests(deps: ControlRequestsDeps): ControlRequest
       try {
         await reply({ ok: true, pid, alreadyStopping: false });
       } finally {
-        handler();
+        handler(source);
       }
     },
   };

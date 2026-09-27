@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { makeTempDir } from "../persist/atomicFile.js";
 import {
   powerShellArgs,
+  psQuote,
   quoteWindowsArg,
   spawnServe,
   windowsServeCommandLine,
@@ -50,6 +51,28 @@ describe("windowsServeCommandLine", () => {
       'cmd.exe /d /s /c ""C:\\Program Files\\nodejs\\node.exe" C:\\repo\\packages\\server\\dist\\main.js serve --state-dir "C:\\Users\\a b\\AppData\\Local\\sodashitsu" --session work >> "C:\\Users\\a b\\AppData\\Local\\sodashitsu\\sessions\\work\\serve.out" 2>&1"',
     );
   });
+  it('cmd.exe の特別な文字（& | < > ^ ( )）を含む引数は " で囲む（空白があってもなくても）', () => {
+    const line = windowsServeCommandLine(
+      "C:\\node\\node.exe",
+      ["C:\\a&b\\main.js", "serve", "--state-dir", "C:\\x (y)\\s|t", "--session", "a^b<c>"],
+      "C:\\o&ut\\serve.out",
+    );
+    expect(line).toBe(
+      'cmd.exe /d /s /c "C:\\node\\node.exe "C:\\a&b\\main.js" serve --state-dir "C:\\x (y)\\s|t" --session "a^b<c>" >> "C:\\o&ut\\serve.out" 2>&1"',
+    );
+    // 引数の部分（向け先の手前）に、囲まれていない特別な文字が残っていない（外側の対の " を外した中身の、" の外の部分だけを見る）。
+    const inner = line.slice('cmd.exe /d /s /c "'.length, line.indexOf(" >> "));
+    const outside = inner
+      .split('"')
+      .filter((_, i) => i % 2 === 0)
+      .join("");
+    expect(outside).not.toMatch(/[&|<>^()]/);
+  });
+
+  it('" を含む引数は cmd.exe の引用の数え方をずらすので投げる', () => {
+    expect(() => windowsServeCommandLine("node.exe", ['a"&calc'], "C:\\out")).toThrow(/cmd\.exe/);
+  });
+
   it("% と改行は cmd.exe を通せないので投げる（呼び出し側は detached の spawn に落とす）", () => {
     expect(() => windowsServeCommandLine("node.exe", ["C:\\%TEMP%\\main.js"], "C:\\out")).toThrow(
       /cmd\.exe/,
@@ -72,6 +95,13 @@ describe("wmiCreateScript / powerShellArgs", () => {
     expect(script).toContain("[Console]::Out.WriteLine($r.ProcessId)");
     expect(script).toMatch(/ReturnValue -ne 0\) \{.*exit 1 \}/);
   });
+  it("psQuote は ' と U+2018〜U+201B を 2 つ重ねる（PowerShell はどれも単一引用符として扱う）", () => {
+    expect(psQuote("a'b")).toBe("'a''b'");
+    expect(psQuote("a\u2018b\u2019c\u201Ad\u201Be")).toBe(
+      "'a\u2018\u2018b\u2019\u2019c\u201A\u201Ad\u201B\u201Be'",
+    );
+  });
+
   it("-EncodedCommand（UTF-16LE の base64）で渡す（引用の規則を 2 重に通さない）", () => {
     const args = powerShellArgs("Write-Output 'é'");
     expect(args.slice(0, 5)).toEqual([

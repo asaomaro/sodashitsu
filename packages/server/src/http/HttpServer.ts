@@ -161,6 +161,9 @@ export class HttpServer {
       res.end();
     });
     if (!admitted) return;
+    // 失敗（別のマシン・秘密の不一致）は `/api/login` と同じ回数の制限に数える。制限は送り元の IP ごとなので、同じマシンの別の利用者（送り元は
+    // 同じループバック）がわざと失敗を重ねると、このマシンからの token のログインとローカルログインを一時的に締め出せる——`/api/login` にも元からある
+    // 露出と同じ（締め出せるのは最大 1 時間・秘密や token は漏れない）。
     if (!isSameMachine(req.socket.remoteAddress, req.socket.localAddress)) {
       this.rateLimiter.registerFailure(ip);
       res.statusCode = 403;

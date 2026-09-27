@@ -6,7 +6,13 @@ import { makeTempDir } from "../persist/atomicFile.js";
 import { composeServerOnFreePort } from "../composeServerOnFreePort.js";
 import type { ComposedServer } from "../composeServer.js";
 import { STATE_DIR_LOCK_FILE } from "../persist/StateDirLock.js";
-import { findOrStart, LaunchError, tokenNotice, type FindOrStartOptions } from "./findOrStart.js";
+import {
+  findOrStart,
+  LaunchError,
+  redactTokens,
+  tokenNotice,
+  type FindOrStartOptions,
+} from "./findOrStart.js";
 import { openWs } from "./localHttp.js";
 import { placeholderEntry } from "./placeholderEntry.js";
 import type { SpawnedServe, SpawnServeRequest } from "./spawnDetached.js";
@@ -160,6 +166,53 @@ describe("findOrStart", () => {
     expect(a.baseUrl).toBe(b.baseUrl);
     expect(calls.length).toBeGreaterThanOrEqual(1);
     expect(calls.length).toBeLessThanOrEqual(2);
+    // 初回の token は、負けた側がやり直す前に serve.out を空にして失わない（どちらかの soda で必ず見える）。
+    expect([a, b].some((t) => t.startupNotice?.includes("#token=") === true)).toBe(true);
+  });
+
+  it("最後の試行で子が「使用中」で終わっても、動いている持ち主へ繋ぐ", async () => {
+    const stateDir = await tempStateDir();
+    let server: ComposedServer | undefined;
+    const loser = async (req: SpawnServeRequest): Promise<SpawnedServe> => {
+      // 同時に別の soda がロックを取った状況：持ち主を立ててから、こちらの子は使用中で終わる。
+      server = track(await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] }));
+      // serve.out は 2 つの子で共有する。勝った側の子の初回の token の行が先に書かれている。
+      await writeFile(
+        req.outPath,
+        "soda: open http://127.0.0.1:1/#token=WINNERTOKEN\nsoda: (token 付きの URL は今だけ表示します)\nsoda: the state dir is already in use by another soda\n",
+      );
+      return { method: "detached", pid: 1, hasExited: () => true };
+    };
+    const target = await findOrStart(options(stateDir), { spawnServe: loser, maxStartAttempts: 1 });
+    expect(target.baseUrl).toBe(`http://127.0.0.1:${server!.options.port}`);
+    // 勝った側の token の行を、やり直しの前に捨てずに見せる。
+    expect(target.startupNotice).toContain("#token=WINNERTOKEN");
+  });
+
+  it("ローカルログインが断られたら、秘密を読み直して 1 回だけやり直し、だめなら案内つきで断る（回数の制限まで繰り返さない）", async () => {
+    const stateDir = await tempStateDir();
+    const server = track(
+      await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] }),
+    );
+    await writeFile(
+      join(stateDir, "local-auth.json"),
+      JSON.stringify({ secret: "wrong", pid: process.pid, createdAt: "" }),
+    );
+    const err = await findOrStart(options(stateDir), {
+      spawnServe: noSpawn,
+      timeoutMs: 10_000,
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(LaunchError);
+    expect((err as LaunchError).message).toContain("local login was refused (HTTP 401)");
+    // 2 回だけ失敗した（5 回で締め出される制限に掛かっていない）：token のログインはまだ通る。
+    const port = server.options.port;
+    const origin = `http://127.0.0.1:${port}`;
+    const res = await fetch(`${origin}/api/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin, host: `127.0.0.1:${port}` },
+      body: JSON.stringify({ token: server.freshToken }),
+    });
+    expect(res.status).toBe(204);
   });
 
   it("子が準備完了の前に終わったら、serve.out の内容を案内にして断る", async () => {
@@ -183,7 +236,10 @@ describe("findOrStart", () => {
   it("準備完了にならなければ時間切れで断る（サーバは止めない）", async () => {
     const stateDir = await tempStateDir();
     const never = async (req: SpawnServeRequest): Promise<SpawnedServe> => {
-      await writeFile(req.outPath, "still starting\n");
+      await writeFile(
+        req.outPath,
+        "soda: open http://127.0.0.1:1/#token=SECRETTOKEN\nsoda: (token 付きの URL は今だけ表示します)\nstill starting\n",
+      );
       return { method: "detached", pid: 1, hasExited: () => false };
     };
     const err = await findOrStart(options(stateDir), { spawnServe: never, timeoutMs: 300 }).catch(
@@ -193,6 +249,21 @@ describe("findOrStart", () => {
     expect((err as LaunchError).message).toContain("did not become ready");
     expect((err as LaunchError).hint).toContain("still starting");
     expect((err as LaunchError).hint).toContain("server.log");
+    // 末尾の token は伏せ、token は知らせとして一度だけ見せ、serve.out は空にする。
+    const hint = (err as LaunchError).hint;
+    expect(hint).toContain("#token=<redacted>");
+    expect(hint.split("SECRETTOKEN").length - 1).toBe(1);
+    expect(await readFile(join(stateDir, "serve.out"), "utf8")).toBe("");
+  });
+
+  it("redactTokens は token の URL と「今回作成」の行の token を伏せる", () => {
+    expect(
+      redactTokens(
+        "soda: open http://a/#token=abc\nsoda: token（今回作成・この表示が最後）: xyz\nother",
+      ),
+    ).toBe(
+      "soda: open http://a/#token=<redacted>\nsoda: token（今回作成・この表示が最後）: <redacted>\nother",
+    );
   });
 
   it("入れ子（SODA_PANE_ID）は --allow-nested が無ければ断る", async () => {
