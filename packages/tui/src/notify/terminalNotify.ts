@@ -54,13 +54,20 @@ export function describeDelivery(d: Delivery): string {
   }
 }
 
-/** 通知の文字から、列を壊す文字（ESC・BEL・ST）を除き、改行・タブを空白にする。 */
+/**
+ * 通知の文字から制御文字（C0・DEL・C1。ESC 無しで効く CSI〔U+009B〕・ST〔U+009C〕・CAN・SUB 等を含む）を除き、改行・タブは空白にする
+ * （herdr の `sanitize_text` は ESC・BEL・ST だけ。server の `agentStart.ts` の制御文字の範囲に広げた）。
+ */
 export function sanitizeText(text: string): string {
-  return [...text]
-    .filter((c) => c !== "\x1b" && c !== "\x07" && c !== "\x9c")
-    .map((c) => (c === "\n" || c === "\r" || c === "\t" ? " " : c))
-    .join("");
+  let out = "";
+  for (const c of text) {
+    if (c === "\n" || c === "\r" || c === "\t") out += " ";
+    else if (!isControl(c.codePointAt(0)!)) out += c;
+  }
+  return out;
 }
+
+const isControl = (cp: number): boolean => cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f);
 
 /** tmux の中なら素通しの包み（`ESC P tmux; … ESC \`。中の ESC は 2 つにする）。 */
 export function wrapTmux(seq: string): string {

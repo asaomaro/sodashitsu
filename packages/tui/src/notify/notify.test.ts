@@ -20,6 +20,7 @@ import {
 } from "./terminalNotify.js";
 
 /** 通知（05 の T3。design「通知」・AC13）。 */
+// 判定の表・列・tmux の包み・文字の洗いの試験の値の一部は herdr の src/terminal_notify.rs の tests を写した（Apache-2.0。NOTICE）。
 describe("外側の端末の判定と通知の列（herdr の terminal_notify.rs）", () => {
   it("端末の判定：kitty → OSC 99、ghostty・iTerm2・WezTerm → OSC 9、Windows Terminal → OSC 777、ほかは出さない", () => {
     const cases: [Record<string, string>, string][] = [
@@ -59,6 +60,8 @@ describe("外側の端末の判定と通知の列（herdr の terminal_notify.rs
     expect(notificationSequence("osc9", "hi", "", true)).toBe(wrapTmux("\x1b]9;hi\x1b\\"));
     expect(wrapTmux("\x1b]9;hi\x1b\\")).toBe("\x1bPtmux;\x1b\x1b]9;hi\x1b\x1b\\\x1b\\");
     expect(sanitizeText("a\n\tb\x1bc\x07\x9c")).toBe("a  bc");
+    // C0・DEL・C1 を全部落とす（ESC 無しで効く CSI〔U+009B〕・CAN・SUB も）。
+    expect(sanitizeText("x\x9b31my\x18\x1a\x7f\x85\x00z")).toBe("x31myz");
   });
 });
 
@@ -237,5 +240,56 @@ describe("端末版の通知（組み立て）", () => {
     await vi.waitFor(() => expect(h.app.notify.queued).toHaveLength(1));
     h.io.type("\x02o");
     await vi.waitFor(() => expect(h.app.model.focusedPaneId).toBe("p3"));
+  });
+
+  it("見えているかは今の割り付けで判定する（同じ打鍵の中で移った先の pane の完了は知らせない）", async () => {
+    const snap = snapshot({
+      panes: [
+        pane("p1", "t1"),
+        pane("p2", "t1"),
+        pane("p3", "t2", { agent: agent({ instanceId: "a3", state: "working", label: "Claude" }) }),
+      ],
+    });
+    const h = await startedApp({ snapshot: snap });
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    h.app.renderNow(); // 前の描画の割り付けは t1（p3 は見えていない）
+    h.app.model.focusPane("p3"); // 描き直す前に移る
+    h.ws.event("pane.agent_status_changed", {
+      paneId: "p3",
+      agent: agent({ instanceId: "a3", state: "idle", label: "Claude", completionSeq: 1 }),
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(h.app.ui.toasts).toEqual([]);
+    expect(h.app.notify.queued).toHaveLength(0);
+  });
+
+  it("知らせの一覧を開いている間に行き先が減っても壊れない", async () => {
+    const h = await startedApp();
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    const n = h.app.notify;
+    h.app.model.focusPane("p3");
+    n.deliver("done", "p2", "k1");
+    n.deliver("done", "p1", "k2");
+    expect(n.queued).toHaveLength(2);
+    h.app.ui.openDialogWithContext({ kind: "notifications" });
+    h.app.renderNow();
+    h.io.type("\x1b[B"); // 2 つ目
+    n.dismiss("k1");
+    n.dismiss("k2");
+    expect(() => h.io.type("\x1b[3~")).not.toThrow(); // Delete
+    h.app.renderNow();
+    expect(await h.screen()).toContain("未処理の知らせはありません");
+    // 3 件の 3 つ目を選んでいる間に 1 件減ったら、Delete は（収めた）最後の行を外す。
+    n.deliver("done", "p1", "a");
+    n.deliver("done", "p2", "b");
+    h.app.model.panes.set("p4", { ...h.app.model.panes.get("p2")!, id: "p4" });
+    n.deliver("done", "p4", "c");
+    expect(n.queued.map((q) => q.key)).toEqual(["a", "b", "c"]);
+    h.io.type("\x1b[B\x1b[B"); // 新しいものが上：c・b・a の a
+    n.dismiss("c");
+    h.io.type("\x1b[3~");
+    expect(n.queued.map((q) => q.key)).toEqual(["b"]);
   });
 });

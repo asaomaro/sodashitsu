@@ -45,11 +45,14 @@ export class NotificationList implements Overlay {
     const rows = this.rows();
     if (isEsc(k)) return this.cancel();
     if (rows.length === 0) return;
+    // 開いている間に行き先が減る（ほかで片付けた・pane が閉じた）ことがあるので、毎回収める。
+    this.selected = Math.max(0, Math.min(this.selected, rows.length - 1));
     if (isDown(k)) this.selected = (this.selected + 1) % rows.length;
     else if (isUp(k)) this.selected = (this.selected - 1 + rows.length) % rows.length;
     else if (isEnter(k)) this.open(this.selected);
     else if (k.key === "Delete" || k.key === "Backspace" || k.key === "d") {
-      this.notify.dismiss(rows[this.selected]!.key);
+      const row = rows[this.selected];
+      if (row) this.notify.dismiss(row.key);
       this.selected = Math.max(0, Math.min(this.selected, this.rows().length - 1));
     }
   }
@@ -81,6 +84,7 @@ export class NotificationList implements Overlay {
   render({ grid, theme }: OverlayRenderContext): CursorState {
     const c = dialogColors(theme);
     const rows = this.rows();
+    this.selected = Math.max(0, Math.min(this.selected, rows.length - 1));
     const r = centeredRect(grid, Math.min(80, grid.w - 2), Math.max(1, rows.length) + 4);
     this.rect = r;
     const inner = drawBox(grid, r, c, `知らせ（${rows.length} 件）`);

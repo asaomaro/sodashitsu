@@ -253,8 +253,8 @@ export class TuiApp {
       prefs: this.prefs,
       env: io.env,
       hasFocus: () => this.outerFocused,
-      isPaneVisible: (paneId) =>
-        (this.lastLayout ?? this.layout()).panes.some((b) => b.paneId === paneId),
+      // 今の割り付けで見る（前の描画の割り付けだと、同じ打鍵の中の切り替えを取り違える）。
+      isPaneVisible: (paneId) => this.layout().panes.some((b) => b.paneId === paneId),
       write: (seq) => this.io.write(seq),
       focusPane: (paneId) => this.dispatcher.focusPaneAcrossViews(paneId),
     });

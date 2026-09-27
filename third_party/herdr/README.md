@@ -40,7 +40,8 @@
 | `packages/tui/src/notify/terminalNotify.ts` | `src/terminal_notify.rs`（`detect_backend`・`build_osc9_notification`・`build_osc99_notification`・`sanitize_text`・`wrap_tmux_passthrough`：外側の端末へのデスクトップ通知。20260927-cli-mode） |
 
 テストの一部（`ManifestEngine.test.ts`・`ProcessMatcher.test.ts`・`AgentTracker.test.ts`・
-`packages/server/src/git/worktree.test.ts`・`packages/protocol/src/worktreePath.test.ts`）にも、
+`packages/server/src/git/worktree.test.ts`・`packages/protocol/src/worktreePath.test.ts`・
+`packages/tui/src/notify/notify.test.ts`〔`src/terminal_notify.rs` の試験の値〕）にも、
 herdr 側のテストケース（fixture・期待値）を本製品の型に書き換えて移植したものを含む。
 各ファイルの冒頭コメントと、該当 `describe` の見出しに移植元の herdr 側の関数名を記す。
 
