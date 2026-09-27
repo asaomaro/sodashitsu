@@ -15,6 +15,30 @@ const DEFLATE_THRESHOLD_BYTES = 1024; // D31：1KB 未満は圧縮しない（�
 // 切ってしまわないための余裕（レビュー指摘：以前は無指定で `ws` の既定 100MiB のままだった）。
 const MAX_WS_PAYLOAD_BYTES = 4 * 1024 * 1024; // 4MB
 const DRAIN_POLL_MS = 50; // 流量制御で止めた購読を再開できるかを確かめる間隔（D98）
+/** `?machine=` の値の上限（`machineRules.ts` の `MAX_SELECTOR_LENGTH` と同じ。ws/ は machine/ を import しない——architecture の境界）。 */
+const MAX_MACHINE_SELECTOR_LENGTH = 256;
+
+/**
+ * `/ws?machine=<id|名前>` の行き先（20260927-multi-host-machines の design「/ws の分岐」）。`composeServer` が `MachineManager.route` と
+ * `relayToMachine` を包んで渡す。`unknown`（曖昧を含む）は 404、`offline` は 503。
+ */
+export type MachineRouter = (selector: string) => { kind: "ok"; attach(conn: WsConnection, sessionId: string): void } | { kind: "unknown" } | { kind: "offline" };
+
+/** `machine` のクエリ（無い・`local` は undefined＝このサーバそのもの。不正なら "invalid"）。 */
+export function machineSelectorOf(target: string | undefined): string | undefined | "invalid" {
+  let url: URL;
+  try {
+    url = new URL(target ?? "/", "http://x");
+  } catch {
+    return "invalid";
+  }
+  const all = url.searchParams.getAll("machine");
+  if (all.length === 0) return undefined;
+  if (all.length > 1) return "invalid";
+  const v = all[0]!;
+  if (v.length === 0 || v.length > MAX_MACHINE_SELECTOR_LENGTH) return "invalid";
+  return v === "local" ? undefined : v;
+}
 
 /** `ws` 8.21 での実装（design「WebSocket の通信」・D31）。 */
 export class WsServerWs implements WsServer {
@@ -33,6 +57,8 @@ export class WsServerWs implements WsServer {
     private readonly originGate: OriginRejectionLog,
     private readonly authorize: AuthorizeUpgrade,
     private readonly logger: Logger,
+    /** 保存した SSH のマシンへの中継（20260927-multi-host-machines）。無ければ `?machine=` は 404。 */
+    private readonly machineRouter?: MachineRouter,
   ) {
     this.wss = new WebSocketServer({
       noServer: true,
@@ -98,6 +124,26 @@ export class WsServerWs implements WsServer {
     const authResult = await this.authorize({ headers: req.headers as Record<string, string | undefined>, remoteAddress });
     if (!authResult.ok) {
       rejectUpgrade(socket, "401 Unauthorized");
+      return;
+    }
+    // 行き先のマシン（20260927-multi-host-machines）。認証を通った後にだけ見る（認証の無い要求にマシンの有無を漏らさない）。
+    const selector = machineSelectorOf(req.url);
+    if (selector === "invalid") {
+      rejectUpgrade(socket, "400 Bad Request");
+      return;
+    }
+    if (selector !== undefined) {
+      const route = this.machineRouter?.(selector) ?? { kind: "unknown" as const };
+      if (route.kind === "unknown") {
+        rejectUpgrade(socket, "404 Not Found");
+        return;
+      }
+      if (route.kind === "offline") {
+        rejectUpgrade(socket, "503 Service Unavailable");
+        return;
+      }
+      // 手元のセッション（Cookie）を渡す——ログアウト・token の作り直しで失効したら、中継の接続も閉じる（4401）。
+      this.wss.handleUpgrade(req, socket, head, (ws) => route.attach(new WsConnectionImpl(ws), authResult.sessionId));
       return;
     }
     this.wss.handleUpgrade(req, socket, head, (ws) => {

@@ -8,6 +8,10 @@ import { orderedAgentPaneIds } from "../store/agentOrder.js";
 import { groupedWorkspaceRows, visibleGroupMembers } from "../store/workspaceGrouping.js";
 import { type AgentSort, SIDEBAR_WIDTH, type WorkspaceSort, useViewStore } from "../store/view.js";
 import StateIcon from "./StateIcon.vue";
+import MachineHeader from "./MachineHeader.vue";
+import MachineRows from "./MachineRows.vue";
+import { useMachinesStore } from "../store/machines.js";
+import { LOCAL_MACHINE_ID } from "../net/machineUrl.js";
 
 /**
  * サイドバー（D56 の訂正 9）。「spaces」（workspace の一覧）と「agents」（エージェントの一覧）の 2 区画。
@@ -24,6 +28,21 @@ const session = useSessionStore();
 const seen = useSeenStore();
 const view = useViewStore();
 const actions = inject(ActionDispatcherKey);
+const machines = useMachinesStore();
+
+/**
+ * マシンのまとまり（20260927-multi-host-machines の design「サイドバー」）。有効なマシンが無ければ、選んでいる（＝ローカルの）1 つだけで見出しを
+ * 出さない＝今までの描画のまま（AC15）。あれば、ローカルを先頭に登録の順。選んでいるマシンのまとまりには今までの workspace の行を、ほかは要約の行を出す。
+ */
+const machineSections = computed(() => (machines.hasMachines ? machines.sections : [{ id: machines.selectedId, label: "" }]));
+
+// navigate モード（サイドバーの行をキーで選ぶ）に入ったら、選んでいるマシンのまとまりを開く（畳んだままだと選択の枠が見えない）。
+watch(
+  () => view.mode,
+  (mode) => {
+    if (mode === "navigate" && machines.collapsed[machines.selectedId]) machines.toggleCollapsed(machines.selectedId);
+  },
+);
 const conn = inject(ConnectionKey);
 
 const el = ref<HTMLElement | null>(null);
@@ -127,6 +146,8 @@ const globalMenuOpen = computed(() => view.contextMenu?.target.kind === "global"
  * 1 つでもあるとき（切り替えの入口）だけ出す。押すと session の一覧（`SessionSwitchDialog`）。
  */
 const sessionLabel = computed(() => {
+  // ほかのマシンを選んでいる間は出さない（そのマシンの session を手元のブラウザのホスト名では開けない。20260927-multi-host-machines）。
+  if (machines.selectedId !== LOCAL_MACHINE_ID) return null;
   const name = session.host?.sessionName;
   if (name !== undefined) return name;
   return session.namedSessionCount > 0 ? "default" : null;
@@ -409,53 +430,61 @@ watch(
           {{ WORKSPACE_SORT_LABEL[view.workspaceSort] }}
         </button>
       </div>
-      <div
-        v-for="row in spaces"
-        :key="row.key"
-        class="sidebar-row"
-        :class="{
-          'sidebar-row-current': row.isCurrent,
-          'sidebar-row-selected': view.mode === 'navigate' && !!row.workspace && view.navigateSelection === row.workspace.id,
-          'sidebar-row-indent': row.indent,
-          'sidebar-row-drop-target': view.workspaceDrag?.overRowKey === row.key && !!row.dropAnchorId && !view.workspaceDrag.sourceIds.includes(row.dropAnchorId),
-          'sidebar-row-pane-drop-target': !!row.workspace && view.paneDrag?.overWorkspaceId === row.workspace.id,
-        }"
-        :data-workspace-row-key="row.key"
-        :data-drop-workspace-id="row.workspace?.id"
-        :aria-current="row.isCurrent ? 'true' : undefined"
-        @contextmenu="onRowContextMenu($event, row)"
-        @pointerdown="onRowPointerDown($event, row)"
-        @pointermove="onRowPointerMove($event)"
-        @pointerup="onRowPointerUp($event, row)"
-        @pointercancel="onRowPointerCancel($event)"
-        @lostpointercapture="onRowPointerCancel($event)"
-      >
-        <div class="sidebar-row-line1">
-          <!-- pointerdown/pointerup を `.stop` で止める（タスク点検の指摘）——止めないと行の
-               onRowPointerDown/onRowPointerUp にも伝播し、`onToggleCollapse` が二重に呼ばれる
-               （手動グループの頭）か、意図せず focusWorkspace が呼ばれる（worktree 自動グループの
-               頭）。`@click.stop` だけでは pointerup 側の伝播は止まらない。 -->
-          <button
-            v-if="row.isGroupHead"
-            type="button"
-            class="sidebar-group-toggle"
-            :aria-label="row.collapsed ? 'グループを展開' : 'グループを折りたたむ'"
-            :aria-expanded="!row.collapsed"
-            @pointerdown.stop
-            @pointerup.stop
-            @click.stop="onToggleCollapse(row)"
-            @keydown="onButtonKeydown"
-          >
-            {{ row.collapsed ? "▸" : "▾" }}
-          </button>
-          <StateIcon v-if="row.workspace" class="sidebar-state-icon" :state="row.state" />
-          <span v-if="!view.sidebarCollapsed" class="sidebar-label">{{ row.workspace ? row.workspace.label : row.groupLabel }}</span>
-        </div>
-        <div v-if="!view.sidebarCollapsed && row.showGit" class="sidebar-row-line2">
-          <span>{{ row.workspace!.git!.branch }}</span>
-          <span class="sidebar-git-counts">↑{{ row.workspace!.git!.ahead }} ↓{{ row.workspace!.git!.behind }}</span>
-        </div>
-      </div>
+      <template v-for="section in machineSections" :key="section.id">
+        <MachineHeader v-if="machines.hasMachines" :machine-id="section.id" :label="section.label" :compact="view.sidebarCollapsed" />
+        <template v-if="!machines.hasMachines || !machines.collapsed[section.id]">
+          <template v-if="section.id === machines.selectedId">
+              <div
+                v-for="row in spaces"
+                :key="row.key"
+                class="sidebar-row"
+                :class="{
+                  'sidebar-row-current': row.isCurrent,
+                  'sidebar-row-selected': view.mode === 'navigate' && !!row.workspace && view.navigateSelection === row.workspace.id,
+                  'sidebar-row-indent': row.indent,
+                  'sidebar-row-drop-target': view.workspaceDrag?.overRowKey === row.key && !!row.dropAnchorId && !view.workspaceDrag.sourceIds.includes(row.dropAnchorId),
+                  'sidebar-row-pane-drop-target': !!row.workspace && view.paneDrag?.overWorkspaceId === row.workspace.id,
+                }"
+                :data-workspace-row-key="row.key"
+                :data-drop-workspace-id="row.workspace?.id"
+                :aria-current="row.isCurrent ? 'true' : undefined"
+                @contextmenu="onRowContextMenu($event, row)"
+                @pointerdown="onRowPointerDown($event, row)"
+                @pointermove="onRowPointerMove($event)"
+                @pointerup="onRowPointerUp($event, row)"
+                @pointercancel="onRowPointerCancel($event)"
+                @lostpointercapture="onRowPointerCancel($event)"
+              >
+                <div class="sidebar-row-line1">
+                  <!-- pointerdown/pointerup を `.stop` で止める（タスク点検の指摘）——止めないと行の
+                       onRowPointerDown/onRowPointerUp にも伝播し、`onToggleCollapse` が二重に呼ばれる
+                       （手動グループの頭）か、意図せず focusWorkspace が呼ばれる（worktree 自動グループの
+                       頭）。`@click.stop` だけでは pointerup 側の伝播は止まらない。 -->
+                  <button
+                    v-if="row.isGroupHead"
+                    type="button"
+                    class="sidebar-group-toggle"
+                    :aria-label="row.collapsed ? 'グループを展開' : 'グループを折りたたむ'"
+                    :aria-expanded="!row.collapsed"
+                    @pointerdown.stop
+                    @pointerup.stop
+                    @click.stop="onToggleCollapse(row)"
+                    @keydown="onButtonKeydown"
+                  >
+                    {{ row.collapsed ? "▸" : "▾" }}
+                  </button>
+                  <StateIcon v-if="row.workspace" class="sidebar-state-icon" :state="row.state" />
+                  <span v-if="!view.sidebarCollapsed" class="sidebar-label">{{ row.workspace ? row.workspace.label : row.groupLabel }}</span>
+                </div>
+                <div v-if="!view.sidebarCollapsed && row.showGit" class="sidebar-row-line2">
+                  <span>{{ row.workspace!.git!.branch }}</span>
+                  <span class="sidebar-git-counts">↑{{ row.workspace!.git!.ahead }} ↓{{ row.workspace!.git!.behind }}</span>
+                </div>
+              </div>
+          </template>
+          <MachineRows v-else :machine-id="section.id" :compact="view.sidebarCollapsed" />
+        </template>
+      </template>
 
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-footer">
         <button type="button" class="sidebar-btn" @click="onNewWorkspace" @keydown="onButtonKeydown">＋ 新規</button>

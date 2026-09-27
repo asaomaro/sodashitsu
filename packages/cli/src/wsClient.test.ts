@@ -152,3 +152,34 @@ describe("WsWtmClient.pause/resume — 受信の一時停止（20260926-pane-obs
     }
   });
 });
+
+// 20260927-multi-host-machines（T10）: `--machine` は `/ws?machine=` で、404/503 を分けて返す。
+describe("connect(..., machine) — 手元の wtm serve の中継", () => {
+  it("登録に無いマシンは machine_not_found、local は手元そのもの", async () => {
+    const cookie = await login(origin, token);
+    await expect(connect(origin, cookie, "nope")).rejects.toMatchObject({ code: "machine_not_found" });
+    const local = await connect(origin, cookie, "local");
+    try {
+      expect((await local.hello()).snapshot.protocol).toBe(1);
+    } finally {
+      local.close();
+    }
+  });
+
+  it("503 は machine_unavailable（--machine のときだけ）", async () => {
+    const { createServer } = await import("node:http");
+    const http = createServer();
+    http.on("upgrade", (_req, socket) => {
+      socket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
+      socket.destroy();
+    });
+    await new Promise<void>((r) => http.listen(0, "127.0.0.1", r));
+    const port = (http.address() as { port: number }).port;
+    try {
+      await expect(connect(`http://127.0.0.1:${port}`, "c=1", "Build")).rejects.toMatchObject({ code: "machine_unavailable" });
+      await expect(connect(`http://127.0.0.1:${port}`, "c=1")).rejects.toMatchObject({ statusCode: 503 });
+    } finally {
+      await new Promise<void>((r) => http.close(() => r()));
+    }
+  });
+});

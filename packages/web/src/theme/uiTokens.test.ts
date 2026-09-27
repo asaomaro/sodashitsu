@@ -256,7 +256,8 @@ describe("部品の CSS の透明度", () => {
     import: "default",
     eager: true,
   }) as Record<string, string>;
-  const EXEMPT = [/:disabled/, /\.help-dialog-grayed/, /\.state-icon/];
+  // `[aria-disabled="true"]` も無効な部品（Tab で辿れるよう `disabled` の代わりに使う。20260927-multi-host-machines の切れているマシンの行）。
+  const EXEMPT = [/:disabled/, /\[aria-disabled="true"\]/, /\.help-dialog-grayed/, /\.state-icon/];
 
   it("無効な部品・未対応の行・状態の丸を除き、opacity は MUTED_TEXT_ALPHA 以上", () => {
     const found: string[] = [];

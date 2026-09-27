@@ -1,0 +1,85 @@
+# レビュー記録
+
+## タスク点検ログ（coding 工程内・「3.3」(b)）
+- [must][conv:-] packages/server/src/machine/bridgeFrames.ts 復号で枠ごとに残りのバッファを写していて、小さな枠を詰めたかたまりで O(N^2)（リモートの入力で CPU を食える） / 対応: 修正済（かたまりの一覧と読み位置で 1 回だけ取り出す。T2・ラウンド1）
+- [should][conv:-] packages/server/src/machine/bridgeFrames.ts 大きな枠の組み立てでも push ごとに全体を写していた / 対応: 修正済（同上。T2・ラウンド1）
+- [should][conv:-] packages/server/src/machine/bridgeFrames.test.ts 目印の境界・channel の規則・encode の範囲のテストが無い / 対応: 修正済（境界の両側・分割・多数の枠・channel 0 の規則・範囲。T2・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/bridgeFrames.ts 目印の探索の境界が「最初の 64KiB の中に始まる」とずれていた / 対応: 修正済（T2・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/bridgeFrames.ts `parseClosePayload` が送れない code（1005・1006 等）を通していた / 対応: 修正済（`isSendableCloseCode`。T2・ラウンド1）
+- [must][conv:-] packages/server/src/machine/BridgeEndpoint.ts 引き継ぎの間も受け口が新しいチャネルを gateway に渡していた / 対応: 修正済（`setReady`。closeClients/reopenClients と close() で切り替える。T3・ラウンド1）
+- [should][conv:-] packages/server/src/machine/BridgeEndpoint.ts listen から chmod 0600 までの間の接続を認証済みとして受けていた / 対応: 修正済（絞り終えるまで捨てる。T3・ラウンド1）
+- [should][conv:-] packages/server/src/machine/BridgeEndpoint.ts 停止の CLOSE の枠が destroy で捨てられうる / 対応: 修正済（end してから上限 500ms で destroy。T3・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/BridgeEndpoint.ts CLOSE の reason を UTF-16 の単位で切っていた / 対応: 修正済（`truncateUtf8` で 120 バイト。T3・ラウンド1）
+- [nit][conv:-] packages/server/src/composeServer.ts 版の文字列を 2 か所に持っていた / 対応: 修正済（`SERVER_VERSION`。T3・ラウンド1）
+- [should][conv:-] packages/server/src/machine/bridgeCommand.ts 標準出力・標準入力に 'error' のリスナが無く、ssh の側が先に閉じると EPIPE の未処理のエラーで 1 で落ちる / 対応: 修正済（error・close で終了コード 0。T4・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/bridgeCommand.test.ts 標準入力の EOF の向きと標準出力の失敗のテストが無い / 対応: 修正済（T4・ラウンド1）
+- [should][conv:-] packages/server/src/machine/bridgeFrames.ts HELLO の文字列の上限を UTF-16 の単位で数えていた（design は 256 バイト） / 対応: 修正済（T2・ラウンド2）
+- [should][conv:-] packages/server/src/machine/bridgeFrames.ts CLOSE の reason を切らずに返していた（ws の close は 123 バイト超で投げる） / 対応: 修正済（120 バイト。T2・ラウンド2）
+- [should][conv:regression-negative-control] packages/server/src/machine/bridgeFrames.test.ts かたまりをまたいだ目印の位置の上限の項を消す変異を捕まえない / 対応: 修正済（95＋10 の場合を足した。T2・ラウンド2）
+- [nit][conv:-] packages/server/src/machine/bridgeFrames.test.ts link の PING・endpoint の PONG を受けないことのテストが無い / 対応: 修正済（T2・ラウンド2。上限に達したので再点検はしない）
+- [should][conv:-] packages/server/src/machine/BridgeEndpoint.ts chmod を待つ門は、同じ周回で受け付けの callback が chmod の完了より後に来ると窓が残る / 対応: 修正済（0700 の一時ディレクトリで待ち受け 0600 にしてから `bridge.sock` へ rename。閉じたら自分で消す。T3・ラウンド2）
+- [should][conv:regression-negative-control] packages/server/src/machine/BridgeEndpoint.test.ts reason の切り詰めのテストが ASCII だけで、修正前でも通る / 対応: 修正済（多バイトの reason・送った枠をそのまま読む。変異〔slice(0,60)〕で落ちることを確かめた: scratchpad/negctl/T3-reason-mutant.log。T3・ラウンド2）
+- [nit][conv:-] packages/server/src/machine/BridgeEndpoint.ts close() の猶予の間に届いた OPEN・PING を扱っていた / 対応: 修正済（閉じ始めたら扱わない。T3・ラウンド2。上限に達したので再点検はしない）
+- [should][conv:-] packages/server/src/machine/machineRules.ts 利用者の部分の `%3A`（ssh:// で OpenSSH が戻す）でパスワードを登録簿に保存できた / 対応: 修正済（利用者の部分に % を使わせない。T5・ラウンド1）
+- [should][conv:-] packages/server/src/machine/machineRules.ts 先頭の - を宛先の全体でしか見ず、`ssh://-oX@h`・`u@-oX` が通った（ssh_config の %r・%h 展開に入る） / 対応: 修正済（利用者名・ホスト名それぞれ。ホスト名なしも拒む。T5・ラウンド1）
+- [should][conv:-] packages/server/src/machine/MachineCatalog.ts 登録簿を丸ごと読んでから大きさを見ていた / 対応: 修正済（上限＋1 バイトまでしか読まない。T5・ラウンド1）
+- [should][conv:-] packages/server/src/machine/MachineCatalog.test.ts 境界（64 台・64KiB・128 バイトちょうど）と `__proto__` のテストが無い / 対応: 修正済（T5・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/machineRules.ts 名前に双方向の上書き・行の区切りの文字が通った / 対応: 修正済（T5・ラウンド1）
+- [should][conv:-] packages/server/src/machine/MachineLink.ts 生きているかの確かめを online からの 15 秒周期で見ていて、切るのが最大 15 秒遅れた / 対応: 修正済（1 秒ごと・最後に受けた時刻から。T6・ラウンド1）
+- [should][conv:-] packages/server/src/machine/MachineLink.ts 標準エラーをかたまりごとに文字列にして多バイト文字が化けた / 対応: 修正済（StringDecoder。T6・ラウンド1）
+- [should][conv:-] packages/server/src/machine/MachineLink.ts 「wtm が無い」の文言の照合を標準エラー全体に当てていて、初期化ファイルの雑音で非互換を取り違えた / 対応: 修正済（最後の 2 行・`No such file` を外した。T6・ラウンド1）
+- [nit][conv:-] design.md 判定の順の (2) の条件がコードと食い違う / 対応: 修正済（design を (2)〜(6) に。T6・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/MachineLink.ts stdout・stderr の 'error' のリスナが無い / 対応: 修正済（T6・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/MachineLink.test.ts SIGKILL・報告 1 回・ENOENT の経路・stderr の分割のテストが無い / 対応: 修正済（T6・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/MachineLink.ts 使っていない変数・受け取るだけの logger / 対応: 修正済（logger は閉じた理由を info に。T6・ラウンド1）
+- [should][conv:-] packages/server/src/machine/MachineManager.ts 読み直しのまとめ方に、最後の確かめから `reloading` を空にするまでの窓があり変更を取りこぼしうる / 対応: 修正済（同じ流れの finally で空にする。T7・ラウンド1。窓はテストで再現できないので変異では確かめていない）
+- [nit][conv:-] packages/server/src/machine/MachineManager.ts 同期に失敗する試みで反映の途中の一覧を配っていた / 対応: 修正済（反映の間は配らず最後に 1 回。変異〔門を外す〕で落ちることを確かめた: scratchpad/negctl/T7-reconciling-mutant.log。T7・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/MachineManager.test.ts session の変更・ok→missing・同期の失敗・重なった読み直しのテストが無い / 対応: 修正済（T7・ラウンド1）
+- [must][conv:-] packages/server/src/ws/WsServerWs.ts・composeServer.ts 中継の接続が手元のセッションの失効（ログアウト・token の作り直し）で閉じず、失効後もリモートを操作できた / 対応: 修正済（attach にセッション id を渡し、`auth.onSessionRevoked` で 4401。変異〔閉じる行を外す〕で落ちることを確かめた: scratchpad/negctl/T8-revoke-mutant.log。T8・ラウンド1）
+- [nit][conv:-] packages/server/src/composeServer.ts 停止で ssh を先に閉じ、中継の接続に 1012（切れた）が届いていた / 対応: 修正済（先に 1001 で閉じる。T8・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/MachineManager.ts 起動直後（最初の読み込みの前）は登録済みのマシンも 404 になる / 対応: 修正済（読み込むまでは 503。T8・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/machines.integration.test.ts リンク切れの 1012 を確かめていない（1001 も許していた） / 対応: 修正済（ssh を落として 1012 を確かめる試験を足した。T8・ラウンド1）
+- [should][conv:-] packages/server/src/machine/machineCommands.ts 保存の fs の失敗がスタックトレースで落ちる / 対応: 修正済（理由を出して 1。T9・ラウンド1）
+- [should][conv:-] packages/server/src/machine/machineCommands.ts 名前の規則を登録簿を読んだ後に見ていて、壊れた登録簿のとき引数の誤りが 1 になる / 対応: 修正済（読む前に見る。T9・ラウンド1）
+- [should][conv:-] packages/server/src/machine/machineCommands.ts 案内の `ssh <宛先>` が引用されず、`[::1]` 等を貼ると glob になる / 対応: 修正済（`shellQuote`。T9・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/machineCommands.ts 使っていない定数 PROBE_TIMEOUT_MS / 対応: 修正済（T9・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/machineCommands.test.ts `--remote-session default` と台数の上限のテストが無い / 対応: 修正済（T9・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/machineCommands.ts 同時の add・rename・remove は後から書いた方が勝つ（排他なし） / 対応: 許容（窓は狭い。decisions D13 に既知の制約として記録。T9・ラウンド1）
+- [nit][conv:-] packages/server/src/machine/machineArgs.ts 使い方の `D` と help の `DIR` の表記の食い違い / 対応: 修正済（T9・ラウンド1）
+- [should][conv:-] packages/cli/src/cliArgs.ts `--machine local`（手元そのもの）でも自分の pane の歯止めを外していた / 対応: 修正済（local は前置きが無いのと同じ。T10・ラウンド1）
+- [nit][conv:-] packages/cli/src/cliArgs.ts `--` で始まる名前のマシンを名前で選べない / 対応: 修正済（案内で id を使うよう示す。T10・ラウンド1）
+- [nit][conv:-] packages/cli/src/main.ts help の歯止めの説明に `--machine` のときも効かないことが無い / 対応: 修正済（T10・ラウンド1）
+- [nit][conv:-] packages/cli/src/wsClient.ts connect の説明が 404/503 の RpcFailure と合わない / 対応: 修正済（T10・ラウンド1）
+- [must][conv:-] packages/web/src/net/Connection.ts 閉じる途中（CLOSING）の socket で retarget すると、古い socket の close が新しい socket の要求を落とし 3 本目を開いた / 対応: 修正済（閉じる途中も close を待つ・今の socket 以外の close は無視。変異で落ちることを確かめた: scratchpad/negctl/T11-closing-mutant.log。T11・ラウンド1）
+- [should][conv:-] packages/web/src/store/view.ts 切り替えでキーの側のモード（navigate・copy・dialog）が残る / 対応: 修正済（main.ts の resetView で keys.setMode("terminal")。T11・ラウンド1）
+- [nit][conv:-] packages/web/src/notify/NotificationController.ts 遅延の取り消しが差し替え可能な時計と対でない / 対応: 修正済（clearTimeoutFn。T11・ラウンド1）
+- [nit][conv:-] packages/web/src/store/session.ts・seen.ts 既存の JSDoc が宙に浮いた / 対応: 修正済（T11・ラウンド1）
+- [nit][conv:-] packages/web/src/store/machineScope.test.ts 表示の記憶のキーのモジュールの状態がテスト間で漏れうる / 対応: 修正済（beforeEach で戻す。T11・ラウンド1）
+- [should][conv:-] packages/web/src/net/MachineSummaryClient.ts start の重ねで socket が 2 本開く / 対応: 修正済（T12・ラウンド1）
+- [should][conv:-] packages/web/src/store/machines.test.ts 待っている要求の reject・hello の途中の stop・tab/pane の対応・並びの知らない id のテストが無い / 対応: 修正済（T12・ラウンド1）
+- [nit][conv:-] packages/web/src/store/machines.ts 要約を作った直後に proxy でないオブジェクトを変えていた / 対応: 修正済（T12・ラウンド1）
+- [nit][conv:-] packages/web/src/net/MachineSummaryClient.ts stop が onConnected(false) を知らせない / 対応: 修正済（T12・ラウンド1）
+- [nit][conv:-] packages/web/src/net/MachineSummaryClient.ts 受け取った側の例外まで hello の失敗として握りつぶし繋ぎ直しの輪に入る / 対応: 修正済（後で投げ直す。T12・ラウンド1）
+- [must][conv:-] packages/web/src/main.ts `isMobileViewport()` は Ref を返すので `!isMobileViewport()` が常に偽になり、デスクトップでもマシンの機能が一切働かなかった（型も単体テストも通る） / 対応: 修正済（media query を直接購読し、判断を `actions/MachineWiring.ts` に切り出して単体テストした。T13・ラウンド1）
+- [should][conv:-] packages/web/src/main.ts 起動後に窓を狭めて 1 列の画面になると、リモートを選んだまま戻れない / 対応: 修正済（1 列になったらローカルへ戻り一覧を空にする。広げたら読み直す。T13・ラウンド1）
+- [should][conv:regression-negative-control!] packages/web/src/actions/MachineWiring.test.ts ラウンド1の must の回帰テストが直した箇所（main.ts の判定）を通っていない / 対応: 修正済（判定を `MachineWiring.isEnabled` に移し、依存は Ref で受けて `!Ref` を型で止める。変異: 判定を常に偽にすると 6 件落ちる〔scratchpad/negctl/T13-enabled-mutant.log〕、main.ts で真偽値を渡すと vue-tsc が落ちる〔scratchpad/negctl/T13-type-mutant.log〕。T13・ラウンド2。上限）
+- [should][conv:-] packages/web/src/components/MachineRows.vue 行の aria-label が状態の印の名前を上書きし、読み上げから状態が消える / 対応: 修正済（名前に状態を含める。T14・ラウンド1）
+- [should][conv:-] packages/web/src/components/MachineHeader.vue・MachineRows.vue 畳んだサイドバーで余白が大きく先頭 1 文字が切れる / 対応: 修正済（畳んだときの余白を詰める。T14・ラウンド1）
+- [should][conv:-] packages/web/src/components/MachineHeader.vue 切れているマシンの見出しが disabled で Tab で辿れず、要対応の理由が title にしか無い / 対応: 修正済（aria-disabled・理由を読み上げの名前に。行も同じ。T14・ラウンド1）
+- [nit][conv:-] packages/web/src/components/MachineHeader.vue 開閉のボタンに aria-controls が無く、ラベルが状態で変わり aria-expanded と二重 / 対応: 修正済（ほかのマシンの一覧を指す・ラベルは固定。選んでいるマシンの行は既存の要素のままなので指さない。T14・ラウンド1）
+- [nit][conv:-] packages/web/src/components/Sidebar.vue 選んでいるマシンを畳むと navigate の選択の枠が見えなくなる / 対応: 修正済（navigate に入ったら開く。T14・ラウンド1）
+- [should][conv:-] packages/server/src/machineSmoke.ts リモートのサーバが SIGKILL に落ちたとき pane のシェルが残りうる / 対応: 修正済（シェルの pid を控えて後始末。T15・ラウンド1）
+- [should][conv:-] packages/server/src/machineSmoke.ts 中継を通ったことを「手元に無い」ことでしか示していない / 対応: 修正済（リモートに直接繋いでその workspace があることを確かめる。T15・ラウンド1）
+- [nit][conv:-] packages/server/src/machineSmoke.ts ssh の引数を包含でしか見ていない / 対応: 修正済（`--` の直後が宛先・wtm・bridge の並び。T15・ラウンド1）
+- [nit][conv:-] packages/server/src/machineSmoke.ts mkdir の動的 import / 対応: 修正済（T15・ラウンド1）
+- [must][conv:-] docs/herdr-parity.md H43 の行のコードスパンの中の `|` がエスケープされず表の列がずれる / 対応: 修正済（T16・ラウンド1）
+- [should][conv:-] docs/machines.md リモートの `wtm serve` は既定の状態ディレクトリで動いている必要があることが書かれていない / 対応: 修正済（準備に書いた。T16・ラウンド1。`--state-dir` を登録簿に持たせるのは backlog）
+- [should][conv:-] docs/machines.md `~/.ssh/environment` は sshd の既定では効かない / 対応: 修正済（`.bashrc` の先頭だけを案内。T16・ラウンド1）
+- [nit][conv:-] docs/machines.md herdr との違いの SSH のオプションの書き方が自己矛盾して読める / 対応: 修正済（T16・ラウンド1）
+- [nit][conv:-] docs/machines.md 「違い」の節に同じ点が混ざる / 対応: 修正済（「同じ点」と明記。T16・ラウンド1）
+- [nit][conv:-] docs/machines.md 手で `ssh <宛先> wtm bridge` を打ったときの振る舞い / 対応: 修正済（Ctrl+D で抜ける。T16・ラウンド1）
+- [nit][conv:-] docs/wtmctl.md・docs/machines.md 文体（です・ます）が既存の docs と違う / 対応: wtmctl.md の新しい節は常体に揃えた。machines.md は利用者向けの手引きとして新しく起こしたもので全体を一貫させたまま（許容。T16・ラウンド1）
+- [should][conv:-] packages/server/src/machine/bridgeFrames.ts・BridgeEndpoint.ts 4MiB の上限をリモート → 手元の送信にも当てていて、大きな SNAPSHOT の pane がリモートでだけ見られない（1009 → 1011 → 繋ぎ直しの輪） / 対応: 修正済（リモート → 手元は 64MiB・中継の送り待ちは 128MiB。変異〔4MiB に戻す〕で落ちる: scratchpad/negctl/M14.log。cross・ラウンド1）
+- [should][conv:-] packages/server/src/composeServer.ts 更新時の引き継ぎ（execve）の前にマシンの ssh を止めず、子が回収されずに残る / 対応: 修正済（pausePollers で止めて子の終わりを待ち、失敗で戻したら繋ぎ直す。変異〔待たない〕で落ちる: scratchpad/negctl/M15.log。cross・ラウンド1）
+- [should][conv:-] packages/web/src/main.ts 端末の windowsPty をマシンを切り替えても外さない / 対応: 修正済（Windows でないホストになったら外す。main.ts は単体テストできないので変異では確かめていない。cross・ラウンド1）
+- [nit][conv:-] packages/server/src/composeServer.ts 停止で 1001 を先に送る理由の説明が、クライアントが code を分けていない実態と合わない / 対応: 修正済（説明を直した。cross・ラウンド1）

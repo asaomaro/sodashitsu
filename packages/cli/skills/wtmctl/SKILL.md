@@ -136,3 +136,5 @@ pane の中の wtmctl は、次の操作の対象が**自分の pane**（`$WTM_P
 - エージェント: `wtmctl agent list`・`wtmctl agent get`・`wtmctl agent wait`・`wtmctl agent read`・`wtmctl agent prompt`・`wtmctl agent send-keys`・
   `wtmctl agent rename`・`wtmctl agent start`
 - この説明: `wtmctl skill`
+- 別のマシン: 前置き `wtmctl --machine <名前|id> <コマンド> …`（手元の wtm serve に `wtm machine add` で登録したマシンへ送る。login・skill 以外）。
+  id（pane・エージェントの名前を含む）はマシンごとに別なので、そのマシンの `snapshot`・`agent list` で調べた id を使う。`--machine` のときは自分の pane の歯止めは効かない。

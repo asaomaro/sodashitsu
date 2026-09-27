@@ -1,5 +1,6 @@
 import type { InjectionKey } from "vue";
 import type { ActionDispatcher } from "./actions/ActionDispatcher.js";
+import type { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import type { KeyInputController } from "./keys/KeyInputController.js";
 import type { NotificationController } from "./notify/NotificationController.js";
 import type { ConnectionPort, DeviceKind } from "./net/ports.js";
@@ -24,3 +25,5 @@ export const NotificationControllerKey: InjectionKey<NotificationController> = S
 export const DeviceKindKey: InjectionKey<DeviceKind> = Symbol("deviceKind");
 /** `mobile/ExtraKeys.vue`（04-mobile T3）が `injectKey` へ直接キーを流すために使う。 */
 export const KeyInputControllerKey: InjectionKey<KeyInputController> = Symbol("keyInputController");
+/** 保存した SSH のマシンの切り替え（20260927-multi-host-machines）。サイドバーのマシンのまとまりが使う。無ければ切り替えられない（テスト等）。 */
+export const MachineSwitcherKey: InjectionKey<MachineSwitcher> = Symbol("machineSwitcher");

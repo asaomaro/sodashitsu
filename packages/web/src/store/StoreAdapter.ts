@@ -1,4 +1,4 @@
-import type { AgentInfo, AgentIntegrationStatusResult, ServerEvent, SessionSnapshot } from "@wtm/protocol";
+import type { AgentInfo, AgentIntegrationStatusResult, MachineStatus, ServerEvent, SessionSnapshot } from "@wtm/protocol";
 import type { Pinia } from "pinia";
 import type { ConnectionState, StorePort } from "../net/ports.js";
 import { useSessionStore } from "./session.js";
@@ -31,6 +31,11 @@ export interface StoreAdapterOptions {
   onPaneClosed?: (paneId: string) => void;
   /** 公式フック連携の導入状態・自動再開設定が変わった（20260923-agent-session-resume）。省略可。 */
   onAgentIntegrationChanged?: (status: AgentIntegrationStatusResult) => void;
+  /**
+   * 保存した SSH のマシンの一覧が変わった（`machine.changed`。20260927-multi-host-machines）。**画面の接続がローカルを向いているときだけ**
+   * 意味を持つ（リモートを向いていればそのマシンの登録簿）——使うかは呼び出し側（`main.ts`）が決める。省略可。
+   */
+  onMachinesChanged?: (machines: MachineStatus[]) => void;
 }
 
 /**
@@ -44,6 +49,11 @@ export class StoreAdapter implements StorePort {
   #appliedSnapshot = false;
 
   constructor(private readonly opts: StoreAdapterOptions) {}
+
+  /** 次の snapshot を初回（通知の基準線）として扱う（マシンの切り替え。20260927-multi-host-machines）。 */
+  resetBaseline(): void {
+    this.#appliedSnapshot = false;
+  }
 
   applySnapshot(s: SessionSnapshot, clientId: string): void {
     const session = useSessionStore(this.opts.pinia);
@@ -149,6 +159,9 @@ export class StoreAdapter implements StorePort {
         return;
       case "agent_integration.changed":
         this.opts.onAgentIntegrationChanged?.(e.data);
+        return;
+      case "machine.changed":
+        this.opts.onMachinesChanged?.(e.data.machines);
         return;
     }
   }

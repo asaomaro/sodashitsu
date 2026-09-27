@@ -6,7 +6,7 @@ import type { SizeAuthority } from "../../clients/SizeAuthority.js";
 import type { TerminalManager } from "../../terminal/TerminalManager.js";
 import type { AgentIntegrationService } from "../../agent/AgentIntegrationService.js";
 import type { AgentStarter } from "../../agent/AgentStarter.js";
-import type { ServerSessionEntry } from "@wtm/protocol";
+import type { MachineStatus, ServerSessionEntry } from "@wtm/protocol";
 
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
 export interface MethodDeps {
@@ -24,4 +24,6 @@ export interface MethodDeps {
   agentStarter?: AgentStarter;
   /** `server.sessions`（20260926-named-session-ui）。無ければ空の一覧を返す。 */
   serverSessions?: () => Promise<ServerSessionEntry[]>;
+  /** `machine.list`（20260927-multi-host-machines）。無ければ空の一覧を返す。 */
+  machines?: () => MachineStatus[];
 }

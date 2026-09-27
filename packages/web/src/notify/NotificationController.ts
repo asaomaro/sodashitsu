@@ -22,6 +22,8 @@ export interface NotificationControllerOptions {
   hasFocus?: () => boolean;
   /** 遅延の差し替え（テスト用。既定は `setTimeout`）。 */
   setTimeoutFn?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  /** `setTimeoutFn` と対（マシンの切り替えで遅延中の知らせを取り消す。20260927-multi-host-machines）。 */
+  clearTimeoutFn?: (h: ReturnType<typeof setTimeout>) => void;
   /** pane へ移ったことをサーバへ知らせる（`pane.focus`）。省略可。 */
   onFocusPane?: (paneId: string) => void;
 }
@@ -110,6 +112,18 @@ export class NotificationController {
     for (const entry of store.queue.filter((q) => !alive.has(q.paneId))) {
       for (const e of store.removePane(entry.paneId)) this.#cleanup(e.toastId, e.paneId);
     }
+  }
+
+  /**
+   * マシンの切り替えの前に、前のマシンの待ち行列・トースト・OS 通知・判定済みの鍵・遅延中の知らせを捨てる（20260927-multi-host-machines）。
+   * pane の id はマシンをまたいで衝突するので、前のマシンの `p1` の知らせを次のマシンの `p1` へ移さない。次の snapshot は初回（基準線）として扱う
+   * （`StoreAdapter.resetBaseline`）。
+   */
+  resetForMachineSwitch(): void {
+    const clearT = this.#opts.clearTimeoutFn ?? clearTimeout;
+    for (const h of this.#pending.values()) clearT(h);
+    this.#pending.clear();
+    this.#pruneMissingPanes(new Set());
   }
 
   /**

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentInfo, AgentIntegrationKind, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
+import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
 import { THEME_NAMES } from "./theme.js";
 
 /**
@@ -402,6 +402,15 @@ export interface ServerSessionsResult {
   sessions: ServerSessionEntry[];
 }
 
+// --- 保存した SSH のマシン（20260927-multi-host-machines）---------------------------------------------
+
+/** 手元の `wtm serve` の、有効なマシンの一覧と状態（登録の順）。変化は `machine.changed` でも配る。 */
+export const MachineListParams = z.object({});
+export type MachineListParams = z.infer<typeof MachineListParams>;
+export interface MachineListResult {
+  machines: MachineStatus[];
+}
+
 export const AgentIntegrationStatusParams = z.object({});
 export type AgentIntegrationStatusParams = z.infer<typeof AgentIntegrationStatusParams>;
 
@@ -555,6 +564,7 @@ export const METHOD_SCHEMAS = {
   "agent.rename": AgentRenameParams,
   "agent.start": AgentStartParams,
   "server.sessions": ServerSessionsParams,
+  "machine.list": MachineListParams,
 } as const;
 
 export type MethodName = keyof typeof METHOD_SCHEMAS;
@@ -616,6 +626,7 @@ export interface MethodResultMap {
   "agent.rename": AgentRenameResult;
   "agent.start": AgentStartResult;
   "server.sessions": ServerSessionsResult;
+  "machine.list": MachineListResult;
 }
 
 export type ParamsOf<M extends MethodName> = z.infer<(typeof METHOD_SCHEMAS)[M]>;

@@ -1,4 +1,12 @@
-import type { AgentInfo, Pane, SessionFocus, Tab, Workspace, WorkspaceGroup } from "./model.js";
+import type {
+  AgentInfo,
+  MachineStatus,
+  Pane,
+  SessionFocus,
+  Tab,
+  Workspace,
+  WorkspaceGroup,
+} from "./model.js";
 import type { AgentIntegrationStatusResult } from "./messages.js";
 
 /**
@@ -112,6 +120,12 @@ export interface AgentIntegrationChangedEvent {
   data: AgentIntegrationStatusResult;
 }
 
+/** 保存した SSH のマシンの一覧・状態・名前が変わった（20260927-multi-host-machines）。中身は `machine.list` と同じ。 */
+export interface MachineChangedEvent {
+  event: "machine.changed";
+  data: { machines: MachineStatus[] };
+}
+
 export type ServerEvent =
   | WorkspaceCreatedEvent
   | WorkspaceUpdatedEvent
@@ -133,6 +147,7 @@ export type ServerEvent =
   | PaneAttachChangedEvent
   | SessionFocusChangedEvent
   | ClientErrorEvent
-  | AgentIntegrationChangedEvent;
+  | AgentIntegrationChangedEvent
+  | MachineChangedEvent;
 
 export type ServerEventName = ServerEvent["event"];

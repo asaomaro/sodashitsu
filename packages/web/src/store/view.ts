@@ -8,6 +8,15 @@ import type { Zone } from "../term/paneDragZone.js";
 
 const STORAGE_KEY = "wtm.view.v1";
 
+/**
+ * 表示の記憶のキー（20260927-multi-host-machines）。workspace・tab の id はマシンごとの連番で、マシンをまたぐと衝突する（`w1` が両方にある）ので、
+ * ローカル以外のマシンは別のキーに持つ（ローカルは今までのキーのまま）。
+ */
+let storageKey = STORAGE_KEY;
+export function storedViewKeyFor(machineId: string): string {
+  return machineId === "local" ? STORAGE_KEY : `${STORAGE_KEY}:${machineId}`;
+}
+
 export interface StoredView {
   workspaceId: string;
   tabId: string;
@@ -15,7 +24,7 @@ export interface StoredView {
 
 function loadStoredView(): StoredView | null {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = sessionStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (parsed && typeof parsed === "object" && "workspaceId" in parsed && "tabId" in parsed) return parsed as StoredView;
@@ -27,7 +36,7 @@ function loadStoredView(): StoredView | null {
 
 function saveStoredView(v: StoredView): void {
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(v));
+    sessionStorage.setItem(storageKey, JSON.stringify(v));
   } catch {
     // 保存できなくても致命的ではない（次回は再度 focus から決める）。
   }
@@ -327,6 +336,44 @@ export const useViewStore = defineStore("view", () => {
     }
   }
 
+  /** 表示の記憶をどのマシンのものにするか（20260927-multi-host-machines。切り替えの手順 3）。 */
+  function setMachineScope(machineId: string): void {
+    storageKey = storedViewKeyFor(machineId);
+  }
+
+  /** 今のスコープの記憶だけを書く（切り替え先で表示する workspace。画面の表示は変えない）。 */
+  function rememberView(newWorkspaceId: string, newTabId: string): void {
+    saveStoredView({ workspaceId: newWorkspaceId, tabId: newTabId });
+  }
+
+  /** 今のスコープの記憶を消す（見出しからの切り替えは、そのマシンの今の focus を表示する。AC9）。 */
+  function forgetStoredView(): void {
+    try {
+      sessionStorage.removeItem(storageKey);
+    } catch {
+      // 消せなくても致命的ではない
+    }
+  }
+
+  /**
+   * マシンの切り替えの前に、前のマシンの表示・焦点・開いているダイアログ・メニュー・ドラッグ・navigate の選択を捨てる（id がマシンをまたいで衝突するため）。
+   * 表示は次の snapshot の `restoreView` が決める。
+   */
+  function resetForMachineSwitch(): void {
+    dialogContext.value = null;
+    openDialog.value = null;
+    preDialogFocusPaneId.value = null;
+    contextMenu.value = null;
+    paneDrag.value = null;
+    workspaceDrag.value = null;
+    navigateSelection.value = null;
+    navigateMenuRequested.value = false;
+    workspaceId.value = null;
+    tabId.value = null;
+    focusedPaneId.value = null;
+    lastFocusedPaneId.value = null;
+  }
+
   function setView(newWorkspaceId: string, newTabId: string): void {
     workspaceId.value = newWorkspaceId;
     tabId.value = newTabId;
@@ -543,6 +590,10 @@ export const useViewStore = defineStore("view", () => {
     toasts,
     isPrefixWaiting,
     restoreView,
+    setMachineScope,
+    rememberView,
+    forgetStoredView,
+    resetForMachineSwitch,
     setView,
     focusPane,
     onModeChange,

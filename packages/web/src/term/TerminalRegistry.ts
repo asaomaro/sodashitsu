@@ -272,7 +272,15 @@ export class TerminalRegistry implements TerminalSinkPort {
     };
   }
 
-  private dispose(paneId: string): void {
+  /**
+   * 全ての端末を捨てる（20260927-multi-host-machines のマシンの切り替え）。pane の id はマシンをまたいで衝突するので、前のマシンの `p1` の中身を
+   * 次のマシンの `p1` に見せない。端末の部品（`TerminalPane`）が外れた後に呼ぶ。購読の解除は送らない（その接続はこの後に閉じる）。
+   */
+  disposeAll(): void {
+    for (const paneId of [...this.entries.keys()]) this.dispose(paneId, { notifyServer: false });
+  }
+
+  private dispose(paneId: string, opts: { notifyServer?: boolean } = {}): void {
     const entry = this.entries.get(paneId);
     if (!entry) return;
     this.entries.delete(paneId);
@@ -284,7 +292,7 @@ export class TerminalRegistry implements TerminalSinkPort {
     this.mouseBridges.delete(paneId);
     this.opts.renderers.release(paneId);
     entry.term.dispose();
-    void this.opts.conn.request("pane.unsubscribe", { paneId }).catch(() => undefined);
+    if (opts.notifyServer !== false) void this.opts.conn.request("pane.unsubscribe", { paneId }).catch(() => undefined);
   }
 }
 

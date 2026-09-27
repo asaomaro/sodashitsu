@@ -3,7 +3,7 @@
  * `wtmctl` のエントリポイント（design.md「インターフェース/データ構造・コマンド一覧」）。
  * `parseArgs` → 対応する `commands/*` を呼ぶ → 例外は `reportAndExit` が終了コードへ変換する（T11）。
  */
-import { parseArgs, USAGE_LINES } from "./cliArgs.js";
+import { parseArgs, MACHINE_USAGE_LINE, USAGE_LINES } from "./cliArgs.js";
 import {
   runAgentGet,
   runAgentList,
@@ -29,6 +29,7 @@ function printHelp(): void {
     [
       // 一覧は `cliArgs.ts` の `USAGE_LINES`（skill ファイルとの食い違いの検査も同じものを見る。20260926-agent-skill-file）。
       ...USAGE_LINES,
+      MACHINE_USAGE_LINE,
       "",
       "環境変数: WTMCTL_URL（無ければ WTM_SERVER_URL、それも無ければ http://127.0.0.1:7780）・WTMCTL_TOKEN",
       "",
@@ -45,7 +46,7 @@ function printHelp(): void {
       "agent start は前面がシェル自身だけの pane（sh/bash/dash/zsh/ksh/mksh）に、--kind の決まった実行ファイルと -- の後の引数を",
       "単一引用符で包んで打ち込み、名前を付けて idle になるまで待ちます（既定 30 秒。blocked なら agent_not_ready）。",
       "pane の中（WTM_PANE_ID と WTM_SERVER_URL があり、そのサーバにつなぐとき）は、自分の pane とそれを含む tab・workspace を閉じる・",
-      "入力する・直結する・エージェントを動かす操作を self_target で断ります（WTM_PANE_ID を空にすると効きません）。",
+      "入力する・直結する・エージェントを動かす操作を self_target で断ります（WTM_PANE_ID を空にすると効きません。--machine で別のマシンへ送るときも効きません）。",
       "wtmctl skill はエージェントに wtmctl の使い方を教える Markdown（skill ファイル）を出します。",
     ].join("\n"),
   );

@@ -41,7 +41,14 @@ export const USAGE_LINES: readonly string[] = [
   "wtmctl skill",
 ];
 
-const USAGE = [...USAGE_LINES, "（<target> は pane ID か、agent rename で付けた名前）"].join("\n");
+/** `wtmctl --machine <名前|id> <コマンド> …`（20260927-multi-host-machines）の説明。前置きなので `USAGE_LINES`（コマンドの一覧）には入れない。 */
+export const MACHINE_USAGE_LINE =
+  "wtmctl --machine <名前|id> <コマンド> …（手元の wtm serve に登録したマシン〔wtm machine〕へ送る。login・skill 以外）";
+
+const USAGE = [...USAGE_LINES, MACHINE_USAGE_LINE, "（<target> は pane ID か、agent rename で付けた名前）"].join("\n");
+
+/** `--machine` の値の上限（文字数。サーバの `?machine=` の上限と同じ）。 */
+export const MAX_MACHINE_SELECTOR_LENGTH = 256;
 
 export const DEFAULT_URL = "http://127.0.0.1:7780";
 
@@ -66,8 +73,10 @@ export interface CallerPane {
 export interface GlobalOpts {
   url: string;
   token: string | undefined;
-  /** pane の中（`WTM_PANE_ID` と `WTM_SERVER_URL` がどちらも空でない）ときだけある。 */
+  /** pane の中（`WTM_PANE_ID` と `WTM_SERVER_URL` がどちらも空でない）ときだけある。`--machine` のときは無い（ローカルの pane の id はリモートで意味を持たない）。 */
   caller?: CallerPane;
+  /** `--machine <名前|id>`（20260927-multi-host-machines）。手元の `wtm serve` の `/ws?machine=` で、そのマシンへ送る。 */
+  machine?: string;
 }
 
 export type Command =
@@ -217,6 +226,8 @@ function rejectExtra(positionals: readonly string[], expected: number, usage: st
 
 /** `process.argv.slice(2)` を渡す。`env` は既定 `process.env`（テストで差し替える）。 */
 export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): Command {
+  // `--machine <名前|id>` は前置き（herdr の `herdr --machine … <command>`）。20260927-multi-host-machines。
+  if (argv[0] === "--machine") return parseMachinePrefixed(argv, env);
   const [word0, word1, ...rest0] = argv;
   if (word0 === undefined || word0 === "help" || word0 === "--help" || word0 === "-h") return { kind: "help" };
 
@@ -532,4 +543,26 @@ function parseAgentStart(rest: readonly string[], env: NodeJS.ProcessEnv): Comma
     timeoutMs: timeoutRaw === undefined ? undefined : Number(timeoutRaw),
     args,
   };
+}
+
+function parseMachinePrefixed(argv: readonly string[], env: NodeJS.ProcessEnv): Command {
+  const selector = argv[1];
+  if (selector === undefined || selector.startsWith("--")) {
+    throw new CliUsageError("missing value for --machine", `${MACHINE_USAGE_LINE}\n（-- で始まる名前のマシンは id で指定してください。id は wtm machine list）`);
+  }
+  if (selector.length === 0 || selector.length > MAX_MACHINE_SELECTOR_LENGTH) {
+    throw new CliUsageError(`invalid value for --machine (1-${MAX_MACHINE_SELECTOR_LENGTH} characters)`, MACHINE_USAGE_LINE);
+  }
+  const rest = argv.slice(2);
+  const sub = rest[0];
+  if (sub === undefined || sub === "help" || sub === "--help" || sub === "-h" || sub === "skill" || sub === "login" || sub === "--machine") {
+    throw new CliUsageError(`--machine cannot be used with ${sub === undefined ? "no command" : sub}`, MACHINE_USAGE_LINE);
+  }
+  const cmd = parseArgs(rest, env);
+  if (!("opts" in cmd)) throw new CliUsageError(`--machine cannot be used with ${sub}`, MACHINE_USAGE_LINE);
+  // `local` は手元のサーバそのもの（サーバは `?machine=local` を行き先なしと同じに扱う）——自分の pane の歯止めを外さない。
+  if (selector === "local") return cmd;
+  const { caller: _caller, ...opts } = cmd.opts;
+  void _caller;
+  return { ...cmd, opts: { ...opts, machine: selector } } as Command;
 }

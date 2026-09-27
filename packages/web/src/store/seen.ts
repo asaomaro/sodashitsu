@@ -25,24 +25,44 @@ function saveToStorage(data: Record<string, number>): void {
 }
 
 /**
+ * 既読の鍵（20260927-multi-host-machines）。エージェントの `instanceId`（`a1` 等）はマシンごとの連番で衝突するので、ローカル以外のマシンは
+ * `m:<machineId>:<instanceId>` にする（ローカルは今までの鍵のまま）。
+ */
+export function seenKeyFor(scope: string, instanceId: string): string {
+  return scope === "local" ? instanceId : `m:${scope}:${instanceId}`;
+}
+
+/**
  * エージェントの `instanceId` ごとの既読（architecture.md「store/seen」）。ブラウザごとに別々に持つ
  * （design「エージェントの状態」。`[H]concepts.mdx:51` と同じ）。
  */
 export const useSeenStore = defineStore("seen", () => {
   const seen = ref<Record<string, number>>(loadFromStorage());
+  /** 画面の接続が向いているマシン（`getSeenSeq`・`markSeen` が使う）。 */
+  const scope = ref("local");
+
+  function setScope(machineId: string): void {
+    scope.value = machineId;
+  }
 
   /** 記録が無ければ `fallback`（サーバの `serverSeenSeq`）を返す。 */
   function getSeenSeq(instanceId: string, fallback: number): number {
-    return seen.value[instanceId] ?? fallback;
+    return seen.value[seenKeyFor(scope.value, instanceId)] ?? fallback;
+  }
+
+  /** 選んでいないマシンの要約の状態の印に使う（そのマシンの鍵で引く）。 */
+  function getSeenSeqIn(machineId: string, instanceId: string, fallback: number): number {
+    return seen.value[seenKeyFor(machineId, instanceId)] ?? fallback;
   }
 
   function markSeen(instanceId: string, seq: number): void {
-    if (seen.value[instanceId] === seq) return;
-    seen.value = { ...seen.value, [instanceId]: seq };
+    const key = seenKeyFor(scope.value, instanceId);
+    if (seen.value[key] === seq) return;
+    seen.value = { ...seen.value, [key]: seq };
     saveToStorage(seen.value);
   }
 
-  return { seen, getSeenSeq, markSeen };
+  return { seen, scope, setScope, getSeenSeq, getSeenSeqIn, markSeen };
 });
 
 /** D19：利用者の対応が要る順。数値が大きいほど優先。 */

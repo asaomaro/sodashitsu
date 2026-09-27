@@ -63,7 +63,7 @@ type SessionCheck = "ok" | "unauthorized" | "forbidden" | "unknown";
 export class Connection implements ConnectionPort {
   private readonly kind: ClientKind;
   private readonly httpOrigin: string;
-  private readonly wsUrl: string;
+  private wsUrl: string;
   private readonly store: StorePort;
   private readonly sink: TerminalSinkPort;
   private readonly fetchImpl: typeof fetch;
@@ -80,6 +80,10 @@ export class Connection implements ConnectionPort {
   private readonly closedListeners = new Set<() => void>();
   /** `/api/session` は 204 なのに WebSocket が開く前に閉じた試みの、続いた回数（開けたら 0。D107）。 */
   private socketFailedWhileSessionOk = 0;
+  /** 行き先を替えるために自分で閉じた socket の close を待っている（`retarget`。20260927-multi-host-machines）。 */
+  private retargetPending = false;
+  /** `retarget` の世代。`/api/session` の確認を待つ間に行き先が替わったら、その確認の後は何もしない（socket を 2 本開かない）。 */
+  private targetGen = 0;
 
   constructor(opts: ConnectionOptions) {
     this.kind = opts.kind;
@@ -143,6 +147,33 @@ export class Connection implements ConnectionPort {
     void this.checkSessionThenOpen();
   }
 
+  /**
+   * 行き先（`/ws` の URL）を替えて繋ぎ直す（保存した SSH のマシンの切り替え。20260927-multi-host-machines）。今の socket があれば、その後に届く
+   * メッセージを捨ててから閉じ、その close では再接続の待ちをせずに新しい行き先へ `/api/session` の確認から開き直す。待ちのタイマーは取り消し、
+   * 間隔は最初に戻す。続けて呼ばれたら最後の行き先だけが開く（前の socket を閉じ終える前なら、閉じたときに最後の行き先へ開く）。
+   */
+  retarget(wsUrl: string): void {
+    this.wsUrl = wsUrl;
+    this.targetGen++;
+    this.cancelReconnectTimer();
+    this.reconnectAttempt = 0;
+    this.detachRequested = false;
+    this.resetOriginSuspicion();
+    const ws = this.ws;
+    if (ws) {
+      // 開いている・開く途中・閉じる途中（hello の失敗の後・サーバが閉じ始めた直後）のどれでも、その close を待ってから新しい行き先へ開く
+      // （閉じる途中の socket を残したまま開くと、後から届く close が新しい socket の要求を落とし、3 本目を開いてしまう）。
+      this.retargetPending = true;
+      ws.onmessage = null; // 前の行き先の遅れて届いたメッセージを新しい状態へ混ぜない
+      this.store.onConnectionState("connecting");
+      if (ws.readyState === WS_OPEN || ws.readyState === WS_CONNECTING) ws.close(1000, "retarget");
+      return;
+    }
+    if (this.retargetPending) return; // 閉じ終えるのを待っている。閉じたら最後の行き先へ開く
+    this.store.onConnectionState("connecting");
+    void this.checkSessionThenOpen();
+  }
+
   request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
     const ws = this.ws;
     if (!ws || ws.readyState !== WS_OPEN) {
@@ -190,7 +221,9 @@ export class Connection implements ConnectionPort {
   }
 
   private async checkSessionThenOpen(): Promise<void> {
+    const gen = this.targetGen;
     const session = await this.checkSession();
+    if (gen !== this.targetGen) return; // 確かめている間に行き先が替わった（新しい行き先の確認が別に走っている）
     if (session === "unauthorized") {
       this.store.onAuthRequired();
       return;
@@ -228,6 +261,7 @@ export class Connection implements ConnectionPort {
     const onClose = (code: number): void => {
       if (closeHandled) return;
       closeHandled = true;
+      if (this.ws !== ws) return; // もう今の socket ではない（念のため。古い socket の close で新しい socket の状態を壊さない）
       this.handleClose(code, opened, afterForbidden);
     };
     ws.onopen = () => {
@@ -339,6 +373,13 @@ export class Connection implements ConnectionPort {
     this.pending.clear();
     this.notifyClosed();
 
+    if (this.retargetPending) {
+      // 行き先を替えるために閉じた（`retarget`）。待たずに新しい行き先へ。
+      this.retargetPending = false;
+      this.store.onConnectionState("connecting");
+      void this.checkSessionThenOpen();
+      return;
+    }
     if (this.detachRequested) {
       this.detachRequested = false;
       this.store.onConnectionState("detached");
@@ -363,7 +404,9 @@ export class Connection implements ConnectionPort {
 
   /** @param opened 閉じた socket が開いていたか（開く前に閉じた試みを数える。D107）。 */
   private async verifySessionThenScheduleReconnect(opened: boolean): Promise<void> {
+    const gen = this.targetGen;
     const session = await this.checkSession();
+    if (gen !== this.targetGen) return; // 確かめている間に行き先が替わった
     if (session === "unauthorized") {
       this.store.onAuthRequired();
       return;
