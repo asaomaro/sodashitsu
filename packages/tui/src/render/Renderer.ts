@@ -42,6 +42,7 @@ export class Renderer {
   }
 
   setColorMode(mode: ColorMode): void {
+    if (mode === this.screen.colorMode) return; // 変わらなければ描き直さない
     this.screen.setColorMode(mode);
     this.lastGrid = null;
     this.lastPaint.clear();

@@ -324,4 +324,35 @@ describe("TuiNet（接続・再ログイン。AC10・AC11・AC12）", () => {
     ]);
     expect(t.sockets[1]!.cookie).toBe("sid=2");
   });
+
+  it("サーバは居るのにログインできないまま 30 秒続いたら、知らせてから理由を添えて終える", async () => {
+    vi.useFakeTimers();
+    let n = 0;
+    const onStatus = vi.fn();
+    const t = setup(
+      async () => {
+        if (++n > 1) throw new Error("local login was refused (HTTP 401)");
+        return "sid=1";
+      },
+      204,
+      { isServerAlive: async () => true },
+    );
+    (t.h as { onStatus?: (m: string) => void }).onStatus = onStatus;
+    await t.net.start();
+    await vi.advanceTimersByTimeAsync(0);
+    t.sockets[0]!.open();
+    t.sockets[0]!.reply({ clientId: "c1", snapshot: snapshot() });
+    await vi.advanceTimersByTimeAsync(0);
+    t.srv.status = 401; // cookie は通らず、ログインもできない
+    t.sockets[0]!.close(1006);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(onStatus).toHaveBeenCalledWith(expect.stringContaining("手元からログインできません"));
+    expect(t.h.onFatal).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(t.h.onFatal).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "サーバは動いていますが、手元からログインできません: local login was refused",
+      ),
+    );
+  });
 });

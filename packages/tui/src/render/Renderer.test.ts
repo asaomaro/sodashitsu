@@ -70,7 +70,7 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
       await outer.write(r.output);
       return r;
     };
-    return { model, prefs, panes, outer, draw, commit, layout };
+    return { model, prefs, panes, outer, draw, commit, layout, renderer };
   }
 
   it("サイドバーに workspace とエージェント、tab バーに tab、枠に pane の名前、中身に pane の出力", async () => {
@@ -141,7 +141,7 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
   });
 
   it("中身が変わっていない pane は前の格子を写し、変わった pane だけ読み直す", async () => {
-    const { outer, draw, commit, panes, model } = await setup();
+    const { outer, draw, commit, panes, model, renderer } = await setup();
     commit();
     for (const id of ["p1", "p2"]) {
       const t = panes.get(id)!;
@@ -155,6 +155,10 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     p2.output(new TextEncoder().encode("\r\nNEW"));
     await p2.flush();
     p2.dirty = false;
+    await draw();
+    expect(outer.text()).not.toContain("NEW");
+    // 色の出し方が変わらない setColorMode は、写しの手がかりを捨てない（全部を読み直さない）。
+    renderer.setColorMode("truecolor");
     await draw();
     expect(outer.text()).not.toContain("NEW");
     p2.dirty = true;
@@ -222,6 +226,9 @@ describe("color・width", () => {
     expect(colorModeOf({ SODA_TRUECOLOR: "1" })).toBe("truecolor");
     expect(colorModeOf({ SODA_TRUECOLOR: "0", COLORTERM: "truecolor" })).toBe("256");
     expect(colorModeOf({ COLORTERM: "truecolor" }, "256")).toBe("256");
+    // SODA_TRUECOLOR は手元の設定より優先する。
+    expect(colorModeOf({ SODA_TRUECOLOR: "1" }, "256")).toBe("truecolor");
+    expect(colorModeOf({ SODA_TRUECOLOR: "0" }, "truecolor")).toBe("256");
     expect(colorModeOf({}, "truecolor")).toBe("truecolor");
     expect(colorModeOf({ COLORTERM: "truecolor" }, "auto")).toBe("truecolor");
   });
@@ -276,5 +283,41 @@ describe("pane の中身と chrome の指摘の直し", () => {
     expect(g.text(0, 0, nfd, 0, 0)).toBe(3);
     expect(g.cell(0, 0).ch).toBe("が");
     expect(g.cell(2, 0).ch).toBe("x");
+  });
+});
+
+describe("Renderer.setColorMode", () => {
+  it("変わらなければ描き直さない。変われば全部描き直す", async () => {
+    const { PaneRegistry } = await import("../term/PaneRegistry.js");
+    const panes = new PaneRegistry(
+      { request: (() => Promise.resolve({})) as never },
+      () => 0,
+      () => undefined,
+    );
+    const model = new SessionModel();
+    model.applySnapshot(snapshot(), "c1");
+    const r = new Renderer("truecolor", false);
+    const layout = computeLayout({
+      cols: 60,
+      rows: 10,
+      sidebarVisible: true,
+      sidebarCols: 20,
+      narrowThreshold: 0,
+      tab: null,
+      focusedPaneId: null,
+    });
+    const ctx = {
+      model,
+      prefs: new PrefsModel(),
+      theme: new ThemeColors("dracula"),
+      mode: "terminal" as const,
+      connection: "open" as const,
+      notice: null,
+    };
+    r.render(layout, ctx, panes);
+    r.setColorMode("truecolor");
+    expect(r.render(layout, ctx, panes).output).not.toContain("\x1b[2J");
+    r.setColorMode("256");
+    expect(r.render(layout, ctx, panes).output).toContain("\x1b[2J");
   });
 });

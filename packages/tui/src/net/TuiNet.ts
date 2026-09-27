@@ -27,6 +27,8 @@ export interface TuiNetHandlers {
   onClosed(): void;
   /** 立て直せない（ログインの拒否・サーバの停止・証明書の不一致）。端末版を終了コード 1 で終える。 */
   onFatal(message: string): void;
+  /** 立て直している途中の知らせ（サーバは居るがログインできない等）。 */
+  onStatus?(message: string): void;
 }
 
 export interface TuiNetDeps {
@@ -40,6 +42,9 @@ export interface TuiNetDeps {
 
 /** 再接続中にサーバが生きているかを確かめ直す間隔。 */
 export const PROBE_INTERVAL_MS = 10_000;
+
+/** サーバは居るのにログインできない状態が、これだけ続いたら終える。 */
+export const LOGIN_FAIL_LIMIT_MS = 30_000;
 
 /** ログインできないがサーバは居るとき、ログインをやり直すまでの間。 */
 export const RELOGIN_RETRY_MS = 2_000;
@@ -63,6 +68,8 @@ export class TuiNet implements StorePort {
   /** 再接続中に、サーバが生きているかをログインで最後に確かめた時刻（開けたら null）。長い停止の間も間隔を空けて確かめ直す。 */
   private lastProbeAt: number | null = null;
   private probing = false;
+  /** サーバは居るのにログインできない状態が始まった時刻（ログインできたら null）。 */
+  private loginFailingSince: number | null = null;
   private stopped = false;
   private detachSent = false;
   private loggedOut = false;
@@ -200,13 +207,31 @@ export class TuiNet implements StorePort {
       const old = this.cookie;
       this.cookie = cookie;
       if (old !== "" && old !== cookie) void this.logoutCookie(old);
+      this.loginFailingSince = null;
       return;
-    } catch {
-      // 下でサーバが居るかを確かめる
+    } catch (err) {
+      if (this.stopped) return;
+      if (await this.serverGone()) {
+        this.fatal("soda: the server has stopped (run `soda` again to start it)\n");
+        return;
+      }
+      this.noteLoginFailure(err);
     }
-    if (this.stopped) return;
-    if (await this.serverGone())
-      this.fatal("soda: the server has stopped (run `soda` again to start it)\n");
+  }
+
+  /**
+   * サーバは居るのにログインできない（別のポートで起動し直された・`local-auth.json` が読めない等）。知らせながらやり直し、
+   * `LOGIN_FAIL_LIMIT_MS` 続いたら理由を添えて終える（再接続中のまま残さない。03 の review）。
+   */
+  private noteLoginFailure(err: unknown): void {
+    const now = this.now();
+    this.loginFailingSince ??= now;
+    const reason = err instanceof Error ? err.message : String(err);
+    if (now - this.loginFailingSince >= LOGIN_FAIL_LIMIT_MS) {
+      this.fatal(`soda: サーバは動いていますが、手元からログインできません: ${reason}\n`);
+      return;
+    }
+    this.h.onStatus?.("サーバは動いていますが、手元からログインできません。やり直しています…");
   }
 
   /** 今の cookie でサーバがまだ受け付けるか（`GET /api/session` が 204）。届かなければ false。 */
@@ -264,6 +289,8 @@ export class TuiNet implements StorePort {
           );
           return;
         }
+        this.noteLoginFailure(err);
+        if (this.stopped) return;
         const retry = setTimeout(() => void this.relogin(), RELOGIN_RETRY_MS);
         retry.unref?.();
         return;
@@ -273,6 +300,7 @@ export class TuiNet implements StorePort {
         this.fatal("soda: the server keeps refusing the local login\n");
         return;
       }
+      this.loginFailingSince = null;
       const old = this.cookie;
       this.cookie = cookie;
       if (old !== "" && old !== cookie) void this.logoutCookie(old);

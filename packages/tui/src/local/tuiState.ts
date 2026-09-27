@@ -9,6 +9,11 @@ import { join } from "node:path";
 export interface TuiState {
   sidebarCols?: number;
   sidebarCollapsed?: boolean;
+  /**
+   * 色の出し方（`truecolor`・`256`。無ければ外側の端末から判定）。**端末ごとの項目**なので共有の設定に置かない——同じ利用者でも端末によって対応が違う
+   * （03 の review）。環境変数 `SODA_TRUECOLOR` がこれより優先する。
+   */
+  colorMode?: "truecolor" | "256";
 }
 
 export const TUI_STATE_FILE = "tui-state.json";
@@ -27,6 +32,7 @@ export function readTuiState(stateDir: string): TuiState {
     )
       out.sidebarCols = r["sidebarCols"];
     if (typeof r["sidebarCollapsed"] === "boolean") out.sidebarCollapsed = r["sidebarCollapsed"];
+    if (r["colorMode"] === "truecolor" || r["colorMode"] === "256") out.colorMode = r["colorMode"];
     return out;
   } catch {
     return {};

@@ -26,7 +26,7 @@ export function hexColor(hex: string): PackedColor {
 
 export type ColorMode = "truecolor" | "256";
 
-/** 色の出し方の設定（共有の設定 `tui.colorMode`）。`auto` は外側の端末から判定する。 */
+/** 色の出し方の設定（手元の `tui-state.json` の `colorMode`）。`auto` は外側の端末から判定する。 */
 export type ColorModePref = "auto" | "truecolor" | "256";
 
 /** truecolor を扱うと分かっている端末（`TERM_PROGRAM`）。SSH 越しでは届かないことが多いので、設定・`SODA_TRUECOLOR` でも指定できる。 */
@@ -38,18 +38,18 @@ const TRUECOLOR_PROGRAMS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * RGB で出すか 256 色へ寄せるか（design「render/color.ts」。03 の review で判定を広げた）。設定（`tui.colorMode`）が `auto` 以外ならそれ。
- * `auto` なら `SODA_TRUECOLOR=1`（`0` は 256 色）→ `COLORTERM=truecolor|24bit` → Windows Terminal（`WT_SESSION`）→ `TERM` が `-direct` で終わる →
- * `TERM_PROGRAM` が truecolor の端末 → kitty（`KITTY_WINDOW_ID`）。どれでもなければ 256 色。
+ * RGB で出すか 256 色へ寄せるか（design「render/color.ts」。03 の review で判定を広げた）。**環境変数 `SODA_TRUECOLOR`（`1` で truecolor・`0` で 256 色）が最優先**、
+ * 次に手元の設定（`tui-state.json` の `colorMode`。端末ごと）、`auto` なら `COLORTERM=truecolor|24bit` → Windows Terminal（`WT_SESSION`）→
+ * `TERM` が `-direct` で終わる → `TERM_PROGRAM` が truecolor の端末 → kitty（`KITTY_WINDOW_ID`）。どれでもなければ 256 色。
  */
 export function colorModeOf(
   env: Readonly<Record<string, string | undefined>>,
   pref: ColorModePref = "auto",
 ): ColorMode {
-  if (pref !== "auto") return pref;
   const forced = env["SODA_TRUECOLOR"];
   if (forced === "1") return "truecolor";
   if (forced === "0") return "256";
+  if (pref !== "auto") return pref;
   const ct = (env["COLORTERM"] ?? "").toLowerCase();
   if (ct === "truecolor" || ct === "24bit") return "truecolor";
   if (env["WT_SESSION"]) return "truecolor";

@@ -25,13 +25,13 @@ describe("PrefsModel（共有の設定と手元の状態）", () => {
     expect(p.sidebarCols).toBe(40);
   });
 
-  it("tui.colorMode は auto・truecolor・256（壊れた値は auto）", () => {
+  it("色の出し方は手元の tui-state.json の colorMode（端末ごと）。共有の設定の tui.colorMode は見ない", () => {
     const p = new PrefsModel();
     expect(p.colorMode).toBe("auto");
     p.apply({ tui: { colorMode: "256" } }, 1);
-    expect(p.colorMode).toBe("256");
-    p.apply({ tui: { colorMode: "rgb" as never } }, 2);
     expect(p.colorMode).toBe("auto");
+    p.setLocal({ colorMode: "256" });
+    expect(p.colorMode).toBe("256");
   });
 
   it("古い rev は捨てる。テーマ・並び・スクロールバックを正規化する", () => {
@@ -54,13 +54,18 @@ describe("tui-state.json", () => {
     const dir = await mkdtemp(join(tmpdir(), "tui-state-"));
     try {
       expect(readTuiState(dir)).toEqual({});
-      await writeTuiState(dir, { sidebarCols: 33, sidebarCollapsed: true });
-      expect(readTuiState(dir)).toEqual({ sidebarCols: 33, sidebarCollapsed: true });
+      await writeTuiState(dir, { sidebarCols: 33, sidebarCollapsed: true, colorMode: "truecolor" });
+      expect(readTuiState(dir)).toEqual({
+        sidebarCols: 33,
+        sidebarCollapsed: true,
+        colorMode: "truecolor",
+      });
       if (process.platform !== "win32")
         expect((await stat(join(dir, TUI_STATE_FILE))).mode & 0o777).toBe(0o600);
       expect(JSON.parse(await readFile(join(dir, TUI_STATE_FILE), "utf8"))).toEqual({
         sidebarCols: 33,
         sidebarCollapsed: true,
+        colorMode: "truecolor",
       });
       await writeFile(join(dir, TUI_STATE_FILE), "{broken");
       expect(readTuiState(dir)).toEqual({});

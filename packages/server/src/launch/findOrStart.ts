@@ -5,7 +5,7 @@ import { resolveServeOptions, type RawServeArgs } from "../config.js";
 import { readLocalAuth } from "../auth/LocalLogin.js";
 import { serveRecordMatches } from "../persist/namedSession.js";
 import { readServeRecord } from "../persist/ServeRecordFile.js";
-import { StateDirLock } from "../persist/StateDirLock.js";
+import { isPidAlive, StateDirLock } from "../persist/StateDirLock.js";
 import { paneServerUrl } from "../util/net.js";
 import { STARTUP_DONE_RE } from "../startupBanner.js";
 import { openWs, postJson, type LocalEndpoint } from "./localHttp.js";
@@ -389,17 +389,7 @@ export async function isServerAlive(
   const holder = await new StateDirLock(stateDir).inspect();
   if (holder !== undefined && holder.otherHost === undefined) return true;
   const record = await readServeRecord(stateDir);
-  if (record !== undefined && record.hostname === host && pidAlive(record.pid)) return true;
+  if (record !== undefined && record.hostname === host && isPidAlive(record.pid)) return true;
   const auth = await readLocalAuth(stateDir);
-  return auth !== undefined && pidAlive(auth.pid);
-}
-
-function pidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    // EPERM：居るが別の利用者のもの（居るとみなす）。
-    return (err as NodeJS.ErrnoException).code === "EPERM";
-  }
+  return auth !== undefined && isPidAlive(auth.pid);
 }

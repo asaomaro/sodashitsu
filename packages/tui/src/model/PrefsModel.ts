@@ -93,12 +93,9 @@ export class PrefsModel {
     return typeof v === "boolean" ? v : true;
   }
 
-  /** 色の出し方（`tui.colorMode`。壊れた値は auto）。 */
+  /** 色の出し方（手元の `tui-state.json` の `colorMode`。端末ごと。無ければ auto）。 */
   get colorMode(): ColorModePref {
-    const tui = this.raw.tui;
-    const v =
-      tui && typeof tui === "object" ? (tui as Record<string, unknown>)["colorMode"] : undefined;
-    return v === "truecolor" || v === "256" ? v : "auto";
+    return this.local.colorMode ?? "auto";
   }
 
   get workspaceSort(): WorkspaceSort {

@@ -253,6 +253,7 @@ export class TuiApp {
         onOpened: (clientId) => this.onConnectionOpened(clientId),
         onClosed: () => this.onConnectionClosed(),
         onFatal: (message) => this.finish(1, message),
+        onStatus: (message) => this.showAlert(message, 5000),
       },
       this.options.net,
     );

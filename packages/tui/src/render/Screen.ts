@@ -201,6 +201,10 @@ export class Screen {
     private readonly repeatImeAnchor = true,
   ) {}
 
+  get colorMode(): ColorMode {
+    return this.mode;
+  }
+
   /** 色の出し方を替える（次は全部描き直す）。 */
   setColorMode(mode: ColorMode): void {
     if (mode === this.mode) return;
