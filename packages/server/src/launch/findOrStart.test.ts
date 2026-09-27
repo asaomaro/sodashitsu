@@ -469,7 +469,7 @@ describe("findOrStart", () => {
     };
     const code = await runTuiCommand(
       parseArgs(["--state-dir", stateDir]),
-      placeholderEntry(io),
+      async () => placeholderEntry(io),
       io,
       proc,
       { spawnServe: noSpawn },
@@ -485,7 +485,7 @@ describe("findOrStart", () => {
     expect(authJson.sessions).toEqual([]);
     const nested = await runTuiCommand(
       parseArgs(["--state-dir", stateDir]),
-      placeholderEntry(io),
+      async () => placeholderEntry(io),
       io,
       { ...proc, env: { SODA_PANE_ID: "p1" } },
       { spawnServe: noSpawn },
@@ -516,16 +516,58 @@ describe("findOrStart", () => {
       ["--state-dir", stateDir],
       ["--session", "w", "--state-dir", stateDir],
     ]) {
-      const code = await runTuiCommand(parseArgs(argv), placeholderEntry(io), io, proc, {
-        spawnServe: async (req) => {
-          spawned.push(req);
-          throw new Error("must not spawn");
+      const code = await runTuiCommand(
+        parseArgs(argv),
+        async () => placeholderEntry(io),
+        io,
+        proc,
+        {
+          spawnServe: async (req) => {
+            spawned.push(req);
+            throw new Error("must not spawn");
+          },
         },
-      });
+      );
       expect(code, argv.join(" ")).toBe(2);
     }
     expect(spawned).toEqual([]);
     expect(helps).toBe(3);
     expect(err[0]).toContain("needs a terminal");
+  });
+
+  // 03 の T6 の点検：端末版の読み込みに失敗したら、サーバを探す・起動する前に案内して 1（裏でサーバだけが残らない・生のスタックを出さない）。
+  it("runTuiCommand: 端末版を読み込めなければサーバを起動せずに案内して 1", async () => {
+    const stateDir = await tempStateDir();
+    const err: string[] = [];
+    const io = { out: () => undefined, err: (l: string) => err.push(l), help: () => undefined };
+    const spawned: SpawnServeRequest[] = [];
+    const code = await runTuiCommand(
+      parseArgs(["--state-dir", stateDir]),
+      async () => {
+        throw new Error("Cannot find package '@sodashitsu/tui'");
+      },
+      io,
+      {
+        isTty: true,
+        env: {},
+        cwd: process.cwd(),
+        platform: process.platform,
+        execPath: process.execPath,
+        execArgv: [],
+        mainPath: "/x/main.js",
+      },
+      {
+        spawnServe: async (req) => {
+          spawned.push(req);
+          throw new Error("must not spawn");
+        },
+      },
+    );
+    expect(code).toBe(1);
+    expect(spawned).toEqual([]);
+    expect(err[0]).toBe(
+      "soda: the terminal UI could not be loaded (Cannot find package '@sodashitsu/tui')",
+    );
+    expect(err.join("\n")).toContain("pnpm build");
   });
 });

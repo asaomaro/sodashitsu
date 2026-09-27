@@ -8,7 +8,11 @@ import type { TuiEntry } from "./tuiTarget.js";
  */
 export async function runTuiCommand(
   parsed: ParsedArgs,
-  entry: TuiEntry,
+  /**
+   * 端末版の入口を読み込む（本物は `import("@sodashitsu/tui")`）。**サーバを探す・起動する前に**読む——読めない（壊れた導入・ビルドの抜け）ときに
+   * 裏でサーバだけが起動して残らないように（03 の T6 の点検）。
+   */
+  loadEntry: () => Promise<TuiEntry>,
   io: { err(line: string): void; help(): void },
   proc: {
     /** 標準入力と標準出力がどちらも端末か。端末版は端末の中でしか動かない。 */
@@ -30,6 +34,18 @@ export async function runTuiCommand(
     );
     io.help();
     return 2;
+  }
+  let entry: TuiEntry;
+  try {
+    entry = await loadEntry();
+  } catch (err) {
+    io.err(
+      `soda: the terminal UI could not be loaded (${err instanceof Error ? err.message : String(err)})`,
+    );
+    io.err(
+      "soda serve は使えます（ブラウザで開く）。端末版を使うには、導入をやり直してください（ソースから使っているなら pnpm install と pnpm build）。",
+    );
+    return 1;
   }
   let target;
   try {

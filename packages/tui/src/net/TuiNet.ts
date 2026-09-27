@@ -205,7 +205,6 @@ export class TuiNet implements StorePort {
     }
   }
 
-  /** `client.detach` を送り、サーバが閉じるのを待つ（最大 `timeoutMs`）。 */
   /**
    * セッションを返す（`POST /api/logout`。起動のたびにサーバのセッションが増えないように。02 の review ラウンド 2）。切り離し・終了のたびに呼ぶ。
    * 失敗（サーバが止まっている等）は気にしない。最大 `timeoutMs` 待つ。
@@ -223,6 +222,7 @@ export class TuiNet implements StorePort {
     ]);
   }
 
+  /** `client.detach` を送り、サーバが閉じるのを待つ（最大 `timeoutMs`）。 */
   async detach(timeoutMs = 1000): Promise<void> {
     this.detachSent = true;
     await Promise.race([

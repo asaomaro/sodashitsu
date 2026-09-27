@@ -140,8 +140,8 @@ async function main(): Promise<void> {
     const parsed = applySessionEnv(parseArgs(process.argv.slice(2)), process.env);
     if (parsed.command === "tui") {
       // 引数なしの `soda`（20260927-cli-mode）。端末版は動的 import（`soda serve` 等の起動に端末版の読み込みの費用を足さない。architecture）。
-      const tuiEntry: TuiEntry = async (target) => (await import("@sodashitsu/tui")).runTui(target);
-      process.exitCode = await runTuiCommand(parsed, tuiEntry, { ...consoleIo, help: printHelp }, {
+      const loadTui = async (): Promise<TuiEntry> => (await import("@sodashitsu/tui")).runTui;
+      process.exitCode = await runTuiCommand(parsed, loadTui, { ...consoleIo, help: printHelp }, {
         isTty: process.stdin.isTTY === true && process.stdout.isTTY === true,
         env: process.env,
         cwd: process.cwd(),

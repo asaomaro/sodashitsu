@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import * as nodePty from "node-pty";
 import xtermHeadless from "@xterm/headless";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -46,7 +46,13 @@ function runSoda(base: string, env: NodeJS.ProcessEnv): Run {
   pty.onData((d) => {
     out += d;
   });
-  const exited = new Promise<number>((resolve) => pty.onExit(({ exitCode }) => resolve(exitCode)));
+  let exitedFlag = false;
+  const exited = new Promise<number>((resolve) =>
+    pty.onExit(({ exitCode }) => {
+      exitedFlag = true;
+      resolve(exitCode);
+    }),
+  );
   return {
     pty,
     output: () => out,
@@ -60,7 +66,17 @@ function runSoda(base: string, env: NodeJS.ProcessEnv): Run {
       return lines.join("\n");
     },
     exited,
-    dispose: () => term.dispose(),
+    dispose: () => {
+      // 待ちの時間切れ等で終わっていない子を残さない。
+      if (!exitedFlag) {
+        try {
+          pty.kill();
+        } catch {
+          // もう終わっている
+        }
+      }
+      term.dispose();
+    },
   };
 }
 
@@ -73,15 +89,50 @@ function alive(pid: number): boolean {
   }
 }
 
+/**
+ * ビルドした成果物（`dist`）が、ソースより古くないか（古い dist で走ると、直した内容を確かめないまま通る）。tsc -b は変わったファイルだけ書き直すので、
+ * ソースの 1 ファイルごとに、対応する `.js` か、最後に確かめた記録（`tsconfig.tsbuildinfo`。中身が同じで書き直さなかったときも更新される）の
+ * 新しいほうと比べる。古いものがあれば、その名前を返す。
+ */
+function staleOutputs(pkg: string): string[] {
+  const src = join(pkg, "src");
+  const out: string[] = [];
+  const info = join(pkg, "tsconfig.tsbuildinfo");
+  const checkedAt = existsSync(info) ? statSync(info).mtimeMs : 0;
+  const walk = (dir: string): void => {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      // `testing/` はビルドに入れない（テストの助け）。
+      if (statSync(path).isDirectory()) {
+        if (name !== "testing") walk(path);
+      } else if (name.endsWith(".ts") && !name.endsWith(".test.ts") && !name.endsWith(".d.ts")) {
+        const js = join(pkg, "dist", relative(src, path).replace(/\.ts$/, ".js"));
+        if (!existsSync(js) || Math.max(statSync(js).mtimeMs, checkedAt) < statSync(path).mtimeMs)
+          out.push(relative(pkg, path));
+      }
+    }
+  };
+  walk(src);
+  return out;
+}
+
+const SERVER_PKG = fileURLToPath(new URL("../../", import.meta.url));
+const TUI_PKG = fileURLToPath(new URL("../../../tui/", import.meta.url));
+
 describe.skipIf(process.platform === "win32" || !existsSync(MAIN))(
-  "soda（引数なし）を本物の端末で（node-pty）",
+  "soda（引数なし）を本物の端末で（node-pty。dist が無ければ skip：先に pnpm build。Windows は対象外）",
   () => {
-    let dir: string;
+    let dir: string | undefined;
     let base: string;
     let sessionDir: string;
     let env: NodeJS.ProcessEnv;
 
     beforeAll(async () => {
+      const stale = [...staleOutputs(SERVER_PKG), ...staleOutputs(TUI_PKG)];
+      if (stale.length > 0)
+        throw new Error(
+          `dist is older than src (run pnpm build first): ${stale.slice(0, 5).join(", ")}`,
+        );
       dir = await mkdtemp(join(tmpdir(), "soda-pty-it-"));
       base = join(dir, "state");
       sessionDir = join(base, "sessions", SESSION);
@@ -100,15 +151,24 @@ describe.skipIf(process.platform === "win32" || !existsSync(MAIN))(
           savedAt: "",
         }),
       );
-      // 入れ子の検出（SODA_PANE_ID）に掛からないよう、soda の中から走らせても soda の変数を外す。
-      env = Object.fromEntries(
-        Object.entries(process.env).filter(([k]) => !k.startsWith("SODA_")),
-      ) as NodeJS.ProcessEnv;
-      env["TERM"] = "xterm-256color";
-      env["COLORTERM"] = "truecolor";
+      // 開発者のシェル・プロンプト・rc に依らないよう、最小の環境で走らせる（pane のシェルは /bin/sh・プロンプトは固定・HOME は一時）。
+      // SODA_* は渡さない（入れ子の検出に掛からない）。
+      const home = join(dir, "home");
+      await mkdir(home);
+      env = {
+        PATH: process.env["PATH"] ?? "/usr/bin:/bin",
+        HOME: home,
+        SHELL: "/bin/sh",
+        PS1: "soda-pty$ ",
+        ENV: "",
+        LANG: "C.UTF-8",
+        TERM: "xterm-256color",
+        COLORTERM: "truecolor",
+      };
     });
 
     afterAll(async () => {
+      if (dir === undefined) return; // 準備の前に止まった（dist が古い等）
       // 裏で起動したサーバを止める（serve.json の pid。SIGTERM は通常の停止）。
       const record = JSON.parse(
         await readFile(join(sessionDir, "serve.json"), "utf8").catch(() => "{}"),
@@ -139,7 +199,7 @@ describe.skipIf(process.platform === "win32" || !existsSync(MAIN))(
         // pane のシェルの準備を待ってから打つ（プロンプトが出るまで）。
         await vi.waitFor(
           async () =>
-            expect((await first.screen()).split("\n").slice(1).join("\n")).toMatch(/[$#>%]\s*│/),
+            expect((await first.screen()).split("\n").slice(1).join("\n")).toContain("soda-pty$"),
           {
             timeout: 20_000,
             interval: 200,
