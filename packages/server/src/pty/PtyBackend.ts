@@ -16,7 +16,11 @@ export interface PtyProcess {
   onData(cb: (chunk: string) => void): Disposable;
   onExit(cb: (e: { exitCode: number; signal?: number }) => void): Disposable;
   write(data: string | Uint8Array): void;
-  resize(cols: number, rows: number): void;
+  /**
+   * `pixels` は端末の文字の領域の画素の大きさ（20260926-kitty-graphics design「5.」）。Unix では `TIOCGWINSZ` の `ws_xpixel`/`ws_ypixel` になる
+   * （画像を出すツールが読む）。Windows（ConPTY）は無視する。
+   */
+  resize(cols: number, rows: number, pixels?: { width: number; height: number }): void;
   /** E4。ミラーの処理が遅れたときに PTY 自体を止める（design「流量制御」）。 */
   pause(): void;
   resume(): void;

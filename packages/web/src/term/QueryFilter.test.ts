@@ -66,4 +66,20 @@ describe("installQueryFilter（実物の @xterm/xterm）", () => {
     expect(responses).toEqual([]);
     term.dispose();
   });
+
+  it("XTSMGRAPHICS（CSI ? Pi ; Pa ; Pv S）を、先に登録された応答者（画像の addon 相当）へ届かせない（20260926-kitty-graphics）", async () => {
+    const { term, responses } = makeTerm();
+    const seen: unknown[] = [];
+    term.parser.registerCsiHandler({ prefix: "?", final: "S" }, (params) => {
+      seen.push(params);
+      term.input("\x1b[?1;0;256S", false); // 応答を出す代役（addon の `_report` と同じく onData へ出る）
+      return true;
+    });
+    installQueryFilter(term);
+    term.write("\x1b[?1;1;0S\x1b[?2;1;0S\x1b[?1;3;4096S"); // 読み取り 2 つと設定（Pa=3）
+    await tick();
+    expect(seen).toEqual([]);
+    expect(responses).toEqual([]);
+    term.dispose();
+  });
 });

@@ -7,6 +7,7 @@ import xtermAddonSerialize from "@xterm/addon-serialize";
 import { win32 } from "node:path";
 import { DEFAULT_THEME, DEFAULT_THEME_NAME, THEME_APPEARANCE, type TerminalPalette } from "@wtm/protocol";
 import type { Disposable } from "../util/Disposable.js";
+import { CELL_PIXELS, windowPixels } from "./cellPixels.js";
 
 const { Terminal } = xtermHeadless;
 const { SerializeAddon } = xtermAddonSerialize;
@@ -95,7 +96,16 @@ export class XtermMirror implements Mirror {
     private readonly palette: () => TerminalPalette = () => DEFAULT_THEME,
     private readonly appearance: () => "light" | "dark" = () => THEME_APPEARANCE[DEFAULT_THEME_NAME],
   ) {
-    this.term = new Terminal({ cols, rows, scrollback, allowProposedApi: true });
+    // `windowOptions` の 2 つは画素の大きさの問い合わせ（CSI 14 t・CSI 16 t）を下の自前のハンドラへ通すため（20260926-kitty-graphics）。
+    // xterm.js は公開の `registerCsiHandler({ final: "t" })` のハンドラを、その Ps の `windowOptions` が無効なら呼ばずに握りつぶす
+    // （headless 6.0.0 の `registerCsiHandler` の実装）。headless 自身は画素を持たないので、有効にしても自分では答えない。
+    this.term = new Terminal({
+      cols,
+      rows,
+      scrollback,
+      allowProposedApi: true,
+      windowOptions: { getWinSizePixels: true, getCellSizePixels: true },
+    });
     this.serializeAddon = new SerializeAddon();
     this.term.loadAddon(this.serializeAddon);
 
@@ -137,6 +147,9 @@ export class XtermMirror implements Mirror {
     this.disposables.push(this.term.parser.registerCsiHandler({ prefix: "?", final: "n" }, (params) => this.handleAppearanceQuery(params)));
     this.disposables.push(this.term.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => this.handleMode2031(params, true)));
     this.disposables.push(this.term.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => this.handleMode2031(params, false)));
+    // 画素の大きさの問い合わせ（CSI 14 t・CSI 16 t。20260926-kitty-graphics design「5.」）。サーバは基準のセルの大きさ（decisions D3）で答える
+    // （画像を出すツールが画像の大きさを決めるのに使う）。他の `CSI … t`（窓の操作等）は false で xterm.js に委ねる。
+    this.disposables.push(this.term.parser.registerCsiHandler({ final: "t" }, (params) => this.handlePixelSizeQuery(params)));
     // RIS（端末の完全リセット）で継続通知の登録もリセットする（herdr と同じ挙動。design「振る舞いの詳細」手順6）。
     // xterm 自身の RIS 処理は妨げない（false を返して委譲する）。
     this.disposables.push(
@@ -262,6 +275,19 @@ export class XtermMirror implements Mirror {
 
   private emitResponse(data: string): void {
     for (const fn of [...this.responseListeners]) fn(data);
+  }
+
+  private handlePixelSizeQuery(params: (number | number[])[]): boolean {
+    if (params[0] === 14) {
+      const px = windowPixels(this.term.cols, this.term.rows);
+      this.emitResponse(`\x1b[4;${px.height};${px.width}t`);
+      return true;
+    }
+    if (params[0] === 16) {
+      this.emitResponse(`\x1b[6;${CELL_PIXELS.height};${CELL_PIXELS.width}t`);
+      return true;
+    }
+    return false;
   }
 
   private handleColorQuery(data: string, key: "foreground" | "background" | "cursor", oscNumber: 10 | 11 | 12): boolean {
