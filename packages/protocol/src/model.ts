@@ -45,6 +45,11 @@ export interface Workspace {
    * detached ならパスの末尾）。`label` はどちらでも表示の名前（20260921-workspace-auto-label の design D1・D2）。
    */
   autoLabel: boolean;
+  /**
+   * 外から報告された独自トークン（名前 → 値。20260927-sidebar-row-tokens。herdr の workspace metadata tokens）。サイドバーの spaces 行の
+   * `$名前` が読む。**サーバのメモリだけ**に持ち `session.json` には保存しない。1 つも無ければ項目ごと無い。値は整え済み（制御文字なし・80 文字まで）。
+   */
+  tokens?: Record<string, string>;
 }
 
 export interface Tab {
@@ -88,6 +93,8 @@ export interface Pane {
    * 投入に使う。画面判定で `agent` が非 null→null になったら一緒に null にする（design D9）。
    */
   agentSession: AgentSessionRef | null;
+  /** 外から報告された独自トークン（`Workspace.tokens` と同じ扱い。サイドバーの agents 行の `$名前` が読む。20260927-sidebar-row-tokens）。 */
+  tokens?: Record<string, string>;
 }
 
 /**

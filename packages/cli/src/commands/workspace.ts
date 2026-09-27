@@ -15,6 +15,7 @@ import { withSession } from "../withSession.js";
 type WorkspaceCreateCmd = Extract<Command, { kind: "workspace-create" }>;
 type WorkspaceCloseCmd = Extract<Command, { kind: "workspace-close" }>;
 type WorkspaceRenameCmd = Extract<Command, { kind: "workspace-rename" }>;
+type WorkspaceReportMetadataCmd = Extract<Command, { kind: "workspace-report-metadata" }>;
 
 export async function runWorkspaceCreate(cmd: WorkspaceCreateCmd, store: SessionStore): Promise<void> {
   const result = await withSession(cmd.opts, store, async (client) => {
@@ -43,4 +44,24 @@ export async function runWorkspaceRename(cmd: WorkspaceRenameCmd, store: Session
     return client.request("workspace.rename", { workspaceId: cmd.workspaceId, label: cmd.label });
   });
   printJson(result);
+}
+
+/**
+ * 独自トークンの報告（20260927-sidebar-row-tokens。herdr の `workspace report-metadata`）。自分の pane を含む workspace への報告は断らない
+ * （フックが自分の workspace に報告するのが主な使い方。歯止め〔`selfGuard`〕は壊す操作だけ）。結果は `{}`。
+ */
+export async function runWorkspaceReportMetadata(cmd: WorkspaceReportMetadataCmd, store: SessionStore): Promise<void> {
+  const result = await withSession(cmd.opts, store, async (client) => {
+    await client.hello();
+    return client.request("workspace.report_metadata", { workspaceId: cmd.workspaceId, ...metadataParams(cmd.report) });
+  });
+  printJson(result);
+}
+
+/** `exactOptionalPropertyTypes` のため、無い `seq`・`ttlMs` はキーごと付けない。 */
+export function metadataParams(report: WorkspaceReportMetadataCmd["report"]): Omit<ParamsOf<"workspace.report_metadata">, "workspaceId"> {
+  const params: Omit<ParamsOf<"workspace.report_metadata">, "workspaceId"> = { source: report.source, tokens: report.tokens };
+  if (report.seq !== undefined) params.seq = report.seq;
+  if (report.ttlMs !== undefined) params.ttlMs = report.ttlMs;
+  return params;
 }

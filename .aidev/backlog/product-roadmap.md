@@ -185,11 +185,17 @@ parent: 20260918-web-terminal-multiplexer
   `packages/web/src/components/SettingsDialog.vue:917`、起動確認 `packages/server/src/smoke.ts:166`（実物の Chromium で案内が開き、Esc で端末へ
   フォーカスが戻る）。herdr の現行版（説明＋続けると連携の節）と 0.2 系（通知の選択）を合成し、テーマ・キーのプリセット・通知を選べる。
   実測: unit 3363 本 green（全パッケージ・続けて 2 回）・負の確認は全変異を検知（生き残った変異にはテストを足してやり直し）・smoke pass（3 本）。E2E は未実行）
-- [ ] 外観と設定の残り（未着手分）: サイドバー行の色の条件付け・独自トークン（H21）
-  〔D8〕(needs: 20260918-web-terminal-multiplexer)（
-  20260922-appearance-settings-rest の requirements「対象外」／decisions.md [[D11]]で切り出し。
-  H23 の枠の描画モード・隙間の入切は 20260926-pane-frame-auto-mode、H25b の onboarding は 20260926-settings-onboarding で着地。
-  出典: .aidev/works/20260918-web-terminal-multiplexer/research.md）
+- [x] 外観と設定の残り（H21 分）: サイドバー行の色の条件付け・独自トークン（20260927-sidebar-row-tokens。PR: feature/sidebar-row-tokens ブランチから作成。
+  独自トークンの報告 `wtmctl workspace|pane report-metadata`（`packages/cli/src/cliArgs.ts` の `parseReportMetadata`・RPC `workspace.report_metadata`/`pane.report_metadata`）、
+  規則 `packages/server/src/metadata/metadataTokens.ts`（herdr と同じ整え方・上限・seq・TTL）、配線 `packages/server/src/metadata/MetadataService.ts`（期限のタイマー 1 つ・
+  閉じた対象の破棄）、行の並びの規則 `packages/web/src/sidebar/rowLayout.ts`・解決 `resolveRows.ts`・描画 `packages/web/src/components/Sidebar.vue`・
+  設定画面 `components/SidebarRowsSettings.vue`（節「表示」）。既定の見た目は変更前の描画の golden（`components/__golden__/`）と比べて同じ。
+  実測: unit 4666 本 green（全パッケージ）・負の確認 52 変異（生き残った 3 本はテストを強めて落ちることを確認、1 本は等価な変異）・smoke pass（7 本）。E2E は未実行）
+- [ ] サイドバーの行の `machine` トークン（H21 の残り）: 複数ホストの対応（下記「複数ホストの集約」）が着地してから、agents 行に機械の名前を出す (needs: 20260927-sidebar-row-tokens)（出典: .aidev/works/20260927-sidebar-row-tokens/decisions.md D6）
+- [ ] サイドバーの行の続き（H21 の残り）: `rows_by_agent`（エージェントの種類ごとの並びの上書き）・`row_gap`・`terminal_title_stripped`・隣り合う値の間の ` · ` と `git_status` の ↑ 緑・↓ 赤（既定は今の見た目） (needs: 20260927-sidebar-row-tokens)（出典: .aidev/works/20260927-sidebar-row-tokens/decisions.md D3・D6）
+- [ ] `pane report-metadata` の表示名・状態名の上書き（herdr の `--title`・`--clear-title`・`--display-agent`・`--clear-display-agent`・`--state-label`・`--clear-state-labels`・`--agent`・`--applies-to-source`。トークンだけは対応済み） (needs: 20260927-sidebar-row-tokens)（出典: .aidev/works/20260927-sidebar-row-tokens/decisions.md D6）
+- [ ] サイドバーの行の細部（review の nit）: (1) TTL 付きで同じ値を報告し直すと中身の同じ tokens を配り直す（値の表が変わったときだけ配る）。(2) `unverified` を主の行へ動かすと警告色が付かない。(3) 設定画面の［既定に戻す］で、もう一方の区画の［詳細］の開閉まで閉じる (needs: 20260927-sidebar-row-tokens)（出典: .aidev/works/20260927-sidebar-row-tokens/review.md ラウンド 1）
+- [ ] 独自トークンの値の永続化（サーバの再起動・`wtm handoff` をまたいで残す。herdr もメモリだけなので要否から検討） (needs: 20260927-sidebar-row-tokens)（出典: .aidev/works/20260927-sidebar-row-tokens/decisions.md D4）
 - [x] セッション永続化の拡張（エージェントの会話の再開のうち Claude Code・Codex）: 20260923-agent-session-resume
       で対応。両エージェント公式の hooks 機構（`SessionStart`）を使い、pane ごとに会話IDを本製品自身の
       ローカル socket へ報告させ（`packages/server/assets/agent-hook-report.cjs`）、`session.json`

@@ -52,6 +52,7 @@ import { type HandoffSocket, handoffSocketPathFor, startHandoffSocket } from "./
 import { createControlRequests } from "./handoff/controlRequests.js";
 import { runPreflight } from "./handoff/preflight.js";
 import { type HandoffResult, adoptedSpecsOf, discardHandedOffPanes, discardRejectedPanes, finishTakenHandoff } from "./handoff/startup.js";
+import { MetadataService } from "./metadata/MetadataService.js";
 
 export interface ComposedServer {
   httpServer: HttpServer;
@@ -237,6 +238,8 @@ export async function composeServer(
   const sizeAuthority = new DefaultSizeAuthority(clients, session, bus); // bus: pane.attach_changed（20260926-pane-direct-connect）
   const surface = new ControlSurface(logger);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
+  // 独自トークン（20260927-sidebar-row-tokens）。session へは MetadataTargets の口越しに書き、閉じた対象は bus で捨てる。`close()` で dispose。
+  const metadata = new MetadataService({ targets: session, bus, logger });
   registerAllMethods(surface, {
     session,
     clients,
@@ -247,6 +250,7 @@ export async function composeServer(
     gitPoller,
     agentStarter,
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
+    metadata,
   });
   const wsServer = new WsServerWs(httpServer.server, originRejections, auth.authorizeUpgrade, logger);
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
@@ -497,6 +501,9 @@ export async function composeServer(
         wsServer.closeAll(1001, "server shutting down");
         await new Promise<void>((resolve) => httpServer.server.close(() => resolve()));
       } finally {
+        // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
+        // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。
+        metadata.dispose();
         // スクロールバックの一時ディレクトリ（20260926-edit-scrollback）。途中の処理が投げても消す。
         await session.disposeScrollbackEditors();
         // 制御の socket はロックを放す直前まで開けておく——止まる途中に届いた 2 回目の `wtm session stop` が「既に止まる途中」と答えを受けて待てる
