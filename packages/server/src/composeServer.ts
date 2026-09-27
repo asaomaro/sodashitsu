@@ -62,6 +62,7 @@ import { type HandoffResult, adoptedSpecsOf, discardHandedOffPanes, discardRejec
 import { COMMANDS_FILE_NAME } from "./commands/commandConfig.js";
 import { CommandService } from "./commands/CommandService.js";
 import { MetadataService } from "./metadata/MetadataService.js";
+import { PrefsStore } from "./persist/PrefsStore.js";
 
 export interface ComposedServer {
   httpServer: HttpServer;
@@ -274,6 +275,9 @@ export async function composeServer(
     paneExists: (paneId) => session.getPane(paneId) !== undefined,
     logger,
   });
+  // 共有の設定（20260927-cli-mode）。読むのは `listen()` のロックの後（auth.json と同じ）。保存できた変更は全クライアントへ配る。
+  const prefs = new PrefsStore(options.stateDir);
+  prefs.onChange((state, byClientId) => bus.publish({ event: "prefs.changed", data: { prefs: state.prefs, rev: state.rev, byClientId } }));
   registerAllMethods(surface, {
     session,
     clients,
@@ -288,6 +292,7 @@ export async function composeServer(
     commands,
     metadata,
     images,
+    prefs,
   });
   // `/ws?machine=<id|名前>` は認証の後にそのマシンへの中継へ（`WsServerWs` は router の関数だけを知る。architecture の境界）。
   // 中継の接続は `WsGateway` を通らないので、手元のセッションの失効（ログアウト・token の作り直し）で閉じる印をここで持つ（`WsGateway` と同じ 4401）。
@@ -469,6 +474,9 @@ export async function composeServer(
       try {
         // 0'. auth.json を読む（ロックを取った後。上記）。token は待ち受けに成功してから作る（D102）。
         await auth.initialize();
+        // 0'（続き）. 共有の設定（20260927-cli-mode）。壊れていれば退避して空から始める（起動は止めない）。
+        const loadedPrefs = await prefs.load();
+        if (typeof loadedPrefs === "object") logger.warn("prefs.json was corrupt; starting with empty prefs", { backupPath: loadedPrefs.corrupt });
         // 1. 待ち受け（bind）を最初に行う（D102）。失敗（ポートが使用中・このマシンに無いアドレス・権限の無いポート等）は
         //    reject で返す（呼び出し側が案内を出して終わる。拾わないと未処理の 'error' でプロセスが落ちる）。以前は token の
         //    作成・復元（全 pane のシェルの起動）・poller の後に bind していたため、失敗した起動が token を作って失い、
