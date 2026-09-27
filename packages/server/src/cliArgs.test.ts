@@ -96,9 +96,28 @@ describe("parseArgs（CLI の引数）", () => {
     expect(configErrorOf(["session", "delete"]).message).toContain("missing session name: wtm session delete <name>");
     expect(configErrorOf(["session", "delete", "a", "b"]).message).toContain("unknown subcommand");
     expect(configErrorOf(["session", "list", "x"]).message).toContain("unknown subcommand");
-    expect(configErrorOf(["session", "stop", "work"]).message).toContain("unknown subcommand: wtm session stop work");
+    expect(configErrorOf(["session", "attach", "work"]).message).toContain("unknown subcommand: wtm session attach work");
     expect(configErrorOf(["session", "list", "--port", "1"]).message).toContain("--port is not an option of wtm session");
     expect(configErrorOf(["session", "delete", "work", "--session", "x"]).message).toContain("--session is not an option of wtm session");
+  });
+
+  it("wtm session stop <name> を読む。名前は必須で WTM_SESSION は見ない（20260927-session-stop）", () => {
+    expect(parseArgs(["session", "stop", "work"])).toMatchObject({ command: "session-stop", sessionTarget: "work", json: false });
+    expect(parseArgs(["session", "stop", "default", "--json", "--state-dir", "/s"])).toMatchObject({
+      command: "session-stop",
+      sessionTarget: "default",
+      stateDir: "/s",
+      json: true,
+    });
+    const missing = configErrorOf(["session", "stop"]);
+    expect(missing.message).toContain("missing session name: wtm session stop <name>");
+    expect(missing.hint).toContain("default");
+    expect(configErrorOf(["session", "stop", "a", "b"]).message).toContain("unknown subcommand");
+    expect(configErrorOf(["session", "stop", "work", "--session", "x"]).message).toContain("--session is not an option of wtm session");
+    expect(configErrorOf(["session", "stop", "work", "--port", "1"]).message).toContain("--port is not an option of wtm session");
+    const parsed = parseArgs(["session", "stop", "work"]);
+    expect(applySessionEnv(parsed, { WTM_SESSION: "other" })).toEqual(parsed);
+    expect(configErrorOf(["session"]).message).toContain("<list|delete|stop>");
   });
 
   it("--json は session 以外では ConfigError（20260926-named-session）", () => {

@@ -31,6 +31,7 @@ describe.skipIf(process.platform === "win32")("startHandoffSocket", () => {
   async function start(reply: HandoffReply) {
     dir = await makeTempDir("wtm-handoff-sock-");
     const requests: number[] = [];
+    const stops: number[] = [];
     socket = await startHandoffSocket(
       handoffSocketPathFor(dir),
       {
@@ -39,10 +40,14 @@ describe.skipIf(process.platform === "win32")("startHandoffSocket", () => {
           await send(reply);
         },
         status: () => ({ lastHandoff: { id: "ab", adopted: 1, dropped: 0, at: "t" } }),
+        stop: async (send) => {
+          stops.push(1);
+          await send({ ok: true, pid: 4242, alreadyStopping: false });
+        },
       },
       new MemoryLogger(),
     );
-    return { requests };
+    return { requests, stops };
   }
 
   it("状態ディレクトリの handoff.sock を 0600 で待ち受ける", async () => {
@@ -75,13 +80,35 @@ describe.skipIf(process.platform === "win32")("startHandoffSocket", () => {
     expect(requests).toHaveLength(1);
   });
 
+  it("stop は止める指示の返事を 1 行返す（20260927-session-stop）", async () => {
+    const { requests, stops } = await start({ ok: true, id: "ab", panes: 0 });
+    const path = handoffSocketPathFor(dir);
+    expect(JSON.parse(await ask(path, '{"op":"stop"}\n'))).toEqual({
+      ok: true,
+      pid: 4242,
+      alreadyStopping: false,
+    });
+    expect(stops).toHaveLength(1);
+    expect(requests).toHaveLength(0);
+    // 未知の op の案内に stop が載る
+    expect(JSON.parse(await ask(path, '{"op":"reboot"}\n'))).toMatchObject({
+      reason: "bad_request",
+      message: expect.stringContaining('{"op":"stop"}'),
+    });
+    expect(stops).toHaveLength(1);
+  });
+
   it("残っていたファイル（execve の前の古い版の socket の残り）を消して待ち受け直す", async () => {
     dir = await makeTempDir("wtm-handoff-sock-");
     const path = handoffSocketPathFor(dir);
     await writeFile(path, ""); // 誰も待ち受けていない残り
     socket = await startHandoffSocket(
       path,
-      { request: async () => undefined, status: () => ({ lastHandoff: null }) },
+      {
+        request: async () => undefined,
+        status: () => ({ lastHandoff: null }),
+        stop: async () => undefined,
+      },
       new MemoryLogger(),
     );
     expect(JSON.parse(await ask(path, '{"op":"status"}\n'))).toEqual({ lastHandoff: null });

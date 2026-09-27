@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { ConfigError, sessionFromEnvNote, stateDirInUseError } from "./config.js";
+import { ConfigError, defaultStateDir, sessionFromEnvNote, stateDirInUseError } from "./config.js";
 import { DefaultAuthService } from "./auth/AuthService.js";
 import { FsAuthFile } from "./persist/AuthFile.js";
 import { StateDirInUseError, StateDirLock } from "./persist/StateDirLock.js";
@@ -7,6 +7,7 @@ import {
   deleteSession,
   listSessions,
   resolveSessionStateDir,
+  sessionStopCommandFor,
   SessionDeleteError,
   type SessionEntry,
 } from "./persist/namedSession.js";
@@ -47,7 +48,7 @@ export async function runSessionDelete(
   io: CommandIo,
 ): Promise<number> {
   try {
-    const session = await deleteSession(base, name);
+    const session = await deleteSession(base, name, defaultStateDir());
     io.out(
       json
         ? JSON.stringify({ deleted: true, session })
@@ -93,7 +94,13 @@ export async function runTokenReset(
     await lock.acquire();
   } catch (err) {
     if (err instanceof StateDirInUseError)
-      throw stateDirInUseError(err, dir, "token-reset", fromEnv);
+      throw stateDirInUseError(
+        err,
+        dir,
+        "token-reset",
+        fromEnv,
+        sessionStopCommandFor(dir === base ? "default" : session!, base, defaultStateDir()),
+      );
     throw err;
   }
   try {

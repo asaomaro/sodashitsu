@@ -225,6 +225,8 @@ export function stateDirInUseError(
   command: "serve" | "token-reset",
   /** `WTM_SESSION` から選んだ名前付き session なら、その名前（20260926-named-session-ui）。 */
   sessionFromEnv?: string | undefined,
+  /** 止め方の案内に添える `wtm session stop …` の打ち方（`token-reset` だけ。`sessionStopCommandFor`。20260927-session-stop）。 */
+  stopCommand?: string | undefined,
 ): ConfigError {
   const envNote = sessionFromEnv !== undefined ? sessionFromEnvNote(sessionFromEnv) : "";
   const who = inUse.otherHost !== undefined ? `pid ${inUse.pid} on ${inUse.otherHost}` : `pid ${inUse.pid}`;
@@ -249,6 +251,9 @@ export function stateDirInUseError(
     [
       "wtm serve が動いている間は token を作り直せません（動いている側は古い token のまま新しい token を受け付けず、",
       "次のログイン等で auth.json を古い token に書き戻します）。wtm serve を止めてから wtm token reset を実行し、もう一度起動してください。",
+      stopCommand !== undefined && inUse.otherHost === undefined
+        ? `止めるには、起動した端末で Ctrl+C を押すか ${stopCommand} を実行します。`
+        : "",
       envNote,
       stale,
     ].join(""),

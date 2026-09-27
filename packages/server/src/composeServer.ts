@@ -47,8 +47,9 @@ import { DefaultManifestStore, type ManifestStore } from "./agent/ManifestStore.
 import { FsManifestSource } from "./infra/FsManifestSource.js";
 import { paneServerUrl } from "./util/net.js";
 import { HANDOFF_NONCE_ENV, closeOrphanPtyMasters, takeHandoff } from "./handoff/HandoffManifest.js";
-import { HandoffController } from "./handoff/HandoffController.js";
+import { HandoffController, type PreflightResult } from "./handoff/HandoffController.js";
 import { type HandoffSocket, handoffSocketPathFor, startHandoffSocket } from "./handoff/HandoffSocket.js";
+import { createControlRequests } from "./handoff/controlRequests.js";
 import { runPreflight } from "./handoff/preflight.js";
 import { type HandoffResult, adoptedSpecsOf, discardHandedOffPanes, discardRejectedPanes, finishTakenHandoff } from "./handoff/startup.js";
 
@@ -80,6 +81,11 @@ export interface ComposedServer {
   close(): Promise<void>;
   /** 更新時の引き継ぎ（20260926-live-handoff）で起動したときの結果（`listen()` の後。引き継ぎでない起動は undefined）。 */
   readonly handoffResult: HandoffResult | undefined;
+  /**
+   * 制御の socket（`handoff.sock`）の止める指示（`wtm session stop`。20260927-session-stop）を受けたときに呼ぶものを登録する。`main.ts` が停止の手順を渡す。
+   * 登録しなければ止める指示は `unsupported` で断る（smoke・テストで組み立てだけを使うとき）。呼ぶのは 1 回だけ（止まる途中の指示は呼ばずに答える）。
+   */
+  onStopRequest(fn: () => void): void;
 }
 
 function pickProcessInspector(): ProcessInspector {
@@ -109,7 +115,11 @@ function agentHookScriptFor(): string {
 export async function composeServer(
   rawArgs: RawServeArgs,
   /** テスト用の差し替え（結合テストが定期保存を短い間隔で観測する。20260926-screen-history-replay）。 */
-  internal: { paneHistorySaveIntervalMs?: number } = {},
+  internal: {
+    paneHistorySaveIntervalMs?: number;
+    /** 引き継ぎの前の確認の差し替え（結合テストが引き継ぎの最中の状態を作る。20260927-session-stop）。 */
+    handoffPreflight?: () => Promise<PreflightResult>;
+  } = {},
 ): Promise<ComposedServer> {
   const options = await withRememberedPort(resolveServeOptions(rawArgs), rawArgs);
   const logger = new FileLogger(join(options.stateDir, "server.log"));
@@ -276,7 +286,7 @@ export async function composeServer(
     },
     reopenClients: () => wsServer.setReady(true),
     flushLog: () => logger.flush(),
-    preflight: () => runPreflight(),
+    preflight: internal.handoffPreflight ?? (() => runPreflight()),
     // 同じ Node・同じ引数（ディスク上の同じ入口）で自分を置き換える。PTY の master は close-on-exec が無いので残る（research F2.2）。
     execve: (nonce) =>
       process.execve!(process.execPath, [process.execPath, ...process.execArgv, ...process.argv.slice(1)], {
@@ -286,6 +296,8 @@ export async function composeServer(
     platform: platform(),
     hasExecve: typeof process.execve === "function",
   });
+  /** 制御の socket に届いた指示の受け付けの判断（止める指示・止まる途中の引き継ぎの拒否。20260927-session-stop）。 */
+  const control = createControlRequests({ handoff });
 
   /** 無効なら消して undefined。有効なら読み、使えなければ（無い・大きすぎる・壊れている・読めない）ログに残して undefined（AC4・AC7）。 */
   async function loadPaneHistory(): Promise<ReadonlyMap<string, PaneHistoryEntry> | undefined> {
@@ -327,6 +339,9 @@ export async function composeServer(
     },
     get handoffResult(): HandoffResult | undefined {
       return handoffResult;
+    },
+    onStopRequest(fn: () => void): void {
+      control.setStopHandler(fn);
     },
 
     async listen(): Promise<void> {
@@ -434,7 +449,7 @@ export async function composeServer(
         // 4.5. 更新時の引き継ぎの指示の受け口（Linux/macOS。20260926-live-handoff）。復元と poller の開始の後に置く——起動の途中の指示で、
         //      復元の途中の session.json を保存したり、まだ始めていない poller を「再開」したりしないため。置けなくても起動は続ける。
         if (platform() !== "win32") {
-          handoffSocket = await startHandoffSocket(handoffSocketPathFor(options.stateDir), handoff, logger).catch((err: unknown) => {
+          handoffSocket = await startHandoffSocket(handoffSocketPathFor(options.stateDir), control, logger).catch((err: unknown) => {
             logger.warn("cannot start the handoff socket; live handoff is unavailable", { error: err instanceof Error ? err.message : String(err) });
             return undefined;
           });
@@ -458,10 +473,12 @@ export async function composeServer(
 
     async close(): Promise<void> {
       try {
+        // 止まり始めた印（以後の止める指示は「既に止まる途中」、引き継ぎの指示は断る。20260927-session-stop）。受け付け済みの引き継ぎの
+        // 最中（Ctrl+C 等のシグナル）なら、それが終わる（元に戻す）まで待つ——以前は最初に制御の socket を閉じ、その接続の終わりを待つことで同じ順序になっていた。
+        await control.beginClosing();
         // 閉じ始めたら新しい `/ws` を受け付けない（closeAll の後に届いた upgrade を通さない。D102）。
         wsServer.setReady(false);
         await agentReportSocket?.close();
-        await handoffSocket?.close();
         // 実行中の判定周期を待ってから terminals/session を破棄する（review 指摘。should。D51 の隣の
         // agent/AgentMonitor.ts 参照）。
         await agentMonitor.stop();
@@ -482,6 +499,10 @@ export async function composeServer(
       } finally {
         // スクロールバックの一時ディレクトリ（20260926-edit-scrollback）。途中の処理が投げても消す。
         await session.disposeScrollbackEditors();
+        // 制御の socket はロックを放す直前まで開けておく——止まる途中に届いた 2 回目の `wtm session stop` が「既に止まる途中」と答えを受けて待てる
+        // （20260927-session-stop の decisions D4）。止まる途中の引き継ぎは `beginClosing` で断っている。
+        // （`HandoffSocket.close()` は今は reject しないが、将来 reject してもロックを残さないよう握る）
+        await handoffSocket?.close().catch(() => undefined);
         // session.json を書き終えてから放す（D103。持っていなければ——ロックで断られた起動等——何もしない）。
         await lock.release();
       }
