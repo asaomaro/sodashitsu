@@ -67,7 +67,7 @@ class FakeWebglAddon implements WebglAddonLike {
 /** T17/T18 共通のテスト用の組み立て（実物の KeyRouter・TerminalRegistry を使う。軽量な部品なので実害は無い）。 */
 function makeDispatcher(
   conn: ConnectionPort,
-  extra: { notifications?: { focusNext(): void } } = {},
+  extra: { notifications?: { focusNext(): void }; imagePaste?: { pasteClipboard(paneId: string): void } } = {},
 ): { dispatcher: ActionDispatcher; registry: TerminalRegistry; keys: KeyInputController } {
   const router = new KeyRouter(DEFAULT_KEYMAP, realClock());
   const keys = new KeyInputController(router, conn);
@@ -1106,6 +1106,20 @@ describe("ActionDispatcher — メニュー専用の操作（D56 の訂正 10）
     dispatcher.pasteFromMenu();
     await flush();
     expect(pasteSpy).toHaveBeenCalledWith("pasted");
+    entry.term.dispose();
+  });
+
+  it("pasteIntoPane: imagePaste があればそちらへ（テキストが無く画像があれば画像も。20260927-clipboard-image-paste）", async () => {
+    const conn = makeConnection();
+    const imagePaste = { pasteClipboard: vi.fn() };
+    const { dispatcher, registry } = makeDispatcher(conn, { imagePaste });
+    const entry = registry.acquire("p3");
+    const readText = vi.spyOn(navigator.clipboard, "readText");
+    dispatcher.pasteIntoPane("p3");
+    expect(imagePaste.pasteClipboard).toHaveBeenCalledWith("p3");
+    expect(readText).not.toHaveBeenCalled();
+    dispatcher.pasteIntoPane("nope"); // 端末の無い pane は何もしない
+    expect(imagePaste.pasteClipboard).toHaveBeenCalledTimes(1);
     entry.term.dispose();
   });
 

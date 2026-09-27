@@ -67,6 +67,13 @@ const MESSAGES: Record<ErrorCode, string> = {
   invalid_metadata_token: "独自トークンの名前・数が受け付ける範囲の外です。",
   metadata_token_limit: "独自トークンは 1 つの対象に 32 個までです。",
   metadata_sequence_source_limit: "seq 付きの報告元は 1 つの対象に 32 個までです。",
+  // クリップボードの画像の貼り付け（20260927-clipboard-image-paste）。通常は `ImagePaster` が自分の文言で toast を出す——表の網羅のため。
+  invalid_image: "画像の形式が正しくないため送れませんでした。",
+  image_too_large: "画像が大きすぎます（16MB まで）。",
+  image_upload_busy: "ほかの画像を送っている最中です。少し待ってからもう一度貼り付けてください。",
+  image_upload_rate_limited: "画像の貼り付けが多すぎます。1 分ほど待ってください。",
+  image_upload_expired: "画像の送信が途中で切れました。もう一度貼り付けてください。",
+  image_store_failed: "サーバに画像を保存できませんでした。サーバのログを確かめてください。",
   // 入力の書き込み待ちの上限（20260927-server-size-input-limits）。サーバは同じ pane について 2 秒に 1 回だけ送る。
   input_queue_full: "この pane のプログラムが入力を読んでいないため、送った入力を捨てました（サーバに溜まった入力が上限に達しています）。",
 };

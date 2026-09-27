@@ -1,8 +1,8 @@
 import type { Terminal } from "@xterm/xterm";
 import type { ConnectionPort } from "../net/ports.js";
 import { readClipboard } from "../term/clipboard.js";
-import type { KeyInput, Mode } from "./actions.js";
-import { keyInputOf, type KeyboardEventLike } from "./chord.js";
+import type { KeyDecision, KeyInput, Mode } from "./actions.js";
+import { chordOf, keyInputOf, prefixBytes, type KeyboardEventLike } from "./chord.js";
 import type { KeyRouter } from "./KeyRouter.js";
 
 export interface Disposable {
@@ -17,6 +17,15 @@ export interface FocusPort {
 }
 export interface ModeSink {
   onModeChange(m: Mode): void;
+}
+/**
+ * クリップボードの画像の貼り付け（20260927-clipboard-image-paste。`term/ImagePaster` が実装する）。`keys/` は `term/` を import しない（port 越し）。
+ */
+export interface ImagePastePort {
+  /** 画像を貼り付けるキー（`remote_image_paste`）。画像が無い・読めなければ `fallback`（そのキーの端末への列。null なら何も送らない）。 */
+  fromKey(paneId: string, fallback: string | null): void;
+  /** `Ctrl+Shift+V`：テキストがあればテキスト、無く画像があれば画像。 */
+  pasteClipboard(paneId: string): void;
 }
 
 /**
@@ -79,6 +88,7 @@ export class KeyInputController {
   private action: ActionPort | null = null;
   private focus: FocusPort | null = null;
   private modeSink: ModeSink | null = null;
+  private imagePaste: ImagePastePort | null = null;
   private pendingModifier: PendingModifier | null = null;
   private pendingModifierLocked = false;
 
@@ -89,10 +99,11 @@ export class KeyInputController {
     this.router.onModeChange((m) => this.modeSink?.onModeChange(m));
   }
 
-  bind(ports: { action: ActionPort; focus: FocusPort; mode: ModeSink }): void {
+  bind(ports: { action: ActionPort; focus: FocusPort; mode: ModeSink; imagePaste?: ImagePastePort }): void {
     this.action = ports.action;
     this.focus = ports.focus;
     this.modeSink = ports.mode;
+    this.imagePaste = ports.imagePaste ?? null;
   }
 
   /**
@@ -130,7 +141,13 @@ export class KeyInputController {
   /** 端末以外（サイドバー等）にフォーカスがあるときの keydown。`true` なら既定の動作のままでよい。 */
   handleDomKey(ev: KeyboardEventLike): boolean {
     if (isManualPasteShortcut(ev)) return true; // 端末にフォーカスが無ければ貼り付け先が無い
-    const decision = this.router.handle(this.applyPendingModifier(keyInputOf(ev)));
+    const k = keyInputOf(ev);
+    // 画像を貼り付けるキー（既定 ctrl+v）は端末にフォーカスがあるときだけ働く——入力欄の Ctrl+V（ブラウザの貼り付け）を横取りしない（AC-I5）。
+    // ルーターに渡す前に見る：渡すと押しっぱなしの記録が立ち、繰り返しの Ctrl+V（連続の貼り付け）が食われる（T7 の独立点検）。
+    if (!this.pendingModifier && this.router.directActionOf(k)?.type === "pasteImage") return true;
+    const decision = this.router.handle(this.applyPendingModifier(k));
+    // prefix の後のキーに割り当てた場合は、他の prefix の操作と同じく 2 打目を食う（入力欄へ文字として入れない）。貼り付け先の端末が無いので何もしない。
+    if (isPasteImage(decision)) return false;
     return this.dispatch(decision, null);
   }
 
@@ -147,7 +164,13 @@ export class KeyInputController {
   private inject(k: KeyInput, applyPending: boolean): void {
     const activeModifier = applyPending ? this.pendingModifier : null; // applyPendingModifier が one-shot なら消してしまう前に控える
     const applied = applyPending ? this.applyPendingModifier(k) : k;
+    const direct = this.router.directActionOf(applied)?.type === "pasteImage";
     const decision = this.router.handle(applied);
+    if (isPasteImage(decision)) {
+      const target = this.focus?.focusedPaneId() ?? null;
+      if (target) this.pasteImage(target, applied, direct);
+      return;
+    }
     if (decision.kind === "pass") {
       const target = this.focus?.focusedPaneId() ?? null;
       // pending modifier（Ctrl/Alt。ExtraKeys）が理由でここに来た場合を先に試す。元のキーに実物の
@@ -198,6 +221,10 @@ export class KeyInputController {
 
   private resolveTerminalKey(ev: KeyboardEventLike, term: Terminal, paneId: string): boolean {
     if (isManualPasteShortcut(ev)) {
+      if (this.imagePaste) {
+        this.imagePaste.pasteClipboard(paneId); // テキストが無く画像があれば画像も（20260927-clipboard-image-paste）
+        return false;
+      }
       void readClipboard().then((text) => {
         if (text) term.paste(text);
       });
@@ -205,7 +232,13 @@ export class KeyInputController {
     }
     const raw = keyInputOf(ev);
     const activeModifier = this.pendingModifier; // applyPendingModifier が one-shot なら消してしまう前に控える
-    const decision = this.router.handle(this.applyPendingModifier(raw));
+    const applied = this.applyPendingModifier(raw);
+    const direct = this.router.directActionOf(applied)?.type === "pasteImage"; // handle の前に（handle はモードを変える）
+    const decision = this.router.handle(applied);
+    if (isPasteImage(decision)) {
+      this.pasteImage(paneId, applied, direct);
+      return false;
+    }
     if (decision.kind === "pass" && activeModifier && !raw.ctrl && !raw.alt) {
       // 実物の Ctrl/Alt キーではなく ExtraKeys の pending modifier が理由で "pass" になった場合、
       // xterm.js の既定動作（未修飾のキーとして処理される）に任せると Ctrl/Alt が失われる——
@@ -217,6 +250,18 @@ export class KeyInputController {
       }
     }
     return this.dispatch(decision, paneId);
+  }
+
+  /**
+   * 画像を貼り付けるキー（20260927-clipboard-image-paste）。画像が無い・読めないときに送る列は、そのキーを端末へ送ったときの列（`ctrl+v` なら `\x16`。
+   * `prefixBytes`＝prefix の二度押しと同じ変換）。送れない chord（矢印との組み合わせ等）は何も送らない。`ImagePastePort` が無ければ列をそのまま送る。
+   */
+  private pasteImage(paneId: string, k: KeyInput, direct: boolean): void {
+    // prefix の後のキーに割り当てた場合は、画像が無ければ何も送らない（ほかの prefix の操作と同じく 2 打目を食う。cross の点検）。
+    const chord = direct ? chordOf(k) : null;
+    const fallback = chord === null ? null : prefixBytes(chord);
+    if (this.imagePaste) this.imagePaste.fromKey(paneId, fallback);
+    else if (fallback !== null) this.connection.sendInput(paneId, fallback);
   }
 
   /** `KeyDecision` を実際の効果にする。戻り値は xterm.js の `attachCustomKeyEventHandler` と同じ意味
@@ -237,4 +282,8 @@ export class KeyInputController {
         return false;
     }
   }
+}
+
+function isPasteImage(decision: KeyDecision): boolean {
+  return decision.kind === "action" && decision.action.type === "pasteImage";
 }

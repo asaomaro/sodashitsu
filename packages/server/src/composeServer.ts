@@ -34,6 +34,8 @@ import { DefaultClientRegistry } from "./clients/ClientRegistry.js";
 import { DefaultSizeAuthority } from "./clients/SizeAuthority.js";
 import { ControlSurface } from "./surface/ControlSurface.js";
 import { registerAllMethods } from "./surface/methods/index.js";
+import { IMAGE_DIR_NAME, ImageStore } from "./image/ImageStore.js";
+import { ImageUploads } from "./image/ImageUploads.js";
 import { FsIntegrationFile } from "./persist/IntegrationFile.js";
 import { FsAgentIntegrationInstaller } from "./agent/AgentIntegrationInstaller.js";
 import { DefaultAgentIntegrationService } from "./agent/AgentIntegrationService.js";
@@ -264,6 +266,14 @@ export async function composeServer(
   await commands.reload();
   // 独自トークン（20260927-sidebar-row-tokens）。session へは MetadataTargets の口越しに書き、閉じた対象は bus で捨てる。`close()` で dispose。
   const metadata = new MetadataService({ targets: session, bus, logger });
+  // クリップボードの画像（20260927-clipboard-image-paste）。状態ディレクトリの下の私的なディレクトリに置く（decisions D5）。切断では消さない。
+  const imageStore = new ImageStore({ dir: join(options.stateDir, IMAGE_DIR_NAME) });
+  let imageSweeper: { stop(): void } | undefined;
+  const images = new ImageUploads({
+    store: imageStore,
+    paneExists: (paneId) => session.getPane(paneId) !== undefined,
+    logger,
+  });
   registerAllMethods(surface, {
     session,
     clients,
@@ -277,6 +287,7 @@ export async function composeServer(
     machines: () => machines.listWhenLoaded(), // 20260927-multi-host-machines（最初の読み込みを待つ）
     commands,
     metadata,
+    images,
   });
   // `/ws?machine=<id|名前>` は認証の後にそのマシンへの中継へ（`WsServerWs` は router の関数だけを知る。architecture の境界）。
   // 中継の接続は `WsGateway` を通らないので、手元のセッションの失効（ログアウト・token の作り直し）で閉じる印をここで持つ（`WsGateway` と同じ 4401）。
@@ -304,13 +315,19 @@ export async function composeServer(
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
   wsServer.setReady(false);
   new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
-    onClientGone: (clientId) => commands.onClientGone(clientId), // その接続の popup を止める（20260927-custom-command-keys）
+    onClientGone: (clientId) => {
+      commands.onClientGone(clientId); // その接続の popup を止める（20260927-custom-command-keys）
+      images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
+    },
   });
   // 中継の受け口（20260927-multi-host-machines）。ほかのマシンの `wtm serve` が SSH と `wtm bridge` 越しに繋ぐ、状態ディレクトリの 0600 の socket。
   // 各チャネルは `/ws` の 1 接続と同じ（2 つ目の `WsGateway` に渡す）。待ち受けは `listen()` の最後（`/ws` と同じく復元の後）。
   const bridgeEndpoint = new BridgeEndpoint({ version: SERVER_VERSION, hostname: osHostname(), sessionName: options.sessionName ?? null }, logger);
   new WsGateway(bridgeEndpoint, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
-    onClientGone: (clientId) => commands.onClientGone(clientId), // 中継の接続で開いた popup も止める
+    onClientGone: (clientId) => {
+      commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
+      images.onClientGone(clientId);
+    },
   });
   let bridgeListening = false;
 
@@ -512,6 +529,8 @@ export async function composeServer(
         }
         sessionLoaded = true;
         paneHistory?.start(internal.paneHistorySaveIntervalMs);
+        // クリップボードの画像の後片付け（20260927-clipboard-image-paste）。ロックを取った後に、起動時と 1 時間ごと（貼らなくなっても 24 時間で消す）。
+        imageSweeper = imageStore.startSweeping();
         // 4. poller。
         gitPoller.start();
         agentMonitor.start();
@@ -542,6 +561,7 @@ export async function composeServer(
         // 予約を取り消す（ロックを放した後に session.json を書かない）。
         if (!sessionLoaded) persist.cancel();
         paneHistory?.stop();
+        imageSweeper?.stop();
         await agentReportSocket?.close();
         await handoffSocket?.close();
         if (bridgeListening) await bridgeEndpoint.close();
@@ -590,6 +610,8 @@ export async function composeServer(
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
         // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。
         metadata.dispose();
+        imageSweeper?.stop();
+        await images.dispose(); // 書いている途中の画像を書き終えてから（ロックを放す前に）
         // スクロールバックの一時ディレクトリ（20260926-edit-scrollback）。途中の処理が投げても消す。
         await session.disposeScrollbackEditors();
         // 制御の socket はロックを放す直前まで開けておく——止まる途中に届いた 2 回目の `wtm session stop` が「既に止まる途中」と答えを受けて待てる

@@ -121,4 +121,106 @@ describe("InputGate（D99）", () => {
     await expect(new InputGate(conn).login("tok")).resolves.toEqual({ ok: false, reason: "origin_rejected" });
     expect(conn.login).toHaveBeenCalledWith("tok");
   });
+  describe("first と保持ごとの時間（20260927-clipboard-image-paste）", () => {
+    it("cancel(first) は first を溜めた分より前に流す（Ctrl+V の後に続けて打ったキーが \\x16 を追い越さない）", () => {
+      const conn = makeConn();
+      const gate = new InputGate(conn);
+      const hold = gate.holdInput("p1");
+      gate.sendInput("p1", "j");
+      gate.sendInput("p1", "j");
+      hold.cancel("\x16");
+      expect(conn.sent).toEqual([["p1", "\x16"], ["p1", "j"], ["p1", "j"]]);
+    });
+
+    it("release(to, first) も first を先に、新しい宛先へ流す", () => {
+      const conn = makeConn();
+      const gate = new InputGate(conn);
+      const hold = gate.holdInput("p1");
+      gate.sendInput("p1", "x");
+      hold.release("p2", "PATH");
+      expect(conn.sent).toEqual([["p2", "PATH"], ["p2", "x"]]);
+    });
+
+    it("first の無い cancel は今までどおり（溜めた分だけ）", () => {
+      const conn = makeConn();
+      const gate = new InputGate(conn);
+      const hold = gate.holdInput("p1");
+      gate.sendInput("p1", "x");
+      hold.cancel();
+      expect(conn.sent).toEqual([["p1", "x"]]);
+    });
+
+    it("保持ごとの時間（timeoutMs）で時間切れになる。後から来た first は失わず、溜めた分の後に送る", () => {
+      const conn = makeConn();
+      const gate = new InputGate(conn, { timeoutMs: 1000 });
+      const hold = gate.holdInput("p1", { timeoutMs: 20_000 });
+      gate.sendInput("p1", "a");
+      vi.advanceTimersByTime(1000);
+      expect(conn.sent).toEqual([]); // 構築時の 1 秒では切れない
+      vi.advanceTimersByTime(19_000);
+      expect(conn.sent).toEqual([["p1", "a"]]);
+      hold.cancel("PATH");
+      expect(conn.sent).toEqual([["p1", "a"], ["p1", "PATH"]]);
+      hold.cancel("again"); // 2 度目も同じ（終わった保持の first は普通の入力）
+      expect(conn.sent.at(-1)).toEqual(["p1", "again"]);
+    });
+
+    it("重なった保持: 古い保持の first → その間に打ったキー → 新しい保持の first → その後のキー（新しい方が先に終わっても順序を保つ）", () => {
+      const conn = makeConn();
+      const gate = new InputGate(conn);
+      const first = gate.holdInput("p1");
+      gate.sendInput("p1", "a");
+      const second = gate.holdInput("p1");
+      gate.sendInput("p1", "b");
+      second.cancel("P2");
+      expect(conn.sent).toEqual([]);
+      first.cancel("P1");
+      expect(conn.sent).toEqual([["p1", "P1"], ["p1", "a"], ["p1", "P2"], ["p1", "b"]]);
+    });
+
+    it("時間切れの後の first は、同じ pane の応答待ちの後の保持に溜まる（関所を通る）", () => {
+      const conn = makeConn();
+      const gate = new InputGate(conn);
+      const img = gate.holdInput("p1", { timeoutMs: 100 });
+      vi.advanceTimersByTime(100); // 画像の保持が時間切れ（溜めた分は無い）
+      const split = gate.holdInput("p1"); // 分割の応答待ち
+      img.cancel("PATH");
+      expect(conn.sent).toEqual([]); // 分割の保持に溜まる
+      split.release("p2");
+      expect(conn.sent).toEqual([["p2", "PATH"]]);
+    });
+
+    it("古い保持が応答待ちの間に後ろの保持が時間切れになり、その後の first は古い保持の溜め分を追い越さない", () => {
+      const conn = makeConn();
+      const gate = new InputGate(conn);
+      const old = gate.holdInput("p1");
+      gate.sendInput("p1", "a");
+      const img = gate.holdInput("p1", { timeoutMs: 100 });
+      gate.sendInput("p1", "b");
+      vi.advanceTimersByTime(100); // img は時間切れ（流し先は決まったが old を待つ）
+      img.cancel("PATH");
+      expect(conn.sent).toEqual([]);
+      old.cancel();
+      expect(conn.sent).toEqual([["p1", "a"], ["p1", "b"], ["p1", "PATH"]]);
+    });
+
+    it("discard は溜めた分を捨てる（マシンの切り替え）。後の保持の順序は保つ", () => {
+      const conn = makeConn();
+      const gate = new InputGate(conn);
+      const img = gate.holdInput("p1");
+      gate.sendInput("p1", "old");
+      const later = gate.holdInput("p1");
+      gate.sendInput("p1", "new");
+      img.discard();
+      later.cancel();
+      expect(conn.sent).toEqual([["p1", "new"]]);
+    });
+
+    it("source が null の保持の cancel(first) は何も送らない", () => {
+      const conn = makeConn();
+      const gate = new InputGate(conn);
+      gate.holdInput(null).cancel("x");
+      expect(conn.sent).toEqual([]);
+    });
+  });
 });

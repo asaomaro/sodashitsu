@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
 import { THEME_NAMES } from "./theme.js";
+import { IMAGE_CHUNK_BASE64_MAX, IMAGE_MIME_TYPES } from "./image.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 import { CELL_LIMIT_MESSAGE, terminalDimension, VIEW_VISIBLE_PANES_MAX, withinCellLimit } from "./terminalLimits.js";
 
@@ -352,6 +353,35 @@ export interface PaneEditScrollbackResult {
   pane: Pane;
 }
 
+// 20260927-clipboard-image-paste（herdr の remote_image_paste）。画像を分けて送る（decisions D3）。置き場所・名前はサーバが決め、ここでは受け取らない。
+// `size` の上限はスキーマに置かない——超えたら `image_too_large` で断る（`invalid_params` では利用者に理由を示せない）。
+const uploadId = z.string().min(1).max(64);
+export const PaneImageBeginParams = z.object({ paneId, mime: z.enum(IMAGE_MIME_TYPES), size: z.number().int().min(1) });
+export type PaneImageBeginParams = z.infer<typeof PaneImageBeginParams>;
+export interface PaneImageBeginResult {
+  uploadId: string;
+}
+export const PaneImageChunkParams = z.object({
+  uploadId,
+  offset: z.number().int().min(0),
+  data: z
+    .string()
+    .min(4)
+    .max(IMAGE_CHUNK_BASE64_MAX)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/)
+    .refine((s) => s.length % 4 === 0, "base64 length must be a multiple of 4"),
+});
+export type PaneImageChunkParams = z.infer<typeof PaneImageChunkParams>;
+export const PaneImageCommitParams = z.object({ uploadId });
+export type PaneImageCommitParams = z.infer<typeof PaneImageCommitParams>;
+/** 送信を途中でやめる（ブラウザ側の失敗。サーバの送信の枠を時間切れを待たずに空ける）。知らない id でも成功。 */
+export const PaneImageCancelParams = z.object({ uploadId });
+export type PaneImageCancelParams = z.infer<typeof PaneImageCancelParams>;
+export interface PaneImageCommitResult {
+  /** サーバ（pane のマシン）に置いた画像の絶対パス。ブラウザは `isPastablePath` で確かめてから貼る。 */
+  path: string;
+}
+
 // --- layout -----------------------------------------------------------------
 
 export const LayoutSetSplitRatioParams = z.object({
@@ -616,6 +646,10 @@ export const METHOD_SCHEMAS = {
   "pane.resize": PaneResizeParams,
   "pane.input.set": PaneInputSetParams,
   "pane.edit_scrollback": PaneEditScrollbackParams,
+  "pane.image.begin": PaneImageBeginParams,
+  "pane.image.chunk": PaneImageChunkParams,
+  "pane.image.commit": PaneImageCommitParams,
+  "pane.image.cancel": PaneImageCancelParams,
   "layout.set_split_ratio": LayoutSetSplitRatioParams,
   "worktree.list": WorktreeListParams,
   "worktree.create": WorktreeCreateParams,
@@ -683,6 +717,10 @@ export interface MethodResultMap {
   "pane.resize": Record<string, never>;
   "pane.input.set": Record<string, never>;
   "pane.edit_scrollback": PaneEditScrollbackResult;
+  "pane.image.begin": PaneImageBeginResult;
+  "pane.image.chunk": Record<string, never>;
+  "pane.image.commit": PaneImageCommitResult;
+  "pane.image.cancel": Record<string, never>;
   "layout.set_split_ratio": Record<string, never>;
   "worktree.list": WorktreeListResult;
   "worktree.create": WorktreeCreateResult;

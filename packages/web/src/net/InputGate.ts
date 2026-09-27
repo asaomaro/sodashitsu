@@ -3,10 +3,18 @@ import type { ConnectionPort, InputOrigin, LoginResult } from "./ports.js";
 
 /** `InputGate.holdInput` の戻り値。保持を終える方法は 2 つ。 */
 export interface InputHold {
-  /** 溜めた入力を、この pane（新しくできた pane）へ流して保持を終える。 */
-  release(toPaneId: string): void;
-  /** 溜めた入力を、もともとの宛先（保持を始めたときに焦点のあった pane）へ流して保持を終える（要求が失敗した等）。 */
-  cancel(): void;
+  /**
+   * 溜めた入力を、この pane（新しくできた pane）へ流して保持を終える。`first` は溜めた入力より前に流す（20260927-clipboard-image-paste：
+   * 画像のパス・画像が無かったときの Ctrl+V の `0x16`）。保持が既に終わっていれば（時間切れ・2 度目の呼び出し）、`first` は普通の入力として今送る（失わない）。
+   */
+  release(toPaneId: string, first?: string | Uint8Array): void;
+  /** 溜めた入力を、もともとの宛先（保持を始めたときに焦点のあった pane）へ流して保持を終える（要求が失敗した等）。`first` は `release` と同じ。 */
+  cancel(first?: string | Uint8Array): void;
+  /**
+   * 溜めた入力を**捨てて**保持を終える（20260927-clipboard-image-paste：マシンを切り替えた——pane の id はマシンをまたいで重なるので、前のマシンの
+   * pane へ打った文字を次のマシンの同じ id の pane へ流さない）。
+   */
+  discard(): void;
 }
 
 export interface InputGateOptions {
@@ -32,6 +40,8 @@ interface Hold {
   timer: unknown;
   /** 決まった流し先（`undefined` はまだ応答待ち、`null` は流さない）。 */
   target: string | null | undefined;
+  /** 溜めた入力より前に流す列（`release`/`cancel` の `first`）。 */
+  first: string | Uint8Array | undefined;
 }
 
 /**
@@ -99,31 +109,43 @@ export class InputGate implements ConnectionPort {
     this.conn.sendInput(paneId, bytes, origin);
   }
 
-  /** `sourcePaneId`（今、焦点のある pane）宛ての入力を溜め始める。 */
-  holdInput(sourcePaneId: string | null): InputHold {
+  /**
+   * `sourcePaneId`（今、焦点のある pane）宛ての入力を溜め始める。`timeoutMs` はこの保持だけの時間切れ（既定は構築時の値。画像の送信は長いので 20 秒。
+   * 20260927-clipboard-image-paste）。
+   */
+  holdInput(sourcePaneId: string | null, opts: { timeoutMs?: number } = {}): InputHold {
     const id = ++this.seq;
     const sources = new Set<string>();
     if (sourcePaneId) sources.add(sourcePaneId);
-    const hold: Hold = { id, sources, chunks: [], timer: undefined, target: undefined };
-    hold.timer = this.setTimer(() => this.finish(id, sourcePaneId), this.timeoutMs);
+    const hold: Hold = { id, sources, chunks: [], timer: undefined, target: undefined, first: undefined };
+    hold.timer = this.setTimer(() => this.finish(id, sourcePaneId), opts.timeoutMs ?? this.timeoutMs);
     this.holds.push(hold);
     return {
-      release: (toPaneId) => this.finish(id, toPaneId),
-      cancel: () => this.finish(id, sourcePaneId),
+      release: (toPaneId, first) => this.finish(id, toPaneId, first),
+      cancel: (first) => this.finish(id, sourcePaneId, first),
+      discard: () => this.finish(id, null),
     };
   }
 
-  private finish(id: number, target: string | null): void {
+  private finish(id: number, target: string | null, first?: string | Uint8Array): void {
     const hold = this.holds.find((h) => h.id === id);
-    if (!hold || hold.target !== undefined) return; // 既に終わっている
+    if (!hold || hold.target !== undefined) {
+      // 既に終わっている（時間切れで溜めた分は流した・2 度目の呼び出し。呼ぶ側は 1 度だけ終えること）。`first` は失わずに普通の入力として送る——溜めた分の後になるが、
+      // まだ応答待ちの後の保持があればそこに並ぶ（`sendInput` の規則）。
+      if (first !== undefined && target) this.sendInput(target, first);
+      return;
+    }
     this.clearTimer(hold.timer);
     hold.target = target;
+    hold.first = first;
     // 焦点はこの流し先へ移る——まだ応答待ちの後の保持は、そこ宛ての入力も溜める。
     if (target) for (const later of this.holds) if (later.id > id && later.target === undefined) later.sources.add(target);
     // 古いほうから順に、流し先が決まったものだけ流す（打った順番を保つ）。
     while (this.holds[0] && this.holds[0].target !== undefined) {
       const done = this.holds.shift()!;
-      if (done.target) for (const chunk of done.chunks) this.conn.sendInput(done.target, chunk);
+      if (!done.target) continue;
+      if (done.first !== undefined) this.conn.sendInput(done.target, done.first);
+      for (const chunk of done.chunks) this.conn.sendInput(done.target, chunk);
     }
   }
 }

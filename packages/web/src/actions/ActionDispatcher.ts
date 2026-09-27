@@ -48,6 +48,8 @@ export interface ActionDispatcherOptions {
    * 必須なら落とした時点で型で落ちる。
    */
   notifications: { focusNext(): void };
+  /** クリップボードの画像の貼り付け（20260927-clipboard-image-paste。`term/ImagePaster`）。省略時はメニューの「貼り付け」はテキストだけ（今までの経路）。 */
+  imagePaste?: { pasteClipboard(paneId: string): void };
 }
 
 /**
@@ -68,11 +70,13 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   private readonly keys: KeyInputController;
   private readonly input: ActionDispatcherOptions["input"];
   private readonly notifications: ActionDispatcherOptions["notifications"];
+  private readonly imagePaste: ActionDispatcherOptions["imagePaste"];
 
   constructor(opts: ActionDispatcherOptions) {
     this.conn = opts.conn;
     this.input = opts.input;
     this.notifications = opts.notifications;
+    this.imagePaste = opts.imagePaste;
     this.session = useSessionStore(opts.pinia);
     this.agentIntegrations = useAgentIntegrationsStore(opts.pinia);
     this.seen = useSeenStore(opts.pinia);
@@ -1184,6 +1188,10 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   pasteIntoPane(paneId: string): void {
     const entry = this.registry.get(paneId);
     if (!entry) return;
+    if (this.imagePaste) {
+      this.imagePaste.pasteClipboard(paneId); // テキストが無く画像があれば画像も（20260927-clipboard-image-paste）
+      return;
+    }
     void readClipboard().then((text) => {
       if (text) entry.term.paste(text);
     });

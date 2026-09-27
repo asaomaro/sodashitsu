@@ -473,7 +473,7 @@ describe("useSettingsStore — キーの割り当て（AC8）", () => {
     expect(store.keyPrefs).toEqual({ prefix: null, bindings: {}, navigateKeys: {}, commands: {} });
     expect(store.keymap.prefix).toBe("ctrl+b");
     expect(store.keymap.bindingsOf("split_vertical")).toEqual(["prefix+v"]);
-    expect(store.keymap.directMap.size).toBe(0);
+    expect([...store.keymap.directMap.keys()]).toEqual(["ctrl+v"]); // 既定の直接のキーは画像の貼り付けだけ（20260927-clipboard-image-paste）
   });
 
   it("prefix・割り当てを変えると、解決した表が即時に変わり、wtm.prefs.v1 の keys に差だけが保存される", () => {

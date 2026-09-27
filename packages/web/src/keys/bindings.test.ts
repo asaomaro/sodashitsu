@@ -26,17 +26,18 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
   // 20260923-missing-keybinding-actions で12個追加し 47 個になった（NOT_YET_BINDINGS の案内から昇格。keymap.ts 参照）。
   // 20260923-workspace-grouping で move_workspace_previous/next の2個を追加し 49 個になった。
   // 20260926-edit-scrollback で edit_scrollback（pane）を追加し 50 個になった。
-  it("50 個あり、id は重複しない・表示名は空でない", () => {
-    expect(ACTIONS).toHaveLength(50);
-    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(50);
+  // 20260927-clipboard-image-paste で remote_image_paste（pane。既定は直接のキー ctrl+v）を追加し 51 個になった。
+  it("51 個あり、id は重複しない・表示名は空でない", () => {
+    expect(ACTIONS).toHaveLength(51);
+    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(51);
     for (const a of ACTIONS) expect(a.label.length, a.id).toBeGreaterThan(0);
   });
 
-  it("群は 全体 5・workspace / tab 21・pane 24（この順に並ぶ）", () => {
+  it("群は 全体 5・workspace / tab 21・pane 25（この順に並ぶ）", () => {
     const groups = ACTIONS.map((a) => a.group);
     expect(groups.filter((g) => g === "全体")).toHaveLength(5);
     expect(groups.filter((g) => g === "workspace / tab")).toHaveLength(21);
-    expect(groups.filter((g) => g === "pane")).toHaveLength(24);
+    expect(groups.filter((g) => g === "pane")).toHaveLength(25);
     // 群ごとにまとまっている（全体 → workspace / tab → pane）
     expect(groups.join(",")).toBe(
       [...groups]
@@ -57,6 +58,11 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
         continue;
       }
       expect(a.defaults.length, a.id).toBeGreaterThan(0);
+      // 既定が直接のキーなのは remote_image_paste（ctrl+v。herdr の既定と同じ）だけ。
+      if (a.id === "remote_image_paste") {
+        expect(a.defaults).toEqual(["ctrl+v"]);
+        continue;
+      }
       for (const d of a.defaults) {
         const b = parseBinding(d);
         expect(b, `${a.id}: ${d}`).not.toBeNull();

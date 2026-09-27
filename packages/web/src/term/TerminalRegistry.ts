@@ -10,6 +10,7 @@ import { RendererPool } from "./RendererPool.js";
 import { MouseBridge } from "./MouseBridge.js";
 import { XtermCopyTarget, type CopyTarget } from "./CopyTarget.js";
 import { toXtermTheme } from "./theme.js";
+import { imageFromDataTransfer } from "./clipboard.js";
 
 /** xterm.js がマウスの報告やホイールの変換を出すイベント（`markPointer` の対象。D99）。 */
 const POINTER_EVENT_TYPES = ["mousedown", "mouseup", "mousemove", "wheel", "pointerdown", "pointerup", "pointermove"] as const;
@@ -57,6 +58,11 @@ export interface TerminalRegistryOptions {
    * 読み込みで投げた場合も画像無しで続ける。
    */
   createImageAddon?: () => ITerminalAddon | null;
+  /**
+   * 端末への paste イベントにテキストが無く画像があったとき（20260927-clipboard-image-paste。macOS の Cmd+V・ブラウザのメニュー・スマートフォンの長押し）。
+   * 省略時は今までどおり xterm.js に任せる（画像だけの貼り付けは空の貼り付けになる）。
+   */
+  onImagePaste?: (paneId: string, blob: Blob) => void;
   now?: () => number;
 }
 
@@ -280,6 +286,23 @@ export class TerminalRegistry implements TerminalSinkPort {
       }
     };
     for (const type of POINTER_EVENT_TYPES) element.addEventListener(type, markPointer, { capture: true, passive: true });
+
+    // 画像だけの貼り付け（20260927-clipboard-image-paste）。xterm.js は自分の要素と textarea で paste を受けるので、その祖先で capture して先に見る。
+    // テキストがあれば何もしない（今までどおり xterm.js が貼る）。画像を扱うときだけ xterm.js に渡さない（渡すと空の bracketed paste が送られる）。
+    const onImagePaste = this.opts.onImagePaste;
+    if (onImagePaste) {
+      element.addEventListener(
+        "paste",
+        (ev) => {
+          const blob = imageFromDataTransfer((ev as ClipboardEvent).clipboardData);
+          if (!blob) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          onImagePaste(paneId, blob);
+        },
+        { capture: true },
+      );
+    }
 
     term.onData((data) => {
       if (!this.inputEnabled) return; // D95

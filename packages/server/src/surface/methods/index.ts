@@ -14,6 +14,7 @@ import { registerAttachMethods } from "./attach.js";
 import { registerServerSessionMethods } from "./serverSessions.js";
 import { registerMachineMethods } from "./machines.js";
 import { registerCommandMethods } from "./command.js";
+import { registerImageMethods } from "./image.js";
 
 export type { MethodDeps } from "./deps.js";
 
@@ -35,4 +36,5 @@ export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): v
   registerServerSessionMethods(surface, deps); // 20260926-named-session-ui
   registerMachineMethods(surface, deps); // 20260927-multi-host-machines
   registerCommandMethods(surface, deps); // 20260927-custom-command-keys
+  registerImageMethods(surface, deps); // 20260927-clipboard-image-paste
 }

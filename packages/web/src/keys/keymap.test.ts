@@ -77,10 +77,22 @@ describe("既定の表は旧 DEFAULT_KEYMAP と 1:1（AC1・AC2）", () => {
     );
   });
 
-  it("prefix は ctrl+b・2 度押しは \\x02・直接のキーは 1 つも無い", () => {
+  it("prefix は ctrl+b・2 度押しは \\x02・直接のキーは ctrl+v（画像の貼り付け。20260927-clipboard-image-paste）だけ", () => {
     expect(DEFAULT_KEYMAP.prefix).toBe("ctrl+b");
     expect(DEFAULT_KEYMAP.prefixBytes).toBe("\x02");
-    expect(DEFAULT_KEYMAP.directMap.size).toBe(0);
+    expect([...DEFAULT_KEYMAP.directMap]).toEqual([["ctrl+v", { type: "pasteImage" }]]);
+    expect(DEFAULT_KEYMAP.ownerOf("direct", "ctrl+v")).toBe("remote_image_paste");
+  });
+
+  it("remote_image_paste を外す（[]）と ctrl+v は直接のキーから消える・別のキーにもできる", () => {
+    const off = resolveKeymap({ ...emptyKeyPrefs(), bindings: { remote_image_paste: [] } }).keymap;
+    expect(off.directMap.has("ctrl+v")).toBe(false);
+    const moved = resolveKeymap({
+      ...emptyKeyPrefs(),
+      bindings: { remote_image_paste: ["ctrl+alt+v"] },
+    }).keymap;
+    expect(moved.directMap.has("ctrl+v")).toBe(false);
+    expect(moved.directMap.get("ctrl+alt+v")).toEqual({ type: "pasteImage" });
   });
 
   it("操作ごとの有効な割り当て・持ち主・案内用の先頭", () => {
