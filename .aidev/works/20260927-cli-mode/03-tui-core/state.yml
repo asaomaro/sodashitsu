@@ -1,0 +1,11 @@
+schema: 11
+slug: 03-tui-core
+parent: 20260927-cli-mode
+current: tasks
+approved: []
+mode: autonomous
+profile: full
+humanGates: []
+maxSendBacks: 3
+dependsOn: [02-server]
+harnessRev: unknown
