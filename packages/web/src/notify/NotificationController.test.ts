@@ -1200,3 +1200,25 @@ describe("NotificationController — 利用者の操作で自動再生を解除�
     expect(store.soundBlocked).toBe(false);
   });
 });
+
+// 20260927-multi-host-machines（T11）：マシンの切り替えで、前のマシンの知らせを持ち越さない。
+describe("NotificationController.resetForMachineSwitch", () => {
+  it("出ているトースト・待ち行列・遅延中の知らせを捨てる（前のマシンの p1 を次のマシンの p1 へ移さない）", async () => {
+    vi.useFakeTimers();
+    const { c } = makeController();
+    const view = useViewStore(pinia);
+    const blocked = makeAgent({ state: "blocked", since: 5 });
+    seedSession(blocked);
+    c.onAgentChanged("p1", makeAgent({ state: "working" }), blocked);
+    await settle();
+    expect(view.toasts).toHaveLength(1);
+    // 次の知らせを 1 秒待ちの途中で切り替える
+    const again = makeAgent({ state: "blocked", since: 9 });
+    c.onAgentChanged("p1", makeAgent({ state: "working" }), again);
+    c.resetForMachineSwitch();
+    expect(view.toasts).toHaveLength(0);
+    expect(useNotificationsStore(pinia).queue).toHaveLength(0);
+    await settle();
+    expect(view.toasts).toHaveLength(0); // 遅延中だった知らせも出ない
+  });
+});

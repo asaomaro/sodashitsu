@@ -210,8 +210,10 @@ export class WsWtmClient implements WtmClient {
 /**
  * `/ws` を開く（`origin`/`host` ヘッダは `url` から組み立てる。`smoke.ts:191` と同じ形）。
  * upgrade が 401 なら `AuthError`、それ以外の失敗（403・503・ネットワークエラー等）は素の `Error` で reject する。
+ * `machine` を渡したとき（`--machine`。20260927-multi-host-machines）は `/ws?machine=…` に繋ぎ、404 は `RpcFailure("machine_not_found")`、
+ * 503 は `RpcFailure("machine_unavailable")` にする。
  */
-export function connect(url: string, cookie: string): Promise<WtmClient> {
+export function connect(url: string, cookie: string, machine?: string): Promise<WtmClient> {
   return new Promise((resolve, reject) => {
     let u: URL;
     try {
@@ -221,7 +223,8 @@ export function connect(url: string, cookie: string): Promise<WtmClient> {
       return;
     }
     const wsScheme = u.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${wsScheme}//${u.host}/ws`;
+    // `--machine`（20260927-multi-host-machines）: 手元の `wtm serve` がそのマシンへ中継する。
+    const wsUrl = `${wsScheme}//${u.host}/ws${machine !== undefined ? `?machine=${encodeURIComponent(machine)}` : ""}`;
     const origin = `${u.protocol}//${u.host}`;
     const ws = new WebSocket(wsUrl, { headers: { cookie, origin, host: u.host } });
 
@@ -248,6 +251,14 @@ export function connect(url: string, cookie: string): Promise<WtmClient> {
       ws.terminate();
       if (res.statusCode === 401) {
         reject(new AuthError("authentication failed (401 from /ws)"));
+        return;
+      }
+      if (machine !== undefined && res.statusCode === 404) {
+        reject(new RpcFailure("machine_not_found", `no enabled saved machine matches ${JSON.stringify(machine)} (check: wtm machine list)`));
+        return;
+      }
+      if (machine !== undefined && res.statusCode === 503) {
+        reject(new RpcFailure("machine_unavailable", `machine ${JSON.stringify(machine)} is not connected (or the local wtm serve is still starting)`));
         return;
       }
       // 401 以外（403=Origin/Host 拒否、503=起動中 等）は `statusCode` を持つ素の `Error` で reject する。

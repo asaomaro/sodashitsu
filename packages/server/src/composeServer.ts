@@ -41,6 +41,11 @@ import { startAgentReportSocket, type AgentReportSocket } from "./agent/AgentRep
 import { HttpServer } from "./http/HttpServer.js";
 import { WsServerWs } from "./ws/WsServerWs.js";
 import { WsGateway } from "./ws/WsGateway.js";
+import type { WsConnection } from "./ws/WsServer.js";
+import { BridgeEndpoint, bridgeSocketPathFor } from "./machine/BridgeEndpoint.js";
+import { MachineLink, type SpawnFn } from "./machine/MachineLink.js";
+import { MachineManager } from "./machine/MachineManager.js";
+import { relayToMachine } from "./machine/MachineRelay.js";
 import { AgentMonitor } from "./agent/AgentMonitor.js";
 import { AgentStarter } from "./agent/AgentStarter.js";
 import { DefaultManifestStore, type ManifestStore } from "./agent/ManifestStore.js";
@@ -114,6 +119,9 @@ function agentHookScriptFor(): string {
   return join(import.meta.dirname, "..", "assets", "agent-hook-report.cjs");
 }
 
+/** サーバの版（snapshot の `serverVersion` と中継の HELLO の `version`）。 */
+const SERVER_VERSION = "0.1.0";
+
 /** 起動オプションから、部品をすべて組み立てる（composition root）。`main.ts` と `smoke.ts` の両方から使う。 */
 export async function composeServer(
   rawArgs: RawServeArgs,
@@ -122,6 +130,8 @@ export async function composeServer(
     paneHistorySaveIntervalMs?: number;
     /** 引き継ぎの前の確認の差し替え（結合テストが引き継ぎの最中の状態を作る。20260927-session-stop）。 */
     handoffPreflight?: () => Promise<PreflightResult>;
+    /** 保存した SSH のマシンへの ssh の起動の差し替え（結合テストがリモートの bridge.sock へ直接繋ぐ偽の子を渡す。20260927-multi-host-machines）。 */
+    machineSpawn?: SpawnFn;
   } = {},
 ): Promise<ComposedServer> {
   const options = await withRememberedPort(resolveServeOptions(rawArgs), rawArgs);
@@ -195,7 +205,7 @@ export async function composeServer(
     terminals,
     bus,
     persist,
-    serverVersion: "0.1.0",
+    serverVersion: SERVER_VERSION,
     host,
     scrollbackLines: options.scrollbackLines,
     defaultCwd,
@@ -239,6 +249,14 @@ export async function composeServer(
   palettes.attach({ getPane: (id) => session.getPane(id), getTab: (id) => session.getTab(id), clients });
   const sizeAuthority = new DefaultSizeAuthority(clients, session, bus); // bus: pane.attach_changed（20260926-pane-direct-connect）
   const surface = new ControlSurface(logger);
+  // 保存した SSH のマシン（20260927-multi-host-machines）。登録簿は状態ディレクトリの根（名前付き session で共有。decisions D4）。
+  // 動かし始めるのは `listen()` の最後（`/ws` を受け付けてから）、止めるのは `close()` の最初。
+  const machines = new MachineManager({
+    root: options.sessionRoot,
+    logger,
+    createLink: (profile) => new MachineLink(profile, { ...(internal.machineSpawn !== undefined ? { spawn: internal.machineSpawn } : {}), logger }),
+  });
+  machines.onChanged((list) => bus.publish({ event: "machine.changed", data: { machines: list } }));
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
   // 独自コマンド（20260927-custom-command-keys）。状態ディレクトリ（名前付き session ではその session のもの）の commands.json。起動時に 1 度読む
   // （まだ `/ws` を受け付けていないので `command.updated` を受け取る接続は無い）。読み直しは `command.reload`。
@@ -256,15 +274,45 @@ export async function composeServer(
     gitPoller,
     agentStarter,
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
+    machines: () => machines.listWhenLoaded(), // 20260927-multi-host-machines（最初の読み込みを待つ）
     commands,
     metadata,
   });
-  const wsServer = new WsServerWs(httpServer.server, originRejections, auth.authorizeUpgrade, logger);
+  // `/ws?machine=<id|名前>` は認証の後にそのマシンへの中継へ（`WsServerWs` は router の関数だけを知る。architecture の境界）。
+  // 中継の接続は `WsGateway` を通らないので、手元のセッションの失効（ログアウト・token の作り直し）で閉じる印をここで持つ（`WsGateway` と同じ 4401）。
+  const relayed = new Map<string, Set<WsConnection>>();
+  auth.onSessionRevoked((sessionId) => {
+    for (const conn of [...(relayed.get(sessionId) ?? [])]) conn.close(4401, "session revoked");
+  });
+  const wsServer = new WsServerWs(httpServer.server, originRejections, auth.authorizeUpgrade, logger, (selector) => {
+    const route = machines.route(selector);
+    if (route.kind !== "ok") return route;
+    return {
+      kind: "ok",
+      attach: (conn, sessionId) => {
+        const set = relayed.get(sessionId) ?? new Set<WsConnection>();
+        relayed.set(sessionId, set);
+        set.add(conn);
+        conn.onClose(() => {
+          set.delete(conn);
+          if (set.size === 0 && relayed.get(sessionId) === set) relayed.delete(sessionId);
+        });
+        relayToMachine(conn, route.link);
+      },
+    };
+  });
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
   wsServer.setReady(false);
   new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
     onClientGone: (clientId) => commands.onClientGone(clientId), // その接続の popup を止める（20260927-custom-command-keys）
   });
+  // 中継の受け口（20260927-multi-host-machines）。ほかのマシンの `wtm serve` が SSH と `wtm bridge` 越しに繋ぐ、状態ディレクトリの 0600 の socket。
+  // 各チャネルは `/ws` の 1 接続と同じ（2 つ目の `WsGateway` に渡す）。待ち受けは `listen()` の最後（`/ws` と同じく復元の後）。
+  const bridgeEndpoint = new BridgeEndpoint({ version: SERVER_VERSION, hostname: osHostname(), sessionName: options.sessionName ?? null }, logger);
+  new WsGateway(bridgeEndpoint, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
+    onClientGone: (clientId) => commands.onClientGone(clientId), // 中継の接続で開いた popup も止める
+  });
+  let bridgeListening = false;
 
   let freshToken: string | undefined;
   /** 復元（または最初の workspace の作成）を済ませたか。済ませていない状態を session.json へ書かないために使う。 */
@@ -286,18 +334,26 @@ export async function composeServer(
       paneHistory?.stop();
       gitPoller.stop();
       await agentMonitor.stop();
+      // マシンへの ssh を閉じ、子が終わるのを待つ（execve で置き換わった後は回収されずに残るため。引き継いだ先の起動がまた繋ぐ。20260927-multi-host-machines）。
+      await machines.stop();
     },
     resumePollers: () => {
       gitPoller.start();
       agentMonitor.start();
+      void machines.start();
       paneHistory?.start(internal.paneHistorySaveIntervalMs);
     },
     flushSession: () => persist.flush(),
     closeClients: () => {
       wsServer.setReady(false);
       wsServer.closeAll(1012, "server restarting");
+      bridgeEndpoint.setReady(false);
+      bridgeEndpoint.closeAll(1012, "server restarting");
     },
-    reopenClients: () => wsServer.setReady(true),
+    reopenClients: () => {
+      wsServer.setReady(true);
+      bridgeEndpoint.setReady(true);
+    },
     flushLog: () => logger.flush(),
     preflight: internal.handoffPreflight ?? (() => runPreflight()),
     // 同じ Node・同じ引数（ディスク上の同じ入口）で自分を置き換える。PTY の master は close-on-exec が無いので残る（research F2.2）。
@@ -467,9 +523,20 @@ export async function composeServer(
             return undefined;
           });
         }
+        // 4.6. 中継の受け口（Linux/macOS。20260927-multi-host-machines）。置けなくても起動は続ける（ほかのマシンから繋げないだけ）。
+        if (platform() !== "win32") {
+          await bridgeEndpoint.listen(bridgeSocketPathFor(options.stateDir)).then(
+            () => {
+              bridgeListening = true;
+            },
+            (err: unknown) => logger.warn("cannot start the bridge socket; other machines cannot connect to this server", { error: err instanceof Error ? err.message : String(err) }),
+          );
+        }
         // 5. `/ws` の受け付けを始める。復元は bus にイベントを出さないので、ここより前に hello したクライアントは
         //    作りかけのスナップショットのまま取り残される（それまでは 503。ブラウザは間隔を空けて繋ぎ直す）。
         wsServer.setReady(true);
+        // 6. 保存した SSH のマシンへ繋ぎ始める（20260927-multi-host-machines）。登録簿が無ければ何もしない（ssh を起こさない）。待たない。
+        void machines.start();
       } catch (err) {
         // 失敗した起動はロックを放す（`main` は close() を呼ばずに終わる）。放す前に、復元を済ませていない状態の保存の
         // 予約を取り消す（ロックを放した後に session.json を書かない）。
@@ -477,6 +544,7 @@ export async function composeServer(
         paneHistory?.stop();
         await agentReportSocket?.close();
         await handoffSocket?.close();
+        if (bridgeListening) await bridgeEndpoint.close();
         // 引き継いだのに使う前に失敗した PTY は手放す（見えないプロセスを残さない）。
         if (takenPending !== undefined) discardHandedOffPanes(takenPending.panes, { logger }); // 復元に入る前の失敗だけ
         await lock.release();
@@ -489,8 +557,13 @@ export async function composeServer(
         // 止まり始めた印（以後の止める指示は「既に止まる途中」、引き継ぎの指示は断る。20260927-session-stop）。受け付け済みの引き継ぎの
         // 最中（Ctrl+C 等のシグナル）なら、それが終わる（元に戻す）まで待つ——以前は最初に制御の socket を閉じ、その接続の終わりを待つことで同じ順序になっていた。
         await control.beginClosing();
+        // マシンへの ssh を閉じる（リモートの `wtm serve` と pane は動いたまま。AC5）。中継の接続には、ssh を閉じる前に手元の停止（1001）で閉じる
+        // （手元の `/ws` と同じ code にそろえる。ブラウザ・wtmctl はどちらも繋ぎ直しの扱いで、今は code で分けていない）。
+        for (const set of relayed.values()) for (const conn of [...set]) conn.close(1001, "server shutting down");
+        await machines.stop();
         // 閉じ始めたら新しい `/ws` を受け付けない（closeAll の後に届いた upgrade を通さない。D102）。
         wsServer.setReady(false);
+        bridgeEndpoint.setReady(false);
         await agentReportSocket?.close();
         // 実行中の判定周期を待ってから terminals/session を破棄する（review 指摘。should。D51 の隣の
         // agent/AgentMonitor.ts 参照）。
@@ -508,6 +581,8 @@ export async function composeServer(
         // 繋がったままの WebSocket を明示的に閉じる（レビュー指摘。無いと httpServer.server.close() が
         // 永久にコールバックを呼ばない）。
         wsServer.closeAll(1001, "server shutting down");
+        bridgeEndpoint.closeAll(1001, "server shutting down");
+        await bridgeEndpoint.close();
         await new Promise<void>((resolve) => httpServer.server.close(() => resolve()));
       } finally {
         // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
@@ -521,6 +596,7 @@ export async function composeServer(
         // （20260927-session-stop の decisions D4）。止まる途中の引き継ぎは `beginClosing` で断っている。
         // （`HandoffSocket.close()` は今は reject しないが、将来 reject してもロックを残さないよう握る）
         await handoffSocket?.close().catch(() => undefined);
+        await bridgeEndpoint.close().catch(() => undefined); // 途中で投げても受け口を残さない（2 回目は何もしない）
         // session.json を書き終えてから放す（D103。持っていなければ——ロックで断られた起動等——何もしない）。
         await lock.release();
       }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AgentInfo, AgentIntegrationKind, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
+import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
 import { THEME_NAMES } from "./theme.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 
@@ -403,6 +403,15 @@ export interface ServerSessionsResult {
   sessions: ServerSessionEntry[];
 }
 
+// --- 保存した SSH のマシン（20260927-multi-host-machines）---------------------------------------------
+
+/** 手元の `wtm serve` の、有効なマシンの一覧と状態（登録の順）。変化は `machine.changed` でも配る。 */
+export const MachineListParams = z.object({});
+export type MachineListParams = z.infer<typeof MachineListParams>;
+export interface MachineListResult {
+  machines: MachineStatus[];
+}
+
 export const AgentIntegrationStatusParams = z.object({});
 export type AgentIntegrationStatusParams = z.infer<typeof AgentIntegrationStatusParams>;
 
@@ -611,6 +620,7 @@ export const METHOD_SCHEMAS = {
   "agent.rename": AgentRenameParams,
   "agent.start": AgentStartParams,
   "server.sessions": ServerSessionsParams,
+  "machine.list": MachineListParams,
   "command.list": CommandListParams,
   "command.reload": CommandReloadParams,
   "command.run": CommandRunParams,
@@ -678,6 +688,7 @@ export interface MethodResultMap {
   "agent.rename": AgentRenameResult;
   "agent.start": AgentStartResult;
   "server.sessions": ServerSessionsResult;
+  "machine.list": MachineListResult;
   "command.list": CommandListResult;
   "command.reload": CommandListResult;
   "command.run": CommandRunResult;

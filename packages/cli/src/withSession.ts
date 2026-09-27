@@ -16,7 +16,7 @@ export async function withSession<T>(opts: GlobalOpts, store: SessionStore, fn: 
   const cached = await store.get(opts.url);
   if (cached !== undefined) {
     try {
-      return await connectAndRun(opts.url, cached, fn);
+      return await connectAndRun(opts.url, cached, fn, opts.machine);
     } catch (err) {
       if (!(err instanceof AuthError)) throw err;
       await store.clear(opts.url);
@@ -32,11 +32,12 @@ export async function withSession<T>(opts: GlobalOpts, store: SessionStore, fn: 
   }
   const cookie = await login(opts.url, opts.token);
   await store.set(opts.url, cookie);
-  return connectAndRun(opts.url, cookie, fn);
+  return connectAndRun(opts.url, cookie, fn, opts.machine);
 }
 
-async function connectAndRun<T>(url: string, cookie: string, fn: (client: WtmClient) => Promise<T>): Promise<T> {
-  const client = await connect(url, cookie);
+async function connectAndRun<T>(url: string, cookie: string, fn: (client: WtmClient) => Promise<T>, machine: string | undefined): Promise<T> {
+  // `--machine` が無ければ今までどおりの呼び方（20260927-multi-host-machines の AC15）。
+  const client = machine === undefined ? await connect(url, cookie) : await connect(url, cookie, machine);
   try {
     return await fn(client);
   } finally {

@@ -1,8 +1,11 @@
 import { ConfigError, type RawServeArgs } from "./config.js";
 import { SESSION_NAME_RULE, sessionNameProblem } from "./persist/namedSession.js";
+import { parseMachineArgs, type MachineCommand } from "./machine/machineArgs.js";
 
 export interface ParsedArgs {
-  command: "serve" | "token-reset" | "session-list" | "session-delete" | "session-stop" | "handoff" | "handoff-preflight" | "help";
+  command: "serve" | "token-reset" | "session-list" | "session-delete" | "session-stop" | "handoff" | "handoff-preflight" | "bridge" | "machine" | "help";
+  /** `wtm machine …`（20260927-multi-host-machines）。 */
+  machine?: MachineCommand;
   serve: RawServeArgs;
   stateDir?: string | undefined;
   /** `--session`（serve・token reset・handoff。20260926-named-session・20260926-live-handoff）。serve では `serve.session` にも入る。 */
@@ -25,7 +28,7 @@ export const SESSION_ENV_VAR = "WTM_SESSION";
 export const PREFLIGHT_COMMAND_NAME = "__handoff-preflight";
 
 const USAGE =
-  "使い方: wtm serve [--host H] [--port P] [--cert F] [--key F] [--origin O]... [--state-dir D] [--session NAME] [--scrollback N] [--shell S] [--worktree-dir D] [--pane-history] / wtm token reset [--state-dir D] [--session NAME] / wtm session list [--state-dir D] [--json] / wtm session delete NAME [--state-dir D] [--json] / wtm session stop NAME [--state-dir D] [--json] / wtm handoff [--state-dir D] [--session NAME]";
+  "使い方: wtm serve [--host H] [--port P] [--cert F] [--key F] [--origin O]... [--state-dir D] [--session NAME] [--scrollback N] [--shell S] [--worktree-dir D] [--pane-history] / wtm token reset [--state-dir D] [--session NAME] / wtm session list [--state-dir D] [--json] / wtm session delete NAME [--state-dir D] [--json] / wtm session stop NAME [--state-dir D] [--json] / wtm handoff [--state-dir D] [--session NAME] / wtm bridge [--session NAME] [--state-dir D] / wtm machine add|list|rename|enable|disable|remove …";
 
 /**
  * CLI の引数を解釈する（`wtm serve [...]` / `wtm token reset [--state-dir D] [--session NAME]` / `wtm session list|delete|stop` /
@@ -52,6 +55,12 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     }
     throw new ConfigError(`invalid arguments for ${PREFLIGHT_COMMAND_NAME}`, USAGE);
   }
+  // 保存した SSH のマシン（20260927-multi-host-machines）。専用の解釈（`machine/machineArgs.ts`）で、ほかのコマンドのオプションを混ぜない。
+  if (command === "machine") {
+    const parsed = parseMachineArgs(rest);
+    return { command: "machine", serve, stateDir: parsed.stateDir, machine: parsed };
+  }
+  if (command === "bridge") return parseBridgeArgs(rest, serve);
   if (command !== "serve" && command !== "token" && command !== "session" && command !== "handoff") throw new ConfigError(`unknown command: ${command}`, USAGE);
   let stateDir: string | undefined;
   let session: string | undefined;
@@ -194,4 +203,25 @@ function parseSessionCommand(
   if ((sub === "delete" || sub === "stop") && args.length === 0)
     throw new ConfigError(`missing session name: wtm session ${sub} <name>`, `${sub === "stop" ? "既定の session を止めるなら名前に default を指定してください。" : ""}${USAGE}`);
   throw new ConfigError(`unknown subcommand: wtm session ${words.join(" ")}`, USAGE);
+}
+
+/**
+ * `wtm bridge [--session NAME] [--state-dir D]`（20260927-multi-host-machines）。手元の `wtm serve` が ssh の先で起動する。`WTM_SESSION` は見ない
+ * （`applySessionEnv` の対象外。decisions D5）。名前の規則は `resolveSessionStateDir` が見る。
+ */
+function parseBridgeArgs(rest: readonly string[], serve: RawServeArgs): ParsedArgs {
+  let stateDir: string | undefined;
+  let session: string | undefined;
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i]!;
+    const next = (): string => {
+      const v = rest[++i];
+      if (v === undefined) throw new ConfigError(`missing value for ${arg}`, `${arg} には値が要ります。`);
+      return v;
+    };
+    if (arg === "--state-dir") stateDir = next();
+    else if (arg === "--session") session = next();
+    else throw new ConfigError(arg.startsWith("-") ? `unknown option: ${arg}` : `unexpected argument: ${arg}`, "使い方: wtm bridge [--session NAME] [--state-dir D]");
+  }
+  return { command: "bridge", serve, stateDir, session };
 }

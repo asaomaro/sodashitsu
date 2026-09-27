@@ -10,6 +10,7 @@ import {
   GroupRemoveMemberParams,
   GroupRenameParams,
   GroupToggleCollapsedParams,
+  MachineListParams,
   MAX_AGENT_PROMPT_BYTES,
   METADATA_RAW_TEXT_MAX,
   METADATA_TOKEN_ENTRIES_MAX,
@@ -292,6 +293,15 @@ describe("PaneAttachParams / PaneAttachResizeParams / PaneDetachParams", () => {
     expect(METHOD_SCHEMAS["pane.attach"]).toBe(PaneAttachParams);
     expect(METHOD_SCHEMAS["pane.attach_resize"]).toBe(PaneAttachResizeParams);
     expect(METHOD_SCHEMAS["pane.detach"]).toBe(PaneDetachParams);
+  });
+});
+
+// 20260927-multi-host-machines：保存した SSH のマシンの一覧。
+describe("machine.list", () => {
+  it("引数を取らず、METHOD_SCHEMAS に登録されている", () => {
+    expect(MachineListParams.parse({})).toEqual({});
+    expect(MachineListParams.parse({ extra: 1 })).toEqual({});
+    expect(METHOD_SCHEMAS["machine.list"]).toBe(MachineListParams);
   });
 });
 

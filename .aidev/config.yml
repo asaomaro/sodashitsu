@@ -15,6 +15,9 @@
 # 7本目（20260927-session-stop）: `wtm session stop`。ビルドした `dist/main.js` で `wtm serve --session smoke --pane-history` を起動し、実物の
 # `wtm session stop smoke` で止まる（CLI 0・サーバ 0・一覧が stopped・ロックの解放・状態の保存）こと、動いていない・止まった後は終了コード 3 で何も作らないこと、
 # 起動し直すと同じ pane と前回の画面が戻ることを確かめる（止める指示と `main.ts` の停止の手順の配線は vitest では見られない。Windows では何もせず成功）。
+# 8本目（20260927-multi-host-machines）: 保存した SSH のマシン。ビルドした `dist/main.js` で 2 つの状態ディレクトリを「手元」「リモート」に見立て、`PATH` の先頭に置いた偽の `ssh`
+# （引数を記録し `wtm bridge` をこのマシンで実行する）で `wtm machine add` → 手元の `wtm serve` の接続（online）→ `/ws?machine=` 越しの hello・workspace の作成・echo を確かめる
+# （`wtm bridge` の子プロセスと `bridge.sock` の配線は vitest では見られない。Windows では何もせず成功）。
 smokeCommands:
   - pnpm -s build && pnpm -s smoke
   - pnpm --filter @wtm/cli run smoke
@@ -23,5 +26,6 @@ smokeCommands:
   - d=$(mktemp -d) && mkdir -p "$d/sessions/smoke" && WTM_SESSION=smoke node packages/server/dist/main.js token reset --state-dir "$d" && test -f "$d/sessions/smoke/auth.json" && test ! -e "$d/auth.json" && { WTM_SESSION=a/b node packages/server/dist/main.js token reset --state-dir "$d" 2>/dev/null; test $? -eq 2; } && test ! -e "$d/auth.json"; rc=$?; rm -rf "$d"; exit $rc
   - node packages/server/dist/handoffSmoke.js
   - node packages/server/dist/stopSmoke.js
+  - node packages/server/dist/machineSmoke.js
 smokeTimeoutSec: 180
 tracker: none

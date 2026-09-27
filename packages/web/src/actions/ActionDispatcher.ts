@@ -5,6 +5,8 @@ import type { Action, CopyCommand, Dir } from "../keys/actions.js";
 import type { InputHold } from "../net/InputGate.js";
 import type { ConnectionPort } from "../net/ports.js";
 import { useSessionStore } from "../store/session.js";
+import { useMachinesStore } from "../store/machines.js";
+import { LOCAL_MACHINE_ID } from "../net/machineUrl.js";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
@@ -58,6 +60,8 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   private readonly agentIntegrations: ReturnType<typeof useAgentIntegrationsStore>;
   private readonly seen: ReturnType<typeof useSeenStore>;
   private readonly view: ReturnType<typeof useViewStore>;
+  /** 保存した SSH のマシン（20260927-multi-host-machines）。ローカル以外を選んでいる間は session の一覧を使わない。 */
+  private readonly machines: ReturnType<typeof useMachinesStore>;
   private readonly settings: ReturnType<typeof useSettingsStore>;
   private readonly commands: ReturnType<typeof useCommandsStore>;
   private readonly registry: TerminalRegistry;
@@ -73,6 +77,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.agentIntegrations = useAgentIntegrationsStore(opts.pinia);
     this.seen = useSeenStore(opts.pinia);
     this.view = useViewStore(opts.pinia);
+    this.machines = useMachinesStore(opts.pinia);
     this.settings = useSettingsStore(opts.pinia);
     this.commands = useCommandsStore(opts.pinia);
     this.registry = opts.registry;
@@ -248,6 +253,11 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   /** 名前付き session の数を取り直す（hello のたび。サイドバーの入口の表示条件）。失敗は黙って前の値のまま。 */
   refreshServerSessions(): Promise<void> {
+    // リモートのマシンを選んでいる間は、そのマシンの session の一覧を読まない（手元のブラウザのホスト名でそのポートを開けない）。
+    if (this.machines.selectedId !== LOCAL_MACHINE_ID) {
+      this.session.setNamedSessionCount(0);
+      return Promise.resolve();
+    }
     return this.conn
       .request("server.sessions", {})
       .then((r) => this.session.setNamedSessionCount(r.sessions.filter((e) => !e.default).length))
@@ -309,6 +319,10 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   /** 一覧のダイアログを開く。**先にサーバへ聞く**（開く時点の一覧）。 */
   openSessionSwitcher(): void {
+    if (this.machines.selectedId !== LOCAL_MACHINE_ID) {
+      this.view.toast("ほかのマシンを選んでいる間は session を切り替えられません（ローカルに戻ってから）");
+      return;
+    }
     this.conn
       .request("server.sessions", {})
       .then((r) => {

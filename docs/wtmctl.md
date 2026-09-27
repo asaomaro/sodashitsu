@@ -48,6 +48,14 @@ wtmctl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [-- <ar
 wtmctl skill                               # エージェントに wtmctl の使い方を教える Markdown（skill ファイル）を出す
 ```
 
+## ほかのマシンへ送る（`--machine`）
+
+`wtmctl --machine <名前|id> <コマンド> …` で、手元の `wtm serve` に `wtm machine add` で登録したマシンの `wtm serve` へコマンドを送る
+（20260927-multi-host-machines。herdr の `herdr --machine`）。手元の `wtm serve` の `/ws?machine=` を通すので、手元の `wtm serve` が動いていて、そのマシンが
+繋がっている必要がある。`login`・`skill` 以外の全コマンドに使える。id（pane・エージェントの名前を含む）はマシンごとに別。
+登録に無い・無効・曖昧は `machine_not_found`、繋がっていないは `machine_unavailable`（終了コード 1）。`--machine` のとき自分の pane の歯止め（`self_target`）は
+効かない（`--machine local` は手元そのもの）。詳しくは `docs/machines.md`。
+
 ## サイドバーの独自トークン（`workspace report-metadata`・`pane report-metadata`）
 
 外のスクリプト・エージェントのフックが、workspace・pane ごとに名前付きの短い値（独自トークン）をサーバへ報告する。値はサーバのメモリだけに持ち

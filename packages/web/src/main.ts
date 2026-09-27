@@ -7,7 +7,13 @@ import { createPinia } from "pinia";
 import { createApp, nextTick, watch } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
-import { ActionDispatcherKey, ConnectionKey, DeviceKindKey, KeyInputControllerKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import { ActionDispatcherKey, ConnectionKey, DeviceKindKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import { MachineSwitcher } from "./actions/MachineSwitcher.js";
+import { MachineWiring } from "./actions/MachineWiring.js";
+import { mobileViewportQuery, trackMediaQuery } from "./mobile/detect.js";
+import { MachineSummaryClient } from "./net/MachineSummaryClient.js";
+import { LOCAL_MACHINE_ID, wsUrlFor } from "./net/machineUrl.js";
+import { useMachinesStore } from "./store/machines.js";
 import { KeyInputController } from "./keys/KeyInputController.js";
 import { KeyboardLockController } from "./keys/KeyboardLockController.js";
 import { KeyRouter } from "./keys/KeyRouter.js";
@@ -61,6 +67,10 @@ const session = useSessionStore(pinia);
 const view = useViewStore(pinia);
 const seen = useSeenStore(pinia);
 const settings = useSettingsStore(pinia);
+// 保存した SSH のマシン（20260927-multi-host-machines）。モバイルの 1 列の画面では使わない（手元のマシンだけ。今までどおり）。
+// 1 列かは窓の幅で変わる（`App.vue` と同じ media query）ので、変化を購読する。
+const machines = useMachinesStore(pinia);
+const mobileViewport = trackMediaQuery(mobileViewportQuery());
 // 初回の案内を出すかは、接続より前（同じ読み込みの中で痕跡が書かれる前）に 1 回だけ決める（20260926-settings-onboarding の D4）。
 useOnboardingStore(pinia);
 
@@ -73,6 +83,9 @@ const wsUrl = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${wind
 // 本物の `TerminalRegistry` へ委譲する（箱自体は作った時点で確定するので `registry` を素の `let` にせず
 // 済む——呼び出しは実際に pane を購読した後＝配線が終わった後にしか起きない）。
 const registryBox: { current?: TerminalRegistry } = {};
+/** マシンの切り替え（20260927-multi-host-machines）。`Connection.onOpened` の配線より後に作るので、既存の箱と同じ流儀で繋ぐ。 */
+const machineSwitcherBox: { current?: MachineSwitcher } = {};
+const machineWiringBox: { current?: MachineWiring } = {};
 /** 通知（20260920-agent-notifications）。`StoreAdapter` より後に作るので、既存の箱と同じ流儀で繋ぐ。 */
 const notificationsBox: { current?: NotificationController } = {};
 const sinkProxy: TerminalSinkPort = {
@@ -88,12 +101,15 @@ const storeAdapter = new StoreAdapter({
   onPaneExited: (_paneId, exitCode) => view.toast(`pane を閉じました（終了コード ${exitCode}）`),
   // サーバの英語の固定文（`message`）は出さず、code から日本語の文言を引く（D107）。
   onClientError: (code) => view.toast(clientErrorMessage(code)),
-  onOriginRejectSuspected: (suspected) => view.setOriginRejectSuspected(suspected),
+  // ほかのマシンを選んでいる間の「開く前に閉じた」は、マシンが繋がっていない（503）ことが多く、Origin の拒否の手がかりにならない。
+  onOriginRejectSuspected: (suspected) => view.setOriginRejectSuspected(suspected && machines.selectedId === LOCAL_MACHINE_ID),
   // 通知（20260920-agent-notifications）。**`notifications` はこの後で作る**ので、遅延で参照する。
   onAgentChanged: (paneId, prev, next) => notificationsBox.current?.onAgentChanged(paneId, prev, next),
   onSnapshotApplied: (panes, first) => notificationsBox.current?.onSnapshotApplied(panes, first),
   onPaneClosed: (paneId) => notificationsBox.current?.onPaneClosed(paneId),
   onAgentIntegrationChanged: (status) => useAgentIntegrationsStore(pinia).setStatus(status),
+  // 画面の接続がローカルを向いているときだけ、手元の `wtm serve` の一覧（リモートを向いていればそのマシンの登録簿なので捨てる）。
+  onMachinesChanged: (list) => machineWiringBox.current?.onMainMachinesChanged(list),
 });
 
 const connection = new Connection({ kind, httpOrigin, wsUrl, store: storeAdapter, sink: sinkProxy });
@@ -209,6 +225,9 @@ connection.onOpened(() => viewSync.onConnectionOpened());
 connection.onOpened(() => themeController.resend());
 // 名前付き session の数（サイドバーの session の入口。20260926-named-session-ui）。`actionDispatcher` は下で作るので、呼ぶ時点で読む。
 connection.onOpened(() => void actionDispatcherBox.current?.refreshServerSessions());
+// 保存した SSH のマシン（20260927-multi-host-machines）: 切り替えの直後の `workspace.focus`、ローカルを向いているときのマシンの一覧。
+connection.onOpened(() => machineSwitcherBox.current?.onOpened());
+connection.onOpened(() => machineWiringBox.current?.onMainOpened());
 // 独自コマンドの一覧（20260927-custom-command-keys。サーバ全体の設定）。接続ごとに取り直す（切れている間の読み直しを取りこぼさない）。
 connection.onOpened(() => void actionDispatcherBox.current?.refreshCommands());
 // 閉じてから次の hello が通るまでは、`client.view`・`pane.subscribe` を送らない（D107）。
@@ -248,6 +267,55 @@ notificationsBox.current = notifications;
 
 const actionDispatcher = new ActionDispatcher({ conn, pinia, registry, keys, input: inputGate, notifications });
 actionDispatcherBox.current = actionDispatcher;
+
+/** サイドバーの workspace の選択と同じ（同じマシンのとき。`Sidebar.vue` の `focusWorkspace`）。 */
+function focusWorkspaceHere(workspaceId: string): void {
+  const ws = session.workspaces.get(workspaceId);
+  if (!ws) return;
+  const tab = session.tabs.get(ws.activeTabId);
+  view.setView(workspaceId, ws.activeTabId);
+  if (tab) view.focusPane(tab.focusedPaneId);
+  void conn.request("workspace.focus", { workspaceId }).catch(() => undefined);
+}
+
+const machineSwitcher = new MachineSwitcher({
+  selectedId: () => machines.selectedId,
+  selectMachine: (id) => machines.select(id),
+  isSelectable: (id) => machines.isSelectable(id),
+  setViewScope: (id) => view.setMachineScope(id),
+  setSeenScope: (id) => seen.setScope(id),
+  rememberView: (workspaceId, tabId) => view.rememberView(workspaceId, tabId),
+  forgetStoredView: () => view.forgetStoredView(),
+  focusWorkspaceHere,
+  resetNotifications: () => notifications.resetForMachineSwitch(),
+  resetBaseline: () => storeAdapter.resetBaseline(),
+  clearSession: () => session.clear(),
+  // 表示・ダイアログ等を捨て、キーの受け方（navigate・copy・resize・dialog）も端末へ戻す（view だけではキーの側のモードが残る）。
+  resetView: () => {
+    view.resetForMachineSwitch();
+    keys.setMode("terminal");
+  },
+  nextTick: () => nextTick(),
+  disposeTerminals: () => registry.disposeAll(),
+  retarget: (url) => connection.retarget(url),
+  wsUrlFor: (id) => wsUrlFor(wsUrl, id),
+  requestWorkspaceFocus: (workspaceId) => void conn.request("workspace.focus", { workspaceId }).catch(() => undefined),
+});
+machineSwitcherBox.current = machineSwitcher;
+
+/** 保存した SSH のマシンの配線（判断は `MachineWiring`。ここは呼ぶだけ）。 */
+const machineWiring = new MachineWiring({
+  machines,
+  switcher: machineSwitcher,
+  requestMainList: () => conn.request("machine.list", {}),
+  createSummaryClient: (opts) => new MachineSummaryClient(opts),
+  baseWsUrl: wsUrl,
+  mobileViewport,
+});
+machineWiringBox.current = machineWiring;
+watch([() => machines.selectedId, () => machines.machines.map((m) => m.id).join("\n"), mobileViewport], () => machineWiring.reconcileSummaryClients());
+// 1 列の画面になったらローカルへ戻り一覧を空にする（サイドバーにマシンの見出しが無く戻れなくなるため）。広げたら一覧を読み直す。
+watch(mobileViewport, (mobile) => machineWiring.onMobileChanged(mobile));
 keys.bind({ action: actionDispatcher, focus: actionDispatcher, mode: { onModeChange: (m) => view.onModeChange(m) } });
 
 // Windows のホストなら ConPTY 向けのオプションを足す（design「エージェントの argv[0]」隣接。H-cfg 相当）。
@@ -255,6 +323,8 @@ watch(
   () => session.host,
   (host) => {
     if (host?.os === "windows") terminalOptions.windowsPty = { backend: "conpty", buildNumber: host.windowsBuild ?? 0 };
+    // マシンを切り替えて Windows でないホストになったら外す（ホストはマシンごと。20260927-multi-host-machines）。
+    else if (host) delete terminalOptions.windowsPty;
   },
 );
 
@@ -312,6 +382,7 @@ const app = createApp(App);
 app.use(pinia);
 app.provide(ConnectionKey, conn);
 app.provide(ActionDispatcherKey, actionDispatcher);
+app.provide(MachineSwitcherKey, machineSwitcher);
 app.provide(TerminalRegistryKey, registry);
 app.provide(ViewSyncKey, viewSync);
 app.provide(DeviceKindKey, kind);

@@ -487,6 +487,25 @@ describe("TerminalRegistry と画像の addon（20260926-kitty-graphics の AC6�
   });
 });
 
+// 20260927-multi-host-machines（T11）：マシンの切り替えで全端末を捨てる。
+describe("TerminalRegistry.disposeAll", () => {
+  it("全端末を捨て、購読の解除は送らない（その接続はこの後に閉じる）", () => {
+    const { registry, conn } = makeRegistry({ capacity: 10 });
+    registry.acquire("p1");
+    registry.acquire("p2");
+    registry.release("p2");
+    registry.disposeAll();
+    expect(registry.get("p1")).toBeUndefined();
+    expect(registry.get("p2")).toBeUndefined();
+    expect(registry.isVisible("p1")).toBe(false);
+    expect(conn.requests.filter(([m]) => m === "pane.unsubscribe")).toEqual([]);
+    // 同じ id でもう一度作ると新しい端末（前の中身を持ち越さない）
+    const again = registry.acquire("p1");
+    expect(registry.takePendingSubscriptions(["p1"])).toEqual(["p1"]);
+    expect(again).toBeDefined();
+  });
+});
+
 describe("TerminalRegistry.attachExternal（20260927-custom-command-keys の popup）", () => {
   it("付けた id の OUTPUT・SNAPSHOT・大きさの変化は外の受け手へ回り、外すと届かない。別の受け手に差し替わっていれば外さない", () => {
     const { registry } = makeRegistry({ capacity: 24 });

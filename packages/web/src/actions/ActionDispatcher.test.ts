@@ -13,6 +13,7 @@ import { MouseBridge } from "../term/MouseBridge.js";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSessionStore } from "../store/session.js";
+import { useMachinesStore } from "../store/machines.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import { InputGate } from "../net/InputGate.js";
@@ -2240,6 +2241,21 @@ describe("session の一覧と切り替え", () => {
     await flush();
     expect(view.dialogContext).toBeNull();
     expect(view.toasts.map((t) => t.message)).toContain("session の一覧を取れませんでした");
+  });
+
+  it("ほかのマシンを選んでいる間は session の一覧を読まず開かない（20260927-multi-host-machines）", async () => {
+    const conn = makeConnection();
+    conn.resolveWith["server.sessions"] = { sessions: SESSIONS };
+    const { dispatcher } = makeDispatcher(conn);
+    const view = useViewStore(pinia);
+    useMachinesStore(pinia).select("abc");
+    await dispatcher.refreshServerSessions();
+    dispatcher.openSessionSwitcher();
+    await flush();
+    expect(conn.requests).toEqual([]);
+    expect(useSessionStore(pinia).namedSessionCount).toBe(0);
+    expect(view.openDialog).toBeNull();
+    expect(view.toasts.map((t) => t.message).join()).toMatch(/ほかのマシン/);
   });
 
   it("openServerSession：新しいタブで noopener,noreferrer で開き、ダイアログを閉じる", () => {

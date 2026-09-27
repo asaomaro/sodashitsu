@@ -1,4 +1,12 @@
-import type { AgentInfo, Pane, SessionFocus, Tab, Workspace, WorkspaceGroup } from "./model.js";
+import type {
+  AgentInfo,
+  MachineStatus,
+  Pane,
+  SessionFocus,
+  Tab,
+  Workspace,
+  WorkspaceGroup,
+} from "./model.js";
 import type { AgentIntegrationStatusResult } from "./messages.js";
 import type { CommandListResult } from "./commands.js";
 
@@ -113,6 +121,11 @@ export interface AgentIntegrationChangedEvent {
   data: AgentIntegrationStatusResult;
 }
 
+/** 保存した SSH のマシンの一覧・状態・名前が変わった（20260927-multi-host-machines）。中身は `machine.list` と同じ。 */
+export interface MachineChangedEvent {
+  event: "machine.changed";
+  data: { machines: MachineStatus[] };
+}
 /** 独自コマンドの一覧が変わった（読み直し。20260927-custom-command-keys）。全クライアントへ配る。 */
 export interface CommandUpdatedEvent {
   event: "command.updated";
@@ -149,6 +162,7 @@ export type ServerEvent =
   | SessionFocusChangedEvent
   | ClientErrorEvent
   | AgentIntegrationChangedEvent
+  | MachineChangedEvent
   | CommandUpdatedEvent
   | CommandPopupClosedEvent;
 

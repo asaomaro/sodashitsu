@@ -42,6 +42,20 @@ export const useSessionStore = defineStore("session", () => {
     limits.value = s.limits;
   }
 
+  /**
+   * マシンの切り替えの前に、前のマシンの workspace・tab・pane・グループ・焦点を捨てる（20260927-multi-host-machines。id がマシンをまたいで
+   * 衝突するので持ち越さない）。host・limits は次の snapshot が上書きするまで残す（表示のちらつきを避ける）。
+   */
+  function clear(): void {
+    workspaces.value = new Map();
+    tabs.value = new Map();
+    panes.value = new Map();
+    groups.value = new Map();
+    focus.value = null;
+    clientId.value = null;
+    namedSessionCount.value = 0;
+  }
+
   /** このクライアントがその tab のサイズ権限を持っているか（design「サイズ権限」）。 */
   function hasSizeAuthority(tabId: string): boolean {
     return clientId.value !== null && tabs.value.get(tabId)?.sizeOwnerClientId === clientId.value;
@@ -120,6 +134,7 @@ export const useSessionStore = defineStore("session", () => {
     namedSessionCount,
     setNamedSessionCount,
     applySnapshot,
+    clear,
     hasSizeAuthority,
     workspaceUpserted,
     workspaceClosed,

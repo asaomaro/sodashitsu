@@ -166,6 +166,23 @@ export interface ServerSessionEntry {
   endpoint?: ServerSessionEndpoint;
 }
 
+/**
+ * 保存した SSH のマシン（20260927-multi-host-machines。herdr の saved SSH machines）の、手元の `wtm serve` から見た接続の状態。
+ * `connecting` は初回の試み、`online` は中継の最初の応答（版の確かめ）を受けた後、`reconnecting` は切れて繋ぎ直している間、
+ * `attention` は利用者の対応が要る失敗（認証・ホスト鍵・リモートに `wtm` が無い・リモートの `wtm serve` が動いていない・版が合わない）。
+ */
+export type MachineState = "connecting" | "online" | "reconnecting" | "attention";
+
+/** `machine.list` の 1 項目（有効なマシンだけ。宛先・session は持たない——画面に要らない）。 */
+export interface MachineStatus {
+  /** 登録の不透明な id（32 桁の 16 進）。`/ws?machine=` に使う。 */
+  id: string;
+  label: string;
+  state: MachineState;
+  /** `attention`・`reconnecting` の理由（無ければ null）。 */
+  message: string | null;
+}
+
 export interface SessionFocus {
   workspaceId: WorkspaceId;
   tabId: TabId;

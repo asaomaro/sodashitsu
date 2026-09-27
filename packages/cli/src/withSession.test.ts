@@ -137,4 +137,12 @@ describe("withSession", () => {
     await expect(withSession({ url: URL_, token: undefined }, store, fn)).rejects.toThrow("pane not found");
     expect(client.close).toHaveBeenCalledOnce();
   });
+
+  it("--machine（opts.machine）があれば connect に渡す（20260927-multi-host-machines）", async () => {
+    const client = fakeClient();
+    mockedConnect.mockResolvedValue(client);
+    const store = memoryStore({ [URL_]: "wtm_session=cached" });
+    await withSession({ url: URL_, token: undefined, machine: "GPU" }, store, async () => "ok");
+    expect(mockedConnect).toHaveBeenCalledWith(URL_, "wtm_session=cached", "GPU");
+  });
 });

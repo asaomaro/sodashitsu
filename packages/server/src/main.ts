@@ -13,6 +13,9 @@ import { runHandoff } from "./handoff/handoffCommand.js";
 import { runPreflightStage } from "./handoff/preflight.js";
 import { createShutdown } from "./serveShutdown.js";
 import { runSessionStop } from "./stop/stopCommand.js";
+import { runBridge } from "./machine/bridgeCommand.js";
+import { runMachineCommand } from "./machine/machineCommands.js";
+import { MACHINE_USAGE } from "./machine/machineArgs.js";
 
 function printHelp(): void {
   console.log(
@@ -24,6 +27,8 @@ function printHelp(): void {
       "wtm session delete NAME [--state-dir DIR] [--json]",
       "wtm session stop NAME [--state-dir DIR] [--json]",
       "wtm handoff [--state-dir DIR] [--session NAME]",
+      ...MACHINE_USAGE.split("\n"),
+      "wtm bridge [--session NAME] [--state-dir DIR]   (started by another machine over ssh)",
     ].join("\n"),
   );
 }
@@ -142,6 +147,14 @@ async function main(): Promise<void> {
       runPreflightStage({ stage: parsed.preflightStage ?? 1, probe: parsed.preflightProbe });
     } else if (parsed.command === "session-stop") {
       process.exitCode = await runSessionStop(parsed.stateDir ?? defaultStateDir(), parsed.sessionTarget!, parsed.json === true, consoleIo);
+    } else if (parsed.command === "bridge") {
+      // ほかのマシンの `wtm serve` が ssh の先で起動する（20260927-multi-host-machines）。標準入出力は中継の素通し。
+      process.exitCode = await runBridge(
+        { stateDir: parsed.stateDir ?? defaultStateDir(), session: parsed.session },
+        { stdin: process.stdin, stdout: process.stdout, err: (line) => console.error(line) },
+      );
+    } else if (parsed.command === "machine") {
+      process.exitCode = await runMachineCommand(parsed.machine!, parsed.stateDir ?? defaultStateDir(), consoleIo);
     } else if (parsed.command === "session-delete") {
       process.exitCode = await runSessionDelete(parsed.stateDir ?? defaultStateDir(), parsed.sessionTarget!, parsed.json === true, consoleIo);
     } else {
