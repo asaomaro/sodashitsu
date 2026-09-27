@@ -35,6 +35,49 @@ describe("wtmctl --machine（T10）", () => {
     });
   });
 
+  it("pane の対象: --current は使い方の誤り、省略はそのマシンのフォーカスの pane（20260927-caller-pane-default の AC10）", () => {
+    expect(() =>
+      parseArgs(
+        ["--machine", "m", "pane", "split", "--current", "--direction", "right"],
+        ENV_IN_PANE,
+      ),
+    ).toThrow(/--current cannot be used with --machine/);
+    expect(() =>
+      parseArgs(["--machine", "m", "pane", "current", "--current"], ENV_IN_PANE),
+    ).toThrow(CliUsageError);
+    // pane の外でも理由は --machine（「pane の中で打て」と誤誘導しない。taskcheck T1 の指摘）。
+    expect(() => parseArgs(["--machine", "m", "pane", "current", "--current"], {})).toThrow(
+      /--current cannot be used with --machine/,
+    );
+    expect(
+      parseArgs(["--machine", "m", "pane", "split", "--direction", "right"], ENV_IN_PANE),
+    ).toMatchObject({
+      kind: "pane-split",
+      target: { kind: "focused" },
+      opts: { machine: "m" },
+    });
+    expect(parseArgs(["--machine", "m", "pane", "current"], ENV_IN_PANE)).toMatchObject({
+      target: { kind: "focused" },
+      opts: { machine: "m" },
+    });
+    // 明示の ID はそのまま（そのマシンの ID として送る）。
+    expect(
+      parseArgs(["--machine", "m", "pane", "current", "--pane", "p3"], ENV_IN_PANE),
+    ).toMatchObject({ target: { kind: "id", paneId: "p3" } });
+  });
+
+  it("--machine local は pane の中と同じく呼び出し元の pane を使う（AC11）", () => {
+    expect(
+      parseArgs(["--machine", "local", "pane", "split", "--direction", "right"], ENV_IN_PANE),
+    ).toMatchObject({
+      target: { kind: "caller", paneId: "p3", explicit: false },
+      opts: { caller: { paneId: "p3" } },
+    });
+    expect(
+      parseArgs(["--machine", "local", "pane", "current", "--current"], ENV_IN_PANE),
+    ).toMatchObject({ target: { kind: "caller", explicit: true } });
+  });
+
   it("値が無い・長すぎる・コマンドが無い・help/skill/login/--machine の重ねは使い方の誤り", () => {
     for (const argv of [
       ["--machine"],

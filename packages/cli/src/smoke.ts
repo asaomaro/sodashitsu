@@ -245,7 +245,7 @@ async function main(): Promise<void> {
 
     const created = await runCli(["workspace", "create", "--cwd", process.cwd(), "--label", "smoke", "--url", url, "--token", token], env);
     if (created.exitCode !== 0) throw new Error(`workspace create failed (exit ${created.exitCode}): ${created.stderr}`);
-    const { pane, workspace } = JSON.parse(created.stdout) as { pane: { id: string }; workspace: { id: string } };
+    const { pane, workspace, tab } = JSON.parse(created.stdout) as { pane: { id: string }; workspace: { id: string }; tab: { id: string } };
     console.log(`smoke(cli): wtmctl workspace create ok (pane ${pane.id})`);
 
     // 2回目以降は --token を渡さない：セッションキャッシュが再利用されることの確認を兼ねる（AC7）。
@@ -270,6 +270,28 @@ async function main(): Promise<void> {
     const snapshot = JSON.parse(snap.stdout) as { panes: { id: string }[] };
     if (!snapshot.panes.some((p) => p.id === pane.id)) throw new Error("snapshot did not include the created pane");
     console.log("smoke(cli): wtmctl snapshot ok");
+
+    // 20260927-caller-pane-default: pane の中の環境（WTM_PANE_ID・WTM_SERVER_URL）を与えたビルド済みの wtmctl で、`pane current` が
+    // その pane の tab・workspace を返し、対象を省いた `pane split` がその pane の隣（同じ tab）に作ること。--url は渡さない（WTM_SERVER_URL につなぐ）。
+    // フォーカスを別の workspace へ移しておく（呼び出し元とフォーカスの pane を別にし、フォーカスの pane に落ちる実装を見分ける。タスク点検 T5 の指摘）。
+    const other = await runCli(["workspace", "create", "--label", "smoke-focus", "--url", url], env);
+    if (other.exitCode !== 0) throw new Error(`workspace create failed (exit ${other.exitCode}): ${other.stderr}`);
+    const otherWorkspaceId = (JSON.parse(other.stdout) as { workspace: { id: string } }).workspace.id;
+    const inPaneEnv: NodeJS.ProcessEnv = { ...env, WTM_PANE_ID: pane.id, WTM_SERVER_URL: url };
+    delete inPaneEnv["WTMCTL_URL"];
+    const current = await runCli(["pane", "current"], inPaneEnv);
+    if (current.exitCode !== 0) throw new Error(`pane current failed (exit ${current.exitCode}): ${current.stderr}`);
+    const here = (JSON.parse(current.stdout) as { pane: { id: string; tabId: string; workspaceId: string | null } }).pane;
+    if (here.id !== pane.id || here.tabId !== tab.id || here.workspaceId !== workspace.id) throw new Error(`pane current returned ${current.stdout}`);
+    const splitHere = await runCli(["pane", "split", "--direction", "right"], inPaneEnv);
+    if (splitHere.exitCode !== 0) throw new Error(`pane split (caller) failed (exit ${splitHere.exitCode}): ${splitHere.stderr}`);
+    const sibling = (JSON.parse(splitHere.stdout) as { pane: { id: string; tabId: string } }).pane;
+    if (sibling.tabId !== tab.id || sibling.id === pane.id) throw new Error(`pane split (caller) returned ${splitHere.stdout}`);
+    const closedSibling = await runCli(["pane", "close", sibling.id, "--url", url], env);
+    if (closedSibling.exitCode !== 0) throw new Error(`pane close failed (exit ${closedSibling.exitCode}): ${closedSibling.stderr}`);
+    const closedOther = await runCli(["workspace", "close", otherWorkspaceId, "--url", url], env);
+    if (closedOther.exitCode !== 0) throw new Error(`workspace close failed (exit ${closedOther.exitCode}): ${closedOther.stderr}`);
+    console.log(`smoke(cli): wtmctl pane current / pane split (caller pane, not the focused one) ok (tab ${here.tabId})`);
 
     // 20260927-sidebar-row-tokens: 独自トークンの報告。`--token` を接続の token（= を含まない）と独自トークン（NAME=VALUE）の両方に使い、
     // 値が整えられて snapshot の workspace・pane に載ること、消去で消えることを、ビルドした wtmctl で確かめる。**接続の token が実際に使われるよう、

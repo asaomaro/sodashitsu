@@ -97,7 +97,7 @@ describe("wtmctl agent integration（実サーバ・実 PTY）", () => {
         {
           kind: "pane-split",
           opts: { url, token: server.freshToken },
-          paneId: agentPaneId,
+          target: { kind: "id", paneId: agentPaneId },
           direction: "right",
           ratio: undefined,
         },
