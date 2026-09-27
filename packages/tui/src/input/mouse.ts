@@ -37,6 +37,8 @@ const EDGE_RATIO = 0.3;
 const DOUBLE_CLICK_MS = 400;
 /** ホイール 1 目盛りの行数（herdr と同じ 3 行）。 */
 const WHEEL_LINES = 3;
+/** 境界のドラッグの比率を送る間隔（web の `Splitter.vue` の `SEND_INTERVAL_MS` と同じ）。 */
+const SPLIT_SEND_INTERVAL_MS = 50;
 
 /** 落とす先のゾーン（左右を先に、次に上下。web の `zoneAt` と同じ規則）。 */
 export function zoneAt(rect: Rect, x: number, y: number): Zone {
@@ -102,7 +104,16 @@ type Drag =
       word?: { from: number; to: number };
     }
   /** 境界。`grab` は掴んだ位置と境界の差（掴んだだけでは動かさない）。 */
-  | { kind: "divider"; divider: Divider; tabId: string; grab: number; start: number }
+  | {
+      kind: "divider";
+      divider: Divider;
+      tabId: string;
+      grab: number;
+      start: number;
+      /** まだ送っていない比率（50ms 間隔にまとめる）。 */
+      pending: number | null;
+      timer: ReturnType<typeof setTimeout> | null;
+    }
   /** pane のスクロールバーのつまみ（M9）。`grab` はつまみの上端から掴んだ位置までの行数。 */
   | { kind: "scrollbar"; paneId: string; grab: number }
   | { kind: "sidebar" }
@@ -339,7 +350,15 @@ export class MouseController {
     if (divider && tab) {
       const start = divider.dir === "right" ? x : y;
       const edge = divider.dir === "right" ? divider.x : divider.y;
-      this.drag = { kind: "divider", divider, tabId: tab.id, grab: start - edge, start };
+      this.drag = {
+        kind: "divider",
+        divider,
+        tabId: tab.id,
+        grab: start - edge,
+        start,
+        pending: null,
+        timer: null,
+      };
       return;
     }
 
@@ -372,7 +391,9 @@ export class MouseController {
     const pane = model.panes.get(paneId);
     // Ctrl（macOS の端末では Cmd が Alt/Meta で届かないので Ctrl だけ）＋クリックでリンクを開く（M6）。pane がマウスを求めていても端末版が扱う。
     if (left && ev.mods.ctrl && term) {
-      const url = urlAt(term, term.term.buffer.active.viewportY + row, col);
+      // OSC 8 のリンク（アプリが付けたもの）を先に、無ければ文字の中の URL。
+      const abs = term.term.buffer.active.viewportY + row;
+      const url = term.hyperlinkAt(abs, snapCol(term.term, abs, col)) ?? urlAt(term, abs, col);
       if (url) {
         this.focus(paneId);
         this.host.openLink?.(url);
@@ -514,13 +535,18 @@ export class MouseController {
       case "divider": {
         const d = drag.divider;
         const at = d.dir === "right" ? ev.x : ev.y;
-        if (at === drag.start) break; // 掴んだ所から動いていない
-        const pos = at - drag.grab - (d.dir === "right" ? d.area.x : d.area.y);
-        const total = d.dir === "right" ? d.area.w : d.area.h;
-        const ratio = Math.min(0.95, Math.max(0.05, pos / total));
-        void this.host.rpc
-          .request("layout.set_split_ratio", { tabId: drag.tabId, splitId: d.splitId, ratio })
-          .catch(() => undefined);
+        if (at !== drag.start) {
+          const pos = at - drag.grab - (d.dir === "right" ? d.area.x : d.area.y);
+          const total = d.dir === "right" ? d.area.w : d.area.h;
+          drag.pending = Math.min(0.95, Math.max(0.05, pos / total));
+        }
+        // 動いている間は 50ms 間隔にまとめて送り（web の Splitter と同じ）、離したら最後の値をすぐ送る。
+        if (done) this.flushRatio(drag);
+        else if (drag.pending !== null && drag.timer === null)
+          drag.timer = this.setTimer(() => {
+            drag.timer = null;
+            this.flushRatio(drag);
+          }, SPLIT_SEND_INTERVAL_MS);
         break;
       }
       case "scrollbar": {
@@ -607,6 +633,28 @@ export class MouseController {
     this.host.scheduleRender();
   }
 
+  private setTimer(fn: () => void, ms: number): ReturnType<typeof setTimeout> {
+    const t = setTimeout(fn, ms);
+    t.unref?.();
+    return t;
+  }
+
+  /** 溜めた境界の比率を送る。 */
+  private flushRatio(drag: Extract<Drag, { kind: "divider" }>): void {
+    if (drag.timer !== null) clearTimeout(drag.timer);
+    drag.timer = null;
+    const ratio = drag.pending;
+    drag.pending = null;
+    if (ratio === null) return;
+    void this.host.rpc
+      .request("layout.set_split_ratio", {
+        tabId: drag.tabId,
+        splitId: drag.divider.splitId,
+        ratio,
+      })
+      .catch(() => undefined);
+  }
+
   /** スクロールバーの位置（末尾からの行数）へ pane を動かす。 */
   private scrollPaneTo(term: PaneTerminal, offsetFromBottom: number): void {
     const buf = term.term.buffer.active;
@@ -686,6 +734,8 @@ export class MouseController {
   cancel(): void {
     const drag = this.drag;
     this.drag = null;
+    // 途中の境界の比率は捨てる（離していない。送る時計も止める）。
+    if (drag?.kind === "divider" && drag.timer !== null) clearTimeout(drag.timer);
     this.dropTarget = null;
     // pane へ押下を渡していたなら離しも送る（押したままのアプリを残さない。04 ラウンド 2 の点検）。
     if (drag?.kind === "forward") {

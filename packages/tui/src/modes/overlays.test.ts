@@ -17,6 +17,7 @@ import { stringWidth } from "../render/width.js";
 import { pane, snapshot, workspace } from "../testing/fixtures.js";
 import { filterHelp, helpGroups } from "./HelpDialog.js";
 import { OverlayHost } from "./OverlayHost.js";
+import { TextInput } from "./TextInput.js";
 
 function key(chord: string): KeyInput {
   return chordToKeyInput(chord);
@@ -412,5 +413,23 @@ describe("オーバーレイの点検の指摘（04）", () => {
     s.overlays.handleMouse({ action: "up", button: 0, x: 3, y: 1 });
     // いちばん上に見えている項目（拡大表示）を実行した
     expect(s.calls).toEqual([["pane.zoom", { paneId: "p1", mode: "toggle" }]]);
+  });
+});
+
+describe("入力欄の Alt+B・Alt+F（readline。04 review）", () => {
+  it("語の頭へ戻り、語の終わりへ進む（空白・記号は飛ばす）", () => {
+    const input = new TextInput("foo bar-baz qux");
+    input.handleKey(key("alt+b"));
+    expect(input.cursor).toBe(12); // qux の頭
+    input.handleKey(key("alt+b"));
+    expect(input.cursor).toBe(8); // baz の頭
+    input.handleKey(key("alt+b"));
+    input.handleKey(key("alt+b"));
+    expect(input.cursor).toBe(0);
+    input.handleKey(key("alt+f"));
+    expect(input.cursor).toBe(3); // foo の終わり
+    input.handleKey(key("alt+f"));
+    expect(input.cursor).toBe(7); // bar の終わり
+    expect(input.value).toBe("foo bar-baz qux");
   });
 });

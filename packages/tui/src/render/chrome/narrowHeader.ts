@@ -1,3 +1,9 @@
+/*
+ * 1 列表示の上辺の並べ方（右端の switch のボタン・状態の記号・workspace の名前・右寄せの tab の位置・workspace が無いときの「no workspace」）は
+ * herdr（https://github.com/herdrdev/herdr、commit da6bcd5969779bfe0396bcf89a8025d4375d611e）の `src/client/shell/mobile.rs`
+ * （`render_mobile_header`・`render_header_status`）を TypeScript へ移し、端末版のモードの印・接続の状態・知らせ・tab の名前を足したもの
+ * （Apache-2.0。ルートの `NOTICE` を参照）。
+ */
 import { ATTR } from "../color.js";
 import type { Grid, Rect } from "../Screen.js";
 import { stringWidth, truncate } from "../width.js";

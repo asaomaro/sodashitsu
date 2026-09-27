@@ -55,6 +55,10 @@ export interface DispatcherHost {
   pasteImage(): void;
 }
 
+/** 手元のクリップボードを読めないときの案内（05 の T5 で OS の道具から読むまで）。 */
+export const PASTE_UNAVAILABLE =
+  "クリップボードを読めません。外側の端末の貼り付け（Ctrl+Shift+V・Cmd+V 等）を使ってください";
+
 /**
  * client-core の `Action` を RPC と画面の操作へ（20260927-cli-mode の architecture「actions/TuiDispatcher.ts」）。**web の
  * `packages/web/src/actions/ActionDispatcher.ts` を正として写した**——同じ RPC・同じ確認・同じ焦点の移り先。web の `view`（表示と焦点）は
@@ -1067,9 +1071,11 @@ export class TuiDispatcher {
   }
 
   pasteIntoPane(paneId: string): void {
-    // 空・読めない（手元のクリップボードを読む道具は 05）は黙って何もしない（外側の端末の貼り付けはブラケットペーストで届く）。
+    // 空は黙って何もしない。読めない（null。手元のクリップボードを読む道具は 05 の T5）は外側の端末の貼り付けを案内する
+    // （外側の端末の貼り付けはブラケットペーストで届く）。
     void this.host.readClipboard().then((text) => {
-      if (text) this.host.pasteText(paneId, text);
+      if (text === null) this.ui.toast(PASTE_UNAVAILABLE);
+      else if (text !== "") this.host.pasteText(paneId, text);
     });
   }
 

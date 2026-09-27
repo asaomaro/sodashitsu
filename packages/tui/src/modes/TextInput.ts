@@ -2,7 +2,7 @@ import type { KeyInput } from "@sodashitsu/client-core";
 import { charWidth, stringWidth } from "../render/width.js";
 
 /**
- * 1 行の入力欄（名前の変更・ブランチ名・絞り込み）。←→・Home/End・Backspace/Delete・Ctrl+A/E/U/K/W（readline と同じ）。
+ * 1 行の入力欄（名前の変更・ブランチ名・絞り込み）。←→・Home/End・Backspace/Delete・Ctrl+A/E/U/K/W・Alt+B/F（readline と同じ）。
  * 貼り付けは改行を空白にして入れる（1 行の欄に改行を入れない）。
  */
 export class TextInput {
@@ -25,6 +25,11 @@ export class TextInput {
 
   /** 入力欄として扱ったら true（Enter・Esc 等は呼び出し側が先に見る）。 */
   handleKey(k: KeyInput): boolean {
+    // Alt+B / Alt+F：語の頭へ戻る・語の終わりへ進む（readline と同じ。herdr の H27b）。
+    if (k.alt && !k.ctrl && !k.meta && (k.key === "b" || k.key === "f")) {
+      this.cursor = k.key === "b" ? this.wordBack() : this.wordForward();
+      return true;
+    }
     if (k.ctrl && !k.alt) {
       switch (k.key) {
         case "a":
@@ -86,6 +91,21 @@ export class TextInput {
     return false;
   }
 
+  private wordBack(): number {
+    let i = this.cursor;
+    while (i > 0 && !isWordChar(this.chars[i - 1]!)) i--;
+    while (i > 0 && isWordChar(this.chars[i - 1]!)) i--;
+    return i;
+  }
+
+  private wordForward(): number {
+    let i = this.cursor;
+    const n = this.chars.length;
+    while (i < n && !isWordChar(this.chars[i]!)) i++;
+    while (i < n && isWordChar(this.chars[i]!)) i++;
+    return i;
+  }
+
   insert(text: string): void {
     const add = [...text.replace(/[\r\n\t]+/g, " ")].filter(isPrintable);
     this.chars.splice(this.cursor, 0, ...add);
@@ -110,6 +130,11 @@ export class TextInput {
     }
     return { text, cursorCol: before() };
   }
+}
+
+/** readline の語の文字（英数字。日本語の文字も語の中）。 */
+function isWordChar(c: string): boolean {
+  return /[\p{L}\p{N}]/u.test(c);
 }
 
 /** 名前に入れてよい文字か（C0・DEL・C1 の制御文字は入れない）。 */

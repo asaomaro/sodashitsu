@@ -250,7 +250,7 @@ describe("マウス（04 ラウンド 2）", () => {
     expect(text).toContain("space-w10");
   });
 
-  it("リンクを開く道具：シェルを通さない（Windows は rundll32）。http・https・file だけ", () => {
+  it("リンクを開く道具：シェルを通さない（Windows は rundll32）。http・https だけ", () => {
     const url = "https://example.com/a?x=1&calc.exe";
     expect(linkCommand("win32", url)).toEqual({
       cmd: "rundll32",
@@ -258,10 +258,9 @@ describe("マウス（04 ラウンド 2）", () => {
     });
     expect(linkCommand("darwin", url)).toEqual({ cmd: "open", args: [url] });
     expect(linkCommand("linux", url)).toEqual({ cmd: "xdg-open", args: [url] });
-    expect(linkCommand("linux", "file:///tmp/a b")).toEqual({
-      cmd: "xdg-open",
-      args: ["file:///tmp/a%20b"],
-    });
+    // file: は開かない（web の D110 と同じ。Windows では実行ファイルを起動しうる）。
+    expect(linkCommand("linux", "file:///tmp/a")).toBeNull();
+    expect(linkCommand("win32", "file:///C:/Windows/System32/calc.exe")).toBeNull();
     expect(linkCommand("win32", "javascript:alert(1)")).toBeNull();
     expect(linkCommand("linux", "--help")).toBeNull();
   });
@@ -301,5 +300,43 @@ describe("従来形式（X10）のマウスの動き", () => {
         mods: { shift: false, alt: false, ctrl: false, meta: false },
       },
     ]);
+  });
+});
+
+describe("04 review（リンク・境界の送り方）", () => {
+  const closers: (() => Promise<void>)[] = [];
+  afterEach(async () => {
+    for (const c of closers.splice(0)) await c();
+  });
+
+  it("OSC 8 のリンク（見える文字に URL が無い）も Ctrl＋押下で開く", async () => {
+    const opened: string[] = [];
+    const h = await startedApp({ openUrl: (u) => opened.push(u) });
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    const t = h.app.panes.get("p1")!;
+    t.snapshot(35, 27, "see \x1b]8;id=1;https://docs.example/p\x1b\\the docs\x1b]8;;\x1b\\ here");
+    await t.flush();
+    h.app.renderNow();
+    h.io.type(down(27 + 5, 2, 16) + up(27 + 5, 2, 16)); // 「the docs」の中
+    expect(opened).toEqual(["https://docs.example/p"]);
+    h.io.type(down(27 + 14, 2, 16) + up(27 + 14, 2, 16)); // リンクの後
+    expect(opened).toHaveLength(1);
+  });
+
+  it("境界のドラッグの比率は 50ms 間隔にまとめて送り、離したら最後の値をすぐ送る", async () => {
+    const h = await startedApp();
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    h.app.renderNow();
+    h.io.type(down(63, 10));
+    for (let x = 62; x > 52; x--) h.io.type(drag(x, 10));
+    expect(h.ws.requests("layout.set_split_ratio")).toHaveLength(0);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(h.ws.requests("layout.set_split_ratio")).toHaveLength(1);
+    h.io.type(drag(50, 10) + up(50, 10));
+    const all = h.ws.requests("layout.set_split_ratio");
+    expect(all).toHaveLength(2);
+    expect((all[1]!.params as { ratio: number }).ratio).toBeCloseTo((50 - 26) / 74);
   });
 });

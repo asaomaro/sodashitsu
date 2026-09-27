@@ -641,7 +641,7 @@ export class TuiApp {
     }
     const command = linkCommand(this.io.platform, url);
     if (!command) {
-      this.ui.toast(`このリンクは開きません（http・https・file だけ）: ${url}`);
+      this.ui.toast(`このリンクは開きません（http・https だけ）: ${url}`);
       return;
     }
     try {
@@ -878,14 +878,14 @@ export class TuiApp {
 }
 
 /**
- * リンクを開く OS の道具と引数（M6）。http・https・file だけ（`URL` で読めて、その scheme のもの）。**シェルを通さない**——Windows は
+ * リンクを開く OS の道具と引数（M6）。http・https だけ（`URL` で読めて、その scheme のもの。web の D110 と同じ——file: 等は実行ファイルを起動しうる）。**シェルを通さない**——Windows は
  * `cmd /c start` だと `&` などで任意のコマンドが走るので、`rundll32 url.dll,FileProtocolHandler`（シェルの解釈を通らない）を使う（04 ラウンド 2 の点検）。
  */
 export function linkCommand(platform: string, url: string): { cmd: string; args: string[] } | null {
   let href: string;
   try {
     const u = new URL(url);
-    if (u.protocol !== "http:" && u.protocol !== "https:" && u.protocol !== "file:") return null;
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
     href = u.href;
   } catch {
     return null;

@@ -18,6 +18,17 @@ const MOUSE_ENCODING_MODES: Readonly<Record<number, MouseEncoding>> = {
   1016: "sgr-pixels",
 };
 
+type TermMarker = { readonly line: number; readonly isDisposed: boolean; dispose(): void };
+interface Hyperlink {
+  uri: string;
+  start: TermMarker;
+  startCol: number;
+  end: TermMarker;
+  endCol: number;
+}
+/** 覚えておく OSC 8 のリンクの数。 */
+const MAX_HYPERLINKS = 500;
+
 /**
  * pane ごとの headless（20260927-cli-mode の design「term/PaneTerminal.ts」）。SNAPSHOT で作り直し（`\x1bc`＋本文。client-core の
  * `TerminalSinkPort.onSnapshot` の説明と同じ）、OUTPUT を書く。公開の型に無いモード（カーソルの表示・形、マウスの符号化）は
@@ -85,8 +96,78 @@ export class PaneTerminal {
         return false;
       }),
     );
+    // OSC 8 のハイパーリンク（`OSC 8 ; params ; URI ST` で始まり、URI が空の OSC 8 で終わる）。headless の xterm はセルにリンクを持つが
+    // 読む API が無いので、始まりと終わりの位置をマーカーで覚える（Ctrl＋クリックで開く。M6・H09）。xterm 本体の処理は妨げない。
+    this.disposers.push(
+      parser.registerOscHandler(8, (data) => {
+        this.onHyperlink(data);
+        return false;
+      }),
+    );
     this.disposers.push(this.term.onWriteParsed(() => this.markDirty()));
     this.disposers.push(this.term.onScroll(() => this.markDirty()));
+  }
+
+  /** OSC 8 のリンクの範囲（新しいものが後ろ。上限を超えたら古いものから捨てる）。 */
+  private readonly hyperlinks: Hyperlink[] = [];
+  private openLink: { uri: string; start: TermMarker; startCol: number } | null = null;
+
+  private onHyperlink(data: string): void {
+    const sep = data.indexOf(";");
+    const uri = sep < 0 ? "" : data.slice(sep + 1);
+    this.closeHyperlink();
+    if (uri === "") return;
+    const start = this.markCursor();
+    if (start) this.openLink = { uri, start, startCol: this.term.buffer.active.cursorX };
+  }
+
+  private closeHyperlink(): void {
+    const open = this.openLink;
+    this.openLink = null;
+    if (!open) return;
+    const end = this.markCursor();
+    if (!end) {
+      open.start.dispose();
+      return;
+    }
+    this.hyperlinks.push({ ...open, end, endCol: this.term.buffer.active.cursorX });
+    while (this.hyperlinks.length > MAX_HYPERLINKS) {
+      const old = this.hyperlinks.shift()!;
+      old.start.dispose();
+      old.end.dispose();
+    }
+  }
+
+  private markCursor(): TermMarker | undefined {
+    try {
+      return this.term.registerMarker(0) ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** その位置（絶対行・セルの列）に掛かる OSC 8 のリンクの URI（無ければ null）。閉じていないリンクは今のカーソルまで。 */
+  hyperlinkAt(row: number, col: number): string | null {
+    const before = (r1: number, c1: number, r2: number, c2: number): boolean =>
+      r1 < r2 || (r1 === r2 && c1 < c2);
+    const buf = this.term.buffer.active;
+    const spans: { uri: string; sr: number; sc: number; er: number; ec: number }[] = [];
+    for (const h of this.hyperlinks)
+      if (!h.start.isDisposed && !h.end.isDisposed)
+        spans.push({ uri: h.uri, sr: h.start.line, sc: h.startCol, er: h.end.line, ec: h.endCol });
+    if (this.openLink && !this.openLink.start.isDisposed)
+      spans.push({
+        uri: this.openLink.uri,
+        sr: this.openLink.start.line,
+        sc: this.openLink.startCol,
+        er: buf.baseY + buf.cursorY,
+        ec: buf.cursorX,
+      });
+    for (let i = spans.length - 1; i >= 0; i--) {
+      const s = spans[i]!;
+      if (!before(row, col, s.sr, s.sc) && before(row, col, s.er, s.ec)) return s.uri;
+    }
+    return null;
   }
 
   /** SNAPSHOT：大きさを合わせ、消してから書き直す（流量制御の回復でいつでも届く）。 */
@@ -179,5 +260,12 @@ export class PaneTerminal {
     this.cursorStyle = "block";
     this.cursorBlink = false;
     this.mouseEncoding = "default";
+    // RIS（SNAPSHOT の書き直しを含む）でリンクも消える（バッファを作り直すので位置が意味を失う）。
+    this.openLink?.start.dispose();
+    this.openLink = null;
+    for (const h of this.hyperlinks.splice(0)) {
+      h.start.dispose();
+      h.end.dispose();
+    }
   }
 }

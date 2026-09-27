@@ -5,7 +5,12 @@ import { PrefsModel } from "../model/PrefsModel.js";
 import { SessionModel } from "../model/SessionModel.js";
 import { UiState } from "../model/UiState.js";
 import { agent, leaf, pane, snapshot, split, tab, workspace } from "../testing/fixtures.js";
-import { TuiDispatcher, type CopyTargetPort, type DispatcherHost } from "./TuiDispatcher.js";
+import {
+  PASTE_UNAVAILABLE,
+  TuiDispatcher,
+  type CopyTargetPort,
+  type DispatcherHost,
+} from "./TuiDispatcher.js";
 
 /**
  * `TuiDispatcher` が web の `ActionDispatcher` と同じ RPC・確認・焦点の移り先になることを確かめる（web の `ActionDispatcher.test.ts` の場合を写した）。
@@ -903,13 +908,22 @@ describe("TuiDispatcher — グループ", () => {
     expect(h.ui.toasts.map((t) => t.message)).toEqual(["折りたたみを保存できませんでした"]);
   });
 
-  it("メニューの貼り付け：クリップボードが空・読めないなら黙って何もしない", async () => {
+  it("メニューの貼り付け：空なら黙って何もしない。読めなければ外側の端末の貼り付けを案内する。読めたら貼る", async () => {
     const h = harness();
-    h.host.readClipboard.mockResolvedValueOnce(null);
+    h.host.readClipboard.mockResolvedValueOnce("");
     h.d.pasteIntoPane("p1");
     await flush();
     expect(h.host.pasteText).not.toHaveBeenCalled();
     expect(h.ui.toasts).toEqual([]);
+    h.host.readClipboard.mockResolvedValueOnce(null);
+    h.d.pasteIntoPane("p1");
+    await flush();
+    expect(h.host.pasteText).not.toHaveBeenCalled();
+    expect(h.ui.toasts.map((t) => t.message)).toEqual([PASTE_UNAVAILABLE]);
+    h.host.readClipboard.mockResolvedValueOnce("abc");
+    h.d.pasteIntoPane("p1");
+    await flush();
+    expect(h.host.pasteText).toHaveBeenCalledWith("p1", "abc");
   });
 
   it("worktree の自動グループの折りたたみは共有の設定（prefs.set）", () => {

@@ -36,6 +36,7 @@
 | `packages/tui/src/input/encode.ts` | `src/input/encode.rs`（DECCKM に合わせたカーソルキーの付け替え。20260927-cli-mode） |
 | `packages/tui/src/input/mouseEncode.ts` | `src/input/encode.rs`（`encode_mouse_cb`：pane へのマウスの報告の符号化。20260927-cli-mode） |
 | `packages/tui/src/render/scrollbar.ts` | `src/ui/scrollbar.rs`（`scrollbar_thumb`・`scrollbar_offset_from_row`・`scrollbar_offset_from_drag_row`：pane のスクロールバーのつまみ。20260927-cli-mode） |
+| `packages/tui/src/render/chrome/narrowHeader.ts` | `src/client/shell/mobile.rs`（`render_mobile_header`・`render_header_status`：1 列表示の上辺の並べ方。20260927-cli-mode） |
 
 テストの一部（`ManifestEngine.test.ts`・`ProcessMatcher.test.ts`・`AgentTracker.test.ts`・
 `packages/server/src/git/worktree.test.ts`・`packages/protocol/src/worktreePath.test.ts`）にも、
