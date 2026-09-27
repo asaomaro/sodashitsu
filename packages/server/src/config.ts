@@ -5,7 +5,7 @@ import { ConfigError } from "./configError.js";
 import { DEFAULT_SESSION_NAME, resolveSessionStateDir } from "./persist/namedSession.js";
 import { isLoopbackHost, unbracketHost } from "./util/net.js";
 
-/** design.md「起動オプション（wtm serve）」の既定値。 */
+/** design.md「起動オプション（soda serve）」の既定値。 */
 export const DEFAULTS = {
   host: "127.0.0.1",
   port: 7780,
@@ -24,8 +24,8 @@ export interface ServeOptions {
   /** 名前付き session で起動したときだけその名前（`--session default`・指定なしは `undefined`。20260926-named-session）。 */
   sessionName: string | undefined;
   /**
-   * 名前付き session の名前の出所（名前付きのときだけ。既定の session——指定なし・`default`・`WTM_SESSION=default`——は undefined）。
-   * `"env"` は `WTM_SESSION`（20260926-named-session-ui）。
+   * 名前付き session の名前の出所（名前付きのときだけ。既定の session——指定なし・`default`・`SODA_SESSION=default`——は undefined）。
+   * `"env"` は `SODA_SESSION`（20260926-named-session-ui）。
    */
   sessionSource: "flag" | "env" | undefined;
   /** session の根（既定の session の状態ディレクトリ。`--state-dir` か OS の既定）。session の一覧の走査に使う（20260926-named-session-ui）。 */
@@ -66,10 +66,10 @@ export interface RawServeArgs {
 export function defaultStateDir(env: NodeJS.ProcessEnv = process.env, os: NodeJS.Platform = platform()): string {
   if (os === "win32") {
     const base = env["LOCALAPPDATA"] ?? join(homedir(), "AppData", "Local");
-    return join(base, "web-tn-multiplexer");
+    return join(base, "sodashitsu");
   }
   const base = env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state");
-  return join(base, "web-tn-multiplexer");
+  return join(base, "sodashitsu");
 }
 
 export { ConfigError };
@@ -82,7 +82,7 @@ export { ConfigError };
 export function agentReportSocketPathFor(stateDir: string, os: NodeJS.Platform = platform()): string {
   if (os === "win32") {
     const hash = createHash("sha256").update(stateDir).digest("hex").slice(0, 16);
-    return `\\\\.\\pipe\\wtm-agent-report-${hash}`;
+    return `\\\\.\\pipe\\soda-agent-report-${hash}`;
   }
   return join(stateDir, "agent-report.sock");
 }
@@ -209,13 +209,13 @@ export function bindFailureHint(err: unknown, remembered?: { port: number; sessi
   );
 }
 
-/** `WTM_SESSION` から選んだ名前付き session の案内に添える 1 文（20260926-named-session-ui）。 */
+/** `SODA_SESSION` から選んだ名前付き session の案内に添える 1 文（20260926-named-session-ui）。 */
 export function sessionFromEnvNote(sessionName: string): string {
-  return `session ${sessionName} は環境変数 WTM_SESSION から選びました（既定の session なら --session default）。`;
+  return `session ${sessionName} は環境変数 SODA_SESSION から選びました（既定の session なら --session default）。`;
 }
 
 /**
- * 同じ状態ディレクトリを別の wtm が使っている（`wtm.lock`。D103）。`wtm serve` は起動を、`wtm token reset` は
+ * 同じ状態ディレクトリを別の soda が使っている（`soda.lock`。D103）。`soda serve` は起動を、`soda token reset` は
  * `auth.json` の書き換えを断る（終了コード 2）。`otherHost` は、ロックの持ち主が別のホスト（別のマシン・別のコンテナ）で
  * pid の生死を確かめられなかったときのホスト名。
  */
@@ -223,9 +223,9 @@ export function stateDirInUseError(
   inUse: { pid: number; lockPath: string; otherHost?: string | undefined },
   stateDir: string,
   command: "serve" | "token-reset",
-  /** `WTM_SESSION` から選んだ名前付き session なら、その名前（20260926-named-session-ui）。 */
+  /** `SODA_SESSION` から選んだ名前付き session なら、その名前（20260926-named-session-ui）。 */
   sessionFromEnv?: string | undefined,
-  /** 止め方の案内に添える `wtm session stop …` の打ち方（`token-reset` だけ。`sessionStopCommandFor`。20260927-session-stop）。 */
+  /** 止め方の案内に添える `soda session stop …` の打ち方（`token-reset` だけ。`sessionStopCommandFor`。20260927-session-stop）。 */
   stopCommand?: string | undefined,
 ): ConfigError {
   const envNote = sessionFromEnv !== undefined ? sessionFromEnvNote(sessionFromEnv) : "";
@@ -233,13 +233,13 @@ export function stateDirInUseError(
   const stale =
     inUse.otherHost !== undefined
       ? `ロックは別のホスト（または別のコンテナ）${inUse.otherHost} の pid ${inUse.pid} のもので、その生死はここからは確かめられません。` +
-        `そちらで wtm が動いていなければ（落ちて残ったロック。コンテナを作り直してホスト名が変わった等）、${inUse.lockPath} を消してからやり直してください。`
-      : `pid ${inUse.pid} が wtm でなければ（前の wtm が落ちた後に pid が再利用された）、${inUse.lockPath} を消してからやり直してください。`;
+        `そちらで soda が動いていなければ（落ちて残ったロック。コンテナを作り直してホスト名が変わった等）、${inUse.lockPath} を消してからやり直してください。`
+      : `pid ${inUse.pid} が soda でなければ（前の soda が落ちた後に pid が再利用された）、${inUse.lockPath} を消してからやり直してください。`;
   if (command === "serve") {
     return new ConfigError(
-      `the state dir ${stateDir} is already in use by another wtm (${who})`,
+      `the state dir ${stateDir} is already in use by another soda (${who})`,
       [
-        "同じ --state-dir を別の wtm（wtm serve か wtm token reset）が使っています（wtm serve を 2 つ動かすと全シェルを二重に起動し、session.json・auth.json を互いに上書きします）。",
+        "同じ --state-dir を別の soda（soda serve か soda token reset）が使っています（soda serve を 2 つ動かすと全シェルを二重に起動し、session.json・auth.json を互いに上書きします）。",
         "別のポートで並行して動かすなら、--session <名前> で別の名前付き session にするか、--state-dir に別のディレクトリを指定してください。",
         envNote,
         stale,
@@ -247,10 +247,10 @@ export function stateDirInUseError(
     );
   }
   return new ConfigError(
-    `cannot reset the token: the state dir ${stateDir} is in use by a running wtm (${who})`,
+    `cannot reset the token: the state dir ${stateDir} is in use by a running soda (${who})`,
     [
-      "wtm serve が動いている間は token を作り直せません（動いている側は古い token のまま新しい token を受け付けず、",
-      "次のログイン等で auth.json を古い token に書き戻します）。wtm serve を止めてから wtm token reset を実行し、もう一度起動してください。",
+      "soda serve が動いている間は token を作り直せません（動いている側は古い token のまま新しい token を受け付けず、",
+      "次のログイン等で auth.json を古い token に書き戻します）。soda serve を止めてから soda token reset を実行し、もう一度起動してください。",
       stopCommand !== undefined && inUse.otherHost === undefined
         ? `止めるには、起動した端末で Ctrl+C を押すか ${stopCommand} を実行します。`
         : "",
@@ -271,8 +271,8 @@ export function listenFailureHint(code: string | undefined): string | undefined 
       return [
         "そのポートは別のプロセスが使っています。",
         "--port で別のポートを指定してください。",
-        // 同じ state-dir の wtm はポートを変えても 2 つ目が `wtm.lock` で止まる（D103）ので、状態ディレクトリも分けるよう添える。
-        "wtm を並行して動かすなら --state-dir も分けてください（--session <名前> で名前付き session にしても分かれます）。",
+        // 同じ state-dir の soda はポートを変えても 2 つ目が `soda.lock` で止まる（D103）ので、状態ディレクトリも分けるよう添える。
+        "soda を並行して動かすなら --state-dir も分けてください（--session <名前> で名前付き session にしても分かれます）。",
       ].join("");
     case "EACCES":
       return [

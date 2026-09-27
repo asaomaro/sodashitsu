@@ -1,5 +1,5 @@
 import { mount, type VueWrapper } from "@vue/test-utils";
-import type { MethodName, ParamsOf, ResultOf } from "@wtm/protocol";
+import type { MethodName, ParamsOf, ResultOf } from "@sodashitsu/protocol";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";

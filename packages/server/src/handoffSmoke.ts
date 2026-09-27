@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * 更新時の引き継ぎ（live handoff。20260926-live-handoff）の起動確認。**ビルドした `dist/main.js`** を子プロセスで `wtm serve` として起動し、
- * 実物の `wtm handoff` で入れ替えて、次を確かめてから後始末する（Linux/macOS。Windows では何もせず成功で終わる——非対応）:
- * - 動いていないとき `wtm handoff` は終了コード 3 で、何も作らない（AC12）
+ * 更新時の引き継ぎ（live handoff。20260926-live-handoff）の起動確認。**ビルドした `dist/main.js`** を子プロセスで `soda serve` として起動し、
+ * 実物の `soda handoff` で入れ替えて、次を確かめてから後始末する（Linux/macOS。Windows では何もせず成功で終わる——非対応）:
+ * - 動いていないとき `soda handoff` は終了コード 3 で、何も作らない（AC12）
  * - 入れ替えの前後でサーバの pid が同じ・pane の id とシェルの pid が同じ（AC1）
  * - 前の画面の印が、入れ替えの後に繋いだクライアントの SNAPSHOT に入っている（AC3）
  * - 入れ替えの後も同じ Cookie で `/ws` に繋がり（AC5）、入力がシェルに届き出力が返り、大きさの変更がシェルに見える（AC2）
@@ -16,7 +16,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@wtm/protocol";
+import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@sodashitsu/protocol";
 import WebSocket from "ws";
 
 const MAIN = join(import.meta.dirname, "main.js");
@@ -133,7 +133,7 @@ async function connect(
   return { ws, c };
 }
 
-function runWtm(args: string[]): { status: number | null; stdout: string; stderr: string } {
+function runSoda(args: string[]): { status: number | null; stdout: string; stderr: string } {
   const r = spawnSync(process.execPath, [MAIN, ...args], { encoding: "utf8", timeout: 60_000 });
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
@@ -143,18 +143,18 @@ async function main(): Promise<void> {
     log("skipped (live handoff is not supported on Windows)");
     return;
   }
-  const stateDir = await mkdtemp(join(tmpdir(), "wtm-handoff-smoke-"));
+  const stateDir = await mkdtemp(join(tmpdir(), "soda-handoff-smoke-"));
   let server: ChildProcess | undefined;
   let shellPid: number | undefined;
   let serverOut = "";
   try {
     // 1. 動いていないとき（AC12）
-    const idle = runWtm(["handoff", "--state-dir", stateDir]);
+    const idle = runSoda(["handoff", "--state-dir", stateDir]);
     if (idle.status !== 3)
       throw new Error(`expected exit 3 when not running, got ${idle.status}: ${idle.stderr}`);
     if (readdirSync(stateDir).length !== 0)
       throw new Error(
-        `wtm handoff created files while no server ran: ${readdirSync(stateDir).join(",")}`,
+        `soda handoff created files while no server ran: ${readdirSync(stateDir).join(",")}`,
       );
     log("not running → exit 3, nothing created ok");
 
@@ -216,16 +216,16 @@ async function main(): Promise<void> {
     log(`before: server pid ${serverPid}, pane ${paneId}, shell pid ${shellPid}`);
 
     // 4. 入れ替え
-    const handoff = runWtm(["handoff", "--state-dir", stateDir]);
+    const handoff = runSoda(["handoff", "--state-dir", stateDir]);
     if (
       handoff.status !== 0 ||
       !handoff.stdout.includes("handoff complete: 1 pane(s) kept running")
     ) {
       throw new Error(
-        `wtm handoff failed (exit ${handoff.status}): ${handoff.stdout} ${handoff.stderr}\n--- server ---\n${serverOut}`,
+        `soda handoff failed (exit ${handoff.status}): ${handoff.stdout} ${handoff.stderr}\n--- server ---\n${serverOut}`,
       );
     }
-    log(`wtm handoff → exit 0: ${handoff.stdout.trim().split("\n").pop()}`);
+    log(`soda handoff → exit 0: ${handoff.stdout.trim().split("\n").pop()}`);
     const closeCode = await Promise.race([
       closedBefore,
       new Promise<number>((_, reject) =>

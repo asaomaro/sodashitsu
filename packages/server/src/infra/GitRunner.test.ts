@@ -7,7 +7,7 @@ import { ChildProcessGitRunner } from "./GitRunner.js";
 describe("ChildProcessGitRunner", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await makeTempDir("wtm-git-");
+    dir = await makeTempDir("soda-git-");
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -43,7 +43,7 @@ describe("ChildProcessGitRunner", () => {
 });
 
 async function mkdirTemp(): Promise<string> {
-  const dir = await makeTempDir("wtm-notgit-");
+  const dir = await makeTempDir("soda-notgit-");
   await mkdir(dir, { recursive: true });
   return dir;
 }

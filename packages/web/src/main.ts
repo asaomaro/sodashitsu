@@ -1,4 +1,4 @@
-import { TERMINAL_PALETTES } from "@wtm/protocol";
+import { TERMINAL_PALETTES } from "@sodashitsu/protocol";
 import type { ITerminalOptions } from "@xterm/xterm";
 // xterm.js の必須の CSS（canvas の重ね方・入力用 textarea の隠し方）。無いと描画用の canvas が端末の下へ
 // 押し出され、端末の中身が一切見えない（親の統合 test で発見。D96）。
@@ -109,7 +109,7 @@ const storeAdapter = new StoreAdapter({
   onSnapshotApplied: (panes, first) => notificationsBox.current?.onSnapshotApplied(panes, first),
   onPaneClosed: (paneId) => notificationsBox.current?.onPaneClosed(paneId),
   onAgentIntegrationChanged: (status) => useAgentIntegrationsStore(pinia).setStatus(status),
-  // 画面の接続がローカルを向いているときだけ、手元の `wtm serve` の一覧（リモートを向いていればそのマシンの登録簿なので捨てる）。
+  // 画面の接続がローカルを向いているときだけ、手元の `soda serve` の一覧（リモートを向いていればそのマシンの登録簿なので捨てる）。
   onMachinesChanged: (list) => machineWiringBox.current?.onMainMachinesChanged(list),
 });
 
@@ -382,7 +382,7 @@ function markVisibleAgentsSeen(): void {
 watch(() => [...session.panes.values()].map((p) => p.agent?.completionSeq ?? -1), markVisibleAgentsSeen, { deep: true });
 window.addEventListener("focus", markVisibleAgentsSeen);
 
-// ブラウザのタブのタイトル（H14／AC4）：`{hostname}: {workspace}`。どちらか欠けていれば既定の "wtm"。
+// ブラウザのタブのタイトル（H14／AC4）：`{hostname}: {workspace}`。どちらか欠けていれば既定の製品名 "Sodashitsu"。
 // 名前付き session はその名前を添える（20260926-named-session-ui の AC3。`documentTitle`）。
 watch(
   () => [session.host?.hostname, session.host?.sessionName, view.workspaceId ? session.workspaces.get(view.workspaceId)?.label : null] as const,

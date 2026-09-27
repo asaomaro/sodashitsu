@@ -1,4 +1,4 @@
-import type { DisplayState } from "@wtm/protocol";
+import type { DisplayState } from "@sodashitsu/protocol";
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -8,7 +8,7 @@ import StateIcon from "./StateIcon.vue";
 let pinia: Pinia;
 
 beforeEach(() => {
-  // 設定のストアは作る時点で `wtm.prefs.v1` を読む。前のテストの記号表示を持ち越さない。
+  // 設定のストアは作る時点で `soda.prefs.v1` を読む。前のテストの記号表示を持ち越さない。
   localStorage.clear();
   pinia = createPinia();
 });

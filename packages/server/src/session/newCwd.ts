@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
-import type { NewCwd, Pane, PaneId } from "@wtm/protocol";
+import type { NewCwd, Pane, PaneId } from "@sodashitsu/protocol";
 import type { ProcessInspector } from "../platform/ProcessInspector.js";
 import type { TerminalManager } from "../terminal/TerminalManager.js";
 import { withTimeout } from "./withTimeout.js";

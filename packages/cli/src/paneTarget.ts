@@ -1,4 +1,4 @@
-import type { SessionSnapshot } from "@wtm/protocol";
+import type { SessionSnapshot } from "@sodashitsu/protocol";
 import type { GlobalOpts, PaneTarget } from "./cliArgs.js";
 import { selfPaneId } from "./selfGuard.js";
 import { RpcFailure } from "./wsClient.js";
@@ -19,15 +19,15 @@ export function resolveCallerPane(
   const confirmed = selfPaneId(opts);
   if (confirmed === undefined) {
     const serverUrl = opts.caller?.serverUrl;
-    // WTM_SERVER_URL が無い（サーバが URL にできない待ち受け）ときは「WTM_SERVER_URL につなぐ」を勧められない（タスク横断の点検の指摘）。
+    // SODA_SERVER_URL が無い（サーバが URL にできない待ち受け）ときは「SODA_SERVER_URL につなぐ」を勧められない（タスク横断の点検の指摘）。
     const advice =
       serverUrl === undefined
         ? "if it is, pass the pane ID with --pane"
-        : "if it is, pass the pane ID with --pane; otherwise connect to WTM_SERVER_URL (unset WTMCTL_URL, drop --url)";
+        : "if it is, pass the pane ID with --pane; otherwise connect to SODA_SERVER_URL (unset SODACTL_URL, drop --url)";
     throw new RpcFailure(
       "caller_pane_unknown",
-      `cannot use the calling pane (WTM_PANE_ID=${target.paneId}): cannot confirm that ${opts.url} is the server running this pane ` +
-        `(WTM_SERVER_URL=${serverUrl ?? "(unset)"}); ${advice}`,
+      `cannot use the calling pane (SODA_PANE_ID=${target.paneId}): cannot confirm that ${opts.url} is the server running this pane ` +
+        `(SODA_SERVER_URL=${serverUrl ?? "(unset)"}); ${advice}`,
     );
   }
   return confirmed;

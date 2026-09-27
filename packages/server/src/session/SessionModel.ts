@@ -22,8 +22,8 @@ import type {
   Workspace,
   WorkspaceGroup,
   WorkspaceId,
-} from "@wtm/protocol";
-import { formatId } from "@wtm/protocol";
+} from "@sodashitsu/protocol";
+import { formatId } from "@sodashitsu/protocol";
 import * as Layout from "./LayoutTree.js";
 import type { SessionFileGroup, SessionFileWorkspace } from "../persist/SessionFile.js";
 

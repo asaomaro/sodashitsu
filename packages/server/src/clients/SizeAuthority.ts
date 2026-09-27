@@ -1,4 +1,4 @@
-import { RpcError, type PaneId, type ServerEvent, type TabId } from "@wtm/protocol";
+import { RpcError, type PaneId, type ServerEvent, type TabId } from "@sodashitsu/protocol";
 import type { SessionService } from "../session/SessionService.js";
 import type { ClientRecord, ClientRegistry } from "./ClientRegistry.js";
 
@@ -22,7 +22,7 @@ import type { ClientRecord, ClientRegistry } from "./ClientRegistry.js";
  *   実装していない（権限は前の tab に残るが、`applyOwnerSize` は view の tab に絞るのでその tab の大きさは動かさない。
  *   その tab を見ている資格のある別のクライアントは、操作すれば権限を取れる。D106 の作業で確認）。
  * - **pane への直結**（20260926-pane-direct-connect。herdr の terminal attach）：pane ごとに高々 1 クライアントが直結の所有者になり、
- *   直結中はその pane の大きさを所有者が決める（`applyOwnerSize` はその pane を飛ばす＝大きさの鍵）。種別は問わない（`wtmctl` は external）。
+ *   直結中はその pane の大きさを所有者が決める（`applyOwnerSize` はその pane を飛ばす＝大きさの鍵）。種別は問わない（`sodactl` は external）。
  *   所有者が抜けたら（`detach`・切断）、その tab の権限者の大きさへ戻す（権限者がいなければそのまま）。所有者が変わるたびに
  *   `pane.attach_changed` を発行する。所有者は安全の境界ではない（INPUT は今までどおり誰でも書ける）。
  */

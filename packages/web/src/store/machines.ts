@@ -4,13 +4,13 @@ import type {
   ServerEvent,
   SessionSnapshot,
   Workspace,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { LOCAL_MACHINE_ID } from "../net/machineUrl.js";
 
 /**
- * 保存した SSH のマシン（20260927-multi-host-machines の design「web」）。手元の `wtm serve` が配るマシンの一覧（`machine.list`・`machine.changed`）、
+ * 保存した SSH のマシン（20260927-multi-host-machines の design「web」）。手元の `soda serve` が配るマシンの一覧（`machine.list`・`machine.changed`）、
  * 画面の接続が向いているマシン（選択）、選んでいないマシンの**要約**（軽い接続の snapshot とイベントから作る workspace とエージェントの状態）、
  * マシンごとの折りたたみ（このブラウザのメモリだけ）を持つ。要約はマシンごとに閉じる——id（`w1`・`p1`）はマシンをまたいで衝突する。
  */
@@ -56,7 +56,7 @@ export const useMachinesStore = defineStore("machines", () => {
 
   /**
    * 選べるか（見出し・行の disabled と切り替えの手順 2 はこれ 1 つを使う）。ローカルは（選んでいないとき）要約が繋がっている、
-   * ほかは手元の `wtm serve` から見た状態が online で、かつ要約が繋がっている。選んでいるマシンは常に真（表示だけ）。
+   * ほかは手元の `soda serve` から見た状態が online で、かつ要約が繋がっている。選んでいるマシンは常に真（表示だけ）。
    */
   function isSelectable(id: string): boolean {
     if (id === selectedId.value) return true;

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
-import type { LayoutNode, PaneStatus, SplitDirection } from "@wtm/protocol";
-import type { NextIdCounters } from "@wtm/protocol";
+import type { LayoutNode, PaneStatus, SplitDirection } from "@sodashitsu/protocol";
+import type { NextIdCounters } from "@sodashitsu/protocol";
 import { readFileWithBackup, writeFileAtomic, type ReadResult } from "./atomicFile.js";
 
 /**

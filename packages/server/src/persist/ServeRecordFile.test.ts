@@ -13,7 +13,7 @@ import {
 describe("serve.json（起動の記録）", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await makeTempDir("wtm-serve-record-");
+    dir = await makeTempDir("soda-serve-record-");
   });
   afterEach(async () => {
     await chmod(join(dir, SERVE_RECORD_FILE_NAME), 0o600).catch(() => undefined);

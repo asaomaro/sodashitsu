@@ -9,7 +9,7 @@ import {
   type TabId,
   type TerminalPalette,
   type ThemeName,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 import type { ClientRecord, ClientRegistry } from "./ClientRegistry.js";
 
 /** `answerPaletteFor`/`answerAppearanceFor` が引く先（`composeServer.ts` では `session` と `ClientRegistry`）。 */

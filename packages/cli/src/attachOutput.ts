@@ -1,5 +1,5 @@
 /**
- * `wtmctl pane attach` で手元の端末へ書く前に、pane の出力から端末への問い合わせを取り除く（20260926-pane-direct-connect の decisions D8）。
+ * `sodactl pane attach` で手元の端末へ書く前に、pane の出力から端末への問い合わせを取り除く（20260926-pane-direct-connect の decisions D8）。
  * 問い合わせに答えるのはサーバのミラーだけ（D17。ブラウザは `packages/web/src/term/QueryFilter.ts` で握りつぶす）——手元の端末にも
  * 答えさせると、答えが stdin → INPUT で pane に届いてミラーの答えと二重になり、遅れた方が入力行のごみになる。
  * 取り除くのは `QueryFilter.ts` と同じ種類（DA・DSR/CPR・DECRQM・XTVERSION・DECRQSS・色の問い合わせ）に、手元の端末なら答えうる

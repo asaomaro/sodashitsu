@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { PaneId, TabId, ThemeName, WorkspaceId } from "@wtm/protocol";
+import type { PaneId, TabId, ThemeName, WorkspaceId } from "@sodashitsu/protocol";
 
 /**
- * `"external"` は画面を持たない外部クライアント（`wtmctl`。20260923-external-control-api の design D4）。
+ * `"external"` は画面を持たない外部クライアント（`sodactl`。20260923-external-control-api の design D4）。
  * `client.hello` を送らない・`kind` を省略したクライアントは `register()` の既定 `"desktop"` になるため、
- * `wtmctl` は必ず `client.hello` で `kind: "external"` を送る。`SizeAuthority.canDecideSize` は
+ * `sodactl` は必ず `client.hello` で `kind: "external"` を送る。`SizeAuthority.canDecideSize` は
  * `kind === "desktop"` の等値比較だけを見るので、この値を増やしても `SizeAuthority.ts` 自体の変更は不要
  * （新しい値は自動的に「サイズ権限の資格なし」側になる）。
  */

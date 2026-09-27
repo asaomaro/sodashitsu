@@ -3,7 +3,7 @@ import {
   POPUP_RUN_SIZE_MAX,
   POPUP_RUN_SIZE_MIN,
   type PopupDimension,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 
 /** popup の端末の最小（列・行）。herdr は外枠 6×4（`popup_size.rs`）だが、見出しの行がある本製品では端末そのものの最小にする。 */
 export const POPUP_MIN_COLS = 10;

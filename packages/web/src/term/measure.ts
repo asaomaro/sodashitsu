@@ -1,4 +1,4 @@
-import { clampTerminalSize } from "@wtm/protocol";
+import { clampTerminalSize } from "@sodashitsu/protocol";
 import type { Terminal } from "@xterm/xterm";
 
 /** セル（1 文字分）の CSS 上の寸法。 */
@@ -15,7 +15,7 @@ export interface Dimensions {
 /**
  * 枠の大きさ（CSS px）とセルの寸法から cols/rows を求める純関数（architecture.md「term/measure」）。
  * xterm.js のセルの寸法の取得自体は呼び出し側（`term/ViewSync`）が行う（この部品は DOM も xterm.js も参照しない）。
- * 結果はサーバのスキーマの上限（1 辺 4096・面積 1,000,000 セル。`@wtm/protocol` の `clampTerminalSize`）に丸める——上限の外の `client.view` は
+ * 結果はサーバのスキーマの上限（1 辺 4096・面積 1,000,000 セル。`@sodashitsu/protocol` の `clampTerminalSize`）に丸める——上限の外の `client.view` は
  * 要求ごと断られ、表示も大きさも変わらなくなる（20260927-server-size-input-limits。異常に小さいセルの寸法・巨大な枠でも範囲の内の値を送る）。
  */
 export function measure(containerWidth: number, containerHeight: number, cell: CellSize): Dimensions {

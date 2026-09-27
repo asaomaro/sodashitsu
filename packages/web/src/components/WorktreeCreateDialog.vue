@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, ref, watch } from "vue";
-import { defaultCheckoutPath } from "@wtm/protocol";
+import { defaultCheckoutPath } from "@sodashitsu/protocol";
 import { ActionDispatcherKey } from "../injection.js";
 import { useViewStore } from "../store/view.js";
 
@@ -12,7 +12,7 @@ import { useViewStore } from "../store/view.js";
  * `NameDialog` が「1 行で名前を決める」4 種類のためのもので、**パスのプレビュー**を足すと責務が混ざるため。
  *
  * ブランチ名は**サーバが作った候補**（`worktree.list` の `suggestedBranch`）を入れて開く。
- * 作成先は `defaultCheckoutPath`（`@wtm/protocol`）で組み立てる——**サーバと同じ関数**なので、
+ * 作成先は `defaultCheckoutPath`（`@sodashitsu/protocol`）で組み立てる——**サーバと同じ関数**なので、
  * ここに出るパスと実際に作られる場所がずれない。
  */
 const view = useViewStore();
@@ -86,15 +86,15 @@ function onNativeCancel(ev: Event): void {
 
 <style scoped>
 .worktree-dialog {
-  border: 1px solid var(--wtm-menu-border, #44475a);
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-menu-fg, #f8f8f2);
+  border: 1px solid var(--soda-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
   border-radius: 4px;
   min-width: 28em;
   padding: 1em;
 }
 .worktree-dialog::backdrop {
-  background: var(--wtm-backdrop, rgba(0, 0, 0, 0.4));
+  background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
 .worktree-dialog-label {
   display: flex;

@@ -1,4 +1,4 @@
-import { RpcError, type PaneId, type TerminalPalette } from "@wtm/protocol";
+import { RpcError, type PaneId, type TerminalPalette } from "@sodashitsu/protocol";
 import type { PtyProcess } from "../pty/PtyBackend.js";
 import type { Disposable } from "../util/Disposable.js";
 import { DefaultOutputFanout, type OutputFanout } from "./OutputFanout.js";

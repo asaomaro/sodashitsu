@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:net";
 import { chmod, unlink } from "node:fs/promises";
 import { platform } from "node:os";
-import type { AgentIntegrationKind } from "@wtm/protocol";
+import type { AgentIntegrationKind } from "@sodashitsu/protocol";
 import type { Logger } from "../log/Logger.js";
 
 /**

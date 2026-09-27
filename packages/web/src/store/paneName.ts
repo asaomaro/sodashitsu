@@ -1,4 +1,4 @@
-import type { Pane } from "@wtm/protocol";
+import type { Pane } from "@sodashitsu/protocol";
 
 /**
  * pane の呼び名。`title` は未設定なら空文字なので `??` ではなく `||` で繋ぐ

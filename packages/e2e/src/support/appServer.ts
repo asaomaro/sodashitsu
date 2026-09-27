@@ -1,10 +1,10 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { composeServer, type ComposedServer } from "@wtm/server";
+import { composeServer, type ComposedServer } from "@sodashitsu/server";
 import WebSocket from "ws";
 import { getFreePort } from "./freePort.js";
-import { createTestClient, type WtmTestClient } from "./wsClient.js";
+import { createTestClient, type SodaTestClient } from "./wsClient.js";
 
 /**
  * 1 テストにつき 1 つの実サーバ（空きポート・専用の一時 state dir）を起動する（05-e2e-docs T1）。
@@ -20,13 +20,13 @@ export interface AppServer {
   /** HTTP の Cookie ベースでサーバへ直接リクエストするための login 済み cookie（AC10 のテスト等が使う）。 */
   cookie: string;
   /** API 越しにセッション状態を素早く作る／サーバのイベントを検証するための WS クライアント。 */
-  openClient(kind?: "desktop" | "mobile"): Promise<WtmTestClient>;
+  openClient(kind?: "desktop" | "mobile"): Promise<SodaTestClient>;
   /**
-   * `wtm serve` を止めて再び起動する（AC18。05-e2e-docs T6）。`stateDir` は消さずに同じ場所を使い、
+   * `soda serve` を止めて再び起動する（AC18。05-e2e-docs T6）。`stateDir` は消さずに同じ場所を使い、
    * 同じポートで新しいプロセス相当（同じ Node プロセス内だが `ComposedServer` を作り直す）を立てる。
    * トークンは初回起動時に生成・永続化されたものを再起動後もそのまま使う（`composeServer` の
    * `freshToken` は「今回新しく作ったときだけ」立つフラグで、既存の state dir から起動し直した
-   * 場合は立たない——実物の `wtm serve` の「同じトークンで入り直せる」挙動と同じ。実地に確認して
+   * 場合は立たない——実物の `soda serve` の「同じトークンで入り直せる」挙動と同じ。実地に確認して
    * 判明）。ログイン済みの Cookie はサーバプロセスごとの状態なので、再起動のたびに取り直す。
    * `appServer.cookie` を再起動後も素直に読めばよい。既存の WS 接続は（サーバを止めるので）全て切れる。
    */
@@ -66,12 +66,12 @@ async function bootServer(stateDir: string, port: number, opts: { scrollback?: n
 }
 
 export async function startAppServer(opts: { scrollback?: number } = {}): Promise<AppServer> {
-  const stateDir = await mkdtemp(join(tmpdir(), "wtm-e2e-"));
+  const stateDir = await mkdtemp(join(tmpdir(), "soda-e2e-"));
   const port = await getFreePort();
   let booted = await bootServer(stateDir, port, opts);
   const sockets: WebSocket[] = [];
 
-  async function openClient(kind: "desktop" | "mobile" = "desktop"): Promise<WtmTestClient> {
+  async function openClient(kind: "desktop" | "mobile" = "desktop"): Promise<SodaTestClient> {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { cookie: booted.cookie, origin: booted.origin, host: `127.0.0.1:${port}` } });
     sockets.push(ws);
     await new Promise<void>((resolve, reject) => {

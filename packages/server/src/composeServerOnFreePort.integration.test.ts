@@ -21,7 +21,7 @@ describe("composeServerOnFreePort（20260926-load-flaky-tests の D3）", () => 
   }
 
   async function tempStateDir(): Promise<string> {
-    const stateDir = await makeTempDir("wtm-freeport-");
+    const stateDir = await makeTempDir("soda-freeport-");
     cleanups.push(() =>
       rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }),
     );

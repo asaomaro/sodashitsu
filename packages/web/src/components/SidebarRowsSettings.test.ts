@@ -477,11 +477,11 @@ describe("SidebarRowsSettings — 位置に結び付いた状態とフォーカ�
     (fg.element as HTMLInputElement).value = "#abc";
     await fg.trigger("input");
     localStorage.setItem(
-      "wtm.prefs.v1",
+      "soda.prefs.v1",
       // 同じ位置（1 行目の 2 つ目）に別のトークンが来る差し替え——捨てないと、その別のトークンに色を書いてしまう（負の確認で見つけた穴）。
       JSON.stringify({ sidebarRows: { spaces: [[{ token: "state_icon" }, { token: "branch" }]] } }),
     );
-    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
     await nextTick();
     expect(w.findAll('[data-toggle-detail][aria-expanded="true"]')).toHaveLength(0);
     useViewStore(pinia).closeDialog();

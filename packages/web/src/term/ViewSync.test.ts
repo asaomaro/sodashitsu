@@ -1,4 +1,4 @@
-import type { MethodName, ParamsOf, ResultOf } from "@wtm/protocol";
+import type { MethodName, ParamsOf, ResultOf } from "@sodashitsu/protocol";
 import { Terminal } from "@xterm/xterm";
 import { describe, expect, it, vi } from "vitest";
 import type { ConnectionPort } from "../net/ports.js";

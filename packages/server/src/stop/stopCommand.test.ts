@@ -15,7 +15,7 @@ import {
   runSessionStop,
 } from "./stopCommand.js";
 
-/** `wtm session stop`（20260927-session-stop の T4）。 */
+/** `soda session stop`（20260927-session-stop の T4）。 */
 function captureIo(): CommandIo & { outs: string[]; errs: string[] } {
   const outs: string[] = [];
   const errs: string[] = [];
@@ -70,7 +70,7 @@ const OK = (pid: number, alreadyStopping = false): string =>
 describe("runSessionStop", () => {
   let base: string;
   beforeEach(async () => {
-    base = await makeTempDir("wtm-stopcmd-");
+    base = await makeTempDir("soda-stopcmd-");
   });
   afterEach(async () => {
     await rm(base, { recursive: true, force: true });
@@ -86,7 +86,7 @@ describe("runSessionStop", () => {
     const io = captureIo();
     expect(await runSessionStop(base, "default", false, io, f.deps)).toBe(0);
     expect(f.asked).toEqual([`${join(base, "handoff.sock")} {"op":"stop"}`]);
-    expect(io.outs).toEqual(["wtm: stopped session default"]);
+    expect(io.outs).toEqual(["soda: stopped session default"]);
     expect(io.errs).toEqual([]);
   });
 
@@ -121,7 +121,7 @@ describe("runSessionStop", () => {
       SESSION_STOP_EXIT_NOT_RUNNING,
     );
     expect(SESSION_STOP_EXIT_NOT_RUNNING).toBe(3);
-    expect(io.errs).toEqual(["wtm: session work is not running"]);
+    expect(io.errs).toEqual(["soda: session work is not running"]);
     expect(f.asked).toEqual([]);
     expect(await readdir(join(base, "sessions", "work"))).toEqual(before);
     const j = captureIo();
@@ -169,7 +169,7 @@ describe("runSessionStop", () => {
   it("ディレクトリでないもの（ファイル・シンボリックリンク）は 2（リンクを辿って別の場所を止めない）", async () => {
     await mkdir(join(base, "sessions"), { recursive: true });
     await writeFile(join(base, "sessions", "file"), "");
-    const elsewhere = await makeTempDir("wtm-stopcmd-elsewhere-");
+    const elsewhere = await makeTempDir("soda-stopcmd-elsewhere-");
     await symlink(elsewhere, join(base, "sessions", "link"));
     try {
       const f = fake(OK(42), [{ pid: 42 }]);
@@ -217,9 +217,9 @@ describe("runSessionStop", () => {
       "did not accept a stop request (an older version, still starting, or already stopping)",
     );
     expect(io.errs[0]).toContain("Ctrl+C");
-    // 落ちた wtm のロックの pid が再利用された場合の次の手（wtm.lock を消す）も添える
-    expect(io.errs[0]).toContain(`If pid 42 is not wtm`);
-    expect(io.errs[0]).toContain(join(base, "wtm.lock"));
+    // 落ちた soda のロックの pid が再利用された場合の次の手（soda.lock を消す）も添える
+    expect(io.errs[0]).toContain(`If pid 42 is not soda`);
+    expect(io.errs[0]).toContain(join(base, "soda.lock"));
     const b = fake(errno("ENOENT"), [{ pid: 42 }, undefined]);
     const j = captureIo();
     expect(await runSessionStop(base, "default", true, j, b.deps)).toBe(3);
@@ -267,7 +267,7 @@ describe("runSessionStop", () => {
     expect(io.errs[0]).toContain("try again after the handoff finishes");
   });
 
-  it("返事の pid が wtm.lock の持ち主と違えば止まったと言わない（1）", async () => {
+  it("返事の pid が soda.lock の持ち主と違えば止まったと言わない（1）", async () => {
     const f = fake(OK(7), [{ pid: 42 }, undefined]);
     const j = captureIo();
     expect(await runSessionStop(base, "default", true, j, f.deps)).toBe(1);
@@ -284,8 +284,8 @@ describe("runSessionStop", () => {
 });
 
 describe.skipIf(process.platform === "win32")("runSessionStop（実物の socket とロック）", () => {
-  it("実物の handoff.sock と wtm.lock: 止める指示を受けた側がロックを放すと 0", async () => {
-    const base = await makeTempDir("wtm-stopcmd-real-");
+  it("実物の handoff.sock と soda.lock: 止める指示を受けた側がロックを放すと 0", async () => {
+    const base = await makeTempDir("soda-stopcmd-real-");
     const lock = new StateDirLock(base);
     await lock.acquire();
     const sock = await startHandoffSocket(
@@ -303,7 +303,7 @@ describe.skipIf(process.platform === "win32")("runSessionStop（実物の socket
     try {
       const io = captureIo();
       expect(await runSessionStop(base, "default", false, io)).toBe(0);
-      expect(io.outs).toEqual(["wtm: stopped session default"]);
+      expect(io.outs).toEqual(["soda: stopped session default"]);
     } finally {
       await sock.close();
       await lock.release();

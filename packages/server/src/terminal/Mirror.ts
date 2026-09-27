@@ -5,7 +5,7 @@
 import xtermHeadless from "@xterm/headless";
 import xtermAddonSerialize from "@xterm/addon-serialize";
 import { win32 } from "node:path";
-import { DEFAULT_THEME, DEFAULT_THEME_NAME, THEME_APPEARANCE, type TerminalPalette } from "@wtm/protocol";
+import { DEFAULT_THEME, DEFAULT_THEME_NAME, THEME_APPEARANCE, type TerminalPalette } from "@sodashitsu/protocol";
 import type { Disposable } from "../util/Disposable.js";
 import { CELL_PIXELS, windowPixels } from "./cellPixels.js";
 

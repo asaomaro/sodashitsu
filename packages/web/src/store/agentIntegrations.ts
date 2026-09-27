@@ -1,4 +1,4 @@
-import type { AgentIntegrationStatusResult } from "@wtm/protocol";
+import type { AgentIntegrationStatusResult } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { ref } from "vue";
 

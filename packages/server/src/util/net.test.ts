@@ -209,7 +209,7 @@ describe("unbracketHost / formatUrlHost（D102：角括弧の処理を 1 か所�
   });
 });
 
-describe("paneServerUrl（pane の環境の WTM_SERVER_URL。20260926-agent-skill-file）", () => {
+describe("paneServerUrl（pane の環境の SODA_SERVER_URL。20260926-agent-skill-file）", () => {
   it.each([
     ["http", "127.0.0.1", 7780, "http://127.0.0.1:7780"],
     ["http", "0.0.0.0", 7781, "http://127.0.0.1:7781"],

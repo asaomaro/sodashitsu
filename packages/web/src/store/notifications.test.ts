@@ -28,7 +28,7 @@ describe("useNotificationsStore — 設定", () => {
     expect(useNotificationsStore(createPinia()).prefs).toEqual({ toast: true, desktop: true, sound: false });
   });
 
-  // **AC6**：`wtm.prefs.v1` は他の設定と同居するので、併合でないと巻き添えで消える。
+  // **AC6**：`soda.prefs.v1` は他の設定と同居するので、併合でないと巻き添えで消える。
   it("並び順など他の設定を壊さない", () => {
     writePrefs({ agentSort: "priority" });
     useNotificationsStore(pinia).setPrefs({ sound: true });

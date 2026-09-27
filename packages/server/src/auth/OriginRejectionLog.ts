@@ -6,7 +6,7 @@ import type { OriginPolicy } from "./OriginPolicy.js";
  * Origin/Host で拒否したときのログ（`origin rejected`）に添える対処（D102）。許可リストはこのマシンのインタフェースから
  * しか作れないので、ポート転送・リバースプロキシ・Tailscale の名前で開く構成では利用者が `--origin` で教える必要がある。
  */
-export const ORIGIN_REJECTED_HINT = "ブラウザで開いた Origin がこのマシンのアドレスに無いなら wtm serve --origin <その Origin> で許可できます";
+export const ORIGIN_REJECTED_HINT = "ブラウザで開いた Origin がこのマシンのアドレスに無いなら soda serve --origin <その Origin> で許可できます";
 
 /** ログに書く Origin・Host の上限（文字数）。ヘッダは認証前の相手が自由に送れる（Node の既定で 1 行あたり約 16KB）。 */
 export const ORIGIN_LOG_MAX_CHARS = 200;

@@ -5,8 +5,8 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
-import { encodeInputFrame } from "@wtm/protocol";
-import type { PaneAgentStatusChangedEvent } from "@wtm/protocol";
+import { encodeInputFrame } from "@sodashitsu/protocol";
+import type { PaneAgentStatusChangedEvent } from "@sodashitsu/protocol";
 import { makeTempDir } from "./persist/atomicFile.js";
 import { composeServer } from "./composeServer.js";
 import { composeServerOnFreePort, getFreePort } from "./composeServerOnFreePort.js";
@@ -35,8 +35,8 @@ describe("composeServer (integration)", () => {
   it.skipIf(process.platform === "win32")(
     "close() は開いたままのスクロールバックのエディタの一時ディレクトリを消す（20260926-edit-scrollback の AC8）",
     async () => {
-      const stateDir = await makeTempDir("wtm-compose-");
-      const tmpRoot = await makeTempDir("wtm-compose-tmp-");
+      const stateDir = await makeTempDir("soda-compose-");
+      const tmpRoot = await makeTempDir("soda-compose-tmp-");
       cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
       cleanups.push(() => rm(tmpRoot, { recursive: true, force: true }));
       const saved = { TMPDIR: process.env["TMPDIR"], EDITOR: process.env["EDITOR"] };
@@ -46,7 +46,7 @@ describe("composeServer (integration)", () => {
         process.env["TMPDIR"] = tmpRoot; // 一時ディレクトリの置き場（os.tmpdir() は呼ぶたびに読む）
         process.env["EDITOR"] = "sleep 30 #"; // 閉じるまで終わらないエディタ
         await server.session.editScrollback(source.id);
-        expect((await readdir(tmpRoot)).filter((n) => n.startsWith("wtm-scrollback-"))).toHaveLength(1);
+        expect((await readdir(tmpRoot)).filter((n) => n.startsWith("soda-scrollback-"))).toHaveLength(1);
       } finally {
         for (const [k, v] of Object.entries(saved)) {
           if (v === undefined) delete process.env[k];
@@ -58,10 +58,10 @@ describe("composeServer (integration)", () => {
     },
   );
 
-  it("--session work は <state-dir>/sessions/work に状態を作り、既定の session の状態を読みも書きもしない。同じ名前の 2 つ目は wtm.lock で断り、別の名前は並行して動く（20260926-named-session AC1・AC5）", async () => {
-    const base = await makeTempDir("wtm-compose-");
+  it("--session work は <state-dir>/sessions/work に状態を作り、既定の session の状態を読みも書きもしない。同じ名前の 2 つ目は soda.lock で断り、別の名前は並行して動く（20260926-named-session AC1・AC5）", async () => {
+    const base = await makeTempDir("soda-compose-");
     cleanups.push(() => rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
-    // 既定の session に目印の workspace を保存し、動いている wtm のロック（このプロセスが持つ）も残しておく
+    // 既定の session に目印の workspace を保存し、動いている soda のロック（このプロセスが持つ）も残しておく
     const def = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: base, origin: [] });
     cleanups.unshift(() => def.close());
     await def.session.createWorkspace(process.cwd(), "marker-default");
@@ -99,7 +99,7 @@ describe("composeServer (integration)", () => {
   }, 35_000); // 3 つの実サーバ。負荷の下で最大 15.7 秒（20260926-load-flaky-tests の D5）
 
   it("規則外の --session は composeServer が ConfigError で断り、状態ディレクトリに何も作らない（20260926-named-session AC2）", async () => {
-    const base = await makeTempDir("wtm-compose-");
+    const base = await makeTempDir("soda-compose-");
     cleanups.push(() => rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     for (const bad of ["..", "../escape", "a/b", "con"]) {
       await expect(composeServer({ host: "127.0.0.1", stateDir: base, session: bad, origin: [] }), bad).rejects.toThrow(ConfigError);
@@ -108,13 +108,13 @@ describe("composeServer (integration)", () => {
   });
 
   it("refuses to compose for a non-loopback host without a certificate (D12/D37 の前提)", async () => {
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     await expect(composeServer({ host: "0.0.0.0", stateDir, origin: [] })).rejects.toThrow(ConfigError);
   });
 
   it("generates a token on first run and listens on the requested port", async () => {
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const server = await composeServerOnFreePort(
       { host: "127.0.0.1", stateDir, origin: [] },
@@ -135,7 +135,7 @@ describe("composeServer (integration)", () => {
   });
 
   it("待ち受けに失敗したら listen() が reject する（ポートが使用中。未処理の 'error' で落ちない。D101）", async () => {
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     const blocker = createServer();
     await new Promise<void>((res) => blocker.listen(0, "127.0.0.1", res));
     const port = (blocker.address() as AddressInfo).port;
@@ -149,7 +149,7 @@ describe("composeServer (integration)", () => {
   it("初回の起動で待ち受けに失敗しても token を作らず、次に成功した起動で token 付きの URL を出せる（D102）", async () => {
     // 以前は組み立て（composeServer）の時点で token を作って保存していたため、待ち受けに失敗した初回の起動が token を
     // 作ったまま一度も表示せずに終わり、次の起動では「作り済み」として表示されなかった。
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const blocker = createServer();
     await new Promise<void>((res) => blocker.listen(0, "127.0.0.1", res));
@@ -167,10 +167,10 @@ describe("composeServer (integration)", () => {
     expect(next.freshToken).toBeTruthy();
   });
 
-  it("保存された状態があり待ち受けに失敗したら、シェルを起動せず session.json も書き換えない（D102。同じ state-dir の wtm が動いている場合は、ポートが同じでもその前に wtm.lock で断る——D103）", async () => {
+  it("保存された状態があり待ち受けに失敗したら、シェルを起動せず session.json も書き換えない（D102。同じ state-dir の soda が動いている場合は、ポートが同じでもその前に soda.lock で断る——D103）", async () => {
     // 以前は復元（全 pane のシェルを猶予つきで起動）と poller の開始の後に bind していたため、失敗する起動でも全シェルを起動し、
     // その間の保存の予約（persist.touch）や close() の flush で、動いている側の session.json を上書きしえた。
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const first = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
     await first.session.createWorkspace(process.cwd(), "saved");
@@ -202,7 +202,7 @@ describe("composeServer (integration)", () => {
   it("同じ state-dir の 2 つ目はポートが違っても listen() が ConfigError で断り、シェルを起動せず session.json・auth.json に触れない（D103）", async () => {
     // docs は手元用 7780・LAN 用 8443 で起動させるので、ポート違いの二重起動が起きやすい。以前は bind が両方成功し、
     // 2 つ目が全シェルを二重に起動し、session.json・auth.json を互いに上書きし合っていた。
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const first = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
     cleanups.unshift(() => first.close()); // rm より先に閉じる
@@ -247,10 +247,10 @@ describe("composeServer (integration)", () => {
   }, 15000);
 
   it("組み立て（composeServer）と listen() の間に token reset が走っても、listen() はロックの後に auth.json を読むので新しい token で動く（D103 の独立点検 #1）", async () => {
-    // 以前は組み立ての時点で auth.json を読んでいたため、その後・ロックの前に `wtm token reset`（ロックを取って作り直す）が
+    // 以前は組み立ての時点で auth.json を読んでいたため、その後・ロックの前に `soda token reset`（ロックを取って作り直す）が
     // 走ると、古い token をメモリに持ったまま起動し、新しい token を 401 で拒み、古い token を受け付け、次のログインで
     // auth.json を古い token に書き戻していた。
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const { token: oldToken } = await new DefaultAuthService(new FsAuthFile(stateDir)).ensureToken();
     let newToken = "";
@@ -259,7 +259,7 @@ describe("composeServer (integration)", () => {
       {
         // 組み立ての後・listen() の前に走らせる（取り直したら、組み立て直した後にもう一度）。
         start: async (s) => {
-          // `wtm token reset` と同じ手順（ロックを取り、auth.json を読んで作り直し、放す）。serve はまだロックを取っていない。
+          // `soda token reset` と同じ手順（ロックを取り、auth.json を読んで作り直し、放す）。serve はまだロックを取っていない。
           const resetLock = new StateDirLock(stateDir);
           await resetLock.acquire();
           const resetter = new DefaultAuthService(new FsAuthFile(stateDir));
@@ -289,7 +289,7 @@ describe("composeServer (integration)", () => {
   });
 
   it("listen() が失敗したら（待ち受けの失敗）close() を待たずにロックを放す（main は close() を呼ばずに終わる。D103）", async () => {
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const blocker = createServer();
     await new Promise<void>((res) => blocker.listen(0, "127.0.0.1", res));
@@ -304,7 +304,7 @@ describe("composeServer (integration)", () => {
   it.skipIf(process.platform === "win32")(
     "token を作った後に起動が失敗しても freshToken を読める（呼び出し側が失わずに表示できる。D102）",
     async () => {
-      const stateDir = await makeTempDir("wtm-compose-");
+      const stateDir = await makeTempDir("soda-compose-");
       cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
       const originalShell = process.env["SHELL"];
       process.env["SHELL"] = join(stateDir, "no-such-shell");
@@ -335,7 +335,7 @@ describe("composeServer (integration)", () => {
   );
 
   it("証明書のファイルを読めなければ設定の誤り（ConfigError）にし、token も作らない（D102）", async () => {
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const missing = join(stateDir, "no-such-cert.pem");
     await expect(composeServer({ host: "0.0.0.0", cert: missing, key: missing, stateDir, origin: [] })).rejects.toThrow(ConfigError);
@@ -343,7 +343,7 @@ describe("composeServer (integration)", () => {
   });
 
   it("起動の途中（復元が終わるまで）は /ws を 503 で断り、listen() の後は受け付ける（D102）", async () => {
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const upgradeStatus = (port: number, cookie?: string): Promise<number> =>
       new Promise((resolve, reject) => {
@@ -387,7 +387,7 @@ describe("composeServer (integration)", () => {
   }, 10000);
 
   it("creates one workspace on first startup when there is no saved session (AC1/AC8 の起点)", async () => {
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
     cleanups.push(() => server.close());
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
@@ -401,8 +401,8 @@ describe("composeServer (integration)", () => {
   it.runIf(process.platform === "linux")(
     "「引き継ぐ」は元の pane の前面プロセスの cwd を読み直して開く（記録された場所ではなく）",
     async () => {
-      const stateDir = await makeTempDir("wtm-compose-");
-      const work = await realpath(await makeTempDir("wtm-newcwd-"));
+      const stateDir = await makeTempDir("soda-compose-");
+      const work = await realpath(await makeTempDir("soda-newcwd-"));
       const sub = join(work, "sub");
       await mkdir(sub);
       // シェルの代わりに、`cd` してから印を置いて待つだけのスクリプト（OSC 7 は出さない）。
@@ -427,7 +427,7 @@ describe("composeServer (integration)", () => {
 
   // 20260921-workspace-auto-label：保存に名前が自動かの印が載る（`toSessionFileData` は非公開なので、保存した session.json を読む）。
   it("保存した session.json の workspace に、名前が自動か付けたものかの印（autoLabel）が載る", async () => {
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] }); // 起動時の最初の workspace は名前を渡さない（自動の名前）
     cleanups.push(() => server.close());
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
@@ -443,7 +443,7 @@ describe("composeServer (integration)", () => {
 
   // 20260926-workspace-label-follow-cwd：tab を並べ替えた順で保存する（復元で最初の tab が変わらない——名前と git を決める場所）。
   it.skipIf(process.platform === "win32")("保存した session.json の tab は並べ替えた順（workspace の tabIds の順）", async () => {
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     // 待つだけのシェル——一式を並べて走らせる負荷の下で、既定のシェルが猶予の間に終わって tab ごと閉じたことがある（test-result の失敗の証跡）。
     const shell = join(stateDir, "wait.sh");
     await writeFile(shell, "#!/bin/sh\nexec sleep 30\n", { mode: 0o755 });
@@ -459,7 +459,7 @@ describe("composeServer (integration)", () => {
   }, 10000);
 
   it("persists and restores the session across two composeServer instances (AC18)", async () => {
-    const stateDir = await makeTempDir("wtm-compose-");
+    const stateDir = await makeTempDir("soda-compose-");
     const first = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
     const { workspace } = await first.session.createWorkspace(process.cwd(), "persisted");
     await first.persist.flush();
@@ -475,7 +475,7 @@ describe("composeServer (integration)", () => {
   }, 15_000); // 2 つの実サーバ。負荷の下で最大 5.1 秒（20260926-load-flaky-tests の D5）
 
   it("full round trip: login, hello, create, subscribe, echo (same flow as smoke.ts)", async () => {
-    const stateDir = await makeTempDir("wtm-compose-e2e-");
+    const stateDir = await makeTempDir("soda-compose-e2e-");
     const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
     const port = server.options.port;
     cleanups.push(() => server.close());
@@ -504,9 +504,9 @@ describe("composeServer (integration)", () => {
   }, 10000);
 
   it("--worktree-dir で起動すると、worktree.create RPC で作られたパスがその配下になる（20260924-worktree-dir-config AC1。design「テストで確認すること」——実ホームディレクトリは使わない）", async () => {
-    const stateDir = await makeTempDir("wtm-compose-wtdir-");
-    const worktreeDir = await makeTempDir("wtm-compose-wtdir-root-");
-    const repo = await makeTempDir("wtm-compose-wtdir-repo-");
+    const stateDir = await makeTempDir("soda-compose-wtdir-");
+    const worktreeDir = await makeTempDir("soda-compose-wtdir-root-");
+    const repo = await makeTempDir("soda-compose-wtdir-repo-");
 
     const git = new ChildProcessGitRunner();
     async function runGit(args: string[]): Promise<void> {
@@ -555,8 +555,8 @@ describe("composeServer (integration)", () => {
   }, 15000);
 
   it("workspace.create は、実際の git リポジトリなら定期ポーリング（5秒）を待たずに Workspace.git が埋まる（20260925-workspace-git-immediate。AC1・AC3）", async () => {
-    const stateDir = await makeTempDir("wtm-compose-gitnow-");
-    const repo = await makeTempDir("wtm-compose-gitnow-repo-");
+    const stateDir = await makeTempDir("soda-compose-gitnow-");
+    const repo = await makeTempDir("soda-compose-gitnow-repo-");
 
     const git = new ChildProcessGitRunner();
     async function runGit(args: string[]): Promise<void> {
@@ -621,7 +621,7 @@ describe("composeServer (integration)", () => {
     // 以前は composeServer().close() が WebSocket を一切閉じなかったため、ブラウザが1つでも繋がった
     // ままだと httpServer.server.close() のコールバックが永久に発火しなかった（`wsServer`/`WsGateway` が
     // 返り値にすら保持されていなかった）。ここでは「繋いだまま close() を呼んで、有限時間で終わる」ことを直接確かめる。
-    const stateDir = await makeTempDir("wtm-compose-shutdown-");
+    const stateDir = await makeTempDir("soda-compose-shutdown-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
     const port = server.options.port;
@@ -650,8 +650,8 @@ describe("composeServer (integration)", () => {
   it.skipIf(process.platform === "win32")(
     "実物の PTY で偽の 'claude' を起動すると、pane.agent_status_changed が kind='claude' で届く（02-agent-detection T10・AC6）",
     async () => {
-      const stateDir = await makeTempDir("wtm-compose-agent-");
-      const binDir = await makeTempDir("wtm-compose-agent-bin-");
+      const stateDir = await makeTempDir("soda-compose-agent-");
+      const binDir = await makeTempDir("soda-compose-agent-bin-");
       // claude.toml の `live_turn_working`（bottom_non_empty_lines(12)・working）に当たる画面を出し、
       // pane が判定される間ずっと前面プロセスとして居座る（herdr の「対話の途中で待っている」を模す）。
       const claudePath = join(binDir, "claude");
@@ -784,7 +784,7 @@ describe.skipIf(process.platform === "win32")("composeServer — 画面履歴（
   }
 
   async function tempStateDir(): Promise<string> {
-    const dir = await makeTempDir("wtm-history-it-");
+    const dir = await makeTempDir("soda-history-it-");
     cleanups.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     return dir;
   }
@@ -926,7 +926,7 @@ describe("composeServer — 名前付き session の表示・一覧・Cookie・�
     for (const fn of cleanups.splice(0)) await fn();
   });
   async function tempBase(): Promise<string> {
-    const base = await makeTempDir("wtm-compose-named-ui-");
+    const base = await makeTempDir("soda-compose-named-ui-");
     cleanups.push(() => rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     return base;
   }
@@ -944,7 +944,7 @@ describe("composeServer — 名前付き session の表示・一覧・Cookie・�
     expect(work.session.snapshot().host.sessionName).toBe("work");
     expect("sessionName" in def.session.snapshot().host).toBe(false);
 
-    // ログインの Cookie の名前（名前付きは wtm_session_work、既定は wtm_session のまま）
+    // ログインの Cookie の名前（名前付きは soda_session_work、既定は soda_session のまま）
     const login = async (server: typeof work): Promise<string> => {
       const origin = `http://127.0.0.1:${server.options.port}`;
       const res = await fetch(`${origin}/api/login`, {
@@ -956,8 +956,8 @@ describe("composeServer — 名前付き session の表示・一覧・Cookie・�
       return res.headers.get("set-cookie")!.split(";")[0]!;
     };
     const workCookie = await login(work);
-    expect(workCookie.startsWith("wtm_session_work=")).toBe(true);
-    expect((await login(def)).startsWith("wtm_session=")).toBe(true);
+    expect(workCookie.startsWith("soda_session_work=")).toBe(true);
+    expect((await login(def)).startsWith("soda_session=")).toBe(true);
 
     // 認証済みの WebSocket で server.sessions を取る
     const port = work.options.port;
@@ -978,7 +978,7 @@ describe("composeServer — 名前付き session の表示・一覧・Cookie・�
       { name: "work", default: false, running: true, current: true, endpoint: { port, https: false, host: "127.0.0.1" } },
     ]);
     // 既定の session の Cookie だけでは名前付き session の /ws に入れない（別の session の Cookie は読まない）
-    const defCookie = workCookie.replace(/^wtm_session_work=/, "wtm_session=");
+    const defCookie = workCookie.replace(/^soda_session_work=/, "soda_session=");
     const rejected = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { cookie: defCookie, origin, host: `127.0.0.1:${port}` } });
     const status = await new Promise<number | undefined>((resolve) => {
       rejected.once("unexpected-response", (_req, res) => resolve(res.statusCode));
@@ -1049,7 +1049,7 @@ describe("composeServer — 名前付き session の表示・一覧・Cookie・�
     expect(await readFile(join(base, "server.log"), "utf8")).toContain("cannot write serve.json");
   });
 
-  it("WTM_SESSION から選んだ名前付き session が使用中なら、案内に WTM_SESSION を添える（AC14）", async () => {
+  it("SODA_SESSION から選んだ名前付き session が使用中なら、案内に SODA_SESSION を添える（AC14）", async () => {
     const base = await tempBase();
     const first = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: base, session: "work", origin: [] });
     cleanups.unshift(() => first.close());
@@ -1059,12 +1059,12 @@ describe("composeServer — 名前付き session の表示・一覧・Cookie・�
       (e: unknown) => e,
     );
     expect(err).toBeInstanceOf(ConfigError);
-    expect((err as ConfigError).hint).toContain("WTM_SESSION");
+    expect((err as ConfigError).hint).toContain("SODA_SESSION");
     const third = await composeServer({ host: "127.0.0.1", stateDir: base, session: "work", port: "1", origin: [] }); // ロックで断られるので bind しない
     const err2 = await third.listen().then(
       () => undefined,
       (e: unknown) => e,
     );
-    expect((err2 as ConfigError).hint).not.toContain("WTM_SESSION");
+    expect((err2 as ConfigError).hint).not.toContain("SODA_SESSION");
   });
 });

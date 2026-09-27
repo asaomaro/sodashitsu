@@ -1,4 +1,4 @@
-import { TabCloseParams, TabCreateParams, TabFocusParams, TabMoveParams, TabRenameParams } from "@wtm/protocol";
+import { TabCloseParams, TabCreateParams, TabFocusParams, TabMoveParams, TabRenameParams } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 

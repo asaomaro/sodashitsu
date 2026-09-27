@@ -17,7 +17,7 @@ export interface MachineProfile {
 
 export const MAX_LABEL_BYTES = 128;
 export const MAX_TARGET_BYTES = 1024;
-/** `?machine=`・`wtmctl --machine` の値の上限（文字数）。 */
+/** `?machine=`・`sodactl --machine` の値の上限（文字数）。 */
 export const MAX_SELECTOR_LENGTH = 256;
 /** 画面の「ローカル」と `/ws?machine=local` の予約名。 */
 export const LOCAL_MACHINE_SELECTOR = "local";

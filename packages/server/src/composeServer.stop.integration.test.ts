@@ -10,8 +10,8 @@ import { askSocket } from "./handoff/handoffCommand.js";
 import { handoffSocketPathFor } from "./handoff/HandoffSocket.js";
 
 /**
- * 止める指示（`wtm session stop`。20260927-session-stop の T2）を、実物の `composeServer` と実物の制御の socket（`handoff.sock`）で確かめる。
- * `main.ts` の停止の手順は `serveShutdown.test.ts`、ビルドした `wtm` の通しは smoke（`stopSmoke.ts`）。
+ * 止める指示（`soda session stop`。20260927-session-stop の T2）を、実物の `composeServer` と実物の制御の socket（`handoff.sock`）で確かめる。
+ * `main.ts` の停止の手順は `serveShutdown.test.ts`、ビルドした `soda` の通しは smoke（`stopSmoke.ts`）。
  */
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -28,7 +28,7 @@ describe.skipIf(process.platform === "win32")("composeServer: 止める指示（
         : never
       : never,
   ): Promise<{ server: ComposedServer; stateDir: string; sock: string }> {
-    const stateDir = await makeTempDir("wtm-stop-compose-");
+    const stateDir = await makeTempDir("soda-stop-compose-");
     cleanups.push(() =>
       rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }),
     );

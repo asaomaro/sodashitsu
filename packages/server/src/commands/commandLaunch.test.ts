@@ -141,7 +141,7 @@ describe("spawnDetachedCommand の指定（AC7）", () => {
 describe.skipIf(process.platform === "win32")("spawnDetachedCommand の実物（AC7）", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "wtm-detached-test-"));
+    dir = await mkdtemp(join(tmpdir(), "soda-detached-test-"));
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -152,10 +152,10 @@ describe.skipIf(process.platform === "win32")("spawnDetachedCommand の実物（
     let done = 0;
     await new Promise<void>((resolve, reject) => {
       spawnDetachedCommand(
-        commandArgv("shell", 'printf "%s|%s" "$WTM_COMMAND_ID" "$(pwd -P)" > out.txt', "linux", {}),
+        commandArgv("shell", 'printf "%s|%s" "$SODA_COMMAND_ID" "$(pwd -P)" > out.txt', "linux", {}),
         {
           cwd: dir,
-          env: { PATH: process.env["PATH"] ?? "/usr/bin:/bin", WTM_COMMAND_ID: "build" },
+          env: { PATH: process.env["PATH"] ?? "/usr/bin:/bin", SODA_COMMAND_ID: "build" },
           platform: "linux",
         },
         () => {

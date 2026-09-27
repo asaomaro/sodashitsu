@@ -38,7 +38,7 @@ describe("reportAndExit — 終了コードとエラーの分類（design「終�
   it("CliUsageError は exit 2・message と hint を stderr へ（JSON エラーは書かない）", () => {
     const writeSpy = vi.mocked(process.stderr.write);
     reportAndExit(new CliUsageError("bad arg", "usage: ..."));
-    expect(errSpy).toHaveBeenNthCalledWith(1, "wtmctl: bad arg");
+    expect(errSpy).toHaveBeenNthCalledWith(1, "sodactl: bad arg");
     expect(errSpy).toHaveBeenNthCalledWith(2, "usage: ...");
     expect(exitSpy).toHaveBeenCalledWith(2);
     // `process.exit` はテストでは実プロセスを終えない（実運用では `process.exit` の型が `never` で、

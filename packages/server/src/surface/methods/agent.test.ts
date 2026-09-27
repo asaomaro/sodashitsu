@@ -1,5 +1,5 @@
-import type { AgentInfo, Pane } from "@wtm/protocol";
-import { MAX_AGENT_PROMPT_BYTES } from "@wtm/protocol";
+import type { AgentInfo, Pane } from "@sodashitsu/protocol";
+import { MAX_AGENT_PROMPT_BYTES } from "@sodashitsu/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryLogger } from "../../log/Logger.js";
 import type { InputModes } from "../../terminal/Mirror.js";

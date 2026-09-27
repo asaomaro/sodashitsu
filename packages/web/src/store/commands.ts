@@ -1,4 +1,4 @@
-import type { CommandInfo, CommandListResult } from "@wtm/protocol";
+import type { CommandInfo, CommandListResult } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { ref } from "vue";
 

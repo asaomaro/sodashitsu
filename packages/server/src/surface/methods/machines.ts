@@ -1,4 +1,4 @@
-import { MachineListParams } from "@wtm/protocol";
+import { MachineListParams } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 

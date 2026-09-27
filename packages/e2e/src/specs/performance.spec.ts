@@ -12,7 +12,7 @@ import { expect, test } from "../support/fixtures.js";
  * 環境を選べる親の統合 test に委ねる）。「状態の反映」は T5（`agent-detection.spec.ts`）で
  * 2 秒以内であることを既に実地に計測・アサートしているので、ここでは重複させない。
  * この spec のレイテンシ計測は、ブラウザの `page.keyboard` を経由すると Playwright 自身の入力遅延が
- * 上乗せされて「サーバ〜ネットワーク」の遅延が見えなくなるため、生の `WtmTestClient`（`sendInput`/
+ * 上乗せされて「サーバ〜ネットワーク」の遅延が見えなくなるため、生の `SodaTestClient`（`sendInput`/
  * `armNextOutput`）を使う——ブラウザを経由しない分、実際のブラウザでの体感より小さい値が出る
  * （design の「別のマシンのブラウザから行う」LAN 計測は親の統合 test の担当。ここは仕組みの検証）。
  * 計測は他の spec と同時に走らせない（`playwright.config.ts` の `workers: 1`。05-e2e-docs T13・decisions.md D104）——

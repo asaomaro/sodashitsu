@@ -29,7 +29,7 @@ test("エージェントの検出：idle→blocked の状態遷移がサイド�
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
   await focusTerminal(page);
 
-  const dir = await mkdtemp(join(tmpdir(), "wtm-e2e-agent-"));
+  const dir = await mkdtemp(join(tmpdir(), "soda-e2e-agent-"));
   const scriptPath = join(dir, "fake-claude.sh");
   // `ManifestEngine.test.ts`「claude: Bash 承認プロンプト」と全く同じ画面（bash_permission_prompt に一致する）。
   const blockedScreen = [
@@ -55,7 +55,7 @@ test("エージェントの検出：idle→blocked の状態遷移がサイド�
   // 最初その区別を知らずに計測し、この spec 自身が誤って 3 秒超のレイテンシを「不具合」と早合点しかけた）。
   // そのため、まず何でもない画面（`echo READY` の出力のみ。idle 相当）を出して猶予が明けるのを待ち、
   // そこから blocked の画面へ切り替えたタイミングを計測の起点にする。
-  const readyMarker = `wtm-e2e-agentready-${Date.now()}`;
+  const readyMarker = `soda-e2e-agentready-${Date.now()}`;
   const script = [
     "clear",
     `echo ${readyMarker}`,

@@ -4,7 +4,7 @@ import {
   TERMINAL_PALETTES,
   THEME_APPEARANCE,
   THEME_NAMES,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import appVue from "../App.vue?raw";
 import {
@@ -31,10 +31,10 @@ describe.each(THEME_NAMES)("uiTokens(%s)", (name) => {
   const t = uiTokens(name);
   const v = t.vars;
   const rows = [
-    v["--wtm-bg"],
-    v["--wtm-menu-bg"],
-    v["--wtm-menu-hover-bg"],
-    v["--wtm-menu-active-bg"],
+    v["--soda-bg"],
+    v["--soda-menu-bg"],
+    v["--soda-menu-hover-bg"],
+    v["--soda-menu-active-bg"],
   ];
   const terminalBg = TERMINAL_PALETTES[name].background;
 
@@ -42,7 +42,7 @@ describe.each(THEME_NAMES)("uiTokens(%s)", (name) => {
     expect(Object.keys(v).sort()).toEqual([...CSS_VARS].sort());
     for (const k of CSS_VARS) {
       const pattern =
-        k === "--wtm-subtle-bg" || k === "--wtm-backdrop" || k === "--wtm-backdrop-strong"
+        k === "--soda-subtle-bg" || k === "--soda-backdrop" || k === "--soda-backdrop-strong"
           ? RGBA
           : HEX;
       expect(v[k], k).toMatch(pattern);
@@ -54,24 +54,24 @@ describe.each(THEME_NAMES)("uiTokens(%s)", (name) => {
   });
 
   it("文字は 0.7 に薄めても、背景・枠・hover・選択の行・淡い面の上で 4.5 以上。枠の文字も同じ色", () => {
-    const against = [...rows, subtleOver(t, v["--wtm-bg"]), subtleOver(t, v["--wtm-menu-bg"])];
-    expect(minRatio(v["--wtm-fg"], against, MUTED_TEXT_ALPHA)).toBeGreaterThanOrEqual(4.5);
-    expect(v["--wtm-menu-fg"]).toBe(v["--wtm-fg"]);
+    const against = [...rows, subtleOver(t, v["--soda-bg"]), subtleOver(t, v["--soda-menu-bg"])];
+    expect(minRatio(v["--soda-fg"], against, MUTED_TEXT_ALPHA)).toBeGreaterThanOrEqual(4.5);
+    expect(v["--soda-menu-fg"]).toBe(v["--soda-fg"]);
   });
 
-  it("フォーカスの枠（--wtm-fg）は、端末の背景を含めて 3 以上", () => {
-    expect(minRatio(v["--wtm-fg"], [...rows, terminalBg])).toBeGreaterThanOrEqual(3);
+  it("フォーカスの枠（--soda-fg）は、端末の背景を含めて 3 以上", () => {
+    expect(minRatio(v["--soda-fg"], [...rows, terminalBg])).toBeGreaterThanOrEqual(3);
   });
 
   it("再接続の表示の文字（強い幕の上に直に描き、0.85 に薄める）は、幕を重ねた端末の背景・背景の上で 4.5 以上（decisions D9）", () => {
-    const strong = v["--wtm-backdrop-strong"];
+    const strong = v["--soda-backdrop-strong"];
     expect(
       minRatio(
-        v["--wtm-fg"],
+        v["--soda-fg"],
         [
           overlay(strong, terminalBg),
-          overlay(strong, v["--wtm-bg"]),
-          overlay(strong, v["--wtm-menu-bg"]),
+          overlay(strong, v["--soda-bg"]),
+          overlay(strong, v["--soda-menu-bg"]),
         ],
         0.85,
       ),
@@ -79,44 +79,44 @@ describe.each(THEME_NAMES)("uiTokens(%s)", (name) => {
   });
 
   it("選択の面（表示中の tab・行・選んだ項目）は、枠の背景から 1.5 以上離れる（review ラウンド 1。decisions D15）", () => {
-    expect(contrastRatio(v["--wtm-menu-active-bg"], v["--wtm-menu-bg"])).toBeGreaterThanOrEqual(
+    expect(contrastRatio(v["--soda-menu-active-bg"], v["--soda-menu-bg"])).toBeGreaterThanOrEqual(
       MIN_SELECTED_SURFACE_RATIO,
     );
   });
 
   it("選ばれている pane の枠は、周りの背景と端末の背景に対して 3 以上（dracula は今の #44475a のまま。decisions D15）", () => {
     if (name === "dracula") {
-      expect(v["--wtm-pane-current"]).toBe("#44475a");
+      expect(v["--soda-pane-current"]).toBe("#44475a");
       return;
     }
-    expect(minRatio(v["--wtm-pane-current"], [v["--wtm-bg"], terminalBg])).toBeGreaterThanOrEqual(
+    expect(minRatio(v["--soda-pane-current"], [v["--soda-bg"], terminalBg])).toBeGreaterThanOrEqual(
       3,
     );
   });
 
   it("アクセントの上の文字（押された状態）は 4.5 以上", () => {
-    expect(contrastRatio(v["--wtm-accent-fg"], v["--wtm-accent"])).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(v["--soda-accent-fg"], v["--soda-accent"])).toBeGreaterThanOrEqual(4.5);
   });
 
   it("エラーの文字は背景・枠・端末の背景の上で 4.5 以上、警告の文字はサイドバーの行の上で 4.5 以上", () => {
     expect(
-      minRatio(v["--wtm-error-fg"], [v["--wtm-bg"], v["--wtm-menu-bg"], terminalBg]),
+      minRatio(v["--soda-error-fg"], [v["--soda-bg"], v["--soda-menu-bg"], terminalBg]),
     ).toBeGreaterThanOrEqual(4.5);
     expect(
-      minRatio(v["--wtm-warn-fg"], [
-        v["--wtm-menu-bg"],
-        v["--wtm-menu-hover-bg"],
-        v["--wtm-menu-active-bg"],
+      minRatio(v["--soda-warn-fg"], [
+        v["--soda-menu-bg"],
+        v["--soda-menu-hover-bg"],
+        v["--soda-menu-active-bg"],
       ]),
     ).toBeGreaterThanOrEqual(4.5);
   });
 
   it("状態の記号の 4 色は、背景・枠・hover・選択の行の上で 3 以上（unknown は文字の色で、上で確かめた）", () => {
     for (const k of [
-      "--wtm-state-blocked",
-      "--wtm-state-working",
-      "--wtm-state-done",
-      "--wtm-state-idle",
+      "--soda-state-blocked",
+      "--soda-state-working",
+      "--soda-state-done",
+      "--soda-state-idle",
     ] as const) {
       expect(minRatio(v[k], rows), k).toBeGreaterThanOrEqual(3);
     }
@@ -127,25 +127,25 @@ describe("dracula は今の見た目", () => {
   it("今の値そのもの（変えたのはアクセントだけ。decisions D1）", () => {
     expect(uiTokens("dracula")).toEqual({
       vars: {
-        "--wtm-bg": "#1e1f29",
-        "--wtm-fg": "#f8f8f2",
-        "--wtm-menu-bg": "#282a36",
-        "--wtm-menu-fg": "#f8f8f2",
-        "--wtm-menu-border": "#44475a",
-        "--wtm-menu-active-bg": "#44475a",
-        "--wtm-menu-hover-bg": "#343746",
-        "--wtm-accent": "#6070a1",
-        "--wtm-accent-fg": "#f8f8f2",
-        "--wtm-error-fg": "#ff5555",
-        "--wtm-warn-fg": "#ffb86c",
-        "--wtm-state-blocked": "#ff6e6e",
-        "--wtm-state-working": "#f1fa8c",
-        "--wtm-state-done": "#50fa7b",
-        "--wtm-state-idle": "#8a9ad0",
-        "--wtm-subtle-bg": "rgba(255, 255, 255, 0.08)",
-        "--wtm-backdrop": "rgba(0, 0, 0, 0.4)",
-        "--wtm-backdrop-strong": "rgba(0, 0, 0, 0.5)",
-        "--wtm-pane-current": "#44475a",
+        "--soda-bg": "#1e1f29",
+        "--soda-fg": "#f8f8f2",
+        "--soda-menu-bg": "#282a36",
+        "--soda-menu-fg": "#f8f8f2",
+        "--soda-menu-border": "#44475a",
+        "--soda-menu-active-bg": "#44475a",
+        "--soda-menu-hover-bg": "#343746",
+        "--soda-accent": "#6070a1",
+        "--soda-accent-fg": "#f8f8f2",
+        "--soda-error-fg": "#ff5555",
+        "--soda-warn-fg": "#ffb86c",
+        "--soda-state-blocked": "#ff6e6e",
+        "--soda-state-working": "#f1fa8c",
+        "--soda-state-done": "#50fa7b",
+        "--soda-state-idle": "#8a9ad0",
+        "--soda-subtle-bg": "rgba(255, 255, 255, 0.08)",
+        "--soda-backdrop": "rgba(0, 0, 0, 0.4)",
+        "--soda-backdrop-strong": "rgba(0, 0, 0, 0.5)",
+        "--soda-pane-current": "#44475a",
       },
       colorScheme: "dark",
     });
@@ -157,7 +157,7 @@ describe("dracula は今の見た目", () => {
       [
         ...root
           .replace(/\/\*[\s\S]*?\*\//g, "")
-          .matchAll(/(--wtm-[a-z-]+|color-scheme):\s*([^;]+);/g),
+          .matchAll(/(--soda-[a-z-]+|color-scheme):\s*([^;]+);/g),
       ].map((m) => [m[1], m[2]!.trim()]),
     );
     const t = uiTokens("dracula");
@@ -170,12 +170,12 @@ describe("組み立ての規則（design の表）", () => {
     for (const n of THEME_NAMES.filter((x) => x !== "dracula")) {
       const v = uiTokens(n).vars;
       const dark = THEME_APPEARANCE[n] === "dark";
-      expect(v["--wtm-menu-hover-bg"], n).toBe(
-        mixHex(v["--wtm-menu-bg"], v["--wtm-menu-active-bg"], 0.5),
+      expect(v["--soda-menu-hover-bg"], n).toBe(
+        mixHex(v["--soda-menu-bg"], v["--soda-menu-active-bg"], 0.5),
       );
-      expect(v["--wtm-bg"], n).toBe(mixHex(v["--wtm-menu-bg"], "#000000", dark ? 0.75 : 0.96));
-      expect([v["--wtm-fg"], v["--wtm-menu-bg"]], n).toContain(v["--wtm-accent-fg"]);
-      expect(v["--wtm-subtle-bg"], n).toBe(
+      expect(v["--soda-bg"], n).toBe(mixHex(v["--soda-menu-bg"], "#000000", dark ? 0.75 : 0.96));
+      expect([v["--soda-fg"], v["--soda-menu-bg"]], n).toContain(v["--soda-accent-fg"]);
+      expect(v["--soda-subtle-bg"], n).toBe(
         dark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)",
       );
     }
@@ -183,46 +183,46 @@ describe("組み立ての規則（design の表）", () => {
 
   it("暗いテーマ・明るいテーマの 1 つずつを値で固定する（herdr の値から寄せた結果。警告は peach・idle は overlay1 から）", () => {
     expect(uiTokens("catppuccin").vars).toEqual({
-      "--wtm-bg": "#12121c",
-      "--wtm-fg": "#cdd6f4",
-      "--wtm-menu-bg": "#181825",
-      "--wtm-menu-fg": "#cdd6f4",
-      "--wtm-menu-border": "#313244",
-      "--wtm-menu-active-bg": "#37384a",
-      "--wtm-menu-hover-bg": "#282838",
-      "--wtm-accent": "#89b4fa",
-      "--wtm-accent-fg": "#181825",
-      "--wtm-error-fg": "#f38ba8",
-      "--wtm-warn-fg": "#fab387",
-      "--wtm-state-blocked": "#f38ba8",
-      "--wtm-state-working": "#f9e2af",
-      "--wtm-state-done": "#a6e3a1",
-      "--wtm-state-idle": "#7f849c",
-      "--wtm-subtle-bg": "rgba(255, 255, 255, 0.08)",
-      "--wtm-backdrop": "rgba(0, 0, 0, 0.4)",
-      "--wtm-backdrop-strong": "rgba(0, 0, 0, 0.5)",
-      "--wtm-pane-current": "#696976",
+      "--soda-bg": "#12121c",
+      "--soda-fg": "#cdd6f4",
+      "--soda-menu-bg": "#181825",
+      "--soda-menu-fg": "#cdd6f4",
+      "--soda-menu-border": "#313244",
+      "--soda-menu-active-bg": "#37384a",
+      "--soda-menu-hover-bg": "#282838",
+      "--soda-accent": "#89b4fa",
+      "--soda-accent-fg": "#181825",
+      "--soda-error-fg": "#f38ba8",
+      "--soda-warn-fg": "#fab387",
+      "--soda-state-blocked": "#f38ba8",
+      "--soda-state-working": "#f9e2af",
+      "--soda-state-done": "#a6e3a1",
+      "--soda-state-idle": "#7f849c",
+      "--soda-subtle-bg": "rgba(255, 255, 255, 0.08)",
+      "--soda-backdrop": "rgba(0, 0, 0, 0.4)",
+      "--soda-backdrop-strong": "rgba(0, 0, 0, 0.5)",
+      "--soda-pane-current": "#696976",
     });
     expect(uiTokens("catppuccin-latte").vars).toEqual({
-      "--wtm-bg": "#e5e7eb",
-      "--wtm-fg": "#1f202b",
-      "--wtm-menu-bg": "#eff1f5",
-      "--wtm-menu-fg": "#1f202b",
-      "--wtm-menu-border": "#ccd0da",
-      "--wtm-menu-active-bg": "#c2c6cf",
-      "--wtm-menu-hover-bg": "#d9dce2",
-      "--wtm-accent": "#1d63ee",
-      "--wtm-accent-fg": "#eff1f5",
-      "--wtm-error-fg": "#ce0f38",
-      "--wtm-warn-fg": "#8e3806",
-      "--wtm-state-blocked": "#d20f39",
-      "--wtm-state-working": "#986114",
-      "--wtm-state-done": "#317b21",
-      "--wtm-state-idle": "#6a6d7a",
-      "--wtm-subtle-bg": "rgba(0, 0, 0, 0.06)",
-      "--wtm-backdrop": "rgba(0, 0, 0, 0.4)",
-      "--wtm-backdrop-strong": "rgba(255, 255, 255, 0.6)",
-      "--wtm-pane-current": "#818389",
+      "--soda-bg": "#e5e7eb",
+      "--soda-fg": "#1f202b",
+      "--soda-menu-bg": "#eff1f5",
+      "--soda-menu-fg": "#1f202b",
+      "--soda-menu-border": "#ccd0da",
+      "--soda-menu-active-bg": "#c2c6cf",
+      "--soda-menu-hover-bg": "#d9dce2",
+      "--soda-accent": "#1d63ee",
+      "--soda-accent-fg": "#eff1f5",
+      "--soda-error-fg": "#ce0f38",
+      "--soda-warn-fg": "#8e3806",
+      "--soda-state-blocked": "#d20f39",
+      "--soda-state-working": "#986114",
+      "--soda-state-done": "#317b21",
+      "--soda-state-idle": "#6a6d7a",
+      "--soda-subtle-bg": "rgba(0, 0, 0, 0.06)",
+      "--soda-backdrop": "rgba(0, 0, 0, 0.4)",
+      "--soda-backdrop-strong": "rgba(255, 255, 255, 0.6)",
+      "--soda-pane-current": "#818389",
     });
   });
 
@@ -240,7 +240,7 @@ describe("寄せても明暗の向きは変わらない", () => {
     for (const n of THEME_NAMES) {
       const v = uiTokens(n).vars;
       const bgLighter =
-        contrastRatio(v["--wtm-menu-bg"], "#000000") > contrastRatio(v["--wtm-fg"], "#000000");
+        contrastRatio(v["--soda-menu-bg"], "#000000") > contrastRatio(v["--soda-fg"], "#000000");
       expect(bgLighter ? "light" : "dark", n).toBe(THEME_APPEARANCE[n]);
     }
   });
@@ -278,7 +278,7 @@ describe("部品の CSS の透明度", () => {
 });
 
 /**
- * 警告の文字（`--wtm-warn-fg`）は不透明のまま 4.5 に寄せる（上の検査）。だから**薄めて描いてはならない**——サイドバーの 2 行目は補足の文字を
+ * 警告の文字（`--soda-warn-fg`）は不透明のまま 4.5 に寄せる（上の検査）。だから**薄めて描いてはならない**——サイドバーの 2 行目は補足の文字を
  * 0.75 に薄めるが、警告（未検証）は薄めない（review ラウンド 2・decisions D16）。行ごと薄めると子の警告も薄まる（`opacity` は子に掛かる）。
  */
 describe("警告の文字を薄めない（Sidebar.vue）", () => {

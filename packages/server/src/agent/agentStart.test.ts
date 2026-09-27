@@ -1,4 +1,4 @@
-import { AGENT_START_KINDS, agentStartExecutable } from "@wtm/protocol";
+import { AGENT_START_KINDS, agentStartExecutable } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import type { ForegroundJob } from "../platform/ProcessInspector.js";
 import {

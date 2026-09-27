@@ -13,16 +13,16 @@ import { routeRecordingWebSocket, type RecordingWebSocketRoute } from "../suppor
  * ため、実物のサーバへの生の fetch でも確認する（他の2つと対称に「拒否されること」を確かめる。画面での表示は下の D105）。
  *
  * D105：ログイン画面は失敗を理由ごとに示す（以前は全て「ログインできませんでした」で、Origin の不一致（403）の利用者が
- * token の誤りと思い込み `wtm token reset` へ進んでいた）。403・429 は実物のサーバの振る舞いで確かめる——403 は
- * サーバの許可リストに無い名前でページを開く（Chromium の `--host-resolver-rules` で `wtm-e2e.test` を 127.0.0.1 へ
+ * token の誤りと思い込み `soda token reset` へ進んでいた）。403・429 は実物のサーバの振る舞いで確かめる——403 は
+ * サーバの許可リストに無い名前でページを開く（Chromium の `--host-resolver-rules` で `soda-e2e.test` を 127.0.0.1 へ
  * 向ける。ブラウザは自分が開いているページの Origin を正しく送るので、利用者が LAN の名前・転送したポートで開いたときと
- * 同じ形になる）、429 は誤った token を 5 回送ってからブラウザで正しい token を送る。wtm 自身は付けない `Retry-After` と
+ * 同じ形になる）、429 は誤った token を 5 回送ってからブラウザで正しい token を送る。soda 自身は付けない `Retry-After` と
  * 通信の失敗は `page.route` で作る。
  */
 
-// `wtm-e2e.test` を 127.0.0.1 へ向ける（上の 403 の確かめ用。他の test は 127.0.0.1 で開くので影響しない）。launch の引数は
+// `soda-e2e.test` を 127.0.0.1 へ向ける（上の 403 の確かめ用。他の test は 127.0.0.1 で開くので影響しない）。launch の引数は
 // ワーカー単位なので、describe ではなくファイルの先頭で指定する。
-const FOREIGN_HOST = "wtm-e2e.test";
+const FOREIGN_HOST = "soda-e2e.test";
 test.use({ launchOptions: { args: [`--host-resolver-rules=MAP ${FOREIGN_HOST} 127.0.0.1`] } });
 
 /** 次の `POST /api/login` の応答（ブラウザが受けたもの）を待つ。 */
@@ -96,7 +96,7 @@ test("ログインの失敗が続いたら（429）、正しい token でも入�
   await expect(page.locator(".login-view input")).toHaveValue(appServer.token);
 });
 
-test("429 に Retry-After があれば、その時間を示す（wtm 自身は付けない——前段のプロキシ等の場合。page.route で作る。D105）", async ({ page, appServer }) => {
+test("429 に Retry-After があれば、その時間を示す（soda 自身は付けない——前段のプロキシ等の場合。page.route で作る。D105）", async ({ page, appServer }) => {
   await page.route("**/api/login", (route) => route.fulfill({ status: 429, headers: { "retry-after": "30" } }));
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
   await expect(page.locator(".login-view-error")).toContainText("30 秒ほど待って");

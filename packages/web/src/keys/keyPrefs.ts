@@ -8,7 +8,7 @@ import {
   prefixBytes,
 } from "./chord.js";
 import { NAVIGATE_KEYS, NAVIGATE_RESERVED_CHORDS, navigateKeyDef, type NavigateKeyId } from "./navigateKeys.js";
-import { COMMAND_ID_RE } from "@wtm/protocol";
+import { COMMAND_ID_RE } from "@sodashitsu/protocol";
 import { commandIdOf, isCommandKeyId, type KeyTargetId } from "./commandKeys.js";
 
 /** 保存しておく独自コマンドの割り当ての数の上限（一覧から消えたコマンドの分も残すので、際限なく溜めない）。 */
@@ -17,7 +17,7 @@ export const COMMAND_BINDINGS_MAX = 200;
 /**
  * このブラウザに保存する割り当て（20260921-keybinding-customization。design「保存」・D2。navigate の
  * 6操作は 20260923-navigate-mode-keys で追加）。**既定との差だけ**を持つ——既定を保存しないので、
- * 更新で既定が変わっても差の無い操作には届く。`wtm.prefs.v1` の `keys` に `{ prefix?, bindings?, navigate? }`
+ * 更新で既定が変わっても差の無い操作には届く。`soda.prefs.v1` の `keys` に `{ prefix?, bindings?, navigate? }`
  * （差が無ければ `keys` ごと消す）。
  *
  * 読み込みは**値ごとに落とす**（残りは生かす。`store/settings.ts` の他の設定と同じ流儀）。**衝突・予約の判定はここではしない**——`keymap.ts` の `resolveKeymap`／
@@ -124,7 +124,7 @@ function normalizeNavigateList(id: NavigateKeyId, raw: readonly unknown[]): stri
   return list;
 }
 
-/** `wtm.prefs.v1` の `keys` を読む。形が違えば空（既定）。 */
+/** `soda.prefs.v1` の `keys` を読む。形が違えば空（既定）。 */
 export function loadKeyPrefs(raw: unknown): KeyPrefs {
   const prefs = emptyKeyPrefs();
   if (!isRecord(raw)) return prefs;

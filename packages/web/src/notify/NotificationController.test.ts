@@ -1,4 +1,4 @@
-import type { AgentInfo, Pane, Tab, Workspace } from "@wtm/protocol";
+import type { AgentInfo, Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useNotificationsStore } from "../store/notifications.js";

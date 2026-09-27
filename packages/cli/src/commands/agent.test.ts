@@ -1,7 +1,7 @@
-import type { AgentInfo, ServerEvent } from "@wtm/protocol";
+import type { AgentInfo, ServerEvent } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "../session.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 import {
   runAgentGet,
   runAgentList,
@@ -41,14 +41,14 @@ interface PaneSeed {
   agent: AgentInfo | null;
 }
 
-interface FakeClient extends WtmClient {
+interface FakeClient extends SodaClient {
   emitEvent(evt: ServerEvent): void;
   emitSnapshot(paneId: string, text: string): void;
   emitClose(code: number, reason: string): void;
 }
 
 /**
- * 実物の `WsWtmClient` と同じく、`hello(cb)` は応答を受け取ったその場で `cb` を購読に加える。`withHello` は応答と
+ * 実物の `WsSodaClient` と同じく、`hello(cb)` は応答を受け取ったその場で `cb` を購読に加える。`withHello` は応答と
  * 同じ受信の塊で直後に届くイベント（購読の登録より後・Promise の続きより前に配られる）、`beforeHello` は応答より
  * 前に届いた（snapshot より古い）イベントを模す。
  */

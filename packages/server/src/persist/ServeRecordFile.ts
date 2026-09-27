@@ -4,7 +4,7 @@ import { writeFileAtomic } from "./atomicFile.js";
 
 /**
  * 起動の記録（20260926-named-session-ui の design「記録」）。待ち受けに成功したサーバが状態ディレクトリに書き、止まっても消さない。
- * 2 役：名前付き session のポートの記憶（`--port` の無い起動で使う）と、session の一覧の「開くための情報」（`wtm.lock` の持ち主と
+ * 2 役：名前付き session のポートの記憶（`--port` の無い起動で使う）と、session の一覧の「開くための情報」（`soda.lock` の持ち主と
  * pid・ホスト名が一致するときだけ信じる。`namedSession.ts` の `listServerSessions`）。秘密は持たない（0600 は他の状態ファイルに揃えた）。
  */
 export const SERVE_RECORD_FILE_NAME = "serve.json";

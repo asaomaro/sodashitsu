@@ -9,7 +9,7 @@ import HelpDialog from "./HelpDialog.vue";
 let pinia: Pinia;
 
 beforeEach(() => {
-  localStorage.clear(); // 割り当て（wtm.prefs.v1 の keys）を保存するテストがあるので、前のテストの値を持ち越さない
+  localStorage.clear(); // 割り当て（soda.prefs.v1 の keys）を保存するテストがあるので、前のテストの値を持ち越さない
   pinia = createPinia();
 });
 afterEach(() => {

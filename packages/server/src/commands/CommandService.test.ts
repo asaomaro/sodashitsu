@@ -1,4 +1,4 @@
-import type { Pane, ServerEvent } from "@wtm/protocol";
+import type { Pane, ServerEvent } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import type { CreatePaneOptions } from "../terminal/TerminalManager.js";
 import { MemoryLogger } from "../log/Logger.js";
@@ -80,7 +80,7 @@ function setup(
       },
       commandEnv: (own: string | undefined, extra: Readonly<Record<string, string>>) => ({
         PATH: "/usr/bin",
-        ...(own ? { WTM_PANE_ID: own } : {}),
+        ...(own ? { SODA_PANE_ID: own } : {}),
         ...extra,
       }),
       openCommandPane: async (
@@ -183,7 +183,7 @@ describe("CommandService — run（AC4〜AC11）", () => {
     expect(spawned).toEqual([]);
   });
 
-  it("shell：/bin/sh -lc <設定の文字列> を作業場所・環境（WTM_PANE_ID なし）で裏に走らせる", async () => {
+  it("shell：/bin/sh -lc <設定の文字列> を作業場所・環境（SODA_PANE_ID なし）で裏に走らせる", async () => {
     const { service, spawned } = setup();
     await service.reload();
     expect(await service.run("c1", { commandId: "build", paneId: "p1" })).toEqual({
@@ -194,20 +194,20 @@ describe("CommandService — run（AC4〜AC11）", () => {
     expect(spawned[0]!.cwd).toBe("/home/u/api");
     expect(spawned[0]!.env).toEqual({
       PATH: "/usr/bin",
-      WTM_ACTIVE_WORKSPACE_ID: "w1",
-      WTM_ACTIVE_TAB_ID: "t1",
-      WTM_ACTIVE_PANE_ID: "p1",
-      WTM_ACTIVE_PANE_CWD: "/home/u/api",
-      WTM_COMMAND_ID: "build",
+      SODA_ACTIVE_WORKSPACE_ID: "w1",
+      SODA_ACTIVE_TAB_ID: "t1",
+      SODA_ACTIVE_PANE_ID: "p1",
+      SODA_ACTIVE_PANE_CWD: "/home/u/api",
+      SODA_COMMAND_ID: "build",
     });
   });
 
-  it("作業場所がディレクトリでなければサーバの既定の場所（WTM_ACTIVE_PANE_CWD はモデルの値のまま）", async () => {
+  it("作業場所がディレクトリでなければサーバの既定の場所（SODA_ACTIVE_PANE_CWD はモデルの値のまま）", async () => {
     const { service, spawned } = setup({ isDir: false });
     await service.reload();
     await service.run("c1", { commandId: "build", paneId: "p1" });
     expect(spawned[0]!.cwd).toBe("/start");
-    expect(spawned[0]!.env["WTM_ACTIVE_PANE_CWD"]).toBe("/home/u/api");
+    expect(spawned[0]!.env["SODA_ACTIVE_PANE_CWD"]).toBe("/home/u/api");
   });
 
   it("shell：上限に達したら command_busy。終われば（成功でも失敗でも）数が戻る", async () => {
@@ -239,7 +239,7 @@ describe("CommandService — run（AC4〜AC11）", () => {
     }); // busy ではない
   });
 
-  it("pane：/bin/sh -c <設定の文字列> と WTM_ACTIVE_* を SessionService の pane 種へ渡す", async () => {
+  it("pane：/bin/sh -c <設定の文字列> と SODA_ACTIVE_* を SessionService の pane 種へ渡す", async () => {
     const { service, panes } = setup();
     await service.reload();
     expect(await service.run("c1", { commandId: "htop", paneId: "p1" })).toEqual({
@@ -254,18 +254,18 @@ describe("CommandService — run（AC4〜AC11）", () => {
           shell: "/bin/sh",
           args: ["-c", "htop"],
           env: {
-            WTM_ACTIVE_WORKSPACE_ID: "w1",
-            WTM_ACTIVE_TAB_ID: "t1",
-            WTM_ACTIVE_PANE_ID: "p1",
-            WTM_ACTIVE_PANE_CWD: "/home/u/api",
-            WTM_COMMAND_ID: "htop",
+            SODA_ACTIVE_WORKSPACE_ID: "w1",
+            SODA_ACTIVE_TAB_ID: "t1",
+            SODA_ACTIVE_PANE_ID: "p1",
+            SODA_ACTIVE_PANE_CWD: "/home/u/api",
+            SODA_COMMAND_ID: "htop",
           },
         },
       },
     ]);
   });
 
-  it("popup：モデルに入れない端末を大きさどおりに作り、WTM_PANE_ID を入れない。文字列は設定のまま", async () => {
+  it("popup：モデルに入れない端末を大きさどおりに作り、SODA_PANE_ID を入れない。文字列は設定のまま", async () => {
     const { service, created } = setup();
     await service.reload();
     const r = await service.run("c1", { commandId: "git", paneId: "p1", cols: 90, rows: 30 });
@@ -279,8 +279,8 @@ describe("CommandService — run（AC4〜AC11）", () => {
       cols: 90,
       rows: 30,
     });
-    expect(created[0]!.opts.env?.["WTM_PANE_ID"]).toBeUndefined();
-    expect(created[0]!.opts.env?.["WTM_COMMAND_ID"]).toBe("git");
+    expect(created[0]!.opts.env?.["SODA_PANE_ID"]).toBeUndefined();
+    expect(created[0]!.opts.env?.["SODA_COMMAND_ID"]).toBe("git");
     expect(service.popupSize("c1", "p100")).toEqual({ cols: 90, rows: 30 });
   });
 
@@ -332,7 +332,7 @@ describe("CommandService — run（AC4〜AC11）", () => {
     expect(s.panes[0]!.command).toMatchObject({ shell: "C:\\cmd.exe", args: '/d /s /c "htop"' });
   });
 
-  it("popup：外部の接続（wtmctl）・大きさが無い要求は invalid_params", async () => {
+  it("popup：外部の接続（sodactl）・大きさが無い要求は invalid_params", async () => {
     const { service, created } = setup();
     await service.reload();
     await expect(

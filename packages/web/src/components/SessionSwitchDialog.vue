@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ServerSessionEntry } from "@wtm/protocol";
+import type { ServerSessionEntry } from "@sodashitsu/protocol";
 import { computed, inject, nextTick, ref, watch } from "vue";
 import { ActionDispatcherKey } from "../injection.js";
 import { sessionTarget, type SessionTarget } from "../serverSession/sessionTarget.js";
@@ -186,16 +186,16 @@ function onKeydown(ev: KeyboardEvent): void {
 
 <style scoped>
 .session-switch-dialog {
-  border: 1px solid var(--wtm-menu-border, #44475a);
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-menu-fg, #f8f8f2);
+  border: 1px solid var(--soda-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
   border-radius: 4px;
   min-width: 24em;
   max-width: min(40em, 90vw);
   padding: 1em;
 }
 .session-switch-dialog::backdrop {
-  background: var(--wtm-backdrop, rgba(0, 0, 0, 0.4));
+  background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
 .session-switch-dialog-head {
   display: flex;
@@ -211,7 +211,7 @@ function onKeydown(ev: KeyboardEvent): void {
 }
 .session-switch-dialog-close {
   background: none;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   color: inherit;
   border-radius: 3px;
   cursor: pointer;
@@ -231,11 +231,11 @@ function onKeydown(ev: KeyboardEvent): void {
   cursor: pointer;
 }
 .session-switch-dialog-item:hover {
-  background: var(--wtm-menu-hover-bg, #343746);
+  background: var(--soda-menu-hover-bg, #343746);
 }
 /* `:hover` と詳細度をそろえ、後に置くことで選択中を勝たせる（`GroupPickerDialog.vue` と同じ理由）。 */
 .session-switch-dialog-item.session-switch-dialog-item-selected {
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
 }
 .session-switch-dialog-item-disabled {
   cursor: default;

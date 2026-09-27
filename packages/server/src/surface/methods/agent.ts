@@ -4,8 +4,8 @@ import {
   AgentSendKeysParams,
   AgentStartParams,
   RpcError,
-} from "@wtm/protocol";
-import type { AgentInfo } from "@wtm/protocol";
+} from "@sodashitsu/protocol";
+import type { AgentInfo } from "@sodashitsu/protocol";
 import {
   AGENT_PROMPT_SUBMIT_DELAY_MS,
   encodeKey,

@@ -20,7 +20,7 @@ test("vim: 全画面 TUI が alternate screen へ入り、編集・保存・終�
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
   await focusTerminal(page);
 
-  const path = "/tmp/wtm-e2e-vim-test.txt";
+  const path = "/tmp/soda-e2e-vim-test.txt";
   await typeLine(page, `vim ${path}`);
   await client.waitForOutput(p1, path); // vim のタイトル/ステータス行にファイル名が出る
   await client.waitForOutput(p1, "\x1b[?1049h"); // alternate screen buffer への切替（崩れず全画面化した証拠）
@@ -32,7 +32,7 @@ test("vim: 全画面 TUI が alternate screen へ入り、編集・保存・終�
   await page.keyboard.press("Enter");
   await client.waitForOutput(p1, "\x1b[?1049l"); // alternate screen から戻る（正常終了の証拠）
 
-  const marker = `wtm-e2e-vimcat-${Date.now()}`;
+  const marker = `soda-e2e-vimcat-${Date.now()}`;
   await typeLine(page, `cat ${path} && echo ${marker}`);
   await client.waitForOutput(p1, "hello from e2e"); // 保存した内容が実際にディスクへ書かれている
   await client.waitForOutput(p1, marker);
@@ -59,7 +59,7 @@ test("top: 別の全画面 TUI も崩れずにフルスクリーン描画・終�
   await client.waitForOutput(p1, "PID"); // top のヘッダ行（プロセス一覧の列名）
   await page.keyboard.press("q"); // top を終了
 
-  const marker = `wtm-e2e-topquit-${Date.now()}`;
+  const marker = `soda-e2e-topquit-${Date.now()}`;
   await typeLine(page, `echo ${marker}`); // top 終了後もシェルへ通常どおり入力できる（崩れず終了できた証拠）
   await client.waitForOutput(p1, marker);
 });
@@ -128,7 +128,7 @@ test("IME の合成入力：合成中は確定せず、確定（compositionend�
     (document.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement).value = "";
   });
 
-  const marker = `wtm-e2e-ime-${Date.now()}`;
+  const marker = `soda-e2e-ime-${Date.now()}`;
   await typeLine(page, `echo ${marker}`); // 確定後、通常のキー入力を続けられることも確認する
   await client.waitForOutput(p1, marker);
 });
@@ -141,7 +141,7 @@ test("IME の合成入力：合成中は確定せず、確定（compositionend�
  * コマンド自体が数字を含まないものを選び、実行より前には絶対に現れない「新しく現れた数字」を待つことで
  * 避ける。
  */
-async function runAndReadNumber(client: import("../support/wsClient.js").WtmTestClient, page: import("@playwright/test").Page, paneId: string, command: string): Promise<number> {
+async function runAndReadNumber(client: import("../support/wsClient.js").SodaTestClient, page: import("@playwright/test").Page, paneId: string, command: string): Promise<number> {
   const baseline = client.rawOutput(paneId).length;
   await typeLine(page, command);
   const deadline = Date.now() + 5000;

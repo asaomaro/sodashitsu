@@ -7,8 +7,8 @@ import type { HandoffReply, HandoffStatus } from "./HandoffController.js";
 import { handoffSocketPathFor } from "./HandoffSocket.js";
 
 /**
- * `wtm handoff [--state-dir D] [--session NAME]`（20260926-live-handoff。design「`wtm handoff`」）。動いている `wtm serve` に、pane の
- * プロセスを止めずにディスク上の wtm へ入れ替わるよう指示し、入れ替わった新しいサーバの答えを待って結果を表示する。
+ * `soda handoff [--state-dir D] [--session NAME]`（20260926-live-handoff。design「`soda handoff`」）。動いている `soda serve` に、pane の
+ * プロセスを止めずにディスク上の soda へ入れ替わるよう指示し、入れ替わった新しいサーバの答えを待って結果を表示する。
  * 終了コード: 0 成功（全 pane を引き継いだ）／1 失敗（拒否・確認の失敗・時間切れ・一部を引き継げなかった・別のホスト・受け口に繋げない）／
  * 2 指定の誤り・非対応（`ConfigError` を投げる。main が 2 にする）／3 サーバが動いていない。
  */
@@ -81,7 +81,7 @@ export async function runHandoff(
 ): Promise<number> {
   if (deps.platform === "win32") {
     throw new ConfigError(
-      "wtm handoff is not supported on Windows",
+      "soda handoff is not supported on Windows",
       "更新時の引き継ぎ（live handoff）は Linux と macOS だけで使えます（docs/verification.md）。",
     );
   }
@@ -90,18 +90,18 @@ export async function runHandoff(
   if (dir !== base && !(await isDirectory(dir))) {
     throw new ConfigError(
       `no such session: ${session}`,
-      `session ${session} はありません（${dir}）。wtm session list で名前を確かめてください。` +
+      `session ${session} はありません（${dir}）。soda session list で名前を確かめてください。` +
         (fromEnv !== undefined ? sessionFromEnvNote(fromEnv) : ""),
     );
   }
   const holder = await deps.inspect(dir);
   if (holder === undefined) {
-    io.err(`wtm: no wtm serve is running for ${dir}`);
+    io.err(`soda: no soda serve is running for ${dir}`);
     return HANDOFF_EXIT_NOT_RUNNING;
   }
   if (holder.otherHost !== undefined) {
     io.err(
-      `wtm: the wtm serve for ${dir} runs on another host (${holder.otherHost}, pid ${holder.pid}); run wtm handoff there`,
+      `soda: the soda serve for ${dir} runs on another host (${holder.otherHost}, pid ${holder.pid}); run soda handoff there`,
     );
     return 1;
   }
@@ -115,10 +115,10 @@ export async function runHandoff(
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT" || code === "ECONNREFUSED") {
       io.err(
-        `wtm: the running server (pid ${holder.pid}) does not accept a handoff (an older version, or still starting): ${socketPath}`,
+        `soda: the running server (pid ${holder.pid}) does not accept a handoff (an older version, or still starting): ${socketPath}`,
       );
     } else {
-      io.err(`wtm: handoff request failed: ${err instanceof Error ? err.message : String(err)}`);
+      io.err(`soda: handoff request failed: ${err instanceof Error ? err.message : String(err)}`);
     }
     return 1;
   }
@@ -128,16 +128,16 @@ export async function runHandoff(
         `the server cannot hand off: ${reply.message}`,
         "更新時の引き継ぎ（live handoff）は Linux と macOS の Node.js 24 以降で使えます。",
       );
-    io.err(`wtm: handoff refused (${reply.reason}): ${reply.message}`);
-    // 止まる途中（`wtm session stop`・Ctrl+C）の断りでは「動き続ける」とは言わない（20260927-session-stop）。
+    io.err(`soda: handoff refused (${reply.reason}): ${reply.message}`);
+    // 止まる途中（`soda session stop`・Ctrl+C）の断りでは「動き続ける」とは言わない（20260927-session-stop）。
     io.err(
       reply.reason === "stopping"
-        ? "wtm: the server is shutting down; start it again with wtm serve instead of handing off"
-        : "wtm: the server keeps running as before",
+        ? "soda: the server is shutting down; start it again with soda serve instead of handing off"
+        : "soda: the server keeps running as before",
     );
     return 1;
   }
-  io.out(`wtm: handing off ${reply.panes} pane(s) of pid ${holder.pid} to the wtm on disk…`);
+  io.out(`soda: handing off ${reply.panes} pane(s) of pid ${holder.pid} to the soda on disk…`);
 
   // 新しいサーバが待ち受け直して、同じ id の結果を答えるまで待つ。
   const deadline = deps.now() + (deps.completeTimeoutMs ?? 60_000);
@@ -152,21 +152,21 @@ export async function runHandoff(
     const last = status.lastHandoff;
     if (last === null || last.id !== reply.id) continue;
     if (last.error !== undefined) {
-      io.err(`wtm: handoff failed after it was accepted: ${last.error}`);
-      io.err("wtm: the server keeps running as before");
+      io.err(`soda: handoff failed after it was accepted: ${last.error}`);
+      io.err("soda: the server keeps running as before");
       return 1;
     }
     if (last.dropped > 0) {
       io.err(
-        `wtm: handoff finished, but ${last.dropped} pane(s) could not be kept (see server.log); ${last.adopted} pane(s) kept`,
+        `soda: handoff finished, but ${last.dropped} pane(s) could not be kept (see server.log); ${last.adopted} pane(s) kept`,
       );
       return 1;
     }
-    io.out(`wtm: handoff complete: ${last.adopted} pane(s) kept running`);
+    io.out(`soda: handoff complete: ${last.adopted} pane(s) kept running`);
     return 0;
   }
   io.err(
-    `wtm: the new server did not report the handoff within ${Math.round((deps.completeTimeoutMs ?? 60_000) / 1000)}s; check server.log in ${dir}`,
+    `soda: the new server did not report the handoff within ${Math.round((deps.completeTimeoutMs ?? 60_000) / 1000)}s; check server.log in ${dir}`,
   );
   return 1;
 }

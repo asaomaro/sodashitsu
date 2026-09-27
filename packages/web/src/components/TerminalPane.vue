@@ -99,6 +99,6 @@ function onMouseDownCapture(): void {
 }
 .terminal-pane-failed {
   padding: 1em;
-  color: var(--wtm-error-fg, #ff5555);
+  color: var(--soda-error-fg, #ff5555);
 }
 </style>

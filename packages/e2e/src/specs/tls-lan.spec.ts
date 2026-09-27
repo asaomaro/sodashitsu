@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { lanIpv4Addresses, type InterfaceAddress } from "@wtm/server";
+import { lanIpv4Addresses, type InterfaceAddress } from "@sodashitsu/server";
 import { getFreePort } from "../support/freePort.js";
 
 /**
@@ -12,13 +12,13 @@ import { getFreePort } from "../support/freePort.js";
  * LAN の IP アドレスへ HTTPS でつなぐ（docs/tls-setup.md の手順どおり）。**別のマシンからの接続は含まない**——
  * それは docs/verification.md の手順で実機で確かめる。
  *
- * つなぐ IP は、サーバが表示した `wtm: open https://<IP>:<port>/#token=…` の行から取る（localhost 以外の最初の行）。
- * 表示する LAN の IPv4 は、サーバ自身の純関数 `lanIpv4Addresses`（`@wtm/server` の testkit から。仮想ブリッジ——docker0・
+ * つなぐ IP は、サーバが表示した `soda: open https://<IP>:<port>/#token=…` の行から取る（localhost 以外の最初の行）。
+ * 表示する LAN の IPv4 は、サーバ自身の純関数 `lanIpv4Addresses`（`@sodashitsu/server` の testkit から。仮想ブリッジ——docker0・
  * br-*・vEthernet (WSL) 等——の除外の条件をここで重ねて持つとサーバとずれる。D102）でこのマシンのインタフェースから
  * 求め（skip の判断は読み込み時、表示との比較はサーバの出力を受けた直後に求め直したもの）、**表示されるべきものがあるのに
  * サーバの表示と一致しなければ（1 つも表示しない等）失敗にする**（以前は skip に
  * していたため、実際の NIC まで表示から除く退行が skip として見えなくなっていた。D103）。飛ばすのは、表示されるべき
- * LAN の IPv4 が本当に無いとき（仮想ブリッジだけ等）だけ。`WTM_LAN_IP` を与えればその IP につなぐ（表示の有無は問わない）。
+ * LAN の IPv4 が本当に無いとき（仮想ブリッジだけ等）だけ。`SODA_LAN_IP` を与えればその IP につなぐ（表示の有無は問わない）。
  */
 /** このマシンのインタフェース（`OsNetworkInfo.lanAddresses()` と同じ形で `lanIpv4Addresses` に渡す）。 */
 function interfaces(): InterfaceAddress[] {
@@ -29,7 +29,7 @@ function interfaces(): InterfaceAddress[] {
 const INTERFACES = interfaces();
 /** 読み込み時の見積もり（skip の判断と証明書の SAN にだけ使う。表示との比較は、サーバの出力を受けた直後に求め直す）。 */
 const DISPLAYABLE_IPV4 = lanIpv4Addresses(INTERFACES);
-const LAN_IP_OVERRIDE = process.env.WTM_LAN_IP;
+const LAN_IP_OVERRIDE = process.env.SODA_LAN_IP;
 const MAIN = fileURLToPath(new URL("../../../server/dist/main.js", import.meta.url));
 
 test("LAN の IP アドレスへ TLS でつなぎ、ログイン・表示・入力ができる（AC11 の同一マシン版）", async () => {
@@ -37,12 +37,12 @@ test("LAN の IP アドレスへ TLS でつなぎ、ログイン・表示・入�
     !LAN_IP_OVERRIDE && DISPLAYABLE_IPV4.length === 0,
     `表示されるべき LAN の IPv4 が無い（インタフェース: ${INTERFACES.filter((a) => a.family === "IPv4").map((a) => `${a.name}=${a.address}`).join(", ")}）`,
   );
-  const dir = mkdtempSync(join(tmpdir(), "wtm-tls-"));
-  const cert = join(dir, "wtm.pem");
-  const key = join(dir, "wtm-key.pem");
+  const dir = mkdtempSync(join(tmpdir(), "soda-tls-"));
+  const cert = join(dir, "soda.pem");
+  const key = join(dir, "soda-key.pem");
   // どの IP が表示されるかは起動するまで分からないので、候補をすべて SAN に入れる（ignoreHTTPSErrors なので必須ではない）。
   const san = [...new Set([...(LAN_IP_OVERRIDE ? [LAN_IP_OVERRIDE] : []), ...DISPLAYABLE_IPV4])].map((ip) => `IP:${ip}`).join(",");
-  execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-keyout", key, "-out", cert, "-subj", "/CN=wtm-test", "-addext", `subjectAltName=${san}`], { stdio: "ignore" });
+  execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-keyout", key, "-out", cert, "-subj", "/CN=soda-test", "-addext", `subjectAltName=${san}`], { stdio: "ignore" });
   const port = await getFreePort();
   const proc = spawn(process.execPath, [MAIN, "serve", "--host", "0.0.0.0", "--port", String(port), "--cert", cert, "--key", key, "--state-dir", join(dir, "state")], { cwd: dir });
   let out = "";
@@ -53,16 +53,16 @@ test("LAN の IP アドレスへ TLS でつなぎ、ログイン・表示・入�
     const openLines = await new Promise<string[]>((res, rej) => {
       const t = setTimeout(() => rej(new Error(`no token url: ${out}`)), 15_000);
       const iv = setInterval(() => {
-        if (!out.includes("wtm: (token 付きの URL は今だけ表示します)")) return;
+        if (!out.includes("soda: (token 付きの URL は今だけ表示します)")) return;
         clearTimeout(t);
         clearInterval(iv);
-        res(out.split("\n").filter((l) => l.startsWith("wtm: open https://") && l.includes("/#token=")));
+        res(out.split("\n").filter((l) => l.startsWith("soda: open https://") && l.includes("/#token=")));
       }, 100);
     });
     const token = openLines[0]!.split("#token=")[1]!.trim();
     // `0.0.0.0` ではなく、このマシンの LAN の IP の URL を表示していること（開ける URL を案内する）。
     const lanHosts = openLines
-      .map((l) => new URL(l.slice("wtm: open ".length).trim()))
+      .map((l) => new URL(l.slice("soda: open ".length).trim()))
       .filter((u) => u.hostname !== "localhost" && u.port === String(port))
       .map((u) => u.hostname);
     // 表示されるべき LAN の IPv4 は、サーバの出力を受けた直後に求め直す（読み込み時の見積もりとの間にインタフェースが
@@ -106,7 +106,7 @@ test("LAN の IP アドレスへ TLS でつなぎ、ログイン・表示・入�
 });
 
 test("証明書なしで LAN の IP に bind しようとすると起動を拒否する（docs/tls-setup.md「なぜ TLS が要るか」）", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "wtm-tls-"));
+  const dir = mkdtempSync(join(tmpdir(), "soda-tls-"));
   try {
     let msg = "";
     try {

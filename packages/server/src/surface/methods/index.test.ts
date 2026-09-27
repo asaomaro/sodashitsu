@@ -1,4 +1,4 @@
-import { TERMINAL_PALETTES, type HostInfo } from "@wtm/protocol";
+import { TERMINAL_PALETTES, type HostInfo } from "@sodashitsu/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Disposable } from "../../util/Disposable.js";
 import { MemoryLogger } from "../../log/Logger.js";

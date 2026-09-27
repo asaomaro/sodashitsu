@@ -1,18 +1,18 @@
-# wtmctl（外部操作 CLI）
+# sodactl（外部操作 CLI）
 
-`wtmctl` は、動いている `wtm serve` をブラウザを介さずに操作する CLI（`packages/cli`）。
+`sodactl` は、動いている `soda serve` をブラウザを介さずに操作する CLI（`packages/cli`）。
 ブラウザと同じ認証（token でのログイン → session cookie）と同じ接続（`/ws`。Origin/Host の検査つき）を使う。
 新しいソケットや認証の入口は持たない。
 
 ## 接続とログイン
 
 ```bash
-wtmctl login --url http://127.0.0.1:7780 --token <TOKEN>   # session cookie を ~/.wtmctl に保存（token は保存しない）
-export WTMCTL_URL=http://127.0.0.1:7780                    # 以後 --url を省ける（既定もこの値）
+sodactl login --url http://127.0.0.1:7780 --token <TOKEN>   # session cookie を ~/.sodactl に保存（token は保存しない）
+export SODACTL_URL=http://127.0.0.1:7780                    # 以後 --url を省ける（既定もこの値）
 ```
 
-- 各コマンドは `--url` / `--token`（または環境変数 `WTMCTL_URL` / `WTMCTL_TOKEN`）を受ける。wtm の pane の中では、`--url`・`WTMCTL_URL` が無ければ
-  その pane を動かしているサーバ（pane の環境の `WTM_SERVER_URL`）につなぐ（下の「pane の中から使う」）。
+- 各コマンドは `--url` / `--token`（または環境変数 `SODACTL_URL` / `SODACTL_TOKEN`）を受ける。soda の pane の中では、`--url`・`SODACTL_URL` が無ければ
+  その pane を動かしているサーバ（pane の環境の `SODA_SERVER_URL`）につなぐ（下の「pane の中から使う」）。
   保存済みのセッションが失効していて token が分かれば、1 回だけ再ログインしてやり直す。
 - 成功は終了コード 0（結果は stdout に JSON／テキスト）、サーバ・待ち合わせのエラーは 1（stderr に
   `{"error":{"code","message"}}`）、使い方の誤りは 2。
@@ -20,39 +20,39 @@ export WTMCTL_URL=http://127.0.0.1:7780                    # 以後 --url を省
 ## コマンド一覧
 
 ```
-wtmctl workspace create [--cwd <path>] [--label <text>]
-wtmctl workspace close <workspaceId>
-wtmctl workspace rename <workspaceId> <label>
-wtmctl workspace report-metadata <workspaceId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>]
-wtmctl tab create [--workspace <id>] [--label <text>]
-wtmctl tab close <tabId>
-wtmctl pane split [<paneId>|--pane <paneId>|--current] --direction right|down [--ratio <0.05-0.95>]   # 省略時は下の「呼び出し元の pane」
-wtmctl pane current [--pane <paneId>|--current]                   # pane の今の tab・workspace を JSON で出す
-wtmctl pane close <paneId>
-wtmctl pane input <paneId> <text>          # Enter を付けずに送る
-wtmctl pane run <paneId> <command>         # command と改行を送る
-wtmctl pane read <paneId> [--follow] [--raw] [--timeout <ms>]
-wtmctl pane attach <paneId> [--takeover]   # 手元の端末をその pane に直結する（Ctrl+B q で切り離す）
-wtmctl pane observe <paneId>               # pane の画面を NDJSON で流し続ける（閲覧専用）
-wtmctl pane control <paneId> [--takeover] [--cols <N>] [--rows <N>]   # NDJSON で流し、stdin の NDJSON で操作する
-wtmctl pane report-metadata <paneId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>]
-wtmctl snapshot
-wtmctl watch [--json]
-wtmctl agent list
-wtmctl agent get <target>                  # <target> は pane ID か、agent rename で付けた名前
-wtmctl agent wait <target> [--until working|blocked|idle|done|unknown]... [--timeout <ms>]
-wtmctl agent read <target> [--lines <N>] [--raw] [--timeout <ms>]
-wtmctl agent prompt <target> <text> [--wait] [--until working|blocked|idle|done|unknown]... [--timeout <ms>]
-wtmctl agent send-keys <target> <key>...
-wtmctl agent rename <target> <name>|--clear
-wtmctl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [-- <args>...]
-wtmctl skill                               # エージェントに wtmctl の使い方を教える Markdown（skill ファイル）を出す
+sodactl workspace create [--cwd <path>] [--label <text>]
+sodactl workspace close <workspaceId>
+sodactl workspace rename <workspaceId> <label>
+sodactl workspace report-metadata <workspaceId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>]
+sodactl tab create [--workspace <id>] [--label <text>]
+sodactl tab close <tabId>
+sodactl pane split [<paneId>|--pane <paneId>|--current] --direction right|down [--ratio <0.05-0.95>]   # 省略時は下の「呼び出し元の pane」
+sodactl pane current [--pane <paneId>|--current]                   # pane の今の tab・workspace を JSON で出す
+sodactl pane close <paneId>
+sodactl pane input <paneId> <text>          # Enter を付けずに送る
+sodactl pane run <paneId> <command>         # command と改行を送る
+sodactl pane read <paneId> [--follow] [--raw] [--timeout <ms>]
+sodactl pane attach <paneId> [--takeover]   # 手元の端末をその pane に直結する（Ctrl+B q で切り離す）
+sodactl pane observe <paneId>               # pane の画面を NDJSON で流し続ける（閲覧専用）
+sodactl pane control <paneId> [--takeover] [--cols <N>] [--rows <N>]   # NDJSON で流し、stdin の NDJSON で操作する
+sodactl pane report-metadata <paneId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>]
+sodactl snapshot
+sodactl watch [--json]
+sodactl agent list
+sodactl agent get <target>                  # <target> は pane ID か、agent rename で付けた名前
+sodactl agent wait <target> [--until working|blocked|idle|done|unknown]... [--timeout <ms>]
+sodactl agent read <target> [--lines <N>] [--raw] [--timeout <ms>]
+sodactl agent prompt <target> <text> [--wait] [--until working|blocked|idle|done|unknown]... [--timeout <ms>]
+sodactl agent send-keys <target> <key>...
+sodactl agent rename <target> <name>|--clear
+sodactl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [-- <args>...]
+sodactl skill                               # エージェントに sodactl の使い方を教える Markdown（skill ファイル）を出す
 ```
 
 ## ほかのマシンへ送る（`--machine`）
 
-`wtmctl --machine <名前|id> <コマンド> …` で、手元の `wtm serve` に `wtm machine add` で登録したマシンの `wtm serve` へコマンドを送る
-（20260927-multi-host-machines。herdr の `herdr --machine`）。手元の `wtm serve` の `/ws?machine=` を通すので、手元の `wtm serve` が動いていて、そのマシンが
+`sodactl --machine <名前|id> <コマンド> …` で、手元の `soda serve` に `soda machine add` で登録したマシンの `soda serve` へコマンドを送る
+（20260927-multi-host-machines。herdr の `herdr --machine`）。手元の `soda serve` の `/ws?machine=` を通すので、手元の `soda serve` が動いていて、そのマシンが
 繋がっている必要がある。`login`・`skill` 以外の全コマンドに使える。id（pane・エージェントの名前を含む）はマシンごとに別。
 登録に無い・無効・曖昧は `machine_not_found`、繋がっていないは `machine_unavailable`（終了コード 1）。`--machine` のとき自分の pane の歯止め（`self_target`）は
 効かない（`--machine local` は手元そのもの）。詳しくは `docs/machines.md`。
@@ -60,18 +60,18 @@ wtmctl skill                               # エージェントに wtmctl の使
 ## サイドバーの独自トークン（`workspace report-metadata`・`pane report-metadata`）
 
 外のスクリプト・エージェントのフックが、workspace・pane ごとに名前付きの短い値（独自トークン）をサーバへ報告する。値はサーバのメモリだけに持ち
-（`session.json` に保存しない。再起動・`wtm handoff` で消える）、接続しているすべてのブラウザへ配られる。ブラウザは、設定画面（節「表示」の
+（`session.json` に保存しない。再起動・`soda handoff` で消える）、接続しているすべてのブラウザへ配られる。ブラウザは、設定画面（節「表示」の
 「サイドバーの行（上級者向け）」）で行の並びに `$名前` を置いたときだけ、その値を出す——spaces の行は workspace の値、agents の行は pane の値を読む。
 
 ```sh
-wtmctl pane report-metadata "$WTM_PANE_ID" --source my-hook --token summary="認証を直している" --token model=opus
-wtmctl workspace report-metadata w1 --source ci --token build=green --ttl-ms 600000
-wtmctl pane report-metadata p3 --source my-hook --clear-token summary
+sodactl pane report-metadata "$SODA_PANE_ID" --source my-hook --token summary="認証を直している" --token model=opus
+sodactl workspace report-metadata w1 --source ci --token build=green --ttl-ms 600000
+sodactl pane report-metadata p3 --source my-hook --clear-token summary
 ```
 
 - **`--token` は値で見分ける**: `=` を含めば独自トークンの `NAME=VALUE`（最初の `=` で分ける）、含まなければ全コマンド共通の接続の token
   （`--token <TOKEN>`。接続の token は `=` を含まない）。**`=` を書き忘れた `--token summary` は独自トークンにならない**: ほかに `NAME=VALUE` が無ければ
-  `missing token to set or clear`（終了コード 2）。ほかにあれば `summary` は接続の token の候補として扱われ、`wtmctl login` のキャッシュが使えるあいだは
+  `missing token to set or clear`（終了コード 2）。ほかにあれば `summary` は接続の token の候補として扱われ、`sodactl login` のキャッシュが使えるあいだは
   使われずに捨てられる（報告は成功し、`summary` だけが出ない）。キャッシュが無い・失効しているときは、それで認証を試みて失敗する（`unauthorized`）。
   herdr のスクリプトを写すときは `NAME=VALUE` の形を確かめる。
 - 値は前後の空白と制御文字を除いて 80 文字まで。整えて空になった値は消去（`--clear-token` と同じ）。触れない名前はそのまま残る。同じ名前を 1 回の報告で
@@ -89,8 +89,8 @@ wtmctl pane report-metadata p3 --source my-hook --clear-token summary
 手元の端末（SSH 先のシェルを含む）を pane 1 枚に直結し、ブラウザを開かずにその場の端末として操作する。
 
 ```bash
-wtmctl pane attach p2              # 直結する
-wtmctl pane attach p2 --takeover   # 既に別の端末が直結していれば、それを奪って直結する
+sodactl pane attach p2              # 直結する
+sodactl pane attach p2 --takeover   # 既に別の端末が直結していれば、それを奪って直結する
 ```
 
 - つないだ時点の**見えている画面**を描き、以後の出力をそのまま流す。打鍵はそのまま pane へ送る（手元の端末は raw モード・代替画面になる）。
@@ -105,7 +105,7 @@ wtmctl pane attach p2 --takeover   # 既に別の端末が直結していれば�
   `attach_taken_over` で終わる。
 - 直結中もブラウザでの表示と入力はそのまま使える（ブラウザの入力は止めない。ブラウザから直結を奪う・切り離す操作は無い）。
   直結の所有者は**安全の境界ではない**——認証済みの接続は今までどおり pane に書ける。ブラウザと同じ認証と `/ws`（Origin/Host の検査つき）を使う。
-- 終了コード: 切り離しは 0（stderr に `wtmctl: detached from <paneId>`）。奪われた（`attach_taken_over`）・pane のプロセスが終わった・pane が閉じられた
+- 終了コード: 切り離しは 0（stderr に `sodactl: detached from <paneId>`）。奪われた（`attach_taken_over`）・pane のプロセスが終わった・pane が閉じられた
   （`pane_closed`）・サーバ側から切れた（`connection_closed`）・既に直結がある（`pane_attached`）・pane が無い（`not_found`）・
   標準入力か標準出力が端末でない（`not_a_tty`）は 1。使い方の誤りは 2。
   どの終わり方でも、手元の端末のモード（色・カーソルの表示と形・スクロール領域・マウスの報告・bracketed paste 等）を戻し、代替画面から出る。
@@ -113,13 +113,13 @@ wtmctl pane attach p2 --takeover   # 既に別の端末が直結していれば�
 
 ## pane の NDJSON ストリーム（`pane observe`・`pane control`）
 
-別のプログラム（pane の画面を別の UI へ中継するブリッジ・エージェントを操る自動化）が `wtmctl` を子プロセスとして起動し、
+別のプログラム（pane の画面を別の UI へ中継するブリッジ・エージェントを操る自動化）が `sodactl` を子プロセスとして起動し、
 stdout を 1 行ずつ JSON として読む（`control` は stdin に 1 行 1 コマンドを書く）ための形。人が端末で使うなら `pane attach`。
 
 ```bash
-wtmctl pane observe p2                                      # 閲覧専用。何本でも同時に動かせる
-wtmctl pane control p2 --cols 120 --rows 40                 # 書き込み可能（所有者は pane に 1 つ）
-wtmctl pane control p2 --takeover                           # 既に所有者（pane attach か control）がいれば奪う
+sodactl pane observe p2                                      # 閲覧専用。何本でも同時に動かせる
+sodactl pane control p2 --cols 120 --rows 40                 # 書き込み可能（所有者は pane に 1 つ）
+sodactl pane control p2 --takeover                           # 既に所有者（pane attach か control）がいれば奪う
 ```
 
 ### stdout の記録（observe・control 共通）
@@ -137,8 +137,8 @@ wtmctl pane control p2 --takeover                           # 既に所有者（
   受け取った列を端末エミュレータに流しても、エミュレータの答えが二重に pane へ届かない。
 - 終わりは `terminal.closed` の 1 行。`reason` は `pane_closed`（pane のプロセスが終わった・pane が閉じられた）・`released`（control が所有を返した）・
   `taken_over`（control が奪われた）・`connection_closed`（サーバ側から切れた）。
-- **読み手が遅いとき**: stdout の書き出し待ちが 1 MiB を超えると、wtmctl はサーバからの受信を止める。その間の出力はサーバが捨て、読み手が追いつくと
-  `full: true` の描き直しから続く（wtmctl のメモリは増え続けない。切断もしない）。`pane control` はその間 stdin も読まない
+- **読み手が遅いとき**: stdout の書き出し待ちが 1 MiB を超えると、sodactl はサーバからの受信を止める。その間の出力はサーバが捨て、読み手が追いつくと
+  `full: true` の描き直しから続く（sodactl のメモリは増え続けない。切断もしない）。`pane control` はその間 stdin も読まない
   （奪われた知らせを読めないまま入力を送り続けないため。書いた行は、終わる前に追いつけば処理する）。
 
 ### `pane observe`
@@ -160,7 +160,7 @@ wtmctl pane control p2 --takeover                           # 既に所有者（
 | `{"type":"terminal.resize","cols":100,"rows":30}` | pane の大きさを変える（1〜1000） |
 | `{"type":"terminal.release"}` | 所有を返して終わる |
 
-- 不正な行はサーバに何も送らず、stderr に `wtmctl: pane control input ignored: <理由>` を 1 行出して次の行へ進む。不正になるのは:
+- 不正な行はサーバに何も送らず、stderr に `sodactl: pane control input ignored: <理由>` を 1 行出して次の行へ進む。不正になるのは:
   UTF-8・JSON として正しくない（先頭の BOM・全角空白を含む）／オブジェクトでない／`type` が無い・文字列でない・上の 3 つ以外（`terminal.scroll` は未対応として不正）／
   知らないキーがある（`terminal.resize` の `cell_width_px`・`cell_height_px` は 0 以上の整数なら受け付けて使わない。そうでなければ不正）／
   `text` と `bytes` の両方かどちらも無い／`text` が文字列でない／`bytes` が正規の base64 でない／`cols`・`rows` が 1〜1000 の整数でない／
@@ -172,8 +172,8 @@ wtmctl pane control p2 --takeover                           # 既に所有者（
   `/ws`（Origin/Host の検査つき）だけを使い、ログインしていなければ stdout に何も書かずに失敗する。
 - **pane が入力を読まないとき**（raw モードで固まった TUI 等）、サーバはその pane に溜まった入力と新しい入力の合計が 16 MiB を超える `terminal.input` を
   **pane に書かずに丸ごと捨てる**（「サーバ側の上限」）。捨てたときは stderr に
-  `wtmctl: pane control input dropped: pane <paneId> is not reading input (server input queue is full)` を出す（サーバは同じ pane について 2 秒に 1 回だけ
-  知らせるので、捨てた回数ではない）。stdout の記録と終了コードは変えない。wtmctl は stdin を読んだ速さのまま送る（pane が読むのを待たない）ので、
+  `sodactl: pane control input dropped: pane <paneId> is not reading input (server input queue is full)` を出す（サーバは同じ pane について 2 秒に 1 回だけ
+  知らせるので、捨てた回数ではない）。stdout の記録と終了コードは変えない。sodactl は stdin を読んだ速さのまま送る（pane が読むのを待たない）ので、
   読むのが遅いプログラムへ大きなファイルを流し込むときは、欠けないよう送る側で間を空けるか分けて送る。
 
 ### 終了コード
@@ -188,8 +188,8 @@ wtmctl pane control p2 --takeover                           # 既に所有者（
 
 ## サーバ側の上限
 
-サーバ（`wtm serve`）は `/ws` から届く大きさと入力を次の範囲に絞る。ブラウザと `pane attach` は送る前に範囲の内側に丸め、`pane control` は範囲の内側（1〜1000）の値しか受け付けないので、普段は気にしなくてよい
-（生の `/ws` や古い wtmctl から範囲の外を送ったときのためのもの）。**安全の境界ではない**——認証済みの接続はもともと pane でコマンドを走らせられる。
+サーバ（`soda serve`）は `/ws` から届く大きさと入力を次の範囲に絞る。ブラウザと `pane attach` は送る前に範囲の内側に丸め、`pane control` は範囲の内側（1〜1000）の値しか受け付けないので、普段は気にしなくてよい
+（生の `/ws` や古い sodactl から範囲の外を送ったときのためのもの）。**安全の境界ではない**——認証済みの接続はもともと pane でコマンドを走らせられる。
 誤り・誤用（壊れたクライアント・読まない pane への流し込み）でサーバの全 pane を巻き込まないためのもの。
 
 - **端末の大きさ**（`pane attach`・`pane control` の所有・`--cols/--rows`・`terminal.resize`、ブラウザの表示）: 1 辺 1〜4096・`cols × rows` が 1,000,000 セル以下
@@ -199,7 +199,7 @@ wtmctl pane control p2 --takeover                           # 既に所有者（
   上限を超える pane には何も書かず `input_queue_full` で失敗する。サーバ自身が書く端末の問い合わせへの応答は捨てない。
   知らせを表示するのはブラウザ（画面の下の通知）と `pane control`（stderr）だけ。**`pane attach` は知らせを表示せず**（直結の画面に割り込ませない）、
   `pane input`・`pane run` は 1 通送って `{"ok":true}` を出して終わる（捨てられたかを待たない）——どちらも、固まった pane への入力は黙って消える。
-- 複数ホストの中継（`--machine`・`/ws?machine=`）では、判定するのは**先のマシンの `wtm serve`**（`docs/machines.md`）。
+- 複数ホストの中継（`--machine`・`/ws?machine=`）では、判定するのは**先のマシンの `soda serve`**（`docs/machines.md`）。
 
 ## エージェント（`agent`）
 
@@ -284,7 +284,7 @@ pane の中で検出されたコーディングエージェント（Claude Code�
 
 ### エージェントを起動する（`agent start`）
 
-`wtmctl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [-- <args>...]` は、**前面がシェル自身だけの pane**
+`sodactl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [-- <args>...]` は、**前面がシェル自身だけの pane**
 （プロンプトで待っているシェル）に `KIND` のエージェントを起動し、`<name>` を付け、入力を受け付けられる状態（`idle`）になるまで待ってから
 `agent get` と同じ形で出す。pane は作らない（先に `pane split` 等で用意する）。
 
@@ -319,45 +319,46 @@ pane の中で検出されたコーディングエージェント（Claude Code�
 - 他の code: `unsupported_agent_kind`（サーバ）・`agent_pane_not_found`・`agent_start_input_failed`（端末に書けなかった）。
 
 ```bash
-pane=$(wtmctl pane split p1 --direction right | jq -r .pane.id)
-wtmctl agent start reviewer --kind codex --pane "$pane" -- -m gpt-5.4
-wtmctl agent prompt reviewer "この差分をレビューして" --wait --timeout 600000
+pane=$(sodactl pane split p1 --direction right | jq -r .pane.id)
+sodactl agent start reviewer --kind codex --pane "$pane" -- -m gpt-5.4
+sodactl agent prompt reviewer "この差分をレビューして" --wait --timeout 600000
 ```
 
 ### 例: エージェントに作業させて、終わるのを待って結果を読む
 
 ```bash
-pane=p2                                                    # wtmctl agent list で調べた pane ID
-wtmctl agent prompt "$pane" "テストを直して" --wait --timeout 600000   # 送って、作業が始まったのを確かめ、終わるまで待つ
-wtmctl agent read "$pane" --lines 120
+pane=p2                                                    # sodactl agent list で調べた pane ID
+sodactl agent prompt "$pane" "テストを直して" --wait --timeout 600000   # 送って、作業が始まったのを確かめ、終わるまで待つ
+sodactl agent read "$pane" --lines 120
 ```
 
 ### 例: 承認待ちで止まったら、画面を読んで答える
 
 ```bash
-wtmctl agent wait "$pane" --until blocked --timeout 600000
-wtmctl agent read "$pane" --lines 40
-wtmctl agent send-keys "$pane" esc                         # 取り消す（答えるなら例えば y や enter）
+sodactl agent wait "$pane" --until blocked --timeout 600000
+sodactl agent read "$pane" --lines 40
+sodactl agent send-keys "$pane" esc                         # 取り消す（答えるなら例えば y や enter）
 ```
 
 ## エージェントに教える（skill ファイル）と、pane の中から使う
 
-### skill ファイル（`wtmctl skill`）
+### skill ファイル（`sodactl skill`）
 
-`wtmctl skill` は、コーディングエージェント（Claude Code・Codex 等）に wtmctl の使い方と作法を教える Markdown（skill ファイル）を標準出力に書く
-（サーバにはつながない。中身はリポジトリの `packages/cli/skills/wtmctl/SKILL.md` で、使っている wtmctl と同じ版のもの）。wtmctl を更新したら入れ直す。
+`sodactl skill` は、コーディングエージェント（Claude Code・Codex 等）に sodactl の使い方と作法を教える Markdown（skill ファイル）を標準出力に書く
+（サーバにはつながない。中身はリポジトリの `packages/cli/skills/sodactl/SKILL.md` で、使っている sodactl と同じ版のもの）。sodactl を更新したら入れ直す。
+旧名の `~/.claude/skills/wtmctl` を入れていたら、消してから入れ直す（`docs/migrate-from-wtm.md`）。
 
 ```bash
-# Claude Code（利用者全体）。プロジェクトだけなら <プロジェクト>/.claude/skills/wtmctl/ に置く
-mkdir -p ~/.claude/skills/wtmctl && wtmctl skill > ~/.claude/skills/wtmctl/SKILL.md
+# Claude Code（利用者全体）。プロジェクトだけなら <プロジェクト>/.claude/skills/sodactl/ に置く
+mkdir -p ~/.claude/skills/sodactl && sodactl skill > ~/.claude/skills/sodactl/SKILL.md
 # skill の仕組みの無いエージェント（Codex 等）は、プロジェクトか利用者の指示（AGENTS.md 等）に貼る（先頭の --- で囲んだ front matter は除く）
-wtmctl skill | awk 'NR==1&&/^---$/{f=1;next} f&&/^---$/{f=0;next} !f' >> AGENTS.md
+sodactl skill | awk 'NR==1&&/^---$/{f=1;next} f&&/^---$/{f=0;next} !f' >> AGENTS.md
 ```
 
-skill は、最初に pane の中にいるか（`WTM_PANE_ID` があるか）を確かめ、無ければ止まるようエージェントに指示する（wtm の外のエージェントが
-自分のものでない session を操作しないため）。ほかに教えること: 構文の正典は `wtmctl help`・ID は応答の JSON から読む・隣の pane を作って
+skill は、最初に pane の中にいるか（`SODA_PANE_ID` があるか）を確かめ、無ければ止まるようエージェントに指示する（soda の外のエージェントが
+自分のものでない session を操作しないため）。ほかに教えること: 構文の正典は `sodactl help`・ID は応答の JSON から読む・隣の pane を作って
 コマンドを走らせ結果を読む手順・エージェントを起動して prompt を送り待つ手順・自分が作っていないものを閉じない・`timeout` 等の後に確かめずに
-送り直さない・承認ダイアログには利用者に確かめてから答える・token をコマンド行や会話に書かない・認証されていなければ利用者に `wtmctl login` を頼む。
+送り直さない・承認ダイアログには利用者に確かめてから答える・token をコマンド行や会話に書かない・認証されていなければ利用者に `sodactl login` を頼む。
 
 ### pane の環境変数
 
@@ -365,28 +366,28 @@ skill は、最初に pane の中にいるか（`WTM_PANE_ID` があるか）を
 
 | 変数 | 中身 |
 |---|---|
-| `WTM_PANE_ID` | その pane の ID（`p3` 等）。pane の中にいる印を兼ねる（herdr の `HERDR_ENV=1`・`HERDR_PANE_ID` に当たる） |
-| `WTM_SERVER_URL` | その pane を動かしているサーバへ wtmctl がつなげる URL（URL にできない待ち受け〔ゾーン付きの IPv6 等〕では入れない）。待ち受けが `0.0.0.0` なら `http(s)://127.0.0.1:<port>`、`::` なら `[::1]`、それ以外は待ち受けのホスト。ポートは実際に待ち受けているもの |
-| `WTM_AGENT_REPORT_SOCKET` | 公式フック連携の report の socket（あれば） |
+| `SODA_PANE_ID` | その pane の ID（`p3` 等）。pane の中にいる印を兼ねる（herdr の `HERDR_ENV=1`・`HERDR_PANE_ID` に当たる） |
+| `SODA_SERVER_URL` | その pane を動かしているサーバへ sodactl がつなげる URL（URL にできない待ち受け〔ゾーン付きの IPv6 等〕では入れない）。待ち受けが `0.0.0.0` なら `http(s)://127.0.0.1:<port>`、`::` なら `[::1]`、それ以外は待ち受けのホスト。ポートは実際に待ち受けているもの |
+| `SODA_AGENT_REPORT_SOCKET` | 公式フック連携の report の socket（あれば） |
 
 workspace・tab の ID は環境変数に**入れない**（herdr の `HERDR_WORKSPACE_ID`・`HERDR_TAB_ID` に当たるものは無い）。pane は別の tab・workspace へ移せ
 （pane の ID は変わらない）、環境変数は起動した時の値のまま変わらないので、移された後に古い workspace を操作させてしまうため。今の値は
-`wtmctl pane current`（下）で聞く。
+`sodactl pane current`（下）で聞く。
 
-サーバを起動した環境の `WTMCTL_URL`・`WTMCTL_TOKEN` は pane に**渡さない**（別のサーバを指していることがあり、token は秘密なので pane の全プロセスと
+サーバを起動した環境の `SODACTL_URL`・`SODACTL_TOKEN` は pane に**渡さない**（別のサーバを指していることがあり、token は秘密なので pane の全プロセスと
 エージェントの記録に流さない。Windows では大文字小文字を区別せずに取り除く）。pane の環境に token・cookie は入らない。
 
 ### 接続先と認証
 
-- 接続先は `--url` → `WTMCTL_URL` → `WTM_SERVER_URL` → `http://127.0.0.1:7780` の順。pane の中では何も付けずにその pane のサーバにつながる
+- 接続先は `--url` → `SODACTL_URL` → `SODA_SERVER_URL` → `http://127.0.0.1:7780` の順。pane の中では何も付けずにその pane のサーバにつながる
   （名前付き session・`--port` で別のポートのサーバでも）。
-- TLS で全インタフェースに待ち受けるサーバでは、`WTM_SERVER_URL` は `https://127.0.0.1:<port>`（`::` なら `https://[::1]:<port>`）になるので、証明書に `127.0.0.1`（`::1`）が要る（mkcert の例は
-  `docs/tls-setup.md`）。無ければ pane の中で `WTMCTL_URL` に証明書の名前の URL を export する（そのときは下の歯止めが効かなくなる）。自己署名・mkcert の CA は Node に教える
+- TLS で全インタフェースに待ち受けるサーバでは、`SODA_SERVER_URL` は `https://127.0.0.1:<port>`（`::` なら `https://[::1]:<port>`）になるので、証明書に `127.0.0.1`（`::1`）が要る（mkcert の例は
+  `docs/tls-setup.md`）。無ければ pane の中で `SODACTL_URL` に証明書の名前の URL を export する（そのときは下の歯止めが効かなくなる）。自己署名・mkcert の CA は Node に教える
   （`NODE_EXTRA_CA_CERTS`。pane の外と同じ）。
-- pane のシェルの初期化（`.bashrc` 等）で `WTMCTL_URL` を export していると、そちらが `WTM_SERVER_URL` より優先される。
-- 認証は pane の外と同じく、利用者が `wtmctl login` で保存した session cookie（`~/.wtmctl`）を使う。cookie は URL の origin ごとに保存されるので、
+- pane のシェルの初期化（`.bashrc` 等）で `SODACTL_URL` を export していると、そちらが `SODA_SERVER_URL` より優先される。
+- 認証は pane の外と同じく、利用者が `sodactl login` で保存した session cookie（`~/.sodactl`）を使う。cookie は URL の origin ごとに保存されるので、
   **pane の中の接続先と同じ origin で** login しておく（`http://localhost:7780` で login していても、`http://127.0.0.1:7780` では見つからない）。
-  まだなら、利用者が `wtmctl login --url <URL> --token <TOKEN>` を打つ（`<URL>` は pane の中の `echo "$WTM_SERVER_URL"` の値。pane の外の端末には
+  まだなら、利用者が `sodactl login --url <URL> --token <TOKEN>` を打つ（`<URL>` は pane の中の `echo "$SODA_SERVER_URL"` の値。pane の外の端末には
   この変数が無いので値そのものを渡す。skill はエージェントに、その値を示して利用者に頼ませる）。
 
 ### 呼び出し元の pane を対象にする（`--current`・対象の省略・`pane current`）
@@ -396,30 +397,30 @@ workspace・tab の ID は環境変数に**入れない**（herdr の `HERDR_WOR
 | 指し方 | 対象 |
 |---|---|
 | `<paneId>`・`--pane <paneId>` | その pane |
-| `--current` | 呼び出し元の pane（`WTM_PANE_ID`）。`WTM_PANE_ID` が無ければ使い方の誤り（終了コード 2） |
-| 省略（pane の中＝`WTM_PANE_ID` がある） | 呼び出し元の pane |
+| `--current` | 呼び出し元の pane（`SODA_PANE_ID`）。`SODA_PANE_ID` が無ければ使い方の誤り（終了コード 2） |
+| 省略（pane の中＝`SODA_PANE_ID` がある） | 呼び出し元の pane |
 | 省略（pane の外） | サーバのフォーカスの pane（`snapshot` の `.focus.paneId`。無ければ `not_found`） |
 
 ```bash
-wtmctl pane split --current --direction right          # 自分の隣に pane を作る（pane の中なら --current を省いても同じ）
-wtmctl pane current | jq -r '.pane.tabId, .pane.workspaceId'
-wtmctl tab create --workspace "$(wtmctl pane current | jq -r .pane.workspaceId)"
+sodactl pane split --current --direction right          # 自分の隣に pane を作る（pane の中なら --current を省いても同じ）
+sodactl pane current | jq -r '.pane.tabId, .pane.workspaceId'
+sodactl tab create --workspace "$(sodactl pane current | jq -r .pane.workspaceId)"
 ```
 
 - `pane current` は対象の pane（`snapshot` の `.panes[]` と同じ形）に `workspaceId` と `focused`（サーバのフォーカスの pane か）を足して `{"pane": {...}}` で出す。
   `tabId`・`workspaceId` は打った時点のサーバの状態なので、pane が移された後でも今の値になる。何も変えない。
 - 呼び出し元の pane を使う（`--current`・pane の中での省略）のは、接続先がその pane を動かしているサーバだと確かめられるときだけ。確かめ方は下の歯止めと同じ
-  （接続先と `WTM_SERVER_URL` の origin を比べ、ループバックの名前は同じとみなす）。確かめられない（`WTMCTL_URL`・`--url` が別の origin・証明書の名前等、
-  `WTM_SERVER_URL` が無い）ときは、何も送らずに `caller_pane_unknown`（終了コード 1）で断る。ID はサーバごとに別で、別のサーバでは同じ ID が
-  無関係な pane を指すため。同じサーバだと分かっているとき（証明書の名前で同じサーバを指している等）だけ `--pane "$WTM_PANE_ID"` で明示し、
-  そうでなければ `WTMCTL_URL`・`--url` を外して `WTM_SERVER_URL` につなぐ（`WTM_SERVER_URL` が無い pane では `--pane` で明示するしかない）。
-- `--machine <名前|id>`（`local` 以外）では、`--current` は使い方の誤り、省略はそのマシンのフォーカスの pane（手元の `WTM_PANE_ID` はそのマシンの pane を指さない）。
+  （接続先と `SODA_SERVER_URL` の origin を比べ、ループバックの名前は同じとみなす）。確かめられない（`SODACTL_URL`・`--url` が別の origin・証明書の名前等、
+  `SODA_SERVER_URL` が無い）ときは、何も送らずに `caller_pane_unknown`（終了コード 1）で断る。ID はサーバごとに別で、別のサーバでは同じ ID が
+  無関係な pane を指すため。同じサーバだと分かっているとき（証明書の名前で同じサーバを指している等）だけ `--pane "$SODA_PANE_ID"` で明示し、
+  そうでなければ `SODACTL_URL`・`--url` を外して `SODA_SERVER_URL` につなぐ（`SODA_SERVER_URL` が無い pane では `--pane` で明示するしかない）。
+- `--machine <名前|id>`（`local` 以外）では、`--current` は使い方の誤り、省略はそのマシンのフォーカスの pane（手元の `SODA_PANE_ID` はそのマシンの pane を指さない）。
   `--machine local` は `--machine` が無いときと同じ。
 - 自分の pane を分ける・調べるのは歯止めの対象外（断らない）。
 
 ### 自分の pane への操作の歯止め（`self_target`）
 
-pane の中の wtmctl（`WTM_PANE_ID` と `WTM_SERVER_URL` があり、接続先の origin が `WTM_SERVER_URL` と同じ）は、次の操作の対象が**自分の pane**、
+pane の中の sodactl（`SODA_PANE_ID` と `SODA_SERVER_URL` があり、接続先の origin が `SODA_SERVER_URL` と同じ）は、次の操作の対象が**自分の pane**、
 または**それを含む tab・workspace** のとき、操作の要求を送らずに `self_target`（終了コード 1）で終わる。
 
 `pane close`・`pane input`・`pane run`・`pane attach`・`pane control`・`tab close`・`workspace close`・`agent prompt`・`agent send-keys`・`agent start`
@@ -427,10 +428,10 @@ pane の中の wtmctl（`WTM_PANE_ID` と `WTM_SERVER_URL` があり、接続先
 - 自分の pane を閉じると自分が終わり、自分の pane への入力・prompt は自分の入力欄に混ざり、自分の pane への直結は出力が自分に返って流れ続けるため。
   エージェントを名前で指しても、その pane が自分なら断る。
 - 読み取り・分割・名前付け（`pane read`・`pane observe`・`pane split`・`snapshot`・`watch`・`agent list/get/wait/read/rename` 等）は断らない。
-- 意図してやるとき（人が自分の pane を閉じる等）は `WTM_PANE_ID` を空にして打つ: `WTM_PANE_ID= wtmctl pane close "$WTM_PANE_ID"`。
-  別のサーバ（`--url`・`WTMCTL_URL` で別の origin）につなぐときは効かない。ループバックの名前（`localhost`・`127.0.0.1`・`[::1]`）の違いと既定のポートの
-  省略は同じサーバとみなす（`WTMCTL_URL=http://localhost:7780` を export していても外れない）。ループバック以外の名前（TLS の証明書の名前・LAN の IP 等）で
-  同じサーバを指した `WTMCTL_URL` では、同じサーバだと見分けられないので**効かない**（何も表示しない）。
+- 意図してやるとき（人が自分の pane を閉じる等）は `SODA_PANE_ID` を空にして打つ: `SODA_PANE_ID= sodactl pane close "$SODA_PANE_ID"`。
+  別のサーバ（`--url`・`SODACTL_URL` で別の origin）につなぐときは効かない。ループバックの名前（`localhost`・`127.0.0.1`・`[::1]`）の違いと既定のポートの
+  省略は同じサーバとみなす（`SODACTL_URL=http://localhost:7780` を export していても外れない）。ループバック以外の名前（TLS の証明書の名前・LAN の IP 等）で
+  同じサーバを指した `SODACTL_URL` では、同じサーバだと見分けられないので**効かない**（何も表示しない）。
 - **安全の境界ではない**。誤操作を止めるだけで、環境変数を消せば効かず、認証済みの接続は今までどおりどの pane にも書ける。
 
 ## herdr との対応と違い
@@ -441,7 +442,7 @@ herdr の `terminal attach <terminal_id> [--takeover]` に相当する（`docs/h
 `--takeover` で奪う・直結の大きさを優先してフル UI（ブラウザ）からは変えない・`Ctrl+B q` / `Ctrl+B Ctrl+B`・切り離しは終了コード 0 でそれ以外の終わり方は 1（使い方の誤りは 2）・
 フル UI からの入力は止めない。違い:
 
-- herdr はサーバで描き直したフレームを送るが、wtmctl は **pane の生の出力をそのまま流す**。このため pane の中のアプリが代替画面から出ると
+- herdr はサーバで描き直したフレームを送るが、sodactl は **pane の生の出力をそのまま流す**。このため pane の中のアプリが代替画面から出ると
   手元の端末も主画面に出て、直結前の画面に出力が重なる。kitty keyboard のフラグ・modifyOtherKeys は切り離しても戻さない
   （pane のエージェントがそれを有効にしていた場合、切り離した後に手元のシェルのキー入力の符号化が戻らないことがある）。
 - 直結中のサーバ側のスクロール（ホイール・PageUp/PageDown で遡る）は無い。対象は pane ID だけ（`agent attach <name>` は無い）。
@@ -455,11 +456,11 @@ herdr の `terminal session observe <target> [--cols N] [--rows N]`・`terminal 
 複数の観測者・観測者は入力・大きさ・奪取の権限を持たない・control の所有者は 1 つで `--takeover` で奪う・stdin の `terminal.input`（`text` か `bytes`。両方は不可）・
 `terminal.resize`・`terminal.release`・不正な行は stderr に出して読み飛ばす・stdin の終わりで所有を返す・control の `--cols/--rows` の既定 120×40。違い:
 
-- herdr のフレームはサーバが描き直した画面（観測者の `--cols/--rows` の大きさ）。wtmctl は **pane の生の出力を区切ったもの**で、`width`/`height` は pane の実際の大きさ。
+- herdr のフレームはサーバが描き直した画面（観測者の `--cols/--rows` の大きさ）。sodactl は **pane の生の出力を区切ったもの**で、`width`/`height` は pane の実際の大きさ。
   そのため `pane observe` は `--cols/--rows` を持たない。
 - `terminal.scroll` は未対応（不正な行として読み飛ばす）。対象は pane ID だけ（herdr は terminal・agent も受ける）。
 - 大きさは 1〜1000（herdr は 1〜65535）。不正な行の検査が厳しい（知らないキー・非正規の base64・Unicode の空白や BOM も不正。herdr は知らないキーを無視する）。
-- 読み手が遅いとき、herdr は 30 秒書けなければ切るが、wtmctl は受信を止めて待ち、追いついたら描き直し（`full: true`）から続ける。
+- 読み手が遅いとき、herdr は 30 秒書けなければ切るが、sodactl は受信を止めて待ち、追いついたら描き直し（`full: true`）から続ける。
 - 終わり方の `reason` は「stdout の記録」、終了コードは「終了コード」の節のとおり（herdr はサーバがストリームを閉じた理由を `terminal.closed` の `reason` に載せ、終了コードは 0）。
 
 ### `agent`
@@ -508,17 +509,17 @@ herdr の同名のコマンドに相当する（`docs/herdr-parity.md` の H21�
 
 herdr の agent skill（`skills/herdr/SKILL.md`・`herdr --skill`）と pane の環境（`HERDR_ENV` 等）に相当する（`docs/herdr-parity.md` の H39）。違い:
 
-- skill は `wtmctl skill` で出す（herdr は `herdr --skill`）。中身は本製品のコマンドに合わせて書き直した日本語のもの。`npx skills add` 等の配布は無い。
-- pane の中にいる印は `WTM_PANE_ID`（herdr は `HERDR_ENV=1`）。接続先は socket のパスではなく URL（`WTM_SERVER_URL`）で、認証は利用者の login の
+- skill は `sodactl skill` で出す（herdr は `herdr --skill`）。中身は本製品のコマンドに合わせて書き直した日本語のもの。`npx skills add` 等の配布は無い。
+- pane の中にいる印は `SODA_PANE_ID`（herdr は `HERDR_ENV=1`）。接続先は socket のパスではなく URL（`SODA_SERVER_URL`）で、認証は利用者の login の
   キャッシュ（herdr の socket はファイルの権限で守られ、認証が無い）。`HERDR_WORKSPACE_ID`・`HERDR_TAB_ID`・`HERDR_BIN_PATH` に当たる変数は無い（workspace・tab は `pane current` で聞く）。
 - `--current`・`pane split` の対象の省略・`pane current` は herdr と同じ（呼び出し元の pane・pane の外ではフォーカスの pane・`--machine` では呼び出し元を使わない）。違い:
   - `--current` を受けるのは `pane split`・`pane current` だけ（herdr の `pane layout`・`process-info`・`neighbor`・`edges`・`focus`・`resize`・`zoom`・`swap` は
-    コマンド自体が無く、herdr の `pane input --right-click` は wtmctl の `pane input`〔文字の送信〕とは別物の右クリックの設定で、これも無い）。
+    コマンド自体が無く、herdr の `pane input --right-click` は sodactl の `pane input`〔文字の送信〕とは別物の右クリックの設定で、これも無い）。
   - 位置引数・`--pane`・`--current` を 2 つ以上渡すと使い方の誤り（herdr は後に書いたものが勝つ）。
-  - `pane current --current` は `WTM_PANE_ID` が無ければ使い方の誤り（herdr はフォーカスの pane を返す）。
+  - `pane current --current` は `SODA_PANE_ID` が無ければ使い方の誤り（herdr はフォーカスの pane を返す）。
   - 接続先がその pane のサーバだと確かめられないと `caller_pane_unknown` で断る（herdr は socket のパスでつなぐので、この確かめが要らない）。
   - 出力は camelCase の `{"pane": {...}}`（herdr の `.result.pane` の snake_case の `PaneInfo`）。
   - workspace・tab の ID の環境変数（`HERDR_WORKSPACE_ID`・`HERDR_TAB_ID`）は無い。`pane current` で今の値を聞く（herdr の値は起動時のまま `pane move` で古くなる）。
-    pane を移しても pane の ID は変わらないので、`WTM_PANE_ID` は古くならない（herdr は別の workspace への移動で pane の ID が変わり、古い ID を別名として残す）。
+    pane を移しても pane の ID は変わらないので、`SODA_PANE_ID` は古くならない（herdr は別の workspace への移動で pane の ID が変わり、古い ID を別名として残す）。
 - 自分の pane への操作を断る `self_target` は本製品だけ（herdr は断らない）。
-- サーバを起動した環境の `WTMCTL_URL`・`WTMCTL_TOKEN` を pane に渡さない（herdr は管理する変数を上書きするが、token に当たるものは無い）。
+- サーバを起動した環境の `SODACTL_URL`・`SODACTL_TOKEN` を pane に渡さない（herdr は管理する変数を上書きするが、token に当たるものは無い）。

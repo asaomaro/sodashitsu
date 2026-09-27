@@ -1,4 +1,4 @@
-import type { MachineStatus } from "@wtm/protocol";
+import type { MachineStatus } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { MemoryLogger } from "../log/Logger.js";
 import type { CatalogLoad } from "./MachineCatalog.js";

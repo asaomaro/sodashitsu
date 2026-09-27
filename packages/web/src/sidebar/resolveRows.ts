@@ -1,4 +1,4 @@
-import type { AgentInfo, DisplayState, Pane, Tab, Workspace } from "@wtm/protocol";
+import type { AgentInfo, DisplayState, Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { stateLabel } from "../store/stateIndicator.js";
 import {
   isValidColor,

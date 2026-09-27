@@ -1,4 +1,4 @@
-import type { Dir, LayoutNode, PaneId, SplitDirection, SplitId } from "@wtm/protocol";
+import type { Dir, LayoutNode, PaneId, SplitDirection, SplitId } from "@sodashitsu/protocol";
 
 /**
  * pane の二分木レイアウトを操作する純関数（architecture.md「LayoutTree」）。

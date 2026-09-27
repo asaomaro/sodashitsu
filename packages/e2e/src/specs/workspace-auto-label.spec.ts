@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import type { Browser, BrowserContext, Page } from "@playwright/test";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
-import type { ServerEvent } from "@wtm/protocol";
+import type { ServerEvent } from "@sodashitsu/protocol";
 import { watchReceivedEvents, watchReceivedFrames, type ReceivedFrames } from "../support/frames.js";
 import { focusTerminal, prefixKey, typeLine } from "../support/keys.js";
 import { watchShownPanes } from "../support/panes.js";
@@ -74,7 +74,7 @@ async function defaultWorkspaceName(): Promise<string> {
 
 /** 一時ディレクトリに git のリポジトリを作り、そのサブディレクトリを返す（git のコマンドは前提を作るためだけ。名前の規則は使わない）。 */
 async function repoWithSubdir(): Promise<{ repo: string; sub: string }> {
-  const base = await realpath(await mkdtemp(join(tmpdir(), "wtm-e2e-label-")));
+  const base = await realpath(await mkdtemp(join(tmpdir(), "soda-e2e-label-")));
   tempDirs.push(base);
   const repo = join(base, "label-repo");
   const sub = join(repo, "pkg", "deep");

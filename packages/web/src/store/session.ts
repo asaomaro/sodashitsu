@@ -1,4 +1,4 @@
-import type { AgentInfo, HostInfo, Pane, SessionFocus, SessionLimits, SessionSnapshot, Tab, Workspace, WorkspaceGroup } from "@wtm/protocol";
+import type { AgentInfo, HostInfo, Pane, SessionFocus, SessionLimits, SessionSnapshot, Tab, Workspace, WorkspaceGroup } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { ref } from "vue";
 

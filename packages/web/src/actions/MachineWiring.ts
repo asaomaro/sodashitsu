@@ -1,4 +1,4 @@
-import type { MachineStatus } from "@wtm/protocol";
+import type { MachineStatus } from "@sodashitsu/protocol";
 import type { Ref } from "vue";
 import type { MachineSummaryClientOptions } from "../net/MachineSummaryClient.js";
 import { LOCAL_MACHINE_ID, wsUrlFor } from "../net/machineUrl.js";
@@ -49,7 +49,7 @@ export class MachineWiring {
     return !this.deps.mobileViewport.value;
   }
 
-  /** 手元の `wtm serve` のマシンの一覧を当てる。選んでいるマシンが消えたらローカルへ戻る。 */
+  /** 手元の `soda serve` のマシンの一覧を当てる。選んでいるマシンが消えたらローカルへ戻る。 */
   applyMachineList(list: MachineStatus[]): void {
     if (!this.isEnabled()) return;
     const m = this.deps.machines;

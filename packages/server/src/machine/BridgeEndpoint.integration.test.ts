@@ -60,7 +60,7 @@ describe.skipIf(process.platform === "win32")(
     });
 
     async function start(): Promise<string> {
-      const stateDir = await makeTempDir("wtm-bridge-ep-");
+      const stateDir = await makeTempDir("soda-bridge-ep-");
       cleanups.push(() =>
         rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }),
       );
@@ -137,7 +137,7 @@ describe.skipIf(process.platform === "win32")(
     });
 
     it("待ち受けの一時ディレクトリを残さず、閉じたら bridge.sock を消す", async () => {
-      const stateDir = await makeTempDir("wtm-bridge-ep-");
+      const stateDir = await makeTempDir("soda-bridge-ep-");
       cleanups.push(() =>
         rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }),
       );

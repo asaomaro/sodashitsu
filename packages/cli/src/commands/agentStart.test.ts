@@ -1,10 +1,10 @@
-import type { AgentInfo, ServerEvent } from "@wtm/protocol";
+import type { AgentInfo, ServerEvent } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "../session.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 import { runAgentStart, type AgentStartDeps } from "./agentStart.js";
 
-/** `wtmctl agent start`（20260926-agent-start design「CLI `runAgentStart`」。AC12〜AC14・AC16）。 */
+/** `sodactl agent start`（20260926-agent-start design「CLI `runAgentStart`」。AC12〜AC14・AC16）。 */
 
 vi.mock("../withSession.js", () => ({ withSession: vi.fn() }));
 vi.mock("../output.js", () => ({ printJson: vi.fn(), printLine: vi.fn(), printRaw: vi.fn() }));
@@ -60,7 +60,7 @@ function harness(request: (method: string, params: unknown) => Promise<unknown>)
     }),
     request: requestFn,
     onClose: vi.fn((cb: (code: number, reason: string) => void) => closeCbs.push(cb)),
-  } as unknown as WtmClient;
+  } as unknown as SodaClient;
   mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
   return {
     request: requestFn,
@@ -293,7 +293,7 @@ describe("runAgentStart — 自分の pane（20260926-agent-skill-file。AC11）
     };
     await expect(runAgentStart(own, store, deps)).rejects.toMatchObject({
       code: "self_target",
-      message: expect.stringContaining("WTM_PANE_ID= wtmctl"),
+      message: expect.stringContaining("SODA_PANE_ID= sodactl"),
     });
     expect(mockedWithSession).not.toHaveBeenCalled();
   });

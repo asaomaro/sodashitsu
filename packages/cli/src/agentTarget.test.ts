@@ -1,4 +1,4 @@
-import type { AgentInfo, Pane, SessionSnapshot } from "@wtm/protocol";
+import type { AgentInfo, Pane, SessionSnapshot } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { resolveAgentTarget } from "./agentTarget.js";
 import { RpcFailure } from "./wsClient.js";

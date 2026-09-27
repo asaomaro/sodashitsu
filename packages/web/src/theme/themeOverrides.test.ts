@@ -48,51 +48,51 @@ describe("loadThemeOverrides / serializeThemeOverrides — 値ごとに読む・
 
   it("妥当な値だけを層ごとに読み、CssVar でないキー・妥当でない色は値ごとに落とす", () => {
     const o = loadThemeOverrides({
-      light: { "--wtm-accent": "#fff", "--not-a-var": "#000", "--wtm-bg": "notacolor" },
-      dark: { "--wtm-menu-bg": "rgb(1,2,3)" },
+      light: { "--soda-accent": "#fff", "--not-a-var": "#000", "--soda-bg": "notacolor" },
+      dark: { "--soda-menu-bg": "rgb(1,2,3)" },
     });
-    expect(o).toEqual({ light: { "--wtm-accent": "#fff" }, dark: { "--wtm-menu-bg": "rgb(1,2,3)" } });
+    expect(o).toEqual({ light: { "--soda-accent": "#fff" }, dark: { "--soda-menu-bg": "rgb(1,2,3)" } });
   });
 
   it("往復：serializeThemeOverrides → loadThemeOverrides は同じ内容に戻る", () => {
-    const o: ThemeOverrides = { light: { "--wtm-accent": "#a6e3a1" }, dark: { "--wtm-bg": "#000" } };
+    const o: ThemeOverrides = { light: { "--soda-accent": "#a6e3a1" }, dark: { "--soda-bg": "#000" } };
     expect(loadThemeOverrides(serializeThemeOverrides(o))).toEqual(o);
   });
 
   it("両方の層が空なら serializeThemeOverrides は undefined（差が無くなれば keys ごと消える。keys と同じ規則）", () => {
     expect(serializeThemeOverrides(emptyThemeOverrides())).toBeUndefined();
-    expect(serializeThemeOverrides({ light: {}, dark: { "--wtm-accent": "#fff" } })).toEqual({ dark: { "--wtm-accent": "#fff" } });
+    expect(serializeThemeOverrides({ light: {}, dark: { "--soda-accent": "#fff" } })).toEqual({ dark: { "--soda-accent": "#fff" } });
   });
 });
 
 describe("withOverride / withoutOverride — イミュータブル", () => {
   it("withOverride は新しいオブジェクトを返し、元は変えない", () => {
     const o = emptyThemeOverrides();
-    const next = withOverride(o, "light", "--wtm-accent", "#fff");
+    const next = withOverride(o, "light", "--soda-accent", "#fff");
     expect(o).toEqual(emptyThemeOverrides());
-    expect(next).toEqual({ light: { "--wtm-accent": "#fff" }, dark: {} });
+    expect(next).toEqual({ light: { "--soda-accent": "#fff" }, dark: {} });
     expect(next).not.toBe(o);
   });
 
   it("withoutOverride はその 1 項目だけを外し、ほかは残す", () => {
-    const o: ThemeOverrides = { light: { "--wtm-accent": "#fff", "--wtm-bg": "#000" }, dark: {} };
-    const next = withoutOverride(o, "light", "--wtm-accent");
-    expect(next).toEqual({ light: { "--wtm-bg": "#000" }, dark: {} });
+    const o: ThemeOverrides = { light: { "--soda-accent": "#fff", "--soda-bg": "#000" }, dark: {} };
+    const next = withoutOverride(o, "light", "--soda-accent");
+    expect(next).toEqual({ light: { "--soda-bg": "#000" }, dark: {} });
   });
 
   it("無い項目を外しても壊れない（そのまま）", () => {
     const o = emptyThemeOverrides();
-    expect(withoutOverride(o, "dark", "--wtm-accent")).toEqual(o);
+    expect(withoutOverride(o, "dark", "--soda-accent")).toEqual(o);
   });
 });
 
 describe("mergeVars — 既定の値に層を重ねる（純粋）", () => {
   it("層にあるキーだけを差し替え、無いキーは base のまま", () => {
     const base = Object.fromEntries(CSS_VARS.map((k) => [k, `base:${k}`])) as Record<CssVar, string>;
-    const merged = mergeVars(base, { "--wtm-accent": "#fff" });
-    expect(merged["--wtm-accent"]).toBe("#fff");
-    expect(merged["--wtm-bg"]).toBe(base["--wtm-bg"]);
-    for (const key of CSS_VARS) if (key !== "--wtm-accent") expect(merged[key]).toBe(base[key]);
+    const merged = mergeVars(base, { "--soda-accent": "#fff" });
+    expect(merged["--soda-accent"]).toBe("#fff");
+    expect(merged["--soda-bg"]).toBe(base["--soda-bg"]);
+    for (const key of CSS_VARS) if (key !== "--soda-accent") expect(merged[key]).toBe(base[key]);
   });
 
   it("空の層は base と同じ内容になる（別のオブジェクト）", () => {

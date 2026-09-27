@@ -101,7 +101,7 @@ export interface PaneSizeChangedEvent {
 }
 /**
  * pane の直結の所有者が変わった（20260926-pane-direct-connect）。`clientId` は所有者の `client.hello` の clientId で、直結が終わったら null。
- * 奪われた `wtmctl pane attach` はこれで終わる。ブラウザは今は使わない。
+ * 奪われた `sodactl pane attach` はこれで終わる。ブラウザは今は使わない。
  */
 export interface PaneAttachChangedEvent {
   event: "pane.attach_changed";

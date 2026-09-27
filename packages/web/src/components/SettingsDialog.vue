@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DEFAULT_THEME_NAME, isThemeName, THEME_APPEARANCE, THEME_NAMES, type AgentIntegrationKind, type ThemeName } from "@wtm/protocol";
+import { DEFAULT_THEME_NAME, isThemeName, THEME_APPEARANCE, THEME_NAMES, type AgentIntegrationKind, type ThemeName } from "@sodashitsu/protocol";
 import { computed, inject, nextTick, ref, watch } from "vue";
 import { ActionDispatcherKey, DeviceKindKey, NotificationControllerKey } from "../injection.js";
 import type { PaneBorders } from "../layout/paneChrome.js";
@@ -166,7 +166,7 @@ function toggleSymbols(): void {
 
 /**
  * pane の枠・隙間の太さ（20260922-appearance-settings-rest）。選んだ時点で保存し、`App.vue` の
- * CSS 変数（`--wtm-pane-gap`）が再計算されるのでページの再読み込みは要らない（AC9）。
+ * CSS 変数（`--soda-pane-gap`）が再計算されるのでページの再読み込みは要らない（AC9）。
  */
 const paneFrameChoices: readonly { value: PaneFrameThickness; label: string }[] = [
   { value: "thin", label: "細い" },
@@ -944,13 +944,13 @@ function onNativeCancel(ev: Event): void {
   scroll-padding-top: calc(1em + 2rem + 0.8em);
   /* 節「キー」の結果の文（下に固定）の分。フォーカスが移ったとき、その帯の下に隠れないよう、スクロールの止まる位置も上げる（WCAG 2.4.11）。 */
   scroll-padding-bottom: calc(1.4em + 1.3em + 0.6em);
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-fg, #f8f8f2);
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-fg, #f8f8f2);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 6px;
 }
 .settings-dialog::backdrop {
-  background: var(--wtm-backdrop, rgba(0, 0, 0, 0.4));
+  background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
 /* 題名の行（「閉じる」）は、ダイアログを下までスクロールしても見えるようにする——小さい画面では端末の節まで下げると流れてしまう。 */
 .settings-header {
@@ -963,7 +963,7 @@ function onNativeCancel(ev: Event): void {
   gap: 1em;
   margin: 0 0 0.8em;
   padding-top: 1em;
-  background: var(--wtm-menu-bg, #282a36);
+  background: var(--soda-menu-bg, #282a36);
 }
 .settings-close {
   flex: none;
@@ -971,7 +971,7 @@ function onNativeCancel(ev: Event): void {
   font: inherit;
   color: inherit;
   background: transparent;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.2em 0.8em;
   cursor: pointer;
@@ -997,7 +997,7 @@ function onNativeCancel(ev: Event): void {
   font: inherit;
   color: inherit;
   background: transparent;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.4em 0.6em;
   cursor: pointer;
@@ -1011,12 +1011,12 @@ function onNativeCancel(ev: Event): void {
   flex: none;
   min-width: 2em;
   text-align: center;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 3px;
   padding: 0 0.2em;
 }
 .settings-switch[aria-checked="true"] .settings-mark {
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
 }
 .settings-note {
   margin: 0.3em 0 0;
@@ -1031,7 +1031,7 @@ function onNativeCancel(ev: Event): void {
   font: inherit;
   color: inherit;
   background: transparent;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.2em 0.8em;
   cursor: pointer;
@@ -1109,7 +1109,7 @@ function onNativeCancel(ev: Event): void {
   font: inherit;
   color: inherit;
   background: transparent;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.15em 0.7em;
   min-height: 1.75rem;
@@ -1181,7 +1181,7 @@ function onNativeCancel(ev: Event): void {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.3em 0.8em;
-  border-top: 1px solid var(--wtm-menu-border, #44475a);
+  border-top: 1px solid var(--soda-menu-border, #44475a);
   padding-top: 0.5em;
 }
 .theme-override-label {

@@ -16,7 +16,7 @@ const tabId = z.string().min(1);
 const splitId = z.string().min(1);
 // 20260923-workspace-grouping（タスク点検の指摘：groupId もほかの id と同じく共有 const にする）。
 const groupId = z.string().min(1);
-// `"external"` = 画面を持たない外部クライアント（`wtmctl`。20260923-external-control-api の design D4）。
+// `"external"` = 画面を持たない外部クライアント（`sodactl`。20260923-external-control-api の design D4）。
 const clientKind = z.enum(["desktop", "mobile", "external"]);
 const splitDirection = z.enum(["right", "down"]);
 const dir = z.enum(["left", "right", "up", "down"]);
@@ -85,7 +85,7 @@ export type PaneUnsubscribeParams = z.infer<typeof PaneUnsubscribeParams>;
 export const PaneAttachParams = z
   .object({
     paneId,
-    // 1 辺 4096・面積 1,000,000 セルまで（20260927-server-size-input-limits。`wtmctl` は 1〜1000 に絞るが、生の `/ws` からも巨大なミラーを作らせない）。
+    // 1 辺 4096・面積 1,000,000 セルまで（20260927-server-size-input-limits。`sodactl` は 1〜1000 に絞るが、生の `/ws` からも巨大なミラーを作らせない）。
     cols: terminalDimension,
     rows: terminalDimension,
     takeover: z.boolean().optional(),
@@ -444,7 +444,7 @@ export interface ServerSessionsResult {
 
 // --- 保存した SSH のマシン（20260927-multi-host-machines）---------------------------------------------
 
-/** 手元の `wtm serve` の、有効なマシンの一覧と状態（登録の順）。変化は `machine.changed` でも配る。 */
+/** 手元の `soda serve` の、有効なマシンの一覧と状態（登録の順）。変化は `machine.changed` でも配る。 */
 export const MachineListParams = z.object({});
 export type MachineListParams = z.infer<typeof MachineListParams>;
 export interface MachineListResult {

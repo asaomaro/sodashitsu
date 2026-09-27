@@ -105,7 +105,7 @@ test("tab バー：tab が1個のときは無く、2個以上で現れる。非�
   await expect(page.locator(".xterm-helper-textarea").first()).toBeFocused();
 
   // フォーカスが端末へ戻った証拠として、そのまま入力が届く。
-  const marker = `wtm-e2e-tabbar-focus-${Date.now()}`;
+  const marker = `soda-e2e-tabbar-focus-${Date.now()}`;
   await typeLine(page, `echo ${marker}`);
   await client.waitForOutput(p1, marker);
 });
@@ -196,7 +196,7 @@ test("設定：pane の枠・隙間の太さを変えると、実際に描画さ
   // 走りきってから確認するため、一呼吸おく。
   await page.waitForTimeout(300);
   await focusTerminal(page);
-  const marker = `wtm-e2e-paneframe-resize-${Date.now()}`;
+  const marker = `soda-e2e-paneframe-resize-${Date.now()}`;
   await typeLine(page, `echo ${marker}`);
   await client.waitForOutput(p1, marker);
   expect(pageErrors, `ページのエラー: ${pageErrors.join(" / ")}`).toEqual([]);
@@ -262,7 +262,7 @@ test("prefix+shift+r：外部で変わった設定を読み直し、通知が出
   await expect(page.locator(".sidebar-spaces .sidebar-row")).toHaveCount(1);
 
   // このページの ActionDispatcher を経ない書き換え（別タブ・別ダイアログ経由を模す。design「US5」）。
-  await page.evaluate(() => localStorage.setItem("wtm.prefs.v1", JSON.stringify({ statusSymbols: false })));
+  await page.evaluate(() => localStorage.setItem("soda.prefs.v1", JSON.stringify({ statusSymbols: false })));
   // 前提の確認：この時点ではまだ画面に反映されていない（storage イベントには自動で追従しない設計。design「依拠する既存の事実」）。
   await expect(page.locator(".sidebar-spaces .sidebar-state-icon").first()).toHaveAttribute("data-symbols", "on");
 
@@ -277,7 +277,7 @@ test("prefix+shift+r：外部で変わった設定を読み直し、通知が出
   // （クリックし直さずに済む＝フォーカスも保たれている証拠）。
   await expect(page.locator(".sidebar-spaces .sidebar-row")).toHaveCount(1);
   await expect(page.locator(".terminal-pane")).toHaveCount(1);
-  const marker = `wtm-e2e-reloadconfig-${Date.now()}`;
+  const marker = `soda-e2e-reloadconfig-${Date.now()}`;
   await typeLine(page, `echo ${marker}`);
   await client.waitForOutput(p1, marker);
 });

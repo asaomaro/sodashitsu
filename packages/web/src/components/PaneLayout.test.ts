@@ -1,4 +1,4 @@
-import type { LayoutNode } from "@wtm/protocol";
+import type { LayoutNode } from "@sodashitsu/protocol";
 import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPinia, type Pinia } from "pinia";
@@ -429,7 +429,7 @@ describe("PaneLayout — pane の枠（paneFrames。D110）", () => {
  * `PaneFrame` が辺ごとの余白（inline style）・強調を描き分ける（design「振る舞いの詳細」）。
  */
 describe("PaneLayout — 枠の描画モードと隙間（AC1〜AC5・AC7・AC9）", () => {
-  const GAP = "var(--wtm-pane-gap, 4px)";
+  const GAP = "var(--soda-pane-gap, 4px)";
   // p1 | (p2 / p3)：右分割の b が下分割（入れ子）。
   const NESTED: LayoutNode = {
     type: "split",

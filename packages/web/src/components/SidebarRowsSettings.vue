@@ -525,7 +525,7 @@ watch(
     <p class="sr-note">
       並べたトークンを 1 行ずつ描きます（1 行目が主の行、2
       行目からは小さい補足の行）。値の無いトークンと、何も残らない行は出ません。<code>$名前</code>
-      は <code>wtmctl workspace report-metadata</code>・<code>wtmctl pane report-metadata</code>
+      は <code>sodactl workspace report-metadata</code>・<code>sodactl pane report-metadata</code>
       で外から報告された値です。変更はこのブラウザにすぐ保存されます。
       畳んだサイドバーとグループの見出しの行は変わりません。色は <code>#RGB</code> か
       <code>#RRGGBB</code>（自動のコントラスト調整はかかりません）。
@@ -939,7 +939,7 @@ watch(
   gap: 0.4em;
 }
 .sr-line {
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.4em;
   display: flex;
@@ -974,7 +974,7 @@ watch(
   flex-direction: column;
   gap: 0.3em;
   padding-left: 1em;
-  border-left: 2px solid var(--wtm-menu-border, #44475a);
+  border-left: 2px solid var(--soda-menu-border, #44475a);
 }
 .sr-field,
 .sr-check {
@@ -1001,7 +1001,7 @@ watch(
   font: inherit;
   color: inherit;
   background: transparent;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.15em 0.7em;
   min-height: 1.75rem;

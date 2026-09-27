@@ -23,8 +23,8 @@ describe("judgePreflight", () => {
       "0 以外で終わる（古い版は unknown command で 2）",
       2,
       "",
-      "wtm: unknown command: __handoff-preflight",
-      /cannot be loaded or does not support live handoff \(exit code 2\): wtm: unknown command/,
+      "soda: unknown command: __handoff-preflight",
+      /cannot be loaded or does not support live handoff \(exit code 2\): soda: unknown command/,
     ],
     ["シグナルで終わる", null, "", "", /signal SIGSEGV/],
     ["答えが無い", 0, "", "", /did not answer/],
@@ -76,7 +76,7 @@ describe("runPreflight", () => {
       const p = runPreflight({
         execPath: "/usr/bin/node",
         execArgv: ["--enable-source-maps"],
-        entry: "/opt/wtm/dist/main.js",
+        entry: "/opt/soda/dist/main.js",
         spawn: (command, args, env) => {
           seen = { command, args, env };
           return child as unknown as ChildProcess;
@@ -92,7 +92,7 @@ describe("runPreflight", () => {
     expect(seen?.command).toBe("/usr/bin/node");
     expect(seen?.args).toEqual([
       "--enable-source-maps",
-      "/opt/wtm/dist/main.js",
+      "/opt/soda/dist/main.js",
       PREFLIGHT_COMMAND,
     ]);
     expect(seen?.env[HANDOFF_NONCE_ENV]).toBeUndefined();

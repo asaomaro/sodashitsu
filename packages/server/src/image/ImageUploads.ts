@@ -5,7 +5,7 @@ import {
   matchesImageMagic,
   RpcError,
   type ImageMimeType,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 import type { Logger } from "../log/Logger.js";
 
 /** 上限（decisions D7）。テストで差し替える。 */

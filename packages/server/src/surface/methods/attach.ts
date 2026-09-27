@@ -3,7 +3,7 @@ import {
   PaneAttachResizeParams,
   PaneDetachParams,
   RpcError,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MachineState } from "@wtm/protocol";
+import type { MachineState } from "@sodashitsu/protocol";
 import { computed, inject } from "vue";
 import { MachineSwitcherKey } from "../injection.js";
 import { LOCAL_MACHINE_ID } from "../net/machineUrl.js";
@@ -20,7 +20,7 @@ const selected = computed(() => machines.selectedId === props.machineId);
 const collapsed = computed(() => machines.collapsed[props.machineId] === true);
 const selectable = computed(() => machines.isSelectable(props.machineId));
 
-/** 見出しに出す状態。ローカルは画面の接続（選んでいるとき）か軽い接続の繋がり、ほかは手元の `wtm serve` から見た状態。 */
+/** 見出しに出す状態。ローカルは画面の接続（選んでいるとき）か軽い接続の繋がり、ほかは手元の `soda serve` から見た状態。 */
 const state = computed<MachineState>(() => {
   if (props.machineId === LOCAL_MACHINE_ID) {
     const s = machines.summaries[LOCAL_MACHINE_ID];
@@ -134,7 +134,7 @@ function onButtonKeydown(ev: KeyboardEvent): void {
   font-weight: 600;
 }
 .machine-select[aria-current="true"] {
-  color: var(--wtm-accent-fg, #f8f8f2);
+  color: var(--soda-accent-fg, #f8f8f2);
 }
 .machine-select[aria-disabled="true"] {
   cursor: default;
@@ -157,7 +157,7 @@ function onButtonKeydown(ev: KeyboardEvent): void {
   opacity: 0.75;
 }
 .machine-state[data-state="attention"] {
-  color: var(--wtm-warn-fg, #ffb86c);
+  color: var(--soda-warn-fg, #ffb86c);
   opacity: 1;
 }
 </style>

@@ -3,7 +3,7 @@ import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { defineComponent, h, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MethodName, Pane, ParamsOf, ResultOf } from "@wtm/protocol";
+import type { MethodName, Pane, ParamsOf, ResultOf } from "@sodashitsu/protocol";
 import type { ConnectionPort } from "../net/ports.js";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";

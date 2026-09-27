@@ -67,7 +67,7 @@ function serializeLayer(layer: ThemeOverrideLayer): Record<string, string> | und
   return entries.length === 0 ? undefined : Object.fromEntries(entries);
 }
 
-/** 保存する形（両方の層が空なら `undefined`＝`wtm.prefs.v1` から `themeOverrides` ごと消える。`keys` と同じ「差が無くなれば消す」規則）。 */
+/** 保存する形（両方の層が空なら `undefined`＝`soda.prefs.v1` から `themeOverrides` ごと消える。`keys` と同じ「差が無くなれば消す」規則）。 */
 export function serializeThemeOverrides(
   o: ThemeOverrides,
 ): { light?: Record<string, string>; dark?: Record<string, string> } | undefined {
@@ -107,23 +107,23 @@ export function mergeVars(base: Readonly<Record<CssVar, string>>, layer: ThemeOv
 
 /** 画面に出す、その CSS 変数の使われ方の短い日本語（AC12。研究 F4 の対応表から）。 */
 export const CSS_VAR_LABELS: Readonly<Record<CssVar, string>> = {
-  "--wtm-bg": "画面地の背景",
-  "--wtm-fg": "画面地の文字",
-  "--wtm-menu-bg": "メニュー・ダイアログ・サイドバー等の背景",
-  "--wtm-menu-fg": "同じ面の文字",
-  "--wtm-menu-border": "区切りの線",
-  "--wtm-menu-active-bg": "選ばれている行の背景（メニュー・goto・tab・サイドバーの選択行）",
-  "--wtm-menu-hover-bg": "ホバーの背景",
-  "--wtm-accent": "強調の色（フォーカスの枠等）",
-  "--wtm-accent-fg": "強調の上の文字",
-  "--wtm-error-fg": "エラーの文字",
-  "--wtm-warn-fg": "警告の文字",
-  "--wtm-state-blocked": "状態アイコンの色（入力待ち）",
-  "--wtm-state-working": "状態アイコンの色（作業中）",
-  "--wtm-state-done": "状態アイコンの色（完了）",
-  "--wtm-state-idle": "状態アイコンの色（待機中）",
-  "--wtm-subtle-bg": "薄い強調の背景",
-  "--wtm-backdrop": "ダイアログの幕",
-  "--wtm-backdrop-strong": "再接続の表示の幕",
-  "--wtm-pane-current": "選ばれている pane の枠",
+  "--soda-bg": "画面地の背景",
+  "--soda-fg": "画面地の文字",
+  "--soda-menu-bg": "メニュー・ダイアログ・サイドバー等の背景",
+  "--soda-menu-fg": "同じ面の文字",
+  "--soda-menu-border": "区切りの線",
+  "--soda-menu-active-bg": "選ばれている行の背景（メニュー・goto・tab・サイドバーの選択行）",
+  "--soda-menu-hover-bg": "ホバーの背景",
+  "--soda-accent": "強調の色（フォーカスの枠等）",
+  "--soda-accent-fg": "強調の上の文字",
+  "--soda-error-fg": "エラーの文字",
+  "--soda-warn-fg": "警告の文字",
+  "--soda-state-blocked": "状態アイコンの色（入力待ち）",
+  "--soda-state-working": "状態アイコンの色（作業中）",
+  "--soda-state-done": "状態アイコンの色（完了）",
+  "--soda-state-idle": "状態アイコンの色（待機中）",
+  "--soda-subtle-bg": "薄い強調の背景",
+  "--soda-backdrop": "ダイアログの幕",
+  "--soda-backdrop-strong": "再接続の表示の幕",
+  "--soda-pane-current": "選ばれている pane の枠",
 };

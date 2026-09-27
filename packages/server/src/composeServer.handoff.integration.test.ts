@@ -34,7 +34,7 @@ describe.skipIf(process.platform !== "linux")("composeServer: 引き継ぎの起
 
   /** 普通に起動して止め、pane を 1 つ持つ session.json を作る。 */
   async function prepared(): Promise<{ stateDir: string; paneId: string }> {
-    const stateDir = await makeTempDir("wtm-handoff-compose-");
+    const stateDir = await makeTempDir("soda-handoff-compose-");
     cleanups.push(() =>
       rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }),
     );
@@ -147,7 +147,7 @@ describe.skipIf(process.platform !== "linux")("composeServer: 引き継ぎの起
 
   it("確かめに通らなかった番号を新しいシェルの master が使っていても、閉じない（手放すのは PTY を開く前）", async () => {
     // 1 回目の起動で pane の master が使った番号を控える（同じ手順の起動は同じ番号を使うことが多い）。
-    const stateDir = await makeTempDir("wtm-handoff-compose-");
+    const stateDir = await makeTempDir("soda-handoff-compose-");
     cleanups.push(() =>
       rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }),
     );

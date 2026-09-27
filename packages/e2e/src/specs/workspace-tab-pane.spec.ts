@@ -35,7 +35,7 @@ test("workspace: 作成・名前変更・切替・閉じる（確認あり）", 
   // 切り替わる前にクリックすると元の p1 の端末を押してしまうので、ブラウザが新しい pane を描いた（`client.view` に
   // 含まれる）ことを待ってから触る。
   await expect.poll(shown).toContain(paneCreated.data.pane.id);
-  const marker = `wtm-e2e-newws-${Date.now()}`;
+  const marker = `soda-e2e-newws-${Date.now()}`;
   await focusTerminal(page);
   await typeLine(page, `echo ${marker}`);
   await client.waitForOutput(paneCreated.data.pane.id, marker); // 新しい workspace の pane へフォーカスが移っている証拠
@@ -77,7 +77,7 @@ test("workspace: 作成・名前変更・切替・閉じる（確認あり）", 
   // （D97。以前は tab バーごと消えていた。親の統合 test で追加）。
   await expect(page.locator(".terminal-pane")).toHaveCount(1);
   await client.request("pane.subscribe", { paneId: p1, scrollbackLines: 200 });
-  const afterClose = `wtm-e2e-afterwsclose-${Date.now()}`;
+  const afterClose = `soda-e2e-afterwsclose-${Date.now()}`;
   await typeLine(page, `echo ${afterClose}`);
   await client.waitForOutput(p1, afterClose);
 });
@@ -127,12 +127,12 @@ test("tab: 作成・名前変更・番号での切替・閉じる", async ({ pag
   // （D97。以前は端末が 1 つも表示されなかった。親の統合 test で追加）。`.tab-bar-item-active` も
   // tab バーごと消えている（上と同じ理由）ので、代わりに端末が表示されていることだけを見る。
   await expect(page.locator(".terminal-pane")).toHaveCount(1);
-  const afterClose = `wtm-e2e-aftertabclose-${Date.now()}`;
+  const afterClose = `soda-e2e-aftertabclose-${Date.now()}`;
   await typeLine(page, `echo ${afterClose}`);
   await client.waitForOutput(p1, afterClose);
 });
 
-/** `LayoutNode`（`@wtm/protocol`）の葉を深さ優先（a→b）で並べる。`LayoutTree.leaves`（サーバ）と同じ順序——
+/** `LayoutNode`（`@sodashitsu/protocol`）の葉を深さ優先（a→b）で並べる。`LayoutTree.leaves`（サーバ）と同じ順序——
  *  `cyclePane`（巡回）の順の検証に使う。テスト側は protocol の型を持たないので構造だけ最小限に定義する。 */
 interface TestLayoutNode {
   type: "pane" | "split";
@@ -190,12 +190,12 @@ test("pane: 分割・境界のリサイズ・フォーカス移動・入れ替�
   // prefix 操作の直後は常に正しい pane へ実際のブラウザのフォーカスが移っている。
   await prefixKey(page, "h"); // p2 → p1（境界のリサイズで splitter へ移った焦点からでも、prefix は
   // window 側のグローバルな keydown ハンドラ経由で届く。design「keys/KeyInputController」）
-  const marker1 = `wtm-e2e-focusdir-${Date.now()}`;
+  const marker1 = `soda-e2e-focusdir-${Date.now()}`;
   await typeLine(page, `echo ${marker1}`);
   await client.waitForOutput(p1, marker1); // p1 に届く＝フォーカスが実際に移った証拠
   await markFocusedPane(page, p1); // 画面の pane の並びを読むための印（下の入れ替え。support/panes.ts）
   await prefixKey(page, "l"); // p1 → p2
-  const marker2 = `wtm-e2e-focusdir-${Date.now()}`;
+  const marker2 = `soda-e2e-focusdir-${Date.now()}`;
   await typeLine(page, `echo ${marker2}`);
   await client.waitForOutput(p2, marker2);
   await markFocusedPane(page, p2);
@@ -213,14 +213,14 @@ test("pane: 分割・境界のリサイズ・フォーカス移動・入れ替�
   // 到着だけでなく実際の入力で確かめる（AC-I4。`ActionDispatcher.splitPane` の `.then()` は
   // `pane.split` 自体の RPC 応答を待ってから `view.focusPane` するため、events の到着より遅れうる——
   // 確かめずに次のキー操作へ進むと、まだ p2 にフォーカスが残ったまま操作してしまう）。
-  const markerNewPane = `wtm-e2e-split-${Date.now()}`;
+  const markerNewPane = `soda-e2e-split-${Date.now()}`;
   await typeLine(page, `echo ${markerNewPane}`);
   await client.waitForOutput(p3, markerNewPane);
   await markFocusedPane(page, p3);
 
   // 巡回の前提を作る：k（上）で p3 → p2 に戻る。
   await prefixKey(page, "k");
-  const marker3 = `wtm-e2e-focusdir-${Date.now()}`;
+  const marker3 = `soda-e2e-focusdir-${Date.now()}`;
   await typeLine(page, `echo ${marker3}`);
   await client.waitForOutput(p2, marker3);
 
@@ -238,11 +238,11 @@ test("pane: 分割・境界のリサイズ・フォーカス移動・入れ替�
 
   // 巡回：prefix+Tab で次の pane、prefix+shift+Tab で前の pane。
   await prefixKey(page, "Tab"); // 深さ優先 [p1,p3,p2] の p2（idx2）の次 → p1（idx0）
-  const marker4 = `wtm-e2e-cycle-${Date.now()}`;
+  const marker4 = `soda-e2e-cycle-${Date.now()}`;
   await typeLine(page, `echo ${marker4}`);
   await client.waitForOutput(p1, marker4);
   await prefixKey(page, "Shift+Tab"); // [p1,p3,p2] の p1（idx0）の前 → p2（idx2）
-  const marker5 = `wtm-e2e-cycle-${Date.now()}`;
+  const marker5 = `soda-e2e-cycle-${Date.now()}`;
   await typeLine(page, `echo ${marker5}`);
   await client.waitForOutput(p2, marker5);
 
@@ -272,7 +272,7 @@ test("pane: 分割・境界のリサイズ・フォーカス移動・入れ替�
   // 同じ）へ焦点が移り、クリックせずにそのまま入力が届く（D97。以前は焦点が BODY へ落ちていた。親の統合 test で追加）。
   await prefixKey(page, "x");
   await expect(page.locator(".terminal-pane")).toHaveCount(2);
-  const afterClose = `wtm-e2e-afterpaneclose-${Date.now()}`;
+  const afterClose = `soda-e2e-afterpaneclose-${Date.now()}`;
   await typeLine(page, `echo ${afterClose}`);
   await client.waitForOutput(p1, afterClose);
 });
@@ -313,23 +313,23 @@ test("新しい pane を作る操作の直後に打った文字は、応答を�
   // 分割：prefix+v の直後、新しい pane ができる（シェルの起動確認の猶予 約 0.3 秒）のを待たずに打つ。
   const splitCreated = client.waitForEvent("pane.created");
   await prefixKey(page, "v");
-  const afterSplit = `wtm-e2e-aftersplit-${Date.now()}`;
+  const afterSplit = `soda-e2e-aftersplit-${Date.now()}`;
   await typeLine(page, `echo ${afterSplit}`);
   const p2 = (await splitCreated).data.pane.id;
   await client.request("pane.subscribe", { paneId: p2, scrollbackLines: 200 });
   // 新しい pane の readline が、打った行を先頭から丸ごとエコーしている（先頭の数文字が元の pane に取られていない）。
   await client.waitForOutput(p2, `echo ${afterSplit}`);
-  expect(client.rawOutput(p1)).not.toContain("echo wtm-e2e-aftersplit");
+  expect(client.rawOutput(p1)).not.toContain("echo soda-e2e-aftersplit");
 
   // 新しい workspace：prefix+N の直後に打つ。
   const wsPaneCreated = client.waitForEvent("pane.created", (e) => e.data.pane.id !== p2);
   await prefixKey(page, "N");
-  const afterNewWs = `wtm-e2e-afternewws-${Date.now()}`;
+  const afterNewWs = `soda-e2e-afternewws-${Date.now()}`;
   await typeLine(page, `echo ${afterNewWs}`);
   const p3 = (await wsPaneCreated).data.pane.id;
   await client.request("pane.subscribe", { paneId: p3, scrollbackLines: 200 });
   await client.waitForOutput(p3, `echo ${afterNewWs}`);
-  expect(client.rawOutput(p2)).not.toContain("echo wtm-e2e-afternewws");
+  expect(client.rawOutput(p2)).not.toContain("echo soda-e2e-afternewws");
 });
 
 test("分割の応答待ちの間に元の pane の上でホイールを回しても、その入力は新しい pane へ流れない（D99・独立点検の指摘。親の統合 test で追加）", async ({ page, appServer }) => {
@@ -375,7 +375,7 @@ test("分割の応答待ちの間に元の pane の上でホイールを回し�
  * **上流を持ち 1 コミット進んだ**作業ツリーを用意して実際に描かせる。
  */
 async function makeAheadRepo(branch: string): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "wtm-e2e-git-"));
+  const dir = await mkdtemp(join(tmpdir(), "soda-e2e-git-"));
   const origin = join(dir, "origin.git");
   const work = join(dir, "work");
   // 利用者の ~/.gitconfig（署名・既定ブランチ名など）に左右されないようにする。
@@ -385,7 +385,7 @@ async function makeAheadRepo(branch: string): Promise<string> {
   await git(dir, ["init", "--bare", "-q", origin]);
   await git(dir, ["clone", "-q", origin, work]);
   await git(work, ["config", "user.email", "e2e@example.com"]);
-  await git(work, ["config", "user.name", "wtm e2e"]);
+  await git(work, ["config", "user.name", "soda e2e"]);
   await git(work, ["commit", "-q", "--allow-empty", "-m", "init"]); // push の前に 1 つ要る（空のままでは push できない）
   await git(work, ["checkout", "-q", "-b", branch]);
   await git(work, ["push", "-q", "-u", "origin", branch]); // 上流が無いと ahead は 0 のまま
@@ -465,7 +465,7 @@ test("サイドバーとタブバーのボタンが、キー操作と同じ結�
 });
 
 /**
- * この spec が作った使い捨てリポジトリ。**worktree の作成先は開発機の `~/.wtm/worktrees` 配下**
+ * この spec が作った使い捨てリポジトリ。**worktree の作成先は開発機の `~/.sodashitsu/worktrees` 配下**
  * （サーバの既定。E2E からは差し替えられない）なので、後片付けをしないと**実機に残骸が溜まる**
  * ——実際に 4 つ残っているのを cross 点検が見つけた。テストが途中で落ちても消えるよう `afterEach` で消す。
  */
@@ -474,7 +474,7 @@ const madeRepos = new Set<string>();
 test.afterEach(async () => {
   for (const repo of madeRepos) {
     // 作成先は `<root>/<repo 名>/<ブランチの slug>`（`defaultCheckoutPath`）。repo 名ごと消す。
-    await rm(join(homedir(), ".wtm", "worktrees", basename(repo)), { recursive: true, force: true });
+    await rm(join(homedir(), ".sodashitsu", "worktrees", basename(repo)), { recursive: true, force: true });
     await rm(repo, { recursive: true, force: true });
   }
   madeRepos.clear();
@@ -482,13 +482,13 @@ test.afterEach(async () => {
 
 /** 使い捨ての git リポジトリ（**この実リポジトリに worktree を作らないため**。20260920-git-worktree-actions）。 */
 async function makePlainRepo(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "wtm-e2e-wt-"));
+  const dir = await mkdtemp(join(tmpdir(), "soda-e2e-wt-"));
   madeRepos.add(dir);
   const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" };
   const git = (args: string[]): Promise<unknown> => promisify(execFile)("git", args, { cwd: dir, env });
   await git(["init", "-q", "-b", "main"]);
   await git(["config", "user.email", "e2e@example.com"]);
-  await git(["config", "user.name", "wtm e2e"]);
+  await git(["config", "user.name", "soda e2e"]);
   await git(["commit", "-q", "--allow-empty", "-m", "init"]);
   return dir;
 }
@@ -520,7 +520,7 @@ test("worktree：prefix+G で作ると、その場所の workspace が開く。�
   // 候補が入っていて、作成先が見えている（AC1・AC2）。
   const branch = await dialog.locator(".worktree-dialog-input").inputValue();
   expect(branch).toMatch(/^worktree\//);
-  await expect(dialog.locator(".worktree-dialog-preview-path")).toContainText("/.wtm/worktrees/");
+  await expect(dialog.locator(".worktree-dialog-preview-path")).toContainText("/.sodashitsu/worktrees/");
   const previewPath = await dialog.locator(".worktree-dialog-preview-path").textContent();
 
   // 条件を付けないと、**先に届いている repo の作成イベント**を拾ってしまう。

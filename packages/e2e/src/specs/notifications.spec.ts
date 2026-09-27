@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { devices, type Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures.js";
 import { focusTerminal, prefixKey, typeLine } from "../support/keys.js";
-import type { WtmTestClient } from "../support/wsClient.js";
+import type { SodaTestClient } from "../support/wsClient.js";
 
 /**
  * 通知の E2E（20260920-agent-notifications の AC1・AC3・AC5・AC10・AC15・AC16・AC-I3）。
@@ -20,7 +20,7 @@ import type { WtmTestClient } from "../support/wsClient.js";
  * サーバ側の事実であって「利用者の画面が切り替わったか」ではない。**tab バーの選択状態**を見る
  * （`view.setView` がそれを書く唯一の経路なので、落とすとここで落ちる）。
  *
- * **`wtm.prefs.v1` も同じ `addInitScript` で仕込む**——E2E に localStorage の事前設定の仕組みが無く、
+ * **`soda.prefs.v1` も同じ `addInitScript` で仕込む**——E2E に localStorage の事前設定の仕組みが無く、
  * 既定は OS 通知も音も「切」なので、仕込まないと経路が 1 つも通らない。
  *
  * **偽のエージェント**は `agent-detection.spec.ts` と同じ手法（`exec -a claude bash <script>` で
@@ -46,7 +46,7 @@ async function installNotifyProbe(page: Page, prefs: ProbePrefs, permission: "gr
   await page.addInitScript(
     ([prefsJson, perm]) => {
       try {
-        localStorage.setItem("wtm.prefs.v1", prefsJson as string);
+        localStorage.setItem("soda.prefs.v1", prefsJson as string);
       } catch {
         // プライベートウィンドウ等。仕込めなければ既定のまま走る（そのテストは落ちる）。
       }
@@ -162,12 +162,12 @@ interface FakeAgent {
  * 偽のエージェントを起動し、**起動猶予が明けるまで待って**から戻る。
  * 入力待ちにするのは呼ぶ側の `block()`——`sleep` で固定すると競走になる。
  */
-async function launchFakeAgent(page: Page, client: WtmTestClient, paneId: string, opts: { via?: "keyboard" | "client" } = {}): Promise<FakeAgent> {
-  const dir = await mkdtemp(join(tmpdir(), "wtm-e2e-notify-"));
+async function launchFakeAgent(page: Page, client: SodaTestClient, paneId: string, opts: { via?: "keyboard" | "client" } = {}): Promise<FakeAgent> {
+  const dir = await mkdtemp(join(tmpdir(), "soda-e2e-notify-"));
   tempDirs.push(dir);
   const scriptPath = join(dir, "fake-claude.sh");
   const triggerPath = join(dir, "block-now");
-  const readyMarker = `wtm-e2e-ready-${paneId}`;
+  const readyMarker = `soda-e2e-ready-${paneId}`;
   const script = [
     "clear",
     `echo ${readyMarker}`,

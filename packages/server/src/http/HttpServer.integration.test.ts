@@ -15,7 +15,7 @@ import { listenOnFreePort } from "../composeServerOnFreePort.js";
 
 /** 本物のサーバを 0 番で待ち受けさせ、割り当てられたポートを OriginPolicy に渡す。 */
 async function startServer(webDistDir: string, opts: { extraOrigins?: string[] } = {}) {
-  const stateDir = await makeTempDir("wtm-http-state-");
+  const stateDir = await makeTempDir("soda-http-state-");
   const auth = new DefaultAuthService(new FsAuthFile(stateDir));
   await auth.initialize();
   const { token } = await auth.ensureToken();
@@ -51,7 +51,7 @@ function rawRequest(port: number, requestLine: string, headers: string[] = [], h
 describe("HttpServer — /api/login, /api/logout, /api/session", () => {
   let webDistDir: string;
   beforeEach(async () => {
-    webDistDir = await makeTempDir("wtm-http-dist-");
+    webDistDir = await makeTempDir("soda-http-dist-");
   });
   afterEach(async () => {
     await rm(webDistDir, { recursive: true, force: true });
@@ -100,7 +100,7 @@ describe("HttpServer — /api/login, /api/logout, /api/session", () => {
       });
       expect(loginRes.status).toBe(204);
       const setCookie = loginRes.headers.get("set-cookie");
-      expect(setCookie).toContain("wtm_session=");
+      expect(setCookie).toContain("soda_session=");
       expect(setCookie).toContain("HttpOnly");
       const cookie = setCookie!.split(";")[0]!;
 
@@ -146,7 +146,7 @@ describe("HttpServer — /api/login, /api/logout, /api/session", () => {
   });
 });
 
-/** 正しい token でログインし、Cookie（`wtm_session=…`）を返す。 */
+/** 正しい token でログインし、Cookie（`soda_session=…`）を返す。 */
 async function loginCookie(s: { baseUrl: string; token: string }): Promise<string> {
   const res = await fetch(`${s.baseUrl}/api/login`, {
     method: "POST",
@@ -165,7 +165,7 @@ async function loginCookie(s: { baseUrl: string; token: string }): Promise<strin
 describe("HttpServer — /api/session の Host/Origin の検査（D106）", () => {
   let webDistDir: string;
   beforeEach(async () => {
-    webDistDir = await makeTempDir("wtm-http-dist-session-");
+    webDistDir = await makeTempDir("soda-http-dist-session-");
   });
   afterEach(async () => {
     await rm(webDistDir, { recursive: true, force: true });
@@ -175,7 +175,7 @@ describe("HttpServer — /api/session の Host/Origin の検査（D106）", () =
     const s = await startServer(webDistDir);
     try {
       const cookie = await loginCookie(s);
-      const badHost = `wtm.example:${s.port}`;
+      const badHost = `soda.example:${s.port}`;
       expect(await rawRequest(s.port, "GET /api/session HTTP/1.1", [`Cookie: ${cookie}`], badHost)).toBe("HTTP/1.1 403 Forbidden");
       const warns = () => s.logger.lines.filter((l) => l.level === "warn" && l.msg === "origin rejected");
       expect(warns()).toHaveLength(1);
@@ -220,18 +220,18 @@ describe("HttpServer — /api/session の Host/Origin の検査（D106）", () =
   });
 
   it("--origin で足した Origin のホストは許す（ポート付きは host:port、既定ポートはポート無し）", async () => {
-    const s = await startServer(webDistDir, { extraOrigins: ["https://box.tailnet.ts.net:7780", "https://wtm.example.com"] });
+    const s = await startServer(webDistDir, { extraOrigins: ["https://box.tailnet.ts.net:7780", "https://soda.example.com"] });
     try {
       const cookie = await loginCookie(s);
       const session = (host: string, headers: string[] = []) => rawRequest(s.port, "GET /api/session HTTP/1.1", [`Cookie: ${cookie}`, ...headers], host);
       expect(await session("box.tailnet.ts.net:7780")).toBe("HTTP/1.1 204 No Content");
-      expect(await session("wtm.example.com")).toBe("HTTP/1.1 204 No Content");
-      expect(await session("wtm.example.com:443")).toBe("HTTP/1.1 204 No Content"); // 既定ポートを付けた Host（nginx の $host:$server_port）
+      expect(await session("soda.example.com")).toBe("HTTP/1.1 204 No Content");
+      expect(await session("soda.example.com:443")).toBe("HTTP/1.1 204 No Content"); // 既定ポートを付けた Host（nginx の $host:$server_port）
       // ポートが違えば別の宛先（--origin に無い）。
       expect(await session("box.tailnet.ts.net")).toBe("HTTP/1.1 403 Forbidden");
-      expect(await session("wtm.example.com:8443")).toBe("HTTP/1.1 403 Forbidden");
+      expect(await session("soda.example.com:8443")).toBe("HTTP/1.1 403 Forbidden");
       // Origin が --origin のものなら、Host を問わない（`/ws`・`/api/login` と同じ。前段のプロキシが Host を書き換える構成）。
-      expect(await session(`127.0.0.1:${s.port}`, ["Origin: https://wtm.example.com"])).toBe("HTTP/1.1 204 No Content");
+      expect(await session(`127.0.0.1:${s.port}`, ["Origin: https://soda.example.com"])).toBe("HTTP/1.1 204 No Content");
     } finally {
       await s.close();
     }
@@ -240,9 +240,9 @@ describe("HttpServer — /api/session の Host/Origin の検査（D106）", () =
   it("Cookie が無い・無効なら、Host が許可外でも 401 のまま（ログイン画面を出すため。D105）で、ログにも書かない", async () => {
     const s = await startServer(webDistDir);
     try {
-      const badHost = `wtm.example:${s.port}`;
+      const badHost = `soda.example:${s.port}`;
       expect(await rawRequest(s.port, "GET /api/session HTTP/1.1", [], badHost)).toBe("HTTP/1.1 401 Unauthorized");
-      expect(await rawRequest(s.port, "GET /api/session HTTP/1.1", ["Cookie: wtm_session=unknown"], badHost)).toBe("HTTP/1.1 401 Unauthorized");
+      expect(await rawRequest(s.port, "GET /api/session HTTP/1.1", ["Cookie: soda_session=unknown"], badHost)).toBe("HTTP/1.1 401 Unauthorized");
       expect(s.logger.lines).toEqual([]);
     } finally {
       await s.close();
@@ -254,7 +254,7 @@ describe("HttpServer — /api/session の Host/Origin の検査（D106）", () =
     const s = await startServer(webDistDir);
     try {
       const cookie = await loginCookie(s);
-      const badHost = `wtm.example:${s.port}`;
+      const badHost = `soda.example:${s.port}`;
       expect(await rawRequest(s.port, "GET / HTTP/1.1", [], badHost)).toBe("HTTP/1.1 200 OK");
       expect(await rawRequest(s.port, "POST /api/logout HTTP/1.1", [`Cookie: ${cookie}`, "Content-Length: 0"], badHost)).toBe("HTTP/1.1 204 No Content");
       expect(await rawRequest(s.port, "GET /api/session HTTP/1.1", [`Cookie: ${cookie}`])).toBe("HTTP/1.1 401 Unauthorized"); // ログアウトは効いた
@@ -266,7 +266,7 @@ describe("HttpServer — /api/session の Host/Origin の検査（D106）", () =
 
 describe("HttpServer — static files", () => {
   it("serves a placeholder page when packages/web/dist does not exist", async () => {
-    const missingDir = join(await makeTempDir("wtm-http-missing-"), "does-not-exist");
+    const missingDir = join(await makeTempDir("soda-http-missing-"), "does-not-exist");
     const s = await startServer(missingDir);
     try {
       const res = await fetch(`${s.baseUrl}/`);
@@ -279,7 +279,7 @@ describe("HttpServer — static files", () => {
   });
 
   it("serves a built file and falls back to index.html for unknown paths (SPA routing)", async () => {
-    const dir = await makeTempDir("wtm-http-dist2-");
+    const dir = await makeTempDir("soda-http-dist2-");
     await writeFile(join(dir, "index.html"), "<html>index</html>");
     await mkdir(join(dir, "assets"));
     await writeFile(join(dir, "assets", "app.js"), "console.log('hi')");
@@ -301,7 +301,7 @@ describe("HttpServer — static files", () => {
   });
 
   it("refuses a path that tries to escape the dist directory", async () => {
-    const dir = await makeTempDir("wtm-http-dist3-");
+    const dir = await makeTempDir("soda-http-dist3-");
     await writeFile(join(dir, "index.html"), "<html>index</html>");
     const s = await startServer(dir);
     try {
@@ -319,7 +319,7 @@ describe("HttpServer — static files", () => {
 describe("HttpServer — 認証前の誰でも送れる不正な入力で error 行を書かせない（D103）", () => {
   let webDistDir: string;
   beforeEach(async () => {
-    webDistDir = await makeTempDir("wtm-http-dist-bad-");
+    webDistDir = await makeTempDir("soda-http-dist-bad-");
   });
   afterEach(async () => {
     await rm(webDistDir, { recursive: true, force: true });
@@ -358,7 +358,7 @@ describe("HttpServer — 認証前の誰でも送れる不正な入力で error 
   it("Cookie の % の並びが壊れていても /api/session は 401・/api/logout は 204 で、error 行を書かない", async () => {
     const s = await startServer(webDistDir);
     try {
-      const cookie = "wtm_session=%E0%A4%A";
+      const cookie = "soda_session=%E0%A4%A";
       expect((await fetch(`${s.baseUrl}/api/session`, { headers: { cookie } })).status).toBe(401);
       expect((await fetch(`${s.baseUrl}/api/logout`, { method: "POST", headers: { cookie } })).status).toBe(204);
       expect(s.logger.lines.filter((l) => l.level === "error")).toEqual([]);

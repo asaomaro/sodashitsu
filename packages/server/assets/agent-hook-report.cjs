@@ -7,7 +7,7 @@
  * `node <このファイル> <claude|codex>` の形で起動される想定（AgentIntegrationInstaller が登録する）。
  *
  * 本製品の pane の**外**で（利用者が自分の端末で直接 `claude`/`codex` を使ったときに）呼ばれても、
- * 環境変数（`WTM_PANE_ID`/`WTM_AGENT_REPORT_SOCKET`）が無いので何もせず終わる——この hook は
+ * 環境変数（`SODA_PANE_ID`/`SODA_AGENT_REPORT_SOCKET`）が無いので何もせず終わる——この hook は
  * 常にグローバルな設定に登録されるため、無害であることが最優先（design「5. hook スクリプト」）。
  *
  * **stdout には何も書かない**——`SessionStart` の stdout は Claude Code の会話コンテキストへ
@@ -31,8 +31,8 @@ function readStdin() {
 }
 
 async function main() {
-  const paneId = process.env.WTM_PANE_ID;
-  const sock = process.env.WTM_AGENT_REPORT_SOCKET;
+  const paneId = process.env.SODA_PANE_ID;
+  const sock = process.env.SODA_AGENT_REPORT_SOCKET;
   const kind = process.argv[2];
   if (!paneId || !sock || !kind) return; // 本製品の pane の外・未対応の呼び出し方 → 無害に終わる
 

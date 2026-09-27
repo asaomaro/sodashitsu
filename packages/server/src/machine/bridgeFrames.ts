@@ -1,15 +1,15 @@
 /**
- * 中継の枠（20260927-multi-host-machines の design「中継の枠」）。手元の `wtm serve`（`MachineLink`）とリモートの `wtm serve` の受け口
- * （`BridgeEndpoint`）が、SSH の標準入出力の上（間の `wtm bridge` は素通し）でやり取りする形。**純粋な関数だけ**（I/O は持たない）。
+ * 中継の枠（20260927-multi-host-machines の design「中継の枠」）。手元の `soda serve`（`MachineLink`）とリモートの `soda serve` の受け口
+ * （`BridgeEndpoint`）が、SSH の標準入出力の上（間の `soda bridge` は素通し）でやり取りする形。**純粋な関数だけ**（I/O は持たない）。
  *
- * - 目印: 受け口は接続の最初に `WTM-BRIDGE 1\n` を書く。手元はそれより前のバイト（リモートのシェルの初期化ファイルの出力等）を読み捨てる。
+ * - 目印: 受け口は接続の最初に `SODA-BRIDGE 1\n` を書く。手元はそれより前のバイト（リモートのシェルの初期化ファイルの出力等）を読み捨てる。
  * - 枠: `[type u8][channel u32 BE][length u32 BE][payload]`（見出し 9 バイト）。
  *
  * decoder が見るのは **1 枠で閉じる規則**（type・向き・channel 0 の要否・長さ）だけ。開いているチャネルへの OPEN・同時に開く数・2 回目の HELLO・
  * 閉じたチャネル宛ての枠の扱いは、状態を持つ側（`BridgeEndpoint`・`MachineLink`）が見る。
  */
 
-export const BRIDGE_MARKER = "WTM-BRIDGE 1\n";
+export const BRIDGE_MARKER = "SODA-BRIDGE 1\n";
 export const BRIDGE_VERSION = 1;
 
 export const BRIDGE_FRAME = {
@@ -24,7 +24,7 @@ export const BRIDGE_FRAME = {
 export type BridgeFrameType = (typeof BRIDGE_FRAME)[keyof typeof BRIDGE_FRAME];
 
 export const BRIDGE_LIMITS = {
-  /** 手元 → リモートの TEXT・BINARY の payload（ブラウザ・wtmctl から `/ws` で受ける 1 通の上限 `MAX_WS_PAYLOAD_BYTES` と同じ）。 */
+  /** 手元 → リモートの TEXT・BINARY の payload（ブラウザ・sodactl から `/ws` で受ける 1 通の上限 `MAX_WS_PAYLOAD_BYTES` と同じ）。 */
   maxMessageBytes: 4 * 1024 * 1024,
   /**
    * リモート → 手元の TEXT・BINARY の payload。サーバからブラウザへの 1 通（大きな scrollback の SNAPSHOT・hello の snapshot）は `/ws` では上限が無いので、

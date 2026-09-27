@@ -1,4 +1,4 @@
-import type { ServerEvent, SessionSnapshot } from "@wtm/protocol";
+import type { ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Connection, type WebSocketLike } from "./Connection.js";
 import type { ConnectionState, StorePort, TerminalSinkPort } from "./ports.js";

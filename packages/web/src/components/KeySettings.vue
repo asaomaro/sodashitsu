@@ -843,8 +843,8 @@ watch(
 .keys-filter-input {
   font: inherit;
   color: inherit;
-  background: var(--wtm-menu-bg, #282a36);
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.15em 0.5em;
   min-height: 1.75rem;
@@ -867,7 +867,7 @@ watch(
   gap: 0.2em;
 }
 .keys-details {
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
 }
 .keys-summary {
@@ -891,7 +891,7 @@ watch(
 }
 .keys-editor {
   padding: 0.4em 0.6em 0.6em;
-  border-top: 1px solid var(--wtm-menu-border, #44475a);
+  border-top: 1px solid var(--soda-menu-border, #44475a);
 }
 .keys-chips {
   list-style: none;
@@ -909,8 +909,8 @@ watch(
 }
 .keys-binding {
   font-family: monospace;
-  background: var(--wtm-subtle-bg, rgba(255, 255, 255, 0.06));
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-subtle-bg, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 3px;
   padding: 0 0.4em;
 }
@@ -923,7 +923,7 @@ watch(
   font: inherit;
   color: inherit;
   background: transparent;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.15em 0.7em;
   min-height: 1.75rem;
@@ -933,8 +933,8 @@ watch(
 .keys-capture {
   font: inherit;
   color: inherit;
-  background: var(--wtm-menu-active-bg, #44475a);
-  border: 2px dashed var(--wtm-accent, #6070a1);
+  background: var(--soda-menu-active-bg, #44475a);
+  border: 2px dashed var(--soda-accent, #6070a1);
   border-radius: 4px;
   padding: 0.3em 0.7em;
   min-height: 1.75rem;
@@ -955,8 +955,8 @@ watch(
 .keys-select {
   font: inherit;
   color: inherit;
-  background: var(--wtm-menu-bg, #282a36);
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.15em 0.4em;
   min-height: 1.75rem;
@@ -977,7 +977,7 @@ watch(
   font: inherit;
   color: inherit;
   background: transparent;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.4em 0.6em;
   margin-top: 0.6em;
@@ -988,12 +988,12 @@ watch(
   flex: none;
   min-width: 2em;
   text-align: center;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 3px;
   padding: 0 0.2em;
 }
 .settings-switch[aria-checked="true"] .settings-mark {
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
 }
 /*
  * 長い一覧のどこを操作しても結果が見えるよう、画面（ダイアログ）の下に固定する。
@@ -1010,7 +1010,7 @@ watch(
   bottom: -1em;
   margin: 0.6em 0 0;
   padding: 0.3em 0 1em;
-  background: var(--wtm-menu-bg, #282a36);
+  background: var(--soda-menu-bg, #282a36);
 }
 .keys-message {
   margin: 0;

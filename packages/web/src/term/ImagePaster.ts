@@ -4,7 +4,7 @@ import {
   isImageMimeType,
   isPastablePath,
   type ImageMimeType,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 import type { InputHold } from "../net/InputGate.js";
 import type { ConnectionPort } from "../net/ports.js";
 import { errorCodeOf } from "../net/clientError.js";

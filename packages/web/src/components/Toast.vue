@@ -100,9 +100,9 @@ function dismiss(id: number): void {
   align-items: center;
   gap: 0.6em;
   padding: 0.4em 1em;
-  background: var(--wtm-menu-bg, #282a36);
-  color: var(--wtm-fg, #f8f8f2);
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-fg, #f8f8f2);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   cursor: pointer;
 }
@@ -130,8 +130,8 @@ function dismiss(id: number): void {
   flex: none;
   font: inherit;
   color: inherit;
-  background: var(--wtm-menu-hover-bg, #343746);
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-hover-bg, #343746);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   padding: 0.1em 0.6em;
   cursor: pointer;

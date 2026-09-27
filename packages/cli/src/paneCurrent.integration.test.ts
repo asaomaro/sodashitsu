@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { composeServerOnFreePort, type ComposedServer } from "@wtm/server";
+import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import { parseArgs } from "./cliArgs.js";
 import { runPaneCurrent, runPaneSplit } from "./commands/pane.js";
 import { runWorkspaceCreate } from "./commands/workspace.js";
@@ -12,7 +12,7 @@ import { withSession } from "./withSession.js";
 
 /**
  * 呼び出し元の pane を既定の対象にする（20260927-caller-pane-default の AC1・AC6）を実サーバで確かめる。
- * pane の中の環境（`WTM_PANE_ID`・`WTM_SERVER_URL`）を与えて解釈した実物のコマンドを、実サーバに対して走らせる。
+ * pane の中の環境（`SODA_PANE_ID`・`SODA_SERVER_URL`）を与えて解釈した実物のコマンドを、実サーバに対して走らせる。
  * - pane を別の workspace の新しい tab へ移した後の `pane current` が、移動後の tab・workspace を返す（環境変数のように古くならない）。
  * - 対象を省いた `pane split` が呼び出し元の pane を分ける。
  */
@@ -56,7 +56,7 @@ describe.skipIf(process.platform === "win32")(
     let token: string;
 
     beforeAll(async () => {
-      stateDir = await mkdtemp(join(tmpdir(), "wtmctl-panecurrent-state-"));
+      stateDir = await mkdtemp(join(tmpdir(), "sodactl-panecurrent-state-"));
       server = await composeServerOnFreePort({
         host: "127.0.0.1",
         stateDir,
@@ -67,7 +67,7 @@ describe.skipIf(process.platform === "win32")(
       if (!server.freshToken) throw new Error("expected a freshly generated token");
       token = server.freshToken;
       url = `http://127.0.0.1:${port}`;
-      sessionDir = await mkdtemp(join(tmpdir(), "wtmctl-panecurrent-session-"));
+      sessionDir = await mkdtemp(join(tmpdir(), "sodactl-panecurrent-session-"));
       store = new FsSessionStore(join(sessionDir, "session.json"));
     }, 30_000);
 
@@ -77,12 +77,12 @@ describe.skipIf(process.platform === "win32")(
       await rm(sessionDir, { recursive: true, force: true });
     });
 
-    /** pane の中の環境で解釈した `wtmctl pane current`（引数なし）を走らせる。 */
+    /** pane の中の環境で解釈した `sodactl pane current`（引数なし）を走らせる。 */
     async function currentFrom(callerPaneId: string): Promise<CurrentPane> {
       const cmd = parseArgs(["pane", "current"], {
-        WTM_PANE_ID: callerPaneId,
-        WTM_SERVER_URL: url,
-        WTMCTL_TOKEN: token,
+        SODA_PANE_ID: callerPaneId,
+        SODA_SERVER_URL: url,
+        SODACTL_TOKEN: token,
       });
       if (cmd.kind !== "pane-current") throw new Error(`unexpected command: ${cmd.kind}`);
       return (JSON.parse(await quiet(() => runPaneCurrent(cmd, store))) as { pane: CurrentPane })
@@ -180,9 +180,9 @@ describe.skipIf(process.platform === "win32")(
         ),
       );
       const cmd = parseArgs(["pane", "split", "--direction", "down"], {
-        WTM_PANE_ID: ws.pane.id,
-        WTM_SERVER_URL: url,
-        WTMCTL_TOKEN: token,
+        SODA_PANE_ID: ws.pane.id,
+        SODA_SERVER_URL: url,
+        SODACTL_TOKEN: token,
       });
       if (cmd.kind !== "pane-split") throw new Error(`unexpected command: ${cmd.kind}`);
       const created = JSON.parse(await quiet(() => runPaneSplit(cmd, store))) as {

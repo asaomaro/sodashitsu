@@ -15,8 +15,8 @@ import { STATE_DIR_LOCK_FILE, StateDirLock } from "../persist/StateDirLock.js";
 import type { CommandIo } from "../sessionCommands.js";
 
 /**
- * `wtm session stop <name> [--state-dir D] [--json]`（herdr の `herdr session stop <name>`。20260927-session-stop の design「CLI」「振る舞いの詳細」）。
- * 動いている `wtm serve` に、状態ディレクトリの制御の socket（`handoff.sock`・0600）で止める指示を送り、返事の pid が `wtm.lock` の持ち主と
+ * `soda session stop <name> [--state-dir D] [--json]`（herdr の `herdr session stop <name>`。20260927-session-stop の design「CLI」「振る舞いの詳細」）。
+ * 動いている `soda serve` に、状態ディレクトリの制御の socket（`handoff.sock`・0600）で止める指示を送り、返事の pid が `soda.lock` の持ち主と
  * 一致することを確かめてから、持ち主が居なくなる（プロセスが終わる）まで待つ。**pid へシグナルは送らない**（pid の再利用で無関係なプロセスを止めうる）。
  * 終了コード: 0 止まった／1 断られた・繋げない・返事が無い・pid の不一致・時間切れ・別のホスト／2 名前の誤り・Windows（`--json` でなければ
  * `ConfigError` を投げ、main が案内つきで 2）／3 動いていない。
@@ -92,7 +92,7 @@ export async function runSessionStop(
   try {
     const stopped = await stopSession(base, name, deps);
     io.out(
-      json ? JSON.stringify({ stopped: true, session: stopped }) : `wtm: stopped session ${name}`,
+      json ? JSON.stringify({ stopped: true, session: stopped }) : `soda: stopped session ${name}`,
     );
     return 0;
   } catch (err) {
@@ -101,7 +101,7 @@ export async function runSessionStop(
     io.err(
       json
         ? JSON.stringify({ error: { code: err.code, message: err.message } })
-        : `wtm: ${err.message}`,
+        : `soda: ${err.message}`,
     );
     return err.exitCode;
   }
@@ -116,9 +116,9 @@ async function stopSession(
   if (deps.platform === "win32") {
     throw new StopFailure(
       "unsupported_platform",
-      "wtm session stop is not supported on Windows",
+      "soda session stop is not supported on Windows",
       2,
-      "wtm session stop は Linux と macOS だけで使えます。Windows では wtm serve を起動した窓で Ctrl+C を押して止めてください（docs/verification.md）。",
+      "soda session stop は Linux と macOS だけで使えます。Windows では soda serve を起動した窓で Ctrl+C を押して止めてください（docs/verification.md）。",
     );
   }
   // 2. 名前 → 状態ディレクトリ。名前付きは実エントリだけ（綴り違い・無い名前で別の session を止めない・何も作らない）。
@@ -136,11 +136,11 @@ async function stopSession(
       entry = await findExactEntry(await deps.readSessionsDir(base), name, () => deps.lstat(dir));
     } catch (err) {
       if (!(err instanceof SessionDeleteError)) throw err;
-      const hint = `wtm session list で名前を確かめてください（既定の session は ${DEFAULT_SESSION_NAME}）。`;
+      const hint = `soda session list で名前を確かめてください（既定の session は ${DEFAULT_SESSION_NAME}）。`;
       if (err.code === "spelling")
         throw new StopFailure(
           "spelling",
-          `session ${name} does not match the exact session name; use the spelling shown by wtm session list`,
+          `session ${name} does not match the exact session name; use the spelling shown by soda session list`,
           2,
           hint,
         );
@@ -160,7 +160,7 @@ async function stopSession(
       );
   }
   const label = isDefault ? DEFAULT_SESSION_NAME : name;
-  // 3. 動いているか（wtm.lock の持ち主）。何も送らない・何も作らない。
+  // 3. 動いているか（soda.lock の持ち主）。何も送らない・何も作らない。
   const holder = await deps.inspect(dir);
   if (holder === undefined)
     throw new StopFailure(
@@ -171,7 +171,7 @@ async function stopSession(
   if (holder.otherHost !== undefined)
     throw new StopFailure(
       "other_host",
-      `session ${label} runs on another host (${holder.otherHost}, pid ${holder.pid}); run wtm session stop there`,
+      `session ${label} runs on another host (${holder.otherHost}, pid ${holder.pid}); run soda session stop there`,
       1,
     );
   // 4. 止める指示を送る。
@@ -184,7 +184,7 @@ async function stopSession(
     if (code === "ETIMEDOUT")
       throw new StopFailure(
         "no_reply",
-        `the server of session ${label} (pid ${holder.pid}) did not answer the stop request; it may be stopping — check with wtm session list`,
+        `the server of session ${label} (pid ${holder.pid}) did not answer the stop request; it may be stopping — check with soda session list`,
         1,
       );
     // 繋げなかった間に止まり終えていれば、動いていない（AC7）。
@@ -195,18 +195,18 @@ async function stopSession(
         `session ${label} is not running`,
         SESSION_STOP_EXIT_NOT_RUNNING,
       );
-    // 止まり終えた後に別の wtm serve がロックを取った（動いているのは別のサーバ。止めたとも、動いていないとも言わない）。
+    // 止まり終えた後に別の soda serve がロックを取った（動いているのは別のサーバ。止めたとも、動いていないとも言わない）。
     if (again.pid !== holder.pid)
       throw new StopFailure(
         "unreachable",
-        `the server of session ${label} changed while stopping (pid ${holder.pid} → ${again.pid}); run wtm session stop ${label} again to stop the new one`,
+        `the server of session ${label} changed while stopping (pid ${holder.pid} → ${again.pid}); run soda session stop ${label} again to stop the new one`,
         1,
       );
     throw new StopFailure(
       "unreachable",
       `the running server of session ${label} (pid ${holder.pid}) did not accept a stop request (an older version, still starting, or already stopping): ${socketPath}` +
         (code !== undefined ? ` (${code})` : "") +
-        `; if it keeps running, stop it with Ctrl+C in its terminal. If pid ${holder.pid} is not wtm (the lock was left by a crashed wtm and the pid was reused), remove ${join(dir, STATE_DIR_LOCK_FILE)}`,
+        `; if it keeps running, stop it with Ctrl+C in its terminal. If pid ${holder.pid} is not soda (the lock was left by a crashed soda and the pid was reused), remove ${join(dir, STATE_DIR_LOCK_FILE)}`,
       1,
     );
   }
@@ -220,7 +220,7 @@ async function stopSession(
   if (reply.kind === "bad_request")
     throw new StopFailure(
       "older_server",
-      `the running server of session ${label} (pid ${holder.pid}) is an older version that does not accept wtm session stop; stop it with Ctrl+C in its terminal`,
+      `the running server of session ${label} (pid ${holder.pid}) is an older version that does not accept soda session stop; stop it with Ctrl+C in its terminal`,
       1,
     );
   if (reply.kind === "refused")
@@ -237,7 +237,7 @@ async function stopSession(
       `the stop request was answered by pid ${reply.pid}, but ${dir} is locked by pid ${holder.pid}; not reporting it as stopped`,
       1,
     );
-  // 5. 持ち主が居なくなるまで待つ（止まったかは wtm.lock で見る。`wtm session list` と同じ根拠）。
+  // 5. 持ち主が居なくなるまで待つ（止まったかは soda.lock で見る。`soda session list` と同じ根拠）。
   const waitMs = deps.waitTimeoutMs ?? 30_000;
   const deadline = deps.now() + waitMs;
   for (;;) {

@@ -1,7 +1,7 @@
-import type { AgentInfo, ServerEvent } from "@wtm/protocol";
+import type { AgentInfo, ServerEvent } from "@sodashitsu/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "../session.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 import {
   runAgentGet,
   runAgentPrompt,
@@ -43,7 +43,7 @@ function agent(patch: Partial<AgentInfo> = {}): AgentInfo {
 const REVIEWER = agent({ instanceId: "a2", name: "reviewer" });
 
 interface Harness {
-  client: WtmClient;
+  client: SodaClient;
   emitEvent(evt: ServerEvent): void;
   emitSnapshot(paneId: string, text: string): void;
 }
@@ -77,7 +77,7 @@ function harness(requestResult: (method: string) => unknown = () => ({})): Harne
     ),
     onClose: vi.fn(),
     close: vi.fn(),
-  } as unknown as WtmClient;
+  } as unknown as SodaClient;
   mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
   return {
     client,
@@ -322,7 +322,7 @@ describe("自分の pane の歯止め（20260926-agent-skill-file。AC11・AC14�
       ),
     );
     expect(err.code).toBe("self_target");
-    expect(err.message).toContain("WTM_PANE_ID= wtmctl");
+    expect(err.message).toContain("SODA_PANE_ID= sodactl");
     expect(h.client.request).not.toHaveBeenCalled();
   });
 

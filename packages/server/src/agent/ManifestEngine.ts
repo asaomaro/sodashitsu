@@ -3,7 +3,7 @@
  * herdr のソース（`da6bcd5`。Apache-2.0・D5）の `src/detect/manifest.rs` の `region()`・`compiled_gate_matches()`・
  * `evaluate_loaded_manifest()` を移植した（decisions.md D46 を正典とする）。
  */
-import type { AgentState } from "@wtm/protocol";
+import type { AgentState } from "@sodashitsu/protocol";
 import type { CompiledGate, CompiledManifest, CompiledRule } from "./ManifestStore.js";
 import { regionCount, topRegionCount } from "./ManifestStore.js";
 

@@ -1,6 +1,6 @@
 import { constants as fsConstants } from "node:fs";
 import { open as fsOpen, type FileHandle } from "node:fs/promises";
-import { COMMAND_ID_RE, COMMAND_TYPES, parsePopupDimension, type CommandInfo } from "@wtm/protocol";
+import { COMMAND_ID_RE, COMMAND_TYPES, parsePopupDimension, type CommandInfo } from "@sodashitsu/protocol";
 import { z } from "zod";
 
 /**

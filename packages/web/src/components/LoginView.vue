@@ -12,7 +12,7 @@ import { useViewStore } from "../store/view.js";
  * `history.replaceState` で URL から消す（token をブラウザの履歴・アドレスバーに残さない）。
  *
  * **失敗は理由ごとに示す**（D105。01 の review ラウンド5 で発見）。以前は全ての失敗を「ログインできませんでした」の
- * 1 文で出していたため、Origin の不一致（403）の利用者が token の誤りと思い込み `wtm token reset` へ進んでいた。
+ * 1 文で出していたため、Origin の不一致（403）の利用者が token の誤りと思い込み `soda token reset` へ進んでいた。
  * `#token=` での自動ログインが失敗しても、token は入力欄に残す（URL からは消した後なので、消すと失われる。
  * `--origin` を付けて起動し直した後や、待った後に、そのまま「ログイン」を押し直せる）。
  *
@@ -79,7 +79,7 @@ function failureMessage(f: LoginFailure, origin: string): { text: string; comman
   switch (f.reason) {
     case "bad_token":
       return {
-        text: "token が違います。サーバを起動したときに表示された token（または #token= 付きの URL）を確かめて、入れ直してください。控えが無ければ、wtm serve を止めてから wtm token reset で作り直せます。",
+        text: "token が違います。サーバを起動したときに表示された token（または #token= 付きの URL）を確かめて、入れ直してください。控えが無ければ、soda serve を止めてから soda token reset で作り直せます。",
       };
     case "origin_rejected":
       // サーバは 429 → Origin／Host（403）→ 本文（400）→ token（401）の順に確かめる（`HttpServer.handleLogin`）ので、403 の
@@ -99,7 +99,7 @@ function failureMessage(f: LoginFailure, origin: string): { text: string; comman
       };
     }
     case "network_error":
-      return { text: "サーバに接続できません。wtm serve が動いているか、開いているアドレス（URL）が正しいかを確かめてください。" };
+      return { text: "サーバに接続できません。soda serve が動いているか、開いているアドレス（URL）が正しいかを確かめてください。" };
     case "http_error":
       return { text: `ログインできませんでした（HTTP ${f.status}）。サーバのログを確かめてください。` };
     case "session_rejected":
@@ -139,7 +139,7 @@ function onSubmit(): void {
 <template>
   <div class="login-view">
     <form class="login-view-form" @submit.prevent="onSubmit">
-      <h1>wtm</h1>
+      <h1 class="login-view-title"><img class="login-view-logo" src="/logo.svg" alt="" width="40" height="40" />Sodashitsu</h1>
       <label class="login-view-label">
         <span>token</span>
         <input v-model="token" type="password" autocomplete="off" :disabled="busy" />
@@ -160,14 +160,24 @@ function onSubmit(): void {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(--wtm-bg, #1e1f29);
-  color: var(--wtm-fg, #f8f8f2);
+  background: var(--soda-bg, #1e1f29);
+  color: var(--soda-fg, #f8f8f2);
 }
 .login-view-form {
   display: flex;
   flex-direction: column;
   gap: 0.75em;
   width: min(20em, 90vw);
+}
+.login-view-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.login-view-logo {
+  width: 1.6em;
+  height: 1.6em;
+  flex: none;
 }
 .login-view-label {
   display: flex;
@@ -186,7 +196,7 @@ function onSubmit(): void {
   opacity: 0.85;
 }
 .login-view-error {
-  color: var(--wtm-error-fg, #ff5555);
+  color: var(--soda-error-fg, #ff5555);
   margin: 0;
   display: flex;
   flex-direction: column;
@@ -198,8 +208,8 @@ function onSubmit(): void {
 }
 /* `--origin <Origin>` をそのまま写せるように、選択しやすく・折り返せる形で出す（D105）。 */
 .login-view-error-command {
-  color: var(--wtm-fg, #f8f8f2);
-  background: var(--wtm-subtle-bg, rgba(255, 255, 255, 0.08));
+  color: var(--soda-fg, #f8f8f2);
+  background: var(--soda-subtle-bg, rgba(255, 255, 255, 0.08));
   padding: 0.3em 0.5em;
   border-radius: 3px;
   overflow-wrap: anywhere;

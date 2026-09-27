@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { composeServerOnFreePort, type ComposedServer } from "@wtm/server";
+import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import { runPaneRead, runPaneRun } from "./commands/pane.js";
 import { runSnapshot } from "./commands/session.js";
 import { runWorkspaceCreate } from "./commands/workspace.js";
@@ -11,8 +11,8 @@ import { FsSessionStore } from "./session.js";
 
 /**
  * pane の環境変数（20260926-agent-skill-file。AC7・AC9・AC15）を実サーバ・実 PTY で確かめる。
- * - 起動時に作られる最初の pane（`listen()` の中の `ensureNotEmpty`）にも `WTM_SERVER_URL` が入る——URL を決めるのが pane の起動より後だと、ここが空になる。
- * - サーバのプロセスの環境に置いた `WTMCTL_TOKEN`・`WTMCTL_URL`・古い `WTM_SERVER_URL` が pane に渡らない。
+ * - 起動時に作られる最初の pane（`listen()` の中の `ensureNotEmpty`）にも `SODA_SERVER_URL` が入る——URL を決めるのが pane の起動より後だと、ここが空になる。
+ * - サーバのプロセスの環境に置いた `SODACTL_TOKEN`・`SODACTL_URL`・古い `SODA_SERVER_URL` が pane に渡らない。
  */
 
 /** `fn` の間の標準出力を集める（投げても元に戻す）。 */
@@ -42,11 +42,11 @@ function captureStdout(): { text(): string; restore(): void } {
 }
 
 const INHERITED = {
-  WTMCTL_TOKEN: "inherited-secret-token",
-  WTMCTL_URL: "http://127.0.0.1:1",
-  WTM_SERVER_URL: "http://stale.invalid:2",
-  WTM_AGENT_REPORT_SOCKET: "/stale/agent-report.sock",
-  WTM_SESSION: "inherited-session", // 20260926-named-session-ui（AC15）
+  SODACTL_TOKEN: "inherited-secret-token",
+  SODACTL_URL: "http://127.0.0.1:1",
+  SODA_SERVER_URL: "http://stale.invalid:2",
+  SODA_AGENT_REPORT_SOCKET: "/stale/agent-report.sock",
+  SODA_SESSION: "inherited-session", // 20260926-named-session-ui（AC15）
 } as const;
 
 /** pane に 1 つの環境変数を `<NAME=値>`（無ければ unset）で印刷させ、画面に出た値を返す（20260926-named-session-ui）。 */
@@ -107,12 +107,12 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   const saved: Record<string, string | undefined> = {};
 
   beforeAll(async () => {
-    // サーバを起動した環境に wtmctl の設定と古い値がある状態を作る（終わったら戻す）。
+    // サーバを起動した環境に sodactl の設定と古い値がある状態を作る（終わったら戻す）。
     for (const [k, v] of Object.entries(INHERITED)) {
       saved[k] = process.env[k];
       process.env[k] = v;
     }
-    stateDir = await mkdtemp(join(tmpdir(), "wtmctl-paneenv-state-"));
+    stateDir = await mkdtemp(join(tmpdir(), "sodactl-paneenv-state-"));
     server = await composeServerOnFreePort({
       host: "127.0.0.1",
       stateDir,
@@ -123,7 +123,7 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
     if (!server.freshToken) throw new Error("expected a freshly generated token");
     token = server.freshToken;
     url = `http://127.0.0.1:${port}`;
-    sessionDir = await mkdtemp(join(tmpdir(), "wtmctl-paneenv-session-"));
+    sessionDir = await mkdtemp(join(tmpdir(), "sodactl-paneenv-session-"));
     store = new FsSessionStore(join(sessionDir, "session.json"));
   }, 30_000);
 
@@ -145,7 +145,7 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
           kind: "pane-run",
           opts: { url, token },
           paneId,
-          command: `printf '<%s|%s|%s|%s|%s>\\n' "\${WTM_SERVER_URL-unset}" "\${WTMCTL_TOKEN-unset}" "\${WTMCTL_URL-unset}" "\${WTM_PANE_ID-unset}" "\${WTM_AGENT_REPORT_SOCKET-unset}"`,
+          command: `printf '<%s|%s|%s|%s|%s>\\n' "\${SODA_SERVER_URL-unset}" "\${SODACTL_TOKEN-unset}" "\${SODACTL_URL-unset}" "\${SODA_PANE_ID-unset}" "\${SODA_AGENT_REPORT_SOCKET-unset}"`,
         },
         store,
       ),
@@ -183,22 +183,22 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
     return line.slice(1, -1).split("|")[4]!;
   }
 
-  it("起動時に作られた最初の pane: WTM_SERVER_URL は待ち受けたポート、受け継いだ wtmctl の設定は無い（AC7・AC9・AC15）", async () => {
+  it("起動時に作られた最初の pane: SODA_SERVER_URL は待ち受けたポート、受け継いだ sodactl の設定は無い（AC7・AC9・AC15）", async () => {
     const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token } }, store));
     const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
 
     const line = await envLineOf(first);
     expect(line.startsWith(`<${url}|unset|unset|${first}|`)).toBe(true);
-    expect(socketOf(line)).not.toBe(INHERITED.WTM_AGENT_REPORT_SOCKET);
+    expect(socketOf(line)).not.toBe(INHERITED.SODA_AGENT_REPORT_SOCKET);
   }, 30_000);
 
-  it("既定の session の pane には、サーバを起動した環境の WTM_SESSION を渡さない（20260926-named-session-ui の AC15）", async () => {
+  it("既定の session の pane には、サーバを起動した環境の SODA_SESSION を渡さない（20260926-named-session-ui の AC15）", async () => {
     const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token } }, store));
     const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
-    expect(await paneVar({ url, token, store }, first, "WTM_SESSION")).toBe("unset");
+    expect(await paneVar({ url, token, store }, first, "SODA_SESSION")).toBe("unset");
   }, 30_000);
 
-  it("wtmctl で作った workspace の pane も同じ（AC7・AC9）", async () => {
+  it("sodactl で作った workspace の pane も同じ（AC7・AC9）", async () => {
     const created = await quiet(() =>
       runWorkspaceCreate(
         { kind: "workspace-create", opts: { url, token }, cwd: process.cwd(), label: "env-it" },
@@ -209,13 +209,13 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
 
     const line = await envLineOf(paneId);
     expect(line.startsWith(`<${url}|unset|unset|${paneId}|`)).toBe(true);
-    expect(socketOf(line)).not.toBe(INHERITED.WTM_AGENT_REPORT_SOCKET);
+    expect(socketOf(line)).not.toBe(INHERITED.SODA_AGENT_REPORT_SOCKET);
   }, 30_000);
 });
 
-/** 20260926-named-session-ui（AC15）：名前付き session の pane には WTM_SESSION=<名前>（受け継いだ別の値より勝つ）。 */
+/** 20260926-named-session-ui（AC15）：名前付き session の pane には SODA_SESSION=<名前>（受け継いだ別の値より勝つ）。 */
 describe.skipIf(process.platform === "win32")(
-  "名前付き session の pane の WTM_SESSION（実サーバ・実 PTY）",
+  "名前付き session の pane の SODA_SESSION（実サーバ・実 PTY）",
   () => {
     let server: ComposedServer;
     let stateDir: string;
@@ -224,9 +224,9 @@ describe.skipIf(process.platform === "win32")(
     let saved: string | undefined;
 
     beforeAll(async () => {
-      saved = process.env["WTM_SESSION"];
-      process.env["WTM_SESSION"] = "inherited-session";
-      stateDir = await mkdtemp(join(tmpdir(), "wtmctl-paneenv-named-"));
+      saved = process.env["SODA_SESSION"];
+      process.env["SODA_SESSION"] = "inherited-session";
+      stateDir = await mkdtemp(join(tmpdir(), "sodactl-paneenv-named-"));
       server = await composeServerOnFreePort({
         host: "127.0.0.1",
         stateDir,
@@ -236,7 +236,7 @@ describe.skipIf(process.platform === "win32")(
       });
       const port = (server.httpServer.server.address() as AddressInfo).port;
       if (!server.freshToken) throw new Error("expected a freshly generated token");
-      sessionDir = await mkdtemp(join(tmpdir(), "wtmctl-paneenv-named-session-"));
+      sessionDir = await mkdtemp(join(tmpdir(), "sodactl-paneenv-named-session-"));
       ctx = {
         url: `http://127.0.0.1:${port}`,
         token: server.freshToken,
@@ -245,19 +245,19 @@ describe.skipIf(process.platform === "win32")(
     }, 30_000);
 
     afterAll(async () => {
-      if (saved === undefined) delete process.env["WTM_SESSION"];
-      else process.env["WTM_SESSION"] = saved;
+      if (saved === undefined) delete process.env["SODA_SESSION"];
+      else process.env["SODA_SESSION"] = saved;
       await server?.close();
       await rm(stateDir, { recursive: true, force: true });
       await rm(sessionDir, { recursive: true, force: true });
     });
 
-    it("起動時に作られた最初の pane に WTM_SESSION=work が入る", async () => {
+    it("起動時に作られた最初の pane に SODA_SESSION=work が入る", async () => {
       const snap = await quiet(() =>
         runSnapshot({ kind: "snapshot", opts: { url: ctx.url, token: ctx.token } }, ctx.store),
       );
       const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
-      expect(await paneVar(ctx, first, "WTM_SESSION")).toBe("work");
+      expect(await paneVar(ctx, first, "SODA_SESSION")).toBe("work");
     }, 30_000);
   },
 );

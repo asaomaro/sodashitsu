@@ -19,12 +19,12 @@ describe("parseArgs — global opts (--url/--token, env fallback, defaults)", ()
       opts: { url: "http://h:1", token: "t" },
     });
   });
-  it("環境変数 WTMCTL_URL/WTMCTL_TOKEN にフォールバックする", () => {
-    const env = { WTMCTL_URL: "http://envhost:2", WTMCTL_TOKEN: "envtoken" } as NodeJS.ProcessEnv;
+  it("環境変数 SODACTL_URL/SODACTL_TOKEN にフォールバックする", () => {
+    const env = { SODACTL_URL: "http://envhost:2", SODACTL_TOKEN: "envtoken" } as NodeJS.ProcessEnv;
     expect(parseArgs(["snapshot"], env)).toEqual({ kind: "snapshot", opts: { url: "http://envhost:2", token: "envtoken" } });
   });
   it("--url は環境変数より優先する", () => {
-    const env = { WTMCTL_URL: "http://envhost:2" } as NodeJS.ProcessEnv;
+    const env = { SODACTL_URL: "http://envhost:2" } as NodeJS.ProcessEnv;
     expect(parseArgs(["snapshot", "--url", "http://flag:3"], env)).toEqual({ kind: "snapshot", opts: { url: "http://flag:3", token: undefined } });
   });
 });
@@ -140,7 +140,7 @@ describe("parseArgs — pane split", () => {
 });
 
 describe("parseArgs — pane の対象の指定（20260927-caller-pane-default）", () => {
-  const inPane = { WTM_PANE_ID: "p3", WTM_SERVER_URL: "http://127.0.0.1:7780" } as NodeJS.ProcessEnv;
+  const inPane = { SODA_PANE_ID: "p3", SODA_SERVER_URL: "http://127.0.0.1:7780" } as NodeJS.ProcessEnv;
   const split = (args: string[], env: NodeJS.ProcessEnv) => parseArgs(["pane", "split", ...args, "--direction", "down"], env);
 
   it("位置引数・--pane は明示の ID、--current は呼び出し元（AC2）", () => {
@@ -152,9 +152,9 @@ describe("parseArgs — pane の対象の指定（20260927-caller-pane-default�
   it("省略は pane の中なら呼び出し元、外ならフォーカスの pane（AC1・AC12）", () => {
     expect(split([], inPane)).toMatchObject({ target: { kind: "caller", paneId: "p3", explicit: false } });
     expect(split([], noEnv)).toMatchObject({ target: { kind: "focused" } });
-    expect(split([], { WTM_PANE_ID: "" } as NodeJS.ProcessEnv)).toMatchObject({ target: { kind: "focused" } });
-    // WTM_SERVER_URL が無くても pane の中（呼び出し元）とみなす——同じサーバかは実行時に確かめて断る（AC9）。
-    expect(split([], { WTM_PANE_ID: "p3" } as NodeJS.ProcessEnv)).toMatchObject({ target: { kind: "caller", paneId: "p3", explicit: false } });
+    expect(split([], { SODA_PANE_ID: "" } as NodeJS.ProcessEnv)).toMatchObject({ target: { kind: "focused" } });
+    // SODA_SERVER_URL が無くても pane の中（呼び出し元）とみなす——同じサーバかは実行時に確かめて断る（AC9）。
+    expect(split([], { SODA_PANE_ID: "p3" } as NodeJS.ProcessEnv)).toMatchObject({ target: { kind: "caller", paneId: "p3", explicit: false } });
   });
 
   it.each([
@@ -167,9 +167,9 @@ describe("parseArgs — pane の対象の指定（20260927-caller-pane-default�
     expect(() => split(args, inPane)).toThrow(CliUsageError);
   });
 
-  it("--current は WTM_PANE_ID が無ければ使い方の誤り（AC4）", () => {
-    expect(() => split(["--current"], noEnv)).toThrow(/--current requires WTM_PANE_ID/);
-    expect(() => parseArgs(["pane", "current", "--current"], { WTM_PANE_ID: "" } as NodeJS.ProcessEnv)).toThrow(/--current requires WTM_PANE_ID/);
+  it("--current は SODA_PANE_ID が無ければ使い方の誤り（AC4）", () => {
+    expect(() => split(["--current"], noEnv)).toThrow(/--current requires SODA_PANE_ID/);
+    expect(() => parseArgs(["pane", "current", "--current"], { SODA_PANE_ID: "" } as NodeJS.ProcessEnv)).toThrow(/--current requires SODA_PANE_ID/);
   });
 
   it("pane current は --pane・--current・省略を受け、位置引数は取らない（AC5・AC7）", () => {
@@ -487,17 +487,17 @@ describe("parseArgs — agent rename", () => {
 });
 
 describe("parseArgs — pane の中の接続先と呼び出し元（20260926-agent-skill-file）", () => {
-  const inPane = { WTM_PANE_ID: "p1", WTM_SERVER_URL: "http://127.0.0.1:7790" } as NodeJS.ProcessEnv;
+  const inPane = { SODA_PANE_ID: "p1", SODA_SERVER_URL: "http://127.0.0.1:7790" } as NodeJS.ProcessEnv;
 
-  it("--url > WTMCTL_URL > WTM_SERVER_URL > 既定（AC10）", () => {
-    const env = { ...inPane, WTMCTL_URL: "http://envhost:2" } as NodeJS.ProcessEnv;
+  it("--url > SODACTL_URL > SODA_SERVER_URL > 既定（AC10）", () => {
+    const env = { ...inPane, SODACTL_URL: "http://envhost:2" } as NodeJS.ProcessEnv;
     expect(parseArgs(["snapshot", "--url", "http://flag:3"], env)).toMatchObject({ opts: { url: "http://flag:3" } });
     expect(parseArgs(["snapshot"], env)).toMatchObject({ opts: { url: "http://envhost:2" } });
     expect(parseArgs(["snapshot"], inPane)).toMatchObject({ opts: { url: "http://127.0.0.1:7790" } });
-    expect(parseArgs(["snapshot"], { WTM_SERVER_URL: "" } as NodeJS.ProcessEnv)).toMatchObject({ opts: { url: DEFAULT_URL } });
+    expect(parseArgs(["snapshot"], { SODA_SERVER_URL: "" } as NodeJS.ProcessEnv)).toMatchObject({ opts: { url: DEFAULT_URL } });
   });
 
-  it("WTM_PANE_ID と WTM_SERVER_URL がどちらもあれば caller を持つ", () => {
+  it("SODA_PANE_ID と SODA_SERVER_URL がどちらもあれば caller を持つ", () => {
     expect(parseArgs(["snapshot"], inPane)).toEqual({
       kind: "snapshot",
       opts: { url: "http://127.0.0.1:7790", token: undefined, caller: { paneId: "p1", serverUrl: "http://127.0.0.1:7790" } },
@@ -505,10 +505,10 @@ describe("parseArgs — pane の中の接続先と呼び出し元（20260926-age
   });
 
   it.each([
-    ["WTM_PANE_ID が空", { WTM_PANE_ID: "", WTM_SERVER_URL: "http://127.0.0.1:7790" }],
-    ["WTM_PANE_ID が無い", { WTM_SERVER_URL: "http://127.0.0.1:7790" }],
-    ["WTM_SERVER_URL が無い", { WTM_PANE_ID: "p1" }],
-    ["WTM_SERVER_URL が空", { WTM_PANE_ID: "p1", WTM_SERVER_URL: "" }],
+    ["SODA_PANE_ID が空", { SODA_PANE_ID: "", SODA_SERVER_URL: "http://127.0.0.1:7790" }],
+    ["SODA_PANE_ID が無い", { SODA_SERVER_URL: "http://127.0.0.1:7790" }],
+    ["SODA_SERVER_URL が無い", { SODA_PANE_ID: "p1" }],
+    ["SODA_SERVER_URL が空", { SODA_PANE_ID: "p1", SODA_SERVER_URL: "" }],
   ])("%s なら caller を持たない（AC13）", (_label, env) => {
     const cmd = parseArgs(["snapshot"], env as NodeJS.ProcessEnv);
     expect(cmd.kind).toBe("snapshot");
@@ -565,8 +565,8 @@ describe("parseArgs — report-metadata（20260927-sidebar-row-tokens の AC8）
     expect(cmd).toMatchObject({ opts: { url: DEFAULT_URL, token: "AUTH2" }, report: { tokens: [{ name: "a", value: "1" }] } });
   });
 
-  it("接続の token が無ければ環境変数（WTMCTL_TOKEN）を使い、独自トークンを接続の token にしない", () => {
-    const env = { WTMCTL_TOKEN: "envtoken" } as NodeJS.ProcessEnv;
+  it("接続の token が無ければ環境変数（SODACTL_TOKEN）を使い、独自トークンを接続の token にしない", () => {
+    const env = { SODACTL_TOKEN: "envtoken" } as NodeJS.ProcessEnv;
     expect(parseArgs(["workspace", "report-metadata", "w1", "--source", "s", "--token", "a=1"], env)).toMatchObject({ opts: { token: "envtoken" } });
   });
 

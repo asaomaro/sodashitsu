@@ -38,7 +38,7 @@ function manifest(overrides: Partial<HandoffManifest> = {}): HandoffManifest {
         paneId: "p2",
         sourcePaneId: "p1",
         previousZoomedPaneId: null,
-        dir: "/tmp/wtm-scrollback-abc",
+        dir: "/tmp/soda-scrollback-abc",
       },
     ],
     ...overrides,
@@ -107,7 +107,7 @@ describe("parseHandoffManifest", () => {
       paneId: "p9",
       sourcePaneId: "p1",
       previousZoomedPaneId: null,
-      dir: "/tmp/wtm-scrollback-ok",
+      dir: "/tmp/soda-scrollback-ok",
     };
     const bad = [
       { paneId: "p", sourcePaneId: "q", previousZoomedPaneId: null, dir: "/home/me" },
@@ -115,11 +115,11 @@ describe("parseHandoffManifest", () => {
         paneId: "p",
         sourcePaneId: "q",
         previousZoomedPaneId: null,
-        dir: "/tmp/../home/wtm-scrollback-x",
+        dir: "/tmp/../home/soda-scrollback-x",
       },
-      { paneId: "p", sourcePaneId: "q", previousZoomedPaneId: null, dir: "wtm-scrollback-x" },
+      { paneId: "p", sourcePaneId: "q", previousZoomedPaneId: null, dir: "soda-scrollback-x" },
       { paneId: "p", sourcePaneId: "q", previousZoomedPaneId: null, dir: "" },
-      { ...ok, dir: "/tmp/wtm-scrollback-dup" },
+      { ...ok, dir: "/tmp/soda-scrollback-dup" },
     ];
     const parsed = parseHandoffManifest(
       JSON.stringify(manifest({ scrollbackEditors: [ok, ...bad] })),
@@ -148,7 +148,7 @@ describe("writeHandoffManifest / removeHandoffManifest", () => {
   afterEach(async () => rm(dir, { recursive: true, force: true }));
 
   it.skipIf(process.platform === "win32")("0600 で書き、消せる（無ければ false）", async () => {
-    dir = await makeTempDir("wtm-handoff-");
+    dir = await makeTempDir("soda-handoff-");
     await writeHandoffManifest(dir, manifest());
     const path = join(dir, HANDOFF_FILE_NAME);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
@@ -164,7 +164,7 @@ describe("takeHandoff", () => {
   const deps = { pid: 4242, now: () => NOW, isPtyMaster: (fd: number) => fd === 20 || fd === 21 };
 
   it("環境変数が無い起動は none。残っていたファイルは消す（AC8）", async () => {
-    dir = await makeTempDir("wtm-handoff-");
+    dir = await makeTempDir("soda-handoff-");
     await writeHandoffManifest(dir, manifest());
     const env: NodeJS.ProcessEnv = {};
     expect(await takeHandoff(dir, env, deps)).toEqual({ kind: "none", removedStale: true });
@@ -172,12 +172,12 @@ describe("takeHandoff", () => {
   });
 
   it("ファイルも環境変数も無ければ none", async () => {
-    dir = await makeTempDir("wtm-handoff-");
+    dir = await makeTempDir("soda-handoff-");
     expect(await takeHandoff(dir, {}, deps)).toEqual({ kind: "none", removedStale: false });
   });
 
   it("一致すれば taken。環境変数とファイルを消す", async () => {
-    dir = await makeTempDir("wtm-handoff-");
+    dir = await makeTempDir("soda-handoff-");
     await writeHandoffManifest(dir, manifest());
     const env: NodeJS.ProcessEnv = { [HANDOFF_NONCE_ENV]: NONCE, OTHER: "x" };
     const taken = await takeHandoff(dir, env, deps);
@@ -195,7 +195,7 @@ describe("takeHandoff", () => {
   });
 
   it("環境変数があってファイルが無ければ broken", async () => {
-    dir = await makeTempDir("wtm-handoff-");
+    dir = await makeTempDir("soda-handoff-");
     const env: NodeJS.ProcessEnv = { [HANDOFF_NONCE_ENV]: NONCE };
     const taken = await takeHandoff(dir, env, deps);
     expect(taken.kind).toBe("broken");
@@ -203,7 +203,7 @@ describe("takeHandoff", () => {
   });
 
   it("形が合わなければ broken で、ファイルは消す", async () => {
-    dir = await makeTempDir("wtm-handoff-");
+    dir = await makeTempDir("soda-handoff-");
     await writeFile(join(dir, HANDOFF_FILE_NAME), "{not json");
     const env: NodeJS.ProcessEnv = { [HANDOFF_NONCE_ENV]: NONCE };
     const taken = await takeHandoff(dir, env, deps);
@@ -233,7 +233,7 @@ describe("takeHandoff", () => {
       "created in the future",
     ],
   ])("%s なら全 pane を rejected", async (_why, env, m, reason) => {
-    dir = await makeTempDir("wtm-handoff-");
+    dir = await makeTempDir("soda-handoff-");
     await writeHandoffManifest(dir, m);
     const taken = await takeHandoff(dir, { ...env }, deps);
     expect(taken).toMatchObject({
@@ -245,7 +245,7 @@ describe("takeHandoff", () => {
   });
 
   it("PTY の master でない fd は rejected へ", async () => {
-    dir = await makeTempDir("wtm-handoff-");
+    dir = await makeTempDir("soda-handoff-");
     await writeHandoffManifest(dir, manifest());
     const taken = await takeHandoff(
       dir,
@@ -261,7 +261,7 @@ describe("takeHandoff", () => {
   });
 
   it("期限のちょうど内側は使う", async () => {
-    dir = await makeTempDir("wtm-handoff-");
+    dir = await makeTempDir("soda-handoff-");
     await writeHandoffManifest(
       dir,
       manifest({ createdAt: new Date(NOW - HANDOFF_MAX_AGE_MS).toISOString() }),
@@ -286,7 +286,7 @@ describe.skipIf(process.platform !== "linux")(
       expect(isPtyMaster(fd)).toBe(true);
       // Linux 以外の分岐（文字デバイスで端末か）も、同じ fd で確かめる。
       expect(isPtyMaster(fd, "darwin")).toBe(true);
-      const dir = await makeTempDir("wtm-handoff-");
+      const dir = await makeTempDir("soda-handoff-");
       const file = openSync(join(dir, "f"), "w");
       try {
         expect(isPtyMaster(file)).toBe(false);

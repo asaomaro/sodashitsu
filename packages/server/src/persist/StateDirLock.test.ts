@@ -12,7 +12,7 @@ describe("StateDirLock（状態ディレクトリの排他。D103）", () => {
   let lockPath: string;
   const locks: StateDirLock[] = [];
   beforeEach(async () => {
-    dir = await makeTempDir("wtm-lock-");
+    dir = await makeTempDir("soda-lock-");
     lockPath = join(dir, STATE_DIR_LOCK_FILE);
   });
   afterEach(async () => {
@@ -29,7 +29,7 @@ describe("StateDirLock（状態ディレクトリの排他。D103）", () => {
   };
   const lines = async (path = lockPath): Promise<string[]> => (await readFile(path, "utf8")).trim().split("\n");
 
-  it("自分の pid とホスト名を書いた wtm.lock を作り、release で消す（無い状態ディレクトリも作る）", async () => {
+  it("自分の pid とホスト名を書いた soda.lock を作り、release で消す（無い状態ディレクトリも作る）", async () => {
     const nested = join(dir, "a", "b");
     const lock = make({ pid: 4242 }, nested);
     await lock.acquire();

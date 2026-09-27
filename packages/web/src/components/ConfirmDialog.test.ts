@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Workspace } from "@wtm/protocol";
+import type { Workspace } from "@sodashitsu/protocol";
 import { ActionDispatcherKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";

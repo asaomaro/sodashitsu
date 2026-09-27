@@ -15,7 +15,7 @@ import { rm } from "node:fs/promises";
 const SCRIPT_PATH = join(fileURLToPath(new URL(".", import.meta.url)), "agent-hook-report.cjs");
 
 async function runHook(kind: string, stdin: string): Promise<{ paneId: string; kind: string; sessionId: string } | null> {
-  const workDir = await makeTempDir("wtm-agent-hook-report-test-");
+  const workDir = await makeTempDir("soda-agent-hook-report-test-");
   const sockPath = join(workDir, "report.sock");
   try {
     const received = await new Promise<{ paneId: string; kind: string; sessionId: string } | null>((resolve) => {
@@ -33,7 +33,7 @@ async function runHook(kind: string, stdin: string): Promise<{ paneId: string; k
       });
       server.listen(sockPath, () => {
         const child = spawn("node", [SCRIPT_PATH, kind], {
-          env: { ...process.env, WTM_PANE_ID: "p1", WTM_AGENT_REPORT_SOCKET: sockPath },
+          env: { ...process.env, SODA_PANE_ID: "p1", SODA_AGENT_REPORT_SOCKET: sockPath },
           stdio: ["pipe", "ignore", "ignore"],
         });
         child.stdin.end(stdin);

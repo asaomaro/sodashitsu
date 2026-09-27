@@ -9,8 +9,8 @@ import { bridgeSocketPathFor } from "./BridgeEndpoint.js";
 import { BRIDGE_EXIT_NOT_RUNNING, runBridge } from "./bridgeCommand.js";
 import { parseArgs } from "../cliArgs.js";
 
-/** `wtm bridge`（20260927-multi-host-machines の T4）。本物の Unix socket へ素通しで繋ぐ。 */
-describe.skipIf(process.platform === "win32")("wtm bridge（T4）", () => {
+/** `soda bridge`（20260927-multi-host-machines の T4）。本物の Unix socket へ素通しで繋ぐ。 */
+describe.skipIf(process.platform === "win32")("soda bridge（T4）", () => {
   const cleanups: (() => Promise<unknown> | unknown)[] = [];
   afterEach(async () => {
     for (const fn of cleanups.splice(0).reverse()) await fn();
@@ -26,7 +26,7 @@ describe.skipIf(process.platform === "win32")("wtm bridge（T4）", () => {
   }
 
   it("名前付き session の bridge.sock に繋ぎ、両向きを素通しする。相手が閉じたら 0", async () => {
-    const root = await makeTempDir("wtm-bridge-cmd-");
+    const root = await makeTempDir("soda-bridge-cmd-");
     cleanups.push(() => rm(root, { recursive: true, force: true }));
     const dir = join(root, "sessions", "agents");
     await mkdir(dir, { recursive: true });
@@ -49,7 +49,7 @@ describe.skipIf(process.platform === "win32")("wtm bridge（T4）", () => {
   });
 
   it("標準入力の EOF で socket を end し、相手が閉じて 0。標準出力の失敗（ssh の側が先に閉じた）も落ちずに 0", async () => {
-    const root = await makeTempDir("wtm-bridge-cmd-");
+    const root = await makeTempDir("soda-bridge-cmd-");
     cleanups.push(() => rm(root, { recursive: true, force: true }));
     const received: Buffer[] = [];
     const server: Server = createServer((sock) => {
@@ -66,7 +66,7 @@ describe.skipIf(process.platform === "win32")("wtm bridge（T4）", () => {
     expect(Buffer.concat(received).toString()).toBe("bye");
 
     const server2: Server = createServer((sock) => sock.write("x"));
-    const dir2 = await makeTempDir("wtm-bridge-cmd-");
+    const dir2 = await makeTempDir("soda-bridge-cmd-");
     cleanups.push(() => rm(dir2, { recursive: true, force: true }));
     await new Promise<void>((r) => server2.listen(bridgeSocketPathFor(dir2), r));
     cleanups.push(() => new Promise<void>((r) => server2.close(() => r())));
@@ -81,13 +81,13 @@ describe.skipIf(process.platform === "win32")("wtm bridge（T4）", () => {
   });
 
   it("受け口が無ければ（動いていない）何も作らずに 3。Windows は 2。その他の失敗は 1", async () => {
-    const root = await makeTempDir("wtm-bridge-cmd-");
+    const root = await makeTempDir("soda-bridge-cmd-");
     cleanups.push(() => rm(root, { recursive: true, force: true }));
     const t = io();
     expect(await runBridge({ stateDir: root, session: undefined }, t.io)).toBe(
       BRIDGE_EXIT_NOT_RUNNING,
     );
-    expect(t.errs[0]).toMatch(/no running wtm serve for session default/);
+    expect(t.errs[0]).toMatch(/no running soda serve for session default/);
     const w = io();
     expect(
       await runBridge({ stateDir: root, session: undefined }, w.io, {
@@ -119,7 +119,7 @@ describe.skipIf(process.platform === "win32")("wtm bridge（T4）", () => {
     );
   });
 
-  it("引数: --session と --state-dir だけ。WTM_SESSION の対象外", () => {
+  it("引数: --session と --state-dir だけ。SODA_SESSION の対象外", () => {
     expect(parseArgs(["bridge"])).toMatchObject({
       command: "bridge",
       session: undefined,
@@ -136,10 +136,10 @@ describe.skipIf(process.platform === "win32")("wtm bridge（T4）", () => {
   });
 });
 
-describe("wtm bridge は WTM_SESSION を読まない（T4・decisions D5）", () => {
+describe("soda bridge は SODA_SESSION を読まない（T4・decisions D5）", () => {
   it("applySessionEnv は bridge を変えない", async () => {
     const { applySessionEnv } = await import("../cliArgs.js");
     const parsed = parseArgs(["bridge"]);
-    expect(applySessionEnv(parsed, { WTM_SESSION: "other" })).toEqual(parsed);
+    expect(applySessionEnv(parsed, { SODA_SESSION: "other" })).toEqual(parsed);
   });
 });

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { chmod, lstat, mkdir, open, readdir, unlink } from "node:fs/promises";
 import { platform as osPlatform } from "node:os";
 import { join, resolve } from "node:path";
-import { imageExtension, type ImageMimeType } from "@wtm/protocol";
+import { imageExtension, type ImageMimeType } from "@sodashitsu/protocol";
 
 /** 置いておく時間（herdr の `STAGED_CLIPBOARD_IMAGE_MAX_AGE` と同じ 24 時間）。 */
 export const IMAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -16,7 +16,7 @@ export const IMAGE_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 export const IMAGE_DIR_NAME = "clipboard-images";
 
 /** このストアが作るファイルの名前（これに合わないものは後片付けで触らない）。 */
-export const IMAGE_FILE_NAME_RE = /^wtm-image-\d{8}T\d{6}Z-[0-9a-f]{16}\.(png|jpg|gif|webp)$/;
+export const IMAGE_FILE_NAME_RE = /^soda-image-\d{8}T\d{6}Z-[0-9a-f]{16}\.(png|jpg|gif|webp)$/;
 
 export class ImageStoreError extends Error {
   constructor(message: string) {
@@ -79,7 +79,7 @@ export class ImageStore {
     await this.ensureDir();
     const ext = imageExtension(mime);
     for (let attempt = 0; attempt < 3; attempt++) {
-      const name = `wtm-image-${timestamp(this.now())}-${this.random(8).toString("hex")}.${ext}`;
+      const name = `soda-image-${timestamp(this.now())}-${this.random(8).toString("hex")}.${ext}`;
       const path = join(this.dir, name);
       let handle;
       try {

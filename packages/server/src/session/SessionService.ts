@@ -17,8 +17,8 @@ import type {
   Workspace,
   WorkspaceGroup,
   WorkspaceId,
-} from "@wtm/protocol";
-import { INVALID_AGENT_NAME_MESSAGE, isValidAgentName, RpcError } from "@wtm/protocol";
+} from "@sodashitsu/protocol";
+import { INVALID_AGENT_NAME_MESSAGE, isValidAgentName, RpcError } from "@sodashitsu/protocol";
 import type { SessionFileData, SessionFilePane, SessionFileTab, SessionFileWorkspace } from "../persist/SessionFile.js";
 import type { PaneHistoryEntry } from "../persist/PaneHistoryFile.js";
 import { historyReplayText, sanitizeHistoryAnsi } from "../terminal/historyAnsi.js";
@@ -107,7 +107,7 @@ export interface SessionServiceOptions {
   clock?: { now(): number } | undefined;
   /**
    * 公式フック連携（20260923-agent-session-resume）の report を受け取るローカル socket のパス。
-   * pane 起動時に `WTM_AGENT_REPORT_SOCKET` として環境変数に渡す。未設定（socket の起動に失敗した等）
+   * pane 起動時に `SODA_AGENT_REPORT_SOCKET` として環境変数に渡す。未設定（socket の起動に失敗した等）
    * なら渡さない——hook 側は env が無ければ無害に何もしない（design「5. hook スクリプト」）。
    */
   agentReportSocketPath?: string | undefined;
@@ -117,11 +117,11 @@ export interface SessionServiceOptions {
    */
   getAutoResumeEnabled?: (() => boolean) | undefined;
   /**
-   * pane の中の wtmctl がこのサーバへつなげる URL（20260926-agent-skill-file）。pane を起動するたびに読み、あれば `WTM_SERVER_URL` として
+   * pane の中の sodactl がこのサーバへつなげる URL（20260926-agent-skill-file）。pane を起動するたびに読み、あれば `SODA_SERVER_URL` として
    * 環境に入れる。待ち受けた後に決まる（`composeServer` の `listen()`）ので、組み立て時の値ではなく関数で受け取る。省略時は入れない。
    */
   serverUrlForPanes?: (() => string | undefined) | undefined;
-  /** 名前付き session の名前（20260926-named-session-ui）。pane の環境の `WTM_SESSION` に入れる。既定の session では省く。 */
+  /** 名前付き session の名前（20260926-named-session-ui）。pane の環境の `SODA_SESSION` に入れる。既定の session では省く。 */
   sessionName?: string | undefined;
 }
 
@@ -759,7 +759,7 @@ export class SessionService {
     return { workspaceId: tab.workspaceId, tabId: tab.id, paneId: pane.id, cwd: pane.cwd, defaultCwd: this.defaultCwd };
   }
 
-  /** 独自コマンドの環境（pane と同じ規則。`ownPaneId` を省くと `WTM_PANE_ID` を入れない）。20260927-custom-command-keys。 */
+  /** 独自コマンドの環境（pane と同じ規則。`ownPaneId` を省くと `SODA_PANE_ID` を入れない）。20260927-custom-command-keys。 */
   commandEnv(ownPaneId: PaneId | undefined, extra: Readonly<Record<string, string>>): Record<string, string> {
     return buildPaneEnv(process.env, {
       paneId: ownPaneId,
@@ -1023,7 +1023,7 @@ export class SessionService {
     // agent も同様に、公開している AgentInfo の中身が実際に変わったときだけ発行する（review 指摘。should）。
     // `AgentTracker.update()` は herdr 由来のヒステリシス（D46・D50）の都合で、visibleIdle/visibleBlocker/
     // visibleWorking だけが変わって state 等は同じ、という新しい `AgentInfo` オブジェクトを返すことがある
-    // （その3フラグは `AgentInfo`（`@wtm/protocol`）には含まれない、判定内部だけの情報）。busy/title と
+    // （その3フラグは `AgentInfo`（`@sodashitsu/protocol`）には含まれない、判定内部だけの情報）。busy/title と
     // 同じ「実際に変わったときだけ発行する」規約に揃える。
     // 名前は AgentTracker が知らないので、同じ検出（instanceId）の間だけ前の名前を引き継ぐ（20260926-agent-start-rename design
     // 「名前の引き継ぎ」）。別の instanceId（入れ替わり）・null（終了）には引き継がない＝名前は消える。
@@ -1148,12 +1148,12 @@ export class SessionService {
 
   /**
    * pane 起動時に渡す環境変数（20260923-agent-session-resume design「6. フック登録の書式」）。
-   * `WTM_PANE_ID`・`WTM_AGENT_REPORT_SOCKET` は、この pane の中で Claude Code/Codex が起動されたときに、
+   * `SODA_PANE_ID`・`SODA_AGENT_REPORT_SOCKET` は、この pane の中で Claude Code/Codex が起動されたときに、
    * hook スクリプトが「どの pane の・どの会話か」を報告するために使う。socket が無い（起動に失敗した等）
-   * 環境では `WTM_AGENT_REPORT_SOCKET` を渡さない——hook 側は env が無ければ無害に何もしない。
+   * 環境では `SODA_AGENT_REPORT_SOCKET` を渡さない——hook 側は env が無ければ無害に何もしない。
    * 全 pane に常に付ける（起動時点でその pane が Claude Code/Codex を動かすかは分からないため）。
-   * `WTM_SERVER_URL`（20260926-agent-skill-file）は pane の中の wtmctl の既定の接続先で、`WTM_PANE_ID` と合わせて自分の pane への操作の歯止めにも使う。
-   * サーバの環境から受け継いだ `WTMCTL_URL`・`WTMCTL_TOKEN` と古い `WTM_*` は渡さない（`buildPaneEnv`）。
+   * `SODA_SERVER_URL`（20260926-agent-skill-file）は pane の中の sodactl の既定の接続先で、`SODA_PANE_ID` と合わせて自分の pane への操作の歯止めにも使う。
+   * サーバの環境から受け継いだ `SODACTL_URL`・`SODACTL_TOKEN` と古い `SODA_*` は渡さない（`buildPaneEnv`）。
    */
   private envForPane(paneId: PaneId): Record<string, string> {
     return buildPaneEnv(process.env, {
@@ -1196,7 +1196,7 @@ export class SessionService {
       cols: HEADLESS_COLS,
       rows: HEADLESS_ROWS,
       ...(command ? { shell: command.shell, args: command.args } : this.shell ? { shell: this.shell } : {}),
-      // 独自コマンドの pane 種は `WTM_ACTIVE_*` 等を重ねる（20260927-custom-command-keys）。
+      // 独自コマンドの pane 種は `SODA_ACTIVE_*` 等を重ねる（20260927-custom-command-keys）。
       env: command?.env ? { ...this.envForPane(paneId), ...command.env } : this.envForPane(paneId),
     });
     // 画面履歴（20260926-screen-history-replay）：`create` と同じ同期区間でミラーへ書く——PTY の出力は非同期のイベントで届くので、
@@ -1330,7 +1330,7 @@ export class SessionService {
   async adoptScrollbackEditors(entries: readonly HandoffScrollbackEditor[], adoptedPaneIds: ReadonlySet<PaneId>): Promise<void> {
     const root = resolve(this.scrollbackEditorEnv.tmpRoot ?? tmpdir());
     for (const e of entries) {
-      // 消すことがあるので、このサーバが一時ディレクトリを作る場所（`mkdtemp(<tmpRoot>/wtm-scrollback-)`）の直下のものだけを扱う。
+      // 消すことがあるので、このサーバが一時ディレクトリを作る場所（`mkdtemp(<tmpRoot>/soda-scrollback-)`）の直下のものだけを扱う。
       if (dirname(e.dir) !== root) {
         this.logger.warn("ignoring a handed-off scrollback dir outside the temp root", { dir: e.dir, root });
         continue;

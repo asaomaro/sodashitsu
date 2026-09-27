@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * `wtm session stop`（20260927-session-stop）の起動確認。**ビルドした `dist/main.js`** を子プロセスで `wtm serve --session smoke` として起動し、
- * 実物の `wtm session stop smoke` で止めて、次を確かめてから後始末する（Linux/macOS。Windows では何もせず成功で終わる——非対応）:
+ * `soda session stop`（20260927-session-stop）の起動確認。**ビルドした `dist/main.js`** を子プロセスで `soda serve --session smoke` として起動し、
+ * 実物の `soda session stop smoke` で止めて、次を確かめてから後始末する（Linux/macOS。Windows では何もせず成功で終わる——非対応）:
  * - 動いていない名前付き session には終了コード 3 で、何も作らない（AC2）
- * - 動いている session は `wtm session stop` で止まり（CLI は 0 と `wtm: stopped session smoke`）、サーバは終了コード 0 で終わる。
- *   `wtm session list` が stopped、`wtm.lock` が無く、`session.json`・`session-history.json` がある（AC1）
- * - 止まった後の `wtm session stop` は 3（AC16）
+ * - 動いている session は `soda session stop` で止まり（CLI は 0 と `soda: stopped session smoke`）、サーバは終了コード 0 で終わる。
+ *   `soda session list` が stopped、`soda.lock` が無く、`session.json`・`session-history.json` がある（AC1）
+ * - 止まった後の `soda session stop` は 3（AC16）
  * - 同じ引数で起動し直すと同じ pane があり、前回の画面（`--pane-history`）が戻る（AC1）
  * `main.ts` は単体テストできない（読み込むと起動する）ので、止める指示と停止の手順の配線はここで見る。pane のシェルは `/bin/sh`（印に `$((…))`）。
  */
@@ -15,7 +15,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@wtm/protocol";
+import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@sodashitsu/protocol";
 import WebSocket from "ws";
 
 const MAIN = join(import.meta.dirname, "main.js");
@@ -47,10 +47,10 @@ async function until<T>(
 }
 
 /**
- * ビルドした `wtm` を子で実行して終わりを待つ。**spawnSync は使わない**——このプロセスは `/ws` のクライアントを持っていて、同期で待つと
+ * ビルドした `soda` を子で実行して終わりを待つ。**spawnSync は使わない**——このプロセスは `/ws` のクライアントを持っていて、同期で待つと
  * その間 WebSocket の閉じる握手に答えられず、サーバの `close()`（HTTP の待ち受けを閉じる）が繋がったままのクライアントを待って止まりきらない。
  */
-function runWtm(
+function runSoda(
   args: string[],
 ): Promise<{ status: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -178,10 +178,10 @@ async function stopChild(s: Serve | undefined): Promise<boolean> {
 
 async function main(): Promise<void> {
   if (process.platform === "win32") {
-    log("skipped (wtm session stop is not supported on Windows)");
+    log("skipped (soda session stop is not supported on Windows)");
     return;
   }
-  const stateDir = await mkdtemp(join(tmpdir(), "wtm-stop-smoke-"));
+  const stateDir = await mkdtemp(join(tmpdir(), "soda-stop-smoke-"));
   const sessionDir = join(stateDir, "sessions", "smoke");
   let first: Serve | undefined;
   let second: Serve | undefined;
@@ -190,11 +190,11 @@ async function main(): Promise<void> {
   try {
     // 1. 動いていない名前付き session（AC2）
     mkdirSync(sessionDir, { recursive: true });
-    const idle = await runWtm(["session", "stop", "smoke", "--state-dir", stateDir]);
+    const idle = await runSoda(["session", "stop", "smoke", "--state-dir", stateDir]);
     if (idle.status !== 3 || !idle.stderr.includes("session smoke is not running"))
       throw new Error(`expected exit 3 when not running, got ${idle.status}: ${idle.stderr}`);
     if (readdirSync(sessionDir).length !== 0)
-      throw new Error(`wtm session stop created files: ${readdirSync(sessionDir).join(",")}`);
+      throw new Error(`soda session stop created files: ${readdirSync(sessionDir).join(",")}`);
     log("not running → exit 3, nothing created ok");
 
     // 2. 起動し、pane に印を打つ
@@ -230,29 +230,29 @@ async function main(): Promise<void> {
     log(`started: pid ${first.child.pid}, pane ${paneId}, marker shown`);
 
     // 3. 止める（AC1）
-    const stop = await runWtm(["session", "stop", "smoke", "--state-dir", stateDir]);
-    if (stop.status !== 0 || stop.stdout.trim() !== "wtm: stopped session smoke")
+    const stop = await runSoda(["session", "stop", "smoke", "--state-dir", stateDir]);
+    if (stop.status !== 0 || stop.stdout.trim() !== "soda: stopped session smoke")
       throw new Error(
-        `wtm session stop failed (exit ${stop.status}): ${stop.stdout} ${stop.stderr}\n--- server ---\n${first.out()}`,
+        `soda session stop failed (exit ${stop.status}): ${stop.stdout} ${stop.stderr}\n--- server ---\n${first.out()}`,
       );
     const code = await Promise.race([
       first.exited,
       new Promise<"timeout">((r) => setTimeout(() => r("timeout"), 10_000).unref()),
     ]);
     if (code !== 0) throw new Error(`the server exited with ${code} (expected 0):\n${first.out()}`);
-    if (!first.out().includes("wtm: stop requested (wtm session stop), shutting down"))
+    if (!first.out().includes("soda: stop requested (soda session stop), shutting down"))
       throw new Error(`the server did not log the stop request:\n${first.out()}`);
-    const list = await runWtm(["session", "list", "--state-dir", stateDir]);
+    const list = await runSoda(["session", "list", "--state-dir", stateDir]);
     if (!/^smoke\s+stopped\s/m.test(list.stdout))
-      throw new Error(`wtm session list does not show smoke as stopped:\n${list.stdout}`);
-    if (existsSync(join(sessionDir, "wtm.lock"))) throw new Error("wtm.lock was left behind");
+      throw new Error(`soda session list does not show smoke as stopped:\n${list.stdout}`);
+    if (existsSync(join(sessionDir, "soda.lock"))) throw new Error("soda.lock was left behind");
     for (const file of ["session.json", "session-history.json"])
       if (!existsSync(join(sessionDir, file))) throw new Error(`${file} was not written`);
     c1.ws.close();
     log("stopped: CLI exit 0, server exit 0, list shows stopped, lock released, state saved ok");
 
     // 4. 止まった後（AC16）
-    const again = await runWtm(["session", "stop", "smoke", "--state-dir", stateDir]);
+    const again = await runSoda(["session", "stop", "smoke", "--state-dir", stateDir]);
     if (again.status !== 3) throw new Error(`expected exit 3 after stopping, got ${again.status}`);
     log("stopped → exit 3 ok");
 

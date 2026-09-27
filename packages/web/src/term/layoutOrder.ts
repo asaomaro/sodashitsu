@@ -1,4 +1,4 @@
-import type { Dir, LayoutNode } from "@wtm/protocol";
+import type { Dir, LayoutNode } from "@sodashitsu/protocol";
 
 /**
  * レイアウト木を深さ優先でたどった pane id の並び（`prefix+tab` の巡回順・`GotoPicker`（T24）の

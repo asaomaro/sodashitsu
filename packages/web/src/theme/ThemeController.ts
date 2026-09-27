@@ -1,4 +1,4 @@
-import { TERMINAL_PALETTES, type TerminalPalette, type ThemeName } from "@wtm/protocol";
+import { TERMINAL_PALETTES, type TerminalPalette, type ThemeName } from "@sodashitsu/protocol";
 import { watch, type WatchStopHandle } from "vue";
 import type { useSettingsStore } from "../store/settings.js";
 import { readPrefs } from "../store/view.js";
@@ -9,7 +9,7 @@ import { CSS_VARS, uiTokens, type UiTokens } from "./uiTokens.js";
 type SettingsStore = ReturnType<typeof useSettingsStore>;
 
 /** 起動用の控えの置き場所（localStorage。`public/theme-boot.js` が同じキーを読む。design D5）。 */
-export const BOOT_KEY = "wtm.themeBoot.v1";
+export const BOOT_KEY = "soda.themeBoot.v1";
 
 /** 控えの 1 組（CSS 変数と color-scheme）。 */
 export interface BootVars {
@@ -44,7 +44,7 @@ export interface ThemeControllerOptions {
  * - 当てる（`apply`）：CSS 変数・color-scheme・`data-theme` を root へ、配色を全端末へ、名前をサーバへ。直前と同じ名前なら省く。
  * - OS の明暗を追う：`media` の change → `settings.systemDark` → `settings.effectiveTheme` が変われば当てる（AC5）。
  * - 起動用の控え（`writeBoot`）：**4 つの設定が変わったときと `start()` のときだけ**書く（OS の明暗が変わっただけでは中身が変わらない）。
- *   中身は保存された設定（`wtm.prefs.v1`）から作る。
+ *   中身は保存された設定（`soda.prefs.v1`）から作る。
  */
 export class ThemeController {
   private applied: ThemeName | null = null;

@@ -1,4 +1,4 @@
-import { decodeFrame, encodeOutputFrame, encodeSnapshotFrame, FRAME_TYPE } from "@wtm/protocol";
+import { decodeFrame, encodeOutputFrame, encodeSnapshotFrame, FRAME_TYPE } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../surface/ControlSurface.js";
 import type { ClientRegistry } from "../clients/ClientRegistry.js";
 import type { SizeAuthority } from "../clients/SizeAuthority.js";

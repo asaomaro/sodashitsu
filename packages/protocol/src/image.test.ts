@@ -67,7 +67,7 @@ describe("matchesImageMagic", () => {
 describe("isPastablePath", () => {
   it("普通の絶対パスは貼ってよい", () => {
     expect(
-      isPastablePath("/home/u/.local/state/web-tn-multiplexer/clipboard-images/wtm-image-x.png"),
+      isPastablePath("/home/u/.local/state/sodashitsu/clipboard-images/soda-image-x.png"),
     ).toBe(true);
     expect(isPastablePath("C:\\Users\\A B\\x.png")).toBe(true);
     expect(isPastablePath("/tmp/日本語.png")).toBe(true);

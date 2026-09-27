@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { composeServerOnFreePort, type ComposedServer } from "@wtm/server";
+import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import WebSocket from "ws";
 import { runPaneRead, runPaneRun, runPaneSplit } from "./commands/pane.js";
 import { runLogin, runSnapshot, runWatch } from "./commands/session.js";
@@ -10,8 +10,8 @@ import { runWorkspaceCreate } from "./commands/workspace.js";
 import { FsSessionStore } from "./session.js";
 
 /**
- * `wtmctl` の一巡を実サーバ・実 PTY で確認する（design.md「受け入れ基準との対応」・tasks.md T12）。
- * `@wtm/server` の `composeServer`（`packages/e2e` と同じ土台）を使い、モックの WS サーバは作らない
+ * `sodactl` の一巡を実サーバ・実 PTY で確認する（design.md「受け入れ基準との対応」・tasks.md T12）。
+ * `@sodashitsu/server` の `composeServer`（`packages/e2e` と同じ土台）を使い、モックの WS サーバは作らない
  * ——本物の `AuthService`/`OriginPolicy`/実 PTY を経由させることが AC7・AC9 の検証そのものであるため
  * （tasks.md「テスト方針」）。
  */
@@ -36,7 +36,7 @@ async function waitUntil(check: () => boolean, deadlineMs: number, stepMs = 150)
   if (!check()) throw new Error(`waitUntil: condition not met within ${deadlineMs}ms`);
 }
 
-describe("wtmctl main integration（実サーバ・実 PTY）", () => {
+describe("sodactl main integration（実サーバ・実 PTY）", () => {
   let server: ComposedServer;
   let stateDir: string;
   let sessionDir: string;
@@ -48,13 +48,13 @@ describe("wtmctl main integration（実サーバ・実 PTY）", () => {
   let workspaceId: string;
 
   beforeAll(async () => {
-    stateDir = await mkdtemp(join(tmpdir(), "wtmctl-it-state-"));
+    stateDir = await mkdtemp(join(tmpdir(), "sodactl-it-state-"));
     server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
     port = server.options.port;
     if (!server.freshToken) throw new Error("expected a freshly generated token");
     token = server.freshToken;
     url = `http://127.0.0.1:${port}`;
-    sessionDir = await mkdtemp(join(tmpdir(), "wtmctl-it-session-"));
+    sessionDir = await mkdtemp(join(tmpdir(), "sodactl-it-session-"));
     store = new FsSessionStore(join(sessionDir, "session.json"));
   }, 30_000);
 
@@ -104,7 +104,7 @@ describe("wtmctl main integration（実サーバ・実 PTY）", () => {
   });
 
   it("pane run → pane read: 実 PTY への echo の往復を確認する（AC3, AC4）", async () => {
-    const marker = `wtmctl-it-${Date.now()}`;
+    const marker = `sodactl-it-${Date.now()}`;
     const runOut = captureStdout();
     await runPaneRun({ kind: "pane-run", opts: { url, token: undefined }, paneId, command: `echo ${marker}` }, store);
     runOut.restore();
@@ -135,7 +135,7 @@ describe("wtmctl main integration（実サーバ・実 PTY）", () => {
     // 呼び続け、他のテストの `captureStdout()` の捕捉内容を汚染しうる（実機の一式実行〔`pnpm -s test`〕で
     // 実際に別テストの `JSON.parse` が失敗する形で再現した）。このテストだけ**専用の使い捨てサーバ**を
     // 立て、確認が終わったらサーバごと閉じて接続を確実に切ってから次のテストへ進む。
-    const dedicatedStateDir = await mkdtemp(join(tmpdir(), "wtmctl-it-follow-state-"));
+    const dedicatedStateDir = await mkdtemp(join(tmpdir(), "sodactl-it-follow-state-"));
     const dedicatedServer = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: dedicatedStateDir, origin: [] });
     try {
       if (!dedicatedServer.freshToken) throw new Error("expected a freshly generated token");
@@ -145,7 +145,7 @@ describe("wtmctl main integration（実サーバ・実 PTY）", () => {
       createOut.restore();
       const followPaneId = (JSON.parse(createOut.text()) as { pane: { id: string } }).pane.id;
 
-      const marker = `wtmctl-follow-${Date.now()}`;
+      const marker = `sodactl-follow-${Date.now()}`;
       const out = captureStdout();
       const followPromise = runPaneRead(
         { kind: "pane-read", opts: { url: dedicatedUrl, token: undefined }, paneId: followPaneId, follow: true, raw: false, timeoutMs: 5_000 },
@@ -169,7 +169,7 @@ describe("wtmctl main integration（実サーバ・実 PTY）", () => {
 
   it("watch: 別クライアントが起こした workspace.created イベントを受け取る（AC6）", async () => {
     // 上の「pane read --follow」と同じ理由（後続テストへの汚染を避ける）で専用サーバを使う。
-    const dedicatedStateDir = await mkdtemp(join(tmpdir(), "wtmctl-it-watch-state-"));
+    const dedicatedStateDir = await mkdtemp(join(tmpdir(), "sodactl-it-watch-state-"));
     const dedicatedServer = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: dedicatedStateDir, origin: [] });
     try {
       if (!dedicatedServer.freshToken) throw new Error("expected a freshly generated token");
@@ -209,7 +209,7 @@ describe("wtmctl main integration（実サーバ・実 PTY）", () => {
   }, 35_000); // 専用の実サーバの起動＋中の締め切り 10 秒。負荷の下で 15 秒の上限で落ちた（20260926-load-flaky-tests の D5）
 
   it("login コマンド: --token で明示ログインし、別のセッションキャッシュへ書き込む（AC7 の前提）", async () => {
-    const otherDir = await mkdtemp(join(tmpdir(), "wtmctl-it-session2-"));
+    const otherDir = await mkdtemp(join(tmpdir(), "sodactl-it-session2-"));
     try {
       const otherStore = new FsSessionStore(join(otherDir, "session.json"));
       const out = captureStdout();
@@ -226,7 +226,7 @@ describe("wtmctl main integration（実サーバ・実 PTY）", () => {
   /**
    * AC9: `/ws` の Origin 拒否が、この work のあとも既存どおり効くことを確かめる（decisions.md 参照）。
    *
-   * `wtmctl` の `connect()` は接続先 `--url` からそのまま Origin ヘッダを組み立てるため、**構造的に
+   * `sodactl` の `connect()` は接続先 `--url` からそのまま Origin ヘッダを組み立てるため、**構造的に
    * 誤った Origin を作れない**（D3：Origin をこの CLI 用に緩めていないことの裏返し）。そのため
    * `connect()` 自身を偽の Origin で誤動作させることはできない——この事実そのものが安全側の設計であり、
    * `connect()` の 403 分類ロジック（`statusCode` を持つ `Error` にする。`onUnexpectedResponse`）は

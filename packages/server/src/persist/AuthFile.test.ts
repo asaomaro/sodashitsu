@@ -6,7 +6,7 @@ import { AuthFileData, emptyAuthFileData, FsAuthFile } from "./AuthFile.js";
 describe("FsAuthFile", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await makeTempDir("wtm-auth-");
+    dir = await makeTempDir("soda-auth-");
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });

@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { RpcError, type ErrorCode, type MethodName } from "@wtm/protocol";
+import { RpcError, type ErrorCode, type MethodName } from "@sodashitsu/protocol";
 import type { ClientSink } from "../terminal/OutputFanout.js";
 // `session/SessionService.js` の再エクスポート経由で取る（architecture.md の依存表に無い
 // `session/SessionModel` への直接依存を避ける。レビュー指摘・round2）。

@@ -3,7 +3,7 @@ import { expect, test } from "../support/fixtures.js";
 import { watchSentInput } from "../support/frames.js";
 import { focusTerminal, prefixKey, typeLine } from "../support/keys.js";
 import { watchShownPanes } from "../support/panes.js";
-import type { WtmTestClient } from "../support/wsClient.js";
+import type { SodaTestClient } from "../support/wsClient.js";
 
 /**
  * AC13・AC14・AC-I1〜AC-I5 の E2E（05-e2e-docs T10）。design「受け入れ基準との対応」：
@@ -30,7 +30,7 @@ test("ヘルプ（prefix+?）：開いて閉じると、開く前の pane へフ
   await expect(dialog).toBeHidden();
 
   // AC-I4：閉じたら開く前の pane（端末）へフォーカスが戻る——マウスで触らずに直接打てることで確認する。
-  const marker = `wtm-e2e-after-help-${Date.now()}`;
+  const marker = `soda-e2e-after-help-${Date.now()}`;
   await page.keyboard.type(marker);
   await page.keyboard.press("Enter");
   await expect(page.locator(".xterm-helper-textarea")).toBeFocused();
@@ -74,7 +74,7 @@ test("goto（prefix+g）：矢印キーだけで選び Enter で確定すると�
   await page.keyboard.press("Enter");
   await expect(picker).toBeHidden();
 
-  const marker = `wtm-e2e-goto-${Date.now()}`;
+  const marker = `soda-e2e-goto-${Date.now()}`;
   await page.keyboard.type(marker);
   await page.keyboard.press("Enter");
   await client.waitForOutput(p1, marker); // 選んだ p1 へ実際に切り替わり、焦点も移っている
@@ -107,7 +107,7 @@ test("prefix 直後以外のキーは端末へそのまま届く（AC-I5）", as
   await focusTerminal(page);
 
   // "v"（copy モードでは移動キーだが、prefix を経ていない terminal モードでは通常の文字として届く）。
-  const marker = `wtm-e2e-passthrough-v${Date.now()}`;
+  const marker = `soda-e2e-passthrough-v${Date.now()}`;
   await typeLine(page, `echo v${marker}`); // 先頭に v を含む文字列を打っても素直に文字として届く
   await client.waitForOutput(p1, `v${marker}`);
 });
@@ -160,7 +160,7 @@ test("右クリック（M7）：既定の宛先では、アプリがマウスの
   await expect(menu).toBeHidden();
   // 閉じたら右クリックした端末へフォーカスが戻り（APG の Menu。D110）、そのまま打てる。打った行は、右クリックの後の入力の区切りになる。
   await expect(page.locator(".xterm-helper-textarea")).toBeFocused();
-  const marker = `wtm-e2e-after-right-click-${Date.now()}`;
+  const marker = `soda-e2e-after-right-click-${Date.now()}`;
   await typeLine(page, marker);
   await client.waitForOutput(p1, marker);
   const echoed = client.rawOutput(p1).slice(outputMark);
@@ -192,7 +192,7 @@ test("右クリック（M7）：「pane に送る」にした pane では、端�
   await expect.poll(() => client.rawOutput(p1)).toMatch(/\^\[\[<2;\d+;\d+M\^\[\[<2;\d+;\d+m/);
   await expect(menu).toBeHidden();
   // 届いた報告は `cat` の行の途中に残る（改行までは読まれない）ので、行を終えてから区切る——後の行の `cat -v` の出力に混ざらない。
-  const flush = `wtm-e2e-flush-${Date.now()}`;
+  const flush = `soda-e2e-flush-${Date.now()}`;
   await typeLine(page, flush);
   await expect.poll(() => client.rawOutput(p1).split(flush).length - 1).toBe(2); // tty のエコーと `cat -v` の出力
 
@@ -215,7 +215,7 @@ test("右クリック（M7）：「pane に送る」にした pane では、端�
   await expect(menu).toBeVisible(); // 既定に戻ったので、アプリが報告を求めていてもメニューが開く
   await page.keyboard.press("Escape");
 
-  const marker = `wtm-e2e-after-frame-${Date.now()}`;
+  const marker = `soda-e2e-after-frame-${Date.now()}`;
   await typeLine(page, marker);
   await client.waitForOutput(p1, marker);
   const echoed = client.rawOutput(p1).slice(outputMark);
@@ -348,7 +348,7 @@ test("分割した 2 つ目の pane も、prefix のキーで選んでから、t
 });
 
 /** 端末の文字の位置（0 始まりの列・行）の中心の座標。セルの寸法は描画面の大きさと PTY の大きさ（＝ブラウザの xterm.js の大きさ）から求める。 */
-async function cellCenter(page: Page, client: WtmTestClient, paneId: string, col: number, row: number): Promise<{ x: number; y: number }> {
+async function cellCenter(page: Page, client: SodaTestClient, paneId: string, col: number, row: number): Promise<{ x: number; y: number }> {
   const box = (await terminalScreen(page).boundingBox())!;
   const size = client.paneSize(paneId)!;
   return { x: box.x + ((col + 0.5) * box.width) / size.cols, y: box.y + ((row + 0.5) * box.height) / size.rows };
@@ -382,8 +382,8 @@ test("リンク（M6）：出力の中の URL と OSC 8 のリンクは、ただ
   await focusTerminal(page);
 
   // 開く先はテストのサーバ（外へ出ない）。画面を消して、1 行目に URL、2 行目に OSC 8 のリンク（表示の文字は URL ではない）を出す。
-  const plainUrl = `${appServer.origin}/wtm-e2e-plain-link`;
-  const osc8Url = `${appServer.origin}/wtm-e2e-osc8-link`;
+  const plainUrl = `${appServer.origin}/soda-e2e-plain-link`;
+  const osc8Url = `${appServer.origin}/soda-e2e-osc8-link`;
   await typeLine(page, `printf '\\e[H\\e[2J%s\\n\\e]8;;%s\\e\\\\osc8-link-text\\e]8;;\\e\\\\\\n' ${plainUrl} ${osc8Url}`);
   await client.waitForOutput(p1, `\x1b]8;;${osc8Url}`); // printf の出力（打った行のエコーには ESC が無い）
 

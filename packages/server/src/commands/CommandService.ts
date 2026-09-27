@@ -5,7 +5,7 @@ import {
   type CommandRunParams,
   type CommandRunResult,
   type PaneId,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 import type { EventBus } from "../bus/EventBus.js";
 import type { ClientRegistry } from "../clients/ClientRegistry.js";
 import type { Logger } from "../log/Logger.js";
@@ -149,11 +149,11 @@ export class CommandService {
         `custom command not found: ${params.commandId} (reload the configuration)`,
       );
     const extra: Record<string, string> = {
-      WTM_ACTIVE_WORKSPACE_ID: ctx.workspaceId,
-      WTM_ACTIVE_TAB_ID: ctx.tabId,
-      WTM_ACTIVE_PANE_ID: ctx.paneId,
-      WTM_ACTIVE_PANE_CWD: ctx.cwd,
-      WTM_COMMAND_ID: def.id,
+      SODA_ACTIVE_WORKSPACE_ID: ctx.workspaceId,
+      SODA_ACTIVE_TAB_ID: ctx.tabId,
+      SODA_ACTIVE_PANE_ID: ctx.paneId,
+      SODA_ACTIVE_PANE_CWD: ctx.cwd,
+      SODA_COMMAND_ID: def.id,
     };
     const argv = commandArgv(def.type, def.command, this.platform, this.env);
     // コマンドの文字列はログに出さない（秘密が混ざりうる）。

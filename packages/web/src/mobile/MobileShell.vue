@@ -122,8 +122,8 @@ onBeforeUnmount(() => touchScroll?.dispose());
   align-items: center;
   justify-content: space-between;
   padding: 0.5em;
-  background: var(--wtm-menu-bg, #282a36);
-  border-bottom: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
 .mobile-shell-title {
   flex: 1;
@@ -147,12 +147,12 @@ onBeforeUnmount(() => touchScroll?.dispose());
   padding: 0.3em 0.6em;
   color: inherit;
   background: none;
-  border: 1px solid var(--wtm-menu-border, #44475a);
+  border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
 }
 .mobile-shell-fit-btn[aria-pressed="true"] {
-  color: var(--wtm-accent-fg, #f8f8f2);
-  background: var(--wtm-accent, #6070a1);
+  color: var(--soda-accent-fg, #f8f8f2);
+  background: var(--soda-accent, #6070a1);
 }
 .mobile-shell-keyboard-btn {
   flex: none;
@@ -163,7 +163,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
   border: none;
 }
 .mobile-shell-keyboard-btn[aria-pressed="true"] {
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
   border-radius: 4px;
 }
 /*

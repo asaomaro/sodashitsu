@@ -1,4 +1,4 @@
-import type { AgentInfo } from "@wtm/protocol";
+import type { AgentInfo } from "@sodashitsu/protocol";
 
 /** 知らせる出来事の種類。文言・音・OS 通知の title がこれで分かれる（AC2）。 */
 export type NotifyKind = "blocked" | "done";
@@ -42,7 +42,7 @@ export interface Audience {
   paneVisible: boolean;
 }
 
-/** 3 経路それぞれの入／切（`wtm.prefs.v1` に保存する。AC6）。 */
+/** 3 経路それぞれの入／切（`soda.prefs.v1` に保存する。AC6）。 */
 export interface NotifyPrefs {
   toast: boolean;
   desktop: boolean;

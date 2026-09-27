@@ -20,15 +20,15 @@ import { MACHINE_USAGE } from "./machine/machineArgs.js";
 function printHelp(): void {
   console.log(
     [
-      "wtm serve [--host H] [--port P] [--cert FILE] [--key FILE] [--origin ORIGIN]...",
+      "soda serve [--host H] [--port P] [--cert FILE] [--key FILE] [--origin ORIGIN]...",
       "          [--state-dir DIR] [--session NAME] [--scrollback N] [--shell PATH] [--worktree-dir DIR] [--pane-history]",
-      "wtm token reset [--state-dir DIR] [--session NAME]",
-      "wtm session list [--state-dir DIR] [--json]",
-      "wtm session delete NAME [--state-dir DIR] [--json]",
-      "wtm session stop NAME [--state-dir DIR] [--json]",
-      "wtm handoff [--state-dir DIR] [--session NAME]",
+      "soda token reset [--state-dir DIR] [--session NAME]",
+      "soda session list [--state-dir DIR] [--json]",
+      "soda session delete NAME [--state-dir DIR] [--json]",
+      "soda session stop NAME [--state-dir DIR] [--json]",
+      "soda handoff [--state-dir DIR] [--session NAME]",
       ...MACHINE_USAGE.split("\n"),
-      "wtm bridge [--session NAME] [--state-dir DIR]   (started by another machine over ssh)",
+      "soda bridge [--session NAME] [--state-dir DIR]   (started by another machine over ssh)",
     ].join("\n"),
   );
 }
@@ -63,7 +63,7 @@ async function runServe(args: RawServeArgs): Promise<void> {
   // 終了コード 129）ので、受けて閉じて終わる方がよい。起動の途中で受けたら、その段（復元等）を終えてから閉じる（`close()` と
   // `listen()` を並行させない——ロックを確実に放す）。もう一度受けたら待たずに終わる（残ったロックは次の起動が pid を見て
   // 取り直す）。
-  // 手順の本体は `serveShutdown.ts`（止める指示 `wtm session stop` と共有する。20260927-session-stop）。
+  // 手順の本体は `serveShutdown.ts`（止める指示 `soda session stop` と共有する。20260927-session-stop）。
   let startup: Promise<void> | undefined;
   const stopper = createShutdown({
     close: () => server.close(),
@@ -74,7 +74,7 @@ async function runServe(args: RawServeArgs): Promise<void> {
     exit: (code) => process.exit(code),
   });
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => stopper.signal(signal));
-  // 制御の socket（handoff.sock）の止める指示（`wtm session stop`）も同じ手順で止める。止まる途中の指示は何もしない（AC7）。
+  // 制御の socket（handoff.sock）の止める指示（`soda session stop`）も同じ手順で止める。止まる途中の指示は何もしない（AC7）。
   server.onStopRequest(() => stopper.stopRequest());
 
   let listening = false;
@@ -84,7 +84,7 @@ async function runServe(args: RawServeArgs): Promise<void> {
       await startup;
     } catch (err) {
       // 待ち受けの失敗（ポートが使用中・権限の無いポート・このマシンに無いアドレス・解決できない名前）だけを、案内つきの
-      // 終了コード 2 にする（判定は `config.ts` の `bindFailureHint`）。同じ state-dir の wtm が動いている（`wtm.lock`）は
+      // 終了コード 2 にする（判定は `config.ts` の `bindFailureHint`）。同じ state-dir の soda が動いている（`soda.lock`）は
       // `listen()` が既に `ConfigError` にしている。それ以外（想定外の失敗）はそのまま投げる（終了コード 1。原因を
       // 握りつぶさない）。
       const hint = bindFailureHint(err, remembered);
@@ -112,8 +112,8 @@ async function runServe(args: RawServeArgs): Promise<void> {
     // 更新時の引き継ぎで起動したときの結果（20260926-live-handoff）。
     const handoff = server.handoffResult;
     if (handoff !== undefined) {
-      console.log(`wtm: handoff complete: ${handoff.adopted} pane(s) kept running`);
-      if (handoff.dropped > 0) console.error(`wtm: ${handoff.dropped} handed-off pane(s) could not be kept (see server.log)`);
+      console.log(`soda: handoff complete: ${handoff.adopted} pane(s) kept running`);
+      if (handoff.dropped > 0) console.error(`soda: ${handoff.dropped} handed-off pane(s) could not be kept (see server.log)`);
     }
     tokenShown = true; // `startupLines` は作った token を必ず含む（URL が 1 つも無くても）
   } catch (err) {
@@ -133,7 +133,7 @@ async function main(): Promise<void> {
   try {
     // 引数の誤り（未知のオプション・値の無いオプション）も ConfigError として終了コード 2 にする（以前は try の外で
     // 投げていたため、スタックトレースつきの終了コード 1 になっていた。D102 の実物の CLI の確認で発見）。
-    // `--session` が無ければ `WTM_SESSION`（serve・token reset だけ。20260926-named-session-ui）。
+    // `--session` が無ければ `SODA_SESSION`（serve・token reset だけ。20260926-named-session-ui）。
     const parsed = applySessionEnv(parseArgs(process.argv.slice(2)), process.env);
     if (parsed.command === "serve") {
       await runServe(parsed.serve);
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
     } else if (parsed.command === "session-stop") {
       process.exitCode = await runSessionStop(parsed.stateDir ?? defaultStateDir(), parsed.sessionTarget!, parsed.json === true, consoleIo);
     } else if (parsed.command === "bridge") {
-      // ほかのマシンの `wtm serve` が ssh の先で起動する（20260927-multi-host-machines）。標準入出力は中継の素通し。
+      // ほかのマシンの `soda serve` が ssh の先で起動する（20260927-multi-host-machines）。標準入出力は中継の素通し。
       process.exitCode = await runBridge(
         { stateDir: parsed.stateDir ?? defaultStateDir(), session: parsed.session },
         { stdin: process.stdin, stdout: process.stdout, err: (line) => console.error(line) },
@@ -162,7 +162,7 @@ async function main(): Promise<void> {
     }
   } catch (err) {
     if (err instanceof ConfigError) {
-      console.error(`wtm: ${err.message}`);
+      console.error(`soda: ${err.message}`);
       console.error(err.hint);
       process.exit(2);
     }

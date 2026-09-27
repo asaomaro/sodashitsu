@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { LayoutNode } from "@wtm/protocol";
+import type { LayoutNode } from "@sodashitsu/protocol";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, onUpdated, reactive } from "vue";
 import { ViewSyncKey } from "../injection.js";
 import { childNeighbors, NO_NEIGHBORS, type PaneSides } from "../layout/paneChrome.js";

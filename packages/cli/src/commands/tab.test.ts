@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "../session.js";
-import type { WtmClient } from "../wsClient.js";
+import type { SodaClient } from "../wsClient.js";
 import { runTabClose, runTabCreate } from "./tab.js";
 
 vi.mock("../withSession.js", () => ({ withSession: vi.fn() }));
@@ -12,17 +12,17 @@ import { withSession } from "../withSession.js";
 const mockedWithSession = vi.mocked(withSession);
 const mockedPrintJson = vi.mocked(printJson);
 
-function fakeClient(requestImpl: (method: string, params: unknown) => unknown): WtmClient {
+function fakeClient(requestImpl: (method: string, params: unknown) => unknown): SodaClient {
   return {
     hello: vi.fn().mockResolvedValue({ clientId: "c1", snapshot: {} }),
-    request: vi.fn(requestImpl) as unknown as WtmClient["request"],
+    request: vi.fn(requestImpl) as unknown as SodaClient["request"],
     sendInput: vi.fn(),
     onEvent: vi.fn(),
     onOutput: vi.fn(),
     onSnapshot: vi.fn(),
     onClose: vi.fn(),
     close: vi.fn(),
-  } as unknown as WtmClient;
+  } as unknown as SodaClient;
 }
 
 const OPTS = { url: "http://127.0.0.1:7780", token: undefined };
@@ -76,7 +76,7 @@ describe("runTabClose — 自分の pane を含む tab（20260926-agent-skill-fi
 
     await expect(runTabClose({ kind: "tab-close", opts: IN_P1, tabId: "t1" }, store)).rejects.toMatchObject({
       code: "self_target",
-      message: expect.stringContaining("WTM_PANE_ID= wtmctl"),
+      message: expect.stringContaining("SODA_PANE_ID= sodactl"),
     });
     expect(client.request).not.toHaveBeenCalled();
   });

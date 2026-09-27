@@ -81,7 +81,7 @@ const reserveNameSpace = computed(() => !!(props.enabled && settings?.paneAgentN
  */
 const showBorder = computed(() => !!(reserveNameSpace.value && paneName.value));
 
-const PANE_GAP = "var(--wtm-pane-gap, 4px)";
+const PANE_GAP = "var(--soda-pane-gap, 4px)";
 /** 辺ごとの余白。値そのもの（px）は `App.vue` が `settings.paneFrameThickness` から配る CSS 変数。 */
 const padStyle = computed(() => {
   const c = chrome.value;
@@ -336,7 +336,7 @@ function onKeydown(ev: KeyboardEvent): void {
   height: 100%;
 }
 /*
- * 枠の余白（太さは分割の境界〔`Splitter` の --wtm-pane-gap〕と同じ。ふだんは背景と同じ色で、端末の外の縁に見える）は、
+ * 枠の余白（太さは分割の境界〔`Splitter` の --soda-pane-gap〕と同じ。ふだんは背景と同じ色で、端末の外の縁に見える）は、
  * 辺ごとに決まるので script の `padStyle`（inline style）で当てる（20260926-pane-frame-auto-mode）。値そのもの（既定 4px）は
  * `App.vue` が `settings.paneFrameThickness` から配る CSS 変数で、届いていない場所は 4px にフォールバックする。
  *
@@ -357,29 +357,29 @@ function onKeydown(ev: KeyboardEvent): void {
  * ——外寸が変わると PTY の行・列が変わってしまう。 */
 .pane-frame-edge-current {
   /* 選ばれている pane の枠はテーマごとに背景から 3:1 に寄せた色（20260921-theme-settings の decisions D15。dracula は今と同じ #44475a）。 */
-  border: 2px solid var(--wtm-pane-current, #44475a);
+  border: 2px solid var(--soda-pane-current, #44475a);
 }
 /*
  * 名前を legend 風に表示するときだけ、フォーカスの無い pane にも薄い枠を出す（herdr の見た目に
  * 寄せた。20260923-pane-name-dnd-swap の design D3・AC1・AC3）。**新しいテーマ変数は足さず**、
- * 既存の `--wtm-menu-border` を `color-mix` で薄めるだけにする（17テーマぶんの値決め・
+ * 既存の `--soda-menu-border` を `color-mix` で薄めるだけにする（17テーマぶんの値決め・
  * コントラスト検証を避ける）。フォーカス中は `.pane-frame-edge-current` の 2px の強調色をそのまま使う
  * （下の詳細度: `.pane-frame-edge-current.pane-frame-edge-named` が `.pane-frame-edge-named` 単体より
  * 詳細度が高いので、フォーカス中はこちらが勝つ）。
  */
 .pane-frame-edge-named {
   /* 55% だと画面上でほぼ見えなかった（screenshot で確認）ので、視認できる強さまで上げた。 */
-  border: 1px solid color-mix(in srgb, var(--wtm-menu-border, #44475a) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--soda-menu-border, #44475a) 80%, transparent);
 }
 .pane-frame-edge-current.pane-frame-edge-named {
   /* `border` の shorthand（`.pane-frame-edge-named`）が幅を 1px に戻してしまうため、幅も明示し直す
    * （screenshot で 1px になっていることを確認して修正）。 */
   border-width: 2px;
-  border-color: var(--wtm-pane-current, #44475a);
+  border-color: var(--soda-pane-current, #44475a);
 }
 /* ドロップ候補（20260923-pane-name-dnd-swap）：ドラッグ中、ポインタの下にある pane を強調する。 */
 .pane-frame-edge-drop-target {
-  outline: 2px dashed var(--wtm-accent, #8be9fd);
+  outline: 2px dashed var(--soda-accent, #8be9fd);
   outline-offset: -2px;
 }
 /*
@@ -389,7 +389,7 @@ function onKeydown(ev: KeyboardEvent): void {
  * `EDGE_RATIO` を変えたらここも合わせて直すこと（review 指摘 nit）。
  * `pointer-events: none`——このオーバーレイ自体が `elementFromPoint`/ドロップ判定の対象にならない
  * ようにする（`.pane-frame-name` の上に乗っても掴み手を妨げない）。
- * **中央（分割解除）だけ色を変える**（`--wtm-error-fg` の赤系）——縁（分割。プロセスは失われない）
+ * **中央（分割解除）だけ色を変える**（`--soda-error-fg` の赤系）——縁（分割。プロセスは失われない）
  * と違い、中央はドロップ先の pane のプロセスを実際に終了させる破壊的な操作なので、`swap`（常に
  * 安全）から置き換わったこの区別を見た目で伝える（decisions.md D4 の安全面の検討）。
  */
@@ -397,8 +397,8 @@ function onKeydown(ev: KeyboardEvent): void {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: color-mix(in srgb, var(--wtm-accent, #8be9fd) 25%, transparent);
-  border: 2px solid var(--wtm-accent, #8be9fd);
+  background: color-mix(in srgb, var(--soda-accent, #8be9fd) 25%, transparent);
+  border: 2px solid var(--soda-accent, #8be9fd);
   box-sizing: border-box;
 }
 .pane-frame-zone-top {
@@ -414,13 +414,13 @@ function onKeydown(ev: KeyboardEvent): void {
   left: 70%;
 }
 .pane-frame-zone-center {
-  background: color-mix(in srgb, var(--wtm-error-fg, #ff5555) 25%, transparent);
-  border-color: var(--wtm-error-fg, #ff5555);
+  background: color-mix(in srgb, var(--soda-error-fg, #ff5555) 25%, transparent);
+  border-color: var(--soda-error-fg, #ff5555);
 }
 .pane-frame-edge:focus-visible {
-  outline: 1px solid var(--wtm-fg, #f8f8f2);
+  outline: 1px solid var(--soda-fg, #f8f8f2);
   outline-offset: -1px;
-  background: var(--wtm-menu-active-bg, #44475a);
+  background: var(--soda-menu-active-bg, #44475a);
 }
 /* 余白の無い辺がある pane（20260926-pane-frame-auto-mode。decisions D4）：端末に隠れる辺があるので、キーボードで枠に
  * フォーカスがある間だけ端末の上に内側の線を重ねる。線は疑似要素に描いてクリックを通す——枠そのものに
@@ -431,14 +431,14 @@ function onKeydown(ev: KeyboardEvent): void {
   inset: 0;
   /* xterm のスクロールバー（z-index: 11）より上。 */
   z-index: 12;
-  outline: 2px solid var(--wtm-fg, #f8f8f2);
+  outline: 2px solid var(--soda-fg, #f8f8f2);
   outline-offset: -2px;
   pointer-events: none;
 }
 /*
  * pane にエージェント名を表示する opt-in の設定（20260922-appearance-settings-rest。design「US4」・AC11）。
  * 20260923-pane-name-dnd-swap で、枠線に埋め込む legend 風の見た目に変更した（herdr の見た目に寄せた）。
- * `top: 0` ＋ `translateY(-50%)` で `.pane-frame-edge` の境界線の上に重ね、背景色（`--wtm-bg`。
+ * `top: 0` ＋ `translateY(-50%)` で `.pane-frame-edge` の境界線の上に重ね、背景色（`--soda-bg`。
  * pane の外側の地色と同じ）で線を隠すことで「線に埋め込まれた」ように見せる。
  * ドラッグの掴み手にするため `pointer-events` は `auto`（以前は `none` だった。AC-I1・AC-I5 は
  * script 側の閾値判定で担保する——名前ラベルの上の単純なクリックは、枠を押したのと同じ
@@ -462,13 +462,13 @@ function onKeydown(ev: KeyboardEvent): void {
   user-select: none;
   font-size: 0.75em;
   padding: 0 0.4em;
-  background: var(--wtm-bg, #1e1f29);
-  color: color-mix(in srgb, var(--wtm-menu-fg, #f8f8f2) 55%, transparent);
+  background: var(--soda-bg, #1e1f29);
+  color: color-mix(in srgb, var(--soda-menu-fg, #f8f8f2) 55%, transparent);
 }
 .pane-frame-name-current {
-  /* herdr の見た目（NAME1 が太字の地の色）に合わせる。`--wtm-pane-current` は枠線用に
+  /* herdr の見た目（NAME1 が太字の地の色）に合わせる。`--soda-pane-current` は枠線用に
    * 3:1（非テキストの WCAG コントラスト）で選ばれた色なので、文字色（4.5:1 が要る）には使わない。 */
-  color: var(--wtm-fg, #f8f8f2);
+  color: var(--soda-fg, #f8f8f2);
   font-weight: bold;
 }
 .pane-frame-name-dragging {

@@ -1,4 +1,4 @@
-import type { NewCwd, ThemeName } from "@wtm/protocol";
+import type { NewCwd, ThemeName } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { commandKeyDefs, type KeyTargetId } from "../keys/commandKeys.js";
@@ -51,7 +51,7 @@ import { readPrefs, writePrefs } from "./view.js";
 /**
  * 設定ダイアログの「表示」と「端末」の節の値（20260921-herdr-settings-gaps）。
  * 通知の節の値は `store/notifications.ts`、サイドバーの幅と折りたたみは `store/view.ts`（設定の項目ではなく
- * 操作した結果を覚えるだけ。D1）。**どれも `wtm.prefs.v1` の読み書きは `readPrefs`/`writePrefs` に任せる**
+ * 操作した結果を覚えるだけ。D1）。**どれも `soda.prefs.v1` の読み書きは `readPrefs`/`writePrefs` に任せる**
  * （所有者を 1 つにする。`view.ts` の注記）。
  */
 
@@ -76,7 +76,7 @@ export function loadKeyboardLockInFullscreen(raw: unknown): boolean {
 /**
  * pane の枠・隙間の太さ（20260922-appearance-settings-rest）。既定は今までと同じ見た目
  * （`"default"`＝4px 相当）。値そのもの（px 数）は `PaneFrame.vue`/`Splitter.vue` が読む
- * CSS 変数 `--wtm-pane-gap` へ配る側（`App.vue`）が持つ。
+ * CSS 変数 `--soda-pane-gap` へ配る側（`App.vue`）が持つ。
  */
 export type PaneFrameThickness = "thin" | "default" | "thick";
 export const PANE_FRAME_THICKNESS_PX: Record<PaneFrameThickness, number> = {

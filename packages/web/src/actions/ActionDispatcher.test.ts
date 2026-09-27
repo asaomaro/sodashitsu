@@ -1,5 +1,5 @@
-import type { MethodName, ParamsOf, ResultOf } from "@wtm/protocol";
-import type { AgentInfo, AgentIntegrationStatusResult, Pane, Tab, Workspace } from "@wtm/protocol";
+import type { MethodName, ParamsOf, ResultOf } from "@sodashitsu/protocol";
+import type { AgentInfo, AgentIntegrationStatusResult, Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KeyInputController } from "../keys/KeyInputController.js";
@@ -23,7 +23,7 @@ let pinia: Pinia;
 
 beforeEach(() => {
   sessionStorage.clear();
-  // view ストアは作る時点で `wtm.prefs.v1` を読み、`toggleSidebar` はそこへ書く（20260921-herdr-settings-gaps）。
+  // view ストアは作る時点で `soda.prefs.v1` を読み、`toggleSidebar` はそこへ書く（20260921-herdr-settings-gaps）。
   // 消さないと、畳んだ状態が同じファイルの後続のテストへ残る（`--repeats` や再試行で 2 回目が落ちる）。
   localStorage.clear();
   pinia = createPinia();
@@ -968,12 +968,12 @@ describe("ActionDispatcher — スクロールバックをエディタで開く�
 });
 
 describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-appearance-settings-rest。AC13〜AC15）", () => {
-  it("localStorage（wtm.prefs.v1）の今の値を settings・view ストアへ読み直し、トーストを出す（AC13・AC14）", () => {
+  it("localStorage（soda.prefs.v1）の今の値を settings・view ストアへ読み直し、トーストを出す（AC13・AC14）", () => {
     const conn = makeConnection();
     const settings = useSettingsStore(pinia);
     const view = useViewStore(pinia);
     const { dispatcher } = makeDispatcher(conn);
-    // ストアを作った時点の既定値（wtm.prefs.v1 はまだ空）であることを前提にする。
+    // ストアを作った時点の既定値（soda.prefs.v1 はまだ空）であることを前提にする。
     expect(settings.statusSymbols).toBe(true);
     expect(settings.newCwdPolicy).toBe("follow");
     expect(settings.paneFrameThickness).toBe("default");
@@ -992,9 +992,9 @@ describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-a
     expect(view.workspaceSort).toBe("opened");
 
     // 別のタブ・別のダイアログ経由など、この ActionDispatcher インスタンスを経ずに
-    // `wtm.prefs.v1` が書き変わった状況を模す（reloadConfig の実運用そのままの前提）。
+    // `soda.prefs.v1` が書き変わった状況を模す（reloadConfig の実運用そのままの前提）。
     localStorage.setItem(
-      "wtm.prefs.v1",
+      "soda.prefs.v1",
       JSON.stringify({
         statusSymbols: false,
         scrollback: 500,
@@ -1047,7 +1047,7 @@ describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-a
     // 既定以外にしてから読み直す（既定のままだと、読み直さなくても既定に見えてしまう。taskcheck T6 の指摘）。
     settings.paneBorders = "off";
     settings.paneGaps = false;
-    localStorage.setItem("wtm.prefs.v1", JSON.stringify({ paneFrameThickness: "huge", paneBorders: "framed", paneGaps: "no" }));
+    localStorage.setItem("soda.prefs.v1", JSON.stringify({ paneFrameThickness: "huge", paneBorders: "framed", paneGaps: "no" }));
     dispatcher.run({ type: "reloadConfig" });
     expect(settings.paneFrameThickness).toBe("default");
     expect(settings.paneBorders).toBe("always");
@@ -1068,7 +1068,7 @@ describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-a
     const tabsBefore = new Map(session.tabs);
     const panesBefore = new Map(session.panes);
 
-    localStorage.setItem("wtm.prefs.v1", JSON.stringify({ agentSort: "priority" }));
+    localStorage.setItem("soda.prefs.v1", JSON.stringify({ agentSort: "priority" }));
     dispatcher.run({ type: "reloadConfig" });
 
     expect(view.workspaceId).toBe("w1");
@@ -1210,7 +1210,7 @@ describe("ActionDispatcher — T22 向けの「任意の対象」メソッド（
 
 // 20260920-git-worktree-actions。**サーバに聞いてからダイアログを開く**ので、開くまでに 1 往復ある。
 describe("ActionDispatcher — worktree", () => {
-  const LIST = { worktreeRoot: "/root", repoName: "wtm", suggestedBranch: "worktree/brave-river-0000", entries: [{ path: "/w/a", branch: "a" }] };
+  const LIST = { worktreeRoot: "/root", repoName: "soda", suggestedBranch: "worktree/brave-river-0000", entries: [{ path: "/w/a", branch: "a" }] };
 
   it("newWorktree：一覧を取ってから作成のダイアログを開く（AC1）", async () => {
     const conn = makeConnection();
@@ -1238,7 +1238,7 @@ describe("ActionDispatcher — worktree", () => {
 
   it("confirmWorktreeCreate：作ってから、その場所を cwd に workspace を開く（AC3）", async () => {
     const conn = makeConnection();
-    conn.resolveWith["worktree.create"] = { path: "/root/wtm/feature-x" };
+    conn.resolveWith["worktree.create"] = { path: "/root/soda/feature-x" };
     conn.resolveWith["workspace.create"] = { workspace: makeWorkspace("w2", ["t2"]), tab: makeTab("t2", "w2", "p2"), pane: makePane("p2", "t2") };
     const { dispatcher } = makeDispatcher(conn);
     const view = useViewStore(pinia);
@@ -1251,7 +1251,7 @@ describe("ActionDispatcher — worktree", () => {
     expect(conn.requests[0]![1]).toEqual({ workspaceId: "w1", branch: "feature/x" });
     // **label にブランチ名を渡す**（review ラウンド1）。渡さなければ worktree のフォルダ名が自動の名前になるが、選んだブランチ名のほうが
     // 情報が多い（20260921-workspace-auto-label。ブランチの 2 行目は上流が無いと出ない）。
-    expect(conn.requests[1]![1]).toEqual({ cwd: "/root/wtm/feature-x", label: "feature/x" });
+    expect(conn.requests[1]![1]).toEqual({ cwd: "/root/soda/feature-x", label: "feature/x" });
   });
 
   it("confirmWorktreeCreate：空では何も送らない（AC3）", () => {
@@ -1370,7 +1370,7 @@ describe("ActionDispatcher — worktree の削除", () => {
   it("confirmWorktreeRemove：worktree.remove(force:false) を送り、成功すると一覧を開き直す（AC2・AC3・AC-I1）", async () => {
     const conn = makeConnection();
     conn.resolveWith["worktree.remove"] = {};
-    conn.resolveWith["worktree.list"] = { worktreeRoot: "/root", repoName: "wtm", suggestedBranch: "s", entries: [] };
+    conn.resolveWith["worktree.list"] = { worktreeRoot: "/root", repoName: "soda", suggestedBranch: "s", entries: [] };
     const { dispatcher } = makeDispatcher(conn);
     const view = useViewStore(pinia);
     view.openDialogWithContext({ kind: "confirmWorktreeRemove", sourceWorkspaceId: "w1", path: "/w/a", openWorkspaceId: null });
@@ -1498,7 +1498,7 @@ describe("ActionDispatcher — worktree の削除", () => {
     const conn = makeConnection();
     conn.rejectWith["worktree.remove"] = "worktree_not_a_worktree";
     // entries を空にしない——空だと openWorktree 自身が追加のトーストを出し、件数の検証が壊れる。
-    conn.resolveWith["worktree.list"] = { worktreeRoot: "/root", repoName: "wtm", suggestedBranch: "s", entries: [{ path: "/w/other", branch: "other" }] };
+    conn.resolveWith["worktree.list"] = { worktreeRoot: "/root", repoName: "soda", suggestedBranch: "s", entries: [{ path: "/w/other", branch: "other" }] };
     const { dispatcher } = makeDispatcher(conn);
     const view = useViewStore(pinia);
     view.openDialogWithContext({ kind: "confirmWorktreeRemove", sourceWorkspaceId: "w1", path: "/w/a", openWorkspaceId: null });
@@ -1528,7 +1528,7 @@ describe("ActionDispatcher — worktree の削除", () => {
     const conn = makeConnection();
     conn.rejectWith["worktree.remove"] = "worktree_dirty";
     // entries を空にしない——空だと openWorktree 自身が追加のトーストを出し、件数の検証が壊れる。
-    conn.resolveWith["worktree.list"] = { worktreeRoot: "/root", repoName: "wtm", suggestedBranch: "s", entries: [{ path: "/w/other", branch: "other" }] };
+    conn.resolveWith["worktree.list"] = { worktreeRoot: "/root", repoName: "soda", suggestedBranch: "s", entries: [{ path: "/w/other", branch: "other" }] };
     const { dispatcher } = makeDispatcher(conn);
     const view = useViewStore(pinia);
     view.openDialogWithContext({ kind: "confirmWorktreeRemoveForce", sourceWorkspaceId: "w1", path: "/w/a", openWorkspaceId: null, reason: "dirty" });

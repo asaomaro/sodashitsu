@@ -54,7 +54,7 @@ function classify(err: unknown): Classified {
  */
 export function reportAndExit(err: unknown): void {
   if (err instanceof CliUsageError) {
-    console.error(`wtmctl: ${err.message}`);
+    console.error(`sodactl: ${err.message}`);
     console.error(err.hint);
     process.exit(2);
     return;

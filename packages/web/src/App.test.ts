@@ -1,4 +1,4 @@
-import type { MethodName, ParamsOf, ResultOf, Tab, Workspace } from "@wtm/protocol";
+import type { MethodName, ParamsOf, ResultOf, Tab, Workspace } from "@sodashitsu/protocol";
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,7 +30,7 @@ vi.setConfig({ testTimeout: 15_000 });
 let pinia: Pinia;
 
 beforeEach(() => {
-  // view ストアは初期化時に `wtm.prefs.v1`（localStorage）を読む。消さないと
+  // view ストアは初期化時に `soda.prefs.v1`（localStorage）を読む。消さないと
   // 同じワーカーで先に走ったファイルの選択が持ち越される（20260920-sidebar-tabbar-controls）。
   localStorage.clear();
   sessionStorage.clear();
@@ -216,9 +216,9 @@ describe("App — pane の描画", () => {
 
 // 20260922-appearance-settings-rest T4（design「インターフェース / データ構造」`PaneFrame.vue`／`Splitter.vue` 節）。
 describe("App — pane の枠・隙間の太さの CSS 変数（AC9）", () => {
-  it("`.app-shell` は既定で `--wtm-pane-gap: 4px` を持つ", () => {
+  it("`.app-shell` は既定で `--soda-pane-gap: 4px` を持つ", () => {
     const wrapper = mount(App, makeProvide(makeConnection()));
-    expect(wrapper.get(".app-shell").attributes("style")).toContain("--wtm-pane-gap: 4px");
+    expect(wrapper.get(".app-shell").attributes("style")).toContain("--soda-pane-gap: 4px");
   });
 
   it("`settings.paneFrameThickness` を変えると、リアクティブに変わる（ページの再読み込み不要）", async () => {
@@ -226,10 +226,10 @@ describe("App — pane の枠・隙間の太さの CSS 変数（AC9）", () => {
     const wrapper = mount(App, makeProvide(makeConnection()));
     settings.setPaneFrameThickness("thick");
     await wrapper.vm.$nextTick();
-    expect(wrapper.get(".app-shell").attributes("style")).toContain("--wtm-pane-gap: 6px");
+    expect(wrapper.get(".app-shell").attributes("style")).toContain("--soda-pane-gap: 6px");
     settings.setPaneFrameThickness("thin");
     await wrapper.vm.$nextTick();
-    expect(wrapper.get(".app-shell").attributes("style")).toContain("--wtm-pane-gap: 2px");
+    expect(wrapper.get(".app-shell").attributes("style")).toContain("--soda-pane-gap: 2px");
   });
 });
 

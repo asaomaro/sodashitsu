@@ -1,4 +1,4 @@
-import { RpcError } from "@wtm/protocol";
+import { RpcError } from "@sodashitsu/protocol";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import type { ClientSink } from "../terminal/OutputFanout.js";

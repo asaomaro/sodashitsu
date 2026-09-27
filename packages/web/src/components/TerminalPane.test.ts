@@ -1,4 +1,4 @@
-import type { MethodName, ParamsOf, Pane, ResultOf, Tab } from "@wtm/protocol";
+import type { MethodName, ParamsOf, Pane, ResultOf, Tab } from "@sodashitsu/protocol";
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,7 +18,7 @@ import TerminalPane from "./TerminalPane.vue";
 let pinia: Pinia;
 
 beforeEach(() => {
-  // seen store は wtm.seen.v1（localStorage）を読む。消さないと前のテストの既読が持ち越される
+  // seen store は soda.seen.v1（localStorage）を読む。消さないと前のテストの既読が持ち越される
   // （20260925-seen-semantics-fix。Sidebar.test.ts の並び順の扱いと同じ理由）。
   localStorage.clear();
   pinia = createPinia();

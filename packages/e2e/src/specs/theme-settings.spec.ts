@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { contrastRatio, TERMINAL_PALETTES, type ThemeName } from "@wtm/protocol";
+import { contrastRatio, TERMINAL_PALETTES, type ThemeName } from "@sodashitsu/protocol";
 import { devices, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
@@ -23,7 +23,7 @@ import { watchClientViews, watchShownPanes } from "../support/panes.js";
  *   xterm.js 6 は `.xterm-viewport` の `scrollTop` を使わず常に 0 のまま（design の AC-I5 の「scrollTop」から替えた。decisions D12）。
  */
 
-/** 画面の枠の背景（design の表の `--wtm-menu-bg`＝herdr の `panel_bg`。dracula は今の値）。 */
+/** 画面の枠の背景（design の表の `--soda-menu-bg`＝herdr の `panel_bg`。dracula は今の値）。 */
 const MENU_BG: Partial<Record<ThemeName, string>> = {
   dracula: "#282a36",
   nord: "#2e3440",
@@ -65,7 +65,7 @@ interface Opened {
   views: { count: () => number };
 }
 
-/** 新しいブラウザで開く。`prefs` があれば `wtm.prefs.v1` に入れておく。最初の描画の記録も仕掛ける。 */
+/** 新しいブラウザで開く。`prefs` があれば `soda.prefs.v1` に入れておく。最初の描画の記録も仕掛ける。 */
 async function openBrowser(
   browser: Browser,
   appServer: AppServer,
@@ -74,7 +74,7 @@ async function openBrowser(
   const context = await browser.newContext({
     colorScheme: opts.colorScheme ?? "light",
     ...(opts.prefs
-      ? { storageState: { cookies: [], origins: [{ origin: appServer.origin, localStorage: [{ name: "wtm.prefs.v1", value: JSON.stringify(opts.prefs) }] }] } }
+      ? { storageState: { cookies: [], origins: [{ origin: appServer.origin, localStorage: [{ name: "soda.prefs.v1", value: JSON.stringify(opts.prefs) }] }] } }
       : {}),
   });
   await recordFirstPaint(context);
@@ -107,8 +107,8 @@ async function recordFirstPaint(context: BrowserContext): Promise<void> {
     document.addEventListener("readystatechange", () => {
       if (document.readyState !== "interactive") return;
       const s = document.documentElement.style;
-      (window as unknown as { __wtmFirstPaint: unknown }).__wtmFirstPaint = {
-        menuBg: s.getPropertyValue("--wtm-menu-bg"),
+      (window as unknown as { __sodaFirstPaint: unknown }).__sodaFirstPaint = {
+        menuBg: s.getPropertyValue("--soda-menu-bg"),
         colorScheme: s.colorScheme,
       };
     });
@@ -116,10 +116,10 @@ async function recordFirstPaint(context: BrowserContext): Promise<void> {
 }
 
 const firstPaint = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __wtmFirstPaint?: { menuBg: string; colorScheme: string } }).__wtmFirstPaint ?? null);
+  page.evaluate(() => (window as unknown as { __sodaFirstPaint?: { menuBg: string; colorScheme: string } }).__sodaFirstPaint ?? null);
 
 /**
- * 20260922-theme-custom-overrides：本体（module）が走る前の `--wtm-accent`（上書きが控えに含まれるか。AC9）。
+ * 20260922-theme-custom-overrides：本体（module）が走る前の `--soda-accent`（上書きが控えに含まれるか。AC9）。
  * 既存の `recordFirstPaint`（`menuBg`・`colorScheme` だけを記録）とは別の window の印にする——形を変えると、
  * 既存の `toEqual({ menuBg, colorScheme })` の各所を直すことになるため。
  */
@@ -127,14 +127,14 @@ async function recordFirstPaintAccent(context: BrowserContext): Promise<void> {
   await context.addInitScript(() => {
     document.addEventListener("readystatechange", () => {
       if (document.readyState !== "interactive") return;
-      (window as unknown as { __wtmFirstPaintAccent: unknown }).__wtmFirstPaintAccent =
-        document.documentElement.style.getPropertyValue("--wtm-accent");
+      (window as unknown as { __sodaFirstPaintAccent: unknown }).__sodaFirstPaintAccent =
+        document.documentElement.style.getPropertyValue("--soda-accent");
     });
   });
 }
 
 const firstPaintAccent = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __wtmFirstPaintAccent?: string }).__wtmFirstPaintAccent ?? null);
+  page.evaluate(() => (window as unknown as { __sodaFirstPaintAccent?: string }).__sodaFirstPaintAccent ?? null);
 const dialog = (page: Page) => page.locator("dialog.settings-dialog");
 const themeSection = (page: Page) => dialog(page).locator('section[aria-labelledby="settings-theme"]');
 const themeSelect = (page: Page) => themeSection(page).locator("select").first();
@@ -321,7 +321,7 @@ test("OS の明暗に合わせる：OS を切り替えると再読み込み無�
 
 /** 問い合わせのスクリプト（OSC 11 を書き、答えを `ANS<印>:` の後に JSON で表示する）。打つ行を短くするためにファイルに置く。 */
 async function writeAskScript(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "wtm-e2e-theme-"));
+  const dir = await mkdtemp(join(tmpdir(), "soda-e2e-theme-"));
   tempDirs.push(dir);
   const path = join(dir, "ask-bg.cjs");
   await writeFile(
@@ -464,7 +464,7 @@ const overrideInput = (page: Page, key: string, bucket: "light" | "dark") =>
   overridesDetails(page).locator(`[data-override-input="${bucket}:${key}"]`);
 const overrideStatus = (page: Page) => overridesDetails(page).locator('[role="status"]');
 const computedAccent = (page: Page) =>
-  page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--wtm-accent").trim());
+  page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--soda-accent").trim());
 
 async function openOverrides(page: Page): Promise<void> {
   await openSettingsByKey(page);
@@ -476,7 +476,7 @@ test("色を上書きすると、その場で画面の枠に反映され、再�
   await recordFirstPaintAccent(o.context);
   await openOverrides(o.page);
   const before = await computedAccent(o.page);
-  const input = overrideInput(o.page, "--wtm-accent", "dark");
+  const input = overrideInput(o.page, "--soda-accent", "dark");
   await input.fill("#ff00ff");
   await input.press("Enter");
   await expect(overrideStatus(o.page)).toContainText("を #ff00ff にしました");
@@ -493,10 +493,10 @@ test("色を上書きすると、その場で画面の枠に反映され、再�
 test("「明るいとき」「暗いとき」は、いま当たっている明暗にだけ効く。テーマを替えると切り替わる（AC3・AC4）", async ({ browser, appServer }) => {
   const o = await openBrowser(browser, appServer); // dracula（暗い）
   await openOverrides(o.page);
-  await overrideInput(o.page, "--wtm-accent", "dark").fill("#111111");
-  await overrideInput(o.page, "--wtm-accent", "dark").press("Enter");
-  await overrideInput(o.page, "--wtm-accent", "light").fill("#eeeeee");
-  await overrideInput(o.page, "--wtm-accent", "light").press("Enter");
+  await overrideInput(o.page, "--soda-accent", "dark").fill("#111111");
+  await overrideInput(o.page, "--soda-accent", "dark").press("Enter");
+  await overrideInput(o.page, "--soda-accent", "light").fill("#eeeeee");
+  await overrideInput(o.page, "--soda-accent", "light").press("Enter");
   expect(await computedAccent(o.page), "暗いテーマなので暗いときの上書きが効く").toBe("#111111");
 
   await themeSelect(o.page).selectOption("one-light"); // 明るいテーマへ
@@ -510,7 +510,7 @@ test("妥当でない値は理由を示して拒否し、既定に戻すとそ�
   const o = await openBrowser(browser, appServer);
   await openOverrides(o.page);
   const before = await computedAccent(o.page);
-  const input = overrideInput(o.page, "--wtm-accent", "dark");
+  const input = overrideInput(o.page, "--soda-accent", "dark");
   await input.fill("notacolor");
   await input.press("Enter");
   await expect(overrideStatus(o.page)).toContainText("notacolor は色として読めません");
@@ -529,8 +529,8 @@ test("すべての上書きを既定に戻す：確認を挟み、戻すとす�
   const o = await openBrowser(browser, appServer);
   await openOverrides(o.page);
   const defaultAccent = await computedAccent(o.page); // 既定の値を、上書きを当てる前に測る
-  await overrideInput(o.page, "--wtm-accent", "dark").fill("#222222");
-  await overrideInput(o.page, "--wtm-accent", "dark").press("Enter");
+  await overrideInput(o.page, "--soda-accent", "dark").fill("#222222");
+  await overrideInput(o.page, "--soda-accent", "dark").press("Enter");
   expect(await computedAccent(o.page)).toBe("#222222");
 
   await overridesDetails(o.page).locator("[data-reset-all-overrides]").click();
@@ -542,7 +542,7 @@ test("すべての上書きを既定に戻す：確認を挟み、戻すとす�
   await reloadAndWait(o);
   const afterReload = await computedAccent(o.page);
   await openOverrides(o.page);
-  expect(await overrideInput(o.page, "--wtm-accent", "dark")).toHaveValue("");
+  expect(await overrideInput(o.page, "--soda-accent", "dark")).toHaveValue("");
   expect(afterReload, "再読み込みしても既定の値のまま").toBe(defaultAccent);
 });
 
@@ -571,7 +571,7 @@ test.describe("モバイル", () => {
     await expect(key).toBeVisible();
     const vars = await page.evaluate(() => {
       const cs = getComputedStyle(document.documentElement);
-      return { fg: cs.getPropertyValue("--wtm-fg").trim(), active: cs.getPropertyValue("--wtm-menu-active-bg").trim() };
+      return { fg: cs.getPropertyValue("--soda-fg").trim(), active: cs.getPropertyValue("--soda-menu-active-bg").trim() };
     });
     expect(vars.fg, "gruvbox-light の文字は dracula の文字と違う").not.toBe("#f8f8f2");
     expect(await key.evaluate((el) => getComputedStyle(el).color)).toBe(hexToRgb(vars.fg));
@@ -588,7 +588,7 @@ test.describe("モバイル", () => {
   });
 
   test("自動の切替もモバイルで効く：OS の明暗を替えると上のバーと端末の色が追従する（AC13・AC5）", async ({ page, appServer }) => {
-    await page.addInitScript(() => localStorage.setItem("wtm.prefs.v1", JSON.stringify({ theme: "catppuccin", themeAuto: true })));
+    await page.addInitScript(() => localStorage.setItem("soda.prefs.v1", JSON.stringify({ theme: "catppuccin", themeAuto: true })));
     await page.emulateMedia({ colorScheme: "light" });
     const shown = await watchShownPanes(page);
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);

@@ -1,4 +1,4 @@
-import type { AgentInfo, AgentIntegrationStatusResult, MachineStatus, ServerEvent, SessionSnapshot } from "@wtm/protocol";
+import type { AgentInfo, AgentIntegrationStatusResult, MachineStatus, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { ConnectionState, StorePort } from "../net/ports.js";
 import { useCommandsStore } from "./commands.js";

@@ -1,4 +1,4 @@
-import { DEFAULT_THEME, TERMINAL_PALETTES, type Pane, type Tab, type ThemeName } from "@wtm/protocol";
+import { DEFAULT_THEME, TERMINAL_PALETTES, type Pane, type Tab, type ThemeName } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import type { ClientRecord } from "./ClientRegistry.js";
 import { answerAppearanceFor, answerPaletteFor, createPaletteSource, type AnswerPaletteDeps } from "./answerPalette.js";

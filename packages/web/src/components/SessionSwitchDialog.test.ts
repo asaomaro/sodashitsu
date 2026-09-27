@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import type { ServerSessionEntry } from "@wtm/protocol";
+import type { ServerSessionEntry } from "@sodashitsu/protocol";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionDispatcherKey } from "../injection.js";
@@ -74,7 +74,7 @@ describe("SessionSwitchDialog", () => {
     ]);
     const status = items.map((li) => li.get(".session-switch-dialog-status").text());
     expect(status[0]).toBe("いま開いている session");
-    expect(status[1]).toBe("止まっています（起動: wtm serve --session lan）");
+    expect(status[1]).toBe("止まっています（起動: soda serve --session lan）");
     expect(status[2]).toContain("開く先が分かりません");
     expect(status[3]).toBe("ポート 7781 を新しいタブで開く");
     expect(items.map((li) => li.attributes("aria-disabled"))).toEqual([

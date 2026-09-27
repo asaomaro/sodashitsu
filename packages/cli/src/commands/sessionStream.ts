@@ -1,4 +1,4 @@
-import type { ServerEvent } from "@wtm/protocol";
+import type { ServerEvent } from "@sodashitsu/protocol";
 import { TerminalQueryFilter } from "../attachOutput.js";
 import type { Command } from "../cliArgs.js";
 import type { SessionStore } from "../session.js";
@@ -13,10 +13,10 @@ import {
 } from "../sessionStream.js";
 import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 
 /**
- * `wtmctl pane observe <paneId>`（20260926-pane-observe-control。herdr の terminal session observe）。
+ * `sodactl pane observe <paneId>`（20260926-pane-observe-control。herdr の terminal session observe）。
  * 既存の `pane.subscribe` の SNAPSHOT（`full: true`）と OUTPUT（`full: false`）を、1 行 1 記録の NDJSON（`terminal.frame`）で stdout へ書き、
  * pane の終わり・接続断で `terminal.closed` を書いて終わる。サーバへ送るのは購読だけ（所有者・大きさ・入力には触れない）。
  */
@@ -160,7 +160,7 @@ export class PaneStream {
   onFlowChange: ((paused: boolean) => void) | null = null;
 
   constructor(
-    private readonly client: WtmClient,
+    private readonly client: SodaClient,
     private readonly paneId: string,
     private readonly io: StreamIo,
   ) {
@@ -296,7 +296,7 @@ export class PaneStream {
 /** 購読して、終わるまで待つ（`pane.subscribe` の応答待ちの間に終わることもあるので、終わりとも競わせる）。 */
 export async function subscribeAndWait(
   stream: PaneStream,
-  client: WtmClient,
+  client: SodaClient,
   paneId: string,
 ): Promise<void> {
   await Promise.race([
@@ -328,7 +328,7 @@ export async function runPaneObserve(
 type PaneControlCmd = Extract<Command, { kind: "pane-control" }>;
 
 /**
- * `wtmctl pane control <paneId> [--takeover] [--cols N] [--rows N]`（herdr の terminal session control）。
+ * `sodactl pane control <paneId> [--takeover] [--cols N] [--rows N]`（herdr の terminal session control）。
  * `pane.attach` で所有者になり（`pane attach` と所有者の表を共有）、observe と同じフレームを流し、stdin の NDJSON を
  * INPUT フレーム・`pane.attach_resize`・`pane.detach` に写す。不正な行は stderr に理由を出して読み飛ばす（decisions D5）。
  */
@@ -349,7 +349,7 @@ export async function runPaneControl(
     let releasing = false;
     /**
      * stderr への警告。stderr を読まない相手だと書き出し待ちが際限なく溜まるので、上限を超えている間は捨てる
-     * （review ラウンド 1。stdout の D4 と同じく wtmctl のメモリを上限の範囲に留める）。
+     * （review ラウンド 1。stdout の D4 と同じく sodactl のメモリを上限の範囲に留める）。
      */
     const warnLine = (line: string): void => {
       if (io.errPending() > MAX_WARN_PENDING_BYTES) return;
@@ -357,7 +357,7 @@ export async function runPaneControl(
     };
     /** 不正な行の警告。 */
     const warn = (reason: string): void =>
-      warnLine(`wtmctl: pane control input ignored: ${reason}`);
+      warnLine(`sodactl: pane control input ignored: ${reason}`);
     /**
      * `pane.attach` が通るまではストリームにイベントを渡さず溜めておく（その間の pane の終わりで `terminal.closed` を書いてから attach の失敗を
      * 投げると、「始まる前の失敗は stdout に何も書かない」が破れる。pane が消えていれば attach が not_found を返す）。attach が通ったら溜めたものを
@@ -373,7 +373,7 @@ export async function runPaneControl(
           (evt.data.paneId === undefined || evt.data.paneId === paneId)
         ) {
           warnLine(
-            `wtmctl: pane control input dropped: pane ${paneId} is not reading input (server input queue is full)`,
+            `sodactl: pane control input dropped: pane ${paneId} is not reading input (server input queue is full)`,
           );
         }
         return;
@@ -387,7 +387,7 @@ export async function runPaneControl(
       else stream.onEvent(evt);
     };
     // hello の後・ストリームを始める前（attach の応答待ち）の切断は、stdout に何も書かずに connection_closed で終える
-    // （実物の WtmClient は切断で待ち中の要求を reject しない）。
+    // （実物の SodaClient は切断で待ち中の要求を reject しない）。
     let streamStarted = false;
     /** ストリームを始める前に切れたときの理由（attach の応答の直後・始める前に切れた場合に、始めてから終える）。 */
     let closedEarly: string | null = null;

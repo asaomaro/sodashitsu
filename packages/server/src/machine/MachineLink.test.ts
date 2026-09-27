@@ -61,14 +61,14 @@ describe("sshArgs（T6）", () => {
       ...SSH_OPTIONS,
       "--",
       "you@build",
-      "wtm",
+      "soda",
       "bridge",
     ]);
     expect(sshArgsFor({ target: "ssh://b:2222", session: "agents" })).toEqual([
       ...SSH_OPTIONS,
       "--",
       "ssh://b:2222",
-      "wtm",
+      "soda",
       "bridge",
       "--session",
       "agents",
@@ -94,7 +94,7 @@ describe("MachineLink（T6）", () => {
     expect(child.args.slice(-6)).toEqual([
       "--",
       "you@build",
-      "wtm",
+      "soda",
       "bridge",
       "--session",
       "agents",
@@ -346,11 +346,11 @@ describe("classifyLinkFailure（T6。判定の順）", () => {
       kind: "attention",
       message: expect.stringMatching(/認証/),
     });
-    expect(c({ exitCode: 127, stderr: "bash: wtm: command not found" })).toMatchObject({
+    expect(c({ exitCode: 127, stderr: "bash: soda: command not found" })).toMatchObject({
       kind: "attention",
-      message: expect.stringMatching(/wtm が見つかりません/),
+      message: expect.stringMatching(/soda が見つかりません/),
     });
-    expect(c({ exitCode: 3, stderr: "wtm: no running wtm serve" })).toMatchObject({
+    expect(c({ exitCode: 3, stderr: "soda: no running soda serve" })).toMatchObject({
       kind: "attention",
       message: expect.stringMatching(/動いていません/),
     });
@@ -359,19 +359,19 @@ describe("classifyLinkFailure（T6。判定の順）", () => {
       message: expect.stringMatching(/対応していません/),
     });
     expect(c({ preambleOverflow: true })).toMatchObject({ kind: "attention" });
-    expect(c({ exitCode: 2, stderr: "wtm: unknown command: bridge" })).toMatchObject({
+    expect(c({ exitCode: 2, stderr: "soda: unknown command: bridge" })).toMatchObject({
       kind: "attention",
       message: expect.stringMatching(/中継を始められません/),
     });
     expect(
       c({ exitCode: 255, stderr: "ssh: connect to host build port 22: Connection refused" }),
     ).toMatchObject({ kind: "transient", message: expect.stringMatching(/Connection refused/) });
-    // 初期化ファイルの雑音（not found）が前にあっても、終わり際が unknown command なら「wtm が無い」ではなく非互換
+    // 初期化ファイルの雑音（not found）が前にあっても、終わり際が unknown command なら「soda が無い」ではなく非互換
     expect(
       c({
         exitCode: 2,
         stderr:
-          "sh: 1: nvm: not found\nbash: ~/.cargo/env: No such file or directory\nx\ny\nwtm: unknown command: bridge\nhint",
+          "sh: 1: nvm: not found\nbash: ~/.cargo/env: No such file or directory\nx\ny\nsoda: unknown command: bridge\nhint",
       }),
     ).toMatchObject({
       kind: "attention",
@@ -380,7 +380,7 @@ describe("classifyLinkFailure（T6。判定の順）", () => {
     expect(c({ timeout: "hello" })).toMatchObject({ kind: "transient" });
   });
 
-  it("HELLO の後はどの終了コードでも transient（リモートの wtm serve が止まって bridge が 0 で終わる等）", () => {
+  it("HELLO の後はどの終了コードでも transient（リモートの soda serve が止まって bridge が 0 で終わる等）", () => {
     for (const exitCode of [0, 1, 2, 3, 127, 255])
       expect(
         c({ sawMarker: true, sawHello: true, exitCode, stderr: "Permission denied" }).kind,

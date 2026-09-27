@@ -1,4 +1,4 @@
-import type { AgentInfo, ServerEvent, SessionSnapshot } from "@wtm/protocol";
+import type { AgentInfo, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import { resolveAgentTarget, type AgentPane } from "../agentTarget.js";
 import {
   currentScreen,
@@ -18,12 +18,12 @@ import { printJson, printLine } from "../output.js";
 import type { SessionStore } from "../session.js";
 import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 import { readPaneSnapshot } from "./pane.js";
 
 /**
  * `agent list` / `get` / `wait` / `read`（20260926-agent-automation-api design.md「振る舞いの詳細」）、
- * `agent prompt` / `send-keys`（20260926-agent-prompt-send-keys design.md「`wtmctl agent prompt`（CLI）」）。
+ * `agent prompt` / `send-keys`（20260926-agent-prompt-send-keys design.md「`sodactl agent prompt`（CLI）」）。
  */
 
 type AgentListCmd = Extract<Command, { kind: "agent-list" }>;
@@ -89,7 +89,7 @@ export class EventFeed {
  * 待ち始めのエージェント（`instanceId`）が入れ替わったら消失として扱う。
  */
 function waitForAgent(
-  client: WtmClient,
+  client: SodaClient,
   events: EventFeed,
   target: AgentPane,
   workspaces: Map<string, string>,
@@ -196,7 +196,7 @@ function stalledError(current: AgentInfo): RpcFailure {
  * 活動として数えるのは要求を送った後に届いた状態だけ（hello の応答から要求までの状態は数えない）。
  */
 function promptAndWait(
-  client: WtmClient,
+  client: SodaClient,
   events: EventFeed,
   target: AgentPane,
   workspaces: Map<string, string>,
@@ -353,7 +353,7 @@ export async function runAgentSendKeys(cmd: AgentSendKeysCmd, store: SessionStor
   printJson({ ok: true, paneId });
 }
 
-/** `agent rename`（20260926-agent-start-rename design「`wtmctl agent rename`」）。解決した時点のエージェントにだけ付ける。 */
+/** `agent rename`（20260926-agent-start-rename design「`sodactl agent rename`」）。解決した時点のエージェントにだけ付ける。 */
 export async function runAgentRename(cmd: AgentRenameCmd, store: SessionStore): Promise<void> {
   const agent = await withSession(cmd.opts, store, async (client) => {
     const hello = await client.hello();

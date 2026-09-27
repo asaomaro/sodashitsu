@@ -1,7 +1,7 @@
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import type { NewCwd, Pane } from "@wtm/protocol";
+import type { NewCwd, Pane } from "@sodashitsu/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   expandHome,
@@ -367,7 +367,7 @@ describe("isUsableDir", () => {
   });
 
   it("ディレクトリなら使える、ファイル・無い場所は使えない", async () => {
-    dir = await mkdtemp(join(tmpdir(), "wtm-newcwd-"));
+    dir = await mkdtemp(join(tmpdir(), "soda-newcwd-"));
     // 実行できるファイルにする——入れるか（X_OK）だけでは、ファイルをディレクトリと取り違える（Windows の X_OK は有無だけを見る）。
     await writeFile(join(dir, "file"), "x", { mode: 0o755 });
     expect(await isUsableDir(dir)).toBe(true);
@@ -378,7 +378,7 @@ describe("isUsableDir", () => {
   // 検索（実行）の権限を外しても root は入れてしまい、Windows には無い。
   const posixNonRoot = process.platform !== "win32" && process.getuid?.() !== 0;
   it.runIf(posixNonRoot)("入れない（実行の権限が無い）ディレクトリは使えない", async () => {
-    dir = await mkdtemp(join(tmpdir(), "wtm-newcwd-"));
+    dir = await mkdtemp(join(tmpdir(), "soda-newcwd-"));
     await mkdir(join(dir, "locked"), { mode: 0o600 });
     expect(await isUsableDir(join(dir, "locked"))).toBe(false);
   });
@@ -386,7 +386,7 @@ describe("isUsableDir", () => {
   it.runIf(process.platform !== "win32")(
     "ディレクトリへのシンボリックリンクは使え、ファイルへのリンクは使えない",
     async () => {
-      dir = await mkdtemp(join(tmpdir(), "wtm-newcwd-"));
+      dir = await mkdtemp(join(tmpdir(), "soda-newcwd-"));
       await writeFile(join(dir, "file"), "x");
       await symlink(dir, join(dir, "to-dir"));
       await symlink(join(dir, "file"), join(dir, "to-file"));

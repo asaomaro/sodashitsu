@@ -1,4 +1,4 @@
-import type { ParamsOf } from "@wtm/protocol";
+import type { ParamsOf } from "@sodashitsu/protocol";
 import { stripAnsi } from "../ansiStrip.js";
 import type { Command } from "../cliArgs.js";
 import { printJson, printLine, printRaw } from "../output.js";
@@ -7,7 +7,7 @@ import type { SessionStore } from "../session.js";
 import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 import { metadataParams } from "./workspace.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 
 /**
  * `pane split` / `close` / `input` / `run` / `read`
@@ -67,7 +67,7 @@ export async function runPaneClose(cmd: PaneCloseCmd, store: SessionStore): Prom
  * （design「依拠する既存の事実」：INPUT フレームにサーバからの ack は無く、存在しない pane への送信は
  * 黙って無視されるため。pane が hello の後・送信の前に閉じる TOCTOU は許容する — 既知の限界）。
  */
-async function requirePaneExists(client: WtmClient, paneId: string): Promise<void> {
+async function requirePaneExists(client: SodaClient, paneId: string): Promise<void> {
   const hello = await client.hello();
   if (!hello.snapshot.panes.some((p) => p.id === paneId)) {
     throw new RpcFailure("not_found", `pane not found: ${paneId}`);
@@ -93,7 +93,7 @@ export async function runPaneRun(cmd: PaneRunCmd, store: SessionStore): Promise<
 }
 
 /** タイムアウト付きで、対象 pane の最初の SNAPSHOT を待つ（design「`pane read`」節・手順3）。 */
-function waitForSnapshot(client: WtmClient, paneId: string, timeoutMs: number): Promise<string> {
+function waitForSnapshot(client: SodaClient, paneId: string, timeoutMs: number): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(new RpcFailure("timeout", `timed out waiting for pane snapshot (paneId=${paneId})`));
@@ -107,7 +107,7 @@ function waitForSnapshot(client: WtmClient, paneId: string, timeoutMs: number): 
 }
 
 /** Ctrl-C（既定の SIGINT 処理）か、サーバ側の切断まで OUTPUT を出し続ける（design「`pane read`」節・手順4）。 */
-function followOutput(client: WtmClient, paneId: string, raw: boolean): Promise<never> {
+function followOutput(client: SodaClient, paneId: string, raw: boolean): Promise<never> {
   const decoder = new TextDecoder("utf-8");
   client.onOutput((chunkPaneId, chunk) => {
     if (chunkPaneId !== paneId) return;
@@ -125,7 +125,7 @@ function followOutput(client: WtmClient, paneId: string, raw: boolean): Promise<
  * 購読して最初の SNAPSHOT を読む（hello は呼び出し側が済ませておく）。購読の解除も呼び出し側が行う
  * （`pane read` は表示してから解除する・`--follow` なら解除しない）。`agent read` も同じ経路を使う。
  */
-export async function readPaneSnapshot(client: WtmClient, paneId: string, scrollbackLines: number, timeoutMs: number): Promise<string> {
+export async function readPaneSnapshot(client: SodaClient, paneId: string, scrollbackLines: number, timeoutMs: number): Promise<string> {
   const snapshotPromise = waitForSnapshot(client, paneId, timeoutMs);
   await client.request("pane.subscribe", { paneId, scrollbackLines });
   return snapshotPromise;

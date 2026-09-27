@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import type { MachineStatus } from "@wtm/protocol";
+import type { MachineStatus } from "@sodashitsu/protocol";
 import type { Logger } from "../log/Logger.js";
 import {
   loadCatalog as defaultLoadCatalog,
@@ -11,7 +11,7 @@ import { realClock, type Clock, type MachineLink } from "./MachineLink.js";
 import type { MachineProfile } from "./machineRules.js";
 
 /**
- * 手元の `wtm serve` の、保存した SSH のマシンの接続の管理（20260927-multi-host-machines の design「マシンの管理」・architecture の状態図）。
+ * 手元の `soda serve` の、保存した SSH のマシンの接続の管理（20260927-multi-host-machines の design「マシンの管理」・architecture の状態図）。
  * 1 台の状態の**唯一の持ち主**。登録簿を 1 秒ごとに確かめて反映し（再起動なしに 2 秒以内）、有効なマシンごとに `MachineLink`（1 回の試み）を作り、
  * 切れたら間隔を延ばして作り直す。登録簿が無い・空・全台が無効なら ssh を起こさない（AC15）。
  */
@@ -89,7 +89,7 @@ export class MachineManager {
     return this.poll();
   }
 
-  /** 全部の ssh を閉じる（リモートの `wtm serve` は動いたまま）。返す Promise は ssh の子が終わる（最大 `waitMs`）まで待つ。 */
+  /** 全部の ssh を閉じる（リモートの `soda serve` は動いたまま）。返す Promise は ssh の子が終わる（最大 `waitMs`）まで待つ。 */
   stop(waitMs = 3_000): Promise<void> {
     this.stopped = true;
     this.clock.clearInterval(this.pollTimer);

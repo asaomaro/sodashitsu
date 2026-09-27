@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { type WorktreeCreateResult, type WorktreeListResult, RpcError, defaultCheckoutPath } from "@wtm/protocol";
+import { type WorktreeCreateResult, type WorktreeListResult, RpcError, defaultCheckoutPath } from "@sodashitsu/protocol";
 import type { GitRunner } from "../infra/GitRunner.js";
 import { isUsableDir as defaultIsUsableDir } from "../session/newCwd.js";
 import type { SessionService } from "../session/SessionService.js";
@@ -20,7 +20,7 @@ export interface WorktreeService {
 
 /** 作成先の根。herdr は `~/.herdr/worktrees`。`/` 区切りに正規化して返す（web がそのまま連結する）。 */
 export function defaultWorktreeRoot(home = homedir()): string {
-  return `${home.replace(/\\/g, "/").replace(/\/+$/, "")}/.wtm/worktrees`;
+  return `${home.replace(/\\/g, "/").replace(/\/+$/, "")}/.sodashitsu/worktrees`;
 }
 
 /**

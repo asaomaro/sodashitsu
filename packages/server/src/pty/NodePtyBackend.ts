@@ -7,14 +7,14 @@ import { type HandleBackedStream, restartHandleReading, stopHandleReading } from
  * node-pty 1.2.0-beta.15 での実装（research.md F8.1）。
  * Windows では既定で同梱の ConPTY（`useConptyDll: true`）を使う。古い system ConPTY は
  * Kitty keyboard のシーケンスを落とすため（`[H]windows-beta.mdx:106-108`）。
- * `WTM_WINDOWS_CONPTY=system` で OS 付属の ConPTY に戻せる（herdr の `HERDR_WINDOWS_CONPTY=system` と同じ考え方）。
+ * `SODA_WINDOWS_CONPTY=system` で OS 付属の ConPTY に戻せる（herdr の `HERDR_WINDOWS_CONPTY=system` と同じ考え方）。
  */
 export class NodePtyBackend implements PtyBackend {
   constructor(private readonly env: NodeJS.ProcessEnv = process.env) {}
 
   spawn(opts: PtySpawnOptions): PtyProcess {
     const isWindows = process.platform === "win32";
-    const useConptyDll = isWindows && this.env["WTM_WINDOWS_CONPTY"] !== "system";
+    const useConptyDll = isWindows && this.env["SODA_WINDOWS_CONPTY"] !== "system";
     const pty = nodePty.spawn(opts.shell, opts.args, {
       name: "xterm-256color",
       cols: opts.cols,

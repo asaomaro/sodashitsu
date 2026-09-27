@@ -123,7 +123,7 @@ describe("DefaultOriginPolicy — ホスト名の大文字小文字・起動時�
       { host: "MyHost.example", secure: true },
       // --origin（D102）：Tailscale の名前・ポート転送先の母艦の IP は、このマシンのインタフェースに無くても表示し、許可する
       { host: "0.0.0.0", secure: true, extraOrigins: ["https://box.tailnet.ts.net:7780", "https://192.168.0.10:8443"] },
-      { host: "127.0.0.1", secure: false, extraOrigins: ["https://wtm.example.com"] }, // リバースプロキシ（TLS はプロキシ側）
+      { host: "127.0.0.1", secure: false, extraOrigins: ["https://soda.example.com"] }, // リバースプロキシ（TLS はプロキシ側）
     ];
     for (const c of cases) {
       const port = c.port ?? 7780;
@@ -224,7 +224,7 @@ describe("DefaultOriginPolicy.isHostAllowed（D106）", () => {
   });
 
   it("起動時に表示する URL の Host はどれも許す（isAllowed と同じ範囲）", () => {
-    const extraOrigins = ["https://box.tailnet.ts.net:7780", "https://192.168.0.10:8443", "https://wtm.example.com"];
+    const extraOrigins = ["https://box.tailnet.ts.net:7780", "https://192.168.0.10:8443", "https://soda.example.com"];
     for (const host of ["0.0.0.0", "127.0.0.1", "::1"]) {
       const policy = new DefaultOriginPolicy({ host, port: 7780, secure: true, extraOrigins }, fakeNet);
       for (const url of accessUrls("https", host, 7780, fakeNet.lanAddresses(), extraOrigins)) {

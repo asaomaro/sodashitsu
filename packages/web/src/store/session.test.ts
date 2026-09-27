@@ -1,4 +1,4 @@
-import type { Pane, SessionSnapshot, Tab, Workspace } from "@wtm/protocol";
+import type { Pane, SessionSnapshot, Tab, Workspace } from "@sodashitsu/protocol";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useSessionStore } from "./session.js";

@@ -111,20 +111,20 @@ function onKeydown(ev: KeyboardEvent): void {
  * 分かるよう境界線の色を付ける。 */
 .splitter {
   flex: none;
-  background: var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-border, #44475a);
   touch-action: none;
 }
 .splitter:focus-visible {
-  background: var(--wtm-menu-active-bg, #44475a);
-  outline: 1px solid var(--wtm-fg, #f8f8f2);
+  background: var(--soda-menu-active-bg, #44475a);
+  outline: 1px solid var(--soda-fg, #f8f8f2);
 }
-/* 太さは `PaneFrame.vue` の枠と同じ CSS 変数（`--wtm-pane-gap`。既定 4px。20260922-appearance-settings-rest）。 */
+/* 太さは `PaneFrame.vue` の枠と同じ CSS 変数（`--soda-pane-gap`。既定 4px。20260922-appearance-settings-rest）。 */
 .splitter.right {
-  width: var(--wtm-pane-gap, 4px);
+  width: var(--soda-pane-gap, 4px);
   cursor: col-resize;
 }
 .splitter.down {
-  height: var(--wtm-pane-gap, 4px);
+  height: var(--soda-pane-gap, 4px);
   cursor: row-resize;
 }
 </style>

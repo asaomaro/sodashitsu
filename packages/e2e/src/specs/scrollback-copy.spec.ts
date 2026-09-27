@@ -120,7 +120,7 @@ test("Ctrl+Shift+V で貼り付けると、その内容が端末（PTY）へ届�
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
   await focusTerminal(page);
 
-  const pasteMarker = `wtm-e2e-paste-${Date.now()}`;
+  const pasteMarker = `soda-e2e-paste-${Date.now()}`;
   await page.evaluate((text) => navigator.clipboard.writeText(text), `echo ${pasteMarker}`);
   await page.keyboard.press("Control+Shift+V");
   await page.waitForTimeout(300); // readClipboard() の Promise を待つ

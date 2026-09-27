@@ -24,7 +24,7 @@ function sample(): PaneHistoryFileData {
 describe("FsPaneHistoryFile（session-history.json。20260926-screen-history-replay）", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await makeTempDir("wtm-history-");
+    dir = await makeTempDir("soda-history-");
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });

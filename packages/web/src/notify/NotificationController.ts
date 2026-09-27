@@ -1,4 +1,4 @@
-import type { AgentInfo } from "@wtm/protocol";
+import type { AgentInfo } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import { nextTick, watch } from "vue";
 import { useNotificationsStore } from "../store/notifications.js";

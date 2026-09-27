@@ -1,4 +1,4 @@
-import { AGENT_START_DEFAULT_TIMEOUT_MS, type AgentInfo, type ServerEvent } from "@wtm/protocol";
+import { AGENT_START_DEFAULT_TIMEOUT_MS, type AgentInfo, type ServerEvent } from "@sodashitsu/protocol";
 import { StartWait, type StartVerdict } from "../agentStartWait.js";
 import type { AgentView } from "../agentStatus.js";
 import type { Command } from "../cliArgs.js";
@@ -6,10 +6,10 @@ import { printJson } from "../output.js";
 import type { SessionStore } from "../session.js";
 import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
-import { RpcFailure, type WtmClient } from "../wsClient.js";
+import { RpcFailure, type SodaClient } from "../wsClient.js";
 import { EventFeed, viewOf, workspacesByTab } from "./agent.js";
 
-/** `wtmctl agent start`（20260926-agent-start design「CLI `runAgentStart`」）。 */
+/** `sodactl agent start`（20260926-agent-start design「CLI `runAgentStart`」）。 */
 
 type AgentStartCmd = Extract<Command, { kind: "agent-start" }>;
 
@@ -28,7 +28,7 @@ const REAL_DEPS: AgentStartDeps = {
 };
 
 async function requestStart(
-  client: WtmClient,
+  client: SodaClient,
   cmd: AgentStartCmd,
   deps: AgentStartDeps,
 ): Promise<void> {

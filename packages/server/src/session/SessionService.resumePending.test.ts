@@ -1,4 +1,4 @@
-import type { AgentInfo, HostInfo } from "@wtm/protocol";
+import type { AgentInfo, HostInfo } from "@sodashitsu/protocol";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Disposable } from "../util/Disposable.js";
 import { MemoryLogger } from "../log/Logger.js";

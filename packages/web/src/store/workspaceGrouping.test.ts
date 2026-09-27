@@ -1,4 +1,4 @@
-import type { GitInfo, Workspace, WorkspaceGroup } from "@wtm/protocol";
+import type { GitInfo, Workspace, WorkspaceGroup } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { autoGroupsOf, groupedWorkspaceRows, linkedWorktreeChildrenOf, manualGroupsOf, visibleGroupMembers, visibleWorkspaceIdsInOrder } from "./workspaceGrouping.js";
 

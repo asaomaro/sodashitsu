@@ -1,9 +1,9 @@
 import type { Page, WebSocketRoute } from "@playwright/test";
-import { decodeFrame, FRAME_TYPE, type ServerEvent } from "@wtm/protocol";
+import { decodeFrame, FRAME_TYPE, type ServerEvent } from "@sodashitsu/protocol";
 
 /**
  * ブラウザ（ページの WebSocket）が受けたバイナリのフレーム（OUTPUT・SNAPSHOT）を、接続ごとに記録するテスト専用の道具
- * （D107）。テスト自身の WebSocket クライアント（`WtmTestClient`）は別の接続で購読するので、そこに出力が届いても
+ * （D107）。テスト自身の WebSocket クライアント（`SodaTestClient`）は別の接続で購読するので、そこに出力が届いても
  * **ブラウザに届いたとは限らない**——サーバは購読・表示を接続（clientId）ごとに持つ。再接続の後に表示と購読を張り直して
  * いなかった不具合（D107）は、テストのクライアントでは出力が見えたまま、ブラウザにだけ届かなかった。
  * 接続は開いた順に 0, 1, 2… と数える。

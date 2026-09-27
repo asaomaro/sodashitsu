@@ -3,9 +3,9 @@ import { resolveSessionStateDir } from "../persist/namedSession.js";
 import { bridgeSocketPathFor } from "./BridgeEndpoint.js";
 
 /**
- * `wtm bridge [--session NAME] [--state-dir DIR]`（20260927-multi-host-machines の design「wtm bridge」）。手元の `wtm serve` が
- * `ssh <宛先> wtm bridge …` として起動し、SSH の標準入出力と、このマシンの `wtm serve` の中継の受け口（`bridge.sock`・0600）を**素通しで**繋ぐ。
- * 枠は解釈しない（多重化を解くのは受け口）。`WTM_SESSION` は読まない（ssh の先の環境で思わぬ session を選ばない。decisions D5）。
+ * `soda bridge [--session NAME] [--state-dir DIR]`（20260927-multi-host-machines の design「soda bridge」）。手元の `soda serve` が
+ * `ssh <宛先> soda bridge …` として起動し、SSH の標準入出力と、このマシンの `soda serve` の中継の受け口（`bridge.sock`・0600）を**素通しで**繋ぐ。
+ * 枠は解釈しない（多重化を解くのは受け口）。`SODA_SESSION` は読まない（ssh の先の環境で思わぬ session を選ばない。decisions D5）。
  * 終了コード: 0 どちらかが閉じた／1 繋げない（その他）／2 引数の誤り・Windows（`ConfigError`）／3 動いていない（受け口が無い・拒否）。
  */
 export const BRIDGE_EXIT_NOT_RUNNING = 3;
@@ -32,7 +32,7 @@ export async function runBridge(
   deps: BridgeDeps = defaultBridgeDeps(),
 ): Promise<number> {
   if (deps.platform === "win32") {
-    io.err("wtm: bridge is not supported on Windows");
+    io.err("soda: bridge is not supported on Windows");
     return 2;
   }
   // 名前の規則はここで見る（規則外は ConfigError＝終了コード 2。何も作らない）。
@@ -46,11 +46,11 @@ export async function runBridge(
   if (connected !== undefined) {
     sock.destroy();
     if (connected.code === "ENOENT" || connected.code === "ECONNREFUSED") {
-      const hint = opts.session !== undefined ? `wtm serve --session ${opts.session}` : "wtm serve";
-      io.err(`wtm: no running wtm serve for session ${name} (start it on this machine: ${hint})`);
+      const hint = opts.session !== undefined ? `soda serve --session ${opts.session}` : "soda serve";
+      io.err(`soda: no running soda serve for session ${name} (start it on this machine: ${hint})`);
       return BRIDGE_EXIT_NOT_RUNNING;
     }
-    io.err(`wtm: cannot connect to the bridge socket of session ${name}: ${connected.message}`);
+    io.err(`soda: cannot connect to the bridge socket of session ${name}: ${connected.message}`);
     return 1;
   }
   return new Promise<number>((resolve) => {

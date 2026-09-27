@@ -3,7 +3,7 @@
  * herdr のソース（`da6bcd5`。Apache-2.0・D5）の `src/pane/agent_detection.rs` のヒステリシス
  * （3秒の起動猶予・working→idle の保留）を移植した（decisions.md D46・D50）。
  */
-import type { AgentInfo, AgentState } from "@wtm/protocol";
+import type { AgentInfo, AgentState } from "@sodashitsu/protocol";
 import { agentDescriptor } from "./agents.js";
 
 export interface TrackerJudgment {

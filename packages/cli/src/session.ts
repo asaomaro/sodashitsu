@@ -23,7 +23,7 @@ export interface SessionStore {
 }
 
 export function defaultSessionFilePath(): string {
-  return join(homedir(), ".wtmctl", "session.json");
+  return join(homedir(), ".sodactl", "session.json");
 }
 
 /** `url` を origin 文字列（`scheme://host`）へ正規化する。不正な URL ならそのまま返す（呼び出し側で弾かれる）。 */
@@ -84,7 +84,7 @@ export class FsSessionStore implements SessionStore {
   }
 
   /**
-   * 一時ファイルに書いてから置き換える。切り詰めてから書くと、その途中を読んだ別の操作（別の `wtmctl` のプロセスも）が空とみなし、
+   * 一時ファイルに書いてから置き換える。切り詰めてから書くと、その途中を読んだ別の操作（別の `sodactl` のプロセスも）が空とみなし、
    * 保存し直してほかの接続先の cookie を消していた（20260926-load-flaky-tests の D2。server の `writeFileAtomic` と同じ形）。
    */
   private async save(data: SessionFile): Promise<void> {

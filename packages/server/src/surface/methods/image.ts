@@ -3,7 +3,7 @@ import {
   PaneImageCancelParams,
   PaneImageChunkParams,
   PaneImageCommitParams,
-} from "@wtm/protocol";
+} from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 

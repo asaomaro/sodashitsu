@@ -43,7 +43,7 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 const NOT_BUILT_PAGE = `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><title>wtm</title></head>
+<html lang="ja"><head><meta charset="utf-8"><title>soda</title></head>
 <body><p>Web UI はまだビルドされていません（packages/web/dist が見つかりません）。</p></body></html>`;
 
 /** 静的配信・認証 API・セキュリティヘッダ・TLS（architecture.md「HttpServer」・design.md「HTTP」）。 */

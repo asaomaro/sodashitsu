@@ -117,22 +117,22 @@ const injectPrefix = (): void => {
   gap: 0.25em;
   padding: 0.4em;
   overflow-x: auto;
-  background: var(--wtm-menu-bg, #282a36);
-  border-top: 1px solid var(--wtm-menu-border, #44475a);
+  background: var(--soda-menu-bg, #282a36);
+  border-top: 1px solid var(--soda-menu-border, #44475a);
 }
 .extra-keys-btn {
   flex: 0 0 auto;
   min-width: 2.5em;
   padding: 0.5em 0.7em;
   font: inherit;
-  color: var(--wtm-fg, #f8f8f2);
-  background: var(--wtm-menu-active-bg, #44475a);
+  color: var(--soda-fg, #f8f8f2);
+  background: var(--soda-menu-active-bg, #44475a);
   border: none;
   border-radius: 4px;
   touch-action: manipulation;
 }
 .extra-keys-btn-active {
-  color: var(--wtm-accent-fg, #f8f8f2);
-  background: var(--wtm-accent, #6070a1);
+  color: var(--soda-accent-fg, #f8f8f2);
+  background: var(--soda-accent, #6070a1);
 }
 </style>

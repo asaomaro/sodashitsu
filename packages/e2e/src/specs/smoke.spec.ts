@@ -14,7 +14,7 @@ test("ログイン → pane の表示 → 入力が PTY まで届く", async ({ 
   await expect(page.locator(".login-view")).toHaveCount(0);
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
 
-  const marker = `wtm-e2e-${Date.now()}`;
+  const marker = `soda-e2e-${Date.now()}`;
   await page.locator(".xterm-helper-textarea").click();
   await page.keyboard.type(`echo ${marker}`);
   await page.keyboard.press("Enter");

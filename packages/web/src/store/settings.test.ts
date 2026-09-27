@@ -193,7 +193,7 @@ describe("useSettingsStore — tab バーの位置・右端エントリ・pane �
   it("別のタブ・ウィンドウでの変更に storage イベントで追従する", () => {
     const store = useSettingsStore(pinia);
     writePrefs({ tabBarPosition: "bottom", paneOuterBorders: true });
-    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
     expect(store.tabBarPosition).toBe("bottom");
     expect(store.paneOuterBorders).toBe(true);
   });
@@ -237,7 +237,7 @@ describe("useSettingsStore — pane の枠の描画モード・隙間（20260926
   it("別のタブ・ウィンドウでの変更に storage イベントで追従する", () => {
     const store = useSettingsStore(pinia);
     writePrefs({ paneBorders: "off", paneGaps: false });
-    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
     expect(store.paneBorders).toBe("off");
     expect(store.paneGaps).toBe(false);
   });
@@ -476,7 +476,7 @@ describe("useSettingsStore — キーの割り当て（AC8）", () => {
     expect([...store.keymap.directMap.keys()]).toEqual(["ctrl+v"]); // 既定の直接のキーは画像の貼り付けだけ（20260927-clipboard-image-paste）
   });
 
-  it("prefix・割り当てを変えると、解決した表が即時に変わり、wtm.prefs.v1 の keys に差だけが保存される", () => {
+  it("prefix・割り当てを変えると、解決した表が即時に変わり、soda.prefs.v1 の keys に差だけが保存される", () => {
     const store = useSettingsStore(pinia);
     store.setKeyPrefix("ctrl+a");
     store.setKeyBindings("split_vertical", ["prefix+v", "ctrl+alt+d"]);
@@ -559,10 +559,10 @@ describe("useSettingsStore — キーの割り当て（AC8）", () => {
     store.setKeyBindings("zoom", ["prefix+y"]);
     // 別のウィンドウが prefix を変えて保存した（自分の書き込みでは storage は発火しない。ここでは書いてから発火させる）。
     writePrefs({ keys: { prefix: "alt+x", bindings: { zoom: ["prefix+y"] } } });
-    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
     expect(store.keymap.prefix).toBe("alt+x");
     const km = store.keymap;
-    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" })); // 変わっていなければ表を作り直さない
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" })); // 変わっていなければ表を作り直さない
     expect(store.keymap).toBe(km);
     // このウィンドウで別の操作を変えても、先に保存された prefix は残る。
     store.setKeyBindings("help", ["prefix+u"]);
@@ -690,7 +690,7 @@ describe("useSettingsStore — navigate モードの移動キー（AC1・AC5・A
     expect(store.navigateKeymap.bindingsOf("navigate_workspace_up")).toEqual(["up"]);
   });
 
-  it("setNavigateKeyBindings で変えると、解決した表が即時に変わり、wtm.prefs.v1 の keys.navigate に差だけが保存される", () => {
+  it("setNavigateKeyBindings で変えると、解決した表が即時に変わり、soda.prefs.v1 の keys.navigate に差だけが保存される", () => {
     const store = useSettingsStore(pinia);
     store.setNavigateKeyBindings("navigate_pane_left", ["ctrl+h"]);
     expect(store.navigateKeymap.bindingsOf("navigate_pane_left")).toEqual(["ctrl+h"]);
@@ -740,7 +740,7 @@ describe("useSettingsStore — navigate モードの移動キー（AC1・AC5・A
     const store = useSettingsStore(pinia);
     store.setNavigateKeyBindings("navigate_pane_left", ["ctrl+h"]);
     writePrefs({ keys: { navigate: { navigate_pane_left: ["ctrl+h"], navigate_pane_down: ["ctrl+j"] } } });
-    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
     expect(store.navigateKeymap.bindingsOf("navigate_pane_down")).toEqual(["ctrl+j"]);
   });
 });
@@ -757,32 +757,32 @@ describe("useSettingsStore — 色の個別の上書き（AC6・AC7・AC8）", (
 
   it("setThemeOverride で反映・保存する。既定との差だけを持つ", () => {
     const store = useSettingsStore(pinia);
-    store.setThemeOverride("light", "--wtm-accent", "#a6e3a1");
-    expect(store.themeOverrides).toEqual({ light: { "--wtm-accent": "#a6e3a1" }, dark: {} });
-    expect(readPrefs()["themeOverrides"]).toEqual({ light: { "--wtm-accent": "#a6e3a1" } });
+    store.setThemeOverride("light", "--soda-accent", "#a6e3a1");
+    expect(store.themeOverrides).toEqual({ light: { "--soda-accent": "#a6e3a1" }, dark: {} });
+    expect(readPrefs()["themeOverrides"]).toEqual({ light: { "--soda-accent": "#a6e3a1" } });
     const again = useSettingsStore(createPinia());
-    expect(again.themeOverrides).toEqual({ light: { "--wtm-accent": "#a6e3a1" }, dark: {} });
+    expect(again.themeOverrides).toEqual({ light: { "--soda-accent": "#a6e3a1" }, dark: {} });
   });
 
   it("読めない値（構文が通らない色）は反映せず捨てる（二重の守り。setThemeOverride は妥当な値を渡す前提だが、直に replaceThemeOverrides を呼ぶ経路もある）", () => {
     const store = useSettingsStore(pinia);
-    store.replaceThemeOverrides({ light: { "--wtm-accent": "notacolor" }, dark: {} });
+    store.replaceThemeOverrides({ light: { "--soda-accent": "notacolor" }, dark: {} });
     expect(store.themeOverrides).toEqual({ light: {}, dark: {} });
     expect(readPrefs()).not.toHaveProperty("themeOverrides");
   });
 
   it("resetThemeOverride はその 1 項目だけを外す（ほかは残る。AC6）", () => {
     const store = useSettingsStore(pinia);
-    store.setThemeOverride("light", "--wtm-accent", "#fff");
-    store.setThemeOverride("light", "--wtm-bg", "#000");
-    store.resetThemeOverride("light", "--wtm-accent");
-    expect(store.themeOverrides).toEqual({ light: { "--wtm-bg": "#000" }, dark: {} });
+    store.setThemeOverride("light", "--soda-accent", "#fff");
+    store.setThemeOverride("light", "--soda-bg", "#000");
+    store.resetThemeOverride("light", "--soda-accent");
+    expect(store.themeOverrides).toEqual({ light: { "--soda-bg": "#000" }, dark: {} });
   });
 
   it("resetAllThemeOverrides はすべて消し、themeOverrides ごと保存から消える（AC7）", () => {
     const store = useSettingsStore(pinia);
-    store.setThemeOverride("light", "--wtm-accent", "#fff");
-    store.setThemeOverride("dark", "--wtm-bg", "#000");
+    store.setThemeOverride("light", "--soda-accent", "#fff");
+    store.setThemeOverride("dark", "--soda-bg", "#000");
     store.resetAllThemeOverrides();
     expect(store.themeOverrides).toEqual({ light: {}, dark: {} });
     expect(readPrefs()).not.toHaveProperty("themeOverrides");
@@ -790,12 +790,12 @@ describe("useSettingsStore — 色の個別の上書き（AC6・AC7・AC8）", (
 
   it("同じ内容を渡し直しても書かない（keys と同じ「二重の守り」の形）", () => {
     const store = useSettingsStore(pinia);
-    store.setThemeOverride("light", "--wtm-accent", "#fff");
+    store.setThemeOverride("light", "--soda-accent", "#fff");
     const setItem = vi.spyOn(localStorage, "setItem");
     try {
-      store.setThemeOverride("light", "--wtm-accent", "#fff");
+      store.setThemeOverride("light", "--soda-accent", "#fff");
       expect(setItem).not.toHaveBeenCalled();
-      store.setThemeOverride("light", "--wtm-accent", "#000"); // 変えれば書かれる
+      store.setThemeOverride("light", "--soda-accent", "#000"); // 変えれば書かれる
       expect(setItem).toHaveBeenCalledTimes(1);
     } finally {
       setItem.mockRestore();
@@ -806,31 +806,31 @@ describe("useSettingsStore — 色の個別の上書き（AC6・AC7・AC8）", (
     writePrefs({ theme: "nord" });
     const store = useSettingsStore(pinia);
     store.setKeyPrefix("ctrl+a");
-    store.setThemeOverride("dark", "--wtm-accent", "#89b4fa");
+    store.setThemeOverride("dark", "--soda-accent", "#89b4fa");
     expect(readPrefs()).toMatchObject({
       theme: "nord",
       keys: { prefix: "ctrl+a" },
-      themeOverrides: { dark: { "--wtm-accent": "#89b4fa" } },
+      themeOverrides: { dark: { "--soda-accent": "#89b4fa" } },
     });
   });
 
   it("別のウィンドウで上書きが変わったら（storage イベント）追従し、古い状態から別の変更をしても先の変更を上書きしない", () => {
     const store = useSettingsStore(pinia);
-    store.setThemeOverride("light", "--wtm-accent", "#fff");
+    store.setThemeOverride("light", "--soda-accent", "#fff");
     // 別のウィンドウが暗いときの上書きを足して保存した（自分の書き込みでは storage は発火しない。ここでは書いてから発火させる）。
     writePrefs({
-      themeOverrides: { light: { "--wtm-accent": "#fff" }, dark: { "--wtm-bg": "#000" } },
+      themeOverrides: { light: { "--soda-accent": "#fff" }, dark: { "--soda-bg": "#000" } },
     });
-    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" }));
-    expect(store.themeOverrides).toEqual({ light: { "--wtm-accent": "#fff" }, dark: { "--wtm-bg": "#000" } });
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
+    expect(store.themeOverrides).toEqual({ light: { "--soda-accent": "#fff" }, dark: { "--soda-bg": "#000" } });
     const snapshot = store.themeOverrides;
-    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" })); // 変わっていなければ表を作り直さない
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" })); // 変わっていなければ表を作り直さない
     expect(store.themeOverrides).toBe(snapshot);
     // このウィンドウで別の CSS 変数を変えても、先に保存された分は残る。
-    store.setThemeOverride("light", "--wtm-menu-bg", "#111");
+    store.setThemeOverride("light", "--soda-menu-bg", "#111");
     expect(readPrefs()["themeOverrides"]).toEqual({
-      light: { "--wtm-accent": "#fff", "--wtm-menu-bg": "#111" },
-      dark: { "--wtm-bg": "#000" },
+      light: { "--soda-accent": "#fff", "--soda-menu-bg": "#111" },
+      dark: { "--soda-bg": "#000" },
     });
   });
 });
@@ -892,7 +892,7 @@ describe("useSettingsStore — サイドバーの行の並び（20260927-sidebar
     const spy = vi.spyOn(localStorage, "setItem");
     store.setSidebarLayout("spaces", [[{ token: "workspace" }]]);
     expect(spy).not.toHaveBeenCalled();
-    localStorage.setItem("wtm.prefs.v1", JSON.stringify({ sidebarRows: "broken" }));
+    localStorage.setItem("soda.prefs.v1", JSON.stringify({ sidebarRows: "broken" }));
     spy.mockClear();
     store.setSidebarLayout("spaces", [[{ token: "workspace" }]]);
     expect(spy).toHaveBeenCalledTimes(1);
@@ -909,7 +909,7 @@ describe("useSettingsStore — サイドバーの行の並び（20260927-sidebar
   it("別のタブ・ウィンドウでの変更に storage イベントで追従し、その後こちらで別の区画を変えても先の変更を上書きしない", () => {
     const store = useSettingsStore(pinia);
     writePrefs({ sidebarRows: { agents: [[{ token: "tab" }]] } });
-    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
     expect(store.agentsLayout).toEqual([[{ token: "tab" }]]);
     store.setSidebarLayout("spaces", [[{ token: "workspace" }]]);
     expect(readPrefs()["sidebarRows"]).toEqual({ spaces: [[{ token: "workspace" }]], agents: [[{ token: "tab" }]] });
@@ -919,7 +919,7 @@ describe("useSettingsStore — サイドバーの行の並び（20260927-sidebar
     const store = useSettingsStore(pinia);
     store.setSidebarLayout("spaces", [[{ token: "workspace" }]]);
     const before = store.sidebarRows;
-    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" }));
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
     expect(store.sidebarRows).toBe(before);
   });
 });

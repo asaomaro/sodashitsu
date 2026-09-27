@@ -1,4 +1,4 @@
-import type { AgentInfo, MethodName, Pane, ParamsOf, ResultOf, Tab, Workspace } from "@wtm/protocol";
+import type { AgentInfo, MethodName, Pane, ParamsOf, ResultOf, Tab, Workspace } from "@sodashitsu/protocol";
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";

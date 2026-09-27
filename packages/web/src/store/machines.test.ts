@@ -1,4 +1,4 @@
-import type { AgentInfo, SessionSnapshot, Workspace } from "@wtm/protocol";
+import type { AgentInfo, SessionSnapshot, Workspace } from "@sodashitsu/protocol";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { WebSocketLike } from "../net/Connection.js";
