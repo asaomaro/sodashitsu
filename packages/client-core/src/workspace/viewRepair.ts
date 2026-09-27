@@ -1,5 +1,5 @@
 import type { Pane, Tab, Workspace } from "@sodashitsu/protocol";
-import { depthFirstPaneIds } from "../term/layoutOrder.js";
+import { depthFirstPaneIds } from "../layout/layoutOrder.js";
 
 export interface ViewTarget {
   workspaceId: string | null;

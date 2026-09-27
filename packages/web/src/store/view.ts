@@ -1,7 +1,7 @@
 import type { PopupDimension, ServerSessionEntry, SessionFocus, WorkspaceGroup, WorktreeEntry, WorktreeListResult } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import type { Mode } from "../keys/actions.js";
+import type { AgentSort, Mode, WorkspaceSort } from "@sodashitsu/client-core";
 import type { ConnectionState } from "../net/ports.js";
 import type { MenuTarget } from "../term/MouseBridge.js";
 import type { Zone } from "../term/paneDragZone.js";
@@ -42,12 +42,8 @@ function saveStoredView(v: StoredView): void {
   }
 }
 
-/** agents の並び順（20260920-sidebar-tabbar-controls）。`grouped` は並べ替えない（既定）。 */
-export type AgentSort = "grouped" | "priority";
-
-/** workspace（spaces 区画）の並び順（20260922-appearance-settings-rest）。`opened` は今までどおり
- *  サーバから届いた順（既定）。`name` は workspace のラベルの文字列順。 */
-export type WorkspaceSort = "opened" | "name";
+/** 並び順の型（`AgentSort`・`WorkspaceSort`）は client-core へ移した（20260927-cli-mode）。今までの参照先を壊さないよう再 export する。 */
+export type { AgentSort, WorkspaceSort };
 
 /**
  * 表示位置（`STORAGE_KEY`）と違い、**タブの寿命を越えて残す好み**なので `localStorage` に置く。

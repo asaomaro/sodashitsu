@@ -1,5 +1,5 @@
 import type { Workspace } from "@sodashitsu/protocol";
-import type { WorkspaceSort } from "./view.js";
+import type { WorkspaceSort } from "../prefs/types.js";
 
 /**
  * workspace の表示順（純関数。20260923-missing-keybinding-actions）。`Sidebar.vue` の `spaces` computed と

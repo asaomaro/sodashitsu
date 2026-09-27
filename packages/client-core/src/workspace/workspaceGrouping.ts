@@ -1,5 +1,5 @@
 import type { Workspace, WorkspaceGroup } from "@sodashitsu/protocol";
-import type { WorkspaceSort } from "./view.js";
+import type { WorkspaceSort } from "../prefs/types.js";
 
 /**
  * workspace のグルーピング（純関数。20260923-workspace-grouping）。`store/workspaceOrder.ts` と

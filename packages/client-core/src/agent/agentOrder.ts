@@ -1,6 +1,6 @@
 import type { DisplayState } from "@sodashitsu/protocol";
-import { STATE_PRIORITY } from "./seen.js";
-import type { AgentSort } from "./view.js";
+import { STATE_PRIORITY } from "./agentState.js";
+import type { AgentSort } from "../prefs/types.js";
 
 export interface AgentOrderEntry {
   paneId: string;

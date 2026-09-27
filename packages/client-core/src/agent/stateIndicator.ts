@@ -1,5 +1,5 @@
 import type { DisplayState } from "@sodashitsu/protocol";
-import { STATE_PRIORITY } from "./seen.js";
+import { STATE_PRIORITY } from "./agentState.js";
 
 /**
  * エージェントの状態の**字形**と**読み上げの名前**（20260921-herdr-settings-gaps の D4）。

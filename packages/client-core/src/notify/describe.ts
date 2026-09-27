@@ -1,5 +1,5 @@
 import type { Pane, Tab, Workspace } from "@sodashitsu/protocol";
-import { paneNameOf } from "../store/paneName.js";
+import { paneNameOf } from "../workspace/paneName.js";
 
 /**
  * 知らせる対象の呼び名を組み立てる（design 振る舞い 4「文言」）。

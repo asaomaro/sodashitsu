@@ -1,5 +1,5 @@
 import type { AgentInfo, DisplayState, Pane, Tab, Workspace } from "@sodashitsu/protocol";
-import { stateLabel } from "../store/stateIndicator.js";
+import { stateLabel } from "../agent/stateIndicator.js";
 import {
   isValidColor,
   matchingStyle,
