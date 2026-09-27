@@ -3,7 +3,9 @@
 ## 実行したもの
 
 - `pnpm -s build`（終了コード 0）・`pnpm -s typecheck`（終了コード 0。出力と終了コードを別に確かめた）
-- `pnpm -s test`（全体。1 回）— **225 files / 4373 passed / 0 failed / 0 skipped**（`Test Files  225 passed (225)`・`Tests  4373 passed (4373)`・終了コード 0）
+- `pnpm -s test`（全体。review ラウンド 1 の修正と origin/main〔20260926-kitty-graphics〕の取り込みの後に 1 回）— **229 files / 4446 passed / 0 failed / 0 skipped**
+  （`Test Files  229 passed (229)`・`Tests  4446 passed (4446)`・終了コード 0。取り込みの前は 225 files / 4373 passed）
+  - 取り込みの直後の 1 回目は `@xterm/addon-image`（main で足された依存）が未導入で web の 7 files が読み込みの失敗。`pnpm install --frozen-lockfile` の後に上の結果
   - coding の途中の全体の実行（1 回）: 4375 passed（その後、エディタの対応の検査を 5 件の undefined から 1 件の「その 1 件だけ落とす」へまとめ、2 件足した差）
 - 本 work で足したテスト（すべて上の全体に含まれる）:
   `handoff/HandoffManifest.test.ts`・`handoff/HandoffController.test.ts`・`handoff/HandoffSocket.test.ts`・`handoff/preflight.test.ts`・`handoff/startup.test.ts`・
@@ -33,12 +35,12 @@
 - AC10: pass — `handoffCommand.test.ts`（`--session`・`WTM_SESSION`・`--state-dir` の状態ディレクトリの `handoff.sock` に送る・無い session は ConfigError）。
 - AC11: pass — `docs/tls-setup.md`「更新時の引き継ぎ」・`docs/verification.md`（手動確認・既知の制約）・`docs/herdr-parity.md` H32（T10 の点検で内容とコードを突き合わせた）。
 - AC12: pass — smoke（動いていないとき終了コード 3・何も作らない）、`handoffCommand.test.ts`。
-- AC13: pass — 全体のテスト 4373 passed・smoke 6 本 pass。
+- AC13: pass — 全体のテスト 4446 passed（取り込みの後）・smoke 6 本 pass。
 - AC14: pass — `SessionService.handoff.test.ts`（引き継いだエディタの pane を閉じると一時ディレクトリが消え、焦点と拡大表示が戻る・引き継げなかったものは消す）。
 
 ## 失敗の証跡
 
-このラウンド（test 工程）では失敗が発生していない。coding の途中の失敗（テストの書き誤り・型の誤り）はその場で直した（review.md「タスク点検ログ」）。
+このラウンド（test 工程。1 回目・review ラウンド 1・2 からの差し戻しの後とも。ラウンド 2 の後は文書だけの修正でコードは変わっていない〔decisions D15〕）では、実装の失敗は発生していない（取り込みの直後の依存の未導入は環境の準備の漏れ。上の「実行したもの」）。coding の途中の失敗（テストの書き誤り・型の誤り）はその場で直した（review.md「タスク点検ログ」）。
 
 ### 負の確認（規約 regression-negative-control・変異の網羅）
 
@@ -194,10 +196,12 @@ $ (socketReading-readStop)
 
 ## 起動確認（smoke）
 
+取り込みと review ラウンド 1 の修正の後の `aidev smoke`（`pnpm -s build` を含む）:
+
 ```
 smoke: 20260926-live-handoff
 $ pnpm -s build && pnpm -s smoke
-smoke: starting server on 127.0.0.1:46349 (state dir /tmp/wtm-smoke-qazuik)
+smoke: starting server on 127.0.0.1:45103 (state dir /tmp/wtm-smoke-Py0Gk9)
 smoke: agent manifests ok (22/22)
 smoke: login ok
 smoke: websocket connected
@@ -210,14 +214,14 @@ smoke: PASS
 $ pnpm --filter @wtm/cli run smoke
 smoke(cli): PASS
 $ d=$(mktemp -d) && mkdir -p "$d/sessions/smoke" && node packages/server/dist/main.js token reset --session smoke --state-dir "$d" && test -f "$d/sessions/smoke/auth.json" && node packages/server/dist/main.js session list --state-dir "$d" | grep -q '^smoke ' && node packages/server/dist/main.js session delete smoke --state-dir "$d" && test ! -e "$d/sessions/smoke"; rc=$?; rm -rf "$d"; exit $rc
-wtm: new token: Qt4h54hv0VjX2OAuMVMDTTq0tQ2bgHoE
-wtm: deleted session smoke (/tmp/tmp.BXyyu22lGz/sessions/smoke)
+wtm: new token: pNkL0j08NVo3DpBrAn0ScFUHQZYfFMEs
+wtm: deleted session smoke (/tmp/tmp.5U9gXIWsqh/sessions/smoke)
 $ WTMCTL_URL=http://127.0.0.1:9 node packages/cli/dist/main.js skill | cmp - packages/cli/skills/wtmctl/SKILL.md
 $ d=$(mktemp -d) && mkdir -p "$d/sessions/smoke" && WTM_SESSION=smoke node packages/server/dist/main.js token reset --state-dir "$d" && test -f "$d/sessions/smoke/auth.json" && test ! -e "$d/auth.json" && { WTM_SESSION=a/b node packages/server/dist/main.js token reset --state-dir "$d" 2>/dev/null; test $? -eq 2; } && test ! -e "$d/auth.json"; rc=$?; rm -rf "$d"; exit $rc
-wtm: new token: gHpVBf893xySn6MfGIG8_KBDc-DUcEv-
+wtm: new token: 7oAyQWhTaLm9U3O23QklZtdj1v-5jj3x
 $ node packages/server/dist/handoffSmoke.js
 handoff-smoke: not running → exit 3, nothing created ok
-handoff-smoke: before: server pid 1000120, pane p1, shell pid 1000314
+handoff-smoke: before: server pid 1069384, pane p1, shell pid 1069418
 handoff-smoke: wtm handoff → exit 0: wtm: handoff complete: 1 pane(s) kept running
 handoff-smoke: same server pid, /ws closed with 1012, handoff.json removed ok
 handoff-smoke: same pane, same shell pid, previous screen visible, input/output ok

@@ -298,8 +298,22 @@ parent: 20260918-web-terminal-multiplexer
       止まり、空白の幅が詰まる（保存した幅を記録して流す前にミラーを広げる案。write と resize の順序の保証の確認が要る）。(2) 上限 2MiB を超える
       巨大な 1 論理行があると、行の境目で切る切り詰めがその行を丸ごと落とす (needs: 20260926-screen-history-replay)
       （出典: .aidev/works/20260926-screen-history-replay/decisions.md D7）。
-- [ ] セッション永続化の拡張: 更新時の引き継ぎ（live handoff）〔D8〕 (needs: 20260918-web-terminal-multiplexer)
-      （出典: .aidev/works/20260918-web-terminal-multiplexer/research.md。2026-09-23、4分割した一部）。
+- [x] セッション永続化の拡張: 更新時の引き継ぎ（live handoff）〔D8〕 (needs: 20260918-web-terminal-multiplexer)
+      （出典: .aidev/works/20260918-web-terminal-multiplexer/research.md。2026-09-23、4分割した一部）
+  → 着地: 20260926-live-handoff（feature/live-handoff）。**一部**（Linux で実機確認・macOS は未検証・Windows は非対応）: `wtm handoff [--state-dir D] [--session NAME]`
+  （`packages/server/src/handoff/handoffCommand.ts`）が状態ディレクトリの `handoff.sock`（0600。`handoff/HandoffSocket.ts`）で指示し、サーバは同じ Node で新しい版を
+  確かめて（preflight。`handoff/preflight.ts`：実物の PTY を開いて execve し fd が残るか・読み込めるか・形式の版）から、`/ws` を閉じ・各 pane の読み取りを libuv の handle の段で止め
+  （`pty/socketReading.ts`）・`session.json` と `handoff.json`（0600。画面を含む）を書き、`process.execve` で**同じ pid のまま**ディスク上の wtm に入れ替わる（`handoff/HandoffController.ts`）。
+  PTY の master は close-on-exec が無いので残り、新しい版は PTY を開く前に受け取って（`handoff/HandoffManifest.ts` `takeHandoff`：環境変数と `handoff.json` を必ず消す・
+  nonce/pid/期限/`/dev/ptmx` を確かめる）、復元で新しいシェルの代わりに使う（`pty/AdoptedPtyProcess.ts`・`session/SessionService.ts` `adoptForPane`・`composeServer.ts` `listen`）。
+  herdr との違い（`SCM_RIGHTS` ではなく execve・入口が `wtm handoff`・execve の後は戻れない等）は `docs/herdr-parity.md` H32、方式の選択は decisions D2。
+  実測: 全体テスト 4446 本 green（origin/main の取り込みの後）（`pnpm -s test`）・smoke pass（6 本。6 本目が `packages/server/dist/handoffSmoke.js` の実物の通し）・負の確認 29 変異すべて検知。E2E は未実行。
+- [ ] live handoff の残り（macOS）: macOS の実機で `wtm handoff` を確かめる（`process.execve` と node-pty の master の close-on-exec の無さは同じ設計。PTY の確かめが master と slave を
+      区別しない弱いもの・ゾンビの終了コードが読めず 0 になる点も含めて見る） (needs: 20260926-live-handoff)（出典: .aidev/works/20260926-live-handoff/test-result.md「未検証の穴」）
+- [ ] live handoff の既知の制約: (1) 引き継いだ pane のシェルが終わるとサーバが終わるまで `<defunct>` で残る（Node から任意の pid を回収できない。ネイティブのアドオンか回収の補助のプロセスが要る）。
+      (2) 確かめた後に新しい版が起動の途中で落ちると戻れない（herdr のように新しい版を別のプロセスで起動して確かめてから渡す形は、`wtm serve` が端末・systemd の前面のプロセスである限り pid が変わる）。
+      (3) 境目で割れた多バイト文字の 1 文字・Kitty graphics の転送の途中の画像と送った画像は引き継がない（残りの base64 が文字として出うる）。(4) 読み取りを止める途中にできた
+      Kitty の応答（`a=q` 等）の PTY への書き込みが execve までに終わる保証が無い (needs: 20260926-live-handoff)（出典: .aidev/works/20260926-live-handoff/decisions.md D2・D6・D11・review.md ラウンド 2）
 - [x] 端末機能の拡張: スクロールバックを $EDITOR で開く〔D8〕（herdr の `edit_scrollback`。2026-09-26、画像表示と 2 つに割った一部）（出典: .aidev/works/20260918-web-terminal-multiplexer/research.md）
   → 着地: 20260926-edit-scrollback（feature/edit-scrollback）。`prefix+e`（操作名 `edit_scrollback`。「後続」の案内だった `NOT_YET_BINDINGS` を撤去）で、フォーカス中の pane の
   スクロールバック全体を平文で一時ファイルに書き、サーバの `EDITOR`（未設定・空なら `vi`）を起動した pane を同じ tab に拡大表示で開く。閉じると焦点・拡大表示が戻り一時ファイルが消える。

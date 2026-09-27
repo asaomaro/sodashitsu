@@ -220,6 +220,8 @@ class HandoffController {
 - 引き継ぎでない起動（`none`）: 残っていた `handoff.json` を消すだけ（AC8）。以降は今までどおり。
 - 受け渡しが壊れていた（`broken`）: `closeOrphanPtyMasters()` の後、普通の起動（error をログ）。`status` の `lastHandoff` は `id` が分からないので記録しない（CLI は時間切れ）。
 - 引き継ぎの起動:
+  - PTY を開く前に、確かめに通らなかった fd（PTY の master のものだけ）と、受け渡しに載らない PTY の master（Linux。`closeOrphanPtyMasters({ keep: 受け渡しの fd })`。
+    読み取りを止めた後に作られた pane 等）を閉じる（cross の点検・review ラウンド 1）。
   - 待ち受けのポートは起動の指定のまま（同じ引数で起動し直すので `taken.port` と一致する。違えば warn。decisions D12）。確かめに通らなかった pane の fd は、
     自分で PTY を開く前に、PTY の master のものだけ閉じる（番号が再利用されているかもしれないのでシグナルは送らない）。
   - `session.json` を読めた → `session.restore(data, { paneHistory, adopted })`。`adoptedPaneIds` に入らなかった pane の fd（と `rejected`）は、

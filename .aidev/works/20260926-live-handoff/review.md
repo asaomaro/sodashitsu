@@ -69,3 +69,12 @@
 - [should] design の `holdForHandoff`（`pty.pause()`）と実装（`holdReading`/`releaseReading`・`socketReading.ts` で Node の内部 `_handle.reading`/`readStop` を使う）がずれ、decisions にも記録が無い。`nudgeRedraw` の 100ms も design に無い — 根拠: design.md:129-131, packages/server/src/terminal/TerminalHost.ts:240-246, packages/server/src/pty/socketReading.ts:37-51 [conv:-]
 - [nit] `HandoffController` の冒頭のコメントの手順の順（`/ws` を返事の後に閉じる）が実装（preflight の直後）と違う — 根拠: packages/server/src/handoff/HandoffController.ts:14-15,171 [conv:-]
 - [nit] 復元の後の残りの master の一掃が、書き込みの途中に kill された引き継いだ pane の、まだ閉じていない fd を横から閉じうる（復元の前に `keep` = 受け渡しの fd で一掃すれば競合が無い） — 根拠: packages/server/src/composeServer.ts:428, packages/server/src/pty/AdoptedPtyProcess.ts:194,214 [conv:-]
+
+## ラウンド 2（独立 review。別コンテキスト・opus。範囲はラウンド 1 の解消とこのラウンドの差分〔修正と origin/main の取り込み〕）
+
+ラウンド 1 の 3 件はすべて解消（design の TerminalHost の節と D14・コメントの順・一掃を復元の前へ）。main の取り込み（Kitty graphics）との結合に must は無し。
+
+- [should] docs の「Kitty graphics の転送の途中だった pane では画像が出ない」が実際より軽い。新しい版の translator は空の状態から始まるので、割れた APC の残り（base64）が文字として画面に出うる・続きの分割送信が新しいコマンドとして扱われうる・前に送った画像を配置し直せない — 根拠: docs/tls-setup.md:664, packages/server/src/terminal/TerminalHost.ts:79,117, packages/server/src/terminal/KittyGraphics.ts:153-158,244-245 [conv:-]
+- [nit] 読み取りを止める途中にできた Kitty の応答の PTY への書き込みは非同期で、execve までに書き終わる保証が無い（ふつうの入力と同じ性質。まれに `a=q` の返事が届かない）→ backlog — 根拠: packages/server/src/terminal/TerminalHost.ts:153-162 [conv:-]
+- [nit] walkthrough の手順図の一掃の位置が古い（復元の後に描いている） — 根拠: walkthrough.md:40 [conv:-]
+- [nit] design の「サーバ（新しい版）の起動」に、引き継ぎの起動での一掃（`closeOrphanPtyMasters({ keep })`）が書かれていない — 根拠: design.md:216-228 [conv:-]

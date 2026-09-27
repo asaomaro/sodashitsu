@@ -128,3 +128,10 @@
 - **理由・代替案**: (a) `pause()` だけ——出力の多い pane で数 KB〜数十 KB を失う。(b) 読み取りを止めずに execve——同じ。(c) ネイティブのアドオン——D1 の止める条件。
   内部に頼るのはリスクだが、失敗は「断る」側に倒れる（引き継いだつもりで失うことは無い）。
 - **影響**: design の `TerminalHost` の節を更新。Node の版を上げたときは `socketReading.test.ts`（実物の PTY で buffer に溜まらないこと）が検知する。
+
+## D15: review ラウンド 2 の指摘は文書だけの修正で閉じ、3 巡目の独立 review はしない
+
+- **背景**: review の上限は 2 ラウンド（ユーザーの指示）。ラウンド 2 の指摘は should 1（docs の Kitty graphics の制約の書き方）と nit 3（walkthrough の図・design の記載・
+  execve の直前の Kitty の応答の書き込み）で、コードの変更を要するものは無い。
+- **決定**: should と nit 2 件（docs・walkthrough・design）を直し、Kitty の応答の書き込みの nit は backlog に残す。修正は文書だけなので、coding → test（テストと smoke は
+  コードが変わっていないので前の結果のまま）→ review の記録だけを通し、3 巡目の独立 review はしない。

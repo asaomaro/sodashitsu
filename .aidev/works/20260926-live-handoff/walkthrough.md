@@ -37,7 +37,8 @@ sequenceDiagram
   Old->>Old: ログを書き出す
   Old->>New: process.execve（PTY の fd はそのまま）＋ WTM_HANDOFF_NONCE
   New->>New: lock → takeHandoff（環境変数と handoff.json を消す・fd を確かめる）
-  New->>New: listen → restore(adopted) → 使わなかった fd・受け渡しに載らない master を手放す → handoff.sock
+  New->>New: 確かめに通らない fd・受け渡しに載らない master を手放す（PTY を開く前）
+  New->>New: listen → restore(adopted) → 使わなかった fd を手放す → handoff.sock
   CLI->>New: handoff.sock {"op":"status"}（id が一致するまで）
   New-->>CLI: lastHandoff {adopted, dropped}
 ```
