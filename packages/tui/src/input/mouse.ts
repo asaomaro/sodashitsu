@@ -82,6 +82,10 @@ export interface MouseHost {
   setSidebarSpacesRows?(rows: number, persist: boolean): void;
   /** リンクを開く（M6。Ctrl＋クリック）。 */
   openLink?(url: string): void;
+  /** マシンを切り替える（サイドバーのマシンの見出し・別のマシンの workspace の行）。 */
+  switchMachine?(id: string, target?: { workspaceId: string; tabId: string }): void;
+  /** マシンの見出しの畳み・広げ（M10）。 */
+  toggleMachine?(id: string): void;
   /** 知らせ（トースト）の当たり（押すと `ui.clickToast`）。 */
   toastHits?(): readonly { id: number; x: number; y: number; w: number }[];
   /** マウスで選んだら離した時点でコピーするか（`tui.copyOnSelect`。省略は入）。 */
@@ -291,6 +295,15 @@ export class MouseController {
         if (hit.section === "spaces") actions.toggleWorkspaceSort();
         else actions.toggleAgentSort();
       } else if (hit.kind === "collapse") actions.run({ type: "toggleSidebar" });
+      else if (hit.kind === "machine") {
+        // 左の「▸/▾」で畳み・広げ（M10）、ほかは切り替え（web の MachineHeader の 2 つのボタン）。
+        if (x <= hit.toggleX) this.host.toggleMachine?.(hit.machineId);
+        else this.host.switchMachine?.(hit.machineId);
+      } else if (hit.kind === "machineWorkspace")
+        this.host.switchMachine?.(hit.machineId, {
+          workspaceId: hit.workspaceId,
+          tabId: hit.tabId,
+        });
       else if (hit.kind === "sectionDivider")
         this.drag = { kind: "section", top: layout.sidebar.y };
       return;

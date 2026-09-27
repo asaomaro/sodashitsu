@@ -2,6 +2,7 @@ import type {
   AgentInfo,
   AgentIntegrationStatusResult,
   CommandListResult,
+  MachineStatus,
   DisplayState,
   HostInfo,
   Pane,
@@ -33,6 +34,8 @@ export interface SessionModelHooks {
   onClientError?(code: string, message: string): void;
   onPrefsChanged?(data: PrefsChangedEvent["data"]): void;
   onAgentChanged?(paneId: string, prev: AgentInfo | null, next: AgentInfo | null): void;
+  /** 保存した SSH のマシンの一覧が変わった（`machine.changed`）。 */
+  onMachinesChanged?(machines: MachineStatus[]): void;
   /** スナップショットを当てた（`first` はこのプロセスで最初の 1 回。通知の判定済みの印に使う）。 */
   onSnapshotApplied?(panes: { paneId: string; agent: AgentInfo | null }[], first: boolean): void;
 }
@@ -77,6 +80,27 @@ export class SessionModel {
   }
 
   private snapshots = 0;
+
+  /**
+   * マシンを切り替える前に空にする（web の MachineSwitcher の `clearSession`・`resetView`・`resetBaseline`）。新しいマシンの最初の
+   * スナップショットは「最初」として扱う（通知の判定済みの印を付け直す）。独自コマンドの一覧・既読は新しい接続で取り直す。
+   */
+  reset(): void {
+    this.workspaces = new Map();
+    this.tabs = new Map();
+    this.panes = new Map();
+    this.groups = new Map();
+    this.focus = null;
+    this.host = null;
+    this.workspaceId = null;
+    this.tabId = null;
+    this.focusedPaneId = null;
+    this.lastFocusedPaneId = null;
+    this.agentIntegration = null;
+    this.commands = { commands: [], problem: null };
+    this.snapshots = 0;
+    this.emit();
+  }
 
   applySnapshot(s: SessionSnapshot, clientId: string): void {
     this.serverVersion = s.serverVersion;
@@ -178,6 +202,9 @@ export class SessionModel {
       case "prefs.changed":
         this.hooks.onPrefsChanged?.(e.data);
         return;
+      case "machine.changed":
+        this.hooks.onMachinesChanged?.(e.data.machines);
+        return;
       case "command.updated":
         // 独自コマンドの一覧（読み直し。web の StoreAdapter と同じ）。
         this.commands = normalizeCommands(e.data);
@@ -187,7 +214,7 @@ export class SessionModel {
         this.agentIntegration = e.data;
         return;
       default:
-        // machine.changed・command.popup_closed・pane.attach_changed は 05 の T4・T6 で扱う。
+        // command.popup_closed・pane.attach_changed は 05 の T6 で扱う。
         return;
     }
   }

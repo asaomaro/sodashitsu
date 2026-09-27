@@ -1,6 +1,10 @@
-import type { DisplayState, Pane, Workspace } from "@sodashitsu/protocol";
+import type { DisplayState, MachineState, Pane, Workspace } from "@sodashitsu/protocol";
+import type { MachineSection } from "../../model/MachinesModel.js";
 import {
+  aggregate,
   depthFirstPaneIds,
+  displayStateFor,
+  LOCAL_MACHINE_ID,
   effectiveLayout,
   loadSidebarRows,
   resolveAgentLines,
@@ -29,6 +33,10 @@ export type SidebarTarget =
   | { kind: "sort"; section: "spaces" | "agents"; x: number; w: number }
   /** サイドバーを畳む「«」（web の開閉のボタン・herdr の `sidebar_toggle`。M14）。 */
   | { kind: "collapse"; x: number }
+  /** マシンの見出し（M10。左の「▸/▾」で畳み・広げ、ほかは切り替え）。 */
+  | { kind: "machine"; machineId: string; toggleX: number }
+  /** 選んでいないマシンの workspace の行（押すとそのマシンのその workspace へ）。 */
+  | { kind: "machineWorkspace"; machineId: string; workspaceId: string; tabId: string }
   /** 区画の中の何も無い行（ホイールでその区画を動かす）。 */
   | { kind: "area"; section: "spaces" | "agents" };
 export type SidebarHit = SidebarTarget & { y: number; section?: "spaces" | "agents" };
@@ -157,6 +165,13 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       for (const w of visibleGroupMembers(row.children, row.collapsed, model.workspaceId))
         lines.push(wsLine(w, 2));
     }
+  }
+
+  // 保存した SSH のマシンがあれば、マシンごとの見出しの下に並べる（web の Sidebar・MachineHeader・MachineRows と同じ）。
+  if (ctx.machines?.hasMachines) {
+    const own = lines.splice(0);
+    for (const section of ctx.machines.sections)
+      lines.push(...machineSection(section, own, rect, ctx));
   }
 
   const agentPanes: Pane[] = [];
@@ -294,6 +309,86 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     hits.push({ y: by, kind: "collapse", x: bx });
   }
   return hits;
+}
+
+const MACHINE_STATE_LABEL: Record<MachineState, string> = {
+  connecting: "接続中",
+  online: "接続済み",
+  reconnecting: "再接続中",
+  attention: "要対応",
+};
+
+/** マシンの見出しと、その下の行（選んでいるマシンは今の workspace の行、ほかのマシンは要約の行）。 */
+function machineSection(
+  section: MachineSection,
+  own: Line[],
+  rect: Rect,
+  ctx: ChromeContext,
+): Line[] {
+  const m = ctx.machines!;
+  const { theme, prefs } = ctx;
+  const selected = section.id === m.selectedId;
+  const collapsed = m.collapsed[section.id] === true;
+  // 見出しの状態：ローカルは画面の接続（選んでいるとき）か軽い接続、ほかは手元の soda serve から見た状態（web の MachineHeader と同じ）。
+  let state: MachineState;
+  if (section.id === LOCAL_MACHINE_ID) {
+    const sum = m.summaries[LOCAL_MACHINE_ID];
+    const connected = selected ? ctx.connection === "open" : sum?.connected === true;
+    state = connected ? "online" : selected || sum?.everConnected ? "reconnecting" : "connecting";
+  } else state = m.statusOf(section.id)?.state ?? "connecting";
+  const out: Line[] = [
+    {
+      indent: 0,
+      rows: [
+        [
+          { text: collapsed ? "▸" : "▾" },
+          { text: section.label, attrs: ATTR.bold | (state !== "online" ? ATTR.dim : 0) },
+          {
+            text: MACHINE_STATE_LABEL[state],
+            attrs: ATTR.dim,
+            ...(state === "attention" ? { fg: theme.ui("--soda-warn-fg") } : {}),
+          },
+        ],
+      ],
+      selected: false,
+      hit: { kind: "machine", machineId: section.id, toggleX: rect.x + 1 },
+    },
+  ];
+  if (collapsed) return out;
+  if (selected) {
+    out.push(...own);
+    return out;
+  }
+  const summary = m.summaries[section.id];
+  if (!summary?.everConnected) {
+    out.push({ indent: 2, rows: [[{ text: "未接続", attrs: ATTR.dim }]], selected: false });
+    return out;
+  }
+  const selectable = m.isSelectable(section.id);
+  for (const ws of summary.workspaces) {
+    const states = m
+      .agentsInWorkspace(section.id, ws.id)
+      .map((a) => displayStateFor(a, a.serverSeenSeq));
+    const st = aggregate(states);
+    const glyph = glyphFor(st, prefs.statusSymbols);
+    out.push({
+      indent: 0,
+      rows: [
+        [
+          { text: glyph === "" ? " " : glyph, fg: stateColor(theme, st) },
+          { text: ws.label, ...(selectable ? {} : { attrs: ATTR.dim }) },
+        ],
+      ],
+      selected: false,
+      hit: {
+        kind: "machineWorkspace",
+        machineId: section.id,
+        workspaceId: ws.id,
+        tabId: ws.activeTabId,
+      },
+    });
+  }
+  return out;
 }
 
 /** 表示の位置を収める（`reveal` の行が隠れていれば見える所まで）。 */

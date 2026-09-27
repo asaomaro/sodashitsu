@@ -75,5 +75,5 @@ export async function startedApp(
     await running;
     outer.dispose();
   };
-  return { io, app, ws, running, screen, outer, close };
+  return { io, app, ws, sockets, running, screen, outer, close };
 }

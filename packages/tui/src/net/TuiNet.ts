@@ -78,6 +78,7 @@ export class TuiNet implements StorePort {
   /** 決まった cookie で送る fetch（入れ替えた古い cookie のログアウト）。 */
   private readonly fetchWithCookie: (cookie: string) => typeof fetch;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly socketFactory: (url: string) => WebSocketLike;
 
   private readonly now: () => number;
 
@@ -99,6 +100,7 @@ export class TuiNet implements StorePort {
     this.fetchWithCookie = (cookie) => fetchFactory({ ...ep, cookie: () => cookie });
     this.sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms).unref?.()));
     const baseCreate = (deps.createWebSocket ?? nodeWebSocketFactory)(ep);
+    this.socketFactory = (url) => (this.stopped ? idleSocket() : baseCreate(url));
     const fetchImpl: typeof fetch = async (input, init) => {
       // 終えた後は何も始めない（`Connection` には止める口が無いので、決着しない要求で再接続の連鎖を止める）。
       if (this.stopped) return new Promise<Response>(() => undefined);
@@ -150,6 +152,16 @@ export class TuiNet implements StorePort {
       return;
     }
     if (!this.stopped) this.conn.connect();
+  }
+
+  /** 手元の `soda serve` の `/ws`（マシンの切り替え・要約の接続の行き先の土台）。 */
+  get baseWsUrl(): string {
+    return wsUrlOf(this.target.baseUrl);
+  }
+
+  /** 画面の接続と同じ Cookie・Origin・指紋の照合で WebSocket を開く（選んでいないマシンの要約の接続。web の MachineSummaryClient）。 */
+  createSocket(url: string): WebSocketLike {
+    return this.socketFactory(url);
   }
 
   /** 以後は何もしない（終了の後始末）。開いている接続は閉じてもらう（`client.detach`。以後は自動で繋ぎ直さない）。 */

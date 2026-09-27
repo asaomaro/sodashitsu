@@ -4,6 +4,8 @@ import {
   NavigateMode,
   ResizeMode,
   commandKeyDefs,
+  MachineSummaryClient,
+  wsUrlFor,
   loadKeyPrefs,
   resolveKeymap,
   resolveNavigateKeymap,
@@ -18,6 +20,8 @@ import { SettingsDialog } from "../modes/SettingsDialog.js";
 import { settingsSections } from "../settings/sections.js";
 import { SettingsWriter } from "../settings/SettingsWriter.js";
 import { NotificationController } from "../notify/NotificationController.js";
+import { MachinesModel } from "../model/MachinesModel.js";
+import { MachineWiring, type SwitchTarget } from "../net/MachineWiring.js";
 import { NotificationList } from "../modes/NotificationList.js";
 import { describeDelivery, detectDelivery } from "../notify/terminalNotify.js";
 import type { ToastHit } from "../render/Renderer.js";
@@ -142,6 +146,12 @@ export class TuiApp {
   private copyPaneId: string | null = null;
   /** 外側の端末へマウスの報告を出させているか（`tui.mouseCapture`）。 */
   private mouseOn = true;
+  /** 保存した SSH のマシン（05 の T4）。 */
+  readonly machines = new MachinesModel();
+  /** 複数ホストの結線（接続を作ったときに作る）。 */
+  protected wiring: MachineWiring | null = null;
+  /** マシンを切り替えた後、開いたら移る workspace。 */
+  private pendingMachineFocus: string | null = null;
   /** 通知（05 の T3）。 */
   readonly notify: NotificationController;
   /** 直近のフレームの知らせの当たり（押すと対象へ）。 */
@@ -168,6 +178,7 @@ export class TuiApp {
       },
       onAgentChanged: (paneId, prev, next) => this.notify?.onAgentChanged(paneId, prev, next),
       onSnapshotApplied: (panes, first) => this.notify?.onSnapshotApplied(panes, first),
+      onMachinesChanged: (list) => this.wiring?.onMainMachinesChanged(list),
       onPrefsChanged: (data) => this.prefs.apply(data.prefs, data.rev),
     });
     this.prefs = new PrefsModel(readTuiState(target.stateDir));
@@ -231,6 +242,7 @@ export class TuiApp {
     );
     this.dispatcher = new TuiDispatcher({
       model: this.model,
+      machines: this.machines,
       ui: this.ui,
       prefs: this.prefs,
       conn: this.rpc,
@@ -281,6 +293,8 @@ export class TuiApp {
       setSidebarSpacesRows: (rows, persist) =>
         this.setLocalState({ sidebarSpacesRows: rows }, persist),
       openLink: (url) => this.openLink(url),
+      switchMachine: (id, target) => this.switchMachine(id, target),
+      toggleMachine: (id) => this.machines.toggleCollapsed(id),
       copyOnSelect: () => this.prefs.copyOnSelect,
       toastHits: () => this.toastHits,
       scrollSidebar: (section, delta) => {
@@ -360,6 +374,17 @@ export class TuiApp {
     );
     this.net = net;
     this.gate = new InputGate(net.conn);
+    const wiring = new MachineWiring({
+      machines: this.machines,
+      switchTo: (id, target, opts) => this.switchMachine(id, target, opts),
+      requestMainList: () => net.conn.request("machine.list", {}),
+      createSummaryClient: (opts) =>
+        new MachineSummaryClient({ ...opts, createWebSocket: (url) => net.createSocket(url) }),
+      baseWsUrl: net.baseWsUrl,
+    });
+    this.wiring = wiring;
+    this.disposers.push(() => wiring.stop());
+    this.disposers.push(this.machines.onChange(() => this.scheduleRender()));
     this.disposers.push(() => net.stop());
     this.scheduleRender();
     void net.start();
@@ -412,6 +437,11 @@ export class TuiApp {
       .then((r) => this.prefs.apply(r.prefs as SharedPrefs, r.rev))
       .catch(() => undefined);
     net.conn.request("client.theme", { theme: this.theme.name }).catch(() => undefined);
+    // 保存した SSH のマシン（web の MachineWiring と同じ）。切り替えた直後なら、選んだ workspace へ移る。
+    this.wiring?.onMainOpened();
+    const focusWs = this.pendingMachineFocus;
+    this.pendingMachineFocus = null;
+    if (focusWs && this.model.workspaces.has(focusWs)) this.dispatcher.focusWorkspaceById(focusWs);
     // 独自コマンドの一覧（接続ごとに取り直す。web の main.ts と同じ）。
     net.conn
       .request("command.list", {})
@@ -681,6 +711,34 @@ export class TuiApp {
     this.ui.toast(`${what}は端末版ではまだ使えません`);
   }
 
+  /**
+   * マシンを切り替える（web の MachineSwitcher と同じ順）：選んだマシンを覚え、通知・セッション・pane の headless を空にして、画面の接続の
+   * 行き先を `?machine=<id>` へ替える。開いたら `target` の workspace へ移る。選べない（繋がっていない）マシンは知らせて何もしない。
+   */
+  switchMachine(id: string, target?: SwitchTarget, opts: { force?: boolean } = {}): void {
+    const net = this.net;
+    if (!net) return;
+    if (id === this.machines.selectedId) {
+      if (target) this.dispatcher.focusWorkspaceById(target.workspaceId);
+      return;
+    }
+    if (!opts.force && !this.machines.isSelectable(id)) {
+      const label = this.machines.sections.find((s) => s.id === id)?.label ?? id;
+      this.ui.toast(`${label} には今は切り替えられません（繋がっていません）`);
+      return;
+    }
+    this.machines.select(id);
+    this.pendingMachineFocus = target?.workspaceId ?? null;
+    this.notify.resetForMachineSwitch();
+    this.ui.closeDialog();
+    this.ui.closeContextMenu();
+    this.model.reset();
+    this.panes.reset();
+    net.conn.retarget(wsUrlFor(net.baseWsUrl, id));
+    this.wiring?.reconcileSummaryClients();
+    this.scheduleRender();
+  }
+
   /** 手元の状態の一部を替える（`persist` なら `tui-state.json` に残す）。 */
   protected setLocalState(patch: Partial<TuiState>, persist: boolean): void {
     const next = { ...this.prefs.localState, ...patch };
@@ -805,6 +863,7 @@ export class TuiApp {
       notice: this.notice,
       alert: this.alert,
       session: this.target.session,
+      machines: this.machines,
       sidebarScroll: this.sidebarScroll,
       tabScroll: this.tabScroll,
     };

@@ -94,6 +94,16 @@ export class NotificationController {
     }
   }
 
+  /** マシンを切り替える（web の `resetForMachineSwitch`）：遅延中の入力待ちと判定の印・行き先を捨てる。 */
+  resetForMachineSwitch(): void {
+    const clearT = this.host.clearTimer ?? ((h) => clearTimeout(h));
+    for (const h of this.pending.values()) clearT(h);
+    this.pending.clear();
+    this.judged.clear();
+    for (const e of this.queue) this.cleanup(e);
+    this.queue = [];
+  }
+
   onPaneClosed(paneId: string): void {
     this.judged.delete(paneId);
     this.dropPane(paneId);

@@ -131,6 +131,14 @@ export class PaneRegistry implements TerminalSinkPort {
     this.terms.delete(paneId);
   }
 
+  /** マシンを切り替える：headless を全部捨て、表示の申告もやり直す（新しい行き先の pane は別物）。 */
+  reset(): void {
+    this.dispose();
+    this.current = null;
+    this.lastView = "";
+    this.ready = false;
+  }
+
   dispose(): void {
     for (const term of this.terms.values()) term.dispose();
     this.terms.clear();

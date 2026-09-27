@@ -1,6 +1,7 @@
 import type { DisplayState } from "@sodashitsu/protocol";
 import { stateGlyph, type ConnectionState, type Mode } from "@sodashitsu/client-core";
 import type { SessionModel } from "../../model/SessionModel.js";
+import type { MachinesModel } from "../../model/MachinesModel.js";
 import type { PrefsModel } from "../../model/PrefsModel.js";
 import type { PackedColor, ThemeColors } from "../color.js";
 import type { SidebarScroll } from "./sidebar.js";
@@ -21,6 +22,8 @@ export interface ChromeContext {
   /** 短い警告（未接続で打鍵を送れない等）。接続の状態より優先して出す。 */
   alert?: string | null;
   session?: string | undefined;
+  /** 保存した SSH のマシン（あればサイドバーにマシンごとの見出し。05 の T4）。 */
+  machines?: MachinesModel;
   /** サイドバーの区画の表示の位置（描くたびに収まる範囲へ寄せ直す。持ち主は `TuiApp`）。 */
   sidebarScroll?: SidebarScroll;
   /** tab バーのあふれたときの表示の位置（同上）。 */

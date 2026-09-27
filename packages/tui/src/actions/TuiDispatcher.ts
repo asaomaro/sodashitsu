@@ -1,5 +1,6 @@
 import type { CommandListResult } from "@sodashitsu/protocol";
 import {
+  LOCAL_MACHINE_ID,
   clientErrorMessage,
   depthFirstPaneIds,
   errorCodeOf,
@@ -13,6 +14,7 @@ import {
   type InputHold,
   type Mode,
 } from "@sodashitsu/client-core";
+import type { MachinesModel } from "../model/MachinesModel.js";
 import type { PrefsModel } from "../model/PrefsModel.js";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { MenuTarget, UiState } from "../model/UiState.js";
@@ -30,6 +32,8 @@ export interface CopyTargetPort {
 
 export interface DispatcherHost {
   model: SessionModel;
+  /** 保存した SSH のマシン（止めるサーバの名前。05 の T4）。 */
+  machines?: MachinesModel;
   ui: UiState;
   prefs: PrefsModel;
   conn: RequestPort;
@@ -1091,7 +1095,11 @@ export class TuiDispatcher {
   // --- サーバの停止 ---
 
   /** 止まるサーバ（手元。ほかのマシンへの接続は 05）。ホスト名が無ければ「このマシン」。 */
+  /** 止めるサーバ（web と同じ：別のマシンを見ていればそのマシンの名前、ローカルならホスト名）。 */
   private stopTarget(): { target: string; remote: boolean } {
+    const m = this.host.machines;
+    if (m && m.selectedId !== LOCAL_MACHINE_ID)
+      return { target: m.statusOf(m.selectedId)?.label ?? m.selectedId, remote: true };
     return { target: this.model.host?.hostname ?? "このマシン", remote: false };
   }
 
