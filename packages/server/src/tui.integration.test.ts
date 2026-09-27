@@ -328,4 +328,77 @@ describe("runTui（実サーバ・偽の外側の端末）", () => {
       await rb;
     }
   });
+
+  it("端末版の入力だけで 分割 → 名前の変更 → 入れ替え → 新しい workspace → 閉じる（確認）（04-tui-ops の結合。AC5・AC-I2）", async () => {
+    const io = fakeIo({ cols: COLS, rows: ROWS });
+    const s = screen(io);
+    const running = runTui(local.target, io);
+    const session = local.server.session;
+    try {
+      const before = session.snapshot();
+      await vi.waitFor(async () => expect(await s.text()).toContain("Spaces"), { timeout: 15_000 });
+      await vi.waitFor(() => expect(io.output()).toContain("1:"), { timeout: 15_000 });
+      // 分割（prefix+v）→ 新しい pane へ焦点
+      io.type("\x02v");
+      await vi.waitFor(
+        () => expect(session.snapshot().panes.length).toBe(before.panes.length + 1),
+        { timeout: 15_000 },
+      );
+      const created = session
+        .snapshot()
+        .panes.find((p) => !before.panes.some((b) => b.id === p.id))!;
+      // 名前の変更（prefix+shift+p）→ 入力欄に打って Enter
+      io.type("\x02P");
+      await vi.waitFor(async () => expect(await s.text()).toContain("pane の名前を変更"), {
+        timeout: 10_000,
+      });
+      io.type("\x15renamed-by-tui\r");
+      // 名前が付くのは焦点の pane（分割の応答で新しい pane へ移る。負荷が高いと pane.created の後・応答の前に打ちうるので、どちらの pane でもよい）。
+      await vi.waitFor(
+        () => expect(session.snapshot().panes.some((p) => p.label === "renamed-by-tui")).toBe(true),
+        { timeout: 10_000 },
+      );
+      // 入れ替え（prefix+shift+h）：新しい pane が左の pane と入れ替わる
+      const leavesOf = () => {
+        const t = session.getTab(created.tabId)!;
+        const out: string[] = [];
+        const walk = (n: typeof t.layout): void => {
+          if (n.type === "pane") out.push(n.paneId);
+          else {
+            walk(n.a);
+            walk(n.b);
+          }
+        };
+        walk(t.layout);
+        return out;
+      };
+      const order = leavesOf();
+      io.type("\x02H");
+      await vi.waitFor(() => expect(leavesOf()).not.toEqual(order), { timeout: 10_000 });
+      // 新しい workspace（prefix+shift+n）→ 閉じる（prefix+shift+d）は確認を経る
+      const wsCount = session.snapshot().workspaces.length;
+      io.type("\x02N");
+      await vi.waitFor(() => expect(session.snapshot().workspaces.length).toBe(wsCount + 1), {
+        timeout: 15_000,
+      });
+      await vi.waitFor(async () => expect((await s.text()).split("\n")[0]).toMatch(/1:/), {
+        timeout: 10_000,
+      });
+      io.type("\x02D");
+      await vi.waitFor(async () => expect(await s.text()).toContain("閉じますか？（workspace）"), {
+        timeout: 10_000,
+      });
+      expect(session.snapshot().workspaces.length).toBe(wsCount + 1);
+      io.type("y");
+      await vi.waitFor(() => expect(session.snapshot().workspaces.length).toBe(wsCount), {
+        timeout: 15_000,
+      });
+      io.type("\x02q");
+      expect(await running).toBe(0);
+    } finally {
+      s.outer.dispose();
+      io.signal("SIGTERM");
+      await running;
+    }
+  });
 });

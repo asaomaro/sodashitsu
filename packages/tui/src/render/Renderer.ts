@@ -4,6 +4,7 @@ import type { PaneRegistry } from "../term/PaneRegistry.js";
 import type { ChromeContext } from "./chrome/context.js";
 import { paintFrame } from "./chrome/frame.js";
 import { paintSidebar, type SidebarHit } from "./chrome/sidebar.js";
+import { paintNarrowHeader, type NarrowHeaderHits } from "./chrome/narrowHeader.js";
 import { paintTabBar, type TabBarHits, type TabHit } from "./chrome/tabBar.js";
 import type { ColorMode } from "./color.js";
 import { isCropped, paintPane } from "./paintPane.js";
@@ -25,6 +26,8 @@ export interface RenderResult {
   sidebarHits: SidebarHit[];
   tabHits: TabHit[];
   newTabButton: TabBarHits["newTab"];
+  /** 1 列表示の「switch」（狭い幅のときだけ）。 */
+  switchButton: NarrowHeaderHits["switchButton"];
 }
 
 /**
@@ -72,10 +75,15 @@ export class Renderer {
         sidebarHits: [],
         tabHits: [],
         newTabButton: null,
+        switchButton: null,
       };
     }
     const sidebarHits = layout.sidebar ? paintSidebar(grid, layout.sidebar, ctx) : [];
-    const tabBar = paintTabBar(grid, layout.tabBar, ctx);
+    // 狭い幅は tab バーの代わりに 1 列表示の上辺（herdr の mobile）。
+    const narrow = layout.narrow ? paintNarrowHeader(grid, layout.tabBar, ctx) : null;
+    const tabBar: TabBarHits = narrow
+      ? { tabs: [], newTab: null }
+      : paintTabBar(grid, layout.tabBar, ctx);
     const tabHits = tabBar.tabs;
 
     const prev =
@@ -141,6 +149,7 @@ export class Renderer {
       sidebarHits,
       tabHits,
       newTabButton: tabBar.newTab,
+      switchButton: narrow?.switchButton ?? null,
     };
   }
 }

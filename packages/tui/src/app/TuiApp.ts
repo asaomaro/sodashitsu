@@ -92,6 +92,7 @@ export class TuiApp {
   protected sidebarHits: SidebarHit[] = [];
   protected tabHits: TabHit[] = [];
   protected newTabButton: TabBarHits["newTab"] = null;
+  protected switchButton: { x: number; w: number } | null = null;
   /** マウスの操作。 */
   readonly mouse: MouseController;
   readonly keys: TuiKeys;
@@ -189,6 +190,7 @@ export class TuiApp {
       layout: () => this.lastLayout,
       sidebarHits: () => this.sidebarHits,
       tabHits: () => ({ tabs: this.tabHits, newTab: this.newTabButton }),
+      switchButton: () => this.switchButton,
       pane: (paneId) => this.panes.get(paneId),
       sendToPane: (paneId, bytes) => this.sendToPane(paneId, bytes),
       writeClipboard: (text) => this.writeClipboard(text),
@@ -575,6 +577,7 @@ export class TuiApp {
     this.sidebarHits = result.sidebarHits;
     this.tabHits = result.tabHits;
     this.newTabButton = result.newTabButton;
+    this.switchButton = result.switchButton;
     this.openRequestedNavigateMenu(layout);
     this.io.write(result.output);
     // 見えている pane の既読を進める（外側の端末にフォーカスがあるときだけ。web の sweepMarkSeen と同じ規則）。

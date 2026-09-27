@@ -52,6 +52,8 @@ export interface MouseHost {
   layout(): LayoutResult | null;
   sidebarHits(): readonly SidebarHit[];
   tabHits(): TabBarHits;
+  /** 1 列表示の「switch」（狭い幅のときだけ）。 */
+  switchButton?(): { x: number; w: number } | null;
   pane(paneId: string): PaneTerminal | undefined;
   sendToPane(paneId: string, bytes: string | Uint8Array): void;
   writeClipboard(text: string): Promise<boolean>;
@@ -174,6 +176,14 @@ export class MouseController {
       else if (hit.kind === "autoGroup") actions.toggleAutoGroupCollapsed(hit.repoKey);
       else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
       else if (hit.kind === "newWorkspace") actions.run({ type: "newWorkspace" });
+      return;
+    }
+
+    // 1 列表示の上辺：「switch」で選び直しの一覧（goto）。右クリックは全体のメニュー。
+    if (layout.narrow && y === layout.tabBar.y) {
+      const sw = this.host.switchButton?.() ?? null;
+      if (right) ui.openContextMenu({ kind: "global" }, { x, y: y + 1 });
+      else if (left && sw && x >= sw.x && x < sw.x + sw.w) actions.run({ type: "goto" });
       return;
     }
 
