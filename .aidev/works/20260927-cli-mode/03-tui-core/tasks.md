@@ -54,7 +54,7 @@
       対象: `packages/client-core/src/keys/KeyRouter.ts`・`packages/client-core/src/keys/chord.ts`・`packages/cli/src/attachKeys.ts`
       依存: T3
       AC: AC3, AC6, AC-I5
-- [ ] T6: `soda`（引数なし）から `runTui` を呼ぶ（server の仮の入口を差し替え）・node-pty での結合テスト（起動・描画・切り離し・再び開く）
+- [ ] T6: `soda`（引数なし）から `runTui` を呼ぶ（server の仮の入口を差し替え）・node-pty での結合テスト（起動・描画・切り離し・再び開く）。端末版の切り離し・終了で `/api/logout` を送る（02 の review ラウンド 2）。server の `launch/localHttp.ts` の証明書の照合の写しを `@sodashitsu/tui/pinnedTls` に寄せる。tui の devDependency の server との循環を解く
       対象: `packages/server/src/main.ts`・`packages/server/src/launch/findOrStart.ts`（02 で作ったもの）・`packages/server/package.json`
       依存: T4, T5
       AC: AC1, AC2, AC3, AC4

@@ -23,3 +23,12 @@
 - [nit][conv:-] packages/tui/src/input/decode.ts:200-208 SS3 を常に 3 バイトとして読み、修飾つきの SS3 が崩れる / 対応: 修正済（d6e3c5c〜452b6fb。ラウンド1。直した箇所の変異でテストが落ちることを確認）
 - [nit][conv:-] packages/tui/src/input/decode.ts:198,201 25ms の待ちが途中まで届いたマウスや CSI にも掛かり、遅い回線で崩れる / 対応: 修正済（d6e3c5c〜452b6fb。ラウンド1。直した箇所の変異でテストが落ちることを確認）
 - [nit][conv:-] packages/tui/src/input/encode.ts:25-33 Ctrl+3〜8・Ctrl+/・Ctrl+- の従来のバイトが無い・CSI u の Shift+文字が小文字になる / 対応: 修正済（d6e3c5c〜452b6fb。ラウンド1。直した箇所の変異でテストが落ちることを確認）
+- [must][conv:-] packages/tui/src/input/decode.ts:246-259 Esc の直後に届いたマウス・フォーカス・貼り付けの始まりで Esc が消えるか事象が壊れる（ESC ESC [ を一律に Alt＋列として読む） / 対応: 修正済（6b76ec0。ラウンド2。負の確認の生の出力は scratchpad/03-negative-control.txt → test-result.md）
+- [should][conv:-] packages/tui/src/input/encode.ts:91 従来の列に直せない modifyOtherKeys・CSI u のキーを拡張列のまま pane へ送る / 対応: 修正済（6b76ec0。ラウンド2。負の確認の生の出力は scratchpad/03-negative-control.txt → test-result.md）
+- [should][conv:regression-negative-control] packages/tui/src/app/TuiApp.ts:260-265 待ち時間を decoder.waitMs に替えた変更を TuiApp の段で確かめるテストが無い / 対応: 修正済（6b76ec0。ラウンド2。負の確認の生の出力は scratchpad/03-negative-control.txt → test-result.md）
+- [should][conv:regression-negative-control] .aidev/works/20260927-cli-mode/03-tui-core/review.md:20-23 負の確認の生の出力が記録に無い / 対応: 修正済（6b76ec0。ラウンド2。負の確認の生の出力は scratchpad/03-negative-control.txt → test-result.md）
+- [nit][conv:-] packages/tui/src/input/decode.ts:261-269 Esc 2 回のすばやい押下が ctrl+alt+[（previous_tab の推奨キー）と重なる / 対応: 修正済（6b76ec0。ラウンド2。負の確認の生の出力は scratchpad/03-negative-control.txt → test-result.md）
+- [nit][conv:-] packages/tui/src/input/decode.ts:228,286 CSI・SS3 の頭の 150ms の待ちで Alt+[ / Alt+O の後の文字が列として読まれる / 対応: 修正済（6b76ec0。ラウンド2。負の確認の生の出力は scratchpad/03-negative-control.txt → test-result.md）
+- [nit][conv:-] packages/tui/src/input/decode.ts:234-240 問い合わせていないのに OSC/DCS の応答として捨て、Alt+] と Ctrl+G が消えうる / 対応: 修正済（6b76ec0。ラウンド2。負の確認の生の出力は scratchpad/03-negative-control.txt → test-result.md）
+- [nit][conv:-] packages/tui/src/input/decode.ts:346-349 SGR マウスの拡張ボタン（128〜131）を左ボタンとして扱う / 対応: 修正済（6b76ec0。ラウンド2。負の確認の生の出力は scratchpad/03-negative-control.txt → test-result.md）
+- [nit][conv:-] packages/tui/src/input/decode.ts:327-330,400 X10 形式のマウスを文字のごみとして pane へ送る・接続が開いていない間の打鍵を黙って捨てる / 対応: 修正済（6b76ec0。ラウンド2。負の確認の生の出力は scratchpad/03-negative-control.txt → test-result.md）

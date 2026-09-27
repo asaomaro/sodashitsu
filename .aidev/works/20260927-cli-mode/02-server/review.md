@@ -40,10 +40,17 @@
 - [should][conv:regression-negative-control] packages/web/src/actions/PrefsSync.test.ts:82-318 変異の網羅で、テストの無い競合の守りが 5 つ / 対応: 修正済（99188a8・4af8b72。ラウンド2。変異の網羅 PrefsSync 25・launch 8 がすべて新しいテストで落ちることを確認）
 
 ## ラウンド 1（2026-09-27）
-- [should][conv:-] packages/server/src/launch/findOrStart.ts:225-247 更新前の soda serve（local-auth.json を書かない）が動いていると 15 秒待って誤った案内を出す・古い版の検出が効かない / 対応: 差し戻し
-- [should][conv:-] packages/web/src/actions/ActionDispatcher.ts:1119-1123 stop_server がマシンを選んでいると遠くのサーバを止め、確認の文言がどれを止めるか言わない / 対応: 差し戻し
-- [should][conv:-] packages/server/src/auth/AuthService.ts:150-162 soda の起動ごとにセッションが増え、期限切れも消えず auth.json が増え続ける / 対応: 差し戻し
-- [nit][conv:-] packages/server/src/launch/findOrStart.ts:157-162 時間切れの分岐で起動していない側も serve.out を空にし token を出しうる / 対応: 差し戻し
+- [should][conv:-] packages/server/src/launch/findOrStart.ts:225-247 更新前の soda serve（local-auth.json を書かない）が動いていると 15 秒待って誤った案内を出す・古い版の検出が効かない / 対応: 修正済（9508f77・1dea1c6。負の確認済み）
+- [should][conv:-] packages/web/src/actions/ActionDispatcher.ts:1119-1123 stop_server がマシンを選んでいると遠くのサーバを止め、確認の文言がどれを止めるか言わない / 対応: 修正済（9508f77・1dea1c6。負の確認済み）
+- [should][conv:-] packages/server/src/auth/AuthService.ts:150-162 soda の起動ごとにセッションが増え、期限切れも消えず auth.json が増え続ける / 対応: 修正済（9508f77・1dea1c6。負の確認済み）
+- [nit][conv:-] packages/server/src/launch/findOrStart.ts:157-162 時間切れの分岐で起動していない側も serve.out を空にし token を出しうる / 対応: 修正済（9508f77・1dea1c6。負の確認済み）
 - [nit][conv:-] packages/web/src/actions/PrefsSync.ts:167-174 上限超えの扱いが design の表（知らせて捨てる）と違い decisions に無い / 対応: 修正済（decisions D10）
 - [nit][conv:-] packages/server/src/persist/PrefsStore.ts:99-104 D3 の「最初に繋いだブラウザの値」と実装（項目ごとに後勝ち）が違う / 対応: 修正済（decisions D10）
-- [nit][conv:-] packages/server/src/cliArgs.ts:52-53 端末の無い soda（スクリプト・ssh host soda）が裏でサーバを起動する / 対応: 差し戻し
+- [nit][conv:-] packages/server/src/cliArgs.ts:52-53 端末の無い soda（スクリプト・ssh host soda）が裏でサーバを起動する / 対応: 修正済（9508f77・1dea1c6。負の確認済み）
+
+## ラウンド 2（2026-09-27）
+- [should][conv:regression-negative-control!] .aidev/works/20260927-cli-mode/02-server/test-result.md:10-13 差し戻しの修正の負の確認の生の出力が記録に無い / 対応: 修正済（test-result.md に生の出力を貼った）
+- [nit][conv:-] packages/server/src/launch/findOrStart.ts:233-245 新しい版で local-auth.json の書き込みに失敗した場合も「古い版」と案内し、起動した側の token を見せない / 対応: 許容（書き込みの失敗はサーバ側で warn。まれな場合で、案内の文言に「local-auth.json が無い」ことを含めれば足りる——06 の docs に書く）
+- [nit][conv:-] packages/server/src/launch/placeholderEntry.ts:17-23 /ws の確かめに失敗した経路でログアウトしない / 対応: 許容（仮の入口は 03 の T6 で端末版に置き換わる）
+- [nit][conv:-] packages/server/src/launch/placeholderEntry.ts:62 端末版（03）が /api/logout を送る作業がタスクに無い / 対応: 修正済（03 の tasks.md の T6 に追加）
+- [nit][conv:-] packages/server/src/launch/tuiCommand.ts:25-32 端末の無い素の soda の終了コードが 0→2 に変わったことが docs の対象に無い / 対応: 修正済（06 の tasks に申し送り〔decisions D11〕）
