@@ -2,7 +2,8 @@ import { openWs, postJson } from "./localHttp.js";
 import type { TuiEntry } from "./tuiTarget.js";
 
 /**
- * 端末版（`@sodashitsu/tui`）が出来るまでの仮の入口（20260927-cli-mode の 02-server。03-tui-core で `import("@sodashitsu/tui").runTui` に差し替える）。
+ * **テスト用の入口**（`findOrStart.test.ts` が使う）。02-server で端末版が出来るまでの仮の入口だったもの。本物の入口は `main.ts` の
+ * `import("@sodashitsu/tui").runTui`（03-tui-core の T6 で差し替えた）。
  * 端末版と同じ手順（ローカルログイン → `/ws` → `client.hello`〔`kind: "desktop"`〕）で繋がることだけを確かめ、繋ぎ先を 1 行表示して終わる。
  */
 export function placeholderEntry(io: {

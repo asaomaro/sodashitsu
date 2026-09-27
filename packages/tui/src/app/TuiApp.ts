@@ -456,7 +456,10 @@ export class TuiApp {
     }
     this.modes.restore();
     if (message) this.io.writeError(message);
-    this.resolveExit(code);
+    // セッションを返してから終わる（`POST /api/logout`。起動のたびにセッションが増えないように）。
+    const net = this.net;
+    if (net) void net.logout().then(() => this.resolveExit(code));
+    else this.resolveExit(code);
   }
 
   get isEnded(): boolean {

@@ -3,8 +3,8 @@ import { connect as tlsConnect, type ConnectionOptions, type TLSSocket } from "n
 
 /**
  * 証明書の指紋（`serve.json` の `certSha256`）で相手を確かめる TLS の接続（20260927-cli-mode）。**端末版と server の `launch/localHttp.ts` の
- * 共有の置き場はここ**：client-core は DOM にも Node にも触れない約束なので置けない。server の `launch/localHttp.ts` には同じ手順の写しが
- * まだあり、T6（server が tui に依存するようになる）でこれを import して写しを消す（`@sodashitsu/tui/pinnedTls`。index を通さない subpath なので、server の起動に端末版の読み込みの費用を足さない）。
+ * 共有の置き場はここ**：client-core は DOM にも Node にも触れない約束なので置けない。server の `launch/localHttp.ts` も
+ * `@sodashitsu/tui/pinnedTls` から使う（index を通さない subpath なので、server の起動に端末版の読み込みの費用を足さない）。
  * 自己署名の証明書は検証に通らないので TLS の検証は切り、繋がった直後・何も送る前に相手の証明書の SHA-256 を比べ、違えば切る。
  */
 export type CreateConnection = NonNullable<ClientRequestArgs["createConnection"]>;

@@ -1,7 +1,8 @@
-import { request as httpRequest, type ClientRequestArgs, type IncomingMessage } from "node:http";
+import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { connect as tlsConnect, type ConnectionOptions, type TLSSocket } from "node:tls";
 import WebSocket from "ws";
+// 指紋の照合は端末版と共有（`@sodashitsu/tui/pinnedTls`。index を通さない subpath なので端末版の読み込みの費用は無い）。
+import { pinnedTlsConnection, type CreateConnection } from "@sodashitsu/tui/pinnedTls";
 
 /**
  * 手元の `soda serve` への HTTP・WebSocket（引数なしの `soda`。20260927-cli-mode の design「findOrStart」）。sodactl と同じく Origin・Host を自分で付ける
@@ -17,38 +18,6 @@ export interface LocalEndpoint {
   origin: string;
   /** https のとき、受ける証明書の SHA-256 の指紋（`AA:BB:…`）。 */
   certSha256?: string | undefined;
-}
-
-type CreateConnection = NonNullable<ClientRequestArgs["createConnection"]>;
-
-/** 指紋で相手を確かめてから渡す TLS の接続（`http.request`・`ws` の `createConnection`）。 */
-export function pinnedTlsConnection(certSha256: string): CreateConnection {
-  const expected = certSha256.toUpperCase();
-  return (options, cb) => {
-    let done = false;
-    const finish = (err: Error | null, socket: TLSSocket): void => {
-      if (done) return;
-      done = true;
-      cb(err, socket);
-    };
-    const socket = tlsConnect({ ...(options as ConnectionOptions), rejectUnauthorized: false });
-    socket.once("secureConnect", () => {
-      const got = socket.getPeerCertificate().fingerprint256?.toUpperCase();
-      if (got !== expected) {
-        socket.destroy();
-        finish(
-          new Error(
-            `the server certificate does not match serve.json (certSha256 ${expected}, got ${got ?? "none"})`,
-          ),
-          socket,
-        );
-        return;
-      }
-      finish(null, socket);
-    });
-    socket.once("error", (err) => finish(err, socket));
-    return undefined;
-  };
 }
 
 function connectionOptions(ep: LocalEndpoint): { createConnection?: CreateConnection } {

@@ -57,6 +57,9 @@ export class TuiNet implements StorePort {
   private probing = false;
   private stopped = false;
   private detachSent = false;
+  private loggedOut = false;
+  /** 終えた後も使える（止めた後の決着しない要求の包みを通さない）fetch。`/api/logout` に使う。 */
+  private readonly rawFetch: typeof fetch;
 
   private readonly now: () => number;
 
@@ -73,6 +76,7 @@ export class TuiNet implements StorePort {
       cookie: () => this.cookie,
     };
     const baseFetch = (deps.fetchImpl ?? nodeFetch)(ep);
+    this.rawFetch = baseFetch;
     const baseCreate = (deps.createWebSocket ?? nodeWebSocketFactory)(ep);
     const fetchImpl: typeof fetch = async (input, init) => {
       // 終えた後は何も始めない（`Connection` には止める口が無いので、決着しない要求で再接続の連鎖を止める）。
@@ -202,6 +206,23 @@ export class TuiNet implements StorePort {
   }
 
   /** `client.detach` を送り、サーバが閉じるのを待つ（最大 `timeoutMs`）。 */
+  /**
+   * セッションを返す（`POST /api/logout`。起動のたびにサーバのセッションが増えないように。02 の review ラウンド 2）。切り離し・終了のたびに呼ぶ。
+   * 失敗（サーバが止まっている等）は気にしない。最大 `timeoutMs` 待つ。
+   */
+  async logout(timeoutMs = 1500): Promise<void> {
+    if (this.cookie === "" || this.loggedOut) return;
+    this.loggedOut = true;
+    const url = `${this.target.baseUrl.replace(/\/$/, "")}/api/logout`;
+    await Promise.race([
+      this.rawFetch(url, { method: "POST" }).then(
+        () => undefined,
+        () => undefined,
+      ),
+      new Promise((resolve) => setTimeout(resolve, timeoutMs).unref?.()),
+    ]);
+  }
+
   async detach(timeoutMs = 1000): Promise<void> {
     this.detachSent = true;
     await Promise.race([

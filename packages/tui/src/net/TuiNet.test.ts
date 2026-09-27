@@ -9,6 +9,7 @@ import { TuiNet, type TuiNetHandlers } from "./TuiNet.js";
 function setup(login: () => Promise<string>, sessionStatus = 204) {
   const sockets: FakeSocket[] = [];
   const fetchCookies: string[] = [];
+  const fetchCalls: string[] = [];
   const h = {
     model: new SessionModel(),
     sink: { onOutput: vi.fn(), onSnapshot: vi.fn(), onSizeChanged: vi.fn() },
@@ -29,12 +30,13 @@ function setup(login: () => Promise<string>, sessionStatus = 204) {
       sockets.push(s);
       return s;
     },
-    fetchImpl: (ep: Endpoint) => async () => {
+    fetchImpl: (ep: Endpoint) => async (input, init) => {
+      fetchCalls.push(`${init?.method ?? "GET"} ${String(input)} ${ep.cookie()}`);
       fetchCookies.push(ep.cookie());
       return new Response(null, { status: sessionStatus });
     },
   });
-  return { net, h, sockets, fetchCookies };
+  return { net, h, sockets, fetchCookies, fetchCalls };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -170,5 +172,17 @@ describe("TuiNet（接続・再ログイン。AC10・AC11・AC12）", () => {
       await vi.advanceTimersByTimeAsync(0);
     }
     expect(h.onFatal).toHaveBeenCalledWith(expect.stringContaining("stopped"));
+  });
+
+  it("logout はその cookie で POST /api/logout を 1 回だけ送る（止めた後でも）", async () => {
+    const { net, fetchCalls } = setup(async () => "sid=7");
+    await net.start();
+    await flush();
+    net.stop();
+    await net.logout();
+    await net.logout();
+    expect(fetchCalls.filter((c) => c.startsWith("POST"))).toEqual([
+      "POST http://127.0.0.1:9/api/logout sid=7",
+    ]);
   });
 });

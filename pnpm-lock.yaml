@@ -108,6 +108,9 @@ importers:
       '@sodashitsu/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@sodashitsu/tui':
+        specifier: workspace:*
+        version: link:../tui
       '@xterm/addon-serialize':
         specifier: 0.14.0
         version: 0.14.0
@@ -162,9 +165,6 @@ importers:
         specifier: ^8.21.3
         version: 8.21.3
     devDependencies:
-      '@sodashitsu/server':
-        specifier: workspace:*
-        version: link:../server
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.5

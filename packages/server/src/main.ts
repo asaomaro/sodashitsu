@@ -17,7 +17,7 @@ import { runBridge } from "./machine/bridgeCommand.js";
 import { runMachineCommand } from "./machine/machineCommands.js";
 import { MACHINE_USAGE } from "./machine/machineArgs.js";
 import { runTuiCommand } from "./launch/tuiCommand.js";
-import { placeholderEntry } from "./launch/placeholderEntry.js";
+import type { TuiEntry } from "./launch/tuiTarget.js";
 
 function printHelp(): void {
   console.log(
@@ -139,8 +139,9 @@ async function main(): Promise<void> {
     // `--session` が無ければ `SODA_SESSION`（serve・token reset だけ。20260926-named-session-ui）。
     const parsed = applySessionEnv(parseArgs(process.argv.slice(2)), process.env);
     if (parsed.command === "tui") {
-      // 引数なしの `soda`（20260927-cli-mode）。端末版（`@sodashitsu/tui`）が出来るまでは、繋げたことを表示して終わる仮の入口（03-tui-core で差し替える）。
-      process.exitCode = await runTuiCommand(parsed, placeholderEntry(consoleIo), { ...consoleIo, help: printHelp }, {
+      // 引数なしの `soda`（20260927-cli-mode）。端末版は動的 import（`soda serve` 等の起動に端末版の読み込みの費用を足さない。architecture）。
+      const tuiEntry: TuiEntry = async (target) => (await import("@sodashitsu/tui")).runTui(target);
+      process.exitCode = await runTuiCommand(parsed, tuiEntry, { ...consoleIo, help: printHelp }, {
         isTty: process.stdin.isTTY === true && process.stdout.isTTY === true,
         env: process.env,
         cwd: process.cwd(),

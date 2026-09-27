@@ -28,7 +28,6 @@
     "ws": "^8.21.3"
   },
   "devDependencies": {
-    "@sodashitsu/server": "workspace:*",
     "@types/node": "^24.0.0",
     "@types/ws": "^8.5.13",
     "typescript": "^5.7.3",
