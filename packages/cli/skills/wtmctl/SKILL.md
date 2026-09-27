@@ -100,6 +100,15 @@ wtmctl agent read reviewer --lines 120
 - 既に動いているエージェントの状態が変わるのを待つだけなら `agent wait`（例 `--until blocked`）。
 - 承認ダイアログ・メニューへのキーは `agent send-keys`（例 `esc`・`enter`・`y`・`ctrl+c`）。不明なキー名が 1 つでもあれば何も送らない。
 
+## サイドバーの行に状態を出す（独自トークン）
+
+`wtmctl pane report-metadata "$WTM_PANE_ID" --source my-hook --token summary="テストを直している"` のように、pane（エージェントの行）・workspace（spaces の行）へ
+名前付きの短い値を報告できる。値は利用者がサイドバーの行の並びに `$summary` を置いたときだけ見える。
+
+- `--token NAME=VALUE`（`=` を含むものが独自トークン。含まないものは接続の token と読まれる）・`--clear-token NAME`。空の値も消去。値は 80 文字まで。
+- `--seq N` を付けると同じ `--source` の古い報告は無視される。`--ttl-ms N`（1〜86400000）で期限が来ると消える。サーバを止めると消える。
+- 値は全ブラウザに出る。**秘密（token・パスワード・個人情報）を載せない**。
+
 ## 作法
 
 - **自分が作っていない workspace・tab・pane を閉じない**。利用者に頼まれたときだけ閉じる。自分が作った pane も、結果を読んだ後に利用者の邪魔になるなら閉じてよいが、
@@ -128,10 +137,10 @@ pane の中の wtmctl は、次の操作の対象が**自分の pane**（`$WTM_P
 `wtmctl help` の内容（構文は help を正とする）:
 
 - 接続: `wtmctl login`（利用者が打つ）
-- workspace: `wtmctl workspace create`・`wtmctl workspace close`・`wtmctl workspace rename`
+- workspace: `wtmctl workspace create`・`wtmctl workspace close`・`wtmctl workspace rename`・`wtmctl workspace report-metadata`
 - tab: `wtmctl tab create`・`wtmctl tab close`
 - pane: `wtmctl pane split`・`wtmctl pane close`・`wtmctl pane input`・`wtmctl pane run`・`wtmctl pane read`・`wtmctl pane attach`・
-  `wtmctl pane observe`・`wtmctl pane control`
+  `wtmctl pane observe`・`wtmctl pane control`・`wtmctl pane report-metadata`
 - 状態: `wtmctl snapshot`・`wtmctl watch`
 - エージェント: `wtmctl agent list`・`wtmctl agent get`・`wtmctl agent wait`・`wtmctl agent read`・`wtmctl agent prompt`・`wtmctl agent send-keys`・
   `wtmctl agent rename`・`wtmctl agent start`

@@ -523,6 +523,36 @@ export type CommandRunParams = z.infer<typeof CommandRunParams>;
 export const CommandPopupCloseParams = z.object({ popupId: paneId });
 export type CommandPopupCloseParams = z.infer<typeof CommandPopupCloseParams>;
 
+// --- 独自トークン（20260927-sidebar-row-tokens。herdr の workspace.report_metadata / pane.report_metadata） ----------------
+
+/** 1 回の要求の組の数の上限（重複を除く前。大きさの抑え。整えた後の上限〔16〕はサーバが見る）。 */
+export const METADATA_TOKEN_ENTRIES_MAX = 256;
+/** `source`・`name`・`value` の生の長さ（整える前）の上限。値は 80 文字に切り詰めるので、これを超える値に意味は無い（decisions D7）。 */
+export const METADATA_RAW_TEXT_MAX = 4096;
+
+/**
+ * 設定（`value` が文字列）か消去（`value: null`）の 1 組。**map ではなく配列**で受ける（decisions D7）——JSON のオブジェクトを zod の record で読むと、
+ * キー `__proto__` が黙って消える。同じ名前は後の組が勝つ。
+ */
+const metadataTokenEntry = z.object({
+  name: z.string().max(METADATA_RAW_TEXT_MAX),
+  value: z.string().max(METADATA_RAW_TEXT_MAX).nullable(),
+});
+export type MetadataTokenEntry = z.infer<typeof metadataTokenEntry>;
+
+/** 整え方・上限・`seq`・`ttlMs` の範囲の検査はサーバ（herdr と同じ code で返す）。スキーマは形と生の大きさだけを見る。 */
+const metadataReport = {
+  source: z.string().max(METADATA_RAW_TEXT_MAX),
+  tokens: z.array(metadataTokenEntry).max(METADATA_TOKEN_ENTRIES_MAX),
+  seq: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  ttlMs: z.number().int().optional(),
+};
+
+export const WorkspaceReportMetadataParams = z.object({ workspaceId, ...metadataReport });
+export type WorkspaceReportMetadataParams = z.infer<typeof WorkspaceReportMetadataParams>;
+export const PaneReportMetadataParams = z.object({ paneId, ...metadataReport });
+export type PaneReportMetadataParams = z.infer<typeof PaneReportMetadataParams>;
+
 export const METHOD_SCHEMAS = {
   "client.hello": ClientHelloParams,
   "client.view": ClientViewParams,
@@ -540,6 +570,7 @@ export const METHOD_SCHEMAS = {
   "workspace.close": WorkspaceCloseParams,
   "workspace.move": WorkspaceMoveParams,
   "workspace.move_to": WorkspaceMoveToParams,
+  "workspace.report_metadata": WorkspaceReportMetadataParams,
   "group.create": GroupCreateParams,
   "group.rename": GroupRenameParams,
   "group.delete": GroupDeleteParams,
@@ -555,6 +586,7 @@ export const METHOD_SCHEMAS = {
   "pane.close": PaneCloseParams,
   "pane.focus": PaneFocusParams,
   "pane.rename": PaneRenameParams,
+  "pane.report_metadata": PaneReportMetadataParams,
   "pane.focus_direction": PaneFocusDirectionParams,
   "pane.swap": PaneSwapParams,
   "pane.swap_with": PaneSwapWithParams,
@@ -604,6 +636,7 @@ export interface MethodResultMap {
   "workspace.close": Record<string, never>;
   "workspace.move": Record<string, never>;
   "workspace.move_to": Record<string, never>;
+  "workspace.report_metadata": Record<string, never>;
   "group.create": GroupCreateResult;
   "group.rename": Record<string, never>;
   "group.delete": Record<string, never>;
@@ -619,6 +652,7 @@ export interface MethodResultMap {
   "pane.close": Record<string, never>;
   "pane.focus": Record<string, never>;
   "pane.rename": Record<string, never>;
+  "pane.report_metadata": Record<string, never>;
   "pane.focus_direction": PaneFocusDirectionResult;
   "pane.swap": PaneSwapResult;
   "pane.swap_with": PaneSwapWithResult;

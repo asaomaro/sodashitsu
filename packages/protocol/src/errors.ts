@@ -44,7 +44,13 @@ export type ErrorCode =
   | "command_not_found"
   | "command_failed"
   | "command_popup_open"
-  | "command_busy";
+  | "command_busy"
+  // 独自トークンの報告（20260927-sidebar-row-tokens）。herdr と同じ code。
+  | "invalid_metadata_source"
+  | "invalid_metadata_ttl"
+  | "invalid_metadata_token"
+  | "metadata_token_limit"
+  | "metadata_sequence_source_limit";
 
 export interface ProtocolError {
   code: ErrorCode;

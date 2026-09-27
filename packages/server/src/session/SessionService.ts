@@ -828,6 +828,28 @@ export class SessionService {
     this.persist.touch();
   }
 
+  // --- 独自トークン（20260927-sidebar-row-tokens。`metadata/MetadataService.ts` の `MetadataTargets` の口） -------
+
+  hasWorkspace(id: WorkspaceId): boolean {
+    return this.model.getWorkspace(id) !== undefined;
+  }
+
+  hasPane(id: PaneId): boolean {
+    return this.model.getPane(id) !== undefined;
+  }
+
+  /** 独自トークンを差し替えて `workspace.updated` で配る。**保存しない**（`persist.touch()` を呼ばない。decisions D4）。無い workspace は NotFoundError。 */
+  setWorkspaceTokens(id: WorkspaceId, tokens: Record<string, string> | null): void {
+    const workspace = this.model.setWorkspaceTokens(id, tokens);
+    this.bus.publish({ event: "workspace.updated", data: { workspace } });
+  }
+
+  /** pane 版の `setWorkspaceTokens`（`pane.updated`）。 */
+  setPaneTokens(id: PaneId, tokens: Record<string, string> | null): void {
+    const pane = this.model.setPaneTokens(id, tokens);
+    this.bus.publish({ event: "pane.updated", data: { pane } });
+  }
+
   setPaneRightClick(id: PaneId, target: RightClickTarget): void {
     this.model.setRightClick(id, target);
     this.bus.publish({ event: "pane.updated", data: { pane: this.requirePane(id) } });

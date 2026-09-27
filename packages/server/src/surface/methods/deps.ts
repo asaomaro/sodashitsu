@@ -6,6 +6,7 @@ import type { SizeAuthority } from "../../clients/SizeAuthority.js";
 import type { TerminalManager } from "../../terminal/TerminalManager.js";
 import type { AgentIntegrationService } from "../../agent/AgentIntegrationService.js";
 import type { AgentStarter } from "../../agent/AgentStarter.js";
+import type { MetadataService } from "../../metadata/MetadataService.js";
 import type { ServerSessionEntry } from "@wtm/protocol";
 import type { CommandService } from "../../commands/CommandService.js";
 
@@ -27,4 +28,6 @@ export interface MethodDeps {
   serverSessions?: () => Promise<ServerSessionEntry[]>;
   /** 独自コマンド（20260927-custom-command-keys）。無ければ一覧は空で、popup の購読も受けない。 */
   commands?: CommandService;
+  /** 独自トークンの報告（20260927-sidebar-row-tokens）。無ければ `workspace.report_metadata`・`pane.report_metadata` を登録しない（`agentStarter` と同じ任意の依存）。 */
+  metadata?: MetadataService;
 }

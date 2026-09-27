@@ -1,0 +1,51 @@
+# レビュー: 20260927-sidebar-row-tokens
+
+## タスク点検ログ
+
+- T1 [nit] テストの import の並びを既存のアルファベット順に合わせた（`messages.test.ts`） [conv:-]
+- T1 [nit] herdr の map の形の `tokens` を schema が弾くことのテストを足した（D7 の退行を捕まえる） [conv:-]
+- T2 [should] 前後の空白の除き方を Rust の `str::trim`（Unicode White_Space）に合わせた（JS の `trim` は U+0085 を残し U+FEFF を除く）。境界のテストを足した（`metadataTokens.ts`） [conv:-]
+- T2 [should] herdr の `stale_expiry_does_not_clear_replacement` にあたる場面（古い締め切りで掃いても設定し直した値が残る）のテストを足した [conv:-]
+- T2 [nit] 組の数の上限を名前の検査より先に見る順をテストで固定した [conv:-]
+- T3 [should] `withTokens` をクラスの JSDoc の前へ移した（JSDoc がクラスから外れていた。`SessionModel.ts`） [conv:-]
+- T3 [should] 期限の掃除の失敗は `NotFoundError` のときだけ帳簿を捨て、それ以外はログに出して帳簿（seq の記録）を残すようにした（`MetadataService.ts` `sweep`） [conv:-]
+- T3 [nit] 報告で写す前にタイマーを掛け直すようにした（写す側が投げても締め切りが残る） [conv:-]
+- T3 [nit] dispose の購読の解除・掃除で捨てた帳簿を実際に確かめるテストにした [conv:-]
+- T3 [nit] 空振りしていたテストの名前を実態（整え方で断った報告は seq を記録しない）に合わせた [conv:regression-negative-control]
+- T4 [should] `metadata.dispose()` を WebSocket を閉じた後（`close()` の finally）へ移した。閉じる前に止めると、既存の接続から届いた報告がタイマーを掛け直して残る（`composeServer.ts`） [conv:-]
+- T4 [should] 結合テストの「何も配らない」を、tokens を含むイベントが無いことと model に載らないことに絞った（git の見直しの `workspace.updated` との競合で偽の失敗になりうる） [conv:-]
+- T5 [should] docs・decisions D5 の「`=` を忘れた `--token` は認証の失敗になる」を実際の動き（login のキャッシュが先に使われる）に合わせて直した [conv:-]
+- T5 [should] `runWorkspaceReportMetadata`・`runPaneReportMetadata` の単体テスト（RPC 名・hello が先・seq/ttlMs を省くとキーが無い・自分の pane でも断らない）を足した [conv:-]
+- T5 [nit] 値が `--` で始まる `--token` を断る点を herdr との違いとして docs に書いた [conv:-]
+- T6 [should] 大文字小文字を区別する条件のテストで、当たる側の確認が見た目の無い条件で空振りしていた。見た目を付けて当たることを直接確かめる形にした（`rowLayout.test.ts`） [conv:-]
+- T6 [nit] 新規ファイルを prettier で整形した（`rowLayout.ts`・`rowLayout.test.ts`。同時に `resolveRows.*` も） [conv:-]
+- T7 [nit] design の `tokenStyleAttr` の署名を実装（undefined を返す・ケバブ形のキー）に合わせた [conv:-]
+- T7 [nit] agents の `tab` を常に（無ければ空文字）にした。今の描画は tab が無くても空の要素を描くので、既定の見た目を変えない（design の表も訂正） [conv:-]
+- T7 [nit] `branch`・`git_status`・`git` が消える場合（detached・git の外）のテストを足した [conv:-]
+- T8 [should] storage の追従のテストに「追従した後に別の区画を変えても先の変更を上書きしない」「変わっていなければ差し替えない」を足した（`settings.test.ts`） [conv:-]
+- T8 [nit] `sidebarRows` の追従を、まとまりを丸ごと書く設定（keys・themeOverrides）の listener へ移した（コメントと性質を合わせた） [conv:-]
+- T10 [should] 確定できたら前の理由の文を消すようにした（`SidebarRowsSettings.vue` `commitDraft`） [conv:-]
+- T10 [should] ほかのウィンドウ・読み直しで並びが差し替わったら下書き・開閉・足す選択を捨て、確定の関数は位置のトークン・条件が無ければ何もしないようにした。閉じるときの確定は 1 つの失敗で止めない [conv:-]
+- T10 [should] 独自トークンの名前は足す操作の引数なので Enter か［追加］で足す、と requirements AC-I2・design を訂正した（decisions D9） [conv:-]
+- T10 [should] 見える文字を読み上げの名前に含めた（［詳細］・［行を上へ］等。WCAG 2.5.3） [conv:-]
+- T10 [should] 上限で［追加］が押せなくなったら足した項目の［削除］へフォーカスを移すようにした（AC-I4） [conv:-]
+- T10 [should] 開閉の付け替え・行と条件の削除後のフォーカス・種類の切り替え（数→文字・見た目の保持）・条件の色・下書きの扱い・同じ向きへのフォーカスのテストを足した [conv:-]
+- T10 [nit] 足すトークンの選択も位置で結び付くので、位置が変わる操作で捨てるようにした [conv:-]
+- T10 [nit] 文字→数の切り替えで前後の空白を除いてから数として読むようにした [conv:-]
+- T10 [nit] 下書きを捨てるのを位置が変わる操作（動かす・消す・既定に戻す・外からの差し替え）だけにした（足す・値を変える操作では残す） [conv:-]
+- T11 [should] smoke の接続の token を、セッションのキャッシュの無い HOME で打つようにした（キャッシュがあると `--token` は読まれず、確かめたことにならなかった）。workspace の tokens がちょうど `{build}` であること（接続の token が載らない）も見る（`packages/cli/src/smoke.ts`） [conv:-]
+- T11 [should] backlog の残りの `[ ]` 行に `(needs: …)` と `（出典: …）` を付け、`machine` トークンを別の行にした [conv:-]
+- T11 [nit] 着地の `[x]` 行の実測は test・deliver で足す（未対応のまま deliver で埋める） [conv:-]
+- T11 [nit] smoke で足した snapshot の呼び出しも終了コードを見るようにした [conv:-]
+- cross [nit] docs/wtmctl.md に生の上限を超えたときの `invalid_params` を書いた [conv:-]
+- cross [nit] `Sidebar.vue` の使われなくなった `showGit` を消した（ずれの判定は `resolveRows.ts` の 1 か所に） [conv:-]
+- cross [nit] 設定画面の `isTextWhen`・名前の上限の文言を `rowLayout.ts` から引くようにした（規則の置き場を 1 つに） [conv:-]
+- cross [nit] docs H21 ④ の代わりの行の中身を区画ごとに書いた [conv:-]
+
+## ラウンド 1（2026-09-27。別コンテキストの opus に work 全体の差分を委譲。herdr の一次資料との照合を含む）
+
+判定: **通過**（must 0・should 0・nit 3）。nit は backlog に送った（`.aidev/backlog/product-roadmap.md`「サイドバーの行の細部」）。
+
+- [nit] 同じ値を `--ttl-ms` 付きで報告し直すと、締め切りだけが変わって中身の同じ `tokens` を全クライアントへ配り直す（herdr と同じ動き。AC1 の「同じ値の設定は配らない」は期限なしの場合）。値の表が変わったときだけ配るようにする余地 — 根拠: packages/server/src/metadata/metadataTokens.ts `patch`・MetadataService.ts `report` [conv:-]
+- [nit] `unverified` を主の行へ動かすと `sidebar-label` だけになり警告色が付かない（design どおりだが、並べ替えで印の意味が消える）— 根拠: packages/web/src/components/Sidebar.vue `textTokenClass` [conv:-]
+- [nit] ［既定に戻す］の確定が `selfChange` を立てずに保存するので、外からの差し替え用の watch が走り、もう一方の区画の［詳細］の開閉まで閉じる（値は変わらない）— 根拠: packages/web/src/components/SidebarRowsSettings.vue `confirmReset` [conv:-]

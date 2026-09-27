@@ -7,6 +7,8 @@ import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../sto
 import { orderedAgentPaneIds } from "../store/agentOrder.js";
 import { groupedWorkspaceRows, visibleGroupMembers } from "../store/workspaceGrouping.js";
 import { type AgentSort, SIDEBAR_WIDTH, type WorkspaceSort, useViewStore } from "../store/view.js";
+import { useSettingsStore } from "../store/settings.js";
+import { type ResolvedLine, resolveAgentLines, resolveSpaceLines, tokenStyleAttr } from "../sidebar/resolveRows.js";
 import StateIcon from "./StateIcon.vue";
 
 /**
@@ -23,6 +25,7 @@ import StateIcon from "./StateIcon.vue";
 const session = useSessionStore();
 const seen = useSeenStore();
 const view = useViewStore();
+const settings = useSettingsStore();
 const actions = inject(ActionDispatcherKey);
 const conn = inject(ConnectionKey);
 
@@ -41,7 +44,6 @@ interface SpaceRow {
    *  ヘッダー行だけ null（グループ自体は特定の workspace ではないため）。 */
   workspace: Workspace | null;
   state: keyof typeof STATE_PRIORITY | null;
-  showGit: boolean;
   isCurrent: boolean;
   /** グループの中の行（インデントする）か。 */
   indent: boolean;
@@ -64,13 +66,18 @@ interface SpaceRow {
    * ホバー中の行の特定・ハイライトの対象には代わりに一意な `key` を使う（`dropAnchorForRowKey`）。
    */
   dropAnchorId: string | null;
+  /**
+   * 展開したサイドバーで描く行（設定した並び〔既定なら今と同じ並び〕を解決したもの。20260927-sidebar-row-tokens）。手動グループの見出し行は空
+   * （見出しは今までどおりの 1 行で描く）。
+   */
+  lines: ResolvedLine[];
 }
 
-function rowStateFor(ws: Workspace): { state: keyof typeof STATE_PRIORITY | null; showGit: boolean; isCurrent: boolean } {
+function rowStateFor(ws: Workspace): { state: keyof typeof STATE_PRIORITY | null; isCurrent: boolean; lines: ResolvedLine[] } {
   const states = session.panesInWorkspace(ws.id).map((p) => displayStateFor(p.agent, seen.getSeenSeq(p.agent?.instanceId ?? "", p.agent?.serverSeenSeq ?? 0)));
-  const showGit = !!ws.git && (ws.git.ahead > 0 || ws.git.behind > 0);
   const isCurrent = ws.id === view.workspaceId;
-  return { state: aggregate(states) as keyof typeof STATE_PRIORITY | null, showGit, isCurrent };
+  const state = aggregate(states) as keyof typeof STATE_PRIORITY | null;
+  return { state, isCurrent, lines: resolveSpaceLines(settings.spacesLayout, { workspace: ws, state }) };
 }
 
 function workspaceRow(ws: Workspace, opts: { indent: boolean; groupKind: SpaceRow["groupKind"]; groupTargetId: string | null; dragIds: string[] }): SpaceRow {
@@ -94,7 +101,6 @@ const spaces = computed<SpaceRow[]>(() => {
         key: `group:${row.group.id}`,
         workspace: null,
         state: null,
-        showGit: false,
         isCurrent: false,
         indent: false,
         isGroupHead: true,
@@ -104,6 +110,7 @@ const spaces = computed<SpaceRow[]>(() => {
         collapsed: row.group.collapsed,
         dragIds: allIds,
         dropAnchorId: allIds[0] ?? null,
+        lines: [],
       });
       // 折りたたみ中でも focus 中の workspace があればその行だけ見える（AC6。research.md F3）。
       const visibleMembers = visibleGroupMembers(row.members, row.group.collapsed, view.workspaceId);
@@ -132,6 +139,30 @@ const sessionLabel = computed(() => {
   return session.namedSessionCount > 0 ? "default" : null;
 });
 
+/**
+ * 文字のトークンのクラス（今の DOM を写す。20260927-sidebar-row-tokens の decisions D3）。主の行（1 行目）は `sidebar-label`（省略記号で切る）、
+ * 補足の行は付けた名前・未検証だけが自分のクラスを持つ（薄めない・警告色）。
+ */
+function textTokenClass(token: string, lineIndex: number): string | undefined {
+  if (lineIndex === 0) return "sidebar-label";
+  if (token === "name") return "sidebar-agent-name";
+  if (token === "unverified") return "sidebar-unverified";
+  return undefined;
+}
+
+/**
+ * 文字のトークンの属性（クラスと style）。**無いものはキーごと付けない**——`:class="undefined"` は空の `class=""` を描き、今の DOM
+ * （クラスの無い `<span>`）から変わる（golden の比較で見つけた）。
+ */
+function textTokenAttrs(t: { token: string; style: Parameters<typeof tokenStyleAttr>[0] }, lineIndex: number): Record<string, unknown> {
+  const attrs: Record<string, unknown> = {};
+  const cls = textTokenClass(t.token, lineIndex);
+  if (cls !== undefined) attrs["class"] = cls;
+  const style = tokenStyleAttr(t.style);
+  if (style !== undefined) attrs["style"] = style;
+  return attrs;
+}
+
 /** 並び順の表示名。内部の値（`grouped` / `priority`）をそのまま出さない（decisions.md D6）。 */
 const AGENT_SORT_LABEL: Record<AgentSort, string> = { grouped: "グループ順", priority: "優先度順" };
 
@@ -143,7 +174,8 @@ const agents = computed(() => {
       const ws = tab ? session.workspaces.get(tab.workspaceId) : undefined;
       const agent = p.agent!;
       const state = displayStateFor(agent, seen.getSeenSeq(agent.instanceId, agent.serverSeenSeq));
-      return { pane: p, tab, workspace: ws, agent, state };
+      const lines = resolveAgentLines(settings.agentsLayout, { pane: p, tab, workspace: ws, agent, state });
+      return { pane: p, tab, workspace: ws, agent, state, lines };
     });
   const rowsByPaneId = new Map(rows.map((r) => [r.pane.id, r]));
   // 並び順は `orderedAgentPaneIds`（`ActionDispatcher` の `previous_agent`/`next_agent`/`focus_agent` と
@@ -430,13 +462,15 @@ watch(
         @pointercancel="onRowPointerCancel($event)"
         @lostpointercapture="onRowPointerCancel($event)"
       >
-        <div class="sidebar-row-line1">
+        <!-- 畳んだサイドバーと手動グループの見出し行は今までどおりの 1 行（行の並びの設定は展開した workspace 行だけ。herdr と同じ。
+             20260927-sidebar-row-tokens）。 -->
+        <div v-for="(line, i) in view.sidebarCollapsed || !row.workspace ? [null] : row.lines" :key="i" :class="i === 0 ? 'sidebar-row-line1' : 'sidebar-row-line2'">
           <!-- pointerdown/pointerup を `.stop` で止める（タスク点検の指摘）——止めないと行の
                onRowPointerDown/onRowPointerUp にも伝播し、`onToggleCollapse` が二重に呼ばれる
                （手動グループの頭）か、意図せず focusWorkspace が呼ばれる（worktree 自動グループの
                頭）。`@click.stop` だけでは pointerup 側の伝播は止まらない。 -->
           <button
-            v-if="row.isGroupHead"
+            v-if="i === 0 && row.isGroupHead"
             type="button"
             class="sidebar-group-toggle"
             :aria-label="row.collapsed ? 'グループを展開' : 'グループを折りたたむ'"
@@ -448,12 +482,20 @@ watch(
           >
             {{ row.collapsed ? "▸" : "▾" }}
           </button>
-          <StateIcon v-if="row.workspace" class="sidebar-state-icon" :state="row.state" />
-          <span v-if="!view.sidebarCollapsed" class="sidebar-label">{{ row.workspace ? row.workspace.label : row.groupLabel }}</span>
-        </div>
-        <div v-if="!view.sidebarCollapsed && row.showGit" class="sidebar-row-line2">
-          <span>{{ row.workspace!.git!.branch }}</span>
-          <span class="sidebar-git-counts">↑{{ row.workspace!.git!.ahead }} ↓{{ row.workspace!.git!.behind }}</span>
+          <template v-if="line === null">
+            <StateIcon v-if="row.workspace" class="sidebar-state-icon" :state="row.state" />
+            <span v-if="!view.sidebarCollapsed" class="sidebar-label">{{ row.workspace ? row.workspace.label : row.groupLabel }}</span>
+          </template>
+          <!-- 値はテキストの差し込み（{{ }}）だけで描く（外から報告された独自トークンを HTML にしない）。style は検証済みの色と固定の値だけ。 -->
+          <template v-for="(t, j) in line ?? []" v-else :key="j">
+            <StateIcon v-if="t.kind === 'state_icon'" class="sidebar-state-icon" :state="row.state" :style="tokenStyleAttr(t.style)" />
+            <template v-else-if="t.kind === 'git'">
+              <span :style="tokenStyleAttr(t.style)">{{ t.branch }}</span>
+              <span class="sidebar-git-counts" :style="tokenStyleAttr(t.style)">{{ t.counts }}</span>
+            </template>
+            <span v-else-if="t.kind === 'git_status'" class="sidebar-git-counts" :style="tokenStyleAttr(t.style)">{{ t.counts }}</span>
+            <span v-else v-bind="textTokenAttrs(t, i)">{{ t.text }}</span>
+          </template>
         </div>
       </div>
 
@@ -479,19 +521,19 @@ watch(
           {{ AGENT_SORT_LABEL[view.agentSort] }}
         </button>
       </div>
-      <div v-for="{ pane, tab, workspace, agent, state } in agents" :key="pane.id" class="sidebar-row" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
-        <div class="sidebar-row-line1">
+      <div v-for="{ pane, workspace, state, lines } in agents" :key="pane.id" class="sidebar-row" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
+        <!-- 畳んだサイドバーは今までどおり状態の印だけ（20260927-sidebar-row-tokens）。 -->
+        <div v-if="view.sidebarCollapsed" class="sidebar-row-line1">
           <StateIcon class="sidebar-state-icon" :state="state" />
-          <template v-if="!view.sidebarCollapsed">
-            <span class="sidebar-label">{{ workspace?.label }}</span>
-            <span class="sidebar-label">{{ tab?.label }}</span>
-          </template>
         </div>
-        <div v-if="!view.sidebarCollapsed" class="sidebar-row-line2">
-          <span v-if="agent.name" class="sidebar-agent-name">{{ agent.name }}</span>
-          <span>{{ agent.label }}</span>
-          <span v-if="!agent.verified" class="sidebar-unverified">未検証</span>
-        </div>
+        <template v-else>
+          <div v-for="(line, i) in lines" :key="i" :class="i === 0 ? 'sidebar-row-line1' : 'sidebar-row-line2'">
+            <template v-for="(t, j) in line" :key="j">
+              <StateIcon v-if="t.kind === 'state_icon'" class="sidebar-state-icon" :state="state" :style="tokenStyleAttr(t.style)" />
+              <span v-else-if="t.kind === 'text'" v-bind="textTokenAttrs(t, i)">{{ t.text }}</span>
+            </template>
+          </div>
+        </template>
       </div>
     </section>
 

@@ -38,6 +38,14 @@ import {
   type TabBarPosition,
   type TabBarRightEntry,
 } from "../tabbar/tabBarRight.js";
+import {
+  effectiveLayout,
+  loadSidebarRows,
+  serializeSidebarRows,
+  type RowLayout,
+  type SidebarArea,
+  type SidebarRowsPrefs,
+} from "../sidebar/rowLayout.js";
 import { readPrefs, writePrefs } from "./view.js";
 
 /**
@@ -188,6 +196,14 @@ export const useSettingsStore = defineStore("settings", () => {
   const themeAuto = ref(themePrefs.auto);
   const themeLight = ref<ThemeName | null>(themePrefs.light);
   const themeDark = ref<ThemeName | null>(themePrefs.dark);
+  /**
+   * サイドバーの行の並び（20260927-sidebar-row-tokens。herdr の `[ui.sidebar.*].rows`）。区画ごとに null＝既定。読み込みは値ごとに落とす
+   * （`sidebar/rowLayout.ts` の `loadSidebarRows`）。ブラウザごと（ほかの外観の設定と同じ）。
+   */
+  const sidebarRows = ref<SidebarRowsPrefs>(loadSidebarRows(initial["sidebarRows"]));
+  /** 実際に使う並び（`Sidebar.vue` が読む）。 */
+  const spacesLayout = computed<RowLayout>(() => effectiveLayout(sidebarRows.value, "spaces"));
+  const agentsLayout = computed<RowLayout>(() => effectiveLayout(sidebarRows.value, "agents"));
   /** OS（ブラウザ）の明暗が暗いか。`ThemeController.start()` が `matchMedia` の値で上書きし、変化を追う（初期は暗い＝herdr の「分からなければ暗い」）。 */
   const systemDark = ref(true);
   /** いま使うテーマ（名前の解決は `theme/themes.ts` の `resolveTheme` の 1 か所）。 */
@@ -346,6 +362,26 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   /**
+   * サイドバーの行の並びを丸ごと差し替えて保存する（`replaceKeyPrefs` と同じ形）。保存する形を読み直して正規化し（読めない値は反映せず捨てる）、
+   * 状態も保存も同じなら何もしない。両方の区画が既定なら `sidebarRows` の項目ごと消す。
+   */
+  function replaceSidebarRows(next: SidebarRowsPrefs): void {
+    const serialized = serializeSidebarRows(loadSidebarRows(serializeSidebarRows(next)));
+    const normalized = loadSidebarRows(serialized);
+    const json = JSON.stringify(serialized ?? null);
+    const sameState = json === JSON.stringify(serializeSidebarRows(sidebarRows.value) ?? null);
+    const sameStored = json === JSON.stringify(readPrefs()["sidebarRows"] ?? null);
+    if (sameState && sameStored) return;
+    if (!sameState) sidebarRows.value = normalized;
+    writePrefs({ sidebarRows: serialized });
+  }
+
+  /** 1 つの区画の並びを差し替える（null で既定へ戻す。AC15）。設定画面はこれを使う。 */
+  function setSidebarLayout(area: SidebarArea, layout: RowLayout | null): void {
+    replaceSidebarRows({ ...sidebarRows.value, [area]: layout });
+  }
+
+  /**
    * キーの割り当て（20260921-keybinding-customization。design「store」・D2）。**既定との差だけ**を持つ（`keys/keyPrefs.ts`）。読み込みは値ごとに落とす（AC8）。
    * ブラウザごと（herdr のキー設定はクライアントの機器の設定）。
    */
@@ -414,6 +450,9 @@ export const useSettingsStore = defineStore("settings", () => {
       JSON.stringify(serializeThemeOverrides(themeOverrides.value) ?? null)
     )
       themeOverrides.value = freshOverrides;
+    // 20260927-sidebar-row-tokens：行の並び（`sidebarRows`）も 2 つの区画を 1 つのまとまりとして丸ごと書くので、同じ理由で追従する。
+    const freshRows = loadSidebarRows(readPrefs()["sidebarRows"]);
+    if (JSON.stringify(freshRows) !== JSON.stringify(sidebarRows.value)) sidebarRows.value = freshRows;
   });
 
   /**
@@ -532,6 +571,11 @@ export const useSettingsStore = defineStore("settings", () => {
     keymap,
     navigateKeymap,
     themeOverrides,
+    sidebarRows,
+    spacesLayout,
+    agentsLayout,
+    replaceSidebarRows,
+    setSidebarLayout,
     setStatusSymbols,
     setKeyboardLockInFullscreen,
     setPaneFrameThickness,

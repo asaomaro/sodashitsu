@@ -54,6 +54,7 @@ import { runPreflight } from "./handoff/preflight.js";
 import { type HandoffResult, adoptedSpecsOf, discardHandedOffPanes, discardRejectedPanes, finishTakenHandoff } from "./handoff/startup.js";
 import { COMMANDS_FILE_NAME } from "./commands/commandConfig.js";
 import { CommandService } from "./commands/CommandService.js";
+import { MetadataService } from "./metadata/MetadataService.js";
 
 export interface ComposedServer {
   httpServer: HttpServer;
@@ -243,6 +244,8 @@ export async function composeServer(
   // （まだ `/ws` を受け付けていないので `command.updated` を受け取る接続は無い）。読み直しは `command.reload`。
   const commands = new CommandService({ filePath: join(options.stateDir, COMMANDS_FILE_NAME), session, terminals, bus, clients, logger });
   await commands.reload();
+  // 独自トークン（20260927-sidebar-row-tokens）。session へは MetadataTargets の口越しに書き、閉じた対象は bus で捨てる。`close()` で dispose。
+  const metadata = new MetadataService({ targets: session, bus, logger });
   registerAllMethods(surface, {
     session,
     clients,
@@ -254,6 +257,7 @@ export async function composeServer(
     agentStarter,
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
     commands,
+    metadata,
   });
   const wsServer = new WsServerWs(httpServer.server, originRejections, auth.authorizeUpgrade, logger);
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
@@ -508,6 +512,9 @@ export async function composeServer(
       } finally {
         // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
         commands.dispose();
+        // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
+        // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。
+        metadata.dispose();
         // スクロールバックの一時ディレクトリ（20260926-edit-scrollback）。途中の処理が投げても消す。
         await session.disposeScrollbackEditors();
         // 制御の socket はロックを放す直前まで開けておく——止まる途中に届いた 2 回目の `wtm session stop` が「既に止まる途中」と答えを受けて待てる

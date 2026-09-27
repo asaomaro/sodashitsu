@@ -60,6 +60,12 @@ const MESSAGES: Record<ErrorCode, string> = {
   command_failed: "独自コマンドを起動できませんでした。サーバのログを確かめてください。",
   command_popup_open: "popup がすでに開いています。先に閉じてください。",
   command_busy: "裏で走っている独自コマンドが多すぎます。終わるのを待ってください。",
+  // 独自トークンの報告（20260927-sidebar-row-tokens）。今は wtmctl の report-metadata だけが送る方式で、ブラウザには通常来ない。
+  invalid_metadata_source: "報告元（source）は英数字と : . _ - の 1〜80 文字にしてください。",
+  invalid_metadata_ttl: "期限（ttl）は 1〜86400000 ミリ秒にしてください。",
+  invalid_metadata_token: "独自トークンの名前・数が受け付ける範囲の外です。",
+  metadata_token_limit: "独自トークンは 1 つの対象に 32 個までです。",
+  metadata_sequence_source_limit: "seq 付きの報告元は 1 つの対象に 32 個までです。",
 };
 
 /**

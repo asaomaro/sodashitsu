@@ -25,6 +25,7 @@ import {
 import { loadAgentSort, loadSidebarCollapsed, loadSidebarWidth, loadWorkspaceSort, readPrefs, useViewStore } from "../store/view.js";
 import { loadScrollbackPref } from "../term/scrollback.js";
 import { loadTabBarPosition, loadTabBarRightEntries, loadTabBarRightSeparator } from "../tabbar/tabBarRight.js";
+import { loadSidebarRows } from "../sidebar/rowLayout.js";
 import { loadThemePrefs } from "../theme/themes.js";
 import { clientErrorMessage, errorCodeOf } from "../net/clientError.js";
 import { depthFirstPaneIds, neighborPaneId } from "../term/layoutOrder.js";
@@ -1212,6 +1213,8 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     // 20260926-pane-frame-auto-mode 分。
     this.settings.paneBorders = loadPaneBorders(raw["paneBorders"]);
     this.settings.paneGaps = loadPaneGaps(raw["paneGaps"]);
+    // 20260927-sidebar-row-tokens 分。
+    this.settings.sidebarRows = loadSidebarRows(raw["sidebarRows"]);
     // `view.ts` 側も同じ raw を渡す（`loadSidebarWidth`/`loadSidebarCollapsed`/`loadWorkspaceSort`
     // は元から raw 引数型。`loadAgentSort` は本来 `readPrefs()` を自分で呼ぶ自己完結型〔decisions
     // D7〕だが、ここで省略すると `readPrefs()`（＝ `localStorage` の読み出し）が実質2回になるため、

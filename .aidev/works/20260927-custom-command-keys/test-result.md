@@ -315,3 +315,22 @@ R1c: exit=1 1 failed | 26 passed (27) restored_cmp=ok
  Test Files  244 passed (244)
       Tests  4662 passed (4662)
 ```
+
+### origin/main（be0eb7f・#60 sidebar-row-tokens）の取り込み後
+
+衝突は 6 ファイル（`errors.ts`・`messages.ts`・`composeServer.ts`・`deps.ts`・`clientError.ts`・`settings.test.ts`）で、どれも両方の追加を並べて解消した。
+
+| 項目 | 結果 |
+|---|---|
+| `pnpm -s build` / `pnpm -s typecheck` | exit 0 / exit 0 |
+| `pnpm -s test` | exit 1：252 files / 4,836 tests のうち **1 件だけ時間切れ**（`KeySettings.test.ts` の「3 群 50 個の操作…」、5,000ms を超えて 6,202ms。全体の実行の負荷による既知の揺れ） |
+| 同じファイルを単独で 1 回だけ再実行 | exit 0・98 passed |
+| `aidev smoke` | pass（7 本。`smoke: custom command popup round trip ok`） |
+
+```
+ Test Files  1 failed | 251 passed (252)
+      Tests  1 failed | 4835 passed (4836)
+     × prefix と、3 群 50 個の操作＋navigate 6操作の現在の割り当てが見える（既定は今のキー）。割り当てなしは「なし」 6202ms
+Error: Test timed out in 5000ms.
+（単独の再実行）      Tests  98 passed (98)
+```

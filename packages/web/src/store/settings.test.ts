@@ -15,6 +15,7 @@ import {
   PANE_FRAME_THICKNESS_PX,
   useSettingsStore,
 } from "./settings.js";
+import { DEFAULT_LAYOUTS } from "../sidebar/rowLayout.js";
 import { readPrefs, writePrefs } from "./view.js";
 import { useCommandsStore } from "./commands.js";
 
@@ -852,5 +853,73 @@ describe("useSettingsStore — 独自コマンドの一覧と keymap（20260927-
     const store = useSettingsStore(pinia);
     store.setKeyBindings("command:build", ["ctrl+alt+b"]);
     expect((readPrefs()["keys"] as { commands: unknown }).commands).toEqual({ build: ["ctrl+alt+b"] });
+  });
+});
+
+describe("useSettingsStore — サイドバーの行の並び（20260927-sidebar-row-tokens の AC11・AC15）", () => {
+  it("何も保存されていなければ区画ごとに既定（null）で、使う並びは既定の並び", () => {
+    const store = useSettingsStore(pinia);
+    expect(store.sidebarRows).toEqual({ spaces: null, agents: null });
+    expect(store.spacesLayout).toEqual(DEFAULT_LAYOUTS.spaces);
+    expect(store.agentsLayout).toEqual(DEFAULT_LAYOUTS.agents);
+  });
+
+  it("区画を差し替えると反映・保存され、新しいストアが読み戻す。null で既定へ戻し、両方既定なら項目ごと消える", () => {
+    const store = useSettingsStore(pinia);
+    store.setSidebarLayout("spaces", [[{ token: "workspace", fg: "#f00" }], [{ token: "$build" }]]);
+    expect(store.spacesLayout).toEqual([[{ token: "workspace", fg: "#f00" }], [{ token: "$build" }]]);
+    expect(readPrefs()["sidebarRows"]).toEqual({ spaces: [[{ token: "workspace", fg: "#f00" }], [{ token: "$build" }]] });
+    expect(useSettingsStore(createPinia()).spacesLayout).toEqual([[{ token: "workspace", fg: "#f00" }], [{ token: "$build" }]]);
+    store.setSidebarLayout("agents", [[{ token: "agent" }]]);
+    expect(readPrefs()["sidebarRows"]).toEqual({ spaces: [[{ token: "workspace", fg: "#f00" }], [{ token: "$build" }]], agents: [[{ token: "agent" }]] });
+    store.setSidebarLayout("spaces", null);
+    expect(store.spacesLayout).toEqual(DEFAULT_LAYOUTS.spaces);
+    expect(readPrefs()["sidebarRows"]).toEqual({ agents: [[{ token: "agent" }]] });
+    store.setSidebarLayout("agents", null);
+    expect("sidebarRows" in readPrefs()).toBe(false);
+  });
+
+  it("読めない値は反映も保存もしない（二重の守り）", () => {
+    const store = useSettingsStore(pinia);
+    store.setSidebarLayout("spaces", [[{ token: "tab" }, { token: "workspace", fg: "red" }]]);
+    expect(store.spacesLayout).toEqual([[{ token: "workspace" }]]);
+    expect(readPrefs()["sidebarRows"]).toEqual({ spaces: [[{ token: "workspace" }]] });
+  });
+
+  it("状態も保存も同じなら書かない。保存だけが違えば保存だけ直す", () => {
+    const store = useSettingsStore(pinia);
+    store.setSidebarLayout("spaces", [[{ token: "workspace" }]]);
+    const spy = vi.spyOn(localStorage, "setItem");
+    store.setSidebarLayout("spaces", [[{ token: "workspace" }]]);
+    expect(spy).not.toHaveBeenCalled();
+    localStorage.setItem("wtm.prefs.v1", JSON.stringify({ sidebarRows: "broken" }));
+    spy.mockClear();
+    store.setSidebarLayout("spaces", [[{ token: "workspace" }]]);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(readPrefs()["sidebarRows"]).toEqual({ spaces: [[{ token: "workspace" }]] });
+    spy.mockRestore();
+  });
+
+  it("保存が壊れていれば値ごとに落として起動する", () => {
+    writePrefs({ sidebarRows: { spaces: "x", agents: [[{ token: "agent" }, { token: "nope" }]] } });
+    const store = useSettingsStore(createPinia());
+    expect(store.sidebarRows).toEqual({ spaces: null, agents: [[{ token: "agent" }]] });
+  });
+
+  it("別のタブ・ウィンドウでの変更に storage イベントで追従し、その後こちらで別の区画を変えても先の変更を上書きしない", () => {
+    const store = useSettingsStore(pinia);
+    writePrefs({ sidebarRows: { agents: [[{ token: "tab" }]] } });
+    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" }));
+    expect(store.agentsLayout).toEqual([[{ token: "tab" }]]);
+    store.setSidebarLayout("spaces", [[{ token: "workspace" }]]);
+    expect(readPrefs()["sidebarRows"]).toEqual({ spaces: [[{ token: "workspace" }]], agents: [[{ token: "tab" }]] });
+  });
+
+  it("storage イベントでも値が変わっていなければ差し替えない（同じ参照のまま）", () => {
+    const store = useSettingsStore(pinia);
+    store.setSidebarLayout("spaces", [[{ token: "workspace" }]]);
+    const before = store.sidebarRows;
+    window.dispatchEvent(new StorageEvent("storage", { key: "wtm.prefs.v1" }));
+    expect(store.sidebarRows).toBe(before);
   });
 });

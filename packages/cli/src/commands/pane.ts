@@ -5,6 +5,7 @@ import { printJson, printLine, printRaw } from "../output.js";
 import type { SessionStore } from "../session.js";
 import { assertNotSelfPane } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
+import { metadataParams } from "./workspace.js";
 import { RpcFailure, type WtmClient } from "../wsClient.js";
 
 /**
@@ -18,6 +19,7 @@ type PaneCloseCmd = Extract<Command, { kind: "pane-close" }>;
 type PaneInputCmd = Extract<Command, { kind: "pane-input" }>;
 type PaneRunCmd = Extract<Command, { kind: "pane-run" }>;
 type PaneReadCmd = Extract<Command, { kind: "pane-read" }>;
+type PaneReportMetadataCmd = Extract<Command, { kind: "pane-report-metadata" }>;
 
 export async function runPaneSplit(cmd: PaneSplitCmd, store: SessionStore): Promise<void> {
   const result = await withSession(cmd.opts, store, async (client) => {
@@ -119,4 +121,13 @@ export async function runPaneRead(cmd: PaneReadCmd, store: SessionStore): Promis
     }
     await followOutput(client, cmd.paneId, cmd.raw);
   });
+}
+
+/** 独自トークンの報告（20260927-sidebar-row-tokens。herdr の `pane report-metadata` のトークンの部分）。自分の pane への報告は断らない。結果は `{}`。 */
+export async function runPaneReportMetadata(cmd: PaneReportMetadataCmd, store: SessionStore): Promise<void> {
+  const result = await withSession(cmd.opts, store, async (client) => {
+    await client.hello();
+    return client.request("pane.report_metadata", { paneId: cmd.paneId, ...metadataParams(cmd.report) });
+  });
+  printJson(result);
 }
