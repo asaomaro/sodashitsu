@@ -361,6 +361,16 @@ export const ACTIONS = [
     defaults: ["prefix+b"],
     action: { type: "toggleSidebar" },
   },
+  // 20260927-clipboard-image-paste（herdr の `remote_image_paste`。herdr は `herdr --remote` の既定が ctrl+v——ブラウザは常にサーバの外の
+  // クライアントなので同じ既定にする。decisions D2・D6）。クリップボードに画像が無い・読めないときはそのキーの列（ctrl+v なら 0x16）をそのまま送る。
+  // 端末にフォーカスがあるときだけ働く（入力欄の Ctrl+V はブラウザのまま）。Vim・Emacs の Ctrl+V を使う人は外せる。
+  {
+    id: "remote_image_paste",
+    label: "クリップボードの画像を貼り付け",
+    group: "pane",
+    defaults: ["ctrl+v"],
+    action: { type: "pasteImage" },
+  },
   // 20260923-missing-keybinding-actions（herdr にあって本製品に操作自体が無かったもの。既定は herdr と
   // 同じく全て「割り当てなし」。research F1）。
   {

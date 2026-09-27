@@ -653,7 +653,7 @@ describe("applyRecommended — herdr のおすすめの直接のキー（AC10）
     }
     expect(km2.bindingsOf("focus_pane_left")).toEqual(["prefix+h", "ctrl+alt+h"]);
     expect(km2.bindingsOf("split_horizontal")).toEqual(["prefix+-", "ctrl+alt+shift+d"]);
-    expect(km2.directMap.size).toBe(10);
+    expect(km2.directMap.size).toBe(11); // 推奨の 10 個＋既定の ctrl+v（remote_image_paste）
     expect(km2.directMap.get("ctrl+alt+shift+d")).toEqual({ type: "split", dir: "down" });
     expect(km2.prefixMap.get("h")).toEqual({ type: "focusDir", dir: "left" });
   });

@@ -28,6 +28,7 @@ import { NotificationController } from "./notify/NotificationController.js";
 import { ToneSound } from "./notify/ToneSound.js";
 import { Connection } from "./net/Connection.js";
 import { InputGate } from "./net/InputGate.js";
+import { ImagePaster } from "./term/ImagePaster.js";
 import type { ConnectionPort, TerminalSinkPort } from "./net/ports.js";
 import { documentTitle } from "./serverSession/documentTitle.js";
 import { StoreAdapter } from "./store/StoreAdapter.js";
@@ -156,6 +157,16 @@ const terminalOptions: Partial<ITerminalOptions> = {};
  */
 const getScrollbackLines = (): number => effectiveScrollback(settings.scrollback, kind, session.limits.scrollbackLines);
 
+// クリップボードの画像の貼り付け（20260927-clipboard-image-paste。herdr の remote_image_paste）。入力は関所を通し、送っている間のキーを溜める。
+// `registry` は下で作る（呼ばれるのは pane を acquire した後）。
+const imagePaster = new ImagePaster({
+  conn: inputGate,
+  input: inputGate,
+  terminalOf: (paneId) => registry.get(paneId)?.term ?? null,
+  toast: (message) => view.toast(message),
+  paneExists: (paneId) => session.panes.has(paneId),
+});
+
 const registry = new TerminalRegistry({
   capacity: terminalCapacity,
   conn: inputGate,
@@ -176,6 +187,7 @@ const registry = new TerminalRegistry({
   getScrollbackLines,
   // 作る端末は、いま使っているテーマの配色（20260921-theme-settings）。開いている端末は ThemeController が入れ替える。
   getTheme: () => toXtermTheme(TERMINAL_PALETTES[settings.effectiveTheme]),
+  onImagePaste: (paneId, blob) => imagePaster.pasteBlob(paneId, blob),
 });
 registryBox.current = registry;
 
@@ -265,7 +277,7 @@ for (const type of ["pointerdown", "pointerup", "keydown"] as const) {
 
 notificationsBox.current = notifications;
 
-const actionDispatcher = new ActionDispatcher({ conn, pinia, registry, keys, input: inputGate, notifications });
+const actionDispatcher = new ActionDispatcher({ conn, pinia, registry, keys, input: inputGate, notifications, imagePaste: imagePaster });
 actionDispatcherBox.current = actionDispatcher;
 
 /** サイドバーの workspace の選択と同じ（同じマシンのとき。`Sidebar.vue` の `focusWorkspace`）。 */
@@ -294,6 +306,7 @@ const machineSwitcher = new MachineSwitcher({
   resetView: () => {
     view.resetForMachineSwitch();
     keys.setMode("terminal");
+    imagePaster.resetForMachineSwitch(); // 前のマシンの pane へ始めた画像の貼り付けを、次のマシンの同じ id の pane へ届けない
   },
   nextTick: () => nextTick(),
   disposeTerminals: () => registry.disposeAll(),
@@ -316,7 +329,7 @@ machineWiringBox.current = machineWiring;
 watch([() => machines.selectedId, () => machines.machines.map((m) => m.id).join("\n"), mobileViewport], () => machineWiring.reconcileSummaryClients());
 // 1 列の画面になったらローカルへ戻り一覧を空にする（サイドバーにマシンの見出しが無く戻れなくなるため）。広げたら一覧を読み直す。
 watch(mobileViewport, (mobile) => machineWiring.onMobileChanged(mobile));
-keys.bind({ action: actionDispatcher, focus: actionDispatcher, mode: { onModeChange: (m) => view.onModeChange(m) } });
+keys.bind({ action: actionDispatcher, focus: actionDispatcher, mode: { onModeChange: (m) => view.onModeChange(m) }, imagePaste: imagePaster });
 
 // Windows のホストなら ConPTY 向けのオプションを足す（design「エージェントの argv[0]」隣接。H-cfg 相当）。
 watch(

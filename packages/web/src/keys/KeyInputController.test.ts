@@ -487,3 +487,147 @@ describe("KeyInputController.injectPrefix — モバイルの Prefix ボタン�
     expect(router.mode).toBe("prefix");
   });
 });
+
+describe("KeyInputController — 画像を貼り付けるキー（20260927-clipboard-image-paste）", () => {
+  let term: Terminal;
+  beforeEach(() => {
+    term = new Terminal({ cols: 40, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+  });
+  afterEach(() => {
+    term.dispose();
+    vi.restoreAllMocks();
+  });
+
+  function makeImagePaste() {
+    return { fromKey: vi.fn(), pasteClipboard: vi.fn() };
+  }
+  function bound(keymap = DEFAULT_KEYMAP, focus: string | null = "p1") {
+    const router = new KeyRouter(keymap, realClock());
+    const connection = makeFakeConnection();
+    const controller = new KeyInputController(router, connection);
+    const imagePaste = makeImagePaste();
+    const action = makeFakeAction();
+    controller.bind({ action, focus: makeFakeFocus(focus), mode: makeFakeModeSink(), imagePaste });
+    return { controller, connection, imagePaste, action };
+  }
+
+  it("端末で Ctrl+V は preventDefault して fromKey(pane, \\x16) を呼ぶ（xterm に 0x16 を送らせない）", () => {
+    const { controller, connection, imagePaste, action } = bound();
+    const { handler } = attachAndCapture(controller, term, "p3");
+    const e = ev({ key: "v", code: "KeyV", ctrlKey: true });
+    expect(handler(e as unknown as KeyboardEvent)).toBe(false);
+    expect(e.preventDefault).toHaveBeenCalled();
+    expect(imagePaste.fromKey).toHaveBeenCalledWith("p3", "\x16");
+    expect(connection.sent).toEqual([]);
+    expect(action.runs).toEqual([]); // ActionDispatcher へは渡さない
+  });
+
+  it("port が無ければ Ctrl+V は \\x16 をそのまま送る（画像は扱わない）", () => {
+    const router = new KeyRouter(DEFAULT_KEYMAP, realClock());
+    const connection = makeFakeConnection();
+    const controller = new KeyInputController(router, connection);
+    const { handler } = attachAndCapture(controller, term, "p1");
+    expect(handler(ev({ key: "v", code: "KeyV", ctrlKey: true }) as unknown as KeyboardEvent)).toBe(false);
+    expect(connection.sent).toEqual([["p1", "\x16"]]);
+  });
+
+  it("別のキーに変えたら、そのキーの列を fallback にする（ctrl+alt+v → ESC 0x16）。Ctrl+V は端末の既定のまま", () => {
+    const km = resolveKeymap({ ...emptyKeyPrefs(), bindings: { remote_image_paste: ["ctrl+alt+v"] } }).keymap;
+    const { controller, imagePaste } = bound(km);
+    const { handler } = attachAndCapture(controller, term, "p1");
+    expect(handler(ev({ key: "v", code: "KeyV", ctrlKey: true }) as unknown as KeyboardEvent)).toBe(true);
+    expect(handler(ev({ key: "v", code: "KeyV", ctrlKey: true, altKey: true }) as unknown as KeyboardEvent)).toBe(false);
+    expect(imagePaste.fromKey).toHaveBeenCalledTimes(1);
+    expect(imagePaste.fromKey).toHaveBeenCalledWith("p1", "\x1b\x16");
+  });
+
+  it("外したら Ctrl+V はクリップボードを読まず端末の既定（xterm が 0x16 を送る）", () => {
+    const km = resolveKeymap({ ...emptyKeyPrefs(), bindings: { remote_image_paste: [] } }).keymap;
+    const { controller, imagePaste } = bound(km);
+    const { handler } = attachAndCapture(controller, term, "p1");
+    const e = ev({ key: "v", code: "KeyV", ctrlKey: true });
+    expect(handler(e as unknown as KeyboardEvent)).toBe(true);
+    expect(e.preventDefault).not.toHaveBeenCalled();
+    expect(imagePaste.fromKey).not.toHaveBeenCalled();
+  });
+
+  it("端末以外にフォーカスがあるとき（handleDomKey）は横取りしない（入力欄の Ctrl+V はブラウザの貼り付け）", () => {
+    const { controller, imagePaste, connection } = bound();
+    expect(controller.handleDomKey(ev({ key: "v", code: "KeyV", ctrlKey: true }))).toBe(true);
+    expect(imagePaste.fromKey).not.toHaveBeenCalled();
+    expect(connection.sent).toEqual([]);
+  });
+
+  it("端末以外で Ctrl+V を押しっぱなしにしても毎回ブラウザの既定（連続の貼り付けを食わない）", () => {
+    const { controller, imagePaste } = bound();
+    expect(controller.handleDomKey(ev({ key: "v", code: "KeyV", ctrlKey: true }))).toBe(true);
+    const rep = ev({ key: "v", code: "KeyV", ctrlKey: true, repeat: true } as Partial<KeyboardEventLike> & { key: string });
+    expect(controller.handleDomKey(rep)).toBe(true);
+    expect(controller.handleDomKey(rep)).toBe(true);
+    expect(imagePaste.fromKey).not.toHaveBeenCalled();
+  });
+
+  it("prefix の後のキーに割り当てたとき、端末以外では 2 打目を食う（入力欄に文字を入れない）・端末では fromKey", () => {
+    const km = resolveKeymap({ ...emptyKeyPrefs(), bindings: { remote_image_paste: ["prefix+y"] } }).keymap;
+    const { controller, imagePaste } = bound(km);
+    controller.handleDomKey(ev({ key: "b", code: "KeyB", ctrlKey: true }));
+    expect(controller.handleDomKey(ev({ key: "y", code: "KeyY" }))).toBe(false);
+    expect(imagePaste.fromKey).not.toHaveBeenCalled();
+    const { handler } = attachAndCapture(controller, term, "p2");
+    handler(ev({ key: "b", code: "KeyB", ctrlKey: true }) as unknown as KeyboardEvent);
+    expect(handler(ev({ key: "y", code: "KeyY" }) as unknown as KeyboardEvent)).toBe(false);
+    expect(imagePaste.fromKey).toHaveBeenCalledWith("p2", null); // prefix の後の 1 文字は端末へ送れる chord ではない（画像が無ければ何も送らない＝ほかの prefix の操作と同じ）
+  });
+
+  it("prefix の後の ctrl 付きのキーに割り当てても、画像が無いときにそのキーの列は送らない（ほかの prefix の操作と同じ）", () => {
+    const km = resolveKeymap({ ...emptyKeyPrefs(), bindings: { remote_image_paste: ["prefix+ctrl+y"] } }).keymap;
+    const { controller, imagePaste } = bound(km);
+    const { handler } = attachAndCapture(controller, term, "p2");
+    handler(ev({ key: "b", code: "KeyB", ctrlKey: true }) as unknown as KeyboardEvent);
+    expect(handler(ev({ key: "y", code: "KeyY", ctrlKey: true }) as unknown as KeyboardEvent)).toBe(false);
+    expect(imagePaste.fromKey).toHaveBeenCalledWith("p2", null);
+  });
+
+  it("prefix 中・copy・navigate モードの Ctrl+V は画像を読まない（それぞれのモードの規則のまま）", () => {
+    const { controller, imagePaste } = bound();
+    const { handler } = attachAndCapture(controller, term, "p1");
+    handler(ev({ key: "b", code: "KeyB", ctrlKey: true }) as unknown as KeyboardEvent); // prefix
+    handler(ev({ key: "v", code: "KeyV", ctrlKey: true }) as unknown as KeyboardEvent);
+    for (const m of ["copy", "navigate", "resize"] as const) {
+      controller.setMode(m);
+      handler(ev({ key: "v", code: "KeyV", ctrlKey: true }) as unknown as KeyboardEvent);
+    }
+    expect(imagePaste.fromKey).not.toHaveBeenCalled();
+  });
+
+  it("押しっぱなしの繰り返しは 1 回だけ（直接のキーの規則）", () => {
+    const { controller, imagePaste } = bound();
+    const { handler } = attachAndCapture(controller, term, "p1");
+    handler(ev({ key: "v", code: "KeyV", ctrlKey: true }) as unknown as KeyboardEvent);
+    handler(ev({ key: "v", code: "KeyV", ctrlKey: true, repeat: true } as Partial<KeyboardEventLike> & { key: string }) as unknown as KeyboardEvent);
+    expect(imagePaste.fromKey).toHaveBeenCalledTimes(1);
+  });
+
+  it("Ctrl+Shift+V は port があれば pasteClipboard（画像も扱う）", () => {
+    const { controller, imagePaste } = bound();
+    const { handler } = attachAndCapture(controller, term, "p5");
+    expect(handler(ev({ key: "V", code: "KeyV", ctrlKey: true, shiftKey: true }) as unknown as KeyboardEvent)).toBe(false);
+    expect(imagePaste.pasteClipboard).toHaveBeenCalledWith("p5");
+  });
+
+  it("モバイルの Ctrl（one-shot）＋ v の注入も、フォーカス中の pane で fromKey", () => {
+    const { controller, imagePaste } = bound(DEFAULT_KEYMAP, "p9");
+    controller.setPendingModifier({ ctrl: true, alt: false });
+    controller.injectKey({ key: "v", code: "KeyV", ctrl: false, alt: false, shift: false, meta: false, type: "keydown", composing: false });
+    expect(imagePaste.fromKey).toHaveBeenCalledWith("p9", "\x16");
+  });
+
+  it("モバイルの Ctrl（one-shot）で端末に打った v も fromKey（pending を重ねた chord で判定）", () => {
+    const { controller, imagePaste } = bound();
+    const { handler } = attachAndCapture(controller, term, "p1");
+    controller.setPendingModifier({ ctrl: true, alt: false });
+    expect(handler(ev({ key: "v", code: "KeyV" }) as unknown as KeyboardEvent)).toBe(false);
+    expect(imagePaste.fromKey).toHaveBeenCalledWith("p1", "\x16");
+  });
+});

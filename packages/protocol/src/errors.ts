@@ -50,7 +50,14 @@ export type ErrorCode =
   | "invalid_metadata_ttl"
   | "invalid_metadata_token"
   | "metadata_token_limit"
-  | "metadata_sequence_source_limit";
+  | "metadata_sequence_source_limit"
+  // クリップボードの画像の貼り付け（20260927-clipboard-image-paste。herdr には code が無い——本製品の追加）。
+  | "invalid_image"
+  | "image_too_large"
+  | "image_upload_busy"
+  | "image_upload_rate_limited"
+  | "image_upload_expired"
+  | "image_store_failed";
 
 export interface ProtocolError {
   code: ErrorCode;

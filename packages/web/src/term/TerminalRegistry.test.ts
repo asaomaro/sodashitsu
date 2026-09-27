@@ -46,6 +46,7 @@ function makeRegistry(opts: {
   getScrollbackLines?: () => number;
   getTheme?: () => ITheme;
   createImageAddon?: () => ITerminalAddon | null;
+  onImagePaste?: (paneId: string, blob: Blob) => void;
 }) {
   const conn = makeConnection();
   const router = new KeyRouter(DEFAULT_KEYMAP, realClock());
@@ -58,6 +59,7 @@ function makeRegistry(opts: {
     renderers,
     keys,
     ...(opts.now ? { now: opts.now } : {}),
+    ...(opts.onImagePaste ? { onImagePaste: opts.onImagePaste } : {}),
     ...(opts.hasSizeAuthority ? { hasSizeAuthority: opts.hasSizeAuthority } : {}),
     ...(opts.getScrollbackLines ? { getScrollbackLines: opts.getScrollbackLines } : {}),
     ...(opts.getTheme ? { getTheme: opts.getTheme } : {}),
@@ -526,5 +528,53 @@ describe("TerminalRegistry.attachExternal（20260927-custom-command-keys の pop
     detach(); // 差し替わっているので外さない
     registry.onOutput("p9", new Uint8Array([1]));
     expect(got.at(-1)).toBe("other");
+  });
+});
+
+describe("TerminalRegistry — 画像だけの貼り付け（20260927-clipboard-image-paste）", () => {
+  /** xterm の textarea に paste イベントを配る（clipboardData は偽物）。 */
+  function pasteInto(element: HTMLElement, data: { text: string; files: File[] }): Event {
+    const ev = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, "clipboardData", {
+      value: {
+        getData: (t: string) => (t === "text/plain" ? data.text : ""),
+        items: data.files.map((f) => ({ kind: "file", type: f.type, getAsFile: () => f })),
+        files: data.files,
+      },
+    });
+    const target = element.querySelector("textarea") ?? element;
+    target.dispatchEvent(ev);
+    return ev;
+  }
+  const png = new File([new Uint8Array([0x89, 0x50])], "a.png", { type: "image/png" });
+
+  it("テキストが無く画像があれば onImagePaste へ渡し、xterm.js には渡さない（空の貼り付けを送らない）", () => {
+    const got: [string, Blob][] = [];
+    const { registry, conn } = makeRegistry({ capacity: 4, onImagePaste: (p, b) => void got.push([p, b]) });
+    const entry = registry.acquire("p1");
+    const ev = pasteInto(entry.element, { text: "", files: [png] });
+    expect(got).toEqual([["p1", png]]);
+    expect(ev.defaultPrevented).toBe(true);
+    expect(conn.sentInput).toEqual([]);
+    entry.term.dispose();
+  });
+
+  it("テキストがあれば何もしない（xterm.js が今までどおり貼る）", () => {
+    const got: unknown[] = [];
+    const { registry, conn } = makeRegistry({ capacity: 4, onImagePaste: (p, b) => void got.push([p, b]) });
+    const entry = registry.acquire("p1");
+    const ev = pasteInto(entry.element, { text: "hello", files: [png] });
+    expect(got).toEqual([]);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(conn.sentInput.some(([, b]) => String(b).includes("hello"))).toBe(true); // xterm.js が貼った
+    entry.term.dispose();
+  });
+
+  it("onImagePaste を渡さなければ listener を付けない（今までどおり）", () => {
+    const { registry } = makeRegistry({ capacity: 4 });
+    const entry = registry.acquire("p1");
+    const ev = pasteInto(entry.element, { text: "", files: [png] });
+    expect(ev.defaultPrevented).toBe(false);
+    entry.term.dispose();
   });
 });

@@ -67,14 +67,14 @@ const moveHereBtn = (): HTMLElement | null =>
   document.querySelector<HTMLElement>("[data-move-here]");
 
 describe("KeySettings — 一覧（AC1）", () => {
-  it("prefix と、3 群 50 個の操作＋navigate 6操作の現在の割り当てが見える（既定は今のキー）。割り当てなしは「なし」", async () => {
+  it("prefix と、3 群 51 個の操作＋navigate 6操作の現在の割り当てが見える（既定は今のキー）。割り当てなしは「なし」", async () => {
     const { settings } = await mountKeys();
     expect(document.querySelector("h3")!.textContent).toBe("キー");
     expect(document.querySelector(".keys-prefix .keys-binding")!.textContent).toBe("ctrl+b");
     expect(
       Array.from(document.querySelectorAll(".keys-group-name")).map((h) => h.textContent),
     ).toEqual(["全体", "workspace / tab", "pane", "独自コマンド", "navigate モードの移動"]); // 独自コマンドが 0 件なら群の代わりに置き場所の案内（20260927-custom-command-keys）
-    expect(document.querySelectorAll(".keys-details")).toHaveLength(57); // 50 + navigate 7（20260925-sidebar-keyboard-menu で navigate_open_menu が加わった。20260926-edit-scrollback で edit_scrollback が加わった）
+    expect(document.querySelectorAll(".keys-details")).toHaveLength(58); // 51 + navigate 7（20260925-sidebar-keyboard-menu で navigate_open_menu が加わった。20260926-edit-scrollback で edit_scrollback が加わった。20260927-clipboard-image-paste で remote_image_paste が加わった）
     expect(summaryText("split_vertical")).toBe("prefix+v");
     expect(summaryText("switch_tab")).toBe("prefix+1..9");
     expect(summaryText("cycle_pane_previous")).toBe("prefix+shift+tab");
@@ -649,7 +649,7 @@ describe("KeySettings — herdr のおすすめの直接のキー（AC10）", ()
     const { settings } = await mountKeys();
     presetAddBtn().click();
     await settle();
-    expect(settings.keymap.directMap.size).toBe(10);
+    expect(settings.keymap.directMap.size).toBe(11); // おすすめの 10 個＋既定の ctrl+v（remote_image_paste。20260927-clipboard-image-paste）
     expect(settings.keymap.bindingsOf("focus_pane_left")).toEqual(["prefix+h", "ctrl+alt+h"]);
     expect(summaryText("focus_pane_left")).toBe("prefix+h / ctrl+alt+h");
     expect(status()).toContain("10 個足しました");
@@ -674,7 +674,7 @@ describe("KeySettings — herdr のおすすめの直接のキー（AC10）", ()
     presetAddBtn().click();
     await settle();
     expect(settings.keymap.bindingsOf("zoom")).toEqual(["prefix+z"]);
-    expect(settings.keymap.directMap.size).toBe(10); // help の ctrl+alt+z を含めて 10（zoom の分は足さない）
+    expect(settings.keymap.directMap.size).toBe(11); // help の ctrl+alt+z を含めて 10（zoom の分は足さない）＋既定の ctrl+v
     expect(status()).toContain("9 個足しました");
     expect(status()).toContain("足さなかった分：ctrl+alt+z");
     expect(status()).toContain("キー一覧");
@@ -819,7 +819,7 @@ describe("KeySettings — 絞り込み（AC1・AC2・AC3・AC-I1〜AC-I5）", ()
   it("最初から表示され（開閉の概念を持たない）、操作名の一部で一致する操作だけが残る（AC1・AC-I1）", async () => {
     await mountKeys();
     expect(filterInput()).not.toBeNull();
-    expect(document.querySelectorAll(".keys-details")).toHaveLength(57);
+    expect(document.querySelectorAll(".keys-details")).toHaveLength(58);
     await typeFilter("拡大表示");
     expect(document.querySelectorAll(".keys-details")).toHaveLength(1);
     expect(row("zoom")).not.toBeNull();
@@ -843,7 +843,7 @@ describe("KeySettings — 絞り込み（AC1・AC2・AC3・AC-I1〜AC-I5）", ()
     await typeFilter("拡大表示");
     expect(document.querySelectorAll(".keys-details")).toHaveLength(1);
     await typeFilter("");
-    expect(document.querySelectorAll(".keys-details")).toHaveLength(57);
+    expect(document.querySelectorAll(".keys-details")).toHaveLength(58);
   });
 
   it("絞り込み中もフォーカスが入力欄に残る（入力のたびに奪われない。AC-I4）", async () => {

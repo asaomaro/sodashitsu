@@ -72,6 +72,16 @@ export class KeyRouter {
     return chordToKeyInput(this.keymap.prefix);
   }
 
+  /**
+   * terminal モードで、このキーが直接のキーとして割り当てられている操作（無ければ undefined）。**状態を変えない**（`handle` と違い、押しっぱなしの記録もしない）。
+   * 端末以外にフォーカスがあるとき、画像を貼り付けるキー（既定 ctrl+v）をブラウザの既定の動作に任せるために使う（20260927-clipboard-image-paste）。
+   */
+  directActionOf(k: KeyInput): Action | undefined {
+    if (this.currentMode !== "terminal" || k.type !== "keydown" || k.composing || isAltGrComposed(k)) return undefined;
+    const chord = chordOf(k);
+    return chord === null ? undefined : this.keymap.directMap.get(chord);
+  }
+
   handle(k: KeyInput): KeyDecision {
     // keydown 以外・IME の変換中は prefix と判定しない（design「キー操作」）。どのモードでも同様に扱う。
     if (k.type !== "keydown" || k.composing) return { kind: "pass" };

@@ -1,8 +1,15 @@
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { connect } from "node:net";
 import { PassThrough } from "node:stream";
 import { EventEmitter } from "node:events";
-import { decodeFrame, encodeInputFrame, FRAME_TYPE, type MachineStatus } from "@wtm/protocol";
+import {
+  decodeFrame,
+  encodeInputFrame,
+  FRAME_TYPE,
+  IMAGE_CHUNK_BYTES,
+  type MachineStatus,
+} from "@wtm/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { composeServerOnFreePort } from "../composeServerOnFreePort.js";
@@ -10,6 +17,7 @@ import type { ComposedServer } from "../composeServer.js";
 import { makeTempDir } from "../persist/atomicFile.js";
 import { bridgeSocketPathFor } from "./BridgeEndpoint.js";
 import { saveCatalog } from "./MachineCatalog.js";
+import { DEFAULT_IMAGE_UPLOAD_LIMITS } from "../image/ImageUploads.js";
 import type { ChildLike, SpawnFn } from "./MachineLink.js";
 
 /**
@@ -385,6 +393,74 @@ describe.skipIf(process.platform === "win32")(
       await new Promise((r) => setTimeout(r, 1200));
       expect(calls).toEqual([]);
       c.ws.close();
+    });
+
+    it("クリップボードの画像（20260927-clipboard-image-paste の T6）: 中継越しに分けて送ると、リモートの状態ディレクトリに置かれてリモートのパスが返る。中継の接続が切れると送信は捨てられる", async () => {
+      const { local, remoteDir, localDir } = await startPair({ withMachine: true });
+      const { cookie, port } = await login(local);
+      const localWs = new Client((await openWs(port, "", cookie)) as WebSocket);
+      cleanups.push(() => localWs.ws.close());
+      await localWs.request("client.hello", { protocol: 1, kind: "external" });
+      await until("online", async () => {
+        const r = await localWs.request<{ machines: MachineStatus[] }>("machine.list", {});
+        return r.machines[0]?.state === "online" ? true : undefined;
+      });
+      let paneId = "";
+      const relayed = async (): Promise<Client> => {
+        const c = new Client((await openWs(port, "?machine=Remote", cookie)) as WebSocket);
+        cleanups.push(() => c.ws.close());
+        const hello = await c.request<{ snapshot: { panes: { id: string }[] } }>("client.hello", {
+          protocol: 1,
+          kind: "desktop",
+        });
+        paneId = hello.snapshot.panes[0]!.id;
+        return c;
+      };
+      const c = await relayed();
+      const data = Buffer.alloc(IMAGE_CHUNK_BYTES + 10, 3); // 2 片（1 片は base64 で 1 MiB——中継の 1 通 4 MiB に収まる）
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(data);
+      const { uploadId } = await c.request<{ uploadId: string }>("pane.image.begin", {
+        paneId,
+        mime: "image/png",
+        size: data.length,
+      });
+      for (let off = 0; off < data.length; off += IMAGE_CHUNK_BYTES) {
+        await c.request("pane.image.chunk", {
+          uploadId,
+          offset: off,
+          data: data.subarray(off, off + IMAGE_CHUNK_BYTES).toString("base64"),
+        });
+      }
+      const { path } = await c.request<{ path: string }>("pane.image.commit", { uploadId });
+      expect(path.startsWith(join(remoteDir, "clipboard-images"))).toBe(true);
+      expect(path.startsWith(localDir)).toBe(false);
+      expect((await readFile(path)).equals(data)).toBe(true);
+
+      // 中継の接続の切断（リモートの BridgeEndpoint 側の WsGateway の onClientGone）で受け取り中の枠が空く。
+      const a = await relayed();
+      await a.request("pane.image.begin", { paneId, mime: "image/png", size: 10 });
+      for (let i = 0; i < 3; i++)
+        await (
+          await relayed()
+        ).request("pane.image.begin", { paneId, mime: "image/png", size: 10 });
+      const d = await relayed();
+      await expect(
+        d.request("pane.image.begin", { paneId, mime: "image/png", size: 10 }),
+      ).rejects.toThrow("image_upload_busy");
+      a.ws.close();
+      // 待つのは時間切れ（idleMs）の半分まで——切断の配線（onClientGone）が無いと、枠は時間切れでしか空かず、ここで落ちる。
+      await until(
+        "slot freed",
+        async () =>
+          d.request("pane.image.begin", { paneId, mime: "image/png", size: 10 }).then(
+            () => true,
+            (e: unknown) => {
+              expect(String(e)).toContain("image_upload_busy");
+              return undefined;
+            },
+          ),
+        DEFAULT_IMAGE_UPLOAD_LIMITS.idleMs / 2,
+      );
     });
   },
 );
