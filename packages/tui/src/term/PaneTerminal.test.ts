@@ -94,4 +94,23 @@ describe("PaneTerminal（AC6）", () => {
     expect(() => t.output(enc.encode("x"))).not.toThrow();
     expect(() => t.snapshot(10, 2, "x")).not.toThrow();
   });
+
+  it("DECSTR（CSI ! p）でカーソルの表示・形を初期値へ戻す", async () => {
+    const t = make();
+    t.output(enc.encode("\x1b[?25l\x1b[5 q"));
+    await t.flush();
+    t.output(enc.encode("\x1b[!p"));
+    await t.flush();
+    expect(t.cursorVisible).toBe(true);
+    expect(t.cursorStyle).toBe("block");
+    expect(t.cursorBlink).toBe(false);
+  });
+
+  it("DECSCUSR の 7 以上は無視する（xterm と同じ）", async () => {
+    const t = make();
+    t.output(enc.encode("\x1b[4 q\x1b[7 q"));
+    await t.flush();
+    expect(t.cursorStyle).toBe("underline");
+    expect(t.cursorBlink).toBe(false);
+  });
 });

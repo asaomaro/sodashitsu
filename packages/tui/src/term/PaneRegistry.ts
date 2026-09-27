@@ -58,7 +58,7 @@ export class PaneRegistry implements TerminalSinkPort {
   }
 
   onSizeChanged(paneId: string, cols: number, rows: number): void {
-    this.terms.get(paneId)?.resize(cols, rows);
+    this.terms.get(paneId)?.resizeAfterWrites(cols, rows);
   }
 
   // --- 接続 ---
@@ -102,7 +102,10 @@ export class PaneRegistry implements TerminalSinkPort {
         if (this.subscribed.has(v.paneId)) continue;
         this.subscribed.add(v.paneId);
         void this.conn
-          .request("pane.subscribe", { paneId: v.paneId, scrollbackLines: this.scrollbackLines() })
+          .request("pane.subscribe", {
+            paneId: v.paneId,
+            scrollbackLines: this.terms.get(v.paneId)?.scrollback ?? this.scrollbackLines(),
+          })
           .catch(() => {
             // 購読に失敗した（閉じた pane・切断）。次の commit でやり直せるよう印を外す。
             this.subscribed.delete(v.paneId);

@@ -90,7 +90,39 @@ describe("PaneRegistry（見えている pane の購読。T3）", () => {
     await t.flush();
     expect(t.term.buffer.active.getLine(0)?.translateToString(true)).toBe("snap!");
     reg.onSizeChanged("p1", 50, 7);
+    await t.flush();
     expect([t.cols, t.rows]).toEqual([50, 7]);
+  });
+
+  it("大きさの変化は、それより前に届いた出力を前の大きさで処理してから当てる", async () => {
+    const { reg } = make();
+    reg.commit(view(["p1"]), () => ({ cols: 10, rows: 3 }));
+    const t = reg.get("p1")!;
+    // 前の大きさ（10 桁）では 15 桁目への移動は右端（10 桁目）に留まる。
+    reg.onOutput("p1", new TextEncoder().encode("\x1b[1;15HX"));
+    reg.onSizeChanged("p1", 20, 3);
+    await t.flush();
+    await t.flush();
+    expect([t.cols, t.rows]).toEqual([20, 3]);
+    expect(t.term.buffer.active.getLine(0)?.translateToString(true).indexOf("X")).toBe(9);
+  });
+
+  it("購読で求める行数は headless を作ったときの値（作った後に設定が変わっても食い違わない）", () => {
+    const conn = fakeConn();
+    let lines = 500;
+    const reg = new PaneRegistry(
+      conn,
+      () => lines,
+      () => undefined,
+    );
+    regs.push(reg);
+    reg.commit(view(["p1"]), size);
+    lines = 9000;
+    reg.connectionOpened();
+    expect(conn.calls.find((c) => c[0] === "pane.subscribe")?.[1]).toEqual({
+      paneId: "p1",
+      scrollbackLines: 500,
+    });
   });
 
   it("閉じた pane は捨てる", () => {

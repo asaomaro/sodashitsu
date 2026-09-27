@@ -39,7 +39,8 @@ export class PaneTerminal {
     readonly paneId: string,
     cols: number,
     rows: number,
-    scrollback: number,
+    /** 作ったときの行数（購読で求める行数もこれ。作ってから購読するまでに設定が変わっても食い違わない。web の D6 と同じ）。 */
+    readonly scrollback: number,
     private readonly onDirty: (paneId: string) => void = () => undefined,
   ) {
     this.term = new Terminal({
@@ -67,6 +68,16 @@ export class PaneTerminal {
         this.onCursorStyle(params),
       ),
     );
+    // DECSTR（`CSI ! p`。ソフトリセット）もカーソルの表示・形を初期値へ戻す（xterm 本体の処理は妨げない）。
+    this.disposers.push(
+      parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
+        this.cursorVisible = true;
+        this.cursorStyle = "block";
+        this.cursorBlink = false;
+        this.markDirty();
+        return false;
+      }),
+    );
     // RIS（SNAPSHOT の頭の `\x1bc` を含む）で追っている状態も初期値へ戻す（xterm 自身の RIS は妨げない）。
     this.disposers.push(
       parser.registerEscHandler({ final: "c" }, () => {
@@ -88,6 +99,15 @@ export class PaneTerminal {
   output(chunk: Uint8Array): void {
     if (this.disposed) return;
     this.term.write(chunk);
+  }
+
+  /**
+   * それまでの書き込みを処理し終えてから大きさを変える（`pane.size_changed`。前の大きさで出た出力を新しい大きさで解釈しない。
+   * web の `TerminalRegistry` と同じ順序）。
+   */
+  resizeAfterWrites(cols: number, rows: number): void {
+    if (this.disposed) return;
+    this.term.write("", () => this.resize(cols, rows));
   }
 
   resize(cols: number, rows: number): void {
@@ -147,6 +167,7 @@ export class PaneTerminal {
   private onCursorStyle(params: (number | number[])[]): boolean {
     const first = params[0];
     const ps = typeof first === "number" ? first : (first?.[0] ?? 0);
+    if (ps > 6) return false; // xterm は 7 以上を無視する
     this.cursorStyle = ps <= 2 ? "block" : ps <= 4 ? "underline" : "bar";
     this.cursorBlink = ps === 0 || ps % 2 === 1;
     this.markDirty();
