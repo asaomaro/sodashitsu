@@ -1,4 +1,4 @@
-import type { PopupDimension, ServerSessionEntry, SessionFocus, WorkspaceGroup, WorktreeEntry, WorktreeListResult } from "@sodashitsu/protocol";
+import { DEVICE_LOCAL_PREF_KEYS, type PopupDimension, type ServerSessionEntry, type SessionFocus, type WorkspaceGroup, type WorktreeEntry, type WorktreeListResult } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import type { AgentSort, Mode, WorkspaceSort } from "@sodashitsu/client-core";
@@ -78,6 +78,47 @@ export function writePrefs(patch: Record<string, unknown>): void {
   } catch {
     // 保存できなくても致命的ではない（この画面の間だけ効く）。
   }
+  // サーバの共有の設定へも送る（20260927-cli-mode の design「設定」。`actions/PrefsSync.ts`）。localStorage に書けない環境でも送る（サーバが正）。
+  for (const fn of [...prefsWriteListeners]) fn(patch);
+}
+
+/**
+ * 設定の書き込みを知らせる先（20260927-cli-mode）。`main.ts` が `PrefsSync` を登録する。**`writePrefs` を通った書き込みだけ**が来る
+ * （サーバから受けた値の反映 `replaceSharedPrefs` は来ない——受けた値を送り返さない）。
+ */
+const prefsWriteListeners = new Set<(patch: Record<string, unknown>) => void>();
+export function onPrefsWritten(fn: (patch: Record<string, unknown>) => void): () => void {
+  prefsWriteListeners.add(fn);
+  return () => prefsWriteListeners.delete(fn);
+}
+
+/** 端末ごとに持ち、サーバと共有しない項目か（サイドバーの幅・折りたたみ。design「設定」）。 */
+export function isDeviceLocalPref(key: string): boolean {
+  return (DEVICE_LOCAL_PREF_KEYS as readonly string[]).includes(key);
+}
+
+/** 共有する項目だけを取り出す（端末ごとの項目を除く）。 */
+export function sharedPrefsOf(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) if (!isDeviceLocalPref(k)) out[k] = v;
+  return out;
+}
+
+/**
+ * サーバから受けた共有の設定で、localStorage の共有の項目を**丸ごと置き換える**（端末ごとの項目は残す。20260927-cli-mode）。localStorage は次の起動の表示用のキャッシュ。
+ * 置き換えた後の全体（端末ごとの項目＋受けた値）を返す——localStorage に書けない環境でも、呼び出し側はこれを各ストアへ当てられる。書き込みの知らせ（`onPrefsWritten`）は出さない。
+ */
+export function replaceSharedPrefs(shared: Record<string, unknown>): Record<string, unknown> {
+  const current = readPrefs();
+  const next: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(current)) if (isDeviceLocalPref(k)) next[k] = v;
+  for (const [k, v] of Object.entries(shared)) if (!isDeviceLocalPref(k)) next[k] = v;
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+  } catch {
+    // 書けなくても、この画面には返した値を当てる。
+  }
+  return next;
 }
 
 // `export` する（20260922-appearance-settings-rest T7。decisions D7）——`loadSidebarWidth`/

@@ -1,4 +1,4 @@
-import type { AgentInfo, AgentIntegrationStatusResult, MachineStatus, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
+import type { AgentInfo, AgentIntegrationStatusResult, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { ConnectionState, StorePort } from "@sodashitsu/client-core";
 import { useCommandsStore } from "./commands.js";
@@ -37,6 +37,8 @@ export interface StoreAdapterOptions {
    * 意味を持つ（リモートを向いていればそのマシンの登録簿）——使うかは呼び出し側（`main.ts`）が決める。省略可。
    */
   onMachinesChanged?: (machines: MachineStatus[]) => void;
+  /** 共有の設定が保存された（`prefs.changed`。20260927-cli-mode）。反映するかは `actions/PrefsSync.ts` が決める。省略可。 */
+  onPrefsChanged?: (data: PrefsChangedEvent["data"]) => void;
 }
 
 /**
@@ -170,6 +172,9 @@ export class StoreAdapter implements StorePort {
         return;
       case "command.popup_closed":
         useCommandsStore(this.opts.pinia).notePopupClosed(e.data.popupId, e.data.exitCode);
+        return;
+      case "prefs.changed":
+        this.opts.onPrefsChanged?.(e.data);
         return;
     }
   }
