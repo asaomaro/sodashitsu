@@ -255,10 +255,31 @@ parent: 20260918-web-terminal-multiplexer
       実測: 単体・結合テスト 3291 本 green（`pnpm -s test` を 2 回）・負の確認 29 変異すべて検知・smoke pass（3 本。3 本目を追加）。
       独立点検（タスク 9 件・cross）27＋3 件・独立 review 2 ラウンド（should 2・nit 4。nit 1 は許容）。E2E は未実行。
       Windows ネイティブ・macOS は未検証（`docs/verification.md` に手動確認を追加）。`docs/herdr-parity.md` H33 を更新済み。
-- [ ] 名前付き session の残り（止める）: herdr の `herdr session stop <name>` に当たる `wtm session stop <名前>`。本製品のサーバは外から
+- [x] 名前付き session の残り（止める）: herdr の `herdr session stop <name>` に当たる `wtm session stop <名前>`。本製品のサーバは外から
       止める経路を持たず、`wtm.lock` の pid へシグナルを送る形は pid の再利用で無関係なプロセスを止めうるので、止めるための
-      安全な経路（認証つき等）の設計が要る。今は Ctrl+C か `wtm session list` の pid へ `kill`〔D8〕 (needs: 20260926-named-session)
+      安全な経路（認証つき等）の設計が要る。~~今は Ctrl+C か `wtm session list` の pid へ `kill`~~〔D8〕 (needs: 20260926-named-session)
       （出典: .aidev/works/20260926-named-session/decisions.md D1）。
+      → 着地: 20260927-session-stop（feature/session-stop。Linux・macOS）。経路は既存の制御の socket `handoff.sock`（状態ディレクトリの中・0600）の
+      `{"op":"stop"}`（`packages/server/src/handoff/HandoffSocket.ts`・受け付けの判断は `handoff/controlRequests.ts`）で、新しい TCP の待ち受けも
+      pid へのシグナルも無い。CLI（`packages/server/src/stop/stopCommand.ts` `runSessionStop`）は返事の pid と `wtm.lock` の持ち主の一致を確かめ、
+      持ち主が居なくなるまで最長 30 秒待つ（終了コード 0/1/2/3・`--json`）。停止は Ctrl+C と同じ手順（`serveShutdown.ts`）。名前は必須・`default`・
+      `WTM_SESSION` は見ない（decisions D3）。止める途中の `wtm handoff` は `stopping` で断り、引き継ぎの最中の停止は終わるまで待つ（D9・D10）。
+      実測: `pnpm -s test` 233 files / 4492 passed（1 回）・負の確認 26 変異すべて検知（main.ts の配線はビルドして smoke で）・`aidev smoke` pass（7 本。
+      7 本目 `stopSmoke.js` を追加）・独立点検（タスク 8 件＋cross 2 ラウンド）・独立 review 2 ラウンド（should 1・nit 5）。E2E は未実行。
+      Windows は非対応（下の行）・macOS は未検証。`docs/herdr-parity.md` H33 ⑤・`docs/tls-setup.md`・`docs/verification.md` を更新。
+- [ ] 名前付き session の残り（Windows で止める）: `wtm session stop` の Windows 対応（今は終了コード 2 で非対応。制御の socket を Windows では
+      置かない）。候補は (a) 状態ディレクトリに置く止める専用の秘密（1 回ごとの乱数）と既存の HTTP の待ち受け（loopback からだけ）、
+      (b) 名前付きパイプ——Node の `net.Server` は DACL を指定できず、既定の DACL とリモート（SMB 越し）のクライアントの扱いを実機で確かめる
+      必要がある（`AgentReportSocket` の Windows の権限も未対策。`docs/verification.md`）。herdr は interprocess の名前付きパイプで対応
+      （`scratchpad/herdr/src/ipc.rs`）〔D8〕 (needs: 20260927-session-stop)（出典: .aidev/works/20260927-session-stop/decisions.md D2）。
+- [ ] 制御の socket（`handoff.sock`）の接続に期限を付ける: 1 行も送らずに繋ぎっぱなしにする同じ利用者のプロセスがあると、`close()` の最後の
+      socket の close（`net.Server.close` は接続の終わりを待つ）で停止が止まる。20260927-session-stop で socket を閉じる位置を `lock.release()` の
+      直前へ移したので、起こりうる区間が停止の全体に広がった。1 行を受けるまでの期限（数秒）と、閉じるときに残った接続を切ること
+      〔D8〕 (needs: 20260927-session-stop)（出典: .aidev/works/20260927-session-stop/decisions.md D4・review.md ラウンド 1 の補足）。
+- [ ] `wtm handoff --session <名前>` が大文字小文字を区別しない FS で綴りの違う名前を断らない（`isDirectory` だけで見る。`wtm session stop`・
+      `delete` は `findExactEntry` で断る）。同じ判定にそろえる〔D8〕 (needs: 20260927-session-stop)（出典: .aidev/works/20260927-session-stop/review.md ラウンド 1）。
+- [ ] 画面から session を止める: `server.sessions` の一覧（サイドバーの `session: <名前> ⇄`）から別の session を止める操作（確認つき）。
+      今は CLI の `wtm session stop` だけ〔D8〕 (needs: 20260927-session-stop)（出典: .aidev/works/20260927-session-stop/requirements.md の対象外）。
 - [x] 名前付き session の残り（画面と既定）: ブラウザの画面での session 名の表示・session の切り替え（herdr の `session attach`。
       Web 版では別の URL〔ポート〕を開くことに当たる）、session ごとのポートの記憶（名前だけで同じポートに起動し直す）、
       環境変数での既定の session の選択（herdr の `HERDR_SESSION`）〔D8〕 (needs: 20260926-named-session)

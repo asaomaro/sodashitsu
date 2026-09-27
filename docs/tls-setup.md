@@ -432,6 +432,7 @@ wtm serve --session lan --host 0.0.0.0 --port 8443 --cert wtm.pem --key wtm-key.
 wtm session list                                            # 一覧（動いているか・状態ディレクトリ）
 wtm session list --json                                     # 同じ内容を JSON で（delete も --json を受ける）
 wtm token reset --session lan                               # その session の token だけを作り直す（止めてから。無い名前は断る）
+wtm session stop lan                                        # 動いている session を止める（Ctrl+C と同じ正常な停止。既定の session は default）
 wtm session delete lan                                      # 動いていない名前付き session を丸ごと消す
 ```
 
@@ -465,6 +466,24 @@ wtm session delete lan                                      # 動いていない
   （Linux の `/home/<ユーザー名>/.local/state/web-tn-multiplexer`）なら、ユーザー名が 8 文字で 34 文字の名前まで通る。
 - `wtm session list` の `status` は `wtm.lock` から判定する（`running` なら行末に `(pid …)` を添える。別のホストのロックは
   `(pid … on <ホスト名>)`）。規則外の名前のディレクトリ・シンボリックリンク・ファイルは一覧に出さない。
+- **`wtm session stop <名前> [--json]`**（20260927-session-stop。Linux・macOS。macOS は未検証）：動いている `wtm serve` を、
+  起動した端末に触れずに止める。止め方は Ctrl+C と同じ（`session.json`・`--pane-history` なら画面履歴を保存し、pane のプロセスを
+  終わらせ、`wtm.lock` を放す）ので、同じ名前で起動し直すとレイアウト（と画面履歴）が戻る。既定の session は `wtm session stop default`
+  （名前は必須。`WTM_SESSION` は見ない——名前付き session の pane には `WTM_SESSION` が入っているので、打ち間違いでその pane ごと止めない）。
+  `--state-dir D` で起動した session には同じ `--state-dir D` を付ける。
+  - 止める指示は、その session の状態ディレクトリの `handoff.sock`（`wtm handoff` と同じ制御の socket。0600 で同じ利用者だけが繋げる）に
+    送る。**新しいネットワークの待ち受けは作らず、pid へのシグナルも送らない**（`wtm.lock` の pid が別のプロセスに再利用されていても
+    無関係なプロセスを止めない）。返事の pid が `wtm.lock` の持ち主と一致することを確かめ、持ち主が居なくなるまで最長 30 秒待つ。
+  - 終了コード：`0` 止まった（`wtm: stopped session <名前>`）／`1` 断られた・繋げない・時間切れ等（理由と次の手を出す。サーバは
+    指示の前のまま動き続けるか、時間切れなら止まる途中）／`2` 名前の誤り・無い session・Windows／`3` 動いていない
+    （`session <名前> is not running`。何も作らない）。`--json` は成功を `{"stopped":true,"session":{…}}`、失敗を
+    `{"error":{"code":…,"message":…}}` で出す（`code` は `not_running`・`older_server`・`refused_busy`・`timeout` 等）。
+  - 断られる場面：`wtm handoff` の最中（終わってからもう一度）・`stop` を知らない古い版の `wtm serve`（起動した端末で Ctrl+C）・
+    まだ起動の途中（復元が終わるまで制御の socket が無い）・別のホストで動いている（そのホストで打つ）。
+  - 止まる途中の `wtm serve` への `wtm handoff` は断られる（`handoff refused (stopping)`。起動し直すなら `wtm serve`）。
+  - **pane の中から自分の session を止める**と、その pane のシェルごと終わるので、結果の行が出ないことがある（止まりはする）。
+  - Windows では非対応（終了コード 2。起動した窓で Ctrl+C）。
+  - `wtm session delete`・`wtm token reset` が「動いている」と断るときは、案内に `wtm session stop <名前>` が出る。
 - `wtm session delete <名前>` は、`default`・動いている session・存在しない名前・シンボリックリンクを消さずに断る
   （終了コード 1。規則外の名前は `wtm serve` と同じく終了コード 2）。動いていないのに断られる（落ちて残った・別のホストの
   `wtm.lock`）ときは、案内のとおりその session の `wtm.lock` を消してからやり直す（下の「別のホスト・作り直したコンテナの
@@ -473,8 +492,9 @@ wtm session delete lan                                      # 動いていない
   `sessions/<名前>~deleting-…` へ名前を変えてから中身を消す。名前を変える前に同じ名前の `wtm serve` を起動すると
   `wtm.lock` で止まり、変えた後なら空の新しい session として起動する（消している途中のものとは混ざらない）。
 - **herdr との違い**：
-  - **動いている session を止めるコマンドは無い**（herdr の `herdr session stop <name>`）。その `wtm serve` を起動した端末で
-    Ctrl+C するか、`wtm session list` に出る pid に `kill <pid>`（SIGTERM で `session.json` を書いて終わる）。
+  - `wtm session stop`（herdr の `herdr session stop <name>`）：経路は制御の socket（`handoff.sock`）の `stop`、止まったかは
+    socket への接続ではなく `wtm.lock` の持ち主で見る、待つ上限は 30 秒（herdr は 15 秒。本製品は画面履歴の保存を含むため）、
+    動いていないときは終了コード 3（herdr は 1）、Windows は非対応（herdr は名前付きパイプで対応）。
   - **`attach` の代わりに、画面の session の一覧から別の session を新しいタブで開く**（下の「画面での session の表示と切り替え」）。
     別の session は別の URL（ポート）で、開いた先ではその session のログイン（token）が要る。
   - `WTM_SESSION` の空は「無い」として扱う（herdr は空を誤りにする。`export WTM_SESSION=` で外せるようにした）。
@@ -560,7 +580,8 @@ wtm serve --host 0.0.0.0 --port 8443 --cert wtm.pem --key wtm-key.pem
 # 他のユーザーに読めないよう umask 077 で作る
 ( umask 077; setsid node ~/src/web-tn-multiplexer/packages/server/dist/main.js serve --host 0.0.0.0 --port 8443 \
     --cert wtm.pem --key wtm-key.pem > ~/wtm-serve.log 2>&1 < /dev/null & )
-# 止めるとき：kill <pid>（SIGTERM で閉じて終わる）。pid は <状態ディレクトリ>/wtm.lock の 1 行目
+# 止めるとき：wtm session stop default（Linux・macOS。Ctrl+C と同じ正常な停止）。kill <pid>（SIGTERM）でも閉じて終わるが、
+# pid は <状態ディレクトリ>/wtm.lock の 1 行目で、別のプロセスに再利用されていないか確かめてから送る
 ```
 
 常駐させるなら systemd のユーザー単位のサービス等も使える（書き方は systemd の docs を参照。WSL2 で systemd を使うには

@@ -129,7 +129,12 @@ export async function runHandoff(
         "更新時の引き継ぎ（live handoff）は Linux と macOS の Node.js 24 以降で使えます。",
       );
     io.err(`wtm: handoff refused (${reply.reason}): ${reply.message}`);
-    io.err("wtm: the server keeps running as before");
+    // 止まる途中（`wtm session stop`・Ctrl+C）の断りでは「動き続ける」とは言わない（20260927-session-stop）。
+    io.err(
+      reply.reason === "stopping"
+        ? "wtm: the server is shutting down; start it again with wtm serve instead of handing off"
+        : "wtm: the server keeps running as before",
+    );
     return 1;
   }
   io.out(`wtm: handing off ${reply.panes} pane(s) of pid ${holder.pid} to the wtm on disk…`);

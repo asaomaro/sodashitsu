@@ -6,8 +6,10 @@ import type { Logger } from "../log/Logger.js";
 import type { HandoffReply, HandoffStatus } from "./HandoffController.js";
 
 /**
- * 引き継ぎの指示の受け口（20260926-live-handoff。design「`handoff.sock`」・decisions D3）。状態ディレクトリの Unix ドメイン socket で、
- * 待ち受けたら 0600（同じ利用者だけ）。1 接続 1 行の JSON: `{"op":"handoff"}` → `HandoffReply`／`{"op":"status"}` → `HandoffStatus`。
+ * サーバの制御の受け口（20260926-live-handoff の引き継ぎの指示として作り、20260927-session-stop で止める指示を足した。design「`handoff.sock`」・
+ * decisions D3、20260927-session-stop の decisions D2）。状態ディレクトリの Unix ドメイン socket で、待ち受けたら 0600（同じ利用者だけ）。
+ * 1 接続 1 行の JSON: `{"op":"handoff"}` → `HandoffReply`／`{"op":"status"}` → `HandoffStatus`／`{"op":"stop"}` → `StopReply`。
+ * **ファイル名は `handoff.sock` のまま**（新しい CLI が古いサーバへ `wtm handoff` するときに見つけられるように）。
  * Windows では作らない（呼び出し側が判断する）。新しい TCP の待ち受けは作らない。
  */
 export const HANDOFF_SOCKET_FILE_NAME = "handoff.sock";
@@ -17,9 +19,16 @@ export function handoffSocketPathFor(stateDir: string): string {
   return join(stateDir, HANDOFF_SOCKET_FILE_NAME);
 }
 
+/** 止める指示の返事（20260927-session-stop）。`alreadyStopping` は、既に止まる途中だったので新たには何もしなかったこと。 */
+export type StopReply =
+  | { ok: true; pid: number; alreadyStopping: boolean }
+  | { ok: false; reason: "busy" | "unsupported"; message: string };
+
 export interface HandoffRequestHandler {
   request(reply: (r: HandoffReply) => Promise<void>): Promise<void>;
   status(): HandoffStatus;
+  /** 止める指示。`reply` は 1 回だけ呼ぶ。止めるのは返事の後（返事を書けなくても止める）。 */
+  stop(reply: (r: StopReply) => Promise<void>): Promise<void>;
 }
 
 export interface HandoffSocket {
@@ -98,11 +107,13 @@ async function handleLine(
     } else if (op === "handoff") {
       // 成功したら execve で戻らない（接続はプロセスの入れ替わりで閉じる）。
       await handler.request((r) => writeLine(sock, r));
+    } else if (op === "stop") {
+      await handler.stop((r) => writeLine(sock, r));
     } else {
       await writeLine(sock, {
         ok: false,
         reason: "bad_request",
-        message: 'expected {"op":"handoff"} or {"op":"status"}',
+        message: 'expected {"op":"handoff"}, {"op":"status"} or {"op":"stop"}',
       });
     }
   } catch (err) {

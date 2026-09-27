@@ -2,12 +2,12 @@ import { ConfigError, type RawServeArgs } from "./config.js";
 import { SESSION_NAME_RULE, sessionNameProblem } from "./persist/namedSession.js";
 
 export interface ParsedArgs {
-  command: "serve" | "token-reset" | "session-list" | "session-delete" | "handoff" | "handoff-preflight" | "help";
+  command: "serve" | "token-reset" | "session-list" | "session-delete" | "session-stop" | "handoff" | "handoff-preflight" | "help";
   serve: RawServeArgs;
   stateDir?: string | undefined;
   /** `--session`（serve・token reset・handoff。20260926-named-session・20260926-live-handoff）。serve では `serve.session` にも入る。 */
   session?: string | undefined;
-  /** `wtm session delete <name>` の名前。 */
+  /** `wtm session delete <name>`・`wtm session stop <name>`（20260927-session-stop）の名前。 */
   sessionTarget?: string | undefined;
   /** `--json`（session だけ）。 */
   json?: boolean;
@@ -25,10 +25,10 @@ export const SESSION_ENV_VAR = "WTM_SESSION";
 export const PREFLIGHT_COMMAND_NAME = "__handoff-preflight";
 
 const USAGE =
-  "使い方: wtm serve [--host H] [--port P] [--cert F] [--key F] [--origin O]... [--state-dir D] [--session NAME] [--scrollback N] [--shell S] [--worktree-dir D] [--pane-history] / wtm token reset [--state-dir D] [--session NAME] / wtm session list [--state-dir D] [--json] / wtm session delete NAME [--state-dir D] [--json] / wtm handoff [--state-dir D] [--session NAME]";
+  "使い方: wtm serve [--host H] [--port P] [--cert F] [--key F] [--origin O]... [--state-dir D] [--session NAME] [--scrollback N] [--shell S] [--worktree-dir D] [--pane-history] / wtm token reset [--state-dir D] [--session NAME] / wtm session list [--state-dir D] [--json] / wtm session delete NAME [--state-dir D] [--json] / wtm session stop NAME [--state-dir D] [--json] / wtm handoff [--state-dir D] [--session NAME]";
 
 /**
- * CLI の引数を解釈する（`wtm serve [...]` / `wtm token reset [--state-dir D] [--session NAME]` / `wtm session list|delete` /
+ * CLI の引数を解釈する（`wtm serve [...]` / `wtm token reset [--state-dir D] [--session NAME]` / `wtm session list|delete|stop` /
  * `wtm handoff [--state-dir D] [--session NAME]`（20260926-live-handoff）・隠しコマンド `__handoff-preflight`）。`main.ts` から分けたのは単体テストのため
  * （`main.ts` は読み込むと起動する）。誤りはどれも `ConfigError`（終了コード 2・使い方つき）：
  * - 未知のオプション・値の無いオプション。
@@ -148,7 +148,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
  * - 無い・空は何もしない（herdr は空を誤りにするが、`export WTM_SESSION=` で外せるようにした。decisions D3）。
  * - `default` は既定の session（`resolveSessionStateDir` が既定にする）。
  * - 規則外は `ConfigError`（終了コード 2。何も作らず・読まない）で、値の出所が `WTM_SESSION` であることを示す。
- * - `wtm session list`・`delete` は名前を明示して受け取るので見ない。
+ * - `wtm session list`・`delete`・`stop` は名前を明示して受け取るので見ない（`stop` は pane の中の `WTM_SESSION` でその pane ごと止めないため。20260927-session-stop の decisions D3）。
  */
 export function applySessionEnv(parsed: ParsedArgs, env: NodeJS.ProcessEnv): ParsedArgs {
   if (parsed.command !== "serve" && parsed.command !== "token-reset" && parsed.command !== "handoff") return parsed;
@@ -170,7 +170,10 @@ export function applySessionEnv(parsed: ParsedArgs, env: NodeJS.ProcessEnv): Par
   };
 }
 
-/** `wtm session list` / `wtm session delete <name>`（20260926-named-session）。使えるオプションは --state-dir と --json だけ。 */
+/**
+ * `wtm session list` / `wtm session delete <name>`（20260926-named-session）/ `wtm session stop <name>`（20260927-session-stop。名前は必須で `WTM_SESSION` は見ない——
+ * pane の中の `WTM_SESSION` でその pane ごと止めないため。decisions D3）。使えるオプションは --state-dir と --json だけ。
+ */
 function parseSessionCommand(
   words: readonly string[],
   serveOnlyOptions: readonly string[],
@@ -186,7 +189,9 @@ function parseSessionCommand(
   const [sub, ...args] = words;
   if (sub === "list" && args.length === 0) return { command: "session-list", serve, stateDir, json };
   if (sub === "delete" && args.length === 1) return { command: "session-delete", serve, stateDir, json, sessionTarget: args[0] };
-  if (sub === undefined) throw new ConfigError("missing subcommand: wtm session <list|delete>", USAGE);
-  if (sub === "delete" && args.length === 0) throw new ConfigError("missing session name: wtm session delete <name>", USAGE);
+  if (sub === "stop" && args.length === 1) return { command: "session-stop", serve, stateDir, json, sessionTarget: args[0] };
+  if (sub === undefined) throw new ConfigError("missing subcommand: wtm session <list|delete|stop>", USAGE);
+  if ((sub === "delete" || sub === "stop") && args.length === 0)
+    throw new ConfigError(`missing session name: wtm session ${sub} <name>`, `${sub === "stop" ? "既定の session を止めるなら名前に default を指定してください。" : ""}${USAGE}`);
   throw new ConfigError(`unknown subcommand: wtm session ${words.join(" ")}`, USAGE);
 }

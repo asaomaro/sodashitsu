@@ -12,6 +12,9 @@
 # 6本目（20260926-live-handoff）: 更新時の引き継ぎ。ビルドした `dist/main.js` で `wtm serve` を起動し、実物の `wtm handoff`（execve で同じ入口に入れ替わる）の後も
 # サーバと pane のシェルの pid・前の画面・入出力・大きさ・終了の検知が保たれること、動いていなければ終了コード 3 で何も作らないことを確かめる
 # （execve の先がビルドした成果物なので vitest では確かめられない。Windows では何もせず成功）。
+# 7本目（20260927-session-stop）: `wtm session stop`。ビルドした `dist/main.js` で `wtm serve --session smoke --pane-history` を起動し、実物の
+# `wtm session stop smoke` で止まる（CLI 0・サーバ 0・一覧が stopped・ロックの解放・状態の保存）こと、動いていない・止まった後は終了コード 3 で何も作らないこと、
+# 起動し直すと同じ pane と前回の画面が戻ることを確かめる（止める指示と `main.ts` の停止の手順の配線は vitest では見られない。Windows では何もせず成功）。
 smokeCommands:
   - pnpm -s build && pnpm -s smoke
   - pnpm --filter @wtm/cli run smoke
@@ -19,5 +22,6 @@ smokeCommands:
   - WTMCTL_URL=http://127.0.0.1:9 node packages/cli/dist/main.js skill | cmp - packages/cli/skills/wtmctl/SKILL.md
   - d=$(mktemp -d) && mkdir -p "$d/sessions/smoke" && WTM_SESSION=smoke node packages/server/dist/main.js token reset --state-dir "$d" && test -f "$d/sessions/smoke/auth.json" && test ! -e "$d/auth.json" && { WTM_SESSION=a/b node packages/server/dist/main.js token reset --state-dir "$d" 2>/dev/null; test $? -eq 2; } && test ! -e "$d/auth.json"; rc=$?; rm -rf "$d"; exit $rc
   - node packages/server/dist/handoffSmoke.js
+  - node packages/server/dist/stopSmoke.js
 smokeTimeoutSec: 180
 tracker: none

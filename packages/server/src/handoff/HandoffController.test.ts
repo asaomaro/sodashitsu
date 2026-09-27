@@ -334,11 +334,24 @@ describe("HandoffController", () => {
           : Promise.resolve({ ok: false, message: "second" }),
     });
     const got: HandoffReply[] = [];
+    expect(controller.isBusy).toBe(false);
+    await controller.waitIdle(); // 最中でなければすぐ
     const first = controller.request(async (r) => void replies.push(r));
+    // 引き継ぎの最中は isBusy（止める指示を断る根拠）・waitIdle は終わるまで待つ（止め始めたサーバが待つ。20260927-session-stop）
+    expect(controller.isBusy).toBe(true);
+    let idle = false;
+    const waiting = controller.waitIdle().then(() => {
+      idle = true;
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(idle).toBe(false);
     await controller.request(async (r) => void got.push(r));
     expect(got[0]).toMatchObject({ ok: false, reason: "busy" });
     release();
     await first;
+    await waiting;
+    expect(idle).toBe(true);
+    expect(controller.isBusy).toBe(false);
     // 終わったらまた受け付ける
     const again: HandoffReply[] = [];
     await controller.request(async (r) => void again.push(r));

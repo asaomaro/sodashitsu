@@ -1,7 +1,7 @@
 import type { Dirent } from "node:fs";
 import { lstat, readdir, rename, rm } from "node:fs/promises";
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { ServerSessionEntry } from "@wtm/protocol";
 import { ConfigError } from "../configError.js";
 import { readServeRecord, type ServeRecord } from "./ServeRecordFile.js";
@@ -48,6 +48,25 @@ export function resolveSessionStateDir(base: string, name: string | undefined): 
   return join(base, SESSIONS_DIR, name);
 }
 
+/**
+ * 動いている session の止め方の案内に出す `wtm session stop <名前>`（20260927-session-stop の AC13）。状態ディレクトリの根 `base` が既定
+ * （`defaultBase`）でなければ `--state-dir` を添える——添えないと、案内をそのまま打ったときに既定の根を見に行き、止められない
+ * （POSIX のシェルの単一引用符で包む）。`defaultBase` が無ければ添えない。**Windows では `undefined`**（`wtm session stop` は非対応。AC11）。
+ */
+export function sessionStopCommandFor(
+  name: string,
+  base: string,
+  defaultBase: string | undefined,
+  os: NodeJS.Platform = process.platform,
+): string | undefined {
+  if (os === "win32") return undefined;
+  const dirArg =
+    defaultBase !== undefined && resolve(base) !== resolve(defaultBase)
+      ? ` --state-dir ${/^[\w@%+=:,./-]+$/.test(base) ? base : `'${base.replace(/'/g, `'\\''`)}'`}`
+      : "";
+  return `wtm session stop ${name}${dirArg}`;
+}
+
 export interface SessionEntry {
   name: string;
   default: boolean;
@@ -69,7 +88,8 @@ async function entryFor(name: string, stateDir: string, isDefault: boolean): Pro
   return entry;
 }
 
-async function readSessionsDir(base: string): Promise<Dirent[]> {
+/** `sessions/` の中身（無ければ空）。`wtm session stop` も名前付き session の実エントリを探すのに使う。 */
+export async function readSessionsDir(base: string): Promise<Dirent[]> {
   try {
     return await readdir(join(base, SESSIONS_DIR), { withFileTypes: true });
   } catch (err) {
@@ -166,8 +186,15 @@ export async function findExactEntry(
   );
 }
 
-/** 動いていない名前付き session の状態ディレクトリを丸ごと消す。ロックを取ってから消す（その間の起動は wtm.lock で止まる）。 */
-export async function deleteSession(base: string, name: string): Promise<SessionEntry> {
+/**
+ * 動いていない名前付き session の状態ディレクトリを丸ごと消す。ロックを取ってから消す（その間の起動は wtm.lock で止まる）。
+ * `defaultBase` は止め方の案内に `--state-dir` を添えるかの判断に使う（`sessionStopCommandFor`）。
+ */
+export async function deleteSession(
+  base: string,
+  name: string,
+  defaultBase?: string,
+): Promise<SessionEntry> {
   if (name === DEFAULT_SESSION_NAME)
     throw new SessionDeleteError("default", "既定の session（default）は消せません");
   assertSessionName(name);
@@ -192,9 +219,12 @@ export async function deleteSession(base: string, name: string): Promise<Session
         err.otherHost !== undefined
           ? `ロックは別のホスト（または別のコンテナ）${err.otherHost} のもので、その生死はここからは確かめられません。そちらで wtm が動いていなければ ${err.lockPath} を消してからやり直してください`
           : `pid ${err.pid} が wtm でなければ（前の wtm が落ちた後に pid が再利用された）、${err.lockPath} を消してからやり直してください`;
+      const stopCommand = sessionStopCommandFor(name, base, defaultBase);
       throw new SessionDeleteError(
         "running",
-        `session ${name} は動いています（${who}）。止めてから消してください。${stale}`,
+        `session ${name} は動いています（${who}）。止めてから消してください` +
+          (err.otherHost === undefined && stopCommand !== undefined ? `（${stopCommand}）` : "") +
+          `。${stale}`,
       );
     }
     throw err;

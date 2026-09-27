@@ -152,6 +152,18 @@ describe("runHandoff", () => {
     expect(d.asked).toHaveLength(1);
   });
 
+  it("止まる途中のサーバの断り（stopping）では「動き続ける」と言わない（20260927-session-stop）", async () => {
+    dir = await makeTempDir("wtm-handoff-cmd-");
+    const d = deps([
+      JSON.stringify({ ok: false, reason: "stopping", message: "the server is stopping" }),
+    ]);
+    const o = io();
+    expect(await runHandoff(dir, undefined, o.io, undefined, d)).toBe(1);
+    expect(o.err.join("\n")).toContain("handoff refused (stopping)");
+    expect(o.err.join("\n")).toContain("shutting down");
+    expect(o.err.join("\n")).not.toContain("keeps running");
+  });
+
   it("受け付けた後に入れ替われなかった（status に error）なら、待たずに 1", async () => {
     dir = await makeTempDir("wtm-handoff-cmd-");
     const d = deps([
@@ -228,7 +240,11 @@ describe.skipIf(process.platform === "win32")("askSocket（実物の handoff.soc
       });
       const sock = await startHandoffSocket(
         path,
-        { request: async () => undefined, status: () => ({ lastHandoff: null }) },
+        {
+          request: async () => undefined,
+          status: () => ({ lastHandoff: null }),
+          stop: async () => undefined,
+        },
         new MemoryLogger(),
       );
       try {

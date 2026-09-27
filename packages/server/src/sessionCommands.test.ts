@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ConfigError } from "./configError.js";
 import { makeTempDir } from "./persist/atomicFile.js";
 import { StateDirLock } from "./persist/StateDirLock.js";
+import { sessionStopCommandFor } from "./persist/namedSession.js";
+import { defaultStateDir } from "./config.js";
 import {
   type CommandIo,
   runSessionDelete,
@@ -186,5 +188,52 @@ describe("wtm session list / delete・wtm token reset --session（20260926-named
     await expect(runTokenReset(base, "work", captureIo())).rejects.toThrow(
       /cannot reset the token/,
     );
+  });
+
+  // Windows では wtm session stop が非対応なので案内しない（下の sessionStopCommandFor のテスト）。
+  it.skipIf(process.platform === "win32")(
+    "動いている session への delete・token reset は止め方（wtm session stop <名前>）を案内する（20260927-session-stop の AC13）",
+    async () => {
+      const work = await mkSession("work");
+      const lock = new StateDirLock(work);
+      await lock.acquire();
+      held.push(lock);
+      const del = captureIo();
+      expect(await runSessionDelete(base, "work", false, del)).toBe(1);
+      expect(del.errs[0]).toContain(
+        `止めてから消してください（${sessionStopCommandFor("work", base, defaultStateDir())}）`,
+      );
+      await expect(runTokenReset(base, "work", captureIo())).rejects.toMatchObject({
+        hint: expect.stringContaining("wtm session stop work"),
+      });
+      const baseLock = new StateDirLock(base);
+      await baseLock.acquire();
+      held.push(baseLock);
+      await expect(runTokenReset(base, undefined, captureIo())).rejects.toMatchObject({
+        hint: expect.stringContaining("wtm session stop default"),
+      });
+      // 既定でない根（テストの一時ディレクトリ）なので --state-dir を添える
+      await expect(runTokenReset(base, "work", captureIo())).rejects.toMatchObject({
+        hint: expect.stringContaining(sessionStopCommandFor("work", base, defaultStateDir())!),
+      });
+      // WTM_SESSION から選んだ名前でも同じ名前を案内し、WTM_SESSION の案内も残す
+      await expect(runTokenReset(base, "work", captureIo(), "env")).rejects.toMatchObject({
+        hint: expect.stringMatching(
+          /WTM_SESSION[\s\S]*wtm session stop work|wtm session stop work[\s\S]*WTM_SESSION/,
+        ),
+      });
+    },
+  );
+
+  it("持ち主が別のホストなら、止め方（wtm session stop）は案内しない（そこからは止められない）", async () => {
+    const work = await mkSession("work");
+    await writeFile(join(work, "wtm.lock"), "7\nsome-other-host-for-test\n");
+    const del = captureIo();
+    expect(await runSessionDelete(base, "work", false, del)).toBe(1);
+    expect(del.errs[0]).toContain("some-other-host-for-test");
+    expect(del.errs[0]).not.toContain("wtm session stop");
+    await expect(runTokenReset(base, "work", captureIo())).rejects.toMatchObject({
+      hint: expect.not.stringContaining("wtm session stop"),
+    });
   });
 });

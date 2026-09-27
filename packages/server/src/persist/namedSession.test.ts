@@ -13,6 +13,7 @@ import {
   resolveSessionStateDir,
   SessionDeleteError,
   sessionNameProblem,
+  sessionStopCommandFor,
 } from "./namedSession.js";
 import { hostname } from "node:os";
 import { writeServeRecord } from "./ServeRecordFile.js";
@@ -380,5 +381,22 @@ describe("listServerSessions（server.sessions の一覧）", () => {
       expect(JSON.stringify(e)).not.toContain(base);
       expect(JSON.stringify(e)).not.toContain(String(process.pid));
     }
+  });
+});
+
+describe("sessionStopCommandFor（20260927-session-stop の AC13）", () => {
+  it("既定の根なら --state-dir を添えず、違えば添える（空白・引用符は単一引用符で包む）", () => {
+    expect(
+      sessionStopCommandFor("work", "/home/u/.local/state/wtm", "/home/u/.local/state/wtm"),
+    ).toBe("wtm session stop work");
+    expect(sessionStopCommandFor("default", "/s", "/home/u/.local/state/wtm")).toBe(
+      "wtm session stop default --state-dir /s",
+    );
+    expect(sessionStopCommandFor("work", "/my dir/it's", "/d")).toBe(
+      "wtm session stop work --state-dir '/my dir/it'\\''s'",
+    );
+    expect(sessionStopCommandFor("work", "/s", undefined)).toBe("wtm session stop work");
+    // Windows では非対応なので案内しない（AC11）
+    expect(sessionStopCommandFor("work", "/s", "/d", "win32")).toBeUndefined();
   });
 });

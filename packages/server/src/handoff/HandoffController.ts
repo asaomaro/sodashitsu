@@ -17,6 +17,8 @@ import {
 export type HandoffFailureReason =
   | "unsupported"
   | "busy"
+  /** サーバが止まる途中（`wtm session stop`・Ctrl+C。20260927-session-stop）。 */
+  | "stopping"
   | "preflight_failed"
   | "pane_unavailable"
   | "prepare_failed"
@@ -84,9 +86,15 @@ const DEFAULT_HOLD_TIMEOUT_MS = 5000;
 
 export class HandoffController {
   private busy = false;
+  private running: Promise<void> | undefined;
   private last: LastHandoff | null = null;
 
   constructor(private readonly deps: HandoffControllerDeps) {}
+
+  /** 引き継ぎの最中か（受け付けてから、元に戻すか execve するまで）。止める指示を断るのに使う（20260927-session-stop）。 */
+  get isBusy(): boolean {
+    return this.busy;
+  }
 
   status(): HandoffStatus {
     return { lastHandoff: this.last };
@@ -116,11 +124,22 @@ export class HandoffController {
       return;
     }
     this.busy = true;
+    const running = this.run(reply);
+    this.running = running.catch(() => undefined);
     try {
-      await this.run(reply);
+      await running;
     } finally {
       this.busy = false;
+      this.running = undefined;
     }
+  }
+
+  /**
+   * 引き継ぎの最中なら、それが終わる（元に戻す）まで待つ（最中でなければすぐ）。止め始めたサーバ（`close()`）が、進行中の引き継ぎと並んで
+   * 端末を捨てたり保存したりしないため（20260927-session-stop の cross の点検）。引き継ぎが execve に成功すれば、このプロセスは入れ替わり戻らない。
+   */
+  waitIdle(): Promise<void> {
+    return this.running ?? Promise.resolve();
   }
 
   private async run(reply: (r: HandoffReply) => Promise<void>): Promise<void> {

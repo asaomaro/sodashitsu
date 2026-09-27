@@ -50,7 +50,8 @@ pnpm --filter @wtm/e2e test
   ディレクトリの下の `sessions/<名前>/`。`--session` を付けなければ今までどおり。並行して動かすなら `--port` も分ける。一覧は
   `wtm session list [--json]`、token の作り直しは `wtm token reset --session <名前>`、消すのは（止めてから）
   `wtm session delete <名前>`。名前は 1〜64 文字の ASCII の英数字と `.` `_` `-`（詳しくは `docs/tls-setup.md`
-  「名前付き session」）。止めるコマンドは無い（Ctrl+C か `wtm session list` の pid に `kill`）。
+  「名前付き session」）。止めるのは `wtm session stop <名前>`（既定の session は `default`。Ctrl+C と同じ正常な停止。
+  Linux・macOS。20260927-session-stop）か、起動した端末で Ctrl+C。
   名前付き session はポートを覚え（`--port` 無しの起動で前回のポート）、`WTM_SESSION` で既定の session を選べ、画面のサイドバーの
   `session: <名前> ⇄` から別の session を新しいタブで開ける（20260926-named-session-ui。詳しくは `docs/tls-setup.md`「画面での session の表示と切り替え」）。
 - **画面履歴**（`wtm serve --pane-history`。既定は無効。20260926-screen-history-replay）：付けて動かしたサーバを止めて起動し直すと、
@@ -404,6 +405,14 @@ pnpm --filter @wtm/e2e test` が通ることを基準とする（`packages/e2e` 
       `wtm serve --session work`（`--port` 無し）で起動し直すと 7781 で待ち受け `wtm: session work が前回使ったポート 7781 …` の行が出ること。
       `work` を止めて `WTM_SESSION=work wtm token reset` が `work` の token を作り直すこと、`WTM_SESSION=a/b wtm serve` が何も作らずに
       止まり終了コード `2` で案内に `WTM_SESSION` が出ること、`work` の pane で `echo $WTM_SESSION` が `work` を、既定の session の pane では空を出すこと。
+- [ ] `wtm session stop`（20260927-session-stop。起動確認 `stopSmoke.js` で Linux の通しは確かめ済み。macOS は未検証。Linux・WSL2 の手順）：
+      `wtm serve --session work --port 7781 --pane-history` を tmux の別の窓等で起動し、ブラウザで pane に何か表示してから、別の端末で
+      `wtm session stop work` を打つ。`wtm: stopped session work` が出て `echo $?` が `0`、起動した窓に
+      `wtm: stop requested (wtm session stop), shutting down` が出てプロンプトに戻ること、`wtm session list` の `work` が `stopped` で、
+      もう一度の `wtm session stop work` が `session work is not running` と終了コード `3` になることを確かめる。同じ引数で起動し直すと
+      レイアウトと前回の画面が戻ること。`wtm session stop work --json` の 1 行の JSON、`wtm session stop nope` が終了コード `2`、
+      `work` の pane の中で `wtm session stop work` を打つとサーバとその pane のシェルごと止まる（結果の行が出なくてもよい）こと、`wtm handoff --session work` の
+      直後（引き継ぎの最中）に打つと「引き継ぎが終わってからもう一度」の案内（時機によっては入れ替わりの途中で `did not accept a stop request` の案内）で `1` になり、サーバは動き続けることも見る。
 - [ ] Windows の named pipe の権限限定（`AgentReportSocket`。design D5）：Unix の `chmod 0600` に
       相当する対策が Windows では未実装（既知の制約。同 work の decisions.md 参照）。Windows
       ネイティブで確認する場合、同じホストの別ユーザーから report socket へ接続できないことを
@@ -463,7 +472,9 @@ WSL2 を経由せず、Windows 上で直接 `node.exe` を実行して `wtm serv
       `wtm: cannot reset the token: the state dir … is in use by a running wtm (pid …)`）が出て、`$LASTEXITCODE` が `2`。
 - [ ] 名前付き session（20260926-named-session。Windows ネイティブでは未検証）：`wtm serve --session work --port 7781` を
       実行し、`wtm: session work（状態ディレクトリ: …\web-tn-multiplexer\sessions\work）` の行と token 付きの URL が出ること、
-      別の PowerShell の窓で `wtm session list` を実行して `work` の行の status が `running`、行末に `(pid …)` と出ることを確かめる。`wtm serve --session con`
+      別の PowerShell の窓で `wtm session list` を実行して `work` の行の status が `running`、行末に `(pid …)` と出ることを確かめる。
+      続けて同じ窓で `wtm session stop work` を実行すると、Windows では非対応の案内が出て `$LASTEXITCODE` が `2`、`work` の wtm は
+      動き続けること（`wtm session list` で `running` のまま。20260927-session-stop）。`wtm serve --session con`
       と `wtm serve --session "work."` は何も作らずに止まり `$LASTEXITCODE` が `2`。`work` の wtm を Ctrl+C で止めてから
       `wtm session delete work` を実行し、`…\sessions\work` が消えること（`$LASTEXITCODE` が `0`）、既定の session
       （`wtm serve`）の workspace・token がそのままであることを確かめる。

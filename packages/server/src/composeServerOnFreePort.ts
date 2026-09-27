@@ -40,6 +40,8 @@ export interface ComposeOnFreePortOptions {
   attempts?: number;
   /** 空いているポートの選び方（既定は `getFreePort`）。 */
   pickPort?: (host: string) => Promise<number>;
+  /** `composeServer` のテスト用の差し替え（2 つ目の引数）。 */
+  internal?: Parameters<typeof composeServer>[1];
 }
 
 /**
@@ -57,7 +59,7 @@ export async function composeServerOnFreePort(
   const start = opts.start ?? ((server: ComposedServer) => server.listen());
   for (let attempt = 1; ; attempt++) {
     const port = await pickPort(host);
-    const server = await composeServer({ ...args, port: String(port) });
+    const server = await composeServer({ ...args, port: String(port) }, opts.internal);
     try {
       await start(server, port);
       return server;

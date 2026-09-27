@@ -11,6 +11,8 @@ import { PANE_HISTORY_FILE_NAME } from "./persist/PaneHistoryFile.js";
 import { formatUrlHost } from "./util/net.js";
 import { runHandoff } from "./handoff/handoffCommand.js";
 import { runPreflightStage } from "./handoff/preflight.js";
+import { createShutdown } from "./serveShutdown.js";
+import { runSessionStop } from "./stop/stopCommand.js";
 
 function printHelp(): void {
   console.log(
@@ -20,6 +22,7 @@ function printHelp(): void {
       "wtm token reset [--state-dir DIR] [--session NAME]",
       "wtm session list [--state-dir DIR] [--json]",
       "wtm session delete NAME [--state-dir DIR] [--json]",
+      "wtm session stop NAME [--state-dir DIR] [--json]",
       "wtm handoff [--state-dir DIR] [--session NAME]",
     ].join("\n"),
   );
@@ -55,30 +58,19 @@ async function runServe(args: RawServeArgs): Promise<void> {
   // 終了コード 129）ので、受けて閉じて終わる方がよい。起動の途中で受けたら、その段（復元等）を終えてから閉じる（`close()` と
   // `listen()` を並行させない——ロックを確実に放す）。もう一度受けたら待たずに終わる（残ったロックは次の起動が pid を見て
   // 取り直す）。
-  let shuttingDown = false;
+  // 手順の本体は `serveShutdown.ts`（止める指示 `wtm session stop` と共有する。20260927-session-stop）。
   let startup: Promise<void> | undefined;
-  const shutdown = (signal: NodeJS.Signals): void => {
-    showTokenIfUnshown();
-    if (shuttingDown) {
-      console.error(`wtm: received ${signal} again, exiting without waiting`);
-      process.exit(1);
-    }
-    shuttingDown = true;
-    console.log(`wtm: received ${signal}, shutting down`);
-    void (async () => {
-      await startup?.catch(() => undefined);
-      showTokenIfUnshown(); // 起動の途中で作った token（まだ表示していなければ）
-      // close() は session.json を書き終えてから状態ディレクトリのロック（wtm.lock）を放す（失敗しても放す。D103）。
-      await server.close();
-    })().then(
-      () => process.exit(0),
-      (err: unknown) => {
-        console.error("wtm: error during shutdown", err);
-        process.exit(1);
-      },
-    );
-  };
-  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => shutdown(signal));
+  const stopper = createShutdown({
+    close: () => server.close(),
+    startup: () => startup,
+    showTokenIfUnshown,
+    log: (line) => console.log(line),
+    error: (...args) => console.error(...args),
+    exit: (code) => process.exit(code),
+  });
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => stopper.signal(signal));
+  // 制御の socket（handoff.sock）の止める指示（`wtm session stop`）も同じ手順で止める。止まる途中の指示は何もしない（AC7）。
+  server.onStopRequest(() => stopper.stopRequest());
 
   let listening = false;
   try {
@@ -96,7 +88,7 @@ async function runServe(args: RawServeArgs): Promise<void> {
     }
     listening = true;
     // 起動の途中で終了のシグナルを受けていたら、起動の表示は出さない（`shutdown` が閉じて終わる。token は finally で表示する）。
-    if (shuttingDown) return;
+    if (stopper.shuttingDown) return;
     // ここまで来たら待ち受けに成功している。token 付きの URL はこの後にだけ表示する（D102）。表示する行は先に全部
     // 組み立てる（組み立ての失敗で、途中まで表示して終わらない）。`--origin` を先頭に、`0.0.0.0` / `::` のときは開ける
     // URL（localhost と LAN の IPv4）を並べる（`startupLines`・`accessUrls`。D101・D102）。
@@ -123,7 +115,7 @@ async function runServe(args: RawServeArgs): Promise<void> {
     showTokenIfUnshown(); // close() を待つ前に表示する
     // 待ち受けた後の失敗（表示の組み立て等）では、待ち受けたまま・状態ディレクトリのロックを持ったまま終わらないよう
     // 閉じる（`listen()` 自身の失敗は `listen()` が後始末する）。
-    if (listening && !shuttingDown) await server.close().catch(() => undefined);
+    if (listening && !stopper.shuttingDown) await server.close().catch(() => undefined);
     throw err;
   } finally {
     showTokenIfUnshown();
@@ -148,6 +140,8 @@ async function main(): Promise<void> {
       process.exitCode = await runHandoff(parsed.stateDir ?? defaultStateDir(), parsed.session, consoleIo, parsed.sessionSource);
     } else if (parsed.command === "handoff-preflight") {
       runPreflightStage({ stage: parsed.preflightStage ?? 1, probe: parsed.preflightProbe });
+    } else if (parsed.command === "session-stop") {
+      process.exitCode = await runSessionStop(parsed.stateDir ?? defaultStateDir(), parsed.sessionTarget!, parsed.json === true, consoleIo);
     } else if (parsed.command === "session-delete") {
       process.exitCode = await runSessionDelete(parsed.stateDir ?? defaultStateDir(), parsed.sessionTarget!, parsed.json === true, consoleIo);
     } else {
