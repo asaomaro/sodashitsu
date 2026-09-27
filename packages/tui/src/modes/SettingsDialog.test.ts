@@ -304,3 +304,146 @@ describe("SettingsWriter（手元で先に重ね、返事で外す）", () => {
     expect(prefs.rev).toBe(3);
   });
 });
+
+describe("設定画面の点検の指摘（05 T1）", () => {
+  const closers: (() => Promise<void>)[] = [];
+  afterEach(async () => {
+    for (const c of closers.splice(0)) await c();
+  });
+  const flush = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+  function writer(prefs: PrefsModel, fail: (patch: Record<string, unknown>) => unknown) {
+    const sent: Record<string, unknown>[] = [];
+    const toasts: string[] = [];
+    const w = new SettingsWriter({
+      prefs,
+      conn: {
+        request: ((_m: string, p: { patch: Record<string, unknown> }) => {
+          sent.push(p.patch);
+          const err = fail(p.patch);
+          return err
+            ? Promise.reject(err)
+            : Promise.resolve({ prefs: p.patch, rev: prefs.rev + 1 });
+        }) as never,
+      },
+      toast: (m) => toasts.push(m),
+      setLocal: () => undefined,
+    });
+    return { w, sent, toasts };
+  }
+
+  it("大きすぎて受け付けられない変更は、この画面の中だけで効かせたまま 1 回だけ知らせる（D10）", async () => {
+    const prefs = new PrefsModel();
+    prefs.apply({}, 1);
+    const { w, toasts } = writer(prefs, () =>
+      Object.assign(new Error("too large"), { code: "invalid_params" }),
+    );
+    w.setShared({ statusSymbols: false });
+    await flush();
+    expect(prefs.statusSymbols).toBe(false);
+    w.setShared({ paneGaps: false });
+    await flush();
+    expect(toasts).toEqual([
+      "設定が大きすぎるため、サーバに保存できませんでした（この画面の中だけで効きます）",
+    ]);
+  });
+
+  it("tui の項目は、サーバが受け付けた tui に今回の項目（と返事待ちの項目）だけを重ねて送る。失敗した項目は乗せない", async () => {
+    const prefs = new PrefsModel();
+    prefs.apply({ tui: { narrowThreshold: 50 } }, 1);
+    let failNext = true;
+    const { w, sent } = writer(prefs, () => {
+      if (!failNext) return null;
+      failNext = false;
+      return new Error("closed");
+    });
+    w.setTui("mouseCapture", false);
+    await flush();
+    expect(prefs.mouseCapture).toBe(true); // 戻った
+    w.setTui("copyOnSelect", false);
+    await flush();
+    expect(sent[1]).toEqual({ tui: { narrowThreshold: 50, copyOnSelect: false } });
+  });
+
+  it("この画面だけで効かせている tui の項目（大きすぎて保存できなかった）も、ほかの項目の要求に乗せない", async () => {
+    const prefs = new PrefsModel();
+    prefs.apply({ tui: { narrowThreshold: 50 } }, 1);
+    let first = true;
+    const { w, sent } = writer(prefs, () => {
+      if (!first) return null;
+      first = false;
+      return Object.assign(new Error("too large"), { code: "invalid_params" });
+    });
+    w.setTui("mouseCapture", false);
+    await flush();
+    expect(prefs.mouseCapture).toBe(false); // この画面だけで効いている
+    w.setTui("copyOnSelect", false);
+    expect(sent[1]).toEqual({ tui: { narrowThreshold: 50, copyOnSelect: false } });
+  });
+
+  it("数の入力は 10 進の数字だけ（空・0x40・1e2 は通さない）", async () => {
+    let rev = 0;
+    const h = await startedApp({
+      respond: { "prefs.set": (p: { patch: unknown }) => ({ prefs: p.patch, rev: ++rev }) },
+    });
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    h.io.type("\x02s");
+    await vi.waitFor(() => expect(h.app.ui.dialogContext).toEqual({ kind: "settings" }));
+    for (let i = 0; i < 6; i++) h.io.type("j");
+    h.io.type(ENTER + DOWN + DOWN + DOWN);
+    for (const bad of ["", "0x40", "1e2", "+50", "30.0"]) {
+      h.io.type(ENTER + "\x15" + bad + ENTER);
+    }
+    expect(h.ws.requests("prefs.set")).toEqual([]);
+  });
+
+  it("独自コマンドがあれば一覧に出し、その割り当てとぶつかるキーは「こちらへ移す」を訊く。prefix の「既定に戻す」は上書きしているときだけ", async () => {
+    let rev = 0;
+    const h = await startedApp({
+      respond: {
+        "command.list": {
+          commands: [{ id: "deploy", type: "shell", description: "デプロイ" }],
+          problem: null,
+        },
+        "prefs.set": (p: { patch: unknown }) => ({ prefs: p.patch, rev: ++rev }),
+      },
+    });
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("command.list")).toHaveLength(1));
+    h.app.prefs.apply({ keys: { commands: { deploy: ["ctrl+alt+d"] } } }, 0);
+    const km = () =>
+      (h.app as unknown as { keymap: { bindingsOf(id: string): readonly string[] } }).keymap;
+    await vi.waitFor(() => expect(km().bindingsOf("command:deploy")).toEqual(["ctrl+alt+d"]));
+    h.io.type("\x02s");
+    await vi.waitFor(() => expect(h.app.ui.dialogContext).toEqual({ kind: "settings" }));
+    for (let i = 0; i < 5; i++) h.io.type("j");
+    h.io.type(ENTER + "\x1b[F"); // 末尾へ（独自コマンドの群は操作の後）
+    h.app.renderNow();
+    let t = await h.screen();
+    expect(t).toContain("デプロイ");
+    expect(t).not.toContain("独自コマンドはありません");
+    // prefix の行：上書きが無いので「既定に戻す」は無い。
+    h.io.type("\x1b[H" + ENTER);
+    h.app.renderNow();
+    t = await h.screen();
+    expect(t).toContain("変更（次に押したキー）");
+    expect(t).not.toContain("既定に戻す");
+    h.io.type(ESC + "[B"); // 一覧を閉じる前に Esc だけ送ると確定待ちになるので、矢印と組にして送る
+    await new Promise((r) => setTimeout(r, 40));
+    h.io.type(ESC);
+    await new Promise((r) => setTimeout(r, 40));
+    // 2 つ目の操作に直接 ctrl+alt+d を足そうとすると、独自コマンドとぶつかる。
+    h.io.type(DOWN + DOWN + ENTER);
+    h.app.renderNow();
+    t = await h.screen();
+    const lines = t.split("\n");
+    const row = lines.findIndex((l) => l.includes("追加：直接"));
+    const col = [...lines[row]!].findIndex((_, i) => lines[row]!.slice(i).startsWith("追加：直接"));
+    h.io.type(`\x1b[<0;${col + 1};${row + 1}M\x1b[<0;${col + 1};${row + 1}m`);
+    h.io.type("\x1b\x04");
+    h.app.renderNow();
+    expect(await h.screen()).toContain("こちらへ移しますか");
+  });
+});

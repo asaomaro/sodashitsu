@@ -46,7 +46,8 @@ export class PrefsModel {
 
   /** サーバから受けた設定で置き換える（古い rev は捨てる）。 */
   apply(prefs: SharedPrefs, rev: number): void {
-    if (rev < this.revision) return;
+    // 形の壊れた応答（rev が数でない）は当てない（今の設定を空で上書きしない）。
+    if (typeof rev !== "number" || !Number.isFinite(rev) || rev < this.revision) return;
     this.revision = rev;
     this.server = prefs && typeof prefs === "object" ? prefs : {};
     this.recompute();
@@ -134,6 +135,14 @@ export class PrefsModel {
 
   get narrowThreshold(): number {
     return this.tuiNumber("narrowThreshold", DEFAULT_NARROW_THRESHOLD, 0, 1000);
+  }
+
+  /** サーバが受け付けた `tui` 節（手元の重ねを含まない。書き込みの土台）。 */
+  get serverTui(): Record<string, unknown> {
+    const tui = this.server.tui;
+    return tui && typeof tui === "object" && !Array.isArray(tui)
+      ? (tui as Record<string, unknown>)
+      : {};
   }
 
   /** 共有の `tui` 節（オブジェクトでなければ空）。 */

@@ -38,6 +38,8 @@ export interface KeySectionEnv {
   /** 今の割り当ての表（独自コマンドを含む）。 */
   keymap(): ResolvedKeymap;
   navigateKeymap(): ResolvedNavigateKeymap;
+  /** 独自コマンドの設定ファイルを読めなかった理由（読めたなら null）。 */
+  commandsProblem?(): string | null;
 }
 
 const GROUPS: readonly ActionGroup[] = ["全体", "workspace / tab", "pane"];
@@ -280,7 +282,11 @@ export function keySection(env: KeySectionEnv): SettingsSection {
           activate: () => ({
             kind: "choose",
             title: `prefix（${km.prefix}）`,
-            options: [{ label: "変更（次に押したキー）" }, { label: "既定に戻す" }],
+            // 「既定に戻す」は上書きしているときだけ（web と同じ）。
+            options: [
+              { label: "変更（次に押したキー）" },
+              ...(keyPrefs().prefix !== null ? [{ label: "既定に戻す" }] : []),
+            ],
             pick: (i) => {
               if (i === 0)
                 return capture(
@@ -332,7 +338,13 @@ export function keySection(env: KeySectionEnv): SettingsSection {
         for (const a of ACTIONS) if (a.group === g) items.push(actionRow(a.id, a.label, true));
       }
       items.push({ label: COMMAND_GROUP, heading: true });
-      if (km.commands.length === 0)
+      if (env.commandsProblem?.())
+        items.push({
+          label: "  （設定ファイルを読めませんでした）",
+          disabled: true,
+          note: `設定ファイルを読めませんでした：${env.commandsProblem()}`,
+        });
+      else if (km.commands.length === 0)
         items.push({
           label: "  （独自コマンドはありません）",
           disabled: true,

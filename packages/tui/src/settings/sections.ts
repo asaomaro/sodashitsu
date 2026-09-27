@@ -620,7 +620,9 @@ function numberItem(
       title: `${label}（${min}〜${max}）`,
       initial: String(value),
       commit: (text) => {
-        const n = Number(text.trim());
+        // 10 進の数字だけ（空・`0x40`・`1e2`・符号は通さない）。
+        const t = text.trim();
+        const n = /^\d+$/.test(t) ? Number(t) : Number.NaN;
         if (!Number.isInteger(n) || n < min || n > max)
           return `${min}〜${max} の整数を入れてください。`;
         set(n);

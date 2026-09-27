@@ -3,6 +3,7 @@ import {
   InputGate,
   NavigateMode,
   ResizeMode,
+  commandKeyDefs,
   loadKeyPrefs,
   resolveKeymap,
   resolveNavigateKeymap,
@@ -28,7 +29,7 @@ import { OverlayHost } from "../modes/OverlayHost.js";
 import { encodePaste, type PaneInputModes } from "../input/encode.js";
 import { InputDecoder, type InputEvent } from "../input/decode.js";
 import { TuiKeys } from "../input/keys.js";
-import { clampTerminalSize, type SharedPrefs } from "@sodashitsu/protocol";
+import { clampTerminalSize, type CommandInfo, type SharedPrefs } from "@sodashitsu/protocol";
 import { computeLayout, type LayoutResult } from "../layout/computeLayout.js";
 import { spawn } from "node:child_process";
 import { readTuiState, writeTuiState, type TuiState } from "../local/tuiState.js";
@@ -125,6 +126,7 @@ export class TuiApp {
   /** 新しい pane を待つ間の入力を溜める関所（client-core の `InputGate`。接続を作ったときに作る）。 */
   protected gate: InputGate | null = null;
   private keymapSource = "";
+  private keymapCommands: readonly CommandInfo[] = [];
   /** 今の割り当ての表（ヘルプ・navigate モードが引く）。 */
   protected keymap!: ResolvedKeymap;
   protected navigateKeymap!: ResolvedNavigateKeymap;
@@ -227,6 +229,7 @@ export class TuiApp {
       focusNextNotification: () => this.notYet("通知の移動"),
       runCommand: () => this.notYet("独自コマンド"),
       pasteImage: () => this.notYet("画像の貼り付け"),
+      setCommands: (r) => this.model.setCommands(r),
     });
     this.overlays = new OverlayHost({
       ui: this.ui,
@@ -378,6 +381,11 @@ export class TuiApp {
       .then((r) => this.prefs.apply(r.prefs as SharedPrefs, r.rev))
       .catch(() => undefined);
     net.conn.request("client.theme", { theme: this.theme.name }).catch(() => undefined);
+    // 独自コマンドの一覧（接続ごとに取り直す。web の main.ts と同じ）。
+    net.conn
+      .request("command.list", {})
+      .then((r) => this.model.setCommands(r))
+      .catch(() => undefined);
   }
 
   protected onConnectionClosed(): void {
@@ -385,6 +393,7 @@ export class TuiApp {
   }
 
   protected onModelChange(): void {
+    this.refreshKeymap();
     // copy モードのまま焦点が別の pane へ移ったら、元の pane の選択を消して末尾へ戻し、新しい pane のカーソルを合わせ直す（04 の点検）。
     const focused = this.model.focusedPaneId;
     if (this.copyPaneId !== null && focused !== this.copyPaneId) {
@@ -410,8 +419,7 @@ export class TuiApp {
       this.modes.setMouse(mouse);
     }
     this.renderer.setColorMode(colorModeOf(this.io.env, this.prefs.colorMode));
-    const source = JSON.stringify(this.prefs.shared.keys ?? null);
-    if (source !== this.keymapSource) this.keys.setKeymap(this.resolvedKeymap());
+    this.refreshKeymap();
     const theme = this.prefs.theme;
     if (theme !== this.theme.name) {
       this.theme = new ThemeColors(theme);
@@ -427,6 +435,13 @@ export class TuiApp {
     return this.keys.mode;
   }
 
+  /** 割り当て（`prefs.keys`）か独自コマンドの一覧が変わったら表を作り直す。 */
+  private refreshKeymap(): void {
+    const source = JSON.stringify(this.prefs.shared.keys ?? null);
+    if (source !== this.keymapSource || this.model.commands.commands !== this.keymapCommands)
+      this.keys.setKeymap(this.resolvedKeymap());
+  }
+
   /** 共有の設定（`prefs.keys`）から解いた割り当ての表（web と同じ `loadKeyPrefs` → `resolveKeymap`。AC8）。 */
   private resolvedKeymap(): ResolvedKeymap {
     const raw = this.prefs.shared.keys;
@@ -434,7 +449,9 @@ export class TuiApp {
     const keyPrefs = loadKeyPrefs(raw);
     this.navigateKeymap = resolveNavigateKeymap(keyPrefs.navigateKeys).keymap;
     this.navigateMode.setKeymap(this.navigateKeymap);
-    this.keymap = resolveKeymap(keyPrefs).keymap;
+    // 独自コマンドの一覧も渡す（web の settings.ts と同じ。一覧に無いコマンドの割り当ては載らない・衝突の検査にも入る）。
+    this.keymapCommands = this.model.commands.commands;
+    this.keymap = resolveKeymap(keyPrefs, commandKeyDefs(this.keymapCommands)).keymap;
     return this.keymap;
   }
 
@@ -596,6 +613,7 @@ export class TuiApp {
           write: this.settingsWriter,
           keymap: () => this.keymap,
           navigateKeymap: () => this.navigateKeymap,
+          commandsProblem: () => this.model.commands.problem,
           scrollbackLimit: () => this.model.limits.scrollbackLines,
           agentIntegration: {
             status: () => this.model.agentIntegration,

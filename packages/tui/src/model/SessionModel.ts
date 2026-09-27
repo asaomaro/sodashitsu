@@ -1,6 +1,7 @@
 import type {
   AgentInfo,
   AgentIntegrationStatusResult,
+  CommandListResult,
   DisplayState,
   HostInfo,
   Pane,
@@ -46,6 +47,14 @@ export class SessionModel {
   limits: SessionLimits = { scrollbackLines: 5000 };
   /** 公式フック連携の状態（設定画面を開いたときの `agent_integration.status` と `agent_integration.changed`）。 */
   agentIntegration: AgentIntegrationStatusResult | null = null;
+  /** 独自コマンドの一覧（接続ごとの `command.list`・`command.updated`・`reload_config`。コマンドの文字列は来ない）。 */
+  commands: CommandListResult = { commands: [], problem: null };
+
+  /** 独自コマンドの一覧を置き換える（`command.list`・`command.reload` の結果）。 */
+  setCommands(r: CommandListResult): void {
+    this.commands = normalizeCommands(r);
+    this.emit();
+  }
 
   /** このクライアントの表示。 */
   workspaceId: string | null = null;
@@ -161,12 +170,16 @@ export class SessionModel {
       case "prefs.changed":
         this.hooks.onPrefsChanged?.(e.data);
         return;
+      case "command.updated":
+        // 独自コマンドの一覧（読み直し。web の StoreAdapter と同じ）。
+        this.commands = normalizeCommands(e.data);
+        return;
       case "agent_integration.changed":
         // 公式フック連携の状態（設定画面の「エージェント連携」。web の `agentIntegrations` の store と同じ）。
         this.agentIntegration = e.data;
         return;
       default:
-        // machine.changed・command.*・pane.attach_changed は 05 の T4・T6 で扱う。
+        // machine.changed・command.popup_closed・pane.attach_changed は 05 の T4・T6 で扱う。
         return;
     }
   }
@@ -271,4 +284,13 @@ export class SessionModel {
   private emit(): void {
     for (const cb of [...this.listeners]) cb();
   }
+}
+
+/** 独自コマンドの一覧の形を確かめる（版の違うサーバ・壊れた応答でも落ちない）。 */
+function normalizeCommands(r: unknown): CommandListResult {
+  const o = r && typeof r === "object" ? (r as Partial<CommandListResult>) : {};
+  return {
+    commands: Array.isArray(o.commands) ? o.commands : [],
+    problem: typeof o.problem === "string" ? o.problem : null,
+  };
 }
