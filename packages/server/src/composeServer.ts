@@ -52,6 +52,8 @@ import { type HandoffSocket, handoffSocketPathFor, startHandoffSocket } from "./
 import { createControlRequests } from "./handoff/controlRequests.js";
 import { runPreflight } from "./handoff/preflight.js";
 import { type HandoffResult, adoptedSpecsOf, discardHandedOffPanes, discardRejectedPanes, finishTakenHandoff } from "./handoff/startup.js";
+import { COMMANDS_FILE_NAME } from "./commands/commandConfig.js";
+import { CommandService } from "./commands/CommandService.js";
 import { MetadataService } from "./metadata/MetadataService.js";
 
 export interface ComposedServer {
@@ -238,6 +240,10 @@ export async function composeServer(
   const sizeAuthority = new DefaultSizeAuthority(clients, session, bus); // bus: pane.attach_changed（20260926-pane-direct-connect）
   const surface = new ControlSurface(logger);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
+  // 独自コマンド（20260927-custom-command-keys）。状態ディレクトリ（名前付き session ではその session のもの）の commands.json。起動時に 1 度読む
+  // （まだ `/ws` を受け付けていないので `command.updated` を受け取る接続は無い）。読み直しは `command.reload`。
+  const commands = new CommandService({ filePath: join(options.stateDir, COMMANDS_FILE_NAME), session, terminals, bus, clients, logger });
+  await commands.reload();
   // 独自トークン（20260927-sidebar-row-tokens）。session へは MetadataTargets の口越しに書き、閉じた対象は bus で捨てる。`close()` で dispose。
   const metadata = new MetadataService({ targets: session, bus, logger });
   registerAllMethods(surface, {
@@ -250,12 +256,15 @@ export async function composeServer(
     gitPoller,
     agentStarter,
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
+    commands,
     metadata,
   });
   const wsServer = new WsServerWs(httpServer.server, originRejections, auth.authorizeUpgrade, logger);
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
   wsServer.setReady(false);
-  new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger);
+  new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
+    onClientGone: (clientId) => commands.onClientGone(clientId), // その接続の popup を止める（20260927-custom-command-keys）
+  });
 
   let freshToken: string | undefined;
   /** 復元（または最初の workspace の作成）を済ませたか。済ませていない状態を session.json へ書かないために使う。 */
@@ -501,6 +510,8 @@ export async function composeServer(
         wsServer.closeAll(1001, "server shutting down");
         await new Promise<void>((resolve) => httpServer.server.close(() => resolve()));
       } finally {
+        // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
+        commands.dispose();
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
         // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。
         metadata.dispose();

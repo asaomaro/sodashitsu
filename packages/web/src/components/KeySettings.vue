@@ -10,13 +10,9 @@ import {
   type AssignTarget,
   type NavigateAssignTarget,
 } from "../keys/assign.js";
-import {
-  ACTIONS,
-  actionDef,
-  type ActionDef,
-  type ActionGroup,
-  type ActionId,
-} from "../keys/bindings.js";
+import { ACTIONS, actionDef, type ActionGroup } from "../keys/bindings.js";
+import { COMMAND_GROUP, isCommandKeyId, type KeyTargetId } from "../keys/commandKeys.js";
+import { useCommandsStore } from "../store/commands.js";
 import { formatBinding, keyInputOf, type KeyboardEventLike } from "../keys/chord.js";
 import { displayBinding, type LayoutMap } from "../keys/chordDisplay.js";
 import { NAVIGATE_KEYS, navigateKeyDef, type NavigateKeyId } from "../keys/navigateKeys.js";
@@ -40,6 +36,8 @@ import { isMacPlatform } from "../term/MouseBridge.js";
  */
 const settings = useSettingsStore();
 const view = useViewStore();
+/** 独自コマンドの一覧（20260927-custom-command-keys。サーバの commands.json。0 件なら置き場所の案内を出す）。 */
+const commands = useCommandsStore();
 
 /** 取り込み待ちか（親の設定画面へ知らせる。取り込み待ちの間はネイティブの `cancel`〔Esc〕で設定画面を閉じない）。 */
 const capturing = defineModel<boolean>("capturing", { default: false });
@@ -47,16 +45,27 @@ const capturing = defineModel<boolean>("capturing", { default: false });
 const props = withDefaults(defineProps<{ kind?: "desktop" | "mobile" }>(), { kind: "desktop" });
 
 const GROUPS: readonly ActionGroup[] = ["全体", "workspace / tab", "pane"];
+/** 1 行に出す対象（カタログの操作か独自コマンド）。 */
+interface KeyRow {
+  id: KeyTargetId;
+  label: string;
+}
 /** 操作名・群名での絞り込み（20260922-keybinding-usability。design「US1」・AC1〜AC3）。 */
 const filterText = ref("");
 const actionsByGroup = computed(() => {
   const q = filterText.value.trim().toLowerCase();
-  const matches = (a: ActionDef, group: ActionGroup): boolean =>
+  const matches = (a: KeyRow, group: string): boolean =>
     q === "" || a.label.toLowerCase().includes(q) || group.toLowerCase().includes(q);
-  return GROUPS.map((group) => ({
+  const groups: { group: string; actions: KeyRow[] }[] = GROUPS.map((group) => ({
     group,
-    actions: ACTIONS.filter((a) => a.group === group && matches(a, group)),
-  })).filter((g) => g.actions.length > 0); // AC2：0 件の群は見出しごと消える
+    actions: ACTIONS.filter((a) => a.group === group && matches(a, group)).map((a) => ({ id: a.id, label: a.label })),
+  }));
+  // 独自コマンド（20260927-custom-command-keys）。既存の操作の後に 1 つの群として並べる（既定のキーは無い）。
+  groups.push({
+    group: COMMAND_GROUP,
+    actions: settings.keymap.commands.map((c) => ({ id: c.id, label: c.label })).filter((a) => matches(a, COMMAND_GROUP)),
+  });
+  return groups.filter((g) => g.actions.length > 0); // AC2：0 件の群は見出しごと消える
 });
 /**
  * navigate 操作の絞り込み（20260923-navigate-mode-keys。当初は移動6操作のみだったが、
@@ -93,7 +102,19 @@ const pendingMove = ref<{
   conflict: NonNullable<Extract<AssignResult, { ok: false }>["conflict"]>;
 } | null>(null);
 
-const bindingsOf = (id: ActionId): readonly string[] => settings.keymap.bindingsOf(id);
+const bindingsOf = (id: KeyTargetId): readonly string[] => settings.keymap.bindingsOf(id);
+/** 「設定を読み直す」のキーの案内（割り当てを外していれば空。`navigateModeHint` と同じ流儀）。 */
+const reloadHint = computed<string>(() => {
+  const hint = settings.keymap.hintFor("reload_config");
+  return hint === null ? "" : `（${displayFor(hint)}）`;
+});
+/** 独自コマンドの案内は、絞り込みが空か群名に当たるときだけ出す（0 件の群は見出しごと消える既存の規則。T9 の点検）。 */
+const commandNoteMatchesFilter = computed<boolean>(() => {
+  const q = filterText.value.trim().toLowerCase();
+  return q === "" || COMMAND_GROUP.toLowerCase().includes(q);
+});
+/** 画面に出す名前（独自コマンドは説明か id）。 */
+const labelOf = (id: KeyTargetId): string => settings.keymap.labelOf(id);
 /** navigate 操作版の `bindingsOf`（20260923-navigate-mode-keys）。 */
 const navigateBindingsOf = (id: NavigateKeyId): readonly string[] =>
   settings.navigateKeymap.bindingsOf(id);
@@ -124,7 +145,7 @@ const navigateModeHint = computed<string>(() => {
   const hint = settings.keymap.hintFor("workspace_picker");
   return hint === null ? "" : `（${displayFor(hint)}）`;
 });
-const bindingsText = (id: ActionId): string => {
+const bindingsText = (id: KeyTargetId): string => {
   const list = bindingsOf(id);
   return list.length === 0 ? "なし" : list.map(displayFor).join(" / ");
 };
@@ -136,12 +157,12 @@ const viaOf = (binding: string): "prefix" | "direct" =>
   binding.startsWith("prefix+") ? "prefix" : "direct";
 
 const PREFIX_TARGET: AssignTarget = { kind: "prefix" };
-const addTarget = (id: ActionId, via: "prefix" | "direct"): AssignTarget => ({
+const addTarget = (id: KeyTargetId, via: "prefix" | "direct"): AssignTarget => ({
   kind: "binding",
   id,
   via,
 });
-const changeTarget = (id: ActionId, binding: string): AssignTarget => ({
+const changeTarget = (id: KeyTargetId, binding: string): AssignTarget => ({
   kind: "binding",
   id,
   via: viaOf(binding),
@@ -172,7 +193,7 @@ function captureHint(t: CaptureTarget): string {
     return "prefix にするキーを押してください（ctrl+英字など。Esc で取り消し）";
   if (t.kind === "navigateKey")
     return "navigate モードの中で押すキーを押してください（Esc で取り消し）";
-  if (actionDef(t.id)?.indexed === true)
+  if (!isCommandKeyId(t.id) && actionDef(t.id)?.indexed === true)
     return "1〜9 の数字のキーを押してください（修飾キーと一緒でも。Esc で取り消し）";
   if (t.via === "direct") return "ctrl や alt を組み合わせたキーを押してください（Esc で取り消し）";
   return "prefix の後に押すキーを押してください（Esc で取り消し）";
@@ -240,13 +261,13 @@ function apply(t: CaptureTarget, binding: string): (() => HTMLElement | null) | 
       ? current.map((b) => (b === t.replacing ? binding : b))
       : [...current, binding];
   settings.setKeyBindings(t.id, list);
-  message.value = `「${actionDef(t.id)?.label ?? t.id}」に ${binding} を割り当てました。`;
+  message.value = `「${labelOf(t.id)}」に ${binding} を割り当てました。`;
   // 置き換えたときは chip が作り直されるので、新しい割り当ての［変更］へ。追加のときは押した［追加］が残るのでそこへ。
   if (t.replacing === undefined) return undefined;
   return () => findChangeButton(t.id, binding);
 }
 
-function findChangeButton(id: ActionId, binding: string): HTMLElement | null {
+function findChangeButton(id: KeyTargetId, binding: string): HTMLElement | null {
   const all = root.value?.querySelectorAll<HTMLElement>("[data-change]") ?? [];
   for (const el of all) if (el.dataset["change"] === `${id}|${binding}`) return el;
   return null;
@@ -315,13 +336,13 @@ function moveHere(): void {
     bindingsOf(conflict.ownerId).filter((b) => b !== binding),
   );
   apply(moveTarget, binding); // 衝突が消えたので今度は通る
-  message.value = `${binding} を「${actionDef(conflict.ownerId)?.label ?? conflict.ownerId}」から「${actionDef(moveTarget.id)?.label ?? moveTarget.id}」へ移しました。`;
+  message.value = `${binding} を「${labelOf(conflict.ownerId)}」から「${labelOf(moveTarget.id)}」へ移しました。`;
   pendingMove.value = null;
   void nextTick(() => findChangeButton(moveTarget.id, binding)?.focus()); // AC-I9
 }
 
 /** 割り当てを 1 つ外す。フォーカスは同じ行の次の部品（無ければ［追加：prefix の後］）へ。 */
-function removeBinding(id: ActionId, binding: string, ev: Event): void {
+function removeBinding(id: KeyTargetId, binding: string, ev: Event): void {
   const current = bindingsOf(id);
   const index = current.indexOf(binding);
   const row = (ev.currentTarget as HTMLElement | null)?.closest("details") ?? null;
@@ -329,7 +350,7 @@ function removeBinding(id: ActionId, binding: string, ev: Event): void {
     id,
     current.filter((b) => b !== binding),
   );
-  message.value = `「${actionDef(id)?.label ?? id}」から ${binding} を外しました。`;
+  message.value = `「${labelOf(id)}」から ${binding} を外しました。`;
   void nextTick(() => {
     // 消えた位置に繰り上がった割り当ての［変更］（＝同じ行の次の部品）。最後を消したときは無いので［追加：prefix の後］へ。
     const changes = row?.querySelectorAll<HTMLElement>("[data-change]") ?? [];
@@ -358,7 +379,9 @@ function removeNavigateBinding(id: NavigateKeyId, binding: string, ev: Event): v
 // 既定へ戻す（AC9）・おすすめの直接のキー（AC10）
 // ---------------------------------------------------------------------------------------------------------------------
 
-const isOverridden = (id: ActionId): boolean => settings.keyPrefs.bindings[id] !== undefined;
+/** 上書きがあるか（［既定に戻す］を出すか）。独自コマンドには既定が無いので出さない（外すのは［削除］）。 */
+const isOverridden = (id: KeyTargetId): boolean =>
+  !isCommandKeyId(id) && settings.keyPrefs.bindings[id] !== undefined;
 /** navigate 操作版の `isOverridden`。 */
 const isNavigateOverridden = (id: NavigateKeyId): boolean =>
   settings.keyPrefs.navigateKeys[id] !== undefined;
@@ -370,7 +393,7 @@ function describeSkip(key: string, reason: string): string {
 }
 
 /** 操作の割り当てを既定へ戻す。フォーカスは同じ行の［追加：prefix の後］へ（［既定に戻す］は上書きが無くなると消えるため）。 */
-function resetAction(id: ActionId, ev: Event): void {
+function resetAction(id: KeyTargetId, ev: Event): void {
   const row = (ev.currentTarget as HTMLElement | null)?.closest("details") ?? null;
   const plan = planReset(settings.keymap, settings.keyPrefs, { kind: "action", id });
   if (!plan.ok) {
@@ -378,7 +401,7 @@ function resetAction(id: ActionId, ev: Event): void {
     return;
   }
   settings.replaceKeyPrefs(plan.prefs);
-  const label = actionDef(id)?.label ?? id;
+  const label = labelOf(id);
   // 既定のキーを別の操作が使っていて戻せなかった分があれば、「戻しました」とは言わず、上書きを外したことと戻せなかった分を言う。
   message.value =
     plan.skipped.length === 0
@@ -608,6 +631,22 @@ watch(
           </details>
         </li>
       </ul>
+    </div>
+
+    <div
+      v-if="(commands.catalog.length === 0 || commands.problem !== null) && commandNoteMatchesFilter"
+      class="keys-group keys-commands-note"
+      role="group"
+      :aria-label="COMMAND_GROUP"
+    >
+      <h4 class="keys-group-name">{{ COMMAND_GROUP }}</h4>
+      <p v-if="commands.problem !== null" class="settings-note keys-commands-problem">
+        設定ファイルを読めませんでした：{{ commands.problem }}
+      </p>
+      <p v-if="commands.catalog.length === 0" class="settings-note">
+        独自コマンドは、サーバの状態ディレクトリの commands.json に書きます（書き方は
+        docs/custom-commands.md）。書いたら「設定を読み直す」{{ reloadHint }}で読み込みます。
+      </p>
     </div>
 
     <div

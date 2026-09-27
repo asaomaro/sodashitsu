@@ -70,6 +70,9 @@ pnpm --filter @wtm/e2e test
   20260926-edit-scrollback）。エディタは **`wtm serve` を起動したときの環境変数 `EDITOR`**（未設定・空なら `vi`。Windows ネイティブは
   `VISUAL`、無ければ `EDITOR`。どちらも無ければ開けずにトーストが出る）で、サーバの上の新しい pane に拡大表示で開く。エディタを
   終えると元の pane へ戻る。一時ファイルは OS の一時ディレクトリの下の `wtm-scrollback-*`（本人だけが読める）に作り、閉じれば消える。
+- **独自コマンド**（herdr の `[[keys.command]]`。20260927-custom-command-keys）：状態ディレクトリの `commands.json`（書き方・置き場所は
+  `docs/custom-commands.md`。`chmod 600`）に書いたコマンドを、`prefix+s` の節「キー」の群「独自コマンド」で割り当てたキーで走らせる。
+  書き換えたら `prefix+shift+r`（設定を読み直す）。コマンドはサーバの上で動く（ブラウザからコマンドの文字列は送らない）。
 - **新しい workspace・tab・分割は、既定で「いま見ている pane の、いまの場所」で開く**（herdr の `terminal.new_cwd` の `follow`。
   20260921-new-terminal-cwd）。pane で `cd` してから作ると、その `cd` した先で開く。ブラウザごとの設定（`prefix+s` の「端末」の
   「新しく開く場所」）で、ホーム・サーバを起動した場所・指定した場所（絶対パスか `~/` で始まるパス。`~` だけならホーム。`~user` は
@@ -663,6 +666,13 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
       エディタを終えると元の pane へ戻る。Windows ネイティブは `VISUAL` か `EDITOR` を設定して `wtm serve` を起動したときだけ開き、
       どちらも無ければ「スクロールバックをエディタで開けませんでした」のトーストが出るのが正しい。20260926-edit-scrollback。
       「未対応（後続: …）」と出るキーはもう無い）。`s` は設定を開く。
+- [ ] 独自コマンド（20260927-custom-command-keys。Linux・WSL2 で確かめれば足りる。Windows ネイティブの `cmd.exe` の引用は未検証）：
+      `docs/custom-commands.md` の例（`popup` の `scratch`〔`exec "${SHELL:-sh}"`〕・`pane` の `htop`・`shell` の `touch-ok`〔`touch /tmp/wtm-cmd-ok`〕）を
+      `commands.json` に書き（`chmod 600`）、`prefix+shift+r` で読み直す。`prefix+s` の節「キー」の群「独自コマンド」に 3 つが出て、
+      それぞれにキーを割り当てられる。期待：popup のキーで画面の中央に浮いた端末が開き、`Esc`・`ctrl+b` も popup のシェルに届き
+      （下の pane・prefix は反応しない）、`exit` で閉じて元の pane にフォーカスが戻る。見出しの × でも閉じる。`pane` のキーで拡大表示の
+      htop が開き、`q` で閉じると元の pane・拡大表示に戻る。`shell` のキーで「走らせました」と出て `/tmp/wtm-cmd-ok` ができる。
+      `chmod 666 commands.json` にして読み直すと「書き込めます」の理由のトーストが出て群が案内に変わる。
 - [ ] AC14：マウスで、pane・tab・サイドバーの行のクリックで移る（M1）・pane の境界のドラッグ（M2）・右クリックのメニュー（M3。
       pane・pane の枠・tab・サイドバーの workspace）・文字を選ぶとコピーされ「コピーしました」と出る（M4）・ダブルクリックで単語を
       選ぶ（M5）・ホイールで scrollback（M8）・スクロールバー（M9）。

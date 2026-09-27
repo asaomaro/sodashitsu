@@ -3,7 +3,11 @@ export type { Disposable };
 
 export interface PtySpawnOptions {
   shell: string;
-  args: string[];
+  /**
+   * 引数。**文字列は Windows の 1 本のコマンドライン**（node-pty はそのまま使い、引用し直さない。独自コマンドの `cmd.exe /d /s /c "<command>"`。
+   * 20260927-custom-command-keys の review ラウンド 1）。
+   */
+  args: string[] | string;
   cwd: string;
   env: Record<string, string>;
   cols: number;

@@ -11,7 +11,7 @@
  */
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
-import { mkdtemp } from "node:fs/promises";
+import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@wtm/protocol";
@@ -221,6 +221,10 @@ async function main(): Promise<void> {
   const stateDir = await mkdtemp(join(tmpdir(), "wtm-smoke-"));
   const port = await getFreePort();
   console.log(`smoke: starting server on 127.0.0.1:${port} (state dir ${stateDir})`);
+  // 独自コマンド（20260927-custom-command-keys）：状態ディレクトリの commands.json を起動時に読み、popup の端末へ購読・入力が届くかを後で確かめる。
+  const commandsFile = join(stateDir, "commands.json");
+  await writeFile(commandsFile, JSON.stringify({ commands: [{ id: "smoke-cat", type: "popup", command: "cat" }] }), { mode: 0o600 });
+  await chmod(commandsFile, 0o600);
 
   const server = await composeServer({ host: "127.0.0.1", port: String(port), stateDir, origin: [] });
   await server.listen();
@@ -273,6 +277,19 @@ async function main(): Promise<void> {
     ws.send(encodeInputFrame(created.pane.id, new TextEncoder().encode(`echo ${marker}\n`)));
     await client.waitForOutput(created.pane.id, marker, 8000);
     console.log("smoke: echo round trip ok");
+
+    // 独自コマンドの popup（20260927-custom-command-keys）：一覧に載り（文字列は載らない）、popup の端末へ入力が届いて出力が返る。
+    const list = (await client.requestResponse("c1", "command.list", {})) as { commands: { id: string }[]; problem: string | null };
+    if (list.problem !== null || list.commands.map((c) => c.id).join(",") !== "smoke-cat" || JSON.stringify(list).includes('"command"')) {
+      throw new Error(`command.list: unexpected ${JSON.stringify(list)}`);
+    }
+    const popup = (await client.requestResponse("c2", "command.run", { commandId: "smoke-cat", paneId: created.pane.id, cols: 40, rows: 5 })) as { popupId: string };
+    await client.requestResponse("c3", "pane.subscribe", { paneId: popup.popupId, scrollbackLines: 50 });
+    const popupMarker = `wtm-smoke-popup-${Date.now()}`;
+    ws.send(encodeInputFrame(popup.popupId, new TextEncoder().encode(`${popupMarker}\n`)));
+    await client.waitForOutput(popup.popupId, popupMarker, 8000);
+    await client.requestResponse("c4", "command.popup_close", { popupId: popup.popupId });
+    console.log("smoke: custom command popup round trip ok");
 
     // ここまでは生の WebSocket 接続だけの確認（プロトコル層）。ここから先は、ビルドした Web UI を
     // 実物のブラウザで開いて確かめる（T26。design「起動確認」に「配信の確認」を追加）。

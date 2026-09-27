@@ -51,7 +51,13 @@ parent: 20260918-web-terminal-multiplexer
   実装: `.aidev/works/20260923-missing-keybinding-actions/`（12個の `ActionId` を `packages/web/src/keys/bindings.ts` の `ACTIONS` へ登録、`defaults: []`）。
   実測: 単体テスト 2608 本 green（protocol 58・server 657・web 1760・cli 133）・smoke pass（2本）。独立点検（cross）1件（対応済み）。review 指摘 0 件（test-result.md・review.md 参照）。
   `docs/herdr-parity.md` H26d に対応表を追加済み。
-- [ ] 独自コマンドのキー: herdr の `[[keys.command]]`（`type` が `popup`・`pane`・`shell`・`plugin_action`）。サーバで任意のコマンドを走らせる仕組みと、その権限の設計が要る。`docs/herdr-parity.md` の H12（ポップアップ端末・独自コマンドのキー割り当て）（出典: .aidev/works/20260921-keybinding-customization/requirements.md の対象外）
+- [x] 独自コマンドのキー: herdr の `[[keys.command]]`（`type` が `popup`・`pane`・`shell`）。サーバで任意のコマンドを走らせる仕組みと、その権限の設計が要る。`docs/herdr-parity.md` の H12（ポップアップ端末・独自コマンドのキー割り当て）（出典: .aidev/works/20260921-keybinding-customization/requirements.md の対象外）
+  → 着地: 20260927-custom-command-keys（PR は deliver の報告を参照）。コマンドはサーバの状態ディレクトリ（名前付き session ではその session）の `commands.json` だけに書き（`packages/server/src/commands/commandConfig.ts`。zod の strictObject・64 KiB・100 件・Unix は fd の fstat で持ち主・権限・リンク・FIFO を検査）、
+  ブラウザは id で呼ぶだけ（`command.run` は id・pane・popup の大きさだけ。文字列はブラウザへも渡さない）。キーは設定画面の群「独自コマンド」（`packages/web/src/keys/commandKeys.ts`・`keys.commands`）。
+  popup（`CommandPopup.vue`。開いたブラウザだけ・切断で止まる）・pane（`openZoomedCommandPane` を `prefix+e` と共有）・shell（同時 16 本）。環境変数 `WTM_ACTIVE_*`・`WTM_COMMAND_ID`。
+  実測: 全体 4,662 tests green（244 files）・smoke pass（7 本。popup の往復を足した）・負の確認 32 件すべて落ちる。独立点検：doccheck 5 工程・taskcheck 12 タスク＋cross、review 2 ラウンド（must 1〔Windows の PTY の引用〕→ 解消）。
+- [ ] 独自コマンドの `plugin_action`（herdr の `type = "plugin_action"`）：本製品にプラグインの仕組みが無いので対象外にした（出典: .aidev/works/20260927-custom-command-keys/requirements.md の対象外）
+- [ ] 独自コマンドの残り：`commands.json` に既定のキーを書く／popup を他のブラウザへ出す・切断や再読み込みをまたいで保つ・窓の大きさの変化に追従させる／`wtmctl` から独自コマンドを走らせるサブコマンド／`commands.json` の変更の監視（自動の読み直し）／更新時の引き継ぎ（`wtm handoff`）で `pane` 種の「閉じたら戻す」を引き継ぐ／Windows ネイティブの実機での起動の確認（出典: .aidev/works/20260927-custom-command-keys/requirements.md の対象外・decisions.md D2・D9）
 - [x] サイドバー・tab バーのボタン（`@keydown.stop`）にフォーカスがある間も、prefix・直接のキーを効かせる: いまはそのボタンにフォーカスが残ると、端末をクリックするまで届かない（prefix でも同じ既存の挙動）。
   ボタンの Enter/Space と入力欄への入力を守ったまま、修飾キー付き・prefix のキーだけを window へ通す形が要る（出典: .aidev/works/20260921-keybinding-customization/decisions.md D11）
   実装: `.aidev/works/20260925-focus-trapped-keybindings/`（`Sidebar.vue` 6箇所・`TabBar.vue` 1箇所の

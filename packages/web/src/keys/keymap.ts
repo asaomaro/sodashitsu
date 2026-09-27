@@ -1,5 +1,5 @@
 import type { Action } from "./actions.js";
-import { ACTIONS, actionFor, DEFAULT_PREFIX, type ActionDef, type ActionId } from "./bindings.js";
+import { ACTIONS, actionDef, actionFor, DEFAULT_PREFIX, type ActionDef } from "./bindings.js";
 import {
   expandRange,
   formatBinding,
@@ -9,6 +9,7 @@ import {
   prefixBytes,
 } from "./chord.js";
 import { emptyKeyPrefs, parsePrefix, type KeyPrefs } from "./keyPrefs.js";
+import { commandActionDef, isCommandKeyId, type CommandKeyDef, type KeyTargetId } from "./commandKeys.js";
 
 /**
  * 解決した割り当ての表（20260921-keybinding-customization。design「解決した表」）。カタログ（`bindings.ts`）と、このブラウザの上書き（`keyPrefs.ts`）から 1 か所で作り、
@@ -61,12 +62,16 @@ export interface ResolvedKeymap {
   readonly prefixMap: ReadonlyMap<string, Action>;
   /** 直接のキー → 操作。 */
   readonly directMap: ReadonlyMap<string, Action>;
-  /** ある操作の有効な割り当て（表示用。`["prefix+v", "ctrl+alt+d"]`。範囲は `prefix+1..9`）。無ければ空。 */
-  bindingsOf(id: ActionId): readonly string[];
-  /** その chord を使っている操作（衝突の判定と案内）。使われていなければ null。 */
-  ownerOf(via: "prefix" | "direct", chord: string): ActionId | null;
+  /** ある操作（独自コマンドを含む）の有効な割り当て（表示用。`["prefix+v", "ctrl+alt+d"]`。範囲は `prefix+1..9`）。無ければ空。 */
+  bindingsOf(id: KeyTargetId): readonly string[];
+  /** その chord を使っている操作・独自コマンド（衝突の判定と案内）。使われていなければ null。 */
+  ownerOf(via: "prefix" | "direct", chord: string): KeyTargetId | null;
   /** 案内文用の先頭の割り当て（prefix の後は `ctrl+b ?`、直接は `ctrl+alt+d`）。割り当てが無ければ null。 */
-  hintFor(id: ActionId): string | null;
+  hintFor(id: KeyTargetId): string | null;
+  /** この表を作ったときの独自コマンドの一覧（20260927-custom-command-keys）。表を作り直す箇所（`assign.ts`）はこれを引き継ぐ。 */
+  readonly commands: readonly CommandKeyDef[];
+  /** 画面に出す名前（操作はカタログの名前、独自コマンドは説明か id。知らない id はそのまま）。 */
+  labelOf(id: KeyTargetId): string;
 }
 
 /**
@@ -75,7 +80,10 @@ export interface ResolvedKeymap {
  * これが働くのは壊れた保存値・古い版の値だけ。上書きに負けた既定（上書きに取られた既定のキー）は黙って落とす。
  * **上書きが 1 つ以上あるのに 1 つも登録できなかった操作は、既定を登録し直す**（`loadKeyPrefs` の「全部落ちたら既定へ」と結果をそろえる。元から `[]` の操作だけが「割り当てなし」）。
  */
-export function resolveKeymap(prefs: KeyPrefs): { keymap: ResolvedKeymap; problems: string[] } {
+export function resolveKeymap(
+  prefs: KeyPrefs,
+  commands: readonly CommandKeyDef[] = [],
+): { keymap: ResolvedKeymap; problems: string[] } {
   const problems: string[] = [];
 
   let prefix = DEFAULT_PREFIX;
@@ -90,13 +98,13 @@ export function resolveKeymap(prefs: KeyPrefs): { keymap: ResolvedKeymap; proble
 
   const prefixMap = new Map<string, Action>();
   const directMap = new Map<string, Action>();
-  const prefixOwners = new Map<string, ActionId>();
-  const directOwners = new Map<string, ActionId>();
-  const effective = new Map<ActionId, string[]>();
+  const prefixOwners = new Map<string, KeyTargetId>();
+  const directOwners = new Map<string, KeyTargetId>();
+  const effective = new Map<KeyTargetId, string[]>();
 
   const register = (
     def: ActionDef,
-    id: ActionId,
+    id: KeyTargetId,
     raw: string,
     source: "user" | "default",
   ): void => {
@@ -149,6 +157,15 @@ export function resolveKeymap(prefs: KeyPrefs): { keymap: ResolvedKeymap; proble
     if (list === undefined) continue;
     for (const raw of list) register(def, def.id, raw, "user");
   }
+  // 1.5 独自コマンド（20260927-custom-command-keys）。既定が無いので、割り当ては全て利用者のもの——上書きのある操作の後・既定の前に登録する
+  // （利用者の割り当てが既定に勝つ）。一覧に無いコマンドの割り当ては載せない（保存には残る）。
+  for (const cmd of commands) {
+    // 自分の項目だけを見る（id の規則は `constructor` 等も通すので、`{}` の継いだ性質を割り当てと取り違えない。T7 の独立点検）。
+    if (!Object.hasOwn(prefs.commands, cmd.commandId)) continue;
+    const list = prefs.commands[cmd.commandId]!;
+    const def = commandActionDef(cmd);
+    for (const raw of list) register(def, cmd.id, raw, "user");
+  }
   for (const def of ACTIONS) {
     const list = prefs.bindings[def.id];
     if (list !== undefined && (list.length === 0 || (effective.get(def.id)?.length ?? 0) > 0))
@@ -170,6 +187,11 @@ export function resolveKeymap(prefs: KeyPrefs): { keymap: ResolvedKeymap; proble
       if (b === null) return null;
       const label = formatBinding({ ...b, via: "direct" });
       return b.via === "prefix" ? `${prefix} ${label}` : label;
+    },
+    commands,
+    labelOf: (id) => {
+      if (isCommandKeyId(id)) return commands.find((c) => c.id === id)?.label ?? id;
+      return actionDef(id)?.label ?? id;
     },
   };
   return { keymap, problems };

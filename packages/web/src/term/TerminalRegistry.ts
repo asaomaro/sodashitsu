@@ -81,6 +81,11 @@ export class TerminalRegistry implements TerminalSinkPort {
   private readonly unsubscribed = new Set<string>();
   private readonly now: () => number;
   private inputEnabled = true;
+  /**
+   * pane 以外の端末の受け手（独自コマンドの popup。20260927-custom-command-keys）。popup の端末は prefix を横取りさせないので registry の外で作り、
+   * OUTPUT・SNAPSHOT・大きさの変化だけをここから回す。
+   */
+  private readonly externals = new Map<string, TerminalSinkPort>();
 
   constructor(private readonly opts: TerminalRegistryOptions) {
     this.now = opts.now ?? (() => Date.now());
@@ -182,7 +187,24 @@ export class TerminalRegistry implements TerminalSinkPort {
     this.inputEnabled = enabled;
   }
 
+  /** 端末の生成オプションの上書き（`host.windowsBuild` からの `windowsPty` 等）。registry の外で作る端末（独自コマンドの popup）も同じ前提にそろえる。 */
+  baseTerminalOptions(): Partial<ITerminalOptions> {
+    return { ...this.opts.terminalOptions };
+  }
+
+  /**
+   * pane 以外の受け手を付ける（独自コマンドの popup）。外す関数を返す（別の受け手に差し替わっていれば何もしない）。
+   */
+  attachExternal(paneId: string, sink: TerminalSinkPort): () => void {
+    this.externals.set(paneId, sink);
+    return () => {
+      if (this.externals.get(paneId) === sink) this.externals.delete(paneId);
+    };
+  }
+
   onOutput(paneId: string, chunk: Uint8Array): void {
+    const external = this.externals.get(paneId);
+    if (external) return external.onOutput(paneId, chunk);
     this.entries.get(paneId)?.term.write(chunk);
   }
 
@@ -194,6 +216,8 @@ export class TerminalRegistry implements TerminalSinkPort {
    * 起きうる。大きさは先に変えてよい（その前の書き込みは RIS で消える。RIS は大きさを保つ）。
    */
   onSnapshot(paneId: string, cols: number, rows: number, text: string): void {
+    const external = this.externals.get(paneId);
+    if (external) return external.onSnapshot(paneId, cols, rows, text);
     const entry = this.entries.get(paneId);
     if (!entry) return;
     entry.term.resize(Math.max(1, cols), Math.max(1, rows));
@@ -201,6 +225,8 @@ export class TerminalRegistry implements TerminalSinkPort {
   }
 
   onSizeChanged(paneId: string, cols: number, rows: number): void {
+    const external = this.externals.get(paneId);
+    if (external) return external.onSizeChanged(paneId, cols, rows);
     this.entries.get(paneId)?.term.resize(Math.max(1, cols), Math.max(1, rows));
   }
 

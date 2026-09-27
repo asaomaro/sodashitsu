@@ -523,6 +523,7 @@ describe("planReset — 既定へ戻す（AC9）", () => {
       prefix: "ctrl+a",
       bindings: { zoom: ["prefix+y"], help: [] },
       navigateKeys: {},
+      commands: {},
     };
     const r = planReset(resolveKeymap(prefs).keymap, prefs, { kind: "all" });
     expect(r).toEqual({ ok: true, prefs: emptyKeyPrefs(), skipped: [] });
@@ -539,6 +540,7 @@ describe("planReset — 既定へ戻す（AC9）", () => {
       prefix: null,
       bindings: { zoom: ["prefix+y"], help: ["prefix+shift+h"] },
       navigateKeys: {},
+      commands: {},
     };
     const r = planReset(resolveKeymap(prefs).keymap, prefs, { kind: "action", id: "zoom" });
     expect(r.ok).toBe(true);
@@ -553,6 +555,7 @@ describe("planReset — 既定へ戻す（AC9）", () => {
       prefix: null,
       bindings: { zoom: ["prefix+y"], goto: ["prefix+z"] },
       navigateKeys: {},
+      commands: {},
     };
     const r = planReset(resolveKeymap(prefs).keymap, prefs, { kind: "action", id: "zoom" });
     expect(r.ok).toBe(true);
@@ -564,7 +567,7 @@ describe("planReset — 既定へ戻す（AC9）", () => {
   });
 
   it("操作ごと：上書きが無い操作は何も変えない", () => {
-    const prefs: KeyPrefs = { prefix: null, bindings: { help: [] }, navigateKeys: {} };
+    const prefs: KeyPrefs = { prefix: null, bindings: { help: [] }, navigateKeys: {}, commands: {} };
     const r = planReset(resolveKeymap(prefs).keymap, prefs, { kind: "action", id: "zoom" });
     expect(r).toEqual({ ok: true, prefs, skipped: [] });
   });
@@ -574,6 +577,7 @@ describe("planReset — 既定へ戻す（AC9）", () => {
       prefix: null,
       bindings: { switch_tab: ["prefix+alt+1..9"], zoom: ["prefix+3"] },
       navigateKeys: {},
+      commands: {},
     };
     const r = planReset(resolveKeymap(prefs).keymap, prefs, { kind: "action", id: "switch_tab" });
     expect(r.ok).toBe(true);
@@ -584,11 +588,11 @@ describe("planReset — 既定へ戻す（AC9）", () => {
   });
 
   it("prefix：既定へ戻す。既定の ctrl+b がすでに直接のキー・prefix の後のキーに使われていれば拒否する", () => {
-    const prefs: KeyPrefs = { prefix: "ctrl+a", bindings: {}, navigateKeys: {} };
+    const prefs: KeyPrefs = { prefix: "ctrl+a", bindings: {}, navigateKeys: {}, commands: {} };
     const ok = planReset(resolveKeymap(prefs).keymap, prefs, { kind: "prefix" });
     expect(ok).toEqual({
       ok: true,
-      prefs: { prefix: null, bindings: {}, navigateKeys: {} },
+      prefs: { prefix: null, bindings: {}, navigateKeys: {}, commands: {} },
       skipped: [],
     });
 
@@ -597,6 +601,7 @@ describe("planReset — 既定へ戻す（AC9）", () => {
       prefix: "ctrl+a",
       bindings: { goto: ["prefix+g", "ctrl+b"] },
       navigateKeys: {},
+      commands: {},
     };
     const r = planReset(resolveKeymap(busy).keymap, busy, { kind: "prefix" });
     expect(r.ok).toBe(false);
@@ -608,6 +613,7 @@ describe("planReset — 既定へ戻す（AC9）", () => {
       prefix: "ctrl+a",
       bindings: { goto: ["prefix+ctrl+b"] },
       navigateKeys: {},
+      commands: {},
     };
     const r2 = planReset(resolveKeymap(busy2).keymap, busy2, { kind: "prefix" });
     expect(r2.ok).toBe(false);
@@ -665,6 +671,7 @@ describe("applyRecommended — herdr のおすすめの直接のキー（AC10）
       prefix: "ctrl+alt+d",
       bindings: { help: ["prefix+?", "ctrl+alt+z"] },
       navigateKeys: {},
+      commands: {},
     };
     const r = applyRecommended(resolveKeymap(prefs).keymap, prefs);
     expect(r.added).toHaveLength(8);
@@ -678,6 +685,7 @@ describe("applyRecommended — herdr のおすすめの直接のキー（AC10）
       prefix: null,
       bindings: { split_vertical: ["prefix+|"] },
       navigateKeys: {},
+      commands: {},
     };
     const r = applyRecommended(resolveKeymap(prefs).keymap, prefs);
     expect(resolveKeymap(r.prefs).keymap.bindingsOf("split_vertical")).toEqual([
@@ -931,7 +939,7 @@ describe("validateNavigateAssignment — 衝突・置き換え（AC4）", () => 
 describe("planNavigateReset — 既定へ戻す（AC5）", () => {
   it("上書きを外し、既定のキーが戻る", () => {
     const { keymap } = resolveNavigateKeymap({ navigate_pane_left: ["ctrl+h"] });
-    const prefs: KeyPrefs = { prefix: null, bindings: {}, navigateKeys: { navigate_pane_left: ["ctrl+h"] } };
+    const prefs: KeyPrefs = { prefix: null, bindings: {}, navigateKeys: { navigate_pane_left: ["ctrl+h"] }, commands: {} };
     const r = planNavigateReset(keymap, prefs, { kind: "navigateKey", id: "navigate_pane_left" });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -949,6 +957,7 @@ describe("planNavigateReset — 既定へ戻す（AC5）", () => {
       prefix: null,
       bindings: {},
       navigateKeys: { navigate_pane_left: ["ctrl+h"], navigate_pane_down: ["h"] },
+      commands: {},
     };
     const r = planNavigateReset(keymap, prefs, { kind: "navigateKey", id: "navigate_pane_left" });
     expect(r.ok).toBe(true);
@@ -960,7 +969,7 @@ describe("planNavigateReset — 既定へ戻す（AC5）", () => {
   });
 
   it("上書きが無い操作は何も変えない", () => {
-    const prefs: KeyPrefs = { prefix: null, bindings: {}, navigateKeys: {} };
+    const prefs: KeyPrefs = { prefix: null, bindings: {}, navigateKeys: {}, commands: {} };
     const r = planNavigateReset(DEFAULT_NAVIGATE_KEYMAP, prefs, { kind: "navigateKey", id: "navigate_pane_left" });
     expect(r).toEqual({ ok: true, prefs, skipped: [] });
   });
