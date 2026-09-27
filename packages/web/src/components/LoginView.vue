@@ -139,7 +139,7 @@ function onSubmit(): void {
 <template>
   <div class="login-view">
     <form class="login-view-form" @submit.prevent="onSubmit">
-      <h1>Sodashitsu</h1>
+      <h1 class="login-view-title"><img class="login-view-logo" src="/logo.svg" alt="" width="40" height="40" />Sodashitsu</h1>
       <label class="login-view-label">
         <span>token</span>
         <input v-model="token" type="password" autocomplete="off" :disabled="busy" />
@@ -168,6 +168,16 @@ function onSubmit(): void {
   flex-direction: column;
   gap: 0.75em;
   width: min(20em, 90vw);
+}
+.login-view-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.login-view-logo {
+  width: 1.6em;
+  height: 1.6em;
+  flex: none;
 }
 .login-view-label {
   display: flex;
