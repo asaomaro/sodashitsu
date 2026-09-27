@@ -26,7 +26,7 @@ export interface MethodDeps {
   /** `server.sessions`（20260926-named-session-ui）。無ければ空の一覧を返す。 */
   serverSessions?: () => Promise<ServerSessionEntry[]>;
   /** `machine.list`（20260927-multi-host-machines）。無ければ空の一覧を返す。 */
-  machines?: () => MachineStatus[];
+  machines?: () => MachineStatus[] | Promise<MachineStatus[]>;
   /** 独自トークンの報告（20260927-sidebar-row-tokens）。無ければ `workspace.report_metadata`・`pane.report_metadata` を登録しない（`agentStarter` と同じ任意の依存）。 */
   metadata?: MetadataService;
 }

@@ -130,7 +130,19 @@ parent: 20260918-web-terminal-multiplexer
       review round1 で見つかった「セッション全体のグローバル focus を更新しない」制約は
       backlog に別途追加済み（下記「レイアウトだけを書き換える pane 操作」の行。decisions.md D4）。
 - [ ] エージェント対応の拡充: 主要数種以外の検出、herdr の integrations / plugins 相当 (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/requirements.md）
-- [ ] 複数ホストの集約: herdr の remote / several machines 相当。複数ホストのセッションを 1 画面に (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/requirements.md）
+- [x] 複数ホストの集約: herdr の remote / several machines 相当。複数ホストのセッションを 1 画面に:
+      20260927-multi-host-machines で最初の一切れを対応（PR は deliver の報告を参照）。`wtm machine add/list/rename/enable/disable/remove`
+      （`packages/server/src/machine/machineCommands.ts`・登録簿 `MachineCatalog.ts`＝状態ディレクトリの根の `machines.json`・0600・秘密なし）、`wtm bridge`
+      （`bridgeCommand.ts`）とリモートの `bridge.sock`（`BridgeEndpoint.ts`・0600・認証は socket の権限）、手元の `wtm serve` のマシンの接続の管理
+      （`MachineManager.ts`・`MachineLink.ts`。1 秒から倍々・最大 2 分の繋ぎ直し・要対応の分類）、`/ws?machine=`（`ws/WsServerWs.ts`・`MachineRelay.ts`）、
+      ブラウザのサイドバーのマシンのまとまりと切り替え（`web/src/components/MachineHeader.vue`・`MachineRows.vue`・`actions/MachineSwitcher.ts`）、
+      `wtmctl --machine`。実測: vitest 4800 passed / 0 failed・`aidev smoke` 8 本 pass（`machineSmoke.js`＝偽の ssh で実物の `wtm bridge` を通す）
+      （`.aidev/works/20260927-multi-host-machines/test-result.md`）。使い方は `docs/machines.md`。
+- [ ] 複数ホストの残り（モバイル）: モバイルの 1 列の画面でのマシンの切り替え（今は 1 列ではマシンの機能を使わず手元だけ） (needs: 20260927-multi-host-machines)（出典: .aidev/works/20260927-multi-host-machines/requirements.md の対象外）
+- [ ] 複数ホストの残り（通知とキー）: ほかのマシンのエージェントの状態の変化をトースト・OS 通知・音で知らせる／`prefix+w` 相当のキーボードでのマシンをまたぐ移動／ほかのマシンの行のグループ表示 (needs: 20260927-multi-host-machines)（出典: .aidev/works/20260927-multi-host-machines/requirements.md の対象外・decisions D8）
+- [ ] 複数ホストの残り（接続の入口）: `wtm --remote <宛先>`（登録せずに 1 回）・手元の `wtm serve` を通さない直接の SSH での `wtmctl --machine`・リモートの `--state-dir` を登録簿に持つ・画面からの登録 (needs: 20260927-multi-host-machines)（出典: .aidev/works/20260927-multi-host-machines/decisions.md D5・docs/machines.md）
+- [ ] 複数ホストの残り（導入と対応 OS）: リモートへの `wtm` の自動の導入・更新・`wtm serve` の自動の起動（herdr は承認つき）／Windows のマシンをリモートにする（`bridge.sock` の代わり）／本物の SSH・macOS・手元が Windows での確かめ (needs: 20260927-multi-host-machines)（出典: .aidev/works/20260927-multi-host-machines/test-result.md の未検証の穴）
+- [ ] 複数ホストの残り（画像の貼り付け）: リモートへのクリップボードの画像の転送（herdr の H44） (needs: 20260927-multi-host-machines)（出典: docs/herdr-parity.md H44）
 - [ ] ノードによるオーケストレーション: セッションをノード表示し、マウスで繋いで状態トリガ・出力受け渡し・監督関係を設定（外部操作 API の後） (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/requirements.md）
 - [x] 通知: 完了・入力待ちのアプリ内トースト / OS 通知 / 音、通知の対象への移動（herdr prefix+o）:
       20260920-agent-notifications で対応。エージェントが**入力待ち**になった／**完了**したとき、

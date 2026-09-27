@@ -268,7 +268,7 @@ export async function composeServer(
     gitPoller,
     agentStarter,
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
-    machines: () => machines.list(), // 20260927-multi-host-machines
+    machines: () => machines.listWhenLoaded(), // 20260927-multi-host-machines（最初の読み込みを待つ）
     metadata,
   });
   // `/ws?machine=<id|名前>` は認証の後にそのマシンへの中継へ（`WsServerWs` は router の関数だけを知る。architecture の境界）。

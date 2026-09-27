@@ -110,6 +110,44 @@ describe("表示の記憶のマシンごとの分け方", () => {
     view.setMachineScope("local");
   });
 
+  it("行から切り替えた（target を覚えた）後の snapshot で、その workspace・tab と、その tab の focus の pane に焦点が移る（AC-I4 の前半。端末への DOM のフォーカスは TerminalPane がこの焦点で行う＝TerminalPane.test の「マウント時に既に focus 対象なら term.focus()」）", () => {
+    const view = useViewStore(pinia);
+    const session = useSessionStore(pinia);
+    view.setView("w1", "t1");
+    view.focusPane("p1");
+    // MachineSwitcher の手順 3〜4 と同じ順
+    view.setMachineScope("m9");
+    view.rememberView("w2", "t2");
+    view.resetForMachineSwitch();
+    session.clear();
+    const s = snap("w1", "t1", "p1"); // サーバの focus は w1 だが、行で選んだ w2 を表示する
+    s.workspaces.push({
+      id: "w2",
+      label: "w2",
+      cwd: "/",
+      tabIds: ["t2"],
+      activeTabId: "t2",
+      groupId: null,
+      git: null,
+      autoLabel: false,
+    });
+    s.tabs.push({
+      id: "t2",
+      workspaceId: "w2",
+      label: "t2",
+      layout: { type: "pane", paneId: "p5" },
+      focusedPaneId: "p5",
+      zoomedPaneId: null,
+      sizeOwnerClientId: null,
+    });
+    new StoreAdapter({
+      pinia,
+      onAuthRequired: () => undefined,
+      onConnectionState: () => undefined,
+    }).applySnapshot(s, "c");
+    expect([view.workspaceId, view.tabId, view.focusedPaneId]).toEqual(["w2", "t2", "p5"]);
+  });
+
   it("resetForMachineSwitch は表示・焦点・ダイアログ・メニュー・navigate の選択を捨てる", () => {
     const view = useViewStore(pinia);
     view.setView("w1", "t1");

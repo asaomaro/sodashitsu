@@ -9,6 +9,6 @@ import type { MethodDeps } from "./deps.js";
 export function registerMachineMethods(surface: ControlSurface, deps: MethodDeps): void {
   surface.register("machine.list", {
     schema: MachineListParams,
-    handler: () => ({ machines: deps.machines ? deps.machines() : [] }),
+    handler: async () => ({ machines: deps.machines ? await deps.machines() : [] }),
   });
 }

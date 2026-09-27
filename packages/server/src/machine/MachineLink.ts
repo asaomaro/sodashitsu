@@ -275,6 +275,23 @@ export class MachineLink {
   get online(): boolean {
     return this.state === "online";
   }
+  /** 読むのを止めている理由（中継の接続ごと）。1 つでもあれば ssh の標準出力を読まない（背圧）。 */
+  private readonly readHolds = new Set<unknown>();
+
+  /**
+   * ssh の標準出力を読むのを止める（ブラウザが遅い。review ラウンド 1）。読まないとリモートの `bridge.sock` の書き込み待ちが増え、リモートの `OutputFanout` の
+   * 流量制御（出力を捨て、再開したら SNAPSHOT）が効く。同じ ssh の上のほかの接続も止まるので、呼ぶ側は長く止めない（上限時間で閉じる）。
+   */
+  holdReading(key: unknown): void {
+    this.readHolds.add(key);
+    this.child?.stdout.pause();
+  }
+
+  releaseReading(key: unknown): void {
+    if (!this.readHolds.delete(key)) return;
+    if (this.readHolds.size === 0) this.child?.stdout.resume();
+  }
+
   /** ssh の標準入力の書き込み待ち（全チャネルの合計）。 */
   get pendingBytes(): number {
     return this.child?.stdin.writableLength ?? 0;
@@ -443,6 +460,11 @@ export class MachineLink {
 
   private checkHealth(): void {
     if (this.state !== "online") return;
+    // 自分で読むのを止めている間（背圧）は、黙っているのではない——止めた時間を沈黙に数えない（止める側が 15 秒で閉じる）。
+    if (this.readHolds.size > 0) {
+      this.lastReceivedAt = this.clock.now();
+      return;
+    }
     const quiet = this.clock.now() - this.lastReceivedAt;
     if (quiet >= LINK_TIMEOUTS.silenceMs) {
       this.finish({ timeout: "health" });
@@ -464,6 +486,7 @@ export class MachineLink {
     this.end = { ...this.end, ...info };
     this.clock.clearTimeout(this.helloTimer);
     this.clock.clearInterval(this.healthTimer);
+    this.readHolds.clear();
     for (const ch of [...this.channels.values()]) ch.remoteClosed(1012, "machine disconnected");
     this.channels.clear();
     const child = this.child;

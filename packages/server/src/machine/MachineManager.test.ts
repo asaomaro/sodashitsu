@@ -350,4 +350,22 @@ describe("MachineManager（T7）", () => {
     t.clock.advance(3000);
     await hang;
   });
+
+  it("listWhenLoaded は最初の読み込みを待ってから一覧を返す（読む前に空を返さない）。読めなければ上限で今の一覧", async () => {
+    const t = setup(ok(prof()));
+    let got: MachineStatus[] | undefined;
+    void t.mgr.listWhenLoaded().then((l) => (got = l));
+    await flush();
+    expect(got).toBeUndefined();
+    await t.mgr.start();
+    await flush();
+    expect(got?.map((m) => m.label)).toEqual(["Build"]);
+    const u = setup(ok(prof()));
+    let late: MachineStatus[] | undefined;
+    void u.mgr.listWhenLoaded(3000).then((l) => (late = l));
+    u.clock.advance(3000);
+    await flush();
+    expect(late).toEqual([]);
+    t.mgr.stop();
+  });
 });

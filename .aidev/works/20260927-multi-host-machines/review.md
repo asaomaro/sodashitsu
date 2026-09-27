@@ -83,3 +83,17 @@
 - [should][conv:-] packages/server/src/composeServer.ts 更新時の引き継ぎ（execve）の前にマシンの ssh を止めず、子が回収されずに残る / 対応: 修正済（pausePollers で止めて子の終わりを待ち、失敗で戻したら繋ぎ直す。変異〔待たない〕で落ちる: scratchpad/negctl/M15.log。cross・ラウンド1）
 - [should][conv:-] packages/web/src/main.ts 端末の windowsPty をマシンを切り替えても外さない / 対応: 修正済（Windows でないホストになったら外す。main.ts は単体テストできないので変異では確かめていない。cross・ラウンド1）
 - [nit][conv:-] packages/server/src/composeServer.ts 停止で 1001 を先に送る理由の説明が、クライアントが code を分けていない実態と合わない / 対応: 修正済（説明を直した。cross・ラウンド1）
+
+## ラウンド 1（2026-09-27）
+- [should][conv:-] packages/server/src/machine/MachineRelay.ts・MachineLink.ts 中継に背圧が無く、リモートの OutputFanout の流量制御（D98）が効かない。遅いブラウザでは接続ごとに最大 128MiB を手元に溜めてから 1013 で切れる。design・コメントの 8MiB も古い / 対応: 差し戻し（修正へ）
+- [should][conv:-] .aidev/works/20260927-multi-host-machines/test-result.md AC-I4 の前半（切り替えの後に切り替え先の focus の pane の端末へフォーカスが移る）を確かめるテストが無いのに pass としている / 対応: 差し戻し（修正へ）
+- [nit][conv:-] packages/server/src/machine/MachineManager.ts 最初の登録簿の読み込みの前は machine.list が空を返し、ブラウザが選択中のマシンが消えたと判断してローカルへ戻しうる / 対応: 差し戻しに含めて修正
+- [should][conv:regression-negative-control!] packages/server/src/machine/MachineLink.ts 読むのを止めている間も生きているかの確かめが動き、健全な接続を 45 秒で切りうる。その修正の負の確認が無い / 対応: 修正済（止めている間は沈黙に数えない。変異 R4 で落ちる。review ラウンド 1 の修正の点検〔cross・ラウンド2〕）
+- [nit][conv:-] packages/server/src/machine/MachineRelay.test.ts リモートが閉じた経路の release を確かめていない / 対応: 修正済（R5）
+- [nit][conv:-] packages/server/src/machine/MachineManager.ts listWhenLoaded が決着後も上限のタイマーを残す / 対応: 修正済
+- [nit][conv:-] packages/server/src/machine/MachineRelay.ts RelayClock が MachineLink の Clock の写し / 対応: 修正済（Pick と realClock）
+
+## ラウンド 2（2026-09-27）
+ラウンド 1 の 3 件はコード上すべて解消（背圧はリモートの OutputFanout まで繋がる・AC-I4 は部品のテストの組み合わせと未検証の明記・machine.list は最初の読み込みを待つ）。
+- [should][conv:-] .aidev/works/20260927-multi-host-machines/design.md 「中継」のシグネチャが古い（maxBuffered） / 対応: 修正済（文書だけ。review の上限 2 ラウンドのため再レビューはせず主エージェントが確かめた）
+- [should][conv:-] .aidev/works/20260927-multi-host-machines/walkthrough.md 128MiB が残り、背圧で同じ ssh のほかの接続も最大 15 秒止まる制約が書かれていない / 対応: 修正済（文書だけ。同上）

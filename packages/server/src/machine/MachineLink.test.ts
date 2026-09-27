@@ -416,3 +416,32 @@ describe("MachineLink.exited（引き継ぎの前に子の終わりを待つ）"
     await expect(failed.exited).resolves.toBeUndefined();
   });
 });
+
+describe("MachineLink.holdReading（背圧）", () => {
+  it("理由が 1 つでもあれば ssh の標準出力を止め、全部外れたら再開する", async () => {
+    const { link, child } = setup();
+    child.stdout.write(Buffer.concat([markerBytes(), helloFrame()]));
+    await flush();
+    link.holdReading("a");
+    link.holdReading("b");
+    expect(child.stdout.isPaused()).toBe(true);
+    link.releaseReading("a");
+    expect(child.stdout.isPaused()).toBe(true);
+    link.releaseReading("b");
+    expect(child.stdout.isPaused()).toBe(false);
+    link.releaseReading("zzz"); // 知らない理由は何もしない
+    expect(child.stdout.isPaused()).toBe(false);
+  });
+
+  it("読むのを止めている間は沈黙に数えない（45 秒で健全な接続を切らない）", async () => {
+    const { link, child, clock, events } = setup();
+    child.stdout.write(Buffer.concat([markerBytes(), helloFrame()]));
+    await flush();
+    link.holdReading("a");
+    clock.advance(LINK_TIMEOUTS.silenceMs * 2);
+    expect(events).toEqual(["online"]);
+    link.releaseReading("a");
+    clock.advance(LINK_TIMEOUTS.silenceMs);
+    expect(events).toEqual(["online", "closed"]); // 再開した後は今までどおり
+  });
+});

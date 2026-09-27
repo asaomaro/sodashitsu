@@ -4,10 +4,15 @@ import type { WsConnection } from "../ws/WsServer.js";
 import { machineSelectorOf } from "../ws/WsServerWs.js";
 import type { LinkChannel } from "./MachineLink.js";
 import {
+  RELAY_HOLD_BYTES,
+  RELAY_HOLD_LIMIT_MS,
   RELAY_MAX_BUFFERED_BYTES,
+  RELAY_MAX_UPSTREAM_BYTES,
+  RELAY_RESUME_BYTES,
   relayToMachine,
   sanitizeRemoteCloseCode,
 } from "./MachineRelay.js";
+import { ManualClock } from "./testing.js";
 
 /** 中継（20260927-multi-host-machines の T8）。ブラウザ側の接続とチャネルを偽物で。 */
 class FakeConn implements WsConnection {
@@ -87,14 +92,28 @@ class FakeChannel implements LinkChannel {
 function setup() {
   const conn = new FakeConn();
   const channel = new FakeChannel();
-  relayToMachine(conn, { openChannel: () => channel });
-  return { conn, channel };
+  const holds = new Set<unknown>();
+  const clock = new ManualClock();
+  relayToMachine(
+    conn,
+    {
+      openChannel: () => channel,
+      holdReading: (k) => void holds.add(k),
+      releaseReading: (k) => void holds.delete(k),
+    },
+    { clock },
+  );
+  return { conn, channel, holds, clock };
 }
 
 describe("relayToMachine（T8）", () => {
   it("チャネルが開けなければ 1013 で閉じる", () => {
     const conn = new FakeConn();
-    relayToMachine(conn, { openChannel: () => undefined });
+    relayToMachine(conn, {
+      openChannel: () => undefined,
+      holdReading: () => undefined,
+      releaseReading: () => undefined,
+    });
     expect(conn.closed).toEqual([1013, "machine unavailable"]);
   });
 
@@ -132,21 +151,52 @@ describe("relayToMachine（T8）", () => {
       expect(sanitizeRemoteCloseCode(code)).toBe(1011);
   });
 
-  it("送り待ちが上限を超えたら、その接続とチャネルだけを 1013 で閉じる（両向き）", () => {
+  it("背圧: ブラウザの送り待ちが増えたら ssh を読むのを止め、減ったら再開する（リモートの流量制御が効く）", () => {
+    const { conn, channel, holds, clock } = setup();
+    conn.bufferedAmount = RELAY_HOLD_BYTES; // ちょうどは止めない
+    channel.fromRemoteText("{}");
+    expect(holds.size).toBe(0);
+    conn.bufferedAmount = RELAY_HOLD_BYTES + 1;
+    channel.fromRemoteText("{}");
+    expect(holds.has(conn)).toBe(true);
+    clock.advance(1000);
+    expect(holds.size).toBe(1); // まだ多い
+    conn.bufferedAmount = RELAY_RESUME_BYTES - 1;
+    clock.advance(50);
+    expect(holds.size).toBe(0);
+    expect(conn.closed).toBeUndefined();
+  });
+
+  it("止めたまま上限時間を過ぎる・絶対の上限を超えると、その接続とチャネルだけを 1013 で閉じて読むのを戻す。ブラウザ → リモートも上限で閉じる", () => {
     const a = setup();
-    a.conn.bufferedAmount = RELAY_MAX_BUFFERED_BYTES + 1;
+    a.conn.bufferedAmount = RELAY_HOLD_BYTES + 1;
     a.channel.fromRemoteText("{}");
+    a.clock.advance(RELAY_HOLD_LIMIT_MS);
     expect(a.conn.closed?.[0]).toBe(1013);
     expect(a.channel.closed?.[0]).toBe(1013);
+    expect(a.holds.size).toBe(0);
     const b = setup();
-    b.channel.pendingBytes = RELAY_MAX_BUFFERED_BYTES + 1;
-    b.conn.fromBrowserText("{}");
+    b.conn.bufferedAmount = RELAY_MAX_BUFFERED_BYTES + 1;
+    b.channel.fromRemoteBinary(encodeOutputFrame("p1", new Uint8Array([1])));
     expect(b.conn.closed?.[0]).toBe(1013);
-    expect(b.channel.sent).toHaveLength(0);
+    expect(b.holds.size).toBe(0);
     const c = setup();
-    c.conn.bufferedAmount = RELAY_MAX_BUFFERED_BYTES; // ちょうどは通す
-    c.channel.fromRemoteText("{}");
-    expect(c.conn.closed).toBeUndefined();
+    c.channel.pendingBytes = RELAY_MAX_UPSTREAM_BYTES + 1;
+    c.conn.fromBrowserText("{}");
+    expect(c.conn.closed?.[0]).toBe(1013);
+    expect(c.channel.sent).toHaveLength(0);
+    // ブラウザが閉じても止めたままにしない
+    const d = setup();
+    d.conn.bufferedAmount = RELAY_HOLD_BYTES + 1;
+    d.channel.fromRemoteText("{}");
+    d.conn.close(1000, "bye");
+    expect(d.holds.size).toBe(0);
+    // リモートが閉じても止めたままにしない
+    const e = setup();
+    e.conn.bufferedAmount = RELAY_HOLD_BYTES + 1;
+    e.channel.fromRemoteText("{}");
+    e.channel.remoteClose(1012, "machine disconnected");
+    expect(e.holds.size).toBe(0);
   });
 });
 

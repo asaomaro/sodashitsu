@@ -113,6 +113,35 @@ export class MachineManager {
     this.listeners.push(cb);
   }
 
+  private loadedWaiters: (() => void)[] = [];
+
+  /**
+   * 最初の登録簿の読み込みを済ませてからの一覧（`machine.list`。review ラウンド 1）。読む前に空を返すと、ブラウザは選んでいるマシンが消えたと
+   * 判断してローカルへ戻してしまう（起動・引き継ぎの直後）。読み込みが `waitMs` で終わらなければ今の一覧。
+   */
+  listWhenLoaded(waitMs = 3_000): Promise<MachineStatus[]> {
+    if (this.loaded) return Promise.resolve(this.list());
+    return new Promise((resolve) => {
+      let done = false;
+      let timer: unknown;
+      const finish = (): void => {
+        if (done) return;
+        done = true;
+        this.clock.clearTimeout(timer);
+        resolve(this.list());
+      };
+      this.loadedWaiters.push(finish);
+      timer = this.clock.setTimeout(finish, waitMs);
+    });
+  }
+
+  private markLoaded(): void {
+    this.loaded = true;
+    const ws = this.loadedWaiters;
+    this.loadedWaiters = [];
+    for (const w of ws) w();
+  }
+
   /** 有効なマシンを登録の順に。 */
   list(): MachineStatus[] {
     return this.order.flatMap((id) => {
@@ -162,12 +191,12 @@ export class MachineManager {
                 { reason: loaded.reason },
               );
             this.lastInvalidReason = loaded.reason;
-            this.loaded = true; // 壊れていても「読んだ」（今の接続を保つ。登録が無ければ unknown）
+            this.markLoaded(); // 壊れていても「読んだ」（今の接続を保つ。登録が無ければ unknown）
             continue;
           }
           this.lastInvalidReason = undefined;
-          this.loaded = true;
           this.reconcile(loaded.kind === "ok" ? loaded.data.machines.filter((m) => m.enabled) : []);
+          this.markLoaded();
         } while (this.reloadAgain && !this.stopped);
       } finally {
         // 最後に `reloadAgain` を見たのと同じ流れの中で空にする（その間に来た読み直しの求めを取りこぼさない）。

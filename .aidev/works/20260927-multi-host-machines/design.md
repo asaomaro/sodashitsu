@@ -252,13 +252,13 @@ export class MachineManager {
 ### 中継（`machine/MachineRelay.ts`）
 
 ```ts
-export function relayToMachine(conn: WsConnection, link: MachineLink, opts?: { maxBuffered?: number }): void;
+export function relayToMachine(conn: WsConnection, link: Pick<MachineLink, "openChannel" | "holdReading" | "releaseReading">, opts?: { clock?: RelayClock }): void;
 ```
 - `link.openChannel()` が無ければ `conn.close(1013, "machine unavailable")`。
 - ブラウザ → リモート: `onText`→`sendText`、`onBinary`→`sendBinary`。送る前に**そのチャネルの** `channel.pendingBytes > 8MiB` なら、そのチャネルとブラウザの接続を 1013 で閉じる
   （ssh の標準入力は全チャネルで共有だが、書き込みの callback でチャネルごとに数えるので、詰まらせたチャネルだけを閉じる）。
 - リモート → ブラウザ: TEXT は先頭（空白を除く）が `{` のものだけ通す（それ以外は捨てる）。BINARY は 1 バイト目が OUTPUT(0x01)・SNAPSHOT(0x02) のものだけ通し、OUTPUT は圧縮しない（`WsGateway` と同じ。D98）。
-  送る前に `conn.bufferedAmount > 8MiB` なら 1013 で閉じる（ブラウザは繋ぎ直して SNAPSHOT で読み直す）。
+  送った後に `conn.bufferedAmount` を見て、4MiB を超えたら ssh の標準出力を読むのを止め（`MachineLink.holdReading`。リモートの `bridge.sock` の書き込み待ちが増え、リモートの `OutputFanout` の流量制御が効く）、1MiB を下回ったら再開する。止めたまま 15 秒・80MiB を超えたら 1013 で閉じる（ブラウザは繋ぎ直して SNAPSHOT で読み直す。review ラウンド 1 で背圧を足した・decisions D15）。
 - チャネルの CLOSE の code は `1000・1001・1008・1011・1012・1013` だけそのまま、ほかは 1011（リモートが 4401 等でブラウザをログイン画面へ飛ばせないように）。reason は 120 バイトまで。
   リンクが切れて閉じるチャネルは 1012（「再起動中」＝ブラウザは繋ぎ直す）。ブラウザが閉じたらチャネルを閉じる（CLOSE 1000）。
 
@@ -393,7 +393,7 @@ export interface MachineChangedEvent { event: "machine.changed"; data: { machine
   マシンごとに ssh・`MachineLink`・チャネル・軽い接続が別なので、1 台の失敗はほかに及ばない。
 - AC12: `sshArgsFor`（`--`・固定のコマンド・検証）と `BridgeFrameDecoder`（type・長さ・チャネル数・目印・HELLO の検証。違反は ssh を切る）。
 - AC13: `wtmctl` の `--machine`（`cliArgs`・`wsClient`・`output`・`caller` の無効化）。入力は CLI の引数。
-- AC14: `relayToMachine` の 8MiB の上限（両方向）と枠の 4MiB の上限。
+- AC14: `relayToMachine` の背圧（4MiB で読むのを止め 1MiB で再開・15 秒／80MiB で閉じる）とブラウザ → リモートの 8MiB、枠の上限（手元 → リモート 4MiB・リモート → 手元 64MiB）。
 - AC15: 登録簿が無い・空・全台無効なら `MachineManager` は ssh を起こさず、ブラウザは `hasMachines` が偽で軽い接続を張らず今までの描画。`/ws` はクエリが無ければ今までどおり。
 - AC16: ヘルプ（`main.ts` の `printHelp`・`wtmctl` の `USAGE_LINES`）・`skills/wtmctl/SKILL.md`・`docs/herdr-parity.md` H43・`docs/machines.md`。
 - AC17: `machineSmoke.ts`（ビルドした `dist/main.js` で 2 つの状態ディレクトリ・偽の `ssh`・`wtm machine add`・`/ws?machine=` の往復）を `.aidev/config.yml` の smoke に足す。
