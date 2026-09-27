@@ -117,3 +117,14 @@
 - **背景**: design は受け口の起動の位置を定めていなかった。復元の前に置くと、起動の途中の指示で復元の途中の session.json を保存し、まだ始めていない poller を
   「再開」しうる（T7 の点検）。
 - **決定**: `listen()` の poller の開始の後・`/ws` の受け付けの前に置く。
+
+## D14: 読み取りの停止は Node の内部（`net.Socket._handle`）で handle の段で行う（design からの変更）
+
+- **背景**: design は「`pty.pause()` して止める」としていた。T3 の実装で、`Readable.pause()` だけでは libuv の handle が内部の buffer が満ちるまで読み続け、
+  読んだ分は JS の buffer に溜まり、execve で失われる（カーネルの PTY から取り出し済み）ことが分かった（`[P]rs.cjs`・`socketReading.test.ts` の `readableLength`）。
+  node-pty にも Node にも「読み取りを handle の段で止める」公開の API は無い。
+- **決定**: `PtyProcess.holdReading()` で、buffer を `read()` で流し切ってから `_handle.readStop()`（`_handle.reading` を false に）。戻すときは `readStart()`。
+  `_handle`・`reading`・`readStop`・`readStart` の形が違う Node では false を返し、その pane を渡せないとして引き継ぎを断る（`pane_unavailable`。何も変えない）。
+- **理由・代替案**: (a) `pause()` だけ——出力の多い pane で数 KB〜数十 KB を失う。(b) 読み取りを止めずに execve——同じ。(c) ネイティブのアドオン——D1 の止める条件。
+  内部に頼るのはリスクだが、失敗は「断る」側に倒れる（引き継いだつもりで失うことは無い）。
+- **影響**: design の `TerminalHost` の節を更新。Node の版を上げたときは `socketReading.test.ts`（実物の PTY で buffer に溜まらないこと）が検知する。

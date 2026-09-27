@@ -53,9 +53,11 @@ class NodePtyProcess implements PtyProcess {
     this.pty.write(typeof data === "string" ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength));
   }
 
-  resize(cols: number, rows: number): void {
-    // ConPTY は 0 を渡すと落ちることがある（node-pty #877）ので、下限 1 に丸める。
-    this.pty.resize(Math.max(1, cols), Math.max(1, rows));
+  resize(cols: number, rows: number, pixels?: { width: number; height: number }): void {
+    // ConPTY は 0 を渡すと落ちることがある（node-pty #877）ので、下限 1 に丸める。画素は node-pty が Unix で `ws_xpixel`/`ws_ypixel` に入れる
+    // （Windows は無視する。node-pty の型定義 `resize(columns, rows, pixelSize?)`）。
+    if (pixels) this.pty.resize(Math.max(1, cols), Math.max(1, rows), pixels);
+    else this.pty.resize(Math.max(1, cols), Math.max(1, rows));
   }
 
   pause(): void {

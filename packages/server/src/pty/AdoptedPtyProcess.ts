@@ -10,7 +10,12 @@ import {
 
 export interface AdoptedPtyDeps {
   /** master の大きさを変える（既定は node-pty のネイティブの `resize`）。 */
-  resize: (fd: number, cols: number, rows: number) => void;
+  resize: (
+    fd: number,
+    cols: number,
+    rows: number,
+    pixels?: { width: number; height: number },
+  ) => void;
   /** pid のプロセスが終わっていれば（ゾンビなら）waitpid の形の状態、まだ動いている・分からなければ undefined。 */
   readExitStatus: (pid: number) => number | undefined;
   /** シグナルを送る（既定は `process.kill`）。 */
@@ -25,7 +30,8 @@ export interface AdoptedPtyDeps {
 }
 
 const DEFAULT_DEPS: AdoptedPtyDeps = {
-  resize: (fd, cols, rows) => nodePtyNative().resize(fd, cols, rows, 0, 0),
+  resize: (fd, cols, rows, pixels) =>
+    nodePtyNative().resize(fd, cols, rows, pixels?.width ?? 0, pixels?.height ?? 0),
   readExitStatus: (pid) => readProcExitStatus(pid),
   kill: (pid, signal) => process.kill(pid, signal),
   exitPollMs: 1000,
@@ -168,10 +174,11 @@ export class AdoptedPtyProcess implements PtyProcess {
     });
   }
 
-  resize(cols: number, rows: number): void {
+  resize(cols: number, rows: number, pixels?: { width: number; height: number }): void {
     if (this.fdClosed) return;
     try {
-      this.deps.resize(this.fd, Math.max(1, cols), Math.max(1, rows));
+      // 画素の大きさ（20260926-kitty-graphics）も node-pty と同じく `ws_xpixel`/`ws_ypixel` に入れる。
+      this.deps.resize(this.fd, Math.max(1, cols), Math.max(1, rows), pixels);
     } catch {
       // 閉じた端末（EBADF 等）。
     }

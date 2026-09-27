@@ -352,9 +352,14 @@ export async function composeServer(
         const closed = closeOrphanPtyMasters();
         logger.error("handoff: the handoff data was unusable; closed the handed-off terminals and starting normally", { reason: taken.reason, closed });
       }
-      if (taken.kind === "taken" && taken.rejected.length > 0) {
+      if (taken.kind === "taken") {
         // 確かめに通らなかった fd は、自分で PTY を開く前に手放す——後にすると、同じ番号を新しいシェルの master が使っていて、それを閉じてしまう。
-        discardRejectedPanes(taken.rejected, { logger });
+        if (taken.rejected.length > 0) discardRejectedPanes(taken.rejected, { logger });
+        // 受け渡しに載らなかった master（古い版で読み取りを止めた後に作られた pane 等）も、見えないシェルとして残さない（Linux）。
+        // これも PTY を開く前に行う——この時点でこのプロセスにある master は古い版から残ったものだけなので、受け渡しの fd 以外を閉じればよい
+        // （復元の後だと、閉じかけの端末の fd と取り違えうる。review ラウンド 1）。
+        const strays = closeOrphanPtyMasters({ keep: new Set(taken.panes.map((p) => p.fd)) });
+        if (strays > 0) logger.warn("handoff: closed terminals that were not part of the handoff", { closed: strays });
       }
       if (taken.kind === "taken" && taken.port !== options.port) {
         logger.warn("handoff: listening on the configured port, which differs from the previous one", { previous: taken.port, port: options.port });
@@ -418,15 +423,6 @@ export async function composeServer(
           takenPending = undefined; // 以後の失敗で二度閉じない
           if (loaded.kind !== "ok") logger.error("handoff: session.json could not be restored; closing the handed-off terminals");
           handoffResult = finishTakenHandoff(finished, adoptedPaneIds, { logger });
-          // 受け渡しに載らなかった master（古い版で読み取りを止めた後に作られた pane 等）も、見えないシェルとして残さない（Linux）。
-          // 残すのは、いまの端末（引き継いだ PTY と新しく起動したシェル）が使っている master だけ。
-          const keep = new Set<number>();
-          for (const p of session.snapshot().panes) {
-            const fd = terminals.get(p.id)?.handoffFd?.();
-            if (fd !== undefined) keep.add(fd);
-          }
-          const strays = closeOrphanPtyMasters({ keep });
-          if (strays > 0) logger.warn("handoff: closed terminals that were not part of the handoff", { closed: strays });
           await session.adoptScrollbackEditors(finished.scrollbackEditors, adoptedPaneIds);
           handoff.recordTaken(handoffResult);
         }

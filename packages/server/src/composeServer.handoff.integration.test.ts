@@ -97,7 +97,7 @@ describe.skipIf(process.platform !== "linux")("composeServer: 引き継ぎの起
     expect(host.mirror.plainText()).toContain("from-the-shell");
   });
 
-  it("受け渡しに載らなかった PTY の master（読み取りを止めた後にできた pane 等）は、起動の最後に閉じる。使っている master は閉じない", async () => {
+  it("受け渡しに載らなかった PTY の master（読み取りを止めた後にできた pane 等）は、PTY を開く前に閉じる。受け渡しの master は閉じない", async () => {
     const { stateDir, paneId } = await prepared();
     const { master, child } = fakeHandedOffPty();
     const stray = nodePtyNative().open(80, 24);

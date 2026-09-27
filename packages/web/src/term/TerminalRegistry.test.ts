@@ -1,5 +1,5 @@
 import { TERMINAL_PALETTES, type MethodName, type ParamsOf, type ResultOf } from "@wtm/protocol";
-import type { ITheme } from "@xterm/xterm";
+import type { ITerminalAddon, ITheme } from "@xterm/xterm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KeyInputController } from "../keys/KeyInputController.js";
 import { KeyRouter, type KeyRouterClock } from "../keys/KeyRouter.js";
@@ -45,6 +45,7 @@ function makeRegistry(opts: {
   hasSizeAuthority?: (paneId: string) => boolean;
   getScrollbackLines?: () => number;
   getTheme?: () => ITheme;
+  createImageAddon?: () => ITerminalAddon | null;
 }) {
   const conn = makeConnection();
   const router = new KeyRouter(DEFAULT_KEYMAP, realClock());
@@ -60,6 +61,7 @@ function makeRegistry(opts: {
     ...(opts.hasSizeAuthority ? { hasSizeAuthority: opts.hasSizeAuthority } : {}),
     ...(opts.getScrollbackLines ? { getScrollbackLines: opts.getScrollbackLines } : {}),
     ...(opts.getTheme ? { getTheme: opts.getTheme } : {}),
+    ...(opts.createImageAddon ? { createImageAddon: opts.createImageAddon } : {}),
     createMouseBridge: (term, paneId) => {
       const bridge = new MouseBridge({ term, paneId, ui: { toast: () => undefined, openContextMenu: () => undefined }, getRightClickTarget: () => "herdr" });
       mouseBridges.push(bridge);
@@ -405,5 +407,82 @@ describe("TerminalRegistry", () => {
       registry.onSnapshot("ghost", 1, 1, "");
       registry.onSizeChanged("ghost", 1, 1);
     }).not.toThrow();
+  });
+});
+
+/** xterm.js の問い合わせへの応答は write のコールバックより後（マクロタスク）で届く（QueryFilter.test.ts の tick と同じ）。 */
+async function tick(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+describe("TerminalRegistry と画像の addon（20260926-kitty-graphics の AC6）", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("作った端末に画像の addon を読み込む", () => {
+    const activated: unknown[] = [];
+    const { registry } = makeRegistry({
+      capacity: 24,
+      createImageAddon: () => ({ activate: (term) => activated.push(term), dispose: () => undefined }),
+    });
+    const entry = registry.acquire("p1");
+    expect(activated).toEqual([entry.term]);
+  });
+
+  it("addon を作れない・読み込めないときは画像無しで端末を作る", () => {
+    const { registry } = makeRegistry({
+      capacity: 24,
+      createImageAddon: () => {
+        throw new Error("no canvas");
+      },
+    });
+    expect(registry.acquire("p1").term).toBeDefined();
+    const { registry: r2 } = makeRegistry({ capacity: 24, createImageAddon: () => null });
+    expect(r2.acquire("p2").term).toBeDefined();
+  });
+
+  it("addon の activate が途中（応答するハンドラを登録した後）で投げても、端末はでき、そのハンドラの応答は握りつぶされる", async () => {
+    const { registry, conn } = makeRegistry({
+      capacity: 24,
+      createImageAddon: () => ({
+        activate: (term) => {
+          term.parser.registerCsiHandler({ final: "c" }, () => {
+            term.input("\x1b[?62;4c", false);
+            return true;
+          });
+          throw new Error("activate failed");
+        },
+        dispose: () => undefined,
+      }),
+    });
+    const { term } = registry.acquire("p1");
+    term.write("\x1b[c");
+    await tick();
+    expect(conn.sentInput).toEqual([]);
+  });
+
+  it("実物の addon を読み込んだ端末からも、DA1・XTSMGRAPHICS・画素と文字数の問い合わせの応答は PTY へ送らない（応答はサーバだけ。D17）", async () => {
+    const { registry, conn } = makeRegistry({ capacity: 24 });
+    const { term } = registry.acquire("p1");
+    term.write("\x1b[c\x1b[?1;1;0S\x1b[?2;1;0S\x1b[14t\x1b[16t\x1b[18t");
+    await tick();
+    expect(conn.sentInput).toEqual([]);
+  });
+
+  it("負の対照: 握りつぶしを addon より前に登録すると（以前の順序）、addon が DA1 に答えてしまう", async () => {
+    const { Terminal } = await import("@xterm/xterm");
+    const { installQueryFilter } = await import("./QueryFilter.js");
+    const { createImageAddon } = await import("./imageAddon.js");
+    const term = new Terminal({ allowProposedApi: true });
+    term.open(document.createElement("div"));
+    installQueryFilter(term);
+    term.loadAddon(createImageAddon());
+    const out: string[] = [];
+    term.onData((d) => out.push(d));
+    term.write("\x1b[c");
+    await tick();
+    expect(out.join("")).toContain("\x1b[?62;4;9;22c");
+    term.dispose();
   });
 });

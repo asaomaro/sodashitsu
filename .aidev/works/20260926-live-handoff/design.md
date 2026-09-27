@@ -27,6 +27,8 @@ execve をまたいで開いたまま残り、新しい版は起動時に `hando
 - 追加: `packages/server/src/handoff/preflight.ts`（`__handoff-preflight` の 1 段目・2 段目と、親の側の起動と判定）
 - 追加: `packages/server/src/handoff/handoffCommand.ts`（`wtm handoff` の CLI の処理）
 - 追加: `packages/server/src/pty/AdoptedPtyProcess.ts`（引き継いだ PTY の `PtyProcess`）
+- 追加: `packages/server/src/pty/socketReading.ts`（handle の段で読み取りを止める・再開する）・`packages/server/src/pty/nodePtyNative.ts`（node-pty のネイティブの `resize`）
+- 追加: `packages/server/src/handoff/startup.ts`（新しい版の起動での後始末）
 - 変更: `pty/PtyBackend.ts`（`PtyProcess.handoffFd?()`・`PtyBackend.adopt?()`）・`pty/NodePtyBackend.ts`
 - 変更: `terminal/TerminalHost.ts`（読み取りの停止と再開・fd と大きさの取り出し）・`terminal/TerminalManager.ts`（`adopt`）
 - 変更: `session/SessionService.ts`（復元で引き継いだ端末を使う・スクロールバックのエディタの対応の受け渡し）
@@ -125,10 +127,14 @@ interface PtyBackend { …; /** 引き継いだ master の fd から作る（Uni
 ### `TerminalHost`（`terminal/TerminalHost.ts`）
 
 - `DefaultTerminalHost` に `cols`/`rows` の記録（コンストラクタと `resize` で更新）を足し、次を足す（`TerminalHost` の interface では任意のメソッド）:
-  - `holdForHandoff(): Promise<{ fd: number; cols: number; rows: number; screen: string } | undefined>` — `handoffFd()` が無ければ undefined。
-    `pty.pause()` し（流量制御の再開 `onDrained` で読み取りを再開しないよう「止めている」印を立てる）、`await mirror.flush()` の後に `mirror.historyAnsi()`。
-  - `releaseHandoffHold(): void` — 印を下ろして `pty.resume()`（流量制御で止めていた分はそのまま）。
-  - `nudgeRedraw(): void` — `rows > 2` なら `pty.resize(cols, rows - 1)` → `pty.resize(cols, rows)`、そうでなければ cols で同じことをする（ミラーは変えない）。
+  - `holdForHandoff(): Promise<{ fd: number; cols: number; rows: number; screen: string } | undefined>` — `handoffFd()` か `holdReading()` が無ければ undefined。
+    「止めている」印を立て（流量制御の再開 `onDrained` で読み取りを再開しない）、`pty.holdReading()`（下記。libuv の handle の段で読み取りを止め、読み取り済みの分を
+    `onData` へ流し切る）、`await mirror.flush()` の後に `mirror.historyAnsi()`。待つ間に捨てられたら undefined。
+  - `releaseHandoffHold(): void` — 印を下ろして `pty.releaseReading()`、流量制御で止めていなければ `pty.resume()`。
+  - `nudgeRedraw(): void` — `rows > 2` なら `pty.resize(cols, rows - 1)`、**100ms 後に** `pty.resize(cols, rows)`（同じ瞬間だと SIGWINCH が畳まれて描き直さないことがある。
+    その間に大きさが変わったら戻さない）。そうでなければ cols で同じことをする（ミラーは変えない）。
+  - `PtyProcess.holdReading?(): boolean`・`releaseReading?(): void`（`pty/socketReading.ts`）: `Readable.pause()` だけでは handle が読み続けて JS の buffer に溜まり、execve で失われる。
+    buffer を `read()` で流し切ってから `_handle.readStop()`（Node の内部）。内部の形が違う版では false を返し、引き継ぎを断る（decisions D14）。
 
 ### `TerminalManager.adopt`（`terminal/TerminalManager.ts`）
 

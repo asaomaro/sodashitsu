@@ -11,8 +11,8 @@ import {
 
 /**
  * 更新時の引き継ぎ（20260926-live-handoff）の、古い版の側の制御（design「`HandoffController`」「サーバ（古い版）の `request`」）。
- * 確かめる（preflight）→ poller を止める → 各 pane の読み取りを止めて画面を取る → `session.json` を保存 → `handoff.json` を書く → CLI に返す →
- * `/ws` を閉じる → ログを書き出す → execve。execve の前（戻れる区間）で失敗したら元に戻す。execve は成功すれば戻らない。
+ * 確かめる（preflight）→ `/ws` を閉じる → poller を止める → 各 pane の読み取りを止めて画面を取る → `session.json` を保存 → `handoff.json` を書く →
+ * CLI に返す → ログを書き出す → execve。execve の前（戻れる区間）で失敗したら元に戻す。execve は成功すれば戻らない。
  */
 export type HandoffFailureReason =
   | "unsupported"
