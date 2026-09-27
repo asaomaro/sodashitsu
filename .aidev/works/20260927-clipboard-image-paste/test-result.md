@@ -223,3 +223,106 @@ smoke: pass (exit 0, 8 本)
 - Windows ネイティブのサーバでの置き場所の権限（0700/0600 は効かない）・パスに空白を含む場合のエージェントの扱い。
 - 実物の SSH を越えた中継（偽の ssh で同じプロセスの 2 つのサーバを繋いだ結合テストのみ。smoke の `machineSmoke` は画像を送らない）。
 - 大きな画像（16 MiB 近く）を遅い回線で送ったときの体感（20 秒の保持を超える場合）。負荷をかける試験は利用者の指示で行わない。
+
+## ラウンド 3（2026-09-27。review ラウンド 1 の差し戻しの修正と、origin/main〔b6618fa。#65 caller-pane-default〕の取り込みの後）
+
+### 実行したもの
+- `pnpm install --frozen-lockfile`・`pnpm -s build`・`pnpm -s typecheck` — いずれも exit 0
+- `pnpm -s test` — 5127 passed / 0 failed / 0 skipped（277 files。main の取り込みで増えた分を含む。1 回だけの実行）
+- `aidev smoke` — pass（8 本）
+- 負の確認（変異）の追加 3 通り（review ラウンド 1 の修正の分）— すべて検出（合計 36 通り）:
+
+```
+$ python3 scratchpad/mutate.py M34 M35 M36
+M34 DETECTED exit=1 Test Files  1 failed (1) | Tests  1 failed | 3 passed (4) | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+M35 DETECTED exit=1 Test Files  1 failed (1) | Tests  1 failed | 19 passed (20) | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+M36 DETECTED exit=1 Test Files  1 failed (1) | Tests  1 failed | 24 passed (25) | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+```
+
+M34 起動時の後片付け（`imageStore.startSweeping()`）を外す／M35 begin からの合計の期限を外す／M36 キーからの読み取りの上限を外す。
+
+### 失敗の証跡
+
+このラウンドでは失敗が発生していない（上の変異の「わざと壊して落ちた」記録を除く）。
+
+### 起動確認（smoke）
+
+```
+smoke: 20260927-clipboard-image-paste
+$ pnpm -s build && pnpm -s smoke
+smoke: starting server on 127.0.0.1:39488 (state dir /tmp/wtm-smoke-Hv7YHr)
+{"ts":"2026-09-27T12:20:58.258Z","level":"info","msg":"agent manifests loaded","ok":22,"total":22}
+{"ts":"2026-09-27T12:20:58.263Z","level":"info","msg":"custom commands loaded","file":"/tmp/wtm-smoke-Hv7YHr/commands.json","count":1}
+smoke: agent manifests ok (22/22)
+smoke: login ok
+smoke: websocket connected
+smoke: client.hello ok
+smoke: workspace.create ok (pane p2)
+smoke: pane.subscribe ok
+smoke: echo round trip ok
+{"ts":"2026-09-27T12:20:59.219Z","level":"info","msg":"custom command run","commandId":"smoke-cat","type":"popup","clientId":"ff3a1ae7-feb1-4a2d-9a54-fee388b139f4","paneId":"p2"}
+smoke: custom command popup round trip ok
+smoke(web): auto-login (#token) → connect → pane 表示 ok
+smoke(web): 端末の描画用 canvas が画面内にある（xterm.css 有効。D96）
+smoke(web): tab title ok ("OSK2-024680-2: smoke"。H14/AC4）
+smoke(web): typed into pane p2
+smoke(web): echo round trip ok（ブラウザでの入力が PTY まで届いた）
+smoke(web): 初めてのブラウザで、はじめの案内が端末の表示のあとに開き、見出しにフォーカスがある
+smoke(web): Esc で閉じると端末へフォーカスが戻り、案内済みだけが保存される
+smoke(web): 開き直しても、はじめの案内は出ない
+smoke(web): はじめの案内を閉じたあと、クリックせずに打った文字が PTY まで届いた
+smoke: PASS
+$ pnpm --filter @wtm/cli run smoke
+
+> @wtm/cli@0.1.0 smoke /workspaces/web-tn-multiplexer-wt/clipboard-image-paste/packages/cli
+> node --enable-source-maps dist/smoke.js
+
+smoke(cli): temp server state dir /tmp/wtmctl-smoke-state-EKGWFW, sandboxed HOME /tmp/wtmctl-smoke-home-yTjHWM
+{"ts":"2026-09-27T12:21:04.685Z","level":"info","msg":"agent manifests loaded","ok":22,"total":22}
+{"ts":"2026-09-27T12:21:04.688Z","level":"info","msg":"custom commands loaded","file":"/tmp/wtmctl-smoke-state-EKGWFW/commands.json","count":0}
+smoke(cli): server listening on http://127.0.0.1:38266
+smoke(cli): wtmctl workspace create ok (pane p2)
+smoke(cli): wtmctl pane run ok (no --token needed; cached session reused)
+smoke(cli): wtmctl pane read ok (echo round trip confirmed)
+smoke(cli): wtmctl snapshot ok
+smoke(cli): wtmctl pane current / pane split (caller pane, not the focused one) ok (tab t2)
+smoke(cli): wtmctl workspace/pane report-metadata ok (normalized, in snapshot, cleared, bad source refused)
+smoke(cli): wtmctl agent list ok (no agents)
+smoke(cli): wtmctl agent rename ok (named, resolved by name, cleared)
+smoke(cli): wtmctl agent start ok (usage error for an unknown kind, agent_pane_busy on a pane with an agent)
+smoke(cli): wtmctl agent send-keys ok (the RPC accepted the keys)
+smoke(cli): wtmctl agent prompt ok (submitted; the shell printed the marker)
+smoke(cli): wtmctl pane attach refuses a non-terminal (not_a_tty)
+smoke(cli): wtmctl pane attach ok (in a real PTY: size 100x30, echo round trip, resize 90x25, Ctrl+B q exit 0, left the alternate screen)
+smoke(cli): wtmctl pane observe/control ok (pipes: full first frame, control size 100x30, NDJSON input round trip, invalid line warned, release exit 0, observe pane_closed exit 0)
+smoke(cli): PASS
+$ d=$(mktemp -d) && mkdir -p "$d/sessions/smoke" && node packages/server/dist/main.js token reset --session smoke --state-dir "$d" && test -f "$d/sessions/smoke/auth.json" && node packages/server/dist/main.js session list --state-dir "$d" | grep -q '^smoke ' && node packages/server/dist/main.js session delete smoke --state-dir "$d" && test ! -e "$d/sessions/smoke"; rc=$?; rm -rf "$d"; exit $rc
+wtm: new token: dYjsKZKbffSRVMeu9AmD2dnkScrBqK6v
+wtm: deleted session smoke (/tmp/tmp.xSB3HEjX99/sessions/smoke)
+$ WTMCTL_URL=http://127.0.0.1:9 node packages/cli/dist/main.js skill | cmp - packages/cli/skills/wtmctl/SKILL.md
+$ d=$(mktemp -d) && mkdir -p "$d/sessions/smoke" && WTM_SESSION=smoke node packages/server/dist/main.js token reset --state-dir "$d" && test -f "$d/sessions/smoke/auth.json" && test ! -e "$d/auth.json" && { WTM_SESSION=a/b node packages/server/dist/main.js token reset --state-dir "$d" 2>/dev/null; test $? -eq 2; } && test ! -e "$d/auth.json"; rc=$?; rm -rf "$d"; exit $rc
+wtm: new token: N3mLti-qdOBZdNS2hURlQ5NGGLZFCsAZ
+$ node packages/server/dist/handoffSmoke.js
+handoff-smoke: not running → exit 3, nothing created ok
+handoff-smoke: before: server pid 723282, pane p1, shell pid 723294
+handoff-smoke: wtm handoff → exit 0: wtm: handoff complete: 1 pane(s) kept running
+handoff-smoke: same server pid, /ws closed with 1012, handoff.json removed ok
+handoff-smoke: same pane, same shell pid, previous screen visible, input/output ok
+handoff-smoke: resize reaches the adopted pty ok
+handoff-smoke: pane closes when the adopted shell exits ok
+handoff-smoke: ok
+$ node packages/server/dist/stopSmoke.js
+stop-smoke: not running → exit 3, nothing created ok
+stop-smoke: started: pid 723541, pane p2, marker shown
+stop-smoke: stopped: CLI exit 0, server exit 0, list shows stopped, lock released, state saved ok
+stop-smoke: stopped → exit 3 ok
+stop-smoke: restarted: same pane, previous screen restored ok
+stop-smoke: ok
+$ node packages/server/dist/machineSmoke.js
+machine-smoke: remote wtm serve started (pid 723649)
+machine-smoke: wtm machine add (probed over the fake ssh) and list ok
+machine-smoke: local wtm serve connected to the remote machine (machine.list: online)
+machine-smoke: relay ok: hello (hostname OSK2-024680-2), workspace.create and echo reached the remote wtm serve
+machine-smoke: ok
+smoke: pass (exit 0, 8 本)
+```

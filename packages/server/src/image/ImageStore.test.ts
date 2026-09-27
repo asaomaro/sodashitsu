@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IMAGE_FILE_NAME_RE, IMAGE_MAX_AGE_MS, ImageStore, ImageStoreError } from "./ImageStore.js";
 
 const posix = process.platform !== "win32";
@@ -170,6 +170,25 @@ describe("ImageStore（20260927-clipboard-image-paste）", () => {
     expect(await exists(c)).toBe(true);
     expect(await exists(a)).toBe(false);
     expect(await exists(b)).toBe(false);
+  });
+
+  it("startSweeping は今と間隔ごとに後片付けをし、stop で止まる", () => {
+    vi.useFakeTimers();
+    try {
+      const store = new ImageStore({ dir });
+      const prune = vi.spyOn(store, "prune").mockResolvedValue();
+      const sweeper = store.startSweeping(1000);
+      expect(prune).toHaveBeenCalledTimes(1); // 起動時
+      vi.advanceTimersByTime(1000);
+      expect(prune).toHaveBeenCalledTimes(2);
+      vi.advanceTimersByTime(1000);
+      expect(prune).toHaveBeenCalledTimes(3);
+      sweeper.stop();
+      vi.advanceTimersByTime(5000);
+      expect(prune).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.runIf(posix)("後片付けはリンク・ディレクトリを消さない", async () => {

@@ -44,3 +44,8 @@
 - [should][conv:-] packages/web/src/term/ImagePaster.ts:133,188-197 キーの経路の読み取りに時間の上限が無く、Chromium の許可の画面に答えないと列が止まり、後の Ctrl+V の `\x16` が続くキーより後に届く（AC2・AC-I5） / 対応: 差し戻し（読み取りに上限を付け、超えたら画像無しとして fallback）
 - [nit][conv:-] packages/server/src/image/ImageUploads.ts:158,218-223 小さな片を 30 秒未満ごとに送り続けると同時数の枠を無期限に占められる / 対応: 差し戻し（begin からの合計の期限）
 - [nit][conv:-] packages/web/src/term/ImagePaster.ts:18 `IMAGE_HOLD_TIMEOUT_MS` のコメントが D14 の訂正を反映していない / 対応: 差し戻し（コメントを直す）
+
+## ラウンド 2（2026-09-27）
+- ラウンド 1 の 4 件（should 2・nit 2）はすべて解消を確認（`startSweeping` の起動・停止、キーからの読み取りの 2 秒、合計 5 分、コメント）。main（#65）の取り込みの衝突は `docs/herdr-parity.md` の H39/H44 の行だけで両方残っている。
+- [nit][conv:regression-negative-control] packages/server/src/image/ImageStore.ts:154-158 1 時間ごとの後片付けと `stop()` を確かめるテストが無い（起動時だけ） / 対応: 修正済（`startSweeping` の単体テストを足した）
+- [nit][conv:-] docs/herdr-parity.md:77 H44 に begin からの合計 5 分とキーからの読み取りの 2 秒が無い / 対応: 修正済
