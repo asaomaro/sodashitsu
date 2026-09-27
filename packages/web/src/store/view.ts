@@ -237,7 +237,14 @@ export type DialogContext =
    * `openWorkspaceId` は削除対象の path が現在開いている workspace と一致する場合、その id
    * （確認文言の出し分け用。閉じる処理自体はサーバ側が自動で行う）。
    */
-  | { kind: "confirmWorktreeRemove"; sourceWorkspaceId: string; path: string; openWorkspaceId: string | null }
+  | {
+      kind: "confirmWorktreeRemove";
+      sourceWorkspaceId: string;
+      path: string;
+      openWorkspaceId: string | null;
+      /** 取り消したら一覧へ戻らずに閉じる（一覧を経ずにキーの `remove_worktree` から開いたとき。20260927-cli-mode）。 */
+      closeOnCancel?: true;
+    }
   /**
    * dirty／ロック済みで通常の削除が失敗したあとの `--force` 確認（同上。design「振る舞いの詳細」）。
    * `reason` で確認文言を出し分ける（20260925-worktree-remove-locked）。
@@ -255,6 +262,8 @@ export type DialogContext =
   | { kind: "renameGroup"; groupId: string; currentLabel: string }
   // `worktreeOpen` と同じ「一覧から選ぶ」形。`groups` は開く時点のグループ一覧（GroupPickerDialog）。
   | { kind: "addToGroup"; workspaceId: string; groups: WorkspaceGroup[] }
+  // サーバを止める確認（`stop_server`。20260927-cli-mode）。押し間違えると全ての pane が止まる。
+  | { kind: "confirmStopServer" }
   // 設定（通知・表示・端末。20260921-herdr-settings-gaps）。値はそれぞれのストアが持つので文脈は空。
   | { kind: "settings" }
   // はじめの案内（20260926-settings-onboarding）。選択は下書きでダイアログが持つので文脈は空。

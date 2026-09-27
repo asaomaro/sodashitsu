@@ -43,6 +43,14 @@ function restoreFocus(): void {
   else if (view.focusedPaneId) registry?.focus(view.focusedPaneId);
 }
 
+/** メニューを開いた pane が、焦点の pane と入れ替えられるか（焦点の pane そのものでなく、同じ tab にある）。 */
+function swappableWithFocused(paneId: string): boolean {
+  const focused = view.focusedPaneId;
+  if (!focused || focused === paneId) return false;
+  const tabId = session.panes.get(paneId)?.tabId;
+  return tabId !== undefined && tabId === session.panes.get(focused)?.tabId;
+}
+
 const items = computed<MenuItem[]>(() => {
   const target = view.contextMenu?.target;
   if (!target) return [];
@@ -51,6 +59,8 @@ const items = computed<MenuItem[]>(() => {
     const list: MenuItem[] = [
       { label: "名前の変更", run: () => actions.renamePaneById(target.paneId) },
       ...(pane?.label ? [{ label: "名前の消去", run: () => actions.clearPaneName(target.paneId) }] : []),
+      // herdr の「Swap with focused pane」（20260927-cli-mode の design D-7）。焦点の pane 以外の、同じ tab の pane のメニューにだけ出す。
+      ...(swappableWithFocused(target.paneId) ? [{ label: "焦点の pane と入れ替え", run: () => actions.swapWithFocused(target.paneId) }] : []),
       { label: "右へ分割", run: () => actions.splitPane(target.paneId, "right") },
       { label: "下へ分割", run: () => actions.splitPane(target.paneId, "down") },
       { label: "拡大表示", run: () => actions.zoomPane(target.paneId) },

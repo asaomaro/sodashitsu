@@ -25,6 +25,7 @@ function makeActions() {
     setRightClickTarget: vi.fn(),
     pasteIntoPane: vi.fn(),
     closePaneById: vi.fn(),
+    swapWithFocused: vi.fn(),
     newTabInWorkspace: vi.fn(),
     renameTabById: vi.fn(),
     closeTabById: vi.fn(),
@@ -86,6 +87,34 @@ describe("ContextMenu — pane", () => {
     view.openContextMenu({ kind: "pane", paneId: "p1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(makeActions());
     expect(wrapper.findAll("li").map((li) => li.text()).join("")).not.toContain("入れ替え");
+  });
+
+  // 20260927-cli-mode（design D-7。herdr の「Swap with focused pane」）。D69 の当時は方式が無かったが、今は `pane.swap_with` がある。
+  it("焦点の pane 以外の、同じ tab の pane のメニューには「焦点の pane と入れ替え」を出し、選ぶとその paneId で swapWithFocused を呼ぶ", async () => {
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.paneUpserted(makePane("p1"));
+    session.paneUpserted(makePane("p2"));
+    view.focusPane("p1");
+    view.openContextMenu({ kind: "pane", paneId: "p2" }, { x: 0, y: 0 });
+    const actions = makeActions();
+    const wrapper = mountMenu(actions);
+    const item = wrapper.findAll("li").find((li) => li.text() === "焦点の pane と入れ替え");
+    expect(item).toBeDefined();
+    await item!.trigger("click");
+    expect(actions.swapWithFocused).toHaveBeenCalledWith("p2");
+  });
+
+  it("焦点の pane そのもの・別の tab の pane のメニューには出さない", () => {
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.paneUpserted(makePane("p1"));
+    session.paneUpserted(makePane("p3", { tabId: "t2" }));
+    view.focusPane("p1");
+    view.openContextMenu({ kind: "pane", paneId: "p1" }, { x: 0, y: 0 });
+    expect(mountMenu(makeActions()).findAll("li").map((li) => li.text())).not.toContain("焦点の pane と入れ替え");
+    view.openContextMenu({ kind: "pane", paneId: "p3" }, { x: 0, y: 0 });
+    expect(mountMenu(makeActions()).findAll("li").map((li) => li.text())).not.toContain("焦点の pane と入れ替え");
   });
 
   it("項目をクリックすると対応する ActionDispatcher のメソッドを、指定した paneId で呼ぶ", async () => {

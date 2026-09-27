@@ -68,6 +68,14 @@ export const ACTIONS = [
     defaults: ["prefix+shift+r"],
     action: { type: "reloadConfig" },
   },
+  // 20260927-cli-mode（design D-7）。押し間違えると全ての pane が止まるので既定は無し・確認つき。
+  {
+    id: "stop_server",
+    label: "サーバを止める",
+    group: "全体",
+    defaults: [],
+    action: { type: "stopServer" },
+  },
   // workspace / tab
   {
     id: "workspace_picker",
@@ -221,6 +229,29 @@ export const ACTIONS = [
     defaults: [],
     indexed: true,
     action: (index: number): Action => ({ type: "focusAgentIndex", index: index - 1 }),
+  },
+  // 20260927-cli-mode（herdr にあって Web に無かった操作。design D-7・decisions D4）。既定は herdr と同じく全て「割り当てなし」。
+  {
+    id: "switch_workspace",
+    label: "workspace を切り替え（1〜9）",
+    group: "workspace / tab",
+    defaults: [],
+    indexed: true,
+    action: (index: number): Action => ({ type: "workspaceIndex", index }),
+  },
+  {
+    id: "open_worktree",
+    label: "worktree を開く",
+    group: "workspace / tab",
+    defaults: [],
+    action: { type: "openWorktree" },
+  },
+  {
+    id: "remove_worktree",
+    label: "この worktree を削除",
+    group: "workspace / tab",
+    defaults: [],
+    action: { type: "removeWorktree" },
   },
   // pane
   {
@@ -407,6 +438,16 @@ export const ACTIONS = [
     group: "pane",
     defaults: [],
     action: { type: "resizeBy", dir: "right", amount: RESIZE_STEP },
+  },
+  // 20260927-cli-mode（design D-7）。herdr では pane の右クリックのメニューの項目（キーの操作ではない）。キーから使うときは、焦点の pane と直前の pane を入れ替える。
+  {
+    id: "swap_with_focused",
+    label: "焦点の pane と入れ替え",
+    group: "pane",
+    defaults: [],
+    // herdr のヘルプにも出ない（キーの操作ではなくメニューの項目。swap_pane_* と同じ D76 の扱い）。
+    helpHidden: true,
+    action: { type: "swapWithFocused" },
   },
 ] as const satisfies readonly ActionDef[];
 

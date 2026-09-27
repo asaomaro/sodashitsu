@@ -226,6 +226,24 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       case "focusAgentIndex":
         this.focusAgentIndex(action.index);
         return;
+      // 20260927-cli-mode（herdr にあって Web に無かった操作。design D-7）。
+      case "workspaceIndex":
+        this.workspaceIndex(action.index);
+        return;
+      case "openWorktree": {
+        const workspaceId = this.view.workspaceId;
+        if (workspaceId) this.openWorktree(workspaceId);
+        return;
+      }
+      case "removeWorktree":
+        this.removeCurrentWorktree();
+        return;
+      case "swapWithFocused":
+        this.swapWithFocused(action.paneId);
+        return;
+      case "stopServer":
+        this.view.openDialogWithContext({ kind: "confirmStopServer" });
+        return;
     }
   }
 
@@ -733,6 +751,24 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /**
+   * 焦点の pane と入れ替える（herdr の pane のメニューの「Swap with focused pane」。20260927-cli-mode の design D-7）。`paneId` はメニューを開いた pane。
+   * 入れ替えた後も焦点は元の pane のまま（herdr と同じく `pane.focus` を送り直す）。キーから使うとき（`paneId` 無し）は、直前に焦点のあった pane と入れ替える。
+   * 同じ tab の pane どうしでなければ何もしない（`pane.swap_with` が `ok: false` を返す）。
+   */
+  swapWithFocused(paneId?: string): void {
+    const focused = this.view.focusedPaneId;
+    const other = paneId ?? this.view.lastFocusedPaneId;
+    if (!focused || !other || other === focused) return;
+    if (this.session.panes.get(other)?.tabId !== this.session.panes.get(focused)?.tabId) return;
+    void this.conn
+      .request("pane.swap_with", { paneId: focused, otherPaneId: other })
+      .then((r) => {
+        if (r.ok) void this.conn.request("pane.focus", { paneId: focused }).catch(() => undefined);
+      })
+      .catch(() => undefined);
+  }
+
+  /**
    * 名前ラベルのドラッグを、別の pane の縁へドロップしての分割（20260924-pane-dnd-split-move。
    * `PaneFrame.vue` から直接呼ぶ）。`swapPanesByDrag`（20260923-pane-name-dnd-swap。ドロップ先を
    * 問わず入れ替え）はこの work で縁/中央のゾーン方式に置き換わったため削除した
@@ -1030,6 +1066,52 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     if (next) this.focusWorkspaceById(next);
   }
 
+  /** `switch_workspace`（1〜9。20260927-cli-mode）。サイドバーの並び（`workspaceDelta` と同じ可視範囲）の N 番目へ。無ければ何もしない。 */
+  private workspaceIndex(index: number): void {
+    const ids = visibleWorkspaceIdsInOrder([...this.session.workspaces.values()], [...this.session.groups.values()], this.view.workspaceSort, this.view.collapsedAutoGroups, this.view.workspaceId);
+    const target = ids[index - 1];
+    if (target) this.focusWorkspaceById(target);
+  }
+
+  /**
+   * `remove_worktree`（20260927-cli-mode。herdr と同じく今の workspace が linked worktree のときだけ）。一覧（`worktree.list`）から今の workspace の場所を含む
+   * worktree を引き、一覧を経ずに削除の確認を開く（取り消したら閉じる）。削除の流れ（dirty・ロックの `--force` の確認）は一覧の行からの削除と同じ。
+   */
+  private removeCurrentWorktree(): void {
+    const workspaceId = this.view.workspaceId;
+    const ws = workspaceId ? this.session.workspaces.get(workspaceId) : undefined;
+    if (!ws) return;
+    if (ws.git?.isLinkedWorktree !== true) {
+      this.view.toast("この workspace は worktree のチェックアウトではありません（削除は worktree を開いた workspace で行います）。");
+      return;
+    }
+    this.conn
+      .request("worktree.list", { workspaceId: ws.id })
+      .then((info) => {
+        const entry = worktreeContaining(info.entries, ws.cwd);
+        if (!entry) {
+          this.view.toast("この workspace の worktree が一覧に見つかりませんでした。");
+          return;
+        }
+        if (this.view.dialogContext !== null) return; // 待つ間に別のダイアログが開いていたら奪わない
+        this.view.openDialogWithContext({ kind: "confirmWorktreeRemove", sourceWorkspaceId: ws.id, path: entry.path, openWorkspaceId: ws.id, closeOnCancel: true });
+      })
+      .catch((err: unknown) => this.view.toast(worktreeErrorMessage(err)));
+  }
+
+  /** `ConfirmDialog`（`kind: "confirmStopServer"`）が確定したときに呼ぶ（`stop_server`。20260927-cli-mode）。 */
+  confirmStopServer(): void {
+    if (this.view.dialogContext?.kind !== "confirmStopServer") return;
+    this.view.closeDialog();
+    this.conn
+      .request("server.stop", {})
+      .then(() => this.view.toast("サーバを止めています…"))
+      .catch((err: unknown) => {
+        const code = errorCodeOf(err);
+        this.view.toast(code ? clientErrorMessage(code) : "サーバを止められませんでした。");
+      });
+  }
+
   private lastPane(): void {
     const target = this.view.lastFocusedPaneId;
     if (target === null || target === this.view.focusedPaneId) return; // AC2 のガード
@@ -1255,6 +1337,24 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       })
       .catch(() => this.view.toast("独自コマンドの設定を読み直せませんでした。"));
   }
+}
+
+/** 区切り（`\\`・`/`）と末尾の `/` を揃えたパス（worktree の場所の比べ合わせ用）。 */
+function normalizePath(p: string): string {
+  const slashed = p.replace(/\\/g, "/");
+  return slashed.length > 1 ? slashed.replace(/\/+$/, "") : slashed;
+}
+
+/** `cwd` を含む worktree（一番深いもの）。無ければ undefined。 */
+export function worktreeContaining<T extends { path: string }>(entries: readonly T[], cwd: string): T | undefined {
+  const target = normalizePath(cwd);
+  let best: T | undefined;
+  for (const e of entries) {
+    const root = normalizePath(e.path);
+    if (target !== root && !target.startsWith(`${root}/`)) continue;
+    if (best === undefined || root.length > normalizePath(best.path).length) best = e;
+  }
+  return best;
 }
 
 /** 独自コマンドの失敗の文言（code から引く。サーバの生の message は使わない。20260927-custom-command-keys）。 */

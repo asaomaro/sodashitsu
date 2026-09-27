@@ -18,7 +18,14 @@ function makeWorkspace(id: string, overrides: Partial<Workspace> = {}): Workspac
 }
 
 function makeActions() {
-  return { confirmClose: vi.fn(), confirmReplacePane: vi.fn(), confirmWorktreeRemove: vi.fn(), confirmWorktreeRemoveForce: vi.fn(), openWorktree: vi.fn() };
+  return {
+    confirmClose: vi.fn(),
+    confirmReplacePane: vi.fn(),
+    confirmWorktreeRemove: vi.fn(),
+    confirmWorktreeRemoveForce: vi.fn(),
+    openWorktree: vi.fn(),
+    confirmStopServer: vi.fn(),
+  };
 }
 
 function mountDialog(actions: ReturnType<typeof makeActions>) {
@@ -424,6 +431,39 @@ describe("ConfirmDialog — worktree の削除の確認（kind: confirmWorktreeR
     view.focusPane("p0");
     const wrapper = mountDialog(actions);
     view.openDialogWithContext({ kind: "confirmClose", targets: [{ type: "pane", id: "p1" }] });
+    await wrapper.vm.$nextTick();
+    await wrapper.findAll("button")[0]!.trigger("click");
+    expect(actions.openWorktree).not.toHaveBeenCalled();
+    expect(view.dialogContext).toBeNull();
+  });
+});
+
+// 20260927-cli-mode（design D-7）。
+describe("ConfirmDialog — サーバの停止・キーからの worktree の削除", () => {
+  it("confirmStopServer: 文言と「止める」ボタン。確定で confirmStopServer、取り消しは閉じるだけ", async () => {
+    const view = useViewStore(pinia);
+    const actions = makeActions();
+    const wrapper = mountDialog(actions);
+    view.openDialogWithContext({ kind: "confirmStopServer" });
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect((wrapper.get("dialog").element as HTMLDialogElement).open).toBe(true);
+    expect(wrapper.text()).toContain("サーバを止めますか");
+    expect(wrapper.findAll("button")[1]!.text()).toBe("止める");
+    await wrapper.findAll("button")[1]!.trigger("click");
+    expect(actions.confirmStopServer).toHaveBeenCalledTimes(1);
+    view.openDialogWithContext({ kind: "confirmStopServer" });
+    await wrapper.vm.$nextTick();
+    await wrapper.findAll("button")[0]!.trigger("click");
+    expect(view.dialogContext).toBeNull();
+    expect(actions.openWorktree).not.toHaveBeenCalled();
+  });
+
+  it("closeOnCancel の worktree の削除は、取り消すと一覧へ戻らずに閉じる", async () => {
+    const view = useViewStore(pinia);
+    const actions = makeActions();
+    const wrapper = mountDialog(actions);
+    view.openDialogWithContext({ kind: "confirmWorktreeRemove", sourceWorkspaceId: "w1", path: "/w/a", openWorkspaceId: "w1", closeOnCancel: true });
     await wrapper.vm.$nextTick();
     await wrapper.findAll("button")[0]!.trigger("click");
     expect(actions.openWorktree).not.toHaveBeenCalled();

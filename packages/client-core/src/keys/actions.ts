@@ -83,4 +83,10 @@ export type Action =
   | { type: "agentDelta"; delta: 1 | -1 } // previous_agent / next_agent
   | { type: "focusAgentIndex"; index: number } // focus_agent（1-9 → 0-8 に変換済みで渡す）
   // 20260923-workspace-grouping。
-  | { type: "moveWorkspace"; direction: "previous" | "next" }; // move_workspace_previous / move_workspace_next
+  | { type: "moveWorkspace"; direction: "previous" | "next" } // move_workspace_previous / move_workspace_next
+  // 20260927-cli-mode（herdr にあって Web に無かった操作。design D-7）。
+  | { type: "workspaceIndex"; index: number } // switch_workspace（1〜9。サイドバーの並びの N 番目）
+  | { type: "openWorktree" } // open_worktree（今の workspace の repo の worktree の一覧を開く）
+  | { type: "removeWorktree" } // remove_worktree（今の workspace が linked worktree なら、それを削除する。確認つき）
+  | { type: "swapWithFocused"; paneId?: string } // swap_with_focused（pane のメニュー。paneId が無ければ直前の pane と）
+  | { type: "stopServer" }; // stop_server（サーバを止める。確認つき）

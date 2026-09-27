@@ -19,6 +19,12 @@ const UNBOUND_BY_DEFAULT_IDS = [
   "resize_pane_right",
   "move_workspace_previous",
   "move_workspace_next",
+  // 20260927-cli-mode（design D-7）。herdr と同じく既定は割り当てなし。
+  "stop_server",
+  "switch_workspace",
+  "open_worktree",
+  "remove_worktree",
+  "swap_with_focused",
 ];
 
 describe("操作のカタログ（design「操作のカタログ」）", () => {
@@ -27,17 +33,18 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
   // 20260923-workspace-grouping で move_workspace_previous/next の2個を追加し 49 個になった。
   // 20260926-edit-scrollback で edit_scrollback（pane）を追加し 50 個になった。
   // 20260927-clipboard-image-paste で remote_image_paste（pane。既定は直接のキー ctrl+v）を追加し 51 個になった。
-  it("51 個あり、id は重複しない・表示名は空でない", () => {
-    expect(ACTIONS).toHaveLength(51);
-    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(51);
+  // 20260927-cli-mode で stop_server（全体）・switch_workspace・open_worktree・remove_worktree（workspace / tab）・swap_with_focused（pane）を追加し 56 個になった。
+  it("56 個あり、id は重複しない・表示名は空でない", () => {
+    expect(ACTIONS).toHaveLength(56);
+    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(56);
     for (const a of ACTIONS) expect(a.label.length, a.id).toBeGreaterThan(0);
   });
 
-  it("群は 全体 5・workspace / tab 21・pane 25（この順に並ぶ）", () => {
+  it("群は 全体 6・workspace / tab 24・pane 26（この順に並ぶ）", () => {
     const groups = ACTIONS.map((a) => a.group);
-    expect(groups.filter((g) => g === "全体")).toHaveLength(5);
-    expect(groups.filter((g) => g === "workspace / tab")).toHaveLength(21);
-    expect(groups.filter((g) => g === "pane")).toHaveLength(25);
+    expect(groups.filter((g) => g === "全体")).toHaveLength(6);
+    expect(groups.filter((g) => g === "workspace / tab")).toHaveLength(24);
+    expect(groups.filter((g) => g === "pane")).toHaveLength(26);
     // 群ごとにまとまっている（全体 → workspace / tab → pane）
     expect(groups.join(",")).toBe(
       [...groups]
@@ -50,7 +57,7 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
     );
   });
 
-  it("既定の割り当てはすべて `prefix+…` として読め、範囲になるのは範囲の操作（switch_tab・focus_agent）だけ", () => {
+  it("既定の割り当てはすべて `prefix+…` として読め、範囲になるのは範囲の操作（switch_tab・focus_agent・switch_workspace）だけ", () => {
     for (const a of ACTIONS) {
       // `UNBOUND_BY_DEFAULT_IDS`（12個）は herdr と同じく既定が割り当てなし（`defaults: []`）。
       if (UNBOUND_BY_DEFAULT_IDS.includes(a.id)) {
@@ -71,7 +78,15 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
       }
     }
     const indexed = ACTIONS.filter((a) => "indexed" in a && a.indexed);
-    expect(indexed.map((a) => a.id)).toEqual(["switch_tab", "focus_agent"]);
+    expect(indexed.map((a) => a.id)).toEqual(["switch_tab", "focus_agent", "switch_workspace"]);
+  });
+
+  it("20260927-cli-mode の操作（design D-7）: switch_workspace は数字をそのまま（1〜9）、ほかは固定の Action", () => {
+    expect(actionFor(actionDef("switch_workspace")!, 3)).toEqual({ type: "workspaceIndex", index: 3 });
+    expect(actionFor(actionDef("open_worktree")!)).toEqual({ type: "openWorktree" });
+    expect(actionFor(actionDef("remove_worktree")!)).toEqual({ type: "removeWorktree" });
+    expect(actionFor(actionDef("swap_with_focused")!)).toEqual({ type: "swapWithFocused" });
+    expect(actionFor(actionDef("stop_server")!)).toEqual({ type: "stopServer" });
   });
 
   it("既定の文字列は正規形（読んで書き出すと同じ。保存の「差」の比較に使う）", () => {
@@ -95,12 +110,14 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
     }
   });
 
-  it("キー一覧に出さないのは swap の 4 つだけ（herdr のヘルプにも無い）", () => {
+  // 20260927-cli-mode で swap_with_focused（herdr ではメニューの項目で、ヘルプに無い）が加わった。
+  it("キー一覧に出さないのは swap の 5 つだけ（herdr のヘルプにも無い）", () => {
     expect(ACTIONS.filter((a) => "helpHidden" in a && a.helpHidden).map((a) => a.id)).toEqual([
       "swap_pane_left",
       "swap_pane_down",
       "swap_pane_up",
       "swap_pane_right",
+      "swap_with_focused",
     ]);
   });
 
