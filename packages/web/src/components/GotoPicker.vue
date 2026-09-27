@@ -75,7 +75,7 @@ const rows = computed<GotoRow[]>(() => {
         const pane = session.panes.get(paneId);
         if (!pane) continue;
         const state = paneState(paneId);
-        // 連鎖の正典は `store/paneName.ts` の `paneNameOf`（herdr のフォールバック連鎖と同じ）。
+        // 連鎖の正典は `client-core の workspace/paneName.ts` の `paneNameOf`（herdr のフォールバック連鎖と同じ）。
         // ここは tab 内の順番を既定にする。
         const label = paneNameOf(pane, `pane ${index + 1}`);
         // 名前（agent rename）が呼び名になっても、エージェントの種類の表示名でも引けるようにする（20260926-agent-start-rename）。

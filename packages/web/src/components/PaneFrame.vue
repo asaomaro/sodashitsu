@@ -50,7 +50,7 @@ const edge = ref<HTMLElement | null>(null);
 /** 利用者が付けた名前 → エージェント名 → 端末のタイトル の順に拾う。どれも無ければ空。 */
 const paneName = computed(() => {
   const pane = session?.panes.get(props.paneId);
-  // 連鎖の正典は `store/paneName.ts` の `paneNameOf`。ここは**名前が無ければ空**にする
+  // 連鎖の正典は `client-core の workspace/paneName.ts` の `paneNameOf`。ここは**名前が無ければ空**にする
   // （枠のラベルは名前が無ければ付けない）ので、既定値に空文字を渡す。
   return pane ? paneNameOf(pane, "") : "";
 });
