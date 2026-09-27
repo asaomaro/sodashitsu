@@ -1,5 +1,13 @@
+import type { ConnectionState, TerminalSinkPort } from "@sodashitsu/client-core";
+import { SessionModel } from "../model/SessionModel.js";
+import { TuiNet, type TuiNetDeps } from "../net/TuiNet.js";
 import type { TuiIo, TuiTarget } from "../types.js";
 import { TerminalModes } from "./terminalModes.js";
+
+export interface TuiAppOptions {
+  /** 接続の差し替え（テスト用）。 */
+  net?: TuiNetDeps;
+}
 
 /**
  * 端末版の組み立て（20260927-cli-mode の architecture「tui」の `app/TuiApp.ts`）。外側の端末のモードの有効化と、どの終わり方でも
@@ -9,13 +17,20 @@ export class TuiApp {
   private readonly modes: TerminalModes;
   private readonly disposers: (() => void)[] = [];
   private ended = false;
+  private detaching = false;
   private resolveExit: (code: number) => void = () => undefined;
+
+  readonly model: SessionModel;
+  protected net: TuiNet | null = null;
+  connectionState: ConnectionState = "connecting";
 
   constructor(
     readonly target: TuiTarget,
     readonly io: TuiIo,
+    protected readonly options: TuiAppOptions = {},
   ) {
     this.modes = new TerminalModes(io);
+    this.model = new SessionModel();
   }
 
   run(): Promise<number> {
@@ -42,12 +57,54 @@ export class TuiApp {
     return done;
   }
 
-  /** 画面の部品の組み立て（T2 以降で中身を足す）。 */
-  protected start(): void {}
+  /** 画面の部品の組み立て。 */
+  protected start(): void {
+    const net = new TuiNet(
+      this.target,
+      {
+        model: this.model,
+        sink: this.sink(),
+        onState: (s) => this.onConnectionState(s),
+        onOpened: (clientId) => this.onConnectionOpened(clientId),
+        onClosed: () => this.onConnectionClosed(),
+        onFatal: (message) => this.finish(1, message),
+      },
+      this.options.net,
+    );
+    this.net = net;
+    this.disposers.push(() => net.stop());
+    void net.start();
+  }
 
-  /** 切り離し（`prefix+q`・SIGHUP・SIGTERM）。サーバとエージェントは動き続ける。 */
+  /** pane の出力の受け口（T3 で pane の headless へ）。 */
+  protected sink(): TerminalSinkPort {
+    return {
+      onOutput: () => undefined,
+      onSnapshot: () => undefined,
+      onSizeChanged: () => undefined,
+    };
+  }
+
+  protected onConnectionState(s: ConnectionState): void {
+    this.connectionState = s;
+    // サーバが閉じた `client.detach` の後（自分で切り離した）。
+    if (s === "detached") this.finish(0);
+  }
+
+  protected onConnectionOpened(_clientId: string): void {}
+
+  protected onConnectionClosed(): void {}
+
+  /** 切り離し（`prefix+q`・SIGHUP・SIGTERM・SIGINT）。`client.detach` を送れるなら送る。サーバとエージェントは動き続ける。 */
   detach(): void {
-    this.finish(0);
+    if (this.detaching || this.ended) return;
+    this.detaching = true;
+    const net = this.net;
+    if (!net || this.connectionState !== "open") {
+      this.finish(0);
+      return;
+    }
+    void net.detach().then(() => this.finish(0));
   }
 
   /** 1 回だけ：後始末 → モードを戻す → 案内 → 終了コードを返す。 */
@@ -64,6 +121,10 @@ export class TuiApp {
     this.modes.restore();
     if (message) this.io.writeError(message);
     this.resolveExit(code);
+  }
+
+  get isEnded(): boolean {
+    return this.ended;
   }
 }
 
