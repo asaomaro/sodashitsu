@@ -12,6 +12,8 @@ import {
   GroupToggleCollapsedParams,
   MachineListParams,
   MAX_AGENT_PROMPT_BYTES,
+  METADATA_RAW_TEXT_MAX,
+  METADATA_TOKEN_ENTRIES_MAX,
   METHOD_SCHEMAS,
   NewCwd,
   PaneAttachParams,
@@ -22,6 +24,7 @@ import {
   PaneMoveToNewTabParams,
   PaneMoveToTabParams,
   PaneReplaceParams,
+  PaneReportMetadataParams,
   PaneSplitParams,
   TabCreateParams,
   TabMoveParams,
@@ -30,6 +33,7 @@ import {
   WorkspaceMoveParams,
   WorkspaceMoveToParams,
   WorkspaceRenameParams,
+  WorkspaceReportMetadataParams,
   WorktreeRemoveParams,
 } from "./messages.js";
 import { THEME_NAMES } from "./theme.js";
@@ -298,5 +302,53 @@ describe("machine.list", () => {
     expect(MachineListParams.parse({})).toEqual({});
     expect(MachineListParams.parse({ extra: 1 })).toEqual({});
     expect(METHOD_SCHEMAS["machine.list"]).toBe(MachineListParams);
+  });
+});
+
+describe("独自トークンの報告（20260927-sidebar-row-tokens）", () => {
+  it("workspace.report_metadata・pane.report_metadata が方式の表にある", () => {
+    expect(METHOD_SCHEMAS["workspace.report_metadata"]).toBe(WorkspaceReportMetadataParams);
+    expect(METHOD_SCHEMAS["pane.report_metadata"]).toBe(PaneReportMetadataParams);
+  });
+
+  it("tokens は {name, value} の配列で、value は null（消去）も取る。seq・ttlMs は任意", () => {
+    const parsed = WorkspaceReportMetadataParams.parse({ workspaceId: "w1", source: "hook", tokens: [{ name: "a", value: "1" }, { name: "b", value: null }] });
+    expect(parsed).toEqual({ workspaceId: "w1", source: "hook", tokens: [{ name: "a", value: "1" }, { name: "b", value: null }] });
+    const pane = PaneReportMetadataParams.parse({ paneId: "p1", source: "s", tokens: [], seq: 3, ttlMs: 10 });
+    expect(pane.seq).toBe(3);
+    expect(pane.ttlMs).toBe(10);
+  });
+
+  it("__proto__ という名前も、ただの文字列として残る（map で受けないため。decisions D7）", () => {
+    const raw = JSON.parse('{"workspaceId":"w1","source":"s","tokens":[{"name":"__proto__","value":"x"}]}') as unknown;
+    const parsed = WorkspaceReportMetadataParams.parse(raw);
+    expect(parsed.tokens).toEqual([{ name: "__proto__", value: "x" }]);
+  });
+
+  it("herdr の map の形（tokens: {名前: 値}）は受けない", () => {
+    expect(WorkspaceReportMetadataParams.safeParse({ workspaceId: "w1", source: "s", tokens: { a: "1" } }).success).toBe(false);
+  });
+
+  it("seq は 0 以上の安全な整数だけ。小数・負・大きすぎる値は弾く", () => {
+    const base = { workspaceId: "w1", source: "s", tokens: [] };
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, seq: 0 }).success).toBe(true);
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, seq: Number.MAX_SAFE_INTEGER }).success).toBe(true);
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, seq: -1 }).success).toBe(false);
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, seq: 1.5 }).success).toBe(false);
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, seq: Number.MAX_SAFE_INTEGER + 2 }).success).toBe(false);
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, ttlMs: 1.5 }).success).toBe(false);
+  });
+
+  it("生の大きさを抑える（組の数・source・name・value の長さ）", () => {
+    const base = { workspaceId: "w1", source: "s", tokens: [] as { name: string; value: string | null }[] };
+    const long = "x".repeat(METADATA_RAW_TEXT_MAX + 1);
+    const ok = "x".repeat(METADATA_RAW_TEXT_MAX);
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, source: ok }).success).toBe(true);
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, source: long }).success).toBe(false);
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, tokens: [{ name: long, value: "v" }] }).success).toBe(false);
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, tokens: [{ name: "n", value: long }] }).success).toBe(false);
+    const many = Array.from({ length: METADATA_TOKEN_ENTRIES_MAX + 1 }, (_, i) => ({ name: `k${i}`, value: "v" }));
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, tokens: many }).success).toBe(false);
+    expect(WorkspaceReportMetadataParams.safeParse({ ...base, tokens: many.slice(1) }).success).toBe(true);
   });
 });

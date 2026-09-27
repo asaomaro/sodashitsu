@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionStore } from "../session.js";
 import { RpcFailure, type WtmClient } from "../wsClient.js";
-import { runPaneClose, runPaneInput, runPaneRead, runPaneRun, runPaneSplit } from "./pane.js";
+import { runPaneClose, runPaneInput, runPaneRead, runPaneReportMetadata, runPaneRun, runPaneSplit } from "./pane.js";
 
 vi.mock("../withSession.js", () => ({ withSession: vi.fn() }));
 vi.mock("../output.js", () => ({ printJson: vi.fn(), printLine: vi.fn(), printRaw: vi.fn() }));
@@ -224,5 +224,28 @@ describe("自分の pane の歯止め（20260926-agent-skill-file。AC11・AC13�
     client.emitSnapshot("p1", 80, 24, "hello");
     await readPromise;
     expect(mockedPrintLine).toHaveBeenCalledWith("hello");
+  });
+});
+
+describe("runPaneReportMetadata（20260927-sidebar-row-tokens の AC2・AC8）", () => {
+  it("hello の後に pane.report_metadata を呼ぶ。自分の pane（caller）でも断らない。seq・ttlMs を省くとキーごと付けない", async () => {
+    const order: string[] = [];
+    const client = fakeClient({ panes: ["p1"] });
+    (client.hello as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      order.push("hello");
+      return { clientId: "c1", snapshot: { panes: [{ id: "p1" }] } };
+    });
+    (client.request as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      order.push("request");
+      return {};
+    });
+    mockedWithSession.mockImplementation(async (_opts, _store, fn) => fn(client));
+    const opts = { ...OPTS, caller: { paneId: "p1", serverUrl: OPTS.url } };
+
+    await runPaneReportMetadata({ kind: "pane-report-metadata", opts, paneId: "p1", report: { source: "hook", tokens: [{ name: "summary", value: "x" }] } }, store);
+
+    expect(order).toEqual(["hello", "request"]);
+    expect(client.request).toHaveBeenCalledWith("pane.report_metadata", { paneId: "p1", source: "hook", tokens: [{ name: "summary", value: "x" }] });
+    expect(mockedPrintJson).toHaveBeenCalledWith({});
   });
 });

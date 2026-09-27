@@ -17,9 +17,9 @@ import { runAgentStart } from "./commands/agentStart.js";
 import { runPaneAttach } from "./commands/attach.js";
 import { runPaneControl, runPaneObserve } from "./commands/sessionStream.js";
 import { runTabClose, runTabCreate } from "./commands/tab.js";
-import { runPaneClose, runPaneInput, runPaneRead, runPaneRun, runPaneSplit } from "./commands/pane.js";
+import { runPaneClose, runPaneInput, runPaneRead, runPaneReportMetadata, runPaneRun, runPaneSplit } from "./commands/pane.js";
 import { runLogin, runSnapshot, runWatch } from "./commands/session.js";
-import { runWorkspaceClose, runWorkspaceCreate, runWorkspaceRename } from "./commands/workspace.js";
+import { runWorkspaceClose, runWorkspaceCreate, runWorkspaceRename, runWorkspaceReportMetadata } from "./commands/workspace.js";
 import { reportAndExit } from "./output.js";
 import { FsSessionStore } from "./session.js";
 import { runSkill } from "./skill.js";
@@ -48,6 +48,9 @@ function printHelp(): void {
       "pane の中（WTM_PANE_ID と WTM_SERVER_URL があり、そのサーバにつなぐとき）は、自分の pane とそれを含む tab・workspace を閉じる・",
       "入力する・直結する・エージェントを動かす操作を self_target で断ります（WTM_PANE_ID を空にすると効きません。--machine で別のマシンへ送るときも効きません）。",
       "wtmctl skill はエージェントに wtmctl の使い方を教える Markdown（skill ファイル）を出します。",
+      "workspace/pane report-metadata はサイドバーの行の $名前 に出す独自トークンを設定（--token NAME=VALUE）・消去（--clear-token NAME）します。",
+      "--token は値が = を含めば独自トークン、含まなければ接続の token です。値は前後の空白と制御文字を除いて 80 文字まで、空なら消去。",
+      "--seq を付けると同じ --source の古い報告を無視し、--ttl-ms（1〜86400000）で期限が来ると消えます。値はサーバのメモリだけに持ちます。",
     ].join("\n"),
   );
 }
@@ -69,6 +72,8 @@ async function main(): Promise<void> {
       return runWorkspaceClose(cmd, store);
     case "workspace-rename":
       return runWorkspaceRename(cmd, store);
+    case "workspace-report-metadata":
+      return runWorkspaceReportMetadata(cmd, store);
     case "tab-create":
       return runTabCreate(cmd, store);
     case "tab-close":
@@ -89,6 +94,8 @@ async function main(): Promise<void> {
       return runPaneObserve(cmd, store);
     case "pane-control":
       return runPaneControl(cmd, store);
+    case "pane-report-metadata":
+      return runPaneReportMetadata(cmd, store);
     case "snapshot":
       return runSnapshot(cmd, store);
     case "watch":

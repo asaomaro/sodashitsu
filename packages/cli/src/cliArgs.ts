@@ -18,6 +18,7 @@ export const USAGE_LINES: readonly string[] = [
   "wtmctl workspace create [--cwd <path>] [--label <text>] [--url <URL>] [--token <TOKEN>]",
   "wtmctl workspace close <workspaceId> [--url <URL>] [--token <TOKEN>]",
   "wtmctl workspace rename <workspaceId> <label> [--url <URL>] [--token <TOKEN>]",
+  "wtmctl workspace report-metadata <workspaceId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>] [--url <URL>] [--token <TOKEN>]",
   "wtmctl tab create [--workspace <id>] [--label <text>] [--url <URL>] [--token <TOKEN>]",
   "wtmctl tab close <tabId> [--url <URL>] [--token <TOKEN>]",
   "wtmctl pane split <paneId> --direction right|down [--ratio <0.05-0.95>] [--url <URL>] [--token <TOKEN>]",
@@ -28,6 +29,7 @@ export const USAGE_LINES: readonly string[] = [
   "wtmctl pane attach <paneId> [--takeover] [--url <URL>] [--token <TOKEN>]",
   "wtmctl pane observe <paneId> [--url <URL>] [--token <TOKEN>]",
   "wtmctl pane control <paneId> [--takeover] [--cols <N>] [--rows <N>] [--url <URL>] [--token <TOKEN>]",
+  "wtmctl pane report-metadata <paneId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>] [--url <URL>] [--token <TOKEN>]",
   "wtmctl snapshot [--url <URL>] [--token <TOKEN>]",
   "wtmctl watch [--json] [--url <URL>] [--token <TOKEN>]",
   "wtmctl agent list [--url <URL>] [--token <TOKEN>]",
@@ -45,12 +47,28 @@ export const USAGE_LINES: readonly string[] = [
 export const MACHINE_USAGE_LINE =
   "wtmctl --machine <名前|id> <コマンド> …（手元の wtm serve に登録したマシン〔wtm machine〕へ送る。login・skill 以外）";
 
-const USAGE = [...USAGE_LINES, MACHINE_USAGE_LINE, "（<target> は pane ID か、agent rename で付けた名前）"].join("\n");
+const USAGE = [
+  ...USAGE_LINES,
+  MACHINE_USAGE_LINE,
+  "（<target> は pane ID か、agent rename で付けた名前）",
+  "（report-metadata の --token は、値が = を含めば独自トークンの NAME=VALUE、含まなければ接続の token）",
+].join("\n");
 
 /** `--machine` の値の上限（文字数。サーバの `?machine=` の上限と同じ）。 */
 export const MAX_MACHINE_SELECTOR_LENGTH = 256;
 
 export const DEFAULT_URL = "http://127.0.0.1:7780";
+
+/**
+ * 独自トークンの報告の引数（20260927-sidebar-row-tokens）。`tokens` は指定の順（同じ名前は後が勝つ——サーバが見る）。`value: null` は消去。
+ * 値の整え方・名前と source の規則・上限はサーバだけが見る（CLI で重ねない。architecture.md「コンポーネント」）。
+ */
+export interface MetadataReportArgs {
+  source: string;
+  tokens: { name: string; value: string | null }[];
+  seq?: number;
+  ttlMs?: number;
+}
 
 export class CliUsageError extends Error {
   readonly hint: string;
@@ -86,6 +104,9 @@ export type Command =
   | { kind: "workspace-create"; opts: GlobalOpts; cwd: string | undefined; label: string | undefined }
   | { kind: "workspace-close"; opts: GlobalOpts; workspaceId: string }
   | { kind: "workspace-rename"; opts: GlobalOpts; workspaceId: string; label: string }
+  // 20260927-sidebar-row-tokens（herdr の workspace/pane report-metadata のトークンの部分）。
+  | { kind: "workspace-report-metadata"; opts: GlobalOpts; workspaceId: string; report: MetadataReportArgs }
+  | { kind: "pane-report-metadata"; opts: GlobalOpts; paneId: string; report: MetadataReportArgs }
   | { kind: "tab-create"; opts: GlobalOpts; workspaceId: string | undefined; label: string | undefined }
   | { kind: "tab-close"; opts: GlobalOpts; tabId: string }
   | { kind: "pane-split"; opts: GlobalOpts; paneId: string; direction: "right" | "down"; ratio: number | undefined }
@@ -145,6 +166,8 @@ interface ParsedFlags {
   values: Map<string, string>;
   bools: Set<string>;
   multi: Map<string, string[]>;
+  /** `multi` のフラグを、異なるフラグをまたいで現れた順に（`report-metadata` の `--token`・`--clear-token` の後が勝つ順）。 */
+  sequence: [flag: string, value: string][];
 }
 
 /**
@@ -160,6 +183,7 @@ function parseFlags(rest: readonly string[], spec: FlagSpec): ParsedFlags {
   const outValues = new Map<string, string>();
   const outBools = new Set<string>();
   const outMulti = new Map<string, string[]>();
+  const sequence: [string, string][] = [];
 
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i]!;
@@ -174,13 +198,15 @@ function parseFlags(rest: readonly string[], spec: FlagSpec): ParsedFlags {
     if (values.has(arg) || multi.has(arg)) {
       const v = rest[++i];
       if (v === undefined || v.startsWith("--")) throw new CliUsageError(`missing value for ${arg}`, `${arg} には値が要ります。`);
-      if (multi.has(arg)) outMulti.set(arg, [...(outMulti.get(arg) ?? []), v]);
-      else outValues.set(arg, v);
+      if (multi.has(arg)) {
+        outMulti.set(arg, [...(outMulti.get(arg) ?? []), v]);
+        sequence.push([arg, v]);
+      } else outValues.set(arg, v);
       continue;
     }
     throw new CliUsageError(`unknown option: ${arg}`, USAGE);
   }
-  return { positionals, values: outValues, bools: outBools, multi: outMulti };
+  return { positionals, values: outValues, bools: outBools, multi: outMulti, sequence };
 }
 
 /**
@@ -290,6 +316,10 @@ function parseWorkspace(sub: string | undefined, rest: readonly string[], env: N
     rejectExtra(positionals, 2, USAGE);
     return { kind: "workspace-rename", opts: globalOptsFrom(values, env), workspaceId, label };
   }
+  if (sub === "report-metadata") {
+    const { targetId, opts, report } = parseReportMetadata(rest, env, "workspaceId", "wtmctl workspace report-metadata");
+    return { kind: "workspace-report-metadata", opts, workspaceId: targetId, report };
+  }
   throw new CliUsageError(`unknown subcommand: wtmctl workspace ${sub ?? ""}`.trimEnd(), USAGE);
 }
 
@@ -389,7 +419,63 @@ function parsePane(sub: string | undefined, rest: readonly string[], env: NodeJS
       rows: rowsRaw === undefined ? DEFAULT_CONTROL_SIZE.rows : parseStreamDimension(rowsRaw, "--rows"),
     };
   }
+  if (sub === "report-metadata") {
+    const { targetId, opts, report } = parseReportMetadata(rest, env, "paneId", "wtmctl pane report-metadata");
+    return { kind: "pane-report-metadata", opts, paneId: targetId, report };
+  }
   throw new CliUsageError(`unknown subcommand: wtmctl pane ${sub ?? ""}`.trimEnd(), USAGE);
+}
+
+/** `report-metadata` の `--seq`・`--ttl-ms`（0 以上の安全な整数。範囲の検査〔ttl は 1〜86400000〕はサーバ。herdr の CLI も u64 として読むだけ）。 */
+function parseNonNegativeInt(raw: string, flag: string, usage: string): number {
+  const n = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(n)) {
+    throw new CliUsageError(`invalid value for ${flag}: ${raw}`, usage);
+  }
+  return n;
+}
+
+/**
+ * `workspace|pane report-metadata <id> --source ID [--token NAME=VALUE]... [--clear-token NAME]... [--seq N] [--ttl-ms N]`（20260927-sidebar-row-tokens）。
+ * **`--token` は値で見分ける**（decisions D5）: `=` を含めば独自トークンの `NAME=VALUE`（最初の `=` で分ける。herdr の `parse_token_assignment`）、含まなければ
+ * 接続の token（全コマンド共通の `--token <TOKEN>`。接続の token は base64url で `=` を含まない）。接続の token が複数なら最後が勝つ。
+ */
+function parseReportMetadata(
+  rest: readonly string[],
+  env: NodeJS.ProcessEnv,
+  idName: string,
+  command: string,
+): { targetId: string; opts: GlobalOpts; report: MetadataReportArgs } {
+  const usage = `${command} <${idName}> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>]`;
+  const { positionals, values, sequence } = parseFlags(rest, { values: ["--url", "--source", "--seq", "--ttl-ms"], multi: ["--token", "--clear-token"] });
+  const targetId = requirePositional(positionals, 0, idName, usage);
+  rejectExtra(positionals, 1, usage);
+  const tokens: MetadataReportArgs["tokens"] = [];
+  let authToken: string | undefined;
+  for (const [flag, value] of sequence) {
+    if (flag === "--clear-token") {
+      tokens.push({ name: value, value: null });
+      continue;
+    }
+    const eq = value.indexOf("=");
+    if (eq < 0) {
+      authToken = value;
+      continue;
+    }
+    if (eq === 0) throw new CliUsageError("token name must not be empty", usage);
+    tokens.push({ name: value.slice(0, eq), value: value.slice(eq + 1) });
+  }
+  const source = values.get("--source");
+  if (source === undefined || source.trim() === "") throw new CliUsageError("missing required --source", usage);
+  if (tokens.length === 0) throw new CliUsageError("missing token to set or clear", usage);
+  const report: MetadataReportArgs = { source, tokens };
+  const seq = values.get("--seq");
+  if (seq !== undefined) report.seq = parseNonNegativeInt(seq, "--seq", usage);
+  const ttl = values.get("--ttl-ms");
+  if (ttl !== undefined) report.ttlMs = parseNonNegativeInt(ttl, "--ttl-ms", usage);
+  const opts = globalOptsFrom(values, env);
+  if (authToken !== undefined) opts.token = authToken;
+  return { targetId, opts, report };
 }
 
 /** `pane control` の `--cols/--rows`（1〜1000。decisions D6）。 */

@@ -39,7 +39,13 @@ export type ErrorCode =
   | "agent_start_input_failed"
   // pane への直結（20260926-pane-direct-connect）。名前は herdr の理由文（already has an attached client）に対応させる。
   | "pane_attached"
-  | "not_attached";
+  | "not_attached"
+  // 独自トークンの報告（20260927-sidebar-row-tokens）。herdr と同じ code。
+  | "invalid_metadata_source"
+  | "invalid_metadata_ttl"
+  | "invalid_metadata_token"
+  | "metadata_token_limit"
+  | "metadata_sequence_source_limit";
 
 export interface ProtocolError {
   code: ErrorCode;

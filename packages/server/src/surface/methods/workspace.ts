@@ -5,6 +5,7 @@ import {
   WorkspaceMoveParams,
   WorkspaceMoveToParams,
   WorkspaceRenameParams,
+  WorkspaceReportMetadataParams,
 } from "@wtm/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
@@ -49,6 +50,18 @@ export function registerWorkspaceMethods(surface: ControlSurface, deps: MethodDe
       return {};
     },
   });
+
+  // 独自トークンの報告（20260927-sidebar-row-tokens。herdr の workspace.report_metadata）。検査・帳簿・配布は MetadataService。
+  const metadata = deps.metadata;
+  if (metadata) {
+    surface.register("workspace.report_metadata", {
+      schema: WorkspaceReportMetadataParams,
+      handler: (_ctx, params) => {
+        metadata.reportWorkspace(params);
+        return {};
+      },
+    });
+  }
 
   // 20260923-workspace-grouping（キーバインド用。delta 指定。`tab.move` と同じ形）。
   surface.register("workspace.move", {

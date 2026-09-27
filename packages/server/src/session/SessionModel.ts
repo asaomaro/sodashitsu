@@ -75,6 +75,14 @@ export class NotFoundError extends Error {
   }
 }
 
+/** `tokens` を差し替えた写し（null なら項目ごと除く）。元のオブジェクトは変えない（model は置き換えで更新する）。 */
+function withTokens<T extends { tokens?: Record<string, string> }>(obj: T, tokens: Record<string, string> | null): T {
+  const next = { ...obj };
+  if (tokens === null) delete next.tokens;
+  else next.tokens = tokens;
+  return next;
+}
+
 /**
  * workspace / tab / pane の保持と操作（architecture.md「SessionModel」）。
  * **副作用なし**：PTY の起動・破棄、イベントの発行、永続化はここでは行わない（`SessionService` の責務。T17）。
@@ -860,6 +868,23 @@ export class SessionModel {
   markPaneFailed(paneId: PaneId, failure: string): Pane {
     const pane = this.requirePane(paneId);
     const updated: Pane = { ...pane, status: "failed", failure };
+    this.panes.set(paneId, updated);
+    return updated;
+  }
+
+  /**
+   * 独自トークン（20260927-sidebar-row-tokens）を差し替える。null なら `tokens` の項目を除いた新しいオブジェクトにする（空の表を持たない）。
+   * 帳簿・検査は `metadata/MetadataService.ts` が持ち、ここは写すだけ。
+   */
+  setWorkspaceTokens(workspaceId: WorkspaceId, tokens: Record<string, string> | null): Workspace {
+    const updated = withTokens(this.requireWorkspace(workspaceId), tokens);
+    this.workspaces.set(workspaceId, updated);
+    return updated;
+  }
+
+  /** pane 版の `setWorkspaceTokens`。 */
+  setPaneTokens(paneId: PaneId, tokens: Record<string, string> | null): Pane {
+    const updated = withTokens(this.requirePane(paneId), tokens);
     this.panes.set(paneId, updated);
     return updated;
   }

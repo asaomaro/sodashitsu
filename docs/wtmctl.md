@@ -23,6 +23,7 @@ export WTMCTL_URL=http://127.0.0.1:7780                    # 以後 --url を省
 wtmctl workspace create [--cwd <path>] [--label <text>]
 wtmctl workspace close <workspaceId>
 wtmctl workspace rename <workspaceId> <label>
+wtmctl workspace report-metadata <workspaceId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>]
 wtmctl tab create [--workspace <id>] [--label <text>]
 wtmctl tab close <tabId>
 wtmctl pane split <paneId> --direction right|down [--ratio <0.05-0.95>]
@@ -33,6 +34,7 @@ wtmctl pane read <paneId> [--follow] [--raw] [--timeout <ms>]
 wtmctl pane attach <paneId> [--takeover]   # 手元の端末をその pane に直結する（Ctrl+B q で切り離す）
 wtmctl pane observe <paneId>               # pane の画面を NDJSON で流し続ける（閲覧専用）
 wtmctl pane control <paneId> [--takeover] [--cols <N>] [--rows <N>]   # NDJSON で流し、stdin の NDJSON で操作する
+wtmctl pane report-metadata <paneId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>]
 wtmctl snapshot
 wtmctl watch [--json]
 wtmctl agent list
@@ -53,6 +55,33 @@ wtmctl skill                               # エージェントに wtmctl の使
 繋がっている必要がある。`login`・`skill` 以外の全コマンドに使える。id（pane・エージェントの名前を含む）はマシンごとに別。
 登録に無い・無効・曖昧は `machine_not_found`、繋がっていないは `machine_unavailable`（終了コード 1）。`--machine` のとき自分の pane の歯止め（`self_target`）は
 効かない（`--machine local` は手元そのもの）。詳しくは `docs/machines.md`。
+
+## サイドバーの独自トークン（`workspace report-metadata`・`pane report-metadata`）
+
+外のスクリプト・エージェントのフックが、workspace・pane ごとに名前付きの短い値（独自トークン）をサーバへ報告する。値はサーバのメモリだけに持ち
+（`session.json` に保存しない。再起動・`wtm handoff` で消える）、接続しているすべてのブラウザへ配られる。ブラウザは、設定画面（節「表示」の
+「サイドバーの行（上級者向け）」）で行の並びに `$名前` を置いたときだけ、その値を出す——spaces の行は workspace の値、agents の行は pane の値を読む。
+
+```sh
+wtmctl pane report-metadata "$WTM_PANE_ID" --source my-hook --token summary="認証を直している" --token model=opus
+wtmctl workspace report-metadata w1 --source ci --token build=green --ttl-ms 600000
+wtmctl pane report-metadata p3 --source my-hook --clear-token summary
+```
+
+- **`--token` は値で見分ける**: `=` を含めば独自トークンの `NAME=VALUE`（最初の `=` で分ける）、含まなければ全コマンド共通の接続の token
+  （`--token <TOKEN>`。接続の token は `=` を含まない）。**`=` を書き忘れた `--token summary` は独自トークンにならない**: ほかに `NAME=VALUE` が無ければ
+  `missing token to set or clear`（終了コード 2）。ほかにあれば `summary` は接続の token の候補として扱われ、`wtmctl login` のキャッシュが使えるあいだは
+  使われずに捨てられる（報告は成功し、`summary` だけが出ない）。キャッシュが無い・失効しているときは、それで認証を試みて失敗する（`unauthorized`）。
+  herdr のスクリプトを写すときは `NAME=VALUE` の形を確かめる。
+- 値は前後の空白と制御文字を除いて 80 文字まで。整えて空になった値は消去（`--clear-token` と同じ）。触れない名前はそのまま残る。同じ名前を 1 回の報告で
+  複数回指定すると最後が勝つ。
+- 名前は `[A-Za-z0-9_-]` の 1〜32 文字、1 回の報告で 16 まで、1 つの対象で 32 まで。`--source` は `[A-Za-z0-9:._-]` の 1〜80 文字（必須）。
+- `--seq N`: 同じ `--source` から受け付けた `seq` 以下の報告は、成功を返すが何も変えない（遅れて届いた古い報告を無視する）。1 つの対象が `seq` 付きで
+  受け付ける `--source` は 32 まで（消去・期限でも枠は戻らない）。
+- `--ttl-ms N`（1〜86400000）: その報告で設定した名前だけ、時間が来たら消える。`--ttl-ms` 無しで設定し直すと期限は外れる。
+- 誤りの code（stderr の JSON・終了コード 1）: `not_found`・`invalid_metadata_source`・`invalid_metadata_ttl`・`invalid_metadata_token`・`metadata_token_limit`・
+  `metadata_sequence_source_limit`（herdr と同じ）。生の長さ 4096・組 256 の上限（下の「herdr との対応と違い」）を超えると `invalid_params`。引数の形の誤り（`--source` が無い・設定も消去も無い・`NAME` が空・`--seq`/`--ttl-ms` が整数でない）は終了コード 2。
+- 値は全ブラウザに文字として出る（HTML として解釈されない）。秘密を載せない。
 
 ## pane への直結（`pane attach`）
 
@@ -409,6 +438,17 @@ herdr の `agent list` / `agent get` / `agent wait` / `agent read` / `agent prom
   `invalid_key`）と、`--until` の既定・300ms の遅延 Enter・5 秒の活動の確認・終了コードは herdr と同じ。
 - 本物の Claude Code 等での送信は確かめていない（bracketed paste を有効にする偽のエージェントでの結合テストだけ。
   `.aidev/works/20260926-agent-prompt-send-keys/test-result.md`）。
+
+### `workspace report-metadata`・`pane report-metadata`
+
+herdr の同名のコマンドに相当する（`docs/herdr-parity.md` の H21）。整え方・上限・`seq`・`ttl-ms`・誤りの code は herdr と同じ。違い:
+
+- `pane report-metadata` はトークン（`--token`・`--clear-token`）だけ。herdr の `--title`・`--display-agent`・`--state-label`・`--clear-state-labels`・`--agent`・
+  `--applies-to-source` は無い（`.aidev/backlog/product-roadmap.md`）。
+- `--token` の値が `=` を含まなければ接続の token として読む（本製品の `--token` は全コマンド共通の接続の token のため）。
+- `--token`・`--clear-token` の値が `--` で始まると、値が無いものとして断る（終了コード 2。本製品の CLI のほかのオプションと同じ。herdr は次の引数をそのまま値にする）。
+- RPC（`workspace.report_metadata`・`pane.report_metadata`）の `tokens` は `{name, value}` の配列（herdr は map）。`source`・名前・値の生の長さは 4096 まで、
+  組は 256 まで（herdr には無い上限。値は 80 文字に切り詰めるので実用上の違いは無い）。
 
 ### skill ファイル・pane の環境変数
 

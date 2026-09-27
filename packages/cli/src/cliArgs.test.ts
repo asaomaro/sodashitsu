@@ -477,3 +477,73 @@ describe("parseArgs — skill", () => {
     expect(() => parseArgs(argv, noEnv)).toThrow(CliUsageError);
   });
 });
+
+describe("parseArgs — report-metadata（20260927-sidebar-row-tokens の AC8）", () => {
+  const url = { url: DEFAULT_URL, token: undefined };
+
+  it("workspace: --token NAME=VALUE と --clear-token を指定の順に並べ、seq・ttl-ms を数にする", () => {
+    expect(
+      parseArgs(
+        ["workspace", "report-metadata", "w1", "--source", "ci", "--token", "build=green", "--clear-token", "old", "--token", "note=a=b", "--seq", "7", "--ttl-ms", "60000"],
+        noEnv,
+      ),
+    ).toEqual({
+      kind: "workspace-report-metadata",
+      opts: url,
+      workspaceId: "w1",
+      report: {
+        source: "ci",
+        tokens: [
+          { name: "build", value: "green" },
+          { name: "old", value: null },
+          { name: "note", value: "a=b" },
+        ],
+        seq: 7,
+        ttlMs: 60000,
+      },
+    });
+  });
+
+  it("pane: seq・ttl-ms を省くとキーごと無い。空の値（NAME=）もそのまま送る（消去はサーバが決める）", () => {
+    expect(parseArgs(["pane", "report-metadata", "p1", "--source", "hook", "--token", "summary="], noEnv)).toEqual({
+      kind: "pane-report-metadata",
+      opts: url,
+      paneId: "p1",
+      report: { source: "hook", tokens: [{ name: "summary", value: "" }] },
+    });
+  });
+
+  it("= を含まない --token は接続の token（最後が勝つ）。独自トークンと混ぜられる（decisions D5）", () => {
+    const cmd = parseArgs(["workspace", "report-metadata", "w1", "--token", "AUTH1", "--source", "s", "--token", "a=1", "--token", "AUTH2"], noEnv);
+    expect(cmd).toMatchObject({ opts: { url: DEFAULT_URL, token: "AUTH2" }, report: { tokens: [{ name: "a", value: "1" }] } });
+  });
+
+  it("接続の token が無ければ環境変数（WTMCTL_TOKEN）を使い、独自トークンを接続の token にしない", () => {
+    const env = { WTMCTL_TOKEN: "envtoken" } as NodeJS.ProcessEnv;
+    expect(parseArgs(["workspace", "report-metadata", "w1", "--source", "s", "--token", "a=1"], env)).toMatchObject({ opts: { token: "envtoken" } });
+  });
+
+  it.each([
+    [["workspace", "report-metadata", "w1", "--token", "a=1"], "missing required --source"],
+    [["workspace", "report-metadata", "w1", "--source", "   ", "--token", "a=1"], "missing required --source"],
+    [["workspace", "report-metadata", "w1", "--source", "s"], "missing token to set or clear"],
+    [["workspace", "report-metadata", "w1", "--source", "s", "--token", "AUTH"], "missing token to set or clear"],
+    [["pane", "report-metadata", "p1", "--source", "s", "--token", "=v"], "token name must not be empty"],
+    [["pane", "report-metadata", "p1", "--source", "s", "--token", "a=1", "--seq", "-1"], "invalid value for --seq: -1"],
+    [["pane", "report-metadata", "p1", "--source", "s", "--token", "a=1", "--seq", "1.5"], "invalid value for --seq: 1.5"],
+    [["pane", "report-metadata", "p1", "--source", "s", "--token", "a=1", "--seq", "9007199254740993"], "invalid value for --seq: 9007199254740993"],
+    [["pane", "report-metadata", "p1", "--source", "s", "--token", "a=1", "--ttl-ms", "1e3"], "invalid value for --ttl-ms: 1e3"],
+    [["pane", "report-metadata", "--source", "s", "--token", "a=1"], "missing paneId"],
+    [["pane", "report-metadata", "p1", "extra", "--source", "s", "--token", "a=1"], "unexpected argument: extra"],
+    [["pane", "report-metadata", "p1", "--source", "s", "--token", "a=1", "--title", "x"], "unknown option: --title"],
+  ])("%j は使い方の誤り: %s", (argv, message) => {
+    expect(() => parseArgs(argv, noEnv)).toThrow(CliUsageError);
+    expect(() => parseArgs(argv, noEnv)).toThrow(message);
+  });
+
+  it("--seq 0 と --ttl-ms 0 は CLI では通す（範囲の検査はサーバ。herdr の CLI と同じ）", () => {
+    expect(parseArgs(["pane", "report-metadata", "p1", "--source", "s", "--token", "a=1", "--seq", "0", "--ttl-ms", "0"], noEnv)).toMatchObject({
+      report: { seq: 0, ttlMs: 0 },
+    });
+  });
+});

@@ -805,6 +805,24 @@ describe("SessionModel — focus / navigation", () => {
 });
 
 describe("SessionModel — misc mutations", () => {
+  it("setWorkspaceTokens / setPaneTokens は置き換えで更新し、null で項目ごと除く（20260927-sidebar-row-tokens）", () => {
+    const model = new SessionModel();
+    const { workspace, pane } = model.createWorkspace("/home/u", "api", init);
+    const ws1 = model.setWorkspaceTokens(workspace.id, { a: "1" });
+    expect(ws1).not.toBe(workspace);
+    expect("tokens" in workspace).toBe(false); // 元のオブジェクトは変えない
+    expect(model.getWorkspace(workspace.id)?.tokens).toEqual({ a: "1" });
+    const ws2 = model.setWorkspaceTokens(workspace.id, null);
+    expect("tokens" in ws2).toBe(false);
+    expect(ws1.tokens).toEqual({ a: "1" });
+    const p1 = model.setPaneTokens(pane.id, { b: "2" });
+    expect(model.getPane(pane.id)?.tokens).toEqual({ b: "2" });
+    expect("tokens" in model.setPaneTokens(pane.id, null)).toBe(false);
+    expect(p1.tokens).toEqual({ b: "2" });
+    expect(() => model.setWorkspaceTokens("w999", null)).toThrow(NotFoundError);
+    expect(() => model.setPaneTokens("p999", null)).toThrow(NotFoundError);
+  });
+
   it("renamePane / renameTab / renameWorkspace update the label", () => {
     const model = new SessionModel();
     const { workspace, tab, pane } = model.createWorkspace("/home/u", "api", init);

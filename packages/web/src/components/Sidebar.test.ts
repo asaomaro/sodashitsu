@@ -1,11 +1,13 @@
 import type { AgentInfo, MethodName, ParamsOf, Pane, ResultOf, Tab, Workspace } from "@wtm/protocol";
 import { mount } from "@vue/test-utils";
+import { nextTick } from "vue";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
 import type { ConnectionPort } from "../net/ports.js";
 import { useSessionStore } from "../store/session.js";
 import { readPrefs, useViewStore, writePrefs } from "../store/view.js";
+import { useSettingsStore } from "../store/settings.js";
 import Sidebar from "./Sidebar.vue";
 
 let pinia: Pinia;
@@ -1128,6 +1130,114 @@ describe("Sidebar — session のボタン", () => {
     } finally {
       window.removeEventListener("keydown", onWindow);
       wrapper.unmount();
+    }
+  });
+});
+
+describe("Sidebar — 行の並びの設定と独自トークン（20260927-sidebar-row-tokens の AC9・AC12・AC13）", () => {
+  it("設定した並びで描く: 行の順・トークンの順・独自トークン（workspace の値）。値の無いトークンと空になった行は消える", () => {
+    const session = useSessionStore(pinia);
+    const settings = useSettingsStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", { label: "proj", tokens: { build: "green" } }));
+    settings.setSidebarLayout("spaces", [[{ token: "$build" }, { token: "workspace" }], [{ token: "$missing" }], [{ token: "state_icon" }]]);
+    const wrapper = mountSidebar(makeConnection());
+    const row = wrapper.find(".sidebar-spaces .sidebar-row");
+    const lines = row.findAll(".sidebar-row-line1, .sidebar-row-line2");
+    expect(lines.map((l) => l.classes()[0])).toEqual(["sidebar-row-line1", "sidebar-row-line2"]);
+    expect(lines[0]!.findAll("span").map((s) => s.text())).toEqual(["green", "proj"]);
+    expect(lines[1]!.find(".sidebar-state-icon").exists()).toBe(true);
+  });
+
+  it("agents 行の $名前 は pane の値を読み、報告が変われば描き直す", async () => {
+    const session = useSessionStore(pinia);
+    const settings = useSettingsStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", { tokens: { summary: "ws-value" } }));
+    session.tabUpserted(makeTab("t1", "w1"));
+    session.paneUpserted({ ...makePane("p1", "t1", makeAgent()), tokens: { summary: "reviewing" } });
+    settings.setSidebarLayout("agents", [[{ token: "agent" }, { token: "$summary" }]]);
+    const wrapper = mountSidebar(makeConnection());
+    expect(wrapper.find(".sidebar-agents .sidebar-row-line1").text()).toBe("Claude Codereviewing");
+    session.paneUpserted({ ...makePane("p1", "t1", makeAgent()), tokens: { summary: "done" } });
+    await nextTick();
+    expect(wrapper.find(".sidebar-agents .sidebar-row-line1").text()).toBe("Claude Codedone");
+  });
+
+  it("独自トークンの値の HTML は文字のまま描き、要素・属性を増やさない（AC9）", () => {
+    const session = useSessionStore(pinia);
+    const settings = useSettingsStore(pinia);
+    const evil = '<img src=x onerror="alert(1)"></span><script>alert(2)</script>';
+    session.workspaceUpserted(makeWorkspace("w1", { tokens: { x: evil } }));
+    settings.setSidebarLayout("spaces", [[{ token: "$x" }]]);
+    const wrapper = mountSidebar(makeConnection());
+    const line = wrapper.find(".sidebar-spaces .sidebar-row-line1");
+    expect(line.text()).toBe(evil);
+    expect(line.findAll("img")).toHaveLength(0);
+    expect(line.findAll("script")).toHaveLength(0);
+    expect(line.element.children).toHaveLength(1);
+  });
+
+  it("constructor 等の名前はプロトタイプの値を描かない（報告されていなければ消える）", () => {
+    const session = useSessionStore(pinia);
+    const settings = useSettingsStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", { tokens: { a: "1" } }));
+    settings.setSidebarLayout("spaces", [[{ token: "$constructor" }, { token: "$toString" }, { token: "$a" }]]);
+    const wrapper = mountSidebar(makeConnection());
+    expect(wrapper.find(".sidebar-spaces .sidebar-row-line1").text()).toBe("1");
+  });
+
+  it("見た目は style に、条件で当たった見た目・hide が効く（AC13・AC14）", () => {
+    const session = useSessionStore(pinia);
+    const settings = useSettingsStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", { tokens: { load: "90" } }));
+    session.workspaceUpserted(makeWorkspace("w2", { tokens: { load: "ok" } }));
+    settings.setSidebarLayout("spaces", [
+      [
+        { token: "workspace", bold: false, dim: true },
+        { token: "$load", fg: "#ffffff", rules: [{ when: "gt", value: 80, fg: "#f55", bold: true }, { when: "equals", value: "ok", hide: true }] },
+      ],
+    ]);
+    const wrapper = mountSidebar(makeConnection());
+    const [r1, r2] = wrapper.findAll(".sidebar-spaces .sidebar-row");
+    const spans1 = r1!.findAll(".sidebar-row-line1 > span");
+    expect(spans1[0]!.attributes("style")).toContain("font-weight: normal");
+    expect(spans1[0]!.attributes("style")).toContain("opacity: 0.75");
+    expect(spans1[1]!.text()).toBe("90");
+    expect(spans1[1]!.attributes("style")).toContain("font-weight: bold");
+    expect(spans1[1]!.attributes("style")).toMatch(/color: (#f55|rgb\(255, 85, 85\))/);
+    expect(r2!.findAll(".sidebar-row-line1 > span").map((s) => s.text())).toEqual(["w2"]);
+  });
+
+  it("行が 1 つも残らなければ状態の印と名前の代わりの行を出す。グループの頭の開閉ボタンは主の行の先頭（AC12）", () => {
+    const session = useSessionStore(pinia);
+    const settings = useSettingsStore(pinia);
+    const git = { branch: "main", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: false };
+    session.workspaceUpserted(makeWorkspace("w1", { label: "repo", git }));
+    session.workspaceUpserted(makeWorkspace("w2", { label: "wt", git: { ...git, isLinkedWorktree: true } }));
+    settings.setSidebarLayout("spaces", [[{ token: "$missing" }]]);
+    const wrapper = mountSidebar(makeConnection());
+    const head = wrapper.find('[data-workspace-row-key="w1"] .sidebar-row-line1');
+    expect(head.element.firstElementChild?.classList.contains("sidebar-group-toggle")).toBe(true);
+    expect(head.find(".sidebar-state-icon").exists()).toBe(true);
+    expect(head.find(".sidebar-label").text()).toBe("repo");
+  });
+
+  it("畳んだサイドバーは並びの設定に関わらず今までどおり（状態の印だけ）", async () => {
+    const session = useSessionStore(pinia);
+    const settings = useSettingsStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", { tokens: { build: "green" } }));
+    session.tabUpserted(makeTab("t1", "w1"));
+    session.paneUpserted(makePane("p1", "t1", makeAgent()));
+    settings.setSidebarLayout("spaces", [[{ token: "$build" }]]);
+    settings.setSidebarLayout("agents", [[{ token: "agent" }]]);
+    view.sidebarCollapsed = true;
+    const wrapper = mountSidebar(makeConnection());
+    await nextTick();
+    for (const sel of [".sidebar-spaces .sidebar-row", ".sidebar-agents .sidebar-row"]) {
+      const row = wrapper.find(sel);
+      expect(row.findAll(".sidebar-row-line1")).toHaveLength(1);
+      expect(row.find(".sidebar-row-line2").exists()).toBe(false);
+      expect(row.text()).toBe(row.find(".sidebar-state-icon").text());
     }
   });
 });

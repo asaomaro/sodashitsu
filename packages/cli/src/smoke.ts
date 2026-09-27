@@ -245,7 +245,7 @@ async function main(): Promise<void> {
 
     const created = await runCli(["workspace", "create", "--cwd", process.cwd(), "--label", "smoke", "--url", url, "--token", token], env);
     if (created.exitCode !== 0) throw new Error(`workspace create failed (exit ${created.exitCode}): ${created.stderr}`);
-    const { pane } = JSON.parse(created.stdout) as { pane: { id: string } };
+    const { pane, workspace } = JSON.parse(created.stdout) as { pane: { id: string }; workspace: { id: string } };
     console.log(`smoke(cli): wtmctl workspace create ok (pane ${pane.id})`);
 
     // 2回目以降は --token を渡さない：セッションキャッシュが再利用されることの確認を兼ねる（AC7）。
@@ -270,6 +270,42 @@ async function main(): Promise<void> {
     const snapshot = JSON.parse(snap.stdout) as { panes: { id: string }[] };
     if (!snapshot.panes.some((p) => p.id === pane.id)) throw new Error("snapshot did not include the created pane");
     console.log("smoke(cli): wtmctl snapshot ok");
+
+    // 20260927-sidebar-row-tokens: 独自トークンの報告。`--token` を接続の token（= を含まない）と独自トークン（NAME=VALUE）の両方に使い、
+    // 値が整えられて snapshot の workspace・pane に載ること、消去で消えることを、ビルドした wtmctl で確かめる。**接続の token が実際に使われるよう、
+    // この 1 回はセッションのキャッシュの無い HOME で打つ**（キャッシュがあると `--token` は読まれない——`withSession.ts`。タスク点検 T11 の指摘）。
+    const freshHome = join(homeDir, "fresh-home");
+    await mkdir(freshHome, { recursive: true });
+    const reported = await runCli(
+      ["workspace", "report-metadata", workspace.id, "--source", "smoke", "--token", "build= green\t", "--token", token, "--url", url],
+      { ...env, HOME: freshHome, USERPROFILE: freshHome },
+    );
+    if (reported.exitCode !== 0 || reported.stdout.trim() !== "{}") {
+      throw new Error(`workspace report-metadata failed (exit ${reported.exitCode}): ${reported.stdout} ${reported.stderr}`);
+    }
+    const paneReported = await runCli(["pane", "report-metadata", pane.id, "--source", "smoke", "--token", "summary=smoke-ok", "--ttl-ms", "600000", "--url", url], env);
+    if (paneReported.exitCode !== 0) throw new Error(`pane report-metadata failed (exit ${paneReported.exitCode}): ${paneReported.stderr}`);
+    const snapWithTokens = await runCli(["snapshot", "--url", url], env);
+    if (snapWithTokens.exitCode !== 0) throw new Error(`snapshot failed (exit ${snapWithTokens.exitCode}): ${snapWithTokens.stderr}`);
+    const withTokens = JSON.parse(snapWithTokens.stdout) as {
+      workspaces: { id: string; tokens?: Record<string, string> }[];
+      panes: { id: string; tokens?: Record<string, string> }[];
+    };
+    // 名前が build ちょうど 1 つ（接続の token が独自トークンとして載っていない。decisions D5）。
+    const wsTokens = withTokens.workspaces.find((w) => w.id === workspace.id)?.tokens;
+    if (JSON.stringify(wsTokens) !== JSON.stringify({ build: "green" })) throw new Error(`unexpected workspace tokens: ${JSON.stringify(wsTokens)}`);
+    if (withTokens.panes.find((p) => p.id === pane.id)?.tokens?.["summary"] !== "smoke-ok") throw new Error("snapshot did not include the pane token");
+    const badSource = await runCli(["workspace", "report-metadata", workspace.id, "--source", "bad source", "--token", "a=1", "--url", url], env);
+    if (badSource.exitCode !== 1 || !badSource.stderr.includes("invalid_metadata_source")) {
+      throw new Error(`report-metadata with a bad source should fail with invalid_metadata_source (exit ${badSource.exitCode}): ${badSource.stderr}`);
+    }
+    const tokenCleared = await runCli(["workspace", "report-metadata", workspace.id, "--source", "smoke", "--clear-token", "build", "--url", url], env);
+    if (tokenCleared.exitCode !== 0) throw new Error(`report-metadata --clear-token failed (exit ${tokenCleared.exitCode}): ${tokenCleared.stderr}`);
+    const snapAfterClear = await runCli(["snapshot", "--url", url], env);
+    if (snapAfterClear.exitCode !== 0) throw new Error(`snapshot failed (exit ${snapAfterClear.exitCode}): ${snapAfterClear.stderr}`);
+    const afterClear = JSON.parse(snapAfterClear.stdout) as { workspaces: { id: string; tokens?: unknown }[] };
+    if (afterClear.workspaces.find((w) => w.id === workspace.id)?.tokens !== undefined) throw new Error("--clear-token did not clear the workspace token");
+    console.log("smoke(cli): wtmctl workspace/pane report-metadata ok (normalized, in snapshot, cleared, bad source refused)");
 
     // エージェントを起動していないので空の一覧になる（`agent` コマンド群の配線とセッション再利用の確認）。
     const agents = await runCli(["agent", "list", "--url", url], env);
