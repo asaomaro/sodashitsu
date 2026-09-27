@@ -107,7 +107,7 @@ export async function runTokenReset(
 }
 
 /** 在るディレクトリか（`wtm serve --session` と同じくシンボリックリンクは辿る）。無い以外の失敗（権限等）は投げる。 */
-async function isDirectory(path: string): Promise<boolean> {
+export async function isDirectory(path: string): Promise<boolean> {
   try {
     return (await stat(path)).isDirectory();
   } catch (err) {

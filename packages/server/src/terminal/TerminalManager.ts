@@ -1,5 +1,5 @@
 import type { PaneId, TerminalPalette } from "@wtm/protocol";
-import type { PtyBackend } from "../pty/PtyBackend.js";
+import type { PtyBackend, PtyProcess } from "../pty/PtyBackend.js";
 import type { ProcessInspector } from "../platform/ProcessInspector.js";
 import { DefaultTerminalHost, type TerminalHost } from "./TerminalHost.js";
 
@@ -13,10 +13,20 @@ export interface CreatePaneOptions {
   env?: Record<string, string>;
 }
 
+/** 更新時の引き継ぎ（20260926-live-handoff）で渡された PTY。 */
+export interface AdoptPaneOptions {
+  fd: number;
+  pid: number;
+  cols: number;
+  rows: number;
+}
+
 /** pane の id → `TerminalHost` の対応（architecture.md「TerminalManager」）。 */
 export interface TerminalManager {
   get(paneId: PaneId): TerminalHost | undefined;
   create(paneId: PaneId, opts: CreatePaneOptions): TerminalHost;
+  /** 引き継いだ PTY の master から端末を作る（`PtyBackend.adopt` の無い実装・Windows では投げる）。 */
+  adopt?(paneId: PaneId, opts: AdoptPaneOptions): TerminalHost;
   resize(paneId: PaneId, cols: number, rows: number): void;
   dispose(paneId: PaneId): void;
 }
@@ -61,13 +71,24 @@ export class DefaultTerminalManager implements TerminalManager {
       cols: opts.cols,
       rows: opts.rows,
     });
+    return this.register(paneId, proc, opts.cols, opts.rows);
+  }
+
+  adopt(paneId: PaneId, opts: AdoptPaneOptions): TerminalHost {
+    if (this.ptyBackend.adopt === undefined) throw new Error("this PTY backend cannot adopt a handed-off PTY");
+    const proc = this.ptyBackend.adopt({ fd: opts.fd, pid: opts.pid });
+    return this.register(paneId, proc, opts.cols, opts.rows);
+  }
+
+  /** `create`・`adopt` の共通：端末を作って登録し、終了で自分を捨てる配線をする。 */
+  private register(paneId: PaneId, proc: PtyProcess, cols: number, rows: number): TerminalHost {
     const paletteFor = this.paletteFor;
     const appearanceFor = this.appearanceFor;
     const host = new DefaultTerminalHost(
       paneId,
       proc,
-      opts.cols,
-      opts.rows,
+      cols,
+      rows,
       this.scrollbackLines,
       paletteFor ? () => paletteFor(paneId) : undefined,
       appearanceFor ? () => appearanceFor(paneId) : undefined,

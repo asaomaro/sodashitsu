@@ -12,6 +12,7 @@ describe("buildPaneEnv", () => {
     WTM_SERVER_URL: "http://old:2",
     WTM_AGENT_REPORT_SOCKET: "/old/agent-report.sock",
     WTM_SESSION: "inherited",
+    WTM_HANDOFF_NONCE: "0123456789abcdef", // 20260926-live-handoff: 引き継ぎの nonce も pane へは渡さない
     UNSET: undefined,
   } as NodeJS.ProcessEnv;
 

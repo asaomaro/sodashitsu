@@ -40,7 +40,7 @@ export async function startAgentReportSocket(path: string, onReport: AgentReport
     logger.warn("agent report socket error", { path, error: String(err) });
   });
 
-  await listen(server, path);
+  await listenUnixSocketReplacingStale(server, path);
   if (platform() !== "win32") {
     // 同一利用者限定にする（非機能要件「報告経路の安全性」。design D5）。Windows の named pipe の
     // 権限限定は別途（既知の制約。docs/verification.md の手動確認へ回す）。
@@ -57,8 +57,11 @@ export async function startAgentReportSocket(path: string, onReport: AgentReport
   };
 }
 
-/** stale なソケットファイル（前回の不正終了の残骸）を検出して作り直す（design D12）。 */
-async function listen(server: Server, path: string): Promise<void> {
+/**
+ * stale なソケットファイル（前回の不正終了の残骸）を検出して作り直す（design D12）。`handoff.sock`（20260926-live-handoff）も使う——
+ * execve で入れ替わった新しい版から見ると、古い版の socket のファイルは残骸と同じ。
+ */
+export async function listenUnixSocketReplacingStale(server: Server, path: string): Promise<void> {
   try {
     await listenOnce(server, path);
   } catch (err) {

@@ -21,7 +21,8 @@ import type {
 import { INVALID_AGENT_NAME_MESSAGE, isValidAgentName, RpcError } from "@wtm/protocol";
 import type { SessionFileData, SessionFilePane, SessionFileTab, SessionFileWorkspace } from "../persist/SessionFile.js";
 import type { PaneHistoryEntry } from "../persist/PaneHistoryFile.js";
-import { historyReplayText } from "../terminal/historyAnsi.js";
+import { historyReplayText, sanitizeHistoryAnsi } from "../terminal/historyAnsi.js";
+import type { HandoffScrollbackEditor } from "../handoff/HandoffManifest.js";
 import type { TerminalManager } from "../terminal/TerminalManager.js";
 import { removeScrollbackDir, scrollbackEditorArgv, writeScrollbackFile } from "../terminal/scrollbackEditor.js";
 import type { EventBus } from "../bus/EventBus.js";
@@ -32,9 +33,21 @@ import { resolveNewCwd, type NewCwdDeps } from "./newCwd.js";
 import { buildPaneEnv } from "./paneEnv.js";
 import { AUTO_LABEL_TIMEOUT_MS, autoWorkspaceLabel, defaultWorkspaceLabelDeps, folderLabelOf, type WorkspaceLabelDeps } from "./workspaceLabel.js";
 import { withTimeout } from "./withTimeout.js";
+import { tmpdir } from "node:os";
+import { dirname, resolve } from "node:path";
 import { monotonicNow } from "../log/LogThrottle.js";
 import type { PersistScheduler } from "./PersistScheduler.js";
 import type { Logger } from "../log/Logger.js";
+
+/** 更新時の引き継ぎ（20260926-live-handoff）で渡された、pane の PTY（design「`SessionService`」）。 */
+export interface AdoptedPaneSpec {
+  fd: number;
+  pid: number;
+  cols: number;
+  rows: number;
+  /** 古い版のミラーの `historyAnsi()`。 */
+  screen: string;
+}
 
 /** クライアントが 1 台も無いときの既定サイズ（design「サイズ権限」。herdr の headless_cols/rows と同じ考え方）。 */
 const HEADLESS_COLS = 120;
@@ -1126,7 +1139,15 @@ export class SessionService {
    * `session.json` から復元する。失敗した pane は閉じずに `status: 'failed'` にする。`opts.paneHistory` があれば（`--pane-history`。
    * 20260926-screen-history-replay）、その pane の保存した画面を新しいシェルより前に流し、区切りの行を足す（会話を再開する pane を除く）。
    */
-  async restore(data: SessionFileData, opts: { paneHistory?: ReadonlyMap<string, PaneHistoryEntry> | undefined } = {}): Promise<void> {
+  async restore(
+    data: SessionFileData,
+    opts: {
+      paneHistory?: ReadonlyMap<string, PaneHistoryEntry> | undefined;
+      /** 更新時の引き継ぎ（20260926-live-handoff）で渡された PTY。ある pane は新しいシェルを起動せず、その PTY を使う。 */
+      adopted?: ReadonlyMap<PaneId, AdoptedPaneSpec> | undefined;
+    } = {},
+  ): Promise<{ adoptedPaneIds: Set<PaneId> }> {
+    const adoptedPaneIds = new Set<PaneId>();
     this.model.setNextIdCounters(data.nextId);
     for (const groupData of data.groups) this.model.restoreGroup(groupData); // 20260923-workspace-grouping
     // 名前を先に決めてから入れる（20260921-workspace-auto-label の design D6・D10）。自動の名前はその場所から決め直し（保存した後に git の状態が
@@ -1158,6 +1179,11 @@ export class SessionService {
     for (const wsData of data.workspaces) {
       for (const tabData of wsData.tabs) {
         for (const paneData of tabData.panes) {
+          const adopted = opts.adopted?.get(paneData.id);
+          if (adopted !== undefined && this.adoptForPane(paneData.id, adopted)) {
+            adoptedPaneIds.add(paneData.id);
+            continue;
+          }
           await this.restorePaneProcess(paneData.id, paneData.cwd, paneData.agentSession, opts.paneHistory?.get(paneData.id));
         }
       }
@@ -1167,6 +1193,61 @@ export class SessionService {
         this.model.focusPane(data.focus.paneId);
       } catch {
         // 保存されていた focus の pane が読めなかった（未対応）。既定のフォーカスのままにする。
+      }
+    }
+    return { adoptedPaneIds };
+  }
+
+  /**
+   * 引き継いだ PTY をこの pane の端末にする（20260926-live-handoff。design「`SessionService`」）。プロセスは続いているので、会話の再開のコマンドも
+   * 保存した画面履歴も流さない（AC9）。古い版の画面は、PTY の出力（非同期のイベント）より前に並ぶよう、作ったのと同じ同期区間でミラーへ書く
+   * （`spawnForPane` の `seed` と同じ理由）。その後に大きさでつついて TUI に描き直させる。端末を作れなければ（fd が使えない等）false——
+   * 呼び出し側が普通に新しいシェルを起動する。
+   */
+  private adoptForPane(paneId: PaneId, spec: AdoptedPaneSpec): boolean {
+    if (this.terminals.adopt === undefined) return false;
+    let host;
+    try {
+      host = this.terminals.adopt(paneId, { fd: spec.fd, pid: spec.pid, cols: spec.cols, rows: spec.rows });
+    } catch (err) {
+      this.logger.warn("cannot adopt a handed-off pty; starting a new shell instead", { paneId, error: String(err) });
+      return false;
+    }
+    // model の pane の大きさも PTY に合わせる（復元は 120x40 で入れるので、そのままだと「同じ大きさなら何もしない」で PTY が取り残される）。
+    this.model.setPaneSize(paneId, spec.cols, spec.rows);
+    const screen = sanitizeHistoryAnsi(spec.screen);
+    if (screen !== "") host.mirror.write(screen);
+    this.wireExit(paneId);
+    host.nudgeRedraw?.();
+    return true;
+  }
+
+  /** 引き継ぎで渡す、スクロールバックを $EDITOR で開いた pane の対応（20260926-live-handoff の AC14）。 */
+  handoffScrollbackEditors(): HandoffScrollbackEditor[] {
+    return [...this.scrollbackEditors.entries()].map(([paneId, e]) => ({
+      paneId,
+      sourcePaneId: e.sourcePaneId,
+      previousZoomedPaneId: e.previousZoomedPaneId,
+      dir: e.dir,
+    }));
+  }
+
+  /**
+   * 引き継いだ後に、エディタの pane の対応を登録し直す（閉じたときの一時ディレクトリの削除・焦点と拡大表示の復帰が今までどおり働く）。
+   * 引き継げなかった pane（新しいシェルになった・無くなった）のものは、一時ディレクトリだけ消す。
+   */
+  async adoptScrollbackEditors(entries: readonly HandoffScrollbackEditor[], adoptedPaneIds: ReadonlySet<PaneId>): Promise<void> {
+    const root = resolve(this.scrollbackEditorEnv.tmpRoot ?? tmpdir());
+    for (const e of entries) {
+      // 消すことがあるので、このサーバが一時ディレクトリを作る場所（`mkdtemp(<tmpRoot>/wtm-scrollback-)`）の直下のものだけを扱う。
+      if (dirname(e.dir) !== root) {
+        this.logger.warn("ignoring a handed-off scrollback dir outside the temp root", { dir: e.dir, root });
+        continue;
+      }
+      if (adoptedPaneIds.has(e.paneId) && this.model.getPane(e.paneId) !== undefined) {
+        this.scrollbackEditors.set(e.paneId, { sourcePaneId: e.sourcePaneId, previousZoomedPaneId: e.previousZoomedPaneId, dir: e.dir });
+      } else {
+        await this.removeScrollbackDirQuietly(e.dir);
       }
     }
   }

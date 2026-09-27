@@ -9,6 +9,8 @@ import { lastChanceTokenLines, startupLines } from "./startupBanner.js";
 import { join, resolve } from "node:path";
 import { PANE_HISTORY_FILE_NAME } from "./persist/PaneHistoryFile.js";
 import { formatUrlHost } from "./util/net.js";
+import { runHandoff } from "./handoff/handoffCommand.js";
+import { runPreflightStage } from "./handoff/preflight.js";
 
 function printHelp(): void {
   console.log(
@@ -18,6 +20,7 @@ function printHelp(): void {
       "wtm token reset [--state-dir DIR] [--session NAME]",
       "wtm session list [--state-dir DIR] [--json]",
       "wtm session delete NAME [--state-dir DIR] [--json]",
+      "wtm handoff [--state-dir DIR] [--session NAME]",
     ].join("\n"),
   );
 }
@@ -109,6 +112,12 @@ async function runServe(args: RawServeArgs): Promise<void> {
       portRemembered: remembered !== undefined,
     });
     for (const line of lines) console.log(line);
+    // 更新時の引き継ぎで起動したときの結果（20260926-live-handoff）。
+    const handoff = server.handoffResult;
+    if (handoff !== undefined) {
+      console.log(`wtm: handoff complete: ${handoff.adopted} pane(s) kept running`);
+      if (handoff.dropped > 0) console.error(`wtm: ${handoff.dropped} handed-off pane(s) could not be kept (see server.log)`);
+    }
     tokenShown = true; // `startupLines` は作った token を必ず含む（URL が 1 つも無くても）
   } catch (err) {
     showTokenIfUnshown(); // close() を待つ前に表示する
@@ -135,6 +144,10 @@ async function main(): Promise<void> {
       await runTokenReset(parsed.stateDir ?? defaultStateDir(), parsed.session, consoleIo, parsed.sessionSource);
     } else if (parsed.command === "session-list") {
       process.exitCode = await runSessionList(parsed.stateDir ?? defaultStateDir(), parsed.json === true, consoleIo);
+    } else if (parsed.command === "handoff") {
+      process.exitCode = await runHandoff(parsed.stateDir ?? defaultStateDir(), parsed.session, consoleIo, parsed.sessionSource);
+    } else if (parsed.command === "handoff-preflight") {
+      runPreflightStage({ stage: parsed.preflightStage ?? 1, probe: parsed.preflightProbe });
     } else if (parsed.command === "session-delete") {
       process.exitCode = await runSessionDelete(parsed.stateDir ?? defaultStateDir(), parsed.sessionTarget!, parsed.json === true, consoleIo);
     } else {
