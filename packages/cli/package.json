@@ -13,6 +13,7 @@
     "smoke": "node --enable-source-maps dist/smoke.js"
   },
   "dependencies": {
+    "@sodashitsu/client-core": "workspace:*",
     "@sodashitsu/protocol": "workspace:*",
     "ws": "^8.21.3"
   },

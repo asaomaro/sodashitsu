@@ -1,5 +1,6 @@
-import type { Graph, GraphLink, GraphNode, GraphOp } from "@sodashitsu/protocol";
+import type { Graph, GraphLink, GraphNode, GraphOp, NodeKey } from "@sodashitsu/protocol";
 import { defaultApprovalConfig, LINK_LIMIT_DEFAULT } from "./defaults.js";
+import { graphNodeRect, nextFreeGraphPosition } from "./geometry.js";
 import { validateGraph, type GraphIssue } from "./validate.js";
 
 /** 採番の続き（消した線の id を使い回さない。`graph.json` に保存する）。 */
@@ -128,4 +129,33 @@ export function applyGraphOps(state: GraphDraftState, ops: readonly GraphOp[]): 
   const issues = validateGraph(graph);
   if (issues.length > 0) return { ok: false, issues };
   return { ok: true, graph, nextLinkId };
+}
+
+/**
+ * 載っていない鍵を載せる `add_node`（画面の「pane を載せる」と同じ置き方: 今のノードの右隣に縦に並べる）。載っている鍵・同じ鍵の 2 回目は飛ばす。
+ * sodactl の `graph node add`・`graph link add`（端のノードを一緒に載せる）が使う。
+ */
+export function addMissingNodeOps(
+  graph: Pick<Graph, "nodes">,
+  keys: readonly NodeKey[],
+): GraphOp[] {
+  const present = new Set<string>(graph.nodes.map((n) => n.key));
+  const rects = graph.nodes.map(graphNodeRect);
+  const ops: GraphOp[] = [];
+  for (const key of keys) {
+    if (present.has(key)) continue;
+    present.add(key);
+    ops.push({ op: "add_node", key, ...nextFreeGraphPosition(rects, ops.length) });
+  }
+  return ops;
+}
+
+/**
+ * サーバの採番の続き（`nextLinkId`）を知らないクライアントが、`graph.update` を送る前に同じ規則で当ててみる（問題が無ければ空）。
+ * 採番は今の線の最大の番号の次とみなす（検証は番号の値に依らない）。
+ */
+export function checkGraphOps(graph: Graph, ops: readonly GraphOp[]): GraphIssue[] {
+  const maxId = graph.links.reduce((m, l) => Math.max(m, Number(l.id.slice(1)) || 0), 0);
+  const r = applyGraphOps({ graph, nextLinkId: maxId + 1 }, ops);
+  return r.ok ? [] : r.issues;
 }

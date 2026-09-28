@@ -24,7 +24,7 @@
 
 ## タスク
 
-- [ ] T1: `sodactl graph` の引数の解析（`show`・`link add|set|rm|pause|resume`・`pause`・`resume`・`node add|rm|rekey`・`history`、`--machine`・`--json`）と出力
+- [x] T1: `sodactl graph` の引数の解析（`show`・`link add|set|rm|pause|resume`・`pause`・`resume`・`node add|rm|rekey`・`history`、`--machine`・`--json`）と出力
       対象: `packages/cli/src/cliArgs.ts`・`packages/cli/src/output.ts`・（新規 `packages/cli/src/commands/graph.ts`）・`packages/client-core/src/graph/ops.ts`
       依存: なし
       AC: AC15

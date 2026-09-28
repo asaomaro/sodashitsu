@@ -149,6 +149,9 @@ pane の中の sodactl は、次の操作の対象が**自分の pane**（`$SODA
 - 状態: `sodactl snapshot`・`sodactl watch`
 - エージェント: `sodactl agent list`・`sodactl agent get`・`sodactl agent wait`・`sodactl agent read`・`sodactl agent prompt`・`sodactl agent send-keys`・
   `sodactl agent rename`・`sodactl agent start`
+- 連携のグラフ: `sodactl graph show`・`sodactl graph link add`・`sodactl graph link set`・`sodactl graph link rm`・`sodactl graph link pause`・
+  `sodactl graph link resume`・`sodactl graph pause`・`sodactl graph resume`・`sodactl graph node add`・`sodactl graph node rm`・
+  `sodactl graph node rekey`・`sodactl graph history`
 - この説明: `sodactl skill`
 - 別のマシン: 前置き `sodactl --machine <名前|id> <コマンド> …`（手元の soda serve に `soda machine add` で登録したマシンへ送る。login・skill 以外）。
   id（pane・エージェントの名前を含む）はマシンごとに別なので、そのマシンの `snapshot`・`agent list` で調べた id を使う。`--machine` のときは自分の pane の歯止めは効かない。

@@ -24,6 +24,50 @@ export function printRaw(text: string): void {
   process.stdout.write(text);
 }
 
+/**
+ * 端末での見た目の幅（全角・CJK は 2、それ以外は 1）。表の桁をそろえるだけの目安（結合文字・絵文字の細かい幅は見ない）。
+ */
+export function displayWidth(text: string): number {
+  let w = 0;
+  for (const ch of text) {
+    const c = ch.codePointAt(0)!;
+    const wide =
+      (c >= 0x1100 && c <= 0x115f) ||
+      (c >= 0x2e80 && c <= 0xa4cf) ||
+      (c >= 0xac00 && c <= 0xd7a3) ||
+      (c >= 0xf900 && c <= 0xfaff) ||
+      (c >= 0xfe30 && c <= 0xfe4f) ||
+      (c >= 0xff00 && c <= 0xff60) ||
+      (c >= 0xffe0 && c <= 0xffe6) ||
+      (c >= 0x1f300 && c <= 0x1faff) ||
+      (c >= 0x20000 && c <= 0x3fffd);
+    w += wide ? 2 : 1;
+  }
+  return w;
+}
+
+/**
+ * 見出しと行を、列の幅をそろえた表の文字列にする（`soda session list` と同じく空白 2 つで区切り、最後の列は詰めない。行末の空白は落とす）。
+ * 20260927-agent-graph の `sodactl graph` の表で使う。
+ */
+export function formatTable(
+  header: readonly string[],
+  rows: readonly (readonly string[])[],
+): string {
+  const all = [header, ...rows];
+  const widths = header.map((_, i) => Math.max(...all.map((r) => displayWidth(r[i] ?? ""))));
+  return all
+    .map((r) =>
+      r
+        .map((cell, i) =>
+          i === r.length - 1 ? cell : cell + " ".repeat(widths[i]! - displayWidth(cell)),
+        )
+        .join("  ")
+        .trimEnd(),
+    )
+    .join("\n");
+}
+
 interface Classified {
   code: string;
   message: string;

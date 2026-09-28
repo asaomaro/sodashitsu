@@ -1,4 +1,13 @@
-import { AGENT_START_KINDS } from "@sodashitsu/protocol";
+import {
+  AGENT_START_KINDS,
+  GRAPH_HISTORY_PER_LINK,
+  GRAPH_LINKS_MAX,
+  LINK_LIMIT_MAX,
+  LINK_LIMIT_MIN,
+  LINK_LINES_MAX,
+  LINK_LINES_MIN,
+  type LinkKind,
+} from "@sodashitsu/protocol";
 import { AGENT_STATUSES, type AgentStatus } from "./agentStatus.js";
 import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
 
@@ -41,6 +50,18 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl agent send-keys <target> <key>... [--url <URL>] [--token <TOKEN>]",
   "sodactl agent rename <target> <name>|--clear [--url <URL>] [--token <TOKEN>]",
   "sodactl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [--url <URL>] [--token <TOKEN>] [-- <args>...]",
+  "sodactl graph show [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl graph link add <from> <to> [--kind trigger|supervise|approval] [--on done|blocked] [--prompt <text>] [--output <N>|--no-output] [--when-busy wait|skip] [--mode notify|delegate] [--lines <N>] [--limit <N>] [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl graph link set <linkId> [--on done|blocked] [--prompt <text>] [--output <N>|--no-output] [--when-busy wait|skip] [--mode notify|delegate] [--lines <N>] [--limit <N>] [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl graph link rm <linkId> [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl graph link pause <linkId> [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl graph link resume <linkId> [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl graph pause [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl graph resume [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl graph node add <pane>... [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl graph node rm <pane> [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl graph node rekey <pane> <newPane> [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl graph history [<linkId>] [--limit <N>] [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl skill",
 ];
 
@@ -53,6 +74,7 @@ const USAGE = [
   MACHINE_USAGE_LINE,
   "（<target> は pane ID か、agent rename で付けた名前）",
   "（report-metadata の --token は、値が = を含めば独自トークンの NAME=VALUE、含まなければ接続の token）",
+  "（graph の <from> <to> <pane> は pane ID・agent rename の名前・<マシンの名前|id>:<pane ID>〔soda machine で登録した別のマシンの pane〕）",
 ].join("\n");
 
 /** `--machine` の値の上限（文字数。サーバの `?machine=` の上限と同じ）。 */
@@ -110,6 +132,38 @@ export type PaneTarget =
   | { kind: "caller"; paneId: string; explicit: boolean }
   | { kind: "focused" };
 
+/**
+ * `graph link add|set` の線の設定（20260927-agent-graph の 05）。省いた項目は、add なら既定値（client-core の `defaults`）、set なら今の値のまま。
+ * `output: null` は `--no-output`（受け渡さない）。どの項目がどの種類の線に使えるかは、add は引数の解析で、set は線の種類を知った実行時に見る。
+ */
+export interface GraphLinkConfigArgs {
+  on?: "done" | "blocked";
+  prompt?: string;
+  output?: number | null;
+  whenBusy?: "wait" | "skip";
+  mode?: "notify" | "delegate";
+  lines?: number;
+  limit?: number;
+}
+
+/**
+ * `sodactl graph …` の操作。ノード・線の端（`from`・`to`・`pane`）は利用者が書いたまま（pane ID・エージェントの名前・`<マシン>:<pane ID>`）で、
+ * ノードの鍵（`local:p3`・`<machineId>:p7`）への解決は接続した後（名前は snapshot と `machine.list` で引く。`commands/graph.ts`）。
+ */
+export type GraphAction =
+  | { kind: "show" }
+  | { kind: "link-add"; from: string; to: string; linkKind: LinkKind; config: GraphLinkConfigArgs }
+  | { kind: "link-set"; linkId: string; config: GraphLinkConfigArgs }
+  | { kind: "link-rm"; linkId: string }
+  | { kind: "link-pause"; linkId: string }
+  | { kind: "link-resume"; linkId: string }
+  | { kind: "pause" }
+  | { kind: "resume" }
+  | { kind: "node-add"; panes: string[] }
+  | { kind: "node-rm"; pane: string }
+  | { kind: "node-rekey"; pane: string; newPane: string }
+  | { kind: "history"; linkId: string | undefined; limit: number | undefined };
+
 export type Command =
   | { kind: "help" }
   | { kind: "skill" }
@@ -161,7 +215,9 @@ export type Command =
       paneId: string;
       timeoutMs: number | undefined;
       args: string[];
-    };
+    }
+  // 20260927-agent-graph の 05。`json` は表でなく JSON で出す。
+  | { kind: "graph"; opts: GlobalOpts; json: boolean; action: GraphAction };
 
 const DEFAULT_READ_TIMEOUT_MS = 5000;
 /** herdr の `agent read` の既定（recent の 80 行）。 */
@@ -306,6 +362,8 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
       return parsePane(word1, rest0, env);
     case "agent":
       return parseAgent(word1, rest0, env);
+    case "graph":
+      return parseGraph(word1, rest0, env);
     default:
       throw new CliUsageError(`unknown command: ${word0}`, USAGE);
   }
@@ -678,6 +736,168 @@ function parseAgentStart(rest: readonly string[], env: NodeJS.ProcessEnv): Comma
     timeoutMs: timeoutRaw === undefined ? undefined : Number(timeoutRaw),
     args,
   };
+}
+
+const GRAPH_USAGE = USAGE_LINES.filter((l) => l.startsWith("sodactl graph ")).join("\n");
+const LINK_ID_RE = /^l[1-9][0-9]*$/;
+/** 線の設定のフラグ（`link add`・`link set` で共通）。 */
+const LINK_CONFIG_VALUES = ["--on", "--prompt", "--output", "--when-busy", "--mode", "--lines", "--limit"] as const;
+/** トリガの線だけの項目・承認の代理の線だけの項目（`--limit` はどの線にも使える）。 */
+export const TRIGGER_ONLY_FLAGS = ["--on", "--prompt", "--output", "--no-output", "--when-busy"] as const;
+export const APPROVAL_ONLY_FLAGS = ["--mode", "--lines"] as const;
+
+function parseIntRange(raw: string, flag: string, min: number, max: number): number {
+  const n = Number(raw);
+  if (!/^[0-9]+$/.test(raw) || !Number.isInteger(n) || n < min || n > max) {
+    throw new CliUsageError(`invalid value for ${flag}: ${raw}`, `${flag} には ${min}〜${max} の整数を指定してください。`);
+  }
+  return n;
+}
+
+function parseChoice<T extends string>(raw: string, flag: string, choices: readonly T[]): T {
+  const found = choices.find((c) => c === raw);
+  if (found === undefined) throw new CliUsageError(`invalid value for ${flag}: ${raw}`, `${flag} には ${choices.join("|")} のどれかを指定してください。`);
+  return found;
+}
+
+function parseLinkId(raw: string): string {
+  if (!LINK_ID_RE.test(raw)) throw new CliUsageError(`invalid link id: ${raw}`, "線の id は l1・l2… の形です（sodactl graph show で見られます）。");
+  return raw;
+}
+
+/** 線の設定のフラグを読む。書かれたフラグの名前（種類との食い違いの検査に使う）も返す。 */
+function parseLinkConfig(values: Map<string, string>, bools: Set<string>): { config: GraphLinkConfigArgs; given: string[] } {
+  const config: GraphLinkConfigArgs = {};
+  const given = [...LINK_CONFIG_VALUES.filter((f) => values.has(f)), ...(bools.has("--no-output") ? ["--no-output"] : [])];
+  const on = values.get("--on");
+  if (on !== undefined) config.on = parseChoice(on, "--on", ["done", "blocked"] as const);
+  const prompt = values.get("--prompt");
+  if (prompt !== undefined) config.prompt = prompt;
+  const output = values.get("--output");
+  if (output !== undefined && bools.has("--no-output")) throw new CliUsageError("use only one of --output and --no-output", GRAPH_USAGE);
+  if (output !== undefined) config.output = parseIntRange(output, "--output", LINK_LINES_MIN, LINK_LINES_MAX);
+  if (bools.has("--no-output")) config.output = null;
+  const whenBusy = values.get("--when-busy");
+  if (whenBusy !== undefined) config.whenBusy = parseChoice(whenBusy, "--when-busy", ["wait", "skip"] as const);
+  const mode = values.get("--mode");
+  if (mode !== undefined) config.mode = parseChoice(mode, "--mode", ["notify", "delegate"] as const);
+  const lines = values.get("--lines");
+  if (lines !== undefined) config.lines = parseIntRange(lines, "--lines", LINK_LINES_MIN, LINK_LINES_MAX);
+  const limit = values.get("--limit");
+  if (limit !== undefined) config.limit = parseIntRange(limit, "--limit", LINK_LIMIT_MIN, LINK_LIMIT_MAX);
+  return { config, given };
+}
+
+/** 線の種類に使えない設定のフラグを断る（`link set` は線の種類を知った実行時に同じ関数で見る）。 */
+export function assertLinkConfigFits(kind: LinkKind, given: readonly string[]): void {
+  const wrong = given.filter(
+    (f) =>
+      (kind !== "trigger" && (TRIGGER_ONLY_FLAGS as readonly string[]).includes(f)) ||
+      (kind !== "approval" && (APPROVAL_ONLY_FLAGS as readonly string[]).includes(f)),
+  );
+  if (wrong.length > 0) {
+    throw new CliUsageError(
+      `${wrong.join(", ")} cannot be used with a ${kind} link`,
+      "トリガの線: --on・--prompt・--output・--no-output・--when-busy。承認の代理の線: --mode・--lines。--limit はどの線にも使えます。",
+    );
+  }
+}
+
+/** `link set` の設定のフラグのうち書かれたもの（`GraphLinkConfigArgs` から戻す。実行時の種類の検査用）。 */
+export function givenLinkConfigFlags(config: GraphLinkConfigArgs): string[] {
+  const out: string[] = [];
+  if (config.on !== undefined) out.push("--on");
+  if (config.prompt !== undefined) out.push("--prompt");
+  if (config.output !== undefined) out.push(config.output === null ? "--no-output" : "--output");
+  if (config.whenBusy !== undefined) out.push("--when-busy");
+  if (config.mode !== undefined) out.push("--mode");
+  if (config.lines !== undefined) out.push("--lines");
+  if (config.limit !== undefined) out.push("--limit");
+  return out;
+}
+
+/**
+ * `sodactl graph …`（20260927-agent-graph の 05。AC15）。`link` と `node` は 3 語のコマンド。どのコマンドも `--json`（表の代わりに JSON）を取る。
+ */
+function parseGraph(sub: string | undefined, rest: readonly string[], env: NodeJS.ProcessEnv): Command {
+  const BASE: FlagSpec = { values: ["--url", "--token"], bools: ["--json"] };
+  const done = (parsed: ParsedFlags, action: GraphAction): Command => ({
+    kind: "graph",
+    opts: globalOptsFrom(parsed.values, env),
+    json: parsed.bools.has("--json"),
+    action,
+  });
+  if (sub === "show" || sub === "pause" || sub === "resume") {
+    const parsed = parseFlags(rest, BASE);
+    rejectExtra(parsed.positionals, 0, GRAPH_USAGE);
+    return done(parsed, { kind: sub });
+  }
+  if (sub === "history") {
+    const parsed = parseFlags(rest, { ...BASE, values: [...BASE.values!, "--limit"] });
+    rejectExtra(parsed.positionals, 1, GRAPH_USAGE);
+    const linkId = parsed.positionals[0];
+    const limit = parsed.values.get("--limit");
+    return done(parsed, {
+      kind: "history",
+      linkId: linkId === undefined ? undefined : parseLinkId(linkId),
+      limit: limit === undefined ? undefined : parseIntRange(limit, "--limit", 1, GRAPH_HISTORY_PER_LINK * GRAPH_LINKS_MAX),
+    });
+  }
+  if (sub === "link") return parseGraphLink(rest[0], rest.slice(1), BASE, done);
+  if (sub === "node") return parseGraphNode(rest[0], rest.slice(1), BASE, done);
+  throw new CliUsageError(`unknown subcommand: sodactl graph ${sub ?? ""}`.trimEnd(), GRAPH_USAGE);
+}
+
+type GraphDone = (parsed: ParsedFlags, action: GraphAction) => Command;
+
+function parseGraphLink(sub: string | undefined, rest: readonly string[], base: FlagSpec, done: GraphDone): Command {
+  const configSpec: FlagSpec = { values: [...base.values!, ...LINK_CONFIG_VALUES], bools: [...base.bools!, "--no-output"] };
+  if (sub === "add") {
+    const parsed = parseFlags(rest, { ...configSpec, values: [...configSpec.values!, "--kind"] });
+    const from = requirePositional(parsed.positionals, 0, "from", GRAPH_USAGE);
+    const to = requirePositional(parsed.positionals, 1, "to", GRAPH_USAGE);
+    rejectExtra(parsed.positionals, 2, GRAPH_USAGE);
+    const kindRaw = parsed.values.get("--kind");
+    const linkKind = kindRaw === undefined ? "trigger" : parseChoice(kindRaw, "--kind", ["trigger", "supervise", "approval"] as const);
+    const { config, given } = parseLinkConfig(parsed.values, parsed.bools);
+    assertLinkConfigFits(linkKind, given);
+    return done(parsed, { kind: "link-add", from, to, linkKind, config });
+  }
+  if (sub === "set") {
+    const parsed = parseFlags(rest, configSpec);
+    const linkId = parseLinkId(requirePositional(parsed.positionals, 0, "linkId", GRAPH_USAGE));
+    rejectExtra(parsed.positionals, 1, GRAPH_USAGE);
+    const { config, given } = parseLinkConfig(parsed.values, parsed.bools);
+    if (given.length === 0) throw new CliUsageError("nothing to change (give at least one of --on, --prompt, --output, --no-output, --when-busy, --mode, --lines, --limit)", GRAPH_USAGE);
+    return done(parsed, { kind: "link-set", linkId, config });
+  }
+  if (sub === "rm" || sub === "pause" || sub === "resume") {
+    const parsed = parseFlags(rest, base);
+    const linkId = parseLinkId(requirePositional(parsed.positionals, 0, "linkId", GRAPH_USAGE));
+    rejectExtra(parsed.positionals, 1, GRAPH_USAGE);
+    return done(parsed, { kind: `link-${sub}`, linkId });
+  }
+  throw new CliUsageError(`unknown subcommand: sodactl graph link ${sub ?? ""}`.trimEnd(), GRAPH_USAGE);
+}
+
+function parseGraphNode(sub: string | undefined, rest: readonly string[], base: FlagSpec, done: GraphDone): Command {
+  const parsed = parseFlags(rest, base);
+  if (sub === "add") {
+    requirePositional(parsed.positionals, 0, "pane", GRAPH_USAGE);
+    return done(parsed, { kind: "node-add", panes: parsed.positionals });
+  }
+  if (sub === "rm") {
+    const pane = requirePositional(parsed.positionals, 0, "pane", GRAPH_USAGE);
+    rejectExtra(parsed.positionals, 1, GRAPH_USAGE);
+    return done(parsed, { kind: "node-rm", pane });
+  }
+  if (sub === "rekey") {
+    const pane = requirePositional(parsed.positionals, 0, "pane", GRAPH_USAGE);
+    const newPane = requirePositional(parsed.positionals, 1, "newPane", GRAPH_USAGE);
+    rejectExtra(parsed.positionals, 2, GRAPH_USAGE);
+    return done(parsed, { kind: "node-rekey", pane, newPane });
+  }
+  throw new CliUsageError(`unknown subcommand: sodactl graph node ${sub ?? ""}`.trimEnd(), GRAPH_USAGE);
 }
 
 function parseMachinePrefixed(argv: readonly string[], env: NodeJS.ProcessEnv): Command {

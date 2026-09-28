@@ -6,7 +6,7 @@ import {
   emptyGraph,
   LINK_LIMIT_DEFAULT,
 } from "./defaults.js";
-import { applyGraphOps, type GraphDraftState } from "./ops.js";
+import { addMissingNodeOps, applyGraphOps, checkGraphOps, type GraphDraftState } from "./ops.js";
 import { GRAPH_LINK_ID_MAX } from "./validate.js";
 
 // 20260927-agent-graph の T2（ops）：graph.update の操作をまとめて当てる。
@@ -244,5 +244,45 @@ describe("applyGraphOps", () => {
     const before = JSON.stringify(s1);
     ok(s1, [{ op: "move_node", key: A, x: 20, y: 20 }]);
     expect(JSON.stringify(s1)).toBe(before);
+  });
+});
+
+// 20260927-agent-graph の 05 T1：sodactl graph が操作を組み立てて送る前に確かめる。
+describe("addMissingNodeOps", () => {
+  it("載っていない鍵だけを、今のノードの右隣に縦に並べて載せる（同じ鍵の 2 回目は飛ばす）", () => {
+    const g = { nodes: [{ key: A as NodeKey, x: 40, y: 40 }] };
+    expect(addMissingNodeOps(g, [A, B, R, B])).toEqual([
+      { op: "add_node", key: B, x: 300, y: 40 },
+      { op: "add_node", key: R, x: 300, y: 160 },
+    ]);
+  });
+  it("ノードが無ければ左上から", () => {
+    expect(addMissingNodeOps({ nodes: [] }, [A])).toEqual([
+      { op: "add_node", key: A, x: 40, y: 40 },
+    ]);
+  });
+});
+
+describe("checkGraphOps", () => {
+  it("当てられる操作は空、当てられない操作は問題を返す（採番の続きを知らなくても線の検証は同じ）", () => {
+    const g: Graph = {
+      ...emptyGraph(),
+      nodes: [
+        { key: A, x: 0, y: 0 },
+        { key: B, x: 240, y: 0 },
+      ],
+      links: [{ id: "l7", kind: "supervise", from: A, to: B, limit: 10, count: 0, paused: null }],
+    };
+    expect(
+      checkGraphOps(g, [
+        { op: "add_link", kind: "trigger", from: A, to: B, trigger: defaultTriggerConfig() },
+      ]),
+    ).toEqual([]);
+    expect(
+      checkGraphOps(g, [{ op: "add_link", kind: "supervise", from: A, to: B }]).map((i) => i.code),
+    ).toEqual(["duplicate_link"]);
+    expect(checkGraphOps(g, [{ op: "remove_link", id: "l9" }]).map((i) => i.code)).toEqual([
+      "unknown_link",
+    ]);
   });
 });

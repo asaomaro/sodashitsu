@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CliUsageError } from "./cliArgs.js";
-import { printJson, printLine, reportAndExit } from "./output.js";
+import { printJson, printLine, reportAndExit, displayWidth, formatTable } from "./output.js";
 import { UnauthenticatedError } from "./withSession.js";
 import { AuthError, RpcFailure } from "./wsClient.js";
 
@@ -86,5 +86,19 @@ describe("reportAndExit — 終了コードとエラーの分類（design「終�
     const writeSpy = vi.mocked(process.stderr.write);
     reportAndExit("just a string");
     expect(writeSpy).toHaveBeenCalledWith(JSON.stringify({ error: { code: "internal", message: "just a string" } }) + "\n");
+  });
+});
+
+// 20260927-agent-graph の 05 T1：sodactl graph の表。
+describe("formatTable・displayWidth", () => {
+  it("列の幅をそろえ（最後の列は詰めない）、行末の空白を落とす", () => {
+    expect(formatTable(["link", "kind", "note"], [["l1", "trigger", "x"], ["l12", "supervise", ""]])).toBe(
+      ["link  kind       note", "l1    trigger    x", "l12   supervise"].join("\n"),
+    );
+  });
+  it("全角は幅 2 として数える", () => {
+    expect(displayWidth("abc")).toBe(3);
+    expect(displayWidth("監督")).toBe(4);
+    expect(formatTable(["a", "b"], [["監督", "1"], ["x", "2"]])).toBe(["a     b", "監督  1", "x     2"].join("\n"));
   });
 });
