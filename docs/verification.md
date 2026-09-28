@@ -883,6 +883,81 @@ AC11 の LAN 用（8443・`~/.local/state/soda-lan`）の `soda serve` を止め
       ペースト不可（xterm.js upstream #3727）。実機で再現するか確認し、再現しても既知の upstream
       課題として扱う（本製品のコードでは回避しない）。
 
+## 端末版（20260927-cli-mode）
+
+引数なしの `soda` で開く端末版（`docs/tui.md`）を、3 環境の実物の端末で確かめる手順（20260927-cli-mode の AC16。対象は AC1〜AC14 と AC18）。
+機能ごとの扱いは `docs/tui-parity.md`。
+
+### 自動で確かめられる部分（Linux・WSL2）
+
+```sh
+pnpm -s build
+node scripts/tui-pty-verify.mjs            # 疑似端末（node-pty）で soda を一巡。数秒。成功で終了コード 0・「tui-pty-verify: OK」
+node packages/tui/dist/bench/latency.js    # 性能（AC17）。十数秒。--json で 1 行の JSON
+```
+
+- `scripts/tui-pty-verify.mjs` は、一時の状態ディレクトリ・空いているポートで、起動と描画 → pane への入力 → `prefix+q` で終了コード 0・サーバは動き続ける
+  → 再接続で同じ画面とスクロールバック（ホイールで遡る）→ 端末版 2 つの同時接続 → ブラウザ相当のクライアント（ローカルログインの cookie で `/ws`）との
+  同時接続を確かめ、最後にサーバを止めて一時ディレクトリを消す（AC1・AC2・AC3・AC11・AC12）。ビルドはしないので先に `pnpm -s build`。Windows では何もせず成功で終わる。
+- `packages/tui/dist/bench/latency.js` は入力から描画までの遅延（1 pane・大量出力の隣・16 pane）とエージェントの表示の反映を測る。目安と、手で測る残り
+  （本物のエージェントの 5 状態の遷移）は `packages/tui/src/bench/README.md`。共有のマシンでは 1 回だけ走らせる。
+- 単体・結合のテスト（`pnpm test`）は偽の外側の端末で画面の文字を確かめる。**実物の端末エミュレータでの見え方・マウス・IME・通知・貼り付けは下の手作業で**確かめる。
+
+### 対象の端末
+
+| 環境 | 確かめる端末 |
+|---|---|
+| Windows ネイティブ | Windows Terminal（PowerShell）・VS Code の統合端末 |
+| WSL2 | Windows Terminal・VS Code の統合端末 |
+| Linux | VS Code の統合端末（Remote/devcontainer を含む）・tmux の中（任意の端末の上） |
+| SSH 越し | 上のいずれかから SSH で入った先 |
+
+デスクトップ通知（OSC 9/99/777）は上の端末のうち対応するもの（Windows Terminal の OSC 777）だけを見る。kitty・WezTerm・Ghostty は判定の単体テストで扱い、実機は任意。
+
+### 各端末での一巡
+
+新しい状態ディレクトリで始める（利用者の本物の session を汚さない）。終わったら `soda session stop default --state-dir <同じ場所>` で止めて消す。
+
+```sh
+d=$(mktemp -d); soda --state-dir "$d"     # Linux・WSL2
+```
+
+```powershell
+$d = Join-Path $env:TEMP "soda-tui-check"; soda --state-dir $d   # Windows ネイティブ
+```
+
+1. **起動（AC1・AC2）**: 裏でサーバが起動し、標準エラーに初回の token が出てから、サイドバー（Spaces）・tab バー・pane の枠が描かれる。
+   端末の大きさを変えると追従する。幅 64 桁未満で 1 列表示になる。もう 1 つ端末を開いて `soda --state-dir <同じ場所>` を打つと、起動せずに同じサーバへ繋ぐ。
+2. **pane（AC6）**: `vim`・`htop`（Windows は `edit`・`winget` 等の全画面のもの）が崩れない。`printf '\e[38;2;255;100;0mTRUE\e[0m\n'` が橙色（24 ビット色の端末）。
+   全角の文字・絵文字の幅がずれない。IME で日本語を入れると候補窓が pane のカーソルの位置に出る。`vim` の `:set mouse=a` でクリックが vim へ届く。
+   複数行を貼り付けると 1 回で入る（ブラケットペースト）。
+3. **操作（AC5・AC8・AC-I1〜AC-I5）**: `docs/tui.md`「キー」の表を上から一通り。名前変更は Enter で確定・Esc で元のまま。実行中のプロセスがある pane を閉じると確認が出る。
+   設定（`prefix+s`）の「キー」でプリセット「tmux」に替えるとブラウザでも替わる。
+4. **マウス（AC7・AC9）**: `docs/tui.md`「マウス」を一通り（境界・サイドバーの幅・区画の境界・tab と workspace の並べ替え・pane の名前のドラッグで分割/置き換え/移動・
+   右クリックのメニュー・ホイール・スクロールバー・選択とコピー・ダブルクリック・Ctrl+クリックのリンク）。選択してコピーした文字を、外側の端末の貼り付けで別の場所に貼れる。
+5. **切り離しと再接続（AC3）**: pane で `seq 1 500` を出してから `prefix+q`。終了コード 0 で元の画面に戻る（`echo $?`）。端末の窓ごと閉じる・SSH を切る場合も試す。
+   もう一度 `soda --state-dir <同じ場所>` で、同じ構成・同じ画面に戻り、ホイールで 1 まで遡れる。**Windows では、端末の窓を閉じてもサーバが残る**
+   （`soda session list --state-dir $d` が running）ことを確かめる（WMI の起動。失敗して普通の起動に落ちたときは起動時に知らせが出る）。
+6. **ブラウザとの同時接続（AC11・AC12）**: 1. の token でブラウザからも同じサーバ（`http://127.0.0.1:7780` 等。起動時の案内の URL）を開く。
+   片方で分割・名前変更・入力・設定（テーマ）を変えると、もう片方にすぐ出る。同じ tab を見ているとき、最後にキーを打った側の大きさに pane が合い、
+   もう片方は左上合わせで切り取られる（右下に `⋯`）。端末版を 2 つ同時に開いても壊れない。
+7. **エージェント（AC10）と通知（AC13）**: pane で Claude Code 等を動かし、サイドバーの Agents に名前と状態が 2 秒以内に出る。入力待ち・完了で
+   トースト（右下）が出て、音の設定が入ならベルが鳴る。Windows Terminal では設定「端末版 → 通知の出し方」を OSC 777 にしてデスクトップ通知が出る
+   （端末側で受ける設定が要る版がある）。`prefix+o` で対象の pane へ移る。
+8. **複数ホスト（AC14）**: 登録したマシン（`docs/machines.md`）がサイドバーにマシンの見出しで並び、クリックで切り替えて操作できる。
+9. **認証（AC18）**: 状態ディレクトリの `local-auth.json` を別の利用者から読めない（Linux・WSL2 は `ls -l` で `-rw-------`）。
+   `curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:7780/api/local-login -H 'content-type: application/json' -d '{"secret":"x"}'` が 401 か 403。
+   cookie なしの `/ws` は繋がらない（ブラウザのログアウト後に端末版を開き直すと、端末版は秘密を読み直して繋がる）。
+10. **入れ子と tmux**: pane の中で `soda` を打つと終了コード 1 で断る（`--allow-nested` で開く）。tmux の中で開き、`Ctrl+B Ctrl+B` で端末版の prefix が効く。
+11. **SSH 越し（AC4）**: SSH で入った先で 1.〜7. を行う。コピーは OSC 52 で手元の端末のクリップボードへ届く。通知と 24 ビット色は設定・`SODA_TRUECOLOR=1` で指定する。
+
+### うまくいかないとき
+
+- 起動しない・案内が出て終わる: `docs/tui.md`「起動できないとき」。
+- 色が 256 色になる: `SODA_TRUECOLOR=1 soda …` か設定「色の出し方（この端末だけ）」。
+- マウスが効かない: 設定「端末版 → マウスを使う」が入か。外側の端末がマウスの報告に対応しているか。
+- キーが効かない: 外側の端末が先に取っている（`docs/tui.md`「外側の端末との衝突」「区別できないキー」）。
+
 ## 性能の計測（AC17）
 
 requirements.md の非機能要件（目安）：**応答性**——同一 LAN での接続で、キー入力から画面へ反映されるまでの追加の遅延が
