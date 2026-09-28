@@ -113,6 +113,10 @@ describe("resolveMachineSelector（--machine と同じ引き方）", () => {
       expect.objectContaining({ code: "machine_not_found" }),
     );
     expect(resolveMachineSelector("e".repeat(32), MACHINES)).toBe("e".repeat(32));
+    // 載せる・結ぶ端（allowUnlisted: false）では一覧に無い id を通さない（g05 点検）。
+    expect(() => resolveMachineSelector("e".repeat(32), MACHINES, false)).toThrow(
+      expect.objectContaining({ code: "machine_not_found" }),
+    );
   });
 });
 
@@ -132,6 +136,32 @@ describe("GraphContext.resolve（端の指定 → ノードの鍵）", () => {
     await expect(c.resolve("p9", true)).rejects.toMatchObject({ code: "not_found" });
     expect(await c.resolve("p9", false)).toBe("local:p9");
     await expect(c.resolve("ghost", false)).rejects.toMatchObject({ code: "not_found" });
+  });
+  it("一覧に無い 32 桁の id は、外す・選び直す前の端（mustExist でない）だけ通す（g05 点検）", async () => {
+    const c = ctx();
+    await expect(c.resolve(`${"e".repeat(32)}:p1`, true)).rejects.toMatchObject({
+      code: "machine_not_found",
+    });
+    expect(await c.resolve(`${"e".repeat(32)}:p1`, false)).toBe(`${"e".repeat(32)}:p1`);
+  });
+  it("エージェントの名前の解決は agent 系（resolveAgentTarget）と同じ順（g05 点検）", async () => {
+    const snap = {
+      panes: [
+        { id: "p1", tabId: "t1", agent: { name: "p2" } }, // 名前が pane ID の形
+        { id: "p2", tabId: "t1" }, // エージェントの居ない pane
+        { id: "p3", tabId: "t1", agent: { name: "p4" } },
+        { id: "p4", tabId: "t1", agent: { name: "x" } }, // エージェントの居る pane
+      ],
+      tabs: [],
+    } as unknown as SessionSnapshot;
+    const c = new GraphContext(fakeClient({}), snap);
+    // p2: pane p2 にはエージェントが居ないので、名前 p2 のエージェント（p1）。agent get p2 と同じ。
+    expect(await c.resolve("p2", true)).toBe("local:p1");
+    // p4: pane p4 にエージェントが居るので pane p4（名前 p4 の p3 ではない）。
+    expect(await c.resolve("p4", true)).toBe("local:p4");
+    // エージェントの居ない pane も端にできる（名前に当たらなければ pane）。
+    const plain = new GraphContext(fakeClient({}), SNAPSHOT);
+    expect(await plain.resolve("p3", true)).toBe("local:p3");
   });
   it("別のマシンの pane は pane ID だけ（名前は引けない）", async () => {
     await expect(ctx().resolve("box:reviewer", true)).rejects.toBeInstanceOf(CliUsageError);
@@ -371,6 +401,16 @@ describe("runGraph", () => {
         "l2    supervise  box:p2  p1  0/10   paused",
       ].join("\n"),
     );
+  });
+});
+
+describe("表の制御文字（g05 点検）", () => {
+  it("履歴の文面に混ざった C1・双方向の上書きは表で \\uXXXX に逃がす", () => {
+    const text = formatHistory([
+      { linkId: "l1", at: 0, result: "sent", text: "ok\u202e\u009b31m\u001b]0;x\u0007" },
+    ]);
+    expect(text).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/);
+    expect(text).toContain("ok\\u202e\\u009b31m");
   });
 });
 

@@ -71,6 +71,7 @@ export class GraphContext {
     const machine = resolveMachineSelector(
       selector,
       selector === LOCAL_MACHINE ? [] : await this.machineList(),
+      !mustExist,
     );
     if (machine === LOCAL_MACHINE) return nodeKey(LOCAL_MACHINE, this.localPane(pane, mustExist));
     if (!PANE_ID_RE.test(pane)) {
@@ -82,13 +83,15 @@ export class GraphContext {
     return nodeKey(machine, pane);
   }
 
+  /**
+   * 手元の端。規則は agent 系のコマンドの `resolveAgentTarget`（`agentTarget.ts`）と同じ順: その ID の pane にエージェントが居ればその pane →
+   * その名前のエージェント（2 つ以上なら `agent_target_ambiguous`）→ ただし graph の端はエージェントの居ない pane でもよいので、最後にその ID の pane
+   * （エージェント名は `p9` のように pane ID の形もとりうるので、agent 系と同じ pane を指すように順をそろえる。g05 点検）。
+   * 見つからなければ、`mustExist` でない（外す・選び直す前のノード）pane ID の形はそのまま、それ以外は `not_found`。
+   */
   private localPane(spec: string, mustExist: boolean): string {
-    if (PANE_ID_RE.test(spec)) {
-      if (mustExist && !this.snapshot.panes.some((p) => p.id === spec))
-        throw new RpcFailure("not_found", `pane not found: ${spec}`);
-      return spec;
-    }
-    // エージェントの名前（agent rename で付けたもの）。
+    const byId = this.snapshot.panes.find((p) => p.id === spec);
+    if (byId?.agent) return byId.id;
     const named = this.snapshot.panes.filter((p) => p.agent?.name === spec);
     if (named.length > 1) {
       throw new RpcFailure(
@@ -96,9 +99,13 @@ export class GraphContext {
         `agent target ${spec} is ambiguous; candidates: ${named.map((p) => p.id).join(", ")}`,
       );
     }
-    const match = named[0];
-    if (match === undefined) throw new RpcFailure("not_found", `pane or agent not found: ${spec}`);
-    return match.id;
+    if (named[0] !== undefined) return named[0].id;
+    if (byId !== undefined) return byId.id;
+    if (PANE_ID_RE.test(spec)) {
+      if (mustExist) throw new RpcFailure("not_found", `pane not found: ${spec}`);
+      return spec;
+    }
+    throw new RpcFailure("not_found", `pane or agent not found: ${spec}`);
   }
 
   /** 表に出すノードの呼び方（手元は `p3`、別のマシンは `<名前>:p7`。名前が引けない・重なるなら id）。 */
@@ -115,11 +122,12 @@ export class GraphContext {
 
 /**
  * マシンの指定を id にする（`--machine` と同じ: id の完全一致 → 名前の完全一致が 1 台）。`local` は手元。一覧に無い 32 桁の 16 進は
- * そのまま id として通す（登録から外したマシンのノードを外す・選び直すため）。
+ * `allowUnlisted` のときだけそのまま id として通す（登録から外したマシンのノードを外す・選び直す前の端を指すため）。
  */
 export function resolveMachineSelector(
   selector: string,
   machines: readonly MachineStatus[],
+  allowUnlisted = true,
 ): string {
   if (selector === LOCAL_MACHINE) return LOCAL_MACHINE;
   const byId = machines.find((m) => m.id === selector);
@@ -132,7 +140,8 @@ export function resolveMachineSelector(
       `${byLabel.length} saved machines are named ${JSON.stringify(selector)}; use the id (check: soda machine list)`,
     );
   }
-  if (MACHINE_ID_RE.test(selector)) return selector;
+  // 一覧に無い id は、外す・選び直す前のノードを指すときだけ（載せる・結ぶ端では打ち間違いで動かない線を作らない。g05 点検）。
+  if (allowUnlisted && MACHINE_ID_RE.test(selector)) return selector;
   throw new RpcFailure(
     "machine_not_found",
     `no saved machine matches ${JSON.stringify(selector)} (check: soda machine list)`,

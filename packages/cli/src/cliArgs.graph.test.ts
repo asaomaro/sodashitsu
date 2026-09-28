@@ -145,6 +145,25 @@ describe("parseArgs — graph", () => {
     );
   });
 
+  it("--prompt=<文面> の形で -- で始まる文面も渡せる。離した形で -- で始まれば案内つきの使い方の誤り（g05 点検）", () => {
+    expect(
+      parseArgs(["graph", "link", "add", "p1", "p2", "--prompt=--help を読んで a=b"], noEnv),
+    ).toMatchObject({
+      action: { config: { prompt: "--help を読んで a=b" } },
+    });
+    expect(parseArgs(["graph", "link", "set", "l1", "--prompt="], noEnv)).toMatchObject({
+      action: { config: { prompt: "" } },
+    });
+    const err = usageError(["graph", "link", "add", "p1", "p2", "--prompt", "--help"]);
+    expect(err.message).toBe("missing value for --prompt");
+    expect(err.hint).toContain("--prompt=<値>");
+    // ほかのフラグ・ほかのコマンドの = の形は今までどおり未知のオプション。
+    expect(() => parseArgs(["graph", "link", "add", "p1", "p2", "--limit=3"], noEnv)).toThrow(
+      /unknown option: --limit=3/,
+    );
+    expect(() => parseArgs(["pane", "read", "p1", "--timeout=5"], noEnv)).toThrow(/unknown option/);
+  });
+
   it("link set: 変える項目が 1 つは要る。種類の検査は実行時（線の種類をまだ知らない）", () => {
     expect(parseArgs(["graph", "link", "set", "l3", "--mode", "delegate"], noEnv)).toMatchObject({
       action: { kind: "link-set", linkId: "l3", config: { mode: "delegate" } },

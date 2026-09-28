@@ -46,15 +46,33 @@ export function displayWidth(text: string): number {
   return w;
 }
 
+/* eslint-disable no-control-regex -- 制御文字を逃がすための正規表現 */
+/** 端末へそのまま出さない文字（server の `machineRules` の `CONTROL_RE` と同じ集合: C0・DEL・C1・LRM/RLM・行/段落の区切り・双方向の上書き）。 */
+const TABLE_CONTROL_RE =
+  /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
+/* eslint-enable no-control-regex */
+
+/**
+ * 表に出す文字列の制御文字を `\uXXXX` の形に逃がす（g05 点検。履歴の文面〔受け渡した画面の文章〕などに混ざった C1・双方向の上書きで、
+ * 利用者の端末の表示を偽装させない）。
+ */
+export function escapeControl(text: string): string {
+  return text.replace(
+    TABLE_CONTROL_RE,
+    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+}
+
 /**
  * 見出しと行を、列の幅をそろえた表の文字列にする（`soda session list` と同じく空白 2 つで区切り、最後の列は詰めない。行末の空白は落とす）。
- * 20260927-agent-graph の `sodactl graph` の表で使う。
+ * 20260927-agent-graph の `sodactl graph` の表で使う。セルの制御文字は `escapeControl` で逃がす。
  */
 export function formatTable(
   header: readonly string[],
   rows: readonly (readonly string[])[],
 ): string {
-  const all = [header, ...rows];
+  // 中身の制御文字は逃がしてから幅を測る（どの列も利用者やエージェントが書いた文字を含みうる）。
+  const all = [header, ...rows].map((r) => r.map(escapeControl));
   const widths = header.map((_, i) => Math.max(...all.map((r) => displayWidth(r[i] ?? ""))));
   return all
     .map((r) =>

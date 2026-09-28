@@ -125,7 +125,7 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     );
     viewer = ws;
 
-    injectConflict = async () => {
+    injectConflict = moveFirstNode = async () => {
       // 画面が配置を動かした、に当たる別の変更（rev が 1 進む）。
       const g = server.graph.get();
       const node = g.nodes[0];
@@ -138,10 +138,13 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     };
   }, 30_000);
   let viewer: WebSocket;
+  /** 既定の割り込み（配置の移動）。試験ごとに差し替えた割り込みは後で戻す。 */
+  let moveFirstNode: () => Promise<void>;
 
   // 割り込ませる変更の残りを次の試験へ持ち越さない（送り直しを壊したときに、後の試験まで巻き込んで落ちないように）。
   afterEach(() => {
     conflictsToInject = 0;
+    injectConflict = moveFirstNode;
   });
 
   afterAll(async () => {
@@ -338,5 +341,60 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     }
     const removed = await graph({ kind: "link-rm", linkId: "l1" });
     expect(removed.graph.links).toEqual([]);
+  });
+
+  // g05 点検（T2）: 送り直しは、取り直したグラフから操作を組み立て直す（最初の操作をそのまま送り直すと、割り込んだ変更を消す・ぶつかる）。
+  it("割り込みで同じ線の文面が変わった後の link set は、新しい文面を保ったまま書いた項目だけを変える", async () => {
+    const [p1, p2] = panes as [string, string];
+    const made = await graph<{ link: GraphLink }>({
+      kind: "link-add",
+      from: p1,
+      to: p2,
+      linkKind: "trigger",
+      config: { prompt: "古い文面" },
+    });
+    const id = made.link.id;
+    injectConflict = async () => {
+      const g = server.graph.get();
+      const link = g.links.find((l) => l.id === id)!;
+      await server.graph.update(
+        g.rev,
+        [{ op: "update_link", id, trigger: { ...link.trigger!, prompt: "画面で書き換えた文面" } }],
+        "other-browser",
+      );
+    };
+    conflictsToInject = 1;
+    const r = await graph({ kind: "link-set", linkId: id, config: { whenBusy: "skip", limit: 4 } });
+    expect(conflictsToInject).toBe(0);
+    expect(r.graph.links.find((l) => l.id === id)).toMatchObject({
+      limit: 4,
+      trigger: { prompt: "画面で書き換えた文面", whenBusy: "skip" },
+    });
+  });
+
+  it("割り込みで端のノードが載った後の link add は、ノードを二重に載せず（duplicate_node にならず）線を作る", async () => {
+    const [, p2, , p4] = panes as [string, string, string, string];
+    expect(server.graph.get().nodes.map((n) => n.key)).not.toContain(local(p4));
+    injectConflict = async () => {
+      const g = server.graph.get();
+      await server.graph.update(
+        g.rev,
+        [{ op: "add_node", key: local(p4) as never, x: 0, y: 400 }],
+        "other-browser",
+      );
+    };
+    conflictsToInject = 1;
+    const r = await graph<{ link: GraphLink; graph: Graph }>({
+      kind: "link-add",
+      from: p2,
+      to: p4,
+      linkKind: "trigger",
+      config: {},
+    });
+    expect(conflictsToInject).toBe(0);
+    expect(r.link).toMatchObject({ from: local(p2), to: local(p4) });
+    expect(r.graph.nodes.filter((n) => n.key === local(p4))).toEqual([
+      { key: local(p4), x: 0, y: 400 },
+    ]);
   });
 });

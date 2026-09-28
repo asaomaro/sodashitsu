@@ -74,7 +74,7 @@ const USAGE = [
   MACHINE_USAGE_LINE,
   "（<target> は pane ID か、agent rename で付けた名前）",
   "（report-metadata の --token は、値が = を含めば独自トークンの NAME=VALUE、含まなければ接続の token）",
-  "（graph の <from> <to> <pane> は pane ID・agent rename の名前・<マシンの名前|id>:<pane ID>〔soda machine で登録した別のマシンの pane〕）",
+  "（graph の <from> <to> <pane> は pane ID・agent rename の名前・<マシンの名前|id>:<pane ID>〔soda machine で登録した別のマシンの pane〕。-- で始まる文面は --prompt=<text>）",
 ].join("\n");
 
 /** `--machine` の値の上限（文字数。サーバの `?machine=` の上限と同じ）。 */
@@ -230,6 +230,11 @@ interface FlagSpec {
   values?: readonly string[];
   /** 値を1つ取り、繰り返し指定できるフラグ（`--until <status>` 等）。 */
   multi?: readonly string[];
+  /**
+   * `values` のうち `--flag=値` の形も受けるもの（`graph link add|set` の `--prompt`。`--` で始まる文面を渡すため。g05 点検）。
+   * 最初の `=` で分け、後ろは `=` を含めてそのまま値にする。
+   */
+  inline?: readonly string[];
 }
 
 interface ParsedFlags {
@@ -250,6 +255,7 @@ function parseFlags(rest: readonly string[], spec: FlagSpec): ParsedFlags {
   const bools = new Set(spec.bools ?? []);
   const values = new Set(spec.values ?? []);
   const multi = new Set(spec.multi ?? []);
+  const inline = new Set(spec.inline ?? []);
   const positionals: string[] = [];
   const outValues = new Map<string, string>();
   const outBools = new Set<string>();
@@ -266,9 +272,17 @@ function parseFlags(rest: readonly string[], spec: FlagSpec): ParsedFlags {
       outBools.add(arg);
       continue;
     }
+    const eq = arg.indexOf("=");
+    if (eq > 0 && inline.has(arg.slice(0, eq))) {
+      outValues.set(arg.slice(0, eq), arg.slice(eq + 1));
+      continue;
+    }
     if (values.has(arg) || multi.has(arg)) {
       const v = rest[++i];
-      if (v === undefined || v.startsWith("--")) throw new CliUsageError(`missing value for ${arg}`, `${arg} には値が要ります。`);
+      if (v === undefined || v.startsWith("--")) {
+        const more = inline.has(arg) ? `（-- で始まる値は ${arg}=<値> の形で渡してください）` : "";
+        throw new CliUsageError(`missing value for ${arg}`, `${arg} には値が要ります。${more}`);
+      }
       if (multi.has(arg)) {
         outMulti.set(arg, [...(outMulti.get(arg) ?? []), v]);
         sequence.push([arg, v]);
@@ -851,7 +865,11 @@ function parseGraph(sub: string | undefined, rest: readonly string[], env: NodeJ
 type GraphDone = (parsed: ParsedFlags, action: GraphAction) => Command;
 
 function parseGraphLink(sub: string | undefined, rest: readonly string[], base: FlagSpec, done: GraphDone): Command {
-  const configSpec: FlagSpec = { values: [...base.values!, ...LINK_CONFIG_VALUES], bools: [...base.bools!, "--no-output"] };
+  const configSpec: FlagSpec = {
+    values: [...base.values!, ...LINK_CONFIG_VALUES],
+    bools: [...base.bools!, "--no-output"],
+    inline: ["--prompt"],
+  };
   if (sub === "add") {
     const parsed = parseFlags(rest, { ...configSpec, values: [...configSpec.values!, "--kind"] });
     const from = requirePositional(parsed.positionals, 0, "from", GRAPH_USAGE);
