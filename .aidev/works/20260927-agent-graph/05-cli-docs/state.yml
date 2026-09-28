@@ -1,8 +1,8 @@
 schema: 11
 slug: 05-cli-docs
 parent: 20260927-agent-graph
-current: tasks
-approved: [tasks]
+current: review
+approved: [tasks, coding, test, review]
 mode: autonomous
 profile: full
 humanGates: []
