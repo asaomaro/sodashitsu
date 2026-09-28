@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentInfo, Graph, GraphLink, LinkRun } from "@sodashitsu/protocol";
 import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import type { GraphAction } from "./cliArgs.js";
 import { runGraph } from "./commands/graph.js";
@@ -138,6 +138,11 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     };
   }, 30_000);
   let viewer: WebSocket;
+
+  // 割り込ませる変更の残りを次の試験へ持ち越さない（送り直しを壊したときに、後の試験まで巻き込んで落ちないように）。
+  afterEach(() => {
+    conflictsToInject = 0;
+  });
 
   afterAll(async () => {
     viewer?.close();
