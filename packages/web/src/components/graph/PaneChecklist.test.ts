@@ -289,3 +289,31 @@ describe("PaneChecklist（別のマシンを見ている間・未接続。g04 �
     w2.unmount();
   });
 });
+
+describe("PaneChecklist（切れたマシンの古い要約。04 レビュー R1）", () => {
+  it("切れたマシンの pane は載せられない（載っているものは外せる）", async () => {
+    seed();
+    const M = "a".repeat(32);
+    const machines = useMachinesStore();
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }]);
+    machines.applySummarySnapshot(M, {
+      protocol: 1,
+      serverVersion: "t",
+      host: { os: "linux", windowsBuild: null, hostname: "h" },
+      workspaces: [{ id: "w1", label: "infra", tabIds: ["t1"] } as never],
+      tabs: [{ id: "t1", workspaceId: "w1" } as never],
+      panes: [paneOf("p4", "t1"), paneOf("p5", "t1")],
+      groups: [],
+      focus: null,
+      limits: { scrollbackLines: 5000 },
+    });
+    machines.setSummaryConnected(M, false);
+    const w = mount(PaneChecklist, { attachTo: document.body });
+    await nextTick();
+    const box = (k: string) => w.find<HTMLInputElement>(`[data-pane-key="${k}"]`).element;
+    expect(box(`${M}:p4`).disabled).toBe(false); // 載っている（外せる）
+    expect(box(`${M}:p5`).disabled).toBe(true);
+    expect(box("local:p2").disabled).toBe(false);
+    w.unmount();
+  });
+});

@@ -25,6 +25,8 @@ interface Row {
   key: NodeKey;
   name: string;
   note: string | null;
+  /** 載せられない（マシンが繋がっていない。最後の要約の pane は今あるとは限らない。載っているものは外せる。04 レビュー R1）。 */
+  disabled?: boolean;
 }
 interface Section {
   id: string;
@@ -62,7 +64,12 @@ function sectionsOf(machine: string, machineLabel: string | null): Section[] {
         for (const pane of session.panes.values()) {
           if (pane.tabId !== tabId) continue;
           const key = nodeKey(machine, pane.id);
-          rows.push({ key, name: paneNameOf(pane), note: noteOf(key, pane.agent?.label ?? null) });
+          rows.push({
+            key,
+            name: paneNameOf(pane),
+            note: noteOf(key, pane.agent?.label ?? null),
+            disabled: !connected && !initialOnGraph.has(key),
+          });
         }
       }
       if (rows.length > 0)
@@ -81,6 +88,7 @@ function sectionsOf(machine: string, machineLabel: string | null): Section[] {
         key,
         name: summaryPaneName(paneId, p),
         note: noteOf(key, p.agent?.label ?? null),
+        disabled: !summary.connected && !initialOnGraph.has(key),
       });
     }
     if (rows.length > 0)
@@ -215,6 +223,7 @@ onMounted(() => {
           <input
             type="checkbox"
             :checked="checked.has(r.key)"
+            :disabled="r.disabled"
             :data-pane-key="r.key"
             @change="toggle(r.key, ($event.target as HTMLInputElement).checked)"
           />

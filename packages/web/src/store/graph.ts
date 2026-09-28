@@ -379,10 +379,13 @@ export const useGraphStore = defineStore("graph", () => {
     const machines = useMachinesStore();
     if (machine === machines.selectedId) {
       const state = useViewStore().connectionState;
-      if (state === "open") return true;
-      if (state !== "connecting") return false;
       const session = useSessionStore();
-      return session.panes.size > 0 || session.workspaces.size > 0;
+      const hasContent = session.panes.size > 0 || session.workspaces.size > 0;
+      // 切り替えの直後（選んだマシンを替え session を捨てた後、接続の行き先を替える前）は、接続はまだ前のマシンへ open のまま。
+      // session に hello の中身（clientId）も中身も無ければ、選んだマシンにはまだ繋がっていない（ノードを一瞬 ⚠ 無効と出さない。04 レビュー R1）。
+      if (state === "open") return session.clientId !== null || hasContent;
+      if (state !== "connecting") return false;
+      return hasContent;
     }
     return machines.summaries[machine]?.connected === true;
   }

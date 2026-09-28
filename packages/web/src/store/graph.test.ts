@@ -425,3 +425,33 @@ describe("store/graph（g03 点検 T1）", () => {
     expect(calls.filter((c) => c.method === "graph.update")).toHaveLength(1);
   });
 });
+
+describe("store/graph（切り替えの途中。04 レビュー R1）", () => {
+  it("選んだマシンを替えて session を捨てた直後（接続はまだ前のマシンへ open）のノードは無効でなく未接続", async () => {
+    const machines = useMachinesStore();
+    const M = "b".repeat(32);
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }]);
+    useViewStore().onConnectionState("open");
+    const session = useSessionStore();
+    session.applySnapshot(
+      {
+        protocol: 1,
+        serverVersion: "t",
+        host: { os: "linux", windowsBuild: null, hostname: "h" },
+        workspaces: [],
+        tabs: [],
+        panes: [paneOf("p1", "t1")],
+        groups: [],
+        focus: null,
+        limits: { scrollbackLines: 5000 },
+      },
+      "c1",
+    );
+    const g = useGraphStore();
+    expect(g.nodeInfo("local:p1").exists).toBe(true);
+    expect(g.nodeInfo("local:p9").exists).toBe(false);
+    machines.select(M);
+    session.clear();
+    expect(g.nodeInfo(`${M}:p1`).exists).toBeNull();
+  });
+});
