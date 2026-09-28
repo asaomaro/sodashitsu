@@ -120,13 +120,19 @@ export class XtermMirror implements Mirror {
     this.disposables.push(this.term.parser.registerOscHandler(4, (data) => this.handlePaletteQuery(data)));
 
     // OSC 9;4 は進捗（Windows Terminal/ConEmu 方式）。design「OSC の取得」。
+    // OSC 9;9 は場所（Windows Terminal 方式。中身は Windows のパスそのもの。20260928-windows-pane-cwd の D-5）。Windows で差し込む
+    // シェルの知らせ（`pty/shellCwdTracking.ts`）と、自分のプロンプトで 9;9 を出す利用者の両方を受ける。どのプラットフォームでも受ける。
     this.disposables.push(
       this.term.parser.registerOscHandler(9, (data) => {
         if (data.startsWith("4;")) {
           this.latestProgress = data;
           return true;
         }
-        return false; // 通常の通知（OSC 9）は関与しない
+        if (data.startsWith("9;")) {
+          const cwd = parseOsc9Cwd(data);
+          if (cwd !== null) this.latestCwd = cwd;
+        }
+        return false; // 通常の通知（OSC 9）の処理は妨げない
       }),
     );
     // OSC 7 は cwd（file://host/path）。design「OSC の取得」。
@@ -379,6 +385,20 @@ export function parseOsc7(data: string, platform: NodeJS.Platform = process.plat
   } catch {
     return null;
   }
+}
+
+/**
+ * OSC 9;9（`ESC ] 9 ; 9 ; "<path>" ST` か引用符なし。Windows Terminal の場所の知らせ）から場所を取り出す（20260928-windows-pane-cwd の D-5）。
+ * `data` は OSC 9 のハンドラが受ける中身（先頭の `9;` を除いた `9;"<path>"`）。中身は符号化しないパスそのもの（`%`・`#`・空白・非 ASCII・UNC を
+ * そのまま運ぶ）。両端の `"` を外し、サーバが Windows なら `win32.normalize`。9;9 でない・パスが空なら null（場所を変えない）。
+ */
+export function parseOsc9Cwd(data: string, platform: NodeJS.Platform = process.platform): string | null {
+  if (!data.startsWith("9;")) return null;
+  let path = data.slice(2);
+  if (path.length >= 2 && path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1);
+  path = sanitizeOsc(path);
+  if (path === "") return null;
+  return platform === "win32" ? win32.normalize(path) : path;
 }
 
 /** タイトルに紛れ込みうる制御文字を落とす（design「安全化済み」）。 */

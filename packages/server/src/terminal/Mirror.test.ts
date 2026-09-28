@@ -1,6 +1,6 @@
 import { DEFAULT_THEME, TERMINAL_PALETTES } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
-import { XtermMirror, parseOsc7 } from "./Mirror.js";
+import { XtermMirror, parseOsc7, parseOsc9Cwd } from "./Mirror.js";
 import { sanitizeHistoryAnsi } from "./historyAnsi.js";
 
 function writeAndWait(mirror: XtermMirror, data: string): Promise<void> {
@@ -121,6 +121,49 @@ describe("XtermMirror — serialize / bottomLines / OSC capture", () => {
     expect(parseOsc7("file://host/C:", "win32")).toBe("C:\\");
     expect(parseOsc7("file://host/C:/Users/u", "linux")).toBe("/C:/Users/u");
     expect(parseOsc7("file://host/home/u", "win32")).toBe("/home/u");
+  });
+
+  // 20260928-windows-pane-cwd の D-5：Windows Terminal の場所の知らせ（OSC 9;9）も pane の場所として受ける。
+  it("OSC 9;9 の場所（引用符あり・なし）を cwdHint として受ける", async () => {
+    const mirror = new XtermMirror(20, 3, 1000);
+    await writeAndWait(mirror, '\x1b]9;9;"/home/user/my work"\x1b\\');
+    expect(mirror.cwdHint()).toBe("/home/user/my work");
+    await writeAndWait(mirror, "\x1b]9;9;/srv/a#b%20c\x07");
+    expect(mirror.cwdHint(), "符号化しない（% や # もそのまま）").toBe("/srv/a#b%20c");
+    mirror.dispose();
+  });
+
+  it("OSC 9;9 の後の OSC 7 は今までどおり場所を上書きする", async () => {
+    const mirror = new XtermMirror(20, 3, 1000);
+    await writeAndWait(mirror, '\x1b]9;9;"/a"\x07');
+    await writeAndWait(mirror, "\x1b]7;file://host/b\x07");
+    expect(mirror.cwdHint()).toBe("/b");
+    mirror.dispose();
+  });
+
+  it("ほかの OSC 9（通知・進捗）は場所を変えず、進捗も今までどおり受ける", async () => {
+    const mirror = new XtermMirror(20, 3, 1000);
+    await writeAndWait(mirror, '\x1b]9;9;"/keep"\x07');
+    await writeAndWait(mirror, "\x1b]9;hello\x07");
+    await writeAndWait(mirror, "\x1b]9;4;1;42\x07");
+    await writeAndWait(mirror, "\x1b]9;9;\x07"); // 空の 9;9 も場所を消さない
+    await writeAndWait(mirror, '\x1b]9;9;""\x07');
+    expect(mirror.cwdHint()).toBe("/keep");
+    expect(mirror.progress()).toBe("4;1;42");
+    mirror.dispose();
+  });
+
+  it("OSC 9;9 の中身：両端の引用符を外し、サーバが Windows のときだけ win32.normalize で直す", () => {
+    expect(parseOsc9Cwd('9;"C:\\Users\\u\\My Work"', "win32")).toBe("C:\\Users\\u\\My Work");
+    expect(parseOsc9Cwd("9;C:/Users/u/", "win32")).toBe("C:\\Users\\u\\");
+    expect(parseOsc9Cwd('9;"\\\\server\\share\\dir"', "win32")).toBe("\\\\server\\share\\dir");
+    expect(parseOsc9Cwd('9;"C:\\a%b#c\\日本語"', "win32")).toBe("C:\\a%b#c\\日本語");
+    expect(parseOsc9Cwd('9;"C:/Users/u"', "linux")).toBe("C:/Users/u");
+    expect(parseOsc9Cwd("9;/home/u", "linux")).toBe("/home/u");
+    expect(parseOsc9Cwd('9;"', "linux"), "引用符 1 つだけは外さない").toBe('"');
+    for (const data of ["9;", '9;""', "4;1;42", "hello", "99;x"]) {
+      expect(parseOsc9Cwd(data, "win32"), data).toBeNull();
+    }
   });
 
   it("resize updates cols/rows reflected in the next serialize", async () => {
