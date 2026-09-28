@@ -65,6 +65,23 @@ export interface GraphPaneInfo {
   machine: string | null;
 }
 
+/**
+ * 文面の 1 行の中に埋める名前（pane の呼び名は端末のタイトル〔pane の中のプログラムが OSC で決める〕から来うる）。制御文字・双方向の上書きを落とし、
+ * 改行・タブは空白 1 つにする（名前で行を足して文面の指示を偽装させない。05 レビュー R1）。
+ */
+function inlineName(text: string): string {
+  return stripControl(text).replace(/[\n\t]+/g, " ");
+}
+
+/** 名前を文面に埋められる形にした pane の情報。 */
+function cleanInfo(p: GraphPaneInfo): GraphPaneInfo {
+  return {
+    ...p,
+    name: inlineName(p.name),
+    machine: p.machine === null ? null : inlineName(p.machine),
+  };
+}
+
 function where(p: GraphPaneInfo): string {
   return p.machine === null ? "手元" : `マシン ${p.machine}`;
 }
@@ -72,6 +89,7 @@ function where(p: GraphPaneInfo): string {
 /** 監督役への知らせ（design「監督」）。 */
 export function supervisorNotice(subordinates: readonly GraphPaneInfo[]): string {
   const list = subordinates
+    .map(cleanInfo)
     .map((p) => `${p.name}（pane ${p.paneId}・${p.kind ?? "エージェント未検出"}・${where(p)}）`)
     .join(", ");
   const head =
@@ -86,7 +104,8 @@ export function supervisorNotice(subordinates: readonly GraphPaneInfo[]): string
 }
 
 /** 承認の代理で監督役へ送る文面（design「承認の代理」）。`tail` は `outputText` を通した画面の末尾。 */
-export function approvalNotice(sub: GraphPaneInfo, tail: string, config: ApprovalConfig): string {
+export function approvalNotice(raw: GraphPaneInfo, tail: string, config: ApprovalConfig): string {
+  const sub = cleanInfo(raw);
   const machine = sub.machine === null ? "" : `--machine ${sub.machine} `;
   const head = `配下 ${sub.name}（${sub.paneId}${sub.machine === null ? "" : `・マシン ${sub.machine}`}）が承認待ちです。画面の末尾（${config.lines} 行）:\n\n${tail}\n\n`;
   return config.mode === "delegate"
