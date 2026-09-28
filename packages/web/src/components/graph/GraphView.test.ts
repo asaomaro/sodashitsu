@@ -655,6 +655,7 @@ describe("GraphView（pane を載せる/外す・履歴・pane へ移動。03 T4
       links: [],
     });
     const machines = (await import("../../store/machines.js")).useMachinesStore(pinia);
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }]);
     machines.applySummarySnapshot(M, {
       protocol: 1,
       serverVersion: "t",
@@ -1796,5 +1797,43 @@ describe("GraphView（表示の保存の間引き・ノードの中身を位置�
     window.dispatchEvent(pointer("pointerup", { clientX: 460, clientY: 10 }));
     await flush();
     wrapper.unmount();
+  });
+});
+
+describe("GraphView（繋がっていないマシンのノード。g04 点検）", () => {
+  it("切れたマシンのノードは未接続の印で最後の状態を出さず、Enter は画面を閉じずに知らせる", async () => {
+    const M = "a".repeat(32);
+    const t = await openWithGraph({
+      nodes: [
+        { key: "local:p1", x: 0, y: 0 },
+        { key: `${M}:p7`, x: 300, y: 0 },
+      ],
+      links: [],
+    });
+    const machines = (await import("../../store/machines.js")).useMachinesStore(pinia);
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }]);
+    machines.applySummarySnapshot(M, {
+      protocol: 1,
+      serverVersion: "t",
+      host: { os: "linux", windowsBuild: null, hostname: "h" },
+      workspaces: [],
+      tabs: [{ id: "t9", workspaceId: "w9" } as never],
+      panes: [paneOf("p7", "t9", { agent: agentOf("working") })],
+      groups: [],
+      focus: null,
+      limits: { scrollbackLines: 5000 },
+    });
+    machines.setSummaryConnected(M, false);
+    await flush();
+    const n = t.wrapper.find(`[data-node-key="${M}:p7"]`);
+    expect(n.find(".graph-node-warn").text()).toBe("未接続");
+    expect(n.attributes("aria-label")).toContain("マシンに未接続");
+    expect(n.attributes("aria-label")).not.toContain("作業中");
+    await n.trigger("keydown", { key: "Enter" });
+    await flush();
+    expect(t.switcher.switchTo).not.toHaveBeenCalled();
+    expect(t.view.graphOpen).toBe(true);
+    expect(t.view.toasts.at(-1)!.message).toBe("box に繋がっていません（繋がってから移れます）。");
+    t.wrapper.unmount();
   });
 });

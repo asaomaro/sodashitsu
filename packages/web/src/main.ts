@@ -8,6 +8,7 @@ import { createApp, nextTick, watch } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
 import { ActionDispatcherKey, ConnectionKey, DeviceKindKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
 import { PrefsSync } from "./actions/PrefsSync.js";
@@ -359,10 +360,18 @@ const machineSwitcher = new MachineSwitcher({
   retarget: (url) => connection.retarget(url),
   wsUrlFor: (id) => wsUrlFor(wsUrl, id),
   requestWorkspaceFocus: (workspaceId) => void conn.request("workspace.focus", { workspaceId }).catch(() => undefined),
-  requestPaneFocus: (paneId) => {
-    view.focusPane(paneId);
-    void conn.request("pane.focus", { paneId }).catch(() => undefined);
-  },
+  requestPaneFocus: (paneId) =>
+    void focusPaneIfShown(
+      {
+        paneTab: (id) => session.panes.get(id)?.tabId,
+        shownTab: () => view.tabId,
+        focus: (id) => {
+          view.focusPane(id);
+          void conn.request("pane.focus", { paneId: id }).catch(() => undefined);
+        },
+      },
+      paneId,
+    ),
 });
 machineSwitcherBox.current = machineSwitcher;
 

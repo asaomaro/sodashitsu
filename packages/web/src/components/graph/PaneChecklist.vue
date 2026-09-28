@@ -55,6 +55,7 @@ function sectionsOf(machine: string, machineLabel: string | null): Section[] {
   const legend = (ws: string, connected = true): string =>
     (machineLabel === null ? ws : `${machineLabel} / ${ws}`) + (connected ? "" : "（未接続）");
   if (machine === machines.selectedId) {
+    const connected = graph.machineConnected(machine);
     for (const ws of session.workspaces.values()) {
       const rows: Row[] = [];
       for (const tabId of ws.tabIds) {
@@ -64,7 +65,8 @@ function sectionsOf(machine: string, machineLabel: string | null): Section[] {
           rows.push({ key, name: paneNameOf(pane), note: noteOf(key, pane.agent?.label ?? null) });
         }
       }
-      if (rows.length > 0) out.push({ id: `${machine}/${ws.id}`, label: legend(ws.label), rows });
+      if (rows.length > 0)
+        out.push({ id: `${machine}/${ws.id}`, label: legend(ws.label, connected), rows });
     }
     return out;
   }
@@ -92,10 +94,17 @@ const machineSections = computed<Section[]>(() => [
   ...machines.machines.flatMap((m) => sectionsOf(m.id, m.label)),
 ]);
 
-/** 一度も繋がっていない（pane を出せない）登録したマシン。 */
+/**
+ * pane を出せないマシン（一度も繋がっていない。画面の接続が向いているマシンは session が空で繋がっていない＝切り替えの途中・切れた）。
+ * 手元も含める（手元の軽い接続がまだ繋がっていないと、手元の節が黙って消える。g04 点検）。
+ */
 const unreachable = computed(() =>
-  machines.machines
-    .filter((m) => m.id !== machines.selectedId && machines.summaries[m.id]?.everConnected !== true)
+  [{ id: LOCAL_MACHINE_ID, label: "ローカル" }, ...machines.machines]
+    .filter((m) =>
+      m.id === machines.selectedId
+        ? session.workspaces.size === 0 && !graph.machineConnected(m.id)
+        : machines.summaries[m.id]?.everConnected !== true,
+    )
     .map((m) => m.label),
 );
 
@@ -109,9 +118,11 @@ const otherRows = computed<Row[]>(() => {
       const note =
         info.stale || info.exists === false
           ? "無効（pane がありません）"
-          : info.local
-            ? null
-            : info.machineLabel;
+          : info.exists === null
+            ? `${info.machineLabel}（未接続）`
+            : info.local
+              ? null
+              : info.machineLabel;
       return { key: n.key, name: info.name, note };
     });
 });

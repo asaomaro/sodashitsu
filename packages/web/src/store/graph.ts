@@ -62,7 +62,7 @@ export interface GraphNodeInfo {
   name: string;
   agent: AgentInfo | null;
   state: DisplayState | null;
-  /** pane があるか（無い・閉じた＝false。マシンの要約がまだ無い＝null〔分からない〕）。 */
+  /** pane があるか（無い・閉じた＝false。マシンが繋がっていない・要約がまだ無い＝null〔分からない。未接続の印〕）。 */
   exists: boolean | null;
   stale: boolean;
   /** pane のある workspace・tab（分かれば）。 */
@@ -311,6 +311,7 @@ export const useGraphStore = defineStore("graph", () => {
       : (machines.machines.find((m) => m.id === machine)?.label ?? "別のマシン");
     const stale = graph.value?.nodes.find((n) => n.key === key)?.stale === true;
     const base = { key, machine, paneId, local, machineLabel, stale };
+    const connected = machineConnected(machine);
     // 画面の接続が向いているマシンの pane は、session の全体（呼び名・場所）がある。
     if (machine === machines.selectedId) {
       const pane = session.panes.get(paneId);
@@ -320,7 +321,8 @@ export const useGraphStore = defineStore("graph", () => {
           name: `pane ${paneId}`,
           agent: null,
           state: null,
-          exists: false,
+          // 切れている・切り替えの途中（session が空）は「分からない」（無効と出さない。g04 点検）
+          exists: stale ? false : connected ? false : null,
           location: null,
         };
       const agent = pane.agent;
@@ -329,10 +331,11 @@ export const useGraphStore = defineStore("graph", () => {
         ...base,
         name: paneNameOf(pane),
         agent,
-        state: agent
-          ? displayStateFor(agent, seen.getSeenSeq(agent.instanceId, agent.serverSeenSeq))
-          : null,
-        exists: true,
+        state:
+          agent && connected
+            ? displayStateFor(agent, seen.getSeenSeq(agent.instanceId, agent.serverSeenSeq))
+            : null,
+        exists: connected ? true : null,
         location: workspaceId ? { workspaceId, tabId: pane.tabId } : null,
       };
     }
@@ -340,13 +343,12 @@ export const useGraphStore = defineStore("graph", () => {
     const summary = machines.summaries[machine];
     const entry = summary?.panes[paneId];
     if (!entry) {
-      const known = summary?.everConnected === true;
       return {
         ...base,
         name: `pane ${paneId}`,
         agent: null,
         state: null,
-        exists: stale ? false : known ? false : null,
+        exists: stale ? false : connected ? false : null,
         location: null,
       };
     }
@@ -356,12 +358,33 @@ export const useGraphStore = defineStore("graph", () => {
       ...base,
       name: summaryPaneName(paneId, entry),
       agent,
-      state: agent
-        ? displayStateFor(agent, seen.getSeenSeqIn(machine, agent.instanceId, agent.serverSeenSeq))
-        : null,
-      exists: !stale,
+      // 切れたマシンの最後の要約の状態は出さない（未接続の印。g04 点検）
+      state:
+        agent && connected
+          ? displayStateFor(
+              agent,
+              seen.getSeenSeqIn(machine, agent.instanceId, agent.serverSeenSeq),
+            )
+          : null,
+      exists: stale ? false : connected ? true : null,
       location: workspaceId ? { workspaceId, tabId: entry.tabId } : null,
     };
+  }
+
+  /**
+   * そのマシンの pane の情報が今のものか（g04 点検）。画面の接続が向いているマシンは接続が open（起動・切り替えの直後の connecting でも、
+   * session に中身があれば繋がっているとみなす——切り替えの途中は session が空）。ほかのマシンは軽い接続の要約が繋がっているか。
+   */
+  function machineConnected(machine: string): boolean {
+    const machines = useMachinesStore();
+    if (machine === machines.selectedId) {
+      const state = useViewStore().connectionState;
+      if (state === "open") return true;
+      if (state !== "connecting") return false;
+      const session = useSessionStore();
+      return session.panes.size > 0 || session.workspaces.size > 0;
+    }
+    return machines.summaries[machine]?.connected === true;
   }
 
   /** 線の呼び名（「impl → reviewer」。監督・承認の代理は配下 → 監督役）。 */
@@ -391,6 +414,7 @@ export const useGraphStore = defineStore("graph", () => {
     moveNodes,
     nodeInfo,
     linkTitle,
+    machineConnected,
   };
 });
 

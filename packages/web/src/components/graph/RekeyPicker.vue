@@ -26,6 +26,8 @@ interface Row {
   key: NodeKey;
   name: string;
   note: string | null;
+  /** 選べない（マシンが繋がっていない。最後の要約の pane は今あるとは限らない。g04 点検）。 */
+  disabled: boolean;
 }
 
 const rows = computed<Row[]>(() => {
@@ -33,10 +35,17 @@ const rows = computed<Row[]>(() => {
   const out: Row[] = [];
   const push = (key: NodeKey, name: string, agent: string | null): void => {
     if (onGraph.has(key) && key !== props.nodeKey) return;
-    out.push({ key, name, note: key === props.nodeKey ? "同じ番号の今の pane" : agent });
+    const note = key === props.nodeKey ? "同じ番号の今の pane" : agent;
+    out.push({
+      key,
+      name,
+      note: connected ? note : `未接続${note ? `・${note}` : ""}`,
+      disabled: !connected,
+    });
   };
   // 候補はノードと同じマシンの pane（別のマシンのノードを手元の pane に付け替えない。04 で別のマシンのノードにも広げた）。
   const machine = parseNodeKey(props.nodeKey)?.machine ?? LOCAL_MACHINE_ID;
+  const connected = graph.machineConnected(machine);
   if (machines.selectedId === machine) {
     for (const pane of session.panes.values())
       push(nodeKey(machine, pane.id), paneNameOf(pane), pane.agent?.label ?? null);
@@ -51,7 +60,8 @@ const rows = computed<Row[]>(() => {
 const title = computed(() => `無効なノード（${graph.nodeInfo(props.nodeKey).name}）を選び直す`);
 
 function apply(): void {
-  if (chosen.value) emit("pick", chosen.value);
+  if (chosen.value && rows.value.some((r) => r.key === chosen.value && !r.disabled))
+    emit("pick", chosen.value);
 }
 
 function onKeydown(ev: KeyboardEvent): void {
@@ -90,11 +100,21 @@ onMounted(() => {
     <p class="rekey-picker-hint">
       選んだ pane にノードを付け替えます。繋がる線はそのまま残ります。
     </p>
+    <p v-if="rows.some((r) => r.disabled)" class="rekey-picker-empty">
+      このマシンに繋がっていないので選べません（繋がってから選び直してください）。
+    </p>
     <p v-if="rows.length === 0" class="rekey-picker-empty">
       選べる pane がありません（グラフに載っていない pane がありません）。
     </p>
     <label v-for="r in rows" :key="r.key" class="rekey-picker-row">
-      <input v-model="chosen" type="radio" name="rekey" :value="r.key" :data-rekey-key="r.key" />
+      <input
+        v-model="chosen"
+        type="radio"
+        name="rekey"
+        :value="r.key"
+        :data-rekey-key="r.key"
+        :disabled="r.disabled"
+      />
       <span>{{ r.name }}</span>
       <span v-if="r.note" class="rekey-picker-note">{{ r.note }}</span>
     </label>

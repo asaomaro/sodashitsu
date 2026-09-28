@@ -968,6 +968,14 @@ function gotoNode(key: string): void {
   }
   const info = graph.nodeInfo(key as NodeKey);
   const loc = info.location;
+  // 繋がっていないマシン（切り替えられない）は画面を閉じずに知らせる（閉じるだけで何も起きないにしない。g04 点検）。
+  if (
+    info.exists === null ||
+    (info.machine !== machines.selectedId && !machines.isSelectable(info.machine))
+  ) {
+    view.toast(`${info.machineLabel} に繋がっていません（繋がってから移れます）。`);
+    return;
+  }
   if (!loc || info.exists === false) {
     view.toast(`${info.name} の pane が見つかりません。`);
     return;

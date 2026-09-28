@@ -220,3 +220,72 @@ describe("PaneChecklist（別のマシンの節。04 T4）", () => {
     w.unmount();
   });
 });
+
+describe("PaneChecklist（別のマシンを見ている間・未接続。g04 点検）", () => {
+  const M = "a".repeat(32);
+  const snapWith = (panes: ReturnType<typeof paneOf>[]) => ({
+    protocol: 1 as const,
+    serverVersion: "t",
+    host: { os: "linux" as const, windowsBuild: null, hostname: "h" },
+    workspaces: [{ id: "w1", label: "api", tabIds: ["t1"] } as never],
+    tabs: [{ id: "t1", workspaceId: "w1" } as never],
+    panes,
+    groups: [],
+    focus: null,
+    limits: { scrollbackLines: 5000 },
+  });
+
+  it("別のマシンを見ている間: そのマシンの節は session から、手元の節は要約から。同じ pane id でも鍵のマシンを取り違えない", async () => {
+    const machines = useMachinesStore();
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }]);
+    machines.select(M);
+    const session = useSessionStore();
+    session.workspaceUpserted({ id: "w1", label: "infra", tabIds: ["t1"] } as never);
+    session.panes.set("p1", paneOf("p1", "t1", { label: "remote-one" }));
+    machines.applySummarySnapshot("local", snapWith([paneOf("p1", "t1", { label: "local-one" })]));
+    useGraphStore().applyGraph(graphOf({ nodes: [{ key: `${M}:p1`, x: 0, y: 0 }] }), "fresh");
+    const w = mount(PaneChecklist, { attachTo: document.body });
+    await nextTick();
+    expect(w.findAll("legend").map((l) => l.text())).toEqual(["api", "box / infra"]);
+    const rows = w
+      .findAll(".pane-checklist-row")
+      .map((r) => [
+        r.find("input").attributes("data-pane-key"),
+        r.find("span").text(),
+        (r.find("input").element as HTMLInputElement).checked,
+      ]);
+    expect(rows).toEqual([
+      ["local:p1", "local-one", false],
+      [`${M}:p1`, "remote-one", true],
+    ]);
+    w.unmount();
+  });
+
+  it("画面が向いているマシンが切れたら節に（未接続）。切り替えの途中（session が空）は無効と出さず、繋がっていないと書く。手元の要約が一度も繋がっていなければそう書く", async () => {
+    const machines = useMachinesStore();
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }]);
+    const session = useSessionStore();
+    session.workspaceUpserted({ id: "w1", label: "api", tabIds: ["t1"] } as never);
+    session.panes.set("p1", paneOf("p1", "t1"));
+    const { useViewStore } = await import("../../store/view.js");
+    useViewStore().onConnectionState("reconnecting");
+    useGraphStore().applyGraph(graphOf({ nodes: [{ key: `${M}:p5`, x: 0, y: 0 }] }), "fresh");
+    const w = mount(PaneChecklist, { attachTo: document.body });
+    await nextTick();
+    expect(w.findAll("legend").map((l) => l.text())[0]).toBe("api（未接続）");
+    w.unmount();
+
+    // 別のマシンへ切り替えの途中（session が空・connecting）。手元の要約はまだ繋がっていない
+    machines.select(M);
+    session.clear();
+    session.workspaces.clear();
+    useViewStore().onConnectionState("connecting");
+    const w2 = mount(PaneChecklist, { attachTo: document.body });
+    await nextTick();
+    expect(w2.text()).toContain("ローカル: 繋がっていないので pane を出せません。");
+    expect(w2.text()).toContain("box: 繋がっていないので pane を出せません。");
+    expect(w2.text()).toContain("box（未接続）");
+    expect(w2.text()).not.toContain("無効");
+    w2.unmount();
+  });
+});
