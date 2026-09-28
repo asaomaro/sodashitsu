@@ -205,7 +205,9 @@ describe("composeServer: graph.*（20260927-agent-graph）", () => {
       ops: [{ op: "rekey_node", key: A, newKey: `${"f".repeat(32)}:p1` }],
     });
     expect(rekey.error?.code).toBe("invalid_params");
-    expect(rekey.error?.message).toContain("rekey_other_machine");
+    expect((rekey.error as { message?: string } | undefined)?.message).toContain(
+      "rekey_other_machine",
+    );
     expect(((await b.request("graph.get", {})).result as { rev: number }).rev).toBe(1);
   });
 
