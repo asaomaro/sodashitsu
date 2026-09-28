@@ -62,6 +62,9 @@ class FakePort implements AgentPort {
   status(paneId: string): AgentInfo | null {
     return this.agents.get(paneId) ?? null;
   }
+  machineLabel(): string | null {
+    return null;
+  }
   paneName(paneId: string): string | null {
     return this.names.get(paneId) ?? `pane ${paneId}`;
   }

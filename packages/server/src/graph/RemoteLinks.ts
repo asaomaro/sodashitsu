@@ -17,6 +17,7 @@ import type { Disposable } from "../util/Disposable.js";
 import type { Logger } from "../log/Logger.js";
 import type { LinkChannel } from "../machine/MachineLink.js";
 import { LinkChannelSocket, UnavailableSocket } from "./linkChannelSocket.js";
+import { RemoteAgentPort } from "./RemoteAgentPort.js";
 
 /**
  * 別のマシンへの接続（20260927-agent-graph の 04 T1・design D-5・architecture「別のマシン」）。グラフに載っているマシンごとに 1 本、
@@ -41,6 +42,8 @@ export interface RemoteMachines {
 export interface RemoteLinksDeps {
   machines: RemoteMachines;
   logger?: Pick<Logger, "warn">;
+  /** 画面の末尾を待つ上限（試験用。既定は `REMOTE_TAIL_TIMEOUT_MS`）。 */
+  tailTimeoutMs?: number;
 }
 
 /** マシン 1 台への接続。 */
@@ -167,34 +170,45 @@ export class RemoteLink {
 }
 
 export class RemoteLinks {
-  private readonly links = new Map<string, RemoteLink>();
-  private readonly createdCbs = new Set<(link: RemoteLink) => void>();
+  private readonly links = new Map<string, { link: RemoteLink; port: RemoteAgentPort }>();
 
   constructor(private readonly deps: RemoteLinksDeps) {
     deps.machines.onChanged((list) => {
-      for (const m of list) if (m.state === "online") this.links.get(m.id)?.kick();
+      for (const m of list) if (m.state === "online") this.links.get(m.id)?.link.kick();
     });
   }
 
   /** グラフに載っているマシンの集合にそろえる（無ければ開き、外れたら閉じる）。 */
   ensure(machineIds: Iterable<string>): void {
     const want = new Set(machineIds);
-    for (const [id, link] of [...this.links]) {
+    for (const [id, entry] of [...this.links]) {
       if (want.has(id)) continue;
       this.links.delete(id);
-      link.close();
+      entry.link.close();
+      entry.port.dispose();
     }
     for (const id of want) {
       if (this.links.has(id)) continue;
       const link = new RemoteLink(id, () => this.openSocket(id), this.deps.logger);
-      this.links.set(id, link);
-      for (const cb of [...this.createdCbs]) cb(link);
+      // 口は接続より先に購読しておく（最初の hello の snapshot を取りこぼさない）。
+      const port = new RemoteAgentPort(link, {
+        label: () => this.label(id),
+        ...(this.deps.tailTimeoutMs !== undefined
+          ? { tailTimeoutMs: this.deps.tailTimeoutMs }
+          : {}),
+      });
+      this.links.set(id, { link, port });
       link.start();
     }
   }
 
   get(machineId: string): RemoteLink | undefined {
-    return this.links.get(machineId);
+    return this.links.get(machineId)?.link;
+  }
+
+  /** そのマシンの口（`ensure` に含めたマシンだけ）。 */
+  port(machineId: string): RemoteAgentPort | undefined {
+    return this.links.get(machineId)?.port;
   }
 
   /** 開いているマシン（試験用）。 */
@@ -207,17 +221,14 @@ export class RemoteLinks {
     return this.deps.machines.list().find((m) => m.id === machineId)?.label ?? machineId;
   }
 
-  /** 新しい接続を作ったとき（`ensure` の中、`start` の前）。 */
-  onCreated(cb: (link: RemoteLink) => void): Disposable {
-    this.createdCbs.add(cb);
-    return { dispose: () => this.createdCbs.delete(cb) };
-  }
-
   /** 全部閉じる（終了・引き継ぎ。次の `ensure` でまた開ける）。 */
   closeAll(): void {
-    const links = [...this.links.values()];
+    const entries = [...this.links.values()];
     this.links.clear();
-    for (const link of links) link.close();
+    for (const { link, port } of entries) {
+      link.close();
+      port.dispose();
+    }
   }
 
   private openSocket(machineId: string): WebSocketLike {

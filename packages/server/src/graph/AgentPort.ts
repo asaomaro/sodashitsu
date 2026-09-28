@@ -25,12 +25,17 @@ export class AgentPortError extends Error {
 export interface AgentPort {
   /** `"local"` か マシンの id。 */
   readonly machine: string;
-  /** 繋がっていて使えるか（手元は常に true）。 */
+  /**
+   * 繋がっていて使えるか（手元は常に true）。使えない間の `status` は null、`prompt`・`tail` は `machine_unavailable` で断る。
+   * 使えるようになったら（繋ぎ直しを含む）`onAvailability(true)` の時点の `status` が基準（切れている間の変化は知らせない）。
+   */
   available(): boolean;
   onStatus(cb: (e: AgentStatusEvent) => void): Disposable;
   onAvailability(cb: (up: boolean) => void): Disposable;
   /** 今のエージェント（居なければ・pane が無ければ null）。 */
   status(paneId: PaneId): AgentInfo | null;
+  /** マシンの呼び名（手元は null。別のマシンは登録簿の label。監督の知らせ・承認の代理の文面。04）。 */
+  machineLabel(): string | null;
   /** pane の呼び名（`paneNameOf`）。pane が無ければ null。 */
   paneName(paneId: PaneId): string | null;
   /** 画面の末尾 `lines` 行（末尾の空行を除いてから数える。制御文字を落とした平文）。 */

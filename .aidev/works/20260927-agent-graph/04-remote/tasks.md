@@ -29,7 +29,7 @@ web は、チェックリストのマシンの節と別のマシンのノード�
       対象: `packages/server/src/machine/MachineLink.ts:359`（openChannel）・`packages/server/src/machine/MachineRelay.ts:45-49`（手本）・`packages/client-core/src/net/Connection.ts`・（新規 `packages/server/src/graph/RemoteLinks.ts`）
       依存: なし
       AC: AC14
-- [ ] T2: `graph/RemoteAgentPort.ts`（状態の購読・snapshot の基準・`tail`〔SNAPSHOT の末尾・500 行・5 秒〕・`prompt`・`paneName`）
+- [x] T2: `graph/RemoteAgentPort.ts`（状態の購読・snapshot の基準・`tail`〔SNAPSHOT の末尾・500 行・5 秒〕・`prompt`・`paneName`）
       対象: `packages/server/src/graph/AgentPort.ts`・`packages/cli/src/commands/agent.ts:169-184`（手本）・（新規 `RemoteAgentPort.ts`）
       依存: T1
       AC: AC14, AC6

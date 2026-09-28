@@ -43,6 +43,10 @@ export class LocalAgentPort implements AgentPort {
     return this.deps.session.getPane(paneId)?.agent ?? null;
   }
 
+  machineLabel(): null {
+    return null;
+  }
+
   paneName(paneId: PaneId): string | null {
     const pane = this.deps.session.getPane(paneId);
     return pane === undefined ? null : paneNameOf(pane);
