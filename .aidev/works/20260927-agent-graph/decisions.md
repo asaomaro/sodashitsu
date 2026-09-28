@@ -111,3 +111,29 @@
   19. （04 レビュー R1）「作業中とみなす」（D5-15）は、送り始めから送り終える（prompt が返る）までは期限なしにし、届いたらその時点から `ASSUMED_BUSY_MS` を数える（別のマシンの画面の読み取りは直列で最長 10 秒ほどかかり、送り始めから数えると送る前に切れて同じ先へ 2 通送る）。送らずに終えた（resolved・線が消えた・失敗）ときは今までどおり送り始めから数える。
   20. （04 レビュー R1・web）チェックリストでも、切れたマシン（画面が向いているマシンを含む）の pane は載せられない（載っているものは外せる）。選んだマシンを替えて session を捨てた直後（接続はまだ前のマシンへ open）は、session に hello の中身（clientId）も中身も無ければ未接続として扱う（ノードを一瞬 ⚠ 無効と出さない）。
 - **残した懸念**: リモートの再起動・宛先の変更で同じ pane の id が別の pane を指しても、別のマシンのノードは無効にしない（instanceId が変わるので「基準」から始まり、誤って動きはしない）。
+
+## D8 05-cli-docs の実装での読み替え
+
+- **決定**:
+  1. `sodactl graph` の出力は既定が人の読む表（`soda session list` と同じ小文字の見出し・空白 2 つの区切り）、`--json` で JSON。JSON は既存のコマンドと同じく包む:
+     `show` と変更は `{"graph": …}`、`link add` は `{"link": …, "graph": …}`（新しい線の id を読むため）、`history` は `{"runs": […]}`。ほかの sodactl のコマンド（常に JSON）と
+     違うので、skill ファイルには「graph は `--json` を付ける」と書いた。
+  2. 別のマシンの pane は、線の端ごとに `<マシンの名前|id>:<pane ID>`（例 `box:p7`。最後の `:` で分ける）で書く。前置きの `--machine` は今までどおり「そのマシンの
+     `soda serve` へ送る」（＝そのマシンのグラフ）の意味のまま（端が 2 つあり、別々のマシンを指しうるため、1 つの `--machine` では足りない）。名前は `--machine` と同じ引き方
+     （id の完全一致 → 名前の完全一致が 1 台）で `machine.list` から引き、同じ名前が 2 台は `machine_ambiguous`、無ければ `machine_not_found`。登録から外したマシンのノードを
+     外す・選び直すため、一覧に無い 32 桁の 16 進はそのまま id として受ける。手元の端はエージェントの名前（`agent rename`）でも書ける（別のマシンは pane ID だけ）。
+  3. `link add` は端の pane が載っていなければ同じ `graph.update` で一緒に載せる（画面は先に載せてから結ぶ。置き方は画面の「pane を載せる」と同じ `nextFreeGraphPosition`）。
+     client-core の `graph/ops.ts` に `addMissingNodeOps`・`checkGraphOps`（採番の続きを知らないクライアントが送る前に同じ規則で当ててみる）を足し、cli は client-core に
+     依存するようになった（新しい依存。client-core は Node でも使える純粋な TS）。
+  4. `rev_conflict` は、取り直したグラフから操作を**組み立て直して**1 回だけ送り直す（`link set` は最新の設定に書いた項目だけを重ねる。古い設定で上書きしない）。
+     2 回目も衝突したら送り直さず `rev_conflict`（終了コード 1）。`rev_conflict` 以外の失敗は送り直さない。
+  5. `node rekey`（D6-9 の申し送り）は画面と同じく同じマシンの pane にだけ（別のマシンは `invalid_params`）。無効（stale・閉じた pane）のノードに限る検査は CLI では
+     しない（サーバも限らない。線を付け替えるだけで害が無く、別のマシンの pane が閉じたかは CLI から確かめられないため）。付け替え先の手元の pane は今あることを確かめる。
+  6. 線の種類に使えない設定のフラグ（監督の線に `--prompt` 等）は使い方の誤り（終了コード 2）。`link set` は線の種類を知った後（接続の後）に同じ規則で断る。
+     変える項目の無い `link set` も使い方の誤り。`history --limit` は 1〜6400（サーバの上限と同じ）。
+  7. docs は design の `docs/graph.md` ではなく tasks のとおり `docs/agent-graph.md`。`docs/tui-parity.md` に W30（open_graph。端末版は知らせるだけ）を足した。
+  8. 性能（AC17）の「実行の開始」は、先の pane の画面に送った文面が現れた時刻（`agent.prompt` の打ち込みが先に届き始めた）で測る。あわせて Enter まで送り終えた
+     `sent` の時刻（`agent.prompt` は本文の 300ms 後に Enter）と、16 の元が同時に完了する場合も測る。閾値は要件の 2 秒（実測は 20ms 以下）。画面の描画は happy-dom の
+     目安なので粗い上限（3 秒）で固まっていないことだけを確かめる。値は `[graph-perf]` の行で標準出力へ出す。
+  9. skill ファイルの検査（`skill.test.ts`）は `graph link …`・`graph node …` を 3 語のコマンドとして数える。
+- **影響**: test 工程は `[graph-perf]` の行を test-result に写す。
