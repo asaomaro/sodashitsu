@@ -197,24 +197,45 @@ function chipEl(id: string): HTMLElement | null {
 function focusNode(key: string): void {
   selection.value = { kind: "node", key };
   reveal(rects.value.get(key));
-  void nextTick(() => nodeEl(key)?.focus());
+  void nextTick(() => nodeEl(key)?.focus({ preventScroll: true }));
 }
 function focusLink(id: string): void {
   selection.value = { kind: "link", id };
   const e = edges.value.find((x) => x.link.id === id);
   if (e) reveal({ x: e.mid.x - 40, y: e.mid.y - 12, w: 80, h: 24 });
-  void nextTick(() => chipEl(id)?.focus());
+  void nextTick(() => chipEl(id)?.focus({ preventScroll: true }));
 }
 /** フォーカスしたものが画面の外なら入れる（research-ui §2.12）。 */
 function reveal(rect: GraphRect | undefined): void {
   if (rect) viewport.value = revealGraphRect(viewport.value, rect, canvasSize());
 }
+/**
+ * 押したことで来たフォーカスか（押しただけで画面へ入れる移動をすると表示が跳ぶ。g03 点検）。ポインタを押したときに立て、フォーカスか
+ * 離したときに下ろす。キー（Tab 等）で来たフォーカスだけ画面へ入れる。
+ */
+let pointerFocusing = false;
+function onPointerFocusEnd(): void {
+  pointerFocusing = false;
+}
+window.addEventListener("pointerup", onPointerFocusEnd, true);
+window.addEventListener("pointercancel", onPointerFocusEnd, true);
+onBeforeUnmount(() => {
+  window.removeEventListener("pointerup", onPointerFocusEnd, true);
+  window.removeEventListener("pointercancel", onPointerFocusEnd, true);
+});
 function onNodeFocus(key: string): void {
   selection.value = { kind: "node", key };
-  reveal(rects.value.get(key));
+  if (pointerFocusing) pointerFocusing = false;
+  else reveal(rects.value.get(key));
 }
 function onChipFocus(id: string): void {
   selection.value = { kind: "link", id };
+  if (pointerFocusing) {
+    pointerFocusing = false;
+    return;
+  }
+  const e = edges.value.find((x) => x.link.id === id);
+  if (e) reveal({ x: e.mid.x - 40, y: e.mid.y - 12, w: 80, h: 24 });
 }
 
 // --- ドラッグ（ノードの移動・背景のパン）-------------------------------------------------------------------------
@@ -253,7 +274,8 @@ function onNodePointerdown(ev: PointerEvent, key: string): void {
       : { x: snapToGrid(rawX), y: snapToGrid(rawY) };
   };
   selection.value = { kind: "node", key };
-  target.focus();
+  pointerFocusing = true;
+  target.focus({ preventScroll: true });
   drag.start(ev, target, {
     threshold: 4,
     onMove: (e, dx, dy) => graph.setDragPosition(key, posOf(e, dx, dy)),
@@ -394,6 +416,7 @@ function closeSheet(): void {
 let suppressChipClick: string | null = null;
 function onLinkPointerdown(ev: PointerEvent, id: string, source: "edge" | "chip"): void {
   ev.stopPropagation();
+  if (source === "chip") pointerFocusing = true;
   if (ev.button !== 0 && ev.pointerType === "mouse") return;
   if (confirmState.value) return;
   if (checklistOpen.value || panel.value || connectFrom.value) {

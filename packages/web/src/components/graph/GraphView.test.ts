@@ -1091,3 +1091,67 @@ describe("GraphView（書きかけのパネルと線の押し方。g03 点検）
     wrapper.unmount();
   });
 });
+
+describe("GraphView（フォーカスと画面へ入れる。g03 点検）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  const far = {
+    nodes: [
+      { key: "local:p1" as const, x: 0, y: 0 },
+      { key: "local:p2" as const, x: 1400, y: 0 },
+    ],
+  };
+
+  it("押しただけ（動かさない）では画面へ入れる移動をしない（表示が跳ばない）", async () => {
+    const { wrapper } = await openWithGraph({ ...far, links: [] });
+    const world = wrapper.find(".graph-world").element as HTMLElement;
+    const before = world.style.transform;
+    const n2 = wrapper.find('[data-node-key="local:p2"]').element;
+    n2.dispatchEvent(pointer("pointerdown", { clientX: 1410, clientY: 10 }));
+    window.dispatchEvent(pointer("pointerup", { clientX: 1410, clientY: 10 }));
+    await flush();
+    expect(document.activeElement).toBe(n2);
+    expect(world.style.transform).toBe(before);
+    wrapper.unmount();
+  });
+
+  it("Tab でチップへ移ったら、画面の外なら入れる。フォーカスは preventScroll で移す", async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    const { wrapper } = await openWithGraph({
+      ...far,
+      links: [triggerLink("l1", "local:p1", "local:p2")],
+    });
+    const world = wrapper.find(".graph-world").element as HTMLElement;
+    const n2 = wrapper.find('[data-node-key="local:p2"]');
+    // 読み順の最後（p2）の Tab は先頭のチップ（中点 x≈800 は画面の外）へ
+    (n2.element as HTMLElement).focus();
+    await flush();
+    const before = world.style.transform;
+    focus.mockClear();
+    n2.element.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
+    );
+    await flush();
+    expect(document.activeElement?.getAttribute("data-link-chip")).toBe("l1");
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    // チップへ直接フォーカスが来ても（ブラウザの Tab）入れる。ホイールでチップを画面の外へ出してから
+    const chip = wrapper.find('[data-link-chip="l1"]').element as HTMLElement;
+    (wrapper.find(".graph-view").element as HTMLElement).focus();
+    wrapper
+      .find(".graph-canvas")
+      .element.dispatchEvent(
+        new WheelEvent("wheel", { deltaY: 5000, bubbles: true, cancelable: true }),
+      );
+    await flush();
+    const t0 = world.style.transform;
+    expect(t0).not.toBe(before);
+    chip.focus();
+    await flush();
+    expect(world.style.transform).not.toBe(t0);
+    wrapper.unmount();
+  });
+});
