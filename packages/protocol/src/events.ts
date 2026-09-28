@@ -8,6 +8,7 @@ import type {
   WorkspaceGroup,
 } from "./model.js";
 import type { AgentIntegrationStatusResult, SharedPrefs } from "./messages.js";
+import type { Graph, LinkRun } from "./graph.js";
 import type { CommandListResult } from "./commands.js";
 
 /**
@@ -150,6 +151,20 @@ export interface PrefsChangedEvent {
   data: { prefs: SharedPrefs; rev: number; byClientId: string };
 }
 
+/**
+ * 連携のグラフが保存された（`graph.update`・`graph.pause`／`graph.resume`・サーバの実行による回数の変化。20260927-agent-graph）。全クライアントへ配る。
+ * `byClientId` は変えた接続の clientId（サーバ自身の変更——実行の回数・上限での一時停止——は null）。
+ */
+export interface GraphChangedEvent {
+  event: "graph.changed";
+  data: { graph: Graph; byClientId: string | null };
+}
+/** 線が 1 回動いた（送った・待ち・見送り・失敗。20260927-agent-graph）。全クライアントへ配る。 */
+export interface GraphFiredEvent {
+  event: "graph.fired";
+  data: { run: LinkRun };
+}
+
 export type ServerEvent =
   | WorkspaceCreatedEvent
   | WorkspaceUpdatedEvent
@@ -175,6 +190,8 @@ export type ServerEvent =
   | MachineChangedEvent
   | CommandUpdatedEvent
   | CommandPopupClosedEvent
-  | PrefsChangedEvent;
+  | PrefsChangedEvent
+  | GraphChangedEvent
+  | GraphFiredEvent;
 
 export type ServerEventName = ServerEvent["event"];
