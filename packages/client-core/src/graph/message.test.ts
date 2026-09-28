@@ -1,9 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { RUN_TEXT_PREVIEW_CHARS } from "./defaults.js";
+import { MAX_AGENT_PROMPT_BYTES } from "@sodashitsu/protocol";
+import { OUTPUT_MAX_BYTES, RUN_TEXT_PREVIEW_CHARS } from "./defaults.js";
 import {
   approvalNotice,
   buildTriggerText,
+  limitOutput,
   outputText,
   runTextPreview,
   stripControl,
@@ -201,4 +203,68 @@ describe("知らせの文面のマシンの名前の引用", () => {
       }
     },
   );
+});
+
+// 統合レビュー R1：受け渡す画面の末尾はバイト数に上限を置き、文面全体が agent.prompt の上限（1MB）を超えないよう末尾を優先して切る。
+describe("受け渡す末尾のバイト数の上限", () => {
+  const bytes = (t: string): number => new TextEncoder().encode(t).byteLength;
+  /** 約 `n` バイトの多バイト文字の行（1 行 298 バイト）の後ろに `end` の行。 */
+  const huge = (n: number, end: string): string =>
+    `${`${"あ".repeat(99)}\n`.repeat(Math.ceil(n / 298))}${end}`;
+
+  it(`上限（${OUTPUT_MAX_BYTES / 1024}KB）以下はそのまま、超えたら先頭を切って末尾を残し、切ったことを示す`, () => {
+    const fits = "x".repeat(OUTPUT_MAX_BYTES);
+    expect(buildTriggerText("見て: {output}", fits)).toBe(`見て: ${fits}`);
+    const long = huge(OUTPUT_MAX_BYTES, "最後の行");
+    const text = buildTriggerText("見て: {output}", long);
+    expect(text.startsWith("見て: ")).toBe(true);
+    expect(text.endsWith("\n最後の行")).toBe(true);
+    expect(text).toContain("省きました");
+    expect(bytes(text.slice("見て: ".length))).toBeLessThanOrEqual(OUTPUT_MAX_BYTES);
+    // 多バイト文字の途中で切らない（置換の文字 U+FFFD が出ない）
+    expect(text).not.toContain("\uFFFD");
+    // {output} が無い（末尾に足す）線も同じ
+    const appended = buildTriggerText("見て", long);
+    expect(appended.endsWith("\n最後の行")).toBe(true);
+    expect(bytes(appended)).toBeLessThanOrEqual(bytes("見て\n\n") + OUTPUT_MAX_BYTES);
+  });
+
+  it("{output} を何度書いても、文面全体が agent.prompt の上限を超えない（末尾は残る）", () => {
+    const out = huge(3 * MAX_AGENT_PROMPT_BYTES, "END");
+    for (const prompt of [
+      "{output}",
+      "{output}\n{output}\n{output}\n{output}\n{output}",
+      "{output}".repeat(1024), // 8KB の文面いっぱいの差し込み
+      `${"前置き".repeat(400)}{output}${"後書き".repeat(400)}{output}`,
+    ]) {
+      const text = buildTriggerText(prompt, out);
+      expect(bytes(text)).toBeLessThanOrEqual(MAX_AGENT_PROMPT_BYTES);
+      // 切っても使える分はほぼ使い切る（空にしてしまわない）
+      const slots = prompt.split("{output}").length - 1;
+      const room = Math.min(OUTPUT_MAX_BYTES, (MAX_AGENT_PROMPT_BYTES - 8192) / slots);
+      expect(bytes(text)).toBeGreaterThan(slots * room - slots * 400);
+      expect(text.endsWith("END") || text.endsWith("後書き")).toBe(true);
+      expect(text.split("END").length - 1).toBe(prompt.split("{output}").length - 1);
+    }
+  });
+
+  it("limitOutput は多バイト文字の途中で切らず、改行が無ければ文字の境目から残す", () => {
+    for (const ch of ["あ", "🎉", "é"]) {
+      const text = limitOutput(ch.repeat(1000), 400);
+      expect(bytes(text)).toBeLessThanOrEqual(400);
+      expect(text).not.toContain("\uFFFD");
+      const kept = text.slice(text.indexOf("\n") + 1);
+      expect(kept.length).toBeGreaterThan(0);
+      expect(kept).toBe(ch.repeat(kept.length / ch.length));
+    }
+    expect(limitOutput("短い", 400)).toBe("短い");
+  });
+
+  it("承認の代理の画面の末尾も同じ上限で切る", () => {
+    const tail = huge(MAX_AGENT_PROMPT_BYTES, "Allow? (y/n)");
+    const text = approvalNotice(impl, tail, { mode: "delegate", lines: 500 });
+    expect(bytes(text)).toBeLessThanOrEqual(OUTPUT_MAX_BYTES + 1024);
+    expect(text).toContain("省きました");
+    expect(text).toContain("Allow? (y/n)\n\n`sodactl agent send-keys p3 <キー>`");
+  });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   GRAPH_HISTORY_PER_LINK as HISTORY_MAX,
+  MAX_AGENT_PROMPT_BYTES,
   type AgentInfo,
   type AgentState,
   type Graph,
@@ -221,6 +222,20 @@ describe("GraphEngine — トリガ", () => {
     t.done(1);
     await flush();
     expect(t.port.prompts).toHaveLength(1);
+  });
+
+  it("画面の末尾が長くても、送る文面は agent.prompt の上限（1MB）に収めて送る（{output} を 2 つ書いた線でも。統合レビュー R1）", async () => {
+    const t = setup([
+      trigger({ trigger: { ...defaultTriggerConfig(), prompt: "A {output} B {output}" } }),
+    ]);
+    t.port.tailText = `${`${"x".repeat(99)}\n`.repeat((2 * MAX_AGENT_PROMPT_BYTES) / 100)}最後の行`;
+    t.done(1);
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+    const text = t.port.prompts[0]![1];
+    expect(new TextEncoder().encode(text).byteLength).toBeLessThanOrEqual(MAX_AGENT_PROMPT_BYTES);
+    expect(text.endsWith("\n最後の行")).toBe(true);
+    expect(t.runs()).toMatchObject([{ linkId: "l1", result: "sent" }]);
   });
 
   it("受け渡さない線は画面を読まない", async () => {

@@ -1,5 +1,5 @@
-import type { ApprovalConfig } from "@sodashitsu/protocol";
-import { RUN_TEXT_PREVIEW_CHARS } from "./defaults.js";
+import { MAX_AGENT_PROMPT_BYTES, type ApprovalConfig } from "@sodashitsu/protocol";
+import { OUTPUT_MAX_BYTES, RUN_TEXT_PREVIEW_CHARS } from "./defaults.js";
 
 /**
  * 連携で送る文面の組み立て（20260927-agent-graph の design「GraphEngine」・「ドメイン固有の考慮」）。受け渡す画面の文章は、送る前に
@@ -43,15 +43,58 @@ export function outputText(lines: readonly string[]): string {
   return cleaned.slice(start, end).join("\n");
 }
 
+const encoder = new TextEncoder();
+function utf8Bytes(s: string): number {
+  return encoder.encode(s).byteLength;
+}
+
+/** 切ったときに先頭に置く印（`{n}` は省いたバイト数）。 */
+function omittedMark(omitted: number): string {
+  return `（画面の末尾が長いので、先頭の ${omitted} バイトを省きました）\n`;
+}
+
+/**
+ * 受け渡す文章を `maxBytes`（UTF-8）以下にする。超えたら先頭を切って末尾を残し、切ったことを先頭の印で示す（印も `maxBytes` に含む）。
+ * 文字の途中では切らず、残す部分に改行があればその次の行から始める（行の途中から始めない）。
+ */
+export function limitOutput(text: string, maxBytes: number = OUTPUT_MAX_BYTES): string {
+  const bytes = encoder.encode(text);
+  if (bytes.byteLength <= maxBytes) return text;
+  // 印の長さは省く数の桁で変わるので、最大の桁（全体のバイト数）で見積もる。
+  const room = Math.max(0, maxBytes - utf8Bytes(omittedMark(bytes.byteLength)));
+  let start = bytes.byteLength - room;
+  // UTF-8 の続きのバイト（10xxxxxx）から始めない。
+  while (start < bytes.byteLength && (bytes[start]! & 0xc0) === 0x80) start++;
+  const nl = bytes.indexOf(0x0a, start);
+  if (nl !== -1 && nl + 1 < bytes.byteLength) start = nl + 1;
+  const kept = new TextDecoder().decode(bytes.subarray(start));
+  return omittedMark(start) + kept;
+}
+
 /**
  * トリガで送る文面。`output` が null（受け渡さない）なら prompt の `{output}` は空に。`output` があれば `{output}` の位置（すべて）へ、
- * 無ければ末尾に空行を挟んで足す。
+ * 無ければ末尾に空行を挟んで足す。受け渡す文章は 1 か所あたり `OUTPUT_MAX_BYTES` まで、かつ差し込むすべてと文面を合わせて
+ * `agent.prompt` の上限（`MAX_AGENT_PROMPT_BYTES`）を超えないよう、差し込む数で割った長さまでに末尾を優先して切る（統合レビュー R1）。
  */
 export function buildTriggerText(prompt: string, output: string | null): string {
-  if (prompt.includes(OUTPUT_PLACEHOLDER))
-    return prompt.split(OUTPUT_PLACEHOLDER).join(output ?? "");
+  const parts = prompt.split(OUTPUT_PLACEHOLDER);
+  const slots = parts.length - 1;
+  if (slots > 0) {
+    if (output === null || output === "") return parts.join("");
+    const fixed = utf8Bytes(parts.join(""));
+    return parts.join(limitOutput(output, perSlotBytes(fixed, slots)));
+  }
   if (output === null || output === "") return prompt;
-  return prompt.trim() === "" ? output : `${prompt}\n\n${output}`;
+  if (prompt.trim() === "") return limitOutput(output, perSlotBytes(0, 1));
+  return `${prompt}\n\n${limitOutput(output, perSlotBytes(utf8Bytes(prompt) + 2, 1))}`;
+}
+
+/** 差し込み 1 か所に使えるバイト数（文面の残りを差し込みの数で割る。`OUTPUT_MAX_BYTES` まで）。 */
+function perSlotBytes(fixedBytes: number, slots: number): number {
+  return Math.max(
+    0,
+    Math.min(OUTPUT_MAX_BYTES, Math.floor((MAX_AGENT_PROMPT_BYTES - fixedBytes) / slots)),
+  );
 }
 
 /** 監督の知らせ・承認の代理の文面に出す、配下 1 つの情報。 */
@@ -119,6 +162,8 @@ export function supervisorNotice(subordinates: readonly GraphPaneInfo[]): string
 /** 承認の代理で監督役へ送る文面（design「承認の代理」）。`tail` は `outputText` を通した画面の末尾。 */
 export function approvalNotice(raw: GraphPaneInfo, tail: string, config: ApprovalConfig): string {
   const sub = cleanInfo(raw);
+  // 画面の末尾は受け渡しと同じ上限で切る（残りの文面は短い。文面全体が agent.prompt の上限を超えない）。
+  tail = limitOutput(tail);
   const machine = sub.machine === null ? "" : `--machine ${shellWord(sub.machine)} `;
   const head = `配下 ${sub.name}（${sub.paneId}${sub.machine === null ? "" : `・${where(sub)}`}）が承認待ちです。画面の末尾（${config.lines} 行）:\n\n${tail}\n\n`;
   return config.mode === "delegate"

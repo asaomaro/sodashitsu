@@ -11,6 +11,11 @@ export const BUSY_WAIT_MAX_MS = 30 * 60 * 1000;
 export const BLOCKED_HOLD_MS = 1000;
 /** 監督役への知らせをまとめる待ち（D1-5）。 */
 export const SUPERVISOR_DEBOUNCE_MS = 2000;
+/**
+ * 受け渡す画面の末尾（トリガの `{output}`・承認の代理の画面の末尾）の 1 か所あたりのバイト数（UTF-8）の上限。超えたら先頭を切って末尾を残す
+ * （統合レビュー R1。500 行の長い行で `agent.prompt` の上限〔1MB〕を超えて毎回失敗しないため）。
+ */
+export const OUTPUT_MAX_BYTES = 256 * 1024;
 /** 送った文面を履歴に残す長さ（文字数）。 */
 export const RUN_TEXT_PREVIEW_CHARS = 200;
 
