@@ -39,6 +39,11 @@ export interface Mirror {
   serialize(scrollbackLines: number): MirrorSnapshot;
   bottomLines(n: number): string[];
   /**
+   * 今のバッファ（代替画面なら代替画面）の最後の `n` 個の論理行（20260927-agent-graph の出力の受け渡し）。折り返した行は 1 行につなぎ
+   * （`plainText` と同じ規則）、末尾の空行を除いてから数える。行の右端の空白は落ちる（`translateToString(true)`）。
+   */
+  lastLogicalLines(n: number): string[];
+  /**
    * 通常バッファの全行（スクロールバック＋画面）の平文（20260926-edit-scrollback）。折り返しで分かれた行は 1 行に戻し、
    * 各行の右端の空白と末尾の空行を落とす。代替画面（vim・less 等）の中でも通常バッファを読む（履歴はそこにしか無い）。
    */
@@ -201,6 +206,24 @@ export class XtermMirror implements Mirror {
       if (line) out.push(line.translateToString(true));
     }
     return out;
+  }
+
+  lastLogicalLines(n: number): string[] {
+    const buf = this.term.buffer.active;
+    const out: string[] = [];
+    let y = buf.baseY + this.term.rows - 1;
+    while (y >= 0 && out.length < n) {
+      let text = buf.getLine(y)?.translateToString(true) ?? "";
+      // この行が前の行の続き（折り返し）なら、前の行とつなぐ。
+      while (y > 0 && buf.getLine(y)?.isWrapped === true) {
+        y--;
+        text = (buf.getLine(y)?.translateToString(true) ?? "") + text;
+      }
+      y--;
+      if (out.length === 0 && text === "") continue; // 末尾の空行は数えない
+      out.push(text);
+    }
+    return out.reverse();
   }
 
   plainText(): string {

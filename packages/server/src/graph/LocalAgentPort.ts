@@ -50,14 +50,10 @@ export class LocalAgentPort implements AgentPort {
 
   async tail(paneId: PaneId, lines: number): Promise<string> {
     const host = this.deps.terminals.get(paneId);
-    const pane = this.deps.session.getPane(paneId);
-    if (host === undefined || pane === undefined) return "";
+    if (host === undefined) return "";
     await host.mirror.flush(); // 書き込まれた出力を反映してから読む
-    // 画面の下の空行（出力が画面の途中で止まっている）を数に入れないよう、画面の高さぶん多めに読んでから末尾の空行を落とす。
-    const raw = host.mirror.bottomLines(lines + pane.rows);
-    let end = raw.length;
-    while (end > 0 && raw[end - 1]!.trim() === "") end--;
-    return outputText(raw.slice(Math.max(0, end - lines), end));
+    // 論理行（折り返しをつないだ行。長いパス・URL を途中で切らない）で数え、末尾の空行は除く。
+    return outputText(host.mirror.lastLogicalLines(lines));
   }
 
   async prompt(paneId: PaneId, text: string): Promise<void> {

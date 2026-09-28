@@ -37,26 +37,25 @@ function make(
     lines?: string[];
     pane?: Pane | undefined;
     invoke?: LocalAgentPortDeps["invoke"];
-    hostWithoutPane?: boolean;
   } = {},
 ) {
   const bus = new EventBus();
   const flush = vi.fn(async () => undefined);
-  const bottomLines = vi.fn((n: number) => (opts.lines ?? []).slice(-n));
+  const lastLogicalLines = vi.fn((n: number) => (opts.lines ?? []).slice(-n));
   const p = "pane" in opts ? opts.pane : pane();
   const invoke = opts.invoke ?? vi.fn(async () => ({ ok: true as const, result: {} }));
   const port = new LocalAgentPort({
     bus,
     session: {
-      getPane: (id: string) => (p && id === p.id && !opts.hostWithoutPane ? p : undefined),
+      getPane: (id: string) => (p && id === p.id ? p : undefined),
     },
     terminals: {
       get: (id: string) =>
-        p && id === p.id ? ({ mirror: { flush, bottomLines } } as never) : undefined,
+        p && id === p.id ? ({ mirror: { flush, lastLogicalLines } } as never) : undefined,
     },
     invoke,
   });
-  return { port, bus, flush, bottomLines, invoke };
+  return { port, bus, flush, lastLogicalLines, invoke };
 }
 
 describe("LocalAgentPort", () => {
@@ -91,24 +90,16 @@ describe("LocalAgentPort", () => {
     expect(make({ pane: pane({ agent: null }) }).port.status("p1")).toBeNull();
   });
 
-  it("tail は出力を反映してから、画面の高さぶん多めに読み、末尾の空行を除いた最後の N 行を制御文字なしで返す", async () => {
-    const { port, flush, bottomLines } = make({
-      lines: ["old", "a", "\u001B[31mb\u001B[0m", "c  ", "", "  "],
-    });
+  it("tail は出力を反映してから、最後の N 個の論理行（折り返しをつなぎ末尾の空行を除いたもの。ミラーが数える）を制御文字なしで返す", async () => {
+    const { port, flush, lastLogicalLines } = make({ lines: ["a", "\u001B[31mb\u001B[0m", "c  "] });
     expect(await port.tail("p1", 2)).toBe("b\nc");
     expect(flush).toHaveBeenCalled();
-    expect(bottomLines).toHaveBeenCalledWith(2 + 3);
+    expect(lastLogicalLines).toHaveBeenCalledWith(2);
     expect(await port.tail("p9", 2)).toBe("");
   });
 
-  it("tail は画面が空行だけなら空、pane の記録が無ければ（端末だけ残っていても）空", async () => {
-    expect(await make({ lines: ["", " ", ""] }).port.tail("p1", 5)).toBe("");
-    expect(await make({ lines: ["x"], hostWithoutPane: true }).port.tail("p1", 5)).toBe("");
-  });
-
-  it("tail は行が足りなければあるだけ", async () => {
-    const { port } = make({ lines: ["only"] });
-    expect(await port.tail("p1", 10)).toBe("only");
+  it("tail は行が無ければ空", async () => {
+    expect(await make({ lines: [] }).port.tail("p1", 5)).toBe("");
   });
 
   it("prompt は agent.prompt を呼び、失敗は code つきの AgentPortError", async () => {
