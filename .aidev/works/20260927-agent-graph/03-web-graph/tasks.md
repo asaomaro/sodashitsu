@@ -41,7 +41,7 @@ design「web」「振る舞いの詳細」の全画面のグラフ画面を、01
       対象: （新規 `PaneChecklist.vue`・`HistoryPanel.vue`）・`packages/web/src/components/Sidebar.vue`・`packages/web/src/App.vue`
       依存: T2
       AC: AC1, AC10, AC13
-- [ ] T5: キーボードとフォーカス（Tab・矢印の移動・Esc の段階・同じ prefix+a で閉じる・開いたときと閉じたときのフォーカス）とモバイルの閲覧（1 本指パン・ピンチ・`MobileGraphSheet.vue` で一時停止/再開だけ）
+- [x] T5: キーボードとフォーカス（Tab・矢印の移動・Esc の段階・同じ prefix+a で閉じる・開いたときと閉じたときのフォーカス）とモバイルの閲覧（1 本指パン・ピンチ・`MobileGraphSheet.vue` で一時停止/再開だけ）
       対象: `GraphView.vue`・`packages/web/src/main.ts`（dialog モードの keydown）・（新規 `MobileGraphSheet.vue`）
       依存: T3, T4
       AC: AC20, AC-I1, AC-I3, AC-I4, AC-I5

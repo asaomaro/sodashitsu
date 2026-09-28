@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 import { ConnectionKey, MachineSwitcherKey, TerminalRegistryKey } from "../../injection.js";
 import { useGraphStore } from "../../store/graph.js";
@@ -701,6 +701,164 @@ describe("GraphView（pane を載せる/外す・履歴・pane へ移動。03 T4
     await flush();
     expect(wrapper.findAll(".history-row")).toHaveLength(1);
     expect(wrapper.find(".link-panel").exists()).toBe(true);
+    wrapper.unmount();
+  });
+});
+
+describe("GraphView（キーボード・フォーカス・モバイル。03 T5）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const key = (k: string, init: KeyboardEventInit = {}) =>
+    new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init });
+
+  it("開いたのと同じ prefix＋キー（既定 Ctrl+B a）で閉じる。パネルの入力欄にいても閉じる", async () => {
+    const { wrapper, view } = await openWithGraph();
+    const node = wrapper.find('[data-node-key="local:p1"]').element;
+    node.dispatchEvent(key("b", { ctrlKey: true }));
+    const a = key("a");
+    node.dispatchEvent(a);
+    expect(a.defaultPrevented).toBe(true);
+    expect(view.graphOpen).toBe(false);
+    view.openGraph();
+    await flush();
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    const prompt = wrapper.find(".link-panel-prompt").element;
+    prompt.dispatchEvent(key("b", { ctrlKey: true }));
+    prompt.dispatchEvent(key("a"));
+    expect(view.graphOpen).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("prefix の後のほかのキーは閉じずに食う（グラフの操作へ渡さない）。prefix の無い a は何もしない", async () => {
+    const { wrapper, view } = await openWithGraph();
+    const root = wrapper.find(".graph-view").element;
+    const zoom = () => wrapper.find(".graph-zoom").text();
+    root.dispatchEvent(key("b", { ctrlKey: true }));
+    root.dispatchEvent(key("Control", { ctrlKey: true })); // 修飾キー単体は prefix を保つ
+    root.dispatchEvent(key("+"));
+    await flush();
+    expect(zoom()).toBe("100%");
+    expect(view.graphOpen).toBe(true);
+    root.dispatchEvent(key("a"));
+    expect(view.graphOpen).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("矢印でノードを 1 グリッド（Shift で 5）動かし、連打が止まって 300ms 後に送る", async () => {
+    const { wrapper, fake, store } = await openWithGraph();
+    vi.useFakeTimers();
+    const n = wrapper.find('[data-node-key="local:p2"]').element;
+    n.dispatchEvent(key("ArrowRight"));
+    n.dispatchEvent(key("ArrowDown", { shiftKey: true }));
+    expect(store.dragPositions.get("local:p2")).toEqual({ x: 320, y: 100 });
+    vi.advanceTimersByTime(299);
+    expect(fake.calls).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    await flush();
+    expect(fake.calls[0]).toMatchObject({
+      method: "graph.update",
+      params: { ops: [{ op: "move_node", key: "local:p2", x: 320, y: 100 }] },
+    });
+    wrapper.unmount();
+  });
+
+  it("閉じると待っていた矢印の移動もすぐ送る", async () => {
+    const { wrapper, fake, view } = await openWithGraph();
+    wrapper.find('[data-node-key="local:p1"]').element.dispatchEvent(key("ArrowLeft"));
+    view.closeGraph();
+    await flush();
+    expect(fake.calls[0]).toMatchObject({
+      params: { ops: [{ op: "move_node", key: "local:p1", x: -20, y: 0 }] },
+    });
+    wrapper.unmount();
+  });
+
+  it("Tab の順は読み順（上から、同じ高さなら左から）のノード → 線のチップ", async () => {
+    const { wrapper } = await openWithGraph({
+      nodes: [
+        { key: "local:p2", x: 300, y: 200 },
+        { key: "local:p1", x: 0, y: 200 },
+        { key: "local:p3", x: 500, y: 0 },
+      ],
+    });
+    const order = wrapper
+      .findAll(".graph-node, .graph-chip")
+      .map((e) => e.attributes("data-node-key") ?? e.attributes("data-link-chip"));
+    expect(order).toEqual(["local:p3", "local:p1", "local:p2", "l1", "l2"]);
+    wrapper.unmount();
+  });
+
+  function mockMobile(): void {
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as MediaQueryList);
+  }
+
+  it("モバイル: 編集の部品（ハンドル・pane を載せる・ドラッグ）を出さず、チップを押すと下からのシートで線の一時停止・再開", async () => {
+    mockMobile();
+    const { wrapper, fake, store } = await openWithGraph();
+    expect(wrapper.find(".graph-node-handle").exists()).toBe(false);
+    expect(wrapper.find(".graph-add-panes").exists()).toBe(false);
+    expect(wrapper.find(".graph-pause-all").exists()).toBe(true);
+    const node = wrapper.find('[data-node-key="local:p1"]').element;
+    node.dispatchEvent(pointer("pointerdown", { clientX: 10, clientY: 10, pointerType: "touch" }));
+    window.dispatchEvent(
+      pointer("pointermove", { clientX: 80, clientY: 80, pointerType: "touch" }),
+    );
+    window.dispatchEvent(pointer("pointerup", { clientX: 80, clientY: 80, pointerType: "touch" }));
+    await flush();
+    expect(store.dragPositions.size).toBe(0); // ノードは動かず、背景のパン
+    expect(fake.calls).toHaveLength(0);
+    fake.handlers["graph.pause"] = () =>
+      graphOf({ rev: 2, links: [triggerLink("l1", "local:p1", "local:p2", { paused: "user" })] });
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    expect(wrapper.find(".link-panel").exists()).toBe(false);
+    expect(wrapper.find(".graph-sheet-title").text()).toBe("トリガ: impl → reviewer");
+    await wrapper.find(".graph-sheet-pause").trigger("click");
+    await flush();
+    expect(fake.calls[0]).toEqual({ method: "graph.pause", params: { linkId: "l1" } });
+    expect(wrapper.find(".graph-sheet-resume").exists()).toBe(true);
+    await wrapper.find(".graph-sheet").trigger("keydown", { key: "Escape" });
+    await flush();
+    expect(wrapper.find(".graph-sheet").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("モバイル: ノードを押すと繋がる線ごとのシート。2 本指でピンチすると拡大する", async () => {
+    mockMobile();
+    const { wrapper } = await openWithGraph();
+    const node = wrapper.find('[data-node-key="local:p2"]').element;
+    node.dispatchEvent(pointer("pointerdown", { clientX: 310, clientY: 10, pointerType: "touch" }));
+    node.dispatchEvent(pointer("pointerup", { clientX: 310, clientY: 10, pointerType: "touch" }));
+    await flush();
+    expect(wrapper.find(".graph-sheet-title").text()).toBe("reviewer（ローカル）");
+    expect(wrapper.findAll(".graph-sheet-link")).toHaveLength(2);
+    await wrapper.find(".graph-sheet-close").trigger("click");
+    await flush();
+    const canvas = wrapper.find(".graph-canvas").element;
+    canvas.dispatchEvent(
+      pointer("pointerdown", { pointerId: 1, clientX: 100, clientY: 100, pointerType: "touch" }),
+    );
+    canvas.dispatchEvent(
+      pointer("pointerdown", { pointerId: 2, clientX: 200, clientY: 100, pointerType: "touch" }),
+    );
+    window.dispatchEvent(
+      pointer("pointermove", { pointerId: 2, clientX: 300, clientY: 100, pointerType: "touch" }),
+    );
+    await flush();
+    expect(wrapper.find(".graph-zoom").text()).toBe("200%");
+    window.dispatchEvent(pointer("pointerup", { pointerId: 1, pointerType: "touch" }));
+    window.dispatchEvent(pointer("pointerup", { pointerId: 2, pointerType: "touch" }));
     wrapper.unmount();
   });
 });

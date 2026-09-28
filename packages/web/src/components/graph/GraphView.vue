@@ -12,12 +12,16 @@ import {
   clampZoom,
   edgeGeometry,
   fitGraphView,
+  GRAPH_GRID,
   GRAPH_NODE_HEIGHT,
   GRAPH_NODE_WIDTH,
   graphNodeAt,
   graphNodeRect,
   nextFreeGraphPosition,
+  chordOf,
+  keyInputOf,
   parallelOffsets,
+  pinchGraphView,
   revealGraphRect,
   screenToGraph,
   snapToGrid,
@@ -30,11 +34,13 @@ import { ConnectionKey, MachineSwitcherKey, TerminalRegistryKey } from "../../in
 import { isMobileViewport } from "../../mobile/detect.js";
 import { useGraphStore, type GraphNodeInfo } from "../../store/graph.js";
 import { useMachinesStore } from "../../store/machines.js";
+import { useSettingsStore } from "../../store/settings.js";
 import { useViewStore } from "../../store/view.js";
 import GraphConfirm from "./GraphConfirm.vue";
 import GraphEdge from "./GraphEdge.vue";
 import GraphNode from "./GraphNode.vue";
 import HistoryPanel from "./HistoryPanel.vue";
+import MobileGraphSheet from "./MobileGraphSheet.vue";
 import PaneChecklist from "./PaneChecklist.vue";
 import LinkPanel from "./LinkPanel.vue";
 import { usePointerDrag } from "./usePointerDrag.js";
@@ -49,6 +55,7 @@ import {
 const view = useViewStore();
 const graph = useGraphStore();
 const machines = useMachinesStore();
+const settings = useSettingsStore();
 const registry = inject(TerminalRegistryKey, null);
 const conn = inject(ConnectionKey, null);
 const switcher = inject(MachineSwitcherKey, null);
@@ -265,6 +272,14 @@ function onCanvasPointerdown(ev: PointerEvent): void {
     endConnectMode(true);
     return;
   }
+  // 2 本目の指: パンをやめてピンチ（モバイルの閲覧。design「モバイル」）。
+  touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (touches.size === 2) {
+    drag.cancel();
+    startPinch();
+    return;
+  }
+  if (touches.size > 2) return;
   const target = ev.currentTarget as HTMLElement;
   const start = viewport.value;
   drag.start(ev, target, {
@@ -272,7 +287,13 @@ function onCanvasPointerdown(ev: PointerEvent): void {
     onMove: (_e, dx, dy) => {
       viewport.value = { zoom: start.zoom, panX: start.panX + dx, panY: start.panY + dy };
     },
-    onClick: () => {
+    onClick: (e) => {
+      // モバイルはノードを押すとシート（編集はしない）。
+      const hit = (e.target as Element | null)?.closest?.("[data-node-key]");
+      if (isMobile.value && hit) {
+        sheet.value = { kind: "node", key: hit.getAttribute("data-node-key")! };
+        return;
+      }
       // 何も無い所を押した＝選択の解除（research-ui §2.6）。
       selection.value = null;
     },
@@ -280,6 +301,69 @@ function onCanvasPointerdown(ev: PointerEvent): void {
       viewport.value = start;
     },
   });
+}
+
+// --- ピンチ（モバイル）・シート ------------------------------------------------------------------------------------
+
+/** 触れている指（画面の座標）。2 本でピンチ。 */
+const touches = new Map<number, { x: number; y: number }>();
+let pinch: {
+  view: GraphViewport;
+  a: { x: number; y: number };
+  b: { x: number; y: number };
+  ids: [number, number];
+} | null = null;
+function canvasPoint(x: number, y: number): { x: number; y: number } {
+  const r = canvasEl.value?.getBoundingClientRect();
+  return { x: x - (r?.left ?? 0), y: y - (r?.top ?? 0) };
+}
+function startPinch(): void {
+  const [[ia, pa], [ib, pb]] = [...touches.entries()] as [
+    [number, { x: number; y: number }],
+    [number, { x: number; y: number }],
+  ];
+  pinch = {
+    view: viewport.value,
+    a: canvasPoint(pa.x, pa.y),
+    b: canvasPoint(pb.x, pb.y),
+    ids: [ia, ib],
+  };
+}
+function onWindowPointerMove(ev: PointerEvent): void {
+  if (!touches.has(ev.pointerId)) return;
+  touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (!pinch) return;
+  const a = touches.get(pinch.ids[0]);
+  const b = touches.get(pinch.ids[1]);
+  if (!a || !b) return;
+  viewport.value = pinchGraphView(
+    pinch.view,
+    pinch.a,
+    pinch.b,
+    canvasPoint(a.x, a.y),
+    canvasPoint(b.x, b.y),
+  );
+}
+function onWindowPointerEnd(ev: PointerEvent): void {
+  if (!touches.delete(ev.pointerId)) return;
+  if (pinch && touches.size < 2) pinch = null;
+}
+window.addEventListener("pointermove", onWindowPointerMove);
+window.addEventListener("pointerup", onWindowPointerEnd);
+window.addEventListener("pointercancel", onWindowPointerEnd);
+onBeforeUnmount(() => {
+  window.removeEventListener("pointermove", onWindowPointerMove);
+  window.removeEventListener("pointerup", onWindowPointerEnd);
+  window.removeEventListener("pointercancel", onWindowPointerEnd);
+});
+
+/** モバイルのシート（押した線・ノードの一時停止・再開）。 */
+const sheet = ref<{ kind: "node"; key: string } | { kind: "link"; id: string } | null>(null);
+function closeSheet(): void {
+  const s = sheet.value;
+  sheet.value = null;
+  if (s?.kind === "link") focusLink(s.id);
+  else if (s) focusNode(s.key);
 }
 
 function onEdgeSelect(ev: PointerEvent, id: string): void {
@@ -664,8 +748,46 @@ function gotoNode(key: string): void {
 
 function onChipClick(id: string): void {
   if (connectFrom.value) return;
+  if (isMobile.value) {
+    selection.value = { kind: "link", id };
+    sheet.value = { kind: "link", id };
+    return;
+  }
   openLinkPanel(id);
 }
+
+// --- 矢印キーでノードを動かす（1 グリッド、Shift で 5。連打が止まって 300ms 後に送る。research-ui §2.3）---------------
+
+const ARROW_SEND_DELAY_MS = 300;
+const arrowTimers = new Map<string, ReturnType<typeof setTimeout>>();
+function nudgeNode(key: string, dx: number, dy: number): void {
+  const node = graph.nodes.find((n) => n.key === key);
+  if (!node) return;
+  const p = { x: snapToGrid(node.x) + dx, y: snapToGrid(node.y) + dy };
+  // 送るまではドラッグ中と同じ扱い（サーバの値で上書きしない）。
+  graph.setDragPosition(key, p);
+  reveal(graphNodeRect(p));
+  const old = arrowTimers.get(key);
+  if (old !== undefined) clearTimeout(old);
+  arrowTimers.set(
+    key,
+    setTimeout(() => {
+      arrowTimers.delete(key);
+      const cur = graph.dragPositions.get(key);
+      if (cur) void graph.moveNodes([{ key, ...cur }]);
+    }, ARROW_SEND_DELAY_MS),
+  );
+}
+/** 閉じる・unmount では待たずに送る（動かした位置を捨てない）。 */
+function flushArrowMoves(): void {
+  for (const [key, t] of arrowTimers) {
+    clearTimeout(t);
+    const cur = graph.dragPositions.get(key);
+    if (cur) void graph.moveNodes([{ key, ...cur }]);
+  }
+  arrowTimers.clear();
+}
+onBeforeUnmount(flushArrowMoves);
 
 function onChipKeydown(ev: KeyboardEvent, id: string): void {
   if (ev.isComposing || ev.ctrlKey || ev.metaKey || ev.altKey) return;
@@ -709,6 +831,13 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
     ev.preventDefault();
     ev.stopPropagation();
     requestRemoveNode(key);
+  } else if (ev.key.startsWith("Arrow") && !isMobile.value) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const step = GRAPH_GRID * (ev.shiftKey ? 5 : 1);
+    const dx = ev.key === "ArrowLeft" ? -step : ev.key === "ArrowRight" ? step : 0;
+    const dy = ev.key === "ArrowUp" ? -step : ev.key === "ArrowDown" ? step : 0;
+    nudgeNode(key, dx, dy);
   }
 }
 
@@ -771,6 +900,10 @@ watch(
         return;
       }
       drag.cancel();
+      flushArrowMoves();
+      sheet.value = null;
+      touches.clear();
+      pinch = null;
       connectFrom.value = null;
       connectDrag.value = null;
       panel.value = null;
@@ -819,6 +952,49 @@ function isTextField(el: EventTarget | null): boolean {
   );
 }
 
+// --- 開いたのと同じキーで閉じる（AC-I1。dialog モードでは KeyRouter が prefix を扱わないので、ここで割り当ての表を引く）----------
+
+const PREFIX_TIMEOUT_MS = 3000; // KeyRouter の prefix の時間切れと同じ
+let prefixArmed = false;
+let prefixTimer: ReturnType<typeof setTimeout> | null = null;
+function disarmPrefix(): void {
+  prefixArmed = false;
+  if (prefixTimer !== null) clearTimeout(prefixTimer);
+  prefixTimer = null;
+}
+onBeforeUnmount(disarmPrefix);
+
+/**
+ * 子（パネル・確認）より先に見る（capture）。prefix の次のキーが `open_graph` の割り当てなら閉じる（割り当てを変えても追従する）。
+ * prefix の次のほかのキーは何もせずに食う（グラフの操作・入力へ渡さない）。直接のキーの `open_graph` もそのまま閉じる。
+ */
+function onKeydownCapture(ev: KeyboardEvent): void {
+  if (ev.isComposing || ev.keyCode === 229) return;
+  const chord = chordOf(keyInputOf(ev));
+  if (chord === null) return; // 修飾キー単体は prefix を保つ
+  const km = settings.keymap;
+  const isClose = (a: { type: string } | undefined): boolean => a?.type === "openGraph";
+  if (prefixArmed) {
+    disarmPrefix();
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (isClose(km.prefixMap.get(chord))) view.closeGraph();
+    return;
+  }
+  if (chord === km.prefix) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    prefixArmed = true;
+    prefixTimer = setTimeout(disarmPrefix, PREFIX_TIMEOUT_MS);
+    return;
+  }
+  if (isClose(km.directMap.get(chord))) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    view.closeGraph();
+  }
+}
+
 function onKeydown(ev: KeyboardEvent): void {
   if (ev.isComposing) return;
   if (ev.key === "Escape") {
@@ -852,6 +1028,10 @@ function onKeydown(ev: KeyboardEvent): void {
 function escape(): void {
   if (confirmState.value) {
     onConfirmCancel();
+    return;
+  }
+  if (sheet.value) {
+    closeSheet();
     return;
   }
   if (connectFrom.value) {
@@ -907,6 +1087,7 @@ function chipAria(e: EdgeView): string {
     class="graph-view"
     aria-label="連携（グラフ）"
     tabindex="-1"
+    @keydown.capture="onKeydownCapture"
     @keydown="onKeydown"
     @cancel="onCancel"
   >
@@ -1074,6 +1255,7 @@ function chipAria(e: EdgeView): string {
         </div>
       </div>
       <PaneChecklist v-if="checklistOpen" @apply="applyChecklist" @close="closeChecklist" />
+      <MobileGraphSheet v-if="sheet" :target="sheet" @close="closeSheet" />
       <GraphConfirm
         v-if="confirmState"
         :message="confirmState.message"
