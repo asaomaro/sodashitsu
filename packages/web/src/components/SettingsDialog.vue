@@ -328,6 +328,14 @@ function commitNewCwdPath(): void {
   if (pathDraft.value !== settings.newCwdPath) settings.setNewCwdPath(pathDraft.value);
 }
 
+/**
+ * シェルの場所を追う（Windows。20260928-windows-pane-cwd の D-6）。押した時点で保存し、効くのは次に開く pane から（既に開いている pane は変えない）。
+ * 読むのはサーバ（pane を開くたびに共有の設定を読む）。
+ */
+function toggleShellCwdTracking(): void {
+  settings.setShellCwdTracking(!settings.shellCwdTracking);
+}
+
 /** Enter で確定する。**IME の変換を確定する Enter では保存しない**（Safari は確定の keydown で isComposing が false なので keyCode も見る。`KeyInputController` と同じ）。 */
 function onPathEnter(ev: KeyboardEvent): void {
   if (ev.isComposing || ev.keyCode === 229) return;
@@ -872,6 +880,24 @@ function onNativeCancel(ev: Event): void {
         />
         <p id="settings-path-note" class="settings-note">絶対パスか ~/ で始まるパス（~ だけならホーム）。使えない場所なら、代わりの場所で開いて知らせます。</p>
       </fieldset>
+      <ul class="settings-list">
+        <li class="settings-row">
+          <button
+            type="button"
+            role="switch"
+            class="settings-switch"
+            :aria-checked="settings.shellCwdTracking"
+            aria-describedby="settings-shell-cwd-note"
+            @click="toggleShellCwdTracking"
+          >
+            <span class="settings-mark">{{ settings.shellCwdTracking ? "入" : "切" }}</span>
+            <span>シェルの場所を追う（Windows）</span>
+          </button>
+          <p id="settings-shell-cwd-note" class="settings-note">
+            Windows のサーバで、pane の PowerShell・cmd がプロンプトのたびに今の場所を知らせるようにします（cd した場所を再起動後も保ちます）。新しく開く pane から効きます。
+          </p>
+        </li>
+      </ul>
     </section>
     <section class="settings-section" aria-labelledby="settings-agent-integration">
       <h3 id="settings-agent-integration" class="settings-heading">エージェント連携</h3>

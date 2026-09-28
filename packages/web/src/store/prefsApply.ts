@@ -18,6 +18,7 @@ import {
   loadPaneFrameThickness,
   loadPaneGaps,
   loadPaneOuterBorders,
+  loadShellCwdTracking,
   loadStatusSymbols,
   useSettingsStore,
 } from "./settings.js";
@@ -50,6 +51,7 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
   set("scrollback", loadScrollbackPref(raw["scrollback"]));
   set("newCwdPolicy", loadNewCwdPolicy(raw["newCwdPolicy"]));
   set("newCwdPath", loadNewCwdPath(raw["newCwdPath"]));
+  set("shellCwdTracking", loadShellCwdTracking(raw["shellCwdTracking"]));
   const theme = loadThemePrefs(raw);
   set("theme", theme.theme);
   set("themeAuto", theme.auto);

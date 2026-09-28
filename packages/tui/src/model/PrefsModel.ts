@@ -16,6 +16,7 @@ import {
   loadPaneBorders,
   loadPaneGaps,
   loadScrollbackPref,
+  loadShellCwdTracking,
   loadStatusSymbols,
   loadWorkspaceSort,
   type NewCwdPolicy,
@@ -285,6 +286,11 @@ export class PrefsModel {
   /** 状態を色に加えて記号でも示すか（web の `loadStatusSymbols`。既定は入）。 */
   get statusSymbols(): boolean {
     return loadStatusSymbols(this.raw.statusSymbols);
+  }
+
+  /** Windows で pane のシェルに場所の知らせを差し込むか（web の `loadShellCwdTracking`。既定は入。読むのはサーバ）。 */
+  get shellCwdTracking(): boolean {
+    return loadShellCwdTracking(this.raw.shellCwdTracking);
   }
 
   /** 通知の種類（web の `loadNotifyPrefs` と同じ正規化）。 */

@@ -577,6 +577,12 @@ function terminalSection(env: SettingsEnv): SettingsSection {
             },
           }),
         },
+        toggleItem(
+          "シェルの場所を追う（Windows）",
+          env.prefs.shellCwdTracking,
+          (v) => env.write.setShared({ shellCwdTracking: v }),
+          "Windows のサーバで、pane の PowerShell・cmd がプロンプトのたびに今の場所を知らせます。新しく開く pane から効きます。",
+        ),
       ];
     },
   };

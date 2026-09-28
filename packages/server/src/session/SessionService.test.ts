@@ -201,6 +201,54 @@ describe("SessionService — `--shell`（T27）", () => {
   });
 });
 
+// 20260928-windows-pane-cwd の D-1・decisions D2：場所の知らせを差し込むのは対話の pane のシェル（新規・分割・復元）だけ。
+describe("SessionService — シェルの場所の知らせ（trackCwd）", () => {
+  it("workspace・tab・分割・再起動後の復元の pane は trackCwd 付きで起動する（--shell の有無によらない）", async () => {
+    for (const shell of [undefined, "pwsh.exe"]) {
+      const terminals = new FakeTerminalManager();
+      const service = makeService(terminals, new EventBus(), new FakePersistScheduler(), shell);
+      const { workspace, pane } = await service.createWorkspace("/home/u/api", "api");
+      await service.createTab(workspace.id, undefined);
+      await service.splitPane(pane.id, "right", undefined);
+      expect(terminals.createOptions.map((o) => o.trackCwd), String(shell)).toEqual([true, true, true]);
+
+      const restored = new FakeTerminalManager();
+      await makeService(restored, new EventBus(), new FakePersistScheduler(), shell).restore({
+        schema: 1,
+        savedAt: "2026-09-28T00:00:00Z",
+        nextId: { w: 2, t: 2, p: 3, s: 1, a: 1, g: 1 },
+        groups: [],
+        workspaces: [
+          {
+            id: "w1",
+            label: "api",
+            cwd: "/home/u/api",
+            activeTabId: "t1",
+            tabs: [
+              {
+                id: "t1",
+                label: "main",
+                focusedPaneId: "p1",
+                zoomedPaneId: null,
+                layout: { type: "split", id: "s1", dir: "right", ratio: 0.5, a: { type: "pane", paneId: "p1" }, b: { type: "pane", paneId: "p2" } },
+                panes: [
+                  { id: "p1", label: null, cwd: "/home/u/api", shell: "" },
+                  { id: "p2", label: null, cwd: "/home/u/api/src", shell: "" },
+                ],
+              },
+            ],
+          },
+        ],
+        focus: { workspaceId: "w1", tabId: "t1", paneId: "p1" },
+      });
+      expect(restored.createOptions.map((o) => [o.cwd, o.trackCwd]), String(shell)).toEqual([
+        ["/home/u/api", true],
+        ["/home/u/api/src", true],
+      ]);
+    }
+  });
+});
+
 describe("SessionService — workspace creation", () => {
   let terminals: FakeTerminalManager;
   let bus: EventBus;
@@ -2375,6 +2423,8 @@ describe("SessionService — スクロールバックを $EDITOR で開く（202
     expect(opts.cwd).toBe("/home/u/api");
     expect(opts.shell).toBe("/bin/sh");
     expect(opts.args?.slice(0, 3)).toEqual(["-c", 'eval "${EDITOR:-vi} \\"\\$1\\""', "soda-edit-scrollback"]);
+    expect(opts.trackCwd, "エディタには場所の知らせを差し込まない（20260928-windows-pane-cwd の decisions D2）").toBeUndefined();
+    expect(terminals.createOptions[0]!.trackCwd, "元の対話の pane には差し込む").toBe(true);
     expect(events.map((e) => e.event)).toEqual(["pane.created", "layout.updated"]);
     expect((events[1]!.data as { tab: { zoomedPaneId: string | null } }).tab.zoomedPaneId).toBe(pane.id);
   });
@@ -2658,6 +2708,7 @@ describe("SessionService — 独自コマンドの pane 種・文脈・環境（
     expect(pane.cwd).toBe("/srv/x");
     const opts = terminals.createOptions.at(-1)!;
     expect(opts).toMatchObject({ cwd: "/srv/x", shell: "/bin/sh", args: ["-c", "htop"] });
+    expect(opts.trackCwd, "独自コマンドの pane には場所の知らせを差し込まない（20260928-windows-pane-cwd の decisions D2）").toBeUndefined();
     expect(opts.env).toMatchObject({ SODA_PANE_ID: pane.id, SODA_COMMAND_ID: "htop", SODA_ACTIVE_PANE_ID: "p2" });
     expect(events.map((e) => e.event)).toEqual(["pane.created", "layout.updated"]);
   });

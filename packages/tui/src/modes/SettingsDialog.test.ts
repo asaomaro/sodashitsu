@@ -122,6 +122,22 @@ describe("設定画面", () => {
     expect(h.app.prefs.sharedSidebarCols).toBe(30);
   });
 
+  // 20260928-windows-pane-cwd の D-6：web の「端末」の節と同じ項目・同じ保存先（共有の設定の shellCwdTracking）。
+  it("端末の節の「シェルの場所を追う（Windows）」は既定で入、押すと shellCwdTracking:false を送る", async () => {
+    const h = await open();
+    await h.section(3);
+    const t = await h.text();
+    expect(t).toContain("シェルの場所を追う（Windows）");
+    expect(h.app.prefs.shellCwdTracking).toBe(true);
+    h.io.type(DOWN + DOWN + DOWN); // scrollback・新しく開く場所・指定した場所のパスの次
+    expect(await h.text()).toContain("PowerShell・cmd がプロンプトのたびに今の場所を知らせます"); // 項目の注記（選んだ項目の下に出る）
+    h.io.type(ENTER);
+    expect(h.patches()).toEqual([{ shellCwdTracking: false }]);
+    expect(h.app.prefs.shellCwdTracking).toBe(false);
+    h.io.type(" ");
+    expect(h.patches()[1]).toEqual({ shellCwdTracking: true });
+  });
+
   it("色の出し方は端末ごと（tui-state）で、共有の設定へは送らない", async () => {
     const h = await open();
     await h.section(6);
