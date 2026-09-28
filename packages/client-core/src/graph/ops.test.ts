@@ -7,6 +7,7 @@ import {
   LINK_LIMIT_DEFAULT,
 } from "./defaults.js";
 import { applyGraphOps, type GraphDraftState } from "./ops.js";
+import { GRAPH_LINK_ID_MAX } from "./validate.js";
 
 // 20260927-agent-graph の T2（ops）：graph.update の操作をまとめて当てる。
 const A = "local:p1";
@@ -156,6 +157,28 @@ describe("applyGraphOps", () => {
     expect(applyGraphOps(s1, [{ op: "add_link", kind: "trigger", from: A, to: B }])).toMatchObject({
       ok: false,
       issues: [{ code: "config_mismatch" }],
+    });
+  });
+
+  it("次の番号が安全な整数の範囲を超えるなら add_link を断る（01 のレビュー ラウンド 1）", () => {
+    const s1 = state(
+      {
+        nodes: [
+          { key: A, x: 0, y: 0 },
+          { key: B, x: 0, y: 0 },
+        ],
+      },
+      GRAPH_LINK_ID_MAX,
+    );
+    expect(ok(s1, [{ op: "add_link", kind: "supervise", from: A, to: B }]).graph.links[0]!.id).toBe(
+      `l${GRAPH_LINK_ID_MAX}`,
+    );
+    const s2 = { ...s1, nextLinkId: GRAPH_LINK_ID_MAX + 1 };
+    expect(
+      applyGraphOps(s2, [{ op: "add_link", kind: "supervise", from: A, to: B }]),
+    ).toMatchObject({
+      ok: false,
+      issues: [{ code: "link_id_too_large" }],
     });
   });
 

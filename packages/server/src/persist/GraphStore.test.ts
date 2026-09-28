@@ -190,6 +190,51 @@ describe("GraphStore", () => {
         },
       }),
     ],
+    [
+      "線の id が重なる（01 のレビュー ラウンド 1）",
+      JSON.stringify({
+        schema: 1,
+        rev: 1,
+        nextLinkId: 3,
+        graph: {
+          paused: false,
+          nodes: [
+            { key: A, x: 0, y: 0 },
+            { key: B, x: 0, y: 0 },
+          ],
+          links: [
+            { id: "l1", kind: "supervise", from: A, to: B, limit: 10, count: 0, paused: null },
+            { id: "l1", kind: "supervise", from: B, to: A, limit: 10, count: 0, paused: null },
+          ],
+        },
+      }),
+    ],
+    [
+      "線の id の番号が安全な整数を超える（01 のレビュー ラウンド 1）",
+      JSON.stringify({
+        schema: 1,
+        rev: 1,
+        nextLinkId: 1,
+        graph: {
+          paused: false,
+          nodes: [
+            { key: A, x: 0, y: 0 },
+            { key: B, x: 0, y: 0 },
+          ],
+          links: [
+            {
+              id: "l9007199254740993",
+              kind: "supervise",
+              from: A,
+              to: B,
+              limit: 10,
+              count: 0,
+              paused: null,
+            },
+          ],
+        },
+      }),
+    ],
   ])("壊れたファイル（%s）は退避して空から始める", async (_name, content) => {
     const dir = await tempDir();
     await writeFile(join(dir, GRAPH_FILE_NAME), content);
