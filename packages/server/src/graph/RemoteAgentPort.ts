@@ -51,7 +51,7 @@ export class RemoteAgentPort implements AgentPort {
   ) {
     this.machine = link.machine;
     this.subs = [
-      link.onOpened((s) => this.onOpened(s)),
+      link.onOpened((s, beforeReply) => this.onOpened(s, beforeReply)),
       link.onClosed(() => this.emitAvailability(false)),
       link.onEvent((e) => this.onEvent(e)),
     ];
@@ -173,9 +173,32 @@ export class RemoteAgentPort implements AgentPort {
     return { result, released };
   }
 
-  private onOpened(snapshot: SessionSnapshot): void {
+  private onOpened(snapshot: SessionSnapshot, beforeReply: readonly ServerEvent[]): void {
     this.panes = new Map(snapshot.panes.map((p) => [p.id, p]));
     this.emitAvailability(true);
+    // hello の応答より前のイベントは snapshot より古いか新しいか分からない（04 レビュー R1）。当てても古い値に戻らないものだけ当てる:
+    // - pane.closed: snapshot にある pane が閉じた（pane の id は再利用されないので、snapshot にあるなら snapshot の後に閉じた）。
+    // - pane.created: snapshot に無い pane（snapshot の後にできた。前に閉じたものは同じ応答の前の pane.closed で消える）。
+    // - agent_status_changed: 同じエージェントで完了の回数が snapshot より多い（完了は増えるだけ。基準の後の完了として動く）。
+    // 名前だけの pane.updated・回数の増えない状態の変化は見分けられないので当てない（次の知らせで追いつく。D7-14）。
+    for (const e of beforeReply) {
+      if (!this.link.available()) return;
+      if (e.event === "pane.closed") {
+        if (this.panes.has(e.data.paneId)) this.onEvent(e);
+      } else if (e.event === "pane.created") {
+        if (!this.panes.has(e.data.pane.id)) this.onEvent(e);
+      } else if (e.event === "pane.agent_status_changed") {
+        const now = this.panes.get(e.data.paneId)?.agent;
+        const next = e.data.agent;
+        if (
+          now != null &&
+          next !== null &&
+          next.instanceId === now.instanceId &&
+          next.completionSeq > now.completionSeq
+        )
+          this.onEvent(e);
+      }
+    }
   }
 
   private onEvent(e: ServerEvent): void {

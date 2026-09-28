@@ -67,6 +67,7 @@ export const GRAPH_TICK_MS = 1000;
 /**
  * 送った先を「作業中」とみなす時間（ms）。送った直後の先は、エージェントが読み始めて working を公開するまで idle のまま見えるので、その間に
  * 同じ先へ 2 つ目の prompt（監督の知らせと承認の代理が同じ tick に揃った等）を続けて送らない。本物の状態の知らせが来たらそちらを使う。
+ * 数えるのは送り終えた（prompt が返った）時点から。送り始めから送り終えるまで（画面の読み取りを含む）は期限なしで作業中とみなす（04 レビュー R1）。
  */
 export const ASSUMED_BUSY_MS = 5000;
 
@@ -75,6 +76,15 @@ interface End {
   paneId: string;
   /** 口（別のマシンの口が無い〔`remote` を渡していない〕なら null）。 */
   port: AgentPort | null;
+}
+
+interface BusyEntry {
+  end: End;
+  /** 期限（送り終えるまでは無限）。 */
+  until: number;
+  agent: AgentInfo;
+  /** 送り始めた時刻。 */
+  startedAt: number;
 }
 
 interface LinkRuntime {
@@ -102,7 +112,7 @@ export class GraphEngine {
   /** 履歴の連番（同じ時刻の記録を新しい順に並べる）。 */
   private seq = 0;
   /** 送った直後で「作業中」とみなしている先（鍵は `<machine>:<paneId>`）。 */
-  private readonly assumedBusy = new Map<string, { end: End; until: number; agent: AgentInfo }>();
+  private readonly assumedBusy = new Map<string, BusyEntry>();
   private subs: Disposable[] = [];
   /** 別のマシンの口の購読（マシンごと）。 */
   private readonly remoteSubs = new Map<string, { port: AgentPort; subs: Disposable[] }>();
@@ -452,16 +462,27 @@ export class GraphEngine {
   }
 
   /** 送り始めた先を、しばらく作業中とみなす（同じ先への 2 つ目の prompt を続けて送らない。`ASSUMED_BUSY_MS`）。 */
-  private assumeBusy(end: End): void {
+  private assumeBusy(end: End): BusyEntry | null {
     const agent = end.port!.status(end.paneId);
-    if (agent === null) return;
+    if (agent === null) return null;
     const at = this.deps.now();
-    this.assumedBusy.set(`${end.machine}:${end.paneId}`, {
-      end,
-      until: at + ASSUMED_BUSY_MS,
-      agent,
-    });
+    // 送り終える（prompt が返る）までは期限なし。送り終えたら `settleBusy` がその時点から数え直す（別のマシンの画面の読み取りは
+    // 直列で最長 10 秒ほどかかり、送り始めから数えると送る前に切れて同じ先へ 2 通送る。04 レビュー R1）。
+    const entry: BusyEntry = { end, until: Number.POSITIVE_INFINITY, agent, startedAt: at };
+    this.assumedBusy.set(`${end.machine}:${end.paneId}`, entry);
     this.feedTarget(end, { ...agent, state: "working" }, at);
+    return entry;
+  }
+
+  /**
+   * 送り終えた（または送らずに終えた）。届いたなら今から `ASSUMED_BUSY_MS`、届いていないなら送り始めから `ASSUMED_BUSY_MS`（今までと同じ）で
+   * 期限を切る。その間に本物の状態の知らせで外れていれば（別の entry・無い）何もしない。
+   */
+  private settleBusy(entry: BusyEntry | null, delivered: boolean): void {
+    if (entry === null) return;
+    const key = `${entry.end.machine}:${entry.end.paneId}`;
+    if (this.assumedBusy.get(key) !== entry) return;
+    entry.until = delivered ? this.deps.now() + ASSUMED_BUSY_MS : entry.startedAt + ASSUMED_BUSY_MS;
   }
 
   /** 先・監督役としての状態だけを流す（元としての完了・承認待ちの判定には流さない）。 */
@@ -492,7 +513,8 @@ export class GraphEngine {
     const { link, from, to } = rt;
     const target = to.port!;
     rt.sending = true;
-    this.assumeBusy(to);
+    const busy = this.assumeBusy(to);
+    let delivered = false;
     try {
       let text: string;
       if (!from.port!.available() || !target.available()) {
@@ -534,6 +556,7 @@ export class GraphEngine {
         return;
       }
       await target.prompt(to.paneId, text);
+      delivered = true;
       // 止めた後（引き継ぎ・終了の途中）に届いた送信は履歴に残さないが、回数は下で数える（届いたので上限を守る）。
       if (gen === this.generation) {
         this.record({
@@ -549,6 +572,7 @@ export class GraphEngine {
       return;
     } finally {
       rt.sending = false;
+      this.settleBusy(busy, delivered);
     }
     // 届いた。回数を数える（保存に失敗しても送ったことは変わらないので、履歴は「送った」のまま。閉じた後〔終了の途中〕は保存が断るのでログだけ）。
     try {
@@ -571,9 +595,11 @@ export class GraphEngine {
     }
     const text = supervisorNotice(subs);
     sv.sending = true;
-    this.assumeBusy(sv.end);
+    const busy = this.assumeBusy(sv.end);
+    let delivered = false;
     try {
       await sv.end.port!.prompt(sv.end.paneId, text);
+      delivered = true;
       if (gen !== this.generation) return;
       const at = this.deps.now();
       for (const l of sv.links)
@@ -595,6 +621,7 @@ export class GraphEngine {
       for (const l of sv.links) this.recordFailure(l.id, err);
     } finally {
       sv.sending = false;
+      this.settleBusy(busy, delivered);
     }
   }
 

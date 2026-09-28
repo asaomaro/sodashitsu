@@ -329,6 +329,58 @@ describe("GraphEngine — 別のマシン（04）", () => {
   });
 });
 
+describe("GraphEngine — 作業中とみなすのは送り終えてから（04 レビュー R1）", () => {
+  it("別のマシンの画面の読み取りが 5 秒を超えても、その間と送り終えてから 5 秒は同じ先へ 2 通目を送らない", async () => {
+    const t = setup([trigger("l1", R1, L1), trigger("l2", R2, L1)]);
+    let finishTail!: (v: string) => void;
+    t.remote.tail.mockImplementationOnce(() => new Promise<string>((r) => (finishTail = r)));
+    t.remote.set("p1", agent("ra", 1)); // l1 が送り始める（画面の読み取りが遅い）
+    await flush();
+    t.advance(ASSUMED_BUSY_MS + 1000); // 読み取りの途中で 5 秒を過ぎる
+    t.remote.set("p2", agent("rb", 1)); // l2 が発火。先はまだ作業中とみなす
+    await flush();
+    expect(t.local.prompts).toEqual([]);
+    expect(t.reasons()).toEqual(["l2:waiting"]);
+    finishTail("遅い画面");
+    await flush();
+    expect(t.local.prompts).toHaveLength(1);
+    t.advance(ASSUMED_BUSY_MS - 1); // 送り終えてから 5 秒までは待つ
+    await flush();
+    expect(t.local.prompts).toHaveLength(1);
+    t.advance(1);
+    await flush();
+    expect(t.local.prompts).toHaveLength(2);
+  });
+
+  it("送らずに終えた（resolved 等）なら、送り始めから 5 秒で今までどおり戻す", async () => {
+    const approval: GraphLink = {
+      id: "l1",
+      kind: "approval",
+      from: L1,
+      to: R1,
+      approval: { mode: "notify", lines: 5 },
+      limit: 10,
+      count: 0,
+      paused: null,
+    };
+    const t = setup([approval, trigger("l2", L2, R1)]);
+    let finishTail!: (v: string) => void;
+    t.local.tail.mockImplementationOnce(() => new Promise<string>((r) => (finishTail = r)));
+    t.local.set("p1", agent("la", 0, "working"));
+    t.local.set("p1", agent("la", 0, "blocked"));
+    t.advance(BLOCKED_HOLD_MS);
+    await flush();
+    t.local.set("p2", agent("lb", 1)); // 待つ
+    t.store.set({ ...t.store.graph, links: [trigger("l2", L2, R1)] }); // 承認の代理の線を消す（送らずに終える）
+    finishTail("x");
+    await flush();
+    expect(t.remote.prompts).toEqual([]);
+    t.advance(ASSUMED_BUSY_MS);
+    await flush();
+    expect(t.remote.prompts).toHaveLength(1);
+  });
+});
+
 describe("GraphEngine — 別のマシンの監督役（04）", () => {
   const supervise = (id: string, from: NodeKey, to: NodeKey): GraphLink => ({
     id,

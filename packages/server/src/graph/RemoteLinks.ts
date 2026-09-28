@@ -46,12 +46,17 @@ export interface RemoteLinksDeps {
   tailTimeoutMs?: number;
 }
 
+/** hello の応答より前に溜めるイベントの上限（応答の前はふつう数件）。 */
+const MAX_BEFORE_REPLY = 1000;
+
 /** マシン 1 台への接続。 */
 export class RemoteLink {
   private readonly conn: Connection;
   private up = false;
   private closed = false;
-  private readonly openedCbs = new Set<(snapshot: SessionSnapshot) => void>();
+  private readonly openedCbs = new Set<
+    (snapshot: SessionSnapshot, beforeReply: readonly ServerEvent[]) => void
+  >();
   private readonly closedCbs = new Set<() => void>();
   private readonly eventCbs = new Set<(e: ServerEvent) => void>();
   private readonly screenCbs = new Set<(paneId: string, text: string) => void>();
@@ -60,6 +65,11 @@ export class RemoteLink {
   private helloAnswered = false;
   /** hello の応答の後・open の前に届いたイベント（open の後に順に当てる。g04 点検）。 */
   private early: ServerEvent[] = [];
+  /**
+   * hello の応答より前に届いたイベント（04 レビュー R1）。snapshot を取る前のもの（snapshot が含む）と、取った後・応答を送る前のもの
+   * （snapshot より新しい）が混ざり、どちらか見分けられない。口（`RemoteAgentPort`）が、古い値に戻らない種類だけを snapshot に当てる。
+   */
+  private beforeReply: ServerEvent[] = [];
 
   constructor(
     readonly machine: string,
@@ -72,9 +82,10 @@ export class RemoteLink {
       },
       applyEvent: (e) => {
         if (this.up) this.emit(this.eventCbs, (cb) => cb(e));
-        // hello の応答より前のイベントは snapshot が含む（当て直すと古い値に戻る）。応答の後・open の前（同じ読み取りの塊で続けて届く）は
-        // snapshot より新しいので溜めて、open の後に当てる。
+        // 応答の後・open の前（同じ読み取りの塊で続けて届く）は snapshot より新しいので溜めて、open の後にそのまま当てる。
         else if (this.helloAnswered) this.early.push(e);
+        // 応答の前は snapshot より古いか新しいか分からない。溜めて、open のときに口へ渡す（口が安全なものだけ当てる）。
+        else if (this.beforeReply.length < MAX_BEFORE_REPLY) this.beforeReply.push(e);
       },
       onAuthRequired: () => undefined, // 中継の受け口は認証済み。閉じた code は adapter が 4401 を通さない
       onConnectionState: (s) => this.onState(s),
@@ -97,6 +108,7 @@ export class RemoteLink {
       createWebSocket: () => {
         this.helloAnswered = false;
         this.early = [];
+        this.beforeReply = [];
         return new HelloWatchSocket(openSocket(), () => {
           this.helloAnswered = true;
         });
@@ -131,8 +143,13 @@ export class RemoteLink {
     return this.conn.request(method, params);
   }
 
-  /** hello を済ませた（初回・繋ぎ直し）。snapshot は今のリモートの状態（基準）。 */
-  onOpened(cb: (snapshot: SessionSnapshot) => void): Disposable {
+  /**
+   * hello を済ませた（初回・繋ぎ直し）。snapshot は今のリモートの状態（基準）。`beforeReply` は応答より前に届いたイベント（snapshot より
+   * 古いものも混ざる）。応答の後のイベントは、この後に `onEvent` で届く。
+   */
+  onOpened(
+    cb: (snapshot: SessionSnapshot, beforeReply: readonly ServerEvent[]) => void,
+  ): Disposable {
     return this.add(this.openedCbs, cb);
   }
   onClosed(cb: () => void): Disposable {
@@ -151,14 +168,17 @@ export class RemoteLink {
       const snap = this.pendingSnapshot;
       this.pendingSnapshot = null;
       const early = this.early;
+      const beforeReply = this.beforeReply;
       this.early = [];
+      this.beforeReply = [];
       if (this.closed || snap === null) return;
       this.up = true;
-      this.emit(this.openedCbs, (cb) => cb(snap));
+      this.emit(this.openedCbs, (cb) => cb(snap, beforeReply));
       for (const e of early) if (this.up) this.emit(this.eventCbs, (cb) => cb(e));
       return;
     }
     this.early = [];
+    this.beforeReply = [];
     this.setUp(false);
   }
 

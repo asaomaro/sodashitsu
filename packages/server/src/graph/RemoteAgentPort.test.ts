@@ -244,3 +244,38 @@ describe("RemoteAgentPort（g04 点検）", () => {
     links.closeAll();
   });
 });
+
+describe("RemoteAgentPort（hello の応答より前のイベント。04 レビュー R1）", () => {
+  it("閉じた pane・できた pane・同じエージェントの完了の増加は snapshot に当て、古い値に戻りうるもの（名前・回数の増えない変化）は当てない", async () => {
+    const machines = new FakeMachines([{ id: M, label: "box" }]);
+    const links = new RemoteLinks({ machines });
+    links.ensure([M]);
+    const port = links.port(M)!;
+    const log: string[] = [];
+    port.onAvailability((up) => log.push(`up:${up}`));
+    port.onStatus((e) => log.push(`${e.paneId}:${e.agent?.completionSeq ?? "null"}`));
+    await new Promise((r) => setImmediate(r));
+    const ch = machines.last();
+    // 応答より前（snapshot を取った後に起きたもの・前に起きたものが混ざる）
+    ch.event("pane.closed", { paneId: "p2" });
+    ch.event("pane.created", { pane: pane("p3", { label: "new" }) });
+    ch.event("pane.agent_status_changed", { paneId: "p1", agent: agent("i1", 4) });
+    ch.event("pane.agent_status_changed", { paneId: "p4", agent: agent("i4", 1, "working") }); // 回数が増えていない
+    ch.event("pane.updated", { pane: pane("p4", { label: "old-name" }) });
+    ch.hello(
+      remoteSnapshot([
+        pane("p1", { agent: agent("i1", 3) }),
+        pane("p2", { agent: agent("i2", 0) }),
+        pane("p4", { label: "new-name", agent: agent("i4", 1, "idle") }),
+      ]),
+    );
+    await new Promise((r) => setImmediate(r));
+    expect(log).toEqual(["up:true", "p2:null", "p1:4"]);
+    expect(port.status("p2")).toBeNull();
+    expect(port.paneName("p3")).toBe("new");
+    expect(port.status("p1")).toMatchObject({ completionSeq: 4 });
+    expect(port.status("p4")).toMatchObject({ state: "idle" });
+    expect(port.paneName("p4")).toBe("new-name");
+    links.closeAll();
+  });
+});
