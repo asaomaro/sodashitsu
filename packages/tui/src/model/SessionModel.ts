@@ -35,6 +35,8 @@ export interface SessionModelHooks {
   onClientError?(code: string, message: string): void;
   onPrefsChanged?(data: PrefsChangedEvent["data"]): void;
   onAgentChanged?(paneId: string, prev: AgentInfo | null, next: AgentInfo | null): void;
+  /** 独自コマンドの popup が閉じた（`command.popup_closed`）。 */
+  onPopupClosed?(popupId: string, exitCode: number | undefined): void;
   /** 保存した SSH のマシンの一覧が変わった（`machine.changed`）。 */
   onMachinesChanged?(machines: MachineStatus[]): void;
   /** スナップショットを当てた（`first` はこのプロセスで最初の 1 回。通知の判定済みの印に使う）。 */
@@ -210,6 +212,9 @@ export class SessionModel {
       case "prefs.changed":
         this.hooks.onPrefsChanged?.(e.data);
         return;
+      case "command.popup_closed":
+        this.hooks.onPopupClosed?.(e.data.popupId, e.data.exitCode);
+        return;
       case "machine.changed":
         this.hooks.onMachinesChanged?.(e.data.machines);
         return;
@@ -222,7 +227,7 @@ export class SessionModel {
         this.agentIntegration = e.data;
         return;
       default:
-        // command.popup_closed・pane.attach_changed は 05 の T6 で扱う。
+        // pane.attach_changed は端末版では使わない（`sodactl pane attach` のため。web も使わない）。
         return;
     }
   }

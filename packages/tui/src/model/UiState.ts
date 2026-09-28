@@ -1,4 +1,9 @@
-import type { WorktreeEntry, WorktreeListResult, WorkspaceGroup } from "@sodashitsu/protocol";
+import type {
+  PopupDimension,
+  WorktreeEntry,
+  WorktreeListResult,
+  WorkspaceGroup,
+} from "@sodashitsu/protocol";
 import type { SessionModel } from "./SessionModel.js";
 
 /**
@@ -23,6 +28,15 @@ export type DialogContext =
   | { kind: "settings" }
   /** 端末版だけ：未処理の知らせの一覧（design「modes/」の「通知の一覧」）。 */
   | { kind: "notifications" }
+  /** 独自コマンドの popup（web と同じ形）。 */
+  | {
+      kind: "commandPopup";
+      commandId: string;
+      paneId: string;
+      title: string;
+      width?: PopupDimension;
+      height?: PopupDimension;
+    }
   | { kind: "worktreeCreate"; workspaceId: string; info: WorktreeListResult }
   | { kind: "worktreeOpen"; workspaceId: string; entries: WorktreeEntry[] }
   | {

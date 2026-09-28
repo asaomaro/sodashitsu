@@ -50,15 +50,30 @@ export class PaneRegistry implements TerminalSinkPort {
   // --- TerminalSinkPort ---
 
   onOutput(paneId: string, chunk: Uint8Array): void {
-    this.terms.get(paneId)?.output(chunk);
+    const ext = this.externals.get(paneId);
+    if (ext) ext.onOutput(paneId, chunk);
+    else this.terms.get(paneId)?.output(chunk);
   }
 
   onSnapshot(paneId: string, cols: number, rows: number, text: string): void {
-    this.terms.get(paneId)?.snapshot(cols, rows, text);
+    const ext = this.externals.get(paneId);
+    if (ext) ext.onSnapshot(paneId, cols, rows, text);
+    else this.terms.get(paneId)?.snapshot(cols, rows, text);
   }
 
   onSizeChanged(paneId: string, cols: number, rows: number): void {
-    this.terms.get(paneId)?.resizeAfterWrites(cols, rows);
+    const ext = this.externals.get(paneId);
+    if (ext) ext.onSizeChanged(paneId, cols, rows);
+    else this.terms.get(paneId)?.resizeAfterWrites(cols, rows);
+  }
+
+  /** 表示の割り付けの外の端末（独自コマンドの popup）の出力の受け先（web の `TerminalRegistry.attachExternal`）。外す関数を返す。 */
+  private readonly externals = new Map<string, TerminalSinkPort>();
+  attachExternal(id: string, sink: TerminalSinkPort): () => void {
+    this.externals.set(id, sink);
+    return () => {
+      if (this.externals.get(id) === sink) this.externals.delete(id);
+    };
   }
 
   // --- 接続 ---

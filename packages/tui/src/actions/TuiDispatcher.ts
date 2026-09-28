@@ -58,7 +58,6 @@ export interface DispatcherHost {
   /** 次の通知へ（05）。 */
   focusNextNotification(): void;
   /** 独自コマンド（05）。 */
-  runCommand(commandId: string): void;
   /** クリップボードの画像の貼り付け（05）。 */
   pasteImage(): void;
 }
@@ -169,7 +168,7 @@ export class TuiDispatcher {
         this.reloadConfig();
         return;
       case "runCommand":
-        this.host.runCommand(action.commandId);
+        this.runCommand(action.commandId);
         return;
       case "pasteImage":
         this.host.pasteImage();
@@ -1163,6 +1162,47 @@ export class TuiDispatcher {
   }
 
   /** 溜めた入力を新しい pane へ（閉じている・zoom で隠れているなら元の pane へ戻す。web の D99）。 */
+  /**
+   * 独自コマンドを走らせる（web の ActionDispatcher.runCommand と同じ）：popup は浮いた端末のダイアログ、shell は走らせて知らせる、pane は新しい
+   * pane へ移る（応答までの打鍵は新しい pane へ）。一覧に無いコマンド・焦点の pane が無ければ何もしない。
+   */
+  private runCommand(commandId: string): void {
+    const def = this.model.commands.commands.find((c) => c.id === commandId);
+    const paneId = this.model.focusedPaneId;
+    if (!def || !paneId) return;
+    const label = def.description ?? def.id;
+    if (def.type === "popup") {
+      this.ui.openDialogWithContext({
+        kind: "commandPopup",
+        commandId,
+        paneId,
+        title: label,
+        ...(def.width !== undefined ? { width: def.width } : {}),
+        ...(def.height !== undefined ? { height: def.height } : {}),
+      });
+      return;
+    }
+    if (def.type === "shell") {
+      this.conn
+        .request("command.run", { commandId, paneId })
+        .then(() => this.ui.toast(`「${label}」を走らせました。`))
+        .catch((err: unknown) => this.ui.toast(commandErrorMessage(err)));
+      return;
+    }
+    const hold = this.host.input?.holdInput(paneId);
+    this.conn
+      .request("command.run", { commandId, paneId })
+      .then((r) => {
+        const pane = r.type === "pane" ? r.pane : null;
+        if (pane && this.model.panes.has(pane.id)) this.model.focusPane(pane.id);
+        this.releaseHold(hold, pane?.id ?? paneId);
+      })
+      .catch((err: unknown) => {
+        hold?.cancel();
+        this.ui.toast(commandErrorMessage(err));
+      });
+  }
+
   private releaseHold(hold: InputHold | undefined, newPaneId: string): void {
     if (!hold) return;
     const pane = this.model.panes.get(newPaneId);
@@ -1171,6 +1211,11 @@ export class TuiDispatcher {
     if (pane && !hiddenByZoom) hold.release(newPaneId);
     else hold.cancel();
   }
+}
+
+function commandErrorMessage(err: unknown): string {
+  const code = errorCodeOf(err);
+  return code ? clientErrorMessage(code) : "独自コマンドを走らせられませんでした。";
 }
 
 function worktreeErrorMessage(err: unknown): string {

@@ -24,6 +24,7 @@ import { NotificationController } from "../notify/NotificationController.js";
 import { MachinesModel } from "../model/MachinesModel.js";
 import { MachineWiring, type SwitchTarget } from "../net/MachineWiring.js";
 import { NotificationList } from "../modes/NotificationList.js";
+import { CommandPopup } from "../modes/CommandPopup.js";
 import { describeDelivery, detectDelivery } from "../notify/terminalNotify.js";
 import type { ToastHit } from "../render/Renderer.js";
 import { ATTR } from "../render/color.js";
@@ -186,6 +187,10 @@ export class TuiApp {
   private readonly kitty: KittyImages | null;
   /** 直近のフレームで出し直す画像。 */
   private frameImages: KittyPlacement[] = [];
+  /** 開いている独自コマンドの popup。 */
+  private popup: CommandPopup | null = null;
+  /** 開き終える前に閉じた popup（id → 終了コード）。 */
+  private readonly closedPopups = new Map<string, number | undefined>();
   /** 通知（05 の T3）。 */
   readonly notify: NotificationController;
   /** 直近のフレームの知らせの当たり（押すと対象へ）。 */
@@ -213,6 +218,7 @@ export class TuiApp {
       onAgentChanged: (paneId, prev, next) => this.notify?.onAgentChanged(paneId, prev, next),
       onSnapshotApplied: (panes, first) => this.notify?.onSnapshotApplied(panes, first),
       onMachinesChanged: (list) => this.wiring?.onMainMachinesChanged(list),
+      onPopupClosed: (popupId, exitCode) => this.onPopupClosed(popupId, exitCode),
       // 共有の設定はローカルのサーバのものだけ（ほかのマシンを見ている間の画面の接続の知らせは当てない。decisions D7.4）。
       onPrefsChanged: (data) => {
         if (this.machines.selectedId === LOCAL_MACHINE_ID) this.prefs.apply(data.prefs, data.rev);
@@ -299,7 +305,6 @@ export class TuiApp {
       detach: () => this.detach(),
       toggleSidebar: () => this.toggleSidebar(),
       focusNextNotification: () => this.notify.focusNext(),
-      runCommand: () => this.notYet("独自コマンド"),
       pasteImage: () => {
         const id = this.model.focusedPaneId;
         if (id) this.imagePaster.fromKey(id, null);
@@ -522,7 +527,23 @@ export class TuiApp {
       .catch(() => undefined);
   }
 
+  /** 独自コマンドの popup が閉じた。開いている popup なら閉じ、まだ開き終えていなければ覚えておく（web の commands の store の closedPopups）。 */
+  private onPopupClosed(popupId: string, exitCode: number | undefined): void {
+    if (this.popup?.id === popupId) {
+      this.popup.onClosed(exitCode);
+      this.popup = null;
+      return;
+    }
+    this.closedPopups.set(popupId, exitCode);
+    while (this.closedPopups.size > 32)
+      this.closedPopups.delete(this.closedPopups.keys().next().value!);
+  }
+
   protected onConnectionClosed(): void {
+    if (this.popup) {
+      this.popup.onDisconnected();
+      this.popup = null;
+    }
     this.panes.connectionClosed();
   }
 
@@ -624,7 +645,7 @@ export class TuiApp {
       return;
     }
     if (ev.kind !== "focus" && this.overlays.active) {
-      if (ev.kind === "key") this.overlays.handleKey(ev.key);
+      if (ev.kind === "key") this.overlays.handleKey(ev.key, ev.raw);
       else if (ev.kind === "paste") this.overlays.handlePaste(ev.text);
       else this.overlays.handleMouse(ev);
       this.scheduleRender();
@@ -744,6 +765,24 @@ export class TuiApp {
       });
     if (ctx.kind === "settings") return this.settingsDialog();
     if (ctx.kind === "notifications") return new NotificationList(this.ui, this.notify);
+    if (ctx.kind === "commandPopup") {
+      const popup = new CommandPopup(ctx, {
+        ui: this.ui,
+        conn: this.rpc,
+        sendInput: (id, bytes) => this.net?.conn.sendInput(id, bytes),
+        attachExternal: (id, sink) => this.panes.attachExternal(id, sink),
+        area: () => (this.lastLayout ?? this.layout()).paneArea,
+        takeClosed: (id) => {
+          if (!this.closedPopups.has(id)) return { closed: false };
+          const exitCode = this.closedPopups.get(id);
+          this.closedPopups.delete(id);
+          return { closed: true, exitCode };
+        },
+        requestRender: () => this.scheduleRender(),
+      });
+      this.popup = popup;
+      return popup;
+    }
     return null;
   }
 

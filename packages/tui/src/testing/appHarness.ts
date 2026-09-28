@@ -67,7 +67,10 @@ export async function startedApp(
     const r = opts.respond?.[msg.method];
     const result =
       typeof r === "function" ? (r as (params: unknown) => unknown)(msg.params) : (r ?? {});
-    queueMicrotask(() => ws.onmessage?.({ data: JSON.stringify({ id: msg.id, result }) }));
+    // 関数が Promise を返したら、解けたときに応える（返事の順を試験で決められる）。
+    void Promise.resolve(result).then((res) =>
+      ws.onmessage?.({ data: JSON.stringify({ id: msg.id, result: res }) }),
+    );
   };
   const outer = new OuterTerminal(cols, rows);
   let written = 0;

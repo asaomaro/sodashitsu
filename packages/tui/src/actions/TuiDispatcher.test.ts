@@ -100,7 +100,6 @@ function harness(snap: SessionSnapshot = snapshot(), responses: Record<string, R
     toggleSidebar: vi.fn(),
     setCommands: vi.fn(),
     focusNextNotification: vi.fn(),
-    runCommand: vi.fn(),
     pasteImage: vi.fn(),
   } satisfies DispatcherHost;
   const d = new TuiDispatcher(host);
@@ -575,7 +574,7 @@ describe("TuiDispatcher — モード・その他", () => {
     expect(h.modes).toEqual(["terminal", "terminal"]);
   });
 
-  it("help・goto・settings はダイアログ。toggleSidebar・detach・nextNotification・runCommand・pasteImage は host へ", () => {
+  it("help・goto・settings はダイアログ。toggleSidebar・detach・nextNotification・pasteImage は host へ", () => {
     const h = harness();
     h.d.run({ type: "help" });
     expect(h.ui.dialogContext).toEqual({ kind: "help" });
@@ -589,12 +588,10 @@ describe("TuiDispatcher — モード・その他", () => {
     h.d.run({ type: "toggleSidebar" });
     h.d.run({ type: "detach" });
     h.d.run({ type: "nextNotification" });
-    h.d.run({ type: "runCommand", commandId: "x" });
     h.d.run({ type: "pasteImage" });
     expect(h.host.toggleSidebar).toHaveBeenCalled();
     expect(h.host.detach).toHaveBeenCalled();
     expect(h.host.focusNextNotification).toHaveBeenCalled();
-    expect(h.host.runCommand).toHaveBeenCalledWith("x");
     expect(h.host.pasteImage).toHaveBeenCalled();
   });
 

@@ -57,7 +57,6 @@ function setup(snap: SessionSnapshot = snapshot(), responses: Record<string, unk
     detach: vi.fn(),
     toggleSidebar: vi.fn(),
     focusNextNotification: vi.fn(),
-    runCommand: vi.fn(),
     pasteImage: vi.fn(),
   };
   const actions = new TuiDispatcher(host);

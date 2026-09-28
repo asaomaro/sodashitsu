@@ -22,6 +22,8 @@ export interface OverlayRenderContext {
  */
 export interface Overlay {
   handleKey(k: KeyInput): void;
+  /** 生の列も要るもの（popup の端末へそのまま送る）。あれば `handleKey` の代わりに呼ぶ。 */
+  handleKeyEvent?(ev: { key: KeyInput; raw: string }): void;
   handlePaste?(text: string): void;
   /** 内側の事象なら扱って true。外側なら false（押したら閉じる。AC-I1）。 */
   handleMouse?(ev: OverlayMouse): boolean;

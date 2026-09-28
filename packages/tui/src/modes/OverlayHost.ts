@@ -69,8 +69,11 @@ export class OverlayHost {
     return deps.extra?.(ctx) ?? null;
   }
 
-  handleKey(k: KeyInput): void {
-    this.overlay()?.handleKey(k);
+  handleKey(k: KeyInput, raw = ""): void {
+    const o = this.overlay();
+    if (!o) return;
+    if (o.handleKeyEvent) o.handleKeyEvent({ key: k, raw });
+    else o.handleKey(k);
   }
 
   handlePaste(text: string): void {
