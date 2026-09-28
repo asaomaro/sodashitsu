@@ -1436,3 +1436,58 @@ describe("GraphView（変更を捨てますかはグラフ画面全体でモー�
     wrapper.unmount();
   });
 });
+
+describe("GraphView（保存の応答は送ったときのパネルにだけ当てる。レビュー R3）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+  const key = (k: string, init: KeyboardEventInit = {}) =>
+    new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init });
+
+  it("保存の応答待ちの間に別の線のパネルへ移っても、その保存中の印・応答は新しいパネルに当たらない（probe C）", async () => {
+    const { wrapper, fake, store } = await openWithGraph();
+    let resolve!: (g: unknown) => void;
+    fake.handlers["graph.update"] = () => new Promise((res) => (resolve = res));
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    await wrapper.find(".link-panel-limit").setValue(5);
+    wrapper.find(".link-panel-limit").element.dispatchEvent(key("Enter", { ctrlKey: true }));
+    await flush();
+    expect(wrapper.find(".link-panel-save").attributes("disabled")).toBeDefined();
+    await wrapper.find('[data-link-chip="l2"]').trigger("click");
+    await flush();
+    await wrapper.find(".graph-confirm-ok").trigger("click");
+    await flush();
+    expect(wrapper.find(".link-panel-heading").text()).toBe("線: impl → reviewer（監督）");
+    expect(wrapper.find(".link-panel-save").attributes("disabled")).toBeUndefined();
+    await wrapper.find(".link-panel-limit").setValue(8);
+    resolve({ ...store.graph!, rev: 2 });
+    await flush();
+    await flush();
+    // l2 のパネルは閉じない・入力も残る
+    expect(wrapper.find(".link-panel-heading").text()).toBe("線: impl → reviewer（監督）");
+    expect((wrapper.find(".link-panel-limit").element as HTMLInputElement).value).toBe("8");
+    wrapper.unmount();
+  });
+
+  it("閉じた後に保存が失敗したらトーストで知らせる（パネルが無いので黙って消えない）", async () => {
+    const { wrapper, fake, view } = await openWithGraph();
+    let reject!: (e: unknown) => void;
+    fake.handlers["graph.update"] = () => new Promise((_res, rej) => (reject = rej));
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    await wrapper.find(".link-panel-limit").setValue(7);
+    wrapper.find(".link-panel-limit").element.dispatchEvent(key("Enter", { ctrlKey: true }));
+    await flush();
+    wrapper.find(".link-panel-limit").element.dispatchEvent(key("Escape"));
+    await flush();
+    await wrapper.find(".graph-confirm-ok").trigger("click");
+    await flush();
+    expect(wrapper.find(".link-panel").exists()).toBe(false);
+    reject(Object.assign(new Error("internal: x"), { code: "internal" }));
+    await flush();
+    await flush();
+    expect(view.toasts.at(-1)?.message).toContain("線の設定を保存できませんでした");
+    wrapper.unmount();
+  });
+});

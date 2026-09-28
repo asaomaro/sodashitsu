@@ -554,7 +554,9 @@ type PanelState = { mode: "edit"; id: string } | { mode: "new"; from: NodeKey; t
 const panel = ref<PanelState | null>(null);
 /** 開くたびに作り直す（前の線の入力を持ち越さない）。 */
 const panelKey = ref(0);
-const panelSaving = ref(false);
+/** 保存の応答を待っているパネルの世代（`panelKey`）。保存中の印はそのパネルにだけ出す（レビュー R3）。 */
+const savingPanels = ref(new Set<number>());
+const panelSaving = computed(() => savingPanels.value.has(panelKey.value));
 const panelError = ref<string | null>(null);
 const panelRef = ref<InstanceType<typeof LinkPanel> | null>(null);
 const panelLink = computed(() => {
@@ -644,7 +646,9 @@ function configOps(p: LinkPanelSave): Pick<LinkPanelSave, "trigger" | "approval"
 }
 
 async function onPanelSave(p: LinkPanelSave): Promise<void> {
-  panelSaving.value = true;
+  // 送ったときのパネル（世代）。応答はそのパネルが開いたままのときだけ当てる（別の線のパネル・閉じた後に当てない。レビュー R3）。
+  const gen = panelKey.value;
+  savingPanels.value = new Set(savingPanels.value).add(gen);
   panelError.value = null;
   const before = new Set(graph.links.map((l) => l.id));
   const id = p.id;
@@ -659,7 +663,17 @@ async function onPanelSave(p: LinkPanelSave): Promise<void> {
             ? null
             : [{ op: "add_link", kind: p.kind, from: p.from, to: p.to, ...configOps(p) }],
         );
-  panelSaving.value = false;
+  const rest = new Set(savingPanels.value);
+  rest.delete(gen);
+  savingPanels.value = rest;
+  if (panelKey.value !== gen || !panel.value) {
+    // パネルはもう無い（閉じた・別の線へ移った）。失敗だけはトーストで知らせる（黙って消えない）。
+    if (!result.ok)
+      view.toast(
+        `線の設定を保存できませんでした（${result.reason === "gone" ? "対象がほかの画面・sodactl で消されました" : result.message}）`,
+      );
+    return;
+  }
   if (!result.ok) {
     panelError.value =
       result.reason === "gone"
