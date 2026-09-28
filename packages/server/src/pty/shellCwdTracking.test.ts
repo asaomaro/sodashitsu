@@ -160,20 +160,64 @@ describe("withShellCwdTracking — PowerShell（design D-3）", () => {
     expect(out.args as string[]).toContain("-EncodedCommand");
   });
 
+  it("値を取る既知の引数（空白区切り・コロン区切り）の値は位置引数と見ない", () => {
+    for (const args of [
+      ["-ExecutionPolicy", "Bypass"],
+      ["-ExecutionPolicy:Bypass"],
+      ["-ep", "RemoteSigned", "-NoLogo"],
+      ["-WorkingDirectory", "C:\\work", "-WindowStyle", "Hidden"],
+      ["-wd", "C:\\my work"],
+      ["-Version", "5.1", "-Sta"],
+      ["-NoProfileLoadTime", "-Login", "-Mta"],
+    ]) {
+      expect(withShellCwdTracking(launch("pwsh.exe", args), WIN).args, args.join(" ")).toContain(
+        "-EncodedCommand",
+      );
+    }
+  });
+
+  it("位置引数（pwsh script.ps1 は -File、5.1 は -Command として読む）・知らない引数・どちらとも読める省略があれば差し込まない", () => {
+    for (const args of [
+      ["script.ps1"],
+      ["-NoLogo", "C:\\x\\script.ps1", "arg"],
+      ["Get-Date"],
+      ["-ExecutionPolicy", "Bypass", "script.ps1"],
+      ["-ExecutionPolicy:Bypass", "script.ps1"],
+      ["-Unknown"],
+      ["-?"],
+      ["-i"], // -Interactive と -InputFormat のどちらとも読める
+    ]) {
+      for (const shell of ["powershell.exe", "pwsh"]) {
+        const l = launch(shell, args);
+        expect(withShellCwdTracking(l, WIN), `${shell} ${args.join(" ")}`).toBe(l);
+      }
+    }
+  });
+
   it("スクリプトは既存の prompt を包み、FileSystem の場所だけ OSC 9;9 を引用符付きで [Console]::Write する", () => {
     const script = decodedScript(withShellCwdTracking(launch("powershell.exe"), WIN).args);
     expect(script).toBe(
       [
         "$__sodaPrompt = $function:prompt",
         "function global:prompt {",
+        "  $__sodaOk = $?",
         "  $loc = $executionContext.SessionState.Path.CurrentLocation",
         "  if ($loc.Provider.Name -eq 'FileSystem') {",
         `    [Console]::Write([char]27 + ']9;9;"' + $loc.ProviderPath + '"' + [char]27 + '\\')`,
         "  }",
+        "  if (-not $__sodaOk) { Write-Error '' -ErrorAction Ignore }",
         `  if ($__sodaPrompt) { & $__sodaPrompt } else { "PS $($loc)$('>' * ($nestedPromptLevel + 1)) " }`,
         "}",
       ].join("\n"),
     );
+    // 直前のコマンドの成否（$?）は、包んだ側が文を実行する前に取り、元の prompt を呼ぶ直前に戻す（oh-my-posh・starship の失敗の色）。
+    const lines = script.split("\n");
+    expect(lines[2], "prompt の最初の文で $? を取る").toBe("  $__sodaOk = $?");
+    const restore = lines.indexOf("  if (-not $__sodaOk) { Write-Error '' -ErrorAction Ignore }");
+    const invoke = lines.findIndex((l) => l.includes("& $__sodaPrompt"));
+    expect(restore).toBeGreaterThan(lines.findIndex((l) => l.includes("[Console]::Write")));
+    expect(invoke, "元の prompt を呼ぶ直前に戻す").toBe(restore + 1);
+    expect(script, "$LASTEXITCODE には触らない").not.toContain("LASTEXITCODE");
     // 5.1 は `e を持たない。ESC は [char]27 で作る（制御文字そのものは入れない）。
     expect(script).not.toContain("`e");
     // eslint-disable-next-line no-control-regex
@@ -213,6 +257,24 @@ describe("withShellCwdTracking — cmd（design D-4）", () => {
   it("PROMPT の名前は大文字小文字を区別しない（入っていた綴りの項目を書き換え、別の項目を増やさない）", () => {
     const out = withShellCwdTracking(launch("cmd.exe", [], { Prompt: "[$P]" }), WIN);
     expect(out.env).toEqual({ Prompt: '$E]9;9;"$P"$E\\[$P]' });
+  });
+
+  it("綴りの違う PROMPT が複数あれば 1 つにまとめる（PROMPT を優先し、ほかは落とす）", () => {
+    const out = withShellCwdTracking(
+      launch("cmd.exe", [], { prompt: "a", PATH: "C:\\bin", PROMPT: "[$P]", Prompt: "b" }),
+      WIN,
+    );
+    expect(out.env).toEqual({ PATH: "C:\\bin", PROMPT: '$E]9;9;"$P"$E\\[$P]' });
+    const noUpper = withShellCwdTracking(launch("cmd.exe", [], { Prompt: "x", prompt: "y" }), WIN);
+    expect(noUpper.env).toEqual({ Prompt: '$E]9;9;"$P"$E\\x' });
+  });
+
+  it("既に知らせが付いた PROMPT（soda の中から起動した等）には二重に足さない", () => {
+    const already = '$E]9;9;"$P"$E\\$P$G';
+    const out = withShellCwdTracking(launch("cmd.exe", [], { PROMPT: already }), WIN);
+    expect(out.env).toEqual({ PROMPT: already });
+    const twice = withShellCwdTracking(withShellCwdTracking(launch("cmd.exe"), WIN), WIN);
+    expect(twice.env).toEqual({ PROMPT: already });
   });
 
   it("PROMPT が空なら既定の $P$G として扱う", () => {
