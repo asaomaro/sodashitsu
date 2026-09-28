@@ -359,6 +359,10 @@ const machineSwitcher = new MachineSwitcher({
   retarget: (url) => connection.retarget(url),
   wsUrlFor: (id) => wsUrlFor(wsUrl, id),
   requestWorkspaceFocus: (workspaceId) => void conn.request("workspace.focus", { workspaceId }).catch(() => undefined),
+  requestPaneFocus: (paneId) => {
+    view.focusPane(paneId);
+    void conn.request("pane.focus", { paneId }).catch(() => undefined);
+  },
 });
 machineSwitcherBox.current = machineSwitcher;
 

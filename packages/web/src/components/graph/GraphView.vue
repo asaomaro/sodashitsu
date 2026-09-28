@@ -894,11 +894,11 @@ function requestRemoveNode(key: string): void {
 
 const rekeyKey = ref<NodeKey | null>(null);
 /**
- * 選び直せるノードか（ボタンとキーの r の条件はここ 1 か所。レビュー R5）: 無効な手元のノードだけ（候補は手元の pane なので、別のマシンの
- * ノードを手元の pane に付け替えない）。モバイルは編集しない。
+ * 選び直せるノードか（ボタンとキーの r の条件はここ 1 か所。レビュー R5）: 無効なノード（候補は同じマシンの pane。別のマシンのノードを
+ * 手元の pane に付け替えない。04 で別のマシンのノードにも広げた）。モバイルは編集しない。
  */
 function canRekey(key: string): boolean {
-  return !isMobile.value && nodeInvalid(key) && infos.value.get(key)?.local === true;
+  return !isMobile.value && nodeInvalid(key);
 }
 function openRekey(key: string): void {
   if (!canRekey(key)) return;
@@ -979,8 +979,8 @@ function gotoNode(key: string): void {
     void conn?.request("pane.focus", { paneId: info.paneId }).catch(() => undefined);
     return;
   }
-  // 別のマシン（別のマシンを見ている間の手元を含む）はそのマシンへ切り替えて、その pane のある tab を開く。
-  void switcher?.switchTo(info.machine, loc);
+  // 別のマシン（別のマシンを見ている間の手元を含む）はそのマシンへ切り替えて、その pane のある tab を開き、その pane に焦点を置く（04）。
+  void switcher?.switchTo(info.machine, { ...loc, paneId: info.paneId });
 }
 
 function onChipClick(id: string): void {

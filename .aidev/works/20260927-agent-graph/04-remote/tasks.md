@@ -37,7 +37,7 @@ web は、チェックリストのマシンの節と別のマシンのノード�
       対象: `packages/server/src/graph/GraphEngine.ts:34,91-93,234,499`・`packages/server/src/composeServer.ts`
       依存: T2
       AC: AC14, AC7, AC8, AC9
-- [ ] T4: web のチェックリストのマシンの節・別のマシンのノードの呼び名とマシンの表示・選び直しの候補に別のマシンの pane・別のマシンのノードから pane への移動
+- [x] T4: web のチェックリストのマシンの節・別のマシンのノードの呼び名とマシンの表示・選び直しの候補に別のマシンの pane・別のマシンのノードから pane への移動
       対象: `packages/web/src/components/graph/PaneChecklist.vue:52-98`・`packages/web/src/components/graph/GraphNode.vue`・`packages/web/src/components/graph/RekeyPicker.vue`・`packages/web/src/store/machines.ts`
       依存: なし
       AC: AC14, AC1

@@ -23,17 +23,21 @@ export interface MachineSwitcherPorts {
   wsUrlFor(id: string): string;
   /** 切り替え先で表示した workspace をサーバの「最後の選択」にする（`workspace.focus`）。 */
   requestWorkspaceFocus(workspaceId: string): void;
+  /** 切り替え先でその pane に焦点を置く（表示と `pane.focus`。連携のグラフのノードから。20260927-agent-graph の 04）。 */
+  requestPaneFocus(paneId: string): void;
 }
 
 export interface SwitchTarget {
   workspaceId: string;
   tabId: string;
+  /** その tab の中で焦点を置く pane（無ければそのマシンの tab の焦点のまま）。 */
+  paneId?: string;
 }
 
 export class MachineSwitcher {
   private generation = 0;
   /** 切り替え先で 1 回だけ送る `workspace.focus`（世代つき）。 */
-  private pendingFocus: { generation: number; workspaceId: string } | undefined;
+  private pendingFocus: { generation: number; workspaceId: string; paneId?: string } | undefined;
 
   constructor(private readonly ports: MachineSwitcherPorts) {}
 
@@ -53,7 +57,13 @@ export class MachineSwitcher {
     }
     if (!opts.force && !p.isSelectable(id)) return false;
     const generation = ++this.generation;
-    this.pendingFocus = target ? { generation, workspaceId: target.workspaceId } : undefined;
+    this.pendingFocus = target
+      ? {
+          generation,
+          workspaceId: target.workspaceId,
+          ...(target.paneId !== undefined ? { paneId: target.paneId } : {}),
+        }
+      : undefined;
     p.selectMachine(id);
     p.setViewScope(id);
     p.setSeenScope(id);
@@ -75,6 +85,8 @@ export class MachineSwitcher {
   onOpened(): void {
     const f = this.pendingFocus;
     this.pendingFocus = undefined;
-    if (f && f.generation === this.generation) this.ports.requestWorkspaceFocus(f.workspaceId);
+    if (!f || f.generation !== this.generation) return;
+    this.ports.requestWorkspaceFocus(f.workspaceId);
+    if (f.paneId !== undefined) this.ports.requestPaneFocus(f.paneId);
   }
 }

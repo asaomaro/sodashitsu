@@ -321,7 +321,7 @@ describe("store/graph", () => {
       limits: { scrollbackLines: 5000 },
     });
     expect(g.nodeInfo(`${M}:p7`)).toMatchObject({
-      name: "pane p7",
+      name: "reviewer", // 要約の呼び名（04）
       exists: true,
       state: "idle",
       location: { workspaceId: "w1", tabId: "t1" },

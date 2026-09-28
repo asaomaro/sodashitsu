@@ -669,7 +669,11 @@ describe("GraphView（pane を載せる/外す・履歴・pane へ移動。03 T4
     await flush();
     expect(t.wrapper.find(`[data-node-key="${M}:p7"] .graph-node-name`).text()).toBe("pane p7");
     await t.wrapper.find(`[data-node-key="${M}:p7"]`).trigger("keydown", { key: "Enter" });
-    expect(t.switcher.switchTo).toHaveBeenCalledWith(M, { workspaceId: "w9", tabId: "t9" });
+    expect(t.switcher.switchTo).toHaveBeenCalledWith(M, {
+      workspaceId: "w9",
+      tabId: "t9",
+      paneId: "p7",
+    });
     t.view.openGraph();
     await flush();
     useSessionStore(pinia).panes.delete("p1");
@@ -1336,6 +1340,47 @@ describe("GraphView（無効なノードの選び直し。g03 点検 T4）", () 
     expect(fake.calls).toHaveLength(0);
     wrapper.unmount();
   });
+
+  it("別のマシンのノード（その pane が閉じた）も、同じマシンの pane から選び直せる（手元の pane は候補にしない。04）", async () => {
+    const M = "b".repeat(32);
+    const { wrapper, fake } = await openWithGraph({
+      nodes: [
+        { key: "local:p1", x: 0, y: 0 },
+        { key: `${M}:p7`, x: 300, y: 0 },
+        { key: `${M}:p8`, x: 600, y: 0 },
+      ],
+    });
+    const machines = (await import("../../store/machines.js")).useMachinesStore(pinia);
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }]);
+    machines.applySummarySnapshot(M, {
+      protocol: 1,
+      serverVersion: "t",
+      host: { os: "linux", windowsBuild: null, hostname: "h" },
+      workspaces: [],
+      tabs: [{ id: "t9", workspaceId: "w9" } as never],
+      panes: [paneOf("p8", "t9"), paneOf("p9", "t9", { label: "fixer" })],
+      groups: [],
+      focus: null,
+      limits: { scrollbackLines: 5000 },
+    });
+    await flush();
+    expect(wrapper.find(`[data-node-key="${M}:p8"] .graph-node-rekey`).exists()).toBe(false);
+    await wrapper.find(`[data-node-key="${M}:p7"] .graph-node-rekey`).trigger("click");
+    await flush();
+    expect(wrapper.findAll("[data-rekey-key]").map((r) => r.attributes("data-rekey-key"))).toEqual([
+      `${M}:p9`,
+    ]);
+    expect(wrapper.find(".rekey-picker").text()).toContain("fixer");
+    await wrapper.find(`[data-rekey-key="${M}:p9"]`).setValue(true);
+    fake.handlers["graph.update"] = () => graphOf({ rev: 2 });
+    await wrapper.find(".rekey-picker-apply").trigger("click");
+    await flush();
+    expect(fake.calls[0]!.params).toEqual({
+      baseRev: 1,
+      ops: [{ op: "rekey_node", key: `${M}:p7`, newKey: `${M}:p9` }],
+    });
+    wrapper.unmount();
+  });
 });
 
 describe("GraphView（閉じたときの一時的な状態。レビュー R1）", () => {
@@ -1556,8 +1601,8 @@ describe("GraphView（選び直し・チェックリスト・パネルは排他�
   });
 });
 
-describe("GraphView（選び直しは手元のノードだけ。レビュー R5）", () => {
-  it("別のマシンの閉じた pane のノードは、ボタンも r も選び直しを開かない（probe E）", async () => {
+describe("GraphView（選び直しの候補は同じマシンの pane だけ。レビュー R5・04 で別のマシンのノードにも広げた）", () => {
+  it("別のマシンの閉じた pane のノードの選び直しは、そのマシンの pane だけを候補にする（手元の pane に付け替えない。probe E）", async () => {
     const M = "a".repeat(32);
     const t = await openWithGraph({
       nodes: [
@@ -1581,10 +1626,14 @@ describe("GraphView（選び直しは手元のノードだけ。レビュー R5�
     await flush();
     const n = t.wrapper.find(`[data-node-key="${M}:p7"]`);
     expect(n.classes()).toContain("graph-node-invalid");
-    expect(n.find(".graph-node-rekey").exists()).toBe(false);
+    expect(n.find(".graph-node-rekey").exists()).toBe(true);
     await n.trigger("keydown", { key: "r" });
     await flush();
-    expect(t.wrapper.find(".rekey-picker").exists()).toBe(false);
+    expect(t.wrapper.find(".rekey-picker").exists()).toBe(true);
+    // 手元の pane（p1 は載っているので元々出ないが、載っていない手元の pane も出さない）
+    useSessionStore(pinia).panes.set("p5", paneOf("p5", "t1"));
+    await flush();
+    expect(t.wrapper.findAll("[data-rekey-key]")).toHaveLength(0);
     t.wrapper.unmount();
   });
 });

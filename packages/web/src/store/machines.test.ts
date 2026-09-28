@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { WebSocketLike } from "@sodashitsu/client-core";
 import { MachineSummaryClient } from "@sodashitsu/client-core";
 import { LOCAL_MACHINE_ID, wsUrlFor } from "@sodashitsu/client-core";
-import { useMachinesStore } from "./machines.js";
+import { summaryPaneName, useMachinesStore } from "./machines.js";
 
 /** マシンの一覧・選択・要約（20260927-multi-host-machines の T12）。 */
 let pinia: Pinia;
@@ -356,5 +356,27 @@ describe("MachineSummaryClient（T12）", () => {
     sockets[0]!.reply({ machines: [] }, 1);
     await expect(p).resolves.toEqual({ machines: [] });
     c.stop();
+  });
+});
+
+describe("要約の pane の呼び名（20260927-agent-graph の 04）", () => {
+  it("paneNameOf と同じ連鎖（名前 → エージェントの名前 → 種類 → タイトル → pane <id>）。pane.updated で変わる", () => {
+    const m = useMachinesStore();
+    m.applySummarySnapshot("b", snap());
+    const id = snap().panes[0]!.id;
+    const base = { tabId: "t", agent: null, label: null, title: "" };
+    expect(summaryPaneName("p1", base)).toBe("pane p1");
+    expect(summaryPaneName("p1", { ...base, title: "vim" })).toBe("vim");
+    expect(summaryPaneName("p1", { ...base, title: "vim", agent: agent({}) })).toBe(
+      agent({}).label,
+    );
+    expect(summaryPaneName("p1", { ...base, agent: agent({ name: "rev" }), label: "impl" })).toBe(
+      "impl",
+    );
+    m.applySummaryEvent("b", {
+      event: "pane.updated",
+      data: { pane: { ...snap().panes[0]!, label: "renamed" } },
+    });
+    expect(summaryPaneName(id, m.summaries["b"]!.panes[id]!)).toBe("renamed");
   });
 });

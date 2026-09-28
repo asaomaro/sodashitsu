@@ -4,14 +4,14 @@
  * ツールバーの「pane を載せる」から開くポップオーバー。チェックを変えて「適用」で確定し、`Esc`・取り消し・外側のクリックは何も変えずに閉じる（AC-I1）。
  * 外すときの確認（消える線の本数）は親（`GraphView`）が出す。
  *
- * 03 は手元の pane だけを選べる（workspace ごと）。別のマシンの pane の節と呼び名は 04。グラフに載っている別のマシンのノード・無効なノード・
- * 閉じた pane のノードは「そのほか」に出し、外せる。
+ * 手元と登録したマシンの pane を workspace ごとに選べる（別のマシンの節は 04）。上の一覧に無いノード（無効・閉じた pane・繋がっていない
+ * マシンのノード）は「そのほか」に出し、外せる。
  */
 import { computed, nextTick, onMounted, ref } from "vue";
 import type { NodeKey } from "@sodashitsu/protocol";
 import { LOCAL_MACHINE_ID, nodeKey, paneNameOf } from "@sodashitsu/client-core";
 import { useGraphStore } from "../../store/graph.js";
-import { useMachinesStore } from "../../store/machines.js";
+import { summaryPaneName, useMachinesStore } from "../../store/machines.js";
 import { useSessionStore } from "../../store/session.js";
 
 const emit = defineEmits<{ apply: [change: { add: NodeKey[]; remove: NodeKey[] }]; close: [] }>();
@@ -32,7 +32,6 @@ interface Section {
   rows: Row[];
 }
 
-/** 手元の pane（workspace の順、その中は tab・pane の順）。画面の接続が別のマシンを向いている間は、手元の軽い接続の要約から。 */
 /** 無効（stale）なノードの鍵（id を振り直す前の pane のノード。同じ番号の今の pane とは別物）。 */
 const staleKeys = computed(
   () => new Set<string>(graph.nodes.filter((n) => n.stale).map((n) => n.key)),
@@ -47,45 +46,62 @@ function noteOf(key: string, agent: string | null): string | null {
   return agent;
 }
 
-const localSections = computed<Section[]>(() => {
+/**
+ * 1 台のマシンの pane の節（workspace ごと。その中は tab・pane の順）。画面の接続が向いているマシンは session の全体から、ほかのマシン
+ * （別のマシンを見ている間の手元を含む）は軽い接続の要約から。手元の節の見出しは workspace の名前だけ、別のマシンは「マシン / workspace」（04）。
+ */
+function sectionsOf(machine: string, machineLabel: string | null): Section[] {
   const out: Section[] = [];
-  if (machines.selectedId === LOCAL_MACHINE_ID) {
+  const legend = (ws: string, connected = true): string =>
+    (machineLabel === null ? ws : `${machineLabel} / ${ws}`) + (connected ? "" : "（未接続）");
+  if (machine === machines.selectedId) {
     for (const ws of session.workspaces.values()) {
       const rows: Row[] = [];
       for (const tabId of ws.tabIds) {
         for (const pane of session.panes.values()) {
           if (pane.tabId !== tabId) continue;
-          rows.push({
-            key: nodeKey(LOCAL_MACHINE_ID, pane.id),
-            name: paneNameOf(pane),
-            note: noteOf(nodeKey(LOCAL_MACHINE_ID, pane.id), pane.agent?.label ?? null),
-          });
+          const key = nodeKey(machine, pane.id);
+          rows.push({ key, name: paneNameOf(pane), note: noteOf(key, pane.agent?.label ?? null) });
         }
       }
-      if (rows.length > 0) out.push({ id: ws.id, label: ws.label, rows });
+      if (rows.length > 0) out.push({ id: `${machine}/${ws.id}`, label: legend(ws.label), rows });
     }
     return out;
   }
-  const summary = machines.summaries[LOCAL_MACHINE_ID];
+  const summary = machines.summaries[machine];
   if (!summary) return out;
   for (const ws of summary.workspaces) {
     const rows: Row[] = [];
     for (const [paneId, p] of Object.entries(summary.panes)) {
       if (summary.tabWorkspace[p.tabId] !== ws.id) continue;
+      const key = nodeKey(machine, paneId);
       rows.push({
-        key: nodeKey(LOCAL_MACHINE_ID, paneId),
-        name: p.agent?.name || `pane ${paneId}`,
-        note: noteOf(nodeKey(LOCAL_MACHINE_ID, paneId), p.agent?.label ?? null),
+        key,
+        name: summaryPaneName(paneId, p),
+        note: noteOf(key, p.agent?.label ?? null),
       });
     }
-    if (rows.length > 0) out.push({ id: ws.id, label: ws.label, rows });
+    if (rows.length > 0)
+      out.push({ id: `${machine}/${ws.id}`, label: legend(ws.label, summary.connected), rows });
   }
   return out;
-});
+}
+
+const machineSections = computed<Section[]>(() => [
+  ...sectionsOf(LOCAL_MACHINE_ID, null),
+  ...machines.machines.flatMap((m) => sectionsOf(m.id, m.label)),
+]);
+
+/** 一度も繋がっていない（pane を出せない）登録したマシン。 */
+const unreachable = computed(() =>
+  machines.machines
+    .filter((m) => m.id !== machines.selectedId && machines.summaries[m.id]?.everConnected !== true)
+    .map((m) => m.label),
+);
 
 /** グラフに載っているが上の一覧に無いノード（別のマシン・無効・閉じた pane）。 */
 const otherRows = computed<Row[]>(() => {
-  const listed = new Set(localSections.value.flatMap((s) => s.rows.map((r) => r.key)));
+  const listed = new Set(machineSections.value.flatMap((s) => s.rows.map((r) => r.key)));
   return graph.nodes
     .filter((n) => !listed.has(n.key))
     .map((n) => {
@@ -179,10 +195,10 @@ onMounted(() => {
       aria-label="pane を絞り込む"
     />
     <div class="pane-checklist-list">
-      <p v-if="localSections.length === 0 && otherRows.length === 0" class="pane-checklist-empty">
+      <p v-if="machineSections.length === 0 && otherRows.length === 0" class="pane-checklist-empty">
         pane がありません。
       </p>
-      <fieldset v-for="sec in localSections" :key="sec.id" class="pane-checklist-section">
+      <fieldset v-for="sec in machineSections" :key="sec.id" class="pane-checklist-section">
         <legend>{{ sec.label }}</legend>
         <label v-for="r in visible(sec.rows)" :key="r.key" class="pane-checklist-row">
           <input
@@ -195,6 +211,9 @@ onMounted(() => {
           <span v-if="r.note" class="pane-checklist-note">{{ r.note }}</span>
         </label>
       </fieldset>
+      <p v-for="label in unreachable" :key="label" class="pane-checklist-empty">
+        {{ label }}: 繋がっていないので pane を出せません。
+      </p>
       <fieldset v-if="otherRows.length > 0" class="pane-checklist-section">
         <legend>そのほか（載っているノード）</legend>
         <label v-for="r in visible(otherRows)" :key="r.key" class="pane-checklist-row">

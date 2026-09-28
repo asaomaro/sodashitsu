@@ -2,14 +2,15 @@
 /**
  * 無効なノードを別の pane に選び直す（20260927-agent-graph の design「`session.json` が読めなかった起動で手元のノードを stale にする…利用者がノードを
  * 選び直すか除去するまで」・g03 点検）。`rekey_node` で送るので、ノードに繋がる線はそのまま付け替わる。
- * 候補はグラフに載っていない手元の pane と、同じ番号の今の pane（id を振り直した後に同じ番号で開いた pane。選べば「無効」の印だけが外れる）。
+ * 候補はグラフに載っていない同じマシンの pane と、同じ番号の今の pane（id を振り直した後に同じ番号で開いた pane。選べば「無効」の印だけが外れる）。
+ * 別のマシンのノード（その pane が閉じた）も同じマシンの pane から選び直せる（04）。
  * `Esc`・取り消し・外側のクリックは何も変えずに閉じる。
  */
 import { computed, nextTick, onMounted, ref } from "vue";
 import type { NodeKey } from "@sodashitsu/protocol";
-import { LOCAL_MACHINE_ID, nodeKey, paneNameOf } from "@sodashitsu/client-core";
+import { LOCAL_MACHINE_ID, nodeKey, paneNameOf, parseNodeKey } from "@sodashitsu/client-core";
 import { useGraphStore } from "../../store/graph.js";
-import { useMachinesStore } from "../../store/machines.js";
+import { summaryPaneName, useMachinesStore } from "../../store/machines.js";
 import { useSessionStore } from "../../store/session.js";
 
 const props = defineProps<{ nodeKey: NodeKey }>();
@@ -34,17 +35,15 @@ const rows = computed<Row[]>(() => {
     if (onGraph.has(key) && key !== props.nodeKey) return;
     out.push({ key, name, note: key === props.nodeKey ? "同じ番号の今の pane" : agent });
   };
-  if (machines.selectedId === LOCAL_MACHINE_ID) {
+  // 候補はノードと同じマシンの pane（別のマシンのノードを手元の pane に付け替えない。04 で別のマシンのノードにも広げた）。
+  const machine = parseNodeKey(props.nodeKey)?.machine ?? LOCAL_MACHINE_ID;
+  if (machines.selectedId === machine) {
     for (const pane of session.panes.values())
-      push(nodeKey(LOCAL_MACHINE_ID, pane.id), paneNameOf(pane), pane.agent?.label ?? null);
+      push(nodeKey(machine, pane.id), paneNameOf(pane), pane.agent?.label ?? null);
   } else {
-    const summary = machines.summaries[LOCAL_MACHINE_ID];
+    const summary = machines.summaries[machine];
     for (const [paneId, p] of Object.entries(summary?.panes ?? {}))
-      push(
-        nodeKey(LOCAL_MACHINE_ID, paneId),
-        p.agent?.name || `pane ${paneId}`,
-        p.agent?.label ?? null,
-      );
+      push(nodeKey(machine, paneId), summaryPaneName(paneId, p), p.agent?.label ?? null);
   }
   return out;
 });

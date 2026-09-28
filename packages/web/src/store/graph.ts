@@ -21,7 +21,7 @@ import {
   paneNameOf,
   parseNodeKey,
 } from "@sodashitsu/client-core";
-import { useMachinesStore } from "./machines.js";
+import { summaryPaneName, useMachinesStore } from "./machines.js";
 import { displayStateFor, useSeenStore } from "./seen.js";
 import { useSessionStore } from "./session.js";
 import { useViewStore } from "./view.js";
@@ -336,7 +336,7 @@ export const useGraphStore = defineStore("graph", () => {
         location: workspaceId ? { workspaceId, tabId: pane.tabId } : null,
       };
     }
-    // ほかのマシン（手元を含む）は軽い接続の要約だけ（pane の呼び名は持たない）。
+    // ほかのマシン（手元を含む）は軽い接続の要約から（呼び名の材料も要約に持つ。04）。
     const summary = machines.summaries[machine];
     const entry = summary?.panes[paneId];
     if (!entry) {
@@ -354,7 +354,7 @@ export const useGraphStore = defineStore("graph", () => {
     const workspaceId = summary.tabWorkspace[entry.tabId];
     return {
       ...base,
-      name: agent?.name || `pane ${paneId}`,
+      name: summaryPaneName(paneId, entry),
       agent,
       state: agent
         ? displayStateFor(agent, seen.getSeenSeqIn(machine, agent.instanceId, agent.serverSeenSeq))

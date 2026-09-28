@@ -155,3 +155,68 @@ describe("PaneChecklist（開いた時点の写しと比べる。レビュー R6
     w.unmount();
   });
 });
+
+describe("PaneChecklist（別のマシンの節。04 T4）", () => {
+  const M = "a".repeat(32);
+  const N = "c".repeat(32);
+  function remoteSnap() {
+    return {
+      protocol: 1 as const,
+      serverVersion: "t",
+      host: { os: "linux" as const, windowsBuild: null, hostname: "h" },
+      workspaces: [{ id: "w1", label: "infra", tabIds: ["t1"] } as never],
+      tabs: [{ id: "t1", workspaceId: "w1" } as never],
+      panes: [
+        paneOf("p4", "t1", { title: "vim" }),
+        paneOf("p5", "t1", { agent: agentOf("idle", { name: "rev" }) }),
+      ],
+      groups: [],
+      focus: null,
+      limits: { scrollbackLines: 5000 },
+    };
+  }
+
+  it("登録したマシンの pane を「マシン / workspace」の節に呼び名つきで出し、載せる・外すができる。繋がっていないマシンはそう書く", async () => {
+    seed();
+    const machines = useMachinesStore();
+    machines.setMachines([
+      { id: M, label: "box", state: "online", message: null },
+      { id: N, label: "far", state: "reconnecting", message: null },
+    ]);
+    machines.applySummarySnapshot(M, remoteSnap());
+    const w = mount(PaneChecklist, { attachTo: document.body });
+    await nextTick();
+    expect(w.findAll("legend").map((l) => l.text())).toEqual([
+      "api",
+      "web",
+      "box / infra",
+      "そのほか（載っているノード）",
+    ]);
+    const remoteRows = w
+      .findAll(".pane-checklist-row")
+      .filter((r) => r.find("input").attributes("data-pane-key")!.startsWith(M));
+    expect(remoteRows.map((r) => [r.find("input").attributes("data-pane-key"), r.text()])).toEqual([
+      [`${M}:p4`, "vim"],
+      [`${M}:p5`, "revClaude Code"],
+    ]);
+    expect((remoteRows[0]!.find("input").element as HTMLInputElement).checked).toBe(true); // 載っている
+    expect(w.text()).toContain("far: 繋がっていないので pane を出せません。");
+    await w.find(`[data-pane-key="${M}:p5"]`).setValue(true);
+    await w.find(`[data-pane-key="${M}:p4"]`).setValue(false);
+    await w.find(".pane-checklist-apply").trigger("click");
+    expect(w.emitted("apply")![0]![0]).toEqual({ add: [`${M}:p5`], remove: [`${M}:p4`] });
+    w.unmount();
+  });
+
+  it("切れた後は最後の要約を（未接続）の印つきで出す", async () => {
+    seed();
+    const machines = useMachinesStore();
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }]);
+    machines.applySummarySnapshot(M, remoteSnap());
+    machines.setSummaryConnected(M, false);
+    const w = mount(PaneChecklist, { attachTo: document.body });
+    await nextTick();
+    expect(w.findAll("legend").map((l) => l.text())).toContain("box / infra（未接続）");
+    w.unmount();
+  });
+});
