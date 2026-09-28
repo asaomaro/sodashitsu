@@ -146,6 +146,39 @@ describe("TuiNet（接続・再ログイン。AC10・AC11・AC12）", () => {
     expect(h.onFatal).not.toHaveBeenCalled();
   });
 
+  it("expectStop の後でも繋ぎ直せたら取り消し、その後に居なくなったら fatal で終える（統合の review r2）", async () => {
+    let calls = 0;
+    let loginFails = false;
+    const { net, h, sockets, srv } = setup(async () => {
+      calls++;
+      if (loginFails) throw new Error("gone");
+      return `sid=${calls}`;
+    });
+    const onStopped = vi.fn();
+    (h as TuiNetHandlers).onStopped = onStopped;
+    await net.start();
+    await flush();
+    sockets[0]!.open();
+    sockets[0]!.reply({ clientId: "c1", snapshot: snapshot() });
+    await flush();
+    net.expectStop();
+    // 止めたはずのサーバが居続けた（別の soda が起動し直した等）：繋ぎ直せる（4401 → ログインし直して繋ぐ）
+    sockets[0]!.close(4401);
+    await vi.waitFor(() => expect(sockets.length).toBeGreaterThan(1));
+    const s2 = sockets.at(-1)!;
+    s2.open();
+    s2.reply({ clientId: "c2", snapshot: snapshot() });
+    await vi.waitFor(() => expect(h.onOpened).toHaveBeenCalledTimes(2));
+    // 今度は本当に落ちた
+    loginFails = true;
+    srv.down = true;
+    s2.close(1006);
+    await vi.waitFor(() =>
+      expect(h.onFatal).toHaveBeenCalledWith(expect.stringContaining("stopped")),
+    );
+    expect(onStopped).not.toHaveBeenCalled();
+  });
+
   it("/api/session が 401 のままなら何度か再ログインして諦める", async () => {
     const login = vi.fn(async () => "sid=x");
     const { net, h } = setup(login, 401);

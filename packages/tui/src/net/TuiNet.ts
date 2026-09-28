@@ -136,6 +136,8 @@ export class TuiNet implements StorePort {
     this.conn.onOpened((clientId) => {
       this.reloginsWithoutOpen = 0;
       this.lastProbeAt = null;
+      // 繋ぎ直せた（止めたはずのサーバが起動し直された等）。この後に居なくなるのは異常の終わり方（統合の review r2）。
+      this.stopExpected = false;
       h.onOpened(clientId);
     });
     this.conn.onClosed(() => h.onClosed());
