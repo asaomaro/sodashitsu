@@ -133,7 +133,7 @@
      変える項目の無い `link set` も使い方の誤り。`history --limit` は 1〜6400（サーバの上限と同じ）。
   7. docs は design の `docs/graph.md` ではなく tasks のとおり `docs/agent-graph.md`。`docs/tui-parity.md` に W30（open_graph。端末版は知らせるだけ）を足した。
   8. 性能（AC17）の「実行の開始」は、先の pane の画面に送った文面が現れた時刻（`agent.prompt` の打ち込みが先に届き始めた）で測る。あわせて Enter まで送り終えた
-     `sent` の時刻（`agent.prompt` は本文の 300ms 後に Enter）と、16 の元が同時に完了する場合も測る。閾値は要件の 2 秒（実測は単独で 20ms 以下、全体の試験の並列の下で最大 327ms）。画面の描画は happy-dom の
+     `sent` の時刻（`agent.prompt` は本文の 300ms 後に Enter）と、16 の元が同時に完了する場合も測る。閾値は要件の 2 秒（実測は単独で 20ms 以下、全体の試験の並列の下で最大 327ms・515ms〔2 回〕）。画面の描画は happy-dom の
      目安なので粗い上限（10 秒。全体の試験の並列の下で開くのに約 1.3 秒かかった）で固まっていないことだけを確かめる。値は `[graph-perf]` の行で標準出力へ出す。
   9. skill ファイルの検査（`skill.test.ts`）は `graph link …`・`graph node …` を 3 語のコマンドとして数える。
 - **影響**: test 工程は `[graph-perf]` の行を test-result に写す。
