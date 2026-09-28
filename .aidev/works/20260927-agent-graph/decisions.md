@@ -20,3 +20,9 @@
 - **背景**: 承認の代理で「返答まで任せる」は、人の承認をエージェントに任せることになる。
 - **決定**: 新しい承認の代理の線の既定は `notify`（知らせるだけ）。`delegate` を選ぶと設定のパネルに注意を出す。
 - **理由・代替案**: 既定を `delegate` にすると、線を引いただけで承認が自動になる。
+
+## D3 tasks 以降は autonomous で PR・merge まで
+
+- **背景**: requirements〜tasks はユーザーとの対話で承認した（2026-09-28）。tasks の承認のときにユーザーが「自律で PR・merge まで」を選んだ。
+- **決定**: 親と 5 つの subtask の `mode` を autonomous にする。各 subtask の上流文書は `doccheck`、各タスクは `taskcheck` で点検を記録する。deliver は PR を作って squash merge する（`protocol-autonomous.md` の auto-merge 禁止はユーザーの明示の指示で上書き。①〔20260927-cli-mode〕の D1 と同じ）。
+- **影響**: ユーザーはゲートで確認しない。未検証の範囲は PR 本文の既知の制約に書く。先に Windows の pane の場所の自動追従の作業を片付けてから再開する（ユーザーの指示）。

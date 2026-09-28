@@ -6,3 +6,6 @@ events:
   - { ts: 2026-09-28T03:34:24Z, phase: design, event: start }
   - { ts: 2026-09-28T03:47:03Z, phase: design, event: approved }
   - { ts: 2026-09-28T03:47:04Z, phase: architecture, event: start }
+  - { ts: 2026-09-28T03:49:00Z, phase: architecture, event: approved }
+  - { ts: 2026-09-28T03:49:00Z, phase: tasks, event: start }
+  - { ts: 2026-09-28T03:52:05Z, phase: tasks, event: approved, metrics: { tasks_planned: 0, tasks_anchored: 0 } }
