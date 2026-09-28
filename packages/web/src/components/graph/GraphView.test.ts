@@ -1632,3 +1632,70 @@ describe("GraphView（押しただけの reveal の残りの経路。レビュ�
     m.wrapper.unmount();
   });
 });
+
+describe("GraphView（閉じた後のフォーカスの戻り先。レビュー R8）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+
+  function seedPane3(): void {
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted({ id: "w1", label: "api", tabIds: ["t1"] } as never);
+    session.panes.set("p3", paneOf("p3", "t1", { label: "fixer" }));
+  }
+
+  it("チェックリストの適用の応答を待つ間・失敗・空の操作でも、フォーカスは「pane を載せる」に居る（body に落ちない）", async () => {
+    const { wrapper, fake, store, view } = await openWithGraph();
+    seedPane3();
+    let reject!: (e: unknown) => void;
+    fake.handlers["graph.update"] = () => new Promise((_res, rej) => (reject = rej));
+    await wrapper.find(".graph-add-panes").trigger("click");
+    await flush();
+    await wrapper.find('[data-pane-key="local:p3"]').setValue(true);
+    await wrapper.find(".pane-checklist-apply").trigger("click");
+    await flush();
+    expect(document.activeElement?.className).toContain("graph-add-panes");
+    reject(Object.assign(new Error("internal: x"), { code: "internal" }));
+    await flush();
+    await flush();
+    expect(view.toasts.at(-1)?.message).toContain("グラフを変えられませんでした");
+    expect(document.activeElement?.className).toContain("graph-add-panes");
+    // 空の操作（開いている間に他で p3 が載った）
+    await wrapper.find(".graph-add-panes").trigger("click");
+    await flush();
+    await wrapper.find('[data-pane-key="local:p3"]').setValue(true);
+    store.applyGraph(
+      graphOf({ rev: 9, nodes: [...graphOf().nodes, { key: "local:p3", x: 0, y: 300 }] }),
+      "event",
+    );
+    await flush();
+    await wrapper.find(".pane-checklist-apply").trigger("click");
+    await flush();
+    await flush();
+    expect(document.activeElement?.className).toContain("graph-add-panes");
+    wrapper.unmount();
+  });
+
+  it("選び直しの応答を待つ間はそのノード、失敗してもそのノードに居る", async () => {
+    const { wrapper, fake } = await openWithGraph({
+      nodes: [
+        { key: "local:p1", x: 0, y: 0, stale: true },
+        { key: "local:p2", x: 300, y: 0 },
+      ],
+    });
+    seedPane3();
+    let reject!: (e: unknown) => void;
+    fake.handlers["graph.update"] = () => new Promise((_res, rej) => (reject = rej));
+    await wrapper.find('[data-node-key="local:p1"]').trigger("keydown", { key: "r" });
+    await flush();
+    await wrapper.find('[data-rekey-key="local:p3"]').setValue(true);
+    await wrapper.find(".rekey-picker-apply").trigger("click");
+    await flush();
+    expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p1");
+    reject(Object.assign(new Error("internal: x"), { code: "internal" }));
+    await flush();
+    await flush();
+    expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p1");
+    wrapper.unmount();
+  });
+});

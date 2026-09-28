@@ -811,6 +811,11 @@ function applyChecklist(change: { add: NodeKey[]; remove: NodeKey[] }): void {
   if (isMobile.value) return; // モバイルは編集しない（AC20）
   checklistOpen.value = false;
   const run = (): void => {
+    // 応答を待つ間・失敗・空の操作でもフォーカスを body に落とさない（まず「pane を載せる」へ。レビュー R8）。
+    const home = toolbarButton("graph-add-panes");
+    home?.focus({ preventScroll: true });
+    const stillHome = (): boolean =>
+      document.activeElement === home || document.activeElement === document.body;
     void graph
       .update((g): GraphOp[] | null => {
         const present = new Set(g.nodes.map((n) => n.key));
@@ -828,11 +833,13 @@ function applyChecklist(change: { add: NodeKey[]; remove: NodeKey[] }): void {
       .then((r) => {
         if (!r.ok) {
           if (r.reason === "error") view.toast(`グラフを変えられませんでした（${r.message}）`);
-          return;
+          return; // フォーカスは適用のすぐ後に「pane を載せる」へ移してある
         }
+        // 待つ間に利用者が別の所へ移っていれば動かさない。
+        if (!stillHome()) return;
         const added = change.add.find((k) => r.graph.nodes.some((n) => n.key === k));
         if (added) focusNode(added);
-        else toolbarButton("graph-add-panes")?.focus();
+        else home?.focus({ preventScroll: true });
       });
   };
   if (change.remove.length > 0)
@@ -887,6 +894,12 @@ function applyRekey(newKey: NodeKey): void {
   const key = rekeyKey.value;
   rekeyKey.value = null;
   if (!key) return;
+  // 応答を待つ間はそのノードに居る（選び直しの欄が消えてフォーカスが body に落ちない。レビュー R8）。
+  focusNode(key);
+  const stillThere = (): boolean => {
+    const a = document.activeElement;
+    return a === document.body || a === dialogEl.value || a?.getAttribute("data-node-key") === key;
+  };
   void graph
     .update((g): GraphOp[] | null =>
       g.nodes.some((n) => n.key === key) ? [{ op: "rekey_node", key, newKey }] : null,
@@ -894,10 +907,12 @@ function applyRekey(newKey: NodeKey): void {
     .then((r) => {
       if (!r.ok) {
         view.toast(`選び直せませんでした（${r.message}）`);
-        focusNode(key);
+        if (!stillThere()) return;
+        if (graph.nodes.some((n) => n.key === key)) focusNode(key);
+        else dialogEl.value?.focus({ preventScroll: true });
         return;
       }
-      focusNode(newKey);
+      if (stillThere()) focusNode(newKey);
     });
 }
 
