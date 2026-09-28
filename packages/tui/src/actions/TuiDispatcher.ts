@@ -638,7 +638,7 @@ export class TuiDispatcher {
     if (paneId) this.closePaneById(paneId);
   }
 
-  /** 実行中のプロセスがあれば確認（D23）。 */
+  /** 実行中のプロセスがあれば確認（web の 20260918-web-terminal-multiplexer の D23）。 */
   closePaneById(paneId: string): void {
     const pane = this.model.panes.get(paneId);
     if (pane?.busy) {
@@ -674,7 +674,7 @@ export class TuiDispatcher {
   }
 
   /**
-   * workspace は確認する（`tui.confirmClose`。herdr の confirm_close。既定は入）。切でも、実行中のプロセスがある pane を含むなら確認する（D23）。
+   * workspace は確認する（`tui.confirmClose`。herdr の confirm_close。既定は入）。切にできるのは本作業の D18（H50）。切でも、実行中のプロセスがある pane を含むなら確認する（web の 20260918-web-terminal-multiplexer の D23）。
    * 確認しないときは紐づく worktree を消さない。
    */
   closeWorkspaceById(workspaceId: string): void {
@@ -778,7 +778,7 @@ export class TuiDispatcher {
       .catch(() => undefined);
   }
 
-  /** 名前のドラッグを別の pane の中央へ落としての置き換え。落とし先が動作中なら確認（D23）。 */
+  /** 名前のドラッグを別の pane の中央へ落としての置き換え。落とし先が動作中なら確認（web の 20260918-web-terminal-multiplexer の D23）。 */
   replacePaneWithDrag(paneId: string, targetPaneId: string): void {
     const target = this.model.panes.get(targetPaneId);
     if (target?.busy) {

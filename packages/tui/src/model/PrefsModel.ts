@@ -244,6 +244,11 @@ export class PrefsModel {
     return typeof v === "string" ? v : DEFAULT_WINDOW_TITLE;
   }
 
+  /** 外側の端末にフォーカスが戻ったら全部描き直す（herdr の redraw_on_focus_gained。既定は入）。 */
+  get redrawOnFocusGained(): boolean {
+    return this.tuiFlag("redrawOnFocusGained", true);
+  }
+
   /** pane の BEL を外側の端末へ（herdr の前面のクライアントへのベル。既定は入）。 */
   get forwardBell(): boolean {
     return this.tuiFlag("forwardBell", true);

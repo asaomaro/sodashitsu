@@ -721,7 +721,10 @@ export class TuiApp {
       }
       case "focus": {
         this.outerFocused = ev.focused;
-        if (!ev.focused) this.mouse.cancel(); // 外側の端末を離れた：離す事象は届かないので、ドラッグを捨てる
+        if (!ev.focused)
+          this.mouse.cancel(); // 外側の端末を離れた：離す事象は届かないので、ドラッグを捨てる
+        // 外側の端末に戻ったら全部描き直す（`tui.redrawOnFocusGained`。herdr の redraw_on_focus_gained。まれな外側の端末の表示の崩れを残さない）。
+        else if (this.prefs.redrawOnFocusGained) this.renderer.invalidate();
         // pane がフォーカスの報告を求めていれば伝える（`CSI ? 1004 h`）。
         const term = this.model.focusedPaneId
           ? this.panes.get(this.model.focusedPaneId)
@@ -935,11 +938,6 @@ export class TuiApp {
       () => this.scheduleRender(),
       section,
     );
-  }
-
-  /** 端末版にまだ無い操作（05 で足す）。 */
-  protected notYet(what: string): void {
-    this.ui.toast(`${what}は端末版ではまだ使えません`);
   }
 
   /**

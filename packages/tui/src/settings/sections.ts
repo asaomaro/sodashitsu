@@ -775,6 +775,12 @@ function tuiSection(env: SettingsEnv): SettingsSection {
           }),
         },
         toggleItem(
+          "外側の端末に戻ったら全部描き直す",
+          p.redrawOnFocusGained,
+          (v) => env.write.setTui("redrawOnFocusGained", v),
+          `${TUI_ONLY}外側の端末の表示のまれな崩れを直します。切にすると戻ったときのちらつきが減ります（崩れは次に全部描き直すまで残ることがあります）。`,
+        ),
+        toggleItem(
           "pane のベルを外側の端末へ",
           p.forwardBell,
           (v) => env.write.setTui("forwardBell", v),

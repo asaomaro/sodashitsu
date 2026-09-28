@@ -39,7 +39,7 @@ function connectionOptions(ep: Endpoint): { createConnection?: CreateConnection 
   return { createConnection: pinnedTlsConnection(ep.certSha256) };
 }
 
-/** `/ws` の URL（`?machine=` は 05 で足す）。 */
+/** `/ws` の URL（ほかのマシンを見るときの `?machine=` は client-core の `wsUrlFor` が付ける）。 */
 export function wsUrlOf(baseUrl: string): string {
   const u = new URL("/ws", `${baseUrl}/`);
   u.protocol = u.protocol === "https:" ? "wss:" : "ws:";

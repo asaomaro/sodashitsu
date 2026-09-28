@@ -125,7 +125,7 @@ describe("設定画面", () => {
   it("色の出し方は端末ごと（tui-state）で、共有の設定へは送らない", async () => {
     const h = await open();
     await h.section(6);
-    for (let i = 0; i < 11; i++) h.io.type(DOWN);
+    for (let i = 0; i < 12; i++) h.io.type(DOWN);
     h.io.type(ENTER + DOWN + DOWN + ENTER); // 256 色
     expect(h.app.prefs.colorMode).toBe("256");
     expect(h.patches()).toEqual([]);

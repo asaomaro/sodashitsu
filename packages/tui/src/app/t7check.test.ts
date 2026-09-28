@@ -111,4 +111,35 @@ describe("05 T7 の点検", () => {
       expect(await h.screen()).toContain("Qwen Code");
     });
   });
+
+  it("外側の端末に戻ったら（CSI I）全部描き直す。tui.redrawOnFocusGained が切なら差分だけ", async () => {
+    const h = await app();
+    h.app.prefs.apply({ onboarding: false }, 1);
+    h.app.renderNow();
+    const frameAfter = (seq: string): string => {
+      const start = h.io.output().length;
+      h.io.type(seq);
+      h.app.renderNow();
+      return h.io.output().slice(start);
+    };
+    // 離れたときは描き直さない
+    expect(frameAfter("\x1b[O")).not.toContain("\x1b[2J");
+    expect(frameAfter("\x1b[I")).toContain("\x1b[2J");
+    h.app.prefs.apply({ onboarding: false, tui: { redrawOnFocusGained: false } }, 2);
+    h.app.renderNow();
+    frameAfter("\x1b[O");
+    expect(frameAfter("\x1b[I")).not.toContain("\x1b[2J");
+  });
+
+  it("設定画面の端末版の節に「外側の端末に戻ったら全部描き直す」（既定は入）", async () => {
+    const h = await app({ respond: { "prefs.get": { prefs: { onboarding: false }, rev: 0 } } });
+    await vi.waitFor(() => expect(h.app.prefs.rev).toBe(0));
+    expect(h.app.prefs.redrawOnFocusGained).toBe(true);
+    h.io.type("\x02s");
+    await vi.waitFor(() => expect(h.app.ui.dialogContext).toEqual({ kind: "settings" }));
+    for (let i = 0; i < 6; i++) h.io.type("j");
+    h.io.type("\r");
+    h.app.renderNow();
+    expect(await h.screen()).toContain("外側の端末に戻ったら全部描き直す");
+  });
 });

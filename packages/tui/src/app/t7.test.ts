@@ -456,7 +456,7 @@ describe("T7 の画面", () => {
     await vi.waitFor(() => expect(h.app.prefs.rev).toBe(3));
     expect(h.app.ui.dialogContext).toBeNull();
     await tuiSettings(h);
-    for (let i = 0; i < 12; i++) h.io.type("j"); // はじめの案内を開く
+    for (let i = 0; i < 13; i++) h.io.type("j"); // はじめの案内を開く
     h.app.renderNow();
     expect(await h.screen()).toContain("はじめの案内を開く");
     h.io.type("\r");
