@@ -26,3 +26,17 @@
 - **背景**: requirements〜tasks はユーザーとの対話で承認した（2026-09-28）。tasks の承認のときにユーザーが「自律で PR・merge まで」を選んだ。
 - **決定**: 親と 5 つの subtask の `mode` を autonomous にする。各 subtask の上流文書は `doccheck`、各タスクは `taskcheck` で点検を記録する。deliver は PR を作って squash merge する（`protocol-autonomous.md` の auto-merge 禁止はユーザーの明示の指示で上書き。①〔20260927-cli-mode〕の D1 と同じ）。
 - **影響**: ユーザーはゲートで確認しない。未検証の範囲は PR 本文の既知の制約に書く。先に Windows の pane の場所の自動追従の作業を片付けてから再開する（ユーザーの指示）。
+
+## D4 01-graph-core の実装での読み替え
+
+- **決定**:
+  1. protocol の graph の型は `packages/protocol/src/graph.ts` にまとめた（model.ts・messages.ts は参照だけ）。
+  2. `graph.update` の操作は add_node・move_node・remove_node（線も消す）・rekey_node（stale のノードを選び直して印を外す）・add_link・update_link・remove_link の 7 つ。count・paused は操作で変えられない。まとめて当てる処理は client-core の `graph/ops.ts`（architecture の表に無かったモジュール）。
+  3. 線の番号の続き `nextLinkId` を `graph.json` に保存する（消した線の id を再利用しない）。
+  4. 全体の再開は線の count と paused を変えない。count を 0 に戻すのは線ごとの再開だけ（design の「resume は count を 0 に戻す」を線ごとに限定）。
+  5. 検証の失敗は専用のコードを足さず `invalid_params`（web は保存の前に同じ validate を使う）。
+  6. design に無かった既定値: 承認の代理の行数 40・トリガの prompt の既定の文。
+  7. geometry の export 名に `graph` を付けた（`snapToGrid` 等との衝突を避ける）。
+  8. グラフ画面を「同じ prefix＋キー」で閉じるのは 03 で足す（01 は Esc と閉じるボタン）。
+  9. web の vitest の worker のヒープの上限を 4GB に上げた（`SettingsDialog.test.ts` が 1 件ごとに約 21MB を残し、操作が 1 つ増えて既定の 2GB を超えた。漏れそのものは backlog）。
+- **影響**: 02 以降はこの形に合わせる。

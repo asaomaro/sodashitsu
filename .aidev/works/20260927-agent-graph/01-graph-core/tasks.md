@@ -22,19 +22,19 @@ design「インターフェース / データ構造」の protocol・`GraphStore
 
 ## タスク
 
-- [ ] T1: protocol に graph の型・方式（`graph.get|update|pause|resume|history`）・イベント（`graph.changed`・`graph.fired`）を足す
+- [x] T1: protocol に graph の型・方式（`graph.get|update|pause|resume|history`）・イベント（`graph.changed`・`graph.fired`）を足す
       対象: `packages/protocol/src/messages.ts:709`（METHOD_SCHEMAS）・`packages/protocol/src/events.ts`・`packages/protocol/src/model.ts`
       依存: なし
       AC: AC13, AC16, AC18
-- [ ] T2: client-core/graph（`nodeKey`・`validate`・`defaults`・`message`・`geometry`）
+- [x] T2: client-core/graph（`nodeKey`・`validate`・`defaults`・`message`・`geometry`）
       対象: （新規 `packages/client-core/src/graph/`）・`packages/client-core/src/index.ts`
       依存: T1
       AC: AC3, AC6, AC11
-- [ ] T3: server の `GraphStore`（`graph.json`・`stale`）と `surface/methods/graph.ts`（実行なし。`history` は空）・`composeServer` の配線（読み込み・flush・handoff）
+- [x] T3: server の `GraphStore`（`graph.json`・`stale`）と `surface/methods/graph.ts`（実行なし。`history` は空）・`composeServer` の配線（読み込み・flush・handoff）
       対象: `packages/server/src/persist/PrefsStore.ts`（手本）・`packages/server/src/composeServer.ts:543-548`・`packages/server/src/surface/methods/index.ts`・（新規 `persist/GraphStore.ts`・`surface/methods/graph.ts`）
       依存: T2
       AC: AC13, AC16, AC18, AC19
-- [ ] T4: 操作表の `open_graph`（既定 prefix+a）・web の `view.graphOpen` の開閉・tui の知らせ・件数の試験の更新
+- [x] T4: 操作表の `open_graph`（既定 prefix+a）・web の `view.graphOpen` の開閉・tui の知らせ・件数の試験の更新
       対象: `packages/client-core/src/keys/bindings.ts`・`packages/web/src/store/view.ts:308-312`・`packages/web/src/actions/ActionDispatcher.ts`・`packages/tui/src/actions/TuiDispatcher.ts:237-239`
       依存: なし
       AC: AC1, AC19
