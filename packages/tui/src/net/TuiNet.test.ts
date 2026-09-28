@@ -124,6 +124,28 @@ describe("TuiNet（接続・再ログイン。AC10・AC11・AC12）", () => {
     expect(h.onFatal).toHaveBeenCalledWith(expect.stringContaining("stopped"));
   });
 
+  it("利用者が止めたサーバ（expectStop の後）が居なくなったら、fatal ではなく onStopped で終える（統合の review）", async () => {
+    let calls = 0;
+    const { net, h, sockets, srv } = setup(async () => {
+      if (++calls > 1) throw new Error("gone");
+      return "sid=1";
+    });
+    const onStopped = vi.fn();
+    (h as TuiNetHandlers).onStopped = onStopped;
+    await net.start();
+    await flush();
+    sockets[0]!.open();
+    sockets[0]!.reply({ clientId: "c1", snapshot: snapshot() });
+    await flush();
+    net.expectStop();
+    srv.down = true;
+    sockets[0]!.close(1006);
+    await flush();
+    await flush();
+    expect(onStopped).toHaveBeenCalledTimes(1);
+    expect(h.onFatal).not.toHaveBeenCalled();
+  });
+
   it("/api/session が 401 のままなら何度か再ログインして諦める", async () => {
     const login = vi.fn(async () => "sid=x");
     const { net, h } = setup(login, 401);

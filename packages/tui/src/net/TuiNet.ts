@@ -29,6 +29,8 @@ export interface TuiNetHandlers {
   onFatal(message: string): void;
   /** 立て直している途中の知らせ（サーバは居るがログインできない等）。 */
   onStatus?(message: string): void;
+  /** 利用者が止めたサーバ（`expectStop` の後）が居なくなった。端末版を終了コード 0 で終える。 */
+  onStopped?(): void;
 }
 
 export interface TuiNetDeps {
@@ -71,6 +73,8 @@ export class TuiNet implements StorePort {
   /** サーバは居るのにログインできない状態が始まった時刻（ログインできたら null）。 */
   private loginFailingSince: number | null = null;
   private stopped = false;
+  /** 利用者がこのサーバを止めた（`server.stop` が通った）。この後に居なくなったのは異常ではない。 */
+  private stopExpected = false;
   private detachSent = false;
   private loggedOut = false;
   /** 終えた後も使える（止めた後の決着しない要求の包みを通さない）fetch。`/api/logout` に使う。 */
@@ -259,6 +263,12 @@ export class TuiNet implements StorePort {
     } catch (err) {
       if (this.stopped) return;
       if (await this.serverGone()) {
+        if (this.stopExpected && this.h.onStopped) {
+          // 利用者が止めた（`server.stop`）。異常ではないので fatal の道（終了コード 1）を通らない（統合の review）。
+          this.stop();
+          this.h.onStopped();
+          return;
+        }
         this.fatal("soda: the server has stopped (run `soda` again to start it)\n");
         return;
       }
@@ -381,6 +391,11 @@ export class TuiNet implements StorePort {
       this.conn.request("client.detach", {}).catch(() => undefined),
       new Promise((resolve) => setTimeout(resolve, timeoutMs).unref?.()),
     ]);
+  }
+
+  /** 利用者がこのサーバを止めた（`server.stop` が通った）。以後にサーバが居なくなったら `onStopped` で終える。 */
+  expectStop(): void {
+    this.stopExpected = true;
   }
 
   private fatal(message: string): void {

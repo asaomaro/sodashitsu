@@ -33,13 +33,19 @@ export async function startedApp(
     clipboardRunner?: Runner;
     /** 状態ディレクトリ（無ければ存在しない場所）。 */
     stateDir?: string;
+    /** 繋ぎ先に足す値（初回の知らせ・止め方の注意等）。 */
+    target?: Partial<TuiTarget>;
   } = {},
 ) {
   const cols = opts.cols ?? 100;
   const rows = opts.rows ?? 30;
   const io = fakeIo({ cols, rows, ...(opts.env ? { env: opts.env } : {}) });
   const sockets: FakeSocket[] = [];
-  const target = opts.stateDir ? { ...testTarget, stateDir: opts.stateDir } : testTarget;
+  const target: TuiTarget = {
+    ...testTarget,
+    ...(opts.stateDir ? { stateDir: opts.stateDir } : {}),
+    ...opts.target,
+  };
   const app = new TuiApp(target, io, {
     ...(opts.openUrl ? { openUrl: opts.openUrl } : {}),
     // 既定は道具が見つからない（テストで本物の xclip 等を動かさない）。

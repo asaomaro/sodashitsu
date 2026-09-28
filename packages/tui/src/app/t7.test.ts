@@ -1,3 +1,8 @@
+/*
+ * 外側の端末のタイトルの書式・文字の洗い・端末のタイトルの回る記号の除去の試験の一部（「外側の端末のタイトルの書式」の describe）は、
+ * herdr（https://github.com/herdrdev/herdr、commit da6bcd5969779bfe0396bcf89a8025d4375d611e）の `src/config/window_title.rs` の試験
+ * （`parses_tokens_literals_and_escapes` 等）と `src/terminal/title.rs` の試験の値を本製品の型に書き換えて移したもの（Apache-2.0。ルートの `NOTICE`）。
+ */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { computeLayout } from "../layout/computeLayout.js";
 import { startedApp } from "../testing/appHarness.js";
@@ -19,7 +24,7 @@ const BEL = "\x07";
 const PUSH = "\x1b[22;0t";
 const POP = "\x1b[23;0t";
 
-describe("外側の端末のタイトルの書式（H14。herdr の window_title）", () => {
+describe("外側の端末のタイトルの書式（H14。herdr の WindowTitleTemplate::parse・sanitize_window_title_text・stripped_terminal_title）", () => {
   it("語・文字・{{ }} の括弧を読む", () => {
     expect(parseWindowTitle("{hostname}: {workspace} {{a}}")).toEqual([
       { token: "hostname" },

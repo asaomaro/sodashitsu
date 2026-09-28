@@ -53,6 +53,8 @@ export interface DispatcherHost {
   /** pane へ貼り付ける（pane のブラケットペーストに合わせて包む）。 */
   pasteText(paneId: string, text: string): void;
   detach(): void;
+  /** 手元のサーバの停止（`server.stop`）が通った（この後にサーバが居なくなったら終了コード 0 で終える）。 */
+  serverStopRequested?(): void;
   toggleSidebar(): void;
   /** 独自コマンドの一覧を受け取った（reload_config）。 */
   setCommands?(catalog: CommandListResult): void;
@@ -1181,9 +1183,14 @@ export class TuiDispatcher {
   confirmStopServer(): void {
     if (this.ui.dialogContext?.kind !== "confirmStopServer") return;
     this.ui.closeDialog();
+    const { remote } = this.stopTarget();
     this.conn
       .request("server.stop", {})
-      .then(() => this.ui.toast("サーバを止めています…"))
+      .then(() => {
+        this.ui.toast("サーバを止めています…");
+        // 手元のサーバ（画面の接続の先）を止めた。別のマシンを止めても手元の接続は続く。
+        if (!remote) this.host.serverStopRequested?.();
+      })
       .catch((err: unknown) => {
         const code = errorCodeOf(err);
         this.ui.toast(code ? clientErrorMessage(code) : "サーバを止められませんでした。");

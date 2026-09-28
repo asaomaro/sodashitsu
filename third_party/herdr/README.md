@@ -38,10 +38,13 @@
 | `packages/tui/src/render/scrollbar.ts` | `src/ui/scrollbar.rs`（`scrollbar_thumb`・`scrollbar_offset_from_row`・`scrollbar_offset_from_drag_row`：pane のスクロールバーのつまみ。20260927-cli-mode） |
 | `packages/tui/src/render/chrome/narrowHeader.ts` | `src/client/shell/mobile.rs`（`render_mobile_header`・`render_header_status`：1 列表示の上辺の並べ方。20260927-cli-mode） |
 | `packages/tui/src/notify/terminalNotify.ts` | `src/terminal_notify.rs`（`detect_backend`・`build_osc9_notification`・`build_osc99_notification`・`sanitize_text`・`wrap_tmux_passthrough`：外側の端末へのデスクトップ通知。20260927-cli-mode） |
+| `packages/tui/src/app/windowTitle.ts` | `src/config/window_title.rs`（`WindowTitleTemplate::parse`・`sanitize_window_title_text`・`MAX_WINDOW_TITLE_CHARS`）と `src/terminal/title.rs`（`stripped_terminal_title`・`CLAUDE_ACTIVITY_GLYPHS`）：外側の端末のタイトル。20260927-cli-mode |
+| `packages/tui/src/modes/OnboardingDialog.ts` | `src/client/shell/overlays.rs`（`render_onboarding_overlay`）・`src/client/shell/overlay_input.rs`（`route_overlay_key`・`complete_onboarding`）・`src/ui/onboarding.rs`（文言）：はじめの案内。20260927-cli-mode |
 
 テストの一部（`ManifestEngine.test.ts`・`ProcessMatcher.test.ts`・`AgentTracker.test.ts`・
 `packages/server/src/git/worktree.test.ts`・`packages/protocol/src/worktreePath.test.ts`・
-`packages/tui/src/notify/notify.test.ts`〔`src/terminal_notify.rs` の試験の値〕）にも、
+`packages/tui/src/notify/notify.test.ts`〔`src/terminal_notify.rs` の試験の値〕・
+`packages/tui/src/app/t7.test.ts`〔`src/config/window_title.rs`・`src/terminal/title.rs` の試験の値〕）にも、
 herdr 側のテストケース（fixture・期待値）を本製品の型に書き換えて移植したものを含む。
 各ファイルの冒頭コメントと、該当 `describe` の見出しに移植元の herdr 側の関数名を記す。
 

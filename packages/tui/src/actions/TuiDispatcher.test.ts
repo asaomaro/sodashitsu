@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ACTIONS, type Action, type ActionDef } from "@sodashitsu/client-core";
 import type { SessionSnapshot } from "@sodashitsu/protocol";
 import { PrefsModel } from "../model/PrefsModel.js";
+import { MachinesModel } from "../model/MachinesModel.js";
 import { SessionModel } from "../model/SessionModel.js";
 import { UiState } from "../model/UiState.js";
 import { agent, leaf, pane, snapshot, split, tab, workspace } from "../testing/fixtures.js";
@@ -986,5 +987,38 @@ describe("TuiDispatcher — stop_server", () => {
     expect(h.sent("server.stop")).toEqual([{}]);
     expect(h.ui.toasts[0]?.message).not.toBe("サーバを止められませんでした。");
     expect(h.ui.dialogContext).toBeNull();
+  });
+
+  // 統合の review：止めたのが手元のサーバなら、この後にサーバが居なくなっても異常の終わり方（終了コード 1）にしない。
+  it("手元のサーバの停止が通ったら serverStopRequested を呼ぶ。断られたら呼ばない", async () => {
+    const ok = harness(snapshot(), { "server.stop": {} });
+    const requested = vi.fn();
+    (ok.host as DispatcherHost).serverStopRequested = requested;
+    ok.d.run({ type: "stopServer" });
+    ok.d.confirmStopServer();
+    await flush();
+    expect(requested).toHaveBeenCalledTimes(1);
+    const ng = harness(snapshot(), { "server.stop": codeError("server_busy") });
+    const notRequested = vi.fn();
+    (ng.host as DispatcherHost).serverStopRequested = notRequested;
+    ng.d.run({ type: "stopServer" });
+    ng.d.confirmStopServer();
+    await flush();
+    expect(notRequested).not.toHaveBeenCalled();
+  });
+
+  it("別のマシンのサーバを止めても serverStopRequested は呼ばない（手元の接続は続く）", async () => {
+    const h = harness(snapshot(), { "server.stop": {} });
+    const machines = new MachinesModel();
+    machines.select("m1");
+    const requested = vi.fn();
+    Object.assign(h.host as DispatcherHost, { machines, serverStopRequested: requested });
+    const d = new TuiDispatcher(h.host);
+    d.run({ type: "stopServer" });
+    expect(h.ui.dialogContext).toMatchObject({ kind: "confirmStopServer", remote: true });
+    d.confirmStopServer();
+    await flush();
+    expect(h.sent("server.stop")).toEqual([{}]);
+    expect(requested).not.toHaveBeenCalled();
   });
 });

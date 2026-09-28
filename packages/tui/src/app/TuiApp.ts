@@ -339,6 +339,7 @@ export class TuiApp {
       pasteClipboard: (paneId) => this.imagePaster.pasteClipboard(paneId),
       pasteText: (paneId, text) => this.pasteText(paneId, text),
       detach: () => this.detach(),
+      serverStopRequested: () => this.net?.expectStop(),
       toggleSidebar: () => this.toggleSidebar(),
       focusNextNotification: () => this.notify.focusNext(),
       pasteImage: () => {
@@ -428,6 +429,8 @@ export class TuiApp {
     // 初回の token など（ブラウザ用。二度と出ない）は、代替画面に入る前に標準エラーへ（design「起動と終了」）。
     // 端末でなく端末版を開けないときも出す——ここで出さないと token は二度と得られない。
     if (this.target.startupNotice) this.io.writeError(`${this.target.startupNotice}\n`);
+    // 止め方の注意（Windows の WMI の失敗等）も、token と一緒のときも出す（統合の review）。
+    if (this.target.stopHint) this.io.writeError(`${this.target.stopHint}\n`);
     if (!this.io.isTTY) {
       this.io.writeError("soda: the terminal UI needs a terminal on both stdin and stdout\n");
       return Promise.resolve(1);
@@ -455,7 +458,11 @@ export class TuiApp {
 
   /** 画面の部品の組み立て。 */
   protected start(): void {
-    this.showNotice(this.target.startupNotice ?? this.target.stopHint ?? null);
+    // 知らせは 1 行ずつ：初回の token の後に止め方の注意（どちらか一方でも出す）。
+    const notices = [this.target.startupNotice, this.target.stopHint].filter(
+      (n): n is string => !!n,
+    );
+    this.showNotices(notices);
     this.disposers.push(
       this.io.onResize(() => {
         this.renderer.invalidate();
@@ -487,6 +494,9 @@ export class TuiApp {
         onClosed: () => this.onConnectionClosed(),
         onFatal: (message) => this.finish(1, message),
         onStatus: (message) => this.showAlert(message, 5000),
+        // 利用者が止めたサーバが居なくなった：異常ではないので終了コード 0（統合の review）。
+        onStopped: () =>
+          this.finish(0, "soda: サーバを止めました（もう一度 soda を実行すると起動します）\n"),
       },
       this.options.net,
     );
@@ -520,6 +530,18 @@ export class TuiApp {
       this.scheduleRender();
     }, ms);
     this.alertTimer.unref?.();
+  }
+
+  /** 知らせを順に 1 つずつ（前のものの時間が切れたら次）。 */
+  private showNotices(texts: readonly string[], ms = NOTICE_MS): void {
+    const [first, ...rest] = texts;
+    if (first === undefined) return;
+    this.showNotice(first, ms);
+    if (rest.length === 0) return;
+    const timer = setTimeout(() => {
+      if (!this.ended) this.showNotices(rest, ms);
+    }, ms);
+    timer.unref?.();
   }
 
   private showNotice(text: string | null, ms = NOTICE_MS): void {
