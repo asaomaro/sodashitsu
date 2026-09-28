@@ -33,7 +33,7 @@ web は、チェックリストのマシンの節と別のマシンのノード�
       対象: `packages/server/src/graph/AgentPort.ts`・`packages/cli/src/commands/agent.ts:169-184`（手本）・（新規 `RemoteAgentPort.ts`）
       依存: T1
       AC: AC14, AC6
-- [ ] T3: `GraphEngine` の口の選択をリモートに広げる（`machine_unavailable` の分岐の置き換え・可用性の変化・監督の知らせのマシンの呼び名）と `composeServer` の配線（開始・handoff・終了の順）
+- [x] T3: `GraphEngine` の口の選択をリモートに広げる（`machine_unavailable` の分岐の置き換え・可用性の変化・監督の知らせのマシンの呼び名）と `composeServer` の配線（開始・handoff・終了の順）
       対象: `packages/server/src/graph/GraphEngine.ts:34,91-93,234,499`・`packages/server/src/composeServer.ts`
       依存: T2
       AC: AC14, AC7, AC8, AC9

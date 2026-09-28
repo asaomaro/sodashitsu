@@ -67,6 +67,7 @@ import { PrefsStore } from "./persist/PrefsStore.js";
 import { GraphStore } from "./persist/GraphStore.js";
 import { GraphEngine } from "./graph/GraphEngine.js";
 import { LocalAgentPort } from "./graph/LocalAgentPort.js";
+import { RemoteLinks } from "./graph/RemoteLinks.js";
 import type { ClientSink } from "./terminal/OutputFanout.js";
 import { LocalLogin } from "./auth/LocalLogin.js";
 
@@ -316,6 +317,8 @@ export async function composeServer(
   // 連携の実行（20260927-agent-graph の 02）。送信は方式の agent.prompt をサーバの中から呼ぶ（内部の clientId と何もしない sink。design D-2）。
   // 始めるのは `listen()` の復元の後・agentMonitor の前、止めるのは終了（graph.close の前）と引き継ぎの間。
   const graphSink: ClientSink = { clientId: GRAPH_CLIENT_ID, sendOutput: () => undefined, sendSnapshot: () => undefined, bufferedAmount: 0 };
+  // 別のマシンの pane への接続（04）。グラフに載っているマシンだけ、中継のチャネルの上に external の接続を張る。閉じるのは実行を止めた後。
+  const remoteLinks = new RemoteLinks({ machines, logger });
   const graphEngine = new GraphEngine({
     store: graph,
     local: new LocalAgentPort({
@@ -324,6 +327,8 @@ export async function composeServer(
       terminals,
       invoke: (method, params) => surface.invoke({ clientId: GRAPH_CLIENT_ID, sink: graphSink }, method, params),
     }),
+    remote: remoteLinks,
+    localLabel: osHostname(),
     publish: (e) => bus.publish(e),
     now: () => Date.now(),
     logger,
@@ -408,6 +413,7 @@ export async function composeServer(
     boundPort: () => boundPortValue,
     pausePollers: async () => {
       graphEngine.stop(); // 20260927-agent-graph（待ちは取り消す。引き継いだ先が今の値を基準に始め直す）
+      remoteLinks.closeAll(); // 別のマシンへの接続は実行を止めた後に閉じる（04。元に戻すときは start の ensure が開き直す）
       paneHistory?.stop();
       gitPoller.stop();
       await agentMonitor.stop();
@@ -655,6 +661,7 @@ export async function composeServer(
         // 予約を取り消す（ロックを放した後に session.json を書かない）。
         if (!sessionLoaded) persist.cancel();
         graphEngine.stop();
+        remoteLinks.closeAll();
         paneHistory?.stop();
         imageSweeper?.stop();
         await agentReportSocket?.close();
@@ -676,6 +683,10 @@ export async function composeServer(
         // マシンへの ssh を閉じる（リモートの `soda serve` と pane は動いたまま。AC5）。中継の接続には、ssh を閉じる前に手元の停止（1001）で閉じる
         // （手元の `/ws` と同じ code にそろえる。ブラウザ・sodactl はどちらも繋ぎ直しの扱いで、今は code で分けていない）。
         for (const set of relayed.values()) for (const conn of [...set]) conn.close(1001, "server shutting down");
+        // 連携の実行を止めてから別のマシンへの接続を閉じる（20260927-agent-graph の 04。先に ssh を閉じると、切れた知らせで待ちを
+        // machine_unavailable として履歴に残してしまう。止める＝待ちは履歴に残さず取り消し、送っている途中の結果も書かない）。graph.close の前。
+        graphEngine.stop();
+        remoteLinks.closeAll();
         await machines.stop();
         // 閉じ始めたら新しい `/ws` を受け付けない（closeAll の後に届いた upgrade を通さない。D102）。
         wsServer.setReady(false);
@@ -684,8 +695,6 @@ export async function composeServer(
         // 実行中の判定周期を待ってから terminals/session を破棄する（review 指摘。should。D51 の隣の
         // agent/AgentMonitor.ts 参照）。
         await agentMonitor.stop();
-        // 連携の実行を止める（20260927-agent-graph。待ちは履歴に残さず取り消し、送っている途中の結果も書かない）。graph.close の前。
-        graphEngine.stop();
         gitPoller.stop();
         // 画面履歴の定期保存は最初に止める（この後の flush が投げても、ロックを放した後にタイマーが残って書かない。T9 の独立点検）。
         paneHistory?.stop();

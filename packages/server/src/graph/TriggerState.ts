@@ -18,7 +18,7 @@ export type SkipReason = Exclude<LinkRunReason, "error">;
 export interface TriggerSettings {
   on: TriggerOn;
   whenBusy: WhenBusy;
-  /** 発火をすべて見送る理由（全体・線の一時停止は "paused"、上限は "limit"、先が別のマシンで繋がっていなければ "machine_unavailable"）。無ければ null。 */
+  /** 発火をすべて見送る理由（全体・線の一時停止は "paused"、上限は "limit"、元・先のマシンが繋がっていなければ "machine_unavailable"）。無ければ null。 */
   suppress: SkipReason | null;
 }
 
