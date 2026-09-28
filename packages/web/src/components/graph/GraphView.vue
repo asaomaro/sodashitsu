@@ -28,6 +28,9 @@ watch(
       if (back && !view.modalOpen) registry?.focus(back);
     });
   },
+  // 開いたまま本体が作り直された（ログインし直し・切り離しからの復帰）ときも開き直す——`graphOpen` とキーの dialog モードが残ったまま
+  // 画面が見えない状態にしない。
+  { immediate: true },
 );
 
 function onKeydown(ev: KeyboardEvent): void {
@@ -44,7 +47,9 @@ function onCancel(ev: Event): void {
 </script>
 
 <template>
+  <!-- `id` は App.vue の Teleport の行き先（開いている間はトースト・再接続の表示をこの中へ出す。decisions D4）。 -->
   <dialog
+    id="soda-graph-dialog"
     ref="dialogEl"
     class="graph-view"
     aria-label="連携（グラフ）"

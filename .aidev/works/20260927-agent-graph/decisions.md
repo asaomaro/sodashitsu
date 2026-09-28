@@ -39,4 +39,5 @@
   7. geometry の export 名に `graph` を付けた（`snapToGrid` 等との衝突を避ける）。
   8. グラフ画面を「同じ prefix＋キー」で閉じるのは 03 で足す（01 は Esc と閉じるボタン）。
   9. web の vitest の worker のヒープの上限を 4GB に上げた（`SettingsDialog.test.ts` が 1 件ごとに約 21MB を残し、操作が 1 つ増えて既定の 2GB を超えた。漏れそのものは backlog）。
+  10. グラフ画面（`showModal()` の top layer）を開いている間は、トーストと再接続の表示を App.vue の `<Teleport :disabled="!graphOpen">` でその dialog の中へ出す（`popover="manual"` は top layer の中の重なりが「後から出したものが上」なので、グラフ画面を後から開くとまた隠れ、出し直しの管理が要るため採らない）。
 - **影響**: 02 以降はこの形に合わせる。

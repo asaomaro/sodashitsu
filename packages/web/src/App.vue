@@ -96,8 +96,12 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
     <GraphView />
     <CommandPopup />
     <PrefixIndicator />
-    <Toast />
-    <ReconnectOverlay />
+    <!-- グラフ画面（`showModal()` の top layer）を開いている間は、トーストと再接続の表示をその dialog の中へ出す——外に置くと top layer の下に隠れ、
+         inert で押せない（20260927-agent-graph の decisions D4）。`defer` は同じ描画の中で後から mount される行き先を待つため。 -->
+    <Teleport to="#soda-graph-dialog" :disabled="!view.graphOpen" defer>
+      <Toast />
+      <ReconnectOverlay />
+    </Teleport>
   </div>
 </template>
 
