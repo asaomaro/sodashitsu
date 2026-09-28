@@ -37,6 +37,11 @@ file, per Apache License 2.0 section 4(b).
     packages/tui/src/render/scrollbar.ts            (from src/ui/scrollbar.rs)
     packages/tui/src/render/chrome/narrowHeader.ts  (from src/client/shell/mobile.rs)
     packages/tui/src/notify/terminalNotify.ts       (from src/terminal_notify.rs)
+    packages/tui/src/app/windowTitle.ts             (from src/config/window_title.rs,
+                                                       src/terminal/title.rs)
+    packages/tui/src/modes/OnboardingDialog.ts      (from src/client/shell/overlays.rs,
+                                                       src/client/shell/overlay_input.rs,
+                                                       src/ui/onboarding.rs)
 
   Location in this repository (ported test cases, alongside this product's own tests):
     packages/server/src/agent/ManifestEngine.test.ts   (from src/detect/manifest/tests.rs)
@@ -45,3 +50,5 @@ file, per Apache License 2.0 section 4(b).
     packages/server/src/git/worktree.test.ts           (from src/worktree.rs tests)
     packages/protocol/src/worktreePath.test.ts         (from src/worktree.rs tests)
     packages/tui/src/notify/notify.test.ts             (from src/terminal_notify.rs tests)
+    packages/tui/src/app/t7.test.ts                    (from src/config/window_title.rs and
+                                                          src/terminal/title.rs tests)

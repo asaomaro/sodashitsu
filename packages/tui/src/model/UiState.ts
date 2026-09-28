@@ -27,7 +27,8 @@ export type DialogContext =
   | { kind: "confirmReplacePane"; paneId: string; targetPaneId: string }
   | { kind: "help" }
   | { kind: "goto" }
-  | { kind: "settings" }
+  /** `section`：開いたときに選ぶ節の id（はじめの案内の後の「エージェント連携」。herdr の select_settings_section）。 */
+  | { kind: "settings"; section?: string }
   /** はじめの案内（web と同じ kind。端末版は herdr のはじめの画面の形。H25b）。 */
   | { kind: "onboarding" }
   /** 端末版だけ：未処理の知らせの一覧（design「modes/」の「通知の一覧」）。 */

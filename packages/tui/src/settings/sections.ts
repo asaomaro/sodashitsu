@@ -613,7 +613,7 @@ function agentSection(env: SettingsEnv): SettingsSection {
       const status = env.agentIntegration.status();
       if (!status) return [{ label: "状態を読み込んでいます…", disabled: true }];
       const items: SettingItem[] = AGENT_KINDS.map((k) => {
-        const s = status.agents[k.value];
+        const s = status.agents?.[k.value];
         const installed = s?.installed === true;
         return {
           label: k.label,

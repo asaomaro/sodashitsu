@@ -438,7 +438,9 @@ describe("T7 の画面", () => {
     h.io.type("x");
     expect(h.app.ui.dialogContext).toEqual({ kind: "onboarding" });
     h.io.type("\r");
-    await vi.waitFor(() => expect(h.app.ui.dialogContext).toEqual({ kind: "settings" }));
+    await vi.waitFor(() =>
+      expect(h.app.ui.dialogContext).toEqual({ kind: "settings", section: "agents" }),
+    );
     await vi.waitFor(() => expect(h.ws.requests("prefs.set")).toHaveLength(1));
     expect(h.ws.requests("prefs.set")[0]!.params).toMatchObject({ patch: { onboarding: false } });
     // 閉じても 2 回は出さない
@@ -480,7 +482,9 @@ describe("T7 の画面", () => {
     const y = lines.findIndex((l) => l.includes("はじめる"));
     const x = lines[y]!.indexOf("はじめる");
     h.io.type(`\x1b[<0;${x + 1};${y + 1}M`);
-    await vi.waitFor(() => expect(h.app.ui.dialogContext).toEqual({ kind: "settings" }));
+    await vi.waitFor(() =>
+      expect(h.app.ui.dialogContext).toEqual({ kind: "settings", section: "agents" }),
+    );
   });
 
   it("設定画面：外側の端末のタイトルの書式が読めなければ保存しない", async () => {

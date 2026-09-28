@@ -54,7 +54,7 @@ import { TuiKeys } from "../input/keys.js";
 import { clampTerminalSize, type CommandInfo, type SharedPrefs } from "@sodashitsu/protocol";
 import { computeLayout, type LayoutResult } from "../layout/computeLayout.js";
 import { spawn } from "node:child_process";
-import { readTuiState, writeTuiState, type TuiState } from "../local/tuiState.js";
+import { readTuiState, tuiStateExists, writeTuiState, type TuiState } from "../local/tuiState.js";
 import { PrefsModel } from "../model/PrefsModel.js";
 import { SessionModel } from "../model/SessionModel.js";
 import { TuiNet, type TuiNetDeps } from "../net/TuiNet.js";
@@ -94,11 +94,11 @@ export interface TuiAppOptions {
 }
 
 /** 描画の最短の間隔（60fps。design「描画の予約は最短 16ms」）。 */
-export /** tab バーの日時を描き直す間隔。 */
+export const RENDER_INTERVAL_MS = 16;
+/** tab バーの日時を描き直す間隔。 */
 const CLOCK_TICK_MS = 1000;
 /** pane の BEL を外側の端末へ回す最短の間隔。 */
 const BELL_INTERVAL_MS = 100;
-const RENDER_INTERVAL_MS = 16;
 /** 接続が開いていない間の打鍵の知らせ。 */
 export const DROPPED_NOTICE = "未接続のため入力を送れません";
 /** 外側の端末への問い合わせ（背景色）の応答を、割れた列として待つ時間。 */
@@ -219,11 +219,16 @@ export class TuiApp {
   private readonly copyTargets = new WeakMap<PaneTerminal, TuiCopyTarget>();
   /** オーバーレイ（ダイアログ・メニュー）。 */
   readonly overlays: OverlayHost;
-  /** 読んだ外側の端末のタイトルの書式（書式が変わったら読み直す）。 */
   /** この起動ではじめの案内を開いたか（2 回開かない）。 */
   private onboardingOpened = false;
+  /**
+   * はじめの案内を出してよい起動か（起動時に 1 回だけ決める）。自動の起動（`SODA_NO_ONBOARDING=1`・端末でない）と、この端末版を前にも使った
+   * 痕跡（`tui-state.json`）がある既存の利用者には出さない（web の `isFreshBrowser`・`isAutomatedBrowser` と同じ考え）。
+   */
+  private readonly onboardingEligible: boolean;
   /** 直前に外側の端末へ回した BEL の時刻。 */
   private lastBellAt = -Infinity;
+  /** 読んだ外側の端末のタイトルの書式（書式が変わったら読み直す）。 */
   private titleTemplate: { source: string | null; parts: WindowTitlePart[] | null } = {
     source: null,
     parts: null,
@@ -250,6 +255,8 @@ export class TuiApp {
       },
     });
     this.prefs = new PrefsModel(readTuiState(target.stateDir));
+    this.onboardingEligible =
+      io.isTTY && io.env["SODA_NO_ONBOARDING"] !== "1" && !tuiStateExists(target.stateDir);
     this.prefs.setSystemDark(systemDarkFromEnv(io.env));
     this.theme = new ThemeColors(this.prefs.theme, this.prefs.themeOverrides);
     this.renderer = new Renderer(
@@ -834,7 +841,7 @@ export class TuiApp {
         statusSymbols: () => this.prefs.statusSymbols,
         machines: this.machines,
       });
-    if (ctx.kind === "settings") return this.settingsDialog();
+    if (ctx.kind === "settings") return this.settingsDialog(ctx.section);
     if (ctx.kind === "onboarding")
       return new OnboardingDialog({
         prefix: () => this.keymap.prefix,
@@ -864,15 +871,20 @@ export class TuiApp {
   }
 
   /**
-   * はじめの案内（H25b。herdr の onboarding）を起動後に 1 回だけ開く：ローカルのサーバの共有の設定を受け取っていて、案内済み
-   * （`onboarding: false`。web で済ませたものも同じ項目）でなく、接続が開いていて、ほかのダイアログ・メニューが無いとき。
+   * はじめの案内（H25b。herdr の onboarding）を起動後に 1 回だけ開く：出してよい起動（{@link onboardingEligible}）で、ローカルのサーバの
+   * 共有の設定を受け取っていて、初めての利用者（一度も書かれていない＝rev 0。案内の項目ができる前から設定を使っていた既存の利用者〔rev が
+   * 1 以上で `onboarding` が無い〕には出さない）か `onboarding: true`（明示して出し直す）で、`onboarding: false`（案内済み。web で
+   * 済ませたものも同じ項目）でなく、接続が開いていて、ほかのダイアログ・メニューが無いとき。
    */
   protected maybeOpenOnboarding(): void {
+    const flag = this.prefs.shared.onboarding;
     if (
+      !this.onboardingEligible ||
       this.onboardingOpened ||
       this.ended ||
       this.prefs.rev < 0 ||
-      this.prefs.shared.onboarding === false ||
+      flag === false ||
+      (flag !== true && this.prefs.rev > 0) ||
       this.connectionState !== "open" ||
       this.ui.dialogContext !== null ||
       this.ui.contextMenu !== null
@@ -882,14 +894,14 @@ export class TuiApp {
     this.ui.openDialogWithContext({ kind: "onboarding" });
   }
 
-  /** 案内を確定した：案内済みにして（共有の設定。herdr の `onboarding = false`）設定画面を開く（herdr の complete_onboarding）。 */
+  /** 案内を確定した：案内済みにして（共有の設定。herdr の `onboarding = false`）設定画面の「エージェント連携」の節を開く（herdr の complete_onboarding・select_settings_section）。 */
   private completeOnboarding(): void {
     this.settingsWriter.setShared({ onboarding: false });
-    this.ui.openDialogWithContext({ kind: "settings" });
+    this.ui.openDialogWithContext({ kind: "settings", section: "agents" });
   }
 
   /** 設定画面（05 の T1）。開くたびにエージェント連携の状態を読み直す（サーバ全体の設定なので hello に乗らない。web と同じ）。 */
-  protected settingsDialog(): Overlay {
+  protected settingsDialog(section?: string): Overlay {
     this.rpc
       .request("agent_integration.status", {})
       .then((status) => {
@@ -921,6 +933,7 @@ export class TuiApp {
           openOnboarding: () => this.ui.openDialogWithContext({ kind: "onboarding" }),
         }),
       () => this.scheduleRender(),
+      section,
     );
   }
 

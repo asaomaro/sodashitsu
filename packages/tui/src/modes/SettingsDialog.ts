@@ -70,11 +70,17 @@ export class SettingsDialog implements Overlay {
     private readonly ui: UiState,
     makeSections: (message: (text: string) => void) => SettingsSection[],
     private readonly requestRender: () => void = () => undefined,
+    /** 開いたときに選ぶ節の id（無い・知らない id なら先頭）。 */
+    initialSection?: string,
   ) {
     this.sections = makeSections((text) => {
       this.message = text;
       this.requestRender();
     });
+    this.section = Math.max(
+      0,
+      this.sections.findIndex((s) => s.id === initialSection),
+    );
   }
 
   /** 今の節の項目（描くたびに今の設定から作り直す）。 */

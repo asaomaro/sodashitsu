@@ -1,7 +1,8 @@
 /*
  * 外側の端末のタイトルの書式（`{hostname}`・`{workspace}`・`{tab}`・`{pane}`・`{terminal_title}`・`{{`・`}}`）の読み取りと文字の洗いは
  * herdr（https://github.com/herdrdev/herdr、commit da6bcd5969779bfe0396bcf89a8025d4375d611e）の `src/config/window_title.rs`
- * （`WindowTitleTemplate::parse`・`sanitize_window_title_text`・`MAX_WINDOW_TITLE_CHARS`）を TypeScript へ移したもの（Apache-2.0。ルートの `NOTICE`）。
+ * （`WindowTitleTemplate::parse`・`sanitize_window_title_text`・`MAX_WINDOW_TITLE_CHARS`）を、端末のタイトルの先頭の回る記号の除去は
+ * `src/terminal/title.rs`（`stripped_terminal_title`・`CLAUDE_ACTIVITY_GLYPHS`）を TypeScript へ移したもの（Apache-2.0。ルートの `NOTICE`）。
  */
 
 export type WindowTitleToken = "hostname" | "workspace" | "tab" | "pane" | "terminal_title";
@@ -86,7 +87,7 @@ export function titleSequence(title: string): string {
 /** Claude Code が作業中にタイトルの先頭へ付ける記号（herdr の `CLAUDE_ACTIVITY_GLYPHS`）。 */
 const ACTIVITY_GLYPHS = "·✢✳✶✻✽◐◓◑◒";
 
-/** 端末のタイトルから先頭の回る記号（点字の 1 文字・作業中の記号）を除く（herdr の `stripped_terminal_title`）。空なら null。 */
+/** 端末のタイトルから先頭の回る記号（点字の 1 文字・作業中の記号）を除く（herdr の `src/terminal/title.rs` の `stripped_terminal_title`）。空なら null。 */
 export function strippedTerminalTitle(title: string): string | null {
   const t = title.trim();
   const first = [...t][0];

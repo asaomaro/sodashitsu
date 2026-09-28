@@ -220,7 +220,12 @@ export class MouseController {
     return undefined;
   }
 
+  /**
+   * 分割の境界（掴んで大きさを変える）。枠の罫線・境目の線の桁だけ——pane の中身の桁は境界にしない（枠を描かない・隙間の無い pane は、
+   * 境界の隣の桁が中身。`box.sides`。05 T7 の点検）。
+   */
   private dividerAt(layout: LayoutResult, x: number, y: number): Divider | undefined {
+    if (layout.panes.some((b) => this.inContent(b, x, y))) return undefined;
     return layout.dividers.find((d) =>
       d.dir === "right"
         ? (x === d.x || x === d.x - 1) && y >= d.y && y < d.y + d.len

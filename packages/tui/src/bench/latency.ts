@@ -43,7 +43,12 @@ interface Frame {
 class BenchIo implements TuiIo {
   readonly isTTY = true;
   readonly platform = process.platform;
-  readonly env: Record<string, string> = { COLORTERM: "truecolor", TERM: "xterm-256color" };
+  // 一時の状態ディレクトリで始めるので、はじめの案内を出させない（打鍵が案内に吸われる）。
+  readonly env: Record<string, string> = {
+    COLORTERM: "truecolor",
+    TERM: "xterm-256color",
+    SODA_NO_ONBOARDING: "1",
+  };
   readonly frames: Frame[] = [];
   private cols = COLS;
   private rows = ROWS;

@@ -31,13 +31,16 @@ export async function startedApp(
     env?: Record<string, string | undefined>;
     /** クリップボードの OS の道具の呼び出し（無ければ何も無い＝道具が見つからない）。 */
     clipboardRunner?: Runner;
+    /** 状態ディレクトリ（無ければ存在しない場所）。 */
+    stateDir?: string;
   } = {},
 ) {
   const cols = opts.cols ?? 100;
   const rows = opts.rows ?? 30;
   const io = fakeIo({ cols, rows, ...(opts.env ? { env: opts.env } : {}) });
   const sockets: FakeSocket[] = [];
-  const app = new TuiApp(testTarget, io, {
+  const target = opts.stateDir ? { ...testTarget, stateDir: opts.stateDir } : testTarget;
+  const app = new TuiApp(target, io, {
     ...(opts.openUrl ? { openUrl: opts.openUrl } : {}),
     // 既定は道具が見つからない（テストで本物の xclip 等を動かさない）。
     clipboardRunner: opts.clipboardRunner ?? (() => Promise.reject(new Error("ENOENT"))),

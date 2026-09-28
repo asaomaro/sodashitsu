@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { chmod, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -42,6 +42,11 @@ export function readTuiState(stateDir: string): TuiState {
   } catch {
     return {};
   }
+}
+
+/** `tui-state.json` があるか（この状態ディレクトリで端末版を前にも使った痕跡。はじめの案内を既存の利用者に出さない）。 */
+export function tuiStateExists(stateDir: string): boolean {
+  return existsSync(join(stateDir, TUI_STATE_FILE));
 }
 
 /** 原子的に書く（一時ファイル → rename。0600）。失敗は呼び出し側で握りつぶしてよい（次の起動で既定に戻るだけ）。 */

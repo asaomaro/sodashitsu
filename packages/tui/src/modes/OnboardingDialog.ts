@@ -25,8 +25,9 @@ export interface OnboardingDeps {
 
 /**
  * はじめの案内（H25b。herdr の onboarding のはじめの画面：`client/shell/overlays.rs` の `render_onboarding_overlay` と
- * `overlay_input.rs` の `route_overlay_key`・`complete_onboarding`）。Enter・→・`l`・［はじめる］で確定し、案内済み（共有の設定 `onboarding: false`）に
- * して設定画面を開く。herdr と同じく Esc・外側のクリックでは閉じない（初回の案内を誤って消費しない）。
+ * `overlay_input.rs` の `route_overlay_key`・`complete_onboarding`、文言は `src/ui/onboarding.rs`。herdr〔https://github.com/herdrdev/herdr、
+ * commit da6bcd5969779bfe0396bcf89a8025d4375d611e〕から TypeScript へ移した。Apache-2.0。ルートの `NOTICE`）。Enter・→・`l`・［はじめる］で確定し、案内済み（共有の設定 `onboarding: false`）に
+ * して設定画面の「エージェント連携」の節を開く。herdr と同じく Esc・外側のクリックでは閉じない（初回の案内を誤って消費しない）。
  */
 export class OnboardingDialog implements Overlay {
   private rect: Rect | null = null;
