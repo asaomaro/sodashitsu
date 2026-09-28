@@ -581,7 +581,7 @@ describe("GraphEngine — 履歴・開始と停止", () => {
     expect(t.engine.getHistory("l9")).toEqual([]);
   });
 
-  it("stop で購読・見回りを止め、待ちは黙って取り消す（履歴を足さない）。送っている途中の結果も記録しない", async () => {
+  it("stop で購読・見回りを止め、待ちは黙って取り消す（履歴を足さない）。送っている途中の結果は履歴に残さない（届いた分の回数は数える）", async () => {
     const t = setup([trigger(), trigger({ id: "l2", from: B, to: A })], {}, (p) =>
       p.agents.set("p2", agent("b1", 0, "working")),
     );
@@ -599,7 +599,7 @@ describe("GraphEngine — 履歴・開始と停止", () => {
     t.store.set({ ...t.store.graph });
     await flush();
     expect(t.runs()).toHaveLength(before);
-    expect(t.store.recordRun).not.toHaveBeenCalled();
+    expect(t.store.recordRun).toHaveBeenCalledTimes(1); // 止めた後に届いた 1 通は数える（上限を守る）
     t.engine.stop(); // 二度目は何もしない
   });
 
@@ -992,7 +992,7 @@ describe("GraphEngine — g02 点検の修正", () => {
     t.done(1);
     await flush();
     t.done(2); // 先は作業中とみなしているので待ち
-    t.port.set("p2", agent("b1", 0, "idle")); // 送っている途中に先の本物の idle が届く → 待ちが解けて送ろうとする
+    t.port.set("p2", agent("b1", 1, "idle")); // 送っている途中に先の本物の完了が届く → 待ちが解けて送ろうとする
     await flush();
     expect(t.port.prompts).toHaveLength(1);
     expect(t.runs().map((r) => [r.result, r.reason])).toEqual([
@@ -1043,5 +1043,124 @@ describe("GraphEngine — g02 点検の修正", () => {
     expect(history.map((r) => r.at)).toEqual([t.at(), t.at()]);
     expect(history.map((r) => r.result)).toEqual(["waiting", "skipped"]);
     expect(t.engine.getHistory().map((r) => r.result)).toEqual(["waiting", "skipped"]);
+  });
+});
+
+describe("GraphEngine — レビュー ラウンド 1 の修正", () => {
+  const supervise = (id: string, from: NodeKey): GraphLink => ({
+    id,
+    kind: "supervise",
+    from,
+    to: S,
+    limit: 10,
+    count: 0,
+    paused: null,
+  });
+
+  it("同じ先を待つ 2 本の線は、先の 1 回の idle の知らせで 1 通だけ送り、もう 1 本は待ち続ける", async () => {
+    const t = setup([trigger(), trigger({ id: "l2", from: S, to: B })], {}, (p) =>
+      p.agents.set("p2", agent("b1", 0, "working")),
+    );
+    t.done(1);
+    t.port.set("p3", agent("s1", 1)); // S も完了
+    expect(t.engine.getHistory().map((r) => r.result)).toEqual(["waiting", "waiting"]);
+    t.port.set("p2", agent("b1", 1, "idle"));
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+    // 先が 1 通目を片付けたら 2 通目
+    t.port.set("p2", agent("b1", 1, "working"));
+    t.port.set("p2", agent("b1", 2, "idle"));
+    await flush();
+    expect(t.port.prompts).toHaveLength(2);
+  });
+
+  it("監督の知らせと承認の代理が監督役の 1 回の idle の知らせで揃っても、1 通だけ送る", async () => {
+    const approval: GraphLink = {
+      id: "l2",
+      kind: "approval",
+      from: A,
+      to: S,
+      approval: { mode: "notify", lines: 5 },
+      limit: 10,
+      count: 0,
+      paused: null,
+    };
+    const t = setup([supervise("l1", A), approval], {}, (p) =>
+      p.agents.set("p3", agent("s1", 0, "working")),
+    );
+    t.port.set("p1", agent("a1", 0, "blocked"));
+    t.advance(SUPERVISOR_DEBOUNCE_MS); // 承認の代理は待ち、監督の知らせも監督役の手が空くのを待つ
+    await flush();
+    expect(t.port.prompts).toEqual([]);
+    t.port.set("p3", agent("s1", 1, "idle"));
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+  });
+
+  it("作業中とみなしている先の、idle のままの知らせ（既読・名前の変更）では、みなしを外さない", async () => {
+    const t = setup([trigger()]);
+    t.done(1);
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+    t.port.set("p2", { ...agent("b1", 0, "idle"), serverSeenSeq: 1 }); // 既読だけ
+    t.port.set("p2", { ...agent("b1", 0, "idle"), serverSeenSeq: 1, name: "reviewer" }); // 名前だけ
+    t.done(2);
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+    expect(t.runs().at(-1)).toMatchObject({ result: "waiting" });
+  });
+
+  it("作業中とみなしている先の完了（completionSeq の増加）・状態の変化・入れ替わり・不在では、みなしを外す", async () => {
+    const cases: (AgentInfo | null)[] = [
+      agent("b1", 1, "idle"),
+      agent("b1", 0, "blocked"),
+      agent("b2", 0, "idle"),
+      null,
+    ];
+    for (const next of cases) {
+      const t = setup([trigger()]);
+      t.done(1);
+      await flush();
+      t.port.set("p2", next);
+      t.done(2);
+      await flush();
+      // みなしが外れれば、今の先の状態で決まる（idle なら送る・blocked なら blocked・居なければ target_absent）
+      expect(t.runs().at(-1)!.result).not.toBe("waiting");
+    }
+  });
+
+  it("送っている途中に止めても、届いた送信は回数に数える（履歴は残さない）。閉じた保存が断っても投げない", async () => {
+    const t = setup([trigger({ limit: 1 })]);
+    t.port.hold = true;
+    t.done(1);
+    await flush();
+    t.engine.stop();
+    t.port.finish();
+    await flush();
+    expect(t.store.recordRun).toHaveBeenCalledWith("l1");
+    expect(t.store.graph.links[0]).toMatchObject({ count: 1, paused: "limit" });
+    expect(t.runs()).toEqual([]);
+    const u = setup([trigger()]);
+    u.port.hold = true;
+    u.store.recordRun.mockRejectedValueOnce(new Error("graph store is closed"));
+    u.done(1);
+    await flush();
+    u.engine.stop();
+    u.port.finish();
+    await flush();
+    await flush();
+    expect(u.store.recordRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("送っている途中に止めて、送信が失敗したら数えない", async () => {
+    const t = setup([trigger()]);
+    t.port.hold = true;
+    t.port.failWith = new Error("boom");
+    t.done(1);
+    await flush();
+    t.engine.stop();
+    t.port.finish();
+    await flush();
+    expect(t.store.recordRun).not.toHaveBeenCalled();
   });
 });

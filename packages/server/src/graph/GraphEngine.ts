@@ -101,7 +101,7 @@ export class GraphEngine {
   /** 履歴の連番（同じ時刻の記録を新しい順に並べる）。 */
   private seq = 0;
   /** 送った直後で「作業中」とみなしている先（鍵は `<machine>:<paneId>`）。 */
-  private readonly assumedBusy = new Map<string, { end: End; until: number }>();
+  private readonly assumedBusy = new Map<string, { end: End; until: number; agent: AgentInfo }>();
   private subs: Disposable[] = [];
   private timer: { clear(): void } | null = null;
   private graph: Graph | null = null;
@@ -289,18 +289,35 @@ export class GraphEngine {
 
   private onStatus(port: AgentPort, e: AgentStatusEvent): void {
     const at = this.deps.now();
-    this.assumedBusy.delete(`${port.machine}:${e.paneId}`); // 本物の知らせが来たらそちらを使う
+    const key = `${port.machine}:${e.paneId}`;
+    const assumed = this.assumedBusy.get(key);
+    // 「作業中とみなす」を外すのは、送った仕事が本当に動いた・終わった知らせのときだけ（idle のままの既読・名前の変更では外さない）。
+    if (assumed !== undefined && startedOrReplaced(assumed.agent, e.agent))
+      this.assumedBusy.delete(key);
     for (const rt of [...this.links.values()]) {
       if (rt.from.port === port && rt.from.paneId === e.paneId)
         this.apply(rt, rt.state.handle({ kind: "source", agent: e.agent, at }), at);
+      // 先・監督役としては、この知らせの処理の中で送り始めた（作業中とみなした）なら、その後の線にも作業中として渡す。
       if (rt.to.port === port && rt.to.paneId === e.paneId)
-        this.apply(rt, rt.state.handle({ kind: "target", agent: e.agent, at }), at);
+        this.apply(
+          rt,
+          rt.state.handle({ kind: "target", agent: this.asTarget(key, e.agent), at }),
+          at,
+        );
     }
     for (const sv of [...this.supervisors.values()]) {
       if (sv.end.port === port && sv.end.paneId === e.paneId) {
-        this.applySupervisor(sv, sv.notifier.handle({ kind: "supervisor", agent: e.agent, at }));
+        this.applySupervisor(
+          sv,
+          sv.notifier.handle({ kind: "supervisor", agent: this.asTarget(key, e.agent), at }),
+        );
       }
     }
+  }
+
+  /** 先としての状態（作業中とみなしている間は working）。 */
+  private asTarget(key: string, agent: AgentInfo | null): AgentInfo | null {
+    return agent !== null && this.assumedBusy.has(key) ? { ...agent, state: "working" } : agent;
   }
 
   private apply(rt: LinkRuntime, d: TriggerDecision, at: number): void {
@@ -327,7 +344,11 @@ export class GraphEngine {
     const agent = end.port!.status(end.paneId);
     if (agent === null) return;
     const at = this.deps.now();
-    this.assumedBusy.set(`${end.machine}:${end.paneId}`, { end, until: at + ASSUMED_BUSY_MS });
+    this.assumedBusy.set(`${end.machine}:${end.paneId}`, {
+      end,
+      until: at + ASSUMED_BUSY_MS,
+      agent,
+    });
     this.feedTarget(end, { ...agent, state: "working" }, at);
   }
 
@@ -391,13 +412,15 @@ export class GraphEngine {
         return;
       }
       await target.prompt(to.paneId, text);
-      if (gen !== this.generation) return;
-      this.record({
-        linkId: link.id,
-        at: this.deps.now(),
-        result: "sent",
-        text: runTextPreview(text),
-      });
+      // 止めた後（引き継ぎ・終了の途中）に届いた送信は履歴に残さないが、回数は下で数える（届いたので上限を守る）。
+      if (gen === this.generation) {
+        this.record({
+          linkId: link.id,
+          at: this.deps.now(),
+          result: "sent",
+          text: runTextPreview(text),
+        });
+      }
     } catch (err) {
       if (gen !== this.generation) return;
       this.recordFailure(link.id, err);
@@ -405,7 +428,7 @@ export class GraphEngine {
     } finally {
       rt.sending = false;
     }
-    // 送れた。回数を数える（保存に失敗しても送ったことは変わらないので、履歴は「送った」のまま。閉じた後〔終了の途中〕は数えない）。
+    // 届いた。回数を数える（保存に失敗しても送ったことは変わらないので、履歴は「送った」のまま。閉じた後〔終了の途中〕は保存が断るのでログだけ）。
     try {
       await this.deps.store.recordRun(link.id);
     } catch (err) {
@@ -498,6 +521,13 @@ export class GraphEngine {
       });
     }
   }
+}
+
+/** 作業中とみなしていた先の知らせが、送った仕事の開始・完了・入れ替わり（または不在）を表すか。idle のままの既読・名前の変更は false。 */
+function startedOrReplaced(assumed: AgentInfo, now: AgentInfo | null): boolean {
+  if (now === null || now.instanceId !== assumed.instanceId) return true;
+  if (now.state !== "idle") return true;
+  return now.completionSeq > assumed.completionSeq;
 }
 
 function defaultInterval(fn: () => void, ms: number): { clear(): void } {
