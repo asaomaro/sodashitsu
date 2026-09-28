@@ -20,7 +20,7 @@ describe("stripControl", () => {
   });
 
   it("C0（改行・タブ以外）・DEL・C1 を落とし、CRLF は LF に", () => {
-    expect(stripControl("a\u0000b\u0007c\u0008d\u007Fe\u009Bf\u0085g")).toBe("abcdefg");
+    expect(stripControl("a\u0000b\u0007c\u0008d\u007Fe\u0084f\u0085g")).toBe("abcdefg");
     expect(stripControl("a\tb\r\nc\rd")).toBe("a\tb\ncd");
   });
 
@@ -30,6 +30,15 @@ describe("stripControl", () => {
 
   it("日本語・絵文字はそのまま", () => {
     expect(stripControl("完了しました 🎉")).toBe("完了しました 🎉");
+  });
+});
+
+describe("8 ビットの C1 の列（g01 点検）", () => {
+  it("CSI（U+009B）は引数ごと、OSC（U+009D）は ST/BEL まで、DCS（U+0090）は ST まで落とす", () => {
+    expect(stripControl("a\u009B31mb\u009B0mc")).toBe("abc");
+    expect(stripControl("a\u009D0;title\u0007b\u009D8;;http://x\u009Cc")).toBe("abc");
+    expect(stripControl("a\u009D0;t\u001B\\b")).toBe("ab");
+    expect(stripControl("a\u0090q#0\u009Cb")).toBe("ab");
   });
 });
 
@@ -50,6 +59,10 @@ describe("buildTriggerText", () => {
   it("{output} が無ければ末尾に空行を挟んで足す。文面が空なら結果だけ", () => {
     expect(buildTriggerText("見て", "結果")).toBe("見て\n\n結果");
     expect(buildTriggerText("  ", "結果")).toBe("結果");
+  });
+
+  it('画面が空（""）で {output} が無ければ、末尾に空行を足さない', () => {
+    expect(buildTriggerText("見て", "")).toBe("見て");
   });
 
   it("受け渡さない（null）なら {output} は空、無ければ文面そのまま", () => {

@@ -6,6 +6,7 @@ import {
   type GraphLink,
   type LinkKind,
 } from "@sodashitsu/protocol";
+import { OUTPUT_PLACEHOLDER } from "./message.js";
 
 /**
  * 線とノードの検証（20260927-agent-graph の design「線の検証」）。サーバ（`graph.update` の拒否）と画面（保存の前の知らせ）が同じ規則を使う。
@@ -73,7 +74,11 @@ function linkOwnIssues(link: LinkDraft): GraphIssue[] {
         ...at,
       });
     }
-    if (link.trigger.prompt.trim() === "" && link.trigger.output === null) {
+    // `{output}` は受け渡しが無ければ空になるので、除いた残りで見る（`{output}` だけの文面は空を送ることになる）。
+    if (
+      link.trigger.prompt.split(OUTPUT_PLACEHOLDER).join("").trim() === "" &&
+      link.trigger.output === null
+    ) {
       issues.push({
         code: "empty_prompt",
         message: "送る文面が空です（文面を書くか、結果を受け渡してください）。",
@@ -159,7 +164,9 @@ export function validateLink(graph: Pick<Graph, "nodes" | "links">, link: LinkDr
     if (!keys.has(end))
       issues.push({ code: "unknown_node", message: "線の端のノードが載っていません。", key: end });
   }
-  if (link.id === undefined && others.length >= GRAPH_LINKS_MAX) {
+  // グラフに無い id の下書きも新しい線として数える（置き換える線が無い）。
+  const isNew = link.id === undefined || !graph.links.some((l) => l.id === link.id);
+  if (isNew && others.length >= GRAPH_LINKS_MAX) {
     issues.push({ code: "too_many_links", message: `線は ${GRAPH_LINKS_MAX} 本までです。` });
   }
   issues.push(...linkOwnIssues(link), ...linkRelationIssues(link, others));

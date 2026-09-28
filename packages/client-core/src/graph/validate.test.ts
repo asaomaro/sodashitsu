@@ -167,6 +167,56 @@ describe("validateGraph", () => {
   });
 });
 
+describe("validate の修正（20260927-agent-graph の g01 点検）", () => {
+  it("{output} を除くと空の文面は、受け渡しが無ければ empty_prompt（空の文面を送らない）", () => {
+    const t = defaultTriggerConfig();
+    expect(
+      codes(
+        validateGraph(
+          graph([link({ id: "l1", trigger: { ...t, prompt: "{output}", output: null } })]),
+        ),
+      ),
+    ).toEqual(["empty_prompt"]);
+    expect(
+      codes(
+        validateGraph(
+          graph([
+            link({ id: "l1", trigger: { ...t, prompt: " {output}{output}\n", output: null } }),
+          ]),
+        ),
+      ),
+    ).toEqual(["empty_prompt"]);
+    expect(
+      validateGraph(
+        graph([link({ id: "l1", trigger: { ...t, prompt: "見て {output}", output: null } })]),
+      ),
+    ).toEqual([]);
+  });
+
+  it("グラフに無い id の下書きは新しい線として 128 本の上限を見る", () => {
+    const full = graph(
+      Array.from({ length: GRAPH_LINKS_MAX }, (_, i) =>
+        link({ id: `l${i + 1}`, to: `local:p${i + 2}` }),
+      ),
+    );
+    expect(codes(validateLink(full, { id: "l999", kind: "supervise", from: C, to: A }))).toContain(
+      "too_many_links",
+    );
+    // 既にある線の編集は上限に数えない
+    expect(
+      codes(
+        validateLink(full, {
+          id: "l1",
+          kind: "trigger",
+          from: A,
+          to: B,
+          trigger: defaultTriggerConfig(),
+        }),
+      ),
+    ).not.toContain("too_many_links");
+  });
+});
+
 describe("validateLink（保存の前の検証）", () => {
   const g = graph([link({ id: "l1" })]);
 

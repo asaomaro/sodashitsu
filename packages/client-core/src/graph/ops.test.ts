@@ -139,6 +139,26 @@ describe("applyGraphOps", () => {
     });
   });
 
+  it("rekey_node で既に載っている鍵へ移すのは duplicate_node、トリガの線を設定なしで足すのは config_mismatch（g01 点検）", () => {
+    const s1 = state({
+      nodes: [
+        { key: A, x: 0, y: 0, stale: true },
+        { key: B, x: 0, y: 0 },
+      ],
+    });
+    expect(applyGraphOps(s1, [{ op: "rekey_node", key: A, newKey: B }])).toMatchObject({
+      ok: false,
+      issues: [{ code: "duplicate_node", key: B }],
+    });
+    expect(applyGraphOps(s1, [{ op: "rekey_node", key: A, newKey: A }])).toMatchObject({
+      ok: true,
+    }); // 同じ鍵は選び直し（印だけ外れる）
+    expect(applyGraphOps(s1, [{ op: "add_link", kind: "trigger", from: A, to: B }])).toMatchObject({
+      ok: false,
+      issues: [{ code: "config_mismatch" }],
+    });
+  });
+
   it("途中の 1 つでも不正なら何も変えない（入力も書き換えない）", () => {
     const s1 = state({ nodes: [{ key: A, x: 0, y: 0 }] });
     const before = JSON.stringify(s1);

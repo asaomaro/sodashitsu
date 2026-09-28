@@ -13,6 +13,9 @@ const OSC_RE = /\u001B\][\s\S]*?(?:\u0007|\u001B\\)/g;
 const STRING_SEQ_RE = /\u001B[PX^_][\s\S]*?\u001B\\/g;
 const CSI_RE = /\u001B\[[0-?]*[ -/]*[@-~]/g;
 const ESC_RE = /\u001B[ -/]*[0-~]/g;
+// 8 ビットの C1 の列: CSI（U+009B）は引数と終端の文字まで、OSC（U+009D）は BEL か ST（U+009C・ESC \）まで、DCS/SOS/PM/APC（U+0090・U+0098・U+009E・U+009F）は ST まで。
+const C1_STRING_RE = /[\u0090\u0098\u009D\u009E\u009F][\s\S]*?(?:\u0007|\u009C|\u001B\\)/g;
+const C1_CSI_RE = /\u009B[0-?]*[ -/]*[@-~]/g;
 // C0（改行・タブを除く）・DEL・C1。
 const CONTROL_RE = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
 /* eslint-enable no-control-regex */
@@ -22,6 +25,8 @@ export function stripControl(text: string): string {
   return text
     .replace(OSC_RE, "")
     .replace(STRING_SEQ_RE, "")
+    .replace(C1_STRING_RE, "")
+    .replace(C1_CSI_RE, "")
     .replace(CSI_RE, "")
     .replace(ESC_RE, "")
     .replace(/\r\n/g, "\n")
@@ -45,7 +50,7 @@ export function outputText(lines: readonly string[]): string {
 export function buildTriggerText(prompt: string, output: string | null): string {
   if (prompt.includes(OUTPUT_PLACEHOLDER))
     return prompt.split(OUTPUT_PLACEHOLDER).join(output ?? "");
-  if (output === null) return prompt;
+  if (output === null || output === "") return prompt;
   return prompt.trim() === "" ? output : `${prompt}\n\n${output}`;
 }
 
