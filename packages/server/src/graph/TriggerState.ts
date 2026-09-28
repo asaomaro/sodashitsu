@@ -73,8 +73,12 @@ export class TriggerState {
         this.target = input.agent;
         return this.resolveWaiting(input.at);
       case "tick":
-        return this.checkBlockedHold(input.at) ?? this.resolveWaiting(input.at);
+        // 先の手が空いた・居なくなったは target の知らせで決まる。tick で見るのは承認待ちの 1 秒と待ちの 30 分だけ。
+        return this.checkBlockedHold(input.at) ?? this.checkTimeout(input.at);
       case "config": {
+        // on を変えたら、今続いている承認待ちの回は基準（新しい線と同じ。D5-5）。
+        if (input.settings.on !== this.settings.on && this.blockedSince !== null)
+          this.blockedHandled = true;
         this.settings = input.settings;
         if (this.waitingSince !== null && input.settings.suppress !== null) {
           this.waitingSince = null;
@@ -93,7 +97,7 @@ export class TriggerState {
       // 元のエージェントが居なくなった。次に現れたものは新しい基準から。
       this.baseline = null;
       this.blockedSince = null;
-      return null;
+      return this.resolveBlockedWait();
     }
     if (this.baseline === null || this.baseline.instanceId !== agent.instanceId) {
       // 最初に見た値・入れ替わった直後の値は基準（動かない）。blocked の回も、ここで既に blocked なら動かない。
@@ -107,6 +111,8 @@ export class TriggerState {
       this.baseline = { instanceId: agent.instanceId, completionSeq: agent.completionSeq };
     if (agent.state !== "blocked") {
       this.blockedSince = null;
+      const resolved = this.resolveBlockedWait();
+      if (resolved !== null) return resolved;
     } else if (this.blockedSince === null) {
       // 新しい blocked の回。
       this.blockedSince = at;
@@ -142,6 +148,19 @@ export class TriggerState {
     }
   }
 
+  /** 承認の知らせ（on: blocked）の待ちは、元が承認待ちを抜けたら要らない（古い回の画面を送らない）。 */
+  private resolveBlockedWait(): TriggerDecision {
+    if (this.settings.on !== "blocked" || this.waitingSince === null) return null;
+    this.waitingSince = null;
+    return { kind: "skip", reason: "resolved" };
+  }
+
+  private checkTimeout(at: number): TriggerDecision {
+    if (this.waitingSince === null || at - this.waitingSince < BUSY_WAIT_MAX_MS) return null;
+    this.waitingSince = null;
+    return { kind: "skip", reason: "busy_timeout" };
+  }
+
   private resolveWaiting(at: number): TriggerDecision {
     // 抑止が付いたら待ちは config の時点で取り消している（ここへは抑止なしでだけ来る）。
     if (this.waitingSince === null) return null;
@@ -152,14 +171,12 @@ export class TriggerState {
     }
     if (verdict === "ready") {
       this.waitingSince = null;
+      // 待ちから送った回は処理済み（承認の待ちは回が変われば resolved で消えるので、ここで印は既に付いている。念のための揃え）。
+      if (this.blockedSince !== null) this.blockedHandled = true;
       return { kind: "send" };
     }
     // 作業中・承認待ち（人が答えれば作業に戻り、やがて手が空く）の間は待ち続ける。最長で打ち切る。
-    if (at - this.waitingSince >= BUSY_WAIT_MAX_MS) {
-      this.waitingSince = null;
-      return { kind: "skip", reason: "busy_timeout" };
-    }
-    return null;
+    return this.checkTimeout(at);
   }
 
   /** 待っている発火を黙って取り消す（終了・線の削除。履歴に残さない）。 */

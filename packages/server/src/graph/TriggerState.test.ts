@@ -249,11 +249,23 @@ describe("TriggerState — 先の状態と待ち", () => {
     });
   });
 
-  it("待つ間の tick は、先が空いていれば送る（知らせの取りこぼしの保険）", () => {
+  it("待つ間の tick は、30 分に満たなければ何もしない（先が承認待ちで待っている間も）", () => {
     const s = make(DONE, agent("a1", 0), agent("t1", 0, "working"));
     fireAt(s, 0, 1);
     s.handle({ kind: "target", agent: agent("t1", 0, "blocked"), at: 1 });
     expect(s.handle({ kind: "tick", at: 2 })).toBeNull();
+    expect(s.waiting).toBe(true);
+  });
+
+  it("30 分を過ぎてから先の状態の知らせ（まだ作業中）が来ても busy_timeout", () => {
+    const s = make(DONE, agent("a1", 0), agent("t1", 0, "working"));
+    fireAt(s, 0, 1);
+    expect(
+      s.handle({ kind: "target", agent: agent("t1", 0, "working"), at: BUSY_WAIT_MAX_MS }),
+    ).toEqual({
+      kind: "skip",
+      reason: "busy_timeout",
+    });
   });
 
   it("cancel は待ちを黙って取り消す（決定を出さない）", () => {
@@ -307,5 +319,71 @@ describe("TriggerState — 一時停止・上限・マシン不在（抑止）",
     const s = make({ ...DONE, suppress: "limit" }, agent("a1", 0), agent("t1", 0, "working"));
     s.handle({ kind: "source", agent: agent("a1", 1), at: 1 });
     expect(s.waiting).toBe(false);
+  });
+});
+
+describe("TriggerState — 承認待ちの回と待ち（g02 点検）", () => {
+  it("待つ間に元が承認待ちを抜けたら、承認の待ちは resolved で取り消す（次の回で改めて動く）", () => {
+    const s = make(BLOCKED, agent("a1", 0, "working"), agent("sv", 0, "working"));
+    s.handle({ kind: "source", agent: agent("a1", 0, "blocked"), at: 0 });
+    expect(s.handle({ kind: "tick", at: BLOCKED_HOLD_MS })).toEqual({ kind: "wait" });
+    expect(s.handle({ kind: "source", agent: agent("a1", 0, "working"), at: 5000 })).toEqual({
+      kind: "skip",
+      reason: "resolved",
+    });
+    expect(s.waiting).toBe(false);
+    // 次の回（ep2）: 監督役が空いても前の回の待ちでは送らない。ep2 の 1 秒で 1 回だけ
+    s.handle({ kind: "source", agent: agent("a1", 0, "blocked"), at: 10_000 });
+    expect(s.handle({ kind: "target", agent: agent("sv", 1, "idle"), at: 10_500 })).toBeNull();
+    expect(s.handle({ kind: "tick", at: 11_000 })).toEqual({ kind: "send" });
+    s.handle({ kind: "target", agent: agent("sv", 1, "working"), at: 11_100 });
+    expect(s.handle({ kind: "tick", at: 12_000 })).toBeNull();
+    expect(s.handle({ kind: "target", agent: agent("sv", 2, "idle"), at: 60_000 })).toBeNull();
+  });
+
+  it("元が居なくなっても承認の待ちは resolved で取り消す", () => {
+    const s = make(BLOCKED, agent("a1", 0, "working"), agent("sv", 0, "working"));
+    s.handle({ kind: "source", agent: agent("a1", 0, "blocked"), at: 0 });
+    s.handle({ kind: "tick", at: BLOCKED_HOLD_MS });
+    expect(s.handle({ kind: "source", agent: null, at: 2000 })).toEqual({
+      kind: "skip",
+      reason: "resolved",
+    });
+  });
+
+  it("承認待ちが続く間に待ちから送ったら、その回は処理済み（同じ回で二度送らない）", () => {
+    const s = make(BLOCKED, agent("a1", 0, "working"), agent("sv", 0, "working"));
+    s.handle({ kind: "source", agent: agent("a1", 0, "blocked"), at: 0 });
+    s.handle({ kind: "tick", at: BLOCKED_HOLD_MS });
+    expect(s.handle({ kind: "target", agent: agent("sv", 1, "idle"), at: 2000 })).toEqual({
+      kind: "send",
+    });
+    s.handle({ kind: "target", agent: agent("sv", 1, "working"), at: 2100 });
+    expect(s.handle({ kind: "tick", at: 5000 })).toBeNull();
+    expect(s.handle({ kind: "target", agent: agent("sv", 2, "idle"), at: 9000 })).toBeNull();
+  });
+
+  it("on: done の線の待ちは、元が承認待ちを抜けても取り消さない", () => {
+    const s = make(DONE, agent("a1", 0), agent("t1", 0, "working"));
+    s.handle({ kind: "source", agent: agent("a1", 1), at: 0 });
+    expect(s.handle({ kind: "source", agent: agent("a1", 1, "working"), at: 1 })).toBeNull();
+    expect(s.waiting).toBe(true);
+  });
+
+  it("on を done から blocked に変えたとき、続いている承認待ちの回は基準（動かない）。次の回から動く", () => {
+    const s = make(DONE, agent("a1", 0, "working"));
+    s.handle({ kind: "source", agent: agent("a1", 0, "blocked"), at: 0 });
+    expect(s.handle({ kind: "config", settings: BLOCKED })).toBeNull();
+    expect(s.handle({ kind: "tick", at: 100_000 })).toBeNull();
+    s.handle({ kind: "source", agent: agent("a1", 0, "working"), at: 100_001 });
+    s.handle({ kind: "source", agent: agent("a1", 0, "blocked"), at: 100_002 });
+    expect(s.handle({ kind: "tick", at: 100_002 + BLOCKED_HOLD_MS })).toEqual({ kind: "send" });
+  });
+
+  it("on が変わらない設定の変更では、続いている承認待ちの回をそのまま数える", () => {
+    const s = make(BLOCKED, agent("a1", 0));
+    s.handle({ kind: "source", agent: agent("a1", 0, "blocked"), at: 0 });
+    s.handle({ kind: "config", settings: { ...BLOCKED, whenBusy: "skip" } });
+    expect(s.handle({ kind: "tick", at: BLOCKED_HOLD_MS })).toEqual({ kind: "send" });
   });
 });
