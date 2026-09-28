@@ -1,7 +1,7 @@
 schema: 11
 slug: agent-graph
-current: requirements
-approved: [requirements]
+current: design
+approved: [requirements, research, design]
 mode: interactive
 profile: full
 humanGates: []
