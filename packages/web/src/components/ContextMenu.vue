@@ -121,6 +121,8 @@ const items = computed<MenuItem[]>(() => {
   return [
     { label: "キー割り当て", run: () => actions.run({ type: "help" }) },
     { label: "移動", run: () => actions.run({ type: "goto" }) },
+    // 連携のグラフ画面（20260927-agent-graph の design「入口」。キーの open_graph と同じ操作）。
+    { label: "連携（グラフ）", run: () => actions.run({ type: "openGraph" }) },
     { label: "設定", run: () => actions.run({ type: "settings" }) },
     { label: "切り離し", run: () => actions.run({ type: "detach" }) },
   ];

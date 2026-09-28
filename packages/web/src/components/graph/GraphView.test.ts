@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
-import { TerminalRegistryKey } from "../../injection.js";
+import { ConnectionKey, MachineSwitcherKey, TerminalRegistryKey } from "../../injection.js";
 import { useGraphStore } from "../../store/graph.js";
 import { useSessionStore } from "../../store/session.js";
 import { useViewStore } from "../../store/view.js";
@@ -20,11 +20,20 @@ beforeEach(() => {
 
 function mountView() {
   const registry = { focus: vi.fn() };
+  const conn = { request: vi.fn(async () => ({})) };
+  const switcher = { switchTo: vi.fn(async () => true) };
   const wrapper = mount(GraphView, {
     attachTo: document.body,
-    global: { plugins: [pinia], provide: { [TerminalRegistryKey as symbol]: registry } },
+    global: {
+      plugins: [pinia],
+      provide: {
+        [TerminalRegistryKey as symbol]: registry,
+        [ConnectionKey as symbol]: conn,
+        [MachineSwitcherKey as symbol]: switcher,
+      },
+    },
   });
-  return { wrapper, registry, view: useViewStore(pinia) };
+  return { wrapper, registry, conn, switcher, view: useViewStore(pinia) };
 }
 
 describe("GraphView（枠）", () => {
@@ -540,6 +549,158 @@ describe("GraphView（線の作成と設定・一時停止。03 T3）", () => {
     await wrapper.find('[data-link-chip="l1"]').trigger("keydown", { key: "p" });
     await flush();
     expect(fake.calls[2]).toEqual({ method: "graph.resume", params: { linkId: "l1" } });
+    wrapper.unmount();
+  });
+});
+
+describe("GraphView（pane を載せる/外す・履歴・pane へ移動。03 T4）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+
+  function seedWorkspace(): void {
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted({ id: "w1", label: "api", tabIds: ["t1"] } as never);
+    session.panes.set("p3", paneOf("p3", "t1", { label: "fixer" }));
+  }
+
+  it("「pane を載せる」で選んで適用すると、外接矩形の右隣に add_node を送り、足したノードへフォーカス", async () => {
+    const { wrapper, fake } = await openWithGraph();
+    seedWorkspace();
+    fake.handlers["graph.update"] = () =>
+      graphOf({ rev: 2, nodes: [...graphOf().nodes, { key: "local:p3", x: 560, y: 0 }] });
+    await wrapper.find(".graph-add-panes").trigger("click");
+    await flush();
+    expect(wrapper.find(".graph-add-panes").attributes("aria-expanded")).toBe("true");
+    await wrapper.find('[data-pane-key="local:p3"]').setValue(true);
+    await wrapper.find(".pane-checklist-apply").trigger("click");
+    await flush();
+    expect(fake.calls[0]).toEqual({
+      method: "graph.update",
+      params: { baseRev: 1, ops: [{ op: "add_node", key: "local:p3", x: 560, y: 0 }] },
+    });
+    expect(wrapper.find(".pane-checklist").exists()).toBe(false);
+    expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p3");
+    wrapper.unmount();
+  });
+
+  it("チェックリストで外すときは消える線の本数を書いて確かめる。取り消せば何も送らない。外側のクリックはチェックリストを閉じるだけ", async () => {
+    const { wrapper, fake } = await openWithGraph();
+    await wrapper.find(".graph-add-panes").trigger("click");
+    await flush();
+    wrapper
+      .find(".graph-canvas")
+      .element.dispatchEvent(pointer("pointerdown", { clientX: 700, clientY: 500 }));
+    window.dispatchEvent(pointer("pointerup", { clientX: 700, clientY: 500 }));
+    await flush();
+    expect(wrapper.find(".pane-checklist").exists()).toBe(false);
+    await wrapper.find(".graph-add-panes").trigger("click");
+    await flush();
+    await wrapper.find('[data-pane-key="local:p1"]').setValue(false);
+    await wrapper.find(".pane-checklist-apply").trigger("click");
+    await flush();
+    expect(wrapper.find(".graph-confirm-message").text()).toBe(
+      "pane（impl）をグラフから外しますか？",
+    );
+    expect(wrapper.find(".graph-confirm-detail").text()).toContain("繋がる線 2 本も消えます");
+    await wrapper.find(".graph-confirm-cancel").trigger("click");
+    await flush();
+    expect(fake.calls).toHaveLength(0);
+    expect(document.activeElement?.className).toContain("graph-add-panes");
+    wrapper.unmount();
+  });
+
+  it("ノードの Delete は確認のうえ remove_node（線も一緒に消える）", async () => {
+    const { wrapper, fake } = await openWithGraph();
+    const n = wrapper.find('[data-node-key="local:p2"]');
+    await n.trigger("keydown", { key: "Delete" });
+    await flush();
+    expect(wrapper.find(".graph-confirm-message").text()).toBe(
+      "pane（reviewer）をグラフから外しますか？",
+    );
+    await wrapper.find(".graph-confirm-ok").trigger("click");
+    await flush();
+    expect(fake.calls[0]).toMatchObject({
+      params: { ops: [{ op: "remove_node", key: "local:p2" }] },
+    });
+    wrapper.unmount();
+  });
+
+  it("ノードの Enter・「pane へ」でグラフ画面を閉じてその pane へ移り、焦点はその pane（AC2・AC-I4）", async () => {
+    const t = await openWithGraph();
+    t.view.focusPane("p1");
+    await t.wrapper.find('[data-node-key="local:p2"]').trigger("keydown", { key: "Enter" });
+    await flush();
+    expect(t.view.graphOpen).toBe(false);
+    expect(t.view.focusedPaneId).toBe("p2");
+    expect(t.view.tabId).toBe("t1");
+    expect(t.conn.request).toHaveBeenCalledWith("pane.focus", { paneId: "p2" });
+    expect(t.registry.focus).toHaveBeenLastCalledWith("p2");
+    t.view.openGraph();
+    await flush();
+    await t.wrapper.find('[data-node-key="local:p1"] .graph-node-goto').trigger("click");
+    await flush();
+    expect(t.view.focusedPaneId).toBe("p1");
+    t.wrapper.unmount();
+  });
+
+  it("別のマシンのノードはそのマシンへ切り替えて pane の tab を開く。pane が無ければ知らせるだけ", async () => {
+    const M = "a".repeat(32);
+    const t = await openWithGraph({
+      nodes: [
+        { key: "local:p1", x: 0, y: 0 },
+        { key: `${M}:p7`, x: 300, y: 0 },
+      ],
+      links: [],
+    });
+    const machines = (await import("../../store/machines.js")).useMachinesStore(pinia);
+    machines.applySummarySnapshot(M, {
+      protocol: 1,
+      serverVersion: "t",
+      host: { os: "linux", windowsBuild: null, hostname: "h" },
+      workspaces: [],
+      tabs: [{ id: "t9", workspaceId: "w9" } as never],
+      panes: [paneOf("p7", "t9")],
+      groups: [],
+      focus: null,
+      limits: { scrollbackLines: 5000 },
+    });
+    await flush();
+    expect(t.wrapper.find(`[data-node-key="${M}:p7"] .graph-node-name`).text()).toBe("pane p7");
+    await t.wrapper.find(`[data-node-key="${M}:p7"]`).trigger("keydown", { key: "Enter" });
+    expect(t.switcher.switchTo).toHaveBeenCalledWith(M, { workspaceId: "w9", tabId: "t9" });
+    t.view.openGraph();
+    await flush();
+    useSessionStore(pinia).panes.delete("p1");
+    await flush();
+    await t.wrapper.find('[data-node-key="local:p1"]').trigger("keydown", { key: "Enter" });
+    expect(t.view.graphOpen).toBe(true);
+    expect(t.view.toasts.at(-1)!.message).toBe("pane p1 の pane が見つかりません。");
+    t.wrapper.unmount();
+  });
+
+  it("「履歴」で履歴を開き（graph.history）、パネルの「履歴」はその線に絞る。Esc で閉じてボタンへ戻る", async () => {
+    const { wrapper, fake } = await openWithGraph();
+    fake.handlers["graph.history"] = () => ({
+      runs: [
+        { linkId: "l1", at: 1, result: "sent" },
+        { linkId: "l2", at: 2, result: "skipped", reason: "paused" },
+      ],
+    });
+    await wrapper.find(".graph-history").trigger("click");
+    await flush();
+    expect(fake.calls.some((c) => c.method === "graph.history")).toBe(true);
+    expect(wrapper.findAll(".history-row")).toHaveLength(2);
+    await wrapper.find(".history-panel").trigger("keydown", { key: "Escape" });
+    await flush();
+    expect(wrapper.find(".history-panel").exists()).toBe(false);
+    expect(document.activeElement?.className).toContain("graph-history");
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    await wrapper.find(".link-panel-history").trigger("click");
+    await flush();
+    expect(wrapper.findAll(".history-row")).toHaveLength(1);
+    expect(wrapper.find(".link-panel").exists()).toBe(true);
     wrapper.unmount();
   });
 });

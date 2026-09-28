@@ -16,6 +16,7 @@ import {
   GRAPH_NODE_WIDTH,
   graphNodeAt,
   graphNodeRect,
+  nextFreeGraphPosition,
   parallelOffsets,
   revealGraphRect,
   screenToGraph,
@@ -25,7 +26,7 @@ import {
   type GraphRect,
   type GraphViewport,
 } from "@sodashitsu/client-core";
-import { TerminalRegistryKey } from "../../injection.js";
+import { ConnectionKey, MachineSwitcherKey, TerminalRegistryKey } from "../../injection.js";
 import { isMobileViewport } from "../../mobile/detect.js";
 import { useGraphStore, type GraphNodeInfo } from "../../store/graph.js";
 import { useMachinesStore } from "../../store/machines.js";
@@ -33,6 +34,8 @@ import { useViewStore } from "../../store/view.js";
 import GraphConfirm from "./GraphConfirm.vue";
 import GraphEdge from "./GraphEdge.vue";
 import GraphNode from "./GraphNode.vue";
+import HistoryPanel from "./HistoryPanel.vue";
+import PaneChecklist from "./PaneChecklist.vue";
 import LinkPanel from "./LinkPanel.vue";
 import { usePointerDrag } from "./usePointerDrag.js";
 import {
@@ -47,6 +50,8 @@ const view = useViewStore();
 const graph = useGraphStore();
 const machines = useMachinesStore();
 const registry = inject(TerminalRegistryKey, null);
+const conn = inject(ConnectionKey, null);
+const switcher = inject(MachineSwitcherKey, null);
 const isMobile = isMobileViewport();
 const dialogEl = ref<HTMLDialogElement | null>(null);
 const canvasEl = ref<HTMLElement | null>(null);
@@ -204,6 +209,10 @@ function onNodePointerdown(ev: PointerEvent, key: string): void {
   if (isMobile.value || ev.button !== 0) return; // モバイルは閲覧だけ（背景のパンへ流す）
   ev.stopPropagation();
   if (confirmState.value) return;
+  if (checklistOpen.value) {
+    closeChecklist();
+    return;
+  }
   // 線の設定を開いている間は、外側のクリック＝取り消し（未保存の値と他の操作を混ぜない。research-ui §2.7）。
   if (panel.value) {
     panelRef.value?.requestClose();
@@ -244,6 +253,10 @@ function onNodePointerdown(ev: PointerEvent, key: string): void {
 function onCanvasPointerdown(ev: PointerEvent): void {
   if (ev.button !== 0 && ev.pointerType === "mouse") return;
   if (confirmState.value) return;
+  if (checklistOpen.value) {
+    closeChecklist();
+    return;
+  }
   if (panel.value) {
     panelRef.value?.requestClose();
     return;
@@ -523,6 +536,132 @@ async function toggleLinkPaused(id: string): Promise<void> {
       : `線（${graph.linkTitle(link)}）を再開しました（回数を 0 に戻しました）。`;
 }
 
+// --- pane を載せる/外す（チェックリスト・ノードの Delete。AC-I2 の確認つき）------------------------------------------
+
+const checklistOpen = ref(false);
+function toolbarButton(cls: string): HTMLElement | null {
+  return dialogEl.value?.querySelector<HTMLElement>(`.${cls}`) ?? null;
+}
+function openChecklist(): void {
+  if (panel.value) {
+    panelRef.value?.requestClose();
+    return;
+  }
+  checklistOpen.value = true;
+}
+function closeChecklist(): void {
+  checklistOpen.value = false;
+  void nextTick(() => toolbarButton("graph-add-panes")?.focus());
+}
+
+function removeOps(g: { nodes: { key: string }[] }, keys: readonly string[]): GraphOp[] {
+  const present = new Set(g.nodes.map((n) => n.key));
+  return keys
+    .filter((k) => present.has(k))
+    .map((key) => ({ op: "remove_node" as const, key: key as NodeKey }));
+}
+
+/** 外すときの確認（消える線の本数を書く。design「ノードを載せる」）。 */
+function confirmRemove(keys: readonly string[], onConfirm: () => void, onCancel: () => void): void {
+  const lines = graph.links.filter((l) => keys.includes(l.from) || keys.includes(l.to)).length;
+  confirmState.value = {
+    message:
+      keys.length === 1
+        ? `pane（${graph.nodeInfo(keys[0] as NodeKey).name}）をグラフから外しますか？`
+        : `${keys.length} 個の pane をグラフから外しますか？`,
+    detail:
+      lines > 0
+        ? `繋がる線 ${lines} 本も消えます（実行中・一時停止中でも）。pane そのものは閉じません。`
+        : "繋がる線はありません。pane そのものは閉じません。",
+    confirmLabel: "外す",
+    onConfirm,
+    onCancel,
+  };
+}
+
+function applyChecklist(change: { add: NodeKey[]; remove: NodeKey[] }): void {
+  checklistOpen.value = false;
+  const run = (): void => {
+    void graph
+      .update((g): GraphOp[] | null => {
+        const present = new Set(g.nodes.map((n) => n.key));
+        const add = change.add.filter((k) => !present.has(k));
+        const kept = g.nodes.filter((n) => !change.remove.includes(n.key)).map(graphNodeRect);
+        return [
+          ...removeOps(g, change.remove),
+          ...add.map((key, i) => ({
+            op: "add_node" as const,
+            key,
+            ...nextFreeGraphPosition(kept, i),
+          })),
+        ];
+      })
+      .then((r) => {
+        if (!r.ok) {
+          if (r.reason === "error") view.toast(`グラフを変えられませんでした（${r.message}）`);
+          return;
+        }
+        const added = change.add.find((k) => r.graph.nodes.some((n) => n.key === k));
+        if (added) focusNode(added);
+        else toolbarButton("graph-add-panes")?.focus();
+      });
+  };
+  if (change.remove.length > 0)
+    confirmRemove(change.remove, run, () => toolbarButton("graph-add-panes")?.focus());
+  else run();
+}
+
+function requestRemoveNode(key: string): void {
+  confirmRemove(
+    [key],
+    () => {
+      void graph
+        .update((g) => removeOps(g, [key]))
+        .then((r) => {
+          if (!r.ok && r.reason === "error")
+            view.toast(`グラフから外せませんでした（${r.message}）`);
+        });
+      const next = orderedNodes.value.find((n) => n.key !== key);
+      if (next) focusNode(next.key);
+      else dialogEl.value?.focus();
+    },
+    () => focusNode(key),
+  );
+}
+
+// --- 履歴 --------------------------------------------------------------------------------------------------------
+
+/** 開いている履歴（`linkId` が null ならすべての線）。 */
+const history = ref<{ linkId: string | null } | null>(null);
+function toggleHistory(): void {
+  history.value = history.value ? null : { linkId: null };
+}
+function closeHistory(): void {
+  history.value = null;
+  void nextTick(() => toolbarButton("graph-history")?.focus());
+}
+
+// --- ノードから pane へ（AC2・AC-I4）----------------------------------------------------------------------------------
+
+/** グラフ画面を閉じて、そのマシンのその pane へ移る（閉じた後の焦点はその pane。画面を閉じたときの戻り先を上書きする）。 */
+function gotoNode(key: string): void {
+  const info = graph.nodeInfo(key as NodeKey);
+  const loc = info.location;
+  if (!loc || info.exists === false) {
+    view.toast(`${info.name} の pane が見つかりません。`);
+    return;
+  }
+  view.closeGraph();
+  if (info.machine === machines.selectedId) {
+    view.setView(loc.workspaceId, loc.tabId);
+    view.focusPane(info.paneId);
+    void conn?.request("pane.focus", { paneId: info.paneId }).catch(() => undefined);
+    return;
+  }
+  // 別のマシン（別のマシンを見ている間の手元を含む）はそのマシンへ切り替えて、その pane のある tab を開く。
+  void switcher?.switchTo(info.machine, loc);
+}
+
 function onChipClick(id: string): void {
   if (connectFrom.value) return;
   openLinkPanel(id);
@@ -562,6 +701,14 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
     ev.preventDefault();
     ev.stopPropagation();
     startConnectMode(key);
+  } else if (ev.key === "Enter") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    gotoNode(key);
+  } else if ((ev.key === "Delete" || ev.key === "Backspace") && !isMobile.value) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    requestRemoveNode(key);
   }
 }
 
@@ -628,6 +775,8 @@ watch(
       connectDrag.value = null;
       panel.value = null;
       confirmState.value = null;
+      checklistOpen.value = false;
+      history.value = null;
       liveMessage.value = "";
       if (el?.open) el.close();
       // `closeGraph` は焦点の pane を同じ値に戻すだけで、`TerminalPane` の watch が動かない——端末へ明示的に戻す（`CommandPopup` と同じ）。
@@ -709,8 +858,16 @@ function escape(): void {
     endConnectMode(true);
     return;
   }
+  if (checklistOpen.value) {
+    closeChecklist();
+    return;
+  }
   if (panel.value) {
     panelRef.value?.requestClose();
+    return;
+  }
+  if (history.value) {
+    closeHistory();
     return;
   }
   if (selection.value) {
@@ -765,6 +922,25 @@ function chipAria(e: EdgeView): string {
           @click="toggleGraphPaused"
         >
           {{ graph.graph?.paused ? "全体を再開" : "全体を一時停止" }}
+        </button>
+        <button
+          v-if="!isMobile"
+          type="button"
+          class="graph-tool graph-add-panes"
+          aria-haspopup="dialog"
+          :aria-expanded="checklistOpen"
+          :disabled="!graph.graph"
+          @click="openChecklist"
+        >
+          pane を載せる
+        </button>
+        <button
+          type="button"
+          class="graph-tool graph-history"
+          :aria-pressed="history !== null"
+          @click="toggleHistory"
+        >
+          履歴
         </button>
         <button type="button" class="graph-tool graph-fit" title="全体表示（1）" @click="fitAll">
           全体表示
@@ -835,6 +1011,7 @@ function chipAria(e: EdgeView): string {
               @keydown="onNodeKeydown($event, n.key)"
               @body-pointerdown="onNodePointerdown($event, n.key)"
               @handle-pointerdown="onHandlePointerdown($event, n.key)"
+              @goto="gotoNode(n.key)"
             />
             <button
               v-for="e in edges"
@@ -869,24 +1046,34 @@ function chipAria(e: EdgeView): string {
             線の先のノードを選んでください（Tab・矢印で移動、Enter で決定、Esc で取り消し）
           </p>
         </div>
-        <LinkPanel
-          v-if="panel && graph.graph"
-          ref="panelRef"
-          :key="panelKey"
-          :graph="graph.graph"
-          :link="panelLink"
-          :new-ends="panelNewEnds"
-          :gone="panel.mode === 'edit' && panelLink === null"
-          :name-of="(k) => graph.nodeInfo(k).name"
-          :invalid="panelInvalid"
-          :saving="panelSaving"
-          :error="panelError"
-          @save="onPanelSave"
-          @cancel="closePanel"
-          @delete="panel.mode === 'edit' && requestDeleteLink(panel.id)"
-          @pause="(p) => panel?.mode === 'edit' && graph.setPaused(p, panel.id)"
-        />
+        <div v-if="(panel && graph.graph) || history" class="graph-side">
+          <LinkPanel
+            v-if="panel && graph.graph"
+            ref="panelRef"
+            :key="panelKey"
+            :graph="graph.graph"
+            :link="panelLink"
+            :new-ends="panelNewEnds"
+            :gone="panel.mode === 'edit' && panelLink === null"
+            :name-of="(k) => graph.nodeInfo(k).name"
+            :invalid="panelInvalid"
+            :saving="panelSaving"
+            :error="panelError"
+            @save="onPanelSave"
+            @cancel="closePanel"
+            @delete="panel.mode === 'edit' && requestDeleteLink(panel.id)"
+            @pause="(p) => panel?.mode === 'edit' && graph.setPaused(p, panel.id)"
+            @history="panel.mode === 'edit' && (history = { linkId: panel.id })"
+          />
+          <HistoryPanel
+            v-if="history"
+            :link-id="history.linkId"
+            @close="closeHistory"
+            @clear-filter="history = { linkId: null }"
+          />
+        </div>
       </div>
+      <PaneChecklist v-if="checklistOpen" @apply="applyChecklist" @close="closeChecklist" />
       <GraphConfirm
         v-if="confirmState"
         :message="confirmState.message"
@@ -962,6 +1149,16 @@ function chipAria(e: EdgeView): string {
   position: relative;
   flex: 1;
   display: flex;
+  min-height: 0;
+}
+.graph-side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.graph-side > * {
+  flex: 1 1 0;
   min-height: 0;
 }
 .graph-canvas {

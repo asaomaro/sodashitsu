@@ -37,7 +37,7 @@ design「web」「振る舞いの詳細」の全画面のグラフ画面を、01
       対象: （新規 `packages/web/src/components/graph/LinkPanel.vue`）・`GraphView.vue`・`GraphEdge.vue`
       依存: T2
       AC: AC3, AC11, AC12, AC-I2
-- [ ] T4: `PaneChecklist.vue`（載せる/外す・外すときの確認で消える線の本数）・`HistoryPanel.vue`・ノードから pane へ移動・入口（サイドバーのメニュー「連携（グラフ）」・モバイルの上部バー）
+- [x] T4: `PaneChecklist.vue`（載せる/外す・外すときの確認で消える線の本数）・`HistoryPanel.vue`・ノードから pane へ移動・入口（サイドバーのメニュー「連携（グラフ）」・モバイルの上部バー）
       対象: （新規 `PaneChecklist.vue`・`HistoryPanel.vue`）・`packages/web/src/components/Sidebar.vue`・`packages/web/src/App.vue`
       依存: T2
       AC: AC1, AC10, AC13
