@@ -158,12 +158,55 @@ describe("XtermMirror — serialize / bottomLines / OSC capture", () => {
     expect(parseOsc9Cwd("9;C:/Users/u/", "win32")).toBe("C:\\Users\\u\\");
     expect(parseOsc9Cwd('9;"\\\\server\\share\\dir"', "win32")).toBe("\\\\server\\share\\dir");
     expect(parseOsc9Cwd('9;"C:\\a%b#c\\日本語"', "win32")).toBe("C:\\a%b#c\\日本語");
-    expect(parseOsc9Cwd('9;"C:/Users/u"', "linux")).toBe("C:/Users/u");
     expect(parseOsc9Cwd("9;/home/u", "linux")).toBe("/home/u");
-    expect(parseOsc9Cwd('9;"', "linux"), "引用符 1 つだけは外さない").toBe('"');
     for (const data of ["9;", '9;""', "4;1;42", "hello", "99;x"]) {
       expect(parseOsc9Cwd(data, "win32"), data).toBeNull();
     }
+  });
+
+  it("OSC 9;9 の中身：前後の空白を落としてから引用符を外す", () => {
+    expect(parseOsc9Cwd('9; "C:\\a b" ', "win32")).toBe("C:\\a b");
+    expect(parseOsc9Cwd('9;  "/home/u/x y"\t', "linux")).toBe("/home/u/x y");
+  });
+
+  it("OSC 9;9 の中身：そのサーバの形の絶対パスでなければ場所にしない（相対パス・ゴミ）", () => {
+    for (const data of [
+      '9;"src"',
+      "9;.\\x",
+      "9;\\x",
+      "9;C:",
+      "9;C:rel",
+      '9;"',
+      "9;\\\\server",
+      "9;/home/u",
+      "9;garbage",
+    ]) {
+      expect(parseOsc9Cwd(data, "win32"), `win32 ${data}`).toBeNull();
+    }
+    for (const data of ['9;"src"', "9;./x", '9;"C:/Users/u"', "9;C:\\x", '9;"']) {
+      expect(parseOsc9Cwd(data, "linux"), `linux ${data}`).toBeNull();
+    }
+    // UNC は受ける（既知の危険として受け入れた。parseOsc9Cwd のコメント）。/ 区切りの UNC も win32.normalize で直す。
+    expect(parseOsc9Cwd("9;//server/share/d", "win32")).toBe("\\\\server\\share\\d");
+  });
+
+  it("相対パスの OSC 9;9 は、それまでの場所を変えない", async () => {
+    const mirror = new XtermMirror(20, 3, 1000);
+    await writeAndWait(mirror, '\x1b]9;9;"/keep"\x07');
+    await writeAndWait(mirror, '\x1b]9;9;"relative/dir"\x07');
+    expect(mirror.cwdHint()).toBe("/keep");
+    mirror.dispose();
+  });
+
+  it("OSC 9 のハンドラは 9;9 を扱い終えたら true（壊れた中身でも）、通常の通知は false を返す", () => {
+    const mirror = new XtermMirror(20, 3, 1000);
+    const handle = (data: string) =>
+      (mirror as unknown as { handleOsc9(d: string): boolean }).handleOsc9(data);
+    expect(handle('9;"/a"')).toBe(true);
+    expect(handle("9;relative")).toBe(true);
+    expect(handle("4;1;42")).toBe(true);
+    expect(handle("hello")).toBe(false);
+    mirror.dispose();
   });
 
   it("resize updates cols/rows reflected in the next serialize", async () => {
