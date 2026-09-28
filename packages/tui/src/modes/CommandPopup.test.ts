@@ -123,4 +123,67 @@ describe("独自コマンドを走らせる（web の ActionDispatcher.runComman
     await vi.waitFor(() => expect(h.app.ui.dialogContext).toBeNull());
     expect(h.ws.requests("command.popup_close").map((r) => r.params)).toEqual([{ popupId: "pp3" }]);
   });
+
+  it("別のダイアログが popup を置き換えたら、popup のコマンドを止める（web の watch(ctx) と同じ）", async () => {
+    const h = await start({ "command.run": { type: "popup", popupId: "pp4", cols: 40, rows: 8 } });
+    h.run("fzf");
+    await vi.waitFor(() =>
+      expect(
+        h.ws
+          .requests("pane.subscribe")
+          .some((r) => (r.params as { paneId: string }).paneId === "pp4"),
+      ).toBe(true),
+    );
+    h.app.ui.openDialogWithContext({ kind: "help" });
+    h.app.renderNow();
+    expect(h.ws.requests("command.popup_close").map((r) => r.params)).toEqual([{ popupId: "pp4" }]);
+    expect(h.app.ui.dialogContext).toEqual({ kind: "help" });
+  });
+
+  it("popup の中のプログラムがマウスを求めていれば渡し、代替画面のホイールは矢印キー", async () => {
+    const h = await start({ "command.run": { type: "popup", popupId: "pp5", cols: 40, rows: 8 } });
+    h.run("fzf");
+    await vi.waitFor(() =>
+      expect(
+        h.ws
+          .requests("pane.subscribe")
+          .some((r) => (r.params as { paneId: string }).paneId === "pp5"),
+      ).toBe(true),
+    );
+    h.ws.onmessage?.({ data: encodeSnapshotFrame("pp5", 40, 8, "\x1b[?1049hlist") });
+    await new Promise((r) => setTimeout(r, 20));
+    h.app.renderNow();
+    const c = (h.app as unknown as { popup: { content: { x: number; y: number } } }).popup.content;
+    h.io.type(`\x1b[<65;${c.x + 3};${c.y + 2}M`); // ホイール（マウスを求めていない代替画面）
+    expect(h.inputs().at(-1)).toEqual(["pp5", "\x1b[B\x1b[B\x1b[B"]);
+    h.ws.onmessage?.({
+      data: encodeSnapshotFrame("pp5", 40, 8, "\x1b[?1049h\x1b[?1000;1006hlist"),
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    h.io.type(`\x1b[<0;${c.x + 3};${c.y + 2}M`);
+    expect(h.inputs().at(-1)).toEqual(["pp5", "\x1b[<0;3;2M"]);
+  });
+
+  it("接続が切れたら閉じて知らせる（開き終える前でも。後から返事が来ても開かない）", async () => {
+    let resolveRun: (v: unknown) => void = () => undefined;
+    const h = await start({ "command.run": () => new Promise((r) => (resolveRun = r)) });
+    h.run("fzf");
+    await vi.waitFor(() => expect(h.ws.requests("command.run")).toHaveLength(1));
+    (h.app as unknown as { onConnectionClosed(): void }).onConnectionClosed();
+    expect(h.app.ui.dialogContext).toBeNull();
+    expect(h.app.ui.toasts.map((t) => t.message)).toContain(
+      "接続が切れたため popup を閉じました。",
+    );
+    resolveRun({ type: "popup", popupId: "pp6", cols: 40, rows: 8 });
+    await vi.waitFor(() =>
+      expect(h.ws.requests("command.popup_close").map((r) => r.params)).toEqual([
+        { popupId: "pp6" },
+      ]),
+    );
+    expect(
+      h.ws
+        .requests("pane.subscribe")
+        .some((r) => (r.params as { paneId: string }).paneId === "pp6"),
+    ).toBe(false);
+  });
 });

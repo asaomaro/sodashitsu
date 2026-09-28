@@ -12,6 +12,9 @@ import {
 } from "@sodashitsu/protocol";
 import type { UiState } from "../model/UiState.js";
 import { encodeKey, encodePaste } from "../input/encode.js";
+import { encodeMouse, type MouseTracking } from "../input/mouseEncode.js";
+
+const NO_MODS = { shift: false, alt: false, ctrl: false, meta: false };
 import type { Rect } from "../render/Screen.js";
 import { ATTR } from "../render/color.js";
 import { paintPane } from "../render/paintPane.js";
@@ -57,7 +60,7 @@ export function popupCells(
 export interface CommandPopupDeps {
   ui: UiState;
   conn: RequestPort;
-  sendInput(popupId: string, bytes: string): void;
+  sendInput(popupId: string, bytes: string | Uint8Array): void;
   attachExternal(id: string, sink: TerminalSinkPort): () => void;
   /** 使える広さ（pane の場所。外側の端末の桁・行）。 */
   area(): Rect;
@@ -79,6 +82,8 @@ export class CommandPopup implements Overlay {
   private abandoned = false;
   private rect: Rect | null = null;
   private closeButton: Rect | null = null;
+  /** 端末を描いた場所（マウスの座標の元）。 */
+  private content: Rect | null = null;
 
   constructor(
     private readonly ctx: {
@@ -117,7 +122,8 @@ export class CommandPopup implements Overlay {
       if (!this.abandoned) this.finish(undefined, "popup を開けませんでした。");
       return;
     }
-    if (this.abandoned) {
+    // 閉じた後（切断・× で止めた）に返事が来たら開かずに止める。
+    if (this.abandoned || this.finished) {
       void this.deps.conn
         .request("command.popup_close", { popupId: r.popupId })
         .catch(() => undefined);
@@ -179,11 +185,33 @@ export class CommandPopup implements Overlay {
       this.close();
       return true;
     }
-    if (ev.action === "wheel" && this.term && inside(this.rect, ev.x, ev.y)) {
-      this.term.term.scrollLines(ev.button === 65 ? 3 : -3);
-      this.deps.requestRender();
+    const term = this.term;
+    const c = this.content;
+    if (!term || !this.popupId || !c || !inside(c, ev.x, ev.y)) return true; // 外側を押しても閉じない（web と同じ）
+    const col = ev.x - c.x;
+    const row = ev.y - c.y;
+    const tracking = term.modes.mouseTrackingMode as MouseTracking;
+    // popup の中のプログラムがマウスを求めていれば、pane と同じ符号化で渡す（web の popup の xterm と同じ）。
+    if (tracking !== "none") {
+      const bytes = encodeMouse(
+        { action: ev.action, button: ev.button, col, row, mods: NO_MODS },
+        term.mouseEncoding,
+        tracking,
+      );
+      if (bytes !== null) this.deps.sendInput(this.popupId, bytes);
+      return true;
     }
-    return true; // 外側を押しても閉じない（web と同じ）
+    if (ev.action === "wheel" && (ev.button === 64 || ev.button === 65)) {
+      if (term.term.buffer.active.type === "alternate") {
+        // 代替画面（less・fzf 等）：矢印キーを 3 回（pane と同じ。DECCKM に従う）。
+        const seq = `${term.modes.applicationCursorKeysMode ? "\x1bO" : "\x1b["}${ev.button === 65 ? "B" : "A"}`;
+        this.deps.sendInput(this.popupId, seq.repeat(3));
+      } else {
+        term.term.scrollLines(ev.button === 65 ? 3 : -3);
+        this.deps.requestRender();
+      }
+    }
+    return true;
   }
 
   /** 見出しの「×」：コマンドを止めて閉じる。 */
@@ -198,6 +226,11 @@ export class CommandPopup implements Overlay {
     if (id)
       void this.deps.conn.request("command.popup_close", { popupId: id }).catch(() => undefined);
     this.finish();
+  }
+
+  /** 別のダイアログに置き換わった（まだ閉じていなければコマンドを止める）。 */
+  dispose(): void {
+    if (!this.finished) this.close();
   }
 
   cancel(): void {
@@ -254,6 +287,7 @@ export class CommandPopup implements Overlay {
       w: Math.min(inner.w, cols),
       h: Math.min(inner.h, rows),
     };
+    this.content = content;
     return paintPane(grid, term, content, theme);
   }
 }

@@ -52,13 +52,11 @@ export interface DispatcherHost {
   pasteText(paneId: string, text: string): void;
   detach(): void;
   toggleSidebar(): void;
-  /** 独自コマンドの一覧を受け取った（05 で使う）。 */
+  /** 独自コマンドの一覧を受け取った（reload_config）。 */
   setCommands?(catalog: CommandListResult): void;
-  /** 設定画面（05）。 */
-  /** 次の通知へ（05）。 */
+  /** 次の通知へ（prefix+o）。 */
   focusNextNotification(): void;
-  /** 独自コマンド（05）。 */
-  /** クリップボードの画像の貼り付け（05）。 */
+  /** クリップボードの画像の貼り付け（キー以外から。キーは TuiKeys が直接扱う）。 */
   pasteImage(): void;
 }
 
@@ -1161,7 +1159,6 @@ export class TuiDispatcher {
       );
   }
 
-  /** 溜めた入力を新しい pane へ（閉じている・zoom で隠れているなら元の pane へ戻す。web の D99）。 */
   /**
    * 独自コマンドを走らせる（web の ActionDispatcher.runCommand と同じ）：popup は浮いた端末のダイアログ、shell は走らせて知らせる、pane は新しい
    * pane へ移る（応答までの打鍵は新しい pane へ）。一覧に無いコマンド・焦点の pane が無ければ何もしない。
@@ -1203,6 +1200,7 @@ export class TuiDispatcher {
       });
   }
 
+  /** 溜めた入力を新しい pane へ（閉じている・zoom で隠れているなら元の pane へ戻す。web の D99）。 */
   private releaseHold(hold: InputHold | undefined, newPaneId: string): void {
     if (!hold) return;
     const pane = this.model.panes.get(newPaneId);

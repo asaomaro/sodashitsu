@@ -31,6 +31,8 @@ export interface Overlay {
   render(ctx: OverlayRenderContext): CursorState | null;
   /** 外側を押した・Esc で閉じる（取り消し）。 */
   cancel(): void;
+  /** 別のダイアログに置き換わった・閉じた後の後始末（popup のコマンドを止める等）。 */
+  dispose?(): void;
 }
 
 export interface DialogColors {

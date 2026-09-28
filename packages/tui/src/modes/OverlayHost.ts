@@ -42,10 +42,13 @@ export class OverlayHost {
   overlay(): Overlay | null {
     const { ui } = this.deps;
     const key: object | null = ui.contextMenu ?? ui.dialogContext;
-    if (key === null) {
+    if (this.current && this.current.key !== key) {
+      // 置き換わった・閉じた：前の部品を片付ける（別のダイアログが popup を置き換えたら popup を止める。web の CommandPopup.vue の watch(ctx) と同じ）。
+      const prev = this.current.overlay;
       this.current = null;
-      return null;
+      prev.dispose?.();
     }
+    if (key === null) return null;
     if (this.current?.key === key) return this.current.overlay;
     const overlay = ui.contextMenu
       ? new ContextMenu(ui.contextMenu, this.deps)
