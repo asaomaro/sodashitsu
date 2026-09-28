@@ -182,6 +182,35 @@ describe("applyGraphOps", () => {
     });
   });
 
+  it("update_link で上限を回数以下に下げたら paused: limit にする（既に止まっている線・上限が回数より大きい線は変えない。g02 点検）", () => {
+    const base = (count: number, paused: "user" | "limit" | null) =>
+      state(
+        {
+          nodes: [
+            { key: A, x: 0, y: 0 },
+            { key: B, x: 0, y: 0 },
+          ],
+          links: [{ id: "l1", kind: "supervise", from: A, to: B, limit: 10, count, paused }],
+        },
+        2,
+      );
+    expect(
+      ok(base(5, null), [{ op: "update_link", id: "l1", limit: 5 }]).graph.links[0],
+    ).toMatchObject({ limit: 5, count: 5, paused: "limit" });
+    expect(
+      ok(base(5, null), [{ op: "update_link", id: "l1", limit: 3 }]).graph.links[0],
+    ).toMatchObject({ paused: "limit" });
+    expect(
+      ok(base(5, null), [{ op: "update_link", id: "l1", limit: 6 }]).graph.links[0],
+    ).toMatchObject({ paused: null });
+    expect(
+      ok(base(5, "user"), [{ op: "update_link", id: "l1", limit: 3 }]).graph.links[0],
+    ).toMatchObject({ paused: "user" });
+    expect(
+      ok(base(0, null), [{ op: "update_link", id: "l1", limit: 1 }]).graph.links[0],
+    ).toMatchObject({ paused: null });
+  });
+
   it("途中の 1 つでも不正なら何も変えない（入力も書き換えない）", () => {
     const s1 = state({ nodes: [{ key: A, x: 0, y: 0 }] });
     const before = JSON.stringify(s1);

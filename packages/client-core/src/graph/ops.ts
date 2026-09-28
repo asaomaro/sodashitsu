@@ -110,7 +110,11 @@ export function applyGraphOps(state: GraphDraftState, ops: readonly GraphOp[]): 
         if (link === undefined) return unknownLink(op.id);
         if (op.trigger !== undefined) link.trigger = op.trigger;
         if (op.approval !== undefined) link.approval = op.approval;
-        if (op.limit !== undefined) link.limit = op.limit;
+        if (op.limit !== undefined) {
+          link.limit = op.limit;
+          // 上限を今の回数以下に下げたら、その場で上限の一時停止にする（上限を超えて 1 回送らない。止まっている線はそのまま）。
+          if (link.paused === null && link.count >= link.limit) link.paused = "limit";
+        }
         break;
       }
       case "remove_link":
