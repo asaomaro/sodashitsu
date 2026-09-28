@@ -1155,3 +1155,50 @@ describe("GraphView（フォーカスと画面へ入れる。g03 点検）", () 
     wrapper.unmount();
   });
 });
+
+describe("GraphView（承認の代理の見分け・シートの文言。g03 点検）", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  const approval = (id: string, from: string, mode: "delegate" | "notify") => ({
+    id,
+    kind: "approval" as const,
+    from: from as `local:${string}`,
+    to: "local:p2" as const,
+    approval: { mode, lines: 40 },
+    limit: 10,
+    count: 0,
+    paused: null,
+  });
+
+  it("承認の代理は「返答まで任せる」と「知らせるだけ」をチップの文字と線の見た目で分ける", async () => {
+    const { wrapper } = await openWithGraph({
+      nodes: [
+        { key: "local:p1", x: 0, y: 0 },
+        { key: "local:p2", x: 300, y: 0 },
+        { key: "local:p3", x: 0, y: 200 },
+      ],
+      links: [approval("l1", "local:p1", "delegate"), approval("l2", "local:p3", "notify")],
+    });
+    expect(wrapper.find('[data-link-chip="l1"]').text()).toBe("承認・返答 0/10");
+    expect(wrapper.find('[data-link-chip="l2"]').text()).toBe("承認・通知 0/10 ⚠");
+    expect(wrapper.find('[data-link-id="l1"]').classes()).toContain("graph-edge-delegate");
+    expect(wrapper.find('[data-link-id="l2"]').classes()).not.toContain("graph-edge-delegate");
+    wrapper.unmount();
+  });
+
+  it("モバイルのシートの再開は回数を 0 に戻すと示す", async () => {
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as MediaQueryList);
+    const { wrapper } = await openWithGraph({
+      links: [triggerLink("l1", "local:p1", "local:p2", { paused: "limit", count: 10 })],
+    });
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    expect(wrapper.find(".graph-sheet-resume").text()).toBe("再開（回数を 0 に戻す）");
+    wrapper.unmount();
+  });
+});

@@ -138,47 +138,53 @@ function swapEnds(): void {
   form.to = f;
 }
 
-function clampInt(v: number, min: number, max: number, fallback: number): number {
-  if (!Number.isFinite(v)) return fallback;
-  return Math.min(max, Math.max(min, Math.round(v)));
+/** 範囲内の整数か（空の欄は v-model.number で文字列の "" になる）。 */
+function inRange(v: unknown, min: number, max: number): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
 }
 
-function payload(): LinkPanelSave {
-  const p: LinkPanelSave = {
-    kind: form.kind,
-    from: form.from,
-    to: form.to,
-    limit: clampInt(form.limit, LINK_LIMIT_MIN, LINK_LIMIT_MAX, LINK_LIMIT_DEFAULT),
+/** 範囲外・空の数は黙って丸めず、検証のエラーとして見せる（g03 点検）。 */
+function rangeIssues(): GraphIssue[] {
+  const out: GraphIssue[] = [];
+  const bad = (message: string): void => {
+    out.push({ code: "config_mismatch", message });
   };
+  if (!inRange(form.limit, LINK_LIMIT_MIN, LINK_LIMIT_MAX))
+    bad(`上限は ${LINK_LIMIT_MIN}〜${LINK_LIMIT_MAX} の整数で入れてください。`);
+  if (
+    form.kind === "trigger" &&
+    form.passOutput &&
+    !inRange(form.outputLines, LINK_LINES_MIN, LINK_LINES_MAX)
+  )
+    bad(`受け渡す行数は ${LINK_LINES_MIN}〜${LINK_LINES_MAX} の整数で入れてください。`);
+  if (form.kind === "approval" && !inRange(form.approvalLines, LINK_LINES_MIN, LINK_LINES_MAX))
+    bad(`渡す行数は ${LINK_LINES_MIN}〜${LINK_LINES_MAX} の整数で入れてください。`);
+  return out;
+}
+
+/** 送るもの（`rangeIssues` が空のときだけ呼ぶ）。 */
+function payload(): LinkPanelSave {
+  const p: LinkPanelSave = { kind: form.kind, from: form.from, to: form.to, limit: form.limit };
   if (props.link) p.id = props.link.id;
   if (form.kind === "trigger") {
     p.trigger = {
       on: form.on,
       prompt: form.prompt,
-      output: form.passOutput
-        ? {
-            lines: clampInt(form.outputLines, LINK_LINES_MIN, LINK_LINES_MAX, OUTPUT_LINES_DEFAULT),
-          }
-        : null,
+      output: form.passOutput ? { lines: form.outputLines } : null,
       whenBusy: form.whenBusy,
     };
   }
-  if (form.kind === "approval") {
-    p.approval = {
-      mode: form.approvalMode,
-      lines: clampInt(
-        form.approvalLines,
-        LINK_LINES_MIN,
-        LINK_LINES_MAX,
-        defaultApprovalConfig().lines,
-      ),
-    };
-  }
+  if (form.kind === "approval") p.approval = { mode: form.approvalMode, lines: form.approvalLines };
   return p;
 }
 
 function save(): void {
   if (props.saving || props.gone) return;
+  const range = rangeIssues();
+  if (range.length > 0) {
+    issues.value = range;
+    return;
+  }
   const p = payload();
   // 保存の前にサーバと同じ検証（client-core の validateLink）。
   const found = validateLink(props.graph, linkDraftOf(p));

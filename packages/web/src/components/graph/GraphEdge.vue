@@ -49,6 +49,7 @@ const heavy = computed(() => props.link.kind === "trigger" && props.link.trigger
       `graph-edge-${link.kind}`,
       {
         'graph-edge-heavy': heavy,
+        'graph-edge-delegate': link.kind === 'approval' && link.approval?.mode === 'delegate',
         'graph-edge-invalid': invalid,
         'graph-edge-selected': selected,
         'graph-edge-paused': paused,
@@ -101,6 +102,11 @@ const heavy = computed(() => props.link.kind === "trigger" && props.link.trigger
 .graph-edge-approval .graph-edge-line {
   stroke-dasharray: 2 4;
   stroke-linecap: round;
+}
+/* 返答まで任せる承認の代理は、太い点線（知らせるだけと見分ける。チップの文字も「承認・返答」）。 */
+.graph-edge-delegate .graph-edge-line {
+  stroke-width: 4px;
+  stroke-dasharray: 1 6;
 }
 .graph-edge-selected .graph-edge-line {
   stroke-width: 3px;

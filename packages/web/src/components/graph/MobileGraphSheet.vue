@@ -91,7 +91,7 @@ onMounted(() => {
             class="graph-sheet-resume"
             @click="graph.setPaused(false, l.id)"
           >
-            再開
+            再開（回数を 0 に戻す）
           </button>
           <button
             v-else

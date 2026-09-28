@@ -159,3 +159,33 @@ describe("LinkPanel", () => {
     w.unmount();
   });
 });
+
+describe("LinkPanel（範囲外の値。g03 点検 T3 nit）", () => {
+  it("範囲外・空の上限や行数は黙って丸めず、検証のエラーとして見せて送らない", async () => {
+    const w = mountPanel();
+    await w.find(".link-panel-limit").setValue(500);
+    await w.find(".link-panel-save").trigger("click");
+    expect(w.emitted("save")).toBeUndefined();
+    expect(w.find(".link-panel-issues").text()).toContain("上限は 1〜100 の整数");
+    await w.find(".link-panel-limit").setValue("");
+    await w.find(".link-panel-save").trigger("click");
+    expect(w.emitted("save")).toBeUndefined();
+    await w.find(".link-panel-limit").setValue(7);
+    await w.find(".link-panel-lines").setValue(0);
+    await w.find(".link-panel-save").trigger("click");
+    expect(w.emitted("save")).toBeUndefined();
+    expect(w.find(".link-panel-issues").text()).toContain("受け渡す行数は 1〜500 の整数");
+    await w.find(".link-panel-lines").setValue(501);
+    await w.find(".link-panel-pass").setValue(false); // 受け渡さないなら行数は見ない
+    await w.find(".link-panel-save").trigger("click");
+    expect(w.emitted("save")![0]![0]).toMatchObject({ limit: 7, trigger: { output: null } });
+    w.unmount();
+    const w2 = mountPanel();
+    await w2.find('input[value="approval"]').setValue(true);
+    await w2.find(".link-panel-approval-lines").setValue(2.5);
+    await w2.find(".link-panel-save").trigger("click");
+    expect(w2.emitted("save")).toBeUndefined();
+    expect(w2.find(".link-panel-issues").text()).toContain("渡す行数は 1〜500 の整数");
+    w2.unmount();
+  });
+});

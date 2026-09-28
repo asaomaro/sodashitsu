@@ -18,10 +18,12 @@ export const LINK_KIND_NAME: Record<LinkKind, string> = {
   approval: "承認の代理",
 };
 
-/** 線の上の短いラベル（design の表: 「完了→」「承認待ち→」「監督」「承認」）。 */
-export function linkShortLabel(link: Pick<GraphLink, "kind" | "trigger">): string {
+/** 線の上の短いラベル（design の表: 「完了→」「承認待ち→」「監督」「承認」。承認は「承認・返答」「承認・通知」）。 */
+export function linkShortLabel(link: Pick<GraphLink, "kind" | "trigger" | "approval">): string {
   if (link.kind === "trigger") return link.trigger?.on === "blocked" ? "承認待ち→" : "完了→";
-  return link.kind === "supervise" ? "監督" : "承認";
+  if (link.kind === "supervise") return "監督";
+  // 返答まで任せる／知らせるだけを見た目で分ける（g03 点検）。
+  return link.approval?.mode === "delegate" ? "承認・返答" : "承認・通知";
 }
 
 const FIRED_MARK: Record<LinkRunResult, string> = {
