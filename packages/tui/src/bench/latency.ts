@@ -2,21 +2,24 @@
  * 端末版の性能の測定（20260927-cli-mode の 06-docs-verify T4・AC17。requirements の非機能要件「キー入力から反映まで追加遅延 p95 50ms 以内の目安・
  * pane 16 個・状態反映 2 秒以内・大量出力の pane があっても他の pane と画面の操作が固まらない」）。
  *
- * 使い方（先に `pnpm build`）: `node packages/tui/dist/bench/latency.js [--json]`
+ * 使い方（先に `pnpm build`）: `node packages/tui/dist/bench/latency.js [--json]`。目安を外れたら終了コード 1。
  *
  * ビルドした `soda serve`（`packages/server/dist/main.js`）を一時の状態ディレクトリ・空いているポートで子として起動し、`runTui` を偽の外側の端末
- * （`TuiIo`。出力を溜めて headless の外側の端末へ流す）で繋ぐ。測るもの:
- *   (a) 1 pane: 打鍵（`cat` の動く pane へ 1 文字）→ その文字を含むフレームが外側の端末へ書かれるまで。比較のため、同じ pane へ WS の INPUT を直接送って
- *       OUTPUT の echo が返るまで（どのクライアントでも払う分。以下「素の往復」）も測る。差が端末版が足した遅延。
- *   (b) 16 pane（4×4）: 同じ打鍵の遅延と、外側の端末の大きさを変えてから全体を描き直したフレームが書かれるまで。
- *   (c) エージェントの状態の反映: `PATH` の先頭に置いた偽の `claude`（`sleep` の写し）を別の pane で起動 → サイドバーに「Agents」が出るまで、
- *       Ctrl+C で止めて → 消えるまで。本物のエージェントの 5 状態の遷移（working→idle 等）は画面の規則で決まるので、ここでは測らない
- *       （手で測る方法は `bench/README.md`）。
- *   (d) 大量出力: 隣の pane で `seq` が数 MB を書いている間に、(a) と同じ打鍵の遅延。
- * 共有のマシンで重くしないよう、全体で十数秒に収める（busy loop・長い繰り返しはしない）。Linux/WSL2 向け（偽の `claude` は `/bin/sleep` の写し）。
+ * （`TuiIo`。書かれた列をその場で headless の外側の端末へ流す）で繋ぐ。打鍵の 1 標本は次の 2 つを続けて測る（同じ pane・同じ時間帯）:
+ *   - 素の往復: WS の外部クライアントから同じ pane へ INPUT を直接送り、OUTPUT の echo が返るまで（どのクライアントでも払う分）。
+ *   - 端末版: 焦点の pane（`cat`）へ 1 文字打ち、**その pane のカーソルの位置のセルにその文字が描かれ、カーソルが 1 つ進んだ**フレームが書かれるまで。
+ *   足した遅延 = 端末版 − 素の往復（標本ごと）。どちらも同じプロセス（同じイベントループ）で測るので、ループの遅れは両方に乗る。
+ * 測るもの:
+ *   (a) 1 pane の打鍵。足した遅延の p95 ≤ 50ms。
+ *   (d) 隣の pane が 8 秒のあいだ `seq` を出し続けている**最中**の打鍵（静まりを待たない。標本の 9 割以上が流れている間に取れたことを確かめる）。打鍵の p95 ≤ 50ms。
+ *   (b) 16 pane（4×4）の打鍵（p95 ≤ 50ms）と、外側の端末の大きさを変えてから全体を描き直した（`CSI 2J` を含む）フレームが書かれるまで。
+ *   (c) エージェントの表示の反映: `PATH` の先頭に置いた偽の `claude`（`sleep` の写し）を別の pane で起動 → サイドバーに「Agents」が出るまで、
+ *       Ctrl+C で止めて → 消えるまで（どちらも ≤ 2000ms）。本物のエージェントの 5 状態の遷移は画面の規則で決まるので測らない（`bench/README.md`）。
+ * 各場面の最初の 5 標本は暖機として捨てる。共有のマシンで重くしないよう、全体で十数秒に収める（繰り返しの負荷はかけない）。Linux/WSL2 向け。
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,7 +34,14 @@ import type { TuiIo, TuiSignal, TuiTarget } from "../types.js";
 const SERVER_MAIN = fileURLToPath(new URL("../../../server/dist/main.js", import.meta.url));
 const COLS = 200;
 const ROWS = 60;
-const SAMPLES = 30;
+const WARMUP = 5;
+const SAMPLES = 60;
+/** 1 行に打つ標本の数（素の往復と端末版で 2 文字ずつ。16 pane の狭い pane でも折り返さない数）。 */
+const PER_LINE = 12;
+const TARGET_MS = 50;
+const TARGET_STATUS_MS = 2000;
+/** (d) の大量出力を流す秒数。 */
+const FLOOD_SECONDS = 8;
 
 // ---------------------------------------------------------------- 偽の外側の端末
 
@@ -40,36 +50,32 @@ interface Frame {
   data: string;
 }
 
+type FramePred = (f: Frame, outer: HeadlessTerminal) => boolean;
+type HeadlessTerminal = InstanceType<typeof xtermHeadless.Terminal>;
+
 class BenchIo implements TuiIo {
   readonly isTTY = true;
   readonly platform = process.platform;
-  // 一時の状態ディレクトリで始めるので、はじめの案内を出させない（打鍵が案内に吸われる）。
-  readonly env: Record<string, string> = {
-    COLORTERM: "truecolor",
-    TERM: "xterm-256color",
-    SODA_NO_ONBOARDING: "1",
-  };
-  readonly frames: Frame[] = [];
+  readonly env: Record<string, string> = { COLORTERM: "truecolor", TERM: "xterm-256color" };
+  lastWriteAt = 0;
   private cols = COLS;
   private rows = ROWS;
   private readonly inputs = new Set<(b: Uint8Array) => void>();
   private readonly resizes = new Set<() => void>();
-  private readonly outer = new xtermHeadless.Terminal({
-    cols: COLS,
-    rows: ROWS,
-    allowProposedApi: true,
-  });
-  private fed = 0;
-  private readonly writeWaiters = new Set<(f: Frame) => void>();
+  readonly outer = new xtermHeadless.Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true });
+  private readonly waiters = new Set<(f: Frame) => void>();
 
   size(): { cols: number; rows: number } {
     return { cols: this.cols, rows: this.rows };
   }
   setRawMode(): void {}
+  /** 書かれた列はその場で外側の端末へ流し、読み終えたところで待ちに見せる（フレームは溜めない）。 */
   write(data: string): void {
     const f = { at: performance.now(), data };
-    this.frames.push(f);
-    for (const w of [...this.writeWaiters]) w(f);
+    this.lastWriteAt = f.at;
+    this.outer.write(data, () => {
+      for (const w of [...this.waiters]) w(f);
+    });
   }
   onInput(cb: (b: Uint8Array) => void): () => void {
     this.inputs.add(cb);
@@ -106,46 +112,43 @@ class BenchIo implements TuiIo {
     for (const cb of [...this.resizes]) cb();
     return at;
   }
-  /** `pred` を満たすフレームが書かれるまで待ち、その時刻を返す。 */
-  nextFrame(pred: (f: Frame) => boolean, timeoutMs: number, since = -Infinity): Promise<number> {
-    const hit = this.frames.find((f) => f.at >= since && pred(f));
-    if (hit) return Promise.resolve(hit.at);
+  /** `since` 以後に書かれ、読み終えた外側の端末が `pred` を満たすフレームの時刻（書かれた時刻）。 */
+  nextFrame(pred: FramePred, timeoutMs: number, since: number): Promise<number> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.writeWaiters.delete(w);
+        this.waiters.delete(w);
         reject(new Error("timed out waiting for a frame"));
       }, timeoutMs);
       const w = (f: Frame): void => {
-        if (f.at < since || !pred(f)) return;
+        if (f.at < since || !pred(f, this.outer)) return;
         clearTimeout(timer);
-        this.writeWaiters.delete(w);
+        this.waiters.delete(w);
         resolve(f.at);
       };
-      this.writeWaiters.add(w);
+      this.waiters.add(w);
     });
   }
-  /** 溜めた出力を外側の端末（headless）へ流して画面の文字を返す。 */
+  /** 書いた列を読み終えるまで待つ。 */
+  flush(): Promise<void> {
+    return new Promise((resolve) => this.outer.write("", resolve));
+  }
+  cursor(): { x: number; y: number } {
+    const b = this.outer.buffer.active;
+    return { x: b.cursorX, y: b.cursorY };
+  }
   async screen(): Promise<string> {
-    const chunk = this.frames
-      .slice(this.fed)
-      .map((f) => f.data)
-      .join("");
-    this.fed = this.frames.length;
-    await new Promise<void>((resolve) => this.outer.write(chunk, resolve));
+    await this.flush();
     const lines: string[] = [];
     for (let y = 0; y < this.outer.rows; y++)
       lines.push((this.outer.buffer.active.getLine(y)?.translateToString(true) ?? "").trimEnd());
     return lines.join("\n");
   }
-  /** 出力が `quietMs` のあいだ止まるまで待つ（次の打鍵の前）。 */
-  async settle(quietMs = 30, maxMs = 1000): Promise<void> {
+  /** 出力が `quietMs` のあいだ止まるまで待つ（準備の区切り。測定の途中では使わない）。 */
+  async settle(quietMs = 50, maxMs = 2000): Promise<void> {
     const start = performance.now();
-    for (;;) {
-      const last = this.frames.at(-1)?.at ?? 0;
-      const now = performance.now();
-      if (now - last >= quietMs || now - start >= maxMs) return;
+    while (performance.now() - this.lastWriteAt < quietMs && performance.now() - start < maxMs)
       await sleep(quietMs);
-    }
+    await this.flush();
   }
   async waitScreen(pred: (s: string) => boolean, timeoutMs: number): Promise<number> {
     const start = performance.now();
@@ -159,6 +162,10 @@ class BenchIo implements TuiIo {
   dispose(): void {
     this.outer.dispose();
   }
+}
+
+function cellAt(outer: HeadlessTerminal, x: number, y: number): string {
+  return outer.buffer.active.getLine(y)?.getCell(x)?.getChars() ?? "";
 }
 
 // ---------------------------------------------------------------- WS の RPC（外部クライアント。構成の組み立てと素の往復）
@@ -213,9 +220,21 @@ class RpcClient {
     this.ws.send(encodeInputFrame(paneId, new TextEncoder().encode(text)));
     return at;
   }
-  onOutput(cb: (paneId: string, chunk: Uint8Array) => void): () => void {
-    this.outputListeners.add(cb);
-    return () => this.outputListeners.delete(cb);
+  /** `paneId` の OUTPUT に `text` が来た時刻。 */
+  nextOutput(paneId: string, text: string, timeoutMs: number): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.outputListeners.delete(cb);
+        reject(new Error("timed out waiting for the echo"));
+      }, timeoutMs);
+      const cb = (id: string, chunk: Uint8Array): void => {
+        if (id !== paneId || !new TextDecoder().decode(chunk).includes(text)) return;
+        clearTimeout(timer);
+        this.outputListeners.delete(cb);
+        resolve(performance.now());
+      };
+      this.outputListeners.add(cb);
+    });
   }
   close(): void {
     this.ws.close(1000, "done");
@@ -244,16 +263,6 @@ function freePort(): Promise<number> {
   });
 }
 
-/** 制御の列（CSI・OSC・その他の ESC）を除いた文字。 */
-function visibleText(data: string): string {
-  /* eslint-disable no-control-regex -- 制御の列そのものを取り除く */
-  return data
-    .replace(/\x1b\[[0-9;?<>=! ]*[@-~]/g, "")
-    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
-    .replace(/\x1b[@-_]/g, "");
-  /* eslint-enable no-control-regex */
-}
-
 interface Stats {
   n: number;
   p50: number;
@@ -268,83 +277,105 @@ function stats(xs: readonly number[]): Stats {
   return { n: s.length, p50: r(q(0.5)), p95: r(q(0.95)), max: r(s.at(-1) ?? NaN) };
 }
 
-const LETTERS = "abcdefgijknoprstuvwxyz";
-
-/** 焦点の pane（`cat` が動いている）へ 1 文字ずつ打ち、その文字を含むフレームが書かれるまでの時間。 */
-async function typingLatency(io: BenchIo, samples: number): Promise<number[]> {
-  const out: number[] = [];
-  for (let i = 0; i < samples; i++) {
-    await io.settle();
-    const ch = LETTERS[i % LETTERS.length]!;
-    const t0 = io.type(ch);
-    const t1 = await io.nextFrame((f) => visibleText(f.data).includes(ch), 3000, t0);
-    out.push(t1 - t0);
-  }
-  io.type("\r");
-  return out;
+interface Samples {
+  /** 端末版：打鍵 → その文字を描いたフレーム。 */
+  typing: number[];
+  /** 素の往復：INPUT → echo の OUTPUT。 */
+  raw: number[];
+  /** 標本ごとの 端末版 − 素の往復。 */
+  added: number[];
+  /** 端末版の打鍵を送った時刻（(d) の「流れている間か」の判定用）。 */
+  typedAt: number[];
 }
 
-/** 同じ pane へ WS の INPUT を直接送って echo の OUTPUT が返るまで（端末版を通らない素の往復）。 */
-async function rawEcho(rpc: RpcClient, paneId: string, samples: number): Promise<number[]> {
-  const out: number[] = [];
-  for (let i = 0; i < samples; i++) {
-    await sleep(15);
-    const ch = LETTERS[i % LETTERS.length]!;
-    const elapsed = await new Promise<number>((resolve, reject) => {
-      let t0 = 0;
-      const timer = setTimeout(() => reject(new Error("raw echo timed out")), 3000);
-      const off = rpc.onOutput((id, chunk) => {
-        if (id !== paneId || !new TextDecoder().decode(chunk).includes(ch)) return;
-        clearTimeout(timer);
-        off();
-        resolve(performance.now() - t0);
-      });
-      t0 = rpc.sendInput(paneId, ch);
-    });
-    out.push(elapsed);
+interface Summary {
+  typing: Stats;
+  raw: Stats;
+  added: Stats;
+}
+
+const summary = (s: Samples): Summary => ({
+  typing: stats(s.typing),
+  raw: stats(s.raw),
+  added: stats(s.added),
+});
+
+const LETTERS = "abcdefgijknoprstuvwxyz";
+
+/** 焦点の pane のカーソルの位置 `p` に `ch` が描かれ、カーソルが 1 つ進んだフレーム。 */
+const echoedAt =
+  (p: { x: number; y: number }, ch: string): FramePred =>
+  (_f, outer) =>
+    cellAt(outer, p.x, p.y) === ch &&
+    outer.buffer.active.cursorX === p.x + 1 &&
+    outer.buffer.active.cursorY === p.y;
+
+/**
+ * 焦点の pane（`cat` が動いていて、`paneId` がその pane）で、素の往復と端末版の打鍵を交互に `WARMUP + SAMPLES` 回測る。最初の `WARMUP` 回は捨てる。
+ * 次の標本へは待たずに進む（出力の静まりを待たない。(d) で大量出力の最中に打つため）。`PER_LINE` 回ごとに Ctrl+U で行を消して折り返しを避ける。
+ */
+async function typingSamples(io: BenchIo, rpc: RpcClient, paneId: string): Promise<Samples> {
+  const out: Samples = { typing: [], raw: [], added: [], typedAt: [] };
+  await io.flush();
+  const lineStart = io.cursor();
+  for (let i = 0; i < WARMUP + SAMPLES; i++) {
+    if (i > 0 && i % PER_LINE === 0) {
+      io.type("\x15");
+      await io
+        .nextFrame((_f, o) => o.buffer.active.cursorX === lineStart.x, 3000, -Infinity)
+        .catch(async () => {
+          await io.flush();
+          if (io.cursor().x !== lineStart.x)
+            throw new Error("Ctrl+U did not return to the line start");
+        });
+      await io.flush();
+    }
+    const rawCh = LETTERS[(2 * i) % LETTERS.length]!.toUpperCase();
+    const ch = LETTERS[(2 * i + 1) % LETTERS.length]!;
+    // 素の往復（同じ pane。端末版がその文字を描き終えるまで待ってから次へ——カーソルの位置を基準にするため）。
+    await io.flush();
+    const p0 = io.cursor();
+    const rawEcho = rpc.nextOutput(paneId, rawCh, 3000);
+    const drawnRaw = io.nextFrame(echoedAt(p0, rawCh), 3000, performance.now());
+    const r0 = rpc.sendInput(paneId, rawCh);
+    const raw = (await rawEcho) - r0;
+    await drawnRaw;
+    await io.flush();
+    // 端末版。
+    const p1 = io.cursor();
+    const drawn = io.nextFrame(echoedAt(p1, ch), 3000, performance.now());
+    const t0 = io.type(ch);
+    const typing = (await drawn) - t0;
+    if (i >= WARMUP) {
+      out.typing.push(typing);
+      out.raw.push(raw);
+      out.added.push(typing - raw);
+      out.typedAt.push(t0);
+    }
   }
-  rpc.sendInput(paneId, "\r");
+  io.type("\x15");
   return out;
 }
 
 // ---------------------------------------------------------------- 本体
 
 interface Result {
-  typing1: Stats;
-  rawEcho1: Stats;
-  typingHeavy: Stats;
-  heavyBytes: number;
-  heavyMs: number;
-  typing16: Stats;
-  redraw16Ms: number;
-  agentAppearMs: number | null;
-  agentGoneMs: number | null;
+  a: Summary;
+  d: Summary & { heavyMs: number; duringFlood: number };
+  b: Summary & { panes: number; redrawMs: number };
+  c: { agentAppearMs: number | null; agentGoneMs: number | null };
+  violations: string[];
+  pass: boolean;
 }
 
-async function main(): Promise<void> {
-  const json = process.argv.includes("--json");
-  const log = (s: string): void => {
-    if (!json) process.stdout.write(`${s}\n`);
-  };
-  const dir = await mkdtemp(join(tmpdir(), "soda-bench-"));
-  const stateDir = join(dir, "state");
-  const bin = join(dir, "bin");
-  const home = join(dir, "home");
-  await mkdir(bin);
-  await mkdir(home);
-  // 偽のエージェント（ProcessMatcher はプロセス名で見る）。
-  await copyFile("/bin/sleep", join(bin, "claude")).catch(() =>
-    copyFile("/usr/bin/sleep", join(bin, "claude")),
-  );
-
-  const port = await freePort();
-  const baseUrl = `http://127.0.0.1:${port}`;
-  let server: ChildProcess | undefined;
-  const io = new BenchIo();
-  let rpc: RpcClient | undefined;
-  let running: Promise<number> | undefined;
-  try {
-    server = spawn(
+async function startServer(
+  stateDir: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ server: ChildProcess; baseUrl: string; login(): Promise<string>; cookie: string }> {
+  for (let attempt = 1; ; attempt++) {
+    const port = await freePort();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const server = spawn(
       process.execPath,
       [
         SERVER_MAIN,
@@ -358,22 +389,10 @@ async function main(): Promise<void> {
         "--shell",
         "/bin/sh",
       ],
-      {
-        env: {
-          PATH: `${bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`,
-          HOME: home,
-          SHELL: "/bin/sh",
-          PS1: "bench$ ",
-          ENV: "",
-          LANG: "C.UTF-8",
-          TERM: "xterm-256color",
-        },
-        stdio: ["ignore", "ignore", "pipe"],
-      },
+      { env, stdio: ["ignore", "ignore", "pipe"] },
     );
     let serverErr = "";
     server.stderr?.on("data", (d: Buffer) => (serverErr += d.toString("utf8")));
-
     const login = async (): Promise<string> => {
       const auth = JSON.parse(await readFile(join(stateDir, "local-auth.json"), "utf8")) as {
         secret: string;
@@ -387,71 +406,112 @@ async function main(): Promise<void> {
       if (res.status !== 204 || !cookie) throw new Error(`local login failed: HTTP ${res.status}`);
       return cookie;
     };
-    // 準備完了（ローカルログインが通る）まで待つ。
     let cookie: string | undefined;
-    for (let i = 0; i < 300 && cookie === undefined; i++) {
+    for (let i = 0; i < 300 && cookie === undefined && server.exitCode === null; i++) {
       cookie = await login().catch(() => undefined);
       if (cookie === undefined) await sleep(50);
-      if (server.exitCode !== null) throw new Error(`soda serve exited: ${serverErr}`);
     }
-    if (cookie === undefined) throw new Error(`soda serve did not become ready: ${serverErr}`);
+    if (cookie !== undefined) return { server, baseUrl, login, cookie };
+    if (server.exitCode === null) server.kill("SIGKILL");
+    // 選んだポートを使う前に他に取られた（空きポートを選んでから使うまでの競合）ときだけ、ポートを替えてやり直す。
+    if (attempt < 3 && /cannot listen|EADDRINUSE/i.test(serverErr)) continue;
+    throw new Error(`soda serve did not become ready: ${serverErr}`);
+  }
+}
+
+async function main(): Promise<number> {
+  const json = process.argv.includes("--json");
+  const log = (s: string): void => {
+    if (!json) process.stdout.write(`${s}\n`);
+  };
+  const dir = await mkdtemp(join(tmpdir(), "soda-bench-"));
+  let server: ChildProcess | undefined;
+  const io = new BenchIo();
+  let rpc: RpcClient | undefined;
+  let running: Promise<number> | undefined;
+  try {
+    const stateDir = join(dir, "state");
+    const bin = join(dir, "bin");
+    const home = join(dir, "home");
+    await mkdir(bin);
+    await mkdir(home);
+    await mkdir(stateDir);
+    // はじめの案内は済ませた扱い（案内が打鍵を受けて画面を覆わない）。
+    await writeFile(
+      join(stateDir, "prefs.json"),
+      JSON.stringify({ schema: 1, rev: 1, prefs: { onboarding: false } }),
+    );
+    // 偽のエージェント（ProcessMatcher はプロセス名で見る）。
+    await copyFile("/bin/sleep", join(bin, "claude")).catch(() =>
+      copyFile("/usr/bin/sleep", join(bin, "claude")),
+    );
+
+    const started = await startServer(stateDir, {
+      PATH: `${bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}`,
+      HOME: home,
+      SHELL: "/bin/sh",
+      PS1: "bench$ ",
+      ENV: "",
+      LANG: "C.UTF-8",
+      TERM: "xterm-256color",
+    });
+    server = started.server;
+    const { baseUrl, login } = started;
 
     // 復元までは /ws が 503 なので、繋がるまで繰り返す。
     for (let i = 0; i < 300 && rpc === undefined; i++) {
-      rpc = await RpcClient.open(baseUrl, cookie).catch(() => undefined);
+      rpc = await RpcClient.open(baseUrl, started.cookie).catch(() => undefined);
       if (rpc === undefined) await sleep(50);
     }
     if (rpc === undefined) throw new Error("/ws did not accept the connection");
-    const hello = await rpc.request<{ snapshot: { panes: PaneLite[]; tabs: { id: string }[] } }>(
-      "client.hello",
-      {
-        protocol: 1,
-        kind: "external",
-      },
-    );
+    const hello = await rpc.request<{ snapshot: { panes: PaneLite[] } }>("client.hello", {
+      protocol: 1,
+      kind: "external",
+    });
     const first = hello.snapshot.panes[0]!.id;
 
     const target: TuiTarget = { baseUrl, origin: baseUrl, stateDir, login };
     running = runTui(target, io);
     await io.waitScreen((s) => s.includes("bench$"), 20_000);
+    await rpc.request("pane.subscribe", { paneId: first, scrollbackLines: 0 });
 
     // ---- (a) 1 pane
     io.type("cat\r");
     await sleep(200);
-    const typing1 = await typingLatency(io, SAMPLES);
-    await rpc.request("pane.subscribe", { paneId: first, scrollbackLines: 0 });
-    const raw1 = await rawEcho(rpc, first, SAMPLES);
-    log(
-      `(a) 1 pane      打鍵→フレーム ${JSON.stringify(stats(typing1))} ms / 素の往復 ${JSON.stringify(stats(raw1))} ms`,
-    );
+    await io.settle();
+    const a = await typingSamples(io, rpc, first);
+    log(`(a) 1 pane       ${fmt(summary(a))}`);
 
-    // ---- (d) 大量出力の隣で打鍵
+    // ---- (d) 大量出力の最中に打鍵
     const heavy = (
       await rpc.request<{ pane: PaneLite }>("pane.split", { paneId: first, direction: "right" })
     ).pane.id;
     await rpc.request("pane.focus", { paneId: first });
     await sleep(300);
-    let heavyBytes = 0;
-    const offHeavy = rpc.onOutput((id, chunk) => {
-      if (id === heavy) heavyBytes += chunk.length;
-    });
-    await rpc.request("pane.subscribe", { paneId: heavy, scrollbackLines: 0 });
+    await io.settle();
+    const doneFile = join(dir, "flood-done");
+    // 8 秒のあいだ出し続ける（数十 KB ずつ途切れずに。打鍵の標本を取り終えるより長く流す）。
+    rpc.sendInput(
+      heavy,
+      `end=$(($(date +%s)+${FLOOD_SECONDS})); while [ $(date +%s) -lt $end ]; do seq 1 20000; done; touch ${doneFile}\r`,
+    );
     const heavyStart = performance.now();
-    rpc.sendInput(heavy, "seq 1 400000; echo HEAVY_DONE\r");
-    await sleep(100);
-    const typingHeavy = await typingLatency(io, SAMPLES);
-    await io
-      .waitScreen((s) => s.includes("HEAVY_DONE") && !s.includes("echo HEAVY_DONE\n"), 30_000)
-      .catch(() => 0);
-    const heavyMs = performance.now() - heavyStart;
-    offHeavy();
+    let floodEnd = Infinity;
+    const floodWatch = (async () => {
+      while (!existsSync(doneFile) && performance.now() - heavyStart < 60_000) await sleep(20);
+      floodEnd = performance.now();
+    })();
+    await sleep(200); // 流れ始めるまで（seq の起動）
+    const d = await typingSamples(io, rpc, first);
+    const duringFlood = d.typedAt.filter((t) => t < floodEnd).length / d.typedAt.length;
+    await floodWatch;
+    const heavyMs = Math.round(floodEnd - heavyStart);
     log(
-      `(d) 大量出力の隣 打鍵→フレーム ${JSON.stringify(stats(typingHeavy))} ms（隣の pane: ${(heavyBytes / 1e6).toFixed(1)} MB を ${Math.round(heavyMs)} ms）`,
+      `(d) 大量出力の最中 ${fmt(summary(d))}（隣の pane が ${heavyMs} ms 出し続けた。標本の ${Math.round(duringFlood * 100)}% が流れている間）`,
     );
 
     // ---- (b) 16 pane（4×4）
-    const cols: string[] = [first];
-    // 最初の 2 列は first|heavy。heavy を右に 2 つ割って 4 列（1/4 ずつに近づける）。
+    await io.settle(50, 3000);
     const c2 = (
       await rpc.request<{ pane: PaneLite }>("pane.split", {
         paneId: heavy,
@@ -466,9 +526,8 @@ async function main(): Promise<void> {
         ratio: 0.5,
       })
     ).pane.id;
-    cols.push(heavy, c2, c3);
     const all: string[] = [];
-    for (const top of cols) {
+    for (const top of [first, heavy, c2, c3]) {
       all.push(top);
       const r1 = (
         await rpc.request<{ pane: PaneLite }>("pane.split", {
@@ -494,26 +553,26 @@ async function main(): Promise<void> {
       all.push(r1, r2, r3);
     }
     await rpc.request("pane.focus", { paneId: first });
-    // 各 pane に 1 行ずつ書かせる（全 pane に中身がある状態で描く）。
-    for (const id of all) if (id !== first) rpc.sendInput(id, `echo pane-${id.slice(-4)}\r`);
+    rpc.sendInput(heavy, "clear\r");
+    for (const id of all)
+      if (id !== first && id !== heavy) rpc.sendInput(id, `echo pane-${id.slice(-4)}\r`);
     await sleep(800);
-    await io.settle(50, 2000);
-    const typing16 = await typingLatency(io, SAMPLES);
-    await io.settle(50, 2000);
+    await io.settle(50, 3000);
+    const b = await typingSamples(io, rpc, first);
+    await io.settle(50, 3000);
     const tResize = io.resize(COLS - 10, ROWS - 4);
-    const tRedraw = await io.nextFrame(() => true, 3000, tResize);
-    const redraw16Ms = Math.round((tRedraw - tResize) * 10) / 10;
+    const tRedraw = await io.nextFrame((f) => f.data.includes("\x1b[2J"), 3000, tResize);
+    const redrawMs = Math.round((tRedraw - tResize) * 10) / 10;
     log(
-      `(b) 16 pane     打鍵→フレーム ${JSON.stringify(stats(typing16))} ms / 大きさの変更→全体の描き直し ${redraw16Ms} ms（pane ${all.length} 個）`,
+      `(b) 16 pane      ${fmt(summary(b))} / 大きさの変更→全体の描き直し ${redrawMs} ms（pane ${all.length} 個）`,
     );
     await sleep(300);
 
-    // ---- (c) エージェントの状態の反映
+    // ---- (c) エージェントの表示の反映
     let agentAppearMs: number | null = null;
     let agentGoneMs: number | null = null;
     const agentPane = all[all.length - 1]!;
     await io.settle(50, 2000);
-    await io.screen();
     const tStart = rpc.sendInput(agentPane, "claude 30\r");
     try {
       agentAppearMs = Math.round((await io.waitScreen((s) => s.includes("Agents"), 5000)) - tStart);
@@ -523,25 +582,43 @@ async function main(): Promise<void> {
       log(`(c) エージェントの反映を測れなかった: ${String(err)}`);
     }
     log(
-      `(c) エージェント 起動→サイドバーに出る ${agentAppearMs ?? "-"} ms / 止める→消える ${agentGoneMs ?? "-"} ms（目安 2000 ms 以内）`,
+      `(c) エージェント 起動→サイドバーに出る ${agentAppearMs ?? "-"} ms / 止める→消える ${agentGoneMs ?? "-"} ms`,
     );
 
+    // ---- 目安（AC17）
+    const violations: string[] = [];
+    const sa = summary(a);
+    const sd = summary(d);
+    const sb = summary(b);
+    if (!(sa.added.p95 <= TARGET_MS))
+      violations.push(`(a) added p95 ${sa.added.p95} ms > ${TARGET_MS} ms`);
+    if (!(sd.typing.p95 <= TARGET_MS))
+      violations.push(`(d) typing p95 ${sd.typing.p95} ms > ${TARGET_MS} ms`);
+    if (duringFlood < 0.9)
+      violations.push(
+        `(d) only ${Math.round(duringFlood * 100)}% of the samples were taken while the flood was running`,
+      );
+    if (!(sb.typing.p95 <= TARGET_MS))
+      violations.push(`(b) typing p95 ${sb.typing.p95} ms > ${TARGET_MS} ms`);
+    if (agentAppearMs === null || agentAppearMs > TARGET_STATUS_MS)
+      violations.push(
+        `(c) agent appear ${agentAppearMs ?? "not measured"} > ${TARGET_STATUS_MS} ms`,
+      );
+    if (agentGoneMs === null || agentGoneMs > TARGET_STATUS_MS)
+      violations.push(`(c) agent gone ${agentGoneMs ?? "not measured"} > ${TARGET_STATUS_MS} ms`);
+
     const result: Result = {
-      typing1: stats(typing1),
-      rawEcho1: stats(raw1),
-      typingHeavy: stats(typingHeavy),
-      heavyBytes,
-      heavyMs: Math.round(heavyMs),
-      typing16: stats(typing16),
-      redraw16Ms,
-      agentAppearMs,
-      agentGoneMs,
+      a: sa,
+      d: { ...sd, heavyMs, duringFlood: Math.round(duringFlood * 100) / 100 },
+      b: { ...sb, panes: all.length, redrawMs },
+      c: { agentAppearMs, agentGoneMs },
+      violations,
+      pass: violations.length === 0,
     };
-    const added = result.typing1.p95 - result.rawEcho1.p95;
-    log(
-      `端末版が足した遅延（p95 の差の目安）: ${Math.round(added * 10) / 10} ms（目安 50 ms 以内）`,
-    );
     if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
+    else if (violations.length === 0) log(`目安（AC17）: すべて満たした`);
+    else log(`目安（AC17）を外れた:\n  ${violations.join("\n  ")}`);
+    return violations.length === 0 ? 0 : 1;
   } finally {
     if (running) {
       io.type("\x02q");
@@ -550,20 +627,26 @@ async function main(): Promise<void> {
     rpc?.close();
     io.dispose();
     if (server && server.exitCode === null) {
-      server.kill("SIGTERM");
-      await Promise.race([new Promise((resolve) => server!.once("exit", resolve)), sleep(10_000)]);
-      if (server.exitCode === null) server.kill("SIGKILL");
+      const s = server;
+      s.kill("SIGTERM");
+      await Promise.race([new Promise((resolve) => s.once("exit", resolve)), sleep(10_000)]);
+      if (s.exitCode === null) s.kill("SIGKILL");
     }
     await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 
+function fmt(s: Summary): string {
+  const f = (x: Stats): string => `p50 ${x.p50} / p95 ${x.p95} / max ${x.max}`;
+  return `打鍵→フレーム ${f(s.typing)} ms・素の往復 ${f(s.raw)} ms・足した遅延 ${f(s.added)} ms（n=${s.typing.n}）`;
+}
+
 main().then(
-  () => process.exit(0),
+  (code) => process.exit(code),
   (err: unknown) => {
     process.stderr.write(
       `bench failed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
     );
-    process.exit(1);
+    process.exit(2);
   },
 );
