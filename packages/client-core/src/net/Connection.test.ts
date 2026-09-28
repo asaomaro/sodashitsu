@@ -433,6 +433,41 @@ describe("Connection", () => {
     expect(sockets).toHaveLength(1); // 再接続していない
   });
 
+  it("disconnect は閉じて繋ぎ直さず、応答待ちを reject する。繋ぎ直しの待ち・/api/session の確認の途中でも開かない。connect で再開できる（20260927-agent-graph の 04）", async () => {
+    const { conn, store, sockets } = makeConnection();
+    conn.connect();
+    await flush();
+    const ws = sockets[0]!;
+    ws.open();
+    ws.message(JSON.stringify({ id: JSON.parse(ws.sent[0] as string).id, result: { clientId: "c1", snapshot: makeSnapshot() } }));
+    const pending = conn.request("session.get" as never, {} as never);
+    conn.disconnect();
+    await expect(pending).rejects.toThrow("connection closed");
+    expect(ws.readyState).toBe(WS_CLOSED);
+    expect(store.states.at(-1)).toBe("detached");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sockets).toHaveLength(1);
+
+    // 繋ぎ直しの待ちの途中
+    conn.connect();
+    await flush();
+    sockets[1]!.remoteClose(1006);
+    await flush();
+    conn.disconnect();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sockets).toHaveLength(2);
+
+    // /api/session の確認の途中（connect の直後）
+    conn.connect();
+    conn.disconnect();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sockets).toHaveLength(2);
+
+    conn.connect();
+    await flush();
+    expect(sockets).toHaveLength(3);
+  });
+
   it("client.detach の後は自動で再接続しない（onConnectionState('detached') を呼ぶ）", async () => {
     const { conn, store, sockets } = makeConnection();
     conn.connect();

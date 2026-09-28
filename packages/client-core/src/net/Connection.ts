@@ -84,6 +84,8 @@ export class Connection implements ConnectionPort {
   private retargetPending = false;
   /** `retarget` の世代。`/api/session` の確認を待つ間に行き先が替わったら、その確認の後は何もしない（socket を 2 本開かない）。 */
   private targetGen = 0;
+  /** `disconnect` で自分から閉じた（その close では繋ぎ直さない。次の `connect` で戻す）。 */
+  private stopped = false;
 
   constructor(opts: ConnectionOptions) {
     this.kind = opts.kind;
@@ -138,6 +140,7 @@ export class Connection implements ConnectionPort {
   }
 
   connect(): void {
+    this.stopped = false;
     if (this.ws && (this.ws.readyState === WS_OPEN || this.ws.readyState === WS_CONNECTING)) return;
     this.cancelReconnectTimer();
     this.reconnectAttempt = 0;
@@ -172,6 +175,19 @@ export class Connection implements ConnectionPort {
     if (this.retargetPending) return; // 閉じ終えるのを待っている。閉じたら最後の行き先へ開く
     this.store.onConnectionState("connecting");
     void this.checkSessionThenOpen();
+  }
+
+  /**
+   * 閉じて、自動では繋ぎ直さない（サーバの中の接続〔連携のグラフの別のマシン。20260927-agent-graph の 04〕が、グラフから外れたマシン・終了で使う）。
+   * 繋ぎ直しの待ち・`/api/session` の確認の途中も取り消す。応答待ちの要求は close で reject される。次の `connect()` で再開できる。
+   */
+  disconnect(): void {
+    this.stopped = true;
+    this.targetGen++; // 確認の途中なら、その後に開かない
+    this.cancelReconnectTimer();
+    this.retargetPending = false;
+    const ws = this.ws;
+    if (ws && (ws.readyState === WS_OPEN || ws.readyState === WS_CONNECTING)) ws.close(1000, "disconnect");
   }
 
   request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
@@ -270,6 +286,7 @@ export class Connection implements ConnectionPort {
       this.resetOriginSuspicion(); // 開けた：サーバはこのアドレスを拒否していない（D107）
       this.request("client.hello", { protocol: 1, kind: this.kind })
         .then((result) => {
+          if (this.ws !== ws) return; // 応答を受けた後、当てる前に閉じた（`disconnect` 等）。閉じた接続を open にしない
           this.store.applySnapshot(result.snapshot, result.clientId);
           // `open`（＝入力を受け付けてよい。D95）は hello が通ってから。socket が開いただけで `open` にすると、
           // hello が失敗して閉じ直すまでの間、入力を受け付けたまま黙って捨てることになる。
@@ -373,6 +390,10 @@ export class Connection implements ConnectionPort {
     this.pending.clear();
     this.notifyClosed();
 
+    if (this.stopped) {
+      this.store.onConnectionState("detached");
+      return; // `disconnect` で閉じた（繋ぎ直さない）
+    }
     if (this.retargetPending) {
       // 行き先を替えるために閉じた（`retarget`）。待たずに新しい行き先へ。
       this.retargetPending = false;

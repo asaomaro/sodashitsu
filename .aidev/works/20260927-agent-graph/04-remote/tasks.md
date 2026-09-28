@@ -25,7 +25,7 @@ web は、チェックリストのマシンの節と別のマシンのノード�
 
 ## タスク
 
-- [ ] T1: `LinkChannel` → `WebSocketLike` の adapter と `graph/RemoteLinks.ts`（載っているマシンだけ開き、外れたら閉じる・可用性の通知・終了で閉じる）
+- [x] T1: `LinkChannel` → `WebSocketLike` の adapter と `graph/RemoteLinks.ts`（載っているマシンだけ開き、外れたら閉じる・可用性の通知・終了で閉じる）
       対象: `packages/server/src/machine/MachineLink.ts:359`（openChannel）・`packages/server/src/machine/MachineRelay.ts:45-49`（手本）・`packages/client-core/src/net/Connection.ts`・（新規 `packages/server/src/graph/RemoteLinks.ts`）
       依存: なし
       AC: AC14
