@@ -445,16 +445,25 @@ WSL2 を経由せず、Windows 上で直接 `node.exe` を実行して `soda ser
 - [ ] `soda serve` を起動し、表示された `soda: open http://127.0.0.1:7780/…` の URL でログインし（token の扱いは「Linux」の
       最初の項目と同じ）、シェル（既定は `powershell.exe`。`--shell` で変えられる。design「起動オプション（`soda serve`）」）が
       実際に起動して入出力できる。
-- [ ] pane の cwd 追従と、新しく開く場所の「引き継ぐ」（20260921-new-terminal-cwd）を確認する：**Windows は前面のプロセスの cwd を
-      読めない**ので、「いまの場所」は**シェルが OSC 7 で知らせた場所**だけ（herdr も部分対応。`[H]windows-beta.mdx:62-70`）。
-      既定の `powershell.exe` は OSC 7 を出さないので、pane で `cd C:\Windows` してから `Ctrl+B c` で新しい tab を開き `Get-Location`
-      を実行すると、**元の pane を開いた場所**になる（`cd` した先ではない）。これは既知の制約で、不具合ではない（以前の新しい tab は
-      workspace を作った場所、新しい workspace はサーバを起動した場所で開いていた）。プロンプトで OSC 7 を出すようにしたシェルでは
-      `cd` した先で開くはず（`file://host/C:/…` の形を `C:\…` に直して使う。20260921-new-terminal-cwd の decisions D7。**実機では未検証**——確かめたらここを更新する）。
+- [ ] pane の cwd 追従と、新しく開く場所の「引き継ぐ」（20260921-new-terminal-cwd・20260928-windows-pane-cwd）を確認する：**Windows は前面の
+      プロセスの cwd を読めない**ので、「いまの場所」は**シェルが知らせた場所**（OSC 7、または Windows Terminal の場所の知らせ OSC 9;9）だけ
+      （herdr も部分対応。`[H]windows-beta.mdx:62-70`）。そこで本製品は、対話の pane（新規・分割・再起動後の復元）のシェルが
+      `powershell.exe`・`pwsh.exe`・`cmd.exe` なら、起動時にプロンプトのたびに今の場所を OSC 9;9 で知らせる設定を差し込む
+      （PowerShell は末尾に `-NoExit -EncodedCommand …` を足して既存の `prompt` 関数を包む。cmd は環境変数 `PROMPT` の先頭に
+      `$E]9;9;"$P"$E\` を足す。設定「端末 → シェルの場所を追う（Windows）」、既定は入）。**実機では未検証**——次を確かめたらここを更新する:
+      - PowerShell 5.1・PowerShell 7（`--shell pwsh.exe`）・cmd（`--shell cmd.exe`）のそれぞれで、pane で `cd C:\Windows`（cmd は `cd /d C:\Windows`）
+        してから数秒後に `sodactl pane current` の `cwd` が `C:\Windows` になり、サイドバーの workspace の自動の名前も追従する。
+        空白・`#`・`%`・日本語を含むフォルダと UNC パス（`\\server\share`）でも同じ。
+      - そのまま `Ctrl+B c` で新しい tab を開き `Get-Location`（cmd は `cd`）を実行すると `cd` した先になる（設定「新しく開く場所」が「引き継ぐ」のとき）。
+      - `cd` した後に `soda serve` を止めて起動し直すと、その pane が `cd` した先のシェルとして開き直される（Claude Code の会話の再開もその場所）。
+      - プロファイルの `prompt` 関数（oh-my-posh・starship を含む）と cmd の `PROMPT` の見た目が変わらず、知らせの文字列が画面に出ない。
+        起動の遅れが体感できない（目安 +200ms 以内）。
+      - 設定を切にした後に開いた pane は差し込まれない（`cd` しても `sodactl pane current` の `cwd` は開いた場所のまま）。既に開いている pane は変わらない。
+      独自コマンドの pane（`docs/custom-commands.md`）と `edit_scrollback` のエディタには差し込まない。ほかのシェル（Git Bash・nushell 等）は、プロンプトで
+      OSC 7（`file://host/C:/…` の形を `C:\…` に直して使う。20260921-new-terminal-cwd の decisions D7）か OSC 9;9 を出せば追従する。
       設定を「ホーム」にした新しい tab が `%USERPROFILE%` で開くことも確かめる。
 - [ ] workspace の自動の名前（20260921-workspace-auto-label）：起動時に作る最初の workspace が、`soda serve` を起動した場所の名前
-      （リポジトリの直下から起動したならリポジトリの根の名前）になる。Windows の既定の `powershell.exe` では「引き継ぐ」が `cd` に追従
-      しない（上の項目）ので、場所は設定の「新しく開く場所」で選ぶ：「ホーム」にして新しい workspace → `~`（ホームが git のリポジトリでなければ）。「指定した場所」に `C:\` を
+      （リポジトリの直下から起動したならリポジトリの根の名前）になる。場所は設定の「新しく開く場所」で選ぶ：「ホーム」にして新しい workspace → `~`（ホームが git のリポジトリでなければ）。「指定した場所」に `C:\` を
       入れて新しい workspace → `C:\`（フォルダ名の無い根はパスそのもの）。「指定した場所」に大小を変えたホームのパス（例
       `c:\users\<名前>`）を入れて新しい workspace → `~`（本製品は大小を問わずホームと見る。herdr は `HOME` 環境変数との完全一致）。
       最後に「引き継ぐ」に戻す。**ホームと根は単体テスト（`path.win32`）で確かめたが、リポジトリの中の根の見つけ方は Windows では

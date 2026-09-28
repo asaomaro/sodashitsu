@@ -50,6 +50,8 @@
 コマンドは Unix で `/bin/sh -c '<command>'`（`shell` はログインシェルの `/bin/sh -lc`）、Windows ネイティブで
 `%ComSpec% /d /s /c "<command>"` として走る（Windows では環境変数は `%VAR%` の書き方）。作業場所はフォーカス中の pane の場所（無い・
 ディレクトリでなければ `soda serve` を起動した場所）。
+Windows で対話の pane のシェルに差し込む場所の知らせ（設定「シェルの場所を追う（Windows）」）は、`pane` の種類の pane には差し込まない
+（コマンドの引数の意味が変わるため）。その pane の場所は、コマンドが自分で OSC 7・OSC 9;9 を出さない限り開いた場所のまま（今までどおり）。
 
 ### コマンドに渡す環境変数
 
