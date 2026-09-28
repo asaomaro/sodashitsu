@@ -3,6 +3,9 @@ import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PREFS_KEY,
+  PREFS_MIGRATED_KEY,
+  isPrefsMigrated,
+  markPrefsMigrated,
   onPrefsWritten,
   readPrefs,
   replaceSharedPrefs,
@@ -68,6 +71,8 @@ function setup(
     replaceShared: replaceSharedPrefs,
     applyToStores: (raw) => applyPrefsToStores(pinia, raw),
     toast: (m) => toasts.push(m),
+    migrated: isPrefsMigrated,
+    markMigrated: markPrefsMigrated,
   });
   unsubscribe = onPrefsWritten((p) => sync.onWritten(p));
   const release = async (): Promise<void> => {
@@ -76,6 +81,10 @@ function setup(
   };
   return { sync, sets, toasts, getPrefs, release };
 }
+
+/** localStorage へ直に書く（ストアを通さない＝送らない）。 */
+const writeLocal = (patch: Record<string, unknown>): void =>
+  localStorage.setItem(PREFS_KEY, JSON.stringify({ ...stored(), ...patch }));
 
 const stored = (): Record<string, unknown> =>
   JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Record<string, unknown>;
@@ -103,11 +112,12 @@ describe("PrefsSync（初回の移行）", () => {
     });
   });
 
-  it("サーバが rev>0 なら送らず、手元の共有の項目をサーバの値で置き換えて各ストアへ当てる（端末ごとの項目は残す）", async () => {
+  it("移し終えたブラウザで、サーバが rev>0 なら送らず、手元の共有の項目をサーバの値で置き換えて各ストアへ当てる（端末ごとの項目は残す）", async () => {
     localStorage.setItem(
       PREFS_KEY,
       JSON.stringify({ theme: "nord", statusSymbols: false, sidebarWidth: 300 }),
     );
+    localStorage.setItem(PREFS_MIGRATED_KEY, "1");
     const settings = useSettingsStore(pinia);
     const view = useViewStore(pinia);
     const notifications = useNotificationsStore(pinia);
@@ -149,6 +159,74 @@ describe("PrefsSync（初回の移行）", () => {
     await flush();
     expect(useViewStore(pinia).agentSort).toBe("priority");
     expect(stored()).toEqual({ theme: "nord", agentSort: "priority" });
+  });
+
+  // 統合の review の差し戻し（must）：先に端末版がサーバへ書いて rev>0 になっても、まだ移していないブラウザの設定を黙って捨てない。
+  it("端末版が先に onboarding:false を書いた（rev 1）サーバへ、まだ移していないブラウザが繋ぐと、サーバに無いキー・テーマを移し、手元とサーバの両方に残る", async () => {
+    localStorage.setItem(
+      PREFS_KEY,
+      JSON.stringify({ theme: "nord", keys: { prefix: "ctrl+a" }, sidebarWidth: 300 }),
+    );
+    const server = { prefs: { onboarding: false } as SharedPrefs, rev: 1 };
+    const { sync, sets } = setup(server);
+    sync.onOpened();
+    await flush();
+    expect(sets).toEqual([{ patch: { theme: "nord", keys: { prefix: "ctrl+a" } }, baseRev: 1 }]);
+    expect(server.prefs).toEqual({ onboarding: false, theme: "nord", keys: { prefix: "ctrl+a" } });
+    expect(stored()).toEqual({
+      onboarding: false,
+      theme: "nord",
+      keys: { prefix: "ctrl+a" },
+      sidebarWidth: 300,
+    });
+    expect(useSettingsStore(pinia).theme).toBe("nord");
+    expect(useSettingsStore(pinia).keymap.prefix).toBe("ctrl+a");
+    expect(isPrefsMigrated()).toBe(true);
+    // 移し終えた後は移さない（次の接続でサーバの値が勝つ）
+    sync.onClosed();
+    server.prefs = { ...server.prefs, theme: "dracula" };
+    server.rev++;
+    writeLocal({ statusSymbols: false });
+    sync.onOpened();
+    await flush();
+    expect(sets).toHaveLength(1);
+    expect(useSettingsStore(pinia).theme).toBe("dracula");
+  });
+
+  it("まだ移していないブラウザでも、サーバにある項目はサーバの値が勝つ（送らない）", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: "nord", statusSymbols: false }));
+    const server = { prefs: { theme: "dracula" } as SharedPrefs, rev: 3 };
+    const { sync, sets } = setup(server);
+    sync.onOpened();
+    await flush();
+    expect(sets).toEqual([{ patch: { statusSymbols: false }, baseRev: 3 }]);
+    expect(useSettingsStore(pinia).theme).toBe("dracula");
+    expect(useSettingsStore(pinia).statusSymbols).toBe(false);
+  });
+
+  it("移す送信が失敗したら移し終えた印を付けず、次の接続でサーバに無い項目を送り直す", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: "nord" }));
+    const state: { fail?: string } = { fail: "internal" };
+    const server = { prefs: { onboarding: false } as SharedPrefs, rev: 1 };
+    const { sync, sets } = setup(server, { failSet: () => state.fail });
+    sync.onOpened();
+    await flush();
+    expect(isPrefsMigrated()).toBe(false);
+    delete state.fail;
+    sync.onClosed();
+    sync.onOpened();
+    await flush();
+    expect(sets.map((x) => x.patch)).toEqual([{ theme: "nord" }]);
+    expect(isPrefsMigrated()).toBe(true);
+  });
+
+  it("移し終えた印があっても、サーバが rev 0（設定が消えた等）なら今までどおり全部移す", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: "nord" }));
+    localStorage.setItem(PREFS_MIGRATED_KEY, "1");
+    const { sync, sets } = setup({ prefs: {}, rev: 0 });
+    sync.onOpened();
+    await flush();
+    expect(sets).toEqual([{ patch: { theme: "nord" }, baseRev: 0 }]);
   });
 
   it("rev 0 で localStorage が空なら何も送らない", async () => {

@@ -70,6 +70,29 @@ export function readPrefs(): Record<string, unknown> {
   }
 }
 
+/**
+ * このブラウザの localStorage の共有の項目をサーバへ移し終えた印（`actions/PrefsSync.ts`。ブラウザごと＝この localStorage ごと）。
+ * サーバが先に rev>0 になっていても、印が無ければサーバにまだ無い項目を移す（統合の review の差し戻し）。
+ */
+export const PREFS_MIGRATED_KEY = "soda.prefsMigrated.v1";
+
+/** 移し終えたか。読めない環境では移し終えた扱い（毎回移そうとしない。`Toast.vue` の `hasShownHint` と同じ倒し方）。 */
+export function isPrefsMigrated(): boolean {
+  try {
+    return localStorage.getItem(PREFS_MIGRATED_KEY) !== null;
+  } catch {
+    return true;
+  }
+}
+
+export function markPrefsMigrated(): void {
+  try {
+    localStorage.setItem(PREFS_MIGRATED_KEY, "1");
+  } catch {
+    // 書けなければ、次の読み込みでもう一度サーバに無い項目だけを移す（害は無い）。
+  }
+}
+
 /** 既存の値に**併合して**書く。**読みも書きも同じ try/catch の内側**に置く（読めない環境で throw させない）。 */
 export function writePrefs(patch: Record<string, unknown>): void {
   try {

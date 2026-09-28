@@ -23,6 +23,7 @@ import {
 } from "./settings.js";
 import { loadAgentSort, loadCollapsedAutoGroups, loadWorkspaceSort, useViewStore } from "./view.js";
 import { loadNotifyPrefs, useNotificationsStore } from "./notifications.js";
+import { useOnboardingStore } from "./onboarding.js";
 
 /**
  * サーバから受けた共有の設定（`prefs.get`・`prefs.changed`。20260927-cli-mode）を各ストアへ当てる。`raw` は `soda.prefs.v1` の全体
@@ -76,4 +77,7 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
     notifications.hintPending = raw["notifyHintPending"] === true;
   if (notifications.hintDone !== (raw["notifyHintDone"] === true))
     notifications.hintDone = raw["notifyHintDone"] === true;
+
+  // はじめの案内：端末版・ほかのブラウザで済ませた（共有の `onboarding: false`）なら、このブラウザでも出さない。
+  if (raw["onboarding"] === false) useOnboardingStore(pinia).suppress();
 }

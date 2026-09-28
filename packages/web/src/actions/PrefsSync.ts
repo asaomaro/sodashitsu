@@ -12,8 +12,11 @@ import { errorCodeOf } from "@sodashitsu/client-core";
  *   `サーバ ⊕ localOnly ⊕ inflight ⊕ pending`（まだ認められていない手元の値を上に重ねる）。受け取る前に届いた `prefs.changed` は最も新しいものを持っておき、受け取った後で当てる。
  * - 送るのは `pending` を丸ごと 1 回分として（直列）。成功したら `inflight` を消して、溜まっていれば続けて送る。失敗したら `inflight` を `pending` へ戻す
  *   （同じ項目のもっと新しい値が `pending` にあればそちらを残す）。次に繋がったとき・次に変更したときに送り直す。
- * - 初回の移行: サーバの `rev` が 0 なら、localStorage の共有の項目を `pending` に入れてから送る（移行の種〔seed〕の印つき）。後でサーバが rev>0 になっていたら
- *   （移行が失敗している間にほかのクライアントが先に移した）、利用者が書き直していない種は捨てる——rev 0 のときだけ移す（decisions D3）。
+ * - 初回の移行: サーバの `rev` が 0 なら、localStorage の共有の項目を `pending` に入れてから送る（移行の種〔seed〕の印つき）。
+ * - サーバが rev>0 でも、**このブラウザがまだ移していなければ**（`migrated()` が偽。localStorage の印 `soda.prefsMigrated.v1`）、サーバに**まだ無い項目だけ**を
+ *   種として送る（サーバにある項目はサーバの値が勝つ）。先に端末版やほかのブラウザがサーバへ書いて rev>0 になっていても、このブラウザの localStorage の
+ *   キー・テーマ等を黙って捨てない（統合の review の差し戻し）。種が残っていない状態でサーバの値を受け取れたら移し終えた印を付け、以後は移さない。
+ *   移し終えた後に rev>0 のサーバから受け取った種（移す途中で失敗したもの）は、サーバに無い項目だけ残す。
  * - 大きすぎる（`invalid_params`）: 2 項目以上の 1 回分なら 1 項目ずつに分けて送り直し、1 項目でも断られたらその項目だけ `localOnly` にして知らせる（ほかの項目の同期は続く）。
  *   その項目を次に書き直したら、もう一度送ってみる。
  * - 端末ごとの項目（`sidebarWidth`・`sidebarCollapsed`）は送らない・置き換えない（`sharedOf`）。
@@ -32,6 +35,10 @@ export interface PrefsSyncDeps {
   replaceShared(shared: Record<string, unknown>): Record<string, unknown>;
   /** 各ストアへ当てる（`applyPrefsToStores`）。 */
   applyToStores(raw: Record<string, unknown>): void;
+  /** このブラウザの localStorage の共有の項目をサーバへ移し終えたか（`isPrefsMigrated`）。 */
+  migrated(): boolean;
+  /** 移し終えた印を付ける（`markPrefsMigrated`）。 */
+  markMigrated(): void;
   toast(message: string): void;
 }
 
@@ -70,25 +77,36 @@ export class PrefsSync {
       .getPrefs()
       .then((r) => {
         if (gen !== this.generation) return;
-        if (r.rev === 0) {
-          // 初回の移行：まだ送っていない手元の値（利用者の変更）を優先し、それ以外の共有の項目を種として入れる。
+        // サーバにまだ無い項目（rev 0 なら全部）。サーバにある項目はサーバの値が勝つ。
+        const missing = (k: string): boolean => r.rev === 0 || !Object.hasOwn(r.prefs, k);
+        if (r.rev === 0 || !this.deps.migrated()) {
+          // 移行：まだ送っていない手元の値（利用者の変更）を優先し、それ以外の共有の項目のうちサーバに無いものを種として入れる。
           for (const [k, value] of Object.entries(this.deps.sharedOf(this.deps.readLocal()))) {
-            if (!this.pending.has(k) && !this.localOnly.has(k))
+            if (missing(k) && !this.pending.has(k) && !this.localOnly.has(k))
               this.pending.set(k, { value, seed: true });
           }
-        } else {
-          for (const [k, p] of [...this.pending]) if (p.seed) this.pending.delete(k);
         }
+        // 前の接続で送れなかった種は、サーバにまだ無い項目だけ残す（その間にほかのクライアントが書いた項目は、サーバの値が勝つ）。
+        for (const [k, p] of [...this.pending]) if (p.seed && !missing(k)) this.pending.delete(k);
         this.synced = true;
         this.accept(r.prefs, r.rev);
         const b = this.buffered;
         this.buffered = undefined;
         if (b !== undefined && b.rev > this.rev) this.accept(b.prefs, b.rev);
         this.flush();
+        this.markMigratedIfDone();
       })
       .catch(() => {
         // 受け取れなかった（切れた・古いサーバで方式が無い）。手元の値のまま動き、次の接続でやり直す。
       });
+  }
+
+  /** サーバの値を受け取っていて、送っていない・送っている種が無ければ、移し終えた印を付ける（1 回だけ）。 */
+  private markMigratedIfDone(): void {
+    if (!this.synced || this.deps.migrated()) return;
+    const seeds = [...this.pending.values(), ...(this.inflight?.values() ?? [])];
+    if (seeds.some((p) => p.seed)) return;
+    this.deps.markMigrated();
   }
 
   /** 画面の接続が切れた。以後の変更は溜める。 */
@@ -154,6 +172,7 @@ export class PrefsSync {
         // 変更の知らせ（`prefs.changed`）は返事より先に届くので、ふつうは当て済み。届かなかったときだけ当てる。
         if (this.synced && gen === this.generation && r.rev > this.rev) this.accept(r.prefs, r.rev);
         this.flush();
+        this.markMigratedIfDone();
       })
       .catch((err: unknown) => {
         this.inflight = null;

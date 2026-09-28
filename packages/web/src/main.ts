@@ -37,7 +37,7 @@ import { sweepMarkSeen, useSeenStore } from "./store/seen.js";
 import { useSessionStore } from "./store/session.js";
 import { useOnboardingStore } from "./store/onboarding.js";
 import { useSettingsStore } from "./store/settings.js";
-import { onPrefsWritten, readPrefs, replaceSharedPrefs, sharedPrefsOf, useViewStore } from "./store/view.js";
+import { isPrefsMigrated, markPrefsMigrated, onPrefsWritten, readPrefs, replaceSharedPrefs, sharedPrefsOf, useViewStore } from "./store/view.js";
 import { applyPrefsToStores } from "./store/prefsApply.js";
 import { useAgentIntegrationsStore } from "./store/agentIntegrations.js";
 import { isMacPlatform, MouseBridge } from "./term/MouseBridge.js";
@@ -260,6 +260,8 @@ const prefsSync = new PrefsSync({
   replaceShared: replaceSharedPrefs,
   applyToStores: (raw) => applyPrefsToStores(pinia, raw),
   toast: (message) => view.toast(message),
+  migrated: isPrefsMigrated,
+  markMigrated: markPrefsMigrated,
 });
 prefsSyncBox.current = prefsSync;
 onPrefsWritten((patch) => prefsSync.onWritten(patch));

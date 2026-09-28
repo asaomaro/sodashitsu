@@ -1,7 +1,8 @@
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isFreshBrowser, useOnboardingStore, type ReadableStorage } from "./onboarding.js";
-import { readPrefs } from "./view.js";
+import { applyPrefsToStores } from "./prefsApply.js";
+import { readPrefs, useViewStore } from "./view.js";
 
 function snapshotStorage(): Record<string, string | null> {
   const out: Record<string, string | null> = {};
@@ -110,5 +111,50 @@ describe("useOnboardingStore", () => {
     expect(store.startupOpened).toBe(false);
     store.markStartupOpened();
     expect(store.startupOpened).toBe(true);
+  });
+});
+
+describe("共有の設定の onboarding（統合の review の差し戻し）", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.spyOn(navigator, "webdriver", "get").mockReturnValue(false);
+  });
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it("端末版・ほかのブラウザで済ませた（onboarding: false）なら、初めてのブラウザでも起動時の案内を出さない", () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const store = useOnboardingStore();
+    expect(store.pendingAtStartup).toBe(true);
+    applyPrefsToStores(pinia, { onboarding: false });
+    expect(store.pendingAtStartup).toBe(false);
+  });
+
+  it("サーバの値が届く前に開いた起動時の案内は、onboarding: false が届いたら閉じる", () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const store = useOnboardingStore();
+    const view = useViewStore();
+    store.markStartupOpened();
+    view.openDialogWithContext({ kind: "onboarding" });
+    applyPrefsToStores(pinia, { theme: "nord" });
+    expect(view.dialogContext).toEqual({ kind: "onboarding" }); // 案内済みでなければ閉じない
+    applyPrefsToStores(pinia, { onboarding: false });
+    expect(view.dialogContext).toBeNull();
+  });
+
+  it("設定画面から開き直した案内（起動時の案内を終えた後）は閉じない", () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const store = useOnboardingStore();
+    const view = useViewStore();
+    store.markStartupOpened();
+    store.markDone();
+    view.openDialogWithContext({ kind: "onboarding" });
+    applyPrefsToStores(pinia, { onboarding: false });
+    expect(view.dialogContext).toEqual({ kind: "onboarding" });
   });
 });

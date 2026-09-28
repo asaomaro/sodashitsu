@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { SEEN_STORAGE_KEY } from "./seen.js";
-import { PREFIX_HELP_HINT_KEY, PREFS_KEY, writePrefs } from "./view.js";
+import { PREFIX_HELP_HINT_KEY, PREFS_KEY, useViewStore, writePrefs } from "./view.js";
 
 /**
  * 初回の案内（20260926-settings-onboarding。herdr の `onboarding`）を出すかの判定と、案内済みの記録。
@@ -58,11 +58,27 @@ export const useOnboardingStore = defineStore("onboarding", () => {
     startupOpened.value = true;
   }
 
+  /** 起動時の案内を確定・スキップで終えたか（`suppress` が、設定画面から開き直した案内まで閉じないように）。 */
+  const startupHandled = ref(false);
+
   /** 案内済みにする。確定・スキップのどちらでも呼ぶ。 */
   function markDone(): void {
     pendingAtStartup.value = false;
+    startupHandled.value = true;
     writePrefs({ onboarding: false });
   }
 
-  return { pendingAtStartup, startupOpened, markStartupOpened, markDone };
+  /**
+   * 共有の設定が案内済み（`onboarding: false`。端末版・ほかのブラウザで済ませた）だった（`prefsApply.ts`）。起動時の案内を出さず、
+   * サーバの値が届く前に開いてしまっていれば閉じる（統合の review の差し戻し。設定画面から開き直した案内は閉じない）。
+   */
+  function suppress(): void {
+    pendingAtStartup.value = false;
+    if (!startupOpened.value || startupHandled.value) return;
+    startupHandled.value = true;
+    const view = useViewStore();
+    if (view.dialogContext?.kind === "onboarding") view.closeDialog();
+  }
+
+  return { pendingAtStartup, startupOpened, markStartupOpened, markDone, suppress };
 });
