@@ -69,6 +69,12 @@ export class KittyImages {
     return out + "\x1b8";
   }
 
+  /** 外側の端末が画面を消した（2J）：次は全部送り直して置き直す。 */
+  forget(): void {
+    this.ids.clear();
+    this.shown = "";
+  }
+
   /** 全部消す（終わるとき）。何も出していなければ空。 */
   clear(): string {
     if (!this.used) return "";

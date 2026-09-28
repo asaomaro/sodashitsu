@@ -19,11 +19,14 @@ export interface RunResult {
   stdout: Buffer;
 }
 
-/** 道具を動かす（`input` は標準入力へ書く。`timeoutMs` で打ち切る）。起動できなければ reject。 */
+/**
+ * 道具を動かす（`input` は標準入力へ書く。`timeoutMs` で打ち切る）。起動できなければ reject。`capture: false` は標準出力を読まない
+ * （写す道具。xclip・wl-copy は裏で残ってクリップボードを持ち続けるので、出力をつないだままにすると終わりを待ち続け、端末版も終われない）。
+ */
 export type Runner = (
   cmd: string,
   args: readonly string[],
-  opts?: { input?: string | Buffer; timeoutMs?: number },
+  opts?: { input?: string | Buffer; timeoutMs?: number; capture?: boolean },
 ) => Promise<RunResult>;
 
 export interface ClipboardEnv {
@@ -35,8 +38,9 @@ export interface ClipboardEnv {
 /** 道具を 1 つ動かす（本物）。 */
 export const nodeRunner: Runner = (cmd, args, opts = {}) =>
   new Promise((resolve, reject) => {
+    const capture = opts.capture !== false;
     const child = spawn(cmd, args as string[], {
-      stdio: ["pipe", "pipe", "ignore"],
+      stdio: ["pipe", capture ? "pipe" : "ignore", "ignore"],
       windowsHide: true,
     });
     const chunks: Buffer[] = [];
@@ -46,13 +50,15 @@ export const nodeRunner: Runner = (cmd, args, opts = {}) =>
       clearTimeout(timer);
       reject(err);
     });
-    child.stdout.on("data", (b: Buffer) => chunks.push(b));
-    child.on("close", (code) => {
+    child.stdout?.on("data", (b: Buffer) => chunks.push(b));
+    // 読まない道具は親の終わり（exit）で片付ける（裏に残る子の出力の閉じを待たない）。子はイベントループを引き留めない。
+    child.on(capture ? "close" : "exit", (code) => {
       clearTimeout(timer);
       resolve({ code, stdout: Buffer.concat(chunks) });
     });
-    child.stdin.on("error", () => undefined);
-    child.stdin.end(opts.input ?? "");
+    if (!capture) child.unref();
+    child.stdin?.on("error", () => undefined);
+    child.stdin?.end(opts.input ?? "");
   });
 
 /** SSH 越し（手元のクリップボードは外側の端末の向こうにある）。 */
@@ -82,7 +88,7 @@ export async function writeClipboardTool(ce: ClipboardEnv, text: string): Promis
   const tool = writeTool(ce);
   if (!tool) return false;
   try {
-    const r = await (ce.run ?? nodeRunner)(tool.cmd, tool.args, { input: text });
+    const r = await (ce.run ?? nodeRunner)(tool.cmd, tool.args, { input: text, capture: false });
     return r.code === 0;
   } catch {
     return false;
@@ -119,6 +125,11 @@ export interface ClipboardImage {
   bytes: Buffer;
 }
 
+/** 画像を読む待ちの上限（PowerShell は起動に数秒かかる。web・herdr と同じく読めなければそのキーを端末へ送る）。 */
+export function imageReadTimeoutMs(ce: Pick<ClipboardEnv, "platform" | "env">): number {
+  return ce.platform === "win32" || isWsl(ce as ClipboardEnv) ? 8000 : 2000;
+}
+
 /** 形式の一覧から貼れる画像の形式（PNG を先に）。 */
 function pickImageType(types: string[]): ImageMimeType | null {
   for (const m of IMAGE_MIME_TYPES) if (types.includes(m)) return m;
@@ -134,7 +145,7 @@ export async function readClipboardImage(ce: ClipboardEnv): Promise<ClipboardIma
   const run = ce.run ?? nodeRunner;
   const out = async (cmd: string, args: string[]): Promise<Buffer | null> => {
     try {
-      const r = await run(cmd, args, { timeoutMs: 5000 });
+      const r = await run(cmd, args, { timeoutMs: imageReadTimeoutMs(ce) + 1000 });
       return r.code === 0 && r.stdout.length > 0 ? r.stdout : null;
     } catch {
       return null;

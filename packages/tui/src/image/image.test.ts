@@ -1,7 +1,9 @@
 import { decodeFrame } from "@sodashitsu/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  imageReadTimeoutMs,
   isRemoteSession,
+  nodeRunner,
   readClipboardImage,
   readClipboardText,
   writeClipboardTool,
@@ -326,5 +328,143 @@ describe("端末版の画像とクリップボード（組み立て）", () => {
       h.app as unknown as { dispatcher: { pasteIntoPane(id: string): void } }
     ).dispatcher.pasteIntoPane("p1");
     await vi.waitFor(() => expect(inputs(h)).toEqual(["\x16", "clip"]));
+  });
+});
+
+describe("画像とクリップボードの点検の指摘（05 T5）", () => {
+  const closers: (() => Promise<void>)[] = [];
+  afterEach(async () => {
+    for (const c of closers.splice(0)) await c();
+  });
+  const img = (b64 = "iVBORw==", cols = 8, rows = 2) =>
+    `\x1b]1337;File=inline=1;size=4;width=${cols};height=${rows};preserveAspectRatio=0:${b64}\x07`;
+
+  it("OSC の途中で xterm が捨てる終わり（ESC と別の文字・CAN・SUB）では IND を足さない。続く画像は数え直す", () => {
+    const enc = (s: string) => new TextEncoder().encode(s);
+    const dec = (b: Uint8Array) => new TextDecoder().decode(b);
+    for (const cut of ["\x1b[0m", "\x18", "\x1a"]) {
+      const f = new InlineImageFilter();
+      const s = `\x1b]1337;File=inline=1;width=2;height=3:AAAA${cut}\x07x`;
+      expect(dec(f.feed(enc(s)))).toBe(s);
+    }
+    const f = new InlineImageFilter();
+    const s = `\x1b]1337;File=inline=1;width=2;height=3:AA\x1b${img("QQ==", 2, 2)}`;
+    expect(dec(f.feed(enc(s)))).toBe(s + "\x1bD");
+  });
+
+  it("画像の上に文字を書く・ED・EL で消えたら画像も消す（addon-image と同じ）。鍵は中身の指紋", async () => {
+    const mk = async (after: string) => {
+      const t = new PaneTerminal("p", 20, 10, 100);
+      t.output(new TextEncoder().encode(`\r\n${img("iVBORw==", 4, 2)}${after}`));
+      await t.flush();
+      return t;
+    };
+    expect((await mk("")).liveImages()).toHaveLength(1);
+    expect((await mk("\x1b[2;1Hxxxx")).liveImages()).toEqual([]); // 上書き
+    expect((await mk("\x1b[2J")).liveImages()).toEqual([]);
+    expect((await mk("\x1b[2;1H\x1b[K")).liveImages()).toEqual([]);
+    expect((await mk("\x1b[1;1H\x1b[J")).liveImages()).toEqual([]); // ED 0（カーソルから下）
+    expect((await mk("\x1b[5;1H\x1b[1J")).liveImages()).toEqual([]); // ED 1（頭からカーソルまで）
+    expect((await mk("\x1b[9;1H\x1b[K")).liveImages()).toHaveLength(1); // 別の行
+    const a = (await mk("")).liveImages()[0]!;
+    const b = (await mk("")).liveImages()[0]!;
+    expect(a.hash).toBe(b.hash);
+    const t = new PaneTerminal("p", 20, 10, 100);
+    t.output(new TextEncoder().encode(img("QUJD", 4, 2)));
+    await t.flush();
+    expect(t.liveImages()[0]!.hash).not.toBe(a.hash);
+  });
+
+  it("写す道具は出力をつながずに動かす（裏に残る xclip で終われなくならない）。本物でも裏の子を待たない", async () => {
+    const r = fakeRunner({ xclip: {} });
+    const seen: unknown[] = [];
+    const run: Runner = (cmd, args, opts) => {
+      seen.push(opts?.capture);
+      return r.run(cmd, args, opts);
+    };
+    await writeClipboardTool({ platform: "linux", env: { DISPLAY: ":0" }, run }, "x");
+    expect(seen).toEqual([false]);
+    const started = Date.now();
+    const res = await nodeRunner("sh", ["-c", "sleep 3 >/dev/null 2>&1 & exit 0"], {
+      capture: false,
+    });
+    expect(res.code).toBe(0);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it("Windows・WSL は画像を読む待ちを長く（PowerShell の起動）。遅いと「読んでいます」を出す", async () => {
+    expect(imageReadTimeoutMs({ platform: "win32", env: {} })).toBe(8000);
+    expect(imageReadTimeoutMs({ platform: "linux", env: { WSL_DISTRO_NAME: "U" } })).toBe(8000);
+    expect(imageReadTimeoutMs({ platform: "linux", env: {} })).toBe(2000);
+    const shown: string[] = [];
+    let dismissed = 0;
+    const p = new ImagePaster({
+      conn: { request: (() => Promise.resolve({})) as never },
+      input: {
+        holdInput: () => ({
+          release: () => undefined,
+          cancel: () => undefined,
+          discard: () => undefined,
+        }),
+      },
+      readImage: () => new Promise((r) => setTimeout(() => r(null), 600)),
+      readText: () => Promise.resolve(null),
+      bracketed: () => false,
+      paneExists: () => true,
+      pasteText: () => undefined,
+      toast: () => undefined,
+      status: (m) => {
+        shown.push(m);
+        return () => dismissed++;
+      },
+      readTimeoutMs: 5000,
+    });
+    p.fromKey("p1", "\x16");
+    await vi.waitFor(() => expect(dismissed).toBe(1), { timeout: 2000 });
+    expect(shown).toEqual(["クリップボードの画像を読んでいます…"]);
+  });
+
+  it("出し直しは同期の更新の中へ入れ、全体の描き直しの後は置き直す。狭い幅の navigate の重ねたサイドバーの間は出さない", async () => {
+    const h = await startedApp({ env: { TERM: "xterm-kitty" } });
+    closers.push(h.close);
+    await vi.waitFor(() => expect(h.ws.requests("client.view")).toHaveLength(1));
+    const t = h.app.panes.get("p1")!;
+    t.output(new TextEncoder().encode(img()));
+    await t.flush();
+    let before = h.io.output().length;
+    h.app.renderNow();
+    let out = h.io.output().slice(before);
+    const place = out.indexOf("a=p,");
+    expect(place).toBeGreaterThan(0);
+    expect(out.lastIndexOf("\x1b[?2026l")).toBeGreaterThan(place);
+    // 大きさが変わる（全体の描き直し）→ 置き直す。
+    before = h.io.output().length;
+    h.io.resizeTo(100, 30);
+    h.app.renderNow();
+    out = h.io.output().slice(before);
+    expect(out).toContain("\x1b[2J");
+    expect(out).toContain("a=p,");
+    // pane の headless を作り直して、同じ番号の別の画像が来ても、古い画像を置かない（鍵は中身の指紋）。
+    h.app.panes.paneClosed("p1");
+    (h.app as unknown as { commitView(): void }).commitView(); // 作り直す
+    const t2 = h.app.panes.get("p1")!;
+    expect(t2).not.toBe(t);
+    t2.output(new TextEncoder().encode(img("QUJDRA==")));
+    await t2.flush();
+    before = h.io.output().length;
+    h.app.renderNow();
+    expect(h.io.output().slice(before)).toContain(";QUJDRA==\x1b\\");
+    // 出し直す画像の鍵は中身の指紋（pane と番号ではない）。
+    const frameImages = (h.app as unknown as { frameImages: { imageKey: string }[] }).frameImages;
+    expect(frameImages.map((f) => f.imageKey)).toEqual([t2.liveImages()[0]!.hash]);
+    // 狭い幅で navigate：重ねたサイドバーの間は外す。
+    h.io.resizeTo(50, 20);
+    h.io.type("\x02w");
+    await vi.waitFor(() => expect(h.app.keys.mode).toBe("navigate"));
+    before = h.io.output().length;
+    h.app.renderNow();
+    out = h.io.output().slice(before);
+    expect(out).not.toContain("a=p,");
+    expect(await h.screen()).not.toContain("[画像]");
   });
 });

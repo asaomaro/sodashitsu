@@ -13,6 +13,8 @@ import type { ClipboardImage } from "../clipboard.js";
 export const IMAGE_HOLD_TIMEOUT_MS = 20_000;
 /** キー（Ctrl+V）で画像を読む待ちの上限（読めなければそのキーを端末へ）。 */
 export const IMAGE_KEY_READ_TIMEOUT_MS = 2_000;
+/** 読むのに時間がかかっていると知らせるまでの時間。 */
+const SLOW_READ_MS = 400;
 
 export interface ImagePasterDeps {
   conn: RequestPort;
@@ -27,6 +29,8 @@ export interface ImagePasterDeps {
   /** 文字を pane へ貼る（ブラケットペーストに合わせて包む）。 */
   pasteText(paneId: string, text: string): void;
   toast(message: string): void;
+  /** 読むのに時間がかかっているときの知らせ（出して、消す関数を返す）。 */
+  status?(message: string): () => void;
   holdTimeoutMs?: number;
   readTimeoutMs?: number;
 }
@@ -89,6 +93,12 @@ export class ImagePaster {
     const job = this.start(paneId);
     this.enqueue(job, async () => {
       let image: ClipboardImage | null = null;
+      // 0.4 秒を過ぎても読めていなければ知らせる（Windows・WSL の PowerShell は数秒かかる。黙って待たせない）。
+      let dismiss: (() => void) | null = null;
+      const slow = setTimeout(() => {
+        dismiss = this.deps.status?.("クリップボードの画像を読んでいます…") ?? null;
+      }, SLOW_READ_MS);
+      slow.unref?.();
       try {
         image = await withTimeout(
           this.deps.readImage(),
@@ -96,6 +106,9 @@ export class ImagePaster {
         );
       } catch {
         image = null; // 読めなくても、そのキーの列（Vim の Ctrl+V）は失わない
+      } finally {
+        clearTimeout(slow);
+        (dismiss as (() => void) | null)?.();
       }
       if (this.stale(job)) return job.hold.discard();
       if (!image) return job.hold.cancel(fallback ?? undefined);

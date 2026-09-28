@@ -67,17 +67,26 @@ export class InlineImageFilter {
         continue;
       }
       this.length++;
-      if (this.rows === 0 && this.header !== null) {
+      if (this.rows === 0) {
         if (b === 0x3a /* : */) {
           const m = /(?:^|;)height=(\d+)/.exec(this.header);
           this.rows = m ? Number(m[1]) : -1;
         } else if (this.header.length < 512) this.header += String.fromCharCode(b);
       }
-      const end = b === BEL || (this.sawEsc && b === 0x5c); /* ST */
-      this.sawEsc = b === ESC;
-      if (end || this.length > MAX_OSC) {
+      // 終わり：BEL・ST（ESC \）は画像として受けた（IND を足す）。ESC とほかの文字・CAN・SUB は xterm が OSC を捨てる（足さない）。
+      let end: "image" | "abort" | null = null;
+      if (this.sawEsc) {
+        this.sawEsc = false;
+        end = b === 0x5c ? "image" : "abort";
+        // その ESC は次の列の頭（ESC ] 1337;File= … の画像が続けて来ることもあるので、見出しの一致を ESC から数え直す）。
+        if (end === "abort") this.matched = b === HEAD_BYTES[1] ? 2 : b === HEAD_BYTES[0] ? 1 : 0;
+      } else if (b === BEL) end = "image";
+      else if (b === ESC) this.sawEsc = true;
+      else if (b === 0x18 || b === 0x1a) end = "abort";
+      if (end === null && this.length > MAX_OSC) end = "abort";
+      if (end !== null) {
         this.inside = false;
-        if (end && this.rows > 1) {
+        if (end === "image" && this.rows > 1) {
           for (let k = 1; k < Math.min(this.rows, 1000); k++) out.push(ESC, 0x44 /* D */);
           changed = true;
         }

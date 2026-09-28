@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // `@xterm/headless`・`@xterm/addon-unicode11` は CJS のバンドルで、Node の ESM ローダが named export を静的に解析できない
 // （server の `terminal/Mirror.ts` の冒頭と同じ事情）。default（名前空間オブジェクト）を受けて実行時に取り出す。
 import xtermHeadless from "@xterm/headless";
@@ -29,6 +30,8 @@ export interface InlinePlacement {
   cols: number;
   rows: number;
   base64: string;
+  /** 中身の指紋（外側の端末へ出し直すときの鍵）。 */
+  hash: string;
 }
 /** 覚えておく画像の数（base64 を持つので少なく）。 */
 const MAX_IMAGES = 32;
@@ -115,6 +118,14 @@ export class PaneTerminal {
     );
     // 画像（サーバが作り直した OSC 1337 File=）。置いた位置と大きさを覚える（描画が [画像] の印か、対応する外側の端末へ出し直す。05 の T5）。
     this.disposers.push(parser.registerOscHandler(1337, (data) => this.onInlineImage(data)));
+    // 画像の行を消したら画像も消す（@xterm/addon-image と同じ）。ED（`CSI J`）で消えた行のマーカーは xterm 自身が捨てるので、
+    // 行の中を消す EL（`CSI K`）だけを見る。xterm 本体の処理は妨げない。
+    this.disposers.push(
+      parser.registerCsiHandler({ final: "K" }, () => {
+        this.eraseImages();
+        return false;
+      }),
+    );
     this.disposers.push(this.term.onWriteParsed(() => this.markDirty()));
     this.disposers.push(this.term.onScroll(() => this.markDirty()));
   }
@@ -182,25 +193,59 @@ export class PaneTerminal {
       cols: img.cols,
       rows: img.rows,
       base64: img.base64,
+      hash: createHash("sha1").update(img.base64).digest("hex").slice(0, 16),
     });
     while (this.images.length > MAX_IMAGES) this.images.shift()!.marker.dispose();
     this.markDirty();
     return true;
   }
 
-  /** 今のバッファで、まだ行が残っている画像（絶対行つき）。 */
+  /** 今のバッファで、まだ行が残っていて、上に文字を書かれていない画像（絶対行つき）。 */
   liveImages(): (InlinePlacement & { row: number })[] {
     const type = this.term.buffer.active.type;
     const out: (InlinePlacement & { row: number })[] = [];
     for (let i = this.images.length - 1; i >= 0; i--) {
       const im = this.images[i]!;
-      if (im.marker.isDisposed) {
+      if (im.marker.isDisposed || (im.buffer === type && this.overwritten(im))) {
+        im.marker.dispose();
         this.images.splice(i, 1);
         continue;
       }
       if (im.buffer === type) out.unshift({ ...im, row: im.marker.line });
     }
     return out;
+  }
+
+  /** 画像の場所に文字が書かれた（@xterm/addon-image は上書きされたところの画像を消す）。 */
+  private overwritten(im: InlinePlacement): boolean {
+    const buf = this.term.buffer.active;
+    const cell = buf.getNullCell();
+    const rows = Math.min(im.rows, 200);
+    const cols = Math.min(im.cols, this.term.cols - im.col, 300);
+    for (let r = 0; r < rows; r++) {
+      const line = buf.getLine(im.marker.line + r);
+      if (!line) continue;
+      for (let c = 0; c < cols; c++) {
+        const ch = line.getCell(im.col + c, cell)?.getChars() ?? "";
+        if (ch !== "" && ch !== " ") return true;
+      }
+    }
+    return false;
+  }
+
+  /** EL（`CSI K`）でカーソルの行にかかる画像を捨てる。 */
+  private eraseImages(): void {
+    if (this.images.length === 0) return;
+    const buf = this.term.buffer.active;
+    const cur = buf.baseY + buf.cursorY;
+    for (let i = this.images.length - 1; i >= 0; i--) {
+      const im = this.images[i]!;
+      if (im.buffer !== buf.type || im.marker.isDisposed) continue;
+      if (im.marker.line <= cur && cur <= im.marker.line + im.rows - 1) {
+        im.marker.dispose();
+        this.images.splice(i, 1);
+      }
+    }
   }
 
   /**

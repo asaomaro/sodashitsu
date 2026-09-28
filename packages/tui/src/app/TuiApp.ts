@@ -36,6 +36,7 @@ import {
   readClipboardImage,
   readClipboardText,
   writeClipboardTool,
+  imageReadTimeoutMs,
   type ClipboardEnv,
   type Runner,
 } from "../clipboard.js";
@@ -328,6 +329,11 @@ export class TuiApp {
       paneExists: (paneId) => this.model.panes.has(paneId),
       pasteText: (paneId, text) => this.pasteText(paneId, text),
       toast: (m) => this.ui.toast(m),
+      status: (m) => {
+        const id = this.ui.toast(m, { ms: 30_000 });
+        return () => this.ui.dismissToast(id);
+      },
+      readTimeoutMs: imageReadTimeoutMs(this.clipboardEnv),
     });
     this.notify = new NotificationController({
       model: this.model,
@@ -998,12 +1004,18 @@ export class TuiApp {
     this.switchButton = result.switchButton;
     this.openRequestedNavigateMenu(layout);
     this.syncAnyMotion(layout);
-    this.io.write(result.output);
-    // 外側の端末へ出し直す画像（Kitty graphics。対応する端末だけ。変わったときだけ列が出る）。
+    let output = result.output;
+    // 外側の端末へ出し直す画像（Kitty graphics。対応する端末だけ。変わったときだけ列が出る）。全体を描き直した（2J）ら置き直す。
+    // 同期の更新（?2026）の中に入れる（ちらつかない）。
     if (this.kitty) {
+      if (output.includes("\x1b[2J")) this.kitty.forget();
       const seq = this.kitty.sync(this.frameImages);
-      if (seq) this.io.write(seq);
+      if (seq) {
+        const end = output.lastIndexOf("\x1b[?2026l");
+        output = end < 0 ? output + seq : output.slice(0, end) + seq + output.slice(end);
+      }
     }
+    this.io.write(output);
     // 見えている pane の既読を進める（外側の端末にフォーカスがあるときだけ。web の sweepMarkSeen と同じ規則）。
     const visible = new Set(layout.panes.map((b) => b.paneId));
     this.model.sweepSeen((id) => visible.has(id), this.outerFocused);
@@ -1064,7 +1076,8 @@ export class TuiApp {
    */
   private decorateImages(grid: Grid, layout: LayoutResult): boolean {
     this.frameImages = [];
-    if (this.ui.overlayOpen) return false;
+    // ダイアログ・メニュー・狭い幅の navigate で重ねたサイドバーの間は出さない（下地の上に透けて見える・印が重なる）。
+    if (this.ui.overlayOpen || layout.sidebarOverlay) return false;
     let drew = false;
     const fg = this.theme.ui("--soda-accent-fg");
     const bg = this.theme.ui("--soda-accent");
@@ -1079,7 +1092,8 @@ export class TuiApp {
         if (row + im.rows <= 0 || row >= h || im.col >= w) continue;
         if (this.kitty && row >= 0 && row + im.rows <= h && im.col + im.cols <= w) {
           this.frameImages.push({
-            imageKey: `${box.paneId}:${im.id}`,
+            // 中身で見分ける（pane の headless を作り直して id が重なっても、古い画像を置かない）。
+            imageKey: im.hash,
             base64: im.base64,
             x: box.content.x + im.col,
             y: box.content.y + row,
