@@ -829,7 +829,13 @@ function toggleHistory(): void {
 }
 function closeHistory(): void {
   history.value = null;
-  void nextTick(() => toolbarButton("graph-history")?.focus());
+  // パネルから開いた履歴ならパネルの「履歴」へ戻す（g03 点検）。
+  void nextTick(() =>
+    (
+      (panel.value ? dialogEl.value?.querySelector<HTMLElement>(".link-panel-history") : null) ??
+      toolbarButton("graph-history")
+    )?.focus({ preventScroll: true }),
+  );
 }
 
 // --- ノードから pane へ（AC2・AC-I4）----------------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import { nextTick } from "vue";
 import { ConnectionKey, MachineSwitcherKey, TerminalRegistryKey } from "../../injection.js";
 import { useGraphStore } from "../../store/graph.js";
 import { useSessionStore } from "../../store/session.js";
+import { useSettingsStore } from "../../store/settings.js";
 import { useViewStore } from "../../store/view.js";
 import GraphView from "./GraphView.vue";
 import { agentOf, fakeGraphPort, graphOf, paneOf, triggerLink } from "./graphTestKit.js";
@@ -1199,6 +1200,73 @@ describe("GraphView（承認の代理の見分け・シートの文言。g03 点
     await wrapper.find('[data-link-chip="l1"]').trigger("click");
     await flush();
     expect(wrapper.find(".graph-sheet-resume").text()).toBe("再開（回数を 0 に戻す）");
+    wrapper.unmount();
+  });
+});
+
+describe("GraphView（Esc の段階・割り当て・履歴の戻り先。g03 点検）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+  const key = (k: string, init: KeyboardEventInit = {}) =>
+    new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init });
+
+  it("パネルから開いた履歴を Esc で閉じると、フォーカスはパネルの「履歴」へ戻る（ツールバーへ行かない）", async () => {
+    const { wrapper } = await openWithGraph();
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    await wrapper.find(".link-panel-history").trigger("click");
+    await flush();
+    await wrapper.find(".history-panel").trigger("keydown", { key: "Escape" });
+    await flush();
+    expect(wrapper.find(".history-panel").exists()).toBe(false);
+    expect(document.activeElement?.className).toContain("link-panel-history");
+    wrapper.unmount();
+  });
+
+  it("Esc の段階を通しで: パネル → 履歴 → 選択 → 画面（1 回で 1 段）", async () => {
+    const { wrapper, view, fake } = await openWithGraph();
+    fake.handlers["graph.history"] = () => ({ runs: [] });
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    await wrapper.find(".link-panel-history").trigger("click");
+    await flush();
+    const root = wrapper.find(".graph-view").element;
+    const esc = async (): Promise<void> => {
+      root.dispatchEvent(key("Escape"));
+      await flush();
+    };
+    await esc();
+    expect([wrapper.find(".link-panel").exists(), wrapper.find(".history-panel").exists()]).toEqual(
+      [false, true],
+    );
+    await esc();
+    expect(wrapper.find(".history-panel").exists()).toBe(false);
+    expect(wrapper.find(".graph-chip-selected").exists()).toBe(true);
+    await esc();
+    expect(wrapper.find(".graph-chip-selected").exists()).toBe(false);
+    expect(view.graphOpen).toBe(true);
+    await esc();
+    expect(view.graphOpen).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("open_graph の割り当てを変えれば新しいキーで閉じ（古いキーでは閉じない）、直接のキーの割り当てでも閉じる", async () => {
+    const settings = useSettingsStore(pinia);
+    settings.setKeyBindings("open_graph", ["prefix+g"]);
+    const { wrapper, view } = await openWithGraph();
+    const root = wrapper.find(".graph-view").element;
+    root.dispatchEvent(key("b", { ctrlKey: true }));
+    root.dispatchEvent(key("a"));
+    expect(view.graphOpen).toBe(true);
+    root.dispatchEvent(key("b", { ctrlKey: true }));
+    root.dispatchEvent(key("g"));
+    expect(view.graphOpen).toBe(false);
+    settings.setKeyBindings("open_graph", ["ctrl+alt+g"]);
+    view.openGraph();
+    await flush();
+    root.dispatchEvent(key("g", { ctrlKey: true, altKey: true }));
+    expect(view.graphOpen).toBe(false);
     wrapper.unmount();
   });
 });
