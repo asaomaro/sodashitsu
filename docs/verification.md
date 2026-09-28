@@ -885,7 +885,7 @@ AC11 の LAN 用（8443・`~/.local/state/soda-lan`）の `soda serve` を止め
 
 ## 端末版（20260927-cli-mode）
 
-引数なしの `soda` で開く端末版（`docs/tui.md`）を、3 環境の実物の端末で確かめる手順（20260927-cli-mode の AC16。対象は AC1〜AC14 と AC18）。
+引数なしの `soda` で開く端末版（`docs/tui.md`）を、3 つの OS と SSH 越しの実物の端末で確かめる手順（20260927-cli-mode の AC16。対象は AC1〜AC14 と AC18）。
 機能ごとの扱いは `docs/tui-parity.md`。
 
 ### 自動で確かめられる部分（Linux・WSL2）
@@ -927,7 +927,7 @@ $d = Join-Path $env:TEMP "soda-tui-check"; soda --state-dir $d   # Windows ネ�
 ```
 
 1. **起動（AC1・AC2）**: 裏でサーバが起動し、標準エラーに初回の token が出てから、サイドバー（Spaces）・tab バー・pane の枠が描かれる。
-   新しい状態ディレクトリでは、はじめの案内が出る（Enter で設定画面へ移り、Esc で閉じる。次に開いたときは出ない）。
+   新しい状態ディレクトリでは、はじめの案内が出る（Enter・→・`l` で設定画面の「エージェント連携」の節へ移る。Esc・外側のクリックでは閉じない。次に開いたときは出ない）。
    端末の大きさを変えると追従する。幅 64 桁未満で 1 列表示になる。もう 1 つ端末を開いて `soda --state-dir <同じ場所>` を打つと、起動せずに同じサーバへ繋ぐ。
 2. **pane（AC6）**: `vim`・`htop`（Windows は `edit`・`winget` 等の全画面のもの）が崩れない。`printf '\e[38;2;255;100;0mTRUE\e[0m\n'` が橙色（24 ビット色の端末）。
    全角の文字・絵文字の幅がずれない。IME で日本語を入れると候補窓が pane のカーソルの位置に出る。`vim` の `:set mouse=a` でクリックが vim へ届く。

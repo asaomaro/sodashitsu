@@ -30,7 +30,7 @@ soda --state-dir ~/soda-lan # 状態ディレクトリを指定
   - 端末版の中から: 操作「サーバを止める」（`stop_server`。**既定のキーは無い**——押し間違えると全ての pane が止まるので。
     設定の「キー」で割り当てる）。確認を挟み、止めたら端末版も終わる。
 - `soda help` で使い方を出す。**標準入力か標準出力が端末でないと**（パイプ・リダイレクト・CI）、`soda` は
-  サーバを起動せずに一行の案内と使い方を標準エラーへ出して**終了コード 2** で終わる。スクリプトから使い方を見るなら `soda help`
+  サーバを起動せずに一行の案内を標準エラーへ、使い方を標準出力へ出して**終了コード 2** で終わる。スクリプトから使い方を見るなら `soda help`
   （終了コード 0）を使う。
 
 ### 起動できないとき（終了コード 1 と案内）
@@ -41,6 +41,8 @@ soda --state-dir ~/soda-lan # 状態ディレクトリを指定
 | `the state dir … is in use by soda on another host` | 別のホスト・コンテナの soda が同じ状態ディレクトリを使っている。`--state-dir` か `--session` で分ける |
 | `the running soda serve (pid …) does not support connecting without a token (an older version)` | 古い版の `soda serve` が動いている。止めてから（起動した端末で Ctrl+C・`soda session stop`）打ち直すか、`soda handoff` で新しい版に入れ替える |
 | `soda serve exited before it became ready`・`did not become ready within 15 seconds` | サーバが起動できなかった（ポートの衝突等）。出た案内と状態ディレクトリの `server.log` を見る |
+| `could not start soda serve` | 3 回起動を試みたが、サーバが動き続けなかった。状態ディレクトリの `server.log` を見る |
+| `local login is rate limited` | ローカルログインの失敗が続き、サーバが一時的に受け付けていない（通常のログインと同じ回数の制限）。1 分ほど待ってやり直す |
 | `local login was refused (HTTP 403)` | サーバが同じマシンからの接続と認めなかった（下の「認証」） |
 | `the terminal UI could not be loaded` | 導入が壊れている（ソースから使っているなら `pnpm install` と `pnpm build`）。`soda serve` とブラウザは使える |
 
@@ -69,7 +71,8 @@ soda --state-dir ~/soda-lan # 状態ディレクトリを指定
 ## キー
 
 herdr と同じ prefix 方式。`Ctrl+B` の後に 1 キー。prefix を押すと tab バーの左端に `PREFIX` が出て、`Esc` か 3 秒で解ける。
-`Ctrl+B Ctrl+B` で pane へ `Ctrl+B` そのものを送る。prefix とその直後の 1 キー以外（`Ctrl+C`・`Esc`・矢印・`Alt` 付き等）はすべて焦点の pane へ届く。
+`Ctrl+B Ctrl+B` で pane へ `Ctrl+B` そのものを送る。prefix とその直後の 1 キー、それに直接のキー（prefix なしで割り当てたキー。既定では画像の貼り付けの `ctrl+v` だけ）以外
+（`Ctrl+C`・`Esc`・矢印・`Alt` 付き等）はすべて焦点の pane へ届く。直接のキーに割り当てたキーは端末版が受ける（割り当てを外せば pane へ届く。画像の貼り付けの `ctrl+v` は、クリップボードに画像が無ければそのまま pane へ送る）。
 
 | キー | 操作 | キー | 操作 |
 |---|---|---|---|
@@ -83,12 +86,12 @@ herdr と同じ prefix 方式。`Ctrl+B` の後に 1 キー。prefix を押す�
 | `prefix+shift+h/j/k/l` | pane を入れ替え | `prefix+tab` / `shift+tab` | pane を巡回 |
 | `prefix+x` | pane を閉じる | `prefix+z` | 拡大表示 |
 | `prefix+r` | resize モード（h/j/k/l・矢印、Esc で抜ける） | `prefix+shift+p` | pane の名前を変更 |
-| `prefix+[` | copy モード（v で選択・y でコピー・`/` で検索・q で抜ける） | `prefix+e` | スクロールバックをエディタで開く（サーバの `EDITOR`） |
+| `prefix+[` | copy モード（v で選択・y でコピー・`/` で検索・q で抜ける） | `prefix+e` | スクロールバックをエディタで開く（サーバの上で。Linux・macOS は `EDITOR`〔無ければ `vi`〕、Windows は `VISUAL`、無ければ `EDITOR`） |
 | `prefix+b` | サイドバーの折りたたみ | `prefix+shift+r` | 設定と独自コマンドを読み直す |
 | `ctrl+v` | クリップボードの画像を貼り付け（手元だけ。下の「クリップボード」） | | |
 
 - 割り当ては Web 版と**共有**（設定「キー」でどちらから変えても両方に効く）。プリセット（herdr-ctrl-alt・tmux）・直接のキー（prefix なし）も同じ。
-  既定のキーの無い操作（`switch_workspace_1..9`・`open_worktree`・`remove_worktree`・`stop_server` 等）は設定で割り当てると使える。
+  既定のキーの無い操作（`switch_workspace`〔1〜9 の番号つき〕・`open_worktree`・`remove_worktree`・`stop_server` 等）は設定で割り当てると使える。
 - 名前の入力欄は Enter で確定・Esc で取り消し。Ctrl+A/E/U/K/W・Alt+B/F が効く。
 
 ### 区別できないキー
@@ -127,9 +130,10 @@ herdr と同じ prefix 方式。`Ctrl+B` の後に 1 キー。prefix を押す�
 ## クリップボード
 
 - コピー（選択・copy モードの `y`）は、外側の端末へ OSC 52 を出す（SSH 越し・VS Code・WSL・tmux の中でも効く唯一の手段）。
-  手元で動いていて OS の道具（`wl-copy`・`xclip`・`pbcopy`・`clip.exe`）があれば、それでも写す。tmux の中なら tmux の `set -g set-clipboard on` が要る。
+  手元（SSH 越しでない）の Linux・macOS で OS の道具（`wl-copy`・`xclip`・`pbcopy`）があれば、それでも写す（OSC 52 を受けない端末のため）。
+  Windows・WSL は OSC 52 だけ（Windows Terminal が受ける。`clip.exe` は UTF-8 の文字を化かすので使わない）。tmux の中なら tmux の `set -g set-clipboard on` が要る。
 - 貼り付けは外側の端末の貼り付け（ブラケットペーストで pane へ届く）。pane のメニューの「貼り付け」は手元のクリップボードを読める構成だけ。
-- 画像の貼り付け（`ctrl+v`）は、端末版がクリップボードを読める機械で動いているときだけ（`wl-paste`・`xclip`・`pbpaste`・PowerShell）。
+- 画像の貼り付け（`ctrl+v`）は、端末版がクリップボードを読める機械で動いているときだけ（Linux は `wl-paste`・`xclip`、macOS は `osascript`、Windows・WSL は PowerShell）。
   **SSH で入った先で端末版を起動した構成では出来ない**（外側の端末からクリップボードの画像を読む手段が無い）。
 
 ## 通知
@@ -146,7 +150,7 @@ herdr と同じ prefix 方式。`Ctrl+B` の後に 1 キー。prefix を押す�
 
 ## 設定（ブラウザと共有）
 
-`prefix+s`。節は通知・テーマ・表示・端末・キー・エージェント連携・端末版。変更はすぐ効き、**サーバに保存されてブラウザと他の端末版にも届く**。
+`prefix+s`。節は通知・テーマ・表示・端末・エージェント連携・キー・端末版（画面の並び）。変更はすぐ効き、**サーバに保存されてブラウザと他の端末版にも届く**。
 
 - **ブラウザ同士でも共有になった**（以前はブラウザごとの localStorage）。サーバにまだ設定が無いとき（初めてこの版に繋いだとき）だけ、
   最初に繋いだブラウザの値がサーバへ移る（同時に 2 つが移したら項目ごとに後の方）。2 つのブラウザで違う設定を使っていた人は 1 つに揃う。
@@ -166,6 +170,7 @@ herdr と同じ prefix 方式。`Ctrl+B` の後に 1 キー。prefix を押す�
   | 1 列表示にする幅 | 64 | 端末の幅がこれより狭いと 1 列表示 |
   | tab が 1 つなら tab バーを隠す | 切 | サイドバーを畳んでいる間と 1 列表示では隠さない。隠している間のモードの印と接続の状態は pane の場所の右上に出す |
   | 外側の端末のタイトル | `{hostname}: {workspace}` | OSC 2 で外側の端末のタイトルを書く。`{hostname}`・`{workspace}`・`{tab}`・`{pane}`・`{terminal_title}`（`{{`・`}}` で括弧そのもの）。空にすると触らない。読めない書式は設定画面で受け付けない（`prefs.json` に読めない書式があればタイトルに触らない）。終えるとき元のタイトルへ戻す（戻せる端末だけ） |
+  | 外側の端末に戻ったら全部描き直す | 入 | 外側の端末にフォーカスが戻ったとき全体を描き直し、外側の端末の表示のまれな崩れを直す（herdr の `redraw_on_focus_gained`）。切にすると戻ったときのちらつきが減る |
   | pane のベルを外側の端末へ | 入 | 見えている pane が出した BEL を、外側の端末にフォーカスがあるときだけ送る（100ms に 1 回まで） |
   | workspace を閉じる前に確かめる | 入 | 切でも、動作中の pane があれば確かめる（herdr と同じ） |
   | 新しい tab の名前を先に聞く | 入 | 新しい tab を作るとき名前の入力欄を出す |
