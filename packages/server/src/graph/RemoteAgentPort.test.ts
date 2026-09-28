@@ -166,6 +166,7 @@ describe("RemoteAgentPort", () => {
     ch().snapshotFrame("p1", "l1\r\nl2\r\nl3\r\n");
     await expect(p).resolves.toBe("l2\nl3");
     expect(ch().lastRequest("pane.unsubscribe")!.params).toEqual({ paneId: "p1" });
+    ch().reply(ch().lastRequest("pane.unsubscribe")!.id, {});
 
     const big = port.tail("p1", 10_000);
     await tick();
@@ -189,6 +190,7 @@ describe("RemoteAgentPort", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(await first).toMatchObject({ code: "tail_timeout" });
     expect(ch().lastRequest("pane.unsubscribe")).toBeDefined();
+    ch().reply(ch().lastRequest("pane.unsubscribe")!.id, {}); // 外し終えてから次の読み取り
     await tick();
     expect(
       ch()
@@ -210,5 +212,35 @@ describe("RemoteAgentPort", () => {
     await tick();
     ch().replyError(ch().lastRequest("pane.subscribe")!.id, "not_found", "pane not found: p9");
     await expect(p).rejects.toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("RemoteAgentPort（g04 点検）", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("時間切れの読み取りの購読を外し終えるまで次の読み取りを始めず、遅れて届いた古い SNAPSHOT を次の読み取りに使わない", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const machines = new FakeMachines([{ id: M, label: "box" }]);
+    const links = new RemoteLinks({ machines });
+    links.ensure([M]);
+    await tick();
+    const ch = machines.last();
+    ch.hello(remoteSnapshot([pane("p1", { agent: agent("i1", 3) })]));
+    await tick();
+    const port = links.port(M)!;
+    const first = port.tail("p1", 3).catch((e: unknown) => e);
+    await tick();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(await first).toMatchObject({ code: "tail_timeout" });
+    const second = port.tail("p1", 3);
+    await tick();
+    expect(ch.requests().filter((r) => r.method === "pane.subscribe")).toHaveLength(1);
+    ch.snapshotFrame("p1", "OLD"); // 前の購読の遅れた画面
+    ch.reply(ch.lastRequest("pane.unsubscribe")!.id, {});
+    await tick();
+    expect(ch.requests().filter((r) => r.method === "pane.subscribe")).toHaveLength(2);
+    ch.snapshotFrame("p1", "NEW");
+    await expect(second).resolves.toBe("NEW");
+    links.closeAll();
   });
 });

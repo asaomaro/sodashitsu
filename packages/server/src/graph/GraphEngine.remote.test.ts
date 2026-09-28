@@ -389,4 +389,19 @@ describe("GraphEngine — 別のマシンの監督役（04）", () => {
     expect(t.remote.prompts).toHaveLength(2);
     expect(t.reasons()).toEqual(["l1:sent"]);
   });
+
+  it("知らせの途中で接続が切れた（connection_closed。届いたか分からない）なら、失敗を残さず繋がった後に知らせ直す（g04 点検）", async () => {
+    const t = setup([supervise("l1", L1, R1)]);
+    t.remote.failWith = new AgentPortError("connection_closed", "connection closed");
+    t.advance(SUPERVISOR_DEBOUNCE_MS);
+    await flush();
+    expect(t.runs()).toEqual([]);
+    t.remote.failWith = null;
+    t.remote.setUp(false);
+    t.remote.setUp(true);
+    t.advance(ASSUMED_BUSY_MS);
+    await flush();
+    expect(t.remote.prompts).toHaveLength(2);
+    expect(t.reasons()).toEqual(["l1:sent"]);
+  });
 });

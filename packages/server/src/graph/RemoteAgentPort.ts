@@ -94,11 +94,10 @@ export class RemoteAgentPort implements AgentPort {
   tail(paneId: PaneId, lines: number): Promise<string> {
     const n = Math.max(1, Math.min(REMOTE_TAIL_MAX_LINES, Math.floor(lines)));
     const before = this.tails.get(paneId) ?? Promise.resolve();
-    const run = before.then(
-      () => this.readTail(paneId, n),
-      () => this.readTail(paneId, n),
-    );
-    const tracked = run.catch(() => undefined);
+    // 次の読み取りは、前の読み取りの購読を外し終えてから（時間切れの購読へ遅れて届いた SNAPSHOT を次の読み取りに使わない。g04 点検）。
+    const read = before.then(() => this.readTail(paneId, n));
+    const run = read.then((r) => r.result);
+    const tracked = read.then((r) => r.released).catch(() => undefined);
     this.tails.set(paneId, tracked);
     void tracked.then(() => {
       if (this.tails.get(paneId) === tracked) this.tails.delete(paneId);
@@ -115,9 +114,17 @@ export class RemoteAgentPort implements AgentPort {
     }
   }
 
-  private readTail(paneId: PaneId, n: number): Promise<string> {
-    if (!this.link.available()) return Promise.reject(unavailable(this.machine));
-    return new Promise<string>((resolve, reject) => {
+  /** 1 回の読み取り。`released` は購読を外し終えた（応答・切断・時間切れ）とき。 */
+  private readTail(
+    paneId: PaneId,
+    n: number,
+  ): { result: Promise<string>; released: Promise<void> } {
+    if (!this.link.available())
+      return { result: Promise.reject(unavailable(this.machine)), released: Promise.resolve() };
+    const waitMs = this.opts.tailTimeoutMs ?? REMOTE_TAIL_TIMEOUT_MS;
+    let release!: () => void;
+    const released = new Promise<void>((r) => (release = r));
+    const result = new Promise<string>((resolve, reject) => {
       let done = false;
       const subs: Disposable[] = [];
       const finish = (fn: () => void): void => {
@@ -125,9 +132,18 @@ export class RemoteAgentPort implements AgentPort {
         done = true;
         clearTimeout(timer);
         for (const s of subs) s.dispose();
-        // 購読は必ず外す（応答は待たない。切れていれば送らない）。
-        if (this.link.available())
-          this.link.request("pane.unsubscribe", { paneId }).catch(() => undefined);
+        // 購読は必ず外す。外し終えたら（応答・切断で失敗・最長 waitMs）次の読み取りへ。
+        if (this.link.available()) {
+          const t = setTimeout(release, waitMs);
+          t.unref?.();
+          this.link
+            .request("pane.unsubscribe", { paneId })
+            .catch(() => undefined)
+            .finally(() => {
+              clearTimeout(t);
+              release();
+            });
+        } else release();
         fn();
       };
       const timer = setTimeout(
@@ -140,7 +156,7 @@ export class RemoteAgentPort implements AgentPort {
               ),
             ),
           ),
-        this.opts.tailTimeoutMs ?? REMOTE_TAIL_TIMEOUT_MS,
+        waitMs,
       );
       timer.unref?.();
       subs.push(
@@ -154,6 +170,7 @@ export class RemoteAgentPort implements AgentPort {
         .request("pane.subscribe", { paneId, scrollbackLines: n })
         .catch((err: unknown) => finish(() => reject(asPortError(err))));
     });
+    return { result, released };
   }
 
   private onOpened(snapshot: SessionSnapshot): void {

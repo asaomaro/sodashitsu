@@ -207,3 +207,97 @@ describe("RemoteLinks", () => {
     expect(machines.last().closedWith).toBeNull();
   });
 });
+
+describe("RemoteLinks（g04 点検）", () => {
+  const cleanups: (() => void)[] = [];
+  afterEach(() => {
+    for (const fn of cleanups.splice(0)) fn();
+    vi.useRealTimers();
+  });
+  const agentAt = (state: string, seq: number) =>
+    ({
+      kind: "claude",
+      label: "Claude",
+      state,
+      instanceId: "i1",
+      completionSeq: seq,
+      serverSeenSeq: 0,
+      verified: true,
+      since: 0,
+    }) as never;
+  const paneWith = (a: unknown) =>
+    ({
+      id: "p1",
+      tabId: "t1",
+      label: null,
+      agent: a,
+      title: "t",
+      cwd: "/",
+      cols: 80,
+      rows: 24,
+    }) as never;
+
+  it("hello の応答と同じ塊で後ろに来たイベントを落とさず、snapshot の後に順に当てる。応答より前のイベント（snapshot が含む）は当て直さない", async () => {
+    const machines = new FakeMachines([{ id: M, label: "m" }]);
+    const links = new RemoteLinks({ machines });
+    cleanups.push(() => links.closeAll());
+    links.ensure([M]);
+    const port = links.port(M)!;
+    const seen: string[] = [];
+    port.onStatus((e) =>
+      seen.push(`${e.paneId}:${(e.agent as { completionSeq: number } | null)?.completionSeq}`),
+    );
+    await settle();
+    const ch = machines.last();
+    // 応答より前（snapshot に含まれる古い値）
+    ch.event("pane.agent_status_changed", { paneId: "p1", agent: agentAt("working", 0) });
+    // 同じ読み取りの中で: hello の応答 → 完了のイベント
+    ch.hello(remoteSnapshot([paneWith(agentAt("working", 1))]));
+    ch.event("pane.agent_status_changed", { paneId: "p1", agent: agentAt("idle", 2) });
+    await settle();
+    expect(port.available()).toBe(true);
+    expect(port.status("p1")).toMatchObject({ state: "idle", completionSeq: 2 });
+    expect(seen).toEqual(["p1:2"]);
+  });
+
+  it("リモートの CLOSE の code は素通しせず（4401 等は 1011）、繋ぎ直しを止めない", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const machines = new FakeMachines([{ id: M, label: "m" }]);
+    const links = new RemoteLinks({ machines });
+    cleanups.push(() => links.closeAll());
+    links.ensure([M]);
+    await vi.advanceTimersByTimeAsync(0);
+    machines.last().remoteClose(4401);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(machines.channels.length).toBeGreaterThan(1);
+  });
+
+  it("hello を断り続けるリモートへは、繋ぎ直しの間隔が伸びる（チャネルが開いただけでは間隔を戻さない）。同じ online の知らせでは待ちを飛ばさない", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const machines = new FakeMachines([{ id: M, label: "m" }]);
+    const links = new RemoteLinks({ machines });
+    cleanups.push(() => links.closeAll());
+    links.ensure([M]);
+    const opened: number[] = [];
+    let answered = 0;
+    const start = Date.now();
+    for (let t = 0; t < 20_000; t += 100) {
+      await vi.advanceTimersByTimeAsync(100);
+      if (machines.channels.length > answered) {
+        const ch = machines.last();
+        const req = ch.lastRequest("client.hello");
+        if (req === undefined) continue;
+        answered = machines.channels.length;
+        opened.push(Date.now() - start);
+        ch.replyError(req.id, "unsupported_protocol");
+        await vi.advanceTimersByTimeAsync(0); // 閉じて繋ぎ直しを待ち始めてから
+        // 名前の変更など、online のままの知らせ
+        machines.statuses = machines.statuses.map((s) => ({ ...s, label: `m${answered}` }));
+        machines.setOnline(M, true);
+      }
+    }
+    const gaps = opened.slice(1).map((v, i) => v - opened[i]!);
+    expect(gaps.length).toBeGreaterThanOrEqual(3);
+    expect(gaps.slice(0, 3).map((g) => Math.round(g / 1000))).toEqual([1, 2, 4]);
+  });
+});

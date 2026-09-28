@@ -28,6 +28,11 @@ export interface ConnectionOptions {
   sink: TerminalSinkPort;
   fetchImpl?: typeof fetch;
   createWebSocket?: (url: string) => WebSocketLike;
+  /**
+   * 繋ぎ直しの間隔を最初に戻すのを、socket が開いたときでなく hello が通ったときにする（既定 false＝開いたとき）。サーバの中の接続
+   * （20260927-agent-graph の 04。中継のチャネルは必ずすぐ開く）が、hello を断り続けるリモートへ 1 秒おきに繋ぎ直し続けないため。
+   */
+  resetBackoffOnHello?: boolean;
 }
 
 interface PendingRequest {
@@ -68,6 +73,7 @@ export class Connection implements ConnectionPort {
   private readonly sink: TerminalSinkPort;
   private readonly fetchImpl: typeof fetch;
   private readonly createWebSocket: (url: string) => WebSocketLike;
+  private readonly resetBackoffOnHello: boolean;
 
   private ws: WebSocketLike | null = null;
   private nextRequestId = 1;
@@ -94,6 +100,7 @@ export class Connection implements ConnectionPort {
     this.store = opts.store;
     this.sink = opts.sink;
     this.fetchImpl = opts.fetchImpl ?? ((...args) => fetch(...args));
+    this.resetBackoffOnHello = opts.resetBackoffOnHello ?? false;
     this.createWebSocket =
       opts.createWebSocket ??
       ((url) => {
@@ -157,6 +164,7 @@ export class Connection implements ConnectionPort {
    */
   retarget(wsUrl: string): void {
     this.wsUrl = wsUrl;
+    this.stopped = false; // `disconnect` の後でも、行き先を替えたら繋ぐ
     this.targetGen++;
     this.cancelReconnectTimer();
     this.reconnectAttempt = 0;
@@ -188,6 +196,8 @@ export class Connection implements ConnectionPort {
     this.retargetPending = false;
     const ws = this.ws;
     if (ws && (ws.readyState === WS_OPEN || ws.readyState === WS_CONNECTING)) ws.close(1000, "disconnect");
+    // socket が無い（繋ぎ直しの待ち・`/api/session` の確認の途中）なら close は来ないので、ここで知らせる。閉じる途中なら close で知らせる。
+    else if (!ws) this.store.onConnectionState("detached");
   }
 
   request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
@@ -282,11 +292,12 @@ export class Connection implements ConnectionPort {
     };
     ws.onopen = () => {
       opened = true;
-      this.reconnectAttempt = 0;
+      if (!this.resetBackoffOnHello) this.reconnectAttempt = 0;
       this.resetOriginSuspicion(); // 開けた：サーバはこのアドレスを拒否していない（D107）
       this.request("client.hello", { protocol: 1, kind: this.kind })
         .then((result) => {
           if (this.ws !== ws) return; // 応答を受けた後、当てる前に閉じた（`disconnect` 等）。閉じた接続を open にしない
+          if (this.resetBackoffOnHello) this.reconnectAttempt = 0;
           this.store.applySnapshot(result.snapshot, result.clientId);
           // `open`（＝入力を受け付けてよい。D95）は hello が通ってから。socket が開いただけで `open` にすると、
           // hello が失敗して閉じ直すまでの間、入力を受け付けたまま黙って捨てることになる。

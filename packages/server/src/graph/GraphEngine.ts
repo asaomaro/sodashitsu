@@ -580,12 +580,14 @@ export class GraphEngine {
         this.record({ linkId: l.id, at, result: "sent", text: runTextPreview(text) });
     } catch (err) {
       if (gen !== this.generation) return;
-      // 承認待ち・居ない間に当たった（知らせの直前に変わった）・監督役のマシンが切れていたなら、次に手が空いたとき（繋がったとき）に送り直す。
+      // 承認待ち・居ない間に当たった（知らせの直前に変わった）・監督役のマシンが切れていた・送っている途中で切れた（届いたか分からない。
+      // 知らせは冪等な案内なので二重に届いても害が小さい。D7-13）なら、次に手が空いたとき（繋がったとき）に送り直す。
       if (
         err instanceof AgentPortError &&
         (err.code === "agent_blocked" ||
           err.code === "agent_not_found" ||
-          err.code === "machine_unavailable")
+          err.code === "machine_unavailable" ||
+          err.code === "connection_closed")
       ) {
         sv.notifier.retry(this.deps.now());
         return;

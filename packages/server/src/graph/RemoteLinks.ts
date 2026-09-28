@@ -56,6 +56,10 @@ export class RemoteLink {
   private readonly eventCbs = new Set<(e: ServerEvent) => void>();
   private readonly screenCbs = new Set<(paneId: string, text: string) => void>();
   private pendingSnapshot: SessionSnapshot | null = null;
+  /** 今の socket で hello の応答を受けたか（受けた後・open の前のイベントは snapshot より新しいので溜める）。 */
+  private helloAnswered = false;
+  /** hello の応答の後・open の前に届いたイベント（open の後に順に当てる。g04 点検）。 */
+  private early: ServerEvent[] = [];
 
   constructor(
     readonly machine: string,
@@ -67,9 +71,12 @@ export class RemoteLink {
         this.pendingSnapshot = s;
       },
       applyEvent: (e) => {
-        if (this.up) this.emit(this.eventCbs, (cb) => cb(e)); // hello の前のイベントは snapshot が含む
+        if (this.up) this.emit(this.eventCbs, (cb) => cb(e));
+        // hello の応答より前のイベントは snapshot が含む（当て直すと古い値に戻る）。応答の後・open の前（同じ読み取りの塊で続けて届く）は
+        // snapshot より新しいので溜めて、open の後に当てる。
+        else if (this.helloAnswered) this.early.push(e);
       },
-      onAuthRequired: () => undefined, // 中継の受け口は認証済み（4401 は来ない）
+      onAuthRequired: () => undefined, // 中継の受け口は認証済み。閉じた code は adapter が 4401 を通さない
       onConnectionState: (s) => this.onState(s),
       onOriginRejectSuspected: () => undefined,
     };
@@ -87,7 +94,15 @@ export class RemoteLink {
       sink,
       // `/api/session` の確認は要らない（中継の受け口に繋いだ時点で認証済み）。
       fetchImpl: (async () => new Response(null, { status: 204 })) as typeof fetch,
-      createWebSocket: openSocket,
+      createWebSocket: () => {
+        this.helloAnswered = false;
+        this.early = [];
+        return new HelloWatchSocket(openSocket(), () => {
+          this.helloAnswered = true;
+        });
+      },
+      // 中継のチャネルは必ずすぐ開くので、hello が通るまで間隔を戻さない（hello を断るリモートへ 1 秒おきに繋ぎ直さない。g04 点検）。
+      resetBackoffOnHello: true,
     });
   }
 
@@ -135,11 +150,15 @@ export class RemoteLink {
     if (s === "open") {
       const snap = this.pendingSnapshot;
       this.pendingSnapshot = null;
+      const early = this.early;
+      this.early = [];
       if (this.closed || snap === null) return;
       this.up = true;
       this.emit(this.openedCbs, (cb) => cb(snap));
+      for (const e of early) if (this.up) this.emit(this.eventCbs, (cb) => cb(e));
       return;
     }
+    this.early = [];
     this.setUp(false);
   }
 
@@ -171,10 +190,20 @@ export class RemoteLink {
 
 export class RemoteLinks {
   private readonly links = new Map<string, { link: RemoteLink; port: RemoteAgentPort }>();
+  /** マシンごとの直前の online か（online に変わったときだけ繋ぎ直しの待ちを飛ばす）。 */
+  private readonly wasOnline = new Map<string, boolean>();
 
   constructor(private readonly deps: RemoteLinksDeps) {
     deps.machines.onChanged((list) => {
-      for (const m of list) if (m.state === "online") this.links.get(m.id)?.link.kick();
+      // online に**変わった**ときだけ待ちを飛ばす（名前の変更など online のままの知らせで飛ばすと、hello を断るリモートへ間隔を守らずに繋ぎ直す）。
+      for (const m of list) {
+        const online = m.state === "online";
+        const was = this.wasOnline.get(m.id) ?? false;
+        this.wasOnline.set(m.id, online);
+        if (online && !was) this.links.get(m.id)?.link.kick();
+      }
+      for (const id of [...this.wasOnline.keys()])
+        if (!list.some((m) => m.id === id)) this.wasOnline.delete(id);
     });
   }
 
@@ -198,6 +227,12 @@ export class RemoteLinks {
           : {}),
       });
       this.links.set(id, { link, port });
+      // 今の online を覚える（最初の知らせを「online に変わった」と取り違えて待ちを飛ばさない）。
+      if (!this.wasOnline.has(id))
+        this.wasOnline.set(
+          id,
+          this.deps.machines.list().some((m) => m.id === id && m.state === "online"),
+        );
       link.start();
     }
   }
@@ -242,4 +277,64 @@ export class RemoteLinks {
       }),
     );
   }
+}
+
+/**
+ * `Connection` が送る `client.hello` の id を覚え、その応答を受けた瞬間（`Connection` が当てる前）を知らせる socket の包み（g04 点検）。
+ * hello の応答の後に同じ塊で続くイベントは、応答の処理（マイクロタスク）より先に `applyEvent` に届くので、応答の前後を見分けるのに使う。
+ */
+class HelloWatchSocket implements WebSocketLike {
+  onopen: (() => void) | null = null;
+  onclose: ((ev: { code: number }) => void) | null = null;
+  onerror: ((ev: unknown) => void) | null = null;
+  onmessage: ((ev: { data: unknown }) => void) | null = null;
+  private helloId: string | null = null;
+  private answered = false;
+
+  constructor(
+    private readonly inner: WebSocketLike,
+    private readonly onHelloAnswered: () => void,
+  ) {
+    inner.onopen = () => this.onopen?.();
+    inner.onclose = (ev) => this.onclose?.(ev);
+    inner.onerror = (ev) => this.onerror?.(ev);
+    inner.onmessage = (ev) => {
+      if (!this.answered && this.helloId !== null && typeof ev.data === "string") {
+        if (idOf(ev.data) === this.helloId) {
+          this.answered = true;
+          this.onHelloAnswered();
+        }
+      }
+      this.onmessage?.(ev);
+    };
+  }
+
+  get readyState(): number {
+    return this.inner.readyState;
+  }
+
+  send(data: string | Uint8Array): void {
+    if (this.helloId === null && typeof data === "string" && data.includes('"client.hello"')) {
+      const m = parseObject(data);
+      if (m?.method === "client.hello" && typeof m.id === "string") this.helloId = m.id;
+    }
+    this.inner.send(data);
+  }
+
+  close(code?: number, reason?: string): void {
+    this.inner.close(code, reason);
+  }
+}
+
+function parseObject(s: string): Record<string, unknown> | null {
+  try {
+    const v: unknown = JSON.parse(s);
+    return typeof v === "object" && v !== null ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function idOf(s: string): unknown {
+  return parseObject(s)?.id;
 }

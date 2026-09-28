@@ -1,6 +1,7 @@
 import { FRAME_TYPE } from "@sodashitsu/protocol";
 import type { WebSocketLike } from "@sodashitsu/client-core";
 import type { LinkChannel } from "../machine/MachineLink.js";
+import { sanitizeRemoteCloseCode } from "../machine/MachineRelay.js";
 
 /**
  * マシンへの中継の 1 チャネル（`MachineLink.openChannel()`）を client-core の `WebSocketLike` に見せる adapter（20260927-agent-graph の 04 T1・
@@ -9,7 +10,8 @@ import type { LinkChannel } from "../machine/MachineLink.js";
  * - 開く合図は無い（OPEN の枠を書いた時点で使える）ので、作った後のマイクロタスクで `onopen` を呼ぶ（`Connection` が `onopen` を付けた後）。
  * - リモートから来るものは信用しない（`MachineRelay` と同じ）: TEXT は `{` で始まるものだけ、BINARY は OUTPUT・SNAPSHOT だけを渡す。
  *   受け手（`Connection`）の例外はチャネルの読み取り（ssh の標準出力の処理）へ返さない。
- * - `close` はチャネルを閉じ、`onclose` を 1 回だけ呼ぶ（チャネルの `onClose` が同期で呼ばれても重ねない）。
+ * - `close` はチャネルを閉じ、`onclose` を 1 回だけ呼ぶ（チャネルの `onClose` が同期で呼ばれても重ねない）。リモートが閉じた code は
+ *   `sanitizeRemoteCloseCode` で絞る（4401 で `Connection` が認証の要求として止まらない）。
  */
 const CONNECTING = 0;
 const OPEN = 1;
@@ -46,7 +48,8 @@ export class LinkChannelSocket implements WebSocketLike {
       if (b[0] !== FRAME_TYPE.OUTPUT && b[0] !== FRAME_TYPE.SNAPSHOT) return;
       this.deliver(b);
     });
-    channel.onClose((code) => this.finish(code));
+    // リモートの code は信用しない（`MachineRelay` と同じ。4401 等で `Connection` の繋ぎ直しを止めさせない）。
+    channel.onClose((code) => this.finish(sanitizeRemoteCloseCode(code)));
     queueMicrotask(() => {
       if (this.readyState !== CONNECTING) return;
       this.readyState = OPEN;

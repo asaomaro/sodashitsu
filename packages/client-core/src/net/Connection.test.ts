@@ -468,6 +468,70 @@ describe("Connection", () => {
     expect(sockets).toHaveLength(3);
   });
 
+  it("待ちの途中の disconnect も detached を知らせる。disconnect の後の retarget は新しい行き先へ繋ぐ（g04 点検）", async () => {
+    const { conn, store, sockets } = makeConnection();
+    conn.connect();
+    await flush();
+    sockets[0]!.remoteClose(1006);
+    await flush();
+    expect(store.states.at(-1)).toBe("reconnecting");
+    conn.disconnect();
+    expect(store.states.at(-1)).toBe("detached");
+    conn.retarget("ws://example.test/ws?machine=m");
+    await flush();
+    expect(sockets).toHaveLength(2);
+    sockets[1]!.remoteClose(1006); // retarget の後は繋ぎ直す（止めたままにしない）
+    await flush();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sockets).toHaveLength(3);
+  });
+
+  it("resetBackoffOnHello: 開いただけでは間隔を戻さず、hello が通ったら戻す（既定は開いたときに戻す）", async () => {
+    const make = (resetBackoffOnHello: boolean) => {
+      const store = makeStore();
+      const sockets: FakeWebSocket[] = [];
+      const conn = new Connection({
+        kind: "external",
+        httpOrigin: "",
+        wsUrl: "x",
+        store,
+        sink: makeSink(),
+        fetchImpl: makeFetch({ session: 204, login: 204, logout: 204 }),
+        createWebSocket: () => {
+          const ws = new FakeWebSocket();
+          sockets.push(ws);
+          return ws;
+        },
+        resetBackoffOnHello,
+      });
+      return { conn, sockets };
+    };
+    // hello を断られ続けたときに次の socket を作るまでの時間
+    const gaps = async (resetBackoffOnHello: boolean): Promise<number[]> => {
+      const { conn, sockets } = make(resetBackoffOnHello);
+      conn.connect();
+      await flush();
+      const out: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        const ws = sockets.at(-1)!;
+        ws.open();
+        ws.message(JSON.stringify({ id: JSON.parse(ws.sent[0] as string).id, error: { code: "bad", message: "x" } }));
+        await flush();
+        const before = sockets.length;
+        let waited = 0;
+        while (sockets.length === before) {
+          await vi.advanceTimersByTimeAsync(500);
+          waited += 500;
+        }
+        out.push(waited);
+      }
+      conn.disconnect();
+      return out;
+    };
+    expect(await gaps(false)).toEqual([1000, 1000, 1000]);
+    expect(await gaps(true)).toEqual([1000, 2000, 4000]);
+  });
+
   it("client.detach の後は自動で再接続しない（onConnectionState('detached') を呼ぶ）", async () => {
     const { conn, store, sockets } = makeConnection();
     conn.connect();
