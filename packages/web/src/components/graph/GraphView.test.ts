@@ -1270,3 +1270,70 @@ describe("GraphView（Esc の段階・割り当て・履歴の戻り先。g03 �
     wrapper.unmount();
   });
 });
+
+describe("GraphView（無効なノードの選び直し。g03 点検 T4）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+
+  it("無効（stale）なノードの「選び直す」から pane を選ぶと rekey_node を送り（線は付け替わる）、選び直したノードへフォーカス", async () => {
+    const { wrapper, fake, store } = await openWithGraph({
+      nodes: [
+        { key: "local:p1", x: 0, y: 0, stale: true },
+        { key: "local:p2", x: 300, y: 0 },
+      ],
+    });
+    useSessionStore(pinia).panes.set("p3", paneOf("p3", "t1", { label: "fixer" }));
+    await flush();
+    fake.handlers["graph.update"] = () =>
+      graphOf({
+        rev: 2,
+        nodes: [
+          { key: "local:p3", x: 0, y: 0 },
+          { key: "local:p2", x: 300, y: 0 },
+        ],
+        links: [triggerLink("l1", "local:p3", "local:p2")],
+      });
+    const btn = wrapper.find('[data-node-key="local:p1"] .graph-node-rekey');
+    expect(btn.text()).toBe("選び直す…");
+    await btn.trigger("click");
+    await flush();
+    // 候補: 同じ番号の今の pane（p1）と、載っていない p3（p2 は載っているので出さない）
+    expect(wrapper.findAll("[data-rekey-key]").map((r) => r.attributes("data-rekey-key"))).toEqual([
+      "local:p1",
+      "local:p3",
+    ]);
+    expect(wrapper.find(".rekey-picker").text()).toContain("同じ番号の今の pane");
+    await wrapper.find('[data-rekey-key="local:p3"]').setValue(true);
+    await wrapper.find(".rekey-picker-apply").trigger("click");
+    await flush();
+    expect(fake.calls[0]).toEqual({
+      method: "graph.update",
+      params: { baseRev: 1, ops: [{ op: "rekey_node", key: "local:p1", newKey: "local:p3" }] },
+    });
+    expect(wrapper.find(".rekey-picker").exists()).toBe(false);
+    expect(store.links[0]!.from).toBe("local:p3");
+    expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p3");
+    wrapper.unmount();
+  });
+
+  it("無効なノードの r でも選び直しを開き、Esc は何も変えずに閉じてノードへ戻る。有効なノードには出さない", async () => {
+    const { wrapper, fake } = await openWithGraph({
+      nodes: [
+        { key: "local:p1", x: 0, y: 0, stale: true },
+        { key: "local:p2", x: 300, y: 0 },
+      ],
+    });
+    expect(wrapper.find('[data-node-key="local:p2"] .graph-node-rekey').exists()).toBe(false);
+    const n1 = wrapper.find('[data-node-key="local:p1"]');
+    await n1.trigger("keydown", { key: "r" });
+    await flush();
+    expect(wrapper.find(".rekey-picker").exists()).toBe(true);
+    await wrapper.find(".rekey-picker").trigger("keydown", { key: "Escape" });
+    await flush();
+    expect(wrapper.find(".rekey-picker").exists()).toBe(false);
+    expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p1");
+    expect(fake.calls).toHaveLength(0);
+    wrapper.unmount();
+  });
+});

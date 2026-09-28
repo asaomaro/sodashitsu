@@ -77,7 +77,7 @@
   6. 確認（線の削除・ノードを外す・変更を捨てる）はダイアログの 1 枠（`ConfirmDialog`）を使わず、グラフの `<dialog>` の中の `GraphConfirm` で出す（research-web §1.5-1）。
   7. Esc の段階は design の 4 段に、確認・モバイルのシート・チェックリスト・履歴を足した: 確認 → シート → 接続モード → チェックリスト → パネル → 履歴 → 選択 → 画面。ドラッグ中の Esc は `usePointerDrag` が先に取る（window の capture。外へ渡さない）。
   8. 「開いたのと同じ prefix＋キーで閉じる」は `GraphView` の keydown の capture で `settings.keymap` の `prefixMap`・`directMap` を引く（子のパネルの入力欄にいても閉じる。保存していない値は変わらないので AC-I1 を満たす）。prefix の後のほかのキーは食う。`main.ts` は変えていない（dialog モード化と window の keydown の抑止は 01 の `view.modalOpen` で足りた）。
-  9. 無効（`stale`）なノードの選び直し（`rekey_node`）の画面は作っていない。無効なノードは `⚠ 無効` で示し、チェックリスト・Delete で外せる。
+  9. 無効（`stale`）なノード・pane の無いノードは `⚠ 無効` で示し、ノードの「選び直す…」（キーは `r`）から手元の pane を選んで `rekey_node` で付け替えられる（線はそのまま。design「選び直すか除去するまで」。g03 点検で足した）。候補はグラフに載っていない手元の pane と、同じ番号の今の pane（選べば無効の印だけが外れる）。チェックリスト・Delete で外すこともできる。チェックリストでは、無効なノードと同じ鍵の今の pane の行に「無効: 同じ番号の前の pane のノード」と注記して、「今の pane が載っている」と区別する。**05 への申し送り**: `sodactl graph` にも無効なノードの選び直し（`rekey_node`）を足す（今は画面からだけ）。
   10. 表示（パン・ズーム）はこのブラウザの `localStorage`（`soda.graphView.v1`）。無ければ最初に中身を描いたときに全体表示。
   11. 別のマシンのノードから pane へは `MachineSwitcher.switchTo(machine, {workspaceId, tabId})`（その pane のある tab を開く。tab の中のどの pane に焦点を置くかはそのマシンの tab の焦点のまま）。別のマシンを見ている間の手元のノードも同じ（要約に呼び名が無いので `pane <id>`〔エージェントの名前があればそれ〕。呼び名は 04）。
   12. 履歴は履歴の欄を開いたときに `graph.history` を読み、以後は `graph.fired` を先頭へ足す（画面には 200 件まで）。

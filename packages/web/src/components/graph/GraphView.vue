@@ -42,6 +42,7 @@ import GraphNode from "./GraphNode.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import MobileGraphSheet from "./MobileGraphSheet.vue";
 import PaneChecklist from "./PaneChecklist.vue";
+import RekeyPicker from "./RekeyPicker.vue";
 import LinkPanel from "./LinkPanel.vue";
 import { usePointerDrag } from "./usePointerDrag.js";
 import {
@@ -251,6 +252,10 @@ function onNodePointerdown(ev: PointerEvent, key: string): void {
     closeChecklist();
     return;
   }
+  if (rekeyKey.value) {
+    closeRekey();
+    return;
+  }
   // 線の設定を開いている間は、外側のクリック＝取り消し（未保存の値と他の操作を混ぜない。research-ui §2.7）。
   if (panel.value) {
     panelRef.value?.requestClose();
@@ -294,6 +299,10 @@ function onCanvasPointerdown(ev: PointerEvent): void {
   if (confirmState.value) return;
   if (checklistOpen.value) {
     closeChecklist();
+    return;
+  }
+  if (rekeyKey.value) {
+    closeRekey();
     return;
   }
   if (panel.value) {
@@ -820,6 +829,41 @@ function requestRemoveNode(key: string): void {
   );
 }
 
+// --- 無効なノードの選び直し（rekey_node。線はそのまま付け替わる。g03 点検）--------------------------------------------
+
+const rekeyKey = ref<NodeKey | null>(null);
+function openRekey(key: string): void {
+  if (isMobile.value) return; // モバイルは編集しない（AC20）
+  if (panel.value) {
+    guardPanel(() => openRekey(key));
+    return;
+  }
+  checklistOpen.value = false;
+  rekeyKey.value = key as NodeKey;
+}
+function closeRekey(): void {
+  const key = rekeyKey.value;
+  rekeyKey.value = null;
+  if (key) focusNode(key);
+}
+function applyRekey(newKey: NodeKey): void {
+  const key = rekeyKey.value;
+  rekeyKey.value = null;
+  if (!key) return;
+  void graph
+    .update((g): GraphOp[] | null =>
+      g.nodes.some((n) => n.key === key) ? [{ op: "rekey_node", key, newKey }] : null,
+    )
+    .then((r) => {
+      if (!r.ok) {
+        view.toast(`選び直せませんでした（${r.message}）`);
+        focusNode(key);
+        return;
+      }
+      focusNode(newKey);
+    });
+}
+
 // --- 履歴 --------------------------------------------------------------------------------------------------------
 
 /** 開いている履歴（`linkId` が null ならすべての線）。 */
@@ -979,6 +1023,10 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
     ev.preventDefault();
     ev.stopPropagation();
     startConnectMode(key);
+  } else if ((ev.key === "r" || ev.key === "R") && nodeInvalid(key) && !isMobile.value) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    openRekey(key);
   } else if (ev.key === "Enter") {
     ev.preventDefault();
     ev.stopPropagation();
@@ -1065,6 +1113,7 @@ watch(
       panel.value = null;
       confirmState.value = null;
       checklistOpen.value = false;
+      rekeyKey.value = null;
       history.value = null;
       liveMessage.value = "";
       if (el?.open) el.close();
@@ -1196,6 +1245,10 @@ function escape(): void {
   }
   if (checklistOpen.value) {
     closeChecklist();
+    return;
+  }
+  if (rekeyKey.value) {
+    closeRekey();
     return;
   }
   if (panel.value) {
@@ -1351,6 +1404,7 @@ function chipAria(e: EdgeView): string {
               @body-pointerdown="onNodePointerdown($event, n.key)"
               @handle-pointerdown="onHandlePointerdown($event, n.key)"
               @goto="gotoNode(n.key)"
+              @rekey="openRekey(n.key)"
             />
             <button
               v-for="e in edges"
@@ -1414,6 +1468,7 @@ function chipAria(e: EdgeView): string {
         </div>
       </div>
       <PaneChecklist v-if="checklistOpen" @apply="applyChecklist" @close="closeChecklist" />
+      <RekeyPicker v-if="rekeyKey" :node-key="rekeyKey" @pick="applyRekey" @close="closeRekey" />
       <MobileGraphSheet v-if="sheet" :target="sheet" @close="closeSheet" />
       <GraphConfirm
         v-if="confirmState"

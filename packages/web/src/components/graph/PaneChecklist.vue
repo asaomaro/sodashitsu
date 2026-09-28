@@ -33,6 +33,20 @@ interface Section {
 }
 
 /** 手元の pane（workspace の順、その中は tab・pane の順）。画面の接続が別のマシンを向いている間は、手元の軽い接続の要約から。 */
+/** 無効（stale）なノードの鍵（id を振り直す前の pane のノード。同じ番号の今の pane とは別物）。 */
+const staleKeys = computed(
+  () => new Set<string>(graph.nodes.filter((n) => n.stale).map((n) => n.key)),
+);
+/**
+ * 行の注記。同じ鍵の無効なノードが載っていれば、その行のチェックは「今の pane が載っている」ではなく「前の pane の無効なノード」なので、
+ * そう書く（外せば無効なノードが消える。今の pane に付け替えるならノードの「選び直す…」。g03 点検）。
+ */
+function noteOf(key: string, agent: string | null): string | null {
+  if (staleKeys.value.has(key))
+    return "無効: 同じ番号の前の pane のノードが載っています（今の pane とは別。ノードの「選び直す…」か、外してください）";
+  return agent;
+}
+
 const localSections = computed<Section[]>(() => {
   const out: Section[] = [];
   if (machines.selectedId === LOCAL_MACHINE_ID) {
@@ -44,7 +58,7 @@ const localSections = computed<Section[]>(() => {
           rows.push({
             key: nodeKey(LOCAL_MACHINE_ID, pane.id),
             name: paneNameOf(pane),
-            note: pane.agent?.label ?? null,
+            note: noteOf(nodeKey(LOCAL_MACHINE_ID, pane.id), pane.agent?.label ?? null),
           });
         }
       }
@@ -61,7 +75,7 @@ const localSections = computed<Section[]>(() => {
       rows.push({
         key: nodeKey(LOCAL_MACHINE_ID, paneId),
         name: p.agent?.name || `pane ${paneId}`,
-        note: p.agent?.label ?? null,
+        note: noteOf(nodeKey(LOCAL_MACHINE_ID, paneId), p.agent?.label ?? null),
       });
     }
     if (rows.length > 0) out.push({ id: ws.id, label: ws.label, rows });

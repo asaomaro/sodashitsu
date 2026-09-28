@@ -32,6 +32,7 @@ const emit = defineEmits<{
   handlePointerdown: [ev: PointerEvent];
   handleClick: [];
   goto: [];
+  rekey: [];
 }>();
 
 const invalid = computed(() => props.info.exists === false || props.info.stale);
@@ -85,7 +86,21 @@ const ariaLabel = computed(() => {
       <StateIcon class="graph-node-state" :state="info.state" />
       <span class="graph-node-agent-name">{{ agentLine }}</span>
     </div>
-    <div v-if="invalid" class="graph-node-warn">⚠ 無効（pane がありません）</div>
+    <div v-if="invalid" class="graph-node-warn">
+      ⚠ 無効（pane がありません）
+      <!-- 選び直す（rekey_node で線を保つ。design「選び直すか除去するまで」）。キーは r。 -->
+      <button
+        v-if="!readOnly && info.local"
+        type="button"
+        class="graph-node-rekey"
+        tabindex="-1"
+        :aria-label="`${info.name} のノードを別の pane に選び直す`"
+        @pointerdown.stop
+        @click.stop="emit('rekey')"
+      >
+        選び直す…
+      </button>
+    </div>
     <div v-else-if="info.exists === null" class="graph-node-warn">未接続</div>
     <button
       v-if="!readOnly && !invalid"
@@ -178,6 +193,16 @@ const ariaLabel = computed(() => {
 .graph-node-warn {
   color: var(--soda-warn-fg, #ffb86c);
   font-size: 11px;
+}
+.graph-node-rekey {
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 4px;
+  background: var(--soda-subtle-bg, #343746);
+  color: var(--soda-menu-fg, #f8f8f2);
+  font-size: 11px;
+  cursor: pointer;
 }
 .graph-node-goto {
   position: absolute;

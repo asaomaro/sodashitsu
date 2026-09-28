@@ -107,3 +107,27 @@ describe("PaneChecklist", () => {
     w.unmount();
   });
 });
+
+describe("PaneChecklist（無効なノードと同じ番号の pane。g03 点検 T4）", () => {
+  it("無効なノードと同じ鍵の今の pane の行は「載っている」と区別し、無効の注記を出す", async () => {
+    const session = useSessionStore();
+    session.workspaceUpserted({ id: "w1", label: "api", tabIds: ["t1"] } as never);
+    session.panes.set("p1", paneOf("p1", "t1", { label: "impl" }));
+    session.panes.set("p2", paneOf("p2", "t1", { label: "reviewer" }));
+    useGraphStore().applyGraph(
+      graphOf({
+        nodes: [
+          { key: "local:p1", x: 0, y: 0, stale: true },
+          { key: "local:p2", x: 0, y: 100 },
+        ],
+      }),
+      "fresh",
+    );
+    const w = mount(PaneChecklist, { attachTo: document.body });
+    const rows = w.findAll(".pane-checklist-row");
+    expect(rows[0]!.text()).toContain("無効");
+    expect(rows[0]!.find(".pane-checklist-note").text()).toContain("前の pane のノード");
+    expect(rows[1]!.find(".pane-checklist-note").exists()).toBe(false);
+    w.unmount();
+  });
+});
