@@ -1,13 +1,13 @@
 import type { SplitDirection } from "@sodashitsu/protocol";
+import { PANE_BORDERS, type PaneBorders } from "@sodashitsu/client-core";
 
 /**
  * pane の枠の描き分け（20260926-pane-frame-auto-mode。herdr の `ui.pane_borders`・`ui.pane_gaps`）。
  * 余白を辺ごとに決める：隣と接する辺は隙間の設定、外周の辺（隣に pane が無い辺）は枠を描くかで決まる。
  */
 
-/** 枠の描画モード。always=常に・auto=分割しているときだけ・off=描かない（herdr の値と同じ綴り）。 */
-export type PaneBorders = "always" | "auto" | "off";
-export const PANE_BORDERS: readonly PaneBorders[] = ["always", "auto", "off"];
+/** 枠の描画モード（型と値の一覧は client-core。web と端末版が同じものを使う）。 */
+export { PANE_BORDERS, type PaneBorders };
 
 export type PaneSide = "top" | "right" | "bottom" | "left";
 export type PaneSides = Readonly<Record<PaneSide, boolean>>;

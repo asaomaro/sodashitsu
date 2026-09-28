@@ -1,7 +1,10 @@
 import { DEVICE_LOCAL_PREF_KEYS, type PopupDimension, type ServerSessionEntry, type SessionFocus, type WorkspaceGroup, type WorktreeEntry, type WorktreeListResult } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import type { AgentSort, Mode, WorkspaceSort } from "@sodashitsu/client-core";
+import { loadAgentSort as loadAgentSortValue, loadCollapsedAutoGroups, loadWorkspaceSort, type AgentSort, type Mode, type WorkspaceSort } from "@sodashitsu/client-core";
+
+// 共有の設定の読み込みは client-core（web と端末版が同じ規則で読む。統合の review）。今までの import 先を保つため再び出す。
+export { loadCollapsedAutoGroups, loadWorkspaceSort };
 import type { ConnectionState } from "@sodashitsu/client-core";
 import type { MenuTarget } from "../term/MouseBridge.js";
 import type { Zone } from "../term/paneDragZone.js";
@@ -151,8 +154,7 @@ export function replaceSharedPrefs(shared: Record<string, unknown>): Record<stri
 // 変えない）。T7 の taskcheck 指摘で追加——`reload_config` は他の設定のために既に `readPrefs()` を
 // 1回呼んでいるので、ここでも省略無しで自分で呼び直すと `localStorage` への読み出しが実質2回になる。
 export function loadAgentSort(raw?: Record<string, unknown>): AgentSort {
-  const v = (raw ?? readPrefs())["agentSort"];
-  return v === "priority" || v === "grouped" ? v : "grouped"; // 壊れた値は既定へ落とす
+  return loadAgentSortValue((raw ?? readPrefs())["agentSort"]); // 壊れた値は既定へ落とす（client-core）
 }
 
 function saveAgentSort(v: AgentSort): void {
@@ -179,24 +181,11 @@ export function loadSidebarCollapsed(raw: unknown): boolean {
   return raw === true;
 }
 
-/** 保存された workspace の並び順を読む（壊れた値は `"opened"` へ。20260922-appearance-settings-rest の AC3）。 */
-export function loadWorkspaceSort(raw: unknown): WorkspaceSort {
-  return raw === "name" || raw === "opened" ? raw : "opened";
-}
 
 function saveWorkspaceSort(v: WorkspaceSort): void {
   writePrefs({ workspaceSort: v });
 }
 
-/**
- * worktree 自動グループの折りたたみ状態（20260923-workspace-grouping）。herdr は client 側の
- * preferences に持つ（research.md F3）——本製品も `sidebarCollapsed` 等と同じ `localStorage` の
- * 流儀に揃える。`Set` は JSON に直接書けないので、保存は配列（`repoKey` の一覧）で行う。
- * 手動グループの折りたたみはサーバ全体で共有する別物（`WorkspaceGroup.collapsed`）——ここでは扱わない。
- */
-export function loadCollapsedAutoGroups(raw: unknown): Set<string> {
-  return Array.isArray(raw) ? new Set(raw.filter((v): v is string => typeof v === "string")) : new Set();
-}
 
 function saveCollapsedAutoGroups(v: ReadonlySet<string>): void {
   writePrefs({ collapsedAutoGroups: [...v] });

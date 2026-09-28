@@ -2,16 +2,12 @@ import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick, watch } from "vue";
 import {
-  buildNewCwd,
   loadKeyboardLockInFullscreen,
-  loadNewCwdPath,
-  loadNewCwdPolicy,
   loadPaneAgentNameVisible,
   loadPaneBorders,
   loadPaneFrameThickness,
   loadPaneGaps,
   loadPaneOuterBorders,
-  loadStatusSymbols,
   PANE_FRAME_THICKNESS_PX,
   useSettingsStore,
 } from "./settings.js";
@@ -27,20 +23,6 @@ beforeEach(() => {
 });
 afterEach(() => {
   localStorage.clear();
-});
-
-describe("loadStatusSymbols（AC3・AC7）", () => {
-  it("boolean はそのまま", () => {
-    expect(loadStatusSymbols(true)).toBe(true);
-    expect(loadStatusSymbols(false)).toBe(false);
-  });
-
-  // 既定は「入」（herdr と逆。decisions D1）。何も保存していない利用者にも記号が出る。
-  it("boolean でなければ既定の「入」", () => {
-    for (const raw of [undefined, null, "false", 0, 1, {}, []]) {
-      expect(loadStatusSymbols(raw), String(raw)).toBe(true);
-    }
-  });
 });
 
 describe("loadKeyboardLockInFullscreen（20260922-keybinding-usability。AC11）", () => {
@@ -299,45 +281,6 @@ describe("useSettingsStore", () => {
     const store = useSettingsStore(createPinia());
     expect(store.statusSymbols).toBe(true);
     expect(store.scrollback).toBe("auto");
-  });
-});
-
-// 新しく開く場所（20260921-new-terminal-cwd）。
-describe("loadNewCwdPolicy・loadNewCwdPath（AC4）", () => {
-  it("4 つの方針はそのまま", () => {
-    for (const p of ["follow", "home", "current", "path"] as const) {
-      expect(loadNewCwdPolicy(p)).toBe(p);
-    }
-  });
-
-  // 何も設定していない利用者は「引き継ぐ」（herdr の既定と同じ）。壊れた値でも起動できる。
-  it("4 つのどれかでなければ既定の「引き継ぐ」", () => {
-    for (const raw of [undefined, null, "", "Follow", "cwd", 0, true, {}, []]) {
-      expect(loadNewCwdPolicy(raw), String(raw)).toBe("follow");
-    }
-  });
-
-  it("パスは文字列ならそのまま、そうでなければ空", () => {
-    expect(loadNewCwdPath("~/work")).toBe("~/work");
-    expect(loadNewCwdPath("")).toBe("");
-    for (const raw of [undefined, null, 1, {}, ["~/work"]]) {
-      expect(loadNewCwdPath(raw), String(raw)).toBe("");
-    }
-  });
-});
-
-describe("buildNewCwd", () => {
-  it("引き継ぐは元の pane を載せ、元の pane が無ければ載せない（design D7）", () => {
-    expect(buildNewCwd("follow", "", "p3")).toEqual({ policy: "follow", sourcePaneId: "p3" });
-    expect(buildNewCwd("follow", "", null)).toEqual({ policy: "follow" });
-  });
-
-  // 元の pane を見るのは「引き継ぐ」だけ（ほかの方針に余計な値を載せない）。
-  it("ホーム・起動した場所は方針だけ、指定した場所はパスを入れたまま載せる", () => {
-    expect(buildNewCwd("home", "/x", "p3")).toEqual({ policy: "home" });
-    expect(buildNewCwd("current", "/x", "p3")).toEqual({ policy: "current" });
-    expect(buildNewCwd("path", "~/work", "p3")).toEqual({ policy: "path", path: "~/work" });
-    expect(buildNewCwd("path", "", null)).toEqual({ policy: "path", path: "" });
   });
 });
 

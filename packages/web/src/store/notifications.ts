@@ -1,8 +1,8 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import {
-  DEFAULT_NOTIFY_PREFS,
   enqueue as enqueuePure,
+  loadNotifyPrefs as loadNotifyPrefsValue,
   removeByKey as removeByKeyPure,
   removeByPane as removeByPanePure,
   type NotifyKey,
@@ -19,10 +19,7 @@ import { readPrefs, writePrefs } from "./view.js";
 
 /** 保存された通知の設定を読む（値ごとに既定へ落とす）。`raw` は `soda.prefs.v1` の `notify`（省略時は読む。サーバから受けた値の反映は渡す。20260927-cli-mode）。 */
 export function loadNotifyPrefs(raw: unknown = readPrefs()["notify"]): NotifyPrefs {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...DEFAULT_NOTIFY_PREFS };
-  const o = raw as Record<string, unknown>;
-  const pick = (k: keyof NotifyPrefs): boolean => (typeof o[k] === "boolean" ? (o[k] as boolean) : DEFAULT_NOTIFY_PREFS[k]);
-  return { toast: pick("toast"), desktop: pick("desktop"), sound: pick("sound") };
+  return loadNotifyPrefsValue(raw); // 正規化は client-core（端末版と同じ規則）
 }
 
 function loadFlag(key: string): boolean {

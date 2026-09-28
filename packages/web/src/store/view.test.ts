@@ -4,7 +4,6 @@ import {
   SIDEBAR_WIDTH,
   loadSidebarCollapsed,
   loadSidebarWidth,
-  loadWorkspaceSort,
   readPrefs,
   useViewStore,
   writePrefs,
@@ -94,19 +93,6 @@ describe("useViewStore — workspace（spaces）の並び順", () => {
       expect(useViewStore(createPinia()).workspaceSort).toBe("opened");
     } finally {
       Storage.prototype.getItem = original;
-    }
-  });
-});
-
-describe("loadWorkspaceSort（AC3）", () => {
-  it("有効な値はそのまま通す", () => {
-    expect(loadWorkspaceSort("opened")).toBe("opened");
-    expect(loadWorkspaceSort("name")).toBe("name");
-  });
-
-  it("壊れた値・無いときは opened", () => {
-    for (const raw of [undefined, null, "なにか", 1, {}, true]) {
-      expect(loadWorkspaceSort(raw), String(raw)).toBe("opened");
     }
   });
 });

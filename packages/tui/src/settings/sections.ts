@@ -9,7 +9,9 @@ import {
   withoutOverride,
   type ThemeOverrides,
   THEME_LABELS,
+  loadScrollbackPref,
   loadTabBarPosition,
+  scrollbackChoices,
   loadTabBarRightEntries,
   loadTabBarRightSeparator,
   loadThemePrefs,
@@ -384,13 +386,13 @@ function displaySection(env: SettingsEnv): SettingsSection {
         choiceItem(
           "pane の枠の表示",
           PANE_BORDERS,
-          pick(raw.paneBorders, ["always", "auto", "off"] as const, "always"),
+          env.prefs.paneBorders,
           (v) => set({ paneBorders: v }),
           "端末版では、枠を描かないときも分割の境目に線を 1 本残します。",
         ),
         toggleItem(
           "pane の間の隙間",
-          flag(raw.paneGaps, true),
+          env.prefs.paneGaps,
           (v) => set({ paneGaps: v }),
           "端末版では、切にすると左右に並んだ pane の縦の罫線を 1 本にまとめます。",
         ),
@@ -401,7 +403,7 @@ function displaySection(env: SettingsEnv): SettingsSection {
           (v) => set({ paneFrameThickness: v }),
           BROWSER_ONLY,
         ),
-        toggleItem("pane にエージェント名を出す", flag(raw.paneAgentNameVisible, false), (v) =>
+        toggleItem("pane にエージェント名を出す", env.prefs.paneAgentNameVisible, (v) =>
           set({ paneAgentNameVisible: v }),
         ),
         toggleItem(
@@ -521,17 +523,6 @@ function displaySection(env: SettingsEnv): SettingsSection {
 
 // --- 端末 ---
 
-const SCROLLBACK_STEPS = [1000, 2000, 5000, 10000] as const;
-
-/** web の `scrollbackChoices`（`packages/web/src/term/scrollback.ts`）と同じ選択肢。 */
-export function scrollbackChoices(limit: number, saved?: number): number[] {
-  const choices = new Set<number>();
-  for (const step of SCROLLBACK_STEPS) if (step <= limit) choices.add(step);
-  choices.add(limit);
-  if (saved !== undefined && saved <= limit) choices.add(saved);
-  return [...choices].sort((a, b) => a - b);
-}
-
 const NEW_CWD = [
   { value: "follow", label: "引き継ぐ（いま見ている pane の場所）" },
   { value: "home", label: "ホーム" },
@@ -544,9 +535,9 @@ function terminalSection(env: SettingsEnv): SettingsSection {
     id: "terminal",
     label: "端末",
     items: () => {
-      const raw = env.prefs.shared.scrollback;
+      const pref = loadScrollbackPref(env.prefs.shared.scrollback);
       const limit = env.scrollbackLimit();
-      const saved = typeof raw === "number" && Number.isInteger(raw) && raw >= 0 ? raw : undefined;
+      const saved = pref === "auto" ? undefined : pref;
       const selected: "auto" | number = saved === undefined ? "auto" : Math.min(saved, limit);
       const fmt = (n: number): string => `${n.toLocaleString("ja-JP")} 行`;
       const scrollChoices: { value: "auto" | number; label: string }[] = [

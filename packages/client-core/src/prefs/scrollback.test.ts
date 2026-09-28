@@ -1,15 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { MOBILE_SCROLLBACK_LINES, effectiveScrollback, loadScrollbackPref, scrollbackChoices } from "./scrollback.js";
+import {
+  MOBILE_SCROLLBACK_LINES,
+  effectiveScrollback,
+  loadScrollbackPref,
+  scrollbackChoices,
+} from "./scrollback.js";
 
 describe("loadScrollbackPref（AC3）", () => {
-  it("\"auto\" と非負の整数はそのまま", () => {
+  it('"auto" と非負の整数はそのまま', () => {
     expect(loadScrollbackPref("auto")).toBe("auto");
     expect(loadScrollbackPref(5000)).toBe(5000);
     expect(loadScrollbackPref(0)).toBe(0); // サーバは --scrollback 0 を受け付ける
   });
 
-  it("それ以外（無い・負・小数・文字列・NaN・無限・オブジェクト）は \"auto\"", () => {
-    for (const raw of [undefined, null, -1, 1.5, "5000", Number.NaN, Number.POSITIVE_INFINITY, {}, [], true]) {
+  it('それ以外（無い・負・小数・文字列・NaN・無限・オブジェクト）は "auto"', () => {
+    for (const raw of [
+      undefined,
+      null,
+      -1,
+      1.5,
+      "5000",
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      {},
+      [],
+      true,
+    ]) {
       expect(loadScrollbackPref(raw), String(raw)).toBe("auto");
     }
   });
@@ -61,7 +77,8 @@ describe("effectiveScrollback", () => {
   // 何も設定していない利用者の見え方を変えない（この work より前の main.ts と同じ）。
   it("自動: デスクトップはサーバの上限、モバイルは 1000", () => {
     // 上限を既定の 5000 だけで見ると、`limit` を定数 5000 に書き換えても通る。上限を変えて見る。
-    for (const limit of [5000, 10000, 3000, 0]) expect(effectiveScrollback("auto", "desktop", limit), `上限 ${limit}`).toBe(limit);
+    for (const limit of [5000, 10000, 3000, 0])
+      expect(effectiveScrollback("auto", "desktop", limit), `上限 ${limit}`).toBe(limit);
     expect(effectiveScrollback("auto", "mobile", 5000)).toBe(MOBILE_SCROLLBACK_LINES);
     expect(MOBILE_SCROLLBACK_LINES).toBe(1000);
   });

@@ -1,4 +1,4 @@
-import type { NewCwd, ThemeName } from "@sodashitsu/protocol";
+import type { ThemeName } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { commandKeyDefs, type KeyTargetId } from "@sodashitsu/client-core";
@@ -28,7 +28,6 @@ import {
   type ThemeOverrides,
 } from "../theme/themeOverrides.js";
 import type { CssVar } from "@sodashitsu/client-core";
-import { PANE_BORDERS, type PaneBorders } from "../layout/paneChrome.js";
 import { loadScrollbackPref, type ScrollbackPref } from "../term/scrollback.js";
 import {
   loadTabBarPosition,
@@ -46,7 +45,30 @@ import {
   type SidebarArea,
   type SidebarRowsPrefs,
 } from "@sodashitsu/client-core";
+import {
+  buildNewCwd,
+  loadNewCwdPath,
+  loadNewCwdPolicy,
+  loadPaneAgentNameVisible,
+  loadPaneBorders,
+  loadPaneGaps,
+  loadStatusSymbols,
+  type NewCwdPolicy,
+  type PaneBorders,
+} from "@sodashitsu/client-core";
 import { readPrefs, writePrefs } from "./view.js";
+
+// 共有の設定の読み込みは client-core（web と端末版が同じ規則で読む。統合の review）。今までの import 先を保つため再び出す。
+export {
+  buildNewCwd,
+  loadNewCwdPath,
+  loadNewCwdPolicy,
+  loadPaneAgentNameVisible,
+  loadPaneBorders,
+  loadPaneGaps,
+  loadStatusSymbols,
+  type NewCwdPolicy,
+};
 
 /**
  * 設定ダイアログの「表示」と「端末」の節の値（20260921-herdr-settings-gaps）。
@@ -55,15 +77,6 @@ import { readPrefs, writePrefs } from "./view.js";
  * （所有者を 1 つにする。`view.ts` の注記）。
  */
 
-/**
- * 保存された記号表示を読む。**boolean でなければ既定の「入」**（AC3・AC7）。
- *
- * **既定が herdr と逆**（herdr の `ui.status_indicators` の既定は `dots`＝色だけ）。WCAG 1.4.1 は色を唯一の手段に
- * することを禁じており、既定で違反した状態を出さない（decisions D1）。
- */
-export function loadStatusSymbols(raw: unknown): boolean {
-  return typeof raw === "boolean" ? raw : true;
-}
 
 /**
  * 全画面のときブラウザ予約キーも Keyboard Lock で受け取るか（20260922-keybinding-usability。
@@ -94,11 +107,6 @@ export function loadPaneFrameThickness(raw: unknown): PaneFrameThickness {
     : "default";
 }
 
-/** pane にエージェント名を可視で出すか（20260922-appearance-settings-rest）。既定は無効
- *  （常時表示すると既存の見た目が変わるため。opt-in）。 */
-export function loadPaneAgentNameVisible(raw: unknown): boolean {
-  return typeof raw === "boolean" ? raw : false;
-}
 
 /**
  * pane 領域の外周の枠（20260922-tabbar-pane-appearance。herdr の `ui.pane_outer_borders` 相当。PR #12 から
@@ -109,55 +117,7 @@ export function loadPaneOuterBorders(raw: unknown): boolean {
   return typeof raw === "boolean" ? raw : false;
 }
 
-/**
- * pane の枠の描画モード（20260926-pane-frame-auto-mode。herdr の `ui.pane_borders`）。3 値のどれかでなければ
- * 既定の「常に」——herdr の既定（`auto`）と逆で、今までの見た目（単一 pane にも枠）を既定にする（decisions D2）。
- */
-export function loadPaneBorders(raw: unknown): PaneBorders {
-  return PANE_BORDERS.includes(raw as PaneBorders) ? (raw as PaneBorders) : "always";
-}
 
-/** pane の間の隙間（herdr の `ui.pane_gaps`）。boolean でなければ既定の「入」（今までの見た目）。 */
-export function loadPaneGaps(raw: unknown): boolean {
-  return typeof raw === "boolean" ? raw : true;
-}
-
-/**
- * 新しく開く場所の方針（20260921-new-terminal-cwd。herdr の `terminal.new_cwd`）。**ブラウザごと**に持ち、作成の要求に載せる
- * （サーバは方針を持たない。design D1）。
- */
-export type NewCwdPolicy = NewCwd["policy"];
-const NEW_CWD_POLICIES: readonly NewCwdPolicy[] = ["follow", "home", "current", "path"];
-
-/** 保存された方針を読む。**4 つのどれかでなければ既定の「引き継ぐ」**（herdr の既定と同じ。AC4）。 */
-export function loadNewCwdPolicy(raw: unknown): NewCwdPolicy {
-  return NEW_CWD_POLICIES.includes(raw as NewCwdPolicy) ? (raw as NewCwdPolicy) : "follow";
-}
-
-/** 保存された「指定した場所」を読む。文字列でなければ空（検証はサーバ。空なら使えない場所として知らされる）。 */
-export function loadNewCwdPath(raw: unknown): string {
-  return typeof raw === "string" ? raw : "";
-}
-
-/**
- * 作成の要求に載せる形を作る。**`sourcePaneId` は「引き継ぐ」のときだけ**、null なら載せない（元の pane が無い →
- * サーバが以前と同じ場所で開く。design D7）。「指定した場所」は入れたままの文字列を送る（`~` の展開と検証はサーバ）。
- */
-export function buildNewCwd(
-  policy: NewCwdPolicy,
-  path: string,
-  sourcePaneId: string | null,
-): NewCwd {
-  switch (policy) {
-    case "follow":
-      return sourcePaneId === null ? { policy } : { policy, sourcePaneId };
-    case "home":
-    case "current":
-      return { policy };
-    case "path":
-      return { policy, path };
-  }
-}
 
 export const useSettingsStore = defineStore("settings", () => {
   const initial = readPrefs();

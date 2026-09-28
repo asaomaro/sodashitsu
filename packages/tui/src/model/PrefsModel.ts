@@ -5,7 +5,21 @@ import {
   type ThemeName,
 } from "@sodashitsu/protocol";
 import {
-  DEFAULT_NOTIFY_PREFS,
+  buildNewCwd,
+  effectiveScrollback,
+  loadAgentSort,
+  loadCollapsedAutoGroups,
+  loadNewCwdPath,
+  loadNewCwdPolicy,
+  loadNotifyPrefs,
+  loadPaneAgentNameVisible,
+  loadPaneBorders,
+  loadPaneGaps,
+  loadScrollbackPref,
+  loadStatusSymbols,
+  loadWorkspaceSort,
+  type NewCwdPolicy,
+  type PaneBorders,
   loadTabBarPosition,
   loadTabBarRightEntries,
   loadTabBarRightSeparator,
@@ -207,18 +221,17 @@ export class PrefsModel {
 
   /** 枠にエージェント名を出すか（web の `paneAgentNameVisible`。既定は切）。 */
   get paneAgentNameVisible(): boolean {
-    return this.raw.paneAgentNameVisible === true;
+    return loadPaneAgentNameVisible(this.raw.paneAgentNameVisible);
   }
 
   /** pane の枠の描画（web の `loadPaneBorders`。既定は常に）。 */
-  get paneBorders(): "always" | "auto" | "off" {
-    const v = this.raw.paneBorders;
-    return v === "auto" || v === "off" ? v : "always";
+  get paneBorders(): PaneBorders {
+    return loadPaneBorders(this.raw.paneBorders);
   }
 
   /** 分割の間の隙間（既定は入）。 */
   get paneGaps(): boolean {
-    return typeof this.raw.paneGaps === "boolean" ? this.raw.paneGaps : true;
+    return loadPaneGaps(this.raw.paneGaps);
   }
 
   get tabBarPosition(): "top" | "bottom" {
@@ -271,17 +284,12 @@ export class PrefsModel {
 
   /** 状態を色に加えて記号でも示すか（web の `loadStatusSymbols`。既定は入）。 */
   get statusSymbols(): boolean {
-    return typeof this.raw.statusSymbols === "boolean" ? this.raw.statusSymbols : true;
+    return loadStatusSymbols(this.raw.statusSymbols);
   }
 
   /** 通知の種類（web の `loadNotifyPrefs` と同じ正規化）。 */
   get notify(): NotifyPrefs {
-    const raw = this.raw.notify;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...DEFAULT_NOTIFY_PREFS };
-    const o = raw as Record<string, unknown>;
-    const pick = (k: keyof NotifyPrefs): boolean =>
-      typeof o[k] === "boolean" ? (o[k] as boolean) : DEFAULT_NOTIFY_PREFS[k];
-    return { toast: pick("toast"), desktop: pick("desktop"), sound: pick("sound") };
+    return loadNotifyPrefs(this.raw.notify);
   }
 
   /** 色の出し方（手元の `tui-state.json` の `colorMode`。端末ごと。無ければ auto）。 */
@@ -290,50 +298,37 @@ export class PrefsModel {
   }
 
   get workspaceSort(): WorkspaceSort {
-    return this.raw.workspaceSort === "name" ? "name" : "opened";
+    return loadWorkspaceSort(this.raw.workspaceSort);
   }
 
   get agentSort(): AgentSort {
-    return this.raw.agentSort === "priority" ? "priority" : "grouped";
+    return loadAgentSort(this.raw.agentSort);
   }
 
   get collapsedAutoGroups(): ReadonlySet<string> {
-    const v = this.raw.collapsedAutoGroups;
-    return new Set(Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : []);
+    return loadCollapsedAutoGroups(this.raw.collapsedAutoGroups);
   }
 
   /** 新しく開く場所の方針（web の `loadNewCwdPolicy` と同じ正規化。既定は「引き継ぐ」）。 */
-  get newCwdPolicy(): NewCwd["policy"] {
-    const v = this.raw.newCwdPolicy;
-    return v === "follow" || v === "home" || v === "current" || v === "path" ? v : "follow";
+  get newCwdPolicy(): NewCwdPolicy {
+    return loadNewCwdPolicy(this.raw.newCwdPolicy);
   }
 
   get newCwdPath(): string {
-    return typeof this.raw.newCwdPath === "string" ? this.raw.newCwdPath : "";
+    return loadNewCwdPath(this.raw.newCwdPath);
   }
 
   /**
    * 作成の要求に載せる形（web の `buildNewCwd` と同じ）。`sourcePaneId` は「引き継ぐ」のときだけ載せる（null なら載せない → サーバが以前と同じ場所で開く）。
    */
   newCwd(sourcePaneId: string | null): NewCwd {
-    const policy = this.newCwdPolicy;
-    switch (policy) {
-      case "follow":
-        return sourcePaneId === null ? { policy } : { policy, sourcePaneId };
-      case "home":
-      case "current":
-        return { policy };
-      case "path":
-        return { policy, path: this.newCwdPath };
-    }
+    return buildNewCwd(this.newCwdPolicy, this.newCwdPath, sourcePaneId);
   }
 
   /** 購読で求める行数（`auto` はサーバの上限。数ならサーバの上限以下）。 */
   scrollbackLines(serverLimit: number): number {
-    const v = this.raw.scrollback;
-    return typeof v === "number" && Number.isInteger(v) && v >= 0
-      ? Math.min(v, serverLimit)
-      : serverLimit;
+    // 端末版はデスクトップの扱い（`auto` はサーバの上限）。
+    return effectiveScrollback(loadScrollbackPref(this.raw.scrollback), "desktop", serverLimit);
   }
 
   private emit(): void {
