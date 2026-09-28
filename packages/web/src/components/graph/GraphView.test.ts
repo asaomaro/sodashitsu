@@ -780,7 +780,7 @@ describe("GraphView（キーボード・フォーカス・モバイル。03 T5�
     wrapper.unmount();
   });
 
-  it("Tab の順は読み順（上から、同じ高さなら左から）のノード → 線のチップ", async () => {
+  it("ノードの DOM の順はグラフの順のまま（並べ替えない）。Tab・Shift+Tab は読み順（上から、同じ高さなら左から）のノード → 線のチップ（g03 点検 T2・T5）", async () => {
     const { wrapper } = await openWithGraph({
       nodes: [
         { key: "local:p2", x: 300, y: 200 },
@@ -788,10 +788,71 @@ describe("GraphView（キーボード・フォーカス・モバイル。03 T5�
         { key: "local:p3", x: 500, y: 0 },
       ],
     });
-    const order = wrapper
-      .findAll(".graph-node, .graph-chip")
-      .map((e) => e.attributes("data-node-key") ?? e.attributes("data-link-chip"));
-    expect(order).toEqual(["local:p3", "local:p1", "local:p2", "l1", "l2"]);
+    expect(wrapper.findAll(".graph-node").map((e) => e.attributes("data-node-key"))).toEqual([
+      "local:p2",
+      "local:p1",
+      "local:p3",
+    ]);
+    const active = () =>
+      document.activeElement?.getAttribute("data-node-key") ??
+      document.activeElement?.getAttribute("data-link-chip");
+    // 入口（tabindex=0）は選んでいるノード（無ければ読み順の先頭）の 1 つだけ
+    (wrapper.find(".graph-view").element as HTMLElement).focus();
+    await wrapper.find(".graph-canvas").trigger("pointerdown");
+    const tabbable = () =>
+      wrapper
+        .findAll(".graph-node")
+        .filter((n) => n.attributes("tabindex") === "0")
+        .map((n) => n.attributes("data-node-key"));
+    const n3 = wrapper.find('[data-node-key="local:p3"]');
+    (n3.element as HTMLElement).focus();
+    await flush();
+    expect(tabbable()).toEqual(["local:p3"]);
+    const seq: (string | undefined | null)[] = [];
+    for (let i = 0; i < 3; i++) {
+      const el = document.activeElement as HTMLElement;
+      el.dispatchEvent(key("Tab"));
+      await flush();
+      seq.push(active());
+    }
+    expect(seq).toEqual(["local:p1", "local:p2", "l1"]);
+    // チップの先頭の Shift+Tab は読み順の最後のノードへ、ノードの Shift+Tab は読み順の前へ
+    (document.activeElement as HTMLElement).dispatchEvent(key("Tab", { shiftKey: true }));
+    await flush();
+    expect(active()).toBe("local:p2");
+    (document.activeElement as HTMLElement).dispatchEvent(key("Tab", { shiftKey: true }));
+    await flush();
+    expect(active()).toBe("local:p1");
+    wrapper.unmount();
+  });
+
+  it("矢印で他のノードを越えても DOM が並べ替わらず、フォーカスがノードに残る（Esc で画面ごと閉じない。g03 点検 T5 must）", async () => {
+    const { wrapper, view } = await openWithGraph({ links: [] });
+    const n2 = wrapper.find('[data-node-key="local:p2"]');
+    (n2.element as HTMLElement).focus();
+    const before = wrapper.findAll(".graph-node").map((e) => e.attributes("data-node-key"));
+    for (let i = 0; i < 3; i++) n2.element.dispatchEvent(key("ArrowUp"));
+    n2.element.dispatchEvent(key("ArrowLeft", { shiftKey: true }));
+    for (let i = 0; i < 4; i++) n2.element.dispatchEvent(key("ArrowLeft", { shiftKey: true }));
+    await flush();
+    expect(wrapper.findAll(".graph-node").map((e) => e.attributes("data-node-key"))).toEqual(
+      before,
+    );
+    expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p2");
+    await wrapper.find(".graph-view").trigger("keydown", { key: "Escape" });
+    expect(view.graphOpen).toBe(true); // 1 段目は選択を外すだけ
+    wrapper.unmount();
+  });
+
+  it("ドラッグで他のノードを越えてもフォーカスがノードに残る", async () => {
+    const { wrapper } = await openWithGraph({ links: [] });
+    const n2 = wrapper.find('[data-node-key="local:p2"]').element;
+    n2.dispatchEvent(pointer("pointerdown", { clientX: 310, clientY: 10 }));
+    window.dispatchEvent(pointer("pointermove", { clientX: 10, clientY: -90 }));
+    await flush();
+    window.dispatchEvent(pointer("pointerup", { clientX: 10, clientY: -90 }));
+    await flush();
+    expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p2");
     wrapper.unmount();
   });
 

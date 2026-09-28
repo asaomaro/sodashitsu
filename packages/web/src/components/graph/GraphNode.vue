@@ -15,6 +15,8 @@ const props = defineProps<{
   x: number;
   y: number;
   selected: boolean;
+  /** Tab の入口（tabindex=0）か。ほかのノードは -1（ノードの間の Tab は親が読み順で動かす）。 */
+  tabbable: boolean;
   /** 読み取りだけ（モバイル）。ハンドル・「pane へ」を出さない。 */
   readOnly?: boolean;
   /** 接続モード・線のドラッグの元。 */
@@ -65,7 +67,7 @@ const ariaLabel = computed(() => {
     role="group"
     aria-roledescription="ノード"
     :aria-label="ariaLabel"
-    tabindex="0"
+    :tabindex="tabbable ? 0 : -1"
     :data-node-key="info.key"
     :style="{
       left: `${x}px`,

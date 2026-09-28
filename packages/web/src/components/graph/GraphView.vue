@@ -122,6 +122,15 @@ const worldStyle = computed(() => ({
 
 /** Tab の順＝読み順（上から、同じ高さなら左から）。配置の変更に追従する（research-ui §2.12）。 */
 const orderedNodes = computed(() => [...graph.nodes].sort((a, b) => a.y - b.y || a.x - b.x));
+/**
+ * Tab の入口（tabindex=0）のノード: 選んでいるノード、無ければ読み順の先頭。ほかのノードは -1 で、ノードの間の Tab は読み順で自前に動かす。
+ * **DOM の順は並べ替えない**（グラフの順のまま）——並べ替えると、ドラッグ・矢印で他のノードを越えた瞬間に要素が付け替わりフォーカスが落ちる（g03 点検）。
+ */
+const tabEntryKey = computed(() => {
+  const s = selection.value;
+  if (s?.kind === "node" && graph.nodes.some((n) => n.key === s.key)) return s.key;
+  return orderedNodes.value[0]?.key ?? null;
+});
 const rects = computed(
   () => new Map<string, GraphRect>(graph.nodes.map((n) => [n.key, graphNodeRect(n)])),
 );
@@ -789,8 +798,36 @@ function flushArrowMoves(): void {
 }
 onBeforeUnmount(flushArrowMoves);
 
+/** ノードの間の Tab（読み順）。最後のノードの Tab は先頭のチップへ、先頭のノードの Shift+Tab は既定（ツールバーへ）。 */
+function tabFromNode(ev: KeyboardEvent, key: string): void {
+  const order: string[] = orderedNodes.value.map((n) => n.key);
+  const i = order.indexOf(key);
+  const next = order[ev.shiftKey ? i - 1 : i + 1];
+  if (next !== undefined) {
+    ev.preventDefault();
+    focusNode(next);
+    return;
+  }
+  if (!ev.shiftKey) {
+    const chip = edges.value[0];
+    if (chip) {
+      ev.preventDefault();
+      focusLink(chip.link.id);
+    }
+  }
+}
+
 function onChipKeydown(ev: KeyboardEvent, id: string): void {
   if (ev.isComposing || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  // 先頭のチップの Shift+Tab は読み順の最後のノードへ（ほかのノードは tabindex=-1 なので既定では入口のノードへ戻ってしまう）。
+  if (ev.key === "Tab" && ev.shiftKey && edges.value[0]?.link.id === id) {
+    const last = orderedNodes.value.at(-1);
+    if (last) {
+      ev.preventDefault();
+      focusNode(last.key);
+    }
+    return;
+  }
   if (ev.key === "Delete" || ev.key === "Backspace") {
     ev.preventDefault();
     ev.stopPropagation();
@@ -819,7 +856,9 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
     }
     return;
   }
-  if ((ev.key === "c" || ev.key === "C") && !isMobile.value) {
+  if (ev.key === "Tab") {
+    tabFromNode(ev, key);
+  } else if ((ev.key === "c" || ev.key === "C") && !isMobile.value) {
     ev.preventDefault();
     ev.stopPropagation();
     startConnectMode(key);
@@ -1175,12 +1214,13 @@ function chipAria(e: EdgeView): string {
               />
             </svg>
             <GraphNode
-              v-for="n in orderedNodes"
+              v-for="n in graph.nodes"
               :key="n.key"
               :info="infos.get(n.key)!"
               :x="n.x"
               :y="n.y"
               :selected="isNodeSelected(n.key)"
+              :tabbable="tabEntryKey === n.key"
               :read-only="isMobile"
               :connect-source="connectFrom === n.key || connectDrag?.from === n.key"
               :drop-target="
