@@ -343,3 +343,85 @@ describe("store/graph（g03 点検）", () => {
     expect(g.loadError).toBe("サーバに繋がっていません（繋ぎ直しを待っています）。");
   });
 });
+
+describe("store/graph（g03 点検 T1）", () => {
+  it("取り直し（再接続・マシンの切り替え）のとき、読んである履歴も取り直す（回数と履歴を食い違わせない）", async () => {
+    const g = useGraphStore();
+    let n = 0;
+    const { port, calls } = fakeGraphPort({
+      "graph.get": () => graphOf(),
+      "graph.history": () => ({ runs: [{ linkId: "l1", at: ++n, result: "sent" as const }] }),
+    });
+    g.bind(port);
+    await g.load();
+    expect(calls.filter((c) => c.method === "graph.history")).toHaveLength(0); // 読んでいなければ読まない
+    await g.loadHistory();
+    await g.load();
+    await Promise.resolve();
+    expect(calls.filter((c) => c.method === "graph.history")).toHaveLength(2);
+    expect(g.runs.map((r) => r.at)).toEqual([2]);
+  });
+
+  it("自分で上限を今の回数以下に下げた保存（D5-13）では「上限に達した」を知らせない。ほかの変化では知らせる", async () => {
+    const g = useGraphStore();
+    const view = useViewStore();
+    const before = graphOf({
+      rev: 1,
+      links: [triggerLink("l1", "local:p1", "local:p2", { count: 5 })],
+    });
+    const after = graphOf({
+      rev: 2,
+      links: [triggerLink("l1", "local:p1", "local:p2", { count: 5, limit: 3, paused: "limit" })],
+    });
+    const { port } = fakeGraphPort({
+      "graph.update": () => {
+        g.applyEvent(changed(after)); // サーバは応答より先に graph.changed を配る
+        return after;
+      },
+    });
+    g.bind(port);
+    g.applyGraph(before, "fresh");
+    await g.update(() => [{ op: "update_link", id: "l1", limit: 3 }]);
+    expect(view.toasts).toHaveLength(0);
+    g.applyEvent(
+      changed(
+        graphOf({
+          rev: 3,
+          links: [triggerLink("l1", "local:p1", "local:p2", { count: 5, limit: 3 })],
+        }),
+      ),
+    );
+    g.applyEvent(
+      changed(
+        graphOf({
+          rev: 3,
+          links: [
+            triggerLink("l1", "local:p1", "local:p2", { count: 3, limit: 3, paused: "limit" }),
+          ],
+        }),
+      ),
+    );
+    expect(view.toasts).toHaveLength(1);
+  });
+
+  it("rev_conflict の後の取り直しに失敗したら、古い rev で送り直さずに失敗を返す", async () => {
+    const g = useGraphStore();
+    const { port, calls } = fakeGraphPort({
+      "graph.get": () => {
+        throw rpcError("not_connected");
+      },
+      "graph.update": () => {
+        throw rpcError("rev_conflict");
+      },
+    });
+    g.bind(port);
+    g.applyGraph(graphOf(), "fresh");
+    const r = await g.update(() => [{ op: "remove_node", key: "local:p1" }]);
+    expect(r).toMatchObject({
+      ok: false,
+      reason: "error",
+      message: "サーバに繋がっていません（繋ぎ直しを待っています）。",
+    });
+    expect(calls.filter((c) => c.method === "graph.update")).toHaveLength(1);
+  });
+});

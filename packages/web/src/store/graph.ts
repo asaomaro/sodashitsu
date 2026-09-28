@@ -90,23 +90,31 @@ export const useGraphStore = defineStore("graph", () => {
   const firing = ref(new Map<string, LinkRun["result"]>());
   const fireTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let loadSeq = 0;
+  /** 送っている途中の `update_link` で上限を変えた線（その結果の上限の一時停止は知らせない）。値は重なった数。 */
+  const ownLimitEdits = new Map<string, number>();
 
   function bind(p: GraphPort | null): void {
     port = p;
   }
 
-  /** 口を差し替えた（マシンの切り替え）・接続し直した。取り直す。 */
-  async function load(): Promise<void> {
-    if (!port) return;
+  /**
+   * 口を差し替えた（マシンの切り替え）・接続し直した。取り直す。読んである履歴も取り直す（切れていた間の実行を取りこぼして、回数と履歴を
+   * 食い違わせない）。取れたら true。
+   */
+  async function load(): Promise<boolean> {
+    if (!port) return false;
     const seq = ++loadSeq;
     try {
       const g = await port.request("graph.get", {});
-      if (seq !== loadSeq) return;
+      if (seq !== loadSeq) return false;
       loadError.value = null;
       applyGraph(g, "fresh");
+      if (runsLoaded.value) void loadHistory();
+      return true;
     } catch (err) {
-      if (seq !== loadSeq) return;
+      if (seq !== loadSeq) return false;
       loadError.value = errorText(errorCodeOf(err), err);
+      return false;
     }
   }
 
@@ -129,6 +137,8 @@ export const useGraphStore = defineStore("graph", () => {
     for (const link of next.links) {
       const old = before.get(link.id);
       if (!old || old.paused === "limit" || link.paused !== "limit") continue;
+      // 自分で上限を今の回数以下に下げた保存（D5-13）は、自分の操作の結果なので知らせない。
+      if (ownLimitEdits.has(link.id)) continue;
       useViewStore().toast(
         `連携の線（${linkTitle(link)}）が上限の ${link.limit} 回に達したので止めました。グラフ画面の線から再開できます。`,
       );
@@ -188,6 +198,10 @@ export const useGraphStore = defineStore("graph", () => {
       const ops = build(g);
       if (!ops || ops.length === 0)
         return { ok: false, reason: "gone", message: "対象がほかの画面・sodactl で消されました。" };
+      const limitEdits = ops.flatMap((o) =>
+        o.op === "update_link" && o.limit !== undefined ? [o.id] : [],
+      );
+      for (const id of limitEdits) ownLimitEdits.set(id, (ownLimitEdits.get(id) ?? 0) + 1);
       try {
         const next = await port.request("graph.update", { baseRev: g.rev, ops });
         applyGraph(next, "result");
@@ -196,10 +210,22 @@ export const useGraphStore = defineStore("graph", () => {
         const code = errorCodeOf(err);
         if (code === "rev_conflict") {
           conflicted = true;
-          await load();
+          // 取り直せなければ古い rev で送り直さない（同じ rev_conflict を繰り返すだけ）。
+          if (!(await load()))
+            return {
+              ok: false,
+              reason: "error",
+              message: loadError.value ?? "グラフを読めませんでした。",
+            };
           continue;
         }
         return { ok: false, reason: "error", message: errorText(code, err) };
+      } finally {
+        for (const id of limitEdits) {
+          const n = (ownLimitEdits.get(id) ?? 1) - 1;
+          if (n <= 0) ownLimitEdits.delete(id);
+          else ownLimitEdits.set(id, n);
+        }
       }
     }
     return { ok: false, reason: "error", message: clientErrorMessage("rev_conflict") };
@@ -343,20 +369,6 @@ export const useGraphStore = defineStore("graph", () => {
     return `${nodeInfo(link.from).name} → ${nodeInfo(link.to).name}`;
   }
 
-  /** マシンの切り替え・ログインし直し等で口を変える前に、前の口の結果を捨てる。 */
-  function reset(): void {
-    loadSeq++;
-    graph.value = null;
-    loadError.value = null;
-    runs.value = [];
-    runsLoaded.value = false;
-    dragPositions.value = new Map();
-    pendingPositions.value = new Map();
-    for (const t of fireTimers.values()) clearTimeout(t);
-    fireTimers.clear();
-    firing.value = new Map();
-  }
-
   return {
     graph,
     loadError,
@@ -369,7 +381,6 @@ export const useGraphStore = defineStore("graph", () => {
     pendingPositions,
     bind,
     load,
-    reset,
     applyGraph,
     applyEvent,
     applyFired,
