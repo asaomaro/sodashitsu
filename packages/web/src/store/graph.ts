@@ -211,8 +211,14 @@ export const useGraphStore = defineStore("graph", () => {
         return { ok: false, reason: "conflict", message: ops.conflict };
       if (!ops || ops.length === 0)
         return { ok: false, reason: "gone", message: "対象がほかの画面・sodactl で消されました。" };
+      // 上限の知らせを抑えるのは、上限を今より下げる保存だけ（下げた結果の一時停止は自分の操作。上げる保存の応答待ちの間に
+      // 上限に達したのは知らせる。統合レビュー R1）。
       const limitEdits = ops.flatMap((o) =>
-        o.op === "update_link" && o.limit !== undefined ? [o.id] : [],
+        o.op === "update_link" &&
+        o.limit !== undefined &&
+        o.limit < (g.links.find((l) => l.id === o.id)?.limit ?? Infinity)
+          ? [o.id]
+          : [],
       );
       for (const id of limitEdits) ownLimitEdits.set(id, (ownLimitEdits.get(id) ?? 0) + 1);
       try {

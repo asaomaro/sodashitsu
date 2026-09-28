@@ -404,6 +404,33 @@ describe("store/graph（g03 点検 T1）", () => {
     expect(view.toasts).toHaveLength(1);
   });
 
+  it("上限を上げる・変えない保存の応答待ちの間に上限に達したら知らせる（抑止は上限を下げた保存だけ。統合レビュー R1）", async () => {
+    const g = useGraphStore();
+    const view = useViewStore();
+    const before = graphOf({
+      rev: 1,
+      links: [triggerLink("l1", "local:p1", "local:p2", { count: 9, limit: 10 })],
+    });
+    const hit = graphOf({
+      rev: 1,
+      links: [triggerLink("l1", "local:p1", "local:p2", { count: 10, limit: 10, paused: "limit" })],
+    });
+    const { port } = fakeGraphPort({
+      "graph.update": () => {
+        g.applyEvent(changed(hit)); // 応答待ちの間に 10 回目が送られて上限に達した
+        throw rpcError("rev_conflict");
+      },
+      "graph.get": () => hit,
+    });
+    g.bind(port);
+    g.applyGraph(before, "fresh");
+    await g.update((gr) =>
+      gr.links[0]!.paused === "limit" ? null : [{ op: "update_link", id: "l1", limit: 20 }],
+    );
+    expect(view.toasts).toHaveLength(1);
+    expect(view.toasts[0]!.message).toContain("上限の 10 回");
+  });
+
   it("rev_conflict の後の取り直しに失敗したら、古い rev で送り直さずに失敗を返す", async () => {
     const g = useGraphStore();
     const { port, calls } = fakeGraphPort({
