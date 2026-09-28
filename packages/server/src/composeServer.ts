@@ -84,6 +84,8 @@ export interface ComposedServer {
   graph: GraphStore;
   /** 連携の実行の履歴（`graph.history` と同じ。結合試験が接続を閉じた後・引き継ぎの最中の実行の有無を確かめる）。 */
   graphHistory(linkId?: string): LinkRun[];
+  /** 連携の別のマシンへの接続が使えるか（04。結合試験が繋がった・切れたを待つ）。 */
+  graphRemoteAvailable(machineId: string): boolean;
   logger: Logger;
   options: ServeOptions;
   /**
@@ -492,6 +494,7 @@ export async function composeServer(
     manifestStore,
     graph,
     graphHistory: (linkId) => graphEngine.getHistory(linkId),
+    graphRemoteAvailable: (machineId) => remoteLinks.get(machineId)?.available() === true,
     logger,
     options,
     get freshToken(): string | undefined {

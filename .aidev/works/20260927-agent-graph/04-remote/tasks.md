@@ -41,7 +41,7 @@ web は、チェックリストのマシンの節と別のマシンのノード�
       対象: `packages/web/src/components/graph/PaneChecklist.vue:52-98`・`packages/web/src/components/graph/GraphNode.vue`・`packages/web/src/components/graph/RekeyPicker.vue`・`packages/web/src/store/machines.ts`
       依存: なし
       AC: AC14, AC1
-- [ ] T5: 実物のサーバ 2 台の結合試験（手元 → リモートの線・リモート → 手元の線・切断中の見送り・再接続後の基準・監督役がリモート）
+- [x] T5: 実物のサーバ 2 台の結合試験（手元 → リモートの線・リモート → 手元の線・切断中の見送り・再接続後の基準・監督役がリモート）
       対象: `packages/server/src/machine/machines.integration.test.ts`（手本）・（新規 `packages/server/src/graph/remote.integration.test.ts`）
       依存: T3
       AC: AC14
