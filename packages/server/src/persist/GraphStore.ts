@@ -182,23 +182,32 @@ export class GraphStore {
   }
 
   /**
-   * 線が 1 回送ったことを数える（`GraphEngine`。byClientId は null）。上限に達したら `paused: "limit"` にする（D1-4）。線が消えていれば何もしない
+   * 線が 1 回送ったことを数える（`GraphEngine`。byClientId は null。rev は上げない）。上限に達したら `paused: "limit"` にする（D1-4。既に止まっていれば変えない）。線が消えていれば何もしない
    * （送っている間に削除された）。上限に達したかを返す（線が無ければ null）。
    */
   async recordRun(linkId: string): Promise<{ limitReached: boolean } | null> {
     let result: { limitReached: boolean } | null = null;
-    await this.commit((s) => {
-      const link = s.graph.links.find((l) => l.id === linkId);
-      if (link === undefined) return null;
-      const count = link.count + 1;
-      const limitReached = count >= link.limit;
-      result = { limitReached };
-      const next = { ...link, count, ...(limitReached ? { paused: "limit" as const } : {}) };
-      return {
-        ...s,
-        graph: { ...s.graph, links: s.graph.links.map((l) => (l.id === linkId ? next : l)) },
-      };
-    }, null);
+    await this.commit(
+      (s) => {
+        const link = s.graph.links.find((l) => l.id === linkId);
+        if (link === undefined) return null;
+        const count = link.count + 1;
+        const limitReached = count >= link.limit;
+        result = { limitReached };
+        // 既に止まっている線（送っている途中に利用者が止めた）は、その止め方のまま。
+        const next = {
+          ...link,
+          count,
+          ...(limitReached && link.paused === null ? { paused: "limit" as const } : {}),
+        };
+        return {
+          ...s,
+          graph: { ...s.graph, links: s.graph.links.map((l) => (l.id === linkId ? next : l)) },
+        };
+      },
+      null,
+      { bumpRev: false },
+    );
     return result;
   }
 
@@ -235,6 +244,8 @@ export class GraphStore {
   private commit(
     change: (s: GraphDraftState) => GraphDraftState | null,
     byClientId: string | null,
+    /** 実行の回数（count と上限の一時停止）だけの変化は rev を上げない——画面は回数を編集しないので、その変化で他の画面の編集を rev_conflict にしない。 */
+    opts: { bumpRev: boolean } = { bumpRev: true },
   ): Promise<Graph> {
     // 閉じた後に来た書き込みは並べずに断る（閉じる前に並んだものは書き終える）。
     if (this.closed) return Promise.reject(new GraphStoreClosedError());
@@ -242,7 +253,7 @@ export class GraphStore {
       const changed = change(this.state);
       if (changed === null) return this.get();
       const next: GraphDraftState = {
-        graph: { ...changed.graph, rev: this.state.graph.rev + 1 },
+        graph: { ...changed.graph, rev: this.state.graph.rev + (opts.bumpRev ? 1 : 0) },
         nextLinkId: changed.nextLinkId,
       };
       const { rev, ...graph } = next.graph;

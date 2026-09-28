@@ -17,7 +17,7 @@ import {
 } from "@sodashitsu/client-core";
 import type { Disposable } from "../util/Disposable.js";
 import { AgentPortError, type AgentPort, type AgentStatusEvent } from "./AgentPort.js";
-import { GraphEngine } from "./GraphEngine.js";
+import { ASSUMED_BUSY_MS, GraphEngine } from "./GraphEngine.js";
 
 // 20260927-agent-graph の 02 T4：実行の配線（偽の口・偽の時計・偽の保存）。
 const A: NodeKey = "local:p1";
@@ -276,6 +276,7 @@ describe("GraphEngine — トリガ", () => {
       ...t.store.graph,
       links: [{ ...t.store.graph.links[0]!, count: 0, paused: null }],
     });
+    t.port.set("p2", agent("b1", 1, "idle")); // 先が前の prompt を片付けた（送った直後は作業中とみなしている）
     t.done(3);
     await flush();
     expect(t.port.prompts).toHaveLength(2);
@@ -502,6 +503,7 @@ describe("GraphEngine — 監督", () => {
       ...t.store.graph,
       nodes: t.store.graph.nodes.map((n) => (n.key === B ? { ...n, stale: true as const } : n)),
     });
+    t.port.set("p3", agent("s1", 1, "idle")); // 監督役が最初の知らせを読み終えた
     t.advance(SUPERVISOR_DEBOUNCE_MS);
     await flush();
     expect(t.port.prompts).toHaveLength(2);
@@ -527,7 +529,7 @@ describe("GraphEngine — 監督", () => {
     t.advance(SUPERVISOR_DEBOUNCE_MS);
     await flush();
     t.port.failWith = null;
-    t.advance(SUPERVISOR_DEBOUNCE_MS);
+    t.advance(ASSUMED_BUSY_MS); // 送り始めに作業中とみなした期限が過ぎ、今の状態（idle）に戻る
     await flush();
     expect(t.port.prompts).toHaveLength(2);
     expect(t.runs().map((r) => r.result)).toEqual(["sent"]);
@@ -705,6 +707,7 @@ describe("GraphEngine — 変異の網羅で見つけた抜け", () => {
       (p) => p.agents.set("p2", agent("b1", 0, "working")),
     );
     t.done(1);
+    await flush();
     expect(t.runs()).toEqual([expect.objectContaining({ result: "skipped", reason: "busy" })]);
   });
 
@@ -818,7 +821,7 @@ describe("GraphEngine — 変異の網羅で見つけた抜け", () => {
     t.advance(SUPERVISOR_DEBOUNCE_MS);
     await flush();
     t.port.failWith = null;
-    t.advance(SUPERVISOR_DEBOUNCE_MS);
+    t.advance(ASSUMED_BUSY_MS);
     await flush();
     expect(t.port.prompts).toHaveLength(2);
   });
@@ -857,5 +860,188 @@ describe("GraphEngine — 変異の網羅で見つけた抜け", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("GraphEngine — g02 点検の修正", () => {
+  const supervise = (id: string, from: NodeKey): GraphLink => ({
+    id,
+    kind: "supervise",
+    from,
+    to: S,
+    limit: 10,
+    count: 0,
+    paused: null,
+  });
+  const approval = (id: string): GraphLink => ({
+    id,
+    kind: "approval",
+    from: A,
+    to: S,
+    approval: { mode: "notify", lines: 5 },
+    limit: 10,
+    count: 0,
+    paused: null,
+  });
+
+  it("監督の知らせと承認の代理が同じ見回りに揃っても、監督役へは 1 通ずつ（送った直後は作業中とみなし、手が空いてから次）", async () => {
+    const t = setup([supervise("l1", A), approval("l2")]);
+    t.port.set("p1", agent("a1", 0, "blocked"));
+    t.advance(SUPERVISOR_DEBOUNCE_MS); // 承認待ちの 1 秒と監督の 2 秒が同じ見回りで揃う
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+    t.port.set("p3", agent("s1", 0, "working"));
+    t.port.set("p3", agent("s1", 1, "idle"));
+    t.advance(SUPERVISOR_DEBOUNCE_MS);
+    await flush();
+    expect(t.port.prompts).toHaveLength(2);
+    expect(
+      t.port.prompts.map(([, text]) => (text.includes("承認待ち") ? "approval" : "notice")).sort(),
+    ).toEqual(["approval", "notice"]);
+  });
+
+  it("監督の知らせを送った直後に承認の代理が動いても、監督役の手が空くまで待つ", async () => {
+    const t = setup([supervise("l1", A), approval("l2")]);
+    t.advance(SUPERVISOR_DEBOUNCE_MS); // 監督の知らせ
+    await flush();
+    t.port.set("p1", agent("a1", 0, "blocked"));
+    t.advance(BLOCKED_HOLD_MS);
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+    expect(t.runs().map((r) => [r.linkId, r.result])).toEqual([
+      ["l1", "sent"],
+      ["l2", "waiting"],
+    ]);
+    t.port.set("p3", agent("s1", 1, "idle"));
+    await flush();
+    expect(t.port.prompts).toHaveLength(2);
+  });
+
+  it("作業中とみなす期限が過ぎれば、本物の状態（idle）に戻って次を送る", async () => {
+    const t = setup([trigger()]);
+    t.done(1);
+    await flush();
+    t.done(2);
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+    expect(t.runs().at(-1)).toMatchObject({ result: "waiting" });
+    t.advance(ASSUMED_BUSY_MS - 1);
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+    t.advance(1);
+    await flush();
+    expect(t.port.prompts).toHaveLength(2);
+  });
+
+  it("画面を読んでいる間に線が消えたら送らず、履歴も graph.fired も残さない", async () => {
+    const t = setup([trigger()]);
+    t.port.holdTail = true;
+    t.done(1);
+    await flush();
+    t.store.set({ ...t.store.graph, links: [] });
+    t.port.finishTail();
+    await flush();
+    expect(t.port.prompts).toEqual([]);
+    expect(t.runs()).toEqual([]);
+  });
+
+  it("画面を読んでいる間に止められたら送らず paused、回数が上限に届いていれば limit", async () => {
+    const paused = setup([trigger()]);
+    paused.port.holdTail = true;
+    paused.done(1);
+    await flush();
+    paused.store.set({ ...paused.store.graph, paused: true });
+    paused.port.finishTail();
+    await flush();
+    expect(paused.port.prompts).toEqual([]);
+    expect(paused.runs()).toEqual([
+      expect.objectContaining({ result: "skipped", reason: "paused" }),
+    ]);
+    const user = setup([trigger()]);
+    user.port.holdTail = true;
+    user.done(1);
+    await flush();
+    user.store.set({ ...user.store.graph, links: [trigger({ paused: "user" })] });
+    user.port.finishTail();
+    await flush();
+    expect(user.runs()).toEqual([expect.objectContaining({ result: "skipped", reason: "paused" })]);
+    const limit = setup([trigger({ limit: 2 })]);
+    limit.port.holdTail = true;
+    limit.done(1);
+    await flush();
+    limit.store.set({ ...limit.store.graph, links: [trigger({ limit: 2, count: 2 })] });
+    limit.port.finishTail();
+    await flush();
+    expect(limit.port.prompts).toEqual([]);
+    expect(limit.runs()).toEqual([expect.objectContaining({ result: "skipped", reason: "limit" })]);
+    const limitPaused = setup([trigger()]);
+    limitPaused.port.holdTail = true;
+    limitPaused.done(1);
+    await flush();
+    limitPaused.store.set({ ...limitPaused.store.graph, links: [trigger({ paused: "limit" })] });
+    limitPaused.port.finishTail();
+    await flush();
+    expect(limitPaused.runs()).toEqual([
+      expect.objectContaining({ result: "skipped", reason: "limit" }),
+    ]);
+  });
+
+  it("同じ線が送っている途中に次の送信が決まっても重ねず busy（回数は 1 つだけ）", async () => {
+    const t = setup([trigger()]);
+    t.port.hold = true;
+    t.done(1);
+    await flush();
+    t.done(2); // 先は作業中とみなしているので待ち
+    t.port.set("p2", agent("b1", 0, "idle")); // 送っている途中に先の本物の idle が届く → 待ちが解けて送ろうとする
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+    expect(t.runs().map((r) => [r.result, r.reason])).toEqual([
+      ["waiting", undefined],
+      ["skipped", "busy"],
+    ]);
+    t.port.finish();
+    await flush();
+    expect(t.store.recordRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("監督役への知らせを送っている途中に次の知らせが決まったら、送り終えた後に送り直す", async () => {
+    const t = setup([supervise("l1", A)]);
+    t.port.hold = true;
+    t.advance(SUPERVISOR_DEBOUNCE_MS);
+    await flush();
+    t.store.set({ ...t.store.graph, links: [supervise("l1", A), supervise("l2", B)] });
+    t.port.set("p3", agent("s1", 0, "idle")); // 途中に本物の idle が届く
+    t.advance(SUPERVISOR_DEBOUNCE_MS);
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+    t.port.hold = false;
+    t.port.finish();
+    await flush();
+    t.port.set("p3", agent("s1", 1, "idle"));
+    t.advance(SUPERVISOR_DEBOUNCE_MS);
+    await flush();
+    expect(t.port.prompts).toHaveLength(2);
+    expect(t.port.prompts[1]![1]).toContain("pane p2");
+  });
+
+  it("graph.fired は原因の状態の変化を配り終えた後に配る（同期の bus で先に届かない）", async () => {
+    const t = setup([trigger()], {}, (p) => p.agents.set("p2", null));
+    t.done(1);
+    expect(t.runs()).toEqual([]); // まだ配っていない
+    expect(t.engine.getHistory("l1")).toHaveLength(1); // 履歴には残っている
+    await flush();
+    expect(t.runs()).toEqual([expect.objectContaining({ reason: "target_absent" })]);
+  });
+
+  it("同じ時刻の履歴も新しい順", async () => {
+    const t = setup([trigger()], {}, (p) => p.agents.set("p2", null));
+    t.done(1); // target_absent
+    t.port.agents.set("p2", agent("b1", 0, "working"));
+    t.port.set("p2", agent("b1", 0, "working"));
+    t.done(2); // 同じ時刻に waiting
+    const history = t.engine.getHistory("l1");
+    expect(history.map((r) => r.at)).toEqual([t.at(), t.at()]);
+    expect(history.map((r) => r.result)).toEqual(["waiting", "skipped"]);
+    expect(t.engine.getHistory().map((r) => r.result)).toEqual(["waiting", "skipped"]);
   });
 });

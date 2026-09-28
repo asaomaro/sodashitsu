@@ -362,6 +362,30 @@ describe("GraphStore", () => {
     expect(store.get().links[0]).toMatchObject({ count: 1, paused: "user" });
   });
 
+  it("recordRun は rev を上げない（回数は rev の対象外。他の画面の graph.update を rev_conflict にしない）が、保存して知らせる（g02 点検）", async () => {
+    const dir = await tempDir();
+    const store = await loaded(dir);
+    await store.update(0, build, "c1");
+    const seen: [number, number][] = [];
+    store.onChange((g) => seen.push([g.rev, g.links[0]!.count]));
+    await store.recordRun("l1");
+    expect(store.get().rev).toBe(1);
+    expect(seen).toEqual([[1, 1]]);
+    // 回数を数えた後でも、同じ rev を見ていた画面の変更は通る
+    await expect(
+      store.update(1, [{ op: "move_node", key: A, x: 20, y: 0 }], "c2"),
+    ).resolves.toMatchObject({ rev: 2 });
+    expect((await loaded(dir)).get().links[0]!.count).toBe(1);
+  });
+
+  it("recordRun は利用者の一時停止を上限の一時停止で上書きしない（送っている途中に止められた。g02 点検）", async () => {
+    const store = await loaded();
+    await store.update(0, [...build, { op: "update_link", id: "l1", limit: 1 }], "c1");
+    await store.pause("l1", "c1");
+    expect(await store.recordRun("l1")).toEqual({ limitReached: true });
+    expect(store.get().links[0]).toMatchObject({ count: 1, paused: "user" });
+  });
+
   it("flush は待ち行列の書き込みを待つ", async () => {
     const dir = await tempDir();
     const store = await loaded(dir);

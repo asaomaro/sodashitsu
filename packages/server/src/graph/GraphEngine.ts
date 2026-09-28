@@ -1,5 +1,6 @@
 import {
   GRAPH_HISTORY_PER_LINK,
+  type AgentInfo,
   type Graph,
   type GraphLink,
   type GraphNode,
@@ -52,6 +53,11 @@ export interface GraphEngineDeps {
 
 /** 見回りの間隔（承認待ちの 1 秒・待ちの 30 分・監督の 2 秒のまとめを見る）。 */
 export const GRAPH_TICK_MS = 1000;
+/**
+ * 送った先を「作業中」とみなす時間（ms）。送った直後の先は、エージェントが読み始めて working を公開するまで idle のまま見えるので、その間に
+ * 同じ先へ 2 つ目の prompt（監督の知らせと承認の代理が同じ tick に揃った等）を続けて送らない。本物の状態の知らせが来たらそちらを使う。
+ */
+export const ASSUMED_BUSY_MS = 5000;
 
 interface End {
   machine: string;
@@ -65,10 +71,14 @@ interface LinkRuntime {
   from: End;
   to: End;
   state: TriggerState;
+  /** 送っている途中（同じ線の送信を重ねない）。 */
+  sending: boolean;
 }
 
 interface SupervisorRuntime {
   end: End;
+  /** 知らせを送っている途中。 */
+  sending: boolean;
   notifier: SupervisorNotifier;
   /** この監督役への監督の線（履歴を残す先）。 */
   links: GraphLink[];
@@ -87,7 +97,11 @@ function endOf(key: string, local: AgentPort): End {
 export class GraphEngine {
   private readonly links = new Map<string, LinkRuntime>();
   private readonly supervisors = new Map<string, SupervisorRuntime>();
-  private readonly history = new Map<string, LinkRun[]>();
+  private readonly history = new Map<string, { run: LinkRun; seq: number }[]>();
+  /** 履歴の連番（同じ時刻の記録を新しい順に並べる）。 */
+  private seq = 0;
+  /** 送った直後で「作業中」とみなしている先（鍵は `<machine>:<paneId>`）。 */
+  private readonly assumedBusy = new Map<string, { end: End; until: number }>();
   private subs: Disposable[] = [];
   private timer: { clear(): void } | null = null;
   private graph: Graph | null = null;
@@ -120,21 +134,29 @@ export class GraphEngine {
     // 線・監督役の状態は捨てる（待ちも一緒に消え、履歴には残さない）。次の start は今の値を基準に作り直す。
     this.links.clear();
     this.supervisors.clear();
+    this.assumedBusy.clear();
   }
 
   /** 履歴（新しい順）。`linkId` 無しは全部の線。 */
   getHistory(linkId?: string, limit?: number): LinkRun[] {
-    const runs =
+    const entries =
       linkId === undefined
         ? [...this.history.values()].flat()
         : [...(this.history.get(linkId) ?? [])];
-    runs.sort((a, b) => b.at - a.at);
+    entries.sort((a, b) => b.run.at - a.run.at || b.seq - a.seq);
+    const runs = entries.map((e) => e.run);
     return limit === undefined ? runs : runs.slice(0, limit);
   }
 
   /** 見回り（1 秒ごと。試験は直接呼ぶ）。 */
   tick(): void {
     const at = this.deps.now();
+    // 「作業中とみなす」の期限が来た先は、今の本当の状態に戻す。
+    for (const [key, { end, until }] of [...this.assumedBusy]) {
+      if (at < until) continue;
+      this.assumedBusy.delete(key);
+      this.feedTarget(end, end.port!.status(end.paneId), at);
+    }
     for (const rt of [...this.links.values()])
       this.apply(rt, rt.state.handle({ kind: "tick", at }), at);
     for (const sv of [...this.supervisors.values()])
@@ -190,6 +212,7 @@ export class GraphEngine {
       link,
       from,
       to,
+      sending: false,
       state: new TriggerState(settings, {
         source: from.port.status(from.paneId),
         target: to.port?.status(to.paneId) ?? null,
@@ -240,6 +263,7 @@ export class GraphEngine {
       if (existing === undefined) {
         this.supervisors.set(key, {
           end,
+          sending: false,
           links,
           notifier: new SupervisorNotifier({
             signature,
@@ -265,6 +289,7 @@ export class GraphEngine {
 
   private onStatus(port: AgentPort, e: AgentStatusEvent): void {
     const at = this.deps.now();
+    this.assumedBusy.delete(`${port.machine}:${e.paneId}`); // 本物の知らせが来たらそちらを使う
     for (const rt of [...this.links.values()]) {
       if (rt.from.port === port && rt.from.paneId === e.paneId)
         this.apply(rt, rt.state.handle({ kind: "source", agent: e.agent, at }), at);
@@ -283,12 +308,48 @@ export class GraphEngine {
     if (d.kind === "wait") this.record({ linkId: rt.link.id, at, result: "waiting" });
     else if (d.kind === "skip")
       this.record({ linkId: rt.link.id, at, result: "skipped", reason: d.reason });
+    // 同じ線がまだ送っている途中なら重ねない（回数が上限を超えない）。先は作業中とみなしているので busy。
+    else if (rt.sending) this.record({ linkId: rt.link.id, at, result: "skipped", reason: "busy" });
     else void this.send(rt);
   }
 
   private applySupervisor(sv: SupervisorRuntime, d: SupervisorDecision): void {
     if (d === null) return;
+    if (sv.sending) {
+      sv.notifier.retry(this.deps.now()); // 送っている途中の変化は、次に手が空いたときに知らせ直す
+      return;
+    }
     void this.notifySupervisor(sv);
+  }
+
+  /** 送り始めた先を、しばらく作業中とみなす（同じ先への 2 つ目の prompt を続けて送らない。`ASSUMED_BUSY_MS`）。 */
+  private assumeBusy(end: End): void {
+    const agent = end.port!.status(end.paneId);
+    if (agent === null) return;
+    const at = this.deps.now();
+    this.assumedBusy.set(`${end.machine}:${end.paneId}`, { end, until: at + ASSUMED_BUSY_MS });
+    this.feedTarget(end, { ...agent, state: "working" }, at);
+  }
+
+  /** 先・監督役としての状態だけを流す（元としての完了・承認待ちの判定には流さない）。 */
+  private feedTarget(end: End, agent: AgentInfo | null, at: number): void {
+    for (const rt of [...this.links.values()]) {
+      if (rt.to.port === end.port && rt.to.paneId === end.paneId)
+        this.apply(rt, rt.state.handle({ kind: "target", agent, at }), at);
+    }
+    for (const sv of [...this.supervisors.values()]) {
+      if (sv.end.port === end.port && sv.end.paneId === end.paneId)
+        this.applySupervisor(sv, sv.notifier.handle({ kind: "supervisor", agent, at }));
+    }
+  }
+
+  /** 送る直前に、今のグラフで線が残っているか・止まっていないかを確かめる。消えていれば "gone"、止まっていれば見送りの理由。 */
+  private recheck(linkId: string): "gone" | "paused" | "limit" | null {
+    const link = this.graph?.links.find((l) => l.id === linkId);
+    if (link === undefined) return "gone";
+    if (this.graph!.paused || link.paused === "user") return "paused";
+    if (link.paused === "limit" || link.count >= link.limit) return "limit";
+    return null;
   }
 
   // --- 送信 ---
@@ -297,6 +358,8 @@ export class GraphEngine {
     const gen = this.generation;
     const { link, from, to } = rt;
     const target = to.port!;
+    rt.sending = true;
+    this.assumeBusy(to);
     try {
       let text: string;
       if (link.kind === "approval") {
@@ -320,6 +383,13 @@ export class GraphEngine {
         text = buildTriggerText(trigger.prompt, output);
       }
       if (gen !== this.generation) return;
+      // 画面を読んでいる間に線が消えた・止められたら送らない（消えた線の履歴は残さない）。
+      const now = this.recheck(link.id);
+      if (now === "gone") return;
+      if (now !== null) {
+        this.record({ linkId: link.id, at: this.deps.now(), result: "skipped", reason: now });
+        return;
+      }
       await target.prompt(to.paneId, text);
       if (gen !== this.generation) return;
       this.record({
@@ -332,6 +402,8 @@ export class GraphEngine {
       if (gen !== this.generation) return;
       this.recordFailure(link.id, err);
       return;
+    } finally {
+      rt.sending = false;
     }
     // 送れた。回数を数える（保存に失敗しても送ったことは変わらないので、履歴は「送った」のまま。閉じた後〔終了の途中〕は数えない）。
     try {
@@ -353,6 +425,8 @@ export class GraphEngine {
       subs.push(this.paneInfo(endOf(l.from, this.deps.local)));
     }
     const text = supervisorNotice(subs);
+    sv.sending = true;
+    this.assumeBusy(sv.end);
     try {
       await sv.end.port!.prompt(sv.end.paneId, text);
       if (gen !== this.generation) return;
@@ -370,6 +444,8 @@ export class GraphEngine {
         return;
       }
       for (const l of sv.links) this.recordFailure(l.id, err);
+    } finally {
+      sv.sending = false;
     }
   }
 
@@ -405,10 +481,11 @@ export class GraphEngine {
 
   private record(run: LinkRun): void {
     const list = this.history.get(run.linkId) ?? [];
-    list.push(run);
+    list.push({ run, seq: this.seq++ });
     if (list.length > GRAPH_HISTORY_PER_LINK) list.splice(0, list.length - GRAPH_HISTORY_PER_LINK);
     this.history.set(run.linkId, list);
-    this.deps.publish({ event: "graph.fired", data: { run } });
+    // 配るのは原因（状態の変化・graph.changed）を配り終えた後（bus は同期なので、ここで配ると原因より先に届く）。
+    queueMicrotask(() => this.deps.publish({ event: "graph.fired", data: { run } }));
   }
 
   /** 購読者の例外を外へ出さない（bus の後続の購読者〔WS への配信〕を止めない。research F3.3）。 */
