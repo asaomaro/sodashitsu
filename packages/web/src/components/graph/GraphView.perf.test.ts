@@ -90,7 +90,10 @@ describe("GraphView の描画の時間（pane 16・線 32。AC17）", () => {
     const rerenderMs = performance.now() - t1;
     expect(wrapper.find('[data-node-key="local:p1"]').attributes("style")).toContain("40px");
 
-    process.stdout.write(
+    // web の型は node を持たないので globalThis から引く（vitest は Node で動く）。console は通った試験では出ないため標準出力へ直に書く。
+    (
+      globalThis as unknown as { process: { stdout: { write(s: string): void } } }
+    ).process.stdout.write(
       `[graph-perf] ${JSON.stringify({ case: "web-render", env: "happy-dom", panes: PANES, links: PANES * 2, openMs: Math.round(openMs), rerenderMs: Math.round(rerenderMs), limitMs: LIMIT_MS })}\n`,
     );
     expect(openMs).toBeLessThan(LIMIT_MS);
