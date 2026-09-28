@@ -18,6 +18,11 @@ soda --state-dir ~/soda-lan # 状態ディレクトリを指定
 - 手元の `soda serve` が動いていればそれに繋ぐ。動いていなければ**裏で起動してから**繋ぐ（既定の session は `127.0.0.1:7780`、
   名前付き session は記憶したポート〔`serve.json`〕、無ければ 7780）。起動した場合、初回の token（ブラウザでログインするためのもの）を端末版が画面を開く前に
   標準エラーへ出す。**二度と出ない**ので、ブラウザでも使うなら控える（無くしたら `soda token reset`）。
+- 裏で起動したサーバは最初に打った端末より長く生き、その環境が以後の pane に写るので、その端末・セッションだけの環境変数は渡さない:
+  `TMUX`・`TMUX_PANE`・`STY`・`WINDOW`・`SSH_CONNECTION`・`SSH_CLIENT`・`SSH_TTY`・（SSH の中で起動したときだけ）`SSH_AUTH_SOCK`・
+  `TERM_PROGRAM`・`TERM_PROGRAM_VERSION`・`TERM_SESSION_ID`・`LC_TERMINAL`・`LC_TERMINAL_VERSION`・`WINDOWID`・`WT_SESSION`・`WT_PROFILE_ID`・
+  `KITTY_WINDOW_ID` 等・`ALACRITTY_*` の窓の値・`KONSOLE_*`・`WEZTERM_*`・`GHOSTTY_*`・`ITERM_*`・`VSCODE_*`、VS Code を指す `GIT_ASKPASS`・`BROWSER`。
+  `TERM`・`COLORTERM`・`DISPLAY`・`WAYLAND_DISPLAY` とほかの変数は渡す。`soda serve` を手で起動したときは何も除かない。
 - 既定の session は `--state-dir` を替えてもポート 7780 を使うので、7780 がふさがっていると裏での起動が失敗する。別のポートにするなら名前付き session で、
   最初に 1 回 `soda serve --session <名前> --port <N>`（`--state-dir` を使うなら同じものを付ける）を起動して止める。名前付き session は
   そのポートを覚え、以後は `soda --session <名前>` が同じポートで裏に起動する。

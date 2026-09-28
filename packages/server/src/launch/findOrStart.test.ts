@@ -15,9 +15,9 @@ import {
   tokenNotice,
   type FindOrStartOptions,
 } from "./findOrStart.js";
-import { openWs } from "./localHttp.js";
-import { placeholderEntry } from "./placeholderEntry.js";
+import { openWs, postJson } from "./localHttp.js";
 import type { SpawnedServe, SpawnServeRequest } from "./spawnDetached.js";
+import type { TuiEntry } from "./tuiTarget.js";
 import { runTuiCommand } from "./tuiCommand.js";
 import { startupLines } from "../startupBanner.js";
 import { parseArgs } from "../cliArgs.js";
@@ -137,12 +137,17 @@ describe("findOrStart", () => {
     const root = await tempStateDir();
     const calls: SpawnServeRequest[] = [];
     const target = await findOrStart(
-      options(root, { serve: { origin: [], stateDir: root, session: "work" } }),
+      options(root, {
+        serve: { origin: [], stateDir: root, session: "work" },
+        env: { TMUX: "/tmp/tmux-1/default,1,0", TERM_PROGRAM: "vscode", KEEP_ME: "1" },
+      }),
       {
         spawnServe: inProcessSpawn(calls),
       },
     );
     expect(calls).toHaveLength(1);
+    // 最初の端末だけの変数は裏のサーバへ渡さない（serveEnv.ts）
+    expect(calls[0]!.env).toEqual({ KEEP_ME: "1" });
     expect(calls[0]!.args).toEqual([
       "/nonexistent/main.js",
       "serve",
@@ -612,3 +617,65 @@ describe("findOrStart", () => {
     }
   });
 });
+
+/**
+ * **テスト用の入口**。02-server で端末版が出来るまでの仮の入口だったもの（本番の src から、使うこの試験へ移した。統合の review）。本物の入口は `main.ts` の
+ * `import("@sodashitsu/tui").runTui`（03-tui-core の T6 で差し替えた）。
+ * 端末版と同じ手順（ローカルログイン → `/ws` → `client.hello`〔`kind: "desktop"`〕）で繋がることだけを確かめ、繋ぎ先を 1 行表示して終わる。
+ */
+function placeholderEntry(io: { out(line: string): void; err(line: string): void }): TuiEntry {
+  return async (target) => {
+    if (target.startupNotice !== undefined)
+      for (const line of target.startupNotice.split("\n")) io.err(line);
+    if (target.stopHint !== undefined) io.err(target.stopHint);
+    const cookie = await target.login();
+    const probe = await openWs(target, cookie);
+    if (probe.kind !== "open") {
+      io.err(
+        `soda: cannot connect to ${target.baseUrl} (${probe.kind === "status" ? `HTTP ${probe.status}` : probe.error.message})`,
+      );
+      return 1;
+    }
+    const ws = probe.ws;
+    try {
+      const reply = await new Promise<{ result?: { clientId?: string }; error?: { code: string } }>(
+        (resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("client.hello timed out")), 5000);
+          ws.on("message", (raw, isBinary) => {
+            if (isBinary) return;
+            const msg = JSON.parse(raw.toString()) as {
+              id?: string;
+              result?: { clientId?: string };
+              error?: { code: string };
+            };
+            if (msg.id !== "hello") return;
+            clearTimeout(timer);
+            resolve(msg);
+          });
+          ws.once("close", () => reject(new Error("the connection closed before client.hello")));
+          ws.send(
+            JSON.stringify({
+              id: "hello",
+              method: "client.hello",
+              params: { protocol: 1, kind: "desktop" },
+            }),
+          );
+        },
+      );
+      if (reply.error !== undefined || reply.result?.clientId === undefined) {
+        io.err(
+          `soda: client.hello was refused by ${target.baseUrl} (${reply.error?.code ?? "no clientId"})`,
+        );
+        return 1;
+      }
+      io.out(
+        `soda: connected to ${target.baseUrl}${target.session !== undefined ? ` (session ${target.session})` : ""} (tui not yet available)`,
+      );
+      return 0;
+    } finally {
+      ws.close();
+      // 終わるときにセッションを返す（起動のたびにセッションが増えないように。02 の review）。端末版（03）の切り離し・終了も同じにする。
+      await postJson(target, "/api/logout", {}, 5000, cookie).catch(() => undefined);
+    }
+  };
+}

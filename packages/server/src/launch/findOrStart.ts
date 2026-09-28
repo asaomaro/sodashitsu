@@ -15,6 +15,7 @@ import {
   type SpawnedServe,
   type SpawnServeRequest,
 } from "./spawnDetached.js";
+import { detachedServeEnv } from "./serveEnv.js";
 import type { TuiTarget } from "./tuiTarget.js";
 
 /**
@@ -130,7 +131,8 @@ export async function findOrStart(
           ...(options.sessionName !== undefined ? ["--session", options.sessionName] : []),
         ],
         cwd: opts.cwd,
-        env: opts.env,
+        // 最初の端末・セッションだけの変数（TMUX・SSH_*・TERM_PROGRAM 等）を除く（`serveEnv.ts`）。
+        env: detachedServeEnv(opts.env, opts.platform),
         outPath,
         platform: opts.platform,
       });
