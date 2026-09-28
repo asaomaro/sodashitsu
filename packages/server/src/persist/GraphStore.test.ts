@@ -329,6 +329,18 @@ describe("GraphStore", () => {
     expect(store.get().rev).toBe(1);
   });
 
+  it("markLocalStale に条件を渡すと、その pane の手元のノードだけを無効にする（01 のレビュー ラウンド 1）", async () => {
+    const dir = await tempDir();
+    const store = await loaded(dir);
+    await store.update(0, build, "c1"); // local:p1・local:p2・リモートの p1
+    expect(await store.markLocalStale((paneId) => paneId === "p2")).toBe(1);
+    expect(store.get().nodes.map((n) => [n.key, n.stale === true])).toEqual([
+      [A, false],
+      [B, true],
+      [R, false],
+    ]);
+  });
+
   it("flush は待ち行列の書き込みを待つ", async () => {
     const dir = await tempDir();
     const store = await loaded(dir);

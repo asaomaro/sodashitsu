@@ -273,6 +273,32 @@ describe("composeServer: graph.*（20260927-agent-graph）", () => {
     });
   });
 
+  it("読めた session.json より新しい pane（nextId 以上）を指す手元のノードは stale にする（session.json の保存の遅れ。01 のレビュー ラウンド 1）", async () => {
+    const stateDir = await tempStateDir();
+    const first = await startWithClients(stateDir);
+    // 最初の起動の pane は p1 だけ（session.json の nextId.p は 2）。p50 は「作った直後に graph へ載せ、session.json の保存の前に落ちた」pane の代わり。
+    await first.clients[0]!.request("graph.update", {
+      baseRev: 0,
+      ops: [
+        { op: "add_node", key: A, x: 0, y: 0 },
+        { op: "add_node", key: "local:p50", x: 240, y: 0 },
+        { op: "add_node", key: REMOTE, x: 480, y: 0 },
+        { op: "add_node", key: "local:p2", x: 720, y: 0 }, // ちょうど nextId.p（次に作られる pane）
+      ],
+    });
+    first.clients[0]!.ws.close();
+    await first.server.close();
+
+    const second = await start(stateDir);
+    const b = await connect(second, await tokenLogin(second, first.token));
+    expect(((await b.request("graph.get", {})).result as { nodes: unknown[] }).nodes).toEqual([
+      { key: A, x: 0, y: 0 },
+      { key: "local:p50", x: 240, y: 0, stale: true },
+      { key: REMOTE, x: 480, y: 0 },
+      { key: "local:p2", x: 720, y: 0, stale: true },
+    ]);
+  });
+
   it("ログインしていない接続は WebSocket を開けない（graph.* に届かない）", async () => {
     const server = await start(await tempStateDir());
     const port = server.options.port;

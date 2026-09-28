@@ -4,6 +4,7 @@ import {
   applyGraphOps,
   emptyGraph,
   isLocalNodeKey,
+  parseNodeKey,
   validateGraph,
   type GraphDraftState,
   type GraphIssue,
@@ -115,12 +116,14 @@ export class GraphStore {
   /**
    * 手元のノードをすべて無効（`stale`）にする。`session.json` が読めずに pane の id を 1 から振り直した起動で呼ぶ（research F1.2）——保存した `local:p3` が
    * 別の pane を指さないよう、利用者が選び直すか除くまで線を動かさない。無効にしたノードの数を返す（0 なら保存しない）。
+   * `only` を渡すと、その pane の id（`p3` 等）に当てはまる手元のノードだけを無効にする（読めた `session.json` より新しい pane を指すノード。composeServer）。
    */
-  async markLocalStale(): Promise<number> {
+  async markLocalStale(only?: (paneId: string) => boolean): Promise<number> {
     let marked = 0;
     await this.commit((s) => {
       const nodes = s.graph.nodes.map((n) => {
         if (!isLocalNodeKey(n.key) || n.stale === true) return n;
+        if (only !== undefined && !only(parseNodeKey(n.key)!.paneId)) return n;
         marked++;
         return { ...n, stale: true as const };
       });
