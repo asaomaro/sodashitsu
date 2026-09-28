@@ -17,6 +17,8 @@ const props = defineProps<{
   selected: boolean;
   /** Tab の入口（tabindex=0）か。ほかのノードは -1（ノードの間の Tab は親が読み順で動かす）。 */
   tabbable: boolean;
+  /** 無効なノードの「選び直す…」を出すか（条件は親の `canRekey` 1 か所）。 */
+  rekeyable?: boolean;
   /** 読み取りだけ（モバイル）。ハンドル・「pane へ」を出さない。 */
   readOnly?: boolean;
   /** 接続モード・線のドラッグの元。 */
@@ -90,7 +92,7 @@ const ariaLabel = computed(() => {
       ⚠ 無効（pane がありません）
       <!-- 選び直す（rekey_node で線を保つ。design「選び直すか除去するまで」）。キーは r。 -->
       <button
-        v-if="!readOnly && info.local"
+        v-if="rekeyable"
         type="button"
         class="graph-node-rekey"
         tabindex="-1"

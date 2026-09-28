@@ -861,8 +861,15 @@ function requestRemoveNode(key: string): void {
 // --- 無効なノードの選び直し（rekey_node。線はそのまま付け替わる。g03 点検）--------------------------------------------
 
 const rekeyKey = ref<NodeKey | null>(null);
+/**
+ * 選び直せるノードか（ボタンとキーの r の条件はここ 1 か所。レビュー R5）: 無効な手元のノードだけ（候補は手元の pane なので、別のマシンの
+ * ノードを手元の pane に付け替えない）。モバイルは編集しない。
+ */
+function canRekey(key: string): boolean {
+  return !isMobile.value && nodeInvalid(key) && infos.value.get(key)?.local === true;
+}
 function openRekey(key: string): void {
-  if (isMobile.value) return; // モバイルは編集しない（AC20）
+  if (!canRekey(key)) return;
   if (panel.value) {
     guardPanel(() => openRekey(key));
     return;
@@ -1056,7 +1063,7 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
     ev.preventDefault();
     ev.stopPropagation();
     startConnectMode(key);
-  } else if ((ev.key === "r" || ev.key === "R") && nodeInvalid(key) && !isMobile.value) {
+  } else if ((ev.key === "r" || ev.key === "R") && canRekey(key)) {
     ev.preventDefault();
     ev.stopPropagation();
     openRekey(key);
@@ -1441,6 +1448,7 @@ function chipAria(e: EdgeView): string {
               :y="n.y"
               :selected="isNodeSelected(n.key)"
               :tabbable="tabEntryKey === n.key"
+              :rekeyable="canRekey(n.key)"
               :read-only="isMobile"
               :connect-source="connectFrom === n.key || connectDrag?.from === n.key"
               :drop-target="

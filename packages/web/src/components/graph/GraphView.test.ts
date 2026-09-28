@@ -1555,3 +1555,36 @@ describe("GraphView（選び直し・チェックリスト・パネルは排他�
     wrapper.unmount();
   });
 });
+
+describe("GraphView（選び直しは手元のノードだけ。レビュー R5）", () => {
+  it("別のマシンの閉じた pane のノードは、ボタンも r も選び直しを開かない（probe E）", async () => {
+    const M = "a".repeat(32);
+    const t = await openWithGraph({
+      nodes: [
+        { key: "local:p1", x: 0, y: 0 },
+        { key: `${M}:p7`, x: 300, y: 0 },
+      ],
+      links: [],
+    });
+    const machines = (await import("../../store/machines.js")).useMachinesStore(pinia);
+    machines.applySummarySnapshot(M, {
+      protocol: 1,
+      serverVersion: "t",
+      host: { os: "linux", windowsBuild: null, hostname: "h" },
+      workspaces: [],
+      tabs: [],
+      panes: [],
+      groups: [],
+      focus: null,
+      limits: { scrollbackLines: 5000 },
+    });
+    await flush();
+    const n = t.wrapper.find(`[data-node-key="${M}:p7"]`);
+    expect(n.classes()).toContain("graph-node-invalid");
+    expect(n.find(".graph-node-rekey").exists()).toBe(false);
+    await n.trigger("keydown", { key: "r" });
+    await flush();
+    expect(t.wrapper.find(".rekey-picker").exists()).toBe(false);
+    t.wrapper.unmount();
+  });
+});
