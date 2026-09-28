@@ -33,7 +33,7 @@ design「web」「振る舞いの詳細」の全画面のグラフ画面を、01
       対象: `packages/web/src/components/graph/GraphView.vue`・（新規 `GraphNode.vue`・`GraphEdge.vue`・`usePointerDrag.ts`）・`packages/client-core/src/graph/geometry.ts`
       依存: T1
       AC: AC1, AC2, AC10, AC-I5
-- [ ] T3: 線の作成と設定（ハンドルのドラッグ・接続モード `c`・`LinkPanel.vue`〔保存・Ctrl+Enter・取り消しの確認・削除の確認・delegate の注意〕）・一時停止/再開（全体・線ごと）・上限の知らせ（トースト）
+- [x] T3: 線の作成と設定（ハンドルのドラッグ・接続モード `c`・`LinkPanel.vue`〔保存・Ctrl+Enter・取り消しの確認・削除の確認・delegate の注意〕）・一時停止/再開（全体・線ごと）・上限の知らせ（トースト）
       対象: （新規 `packages/web/src/components/graph/LinkPanel.vue`）・`GraphView.vue`・`GraphEdge.vue`
       依存: T2
       AC: AC3, AC11, AC12, AC-I2

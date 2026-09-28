@@ -7,15 +7,20 @@
  * 座標・線の経路・当たり判定は client-core/graph の純関数（geometry）。サーバとのやりとりは `store/graph`。
  */
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import type { GraphLink } from "@sodashitsu/protocol";
+import type { GraphLink, GraphOp, NodeKey } from "@sodashitsu/protocol";
 import {
   clampZoom,
   edgeGeometry,
   fitGraphView,
+  GRAPH_NODE_HEIGHT,
+  GRAPH_NODE_WIDTH,
+  graphNodeAt,
   graphNodeRect,
   parallelOffsets,
   revealGraphRect,
+  screenToGraph,
   snapToGrid,
+  validateLink,
   zoomGraphAt,
   type GraphRect,
   type GraphViewport,
@@ -25,10 +30,18 @@ import { isMobileViewport } from "../../mobile/detect.js";
 import { useGraphStore, type GraphNodeInfo } from "../../store/graph.js";
 import { useMachinesStore } from "../../store/machines.js";
 import { useViewStore } from "../../store/view.js";
+import GraphConfirm from "./GraphConfirm.vue";
 import GraphEdge from "./GraphEdge.vue";
 import GraphNode from "./GraphNode.vue";
+import LinkPanel from "./LinkPanel.vue";
 import { usePointerDrag } from "./usePointerDrag.js";
-import { linkChipText, linkDescription } from "./linkText.js";
+import {
+  LINK_KIND_NAME,
+  linkChipText,
+  linkDescription,
+  linkDraftOf,
+  type LinkPanelSave,
+} from "./linkText.js";
 
 const view = useViewStore();
 const graph = useGraphStore();
@@ -190,6 +203,17 @@ const drag = usePointerDrag();
 function onNodePointerdown(ev: PointerEvent, key: string): void {
   if (isMobile.value || ev.button !== 0) return; // モバイルは閲覧だけ（背景のパンへ流す）
   ev.stopPropagation();
+  if (confirmState.value) return;
+  // 線の設定を開いている間は、外側のクリック＝取り消し（未保存の値と他の操作を混ぜない。research-ui §2.7）。
+  if (panel.value) {
+    panelRef.value?.requestClose();
+    return;
+  }
+  // 接続モード: 押したノードを先にする。
+  if (connectFrom.value) {
+    if (key !== connectFrom.value) openNewLink(connectFrom.value as NodeKey, key as NodeKey);
+    return;
+  }
   const node = graph.nodes.find((n) => n.key === key);
   if (!node) return;
   const target = ev.currentTarget as HTMLElement;
@@ -219,6 +243,15 @@ function onNodePointerdown(ev: PointerEvent, key: string): void {
 
 function onCanvasPointerdown(ev: PointerEvent): void {
   if (ev.button !== 0 && ev.pointerType === "mouse") return;
+  if (confirmState.value) return;
+  if (panel.value) {
+    panelRef.value?.requestClose();
+    return;
+  }
+  if (connectFrom.value) {
+    endConnectMode(true);
+    return;
+  }
   const target = ev.currentTarget as HTMLElement;
   const start = viewport.value;
   drag.start(ev, target, {
@@ -238,7 +271,298 @@ function onCanvasPointerdown(ev: PointerEvent): void {
 
 function onEdgeSelect(ev: PointerEvent, id: string): void {
   ev.stopPropagation();
-  focusLink(id);
+  onChipClick(id);
+}
+
+// --- 線を作る（ハンドルのドラッグ・接続モード。design「線を作る」）---------------------------------------------------
+
+/** ハンドルからドラッグしている線（世界の座標）。 */
+const connectDrag = ref<{
+  from: string;
+  to: { x: number; y: number };
+  hover: string | null;
+} | null>(null);
+/** 接続モード（キーの `c`・ハンドルのクリック）の元。先を Tab・矢印で選び Enter。 */
+const connectFrom = ref<string | null>(null);
+/** 支援技術への知らせ（接続モード・一時停止など、気づくべき出来事だけ。research-ui §2.10）。 */
+const liveMessage = ref("");
+
+function toWorld(e: { clientX: number; clientY: number }): { x: number; y: number } {
+  const r = canvasEl.value?.getBoundingClientRect();
+  return screenToGraph(viewport.value, {
+    x: e.clientX - (r?.left ?? 0),
+    y: e.clientY - (r?.top ?? 0),
+  });
+}
+function nodeAtPoint(p: { x: number; y: number }, exclude: string): string | null {
+  return graphNodeAt(
+    graph.nodes
+      .filter((n) => n.key !== exclude)
+      .map((n) => ({ key: n.key, rect: graphNodeRect(n) })),
+    p,
+  );
+}
+
+function onHandlePointerdown(ev: PointerEvent, key: string): void {
+  if (isMobile.value || ev.button !== 0) return;
+  if (confirmState.value) return;
+  if (panel.value) {
+    panelRef.value?.requestClose();
+    return;
+  }
+  const target = ev.currentTarget as HTMLElement;
+  drag.start(ev, target, {
+    threshold: 4,
+    onStart: (e) => {
+      connectDrag.value = { from: key, to: toWorld(e), hover: null };
+    },
+    onMove: (e) => {
+      const p = toWorld(e);
+      connectDrag.value = { from: key, to: p, hover: nodeAtPoint(p, key) };
+    },
+    onEnd: (e) => {
+      // 離した瞬間の座標で決め直す。空白・元のノード自身で離したら何も作らない（AC-I2）。
+      const hover = nodeAtPoint(toWorld(e), key);
+      connectDrag.value = null;
+      if (hover) openNewLink(key as NodeKey, hover as NodeKey);
+    },
+    // ドラッグしないクリックは接続モード（ドラッグ以外でも結べる。WCAG 2.5.7）。
+    onClick: () => startConnectMode(key),
+    onCancel: () => {
+      connectDrag.value = null;
+    },
+  });
+}
+
+const connectLine = computed(() => {
+  const c = connectDrag.value;
+  if (!c) return null;
+  const n = graph.nodes.find((x) => x.key === c.from);
+  if (!n) return null;
+  return { x1: n.x + GRAPH_NODE_WIDTH, y1: n.y + GRAPH_NODE_HEIGHT / 2, x2: c.to.x, y2: c.to.y };
+});
+
+function connectCandidates(): string[] {
+  return orderedNodes.value.map((n) => n.key).filter((k) => k !== connectFrom.value);
+}
+function startConnectMode(key: string): void {
+  if (isMobile.value) return;
+  connectFrom.value = key;
+  liveMessage.value = `${infos.value.get(key)?.name ?? key} から結ぶ先のノードを選んでください（Tab・矢印で移動、Enter で決定、Esc で取り消し）。`;
+  const first = connectCandidates()[0];
+  if (first) focusNode(first);
+}
+function endConnectMode(backToSource: boolean): void {
+  const from = connectFrom.value;
+  connectFrom.value = null;
+  liveMessage.value = "";
+  if (backToSource && from) focusNode(from);
+}
+function moveConnectFocus(step: number): void {
+  const c = connectCandidates();
+  if (c.length === 0) return;
+  const cur = document.activeElement?.getAttribute("data-node-key") ?? null;
+  const i = cur === null ? -1 : c.indexOf(cur);
+  const next = c[(((i + step) % c.length) + c.length) % c.length]!;
+  focusNode(next);
+}
+
+// --- 線の設定のパネル --------------------------------------------------------------------------------------------
+
+type PanelState = { mode: "edit"; id: string } | { mode: "new"; from: NodeKey; to: NodeKey };
+const panel = ref<PanelState | null>(null);
+/** 開くたびに作り直す（前の線の入力を持ち越さない）。 */
+const panelKey = ref(0);
+const panelSaving = ref(false);
+const panelError = ref<string | null>(null);
+const panelRef = ref<InstanceType<typeof LinkPanel> | null>(null);
+const panelLink = computed(() => {
+  const p = panel.value;
+  return p?.mode === "edit" ? (graph.links.find((l) => l.id === p.id) ?? null) : null;
+});
+const panelNewEnds = computed(() => {
+  const p = panel.value;
+  return p?.mode === "new" ? { from: p.from, to: p.to } : null;
+});
+const panelInvalid = computed(() => {
+  const l = panelLink.value;
+  return l ? nodeInvalid(l.from) || nodeInvalid(l.to) : false;
+});
+
+function openNewLink(from: NodeKey, to: NodeKey): void {
+  connectFrom.value = null;
+  liveMessage.value = "";
+  selection.value = null;
+  panel.value = { mode: "new", from, to };
+  panelError.value = null;
+  panelKey.value++;
+}
+function openLinkPanel(id: string): void {
+  selection.value = { kind: "link", id };
+  panel.value = { mode: "edit", id };
+  panelError.value = null;
+  panelKey.value++;
+}
+/** 閉じたらフォーカスをその線へ（新しい線を取り消したら元のノードへ。AC-I4）。 */
+function closePanel(): void {
+  const p = panel.value;
+  panel.value = null;
+  panelError.value = null;
+  if (p?.mode === "edit") {
+    if (graph.links.some((l) => l.id === p.id)) focusLink(p.id);
+    else dialogEl.value?.focus();
+  } else if (p) focusNode(p.from);
+}
+
+function configOps(p: LinkPanelSave): Pick<LinkPanelSave, "trigger" | "approval" | "limit"> {
+  return {
+    ...(p.trigger === undefined ? {} : { trigger: p.trigger }),
+    ...(p.approval === undefined ? {} : { approval: p.approval }),
+    limit: p.limit,
+  };
+}
+
+async function onPanelSave(p: LinkPanelSave): Promise<void> {
+  panelSaving.value = true;
+  panelError.value = null;
+  const before = new Set(graph.links.map((l) => l.id));
+  const id = p.id;
+  const result =
+    id !== undefined
+      ? await graph.update((g): GraphOp[] | null =>
+          g.links.some((l) => l.id === id) ? [{ op: "update_link", id, ...configOps(p) }] : null,
+        )
+      : await graph.update((g): GraphOp[] | null =>
+          // 送り直しのときは最新のグラフでもう一度確かめる（ノードが外された・同じ線ができた）。
+          validateLink(g, linkDraftOf(p)).length > 0
+            ? null
+            : [{ op: "add_link", kind: p.kind, from: p.from, to: p.to, ...configOps(p) }],
+        );
+  panelSaving.value = false;
+  if (!result.ok) {
+    panelError.value =
+      result.reason === "gone"
+        ? id !== undefined
+          ? "この線はほかの画面・sodactl で削除されました。"
+          : "ほかの画面・sodactl の変更と合わなくなりました（ノードが外された・同じ線ができた等）。"
+        : result.message;
+    return;
+  }
+  panel.value = null;
+  const savedId =
+    id ??
+    result.graph.links.find(
+      (l) => !before.has(l.id) && l.kind === p.kind && l.from === p.from && l.to === p.to,
+    )?.id;
+  if (savedId) focusLink(savedId);
+  else dialogEl.value?.focus();
+}
+
+// --- 確認（線の削除・ノードを外す）---------------------------------------------------------------------------------
+
+interface ConfirmState {
+  message: string;
+  detail?: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+const confirmState = ref<ConfirmState | null>(null);
+function onConfirmOk(): void {
+  const c = confirmState.value;
+  confirmState.value = null;
+  c?.onConfirm();
+}
+function onConfirmCancel(): void {
+  const c = confirmState.value;
+  confirmState.value = null;
+  c?.onCancel();
+}
+
+function requestDeleteLink(id: string): void {
+  const link = graph.links.find((l) => l.id === id);
+  if (!link) return;
+  const fromPanel = panel.value?.mode === "edit" && panel.value.id === id;
+  confirmState.value = {
+    message: `線（${LINK_KIND_NAME[link.kind]}: ${graph.linkTitle(link)}）を削除しますか？`,
+    detail: "実行中・一時停止中でも削除します。送った prompt は取り消せません。",
+    confirmLabel: "削除する",
+    onConfirm: () => {
+      void graph
+        .update((g): GraphOp[] | null =>
+          g.links.some((l) => l.id === id) ? [{ op: "remove_link", id }] : null,
+        )
+        .then((r) => {
+          if (!r.ok && r.reason === "error") view.toast(`線を削除できませんでした（${r.message}）`);
+        });
+      if (fromPanel) panel.value = null;
+      focusNode(link.from);
+    },
+    onCancel: () => {
+      if (fromPanel)
+        void nextTick(() => panelRef.value?.$el?.querySelector?.(".link-panel-delete")?.focus());
+      else focusLink(id);
+    },
+  };
+}
+
+// --- 一時停止・再開（全体・線ごと。AC12）-----------------------------------------------------------------------------
+
+async function toggleGraphPaused(): Promise<void> {
+  const paused = graph.graph?.paused === true;
+  if (await graph.setPaused(!paused))
+    liveMessage.value = paused ? "連携の全体を再開しました。" : "連携の全体を一時停止しました。";
+}
+async function toggleLinkPaused(id: string): Promise<void> {
+  const link = graph.links.find((l) => l.id === id);
+  if (!link) return;
+  const pause = link.paused === null;
+  if (await graph.setPaused(pause, id))
+    liveMessage.value = pause
+      ? `線（${graph.linkTitle(link)}）を一時停止しました。`
+      : `線（${graph.linkTitle(link)}）を再開しました（回数を 0 に戻しました）。`;
+}
+
+function onChipClick(id: string): void {
+  if (connectFrom.value) return;
+  openLinkPanel(id);
+}
+
+function onChipKeydown(ev: KeyboardEvent, id: string): void {
+  if (ev.isComposing || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (ev.key === "Delete" || ev.key === "Backspace") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    requestDeleteLink(id);
+  } else if (ev.key === "p" || ev.key === "P") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    void toggleLinkPaused(id);
+  }
+}
+
+function onNodeKeydown(ev: KeyboardEvent, key: string): void {
+  if (ev.isComposing || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (ev.target !== ev.currentTarget) return;
+  if (connectFrom.value) {
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (key !== connectFrom.value) openNewLink(connectFrom.value as NodeKey, key as NodeKey);
+    } else if (ev.key === "Tab" || ev.key.startsWith("Arrow")) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const back =
+        ev.key === "ArrowLeft" || ev.key === "ArrowUp" || (ev.key === "Tab" && ev.shiftKey);
+      moveConnectFocus(back ? -1 : 1);
+    }
+    return;
+  }
+  if ((ev.key === "c" || ev.key === "C") && !isMobile.value) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    startConnectMode(key);
+  }
 }
 
 /** ホイール: 既定はパン、Ctrl/⌘（トラックパッドのピンチ）はポインタの位置を中心にズーム。ページはスクロールさせない（AC-I5）。 */
@@ -300,6 +624,11 @@ watch(
         return;
       }
       drag.cancel();
+      connectFrom.value = null;
+      connectDrag.value = null;
+      panel.value = null;
+      confirmState.value = null;
+      liveMessage.value = "";
       if (el?.open) el.close();
       // `closeGraph` は焦点の pane を同じ値に戻すだけで、`TerminalPane` の watch が動かない——端末へ明示的に戻す（`CommandPopup` と同じ）。
       const back = view.focusedPaneId;
@@ -372,6 +701,18 @@ function onKeydown(ev: KeyboardEvent): void {
 
 /** Esc は 1 段ずつ（design「開く」: 接続中の取り消し → パネル → 選択 → 画面）。ドラッグ中の Esc は `usePointerDrag` が先に取る。 */
 function escape(): void {
+  if (confirmState.value) {
+    onConfirmCancel();
+    return;
+  }
+  if (connectFrom.value) {
+    endConnectMode(true);
+    return;
+  }
+  if (panel.value) {
+    panelRef.value?.requestClose();
+    return;
+  }
   if (selection.value) {
     selection.value = null;
     dialogEl.value?.focus();
@@ -415,6 +756,16 @@ function chipAria(e: EdgeView): string {
     <template v-if="view.graphOpen">
       <header class="graph-toolbar">
         <h2 class="graph-title">連携（グラフ）</h2>
+        <span v-if="graph.graph?.paused" class="graph-paused-badge">⏸ 全体が一時停止中</span>
+        <button
+          type="button"
+          class="graph-tool graph-pause-all"
+          :aria-pressed="graph.graph?.paused === true"
+          :disabled="!graph.graph"
+          @click="toggleGraphPaused"
+        >
+          {{ graph.graph?.paused ? "全体を再開" : "全体を一時停止" }}
+        </button>
         <button type="button" class="graph-tool graph-fit" title="全体表示（1）" @click="fitAll">
           全体表示
         </button>
@@ -457,6 +808,14 @@ function chipAria(e: EdgeView): string {
                 :firing="graph.firing.get(e.link.id) ?? null"
                 @select="onEdgeSelect($event, e.link.id)"
               />
+              <line
+                v-if="connectLine"
+                class="graph-connecting"
+                :x1="connectLine.x1"
+                :y1="connectLine.y1"
+                :x2="connectLine.x2"
+                :y2="connectLine.y2"
+              />
             </svg>
             <GraphNode
               v-for="n in orderedNodes"
@@ -466,10 +825,16 @@ function chipAria(e: EdgeView): string {
               :y="n.y"
               :selected="isNodeSelected(n.key)"
               :read-only="isMobile"
+              :connect-source="connectFrom === n.key || connectDrag?.from === n.key"
+              :drop-target="
+                connectDrag?.hover === n.key || (connectFrom !== null && connectFrom !== n.key)
+              "
               :out-count="degree.out.get(n.key) ?? 0"
               :in-count="degree.inn.get(n.key) ?? 0"
               @focus="onNodeFocus(n.key)"
+              @keydown="onNodeKeydown($event, n.key)"
               @body-pointerdown="onNodePointerdown($event, n.key)"
+              @handle-pointerdown="onHandlePointerdown($event, n.key)"
             />
             <button
               v-for="e in edges"
@@ -488,7 +853,8 @@ function chipAria(e: EdgeView): string {
               :style="{ left: `${e.mid.x}px`, top: `${e.mid.y}px` }"
               @pointerdown.stop
               @focus="onChipFocus(e.link.id)"
-              @click="focusLink(e.link.id)"
+              @keydown="onChipKeydown($event, e.link.id)"
+              @click="onChipClick(e.link.id)"
             >
               {{ chipLabel(e) }}
             </button>
@@ -499,8 +865,37 @@ function chipAria(e: EdgeView): string {
           <p v-else-if="!graph.graph" class="graph-empty">
             {{ graph.loadError ?? "読み込んでいます…" }}
           </p>
+          <p v-if="connectFrom" class="graph-connect-banner">
+            線の先のノードを選んでください（Tab・矢印で移動、Enter で決定、Esc で取り消し）
+          </p>
         </div>
+        <LinkPanel
+          v-if="panel && graph.graph"
+          ref="panelRef"
+          :key="panelKey"
+          :graph="graph.graph"
+          :link="panelLink"
+          :new-ends="panelNewEnds"
+          :gone="panel.mode === 'edit' && panelLink === null"
+          :name-of="(k) => graph.nodeInfo(k).name"
+          :invalid="panelInvalid"
+          :saving="panelSaving"
+          :error="panelError"
+          @save="onPanelSave"
+          @cancel="closePanel"
+          @delete="panel.mode === 'edit' && requestDeleteLink(panel.id)"
+          @pause="(p) => panel?.mode === 'edit' && graph.setPaused(p, panel.id)"
+        />
       </div>
+      <GraphConfirm
+        v-if="confirmState"
+        :message="confirmState.message"
+        :detail="confirmState.detail"
+        :confirm-label="confirmState.confirmLabel"
+        @confirm="onConfirmOk"
+        @cancel="onConfirmCancel"
+      />
+      <div class="graph-live" aria-live="polite">{{ liveMessage }}</div>
     </template>
   </dialog>
 </template>
@@ -618,6 +1013,36 @@ function chipAria(e: EdgeView): string {
 .graph-chip-fired {
   border-color: var(--soda-state-working, #f1fa8c);
   background: var(--soda-subtle-bg, #343746);
+}
+.graph-paused-badge {
+  color: var(--soda-warn-fg, #ffb86c);
+  font-size: 12px;
+}
+.graph-connecting {
+  stroke: var(--soda-state-working, #f1fa8c);
+  stroke-width: 2px;
+  stroke-dasharray: 6 4;
+}
+.graph-connect-banner {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 4px 12px;
+  border: 1px solid var(--soda-state-working, #f1fa8c);
+  border-radius: 4px;
+  background: var(--soda-menu-bg, #282a36);
+  font-size: 12px;
+  pointer-events: none;
+}
+.graph-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .graph-empty {
   position: absolute;

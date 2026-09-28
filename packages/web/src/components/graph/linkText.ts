@@ -1,4 +1,13 @@
-import type { GraphLink, LinkKind, LinkRunReason, LinkRunResult } from "@sodashitsu/protocol";
+import type {
+  ApprovalConfig,
+  GraphLink,
+  LinkKind,
+  LinkRunReason,
+  LinkRunResult,
+  NodeKey,
+  TriggerConfig,
+} from "@sodashitsu/protocol";
+import type { LinkDraft } from "@sodashitsu/client-core";
 
 /**
  * 線の文言（20260927-agent-graph の design「線の種類の見た目」「エラー処理」）。チップ・読み上げ・パネル・履歴・モバイルのシートが同じ文言を使う。
@@ -93,3 +102,27 @@ export const RUN_REASON_TEXT: Record<LinkRunReason, string> = {
   limit: "上限に達した",
   error: "送れなかった",
 };
+
+/** 線の設定のパネルが保存するもの（`LinkPanel` → `GraphView`）。 */
+export interface LinkPanelSave {
+  /** 既存の線なら id。 */
+  id?: string;
+  kind: LinkKind;
+  from: NodeKey;
+  to: NodeKey;
+  trigger?: TriggerConfig;
+  approval?: ApprovalConfig;
+  limit: number;
+}
+
+/** 検証（client-core の `validateLink`）に渡す形。 */
+export function linkDraftOf(p: LinkPanelSave): LinkDraft {
+  return {
+    ...(p.id === undefined ? {} : { id: p.id }),
+    kind: p.kind,
+    from: p.from,
+    to: p.to,
+    ...(p.trigger === undefined ? {} : { trigger: p.trigger }),
+    ...(p.approval === undefined ? {} : { approval: p.approval }),
+  };
+}

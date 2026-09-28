@@ -113,7 +113,8 @@ async function openWithGraph(extra: Parameters<typeof graphOf>[0] = {}) {
   session.panes.set("p2", paneOf("p2", "t1", { label: "reviewer" }));
   const store = useGraphStore(pinia);
   const fake = fakeGraphPort({
-    "graph.update": (p) => graphOf({ rev: (p as { baseRev: number }).baseRev + 1 }),
+    // 既定は内容を変えずに rev だけ進める（操作の中身は各試験が calls で確かめる）。
+    "graph.update": (p) => ({ ...store.graph!, rev: (p as { baseRev: number }).baseRev + 1 }),
   });
   store.bind(fake.port);
   store.applyGraph(
@@ -261,10 +262,14 @@ describe("GraphView（ノードと線。03 T2）", () => {
     await flush();
     expect(world.style.transform).not.toBe(before);
     await wrapper.find('[data-link-chip="l1"]').trigger("click");
-    expect(wrapper.find('[data-link-chip="l1"]').classes()).toContain("graph-chip-selected");
-    canvas.dispatchEvent(pointer("pointerdown", { clientX: 10, clientY: 10 }));
-    window.dispatchEvent(pointer("pointerup", { clientX: 10, clientY: 10 }));
     await flush();
+    expect(wrapper.find('[data-link-chip="l1"]').classes()).toContain("graph-chip-selected");
+    // 1 回目はパネルを閉じる（外側のクリック）、2 回目で選択を外す
+    for (let i = 0; i < 2; i++) {
+      canvas.dispatchEvent(pointer("pointerdown", { clientX: 10, clientY: 10 }));
+      window.dispatchEvent(pointer("pointerup", { clientX: 10, clientY: 10 }));
+      await flush();
+    }
     expect(wrapper.find('[data-link-chip="l1"]').classes()).not.toContain("graph-chip-selected");
     wrapper.unmount();
   });
@@ -333,15 +338,208 @@ describe("GraphView（ノードと線。03 T2）", () => {
     t.wrapper.unmount();
   });
 
-  it("Esc は選択を外し、もう一度で閉じる", async () => {
+  it("Esc は 1 段ずつ: パネル → 選択 → 画面", async () => {
     const { wrapper, view } = await openWithGraph();
     await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
     const root = wrapper.find(".graph-view");
+    await root.trigger("keydown", { key: "Escape" });
+    await flush();
+    expect(wrapper.find(".link-panel").exists()).toBe(false);
+    expect(wrapper.find(".graph-chip-selected").exists()).toBe(true);
     await root.trigger("keydown", { key: "Escape" });
     expect(view.graphOpen).toBe(true);
     expect(wrapper.find(".graph-chip-selected").exists()).toBe(false);
     await root.trigger("keydown", { key: "Escape" });
     expect(view.graphOpen).toBe(false);
+    wrapper.unmount();
+  });
+});
+
+describe("GraphView（線の作成と設定・一時停止。03 T3）", () => {
+  beforeEach(() => {
+    // 等倍・原点の表示（画面の座標＝世界の座標）で始める（全体表示にしない）。
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+
+  it("ハンドルから別のノードへドラッグして離すと新しい線のパネル。保存で add_link を送り、新しい線のチップへフォーカス", async () => {
+    const { wrapper, fake, store } = await openWithGraph({ links: [] });
+    fake.handlers["graph.update"] = () =>
+      graphOf({ rev: 2, links: [triggerLink("l7", "local:p1", "local:p2")] });
+    const handle = wrapper.find('[data-node-key="local:p1"] .graph-node-handle').element;
+    handle.dispatchEvent(pointer("pointerdown", { clientX: 200, clientY: 40 }));
+    window.dispatchEvent(pointer("pointermove", { clientX: 340, clientY: 40 }));
+    await flush();
+    expect(wrapper.find(".graph-connecting").exists()).toBe(true);
+    expect(wrapper.find('[data-node-key="local:p2"]').classes()).toContain("graph-node-drop");
+    window.dispatchEvent(pointer("pointerup", { clientX: 350, clientY: 40 }));
+    await flush();
+    expect(wrapper.find(".graph-connecting").exists()).toBe(false);
+    expect(wrapper.find(".link-panel-heading").text()).toBe("新しい線: impl → reviewer（トリガ）");
+    expect(fake.calls).toHaveLength(0); // 保存するまで送らない
+    await wrapper.find(".link-panel-save").trigger("click");
+    await flush();
+    expect(fake.calls[0]).toMatchObject({
+      method: "graph.update",
+      params: {
+        baseRev: 1,
+        ops: [{ op: "add_link", kind: "trigger", from: "local:p1", to: "local:p2", limit: 10 }],
+      },
+    });
+    expect(wrapper.find(".link-panel").exists()).toBe(false);
+    expect(store.links.map((l) => l.id)).toEqual(["l7"]);
+    expect(document.activeElement?.getAttribute("data-link-chip")).toBe("l7");
+    wrapper.unmount();
+  });
+
+  it("ハンドルのドラッグを空白・元のノードで離す、Esc で取り消すと線を作らない（AC-I2）", async () => {
+    const { wrapper, view } = await openWithGraph({ links: [] });
+    const handle = wrapper.find('[data-node-key="local:p1"] .graph-node-handle').element;
+    handle.dispatchEvent(pointer("pointerdown", { clientX: 200, clientY: 40 }));
+    window.dispatchEvent(pointer("pointermove", { clientX: 250, clientY: 300 }));
+    window.dispatchEvent(pointer("pointerup", { clientX: 250, clientY: 300 }));
+    await flush();
+    expect(wrapper.find(".link-panel").exists()).toBe(false);
+    handle.dispatchEvent(pointer("pointerdown", { clientX: 200, clientY: 40 }));
+    window.dispatchEvent(pointer("pointermove", { clientX: 100, clientY: 40 }));
+    window.dispatchEvent(pointer("pointerup", { clientX: 100, clientY: 40 }));
+    await flush();
+    expect(wrapper.find(".link-panel").exists()).toBe(false);
+    handle.dispatchEvent(pointer("pointerdown", { clientX: 200, clientY: 40 }));
+    window.dispatchEvent(pointer("pointermove", { clientX: 340, clientY: 40 }));
+    handle.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+    await flush();
+    window.dispatchEvent(pointer("pointerup", { clientX: 340, clientY: 40 }));
+    await flush();
+    expect(wrapper.find(".graph-connecting").exists()).toBe(false);
+    expect(wrapper.find(".link-panel").exists()).toBe(false);
+    expect(view.graphOpen).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("キーだけで結ぶ: ノードで c → 先へフォーカス → Enter でパネル。接続モードの Esc は元のノードへ戻る", async () => {
+    const { wrapper, view } = await openWithGraph({ links: [] });
+    const n1 = wrapper.find('[data-node-key="local:p1"]');
+    (n1.element as HTMLElement).focus();
+    await n1.trigger("keydown", { key: "c" });
+    await flush();
+    expect(wrapper.find(".graph-connect-banner").exists()).toBe(true);
+    expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p2");
+    expect(wrapper.find(".graph-live").text()).toContain("結ぶ先のノードを選んでください");
+    // Tab は候補の間で回る（元のノードは選べない）
+    await wrapper.find('[data-node-key="local:p2"]').trigger("keydown", { key: "Tab" });
+    await flush();
+    expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p2");
+    await wrapper.find(".graph-view").trigger("keydown", { key: "Escape" });
+    await flush();
+    expect(wrapper.find(".graph-connect-banner").exists()).toBe(false);
+    expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p1");
+    expect(view.graphOpen).toBe(true);
+    await n1.trigger("keydown", { key: "c" });
+    await flush();
+    await wrapper.find('[data-node-key="local:p2"]').trigger("keydown", { key: "Enter" });
+    await flush();
+    expect(wrapper.find(".link-panel-heading").text()).toBe("新しい線: impl → reviewer（トリガ）");
+    wrapper.unmount();
+  });
+
+  it("チップのクリックで設定を開き、上限を変えて保存すると update_link。パネルの Esc は閉じてその線へ戻る", async () => {
+    const { wrapper, fake, view } = await openWithGraph();
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    expect(wrapper.find(".link-panel-heading").text()).toBe("線: impl → reviewer（トリガ）");
+    await wrapper.find(".link-panel-limit").setValue(5);
+    await wrapper.find(".link-panel-save").trigger("click");
+    await flush();
+    expect(fake.calls[0]).toMatchObject({
+      method: "graph.update",
+      params: { ops: [{ op: "update_link", id: "l1", limit: 5 }] },
+    });
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    wrapper
+      .find(".link-panel-limit")
+      .element.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    await flush();
+    expect(wrapper.find(".link-panel").exists()).toBe(false);
+    expect(document.activeElement?.getAttribute("data-link-chip")).toBe("l1");
+    expect(view.graphOpen).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("パネルを開いている間の外側のクリックは取り消し（変更が無ければ閉じる）で、パンもしない", async () => {
+    const { wrapper } = await openWithGraph();
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    const world = wrapper.find(".graph-world").element as HTMLElement;
+    const before = world.style.transform;
+    wrapper
+      .find(".graph-canvas")
+      .element.dispatchEvent(pointer("pointerdown", { clientX: 5, clientY: 5 }));
+    window.dispatchEvent(pointer("pointermove", { clientX: 90, clientY: 90 }));
+    window.dispatchEvent(pointer("pointerup", { clientX: 90, clientY: 90 }));
+    await flush();
+    expect(wrapper.find(".link-panel").exists()).toBe(false);
+    expect(world.style.transform).toBe(before);
+    wrapper.unmount();
+  });
+
+  it("線の削除は確認を挟み（既定のフォーカスは取り消す）、取り消せば何も送らずチップへ戻り、確定で remove_link", async () => {
+    const { wrapper, fake } = await openWithGraph();
+    const chip = wrapper.find('[data-link-chip="l1"]');
+    (chip.element as HTMLElement).focus();
+    await chip.trigger("keydown", { key: "Delete" });
+    await flush();
+    expect(wrapper.find(".graph-confirm-message").text()).toBe(
+      "線（トリガ: impl → reviewer）を削除しますか？",
+    );
+    expect(document.activeElement?.className).toBe("graph-confirm-cancel");
+    await wrapper.find(".graph-confirm").trigger("keydown", { key: "Escape" });
+    await flush();
+    expect(wrapper.find(".graph-confirm").exists()).toBe(false);
+    expect(fake.calls).toHaveLength(0);
+    expect(document.activeElement?.getAttribute("data-link-chip")).toBe("l1");
+    await chip.trigger("keydown", { key: "Backspace" });
+    await flush();
+    await wrapper.find(".graph-confirm-ok").trigger("click");
+    await flush();
+    expect(fake.calls[0]).toMatchObject({
+      method: "graph.update",
+      params: { ops: [{ op: "remove_link", id: "l1" }] },
+    });
+    wrapper.unmount();
+  });
+
+  it("ツールバーで全体の一時停止・再開、チップの p で線の一時停止・再開（AC12）", async () => {
+    const { wrapper, fake, store } = await openWithGraph();
+    fake.handlers["graph.pause"] = (p) =>
+      (p as { linkId?: string }).linkId
+        ? graphOf({
+            rev: 3,
+            links: [triggerLink("l1", "local:p1", "local:p2", { paused: "user" })],
+          })
+        : graphOf({ rev: 2, paused: true, links: store.links });
+    fake.handlers["graph.resume"] = () =>
+      graphOf({ rev: 4, links: [triggerLink("l1", "local:p1", "local:p2")] });
+    const btn = wrapper.find(".graph-pause-all");
+    expect(btn.text()).toBe("全体を一時停止");
+    await btn.trigger("click");
+    await flush();
+    expect(fake.calls[0]).toEqual({ method: "graph.pause", params: {} });
+    expect(btn.text()).toBe("全体を再開");
+    expect(btn.attributes("aria-pressed")).toBe("true");
+    expect(wrapper.find(".graph-paused-badge").exists()).toBe(true);
+    await wrapper.find('[data-link-chip="l1"]').trigger("keydown", { key: "p" });
+    await flush();
+    expect(fake.calls[1]).toEqual({ method: "graph.pause", params: { linkId: "l1" } });
+    expect(wrapper.find('[data-link-chip="l1"]').text()).toContain("⏸");
+    await wrapper.find('[data-link-chip="l1"]').trigger("keydown", { key: "p" });
+    await flush();
+    expect(fake.calls[2]).toEqual({ method: "graph.resume", params: { linkId: "l1" } });
     wrapper.unmount();
   });
 });
