@@ -40,7 +40,7 @@ architecture の `TriggerState`（純粋な状態機械）・`SupervisorNotifier
       対象: `packages/server/src/surface/methods/graph.ts:43`・`packages/server/src/composeServer.ts:296-316,506-569,648-649`・（新規 `graph/GraphEngine.ts`）
       依存: T1, T2, T3
       AC: AC4, AC5, AC6, AC7, AC8, AC9, AC10, AC11, AC12
-- [ ] T5: 実物のサーバの結合試験（トリガ 1 回・待ち・見送りの理由・受け渡しの行・監督の知らせ・承認の代理・上限・一時停止・stale のノードは動かない・終了後に graph.json を書かない）
+- [x] T5: 実物のサーバの結合試験（トリガ 1 回・待ち・見送りの理由・受け渡しの行・監督の知らせ・承認の代理・上限・一時停止・stale のノードは動かない・終了後に graph.json を書かない）
       対象: （新規 `packages/server/src/composeServer.graph.integration.test.ts`）
       依存: T4
       AC: AC4, AC5, AC6, AC7, AC8, AC9, AC10, AC11, AC12
