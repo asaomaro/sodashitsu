@@ -2,6 +2,7 @@
 // （server の `terminal/Mirror.ts` の冒頭と同じ事情）。default（名前空間オブジェクト）を受けて実行時に取り出す。
 import xtermHeadless from "@xterm/headless";
 import xtermUnicode11 from "@xterm/addon-unicode11";
+import { InlineImageFilter, parseInlineImage } from "../image/inlineImages.js";
 
 const { Terminal } = xtermHeadless;
 const { Unicode11Addon } = xtermUnicode11;
@@ -17,6 +18,20 @@ const MOUSE_ENCODING_MODES: Readonly<Record<number, MouseEncoding>> = {
   1015: "urxvt",
   1016: "sgr-pixels",
 };
+
+/** pane の中の画像（OSC 1337 File=。サーバが Kitty graphics を作り直したもの）。 */
+export interface InlinePlacement {
+  id: number;
+  /** 置いたときのバッファ（代替画面の画像は通常の画面に出さない）。 */
+  buffer: "normal" | "alternate";
+  marker: { readonly line: number; readonly isDisposed: boolean; dispose(): void };
+  col: number;
+  cols: number;
+  rows: number;
+  base64: string;
+}
+/** 覚えておく画像の数（base64 を持つので少なく）。 */
+const MAX_IMAGES = 32;
 
 /** `hyperlinkAt` が読む xterm の中の形（@xterm/headless 6.0.0）。 */
 interface XtermCore {
@@ -98,6 +113,8 @@ export class PaneTerminal {
         return false;
       }),
     );
+    // 画像（サーバが作り直した OSC 1337 File=）。置いた位置と大きさを覚える（描画が [画像] の印か、対応する外側の端末へ出し直す。05 の T5）。
+    this.disposers.push(parser.registerOscHandler(1337, (data) => this.onInlineImage(data)));
     this.disposers.push(this.term.onWriteParsed(() => this.markDirty()));
     this.disposers.push(this.term.onScroll(() => this.markDirty()));
   }
@@ -137,7 +154,53 @@ export class PaneTerminal {
 
   output(chunk: Uint8Array): void {
     if (this.disposed) return;
-    this.term.write(chunk);
+    // 画像の後にブラウザの addon と同じだけ IND を足す（サーバのミラーと並びをそろえる。image/inlineImages.ts）。
+    this.term.write(this.imageFilter.feed(chunk));
+  }
+
+  /** 置いた画像（新しいものが後ろ。上限を超えたら古いものから捨てる）。 */
+  readonly images: InlinePlacement[] = [];
+  private nextImageId = 1;
+  private readonly imageFilter = new InlineImageFilter();
+
+  private onInlineImage(data: string): boolean {
+    const img = parseInlineImage(data);
+    if (!img) return false;
+    const buf = this.term.buffer.active;
+    let marker: InlinePlacement["marker"] | undefined;
+    try {
+      marker = this.term.registerMarker(0) ?? undefined;
+    } catch {
+      marker = undefined;
+    }
+    if (!marker) return true;
+    this.images.push({
+      id: this.nextImageId++,
+      buffer: buf.type,
+      marker,
+      col: buf.cursorX,
+      cols: img.cols,
+      rows: img.rows,
+      base64: img.base64,
+    });
+    while (this.images.length > MAX_IMAGES) this.images.shift()!.marker.dispose();
+    this.markDirty();
+    return true;
+  }
+
+  /** 今のバッファで、まだ行が残っている画像（絶対行つき）。 */
+  liveImages(): (InlinePlacement & { row: number })[] {
+    const type = this.term.buffer.active.type;
+    const out: (InlinePlacement & { row: number })[] = [];
+    for (let i = this.images.length - 1; i >= 0; i--) {
+      const im = this.images[i]!;
+      if (im.marker.isDisposed) {
+        this.images.splice(i, 1);
+        continue;
+      }
+      if (im.buffer === type) out.unshift({ ...im, row: im.marker.line });
+    }
+    return out;
   }
 
   /**
@@ -218,5 +281,7 @@ export class PaneTerminal {
     this.cursorStyle = "block";
     this.cursorBlink = false;
     this.mouseEncoding = "default";
+    // RIS（SNAPSHOT の書き直しを含む）で画像も消える。
+    for (const im of this.images.splice(0)) im.marker.dispose();
   }
 }

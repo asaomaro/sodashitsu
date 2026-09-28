@@ -1,5 +1,7 @@
 import {
+  chordOf,
   KeyRouter,
+  prefixBytes,
   type Action,
   type Mode,
   type ResolvedKeymap,
@@ -15,6 +17,11 @@ export interface KeyTarget {
   dispatch(action: Action): void;
   /** 送り先が無くて捨てた打鍵（未接続の知らせを出す）。 */
   dropped?(): void;
+  /**
+   * 画像を貼るキー（`pasteImage`。既定 Ctrl+V）。`fallback` は画像が無いときにそのキーとして端末へ送る列（直接のキーなら `prefixBytes` と同じ変換、
+   * prefix の後なら null＝送らない。web の KeyInputController と同じ）。無ければ操作として dispatch する。
+   */
+  pasteImage?(fallback: string | null): void;
 }
 
 /**
@@ -55,6 +62,7 @@ export class TuiKeys {
   }
 
   handle(ev: { key: KeyInput; raw: string }): void {
+    const afterPrefix = this.router.mode === "prefix";
     const decision = this.router.handle(ev.key);
     switch (decision.kind) {
       case "pass": {
@@ -72,6 +80,11 @@ export class TuiKeys {
         else this.target.dropped?.();
         return;
       case "action":
+        if (decision.action.type === "pasteImage" && this.target.pasteImage) {
+          const chord = afterPrefix ? null : chordOf(ev.key);
+          this.target.pasteImage(chord === null ? null : prefixBytes(chord));
+          return;
+        }
         this.target.dispatch(decision.action);
         return;
       case "consume":

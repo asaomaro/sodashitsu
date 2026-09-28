@@ -44,8 +44,10 @@ export interface DispatcherHost {
   keys: { setMode(m: Mode): void };
   copyTarget(paneId: string): CopyTargetPort | undefined;
   writeClipboard(text: string): Promise<boolean>;
-  /** 手元のクリップボードの文字（読めなければ null）。メニューの「貼り付け」。 */
+  /** 手元のクリップボードの文字（読めなければ null）。メニューの「貼り付け」（`pasteClipboard` が無いとき）。 */
   readClipboard(): Promise<string | null>;
+  /** メニューの「貼り付け」：画像があれば画像、無ければ文字を貼る（web の ImagePaster.pasteClipboard）。 */
+  pasteClipboard?(paneId: string): Promise<"image" | "text" | "empty" | "unavailable">;
   /** pane へ貼り付ける（pane のブラケットペーストに合わせて包む）。 */
   pasteText(paneId: string, text: string): void;
   detach(): void;
@@ -1079,6 +1081,12 @@ export class TuiDispatcher {
   pasteIntoPane(paneId: string): void {
     // 空は黙って何もしない。読めない（null。手元のクリップボードを読む道具は 05 の T5）は外側の端末の貼り付けを案内する
     // （外側の端末の貼り付けはブラケットペーストで届く）。
+    if (this.host.pasteClipboard) {
+      void this.host.pasteClipboard(paneId).then((r) => {
+        if (r === "unavailable") this.ui.toast(PASTE_UNAVAILABLE);
+      });
+      return;
+    }
     void this.host.readClipboard().then((text) => {
       if (text === null) this.ui.toast(PASTE_UNAVAILABLE);
       else if (text !== "") this.host.pasteText(paneId, text);

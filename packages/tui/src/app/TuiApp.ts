@@ -30,7 +30,17 @@ import { ATTR } from "../render/color.js";
 import type { CursorState, Grid } from "../render/Screen.js";
 import { TuiCopyTarget } from "../term/CopyTarget.js";
 import type { PaneTerminal } from "../term/PaneTerminal.js";
-import { osc52 } from "../clipboard.js";
+import {
+  osc52,
+  readClipboardImage,
+  readClipboardText,
+  writeClipboardTool,
+  type ClipboardEnv,
+  type Runner,
+} from "../clipboard.js";
+import { ImagePaster } from "../image/ImagePaster.js";
+import { KittyImages, kittyGraphicsSupported, type KittyPlacement } from "../image/kittyOutput.js";
+import { truncate } from "../render/width.js";
 import { UiState, type DialogContext } from "../model/UiState.js";
 import { helpGroups } from "../modes/HelpDialog.js";
 import type { Overlay } from "../modes/overlay.js";
@@ -68,6 +78,8 @@ export interface TuiAppOptions {
   openUrl?: (url: string) => void;
   /** 接続の差し替え（テスト用）。 */
   net?: TuiNetDeps;
+  /** クリップボードの OS の道具の呼び出しの差し替え（テスト用）。 */
+  clipboardRunner?: Runner;
 }
 
 /** 描画の最短の間隔（60fps。design「描画の予約は最短 16ms」）。 */
@@ -166,6 +178,14 @@ export class TuiApp {
   protected wiring: MachineWiring | null = null;
   /** マシンを切り替えた後、開いたら移る workspace。 */
   private pendingMachineFocus: string | null = null;
+  /** クリップボードの道具の呼び出し先（05 の T5）。 */
+  protected clipboardEnv!: ClipboardEnv;
+  /** 画像の貼り付け（herdr の remote_image_paste。05 の T5）。 */
+  protected imagePaster!: ImagePaster;
+  /** 画像を外側の端末へ出し直す（Kitty graphics を描ける端末だけ）。 */
+  private readonly kitty: KittyImages | null;
+  /** 直近のフレームで出し直す画像。 */
+  private frameImages: KittyPlacement[] = [];
   /** 通知（05 の T3）。 */
   readonly notify: NotificationController;
   /** 直近のフレームの知らせの当たり（押すと対象へ）。 */
@@ -223,6 +243,11 @@ export class TuiApp {
         sendToPane: (bytes) => this.sendToFocusedPane(bytes),
         dispatch: (action) => this.dispatcher.dispatch(action),
         dropped: () => this.inputDropped(),
+        pasteImage: (fallback) => {
+          const id = this.model.focusedPaneId;
+          if (!id || this.connectionState !== "open") this.inputDropped();
+          else this.imagePaster.fromKey(id, fallback);
+        },
       },
       { navigate: this.navigateMode, copy: this.copyMode, resize: new ResizeMode() },
     );
@@ -268,14 +293,36 @@ export class TuiApp {
       keys: { setMode: (m) => this.keys.router.setMode(m) },
       copyTarget: (paneId) => this.copyTargetOf(paneId),
       writeClipboard: (text) => this.writeClipboard(text),
-      readClipboard: () => Promise.resolve(null),
+      readClipboard: () => readClipboardText(this.clipboardEnv),
+      pasteClipboard: (paneId) => this.imagePaster.pasteClipboard(paneId),
       pasteText: (paneId, text) => this.pasteText(paneId, text),
       detach: () => this.detach(),
       toggleSidebar: () => this.toggleSidebar(),
       focusNextNotification: () => this.notify.focusNext(),
       runCommand: () => this.notYet("独自コマンド"),
-      pasteImage: () => this.notYet("画像の貼り付け"),
+      pasteImage: () => {
+        const id = this.model.focusedPaneId;
+        if (id) this.imagePaster.fromKey(id, null);
+      },
       setCommands: (r) => this.model.setCommands(r),
+    });
+    this.kitty = kittyGraphicsSupported(io.env) ? new KittyImages() : null;
+    this.clipboardEnv = {
+      platform: io.platform,
+      env: io.env,
+      ...(options.clipboardRunner ? { run: options.clipboardRunner } : {}),
+    };
+    this.imagePaster = new ImagePaster({
+      conn: this.rpc,
+      input: {
+        holdInput: (paneId, opts) => (this.gate ? this.gate.holdInput(paneId, opts) : NO_HOLD),
+      },
+      readImage: () => readClipboardImage(this.clipboardEnv),
+      readText: () => readClipboardText(this.clipboardEnv),
+      bracketed: (paneId) => this.panes.get(paneId)?.modes.bracketedPasteMode ?? null,
+      paneExists: (paneId) => this.model.panes.has(paneId),
+      pasteText: (paneId, text) => this.pasteText(paneId, text),
+      toast: (m) => this.ui.toast(m),
     });
     this.notify = new NotificationController({
       model: this.model,
@@ -677,9 +724,12 @@ export class TuiApp {
     return t;
   }
 
-  /** 外側の端末のクリップボードへ書く（OSC 52。05 で手元の OS の道具・tmux の包みを足す）。 */
+  /**
+   * クリップボードへ写す：外側の端末へ OSC 52（SSH 越し・tmux の中でも効く）と、手元なら OS の道具でも（OSC 52 を受けない端末のため）。
+   */
   protected writeClipboard(text: string): Promise<boolean> {
     this.io.write(osc52(text));
+    void writeClipboardTool(this.clipboardEnv, text);
     return Promise.resolve(true);
   }
 
@@ -758,6 +808,7 @@ export class TuiApp {
     // キーのモードを戻す（web の resetView。前のマシンの navigate・copy のまま次のマシンへ持ち込まない）。
     this.keys.router.setMode("terminal");
     this.notify.resetForMachineSwitch();
+    this.imagePaster.resetForMachineSwitch();
     this.ui.closeDialog();
     this.ui.closeContextMenu();
     this.model.reset(id);
@@ -909,6 +960,11 @@ export class TuiApp {
     this.openRequestedNavigateMenu(layout);
     this.syncAnyMotion(layout);
     this.io.write(result.output);
+    // 外側の端末へ出し直す画像（Kitty graphics。対応する端末だけ。変わったときだけ列が出る）。
+    if (this.kitty) {
+      const seq = this.kitty.sync(this.frameImages);
+      if (seq) this.io.write(seq);
+    }
     // 見えている pane の既読を進める（外側の端末にフォーカスがあるときだけ。web の sweepMarkSeen と同じ規則）。
     const visible = new Set(layout.panes.map((b) => b.paneId));
     this.model.sweepSeen((id) => visible.has(id), this.outerFocused);
@@ -916,7 +972,7 @@ export class TuiApp {
 
   /** pane の上の印（copy モードの選択とカーソル）。何も描かなければ undefined。 */
   protected decorate(grid: Grid, layout: LayoutResult): CursorState | null | undefined {
-    let drew = false;
+    let drew = this.decorateImages(grid, layout);
     // マウスの選択（M4）
     const msel = this.mouse.selection;
     const mbox = msel ? layout.panes.find((b) => b.paneId === msel.paneId) : undefined;
@@ -960,6 +1016,46 @@ export class TuiApp {
       style: "block",
       blink: false,
     };
+  }
+
+  /**
+   * pane の中の画像（05 の T5。design「image/」）：外側の端末が Kitty graphics を描けて、画像が pane の中に丸ごと入るなら出し直し
+   * （`frameImages`）、そうでなければ左上に「[画像]」の印を描く。ダイアログ・メニューを開いている間は出さない（下地の上に透けて見えるので）。
+   * 何か描いたら true。
+   */
+  private decorateImages(grid: Grid, layout: LayoutResult): boolean {
+    this.frameImages = [];
+    if (this.ui.overlayOpen) return false;
+    let drew = false;
+    const fg = this.theme.ui("--soda-accent-fg");
+    const bg = this.theme.ui("--soda-accent");
+    for (const box of layout.panes) {
+      const term = this.panes.get(box.paneId);
+      if (!term || term.images.length === 0) continue;
+      const top = term.term.buffer.active.viewportY;
+      const w = Math.min(box.content.w, term.cols);
+      const h = Math.min(box.content.h, term.rows);
+      for (const im of term.liveImages()) {
+        const row = im.row - top;
+        if (row + im.rows <= 0 || row >= h || im.col >= w) continue;
+        if (this.kitty && row >= 0 && row + im.rows <= h && im.col + im.cols <= w) {
+          this.frameImages.push({
+            imageKey: `${box.paneId}:${im.id}`,
+            base64: im.base64,
+            x: box.content.x + im.col,
+            y: box.content.y + row,
+            cols: im.cols,
+            rows: im.rows,
+          });
+          continue;
+        }
+        const y = box.content.y + Math.max(0, row);
+        const x = box.content.x + im.col;
+        grid.text(x, y, truncate("[画像]", Math.min(im.cols, w - im.col)), fg, bg, 0);
+        drew = true;
+      }
+    }
+    return drew || this.frameImages.length > 0;
   }
 
   /**
@@ -1014,6 +1110,15 @@ export class TuiApp {
         dispose();
       } catch {
         // 後始末の失敗で、モードを戻すのを止めない。
+      }
+    }
+    // 出し直した画像を消してから戻す。
+    const clear = this.kitty?.clear() ?? "";
+    if (clear) {
+      try {
+        this.io.write(clear);
+      } catch {
+        // 書けなければ何もしない。
       }
     }
     this.modes.restore();

@@ -1,6 +1,7 @@
 import type { SessionSnapshot } from "@sodashitsu/protocol";
 import { expect, vi } from "vitest";
 import { TuiApp } from "../app/TuiApp.js";
+import type { Runner } from "../clipboard.js";
 import type { TuiTarget } from "../types.js";
 import { fakeIo } from "./fakeIo.js";
 import { FakeSocket } from "./fakeSocket.js";
@@ -26,14 +27,20 @@ export async function startedApp(
     /** 要求の方式ごとの応答（関数なら要求の params から作る）。 */
     respond?: Record<string, unknown>;
     openUrl?: (url: string) => void;
+    /** 外側の端末の環境変数。 */
+    env?: Record<string, string | undefined>;
+    /** クリップボードの OS の道具の呼び出し（無ければ何も無い＝道具が見つからない）。 */
+    clipboardRunner?: Runner;
   } = {},
 ) {
   const cols = opts.cols ?? 100;
   const rows = opts.rows ?? 30;
-  const io = fakeIo({ cols, rows });
+  const io = fakeIo({ cols, rows, ...(opts.env ? { env: opts.env } : {}) });
   const sockets: FakeSocket[] = [];
   const app = new TuiApp(testTarget, io, {
     ...(opts.openUrl ? { openUrl: opts.openUrl } : {}),
+    // 既定は道具が見つからない（テストで本物の xclip 等を動かさない）。
+    clipboardRunner: opts.clipboardRunner ?? (() => Promise.reject(new Error("ENOENT"))),
     net: {
       createWebSocket: (ep) => (url) => {
         const s = new FakeSocket(url, ep.cookie());
