@@ -5,14 +5,15 @@ import {
   GRAPH_PROMPT_MAX_BYTES,
   type Graph,
   type GraphLink,
+  type NodeKey,
 } from "@sodashitsu/protocol";
 import { defaultApprovalConfig, defaultTriggerConfig } from "./defaults.js";
 import { validateGraph, validateLink, type GraphIssueCode } from "./validate.js";
 
 // 20260927-agent-graph の T2：線とノードの検証の全規則。
-const A = "local:p1";
-const B = "local:p2";
-const C = "local:p3";
+const A: NodeKey = "local:p1";
+const B: NodeKey = "local:p2";
+const C: NodeKey = "local:p3";
 
 function link(over: Partial<GraphLink> & Pick<GraphLink, "id">): GraphLink {
   return {
@@ -26,7 +27,7 @@ function link(over: Partial<GraphLink> & Pick<GraphLink, "id">): GraphLink {
     ...over,
   };
 }
-function graph(links: GraphLink[], keys = [A, B, C]): Graph {
+function graph(links: GraphLink[], keys: NodeKey[] = [A, B, C]): Graph {
   return { rev: 1, paused: false, nodes: keys.map((key) => ({ key, x: 0, y: 0 })), links };
 }
 const codes = (issues: { code: GraphIssueCode }[]) => issues.map((i) => i.code);
@@ -69,7 +70,7 @@ describe("validateGraph", () => {
   });
 
   it("監督・承認の代理は 1 つの配下につき監督役 1 つまで（トリガは制限なし）", () => {
-    const sup = (id: string, to: string): GraphLink => ({
+    const sup = (id: string, to: NodeKey): GraphLink => ({
       id,
       kind: "supervise",
       from: A,
@@ -79,7 +80,7 @@ describe("validateGraph", () => {
       paused: null,
     });
     expect(codes(validateGraph(graph([sup("l1", B), sup("l2", C)])))).toEqual(["supervisor_taken"]);
-    const appr = (id: string, to: string): GraphLink => ({
+    const appr = (id: string, to: NodeKey): GraphLink => ({
       id,
       kind: "approval",
       from: A,
@@ -106,7 +107,7 @@ describe("validateGraph", () => {
   });
 
   it("ノード 64・線 128 まで", () => {
-    const keys = Array.from({ length: GRAPH_NODES_MAX + 1 }, (_, i) => `local:p${i + 1}`);
+    const keys = Array.from({ length: GRAPH_NODES_MAX + 1 }, (_, i): NodeKey => `local:p${i + 1}`);
     expect(codes(validateGraph(graph([], keys)))).toEqual(["too_many_nodes"]);
     expect(validateGraph(graph([], keys.slice(0, GRAPH_NODES_MAX)))).toEqual([]);
     const many = Array.from({ length: GRAPH_LINKS_MAX + 1 }, (_, i) =>

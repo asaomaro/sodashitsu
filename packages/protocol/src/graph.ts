@@ -7,7 +7,7 @@ import { z } from "zod";
  */
 
 /** ノードの鍵。手元の pane は `local:<paneId>`、登録したマシンの pane は `<machineId(32 桁の 16 進)>:<paneId>`。 */
-export type NodeKey = string;
+export type NodeKey = `${"local" | (string & {})}:${string}`;
 export const NODE_KEY_RE = /^(local|[0-9a-f]{32}):p[1-9][0-9]*$/;
 
 export const GRAPH_NODES_MAX = 64;
@@ -109,7 +109,8 @@ function utf8Bytes(s: string): number {
   return new TextEncoder().encode(s).byteLength;
 }
 
-const nodeKey = z.string().regex(NODE_KEY_RE);
+// 実行時は正規表現で確かめ、型はテンプレート文字列の `NodeKey` として扱う（zod の推論は string になるため）。
+const nodeKey = z.string().regex(NODE_KEY_RE) as unknown as z.ZodType<NodeKey>;
 const coord = z.number().finite().min(-GRAPH_COORD_MAX).max(GRAPH_COORD_MAX);
 const linkId = z.string().regex(/^l[1-9][0-9]*$/);
 const lines = z.number().int().min(LINK_LINES_MIN).max(LINK_LINES_MAX);
@@ -144,7 +145,10 @@ export const GraphLinkSchema = z.object({
   count: z.number().int().min(0),
   paused: z.enum(["user", "limit"]).nullable(),
 });
-/** 保存したグラフ（`graph.json` の読み込みで形を確かめる）。 */
+/**
+ * 保存したグラフ（`graph.json` の読み込みで形を確かめる）。**形だけ**で、種類と設定の組・重複などの意味は見ない——読み込む側（server の `GraphStore`）が
+ * 続けて client-core の `validateGraph` を通し、落ちれば壊れたファイルとして退避する。
+ */
 export const GraphSchema = z.object({
   rev: z.number().int().min(0),
   paused: z.boolean(),

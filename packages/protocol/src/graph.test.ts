@@ -4,13 +4,16 @@ import {
   GRAPH_NODES_MAX,
   GRAPH_OPS_MAX,
   GRAPH_PROMPT_MAX_BYTES,
+  GraphGetParams,
   GraphHistoryParams,
   GraphLinkSchema,
   GraphPauseParams,
+  GraphResumeParams,
   GraphSchema,
   GraphUpdateParams,
   NODE_KEY_RE,
   TriggerConfigSchema,
+  type NodeKey,
 } from "./graph.js";
 import { METHOD_SCHEMAS } from "./messages.js";
 
@@ -121,9 +124,19 @@ describe("TriggerConfigSchema", () => {
 });
 
 describe("graph.* の方式", () => {
-  it("METHOD_SCHEMAS に 5 つ登録する", () => {
-    for (const m of ["graph.get", "graph.update", "graph.pause", "graph.resume", "graph.history"])
-      expect(Object.keys(METHOD_SCHEMAS)).toContain(m);
+  it("METHOD_SCHEMAS に 5 つを、それぞれのスキーマそのもので登録する", () => {
+    expect(METHOD_SCHEMAS["graph.get"]).toBe(GraphGetParams);
+    expect(METHOD_SCHEMAS["graph.update"]).toBe(GraphUpdateParams);
+    expect(METHOD_SCHEMAS["graph.pause"]).toBe(GraphPauseParams);
+    expect(METHOD_SCHEMAS["graph.resume"]).toBe(GraphResumeParams);
+    expect(METHOD_SCHEMAS["graph.history"]).toBe(GraphHistoryParams);
+  });
+
+  it("NodeKey は型でも「<local|machine>:<pane>」の形", () => {
+    const ok: NodeKey = "local:p1";
+    // @ts-expect-error コロンの無い文字列は NodeKey ではない
+    const bad: NodeKey = "p1";
+    expect([ok, bad]).toHaveLength(2);
   });
 
   it("graph.update は baseRev と 1 つ以上の操作", () => {

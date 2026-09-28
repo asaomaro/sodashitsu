@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Graph, GraphOp } from "@sodashitsu/protocol";
+import type { Graph, GraphOp, NodeKey } from "@sodashitsu/protocol";
 import {
   APPROVAL_LINES_DEFAULT,
   defaultTriggerConfig,
@@ -11,7 +11,7 @@ import { applyGraphOps, type GraphDraftState } from "./ops.js";
 // 20260927-agent-graph の T2（ops）：graph.update の操作をまとめて当てる。
 const A = "local:p1";
 const B = "local:p2";
-const R = `${"f".repeat(32)}:p1`;
+const R: NodeKey = `${"f".repeat(32)}:p1`;
 
 function state(graph: Partial<Graph> = {}, nextLinkId = 1): GraphDraftState {
   return { graph: { ...emptyGraph(), ...graph }, nextLinkId };

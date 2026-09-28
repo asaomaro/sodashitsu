@@ -1,7 +1,7 @@
 import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Graph, GraphOp } from "@sodashitsu/protocol";
+import type { Graph, GraphOp, NodeKey } from "@sodashitsu/protocol";
 import { defaultTriggerConfig } from "@sodashitsu/client-core";
 import { makeTempDir } from "./atomicFile.js";
 import {
@@ -15,7 +15,7 @@ import {
 // 20260927-agent-graph の T3：グラフの保存（graph.json・rev・壊れたファイル・stale）。
 const A = "local:p1";
 const B = "local:p2";
-const R = `${"e".repeat(32)}:p1`;
+const R: NodeKey = `${"e".repeat(32)}:p1`;
 const build: GraphOp[] = [
   { op: "add_node", key: A, x: 0, y: 0 },
   { op: "add_node", key: B, x: 240, y: 0 },
