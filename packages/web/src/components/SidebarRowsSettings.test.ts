@@ -2,7 +2,7 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { nextTick } from "vue";
-import { DEFAULT_LAYOUTS } from "../sidebar/rowLayout.js";
+import { DEFAULT_LAYOUTS } from "@sodashitsu/client-core";
 import { useSettingsStore } from "../store/settings.js";
 import { readPrefs, useViewStore } from "../store/view.js";
 import SidebarRowsSettings from "./SidebarRowsSettings.vue";

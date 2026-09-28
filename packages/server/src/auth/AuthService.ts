@@ -47,6 +47,11 @@ export interface AuthService {
   ensureToken(): Promise<{ created: boolean; token: string | undefined }>;
   resetToken(): Promise<string>;
   login(token: string): Promise<{ ok: true; sessionId: string } | { ok: false }>;
+  /**
+   * token を照合せずにセッションを発行する（手元からのログイン `POST /api/local-login` 専用。20260927-cli-mode）。照合（同じマシン・秘密の一致）は
+   * 呼び出し側の責任。発行したセッションは `login` のものと同じ扱い（14 日・ログアウト・token の作り直しで失効）。
+   */
+  issueSession(): Promise<string>;
   logout(sessionId: string): Promise<void>;
   /** 高速な確認（ディスクへの書き込みはしない）。有効なら内部の最終利用時刻だけ延ばす。 */
   verifySession(sessionId: string | undefined): boolean;
@@ -103,6 +108,8 @@ export class DefaultAuthService implements AuthService {
       this.sessions.set(s.idHash, { idHash: s.idHash, lastSeenAtMs: Date.parse(s.lastSeenAt) || now, lastPersistedAtMs: now });
     }
     this.loaded = true;
+    // 期限の切れたセッションを捨てる（20260927-cli-mode の 02 の review。引数なしの soda は起動のたびにセッションを作るので、捨てないと auth.json が伸び続ける）。
+    if (this.pruneExpired(now)) await this.file.save(this.data);
   }
 
   async ensureToken(): Promise<{ created: boolean; token: string | undefined }> {
@@ -139,7 +146,12 @@ export class DefaultAuthService implements AuthService {
     const expected = Buffer.from(this.data.token.hash, "hex");
     const actual = (await scrypt(token, salt, SCRYPT_KEYLEN)) as Buffer;
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return { ok: false };
+    return { ok: true, sessionId: await this.issueSession() };
+  }
 
+  async issueSession(): Promise<string> {
+    await this.ensureLoaded();
+    this.pruneExpired(Date.now()); // 下の保存で一緒に書く
     const sessionId = randomBytes(SESSION_ID_BYTES).toString("base64url");
     const idHash = sha256Hex(sessionId);
     const now = Date.now();
@@ -150,7 +162,25 @@ export class DefaultAuthService implements AuthService {
       sessions: [...this.data.sessions, { idHash, createdAt: new Date(now).toISOString(), lastSeenAt: new Date(now).toISOString() }],
     };
     await this.file.save(this.data);
-    return { ok: true, sessionId };
+    return sessionId;
+  }
+
+  /**
+   * 期限（最後に使ってから `SESSION_TTL_MS`）の切れたセッションを、メモリと保存する中身の両方から捨てる。最後に使った時刻はメモリの方が新しい（延長は間隔を空けてしか
+   * 書かない）ので、メモリにあればそちらで見る。捨てたら true（呼び出し側が保存する）。
+   */
+  private pruneExpired(now: number): boolean {
+    const before = this.data.sessions.length;
+    const alive = this.data.sessions.filter((s) => {
+      const lastSeen = this.sessions.get(s.idHash)?.lastSeenAtMs ?? (Date.parse(s.lastSeenAt) || now);
+      return now - lastSeen <= SESSION_TTL_MS;
+    });
+    if (alive.length === before) return false;
+    const aliveHashes = new Set(alive.map((s) => s.idHash));
+    for (const hash of [...this.sessions.keys()]) if (!aliveHashes.has(hash)) this.sessions.delete(hash);
+    for (const [id, hash] of [...this.liveSessionIds]) if (!aliveHashes.has(hash)) this.liveSessionIds.delete(id);
+    this.data = { ...this.data, sessions: alive };
+    return true;
   }
 
   async logout(sessionId: string): Promise<void> {

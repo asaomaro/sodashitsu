@@ -4,16 +4,16 @@ import type { Workspace } from "@sodashitsu/protocol";
 import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
-import { orderedAgentPaneIds } from "../store/agentOrder.js";
-import { groupedWorkspaceRows, visibleGroupMembers } from "../store/workspaceGrouping.js";
+import { orderedAgentPaneIds } from "@sodashitsu/client-core";
+import { groupedWorkspaceRows, visibleGroupMembers } from "@sodashitsu/client-core";
 import { type AgentSort, SIDEBAR_WIDTH, type WorkspaceSort, useViewStore } from "../store/view.js";
 import { useSettingsStore } from "../store/settings.js";
-import { type ResolvedLine, resolveAgentLines, resolveSpaceLines, tokenStyleAttr } from "../sidebar/resolveRows.js";
+import { type ResolvedLine, resolveAgentLines, resolveSpaceLines, tokenStyleAttr } from "@sodashitsu/client-core";
 import StateIcon from "./StateIcon.vue";
 import MachineHeader from "./MachineHeader.vue";
 import MachineRows from "./MachineRows.vue";
 import { useMachinesStore } from "../store/machines.js";
-import { LOCAL_MACHINE_ID } from "../net/machineUrl.js";
+import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 
 /**
  * サイドバー（D56 の訂正 9）。「spaces」（workspace の一覧）と「agents」（エージェントの一覧）の 2 区画。

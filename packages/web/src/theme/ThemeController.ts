@@ -2,9 +2,9 @@ import { TERMINAL_PALETTES, type TerminalPalette, type ThemeName } from "@sodash
 import { watch, type WatchStopHandle } from "vue";
 import type { useSettingsStore } from "../store/settings.js";
 import { readPrefs } from "../store/view.js";
-import { lightDarkOf, loadThemePrefs } from "./themes.js";
+import { lightDarkOf, loadThemePrefs } from "@sodashitsu/client-core";
 import { loadThemeOverrides, mergeVars, type ThemeOverrideLayer, type ThemeOverrides } from "./themeOverrides.js";
-import { CSS_VARS, uiTokens, type UiTokens } from "./uiTokens.js";
+import { CSS_VARS, uiTokens, type UiTokens } from "@sodashitsu/client-core";
 
 type SettingsStore = ReturnType<typeof useSettingsStore>;
 

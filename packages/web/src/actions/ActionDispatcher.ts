@@ -1,17 +1,17 @@
 import type { AgentIntegrationInstallResult, AgentIntegrationKind, NewCwd } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { KeyInputController, ActionPort, FocusPort } from "../keys/KeyInputController.js";
-import type { Action, CopyCommand, Dir } from "../keys/actions.js";
-import type { InputHold } from "../net/InputGate.js";
-import type { ConnectionPort } from "../net/ports.js";
+import type { Action, CopyCommand, Dir } from "@sodashitsu/client-core";
+import type { InputHold } from "@sodashitsu/client-core";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
-import { LOCAL_MACHINE_ID } from "../net/machineUrl.js";
+import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
-import { orderedAgentPaneIds, type AgentOrderEntry } from "../store/agentOrder.js";
-import { visibleWorkspaceIdsInOrder } from "../store/workspaceGrouping.js";
+import { orderedAgentPaneIds, type AgentOrderEntry } from "@sodashitsu/client-core";
+import { visibleWorkspaceIdsInOrder } from "@sodashitsu/client-core";
 import {
   buildNewCwd,
   loadNewCwdPath,
@@ -26,11 +26,11 @@ import {
 } from "../store/settings.js";
 import { loadAgentSort, loadSidebarCollapsed, loadSidebarWidth, loadWorkspaceSort, readPrefs, useViewStore } from "../store/view.js";
 import { loadScrollbackPref } from "../term/scrollback.js";
-import { loadTabBarPosition, loadTabBarRightEntries, loadTabBarRightSeparator } from "../tabbar/tabBarRight.js";
-import { loadSidebarRows } from "../sidebar/rowLayout.js";
-import { loadThemePrefs } from "../theme/themes.js";
-import { clientErrorMessage, errorCodeOf } from "../net/clientError.js";
-import { depthFirstPaneIds, neighborPaneId } from "../term/layoutOrder.js";
+import { loadTabBarPosition, loadTabBarRightEntries, loadTabBarRightSeparator } from "@sodashitsu/client-core";
+import { loadSidebarRows } from "@sodashitsu/client-core";
+import { loadThemePrefs } from "@sodashitsu/client-core";
+import { clientErrorMessage, errorCodeOf } from "@sodashitsu/client-core";
+import { depthFirstPaneIds, neighborPaneId } from "@sodashitsu/client-core";
 import type { MenuTarget, UiPort } from "../term/MouseBridge.js";
 import { readClipboard, writeClipboard } from "../term/clipboard.js";
 import type { TerminalRegistry } from "../term/TerminalRegistry.js";
@@ -225,6 +225,31 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         return;
       case "focusAgentIndex":
         this.focusAgentIndex(action.index);
+        return;
+      // 20260927-cli-mode（herdr にあって Web に無かった操作。design D-7）。
+      case "workspaceIndex":
+        this.workspaceIndex(action.index);
+        return;
+      case "openWorktree": {
+        const workspaceId = this.view.workspaceId;
+        if (!workspaceId) return;
+        // herdr と同じく、linked worktree の workspace からは始めない（一覧は repo の本体から開く。herdr の
+        // 「New and open worktree actions start from the repo parent workspace.」）。
+        if (this.session.workspaces.get(workspaceId)?.git?.isLinkedWorktree === true) {
+          this.view.toast("worktree を開く操作は、repo の本体の workspace から始めてください。");
+          return;
+        }
+        this.openWorktree(workspaceId);
+        return;
+      }
+      case "removeWorktree":
+        this.removeCurrentWorktree();
+        return;
+      case "swapWithFocused":
+        this.swapWithFocused(action.paneId);
+        return;
+      case "stopServer":
+        this.view.openDialogWithContext({ kind: "confirmStopServer", ...this.stopTarget() });
         return;
     }
   }
@@ -424,7 +449,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     const ctx = this.view.dialogContext;
     if (ctx?.kind !== "confirmWorktreeRemove") return;
     this.view.closeDialog();
-    this.sendWorktreeRemove(ctx.sourceWorkspaceId, ctx.path, false, ctx.openWorkspaceId);
+    this.sendWorktreeRemove(ctx.sourceWorkspaceId, ctx.path, false, ctx.openWorkspaceId, ctx.closeOnCancel === true);
   }
 
   /** dirty で通常の削除が失敗したあとの `--force` での再実行（AC7・AC8）。 */
@@ -432,7 +457,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     const ctx = this.view.dialogContext;
     if (ctx?.kind !== "confirmWorktreeRemoveForce") return;
     this.view.closeDialog();
-    this.sendWorktreeRemove(ctx.sourceWorkspaceId, ctx.path, true, ctx.openWorkspaceId);
+    this.sendWorktreeRemove(ctx.sourceWorkspaceId, ctx.path, true, ctx.openWorkspaceId, ctx.closeOnCancel === true);
   }
 
   /**
@@ -445,7 +470,14 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
    * （view の移動先は既存の `repairView` に任せる）。(2) RPC の応答を待つ間に別の操作で
    * 他のダイアログが開いていたら、それを奪わない。
    */
-  private sendWorktreeRemove(sourceWorkspaceId: string, path: string, force: boolean, openWorkspaceId: string | null): void {
+  private sendWorktreeRemove(
+    sourceWorkspaceId: string,
+    path: string,
+    force: boolean,
+    openWorkspaceId: string | null,
+    /** 一覧を経ずに始めた削除（キーの `remove_worktree`）。失敗しても一覧を開き直さず、`--force` の確認にも引き継ぐ。 */
+    closeOnCancel = false,
+  ): void {
     this.conn
       .request("worktree.remove", { workspaceId: sourceWorkspaceId, path, force })
       .then(() => {
@@ -471,6 +503,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
               path,
               openWorkspaceId,
               reason: code === "worktree_locked" ? "locked" : "dirty",
+              ...(closeOnCancel ? { closeOnCancel: true as const } : {}),
             });
           }
           return;
@@ -479,7 +512,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         this.view.toast(worktreeErrorMessage(err));
         // 何も変わっていないので、削除元の workspace は必ず生きている——一覧を開き直して戻す
         // （AC9・AC-I1）。他のダイアログを奪わないことだけ守る。
-        if (this.view.dialogContext === null) this.openWorktree(sourceWorkspaceId);
+        if (this.view.dialogContext === null && !closeOnCancel) this.openWorktree(sourceWorkspaceId);
       });
   }
 
@@ -730,6 +763,24 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     const paneId = this.view.focusedPaneId;
     if (!paneId) return;
     void this.conn.request("pane.swap", { paneId, direction: dir }).catch(() => undefined);
+  }
+
+  /**
+   * 焦点の pane と入れ替える（herdr の pane のメニューの「Swap with focused pane」。20260927-cli-mode の design D-7）。`paneId` はメニューを開いた pane。
+   * 入れ替えた後も焦点は元の pane のまま（herdr と同じく `pane.focus` を送り直す）。キーから使うとき（`paneId` 無し）は、直前に焦点のあった pane と入れ替える。
+   * 同じ tab の pane どうしでなければ何もしない（`pane.swap_with` が `ok: false` を返す）。
+   */
+  swapWithFocused(paneId?: string): void {
+    const focused = this.view.focusedPaneId;
+    const other = paneId ?? this.view.lastFocusedPaneId;
+    if (!focused || !other || other === focused) return;
+    if (this.session.panes.get(other)?.tabId !== this.session.panes.get(focused)?.tabId) return;
+    void this.conn
+      .request("pane.swap_with", { paneId: focused, otherPaneId: other })
+      .then((r) => {
+        if (r.ok) void this.conn.request("pane.focus", { paneId: focused }).catch(() => undefined);
+      })
+      .catch(() => undefined);
   }
 
   /**
@@ -1028,6 +1079,63 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     const current = this.view.workspaceId ? ids.indexOf(this.view.workspaceId) : -1;
     const next = ids[(current === -1 ? 0 : current + delta + ids.length) % ids.length];
     if (next) this.focusWorkspaceById(next);
+  }
+
+  /** `switch_workspace`（1〜9。20260927-cli-mode）。サイドバーの並び（`workspaceDelta` と同じ可視範囲）の N 番目へ。無ければ何もしない。 */
+  private workspaceIndex(index: number): void {
+    const ids = visibleWorkspaceIdsInOrder([...this.session.workspaces.values()], [...this.session.groups.values()], this.view.workspaceSort, this.view.collapsedAutoGroups, this.view.workspaceId);
+    const target = ids[index - 1];
+    if (target) this.focusWorkspaceById(target);
+  }
+
+  /**
+   * `remove_worktree`（20260927-cli-mode。herdr と同じく今の workspace が linked worktree のときだけ）。一覧（`worktree.list`）から、今の workspace の場所と
+   * **同じ場所**の worktree を引き（一覧の行からの削除と同じく完全一致。サーバは完全一致の workspace だけを閉じる）、一覧を経ずに削除の確認を開く（取り消したら閉じる）。
+   * 削除の流れ（dirty・ロックの `--force` の確認）は一覧の行からの削除と同じ。
+   */
+  private removeCurrentWorktree(): void {
+    const workspaceId = this.view.workspaceId;
+    const ws = workspaceId ? this.session.workspaces.get(workspaceId) : undefined;
+    if (!ws) return;
+    if (ws.git?.isLinkedWorktree !== true) {
+      this.view.toast("この workspace は worktree のチェックアウトではありません（削除は worktree を開いた workspace で行います）。");
+      return;
+    }
+    this.conn
+      .request("worktree.list", { workspaceId: ws.id })
+      .then((info) => {
+        const entry = info.entries.find((e) => e.path === ws.cwd);
+        if (!entry) {
+          this.view.toast("この workspace の worktree が一覧に見つかりませんでした。");
+          return;
+        }
+        if (this.view.dialogContext !== null) return; // 待つ間に別のダイアログが開いていたら奪わない
+        this.view.openDialogWithContext({ kind: "confirmWorktreeRemove", sourceWorkspaceId: ws.id, path: entry.path, openWorkspaceId: ws.id, closeOnCancel: true });
+      })
+      .catch((err: unknown) => this.view.toast(worktreeErrorMessage(err)));
+  }
+
+  /**
+   * `stop_server` で止まるサーバ（02 の review）。画面の接続が保存したマシンを向いていれば（`/ws?machine=`）、止まるのはそのマシンの `soda serve`
+   * （herdr に無い操作なので本製品の選択。リモートでも止められるままにし、確認で名前を言う）。ローカルはホスト名（無ければ「このマシン」）。
+   */
+  private stopTarget(): { target: string; remote: boolean } {
+    const id = this.machines.selectedId;
+    if (id !== LOCAL_MACHINE_ID) return { target: this.machines.statusOf(id)?.label ?? id, remote: true };
+    return { target: this.session.host?.hostname ?? "このマシン", remote: false };
+  }
+
+  /** `ConfirmDialog`（`kind: "confirmStopServer"`）が確定したときに呼ぶ（`stop_server`。20260927-cli-mode）。 */
+  confirmStopServer(): void {
+    if (this.view.dialogContext?.kind !== "confirmStopServer") return;
+    this.view.closeDialog();
+    this.conn
+      .request("server.stop", {})
+      .then(() => this.view.toast("サーバを止めています…"))
+      .catch((err: unknown) => {
+        const code = errorCodeOf(err);
+        this.view.toast(code ? clientErrorMessage(code) : "サーバを止められませんでした。");
+      });
   }
 
   private lastPane(): void {

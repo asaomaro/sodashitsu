@@ -125,10 +125,43 @@ describe("parseArgs（CLI の引数）", () => {
     expect(configErrorOf(["token", "reset", "--json"]).message).toContain("--json is not an option of soda token reset");
   });
 
-  it("未知のオプション・値の無いオプションは ConfigError。コマンドが無い・help・--help・-h だけが help", () => {
+  it("未知のオプション・値の無いオプションは ConfigError。help・--help・-h だけが help", () => {
     expect(() => parseArgs(["serve", "--nope"])).toThrow(ConfigError);
     expect(() => parseArgs(["token", "reset", "--state-dir"])).toThrow(ConfigError);
-    for (const argv of [[], ["help"], ["--help"], ["-h"]]) expect(parseArgs(argv).command).toBe("help");
+    for (const argv of [["help"], ["--help"], ["-h"]]) expect(parseArgs(argv).command).toBe("help");
+  });
+});
+
+/** 20260927-cli-mode（引数なしの soda＝端末版）。 */
+describe("parseArgs: 引数なしの soda（tui）", () => {
+  it("引数なしは tui（以前は help）", () => {
+    expect(parseArgs([])).toEqual({ command: "tui", serve: { origin: [] }, stateDir: undefined, session: undefined });
+  });
+
+  it("先頭がオプションなら tui（--session・--state-dir・--allow-nested）", () => {
+    expect(parseArgs(["--session", "work", "--state-dir", "/s", "--allow-nested"])).toMatchObject({
+      command: "tui",
+      session: "work",
+      sessionSource: "flag",
+      stateDir: "/s",
+      allowNested: true,
+      serve: { session: "work", sessionSource: "flag", stateDir: "/s" },
+    });
+    expect(parseArgs(["--allow-nested"])).toMatchObject({ command: "tui", allowNested: true });
+    expect(parseArgs(["--state-dir", "/s"]).allowNested).toBeUndefined();
+  });
+
+  it("soda serve のオプション・余分な語・値の無いオプションは ConfigError", () => {
+    expect(configErrorOf(["--port", "9000"]).message).toContain("unknown option: --port");
+    expect(configErrorOf(["--session", "w", "extra"]).message).toContain("unexpected argument: extra");
+    expect(configErrorOf(["--session"]).message).toContain("missing value for --session");
+    expect(configErrorOf(["--json"]).message).toContain("unknown option: --json");
+  });
+
+  it("SODA_SESSION を serve と同じ規則で見る（--session が優先）", () => {
+    expect(applySessionEnv(parseArgs([]), { SODA_SESSION: "work" })).toMatchObject({ command: "tui", session: "work", sessionSource: "env", serve: { session: "work" } });
+    expect(applySessionEnv(parseArgs(["--session", "x"]), { SODA_SESSION: "work" }).session).toBe("x");
+    expect(() => applySessionEnv(parseArgs([]), { SODA_SESSION: "a/b" })).toThrow(ConfigError);
   });
 });
 

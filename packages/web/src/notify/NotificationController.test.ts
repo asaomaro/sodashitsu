@@ -6,7 +6,7 @@ import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import { NotificationController, type NotificationControllerOptions } from "./NotificationController.js";
-import type { NotifyKind } from "./policy.js";
+import type { NotifyKind } from "@sodashitsu/client-core";
 import type { DesktopNotifierPort, DesktopPermission, SoundPort, SoundResult } from "./ports.js";
 
 let pinia: Pinia;

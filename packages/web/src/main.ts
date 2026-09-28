@@ -1,4 +1,4 @@
-import { TERMINAL_PALETTES } from "@sodashitsu/protocol";
+import { TERMINAL_PALETTES, type SharedPrefs } from "@sodashitsu/protocol";
 import type { ITerminalOptions } from "@xterm/xterm";
 // xterm.js の必須の CSS（canvas の重ね方・入力用 textarea の隠し方）。無いと描画用の canvas が端末の下へ
 // 押し出され、端末の中身が一切見えない（親の統合 test で発見。D96）。
@@ -10,33 +10,35 @@ import { ActionDispatcher } from "./actions/ActionDispatcher.js";
 import { ActionDispatcherKey, ConnectionKey, DeviceKindKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
+import { PrefsSync } from "./actions/PrefsSync.js";
 import { mobileViewportQuery, trackMediaQuery } from "./mobile/detect.js";
-import { MachineSummaryClient } from "./net/MachineSummaryClient.js";
-import { LOCAL_MACHINE_ID, wsUrlFor } from "./net/machineUrl.js";
+import { MachineSummaryClient } from "@sodashitsu/client-core";
+import { LOCAL_MACHINE_ID, wsUrlFor } from "@sodashitsu/client-core";
 import { useMachinesStore } from "./store/machines.js";
 import { KeyInputController } from "./keys/KeyInputController.js";
 import { KeyboardLockController } from "./keys/KeyboardLockController.js";
-import { KeyRouter } from "./keys/KeyRouter.js";
-import { CopyMode } from "./keys/CopyMode.js";
-import { NavigateMode } from "./keys/NavigateMode.js";
-import { ResizeMode } from "./keys/ResizeMode.js";
-import { setOptionComposes } from "./keys/chord.js";
+import { KeyRouter } from "@sodashitsu/client-core";
+import { CopyMode } from "@sodashitsu/client-core";
+import { NavigateMode } from "@sodashitsu/client-core";
+import { ResizeMode } from "@sodashitsu/client-core";
+import { setOptionComposes } from "@sodashitsu/client-core";
 import { isCoarsePointer } from "./mobile/detect.js";
-import { clientErrorMessage } from "./net/clientError.js";
+import { clientErrorMessage } from "@sodashitsu/client-core";
 import { DesktopNotifier } from "./notify/DesktopNotifier.js";
 import { NotificationController } from "./notify/NotificationController.js";
 import { ToneSound } from "./notify/ToneSound.js";
-import { Connection } from "./net/Connection.js";
-import { InputGate } from "./net/InputGate.js";
+import { Connection } from "@sodashitsu/client-core";
+import { InputGate } from "@sodashitsu/client-core";
 import { ImagePaster } from "./term/ImagePaster.js";
-import type { ConnectionPort, TerminalSinkPort } from "./net/ports.js";
+import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
 import { documentTitle } from "./serverSession/documentTitle.js";
 import { StoreAdapter } from "./store/StoreAdapter.js";
 import { sweepMarkSeen, useSeenStore } from "./store/seen.js";
 import { useSessionStore } from "./store/session.js";
 import { useOnboardingStore } from "./store/onboarding.js";
 import { useSettingsStore } from "./store/settings.js";
-import { useViewStore } from "./store/view.js";
+import { isPrefsMigrated, markPrefsMigrated, onPrefsWritten, readPrefs, replaceSharedPrefs, sharedPrefsOf, useViewStore } from "./store/view.js";
+import { applyPrefsToStores } from "./store/prefsApply.js";
 import { useAgentIntegrationsStore } from "./store/agentIntegrations.js";
 import { isMacPlatform, MouseBridge } from "./term/MouseBridge.js";
 import { RendererPool } from "./term/RendererPool.js";
@@ -87,6 +89,7 @@ const registryBox: { current?: TerminalRegistry } = {};
 /** マシンの切り替え（20260927-multi-host-machines）。`Connection.onOpened` の配線より後に作るので、既存の箱と同じ流儀で繋ぐ。 */
 const machineSwitcherBox: { current?: MachineSwitcher } = {};
 const machineWiringBox: { current?: MachineWiring } = {};
+const prefsSyncBox: { current?: PrefsSync } = {};
 /** 通知（20260920-agent-notifications）。`StoreAdapter` より後に作るので、既存の箱と同じ流儀で繋ぐ。 */
 const notificationsBox: { current?: NotificationController } = {};
 const sinkProxy: TerminalSinkPort = {
@@ -111,6 +114,8 @@ const storeAdapter = new StoreAdapter({
   onAgentIntegrationChanged: (status) => useAgentIntegrationsStore(pinia).setStatus(status),
   // 画面の接続がローカルを向いているときだけ、手元の `soda serve` の一覧（リモートを向いていればそのマシンの登録簿なので捨てる）。
   onMachinesChanged: (list) => machineWiringBox.current?.onMainMachinesChanged(list),
+  // 共有の設定（20260927-cli-mode）。`prefsSync` はこの後で作るので、遅延で参照する。
+  onPrefsChanged: (data) => prefsSyncBox.current?.onChanged(data),
 });
 
 const connection = new Connection({ kind, httpOrigin, wsUrl, store: storeAdapter, sink: sinkProxy });
@@ -244,6 +249,24 @@ connection.onOpened(() => machineWiringBox.current?.onMainOpened());
 connection.onOpened(() => void actionDispatcherBox.current?.refreshCommands());
 // 閉じてから次の hello が通るまでは、`client.view`・`pane.subscribe` を送らない（D107）。
 connection.onClosed(() => viewSync.onConnectionClosed());
+// 設定の置き場所はサーバ（20260927-cli-mode の design「設定」）。接続のたびに受け取り（初回は移行）、以後の変更を送る。判断は `PrefsSync`。
+const prefsSync = new PrefsSync({
+  getPrefs: () => conn.request("prefs.get", {}),
+  // 送るのは web のストアが `writePrefs` で書いた値そのもの（`SharedPrefs` の形で書いている。サーバは形を問わない）。
+  setPrefs: (patch, baseRev) => conn.request("prefs.set", { patch: patch as SharedPrefs, baseRev }),
+  isLocal: () => machines.selectedId === LOCAL_MACHINE_ID,
+  readLocal: () => readPrefs(),
+  sharedOf: sharedPrefsOf,
+  replaceShared: replaceSharedPrefs,
+  applyToStores: (raw) => applyPrefsToStores(pinia, raw),
+  toast: (message) => view.toast(message),
+  migrated: isPrefsMigrated,
+  markMigrated: markPrefsMigrated,
+});
+prefsSyncBox.current = prefsSync;
+onPrefsWritten((patch) => prefsSync.onWritten(patch));
+connection.onOpened(() => prefsSync.onOpened());
+connection.onClosed(() => prefsSync.onClosed());
 
 // 通知（20260920-agent-notifications）。`registry`（表示中の pane を引く）より後、
 // `ActionDispatcher`（`prefix+o` の行き先に使う）より前にしか置けない。

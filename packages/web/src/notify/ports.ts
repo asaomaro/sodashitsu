@@ -1,4 +1,4 @@
-import type { NotifyKind } from "./policy.js";
+import type { NotifyKind } from "@sodashitsu/client-core";
 
 /**
  * 配送の口（design インターフェース「port」）。**ブラウザ API に触るのはこの裏の実装だけ**

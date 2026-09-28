@@ -4,9 +4,9 @@ import { computed, inject, nextTick, ref, watch } from "vue";
 import { ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { aggregate, displayStateFor, useSeenStore } from "../store/seen.js";
-import { paneNameOf } from "../store/paneName.js";
+import { paneNameOf } from "@sodashitsu/client-core";
 import { useViewStore } from "../store/view.js";
-import { depthFirstPaneIds } from "../term/layoutOrder.js";
+import { depthFirstPaneIds } from "@sodashitsu/client-core";
 import StateIcon from "./StateIcon.vue";
 
 /**
@@ -75,7 +75,7 @@ const rows = computed<GotoRow[]>(() => {
         const pane = session.panes.get(paneId);
         if (!pane) continue;
         const state = paneState(paneId);
-        // 連鎖の正典は `store/paneName.ts` の `paneNameOf`（herdr のフォールバック連鎖と同じ）。
+        // 連鎖の正典は `client-core の workspace/paneName.ts` の `paneNameOf`（herdr のフォールバック連鎖と同じ）。
         // ここは tab 内の順番を既定にする。
         const label = paneNameOf(pane, `pane ${index + 1}`);
         // 名前（agent rename）が呼び名になっても、エージェントの種類の表示名でも引けるようにする（20260926-agent-start-rename）。

@@ -2,7 +2,7 @@ import type { MethodName, ParamsOf, ResultOf } from "@sodashitsu/protocol";
 import { mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectionKey } from "../injection.js";
-import type { ConnectionPort } from "../net/ports.js";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import Splitter from "./Splitter.vue";
 
 function makeConnection(): ConnectionPort & { requests: [MethodName, unknown][] } {

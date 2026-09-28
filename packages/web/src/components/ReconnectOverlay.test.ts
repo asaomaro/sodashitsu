@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectionKey } from "../injection.js";
-import type { ConnectionPort } from "../net/ports.js";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useViewStore } from "../store/view.js";
 import ReconnectOverlay from "./ReconnectOverlay.vue";
 

@@ -48,6 +48,13 @@ describe("createShutdown", () => {
     ]);
   });
 
+  it("server.stop からの止める指示は、ログに出所を書く（20260927-cli-mode）", async () => {
+    const a = setup();
+    a.shutdown.stopRequest("server.stop");
+    expect(await a.exited).toBe(0);
+    expect(a.events).toContain("log:soda: stop requested (server.stop from a connected client), shutting down");
+  });
+
   it("止める指示の 2 回目・シグナルの後の止める指示は何もしない（停止を打ち切らない。AC7）", async () => {
     const a = setup();
     a.shutdown.stopRequest();

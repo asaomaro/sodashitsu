@@ -14,7 +14,7 @@ import {
   overlay,
   subtleOver,
   uiTokens,
-} from "./uiTokens.js";
+} from "@sodashitsu/client-core";
 
 /**
  * AC9：どのテーマでも、design の表の相手に対して比が足りる（WCAG 2.2 の 1.4.3・1.4.11）。dracula も同じ検査を通る（今の値のまま足りている。

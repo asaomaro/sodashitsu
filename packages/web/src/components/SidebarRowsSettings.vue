@@ -20,7 +20,7 @@ import {
   type TokenRule,
   type TokenSpec,
   type TokenStyle,
-} from "../sidebar/rowLayout.js";
+} from "@sodashitsu/client-core";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 

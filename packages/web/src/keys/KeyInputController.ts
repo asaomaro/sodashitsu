@@ -1,16 +1,16 @@
 import type { Terminal } from "@xterm/xterm";
-import type { ConnectionPort } from "../net/ports.js";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { readClipboard } from "../term/clipboard.js";
-import type { KeyDecision, KeyInput, Mode } from "./actions.js";
-import { chordOf, keyInputOf, prefixBytes, type KeyboardEventLike } from "./chord.js";
-import type { KeyRouter } from "./KeyRouter.js";
+import type { KeyDecision, KeyInput, Mode } from "@sodashitsu/client-core";
+import { chordOf, keyInputOf, prefixBytes, type KeyboardEventLike } from "@sodashitsu/client-core";
+import type { KeyRouter } from "@sodashitsu/client-core";
 
 export interface Disposable {
   dispose(): void;
 }
 
 export interface ActionPort {
-  run(action: import("./actions.js").Action): void;
+  run(action: import("@sodashitsu/client-core").Action): void;
 }
 export interface FocusPort {
   focusedPaneId(): string | null;
@@ -32,7 +32,7 @@ export interface ImagePastePort {
  * `Terminal.attachCustomKeyEventHandler` に渡す形の最小限（テストで差し替える）。**定義と `KeyInput` への変換（`keyInputOf`）は `chord.ts`**——設定画面の取り込みが
  * 同じ変換を使う（20260921-keybinding-customization）。ここからは互換のため再エクスポートする。
  */
-export type { KeyboardEventLike } from "./chord.js";
+export type { KeyboardEventLike } from "@sodashitsu/client-core";
 
 /** `Ctrl+Shift+V`（Windows/Linux）。macOS の `Cmd+V` はブラウザの標準の貼り付けなので、xterm.js が自分で拾う（design「貼り付け」）。 */
 function isManualPasteShortcut(ev: KeyboardEventLike): boolean {

@@ -3,10 +3,10 @@ import type { AgentInfo, AgentIntegrationStatusResult, Pane, Tab, Workspace } fr
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KeyInputController } from "../keys/KeyInputController.js";
-import { KeyRouter, type KeyRouterClock } from "../keys/KeyRouter.js";
-import { DEFAULT_KEYMAP } from "../keys/keymap.js";
-import { clientErrorMessage } from "../net/clientError.js";
-import type { ConnectionPort } from "../net/ports.js";
+import { KeyRouter, type KeyRouterClock } from "@sodashitsu/client-core";
+import { DEFAULT_KEYMAP } from "@sodashitsu/client-core";
+import { clientErrorMessage } from "@sodashitsu/client-core";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { RendererPool, type WebglAddonLike } from "../term/RendererPool.js";
 import { TerminalRegistry } from "../term/TerminalRegistry.js";
 import { MouseBridge } from "../term/MouseBridge.js";
@@ -16,7 +16,7 @@ import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
-import { InputGate } from "../net/InputGate.js";
+import { InputGate } from "@sodashitsu/client-core";
 import { ActionDispatcher } from "./ActionDispatcher.js";
 
 let pinia: Pinia;
@@ -2466,5 +2466,181 @@ describe("ActionDispatcher — 独自コマンド（20260927-custom-command-keys
     makeDispatcher(ok).dispatcher.run({ type: "reloadConfig" });
     await flush();
     expect(view.toasts.map((t) => t.message)).toEqual(["設定を読み直しました。"]);
+  });
+});
+
+// 20260927-cli-mode（herdr にあって Web に無かった操作。design D-7）。
+describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
+  it("workspaceIndex（switch_workspace）: サイドバーの並びの N 番目へ移る。範囲の外は何もしない", () => {
+    const conn = makeConnection();
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted({ ...makeWorkspace("w1", ["t1"]), activeTabId: "t1" });
+    session.workspaceUpserted({ ...makeWorkspace("w2", ["t2"]), activeTabId: "t2" });
+    session.tabUpserted(makeTab("t1", "w1", "p1"));
+    session.tabUpserted(makeTab("t2", "w2", "p2"));
+    view.setView("w1", "t1");
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.run({ type: "workspaceIndex", index: 2 });
+    expect(view.workspaceId).toBe("w2");
+    expect(view.focusedPaneId).toBe("p2");
+    expect(conn.requests).toEqual([["workspace.focus", { workspaceId: "w2" }]]);
+    dispatcher.run({ type: "workspaceIndex", index: 3 });
+    expect(view.workspaceId).toBe("w2");
+    expect(conn.requests).toHaveLength(1);
+  });
+
+  it("openWorktree（open_worktree）: 今の workspace の worktree の一覧を開く", async () => {
+    const conn = makeConnection();
+    conn.resolveWith["worktree.list"] = { worktreeRoot: "/wt", repoName: "r", suggestedBranch: "b", entries: [{ path: "/wt/r/a", branch: "a" }] };
+    const view = useViewStore(pinia);
+    view.setView("w1", "t1");
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.run({ type: "openWorktree" });
+    await flush();
+    expect(conn.requests).toEqual([["worktree.list", { workspaceId: "w1" }]]);
+    expect(view.dialogContext).toEqual({ kind: "worktreeOpen", workspaceId: "w1", entries: [{ path: "/wt/r/a", branch: "a" }] });
+  });
+
+  it("removeWorktree（remove_worktree）: linked worktree でなければ知らせるだけ", () => {
+    const conn = makeConnection();
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", ["t1"], { git: { branch: "main", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: false } }));
+    view.setView("w1", "t1");
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.run({ type: "removeWorktree" });
+    expect(conn.requests).toEqual([]);
+    expect(view.toasts.at(-1)?.message).toContain("worktree のチェックアウトではありません");
+  });
+
+  function linkedSetup(cwd: string) {
+    const conn = makeConnection();
+    conn.resolveWith["worktree.list"] = {
+      worktreeRoot: "/wt",
+      repoName: "r",
+      suggestedBranch: "b",
+      entries: [
+        { path: "/r", branch: "main" },
+        { path: "/wt/r/feat", branch: "feat" },
+      ],
+    };
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w2", ["t1"], { cwd, git: { branch: "feat", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: true } }));
+    view.setView("w2", "t1");
+    return { conn, view, ...makeDispatcher(conn) };
+  }
+
+  it("removeWorktree: linked worktree なら、今の場所と同じ場所の worktree の削除の確認を開く（取り消したら閉じる）", async () => {
+    const { conn, view, dispatcher } = linkedSetup("/wt/r/feat");
+    dispatcher.run({ type: "removeWorktree" });
+    await flush();
+    expect(conn.requests).toEqual([["worktree.list", { workspaceId: "w2" }]]);
+    expect(view.dialogContext).toEqual({ kind: "confirmWorktreeRemove", sourceWorkspaceId: "w2", path: "/wt/r/feat", openWorkspaceId: "w2", closeOnCancel: true });
+  });
+
+  // 点検の指摘（02 の修正）：部分一致で選ぶと、サーバ（完全一致でしか workspace を閉じない）と食い違う。一覧の行からの削除と同じ完全一致にする。
+  it("removeWorktree: 今の場所が worktree の中の下の場所なら（完全一致が無ければ）確認を開かずに知らせる", async () => {
+    const { view, dispatcher } = linkedSetup("/wt/r/feat/sub");
+    dispatcher.run({ type: "removeWorktree" });
+    await flush();
+    expect(view.dialogContext).toBeNull();
+    expect(view.toasts.at(-1)?.message).toContain("見つかりませんでした");
+  });
+
+  it("removeWorktree（キーから）: dirty で断られたら --force の確認へ closeOnCancel を引き継ぎ、ほかの失敗では一覧を開き直さない", async () => {
+    const { conn, view, dispatcher } = linkedSetup("/wt/r/feat");
+    dispatcher.run({ type: "removeWorktree" });
+    await flush();
+    conn.rejectWith["worktree.remove"] = "worktree_dirty";
+    dispatcher.confirmWorktreeRemove();
+    await flush();
+    expect(view.dialogContext).toMatchObject({ kind: "confirmWorktreeRemoveForce", reason: "dirty", closeOnCancel: true });
+    conn.rejectWith["worktree.remove"] = "worktree_failed";
+    const listCalls = conn.requests.filter(([m]) => m === "worktree.list").length;
+    dispatcher.confirmWorktreeRemoveForce();
+    await flush();
+    expect(view.dialogContext).toBeNull();
+    expect(conn.requests.filter(([m]) => m === "worktree.list").length).toBe(listCalls); // 一覧を開き直さない
+  });
+
+  // 点検の指摘（02 の修正）：herdr は linked worktree の workspace からは始めず案内する。
+  it("openWorktree: linked worktree の workspace からは一覧を開かずに知らせる", () => {
+    const { conn, view, dispatcher } = linkedSetup("/wt/r/feat");
+    dispatcher.run({ type: "openWorktree" });
+    expect(conn.requests).toEqual([]);
+    expect(view.toasts.at(-1)?.message).toContain("repo の本体");
+  });
+
+  it("swapWithFocused: メニューを開いた pane と焦点の pane を pane.swap_with で入れ替え、焦点を送り直す。キーからは直前の pane と。別の tab・同じ pane は何もしない", async () => {
+    const conn = makeConnection();
+    conn.resolveWith["pane.swap_with"] = { ok: true };
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.paneUpserted(makePane("p1", "t1"));
+    session.paneUpserted(makePane("p2", "t1"));
+    session.paneUpserted(makePane("p3", "t2"));
+    view.focusPane("p2");
+    view.focusPane("p1");
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.swapWithFocused("p2");
+    await flush();
+    expect(conn.requests).toEqual([
+      ["pane.swap_with", { paneId: "p1", otherPaneId: "p2" }],
+      ["pane.focus", { paneId: "p1" }],
+    ]);
+    conn.requests.length = 0;
+    dispatcher.run({ type: "swapWithFocused" }); // 直前の pane（p2）と
+    await flush();
+    expect(conn.requests[0]).toEqual(["pane.swap_with", { paneId: "p1", otherPaneId: "p2" }]);
+    conn.requests.length = 0;
+    dispatcher.swapWithFocused("p3");
+    dispatcher.swapWithFocused("p1");
+    await flush();
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("stopServer（stop_server）: 確認を開き、確定で server.stop を送る。断られたら code の文言で知らせる", async () => {
+    const conn = makeConnection();
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.run({ type: "stopServer" });
+    expect(view.dialogContext).toEqual({ kind: "confirmStopServer", target: "このマシン", remote: false });
+    expect(conn.requests).toEqual([]);
+    dispatcher.confirmStopServer();
+    await flush();
+    expect(view.dialogContext).toBeNull();
+    expect(conn.requests).toEqual([["server.stop", {}]]);
+    conn.rejectWith["server.stop"] = "server_busy";
+    dispatcher.run({ type: "stopServer" });
+    dispatcher.confirmStopServer();
+    await flush();
+    expect(view.toasts.at(-1)?.message).toBe(clientErrorMessage("server_busy"));
+  });
+
+  // 02 の review：画面の接続が保存したマシンを向いていれば、止まるのはそのマシンの soda serve。確認でどれが止まるかを言う。
+  it("stopServer: 確認の文脈に止まるサーバ（ローカルはホスト名・保存したマシンはその名前）を入れる", () => {
+    const conn = makeConnection();
+    const view = useViewStore(pinia);
+    const session = useSessionStore(pinia);
+    session.host = { os: "linux", windowsBuild: null, hostname: "devbox" };
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.run({ type: "stopServer" });
+    expect(view.dialogContext).toEqual({ kind: "confirmStopServer", target: "devbox", remote: false });
+    view.closeDialog();
+    const machines = useMachinesStore(pinia);
+    const id = "b".repeat(32);
+    machines.setMachines([{ id, label: "GPU", state: "online", message: null }]);
+    machines.select(id);
+    dispatcher.run({ type: "stopServer" });
+    expect(view.dialogContext).toEqual({ kind: "confirmStopServer", target: "GPU", remote: true });
+  });
+
+  it("confirmStopServer は確認の文脈でなければ何もしない", () => {
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.confirmStopServer();
+    expect(conn.requests).toEqual([]);
   });
 });

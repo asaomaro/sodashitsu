@@ -1,7 +1,7 @@
 import type { AgentInfo, Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConnectionState } from "../net/ports.js";
+import type { ConnectionState } from "@sodashitsu/client-core";
 import { useCommandsStore } from "./commands.js";
 import { useSessionStore } from "./session.js";
 import { StoreAdapter } from "./StoreAdapter.js";
@@ -308,6 +308,14 @@ describe("StoreAdapter", () => {
 
     const { adapter: withoutCallback } = makeAdapter();
     expect(() => withoutCallback.applyEvent({ event: "agent_integration.changed", data: status })).not.toThrow();
+  });
+
+  it("prefs.changed は注入した onPrefsChanged へ（20260927-cli-mode。省略時は例外を投げない）", () => {
+    const onPrefsChanged = vi.fn();
+    const data = { prefs: { theme: "nord" as const }, rev: 3, byClientId: "c2" };
+    makeAdapter({ onPrefsChanged }).adapter.applyEvent({ event: "prefs.changed", data });
+    expect(onPrefsChanged).toHaveBeenCalledWith(data);
+    expect(() => makeAdapter().adapter.applyEvent({ event: "prefs.changed", data })).not.toThrow();
   });
 
   it("command.updated は独自コマンドの一覧を置き換え、command.popup_closed は閉じた控えに残す（20260927-custom-command-keys の AC15）", () => {

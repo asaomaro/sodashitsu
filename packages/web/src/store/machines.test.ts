@@ -1,9 +1,9 @@
 import type { AgentInfo, SessionSnapshot, Workspace } from "@sodashitsu/protocol";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { WebSocketLike } from "../net/Connection.js";
-import { MachineSummaryClient } from "../net/MachineSummaryClient.js";
-import { LOCAL_MACHINE_ID, wsUrlFor } from "../net/machineUrl.js";
+import type { WebSocketLike } from "@sodashitsu/client-core";
+import { MachineSummaryClient } from "@sodashitsu/client-core";
+import { LOCAL_MACHINE_ID, wsUrlFor } from "@sodashitsu/client-core";
 import { useMachinesStore } from "./machines.js";
 
 /** マシンの一覧・選択・要約（20260927-multi-host-machines の T12）。 */

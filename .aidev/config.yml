@@ -20,6 +20,8 @@
 # （`soda bridge` の子プロセスと `bridge.sock` の配線は vitest では見られない。Windows では何もせず成功）。
 # 9本目（20260927-rename-sodashitsu）: 一度きりの移行スクリプト `scripts/migrate-from-wtm.sh`。一時的な HOME・XDG_STATE_HOME だけの環境（env -i）で
 # `~/.wtmctl` を移し、2 回目は「移すものがありません」になることを確かめる（利用者の本物の状態には触れない）。
+# 10本目（20260927-cli-mode）: 引数なしの `soda`（端末版）を疑似端末（node-pty）で一巡させる `scripts/tui-pty-verify.mjs`。ビルドした `dist` の `soda` を一時の状態ディレクトリで起動し、
+# はじめの案内・描画・入力・切り離し・再接続（スクロールバック）・端末版 2 つの同時接続・ブラウザ相当のクライアントとの同時接続を確かめる（Windows では何もせず成功）。
 smokeCommands:
   - pnpm -s build && pnpm -s smoke
   - pnpm --filter @sodashitsu/cli run smoke
@@ -30,5 +32,6 @@ smokeCommands:
   - node packages/server/dist/stopSmoke.js
   - node packages/server/dist/machineSmoke.js
   - d=$(mktemp -d) && mkdir -p "$d/home/.wtmctl" && env -i PATH="$PATH" HOME="$d/home" XDG_STATE_HOME="$d/state" sh scripts/migrate-from-wtm.sh >"$d/out" && grep -q '^済み: CLI のキャッシュを移す' "$d/out" && test -d "$d/home/.sodactl" && env -i PATH="$PATH" HOME="$d/home" XDG_STATE_HOME="$d/state" sh scripts/migrate-from-wtm.sh | grep -q '移すものがありません'; rc=$?; rm -rf "$d"; exit $rc
+  - node scripts/tui-pty-verify.mjs
 smokeTimeoutSec: 180
 tracker: none

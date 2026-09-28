@@ -52,6 +52,22 @@ importers:
         specifier: ^5.0.1
         version: 5.0.1(@types/node@24.13.5)(happy-dom@20.14.5)(vite@8.3.0(@types/node@24.13.5))
 
+  packages/client-core:
+    dependencies:
+      '@sodashitsu/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.5
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^5.0.1
+        version: 5.0.1(@types/node@24.13.5)(happy-dom@20.14.5)(vite@8.3.0(@types/node@24.13.5))
+
   packages/e2e:
     dependencies:
       '@sodashitsu/protocol':
@@ -92,6 +108,9 @@ importers:
       '@sodashitsu/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@sodashitsu/tui':
+        specifier: workspace:*
+        version: link:../tui
       '@xterm/addon-serialize':
         specifier: 0.14.0
         version: 0.14.0
@@ -128,8 +147,42 @@ importers:
         specifier: ^5.0.1
         version: 5.0.1(@types/node@24.13.5)(happy-dom@20.14.5)(vite@8.3.0(@types/node@24.13.5))
 
+  packages/tui:
+    dependencies:
+      '@sodashitsu/client-core':
+        specifier: workspace:*
+        version: link:../client-core
+      '@sodashitsu/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@xterm/addon-unicode11':
+        specifier: 0.9.0
+        version: 0.9.0
+      '@xterm/headless':
+        specifier: 6.0.0
+        version: 6.0.0
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.5
+      '@types/ws':
+        specifier: ^8.5.13
+        version: 8.18.1
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^5.0.1
+        version: 5.0.1(@types/node@24.13.5)(happy-dom@20.14.5)(vite@8.3.0(@types/node@24.13.5))
+
   packages/web:
     dependencies:
+      '@sodashitsu/client-core':
+        specifier: workspace:*
+        version: link:../client-core
       '@sodashitsu/protocol':
         specifier: workspace:*
         version: link:../protocol

@@ -192,8 +192,8 @@ describe("HelpDialog — 現在の割り当て（AC11）", () => {
     const wrapper = mountDialog();
     await open(view, wrapper);
     const groups = wrapper.findAll(".help-dialog-group");
-    // 全体：prefix・?・q・s・o・shift+r
-    expect(groups[0]!.findAll("dt").map((el) => el.text())).toEqual(["ctrl+b", "prefix+?", "prefix+q", "prefix+s", "prefix+o", "prefix+shift+r"]);
+    // 全体：prefix・?・q・s・o・shift+r・サーバを止める（既定なし。20260927-cli-mode）
+    expect(groups[0]!.findAll("dt").map((el) => el.text())).toEqual(["ctrl+b", "prefix+?", "prefix+q", "prefix+s", "prefix+o", "prefix+shift+r", "なし"]);
     expect(groups[0]!.findAll("dd")[0]!.text()).toContain("prefix");
     // 移動（navigate モードの操作は現在の割り当てから作る。20260923-navigate-mode-keys。AC7）。
     // 既定は up/down/h/j/k/l で、pane 左右は矢印の固定フォールバックが常に併記される（decisions D3）。

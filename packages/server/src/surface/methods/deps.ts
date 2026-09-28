@@ -10,6 +10,8 @@ import type { MetadataService } from "../../metadata/MetadataService.js";
 import type { MachineStatus, ServerSessionEntry } from "@sodashitsu/protocol";
 import type { CommandService } from "../../commands/CommandService.js";
 import type { ImageUploads } from "../../image/ImageUploads.js";
+import type { PrefsStore } from "../../persist/PrefsStore.js";
+import type { StopReply } from "../../handoff/HandoffSocket.js";
 
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
 export interface MethodDeps {
@@ -35,4 +37,11 @@ export interface MethodDeps {
   metadata?: MetadataService;
   /** クリップボードの画像の貼り付け（20260927-clipboard-image-paste）。無ければ `pane.image.*` を登録しない。 */
   images?: ImageUploads;
+  /** 共有の設定（20260927-cli-mode）。無ければ `prefs.*` を登録しない。 */
+  prefs?: PrefsStore;
+  /**
+   * 止める指示の受け付け（`server.stop`。20260927-cli-mode）。制御の socket と同じ判断（`ControlRequests.stop`）。`reply` は 1 回だけ呼ばれ、止めるのは返事の後。
+   * 無ければ `server.stop` は `server_stop_unsupported` で断る。
+   */
+  stopServer?: (reply: (r: StopReply) => Promise<void>) => Promise<void>;
 }

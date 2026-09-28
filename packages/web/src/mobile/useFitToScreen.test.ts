@@ -4,7 +4,7 @@ import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { defineComponent, h, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MethodName, Pane, ParamsOf, ResultOf } from "@sodashitsu/protocol";
-import type { ConnectionPort } from "../net/ports.js";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
 import type { TerminalRegistry } from "../term/TerminalRegistry.js";
