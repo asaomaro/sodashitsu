@@ -100,6 +100,8 @@ herdr と同じ prefix 方式。`Ctrl+B` の後に 1 キー。prefix を押す�
 | `prefix+b` | サイドバーの折りたたみ | `prefix+shift+r` | 設定と独自コマンドを読み直す |
 | `ctrl+v` | クリップボードの画像を貼り付け（手元だけ。下の「クリップボード」） | | |
 
+- 連携のグラフ（`prefix+a`。操作名 `open_graph`）は端末版では開けない。押すと「グラフの画面はブラウザで開けます。」と知らせる（`docs/agent-graph.md`。
+  連携そのものはサーバが動かすので、端末版を使っていても動き続ける。端末から見る・変えるなら `sodactl graph`）。
 - 割り当ては Web 版と**共有**（設定「キー」でどちらから変えても両方に効く）。プリセット（herdr-ctrl-alt・tmux）・直接のキー（prefix なし）も同じ。
   既定のキーの無い操作（`switch_workspace`〔1〜9 の番号つき〕・`open_worktree`・`remove_worktree`・`stop_server` 等）は設定で割り当てると使える。
 - 名前の入力欄は Enter で確定・Esc で取り消し。Ctrl+A/E/U/K/W・Alt+B/F が効く。

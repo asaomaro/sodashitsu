@@ -77,6 +77,16 @@ sodactl --machine <id> pane read p3
 - 登録に無い・無効・名前が曖昧なら `machine_not_found`、繋がっていないなら `machine_unavailable`（どちらも終了コード 1）。ローカルへ黙って送ることはありません。
 - `--machine` のときは、pane の中から呼んだときの自分の pane の歯止め（`self_target`）は効きません（`--machine local` は手元そのものなので効きます）。
 
+## 連携のグラフで使う
+
+グラフ画面（`docs/agent-graph.md`）の「pane を載せる」に登録したマシンの pane が出て、手元の pane と線で結べます（`sodactl graph link add p1 GPU:p3` のように
+`<名前>:<pane ID>` でも）。
+
+- 手元の `soda serve` が、グラフに載っているマシンにだけ接続を張って線を動かします（ブラウザを閉じても動きます）。
+- マシンが繋がっていない間の線は見送られ（履歴に `machine_unavailable`）、繋がり直しても後から送りません。
+- 監督役への知らせの中の「マシン」は監督役から見た名前です。別のマシンの監督役が `sodactl --machine <名前>` で手元の pane を操作できるのは、そのマシンの登録簿に
+  手元のマシンを同じ名前で登録しているときだけです。
+
 ## 繋がらないとき
 
 | 見出しの状態 | 意味と次の手                                                                                                                                                                                                                                                                                          |

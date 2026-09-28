@@ -36,7 +36,7 @@
       対象: `packages/cli/src/skill.ts`・`packages/cli/src/skill.test.ts`
       依存: T1
       AC: AC15, AC7
-- [ ] T4: docs（新規 `docs/agent-graph.md`〔画面の操作とキー・線の種類・待ちと見送り・上限・一時停止・履歴はメモリで再起動で消える・受け渡しはプロンプト注入になりうる・別のマシン・無効なノード〕、`docs/sodactl.md`・`docs/tui.md`〔端末版はブラウザで開けますと知らせる〕・`docs/machines.md`・`docs/verification.md`〔実機の確認の手順〕・`docs/herdr-parity.md`・`AGENTS.md` の docs の案内）
+- [x] T4: docs（新規 `docs/agent-graph.md`〔画面の操作とキー・線の種類・待ちと見送り・上限・一時停止・履歴はメモリで再起動で消える・受け渡しはプロンプト注入になりうる・別のマシン・無効なノード〕、`docs/sodactl.md`・`docs/tui.md`〔端末版はブラウザで開けますと知らせる〕・`docs/machines.md`・`docs/verification.md`〔実機の確認の手順〕・`docs/herdr-parity.md`・`AGENTS.md` の docs の案内）
       対象: `docs/sodactl.md`・`docs/tui.md`・`docs/machines.md`・`docs/verification.md`・`docs/herdr-parity.md`・`AGENTS.md`・（新規 `docs/agent-graph.md`）
       依存: T2, T3
       AC: AC15, AC10
