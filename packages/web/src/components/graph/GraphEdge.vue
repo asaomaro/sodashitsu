@@ -53,7 +53,7 @@ const heavy = computed(() => props.link.kind === "trigger" && props.link.trigger
     ]"
     :data-link-id="link.id"
   >
-    <path class="graph-edge-hit" :d="d" @pointerdown.stop="emit('select', $event)" />
+    <path class="graph-edge-hit" :d="d" @pointerdown="emit('select', $event)" />
     <path class="graph-edge-line" :d="d" />
     <path class="graph-edge-head" :d="head.d" />
   </g>

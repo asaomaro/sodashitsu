@@ -281,7 +281,27 @@ function onCanvasPointerdown(ev: PointerEvent): void {
     endConnectMode(true);
     return;
   }
-  // 2 本目の指: パンをやめてピンチ（モバイルの閲覧。design「モバイル」）。
+  startPan(ev, ev.currentTarget as HTMLElement, (e) => {
+    // モバイルはノードを押すとシート（編集はしない）。
+    const hit = (e.target as Element | null)?.closest?.("[data-node-key]");
+    if (isMobile.value && hit) {
+      sheet.value = { kind: "node", key: hit.getAttribute("data-node-key")! };
+      return;
+    }
+    // 何も無い所を押した＝選択の解除（research-ui §2.6）。
+    selection.value = null;
+  });
+}
+
+/**
+ * 背景・線・チップからのパン（動かずに離したら `onTap`）。2 本目の指が触れたらパンをやめてピンチ（モバイルの閲覧。design「モバイル」）。
+ */
+function startPan(
+  ev: PointerEvent,
+  target: HTMLElement | Element,
+  onTap: (e: PointerEvent) => void,
+  onStart?: () => void,
+): void {
   touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
   if (touches.size === 2) {
     drag.cancel();
@@ -289,23 +309,14 @@ function onCanvasPointerdown(ev: PointerEvent): void {
     return;
   }
   if (touches.size > 2) return;
-  const target = ev.currentTarget as HTMLElement;
   const start = viewport.value;
   drag.start(ev, target, {
     threshold: 3,
+    ...(onStart ? { onStart } : {}),
     onMove: (_e, dx, dy) => {
       viewport.value = { zoom: start.zoom, panX: start.panX + dx, panY: start.panY + dy };
     },
-    onClick: (e) => {
-      // モバイルはノードを押すとシート（編集はしない）。
-      const hit = (e.target as Element | null)?.closest?.("[data-node-key]");
-      if (isMobile.value && hit) {
-        sheet.value = { kind: "node", key: hit.getAttribute("data-node-key")! };
-        return;
-      }
-      // 何も無い所を押した＝選択の解除（research-ui §2.6）。
-      selection.value = null;
-    },
+    onClick: onTap,
     onCancel: () => {
       viewport.value = start;
     },
@@ -375,8 +386,39 @@ function closeSheet(): void {
   else if (s) focusNode(s.key);
 }
 
-function onEdgeSelect(ev: PointerEvent, id: string): void {
+/**
+ * 線（当たり）・チップの pointerdown。押した瞬間には選ばず、動かせばパン、動かずに離したら選ぶ（モバイルで線からもパン・ピンチできるように。
+ * g03 点検）。チップは離した後の `click` で選ぶ（キーの Enter・Space も同じ `click`）ので、パンになったときだけその `click` を捨てる。
+ * パネル・チェックリストを開いている間は何もしない（`click` の側で確認・閉じるを通す）。
+ */
+let suppressChipClick: string | null = null;
+function onLinkPointerdown(ev: PointerEvent, id: string, source: "edge" | "chip"): void {
   ev.stopPropagation();
+  if (ev.button !== 0 && ev.pointerType === "mouse") return;
+  if (confirmState.value) return;
+  if (checklistOpen.value || panel.value || connectFrom.value) {
+    if (source === "edge") onChipClick(id);
+    return;
+  }
+  suppressChipClick = null;
+  const target = ev.currentTarget as Element;
+  startPan(
+    ev,
+    target,
+    () => {
+      if (source === "edge") onChipClick(id);
+    },
+    // 動いたら（パン）その後のチップの click を捨てる。
+    () => {
+      if (source === "chip") suppressChipClick = id;
+    },
+  );
+}
+function onChipActivate(id: string): void {
+  if (suppressChipClick === id) {
+    suppressChipClick = null;
+    return;
+  }
   onChipClick(id);
 }
 
@@ -495,7 +537,28 @@ const panelInvalid = computed(() => {
   return l ? nodeInvalid(l.from) || nodeInvalid(l.to) : false;
 });
 
+/**
+ * 書きかけのパネルを閉じてから `then` を行う（変更があれば「変更を捨てますか」を通す。捨てたら `then`、編集に戻れば何もしない。g03 点検）。
+ */
+let afterPanelClose: (() => void) | null = null;
+function guardPanel(then: () => void): void {
+  if (!panel.value) {
+    then();
+    return;
+  }
+  afterPanelClose = then;
+  panelRef.value?.requestClose();
+}
+function onPanelKeep(): void {
+  afterPanelClose = null;
+}
+
 function openNewLink(from: NodeKey, to: NodeKey): void {
+  if (isMobile.value) return; // モバイルは編集しない（AC20）
+  if (panel.value) {
+    guardPanel(() => openNewLink(from, to));
+    return;
+  }
   connectFrom.value = null;
   liveMessage.value = "";
   selection.value = null;
@@ -504,6 +567,7 @@ function openNewLink(from: NodeKey, to: NodeKey): void {
   panelKey.value++;
 }
 function openLinkPanel(id: string): void {
+  if (isMobile.value) return;
   selection.value = { kind: "link", id };
   panel.value = { mode: "edit", id };
   panelError.value = null;
@@ -514,6 +578,12 @@ function closePanel(): void {
   const p = panel.value;
   panel.value = null;
   panelError.value = null;
+  const next = afterPanelClose;
+  afterPanelClose = null;
+  if (next) {
+    next();
+    return;
+  }
   if (p?.mode === "edit") {
     if (graph.links.some((l) => l.id === p.id)) focusLink(p.id);
     else dialogEl.value?.focus();
@@ -586,6 +656,7 @@ function onConfirmCancel(): void {
 }
 
 function requestDeleteLink(id: string): void {
+  if (isMobile.value) return; // モバイルは編集しない（AC20）
   const link = graph.links.find((l) => l.id === id);
   if (!link) return;
   const fromPanel = panel.value?.mode === "edit" && panel.value.id === id;
@@ -636,6 +707,7 @@ function toolbarButton(cls: string): HTMLElement | null {
   return dialogEl.value?.querySelector<HTMLElement>(`.${cls}`) ?? null;
 }
 function openChecklist(): void {
+  if (isMobile.value) return; // モバイルは編集しない（AC20）
   if (panel.value) {
     panelRef.value?.requestClose();
     return;
@@ -673,6 +745,7 @@ function confirmRemove(keys: readonly string[], onConfirm: () => void, onCancel:
 }
 
 function applyChecklist(change: { add: NodeKey[]; remove: NodeKey[] }): void {
+  if (isMobile.value) return; // モバイルは編集しない（AC20）
   checklistOpen.value = false;
   const run = (): void => {
     void graph
@@ -705,6 +778,7 @@ function applyChecklist(change: { add: NodeKey[]; remove: NodeKey[] }): void {
 }
 
 function requestRemoveNode(key: string): void {
+  if (isMobile.value) return; // モバイルは編集しない（AC20）
   confirmRemove(
     [key],
     () => {
@@ -738,6 +812,10 @@ function closeHistory(): void {
 
 /** グラフ画面を閉じて、そのマシンのその pane へ移る（閉じた後の焦点はその pane。画面を閉じたときの戻り先を上書きする）。 */
 function gotoNode(key: string): void {
+  if (panel.value) {
+    guardPanel(() => gotoNode(key));
+    return;
+  }
   const info = graph.nodeInfo(key as NodeKey);
   const loc = info.location;
   if (!loc || info.exists === false) {
@@ -757,12 +835,20 @@ function gotoNode(key: string): void {
 
 function onChipClick(id: string): void {
   if (connectFrom.value) return;
+  if (confirmState.value) return;
+  // チェックリストを開いている間は、外側のクリックとして閉じるだけ（両方を開かない）。
+  if (checklistOpen.value) {
+    closeChecklist();
+    return;
+  }
   if (isMobile.value) {
     selection.value = { kind: "link", id };
     sheet.value = { kind: "link", id };
     return;
   }
-  openLinkPanel(id);
+  const p = panel.value;
+  if (p?.mode === "edit" && p.id === id) return; // 開いている線そのもの
+  guardPanel(() => openLinkPanel(id));
 }
 
 // --- 矢印キーでノードを動かす（1 グリッド、Shift で 5。連打が止まって 300ms 後に送る。research-ui §2.3）---------------
@@ -770,6 +856,7 @@ function onChipClick(id: string): void {
 const ARROW_SEND_DELAY_MS = 300;
 const arrowTimers = new Map<string, ReturnType<typeof setTimeout>>();
 function nudgeNode(key: string, dx: number, dy: number): void {
+  if (isMobile.value) return; // モバイルは編集しない（AC20）
   const node = graph.nodes.find((n) => n.key === key);
   if (!node) return;
   const p = { x: snapToGrid(node.x) + dx, y: snapToGrid(node.y) + dy };
@@ -1202,7 +1289,7 @@ function chipAria(e: EdgeView): string {
                 :selected="isLinkSelected(e.link.id)"
                 :paused="e.paused"
                 :firing="graph.firing.get(e.link.id) ?? null"
-                @select="onEdgeSelect($event, e.link.id)"
+                @select="onLinkPointerdown($event, e.link.id, 'edge')"
               />
               <line
                 v-if="connectLine"
@@ -1249,10 +1336,10 @@ function chipAria(e: EdgeView): string {
               :aria-label="chipAria(e)"
               :data-link-chip="e.link.id"
               :style="{ left: `${e.mid.x}px`, top: `${e.mid.y}px` }"
-              @pointerdown.stop
+              @pointerdown="onLinkPointerdown($event, e.link.id, 'chip')"
               @focus="onChipFocus(e.link.id)"
               @keydown="onChipKeydown($event, e.link.id)"
-              @click="onChipClick(e.link.id)"
+              @click="onChipActivate(e.link.id)"
             >
               {{ chipLabel(e) }}
             </button>
@@ -1282,6 +1369,7 @@ function chipAria(e: EdgeView): string {
             :error="panelError"
             @save="onPanelSave"
             @cancel="closePanel"
+            @keep="onPanelKeep"
             @delete="panel.mode === 'edit' && requestDeleteLink(panel.id)"
             @pause="(p) => panel?.mode === 'edit' && graph.setPaused(p, panel.id)"
             @history="panel.mode === 'edit' && (history = { linkId: panel.id })"

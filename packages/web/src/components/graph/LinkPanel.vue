@@ -56,6 +56,8 @@ const emit = defineEmits<{
   delete: [];
   pause: [paused: boolean];
   history: [];
+  /** 「変更を捨てますか」で編集に戻った（閉じる要求の後に予定していたことを取りやめる）。 */
+  keep: [];
 }>();
 
 interface Form {
@@ -197,6 +199,7 @@ function requestClose(): void {
 
 function onDiscardCancel(): void {
   confirmDiscard.value = false;
+  emit("keep");
   void nextTick(() => rootEl.value?.querySelector<HTMLElement>("select, textarea, input")?.focus());
 }
 
