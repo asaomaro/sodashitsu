@@ -1,7 +1,7 @@
 schema: 11
 slug: agent-graph
-current: tasks
-approved: [requirements, research, design, architecture, tasks]
+current: review
+approved: [requirements, research, design, architecture, tasks, test, review]
 mode: autonomous
 profile: full
 humanGates: []

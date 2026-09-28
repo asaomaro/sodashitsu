@@ -149,7 +149,7 @@ parent: 20260918-web-terminal-multiplexer
 - [ ] 複数ホストの残り（接続の入口）: `soda --remote <宛先>`（登録せずに 1 回）・手元の `soda serve` を通さない直接の SSH での `sodactl --machine`・リモートの `--state-dir` を登録簿に持つ・画面からの登録 (needs: 20260927-multi-host-machines)（出典: .aidev/works/20260927-multi-host-machines/decisions.md D5・docs/machines.md）
 - [ ] 複数ホストの残り（導入と対応 OS）: リモートへの `soda` の自動の導入・更新・`soda serve` の自動の起動（herdr は承認つき）／Windows のマシンをリモートにする（`bridge.sock` の代わり）／本物の SSH・macOS・手元が Windows での確かめ (needs: 20260927-multi-host-machines)（出典: .aidev/works/20260927-multi-host-machines/test-result.md の未検証の穴）
 - [ ] 複数ホストの残り（画像の貼り付け）: リモートへのクリップボードの画像の転送（herdr の H44） (needs: 20260927-multi-host-machines)（出典: docs/herdr-parity.md H44）
-- [ ] ノードによるオーケストレーション: セッションをノード表示し、マウスで繋いで状態トリガ・出力受け渡し・監督関係を設定（外部操作 API の後） (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/requirements.md）
+- [x] ノードによるオーケストレーション: セッションをノード表示し、マウスで繋いで状態トリガ・出力受け渡し・監督関係を設定（外部操作 API の後） (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/requirements.md）
 - [x] 通知: 完了・入力待ちのアプリ内トースト / OS 通知 / 音、通知の対象への移動（herdr prefix+o）:
       20260920-agent-notifications で対応。エージェントが**入力待ち**になった／**完了**したとき、
       利用者の状態に応じて 3 経路を使い分ける（フォーカス無し→OS 通知・音・トースト／

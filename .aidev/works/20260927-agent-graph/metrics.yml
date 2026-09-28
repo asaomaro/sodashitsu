@@ -9,3 +9,10 @@ events:
   - { ts: 2026-09-28T03:49:00Z, phase: architecture, event: approved }
   - { ts: 2026-09-28T03:49:00Z, phase: tasks, event: start }
   - { ts: 2026-09-28T03:52:05Z, phase: tasks, event: approved, metrics: { tasks_planned: 0, tasks_anchored: 0 } }
+  - { ts: 2026-09-28T18:15:16Z, phase: test, event: start, metrics: { marks: 0 } }
+  - { ts: 2026-09-28T18:20:34Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-09-28T18:20:48Z, phase: test, event: approved, metrics: { passed: 6333, failed: 0 } }
+  - { ts: 2026-09-28T18:20:48Z, phase: review, event: start, metrics: { marks: 6, marks: 0 } }
+  - { ts: 2026-09-28T18:59:05Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-09-28T18:59:45Z, phase: review, event: approved, metrics: { must: 0, should: 3, nit: 4, ac_total: 25, ac_covered: 25, tasks_no_ac: 0, tasks_ac_none: 0 } }
+  - { ts: 2026-09-28T18:59:45Z, phase: deliver, event: start }
