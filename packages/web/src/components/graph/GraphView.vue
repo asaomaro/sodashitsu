@@ -245,6 +245,8 @@ function onChipFocus(id: string): void {
 const drag = usePointerDrag();
 
 function onNodePointerdown(ev: PointerEvent, key: string): void {
+  // 押したことで来るフォーカス（ブラウザの mousedown の既定も含む）は、どの経路で戻っても画面へ入れない（レビュー R7）。
+  pointerFocusing = true;
   if (isMobile.value || ev.button !== 0) return; // モバイルは閲覧だけ（背景のパンへ流す）
   ev.stopPropagation();
   if (confirmState.value) return;
@@ -280,7 +282,6 @@ function onNodePointerdown(ev: PointerEvent, key: string): void {
       : { x: snapToGrid(rawX), y: snapToGrid(rawY) };
   };
   selection.value = { kind: "node", key };
-  pointerFocusing = true;
   target.focus({ preventScroll: true });
   drag.start(ev, target, {
     threshold: 4,

@@ -1588,3 +1588,47 @@ describe("GraphView（選び直しは手元のノードだけ。レビュー R5�
     t.wrapper.unmount();
   });
 });
+
+describe("GraphView（押しただけの reveal の残りの経路。レビュー R7）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("チェックリストを開いている・モバイルのときにノードを押しても（ブラウザの既定のフォーカスでも）表示が跳ばない", async () => {
+    const far = {
+      nodes: [
+        { key: "local:p1" as const, x: 0, y: 0 },
+        { key: "local:p2" as const, x: 1400, y: 0 },
+      ],
+    };
+    const press = async (w: ReturnType<typeof mount>, k: string) => {
+      const el = w.find(`[data-node-key="${k}"]`).element as HTMLElement;
+      el.dispatchEvent(pointer("pointerdown", { clientX: 5, clientY: 5 }));
+      el.focus(); // mousedown の既定のフォーカス
+      window.dispatchEvent(pointer("pointerup", { clientX: 5, clientY: 5 }));
+      await flush();
+    };
+    const { wrapper } = await openWithGraph(far);
+    const world = wrapper.find(".graph-world").element as HTMLElement;
+    // チェックリストを開いている（押すと外側のクリックとして閉じるだけの経路）
+    await wrapper.find(".graph-add-panes").trigger("click");
+    await flush();
+    const before = world.style.transform;
+    await press(wrapper, "local:p2");
+    expect(wrapper.find(".pane-checklist").exists()).toBe(false);
+    expect(world.style.transform).toBe(before);
+    wrapper.unmount();
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as MediaQueryList);
+    const m = await openWithGraph(far);
+    const world2 = m.wrapper.find(".graph-world").element as HTMLElement;
+    const b2 = world2.style.transform;
+    await press(m.wrapper, "local:p2");
+    expect(world2.style.transform).toBe(b2);
+    m.wrapper.unmount();
+  });
+});
