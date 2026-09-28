@@ -1337,3 +1337,45 @@ describe("GraphView（無効なノードの選び直し。g03 点検 T4）", () 
     wrapper.unmount();
   });
 });
+
+describe("GraphView（閉じたときの一時的な状態。レビュー R1）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+  const key = (k: string, init: KeyboardEventInit = {}) =>
+    new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init });
+
+  it("「変更を捨てますか」の途中で画面を閉じたら、予定（別の線を開く）は開き直した後に効かない（probe A）", async () => {
+    const { wrapper, view } = await openWithGraph();
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    await wrapper.find(".link-panel-limit").setValue(5);
+    await wrapper.find('[data-link-chip="l2"]').trigger("click");
+    await flush();
+    expect(wrapper.find(".graph-confirm").exists()).toBe(true);
+    await wrapper.find(".graph-close").trigger("click");
+    await flush();
+    view.openGraph();
+    await flush();
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    wrapper.find(".link-panel-limit").element.dispatchEvent(key("Escape"));
+    await flush();
+    expect(wrapper.find(".link-panel").exists()).toBe(false);
+    expect(document.activeElement?.getAttribute("data-link-chip")).toBe("l1");
+    wrapper.unmount();
+  });
+
+  it("prefix を押したまま画面を閉じても、開き直した後の a で閉じない", async () => {
+    const { wrapper, view } = await openWithGraph();
+    const root = wrapper.find(".graph-view").element;
+    root.dispatchEvent(key("b", { ctrlKey: true }));
+    await wrapper.find(".graph-close").trigger("click");
+    await flush();
+    view.openGraph();
+    await flush();
+    root.dispatchEvent(key("a"));
+    expect(view.graphOpen).toBe(true);
+    wrapper.unmount();
+  });
+});

@@ -1103,8 +1103,13 @@ watch(
         }
         return;
       }
+      // 画面を閉じたら一時的な状態をすべて初期化する（開き直した後に古い予定・prefix が効かない。レビュー R1）。
       drag.cancel();
       flushArrowMoves();
+      afterPanelClose = null;
+      disarmPrefix();
+      suppressChipClick = null;
+      pointerFocusing = false;
       sheet.value = null;
       touches.clear();
       pinch = null;
