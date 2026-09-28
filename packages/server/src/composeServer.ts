@@ -188,7 +188,12 @@ export async function composeServer(
   // 作る（`clients` もその下）——先に箱を渡し、`clients` を作った直後に埋める。pane を作る（復元する）のは `listen()` の中で、埋めた後になる。
   // 埋まる前に問い合わせが来ても dracula（明暗は dark）で答える（投げない）。
   const palettes = createPaletteSource();
-  const terminals = new DefaultTerminalManager(new NodePtyBackend(), processInspector, options.scrollbackLines, palettes.paletteFor, palettes.appearanceFor);
+  // シェルの場所の知らせ（20260928-windows-pane-cwd の D-6）：pane を開くたびに共有の設定 `shellCwdTracking` の今の値を読む（boolean の false のときだけ切。
+  // client-core の `loadShellCwdTracking` と同じ規則）。`prefs` は下で作る——読むのは pane を開くとき（`listen()` で読み込んだ後）。
+  const terminals = new DefaultTerminalManager(new NodePtyBackend(), processInspector, options.scrollbackLines, palettes.paletteFor, palettes.appearanceFor, {
+    platform: platform(),
+    enabled: () => prefs.get().prefs.shellCwdTracking !== false,
+  });
   const sessionFile = new FsSessionFile(options.stateDir);
   const persist = new DefaultPersistScheduler(async () => {
     await sessionFile.save(toSessionFileData(session));

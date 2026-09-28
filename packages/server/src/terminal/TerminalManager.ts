@@ -1,6 +1,7 @@
 import type { PaneId, TerminalPalette } from "@sodashitsu/protocol";
 import type { PtyBackend, PtyProcess } from "../pty/PtyBackend.js";
 import type { ProcessInspector } from "../platform/ProcessInspector.js";
+import { withShellCwdTracking } from "../pty/shellCwdTracking.js";
 import { DefaultTerminalHost, type TerminalHost } from "./TerminalHost.js";
 
 export interface CreatePaneOptions {
@@ -11,6 +12,17 @@ export interface CreatePaneOptions {
   cols: number;
   rows: number;
   env?: Record<string, string>;
+  /**
+   * 対話の pane のシェル（新規・分割・復元）なら true（20260928-windows-pane-cwd の D-1）。Windows で設定が入なら、プロンプトのたびに場所を知らせる
+   * 設定を差し込む（`pty/shellCwdTracking.ts`）。独自コマンドの pane・`edit_scrollback` のエディタは渡さない（引数の意味が変わるため。decisions D2）。
+   */
+  trackCwd?: boolean;
+}
+
+/** シェルの場所の知らせの差し込み（20260928-windows-pane-cwd）。`enabled` は pane を開くたびに読む（共有の設定の今の値）。 */
+export interface ShellCwdTrackingSource {
+  platform: NodeJS.Platform;
+  enabled(): boolean;
 }
 
 /** 更新時の引き継ぎ（20260926-live-handoff）で渡された PTY。 */
@@ -48,6 +60,8 @@ export class DefaultTerminalManager implements TerminalManager {
      * `composeServer.ts` が `createPaletteSource` を渡す）。省けば今までどおり dark（dracula）。
      */
     private readonly appearanceFor?: (paneId: PaneId) => "light" | "dark",
+    /** 省けば差し込まない（今までどおり）。`composeServer.ts` がプラットフォームと共有の設定の読み取りを渡す。 */
+    private readonly shellCwdTracking?: ShellCwdTrackingSource,
   ) {}
 
   get(paneId: PaneId): TerminalHost | undefined {
@@ -61,13 +75,18 @@ export class DefaultTerminalManager implements TerminalManager {
    */
   create(paneId: PaneId, opts: CreatePaneOptions): TerminalHost {
     const defaultShell = opts.shell ? undefined : this.processInspector.defaultShell();
-    const shell = opts.shell ?? defaultShell!.shell;
-    const args = opts.shell ? (opts.args ?? []) : defaultShell!.args;
-    const proc = this.ptyBackend.spawn({
-      shell,
-      args,
-      cwd: opts.cwd,
+    let launch = {
+      shell: opts.shell ?? defaultShell!.shell,
+      args: opts.shell ? (opts.args ?? []) : defaultShell!.args,
       env: opts.env ?? (process.env as Record<string, string>),
+    };
+    const tracking = this.shellCwdTracking;
+    if (opts.trackCwd && tracking) {
+      launch = withShellCwdTracking(launch, { platform: tracking.platform, enabled: tracking.enabled() });
+    }
+    const proc = this.ptyBackend.spawn({
+      ...launch,
+      cwd: opts.cwd,
       cols: opts.cols,
       rows: opts.rows,
     });

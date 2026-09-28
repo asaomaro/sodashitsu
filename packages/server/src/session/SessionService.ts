@@ -1196,6 +1196,8 @@ export class SessionService {
       cols: HEADLESS_COLS,
       rows: HEADLESS_ROWS,
       ...(command ? { shell: command.shell, args: command.args } : this.shell ? { shell: this.shell } : {}),
+      // 対話の pane のシェル（新規・分割・復元）だけ、Windows で場所の知らせを差し込ませる（20260928-windows-pane-cwd の D-1・decisions D2）。
+      ...(command ? {} : { trackCwd: true }),
       // 独自コマンドの pane 種は `SODA_ACTIVE_*` 等を重ねる（20260927-custom-command-keys）。
       env: command?.env ? { ...this.envForPane(paneId), ...command.env } : this.envForPane(paneId),
     });
