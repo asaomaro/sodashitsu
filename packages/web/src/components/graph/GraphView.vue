@@ -429,7 +429,7 @@ function onLinkPointerdown(ev: PointerEvent, id: string, source: "edge" | "chip"
   if (source === "chip") pointerFocusing = true;
   if (ev.button !== 0 && ev.pointerType === "mouse") return;
   if (confirmState.value) return;
-  if (checklistOpen.value || panel.value || connectFrom.value) {
+  if (checklistOpen.value || rekeyKey.value || panel.value || connectFrom.value) {
     if (source === "edge") onChipClick(id);
     return;
   }
@@ -766,12 +766,14 @@ const checklistOpen = ref(false);
 function toolbarButton(cls: string): HTMLElement | null {
   return dialogEl.value?.querySelector<HTMLElement>(`.${cls}`) ?? null;
 }
+/** 選び直し・チェックリスト・パネルは互いに排他（開くときに他を閉じる。パネルに変更があれば確認。レビュー R4）。 */
 function openChecklist(): void {
   if (isMobile.value) return; // モバイルは編集しない（AC20）
   if (panel.value) {
-    panelRef.value?.requestClose();
+    guardPanel(() => openChecklist());
     return;
   }
+  rekeyKey.value = null;
   checklistOpen.value = true;
 }
 function closeChecklist(): void {
@@ -937,9 +939,13 @@ function gotoNode(key: string): void {
 function onChipClick(id: string): void {
   if (connectFrom.value) return;
   if (confirmState.value) return;
-  // チェックリストを開いている間は、外側のクリックとして閉じるだけ（両方を開かない）。
+  // チェックリスト・選び直しを開いている間は、外側のクリックとして閉じるだけ（両方を開かない。レビュー R4）。
   if (checklistOpen.value) {
     closeChecklist();
+    return;
+  }
+  if (rekeyKey.value) {
+    closeRekey();
     return;
   }
   if (isMobile.value) {

@@ -1491,3 +1491,67 @@ describe("GraphView（保存の応答は送ったときのパネルにだけ当�
     wrapper.unmount();
   });
 });
+
+describe("GraphView（選び直し・チェックリスト・パネルは排他。レビュー R4）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+  const staleGraph = {
+    nodes: [
+      { key: "local:p1" as const, x: 0, y: 0, stale: true as const },
+      { key: "local:p2" as const, x: 300, y: 0 },
+    ],
+  };
+  const opened = (w: ReturnType<typeof mount>) => ({
+    rekey: w.find(".rekey-picker").exists(),
+    checklist: w.find(".pane-checklist").exists(),
+    panel: w.find(".link-panel").exists(),
+  });
+
+  it("選び直しを開いたままチップ・線を押すと選び直しを閉じるだけ（パネルは開かない。probe D）", async () => {
+    const { wrapper } = await openWithGraph(staleGraph);
+    await wrapper.find('[data-node-key="local:p1"]').trigger("keydown", { key: "r" });
+    await flush();
+    const chip = wrapper.find('[data-link-chip="l1"]');
+    chip.element.dispatchEvent(pointer("pointerdown", { clientX: 5, clientY: 5 }));
+    window.dispatchEvent(pointer("pointerup", { clientX: 5, clientY: 5 }));
+    await chip.trigger("click");
+    await flush();
+    expect(opened(wrapper)).toEqual({ rekey: false, checklist: false, panel: false });
+    await wrapper.find('[data-node-key="local:p1"]').trigger("keydown", { key: "r" });
+    await flush();
+    const hit = wrapper.find('[data-link-id="l1"] .graph-edge-hit').element;
+    hit.dispatchEvent(pointer("pointerdown", { clientX: 250, clientY: 40 }));
+    window.dispatchEvent(pointer("pointerup", { clientX: 250, clientY: 40 }));
+    await flush();
+    expect(opened(wrapper)).toEqual({ rekey: false, checklist: false, panel: false });
+    wrapper.unmount();
+  });
+
+  it("選び直しを開いたまま「pane を載せる」でチェックリストだけにし、チェックリストを開いたままの r は選び直しだけにする（probe D2）", async () => {
+    const { wrapper } = await openWithGraph(staleGraph);
+    await wrapper.find('[data-node-key="local:p1"]').trigger("keydown", { key: "r" });
+    await flush();
+    await wrapper.find(".graph-add-panes").trigger("click");
+    await flush();
+    expect(opened(wrapper)).toEqual({ rekey: false, checklist: true, panel: false });
+    await wrapper.find('[data-node-key="local:p1"]').trigger("keydown", { key: "r" });
+    await flush();
+    expect(opened(wrapper)).toEqual({ rekey: true, checklist: false, panel: false });
+    wrapper.unmount();
+  });
+
+  it("変更があるパネルのまま「pane を載せる」は確認を通し、捨てればチェックリストを開く", async () => {
+    const { wrapper } = await openWithGraph();
+    await wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    await wrapper.find(".link-panel-limit").setValue(5);
+    await wrapper.find(".graph-add-panes").trigger("click");
+    await flush();
+    expect(wrapper.find(".graph-confirm").exists()).toBe(true);
+    await wrapper.find(".graph-confirm-ok").trigger("click");
+    await flush();
+    expect(opened(wrapper)).toEqual({ rekey: false, checklist: true, panel: false });
+    wrapper.unmount();
+  });
+});
