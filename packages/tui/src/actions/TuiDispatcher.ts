@@ -14,7 +14,7 @@ import {
   type InputHold,
   type Mode,
 } from "@sodashitsu/client-core";
-import type { MachinesModel } from "../model/MachinesModel.js";
+import { parseRemoteKey, remoteKey, type MachinesModel } from "../model/MachinesModel.js";
 import type { PrefsModel } from "../model/PrefsModel.js";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { MenuTarget, UiState } from "../model/UiState.js";
@@ -32,6 +32,8 @@ export interface CopyTargetPort {
 
 export interface DispatcherHost {
   model: SessionModel;
+  /** マシンを切り替える（navigate・goto で別のマシンの workspace を選んだとき。AC14・AC-I3）。 */
+  switchMachine?(id: string, target?: { workspaceId: string; tabId: string }): void;
   /** 共有の設定（`prefs.*`）を送る先（ローカルのサーバ。無ければ `conn`。decisions D7.4）。 */
   prefsConn?: RequestPort;
   /** 保存した SSH のマシン（止めるサーバの名前。05 の T4）。 */
@@ -848,6 +850,31 @@ export class TuiDispatcher {
 
   // --- workspace ---
 
+  /**
+   * navigate モードで選べる並び：保存した SSH のマシンがあれば、マシンの見出しの順に、今のマシンは今の workspace、ほかのマシン（畳んでいない）は
+   * 要約の workspace（`remoteKey`）。サイドバーの並びと同じ。
+   */
+  private navigateIds(): string[] {
+    const m = this.host.machines;
+    if (!m?.hasMachines) return this.visibleWorkspaceIds();
+    const out: string[] = [];
+    for (const s of m.sections) {
+      if (s.id === m.selectedId) out.push(...this.visibleWorkspaceIds());
+      else if (!m.collapsed[s.id])
+        for (const ws of m.summaries[s.id]?.workspaces ?? []) out.push(remoteKey(s.id, ws.id));
+    }
+    return out;
+  }
+
+  /** 別のマシンの workspace へ（そのマシンへ切り替えて、その workspace へ移る）。 */
+  openRemoteWorkspace(machineId: string, workspaceId: string): void {
+    const ws = this.host.machines?.summaries[machineId]?.workspaces.find(
+      (w) => w.id === workspaceId,
+    );
+    if (!ws) return;
+    this.host.switchMachine?.(machineId, { workspaceId, tabId: ws.activeTabId });
+  }
+
   private visibleWorkspaceIds(): string[] {
     return visibleWorkspaceIdsInOrder(
       [...this.model.workspaces.values()],
@@ -946,7 +973,8 @@ export class TuiDispatcher {
     switch (op) {
       case "up":
       case "down": {
-        const ids = this.visibleWorkspaceIds();
+        // 別のマシンの workspace も同じ並びで選べる（サイドバーの並びと同じ。キーだけでマシンを切り替えられる）。
+        const ids = this.navigateIds();
         if (ids.length === 0) return;
         const current = this.ui.navigateSelection ? ids.indexOf(this.ui.navigateSelection) : -1;
         const delta = op === "up" ? -1 : 1;
@@ -960,14 +988,18 @@ export class TuiDispatcher {
       case "activate": {
         const workspaceId = this.ui.navigateSelection;
         this.ui.setNavigateSelection(null);
-        if (workspaceId) this.focusWorkspaceById(workspaceId);
+        const remote = workspaceId ? parseRemoteKey(workspaceId) : null;
+        if (remote) this.openRemoteWorkspace(remote.machineId, remote.workspaceId);
+        else if (workspaceId) this.focusWorkspaceById(workspaceId);
         return;
       }
       case "cancel":
         this.ui.setNavigateSelection(null);
         return;
       case "openMenu":
-        if (this.ui.navigateSelection) this.ui.requestNavigateMenu();
+        // 別のマシンの workspace にはメニューが無い（そのマシンへ切り替えてから）。
+        if (this.ui.navigateSelection && !parseRemoteKey(this.ui.navigateSelection))
+          this.ui.requestNavigateMenu();
         return;
     }
   }

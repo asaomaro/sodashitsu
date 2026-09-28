@@ -1,5 +1,5 @@
 import type { DisplayState, MachineState, Pane, Workspace } from "@sodashitsu/protocol";
-import type { MachineSection } from "../../model/MachinesModel.js";
+import { remoteKey, type MachineSection } from "../../model/MachinesModel.js";
 import {
   aggregate,
   depthFirstPaneIds,
@@ -243,7 +243,10 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     ...(scroll.reveal?.workspaceId
       ? revealRange(
           spacesLines,
-          (h) => h.kind === "workspace" && h.workspaceId === scroll.reveal!.workspaceId,
+          (h) =>
+            (h.kind === "workspace" && h.workspaceId === scroll.reveal!.workspaceId) ||
+            (h.kind === "machineWorkspace" &&
+              remoteKey(h.machineId, h.workspaceId) === scroll.reveal!.workspaceId),
         )
       : ([-1, 0] as [number, number])),
   );
@@ -380,6 +383,7 @@ function machineSection(
         ],
       ],
       selected: false,
+      navigated: ctx.navigateSelection === remoteKey(section.id, ws.id),
       hit: {
         kind: "machineWorkspace",
         machineId: section.id,

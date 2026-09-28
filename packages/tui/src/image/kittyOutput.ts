@@ -43,8 +43,10 @@ export class KittyImages {
   /** 一度でも出したか（終わるときに全部消す）。 */
   private used = false;
 
-  /** 今見せる画像。変わらなければ空文字列。 */
-  sync(placements: readonly KittyPlacement[]): string {
+  /**
+   * 今見せる画像。変わらなければ空文字列。`keep` はいま置かないが中身を残す画像の鍵（pane がまだ持つ画像。ダイアログを閉じたら送り直さずに置ける）。
+   */
+  sync(placements: readonly KittyPlacement[], keep: ReadonlySet<string> = new Set()): string {
     const sig = placements.map((p) => `${p.imageKey}@${p.x},${p.y},${p.cols}x${p.rows}`).join("|");
     if (sig === this.shown) return "";
     this.shown = sig;
@@ -52,7 +54,7 @@ export class KittyImages {
     let out = "\x1b7" + apc("a=d,d=a,q=2"); // 置き方を全部外す（中身は残す）
     const wanted = new Set(placements.map((p) => p.imageKey));
     for (const [key, id] of [...this.ids]) {
-      if (wanted.has(key)) continue;
+      if (wanted.has(key) || keep.has(key)) continue;
       out += apc(`a=d,d=I,i=${id},q=2`); // 使わなくなった中身を消す
       this.ids.delete(key);
     }

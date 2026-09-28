@@ -1,5 +1,12 @@
 import type { DisplayState } from "@sodashitsu/protocol";
-import { aggregate, depthFirstPaneIds, paneNameOf, type KeyInput } from "@sodashitsu/client-core";
+import {
+  aggregate,
+  depthFirstPaneIds,
+  displayStateFor,
+  paneNameOf,
+  type KeyInput,
+} from "@sodashitsu/client-core";
+import type { MachinesModel } from "../model/MachinesModel.js";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
@@ -23,7 +30,9 @@ import { TextInput } from "./TextInput.js";
 type GotoTarget =
   | { kind: "workspace"; workspaceId: string }
   | { kind: "tab"; tabId: string }
-  | { kind: "pane"; paneId: string };
+  | { kind: "pane"; paneId: string }
+  /** 別のマシンの workspace（選ぶとそのマシンへ切り替える。AC14）。 */
+  | { kind: "remote"; machineId: string; workspaceId: string };
 
 export interface GotoRow {
   depth: 0 | 1 | 2;
@@ -46,7 +55,9 @@ function targetKey(t: GotoTarget): string {
     ? `workspace:${t.workspaceId}`
     : t.kind === "tab"
       ? `tab:${t.tabId}`
-      : `pane:${t.paneId}`;
+      : t.kind === "pane"
+        ? `pane:${t.paneId}`
+        : `remote:${t.machineId}:${t.workspaceId}`;
 }
 
 /**
@@ -58,6 +69,7 @@ export function gotoRows(
   query: string,
   filter: DisplayState | null,
   expanded: ReadonlySet<string>,
+  machines?: MachinesModel,
 ): GotoRow[] {
   const q = query.trim().toLowerCase();
   const filtering = filter !== null || q !== "";
@@ -124,6 +136,27 @@ export function gotoRows(
       if (expanded.has(ws.id) || filtering) out.push(...tabRows);
     }
   }
+  // 別のマシンの workspace（要約。そのマシンの名前を添える）。キーだけでマシンを切り替えられる（AC-I3・AC14）。
+  if (machines?.hasMachines) {
+    for (const s of machines.sections) {
+      if (s.id === machines.selectedId) continue;
+      for (const ws of machines.summaries[s.id]?.workspaces ?? []) {
+        const state = aggregate(
+          machines.agentsInWorkspace(s.id, ws.id).map((a) => displayStateFor(a, a.serverSeenSeq)),
+        );
+        if (filtering && !(statusMatch(state) && (textMatch(ws.label) || textMatch(s.label))))
+          continue;
+        out.push({
+          depth: 0,
+          label: ws.label,
+          meta: `@${s.label}`,
+          state,
+          current: false,
+          target: { kind: "remote", machineId: s.id, workspaceId: ws.id },
+        });
+      }
+    }
+  }
   return out;
 }
 
@@ -148,6 +181,8 @@ export class GotoDialog implements Overlay {
       actions: TuiDispatcher;
       /** 状態を記号でも示すか（共有の設定 `statusSymbols`。省略は入）。 */
       statusSymbols?: () => boolean;
+      /** 保存した SSH のマシン（別のマシンの workspace も並べる）。 */
+      machines?: MachinesModel;
     },
   ) {
     this.expanded = new Set(deps.model.workspaces.keys());
@@ -155,7 +190,13 @@ export class GotoDialog implements Overlay {
   }
 
   rows(): GotoRow[] {
-    return gotoRows(this.deps.model, this.query.value, this.filter, this.expanded);
+    return gotoRows(
+      this.deps.model,
+      this.query.value,
+      this.filter,
+      this.expanded,
+      this.deps.machines,
+    );
   }
 
   private selectedIndex(rows = this.rows()): number {
@@ -262,7 +303,8 @@ export class GotoDialog implements Overlay {
     const { ui, model, actions } = this.deps;
     ui.closeDialog();
     const t = row.target;
-    if (t.kind === "workspace") actions.focusWorkspaceById(t.workspaceId);
+    if (t.kind === "remote") actions.openRemoteWorkspace(t.machineId, t.workspaceId);
+    else if (t.kind === "workspace") actions.focusWorkspaceById(t.workspaceId);
     else if (t.kind === "tab") {
       const tab = model.tabs.get(t.tabId);
       if (tab) actions.switchToTab(tab.workspaceId, tab.id);

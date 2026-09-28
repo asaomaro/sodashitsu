@@ -141,6 +141,8 @@ export class Grid {
     let col = 0;
     for (const chr of s) {
       const cp = chr.codePointAt(0)!;
+      // 制御文字（C0・DEL・C1）は描かない。pane の名前・タイトル等は外から来るので、C1（ESC 無しで効く CSI〔U+009B〕等）を外側の端末へ送らない。
+      if (cp < 0x20 || (cp >= 0x7f && cp <= 0x9f)) continue;
       const cw = charWidth(cp);
       if (cw === 0) {
         // 結合文字（NFD の濁点等）は直前に書いたセルへ足す（pane の中の xterm と同じく 1 セルにまとめる）。制御文字は出さない。

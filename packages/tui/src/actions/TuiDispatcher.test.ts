@@ -120,7 +120,7 @@ const EFFECTS: Record<
   {
     rpc?: [string, unknown];
     dialog?: string;
-    host?: Exclude<keyof DispatcherHost, "machines" | "prefsConn" | "pasteClipboard">;
+    host?: "detach" | "focusNextNotification" | "pasteImage" | "toggleSidebar";
     none?: true;
     mode?: true;
     toast?: true;

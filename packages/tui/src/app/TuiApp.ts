@@ -41,6 +41,7 @@ import {
   type Runner,
 } from "../clipboard.js";
 import { ImagePaster } from "../image/ImagePaster.js";
+import { wrapTmux } from "../notify/terminalNotify.js";
 import { KittyImages, kittyGraphicsSupported, type KittyPlacement } from "../image/kittyOutput.js";
 import { truncate } from "../render/width.js";
 import { UiState, type DialogContext } from "../model/UiState.js";
@@ -192,6 +193,8 @@ export class TuiApp {
   private popup: CommandPopup | null = null;
   /** 開き終える前に閉じた popup（id → 終了コード）。 */
   private readonly closedPopups = new Map<string, number | undefined>();
+  /** tmux の中のクリップボードの案内を出したか。 */
+  private tmuxClipboardHinted = false;
   /** 通知（05 の T3）。 */
   readonly notify: NotificationController;
   /** 直近のフレームの知らせの当たり（押すと対象へ）。 */
@@ -293,6 +296,7 @@ export class TuiApp {
       model: this.model,
       machines: this.machines,
       prefsConn: this.prefsPort,
+      switchMachine: (id, target) => this.switchMachine(id, target),
       ui: this.ui,
       prefs: this.prefs,
       conn: this.rpc,
@@ -755,7 +759,19 @@ export class TuiApp {
    * クリップボードへ写す：外側の端末へ OSC 52（SSH 越し・tmux の中でも効く）と、手元なら OS の道具でも（OSC 52 を受けない端末のため）。
    */
   protected writeClipboard(text: string): Promise<boolean> {
-    this.io.write(osc52(text));
+    const seq = osc52(text);
+    this.io.write(seq);
+    if (this.io.env["TMUX"]) {
+      // tmux の中：素通しの包み（allow-passthrough）でも出す。tmux の設定によっては黙って捨てられるので、最初の 1 回だけ設定を案内する。
+      this.io.write(wrapTmux(seq));
+      if (!this.tmuxClipboardHinted) {
+        this.tmuxClipboardHinted = true;
+        this.ui.toast(
+          "tmux の中です。写せないときは tmux に `set -g set-clipboard on`（か `set -g allow-passthrough on`）を設定してください",
+          { ms: 10_000 },
+        );
+      }
+    }
     void writeClipboardTool(this.clipboardEnv, text);
     return Promise.resolve(true);
   }
@@ -768,6 +784,7 @@ export class TuiApp {
         model: this.model,
         actions: this.dispatcher,
         statusSymbols: () => this.prefs.statusSymbols,
+        machines: this.machines,
       });
     if (ctx.kind === "settings") return this.settingsDialog();
     if (ctx.kind === "notifications") return new NotificationList(this.ui, this.notify);
@@ -1009,7 +1026,7 @@ export class TuiApp {
     // 同期の更新（?2026）の中に入れる（ちらつかない）。
     if (this.kitty) {
       if (output.includes("\x1b[2J")) this.kitty.forget();
-      const seq = this.kitty.sync(this.frameImages);
+      const seq = this.kitty.sync(this.frameImages, this.heldImageKeys(layout));
       if (seq) {
         const end = output.lastIndexOf("\x1b[?2026l");
         output = end < 0 ? output + seq : output.slice(0, end) + seq + output.slice(end);
@@ -1067,6 +1084,14 @@ export class TuiApp {
       style: "block",
       blink: false,
     };
+  }
+
+  /** 見えている pane がまだ持つ画像の鍵（置かないときも外側の端末に中身を残す）。 */
+  private heldImageKeys(layout: LayoutResult): Set<string> {
+    const keys = new Set<string>();
+    for (const box of layout.panes)
+      for (const im of this.panes.get(box.paneId)?.liveImages() ?? []) keys.add(im.hash);
+    return keys;
   }
 
   /**

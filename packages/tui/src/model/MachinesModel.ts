@@ -170,3 +170,13 @@ export class MachinesModel {
     return out;
   }
 }
+
+/** navigate モードの選択で、別のマシンの workspace を表す鍵。 */
+export function remoteKey(machineId: string, workspaceId: string): string {
+  return `machine:${machineId}:${workspaceId}`;
+}
+
+export function parseRemoteKey(key: string): { machineId: string; workspaceId: string } | null {
+  const m = /^machine:([^:]+):(.+)$/.exec(key);
+  return m ? { machineId: m[1]!, workspaceId: m[2]! } : null;
+}
