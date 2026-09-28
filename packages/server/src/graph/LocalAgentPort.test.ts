@@ -33,7 +33,12 @@ function pane(over: Partial<Pane> = {}): Pane {
 }
 
 function make(
-  opts: { lines?: string[]; pane?: Pane | undefined; invoke?: LocalAgentPortDeps["invoke"] } = {},
+  opts: {
+    lines?: string[];
+    pane?: Pane | undefined;
+    invoke?: LocalAgentPortDeps["invoke"];
+    hostWithoutPane?: boolean;
+  } = {},
 ) {
   const bus = new EventBus();
   const flush = vi.fn(async () => undefined);

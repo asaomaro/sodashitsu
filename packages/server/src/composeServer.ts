@@ -65,6 +65,9 @@ import { CommandService } from "./commands/CommandService.js";
 import { MetadataService } from "./metadata/MetadataService.js";
 import { PrefsStore } from "./persist/PrefsStore.js";
 import { GraphStore } from "./persist/GraphStore.js";
+import { GraphEngine } from "./graph/GraphEngine.js";
+import { LocalAgentPort } from "./graph/LocalAgentPort.js";
+import type { ClientSink } from "./terminal/OutputFanout.js";
 import { LocalLogin } from "./auth/LocalLogin.js";
 
 export interface ComposedServer {
@@ -76,6 +79,8 @@ export interface ComposedServer {
   terminals: TerminalManager;
   /** 起動時の判定ルール読み込みの結果（smoke・結合テスト用。design「起動確認」・02-agent-detection T10）。 */
   manifestStore: ManifestStore;
+  /** 連携のグラフの保存（20260927-agent-graph。結合試験が終了の後に書き込めないことを確かめる）。 */
+  graph: GraphStore;
   logger: Logger;
   options: ServeOptions;
   /**
@@ -124,6 +129,9 @@ function agentHookScriptFor(): string {
   // packages/server/dist/composeServer.js から見て ../assets/agent-hook-report.cjs
   return join(import.meta.dirname, "..", "assets", "agent-hook-report.cjs");
 }
+
+/** 連携の実行（`GraphEngine`）が方式を中から呼ぶときの clientId（20260927-agent-graph。`SizeAuthority` は登録の無い clientId を無視する）。 */
+const GRAPH_CLIENT_ID = "graph";
 
 /** サーバの版（snapshot の `serverVersion` と中継の HELLO の `version`）。 */
 const SERVER_VERSION = "0.1.0";
@@ -298,6 +306,21 @@ export async function composeServer(
     logger.error("graph.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),
   );
   graph.onChange((g, byClientId) => bus.publish({ event: "graph.changed", data: { graph: g, byClientId } }));
+  // 連携の実行（20260927-agent-graph の 02）。送信は方式の agent.prompt をサーバの中から呼ぶ（内部の clientId と何もしない sink。design D-2）。
+  // 始めるのは `listen()` の復元の後・agentMonitor の前、止めるのは終了（graph.close の前）と引き継ぎの間。
+  const graphSink: ClientSink = { clientId: GRAPH_CLIENT_ID, sendOutput: () => undefined, sendSnapshot: () => undefined, bufferedAmount: 0 };
+  const graphEngine = new GraphEngine({
+    store: graph,
+    local: new LocalAgentPort({
+      bus,
+      session,
+      terminals,
+      invoke: (method, params) => surface.invoke({ clientId: GRAPH_CLIENT_ID, sink: graphSink }, method, params),
+    }),
+    publish: (e) => bus.publish(e),
+    now: () => Date.now(),
+    logger,
+  });
   registerAllMethods(surface, {
     session,
     clients,
@@ -314,6 +337,7 @@ export async function composeServer(
     images,
     prefs,
     graph,
+    graphHistory: (linkId, limit) => graphEngine.getHistory(linkId, limit),
     // `server.stop`（20260927-cli-mode）。制御の socket の止める指示と同じ受け付けと停止の手順（`control` は下で作る。呼ばれるのは待ち受けの後）。
     stopServer: (reply) => control.stop(reply, "server.stop"),
   });
@@ -376,6 +400,7 @@ export async function composeServer(
     scrollbackEditors: () => session.handoffScrollbackEditors(),
     boundPort: () => boundPortValue,
     pausePollers: async () => {
+      graphEngine.stop(); // 20260927-agent-graph（待ちは取り消す。引き継いだ先が今の値を基準に始め直す）
       paneHistory?.stop();
       gitPoller.stop();
       await agentMonitor.stop();
@@ -383,6 +408,7 @@ export async function composeServer(
       await machines.stop();
     },
     resumePollers: () => {
+      graphEngine.start();
       gitPoller.start();
       agentMonitor.start();
       void machines.start();
@@ -449,6 +475,7 @@ export async function composeServer(
     persist,
     terminals,
     manifestStore,
+    graph,
     logger,
     options,
     get freshToken(): string | undefined {
@@ -586,6 +613,8 @@ export async function composeServer(
         paneHistory?.start(internal.paneHistorySaveIntervalMs);
         // クリップボードの画像の後片付け（20260927-clipboard-image-paste）。ロックを取った後に、起動時と 1 時間ごと（貼らなくなっても 24 時間で消す）。
         imageSweeper = imageStore.startSweeping();
+        // 3.5. 連携の実行（20260927-agent-graph）。状態の変化を購読するので agentMonitor より前に始める（最初の判定の変化から拾う）。
+        graphEngine.start();
         // 4. poller。
         gitPoller.start();
         agentMonitor.start();
@@ -615,6 +644,7 @@ export async function composeServer(
         // 失敗した起動はロックを放す（`main` は close() を呼ばずに終わる）。放す前に、復元を済ませていない状態の保存の
         // 予約を取り消す（ロックを放した後に session.json を書かない）。
         if (!sessionLoaded) persist.cancel();
+        graphEngine.stop();
         paneHistory?.stop();
         imageSweeper?.stop();
         await agentReportSocket?.close();
@@ -644,6 +674,8 @@ export async function composeServer(
         // 実行中の判定周期を待ってから terminals/session を破棄する（review 指摘。should。D51 の隣の
         // agent/AgentMonitor.ts 参照）。
         await agentMonitor.stop();
+        // 連携の実行を止める（20260927-agent-graph。待ちは履歴に残さず取り消し、送っている途中の結果も書かない）。graph.close の前。
+        graphEngine.stop();
         gitPoller.stop();
         // 画面履歴の定期保存は最初に止める（この後の flush が投げても、ロックを放した後にタイマーが残って書かない。T9 の独立点検）。
         paneHistory?.stop();

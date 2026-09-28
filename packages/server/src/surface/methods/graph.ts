@@ -18,7 +18,7 @@ import {
 /**
  * 連携のグラフ（20260927-agent-graph の design「インターフェース / データ構造」）。保存できた変更は `graph.changed` として全クライアントへ配られる
  * （配るのは `composeServer` の `GraphStore.onChange`）。依存が無ければ登録しない（`prefs` と同じ任意の依存）。
- * 実行（`GraphEngine`）は 02-engine-local で足す——それまで履歴は空。
+ * 履歴は実行（`GraphEngine`）のメモリから新しい順に返す（再起動で消える）。
  */
 export function registerGraphMethods(surface: ControlSurface, deps: MethodDeps): void {
   const store = deps.graph;
@@ -42,7 +42,7 @@ export function registerGraphMethods(surface: ControlSurface, deps: MethodDeps):
   });
   surface.register("graph.history", {
     schema: GraphHistoryParams,
-    handler: () => ({ runs: [] }),
+    handler: (_ctx, params) => ({ runs: deps.graphHistory?.(params.linkId, params.limit) ?? [] }),
   });
 }
 

@@ -181,6 +181,27 @@ export class GraphStore {
     }, byClientId);
   }
 
+  /**
+   * 線が 1 回送ったことを数える（`GraphEngine`。byClientId は null）。上限に達したら `paused: "limit"` にする（D1-4）。線が消えていれば何もしない
+   * （送っている間に削除された）。上限に達したかを返す（線が無ければ null）。
+   */
+  async recordRun(linkId: string): Promise<{ limitReached: boolean } | null> {
+    let result: { limitReached: boolean } | null = null;
+    await this.commit((s) => {
+      const link = s.graph.links.find((l) => l.id === linkId);
+      if (link === undefined) return null;
+      const count = link.count + 1;
+      const limitReached = count >= link.limit;
+      result = { limitReached };
+      const next = { ...link, count, ...(limitReached ? { paused: "limit" as const } : {}) };
+      return {
+        ...s,
+        graph: { ...s.graph, links: s.graph.links.map((l) => (l.id === linkId ? next : l)) },
+      };
+    }, null);
+    return result;
+  }
+
   /** 待ち行列の書き込みが終わるのを待つ（handoff・終了の前）。 */
   async flush(): Promise<void> {
     await this.queue;

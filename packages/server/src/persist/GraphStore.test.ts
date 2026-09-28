@@ -341,6 +341,27 @@ describe("GraphStore", () => {
     ]);
   });
 
+  it("recordRun は回数を 1 増やし、上限に達したら paused: limit にする（サーバの変更なので byClientId は null）。線が無ければ何もしない", async () => {
+    const store = await loaded();
+    await store.update(0, [...build, { op: "update_link", id: "l1", limit: 2 }], "c1");
+    const seen: (string | null)[] = [];
+    store.onChange((_g, by) => seen.push(by));
+    expect(await store.recordRun("l1")).toEqual({ limitReached: false });
+    expect(store.get().links[0]).toMatchObject({ count: 1, paused: null });
+    expect(await store.recordRun("l1")).toEqual({ limitReached: true });
+    expect(store.get().links[0]).toMatchObject({ count: 2, paused: "limit" });
+    expect(seen).toEqual([null, null]);
+    const rev = store.get().rev;
+    expect(await store.recordRun("l9")).toBeNull();
+    expect(store.get().rev).toBe(rev);
+    // 利用者が止めていた線でも数える（送っている間に止めた）。上限に届かなければ paused は変えない
+    await store.update(rev, [{ op: "update_link", id: "l1", limit: 10 }], "c1");
+    await store.resume("l1", "c1"); // 回数は 0 に戻る
+    await store.pause("l1", "c1");
+    await store.recordRun("l1");
+    expect(store.get().links[0]).toMatchObject({ count: 1, paused: "user" });
+  });
+
   it("flush は待ち行列の書き込みを待つ", async () => {
     const dir = await tempDir();
     const store = await loaded(dir);

@@ -41,3 +41,19 @@
   9. web の vitest の worker のヒープの上限を 4GB に上げた（`SettingsDialog.test.ts` が 1 件ごとに約 21MB を残し、操作が 1 つ増えて既定の 2GB を超えた。漏れそのものは backlog）。
   10. グラフ画面（`showModal()` の top layer）を開いている間は、トーストと再接続の表示を App.vue の `<Teleport :disabled="!graphOpen">` でその dialog の中へ出す（`popover="manual"` は top layer の中の重なりが「後から出したものが上」なので、グラフ画面を後から開くとまた隠れ、出し直しの管理が要るため採らない）。
 - **影響**: 02 以降はこの形に合わせる。
+
+## D5 02-engine-local の実装での読み替え
+
+- **決定**:
+  1. 履歴の理由に `busy`（先が作業中で、線が「見送る」）と `resolved`（承認の代理で、送る前に承認待ちが解けていた）を足した（design の理由の表に無かった場合）。
+  2. `TriggerState` はトリガの線と承認の代理の線（`on: blocked`・`whenBusy: wait` 相当）の両方に使う。
+  3. 送る文面の画面の末尾は、発火の時点でなく送る時点で読む（待った後は待った後の画面。待つ間の発火は 1 件に置き換わるので、最新の結果を渡す）。
+  4. 先の状態の `unknown`（起動直後の猶予）は作業中と同じ扱い（待つ／見送る）。待つ間に先が承認待ちになっても待ち続ける（人が答えれば作業に戻り、やがて手が空く。最長 30 分）。
+  5. 承認待ちの「最初に見た時点で既に blocked」の回は基準として動かない（完了の鍵と同じ「最初の状態は基準」）。
+  6. 監督役への知らせは線の回数に数えない（ループしない系の知らせ）。履歴はその監督役への監督の線それぞれに残す。監督役のエージェントが入れ替わったとき・実行を始め直したとき（handoff の失敗からの再開を含む）も知らせ直す。一時停止は「全体が止まっている」か「その監督役への監督の線が全部止まっている」とき。
+  7. 監督役への知らせの失敗は、`agent_blocked`・`agent_not_found` なら次に手が空いたときに送り直し、それ以外は `failed` を残して送り直さない（同じ失敗を 2 秒ごとに繰り返さない）。
+  8. `agent.prompt` の失敗の `agent_blocked` は `skipped/blocked`、`agent_not_found` は `skipped/target_absent` に読み替える（送る直前に状態が変わった）。ほかは `failed/error`。回数に数えるのは送れたときだけ。
+  9. 別のマシン（04 まで）: 元が別のマシンの線は購読できないので動かない（履歴も残さない）。先が別のマシンなら発火を `machine_unavailable` で見送る。監督役が別のマシンなら知らせない。
+  10. `AgentPort` に `paneName()` を足した（文面の呼び名）。手元の `tail` は画面の高さぶん多めに読み、末尾の空行を除いてから N 行を取る（`sodactl agent read` と同じ規則）。
+  11. 実行は `listen()` の復元の後・poller の前に始め、handoff の `pausePollers` で止めて `resumePollers` で始め直す。終了は agentMonitor の停止の後・`graph.close()` の前に止める。`ComposedServer` に `graph`（GraphStore）を出した（終了の後に書かないことの結合試験のため）。
+- **影響**: 03 の履歴の表示は `busy`・`resolved` の文言を持つ。04 は `endOf` の口の選び方と `machine_unavailable` を差し替える。

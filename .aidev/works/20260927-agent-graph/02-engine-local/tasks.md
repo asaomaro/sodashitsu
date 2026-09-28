@@ -36,7 +36,7 @@ architecture の `TriggerState`（純粋な状態機械）・`SupervisorNotifier
       対象: `packages/server/src/session/SessionService.ts:1051,1079`（イベント）・`packages/server/src/terminal/Mirror.ts:195`（bottomLines）・`packages/server/src/surface/methods/agent.ts`（agent.prompt）・（新規 `graph/AgentPort.ts`・`graph/LocalAgentPort.ts`）
       依存: なし
       AC: AC4, AC6
-- [ ] T4: `graph/GraphEngine.ts`（GraphStore の変化で対象を更新・決定の実行・count と上限での `paused:"limit"`・履歴〔線ごと直近 50 件・メモリ〕・`graph.fired`・1 秒の見回り・終了での取り消し）と `graph.history`・`composeServer` の配線（`agentMonitor.start()` の前に始め、終了で止めてから `graph.close()`）
+- [x] T4: `graph/GraphEngine.ts`（GraphStore の変化で対象を更新・決定の実行・count と上限での `paused:"limit"`・履歴〔線ごと直近 50 件・メモリ〕・`graph.fired`・1 秒の見回り・終了での取り消し）と `graph.history`・`composeServer` の配線（`agentMonitor.start()` の前に始め、終了で止めてから `graph.close()`）
       対象: `packages/server/src/surface/methods/graph.ts:43`・`packages/server/src/composeServer.ts:296-316,506-569,648-649`・（新規 `graph/GraphEngine.ts`）
       依存: T1, T2, T3
       AC: AC4, AC5, AC6, AC7, AC8, AC9, AC10, AC11, AC12
