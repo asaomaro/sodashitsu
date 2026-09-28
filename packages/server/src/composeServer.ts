@@ -645,7 +645,8 @@ export async function composeServer(
         // 復元の途中の保存の予約（シェルが猶予中に終わった pane を閉じた等）も取り消す。
         if (sessionLoaded) await persist.flush();
         else persist.cancel();
-        await graph.flush(); // 20260927-agent-graph（ロックを放す前に書き終える）
+        // 20260927-agent-graph：並んだ書き込みを書き終え、以後（まだ開いている接続からの graph.update 等）は断る——ロックを放した後に graph.json を書かない。
+        await graph.close();
         // 画面履歴は端末を捨てる前に取り直して書く（design「停止」）。失敗しても投げない（AC13）。
         if (sessionLoaded) await paneHistory?.save({ force: true });
         for (const pane of session.snapshot().panes) terminals.dispose(pane.id);

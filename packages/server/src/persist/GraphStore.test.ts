@@ -10,6 +10,7 @@ import {
   GraphLinkNotFoundError,
   GraphRevConflictError,
   GraphStore,
+  GraphStoreClosedError,
 } from "./GraphStore.js";
 
 // 20260927-agent-graph の T3：グラフの保存（graph.json・rev・壊れたファイル・stale）。
@@ -243,6 +244,44 @@ describe("GraphStore", () => {
     // 選び直すと無効の印が外れる
     const g = await reread.update(2, [{ op: "rekey_node", key: A, newKey: "local:p5" }], "c1");
     expect(g.nodes[0]).toEqual({ key: "local:p5", x: 0, y: 0 });
+  });
+
+  it("変化の無い pause・resume（既にその状態）は rev を進めず、知らせも保存もしない（g01 点検）", async () => {
+    const dir = await tempDir();
+    const store = await loaded(dir);
+    await store.update(0, build, "c1");
+    await store.pause(undefined, "c1");
+    await store.pause("l1", "c1");
+    const seen: number[] = [];
+    store.onChange((g) => seen.push(g.rev));
+    const before = await readFile(join(dir, GRAPH_FILE_NAME), "utf8");
+    expect((await store.pause(undefined, "c2")).rev).toBe(3);
+    expect((await store.pause("l1", "c2")).rev).toBe(3);
+    await store.resume("l1", "c2");
+    expect(store.get().rev).toBe(4);
+    expect((await store.resume("l1", "c2")).rev).toBe(4); // 既に動いていて回数も 0
+    await store.resume(undefined, "c2");
+    expect((await store.resume(undefined, "c2")).rev).toBe(5);
+    expect(seen).toEqual([4, 5]);
+    expect(before).not.toBe(await readFile(join(dir, GRAPH_FILE_NAME), "utf8"));
+    // 知らない線は変化が無くても not found
+    await expect(store.pause("l9", "c1")).rejects.toBeInstanceOf(GraphLinkNotFoundError);
+  });
+
+  it("close は待ち行列の書き込みを待ち、その後の書き込みは断ってファイルを変えない（ロックを放した後に書かない。g01 点検）", async () => {
+    const dir = await tempDir();
+    const store = await loaded(dir);
+    const pending = store.update(0, build, "c1");
+    await store.close();
+    await expect(pending).resolves.toMatchObject({ rev: 1 });
+    const before = await readFile(join(dir, GRAPH_FILE_NAME), "utf8");
+    await expect(
+      store.update(1, [{ op: "move_node", key: A, x: 20, y: 20 }], "c1"),
+    ).rejects.toBeInstanceOf(GraphStoreClosedError);
+    await expect(store.pause(undefined, "c1")).rejects.toBeInstanceOf(GraphStoreClosedError);
+    await expect(store.markLocalStale()).rejects.toBeInstanceOf(GraphStoreClosedError);
+    expect(await readFile(join(dir, GRAPH_FILE_NAME), "utf8")).toBe(before);
+    expect(store.get().rev).toBe(1);
   });
 
   it("flush は待ち行列の書き込みを待つ", async () => {

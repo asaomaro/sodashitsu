@@ -52,6 +52,14 @@ export class GraphLinkNotFoundError extends Error {
   }
 }
 
+/** 閉じた後（サーバの終了でロックを放す前）の書き込み。方式の側で `internal` にする（ロックを放した後に graph.json を書かない）。 */
+export class GraphStoreClosedError extends Error {
+  constructor() {
+    super("graph store is closed (server shutting down)");
+    this.name = "GraphStoreClosedError";
+  }
+}
+
 function linkNumber(id: string): number {
   return Number(id.slice(1));
 }
@@ -82,6 +90,7 @@ export class GraphStore {
   /** 書き込みを 1 本に並べる（rev の確かめと保存の間に別の変更が割り込まない）。 */
   private queue: Promise<unknown> = Promise.resolve();
   private readonly listeners = new Set<(graph: Graph, byClientId: string | null) => void>();
+  private closed = false;
 
   constructor(
     stateDir: string,
@@ -137,23 +146,33 @@ export class GraphStore {
   /** 一時停止（`linkId` 無し＝全体）。線が無ければ `GraphLinkNotFoundError`。 */
   pause(linkId: string | undefined, byClientId: string | null): Promise<Graph> {
     return this.commit((s) => {
-      if (linkId === undefined) return { ...s, graph: { ...s.graph, paused: true } };
-      return {
-        ...s,
-        graph: { ...s.graph, links: this.mapLink(s, linkId, (l) => ({ ...l, paused: "user" })) },
-      };
-    }, byClientId);
-  }
-
-  /** 再開（`linkId` 無し＝全体。全体の再開は線の状態を変えない）。線の再開は回数を 0 に戻す（D1-4）。 */
-  resume(linkId: string | undefined, byClientId: string | null): Promise<Graph> {
-    return this.commit((s) => {
-      if (linkId === undefined) return { ...s, graph: { ...s.graph, paused: false } };
+      if (linkId === undefined)
+        return s.graph.paused ? null : { ...s, graph: { ...s.graph, paused: true } };
+      const link = this.findLink(s, linkId);
+      // 既に止めている（利用者か上限で）なら変えない（rev を進めると他の編集に要らない rev_conflict を起こす）。
+      if (link.paused !== null) return null;
       return {
         ...s,
         graph: {
           ...s.graph,
-          links: this.mapLink(s, linkId, (l) => ({ ...l, paused: null, count: 0 })),
+          links: s.graph.links.map((l) => (l.id === linkId ? { ...l, paused: "user" } : l)),
+        },
+      };
+    }, byClientId);
+  }
+
+  /** 再開（`linkId` 無し＝全体。全体の再開は線の状態を変えない）。線の再開は回数を 0 に戻す（D1-4）。既にその状態なら何もしない。 */
+  resume(linkId: string | undefined, byClientId: string | null): Promise<Graph> {
+    return this.commit((s) => {
+      if (linkId === undefined)
+        return s.graph.paused ? { ...s, graph: { ...s.graph, paused: false } } : null;
+      const link = this.findLink(s, linkId);
+      if (link.paused === null && link.count === 0) return null;
+      return {
+        ...s,
+        graph: {
+          ...s.graph,
+          links: s.graph.links.map((l) => (l.id === linkId ? { ...l, paused: null, count: 0 } : l)),
         },
       };
     }, byClientId);
@@ -164,19 +183,25 @@ export class GraphStore {
     await this.queue;
   }
 
+  /**
+   * 閉じる（サーバの終了。ロックを放す前に呼ぶ）。待ち行列の書き込みを待ち、以後の書き込み（まだ開いている接続からの `graph.update` 等）は
+   * `GraphStoreClosedError` で断る——flush の後に届いた変更をロックを放した後に書かない。読み（`get`）はそのまま。
+   */
+  async close(): Promise<void> {
+    this.closed = true;
+    await this.queue;
+  }
+
   /** 保存できた変更を知らせる（`composeServer` が `graph.changed` として全クライアントへ配る）。 */
   onChange(fn: (graph: Graph, byClientId: string | null) => void): { dispose(): void } {
     this.listeners.add(fn);
     return { dispose: () => this.listeners.delete(fn) };
   }
 
-  private mapLink(
-    s: GraphDraftState,
-    linkId: string,
-    fn: (l: Graph["links"][number]) => Graph["links"][number],
-  ): Graph["links"] {
-    if (!s.graph.links.some((l) => l.id === linkId)) throw new GraphLinkNotFoundError(linkId);
-    return s.graph.links.map((l) => (l.id === linkId ? fn(l) : l));
+  private findLink(s: GraphDraftState, linkId: string): Graph["links"][number] {
+    const link = s.graph.links.find((l) => l.id === linkId);
+    if (link === undefined) throw new GraphLinkNotFoundError(linkId);
+    return link;
   }
 
   /**
@@ -187,6 +212,8 @@ export class GraphStore {
     change: (s: GraphDraftState) => GraphDraftState | null,
     byClientId: string | null,
   ): Promise<Graph> {
+    // 閉じた後に来た書き込みは並べずに断る（閉じる前に並んだものは書き終える）。
+    if (this.closed) return Promise.reject(new GraphStoreClosedError());
     const run = async (): Promise<Graph> => {
       const changed = change(this.state);
       if (changed === null) return this.get();

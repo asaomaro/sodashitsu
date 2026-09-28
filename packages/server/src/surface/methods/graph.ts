@@ -12,6 +12,7 @@ import {
   GraphInvalidError,
   GraphLinkNotFoundError,
   GraphRevConflictError,
+  GraphStoreClosedError,
 } from "../../persist/GraphStore.js";
 
 /**
@@ -53,6 +54,7 @@ async function mapErrors<T>(fn: () => Promise<T>): Promise<T> {
     if (err instanceof GraphInvalidError)
       throw new RpcError("invalid_params", `invalid graph: ${err.message}`);
     if (err instanceof GraphLinkNotFoundError) throw new RpcError("not_found", err.message);
+    if (err instanceof GraphStoreClosedError) throw new RpcError("internal", err.message);
     throw err;
   }
 }
