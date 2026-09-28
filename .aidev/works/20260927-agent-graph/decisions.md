@@ -65,3 +65,21 @@
   18. （g02）受け渡す画面の末尾は、折り返しをつないだ論理行で数える（`Mirror.lastLogicalLines`）。
   19. （02 レビュー R1）「作業中とみなす」は、1 回の状態の知らせの処理の中で送り始めた先にも効かせる（後ろの線・監督役へは作業中として渡す）。みなしを外すのは、送った先の知らせが状態の変化（idle 以外）・completionSeq の増加・入れ替わり・不在のときだけ（idle のままの既読・名前の変更では外さない）。送っている途中に止めても、届いた送信は回数に数える（履歴には残さない。終了の後は保存が断るのでログだけ）。
 - **影響**: 03 の履歴の表示は `busy`・`resolved` の文言を持つ。03 の web のストアは同じ rev の `graph.changed` も当てる（14）。04 は `endOf` の口の選び方と `machine_unavailable` を差し替える。
+
+## D6 03-web-graph の実装での読み替え
+
+- **決定**:
+  1. グラフの方式とイベントの経路: 画面の接続がローカルを向いていればその接続、別のマシンを向いていればローカルの軽い接続（`MachineWiring.summaryClient("local")`・`onLocalGraphEvent`・`onLocalOpened`）。画面の接続が別のマシンを向いている間に届いた（そのマシンの）`graph.*` は捨てる。軽い接続が無い間の方式は `not_connected` で断る。グラフは画面を開いていなくても接続のたびに取り直して持つ（上限の知らせ〔トースト〕を画面を閉じていても出すため）。
+  2. store の rev の規則: `graph.changed` は rev が同じでも当て（D5-14）、方式の戻り値（`graph.update`・`pause`・`resume`）は rev が今より新しいときだけ当てる（先に届いた同じ rev の回数の保存を戻り値で巻き戻さない）。取り直し（`graph.get`）は常に当てる。
+  3. 線の中点のチップ（HTML の `<button>`）は `GraphEdge.vue` ではなく `GraphView.vue` が置く（`GraphEdge` は SVG 1 枚の中の `<g>` なので HTML を持てない。`foreignObject` はフォーカス・読み上げが揃わない）。線の先の印（▶・◆・●）は SVG の marker でなく path で描く（marker の色が線の色に追従しない。client-core の `edgeHead`）。
+  4. 線の色（新しいトークンは足さない）: トリガ `--soda-fg`・監督 `--soda-state-done`・承認の代理 `--soda-warn-fg`・選択 `--soda-accent`・無効 `--soda-menu-border`・光り `--soda-state-working`。色だけに頼らず、線種・印・チップの文字（「完了→」「承認待ち→」「監督」「承認」・`⏸`・`⏸ 上限`・`⏸ 全体`・`⚠`・直前の結果 `✓ … ⏭ ✕`）で区別する。
+  5. 既存の線の種類はパネルで変えられない（`update_link` は設定だけ。種類を変えるなら削除して作り直す）。新しい線だけ種類を選べ、「向きを入れ替える」を持つ（監督・承認の代理は from＝配下・to＝監督役）。
+  6. 確認（線の削除・ノードを外す・変更を捨てる）はダイアログの 1 枠（`ConfirmDialog`）を使わず、グラフの `<dialog>` の中の `GraphConfirm` で出す（research-web §1.5-1）。
+  7. Esc の段階は design の 4 段に、確認・モバイルのシート・チェックリスト・履歴を足した: 確認 → シート → 接続モード → チェックリスト → パネル → 履歴 → 選択 → 画面。ドラッグ中の Esc は `usePointerDrag` が先に取る（window の capture。外へ渡さない）。
+  8. 「開いたのと同じ prefix＋キーで閉じる」は `GraphView` の keydown の capture で `settings.keymap` の `prefixMap`・`directMap` を引く（子のパネルの入力欄にいても閉じる。保存していない値は変わらないので AC-I1 を満たす）。prefix の後のほかのキーは食う。`main.ts` は変えていない（dialog モード化と window の keydown の抑止は 01 の `view.modalOpen` で足りた）。
+  9. 無効（`stale`）なノードの選び直し（`rekey_node`）の画面は作っていない。無効なノードは `⚠ 無効` で示し、チェックリスト・Delete で外せる。
+  10. 表示（パン・ズーム）はこのブラウザの `localStorage`（`soda.graphView.v1`）。無ければ最初に中身を描いたときに全体表示。
+  11. 別のマシンのノードから pane へは `MachineSwitcher.switchTo(machine, {workspaceId, tabId})`（その pane のある tab を開く。tab の中のどの pane に焦点を置くかはそのマシンの tab の焦点のまま）。別のマシンを見ている間の手元のノードも同じ（要約に呼び名が無いので `pane <id>`〔エージェントの名前があればそれ〕。呼び名は 04）。
+  12. 履歴は履歴の欄を開いたときに `graph.history` を読み、以後は `graph.fired` を先頭へ足す（画面には 200 件まで）。
+  13. `Ctrl+Z` の「元に戻す機能はありません」の知らせ（research-ui §2.11）は作っていない。
+- **影響**: 04 は別のマシンの pane の呼び名とチェックリストのマシンの節を足す（`store/graph` の `nodeInfo` と `PaneChecklist` の手元の節の作り方に合わせる）。05 の docs はグラフ画面のキー（c・Enter・Delete・p・矢印・1・+・-・0・同じ prefix＋キー）を書く。
