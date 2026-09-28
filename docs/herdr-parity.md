@@ -6,6 +6,9 @@ MVP に分類した項目がすべて何らかの受け入れ基準（AC）で�
 （05-e2e-docs T12。このタスクが無いと `aidev coverage` の AC15 が gap のまま残る——04-mobile の review で
 気づいた教訓）。
 
+端末の中の画面（引数なしの `soda`。20260927-cli-mode）で各項目をどう扱うか（対応／読み替え／非対応と理由・検証した AC）は
+`docs/tui-parity.md` にまとめてある（ID はこの表と同じ）。この表の「分類」「対応 AC」は Web 版についてのもの。
+
 ## 分類の凡例
 
 - **MVP** = この一連の work（20260918-web-terminal-multiplexer）で作った
