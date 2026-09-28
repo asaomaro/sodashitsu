@@ -12,3 +12,17 @@ events:
   - { ts: 2026-09-27T23:37:16Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T3, findings: 4 } }
   - { ts: 2026-09-27T23:51:45Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T4, mode: delegated } }
   - { ts: 2026-09-27T23:55:12Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T4, findings: 4 } }
+  - { ts: 2026-09-28T00:17:01Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T5, mode: delegated } }
+  - { ts: 2026-09-28T00:22:14Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T5, findings: 8 } }
+  - { ts: 2026-09-28T00:27:02Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T6, mode: delegated } }
+  - { ts: 2026-09-28T00:29:05Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T6, findings: 5 } }
+  - { ts: 2026-09-28T00:49:41Z, phase: coding, event: taskcheck, metrics: { stage: start, task: cross, mode: same_session } }
+  - { ts: 2026-09-28T00:49:41Z, phase: coding, event: taskcheck, metrics: { stage: report, task: cross, findings: 0 } }
+  - { ts: 2026-09-28T00:49:41Z, phase: coding, event: approved, metrics: { tasks_done: 6, unplanned_lookups: 1, task_checks: 6, task_check_findings: 30, task_check_mode: delegated } }
+  - { ts: 2026-09-28T00:49:41Z, phase: test, event: start, metrics: { marks: 0 } }
+  - { ts: 2026-09-28T00:55:37Z, phase: test, event: approved, metrics: { passed: 5757, failed: 1 } }
+  - { ts: 2026-09-28T00:55:37Z, phase: review, event: start, metrics: { marks: 15 } }
+  - { ts: 2026-09-28T01:01:59Z, phase: review, event: sent_back }
+  - { ts: 2026-09-28T01:01:59Z, phase: test, event: sent_back, metrics: { by: unapprove } }
+  - { ts: 2026-09-28T01:01:59Z, phase: coding, event: sent_back, metrics: { by: unapprove } }
+  - { ts: 2026-09-28T01:01:59Z, phase: coding, event: start }

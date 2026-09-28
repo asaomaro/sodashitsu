@@ -18,3 +18,22 @@
 - [should][conv:-] packages/tui/src/app/TuiApp.ts:718-739 マシンを切り替えてもキーのモードを戻さない / 対応: 修正済（4aa549d。負の確認 10 本）
 - [should][conv:-] packages/tui/src/model/SessionModel.ts:72,88-104 reset() が既読を消さず、マシンをまたいで同じ id のエージェントに当たる / 対応: 修正済（4aa549d。負の確認 10 本）
 - [nit][conv:-] packages/tui/src/net/TuiNet.ts:103 要約の接続に 4401 の再ログインが無い・生成の同期の例外を拾わない / 対応: 修正済（4aa549d。負の確認 10 本）
+- [should][conv:-] packages/tui/src/app/TuiApp.ts:1028 狭い幅の navigate で重なるサイドバーの上に画像の印・画像が出る / 対応: 修正済（9d812c4。負の確認済み）
+- [should][conv:-] packages/tui/src/image/kittyOutput.ts:49 全体の描き直し（2J）の後に置き直さず画像が消えたまま / 対応: 修正済（9d812c4。負の確認済み）
+- [should][conv:-] packages/tui/src/clipboard.ts:39 xclip の子が stdout を持ち続け、端末版が終わらない / 対応: 修正済（9d812c4。負の確認済み）
+- [should][conv:-] packages/tui/src/image/ImagePaster.ts:15 Windows・WSL で画像の読み取りが 2 秒を超えて貼り付けが黙って 0x16 になる / 対応: 修正済（9d812c4。負の確認済み）
+- [nit][conv:-] packages/tui/src/image/inlineImages.ts:76-77 途中で打ち切られた OSC の後の BEL で余分な IND を足す / 対応: 修正済（9d812c4。負の確認済み）
+- [nit][conv:-] packages/tui/src/term/PaneTerminal.ts:166-192 上書きされた画像を残す / 対応: 修正済（9d812c4。負の確認済み）
+- [nit][conv:-] packages/tui/src/app/TuiApp.ts:1036 画像の鍵が中身に依らず、作り直した pane で古い画像を置く / 対応: 修正済（9d812c4。負の確認済み）
+- [nit][conv:-] packages/tui/src/app/TuiApp.ts:965 Kitty の置き直しが同期の更新の外でちらつく / 対応: 修正済（9d812c4。負の確認済み）
+- [should][conv:-] packages/tui/src/modes/OverlayHost.ts:58 別のダイアログが popup を置き換えると popup を閉じず、サーバ側で動き続けて以後の popup が断られる / 対応: 修正済（6fcf23f。負の確認済み）
+- [nit][conv:-] packages/tui/src/modes/CommandPopup.ts:177-186 popup の中のプログラムへマウスを渡さない（web は渡す） / 対応: 修正済（6fcf23f。負の確認済み）
+- [nit][conv:-] packages/tui/src/modes/CommandPopup.test.ts:90-126 切断で閉じる経路の試験が無い / 対応: 修正済（6fcf23f。負の確認済み）
+- [nit][conv:-] packages/tui/src/actions/TuiDispatcher.ts:1164-1169 releaseHold の JSDoc が runCommand の上に取り残された / 対応: 修正済（6fcf23f。負の確認済み）
+- [nit][conv:-] packages/tui/src/actions/TuiDispatcher.ts:60 残ったコメント「独自コマンド（05）」 / 対応: 修正済（6fcf23f。負の確認済み）
+
+## ラウンド 1（2026-09-28）
+- [should][conv:-] packages/tui/src/input/mouse.ts:298-306 別のマシンへはマウスでしか切り替えられない（navigate・goto・キーで届かない。AC-I3・AC14） / 対応: 修正済（7dbb323。負の確認 8 本）
+- [should][conv:-] packages/tui/src/app/TuiApp.ts:757-760 tmux の中で OSC 52 を包まず、黙って写せない / 対応: 修正済（7dbb323。負の確認 8 本）
+- [nit][conv:-] packages/tui/src/image/kittyOutput.ts:53-58 オーバーレイを開くたびに全画像のデータを消し、次の描画で送り直す / 対応: 修正済（7dbb323。負の確認 8 本）
+- [nit][conv:-] packages/tui/src/render/Screen.ts:147 chrome の文字列に C1 が残り、pane のタイトル経由で外側の端末へ制御を送りうる / 対応: 修正済（7dbb323。負の確認 8 本）
