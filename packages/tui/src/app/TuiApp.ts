@@ -4,6 +4,7 @@ import {
   NavigateMode,
   ResizeMode,
   commandKeyDefs,
+  LOCAL_MACHINE_ID,
   MachineSummaryClient,
   wsUrlFor,
   loadKeyPrefs,
@@ -128,6 +129,19 @@ export class TuiApp {
   private escTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly dispatcher: TuiDispatcher;
   readonly ui: UiState;
+  /**
+   * 共有の設定（`prefs.*`）の口：**いつもローカルのサーバ**（ローカルを見ていれば画面の接続、ほかのマシンを見ていればローカルの軽い接続。
+   * web の PrefsSync の `isLocal` と同じく、ほかのマシンのサーバの設定は読み書きしない。decisions D7.4）。
+   */
+  readonly prefsPort: RequestPort = {
+    request: (method, params) => {
+      if (this.machines.selectedId === LOCAL_MACHINE_ID) return this.rpc.request(method, params);
+      const local = this.wiring?.localClient();
+      return local
+        ? local.request(method, params)
+        : Promise.reject(new Error("the local server is not connected"));
+    },
+  };
   /** 要求の口（接続が無ければ reject）。 */
   readonly rpc: RequestPort = {
     request: (method, params) =>
@@ -179,7 +193,10 @@ export class TuiApp {
       onAgentChanged: (paneId, prev, next) => this.notify?.onAgentChanged(paneId, prev, next),
       onSnapshotApplied: (panes, first) => this.notify?.onSnapshotApplied(panes, first),
       onMachinesChanged: (list) => this.wiring?.onMainMachinesChanged(list),
-      onPrefsChanged: (data) => this.prefs.apply(data.prefs, data.rev),
+      // 共有の設定はローカルのサーバのものだけ（ほかのマシンを見ている間の画面の接続の知らせは当てない。decisions D7.4）。
+      onPrefsChanged: (data) => {
+        if (this.machines.selectedId === LOCAL_MACHINE_ID) this.prefs.apply(data.prefs, data.rev);
+      },
     });
     this.prefs = new PrefsModel(readTuiState(target.stateDir));
     this.prefs.setSystemDark(systemDarkFromEnv(io.env));
@@ -230,7 +247,7 @@ export class TuiApp {
     this.ui = new UiState(this.model);
     this.settingsWriter = new SettingsWriter({
       prefs: this.prefs,
-      conn: this.rpc,
+      conn: this.prefsPort,
       toast: (m) => this.ui.toast(m),
       setLocal: (patch) => this.setLocalState(patch as Partial<TuiState>, true),
     });
@@ -243,6 +260,7 @@ export class TuiApp {
     this.dispatcher = new TuiDispatcher({
       model: this.model,
       machines: this.machines,
+      prefsConn: this.prefsPort,
       ui: this.ui,
       prefs: this.prefs,
       conn: this.rpc,
@@ -381,6 +399,8 @@ export class TuiApp {
       createSummaryClient: (opts) =>
         new MachineSummaryClient({ ...opts, createWebSocket: (url) => net.createSocket(url) }),
       baseWsUrl: net.baseWsUrl,
+      onLocalSummaryOpened: () => this.loadPrefs(),
+      onLocalPrefsChanged: (data) => this.prefs.apply(data.prefs, data.rev),
     });
     this.wiring = wiring;
     this.disposers.push(() => wiring.stop());
@@ -431,11 +451,9 @@ export class TuiApp {
     this.scheduleRender();
     const net = this.net;
     if (!net) return;
-    // 共有の設定（`prefs.get`）と、pane の色の問い合わせにサーバが答える配色（`client.theme`。web と同じ）。
-    net.conn
-      .request("prefs.get", {})
-      .then((r) => this.prefs.apply(r.prefs as SharedPrefs, r.rev))
-      .catch(() => undefined);
+    // 共有の設定（`prefs.get`。ローカルを見ているときだけ。ほかのマシンのときはローカルの軽い接続が開いたときに読む）と、
+    // pane の色の問い合わせにサーバが答える配色（`client.theme`。web と同じ）。
+    if (this.machines.selectedId === LOCAL_MACHINE_ID) this.loadPrefs();
     net.conn.request("client.theme", { theme: this.theme.name }).catch(() => undefined);
     // 保存した SSH のマシン（web の MachineWiring と同じ）。切り替えた直後なら、選んだ workspace へ移る。
     this.wiring?.onMainOpened();
@@ -446,6 +464,14 @@ export class TuiApp {
     net.conn
       .request("command.list", {})
       .then((r) => this.model.setCommands(r))
+      .catch(() => undefined);
+  }
+
+  /** 共有の設定をローカルのサーバから読む。 */
+  private loadPrefs(): void {
+    this.prefsPort
+      .request("prefs.get", {})
+      .then((r) => this.prefs.apply(r.prefs as SharedPrefs, r.rev))
       .catch(() => undefined);
   }
 
@@ -729,10 +755,12 @@ export class TuiApp {
     }
     this.machines.select(id);
     this.pendingMachineFocus = target?.workspaceId ?? null;
+    // キーのモードを戻す（web の resetView。前のマシンの navigate・copy のまま次のマシンへ持ち込まない）。
+    this.keys.router.setMode("terminal");
     this.notify.resetForMachineSwitch();
     this.ui.closeDialog();
     this.ui.closeContextMenu();
-    this.model.reset();
+    this.model.reset(id);
     this.panes.reset();
     net.conn.retarget(wsUrlFor(net.baseWsUrl, id));
     this.wiring?.reconcileSummaryClients();

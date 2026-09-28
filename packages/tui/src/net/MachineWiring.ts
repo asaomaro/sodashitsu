@@ -1,4 +1,10 @@
-import type { MachineStatus } from "@sodashitsu/protocol";
+import type {
+  MachineStatus,
+  MethodName,
+  ParamsOf,
+  ResultOf,
+  SharedPrefs,
+} from "@sodashitsu/protocol";
 import {
   LOCAL_MACHINE_ID,
   wsUrlFor,
@@ -9,10 +15,7 @@ import type { MachinesModel } from "../model/MachinesModel.js";
 export interface SummaryClientLike {
   start(): void;
   stop(): void;
-  request(
-    method: "machine.list",
-    params: Record<string, never>,
-  ): Promise<{ machines: MachineStatus[] }>;
+  request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>;
 }
 
 export interface SwitchTarget {
@@ -29,6 +32,10 @@ export interface MachineWiringDeps {
   createSummaryClient(opts: MachineSummaryClientOptions): SummaryClientLike;
   /** 手元の `soda serve` の `/ws`。 */
   baseWsUrl: string;
+  /** ほかのマシンを見ている間に、ローカルの軽い接続が開いた（共有の設定はローカルのサーバとだけやりとりする。decisions D7.4）。 */
+  onLocalSummaryOpened?(): void;
+  /** ほかのマシンを見ている間の、ローカルの軽い接続の `prefs.changed`。 */
+  onLocalPrefsChanged?(data: { prefs: SharedPrefs; rev: number }): void;
 }
 
 /**
@@ -85,6 +92,11 @@ export class MachineWiring {
         wsUrl: wsUrlFor(this.deps.baseWsUrl, id),
         onSnapshot: (s) => m.applySummarySnapshot(id, s),
         onEvent: (e) => {
+          if (e.event === "prefs.changed") {
+            if (id === LOCAL_MACHINE_ID && m.selectedId !== LOCAL_MACHINE_ID)
+              this.deps.onLocalPrefsChanged?.(e.data);
+            return;
+          }
           if (e.event === "machine.changed") {
             if (id === LOCAL_MACHINE_ID && m.selectedId !== LOCAL_MACHINE_ID)
               this.applyMachineList(e.data.machines);
@@ -95,6 +107,7 @@ export class MachineWiring {
         onConnected: (connected) => m.setSummaryConnected(id, connected),
         onOpened: () => {
           if (id !== LOCAL_MACHINE_ID || m.selectedId === LOCAL_MACHINE_ID) return;
+          this.deps.onLocalSummaryOpened?.();
           void client
             .request("machine.list", {})
             .then((r) => this.applyMachineList(r.machines))
@@ -104,6 +117,11 @@ export class MachineWiring {
       this.clients.set(id, client);
       client.start();
     }
+  }
+
+  /** ローカルの軽い接続（ほかのマシンを見ている間だけある）。共有の設定の読み書きはここを通す。 */
+  localClient(): SummaryClientLike | undefined {
+    return this.clients.get(LOCAL_MACHINE_ID);
   }
 
   summaryClientIds(): string[] {

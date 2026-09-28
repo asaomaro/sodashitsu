@@ -32,6 +32,8 @@ export interface CopyTargetPort {
 
 export interface DispatcherHost {
   model: SessionModel;
+  /** 共有の設定（`prefs.*`）を送る先（ローカルのサーバ。無ければ `conn`。decisions D7.4）。 */
+  prefsConn?: RequestPort;
   /** 保存した SSH のマシン（止めるサーバの名前。05 の T4）。 */
   machines?: MachinesModel;
   ui: UiState;
@@ -572,7 +574,7 @@ export class TuiDispatcher {
     const before = this.host.prefs.shared;
     const rev = this.host.prefs.rev;
     this.host.prefs.apply({ ...before, ...patch }, rev);
-    this.conn
+    (this.host.prefsConn ?? this.conn)
       .request("prefs.set", { patch })
       .then((r) => {
         if (r && typeof r.rev === "number") this.host.prefs.apply(r.prefs, r.rev);
@@ -1119,7 +1121,8 @@ export class TuiDispatcher {
 
   /** 設定を読み直す（herdr の `reload_config`。端末版は共有の設定をサーバから取り直し、独自コマンドの設定を読み直させる）。 */
   private reloadConfig(): void {
-    this.conn
+    // 共有の設定はローカルのサーバから（ほかのマシンを見ていても。decisions D7.4）。
+    (this.host.prefsConn ?? this.conn)
       .request("prefs.get", {})
       .then((r) => {
         this.host.prefs.apply(r.prefs, r.rev);

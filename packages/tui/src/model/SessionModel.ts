@@ -18,6 +18,7 @@ import type {
 import {
   aggregate,
   displayStateFor,
+  LOCAL_MACHINE_ID,
   repairView,
   sweepMarkSeen,
   type ViewTarget,
@@ -69,7 +70,11 @@ export class SessionModel {
   lastFocusedPaneId: string | null = null;
 
   /** instanceId → 既読の completionSeq（web の `soda.seen.v1` と同じ意味。このプロセスのメモリだけ）。 */
-  private readonly seen = new Map<string, number>();
+  private seen = new Map<string, number>();
+  /** マシンごとの既読（web の `seen` の store の `setSeenScope` と同じ。マシンをまたいで同じ id のエージェントに当てない）。 */
+  private readonly seenByScope = new Map<string, Map<string, number>>([
+    [LOCAL_MACHINE_ID, this.seen],
+  ]);
   private readonly listeners = new Set<() => void>();
 
   constructor(private readonly hooks: SessionModelHooks = {}) {}
@@ -85,7 +90,10 @@ export class SessionModel {
    * マシンを切り替える前に空にする（web の MachineSwitcher の `clearSession`・`resetView`・`resetBaseline`）。新しいマシンの最初の
    * スナップショットは「最初」として扱う（通知の判定済みの印を付け直す）。独自コマンドの一覧・既読は新しい接続で取り直す。
    */
-  reset(): void {
+  reset(scope: string = LOCAL_MACHINE_ID): void {
+    let seen = this.seenByScope.get(scope);
+    if (!seen) this.seenByScope.set(scope, (seen = new Map()));
+    this.seen = seen;
     this.workspaces = new Map();
     this.tabs = new Map();
     this.panes = new Map();

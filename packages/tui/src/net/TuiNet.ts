@@ -159,9 +159,44 @@ export class TuiNet implements StorePort {
     return wsUrlOf(this.target.baseUrl);
   }
 
-  /** 画面の接続と同じ Cookie・Origin・指紋の照合で WebSocket を開く（選んでいないマシンの要約の接続。web の MachineSummaryClient）。 */
+  /**
+   * 画面の接続と同じ Cookie・Origin・指紋の照合で WebSocket を開く（選んでいないマシンの要約の接続。web の MachineSummaryClient）。
+   * 作るときに投げても（指紋の食い違い等）すぐ閉じる socket を返す（要約の接続が時間をおいて繋ぎ直す）。4401（ログインが無効）で閉じたら
+   * cookie を取り直す（画面の接続はそのまま。次に繋ぐときから新しい cookie）。
+   */
   createSocket(url: string): WebSocketLike {
-    return this.socketFactory(url);
+    let ws: WebSocketLike;
+    try {
+      ws = this.socketFactory(url);
+    } catch {
+      return closedSocket();
+    }
+    return withCloseHook(ws, (code) => {
+      if (code === 4401) void this.refreshCookie();
+    });
+  }
+
+  private refreshing = false;
+  private lastRefreshAt = -Infinity;
+
+  /** 要約の接続が 4401 で閉じた：ログインし直して cookie を替える（画面の接続は触らない。5 秒に 1 回まで）。 */
+  private async refreshCookie(): Promise<void> {
+    const now = this.now();
+    if (this.refreshing || this.stopped || now - this.lastRefreshAt < RELOGIN_RETRY_MS * 2.5)
+      return;
+    this.refreshing = true;
+    this.lastRefreshAt = now;
+    try {
+      const cookie = await this.target.login();
+      if (this.stopped) return;
+      const old = this.cookie;
+      this.cookie = cookie;
+      if (old !== "" && old !== cookie) void this.logoutCookie(old);
+    } catch {
+      // 取り直せなければ、画面の接続の再ログイン（`onAuthRequired`）に任せる。
+    } finally {
+      this.refreshing = false;
+    }
   }
 
   /** 以後は何もしない（終了の後始末）。開いている接続は閉じてもらう（`client.detach`。以後は自動で繋ぎ直さない）。 */
@@ -356,6 +391,44 @@ export class TuiNet implements StorePort {
 }
 
 /** 開きも閉じもしない socket（終えた後の再接続の試みを、タイマーも接続も残さずに止める）。 */
+/** すぐ閉じる socket（作れなかったとき。使う側が時間をおいて繋ぎ直す）。 */
+function closedSocket(): WebSocketLike {
+  const ws: WebSocketLike = {
+    readyState: 3,
+    send: () => undefined,
+    close: () => undefined,
+    onopen: null,
+    onclose: null,
+    onerror: null,
+    onmessage: null,
+  };
+  queueMicrotask(() => ws.onclose?.({ code: 1006 }));
+  return ws;
+}
+
+/** `onclose` に割り込む（使う側が後から `onclose` を入れても、先に `hook` を呼ぶ）。 */
+function withCloseHook(ws: WebSocketLike, hook: (code: number) => void): WebSocketLike {
+  let user: WebSocketLike["onclose"] = null;
+  ws.onclose = (ev) => {
+    hook(ev.code);
+    user?.(ev);
+  };
+  return new Proxy(ws, {
+    get(target, prop) {
+      if (prop === "onclose") return user;
+      const v = Reflect.get(target, prop) as unknown;
+      return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+    },
+    set(target, prop, value) {
+      if (prop === "onclose") {
+        user = value as WebSocketLike["onclose"];
+        return true;
+      }
+      return Reflect.set(target, prop, value);
+    },
+  });
+}
+
 function idleSocket(): WebSocketLike {
   return {
     readyState: 0,

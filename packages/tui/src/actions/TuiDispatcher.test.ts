@@ -121,7 +121,7 @@ const EFFECTS: Record<
   {
     rpc?: [string, unknown];
     dialog?: string;
-    host?: Exclude<keyof DispatcherHost, "machines">;
+    host?: Exclude<keyof DispatcherHost, "machines" | "prefsConn" | "pasteClipboard">;
     none?: true;
     mode?: true;
     toast?: true;
