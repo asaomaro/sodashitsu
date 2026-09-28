@@ -176,7 +176,8 @@ herdr と同じ prefix 方式。`Ctrl+B` の後に 1 キー。prefix を押す�
   「ブラウザの画面の設定です」と注記が出て、端末版の画面は変わらない。
 - 「端末」の節の「シェルの場所を追う（Windows）」（既定は入）は、Windows のサーバで対話の pane のシェル（PowerShell 5.1・7、cmd）に、プロンプトのたびに
   今の場所を知らせる設定（OSC 9;9）を差し込む。`cd` した場所が pane の場所になり、再起動後もその場所で開き直す。読むのはサーバで、**新しく開く pane から効く**
-  （既に開いている pane は変わらない）。Linux・WSL2・macOS のサーバでは何もしない。確かめ方は `docs/verification.md` の「Windows ネイティブ」。
+  （既に開いている pane は変わらない）。Linux・WSL2・macOS のサーバでは何もしない。**Windows の実機では未検証**（確かめ方は `docs/verification.md` の「Windows ネイティブ」）。
+  PowerShell で、pane を開いた後に `prompt` を定義し直す（あとから oh-my-posh を初期化する等）と、新しい pane を開くまで追従が止まる。
 - 端末版の節（端末版にだけ効く。保存先は共有の設定なので、どの端末版でも同じ）:
 
   | 項目 | 既定 | 意味 |

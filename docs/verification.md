@@ -453,12 +453,15 @@ WSL2 を経由せず、Windows 上で直接 `node.exe` を実行して `soda ser
       `$E]9;9;"$P"$E\` を足す。設定「端末 → シェルの場所を追う（Windows）」、既定は入）。**実機では未検証**——次を確かめたらここを更新する:
       - PowerShell 5.1・PowerShell 7（`--shell pwsh.exe`）・cmd（`--shell cmd.exe`）のそれぞれで、pane で `cd C:\Windows`（cmd は `cd /d C:\Windows`）
         してから数秒後に `sodactl pane current` の `cwd` が `C:\Windows` になり、サイドバーの workspace の自動の名前も追従する。
-        空白・`#`・`%`・日本語を含むフォルダと UNC パス（`\\server\share`）でも同じ。
+        空白・`#`・`%`・日本語を含むフォルダでも同じ。UNC パスは PowerShell だけ：`cd \\server\share` で `cwd` が `\\server\share` になる
+        （cmd は UNC を今の場所にできない。`pushd \\server\share` で割り当てられたドライブ文字〔例 `Z:\`〕が `cwd` になることを確かめる）。
       - そのまま `Ctrl+B c` で新しい tab を開き `Get-Location`（cmd は `cd`）を実行すると `cd` した先になる（設定「新しく開く場所」が「引き継ぐ」のとき）。
       - `cd` した後に `soda serve` を止めて起動し直すと、その pane が `cd` した先のシェルとして開き直される（Claude Code の会話の再開もその場所）。
       - プロファイルの `prompt` 関数（oh-my-posh・starship を含む）と cmd の `PROMPT` の見た目が変わらず、知らせの文字列が画面に出ない。
         起動の遅れが体感できない（目安 +200ms 以内）。
       - 設定を切にした後に開いた pane は差し込まれない（`cd` しても `sodactl pane current` の `cwd` は開いた場所のまま）。既に開いている pane は変わらない。
+      - 既知の制約：PowerShell で pane を開いた後に `prompt` を定義し直す（あとから oh-my-posh を初期化する等）と、包みが外れて新しい pane を開くまで追従が止まる。
+        直前のコマンドが失敗したとき、oh-my-posh・starship の失敗の表示がそのまま出ることも確かめる（包みは `$?` を保つ）。
       独自コマンドの pane（`docs/custom-commands.md`）と `edit_scrollback` のエディタには差し込まない。ほかのシェル（Git Bash・nushell 等）は、プロンプトで
       OSC 7（`file://host/C:/…` の形を `C:\…` に直して使う。20260921-new-terminal-cwd の decisions D7）か OSC 9;9 を出せば追従する。
       設定を「ホーム」にした新しい tab が `%USERPROFILE%` で開くことも確かめる。
