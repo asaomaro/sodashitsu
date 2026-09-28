@@ -5,7 +5,8 @@
  *
  * - 保存: 保存ボタン・`Ctrl`/`⌘`＋`Enter`（どの欄でも）・単一行の欄の `Enter`。prompt の欄の `Enter` は改行。IME の変換中は無視。
  * - 取り消し: `Esc`・取り消しボタン・外側のクリック（`requestClose`）。値が変わっていれば「変更を捨てますか」。
- * - 他の画面・sodactl が同じ線を変えた・消したら知らせる（黙って上書きしない。design「エラー処理」）。
+ * - 他の画面・sodactl が同じ線を変えた・消したら知らせる（黙って上書きしない。design「エラー処理」）。保存は開いた（最新を読み込んだ）時点の値から
+ *   変えた項目だけを送り、最新に重ねる。同じ項目が他でも変わっていれば親が `showConflict` を呼び、送らずに最新の値を出す（統合レビュー R1）。
  * - 承認の代理の「返答まで任せる」には注意を出す（decisions D2）。
  */
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
@@ -32,7 +33,16 @@ import {
   validateLink,
   type GraphIssue,
 } from "@sodashitsu/client-core";
-import { LINK_KIND_NAME, linkDraftOf, linkStateText, type LinkPanelSave } from "./linkText.js";
+import {
+  LINK_KIND_NAME,
+  linkConfigOf,
+  linkDraftOf,
+  linkFieldText,
+  linkStateText,
+  type LinkConfig,
+  type LinkField,
+  type LinkPanelSave,
+} from "./linkText.js";
 
 const props = defineProps<{
   graph: Graph;
@@ -98,7 +108,16 @@ const form = reactive<Form>(formOf(props.link, props.newEnds));
 /** 開いた時点（または「最新を読み込む」の時点）の値。変更の有無と、他での変更の判定に使う。 */
 let initial = JSON.stringify(form);
 let baseConfig = configKey(props.link);
+/** 既存の線の、開いた（最新を読み込んだ）時点の設定。保存はここからの差分（統合レビュー R1）。 */
+let baseLink: LinkConfig | null = props.link ? linkConfigOf(props.link) : null;
 const changedElsewhere = ref(false);
+/** 保存しようとしたら、変えた項目が他でも変わっていた（送っていない）。その項目。 */
+const conflictFields = ref<LinkField[] | null>(null);
+const conflictText = computed(() =>
+  conflictFields.value && props.link
+    ? conflictFields.value.map((f) => linkFieldText(f, props.link!)).join("・")
+    : "",
+);
 const issues = ref<GraphIssue[]>([]);
 const rootEl = ref<HTMLElement | null>(null);
 
@@ -129,8 +148,15 @@ function reloadLatest(): void {
   Object.assign(form, formOf(props.link, props.newEnds));
   initial = JSON.stringify(form);
   baseConfig = configKey(props.link);
+  baseLink = props.link ? linkConfigOf(props.link) : null;
   changedElsewhere.value = false;
+  conflictFields.value = null;
   issues.value = [];
+}
+
+/** 保存が他の変更と重なった（親の `GraphView` が呼ぶ）。送らずに、重なった項目の最新の値を出す。 */
+function showConflict(fields: LinkField[]): void {
+  conflictFields.value = fields;
 }
 
 function swapEnds(): void {
@@ -166,7 +192,10 @@ function rangeIssues(): GraphIssue[] {
 /** 送るもの（`rangeIssues` が空のときだけ呼ぶ）。 */
 function payload(): LinkPanelSave {
   const p: LinkPanelSave = { kind: form.kind, from: form.from, to: form.to, limit: form.limit };
-  if (props.link) p.id = props.link.id;
+  if (props.link) {
+    p.id = props.link.id;
+    if (baseLink) p.base = baseLink;
+  }
   if (form.kind === "trigger") {
     p.trigger = {
       on: form.on,
@@ -246,7 +275,7 @@ onMounted(() => {
   );
 });
 
-defineExpose({ requestClose, focusFirstField });
+defineExpose({ requestClose, focusFirstField, showConflict });
 </script>
 
 <template>
@@ -264,8 +293,14 @@ defineExpose({ requestClose, focusFirstField });
     <p v-if="gone" class="link-panel-note" role="alert">
       この線はほかの画面・sodactl で削除されました。
     </p>
+    <p v-else-if="conflictFields" class="link-panel-note link-panel-conflict" role="alert">
+      ほかの画面・sodactl で同じ項目が変わりました:
+      {{ conflictText }}。保存していません（上書きしません）。 最新を読み込んでから直してください。
+      <button type="button" class="link-panel-reload" @click="reloadLatest">最新を読み込む</button>
+    </p>
     <p v-else-if="changedElsewhere" class="link-panel-note" role="alert">
-      この線はほかの画面・sodactl で変わりました。保存するとこの内容で上書きします。
+      この線はほかの画面・sodactl
+      で変わりました。保存すると、ここで変えた項目だけを最新の設定に重ねます（同じ項目がほかでも変わっていれば保存しません）。
       <button type="button" class="link-panel-reload" @click="reloadLatest">最新を読み込む</button>
     </p>
 

@@ -70,9 +70,20 @@ export interface GraphNodeInfo {
 }
 
 export type GraphUpdateResult =
-  | { ok: true; graph: Graph; conflicted: boolean }
-  /** `reason: "gone"` は作り直す元（ノード・線）がもう無い。 */
-  | { ok: false; reason: "gone" | "error"; message: string };
+  | { ok: true; graph: Graph }
+  /**
+   * `reason: "gone"` は作り直す元（ノード・線）がもう無い。`"conflict"` は作り直すと他の変更と重なった（`build` が `{ conflict }` を返した。
+   * 送らない。黙って上書きしない）。
+   */
+  | { ok: false; reason: "gone" | "error" | "conflict"; message: string };
+
+/** `update` の `build` が返す、送るものが無い（もう最新がその値）の印。送らずに成功とする。 */
+export const GRAPH_UNCHANGED = Symbol("graph-unchanged");
+/**
+ * `update` の `build` の戻り値: 送る操作・`null` か空（元が他で消えた。`gone`）・`GRAPH_UNCHANGED`（送るものが無い）・`{ conflict }`
+ * （他の変更と重なるので送らない。`message` が理由）。
+ */
+export type GraphBuild = GraphOp[] | null | typeof GRAPH_UNCHANGED | { conflict: string };
 
 export const useGraphStore = defineStore("graph", () => {
   let port: GraphPort | null = null;
@@ -183,10 +194,9 @@ export const useGraphStore = defineStore("graph", () => {
    * `graph.update` を送る。`build` は今のグラフから操作を作る——`rev_conflict` なら取り直した最新でもう一度作って送り直す（design「エラー処理」）。
    * 作り直した結果が null・空なら（元のノード・線が他で消えた）送らずに `gone`。
    */
-  async function update(build: (g: Graph) => GraphOp[] | null): Promise<GraphUpdateResult> {
+  async function update(build: (g: Graph) => GraphBuild): Promise<GraphUpdateResult> {
     if (!port) return { ok: false, reason: "error", message: "サーバに繋がっていません。" };
     if (!graph.value) await load();
-    let conflicted = false;
     for (let attempt = 0; attempt < UPDATE_RETRIES; attempt++) {
       const g = graph.value;
       if (!g)
@@ -196,6 +206,9 @@ export const useGraphStore = defineStore("graph", () => {
           message: loadError.value ?? "グラフを読めませんでした。",
         };
       const ops = build(g);
+      if (ops === GRAPH_UNCHANGED) return { ok: true, graph: g };
+      if (ops !== null && !Array.isArray(ops))
+        return { ok: false, reason: "conflict", message: ops.conflict };
       if (!ops || ops.length === 0)
         return { ok: false, reason: "gone", message: "対象がほかの画面・sodactl で消されました。" };
       const limitEdits = ops.flatMap((o) =>
@@ -205,11 +218,10 @@ export const useGraphStore = defineStore("graph", () => {
       try {
         const next = await port.request("graph.update", { baseRev: g.rev, ops });
         applyGraph(next, "result");
-        return { ok: true, graph: next, conflicted };
+        return { ok: true, graph: next };
       } catch (err) {
         const code = errorCodeOf(err);
         if (code === "rev_conflict") {
-          conflicted = true;
           // 取り直せなければ古い rev で送り直さない（同じ rev_conflict を繰り返すだけ）。
           if (!(await load()))
             return {

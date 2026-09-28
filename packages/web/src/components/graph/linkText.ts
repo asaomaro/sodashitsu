@@ -1,6 +1,7 @@
 import type {
   ApprovalConfig,
   GraphLink,
+  GraphOp,
   LinkKind,
   LinkRunReason,
   LinkRunResult,
@@ -105,10 +106,148 @@ export const RUN_REASON_TEXT: Record<LinkRunReason, string> = {
   error: "送れなかった",
 };
 
+/** 線の設定（保存の差分の比べる単位）。 */
+export type LinkConfig = Pick<GraphLink, "trigger" | "approval" | "limit">;
+
+/** 線の設定の既存の線の値（パネルを開いた時点・「最新を読み込む」の時点）を写し取る（後でストアの値が替わっても変わらない）。 */
+export function linkConfigOf(link: LinkConfig): LinkConfig {
+  return {
+    ...(link.trigger === undefined
+      ? {}
+      : {
+          trigger: {
+            ...link.trigger,
+            output: link.trigger.output === null ? null : { ...link.trigger.output },
+          },
+        }),
+    ...(link.approval === undefined ? {} : { approval: { ...link.approval } }),
+    limit: link.limit,
+  };
+}
+
+/** パネルの項目（差分と「他で変わりました」の単位）。 */
+export type LinkField =
+  "on" | "prompt" | "output" | "whenBusy" | "approvalMode" | "approvalLines" | "limit";
+
+type FieldValue = string | number | null;
+
+function fieldValues(c: LinkConfig): Partial<Record<LinkField, FieldValue>> {
+  const v: Partial<Record<LinkField, FieldValue>> = { limit: c.limit };
+  if (c.trigger) {
+    v.on = c.trigger.on;
+    v.prompt = c.trigger.prompt;
+    v.output = c.trigger.output?.lines ?? null;
+    v.whenBusy = c.trigger.whenBusy;
+  }
+  if (c.approval) {
+    v.approvalMode = c.approval.mode;
+    v.approvalLines = c.approval.lines;
+  }
+  return v;
+}
+
+const ON_TEXT: Record<TriggerConfig["on"], string> = {
+  done: "完了した",
+  blocked: "承認待ちになった",
+};
+const BUSY_TEXT: Record<TriggerConfig["whenBusy"], string> = {
+  wait: "手が空くまで待つ",
+  skip: "見送る",
+};
+const MODE_TEXT: Record<ApprovalConfig["mode"], string> = {
+  notify: "知らせるだけ",
+  delegate: "返答まで任せる",
+};
+
+/** 「他で変わりました」に出す、その項目の今の値（「上限（最新: 30 回）」）。 */
+export function linkFieldText(field: LinkField, link: LinkConfig): string {
+  const v = fieldValues(link)[field] ?? null;
+  const short = (t: string): string =>
+    [...t].length > 40 ? `${[...t].slice(0, 40).join("")}…` : t;
+  switch (field) {
+    case "on":
+      return `元が〜とき（最新: ${v === null ? "—" : ON_TEXT[v as TriggerConfig["on"]]}）`;
+    case "prompt":
+      return `送る文面（最新: 「${short(String(v ?? ""))}」）`;
+    case "output":
+      return `受け渡す行数（最新: ${v === null ? "受け渡さない" : `${v} 行`}）`;
+    case "whenBusy":
+      return `先が作業中なら（最新: ${v === null ? "—" : BUSY_TEXT[v as TriggerConfig["whenBusy"]]}）`;
+    case "approvalMode":
+      return `監督役に（最新: ${v === null ? "—" : MODE_TEXT[v as ApprovalConfig["mode"]]}）`;
+    case "approvalLines":
+      return `渡す画面の末尾（最新: ${v ?? "—"} 行）`;
+    case "limit":
+      return `上限（最新: ${v ?? "—"} 回）`;
+  }
+}
+
+export type LinkEditResult =
+  /** 送る操作（送るものが無ければ null）。 */
+  | { op: Extract<GraphOp, { op: "update_link" }> | null }
+  /** パネルで変えた項目が他でも（違う値へ）変わっていた。送らない（黙って上書きしない）。 */
+  | { conflict: LinkField[] };
+
+/**
+ * 既存の線の設定の保存を、パネルを開いた時点の値（`base`）からの差分として最新の線（`latest`）に重ねる（統合レビュー R1）。
+ * パネルで変えた項目だけを送り、変えていない項目（他で変わっていてもよい）は最新のまま。変えた項目が他でも違う値へ変わっていれば
+ * `conflict`（同じ値へ変わっていれば送らない）。`rev_conflict` の送り直しでも、先に届いた他の変更でも同じ規則で重ねる。
+ */
+export function linkEditOp(
+  id: string,
+  base: LinkConfig,
+  edited: LinkConfig,
+  latest: LinkConfig,
+): LinkEditResult {
+  const b = fieldValues(base);
+  const e = fieldValues(edited);
+  const l = fieldValues(latest);
+  const send: LinkField[] = [];
+  const conflict: LinkField[] = [];
+  for (const f of Object.keys(e) as LinkField[]) {
+    if (e[f] === b[f] || e[f] === l[f]) continue;
+    // 最新に無い項目（線の種類が変わった）・最新が開いた時点から変わっている項目は重ならない。
+    if (!(f in l) || l[f] !== b[f]) conflict.push(f);
+    else send.push(f);
+  }
+  if (conflict.length > 0) return { conflict };
+  if (send.length === 0) return { op: null };
+  const op: Extract<GraphOp, { op: "update_link" }> = { op: "update_link", id };
+  const has = (...fs: LinkField[]): boolean => fs.some((f) => send.includes(f));
+  if (has("on", "prompt", "output", "whenBusy")) {
+    const t = latest.trigger!;
+    const et = edited.trigger!;
+    op.trigger = {
+      on: send.includes("on") ? et.on : t.on,
+      prompt: send.includes("prompt") ? et.prompt : t.prompt,
+      output: send.includes("output")
+        ? et.output === null
+          ? null
+          : { ...et.output }
+        : t.output === null
+          ? null
+          : { ...t.output },
+      whenBusy: send.includes("whenBusy") ? et.whenBusy : t.whenBusy,
+    };
+  }
+  if (has("approvalMode", "approvalLines")) {
+    const a = latest.approval!;
+    const ea = edited.approval!;
+    op.approval = {
+      mode: send.includes("approvalMode") ? ea.mode : a.mode,
+      lines: send.includes("approvalLines") ? ea.lines : a.lines,
+    };
+  }
+  if (send.includes("limit")) op.limit = edited.limit;
+  return { op };
+}
+
 /** 線の設定のパネルが保存するもの（`LinkPanel` → `GraphView`）。 */
 export interface LinkPanelSave {
   /** 既存の線なら id。 */
   id?: string;
+  /** 既存の線の、パネルを開いた（最新を読み込んだ）時点の設定。保存はここからの差分だけを送る（統合レビュー R1）。 */
+  base?: LinkConfig;
   kind: LinkKind;
   from: NodeKey;
   to: NodeKey;

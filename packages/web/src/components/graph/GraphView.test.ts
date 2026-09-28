@@ -455,6 +455,125 @@ describe("GraphView（線の作成と設定・一時停止。03 T3）", () => {
     wrapper.unmount();
   });
 
+  // 統合レビュー R1：保存の rev_conflict で、フォームの全項目を送り直して他の変更を黙って上書きしない。
+  describe("線の設定の保存と他での変更（統合レビュー R1）", () => {
+    const sup = {
+      id: "l2",
+      kind: "supervise" as const,
+      from: "local:p1" as const,
+      to: "local:p2" as const,
+      limit: 10,
+      count: 0,
+      paused: null,
+    };
+    /** 他（sodactl 等）が上限と受け渡しの行数を変えた最新のグラフ（rev 2。まだ届いていない）。 */
+    const latestOf = () =>
+      graphOf({
+        rev: 2,
+        links: [
+          triggerLink("l1", "local:p1", "local:p2", {
+            limit: 30,
+            trigger: { on: "done", prompt: "続けて", output: { lines: 120 }, whenBusy: "wait" },
+          }),
+          sup,
+        ],
+      });
+    async function openAndConflict() {
+      const t = await openWithGraph();
+      await t.wrapper.find('[data-link-chip="l1"]').trigger("click");
+      await flush();
+      t.fake.handlers["graph.get"] = () => latestOf();
+      t.fake.handlers["graph.update"] = (p) => {
+        const { baseRev } = p as { baseRev: number };
+        if (baseRev !== 2)
+          throw Object.assign(new Error("rev_conflict: x"), { code: "rev_conflict" });
+        return { ...latestOf(), rev: 3 };
+      };
+      return t;
+    }
+    const updates = (fake: { calls: { method: string; params: unknown }[] }) =>
+      fake.calls.filter((c) => c.method === "graph.update").map((c) => c.params);
+
+    it("rev_conflict では、パネルで変えた項目だけを最新に重ねて送り直す（他で変わった上限・行数を上書きしない）", async () => {
+      const { wrapper, fake } = await openAndConflict();
+      await wrapper.find(".link-panel-prompt").setValue("新しい文面 {output}");
+      await wrapper.find(".link-panel-save").trigger("click");
+      await flush();
+      const sent = updates(fake);
+      expect(sent).toHaveLength(2);
+      // 最初も変えた項目だけ（上限は変えていないので送らない。統合レビュー R1 の nit）
+      expect(sent[0]).toEqual({
+        baseRev: 1,
+        ops: [
+          {
+            op: "update_link",
+            id: "l1",
+            trigger: {
+              on: "done",
+              prompt: "新しい文面 {output}",
+              output: { lines: 80 },
+              whenBusy: "wait",
+            },
+          },
+        ],
+      });
+      // 送り直しは最新（上限 30・120 行）に文面だけを重ねる
+      expect(sent[1]).toEqual({
+        baseRev: 2,
+        ops: [
+          {
+            op: "update_link",
+            id: "l1",
+            trigger: {
+              on: "done",
+              prompt: "新しい文面 {output}",
+              output: { lines: 120 },
+              whenBusy: "wait",
+            },
+          },
+        ],
+      });
+      await flush();
+      expect(wrapper.find(".link-panel").exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it("同じ項目が他でも変わっていたら、送り直さずにパネルを開いたまま「他で変わりました」と最新の値を出す", async () => {
+      const { wrapper, fake } = await openAndConflict();
+      await wrapper.find(".link-panel-limit").setValue(5);
+      await wrapper.find(".link-panel-save").trigger("click");
+      await flush();
+      expect(updates(fake)).toHaveLength(1); // 送り直さない
+      expect(wrapper.find(".link-panel").exists()).toBe(true);
+      const note = wrapper.find(".link-panel-conflict");
+      expect(note.text()).toContain("ほかの画面・sodactl で同じ項目が変わりました");
+      expect(note.text()).toContain("上限（最新: 30 回）");
+      expect(note.text()).not.toContain("行数");
+      // 入れた値は残る。最新を読み込めば最新の値になり、知らせが消える
+      expect((wrapper.find(".link-panel-limit").element as HTMLInputElement).value).toBe("5");
+      await note.find(".link-panel-reload").trigger("click");
+      await flush();
+      expect(wrapper.find(".link-panel-conflict").exists()).toBe(false);
+      expect((wrapper.find(".link-panel-limit").element as HTMLInputElement).value).toBe("30");
+      expect((wrapper.find(".link-panel-lines").element as HTMLInputElement).value).toBe("120");
+      wrapper.unmount();
+    });
+
+    it("他の変更が先に届いていても（rev は合う）、変えた項目だけを重ねる。同じ値へ変わっていれば送らずに閉じる", async () => {
+      const { wrapper, fake, store } = await openWithGraph();
+      await wrapper.find('[data-link-chip="l1"]').trigger("click");
+      await flush();
+      await wrapper.find(".link-panel-limit").setValue(30);
+      store.applyEvent({ event: "graph.changed", data: { graph: latestOf(), byClientId: null } });
+      await flush();
+      await wrapper.find(".link-panel-save").trigger("click");
+      await flush();
+      expect(updates(fake)).toHaveLength(0);
+      expect(wrapper.find(".link-panel").exists()).toBe(false);
+      wrapper.unmount();
+    });
+  });
+
   it("チップのクリックで設定を開き、上限を変えて保存すると update_link。パネルの Esc は閉じてその線へ戻る", async () => {
     const { wrapper, fake, view } = await openWithGraph();
     await wrapper.find('[data-link-chip="l1"]').trigger("click");

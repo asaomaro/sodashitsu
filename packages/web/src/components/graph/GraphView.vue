@@ -32,7 +32,12 @@ import {
 } from "@sodashitsu/client-core";
 import { ConnectionKey, MachineSwitcherKey, TerminalRegistryKey } from "../../injection.js";
 import { isMobileViewport } from "../../mobile/detect.js";
-import { useGraphStore, type GraphNodeInfo } from "../../store/graph.js";
+import {
+  GRAPH_UNCHANGED,
+  useGraphStore,
+  type GraphBuild,
+  type GraphNodeInfo,
+} from "../../store/graph.js";
 import { useMachinesStore } from "../../store/machines.js";
 import { useSettingsStore } from "../../store/settings.js";
 import { useViewStore } from "../../store/view.js";
@@ -49,7 +54,10 @@ import {
   LINK_KIND_NAME,
   linkChipText,
   linkDescription,
+  linkConfigOf,
   linkDraftOf,
+  linkEditOp,
+  type LinkField,
   type LinkPanelSave,
 } from "./linkText.js";
 
@@ -677,11 +685,20 @@ async function onPanelSave(p: LinkPanelSave): Promise<void> {
   panelError.value = null;
   const before = new Set(graph.links.map((l) => l.id));
   const id = p.id;
+  let conflict: LinkField[] = [];
   const result =
     id !== undefined
-      ? await graph.update((g): GraphOp[] | null =>
-          g.links.some((l) => l.id === id) ? [{ op: "update_link", id, ...configOps(p) }] : null,
-        )
+      ? await graph.update((g): GraphBuild => {
+          const latest = g.links.find((l) => l.id === id);
+          if (!latest) return null;
+          // 開いた時点の値から変えた項目だけを最新に重ねる。同じ項目が他でも変わっていれば送らない（黙って上書きしない。統合レビュー R1）。
+          const r = linkEditOp(id, p.base ?? linkConfigOf(latest), p, latest);
+          if ("conflict" in r) {
+            conflict = r.conflict;
+            return { conflict: "ほかの画面・sodactl で同じ項目が変わりました。" };
+          }
+          return r.op ? [r.op] : GRAPH_UNCHANGED;
+        })
       : await graph.update((g): GraphOp[] | null =>
           // 送り直しのときは最新のグラフでもう一度確かめる（ノードが外された・同じ線ができた）。
           validateLink(g, linkDraftOf(p)).length > 0
@@ -697,6 +714,11 @@ async function onPanelSave(p: LinkPanelSave): Promise<void> {
       view.toast(
         `線の設定を保存できませんでした（${result.reason === "gone" ? "対象がほかの画面・sodactl で消されました" : result.message}）`,
       );
+    return;
+  }
+  if (!result.ok && result.reason === "conflict") {
+    // パネルは開いたまま、重なった項目の最新の値を出す（入れた値は残す）。
+    panelRef.value?.showConflict(conflict);
     return;
   }
   if (!result.ok) {

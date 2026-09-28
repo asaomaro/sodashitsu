@@ -160,7 +160,7 @@ describe("store/graph", () => {
       { op: "move_node", key: "local:p1", x: gr.rev * 20, y: 0 },
     ]);
     const r = await g.update(build);
-    expect(r).toMatchObject({ ok: true, conflicted: true });
+    expect(r).toMatchObject({ ok: true });
     expect(build).toHaveBeenCalledTimes(2);
     const updates = calls.filter((c) => c.method === "graph.update").map((c) => c.params);
     expect(updates).toEqual([
