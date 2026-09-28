@@ -845,6 +845,43 @@ describe("SettingsDialog — 端末の節 — 新しく開く場所（AC4・AC10
   });
 });
 
+// シェルの場所を追う（Windows。20260928-windows-pane-cwd の D-6）。
+describe("SettingsDialog — 端末の節 — シェルの場所を追う（AC6）", () => {
+  const trackingSwitch = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) =>
+    w
+      .get('section[aria-labelledby="settings-terminal"]')
+      .findAll('[role="switch"]')
+      .find((sw) => sw.text().includes("シェルの場所を追う（Windows）"))!;
+
+  it("端末の節に switch があり、既定は「入」。説明に「新しく開く pane から効く」と書く", async () => {
+    const { wrapper } = await openDialog();
+    const sw = trackingSwitch(wrapper);
+    expect(sw.attributes("aria-checked")).toBe("true");
+    expect(sw.text()).toContain("入");
+    const note = document.getElementById(sw.attributes("aria-describedby")!)!;
+    expect(note.textContent).toContain("新しく開く pane から効きます");
+  });
+
+  it("押すと「切」になって共有の設定に保存され、もう一度押すと戻る（確定ボタンは無い）", async () => {
+    const { wrapper } = await openDialog();
+    await trackingSwitch(wrapper).trigger("click");
+    expect(useSettingsStore(pinia).shellCwdTracking).toBe(false);
+    expect(readPrefs()["shellCwdTracking"]).toBe(false);
+    expect(trackingSwitch(wrapper).attributes("aria-checked")).toBe("false");
+    expect(useSettingsStore(createPinia()).shellCwdTracking, "再読み込みしても残る").toBe(false);
+    await trackingSwitch(wrapper).trigger("click");
+    expect(useSettingsStore(pinia).shellCwdTracking).toBe(true);
+    expect(readPrefs()["shellCwdTracking"]).toBe(true);
+  });
+
+  it("保存値が切なら「切」で開く", async () => {
+    localStorage.setItem("soda.prefs.v1", JSON.stringify({ shellCwdTracking: false }));
+    pinia = createPinia();
+    const { wrapper } = await openDialog();
+    expect(trackingSwitch(wrapper).attributes("aria-checked")).toBe("false");
+  });
+});
+
 // 20260926-pane-frame-auto-mode（design「振る舞いの詳細」設定画面）。
 describe("SettingsDialog — 表示の節 — pane の枠の表示・隙間（AC6・AC-I1〜AC-I4）", () => {
   const displaySection = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) =>

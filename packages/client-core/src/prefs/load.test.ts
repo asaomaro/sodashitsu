@@ -9,6 +9,7 @@ import {
   loadPaneAgentNameVisible,
   loadPaneBorders,
   loadPaneGaps,
+  loadShellCwdTracking,
   loadStatusSymbols,
   loadWorkspaceSort,
 } from "./load.js";
@@ -49,6 +50,21 @@ describe("loadNewCwdPolicy・loadNewCwdPath（AC4）", () => {
     expect(loadNewCwdPath("")).toBe("");
     for (const raw of [undefined, null, 1, {}, ["~/work"]]) {
       expect(loadNewCwdPath(raw), String(raw)).toBe("");
+    }
+  });
+});
+
+// シェルの場所を追う（20260928-windows-pane-cwd の D-6）。
+describe("loadShellCwdTracking（AC6）", () => {
+  it("boolean はそのまま", () => {
+    expect(loadShellCwdTracking(true)).toBe(true);
+    expect(loadShellCwdTracking(false)).toBe(false);
+  });
+
+  // 何も保存していない利用者にも差し込む（既定は入）。壊れた値でも切にならない。
+  it("boolean でなければ既定の「入」", () => {
+    for (const raw of [undefined, null, "false", 0, 1, {}, []]) {
+      expect(loadShellCwdTracking(raw), String(raw)).toBe(true);
     }
   });
 });

@@ -31,6 +31,7 @@ const raw = {
   scrollback: 2000,
   newCwdPolicy: "path",
   newCwdPath: "/tmp",
+  shellCwdTracking: false,
   theme: "nord",
   themeAuto: false,
   keys: { prefix: "ctrl+a" },
@@ -63,6 +64,7 @@ describe("applyPrefsToStores", () => {
     expect(settings.scrollback).toBe(2000);
     expect(settings.newCwdPolicy).toBe("path");
     expect(settings.newCwdPath).toBe("/tmp");
+    expect(settings.shellCwdTracking).toBe(false);
     expect(settings.theme).toBe("nord");
     expect(settings.keymap.prefix).toBe("ctrl+a");
     expect(view.agentSort).toBe("priority");
@@ -81,6 +83,7 @@ describe("applyPrefsToStores", () => {
     applyPrefsToStores(pinia, raw);
     applyPrefsToStores(pinia, { statusSymbols: "yes", paneBorders: 3 });
     expect(settings.statusSymbols).toBe(true);
+    expect(settings.shellCwdTracking).toBe(true);
     expect(settings.paneBorders).toBe("always");
     expect(settings.theme).not.toBe("nord");
   });

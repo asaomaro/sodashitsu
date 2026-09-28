@@ -985,6 +985,7 @@ describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-a
     expect(settings.paneOuterBorders).toBe(false);
     expect(settings.paneBorders).toBe("always");
     expect(settings.paneGaps).toBe(true);
+    expect(settings.shellCwdTracking).toBe(true);
     expect(settings.sidebarRows).toEqual({ spaces: null, agents: null });
     expect(view.sidebarWidth).toBe(240);
     expect(view.sidebarCollapsed).toBe(false);
@@ -1009,6 +1010,7 @@ describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-a
         paneOuterBorders: true,
         paneBorders: "auto",
         paneGaps: false,
+        shellCwdTracking: false,
         sidebarRows: { spaces: [[{ token: "$build" }]] },
         sidebarWidth: 300,
         sidebarCollapsed: true,
@@ -1032,6 +1034,7 @@ describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-a
     expect(settings.paneOuterBorders).toBe(true);
     expect(settings.paneBorders).toBe("auto");
     expect(settings.paneGaps).toBe(false);
+    expect(settings.shellCwdTracking).toBe(false); // 20260928-windows-pane-cwd
     expect(settings.sidebarRows).toEqual({ spaces: [[{ token: "$build" }]], agents: null }); // 20260927-sidebar-row-tokens
     expect(view.sidebarWidth).toBe(300);
     expect(view.sidebarCollapsed).toBe(true);
@@ -1047,8 +1050,10 @@ describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-a
     // 既定以外にしてから読み直す（既定のままだと、読み直さなくても既定に見えてしまう。taskcheck T6 の指摘）。
     settings.paneBorders = "off";
     settings.paneGaps = false;
-    localStorage.setItem("soda.prefs.v1", JSON.stringify({ paneFrameThickness: "huge", paneBorders: "framed", paneGaps: "no" }));
+    settings.shellCwdTracking = false;
+    localStorage.setItem("soda.prefs.v1", JSON.stringify({ paneFrameThickness: "huge", paneBorders: "framed", paneGaps: "no", shellCwdTracking: "off" }));
     dispatcher.run({ type: "reloadConfig" });
+    expect(settings.shellCwdTracking).toBe(true);
     expect(settings.paneFrameThickness).toBe("default");
     expect(settings.paneBorders).toBe("always");
     expect(settings.paneGaps).toBe(true);

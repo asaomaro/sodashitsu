@@ -120,15 +120,9 @@ export class XtermMirror implements Mirror {
     this.disposables.push(this.term.parser.registerOscHandler(4, (data) => this.handlePaletteQuery(data)));
 
     // OSC 9;4 は進捗（Windows Terminal/ConEmu 方式）。design「OSC の取得」。
-    this.disposables.push(
-      this.term.parser.registerOscHandler(9, (data) => {
-        if (data.startsWith("4;")) {
-          this.latestProgress = data;
-          return true;
-        }
-        return false; // 通常の通知（OSC 9）は関与しない
-      }),
-    );
+    // OSC 9;9 は場所（Windows Terminal 方式。中身は Windows のパスそのもの。20260928-windows-pane-cwd の D-5）。Windows で差し込む
+    // シェルの知らせ（`pty/shellCwdTracking.ts`）と、自分のプロンプトで 9;9 を出す利用者の両方を受ける。どのプラットフォームでも受ける。
+    this.disposables.push(this.term.parser.registerOscHandler(9, (data) => this.handleOsc9(data)));
     // OSC 7 は cwd（file://host/path）。design「OSC の取得」。
     this.disposables.push(
       this.term.parser.registerOscHandler(7, (data) => {
@@ -296,6 +290,20 @@ export class XtermMirror implements Mirror {
     return true;
   }
 
+  /** OSC 9 のハンドラ。扱い終えた（9;4・9;9）なら true、通常の通知は false（xterm.js のほかのハンドラに任せる）。 */
+  private handleOsc9(data: string): boolean {
+    if (data.startsWith("4;")) {
+      this.latestProgress = data;
+      return true;
+    }
+    if (data.startsWith("9;")) {
+      const cwd = parseOsc9Cwd(data);
+      if (cwd !== null) this.latestCwd = cwd;
+      return true; // 9;9 はここで扱い終えた（壊れた中身でも、ほかのハンドラに通知として渡さない）
+    }
+    return false; // 通常の通知（OSC 9）の処理は妨げない
+  }
+
   private handlePaletteQuery(data: string): boolean {
     // 形式: "<idx>;?"（複数指定 "<idx>;?;<idx2>;?..." も許容する）
     const parts = data.split(";");
@@ -379,6 +387,29 @@ export function parseOsc7(data: string, platform: NodeJS.Platform = process.plat
   } catch {
     return null;
   }
+}
+
+/**
+ * OSC 9;9（`ESC ] 9 ; 9 ; "<path>" ST` か引用符なし。Windows Terminal の場所の知らせ）から場所を取り出す（20260928-windows-pane-cwd の D-5）。
+ * `data` は OSC 9 のハンドラが受ける中身（先頭の `9;` を除いた `9;"<path>"`）。中身は符号化しないパスそのもの（`%`・`#`・空白・非 ASCII・UNC を
+ * そのまま運ぶ）。前後の空白を落としてから両端の `"` を外し、サーバが Windows なら `win32.normalize`。9;9 でない・空・**そのサーバの形の絶対パスでない**
+ * （相対パス・ゴミ）なら null（場所を変えない）。Windows はドライブ付き（`C:\…`）と UNC（`\\server\share\…`）、ほかは `/` で始まるものだけ。
+ *
+ * **既知の危険（受け入れた）**：UNC を受けるので、pane に表示されただけの出力（`cat` したファイル等）が `\\server\share` を場所にし、「引き継ぐ」で
+ * 新しい pane を開くとシェルがその共有へ SMB で接続しに行きうる。OSC 7 の `file://server/share` でも前から同じで、共有のフォルダで作業する利用者のために受ける。
+ */
+export function parseOsc9Cwd(data: string, platform: NodeJS.Platform = process.platform): string | null {
+  if (!data.startsWith("9;")) return null;
+  let path = data.slice(2).trim();
+  if (path.length >= 2 && path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1);
+  path = sanitizeOsc(path);
+  if (path === "") return null;
+  if (platform === "win32") {
+    const drive = /^[A-Za-z]:[\\/]/.test(path);
+    const unc = /^[\\/]{2}[^\\/]+[\\/][^\\/]+/.test(path);
+    return drive || unc ? win32.normalize(path) : null;
+  }
+  return path.startsWith("/") ? path : null;
 }
 
 /** タイトルに紛れ込みうる制御文字を落とす（design「安全化済み」）。 */
