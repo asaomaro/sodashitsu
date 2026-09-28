@@ -5,6 +5,7 @@
 //
 // ビルドした `packages/server/dist/main.js` を使う（ここではビルドしない）。一時の状態ディレクトリ・名前付き session・空いているポートで:
 //   1. 起動: 裏でサーバが立ち上がり、サイドバー・tab バー・pane の枠が描かれる（AC1・AC2）
+//   1b. はじめの案内: 新しい状態ディレクトリで出て、Enter で閉じ、案内済みが prefs.json に残る（再接続では出ない）
 //   2. 入力: pane に打ったコマンドの出力が画面に出る（80 行を流してスクロールバックを作る）
 //   3. 切り離し: prefix+q で終了コード 0・代替画面から出る・サーバは動き続ける（AC3）
 //   4. 再接続: もう一度 `soda` で同じ画面が戻り、ホイールで遡ると流した最初の行が見える（スクロールバック。AC3）
@@ -198,9 +199,34 @@ try {
   );
   step("起動して描いた（サイドバー・pane のプロンプト）");
 
+  // 1b. はじめの案内（H25b）：新しい状態ディレクトリでは出る。Enter で案内済みにして設定画面へ移り、Esc で閉じる。案内済みは共有の設定に残る。
+  const ONBOARDING = "マウスで操作できる端末です";
+  await waitFor(
+    "onboarding on a fresh state dir",
+    async () => (await first.screen()).includes(ONBOARDING),
+    15_000,
+  );
+  first.pty.write("\r");
+  await waitFor(
+    "onboarding dismissed by Enter",
+    async () => !(await first.screen()).includes(ONBOARDING),
+    10_000,
+  );
+  // Enter の後は設定画面（節の一覧に「エージェント連携」）。Esc で節の一覧へ戻り、もう一度で閉じる。
+  for (let i = 0; i < 3 && (await first.screen()).includes("エージェント連携"); i++) {
+    first.pty.write("\x1b");
+    await sleep(400);
+  }
+  if ((await first.screen()).includes("エージェント連携"))
+    throw new Error("the settings screen did not close with Esc");
+  const prefsFile = JSON.parse(await readFile(join(sessionDir, "prefs.json"), "utf8"));
+  if (prefsFile.prefs?.onboarding !== false)
+    throw new Error("onboarding: false was not saved to prefs.json");
+  step("新しい状態ディレクトリではじめの案内が出て、Enter で閉じ、案内済みが共有の設定に残った");
+
   // 2. 入力（80 行を流してスクロールバックを作る）
   const marker = `PTYV_${Date.now()}`;
-  first.pty.write(`i=1; while [ $i -le 80 ]; do echo L$i; i=$((i+1)); done; echo ${marker}\r`);
+  first.pty.write(`\x15i=1; while [ $i -le 80 ]; do echo L$i; i=$((i+1)); done; echo ${marker}\r`);
   await first.waitLine("typed command output", new RegExp(`${marker}`), 20_000);
   if (!(await first.screen()).includes("L80"))
     throw new Error("the loop output did not reach the screen");
@@ -220,6 +246,8 @@ try {
   // pane の中身の上でホイールを上へ（SGR 1006。pane はマウスを求めていないのでスクロールバックが動く）。
   for (let i = 0; i < 30; i++) second.pty.write(`\x1b[<64;${COLS - 20};${Math.floor(ROWS / 2)}M`);
   await second.waitLine("scrollback (L3) after wheel up", /(^|[^\w])L3([^\w]|$)/, 10_000);
+  if ((await second.screen()).includes(ONBOARDING))
+    throw new Error("onboarding was shown again after it was dismissed");
   step("もう一度 soda で同じ画面が戻り、ホイールで最初の行（L3）まで遡れた");
   for (let i = 0; i < 40; i++) second.pty.write(`\x1b[<65;${COLS - 20};${Math.floor(ROWS / 2)}M`);
   await sleep(300);
