@@ -15,6 +15,7 @@ import {
 import { useSettingsStore } from "../store/settings.js";
 import { useNotificationsStore } from "../store/notifications.js";
 import { applyPrefsToStores } from "../store/prefsApply.js";
+import { ACTIONS } from "@sodashitsu/client-core";
 import { PrefsSync } from "./PrefsSync.js";
 
 /**
@@ -227,6 +228,77 @@ describe("PrefsSync（初回の移行）", () => {
     sync.onOpened();
     await flush();
     expect(sets).toEqual([{ patch: { theme: "nord" }, baseRev: 0 }]);
+  });
+
+  // 統合の review r2：大きすぎて断られた種も移し終えた扱い（読み込むたびに入れ直して断られ、知らせ続けない）。
+  it("まだ移していないブラウザの種が大きすぎて断られても移し終えた印を付け、次の読み込みでは送らず知らせない", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: "nord", keys: { prefix: "ctrl+a" } }));
+    const server = { prefs: { onboarding: false } as SharedPrefs, rev: 1 };
+    const tooLarge = (patch: Record<string, unknown>) =>
+      "keys" in patch ? "invalid_params" : undefined;
+    const allSets: unknown[] = [];
+    const allToasts: string[] = [];
+    for (let load = 1; load <= 3; load++) {
+      unsubscribe?.();
+      pinia = createPinia();
+      const { sync, sets, toasts } = setup(server, { failSet: tooLarge });
+      sync.onOpened();
+      await flush();
+      await flush();
+      allSets.push(...sets.map((x) => x.patch));
+      allToasts.push(...toasts);
+      expect(isPrefsMigrated(), `load ${load}`).toBe(true);
+    }
+    expect(allSets).toEqual([{ theme: "nord" }]);
+    expect(allToasts).toHaveLength(1);
+    expect(server.prefs).toEqual({ onboarding: false, theme: "nord" });
+  });
+
+  // 統合の review r2：オブジェクトの項目（キーの割り当て等）は、サーバにもあっても中身を併合する（サーバの中身が勝つ）。
+  it("ブラウザに 20 個の割り当て、端末版が先に 1 個を書いたサーバへ繋ぐと、サーバと手元の両方に 21 個（同じ操作はサーバが勝つ）", async () => {
+    const actions = ACTIONS.map((a) => a.id).filter((id) => !id.includes("["));
+    const mine: Record<string, string[]> = {};
+    for (const [i, id] of actions.slice(0, 20).entries())
+      mine[id] = [`ctrl+alt+${String.fromCharCode(97 + i)}`];
+    const theirs = actions[20]!;
+    const clash = actions[0]!;
+    localStorage.setItem(
+      PREFS_KEY,
+      JSON.stringify({
+        keys: { bindings: mine, commands: { deploy: ["ctrl+alt+z"] } },
+        notify: { toast: false, sound: true },
+      }),
+    );
+    const server = {
+      prefs: {
+        keys: { bindings: { [theirs]: ["ctrl+alt+x"], [clash]: ["ctrl+alt+y"] } },
+        notify: { toast: true },
+      } as SharedPrefs,
+      rev: 1,
+    };
+    const { sync } = setup(server);
+    sync.onOpened();
+    await flush();
+    const expected = {
+      bindings: { ...mine, [theirs]: ["ctrl+alt+x"], [clash]: ["ctrl+alt+y"] },
+      commands: { deploy: ["ctrl+alt+z"] },
+    };
+    expect(Object.keys(expected.bindings)).toHaveLength(21);
+    expect(server.prefs["keys"]).toEqual(expected);
+    expect(server.prefs["notify"]).toEqual({ toast: true, sound: true });
+    expect(stored()["keys"]).toEqual(expected);
+    expect(stored()["notify"]).toEqual({ toast: true, sound: true });
+    expect(isPrefsMigrated()).toBe(true);
+  });
+
+  it("オブジェクトの項目でも、サーバに無い中身が無ければ送らない（配列・値は葉でサーバが勝つ）", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ keys: { bindings: { a: ["x"] } } }));
+    const server = { prefs: { keys: { bindings: { a: ["y"] } } } as SharedPrefs, rev: 2 };
+    const { sync, sets } = setup(server);
+    sync.onOpened();
+    await flush();
+    expect(sets).toEqual([]);
+    expect(stored()["keys"]).toEqual({ bindings: { a: ["y"] } });
   });
 
   it("rev 0 で localStorage が空なら何も送らない", async () => {

@@ -77,17 +77,25 @@ export class PrefsSync {
       .getPrefs()
       .then((r) => {
         if (gen !== this.generation) return;
-        // サーバにまだ無い項目（rev 0 なら全部）。サーバにある項目はサーバの値が勝つ。
-        const missing = (k: string): boolean => r.rev === 0 || !Object.hasOwn(r.prefs, k);
+        // 移す値：サーバに無い項目（rev 0 なら全部）はそのまま、サーバにもある項目は入れ子のオブジェクト同士なら併合（サーバに無い中身だけ足す）、
+        // それ以外はサーバの値が勝つ（移さない）。
+        const seedOf = (k: string, value: unknown): unknown =>
+          r.rev === 0 || !Object.hasOwn(r.prefs, k) ? value : mergeMissing(value, r.prefs[k]);
         if (r.rev === 0 || !this.deps.migrated()) {
-          // 移行：まだ送っていない手元の値（利用者の変更）を優先し、それ以外の共有の項目のうちサーバに無いものを種として入れる。
+          // 移行：まだ送っていない手元の値（利用者の変更）を優先し、それ以外の共有の項目を種として入れる。
           for (const [k, value] of Object.entries(this.deps.sharedOf(this.deps.readLocal()))) {
-            if (missing(k) && !this.pending.has(k) && !this.localOnly.has(k))
-              this.pending.set(k, { value, seed: true });
+            if (this.pending.has(k) || this.localOnly.has(k)) continue;
+            const seed = seedOf(k, value);
+            if (seed !== undefined) this.pending.set(k, { value: seed, seed: true });
           }
         }
-        // 前の接続で送れなかった種は、サーバにまだ無い項目だけ残す（その間にほかのクライアントが書いた項目は、サーバの値が勝つ）。
-        for (const [k, p] of [...this.pending]) if (p.seed && !missing(k)) this.pending.delete(k);
+        // 前の接続で送れなかった種は、今のサーバの値に対して選び直す（その間にほかのクライアントが書いた中身は、サーバの値が勝つ）。
+        for (const [k, p] of [...this.pending]) {
+          if (!p.seed) continue;
+          const seed = seedOf(k, p.value);
+          if (seed === undefined) this.pending.delete(k);
+          else this.pending.set(k, { value: seed, seed: true });
+        }
         this.synced = true;
         this.accept(r.prefs, r.rev);
         const b = this.buffered;
@@ -193,6 +201,8 @@ export class PrefsSync {
             }
           }
           this.flush();
+          // 大きすぎて断られた種も移し終えた扱い（読み込むたびに種を入れ直して断られ、知らせ続けない。統合の review r2）。
+          this.markMigratedIfDone();
           return;
         }
         // 切れた等。戻して、次に繋がったとき・次に変更したときに送り直す（同じ項目のもっと新しい値が溜まっていればそちらを残す）。
@@ -200,4 +210,32 @@ export class PrefsSync {
         if (gen !== this.generation) this.flush(); // 送った後に接続が替わった（新しい接続が受け取り済みなら、そこで送る）
       });
   }
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * 移行でサーバにもある項目の併合（統合の review r2）。両方が入れ子のオブジェクト（`keys`〔`bindings`・`commands` 等〕・`notify`・`themeOverrides`・
+ * `sidebarRows` 等）なら、サーバに無い中身だけを足した全体を返す（入れ子の中も同じ規則。配列・値は葉で、同じ場所ではサーバの値が勝つ）。
+ * 足すものが無い・どちらかがオブジェクトでなければ undefined（移さない）。
+ */
+export function mergeMissing(local: unknown, server: unknown): unknown {
+  if (!isPlainObject(local) || !isPlainObject(server)) return undefined;
+  let added = false;
+  const out: Record<string, unknown> = { ...server };
+  for (const [k, v] of Object.entries(local)) {
+    if (!Object.hasOwn(server, k)) {
+      out[k] = v;
+      added = true;
+      continue;
+    }
+    const inner = mergeMissing(v, server[k]);
+    if (inner !== undefined) {
+      out[k] = inner;
+      added = true;
+    }
+  }
+  return added ? out : undefined;
 }
