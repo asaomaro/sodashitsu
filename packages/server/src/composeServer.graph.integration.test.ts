@@ -199,6 +199,13 @@ describe("composeServer: graph.*（20260927-agent-graph）", () => {
         })
       ).error?.code,
     ).toBe("invalid_params");
+    // 別のマシンの pane への選び直し（マシンが変わる付け替え）は、web・sodactl だけでなくサーバも断る（統合レビュー R1）。
+    const rekey = await b.request("graph.update", {
+      baseRev: 1,
+      ops: [{ op: "rekey_node", key: A, newKey: `${"f".repeat(32)}:p1` }],
+    });
+    expect(rekey.error?.code).toBe("invalid_params");
+    expect(rekey.error?.message).toContain("rekey_other_machine");
     expect(((await b.request("graph.get", {})).result as { rev: number }).rev).toBe(1);
   });
 

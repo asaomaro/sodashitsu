@@ -21,3 +21,13 @@ export function parseNodeKey(key: string): { machine: NodeMachine; paneId: strin
 export function isLocalNodeKey(key: string): boolean {
   return parseNodeKey(key)?.machine === LOCAL_MACHINE;
 }
+
+/**
+ * 2 つの鍵が同じマシンの pane か（どちらかの形が正しくなければ偽）。無効なノードの選び直し（`rekey_node`）は同じマシンの pane へだけ——
+ * 別のマシンへ付け替えると線の意味（どこで動くか）が変わる（decisions D7-10・D8-5）。サーバ（`applyGraphOps`）・sodactl・画面がこの 1 つを使う。
+ */
+export function sameNodeMachine(a: string, b: string): boolean {
+  const pa = parseNodeKey(a);
+  const pb = parseNodeKey(b);
+  return pa !== null && pb !== null && pa.machine === pb.machine;
+}

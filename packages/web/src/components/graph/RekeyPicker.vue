@@ -8,7 +8,13 @@
  */
 import { computed, nextTick, onMounted, ref } from "vue";
 import type { NodeKey } from "@sodashitsu/protocol";
-import { LOCAL_MACHINE_ID, nodeKey, paneNameOf, parseNodeKey } from "@sodashitsu/client-core";
+import {
+  LOCAL_MACHINE_ID,
+  nodeKey,
+  paneNameOf,
+  parseNodeKey,
+  sameNodeMachine,
+} from "@sodashitsu/client-core";
 import { useGraphStore } from "../../store/graph.js";
 import { summaryPaneName, useMachinesStore } from "../../store/machines.js";
 import { useSessionStore } from "../../store/session.js";
@@ -35,6 +41,8 @@ const rows = computed<Row[]>(() => {
   const out: Row[] = [];
   const push = (key: NodeKey, name: string, agent: string | null): void => {
     if (onGraph.has(key) && key !== props.nodeKey) return;
+    // 同じマシンの pane だけ（規則はサーバ・sodactl と同じ client-core の 1 つ。統合レビュー R1）
+    if (!sameNodeMachine(props.nodeKey, key)) return;
     const note = key === props.nodeKey ? "同じ番号の今の pane" : agent;
     out.push({
       key,

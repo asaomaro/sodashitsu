@@ -130,14 +130,39 @@ describe("applyGraphOps", () => {
       },
       2,
     );
-    const r = ok(s1, [{ op: "rekey_node", key: A, newKey: R }]);
-    expect(r.graph.nodes[0]).toEqual({ key: R, x: 0, y: 0 });
-    expect(r.graph.links[0]).toMatchObject({ from: R, to: B });
+    const C = "local:p5";
+    const r = ok(s1, [{ op: "rekey_node", key: A, newKey: C }]);
+    expect(r.graph.nodes[0]).toEqual({ key: C, x: 0, y: 0 });
+    expect(r.graph.links[0]).toMatchObject({ from: C, to: B });
     // 既に載っている pane へは選び直せない
     expect(applyGraphOps(s1, [{ op: "rekey_node", key: A, newKey: B }])).toMatchObject({
       ok: false,
       issues: [{ code: "duplicate_node" }],
     });
+  });
+
+  it("rekey_node は別のマシンの pane へ付け替えない（手元⇄別のマシン・別のマシンどうし。統合レビュー R1）", () => {
+    const R2: NodeKey = `${"e".repeat(32)}:p1`;
+    const s1 = state({
+      nodes: [
+        { key: A, x: 0, y: 0, stale: true },
+        { key: R, x: 0, y: 0 },
+      ],
+    });
+    for (const [key, newKey] of [
+      [A, R2],
+      [R, "local:p1"],
+      [R, R2],
+    ] as const) {
+      expect(applyGraphOps(s1, [{ op: "rekey_node", key, newKey }])).toMatchObject({
+        ok: false,
+        issues: [{ code: "rekey_other_machine", key: newKey }],
+      });
+    }
+    // 同じマシンの pane へは付け替えられる
+    expect(
+      applyGraphOps(s1, [{ op: "rekey_node", key: R, newKey: `${"f".repeat(32)}:p9` }]),
+    ).toMatchObject({ ok: true });
   });
 
   it("rekey_node で既に載っている鍵へ移すのは duplicate_node、トリガの線を設定なしで足すのは config_mismatch（g01 点検）", () => {

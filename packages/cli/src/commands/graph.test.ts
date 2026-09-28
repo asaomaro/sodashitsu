@@ -336,7 +336,12 @@ describe("runGraph", () => {
     });
     await expect(
       run(client, cmd({ kind: "node-rekey", pane: "p1", newPane: "box:p2" })),
-    ).rejects.toMatchObject({ code: "invalid_params" });
+    ).rejects.toMatchObject({
+      code: "invalid_params",
+      // 規則はサーバと同じ client-core の applyGraphOps（checkGraphOps）にある（統合レビュー R1）
+      message: expect.stringContaining("rekey_other_machine"),
+    });
+    expect(client.calls.some(([m]) => m === "graph.update")).toBe(false);
   });
 
   it("pause・link resume・history はそのまま方式を呼ぶ", async () => {

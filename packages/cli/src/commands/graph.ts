@@ -320,12 +320,7 @@ async function perform(
       const key = await ctx.resolve(action.pane, false);
       const newKey = await ctx.resolve(action.newPane, true);
       // 画面と同じく同じマシンの pane にだけ選び直す（別のマシンの pane へ付け替えると、線の意味〔どこで動くか〕が変わる。decisions D7-10）。
-      if (parseNodeKey(key)?.machine !== parseNodeKey(newKey)?.machine) {
-        throw new RpcFailure(
-          "invalid_params",
-          `rekey must stay on the same machine: ${action.pane} -> ${action.newPane}`,
-        );
-      }
+      // 規則は client-core の `applyGraphOps`（サーバと同じ）にあり、`updateGraph` の `checkGraphOps` が送る前に `rekey_other_machine` で断る。
       const { after } = await updateGraph(client, () => [{ op: "rekey_node", key, newKey }]);
       return { kind: "graph", graph: after };
     }

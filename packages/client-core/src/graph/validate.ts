@@ -14,6 +14,7 @@ import { OUTPUT_PLACEHOLDER } from "./message.js";
  */
 export type GraphIssueCode =
   | "duplicate_node"
+  | "rekey_other_machine"
   | "unknown_node"
   | "unknown_link"
   | "self_link"

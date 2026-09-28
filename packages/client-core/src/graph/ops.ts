@@ -1,6 +1,7 @@
 import type { Graph, GraphLink, GraphNode, GraphOp, NodeKey } from "@sodashitsu/protocol";
 import { defaultApprovalConfig, LINK_LIMIT_DEFAULT } from "./defaults.js";
 import { graphNodeRect, nextFreeGraphPosition } from "./geometry.js";
+import { sameNodeMachine } from "./nodeKey.js";
 import { validateGraph, type GraphIssue } from "./validate.js";
 
 /** 採番の続き（消した線の id を使い回さない。`graph.json` に保存する）。 */
@@ -74,6 +75,14 @@ export function applyGraphOps(state: GraphDraftState, ops: readonly GraphOp[]): 
       case "rekey_node": {
         const node = findNode(op.key);
         if (node === undefined) return unknownNode(op.key);
+        // 選び直しは同じマシンの pane へだけ（別のマシンへ付け替えると線の意味が変わる。web・sodactl も同じ規則。統合レビュー R1）。
+        if (!sameNodeMachine(op.key, op.newKey)) {
+          return fail({
+            code: "rekey_other_machine",
+            message: "別のマシンの pane へは選び直せません（同じマシンの pane だけ）。",
+            key: op.newKey,
+          });
+        }
         if (op.newKey !== op.key && findNode(op.newKey) !== undefined) {
           return fail({
             code: "duplicate_node",
