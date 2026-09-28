@@ -337,6 +337,17 @@ describe("StoreAdapter", () => {
     expect(() => makeAdapter().adapter.applyEvent({ event: "prefs.changed", data })).not.toThrow();
   });
 
+  it("graph.changed・graph.fired は注入した onGraphEvent へ（20260927-agent-graph。省略時は例外を投げない）", () => {
+    const onGraphEvent = vi.fn();
+    const changed = { event: "graph.changed" as const, data: { graph: { rev: 1, paused: false, nodes: [], links: [] }, byClientId: null } };
+    const fired = { event: "graph.fired" as const, data: { run: { linkId: "l1", at: 1, result: "sent" as const } } };
+    const { adapter } = makeAdapter({ onGraphEvent });
+    adapter.applyEvent(changed);
+    adapter.applyEvent(fired);
+    expect(onGraphEvent.mock.calls).toEqual([[changed], [fired]]);
+    expect(() => makeAdapter().adapter.applyEvent(changed)).not.toThrow();
+  });
+
   it("command.updated は独自コマンドの一覧を置き換え、command.popup_closed は閉じた控えに残す（20260927-custom-command-keys の AC15）", () => {
     const { adapter } = makeAdapter();
     const commands = useCommandsStore(pinia);

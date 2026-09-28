@@ -1,4 +1,4 @@
-import type { MachineStatus } from "@sodashitsu/protocol";
+import type { GraphChangedEvent, GraphFiredEvent, MachineStatus } from "@sodashitsu/protocol";
 import type { Ref } from "vue";
 import type { MachineSummaryClientOptions } from "@sodashitsu/client-core";
 import { LOCAL_MACHINE_ID, wsUrlFor } from "@sodashitsu/client-core";
@@ -37,6 +37,12 @@ export interface MachineWiringDeps {
    * `!isMobileViewport()`（Ref を否定して常に偽）と書いて機能が一度も働かなかった誤りを、型で止める（T13 の点検）。
    */
   mobileViewport: Ref<boolean>;
+  /**
+   * ローカルの軽い接続（＝ほかのマシンを選んでいる間だけ張る）に届いた連携のグラフのイベント（20260927-agent-graph。グラフは手元の `soda serve` のもの）。省略可。
+   */
+  onLocalGraphEvent?: (e: GraphChangedEvent | GraphFiredEvent) => void;
+  /** ローカルの軽い接続の hello が通った（グラフを取り直す）。省略可。 */
+  onLocalOpened?: () => void;
 }
 
 export class MachineWiring {
@@ -111,11 +117,16 @@ export class MachineWiring {
               this.applyMachineList(e.data.machines);
             return;
           }
+          if (e.event === "graph.changed" || e.event === "graph.fired") {
+            if (id === LOCAL_MACHINE_ID) this.deps.onLocalGraphEvent?.(e);
+            return;
+          }
           m.applySummaryEvent(id, e);
         },
         onConnected: (connected) => m.setSummaryConnected(id, connected),
         onOpened: () => {
           if (id !== LOCAL_MACHINE_ID || m.selectedId === LOCAL_MACHINE_ID) return;
+          this.deps.onLocalOpened?.();
           void client
             .request("machine.list", {})
             .then((r) => this.applyMachineList(r.machines))
@@ -125,6 +136,11 @@ export class MachineWiring {
       this.clients.set(id, client);
       client.start();
     }
+  }
+
+  /** そのマシンの軽い接続（張っていなければ undefined）。グラフの方式をローカルの軽い接続で送るのに使う（20260927-agent-graph）。 */
+  summaryClient(id: string): SummaryClientLike | undefined {
+    return this.clients.get(id);
   }
 
   /** テスト用：いま張っている軽い接続のマシン。 */

@@ -15,6 +15,7 @@ import { mobileViewportQuery, trackMediaQuery } from "./mobile/detect.js";
 import { MachineSummaryClient } from "@sodashitsu/client-core";
 import { LOCAL_MACHINE_ID, wsUrlFor } from "@sodashitsu/client-core";
 import { useMachinesStore } from "./store/machines.js";
+import { useGraphStore, type GraphPort } from "./store/graph.js";
 import { KeyInputController } from "./keys/KeyInputController.js";
 import { KeyboardLockController } from "./keys/KeyboardLockController.js";
 import { KeyRouter } from "@sodashitsu/client-core";
@@ -116,10 +117,33 @@ const storeAdapter = new StoreAdapter({
   onMachinesChanged: (list) => machineWiringBox.current?.onMainMachinesChanged(list),
   // 共有の設定（20260927-cli-mode）。`prefsSync` はこの後で作るので、遅延で参照する。
   onPrefsChanged: (data) => prefsSyncBox.current?.onChanged(data),
+  // 連携のグラフ（20260927-agent-graph）は手元の `soda serve` のもの。画面の接続が別のマシンを向いている間の（そのマシンの）グラフは捨てる。
+  onGraphEvent: (e) => {
+    if (machines.selectedId === LOCAL_MACHINE_ID) graph.applyEvent(e);
+  },
 });
 
 const connection = new Connection({ kind, httpOrigin, wsUrl, store: storeAdapter, sink: sinkProxy });
 const conn: ConnectionPort = connection;
+
+/**
+ * 連携のグラフの口（20260927-agent-graph の design「別のマシンを見ている間も、グラフは手元のサーバのもの」）。画面の接続がローカルを向いていればそれ、
+ * 別のマシンを向いていればローカルの軽い接続（`MachineWiring` が張る。作るのはこのファイルの `MachineSummaryClient` なので型を戻してよい）。
+ */
+const graph = useGraphStore(pinia);
+const graphPort: GraphPort = {
+  request: (method, params) => {
+    if (machines.selectedId === LOCAL_MACHINE_ID) return conn.request(method, params);
+    const local = machineWiringBox.current?.summaryClient(LOCAL_MACHINE_ID) as MachineSummaryClient | undefined;
+    if (!local) return Promise.reject(Object.assign(new Error("not_connected: local"), { code: "not_connected" }));
+    return local.request(method, params);
+  },
+};
+graph.bind(graphPort);
+// 接続のたびに取り直す（切れている間の変化を取りこぼさない）。上限の知らせ（AC11）のため、画面を開いていなくても持つ。
+connection.onOpened(() => {
+  if (machines.selectedId === LOCAL_MACHINE_ID) void graph.load();
+});
 // 端末への入力は全てこの関所を通す（xterm.js の `onData`・`KeyInputController` の直接の送信）。分割・新しい tab・
 // 新しい workspace の応答を待つ間の入力を溜め、新しい pane へ流す（D99）。
 const inputGate = new InputGate(conn);
@@ -347,6 +371,8 @@ const machineWiring = new MachineWiring({
   createSummaryClient: (opts) => new MachineSummaryClient(opts),
   baseWsUrl: wsUrl,
   mobileViewport,
+  onLocalGraphEvent: (e) => graph.applyEvent(e),
+  onLocalOpened: () => void graph.load(),
 });
 machineWiringBox.current = machineWiring;
 watch([() => machines.selectedId, () => machines.machines.map((m) => m.id).join("\n"), mobileViewport], () => machineWiring.reconcileSummaryClients());

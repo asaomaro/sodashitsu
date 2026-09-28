@@ -25,7 +25,7 @@ design「web」「振る舞いの詳細」の全画面のグラフ画面を、01
 
 ## タスク
 
-- [ ] T1: `store/graph.ts`（取得・`graph.changed`〔同じ rev も当てる〕・`graph.fired`・履歴・楽観的な配置とドラッグ中の保護・`rev_conflict` での作り直しと送り直し）
+- [x] T1: `store/graph.ts`（取得・`graph.changed`〔同じ rev も当てる〕・`graph.fired`・履歴・楽観的な配置とドラッグ中の保護・`rev_conflict` での作り直しと送り直し）
       対象: （新規 `packages/web/src/store/graph.ts`）・`packages/web/src/store/StoreAdapter.ts`（イベントの振り分け）・`packages/web/src/store/session.ts`（pane の要約）
       依存: なし
       AC: AC2, AC10, AC16

@@ -1,0 +1,394 @@
+import type {
+  AgentInfo,
+  DisplayState,
+  Graph,
+  GraphLink,
+  GraphNode,
+  GraphOp,
+  LinkRun,
+  MethodName,
+  NodeKey,
+  ParamsOf,
+  ResultOf,
+  ServerEvent,
+} from "@sodashitsu/protocol";
+import { defineStore } from "pinia";
+import { computed, ref } from "vue";
+import {
+  clientErrorMessage,
+  errorCodeOf,
+  LOCAL_MACHINE_ID,
+  paneNameOf,
+  parseNodeKey,
+} from "@sodashitsu/client-core";
+import { useMachinesStore } from "./machines.js";
+import { displayStateFor, useSeenStore } from "./seen.js";
+import { useSessionStore } from "./session.js";
+import { useViewStore } from "./view.js";
+
+/**
+ * 連携のグラフ（20260927-agent-graph の design「web」の `store/graph.ts`）。サーバのグラフ（`graph.get`・`graph.changed`）・実行の知らせ（`graph.fired`）・
+ * 履歴（`graph.history`）・楽観的な配置（ドラッグ中はサーバの値で上書きしない。Splitter と同じ）・`rev_conflict` での作り直しと送り直しを持つ。
+ *
+ * - **同じ rev の `graph.changed` も当てる**（decisions D5-14。実行の回数だけの保存は rev を上げずに配られる）。rev が古いものだけ捨てる。
+ * - 方式の結果（`graph.update` 等の戻り値）は rev が今より新しいときだけ当てる——同じ rev の `graph.changed`（回数の保存）が先に届いていれば、
+ *   戻り値で回数を巻き戻さない。
+ * - サーバとのやりとりは `bind` した口（画面の接続がローカルを向いていればそれ、別のマシンを向いていればローカルの軽い接続。`main.ts`）。
+ */
+
+type GraphMethod = Extract<
+  MethodName,
+  "graph.get" | "graph.update" | "graph.pause" | "graph.resume" | "graph.history"
+>;
+export interface GraphPort {
+  request<M extends GraphMethod>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>;
+}
+
+/** 線が動いた印（光り・チップの記号）を出しておく時間（design「実行の表示」）。 */
+export const GRAPH_FIRE_GLOW_MS = 1500;
+/** 画面に持っておく履歴の件数（新しい順）。 */
+const RUNS_KEEP = 200;
+/** `rev_conflict` で作り直して送り直す回数。 */
+const UPDATE_RETRIES = 3;
+
+export interface GraphNodeInfo {
+  key: NodeKey;
+  machine: string;
+  paneId: string;
+  local: boolean;
+  /** マシンの呼び名（手元は「ローカル」）。 */
+  machineLabel: string;
+  /** pane の呼び名（手元の pane は `paneNameOf`。要約しか無い別のマシンの pane は `pane <id>`。04 で広げる）。 */
+  name: string;
+  agent: AgentInfo | null;
+  state: DisplayState | null;
+  /** pane があるか（無い・閉じた＝false。マシンの要約がまだ無い＝null〔分からない〕）。 */
+  exists: boolean | null;
+  stale: boolean;
+  /** pane のある workspace・tab（分かれば）。 */
+  location: { workspaceId: string; tabId: string } | null;
+}
+
+export type GraphUpdateResult =
+  | { ok: true; graph: Graph; conflicted: boolean }
+  /** `reason: "gone"` は作り直す元（ノード・線）がもう無い。 */
+  | { ok: false; reason: "gone" | "error"; message: string };
+
+export const useGraphStore = defineStore("graph", () => {
+  let port: GraphPort | null = null;
+  const graph = ref<Graph | null>(null);
+  /** 取得に失敗した理由（画面に出す）。取れたら null。 */
+  const loadError = ref<string | null>(null);
+  /** ドラッグ中の位置（サーバの値より優先。離したら `pendingPositions` へ）。 */
+  const dragPositions = ref(new Map<string, { x: number; y: number }>());
+  /** 送ったが応答をまだ受けていない位置（楽観的な配置）。 */
+  const pendingPositions = ref(new Map<string, { x: number; y: number }>());
+  /** 履歴（新しい順）。`loadHistory` で読み、以後は `graph.fired` を先頭へ足す。 */
+  const runs = ref<LinkRun[]>([]);
+  const runsLoaded = ref(false);
+  /** 動いたばかりの線（光り）。値は結果。`GRAPH_FIRE_GLOW_MS` で消える。 */
+  const firing = ref(new Map<string, LinkRun["result"]>());
+  const fireTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  let loadSeq = 0;
+
+  function bind(p: GraphPort | null): void {
+    port = p;
+  }
+
+  /** 口を差し替えた（マシンの切り替え）・接続し直した。取り直す。 */
+  async function load(): Promise<void> {
+    if (!port) return;
+    const seq = ++loadSeq;
+    try {
+      const g = await port.request("graph.get", {});
+      if (seq !== loadSeq) return;
+      loadError.value = null;
+      applyGraph(g, "fresh");
+    } catch (err) {
+      if (seq !== loadSeq) return;
+      loadError.value = clientErrorMessage(errorCodeOf(err) ?? "internal");
+    }
+  }
+
+  /**
+   * グラフを当てる。`source`: `event`＝`graph.changed`（同じ rev も当てる）、`result`＝方式の戻り値（新しい rev だけ）、`fresh`＝取り直し（常に当てる）。
+   * 上限で止まった線があれば知らせる（AC11）。
+   */
+  function applyGraph(next: Graph, source: "event" | "result" | "fresh"): void {
+    const prev = graph.value;
+    if (prev && source !== "fresh") {
+      if (next.rev < prev.rev) return;
+      if (source === "result" && next.rev === prev.rev) return;
+    }
+    graph.value = next;
+    if (prev) notifyLimited(prev, next);
+  }
+
+  function notifyLimited(prev: Graph, next: Graph): void {
+    const before = new Map(prev.links.map((l) => [l.id, l]));
+    for (const link of next.links) {
+      const old = before.get(link.id);
+      if (!old || old.paused === "limit" || link.paused !== "limit") continue;
+      useViewStore().toast(
+        `連携の線（${linkTitle(link)}）が上限の ${link.limit} 回に達したので止めました。グラフ画面の線から再開できます。`,
+      );
+    }
+  }
+
+  function applyEvent(e: ServerEvent): void {
+    if (e.event === "graph.changed") applyGraph(e.data.graph, "event");
+    else if (e.event === "graph.fired") applyFired(e.data.run);
+  }
+
+  function applyFired(run: LinkRun): void {
+    if (runsLoaded.value) runs.value = [run, ...runs.value].slice(0, RUNS_KEEP);
+    const next = new Map(firing.value);
+    next.set(run.linkId, run.result);
+    firing.value = next;
+    const old = fireTimers.get(run.linkId);
+    if (old !== undefined) clearTimeout(old);
+    fireTimers.set(
+      run.linkId,
+      setTimeout(() => {
+        fireTimers.delete(run.linkId);
+        const m = new Map(firing.value);
+        m.delete(run.linkId);
+        firing.value = m;
+      }, GRAPH_FIRE_GLOW_MS),
+    );
+  }
+
+  async function loadHistory(): Promise<void> {
+    if (!port) return;
+    try {
+      const r = await port.request("graph.history", {});
+      runs.value = r.runs.slice(0, RUNS_KEEP);
+      runsLoaded.value = true;
+    } catch (err) {
+      useViewStore().toast(
+        `履歴を読めませんでした（${clientErrorMessage(errorCodeOf(err) ?? "internal")}）`,
+      );
+    }
+  }
+
+  /**
+   * `graph.update` を送る。`build` は今のグラフから操作を作る——`rev_conflict` なら取り直した最新でもう一度作って送り直す（design「エラー処理」）。
+   * 作り直した結果が null・空なら（元のノード・線が他で消えた）送らずに `gone`。
+   */
+  async function update(build: (g: Graph) => GraphOp[] | null): Promise<GraphUpdateResult> {
+    if (!port) return { ok: false, reason: "error", message: "サーバに繋がっていません。" };
+    if (!graph.value) await load();
+    let conflicted = false;
+    for (let attempt = 0; attempt < UPDATE_RETRIES; attempt++) {
+      const g = graph.value;
+      if (!g)
+        return {
+          ok: false,
+          reason: "error",
+          message: loadError.value ?? "グラフを読めませんでした。",
+        };
+      const ops = build(g);
+      if (!ops || ops.length === 0)
+        return { ok: false, reason: "gone", message: "対象がほかの画面・sodactl で消されました。" };
+      try {
+        const next = await port.request("graph.update", { baseRev: g.rev, ops });
+        applyGraph(next, "result");
+        return { ok: true, graph: next, conflicted };
+      } catch (err) {
+        const code = errorCodeOf(err);
+        if (code === "rev_conflict") {
+          conflicted = true;
+          await load();
+          continue;
+        }
+        return { ok: false, reason: "error", message: errorText(code, err) };
+      }
+    }
+    return { ok: false, reason: "error", message: clientErrorMessage("rev_conflict") };
+  }
+
+  /** 全体（`linkId` 無し）か線の一時停止・再開。失敗はトースト。 */
+  async function setPaused(paused: boolean, linkId?: string): Promise<boolean> {
+    if (!port) return false;
+    try {
+      const params = linkId === undefined ? {} : { linkId };
+      const next = paused
+        ? await port.request("graph.pause", params)
+        : await port.request("graph.resume", params);
+      applyGraph(next, "result");
+      return true;
+    } catch (err) {
+      useViewStore().toast(
+        `${paused ? "一時停止" : "再開"}できませんでした（${errorText(errorCodeOf(err), err)}）`,
+      );
+      return false;
+    }
+  }
+
+  // --- 配置（ドラッグ中はサーバの値で上書きしない）---------------------------------
+
+  function setDragPosition(key: string, p: { x: number; y: number } | null): void {
+    const m = new Map(dragPositions.value);
+    if (p) m.set(key, p);
+    else m.delete(key);
+    dragPositions.value = m;
+  }
+
+  /** ノードを動かし終えた（ドラッグを離した・矢印キーの連打が止まった）。楽観的に置いてから送る。 */
+  async function moveNodes(
+    moves: readonly { key: string; x: number; y: number }[],
+  ): Promise<GraphUpdateResult> {
+    const pend = new Map(pendingPositions.value);
+    for (const m of moves) pend.set(m.key, { x: m.x, y: m.y });
+    pendingPositions.value = pend;
+    const drag = new Map(dragPositions.value);
+    for (const m of moves) drag.delete(m.key);
+    dragPositions.value = drag;
+    const result = await update((g) =>
+      moves
+        .filter((m) => g.nodes.some((n) => n.key === m.key))
+        .map((m) => ({ op: "move_node" as const, key: m.key as NodeKey, x: m.x, y: m.y })),
+    );
+    const after = new Map(pendingPositions.value);
+    for (const m of moves) {
+      const cur = after.get(m.key);
+      // 応答を待つ間に同じノードをもう一度動かしていれば、そちらを残す。
+      if (cur && cur.x === m.x && cur.y === m.y) after.delete(m.key);
+    }
+    pendingPositions.value = after;
+    if (!result.ok && result.reason === "error")
+      useViewStore().toast(`配置を保存できませんでした（${result.message}）`);
+    return result;
+  }
+
+  /** 表示に使うノード（ドラッグ中・送信中の位置を重ねたもの）。 */
+  const nodes = computed<GraphNode[]>(() => {
+    const g = graph.value;
+    if (!g) return [];
+    return g.nodes.map((n) => {
+      const p = dragPositions.value.get(n.key) ?? pendingPositions.value.get(n.key);
+      return p ? { ...n, x: p.x, y: p.y } : n;
+    });
+  });
+  const links = computed<GraphLink[]>(() => graph.value?.links ?? []);
+
+  // --- ノードの中身（pane の要約）--------------------------------------------------
+
+  function nodeInfo(key: NodeKey): GraphNodeInfo {
+    const session = useSessionStore();
+    const machines = useMachinesStore();
+    const seen = useSeenStore();
+    const parsed = parseNodeKey(key);
+    const machine = parsed?.machine ?? LOCAL_MACHINE_ID;
+    const paneId = parsed?.paneId ?? key;
+    const local = machine === LOCAL_MACHINE_ID;
+    const machineLabel = local
+      ? "ローカル"
+      : (machines.machines.find((m) => m.id === machine)?.label ?? "別のマシン");
+    const stale = graph.value?.nodes.find((n) => n.key === key)?.stale === true;
+    const base = { key, machine, paneId, local, machineLabel, stale };
+    // 画面の接続が向いているマシンの pane は、session の全体（呼び名・場所）がある。
+    if (machine === machines.selectedId) {
+      const pane = session.panes.get(paneId);
+      if (!pane || stale)
+        return {
+          ...base,
+          name: `pane ${paneId}`,
+          agent: null,
+          state: null,
+          exists: false,
+          location: null,
+        };
+      const agent = pane.agent;
+      const workspaceId = session.tabs.get(pane.tabId)?.workspaceId;
+      return {
+        ...base,
+        name: paneNameOf(pane),
+        agent,
+        state: agent
+          ? displayStateFor(agent, seen.getSeenSeq(agent.instanceId, agent.serverSeenSeq))
+          : null,
+        exists: true,
+        location: workspaceId ? { workspaceId, tabId: pane.tabId } : null,
+      };
+    }
+    // ほかのマシン（手元を含む）は軽い接続の要約だけ（pane の呼び名は持たない）。
+    const summary = machines.summaries[machine];
+    const entry = summary?.panes[paneId];
+    if (!entry) {
+      const known = summary?.everConnected === true;
+      return {
+        ...base,
+        name: `pane ${paneId}`,
+        agent: null,
+        state: null,
+        exists: stale ? false : known ? false : null,
+        location: null,
+      };
+    }
+    const agent = entry.agent;
+    const workspaceId = summary.tabWorkspace[entry.tabId];
+    return {
+      ...base,
+      name: agent?.name || `pane ${paneId}`,
+      agent,
+      state: agent
+        ? displayStateFor(agent, seen.getSeenSeqIn(machine, agent.instanceId, agent.serverSeenSeq))
+        : null,
+      exists: !stale,
+      location: workspaceId ? { workspaceId, tabId: entry.tabId } : null,
+    };
+  }
+
+  /** 線の呼び名（「impl → reviewer」。監督・承認の代理は配下 → 監督役）。 */
+  function linkTitle(link: Pick<GraphLink, "from" | "to">): string {
+    return `${nodeInfo(link.from).name} → ${nodeInfo(link.to).name}`;
+  }
+
+  /** マシンの切り替え・ログインし直し等で口を変える前に、前の口の結果を捨てる。 */
+  function reset(): void {
+    loadSeq++;
+    graph.value = null;
+    loadError.value = null;
+    runs.value = [];
+    runsLoaded.value = false;
+    dragPositions.value = new Map();
+    pendingPositions.value = new Map();
+    for (const t of fireTimers.values()) clearTimeout(t);
+    fireTimers.clear();
+    firing.value = new Map();
+  }
+
+  return {
+    graph,
+    loadError,
+    nodes,
+    links,
+    runs,
+    runsLoaded,
+    firing,
+    dragPositions,
+    pendingPositions,
+    bind,
+    load,
+    reset,
+    applyGraph,
+    applyEvent,
+    applyFired,
+    loadHistory,
+    update,
+    setPaused,
+    setDragPosition,
+    moveNodes,
+    nodeInfo,
+    linkTitle,
+  };
+});
+
+function errorText(code: string | null, err: unknown): string {
+  if (code === "invalid_params" && err instanceof Error) {
+    // サーバの検証（client-core の validate と同じ規則）の文。画面の保存の前にも同じ検証をするので、ここへ来るのは他と競ったときだけ。
+    return "内容がほかの変更と合わなくなりました。最新のグラフで確かめてください。";
+  }
+  return clientErrorMessage(code ?? "internal");
+}

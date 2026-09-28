@@ -5,7 +5,7 @@ import { ref } from "vue";
 import { trackMediaQuery } from "../mobile/detect.js";
 import type { MachineSummaryClientOptions } from "@sodashitsu/client-core";
 import { useMachinesStore } from "../store/machines.js";
-import { MachineWiring, type SummaryClientLike } from "./MachineWiring.js";
+import { MachineWiring, type MachineWiringDeps, type SummaryClientLike } from "./MachineWiring.js";
 
 /** ブラウザの配線（20260927-multi-host-machines の T13。`main.ts` から判断を切り出したもの）。 */
 const B = "b".repeat(32);
@@ -28,7 +28,9 @@ const snap = (): SessionSnapshot => ({
   limits: { scrollbackLines: 5000 },
 });
 
-function setup(opts: { enabled?: boolean; mainList?: MachineStatus[] } = {}) {
+function setup(
+  opts: { enabled?: boolean; mainList?: MachineStatus[]; extra?: Partial<MachineWiringDeps> } = {},
+) {
   setActivePinia(createPinia());
   const machines = useMachinesStore();
   const mobile = ref(!(opts.enabled ?? true));
@@ -62,6 +64,7 @@ function setup(opts: { enabled?: boolean; mainList?: MachineStatus[] } = {}) {
     },
     baseWsUrl: "ws://h/ws",
     mobileViewport: mobile,
+    ...opts.extra,
   });
   return {
     wiring,
@@ -136,6 +139,30 @@ describe("MachineWiring（T13）", () => {
       data: { machines: [online(B, "GPU"), online(C, "Renamed")] },
     });
     expect(t.machines.machines.map((m) => m.label)).toEqual(["GPU", "Renamed"]);
+  });
+
+  it("ローカルの軽い接続のグラフのイベント・hello は onLocalGraphEvent・onLocalOpened へ。ほかのマシンのグラフのイベントは要約にも当てずに捨てる（20260927-agent-graph）", () => {
+    const onLocalGraphEvent = vi.fn();
+    const onLocalOpened = vi.fn();
+    const t = setup({ extra: { onLocalGraphEvent, onLocalOpened } });
+    const wiring = t.wiring;
+    wiring.applyMachineList([online(B, "GPU"), online(C, "Build")]);
+    t.machines.select(B);
+    wiring.reconcileSummaryClients();
+    const local = t.created.find((c) => c.opts.wsUrl === "ws://h/ws")!;
+    const other = t.created.find((c) => c.opts.wsUrl.endsWith(C))!;
+    const changed = {
+      event: "graph.changed" as const,
+      data: { graph: { rev: 2, paused: false, nodes: [], links: [] }, byClientId: null },
+    };
+    other.opts.onEvent(changed);
+    expect(onLocalGraphEvent).not.toHaveBeenCalled();
+    local.opts.onEvent(changed);
+    expect(onLocalGraphEvent).toHaveBeenCalledWith(changed);
+    local.opts.onOpened?.();
+    expect(onLocalOpened).toHaveBeenCalledTimes(1);
+    expect(wiring.summaryClient("local")).toBe(local.client);
+    expect(wiring.summaryClient(B)).toBeUndefined();
   });
 
   it("画面の接続の machine.changed はローカルを向いているときだけ当てる", () => {
