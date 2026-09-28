@@ -15,3 +15,12 @@ events:
   - { ts: 2026-09-27T16:42:45Z, phase: tasks, event: doccheck, metrics: { stage: start, phase: tasks, mode: delegated, size: 3591 } }
   - { ts: 2026-09-27T16:43:39Z, phase: tasks, event: doccheck, metrics: { stage: report, phase: tasks, findings: 5 } }
   - { ts: 2026-09-27T16:43:49Z, phase: tasks, event: approved, metrics: { tasks_planned: 0, tasks_anchored: 0, doc_check_rounds: 1, doc_check_findings: 5, doc_check_mode: delegated } }
+  - { ts: 2026-09-28T02:30:08Z, phase: test, event: start, metrics: { marks: 0 } }
+  - { ts: 2026-09-28T02:31:09Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-09-28T02:31:39Z, phase: test, event: approved, metrics: { passed: 5795, failed: 0 } }
+  - { ts: 2026-09-28T02:31:39Z, phase: review, event: start, metrics: { marks: 0 } }
+  - { ts: 2026-09-28T02:39:46Z, phase: review, event: sent_back }
+  - { ts: 2026-09-28T03:02:06Z, phase: test, event: start, metrics: { marks: 2 } }
+  - { ts: 2026-09-28T03:03:06Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-09-28T03:07:31Z, phase: test, event: approved, metrics: { passed: 5815, failed: 0 } }
+  - { ts: 2026-09-28T03:07:31Z, phase: review, event: start, metrics: { marks: 6 } }

@@ -54,3 +54,6 @@
 - [nit][conv:-] packages/server/src/launch/placeholderEntry.ts:17-23 /ws の確かめに失敗した経路でログアウトしない / 対応: 許容（仮の入口は 03 の T6 で端末版に置き換わる）
 - [nit][conv:-] packages/server/src/launch/placeholderEntry.ts:62 端末版（03）が /api/logout を送る作業がタスクに無い / 対応: 修正済（03 の tasks.md の T6 に追加）
 - [nit][conv:-] packages/server/src/launch/tuiCommand.ts:25-32 端末の無い素の soda の終了コードが 0→2 に変わったことが docs の対象に無い / 対応: 修正済（06 の tasks に申し送り〔decisions D11〕）
+
+## ラウンド（統合 review の差し戻し。2026-09-28）
+- 親の統合 review の指摘を d3941ed・ae49be9・dbd5f5d・a5c0bd8 で直した（親の review.md）。この subtask の範囲の再 test は親の統合 test でまとめて行った

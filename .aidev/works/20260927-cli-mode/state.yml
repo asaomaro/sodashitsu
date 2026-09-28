@@ -1,7 +1,7 @@
 schema: 11
 slug: cli-mode
-current: tasks
-approved: [requirements, research, design, architecture, tasks]
+current: test
+approved: [requirements, research, design, architecture, tasks, test]
 mode: autonomous
 profile: full
 humanGates: []
