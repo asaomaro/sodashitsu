@@ -137,3 +137,14 @@
      目安なので粗い上限（10 秒。全体の試験の並列の下で開くのに約 1.3 秒かかった）で固まっていないことだけを確かめる。値は `[graph-perf]` の行で標準出力へ出す。
   9. skill ファイルの検査（`skill.test.ts`）は `graph link …`・`graph node …` を 3 語のコマンドとして数える。
 - **影響**: test 工程は `[graph-perf]` の行を test-result に写す。
+  10. （g05 点検）別のマシンの pane の番号の振り直しは**検出しない**（docs を書き分けて backlog へ）。手元の stale は「起動時に session.json を読めなかった」を手元のサーバ自身が
+      知っているから付けられるが、別のマシンについては hello の snapshot（`SessionSnapshot`: protocol・serverVersion・host・workspaces・tabs・panes・groups・focus・limits）にも
+      イベントにも、起動や振り直しを見分ける識別子が無い（エージェントの instanceId は普通の再起動でも変わるので信号にならない）。検出には session.json に振り直しの識別子を
+      持たせ、snapshot に載せ、ノードに覚えて比べ、web に出し、識別子を持たない古い版のリモートを扱う、という protocol・保存・GraphStore・GraphEngine・web にまたがる変更が要る
+      ので、この subtask では行わない。docs（agent-graph.md「無効なノードと選び直し」）には、先・監督役の側では同じ番号の別の pane へ送りうることと対処を書いた。
+  11. （g05 点検）承認待ちの 1 秒の継続は、1 秒ごとの見回りでなく期限のタイマーで見る（`TriggerState.holdDeadline` を `GraphEngine` が聞いて一番早い期限に `setTimeout` を張り、
+      `tick` を呼ぶ）。承認待ちに入ってから送り始めるまでが最長 2 秒 → 約 1 秒＋α（実測 1007ms）。
+  12. （g05 点検）sodactl graph の表のセルは制御文字（server の `machineRules` の `CONTROL_RE` と同じ集合）を `\uXXXX` に逃がす。受け渡す文章の `stripControl` は双方向の上書き
+      （U+202A-202E・U+2066-2069）も落とす（LRM・RLM は残す）。`--prompt=<文面>` の形を足した（`graph link add|set` の `--prompt` だけ。ほかのフラグ・コマンドは今までどおり）。
+      手元の端のエージェントの名前は agent 系の `resolveAgentTarget` と同じ順で引き（最後にエージェントの居ない同じ ID の pane）、載せる・結ぶ端では一覧に無いマシンの id を通さない
+      （2 の「一覧に無い 32 桁はそのまま」は `node rm` と `node rekey` の 1 つ目だけに狭めた）。

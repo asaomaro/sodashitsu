@@ -375,10 +375,12 @@ sodactl graph pause; sodactl graph resume                        # 全体（線�
 sodactl graph history "$l" --limit 5
 ```
 
-- **端の指定**（`<from>`・`<to>`・`<pane>`）: pane ID（`p3`）・`agent rename` で付けたエージェントの名前（手元だけ）・`<マシンの名前|id>:<pane ID>`
+- **端の指定**（`<from>`・`<to>`・`<pane>`）: pane ID（`p3`）・`agent rename` で付けたエージェントの名前（手元だけ。引き方は `agent` の `<target>` と同じ順——
+  その ID の pane にエージェントが居ればその pane、次にその名前のエージェント、最後にエージェントの居ない同じ ID の pane）・`<マシンの名前|id>:<pane ID>`
   （`soda machine` で登録した別のマシンの pane。例 `box:p7`。`local:p3` は手元）。マシンの名前は `--machine` と同じく、id の完全一致 → 名前の完全一致が 1 台で引き
   （`machine.list`）、ノードの鍵には id を使う（名前は変えられるため）。同じ名前が 2 台なら `machine_ambiguous`、無ければ `machine_not_found`。
-  登録から外したマシンのノードを外す・選び直すために、一覧に無い 32 桁の id もそのまま受ける。
+  登録から外したマシンのノードを外す（`node rm`）・選び直す前のノード（`node rekey` の 1 つ目）を指すときだけ、一覧に無い 32 桁の id もそのまま受ける
+  （載せる・結ぶ端では `machine_not_found`。打ち間違いで動かない線を作らない）。
 - `link add` は、端の pane がグラフに載っていなければ一緒に載せる（画面の「pane を載せる」と同じ置き方）。載せる・結ぶ pane が手元に無ければ `not_found`
   （別のマシンの pane は確かめない。実行のときに `target_absent`）。
 - 線の設定の項目と既定値は画面と同じ（トリガ: `--on done`・既定の文面・`--output 80`・`--when-busy wait`。承認の代理: `--mode notify`・`--lines 40`。
@@ -391,11 +393,12 @@ sodactl graph history "$l" --limit 5
 - 変更は取り出した rev を添えて送る。その間に画面などが変えていれば（`rev_conflict`）、**取り直して操作を組み立て直し、1 回だけ送り直す**。2 回目も衝突したら
   `rev_conflict` で終了コード 1。
 - 知らない線は `not_found`（終了コード 1）。
+- 表のセルの制御文字（C0・C1・双方向の上書き等）は `\uXXXX` の形に逃がして出す（履歴の文面などで端末の表示を偽装させない）。`--json` はそのまま。
 - `--json` の形: `show` と変更は `{"graph": …}`、`link add` は `{"link": …, "graph": …}`、`history` は `{"runs": […]}`（新しい順）。
 - 表の `status`: `ok`（手元の pane がある）・`closed`（手元の pane が無い）・`stale`（無効）・`-`（別のマシン。ここからは確かめない）。
   `state`: `active`・`paused`（利用者が止めた）・`paused(limit)`（上限で止まった）。
 - 履歴はサーバのメモリだけ（線ごとに直近 50 件。再起動で消える）。
-- `--prompt` の文面が `--` で始まると未知のオプションとして断られる（`pane input` と同じ既知の制約）。
+- `--prompt` の文面が `--` で始まるときは `--prompt=<文面>` の形で渡す（離して書くと `missing value for --prompt` の使い方の誤り。終了コード 2）。
 
 ## エージェントに教える（skill ファイル）と、pane の中から使う
 

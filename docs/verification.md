@@ -996,7 +996,9 @@ pnpm --filter @sodashitsu/web exec vitest run src/components/graph/GraphView.per
 ```
 
 出力の `[graph-perf]` の行が測った値（`toStartMs` は状態の変化から先の画面に文面が現れるまで、`toSentMs` は Enter まで送り終えるまで〔`agent.prompt` は 300ms 後に Enter〕、
-`burst` は 16 の元が同時に完了したとき、`web-render` は画面を開いて描く・全ノードが動いた変更を描き直す時間）。2 秒を超えれば試験が落ちる。共有のマシンでは 1 回だけ走らせる。
+`blocked` は承認待ちになってから承認待ちのトリガ・承認の代理の先に届き始めるまで〔1 秒の継続を含む〕、`burst` は 16 の元が同時に完了したとき、
+`web-render` は画面を開いて描く・全ノードが動いた変更を描き直す時間）。サーバの `toStartMs`・`blocked`・`burst` が 2 秒を超えれば試験が落ちる（`toSentMs` は記録だけ）。
+画面の描画は happy-dom の目安で、10 秒を超えたときだけ落ちる。共有のマシンでは 1 回だけ走らせる。
 
 ### 実物のエージェントで（Linux・WSL2・Windows ネイティブ）
 
@@ -1013,7 +1015,7 @@ pnpm --filter @sodashitsu/web exec vitest run src/components/graph/GraphView.per
    **取り消せない操作を承認させないこと**（確かめるのは無害な操作で）。
 7. impl ⇄ reviewer に往復のトリガを結び上限を 3 にする。3 回で `⏸ 上限` になり、画面の下に知らせが出る。線の再開で回数が 0 に戻る。
    「全体を一時停止」の間は完了させても動かない（履歴に「一時停止中」）。
-8. `soda serve` を再起動（`soda session stop` → 起動）し、配置・線・一時停止の状態が戻り、履歴は空になる。`session.json` を消して起動すると手元のノードが
+8. `soda serve` を再起動（`soda session stop <名前>`〔既定の session は `default`〕か起動した窓で Ctrl+C → 同じ引数で起動）し、配置・線・一時停止の状態が戻り、履歴は空になる。`session.json` を消して起動すると手元のノードが
    `⚠ 無効` になり、「選び直す…」（`r`）で付け替えられる。
 
 ### 実物のブラウザで（Chrome・Edge・モバイル）
