@@ -329,3 +329,17 @@ describe("store/graph", () => {
     expect(g.nodeInfo(`${M}:p8`)).toMatchObject({ exists: false });
   });
 });
+
+describe("store/graph（g03 点検）", () => {
+  it("接続が無い（not_connected）は「繋がっていません」の文言にする（サーバのエラーの文言にしない）", async () => {
+    const g = useGraphStore();
+    const { port } = fakeGraphPort({
+      "graph.get": () => {
+        throw rpcError("not_connected");
+      },
+    });
+    g.bind(port);
+    await g.load();
+    expect(g.loadError).toBe("サーバに繋がっていません（繋ぎ直しを待っています）。");
+  });
+});

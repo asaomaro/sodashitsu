@@ -106,7 +106,7 @@ export const useGraphStore = defineStore("graph", () => {
       applyGraph(g, "fresh");
     } catch (err) {
       if (seq !== loadSeq) return;
-      loadError.value = clientErrorMessage(errorCodeOf(err) ?? "internal");
+      loadError.value = errorText(errorCodeOf(err), err);
     }
   }
 
@@ -165,9 +165,7 @@ export const useGraphStore = defineStore("graph", () => {
       runs.value = r.runs.slice(0, RUNS_KEEP);
       runsLoaded.value = true;
     } catch (err) {
-      useViewStore().toast(
-        `履歴を読めませんでした（${clientErrorMessage(errorCodeOf(err) ?? "internal")}）`,
-      );
+      useViewStore().toast(`履歴を読めませんでした（${errorText(errorCodeOf(err), err)}）`);
     }
   }
 
@@ -386,6 +384,8 @@ export const useGraphStore = defineStore("graph", () => {
 });
 
 function errorText(code: string | null, err: unknown): string {
+  // 接続が無い・切れた（`graphRouting` がそろえる）。サーバのエラーの文言にしない。
+  if (code === "not_connected") return "サーバに繋がっていません（繋ぎ直しを待っています）。";
   if (code === "invalid_params" && err instanceof Error) {
     // サーバの検証（client-core の validate と同じ規則）の文。画面の保存の前にも同じ検証をするので、ここへ来るのは他と競ったときだけ。
     return "内容がほかの変更と合わなくなりました。最新のグラフで確かめてください。";
