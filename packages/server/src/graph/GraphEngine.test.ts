@@ -162,7 +162,7 @@ function setup(links: GraphLink[], over: Partial<Graph> = {}, init?: (port: Fake
   const events: ServerEvent[] = [];
   const timers: (() => void)[] = [];
   /** 承認待ちの 1 秒の期限のタイマー（張られた順。clear されたものは消える）。 */
-  const holds: { fn: () => void; ms: number }[] = [];
+  const holds: { fn: () => void; ms: number; at: number }[] = [];
   const engine = new GraphEngine({
     store,
     local: port,
@@ -173,7 +173,7 @@ function setup(links: GraphLink[], over: Partial<Graph> = {}, init?: (port: Fake
       return { clear: () => timers.splice(timers.indexOf(fn), 1) };
     },
     setTimeout: (fn, ms) => {
-      const h = { fn, ms };
+      const h = { fn, ms, at: now };
       holds.push(h);
       return { clear: () => void (holds.includes(h) && holds.splice(holds.indexOf(h), 1)) };
     },
@@ -188,11 +188,11 @@ function setup(links: GraphLink[], over: Partial<Graph> = {}, init?: (port: Fake
     events,
     timers,
     holds,
-    /** 張られている期限のタイマーの時刻まで時計を進めて呼ぶ（見回りの tick は呼ばない）。 */
+    /** 張られている期限のタイマー（張った時刻＋ms）まで時計を進めて呼ぶ（見回りの tick は呼ばない）。 */
     fireHold: () => {
       const h = holds.shift();
       if (h === undefined) throw new Error("no hold timer");
-      now += h.ms;
+      now = h.at + h.ms;
       h.fn();
     },
     runs,
@@ -443,6 +443,19 @@ describe("GraphEngine — 承認の代理", () => {
     expect(t.store.recordRun).toHaveBeenCalledWith("l1");
   });
 
+  it("文面と履歴の text に、pane の呼び名の制御文字・双方向の上書きが残らない（05 レビュー R1）", async () => {
+    const t = setup([approval("delegate")], {}, (p) => p.names.set("p1", "impl\u202e\u009b31m\nx"));
+    t.port.set("p1", agent("a1", 0, "blocked"));
+    t.advance(BLOCKED_HOLD_MS);
+    await flush();
+    const bad = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/;
+    expect(t.port.prompts[0]![1]).toContain("配下 impl x（p1）");
+    expect(t.port.prompts[0]![1]).not.toMatch(bad);
+    const run = t.runs().find((r) => r.result === "sent")!;
+    expect(run.text).toContain("impl x（p1）");
+    expect(run.text).not.toMatch(bad);
+  });
+
   it("承認待ちの 1 秒は見回りを待たずに期限のタイマーで発火する（g05 点検）", async () => {
     const t = setup([approval("notify")]);
     expect(t.holds).toEqual([]);
@@ -454,6 +467,34 @@ describe("GraphEngine — 承認の代理", () => {
     expect(t.port.prompts).toHaveLength(1);
     expect(t.at() - start).toBe(BLOCKED_HOLD_MS + 1);
     expect(t.holds).toEqual([]); // 発火した回は張り直さない
+  });
+
+  it("2 本の線の期限が違えば、早い方で発火した後に次の期限へ張り直す（05 レビュー R1）", async () => {
+    const t = setup([approval("notify"), { ...approval("notify"), id: "l2", from: B }]);
+    const start = t.at();
+    t.port.set("p1", agent("a1", 0, "blocked"));
+    t.advance(300);
+    t.port.set("p2", agent("b1", 0, "blocked"));
+    expect(t.holds.map((h) => h.at + h.ms)).toEqual([start + BLOCKED_HOLD_MS + 1]);
+    t.fireHold();
+    await flush();
+    expect(t.runs().map((r) => r.linkId)).toEqual(["l1"]);
+    // 監督役（p3）は送った直後で作業中とみなすので l2 は待ちに入る。期限のタイマーは l2 の期限へ張り直している。
+    expect(t.holds.map((h) => h.at + h.ms)).toEqual([start + 300 + BLOCKED_HOLD_MS + 1]);
+  });
+
+  it("一番早い期限の線が先に解けたら、次の線の期限へ張り直す（前の期限では見ない。05 レビュー R1）", async () => {
+    const t = setup([approval("notify"), { ...approval("notify"), id: "l2", from: B }]);
+    const start = t.at();
+    t.port.set("p1", agent("a1", 0, "blocked"));
+    t.advance(300);
+    t.port.set("p2", agent("b1", 0, "blocked"));
+    t.port.set("p1", agent("a1", 0, "working")); // 早い方が解けた
+    expect(t.holds.map((h) => h.at + h.ms)).toEqual([start + 300 + BLOCKED_HOLD_MS + 1]);
+    t.fireHold();
+    await flush();
+    expect(t.runs().map((r) => [r.linkId, r.result])).toEqual([["l2", "sent"]]);
+    expect(t.at()).toBe(start + 300 + BLOCKED_HOLD_MS + 1);
   });
 
   it("期限の前に承認待ちが解けたら、期限のタイマーを外す", () => {
