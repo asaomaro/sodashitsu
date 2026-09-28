@@ -12,11 +12,11 @@ import { agentOf, fakeGraphPort, paneOf, triggerLink } from "./graphTestKit.js";
 
 /**
  * 20260927-agent-graph の 05 T5（AC17）：pane 16 個・線 32 本のグラフ画面の描画の時間（happy-dom での目安）。実物のブラウザの時間ではないので、
- * 閾値は「固まっていない」ことの粗い確かめ（3 秒）にとどめ、測った値は `[graph-perf]` の行で標準出力へ出して記録する。
+ * 閾値は「固まっていない」ことの粗い確かめ（10 秒。並列の試験の下では開くのに 1 秒を超えることがある）にとどめ、測った値は `[graph-perf]` の行で標準出力へ出して記録する。
  */
 
 const PANES = 16;
-const LIMIT_MS = 3000;
+const LIMIT_MS = 10_000;
 
 function bigGraph(rev: number, dx = 0): Graph {
   const key = (i: number) => `local:p${i + 1}` as NodeKey;
