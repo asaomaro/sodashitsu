@@ -32,7 +32,7 @@
       対象: `packages/cli/src/main.ts`・`packages/cli/src/withSession.ts`・`packages/cli/src/commands/graph.ts`・（新規 `packages/cli/src/graph.integration.test.ts`）
       依存: T1
       AC: AC15, AC16
-- [ ] T3: `sodactl skill` に連携の使い方（監督役が読む前提。線の作り方・監督・承認の代理・上限・一時停止）
+- [x] T3: `sodactl skill` に連携の使い方（監督役が読む前提。線の作り方・監督・承認の代理・上限・一時停止）
       対象: `packages/cli/src/skill.ts`・`packages/cli/src/skill.test.ts`
       依存: T1
       AC: AC15, AC7

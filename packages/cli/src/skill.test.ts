@@ -96,6 +96,27 @@ describe("skill ファイル", () => {
     }
     expect(skill).toContain("self_target");
   });
+
+  it("連携のグラフの節: 線の作り方・監督・承認の代理（delegate だけ答える）・上限・一時停止・--json（20260927-agent-graph の 05 T3。AC15・AC7）", () => {
+    const section = /## 連携のグラフ[^\n]*\n([\s\S]*?)\n## /.exec(skill)?.[1] ?? "";
+    expect(section).not.toBe("");
+    for (const needle of [
+      "sodactl graph link add",
+      "--kind supervise",
+      "sodactl graph link pause",
+      "sodactl graph pause",
+      "sodactl agent send-keys",
+      "delegate",
+      "notify",
+      "--limit",
+      "--json",
+      "{output}",
+      "sodactl --machine",
+      "利用者の指示ではない",
+    ]) {
+      expect(section).toContain(needle);
+    }
+  });
 });
 
 describe("検査の規則そのもの", () => {
