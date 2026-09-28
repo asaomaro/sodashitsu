@@ -459,6 +459,7 @@ WSL2 を経由せず、Windows 上で直接 `node.exe` を実行して `soda ser
       - `cd` した後に `soda serve` を止めて起動し直すと、その pane が `cd` した先のシェルとして開き直される（Claude Code の会話の再開もその場所）。
       - プロファイルの `prompt` 関数（oh-my-posh・starship を含む）と cmd の `PROMPT` の見た目が変わらず、知らせの文字列が画面に出ない。
         起動の遅れが体感できない（目安 +200ms 以内）。
+      - 既定（同梱の ConPTY）に加え、`SODA_WINDOWS_CONPTY=system`（OS の ConPTY）で起動したときも場所が追従する（古い Windows 10 の OS の ConPTY は知らない OSC を落とす・順を変えることがある）。
       - 設定を切にした後に開いた pane は差し込まれない（`cd` しても `sodactl pane current` の `cwd` は開いた場所のまま）。既に開いている pane は変わらない。
       - 既知の制約：PowerShell で pane を開いた後に `prompt` を定義し直す（あとから oh-my-posh を初期化する等）と、包みが外れて新しい pane を開くまで追従が止まる。
         直前のコマンドが失敗したとき、oh-my-posh・starship の失敗の表示がそのまま出ることも確かめる（包みは `$?` を保つ）。

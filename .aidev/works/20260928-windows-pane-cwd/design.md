@@ -9,7 +9,7 @@ Windows ネイティブで対話の pane のシェル（PowerShell 5.1・7、cmd
 ## 設計方針
 
 - **D-1 差し込むのは対話の pane のシェルだけ**。新規・分割・再起動後の復元の pane（`SessionService.spawnForPane` を `command` 無しで呼ぶ経路）。独自コマンドの pane・`edit_scrollback` のエディタのように引数を持つ起動には差し込まない（引数の意味が変わるため。decisions D2）。
-- **D-2 判定と組み立ては純粋な関数**（新 `packages/server/src/pty/shellCwdTracking.ts`）。入力: プラットフォーム・シェルのパス・引数・環境・ホスト名・設定。出力: 差し込んだ後の引数・環境。単体試験で Windows の組み立てを確かめる（この環境で Windows の実機は使えない）。
+- **D-2 判定と組み立ては純粋な関数**（新 `packages/server/src/pty/shellCwdTracking.ts`）。入力: プラットフォーム・シェルのパス・引数・環境・設定。出力: 差し込んだ後の引数・環境。単体試験で Windows の組み立てを確かめる（この環境で Windows の実機は使えない）。
 - **D-3 PowerShell**（ファイル名が `powershell.exe`・`pwsh.exe`・拡張子なしを含む。ファイル名・引数とも大文字小文字を区別しない）: 引数に `-Command`・`-c`・`-File`・`-f`・`-EncodedCommand`・`-e`・`-ec`・`-NoExit` のいずれかがあれば差し込まない（利用者が起動の仕方を決めている。ただし今の `--shell` は 1 つの文字列で引数を渡せない〔`packages/server/src/cliArgs.ts:118`〕ので、この判定は将来の引数と独自の組み立てへの備え）。無ければ末尾に `-NoExit -EncodedCommand <base64(UTF-16LE)>` を足す。
   ```powershell
   $__sodaPrompt = $function:prompt
@@ -49,6 +49,7 @@ Windows ネイティブで対話の pane のシェル（PowerShell 5.1・7、cmd
 - `Pane.cwd` の使い道: 新しく開く場所の「引き継ぐ」（`packages/server/src/session/newCwd.ts:123-139`）・workspace の自動の名前の追従（`SessionService.ts:351`・`workspaceLabel.ts`）・`sodactl pane current`（pane の情報を返す）・保存と復元（上）。
 - 独自コマンドの `shell` 種は `/bin/sh -lc <コマンド>` のようにコマンドを実行する起動で、対話のシェルではない（`packages/server/src/commands/commandLaunch.ts:31`）。`edit_scrollback` のエディタも `command` 付きで起動する（`SessionService.ts:692`）。
 - **未確認**: Windows の実機での差し込みの振る舞い（D-3・D-4 の未確認の項）。
+- **未確認**: OS の ConPTY（`SODA_WINDOWS_CONPTY=system`。`packages/server/src/pty/NodePtyBackend.ts:8-17`）が OSC 9;9 をそのまま通すか（古い Windows 10）。既定の同梱の ConPTY でも実機は未検証。
 
 ## インターフェース / データ構造
 
@@ -57,13 +58,14 @@ Windows ネイティブで対話の pane のシェル（PowerShell 5.1・7、cmd
 export interface ShellLaunch { shell: string; args: string[] | string; env: Record<string, string> }
 export function withShellCwdTracking(
   launch: ShellLaunch,
-  ctx: { platform: NodeJS.Platform; hostname: string; enabled: boolean },
+  ctx: { platform: NodeJS.Platform; enabled: boolean },   // OSC 9;9 はホスト名を使わない（D3）
 ): ShellLaunch;   // 差し込まないときは launch をそのまま返す
 export function powerShellPromptScript(): string;  // 上の固定のスクリプト
 ```
 
 - `args` が文字列（`packages/server/src/pty/PtyBackend.ts:10` の型が `string[] | string`）のときは差し込まない（組み立てた行を壊さない）。
-- `CreatePaneOptions` に `trackCwd?: boolean`（true のときだけ `withShellCwdTracking` を通す）。`TerminalManager` は `platform`・`hostname`・`enabled()` を受け取る（`composeServer` が `os.hostname()`・`() => prefs の shellCwdTracking !== false` を渡す）。
+- `CreatePaneOptions` に `trackCwd?: boolean`（true のときだけ `withShellCwdTracking` を通す）。`TerminalManager` は `platform`・`enabled()` を受け取る（`composeServer` が `() => prefs の shellCwdTracking !== false` を渡す）。
+- 既知の制約: 包むのはプロファイルの読み込みの後に 1 回だけ。セッションの途中で `prompt` が差し替えられる（手で `oh-my-posh init pwsh | iex` を打つ・posh-git を読み込む）と、その pane は新しい pane を開くまで追従しない（**未確認**の実機の振る舞いとあわせて docs に書く）。
 
 ## 振る舞いの詳細
 

@@ -22,19 +22,19 @@ design の D-1〜D-6。差し込みの判定と組み立ては純粋な関数（
 
 ## タスク
 
-- [ ] T1: `pty/shellCwdTracking.ts`（純粋な判定と組み立て）と `TerminalManager` の `trackCwd`・`SessionService` の対話の pane だけ `trackCwd: true`・`composeServer` から `hostname` と設定の読み取りを渡す
+- [x] T1: `pty/shellCwdTracking.ts`（純粋な判定と組み立て）と `TerminalManager` の `trackCwd`・`SessionService` の対話の pane だけ `trackCwd: true`・`composeServer` から `hostname` と設定の読み取りを渡す
       対象: `packages/server/src/terminal/TerminalManager.ts:62-75`・`packages/server/src/session/SessionService.ts:1188-1201`・`packages/server/src/composeServer.ts`・（新規 `packages/server/src/pty/shellCwdTracking.ts`）
       依存: T3
       AC: AC1, AC2, AC3, AC4, AC5, AC6, AC8
-- [ ] T2: `Mirror` の OSC 9;9 の受け取り
+- [x] T2: `Mirror` の OSC 9;9 の受け取り
       対象: `packages/server/src/terminal/Mirror.ts:132-135,370-384`
       依存: なし
       AC: AC7, AC1
-- [ ] T3: 共有の設定 `shellCwdTracking`（protocol・client-core の読み込み・web と tui の設定画面の「端末」の節）
+- [x] T3: 共有の設定 `shellCwdTracking`（protocol・client-core の読み込み・web と tui の設定画面の「端末」の節）
       対象: `packages/protocol/src/messages.ts`（SharedPrefs）・`packages/client-core/src/prefs/load.ts`・`packages/web/src/components/SettingsDialog.vue`・`packages/web/src/store/settings.ts`・`packages/tui/src/settings/sections.ts`
       依存: なし
       AC: AC6
-- [ ] T4: docs（`docs/verification.md` の既知の制約・`docs/tui.md` の設定・`docs/custom-commands.md`・`docs/herdr-parity.md` の cwd の注記）
+- [x] T4: docs（`docs/verification.md` の既知の制約・`docs/tui.md` の設定・`docs/custom-commands.md`・`docs/herdr-parity.md` の cwd の注記）
       対象: `docs/verification.md:449-452`・`docs/tui.md`・`docs/custom-commands.md`・`docs/herdr-parity.md`
       依存: T1, T2, T3
       AC: AC9
