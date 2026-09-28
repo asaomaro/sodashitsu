@@ -24,7 +24,7 @@ architecture の `TriggerState`（純粋な状態機械）・`SupervisorNotifier
 
 ## タスク
 
-- [ ] T1: `graph/TriggerState.ts`（線ごとの状態機械。完了の鍵 `(instanceId, completionSeq)`・承認待ち 1 秒・whenBusy wait/skip・待ちの置き換え・30 分・一時停止・上限・先の不在/blocked）
+- [x] T1: `graph/TriggerState.ts`（線ごとの状態機械。完了の鍵 `(instanceId, completionSeq)`・承認待ち 1 秒・whenBusy wait/skip・待ちの置き換え・30 分・一時停止・上限・先の不在/blocked）
       対象: （新規 `packages/server/src/graph/TriggerState.ts`）・`packages/client-core/src/graph/defaults.ts`（既定値）
       依存: なし
       AC: AC4, AC5, AC11, AC12

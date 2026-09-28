@@ -85,6 +85,10 @@ export interface Graph {
 
 export type LinkRunResult = "sent" | "waiting" | "skipped" | "failed";
 export type LinkRunReason =
+  /** 先が作業中で、線の設定が「見送る」（whenBusy: skip）。 */
+  | "busy"
+  /** 承認の代理で、送る前に元の承認待ちが解けていた。 */
+  | "resolved"
   | "busy_timeout"
   | "target_absent"
   | "blocked"
