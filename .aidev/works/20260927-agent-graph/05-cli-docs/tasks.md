@@ -40,7 +40,7 @@
       対象: `docs/sodactl.md`・`docs/tui.md`・`docs/machines.md`・`docs/verification.md`・`docs/herdr-parity.md`・`AGENTS.md`・（新規 `docs/agent-graph.md`）
       依存: T2, T3
       AC: AC15, AC10
-- [ ] T5: 性能の測定（16 ノード・32 線。状態の変化から送信までの時間をサーバの試験で測り 2 秒以内を確かめる・web の描画の時間の記録）と結果の記録
+- [x] T5: 性能の測定（16 ノード・32 線。状態の変化から送信までの時間をサーバの試験で測り 2 秒以内を確かめる・web の描画の時間の記録）と結果の記録
       対象: `packages/server/src/graph/GraphEngine.ts`・（新規 `packages/server/src/graph/perf.integration.test.ts`・`packages/web/src/components/graph/GraphView.perf.test.ts`）
       依存: なし
       AC: AC17
