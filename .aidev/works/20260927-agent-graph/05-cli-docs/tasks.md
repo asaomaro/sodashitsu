@@ -28,7 +28,7 @@
       対象: `packages/cli/src/cliArgs.ts`・`packages/cli/src/output.ts`・（新規 `packages/cli/src/commands/graph.ts`）・`packages/client-core/src/graph/ops.ts`
       依存: なし
       AC: AC15
-- [ ] T2: `sodactl graph` の実行（`withSession` で `graph.*` を呼ぶ・`rev_conflict` の送り直し・終了コード）と実物のサーバの結合試験
+- [x] T2: `sodactl graph` の実行（`withSession` で `graph.*` を呼ぶ・`rev_conflict` の送り直し・終了コード）と実物のサーバの結合試験
       対象: `packages/cli/src/main.ts`・`packages/cli/src/withSession.ts`・`packages/cli/src/commands/graph.ts`・（新規 `packages/cli/src/graph.integration.test.ts`）
       依存: T1
       AC: AC15, AC16
