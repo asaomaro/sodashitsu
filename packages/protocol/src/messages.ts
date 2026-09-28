@@ -507,6 +507,11 @@ export interface SharedPrefs {
   scrollback?: "auto" | number;
   newCwdPolicy?: NewCwd["policy"];
   newCwdPath?: string;
+  /**
+   * Windows で pane のシェル（PowerShell・cmd）にプロンプトのたびに場所を知らせる設定を差し込むか（20260928-windows-pane-cwd の D-6）。
+   * 既定は入（boolean でなければ入）。サーバが pane を開くたびに読む（次に開く pane から効く）。
+   */
+  shellCwdTracking?: boolean;
   notify?: { toast?: boolean; desktop?: boolean; sound?: boolean };
   notifyHintPending?: boolean;
   notifyHintDone?: boolean;

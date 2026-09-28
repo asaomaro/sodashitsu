@@ -74,6 +74,14 @@ export function loadNewCwdPolicy(raw: unknown): NewCwdPolicy {
   return NEW_CWD_POLICIES.includes(raw as NewCwdPolicy) ? (raw as NewCwdPolicy) : "follow";
 }
 
+/**
+ * Windows で pane のシェルに場所の知らせを差し込むか（`shellCwdTracking`。20260928-windows-pane-cwd の D-6）。**boolean でなければ既定の「入」**
+ * （サーバも同じ規則で読む——`false` のときだけ差し込まない）。
+ */
+export function loadShellCwdTracking(raw: unknown): boolean {
+  return typeof raw === "boolean" ? raw : true;
+}
+
 /** 保存された「指定した場所」を読む。文字列でなければ空（検証はサーバ。空なら使えない場所として知らされる）。 */
 export function loadNewCwdPath(raw: unknown): string {
   return typeof raw === "string" ? raw : "";

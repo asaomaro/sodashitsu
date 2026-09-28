@@ -21,6 +21,7 @@ import {
   loadPaneFrameThickness,
   loadPaneGaps,
   loadPaneOuterBorders,
+  loadShellCwdTracking,
   loadStatusSymbols,
   useSettingsStore,
 } from "../store/settings.js";
@@ -1328,6 +1329,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.settings.scrollback = loadScrollbackPref(raw["scrollback"]);
     this.settings.newCwdPolicy = loadNewCwdPolicy(raw["newCwdPolicy"]);
     this.settings.newCwdPath = loadNewCwdPath(raw["newCwdPath"]);
+    this.settings.shellCwdTracking = loadShellCwdTracking(raw["shellCwdTracking"]); // 20260928-windows-pane-cwd
     const themePrefs = loadThemePrefs(raw);
     this.settings.theme = themePrefs.theme;
     this.settings.themeAuto = themePrefs.auto;
