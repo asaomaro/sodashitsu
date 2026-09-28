@@ -37,3 +37,17 @@
 - [should][conv:-] packages/tui/src/app/TuiApp.ts:757-760 tmux の中で OSC 52 を包まず、黙って写せない / 対応: 修正済（7dbb323。負の確認 8 本）
 - [nit][conv:-] packages/tui/src/image/kittyOutput.ts:53-58 オーバーレイを開くたびに全画像のデータを消し、次の描画で送り直す / 対応: 修正済（7dbb323。負の確認 8 本）
 - [nit][conv:-] packages/tui/src/render/Screen.ts:147 chrome の文字列に C1 が残り、pane のタイトル経由で外側の端末へ制御を送りうる / 対応: 修正済（7dbb323。負の確認 8 本）
+- [should][conv:-] packages/tui/src/input/mouse.ts:226 枠の無い・隙間の無い pane の中身の列を境界として掴み、pane へ届かない / 対応: 修正済（f32e3f6。負の確認 7 件）
+- [should][conv:-] packages/tui/src/app/TuiApp.ts:870-882 はじめの案内に既存の利用者・自動の起動の除外が無く、bench の打鍵が案内に吸われる / 対応: 修正済（f32e3f6。負の確認 7 件）
+- [should][conv:-] docs/tui-parity.md:43,52,54,59,72,93 T7 の後も一覧が非対応のまま / 対応: 修正済（9954ec3）
+- [should][conv:-] NOTICE:22-37 windowTitle.ts（herdr から写した）が NOTICE に無い / 対応: 修正済（f32e3f6。負の確認 7 件）
+- [nit][conv:-] packages/tui/src/app/windowTitle.ts:3,86-100 写した元の title.rs を見出しに書いていない / 対応: 修正済（f32e3f6。負の確認 7 件）
+- [nit][conv:-] packages/tui/src/app/TuiApp.ts:97-101 export と JSDoc の位置がずれた / 対応: 修正済（f32e3f6。負の確認 7 件）
+- [nit][conv:-] packages/tui/src/app/TuiApp.ts:222-228 取り残されたコメント・案内の後に「エージェント連携」の節を選ばない / 対応: 修正済（f32e3f6。負の確認 7 件）
+
+## ラウンド 2（2026-09-28）
+- [should][conv:-] docs/tui.md:21-22 はじめの案内を「Esc で閉じる」と書くが、コードは herdr と同じく閉じない / 対応: 修正済（主エージェントが docs を直した）
+- [nit][conv:-] docs/tui-parity.md:59 案内を出さない 4 つの条件と SODA_NO_ONBOARDING が docs と decisions に無い / 対応: 修正済（docs と decisions D19）
+
+## ラウンド 3（2026-09-28）
+- 指摘なし（ラウンド 2 の 2 件は docs の食い違いで、主エージェントが 8e665fd で直し decisions D19 に残した。コードは f32e3f6 のまま）

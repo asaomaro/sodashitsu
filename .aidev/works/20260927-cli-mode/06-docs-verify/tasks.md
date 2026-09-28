@@ -27,23 +27,23 @@
 
 ## タスク
 
-- [ ] T1: `docs/tui.md`（使い方と注意）と help・`AGENTS.md` の案内
+- [x] T1: `docs/tui.md`（使い方と注意）と help・`AGENTS.md` の案内
       対象: `docs/`（新規 `tui.md`）・`AGENTS.md`・`packages/server/src/cliArgs.ts`（USAGE）・`packages/server/src/main.ts`
       依存: なし
       AC: AC4, AC19
-- [ ] T2: `docs/tui-parity.md`（AC15 の一覧）と `docs/herdr-parity.md` からの参照
+- [x] T2: `docs/tui-parity.md`（AC15 の一覧）と `docs/herdr-parity.md` からの参照
       対象: `.aidev/works/20260927-cli-mode/research-inventory.md`・`docs/herdr-parity.md`
       依存: なし
       AC: AC15
-- [ ] T3: `docs/migrate-from-wtm.md` と `docs/verification.md`（端末版の確かめ方）
+- [x] T3: `docs/migrate-from-wtm.md` と `docs/verification.md`（端末版の確かめ方）
       対象: `docs/migrate-from-wtm.md`・`docs/verification.md`
       依存: なし
       AC: AC16, AC19
-- [ ] T4: 性能の測定のスクリプト（`packages/tui/src/bench/`）
+- [x] T4: 性能の測定のスクリプト（`packages/tui/src/bench/`）
       対象: （新規 `packages/tui/src/bench/`）・`packages/tui/src/app/TuiApp.ts`
       依存: なし
       AC: AC17
-- [ ] T5: 疑似端末で `soda` を動かす確かめのスクリプト（親の統合 test 用）と `.aidev/config.yml` の smoke への追加
+- [x] T5: 疑似端末で `soda` を動かす確かめのスクリプト（親の統合 test 用）と `.aidev/config.yml` の smoke への追加
       対象: `.aidev/config.yml`（smokeCommands）・（新規 `scripts/` か `packages/tui/src/testing/`）
       依存: なし
       AC: AC1, AC3, AC4, AC11, AC12

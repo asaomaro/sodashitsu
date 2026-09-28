@@ -6,6 +6,21 @@
 - `npx eslint packages --ext .ts` — exit 1（18 errors。**すべて今回触っていない packages/cli・packages/server の既存のファイル**〔ansiStrip.ts・attach.integration.test.ts・sessionStream*.ts・smoke.ts・agentInput.ts・MachineLink*.ts・MachineManager.ts・AdoptedPtyProcess.test.ts・KittyGraphics*.ts〕。packages/tui・client-core・web・protocol は 0 件）
 - `node scripts/tui-pty-verify.mjs` — exit 0
 
+## ラウンド 2（review の差し戻し・T7 の追加の後。f32e3f6 を取り出した作業ツリー）
+- `pnpm build`・`pnpm typecheck` — exit 0
+- `pnpm test` — 323 files / 5793 passed / 0 failed / 0 skipped
+- `npx eslint packages/tui packages/client-core packages/web/src packages/protocol` — exit 0
+- `node scripts/tui-pty-verify.mjs` — exit 0（新しい状態ディレクトリではじめの案内が出て Enter で閉じる流れを含む）
+- `node packages/tui/dist/bench/latency.js` — exit 0
+
+```
+(a) 1 pane      打鍵→フレーム {"n":30,"p50":6.6,"p95":8.7,"max":9.5} ms / 素の往復 {"n":30,"p50":3,"p95":4,"max":5.6} ms
+(d) 大量出力の隣 打鍵→フレーム {"n":30,"p50":6.5,"p95":7.6,"max":7.9} ms（隣の pane: 3.1 MB を 1789 ms）
+(b) 16 pane     打鍵→フレーム {"n":30,"p50":6.2,"p95":37.9,"max":73.7} ms / 大きさの変更→全体の描き直し 9.9 ms（pane 16 個）
+(c) エージェント 起動→サイドバーに出る 440 ms / 止める→消える 198 ms（目安 2000 ms 以内）
+端末版が足した遅延（p95 の差の目安）: 4.7 ms（目安 50 ms 以内）
+```
+
 ## 受け入れ基準ごとの判定（この subtask の分）
 - AC11: pass（設定画面・共有の設定・別のマシンを見ている間も手元とだけ同期）
 - AC13: pass（通知の経路・トースト・OSC 9/99/777・tmux の包み・prefix+o・知らせの一覧。外側の端末での実際の表示は親の統合 test）
@@ -30,7 +45,6 @@ $ npx vitest run packages/server/src/composeServer.integration.test.ts
 ### 負の確認（点検の指摘の修正。直した行を戻して落ちることの生の出力）
 
 ```
-
 ===== 05T1-D10-localOnly (2026-09-28T07:16:12)
 mutation: src/settings/SettingsWriter.ts
   - 'if (errorCodeOf(err) === "invalid_params") {'
@@ -1804,6 +1818,512 @@ restored: sha256 before=27a98594a4a51d4c after=27a98594a4a51d4c IDENTICAL
 ===== 05T6-disconnect-starting・05T6-late-reply-after-finish の扱い（手で書いた注記）
 - 2 つの守り（切断で abandoned を立てる・返事の後に finished を見る）が重なっていて、1 つずつ外しても試験は通った（どちらかで足りる）。
   finished を見る方だけを残し（× で止めた後・切断の後のどちらも覆う）、もう一方をコードから外した。残した方を外す変異は失敗する（上の記録）。
+
+===== 05rv-navigate-remote-ids (2026-09-28T10:06:22)
+mutation: src/actions/TuiDispatcher.ts
+  - '        const ids = this.navigateIds();'
+  + '        const ids = this.visibleWorkspaceIds();'
+command: (cd packages/tui && npx vitest run src/app/review05.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/review05.test.ts > 05 review > navigate モード：別のマシンの workspace もサイドバーの並びで選べ、Enter でそのマシンへ切り替える
+AssertionError: expected 'w1' to be 'machine:m1:rw1' // Object.is equality
+
+Expected: "machine:m1:rw1"
+Received: "w1"
+
+ ❯ src/app/review05.test.ts:42:40
+     40|     await vi.waitFor(() => expect(h.app.keys.mode).toBe("navigate"));
+     41|     for (let i = 0; i < 2; i++) h.io.type("\x1b[B"); // （今の w1 から）w2 →…
+     42|     expect(h.app.ui.navigateSelection).toBe("machine:m1:rw1");
+       |                                        ^
+     43|     h.app.renderNow();
+     44|     expect(await h.screen()).toContain("remote-ws");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=23eca8aeb8f37737 after=23eca8aeb8f37737 IDENTICAL
+
+===== 05rv-navigate-activate-remote (2026-09-28T10:06:43)
+mutation: src/actions/TuiDispatcher.ts
+  - '        if (remote) this.openRemoteWorkspace(remote.machineId, remote.workspaceId);\n        else if'
+  + '        if'
+command: (cd packages/tui && npx vitest run src/app/review05.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/review05.test.ts > 05 review > navigate モード：別のマシンの workspace もサイドバーの並びで選べ、Enter でそのマシンへ切り替える
+AssertionError: expected 'local' to be 'm1' // Object.is equality
+
+Expected: "m1"
+Received: "local"
+
+ ❯ src/app/review05.test.ts:46:62
+     44|     expect(await h.screen()).toContain("remote-ws");
+     45|     h.io.type("\r");
+     46|     await vi.waitFor(() => expect(h.app.machines.selectedId).toBe("m1"…
+       |                                                              ^
+     47|   });
+     48|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=23eca8aeb8f37737 after=23eca8aeb8f37737 IDENTICAL
+
+===== 05rv-goto-remote-rows (2026-09-28T10:06:59)
+mutation: src/modes/GotoDialog.ts
+  - '  if (machines?.hasMachines) {'
+  + '  if (false) {'
+command: (cd packages/tui && npx vitest run src/app/review05.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/review05.test.ts > 05 review > goto：別のマシンの workspace の行（@マシン名）を選ぶとそのマシンへ切り替える
+AssertionError: expected ' Spaces       開いた順 + │ 1:t1   +      …' to contain '@box'
+
+- Expected
++ Received
+
+- @box
++  Spaces       開いた順 + │ 1:t1   +                                                   session: work
++  ▾┌─ goto ───────────────────────────────────────────────────────────────────────────────────────┐─┐
++   │ / / で絞り込み・b/w/i/d で状態・a で解除                                                     │ │
++   │                                                                                              │ │
++  ▾│   w1                                                                                         │ │
++   │     t1  2 pane                                                                               │ │
++   │       pane 1  /                                                                              │ │
++   │       pane 2  /                                                                              │ │
++   │   w2                                                                                         │ │
++   │     t2  1 pane                                                                               │ │
++   │       pane 1  /                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   │                                                                                              │ │
++   └──────────────────────────────────────────────────────────────────────────────────────────────┘ │
++                        « │└───────────────────────────────────⋯└───────────────────────────────────⋯
+
+ ❯ src/app/review05.test.ts:54:30
+     52|     await vi.waitFor(() => expect(h.app.ui.dialogContext).toEqual({ ki…
+     53|     h.app.renderNow();
+     54|     expect(await h.screen()).toContain("@box");
+       |                              ^
+     55|     h.io.type("G\r");
+     56|     await vi.waitFor(() => expect(h.app.machines.selectedId).toBe("m1"…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=1a63688b6bc33d89 after=1a63688b6bc33d89 IDENTICAL
+
+===== 05rv-goto-accept-remote (2026-09-28T10:07:05)
+mutation: src/modes/GotoDialog.ts
+  - '    if (t.kind === "remote") actions.openRemoteWorkspace(t.machineId, t.workspaceId);\n    else if'
+  + '    if'
+command: (cd packages/tui && npx vitest run src/app/review05.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/review05.test.ts > 05 review > goto：別のマシンの workspace の行（@マシン名）を選ぶとそのマシンへ切り替える
+AssertionError: expected 'local' to be 'm1' // Object.is equality
+
+Expected: "m1"
+Received: "local"
+
+ ❯ src/app/review05.test.ts:56:62
+     54|     expect(await h.screen()).toContain("@box");
+     55|     h.io.type("G\r");
+     56|     await vi.waitFor(() => expect(h.app.machines.selectedId).toBe("m1"…
+       |                                                              ^
+     57|   });
+     58|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=1a63688b6bc33d89 after=1a63688b6bc33d89 IDENTICAL
+
+===== 05rv-tmux-wrap (2026-09-28T10:07:08)
+mutation: src/app/TuiApp.ts
+  - '      this.io.write(wrapTmux(seq));\n'
+  + ''
+command: (cd packages/tui && npx vitest run src/app/review05.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/review05.test.ts > 05 review > tmux の中の OSC 52 は素通しの包みでも出し、設定の案内を 1 回だけ出す
+AssertionError: expected '\u001b[?1049h\u001b[H\u001b[2J\u001b[…' to contain '\u001bPtmux;\u001b\u001b]52;c;aGk=\u0…'
+
+Expected: "Ptmux;]52;c;aGk=\"
+Received: "[?1049h[H[2J[?25l[?2004h[?1004h=[?1000h[?1002h[?1006h[?2031h]11;?\[?2026h[?25l[2J[1;1H Spaces       開[1;17Hい[1;19Hた[1;21H順[1;23H + │[1;27H                                                                  接[1;95H続[1;97H中[1;99H…[1;100H [2;1H                         │[2;27H                                                                          [3;1H                         │[3;27H                                                                          [4;1H                         │[4;27H                                                                          [5;1H                         │[5;27H                                                                          [6;1H                         │[6;27H                                                                          [7;1H                         │[7;27H                                                                          [8;1H                         │[8;27H                                                                          [9;1H                         │[9;27H                                                                          [10;1H                         │[10;27H                                                                          [11;1H                         │[11;27H                                                                          [12;1H                         │[12;27H                                                                          [13;1H                         │[13;27H                                                                          [14;1H                         │[14;27H                                                                          [15;1H                         │[15;27H                                                                          [16;1H                         │[16;27H                                 接[16;62H続[16;64H中[16;66H…[16;67H                                  [17;1H                         │[17;27H                                                                          [18;1H                         │[18;27H                                                                          [19;1H                         │[19;27H                                                                          [20;1H                         │[20;27H                                                                          [21;1H                         │[21;27H                                                                          [22;1H                         │[22;27H                                                                          [23;1H                         │[23;27H                                                                          [24;1H                         │[24;27H                                                                          [25;1H                         │[25;27H                                                                          [26;1H                         │[26;27H                                                                          [27;1H                         │[27;27H                                                                          [28;1H                         │[28;27H                                                                          [29;1H                         │[29;27H                                                                          [30;1H                       «[30;25H │[30;27H                                                                          [1;1H[?2026l[1;1H]52;c;aGk=]52;c;YWdhaW4="
+
+ ❯ src/app/review05.test.ts:68:27
+     66|     const b64 = Buffer.from("hi").toString("base64");
+     67|     expect(h.io.output()).toContain(`\x1b]52;c;${b64}\x07`);
+     68|     expect(h.io.output()).toContain(`\x1bPtmux;\x1b\x1b]52;c;${b64}\x0…
+       |                           ^
+     69|     expect(h.app.ui.toasts.filter((t) => t.message.includes("set-clipb…
+     70|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=f3d893ceb8f48aef after=f3d893ceb8f48aef IDENTICAL
+
+===== 05rv-tmux-hint-once (2026-09-28T10:07:11)
+mutation: src/app/TuiApp.ts
+  - '      if (!this.tmuxClipboardHinted) {'
+  + '      if (true) {'
+command: (cd packages/tui && npx vitest run src/app/review05.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/review05.test.ts > 05 review > tmux の中の OSC 52 は素通しの包みでも出し、設定の案内を 1 回だけ出す
+AssertionError: expected [ { id: 1, …(1) }, { id: 2, …(1) } ] to have a length of 1 but got 2
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ src/app/review05.test.ts:69:80
+     67|     expect(h.io.output()).toContain(`\x1b]52;c;${b64}\x07`);
+     68|     expect(h.io.output()).toContain(`\x1bPtmux;\x1b\x1b]52;c;${b64}\x0…
+     69|     expect(h.app.ui.toasts.filter((t) => t.message.includes("set-clipb…
+       |                                                                                ^
+     70|   });
+     71|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=f3d893ceb8f48aef after=f3d893ceb8f48aef IDENTICAL
+
+===== 05rv-kitty-keep (2026-09-28T10:07:14)
+mutation: src/image/kittyOutput.ts
+  - '      if (wanted.has(key) || keep.has(key)) continue;'
+  + '      if (wanted.has(key)) continue;'
+command: (cd packages/tui && npx vitest run src/app/review05.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/review05.test.ts > 05 review > Kitty：置かないとき（ダイアログの間）も、pane が持つ画像の中身は消さない（送り直さない）
+AssertionError: expected '\u001b7\u001b_Ga=d,d=a,q=2\u001b\\u00…' not to contain 'd=I'
+
+Expected: "d=I"
+Received: "7_Ga=d,d=a,q=2\_Ga=d,d=I,i=1,q=2\8"
+
+ ❯ src/app/review05.test.ts:78:24
+     76|     const hidden = k.sync([], new Set(["h1"]));
+     77|     expect(hidden).toContain("a=d,d=a");
+     78|     expect(hidden).not.toContain("d=I");
+       |                        ^
+     79|     expect(k.sync([a], new Set(["h1"]))).not.toContain("a=t");
+     80|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=6b9ab9c59fdadd45 after=6b9ab9c59fdadd45 IDENTICAL
+
+===== 05rv-grid-c1 (2026-09-28T10:07:18)
+mutation: src/render/Screen.ts
+  - '      if (cp < 0x20 || (cp >= 0x7f && cp <= 0x9f)) continue;\n'
+  + ''
+command: (cd packages/tui && npx vitest run src/app/review05.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/review05.test.ts > 05 review > chrome の文字列から C1（U+0080〜009F）と DEL を落とす
+AssertionError: expected 'a\u009b31mb\u007fc\u0085d' to be 'a31mbcd' // Object.is equality
+
+Expected: "a31mbcd"
+Received: "a31mbc
+d"
+
+ ❯ src/app/review05.test.ts:85:36
+     83|     const g = new Grid(20, 1);
+     84|     g.text(0, 0, "a\u009b31mb\u007fc\u0085d", 0, 0);
+     85|     expect(g.rowText(0).trimEnd()).toBe("a31mbcd");
+       |                                    ^
+     86|   });
+     87| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=bd44ae1201fa88f2 after=bd44ae1201fa88f2 IDENTICAL
+=== 05 T7 check fix (2026-09-28) ===
+
+===== t7c-divider-content (2026-09-28T10:49:45)
+mutation: src/input/mouse.ts
+  - '    if (layout.panes.some((b) => this.inContent(b, x, y))) return undefined;\n'
+  + ''
+command: (cd packages/tui && npx vitest run src/app/t7check.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/t7check.test.ts > 05 T7 の点検 > 枠を描かない（off）：p2 の最初の中身の桁は境界にせず、境目の線（p1 の右）は掴める
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/app/t7check.test.ts:43:22
+     41|     expect(a!.sides.right).toBe(true);
+     42|     h.io.type(down(63, 10) + drag(55, 10) + up(55, 10));
+     43|     expect(ratios()).toBe(0);
+       |                      ^
+     44|     expect(h.app.model.focusedPaneId).toBe("p2");
+     45|     h.io.type(down(62, 10) + drag(55, 10) + up(55, 10));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/app/t7check.test.ts > 05 T7 の点検 > 隙間なし：p1 の右端の中身の桁は境界にせず、p2 の左の罫線は掴める
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/app/t7check.test.ts:54:22
+     52|     expect(a!.content.x + a!.content.w - 1).toBe(62);
+     53|     h.io.type(down(62, 10) + drag(55, 10) + up(55, 10));
+     54|     expect(ratios()).toBe(0);
+       |                      ^
+     55|     h.io.type(down(63, 10) + drag(55, 10) + up(55, 10));
+     56|     expect(ratios()).toBeGreaterThan(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+restored: sha256 before=0cbc6a62d8e1348f after=0cbc6a62d8e1348f IDENTICAL
+
+===== t7c-existing-user (2026-09-28T10:49:55)
+mutation: src/app/TuiApp.ts
+  - '      (flag !== true && this.prefs.rev > 0) ||\n'
+  + ''
+command: (cd packages/tui && npx vitest run src/app/t7check.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/t7check.test.ts > 05 T7 の点検 > はじめの案内：設定を前から使っていた既存の利用者（rev が 1 以上で onboarding の項目が無い）には出さない
+AssertionError: expected { kind: 'onboarding' } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "kind": "onboarding",
+}
+
+ ❯ src/app/t7check.test.ts:63:36
+     61|     await vi.waitFor(() => expect(h.app.prefs.rev).toBe(4));
+     62|     h.app.ui.toast("x");
+     63|     expect(h.app.ui.dialogContext).toBeNull();
+       |                                    ^
+     64|   });
+     65|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=429d70c1653b4e29 after=429d70c1653b4e29 IDENTICAL
+
+===== t7c-flag-true (2026-09-28T10:50:03)
+mutation: src/app/TuiApp.ts
+  - '(flag !== true && this.prefs.rev > 0)'
+  + 'this.prefs.rev > 0'
+command: (cd packages/tui && npx vitest run src/app/t7check.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/t7check.test.ts > 05 T7 の点検 > はじめの案内：onboarding: true なら rev が 1 以上でも出す
+AssertionError: expected null to deeply equal { kind: 'onboarding' }
+
+- Expected:
+{
+  "kind": "onboarding",
+}
+
++ Received:
+null
+
+ ❯ src/app/t7check.test.ts:68:59
+     66|   it("はじめの案内：onboarding: true なら rev が 1 以上でも出す", async () => {
+     67|     const h = await app({ respond: { "prefs.get": { prefs: { onboardin…
+     68|     await vi.waitFor(() => expect(h.app.ui.dialogContext).toEqual({ ki…
+       |                                                           ^
+     69|   });
+     70|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=429d70c1653b4e29 after=429d70c1653b4e29 IDENTICAL
+
+===== t7c-env (2026-09-28T10:50:10)
+mutation: src/app/TuiApp.ts
+  - 'io.env["SODA_NO_ONBOARDING"] !== "1" && '
+  + ''
+command: (cd packages/tui && npx vitest run src/app/t7check.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/t7check.test.ts > 05 T7 の点検 > はじめの案内：SODA_NO_ONBOARDING=1 の起動には出さない
+AssertionError: expected { kind: 'onboarding' } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "kind": "onboarding",
+}
+
+ ❯ src/app/t7check.test.ts:78:36
+     76|     await vi.waitFor(() => expect(h.app.prefs.rev).toBe(0));
+     77|     h.app.ui.toast("x");
+     78|     expect(h.app.ui.dialogContext).toBeNull();
+       |                                    ^
+     79|   });
+     80|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=429d70c1653b4e29 after=429d70c1653b4e29 IDENTICAL
+
+===== t7c-tuistate (2026-09-28T10:50:16)
+mutation: src/app/TuiApp.ts
+  - ' && !tuiStateExists(target.stateDir)'
+  + ''
+command: (cd packages/tui && npx vitest run src/app/t7check.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/t7check.test.ts > 05 T7 の点検 > はじめの案内：この状態ディレクトリで端末版を前にも使った（tui-state.json がある）なら出さない
+AssertionError: expected { kind: 'onboarding' } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "kind": "onboarding",
+}
+
+ ❯ src/app/t7check.test.ts:88:38
+     86|       await vi.waitFor(() => expect(h.app.prefs.rev).toBe(0));
+     87|       h.app.ui.toast("x");
+     88|       expect(h.app.ui.dialogContext).toBeNull();
+       |                                      ^
+     89|     } finally {
+     90|       await rm(dir, { recursive: true, force: true });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=429d70c1653b4e29 after=429d70c1653b4e29 IDENTICAL
+
+===== t7c-section (2026-09-28T10:50:23)
+mutation: src/app/TuiApp.ts
+  - '{ kind: "settings", section: "agents" }'
+  + '{ kind: "settings" }'
+command: (cd packages/tui && npx vitest run src/app/t7check.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/t7check.test.ts > 05 T7 の点検 > はじめの案内の後は設定画面の「エージェント連携」の節を選んで開く（herdr と同じ）
+AssertionError: expected { kind: 'settings' } to deeply equal { kind: 'settings', section: 'agents' }
+
+- Expected
++ Received
+
+  {
+    "kind": "settings",
+-   "section": "agents",
+  }
+
+ ❯ src/app/t7check.test.ts:107:38
+    105|     h.io.type("\r");
+    106|     await vi.waitFor(() =>
+    107|       expect(h.app.ui.dialogContext).toEqual({ kind: "settings", secti…
+       |                                      ^
+    108|     );
+    109|     await vi.waitFor(async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=429d70c1653b4e29 after=429d70c1653b4e29 IDENTICAL
+
+===== t7c-initial-section (2026-09-28T10:50:32)
+mutation: src/modes/SettingsDialog.ts
+  - 'this.sections.findIndex((s) => s.id === initialSection)'
+  + '-1'
+command: (cd packages/tui && npx vitest run src/app/t7check.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/t7check.test.ts > 05 T7 の点検 > はじめの案内の後は設定画面の「エージェント連携」の節を選んで開く（herdr と同じ）
+AssertionError: expected ' Spaces       開いた順 + │ 1:t1   +      …' to contain 'Qwen Code'
+
+- Expected
++ Received
+
+- Qwen Code
++  Spaces       開いた順 + │ 1:t1   +                                                   session: work
++  ┌─ 設定 ─────────────────────────────────────────────────────────────────────────────────────────┐┐
++  │  通知             │  画面の中の知らせ（トースト）                                          入  ││
++  │  テーマ           │  デスクトップの通知                                                    切  ││
++  │  表示             │  音                                                                    切  ││
++  │  端末             │                                                                            ││
++  │  エージェント連携 │                                                                            ││
++  │  キー             │                                                                            ││
++  │  端末版           │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │                   │                                                                            ││
++  │ ────────────────────────────────────────────────────────────────────────────────────────────── ││
++  │ ↑↓ で節・Enter で項目へ・Esc で閉じる                                                          ││
++  │                                                                                                ││
++  │                                                                                                ││
++  └────────────────────────────────────────────────────────────────────────────────────────────────┘│
++                        « │└───────────────────────────────────⋯└───────────────────────────────────⋯
+
+ ❯ src/app/t7check.test.ts:111:32
+    109|     await vi.waitFor(async () => {
+    110|       h.app.renderNow();
+    111|       expect(await h.screen()).toContain("Qwen Code");
+       |                                ^
+    112|     });
+    113|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=484f40d8446aac1d after=484f40d8446aac1d IDENTICAL
 ```
 
 ## 起動確認（smoke）

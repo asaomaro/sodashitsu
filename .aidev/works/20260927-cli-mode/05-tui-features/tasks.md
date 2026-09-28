@@ -50,7 +50,7 @@
       対象: `packages/client-core/src/keys/commandKeys.ts`・`packages/web/src/term/CommandPopupSession.ts`・`packages/tui/src/model/SessionModel.ts:162`
       依存: なし
       AC: AC5, AC8
-- [ ] T7: herdr の端末画面にあって端末版で「非対応」にしていたものを作る（06 の一覧の清書で見つかった。requirements は herdr の端末画面の機能を全部対応にする）: 外側の端末のタイトル（H14・`window_title`。終わるときに戻す）、tab バーの位置・右端の表示・1 個なら隠す（H22・共有の設定を読む）、pane の枠の描画モードとエージェント名の表示（H23）、onboarding（H25b）、pane の BEL を外側の端末へ（H29d・前面のとき）、閉じる確認を切る・名前を先に聞く設定（H50・`tui` 節）
+- [x] T7: herdr の端末画面にあって端末版で「非対応」にしていたものを作る（06 の一覧の清書で見つかった。requirements は herdr の端末画面の機能を全部対応にする）: 外側の端末のタイトル（H14・`window_title`。終わるときに戻す）、tab バーの位置・右端の表示・1 個なら隠す（H22・共有の設定を読む）、pane の枠の描画モードとエージェント名の表示（H23）、onboarding（H25b）、pane の BEL を外側の端末へ（H29d・前面のとき）、閉じる確認を切る・名前を先に聞く設定（H50・`tui` 節）
       対象: `docs/tui-parity.md:43,52,54,59,72,93`・`packages/tui/src/render/chrome/tabBar.ts`・`packages/tui/src/render/chrome/frame.ts`・`packages/tui/src/app/terminalModes.ts`・`scratchpad/herdr/src`（参考）
       依存: なし
       AC: AC2, AC15
