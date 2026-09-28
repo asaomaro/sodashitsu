@@ -95,6 +95,8 @@ export interface EdgeGeometry {
   end: GraphPoint;
   /** 中点（回数のチップを置く）。 */
   mid: GraphPoint;
+  /** 元の中心から先の中心への向き（単位ベクトル）。ノードが重なって縁の点が逆順になっても、線の先の印はこの向きを向く。 */
+  dir: GraphPoint;
 }
 
 /**
@@ -116,7 +118,10 @@ export function edgeGeometry(from: GraphRect, to: GraphRect, offset = 0): EdgeGe
   const shiftedTo = { ...to, x: to.x + nx * shift, y: to.y + ny * shift };
   const start = borderPoint(shiftedFrom, b2);
   const end = borderPoint(shiftedTo, a2);
-  return { start, end, mid: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 } };
+  const dlen = Math.hypot(b.x - a.x, b.y - a.y);
+  const dir =
+    dlen === 0 ? { x: 1, y: 0 } : { x: (b.x - a.x) / dlen + 0, y: (b.y - a.y) / dlen + 0 };
+  return { start, end, mid: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }, dir };
 }
 
 /**
@@ -169,10 +174,12 @@ export function edgeHead(
   end: GraphPoint,
   shape: EdgeHeadShape,
   size = EDGE_HEAD_SIZE,
+  /** 印の向き（単位ベクトル。`edgeGeometry` の `dir`）。省けば start→end。 */
+  dir?: GraphPoint,
 ): { d: string; lineEnd: GraphPoint } {
   const len = Math.hypot(end.x - start.x, end.y - start.y);
-  const ux = len === 0 ? 1 : (end.x - start.x) / len;
-  const uy = len === 0 ? 0 : (end.y - start.y) / len;
+  const ux = dir ? dir.x : len === 0 ? 1 : (end.x - start.x) / len;
+  const uy = dir ? dir.y : len === 0 ? 0 : (end.y - start.y) / len;
   const nx = -uy;
   const ny = ux;
   const at = (back: number, side: number): GraphPoint => ({

@@ -15,6 +15,8 @@ const props = defineProps<{
   /** 描く向きの始点・終点（監督は監督役→配下に入れ替え済み）。 */
   start: GraphPoint;
   end: GraphPoint;
+  /** 印の向き（元の中心→先の中心。ノードが重なっても逆を向かない）。 */
+  dir: GraphPoint;
   invalid: boolean;
   selected: boolean;
   /** 動いたばかり（光る）。 */
@@ -31,7 +33,9 @@ const SHAPE: Record<GraphLink["kind"], EdgeHeadShape> = {
   approval: "circle",
 };
 
-const head = computed(() => edgeHead(props.start, props.end, SHAPE[props.link.kind]));
+const head = computed(() =>
+  edgeHead(props.start, props.end, SHAPE[props.link.kind], undefined, props.dir),
+);
 const d = computed(
   () => `M ${props.start.x} ${props.start.y} L ${head.value.lineEnd.x} ${head.value.lineEnd.y}`,
 );

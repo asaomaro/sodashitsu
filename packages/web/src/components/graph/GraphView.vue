@@ -147,6 +147,7 @@ interface EdgeView {
   start: { x: number; y: number };
   end: { x: number; y: number };
   mid: { x: number; y: number };
+  dir: { x: number; y: number };
   invalid: boolean;
   paused: boolean;
 }
@@ -1308,6 +1309,7 @@ function chipAria(e: EdgeView): string {
                 :link="e.link"
                 :start="e.start"
                 :end="e.end"
+                :dir="e.dir"
                 :invalid="e.invalid"
                 :selected="isLinkSelected(e.link.id)"
                 :paused="e.paused"

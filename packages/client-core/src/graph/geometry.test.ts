@@ -98,6 +98,7 @@ describe("線の経路", () => {
       start: { x: 200, y: 40 },
       end: { x: 400, y: 40 },
       mid: { x: 300, y: 40 },
+      dir: { x: 1, y: 0 },
     });
   });
 
@@ -214,5 +215,19 @@ describe("pinchGraphView", () => {
       { x: 1000, y: 0 },
     );
     expect(big.zoom).toBe(GRAPH_ZOOM_MAX);
+  });
+});
+
+describe("重なったノードの線の先の印（g03 点検 T2 nit）", () => {
+  it("ノードが重なって縁の点が逆順になっても、印は元→先の向き（中心から中心）を向く", () => {
+    const from = { x: 0, y: 0, w: 200, h: 80 };
+    const to = { x: 50, y: 0, w: 200, h: 80 };
+    const g = edgeGeometry(from, to);
+    expect(g.start.x).toBeGreaterThan(g.end.x); // 縁の点は逆順になる
+    expect(g.dir).toEqual({ x: 1, y: 0 });
+    const h = edgeHead(g.start, g.end, "triangle", 10, g.dir);
+    // 先端は end、根元は end より元の側（-x）
+    expect(h.d.startsWith(`M ${g.end.x} ${g.end.y} L ${g.end.x - 10} `)).toBe(true);
+    expect(h.lineEnd).toEqual({ x: g.end.x - 10, y: g.end.y });
   });
 });
