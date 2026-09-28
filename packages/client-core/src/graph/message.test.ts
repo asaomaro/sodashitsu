@@ -31,6 +31,9 @@ describe("stripControl", () => {
   it("日本語・絵文字はそのまま", () => {
     expect(stripControl("完了しました 🎉")).toBe("完了しました 🎉");
   });
+  it("双方向の上書き（U+202A-202E・U+2066-2069）は落とす。LRM・RLM はそのまま（g05 点検）", () => {
+    expect(stripControl("a\u202Eb\u202Ac\u2066d\u2069e\u200Ef")).toBe("abcde\u200Ef");
+  });
 });
 
 describe("8 ビットの C1 の列（g01 点検）", () => {

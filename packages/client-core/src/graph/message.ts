@@ -3,7 +3,7 @@ import { RUN_TEXT_PREVIEW_CHARS } from "./defaults.js";
 
 /**
  * 連携で送る文面の組み立て（20260927-agent-graph の design「GraphEngine」・「ドメイン固有の考慮」）。受け渡す画面の文章は、送る前に
- * 制御文字（ANSI のエスケープ・C0・C1）を落とす——先のエージェントの端末を操作する列を混ぜないため。
+ * 制御文字（ANSI のエスケープ・C0・C1・双方向の上書き）を落とす——先のエージェントの端末を操作する列を混ぜないため。
  */
 export const OUTPUT_PLACEHOLDER = "{output}";
 
@@ -16,8 +16,8 @@ const ESC_RE = /\u001B[ -/]*[0-~]/g;
 // 8 ビットの C1 の列: CSI（U+009B）は引数と終端の文字まで、OSC（U+009D）は BEL か ST（U+009C・ESC \）まで、DCS/SOS/PM/APC（U+0090・U+0098・U+009E・U+009F）は ST まで。
 const C1_STRING_RE = /[\u0090\u0098\u009D\u009E\u009F][\s\S]*?(?:\u0007|\u009C|\u001B\\)/g;
 const C1_CSI_RE = /\u009B[0-?]*[ -/]*[@-~]/g;
-// C0（改行・タブを除く）・DEL・C1。
-const CONTROL_RE = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
+// C0（改行・タブを除く）・DEL・C1・双方向の上書き（U+202A-202E・U+2066-2069。受け渡す文章で先のエージェントの表示の並びを偽装させない。g05 点検）。
+const CONTROL_RE = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g;
 /* eslint-enable no-control-regex */
 
 /** 制御文字を落とす（改行・タブは残す。CRLF は LF に）。 */
