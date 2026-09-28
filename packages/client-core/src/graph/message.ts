@@ -82,8 +82,21 @@ function cleanInfo(p: GraphPaneInfo): GraphPaneInfo {
   };
 }
 
+/** シェルでそのまま 1 語になる文字（英数字・日本語などの文字と数字・`._-@%+=:,/`）。 */
+const SHELL_SAFE_RE = /^[\p{L}\p{N}._\-@%+=:,/]+$/u;
+
+/**
+ * `sodactl --machine <名前>` に写せる形のマシンの名前（統合レビュー R1）。安全な文字だけならそのまま、空白・引用符・シェルの記号を含むなら
+ * POSIX の単一引用符で囲む（中の `'` は `'\''`）。監督役のエージェントが文面のコマンドをそのまま実行しても名前が 1 語として渡る。
+ */
+export function shellWord(text: string): string {
+  if (SHELL_SAFE_RE.test(text)) return text;
+  return `'${text.replace(/'/g, "'\\''")}'`;
+}
+
 function where(p: GraphPaneInfo): string {
-  return p.machine === null ? "手元" : `マシン ${p.machine}`;
+  // 表示も --machine に写せる形（引用した名前）にそろえる。
+  return p.machine === null ? "手元" : `マシン ${shellWord(p.machine)}`;
 }
 
 /** 監督役への知らせ（design「監督」）。 */
@@ -106,8 +119,8 @@ export function supervisorNotice(subordinates: readonly GraphPaneInfo[]): string
 /** 承認の代理で監督役へ送る文面（design「承認の代理」）。`tail` は `outputText` を通した画面の末尾。 */
 export function approvalNotice(raw: GraphPaneInfo, tail: string, config: ApprovalConfig): string {
   const sub = cleanInfo(raw);
-  const machine = sub.machine === null ? "" : `--machine ${sub.machine} `;
-  const head = `配下 ${sub.name}（${sub.paneId}${sub.machine === null ? "" : `・マシン ${sub.machine}`}）が承認待ちです。画面の末尾（${config.lines} 行）:\n\n${tail}\n\n`;
+  const machine = sub.machine === null ? "" : `--machine ${shellWord(sub.machine)} `;
+  const head = `配下 ${sub.name}（${sub.paneId}${sub.machine === null ? "" : `・${where(sub)}`}）が承認待ちです。画面の末尾（${config.lines} 行）:\n\n${tail}\n\n`;
   return config.mode === "delegate"
     ? `${head}\`sodactl ${machine}agent send-keys ${sub.paneId} <キー>\` で答えてください。`
     : `${head}返答は利用者が行います（あなたは答えないでください）。`;

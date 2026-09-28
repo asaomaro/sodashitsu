@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { RUN_TEXT_PREVIEW_CHARS } from "./defaults.js";
 import {
@@ -151,4 +152,53 @@ describe("知らせの文面の名前", () => {
       "`sodactl --machine box agent send-keys p3 <キー>`",
     );
   });
+});
+
+// 統合レビュー R1：--machine に渡すマシンの名前は、シェルで 1 語として渡る形に引用する（空白・引用符・$ を含む名前で監督役のコマンドが壊れない）。
+describe("知らせの文面のマシンの名前の引用", () => {
+  const names = ["my box", "it's", 'a"b', "$(echo x) `y` \\z;|&*?", "開発機 2", "\u3000全角空白"];
+  const sub = (machine: string): GraphPaneInfo => ({
+    name: "impl",
+    paneId: "p3",
+    kind: "claude",
+    machine,
+  });
+
+  it("安全な文字だけの名前は引用しない（英数字・日本語・._-@%+=:,/）", () => {
+    for (const m of ["box", "box-2.local", "user@host:22", "開発機"]) {
+      expect(approvalNotice(sub(m), "?", { mode: "delegate", lines: 5 })).toContain(
+        `\`sodactl --machine ${m} agent send-keys p3 <キー>\``,
+      );
+      expect(supervisorNotice([sub(m)])).toContain(`・マシン ${m}）`);
+    }
+  });
+
+  it("空白・引用符・シェルの記号を含む名前は単一引用符で囲む（' は '\\'' に）", () => {
+    expect(approvalNotice(sub("my box"), "?", { mode: "delegate", lines: 5 })).toContain(
+      "`sodactl --machine 'my box' agent send-keys p3 <キー>`",
+    );
+    expect(approvalNotice(sub("it's"), "?", { mode: "delegate", lines: 5 })).toContain(
+      "`sodactl --machine 'it'\\''s' agent send-keys p3 <キー>`",
+    );
+    // 監督の知らせ・承認の代理の見出しの表示も同じ形（その名前をそのまま --machine に写せる）
+    expect(supervisorNotice([sub("my box")])).toContain("・マシン 'my box'）");
+    expect(approvalNotice(sub("my box"), "?", { mode: "notify", lines: 5 })).toContain(
+      "（p3・マシン 'my box'）",
+    );
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "sh に渡すと、--machine の値がちょうど元の名前の 1 語になる",
+    () => {
+      for (const m of names) {
+        const text = approvalNotice(sub(m), "?", { mode: "delegate", lines: 5 });
+        const cmd = /`sodactl (--machine .*) agent send-keys p3 <キー>`/.exec(text)![1]!;
+        const r = spawnSync("sh", ["-c", `set -- ${cmd}; printf '%s\\0' "$@"`], {
+          encoding: "utf8",
+        });
+        expect(r.status).toBe(0);
+        expect(r.stdout.split("\0").slice(0, -1)).toEqual(["--machine", m]);
+      }
+    },
+  );
 });
