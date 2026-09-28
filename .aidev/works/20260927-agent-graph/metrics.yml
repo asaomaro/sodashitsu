@@ -1,3 +1,4 @@
 events:
   - { ts: 2026-09-27T16:10:06Z, phase: requirements, event: start }
   - { ts: 2026-09-27T16:17:35Z, phase: requirements, event: approved }
+  - { ts: 2026-09-28T03:23:59Z, phase: research, event: start }
