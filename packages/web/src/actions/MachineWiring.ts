@@ -12,6 +12,8 @@ import type { SwitchTarget } from "./MachineSwitcher.js";
  * - マシンの一覧の出所: ローカルを選んでいる間は画面の接続（`onMainOpened`・`onMainMachinesChanged`）、ほかを選んでいる間はローカルの軽い接続。
  * - 軽い接続: 有効なマシンがあり、1 列の画面でないとき、[ローカル, ...マシン] のうち選んでいないものに 1 本ずつ。
  * - 選んでいるマシンが一覧から消えたら（無効化・削除）ローカルへ戻る（切れていても）。1 列の画面になったらローカルへ戻り一覧を空にする。
+ * - ただし 1 列の画面でも**連携のグラフ画面を開いている間**は一覧と軽い接続を保つ（別のマシンのノードの接続の状態・呼び名を出すため。
+ *   閉じたら一覧を空にして接続を閉じる。選ぶマシンはローカルのまま。統合レビュー R1）。
  */
 export interface SummaryClientLike {
   start(): void;
@@ -43,6 +45,8 @@ export interface MachineWiringDeps {
   onLocalGraphEvent?: (e: GraphChangedEvent | GraphFiredEvent) => void;
   /** ローカルの軽い接続の hello が通った（グラフを取り直す）。省略可。 */
   onLocalOpened?: () => void;
+  /** 連携のグラフ画面を開いているか（リアクティブ。1 列の画面でも開いている間はマシンの一覧と軽い接続を保つ）。省略なら常に閉じている。 */
+  graphOpen?: Ref<boolean>;
 }
 
 export class MachineWiring {
@@ -50,9 +54,9 @@ export class MachineWiring {
 
   constructor(private readonly deps: MachineWiringDeps) {}
 
-  /** マシンの機能を使うか（1 列の画面では使わない）。 */
+  /** マシンの機能を使うか（1 列の画面では使わない。グラフ画面を開いている間は使う）。 */
   isEnabled(): boolean {
-    return !this.deps.mobileViewport.value;
+    return !this.deps.mobileViewport.value || this.deps.graphOpen?.value === true;
   }
 
   /** 手元の `soda serve` のマシンの一覧を当てる。選んでいるマシンが消えたらローカルへ戻る。 */
@@ -84,11 +88,27 @@ export class MachineWiring {
     if (mobile) {
       if (m.selectedId !== LOCAL_MACHINE_ID)
         void this.deps.switcher.switchTo(LOCAL_MACHINE_ID, undefined, { force: true });
+      // グラフ画面を開いている間は一覧と軽い接続を保つ（閉じたときに `onGraphOpenChanged` が空にする）。
+      if (this.isEnabled()) return;
       m.setMachines([]);
       this.reconcileSummaryClients();
       return;
     }
     this.onMainOpened();
+  }
+
+  /** 連携のグラフ画面を開いた・閉じた。1 列の画面でだけ、開いたら一覧を読み、閉じたら一覧を空にして軽い接続を閉じる。 */
+  onGraphOpenChanged(open: boolean): void {
+    if (!this.deps.mobileViewport.value) return;
+    if (open) {
+      this.onMainOpened();
+      return;
+    }
+    const m = this.deps.machines;
+    if (m.selectedId !== LOCAL_MACHINE_ID)
+      void this.deps.switcher.switchTo(LOCAL_MACHINE_ID, undefined, { force: true });
+    m.setMachines([]);
+    this.reconcileSummaryClients();
   }
 
   /** 軽い接続を、選んでいないマシンに 1 本ずつに揃える（選んだ・消えたマシンの接続は閉じて要約を捨てる）。 */

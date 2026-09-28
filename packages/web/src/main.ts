@@ -4,7 +4,7 @@ import type { ITerminalOptions } from "@xterm/xterm";
 // 押し出され、端末の中身が一切見えない（親の統合 test で発見。D96）。
 import "@xterm/xterm/css/xterm.css";
 import { createPinia } from "pinia";
-import { createApp, nextTick, watch } from "vue";
+import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
 import { ActionDispatcherKey, ConnectionKey, DeviceKindKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
@@ -385,11 +385,14 @@ const machineWiring = new MachineWiring({
   mobileViewport,
   onLocalGraphEvent: (e) => graph.applyEvent(e),
   onLocalOpened: () => void graph.load(),
+  graphOpen: toRef(view, "graphOpen"),
 });
 machineWiringBox.current = machineWiring;
-watch([() => machines.selectedId, () => machines.machines.map((m) => m.id).join("\n"), mobileViewport], () => machineWiring.reconcileSummaryClients());
+watch([() => machines.selectedId, () => machines.machines.map((m) => m.id).join("\n"), mobileViewport, () => view.graphOpen], () => machineWiring.reconcileSummaryClients());
 // 1 列の画面になったらローカルへ戻り一覧を空にする（サイドバーにマシンの見出しが無く戻れなくなるため）。広げたら一覧を読み直す。
 watch(mobileViewport, (mobile) => machineWiring.onMobileChanged(mobile));
+// 1 列の画面でも連携のグラフ画面を開いている間は、別のマシンのノードの状態を出すため一覧と軽い接続を保つ（統合レビュー R1）。
+watch(() => view.graphOpen, (open) => machineWiring.onGraphOpenChanged(open));
 keys.bind({ action: actionDispatcher, focus: actionDispatcher, mode: { onModeChange: (m) => view.onModeChange(m) }, imagePaste: imagePaster });
 
 // Windows のホストなら ConPTY 向けのオプションを足す（design「エージェントの argv[0]」隣接。H-cfg 相当）。

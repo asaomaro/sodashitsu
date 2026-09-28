@@ -1002,6 +1002,13 @@ function gotoNode(key: string): void {
     view.toast(`${info.name} の pane が見つかりません。`);
     return;
   }
+  // 1 列の画面はマシンを切り替えない（グラフ画面を開いている間だけ別のマシンの状態を見せる。閉じるとローカルへ戻る。統合レビュー R1）。
+  if (isMobile.value && info.machine !== machines.selectedId) {
+    view.toast(
+      `1 列の画面では別のマシンの pane へ移れません（${info.machineLabel}。広い画面で開いてください）。`,
+    );
+    return;
+  }
   view.closeGraph();
   if (info.machine === machines.selectedId) {
     view.setView(loc.workspaceId, loc.tabId);

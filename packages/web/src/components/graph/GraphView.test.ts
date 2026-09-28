@@ -804,6 +804,45 @@ describe("GraphView（pane を載せる/外す・履歴・pane へ移動。03 T4
     t.wrapper.unmount();
   });
 
+  it("1 列の画面では、繋がっている別のマシンのノードを「未接続」と出さない。そのマシンへは移らずに知らせる（統合レビュー R1）", async () => {
+    const media = vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as MediaQueryList);
+    const M = "a".repeat(32);
+    const t = await openWithGraph({
+      nodes: [
+        { key: "local:p1", x: 0, y: 0 },
+        { key: `${M}:p7`, x: 300, y: 0 },
+      ],
+      links: [],
+    });
+    const machines = (await import("../../store/machines.js")).useMachinesStore(pinia);
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }]);
+    machines.applySummarySnapshot(M, {
+      protocol: 1,
+      serverVersion: "t",
+      host: { os: "linux", windowsBuild: null, hostname: "h" },
+      workspaces: [],
+      tabs: [{ id: "t9", workspaceId: "w9" } as never],
+      panes: [paneOf("p7", "t9")],
+      groups: [],
+      focus: null,
+      limits: { scrollbackLines: 5000 },
+    });
+    await flush();
+    const node = t.wrapper.find(`[data-node-key="${M}:p7"]`);
+    expect(node.find(".graph-node-warn").exists()).toBe(false);
+    expect(node.find(".graph-node-machine").text()).toBe("box");
+    await node.trigger("keydown", { key: "Enter" });
+    expect(t.switcher.switchTo).not.toHaveBeenCalled();
+    expect(t.view.graphOpen).toBe(true);
+    expect(t.view.toasts.at(-1)!.message).toContain("1 列の画面では別のマシンの pane へ移れません");
+    t.wrapper.unmount();
+    media.mockRestore(); // 後の試験へ 1 列の画面を持ち越さない
+  });
+
   it("「履歴」で履歴を開き（graph.history）、パネルの「履歴」はその線に絞る。Esc で閉じてボタンへ戻る", async () => {
     const { wrapper, fake } = await openWithGraph();
     fake.handlers["graph.history"] = () => ({
