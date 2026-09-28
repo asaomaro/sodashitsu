@@ -28,7 +28,7 @@ architecture の `TriggerState`（純粋な状態機械）・`SupervisorNotifier
       対象: （新規 `packages/server/src/graph/TriggerState.ts`）・`packages/client-core/src/graph/defaults.ts`（既定値）
       依存: なし
       AC: AC4, AC5, AC11, AC12
-- [ ] T2: `graph/SupervisorNotifier.ts`（監督の知らせの印・2 秒のまとめ・手が空いたら送る決定、承認の代理 delegate/notify の文面の選択）
+- [x] T2: `graph/SupervisorNotifier.ts`（監督の知らせの印・2 秒のまとめ・手が空いたら送る決定、承認の代理 delegate/notify の文面の選択）
       対象: （新規 `packages/server/src/graph/SupervisorNotifier.ts`）・`packages/client-core/src/graph/message.ts`
       依存: なし
       AC: AC7, AC8, AC9
