@@ -265,7 +265,7 @@ describe("useViewStore — モード・ダイアログ・接続状態", () => {
   });
 
   // 20260927-agent-graph（design D-6・research F7.2）：グラフ画面はダイアログの 1 枠とは別の状態。
-  it("openGraph / closeGraph: 開く前の focus を覚えて戻す。二度開いても戻り先は最初のまま。toggleGraph で行き来する", () => {
+  it("openGraph / closeGraph: 開く前の focus を覚えて戻す。二度開いても戻り先は最初のまま", () => {
     const store = useViewStore(pinia);
     store.focusPane("p1");
     expect(store.modalOpen).toBe(false);
@@ -279,10 +279,6 @@ describe("useViewStore — モード・ダイアログ・接続状態", () => {
     store.closeGraph();
     expect(store.graphOpen).toBe(false);
     expect(store.focusedPaneId).toBe("p1");
-    store.toggleGraph();
-    expect(store.graphOpen).toBe(true);
-    store.toggleGraph();
-    expect(store.graphOpen).toBe(false);
     expect(store.modalOpen).toBe(false);
   });
 

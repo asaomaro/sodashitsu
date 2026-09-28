@@ -25,14 +25,38 @@ function mountView() {
 }
 
 describe("GraphView（枠）", () => {
-  it("graphOpen の間だけ全画面の role=dialog を出し、開いたら自身へフォーカスする", async () => {
+  it("ネイティブの <dialog> を showModal で開く（背面を inert にして、Tab で背面の端末へ出られない。g01 点検）", async () => {
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal");
     const { wrapper, view } = mountView();
-    expect(wrapper.find(".graph-view").exists()).toBe(false);
     view.openGraph();
     await nextTick();
     await nextTick();
     const root = wrapper.find(".graph-view");
-    expect(root.attributes("role")).toBe("dialog");
+    expect(root.element.tagName).toBe("DIALOG");
+    expect(showModal).toHaveBeenCalledTimes(1);
+    expect((root.element as HTMLDialogElement).open).toBe(true);
+    // ブラウザの Esc（cancel）でも閉じる（既定の閉じ方は止めて、store 経由で閉じる）
+    const cancel = new Event("cancel", { cancelable: true });
+    root.element.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    expect(view.graphOpen).toBe(false);
+    await nextTick();
+    await nextTick();
+    expect((root.element as HTMLDialogElement).open).toBe(false);
+    showModal.mockRestore();
+    wrapper.unmount();
+  });
+
+  it("graphOpen の間だけ全画面の dialog を開いて中身を出し、開いたら自身へフォーカスする", async () => {
+    const { wrapper, view } = mountView();
+    expect((wrapper.find(".graph-view").element as HTMLDialogElement).open).toBe(false);
+    expect(wrapper.find(".graph-toolbar").exists()).toBe(false);
+    view.openGraph();
+    await nextTick();
+    await nextTick();
+    const root = wrapper.find(".graph-view");
+    expect((root.element as HTMLDialogElement).open).toBe(true);
+    expect(wrapper.find(".graph-toolbar").exists()).toBe(true);
     expect(root.attributes("aria-label")).toBe("連携（グラフ）");
     expect(document.activeElement).toBe(root.element);
     wrapper.unmount();
@@ -48,7 +72,7 @@ describe("GraphView（枠）", () => {
     await nextTick();
     await nextTick();
     expect(registry.focus).toHaveBeenCalledWith("p1");
-    expect(wrapper.find(".graph-view").exists()).toBe(false);
+    expect((wrapper.find(".graph-view").element as HTMLDialogElement).open).toBe(false);
     wrapper.unmount();
   });
 

@@ -515,11 +515,6 @@ export const useViewStore = defineStore("view", () => {
     preGraphFocusPaneId.value = null;
   }
 
-  function toggleGraph(): void {
-    if (graphOpen.value) closeGraph();
-    else openGraph();
-  }
-
   /** グラフ画面を開いている間の焦点の移し直し（`retargetPreDialogFocus` と同じ理由。焦点を直接変えると端末がグラフ画面からフォーカスを奪う）。 */
   function retargetPreGraphFocus(paneId: string | null): void {
     preGraphFocusPaneId.value = paneId;
@@ -710,7 +705,6 @@ export const useViewStore = defineStore("view", () => {
     retargetPreDialogFocus,
     openGraph,
     closeGraph,
-    toggleGraph,
     retargetPreGraphFocus,
     setNavigateSelection,
     requestNavigateMenu,
