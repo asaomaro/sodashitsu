@@ -1699,3 +1699,53 @@ describe("GraphView（閉じた後のフォーカスの戻り先。レビュー 
     wrapper.unmount();
   });
 });
+
+describe("GraphView（表示の保存の間引き・ノードの中身を位置に依存させない。レビュー R10）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("パン・ズームの毎回には localStorage に書かず、止まってから 1 回・閉じるときにすぐ書く", async () => {
+    const { wrapper, view } = await openWithGraph();
+    vi.useFakeTimers();
+    const setItem = vi.spyOn(localStorage, "setItem");
+    const writes = () => setItem.mock.calls.filter(([k]) => k === "soda.graphView.v1").length;
+    const canvas = wrapper.find(".graph-canvas").element;
+    for (let i = 0; i < 10; i++)
+      canvas.dispatchEvent(
+        new WheelEvent("wheel", { deltaY: 10, bubbles: true, cancelable: true }),
+      );
+    await nextTick();
+    expect(writes()).toBe(0);
+    vi.advanceTimersByTime(300);
+    expect(writes()).toBe(1);
+    canvas.dispatchEvent(new WheelEvent("wheel", { deltaY: 10, bubbles: true, cancelable: true }));
+    await nextTick();
+    view.closeGraph();
+    await nextTick();
+    await nextTick();
+    expect(writes()).toBe(2);
+    expect(JSON.parse(localStorage.getItem("soda.graphView.v1")!).panY).toBe(40 - 110);
+    wrapper.unmount();
+  });
+
+  it("ノードのドラッグの毎回にはノードの中身（nodeInfo）を作り直さない", async () => {
+    const { wrapper, store } = await openWithGraph();
+    const spy = vi.spyOn(store, "nodeInfo");
+    const n2 = wrapper.find('[data-node-key="local:p2"]').element;
+    n2.dispatchEvent(pointer("pointerdown", { clientX: 310, clientY: 10 }));
+    for (let i = 1; i <= 5; i++) {
+      window.dispatchEvent(pointer("pointermove", { clientX: 310 + i * 30, clientY: 10 }));
+      await nextTick();
+    }
+    expect(store.dragPositions.get("local:p2")).toEqual({ x: 460, y: 0 });
+    expect(spy.mock.calls.filter(([k]) => k === "local:p2")).toHaveLength(0);
+    window.dispatchEvent(pointer("pointerup", { clientX: 460, clientY: 10 }));
+    await flush();
+    wrapper.unmount();
+  });
+});

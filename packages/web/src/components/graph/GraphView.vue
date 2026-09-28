@@ -84,13 +84,26 @@ const savedViewport = loadViewport();
 const viewport = ref<GraphViewport>(savedViewport ?? { zoom: 1, panX: 0, panY: 0 });
 /** 保存した表示が無ければ、最初に中身を描いたときに全体表示にする。 */
 let needsFit = savedViewport === null;
-watch(viewport, (v) => {
+/** 表示の保存は間引く（パン・ズームの毎回には書かない。止まって 300ms 後・閉じるときにすぐ。レビュー R10）。 */
+const VIEWPORT_SAVE_DELAY_MS = 300;
+let viewportTimer: ReturnType<typeof setTimeout> | null = null;
+function saveViewport(): void {
+  if (viewportTimer !== null) clearTimeout(viewportTimer);
+  viewportTimer = null;
   try {
-    localStorage.setItem(VIEWPORT_KEY, JSON.stringify(v));
+    localStorage.setItem(VIEWPORT_KEY, JSON.stringify(viewport.value));
   } catch {
     // 保存できなくても動く
   }
+}
+function flushViewportSave(): void {
+  if (viewportTimer !== null) saveViewport();
+}
+watch(viewport, () => {
+  if (viewportTimer !== null) clearTimeout(viewportTimer);
+  viewportTimer = setTimeout(saveViewport, VIEWPORT_SAVE_DELAY_MS);
 });
+onBeforeUnmount(flushViewportSave);
 
 function canvasSize(): { w: number; h: number } {
   const el = canvasEl.value;
@@ -135,8 +148,19 @@ const tabEntryKey = computed(() => {
 const rects = computed(
   () => new Map<string, GraphRect>(graph.nodes.map((n) => [n.key, graphNodeRect(n)])),
 );
+/**
+ * ノードの中身は位置に依存させない（ドラッグの毎回に作り直さない。レビュー R10）。鍵の並びが変わったときと、サーバのグラフ・pane の
+ * 状態（`nodeInfo` が読むもの）が変わったときだけ作り直す。
+ */
+const nodeKeysText = computed(() => (graph.graph?.nodes ?? []).map((n) => n.key).join("\n"));
 const infos = computed(
-  () => new Map<string, GraphNodeInfo>(graph.nodes.map((n) => [n.key, graph.nodeInfo(n.key)])),
+  () =>
+    new Map<string, GraphNodeInfo>(
+      nodeKeysText.value
+        .split("\n")
+        .filter((k) => k !== "")
+        .map((k) => [k, graph.nodeInfo(k as NodeKey)]),
+    ),
 );
 const nodeInvalid = (key: string): boolean => {
   const i = infos.value.get(key);
@@ -1164,6 +1188,7 @@ watch(
       flushArrowMoves();
       afterPanelClose = null;
       disarmPrefix();
+      flushViewportSave();
       suppressChipClick = null;
       pointerFocusing = false;
       sheet.value = null;
