@@ -898,7 +898,7 @@ node packages/tui/dist/bench/latency.js    # 性能（AC17）。十数秒。--js
 
 - `scripts/tui-pty-verify.mjs` は、一時の状態ディレクトリ・空いているポートで、起動と描画 → はじめの案内が出て Enter で閉じ案内済みが `prefs.json` に残る → pane への入力 → `prefix+q` で終了コード 0・サーバは動き続ける
   → 再接続で同じ画面とスクロールバック（ホイールで遡る）→ 端末版 2 つの同時接続 → ブラウザ相当のクライアント（ローカルログインの cookie で `/ws`）との
-  同時接続を確かめ、最後にサーバを止めて一時ディレクトリを消す（AC1・AC2・AC3・AC11・AC12）。ビルドはしないので先に `pnpm -s build`。Windows では何もせず成功で終わる。
+  同時接続を確かめ、最後にサーバを止めて一時ディレクトリを消す（AC1・AC2〔描画。大きさの追従は含まない〕・AC3・AC11〔構成の変更と入力の反映。設定と pane の大きさは含まない〕・AC12・H25b）。ビルドはしないので先に `pnpm -s build`。Windows では何もせず成功で終わる。
 - `packages/tui/dist/bench/latency.js` は入力から描画までの遅延（1 pane・大量出力の隣・16 pane）とエージェントの表示の反映を測る。目安と、手で測る残り
   （本物のエージェントの 5 状態の遷移）は `packages/tui/src/bench/README.md`。共有のマシンでは 1 回だけ走らせる。
 - 単体・結合のテスト（`pnpm test`）は偽の外側の端末で画面の文字を確かめる。**実物の端末エミュレータでの見え方・マウス・IME・通知・貼り付けは下の手作業で**確かめる。
@@ -916,15 +916,24 @@ node packages/tui/dist/bench/latency.js    # 性能（AC17）。十数秒。--js
 
 ### 各端末での一巡
 
-新しい状態ディレクトリで始める（利用者の本物の session を汚さない）。終わったら `soda session stop default --state-dir <同じ場所>` で止めて消す。
+新しい状態ディレクトリで始める（利用者の本物の session を汚さない）。**既定の session は、状態ディレクトリを替えてもポート 7780 を使う**ので、
+自分の `soda` が 7780 で動いていると裏での起動が失敗する（`soda serve exited before it became ready`）。そのときは名前付き session で、
+最初に 1 回だけ `soda serve` を別のポートで起動してポートを覚えさせる（名前付き session は `serve.json` のポートを次から使う）。
 
 ```sh
-d=$(mktemp -d); soda --state-dir "$d"     # Linux・WSL2
+d=$(mktemp -d)
+soda --state-dir "$d"                                        # 7780 が空いているとき（Linux・WSL2）
+# 7780 が使われているとき: 1 回だけ別のポートで起動して token を控え、Ctrl+C で止める。以後は --session check を付ける。
+soda serve --state-dir "$d" --session check --port 7790
+soda --state-dir "$d" --session check
 ```
 
 ```powershell
-$d = Join-Path $env:TEMP "soda-tui-check"; soda --state-dir $d   # Windows ネイティブ
+$d = Join-Path $env:TEMP "soda-tui-check"; soda --state-dir $d   # Windows ネイティブ（7780 が使われていれば上と同じく --session check と --port）
 ```
+
+以下の `<ポート>` は起動時の案内の URL のポート（既定の session なら 7780、上の回避なら 7790）。終わったら
+`soda session stop default --state-dir "$d"`（名前付きなら `soda session stop check --state-dir "$d"`）で止めて消す。
 
 1. **起動（AC1・AC2）**: 裏でサーバが起動し、標準エラーに初回の token が出てから、サイドバー（Spaces）・tab バー・pane の枠が描かれる。
    新しい状態ディレクトリでは、はじめの案内が出る（Enter・→・`l` で設定画面の「エージェント連携」の節へ移る。Esc・外側のクリックでは閉じない。次に開いたときは出ない）。
@@ -939,7 +948,7 @@ $d = Join-Path $env:TEMP "soda-tui-check"; soda --state-dir $d   # Windows ネ�
 5. **切り離しと再接続（AC3）**: pane で `seq 1 500` を出してから `prefix+q`。終了コード 0 で元の画面に戻る（`echo $?`）。端末の窓ごと閉じる・SSH を切る場合も試す。
    もう一度 `soda --state-dir <同じ場所>` で、同じ構成・同じ画面に戻り、ホイールで 1 まで遡れる。**Windows では、端末の窓を閉じてもサーバが残る**
    （`soda session list --state-dir $d` が running）ことを確かめる（WMI の起動。失敗して普通の起動に落ちたときは起動時に知らせが出る）。
-6. **ブラウザとの同時接続（AC11・AC12）**: 1. の token でブラウザからも同じサーバ（`http://127.0.0.1:7780` 等。起動時の案内の URL）を開く。
+6. **ブラウザとの同時接続（AC11・AC12）**: 1. の token でブラウザからも同じサーバ（`http://127.0.0.1:<ポート>`。起動時の案内の URL）を開く。
    片方で分割・名前変更・入力・設定（テーマ）を変えると、もう片方にすぐ出る。同じ tab を見ているとき、最後にキーを打った側の大きさに pane が合い、
    もう片方は左上合わせで切り取られる（右下に `⋯`）。端末版を 2 つ同時に開いても壊れない。
 7. **エージェント（AC10）と通知（AC13）**: pane で Claude Code 等を動かし、サイドバーの Agents に名前と状態が 2 秒以内に出る。入力待ち・完了で
@@ -947,7 +956,7 @@ $d = Join-Path $env:TEMP "soda-tui-check"; soda --state-dir $d   # Windows ネ�
    （端末側で受ける設定が要る版がある）。`prefix+o` で対象の pane へ移る。
 8. **複数ホスト（AC14）**: 登録したマシン（`docs/machines.md`）がサイドバーにマシンの見出しで並び、クリックで切り替えて操作できる。
 9. **認証（AC18）**: 状態ディレクトリの `local-auth.json` を別の利用者から読めない（Linux・WSL2 は `ls -l` で `-rw-------`）。
-   `curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:7780/api/local-login -H 'content-type: application/json' -d '{"secret":"x"}'` が 401 か 403。
+   `curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:<ポート>/api/local-login -H 'content-type: application/json' -d '{"secret":"x"}'` が 401 か 403。
    cookie なしの `/ws` は繋がらない（ブラウザのログアウト後に端末版を開き直すと、端末版は秘密を読み直して繋がる）。
 10. **入れ子と tmux**: pane の中で `soda` を打つと終了コード 1 で断る（`--allow-nested` で開く）。tmux の中で開き、`Ctrl+B Ctrl+B` で端末版の prefix が効く。
 11. **SSH 越し（AC4）**: SSH で入った先で 1.〜7. を行う。コピーは OSC 52 で手元の端末のクリップボードへ届く。通知と 24 ビット色は設定・`SODA_TRUECOLOR=1` で指定する。

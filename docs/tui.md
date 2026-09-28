@@ -18,6 +18,9 @@ soda --state-dir ~/soda-lan # 状態ディレクトリを指定
 - 手元の `soda serve` が動いていればそれに繋ぐ。動いていなければ**裏で起動してから**繋ぐ（既定の session は `127.0.0.1:7780`、
   名前付き session は記憶したポート〔`serve.json`〕、無ければ 7780）。起動した場合、初回の token（ブラウザでログインするためのもの）を端末版が画面を開く前に
   標準エラーへ出す。**二度と出ない**ので、ブラウザでも使うなら控える（無くしたら `soda token reset`）。
+- 既定の session は `--state-dir` を替えてもポート 7780 を使うので、7780 がふさがっていると裏での起動が失敗する。別のポートにするなら名前付き session で、
+  最初に 1 回 `soda serve --session <名前> --port <N>`（`--state-dir` を使うなら同じものを付ける）を起動して止める。名前付き session は
+  そのポートを覚え、以後は `soda --session <名前>` が同じポートで裏に起動する。
 - 初めて開いたとき、はじめの案内が 1 回出る。Enter（か →・`l`・［はじめる］）で案内済みにして、設定画面の「エージェント連携」の節へ移る
   （herdr と同じく Esc・外側のクリックでは閉じない）。設定画面の端末版の節の末尾から開き直せる。次のときは出ない: 共有の設定で案内済み（Web 版で
   済ませた場合を含む）・案内ができる前からの利用者（共有の設定が保存済みで `onboarding` の項目が無い）・この状態ディレクトリで端末版を前に使った
@@ -43,6 +46,8 @@ soda --state-dir ~/soda-lan # 状態ディレクトリを指定
 | `soda serve exited before it became ready`・`did not become ready within 15 seconds` | サーバが起動できなかった（ポートの衝突等）。出た案内と状態ディレクトリの `server.log` を見る |
 | `could not start soda serve` | 3 回起動を試みたが、サーバが動き続けなかった。状態ディレクトリの `server.log` を見る |
 | `local login is rate limited` | ローカルログインの失敗が続き、サーバが一時的に受け付けていない（通常のログインと同じ回数の制限）。1 分ほど待ってやり直す |
+| `the server uses TLS but serve.json has no certificate fingerprint` | TLS で動いている古い版の `soda serve`（`serve.json` に証明書の指紋が無い）。止めてから打ち直す |
+| `… does not match serve.json`（証明書の指紋の不一致） | 同じポートで別のサーバが待ち受けている可能性があるので繋がない。`soda session list` と、そのポートを使っているプロセスを確かめる |
 | `local login was refused (HTTP 403)` | サーバが同じマシンからの接続と認めなかった（下の「認証」） |
 | `the terminal UI could not be loaded` | 導入が壊れている（ソースから使っているなら `pnpm install` と `pnpm build`）。`soda serve` とブラウザは使える |
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// 端末版（引数なしの `soda`）を本物の疑似端末（node-pty）で動かして一巡させる確かめ（20260927-cli-mode の 06-docs-verify T5。AC1・AC3・AC4・AC11・AC12）。
+// 端末版（引数なしの `soda`）を本物の疑似端末（node-pty）で動かして一巡させる確かめ（20260927-cli-mode の 06-docs-verify T5。
+// AC1・AC2〔描画。大きさの追従は含まない〕・AC3・AC11〔構成の変更と入力の反映。設定と pane の大きさは含まない〕・AC12・H25b）。
 //
 //   pnpm build && node scripts/tui-pty-verify.mjs
 //
@@ -13,7 +14,7 @@
 //   6. ブラウザ相当: ローカルログインの cookie で `/ws` に `desktop` として繋ぎ、同じ workspace が見え、そこで作った workspace と
 //      そこから送った入力が両方の端末版に出る（AC11）
 // 失敗したら理由を出して終了コード 1。最後にサーバを止めて一時ディレクトリを消す（Ctrl+C・SIGTERM で止めても同じ後片付けをして 130・143）。Windows では何もせず成功（node-pty の ConPTY の扱いが別。docs/verification.md で手で確かめる）。
-// SSH 越し（AC4）は、この確かめを SSH で入った先で走らせれば同じ経路を通る（端末版は手元のプロセスとして動く）。
+// SSH 越し（AC4）はこの確かめでは見ない（SSH で入った先で走らせれば同じ経路を通るが、SSH そのものは docs/verification.md で手で確かめる）。
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";

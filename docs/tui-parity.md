@@ -3,9 +3,11 @@
 引数なしの `soda` で開く端末の中の画面（以下「端末版」。20260927-cli-mode）について、herdr と Web 版の全機能項目を
 端末版でどう扱うかを分類したもの。調べた元は `.aidev/works/20260927-cli-mode/research-inventory.md`（herdr のソース・
 `docs/herdr-parity.md`・`packages/web/src` の出典つき）で、この docs はそれを実際に作ったもの（`packages/tui`）に合わせて整え、
-**「対応」「読み替え」の行がすべてどれかの受け入れ基準（AC）で検証されていること**を示す役割を持つ。
+**「対応」「読み替え」の行がすべて受け入れ基準（AC）か試験で検証されていること**を示す役割を持つ（AC1〜AC14 に当たる基準が無い herdr の細目は、
+「AC なし（試験: …）」と書いて単体の試験を根拠にする。decisions D20）。
 
-herdr と Web 版の対応は `docs/herdr-parity.md` を見る（ID の H01〜H52 はそちらと同じ番号）。使い方は `docs/tui.md`。
+herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は同じ項目（H17-18・H38-40・H45-46 はそちらの複数の行を 1 行にまとめた）。
+そちらに無い ID（H04m・H04w・H08b・H10b・H19b・H19c・H22b・H26e・H26f・H27b・H29c〜H29e・H43b・H50〜H52）は、端末版の下調べで見つけた herdr の細目としてこの一覧で足したもの。使い方は `docs/tui.md`。
 
 ## 分類の凡例
 
@@ -42,7 +44,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る（ID の H01〜H5
 | H11 | スクロールバックを `$EDITOR` で開く（`prefix+e`） | あり | あり（サーバの EDITOR を新しい pane で） | 対応（Web と同じくサーバ側の pane で開く。エディタが動くのはサーバの上） | AC5, AC8 |
 | H12 | 独自コマンド（popup / pane / shell） | あり | あり | 対応（popup は端末の上に浮いた枠で描き、中のプログラムへマウスも渡す） | AC5, AC8 |
 | H13 | 端末内の画像（Kitty graphics・Sixel・iTerm2 形式） | あり（外側の端末へ Kitty で出し直す） | 一部対応（サーバで iTerm2 形式へ） | 読み替え: 外側の端末が kitty・Ghostty・WezTerm なら Kitty graphics で出し直す。それ以外の端末・tmux の中・pane の縁で切れる画像・ダイアログの下では、置いた場所に `[画像]` の印を描く。**繋ぎ直すと画像は消える**（SNAPSHOT は文字だけ。Web 版と同じ） | AC6 |
-| H14 | 端末タイトルと外側の端末のタイトル（`window_title`） | あり | 読み替え（ブラウザのタブ名） | 対応（設定「端末版 → 外側の端末のタイトル」〔`tui.windowTitle`、端末版だけの設定〕。既定は `{hostname}: {workspace}`、`{tab}`・`{pane}`・`{terminal_title}` も使える。空にすると触らない。読めない書式では触らない。OSC 2 で書き、終えるとき元のタイトルへ戻す〔戻せる端末だけ〕。decisions D18） | AC15（この一覧での分類。挙動は `packages/tui/src/app/t7.test.ts` の H14 の試験で確かめる。requirements の AC1〜AC14 にタイトルを見るものは無い） |
+| H14 | 端末タイトルと外側の端末のタイトル（`window_title`） | あり | 読み替え（ブラウザのタブ名） | 対応（設定「端末版 → 外側の端末のタイトル」〔`tui.windowTitle`、端末版だけの設定〕。既定は `{hostname}: {workspace}`、`{tab}`・`{pane}`・`{terminal_title}` も使える。空にすると触らない。読めない書式では触らない。OSC 2 で書き、終えるとき元のタイトルへ戻す〔戻せる端末だけ〕。decisions D18） | AC なし（試験: `packages/tui/src/app/t7.test.ts` の H14。decisions D20） |
 | H15 | CJK IME の候補窓・prefix 中の IME 切替 | あり（実験的） | IME 入力のみ | 読み替え: IME は外側の端末が担い、端末版は確定した文字を受ける。本物のカーソルを焦点の pane のカーソル位置に置くので候補窓がそこに出る。IME の自動切替は非対応（OS の入力ソースの API。Linux は herdr も非対応） | AC6 |
 | H16 | エージェントの検出・5 状態・集約・`done` の既読 | あり（既読はサーバ） | あり（既読はブラウザごと） | 読み替え: 検出・状態・集約は同じ。`done` の既読は端末版ごと・マシンごとにメモリに持つ（Web 版と同じくクライアントごと。decisions D3）。見ていないマシンのサイドバーの要約は、サーバが覚えている既読（`serverSeenSeq`）だけで決まる | AC10 |
 | H17-18 | 検出の拡充・連携の導入 | あり | 後続／一部 | サーバ機能（設定の「エージェント連携」は W25） | AC19 |
@@ -71,7 +73,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る（ID の H01〜H5
 | H29 | 通知（画面内・OS 通知・`prefix+o`） | あり | あり | 読み替え: 画面内のトースト（右下）と `prefix+o` は対応。OS 通知は外側の端末へのデスクトップ通知の依頼に読み替え（kitty→OSC 99、Ghostty・iTerm2・WezTerm→OSC 9、Windows Terminal→OSC 777、判別できない端末では出さない。設定「端末版 → 通知の出し方」で上書き。tmux の中は DCS で包む）。ブラウザの「OS 通知を許可する」案内は端末版には無い（許可の仕組みが無く要らない） | AC13 |
 | H29b | 通知音 | あり（mp3） | 内蔵音 | 読み替え: 音を鳴らす設定のとき、外側の端末へベル（BEL）を送る | AC13 |
 | H29c | トーストをクリックして対象へ | あり | あり（「移動」） | 対応 | AC13, AC9 |
-| H29d | pane の BEL を外側の端末へ | あり（前面のクライアントへ） | —（ブラウザに無い） | 対応（設定「端末版 → pane のベルを外側の端末へ」〔`tui.forwardBell`、既定は入、端末版だけの設定〕。見えている pane の BEL を、外側の端末にフォーカスがあるときだけ送る〔100ms に 1 回まで〕。herdr の「前面のクライアントにだけ」を端末版の側で読み替えた。decisions D18） | AC13 |
+| H29d | pane の BEL を外側の端末へ | あり（前面のクライアントへ） | —（ブラウザに無い） | 対応（設定「端末版 → pane のベルを外側の端末へ」〔`tui.forwardBell`、既定は入、端末版だけの設定〕。見えている pane の BEL を、外側の端末にフォーカスがあるときだけ送る〔100ms に 1 回まで〕。herdr の「前面のクライアントにだけ」を端末版の側で読み替えた。decisions D18） | AC なし（試験: `packages/tui/src/app/t7.test.ts` の H29d。AC13 はエージェントの通知で、pane の BEL は含まない。decisions D20） |
 | H29e | 未処理の知らせの一覧 | 無し | 無し | 端末版だけの機能（全体のメニューの「知らせの一覧」。Enter・クリックで対象へ、Delete で外す）。ブラウザの OS 通知の履歴に当たるものが端末に無いため | AC13 |
 | H30 | 切り離し（`prefix+q`）と再接続 | あり | 読み替え（ブラウザの接続だけ） | 対応（端末版が終わり、サーバと pane は動き続ける。再び `soda` で戻る） | AC3 |
 | H31 | サーバ再起動後の復元 | あり | あり | サーバ機能 | AC19 |
@@ -92,7 +94,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る（ID の H01〜H5
 | H44 | クリップボードの画像の貼り付け・画像ファイルのドロップ | あり（`--remote` のときだけ） | あり | 読み替え: 端末版がクリップボードを読める機械で動くとき（手元）だけ、OS の道具（Linux は `wl-paste`・`xclip`、macOS は `osascript`、Windows・WSL は PowerShell）で読んで送り、返ったパスを貼る（`ctrl+v`＝`remote_image_paste`）。**SSH 先で端末版を起動した構成は非対応**（外側の端末からクリップボードの画像を読む標準の手段が無い。herdr も同じ）。画像ファイルのドロップは対応（外側の端末〔Windows Terminal 等〕が貼り付けるファイルのパスを、ブラケットペーストのまま pane へ送る。herdr と同じ） | AC7, AC6 |
 | H45-46 | 自己更新・補完・ログ | あり | 後続 | 対象外 | — |
 | H47 | 入れ子の許可 | あり（既定で拒否・設定で許可） | —（ブラウザ） | 対応（pane の中の `soda` は既定で終了コード 1。`--allow-nested` で許す。設定ではなく起動の引数） | AC1 |
-| H48 | 外側の端末向けの設定（`mouse_capture`・`host_cursor`・`redraw_on_focus_gained`） | あり | —（ブラウザ） | `mouse_capture` は対応（設定「端末版 → マウスを使う」〔`tui.mouseCapture`〕を切ると外側の端末がマウスを扱う。実行中に切り替わる）。`redraw_on_focus_gained` は対応（「外側の端末に戻ったら全部描き直す」〔`tui.redrawOnFocusGained`、既定は入〕）。`host_cursor` は読み替え（端末版は常に外側の端末の本物のカーソルを焦点の pane のカーソルの位置へ置き、形も合わせる＝herdr の `native`。herdr の既定の `auto` は Linux〔WSL を除く〕・macOS ではこれと同じだが、Windows・WSL では ConPTY のちらつきを避けて自前のカーソルを描く。端末版は Windows・WSL でも本物のカーソルを使う〔IME の候補窓の位置の基準になるため〕。切り替えの設定は持たない） | AC9, AC6 |
+| H48 | 外側の端末向けの設定（`mouse_capture`・`host_cursor`・`redraw_on_focus_gained`） | あり | —（ブラウザ） | `mouse_capture` は対応（設定「端末版 → マウスを使う」〔`tui.mouseCapture`〕を切ると外側の端末がマウスを扱う。実行中に切り替わる）。`redraw_on_focus_gained` は対応（「外側の端末に戻ったら全部描き直す」〔`tui.redrawOnFocusGained`、既定は入〕）。`host_cursor` は読み替え（端末版は常に外側の端末の本物のカーソルを焦点の pane のカーソルの位置へ置き、形も合わせる＝herdr の `native`。herdr の既定の `auto` は Linux〔WSL を除く〕・macOS ではこれと同じだが、Windows・WSL では ConPTY のちらつきを避けて自前のカーソルを描く。端末版は Windows・WSL でも本物のカーソルを使う〔IME の候補窓の位置の基準になるため〕。切り替えの設定は持たない） | AC9（`mouse_capture`）。`redraw_on_focus_gained`・`host_cursor` は AC なし（試験: `packages/tui/src/app/t7check.test.ts`〔描き直し〕・`packages/tui/src/render/Screen.test.ts`〔本物のカーソルの位置〕。decisions D20） |
 | H49 | Windows ネイティブ | あり（一部） | あり | 対応（Windows Terminal・VS Code の統合端末） | AC16 |
 | H50 | 閉じる確認・新しい tab/workspace の名前を先に聞く設定 | あり（設定可） | 確認あり・設定なし | 対応（端末版だけの設定。「workspace を閉じる前に確かめる」〔`tui.confirmClose`、既定は入。herdr と同じく workspace を閉じるときの確認で、切でも動作中の pane があれば確かめる〕・「新しい tab の名前を先に聞く」〔`tui.promptNewTabName`、既定は入〕・「新しい workspace の名前を先に聞く」〔`tui.promptNewWorkspaceName`、既定は切〕。decisions D18） | AC5, AC-I2 |
 | H51 | 全体のメニュー（キー割り当て・移動・設定・知らせの一覧・切り離し） | あり | あり | 対応（サイドバー・tab バーの空いた所の右クリックで開く。設定の再読み込みは `prefix+shift+r`） | AC-I1, AC9 |
@@ -143,10 +145,10 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る（ID の H01〜H5
 | W20 | 明暗の変化を pane のアプリへ知らせる（DSR 996・mode 2031） | あり | あり | 対応（外側の端末の明暗を H24 の手順で知り、`client.theme` でサーバへ伝える） | AC11 |
 | W21 | 端末アプリの問い合わせに答えるのはサーバだけ | —（サーバ） | あり | 対応（端末版の中の端末エミュレータは答えない。外側の端末への問い合わせは端末版自身のものだけ） | AC6 |
 | W22 | 描画の WebGL・描画器の使い回し | 無し | あり | 非対応（ブラウザの描画の仕組み。端末版は変わったセルだけを書き出して、大量出力でも固まらない目的を満たす〔AC17 で測った〕） | — |
-| W23 | ブラウザのタブのタイトル | window_title | あり | 読み替え（H14。外側の端末のタイトル） | AC15（H14 と同じ） |
+| W23 | ブラウザのタブのタイトル | window_title | あり | 読み替え（H14。外側の端末のタイトル） | AC なし（試験: H14 と同じ） |
 | W24 | tab バーの右端の日時・ホスト名・固定の文字 | あり | あり | 対応（H22。共有の設定。日時は毎秒描き直す） | AC2 |
 | W25 | 設定の「エージェント連携」（導入・再開の入切） | Integrations 節 | あり | 対応 | AC11 |
-| W26 | onboarding の画面 | あり | あり | 対応（H25b） | AC-I1 |
+| W26 | onboarding の画面 | あり | あり | 対応（H25b） | AC1（H25b と同じ。Esc・外側では閉じないのは AC-I1 の例外〔decisions D19〕） |
 | W27 | マシンの切替とマシンの要約の購読 | endpoint catalog | あり | 対応（Web 版と同じ部品〔client-core の `MachineSummaryClient`〕。切り替えるとキーのモードを戻し、途中の画像の貼り付けは捨てる） | AC14 |
 | W28 | 画像の貼り付けの送信中に打ったキーの保留 | — | あり | 対応（H44 の構成に限る） | AC7 |
 | W29 | 設定・既読をブラウザごとに覚える | サーバ／config | あり | 読み替え: 設定はサーバに置いてブラウザと端末版で共有（ブラウザ同士でも共有に変わった。decisions D3・D10）。端末ごとの項目（サイドバーの今の幅・折りたたみ・色の出し方）は `tui-state.json`、`done` の既読はクライアントごと | AC11 |
@@ -177,5 +179,5 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る（ID の H01〜H5
 ## 確かめの手段
 
 - 性能（AC17）: `node packages/tui/dist/bench/latency.js`（入力から描画までの遅延・16 pane・大量出力の隣での入力・エージェントの表示の反映。`packages/tui/src/bench/README.md`）。
-- 疑似端末での一巡（AC1・AC3・AC11・AC12・H25b）: `node scripts/tui-pty-verify.mjs`（起動・描画・はじめの案内・入力・切り離し・再接続とスクロールバック・端末版 2 つの同時接続・ブラウザ相当のクライアントとの同時接続）。
+- 疑似端末での一巡（AC1・AC2〔描画。大きさの追従は含まない〕・AC3・AC11〔構成の変更と入力の反映。設定と pane の大きさは含まない〕・AC12・H25b）: `node scripts/tui-pty-verify.mjs`（起動・描画・はじめの案内・入力・切り離し・再接続とスクロールバック・端末版 2 つの同時接続・ブラウザ相当のクライアントとの同時接続）。
 - 3 環境の実機（AC16）: `docs/verification.md`「端末版（20260927-cli-mode）」。
