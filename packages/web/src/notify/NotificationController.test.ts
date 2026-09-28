@@ -1032,6 +1032,24 @@ describe("NotificationController — 他の仕組みとの噛み合わせ", () =
     expect(view.focusedPaneId, "閉じたら知らせの pane へ戻る（表示中の tab と食い違わない）").toBe("p1");
   });
 
+  // 20260927-agent-graph（g01 点検）：グラフ画面もダイアログの 1 枠とは別に同じく守る（焦点を動かすと端末がグラフ画面からフォーカスを奪い、Esc も効かなくなる）。
+  it("グラフ画面を開いている間にクリックされたら、焦点は『閉じたときに戻す先』だけ差し替える", async () => {
+    vi.useFakeTimers();
+    const h = makeController();
+    await queueOne(h);
+    const view = useViewStore(pinia);
+    view.focusPane("p-other");
+    view.openGraph(); // 開く前の焦点は p-other
+
+    h.c.focusNext();
+
+    expect(view.tabId, "表示する tab は移る").toBe("t1");
+    expect(view.focusedPaneId, "焦点は直接動かさない（グラフ画面からフォーカスを奪わない）").toBe("p-other");
+    expect(view.graphOpen).toBe(true);
+    view.closeGraph();
+    expect(view.focusedPaneId, "閉じたら知らせの pane へ戻る").toBe("p1");
+  });
+
   it("ダイアログが開いていなければ、今までどおり焦点を動かす", async () => {
     vi.useFakeTimers();
     const h = makeController();

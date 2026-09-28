@@ -311,8 +311,11 @@ export class NotificationController {
     const tab = pane ? session.tabs.get(pane.tabId) : undefined;
     if (!pane || !tab) return false;
     view.setView(tab.workspaceId, tab.id);
-    if (view.openDialog !== null) view.retargetPreDialogFocus(paneId);
-    else view.focusPane(paneId);
+    // グラフ画面（20260927-agent-graph）もダイアログと同じく、開いている間は「閉じたときに戻す先」だけを差し替える。
+    if (view.modalOpen) {
+      if (view.openDialog !== null) view.retargetPreDialogFocus(paneId);
+      if (view.graphOpen) view.retargetPreGraphFocus(paneId);
+    } else view.focusPane(paneId);
     this.#opts.onFocusPane?.(paneId);
     return true;
   }
