@@ -32,7 +32,7 @@ architecture の `TriggerState`（純粋な状態機械）・`SupervisorNotifier
       対象: （新規 `packages/server/src/graph/SupervisorNotifier.ts`）・`packages/client-core/src/graph/message.ts`
       依存: なし
       AC: AC7, AC8, AC9
-- [ ] T3: `graph/AgentPort.ts`・`graph/LocalAgentPort.ts`（`pane.agent_status_changed` の購読・今の状態・`bottomLines` の末尾〔制御文字を除く〕・`agent.prompt`）
+- [x] T3: `graph/AgentPort.ts`・`graph/LocalAgentPort.ts`（`pane.agent_status_changed` の購読・今の状態・`bottomLines` の末尾〔制御文字を除く〕・`agent.prompt`）
       対象: `packages/server/src/session/SessionService.ts:1051,1079`（イベント）・`packages/server/src/terminal/Mirror.ts:195`（bottomLines）・`packages/server/src/surface/methods/agent.ts`（agent.prompt）・（新規 `graph/AgentPort.ts`・`graph/LocalAgentPort.ts`）
       依存: なし
       AC: AC4, AC6
