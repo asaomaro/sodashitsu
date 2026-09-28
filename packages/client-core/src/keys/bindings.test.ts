@@ -35,15 +35,16 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
   // 20260926-edit-scrollback で edit_scrollback（pane）を追加し 50 個になった。
   // 20260927-clipboard-image-paste で remote_image_paste（pane。既定は直接のキー ctrl+v）を追加し 51 個になった。
   // 20260927-cli-mode で stop_server（全体）・switch_workspace・open_worktree・remove_worktree（workspace / tab）・swap_with_focused（pane）を追加し 56 個になった。
-  it("56 個あり、id は重複しない・表示名は空でない", () => {
-    expect(ACTIONS).toHaveLength(56);
-    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(56);
+  // 20260927-agent-graph で open_graph（全体）を追加し 57 個になった。
+  it("57 個あり、id は重複しない・表示名は空でない", () => {
+    expect(ACTIONS).toHaveLength(57);
+    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(57);
     for (const a of ACTIONS) expect(a.label.length, a.id).toBeGreaterThan(0);
   });
 
-  it("群は 全体 6・workspace / tab 24・pane 26（この順に並ぶ）", () => {
+  it("群は 全体 7・workspace / tab 24・pane 26（この順に並ぶ）", () => {
     const groups = ACTIONS.map((a) => a.group);
-    expect(groups.filter((g) => g === "全体")).toHaveLength(6);
+    expect(groups.filter((g) => g === "全体")).toHaveLength(7);
     expect(groups.filter((g) => g === "workspace / tab")).toHaveLength(24);
     expect(groups.filter((g) => g === "pane")).toHaveLength(26);
     // 群ごとにまとまっている（全体 → workspace / tab → pane）

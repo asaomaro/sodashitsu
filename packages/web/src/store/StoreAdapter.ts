@@ -91,14 +91,17 @@ export class StoreAdapter implements StorePort {
   private applyViewRepair(successorHint?: string): void {
     const session = useSessionStore(this.opts.pinia);
     const view = useViewStore(this.opts.pinia);
-    const dialogOpen = view.openDialog !== null;
-    const focused = dialogOpen ? (view.preDialogFocusPaneId ?? view.focusedPaneId) : view.focusedPaneId;
+    // グラフ画面（20260927-agent-graph）もダイアログと同じく、開いている間は「閉じたときに戻す先」を差し替える。
+    const dialogOpen = view.modalOpen;
+    const focused = dialogOpen ? (view.preDialogFocusPaneId ?? view.preGraphFocusPaneId ?? view.focusedPaneId) : view.focusedPaneId;
     const next = repairView({ workspaceId: view.workspaceId, tabId: view.tabId, focusedPaneId: focused }, session, successorHint);
     if (!next) return;
     if (next.workspaceId && next.tabId && (next.workspaceId !== view.workspaceId || next.tabId !== view.tabId)) view.setView(next.workspaceId, next.tabId);
     if (next.focusedPaneId === focused) return;
-    if (dialogOpen) view.retargetPreDialogFocus(next.focusedPaneId);
-    else view.focusPane(next.focusedPaneId);
+    if (dialogOpen) {
+      if (view.openDialog !== null) view.retargetPreDialogFocus(next.focusedPaneId);
+      if (view.graphOpen) view.retargetPreGraphFocus(next.focusedPaneId);
+    } else view.focusPane(next.focusedPaneId);
   }
 
   private applyEventToSession(e: ServerEvent): void {

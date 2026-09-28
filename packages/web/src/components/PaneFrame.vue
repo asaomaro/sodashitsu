@@ -219,9 +219,9 @@ function onNamePointerCancel(ev: PointerEvent): void {
  * 頼らない（cross-cutting 独立点検で発見。review.md 参照）。
  */
 watch(
-  () => view?.openDialog,
-  (dialog) => {
-    if (dialog !== null && isDragSource.value) cancelDrag();
+  () => view?.modalOpen === true, // グラフ画面（20260927-agent-graph）も同じ
+  (open) => {
+    if (open && isDragSource.value) cancelDrag();
   },
 );
 

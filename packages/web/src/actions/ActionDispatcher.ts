@@ -252,6 +252,10 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       case "stopServer":
         this.view.openDialogWithContext({ kind: "confirmStopServer", ...this.stopTarget() });
         return;
+      // 20260927-agent-graph。グラフ画面はダイアログの 1 枠とは別の状態（`view.graphOpen`）。閉じるのは画面自身（Esc・同じキー・閉じるボタン）。
+      case "openGraph":
+        this.view.openGraph();
+        return;
     }
   }
 

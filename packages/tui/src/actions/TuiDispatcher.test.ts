@@ -113,7 +113,7 @@ const flush = async () => {
 };
 
 /**
- * 全操作（カタログの 56 操作。添字つきは 1）の効果の表。**web の `ActionDispatcher` の同じ操作と同じ RPC・引数・ダイアログ**（焦点は p1・w1/t1〔p1|p2〕・w2/t2〔p3〕）。
+ * 全操作（カタログの 57 操作。添字つきは 1）の効果の表。**web の `ActionDispatcher` の同じ操作と同じ RPC・引数・ダイアログ**（焦点は p1・w1/t1〔p1|p2〕・w2/t2〔p3〕）。
  * 表に無い操作があれば落ちる（足し忘れの検出）。
  */
 const EFFECTS: Record<
@@ -191,12 +191,13 @@ const EFFECTS: Record<
   resize_pane_up: { rpc: ["pane.resize", { paneId: "p1", direction: "up", amount: 0.05 }] },
   resize_pane_right: { rpc: ["pane.resize", { paneId: "p1", direction: "right", amount: 0.05 }] },
   swap_with_focused: { none: true },
+  open_graph: { toast: true },
 };
 
-describe("TuiDispatcher — 全操作の効果（web の 56 操作と同じ RPC・引数・ダイアログ）", () => {
+describe("TuiDispatcher — 全操作の効果（web の 57 操作と同じ RPC・引数・ダイアログ）", () => {
   it("表はカタログの全操作をちょうど覆う", () => {
     expect(Object.keys(EFFECTS).sort()).toEqual(ACTIONS.map((d) => d.id).sort());
-    expect(ACTIONS).toHaveLength(56);
+    expect(ACTIONS).toHaveLength(57);
   });
 
   it.each(ACTIONS.map((d) => [d.id, d as ActionDef] as const))("%s", (id, def) => {
@@ -211,6 +212,16 @@ describe("TuiDispatcher — 全操作の効果（web の 56 操作と同じ RPC�
     if (e.host) expect(h.host[e.host]).toHaveBeenCalled();
     if (e.none || e.mode) expect(h.calls).toEqual([]);
     if (e.toast) expect(h.ui.toasts).toHaveLength(1);
+  });
+});
+
+describe("TuiDispatcher — 連携のグラフ（20260927-agent-graph）", () => {
+  it("open_graph は開かずに「ブラウザで開けます」と知らせる（D1-8）", () => {
+    const h = harness();
+    h.d.run({ type: "openGraph" });
+    expect(h.ui.toasts.map((t) => t.message)).toEqual(["グラフの画面はブラウザで開けます。"]);
+    expect(h.calls).toEqual([]);
+    expect(h.ui.dialogContext).toBeNull();
   });
 });
 

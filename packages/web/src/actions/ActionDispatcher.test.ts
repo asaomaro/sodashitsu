@@ -2648,4 +2648,16 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     dispatcher.confirmStopServer();
     expect(conn.requests).toEqual([]);
   });
+
+  it("openGraph（open_graph。20260927-agent-graph）: グラフ画面を開く（ダイアログの枠は使わない・何も送らない）", () => {
+    const conn = makeConnection();
+    const view = useViewStore(pinia);
+    view.focusPane("p1");
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.run({ type: "openGraph" });
+    expect(view.graphOpen).toBe(true);
+    expect(view.preGraphFocusPaneId).toBe("p1");
+    expect(view.dialogContext).toBeNull();
+    expect(conn.requests).toEqual([]);
+  });
 });

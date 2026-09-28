@@ -264,6 +264,52 @@ describe("useViewStore — モード・ダイアログ・接続状態", () => {
     expect(store.focusedPaneId).toBe("p1"); // 開く前の pane に戻る
   });
 
+  // 20260927-agent-graph（design D-6・research F7.2）：グラフ画面はダイアログの 1 枠とは別の状態。
+  it("openGraph / closeGraph: 開く前の focus を覚えて戻す。二度開いても戻り先は最初のまま。toggleGraph で行き来する", () => {
+    const store = useViewStore(pinia);
+    store.focusPane("p1");
+    expect(store.modalOpen).toBe(false);
+    store.openGraph();
+    expect(store.graphOpen).toBe(true);
+    expect(store.modalOpen).toBe(true);
+    expect(store.openDialog).toBeNull(); // ダイアログの枠は使わない
+    store.focusPane("p2");
+    store.openGraph();
+    expect(store.preGraphFocusPaneId).toBe("p1");
+    store.closeGraph();
+    expect(store.graphOpen).toBe(false);
+    expect(store.focusedPaneId).toBe("p1");
+    store.toggleGraph();
+    expect(store.graphOpen).toBe(true);
+    store.toggleGraph();
+    expect(store.graphOpen).toBe(false);
+    expect(store.modalOpen).toBe(false);
+  });
+
+  it("グラフ画面の中からダイアログを開いて閉じても、グラフ画面は開いたまま（modalOpen も真のまま）", () => {
+    const store = useViewStore(pinia);
+    store.focusPane("p1");
+    store.openGraph();
+    store.openDialogWithContext({ kind: "help" });
+    expect(store.graphOpen).toBe(true);
+    store.closeDialog();
+    expect(store.graphOpen).toBe(true);
+    expect(store.modalOpen).toBe(true);
+    store.closeGraph();
+    expect(store.focusedPaneId).toBe("p1");
+  });
+
+  it("マシンの切り替えではグラフ画面を閉じない（手元のもの）。戻り先の pane の id だけ捨てる", () => {
+    const store = useViewStore(pinia);
+    store.focusPane("p1");
+    store.openGraph();
+    store.resetForMachineSwitch();
+    expect(store.graphOpen).toBe(true);
+    expect(store.preGraphFocusPaneId).toBeNull();
+    store.closeGraph();
+    expect(store.focusedPaneId).toBeNull(); // 前のマシンの p1 へは戻さない
+  });
+
   it("onConnectionState: 'open' になると authRequired を解除する", () => {
     const store = useViewStore(pinia);
     store.onAuthRequired();

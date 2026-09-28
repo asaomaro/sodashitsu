@@ -5,6 +5,7 @@ import ConfirmDialog from "./components/ConfirmDialog.vue";
 import ContextMenu from "./components/ContextMenu.vue";
 import DetachedView from "./components/DetachedView.vue";
 import GotoPicker from "./components/GotoPicker.vue";
+import GraphView from "./components/graph/GraphView.vue";
 import GroupPickerDialog from "./components/GroupPickerDialog.vue";
 import HelpDialog from "./components/HelpDialog.vue";
 import LoginView from "./components/LoginView.vue";
@@ -92,6 +93,7 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
     <HelpDialog />
     <OnboardingDialog />
     <GotoPicker />
+    <GraphView />
     <CommandPopup />
     <PrefixIndicator />
     <Toast />

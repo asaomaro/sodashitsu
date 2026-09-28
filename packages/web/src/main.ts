@@ -375,8 +375,9 @@ watch(
 // ダイアログの開閉と `KeyRouter` のモードを同期する（design の状態遷移図「prefix --> dialog」「dialog -->
 // terminal」）。ダイアログ自身が Esc/Enter 等の全キーを処理するので、KeyRouter 側はここでは何も横取りしない
 // （`KeyRouter.handle` は mode:"dialog" のとき常に consume を返すのみ）。
+// 連携のグラフ画面（20260927-agent-graph）もダイアログの 1 枠とは別の状態で同じく扱う（`view.modalOpen`。research-web §1.5）。
 watch(
-  () => view.openDialog,
+  () => view.modalOpen,
   (open) => keys.setMode(open ? "dialog" : "terminal"),
 );
 
@@ -387,7 +388,7 @@ watch(
 // Ctrl+B を押す」が「prefix に入る→直後に \x02 が送られて抜ける」という壊れた動きになる）。
 // ダイアログが開いている間も同様にここでは何もしない（ダイアログ自身が処理する。上の watch 参照）。
 window.addEventListener("keydown", (ev) => {
-  if (view.openDialog) return;
+  if (view.modalOpen) return;
   if (document.activeElement?.classList.contains("xterm-helper-textarea")) return;
   const passThrough = keys.handleDomKey(ev);
   if (!passThrough) ev.preventDefault();

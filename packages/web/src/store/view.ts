@@ -310,6 +310,17 @@ export const useViewStore = defineStore("view", () => {
   const dialogContext = ref<DialogContext | null>(null);
   /** ダイアログを開く前にフォーカスしていた pane（AC-I4「閉じたら開く前の pane に戻す」）。 */
   const preDialogFocusPaneId = ref<string | null>(null);
+  /**
+   * 連携のグラフ画面（20260927-agent-graph の design D-6・research F7.2）。**ダイアログの 1 枠（`openDialog`）とは別の状態**——グラフ画面の中から
+   * 確認のダイアログを開いても、グラフ画面の文脈が消えない。マシンの切り替えでは閉じない（グラフは手元のサーバのもの）。
+   */
+  const graphOpen = ref(false);
+  /** グラフ画面を開く前にフォーカスしていた pane（閉じたら戻す。AC-I4）。 */
+  const preGraphFocusPaneId = ref<string | null>(null);
+  /**
+   * ダイアログかグラフ画面が開いている（キーを端末へ送らない dialog モード・window の keydown の抑止・ドラッグの取り消しの判定。research-web §1.5）。
+   */
+  const modalOpen = computed(() => openDialog.value !== null || graphOpen.value);
   /** navigate モード中に選択中の workspace（`↑/↓` で動かす。Enter で確定）。 */
   const navigateSelection = ref<string | null>(null);
   /**
@@ -429,6 +440,8 @@ export const useViewStore = defineStore("view", () => {
     dialogContext.value = null;
     openDialog.value = null;
     preDialogFocusPaneId.value = null;
+    // グラフ画面は閉じない（手元のもの）。戻す先の pane の id だけは前のマシンのものなので捨てる。
+    preGraphFocusPaneId.value = null;
     contextMenu.value = null;
     paneDrag.value = null;
     workspaceDrag.value = null;
@@ -485,6 +498,31 @@ export const useViewStore = defineStore("view", () => {
     openDialog.value = null;
     if (preDialogFocusPaneId.value) focusedPaneId.value = preDialogFocusPaneId.value;
     preDialogFocusPaneId.value = null;
+  }
+
+  /** グラフ画面を開く（開く前の焦点を覚える。既に開いていれば何もしない）。 */
+  function openGraph(): void {
+    if (graphOpen.value) return;
+    preGraphFocusPaneId.value = focusedPaneId.value;
+    graphOpen.value = true;
+  }
+
+  /** グラフ画面を閉じる。開く前の pane へ焦点を戻す（AC-I4）。 */
+  function closeGraph(): void {
+    if (!graphOpen.value) return;
+    graphOpen.value = false;
+    if (preGraphFocusPaneId.value) focusedPaneId.value = preGraphFocusPaneId.value;
+    preGraphFocusPaneId.value = null;
+  }
+
+  function toggleGraph(): void {
+    if (graphOpen.value) closeGraph();
+    else openGraph();
+  }
+
+  /** グラフ画面を開いている間の焦点の移し直し（`retargetPreDialogFocus` と同じ理由。焦点を直接変えると端末がグラフ画面からフォーカスを奪う）。 */
+  function retargetPreGraphFocus(paneId: string | null): void {
+    preGraphFocusPaneId.value = paneId;
   }
 
   function setNavigateSelection(workspaceId2: string | null): void {
@@ -637,6 +675,9 @@ export const useViewStore = defineStore("view", () => {
     mode,
     openDialog,
     dialogContext,
+    graphOpen,
+    preGraphFocusPaneId,
+    modalOpen,
     navigateSelection,
     navigateMenuRequested,
     contextMenu,
@@ -667,6 +708,10 @@ export const useViewStore = defineStore("view", () => {
     openDialogWithContext,
     closeDialog,
     retargetPreDialogFocus,
+    openGraph,
+    closeGraph,
+    toggleGraph,
+    retargetPreGraphFocus,
     setNavigateSelection,
     requestNavigateMenu,
     clearNavigateMenuRequest,
