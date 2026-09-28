@@ -896,7 +896,7 @@ node scripts/tui-pty-verify.mjs            # 疑似端末（node-pty）で soda 
 node packages/tui/dist/bench/latency.js    # 性能（AC17）。十数秒。--json で 1 行の JSON
 ```
 
-- `scripts/tui-pty-verify.mjs` は、一時の状態ディレクトリ・空いているポートで、起動と描画 → pane への入力 → `prefix+q` で終了コード 0・サーバは動き続ける
+- `scripts/tui-pty-verify.mjs` は、一時の状態ディレクトリ・空いているポートで、起動と描画 → はじめの案内が出て Enter で閉じ案内済みが `prefs.json` に残る → pane への入力 → `prefix+q` で終了コード 0・サーバは動き続ける
   → 再接続で同じ画面とスクロールバック（ホイールで遡る）→ 端末版 2 つの同時接続 → ブラウザ相当のクライアント（ローカルログインの cookie で `/ws`）との
   同時接続を確かめ、最後にサーバを止めて一時ディレクトリを消す（AC1・AC2・AC3・AC11・AC12）。ビルドはしないので先に `pnpm -s build`。Windows では何もせず成功で終わる。
 - `packages/tui/dist/bench/latency.js` は入力から描画までの遅延（1 pane・大量出力の隣・16 pane）とエージェントの表示の反映を測る。目安と、手で測る残り
@@ -927,6 +927,7 @@ $d = Join-Path $env:TEMP "soda-tui-check"; soda --state-dir $d   # Windows ネ�
 ```
 
 1. **起動（AC1・AC2）**: 裏でサーバが起動し、標準エラーに初回の token が出てから、サイドバー（Spaces）・tab バー・pane の枠が描かれる。
+   新しい状態ディレクトリでは、はじめの案内が出る（Enter で設定画面へ移り、Esc で閉じる。次に開いたときは出ない）。
    端末の大きさを変えると追従する。幅 64 桁未満で 1 列表示になる。もう 1 つ端末を開いて `soda --state-dir <同じ場所>` を打つと、起動せずに同じサーバへ繋ぐ。
 2. **pane（AC6）**: `vim`・`htop`（Windows は `edit`・`winget` 等の全画面のもの）が崩れない。`printf '\e[38;2;255;100;0mTRUE\e[0m\n'` が橙色（24 ビット色の端末）。
    全角の文字・絵文字の幅がずれない。IME で日本語を入れると候補窓が pane のカーソルの位置に出る。`vim` の `:set mouse=a` でクリックが vim へ届く。
