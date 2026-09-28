@@ -155,3 +155,107 @@ export function graphNodeAt(
 export function graphNodeRect(node: { x: number; y: number }): GraphRect {
   return { x: node.x, y: node.y, w: GRAPH_NODE_WIDTH, h: GRAPH_NODE_HEIGHT };
 }
+
+export type EdgeHeadShape = "triangle" | "diamond" | "circle";
+/** 線の先の印の大きさ（世界の px）。 */
+export const EDGE_HEAD_SIZE = 10;
+
+/**
+ * 線の先の印（design「線の種類の見た目」: トリガ ▶・監督 ◆・承認の代理 ●）。`end` を先端に、`start` から来る向きで描く SVG の path と、
+ * 線を止める点（`lineEnd`。印と線が重ならない）。SVG の marker の色は線の色に追従しない（context-stroke がブラウザで揃わない）ので path で描く。
+ */
+export function edgeHead(
+  start: GraphPoint,
+  end: GraphPoint,
+  shape: EdgeHeadShape,
+  size = EDGE_HEAD_SIZE,
+): { d: string; lineEnd: GraphPoint } {
+  const len = Math.hypot(end.x - start.x, end.y - start.y);
+  const ux = len === 0 ? 1 : (end.x - start.x) / len;
+  const uy = len === 0 ? 0 : (end.y - start.y) / len;
+  const nx = -uy;
+  const ny = ux;
+  const at = (back: number, side: number): GraphPoint => ({
+    x: end.x - ux * back + nx * side,
+    y: end.y - uy * back + ny * side,
+  });
+  const fmt = (p: GraphPoint): string => `${round2(p.x)} ${round2(p.y)}`;
+  if (shape === "triangle") {
+    const c1 = at(size, size / 2);
+    const c2 = at(size, -size / 2);
+    return { d: `M ${fmt(end)} L ${fmt(c1)} L ${fmt(c2)} Z`, lineEnd: at(size, 0) };
+  }
+  if (shape === "diamond") {
+    const l = size * 1.4;
+    return {
+      d: `M ${fmt(end)} L ${fmt(at(l / 2, size / 2))} L ${fmt(at(l, 0))} L ${fmt(at(l / 2, -size / 2))} Z`,
+      lineEnd: at(l, 0),
+    };
+  }
+  const r = size / 2;
+  const c = at(r, 0);
+  return {
+    d: `M ${round2(c.x - r)} ${round2(c.y)} A ${r} ${r} 0 1 0 ${round2(c.x + r)} ${round2(c.y)} A ${r} ${r} 0 1 0 ${round2(c.x - r)} ${round2(c.y)} Z`,
+    lineEnd: at(size, 0),
+  };
+}
+
+function round2(v: number): number {
+  return Math.round(v * 100) / 100 + 0;
+}
+
+/**
+ * 新しく載せるノードの位置（`index` 番目）。今のノードの外接矩形の右隣に縦に並べる（グリッドに合わせる）。ノードが無ければ左上から。
+ */
+export function nextFreeGraphPosition(rects: readonly GraphRect[], index: number): GraphPoint {
+  const stepY = GRAPH_NODE_HEIGHT + GRAPH_GRID * 2;
+  if (rects.length === 0)
+    return { x: GRAPH_GRID * 2, y: snapToGrid(GRAPH_GRID * 2 + index * stepY) };
+  const maxX = Math.max(...rects.map((r) => r.x + r.w));
+  const minY = Math.min(...rects.map((r) => r.y));
+  return { x: snapToGrid(maxX + GRAPH_GRID * 3), y: snapToGrid(minY + index * stepY) };
+}
+
+/**
+ * 矩形（世界の座標）が画面（`size`）の余白の内側に見えるよう、最小のパンだけ動かした表示（フォーカスしたノード・線を画面へ入れる。research-ui §2.12）。
+ * 既に見えていれば同じ表示を返す。
+ */
+export function revealGraphRect(
+  view: GraphViewport,
+  rect: GraphRect,
+  size: { w: number; h: number },
+  margin = 40,
+): GraphViewport {
+  const x0 = rect.x * view.zoom + view.panX;
+  const y0 = rect.y * view.zoom + view.panY;
+  const x1 = x0 + rect.w * view.zoom;
+  const y1 = y0 + rect.h * view.zoom;
+  const shift = (lo: number, hi: number, max: number): number => {
+    if (lo < margin) return margin - lo;
+    if (hi > max - margin) return Math.max(margin - lo, max - margin - hi);
+    return 0;
+  };
+  const dx = shift(x0, x1, size.w);
+  const dy = shift(y0, y1, size.h);
+  if (dx === 0 && dy === 0) return view;
+  return { zoom: view.zoom, panX: view.panX + dx, panY: view.panY + dy };
+}
+
+/**
+ * 2 本指のピンチ（モバイルの閲覧）。始めの 2 点（`a`・`b`）の中点の下の世界の点を、今の 2 点の中点の下に保ったまま、2 点の間の距離の比でズームする。
+ */
+export function pinchGraphView(
+  startView: GraphViewport,
+  a: GraphPoint,
+  b: GraphPoint,
+  a2: GraphPoint,
+  b2: GraphPoint,
+): GraphViewport {
+  const d0 = Math.hypot(b.x - a.x, b.y - a.y);
+  const d1 = Math.hypot(b2.x - a2.x, b2.y - a2.y);
+  const zoom = clampZoom(d0 === 0 ? startView.zoom : (startView.zoom * d1) / d0);
+  const world = screenToGraph(startView, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const mx = (a2.x + b2.x) / 2;
+  const my = (a2.y + b2.y) / 2;
+  return { zoom, panX: mx - world.x * zoom, panY: my - world.y * zoom };
+}

@@ -3,13 +3,17 @@ import {
   borderPoint,
   clampZoom,
   edgeGeometry,
+  edgeHead,
   fitGraphView,
   GRAPH_ZOOM_MAX,
   GRAPH_ZOOM_MIN,
   graphNodeAt,
   graphToScreen,
+  nextFreeGraphPosition,
   parallelOffsets,
   PARALLEL_LINK_GAP,
+  pinchGraphView,
+  revealGraphRect,
   screenToGraph,
   snapToGrid,
   zoomGraphAt,
@@ -126,5 +130,89 @@ describe("graphNodeAt", () => {
     expect(graphNodeAt(nodes, { x: 10, y: 10 })).toBe("a");
     expect(graphNodeAt(nodes, { x: 60, y: 60 })).toBe("b");
     expect(graphNodeAt(nodes, { x: 300, y: 300 })).toBeNull();
+  });
+});
+
+// 03-web-graph T2：線の先の印・新しいノードの位置・フォーカスで画面へ入れる・ピンチ。
+describe("edgeHead", () => {
+  it("三角は先端が end、線は印の根元で止まる（向きは start から）", () => {
+    const h = edgeHead({ x: 0, y: 0 }, { x: 100, y: 0 }, "triangle", 10);
+    expect(h.d).toBe("M 100 0 L 90 5 L 90 -5 Z");
+    expect(h.lineEnd).toEqual({ x: 90, y: 0 });
+  });
+  it("菱形は 1.4 倍の長さ、丸は直径ぶん手前で線を止める", () => {
+    const d = edgeHead({ x: 0, y: 0 }, { x: 0, y: 100 }, "diamond", 10);
+    expect(d.lineEnd).toEqual({ x: 0, y: 86 });
+    expect(d.d.startsWith("M 0 100 L")).toBe(true);
+    const c = edgeHead({ x: 0, y: 0 }, { x: 100, y: 0 }, "circle", 10);
+    expect(c.lineEnd).toEqual({ x: 90, y: 0 });
+    expect(c.d).toBe("M 90 0 A 5 5 0 1 0 100 0 A 5 5 0 1 0 90 0 Z");
+  });
+  it("始点と終点が同じでも数が壊れない", () => {
+    const h = edgeHead({ x: 5, y: 5 }, { x: 5, y: 5 }, "triangle", 10);
+    expect(h.d).not.toMatch(/NaN/);
+  });
+});
+
+describe("nextFreeGraphPosition", () => {
+  it("ノードが無ければ左上から縦に、あれば外接矩形の右隣に縦に（グリッドに合わせる）", () => {
+    expect(nextFreeGraphPosition([], 0)).toEqual({ x: 40, y: 40 });
+    expect(nextFreeGraphPosition([], 1)).toEqual({ x: 40, y: 160 });
+    const rects = [
+      { x: 0, y: 20, w: 200, h: 80 },
+      { x: 300, y: 200, w: 200, h: 80 },
+    ];
+    expect(nextFreeGraphPosition(rects, 0)).toEqual({ x: 560, y: 20 });
+    expect(nextFreeGraphPosition(rects, 2)).toEqual({ x: 560, y: 260 });
+  });
+});
+
+describe("revealGraphRect", () => {
+  const size = { w: 800, h: 600 };
+  it("見えていればそのまま", () => {
+    const v = { zoom: 1, panX: 0, panY: 0 };
+    expect(revealGraphRect(v, { x: 100, y: 100, w: 200, h: 80 }, size)).toBe(v);
+  });
+  it("右下へはみ出せば最小だけ戻し、左上へはみ出せば余白まで寄せる", () => {
+    const v = { zoom: 1, panX: 0, panY: 0 };
+    expect(revealGraphRect(v, { x: 700, y: 550, w: 200, h: 80 }, size)).toEqual({
+      zoom: 1,
+      panX: -140,
+      panY: -70,
+    });
+    expect(revealGraphRect(v, { x: -100, y: -10, w: 200, h: 80 }, size)).toEqual({
+      zoom: 1,
+      panX: 140,
+      panY: 50,
+    });
+  });
+});
+
+describe("pinchGraphView", () => {
+  it("2 点の距離の比でズームし、中点の下の点を保つ", () => {
+    const v = { zoom: 1, panX: 0, panY: 0 };
+    const next = pinchGraphView(
+      v,
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+      { x: 50, y: 100 },
+      { x: 250, y: 100 },
+    );
+    expect(next.zoom).toBe(2);
+    expect(screenToGraph(next, { x: 150, y: 100 })).toEqual({ x: 150, y: 100 });
+  });
+  it("始めの 2 点が重なっていてもズームを変えない（範囲にも収める）", () => {
+    const v = { zoom: 1.5, panX: 0, panY: 0 };
+    expect(
+      pinchGraphView(v, { x: 1, y: 1 }, { x: 1, y: 1 }, { x: 0, y: 0 }, { x: 9, y: 9 }).zoom,
+    ).toBe(1.5);
+    const big = pinchGraphView(
+      v,
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 0, y: 0 },
+      { x: 1000, y: 0 },
+    );
+    expect(big.zoom).toBe(GRAPH_ZOOM_MAX);
   });
 });

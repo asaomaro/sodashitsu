@@ -29,7 +29,7 @@ design「web」「振る舞いの詳細」の全画面のグラフ画面を、01
       対象: （新規 `packages/web/src/store/graph.ts`）・`packages/web/src/store/StoreAdapter.ts`（イベントの振り分け）・`packages/web/src/store/session.ts`（pane の要約）
       依存: なし
       AC: AC2, AC10, AC16
-- [ ] T2: `GraphView.vue` の本体（ツールバー・SVG の線の層・DOM のノードの層・パン/ズーム・全体表示・`GraphNode.vue`・`GraphEdge.vue`〔種類ごとの線種・矢印・ラベル・チップ・無効の ⚠〕・`graph.fired` の光り〔reduced-motion〕）と `usePointerDrag.ts`（ノードの移動・スナップ）
+- [x] T2: `GraphView.vue` の本体（ツールバー・SVG の線の層・DOM のノードの層・パン/ズーム・全体表示・`GraphNode.vue`・`GraphEdge.vue`〔種類ごとの線種・矢印・ラベル・チップ・無効の ⚠〕・`graph.fired` の光り〔reduced-motion〕）と `usePointerDrag.ts`（ノードの移動・スナップ）
       対象: `packages/web/src/components/graph/GraphView.vue`・（新規 `GraphNode.vue`・`GraphEdge.vue`・`usePointerDrag.ts`）・`packages/client-core/src/graph/geometry.ts`
       依存: T1
       AC: AC1, AC2, AC10, AC-I5
