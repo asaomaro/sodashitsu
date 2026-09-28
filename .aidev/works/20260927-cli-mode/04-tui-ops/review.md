@@ -57,6 +57,9 @@
 - [nit][conv:-] packages/tui/src/input/mouse.ts:512-522 境界のドラッグの比率を動きのたびに送る（web は 50ms で間引く） / 対応: 修正済（fcb94c3。負の確認 8 本）
 
 ## ラウンド 2（2026-09-27）
-- [should][conv:-] packages/tui/src/term/PaneTerminal.ts:115-133,150-170 OSC 8 のリンクを始まりと終わりの位置だけで覚え、上書き・代替画面・カーソル移動の後も見えない URL を開く / 対応: 差し戻し
-- [nit][conv:-] packages/tui/src/term/PaneTerminal.ts:121,133 大きさが変わって折り返し直すとリンクの位置がずれる / 対応: 差し戻し
-- [nit][conv:regression-negative-control] packages/tui/src/input/mouse.r2.test.ts:305-325 OSC 8 の試験に上書き・代替画面・折り返しの負の場合が無い / 対応: 差し戻し
+- [should][conv:-] packages/tui/src/term/PaneTerminal.ts:115-133,150-170 OSC 8 のリンクを始まりと終わりの位置だけで覚え、上書き・代替画面・カーソル移動の後も見えない URL を開く / 対応: 修正済（6c65ebb。xterm のセルごとのリンクの id を読む形に変えた。負の確認済み）
+- [nit][conv:-] packages/tui/src/term/PaneTerminal.ts:121,133 大きさが変わって折り返し直すとリンクの位置がずれる / 対応: 修正済（6c65ebb。xterm のセルごとのリンクの id を読む形に変えた。負の確認済み）
+- [nit][conv:regression-negative-control] packages/tui/src/input/mouse.r2.test.ts:305-325 OSC 8 の試験に上書き・代替画面・折り返しの負の場合が無い / 対応: 修正済（6c65ebb。xterm のセルごとのリンクの id を読む形に変えた。負の確認済み）
+
+## ラウンド 3（2026-09-27）
+- 指摘なし（6c65ebb を主エージェントが直読。位置で覚える形を捨て、xterm のセルごとのリンクの id を読む形になったので、上書き・代替画面・カーソルの移動・折り返し直しの 4 つが構造的に解消した。内部を読む点は decisions D16。負の確認の記録あり）

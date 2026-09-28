@@ -26,19 +26,19 @@
 
 ## タスク
 
-- [ ] T1: 設定画面（通知・テーマ・表示・端末・キー・`tui` 節。項目の一覧・切り替え・選択肢・入力欄・キーの割り当ての待ち）と `mouseCapture` の実行中の切り替え
+- [x] T1: 設定画面（通知・テーマ・表示・端末・キー・`tui` 節。項目の一覧・切り替え・選択肢・入力欄・キーの割り当ての待ち）と `mouseCapture` の実行中の切り替え
       対象: `packages/web/src/components/SettingsDialog.vue`・`packages/web/src/store/settings.ts`・`packages/tui/src/model/PrefsModel.ts`・`packages/client-core/src/keys/assign.ts`・`presets.ts`
       依存: なし
       AC: AC8, AC11, AC-I1, AC-I2, AC-I3, AC-I4
-- [ ] T2: テーマの配色（`themeOverrides`・明暗の自動・`client.theme` の送信）とサイドバーの行のカスタマイズ（`sidebarRows`・`resolveRows`）
+- [x] T2: テーマの配色（`themeOverrides`・明暗の自動・`client.theme` の送信）とサイドバーの行のカスタマイズ（`sidebarRows`・`resolveRows`）
       対象: `packages/tui/src/render/color.ts`・`packages/web/src/theme/themeOverrides.ts`・`packages/web/src/theme/ThemeController.ts`・`packages/client-core/src/sidebar/resolveRows.ts`
       依存: T1
       AC: AC2, AC11
-- [ ] T3: 通知（`routesFor`・フォーカスの報告・トースト・BEL・OSC 9/99/777・tmux の包み・`tui.notifyDelivery`・`prefix+o`・通知の一覧・トーストのクリック）
+- [x] T3: 通知（`routesFor`・フォーカスの報告・トースト・BEL・OSC 9/99/777・tmux の包み・`tui.notifyDelivery`・`prefix+o`・通知の一覧・トーストのクリック）
       対象: `packages/client-core/src/notify/policy.ts`・`describe.ts`・`packages/web/src/notify/NotificationController.ts`・（新規 `packages/tui/src/notify/`）
       依存: なし
       AC: AC13, AC-I1, AC-I3, AC-I4
-- [ ] T4: 複数ホスト（マシンの一覧・要約の接続・選んだマシンの画面の接続・サイドバーのマシンの見出し・マシンをまたぐ移動）
+- [x] T4: 複数ホスト（マシンの一覧・要約の接続・選んだマシンの画面の接続・サイドバーのマシンの見出し・マシンをまたぐ移動）
       対象: `packages/client-core/src/net/MachineSummaryClient.ts`・`packages/web/src/`（`MachineWiring`。場所は未特定）・`packages/tui/src/net/`
       依存: なし
       AC: AC14

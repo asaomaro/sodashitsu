@@ -10,6 +10,11 @@
 - `pnpm test` — 315 files / 5688 passed / 0 failed
 - `node scripts/tui-pty-verify.mjs` — exit 0
 
+## ラウンド 3（review 2 巡目の差し戻しの後。6c65ebb を取り出した作業ツリー）
+- `pnpm build`・`pnpm typecheck` — exit 0
+- `pnpm test` — 315 files / 5698 passed / 0 failed
+- `node scripts/tui-pty-verify.mjs` — exit 0
+
 ## 受け入れ基準ごとの判定（この subtask の分）
 - AC5: pass（全 56 操作の RPC と引数を web と表で照合する試験・実物のサーバでの結合）
 - AC7: pass（copy モードとマウスの選択・写し。全角・絵文字・折り返し・検索・切り詰め。クリップボードへの書き出しは OSC 52・手元の道具は 05）
@@ -3077,6 +3082,217 @@ AssertionError: expected [ { id: '7', …(2) } ] to have a length of 2 but got 1
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
 
 restored: sha256 before=82c8b56eea2f9705 after=82c8b56eea2f9705 IDENTICAL
+
+===== rv2r2-cell-urlid (セルのリンクを見ずに最後のリンクを当てる＝位置だけで覚えるのと同じ誤り) (2026-09-28T07:28:57)
+mutation: src/term/PaneTerminal.ts
+  - '      const id = cell.extended?.urlId;'
+  + '      const id = (core._oscLinkService as unknown as { _dataByLinkId?: Map<number, unknown> })._dataByLinkId?.size ?? cell.extended?.urlId;'
+command: (cd packages/tui && npx vitest run src/term/PaneTerminal.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/term/PaneTerminal.test.ts > OSC 8 のハイパーリンク（今見えている文字がそのリンクで書かれた文字のときだけ。04 review ラウンド 2） > リンクの中で書いた文字だけ。前後の文字には付かない
+AssertionError: expected 'https://x.example/' to be null
+
+- Expected:
+null
+
++ Received:
+"https://x.example/"
+
+ ❯ src/term/PaneTerminal.test.ts:130:33
+    128|     t.output(e(`ab${link("https://x.example/", "click")} tail`));
+    129|     await t.flush();
+    130|     expect(t.hyperlinkAt(0, 1)).toBeNull();
+       |                                 ^
+    131|     expect(t.hyperlinkAt(0, 2)).toBe("https://x.example/");
+    132|     expect(t.hyperlinkAt(0, 6)).toBe("https://x.example/");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/term/PaneTerminal.test.ts > OSC 8 のハイパーリンク（今見えている文字がそのリンクで書かれた文字のときだけ。04 review ラウンド 2） > 上書き（\r の後の書き直し・画面の消去）で外れる
+AssertionError: expected 'https://evil.example/y' to be null
+
+- Expected:
+null
+
++ Received:
+"https://evil.example/y"
+
+ ❯ src/term/PaneTerminal.test.ts:141:33
+    139|     t.output(e(`${link("https://evil.example/y", "progress")}\rDONE!!!…
+    140|     await t.flush();
+    141|     expect(t.hyperlinkAt(0, 2)).toBeNull();
+       |                                 ^
+    142|     t.output(e(`\r\n${link("https://evil.example/x", "click")}\x1b[H\x…
+    143|     await t.flush();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/term/PaneTerminal.test.ts > OSC 8 のハイパーリンク（今見えている文字がそのリンクで書かれた文字のときだけ。04 review ラウンド 2） > 代替画面のリンクは通常の画面と別（代替画面の文字に通常の画面のリンクを当てない）
+AssertionError: expected 'https://evil.example/z' to be null
+
+- Expected:
+null
+
++ Received:
+"https://evil.example/z"
+
+ ❯ src/term/PaneTerminal.test.ts:155:33
+    153|     await t.flush();
+    154|     expect(t.term.buffer.active.type).toBe("alternate");
+    155|     expect(t.hyperlinkAt(0, 2)).toBeNull();
+       |                                 ^
+    156|     t.output(e("\x1b[?1049l"));
+    157|     await t.flush();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/term/PaneTerminal.test.ts > OSC 8 のハイパーリンク（今見えている文字がそのリンクで書かれた文字のときだけ。04 review ラウンド 2） > 開いてから閉じるまでにカーソルが動いても、その間に書いていない行には付かない
+AssertionError: expected 'https://evil.example/w' to be null
+
+- Expected:
+null
+
++ Received:
+"https://evil.example/w"
+
+ ❯ src/term/PaneTerminal.test.ts:167:33
+    165|     await t.flush();
+    166|     expect(t.hyperlinkAt(0, 0)).toBe("https://evil.example/w");
+    167|     expect(t.hyperlinkAt(1, 2)).toBeNull();
+       |                                 ^
+    168|     expect(t.hyperlinkAt(2, 1)).toBeNull();
+    169|     t.dispose();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  src/term/PaneTerminal.test.ts > OSC 8 のハイパーリンク（今見えている文字がそのリンクで書かれた文字のときだけ。04 review ラウンド 2） > 大きさを変えて折り返し直すと、リンクは文字と一緒に動く
+AssertionError: expected 'https://a.example/' to be null
+restored: sha256 before=6a5af5e0000df819 after=6a5af5e0000df819 IDENTICAL
+
+===== rv2r2-active-buffer (代替画面でも通常の画面のバッファを見る) (2026-09-28T07:29:07)
+mutation: src/term/PaneTerminal.ts
+  - '      const buffer = core?.buffer;'
+  + '      const buffer = (core as unknown as { buffers?: { normal?: XtermCore["buffer"] } })?.buffers?.normal ?? core?.buffer;'
+command: (cd packages/tui && npx vitest run src/term/PaneTerminal.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/term/PaneTerminal.test.ts > OSC 8 のハイパーリンク（今見えている文字がそのリンクで書かれた文字のときだけ。04 review ラウンド 2） > 代替画面のリンクは通常の画面と別（代替画面の文字に通常の画面のリンクを当てない）
+AssertionError: expected 'https://evil.example/z' to be null
+
+- Expected:
+null
+
++ Received:
+"https://evil.example/z"
+
+ ❯ src/term/PaneTerminal.test.ts:155:33
+    153|     await t.flush();
+    154|     expect(t.term.buffer.active.type).toBe("alternate");
+    155|     expect(t.hyperlinkAt(0, 2)).toBeNull();
+       |                                 ^
+    156|     t.output(e("\x1b[?1049l"));
+    157|     await t.flush();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+restored: sha256 before=6a5af5e0000df819 after=6a5af5e0000df819 IDENTICAL
+
+===== rv2r2-id-zero-guard (等価の変異の確認：id 0 は getLinkData が無いので同じ結果) (2026-09-28T07:29:15)
+mutation: src/term/PaneTerminal.ts
+  - '      if (typeof id !== "number" || id === 0) return null;'
+  + '      if (typeof id !== "number") return null;'
+command: (cd packages/tui && npx vitest run src/term/PaneTerminal.test.ts)  exit=0
+raw output:
+      Tests  14 passed (14)
+restored: sha256 before=6a5af5e0000df819 after=6a5af5e0000df819 IDENTICAL
+
+===== rv2r2-revert-fix（PaneTerminal.ts を直す前〔HEAD fcb94c3 以降の始まりと終わりの位置で覚える形〕に戻す） (2026-09-28T07:29:39+09:00)
+command: (cd packages/tui && npx vitest run src/term/PaneTerminal.test.ts)  exit=1
+raw output:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/term/PaneTerminal.test.ts > OSC 8 のハイパーリンク（今見えている文字がそのリンクで書かれた文字のときだけ。04 review ラウンド 2） > 上書き（\r の後の書き直し・画面の消去）で外れる
+AssertionError: expected 'https://evil.example/y' to be null
+
+- Expected:
+null
+
++ Received:
+"https://evil.example/y"
+
+ ❯ src/term/PaneTerminal.test.ts:141:33
+    139|     t.output(e(`${link("https://evil.example/y", "progress")}\rDONE!!!…
+    140|     await t.flush();
+    141|     expect(t.hyperlinkAt(0, 2)).toBeNull();
+       |                                 ^
+    142|     t.output(e(`\r\n${link("https://evil.example/x", "click")}\x1b[H\x…
+    143|     await t.flush();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/term/PaneTerminal.test.ts > OSC 8 のハイパーリンク（今見えている文字がそのリンクで書かれた文字のときだけ。04 review ラウンド 2） > 代替画面のリンクは通常の画面と別（代替画面の文字に通常の画面のリンクを当てない）
+AssertionError: expected 'https://evil.example/z' to be null
+
+- Expected:
+null
+
++ Received:
+"https://evil.example/z"
+
+ ❯ src/term/PaneTerminal.test.ts:155:33
+    153|     await t.flush();
+    154|     expect(t.term.buffer.active.type).toBe("alternate");
+    155|     expect(t.hyperlinkAt(0, 2)).toBeNull();
+       |                                 ^
+    156|     t.output(e("\x1b[?1049l"));
+    157|     await t.flush();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/term/PaneTerminal.test.ts > OSC 8 のハイパーリンク（今見えている文字がそのリンクで書かれた文字のときだけ。04 review ラウンド 2） > 開いてから閉じるまでにカーソルが動いても、その間に書いていない行には付かない
+AssertionError: expected 'https://evil.example/w' to be null
+
+- Expected:
+null
+
++ Received:
+"https://evil.example/w"
+
+ ❯ src/term/PaneTerminal.test.ts:167:33
+    165|     await t.flush();
+    166|     expect(t.hyperlinkAt(0, 0)).toBe("https://evil.example/w");
+    167|     expect(t.hyperlinkAt(1, 2)).toBeNull();
+       |                                 ^
+    168|     expect(t.hyperlinkAt(2, 1)).toBeNull();
+    169|     t.dispose();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/term/PaneTerminal.test.ts > OSC 8 のハイパーリンク（今見えている文字がそのリンクで書かれた文字のときだけ。04 review ラウンド 2） > 大きさを変えて折り返し直すと、リンクは文字と一緒に動く
+AssertionError: expected null to be 'https://a.example/' // Object.is equality
+
+- Expected:
+"https://a.example/"
+
++ Received:
+null
+
+ ❯ src/term/PaneTerminal.test.ts:186:51
+    184|     }
+    185|     expect(found).not.toBeNull();
+    186|     expect(t.hyperlinkAt(found!.row, found!.col)).toBe("https://a.exam…
+       |                                                   ^
+    187|     expect(t.hyperlinkAt(found!.row, found!.col - 1)).toBeNull();
+    188|     t.dispose();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+restored: sha256 before=6a5af5e0000df819 after=6a5af5e0000df819 IDENTICAL
 ```
 
 ## 起動確認（smoke）

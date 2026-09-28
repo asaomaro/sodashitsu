@@ -36,3 +36,9 @@ events:
   - { ts: 2026-09-27T22:18:14Z, phase: test, event: sent_back, metrics: { by: unapprove } }
   - { ts: 2026-09-27T22:18:14Z, phase: coding, event: sent_back, metrics: { by: unapprove } }
   - { ts: 2026-09-27T22:18:14Z, phase: coding, event: start }
+  - { ts: 2026-09-27T22:36:22Z, phase: coding, event: approved, metrics: { tasks_done: 5, unplanned_lookups: 0, task_checks: 5, task_check_findings: 44, task_check_mode: delegated } }
+  - { ts: 2026-09-27T22:36:22Z, phase: test, event: start, metrics: { marks: 2 } }
+  - { ts: 2026-09-27T22:41:29Z, phase: test, event: approved, metrics: { passed: 5698, failed: 0 } }
+  - { ts: 2026-09-27T22:41:29Z, phase: review, event: start, metrics: { marks: 35 } }
+  - { ts: 2026-09-27T22:41:29Z, phase: review, event: approved, metrics: { must: 4, should: 9, nit: 6 } }
+  - { ts: 2026-09-27T22:41:36Z, phase: review, event: approved, metrics: { must: 0, should: 6, nit: 5, amend: yes } }
