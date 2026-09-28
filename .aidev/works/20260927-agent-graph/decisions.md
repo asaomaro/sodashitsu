@@ -102,4 +102,10 @@
   10. web: 選び直し（`canRekey`）を別のマシンの無効なノード（その pane が閉じた）にも広げた。候補は同じマシンの pane だけ（手元の pane に付け替えない。R5 の懸念はこれで守る）。
   11. web: 別のマシンのノードから pane へ移るとき、切り替えの後にその pane に焦点を置く（`SwitchTarget.paneId`・`MachineSwitcherPorts.requestPaneFocus`。D6-11 の「tab の焦点のまま」を改めた）。
   12. 結合試験のために `ComposedServer.graphRemoteAvailable(machineId)` を出した。
+  13. （g04 点検）監督役への知らせの途中で接続が切れた（`connection_closed`。届いたか分からない）ときは、失敗を残さず、繋ぎ直した後（監督役の手が空いたとき）に知らせ直す。知らせは冪等な案内文なので、二重に届く害は、届かないまま配下の変化を知らないでいる害より小さい。トリガ・承認の代理の送信の途中の切断は今までどおり `failed/error`（二重に送ると作業を 2 回頼むことになる）。
+  14. （g04 点検）hello の応答と同じ読み取りの塊で後ろに届いたイベントは、`Connection` が応答を当てる（マイクロタスク）より先に届く。`RemoteLink` は `client.hello` の id を覚える socket の包みで応答の到着を知り、応答の後・open の前のイベントを溜めて open の後に順に当てる。応答より前のイベントは snapshot が含むので捨てる（当て直すと古い値に戻る）。
+  15. （g04 点検）リモートが閉じた code は adapter で `sanitizeRemoteCloseCode`（`MachineRelay` と同じ）で絞る。4401 は 1011 になり、`Connection` が認証の要求として止まらない（中継の受け口は認証済みなので、止める理由が無い）。`onAuthRequired` は何もしない。
+  16. （g04 点検）`Connection` に `resetBackoffOnHello`（既定 false。web・tui・cli は今までどおり socket が開いたときに間隔を戻す）を足し、`RemoteLink` は true（中継のチャネルは必ずすぐ開くので、hello を断るリモートへ 1 秒おきに繋ぎ直さない）。マシンの online の知らせで待ちを飛ばすのは online に**変わった**ときだけ（名前の変更など online のままの知らせでは飛ばさない。作った時点の状態を覚える）。`disconnect` は、socket が無い（待ちの途中）なら `detached` をその場で知らせ、`disconnect` の後の `retarget` は繋ぐ。
+  17. （g04 点検）画面の末尾の読み取りは、前の読み取りの購読を外し終える（`pane.unsubscribe` の応答・切断・最長 5 秒）まで次を始めない（時間切れの購読へ遅れて届いた SNAPSHOT を次の読み取りに使わない。SNAPSHOT には読み取りの識別が無いので、順序で分ける）。
+  18. （g04 点検・web）ノードの「未接続」: 画面が向いているマシンは接続が open（起動・切り替えの直後の connecting でも session に中身があれば繋がっている）、ほかは軽い接続が繋がっているとき以外は `exists: null`（未接続の印）・状態を出さない（`store/graph` の `machineConnected`）。未接続のノードの Enter・「pane へ」は画面を閉じずにトースト。チェックリストは画面が向いているマシンの節にも「（未接続）」、pane を出せないマシン（手元を含む）は「繋がっていないので pane を出せません」。選び直しの候補は、繋がっていないマシンでは選べない（未接続の注記）。切り替えの後の pane の焦点は、その pane があり表示中の tab にあるときだけ（`actions/paneFocus`）。
 - **残した懸念**: リモートの再起動・宛先の変更で同じ pane の id が別の pane を指しても、別のマシンのノードは無効にしない（instanceId が変わるので「基準」から始まり、誤って動きはしない）。
