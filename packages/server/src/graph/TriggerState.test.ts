@@ -387,3 +387,34 @@ describe("TriggerState — 承認待ちの回と待ち（g02 点検）", () => {
     expect(s.handle({ kind: "tick", at: BLOCKED_HOLD_MS })).toEqual({ kind: "send" });
   });
 });
+
+// g05 点検：承認待ちの 1 秒の期限（GraphEngine がこの時刻にタイマーを張る）。
+describe("TriggerState.holdDeadline", () => {
+  it("on: blocked で、まだ発火していない承認待ちの回だけ期限を返す", () => {
+    const busy = (state: "idle" | "blocked" | "working") => ({
+      instanceId: "a",
+      kind: "claude",
+      label: "Claude",
+      state,
+      completionSeq: 0,
+      serverSeenSeq: 0,
+      verified: true,
+      since: 0,
+    });
+    const ts = new TriggerState(
+      { on: "blocked", whenBusy: "wait", suppress: null },
+      { source: busy("idle") as never, target: busy("idle") as never, at: 0 },
+    );
+    expect(ts.holdDeadline()).toBeNull();
+    ts.handle({ kind: "source", agent: busy("blocked") as never, at: 500 });
+    expect(ts.holdDeadline()).toBe(1500);
+    expect(ts.handle({ kind: "tick", at: 1500 })).toEqual({ kind: "send" });
+    expect(ts.holdDeadline()).toBeNull();
+    const done = new TriggerState(
+      { on: "done", whenBusy: "wait", suppress: null },
+      { source: busy("idle") as never, target: busy("idle") as never, at: 0 },
+    );
+    done.handle({ kind: "source", agent: busy("blocked") as never, at: 500 });
+    expect(done.holdDeadline()).toBeNull();
+  });
+});

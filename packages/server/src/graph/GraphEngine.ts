@@ -59,6 +59,8 @@ export interface GraphEngineDeps {
   now(): number;
   /** 見回りの間隔のタイマー（試験は `tick()` を直接呼ぶので、既定の setInterval を差し替えない）。 */
   setInterval?(fn: () => void, ms: number): { clear(): void };
+  /** 承認待ちの 1 秒が満ちる時刻に 1 回だけ見回るタイマー（試験は差し替えて時刻を進める。既定は setTimeout）。 */
+  setTimeout?(fn: () => void, ms: number): { clear(): void };
   logger?: Pick<Logger, "warn">;
 }
 
@@ -117,6 +119,9 @@ export class GraphEngine {
   /** 別のマシンの口の購読（マシンごと）。 */
   private readonly remoteSubs = new Map<string, { port: AgentPort; subs: Disposable[] }>();
   private timer: { clear(): void } | null = null;
+  /** 承認待ちの 1 秒の期限のタイマー（一番早い期限の 1 本）とその期限。 */
+  private holdTimer: { clear(): void } | null = null;
+  private holdAt: number | null = null;
   private graph: Graph | null = null;
   /** stop ごとに増やす。送っている途中の結果は、止めた後なら捨てる。 */
   private generation = 0;
@@ -146,6 +151,9 @@ export class GraphEngine {
     this.remoteSubs.clear();
     this.timer?.clear();
     this.timer = null;
+    this.holdTimer?.clear();
+    this.holdTimer = null;
+    this.holdAt = null;
     // 線・監督役の状態は捨てる（待ちも一緒に消え、履歴には残さない）。次の start は今の値を基準に作り直す。
     this.links.clear();
     this.supervisors.clear();
@@ -176,6 +184,35 @@ export class GraphEngine {
       this.apply(rt, rt.state.handle({ kind: "tick", at }), at);
     for (const sv of [...this.supervisors.values()])
       this.applySupervisor(sv, sv.notifier.handle({ kind: "tick", at }));
+    this.armHold();
+  }
+
+  /**
+   * 承認待ちの 1 秒の期限（線ごとの `holdDeadline` の一番早いもの）にタイマーを張り直す（g05 点検）。1 秒ごとの見回りだけでは、承認待ちに入ってから
+   * 発火まで最長 2 秒かかっていた。期限に `tick` を呼ぶ（早く来すぎたら `tick` の後にまた張る）。
+   */
+  private armHold(): void {
+    if (!this.running) return;
+    let next: number | null = null;
+    for (const rt of this.links.values()) {
+      const d = rt.state.holdDeadline();
+      if (d !== null && (next === null || d < next)) next = d;
+    }
+    if (next === this.holdAt) return;
+    this.holdTimer?.clear();
+    this.holdTimer = null;
+    this.holdAt = next;
+    if (next === null) return;
+    const later = this.deps.setTimeout ?? defaultTimeout;
+    this.holdTimer = later(
+      () =>
+        this.guard(() => {
+          this.holdTimer = null;
+          this.holdAt = null;
+          this.tick();
+        }),
+      Math.max(0, next - this.deps.now()) + 1,
+    );
   }
 
   // --- 対象の作り直し ---
@@ -242,6 +279,7 @@ export class GraphEngine {
     for (const id of [...this.history.keys()])
       if (!graph.links.some((l) => l.id === id)) this.history.delete(id);
     this.reconcileSupervisors(graph, nodes, at);
+    this.armHold();
   }
 
   private reconcileLink(
@@ -435,6 +473,7 @@ export class GraphEngine {
         );
       }
     }
+    this.armHold();
   }
 
   /** 先としての状態（作業中とみなしている間は working）。 */
@@ -688,6 +727,12 @@ function startedOrReplaced(assumed: AgentInfo, now: AgentInfo | null): boolean {
   if (now === null || now.instanceId !== assumed.instanceId) return true;
   if (now.state !== "idle") return true;
   return now.completionSeq > assumed.completionSeq;
+}
+
+function defaultTimeout(fn: () => void, ms: number): { clear(): void } {
+  const t = setTimeout(fn, ms);
+  t.unref?.();
+  return { clear: () => clearTimeout(t) };
 }
 
 function defaultInterval(fn: () => void, ms: number): { clear(): void } {

@@ -9,7 +9,8 @@ import { makeTempDir } from "../persist/atomicFile.js";
  * 20260927-agent-graph の 05 T5（AC17）：規模（pane 16 個・線 32 本）と応答性（状態の変化から実行の開始まで 2 秒以内）を、実物のサーバ
  * （`composeServer`・実物の `GraphEngine`・本物の `agent.prompt`・実 PTY）で測る。
  *
- * - エージェントの状態は `session.updatePaneRuntime` で偽って出す（シェルが前面の pane では AgentMonitor が上書きしない。02 の結合試験と同じ）。
+ * - エージェントの状態は `session.updatePaneRuntime` で偽って出す（どの pane も前面は `cat` で、AgentMonitor はエージェントとして検出しないので
+ *   偽の値を上書きしない。02 の結合試験と同じ前提）。
  *   判定の周期（AgentMonitor の見回り）は要件の「判定の周期を除いて」に当たるので測らない。
  * - 「実行の開始」は、先の pane の画面に送った文面が現れた時刻（`agent.prompt` が打ち込んだ文字を `cat` が端末に返した＝先に届き始めた）。
  *   あわせて `graph.fired` の sent（Enter まで送り終えた。`agent.prompt` は本文の 300ms 後に Enter を送る）までの時間も記録する。
@@ -44,12 +45,12 @@ async function waitFor(
   }
 }
 
-function agentInfo(instanceId: string, completionSeq: number) {
+function agentInfo(instanceId: string, completionSeq: number, state: "idle" | "blocked" = "idle") {
   return {
     instanceId,
     kind: "claude",
     label: "Claude",
-    state: "idle",
+    state,
     completionSeq,
     serverSeenSeq: 0,
     verified: true,
@@ -58,14 +59,36 @@ function agentInfo(instanceId: string, completionSeq: number) {
 }
 
 const mark = (from: number, to: number) => `perf-mark-${from}-${to}`;
-/** 線 32 本: 各 pane i から i+1・i+2（16 で回る）へのトリガ。 */
+/**
+ * 線 32 本: 各 pane i から i+1・i+2（16 で回る）へ。`done` は両方とも完了のトリガ。`blocked`（g05 点検）は i+1 へ承認待ちのトリガ（受け渡しなし）、
+ * i+2 へ承認の代理（i が配下・i+2 が監督役。知らせるだけ）。
+ */
 function linkPairs(): [number, number][] {
   const pairs: [number, number][] = [];
   for (let i = 0; i < PANES; i++) pairs.push([i, (i + 1) % PANES], [i, (i + 2) % PANES]);
   return pairs;
 }
 
-async function boot(): Promise<Ctx> {
+type Mode = "done" | "blocked";
+
+function linkOp(mode: Mode, key: (i: number) => `local:${string}`, from: number, to: number) {
+  const base = { op: "add_link" as const, from: key(from), to: key(to), limit: 100 };
+  if (mode === "blocked" && to === (from + 2) % PANES) {
+    return { ...base, kind: "approval" as const, approval: { mode: "notify" as const, lines: 20 } };
+  }
+  return {
+    ...base,
+    kind: "trigger" as const,
+    trigger: {
+      on: mode,
+      prompt: mode === "done" ? `${mark(from, to)} {output}` : mark(from, to),
+      output: mode === "done" ? { lines: 20 } : null,
+      whenBusy: "wait" as const,
+    },
+  };
+}
+
+async function boot(mode: Mode = "done"): Promise<Ctx> {
   const dir = await makeTempDir("soda-graph-perf-");
   cleanups.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
   const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: dir, origin: [] });
@@ -96,19 +119,7 @@ async function boot(): Promise<Ctx> {
         x: (i % 4) * 240,
         y: Math.floor(i / 4) * 120,
       })),
-      ...linkPairs().map(([from, to]) => ({
-        op: "add_link" as const,
-        kind: "trigger" as const,
-        from: key(from),
-        to: key(to),
-        trigger: {
-          on: "done" as const,
-          prompt: `${mark(from, to)} {output}`,
-          output: { lines: 20 },
-          whenBusy: "wait" as const,
-        },
-        limit: 100,
-      })),
+      ...linkPairs().map(([from, to]) => linkOp(mode, key, from, to)),
     ],
     "perf",
   );
@@ -167,6 +178,51 @@ describe("連携の性能（pane 16・線 32。AC17）", () => {
     log({ case: "single-change", panes: PANES, links: LINKS, limitMs: RESPONSE_LIMIT_MS, results });
     for (const r of results)
       for (const ms of r.toStartMs) expect(ms).toBeLessThan(RESPONSE_LIMIT_MS);
+  }, 90_000);
+
+  it("承認待ちが 1 秒続いてから、承認待ちのトリガと承認の代理の先へ送り始めるまで、承認待ちに入ってから 2 秒以内（3 回。g05 点検）", async () => {
+    const ctx = await boot("blocked");
+    const results: { source: number; triggerStartMs: number; approvalStartMs: number }[] = [];
+    for (const source of [0, 5, 10]) {
+      const [t1, t2] = [(source + 1) % PANES, (source + 2) % PANES];
+      // 承認の代理は元の画面の末尾を渡すので、元の画面に目印を出しておき、監督役の画面にそれが現れた時刻を測る。
+      const srcMark = `perf-src-${source}`;
+      ctx.server.terminals.get(ctx.panes[source]!)!.write(`${srcMark}\r`);
+      await waitFor(`the mark on pane ${source}`, () => screenHas(ctx, source, srcMark), 10_000);
+      const t0 = performance.now();
+      ctx.server.session.updatePaneRuntime(ctx.panes[source]!, {
+        agent: agentInfo(`perf-${source}`, 0, "blocked") as never,
+      });
+      const at: Record<string, number> = {};
+      await Promise.all([
+        waitFor(
+          `the blocked trigger on pane ${t1}`,
+          () => screenHas(ctx, t1, mark(source, t1)),
+          10_000,
+        ).then(() => void (at["trigger"] = Math.round(performance.now() - t0))),
+        waitFor(
+          `the approval notice on pane ${t2}`,
+          () => screenHas(ctx, t2, srcMark),
+          10_000,
+        ).then(() => void (at["approval"] = Math.round(performance.now() - t0))),
+      ]);
+      results.push({ source, triggerStartMs: at["trigger"]!, approvalStartMs: at["approval"]! });
+    }
+    log({
+      case: "blocked",
+      panes: PANES,
+      links: LINKS,
+      holdMs: 1000,
+      limitMs: RESPONSE_LIMIT_MS,
+      results,
+    });
+    for (const r of results) {
+      // 1 秒の継続（BLOCKED_HOLD_MS）より前には送らない。
+      expect(r.triggerStartMs).toBeGreaterThanOrEqual(1000);
+      expect(r.approvalStartMs).toBeGreaterThanOrEqual(1000);
+      expect(r.triggerStartMs).toBeLessThan(RESPONSE_LIMIT_MS);
+      expect(r.approvalStartMs).toBeLessThan(RESPONSE_LIMIT_MS);
+    }
   }, 90_000);
 
   it("16 の元が同時に完了しても、16 の先のどれにも 2 秒以内に送り始める（線ごとの 2 本目は先の手が空くまで待つ）", async () => {

@@ -161,6 +161,8 @@ function setup(links: GraphLink[], over: Partial<Graph> = {}, init?: (port: Fake
   const store = new FakeStore(graphOf(links, over));
   const events: ServerEvent[] = [];
   const timers: (() => void)[] = [];
+  /** 承認待ちの 1 秒の期限のタイマー（張られた順。clear されたものは消える）。 */
+  const holds: { fn: () => void; ms: number }[] = [];
   const engine = new GraphEngine({
     store,
     local: port,
@@ -169,6 +171,11 @@ function setup(links: GraphLink[], over: Partial<Graph> = {}, init?: (port: Fake
     setInterval: (fn) => {
       timers.push(fn);
       return { clear: () => timers.splice(timers.indexOf(fn), 1) };
+    },
+    setTimeout: (fn, ms) => {
+      const h = { fn, ms };
+      holds.push(h);
+      return { clear: () => void (holds.includes(h) && holds.splice(holds.indexOf(h), 1)) };
     },
   });
   engine.start();
@@ -180,6 +187,14 @@ function setup(links: GraphLink[], over: Partial<Graph> = {}, init?: (port: Fake
     store,
     events,
     timers,
+    holds,
+    /** 張られている期限のタイマーの時刻まで時計を進めて呼ぶ（見回りの tick は呼ばない）。 */
+    fireHold: () => {
+      const h = holds.shift();
+      if (h === undefined) throw new Error("no hold timer");
+      now += h.ms;
+      h.fn();
+    },
     runs,
     advance: (ms: number) => {
       now += ms;
@@ -426,6 +441,28 @@ describe("GraphEngine — 承認の代理", () => {
     expect(text).toContain("結果の末尾");
     expect(text).toContain("sodactl agent send-keys p1");
     expect(t.store.recordRun).toHaveBeenCalledWith("l1");
+  });
+
+  it("承認待ちの 1 秒は見回りを待たずに期限のタイマーで発火する（g05 点検）", async () => {
+    const t = setup([approval("notify")]);
+    expect(t.holds).toEqual([]);
+    const start = t.at();
+    t.port.set("p1", agent("a1", 0, "blocked"));
+    expect(t.holds).toHaveLength(1);
+    t.fireHold();
+    await flush();
+    expect(t.port.prompts).toHaveLength(1);
+    expect(t.at() - start).toBe(BLOCKED_HOLD_MS + 1);
+    expect(t.holds).toEqual([]); // 発火した回は張り直さない
+  });
+
+  it("期限の前に承認待ちが解けたら、期限のタイマーを外す", () => {
+    const t = setup([approval("notify")]);
+    t.port.set("p1", agent("a1", 0, "blocked"));
+    expect(t.holds).toHaveLength(1);
+    t.port.set("p1", agent("a1", 0, "working"));
+    expect(t.holds).toEqual([]);
+    expect(t.port.prompts).toEqual([]);
   });
 
   it("notify は答えないよう伝える", async () => {

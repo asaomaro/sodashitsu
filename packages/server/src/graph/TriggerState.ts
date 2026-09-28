@@ -60,6 +60,16 @@ export class TriggerState {
     this.observeSource(initial.source, initial.at);
   }
 
+  /**
+   * 承認待ちの 1 秒（`BLOCKED_HOLD_MS`）が満ちる時刻（まだ発火していない承認待ちの回があるときだけ。無ければ null）。純粋なまま、タイマーは
+   * `GraphEngine` がこの時刻に張って `tick` を渡す（1 秒ごとの見回りを待たずに、承認待ちに入ってから約 1 秒で発火させる。g05 点検）。
+   */
+  holdDeadline(): number | null {
+    if (this.settings.on !== "blocked" || this.blockedSince === null || this.blockedHandled)
+      return null;
+    return this.blockedSince + BLOCKED_HOLD_MS;
+  }
+
   /** 待っている発火があるか（試験・終了の取り消し用）。 */
   get waiting(): boolean {
     return this.waitingSince !== null;
