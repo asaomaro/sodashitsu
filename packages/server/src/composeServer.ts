@@ -2,7 +2,7 @@ import { X509Certificate } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { hostname as osHostname, platform } from "node:os";
-import { parseId, type HostInfo } from "@sodashitsu/protocol";
+import { parseId, type HostInfo, type LinkRun } from "@sodashitsu/protocol";
 import { ConfigError, type RawServeArgs, type ServeOptions, agentReportSocketPathFor, resolveServeOptions, stateDirInUseError } from "./config.js";
 import { FileLogger, type Logger } from "./log/Logger.js";
 import { EventBus } from "./bus/EventBus.js";
@@ -81,6 +81,8 @@ export interface ComposedServer {
   manifestStore: ManifestStore;
   /** 連携のグラフの保存（20260927-agent-graph。結合試験が終了の後に書き込めないことを確かめる）。 */
   graph: GraphStore;
+  /** 連携の実行の履歴（`graph.history` と同じ。結合試験が接続を閉じた後・引き継ぎの最中の実行の有無を確かめる）。 */
+  graphHistory(linkId?: string): LinkRun[];
   logger: Logger;
   options: ServeOptions;
   /**
@@ -144,6 +146,11 @@ export async function composeServer(
     paneHistorySaveIntervalMs?: number;
     /** 引き継ぎの前の確認の差し替え（結合テストが引き継ぎの最中の状態を作る。20260927-session-stop）。 */
     handoffPreflight?: () => Promise<PreflightResult>;
+    /**
+     * 引き継ぎの execve の差し替え（結合試験が引き継ぎの最中〔poller を止めた後〕の状態を作り、投げて元に戻させる。20260927-agent-graph）。
+     * 差し替えなければ本物の `process.execve`（成功すればこのプロセスを置き換える）。
+     */
+    handoffExecve?: (nonce: string) => void;
     /** 保存した SSH のマシンへの ssh の起動の差し替え（結合テストがリモートの bridge.sock へ直接繋ぐ偽の子を渡す。20260927-multi-host-machines）。 */
     machineSpawn?: SpawnFn;
   } = {},
@@ -431,11 +438,13 @@ export async function composeServer(
     flushLog: () => logger.flush(),
     preflight: internal.handoffPreflight ?? (() => runPreflight()),
     // 同じ Node・同じ引数（ディスク上の同じ入口）で自分を置き換える。PTY の master は close-on-exec が無いので残る（research F2.2）。
-    execve: (nonce) =>
-      process.execve!(process.execPath, [process.execPath, ...process.execArgv, ...process.argv.slice(1)], {
+    execve:
+      internal.handoffExecve ??
+      ((nonce) =>
+        process.execve!(process.execPath, [process.execPath, ...process.execArgv, ...process.argv.slice(1)], {
         ...process.env,
         [HANDOFF_NONCE_ENV]: nonce,
-      }),
+      })),
     platform: platform(),
     hasExecve: typeof process.execve === "function",
   });
@@ -476,6 +485,7 @@ export async function composeServer(
     terminals,
     manifestStore,
     graph,
+    graphHistory: (linkId) => graphEngine.getHistory(linkId),
     logger,
     options,
     get freshToken(): string | undefined {

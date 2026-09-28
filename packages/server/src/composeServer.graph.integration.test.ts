@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { makeTempDir } from "./persist/atomicFile.js";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
+import { askSocket } from "./handoff/handoffCommand.js";
+import { handoffSocketPathFor } from "./handoff/HandoffSocket.js";
 import type { ComposedServer } from "./composeServer.js";
 
 /**
@@ -317,7 +319,8 @@ describe("composeServer: graph.*（20260927-agent-graph）", () => {
 
 /**
  * 20260927-agent-graph の 02 T5：実物のサーバでの実行（手元の pane。エージェントの状態は `session.updatePaneRuntime` で偽って出す——判定の
- * AgentMonitor はシェルだけの pane では変化を出さないので、偽の値を上書きしない）。送信は本物の `agent.prompt`（pane のシェルへ打ち込まれる）。
+ * AgentMonitor はシェルだけの pane では変化を出さないので、偽の値を上書きしない）。送信は本物の `agent.prompt`。送られる側の pane では `cat` を
+ * 動かしておく（送った文面をシェルが実行しない）。待ちは固定の時間でなく条件で待つ。
  */
 describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () => {
   const cleanups: (() => Promise<unknown> | unknown)[] = [];
@@ -326,6 +329,9 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
   });
 
   type Run = { linkId: string; result: string; reason?: string; text?: string };
+  type Internal = NonNullable<
+    NonNullable<Parameters<typeof composeServerOnFreePort>[1]>["internal"]
+  >;
   interface Ctx {
     server: ComposedServer;
     stateDir: string;
@@ -358,11 +364,30 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
     };
   }
 
-  async function boot(paneCount: number, stateDir?: string, knownToken?: string): Promise<Ctx> {
-    const dir = stateDir ?? (await makeTempDir("soda-graph-run-"));
-    if (stateDir === undefined)
+  /** 条件が成り立つまで待つ（固定の sleep の代わり。負荷の高い機械でも条件で決まる）。 */
+  async function waitFor(
+    what: string,
+    cond: () => boolean | Promise<boolean>,
+    timeoutMs = 8000,
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (!(await cond())) {
+      if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+
+  async function boot(
+    paneCount: number,
+    opts: { stateDir?: string; token?: string; internal?: Internal } = {},
+  ): Promise<Ctx> {
+    const dir = opts.stateDir ?? (await makeTempDir("soda-graph-run-"));
+    if (opts.stateDir === undefined)
       cleanups.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
-    const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: dir, origin: [] });
+    const server = await composeServerOnFreePort(
+      { host: "127.0.0.1", stateDir: dir, origin: [] },
+      opts.internal ? { internal: opts.internal } : undefined,
+    );
     let closed = false;
     const close = server.close.bind(server);
     server.close = async () => {
@@ -373,7 +398,7 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
     cleanups.push(() => server.close());
     const port = server.options.port;
     const origin = `http://127.0.0.1:${port}`;
-    const token = knownToken ?? server.freshToken ?? "";
+    const token = opts.token ?? server.freshToken ?? "";
     const res = await fetch(`${origin}/api/login`, {
       method: "POST",
       headers: { "content-type": "application/json", origin, host: `127.0.0.1:${port}` },
@@ -439,6 +464,11 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
     const panes = [server.session.snapshot().panes[0]!.id];
     while (panes.length < paneCount)
       panes.push((await server.session.splitPane(panes[0]!, "right", undefined)).pane.id);
+    // 送られる側（2 つ目以降）の pane では cat を動かす（送った文面をシェルが実行しない）。前面が cat になった（busy）まで待つ。
+    for (const p of panes.slice(1)) server.terminals.get(p)!.write("cat\r");
+    await waitFor("cat in the receiving panes", () =>
+      panes.slice(1).every((p) => server.session.getPane(p)?.busy === true),
+    );
     return { server, stateDir: dir, token, client: { request, fired, runs }, panes };
   }
 
@@ -448,19 +478,38 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
     const r = await ctx.client.request("graph.update", { baseRev: g.rev, ops });
     expect(r.error).toBeUndefined();
   }
+  async function graphOf(ctx: Ctx): Promise<{
+    nodes: { key: string; stale?: true }[];
+    links: { count: number; paused: string | null }[];
+  }> {
+    return (await ctx.client.request("graph.get", {})).result as never;
+  }
   function nodes(ctx: Ctx): unknown[] {
     return ctx.panes.map((p, i) => ({ op: "add_node", key: key(p), x: i * 240, y: 0 }));
   }
   const setAgent = (ctx: Ctx, paneId: string, a: ReturnType<typeof agentInfo> | null) =>
     ctx.server.session.updatePaneRuntime(paneId, { agent: a as never });
-  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const screenOf = (ctx: Ctx, paneId: string) =>
+    ctx.server.terminals.get(paneId)!.mirror.plainText();
+  const trigger = (
+    prompt: string,
+    output: { lines: number } | null = null,
+    whenBusy: "wait" | "skip" = "wait",
+  ) => ({
+    on: "done",
+    prompt,
+    output,
+    whenBusy,
+  });
 
   it("元が完了したら先へ 1 回送り（画面の末尾を受け渡す）、履歴・回数・graph.history に残る", async () => {
     const ctx = await boot(2);
     const [p1, p2] = ctx.panes as [string, string];
-    // 元の画面に結果を出しておく
-    ctx.server.terminals.get(p1)!.write("echo GRAPH_RESULT_OK\r");
-    await sleep(500);
+    // 元の画面に結果を出す。printf で組み立てるので、打ち込んだコマンドの表示（エコー）には GRAPH_RESULT_OK が現れない。
+    ctx.server.terminals.get(p1)!.write("printf 'GRAPH_%s\\n' RESULT_OK\r");
+    await waitFor("the result on the source screen", () =>
+      /^GRAPH_RESULT_OK$/m.test(screenOf(ctx, p1)),
+    );
     setAgent(ctx, p1, agentInfo("ga1", 0));
     setAgent(ctx, p2, agentInfo("gb1", 0));
     await update(ctx, [
@@ -470,24 +519,24 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
         kind: "trigger",
         from: key(p1),
         to: key(p2),
-        trigger: { on: "done", prompt: "見て {output}", output: { lines: 20 }, whenBusy: "wait" },
+        trigger: trigger("見て {output}", { lines: 20 }),
       },
     ]);
     setAgent(ctx, p1, agentInfo("ga1", 1));
     const run = await ctx.client.fired((r) => r.result === "sent");
     expect(run.linkId).toBe("l1");
-    expect(run.text).toContain("GRAPH_RESULT_OK");
-    await sleep(300);
-    const g = (await ctx.client.request("graph.get", {})).result as { links: { count: number }[] };
-    expect(g.links[0]!.count).toBe(1);
+    // 先の pane（cat）に、受け渡した結果が届いている（履歴の 200 文字の切り取りに依らない）
+    await waitFor("the output delivered to the target", () =>
+      screenOf(ctx, p2).includes("GRAPH_RESULT_OK"),
+    );
+    await waitFor("the run counted", async () => (await graphOf(ctx)).links[0]!.count === 1);
     const history = (await ctx.client.request("graph.history", { linkId: "l1" })).result as {
       runs: Run[];
     };
     expect(history.runs).toEqual([expect.objectContaining({ linkId: "l1", result: "sent" })]);
     // 同じ完了の知らせをもう一度出しても送らない（既読だけの変化など）
     setAgent(ctx, p1, { ...agentInfo("ga1", 1), serverSeenSeq: 1 });
-    await sleep(300);
-    expect(ctx.client.runs.filter((r) => r.result === "sent")).toHaveLength(1);
+    expect(ctx.server.graphHistory("l1").filter((r) => r.result === "sent")).toHaveLength(1);
   });
 
   it("先が作業中なら待ち、手が空いたら送る。作業中は見送る線は busy", async () => {
@@ -498,19 +547,13 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
     setAgent(ctx, p3, agentInfo("gc1", 0, "working"));
     await update(ctx, [
       ...nodes(ctx),
-      {
-        op: "add_link",
-        kind: "trigger",
-        from: key(p1),
-        to: key(p2),
-        trigger: { on: "done", prompt: "続けて", output: null, whenBusy: "wait" },
-      },
+      { op: "add_link", kind: "trigger", from: key(p1), to: key(p2), trigger: trigger("続けて") },
       {
         op: "add_link",
         kind: "trigger",
         from: key(p1),
         to: key(p3),
-        trigger: { on: "done", prompt: "続けて", output: null, whenBusy: "skip" },
+        trigger: trigger("続けて", null, "skip"),
       },
     ]);
     setAgent(ctx, p1, agentInfo("ga1", 1));
@@ -529,20 +572,8 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
     setAgent(ctx, p3, agentInfo("gc1", 0, "blocked"));
     await update(ctx, [
       ...nodes(ctx),
-      {
-        op: "add_link",
-        kind: "trigger",
-        from: key(p1),
-        to: key(p2),
-        trigger: { on: "done", prompt: "x", output: null, whenBusy: "wait" },
-      },
-      {
-        op: "add_link",
-        kind: "trigger",
-        from: key(p1),
-        to: key(p3),
-        trigger: { on: "done", prompt: "x", output: null, whenBusy: "wait" },
-      },
+      { op: "add_link", kind: "trigger", from: key(p1), to: key(p2), trigger: trigger("x") },
+      { op: "add_link", kind: "trigger", from: key(p1), to: key(p3), trigger: trigger("x") },
     ]);
     setAgent(ctx, p1, agentInfo("ga1", 1));
     await ctx.client.fired((r) => r.linkId === "l1" && r.reason === "target_absent");
@@ -562,16 +593,12 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
         from: key(p1),
         to: key(p2),
         limit: 1,
-        trigger: { on: "done", prompt: "x", output: null, whenBusy: "wait" },
+        trigger: trigger("x"),
       },
     ]);
     setAgent(ctx, p1, agentInfo("ga1", 1));
     await ctx.client.fired((r) => r.result === "sent");
-    await sleep(300);
-    expect(
-      ((await ctx.client.request("graph.get", {})).result as { links: { paused: string | null }[] })
-        .links[0]!.paused,
-    ).toBe("limit");
+    await waitFor("the limit pause", async () => (await graphOf(ctx)).links[0]!.paused === "limit");
     setAgent(ctx, p1, agentInfo("ga1", 2));
     await ctx.client.fired((r) => r.reason === "limit");
     await ctx.client.request("graph.resume", { linkId: "l1" });
@@ -592,6 +619,9 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
     ]);
     const notice = await ctx.client.fired((r) => r.linkId === "l1" && r.result === "sent");
     expect(notice.text).toContain("監督役");
+    // 監督役が知らせを読み終えた（送った直後は作業中とみなしているので、本物の状態の変化を出す）
+    setAgent(ctx, p2, agentInfo("gs1", 0, "working"));
+    setAgent(ctx, p2, agentInfo("gs1", 1, "idle"));
     setAgent(ctx, p1, agentInfo("ga1", 0, "blocked"));
     const approval = await ctx.client.fired((r) => r.linkId === "l2" && r.result === "sent");
     expect(approval.text).toContain("承認待ち");
@@ -602,39 +632,97 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
     const [p1, p2] = first.panes as [string, string];
     await update(first, [
       ...nodes(first),
-      {
-        op: "add_link",
-        kind: "trigger",
-        from: key(p1),
-        to: key(p2),
-        trigger: { on: "done", prompt: "x", output: null, whenBusy: "wait" },
-      },
+      { op: "add_link", kind: "trigger", from: key(p1), to: key(p2), trigger: trigger("x") },
     ]);
     await first.server.close();
     await writeFile(join(first.stateDir, "session.json"), "{broken");
-    const second = await boot(2, first.stateDir, first.token);
+    const second = await boot(2, { stateDir: first.stateDir, token: first.token });
     expect(second.panes).toEqual([p1, p2]); // 振り直した同じ id の、別の pane
+    expect((await graphOf(second)).nodes.map((n) => [n.key, n.stale === true])).toEqual([
+      [key(p1), true],
+      [key(p2), true],
+    ]);
     setAgent(second, p1, agentInfo("ga9", 0));
     setAgent(second, p2, agentInfo("gb9", 0));
     setAgent(second, p1, agentInfo("ga9", 1));
-    await sleep(1500);
+    // 実行の知らせは同期の bus の後の microtask で履歴に残る。止まっている（無効な）線は何も残さない
+    await new Promise((r) => setTimeout(r, 0));
+    expect(second.server.graphHistory()).toEqual([]);
     expect(second.client.runs).toEqual([]);
   });
 
-  it("終了の後は graph.json を書かない（閉じた保存は書き込みを断る）", async () => {
-    const ctx = await boot(1);
-    await update(ctx, [{ op: "add_node", key: key(ctx.panes[0]!), x: 0, y: 0 }]);
+  it("終了の後は graph.json を書かない（閉じた保存は書き込みを断る）。実行も止まる（元が完了しても動かない）", async () => {
+    const ctx = await boot(2);
+    const [p1, p2] = ctx.panes as [string, string];
+    setAgent(ctx, p1, agentInfo("ga1", 0));
+    setAgent(ctx, p2, agentInfo("gb1", 0));
+    await update(ctx, [
+      ...nodes(ctx),
+      { op: "add_link", kind: "trigger", from: key(p1), to: key(p2), trigger: trigger("x") },
+    ]);
     const path = join(ctx.stateDir, "graph.json");
     const before = await readFile(path, "utf8");
     await ctx.server.close();
+    // 止めていなければ、ここで発火して同期で履歴に残る（先が居ないので target_absent）
+    setAgent(ctx, p2, null);
+    setAgent(ctx, p1, agentInfo("ga1", 1));
+    expect(ctx.server.graphHistory()).toEqual([]);
     await expect(
       ctx.server.graph.update(
         1,
-        [{ op: "move_node", key: key(ctx.panes[0]!) as `local:${string}`, x: 20, y: 20 }],
+        [{ op: "move_node", key: key(p1) as `local:${string}`, x: 20, y: 20 }],
         "c1",
       ),
     ).rejects.toThrow("graph store is closed");
     await expect(ctx.server.graph.recordRun("l1")).rejects.toThrow("graph store is closed");
     expect(await readFile(path, "utf8")).toBe(before);
   });
+
+  it.skipIf(process.platform === "win32")(
+    "引き継ぎの間は実行を止め（元が完了しても動かない）、引き継ぎに失敗して元に戻ったら再び動く",
+    async () => {
+      const hooks: { during?: () => void } = {};
+      const ctx = await boot(2, {
+        internal: {
+          handoffPreflight: () => Promise.resolve({ ok: true }),
+          handoffExecve: () => {
+            hooks.during?.();
+            throw new Error("execve refused by the test");
+          },
+        },
+      });
+      const [p1, p2] = ctx.panes as [string, string];
+      setAgent(ctx, p1, agentInfo("ga1", 0));
+      setAgent(ctx, p2, agentInfo("gb1", 0));
+      await update(ctx, [
+        ...nodes(ctx),
+        { op: "add_link", kind: "trigger", from: key(p1), to: key(p2), trigger: trigger("x") },
+      ]);
+      let historyDuring: unknown[] | undefined;
+      hooks.during = () => {
+        // 引き継ぎの最中の完了。止めていなければ同期で履歴に残る（先を居なくしておくので target_absent）
+        setAgent(ctx, p2, null);
+        setAgent(ctx, p1, agentInfo("ga1", 1));
+        historyDuring = ctx.server.graphHistory();
+        setAgent(ctx, p2, agentInfo("gb1", 0));
+      };
+      const answer = JSON.parse(
+        await askSocket(
+          handoffSocketPathFor(ctx.stateDir),
+          JSON.stringify({ op: "handoff" }),
+          10_000,
+        ),
+      ) as { ok: boolean };
+      expect(answer.ok).toBe(true);
+      await waitFor("the handoff rollback", () => historyDuring !== undefined);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(historyDuring).toEqual([]);
+      expect(ctx.server.graphHistory()).toEqual([]);
+      // 元に戻った（execve の失敗）後は再び動く。止めていた間の完了は基準になっているので、次の完了で送る
+      await waitFor("the engine resumed", () => {
+        setAgent(ctx, p1, agentInfo("ga1", 2 + ctx.server.graphHistory().length));
+        return ctx.server.graphHistory().some((r) => r.result === "sent");
+      });
+    },
+  );
 });
