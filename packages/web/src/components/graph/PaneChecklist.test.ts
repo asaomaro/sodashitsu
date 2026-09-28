@@ -131,3 +131,27 @@ describe("PaneChecklist（無効なノードと同じ番号の pane。g03 点検
     w.unmount();
   });
 });
+
+describe("PaneChecklist（開いた時点の写しと比べる。レビュー R6）", () => {
+  it("開いている間に他で足された・外されたノードを、適用で巻き戻さない（自分が変えた分だけを渡す）", async () => {
+    seed();
+    const w = mount(PaneChecklist, { attachTo: document.body });
+    await w.find('[data-pane-key="local:p2"]').setValue(true);
+    // 他の画面が p1 を外し、p3 を足した
+    useGraphStore().applyGraph(
+      graphOf({
+        rev: 5,
+        nodes: [
+          { key: "local:p3", x: 0, y: 0 },
+          { key: "local:p9", x: 0, y: 100, stale: true },
+          { key: `${"a".repeat(32)}:p4`, x: 0, y: 200 },
+        ],
+      }),
+      "event",
+    );
+    await nextTick();
+    await w.find(".pane-checklist-apply").trigger("click");
+    expect(w.emitted("apply")![0]![0]).toEqual({ add: ["local:p2"], remove: [] });
+    w.unmount();
+  });
+});

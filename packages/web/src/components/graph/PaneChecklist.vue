@@ -100,8 +100,12 @@ const otherRows = computed<Row[]>(() => {
     });
 });
 
-const onGraph = computed(() => new Set<string>(graph.nodes.map((n) => n.key)));
-const checked = ref(new Set<string>(onGraph.value));
+/**
+ * 開いた時点で載っていたノード（写し）。差分（足す/外す）はこれと比べて作る——今の載り方と比べると、開いている間に他の画面・sodactl で
+ * 足された・外されたノードを適用で巻き戻してしまう（レビュー R6）。
+ */
+const initialOnGraph: ReadonlySet<string> = new Set(graph.nodes.map((n) => n.key));
+const checked = ref(new Set<string>(initialOnGraph));
 const filter = ref("");
 
 function visible(rows: Row[]): Row[] {
@@ -119,8 +123,8 @@ function toggle(key: string, on: boolean): void {
 }
 
 const change = computed(() => {
-  const add = [...checked.value].filter((k) => !onGraph.value.has(k)) as NodeKey[];
-  const remove = [...onGraph.value].filter((k) => !checked.value.has(k)) as NodeKey[];
+  const add = [...checked.value].filter((k) => !initialOnGraph.has(k)) as NodeKey[];
+  const remove = [...initialOnGraph].filter((k) => !checked.value.has(k)) as NodeKey[];
   return { add, remove };
 });
 const changed = computed(() => change.value.add.length + change.value.remove.length > 0);
