@@ -8,18 +8,18 @@ import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useNotificationsStore } from "../store/notifications.js";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore, type NewCwdPolicy, type PaneFrameThickness } from "../store/settings.js";
-import { DISPLAY_STATES, stateGlyph, stateLabel } from "../store/stateIndicator.js";
+import { DISPLAY_STATES, stateGlyph, stateLabel } from "@sodashitsu/client-core";
 import { useViewStore } from "../store/view.js";
 import { effectiveScrollback, scrollbackChoices, type ScrollbackPref } from "../term/scrollback.js";
-import { siblingThemes, THEME_LABELS } from "../theme/themes.js";
+import { siblingThemes, THEME_LABELS } from "@sodashitsu/client-core";
 import {
   MAX_TAB_BAR_RIGHT_ENTRIES,
   type DatetimeFormat,
   type TabBarPosition,
   type TabBarRightEntry,
-} from "../tabbar/tabBarRight.js";
+} from "@sodashitsu/client-core";
 import { CSS_VAR_LABELS, isValidCssColor, type ThemeOverrideBucket } from "../theme/themeOverrides.js";
-import { CSS_VARS, type CssVar } from "../theme/uiTokens.js";
+import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
 import KeySettings from "./KeySettings.vue";
 import SidebarRowsSettings from "./SidebarRowsSettings.vue";
 
@@ -151,7 +151,7 @@ const toggleSound = (): void => {
 };
 
 /**
- * 表示の節の注記。**字形と名前は表（`store/stateIndicator.ts`）から組み立てる**——直書きすると、表を 1 か所で変えたとき
+ * 表示の節の注記。**字形と名前は表（`client-core の agent/stateIndicator.ts`）から組み立てる**——直書きすると、表を 1 か所で変えたとき
  * サイドバー・goto・モバイルのピッカーは新しい字形になるのに、この注記だけが古いまま残る（cross 点検の指摘）。
  */
 // 字形と名前は**組にして**並べる——列を分けると対応を順番で数えるしかなく、タッチの端末では `title` の吹き出しも出ないので、

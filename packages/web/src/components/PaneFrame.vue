@@ -2,7 +2,7 @@
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { ActionDispatcherKey, TerminalRegistryKey } from "../injection.js";
 import { NO_NEIGHBORS, resolvePaneChrome, type PaneSide, type PaneSides } from "../layout/paneChrome.js";
-import { paneNameOf } from "../store/paneName.js";
+import { paneNameOf } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
@@ -50,7 +50,7 @@ const edge = ref<HTMLElement | null>(null);
 /** 利用者が付けた名前 → エージェント名 → 端末のタイトル の順に拾う。どれも無ければ空。 */
 const paneName = computed(() => {
   const pane = session?.panes.get(props.paneId);
-  // 連鎖の正典は `store/paneName.ts` の `paneNameOf`。ここは**名前が無ければ空**にする
+  // 連鎖の正典は `client-core の workspace/paneName.ts` の `paneNameOf`。ここは**名前が無ければ空**にする
   // （枠のラベルは名前が無ければ付けない）ので、既定値に空文字を渡す。
   return pane ? paneNameOf(pane, "") : "";
 });

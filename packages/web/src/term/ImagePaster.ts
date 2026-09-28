@@ -5,9 +5,9 @@ import {
   isPastablePath,
   type ImageMimeType,
 } from "@sodashitsu/protocol";
-import type { InputHold } from "../net/InputGate.js";
-import type { ConnectionPort } from "../net/ports.js";
-import { errorCodeOf } from "../net/clientError.js";
+import type { InputHold } from "@sodashitsu/client-core";
+import type { ConnectionPort } from "@sodashitsu/client-core";
+import { errorCodeOf } from "@sodashitsu/client-core";
 import {
   canReadClipboardByKey,
   readClipboardForPaste,

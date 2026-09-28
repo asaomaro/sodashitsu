@@ -1,6 +1,6 @@
 import type { MethodName, ParamsOf, ResultOf } from "@sodashitsu/protocol";
 import { describe, expect, it, vi } from "vitest";
-import type { ConnectionPort, TerminalSinkPort } from "../net/ports.js";
+import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
 import { CommandPopupSession, type PopupTerminalLike } from "./CommandPopupSession.js";
 
 function setup(run: () => Promise<unknown>) {

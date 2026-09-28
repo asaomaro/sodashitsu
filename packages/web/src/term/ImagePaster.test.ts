@@ -1,7 +1,7 @@
 import { IMAGE_CHUNK_BYTES, IMAGE_MAX_BYTES, type MethodName } from "@sodashitsu/protocol";
 import { describe, expect, it, vi } from "vitest";
-import { InputGate } from "../net/InputGate.js";
-import type { ConnectionPort } from "../net/ports.js";
+import { InputGate } from "@sodashitsu/client-core";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import type { ClipboardContent } from "./clipboard.js";
 import {
   bracketedOf,

@@ -24,5 +24,12 @@ module.exports = {
       files: ["packages/web/src/**/*.ts"],
       env: { node: false, browser: true, es2023: true },
     },
+    {
+      // packages/client-core は web（ブラウザ）と tui（Node）の両方で動く。型のために `@types/node` を入れているので、
+      // Node だけのグローバルを使っても tsc は通ってしまう——ここで止める（20260927-cli-mode の 01 の点検）。
+      files: ["packages/client-core/src/**/*.ts"],
+      env: { node: false, es2023: true },
+      rules: { "no-restricted-globals": ["error", "process", "Buffer", "setImmediate", "clearImmediate", "require", "__dirname", "__filename", "global"] },
+    },
   ],
 };

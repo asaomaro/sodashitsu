@@ -4,7 +4,7 @@ import { ActionDispatcherKey, ConnectionKey, TerminalRegistryKey } from "../inje
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
-import { formatDatetime, type TabBarRightEntry } from "../tabbar/tabBarRight.js";
+import { formatDatetime, type TabBarRightEntry } from "@sodashitsu/client-core";
 
 /**
  * tab の一覧（design「サイドバー」隣接の tab バー。D56 の訂正 9・10）。状態の印は出さない、拡大中は「Z」だけ。

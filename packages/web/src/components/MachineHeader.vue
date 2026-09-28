@@ -2,7 +2,7 @@
 import type { MachineState } from "@sodashitsu/protocol";
 import { computed, inject } from "vue";
 import { MachineSwitcherKey } from "../injection.js";
-import { LOCAL_MACHINE_ID } from "../net/machineUrl.js";
+import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 import { useMachinesStore } from "../store/machines.js";
 import { useViewStore } from "../store/view.js";
 

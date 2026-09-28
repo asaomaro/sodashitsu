@@ -2,7 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectionKey } from "../injection.js";
-import type { LoginResult } from "../net/ports.js";
+import type { LoginResult } from "@sodashitsu/client-core";
 import { useViewStore } from "../store/view.js";
 import LoginView from "./LoginView.vue";
 

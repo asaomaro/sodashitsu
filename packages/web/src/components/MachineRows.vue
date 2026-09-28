@@ -4,7 +4,7 @@ import { computed, inject } from "vue";
 import { MachineSwitcherKey } from "../injection.js";
 import { useMachinesStore } from "../store/machines.js";
 import { aggregate, displayStateFor, useSeenStore } from "../store/seen.js";
-import { stateLabel } from "../store/stateIndicator.js";
+import { stateLabel } from "@sodashitsu/client-core";
 import StateIcon from "./StateIcon.vue";
 
 /**

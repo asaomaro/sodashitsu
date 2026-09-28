@@ -1,0 +1,13 @@
+schema: 11
+slug: cli-mode
+current: deliver
+approved: [requirements, research, design, architecture, tasks, test, review, deliver]
+mode: autonomous
+profile: full
+humanGates: []
+maxSendBacks: 3
+dependsOn: []
+harnessRev: unknown
+subtasks: [01-client-core, 02-server, 03-tui-core, 04-tui-ops, 05-tui-features, 06-docs-verify]
+activeSubtask: done
+harnessRevDelivered: unknown

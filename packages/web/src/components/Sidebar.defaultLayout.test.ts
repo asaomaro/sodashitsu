@@ -3,7 +3,7 @@ import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
-import type { ConnectionPort } from "../net/ports.js";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
 import Sidebar from "./Sidebar.vue";

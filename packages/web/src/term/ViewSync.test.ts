@@ -1,7 +1,7 @@
 import type { MethodName, ParamsOf, ResultOf } from "@sodashitsu/protocol";
 import { Terminal } from "@xterm/xterm";
 import { describe, expect, it, vi } from "vitest";
-import type { ConnectionPort } from "../net/ports.js";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import type { TerminalRegistry } from "./TerminalRegistry.js";
 import { ViewSync } from "./ViewSync.js";
 

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import { ACTIONS, type ActionGroup } from "../keys/bindings.js";
-import { navigateKeyDef, type NavigateKeyId } from "../keys/navigateKeys.js";
-import { COMMAND_GROUP } from "../keys/commandKeys.js";
+import { ACTIONS, type ActionGroup } from "@sodashitsu/client-core";
+import { navigateKeyDef, type NavigateKeyId } from "@sodashitsu/client-core";
+import { COMMAND_GROUP } from "@sodashitsu/client-core";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 

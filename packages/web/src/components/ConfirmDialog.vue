@@ -3,7 +3,7 @@ import { computed, inject, nextTick, ref, watch } from "vue";
 import { ActionDispatcherKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { type DialogContext, useViewStore } from "../store/view.js";
-import { linkedWorktreeChildrenOf } from "../store/workspaceGrouping.js";
+import { linkedWorktreeChildrenOf } from "@sodashitsu/client-core";
 
 /**
  * 閉じる確認ダイアログ（T23。design「ダイアログ」）。`view.dialogContext.kind === "confirmClose"` を扱う。
@@ -17,6 +17,8 @@ import { linkedWorktreeChildrenOf } from "../store/workspaceGrouping.js";
  *
  * `kind === "confirmWorktreeRemove"`/`"confirmWorktreeRemoveForce"`（20260924-worktree-remove）
  * も同じダイアログで扱う——worktree の削除（と、dirty 時の `--force` 再実行）の確認。
+ *
+ * `kind === "confirmStopServer"`（`stop_server`。20260927-cli-mode）も同じダイアログで扱う——サーバの停止の確認。
  */
 const session = useSessionStore();
 const view = useViewStore();
@@ -48,6 +50,10 @@ const message = computed(() => {
       ? "この worktree は現在 workspace として開いています。workspace を閉じて worktree を削除しますか？"
       : "この worktree を削除しますか？";
   }
+  if (ctx?.kind === "confirmStopServer") {
+    const which = ctx.remote ? `保存したマシン「${ctx.target}」` : `このマシン（${ctx.target}）`;
+    return `${which}の soda serve を止めますか？ そのサーバのすべての pane のプロセスが終わり、繋いでいる画面はすべて切れます。`;
+  }
   if (ctx?.kind === "confirmWorktreeRemoveForce") {
     // 20260925-worktree-remove-locked。reason で理由に応じた文言を出し分ける（AC5）。
     return ctx.reason === "locked"
@@ -60,6 +66,7 @@ const message = computed(() => {
 /** 確定ボタンの文言。worktree の削除系だけ「削除」——「閉じる」のままだと破壊的な操作に見えない。 */
 const confirmLabel = computed(() => {
   const kind = view.dialogContext?.kind;
+  if (kind === "confirmStopServer") return "止める";
   return kind === "confirmWorktreeRemove" || kind === "confirmWorktreeRemoveForce" ? "削除" : "閉じる";
 });
 
@@ -72,7 +79,7 @@ const linkedWorktrees = computed(() => {
   return linkedWorktreeChildrenOf(target.id, [...session.workspaces.values()]);
 });
 
-const CONFIRM_DIALOG_KINDS: DialogContext["kind"][] = ["confirmClose", "confirmReplacePane", "confirmWorktreeRemove", "confirmWorktreeRemoveForce"];
+const CONFIRM_DIALOG_KINDS: DialogContext["kind"][] = ["confirmClose", "confirmReplacePane", "confirmWorktreeRemove", "confirmWorktreeRemoveForce", "confirmStopServer"];
 
 watch(
   () => view.dialogContext,
@@ -95,6 +102,7 @@ const confirm = (): void => {
   if (ctx?.kind === "confirmReplacePane") actions.confirmReplacePane();
   else if (ctx?.kind === "confirmWorktreeRemove") actions.confirmWorktreeRemove();
   else if (ctx?.kind === "confirmWorktreeRemoveForce") actions.confirmWorktreeRemoveForce();
+  else if (ctx?.kind === "confirmStopServer") actions.confirmStopServer();
   else actions.confirmClose(closeLinkedWorktrees.value);
 };
 
@@ -105,7 +113,7 @@ const confirm = (): void => {
  */
 const cancel = (): void => {
   const ctx = view.dialogContext;
-  if (ctx?.kind === "confirmWorktreeRemove" || ctx?.kind === "confirmWorktreeRemoveForce") {
+  if ((ctx?.kind === "confirmWorktreeRemove" || ctx?.kind === "confirmWorktreeRemoveForce") && ctx.closeOnCancel !== true) {
     actions.openWorktree(ctx.sourceWorkspaceId);
     return;
   }

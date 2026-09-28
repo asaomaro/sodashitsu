@@ -2,7 +2,7 @@
 import type { DisplayState } from "@sodashitsu/protocol";
 import { computed } from "vue";
 import { useSettingsStore } from "../store/settings.js";
-import { stateGlyph, stateLabel } from "../store/stateIndicator.js";
+import { stateGlyph, stateLabel } from "@sodashitsu/client-core";
 
 /**
  * エージェントの状態の印（20260921-herdr-settings-gaps の D2・D4）。サイドバー・goto・モバイルのピッカーが使う。

@@ -7,7 +7,7 @@ import type {
 } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import { LOCAL_MACHINE_ID } from "../net/machineUrl.js";
+import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 
 /**
  * 保存した SSH のマシン（20260927-multi-host-machines の design「web」）。手元の `soda serve` が配るマシンの一覧（`machine.list`・`machine.changed`）、

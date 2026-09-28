@@ -22,7 +22,8 @@ export interface ShutdownDeps {
 
 export interface Shutdown {
   signal(signal: NodeJS.Signals): void;
-  stopRequest(): void;
+  /** `source` は止める指示の出所（ログに出す。既定は `soda session stop`）。 */
+  stopRequest(source?: "session-stop" | "server.stop"): void;
   readonly shuttingDown: boolean;
 }
 
@@ -57,10 +58,10 @@ export function createShutdown(deps: ShutdownDeps): Shutdown {
       }
       begin(`soda: received ${signal}, shutting down`);
     },
-    stopRequest(): void {
+    stopRequest(source: "session-stop" | "server.stop" = "session-stop"): void {
       if (shuttingDown) return;
       deps.showTokenIfUnshown();
-      begin("soda: stop requested (soda session stop), shutting down");
+      begin(`soda: stop requested (${source === "server.stop" ? "server.stop from a connected client" : "soda session stop"}), shutting down`);
     },
   };
 }

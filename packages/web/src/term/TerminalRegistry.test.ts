@@ -2,9 +2,9 @@ import { TERMINAL_PALETTES, type MethodName, type ParamsOf, type ResultOf } from
 import type { ITerminalAddon, ITheme } from "@xterm/xterm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KeyInputController } from "../keys/KeyInputController.js";
-import { KeyRouter, type KeyRouterClock } from "../keys/KeyRouter.js";
-import { DEFAULT_KEYMAP } from "../keys/keymap.js";
-import type { ConnectionPort } from "../net/ports.js";
+import { KeyRouter, type KeyRouterClock } from "@sodashitsu/client-core";
+import { DEFAULT_KEYMAP } from "@sodashitsu/client-core";
+import type { ConnectionPort } from "@sodashitsu/client-core";
 import { MouseBridge } from "./MouseBridge.js";
 import { RendererPool, type WebglAddonLike } from "./RendererPool.js";
 import { TerminalRegistry } from "./TerminalRegistry.js";

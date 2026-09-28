@@ -185,3 +185,50 @@ describe("名前付き session の Cookie の名前", () => {
     expect(def.parseSessionIdFromCookie("soda_session_work=abc; soda_session=def")).toBe("def");
   });
 });
+
+// 20260927-cli-mode の 02 の review：期限の切れたセッションを捨てる（引数なしの soda は起動のたびにセッションを作る）。
+describe("DefaultAuthService — 期限の切れたセッションの掃除", () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await makeTempDir("soda-authsvc-prune-");
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const iso = (msAgo: number): string => new Date(Date.now() - msAgo).toISOString();
+
+  async function seed(sessions: { idHash: string; lastSeenAt: string }[]): Promise<void> {
+    await new FsAuthFile(dir).save({
+      schema: 1,
+      token: null,
+      sessions: sessions.map((s) => ({ ...s, createdAt: s.lastSeenAt })),
+    });
+  }
+  const saved = async (): Promise<string[]> =>
+    (JSON.parse(await readFile(join(dir, "auth.json"), "utf8")) as { sessions: { idHash: string }[] }).sessions.map((s) => s.idHash);
+
+  it("読み込みのときに、最後に使ってから 14 日を過ぎたセッションを auth.json から捨てる（期限の内側は残す）", async () => {
+    await seed([
+      { idHash: "old", lastSeenAt: iso(15 * DAY) },
+      { idHash: "fresh", lastSeenAt: iso(1 * DAY) },
+    ]);
+    await new DefaultAuthService(new FsAuthFile(dir)).initialize();
+    expect(await saved()).toEqual(["fresh"]);
+  });
+
+  it("セッションを発行するときにも、期限の切れたものを捨ててから保存する（発行のたびに増え続けない）", async () => {
+    await seed([{ idHash: "fresh", lastSeenAt: iso(1 * DAY) }]);
+    const auth = new DefaultAuthService(new FsAuthFile(dir));
+    await auth.initialize();
+    // 読み込んだ後に期限が切れた（時計を進める代わりに、読み込み済みのメモリの最後の使用を古くする）
+    (auth as unknown as { sessions: Map<string, { lastSeenAtMs: number }> }).sessions.get("fresh")!.lastSeenAtMs = Date.now() - 15 * DAY;
+    const id = await auth.issueSession();
+    const hashes = await saved();
+    expect(hashes).toHaveLength(1);
+    expect(hashes).not.toContain("fresh");
+    expect(auth.verifySession(id)).toBe(true);
+  });
+});
+

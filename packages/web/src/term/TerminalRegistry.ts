@@ -3,7 +3,7 @@ import type { ITerminalAddon, ITerminalOptions, ITheme } from "@xterm/xterm";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { SearchAddon } from "@xterm/addon-search";
 import type { KeyInputController } from "../keys/KeyInputController.js";
-import type { ConnectionPort, TerminalSinkPort } from "../net/ports.js";
+import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
 import { installQueryFilter } from "./QueryFilter.js";
 import { createImageAddon } from "./imageAddon.js";
 import { RendererPool } from "./RendererPool.js";

@@ -1,8 +1,11 @@
-import type { PopupDimension, ServerSessionEntry, SessionFocus, WorkspaceGroup, WorktreeEntry, WorktreeListResult } from "@sodashitsu/protocol";
+import { DEVICE_LOCAL_PREF_KEYS, type PopupDimension, type ServerSessionEntry, type SessionFocus, type WorkspaceGroup, type WorktreeEntry, type WorktreeListResult } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import type { Mode } from "../keys/actions.js";
-import type { ConnectionState } from "../net/ports.js";
+import { loadAgentSort as loadAgentSortValue, loadCollapsedAutoGroups, loadWorkspaceSort, type AgentSort, type Mode, type WorkspaceSort } from "@sodashitsu/client-core";
+
+// 共有の設定の読み込みは client-core（web と端末版が同じ規則で読む。統合の review）。今までの import 先を保つため再び出す。
+export { loadCollapsedAutoGroups, loadWorkspaceSort };
+import type { ConnectionState } from "@sodashitsu/client-core";
 import type { MenuTarget } from "../term/MouseBridge.js";
 import type { Zone } from "../term/paneDragZone.js";
 
@@ -42,12 +45,8 @@ function saveStoredView(v: StoredView): void {
   }
 }
 
-/** agents の並び順（20260920-sidebar-tabbar-controls）。`grouped` は並べ替えない（既定）。 */
-export type AgentSort = "grouped" | "priority";
-
-/** workspace（spaces 区画）の並び順（20260922-appearance-settings-rest）。`opened` は今までどおり
- *  サーバから届いた順（既定）。`name` は workspace のラベルの文字列順。 */
-export type WorkspaceSort = "opened" | "name";
+/** 並び順の型（`AgentSort`・`WorkspaceSort`）は client-core へ移した（20260927-cli-mode）。今までの参照先を壊さないよう再 export する。 */
+export type { AgentSort, WorkspaceSort };
 
 /**
  * 表示位置（`STORAGE_KEY`）と違い、**タブの寿命を越えて残す好み**なので `localStorage` に置く。
@@ -74,6 +73,29 @@ export function readPrefs(): Record<string, unknown> {
   }
 }
 
+/**
+ * このブラウザの localStorage の共有の項目をサーバへ移し終えた印（`actions/PrefsSync.ts`。ブラウザごと＝この localStorage ごと）。
+ * サーバが先に rev>0 になっていても、印が無ければサーバにまだ無い項目を移す（統合の review の差し戻し）。
+ */
+export const PREFS_MIGRATED_KEY = "soda.prefsMigrated.v1";
+
+/** 移し終えたか。読めない環境では移し終えた扱い（毎回移そうとしない。`Toast.vue` の `hasShownHint` と同じ倒し方）。 */
+export function isPrefsMigrated(): boolean {
+  try {
+    return localStorage.getItem(PREFS_MIGRATED_KEY) !== null;
+  } catch {
+    return true;
+  }
+}
+
+export function markPrefsMigrated(): void {
+  try {
+    localStorage.setItem(PREFS_MIGRATED_KEY, "1");
+  } catch {
+    // 書けなければ、次の読み込みでもう一度サーバに無い項目だけを移す（害は無い）。
+  }
+}
+
 /** 既存の値に**併合して**書く。**読みも書きも同じ try/catch の内側**に置く（読めない環境で throw させない）。 */
 export function writePrefs(patch: Record<string, unknown>): void {
   try {
@@ -82,6 +104,47 @@ export function writePrefs(patch: Record<string, unknown>): void {
   } catch {
     // 保存できなくても致命的ではない（この画面の間だけ効く）。
   }
+  // サーバの共有の設定へも送る（20260927-cli-mode の design「設定」。`actions/PrefsSync.ts`）。localStorage に書けない環境でも送る（サーバが正）。
+  for (const fn of [...prefsWriteListeners]) fn(patch);
+}
+
+/**
+ * 設定の書き込みを知らせる先（20260927-cli-mode）。`main.ts` が `PrefsSync` を登録する。**`writePrefs` を通った書き込みだけ**が来る
+ * （サーバから受けた値の反映 `replaceSharedPrefs` は来ない——受けた値を送り返さない）。
+ */
+const prefsWriteListeners = new Set<(patch: Record<string, unknown>) => void>();
+export function onPrefsWritten(fn: (patch: Record<string, unknown>) => void): () => void {
+  prefsWriteListeners.add(fn);
+  return () => prefsWriteListeners.delete(fn);
+}
+
+/** 端末ごとに持ち、サーバと共有しない項目か（サイドバーの幅・折りたたみ。design「設定」）。 */
+export function isDeviceLocalPref(key: string): boolean {
+  return (DEVICE_LOCAL_PREF_KEYS as readonly string[]).includes(key);
+}
+
+/** 共有する項目だけを取り出す（端末ごとの項目を除く）。 */
+export function sharedPrefsOf(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) if (!isDeviceLocalPref(k)) out[k] = v;
+  return out;
+}
+
+/**
+ * サーバから受けた共有の設定で、localStorage の共有の項目を**丸ごと置き換える**（端末ごとの項目は残す。20260927-cli-mode）。localStorage は次の起動の表示用のキャッシュ。
+ * 置き換えた後の全体（端末ごとの項目＋受けた値）を返す——localStorage に書けない環境でも、呼び出し側はこれを各ストアへ当てられる。書き込みの知らせ（`onPrefsWritten`）は出さない。
+ */
+export function replaceSharedPrefs(shared: Record<string, unknown>): Record<string, unknown> {
+  const current = readPrefs();
+  const next: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(current)) if (isDeviceLocalPref(k)) next[k] = v;
+  for (const [k, v] of Object.entries(shared)) if (!isDeviceLocalPref(k)) next[k] = v;
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+  } catch {
+    // 書けなくても、この画面には返した値を当てる。
+  }
+  return next;
 }
 
 // `export` する（20260922-appearance-settings-rest T7。decisions D7）——`loadSidebarWidth`/
@@ -91,8 +154,7 @@ export function writePrefs(patch: Record<string, unknown>): void {
 // 変えない）。T7 の taskcheck 指摘で追加——`reload_config` は他の設定のために既に `readPrefs()` を
 // 1回呼んでいるので、ここでも省略無しで自分で呼び直すと `localStorage` への読み出しが実質2回になる。
 export function loadAgentSort(raw?: Record<string, unknown>): AgentSort {
-  const v = (raw ?? readPrefs())["agentSort"];
-  return v === "priority" || v === "grouped" ? v : "grouped"; // 壊れた値は既定へ落とす
+  return loadAgentSortValue((raw ?? readPrefs())["agentSort"]); // 壊れた値は既定へ落とす（client-core）
 }
 
 function saveAgentSort(v: AgentSort): void {
@@ -119,24 +181,11 @@ export function loadSidebarCollapsed(raw: unknown): boolean {
   return raw === true;
 }
 
-/** 保存された workspace の並び順を読む（壊れた値は `"opened"` へ。20260922-appearance-settings-rest の AC3）。 */
-export function loadWorkspaceSort(raw: unknown): WorkspaceSort {
-  return raw === "name" || raw === "opened" ? raw : "opened";
-}
 
 function saveWorkspaceSort(v: WorkspaceSort): void {
   writePrefs({ workspaceSort: v });
 }
 
-/**
- * worktree 自動グループの折りたたみ状態（20260923-workspace-grouping）。herdr は client 側の
- * preferences に持つ（research.md F3）——本製品も `sidebarCollapsed` 等と同じ `localStorage` の
- * 流儀に揃える。`Set` は JSON に直接書けないので、保存は配列（`repoKey` の一覧）で行う。
- * 手動グループの折りたたみはサーバ全体で共有する別物（`WorkspaceGroup.collapsed`）——ここでは扱わない。
- */
-export function loadCollapsedAutoGroups(raw: unknown): Set<string> {
-  return Array.isArray(raw) ? new Set(raw.filter((v): v is string => typeof v === "string")) : new Set();
-}
 
 function saveCollapsedAutoGroups(v: ReadonlySet<string>): void {
   writePrefs({ collapsedAutoGroups: [...v] });
@@ -200,7 +249,14 @@ export type DialogContext =
    * `openWorkspaceId` は削除対象の path が現在開いている workspace と一致する場合、その id
    * （確認文言の出し分け用。閉じる処理自体はサーバ側が自動で行う）。
    */
-  | { kind: "confirmWorktreeRemove"; sourceWorkspaceId: string; path: string; openWorkspaceId: string | null }
+  | {
+      kind: "confirmWorktreeRemove";
+      sourceWorkspaceId: string;
+      path: string;
+      openWorkspaceId: string | null;
+      /** 取り消したら一覧へ戻らずに閉じる（一覧を経ずにキーの `remove_worktree` から開いたとき。20260927-cli-mode）。 */
+      closeOnCancel?: true;
+    }
   /**
    * dirty／ロック済みで通常の削除が失敗したあとの `--force` 確認（同上。design「振る舞いの詳細」）。
    * `reason` で確認文言を出し分ける（20260925-worktree-remove-locked）。
@@ -211,6 +267,8 @@ export type DialogContext =
       path: string;
       openWorkspaceId: string | null;
       reason: "dirty" | "locked";
+      /** `confirmWorktreeRemove` から引き継ぐ（キーの `remove_worktree` から始めた削除は、取り消し・失敗でも一覧へ戻らない）。 */
+      closeOnCancel?: true;
     }
   // 手動グループ（20260923-workspace-grouping。herdr に前例が無い独自拡張）。
   // 新しいグループを作り、右クリック元の workspace をそのまま追加する（`NameDialog` を再利用）。
@@ -218,6 +276,12 @@ export type DialogContext =
   | { kind: "renameGroup"; groupId: string; currentLabel: string }
   // `worktreeOpen` と同じ「一覧から選ぶ」形。`groups` は開く時点のグループ一覧（GroupPickerDialog）。
   | { kind: "addToGroup"; workspaceId: string; groups: WorkspaceGroup[] }
+  // サーバを止める確認（`stop_server`。20260927-cli-mode）。押し間違えると全ての pane が止まる。
+  /**
+   * `target` は止まるサーバの名前（ローカルならホスト名、保存したマシンを選んでいればそのマシンの名前）、`remote` は保存したマシンか（02 の review。
+   * 画面の接続が `/ws?machine=` を向いていれば、止まるのはそのマシンの `soda serve`——確認でどれが止まるかを言う）。
+   */
+  | { kind: "confirmStopServer"; target: string; remote: boolean }
   // 設定（通知・表示・端末。20260921-herdr-settings-gaps）。値はそれぞれのストアが持つので文脈は空。
   | { kind: "settings" }
   // はじめの案内（20260926-settings-onboarding）。選択は下書きでダイアログが持つので文脈は空。

@@ -29,6 +29,16 @@ describe("serve.json（起動の記録）", () => {
       expect((await stat(join(dir, SERVE_RECORD_FILE_NAME))).mode & 0o777).toBe(0o600);
   });
 
+  it("TLS の証明書の指紋（certSha256）を書いて読める。無ければ項目ごと無い・空文字は無いとみなす（20260927-cli-mode）", async () => {
+    const certSha256 = "AA:BB:CC";
+    await writeServeRecord(dir, { ...valid, https: true, certSha256 });
+    expect(await readServeRecord(dir)).toMatchObject({ https: true, certSha256 });
+    await writeServeRecord(dir, valid);
+    expect(await readServeRecord(dir)).not.toHaveProperty("certSha256");
+    const raw = JSON.stringify({ schema: 1, ...valid, certSha256: "" });
+    expect(parseServeRecord(raw)).not.toHaveProperty("certSha256");
+  });
+
   it("状態ディレクトリが無ければ作って書く", async () => {
     const nested = join(dir, "sessions", "work");
     await writeServeRecord(nested, valid);

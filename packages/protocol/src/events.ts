@@ -7,7 +7,7 @@ import type {
   Workspace,
   WorkspaceGroup,
 } from "./model.js";
-import type { AgentIntegrationStatusResult } from "./messages.js";
+import type { AgentIntegrationStatusResult, SharedPrefs } from "./messages.js";
 import type { CommandListResult } from "./commands.js";
 
 /**
@@ -141,6 +141,15 @@ export interface CommandPopupClosedEvent {
   data: { popupId: string; exitCode?: number };
 }
 
+/**
+ * 共有の設定が保存された（`prefs.set`。20260927-cli-mode）。全クライアントへ配る（保存した本人にも）。`byClientId` は保存した接続の clientId——
+ * 自分の変更の反映を二重に行わないために使える。
+ */
+export interface PrefsChangedEvent {
+  event: "prefs.changed";
+  data: { prefs: SharedPrefs; rev: number; byClientId: string };
+}
+
 export type ServerEvent =
   | WorkspaceCreatedEvent
   | WorkspaceUpdatedEvent
@@ -165,6 +174,7 @@ export type ServerEvent =
   | AgentIntegrationChangedEvent
   | MachineChangedEvent
   | CommandUpdatedEvent
-  | CommandPopupClosedEvent;
+  | CommandPopupClosedEvent
+  | PrefsChangedEvent;
 
 export type ServerEventName = ServerEvent["event"];

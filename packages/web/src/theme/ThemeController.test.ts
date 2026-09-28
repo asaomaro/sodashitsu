@@ -5,7 +5,7 @@ import { nextTick } from "vue";
 import { useSettingsStore } from "../store/settings.js";
 import { writePrefs } from "../store/view.js";
 import { BOOT_KEY, ThemeController, type BootCache } from "./ThemeController.js";
-import { uiTokens } from "./uiTokens.js";
+import { uiTokens } from "@sodashitsu/client-core";
 
 /** `matchMedia("(prefers-color-scheme: dark)")` の偽物（happy-dom の matchMedia は OS の明暗を切り替えて change を出せない）。`set` で切り替える。 */
 function fakeMedia(dark: boolean) {

@@ -377,8 +377,8 @@ describe("OnboardingDialog — 確定の反映（AC3・AC-I2）", () => {
     localStorage.clear();
     const other = createPinia();
     const s2 = useSettingsStore(other);
-    const { applyRecommended } = await import("../keys/assign.js");
-    const { KEY_PRESETS } = await import("../keys/presets.js");
+    const { applyRecommended } = await import("@sodashitsu/client-core");
+    const { KEY_PRESETS } = await import("@sodashitsu/client-core");
     const preset = KEY_PRESETS.find((p) => p.id === "tmux")!;
     s2.replaceKeyPrefs(applyRecommended(s2.keymap, s2.keyPrefs, preset.bindings).prefs);
     expect(got).toEqual(readPrefs()["keys"]);

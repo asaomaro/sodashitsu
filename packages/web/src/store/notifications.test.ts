@@ -1,6 +1,6 @@
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { MAX_QUEUED, type QueuedNotification } from "../notify/policy.js";
+import { MAX_QUEUED, type QueuedNotification } from "@sodashitsu/client-core";
 import { useNotificationsStore } from "./notifications.js";
 import { readPrefs, writePrefs } from "./view.js";
 
