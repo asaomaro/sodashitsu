@@ -15,6 +15,7 @@
     "smoke": "node --enable-source-maps dist/smoke.js"
   },
   "dependencies": {
+    "@sodashitsu/client-core": "workspace:*",
     "@sodashitsu/protocol": "workspace:*",
     "@sodashitsu/tui": "workspace:*",
     "@xterm/addon-serialize": "0.14.0",

@@ -64,6 +64,7 @@ import { COMMANDS_FILE_NAME } from "./commands/commandConfig.js";
 import { CommandService } from "./commands/CommandService.js";
 import { MetadataService } from "./metadata/MetadataService.js";
 import { PrefsStore } from "./persist/PrefsStore.js";
+import { GraphStore } from "./persist/GraphStore.js";
 import { LocalLogin } from "./auth/LocalLogin.js";
 
 export interface ComposedServer {
@@ -292,6 +293,11 @@ export async function composeServer(
     logger.error("prefs.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),
   );
   prefs.onChange((state, byClientId) => bus.publish({ event: "prefs.changed", data: { prefs: state.prefs, rev: state.rev, byClientId } }));
+  // 連携のグラフ（20260927-agent-graph）。読むのは `listen()` のロックの後（prefs と同じ）。保存できた変更は全クライアントへ配る。
+  const graph = new GraphStore(options.stateDir, (err) =>
+    logger.error("graph.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),
+  );
+  graph.onChange((g, byClientId) => bus.publish({ event: "graph.changed", data: { graph: g, byClientId } }));
   registerAllMethods(surface, {
     session,
     clients,
@@ -307,6 +313,7 @@ export async function composeServer(
     metadata,
     images,
     prefs,
+    graph,
     // `server.stop`（20260927-cli-mode）。制御の socket の止める指示と同じ受け付けと停止の手順（`control` は下で作る。呼ばれるのは待ち受けの後）。
     stopServer: (reply) => control.stop(reply, "server.stop"),
   });
@@ -381,7 +388,10 @@ export async function composeServer(
       void machines.start();
       paneHistory?.start(internal.paneHistorySaveIntervalMs);
     },
-    flushSession: () => persist.flush(),
+    flushSession: async () => {
+      await persist.flush();
+      await graph.flush(); // 20260927-agent-graph（書きかけの graph.json を残して置き換わらない）
+    },
     closeClients: () => {
       wsServer.setReady(false);
       wsServer.closeAll(1012, "server restarting");
@@ -493,6 +503,9 @@ export async function composeServer(
         // 0'（続き）. 共有の設定（20260927-cli-mode）。壊れていれば退避して空から始める（起動は止めない）。
         const loadedPrefs = await prefs.load();
         if (typeof loadedPrefs === "object") logger.warn("prefs.json was corrupt; starting with empty prefs", { backupPath: loadedPrefs.corrupt });
+        // 0'（続き）. 連携のグラフ（20260927-agent-graph）。壊れていれば退避して空から始める（起動は止めない）。
+        const loadedGraph = await graph.load();
+        if (typeof loadedGraph === "object") logger.warn("graph.json was corrupt; starting with an empty graph", { backupPath: loadedGraph.corrupt });
         // 1. 待ち受け（bind）を最初に行う（D102）。失敗（ポートが使用中・このマシンに無いアドレス・権限の無いポート等）は
         //    reject で返す（呼び出し側が案内を出して終わる。拾わないと未処理の 'error' でプロセスが落ちる）。以前は token の
         //    作成・復元（全 pane のシェルの起動）・poller の後に bind していたため、失敗した起動が token を作って失い、
@@ -551,6 +564,9 @@ export async function composeServer(
           // 無効のとき（下の `loadPaneHistory` と同じ）も消す。
           await clearPaneHistory(options.paneHistory ? "session.json was not restored" : "pane history disabled");
           await session.ensureNotEmpty();
+          // pane の id を振り直したので、保存したグラフの手元のノード（`local:p3` 等）は別の pane を指しうる。選び直すまで無効にする（20260927-agent-graph。research F1.2）。
+          const staled = await graph.markLocalStale();
+          if (staled > 0) logger.warn("session.json was not restored; marked local graph nodes as stale", { nodes: staled });
         }
         if (takenPending !== undefined) {
           const finished = takenPending;
@@ -629,6 +645,7 @@ export async function composeServer(
         // 復元の途中の保存の予約（シェルが猶予中に終わった pane を閉じた等）も取り消す。
         if (sessionLoaded) await persist.flush();
         else persist.cancel();
+        await graph.flush(); // 20260927-agent-graph（ロックを放す前に書き終える）
         // 画面履歴は端末を捨てる前に取り直して書く（design「停止」）。失敗しても投げない（AC13）。
         if (sessionLoaded) await paneHistory?.save({ force: true });
         for (const pane of session.snapshot().panes) terminals.dispose(pane.id);
