@@ -11,7 +11,9 @@ import type { MachineStatus, ServerSessionEntry } from "@sodashitsu/protocol";
 import type { CommandService } from "../../commands/CommandService.js";
 import type { ImageUploads } from "../../image/ImageUploads.js";
 import type { PrefsStore } from "../../persist/PrefsStore.js";
+import type { GraphStore } from "../../persist/GraphStore.js";
 import type { StopReply } from "../../handoff/HandoffSocket.js";
+import type { LinkRun } from "@sodashitsu/protocol";
 
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
 export interface MethodDeps {
@@ -39,6 +41,10 @@ export interface MethodDeps {
   images?: ImageUploads;
   /** 共有の設定（20260927-cli-mode）。無ければ `prefs.*` を登録しない。 */
   prefs?: PrefsStore;
+  /** 連携のグラフ（20260927-agent-graph）。無ければ `graph.*` を登録しない。 */
+  graph?: GraphStore;
+  /** 連携の実行の履歴（`graph.history`。20260927-agent-graph の 02）。無ければ履歴は空。 */
+  graphHistory?: (linkId: string | undefined, limit: number | undefined) => LinkRun[];
   /**
    * 止める指示の受け付け（`server.stop`。20260927-cli-mode）。制御の socket と同じ判断（`ControlRequests.stop`）。`reply` は 1 回だけ呼ばれ、止めるのは返事の後。
    * 無ければ `server.stop` は `server_stop_unsupported` で断る。

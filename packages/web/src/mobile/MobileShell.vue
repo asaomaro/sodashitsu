@@ -84,6 +84,8 @@ onBeforeUnmount(() => touchScroll?.dispose());
       <!-- 設定（20260921-herdr-settings-gaps の AC13）。モバイルはサイドバーも prefix キーも無いので、
            ここが唯一の入口になる。**文字のボタンにする**——以前の 🔔 は絵文字で環境により見た目が変わり、
            設定全体を開くのに通知の絵を出すと中身と食い違う（⚙ も絵文字の属性を持つので避ける）。 -->
+      <!-- 連携のグラフ（20260927-agent-graph の AC20。モバイルは閲覧と一時停止・再開だけ）。文字のボタン（設定と同じ理由）。 -->
+      <button type="button" class="mobile-shell-graph-btn" @click="view.openGraph()">連携</button>
       <button type="button" class="mobile-shell-settings-btn" @click="view.openDialogWithContext({ kind: 'settings' })">設定</button>
     </header>
     <main ref="paneContainer" class="mobile-shell-pane">
@@ -140,6 +142,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
 /* 設定のボタンも文字なので、同じく文字の［この端末に合わせる］と同じ見た目にそろえる。設定はモバイルで唯一の入口なので、
    押せる高さ（⌨ と同じ程度）を持たせる（review ラウンド1 の指摘）。 */
 .mobile-shell-fit-btn,
+.mobile-shell-graph-btn,
 .mobile-shell-settings-btn {
   flex: none;
   min-height: 2rem;

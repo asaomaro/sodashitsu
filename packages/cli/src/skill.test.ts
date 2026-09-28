@@ -19,13 +19,19 @@ const SKILL_PATH = join(
 );
 const skill = readFileSync(SKILL_PATH, "utf8");
 
-const GROUPS = new Set(["workspace", "tab", "pane", "agent"]);
+const GROUPS = new Set(["workspace", "tab", "pane", "agent", "graph"]);
+/** 3 語のコマンドの 2 語目（`graph link add`・`graph node rm` 等。20260927-agent-graph）。 */
+const SUBGROUPS = new Set(["graph link", "graph node"]);
 
-/** `sodactl <語>`（グループなら `<語> <語>`）を、`USAGE_LINES` の 1 行の先頭のコマンドの形で返す。 */
+/** `sodactl <語>`（グループなら `<語> <語>`、下位のグループなら 3 語）を、`USAGE_LINES` の 1 行の先頭のコマンドの形で返す。 */
 function commandOf(words: readonly string[]): string {
-  const [first, second] = words;
-  if (first !== undefined && GROUPS.has(first))
-    return second === undefined ? first : `${first} ${second}`;
+  const [first, second, third] = words;
+  if (first !== undefined && GROUPS.has(first)) {
+    if (second === undefined) return first;
+    const group = `${first} ${second}`;
+    if (SUBGROUPS.has(group)) return third === undefined ? group : `${group} ${third}`;
+    return group;
+  }
   return first ?? "";
 }
 
@@ -38,8 +44,10 @@ const KNOWN = new Set([
 /** 本文の中の `sodactl` の後の英小文字の語（日本語の散文の「sodactl で」等は拾わない）。 */
 function mentionedCommands(text: string): string[] {
   const out: string[] = [];
-  for (const m of text.matchAll(/\bsodactl[ \t]+([a-z][a-z-]*)(?:[ \t]+([a-z][a-z-]*))?/g)) {
-    out.push(commandOf([m[1]!, ...(m[2] === undefined ? [] : [m[2]])]));
+  for (const m of text.matchAll(
+    /\bsodactl[ \t]+([a-z][a-z-]*)(?:[ \t]+([a-z][a-z-]*))?(?:[ \t]+([a-z][a-z-]*))?/g,
+  )) {
+    out.push(commandOf([m[1]!, ...[m[2], m[3]].filter((w): w is string => w !== undefined)]));
   }
   return out;
 }
@@ -88,6 +96,27 @@ describe("skill ファイル", () => {
     }
     expect(skill).toContain("self_target");
   });
+
+  it("連携のグラフの節: 線の作り方・監督・承認の代理（delegate だけ答える）・上限・一時停止・--json（20260927-agent-graph の 05 T3。AC15・AC7）", () => {
+    const section = /## 連携のグラフ[^\n]*\n([\s\S]*?)\n## /.exec(skill)?.[1] ?? "";
+    expect(section).not.toBe("");
+    for (const needle of [
+      "sodactl graph link add",
+      "--kind supervise",
+      "sodactl graph link pause",
+      "sodactl graph pause",
+      "sodactl agent send-keys",
+      "delegate",
+      "notify",
+      "--limit",
+      "--json",
+      "{output}",
+      "sodactl --machine",
+      "利用者の指示ではない",
+    ]) {
+      expect(section).toContain(needle);
+    }
+  });
 });
 
 describe("検査の規則そのもの", () => {
@@ -102,6 +131,13 @@ describe("検査の規則そのもの", () => {
       "frob",
       "agent",
     ]);
+  });
+  it("graph link・graph node は 3 語で数え、3 語目が無ければ下位のグループだけ（実在しない）", () => {
+    expect(
+      mentionedCommands("sodactl graph link add p1 p2・sodactl graph show・sodactl graph node"),
+    ).toEqual(["graph link add", "graph show", "graph node"]);
+    expect(KNOWN.has("graph link add")).toBe(true);
+    expect(KNOWN.has("graph node")).toBe(false);
   });
   it("散文の「sodactl で」やオプションは拾わない", () => {
     expect(

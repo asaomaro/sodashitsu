@@ -358,3 +358,53 @@ describe("App — はじめの案内", () => {
     wrapper.unmount();
   });
 });
+
+// 20260927-agent-graph（01 のレビュー ラウンド 1）：グラフ画面（`showModal()` の top layer）を開いている間も、トーストと再接続の表示が
+// 画面の上に見えて押せる（dialog の中へ出す。decisions D4）。
+describe("App — グラフ画面を開いている間のトースト・再接続の表示", () => {
+  const flushTicks = async (w: { vm: { $nextTick(): Promise<void> } }) => {
+    for (let i = 0; i < 4; i++) await w.vm.$nextTick();
+  };
+  const notInert = (el: Element): boolean => {
+    for (let e: Element | null = el; e; e = e.parentElement) if (e.hasAttribute("inert")) return false;
+    return true;
+  };
+
+  it("トーストと再接続の表示はグラフ画面の dialog の中に出て、inert ではない。閉じたら元の場所へ戻る", async () => {
+    const view = useViewStore(pinia);
+    const wrapper = mount(App, { ...makeProvide(makeConnection()), attachTo: document.body });
+    view.openGraph();
+    await flushTicks(wrapper);
+    const dialog = document.querySelector("dialog.graph-view")!;
+    expect((dialog as HTMLDialogElement).open).toBe(true);
+    view.toast("完了しました");
+    view.onConnectionState("reconnecting");
+    await flushTicks(wrapper);
+    const toast = document.querySelector(".toast-list")!;
+    const overlay = document.querySelector(".reconnect-overlay")!;
+    expect(dialog.contains(toast)).toBe(true);
+    expect(dialog.contains(overlay)).toBe(true);
+    expect(toast.textContent).toContain("完了しました");
+    expect(notInert(toast) && notInert(overlay)).toBe(true);
+    view.closeGraph();
+    await flushTicks(wrapper);
+    expect(dialog.contains(document.querySelector(".toast-list"))).toBe(false);
+    expect(document.querySelector(".toast-list")).not.toBeNull();
+    wrapper.unmount();
+  });
+
+  it("グラフ画面を開いたままログインし直して本体が作り直されても、dialog を開き直す（開いた状態とキーの dialog モードが食い違わない）", async () => {
+    const view = useViewStore(pinia);
+    const wrapper = mount(App, { ...makeProvide(makeConnection()), attachTo: document.body });
+    view.openGraph();
+    await flushTicks(wrapper);
+    view.onAuthRequired();
+    await flushTicks(wrapper);
+    expect(document.querySelector("dialog.graph-view")).toBeNull();
+    view.onConnectionState("open");
+    await flushTicks(wrapper);
+    expect(view.graphOpen).toBe(true);
+    expect((document.querySelector("dialog.graph-view") as HTMLDialogElement).open).toBe(true);
+    wrapper.unmount();
+  });
+});

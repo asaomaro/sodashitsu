@@ -32,6 +32,9 @@ class FakeMirror implements Mirror {
   setSnapshotText(text: string): void {
     this.snapshotText = text;
   }
+  lastLogicalLines(): string[] {
+    return [];
+  }
   bottomLines(): string[] {
     return [];
   }

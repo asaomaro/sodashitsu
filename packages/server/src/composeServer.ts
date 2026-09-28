@@ -2,7 +2,7 @@ import { X509Certificate } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { hostname as osHostname, platform } from "node:os";
-import type { HostInfo } from "@sodashitsu/protocol";
+import { parseId, type HostInfo, type LinkRun } from "@sodashitsu/protocol";
 import { ConfigError, type RawServeArgs, type ServeOptions, agentReportSocketPathFor, resolveServeOptions, stateDirInUseError } from "./config.js";
 import { FileLogger, type Logger } from "./log/Logger.js";
 import { EventBus } from "./bus/EventBus.js";
@@ -64,6 +64,11 @@ import { COMMANDS_FILE_NAME } from "./commands/commandConfig.js";
 import { CommandService } from "./commands/CommandService.js";
 import { MetadataService } from "./metadata/MetadataService.js";
 import { PrefsStore } from "./persist/PrefsStore.js";
+import { GraphStore } from "./persist/GraphStore.js";
+import { GraphEngine } from "./graph/GraphEngine.js";
+import { LocalAgentPort } from "./graph/LocalAgentPort.js";
+import { RemoteLinks } from "./graph/RemoteLinks.js";
+import type { ClientSink } from "./terminal/OutputFanout.js";
 import { LocalLogin } from "./auth/LocalLogin.js";
 
 export interface ComposedServer {
@@ -75,6 +80,12 @@ export interface ComposedServer {
   terminals: TerminalManager;
   /** 起動時の判定ルール読み込みの結果（smoke・結合テスト用。design「起動確認」・02-agent-detection T10）。 */
   manifestStore: ManifestStore;
+  /** 連携のグラフの保存（20260927-agent-graph。結合試験が終了の後に書き込めないことを確かめる）。 */
+  graph: GraphStore;
+  /** 連携の実行の履歴（`graph.history` と同じ。結合試験が接続を閉じた後・引き継ぎの最中の実行の有無を確かめる）。 */
+  graphHistory(linkId?: string): LinkRun[];
+  /** 連携の別のマシンへの接続が使えるか（04。結合試験が繋がった・切れたを待つ）。 */
+  graphRemoteAvailable(machineId: string): boolean;
   logger: Logger;
   options: ServeOptions;
   /**
@@ -124,6 +135,9 @@ function agentHookScriptFor(): string {
   return join(import.meta.dirname, "..", "assets", "agent-hook-report.cjs");
 }
 
+/** 連携の実行（`GraphEngine`）が方式を中から呼ぶときの clientId（20260927-agent-graph。`SizeAuthority` は登録の無い clientId を無視する）。 */
+const GRAPH_CLIENT_ID = "graph";
+
 /** サーバの版（snapshot の `serverVersion` と中継の HELLO の `version`）。 */
 const SERVER_VERSION = "0.1.0";
 
@@ -135,6 +149,11 @@ export async function composeServer(
     paneHistorySaveIntervalMs?: number;
     /** 引き継ぎの前の確認の差し替え（結合テストが引き継ぎの最中の状態を作る。20260927-session-stop）。 */
     handoffPreflight?: () => Promise<PreflightResult>;
+    /**
+     * 引き継ぎの execve の差し替え（結合試験が引き継ぎの最中〔poller を止めた後〕の状態を作り、投げて元に戻させる。20260927-agent-graph）。
+     * 差し替えなければ本物の `process.execve`（成功すればこのプロセスを置き換える）。
+     */
+    handoffExecve?: (nonce: string) => void;
     /** 保存した SSH のマシンへの ssh の起動の差し替え（結合テストがリモートの bridge.sock へ直接繋ぐ偽の子を渡す。20260927-multi-host-machines）。 */
     machineSpawn?: SpawnFn;
   } = {},
@@ -292,6 +311,30 @@ export async function composeServer(
     logger.error("prefs.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),
   );
   prefs.onChange((state, byClientId) => bus.publish({ event: "prefs.changed", data: { prefs: state.prefs, rev: state.rev, byClientId } }));
+  // 連携のグラフ（20260927-agent-graph）。読むのは `listen()` のロックの後（prefs と同じ）。保存できた変更は全クライアントへ配る。
+  const graph = new GraphStore(options.stateDir, (err) =>
+    logger.error("graph.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),
+  );
+  graph.onChange((g, byClientId) => bus.publish({ event: "graph.changed", data: { graph: g, byClientId } }));
+  // 連携の実行（20260927-agent-graph の 02）。送信は方式の agent.prompt をサーバの中から呼ぶ（内部の clientId と何もしない sink。design D-2）。
+  // 始めるのは `listen()` の復元の後・agentMonitor の前、止めるのは終了（graph.close の前）と引き継ぎの間。
+  const graphSink: ClientSink = { clientId: GRAPH_CLIENT_ID, sendOutput: () => undefined, sendSnapshot: () => undefined, bufferedAmount: 0 };
+  // 別のマシンの pane への接続（04）。グラフに載っているマシンだけ、中継のチャネルの上に external の接続を張る。閉じるのは実行を止めた後。
+  const remoteLinks = new RemoteLinks({ machines, logger });
+  const graphEngine = new GraphEngine({
+    store: graph,
+    local: new LocalAgentPort({
+      bus,
+      session,
+      terminals,
+      invoke: (method, params) => surface.invoke({ clientId: GRAPH_CLIENT_ID, sink: graphSink }, method, params),
+    }),
+    remote: remoteLinks,
+    localLabel: osHostname(),
+    publish: (e) => bus.publish(e),
+    now: () => Date.now(),
+    logger,
+  });
   registerAllMethods(surface, {
     session,
     clients,
@@ -307,6 +350,8 @@ export async function composeServer(
     metadata,
     images,
     prefs,
+    graph,
+    graphHistory: (linkId, limit) => graphEngine.getHistory(linkId, limit),
     // `server.stop`（20260927-cli-mode）。制御の socket の止める指示と同じ受け付けと停止の手順（`control` は下で作る。呼ばれるのは待ち受けの後）。
     stopServer: (reply) => control.stop(reply, "server.stop"),
   });
@@ -369,6 +414,8 @@ export async function composeServer(
     scrollbackEditors: () => session.handoffScrollbackEditors(),
     boundPort: () => boundPortValue,
     pausePollers: async () => {
+      graphEngine.stop(); // 20260927-agent-graph（待ちは取り消す。引き継いだ先が今の値を基準に始め直す）
+      remoteLinks.closeAll(); // 別のマシンへの接続は実行を止めた後に閉じる（04。元に戻すときは start の ensure が開き直す）
       paneHistory?.stop();
       gitPoller.stop();
       await agentMonitor.stop();
@@ -376,12 +423,16 @@ export async function composeServer(
       await machines.stop();
     },
     resumePollers: () => {
+      graphEngine.start();
       gitPoller.start();
       agentMonitor.start();
       void machines.start();
       paneHistory?.start(internal.paneHistorySaveIntervalMs);
     },
-    flushSession: () => persist.flush(),
+    flushSession: async () => {
+      await persist.flush();
+      await graph.flush(); // 20260927-agent-graph（書きかけの graph.json を残して置き換わらない）
+    },
     closeClients: () => {
       wsServer.setReady(false);
       wsServer.closeAll(1012, "server restarting");
@@ -395,11 +446,13 @@ export async function composeServer(
     flushLog: () => logger.flush(),
     preflight: internal.handoffPreflight ?? (() => runPreflight()),
     // 同じ Node・同じ引数（ディスク上の同じ入口）で自分を置き換える。PTY の master は close-on-exec が無いので残る（research F2.2）。
-    execve: (nonce) =>
-      process.execve!(process.execPath, [process.execPath, ...process.execArgv, ...process.argv.slice(1)], {
+    execve:
+      internal.handoffExecve ??
+      ((nonce) =>
+        process.execve!(process.execPath, [process.execPath, ...process.execArgv, ...process.argv.slice(1)], {
         ...process.env,
         [HANDOFF_NONCE_ENV]: nonce,
-      }),
+      })),
     platform: platform(),
     hasExecve: typeof process.execve === "function",
   });
@@ -439,6 +492,9 @@ export async function composeServer(
     persist,
     terminals,
     manifestStore,
+    graph,
+    graphHistory: (linkId) => graphEngine.getHistory(linkId),
+    graphRemoteAvailable: (machineId) => remoteLinks.get(machineId)?.available() === true,
     logger,
     options,
     get freshToken(): string | undefined {
@@ -493,6 +549,9 @@ export async function composeServer(
         // 0'（続き）. 共有の設定（20260927-cli-mode）。壊れていれば退避して空から始める（起動は止めない）。
         const loadedPrefs = await prefs.load();
         if (typeof loadedPrefs === "object") logger.warn("prefs.json was corrupt; starting with empty prefs", { backupPath: loadedPrefs.corrupt });
+        // 0'（続き）. 連携のグラフ（20260927-agent-graph）。壊れていれば退避して空から始める（起動は止めない）。
+        const loadedGraph = await graph.load();
+        if (typeof loadedGraph === "object") logger.warn("graph.json was corrupt; starting with an empty graph", { backupPath: loadedGraph.corrupt });
         // 1. 待ち受け（bind）を最初に行う（D102）。失敗（ポートが使用中・このマシンに無いアドレス・権限の無いポート等）は
         //    reject で返す（呼び出し側が案内を出して終わる。拾わないと未処理の 'error' でプロセスが落ちる）。以前は token の
         //    作成・復元（全 pane のシェルの起動）・poller の後に bind していたため、失敗した起動が token を作って失い、
@@ -545,12 +604,21 @@ export async function composeServer(
           takenPending = undefined;
           ({ adoptedPaneIds } = await session.restore(loaded.data, { paneHistory: paneHistoryEntries, adopted }));
           takenPending = pending;
+          // 20260927-agent-graph：session.json は間を置いてまとめて書き、graph.json はすぐ書く。落ちると、読めた session.json に無い新しい pane
+          // （`nextId.p` 以上）を指す手元のノードが残り、次に作る同じ id の pane に線が付いてしまう——それだけを無効にする（それより前の id の
+          // 閉じられた pane のノードは「閉じられた pane」として扱い、無効にしない）。
+          const nextPane = loaded.data.nextId.p;
+          const staledNew = await graph.markLocalStale((paneId) => (parseId(paneId)?.n ?? Infinity) >= nextPane);
+          if (staledNew > 0) logger.warn("graph.json refers to panes newer than session.json; marked them as stale", { nodes: staledNew });
         } else {
           if (loaded.kind === "corrupt") logger.warn("session.json was corrupt; starting fresh", { backupPath: loaded.backupPath });
           // 新しく始める起動では pane の id を採番し直すので、古い画面履歴を新しい pane に取り違えないよう消す（AC5）。
           // 無効のとき（下の `loadPaneHistory` と同じ）も消す。
           await clearPaneHistory(options.paneHistory ? "session.json was not restored" : "pane history disabled");
           await session.ensureNotEmpty();
+          // pane の id を振り直したので、保存したグラフの手元のノード（`local:p3` 等）は別の pane を指しうる。選び直すまで無効にする（20260927-agent-graph。research F1.2）。
+          const staled = await graph.markLocalStale();
+          if (staled > 0) logger.warn("session.json was not restored; marked local graph nodes as stale", { nodes: staled });
         }
         if (takenPending !== undefined) {
           const finished = takenPending;
@@ -564,6 +632,8 @@ export async function composeServer(
         paneHistory?.start(internal.paneHistorySaveIntervalMs);
         // クリップボードの画像の後片付け（20260927-clipboard-image-paste）。ロックを取った後に、起動時と 1 時間ごと（貼らなくなっても 24 時間で消す）。
         imageSweeper = imageStore.startSweeping();
+        // 3.5. 連携の実行（20260927-agent-graph）。状態の変化を購読するので agentMonitor より前に始める（最初の判定の変化から拾う）。
+        graphEngine.start();
         // 4. poller。
         gitPoller.start();
         agentMonitor.start();
@@ -593,6 +663,8 @@ export async function composeServer(
         // 失敗した起動はロックを放す（`main` は close() を呼ばずに終わる）。放す前に、復元を済ませていない状態の保存の
         // 予約を取り消す（ロックを放した後に session.json を書かない）。
         if (!sessionLoaded) persist.cancel();
+        graphEngine.stop();
+        remoteLinks.closeAll();
         paneHistory?.stop();
         imageSweeper?.stop();
         await agentReportSocket?.close();
@@ -614,6 +686,10 @@ export async function composeServer(
         // マシンへの ssh を閉じる（リモートの `soda serve` と pane は動いたまま。AC5）。中継の接続には、ssh を閉じる前に手元の停止（1001）で閉じる
         // （手元の `/ws` と同じ code にそろえる。ブラウザ・sodactl はどちらも繋ぎ直しの扱いで、今は code で分けていない）。
         for (const set of relayed.values()) for (const conn of [...set]) conn.close(1001, "server shutting down");
+        // 連携の実行を止めてから別のマシンへの接続を閉じる（20260927-agent-graph の 04。先に ssh を閉じると、切れた知らせで待ちを
+        // machine_unavailable として履歴に残してしまう。止める＝待ちは履歴に残さず取り消し、送っている途中の結果も書かない）。graph.close の前。
+        graphEngine.stop();
+        remoteLinks.closeAll();
         await machines.stop();
         // 閉じ始めたら新しい `/ws` を受け付けない（closeAll の後に届いた upgrade を通さない。D102）。
         wsServer.setReady(false);
@@ -629,6 +705,8 @@ export async function composeServer(
         // 復元の途中の保存の予約（シェルが猶予中に終わった pane を閉じた等）も取り消す。
         if (sessionLoaded) await persist.flush();
         else persist.cancel();
+        // 20260927-agent-graph：並んだ書き込みを書き終え、以後（まだ開いている接続からの graph.update 等）は断る——ロックを放した後に graph.json を書かない。
+        await graph.close();
         // 画面履歴は端末を捨てる前に取り直して書く（design「停止」）。失敗しても投げない（AC13）。
         if (sessionLoaded) await paneHistory?.save({ force: true });
         for (const pane of session.snapshot().panes) terminals.dispose(pane.id);

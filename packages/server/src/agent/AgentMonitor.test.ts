@@ -29,6 +29,9 @@ class FakeMirror implements Mirror {
   serialize(): { cols: number; rows: number; text: string } {
     return { cols: 80, rows: 24, text: "" };
   }
+  lastLogicalLines(): string[] {
+    return [];
+  }
   bottomLines(): string[] {
     return this.linesValue;
   }

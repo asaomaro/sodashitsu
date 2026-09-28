@@ -429,9 +429,9 @@ function endDrag(): void {
  * workspace の D&D も同じ理由で同じタイミングに取り消す（20260923-workspace-grouping）。
  */
 watch(
-  () => view.openDialog,
-  (dialog) => {
-    if (dialog !== null) {
+  () => view.modalOpen, // グラフ画面（20260927-agent-graph）も同じ
+  (open) => {
+    if (open) {
       endDrag();
       if (view.workspaceDrag) cancelWorkspaceDrag();
     }

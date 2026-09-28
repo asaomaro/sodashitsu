@@ -75,6 +75,24 @@ function expectedRgb(hex: string): string {
   return `rgb:${r}${r}/${g}${g}/${b}${b}`;
 }
 
+describe("XtermMirror — lastLogicalLines（20260927-agent-graph の受け渡し）", () => {
+  it("折り返した行は 1 行につなぎ、末尾の空行を除いてから最後の N 行を返す", async () => {
+    const mirror = new XtermMirror(10, 6, 1000);
+    await writeAndWait(mirror, "first\r\n" + "0123456789ABCDEFGHIJ-long\r\n" + "last\r\n\r\n");
+    expect(mirror.lastLogicalLines(2)).toEqual(["0123456789ABCDEFGHIJ-long", "last"]);
+    expect(mirror.lastLogicalLines(10)).toEqual(["first", "0123456789ABCDEFGHIJ-long", "last"]);
+    mirror.dispose();
+  });
+
+  it("スクロールバックに押し出された行も数える。何も無ければ空", async () => {
+    const mirror = new XtermMirror(10, 3, 1000);
+    expect(mirror.lastLogicalLines(3)).toEqual([]);
+    await writeAndWait(mirror, "a\r\nb\r\nc\r\nd\r\ne");
+    expect(mirror.lastLogicalLines(4)).toEqual(["b", "c", "d", "e"]);
+    mirror.dispose();
+  });
+});
+
 describe("XtermMirror — serialize / bottomLines / OSC capture", () => {
   it("serializes scrollback and current screen content", async () => {
     const mirror = new XtermMirror(20, 5, 1000);

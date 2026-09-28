@@ -66,7 +66,9 @@ export type ErrorCode =
   // - `server_busy`: 更新の引き継ぎ（`soda handoff`）の最中なので止めない（引き継ぎと停止を並んで走らせない）。少し待てば通る。
   // - `server_stop_unsupported`: 止める手順を登録していない組み立て（smoke・テスト等。`ComposedServer.onStopRequest` を呼んでいない）。`soda serve` では起きない。
   | "server_busy"
-  | "server_stop_unsupported";
+  | "server_stop_unsupported"
+  // 連携のグラフ（20260927-agent-graph）。`graph.update` の `baseRev` が今の rev と違う（他のブラウザ・sodactl が先に変えた）。最新を取り直して作り直す。
+  | "rev_conflict";
 
 export interface ProtocolError {
   code: ErrorCode;

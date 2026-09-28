@@ -1,0 +1,11 @@
+schema: 11
+slug: 02-engine-local
+parent: 20260927-agent-graph
+current: review
+approved: [tasks, coding, test, review]
+mode: autonomous
+profile: full
+humanGates: []
+maxSendBacks: 3
+dependsOn: [01-graph-core]
+harnessRev: unknown

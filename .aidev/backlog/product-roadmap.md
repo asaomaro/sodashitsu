@@ -149,7 +149,7 @@ parent: 20260918-web-terminal-multiplexer
 - [ ] 複数ホストの残り（接続の入口）: `soda --remote <宛先>`（登録せずに 1 回）・手元の `soda serve` を通さない直接の SSH での `sodactl --machine`・リモートの `--state-dir` を登録簿に持つ・画面からの登録 (needs: 20260927-multi-host-machines)（出典: .aidev/works/20260927-multi-host-machines/decisions.md D5・docs/machines.md）
 - [ ] 複数ホストの残り（導入と対応 OS）: リモートへの `soda` の自動の導入・更新・`soda serve` の自動の起動（herdr は承認つき）／Windows のマシンをリモートにする（`bridge.sock` の代わり）／本物の SSH・macOS・手元が Windows での確かめ (needs: 20260927-multi-host-machines)（出典: .aidev/works/20260927-multi-host-machines/test-result.md の未検証の穴）
 - [ ] 複数ホストの残り（画像の貼り付け）: リモートへのクリップボードの画像の転送（herdr の H44） (needs: 20260927-multi-host-machines)（出典: docs/herdr-parity.md H44）
-- [ ] ノードによるオーケストレーション: セッションをノード表示し、マウスで繋いで状態トリガ・出力受け渡し・監督関係を設定（外部操作 API の後） (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/requirements.md）
+- [x] ノードによるオーケストレーション: セッションをノード表示し、マウスで繋いで状態トリガ・出力受け渡し・監督関係を設定（外部操作 API の後） (needs: 20260918-web-terminal-multiplexer)（出典: .aidev/works/20260918-web-terminal-multiplexer/requirements.md）
 - [x] 通知: 完了・入力待ちのアプリ内トースト / OS 通知 / 音、通知の対象への移動（herdr prefix+o）:
       20260920-agent-notifications で対応。エージェントが**入力待ち**になった／**完了**したとき、
       利用者の状態に応じて 3 経路を使い分ける（フォーカス無し→OS 通知・音・トースト／
@@ -599,3 +599,5 @@ parent: 20260918-web-terminal-multiplexer
 - [ ] 端末版の残り: 裏で起動した `soda serve` の環境の `WSL_INTEROP`（最初の端末の socket が残る。落とした場合の影響の確かめ）・共有の設定の移行の印がオリジンごと（既定の session は `--state-dir` を替えても同じオリジン。サーバの識別子を hello に持たせる案）・高負荷のマシンでの大量出力の最中の打鍵の p95（bench (d) で 75 ms）（出典: .aidev/works/20260927-cli-mode/decisions.md D22・06-docs-verify/test-result.md）
 - [ ] Windows の pane の場所の追従（20260928-windows-pane-cwd）の実機の確かめ: PowerShell 5.1・7・cmd での `cd` の追従・再起動後の復元・oh-my-posh/starship の見た目と失敗の表示・OS の ConPTY（`SODA_WINDOWS_CONPTY=system`）・起動の遅れ（手順は docs/verification.md の Windows の節）。あわせて UNC の場所の知らせの既知の危険（decisions D4）の対策の要否
 - [ ] `packages/tui/src/image/image.test.ts` の「出し直しは同期の更新の中へ…」が高負荷（load average 24）で `expected -1 to be greater than 0` で落ちた（単独では通る。時刻の依存の疑い）（出典: .aidev/works/20260928-windows-pane-cwd/test-result.md）
+- [ ] web の `SettingsDialog.test.ts` が 1 件ごとに約 21MB を残し続ける（93 件で約 2GB。pinia ごとの settings の store が window の `storage` の listener を外さない疑い）。20260927-agent-graph で vitest の worker のヒープの上限を 4GB に上げてしのいだ（decisions D4-9）
+- [ ] 連携のグラフで、別のマシンが pane の番号を振り直した（保存した session を読めずに 1 から振り直した起動）ことを検出して、そのマシンのノードを無効（stale）にする: 今は hello の snapshot にもイベントにもその信号が無く（`SessionSnapshot` に起動・session の識別子が無い）、線は同じ番号の無関係な pane を相手に元・先・監督役のすべての側で誤って動く（元の側も入れ替わった直後の 1 回だけが基準で、2 回目からは無関係な pane の完了・承認待ちで動き、画面を渡す・delegate なら監督役に無関係な承認へ答えるよう案内する。先・監督役の側はその pane へ送る）。案: session.json に振り直しのたびに変わる識別子（epoch）を持たせて snapshot に載せ、グラフのノードにその値を覚え、繋がったときに違えば無効にする（protocol・session の保存・GraphStore・GraphEngine・web の表示・古い版のリモートの扱いに及ぶ）（出典: .aidev/works/20260927-agent-graph/decisions.md D8-10・05-cli-docs の g05 点検）

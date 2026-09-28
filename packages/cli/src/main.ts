@@ -14,6 +14,7 @@ import {
   runAgentWait,
 } from "./commands/agent.js";
 import { runAgentStart } from "./commands/agentStart.js";
+import { runGraph } from "./commands/graph.js";
 import { runPaneAttach } from "./commands/attach.js";
 import { runPaneControl, runPaneObserve } from "./commands/sessionStream.js";
 import { runTabClose, runTabCreate } from "./commands/tab.js";
@@ -52,6 +53,8 @@ function printHelp(): void {
       "確かめられないとき（SODACTL_URL・--url が別の名前等）は caller_pane_unknown で断ります。同じサーバだと分かっていれば --pane で ID を渡し、",
       "そうでなければ SODACTL_URL・--url を外して SODA_SERVER_URL につないでください。",
       "pane current は pane の今の tabId・workspaceId を返します（pane を移しても古くなりません）。",
+      "graph は連携のグラフ（ブラウザのグラフ画面と同じもの）を表で見て、変えます（--json で JSON）。link add は端の pane が載っていなければ一緒に載せます。",
+      "graph の変更が画面など他の変更とぶつかった（rev_conflict）ときは、取り直して 1 回だけ送り直します。",
       "sodactl skill はエージェントに sodactl の使い方を教える Markdown（skill ファイル）を出します。",
       "workspace/pane report-metadata はサイドバーの行の $名前 に出す独自トークンを設定（--token NAME=VALUE）・消去（--clear-token NAME）します。",
       "--token は値が = を含めば独自トークン、含まなければ接続の token です。値は前後の空白と制御文字を除いて 80 文字まで、空なら消去。",
@@ -123,6 +126,8 @@ async function main(): Promise<void> {
       return runAgentRename(cmd, store);
     case "agent-start":
       return runAgentStart(cmd, store);
+    case "graph":
+      return runGraph(cmd, store);
     default: {
       // 網羅性チェック：`Command` に新しい種類が足されたのにここへ分岐を足し忘れると、ここで型エラーになる
       // （coding のタスク横断点検で見つけた——`switch` 単体では TS は非網羅を黙って許す。この tsconfig は

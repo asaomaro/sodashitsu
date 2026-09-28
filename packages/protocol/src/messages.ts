@@ -3,6 +3,7 @@ import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessio
 import { THEME_NAMES, type ThemeName } from "./theme.js";
 import { IMAGE_CHUNK_BASE64_MAX, IMAGE_MIME_TYPES } from "./image.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
+import { GraphGetParams, GraphHistoryParams, GraphPauseParams, GraphResumeParams, GraphUpdateParams, type Graph, type GraphHistoryResult } from "./graph.js";
 import { CELL_LIMIT_MESSAGE, terminalDimension, VIEW_VISIBLE_PANES_MAX, withinCellLimit } from "./terminalLimits.js";
 
 /**
@@ -775,6 +776,12 @@ export const METHOD_SCHEMAS = {
   "command.popup_close": CommandPopupCloseParams,
   "prefs.get": PrefsGetParams,
   "prefs.set": PrefsSetParams,
+  // エージェントの連携のグラフ（20260927-agent-graph）。
+  "graph.get": GraphGetParams,
+  "graph.update": GraphUpdateParams,
+  "graph.pause": GraphPauseParams,
+  "graph.resume": GraphResumeParams,
+  "graph.history": GraphHistoryParams,
   "server.stop": ServerStopParams,
 } as const;
 
@@ -850,6 +857,11 @@ export interface MethodResultMap {
   "command.popup_close": Record<string, never>;
   "prefs.get": PrefsResult;
   "prefs.set": PrefsResult;
+  "graph.get": Graph;
+  "graph.update": Graph;
+  "graph.pause": Graph;
+  "graph.resume": Graph;
+  "graph.history": GraphHistoryResult;
   "server.stop": Record<string, never>;
 }
 

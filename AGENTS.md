@@ -7,6 +7,7 @@
 - 開発の進め方（要件 → 設計 → 実装 → テスト → レビュー → 着地）の記録は `.aidev/works/` にある。
 - 利用者向けの手順は `docs/`（TLS の設定・3 OS と実機での検証・herdr との対応・独自コマンドの設定ファイル・旧名 wtm からの移行 `docs/migrate-from-wtm.md`）。
 - 端末版（引数なしの `soda`）の使い方は `docs/tui.md`、機能の扱いの一覧は `docs/tui-parity.md`。
+- エージェントの連携のグラフ（画面・線の種類・上限と一時停止・受け渡しの注意・別のマシン）は `docs/agent-graph.md`、`sodactl graph` は `docs/sodactl.md`。
 
 ## コーディング規約の条項
 

@@ -981,6 +981,56 @@ $d = Join-Path $env:TEMP "soda-tui-check"; soda --state-dir $d   # Windows ネ�
 - マウスが効かない: 設定「端末版 → マウスを使う」が入か。外側の端末がマウスの報告に対応しているか。
 - キーが効かない: 外側の端末が先に取っている（`docs/tui.md`「外側の端末との衝突」「区別できないキー」）。
 
+## 連携のグラフ（20260927-agent-graph）
+
+グラフ画面と連携の実行（`docs/agent-graph.md`）を、実物のエージェント・実物のブラウザ・別のマシンで確かめる手順。自動の試験（`pnpm test`）は
+エージェントの状態をサーバの中から偽って出し、送られる側を `cat` にして確かめている（`packages/server/src/composeServer.graph.integration.test.ts`・
+`packages/server/src/graph/remote.integration.test.ts`・`packages/cli/src/graph.integration.test.ts`）。ここでは、その外側を手で見る。
+新しい状態ディレクトリか名前付き session（上の「端末版」と同じ）で始め、利用者の本物のグラフを汚さない。
+
+### 性能（自動・AC17）
+
+```sh
+pnpm --filter @sodashitsu/server exec vitest run src/graph/perf.integration.test.ts   # 実物のサーバで 16 pane・32 本
+pnpm --filter @sodashitsu/web exec vitest run src/components/graph/GraphView.perf.test.ts  # 画面の描画（happy-dom の目安）
+```
+
+出力の `[graph-perf]` の行が測った値（`toStartMs` は状態の変化から先の画面に文面が現れるまで、`toSentMs` は Enter まで送り終えるまで〔`agent.prompt` は 300ms 後に Enter〕、
+`blocked` は承認待ちになってから承認待ちのトリガ・承認の代理の先に届き始めるまで〔1 秒の継続を含む〕、`burst` は 16 の元が同時に完了したとき、
+`web-render` は画面を開いて描く・全ノードが動いた変更を描き直す時間）。サーバの `toStartMs`・`burst`、`blocked` の 1 秒の継続を除いた時間が 2 秒を超えれば試験が落ちる（`toSentMs` は記録だけ）。
+画面の描画は happy-dom の目安で、10 秒を超えたときだけ落ちる。共有のマシンでは 1 回だけ走らせる。
+
+### 実物のエージェントで（Linux・WSL2・Windows ネイティブ）
+
+1. pane を 3 つ用意し、`sodactl agent start impl --kind claude --pane <p1>`・`reviewer`（`<p2>`）・`lead`（`<p3>`）でエージェントを起動する（Windows ネイティブのサーバでは
+   `agent start` が使えないので、pane の中で手で起動して `sodactl agent rename` で名前を付ける）。
+2. ブラウザで `prefix+a` → 「pane を載せる」で 3 つを載せ、impl → reviewer にトリガ（完了した・受け渡し 40 行）を結ぶ。
+   impl に短い作業（「README の 1 行目を読んで要約して」）を頼み、終わると reviewer に文面が 1 回だけ届き、線が光り、チップが `1/10`、履歴に「送った」が出る。
+3. reviewer に長い作業を頼んでいる間に impl をもう一度完了させ、reviewer の手が空いてから 1 通だけ届く（履歴は「待っている」→「送った」）。「見送る」に変えると `busy` で見送る。
+4. impl → lead に監督の線を結ぶ。lead の手が空いていれば、配下（impl の pane・種類・手元）と sodactl の使い方の短い文面が届く。lead に「impl に 〜 を頼んで結果を教えて」と頼み、
+   lead が `sodactl agent prompt/wait/read` で impl を動かせる。
+5. impl → lead に承認の代理（知らせるだけ）を結び、impl に承認の要る操作（ファイルの書き込み等）をさせる。承認待ちが 1 秒続くと lead に画面の末尾と
+   「返答は利用者が行います」が届き、ブラウザの通常の通知も出る。impl は人が答えるまで承認待ちのまま。
+6. 同じ線を「返答まで任せる」に変える（⚠ の注意が出る）。次の承認待ちで lead に `sodactl agent send-keys` の案内が届き、lead の返答で impl の承認待ちが解ける。
+   **取り消せない操作を承認させないこと**（確かめるのは無害な操作で）。
+7. impl ⇄ reviewer に往復のトリガを結び上限を 3 にする。3 回で `⏸ 上限` になり、画面の下に知らせが出る。線の再開で回数が 0 に戻る。
+   「全体を一時停止」の間は完了させても動かない（履歴に「一時停止中」）。
+8. `soda serve` を再起動（`soda session stop <名前>`〔既定の session は `default`〕か起動した窓で Ctrl+C → 同じ引数で起動）し、配置・線・一時停止の状態が戻り、履歴は空になる。`session.json` を消して起動すると手元のノードが
+   `⚠ 無効` になり、「選び直す…」（`r`）で付け替えられる。
+
+### 実物のブラウザで（Chrome・Edge・モバイル）
+
+- 2 つのブラウザで同じグラフを開き、一方のノードの移動・線の作成と削除・一時停止が他方へすぐ届く。`sodactl graph link add` の変更も届く。
+- キーだけで一巡する: `prefix+a` → `Tab` でノード → 矢印で動かす → `c`・`Tab`・`Enter` で線 → 設定を `Ctrl+Enter` で保存 → チップの `p`・`Delete` →
+  `Esc` を繰り返して閉じ、開く前の pane にフォーカスが戻る。開いている間のキーが pane に届かないこと。
+- ホイールでパン・`Ctrl`＋ホイールとピンチでズーム、ページ全体がスクロールしない。OS の「視差効果を減らす」で線の光りが動かない（太さと色だけ）。
+- モバイル（iOS Safari・Android Chrome）: 上部バーの「連携」で開き、1 本指のパン・2 本指のピンチ、線のチップを押して下からのシートで一時停止・再開。編集の操作が出ない。
+
+### 別のマシンで
+
+`docs/machines.md` の手順で 2 台を登録し、手元の pane と別のマシンの pane を線で結んで上の 2〜6 を行う。そのマシンの `soda serve` を止めて、止めている間の完了が
+`machine_unavailable` で見送られ、繋がり直しても後から送られないこと、監督役への知らせが繋がったときに届くことを見る。
+
 ## 性能の計測（AC17）
 
 requirements.md の非機能要件（目安）：**応答性**——同一 LAN での接続で、キー入力から画面へ反映されるまでの追加の遅延が

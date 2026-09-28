@@ -27,6 +27,7 @@ function setup(opts: { selectable?: (id: string) => boolean } = {}) {
     retarget: (url) => calls.push(`retarget:${url}`),
     wsUrlFor: (id) => (id === "local" ? "/ws" : `/ws?machine=${id}`),
     requestWorkspaceFocus: (w) => calls.push(`workspace.focus:${w}`),
+    requestPaneFocus: (p) => calls.push(`pane.focus:${p}`),
   };
   const sw = new MachineSwitcher(ports);
   const tick = async (): Promise<void> => {
@@ -107,5 +108,18 @@ describe("MachineSwitcher（T13）", () => {
     await Promise.all([x, y]);
     s2.sw.onOpened();
     expect(s2.calls.filter((c) => c.startsWith("workspace.focus"))).toEqual([]);
+  });
+
+  it("pane を指した切り替え（連携のグラフのノードから。04）は、workspace の後にその pane に焦点を置く（最初の onOpened だけ）", async () => {
+    const { sw, calls, tick } = setup();
+    const done = sw.switchTo("m1", { workspaceId: "w3", tabId: "t4", paneId: "p7" });
+    await tick();
+    await done;
+    sw.onOpened();
+    sw.onOpened();
+    expect(calls.filter((c) => c.includes(".focus:"))).toEqual([
+      "workspace.focus:w3",
+      "pane.focus:p7",
+    ]);
   });
 });

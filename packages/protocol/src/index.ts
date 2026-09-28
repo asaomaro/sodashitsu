@@ -8,6 +8,7 @@ export * from "./errors.js";
 export * from "./commands.js";
 export * from "./worktreePath.js";
 export * from "./image.js";
+export * from "./graph.js";
 export * from "./messages.js";
 export * from "./events.js";
 export * from "./frames.js";

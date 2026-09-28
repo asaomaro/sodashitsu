@@ -1,6 +1,7 @@
 import type {
   AgentInfo,
   MachineStatus,
+  Pane,
   ServerEvent,
   SessionSnapshot,
   Workspace,
@@ -23,8 +24,24 @@ export interface MachineSummary {
   workspaces: Workspace[];
   /** tab → workspace。 */
   tabWorkspace: Record<string, string>;
-  /** pane → tab とエージェント。 */
-  panes: Record<string, { tabId: string; agent: AgentInfo | null }>;
+  /** pane → tab とエージェントと呼び名の材料（連携のグラフのノード・チェックリストの呼び名。20260927-agent-graph の 04）。 */
+  panes: Record<string, SummaryPane>;
+}
+
+export interface SummaryPane {
+  tabId: string;
+  agent: AgentInfo | null;
+  label: string | null;
+  title: string;
+}
+
+function summaryPaneOf(p: Pane): SummaryPane {
+  return { tabId: p.tabId, agent: p.agent, label: p.label, title: p.title };
+}
+
+/** 要約の pane の呼び名（`paneNameOf` と同じ連鎖: 名前 → エージェントの名前 → エージェントの種類 → タイトル → `pane <id>`）。 */
+export function summaryPaneName(paneId: string, p: SummaryPane): string {
+  return p.label || p.agent?.name || p.agent?.label || p.title || `pane ${paneId}`;
 }
 
 export interface MachineSection {
@@ -90,7 +107,7 @@ export const useMachinesStore = defineStore("machines", () => {
     const tabWorkspace: Record<string, string> = {};
     for (const t of snap.tabs) tabWorkspace[t.id] = t.workspaceId;
     const panes: MachineSummary["panes"] = {};
-    for (const p of snap.panes) panes[p.id] = { tabId: p.tabId, agent: p.agent };
+    for (const p of snap.panes) panes[p.id] = summaryPaneOf(p);
     summaries.value[id] = {
       connected: true,
       everConnected: true,
@@ -143,7 +160,7 @@ export const useMachinesStore = defineStore("machines", () => {
         return;
       case "pane.created":
       case "pane.updated":
-        s.panes[e.data.pane.id] = { tabId: e.data.pane.tabId, agent: e.data.pane.agent };
+        s.panes[e.data.pane.id] = summaryPaneOf(e.data.pane);
         return;
       case "pane.closed":
         delete s.panes[e.data.paneId];

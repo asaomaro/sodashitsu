@@ -17,6 +17,7 @@ import { registerCommandMethods } from "./command.js";
 import { registerImageMethods } from "./image.js";
 import { registerPrefsMethods } from "./prefs.js";
 import { registerServerMethods } from "./server.js";
+import { registerGraphMethods } from "./graph.js";
 
 export type { MethodDeps } from "./deps.js";
 
@@ -41,4 +42,5 @@ export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): v
   registerImageMethods(surface, deps); // 20260927-clipboard-image-paste
   registerPrefsMethods(surface, deps); // 20260927-cli-mode
   registerServerMethods(surface, deps); // 20260927-cli-mode（server.stop）
+  registerGraphMethods(surface, deps); // 20260927-agent-graph
 }

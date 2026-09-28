@@ -278,6 +278,25 @@ describe("StoreAdapter", () => {
     expect(view.focusedPaneId).toBe("p1"); // 閉じたら、残りの pane へ戻る
   });
 
+  it("グラフ画面（20260927-agent-graph）を開いている間も同じく、焦点は動かさず閉じたときの戻り先だけを差し替える", () => {
+    const { adapter } = makeAdapter();
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted({ ...makeWorkspace("w1"), tabIds: ["t1"], activeTabId: "t1" });
+    session.tabUpserted({ ...makeTab("t1", "w1"), layout: { type: "split", id: "s1", dir: "right", ratio: 0.5, a: { type: "pane", paneId: "p1" }, b: { type: "pane", paneId: "p2" } }, focusedPaneId: "p2" });
+    session.paneUpserted(makePane("p1", "t1"));
+    session.paneUpserted(makePane("p2", "t1"));
+    view.setView("w1", "t1");
+    view.focusPane("p2");
+    view.openGraph();
+
+    adapter.applyEvent({ event: "pane.closed", data: { paneId: "p2" } });
+    expect(view.focusedPaneId).toBe("p2"); // グラフ画面を開いている間は焦点を動かさない
+    expect(view.preGraphFocusPaneId).toBe("p1");
+    view.closeGraph();
+    expect(view.focusedPaneId).toBe("p1"); // 閉じたら、残りの pane へ戻る
+  });
+
   it("pane.agent_status_changed / pane.size_changed", () => {
     const { adapter } = makeAdapter();
     useSessionStore(pinia).paneUpserted(makePane("p1", "t1"));
@@ -316,6 +335,17 @@ describe("StoreAdapter", () => {
     makeAdapter({ onPrefsChanged }).adapter.applyEvent({ event: "prefs.changed", data });
     expect(onPrefsChanged).toHaveBeenCalledWith(data);
     expect(() => makeAdapter().adapter.applyEvent({ event: "prefs.changed", data })).not.toThrow();
+  });
+
+  it("graph.changed・graph.fired は注入した onGraphEvent へ（20260927-agent-graph。省略時は例外を投げない）", () => {
+    const onGraphEvent = vi.fn();
+    const changed = { event: "graph.changed" as const, data: { graph: { rev: 1, paused: false, nodes: [], links: [] }, byClientId: null } };
+    const fired = { event: "graph.fired" as const, data: { run: { linkId: "l1", at: 1, result: "sent" as const } } };
+    const { adapter } = makeAdapter({ onGraphEvent });
+    adapter.applyEvent(changed);
+    adapter.applyEvent(fired);
+    expect(onGraphEvent.mock.calls).toEqual([[changed], [fired]]);
+    expect(() => makeAdapter().adapter.applyEvent(changed)).not.toThrow();
   });
 
   it("command.updated は独自コマンドの一覧を置き換え、command.popup_closed は閉じた控えに残す（20260927-custom-command-keys の AC15）", () => {

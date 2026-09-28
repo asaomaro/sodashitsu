@@ -68,6 +68,15 @@ export const ACTIONS = [
     defaults: ["prefix+shift+r"],
     action: { type: "reloadConfig" },
   },
+  // 20260927-agent-graph（design D-7）。herdr の操作ではない（エージェントの連携のグラフ画面。本製品の追加）。既定の prefix+a は herdr・本製品のどちらの既定でも空いている。
+  // 端末版では開けず「ブラウザで開けます」と知らせる（decisions D1-8。操作表は共有のまま）。
+  {
+    id: "open_graph",
+    label: "連携（グラフ）を開く",
+    group: "全体",
+    defaults: ["prefix+a"],
+    action: { type: "openGraph" },
+  },
   // 20260927-cli-mode（design D-7）。herdr の操作ではない（端末版・画面からサーバを止める口として本製品が足した）。押し間違えると全ての pane が止まるので既定は無し・確認つき。
   {
     id: "stop_server",

@@ -1,0 +1,14 @@
+schema: 11
+slug: agent-graph
+current: review
+approved: [requirements, research, design, architecture, tasks, test, review]
+mode: autonomous
+profile: full
+humanGates: []
+maxSendBacks: 3
+dependsOn: []
+harnessRev: unknown
+backlog: product-roadmap.md
+backlogItem: ノードによるオーケストレーション: セッションをノード表示し、マウスで繋いで状態トリガ・出力受け渡し・監督関係を設定（外部操作 API の後）
+subtasks: [01-graph-core, 02-engine-local, 03-web-graph, 04-remote, 05-cli-docs]
+activeSubtask: done

@@ -4,10 +4,11 @@ import type { ITerminalOptions } from "@xterm/xterm";
 // 押し出され、端末の中身が一切見えない（親の統合 test で発見。D96）。
 import "@xterm/xterm/css/xterm.css";
 import { createPinia } from "pinia";
-import { createApp, nextTick, watch } from "vue";
+import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
 import { ActionDispatcherKey, ConnectionKey, DeviceKindKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
 import { PrefsSync } from "./actions/PrefsSync.js";
@@ -15,6 +16,8 @@ import { mobileViewportQuery, trackMediaQuery } from "./mobile/detect.js";
 import { MachineSummaryClient } from "@sodashitsu/client-core";
 import { LOCAL_MACHINE_ID, wsUrlFor } from "@sodashitsu/client-core";
 import { useMachinesStore } from "./store/machines.js";
+import { useGraphStore } from "./store/graph.js";
+import { acceptsMainGraphEvent, createGraphPort, reloadsOnMainOpened } from "./store/graphRouting.js";
 import { KeyInputController } from "./keys/KeyInputController.js";
 import { KeyboardLockController } from "./keys/KeyboardLockController.js";
 import { KeyRouter } from "@sodashitsu/client-core";
@@ -116,10 +119,31 @@ const storeAdapter = new StoreAdapter({
   onMachinesChanged: (list) => machineWiringBox.current?.onMainMachinesChanged(list),
   // 共有の設定（20260927-cli-mode）。`prefsSync` はこの後で作るので、遅延で参照する。
   onPrefsChanged: (data) => prefsSyncBox.current?.onChanged(data),
+  // 連携のグラフ（20260927-agent-graph）は手元の `soda serve` のもの。画面の接続が別のマシンを向いている間の（そのマシンの）グラフは捨てる。
+  onGraphEvent: (e) => {
+    if (acceptsMainGraphEvent(machines.selectedId)) graph.applyEvent(e);
+  },
 });
 
 const connection = new Connection({ kind, httpOrigin, wsUrl, store: storeAdapter, sink: sinkProxy });
 const conn: ConnectionPort = connection;
+
+/**
+ * 連携のグラフの口（20260927-agent-graph の design「別のマシンを見ている間も、グラフは手元のサーバのもの」）。画面の接続がローカルを向いていればそれ、
+ * 別のマシンを向いていればローカルの軽い接続（`MachineWiring` が張る。作るのはこのファイルの `MachineSummaryClient` なので型を戻してよい）。
+ */
+const graph = useGraphStore(pinia);
+graph.bind(
+  createGraphPort({
+    selectedId: () => machines.selectedId,
+    main: conn,
+    localSummary: () => machineWiringBox.current?.summaryClient(LOCAL_MACHINE_ID) as MachineSummaryClient | undefined,
+  }),
+);
+// 接続のたびに取り直す（切れている間の変化を取りこぼさない）。上限の知らせ（AC11）のため、画面を開いていなくても持つ。
+connection.onOpened(() => {
+  if (reloadsOnMainOpened(machines.selectedId)) void graph.load();
+});
 // 端末への入力は全てこの関所を通す（xterm.js の `onData`・`KeyInputController` の直接の送信）。分割・新しい tab・
 // 新しい workspace の応答を待つ間の入力を溜め、新しい pane へ流す（D99）。
 const inputGate = new InputGate(conn);
@@ -336,6 +360,18 @@ const machineSwitcher = new MachineSwitcher({
   retarget: (url) => connection.retarget(url),
   wsUrlFor: (id) => wsUrlFor(wsUrl, id),
   requestWorkspaceFocus: (workspaceId) => void conn.request("workspace.focus", { workspaceId }).catch(() => undefined),
+  requestPaneFocus: (paneId) =>
+    void focusPaneIfShown(
+      {
+        paneTab: (id) => session.panes.get(id)?.tabId,
+        shownTab: () => view.tabId,
+        focus: (id) => {
+          view.focusPane(id);
+          void conn.request("pane.focus", { paneId: id }).catch(() => undefined);
+        },
+      },
+      paneId,
+    ),
 });
 machineSwitcherBox.current = machineSwitcher;
 
@@ -347,11 +383,16 @@ const machineWiring = new MachineWiring({
   createSummaryClient: (opts) => new MachineSummaryClient(opts),
   baseWsUrl: wsUrl,
   mobileViewport,
+  onLocalGraphEvent: (e) => graph.applyEvent(e),
+  onLocalOpened: () => void graph.load(),
+  graphOpen: toRef(view, "graphOpen"),
 });
 machineWiringBox.current = machineWiring;
-watch([() => machines.selectedId, () => machines.machines.map((m) => m.id).join("\n"), mobileViewport], () => machineWiring.reconcileSummaryClients());
+watch([() => machines.selectedId, () => machines.machines.map((m) => m.id).join("\n"), mobileViewport, () => view.graphOpen], () => machineWiring.reconcileSummaryClients());
 // 1 列の画面になったらローカルへ戻り一覧を空にする（サイドバーにマシンの見出しが無く戻れなくなるため）。広げたら一覧を読み直す。
 watch(mobileViewport, (mobile) => machineWiring.onMobileChanged(mobile));
+// 1 列の画面でも連携のグラフ画面を開いている間は、別のマシンのノードの状態を出すため一覧と軽い接続を保つ（統合レビュー R1）。
+watch(() => view.graphOpen, (open) => machineWiring.onGraphOpenChanged(open));
 keys.bind({ action: actionDispatcher, focus: actionDispatcher, mode: { onModeChange: (m) => view.onModeChange(m) }, imagePaste: imagePaster });
 
 // Windows のホストなら ConPTY 向けのオプションを足す（design「エージェントの argv[0]」隣接。H-cfg 相当）。
@@ -375,8 +416,9 @@ watch(
 // ダイアログの開閉と `KeyRouter` のモードを同期する（design の状態遷移図「prefix --> dialog」「dialog -->
 // terminal」）。ダイアログ自身が Esc/Enter 等の全キーを処理するので、KeyRouter 側はここでは何も横取りしない
 // （`KeyRouter.handle` は mode:"dialog" のとき常に consume を返すのみ）。
+// 連携のグラフ画面（20260927-agent-graph）もダイアログの 1 枠とは別の状態で同じく扱う（`view.modalOpen`。research-web §1.5）。
 watch(
-  () => view.openDialog,
+  () => view.modalOpen,
   (open) => keys.setMode(open ? "dialog" : "terminal"),
 );
 
@@ -387,7 +429,7 @@ watch(
 // Ctrl+B を押す」が「prefix に入る→直後に \x02 が送られて抜ける」という壊れた動きになる）。
 // ダイアログが開いている間も同様にここでは何もしない（ダイアログ自身が処理する。上の watch 参照）。
 window.addEventListener("keydown", (ev) => {
-  if (view.openDialog) return;
+  if (view.modalOpen) return;
   if (document.activeElement?.classList.contains("xterm-helper-textarea")) return;
   const passThrough = keys.handleDomKey(ev);
   if (!passThrough) ev.preventDefault();

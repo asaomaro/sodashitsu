@@ -1,4 +1,4 @@
-import type { AgentInfo, AgentIntegrationStatusResult, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
+import type { AgentInfo, AgentIntegrationStatusResult, GraphChangedEvent, GraphFiredEvent, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { ConnectionState, StorePort } from "@sodashitsu/client-core";
 import { useCommandsStore } from "./commands.js";
@@ -39,6 +39,11 @@ export interface StoreAdapterOptions {
   onMachinesChanged?: (machines: MachineStatus[]) => void;
   /** 共有の設定が保存された（`prefs.changed`。20260927-cli-mode）。反映するかは `actions/PrefsSync.ts` が決める。省略可。 */
   onPrefsChanged?: (data: PrefsChangedEvent["data"]) => void;
+  /**
+   * 連携のグラフのイベント（`graph.changed`・`graph.fired`。20260927-agent-graph）。グラフは手元の `soda serve` のものなので、
+   * **画面の接続がローカルを向いているときだけ**当てる（別のマシンを向いていればローカルの軽い接続から受ける）——決めるのは呼び出し側（`main.ts`）。省略可。
+   */
+  onGraphEvent?: (e: GraphChangedEvent | GraphFiredEvent) => void;
 }
 
 /**
@@ -91,14 +96,17 @@ export class StoreAdapter implements StorePort {
   private applyViewRepair(successorHint?: string): void {
     const session = useSessionStore(this.opts.pinia);
     const view = useViewStore(this.opts.pinia);
-    const dialogOpen = view.openDialog !== null;
-    const focused = dialogOpen ? (view.preDialogFocusPaneId ?? view.focusedPaneId) : view.focusedPaneId;
+    // グラフ画面（20260927-agent-graph）もダイアログと同じく、開いている間は「閉じたときに戻す先」を差し替える。
+    const dialogOpen = view.modalOpen;
+    const focused = dialogOpen ? (view.preDialogFocusPaneId ?? view.preGraphFocusPaneId ?? view.focusedPaneId) : view.focusedPaneId;
     const next = repairView({ workspaceId: view.workspaceId, tabId: view.tabId, focusedPaneId: focused }, session, successorHint);
     if (!next) return;
     if (next.workspaceId && next.tabId && (next.workspaceId !== view.workspaceId || next.tabId !== view.tabId)) view.setView(next.workspaceId, next.tabId);
     if (next.focusedPaneId === focused) return;
-    if (dialogOpen) view.retargetPreDialogFocus(next.focusedPaneId);
-    else view.focusPane(next.focusedPaneId);
+    if (dialogOpen) {
+      if (view.openDialog !== null) view.retargetPreDialogFocus(next.focusedPaneId);
+      if (view.graphOpen) view.retargetPreGraphFocus(next.focusedPaneId);
+    } else view.focusPane(next.focusedPaneId);
   }
 
   private applyEventToSession(e: ServerEvent): void {
@@ -175,6 +183,10 @@ export class StoreAdapter implements StorePort {
         return;
       case "prefs.changed":
         this.opts.onPrefsChanged?.(e.data);
+        return;
+      case "graph.changed":
+      case "graph.fired":
+        this.opts.onGraphEvent?.(e);
         return;
     }
   }

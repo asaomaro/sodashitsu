@@ -234,6 +234,10 @@ export class TuiDispatcher {
       case "stopServer":
         this.ui.openDialogWithContext({ kind: "confirmStopServer", ...this.stopTarget() });
         return;
+      case "openGraph":
+        // 連携のグラフ画面はブラウザにだけある（20260927-agent-graph の decisions D1-8。操作表は共有のまま、端末版は知らせる）。
+        this.ui.toast("グラフの画面はブラウザで開けます。");
+        return;
       default:
         // 網羅の検査：`Action` に種類が増えたらここで型が落ちる（web は `switch` に網羅の検査が無く、足し忘れが黙って無反応になっていた）。
         action satisfies never;

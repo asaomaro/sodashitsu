@@ -303,3 +303,16 @@ describe("MobileShell — 設定への入口", () => {
     expect(view.dialogContext).toEqual({ kind: "settings" });
   });
 });
+
+// 20260927-agent-graph の AC20：モバイルでもグラフを閲覧し、一時停止・再開ができる。入口は上部バーの文字のボタン。
+describe("MobileShell — 連携（グラフ）への入口", () => {
+  it("上部バーの「連携」のボタンでグラフ画面が開く", async () => {
+    const { wrapper, view } = seedAndMount();
+    await wrapper.vm.$nextTick();
+    const btn = wrapper.get(".mobile-shell-graph-btn");
+    expect(btn.text()).toBe("連携");
+    await btn.trigger("click");
+    expect(view.graphOpen).toBe(true);
+    wrapper.unmount();
+  });
+});

@@ -89,4 +89,6 @@ export type Action =
   | { type: "openWorktree" } // open_worktree（今の workspace の repo の worktree の一覧を開く）
   | { type: "removeWorktree" } // remove_worktree（今の workspace が linked worktree なら、それを削除する。確認つき）
   | { type: "swapWithFocused"; paneId?: string } // swap_with_focused（pane のメニュー。paneId が無ければ直前の pane と）
-  | { type: "stopServer" }; // stop_server（サーバを止める。確認つき）
+  | { type: "stopServer" } // stop_server（サーバを止める。確認つき）
+  // 20260927-agent-graph（本製品の追加）。
+  | { type: "openGraph" }; // open_graph（連携のグラフ画面を開く・閉じる。端末版は知らせだけ）

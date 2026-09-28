@@ -46,6 +46,15 @@ sodactl agent prompt <target> <text> [--wait] [--until working|blocked|idle|done
 sodactl agent send-keys <target> <key>...
 sodactl agent rename <target> <name>|--clear
 sodactl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [-- <args>...]
+sodactl graph show [--json]                 # 連携のグラフ（下の「連携のグラフ」）。graph のコマンドは既定が表、--json で JSON
+sodactl graph link add <from> <to> [--kind trigger|supervise|approval] [--on done|blocked] [--prompt <text>] [--output <N>|--no-output] [--when-busy wait|skip] [--mode notify|delegate] [--lines <N>] [--limit <N>] [--json]
+sodactl graph link set <linkId> [--on …] [--prompt …] [--output <N>|--no-output] [--when-busy …] [--mode …] [--lines <N>] [--limit <N>] [--json]
+sodactl graph link rm|pause|resume <linkId> [--json]
+sodactl graph pause|resume [--json]         # グラフ全体
+sodactl graph node add <pane>... [--json]
+sodactl graph node rm <pane> [--json]
+sodactl graph node rekey <pane> <newPane> [--json]
+sodactl graph history [<linkId>] [--limit <N>] [--json]
 sodactl skill                               # エージェントに sodactl の使い方を教える Markdown（skill ファイル）を出す
 ```
 
@@ -339,6 +348,57 @@ sodactl agent wait "$pane" --until blocked --timeout 600000
 sodactl agent read "$pane" --lines 40
 sodactl agent send-keys "$pane" esc                         # 取り消す（答えるなら例えば y や enter）
 ```
+
+## 連携のグラフ（`graph`）
+
+ブラウザのグラフ画面（`docs/agent-graph.md`）と同じグラフを読み書きする（20260927-agent-graph）。変更はサーバが `graph.changed` で配るので、開いている画面にすぐ届く。
+グラフは接続した `soda serve` のもの（`--machine <名前>` を前に付けると、そのマシンの `soda serve` のグラフ）。
+
+```bash
+sodactl graph show
+# graph: running (rev 4)
+#
+# node    key       status
+# p1      local:p1  ok
+# p2      local:p2  ok
+# box:p7  0123…:p7  -
+#
+# link  kind       from  to      count  state   settings
+# l1    trigger    p1    p2      2/10   active  on=done output=80 busy=wait prompt="レビューして {output}"
+# l2    supervise  p2    box:p7  0/10   paused
+
+l=$(sodactl graph link add impl reviewer --prompt "次の差分をレビューして。{output}" --output 120 --json | jq -r .link.id)
+sodactl graph link add impl lead --kind approval --mode delegate --limit 5
+sodactl graph link set "$l" --when-busy skip
+sodactl graph link pause "$l"; sodactl graph link resume "$l"   # 線の再開は回数を 0 に戻す
+sodactl graph pause; sodactl graph resume                        # 全体（線ごとの回数・一時停止は変えない）
+sodactl graph history "$l" --limit 5
+```
+
+- **端の指定**（`<from>`・`<to>`・`<pane>`）: pane ID（`p3`）・`agent rename` で付けたエージェントの名前（手元だけ。引き方は `agent` の `<target>` と同じ順——
+  その ID の pane にエージェントが居ればその pane、次にその名前のエージェント、最後にエージェントの居ない同じ ID の pane）・`<マシンの名前|id>:<pane ID>`
+  （`soda machine` で登録した別のマシンの pane。例 `box:p7`。`local:p3` は手元）。マシンの名前は `--machine` と同じく、id の完全一致 → 名前の完全一致が 1 台で引き
+  （`machine.list`）、ノードの鍵には id を使う（名前は変えられるため）。同じ名前が 2 台なら `machine_ambiguous`、無ければ `machine_not_found`。
+  登録から外したマシンのノードを外す（`node rm`）・選び直す前のノード（`node rekey` の 1 つ目）を指すときだけ、一覧に無い 32 桁の id もそのまま受ける
+  （載せる・結ぶ端では `machine_not_found`。打ち間違いで動かない線を作らない）。
+- `link add` は、端の pane がグラフに載っていなければ一緒に載せる（画面の「pane を載せる」と同じ置き方）。載せる・結ぶ pane が手元に無ければ `not_found`
+  （別のマシンの pane は確かめない。実行のときに `target_absent`）。
+- 線の設定の項目と既定値は画面と同じ（トリガ: `--on done`・既定の文面・`--output 80`・`--when-busy wait`。承認の代理: `--mode notify`・`--lines 40`。
+  上限 `--limit 10`）。線の種類に合わない項目（監督の線に `--prompt` 等）は使い方の誤り（終了コード 2）。`link set` は書いた項目だけを変える。
+  線の種類は変えられない（消して作り直す）。
+- 監督・承認の代理の線は `<from>` が配下、`<to>` が監督役。
+- `node rm` はそのノードの線も消す。`node rekey` は無効なノード（`status` が `stale`・`closed`）を同じマシンの別の pane に付け替える（線はそのまま。別のマシンの pane へは
+  `invalid_params`）。
+- 変更は、送る前に画面と同じ規則（client-core の検証）で確かめ、落ちれば送らずに `invalid_params`（メッセージに `supervisor_taken` 等の理由）。
+- 変更は取り出した rev を添えて送る。その間に画面などが変えていれば（`rev_conflict`）、**取り直して操作を組み立て直し、1 回だけ送り直す**。2 回目も衝突したら
+  `rev_conflict` で終了コード 1。
+- 知らない線は `not_found`（終了コード 1）。
+- 表のセルの制御文字（C0・C1・双方向の上書き等）は `\uXXXX` の形に逃がして出す（履歴の文面などで端末の表示を偽装させない）。`--json` はそのまま。
+- `--json` の形: `show` と変更は `{"graph": …}`、`link add` は `{"link": …, "graph": …}`、`history` は `{"runs": […]}`（新しい順）。
+- 表の `status`: `ok`（手元の pane がある）・`closed`（手元の pane が無い）・`stale`（無効）・`-`（別のマシン。ここからは確かめない）。
+  `state`: `active`・`paused`（利用者が止めた）・`paused(limit)`（上限で止まった）。
+- 履歴はサーバのメモリだけ（線ごとに直近 50 件。再起動で消える）。
+- `--prompt` の文面が `--` で始まるときは `--prompt=<文面>` の形で渡す（離して書くと `missing value for --prompt` の使い方の誤り。終了コード 2）。
 
 ## エージェントに教える（skill ファイル）と、pane の中から使う
 

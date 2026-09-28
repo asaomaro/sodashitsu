@@ -5,7 +5,7 @@ import { ref } from "vue";
 import { trackMediaQuery } from "../mobile/detect.js";
 import type { MachineSummaryClientOptions } from "@sodashitsu/client-core";
 import { useMachinesStore } from "../store/machines.js";
-import { MachineWiring, type SummaryClientLike } from "./MachineWiring.js";
+import { MachineWiring, type MachineWiringDeps, type SummaryClientLike } from "./MachineWiring.js";
 
 /** ブラウザの配線（20260927-multi-host-machines の T13。`main.ts` から判断を切り出したもの）。 */
 const B = "b".repeat(32);
@@ -28,7 +28,9 @@ const snap = (): SessionSnapshot => ({
   limits: { scrollbackLines: 5000 },
 });
 
-function setup(opts: { enabled?: boolean; mainList?: MachineStatus[] } = {}) {
+function setup(
+  opts: { enabled?: boolean; mainList?: MachineStatus[]; extra?: Partial<MachineWiringDeps> } = {},
+) {
   setActivePinia(createPinia());
   const machines = useMachinesStore();
   const mobile = ref(!(opts.enabled ?? true));
@@ -62,6 +64,7 @@ function setup(opts: { enabled?: boolean; mainList?: MachineStatus[] } = {}) {
     },
     baseWsUrl: "ws://h/ws",
     mobileViewport: mobile,
+    ...opts.extra,
   });
   return {
     wiring,
@@ -138,6 +141,30 @@ describe("MachineWiring（T13）", () => {
     expect(t.machines.machines.map((m) => m.label)).toEqual(["GPU", "Renamed"]);
   });
 
+  it("ローカルの軽い接続のグラフのイベント・hello は onLocalGraphEvent・onLocalOpened へ。ほかのマシンのグラフのイベントは要約にも当てずに捨てる（20260927-agent-graph）", () => {
+    const onLocalGraphEvent = vi.fn();
+    const onLocalOpened = vi.fn();
+    const t = setup({ extra: { onLocalGraphEvent, onLocalOpened } });
+    const wiring = t.wiring;
+    wiring.applyMachineList([online(B, "GPU"), online(C, "Build")]);
+    t.machines.select(B);
+    wiring.reconcileSummaryClients();
+    const local = t.created.find((c) => c.opts.wsUrl === "ws://h/ws")!;
+    const other = t.created.find((c) => c.opts.wsUrl.endsWith(C))!;
+    const changed = {
+      event: "graph.changed" as const,
+      data: { graph: { rev: 2, paused: false, nodes: [], links: [] }, byClientId: null },
+    };
+    other.opts.onEvent(changed);
+    expect(onLocalGraphEvent).not.toHaveBeenCalled();
+    local.opts.onEvent(changed);
+    expect(onLocalGraphEvent).toHaveBeenCalledWith(changed);
+    local.opts.onOpened?.();
+    expect(onLocalOpened).toHaveBeenCalledTimes(1);
+    expect(wiring.summaryClient("local")).toBe(local.client);
+    expect(wiring.summaryClient(B)).toBeUndefined();
+  });
+
   it("画面の接続の machine.changed はローカルを向いているときだけ当てる", () => {
     const t = setup();
     t.wiring.onMainMachinesChanged([online(B, "GPU")]);
@@ -170,6 +197,50 @@ describe("MachineWiring（T13）", () => {
     await flush();
     expect(t.requestMainList).toHaveBeenCalled();
     expect(t.machines.machines.map((m) => m.label)).toEqual(["GPU"]);
+  });
+
+  // 統合レビュー R1：1 列の画面でもグラフ画面を開いている間は、別のマシンのノードの接続の状態を正しく出す（常に未接続と出さない）。
+  it("1 列の画面でグラフ画面を開いたら一覧を読み、軽い接続を張る。閉じたら一覧を空にして閉じる", async () => {
+    const graphOpen = ref(false);
+    const t = setup({ enabled: false, mainList: [online(B, "GPU")], extra: { graphOpen } });
+    t.wiring.onMobileChanged(true);
+    expect(t.machines.machines).toEqual([]);
+    graphOpen.value = true;
+    t.wiring.onGraphOpenChanged(true);
+    await flush();
+    expect(t.requestMainList).toHaveBeenCalledTimes(1);
+    expect(t.machines.machines.map((m) => m.label)).toEqual(["GPU"]);
+    t.wiring.reconcileSummaryClients();
+    expect(t.wiring.summaryClientIds()).toEqual([B]);
+    // 繋がった要約はノードの状態の材料になる
+    t.created[0]!.opts.onConnected(true);
+    expect(t.machines.summaries[B]?.connected).toBe(true);
+    graphOpen.value = false;
+    t.wiring.onGraphOpenChanged(false);
+    expect(t.machines.machines).toEqual([]);
+    expect(t.wiring.summaryClientIds()).toEqual([]);
+    expect(t.created[0]!.client.stopped).toBe(1);
+  });
+
+  it("グラフ画面を開いたまま 1 列の画面になっても、ローカルへ戻るが一覧と軽い接続は保つ。広い画面ではグラフの開閉で何も変えない", async () => {
+    const graphOpen = ref(true);
+    const t = setup({ mainList: [online(B, "GPU")], extra: { graphOpen } });
+    t.wiring.applyMachineList([online(B, "GPU")]);
+    t.machines.select(B);
+    t.wiring.reconcileSummaryClients();
+    t.setEnabled(false);
+    t.wiring.onMobileChanged(true);
+    expect(t.switchTo).toHaveBeenCalledWith("local", undefined, { force: true });
+    expect(t.machines.machines.map((m) => m.label)).toEqual(["GPU"]);
+    t.wiring.reconcileSummaryClients();
+    expect(t.wiring.summaryClientIds()).toEqual([B]);
+    const u = setup({ mainList: [online(B, "GPU")], extra: { graphOpen: ref(false) } });
+    u.wiring.applyMachineList([online(B, "GPU")]);
+    u.wiring.onGraphOpenChanged(false);
+    u.wiring.onGraphOpenChanged(true);
+    await flush();
+    expect(u.machines.machines.map((m) => m.label)).toEqual(["GPU"]);
+    expect(u.requestMainList).not.toHaveBeenCalled();
   });
 
   it("1 列の画面かは media query の一致を追う（起動の後に窓の幅が変わっても）", () => {
