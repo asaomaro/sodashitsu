@@ -71,7 +71,15 @@ import {
   type VisiblePane,
 } from "../term/PaneRegistry.js";
 import type { TuiIo, TuiTarget } from "../types.js";
+import { OnboardingDialog } from "../modes/OnboardingDialog.js";
 import { ENABLE_MOUSE, TerminalModes } from "./terminalModes.js";
+import {
+  FALLBACK_WINDOW_TITLE,
+  parseWindowTitle,
+  renderWindowTitle,
+  strippedTerminalTitle,
+  type WindowTitlePart,
+} from "./windowTitle.js";
 
 /** 関所が無いとき（接続の前）の保持：何もしない。 */
 const NO_HOLD = { release: () => undefined, cancel: () => undefined, discard: () => undefined };
@@ -86,7 +94,11 @@ export interface TuiAppOptions {
 }
 
 /** 描画の最短の間隔（60fps。design「描画の予約は最短 16ms」）。 */
-export const RENDER_INTERVAL_MS = 16;
+export /** tab バーの日時を描き直す間隔。 */
+const CLOCK_TICK_MS = 1000;
+/** pane の BEL を外側の端末へ回す最短の間隔。 */
+const BELL_INTERVAL_MS = 100;
+const RENDER_INTERVAL_MS = 16;
 /** 接続が開いていない間の打鍵の知らせ。 */
 export const DROPPED_NOTICE = "未接続のため入力を送れません";
 /** 外側の端末への問い合わせ（背景色）の応答を、割れた列として待つ時間。 */
@@ -207,6 +219,15 @@ export class TuiApp {
   private readonly copyTargets = new WeakMap<PaneTerminal, TuiCopyTarget>();
   /** オーバーレイ（ダイアログ・メニュー）。 */
   readonly overlays: OverlayHost;
+  /** 読んだ外側の端末のタイトルの書式（書式が変わったら読み直す）。 */
+  /** この起動ではじめの案内を開いたか（2 回開かない）。 */
+  private onboardingOpened = false;
+  /** 直前に外側の端末へ回した BEL の時刻。 */
+  private lastBellAt = -Infinity;
+  private titleTemplate: { source: string | null; parts: WindowTitlePart[] | null } = {
+    source: null,
+    parts: null,
+  };
 
   constructor(
     readonly target: TuiTarget,
@@ -244,6 +265,7 @@ export class TuiApp {
       },
       () => this.prefs.scrollbackLines(this.model.limits.scrollbackLines),
       () => this.scheduleRender(),
+      (paneId) => this.onPaneBell(paneId),
     );
     this.disposers.push(() => this.panes.dispose());
     this.keys = new TuiKeys(
@@ -288,7 +310,9 @@ export class TuiApp {
     });
     this.disposers.push(
       this.ui.onChange(() => {
-        if (this.ui.overlayOpen) this.mouse?.cancel(); // オーバーレイを開いたら途中のドラッグを捨てる
+        if (this.ui.overlayOpen)
+          this.mouse?.cancel(); // オーバーレイを開いたら途中のドラッグを捨てる
+        else this.maybeOpenOnboarding(); // 案内をほかのダイアログが閉じるまで待っていた
         this.scheduleRender();
       }),
     );
@@ -439,6 +463,13 @@ export class TuiApp {
       this.escTimer = null;
     });
     this.disposers.push(this.io.onInput((bytes) => this.onInput(bytes)));
+    // tab バーの右端に日時を出していれば、毎秒描き直す（差分だけが出る）。
+    const clock = setInterval(() => {
+      if (this.lastLayout?.tabBar.h && this.prefs.tabBarRight.some((e) => e.kind === "datetime"))
+        this.scheduleRender();
+    }, CLOCK_TICK_MS);
+    clock.unref?.();
+    this.disposers.push(() => clearInterval(clock));
     const net = new TuiNet(
       this.target,
       {
@@ -504,6 +535,7 @@ export class TuiApp {
       this.finish(0);
       return;
     }
+    if (s === "open") this.maybeOpenOnboarding();
     this.scheduleRender();
   }
 
@@ -533,7 +565,10 @@ export class TuiApp {
   private loadPrefs(): void {
     this.prefsPort
       .request("prefs.get", {})
-      .then((r) => this.prefs.apply(r.prefs as SharedPrefs, r.rev))
+      .then((r) => {
+        this.prefs.apply(r.prefs as SharedPrefs, r.rev);
+        this.maybeOpenOnboarding();
+      })
       .catch(() => undefined);
   }
 
@@ -694,6 +729,19 @@ export class TuiApp {
     }
   }
 
+  /**
+   * pane の BEL を外側の端末へ回す（H29d。herdr の TerminalBell）。`tui.forwardBell` が入で、外側の端末にフォーカスがあり、その pane が
+   * 今の画面に見えているときだけ。続けて鳴っても {@link BELL_INTERVAL_MS} に 1 回。
+   */
+  protected onPaneBell(paneId: string): void {
+    if (this.ended || !this.prefs.forwardBell || !this.outerFocused) return;
+    if (!this.layout().panes.some((b) => b.paneId === paneId)) return;
+    const now = performance.now();
+    if (now - this.lastBellAt < BELL_INTERVAL_MS) return;
+    this.lastBellAt = now;
+    this.io.write("\x07");
+  }
+
   /** マウス（`input/mouse.ts`。design「マウス」の全操作）。 */
   protected handleMouse(ev: Extract<InputEvent, { kind: "mouse" }>): void {
     this.mouse.handle(ev);
@@ -787,6 +835,12 @@ export class TuiApp {
         machines: this.machines,
       });
     if (ctx.kind === "settings") return this.settingsDialog();
+    if (ctx.kind === "onboarding")
+      return new OnboardingDialog({
+        prefix: () => this.keymap.prefix,
+        hintFor: (id) => this.keymap.hintFor(id),
+        complete: () => this.completeOnboarding(),
+      });
     if (ctx.kind === "notifications") return new NotificationList(this.ui, this.notify);
     if (ctx.kind === "commandPopup") {
       const popup = new CommandPopup(ctx, {
@@ -807,6 +861,31 @@ export class TuiApp {
       return popup;
     }
     return null;
+  }
+
+  /**
+   * はじめの案内（H25b。herdr の onboarding）を起動後に 1 回だけ開く：ローカルのサーバの共有の設定を受け取っていて、案内済み
+   * （`onboarding: false`。web で済ませたものも同じ項目）でなく、接続が開いていて、ほかのダイアログ・メニューが無いとき。
+   */
+  protected maybeOpenOnboarding(): void {
+    if (
+      this.onboardingOpened ||
+      this.ended ||
+      this.prefs.rev < 0 ||
+      this.prefs.shared.onboarding === false ||
+      this.connectionState !== "open" ||
+      this.ui.dialogContext !== null ||
+      this.ui.contextMenu !== null
+    )
+      return;
+    this.onboardingOpened = true;
+    this.ui.openDialogWithContext({ kind: "onboarding" });
+  }
+
+  /** 案内を確定した：案内済みにして（共有の設定。herdr の `onboarding = false`）設定画面を開く（herdr の complete_onboarding）。 */
+  private completeOnboarding(): void {
+    this.settingsWriter.setShared({ onboarding: false });
+    this.ui.openDialogWithContext({ kind: "settings" });
   }
 
   /** 設定画面（05 の T1）。開くたびにエージェント連携の状態を読み直す（サーバ全体の設定なので hello に乗らない。web と同じ）。 */
@@ -839,6 +918,7 @@ export class TuiApp {
                 .then(() => undefined),
           },
           message,
+          openOnboarding: () => this.ui.openDialogWithContext({ kind: "onboarding" }),
         }),
       () => this.scheduleRender(),
     );
@@ -958,6 +1038,14 @@ export class TuiApp {
       tab: tab ? { layout: tab.layout, zoomedPaneId: tab.zoomedPaneId } : null,
       focusedPaneId: this.model.focusedPaneId,
       navigateOverlay: this.keys.mode === "navigate",
+      paneBorders: this.prefs.paneBorders,
+      paneGaps: this.prefs.paneGaps,
+      tabBarPosition: this.prefs.tabBarPosition,
+      // tab が 1 つなら隠す（herdr の hide_tab_bar_when_single_tab）。サイドバーを畳んでいる間は開く「»」が tab バーにあるので隠さない。
+      hideTabBar:
+        this.prefs.hideTabBarWhenSingle &&
+        !this.prefs.sidebarCollapsed &&
+        (this.model.workspaceId ? this.model.tabsOf(this.model.workspaceId).length : 0) <= 1,
     });
   }
 
@@ -1033,9 +1121,42 @@ export class TuiApp {
       }
     }
     this.io.write(output);
+    // 外側の端末のタイトルは、サーバの状態（ホスト名・workspace）を受け取ってから置く（接続中の空の値を置かない）。
+    if (this.model.host) this.modes.setTitle(this.windowTitle());
     // 見えている pane の既読を進める（外側の端末にフォーカスがあるときだけ。web の sweepMarkSeen と同じ規則）。
     const visible = new Set(layout.panes.map((b) => b.paneId));
     this.model.sweepSeen((id) => visible.has(id), this.outerFocused);
+  }
+
+  /**
+   * 外側の端末のタイトル（H14。`tui.windowTitle` の書式。herdr の ui.window_title）。書式が空・読めなければ null（タイトルに触らない・置いていたら戻す）。
+   */
+  protected windowTitle(): string | null {
+    const template = this.prefs.windowTitle;
+    if (template !== this.titleTemplate.source) {
+      let parts: WindowTitlePart[] | null = null;
+      try {
+        parts = parseWindowTitle(template);
+      } catch {
+        parts = null; // herdr と同じく、読めない書式ではタイトルに触らない
+      }
+      this.titleTemplate = { source: template, parts };
+    }
+    const parts = this.titleTemplate.parts;
+    if (!parts) return null;
+    const m = this.model;
+    const ws = m.workspaceId ? m.workspaces.get(m.workspaceId) : undefined;
+    const tab = m.currentTab();
+    const pane = m.focusedPaneId ? m.panes.get(m.focusedPaneId) : undefined;
+    return (
+      renderWindowTitle(parts, {
+        hostname: m.host?.hostname ?? "",
+        workspace: ws?.label ?? "",
+        tab: tab?.label ?? "",
+        pane: pane?.label ?? "",
+        terminal_title: pane?.title ? (strippedTerminalTitle(pane.title) ?? "") : "",
+      }) ?? FALLBACK_WINDOW_TITLE
+    );
   }
 
   /** pane の上の印（copy モードの選択とカーソル）。何も描かなければ undefined。 */

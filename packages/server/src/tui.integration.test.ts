@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import xtermHeadless from "@xterm/headless";
@@ -93,6 +93,12 @@ interface LocalServer {
 async function startLocalServer(): Promise<LocalServer> {
   const dir = await mkdtemp(join(tmpdir(), "soda-tui-it-"));
   const stateDir = join(dir, "state");
+  // はじめの案内は済ませた扱い（共有の設定 `onboarding: false`。案内が打鍵を受けて画面を覆わない）。
+  await mkdir(stateDir, { recursive: true });
+  await writeFile(
+    join(stateDir, "prefs.json"),
+    JSON.stringify({ schema: 1, rev: 1, prefs: { onboarding: false } }),
+  );
   const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
   const baseUrl = `http://127.0.0.1:${server.options.port}`;
   const cookies: string[] = [];

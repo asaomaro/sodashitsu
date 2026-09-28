@@ -33,12 +33,20 @@ export interface DialogDeps {
 type NameKind = Extract<
   DialogContext,
   {
-    kind: "newTab" | "renamePane" | "renameTab" | "renameWorkspace" | "createGroup" | "renameGroup";
+    kind:
+      | "newTab"
+      | "newWorkspace"
+      | "renamePane"
+      | "renameTab"
+      | "renameWorkspace"
+      | "createGroup"
+      | "renameGroup";
   }
 >;
 
 const NAME_TITLES: Record<NameKind["kind"], string> = {
   newTab: "新しい tab の名前",
+  newWorkspace: "新しい workspace の名前",
   renamePane: "pane の名前を変更",
   renameTab: "tab の名前を変更",
   renameWorkspace: "workspace の名前を変更",
@@ -90,6 +98,9 @@ export class NameDialog implements Overlay {
       case "newTab":
         actions.confirmNewTab(value.trim() === this.openedWith.trim() ? "" : value);
         return;
+      case "newWorkspace":
+        actions.confirmNewWorkspace(value);
+        return;
       case "renamePane":
         actions.confirmRenamePane(value);
         return;
@@ -113,7 +124,9 @@ export class NameDialog implements Overlay {
     const hint =
       this.ctx.kind === "renameWorkspace"
         ? `${this.ctx.currentAutoLabel ? "いまは自動の名前です。" : ""}空にして確定すると、自動の名前（リポジトリ名かフォルダ名）に戻ります。`
-        : "";
+        : this.ctx.kind === "newWorkspace"
+          ? "空のまま確定すると、自動の名前（リポジトリ名かフォルダ名）になります。"
+          : "";
     const width = Math.min(60, grid.w - 2);
     const hintLines = hint ? wrapText(hint, width - 4) : [];
     const r = centeredRect(grid, width, 5 + hintLines.length);
@@ -142,7 +155,7 @@ function initialName(ctx: NameKind, model: SessionModel): string {
     const ws = model.workspaces.get(ctx.workspaceId);
     return ws ? String(ws.tabIds.length + 1) : "";
   }
-  if (ctx.kind === "createGroup") return "";
+  if (ctx.kind === "createGroup" || ctx.kind === "newWorkspace") return "";
   return ctx.currentLabel;
 }
 

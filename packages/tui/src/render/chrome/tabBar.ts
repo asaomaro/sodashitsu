@@ -1,3 +1,4 @@
+import { formatDatetime } from "@sodashitsu/client-core";
 import { ATTR } from "../color.js";
 import type { Grid, Rect } from "../Screen.js";
 import { stringWidth, truncate } from "../width.js";
@@ -35,6 +36,31 @@ export interface TabScroll {
   reveal: boolean;
 }
 
+/** 右端の表示の文字（`tabBarRight`。空の項目は飛ばす）。 */
+export function rightEntriesText(ctx: ChromeContext, now = new Date()): string {
+  const { model, prefs } = ctx;
+  const parts: string[] = [];
+  for (const e of prefs.tabBarRight) {
+    switch (e.kind) {
+      case "zoom": {
+        const tab = model.currentTab();
+        if (tab?.zoomedPaneId) parts.push("ZOOM");
+        break;
+      }
+      case "hostname":
+        if (model.host?.hostname) parts.push(model.host.hostname);
+        break;
+      case "datetime":
+        parts.push(formatDatetime(e.format, now));
+        break;
+      case "text":
+        if (e.text !== "") parts.push(e.text);
+        break;
+    }
+  }
+  return parts.join(prefs.tabBarRightSeparator);
+}
+
 /** tab バー・1 列表示の上辺の右端に出すもの：短い警告 → 接続の状態 → 知らせ → session 名（無ければ空）。 */
 export function statusText(ctx: ChromeContext): string {
   if (ctx.alert) return ctx.alert;
@@ -48,6 +74,42 @@ export function statusText(ctx: ChromeContext): string {
     default:
       return ctx.notice ?? (ctx.session ? `session: ${ctx.session}` : "");
   }
+}
+
+/**
+ * tab バーを隠している間（`tui.hideTabBarWhenSingle`）の代わりの印：モードの印と、短い警告・接続の状態・知らせ（session 名は出さない）を
+ * pane の場所の上端の右寄せに重ねる。何か描いたら true。
+ */
+export function paintHiddenBarBadge(grid: Grid, area: Rect, ctx: ChromeContext): boolean {
+  const { theme } = ctx;
+  const badge = MODE_BADGES[ctx.mode];
+  const status = ctx.alert || ctx.connection !== "open" || ctx.notice ? statusText(ctx) : "";
+  const parts: { text: string; fg: number; bg: number; attrs: number }[] = [];
+  if (badge)
+    parts.push({
+      text: ` ${badge} `,
+      fg: theme.ui("--soda-accent-fg"),
+      bg: theme.ui("--soda-accent"),
+      attrs: ATTR.bold,
+    });
+  if (status !== "")
+    parts.push({
+      text: ` ${truncate(status, Math.max(0, Math.floor(area.w / 2)))} `,
+      fg:
+        ctx.connection === "open" && !ctx.alert
+          ? theme.ui("--soda-fg")
+          : theme.ui("--soda-warn-fg"),
+      bg: theme.ui("--soda-bg"),
+      attrs: 0,
+    });
+  if (parts.length === 0 || area.h <= 0) return false;
+  const end = area.x + area.w;
+  let x = end - parts.reduce((n, p) => n + stringWidth(p.text), 0);
+  for (const p of parts) {
+    if (x < area.x) break;
+    x += grid.text(x, area.y, p.text, p.fg, p.bg, p.attrs, end - x);
+  }
+  return true;
 }
 
 /**
@@ -92,6 +154,16 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarH
     const text = truncate(status, Math.max(0, Math.floor(rect.w / 2)));
     rightStart = end - stringWidth(text) - 1;
     grid.text(rightStart, rect.y, text, statusColor, bg, 0, end - rightStart);
+  }
+  // 右端の表示（共有の設定 `tabBarRight`。herdr の tab_bar_right：拡大の状態・ホスト名・日時・固定文字列を区切り文字でつなぐ）。
+  const right = rightEntriesText(ctx);
+  if (right !== "") {
+    const text = truncate(right, Math.max(0, Math.floor(rect.w / 3)));
+    const x0 = rightStart - stringWidth(text) - 1;
+    if (x0 > x + 8) {
+      grid.text(x0, rect.y, text, theme.ui("--soda-state-idle"), bg, 0, rightStart - x0);
+      rightStart = x0;
+    }
   }
 
   const hits: TabHit[] = [];

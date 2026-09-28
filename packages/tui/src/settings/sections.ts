@@ -39,6 +39,7 @@ import {
   type SettingItem,
   type SettingsSection,
 } from "./items.js";
+import { parseWindowTitle } from "../app/windowTitle.js";
 import { keySection, type KeySectionEnv } from "./keySection.js";
 import { sidebarRowsItems } from "./sidebarRowsItems.js";
 import type { SettingsWriter } from "./SettingsWriter.js";
@@ -68,7 +69,12 @@ export interface SettingsEnv extends KeySectionEnv {
   detectedDelivery?(): string;
   /** 非同期の結果の知らせ（導入の結果など）。 */
   message(text: string): void;
+  /** はじめの案内を開き直す（設定画面を閉じて開く。web の「はじめの案内を開く」）。 */
+  openOnboarding?(): void;
 }
+
+/** 端末版だけに効く項目の注記（ブラウザの画面には効かない）。 */
+const TUI_ONLY = "端末版だけの設定です（ブラウザには効きません）。";
 
 /** 端末版の画面には効かない（ブラウザの画面の見た目）項目の注記。 */
 const BROWSER_ONLY =
@@ -380,13 +386,13 @@ function displaySection(env: SettingsEnv): SettingsSection {
           PANE_BORDERS,
           pick(raw.paneBorders, ["always", "auto", "off"] as const, "always"),
           (v) => set({ paneBorders: v }),
-          BROWSER_ONLY,
+          "端末版では、枠を描かないときも分割の境目に線を 1 本残します。",
         ),
         toggleItem(
           "pane の間の隙間",
           flag(raw.paneGaps, true),
           (v) => set({ paneGaps: v }),
-          BROWSER_ONLY,
+          "端末版では、切にすると左右に並んだ pane の縦の罫線を 1 本にまとめます。",
         ),
         choiceItem(
           "pane の枠・隙間の太さ",
@@ -395,11 +401,8 @@ function displaySection(env: SettingsEnv): SettingsSection {
           (v) => set({ paneFrameThickness: v }),
           BROWSER_ONLY,
         ),
-        toggleItem(
-          "pane にエージェント名を出す",
-          flag(raw.paneAgentNameVisible, false),
-          (v) => set({ paneAgentNameVisible: v }),
-          BROWSER_ONLY,
+        toggleItem("pane にエージェント名を出す", flag(raw.paneAgentNameVisible, false), (v) =>
+          set({ paneAgentNameVisible: v }),
         ),
         toggleItem(
           "pane の場所の外周の枠",
@@ -412,14 +415,13 @@ function displaySection(env: SettingsEnv): SettingsSection {
           TAB_BAR_POSITIONS,
           loadTabBarPosition(raw.tabBarPosition),
           (v) => set({ tabBarPosition: v }),
-          BROWSER_ONLY,
+          "端末版は 1 列表示の間はいつも上です。",
         ),
         { label: "tab バー右端の表示", heading: true },
       ];
       entries.forEach((e, i) => {
         items.push({
           label: `  ${i + 1}. ${entryLabel(e)}`,
-          note: BROWSER_ONLY,
           activate: () => {
             const ops: { label: string; run: () => Outcome }[] = [];
             if (i > 0)
@@ -483,7 +485,6 @@ function displaySection(env: SettingsEnv): SettingsSection {
       items.push(
         {
           label: "  ＋ 追加",
-          note: BROWSER_ONLY,
           disabled: entries.length >= MAX_TAB_BAR_RIGHT_ENTRIES,
           activate: () =>
             choose(
@@ -504,7 +505,6 @@ function displaySection(env: SettingsEnv): SettingsSection {
         {
           label: "  区切り文字",
           value: JSON.stringify(loadTabBarRightSeparator(raw.tabBarRightSeparator)),
-          note: BROWSER_ONLY,
           activate: () => ({
             kind: "edit",
             title: "区切り文字",
@@ -750,6 +750,54 @@ function tuiSection(env: SettingsEnv): SettingsSection {
           (v) => env.write.setTui("narrowThreshold", v),
           "端末の幅がこれより狭いと、焦点の pane だけを出します（herdr の mobile）。",
         ),
+        toggleItem(
+          "tab が 1 つなら tab バーを隠す",
+          p.hideTabBarWhenSingle,
+          (v) => env.write.setTui("hideTabBarWhenSingle", v),
+          `${TUI_ONLY}サイドバーを畳んでいる間は隠しません。隠している間のモードの印と接続の状態は、pane の場所の右上に出します。`,
+        ),
+        {
+          label: "外側の端末のタイトル",
+          value: p.windowTitle === "" ? "（変えない）" : JSON.stringify(p.windowTitle),
+          note: `${TUI_ONLY}{hostname}・{workspace}・{tab}・{pane}・{terminal_title} が使えます（{{ と }} で括弧そのもの）。空にすると外側の端末のタイトルに触りません。終えるときに元のタイトルへ戻します（戻せる端末だけ）。`,
+          activate: () => ({
+            kind: "edit",
+            title: "外側の端末のタイトルの書式",
+            initial: p.windowTitle,
+            commit: (text) => {
+              try {
+                parseWindowTitle(text);
+              } catch (err) {
+                return `書式が読めません（${err instanceof Error ? err.message : String(err)}）。`;
+              }
+              env.write.setTui("windowTitle", text);
+            },
+          }),
+        },
+        toggleItem(
+          "pane のベルを外側の端末へ",
+          p.forwardBell,
+          (v) => env.write.setTui("forwardBell", v),
+          `${TUI_ONLY}外側の端末にフォーカスがあり、その pane が画面に見えているときだけ鳴らします。`,
+        ),
+        toggleItem(
+          "workspace を閉じる前に確かめる",
+          p.confirmClose,
+          (v) => env.write.setTui("confirmClose", v),
+          `${TUI_ONLY}切でも、動作中のプロセスがある pane を閉じるときは確かめます。`,
+        ),
+        toggleItem(
+          "新しい tab の名前を先に聞く",
+          p.promptNewTabName,
+          (v) => env.write.setTui("promptNewTabName", v),
+          `${TUI_ONLY}切にすると、番号の名前ですぐ作ります。`,
+        ),
+        toggleItem(
+          "新しい workspace の名前を先に聞く",
+          p.promptNewWorkspaceName,
+          (v) => env.write.setTui("promptNewWorkspaceName", v),
+          `${TUI_ONLY}空のまま確定すると自動の名前になります。`,
+        ),
         choiceItem(
           "色の出し方（この端末だけ）",
           COLOR_MODES,
@@ -757,6 +805,15 @@ function tuiSection(env: SettingsEnv): SettingsSection {
           (v) => env.write.setLocal({ colorMode: v === "auto" ? undefined : v }),
           "端末ごとの設定です（tui-state.json に残します）。環境変数 SODA_TRUECOLOR があればそちらが先です。",
         ),
+        ...(env.openOnboarding
+          ? [
+              {
+                label: "はじめの案内を開く",
+                note: "起動したときに出た案内をもう一度出します。",
+                activate: () => env.openOnboarding?.(),
+              },
+            ]
+          : []),
       ];
     },
   };

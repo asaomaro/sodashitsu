@@ -73,6 +73,8 @@ export class PaneTerminal {
     /** 作ったときの行数（購読で求める行数もこれ。作ってから購読するまでに設定が変わっても食い違わない。web の D6 と同じ）。 */
     readonly scrollback: number,
     private readonly onDirty: (paneId: string) => void = () => undefined,
+    /** pane の BEL（外側の端末へ回すかは受け手が決める。H29d）。 */
+    onBell: (paneId: string) => void = () => undefined,
   ) {
     this.term = new Terminal({
       cols: Math.max(1, cols),
@@ -126,6 +128,7 @@ export class PaneTerminal {
         return false;
       }),
     );
+    this.disposers.push(this.term.onBell(() => onBell(this.paneId)));
     this.disposers.push(this.term.onWriteParsed(() => this.markDirty()));
     this.disposers.push(this.term.onScroll(() => this.markDirty()));
   }

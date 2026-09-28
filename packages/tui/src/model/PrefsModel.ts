@@ -6,7 +6,11 @@ import {
 } from "@sodashitsu/protocol";
 import {
   DEFAULT_NOTIFY_PREFS,
+  loadTabBarPosition,
+  loadTabBarRightEntries,
+  loadTabBarRightSeparator,
   loadThemeOverrides,
+  type TabBarRightEntry,
   type ThemeOverrides,
   loadThemePrefs,
   resolveTheme,
@@ -20,6 +24,8 @@ import { isTuiColor } from "../render/cssColor.js";
 
 export const DEFAULT_SIDEBAR_COLS = 26;
 export const DEFAULT_NARROW_THRESHOLD = 64;
+/** 外側の端末のタイトルの既定（herdr の `default_window_title`）。 */
+export const DEFAULT_WINDOW_TITLE = "{hostname}: {workspace}";
 
 /** 外側の端末への通知の出し方（`tui.notifyDelivery`。design「通知」）。 */
 export const NOTIFY_DELIVERIES = ["auto", "osc9", "osc99", "osc777", "bell", "off"] as const;
@@ -197,6 +203,65 @@ export class PrefsModel {
   /** 共有の `tui.sidebarCols`（手元の今の幅を見ない。設定画面が出す値）。 */
   get sharedSidebarCols(): number {
     return this.tuiNumber("sidebarCols", DEFAULT_SIDEBAR_COLS, 10, 200);
+  }
+
+  /** 枠にエージェント名を出すか（web の `paneAgentNameVisible`。既定は切）。 */
+  get paneAgentNameVisible(): boolean {
+    return this.raw.paneAgentNameVisible === true;
+  }
+
+  /** pane の枠の描画（web の `loadPaneBorders`。既定は常に）。 */
+  get paneBorders(): "always" | "auto" | "off" {
+    const v = this.raw.paneBorders;
+    return v === "auto" || v === "off" ? v : "always";
+  }
+
+  /** 分割の間の隙間（既定は入）。 */
+  get paneGaps(): boolean {
+    return typeof this.raw.paneGaps === "boolean" ? this.raw.paneGaps : true;
+  }
+
+  get tabBarPosition(): "top" | "bottom" {
+    return loadTabBarPosition(this.raw.tabBarPosition);
+  }
+
+  get tabBarRight(): TabBarRightEntry[] {
+    return loadTabBarRightEntries(this.raw.tabBarRight);
+  }
+
+  get tabBarRightSeparator(): string {
+    return loadTabBarRightSeparator(this.raw.tabBarRightSeparator);
+  }
+
+  /** tab が 1 つなら tab バーを隠す（端末版だけ。herdr の hide_tab_bar_when_single_tab。既定は切）。 */
+  get hideTabBarWhenSingle(): boolean {
+    return this.tuiFlag("hideTabBarWhenSingle", false);
+  }
+
+  /** 外側の端末のタイトル（herdr の window_title。空なら触らない。既定は "{hostname}: {workspace}"）。 */
+  get windowTitle(): string {
+    const v = this.tui["windowTitle"];
+    return typeof v === "string" ? v : DEFAULT_WINDOW_TITLE;
+  }
+
+  /** pane の BEL を外側の端末へ（herdr の前面のクライアントへのベル。既定は入）。 */
+  get forwardBell(): boolean {
+    return this.tuiFlag("forwardBell", true);
+  }
+
+  /** 閉じる前に確かめる（herdr の confirm_close。既定は入）。 */
+  get confirmClose(): boolean {
+    return this.tuiFlag("confirmClose", true);
+  }
+
+  /** 新しい tab の名前を先に聞く（herdr の prompt_new_tab_name。既定は入）。 */
+  get promptNewTabName(): boolean {
+    return this.tuiFlag("promptNewTabName", true);
+  }
+
+  /** 新しい workspace の名前を先に聞く（herdr の prompt_new_workspace_name。既定は切）。 */
+  get promptNewWorkspaceName(): boolean {
+    return this.tuiFlag("promptNewWorkspaceName", false);
   }
 
   /** 状態を色に加えて記号でも示すか（web の `loadStatusSymbols`。既定は入）。 */

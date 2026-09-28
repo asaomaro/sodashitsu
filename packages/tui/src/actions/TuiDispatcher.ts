@@ -240,8 +240,11 @@ export class TuiDispatcher {
 
   // --- tab・workspace の作成 ---
 
+  /** 新しい tab。`tui.promptNewTabName`（herdr の prompt_new_tab_name。既定は入）が切なら名前を尋ねずすぐ作る。 */
   newTabInWorkspace(workspaceId: string): void {
-    this.ui.openDialogWithContext({ kind: "newTab", workspaceId });
+    if (this.host.prefs.promptNewTabName)
+      this.ui.openDialogWithContext({ kind: "newTab", workspaceId });
+    else this.createTab(workspaceId, "");
   }
 
   /** 名前の入力欄が新規 tab の名前を確定したとき（空なら名前を送らない）。 */
@@ -249,18 +252,22 @@ export class TuiDispatcher {
     const ctx = this.ui.dialogContext;
     if (ctx?.kind !== "newTab") return;
     this.ui.closeDialog();
+    this.createTab(ctx.workspaceId, label);
+  }
+
+  private createTab(workspaceId: string, label: string): void {
     const trimmed = label.trim();
     const hold = this.host.input?.holdInput(this.model.focusedPaneId);
     // 元の pane は焦点の pane が作る先の workspace にあるときだけ（閉じた後に読む。web の D97・design D7）。
-    const newCwd = this.host.prefs.newCwd(this.focusedPaneIn(ctx.workspaceId));
+    const newCwd = this.host.prefs.newCwd(this.focusedPaneIn(workspaceId));
     this.conn
       .request("tab.create", {
-        workspaceId: ctx.workspaceId,
+        workspaceId,
         ...(trimmed ? { label: trimmed } : {}),
         newCwd,
       })
       .then((result) => {
-        this.model.setView(ctx.workspaceId, result.tab.id, result.pane.id);
+        this.model.setView(workspaceId, result.tab.id, result.pane.id);
         this.releaseHold(hold, result.pane.id);
         this.noteCwdFallback(result);
       })
@@ -275,11 +282,28 @@ export class TuiDispatcher {
     if (workspaceId) this.newTabInWorkspace(workspaceId);
   }
 
-  /** herdr の `prompt_new_workspace_name`（既定 false）：名前を尋ねずすぐ作る。 */
+  /** 新しい workspace。`tui.promptNewWorkspaceName`（herdr の prompt_new_workspace_name。既定は切）が入なら先に名前を尋ねる。 */
   private newWorkspace(): void {
+    if (this.host.prefs.promptNewWorkspaceName)
+      this.ui.openDialogWithContext({ kind: "newWorkspace" });
+    else this.createWorkspace("");
+  }
+
+  /** 名前の入力欄が新規 workspace の名前を確定したとき（空なら名前を送らない＝自動の名前）。 */
+  confirmNewWorkspace(label: string): void {
+    if (this.ui.dialogContext?.kind !== "newWorkspace") return;
+    this.ui.closeDialog();
+    this.createWorkspace(label);
+  }
+
+  private createWorkspace(label: string): void {
+    const trimmed = label.trim();
     const hold = this.host.input?.holdInput(this.model.focusedPaneId);
     this.conn
-      .request("workspace.create", { newCwd: this.host.prefs.newCwd(this.model.focusedPaneId) })
+      .request("workspace.create", {
+        ...(trimmed ? { label: trimmed } : {}),
+        newCwd: this.host.prefs.newCwd(this.model.focusedPaneId),
+      })
       .then((r) => {
         this.model.setView(r.workspace.id, r.tab.id, r.pane.id);
         this.releaseHold(hold, r.pane.id);
@@ -649,8 +673,20 @@ export class TuiDispatcher {
     if (workspaceId) this.closeWorkspaceById(workspaceId);
   }
 
-  /** workspace は常に確認する。 */
+  /**
+   * workspace は確認する（`tui.confirmClose`。herdr の confirm_close。既定は入）。切でも、実行中のプロセスがある pane を含むなら確認する（D23）。
+   * 確認しないときは紐づく worktree を消さない。
+   */
   closeWorkspaceById(workspaceId: string): void {
+    const busy = [...this.model.panes.values()].some(
+      (p) => p.busy && this.model.tabs.get(p.tabId)?.workspaceId === workspaceId,
+    );
+    if (!this.host.prefs.confirmClose && !busy) {
+      void this.conn
+        .request("workspace.close", { workspaceId, closeLinkedWorktrees: false })
+        .catch(() => undefined);
+      return;
+    }
     this.ui.openDialogWithContext({
       kind: "confirmClose",
       targets: [{ type: "workspace", id: workspaceId }],

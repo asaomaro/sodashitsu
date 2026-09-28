@@ -37,6 +37,7 @@ export class PaneRegistry implements TerminalSinkPort {
     private readonly conn: RequestPort,
     private readonly scrollbackLines: () => number,
     private readonly onDirty: (paneId: string) => void,
+    private readonly onBell: (paneId: string) => void = () => undefined,
   ) {}
 
   get(paneId: string): PaneTerminal | undefined {
@@ -103,7 +104,14 @@ export class PaneRegistry implements TerminalSinkPort {
         const size = sizeOf(v.paneId) ?? { cols: v.cols, rows: v.rows };
         this.terms.set(
           v.paneId,
-          new PaneTerminal(v.paneId, size.cols, size.rows, this.scrollbackLines(), this.onDirty),
+          new PaneTerminal(
+            v.paneId,
+            size.cols,
+            size.rows,
+            this.scrollbackLines(),
+            this.onDirty,
+            this.onBell,
+          ),
         );
       }
     }

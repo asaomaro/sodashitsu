@@ -1,4 +1,5 @@
 import type { TuiIo } from "../types.js";
+import { POP_TITLE, PUSH_TITLE, titleSequence } from "./windowTitle.js";
 
 /**
  * 外側の端末のモードの有効化と復元（20260927-cli-mode の design「起動と終了」・「ドメイン固有の考慮」）。
@@ -44,6 +45,8 @@ export const RESTORE_SEQUENCE =
 export class TerminalModes {
   private enabled = false;
   private rawMode = false;
+  /** 置いた外側の端末のタイトル（置いていなければ null。置いたら終わるときに退避したものへ戻す）。 */
+  private title: string | null = null;
 
   constructor(private readonly io: TuiIo) {}
 
@@ -57,6 +60,21 @@ export class TerminalModes {
     this.io.write(on ? ENABLE_MOUSE : DISABLE_MOUSE);
   }
 
+  /**
+   * 外側の端末のタイトル（H14。herdr の ui.window_title）。初めて置くときに元のタイトルを退避し（`CSI 22;0 t`）、null（設定を空にした）なら
+   * 退避したものへ戻す（`CSI 23;0 t`）。同じタイトルなら書かない。
+   */
+  setTitle(title: string | null): void {
+    if (!this.enabled || title === this.title) return;
+    if (title === null) {
+      this.io.write(POP_TITLE);
+      this.title = null;
+      return;
+    }
+    this.io.write((this.title === null ? PUSH_TITLE : "") + titleSequence(title));
+    this.title = title;
+  }
+
   enable(mouse: boolean): void {
     if (this.enabled) return;
     this.enabled = true;
@@ -68,8 +86,10 @@ export class TerminalModes {
   restore(): void {
     if (!this.enabled) return;
     this.enabled = false;
+    const pop = this.title !== null ? POP_TITLE : "";
+    this.title = null;
     try {
-      this.io.write(RESTORE_SEQUENCE);
+      this.io.write(pop + RESTORE_SEQUENCE);
     } catch {
       // 書けなければ戻すものも無い。
     }

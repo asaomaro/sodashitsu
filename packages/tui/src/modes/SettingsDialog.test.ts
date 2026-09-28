@@ -125,7 +125,7 @@ describe("設定画面", () => {
   it("色の出し方は端末ごと（tui-state）で、共有の設定へは送らない", async () => {
     const h = await open();
     await h.section(6);
-    for (let i = 0; i < 5; i++) h.io.type(DOWN);
+    for (let i = 0; i < 11; i++) h.io.type(DOWN);
     h.io.type(ENTER + DOWN + DOWN + ENTER); // 256 色
     expect(h.app.prefs.colorMode).toBe("256");
     expect(h.patches()).toEqual([]);
@@ -415,7 +415,8 @@ describe("設定画面の点検の指摘（05 T1）", () => {
     });
     closers.push(h.close);
     await vi.waitFor(() => expect(h.ws.requests("command.list")).toHaveLength(1));
-    h.app.prefs.apply({ keys: { commands: { deploy: ["ctrl+alt+d"] } } }, 0);
+    // 案内済み（はじめの案内を出さない）。
+    h.app.prefs.apply({ keys: { commands: { deploy: ["ctrl+alt+d"] } }, onboarding: false }, 0);
     const km = () =>
       (h.app as unknown as { keymap: { bindingsOf(id: string): readonly string[] } }).keymap;
     await vi.waitFor(() => expect(km().bindingsOf("command:deploy")).toEqual(["ctrl+alt+d"]));

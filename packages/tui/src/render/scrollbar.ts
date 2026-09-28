@@ -83,6 +83,6 @@ export function offsetFromDragRow(
 
 /** pane のスクロールバーの溝（右の罫線の、中身の行の範囲。pane が割り付けより小さければその行数まで）。出せなければ null。 */
 export function paneScrollTrack(box: PaneBox, term: PaneTerminal): Track | null {
-  if (box.frame.w < 2 || box.content.h <= 0) return null;
+  if (!box.sides.right || box.frame.w < 2 || box.content.h <= 0) return null; // 右の罫線が無ければ出さない
   return { y: box.content.y, h: Math.min(box.content.h, term.rows) };
 }

@@ -23,6 +23,7 @@ describe("computeLayout（AC2）", () => {
         paneId: "p1",
         frame: { x: 26, y: 1, w: 74, h: 29 },
         content: { x: 27, y: 2, w: 72, h: 27 },
+        sides: { top: true, right: true, bottom: true, left: true },
       },
     ]);
   });

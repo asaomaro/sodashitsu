@@ -13,6 +13,8 @@ import type { SessionModel } from "./SessionModel.js";
  */
 export type DialogContext =
   | { kind: "newTab"; workspaceId: string }
+  /** 端末版だけ：新しい workspace の名前（`tui.promptNewWorkspaceName`。herdr の prompt_new_workspace_name）。 */
+  | { kind: "newWorkspace" }
   | { kind: "renamePane"; paneId: string; currentLabel: string }
   | { kind: "renameTab"; tabId: string; currentLabel: string }
   | {
@@ -26,6 +28,8 @@ export type DialogContext =
   | { kind: "help" }
   | { kind: "goto" }
   | { kind: "settings" }
+  /** はじめの案内（web と同じ kind。端末版は herdr のはじめの画面の形。H25b）。 */
+  | { kind: "onboarding" }
   /** 端末版だけ：未処理の知らせの一覧（design「modes/」の「通知の一覧」）。 */
   | { kind: "notifications" }
   /** 独自コマンドの popup（web と同じ形）。 */

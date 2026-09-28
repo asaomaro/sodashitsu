@@ -6,7 +6,7 @@ import type { ChromeContext } from "./chrome/context.js";
 import { paintFrame } from "./chrome/frame.js";
 import { paintSidebar, type SidebarHit } from "./chrome/sidebar.js";
 import { paintNarrowHeader, type NarrowHeaderHits } from "./chrome/narrowHeader.js";
-import { paintTabBar, type TabBarHits, type TabHit } from "./chrome/tabBar.js";
+import { paintHiddenBarBadge, paintTabBar, type TabBarHits, type TabHit } from "./chrome/tabBar.js";
 import type { ColorMode, ThemeColors } from "./color.js";
 import { paneScrollTrack, scrollbarThumb, scrollMetricsOf } from "./scrollbar.js";
 import { isCropped, paintPane } from "./paintPane.js";
@@ -92,7 +92,9 @@ export class Renderer {
     const narrow = layout.narrow ? paintNarrowHeader(grid, layout.tabBar, ctx) : null;
     const tabBar: TabBarHits = narrow
       ? { tabs: [], newTab: null }
-      : paintTabBar(grid, layout.tabBar, ctx);
+      : layout.tabBar.h > 0
+        ? paintTabBar(grid, layout.tabBar, ctx)
+        : { tabs: [], newTab: null };
     const tabHits = tabBar.tabs;
 
     const prev =
@@ -109,13 +111,15 @@ export class Renderer {
         grid,
         box.frame,
         {
-          name: pane ? paneNameOf(pane) : box.paneId,
+          // エージェント名を枠に出すか（共有の設定 `paneAgentNameVisible`。herdr の show_agent_labels_on_pane_borders）。
+          name: pane ? frameNameOf(pane, ctx.prefs.paneAgentNameVisible) : box.paneId,
           state: pane ? model.displayStateOf(pane) : null,
           focused,
           cropped: term ? isCropped(term, box.content) : false,
           symbols: ctx.prefs.statusSymbols,
         },
         theme,
+        box.sides,
       );
       if (!term) {
         grid.fill(box.content, theme.paneFg, theme.paneBg);
@@ -138,6 +142,9 @@ export class Renderer {
     }
     // 重ねて描いたものがあれば、次のフレームは pane の中身を前の格子から写さない（重ねた絵まで写してしまう）。
     let covered = false;
+    // tab バーを隠している間は、モードの印・接続の状態を pane の場所の上端に重ねる。
+    if (!layout.narrow && layout.tabBar.h === 0 && paintHiddenBarBadge(grid, layout.paneArea, ctx))
+      covered = true;
     if (layout.sidebar && layout.sidebarOverlay) {
       sidebarHits = paintSidebar(grid, layout.sidebar, ctx);
       covered = true;
@@ -234,4 +241,10 @@ function paintScrollbar(
   const x = box.frame.x + box.frame.w - 1;
   for (let y = thumb.top; y < thumb.top + thumb.len; y++)
     grid.set(x, y, "┃", 1, color, theme.ui("--soda-bg"));
+}
+
+/** 枠の名前：付けた名前、無ければ（設定が入なら）エージェントの名前、無ければ端末のタイトル。 */
+function frameNameOf(pane: Parameters<typeof paneNameOf>[0], agentVisible: boolean): string {
+  if (agentVisible) return paneNameOf(pane);
+  return pane.label || pane.title || `pane ${pane.id}`;
 }

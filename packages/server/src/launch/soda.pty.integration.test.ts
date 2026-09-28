@@ -137,6 +137,11 @@ describe.skipIf(process.platform === "win32" || !existsSync(MAIN))(
       base = join(dir, "state");
       sessionDir = join(base, "sessions", SESSION);
       await mkdir(sessionDir, { recursive: true });
+      // はじめの案内は済ませた扱い（共有の設定 `onboarding: false`。案内が打鍵を受けて画面を覆わない）。
+      await writeFile(
+        join(sessionDir, "prefs.json"),
+        JSON.stringify({ schema: 1, rev: 1, prefs: { onboarding: false } }),
+      );
       // 空いているポートを「前回使ったポート」として記録しておく（pid は動いていないもの。ロックも無いので、soda は起動し直す）。
       const port = await getFreePort("127.0.0.1");
       await writeFile(
