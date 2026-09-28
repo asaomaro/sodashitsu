@@ -997,7 +997,7 @@ pnpm --filter @sodashitsu/web exec vitest run src/components/graph/GraphView.per
 
 出力の `[graph-perf]` の行が測った値（`toStartMs` は状態の変化から先の画面に文面が現れるまで、`toSentMs` は Enter まで送り終えるまで〔`agent.prompt` は 300ms 後に Enter〕、
 `blocked` は承認待ちになってから承認待ちのトリガ・承認の代理の先に届き始めるまで〔1 秒の継続を含む〕、`burst` は 16 の元が同時に完了したとき、
-`web-render` は画面を開いて描く・全ノードが動いた変更を描き直す時間）。サーバの `toStartMs`・`blocked`・`burst` が 2 秒を超えれば試験が落ちる（`toSentMs` は記録だけ）。
+`web-render` は画面を開いて描く・全ノードが動いた変更を描き直す時間）。サーバの `toStartMs`・`burst`、`blocked` の 1 秒の継続を除いた時間が 2 秒を超えれば試験が落ちる（`toSentMs` は記録だけ）。
 画面の描画は happy-dom の目安で、10 秒を超えたときだけ落ちる。共有のマシンでは 1 回だけ走らせる。
 
 ### 実物のエージェントで（Linux・WSL2・Windows ネイティブ）
