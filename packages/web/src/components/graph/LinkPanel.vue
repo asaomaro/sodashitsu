@@ -32,7 +32,6 @@ import {
   validateLink,
   type GraphIssue,
 } from "@sodashitsu/client-core";
-import GraphConfirm from "./GraphConfirm.vue";
 import { LINK_KIND_NAME, linkDraftOf, linkStateText, type LinkPanelSave } from "./linkText.js";
 
 const props = defineProps<{
@@ -56,8 +55,11 @@ const emit = defineEmits<{
   delete: [];
   pause: [paused: boolean];
   history: [];
-  /** 「変更を捨てますか」で編集に戻った（閉じる要求の後に予定していたことを取りやめる）。 */
-  keep: [];
+  /**
+   * 変更があるのに閉じる要求が来た。「変更を捨てますか」は親（`GraphView`）がグラフ画面全体に対してモーダルに出す（パネルの中だけに
+   * 重ねると、外を押して抜け出せた。レビュー R2）。捨てるなら親が閉じ、編集に戻るなら `focusFirstField`。
+   */
+  discardRequest: [];
 }>();
 
 interface Form {
@@ -98,7 +100,6 @@ let initial = JSON.stringify(form);
 let baseConfig = configKey(props.link);
 const changedElsewhere = ref(false);
 const issues = ref<GraphIssue[]>([]);
-const confirmDiscard = ref(false);
 const rootEl = ref<HTMLElement | null>(null);
 
 function configKey(link: GraphLink | null): string {
@@ -195,18 +196,20 @@ function save(): void {
 
 /** 閉じる要求（Esc・取り消しボタン・外側のクリック）。変更があれば確認。 */
 function requestClose(): void {
-  if (confirmDiscard.value) return;
   if (dirty.value && !props.gone) {
-    confirmDiscard.value = true;
+    emit("discardRequest");
     return;
   }
   emit("cancel");
 }
 
-function onDiscardCancel(): void {
-  confirmDiscard.value = false;
-  emit("keep");
-  void nextTick(() => rootEl.value?.querySelector<HTMLElement>("select, textarea, input")?.focus());
+/** 「変更を捨てますか」で編集に戻った。 */
+function focusFirstField(): void {
+  void nextTick(() =>
+    rootEl.value
+      ?.querySelector<HTMLElement>("select, textarea, input")
+      ?.focus({ preventScroll: true }),
+  );
 }
 
 function onKeydown(ev: KeyboardEvent): void {
@@ -243,7 +246,7 @@ onMounted(() => {
   );
 });
 
-defineExpose({ requestClose });
+defineExpose({ requestClose, focusFirstField });
 </script>
 
 <template>
@@ -406,15 +409,6 @@ defineExpose({ requestClose });
       </button>
     </div>
     <p class="link-panel-hint">Ctrl+Enter で保存・Esc で取り消し</p>
-
-    <GraphConfirm
-      v-if="confirmDiscard"
-      message="変更を捨てますか？"
-      confirm-label="捨てる"
-      cancel-label="編集に戻る"
-      @confirm="emit('cancel')"
-      @cancel="onDiscardCancel"
-    />
   </section>
 </template>
 

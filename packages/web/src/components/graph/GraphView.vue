@@ -582,8 +582,20 @@ function guardPanel(then: () => void): void {
   afterPanelClose = then;
   panelRef.value?.requestClose();
 }
-function onPanelKeep(): void {
-  afterPanelClose = null;
+/** 変更があるパネルを閉じる要求。「変更を捨てますか」をグラフ画面全体のモーダルの確認で出す（レビュー R2）。 */
+function onPanelDiscardRequest(): void {
+  if (confirmState.value) return;
+  confirmState.value = {
+    message: "変更を捨てますか？",
+    confirmLabel: "捨てる",
+    cancelLabel: "編集に戻る",
+    onConfirm: () => closePanel(),
+    onCancel: () => {
+      // 編集に戻る: 閉じた後に予定していたこと（別の線を開く等）を取りやめる。
+      afterPanelClose = null;
+      panelRef.value?.focusFirstField();
+    },
+  };
 }
 
 function openNewLink(from: NodeKey, to: NodeKey): void {
@@ -673,6 +685,7 @@ interface ConfirmState {
   message: string;
   detail?: string;
   confirmLabel: string;
+  cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -1205,6 +1218,16 @@ function onKeydownCapture(ev: KeyboardEvent): void {
   }
 }
 
+/** 確認を出している間は、フォーカスを確認の外へ出さない（グラフ画面全体に対してモーダル。レビュー R2）。 */
+function onFocusin(ev: FocusEvent): void {
+  if (!confirmState.value) return;
+  const t = ev.target as Element | null;
+  if (t?.closest?.(".graph-confirm")) return;
+  dialogEl.value
+    ?.querySelector<HTMLElement>(".graph-confirm-cancel")
+    ?.focus({ preventScroll: true });
+}
+
 function onKeydown(ev: KeyboardEvent): void {
   if (ev.isComposing) return;
   if (ev.key === "Escape") {
@@ -1302,6 +1325,7 @@ function chipAria(e: EdgeView): string {
     aria-label="連携（グラフ）"
     tabindex="-1"
     @keydown.capture="onKeydownCapture"
+    @focusin="onFocusin"
     @keydown="onKeydown"
     @cancel="onCancel"
   >
@@ -1459,7 +1483,7 @@ function chipAria(e: EdgeView): string {
             :error="panelError"
             @save="onPanelSave"
             @cancel="closePanel"
-            @keep="onPanelKeep"
+            @discard-request="onPanelDiscardRequest"
             @delete="panel.mode === 'edit' && requestDeleteLink(panel.id)"
             @pause="(p) => panel?.mode === 'edit' && graph.setPaused(p, panel.id)"
             @history="panel.mode === 'edit' && (history = { linkId: panel.id })"
@@ -1480,6 +1504,7 @@ function chipAria(e: EdgeView): string {
         :message="confirmState.message"
         :detail="confirmState.detail"
         :confirm-label="confirmState.confirmLabel"
+        :cancel-label="confirmState.cancelLabel ?? '取り消す'"
         @confirm="onConfirmOk"
         @cancel="onConfirmCancel"
       />

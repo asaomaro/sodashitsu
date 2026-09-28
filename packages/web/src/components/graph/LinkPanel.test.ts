@@ -103,7 +103,7 @@ describe("LinkPanel", () => {
     w.unmount();
   });
 
-  it("Esc: 変更が無ければそのまま取り消し。変更があれば「変更を捨てますか」（編集に戻る／捨てる）", async () => {
+  it("Esc: 変更が無ければそのまま取り消し。変更があれば「変更を捨てますか」を親に求める（確認は親がグラフ画面全体に出す。レビュー R2）", async () => {
     const w = mountPanel();
     w.find(".link-panel-prompt").element.dispatchEvent(key("Escape"));
     expect(w.emitted("cancel")).toHaveLength(1);
@@ -115,16 +115,14 @@ describe("LinkPanel", () => {
     await nextTick();
     expect(esc.defaultPrevented).toBe(true);
     expect(w2.emitted("cancel")).toBeUndefined();
-    expect(w2.find(".graph-confirm").exists()).toBe(true);
-    await nextTick();
-    expect(document.activeElement?.className).toBe("graph-confirm-cancel");
-    await w2.find(".graph-confirm-cancel").trigger("click");
+    expect(w2.emitted("discardRequest")).toHaveLength(1);
     expect(w2.find(".graph-confirm").exists()).toBe(false);
-    expect(w2.emitted("cancel")).toBeUndefined();
     (w2.vm as unknown as { requestClose(): void }).requestClose(); // 外側のクリック
+    expect(w2.emitted("discardRequest")).toHaveLength(2);
+    (w2.vm as unknown as { focusFirstField(): void }).focusFirstField();
     await nextTick();
-    await w2.find(".graph-confirm-ok").trigger("click");
-    expect(w2.emitted("cancel")).toHaveLength(1);
+    await nextTick();
+    expect((document.activeElement as HTMLElement).tagName).toBe("INPUT");
     w2.unmount();
   });
 

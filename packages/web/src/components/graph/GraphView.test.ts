@@ -1379,3 +1379,60 @@ describe("GraphView（閉じたときの一時的な状態。レビュー R1）"
     wrapper.unmount();
   });
 });
+
+describe("GraphView（変更を捨てますかはグラフ画面全体でモーダル。レビュー R2）", () => {
+  beforeEach(() => {
+    localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
+  });
+  const key = (k: string, init: KeyboardEventInit = {}) =>
+    new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init });
+
+  async function dirtyPanel() {
+    const t = await openWithGraph();
+    await t.wrapper.find('[data-link-chip="l1"]').trigger("click");
+    await flush();
+    await t.wrapper.find(".link-panel-limit").setValue(5);
+    t.wrapper.find(".link-panel-limit").element.dispatchEvent(key("Escape"));
+    await flush();
+    return t;
+  }
+
+  it("確認はパネルの外（グラフ画面全体）に重なり、外へフォーカスが移っても確認へ戻す。Esc は確認を取り消して編集に戻る（probe B）", async () => {
+    const { wrapper } = await dirtyPanel();
+    const confirm = wrapper.find(".graph-confirm");
+    expect(confirm.exists()).toBe(true);
+    expect(wrapper.find(".link-panel .graph-confirm").exists()).toBe(false); // パネルの中ではない
+    const n1 = wrapper.find('[data-node-key="local:p1"]');
+    (n1.element as HTMLElement).focus();
+    await flush();
+    expect(document.activeElement?.className).toBe("graph-confirm-cancel");
+    n1.element.dispatchEvent(key("Escape"));
+    await flush();
+    expect(wrapper.find(".graph-confirm").exists()).toBe(false);
+    expect(wrapper.find(".link-panel").exists()).toBe(true);
+    expect((wrapper.find(".link-panel-limit").element as HTMLInputElement).value).toBe("5");
+    wrapper.unmount();
+  });
+
+  it("確認の外（背景）を押すと取り消して編集に戻り、ノード・背景の操作は通らない", async () => {
+    const { wrapper, store } = await dirtyPanel();
+    wrapper.find(".graph-confirm-backdrop").element.dispatchEvent(pointer("pointerdown"));
+    await flush();
+    expect(wrapper.find(".graph-confirm").exists()).toBe(false);
+    expect(wrapper.find(".link-panel").exists()).toBe(true);
+    // もう一度確認を出してからノードを押しても何も起きない
+    wrapper.find(".link-panel-limit").element.dispatchEvent(key("Escape"));
+    await flush();
+    const n1 = wrapper.find('[data-node-key="local:p1"]').element;
+    n1.dispatchEvent(pointer("pointerdown", { clientX: 5, clientY: 5 }));
+    window.dispatchEvent(pointer("pointermove", { clientX: 90, clientY: 90 }));
+    window.dispatchEvent(pointer("pointerup", { clientX: 90, clientY: 90 }));
+    await flush();
+    expect(store.dragPositions.size).toBe(0);
+    expect(wrapper.find(".graph-confirm").exists()).toBe(true);
+    await wrapper.find(".graph-confirm-ok").trigger("click");
+    await flush();
+    expect(wrapper.find(".link-panel").exists()).toBe(false);
+    wrapper.unmount();
+  });
+});
