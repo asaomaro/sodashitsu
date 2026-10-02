@@ -3,6 +3,7 @@ import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { AuthorizeUpgrade } from "../auth/AuthService.js";
 import type { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
+import { isSameMachine } from "../auth/LocalLogin.js";
 import type { Logger } from "../log/Logger.js";
 import { LogThrottle } from "../log/LogThrottle.js";
 import { requestPathname } from "../util/net.js";
@@ -146,8 +147,9 @@ export class WsServerWs implements WsServer {
       this.wss.handleUpgrade(req, socket, head, (ws) => route.attach(new WsConnectionImpl(ws), authResult.sessionId));
       return;
     }
+    const sameMachine = "socket" in req && req.socket ? isSameMachine(req.socket.remoteAddress, req.socket.localAddress) : false;
     this.wss.handleUpgrade(req, socket, head, (ws) => {
-      const conn = new WsConnectionImpl(ws);
+      const conn = new WsConnectionImpl(ws, sameMachine);
       for (const cb of this.listeners) cb(conn, authResult.sessionId);
     });
   }
@@ -160,7 +162,10 @@ function rejectUpgrade(socket: Duplex, status: string): void {
 }
 
 class WsConnectionImpl implements WsConnection {
-  constructor(private readonly ws: WebSocket) {}
+  constructor(
+    private readonly ws: WebSocket,
+    readonly sameMachine = false,
+  ) {}
 
   get bufferedAmount(): number {
     return this.ws.bufferedAmount;

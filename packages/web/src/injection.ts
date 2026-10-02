@@ -5,6 +5,7 @@ import type { KeyInputController } from "./keys/KeyInputController.js";
 import type { NotificationController } from "./notify/NotificationController.js";
 import type { ConnectionPort, DeviceKind } from "@sodashitsu/client-core";
 import type { TerminalRegistry } from "./term/TerminalRegistry.js";
+import type { FileTransfer } from "./term/FileTransfer.js";
 import type { ViewSync } from "./term/ViewSync.js";
 
 /**
@@ -27,3 +28,5 @@ export const DeviceKindKey: InjectionKey<DeviceKind> = Symbol("deviceKind");
 export const KeyInputControllerKey: InjectionKey<KeyInputController> = Symbol("keyInputController");
 /** 保存した SSH のマシンの切り替え（20260927-multi-host-machines）。サイドバーのマシンのまとまりが使う。無ければ切り替えられない（テスト等）。 */
 export const MachineSwitcherKey: InjectionKey<MachineSwitcher> = Symbol("machineSwitcher");
+/** 端末のファイルのリンクとドロップ。`TerminalPane` がドロップを渡す。無ければドロップを受けない（テスト等）。 */
+export const FileTransferKey: InjectionKey<FileTransfer> = Symbol("fileTransfer");

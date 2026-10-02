@@ -180,7 +180,7 @@ export class WsGateway {
       this.registerInvalidFrame(clientId);
       return;
     }
-    const result = await this.surface.invoke({ clientId, sink }, msg.method, msg.params);
+    const result = await this.surface.invoke({ clientId, sink, sameMachine: conn.sameMachine === true }, msg.method, msg.params);
     if (result.ok) {
       conn.sendText(JSON.stringify({ id: msg.id, result: result.result }));
       if (msg.method === "client.detach") conn.close(1000, "detached"); // このブラウザの接続だけを切る

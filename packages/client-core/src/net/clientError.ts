@@ -74,6 +74,17 @@ const MESSAGES: Record<ErrorCode, string> = {
   image_upload_rate_limited: "画像の貼り付けが多すぎます。1 分ほど待ってください。",
   image_upload_expired: "画像の送信が途中で切れました。もう一度貼り付けてください。",
   image_store_failed: "サーバに画像を保存できませんでした。サーバのログを確かめてください。",
+  // 端末のファイルのリンクとドロップ。通常は `FileTransfer` が自分の文言で toast を出す——表の網羅のため。
+  file_not_found: "ファイルが見つかりませんでした。",
+  file_unreadable: "ファイルを読めませんでした（権限が無いか、通常のファイルではありません）。",
+  file_too_large: "ファイルが大きすぎます（256MB まで）。",
+  file_open_unavailable: "サーバのマシンにファイルを開く手段がありません。",
+  file_open_refused: "実行できる種類のファイルは、サーバのマシンのアプリでは開きません。",
+  file_open_failed: "サーバのマシンでファイルを開けませんでした。",
+  invalid_file: "ファイルを送れませんでした（送った内容が途中で食い違いました）。",
+  file_upload_busy: "ほかのファイルを送っている最中です。少し待ってからやり直してください。",
+  file_upload_expired: "ファイルの送信が途中で切れました。もう一度やり直してください。",
+  file_store_failed: "サーバにファイルを保存できませんでした。サーバのログを確かめてください。",
   // 入力の書き込み待ちの上限（20260927-server-size-input-limits）。サーバは同じ pane について 2 秒に 1 回だけ送る。
   input_queue_full: "この pane のプログラムが入力を読んでいないため、送った入力を捨てました（サーバに溜まった入力が上限に達しています）。",
   // サーバの停止（`server.stop`。20260927-cli-mode）。
