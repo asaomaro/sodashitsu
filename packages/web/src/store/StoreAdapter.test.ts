@@ -297,6 +297,30 @@ describe("StoreAdapter", () => {
     expect(view.focusedPaneId).toBe("p1"); // 閉じたら、残りの pane へ戻る
   });
 
+  it("質問のフォーム（20261002-sodactl-ask）を開いている間も同じく、焦点は動かさず閉じたときの戻り先だけを差し替える。ask イベントはコールバックへ渡す", () => {
+    const asks: string[] = [];
+    const { adapter } = makeAdapter({ onAskEvent: (e) => void asks.push(e.event) });
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted({ ...makeWorkspace("w1"), tabIds: ["t1"], activeTabId: "t1" });
+    session.tabUpserted({ ...makeTab("t1", "w1"), layout: { type: "split", id: "s1", dir: "right", ratio: 0.5, a: { type: "pane", paneId: "p1" }, b: { type: "pane", paneId: "p2" } }, focusedPaneId: "p2" });
+    session.paneUpserted(makePane("p1", "t1"));
+    session.paneUpserted(makePane("p2", "t1"));
+    view.setView("w1", "t1");
+    view.focusPane("p2");
+    view.setAskOpen(true);
+
+    adapter.applyEvent({ event: "pane.closed", data: { paneId: "p2" } });
+    expect(view.focusedPaneId).toBe("p2"); // 質問のフォームを開いている間は焦点を動かさない
+    expect(view.preAskFocusPaneId).toBe("p1");
+    view.setAskOpen(false);
+    expect(view.focusedPaneId).toBe("p1"); // 閉じたら、残りの pane へ戻る
+
+    adapter.applyEvent({ event: "ask.opened", data: { askId: "a", paneId: "p1" } });
+    adapter.applyEvent({ event: "ask.closed", data: { askId: "a", paneId: "p1" } });
+    expect(asks).toEqual(["ask.opened", "ask.closed"]);
+  });
+
   it("pane.agent_status_changed / pane.size_changed", () => {
     const { adapter } = makeAdapter();
     useSessionStore(pinia).paneUpserted(makePane("p1", "t1"));

@@ -37,6 +37,7 @@ import { ControlSurface } from "./surface/ControlSurface.js";
 import { registerAllMethods } from "./surface/methods/index.js";
 import { IMAGE_DIR_NAME, ImageStore } from "./image/ImageStore.js";
 import { ImageUploads } from "./image/ImageUploads.js";
+import { AskService } from "./ask/AskService.js";
 import { FileAccess } from "./file/FileAccess.js";
 import { FileOpener } from "./file/FileOpener.js";
 import { DROP_DIR_NAME, FileStore } from "./file/FileStore.js";
@@ -312,6 +313,16 @@ export async function composeServer(
     paneExists: (paneId) => session.getPane(paneId) !== undefined,
     logger,
   });
+  // 質問のフォーム（20261002-sodactl-ask）。pane のプログラムの質問を、`ask.subscribe` した画面（desktop / mobile）に出す。回答待ちはメモリだけ（再起動・引き継ぎをまたがない）。
+  const asks = new AskService({
+    paneExists: (paneId) => session.getPane(paneId) !== undefined,
+    isBrowserKind: (clientId) => {
+      const kind = clients.get(clientId)?.kind;
+      return kind === "desktop" || kind === "mobile";
+    },
+    bus,
+    logger,
+  });
   // 端末のファイルのリンクとドロップ。ドロップされたファイルは画像と同じく状態ディレクトリの下の私的なディレクトリに置く（切断では消さない）。
   const dropStore = new FileStore({ dir: join(options.stateDir, DROP_DIR_NAME) });
   let dropSweeper: { stop(): void } | undefined;
@@ -364,6 +375,7 @@ export async function composeServer(
     commands,
     metadata,
     images,
+    asks,
     files,
     prefs,
     graph,
@@ -400,6 +412,7 @@ export async function composeServer(
     onClientGone: (clientId) => {
       commands.onClientGone(clientId); // その接続の popup を止める（20260927-custom-command-keys）
       images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
+      asks.onClientGone(clientId); // 質問を出した接続・質問を出せる画面の切断（20261002-sodactl-ask）
       fileUploads.onClientGone(clientId); // 受け取り中のファイルの書きかけを消す
     },
   });
@@ -410,6 +423,7 @@ export async function composeServer(
     onClientGone: (clientId) => {
       commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
       images.onClientGone(clientId);
+      asks.onClientGone(clientId);
       fileUploads.onClientGone(clientId);
     },
   });
@@ -739,6 +753,7 @@ export async function composeServer(
       } finally {
         // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
         commands.dispose();
+        asks.dispose(); // 待っている質問を閉じる（接続を閉じた後。応答は誰にも届かない）
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
         // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。
         metadata.dispose();

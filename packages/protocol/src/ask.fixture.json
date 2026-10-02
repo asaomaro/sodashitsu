@@ -1,0 +1,328 @@
+{
+ "title": "md-to-doc の設定",
+ "intro": "t.md",
+ "submit": "この内容で生成",
+ "questions": [
+  {
+   "id": "theme",
+   "label": "テーマ",
+   "options": [
+    {
+     "value": "corporate",
+     "label": "モダンコーポレート",
+     "desc": "青基調・カード・万人向け。向く文書: 資料・報告・社内共有の既定",
+     "colors": [
+      "#1a56db",
+      "#0ea5e9",
+      "#6366f1",
+      "#0d9488"
+     ],
+     "recommended": true
+    },
+    {
+     "value": "darktech",
+     "label": "ダークテック",
+     "desc": "暗背景＋シアン/パープル。向く文書: エンジニア向けの技術資料",
+     "colors": [
+      "#0e7490",
+      "#7c3aed",
+      "#059669",
+      "#db2777"
+     ],
+     "recommended": false
+    },
+    {
+     "value": "infographic",
+     "label": "インフォグラフィック",
+     "desc": "カラフル・丸ゴシック。向く文書: インパクト重視の紹介・広報",
+     "colors": [
+      "#ff5d73",
+      "#ffb13d",
+      "#2ec4b6",
+      "#5a7dff"
+     ],
+     "recommended": false
+    },
+    {
+     "value": "editorial",
+     "label": "エディトリアル",
+     "desc": "明朝・余白・読み物風。向く文書: コラム・解説・読み物",
+     "colors": [
+      "#8b1e3f",
+      "#a8814e",
+      "#3f6b5e",
+      "#5b4b8a"
+     ],
+     "recommended": false
+    },
+    {
+     "value": "pastel",
+     "label": "やわらかパステル",
+     "desc": "丸み・淡色。向く文書: 社内の親しみやすい共有",
+     "colors": [
+      "#ff9eb5",
+      "#ffd6a5",
+      "#b8e6d0",
+      "#a7d8f0"
+     ],
+     "recommended": false
+    },
+    {
+     "value": "formal",
+     "label": "フォーマル",
+     "desc": "白と墨＋紺・罫線・見出しに 1. / 1.1 の番号。向く文書: 報告書・稟議・規程・提案書（印刷が最も整う）",
+     "colors": [
+      "#1f3a68",
+      "#5b6b7f",
+      "#8a6d3b",
+      "#3f5f4f"
+     ],
+     "recommended": false
+    },
+    {
+     "value": "manual",
+     "label": "マニュアル",
+     "desc": "灰色の地＋オレンジ・詰めた組み・見出しに番号の札。向く文書: 手順書・運用手順・トラブル対応",
+     "colors": [
+      "#d9480f",
+      "#2563eb",
+      "#0f766e",
+      "#7c3aed"
+     ],
+     "recommended": false
+    },
+    {
+     "value": "contrast",
+     "label": "高コントラスト",
+     "desc": "大きな文字・高コントラスト・太い下線のリンク。向く文書: 社外公開・全社向け・読みやすさ最優先",
+     "colors": [
+      "#0033aa",
+      "#8a0000",
+      "#005a1e",
+      "#5a1a8a"
+     ],
+     "recommended": false
+    },
+    {
+     "value": "blueprint",
+     "label": "ブループリント",
+     "desc": "方眼の地に紺・等幅の見出し・製図風の図枠。向く文書: 設計書・仕様書・アーキテクチャ説明",
+     "colors": [
+      "#1d4e89",
+      "#0f7c8c",
+      "#b45309",
+      "#6d28d9"
+     ],
+     "recommended": false
+    },
+    {
+     "value": "minimal",
+     "label": "ミニマル",
+     "desc": "黒い文字と余白・細い罫線・影なし。向く文書: 社内メモ・議事録・ナレッジ",
+     "colors": [
+      "#2f6feb",
+      "#6e6e73",
+      "#0f766e",
+      "#b45309"
+     ],
+     "recommended": false
+    },
+    {
+     "value": "paper",
+     "label": "紙（セピア）",
+     "desc": "生成りの紙色・焦げ茶・広い行間。向く文書: 長文の読み物・解説・研修資料",
+     "colors": [
+      "#7a4a1e",
+      "#5f6f3a",
+      "#8a3b3b",
+      "#3f5f73"
+     ],
+     "recommended": false
+    },
+    {
+     "value": "aurora",
+     "label": "オーロラ",
+     "desc": "深い紫の地にオーロラの光・すりガラスのカード・グラデーションの見出し。向く文書: 発表・製品紹介・イベント（画面で見せる）",
+     "colors": [
+      "#6d28d9",
+      "#0e7490",
+      "#be185d",
+      "#047857"
+     ],
+     "recommended": false
+    },
+    {
+     "value": "nordic",
+     "label": "ノルディック",
+     "desc": "灰みの地に青と木の色・静かな見出し・広い行間。向く文書: 落ち着いた社内資料・方針・ナレッジ",
+     "colors": [
+      "#3b6e8f",
+      "#a0673c",
+      "#5f8a5a",
+      "#8a6fa8"
+     ],
+     "recommended": false
+    }
+   ],
+   "default": "corporate",
+   "help": "ライト/ダークは全テーマが両方持ち、読み手がヘッダーで切り替えられます。"
+  },
+  {
+   "id": "mode",
+   "label": "出力モード",
+   "default": "single",
+   "options": [
+    {
+     "value": "single",
+     "label": "単一HTML",
+     "desc": "1 ファイル完結。メール添付・USB 配布に最適。"
+    },
+    {
+     "value": "print",
+     "label": "印刷/PDF重視",
+     "desc": "紙・PDF 配布を主目的に、改ページ・余白を最適化。"
+    },
+    {
+     "value": "site",
+     "label": "複数md→サイト化",
+     "desc": "複数ファイルを束ね、一覧 index.html を作って相互リンク。"
+    }
+   ]
+  },
+  {
+   "id": "toc",
+   "label": "目次",
+   "default": "sidebar",
+   "options": [
+    {
+     "value": "sidebar",
+     "label": "左サイドに目次",
+     "desc": "本文の左に目次（開閉・検索・章ごとの折りたたみ）。"
+    },
+    {
+     "value": "menu",
+     "label": "ヘッダーメニュー",
+     "desc": "上部の固定メニューのみ。本文は全幅。"
+    },
+    {
+     "value": "both",
+     "label": "両方",
+     "desc": "ヘッダーメニュー＋左サイド目次。"
+    },
+    {
+     "value": "none",
+     "label": "目次なし",
+     "desc": "どちらも出さない。"
+    }
+   ]
+  },
+  {
+   "id": "layout",
+   "label": "リストの見せ方（既定値）",
+   "default": "plain",
+   "help": "節ごとの指定が無い箇条書きに使う既定値です。節ごとの割り当ては、このあと案を出します。",
+   "options": [
+    {
+     "value": "plain",
+     "label": "箇条書き",
+     "desc": "通常のリスト。"
+    },
+    {
+     "value": "cards",
+     "label": "カード",
+     "desc": "項目をカードのグリッドに。一覧性・見栄え重視。"
+    },
+    {
+     "value": "timeline",
+     "label": "タイムライン",
+     "desc": "番号付きの縦タイムライン。手順・工程・時系列向き。"
+    },
+    {
+     "value": "accordion",
+     "label": "アコーディオン",
+     "desc": "折りたたみ。項目が多く詳細を隠したいとき。"
+    },
+    {
+     "value": "freeform",
+     "label": "完全フリーフォーム",
+     "desc": "形式に縛られず、Claude が内容ごとに自由にデザイン（文書全体）。"
+    }
+   ]
+  },
+  {
+   "id": "design",
+   "label": "構築方法",
+   "default": "deterministic",
+   "showIf": {
+    "layout": [
+     "plain",
+     "cards",
+     "timeline",
+     "accordion"
+    ]
+   },
+   "options": [
+    {
+     "value": "deterministic",
+     "label": "決定論的",
+     "desc": "スクリプトが型どおりに変換。同じ入力なら同じ出力。"
+    },
+    {
+     "value": "ai",
+     "label": "AIがこのテイストで構築",
+     "desc": "Claude が節ごとに内容を読んで部品を選び、作り込む。"
+    }
+   ]
+  },
+  {
+   "id": "auto-figure",
+   "label": "図解の自動補完",
+   "default": "off",
+   "options": [
+    {
+     "value": "off",
+     "label": "しない",
+     "desc": "本文そのまま。図は mermaid ブロックのみ。"
+    },
+    {
+     "value": "light",
+     "label": "控えめに補う",
+     "desc": "最も効果的な 1〜2 個だけ図解。"
+    },
+    {
+     "value": "rich",
+     "label": "積極的に図解",
+     "desc": "図にできる箇所は積極的に図解。"
+    }
+   ]
+  },
+  {
+   "id": "motion",
+   "label": "説明図の動き",
+   "default": "off",
+   "showIf": {
+    "mode": [
+     "single",
+     "site"
+    ]
+   },
+   "options": [
+    {
+     "value": "off",
+     "label": "動かさない",
+     "desc": "静止した図のみ。"
+    },
+    {
+     "value": "key",
+     "label": "要所だけ動かす",
+     "desc": "流れ・手順など、動きで理解が進む図を 1〜2 個選んで動かす。"
+    },
+    {
+     "value": "rich",
+     "label": "図をすべて動かす",
+     "desc": "すべての図が流れの向きに沿って順に現れる。"
+    }
+   ]
+  }
+ ]
+}

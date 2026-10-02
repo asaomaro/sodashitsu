@@ -105,6 +105,28 @@ sodactl agent read reviewer --lines 120
 - 既に動いているエージェントの状態が変わるのを待つだけなら `agent wait`（例 `--until blocked`）。
 - 承認ダイアログ・メニューへのキーは `agent send-keys`（例 `esc`・`enter`・`y`・`ctrl+c`）。不明なキー名が 1 つでもあれば何も送らない。
 
+## 利用者に質問する（`sodactl ask`）
+
+選択肢が多い確認（`AskUserQuestion` の「1 問 4 択・1 回 4 問まで」に収まらないもの）を、**この pane を見ているブラウザの画面の上のフォーム**で聞く。ブラウザがどのマシンにあっても同じに動く。
+質問の定義（JSON）を標準入力で渡し、答えが stdout に 1 行の JSON で返る。結果が決まるまで待つので、Bash の `timeout` は `--timeout` より長くする。
+
+```bash
+sodactl ask --timeout 300000 <<'JSON'
+{"title": "配布先", "questions": [
+  {"id": "channel", "label": "配布先", "default": "beta",
+   "options": [{"value": "beta", "label": "ベータ", "recommended": true}, {"value": "stable", "label": "安定版"}]}
+]}
+JSON
+```
+
+- 定義の形は ask-form と同じ: `title`・`intro`・`submit`・`note`、質問の `id`・`label`・`type`（`single`/`multi`/`text`）・`help`・`options`・`default`・`allowOther`・`showIf`・`required`・`multiline`・`placeholder`。
+  `default` はなるべく入れる。`showIf` で参照する質問は、参照する側より上に置く。知らない項目は無視される。
+- 結果の `status`（どれも終了コード 0）: `answered`（`answers` に id → 値。`multi` は配列。`showIf` で隠れた質問は入らない。`custom` は自由入力した質問の id、`note` は補足の欄）・
+  `cancelled`（利用者がキャンセルした・pane が閉じた。勝手に既定で進めず、どうするか聞く）・`timeout`（まだ必要か確かめてから出し直す）・
+  `unavailable`（`reason` に理由。この pane を見ているブラウザが無い、または定義に `sodactl ask` が対応していない型〔`edit`・`rank`・`table` 等〕の質問がある。**同じ質問を `AskUserQuestion` に分けて聞き直す**）。
+- 終了コード 2 は定義の誤り（stderr に理由。直して再実行）。`ask_busy`（終了コード 1）は、この pane の前の質問がまだ答えを待っている。
+- pane の外・別のマシンへ送る `--machine`（`local` 以外）では使えない。利用者の画面に出るので、質問の文字に秘密を入れない。
+
 ## サイドバーの行に状態を出す（独自トークン）
 
 `sodactl pane report-metadata "$SODA_PANE_ID" --source my-hook --token summary="テストを直している"` のように、pane（エージェントの行）・workspace（spaces の行）へ
@@ -187,6 +209,7 @@ pane の中の sodactl は、次の操作の対象が**自分の pane**（`$SODA
 - pane: `sodactl pane split`・`sodactl pane current`・`sodactl pane close`・`sodactl pane input`・`sodactl pane run`・`sodactl pane read`・`sodactl pane attach`・
   `sodactl pane observe`・`sodactl pane control`・`sodactl pane report-metadata`
 - 状態: `sodactl snapshot`・`sodactl watch`
+- 利用者への質問: `sodactl ask`
 - エージェント: `sodactl agent list`・`sodactl agent get`・`sodactl agent wait`・`sodactl agent read`・`sodactl agent prompt`・`sodactl agent send-keys`・
   `sodactl agent rename`・`sodactl agent start`
 - 連携のグラフ: `sodactl graph show`・`sodactl graph link add`・`sodactl graph link set`・`sodactl graph link rm`・`sodactl graph link pause`・

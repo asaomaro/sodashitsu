@@ -395,6 +395,44 @@ describe.skipIf(process.platform === "win32")(
       c.ws.close();
     });
 
+    it("質問のフォーム（20261002-sodactl-ask の T5）: リモートの pane の質問は、そのマシンを表示中の（中継越しの）画面に出て、答えが返る。軽い接続（external）だけなら待たずに unavailable", async () => {
+      const { local, remoteServer } = await startPair({ withMachine: true });
+      const { cookie, port } = await login(local);
+      const localWs = new Client((await openWs(port, "", cookie)) as WebSocket);
+      cleanups.push(() => localWs.ws.close());
+      await localWs.request("client.hello", { protocol: 1, kind: "external" });
+      await until("online", async () => {
+        const r = await localWs.request<{ machines: MachineStatus[] }>("machine.list", {});
+        return r.machines[0]?.state === "online" ? true : undefined;
+      });
+      // リモートの pane の中の sodactl 相当: リモートのサーバへ直接つなぐ external の接続。
+      const remote = remoteServer()!;
+      const direct = await login(remote);
+      const cli = new Client((await openWs(direct.port, "", direct.cookie)) as WebSocket);
+      cleanups.push(() => cli.ws.close());
+      const hello = await cli.request<{ snapshot: { panes: { id: string }[] } }>("client.hello", { protocol: 1, kind: "external" });
+      const paneId = hello.snapshot.panes[0]!.id;
+      const spec = { title: "T", questions: [{ id: "a", label: "A", default: "x", options: ["x", "y"] }] };
+
+      // 軽い接続（external。別のマシンを表示中のブラウザが張る）だけ: 画面が居ないので待たずに unavailable。
+      const summary = new Client((await openWs(port, "?machine=Remote", cookie)) as WebSocket);
+      cleanups.push(() => summary.ws.close());
+      await summary.request("client.hello", { protocol: 1, kind: "external" });
+      await expect(summary.request("ask.subscribe", {})).rejects.toThrow("invalid_params");
+      expect(await cli.request("ask.open", { paneId, spec, timeoutMs: 20_000 })).toMatchObject({ status: "unavailable" });
+
+      // そのマシンを表示中の画面（desktop）が中継越しに ask.subscribe すると、質問が届いて答えられる。
+      const browser = new Client((await openWs(port, "?machine=Remote", cookie)) as WebSocket);
+      cleanups.push(() => browser.ws.close());
+      await browser.request("client.hello", { protocol: 1, kind: "desktop" });
+      expect(await browser.request("ask.subscribe", {})).toEqual({ asks: [] });
+      const result = cli.request("ask.open", { paneId, spec, timeoutMs: 20_000 });
+      const opened = await until("ask.opened over the relay", async () => browser.events.find((e) => e.event === "ask.opened")?.data as { askId: string } | undefined);
+      expect(await browser.request("ask.get", { askId: opened.askId })).toMatchObject({ paneId, spec: { title: "T" } });
+      await browser.request("ask.answer", { askId: opened.askId, answers: { a: "y" } });
+      expect(await result).toEqual({ status: "answered", answers: { a: "y" } });
+    });
+
     it("クリップボードの画像（20260927-clipboard-image-paste の T6）: 中継越しに分けて送ると、リモートの状態ディレクトリに置かれてリモートのパスが返る。中継の接続が切れると送信は捨てられる", async () => {
       const { local, remoteDir, localDir } = await startPair({ withMachine: true });
       const { cookie, port } = await login(local);

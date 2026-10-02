@@ -41,7 +41,8 @@ export interface SodaClient {
    * 応答より前の（snapshot より古い）イベントは渡さない（20260926-agent-automation-api decisions.md D9）。
    */
   hello(onEventAfterHello?: (evt: ServerEvent) => void): Promise<ClientHelloResult>;
-  request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>;
+  /** `opts.timeoutMs` は応答を待つ上限（既定 10 秒）。結果が決まるまで応答しない要求（`ask.open`）は長くする。 */
+  request<M extends MethodName>(method: M, params: ParamsOf<M>, opts?: { timeoutMs?: number }): Promise<ResultOf<M>>;
   /** INPUT フレームを送る。サーバからの ack は無い（design「依拠する既存の事実」）。 */
   sendInput(paneId: string, bytes: Uint8Array): void;
   onEvent(cb: (evt: ServerEvent) => void): void;
@@ -137,13 +138,13 @@ export class WsSodaClient implements SodaClient {
     }
   }
 
-  private requestRaw(method: string, params: unknown, onResponse?: () => void): Promise<unknown> {
+  private requestRaw(method: string, params: unknown, onResponse?: () => void, timeoutMs: number = REQUEST_TIMEOUT_MS): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const id = String(this.nextId++);
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new RpcFailure("timeout", `timed out waiting for response to ${method}`));
-      }, REQUEST_TIMEOUT_MS);
+      }, timeoutMs);
       this.pending.set(id, {
         resolve: (v) => {
           clearTimeout(timer);
@@ -165,8 +166,8 @@ export class WsSodaClient implements SodaClient {
     return (await this.requestRaw("client.hello", { protocol: 1, kind: "external" }, subscribe)) as ClientHelloResult;
   }
 
-  async request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
-    return (await this.requestRaw(method, params)) as ResultOf<M>;
+  async request<M extends MethodName>(method: M, params: ParamsOf<M>, opts?: { timeoutMs?: number }): Promise<ResultOf<M>> {
+    return (await this.requestRaw(method, params, undefined, opts?.timeoutMs)) as ResultOf<M>;
   }
 
   sendInput(paneId: string, bytes: Uint8Array): void {

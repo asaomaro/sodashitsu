@@ -318,9 +318,31 @@ export const useViewStore = defineStore("view", () => {
   /** グラフ画面を開く前にフォーカスしていた pane（閉じたら戻す。AC-I4）。 */
   const preGraphFocusPaneId = ref<string | null>(null);
   /**
-   * ダイアログかグラフ画面が開いている（キーを端末へ送らない dialog モード・window の keydown の抑止・ドラッグの取り消しの判定。research-web §1.5）。
+   * 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）が出ている。**ダイアログの 1 枠（`openDialog`）とは別の状態**——サーバから届く質問は、開いている設定・確認を潰さずに
+   * 重ねて出す。書くのは `AskDialog.vue` だけ（開閉に合わせる）。
    */
-  const modalOpen = computed(() => openDialog.value !== null || graphOpen.value);
+  const askOpen = ref(false);
+  /** 質問のフォームを開く前にフォーカスしていた pane（開いている間に閉じられたら `StoreAdapter.applyViewRepair` が差し替える。`preDialogFocusPaneId` と同じ理由）。 */
+  const preAskFocusPaneId = ref<string | null>(null);
+  function setAskOpen(open: boolean): void {
+    if (open === askOpen.value) return;
+    askOpen.value = open;
+    if (open) {
+      preAskFocusPaneId.value = focusedPaneId.value;
+      return;
+    }
+    // 開いている間に焦点の pane が閉じられて差し替わっていたら、閉じたときに反映する（焦点を直接動かすと端末がフォーカスを奪うので、開いている間は戻し先だけ持つ）。
+    if (preAskFocusPaneId.value !== null && preAskFocusPaneId.value !== focusedPaneId.value) focusedPaneId.value = preAskFocusPaneId.value;
+    preAskFocusPaneId.value = null;
+  }
+  /** 質問のフォームを開いている間の焦点の移し直し（`retargetPreDialogFocus` と同じ理由）。 */
+  function retargetPreAskFocus(paneId: string | null): void {
+    preAskFocusPaneId.value = paneId;
+  }
+  /**
+   * ダイアログ・グラフ画面・質問のフォームのどれかが開いている（キーを端末へ送らない dialog モード・window の keydown の抑止・ドラッグの取り消しの判定。research-web §1.5）。
+   */
+  const modalOpen = computed(() => openDialog.value !== null || graphOpen.value || askOpen.value);
   /** navigate モード中に選択中の workspace（`↑/↓` で動かす。Enter で確定）。 */
   const navigateSelection = ref<string | null>(null);
   /**
@@ -673,6 +695,10 @@ export const useViewStore = defineStore("view", () => {
     graphOpen,
     preGraphFocusPaneId,
     modalOpen,
+    askOpen,
+    preAskFocusPaneId,
+    setAskOpen,
+    retargetPreAskFocus,
     navigateSelection,
     navigateMenuRequested,
     contextMenu,

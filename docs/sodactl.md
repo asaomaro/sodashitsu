@@ -55,6 +55,7 @@ sodactl graph node add <pane>... [--json]
 sodactl graph node rm <pane> [--json]
 sodactl graph node rekey <pane> <newPane> [--json]
 sodactl graph history [<linkId>] [--limit <N>] [--json]
+sodactl ask [--timeout <ms>] < spec.json    # pane の中のプログラムの質問のフォームを、その pane を見ているブラウザの画面に出す（下の「質問のフォーム」）
 sodactl skill                               # エージェントに sodactl の使い方を教える Markdown（skill ファイル）を出す
 ```
 
@@ -208,7 +209,78 @@ sodactl pane control p2 --takeover                           # 既に所有者�
   上限を超える pane には何も書かず `input_queue_full` で失敗する。サーバ自身が書く端末の問い合わせへの応答は捨てない。
   知らせを表示するのはブラウザ（画面の下の通知）と `pane control`（stderr）だけ。**`pane attach` は知らせを表示せず**（直結の画面に割り込ませない）、
   `pane input`・`pane run` は 1 通送って `{"ok":true}` を出して終わる（捨てられたかを待たない）——どちらも、固まった pane への入力は黙って消える。
+- **質問のフォーム**（`ask`）: 定義全体 256 KiB（JSON の UTF-8）・質問 100・1 つの質問の選択肢 200・`id`／`value` 200 文字・`title`／`label` 等の短い文字列 500 文字・
+  `intro`／`help`／`desc` 4,000 文字・1 つの選択肢の `colors` 16 個（超えた分は捨てる）。回答の自由入力・`text` の答え・補足は 10,000 文字まで。`--timeout` は 1,000〜86,400,000 ミリ秒。
+  定義の上限の超過は使い方の誤り（終了コード 2）。標準入力は 1 MiB までしか読まない。サーバが同時に待てる質問は総数 32・1 つの接続あたり 8 まで（超えると `ask_busy`。終了コード 1）。
 - 複数ホストの中継（`--machine`・`/ws?machine=`）では、判定するのは**先のマシンの `soda serve`**（`docs/machines.md`）。
+
+## 質問のフォーム（`ask`）
+
+pane の中のプログラム（エージェント）が、利用者に選択肢の多い確認を**その pane を見ているブラウザの画面の上のフォーム**で聞く。ブラウザがサーバと同じマシンでも別のマシンでも同じに動き、
+新しいウィンドウ・タブは開かない（pane に重なるダイアログとして出る）。Claude Code のスキル ask-form（`AskUserQuestion` の「1 問 4 択・1 回 4 問まで」に収まらない確認）と同じ定義・同じ結果の形。
+
+```bash
+sodactl ask [--timeout <ms>] < spec.json
+# → stdout に結果の JSON を 1 行
+{"status":"answered","answers":{"theme":"manual","mode":"single"},"custom":["theme"],"note":"…"}
+```
+
+### 入力（標準入力の JSON）
+
+ask-form の質問の定義と同じ。全体: `title`・`intro`・`submit`・`note`（`false` で補足欄なし・文字列なら入力例）・`questions`。質問: `id`・`label`・`type`（`single`〔既定〕・`multi`・`text`）・`help`・
+`options`・`default`・`allowOther`（`otherLabel`・`otherPlaceholder`）・`showIf`・`required`・`multiline`・`placeholder`・`minWidth`。選択肢は文字列か `{value, label, desc, recommended, colors}`。
+**知らない項目は無視する**。`showIf` は `{"他の質問の id": 値 または 値の配列}`（複数なら「かつ」。上の質問から順に判定する）。
+
+- 検査は ask.py の `normalize()` と同じ（`questions` が空でない配列・`id`／`label`・`id` の重複なし・`type` は文字列〔対応は `single`・`multi`・`text` の 3 つ。**それ以外の型は下の「対応していない型」**〕・`text` 以外は選択肢が 1 つ以上・`value` の重複なし・`showIf` が実在する `id` を指す）に、
+  上の「サーバ側の上限」を足したもの。誤りは使い方の誤り（終了コード 2・stderr に理由。定義の文字列の中身は理由に入れない。例外は `id` の重複で、その `id` を示す）。`__proto__` という `id` は使えない。
+  `colors` は `#rgb`・`#rgba`・`#rrggbb`・`#rrggbbaa` の形だけを色として使い、ほかは捨てる（誤りにしない）。
+- **対応していない型**: ask-form は質問の型を足していく（`edit`・`rank`・`table` 等）。この版の `sodactl ask` が対応するのは `single`・`multi`・`text` だけで、**それ以外の型（知らない文字列を含む）の質問が 1 つでもあれば、
+  質問を黙って落とさず、ダイアログを出さずに `{"status":"unavailable","reason":"…"}`（終了コード 0）を返す**（サーバへ送らない）。回答が欠けたまま `answered` になって、呼び出し側が聞いたつもりで進むのを防ぐため。
+  呼び出し側（ask-form）は `AskUserQuestion` へ切り替える。`type` が文字列でないなど、型以外の誤りは今までどおり使い方の誤り（終了コード 2）。`image`・`audio`・`code`・`group` など質問・選択肢に足された項目は
+  知らない項目として無視される（プレビューや見出しが出ないだけ）。`remember` は ask-form 側（`ask.py`）が処理する。
+- 標準入力が端末のとき（定義を渡していないとき）は、読まずに使い方の誤り。
+- 対象は**呼び出し元の pane**（`SODA_PANE_ID`・`SODA_SERVER_URL`。pane の外・別のサーバへ向けると接続せずに `caller_pane_unknown`）。`--pane`・位置引数は取らない。`--machine` は `local` 以外では使えない
+  （別のマシンの pane の質問は、そのマシンの pane の中で `sodactl ask` を打つ）。
+
+### 出力
+
+stdout に 1 行の JSON。`status` は次の 4 つで、**どれも終了コード 0**（区別は `status` で行う）。
+
+| `status` | いつ | ほかの項目 |
+|---|---|---|
+| `answered` | 決定が押された | `answers`（id → 値。`single`・`text` は文字列、`multi` は配列。`showIf` で隠れた質問は入らない）・`custom`（自由入力した質問の id。あれば）・`note`（補足。あれば） |
+| `cancelled` | キャンセル・`Esc`・pane が閉じられた | — |
+| `timeout` | `--timeout` が過ぎた（既定 540000 ミリ秒） | — |
+| `unavailable` | この pane のサーバに、質問を出せるブラウザが 1 つもつながっていない・**定義に、この版の `sodactl ask` が対応していない型の質問がある** | `reason`（理由） |
+
+終了コード: 上の 4 つは 0。サーバ・接続・認証のエラーは 1（stderr に `{"error":{code,message}}`）、使い方と定義の誤りは 2。1 になるもの: `caller_pane_unknown`・`unauthenticated`・`not_found`
+（古いサーバ・pane が無い）・`ask_busy`（同じ pane の前の質問がまだ答えを待っている・待っている質問の総数か接続あたりの上限）・`connection_closed`（待っている間にサーバが閉じた・止まった）・`timeout`（**stdout の `status: "timeout"` とは別物**——
+サーバが `--timeout` を過ぎても応答しないときの保険で、`--timeout` に 15 秒を足して待った後の sodactl 側の時間切れ）。
+
+### どのブラウザに出るか
+
+- 出るのは、その pane を動かしているサーバにつながっている**画面**（ブラウザ。デスクトップ・モバイル）。複数あれば全部に出し、**最初の回答を採って、ほかのダイアログは閉じる**。
+  端末版（引数なしの `soda`）・sodactl・ブラウザの軽い接続（別のマシンの要約）には出さない。ブラウザは接続のたびに「質問を出せる画面」として名乗る（古いブラウザの画面・古いサーバは名乗れないので、
+  `unavailable` になる）。1 つも居なければ待たずに `unavailable`。
+- **どの pane からの質問か**は、ダイアログの最上部に固定で出る（pane の名前・workspace・tab。定義の `title` では消せない・書き換えられない）。定義の文字は全て文字として表示され（HTML として解釈しない）、
+  pane のプログラムが soda 自身の確認を装えないようにしている。
+- **質問した pane をそのブラウザが表示していなくても**（別の tab・workspace を見ていても）その場で出る。表示は切り替えない。閉じたら、質問した pane が表示中ならその端末へ、そうでなければ開く前にフォーカスの
+  あった場所へフォーカスが戻る。設定・確認などほかのダイアログが開いていても潰さず上に重なり、閉じると元のダイアログへ戻る。
+- 待っている間にブラウザを**再読み込み・再接続**しても、質問は出し直される（回答待ちはサーバが持つ）。出せるブラウザが全部切れても質問はそのまま待ち、戻れば出し直す（時間切れまで）。
+- `sodactl ask` を止めた（Ctrl+C・接続が切れた）・時間切れ・pane が閉じた・サーバが止まると、ダイアログは閉じる。
+- 同じ pane からの質問は同時に 1 つまで。2 つめは `ask_busy`（終了コード 1）で、前の質問はそのまま。別の pane からは同時に出せ、受けた順に 1 つずつ出る。
+- **保存した SSH のマシン**（`docs/machines.md`）の pane の質問は、**そのマシンを表示中の手元のブラウザ**に出る（既存の中継のまま）。そのマシンを表示していないブラウザ（別のマシン・ローカルを表示中）には出ず、
+  表示中のブラウザが無ければ `unavailable`。リモートのマシンの pane の中で `sodactl ask` を打つので、**リモートのマシンで `sodactl login` 済み**であることが前提（pane の環境に token は入らない。既存の sodactl と同じ）。
+
+### 画面の操作
+
+- ダイアログが開くと、フォーカスは最上部の見出し（どの pane からの質問か）に置かれる（打っている途中の文字が回答として効かない）。`Tab` で質問・選択肢を巡り、ラジオは矢印で移して `Space` で選ぶ。
+  背面の操作・キーはダイアログが開いている間は届かない（ホイールも）。**背景のクリックでは閉じない**。
+- 決定: ［決定］・`Ctrl+Enter`（macOS は `Cmd+Enter` も）・1 行の入力欄での `Enter`（IME の変換中は除く）。未回答の質問があれば決定せず、強調して知らせる。取り消し: ［キャンセル］・`Esc`。
+- 質問が 1 つだけ・`single`・`note: false` のときは、選択肢（「その他」以外）を**クリック・タップ・`Space`・`Enter`** で選んだ時点で決定する。**ask-form の `form.html` との違い**: `form.html` は矢印キーで移っただけでも
+  決定するが、ここでは矢印キーで移っただけでは決定しない（キーボードで選び直せるように）。返る JSON は同じ。
+- 質問の定義・回答を読める・答えられるのは、`ask.subscribe` した画面（デスクトップ・モバイルのブラウザ）の接続だけ。sodactl・端末版・軽い接続は `ask.subscribe` できない。ただし hello の前の接続は
+  既定でデスクトップとして扱われるので、認証済みの生の `/ws` クライアントなら購読できる（pane のシェルを操作できるのと同じ権限。新しい権限は増えない）。回答の内容はサーバのログに残らない。
 
 ## エージェント（`agent`）
 

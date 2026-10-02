@@ -10,6 +10,7 @@ export * from "./worktreePath.js";
 export * from "./image.js";
 export * from "./file.js";
 export * from "./graph.js";
+export * from "./ask.js";
 export * from "./messages.js";
 export * from "./events.js";
 export * from "./frames.js";
