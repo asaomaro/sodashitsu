@@ -5,6 +5,7 @@ import type { KeyInputController } from "./keys/KeyInputController.js";
 import type { NotificationController } from "./notify/NotificationController.js";
 import type { ConnectionPort, DeviceKind } from "@sodashitsu/client-core";
 import type { TerminalRegistry } from "./term/TerminalRegistry.js";
+import type { FileTransfer } from "./term/FileTransfer.js";
 import type { ViewSync } from "./term/ViewSync.js";
 import type { AskController } from "./ask/AskController.js";
 
@@ -30,3 +31,5 @@ export const KeyInputControllerKey: InjectionKey<KeyInputController> = Symbol("k
 export const MachineSwitcherKey: InjectionKey<MachineSwitcher> = Symbol("machineSwitcher");
 /** 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）の通信の係。`AskDialog` が回答・取り消しを送る。 */
 export const AskControllerKey: InjectionKey<AskController> = Symbol("askController");
+/** 端末のファイルのリンクとドロップ。`TerminalPane` がドロップを渡す。無ければドロップを受けない（テスト等）。 */
+export const FileTransferKey: InjectionKey<FileTransfer> = Symbol("fileTransfer");

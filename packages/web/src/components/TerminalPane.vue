@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { TerminalRegistryKey } from "../injection.js";
+import { FileTransferKey, TerminalRegistryKey } from "../injection.js";
+import { acceptsDrop, readDropPayload } from "../term/FileTransfer.js";
 import type { TermEntry } from "../term/TerminalRegistry.js";
 import { shouldMarkSeen, useSeenStore } from "../store/seen.js";
 import { useSessionStore } from "../store/session.js";
@@ -15,6 +16,9 @@ const props = defineProps<{ paneId: string }>();
 
 const registry = inject(TerminalRegistryKey);
 if (!registry) throw new Error("TerminalPane: TerminalRegistryKey が provide されていません");
+
+/** ファイルのドロップの係（無ければドロップを受けない）。 */
+const fileTransfer = inject(FileTransferKey, undefined);
 
 const session = useSessionStore();
 const view = useViewStore();
@@ -72,10 +76,48 @@ watch(
 function onMouseDownCapture(): void {
   view.focusPane(props.paneId);
 }
+
+/**
+ * ファイル（と文字）のドロップ。ブラウザの既定の動作（そのファイルを開く・ダウンロードする）を止め、ふつうの端末と同じくパスを pane へ貼る
+ * （`FileTransfer.drop`：同じマシンで元のパスが分かればそのパス、そうでなければサーバへ送って置いた先のパス）。
+ * `dragenter`/`dragleave` は子の要素をまたぐたびに対で起きるので、数えて重なりの表示を保つ。
+ */
+const dragDepth = ref(0);
+function canDrop(ev: DragEvent): boolean {
+  return fileTransfer !== undefined && !failed.value && acceptsDrop(ev.dataTransfer);
+}
+function onDragEnter(ev: DragEvent): void {
+  if (!canDrop(ev)) return;
+  ev.preventDefault();
+  dragDepth.value++;
+}
+function onDragOver(ev: DragEvent): void {
+  if (!canDrop(ev)) return;
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "copy";
+}
+function onDragLeave(): void {
+  dragDepth.value = Math.max(0, dragDepth.value - 1);
+}
+function onDrop(ev: DragEvent): void {
+  dragDepth.value = 0;
+  if (!canDrop(ev) || !ev.dataTransfer) return;
+  ev.preventDefault();
+  view.focusPane(props.paneId);
+  fileTransfer?.drop(props.paneId, readDropPayload(ev.dataTransfer));
+}
 </script>
 
 <template>
-  <div class="terminal-pane" :class="{ 'terminal-pane-scaled': !hasSizeAuthority }" @mousedown.capture="onMouseDownCapture">
+  <div
+    class="terminal-pane"
+    :class="{ 'terminal-pane-scaled': !hasSizeAuthority, 'terminal-pane-drop-target': dragDepth > 0 }"
+    @mousedown.capture="onMouseDownCapture"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
+  >
     <div v-if="failed" class="terminal-pane-failed">{{ pane?.failure ?? "起動できませんでした" }}</div>
     <div v-else ref="mountPoint" class="terminal-pane-mount" />
   </div>
@@ -87,6 +129,10 @@ function onMouseDownCapture(): void {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: contain;
+}
+.terminal-pane-drop-target {
+  outline: 2px dashed var(--soda-accent, #bd93f9);
+  outline-offset: -2px;
 }
 .terminal-pane-mount {
   width: 100%;

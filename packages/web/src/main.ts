@@ -7,7 +7,7 @@ import { createPinia } from "pinia";
 import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
-import { ActionDispatcherKey, AskControllerKey, ConnectionKey, DeviceKindKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import { ActionDispatcherKey, AskControllerKey, ConnectionKey, DeviceKindKey, FileTransferKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
 import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
@@ -35,6 +35,7 @@ import { InputGate } from "@sodashitsu/client-core";
 import { ImagePaster } from "./term/ImagePaster.js";
 import { AskController } from "./ask/AskController.js";
 import { useAskStore } from "./store/ask.js";
+import { FileTransfer, isFileDrag } from "./term/FileTransfer.js";
 import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
 import { documentTitle } from "./serverSession/documentTitle.js";
 import { StoreAdapter } from "./store/StoreAdapter.js";
@@ -203,6 +204,20 @@ const imagePaster = new ImagePaster({
   paneExists: (paneId) => session.panes.has(paneId),
 });
 
+// 端末のファイルのリンクとドロップ。ブラウザ版はローカルのファイルに触れないので、サーバ越しに開く・受け取る・送る（`term/FileTransfer.ts`）。
+// `machines` は下で作る（呼ばれるのはクリック・ドロップのとき）。
+const fileTransfer: FileTransfer = new FileTransfer({
+  conn: inputGate,
+  input: inputGate,
+  terminalOf: (paneId) => registry.get(paneId)?.term ?? null,
+  toast: (message) => view.toast(message),
+  paneExists: (paneId) => session.panes.has(paneId),
+  locality: () => settings.fileLocality,
+  isLocalMachine: () => machines.selectedId === LOCAL_MACHINE_ID,
+  hostOs: () => (session.host?.os === "windows" ? "windows" : "posix"),
+  hostname: () => session.host?.hostname,
+});
+
 const registry = new TerminalRegistry({
   capacity: terminalCapacity,
   conn: inputGate,
@@ -214,6 +229,11 @@ const registry = new TerminalRegistry({
       paneId,
       ui: actionDispatcherBox.current!,
       getRightClickTarget: () => session.panes.get(paneId)?.rightClick ?? "herdr",
+      files: {
+        resolve: (id, paths) => fileTransfer.resolve(id, paths),
+        open: (file) => fileTransfer.open(file),
+        openUri: (id, uri) => fileTransfer.openUri(id, uri),
+      },
     }),
   hasSizeAuthority: (paneId) => {
     const pane = session.panes.get(paneId);
@@ -274,6 +294,8 @@ connection.onOpened(() => themeController.resend());
 // 質問を出せる画面として名乗り、待っている質問を受け取る（接続ごと。再読み込み・再接続・マシンの切り替えの出し直し）。
 connection.onOpened(() => askController.onOpened());
 connection.onClosed(() => askController.onClosed());
+// この接続から見たサーバ（同じマシンか・ファイルを開く手段があるか）は接続ごとに聞き直す（マシンを切り替えた後の接続も同じ）。
+connection.onOpened(() => fileTransfer.onOpened());
 // 名前付き session の数（サイドバーの session の入口。20260926-named-session-ui）。`actionDispatcher` は下で作るので、呼ぶ時点で読む。
 connection.onOpened(() => void actionDispatcherBox.current?.refreshServerSessions());
 // 保存した SSH のマシン（20260927-multi-host-machines）: 切り替えの直後の `workspace.focus`、ローカルを向いているときのマシンの一覧。
@@ -365,6 +387,7 @@ const machineSwitcher = new MachineSwitcher({
     keys.setMode("terminal");
     imagePaster.resetForMachineSwitch(); // 前のマシンの pane へ始めた画像の貼り付けを、次のマシンの同じ id の pane へ届けない
     askController.resetForMachineSwitch(); // 前のマシンの質問を捨てる（pane の id が重なる）。次の接続の ask.subscribe が取り直す
+    fileTransfer.resetForMachineSwitch(); // ファイルのドロップ・ダウンロードも同じ
   },
   nextTick: () => nextTick(),
   disposeTerminals: () => registry.disposeAll(),
@@ -467,6 +490,17 @@ watch(
   },
 );
 
+// ファイルを pane の外（サイドバー・tab バー等）へ落としても、ブラウザにそのファイルを開かせない（この画面から離れてしまう）。
+// pane の上のドロップは `TerminalPane` が先に受けて止めている（`defaultPrevented`）。
+window.addEventListener("dragover", (ev) => {
+  if (ev.defaultPrevented || !isFileDrag(ev.dataTransfer)) return;
+  ev.preventDefault();
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "none";
+});
+window.addEventListener("drop", (ev) => {
+  if (!ev.defaultPrevented && isFileDrag(ev.dataTransfer)) ev.preventDefault();
+});
+
 const app = createApp(App);
 app.use(pinia);
 app.provide(ConnectionKey, conn);
@@ -474,6 +508,7 @@ app.provide(ActionDispatcherKey, actionDispatcher);
 app.provide(MachineSwitcherKey, machineSwitcher);
 app.provide(TerminalRegistryKey, registry);
 app.provide(AskControllerKey, askController);
+app.provide(FileTransferKey, fileTransfer);
 app.provide(ViewSyncKey, viewSync);
 app.provide(DeviceKindKey, kind);
 app.provide(KeyInputControllerKey, keys);

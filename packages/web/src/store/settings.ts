@@ -58,6 +58,7 @@ import {
   type PaneBorders,
 } from "@sodashitsu/client-core";
 import { readPrefs, writePrefs } from "./view.js";
+import { loadFileLocality, type FileLocality } from "../term/FileTransfer.js";
 
 // 共有の設定の読み込みは client-core（web と端末版が同じ規則で読む。統合の review）。今までの import 先を保つため再び出す。
 export {
@@ -146,6 +147,8 @@ export const useSettingsStore = defineStore("settings", () => {
   const paneGaps = ref(loadPaneGaps(initial["paneGaps"]));
   /** このブラウザの scrollback の設定。使う行数は `term/scrollback.ts` の `effectiveScrollback` が決める。 */
   const scrollback = ref<ScrollbackPref>(loadScrollbackPref(initial["scrollback"]));
+  /** このブラウザをサーバと同じマシンとして扱うか（端末のファイルのリンク・ドロップ。`FileTransfer` が読む）。ブラウザごと（サーバと共有しない）。 */
+  const fileLocality = ref<FileLocality>(loadFileLocality(initial["fileLocality"]));
   /** 新しい workspace・tab・分割を開く場所の方針と、「指定した場所」のパス（方針が `path` のときだけ使う）。 */
   const newCwdPolicy = ref<NewCwdPolicy>(loadNewCwdPolicy(initial["newCwdPolicy"]));
   const newCwdPath = ref(loadNewCwdPath(initial["newCwdPath"]));
@@ -284,6 +287,12 @@ export const useSettingsStore = defineStore("settings", () => {
   function setScrollback(v: ScrollbackPref): void {
     scrollback.value = v;
     writePrefs({ scrollback: v });
+  }
+
+  /** 反映と保存を同時に行う（次のクリック・ドロップから効く）。 */
+  function setFileLocality(v: FileLocality): void {
+    fileLocality.value = v;
+    writePrefs({ fileLocality: v });
   }
 
   /** 反映と保存を同時に行う。**効くのは次に開く pane から**（既に開いている pane は変えない。20260928-windows-pane-cwd の AC6）。 */
@@ -529,6 +538,8 @@ export const useSettingsStore = defineStore("settings", () => {
     paneBorders,
     paneGaps,
     scrollback,
+    fileLocality,
+    setFileLocality,
     newCwdPolicy,
     newCwdPath,
     shellCwdTracking,

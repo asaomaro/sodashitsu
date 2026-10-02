@@ -25,7 +25,7 @@
 - AC11（どの pane からかを必ず示す）: pass — `AskDialog.test.ts`（title が空・500 文字・出どころの行そっくりでも変わらない）・E2E。
 - AC12（HTML・色を文字として扱う）: pass — `AskDialog.test.ts`（script・img が生まれない・色でない文字列は style に入らない・検査を通らずに届いた色も入らない）・E2E（`window.__askXss` が立たない）・`ask.test.ts`（`isAskColor`）。
 - AC13（ログに中身が出ない・2 つめは ask_busy）: pass — `ask.integration.test.ts`（`server.log` に目印の文字列が無い。検査に落ちる定義・誤った回答を含む）・E2E（`ask_busy` は終了コード 1）。
-- AC14（docs・SKILL.md・tui-parity）: pass — `docs/sodactl.md`「質問のフォーム」・上限・`SKILL.md`・W31。`skill.test.ts`・`sodactl skill | cmp`（smoke 4 本目）が通る。
+- AC14（docs・SKILL.md・tui-parity。W32 に採番し直した）: pass — `docs/sodactl.md`「質問のフォーム」・上限・`SKILL.md`・W32。`skill.test.ts`・`sodactl skill | cmp`（smoke 4 本目）が通る。
 - AC15（追補: 対応していない型は unavailable）: pass — `ask.test.ts`（`edit`・`rank`・`table`・知らない文字列は `unsupportedType`。後ろの誤りは見逃さない・前の誤りが優先）・`AskService.test.ts`（台帳に置かず unavailable。pane・busy の確認が先）・`commands/ask.test.ts`（接続もサーバへの送信もせず unavailable・終了コード 0）・E2E（ダイアログが出ない）。
 - AC-I1（開閉）: pass — `AskDialog.test.ts`・E2E（背景のクリックで閉じない）。
 - AC-I2（確定・取り消し）: pass — `AskDialog.test.ts`（ボタン・Ctrl+Enter・Cmd+Enter・1 行の Enter・IME 中は送らない・未回答は強調・即確定はポインタと Space／Enter だけ）・E2E（実ブラウザで label のカードのクリックで確定・矢印では確定しない）。

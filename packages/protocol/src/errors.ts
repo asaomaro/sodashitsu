@@ -58,6 +58,17 @@ export type ErrorCode =
   | "image_upload_rate_limited"
   | "image_upload_expired"
   | "image_store_failed"
+  // 端末のファイルのリンクとドロップ（`file.ts`）。
+  | "file_not_found"
+  | "file_unreadable"
+  | "file_too_large"
+  | "file_open_unavailable"
+  | "file_open_refused"
+  | "file_open_failed"
+  | "invalid_file"
+  | "file_upload_busy"
+  | "file_upload_expired"
+  | "file_store_failed"
   // 入力の書き込み待ちの上限（20260927-server-size-input-limits）。pane のプログラムが入力を読まず、サーバに溜まった入力が上限に達した。
   // herdr は "pty input queue is full"（`pane_send_failed`）。
   | "input_queue_full"

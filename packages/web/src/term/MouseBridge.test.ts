@@ -444,6 +444,98 @@ describe("MouseBridge — M6（リンクの起動）", () => {
   });
 });
 
+describe("MouseBridge — ファイルのリンク", () => {
+  function makeFiles(existing: Record<string, { path: string; kind: "file" | "dir"; size: number }>) {
+    return {
+      resolve: vi.fn(async (_paneId: string, paths: string[]) => paths.map((p) => existing[p] ?? null)),
+      open: vi.fn(),
+      openUri: vi.fn(),
+    };
+  }
+  /** リンクの判定（提供元の非同期の答え）が済むのを待つ。 */
+  const linked = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
+  it("出力の中の実在するパスは、Ctrl を押しながらのクリックで開く（ただのクリックでは開かない）", async () => {
+    const files = makeFiles({ "src/a.ts": { path: "/w/src/a.ts", kind: "file", size: 3 } });
+    new MouseBridge({ term, paneId: "p1", ui: makeUi(), getRightClickTarget: () => "herdr", openLink: vi.fn(), isMac: false, files });
+    await write("error at src/a.ts:12:3");
+    pointAt(12, 1);
+    fire("mousemove", {});
+    await linked();
+    expect(files.resolve).toHaveBeenCalledWith("p1", ["src/a.ts"]);
+    leftClick();
+    expect(files.open).not.toHaveBeenCalled();
+    leftClick({ ctrlKey: true });
+    expect(files.open).toHaveBeenCalledWith({ path: "/w/src/a.ts", kind: "file", size: 3 });
+  });
+
+  it("実在しないパスはリンクにならない", async () => {
+    const files = makeFiles({});
+    new MouseBridge({ term, paneId: "p1", ui: makeUi(), getRightClickTarget: () => "herdr", openLink: vi.fn(), isMac: false, files });
+    await write("error at src/none.ts:1");
+    pointAt(12, 1);
+    fire("mousemove", { ctrlKey: true });
+    await linked();
+    leftClick({ ctrlKey: true });
+    expect(files.open).not.toHaveBeenCalled();
+    expect(screen().classList.contains("xterm-cursor-pointer")).toBe(false);
+  });
+
+  it("下線と指のカーソルは、URL と同じく Ctrl を押している間だけ出す", async () => {
+    const files = makeFiles({ "src/a.ts": { path: "/w/src/a.ts", kind: "file", size: 3 } });
+    new MouseBridge({ term, paneId: "p1", ui: makeUi(), getRightClickTarget: () => "herdr", openLink: vi.fn(), isMac: false, files });
+    await write("src/a.ts");
+    pointAt(3, 1);
+    fire("mousemove", {});
+    await linked();
+    expect(screen().classList.contains("xterm-cursor-pointer")).toBe(false);
+    fire("mousemove", { ctrlKey: true });
+    expect(screen().classList.contains("xterm-cursor-pointer")).toBe(true);
+  });
+
+  it("URL の中のパスらしい部分は、URL のリンクのまま（ファイルとして確かめない）", async () => {
+    const files = makeFiles({});
+    const openLink = vi.fn();
+    new MouseBridge({ term, paneId: "p1", ui: makeUi(), getRightClickTarget: () => "herdr", openLink, isMac: false, files });
+    await write("https://example.com/src/a.ts");
+    pointAt(22, 1);
+    fire("mousemove", {});
+    await linked();
+    leftClick({ ctrlKey: true });
+    expect(openLink).toHaveBeenCalledWith("https://example.com/src/a.ts");
+    expect(files.resolve).not.toHaveBeenCalled();
+  });
+
+  it("OSC 8 の file: のリンクは Ctrl を押しながらのクリックでファイルとして開く。ほかの scheme はリンクにもしない", async () => {
+    const files = makeFiles({});
+    const openLink = vi.fn();
+    new MouseBridge({ term, paneId: "p1", ui: makeUi(), getRightClickTarget: () => "herdr", openLink, isMac: false, files });
+    await write("\x1b]8;;file://host/w/my%20file.txt\x1b\\osc8-file\x1b]8;;\x1b\\ \x1b]8;;javascript:alert(1)\x1b\\js-link\x1b]8;;\x1b\\");
+    pointAt(3, 1);
+    fire("mousemove", {});
+    await linked();
+    leftClick();
+    expect(files.openUri).not.toHaveBeenCalled();
+    leftClick({ ctrlKey: true });
+    expect(files.openUri).toHaveBeenCalledWith("p1", "file://host/w/my%20file.txt");
+    expect(openLink).not.toHaveBeenCalled();
+    // javascript: のリンクの上：指のカーソルにならず、押しても何も起きない。
+    fire("mouseleave", {});
+    pointAt(13, 1);
+    fire("mousemove", { ctrlKey: true });
+    await linked();
+    expect(screen().classList.contains("xterm-cursor-pointer")).toBe(false);
+    leftClick({ ctrlKey: true });
+    expect(files.openUri).toHaveBeenCalledTimes(1);
+    expect(openLink).not.toHaveBeenCalled();
+  });
+
+  it("files を渡さなければ、今までどおりファイルのリンクを作らない", async () => {
+    new MouseBridge({ term, paneId: "p1", ui: makeUi(), getRightClickTarget: () => "herdr", openLink: vi.fn(), isMac: false });
+    expect(term.options.linkHandler!.allowNonHttpProtocols).toBe(false);
+  });
+});
+
 describe("MouseBridge — dispose", () => {
   it("dispose の後は mouseup/contextmenu に反応しない", async () => {
     const writeClipboard = vi.fn().mockResolvedValue(true);
