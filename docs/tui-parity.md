@@ -153,6 +153,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は�
 | W28 | 画像の貼り付けの送信中に打ったキーの保留 | — | あり | 対応（H44 の構成に限る） | AC7 |
 | W29 | 設定・既読をブラウザごとに覚える | サーバ／config | あり | 読み替え: 設定はサーバに置いてブラウザと端末版で共有（ブラウザ同士でも共有に変わった。decisions D3・D10）。端末ごとの項目（サイドバーの今の幅・折りたたみ・色の出し方）は `tui-state.json`、`done` の既読はクライアントごと | AC11 |
 | W30 | 連携のグラフの画面（`open_graph`・既定 `prefix+a`。20260927-agent-graph） | 無し | あり | 非対応（開かずに「グラフの画面はブラウザで開けます。」と知らせる。操作表は共有のまま〔20260927-agent-graph の decisions D1-8〕。連携の実行はサーバなので端末版でも動く。端末からは `sodactl graph`） | 試験: `TuiDispatcher.test.ts` |
+| W31 | pane のプログラムからの質問のフォーム（`sodactl ask`。20261002-sodactl-ask。`docs/sodactl.md`「質問のフォーム」） | 無し | あり | 対象外（端末版はフォームを出せる画面として名乗らないので、端末版しかつながっていない session では `sodactl ask` は待たずに `unavailable` を返し、呼び出し側が `AskUserQuestion` へ切り替える） | 試験: `ask.integration.test.ts` |
 
 ## 4. 外側の端末との取り決め（端末版で新たに要るもの）
 

@@ -7,6 +7,9 @@ import {
   LINK_LINES_MAX,
   LINK_LINES_MIN,
   type LinkKind,
+  ASK_TIMEOUT_DEFAULT_MS,
+  ASK_TIMEOUT_MAX_MS,
+  ASK_TIMEOUT_MIN_MS,
 } from "@sodashitsu/protocol";
 import { AGENT_STATUSES, type AgentStatus } from "./agentStatus.js";
 import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
@@ -62,6 +65,7 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl graph node rm <pane> [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl graph node rekey <pane> <newPane> [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl graph history [<linkId>] [--limit <N>] [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl ask [--timeout <ms>] [--url <URL>] [--token <TOKEN>] < spec.json",
   "sodactl skill",
 ];
 
@@ -171,6 +175,8 @@ export type Command =
   | { kind: "workspace-create"; opts: GlobalOpts; cwd: string | undefined; label: string | undefined }
   | { kind: "workspace-close"; opts: GlobalOpts; workspaceId: string }
   | { kind: "workspace-rename"; opts: GlobalOpts; workspaceId: string; label: string }
+  // 20261002-sodactl-ask。呼び出し元の pane の質問のフォームを、その pane を見ているブラウザに出す（定義は標準入力）。
+  | { kind: "ask"; opts: GlobalOpts; timeoutMs: number }
   // 20260927-sidebar-row-tokens（herdr の workspace/pane report-metadata のトークンの部分）。
   | { kind: "workspace-report-metadata"; opts: GlobalOpts; workspaceId: string; report: MetadataReportArgs }
   | { kind: "pane-report-metadata"; opts: GlobalOpts; paneId: string; report: MetadataReportArgs }
@@ -367,6 +373,14 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
       const { positionals, values, bools } = parseFlags(argv.slice(1), { ...URL_TOKEN, bools: ["--json"] });
       rejectExtra(positionals, 0, USAGE);
       return { kind: "watch", opts: globalOptsFrom(values, env), json: bools.has("--json") };
+    }
+    // 20261002-sodactl-ask。引数は `--timeout` だけ（定義は標準入力）。対象は呼び出し元の pane に決まっているので、`--pane`・位置引数は取らない。
+    case "ask": {
+      const { positionals, values } = parseFlags(argv.slice(1), { values: ["--url", "--token", "--timeout"] });
+      rejectExtra(positionals, 0, ASK_USAGE);
+      const raw = values.get("--timeout");
+      const timeoutMs = raw === undefined ? ASK_TIMEOUT_DEFAULT_MS : parseAskTimeout(raw);
+      return { kind: "ask", opts: globalOptsFrom(values, env), timeoutMs };
     }
     case "workspace":
       return parseWorkspace(word1, rest0, env);
@@ -604,6 +618,16 @@ function parseStreamDimension(raw: string, flag: string): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 1 || n > MAX_STREAM_DIMENSION) {
     throw new CliUsageError(`invalid value for ${flag}: ${raw}`, `${flag} は 1〜${MAX_STREAM_DIMENSION} の整数にしてください。`);
+  }
+  return n;
+}
+
+const ASK_USAGE = "sodactl ask [--timeout <ms>] < spec.json";
+
+function parseAskTimeout(raw: string): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < ASK_TIMEOUT_MIN_MS || n > ASK_TIMEOUT_MAX_MS) {
+    throw new CliUsageError(`invalid value for --timeout: ${raw}`, `--timeout は ${ASK_TIMEOUT_MIN_MS}〜${ASK_TIMEOUT_MAX_MS}（ミリ秒）の整数にしてください。省略すると ${ASK_TIMEOUT_DEFAULT_MS}。`);
   }
   return n;
 }
@@ -938,6 +962,9 @@ function parseMachinePrefixed(argv: readonly string[], env: NodeJS.ProcessEnv): 
   }
   const cmd = parseArgs(rest, env);
   if (!("opts" in cmd)) throw new CliUsageError(`--machine cannot be used with ${sub}`, MACHINE_USAGE_LINE);
+  // `ask` の対象は呼び出し元の pane（手元の SODA_PANE_ID）で、別のマシンの pane ではない。
+  if (cmd.kind === "ask" && selector !== "local")
+    throw new CliUsageError("--machine cannot be used with ask (the question is shown for the calling pane of this machine)", MACHINE_USAGE_LINE);
   // `local` は手元のサーバそのもの（サーバは `?machine=local` を行き先なしと同じに扱う）——自分の pane の歯止めを外さない。
   if (selector === "local") return cmd;
   const { caller: _caller, ...opts } = cmd.opts;

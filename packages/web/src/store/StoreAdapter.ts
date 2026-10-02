@@ -1,4 +1,4 @@
-import type { AgentInfo, AgentIntegrationStatusResult, GraphChangedEvent, GraphFiredEvent, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
+import type { AgentInfo, AgentIntegrationStatusResult, AskClosedEvent, AskOpenedEvent, GraphChangedEvent, GraphFiredEvent, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { ConnectionState, StorePort } from "@sodashitsu/client-core";
 import { useCommandsStore } from "./commands.js";
@@ -44,6 +44,11 @@ export interface StoreAdapterOptions {
    * **画面の接続がローカルを向いているときだけ**当てる（別のマシンを向いていればローカルの軽い接続から受ける）——決めるのは呼び出し側（`main.ts`）。省略可。
    */
   onGraphEvent?: (e: GraphChangedEvent | GraphFiredEvent) => void;
+  /**
+   * 質問のフォームのイベント（`ask.opened`・`ask.closed`。20261002-sodactl-ask）。**中身は載っていない**（id だけ）——`AskController` が `ask.get` で取る。
+   * 画面の接続（選択中のマシン）のイベントだけが来る。省略可。
+   */
+  onAskEvent?: (e: AskOpenedEvent | AskClosedEvent) => void;
 }
 
 /**
@@ -98,7 +103,7 @@ export class StoreAdapter implements StorePort {
     const view = useViewStore(this.opts.pinia);
     // グラフ画面（20260927-agent-graph）もダイアログと同じく、開いている間は「閉じたときに戻す先」を差し替える。
     const dialogOpen = view.modalOpen;
-    const focused = dialogOpen ? (view.preDialogFocusPaneId ?? view.preGraphFocusPaneId ?? view.focusedPaneId) : view.focusedPaneId;
+    const focused = dialogOpen ? (view.preDialogFocusPaneId ?? view.preGraphFocusPaneId ?? view.preAskFocusPaneId ?? view.focusedPaneId) : view.focusedPaneId;
     const next = repairView({ workspaceId: view.workspaceId, tabId: view.tabId, focusedPaneId: focused }, session, successorHint);
     if (!next) return;
     if (next.workspaceId && next.tabId && (next.workspaceId !== view.workspaceId || next.tabId !== view.tabId)) view.setView(next.workspaceId, next.tabId);
@@ -106,6 +111,7 @@ export class StoreAdapter implements StorePort {
     if (dialogOpen) {
       if (view.openDialog !== null) view.retargetPreDialogFocus(next.focusedPaneId);
       if (view.graphOpen) view.retargetPreGraphFocus(next.focusedPaneId);
+      if (view.askOpen) view.retargetPreAskFocus(next.focusedPaneId); // 質問のフォーム（20261002-sodactl-ask）も同じ
     } else view.focusPane(next.focusedPaneId);
   }
 
@@ -187,6 +193,10 @@ export class StoreAdapter implements StorePort {
       case "graph.changed":
       case "graph.fired":
         this.opts.onGraphEvent?.(e);
+        return;
+      case "ask.opened":
+      case "ask.closed":
+        this.opts.onAskEvent?.(e);
         return;
     }
   }

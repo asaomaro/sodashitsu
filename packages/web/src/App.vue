@@ -20,6 +20,7 @@ import Sidebar from "./components/Sidebar.vue";
 import TabBar from "./components/TabBar.vue";
 import TerminalPane from "./components/TerminalPane.vue";
 import Toast from "./components/Toast.vue";
+import AskDialog from "./components/AskDialog.vue";
 import WorktreeCreateDialog from "./components/WorktreeCreateDialog.vue";
 import WorktreeOpenDialog from "./components/WorktreeOpenDialog.vue";
 import { isMobileViewport } from "./mobile/detect.js";
@@ -95,10 +96,12 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
     <GotoPicker />
     <GraphView />
     <CommandPopup />
+    <!-- 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）。ほかのダイアログとは別の枠で、後から開くので上に重なる。 -->
+    <AskDialog />
     <PrefixIndicator />
     <!-- グラフ画面（`showModal()` の top layer）を開いている間は、トーストと再接続の表示をその dialog の中へ出す——外に置くと top layer の下に隠れ、
          inert で押せない（20260927-agent-graph の decisions D4）。`defer` は同じ描画の中で後から mount される行き先を待つため。 -->
-    <Teleport to="#soda-graph-dialog" :disabled="!view.graphOpen" defer>
+    <Teleport :to="view.askOpen ? '#soda-ask-dialog' : '#soda-graph-dialog'" :disabled="!(view.graphOpen || view.askOpen)" defer>
       <Toast />
       <ReconnectOverlay />
     </Teleport>

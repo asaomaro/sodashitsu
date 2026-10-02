@@ -68,7 +68,11 @@ export type ErrorCode =
   | "server_busy"
   | "server_stop_unsupported"
   // 連携のグラフ（20260927-agent-graph）。`graph.update` の `baseRev` が今の rev と違う（他のブラウザ・sodactl が先に変えた）。最新を取り直して作り直す。
-  | "rev_conflict";
+  | "rev_conflict"
+  // 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）。
+  | "invalid_ask_spec" // 定義の誤り・上限の超過
+  | "ask_busy" // 同じ pane に待っている質問がある
+  | "ask_closed"; // その質問はもう無い（回答済み・取り消し・時間切れ）。`ask.subscribe` していない接続への要求も同じ
 
 export interface ProtocolError {
   code: ErrorCode;

@@ -7,7 +7,7 @@ import { createPinia } from "pinia";
 import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
-import { ActionDispatcherKey, ConnectionKey, DeviceKindKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import { ActionDispatcherKey, AskControllerKey, ConnectionKey, DeviceKindKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
 import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
@@ -33,6 +33,8 @@ import { ToneSound } from "./notify/ToneSound.js";
 import { Connection } from "@sodashitsu/client-core";
 import { InputGate } from "@sodashitsu/client-core";
 import { ImagePaster } from "./term/ImagePaster.js";
+import { AskController } from "./ask/AskController.js";
+import { useAskStore } from "./store/ask.js";
 import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
 import { documentTitle } from "./serverSession/documentTitle.js";
 import { StoreAdapter } from "./store/StoreAdapter.js";
@@ -123,6 +125,8 @@ const storeAdapter = new StoreAdapter({
   onGraphEvent: (e) => {
     if (acceptsMainGraphEvent(machines.selectedId)) graph.applyEvent(e);
   },
+  // 質問のフォーム（20261002-sodactl-ask）。`askController` はこの後で作るので、遅延で参照する。
+  onAskEvent: (e) => askController.onEvent(e),
 });
 
 const connection = new Connection({ kind, httpOrigin, wsUrl, store: storeAdapter, sink: sinkProxy });
@@ -185,6 +189,9 @@ const terminalOptions: Partial<ITerminalOptions> = {};
  * 以前の xterm.js は既定の 1,000 行で、それを超える分を捨てていた——D107）。
  */
 const getScrollbackLines = (): number => effectiveScrollback(settings.scrollback, kind, session.limits.scrollbackLines);
+
+// 質問のフォーム（20261002-sodactl-ask）。`inputGate` は素通しの接続（要求だけを使う）。接続のたびに `ask.subscribe` して待っている質問を受け取る（下の `onOpened`）。
+const askController = new AskController({ conn: inputGate, store: useAskStore(pinia), toast: (message) => view.toast(message) });
 
 // クリップボードの画像の貼り付け（20260927-clipboard-image-paste。herdr の remote_image_paste）。入力は関所を通し、送っている間のキーを溜める。
 // `registry` は下で作る（呼ばれるのは pane を acquire した後）。
@@ -264,6 +271,9 @@ connection.onOpened(() => viewSync.onConnectionOpened());
 // サーバは接続ごとに新しい clientId を振り、前の接続のテーマを持たない（色の問い合わせの答えに使う。20260921-theme-settings の design D6）。
 // 起動の直後の `start()` は接続より前で送れないので、接続の直後に今のテーマを届ける経路はここだけ（接続中の変化は `apply` が送る）。
 connection.onOpened(() => themeController.resend());
+// 質問を出せる画面として名乗り、待っている質問を受け取る（接続ごと。再読み込み・再接続・マシンの切り替えの出し直し）。
+connection.onOpened(() => askController.onOpened());
+connection.onClosed(() => askController.onClosed());
 // 名前付き session の数（サイドバーの session の入口。20260926-named-session-ui）。`actionDispatcher` は下で作るので、呼ぶ時点で読む。
 connection.onOpened(() => void actionDispatcherBox.current?.refreshServerSessions());
 // 保存した SSH のマシン（20260927-multi-host-machines）: 切り替えの直後の `workspace.focus`、ローカルを向いているときのマシンの一覧。
@@ -354,6 +364,7 @@ const machineSwitcher = new MachineSwitcher({
     view.resetForMachineSwitch();
     keys.setMode("terminal");
     imagePaster.resetForMachineSwitch(); // 前のマシンの pane へ始めた画像の貼り付けを、次のマシンの同じ id の pane へ届けない
+    askController.resetForMachineSwitch(); // 前のマシンの質問を捨てる（pane の id が重なる）。次の接続の ask.subscribe が取り直す
   },
   nextTick: () => nextTick(),
   disposeTerminals: () => registry.disposeAll(),
@@ -462,6 +473,7 @@ app.provide(ConnectionKey, conn);
 app.provide(ActionDispatcherKey, actionDispatcher);
 app.provide(MachineSwitcherKey, machineSwitcher);
 app.provide(TerminalRegistryKey, registry);
+app.provide(AskControllerKey, askController);
 app.provide(ViewSyncKey, viewSync);
 app.provide(DeviceKindKey, kind);
 app.provide(KeyInputControllerKey, keys);

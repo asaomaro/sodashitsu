@@ -165,6 +165,20 @@ export interface GraphFiredEvent {
   data: { run: LinkRun };
 }
 
+/**
+ * 質問が出た（`sodactl ask`。20261002-sodactl-ask）。**中身（定義）は載せない**——全クライアントへ配るので、sodactl・軽い接続にも届く。
+ * 質問を出せる画面（`ask.subscribe` 済み）は `ask.get` で定義を取る。
+ */
+export interface AskOpenedEvent {
+  event: "ask.opened";
+  data: { askId: string; paneId: string };
+}
+/** 質問が閉じた（回答・取り消し・時間切れ・pane が閉じた・呼び出し側の切断）。全クライアントへ配るが、知らない id は無視する。 */
+export interface AskClosedEvent {
+  event: "ask.closed";
+  data: { askId: string; paneId: string };
+}
+
 export type ServerEvent =
   | WorkspaceCreatedEvent
   | WorkspaceUpdatedEvent
@@ -192,6 +206,8 @@ export type ServerEvent =
   | CommandPopupClosedEvent
   | PrefsChangedEvent
   | GraphChangedEvent
-  | GraphFiredEvent;
+  | GraphFiredEvent
+  | AskOpenedEvent
+  | AskClosedEvent;
 
 export type ServerEventName = ServerEvent["event"];

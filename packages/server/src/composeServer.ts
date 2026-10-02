@@ -37,6 +37,7 @@ import { ControlSurface } from "./surface/ControlSurface.js";
 import { registerAllMethods } from "./surface/methods/index.js";
 import { IMAGE_DIR_NAME, ImageStore } from "./image/ImageStore.js";
 import { ImageUploads } from "./image/ImageUploads.js";
+import { AskService } from "./ask/AskService.js";
 import { FsIntegrationFile } from "./persist/IntegrationFile.js";
 import { FsAgentIntegrationInstaller } from "./agent/AgentIntegrationInstaller.js";
 import { DefaultAgentIntegrationService } from "./agent/AgentIntegrationService.js";
@@ -306,6 +307,16 @@ export async function composeServer(
     paneExists: (paneId) => session.getPane(paneId) !== undefined,
     logger,
   });
+  // 質問のフォーム（20261002-sodactl-ask）。pane のプログラムの質問を、`ask.subscribe` した画面（desktop / mobile）に出す。回答待ちはメモリだけ（再起動・引き継ぎをまたがない）。
+  const asks = new AskService({
+    paneExists: (paneId) => session.getPane(paneId) !== undefined,
+    isBrowserKind: (clientId) => {
+      const kind = clients.get(clientId)?.kind;
+      return kind === "desktop" || kind === "mobile";
+    },
+    bus,
+    logger,
+  });
   // 共有の設定（20260927-cli-mode）。読むのは `listen()` のロックの後（auth.json と同じ）。保存できた変更は全クライアントへ配る。
   const prefs = new PrefsStore(options.stateDir, (err) =>
     logger.error("prefs.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),
@@ -349,6 +360,7 @@ export async function composeServer(
     commands,
     metadata,
     images,
+    asks,
     prefs,
     graph,
     graphHistory: (linkId, limit) => graphEngine.getHistory(linkId, limit),
@@ -384,6 +396,7 @@ export async function composeServer(
     onClientGone: (clientId) => {
       commands.onClientGone(clientId); // その接続の popup を止める（20260927-custom-command-keys）
       images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
+      asks.onClientGone(clientId); // 質問を出した接続・質問を出せる画面の切断（20261002-sodactl-ask）
     },
   });
   // 中継の受け口（20260927-multi-host-machines）。ほかのマシンの `soda serve` が SSH と `soda bridge` 越しに繋ぐ、状態ディレクトリの 0600 の socket。
@@ -393,6 +406,7 @@ export async function composeServer(
     onClientGone: (clientId) => {
       commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
       images.onClientGone(clientId);
+      asks.onClientGone(clientId);
     },
   });
   let bridgeListening = false;
@@ -719,6 +733,7 @@ export async function composeServer(
       } finally {
         // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
         commands.dispose();
+        asks.dispose(); // 待っている質問を閉じる（接続を閉じた後。応答は誰にも届かない）
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
         // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。
         metadata.dispose();

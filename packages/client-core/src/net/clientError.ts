@@ -80,6 +80,10 @@ const MESSAGES: Record<ErrorCode, string> = {
   server_busy: "サーバが更新の引き継ぎの最中のため、止めませんでした。少し待ってからやり直してください。",
   server_stop_unsupported: "このサーバは画面からの停止を受け付けません。",
   // 連携のグラフ（20260927-agent-graph）。通常はグラフの画面が最新を取り直して作り直す——表の網羅のため。
+  // 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）。通常は `AskController` が自分の文言で知らせる——表の網羅のため。
+  invalid_ask_spec: "質問の定義が受け付けられませんでした。",
+  ask_busy: "この pane から出した質問が、まだ答えを待っています。",
+  ask_closed: "この質問は既に閉じられています。",
   rev_conflict: "グラフがほかの画面・sodactl で先に変わったため、保存しませんでした。最新の内容でやり直してください。",
 };
 

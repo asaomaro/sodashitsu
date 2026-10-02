@@ -10,6 +10,7 @@ import type { MetadataService } from "../../metadata/MetadataService.js";
 import type { MachineStatus, ServerSessionEntry } from "@sodashitsu/protocol";
 import type { CommandService } from "../../commands/CommandService.js";
 import type { ImageUploads } from "../../image/ImageUploads.js";
+import type { AskService } from "../../ask/AskService.js";
 import type { PrefsStore } from "../../persist/PrefsStore.js";
 import type { GraphStore } from "../../persist/GraphStore.js";
 import type { StopReply } from "../../handoff/HandoffSocket.js";
@@ -39,6 +40,8 @@ export interface MethodDeps {
   metadata?: MetadataService;
   /** クリップボードの画像の貼り付け（20260927-clipboard-image-paste）。無ければ `pane.image.*` を登録しない。 */
   images?: ImageUploads;
+  /** 質問のフォーム（20261002-sodactl-ask）。無ければ `ask.*` を登録しない。 */
+  asks?: AskService;
   /** 共有の設定（20260927-cli-mode）。無ければ `prefs.*` を登録しない。 */
   prefs?: PrefsStore;
   /** 連携のグラフ（20260927-agent-graph）。無ければ `graph.*` を登録しない。 */

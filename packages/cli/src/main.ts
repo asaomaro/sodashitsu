@@ -14,6 +14,7 @@ import {
   runAgentWait,
 } from "./commands/agent.js";
 import { runAgentStart } from "./commands/agentStart.js";
+import { runAsk } from "./commands/ask.js";
 import { runGraph } from "./commands/graph.js";
 import { runPaneAttach } from "./commands/attach.js";
 import { runPaneControl, runPaneObserve } from "./commands/sessionStream.js";
@@ -55,6 +56,9 @@ function printHelp(): void {
       "pane current は pane の今の tabId・workspaceId を返します（pane を移しても古くなりません）。",
       "graph は連携のグラフ（ブラウザのグラフ画面と同じもの）を表で見て、変えます（--json で JSON）。link add は端の pane が載っていなければ一緒に載せます。",
       "graph の変更が画面など他の変更とぶつかった（rev_conflict）ときは、取り直して 1 回だけ送り直します。",
+      "ask は pane の中のプログラムの質問のフォームを、その pane を見ているブラウザの画面に出し、答えを stdout に 1 行の JSON で返します",
+      "（定義は標準入力。status は answered・cancelled・timeout・unavailable で、どれも終了コード 0。--timeout は 1000〜86400000 ミリ秒、既定 540000）。",
+      "同じ pane の質問は同時に 1 つだけ（ask_busy）。pane の外・別のマシン（--machine）からは使えません。",
       "sodactl skill はエージェントに sodactl の使い方を教える Markdown（skill ファイル）を出します。",
       "workspace/pane report-metadata はサイドバーの行の $名前 に出す独自トークンを設定（--token NAME=VALUE）・消去（--clear-token NAME）します。",
       "--token は値が = を含めば独自トークン、含まなければ接続の token です。値は前後の空白と制御文字を除いて 80 文字まで、空なら消去。",
@@ -74,6 +78,8 @@ async function main(): Promise<void> {
   switch (cmd.kind) {
     case "login":
       return runLogin(cmd, store);
+    case "ask":
+      return runAsk(cmd, store);
     case "workspace-create":
       return runWorkspaceCreate(cmd, store);
     case "workspace-close":

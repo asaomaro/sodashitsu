@@ -42,6 +42,23 @@ interface CliResult {
   exitCode: number;
 }
 
+/** 標準入力つきで呼ぶ（`sodactl ask` は定義を標準入力で受ける）。 */
+function runCliWithStdin(args: string[], env: NodeJS.ProcessEnv, stdin: string): Promise<CliResult> {
+  return new Promise((resolvePromise) => {
+    const child = spawn(process.execPath, [CLI_ENTRY, ...args], { env, stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => child.kill(), 15_000);
+    child.stdout.on("data", (d: Buffer) => (stdout += d.toString("utf8")));
+    child.stderr.on("data", (d: Buffer) => (stderr += d.toString("utf8")));
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolvePromise({ stdout, stderr, exitCode: code ?? 1 });
+    });
+    child.stdin.end(stdin);
+  });
+}
+
 async function runCli(args: string[], env: NodeJS.ProcessEnv): Promise<CliResult> {
   try {
     const { stdout, stderr } = await execFileAsync(process.execPath, [CLI_ENTRY, ...args], { env, timeout: 15_000 });
@@ -292,6 +309,18 @@ async function main(): Promise<void> {
     const closedOther = await runCli(["workspace", "close", otherWorkspaceId, "--url", url], env);
     if (closedOther.exitCode !== 0) throw new Error(`workspace close failed (exit ${closedOther.exitCode}): ${closedOther.stderr}`);
     console.log(`smoke(cli): sodactl pane current / pane split (caller pane, not the focused one) ok (tab ${here.tabId})`);
+
+    // 20261002-sodactl-ask: 質問のフォーム。画面（ブラウザ）が 1 つも繋がっていないので、定義が正しければ待たずに `unavailable`（終了コード 0）、
+    // 定義が誤りなら何も送らず終了コード 2、pane の外（環境変数なし）なら `caller_pane_unknown`（終了コード 1）。
+    const askSpec = JSON.stringify({ title: "smoke", questions: [{ id: "a", label: "A", options: ["x", "y"], default: "x" }] });
+    const asked = await runCliWithStdin(["ask"], inPaneEnv, askSpec);
+    const askedResult = JSON.parse(asked.stdout.trim() || "null") as { status?: string } | null;
+    if (asked.exitCode !== 0 || askedResult?.status !== "unavailable") throw new Error(`sodactl ask (no browser) returned exit ${asked.exitCode}: ${asked.stdout} ${asked.stderr}`);
+    const askedBad = await runCliWithStdin(["ask"], inPaneEnv, JSON.stringify({ questions: [] }));
+    if (askedBad.exitCode !== 2) throw new Error(`sodactl ask (bad spec) did not exit 2 (exit ${askedBad.exitCode}): ${askedBad.stderr}`);
+    const askedOutside = await runCliWithStdin(["ask", "--url", url], env, askSpec);
+    if (askedOutside.exitCode !== 1 || !askedOutside.stderr.includes("caller_pane_unknown")) throw new Error(`sodactl ask (outside a pane) returned exit ${askedOutside.exitCode}: ${askedOutside.stderr}`);
+    console.log("smoke(cli): sodactl ask (unavailable without a browser / bad spec → 2 / outside a pane) ok");
 
     // 20260927-sidebar-row-tokens: 独自トークンの報告。`--token` を接続の token（= を含まない）と独自トークン（NAME=VALUE）の両方に使い、
     // 値が整えられて snapshot の workspace・pane に載ること、消去で消えることを、ビルドした sodactl で確かめる。**接続の token が実際に使われるよう、

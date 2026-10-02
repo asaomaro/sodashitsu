@@ -6,6 +6,7 @@ import type { NotificationController } from "./notify/NotificationController.js"
 import type { ConnectionPort, DeviceKind } from "@sodashitsu/client-core";
 import type { TerminalRegistry } from "./term/TerminalRegistry.js";
 import type { ViewSync } from "./term/ViewSync.js";
+import type { AskController } from "./ask/AskController.js";
 
 /**
  * コンポーネントへ渡す部品の provide/inject キー（`main.ts` が組み立てて provide する。T26）。
@@ -27,3 +28,5 @@ export const DeviceKindKey: InjectionKey<DeviceKind> = Symbol("deviceKind");
 export const KeyInputControllerKey: InjectionKey<KeyInputController> = Symbol("keyInputController");
 /** 保存した SSH のマシンの切り替え（20260927-multi-host-machines）。サイドバーのマシンのまとまりが使う。無ければ切り替えられない（テスト等）。 */
 export const MachineSwitcherKey: InjectionKey<MachineSwitcher> = Symbol("machineSwitcher");
+/** 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）の通信の係。`AskDialog` が回答・取り消しを送る。 */
+export const AskControllerKey: InjectionKey<AskController> = Symbol("askController");

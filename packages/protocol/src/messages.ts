@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
 import { THEME_NAMES, type ThemeName } from "./theme.js";
 import { IMAGE_CHUNK_BASE64_MAX, IMAGE_MIME_TYPES } from "./image.js";
+import { ASK_ANSWER_TEXT_MAX, ASK_ASKID_MAX, ASK_ID_MAX, ASK_OPTIONS_MAX, ASK_QUESTIONS_MAX, ASK_TIMEOUT_MAX_MS, ASK_TIMEOUT_MIN_MS, jsonBytes, type AskPending, type AskResult } from "./ask.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 import { GraphGetParams, GraphHistoryParams, GraphPauseParams, GraphResumeParams, GraphUpdateParams, type Graph, type GraphHistoryResult } from "./graph.js";
 import { CELL_LIMIT_MESSAGE, terminalDimension, VIEW_VISIBLE_PANES_MAX, withinCellLimit } from "./terminalLimits.js";
@@ -383,6 +384,36 @@ export interface PaneImageCommitResult {
   path: string;
 }
 
+// --- 質問のフォーム（`sodactl ask`。ask.ts）-----------------------------------------------------
+// 定義・回答はイベントに載せない（全接続に届くため）。イベントは id だけで、中身は `ask.subscribe`・`ask.get` した画面にだけ返す。
+const askId = z.string().min(1).max(ASK_ASKID_MAX);
+const askAnswerText = z.string().max(ASK_ANSWER_TEXT_MAX);
+/** pane のプログラムが質問を出して結果を待つ。結果が決まるまで応答しない（長い要求）。定義の中身は handler の `normalizeAskSpec` が見る。 */
+export const AskOpenParams = z.object({
+  paneId,
+  spec: z.record(z.string(), z.unknown()),
+  timeoutMs: z.number().int().min(ASK_TIMEOUT_MIN_MS).max(ASK_TIMEOUT_MAX_MS),
+});
+export type AskOpenParams = z.infer<typeof AskOpenParams>;
+/** この接続を「質問を出せる画面」として登録し、いま待っている質問を受け取る（接続のたびに呼ぶ）。 */
+export const AskSubscribeParams = z.object({});
+export type AskSubscribeParams = z.infer<typeof AskSubscribeParams>;
+export interface AskSubscribeResult {
+  asks: AskPending[];
+}
+export const AskGetParams = z.object({ askId });
+export type AskGetParams = z.infer<typeof AskGetParams>;
+export const AskAnswerParams = z.object({
+  askId,
+  // id の長さは定義の検査（`normalizeAskSpec`）がコードポイントで数えるので、ここは UTF-16 の単位（最大で 2 倍）の余裕を持たせる。実際の照合は `checkAskAnswer`（定義の id との一致）。
+  answers: z.record(z.string().max(ASK_ID_MAX * 2), z.union([askAnswerText, z.array(askAnswerText).max(ASK_OPTIONS_MAX + 1)])),
+  custom: z.array(z.string().max(ASK_ID_MAX * 2)).max(ASK_QUESTIONS_MAX).optional(),
+  note: askAnswerText.optional(),
+});
+export type AskAnswerParams = z.infer<typeof AskAnswerParams>;
+export const AskCancelParams = z.object({ askId });
+export type AskCancelParams = z.infer<typeof AskCancelParams>;
+
 // --- layout -----------------------------------------------------------------
 
 export const LayoutSetSplitRatioParams = z.object({
@@ -456,11 +487,6 @@ export interface MachineListResult {
 
 /** `prefs.set` の `patch` と、保存した設定全体の JSON の大きさの上限（バイト。超えたら `invalid_params`）。 */
 export const PREFS_MAX_BYTES = 256 * 1024;
-
-/** JSON にしたときの UTF-8 のバイト数。 */
-function jsonBytes(v: unknown): number {
-  return new TextEncoder().encode(JSON.stringify(v)).byteLength;
-}
 
 /**
  * 端末版の節（`SharedPrefs.tui`。外側の端末向けの好み。どの端末版でも同じ値を使ってよいので共有する）。
@@ -756,6 +782,11 @@ export const METHOD_SCHEMAS = {
   "pane.image.chunk": PaneImageChunkParams,
   "pane.image.commit": PaneImageCommitParams,
   "pane.image.cancel": PaneImageCancelParams,
+  "ask.open": AskOpenParams,
+  "ask.subscribe": AskSubscribeParams,
+  "ask.get": AskGetParams,
+  "ask.answer": AskAnswerParams,
+  "ask.cancel": AskCancelParams,
   "layout.set_split_ratio": LayoutSetSplitRatioParams,
   "worktree.list": WorktreeListParams,
   "worktree.create": WorktreeCreateParams,
@@ -836,6 +867,11 @@ export interface MethodResultMap {
   "pane.image.chunk": Record<string, never>;
   "pane.image.commit": PaneImageCommitResult;
   "pane.image.cancel": Record<string, never>;
+  "ask.open": AskResult;
+  "ask.subscribe": AskSubscribeResult;
+  "ask.get": AskPending;
+  "ask.answer": Record<string, never>;
+  "ask.cancel": Record<string, never>;
   "layout.set_split_ratio": Record<string, never>;
   "worktree.list": WorktreeListResult;
   "worktree.create": WorktreeCreateResult;

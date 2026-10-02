@@ -315,6 +315,7 @@ export class NotificationController {
     if (view.modalOpen) {
       if (view.openDialog !== null) view.retargetPreDialogFocus(paneId);
       if (view.graphOpen) view.retargetPreGraphFocus(paneId);
+      if (view.askOpen) view.retargetPreAskFocus(paneId); // 質問のフォーム（20261002-sodactl-ask）も同じ
     } else view.focusPane(paneId);
     this.#opts.onFocusPane?.(paneId);
     return true;
