@@ -37,6 +37,10 @@ import { ControlSurface } from "./surface/ControlSurface.js";
 import { registerAllMethods } from "./surface/methods/index.js";
 import { IMAGE_DIR_NAME, ImageStore } from "./image/ImageStore.js";
 import { ImageUploads } from "./image/ImageUploads.js";
+import { FileAccess } from "./file/FileAccess.js";
+import { FileOpener } from "./file/FileOpener.js";
+import { DROP_DIR_NAME, FileStore } from "./file/FileStore.js";
+import { FileUploads } from "./file/FileUploads.js";
 import { FsIntegrationFile } from "./persist/IntegrationFile.js";
 import { FsAgentIntegrationInstaller } from "./agent/AgentIntegrationInstaller.js";
 import { DefaultAgentIntegrationService } from "./agent/AgentIntegrationService.js";
@@ -156,6 +160,8 @@ export async function composeServer(
     handoffExecve?: (nonce: string) => void;
     /** 保存した SSH のマシンへの ssh の起動の差し替え（結合テストがリモートの bridge.sock へ直接繋ぐ偽の子を渡す。20260927-multi-host-machines）。 */
     machineSpawn?: SpawnFn;
+    /** ファイルを開く係の差し替え（結合テスト・E2E が実物のアプリを起動させない）。 */
+    fileOpener?: FileOpener;
   } = {},
 ): Promise<ComposedServer> {
   const options = await withRememberedPort(resolveServeOptions(rawArgs), rawArgs);
@@ -306,6 +312,15 @@ export async function composeServer(
     paneExists: (paneId) => session.getPane(paneId) !== undefined,
     logger,
   });
+  // 端末のファイルのリンクとドロップ。ドロップされたファイルは画像と同じく状態ディレクトリの下の私的なディレクトリに置く（切断では消さない）。
+  const dropStore = new FileStore({ dir: join(options.stateDir, DROP_DIR_NAME) });
+  let dropSweeper: { stop(): void } | undefined;
+  const fileUploads = new FileUploads({ store: dropStore, paneExists: (paneId) => session.getPane(paneId) !== undefined, logger });
+  const files = {
+    access: new FileAccess({ cwdOf: (paneId) => session.getPane(paneId)?.cwd }),
+    opener: internal.fileOpener ?? new FileOpener(),
+    uploads: fileUploads,
+  };
   // 共有の設定（20260927-cli-mode）。読むのは `listen()` のロックの後（auth.json と同じ）。保存できた変更は全クライアントへ配る。
   const prefs = new PrefsStore(options.stateDir, (err) =>
     logger.error("prefs.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),
@@ -349,6 +364,7 @@ export async function composeServer(
     commands,
     metadata,
     images,
+    files,
     prefs,
     graph,
     graphHistory: (linkId, limit) => graphEngine.getHistory(linkId, limit),
@@ -384,6 +400,7 @@ export async function composeServer(
     onClientGone: (clientId) => {
       commands.onClientGone(clientId); // その接続の popup を止める（20260927-custom-command-keys）
       images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
+      fileUploads.onClientGone(clientId); // 受け取り中のファイルの書きかけを消す
     },
   });
   // 中継の受け口（20260927-multi-host-machines）。ほかのマシンの `soda serve` が SSH と `soda bridge` 越しに繋ぐ、状態ディレクトリの 0600 の socket。
@@ -393,6 +410,7 @@ export async function composeServer(
     onClientGone: (clientId) => {
       commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
       images.onClientGone(clientId);
+      fileUploads.onClientGone(clientId);
     },
   });
   let bridgeListening = false;
@@ -632,6 +650,7 @@ export async function composeServer(
         paneHistory?.start(internal.paneHistorySaveIntervalMs);
         // クリップボードの画像の後片付け（20260927-clipboard-image-paste）。ロックを取った後に、起動時と 1 時間ごと（貼らなくなっても 24 時間で消す）。
         imageSweeper = imageStore.startSweeping();
+        dropSweeper = dropStore.startSweeping(); // ドロップされたファイルも同じ間隔で片付ける
         // 3.5. 連携の実行（20260927-agent-graph）。状態の変化を購読するので agentMonitor より前に始める（最初の判定の変化から拾う）。
         graphEngine.start();
         // 4. poller。
@@ -667,6 +686,7 @@ export async function composeServer(
         remoteLinks.closeAll();
         paneHistory?.stop();
         imageSweeper?.stop();
+        dropSweeper?.stop();
         await agentReportSocket?.close();
         await handoffSocket?.close();
         if (bridgeListening) await bridgeEndpoint.close();
@@ -724,6 +744,8 @@ export async function composeServer(
         metadata.dispose();
         imageSweeper?.stop();
         await images.dispose(); // 書いている途中の画像を書き終えてから（ロックを放す前に）
+        dropSweeper?.stop();
+        await fileUploads.dispose(); // 受け取り中のファイルの書きかけを消してから（ロックを放す前に）
         // スクロールバックの一時ディレクトリ（20260926-edit-scrollback）。途中の処理が投げても消す。
         await session.disposeScrollbackEditors();
         // 制御の socket はロックを放す直前まで開けておく——止まる途中に届いた 2 回目の `soda session stop` が「既に止まる途中」と答えを受けて待てる

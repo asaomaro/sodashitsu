@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
 import { THEME_NAMES, type ThemeName } from "./theme.js";
 import { IMAGE_CHUNK_BASE64_MAX, IMAGE_MIME_TYPES } from "./image.js";
+import { FILE_CHUNK_BASE64_MAX, FILE_NAME_INPUT_MAX, FILE_PATH_MAX, FILE_RESOLVE_MAX_PATHS, type ResolvedFile } from "./file.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 import { GraphGetParams, GraphHistoryParams, GraphPauseParams, GraphResumeParams, GraphUpdateParams, type Graph, type GraphHistoryResult } from "./graph.js";
 import { CELL_LIMIT_MESSAGE, terminalDimension, VIEW_VISIBLE_PANES_MAX, withinCellLimit } from "./terminalLimits.js";
@@ -383,6 +384,66 @@ export interface PaneImageCommitResult {
   path: string;
 }
 
+// 端末のファイルのリンクとドロップ（`file.ts`）。ブラウザ版はローカルのファイルに触れないので、サーバ越しに確かめる・開く・受け取る・送る。
+const filePath = z.string().min(1).max(FILE_PATH_MAX);
+/** この接続から見たサーバ（リンクを開く方法・ドロップの扱いを「自動」で決める材料）。 */
+export const FileInfoParams = z.object({});
+export type FileInfoParams = z.infer<typeof FileInfoParams>;
+export interface FileInfoResult {
+  /**
+   * この接続がサーバと同じマシンから来ているか（接続の両端のアドレスで見る。`ssh -L`・ポート転送・コンテナのポートの公開・同じマシンの上の
+   * リバースプロキシの後ろでは、別のマシンのブラウザも同じマシンに見える——ブラウザの設定で上書きできる）。中継の接続は常に false。
+   */
+  sameMachine: boolean;
+  /** サーバのマシンでファイルを開く手段（画面と、既定のアプリで開くコマンド）があるか。 */
+  canOpen: boolean;
+}
+/** パスが実在するか確かめる。相対パス・`~` はその pane の今の場所・サーバの利用者のホームから解く。結果は `paths` と同じ並び（無ければ null）。 */
+export const FileResolveParams = z.object({ paneId, paths: z.array(filePath).min(1).max(FILE_RESOLVE_MAX_PATHS) });
+export type FileResolveParams = z.infer<typeof FileResolveParams>;
+export interface FileResolveResult {
+  files: (ResolvedFile | null)[];
+}
+/** サーバのマシンの既定のアプリで開く（`path` は絶対パス）。 */
+export const FileOpenParams = z.object({ path: filePath });
+export type FileOpenParams = z.infer<typeof FileOpenParams>;
+/** ファイルの `offset` から 1 片（`FILE_CHUNK_BYTES` まで）を読む（`path` は絶対パス）。ブラウザは `size`・`mtimeMs` が途中で変わらないことを確かめる。 */
+export const FileReadParams = z.object({ path: filePath, offset: z.number().int().min(0) });
+export type FileReadParams = z.infer<typeof FileReadParams>;
+export interface FileReadResult {
+  /** base64。 */
+  data: string;
+  size: number;
+  mtimeMs: number;
+}
+// ドロップしたファイルを分けて送る。置き場所はサーバが決める（状態ディレクトリの下）。名前はサーバが `sanitizeFileName` で直して使う。
+// `size` の上限はスキーマに置かない——超えたら `file_too_large` で断る（画像と同じ）。
+export const FileUploadBeginParams = z.object({ paneId, name: z.string().min(1).max(FILE_NAME_INPUT_MAX), size: z.number().int().min(0) });
+export type FileUploadBeginParams = z.infer<typeof FileUploadBeginParams>;
+export interface FileUploadBeginResult {
+  uploadId: string;
+}
+export const FileUploadChunkParams = z.object({
+  uploadId,
+  offset: z.number().int().min(0),
+  data: z
+    .string()
+    .min(4)
+    .max(FILE_CHUNK_BASE64_MAX)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/)
+    .refine((s) => s.length % 4 === 0, "base64 length must be a multiple of 4"),
+});
+export type FileUploadChunkParams = z.infer<typeof FileUploadChunkParams>;
+export const FileUploadCommitParams = z.object({ uploadId });
+export type FileUploadCommitParams = z.infer<typeof FileUploadCommitParams>;
+/** 送信を途中でやめる（書きかけを消す）。知らない id でも成功。 */
+export const FileUploadCancelParams = z.object({ uploadId });
+export type FileUploadCancelParams = z.infer<typeof FileUploadCancelParams>;
+export interface FileUploadCommitResult {
+  /** サーバ（pane のマシン）に置いたファイルの絶対パス。ブラウザは `isPastablePath` で確かめてから貼る。 */
+  path: string;
+}
+
 // --- layout -----------------------------------------------------------------
 
 export const LayoutSetSplitRatioParams = z.object({
@@ -533,7 +594,7 @@ export interface SharedPrefs {
 export const SharedPrefs = z.object({ tui: z.object({}).passthrough().optional() }).passthrough() as unknown as z.ZodType<SharedPrefs>;
 
 /** 端末ごとに持ち、共有しない項目（web の localStorage に残す。design「設定」）。 */
-export const DEVICE_LOCAL_PREF_KEYS = ["sidebarWidth", "sidebarCollapsed"] as const;
+export const DEVICE_LOCAL_PREF_KEYS = ["sidebarWidth", "sidebarCollapsed", "fileLocality"] as const;
 
 /** 共有の設定を読む。`rev` は保存のたびに +1（0 = サーバが一度も保存していない。web の初回の移行の目印）。 */
 export const PrefsGetParams = z.object({});
@@ -756,6 +817,14 @@ export const METHOD_SCHEMAS = {
   "pane.image.chunk": PaneImageChunkParams,
   "pane.image.commit": PaneImageCommitParams,
   "pane.image.cancel": PaneImageCancelParams,
+  "file.info": FileInfoParams,
+  "file.resolve": FileResolveParams,
+  "file.open": FileOpenParams,
+  "file.read": FileReadParams,
+  "file.upload.begin": FileUploadBeginParams,
+  "file.upload.chunk": FileUploadChunkParams,
+  "file.upload.commit": FileUploadCommitParams,
+  "file.upload.cancel": FileUploadCancelParams,
   "layout.set_split_ratio": LayoutSetSplitRatioParams,
   "worktree.list": WorktreeListParams,
   "worktree.create": WorktreeCreateParams,
@@ -836,6 +905,14 @@ export interface MethodResultMap {
   "pane.image.chunk": Record<string, never>;
   "pane.image.commit": PaneImageCommitResult;
   "pane.image.cancel": Record<string, never>;
+  "file.info": FileInfoResult;
+  "file.resolve": FileResolveResult;
+  "file.open": Record<string, never>;
+  "file.read": FileReadResult;
+  "file.upload.begin": FileUploadBeginResult;
+  "file.upload.chunk": Record<string, never>;
+  "file.upload.commit": FileUploadCommitResult;
+  "file.upload.cancel": Record<string, never>;
   "layout.set_split_ratio": Record<string, never>;
   "worktree.list": WorktreeListResult;
   "worktree.create": WorktreeCreateResult;

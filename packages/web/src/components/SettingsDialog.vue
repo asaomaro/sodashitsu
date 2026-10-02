@@ -11,6 +11,7 @@ import { useSettingsStore, type NewCwdPolicy, type PaneFrameThickness } from "..
 import { DISPLAY_STATES, stateGlyph, stateLabel } from "@sodashitsu/client-core";
 import { useViewStore } from "../store/view.js";
 import { effectiveScrollback, scrollbackChoices, type ScrollbackPref } from "../term/scrollback.js";
+import type { FileLocality } from "../term/FileTransfer.js";
 import { siblingThemes, THEME_LABELS } from "@sodashitsu/client-core";
 import {
   MAX_TAB_BAR_RIGHT_ENTRIES,
@@ -302,6 +303,16 @@ const formatLines = (n: number): string => n.toLocaleString("ja-JP");
 function chooseScrollback(v: ScrollbackPref): void {
   settings.setScrollback(v);
 }
+
+/**
+ * 端末のファイルのリンク・ドロップで、このブラウザをサーバと同じマシンとして扱うか（`term/FileTransfer.ts`）。ブラウザごとの設定。
+ * 「自動」はサーバが接続の両端のアドレスで判定する——`ssh -L`・コンテナのポートの公開等の転送の後ろでは当たらないので、選び直せる。
+ */
+const fileLocalityChoices: { value: FileLocality; label: string }[] = [
+  { value: "auto", label: "自動（接続元がサーバと同じマシンかで決める）" },
+  { value: "local", label: "同じマシンとして扱う（リンクはサーバのマシンのアプリで開き、ドロップは元のパスを渡す）" },
+  { value: "remote", label: "別のマシンとして扱う（リンクはダウンロードし、ドロップはサーバへ送る）" },
+];
 
 /**
  * 新しく開く場所（20260921-new-terminal-cwd の design D8。herdr の `terminal.new_cwd`）。方針は**選んだ時点で保存**し、
@@ -849,6 +860,19 @@ function onNativeCancel(ev: Event): void {
         <label v-for="n in choices" :key="n" class="settings-radio">
           <input type="radio" name="settings-scrollback" :value="n" :checked="selectedScrollback === n" @change="chooseScrollback(n)" />
           <span>{{ formatLines(n) }} 行</span>
+        </label>
+      </fieldset>
+      <fieldset class="settings-fieldset">
+        <legend class="settings-legend">ファイルのリンクとドロップ（このブラウザだけの設定）</legend>
+        <label v-for="c in fileLocalityChoices" :key="c.value" class="settings-radio">
+          <input
+            type="radio"
+            name="settings-file-locality"
+            :value="c.value"
+            :checked="settings.fileLocality === c.value"
+            @change="settings.setFileLocality(c.value)"
+          />
+          <span>{{ c.label }}</span>
         </label>
       </fieldset>
       <fieldset class="settings-fieldset">

@@ -9,6 +9,8 @@ import type { Logger } from "../log/Logger.js";
 export interface MethodContext {
   clientId: string;
   sink: ClientSink;
+  /** 同じマシンからの接続か（`WsConnection.sameMachine`）。サーバの中からの呼び出し・中継の接続では無い＝偽。 */
+  sameMachine?: boolean;
 }
 
 export interface MethodDef<P = unknown, R = unknown> {

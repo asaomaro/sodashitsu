@@ -1,6 +1,8 @@
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import type { ILink, ILinkDecorations, ILinkProvider, Terminal } from "@xterm/xterm";
 import { writeClipboard } from "./clipboard.js";
+import type { ResolvedFile } from "@sodashitsu/protocol";
+import { createFileLinkProvider } from "./fileLinks.js";
 
 /**
  * M3：pane（`MouseBridge` が右クリックから作る。`PaneFrame` の枠も同じ）・tab・workspace（T22・T21 が直接 `UiPort` を呼ぶ）。
@@ -35,6 +37,16 @@ export interface MouseBridgeOptions {
   openLink?: (uri: string) => void;
   /** macOS か（リンクを開く修飾キーが Ctrl ではなく Cmd になる。M6）。省略時は {@link isMacPlatform}。テスト用の差し替え口。 */
   isMac?: boolean;
+  /**
+   * ファイルのリンク（出力の中の実在するパス・OSC 8 の `file:`）。URL と同じ条件（修飾キーを押しながらの主ボタンのクリック）で開く。
+   * 開く方法（サーバのマシンのアプリで開く・ダウンロード）は呼ばれる側（`FileTransfer`）が決める。省略時はファイルのリンクを作らない。
+   */
+  files?: {
+    /** パスを確かめる（`paths` と同じ並び。無ければ null）。 */
+    resolve(paneId: string, paths: string[]): Promise<(ResolvedFile | null)[]>;
+    open(file: ResolvedFile): void;
+    openUri(paneId: string, uri: string): void;
+  };
 }
 
 /** リンクとして開く scheme（M6。D110）。xterm.js が OSC 8 で既定で通す範囲・`WebLinksAddon` が拾う範囲と同じ。 */
@@ -48,6 +60,15 @@ const OPENABLE_LINK_PROTOCOLS: ReadonlySet<string> = new Set(["http:", "https:"]
 export function isOpenableLinkUri(uri: string): boolean {
   try {
     return OPENABLE_LINK_PROTOCOLS.has(new URL(uri).protocol);
+  } catch {
+    return false;
+  }
+}
+
+/** `file:` の URI か（OSC 8 のファイルのリンク。開くのは `MouseBridgeOptions.files` があるときだけ）。 */
+export function isFileLinkUri(uri: string): boolean {
+  try {
+    return new URL(uri).protocol === "file:";
   } catch {
     return false;
   }
@@ -91,12 +112,38 @@ export class MouseBridge {
     // M6（D110）：OSC 8 のリンク（`linkHandler`。無いと xterm.js は修飾キーを見ずに `confirm()` を出して開く）と、
     // 出力の中の http(s) の URL（`WebLinksAddon`。以前は handler が修飾キーを見ず、ただのクリックで開いていた）の両方を、
     // 同じ条件（`activateLink`）で開く。
-    term.options.linkHandler = { activate: (ev, uri) => this.activateLink(ev, uri), allowNonHttpProtocols: false };
+    // ファイルのリンクを扱うときは、OSC 8 の `file:` を通すために xterm.js の scheme の検査を外し、代わりにここで絞る
+    // （`isActivatableUri`：http/https と `file:` 以外は、リンクにもしない）。
+    const files = opts.files;
+    term.options.linkHandler = { activate: (ev, uri) => this.activateLink(ev, uri), allowNonHttpProtocols: files !== undefined };
     const linksAddon = new WebLinksAddon((ev, uri) => this.activateLink(ev, uri));
     term.loadAddon(linksAddon);
     this.disposables.push(linksAddon);
+    // 出力の中の実在するパス。URL の提供元の後に登録する（重なったら URL のリンクが勝つ）。
+    const fileLinks = new WeakSet<ILink>();
+    if (files) {
+      const provider = createFileLinkProvider({
+        term,
+        resolve: (paths) => files.resolve(opts.paneId, paths),
+        activate: (ev, file) => {
+          if (this.isLinkClick(ev)) files.open(file);
+        },
+      });
+      const provideLinks = provider.provideLinks.bind(provider);
+      provider.provideLinks = (y, callback) =>
+        provideLinks(y, (links) => {
+          links?.forEach((link) => fileLinks.add(link));
+          callback(links);
+        });
+      this.disposables.push(term.registerLinkProvider(provider));
+    }
     // 下線と指のカーソルは、修飾キーを押している間だけ出す（design M6「Ctrl を押しながら重ねると下線を出す」）。
-    this.disposables.push(decorateLinkProviders(term, (link) => this.decorateLink(link)));
+    // 開けない scheme の OSC 8 のリンクはここで落とす（ファイルのリンクの `text` はパスで、URI ではない——そのまま通す）。
+    this.disposables.push(
+      decorateLinkProviders(term, (links) =>
+        links.filter((link) => fileLinks.has(link) || this.isActivatableUri(link.text)).map((link) => this.decorateLink(link)),
+      ),
+    );
     const onKey = (ev: KeyboardEvent): void => this.setLinkModifierHeld(this.isLinkModifier(ev));
     const onWindowBlur = (): void => this.setLinkModifierHeld(false);
     // キャプチャ：xterm.js・`KeyInputController` がキーを処理する前に、押している修飾キーを覚える（端末以外にフォーカスがあっても効く）。
@@ -248,9 +295,20 @@ export class MouseBridge {
    * ただのクリック（タッチ端末のタップを含む——修飾キーが無い）・右クリック（xterm.js はボタンを見ずに離したときに開く）では開かない。
    */
   private activateLink(ev: MouseEvent, uri: string): void {
-    if (ev.button !== 0 || !this.isLinkModifier(ev)) return;
+    if (!this.isLinkClick(ev)) return;
+    if (this.opts.files && isFileLinkUri(uri)) return this.opts.files.openUri(this.opts.paneId, uri);
     if (!isOpenableLinkUri(uri)) return;
     this.openLinkImpl(uri);
+  }
+
+  /** リンクを開くクリックか（修飾キーを押しながらの主ボタン）。 */
+  private isLinkClick(ev: MouseEvent): boolean {
+    return ev.button === 0 && this.isLinkModifier(ev);
+  }
+
+  /** リンクとして扱う URI か（http/https。ファイルのリンクを扱うときは `file:` も）。 */
+  private isActivatableUri(uri: string): boolean {
+    return isOpenableLinkUri(uri) || (this.opts.files !== undefined && isFileLinkUri(uri));
   }
 
   /**
@@ -317,14 +375,14 @@ function releaseXtermMouseTracking(doc: Document, like: MouseEvent): void {
  * 確かめているので、そのとき崩れるのは下線・カーソルの出し分けだけ（xterm.js の既定の「重ねると常に下線」に戻る）。
  * 配列は差し替えず、各提供元の `provideLinks` を包む（`WebLinksAddon` の dispose が配列から自分を探して外せるように）。
  */
-function decorateLinkProviders(term: Terminal, decorate: (link: ILink) => ILink): { dispose(): void } {
+function decorateLinkProviders(term: Terminal, decorate: (links: ILink[]) => ILink[]): { dispose(): void } {
   const core = (term as unknown as { _core?: { _linkProviderService?: { linkProviders?: unknown } } })._core;
   const providers = core?._linkProviderService?.linkProviders;
   if (!Array.isArray(providers)) return { dispose: () => undefined };
   const restores: (() => void)[] = [];
   for (const provider of providers as ILinkProvider[]) {
     const original = provider.provideLinks;
-    provider.provideLinks = (y, callback) => original.call(provider, y, (links) => callback(links?.map(decorate)));
+    provider.provideLinks = (y, callback) => original.call(provider, y, (links) => callback(links ? decorate(links) : undefined));
     restores.push(() => {
       provider.provideLinks = original;
     });
