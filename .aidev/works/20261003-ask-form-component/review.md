@@ -37,3 +37,5 @@ coding 工程のタスク単位の独立点検（委譲）で見つけ、その�
 - T8 [should] フォーカスの行き先を合否にしているが、計画は「観測して報告」で、理由がコメントに無い [conv:-]
 - T8 [nit] キーの配列の期待が、押したキー以外の `keydown` で崩れる [conv:-]
 - T8 [nit] 画面に収まることの確認が最終ページだけ [conv:-]
+- cross [nit] 「手で直していない」検査が、`SOURCE.json` も書き換えられた場合は抜ける → README に前提を書いた（元のコミットとの突き合わせは `--check --from`） [conv:-]
+- cross [nit] 回答のフレームを数える補助が 2 実装ある（`ask-form.spec.ts` と `support/askSent.ts`）→ `askSent.ts` の 1 つにした [conv:-]
