@@ -67,3 +67,64 @@
 
 - **結果**: should 9・nit 5。全件を反映した（9 → 11 タスク）: `__other__` の確かめを T2 の前（T4 の中）へ移した／取り込むコミットの確定・差分の確認・配布物の確認を T10 として立てた／新しい E2E を「ページング」（T8）と「テーマ・絞り込み・安全」（T11）に割った／T5 に `structuredClone`・`resize`・トーストを明記した／AC3・AC-I2 の E2E の件と、開発サーバでの確認を足した。
 - T10 は確かめが主で、自前の差分は「取り込み直し」があるときだけ生まれる。
+
+## D6: coding の途中の判断（T1・T4・T2・T3・T6）
+
+- **`__other__` という値の選択肢は、検査で断る**（`reason: "invalid"`。D4 の決定を確定）。部品 1.0.1 を単体テスト（happy-dom）で走らせた結果、4 通りすべてで害が出た: (a) `allowOther` なしの `single` で既定がその値 → 描けない（`ask-unsupported`・`render failed`）／(b) 同じく後から選ぶ → `el.value`・`submit()` が `TypeError` を投げ、決定できない／(c) `allowOther: true` と併存 → 値 `__other__` の入力が 2 つでき、選んでも未回答のまま・「その他」の欄の文字が回答になる（取り違え）／(d) `multi` で `allowOther` あり → 選んだ `__other__` が黙って落ちる。この動きは `packages/web/src/ask/askFormElement.test.ts` に「部品のいまの動き」として残した（部品の版が変わって動きが変わったら気づける）。実ブラウザでは確かめていない。
+- **Web の読み込み方は design のまま**（副作用だけの相対の `import`）。`vue-tsc`・`vite build`・`vite dev`（`/@fs/…/third_party/ask-form/ask-form.js` が 200）で通ることを確かめた。`server.fs.allow`・`alias` は要らなかった。
+- **同期スクリプトに `--dest <フォルダ>` を足した**（design に無い。テストが実物の `third_party/ask-form/` へ書かないため）。同じコミット・同じ中身の写し直しでは `SOURCE.json` の `retrieved` を変えない。`--check --commit` は使い方の誤り（比べるのは `SOURCE.json` のコミット）。
+- **共通の試験データの比べ方**: 「`expect.spec` に書いた項目だけ比べる」を、「試験データのどこかの例が書いている項目名だけを、実際の出力から取り出して完全一致で比べる」と読んだ（`toMatchObject` では余分な `showIf: {}` を捕まえられず、陰性対照が落ちない）。collect の `state` は、試験データの `about`（書かれていない質問は何も選んでいない）に従い、空の状態に重ねる（design の「`initialAskState` に重ねる」と違う。いまの 20 例に `default` を持つ定義は無いので結果は同じ）。
+- **`reason` の割り当てで文書に無かったもの**: 質問がオブジェクトでない → `invalid`／`showIf` のキーが `__proto__` → `showif_unknown_id`。`valueOf` の並べ替えは `multi` だけ（選択肢に無い値は落とす）。`{a: []}` のような `showIf` は残す（キーが 0 個のときだけ落とす）。
+- **陰性対照**（条項 `regression-negative-control`）: 空の `showIf` を落とす行・`valueOf` の定義の順を、それぞれ 1 行だけ戻すと、共通の試験データの該当の 1 例と `ask.test.ts` の 1 件が落ちた（生の出力は `test-result.md` に貼る）。
+
+## D7: 部品 1.1.0（public_docs 816bf82）に取り込み直す
+
+- **経緯**: ask-form の側が、依頼した直し 2 つと参考 4 つを入れて `main` にマージした（816bf82。変更は c4ad486。PR asaomaro/public_docs#111）。`static version` は 1.1.0。
+  - 即確定: 決定のきっかけを `change` から `click` にした。既に選ばれている選択肢のクリック・`Space`・`Enter` で決定し、矢印キーで移ったときの `click` では決定しない。
+  - `__other__`: 「その他」の印を値ではなく `data-other` 属性で持つ（その入力の `value` は空）。値が `__other__` の選択肢はふつうの選択肢。値が空文字の選択肢も選べる。
+  - 公開のメソッド `step(±1)`／拡大表示は開いたときだけ Shadow DOM に入れる／未回答の `fieldset` に `aria-invalid="true"`・決定して未回答があれば最初の未回答の質問の入力へフォーカス／`SKILL.md` の記述の直し。
+  - `fixtures/collect.json` に 3 例（値が `__other__` の選択肢・それと「その他」の併用・値が空文字の選択肢）。`normalize.json` は 29bfd09 のまま。
+- **決定**:
+  - 固定するコミットを **816bf82** にする（T10 の「取り込み直し」を、T7 の前に行う）。94a5ef6 からの `ask-form.js` の差分を読んで、安全・キーの扱いを確かめる。
+  - **`__other__` を断る検査（D6）を外す**（部品が直り、試験データが「ふつうの選択肢」としている）。`askFormElement.test.ts` の「部品のいまの動き」は、新しい動きに書き直す。
+  - **値が空文字の選択肢を回答として扱う**: 新しい試験データをいまの `collectAsk` に通すと、この 1 例が食い違う（空文字の値を未回答として扱っている）。`collectAsk`（`valueOf`）と `checkAskAnswer` を直す。
+  - 枠が取り次ぐページ移動は、ボタンを押す形から `el.step(±1)` に替える（D3-6 の「公開のメソッドが足されたら替える」）。
+  - AC-I4「決定して未回答のページへ移されたときの行き先」は、部品 1.1.0 で「最初の未回答の質問の入力へフォーカス」になった（D4 の「フォーカスは動かさない」は 1.0.1 の動き）。E2E はこの動きを見る。
+  - ask-form の側の確かめは「プログラムからイベントを起こした」もの。Sodashitsu の E2E で、実際のキー入力（Playwright のキーボード）とクリックで確かめ、違いがあれば知らせる。
+
+## D8: T5（`AskDialog.vue` の書き直し）の途中の判断
+
+- `sending` の ref をやめ、`el.busy` だけにした（`cancel()` も `el.busy = true`）。`Esc` は `busy` を見ないので、送信中も取り消せるのは今までどおり。
+- `structuredClone` が投げたときは `el.spec = null` で前の質問の中身を消してから、取り消し＋トースト。
+- 枠が取り次ぐキーの判定は `closest(".ask-header")`（固定の行の中にフォーカスがあるときだけ）。「使える最大」は `Math.floor` で整数にする。
+- 部品に替わって変わる見た目で、design の一覧に無かったもの: 題が空の定義に、部品は「質問」と出す。
+- eslint は `.vue` を解析できない設定（既存の `.vue` でも同じ）。`AskDialog.vue` は型検査（`vue-tsc`）と単体テストで確かめる。
+- 既存の単体テスト 25 件のうち、丸ごと消した件は無い（枠の責務 15 件は意味を保って残し、部品へ移った 10 件は「部品が描くことの確認」に置き換えた）。22 件を足して 47 件。
+
+## D9: 取り込み直し（816bf82・部品 1.1.0）の結果と、部品の差分の確認
+
+- **写したもの**（`third_party/ask-form/SOURCE.json`）: commit `816bf82f2b3fbe1cd0dbe9f7f85b0dc5dac47dae`・version 1.1.0。`ask-form.js` `3dc46699…60043`／`fixtures/normalize.json` `b09c2c6e…6d930d`（29bfd09 と同じ）／`fixtures/collect.json` `9c5702e1…0945a`（3 例を追加）。`--check --from /workspaces/public_docs` は一致。
+- **部品の差分の確認**（`git diff 94a5ef6 816bf82 -- …/ask-form.js`。30 行追加・17 行削除を全部読んだ。94a5ef6 は research が全文を読んだ版）:
+  - 新しく入っていない・変わっていない: `innerHTML`・`insertAdjacentHTML`・`outerHTML`・`document.write`・`eval`・`new Function`・`fetch`・`XMLHttpRequest`・`WebSocket`・`EventSource`・動的 `import()`・`localStorage`／`sessionStorage`・`location`・`window`・`cssText`・`style` 属性への文字列・`href`。`document` は `createElement` だけのまま。定義の値をスタイル・`src` へ入れる箇所は増えていない。新しく使うグローバルは無い。
+  - リスナー: 新しいのは Shadow DOM の中（`inner`）の `click` 1 つだけ。`Esc` の扱いは変わらない。
+  - 変わった動き: 即確定（`click` で決定。`ask-form.js:734-743`・`:779`）／「その他」は `data-other` 属性（`:336`・`:208`・`:374-375`）／`step(delta)`（`:855`。`delta < 0 ? -1 : 1`）／拡大表示は開いたときだけ DOM に入る（`:227`・`:232`）／未回答に `aria-invalid="true"` と、最初の未回答の質問の入力へフォーカス（`:714-719`）／`unsupported()` が渡された定義を書き換えない。
+  - → research F10・F11（安全）は 1.1.0 でも成り立つ。F4（キー）・F5（フォーカス）・F15（`__other__`）は上のとおり変わった。
+- **protocol**: `__other__` を断る検査（D6）を外した。空文字の値は、`valueOf` を「その質問に値が空文字の選択肢が無いときだけ落とす」に直した（「その他」の空の入力は別の行で見ていて、混ざらない）。`checkAskAnswer`・`initialAskState`・`normalizeAskSpec` は、読んだうえで変えていない（元から空文字の値の選択肢を正しく扱っていた。テストを足して固定）。共通の試験データは normalize 29・collect 23 の全例が通る。`valueOf` の 1 行を戻すと、試験データの「値が空文字の選択肢も選べる」ほか 3 件が落ちた。
+- **枠**: `Alt+PageDown`／`Alt+PageUp` の取り次ぎを `el.step(±1)` に替えた（戻すと 2 件落ちる）。
+- **ask-form の側へ伝える候補**（単体テストとコードの読みから。実物のブラウザでは未確認。E2E の結果とあわせて伝える）: `step(0)`・`step(NaN)` が次へ進む／拡大表示の［これを選ぶ］も即確定に入るが、既に選ばれている選択肢では入らず不揃い／未回答のときのフォーカスの先が、絞り込みで隠れている選択肢だと移らない見込み／`aria-invalid` を `fieldset`（`group`）に付けている。
+
+## D10: 実際のキー入力・クリックでの即確定（T7 の確かめ）
+
+- Playwright の実際のキー入力・クリック（Chromium・Linux・headless）で確かめた結果: クリック（カード・ラジオ。選ばれていない・既に選ばれている）・タップ（iPhone 13 相当）・`Enter`（選ばれていない・既に選ばれている・矢印で移った先）は確定する。矢印だけでは確定しない。`Space`（まだ選ばれていない選択肢）は確定する。
+- **既に選ばれている選択肢で `Space` を押しても確定しない**（部品 1.1.0 の欠陥）。Chromium は既に選ばれているラジオでは `Space` で `click` を出さず（`keydown` と `keyup` だけ）、部品は `Space` での確定を `click` で見ているため。ask-form の側の確かめは、プログラムから `click` を起こしたものだった。ask-form の側へ直しを依頼した（2026-10-03）。
+- **扱い**: 該当の E2E の件は `test.fixme`（理由つき）。ask-form の側が直した版が届けば、そのコミットに固定し直して fixme を外す。届かないまま着地するときは、`test-result.md` と PR に既知の差として書く（枠で補わない。D3-5 と同じ理由）。
+- 参考: 自動のページ分けが 1px の差で決まる定義がある（E2E の `SPEC`: 全部を並べた高さ 577px、使える高さ 575px+1）。環境によって 1 枚か 2 ページかが変わるので、E2E の合否にページ数の決め打ちを使わない。
+- 以降、このセッションのモデルは Sonnet 5.5（`/model` で切り替え）。コミットの共著者の行は `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`。
+
+## D11: 部品 1.1.1（public_docs 029e17f）に取り込み直す
+
+- **経緯**: 実際のキー入力で見つかった `Space` の欠陥（D10）を ask-form の側が直し、`main` にマージした（029e17f。変更は 12dd729。PR asaomaro/public_docs#115）。`static version` は 1.1.1。`fixtures/*.json` は 816bf82 から変わっていない。
+- **写したもの**（`third_party/ask-form/SOURCE.json`）: commit `029e17fa15c663263884312511341e2320e2b951`・version 1.1.1。`ask-form.js` `5b324534…bc199`／`normalize.json` `b09c2c6e…6d930d`／`collect.json` `9c5702e1…0945a`（どちらも 816bf82 と同じ）。
+- **部品の差分の確認**（`git diff 816bf82 029e17f`。11 行追加・8 行削除を全部読んだ）: 禁止の語（`innerHTML` 系・通信・`window`・`document`〔`createElement` 以外〕・`eval`・`location`・保存領域・`cssText`・`href`）・定義の値をスタイルや `src` へ入れる箇所・新しいリスナー・新しいグローバルは増えていない。変わった動き: `Space` を `Enter` と同じく keydown で受けて選んで決定する／`click` での決定は直前の操作がポインタのときだけ／画像の拡大表示の［これを選ぶ］は `instant` のとき 1 回だけ決定する／`step(0)`・`step(NaN)` は何もしない／未回答のフォーカスは隠れていない最初の入力へ。
+- **実際のキー入力での即確定**（Playwright・Chromium。回答のフレーム `ask.answer` は操作ごとに 1 回だけ）: クリック（カード・ラジオ。選ばれていない・既に選ばれている）・`Enter`（選ばれていない・既に選ばれている・矢印で移った先）・`Space`（選ばれていない・既に選ばれている・矢印で移った先）はすべて確定する。矢印だけでは確定しない（`ask.answer` は 0 件）。タップ（iPhone 13 相当）は確定する（フレームの数は見ていない）。D10 の欠陥は解消し、`test.fixme` は外した。Firefox・WebKit は確かめていない。
+- **枠**: `closeDialog` で `loadedAskId` を戻す（質問が無くなった後に遅れて届いた `ask-unsupported` で、古い質問を取り消さずトーストも出さない。戻す行を外すと単体テスト 1 件が落ちる）。

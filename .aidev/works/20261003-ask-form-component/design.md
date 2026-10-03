@@ -248,4 +248,12 @@ export interface AskFormSubmitDetail { answers: AskAnswers; custom?: string[]; n
 
 ## 実装で変わった点
 
-（coding・review の後に、本文を書き換えずここへ足す。）
+- **部品は 1.1.1（public_docs 029e17f）に固定**（`decisions.md` D7・D9・D11）。94a5ef6（research が読んだ版）→ 816bf82 → 029e17f の差分は、そのつど全部読んで安全面を確かめた。
+- **`__other__` を断る検査は無い**（部品が直り、値が `__other__` の選択肢はふつうの選択肢）。値が空文字の選択肢も回答になる（`valueOf` を直した）。
+- **枠が取り次ぐページ移動は、部品の公開のメソッド `el.step(±1)`**（ボタンを押す形ではない）。
+- **未回答のフォーカス**: 部品 1.1.0 以降は、最初の未回答の質問の入力へフォーカスを移す（上の「フォーカスは動かさない」は 1.0.1 の動き。E2E は移ることを合否にしている）。
+- **即確定**: 1.1.1 で `Space`・`Enter`・クリックは、既に選ばれている選択肢でも 1 回だけ確定する（実際のキー入力で確かめた。`decisions.md` D10・D11）。
+- **`sending` の ref は無く、`el.busy` だけ**（`decisions.md` D8）。`structuredClone` が投げたら `el.spec = null` にしてから取り消し＋トースト。描けない定義の取り消し先は、`spec` を入れたときの `askId`（質問が無くなったら戻す）。
+- **同期スクリプトに `--dest <フォルダ>`**（テスト用）。書き込みは一時の名前で書いてから rename で置き換え、失敗は終了コード 2。`.prettierignore` に `third_party/ask-form/`。
+- **E2E の補助**: `support/askSent.ts`（ブラウザが送った `ask.answer`／`ask.cancel` のフレームを数える）。新しい spec は `ask-form-paging.spec.ts`・`ask-form-extras.spec.ts`。
+- **配布物**: `scripts/package.mjs` で作った配布物に `third_party/ask-form/ask-form.js`（リポジトリと同じバイト）と、部品を含む `packages/web/dist` があることを確かめた（`test-result.md`）。
