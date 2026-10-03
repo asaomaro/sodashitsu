@@ -145,3 +145,12 @@
   - US1「質問の多いフォームを、ページを移りながら答えたい」→ 「目次で質問を見渡しながら答えたい」（価値は同じ）。
 - **AskDialog の幅**: 目次が出ると 212px 分が本文から減るので、ダイアログの幅を `indexWidth` の分だけ広げる（画面の幅を超えない）。幅 768px 未満（モバイル）では目次が出ない。
 - **PR の見出し**: 「ページング」ではなく「質問の目次」。
+
+## D13: 部品 1.2.1（public_docs 62c7cd7）の取り込みの結果
+
+- **写したもの**: commit `62c7cd75745367992b916b7944cef77f48dc13f1`・version 1.2.1。`ask-form.js` `2b66e88a…a37a14`／`fixtures/normalize.json` `b09c2c6e…6d930d`・`collect.json` `9c5702e1…0945a`（どちらも変わらず）。`--check --from` は一致。
+- **部品の差分の確認**（029e17f→62c7cd7 の `ask-form.js` 151 行追加・163 行削除を全部読んだ）: 禁止の語（`innerHTML` 系・通信・`window`・`document`〔`createElement` 以外〕・`eval`・`location`・保存領域・`cssText`・`href`）は追加行に無い。定義の値は `el()` 経由で `textContent`／`setAttribute` だけに入る（目次の項目の文言は `q.label`、見出しは `name`、`data-ask-index` は `q.id`）。スタイル・`src`・`--var` に定義の値を入れる新しい箇所は無い。新しいリスナーは Shadow DOM の中の 3 種類（目次の項目の `click`・`.body` の `scroll`・`.body` の `wheel`／`touchmove`）。`ResizeObserver` の使い方は変わらない（呼ぶ先が `layout()`）。新しいグローバルは無い。→ research F10・F11（安全）は 1.2.1 でも成り立つ。
+- **`ask.py`**: `paging` の判定コードは変わらず（`None`／`"auto"`／真偽／1 以上の整数）、メッセージの文言だけが 3 値の説明になった。**数は今も通る**（共通の試験データにも `paging: 5` が正として残る）。Sodashitsu の `normalizeAskSpec`（数を通す）と食い違わない。
+- **実ブラウザの観測**（Chromium・1280×720）: 2 問は目次なし／8 問×6 択は目次あり（8 項目）／`page` を書くと収まっていても目次あり（見出しつき）／`paging: true`・数は目次あり／`paging: false` は目次なし（`page` を書いても出ない——部品のコメントの「page を書いたら必ず出す」と食い違う）。質問は 1 枚に並んだまま、`pageCount` はいつも 1。目次が出ていなくても `[data-ask-index]` は DOM にある（出ているかは `nav.index` の `hidden` か `indexWidth === 0`）。幅の判定は **viewport の幅**（CSS の `@media (max-width:767px)`。768px 以上で出る）で、ダイアログの幅ではない。
+- **枠の対応**: ダイアログの幅を `indexWidth` の分だけ広げる（720px→932px。画面の幅 − 16px を超えない）。広げないと質問の並びが 506px に縮み、選択肢が 2 列になる。`relayout()` の後・`contentHeight` を読む前に幅を決め、`resize` で読み直す（viewport が 768px をまたぐと目次が出入りするため）。固定の行からの `Alt+PageDown`／`PageUp` は `el.step(±1)` のまま（次・前の質問へ移り、フォーカスはその質問のラジオへ）。未回答のまま決定すると最初の未回答の質問へ移り、その質問の入力にフォーカスが移る。
+- **ask-form の側へ伝える点**（参考。Sodashitsu には影響しない）: (1) 目次が出ていて、スクロールしていない／最後の画面に全部収まっているとき、今の項目が最後の質問になる（2 問で `paging: true` のとき 2 問目）。(2) 未回答の質問へ移ったとき、目次の今の項目の印がその質問に移らない（m2 へ移っても m1 のまま）。(3) `paging: false` は `page` を書いても目次を出さない（コメントと食い違う）。(4) 幅の判定が viewport で、部品を置く場所が狭いと質問の並びが狭くなる（置いた側が `indexWidth` で広げる前提）。
