@@ -1,5 +1,5 @@
 import { link, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
-import { connect, createServer, type Server, type Socket } from "node:net";
+import { connect, createServer, Socket, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -169,13 +169,48 @@ describe("callPaneOp（偽の受け口）", () => {
   it("返事がかたまりに割れて届いても（多バイト文字の途中で割れても）1 行として読む", async () => {
     const bytes = Buffer.from(`${JSON.stringify({ ok: true, result: { text: "回答はこれ" } })}\n`, "utf8");
     const cut = bytes.indexOf(Buffer.from("答", "utf8")) + 1; // 「答」の 1 バイト目の後で割る
-    const f = await fake({
-      onLine: (sock) => {
-        sock.setNoDelay?.(true);
-        sock.write(bytes.subarray(0, cut), () => sock.end(bytes.subarray(cut), () => sock.destroy()));
-      },
-    });
-    expect(await callPaneOp(f.path, REQ, WAIT)).toEqual({ kind: "result", result: { text: "回答はこれ" } });
+    // クライアントの socket（`callPaneOp` が作る接続＝`connect` を発火した socket。偽の受け口の側の接続は発火しない）が受け取ったかたまり。
+    const emit = vi.spyOn(Socket.prototype, "emit");
+    const clientChunks = (): number[] => {
+      const calls = emit.mock.calls as unknown as [event: string, arg?: unknown][];
+      const client = emit.mock.contexts[calls.findIndex(([event]) => event === "connect")];
+      if (client === undefined) return [];
+      return calls.filter(([event], i) => emit.mock.contexts[i] === client && event === "data").map(([, chunk]) => (chunk as Buffer).length);
+    };
+    try {
+      const f = await fake({
+        onLine: (sock) => {
+          // 前半を書き、クライアントがそれだけを 1 つのかたまりとして受け取ったのを確かめてから、後半を書く。
+          sock.write(bytes.subarray(0, cut));
+          void vi.waitFor(() => expect(clientChunks()).toEqual([cut])).then(() => sock.end(bytes.subarray(cut), () => sock.destroy()));
+        },
+      });
+      expect(await callPaneOp(f.path, REQ, WAIT)).toEqual({ kind: "result", result: { text: "回答はこれ" } });
+      expect(clientChunks()).toEqual([cut, bytes.length - cut]); // 実際に 2 つに割れて届いた
+    } finally {
+      emit.mockRestore();
+    }
+  });
+
+  it("返事の行が上限を超えたら、改行を待たずに connection_closed（溜め続けない）", async () => {
+    let closedByClient!: () => void;
+    const serverSawClose = new Promise<void>((r) => (closedByClient = r));
+    // 改行の無い返事を書き、接続は開けたままにする（クライアントが自分で切ることを EOF で見る）。
+    const f = await fake({ onConn: (sock) => sock.on("end", () => closedByClient()), onLine: (sock) => void sock.write("x".repeat(300)) });
+    const err = await callPaneOp(f.path, REQ, { ...WAIT, maxReplyBytes: 256 }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(RpcFailure);
+    expect(err).toMatchObject({ code: "connection_closed", message: expect.stringContaining("256 bytes") });
+    await serverSawClose;
+  });
+
+  it("返事の行が上限ちょうどなら読む（上限は改行を除くバイト数）", async () => {
+    const line = JSON.stringify({ ok: true, result: "y".repeat(100) });
+    const f = await fake({ onLine: (sock) => void sock.end(`${line}\n`, () => sock.destroy()) });
+    expect(await callPaneOp(f.path, REQ, { ...WAIT, maxReplyBytes: line.length })).toEqual({ kind: "result", result: "y".repeat(100) });
+    await expect(callPaneOp(f.path, REQ, { ...WAIT, maxReplyBytes: line.length - 1 })).rejects.toMatchObject({ code: "connection_closed" });
   });
 
   it("socket のファイルが無い（ENOENT）→ fallback", async () => {

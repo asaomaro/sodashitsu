@@ -12,6 +12,12 @@ import { AskOpenParams } from "./messages.js";
 export const PANE_SOCKET_VERSION = 1;
 /** 要求 1 行の上限（改行を除く UTF-8 のバイト数）。質問の定義の上限（`ASK_SPEC_MAX_BYTES`）より大きい。 */
 export const PANE_SOCKET_MAX_LINE_BYTES = 1024 * 1024;
+/**
+ * 返事 1 行の上限（改行を除く UTF-8 のバイト数。呼び出し側が超えた返事を読まずに切る）。要求の上限より大きくする——
+ * `ask.open` の結果は回答の自由入力（1 つ `ASK_ANSWER_TEXT_MAX` 文字まで × 質問 `ASK_QUESTIONS_MAX`）を含み、多バイト文字なら 3MB に届く。
+ * 回答はブラウザから `/ws` の 1 通（上限 4MB）で届くので、結果の行もその大きさに収まる。その 2 倍を上限にする。
+ */
+export const PANE_SOCKET_MAX_REPLY_BYTES = 8 * 1024 * 1024;
 /** 同時に開いている接続の上限。 */
 export const PANE_SOCKET_MAX_CONNECTIONS = 64;
 /** 接続してから要求の 1 行が揃うまでの上限。 */

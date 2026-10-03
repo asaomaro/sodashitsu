@@ -1,5 +1,5 @@
 import { connect } from "node:net";
-import { PANE_SOCKET_VERSION } from "@sodashitsu/protocol";
+import { PANE_SOCKET_MAX_REPLY_BYTES, PANE_SOCKET_VERSION } from "@sodashitsu/protocol";
 import type { GlobalOpts } from "./cliArgs.js";
 import { RpcFailure } from "./wsClient.js";
 
@@ -36,7 +36,8 @@ const NEWLINE = 0x0a;
  * 受け口へ 1 要求を送って返事を待つ（design「`callPaneOp` の分岐」の表）。
  * - 接続できない（`connect` が成立する前のエラー）→ `fallback`。
  * - 返事 `{ok:true}` → `result`。`{ok:false}` で `unknown_op`・`bad_request` → `fallback`。それ以外の code（`pane_socket_busy` を含む）→ `RpcFailure(code)`。
- * - 繋がった後、返事の行が揃う前に閉じた（0 バイトで閉じる・要求の書き込みの途中のエラーを含む）・返事が読めない → `RpcFailure("connection_closed")`。
+ * - 繋がった後、返事の行が揃う前に閉じた（0 バイトで閉じる・要求の書き込みの途中のエラーを含む）・返事が読めない・
+ *   返事の行が上限（`maxReplyBytes`。既定 `PANE_SOCKET_MAX_REPLY_BYTES`）を超えた → `RpcFailure("connection_closed")`。
  *   `/ws` へは落ちない——操作が既に始まっているかもしれず、落ちると二重に行う（decisions D3 (m)）。
  * - `timeoutMs` を過ぎた → 接続を捨てて `RpcFailure("timeout")`。
  *
@@ -45,12 +46,14 @@ const NEWLINE = 0x0a;
 export function callPaneOp(
   path: string,
   req: { op: string; paneId: string; params?: Record<string, unknown> },
-  opts: { timeoutMs: number },
+  opts: { timeoutMs: number; maxReplyBytes?: number },
 ): Promise<PaneOpOutcome> {
   return new Promise<PaneOpOutcome>((resolve, reject) => {
     let connected = false;
     let settled = false;
     const chunks: Buffer[] = [];
+    let bytes = 0;
+    const maxReplyBytes = opts.maxReplyBytes ?? PANE_SOCKET_MAX_REPLY_BYTES;
     const sock = connect(path);
 
     /** 1 回だけ結果を決め、接続を捨てる（返事の後のデータ・エラーは見ない）。 */
@@ -77,8 +80,14 @@ export function callPaneOp(
     });
     sock.on("data", (chunk: Buffer) => {
       const nl = chunk.indexOf(NEWLINE);
+      // 改行の前までの長さで上限を見る（改行の来ない返事を溜め続けない）。
+      if (bytes + (nl < 0 ? chunk.length : nl) > maxReplyBytes) {
+        settle(() => reject(new RpcFailure("connection_closed", `the pane socket sent a reply line larger than ${maxReplyBytes} bytes`)));
+        return;
+      }
       if (nl < 0) {
         chunks.push(chunk);
+        bytes += chunk.length;
         return;
       }
       // バイトのまま繋いでから読む（多バイト文字がかたまりの境目で割れていても壊さない）。2 行目以降は読まない。
