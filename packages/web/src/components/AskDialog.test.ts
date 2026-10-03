@@ -984,6 +984,19 @@ describe("AskDialog — 部品が描けない定義（AC15）", () => {
     expect(shadow(w).querySelector("[data-ask-submit]")).not.toBeNull();
   });
 
+  it("質問が無くなった後に ask-unsupported が遅れて届いても、古い質問を取り消さず、トーストも出さない", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const w = mountDialog();
+    await open(w, ask(SPEC, "a1"));
+    const el = form(w); // 質問が無くなると部品は DOM から外れるので、先に取っておく（外れた要素でもリスナーは残る）
+    w.store.remove("a1");
+    await settle();
+    expect(w.store.current).toBeNull();
+    el.dispatchEvent(new CustomEvent("ask-unsupported", { detail: { reason: "late" } }));
+    expect(w.cancel).not.toHaveBeenCalled();
+    expect(w.view.toasts).toEqual([]);
+  });
+
   it("対照: 描ける定義では取り消さず、トーストも出さない", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const w = mountDialog();

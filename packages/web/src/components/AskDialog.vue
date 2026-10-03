@@ -89,6 +89,7 @@ watch(
 function closeDialog(): void {
   window.removeEventListener("resize", onResize);
   contentHeight = 0;
+  loadedAskId = null; // 質問が無くなった後に遅れて届く ask-unsupported で、古い質問を取り消さない
   view.setAskOpen(false);
   dialogEl.value?.close();
   const paneId = previousPaneId;

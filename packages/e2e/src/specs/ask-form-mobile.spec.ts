@@ -32,8 +32,11 @@ test("モバイルの画面で、13 件のテーマ一覧を最後までスク�
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
   // この画面では、定義は 1 問ずつのページに分かれて出る（確かめた値: 8 ページ＝7 問＋補足）。最初のページはテーマだけで、13 件はそのページの中をスクロールして見る。
-  expect(await page.locator("[data-ask-page]:visible").count()).toBeGreaterThan(1);
-  expect(await page.locator("[data-ask-question]:visible").evaluateAll((els) => els.map((e) => e.getAttribute("data-ask-question")))).toEqual(["theme"]);
+  // ページ分けは高さの当て直しの後に決まるので、決まるまで待って読む。
+  await expect.poll(() => page.locator("[data-ask-page]:visible").count()).toBeGreaterThan(1);
+  await expect
+    .poll(() => page.locator("[data-ask-question]:visible").evaluateAll((els) => els.map((e) => e.getAttribute("data-ask-question"))))
+    .toEqual(["theme"]);
   const themes = fixture.questions[0]!.options;
   const cards = page.locator('[data-ask-question="theme"] label.opt');
   await expect(cards).toHaveCount(13);

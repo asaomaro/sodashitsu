@@ -33,10 +33,30 @@ const dialog = (page: Page) => page.locator("dialog#soda-ask-dialog[open]");
 /** ブラウザを開いて「質問を出せる画面」として登録されるまで待つ。 */
 async function openBrowser(page: Page, appServer: { origin: string; token: string }) {
   const subs = await watchAskSubscriptions(page);
+  const sentAnswers = await watchSentAnswers(page);
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
   await subs.waitFor(1);
-  return subs;
+  return Object.assign(subs, { sentAnswers });
+}
+
+/**
+ * ブラウザが送った `ask.answer`（回答）の要求の数（CDP の `Network.webSocketFrameSent`。`support/frames.ts` の流儀。テストの側のクライアントではなく、ブラウザが送ったもの）。
+ * このページを開いてからの累計。**`page.goto()` の前に `await` して呼ぶ**（`openBrowser` が呼ぶ）。
+ */
+async function watchSentAnswers(page: Page): Promise<() => number> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Network.enable");
+  let count = 0;
+  cdp.on("Network.webSocketFrameSent", (e) => {
+    if (e.response.opcode !== 1) return; // テキストのフレーム（JSON の要求）だけ
+    try {
+      if ((JSON.parse(e.response.payloadData) as { method?: unknown }).method === "ask.answer") count++;
+    } catch {
+      // JSON でないフレームは無視する
+    }
+  });
+  return () => count;
 }
 
 /** いま出ている質問の id（いまのページにあり、表示条件を満たしているもの）。 */
@@ -116,8 +136,9 @@ test("確かめ用の定義（7 問・テーマ 13 件・出し分け 2 つ）: 
   expect(themes).toHaveLength(13);
   // この定義は高さに収まらない（テーマの 13 件だけで超える）ので、ページに分かれて出る。質問は DOM に 7 つとも残るが、見えているのは今のページの分だけ。
   await expect(page.locator("[data-ask-question]")).toHaveCount(7);
-  expect(await pageButtons(page).count()).toBeGreaterThan(1);
-  expect(await shownQuestions(page)).toEqual(["theme"]);
+  // ページ分けは高さの当て直しの後に決まるので、決まるまで待って読む。
+  await expect.poll(() => pageButtons(page).count()).toBeGreaterThan(1);
+  await expect.poll(() => shownQuestions(page)).toEqual(["theme"]);
   // 全部のページを回ると、7 問が 1 回ずつ、定義の順に出る（design・motion は条件を満たしているので出ている）。
   const ids = fixture.questions.map((q) => q.id);
   expect(ids).toHaveLength(7);
@@ -298,21 +319,21 @@ test.describe("ログインなし（token なし・セッションのキャッ�
     await expect(origin).toHaveText(ORIGIN_LINE);
     await expect(page.locator("[data-ask-title]")).toHaveText("配布先");
     await expectOriginAboveTitle(page);
-    // 出どころの行は枠の最初の見出しで、部品（Shadow DOM）より前にある。部品の中に出どころの行は無く、題・質問は部品の中にだけある。
+    // 出どころの行は枠（light DOM）の最初の見出しで（`querySelector` は部品の Shadow DOM の中へは入らないので、部品の中の題・質問は数えない）、部品より前にある。部品の中に出どころの行は無く、題・質問は部品の中にだけある。
     expect(
       await dialog(page).evaluate((d) => {
         const origin = d.querySelector("[data-ask-origin]");
         const form = d.querySelector("ask-form");
         const inner = form?.shadowRoot;
         return {
-          firstHeadingIsOrigin: origin !== null && d.querySelector("h1, h2, h3, [data-ask-title], [data-ask-question]") === origin,
+          firstLightDomHeadingIsOrigin: origin !== null && d.querySelector("h1, h2, h3, [data-ask-title], [data-ask-question]") === origin,
           originBeforeForm: !!origin && !!form && (origin.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
           originInForm: inner?.querySelector("[data-ask-origin]") != null,
           titleInForm: inner?.querySelector("h1[data-ask-title]") != null,
           questionsInForm: inner?.querySelectorAll("[data-ask-question]").length,
         };
       }),
-    ).toEqual({ firstHeadingIsOrigin: true, originBeforeForm: true, originInForm: false, titleInForm: true, questionsInForm: 3 });
+    ).toEqual({ firstLightDomHeadingIsOrigin: true, originBeforeForm: true, originInForm: false, titleInForm: true, questionsInForm: 3 });
     await page.locator("[data-ask-submit]").click();
     const r = await run.done;
     // ログインしていないので、受け口を通らなければ unauthenticated（終了コード 1）になる。
@@ -413,6 +434,8 @@ test("キーボードだけで答えられる（見出し → Tab → 矢印 →
   await expect(dialog(page)).toBeVisible();
   await expect(page.locator("[data-ask-origin]")).toBeFocused(); // 開いたら見出し（AC-I4）
   // 見出しの次の Tab 停止は、ページに分かれていればページの番号（出ている数だけ）、その次が最初の質問のチェック済みのラジオ（ベータ）。
+  // ページ分けが決まる（この画面では 2 ページ）まで待つ。0 のまま読むと、番号への Tab の確認が黙って飛ぶ。
+  await expect.poll(() => pageButtons(page).count()).toBeGreaterThan(1);
   const buttons = await pageButtons(page).count();
   for (let i = 0; i < buttons; i++) {
     await page.keyboard.press("Tab");
@@ -511,10 +534,10 @@ test("定義に <script>・HTML を入れても文字として表示され、実
   });
   await expect(dialog(page)).toBeVisible();
   await expect(page.locator("[data-ask-title]")).toHaveText(evil);
+  await expect(page.locator("label.opt .name").first()).toHaveText(evil); // 選択肢の名前も文字のまま（部品の中に描かれている）。描画を待ってから数える
   // ロケータは部品（Shadow DOM）の中も数える。部品の中を直接数えても、script・img は無い（拡大表示の img は、開いたときにだけ入る）。
   expect(await page.locator("dialog#soda-ask-dialog script, dialog#soda-ask-dialog img").count()).toBe(0);
   expect(await page.locator("ask-form").evaluate((f) => f.shadowRoot?.querySelectorAll("script, img").length)).toBe(0);
-  await expect(page.locator("label.opt .name").first()).toHaveText(evil); // 選択肢の名前も文字のまま（部品の中に描かれている）
   expect(await page.evaluate(() => (window as unknown as { __askXss?: number }).__askXss)).toBeUndefined();
   await expect(page.locator("[data-ask-origin]")).toHaveText(ORIGIN_LINE);
   await expectOriginAboveTitle(page);
@@ -547,7 +570,11 @@ test("定義の title に何を書いても、出どころの行の文言は変�
 // --- 即確定（質問が 1 つだけ・single・補足なし。部品の動き。AC9） -------------------------------------------------------
 // 部品（ask-form 1.1.0）の決まり: 選択肢のクリック・タップ・`Space`・`Enter` で、その時点で確定する（既に選ばれている選択肢でも）。矢印キーで移っただけでは
 // 確定しない。ask-form の側はプログラムから起こしたイベントで確かめているので、ここでは実際のクリックとキー入力（`page.keyboard`）で確かめる
-// （タップは `ask-form-mobile.spec.ts`）。「確定した」の観測は、sodactl の stdout（回答の 1 行）とダイアログが閉じたこと。
+// （タップは `ask-form-mobile.spec.ts`）。「確定した」の観測は、sodactl の stdout（回答の 1 行）とダイアログが閉じたこと、そして**ブラウザが送った `ask.answer` のフレーム**
+// （確定は 1 回だけ。矢印で移っただけの間は 0 件）。
+// `Space`: Chromium は、既に選ばれているラジオで `Space` を押しても `click` を出さない（keydown・keyup だけ）。部品 1.1.0 は `Space` を `click` で見ていたため、
+// 既定の選択肢に `Tab` で入って `Space`・矢印で移った先で `Space` が確定しなかった。1.1.1 は `Space` を `Enter` と同じく keydown で受ける——実際のキー入力で確定することを
+// 確かめた（下の件）。
 
 /** `x` が既定で選ばれている。 */
 const ONE = { note: false, questions: [{ id: "a", label: "A", default: "x", options: [{ value: "x", label: "エックス" }, { value: "y", label: "ワイ" }, { value: "z", label: "ゼット" }] }] };
@@ -567,13 +594,14 @@ async function openInstant(page: Page, appServer: AppServer, paneId: string, spe
 test("即確定: 選択肢のカード（label）のクリックで確定する。選ばれていない選択肢でも、既に選ばれている選択肢でも（AC9）", async ({ page, appServer }) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
-  await openBrowser(page, appServer);
+  const { sentAnswers } = await openBrowser(page, appServer);
   // 選ばれていない選択肢。カードの文字をクリック（label → input へ転送されるクリック）。
   const first = await runAsk(appServer, p1, ONE);
   await expect(dialog(page)).toBeVisible();
   await page.locator("label.opt", { hasText: "ゼット" }).click();
   expect((await first.done).json).toEqual({ status: "answered", answers: { a: "z" } });
   await expect(dialog(page)).toHaveCount(0);
+  expect(sentAnswers()).toBe(1); // クリックで二重に決定しない（label のクリックは input へ転送されるが、回答は 1 回）
   // 既に選ばれている選択肢（既定の x）。
   const second = await runAsk(appServer, p1, ONE);
   await expect(dialog(page)).toBeVisible();
@@ -581,42 +609,50 @@ test("即確定: 選択肢のカード（label）のクリックで確定する�
   await page.locator("label.opt", { hasText: "エックス" }).click();
   expect((await second.done).json).toEqual({ status: "answered", answers: { a: "x" } });
   await expect(dialog(page)).toHaveCount(0);
+  expect(sentAnswers()).toBe(2);
   // ラジオそのもののクリックでも同じ（既に選ばれている選択肢）。
   const third = await runAsk(appServer, p1, ONE);
   await expect(dialog(page)).toBeVisible();
   await page.locator("input[type=radio][value=x]").click();
   expect((await third.done).json).toEqual({ status: "answered", answers: { a: "x" } });
   await expect(dialog(page)).toHaveCount(0);
+  expect(sentAnswers()).toBe(3);
 });
 
 test("即確定: 矢印キーで移っただけでは確定しない。Enter で確定する（選ばれていない・既に選ばれている・矢印で移った先）（AC9）", async ({ page, appServer }) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
-  await openBrowser(page, appServer);
+  const { sentAnswers } = await openBrowser(page, appServer);
   // 矢印で y → z と移る。移っただけで確定していれば、回答は y で、次の矢印の前にダイアログが閉じている。
-  // 「確定していない」は時間を置いて見るのではなく、この後の操作が効くこと（z が選ばれる）と、最後に出る回答が z であることで見る。
+  // 「確定していない」は、**ブラウザが送った `ask.answer` が 0 件**であること（矢印の間）と、sodactl がまだ終わっていないこと、
+  // 最後に出る回答が z であること、`Enter` の後に初めて 1 件出ることで見る。
   const first = await openInstant(page, appServer, p1, ONE, "x");
   await page.keyboard.press("ArrowDown");
   await expect(page.locator("input[type=radio][value=y]")).toBeChecked();
   await expect(page.locator("input[type=radio][value=y]")).toBeFocused();
+  expect(sentAnswers()).toBe(0);
   await page.keyboard.press("ArrowDown");
   await expect(page.locator("input[type=radio][value=z]")).toBeChecked();
   await expect(dialog(page)).toBeVisible();
   expect(first.finished()).toBe(false);
+  expect(sentAnswers()).toBe(0);
   await page.keyboard.press("Enter"); // 矢印で移った先（既に選ばれている）で Enter
   expect((await first.done).json).toEqual({ status: "answered", answers: { a: "z" } });
   await expect(dialog(page)).toHaveCount(0);
+  expect(sentAnswers()).toBe(1);
   // 既に選ばれている選択肢（既定の x）で Enter。
   const second = await openInstant(page, appServer, p1, ONE, "x");
   await page.keyboard.press("Enter");
   expect((await second.done).json).toEqual({ status: "answered", answers: { a: "x" } });
   await expect(dialog(page)).toHaveCount(0);
+  expect(sentAnswers()).toBe(2);
   // 選ばれていない選択肢で Enter（既定なし。選んで確定する）。
   const third = await openInstant(page, appServer, p1, ONE_UNSET, "x");
   await expect(dialog(page).locator("input[type=radio]:checked")).toHaveCount(0); // 画面のほかの所にもラジオがあるので、ダイアログの中で数える
   await page.keyboard.press("Enter");
   expect((await third.done).json).toEqual({ status: "answered", answers: { a: "x" } });
   await expect(dialog(page)).toHaveCount(0);
+  expect(sentAnswers()).toBe(3);
 });
 
 test("即確定: 選ばれていない選択肢で Space を押すと、選んで確定する（AC9）", async ({ page, appServer }) => {
