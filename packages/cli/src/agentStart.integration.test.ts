@@ -267,6 +267,47 @@ describe.skipIf(
     expect(await readdir(work)).toEqual([]);
   }, 60_000);
 
+  it("pane の中の環境（SODA_PANE_ID・SODA_SERVER_URL）で agent start すると、打った pane が親として実サーバのグラフに載る。pane の外では載らない（20261003-graph-auto-nodes AC1・AC3・AC4・AC12）", async () => {
+    const parent = server.session.snapshot().panes[0]!.id;
+    const startFrom = (
+      caller: { paneId: string; serverUrl: string } | undefined,
+      paneId: string,
+      name: string,
+    ) =>
+      quiet(() =>
+        runAgentStart(
+          {
+            kind: "agent-start",
+            opts: { ...opts(), ...(caller === undefined ? {} : { caller }) },
+            name,
+            agentKind: "claude",
+            paneId,
+            timeoutMs: 30_000,
+            args: [],
+          },
+          store,
+        ),
+      );
+    const outside = await newPane();
+    const rev0 = server.graph.get().rev;
+    await startFrom(undefined, outside, "outsider");
+    await new Promise((r) => setTimeout(r, 300));
+    expect(server.graph.get().rev).toBe(rev0); // 呼び出し元が無ければ何も載らない
+
+    const child = await newPane();
+    await startFrom({ paneId: parent, serverUrl: url }, child, "lineage-kid");
+    await vi.waitFor(() => expect(server.graph.get().rev).toBe(rev0 + 1), {
+      timeout: 10_000,
+      interval: 50,
+    });
+    const g = server.graph.get();
+    expect(g.nodes.map((n) => n.key).sort()).toEqual([`local:${child}`, `local:${parent}`].sort());
+    expect(g.links.map((l) => [l.kind, l.from, l.to]).sort()).toEqual([
+      ["approval", `local:${child}`, `local:${parent}`],
+      ["supervise", `local:${child}`, `local:${parent}`],
+    ]);
+  }, 60_000);
+
   it("前面がシェル以外（cat の実行中）の pane には何も打ち込まず agent_pane_busy（AC8）", async () => {
     const paneId = await newPane();
     // 前面の cat は受け取った入力をそのままファイルへ書くので、打ち込まれていればファイルに現れる（時間に依らない）。
