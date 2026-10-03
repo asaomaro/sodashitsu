@@ -1,0 +1,10 @@
+#!/bin/sh
+# 開発用の sodactl。リポジトリの packages/cli/dist を直接実行する（先に pnpm build しておく）。
+self=$0
+while [ -h "$self" ]; do
+  dir=$(cd "$(dirname "$self")" && pwd)
+  self=$(readlink "$self")
+  case $self in /*) ;; *) self=$dir/$self ;; esac
+done
+here=$(cd "$(dirname "$self")" && pwd)
+exec node --enable-source-maps "$here/../packages/cli/dist/main.js" "$@"
