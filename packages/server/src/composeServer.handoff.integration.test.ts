@@ -211,8 +211,15 @@ describe.skipIf(process.platform !== "linux")("composeServer: 引き継ぎの起
  */
 describe.skipIf(process.platform === "win32")("composeServer: 引き継ぎの間の pane.sock（20261003-sodactl-ask-socket の T8）", () => {
   const cleanups: (() => Promise<unknown> | unknown)[] = [];
+  /** テストが置いた `process.execve` の置き場を外す。ほかの後始末が投げても必ず走らせる（置き場を次のテストへ残さない）。 */
+  let removeExecvePlaceholder: (() => void) | undefined;
   afterEach(async () => {
-    for (const fn of cleanups.splice(0).reverse()) await fn();
+    try {
+      for (const fn of cleanups.splice(0).reverse()) await fn();
+    } finally {
+      removeExecvePlaceholder?.();
+      removeExecvePlaceholder = undefined;
+    }
   });
 
   /** 受け口へ 1 行送る（sodactl と同じく `write` で送り、半分だけ閉じない）。`closed` は、接続が閉じるまでに受け口が書いたもの。 */
@@ -256,19 +263,20 @@ describe.skipIf(process.platform === "win32")("composeServer: 引き継ぎの間
     });
     cleanups.push(() => ws.close());
     let seq = 0;
-    const replies = new Map<string, () => void>();
+    const replies = new Map<string, (error?: { code: string }) => void>();
     let onOpened!: () => void;
     const opened = new Promise<void>((r) => (onOpened = r));
     ws.on("message", (data, isBinary) => {
       if (isBinary) return;
-      const msg = JSON.parse(String(data)) as { id?: string; event?: string };
-      if (msg.id !== undefined) replies.get(msg.id)?.();
+      const msg = JSON.parse(String(data)) as { id?: string; error?: { code: string }; event?: string };
+      if (msg.id !== undefined) replies.get(msg.id)?.(msg.error);
       else if (msg.event === "ask.opened") onOpened();
     });
     const request = (method: string, params: unknown): Promise<void> =>
-      new Promise((resolve) => {
+      new Promise((resolve, reject) => {
         const id = String(++seq);
-        replies.set(id, resolve);
+        // 誤りの返事は reject する（`paneSocket.integration.test.ts` の `Browser` と同じ。hello・購読が断られたまま先へ進まない）
+        replies.set(id, (error) => (error ? reject(Object.assign(new Error(error.code), { code: error.code })) : resolve()));
         ws.send(JSON.stringify({ id, method, params }));
       });
     await request("client.hello", { protocol: 1, kind: "desktop" });
@@ -284,9 +292,9 @@ describe.skipIf(process.platform === "win32")("composeServer: 引き継ぎの間
       proc.execve = () => {
         throw new Error("the test's process.execve placeholder must not be called");
       };
-      cleanups.push(() => {
+      removeExecvePlaceholder = () => {
         delete proc.execve;
-      });
+      };
     }
     const stateDir = await makeTempDir("soda-handoff-psock-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
@@ -335,7 +343,8 @@ describe.skipIf(process.platform === "win32")("composeServer: 引き継ぎの間
 
     releaseHold();
     expect(JSON.parse(await answer)).toMatchObject({ ok: true, panes: 1 });
-    // execve が失敗して元に戻ると、受け付けが戻る（画面は引き継ぎで切れたので、質問は待たずに `unavailable`）
+    // execve が失敗して元に戻ると、受け付けが戻る（画面は引き継ぎで切れたので、質問は待たずに `unavailable`）。
+    // 待っていた質問が取り消されていることの確かめも兼ねる——残っていれば、同じ pane への 2 つめは `ask_busy` で断られる。
     await vi.waitFor(async () => expect(await call(sockPath, paneId)).toMatchObject({ ok: true, result: { status: "unavailable" } }), {
       timeout: 10_000,
       interval: 20,
