@@ -59,3 +59,10 @@ events:
   - { ts: 2026-10-03T08:17:59Z, phase: test, event: smoke, metrics: { result: fail, exit_code: 1, commands: 10, failed_index: 1 } }
   - { ts: 2026-10-03T08:21:57Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
   - { ts: 2026-10-03T08:37:47Z, phase: test, event: approved, metrics: { passed: 6753, failed: 0 } }
+  - { ts: 2026-10-03T08:38:22Z, phase: review, event: start, metrics: { marks: 0 } }
+  - { ts: 2026-10-03T08:45:30Z, phase: review, event: sent_back }
+  - { ts: 2026-10-03T08:45:30Z, phase: test, event: sent_back, metrics: { by: unapprove } }
+  - { ts: 2026-10-03T08:45:30Z, phase: coding, event: sent_back, metrics: { by: unapprove } }
+  - { ts: 2026-10-03T08:45:30Z, phase: coding, event: start }
+  - { ts: 2026-10-03T08:54:47Z, phase: coding, event: approved, metrics: { tasks_done: 17, unplanned_lookups: 1, task_checks: 17, task_check_findings: 36, task_check_mode: delegated } }
+  - { ts: 2026-10-03T08:54:47Z, phase: test, event: start, metrics: { marks: 10 } }

@@ -269,3 +269,10 @@ export function viaPaneSocketOrSession<T>(opts: GlobalOpts, paneId: string, op: 
 - AC15: `SODA_PANE_SOCKET` の値は socket のパスだけ。`paneEnv.test.ts` の「token はどの値にも含まれない」に、`local-auth.json` の秘密と cookie を含めて見る。入力: `buildPaneEnv` の結果。
 - AC16: `PaneOpContext.paneId` に要求の `paneId` が入る（AC13 の `test.echo` が受け取った `paneId` を返す）。入力: 要求の `paneId`。
 - AC17: 定義の検査は経路の選択より前（`readAskSpec`）なので、ログインなしでも終了コード 2。サーバが断った `invalid_ask_spec`（版の違い）も 2。`ask.test.ts` と smoke（AC2 と同じ環境で `{questions: []}` → 2）。入力: 標準入力の定義。
+
+## 実装で変わった点（coding・review の後。上の本文は書き換えず、ここに差分を残す）
+
+- `callPaneOp` の分岐: 繋がる前の `ECONNREFUSED` と、返事の `pane_socket_busy` は、**5 秒まで（間隔 150ms）繋ぎ直す**。上限まで続いたら、前者は `fallback`、後者は `RpcFailure("pane_socket_busy")`（`decisions.md` D7・D8）。返事の行の上限は 8 MiB（超えたら `connection_closed`）。
+- `PaneSocket`: `PaneSocketDeps.onConnectionGone` は無い。取り消しは `PaneOpContext.signal` の abort だけで、`askOpenOp` がその中で `asks.onClientGone(ctx.connId)` を呼ぶ（D8）。要求を読まずに断るとき（`pane_socket_busy`・行の上限の超過）は、返事を書いて書き込み側だけ閉じ、相手が閉じるか 1 秒まで待つ（D6）。
+- `pane.sock`・`agent-report.sock` のファイル名は `packages/protocol/src/paneSocket.ts` の定数。pane の環境の `SODA_PANE_SOCKET` は絶対パス（D7）。
+- `/ws` に `pane.write` という方式は無い（本文の例示の誤り。D6）。

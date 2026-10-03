@@ -103,3 +103,13 @@ research の「design への申し送り」と R1〜R11 への答え。承認者
   - 採らなかった案: 古い版が execve の前に `pane.sock` を消す（`ENOENT` → すぐ落ちて `unauthenticated` になるので解決にならない）。新しい版が受け口を復元より前に立てる（pane が復元される前は `paneExists` が偽で `not_found` になる）。
 - **pane の環境の `SODA_PANE_SOCKET` は絶対パス**。待ち受けるパスは今までどおり（相対の `--state-dir` ならその相対のまま。起動時のパスの長さの検査と揃える）。sodactl は相対の値を使わない。
 - またぐ点検は 1 ラウンドで終えた（修正は陰性対照つきのテストで確かめた）。
+
+## D8: review のラウンド 1（must 0・should 1・nit 5）で足した決定
+
+- **`pane_socket_busy` も繋ぎ直す**（D3 (m)・D4 の「busy は終了コード 1」を改める）。handoff の前半（受け付けを止めてから execve まで）は busy、後半（execve から置き直しまで）は `ECONNREFUSED` で、どちらも操作は始まっていない。片方だけ繋ぎ直すと、入れ替えの間に打った ask が終了コード 1 で終わり、呼び出し側（ask-form）が別の聞き方へ切り替わる。2 つを 1 つの上限（5 秒・間隔 150ms）で繋ぎ直し、続いたら busy は `RpcFailure`、`ECONNREFUSED` は `/ws` へ落ちる。
+- **取り消しの手段は `PaneOpContext.signal` だけ**（design の `PaneSocketDeps.onConnectionGone` を消した）。結果を待つ操作を足す人が登録 1 つで済むようにする。abort の listener は投げないこと（受け口は捕まえない）。
+- **受け口は待ち受けを始める前から受け付ける**。置く前のパスは 0700 の一時ディレクトリの中で、見える場所に出た時点で 0600 なので、rename の直後の接続を捨てる理由が無い（D6 の「0600 で置き終える前の接続は捨てる」を改める）。
+- socket のファイル名を protocol の定数にした。`BridgeEndpoint.listen` には印のコメントだけ足した（共通関数へ寄せるのは follow-up）。
+- **Node 20 で 1 回出た T8 の結合テストの失敗の原因（推定）**: 元に戻した直後、閉じかけの画面役がまだ購読者に数えられている間に受け口へ届いた質問が、実際に出て待った（`WsGateway` が購読者を外すのは ws の `close` の後。テストの `timeoutMs` は 20 秒で `vi.waitFor` の 10 秒より長い）。テストの側の競合で、製品の欠陥ではない。テストは画面役の `close` を待ち、`call` に 3 秒の時間切れを付けた。
+- **範囲外（follow-up の候補）**: handoff で待っている質問が取り消される（`/ws` と同じ既存の挙動）／`SODA_SERVER_URL` を入れられない待ち受けでは受け口があっても `caller_pane_unknown`／空の `SODACTL_URL=""`／受け口を置くのは復元の後なので、自動再開したエージェントがその前に `sodactl ask` を打つと `/ws` へ落ちる／`BridgeEndpoint.listen` を `listenPrivateUnixSocket` へ寄せる／smoke の 1 本目が `/workspaces/sodashitsu` から落ちる（`main` でも同じ）／E2E の 18 件・lint の 22 件（`main` でも同じ）。
+- **Claude Code のサンドボックス**: この作業のセッションはサンドボックスが無効（seccomp なし・設定に `sandbox` なし）で、Bash から状態ディレクトリの unix socket（`agent-report.sock`）へ繋げることは確かめた。サンドボックスを有効にした場合は未検証（この環境に `socat` が無く、サンドボックス自体が起動しない）。

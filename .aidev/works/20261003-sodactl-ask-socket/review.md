@@ -42,3 +42,17 @@ coding 工程のタスク単位の独立点検（委譲）で見つけ、その�
 - T17 [nit] 足した行が既存の折り方（prettier の 100 桁）に合っていない → この work で足したファイルと、元は整形どおりだったファイルを prettier に通した（T2・T13 の同じ指摘もここで揃えた） [conv:-]
 - cross [should] `soda handoff` で古い版が execve してから新しい版が受け口を置き直すまでの間、`sodactl ask` が繋げずに `/ws` へ落ち、未ログインの pane では `unauthenticated`（「login が要る」と誤って伝わる） → `ECONNREFUSED` のときだけ 5 秒まで繋ぎ直す。繋ぎ直しを外すと足した 2 件が落ちることを確かめた [conv:-]
 - cross [nit] 相対の `--state-dir` だと pane の環境の `SODA_PANE_SOCKET` が相対パスになり、pane の cwd で別の場所を指す → サーバは絶対パスにして入れ、sodactl は相対の値を使わない [conv:-]
+
+## ラウンド 1（2589a21。作業全体の差分・委譲）
+
+must 0・should 1・nit 5。should があるので coding へ差し戻す。`aidev coverage` は tasks 承認時と同じ（ac=17・design 17/17・tasks 17/17・gaps=0）。
+AC1〜AC17 は実装と `test-result.md` の判定に食い違いなし（弱い所は「未検証の穴」に明記済みのもの）。安全（0600・0700 の一時ディレクトリ・登録した操作だけ・検査の順・ログ・上限・取り消しと台帳・fallback の線引き）にコードの上の穴は見つからなかった。
+
+- [should] `soda handoff` の「受け付けを止めてから execve まで」の間の `sodactl ask` は、繋ぎ直さずに `pane_socket_busy`・終了コード 1 で終わる。同じ入れ替えの後半（`ECONNREFUSED`）は 5 秒まで繋ぎ直すのに揃っていない。`pane_socket_busy` は質問が出ていないと決まっているので、繋ぎ直しても二重にならない。終了コード 1 を受けた呼び出し側（ask-form）は別の聞き方へ切り替わり、きっかけと同じ「気づけない」が入れ替えの間だけ残る — 根拠: packages/cli/src/paneSocket.ts:60-68・packages/server/src/panesocket/PaneSocket.ts:184-190・packages/server/src/composeServer.ts:495 [conv:-]
+- [nit] `pane.sock` を rename で置いてから受け付けを始めるまで（一時ディレクトリの削除 1 回分）に繋がった接続は何も書かずに捨てられ、繋ぎ直している sodactl が当たると `connection_closed` になる — 根拠: packages/server/src/panesocket/PaneSocket.ts:139-142・180-183、packages/server/src/infra/privateUnixSocket.ts:39-46 [conv:-]
+- [nit] 「接続が切れたら取り消す」手段が 2 つあり（`PaneOpContext.signal` と `PaneSocketDeps.onConnectionGone`）、`askOp` は `signal` を使わず登録の外の配線に依る。結果を待つ操作を次に足す人が「登録 1 つ」で済まない — 根拠: packages/server/src/panesocket/askOp.ts:21-22、packages/server/src/composeServer.ts:343 [conv:-]
+- [nit] socket のファイル名 `pane.sock`・`agent-report.sock` がサーバと sodactl に別々の文字列で書かれ、古い pane 向けの導出がその一致に依る（ずれを捕まえるのは smoke だけ） — 根拠: packages/server/src/config.ts:87・98、packages/cli/src/cliArgs.ts:139-141 [conv:-]
+- [nit] `listenPrivateUnixSocket` は `BridgeEndpoint.listen` の手順の写しで、`BridgeEndpoint` の側に印が無い（安全に関わる手順が 2 か所） — 根拠: packages/server/src/infra/privateUnixSocket.ts:28-46、packages/server/src/machine/BridgeEndpoint.ts:104-121 [conv:-]
+- [nit] handoff の結合テストの最後の `vi.waitFor` の `call` に時間切れが無く、最後の試行が待って止まると本当の原因が読めない（Node 20 で 1 回出た原因未特定の失敗は、これで説明がつく可能性——推測） — 根拠: packages/server/src/composeServer.handoff.integration.test.ts:228-249・367-378 [conv:-]
+
+範囲外（follow-up の候補。`decisions.md` D8 と PR 本文へ）: handoff で待っている質問が取り消される（既存）／`SODA_SERVER_URL` を入れられない待ち受けでは受け口があっても `caller_pane_unknown`／空の `SODACTL_URL`／受け口を置くのは復元の後なので、自動再開したエージェントがその前に打つと `/ws` へ落ちる・復元が 5 秒を超えても同じ／Claude Code のサンドボックスの中から unix socket へ繋げるかは未確認／smoke 1 本目・E2E 18 件・lint 22 件は `main` と同じ。
