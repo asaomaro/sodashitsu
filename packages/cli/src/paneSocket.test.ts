@@ -302,8 +302,8 @@ describe("callPaneOp（偽の受け口）", () => {
   it("socket でないファイル・誰も待ち受けていない socket（繋がる前のエラー）→ fallback", async () => {
     const file = join(dir, "plain.sock");
     await writeFile(file, "not a socket");
-    // 普通のファイルへの connect も ECONNREFUSED になる。ここでは繋ぎ直しを見ない（`refusedRetryMs: 0`。繋ぎ直しは下の件）。
-    expect((await callPaneOp(file, REQ, { ...WAIT, refusedRetryMs: 0 })).kind).toBe("fallback");
+    // 普通のファイルへの connect も ECONNREFUSED になる。ここでは繋ぎ直しを見ない（`retryMs: 0`。繋ぎ直しは下の件）。
+    expect((await callPaneOp(file, REQ, { ...WAIT, retryMs: 0 })).kind).toBe("fallback");
     // 待ち受けを止めた後に残った socket のファイル（不正終了の残骸と同じ形）。`server.close()` は自分のパスを消すので、
     // 先に別の名前（ハードリンク）を作っておき、そちらを残す。
     const live = join(dir, "live.sock");
@@ -313,8 +313,8 @@ describe("callPaneOp（偽の受け口）", () => {
     await link(live, stale);
     await new Promise<void>((resolve) => server.close(() => resolve()));
     expect((await stat(stale)).isSocket()).toBe(true);
-    // 繋ぎ直しを待たない設定（`refusedRetryMs: 0`）なら、すぐ fallback。
-    const out = await callPaneOp(stale, REQ, { ...WAIT, refusedRetryMs: 0 });
+    // 繋ぎ直しを待たない設定（`retryMs: 0`）なら、すぐ fallback。
+    const out = await callPaneOp(stale, REQ, { ...WAIT, retryMs: 0 });
     expect(out).toMatchObject({
       kind: "fallback",
       reason: expect.stringContaining("ECONNREFUSED"),
@@ -336,7 +336,7 @@ describe("callPaneOp（偽の受け口）", () => {
   it("誰も待ち受けていない受け口（ECONNREFUSED）は、上限まで繋ぎ直してから fallback（すぐには落ちない）", async () => {
     const stale = await staleSocket("gone");
     const started = Date.now();
-    const out = await callPaneOp(stale, REQ, { ...WAIT, refusedRetryMs: 400 });
+    const out = await callPaneOp(stale, REQ, { ...WAIT, retryMs: 400 });
     expect(out).toMatchObject({ kind: "fallback", errno: "ECONNREFUSED" });
     // 1 回で諦めていない（間隔 150ms で少なくとも 1 回は繋ぎ直している）。
     expect(Date.now() - started).toBeGreaterThanOrEqual(150);
@@ -344,7 +344,7 @@ describe("callPaneOp（偽の受け口）", () => {
 
   it("繋ぎ直している間に受け口が置き直されたら（handoff の後の新しい版）、その受け口の結果を返す", async () => {
     const stale = await staleSocket("swap");
-    const pending = callPaneOp(stale, REQ, { ...WAIT, refusedRetryMs: 5_000 });
+    const pending = callPaneOp(stale, REQ, { ...WAIT, retryMs: 5_000 });
     // 新しい受け口を別の名前で立ててから、同じパスへ rename で置き直す（サーバの置き方と同じ）。
     const f = await fake({ onLine: replyWith({ ok: true, result: { from: "new" } }) });
     await rename(f.path, stale);
@@ -353,7 +353,7 @@ describe("callPaneOp（偽の受け口）", () => {
 
   it("ファイルが無い（ENOENT）ときは繋ぎ直さず、すぐ fallback", async () => {
     const started = Date.now();
-    const out = await callPaneOp(join(dir, "none2.sock"), REQ, { ...WAIT, refusedRetryMs: 5_000 });
+    const out = await callPaneOp(join(dir, "none2.sock"), REQ, { ...WAIT, retryMs: 5_000 });
     expect(out).toMatchObject({ kind: "fallback", errno: "ENOENT" });
     expect(Date.now() - started).toBeLessThan(1_000);
   });
@@ -382,12 +382,53 @@ describe("callPaneOp（偽の受け口）", () => {
     const f = await fake({
       onLine: replyWith({ ok: false, error: { code, message: `m-${code}` } }),
     });
-    const err = await callPaneOp(f.path, REQ, WAIT).then(
+    // `pane_socket_busy` の繋ぎ直しはここでは見ない（`retryMs: 0`。繋ぎ直しは下の件）。
+    const err = await callPaneOp(f.path, REQ, { ...WAIT, retryMs: 0 }).then(
       () => undefined,
       (e: unknown) => e,
     );
     expect(err).toBeInstanceOf(RpcFailure);
     expect(err).toMatchObject({ code, message: `m-${code}` });
+  });
+
+  /** 最初の `busyTimes` 回の接続は要求を読まずに `pane_socket_busy` で断り、その後は要求の行に `{ok:true}` を返す偽の受け口。 */
+  const BUSY = { ok: false, error: { code: "pane_socket_busy", message: "busy" } };
+  function busyThenOk(busyTimes: number): Promise<FakeSocket> {
+    let seen = 0;
+    return fake({
+      onConn: (sock) => {
+        if (++seen <= busyTimes) replyWith(BUSY)(sock);
+      },
+      onLine: (sock) => {
+        if (!sock.writableEnded) replyWith({ ok: true, result: { after: seen } })(sock);
+      },
+    });
+  }
+
+  it("pane_socket_busy（要求を読まずに断られた）は繋ぎ直し、受け付けが戻ったらその結果を返す", async () => {
+    const f = await busyThenOk(2);
+    expect(await callPaneOp(f.path, REQ, WAIT)).toEqual({ kind: "result", result: { after: 3 } });
+    expect(f.conns).toHaveLength(3); // 2 回断られ、3 回めで通った
+  });
+
+  it("pane_socket_busy が上限まで続いたら、その code の RpcFailure（/ws へ落ちない）", async () => {
+    const f = await fake({ onConn: replyWith(BUSY) });
+    const err = await callPaneOp(f.path, REQ, { ...WAIT, retryMs: 400 }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(RpcFailure);
+    expect(err).toMatchObject({ code: "pane_socket_busy", message: "busy" });
+    // 1 回で諦めていない（間隔 150ms で、上限 400ms の中に少なくとも 2 回は繋ぎ直している）。
+    expect(f.conns.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("繋ぎ直しを切る設定（retryMs: 0）なら、pane_socket_busy は 1 回ですぐ投げる", async () => {
+    const f = await busyThenOk(1);
+    await expect(callPaneOp(f.path, REQ, { ...WAIT, retryMs: 0 })).rejects.toMatchObject({
+      code: "pane_socket_busy",
+    });
+    expect(f.conns).toHaveLength(1);
   });
 
   it("要求を読まずに返事を書いて閉じる受け口（pane_socket_busy の断り方）の返事を読む——要求の書き込みが受け口の close に間に合う場合", async () => {
@@ -396,7 +437,7 @@ describe("callPaneOp（偽の受け口）", () => {
     const f = await fake({
       onConn: replyWith({ ok: false, error: { code: "pane_socket_busy", message: "busy" } }),
     });
-    await expect(callPaneOp(f.path, REQ, WAIT)).rejects.toMatchObject({
+    await expect(callPaneOp(f.path, REQ, { ...WAIT, retryMs: 0 })).rejects.toMatchObject({
       code: "pane_socket_busy",
       message: "busy",
     });

@@ -131,9 +131,24 @@ describe.skipIf(process.platform === "win32")("callPaneOp × 実物の PaneSocke
     await vi.waitFor(() => expect(waiting).toHaveLength(1));
     socket.pause();
     expect(await settled).toMatchObject({ code: "connection_closed" });
-    await expect(callPaneOp(path, { op: "test.echo", paneId: "p1" }, WAIT)).rejects.toMatchObject({ code: "pane_socket_busy" });
+    // 繋ぎ直しを切って（`retryMs: 0`）、断られ方そのものを見る。繋ぎ直しは下の件。
+    await expect(callPaneOp(path, { op: "test.echo", paneId: "p1" }, { ...WAIT, retryMs: 0 })).rejects.toMatchObject({ code: "pane_socket_busy" });
     socket.resume();
     expect((await callPaneOp(path, { op: "test.echo", paneId: "p1" }, WAIT)).kind).toBe("result");
+  });
+
+  it("受け付けを止めている間（pause）の呼び出しは繋ぎ直して待ち、resume の後に結果を返す（handoff の前半）", async () => {
+    socket.pause();
+    const refused = vi.spyOn(NO_LOG, "info");
+    try {
+      const pending = callPaneOp(path, { op: "test.echo", paneId: "p1" }, WAIT);
+      // 少なくとも 1 回は `pane_socket_busy` で断られてから（受け口の記録で見る）、受け付けを戻す。
+      await vi.waitFor(() => expect(refused).toHaveBeenCalledWith("pane socket: refused a connection", { code: "pane_socket_busy" }));
+      socket.resume();
+      expect(await pending).toMatchObject({ kind: "result", result: { paneId: "p1" } });
+    } finally {
+      refused.mockRestore();
+    }
   });
 
   it("受け口を閉じると、待っていた呼び出しは connection_closed。閉じた後は socket のファイルが無く fallback", async () => {
@@ -202,7 +217,7 @@ describe.skipIf(process.platform === "win32")("callPaneOp × 別のスレッド�
 
     const codes: string[] = [];
     for (let i = 0; i < 10; i++) {
-      const pending = callPaneOp(path, { op: "test.echo", paneId: "p1", params: { text: "x".repeat(4096) } }, WAIT).then(
+      const pending = callPaneOp(path, { op: "test.echo", paneId: "p1", params: { text: "x".repeat(4096) } }, { ...WAIT, retryMs: 0 }).then(
         () => "result",
         (e: unknown) => (e instanceof RpcFailure ? e.code : String(e)),
       );

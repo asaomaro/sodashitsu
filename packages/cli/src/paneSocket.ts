@@ -32,14 +32,19 @@ const FALLBACK_CODES: readonly string[] = ["unknown_op", "bad_request"];
 
 const NEWLINE = 0x0a;
 
-/** 受け口のファイルはあるのに誰も待ち受けていない（`ECONNREFUSED`）とき、繋ぎ直しを続ける上限と間隔（下の `callPaneOp`）。 */
-export const PANE_SOCKET_REFUSED_RETRY_MS = 5_000;
-const REFUSED_RETRY_INTERVAL_MS = 150;
+/**
+ * 操作が始まっていないと決まっている断られ方——受け口のファイルはあるのに誰も待ち受けていない（`ECONNREFUSED`）・受け口が要求を読まずに断った
+ * （`pane_socket_busy`）——のとき、繋ぎ直しを続ける上限と間隔（下の `callPaneOp`）。
+ */
+export const PANE_SOCKET_RETRY_MS = 5_000;
+const RETRY_INTERVAL_MS = 150;
+/** 受け口が要求を読まずに断ったときの code（`soda handoff` の途中・同時接続の上限。操作は始まっていない）。 */
+const BUSY_CODE = "pane_socket_busy";
 
 /**
  * 受け口へ 1 要求を送って返事を待つ（design「`callPaneOp` の分岐」の表）。
  * - 接続できない（`connect` が成立する前のエラー）→ `fallback`。
- * - 返事 `{ok:true}` → `result`。`{ok:false}` で `unknown_op`・`bad_request` → `fallback`。それ以外の code（`pane_socket_busy` を含む）→ `RpcFailure(code)`。
+ * - 返事 `{ok:true}` → `result`。`{ok:false}` で `unknown_op`・`bad_request` → `fallback`。それ以外の code → `RpcFailure(code)`（`pane_socket_busy` は下の繋ぎ直しの後）。
  * - 繋がった後、返事の行が揃う前に閉じた（0 バイトで閉じる・要求の書き込みの途中のエラーを含む）・返事が読めない・
  *   返事の行が上限（`maxReplyBytes`。既定 `PANE_SOCKET_MAX_REPLY_BYTES`）を超えた → `RpcFailure("connection_closed")`。
  *   `/ws` へは落ちない——操作が既に始まっているかもしれず、落ちると二重に行う（decisions D3 (m)）。
@@ -47,23 +52,36 @@ const REFUSED_RETRY_INTERVAL_MS = 150;
  *
  * **要求は `write` で送り、返事の行を読むまで `end` しない**（受け口は相手の EOF を「呼び出し元が終わった」＝取り消しとして扱う）。
  *
- * **`ECONNREFUSED` だけは、すぐには落ちずに繋ぎ直す**（`refusedRetryMs`。既定 `PANE_SOCKET_REFUSED_RETRY_MS`）: 受け口のファイルはあるのに誰も待ち受けていないのは、
- * `soda handoff` で古い版が execve してから新しい版が受け口を置き直すまでの間（古い版はファイルを残す）。ここで `/ws` へ落ちると、ログインしていない pane では
- * `unauthenticated` になり、一時的な入れ替えの間に「login が要る」と誤って伝わる。繋がっていないので操作は始まっておらず、繋ぎ直しても二重にはならない。
- * 上限まで待っても同じなら（不正終了の残骸など）`fallback`。ファイルが無い（`ENOENT`）等のほかのエラーは、今までどおりすぐ `fallback`。
+ * **`ECONNREFUSED` と `pane_socket_busy` は、すぐには終わらずに繋ぎ直す**（`retryMs`。既定 `PANE_SOCKET_RETRY_MS`。間隔 150ms。2 つで 1 つの上限）:
+ * どちらも `soda handoff` の入れ替えの間に当たる。前半（古い版が受け付けを止めてから execve するまで）は受け口が要求を読まずに `pane_socket_busy` で断り、
+ * 後半（古い版が execve してから新しい版が受け口を置き直すまで。古い版はファイルを残す）はファイルはあるのに誰も待ち受けていない（`ECONNREFUSED`）。
+ * ここで終わると、前半は終了コード 1（呼び出し側が別の聞き方へ切り替わる）、後半は `/ws` へ落ちてログインしていない pane では `unauthenticated` になり、
+ * 一時的な入れ替えが利用者に誤って伝わる。どちらも操作は始まっていない（繋がっていない・要求は読まれていない）ので、繋ぎ直しても二重にはならない。
+ * 上限まで続いたら、最後の結果のまま: `ECONNREFUSED`（不正終了の残骸など）は `fallback`、`pane_socket_busy`（同時接続の上限が続く等）は
+ * `RpcFailure("pane_socket_busy")`（`/ws` へは落ちない）。ファイルが無い（`ENOENT`）等のほかのエラーは、今までどおりすぐ `fallback`。
  */
 export async function callPaneOp(
   path: string,
   req: { op: string; paneId: string; params?: Record<string, unknown> },
-  opts: { timeoutMs: number; maxReplyBytes?: number; refusedRetryMs?: number },
+  opts: { timeoutMs: number; maxReplyBytes?: number; retryMs?: number },
 ): Promise<PaneOpOutcome> {
-  const deadline =
-    Date.now() + Math.min(opts.refusedRetryMs ?? PANE_SOCKET_REFUSED_RETRY_MS, opts.timeoutMs);
+  const deadline = Date.now() + Math.min(opts.retryMs ?? PANE_SOCKET_RETRY_MS, opts.timeoutMs);
   for (;;) {
-    const outcome = await callPaneOpOnce(path, req, opts);
-    if (outcome.kind !== "fallback" || outcome.errno !== "ECONNREFUSED") return outcome;
-    if (Date.now() + REFUSED_RETRY_INTERVAL_MS > deadline) return outcome;
-    await new Promise<void>((r) => setTimeout(r, REFUSED_RETRY_INTERVAL_MS));
+    let outcome: PaneOpOutcome | undefined;
+    let busy: RpcFailure | undefined;
+    try {
+      outcome = await callPaneOpOnce(path, req, opts);
+    } catch (err) {
+      if (!(err instanceof RpcFailure) || err.code !== BUSY_CODE) throw err;
+      busy = err;
+    }
+    if (outcome && (outcome.kind !== "fallback" || outcome.errno !== "ECONNREFUSED"))
+      return outcome;
+    if (Date.now() + RETRY_INTERVAL_MS > deadline) {
+      if (outcome) return outcome;
+      throw busy;
+    }
+    await new Promise<void>((r) => setTimeout(r, RETRY_INTERVAL_MS));
   }
 }
 
