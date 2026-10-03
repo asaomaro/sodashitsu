@@ -98,7 +98,9 @@ export function callPaneOp(
         return;
       }
       // 繋がった後のエラー（受け口が先に閉じたときの EPIPE・ECONNRESET 等）はここでは決めない。続く `close` で決める——
-      // エラーより前に届いた返事の行は `data` で既に結果になっている。
+      // エラーより前に**読めた**返事の行は `data` で既に結果になっている。
+      // 読む前に要求の書き込みが失敗した（EPIPE）ときは、Node が接続を捨てるので、届いていても読んでいない返事は失われ、`connection_closed` になる。
+      // これはクライアントの側では防げない。受け口の側が、要求を読まずに断るときは相手が閉じるまで読み捨てて待つことで防ぐ（`PaneSocket` の `refuse`）。
     });
     sock.on("close", () => closed("before replying"));
   });

@@ -1,6 +1,9 @@
 import { mkdtemp, rm, stat } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
 import { PaneAskOpenParams, PaneSocketRequest, RpcError } from "@sodashitsu/protocol";
 import { PaneOpRegistry, PaneSocket, type PaneOpContext } from "@sodashitsu/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -142,5 +145,74 @@ describe.skipIf(process.platform === "win32")("callPaneOp × 実物の PaneSocke
     expect(await settled).toMatchObject({ code: "connection_closed" });
     await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
     expect(await callPaneOp(path, { op: "test.echo", paneId: "p1" }, WAIT)).toMatchObject({ kind: "fallback", reason: expect.stringContaining("ENOENT") });
+  });
+});
+
+/**
+ * 受け付けを止めた受け口を別のスレッドで動かす（このスレッドのイベントループが塞がっている間も、受け口は接続を受けて断れる）。
+ * 同じスレッドでは、クライアントの要求の書き込みが必ず受け口の close より先になり、「書き込みが遅れた」形を作れない。
+ */
+const PAUSED_SOCKET_WORKER = `
+const { parentPort, workerData } = require("node:worker_threads");
+(async () => {
+  const { PaneSocket } = await import(workerData.paneSocketUrl);
+  const { PaneOpRegistry } = await import(workerData.registryUrl);
+  const log = { debug() {}, info() {}, warn() {}, error() {} };
+  const socket = new PaneSocket({ registry: new PaneOpRegistry(log), paneExists: () => true, onConnectionGone() {}, logger: log });
+  await socket.listen(workerData.path);
+  socket.pause();
+  parentPort.on("message", () => void socket.close().then(() => parentPort.postMessage("closed")));
+  parentPort.postMessage("ready");
+})();
+`;
+
+describe.skipIf(process.platform === "win32")("callPaneOp × 別のスレッドの実物の PaneSocket（受け付けを止めている）", () => {
+  let dir: string;
+  let worker: Worker | undefined;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "sp-"));
+  });
+  afterEach(async () => {
+    await worker?.terminate();
+    worker = undefined;
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("要求の書き込みが受け口の返事より後になっても、pane_socket_busy を読める（connection_closed に化けない）", async () => {
+    const path = join(dir, "pane.sock");
+    const dist = dirname(createRequire(import.meta.url).resolve("@sodashitsu/server"));
+    const w = new Worker(PAUSED_SOCKET_WORKER, {
+      eval: true,
+      workerData: {
+        path,
+        paneSocketUrl: pathToFileURL(join(dist, "panesocket", "PaneSocket.js")).href,
+        registryUrl: pathToFileURL(join(dist, "panesocket", "PaneOpRegistry.js")).href,
+      },
+    });
+    worker = w;
+    const next = (): Promise<unknown> =>
+      new Promise((resolve, reject) => {
+        w.once("message", resolve);
+        w.once("error", reject);
+      });
+    expect(await next()).toBe("ready");
+
+    const codes: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const pending = callPaneOp(path, { op: "test.echo", paneId: "p1", params: { text: "x".repeat(4096) } }, WAIT).then(
+        () => "result",
+        (e: unknown) => (e instanceof RpcFailure ? e.code : String(e)),
+      );
+      // 接続は始まっている（受け口のスレッドは受けて断れる）。このスレッドを塞いで、要求の書き込みを受け口の返事より後にする。
+      // 断ってすぐ接続を捨てる受け口では、ここを抜けた後の書き込みが EPIPE になり、届いていた返事を読めずに connection_closed になる。
+      const until = performance.now() + 50;
+      while (performance.now() < until);
+      codes.push(await pending);
+    }
+    expect(codes).toEqual(Array.from({ length: 10 }, () => "pane_socket_busy"));
+
+    w.postMessage("close");
+    expect(await next()).toBe("closed");
   });
 });

@@ -20,7 +20,19 @@ export interface PaneSocketLimits {
   maxConnections: number;
   /** 接続してから要求の 1 行が揃うまでの上限。返事を書き切るまでの上限にも使う（読まない相手に接続の枠を持たせ続けない）。 */
   requestWaitMs: number;
+  /**
+   * 要求を読まずに断った接続（`pane_socket_busy`・行の上限超過の `bad_request`）を、返事を書いた後、相手が閉じるまで開けておく上限。
+   * すぐ捨てると、相手の要求の書き込みが EPIPE になり、届いていた返事を読めない。
+   */
+  refusedLingerMs: number;
+  /** 断った後、相手が閉じるのを待っている接続の上限（超えたら古いものから捨てる。断る接続が際限なく溜まらない）。 */
+  maxRefusedLingering: number;
 }
+
+/** 断った接続を相手が閉じるまで待つ既定の上限（相手は返事の 1 行を読んだらすぐ閉じる。イベントループが少し塞がっても読める長さ）。 */
+const REFUSED_LINGER_MS = 1_000;
+/** 断った後に待っている接続の既定の上限（同時接続の上限 `PANE_SOCKET_MAX_CONNECTIONS` と同じ大きさの、別の枠）。 */
+const MAX_REFUSED_LINGERING = PANE_SOCKET_MAX_CONNECTIONS;
 
 export interface PaneSocketDeps {
   registry: PaneOpRegistry;
@@ -66,8 +78,12 @@ const TMP_PREFIX = ".p-";
 export class PaneSocket {
   private readonly limits: PaneSocketLimits;
   private readonly conns = new Set<Conn>();
-  /** 要求を読まずに断った接続（`pane_socket_busy` を書いて閉じる途中。`close()` が待たずに捨てる）。 */
-  private readonly rejected = new Set<Socket>();
+  /**
+   * 要求を読まずに断った接続（返事を書き、相手が閉じるのを待っている。古い順。`close()` が待たずに捨てる）。
+   * 同時接続の枠（`conns`）には数えない——数えると、断る接続で枠が埋まり、断る理由が無くなった後も断り続ける。
+   * 代わりに別の上限（`maxRefusedLingering`）を持ち、超えたら古いものから捨てる。
+   */
+  private readonly refused = new Set<Socket>();
   private server: Server | undefined;
   private listenPath: string | undefined;
   /** 進行中の `listen()`（終わると解決する。失敗でも reject しない）。途中で呼ばれた `close()` が待つ。 */
@@ -86,6 +102,8 @@ export class PaneSocket {
       maxLineBytes: deps.limits?.maxLineBytes ?? PANE_SOCKET_MAX_LINE_BYTES,
       maxConnections: deps.limits?.maxConnections ?? PANE_SOCKET_MAX_CONNECTIONS,
       requestWaitMs: deps.limits?.requestWaitMs ?? PANE_SOCKET_REQUEST_WAIT_MS,
+      refusedLingerMs: deps.limits?.refusedLingerMs ?? REFUSED_LINGER_MS,
+      maxRefusedLingering: deps.limits?.maxRefusedLingering ?? MAX_REFUSED_LINGERING,
     };
   }
 
@@ -144,8 +162,8 @@ export class PaneSocket {
     this.accepting = false;
     // 接続が残っていると `server.close()` が終わらないので、先に捨てる。
     this.dropAll();
-    for (const sock of [...this.rejected]) sock.destroy();
-    this.rejected.clear();
+    for (const sock of [...this.refused]) sock.destroy();
+    this.refused.clear();
     const server = this.server;
     this.server = undefined;
     if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -162,7 +180,8 @@ export class PaneSocket {
       return;
     }
     if (this.paused || this.conns.size >= this.limits.maxConnections) {
-      this.reject(sock);
+      this.deps.logger.info("pane socket: refused a connection", { code: "pane_socket_busy" });
+      this.refuse(sock, this.failure("pane_socket_busy", "the pane socket is not accepting requests right now"));
       return;
     }
     const conn: Conn = {
@@ -181,17 +200,29 @@ export class PaneSocket {
     sock.on("data", (chunk: Buffer) => this.handleData(conn, chunk));
   }
 
-  /** 要求を読まずに `pane_socket_busy` を 1 行書いて閉じる（操作は始まっていない、と呼び出し側に分かるようにする）。 */
-  private reject(sock: Socket): void {
-    this.rejected.add(sock);
-    sock.on("close", () => this.rejected.delete(sock));
+  /**
+   * 要求を読まずに断る（`pane_socket_busy`・行の上限超過の `bad_request`）: 返事を 1 行書いて書き込み側だけ閉じ、届く要求は読み捨てながら、
+   * 相手が閉じるか `refusedLingerMs` が過ぎるまで待ってから捨てる。
+   * 返事を書いてすぐ捨てると、相手の要求の書き込みがこちらの close より後になったとき EPIPE になり、相手は届いていた返事を読めない
+   * （`connection_closed` に見える＝「操作は始まっていない」と分からない）。
+   */
+  private refuse(sock: Socket, res: PaneSocketResponse): void {
+    // 待っている接続が上限なら、古いものから捨てる（返事は書いてある。新しい相手に返事を届けるほうを優先する）。
+    for (const old of this.refused) {
+      if (this.refused.size < this.limits.maxRefusedLingering) break;
+      this.refused.delete(old);
+      old.destroy();
+    }
+    this.refused.add(sock);
+    const timer = setTimeout(() => sock.destroy(), this.limits.refusedLingerMs);
+    timer.unref();
+    sock.on("close", () => {
+      clearTimeout(timer);
+      this.refused.delete(sock);
+    });
+    sock.on("end", () => sock.destroy()); // 相手が閉じた（返事を読んだ・諦めた）
     sock.resume(); // 相手が書いた要求は読み捨てる（読まないと相手の切断に気づけない）
-    const res: PaneSocketResponse = {
-      ok: false,
-      error: { code: "pane_socket_busy", message: "the pane socket is not accepting requests right now" },
-    };
-    this.deps.logger.info("pane socket: refused a connection", { code: res.error.code });
-    sock.end(`${JSON.stringify(res)}\n`, () => sock.destroy());
+    sock.end(`${JSON.stringify(res)}\n`);
   }
 
   private handleData(conn: Conn, chunk: Buffer): void {
@@ -200,8 +231,11 @@ export class PaneSocket {
     // 改行の前までの長さで上限を見る（改行を含む大きな 1 つのかたまりでも、改行の無い長い流れでも）。
     if (conn.bytes + (nl < 0 ? chunk.length : nl) > this.limits.maxLineBytes) {
       conn.handled = true;
-      conn.chunks = [];
-      this.reply(conn, this.failure("bad_request", `the request line exceeds ${this.limits.maxLineBytes} bytes`), {});
+      // 相手はまだ行の残りを書いているかもしれない。同時接続の枠は空け、断った接続として相手が閉じるのを待つ（`refuse`）。
+      const res = this.failure("bad_request", `the request line exceeds ${this.limits.maxLineBytes} bytes`);
+      this.deps.logger.info("pane socket: request", { connId: conn.id, code: "bad_request" });
+      this.finish(conn);
+      this.refuse(conn.sock, res);
       return;
     }
     if (nl < 0) {
@@ -279,7 +313,7 @@ export class PaneSocket {
       connId: conn.id,
       code: out.ok ? "ok" : out.error.code,
     });
-    // 書き切ったらこちらから閉じる（相手が閉じるのを待たない＝接続の枠をすぐ空ける。上限を超えた行の残りも読まない）。
+    // 書き切ったらこちらから閉じる（相手が閉じるのを待たない＝接続の枠をすぐ空ける。相手は要求の行を書き終えているので、書き込みで失敗しない）。
     // 相手が読まずに書き切れないときは、行を待つのと同じ上限で切る。
     this.armTimer(conn);
     conn.sock.end(`${text}\n`, () => conn.sock.destroy());

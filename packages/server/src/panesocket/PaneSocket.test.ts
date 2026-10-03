@@ -560,6 +560,104 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
     });
   });
 
+  describe("要求を読まずに断った接続の閉じ方", () => {
+    /**
+     * 受け口の FIN を受けても自分からは閉じないクライアント（`allowHalfOpen`）。返事の 1 行と、受け口が書き込み側を閉じたこと（`end`）を待てる。
+     * 断ってすぐ接続を捨てる実装では、`end` の時点で受け口の側はもう閉じていて、その後の `write` が EPIPE になる。
+     */
+    async function openHalf(): Promise<{ sock: Socket; reply: Promise<string>; write(data: string): Promise<Error | null> }> {
+      const sock = connect({ path, allowHalfOpen: true });
+      sock.setEncoding("utf8");
+      let buf = "";
+      sock.on("data", (chunk: string) => (buf += chunk));
+      const failed = new Promise<never>((_, reject) => sock.once("error", reject));
+      failed.catch(() => undefined);
+      const reply = Promise.race([new Promise<string>((res) => sock.once("end", () => res(buf))), failed]);
+      await Promise.race([new Promise<void>((res) => sock.once("connect", () => res())), failed]);
+      halves.push(sock);
+      return { sock, reply, write: (data) => new Promise((res) => sock.write(data, (err) => res(err ?? null))) };
+    }
+    const halves: Socket[] = [];
+    afterEach(() => {
+      for (const sock of halves.splice(0)) sock.destroy();
+    });
+    /** 断った後、相手が閉じるのを待っている接続の数。 */
+    const lingering = (): number => (socket as unknown as { refused: Set<Socket> }).refused.size;
+
+    it("pane_socket_busy: 返事を書いた後も、相手が閉じるまで要求を読み捨てて待つ（返事の後に届いた要求の書き込みが失敗しない）", async () => {
+      await start();
+      socket.pause();
+      const c = await openHalf();
+
+      // 受け口が返事を書いて書き込み側を閉じた後に、要求を書く（クライアントの書き込みが遅れた形）。
+      expect(parseReply(await c.reply)).toMatchObject({ ok: false, error: { code: "pane_socket_busy" } });
+      expect(await c.write(`${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x".repeat(256 * 1024) } })}\n`)).toBeNull();
+
+      expect(echoCalls).toBe(0); // 読み捨てる（操作は始めない）
+      expect(lingering()).toBe(1);
+      expect(socket.connectionCount).toBe(0); // 同時接続の枠には数えない
+      c.sock.destroy(); // 相手が閉じたら、すぐ片づける
+      await vi.waitFor(() => expect(lingering()).toBe(0));
+      expect(gone).toEqual([]);
+    });
+
+    it("行の上限超過の bad_request: 同時接続の枠を空け、相手が閉じるまで残りを読み捨てて待つ", async () => {
+      await start({ maxLineBytes: 256, maxConnections: 1 });
+      const c = await openHalf();
+
+      expect(await c.write("x".repeat(300))).toBeNull();
+      expect(parseReply(await c.reply)).toMatchObject({ ok: false, error: { code: "bad_request" } });
+      expect(await c.write(`${"x".repeat(256 * 1024)}\n`)).toBeNull(); // 行の残りを書いても失敗しない
+
+      expect(lingering()).toBe(1);
+      expect(socket.connectionCount).toBe(0);
+      expect(gone).toHaveLength(1);
+      // 待っている間も、枠（上限 1）は空いている。
+      expect(await call(path, "test.echo", "p1", { text: "next" })).toMatchObject({ ok: true, result: { text: "next" } });
+      c.sock.destroy();
+      await vi.waitFor(() => expect(lingering()).toBe(0));
+      expect(gone).toHaveLength(2); // 断った接続の分は 1 回だけ
+    });
+
+    it("相手が閉じなければ、待ちの上限（refusedLingerMs）で捨てる", async () => {
+      await start({ refusedLingerMs: 100 });
+      socket.pause();
+      const c = await openHalf();
+      expect(parseReply(await c.reply)).toMatchObject({ ok: false, error: { code: "pane_socket_busy" } });
+      expect(lingering()).toBe(1);
+
+      // 上限が効かなければ残り続け、ここで時間切れになる（相手は閉じていない）。
+      await vi.waitFor(() => expect(lingering()).toBe(0), { timeout: 3_000 });
+      expect(c.sock.destroyed).toBe(false);
+    });
+
+    it("待っている接続は上限（maxRefusedLingering）までで、超えたら古いものから捨てる（新しい相手にも返事は届く）", async () => {
+      await start({ maxRefusedLingering: 2, refusedLingerMs: 60_000 });
+      socket.pause();
+      const clients = [];
+      for (let i = 0; i < 5; i++) {
+        const c = await openHalf();
+        expect(parseReply(await c.reply)).toMatchObject({ ok: false, error: { code: "pane_socket_busy" } });
+        clients.push(c);
+        expect(lingering()).toBe(Math.min(i + 1, 2));
+      }
+      // 残っているのは新しい 2 本: 書き込みが通る。
+      expect(await clients[4]!.write("x\n")).toBeNull();
+      expect(await clients[3]!.write("x\n")).toBeNull();
+    });
+
+    it("close は、相手が閉じるのを待っている接続も待たずに捨てる", async () => {
+      await start({ refusedLingerMs: 60_000 });
+      socket.pause();
+      const c = await openHalf();
+      await c.reply;
+
+      await socket.close();
+
+      expect(lingering()).toBe(0);
+    });
+  });
+
   describe("起動と停止", () => {
     it("pane.sock は 0600 の socket で、一時ディレクトリを残さない（AC5）", async () => {
       await start();

@@ -218,8 +218,9 @@ describe("callPaneOp（偽の受け口）", () => {
     },
   );
 
-  it("要求を読まずに返事を書いて閉じる受け口（pane_socket_busy の断り方）でも、届いた返事の行を優先する", async () => {
-    // 実物の受け口は、受け付けを止めている間は要求を読まずに 1 行書いて閉じる。クライアントには返事の後に EPIPE・ECONNRESET が来うる。
+  it("要求を読まずに返事を書いて閉じる受け口（pane_socket_busy の断り方）の返事を読む——要求の書き込みが受け口の close に間に合う場合", async () => {
+    // 書き込みが間に合わない（EPIPE）と、届いていても読んでいない返事は失われる。それを防ぐのは受け口の側（相手が閉じるまで読み捨てて待つ）で、
+    // 実物の受け口との組み合わせは `paneSocket.integration.test.ts`（別のスレッドの受け口）で確かめる。
     const f = await fake({ onConn: replyWith({ ok: false, error: { code: "pane_socket_busy", message: "busy" } }) });
     await expect(callPaneOp(f.path, REQ, WAIT)).rejects.toMatchObject({ code: "pane_socket_busy", message: "busy" });
   });
