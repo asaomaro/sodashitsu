@@ -7,6 +7,8 @@ import { AskOpenParams } from "./messages.js";
  * 状態ディレクトリの Unix ドメイン socket（0600＝同じ利用者だけ）で、**1 接続 1 要求**: 要求を 1 行の JSON で送り、返事を 1 行の JSON で受ける
  * （受け口は返事を書いたら接続を閉じる。2 行目以降は読まない）。`/ws` の RPC は通さず、受け口に登録した操作だけを受ける。
  */
+
+/** やりとりの版（要求の `v`）。 */
 export const PANE_SOCKET_VERSION = 1;
 /** 要求 1 行の上限（改行を除く UTF-8 のバイト数）。質問の定義の上限（`ASK_SPEC_MAX_BYTES`）より大きい。 */
 export const PANE_SOCKET_MAX_LINE_BYTES = 1024 * 1024;
@@ -15,7 +17,7 @@ export const PANE_SOCKET_MAX_CONNECTIONS = 64;
 /** 接続してから要求の 1 行が揃うまでの上限。 */
 export const PANE_SOCKET_REQUEST_WAIT_MS = 10_000;
 
-/** 要求（1 行の JSON。末尾は改行）。知らない項目は無視する。`params` の省略は `{}`。 */
+/** 要求（1 行の JSON。末尾は改行）。知らない項目は無視する。`params` は省略できる（schema の出力は `undefined` のまま。受け口が `{}` として扱う）。 */
 export const PaneSocketRequest = z.object({
   v: z.literal(PANE_SOCKET_VERSION),
   op: z.string().min(1).max(64),
