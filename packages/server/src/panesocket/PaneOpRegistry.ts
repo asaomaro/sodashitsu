@@ -44,12 +44,12 @@ export class PaneOpRegistry {
 
   /**
    * 検査して呼ぶ。知らない操作 → `unknown_op`、schema 違反 → `invalid_params`、`RpcError` → その code、想定外 → `internal`（詳細はログだけ）。
-   * `rawParams` の省略（`undefined`）は `{}` として扱う。投げない（どの失敗も返事の形にする）。
+   * `rawParams` の省略（`undefined`）だけを `{}` として扱う（`null` はそのまま schema に通す）。投げない（どの失敗も返事の形にする）。
    */
   async invoke(name: string, ctx: PaneOpContext, rawParams: unknown): Promise<PaneSocketResponse> {
     const def = this.ops.get(name);
     if (!def) return { ok: false, error: { code: "unknown_op", message: `unknown op: ${name}` } };
-    const parsed = def.params.safeParse(rawParams ?? {});
+    const parsed = def.params.safeParse(rawParams === undefined ? {} : rawParams);
     if (!parsed.success) {
       return { ok: false, error: { code: "invalid_params", message: parsed.error.message } };
     }

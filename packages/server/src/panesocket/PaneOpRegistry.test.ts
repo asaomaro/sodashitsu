@@ -85,6 +85,15 @@ describe("PaneOpRegistry", () => {
     expect(await registry.invoke("test.echo", ctx(), undefined)).toMatchObject({ ok: false, error: { code: "invalid_params" } });
   });
 
+  it("null は省略ではない: {} に置き換えず、schema に通して invalid_params", async () => {
+    const registry = new PaneOpRegistry();
+    let called = 0;
+    registry.register({ name: "test.noargs", params: z.object({}), handler: () => ++called });
+
+    expect(await registry.invoke("test.noargs", ctx(), null)).toMatchObject({ ok: false, error: { code: "invalid_params" } });
+    expect(called).toBe(0);
+  });
+
   it("handler が投げた RpcError は、その code と message の返事になる", async () => {
     const registry = new PaneOpRegistry();
     registry.register(echoOp());
