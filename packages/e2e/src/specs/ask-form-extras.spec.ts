@@ -1,8 +1,8 @@
 import type { Page } from "@playwright/test";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
-import { runAsk, watchAskSubscriptions } from "../support/ask.js";
-import { watchSentAsk } from "../support/askSent.js";
+import { runAsk } from "../support/ask.js";
+import { dialog, opts, q, question, sent, setup as setupBase } from "../support/askForm.js";
 import { watchReceivedEvents } from "../support/frames.js";
 import { focusTerminal, prefixKey } from "../support/keys.js";
 
@@ -13,42 +13,14 @@ import { focusTerminal, prefixKey } from "../support/keys.js";
  * テストのクライアントに届いた `ask.opened` を、ブラウザにダイアログが出た合図にしない（出るまで DOM で待つ）。
  */
 
-const dialog = (page: Page) => page.locator("dialog#soda-ask-dialog[open]");
-
-/** ページごとの、ブラウザが送った `ask.answer`・`ask.cancel` の数と、受けた JSON のイベント（`openBrowser` が `goto` の前に張る）。 */
-const sentOf = new WeakMap<Page, Awaited<ReturnType<typeof watchSentAsk>>>();
-const sent = (page: Page) => sentOf.get(page)!;
+/** ページごとの、ブラウザが受けた JSON のイベント（`setup` が `goto` の前に張る）。 */
 const receivedOf = new WeakMap<Page, () => { event: string }[]>();
 
-/** ブラウザを開いて「質問を出せる画面」として登録されるまで待つ。 */
-async function openBrowser(page: Page, appServer: { origin: string; token: string }) {
-  const subs = await watchAskSubscriptions(page);
-  sentOf.set(page, await watchSentAsk(page));
-  receivedOf.set(page, await watchReceivedEvents(page));
-  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
-  await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
-  await subs.waitFor(1);
-  return subs;
-}
-
-/** ブラウザを開き、pane の id を返す。 */
-async function setup(page: Page, appServer: AppServer): Promise<string> {
-  const client = await appServer.openClient();
-  const p1 = client.helloSnapshot()!.panes[0]!.id;
-  await openBrowser(page, appServer);
-  return p1;
-}
-
-const opts = (n: number) =>
-  Array.from({ length: n }, (_, i) => ({ value: `o${i + 1}`, label: `選択肢${i + 1}` }));
-const q = (id: string, extra: Record<string, unknown> = {}) => ({
-  id,
-  label: `質問 ${id}`,
-  default: "o1",
-  options: opts(2),
-  ...extra,
-});
-const question = (page: Page, id: string) => page.locator(`[data-ask-question="${id}"]`);
+/** ブラウザを開き、pane の id を返す。受けたイベントも記録する（`receivedOf`）。 */
+const setup = (page: Page, appServer: AppServer): Promise<string> =>
+  setupBase(page, appServer, async (p) => {
+    receivedOf.set(p, await watchReceivedEvents(p));
+  });
 
 // --- テーマ（AC7） ----------------------------------------------------------------------------------------------------
 

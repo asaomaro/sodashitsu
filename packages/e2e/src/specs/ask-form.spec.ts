@@ -1,8 +1,8 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
-import { askFixture, runAsk, runAskWithoutLogin, watchAskSubscriptions } from "../support/ask.js";
-import { watchSentAsk } from "../support/askSent.js";
+import { askFixture, runAsk, runAskWithoutLogin } from "../support/ask.js";
+import { dialog, openBrowser, pageButtons, shownQuestions, walkPages } from "../support/askForm.js";
 import { watchReceivedFrames, watchSentInput } from "../support/frames.js";
 import { focusTerminal, prefixKey, typeLine } from "../support/keys.js";
 
@@ -16,55 +16,21 @@ import { focusTerminal, prefixKey, typeLine } from "../support/keys.js";
  *   `querySelector` は越えないので、部品の中は `shadowRoot` から探す。
  * - 部品は、与えられた高さに収まらない定義を**ページに分ける**。表示条件で隠れた質問・ほかのページの質問も DOM に残るので、出ている質問は見え方（`:visible`）で絞る。
  *   補足欄は最後のページ。`Tab` の最初の行き先は、ページに分かれていればページの番号。
- * - この spec の画面（1280×720）での出方（確かめた値）: `SPEC` は 2 ページ（質問 2 つ｜補足。全部を並べた高さが、使える高さを 1px 超えるだけ——
- *   文字の描き方が違う環境では 1 枚になりうるので、`SPEC` の件はページの数を決め打ちにしない）。確かめ用の定義は 6 ページ（テーマだけで高さを超える）。
+ * - この spec の画面（1280×720）での出方（確かめた値）: `SPEC` は 2 ページ（質問 2 つ｜補足）。`SPEC` の件はページの数を決め打ちにしない。
+ *   確かめ用の定義は 6 ページ（テーマだけで高さを超える）。
  */
 
+// `SPEC` は、この画面で**余裕を持って 2 ページに分かれる**ようにしてある（「告知」に長めの `help` を足した。回答の JSON には影響しない）。
+// 以前は全部を並べた高さが使える高さを 1px 超えるだけで、文字の描き方が違う環境では 1 枚になりえた（回答の JSON の期待は 1 枚でも 2 ページでも同じ。
+// 件の意図は回答・キー・フォーカスの確認で、収まる側に寄せると既存の経路〔2 ページ〕が変わるので、確実に分かれる側にした）。
 const SPEC = {
   title: "配布先",
   questions: [
     { id: "channel", label: "チャンネル", default: "beta", options: [{ value: "beta", label: "ベータ", recommended: true }, { value: "stable", label: "安定版" }], allowOther: true },
     { id: "rollout", label: "段階", showIf: { channel: "stable" }, default: "10", options: ["10", "100"] },
-    { id: "notes", label: "告知", type: "multi", options: ["changelog", "blog", "mail"], default: ["changelog"] },
+    { id: "notes", label: "告知", type: "multi", options: ["changelog", "blog", "mail"], default: ["changelog"], help: "告知の経路は複数選べます。変更履歴だけでよい場合は、そのままにしてください。メールは配布の直前にまとめて送ります。" },
   ],
 };
-
-const dialog = (page: Page) => page.locator("dialog#soda-ask-dialog[open]");
-
-/** ブラウザを開いて「質問を出せる画面」として登録されるまで待つ。 */
-async function openBrowser(page: Page, appServer: { origin: string; token: string }) {
-  const subs = await watchAskSubscriptions(page);
-  const sent = await watchSentAsk(page);
-  const sentAnswers = sent.answers; // ブラウザが送った `ask.answer` の累計（`support/askSent.ts`）
-  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
-  await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
-  await subs.waitFor(1);
-  return Object.assign(subs, { sentAnswers });
-}
-
-/** いま出ている質問の id（いまのページにあり、表示条件を満たしているもの）。 */
-async function shownQuestions(page: Page): Promise<string[]> {
-  return page.locator("[data-ask-question]:visible").evaluateAll((els) => els.map((e) => e.getAttribute("data-ask-question") ?? ""));
-}
-
-/** 出ているページの番号のボタン（1 枚のときは 0 個）。 */
-const pageButtons = (page: Page) => page.locator("[data-ask-page]:visible");
-
-/**
- * 最初のページから［次へ］で最後のページまで回り、ページごとの「出ている質問の id」を返す（1 枚ならそのまま 1 つ）。終わると最後のページに居る。
- * ページを移るのは部品のクリックの処理の中（同期）なので、クリックが返った時点で DOM は移った後。
- */
-async function walkPages(page: Page): Promise<string[][]> {
-  if ((await pageButtons(page).count()) > 0) await pageButtons(page).first().click();
-  const pages = [await shownQuestions(page)];
-  const next = page.locator("[data-ask-next]");
-  while (await next.isVisible()) {
-    await next.click();
-    pages.push(await shownQuestions(page));
-    if (pages.length > 50) throw new Error("ページが終わらない");
-  }
-  return pages;
-}
 
 /** `target` が見えるページまで［次へ］で進む（ページに分かれていなければ何もしない）。 */
 async function nextUntilVisible(page: Page, target: Locator): Promise<void> {

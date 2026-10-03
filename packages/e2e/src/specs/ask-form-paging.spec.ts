@@ -1,8 +1,17 @@
 import type { Page } from "@playwright/test";
-import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
-import { runAsk, watchAskSubscriptions } from "../support/ask.js";
-import { watchSentAsk } from "../support/askSent.js";
+import { runAsk } from "../support/ask.js";
+import {
+  dialog,
+  opts,
+  pageButtons,
+  q,
+  question,
+  sent,
+  setup,
+  shownQuestions,
+  walkPages,
+} from "../support/askForm.js";
 
 /**
  * 質問のフォーム（`sodactl ask`）のページ分け・ページをまたぐ決定・キー（20261003-ask-form-component の AC4・AC5・AC-I2〜AC-I5）の E2E。
@@ -15,39 +24,6 @@ import { watchSentAsk } from "../support/askSent.js";
  * ページに分かれた定義は、ページを移る操作の前後で、いまのページの番号のボタン（`[data-ask-page][aria-current="page"]`）で位置を見る。
  */
 
-const dialog = (page: Page) => page.locator("dialog#soda-ask-dialog[open]");
-
-/** ページごとの、ブラウザが送った `ask.answer`・`ask.cancel` の数（`setup` が `goto` の前に張る）。 */
-const sentOf = new WeakMap<Page, Awaited<ReturnType<typeof watchSentAsk>>>();
-const sent = (page: Page) => sentOf.get(page)!;
-
-/** ブラウザを開いて「質問を出せる画面」として登録されるまで待つ。 */
-async function openBrowser(page: Page, appServer: { origin: string; token: string }) {
-  const subs = await watchAskSubscriptions(page);
-  sentOf.set(page, await watchSentAsk(page));
-  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
-  await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
-  await subs.waitFor(1);
-  return subs;
-}
-
-/** ブラウザを開き、pane の id を返す。 */
-async function setup(page: Page, appServer: AppServer): Promise<string> {
-  const client = await appServer.openClient();
-  const p1 = client.helloSnapshot()!.panes[0]!.id;
-  await openBrowser(page, appServer);
-  return p1;
-}
-
-/** いま出ている質問の id（いまのページにあり、表示条件を満たしているもの）。 */
-async function shownQuestions(page: Page): Promise<string[]> {
-  return page
-    .locator("[data-ask-question]:visible")
-    .evaluateAll((els) => els.map((e) => e.getAttribute("data-ask-question") ?? ""));
-}
-
-/** 出ているページの番号のボタン（1 枚のときは 0 個）。 */
-const pageButtons = (page: Page) => page.locator("[data-ask-page]:visible");
 /** いまのページの番号のボタン。 */
 const currentTab = (page: Page) => page.locator('[data-ask-page][aria-current="page"]');
 /**
@@ -79,24 +55,10 @@ async function expectFitsViewport(page: Page, label: string): Promise<void> {
   expect(box.y, label).toBeGreaterThanOrEqual(-1);
   expect(box.y + box.height, label).toBeLessThanOrEqual(page.viewportSize()!.height + 1);
 }
-const question = (page: Page, id: string) => page.locator(`[data-ask-question="${id}"]`);
 const radio = (page: Page, id: string, value: string) =>
   page.locator(`[data-ask-question="${id}"] input[type=radio][value="${value}"]`);
 const otherText = (page: Page, id: string) =>
   page.locator(`[data-ask-question="${id}"] label.opt.other input[type=text]`);
-
-/** 最初のページから［次へ］で最後のページまで回り、ページごとの「出ている質問の id」を返す（1 枚ならそのまま 1 つ）。終わると最後のページに居る。 */
-async function walkPages(page: Page): Promise<string[][]> {
-  if ((await pageButtons(page).count()) > 0) await pageButtons(page).first().click();
-  const pages = [await shownQuestions(page)];
-  const next = page.locator("[data-ask-next]");
-  while (await next.isVisible()) {
-    await next.click();
-    pages.push(await shownQuestions(page));
-    if (pages.length > 50) throw new Error("ページが終わらない");
-  }
-  return pages;
-}
 
 /** 部品の中でフォーカスのある要素（部品の外にあれば null。フォーカスが部品の中にあると `document.activeElement` は `<ask-form>`、中の要素は `shadowRoot.activeElement`）。 */
 async function formFocus(page: Page): Promise<{
@@ -124,16 +86,6 @@ async function expectOnPage(page: Page, n: number, ids: string[]): Promise<void>
   expect(await shownQuestions(page)).toEqual(ids);
 }
 
-const opts = (n: number) =>
-  Array.from({ length: n }, (_, i) => ({ value: `o${i + 1}`, label: `選択肢${i + 1}` }));
-/** 2 択の単一選択（既定は o1）。 */
-const q = (id: string, extra: Record<string, unknown> = {}) => ({
-  id,
-  label: `質問 ${id}`,
-  default: "o1",
-  options: opts(2),
-  ...extra,
-});
 /** 高さを超える定義: 8 問×6 択。 */
 const many = (extra: (i: number) => Record<string, unknown> = () => ({})) =>
   Array.from({ length: 8 }, (_, i) => q(`m${i + 1}`, { options: opts(6), ...extra(i) }));
