@@ -4,8 +4,8 @@ import { watchAskSubscriptions } from "./ask.js";
 import { watchSentAsk } from "./askSent.js";
 
 /**
- * 質問のフォームの E2E（`ask-form.spec.ts`・`ask-form-paging.spec.ts`・`ask-form-extras.spec.ts`）の共通の補助。
- * 部品 `<ask-form>`（`third_party/ask-form/ask-form.js`）の内部の属性（`data-ask-question`・`data-ask-page`・`data-ask-next` など）に依る箇所はここに集める
+ * 質問のフォームの E2E（`ask-form.spec.ts`・`ask-form-index.spec.ts`・`ask-form-extras.spec.ts`）の共通の補助。
+ * 部品 `<ask-form>`（`third_party/ask-form/ask-form.js`）の内部の属性（`data-ask-question`・`data-ask-index`・`nav.index` など）に依る箇所はここに集める
  * （部品を取り込み直して属性名が変わったときの直し先。手順は `third_party/ask-form/README.md`）。
  */
 
@@ -46,30 +46,80 @@ export async function setup(
   return p1;
 }
 
-/** いま出ている質問の id（いまのページにあり、表示条件を満たしているもの）。 */
+/** いま出ている質問の id（表示条件を満たしているもの。質問は 1 枚に並んでいるので、スクロールで見えない分も含む）。 */
 export async function shownQuestions(page: Page): Promise<string[]> {
   return page
     .locator("[data-ask-question]:visible")
     .evaluateAll((els) => els.map((e) => e.getAttribute("data-ask-question") ?? ""));
 }
 
-/** 出ているページの番号のボタン（1 枚のときは 0 個）。 */
-export const pageButtons = (page: Page) => page.locator("[data-ask-page]:visible");
+/** 目次の項目（出ているもの）の値。質問の id が定義の順に並び、補足は空文字。目次が出ていなければ空（項目は DOM にあるが `nav.index` が隠れている）。 */
+export async function indexItems(page: Page): Promise<string[]> {
+  return page
+    .locator("[data-ask-index]:visible")
+    .evaluateAll((els) => els.map((e) => e.getAttribute("data-ask-index") ?? ""));
+}
+
+/** 今の項目（`aria-current="true"`）の値。印が無ければ null。 */
+export async function currentIndex(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const cur = document
+      .querySelector("ask-form")
+      ?.shadowRoot?.querySelector('nav.index [data-ask-index][aria-current="true"]');
+    return cur ? (cur.getAttribute("data-ask-index") ?? "") : null;
+  });
+}
+
+/** 目次の幅（部品の `indexWidth`。目次が出ていなければ 0）。出る・出ないは描画が落ち着いてから読む（`settle`）。 */
+export const indexWidth = (page: Page): Promise<number> =>
+  page.locator("ask-form").evaluate((f) => (f as unknown as { indexWidth: number }).indexWidth);
 
 /**
- * 最初のページから［次へ］で最後のページまで回り、ページごとの「出ている質問の id」を返す（1 枚ならそのまま 1 つ）。終わると最後のページに居る。
- * ページを移るのは部品のクリックの処理の中（同期）なので、クリックが返った時点で DOM は移った後。
+ * ダイアログの高さが連続 5 フレーム変わらなくなる（描画が落ち着く）まで待つ。部品は高さが決まってから目次を出すか決める（ResizeObserver）ので、
+ * 出るまでの途中の 0 を「出ない」と読まないように、「出ない」ことは落ち着いた後に読む。
  */
-export async function walkPages(page: Page): Promise<string[][]> {
-  if ((await pageButtons(page).count()) > 0) await pageButtons(page).first().click();
-  const pages = [await shownQuestions(page)];
-  const next = page.locator("[data-ask-next]");
-  while (await next.isVisible()) {
-    await next.click();
-    pages.push(await shownQuestions(page));
-    if (pages.length > 50) throw new Error("ページが終わらない");
-  }
-  return pages;
+export async function settle(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const d = document.querySelector("dialog#soda-ask-dialog")!;
+        let last = -1;
+        let same = 0;
+        const tick = () => {
+          const h = d.getBoundingClientRect().height;
+          same = h === last ? same + 1 : 0;
+          last = h;
+          if (same >= 5) resolve();
+          else requestAnimationFrame(tick);
+        };
+        tick();
+      }),
+  );
+}
+
+/** 質問が部品の本文（スクロールする領域）の表示範囲に入っている（サブピクセルの許容 ±1px）。 */
+export async function inBody(page: Page, id: string): Promise<boolean> {
+  return page.evaluate((qid) => {
+    const root = document.querySelector("ask-form")!.shadowRoot!;
+    const body = root.querySelector(".body")!.getBoundingClientRect();
+    const r = root.querySelector(`[data-ask-question="${qid}"]`)!.getBoundingClientRect();
+    return r.top >= body.top - 1 && r.bottom <= body.bottom + 1;
+  }, id);
+}
+
+/** 部品の中でフォーカスのある要素（部品の外にあれば null。フォーカスが部品の中にあると `document.activeElement` は `<ask-form>`、中の要素は `shadowRoot.activeElement`）。 */
+export async function formFocus(
+  page: Page,
+): Promise<{ tag: string; type: string | null; question: string | null } | null> {
+  return page.evaluate(() => {
+    const a = document.querySelector("ask-form")?.shadowRoot?.activeElement ?? null;
+    if (!a) return null;
+    return {
+      tag: a.localName,
+      type: a.getAttribute("type"),
+      question: a.closest("fieldset")?.getAttribute("data-ask-question") ?? null,
+    };
+  });
 }
 
 export const question = (page: Page, id: string) => page.locator(`[data-ask-question="${id}"]`);
