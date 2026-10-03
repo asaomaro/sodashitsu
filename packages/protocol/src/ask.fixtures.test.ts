@@ -117,10 +117,9 @@ describe("共通の試験データ: 読めている", () => {
     expect(normalizeDoc.cases.length).toBeGreaterThan(0);
     expect(collectDoc.cases.length).toBeGreaterThan(0);
     expect(Object.keys(normalizeDoc.reasons).length).toBeGreaterThan(0);
-    // 通る例・誤りの例・`sodashitsu` の欄で上書きする例が、どれも 1 つ以上ある。
+    // 通る例・誤りの例が、どちらも 1 つ以上ある（`sodashitsu` の欄の例は、差が解消されれば無くなるので必須にしない）。
     expect(normalizeDoc.cases.some((c) => c.expect.ok)).toBe(true);
     expect(normalizeDoc.cases.some((c) => !c.expect.ok)).toBe(true);
-    expect(normalizeDoc.cases.some((c) => c.sodashitsu !== undefined)).toBe(true);
     const names = [...normalizeDoc.cases, ...collectDoc.cases].map((c) => c.name);
     expect(names.every((n) => typeof n === "string" && n !== "")).toBe(true);
   });
@@ -139,7 +138,7 @@ describe("共通の試験データ: normalize.json（normalizeAskSpec）", () =>
       return;
     }
     if (!got.ok) throw new Error(`通るはずの定義が誤りになった: ${got.reason}（${got.message}）`);
-    expect(written(got.spec as unknown as JsonObject, keys)).toEqual(want.spec);
+    expect(written(got.spec as unknown as JsonObject, keys)).toStrictEqual(want.spec);
   });
 });
 
@@ -159,7 +158,7 @@ describe("共通の試験データ: collect.json（collectAsk・checkAskAnswer�
     };
     const got = collectAsk(spec, state);
 
-    expect(got.answers).toEqual(c.expect.answers);
+    expect(got.answers).toStrictEqual(c.expect.answers);
     expect(got.lacking).toEqual(c.expect.lacking);
     // custom・note は、無いときは項目ごと無い（`collectAsk` の custom は空の配列）。
     expect(got.custom).toEqual(c.expect.custom ?? []);
