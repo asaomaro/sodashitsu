@@ -56,6 +56,8 @@ let previousFocus: Element | null = null;
 let previousPaneId: string | null = null;
 /** 部品が最後に答えた「いちばん高いページの高さ」。0 は「大きさが取れていない」（描けなかった・単体テストの環境）。下の `watch` は `immediate` なので、その前に置く。 */
 let contentHeight = 0;
+/** いま部品に入っている定義の質問（`askId`）。部品が遅れて出す `ask-unsupported` を、その時点の先頭ではなく、定義を入れた質問に結び付ける。 */
+let loadedAskId: string | null = null;
 
 watch(
   () => ask.value?.askId ?? null,
@@ -156,6 +158,7 @@ function loadSpec(a: AskPending): void {
   const el = formEl.value;
   if (!el) return;
   contentHeight = 0;
+  loadedAskId = a.askId;
   el.style.height = `${maxFormHeight()}px`;
   el.busy = false;
   try {
@@ -210,6 +213,8 @@ function onNativeCancel(ev: Event): void {
 /**
  * 部品が描けない（`ask-unsupported`。検査済みの定義では、部品の中の例外でしか起きない）。部品にはボタンが無く利用者は答えられないので、
  * 取り消して知らせる（sodactl には `cancelled`）。理由は定義に由来する文字列（質問の id・型の名前・例外の文）を含むので、画面には出さない。
+ * 部品はこのイベントをマイクロタスクで遅らせて出すので、届いた時点の先頭の質問ではなく、**定義を入れた質問**を取り消す
+ * （その間に先頭が替わっていても、描けなかった質問でないものを取り消さない）。
  */
 function unsupported(askId: string, reason: string): void {
   console.warn(`[ask] cannot render the form (askId=${askId}): ${reason}`);
@@ -217,9 +222,8 @@ function unsupported(askId: string, reason: string): void {
   void controller?.cancel(askId);
 }
 function onUnsupported(ev: Event): void {
-  const a = ask.value;
-  if (!a) return;
-  unsupported(a.askId, String((ev as CustomEvent<{ reason?: unknown }>).detail?.reason));
+  if (loadedAskId === null) return;
+  unsupported(loadedAskId, String((ev as CustomEvent<{ reason?: unknown }>).detail?.reason));
 }
 
 /**

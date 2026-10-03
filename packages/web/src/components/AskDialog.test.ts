@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick, toRaw } from "vue";
@@ -35,6 +35,8 @@ afterEach(() => {
   setInnerHeight(INNER_HEIGHT);
   document.body.innerHTML = "";
 });
+// mount したままの件が、開いたときに付けた `window` の `resize` のリスナーを次の件へ残さないようにする（後から登録した側が先に走る＝上の片付けより前に unmount する）。
+enableAutoUnmount(afterEach);
 
 function spec(raw: unknown) {
   const r = normalizeAskSpec(raw);
@@ -957,6 +959,29 @@ describe("AskDialog — 部品が描けない定義（AC15）", () => {
     expect(warn).toHaveBeenCalledOnce();
     expect(String(warn.mock.calls[0]![0])).toContain("matrix");
     expect(form(w).style.height).toBe("");
+  });
+
+  it("描けない定義を入れた直後（ask-unsupported が届く前）に先頭の質問が替わっても、取り消すのは描けなかった質問（次の質問ではない）", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const w = mountDialog();
+    // 部品は `ask-unsupported` をマイクロタスクで遅らせて出す。定義が入った直後（その前）に、一覧が置き換わって先頭が替わる（接続し直した等）。
+    const original = Object.getOwnPropertyDescriptor(formProto(), "spec")?.set;
+    if (!original) throw new Error("spec の setter が無い");
+    let swapped = false;
+    vi.spyOn(formProto(), "spec", "set").mockImplementation(function (this: AskFormElement, value: unknown) {
+      original.call(this, value);
+      if (swapped) return;
+      swapped = true;
+      w.store.replaceAll([ask(SPEC, "a2"), broken("a1")]);
+    });
+    await open(w, broken("a1"));
+    expect(swapped).toBe(true);
+    expect(w.store.current?.askId).toBe("a2");
+    expect(w.cancel).toHaveBeenCalledOnce();
+    expect(w.cancel).toHaveBeenCalledWith("a1");
+    // 替わった先頭の質問（描ける）は、取り消されずに出ている。
+    expect(inForm(w, "[data-ask-title]").textContent).toBe("配布先");
+    expect(shadow(w).querySelector("[data-ask-submit]")).not.toBeNull();
   });
 
   it("対照: 描ける定義では取り消さず、トーストも出さない", async () => {
