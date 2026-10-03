@@ -16,6 +16,7 @@ export interface PrivateUnixSocketOptions {
  * - rename は `path` に残っていた古いファイル（前回の不正終了の残骸・execve で入れ替わる前の版の socket）を置き換える（unlink は要らない）。
  * - 失敗したら待ち受けを閉じ、一時ディレクトリを消して投げる（`path` には触れていない）。
  * - 待ち受けたのは rename の前のパスなので、`server.close()` は `path` のファイルを消さない。**閉じる側が `path` を自分で消す**。
+ * - 既に待ち受けている `server` を渡したら、何にも触れずに投げる（呼び出し側の待ち受けを閉じない）。
  * - Windows では使わない（名前付きパイプに権限・rename の話が当てはまらない。呼び出し側が判断する）。
  */
 export async function listenPrivateUnixSocket(
@@ -23,6 +24,7 @@ export async function listenPrivateUnixSocket(
   path: string,
   options: PrivateUnixSocketOptions = {},
 ): Promise<void> {
+  if (server.listening) throw new Error("the server is already listening");
   const tmpDir = await mkdtemp(join(dirname(path), options.tmpPrefix ?? ".s-")); // 0700
   const tmpPath = join(tmpDir, "s"); // 短い名前（socket のパスの長さの上限に近づけない）
   try {
