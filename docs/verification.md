@@ -749,11 +749,35 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
       両方操作でき、閉じると設定のダイアログへ戻る。
 - [ ] スマートフォン（iOS Safari・Android Chrome）の実機: フォームが画面に収まり（はみ出さない）、選択肢をタップで選べて、最後までスクロールできる。入力欄へフォーカスしても画面が拡大しない。画面のキーボードが
       出ても［決定］が隠れない（隠れるなら記録する。ダイアログの高さに画面のキーボードを反映していない）。
-- [ ] 保存した SSH のマシン（`docs/machines.md`）: リモートのマシンで `sodactl login` を済ませ、そのマシンを表示した手元のブラウザで、リモートの pane の `sodactl ask`。期待：手元のブラウザに出て、答えが返る。
+- [ ] 保存した SSH のマシン（`docs/machines.md`）: リモートのマシン（Linux・macOS。受け口を含む版の `soda`）で **`sodactl login` をしないまま**、そのマシンを表示した手元のブラウザで、リモートの pane の `sodactl ask`。期待：手元のブラウザに出て、答えが返る
+      （リモートの `pane.sock` で動く）。受け口を持たない古い版のリモートでは、リモートのマシンで `sodactl login` を済ませてから行う。
       ローカルを表示している間は `unavailable`。
 - [ ] 端末版（引数なしの `soda`）だけをつないだ session で `sodactl ask`。期待：待たずに `{"status":"unavailable",…}`。
 - [ ] ブラウザを 1 つも開いていない session で `sodactl ask`。期待：待たずに `unavailable`。同じ pane で 2 つ続けて打つと 2 つめは `ask_busy`（終了コード 1）。
 - [ ] Claude Code（`claude`）を pane で動かし、ask-form のスキルで質問させる（ask-form 側が `sodactl ask` に対応した後）。期待：ブラウザの画面の上に出て、答えが Claude Code に戻る。
+
+### 共通：ログインなしの `sodactl ask`（`pane.sock`。20261003-sodactl-ask-socket・`docs/sodactl.md`「ログイン不要の受け口（pane.sock）」）
+
+自動のテストは、受け口のやりとり（検査の順・上限・引き継ぎの間の `pane_socket_busy`・接続が切れたら取り消し）・sodactl の経路の選択（受け口 → `/ws` へ落ちる条件・落ちない条件）・実物のサーバと実物の socket での結合・
+実物の pane の `SODA_PANE_SOCKET` がそのサーバの実在する `pane.sock`（0600）と一致し、pane の環境に token・cookie の秘密が現れないことを Linux で確かめた。
+**macOS・別の OS 利用者から繋げないこと・版を上げた `soda handoff` を跨いだ pane・保存した SSH のマシン・Windows で今までどおりであることは、実物では確かめていない**。
+
+- [ ] Linux・macOS・WSL2：`sodactl login` のキャッシュが無い状態（`~/.sodactl` を別の名前へ退かす。終わったら戻す）で `soda serve` を起動し、ブラウザで pane を開いて、pane の中で `sodactl ask < spec.json`。
+      期待：`unauthenticated` にならずにフォームが出て、［決定］で `{"status":"answered",…}` が 1 行返る（終了コード 0）。出どころの行に、その pane の名前・workspace・tab が出る。
+- [ ] 同じ pane で `echo "$SODA_PANE_SOCKET"` と `ls -l "$SODA_PANE_SOCKET"`。期待：状態ディレクトリの `pane.sock` で、権限が `srw-------`・持ち主がサーバを起動した利用者。`env | grep -i -e token -e cookie` に soda の token・cookie が出ない。
+      状態ディレクトリに `.p-` で始まる一時ディレクトリが残っていない。
+- [ ] 別の OS 利用者から繋げない：`sudo -u <別の利用者> node -e 'require("net").connect(process.argv[1]).on("connect",()=>console.log("connected")).on("error",(e)=>console.log(e.code))' <pane.sock のパス>`。
+      期待：`EACCES`（`connected` と出たら不合格）。
+- [ ] 受け口を使えないときは今までどおり：キャッシュが無いまま、pane の中で `sodactl ask --url "$SODA_SERVER_URL" < spec.json`（接続先を明示）。期待：stderr に `unauthenticated`・終了コード 1（`/ws` の経路へ落ちている）。
+      `sodactl login` してから同じコマンドを打つと、フォームが出て答えが返る。ログインなしの `sodactl snapshot` は今までどおり `unauthenticated`（受け口に載っているのは ask だけ）。
+- [ ] `sodactl ask` が待っている間に `soda serve` を Ctrl+C で止める。期待：`connection_closed`・終了コード 1 で、ブラウザのダイアログが閉じる。`pane.sock` のファイルが消えている。
+- [ ] `soda handoff` の後の、前から動いている pane：受け口を含まない版の `soda serve` で pane を開いておき（その pane で `echo "$SODA_PANE_SOCKET"` は空）、受け口を含む版へ入れ替えて `soda handoff`。
+      キャッシュが無いまま、その pane で `sodactl ask < spec.json`（sodactl も新しい版）。期待：フォームが出て答えが返る（`SODA_AGENT_REPORT_SOCKET` と同じディレクトリの `pane.sock` を使う）。
+      `soda handoff` の後に開いた pane には `SODA_PANE_SOCKET` が入っている。
+- [ ] `sodactl ask` が待っている間に `soda handoff`。期待：待っていた `sodactl ask` は `connection_closed`・終了コード 1 で、ダイアログが閉じる。入れ替えの後に打ち直すと、フォームが出て答えが返る。
+- [ ] 名前付き session（`soda serve --session lan`）：その pane の `SODA_PANE_SOCKET` が `…/sessions/lan/pane.sock` で、既定の session のものと別。ログインなしの `sodactl ask` の質問は、その session を開いたブラウザにだけ出る。
+- [ ] Windows（ネイティブ）：pane の中で `echo $env:SODA_PANE_SOCKET` が空。キャッシュが無い状態の `sodactl ask` は今までどおり `unauthenticated`・終了コード 1 で、`sodactl login` の後は答えが返る。
+
 ### 共通：ファイルのリンクとドロップ（`docs/file-links.md`）
 
 自動のテストは、サーバの `file.*`（実物の `/ws`）・ブラウザの部品（偽のサーバ）と、実物の Chromium での「パスのリンク → ダウンロード」

@@ -464,6 +464,8 @@ soda session delete lan                                      # 動いていな�
   OS の上限（Linux は 108 バイト、macOS は 103 バイト。macOS は未検証）があり、超えると
   `soda: the state dir path is too long: …` で起動しない（終了コード 2）。既定の状態ディレクトリ
   （Linux の `/home/<ユーザー名>/.local/state/sodashitsu`）なら、ユーザー名が 8 文字で 42 文字の名前まで通る。
+  同じ状態ディレクトリには、pane の中の `sodactl ask` 向けのログイン不要の受け口 `pane.sock`（0600。`docs/sodactl.md`「ログイン不要の受け口（pane.sock）」）も置く。
+  長さの検査は `agent-report.sock` で測っていて、`pane.sock` はそれより短いので、検査を通れば収まる。
 - `soda session list` の `status` は `soda.lock` から判定する（`running` なら行末に `(pid …)` を添える。別のホストのロックは
   `(pid … on <ホスト名>)`）。規則外の名前のディレクトリ・シンボリックリンク・ファイルは一覧に出さない。
 - **`soda session stop <名前> [--json]`**（20260927-session-stop。Linux・macOS。macOS は未検証）：動いている `soda serve` を、
