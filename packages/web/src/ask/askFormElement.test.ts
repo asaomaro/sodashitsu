@@ -179,7 +179,7 @@ describe("部品のいまの動き: 値が __other__ の選択肢（部品 1.0.1
     expect(unsupported).toEqual([]);
   });
 
-  it("(d) multi で allowOther と併存 → 選んだ値が黙って落ち、空の回答が決定される（選んだ値と違う回答）", async () => {
+  it("(d) multi で allowOther と併存 → 選んだ `__other__` が黙って落ち、残りの値だけが決定される（選んだ値と違う回答）", async () => {
     const { el, root, unsupported, submitted } = await mountForm([
       { id: "q", label: "Q", type: "multi", options: OPTIONS, allowOther: true },
     ]);
