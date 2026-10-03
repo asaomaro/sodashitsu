@@ -164,16 +164,29 @@ describe("normalizeAskSpec — 誤り", () => {
     expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "edit", page: "直す" }] })).toMatchObject({ ok: false, reason: "unsupported_type", unsupportedType: "edit" });
     expect(reason({ questions: [q(), q({ page: 2 })] })).toBe("id_duplicate");
   });
-  it("選択肢の value が __other__ の定義は誤り（画面の部品が「その他」の入力と取り違えるため）", () => {
-    for (const extra of [{}, { allowOther: true }, { type: "multi" }, { default: "__other__" }]) {
-      expect(reason({ questions: [q({ options: ["x", "__other__"], ...extra })] })).toBe("invalid");
-      expect(reason({ questions: [q({ options: ["x", { value: "__other__", label: "ほか" }], ...extra })] })).toBe("invalid");
+  it("選択肢の value が __other__ の定義は通る（ふつうの選択肢。「その他」の印は値ではない）", () => {
+    for (const extra of [{}, { allowOther: true }, { type: "multi" }]) {
+      expect(spec({ questions: [q({ options: ["x", "__other__"], ...extra })] }).questions[0]!.options.map((o) => o.value)).toEqual(["x", "__other__"]);
+      expect(spec({ questions: [q({ options: ["x", { value: "__other__", label: "ほか" }], ...extra })] }).questions[0]!.options[1]).toEqual({ value: "__other__", label: "ほか" });
     }
-    expect(bad({ questions: [q({ options: ["__other__"] })] })).toMatch(/options\[0\].*reserved/);
-    // 値でなければ使える（表示名・質問の id・text の既定・「その他」の表示名）
-    const s = spec({ questions: [q({ id: "__other__", label: "__other__", otherLabel: "__other__", allowOther: true, options: [{ value: "x", label: "__other__" }] }), { id: "t", label: "T", type: "text", default: "__other__" }] });
-    expect(s.questions[0]!.options[0]!.label).toBe("__other__");
-    expect(s.questions[1]!.default).toBe("__other__");
+    // default にも使える（選択済みで出て、触らずに決定するとその値）
+    const s = spec({ questions: [q({ options: ["x", "__other__"], default: "__other__", allowOther: true })] });
+    expect(s.questions[0]!.default).toBe("__other__");
+    const r = collectAsk(s, initialAskState(s));
+    expect(r).toMatchObject({ answers: { a: "__other__" }, custom: [], lacking: [] });
+    expect(checkAskAnswer(s, { answers: r.answers })).toBeNull();
+  });
+  it("選択肢の value が空文字の定義は通る（表示名が無ければ表示名も空文字）。default が空文字なら選択済み", () => {
+    const s = spec({ questions: [q({ options: [{ value: "", label: "なし" }, "x"], default: "" }), q({ id: "m", type: "multi", options: ["", "x"], default: [""] })] });
+    expect(s.questions[0]!.options[0]).toEqual({ value: "", label: "なし" });
+    expect(s.questions[0]!.default).toBe("");
+    expect(s.questions[1]!.options[0]).toEqual({ value: "", label: "" });
+    expect(initialAskState(s).picked).toEqual({ a: [""], m: [""] });
+    // 空文字の値の選択肢が無い質問では、default の空文字は選択済みにしない
+    const none = spec({ questions: [q({ default: "" })] });
+    expect(initialAskState(none).picked).toEqual({ a: [] });
+    // 空文字の値が 2 つあれば重複
+    expect(reason({ questions: [q({ options: ["", { value: "" }] })] })).toBe("option_value_duplicate");
   });
   it("message に定義の文字列（id の重複を除く）を入れない", () => {
     expect(bad({ questions: [q({ label: "SECRET-LABEL", type: "nope" })] })).not.toContain("SECRET");
@@ -331,6 +344,38 @@ describe("collectAsk — form.html の collect() と同じ規則", () => {
     expect(empty.lacking).toEqual(["a"]);
     expect(empty.answers).not.toHaveProperty("a");
   });
+  it("値が空文字の選択肢: 選べば回答は空文字（未回答ではない）。「その他」の空の入力とは別もの", () => {
+    const s = spec({ questions: [q({ id: "a", options: [{ value: "", label: "なし" }, "x"], allowOther: true }), q({ id: "m", type: "multi", options: ["x", { value: "", label: "なし" }], required: true, allowOther: true })] });
+    // 選択肢の空文字を選んだ: single は ""、multi は [""]（required も満たす）
+    const r = collectAsk(s, state(s, { picked: { a: [""], m: [""] } }));
+    expect(r).toMatchObject({ answers: { a: "", m: [""] }, custom: [], lacking: [] });
+    expect(checkAskAnswer(s, { answers: r.answers })).toBeNull();
+    // multi は定義の順（空文字の値も、その位置）。「その他」の入力は最後
+    const both = collectAsk(s, state(s, { picked: { a: ["x"], m: ["", "x"] }, otherPicked: { m: true }, otherText: { m: "q" } }));
+    expect(both.answers).toEqual({ a: "x", m: ["x", "", "q"] });
+    expect(checkAskAnswer(s, { answers: both.answers, custom: both.custom })).toBeNull();
+    // 何も選ばず「その他」を選んで入力が空: 空文字の値の選択肢があっても未回答（空文字の回答にしない）
+    const other = collectAsk(s, state(s, { otherPicked: { a: true, m: true }, otherText: { a: "  ", m: "" } }));
+    expect(other.lacking).toEqual(["a", "m"]);
+    expect(other.answers).toEqual({ m: [] });
+    // 選択肢の空文字と「その他」の空の入力を両方選んだ: 回答は選択肢の空文字だけ
+    const mixed = collectAsk(s, state(s, { picked: { a: [""], m: [""] }, otherPicked: { a: true, m: true }, otherText: { a: "", m: " " } }));
+    expect(mixed.answers).toEqual({ a: "", m: [""] });
+    expect(mixed.lacking).toEqual([]);
+  });
+  it("空文字の値の選択肢が無い質問では、選んだ値の空文字は何も選んでいないのと同じ", () => {
+    const s = spec({ questions: [q({ id: "a" }), q({ id: "m", type: "multi", required: true })] });
+    const r = collectAsk(s, state(s, { picked: { a: [""], m: [""] } }));
+    expect(r.lacking).toEqual(["a", "m"]);
+    expect(r.answers).toEqual({ m: [] });
+  });
+  it("空文字の値の選択肢は showIf の条件にも使える", () => {
+    const s = spec({ questions: [q({ id: "a", options: ["", "x"] }), q({ id: "b", default: "x", showIf: { a: "" } })] });
+    expect(collectAsk(s, state(s, { picked: { a: [""] } })).answers).toEqual({ a: "", b: "x" });
+    expect(collectAsk(s, state(s, { picked: { a: ["x"] } })).answers).toEqual({ a: "x" });
+    expect(checkAskAnswer(s, { answers: { a: "", b: "x" } })).toBeNull();
+    expect(checkAskAnswer(s, { answers: { a: "x", b: "x" } })).toMatch(/hidden/);
+  });
   it("text 型は custom に入らない。補足は trim して空でなければ返す。note: false なら返さない", () => {
     const s = spec({ questions: [{ id: "t", label: "T", type: "text", allowOther: true }] });
     const r = collectAsk(s, state(s, { text: { t: "x" }, note: "  メモ  " }));
@@ -370,6 +415,23 @@ describe("checkAskAnswer", () => {
     expect(checkAskAnswer(s, { answers: { a: "x", b: ["p"] } })).toMatch(/string/);
     expect(checkAskAnswer(s, { answers: { a: "nope", t: "hi" } })).toMatch(/not an option/);
     expect(checkAskAnswer(s, { answers: { a: "x", b: ["zzz"], t: "hi" } })).toMatch(/not an option/);
+  });
+  it("空文字の回答は、値が空文字の選択肢がある質問でだけ通る（「その他」の入力としては通さない）", () => {
+    const withEmpty = spec({ questions: [q({ id: "a", options: ["", "x"], allowOther: true }), q({ id: "m", type: "multi", options: ["", "x"], allowOther: true })] });
+    expect(checkAskAnswer(withEmpty, { answers: { a: "", m: [""] } })).toBeNull();
+    expect(checkAskAnswer(withEmpty, { answers: { a: "", m: ["", "自由"] }, custom: ["a", "m"] })).toBeNull();
+    const without = spec({ questions: [q({ id: "a", options: ["x"], allowOther: true }), q({ id: "m", type: "multi", options: ["x"], allowOther: true })] });
+    expect(checkAskAnswer(without, { answers: { a: "", m: [] } })).toMatch(/questions\[0\].*not an option/);
+    expect(checkAskAnswer(without, { answers: { a: "", m: [] }, custom: ["a"] })).toMatch(/questions\[0\].*not an option/);
+    expect(checkAskAnswer(without, { answers: { a: "x", m: [""] } })).toMatch(/questions\[1\].*not an option/);
+    expect(checkAskAnswer(without, { answers: { a: "x", m: [""] }, custom: ["m"] })).toMatch(/questions\[1\].*not an option/);
+  });
+  it("値が __other__ の回答は、その値の選択肢があれば通る（無ければ、自由入力の印が要る）", () => {
+    const has = spec({ questions: [q({ options: ["x", "__other__"] })] });
+    expect(checkAskAnswer(has, { answers: { a: "__other__" } })).toBeNull();
+    const no = spec({ questions: [q({ options: ["x"], allowOther: true })] });
+    expect(checkAskAnswer(no, { answers: { a: "__other__" } })).toMatch(/not an option/);
+    expect(checkAskAnswer(no, { answers: { a: "__other__" }, custom: ["a"] })).toBeNull();
   });
   it("custom: 重複・自由入力を受けない質問・text 型・隠れた質問は断る。自由入力の値は 1 つまで", () => {
     expect(checkAskAnswer(s, { ...ok, custom: ["a", "a"] })).toMatch(/duplicate/);

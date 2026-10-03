@@ -138,12 +138,6 @@ function isScalar(v: unknown): v is string | number | boolean {
 /** 辞書のキーにしてはいけない名前（代入がプロトタイプの差し替えになる）。 */
 const RESERVED_KEY = "__proto__";
 
-/**
- * 画面の部品 `<ask-form>` が「その他」の入力の印に使う値。選択肢の `value` には使えない——部品が「その他」と取り違え、
- * 例外になるか、利用者が選んだ値と違う回答が送られる（`packages/web/src/ask/askFormElement.test.ts` が部品の動きを記録している）。
- */
-const OTHER_VALUE = "__other__";
-
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -300,7 +294,6 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
         if (!isObject(o) || !isScalar(o["value"])) return fail("option_value_required", `${ow}: value is required (a string, number or boolean)`);
         const value = String(o["value"]);
         if (len(value) > ASK_ID_MAX) return fail("too_large", `${ow}.value is longer than ${ASK_ID_MAX} characters`);
-        if (value === OTHER_VALUE) return fail("invalid", `${ow}: value "${OTHER_VALUE}" is reserved`);
         if (values.has(value)) return fail("option_value_duplicate", `${where}: duplicate option value`);
         values.add(value);
         const ol = str(o["label"], ASK_LABEL_MAX, `${ow}.label`);
@@ -360,7 +353,7 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
 
 /** フォームの入力の状態。 */
 export interface AskFormState {
-  /** 質問の id → 選んだ値（`multi` は複数。「その他」の印 `__other__` は `otherPicked` で持つ）。 */
+  /** 質問の id → 選んだ選択肢の値（`multi` は複数。空文字の値の選択肢もある）。「その他」を選んだかは値ではなく `otherPicked` で持つ。 */
   picked: Record<string, string[]>;
   otherPicked: Record<string, boolean>;
   otherText: Record<string, string>;
@@ -399,15 +392,19 @@ function valueOf(q: AskQuestion, state: AskFormState): string | string[] | null 
   if (q.type === "text") return (state.text[q.id] ?? "").trim();
   const picked = state.picked[q.id] ?? [];
   const other = (state.otherText[q.id] ?? "").trim();
+  // 値が空文字の選択肢は、ふつうの選択肢（選べば回答は `""`）。空文字を落とすのは、空文字の値の選択肢が**無い**質問のときだけ
+  // （選択肢に無い空文字は、何も選んでいないのと同じ）。「その他」の空の入力は下の行で別に扱う——選択肢の値とは混ぜない。
+  const hasEmpty = q.options.some((o) => o.value === "");
   // 複数選択は、選んだ順ではなく**定義の順**に揃える（部品 `<ask-form>` は DOM の順に読む。選択肢に無い値は入れない）。「その他」の入力は最後。
-  const vals = q.type === "multi" ? q.options.map((o) => o.value).filter((v) => v !== "" && picked.includes(v)) : picked.filter((v) => v !== "");
+  const vals = q.type === "multi" ? q.options.map((o) => o.value).filter((v) => picked.includes(v)) : picked.filter((v) => v !== "" || hasEmpty);
   if (state.otherPicked[q.id] === true && other !== "") vals.push(other);
   return q.type === "multi" ? vals : (vals[0] ?? null);
 }
 
 /**
  * 上から順に見て、表示条件（`showIf`）を満たす質問だけを回答に入れる。`single` の未回答は answers に入れず `lacking` に数える。
- * 「その他」を選んでいて入力が空のときは、その選択は無いものとして扱う（`form.html` と同じ）。
+ * 「その他」を選んでいて入力が空のときは、その選択は無いものとして扱う（`form.html` と同じ）。値が空文字の**選択肢**を選んだときは、
+ * 回答が `""`（未回答ではない。`multi` は `[""]` で、`required` も満たす）。
  */
 export function collectAsk(
   spec: AskSpec,
@@ -434,7 +431,7 @@ export function collectAsk(
 
 /**
  * 回答の検査（サーバが `ask.answer` に当てる）。誤りの理由（英語・中身を含めない）を返す。null は可。
- * `collectAsk` と同じ順で上から見る。
+ * `collectAsk` と同じ順で上から見る。空文字の回答は、その質問に値が空文字の選択肢があるときだけ通す（「その他」の入力としては通さない）。
  */
 export function checkAskAnswer(spec: AskSpec, body: AskAnswerBody): string | null {
   const answers = body.answers;
