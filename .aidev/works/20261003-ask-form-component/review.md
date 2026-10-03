@@ -53,3 +53,4 @@ AC1〜AC16・AC-I1〜AC-I5 は、実装と `test-result.md` の判定に食い�
 - [nit] skill に `page`／`paging` は足したが `filter`／`showValue` が無い（`docs/sodactl.md` の表にはある） — 根拠: packages/cli/skills/sodactl/SKILL.md [conv:-]
 
 範囲外（follow-up の候補）: `normalizeAskSpec` の `showIf` で `dep` が `"__proto__"` のとき `cond[dep] = …` がオブジェクトの原型を差し替える（グローバルの汚染にはならず、値は捨てられるだけ。以前からある書き方。`Object.create(null)` か `Map` にすると明確）／public_docs に LICENSE が無い（NOTICE と README に明記済み。public_docs 側で明示してもらう）／E2E 全体の 18 件・lint の 22 errors・smoke の 1 本目が `/workspaces/sodashitsu` から落ちる件は `main` でも同じ。
+- review ラウンド 1 の should 3・nit 3 を直した: README に E2E が読む部品の内部の属性の表と取り込み後の確認手順を足した（98d1877）／E2E の補助を `support/askForm.ts` に共通化し、既存の E2E の定義は確実に分かれる側にした（e49b33c）／`AskDialog.test.ts` を 3 ファイル（11＋34＋11 件＝56 件）に分けた（c59f3d4）／README の「元は変わらない」を実際に合わせた・skill に `filter`・`showValue` を足した（98d1877）。
