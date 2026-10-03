@@ -535,6 +535,12 @@ describe("parseArgs — 接続先を明示したかの印（urlExplicit）と受
     expect(optsOf(["ask"], { ...inPane, SODACTL_URL: "" }).urlExplicit).toBe(false);
   });
 
+  it("空の SODACTL_URL のとき url は空文字のまま（`??` は空文字を通す）。明示した扱いにはしない", () => {
+    // この作業（受け口の追加）より前からの挙動で、変えると全コマンドの接続先の決め方が変わるので、ここでは固定するだけにする。
+    expect(optsOf(["ask"], { ...inPane, SODACTL_URL: "" })).toMatchObject({ url: "", urlExplicit: false });
+    expect(optsOf(["snapshot"], { SODACTL_URL: "" } as NodeJS.ProcessEnv)).toMatchObject({ url: "", urlExplicit: false });
+  });
+
   it("SODA_SERVER_URL・既定から決まった接続先は urlExplicit でない", () => {
     expect(optsOf(["ask"], inPane)).toMatchObject({ url: "http://127.0.0.1:7790", urlExplicit: false });
     expect(optsOf(["ask"], noEnv)).toMatchObject({ url: DEFAULT_URL, urlExplicit: false });
@@ -548,12 +554,19 @@ describe("parseArgs — 接続先を明示したかの印（urlExplicit）と受
   it("SODA_PANE_SOCKET が無い・空なら、SODA_AGENT_REPORT_SOCKET（/x/agent-report.sock）と同じディレクトリの pane.sock", () => {
     expect(optsOf(["ask"], { ...inPane, SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock" }).paneSocket).toBe("/x/pane.sock");
     expect(optsOf(["ask"], { ...inPane, SODA_PANE_SOCKET: "", SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock" }).paneSocket).toBe("/x/pane.sock");
+    // 実行中の OS の流儀に依らず、スラッシュ区切り（`path.posix`）で組む。深いディレクトリ・ルート直下でも同じ。
+    expect(optsOf(["ask"], { ...inPane, SODA_AGENT_REPORT_SOCKET: "/home/u/.local/state/sodashitsu/agent-report.sock" }).paneSocket).toBe("/home/u/.local/state/sodashitsu/pane.sock");
+    expect(optsOf(["ask"], { ...inPane, SODA_AGENT_REPORT_SOCKET: "/agent-report.sock" }).paneSocket).toBe("/pane.sock");
   });
 
   it.each([
     ["別の名前", { SODA_AGENT_REPORT_SOCKET: "/x/other.sock" }],
     ["名前の一部が同じだけ", { SODA_AGENT_REPORT_SOCKET: "/x/my-agent-report.sock" }],
     ["ディレクトリの名前が同じだけ", { SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock/y" }],
+    ["末尾がスラッシュ", { SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock/" }],
+    ["相対パス（ファイル名だけ）", { SODA_AGENT_REPORT_SOCKET: "agent-report.sock" }],
+    ["相対パス（ディレクトリつき）", { SODA_AGENT_REPORT_SOCKET: "x/agent-report.sock" }],
+    ["Windows の区切り（win32 以外では 1 つのファイル名）", { SODA_AGENT_REPORT_SOCKET: "C:\\x\\agent-report.sock" }],
     ["空", { SODA_AGENT_REPORT_SOCKET: "" }],
     ["どちらも無い", {}],
   ])("SODA_AGENT_REPORT_SOCKET が %s なら paneSocket は無い（キーも持たない）", (_label, extra) => {

@@ -11,7 +11,7 @@ import {
   ASK_TIMEOUT_MAX_MS,
   ASK_TIMEOUT_MIN_MS,
 } from "@sodashitsu/protocol";
-import { basename, dirname, join } from "node:path";
+import { posix } from "node:path";
 import { AGENT_STATUSES, type AgentStatus } from "./agentStatus.js";
 import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
 
@@ -143,20 +143,23 @@ const PANE_SOCKET_BASENAME = "pane.sock";
 /**
  * 受け口（`pane.sock`）のパスを環境から決める（20261003-sodactl-ask-socket）。
  * 1. `SODA_PANE_SOCKET`（空でなければ）——サーバが pane の環境に入れた値。
- * 2. 無ければ、`SODA_AGENT_REPORT_SOCKET` のファイル名が `agent-report.sock` のとき、同じディレクトリの `pane.sock`——
+ * 2. 無ければ、`SODA_AGENT_REPORT_SOCKET` が絶対パスで、末尾がちょうど `/agent-report.sock` のとき、同じディレクトリの `pane.sock`——
  *    `SODA_PANE_SOCKET` を入れる前のサーバが起動した pane（更新時の引き継ぎを跨いで生きている pane）でも、新しいサーバの受け口に届く。
- *    別の名前（利用者が差し替えた等）からは推測しない。
+ *    別の名前（利用者が差し替えた等）・末尾のスラッシュ・相対パス（どのディレクトリの受け口かが sodactl の cwd で変わる）からは推測しない。
  * 3. どちらも無ければ undefined。
  *
  * Windows では常に undefined（受け口は Unix ドメイン socket のファイルで、Windows のサーバは開かない。`SODA_AGENT_REPORT_SOCKET` も named pipe で、
- * ディレクトリを持たない）。
+ * ディレクトリを持たない）。パスの計算は `path.posix`（ここへ届くのは Windows 以外だけ。実行中の OS の流儀に依らせない——Windows のホストで
+ * 単体テストを走らせても同じ結果になる）。
  */
 export function paneSocketPathFromEnv(env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): string | undefined {
   if (platform === "win32") return undefined;
   const explicit = env["SODA_PANE_SOCKET"];
   if (explicit) return explicit;
   const report = env["SODA_AGENT_REPORT_SOCKET"];
-  if (report && basename(report) === AGENT_REPORT_SOCKET_BASENAME) return join(dirname(report), PANE_SOCKET_BASENAME);
+  if (report && posix.isAbsolute(report) && report.endsWith(`/${AGENT_REPORT_SOCKET_BASENAME}`)) {
+    return posix.join(posix.dirname(report), PANE_SOCKET_BASENAME);
+  }
   return undefined;
 }
 
