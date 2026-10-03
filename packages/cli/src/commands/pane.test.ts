@@ -96,15 +96,15 @@ describe("pane split・pane current の対象（20260927-caller-pane-default）"
   it("pane の中で対象を省いた split は呼び出し元の pane を分ける（AC1・AC14——自分の pane を分けるのは断らない）", async () => {
     const client = clientWith();
     await runPaneSplit({ kind: "pane-split", opts: IN_P3, target: CALLER, direction: "right", ratio: undefined }, store);
-    expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p3", direction: "right" });
+    expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p3", direction: "right", callerPaneId: "p3" });
     await runPaneSplit({ kind: "pane-split", opts: IN_P3, target: { ...CALLER, explicit: true }, direction: "down", ratio: undefined }, store);
-    expect(client.request).toHaveBeenLastCalledWith("pane.split", { paneId: "p3", direction: "down" });
+    expect(client.request).toHaveBeenLastCalledWith("pane.split", { paneId: "p3", direction: "down", callerPaneId: "p3" });
   });
 
   it("明示の ID は呼び出し元より優先して、その pane を分ける（AC2）", async () => {
     const client = clientWith();
     await runPaneSplit({ kind: "pane-split", opts: IN_P3, target: { kind: "id", paneId: "p4" }, direction: "down", ratio: undefined }, store);
-    expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p4", direction: "down" });
+    expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p4", direction: "down", callerPaneId: "p3" });
   });
 
   it("フォーカスの pane を分ける（pane の外・AC12）。フォーカスが無ければ not_found で pane.split を送らない（AC13）", async () => {
@@ -315,7 +315,7 @@ describe("自分の pane の歯止め（20260926-agent-skill-file。AC11・AC13�
     const client = fakeClient({ panes: ["p1"], requestImpl: () => ({ pane: { id: "p2" } }) });
     mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
     await runPaneSplit({ kind: "pane-split", opts: IN_P1, target: { kind: "id", paneId: "p1" }, direction: "right", ratio: undefined }, store);
-    expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p1", direction: "right" });
+    expect(client.request).toHaveBeenCalledWith("pane.split", { paneId: "p1", direction: "right", callerPaneId: "p1" });
 
     const readPromise = runPaneRead({ kind: "pane-read", opts: IN_P1, paneId: "p1", follow: false, raw: false, timeoutMs: 1000 }, store);
     await vi.waitFor(() => expect(client.request).toHaveBeenCalledWith("pane.subscribe", expect.objectContaining({ paneId: "p1" })));

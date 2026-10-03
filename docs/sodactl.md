@@ -672,6 +672,17 @@ sodactl tab create --workspace "$(sodactl pane current | jq -r .pane.workspaceId
   `--machine local` は `--machine` が無いときと同じ。
 - 自分の pane を分ける・調べるのは歯止めの対象外（断らない）。
 
+### グラフの自動載せのための名乗り（`callerPaneId`）
+
+`pane split`・`workspace create`・`tab create`・`agent start` は、pane の中から打ったとき、要求に呼び出し元の pane の ID（`callerPaneId`）を添える。
+サーバが「誰が作ったか・誰が起動したか」を覚え、エージェントが検出されたとき連携のグラフに自動で載せるため（`docs/agent-graph.md`「エージェントが起動したエージェントの自動載せ」）。
+
+- 送るのは、上の `--current` と同じ確かめ（`SODA_PANE_ID` があり、接続先が `SODA_SERVER_URL` と同じサーバ）ができたときだけ。確かめられないとき・`--machine`（`local` 以外）・pane の外では送らない
+  （送らなくても、コマンドの成功・エラー・出力は変わらない）。古い `sodactl` は送らず、古いサーバは知らない項目として無視する。
+- 使うのは**グラフの自動載せの関係の記録だけ**。権限の判断には使わず、他の pane への操作の許可を広げない。サーバは名乗られた pane が実在することだけ確かめ、実在しなければ黙って無視する。
+  `agent start` の `callerPaneId` は、対象の `paneId` とは別の項目（打った pane を指す）。
+- ログインなしの受け口（`pane.sock`）には載せない。この名乗りは、ログイン済みの `/ws` の経路でだけ届く。
+
 ### 自分の pane への操作の歯止め（`self_target`）
 
 pane の中の sodactl（`SODA_PANE_ID` と `SODA_SERVER_URL` があり、接続先の origin が `SODA_SERVER_URL` と同じ）は、次の操作の対象が**自分の pane**、

@@ -844,6 +844,30 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
 - [ ] 大きなファイル（数十 MB）をドロップし、送っている間にキーを打つ。期待：「サーバへ送っています…」のトーストが出て、打ったキーは
       パスが貼られた後に届く（最長 20 秒で先に流れる）。
 
+### 共通：エージェントが起動したエージェントの自動載せ（20261003-graph-auto-nodes・`docs/agent-graph.md`「エージェントが起動したエージェントの自動載せ」）
+
+自動のテストで確かめた範囲: `AgentLineage` の単体（`packages/server/src/graph/AgentLineage.test.ts`・`AgentLineage.attach.test.ts`。親の決め方・1 回だけ・重複・別の監督役・逆向き・上限・競合・閉じた pane）、
+`callerPaneId` の受け渡し（`packages/protocol/src/messages.test.ts`・`packages/cli/src/callerPane.test.ts`・`packages/server/src/surface/methods/lineage.test.ts`）、
+実物のサーバでの一巡（`packages/server/src/composeServer.lineage.integration.test.ts`。`pane split`・`workspace create`・`tab create`・`agent start`・打ち込みの起動・外した子と親・`graph.changed` の配信）、
+偽の `claude` を実 PTY で検出させる `packages/cli/src/agentStart.integration.test.ts`。**実物のエージェント（Claude Code 等）が自分で `sodactl` を打つ一巡・実物のブラウザの画面・Windows のサーバ・別のマシンは確かめていない**。
+新しい状態ディレクトリか名前付き session で始め、利用者の本物のグラフを汚さない。
+
+```sh
+pnpm --filter @sodashitsu/server exec vitest run src/graph/AgentLineage src/composeServer.lineage.integration.test.ts   # 自動で確かめた範囲
+```
+
+- [ ] ブラウザでグラフ（`prefix+a`）を開いたまま、pane の中の Claude Code に「`sodactl` で別のエージェントを起動して、README の 1 行目を要約させて」と頼む。期待：Claude が `pane split` と `agent start` を打つと、
+      グラフに子と親（この Claude の pane）のノードが現れ、子→親の「監督」と「承認・通知」の線が引かれる（チップの回数は `0/10`）。親に監督役への知らせが届く。
+- [ ] 子に承認の要る操作（ファイルの書き込み等）をさせる。期待：子が承認待ちになって約 1 秒後、親へ画面の末尾と「返答は利用者が行います」が届く（「返答まで任せる」にはなっていない）。
+- [ ] グラフ画面の子のノードを外す（確認が出て、その線も消える）。期待：同じ子が、その後に作業しても・エージェントを終わらせて起動し直しても、グラフに戻らない。
+- [ ] 親のノードを外してから、Claude にもう 1 つ別のエージェントを起動させる。期待：新しい子と一緒に親のノードが戻り、新しい子の線だけが引かれる（前の子は戻らない）。
+- [ ] 自動で載ったノードを動かし、線を一時停止する。期待：次の子が載っても、動かしたノードの位置・一時停止の状態は変わらない。別のブラウザ・`sodactl graph show` にも追加が届く。
+- [ ] 載らない場合: ブラウザの端末で手で `claude` を起動した pane・`sodactl --machine <名前> agent start …` で別のマシンに起動した pane は、グラフに出ない。
+- [ ] 打ち込みの起動: Claude に「`sodactl pane split` で pane を作って、そこに `sodactl pane run` で `claude` を打ち込んで」と頼む。期待：`agent start` を使わなくても、検出されたときに載る。
+- [ ] 閉じた子の pane を `sodactl pane close` で閉じる。期待：ノードは自動では消えず、`⚠ 無効` として残る（外すか選び直す）。
+- [ ] `soda serve` を再起動する。期待：グラフに載った子と線は残る。再起動の前に作った pane に後からエージェントが現れても、新たには載らない。
+- [ ] Windows ネイティブの `soda serve`: `agent start` は `unsupported_agent_shell`。`pane split` で作った pane に、手で `claude` を打ち込んだときに載る。
+
 ### 任意：Tailscale・リバースプロキシ（使う構成だけ）
 
 どちらもこの検証環境では実機で確かめていない（`docs/tls-setup.md` の手順は公式の docs に合わせて書いた）。使うなら、最後に

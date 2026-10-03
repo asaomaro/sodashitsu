@@ -4,7 +4,7 @@ import type { AgentView } from "../agentStatus.js";
 import type { Command } from "../cliArgs.js";
 import { printJson } from "../output.js";
 import type { SessionStore } from "../session.js";
-import { assertNotSelfPane } from "../selfGuard.js";
+import { assertNotSelfPane, callerPaneParam } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 import { RpcFailure, type SodaClient } from "../wsClient.js";
 import { EventFeed, viewOf, workspacesByTab } from "./agent.js";
@@ -41,6 +41,7 @@ async function requestStart(
         paneId: cmd.paneId,
         args: cmd.args,
         ...(cmd.timeoutMs === undefined ? {} : { timeoutMs: cmd.timeoutMs }),
+        ...callerPaneParam(cmd.opts),
       });
       return;
     } catch (err) {

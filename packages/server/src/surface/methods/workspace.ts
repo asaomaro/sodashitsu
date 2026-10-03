@@ -19,6 +19,7 @@ export function registerWorkspaceMethods(surface: ControlSurface, deps: MethodDe
       // 20260925-workspace-git-immediate（design「設計方針」）。応答は待たせない（fire-and-forget）。
       // 結果は既存の workspace.updated イベントで届く。
       void deps.gitPoller.pollWorkspaceNow(result.workspace.id).catch(() => undefined);
+      deps.lineage?.noteCreated(result.pane.id, params.callerPaneId); // 20261003-graph-auto-nodes
       return result;
     },
   });

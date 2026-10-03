@@ -5,10 +5,12 @@ import type { MethodDeps } from "./deps.js";
 export function registerTabMethods(surface: ControlSurface, deps: MethodDeps): void {
   surface.register("tab.create", {
     schema: TabCreateParams,
-    handler: (ctx, params) => {
+    handler: async (ctx, params) => {
       // 作る操作も操作——作った pane のシェルが起動の直後に色を問い合わせたら、作った人の配色で答える（20260921-theme-settings の decisions D13）。
       deps.clients.touch(ctx.clientId);
-      return deps.session.createTab(params.workspaceId, params.label, params.newCwd);
+      const result = await deps.session.createTab(params.workspaceId, params.label, params.newCwd);
+      deps.lineage?.noteCreated(result.pane.id, params.callerPaneId); // 20261003-graph-auto-nodes
+      return result;
     },
   });
 

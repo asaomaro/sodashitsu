@@ -4,7 +4,7 @@ import type { Command } from "../cliArgs.js";
 import { printJson, printLine, printRaw } from "../output.js";
 import { paneTargetIdBeforeConnect, resolveFocusedPane } from "../paneTarget.js";
 import type { SessionStore } from "../session.js";
-import { assertNotSelfPane } from "../selfGuard.js";
+import { assertNotSelfPane, callerPaneParam } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 import { metadataParams } from "./workspace.js";
 import { RpcFailure, type SodaClient } from "../wsClient.js";
@@ -34,6 +34,7 @@ export async function runPaneSplit(cmd: PaneSplitCmd, store: SessionStore): Prom
     const paneId = knownPaneId ?? resolveFocusedPane(hello.snapshot);
     const params: ParamsOf<"pane.split"> = { paneId, direction: cmd.direction };
     if (cmd.ratio !== undefined) params.ratio = cmd.ratio;
+    Object.assign(params, callerPaneParam(cmd.opts));
     return client.request("pane.split", params);
   });
   printJson(result);

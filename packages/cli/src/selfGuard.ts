@@ -45,6 +45,16 @@ export function selfPaneId(opts: GlobalOpts): string | undefined {
   return caller.paneId;
 }
 
+/**
+ * pane を作る操作と `agent start` に添える呼び出し元の名乗り（20261003-graph-auto-nodes）。`selfPaneId(opts)` が確認できたとき
+ * （pane の中で、接続先がその pane のサーバのとき。`--machine` では caller が破棄されるので送らない）だけ `{callerPaneId}`、
+ * そうでなければ空。要求へ `...callerPaneParam(opts)` と展開する（`agent start` の対象の `paneId` とは別の項目）。
+ */
+export function callerPaneParam(opts: GlobalOpts): { callerPaneId?: string } {
+  const self = selfPaneId(opts);
+  return self === undefined ? {} : { callerPaneId: self };
+}
+
 function refuse(action: string, what: string, self: string, contains: boolean): never {
   throw new RpcFailure(
     "self_target",

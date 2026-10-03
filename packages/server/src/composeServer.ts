@@ -74,6 +74,7 @@ import { MetadataService } from "./metadata/MetadataService.js";
 import { PrefsStore } from "./persist/PrefsStore.js";
 import { GraphStore } from "./persist/GraphStore.js";
 import { GraphEngine } from "./graph/GraphEngine.js";
+import { AgentLineage } from "./graph/AgentLineage.js";
 import { LocalAgentPort } from "./graph/LocalAgentPort.js";
 import { RemoteLinks } from "./graph/RemoteLinks.js";
 import type { ClientSink } from "./terminal/OutputFanout.js";
@@ -380,6 +381,8 @@ export async function composeServer(
     now: () => Date.now(),
     logger,
   });
+  // エージェントが起動したエージェントの自動載せ（20261003-graph-auto-nodes）。記録はメモリだけ（引き継ぎで消える）なので、handoff の pausePollers では止めない。
+  const lineage = new AgentLineage({ bus, store: graph, paneExists, logger });
   registerAllMethods(surface, {
     session,
     clients,
@@ -398,6 +401,7 @@ export async function composeServer(
     files,
     prefs,
     graph,
+    lineage,
     graphHistory: (linkId, limit) => graphEngine.getHistory(linkId, limit),
     // `server.stop`（20260927-cli-mode）。制御の socket の止める指示と同じ受け付けと停止の手順（`control` は下で作る。呼ばれるのは待ち受けの後）。
     stopServer: (reply) => control.stop(reply, "server.stop"),
@@ -727,6 +731,7 @@ export async function composeServer(
         // 予約を取り消す（ロックを放した後に session.json を書かない）。
         if (!sessionLoaded) persist.cancel();
         graphEngine.stop();
+        lineage.close();
         remoteLinks.closeAll();
         paneHistory?.stop();
         imageSweeper?.stop();
@@ -754,6 +759,7 @@ export async function composeServer(
         // 連携の実行を止めてから別のマシンへの接続を閉じる（20260927-agent-graph の 04。先に ssh を閉じると、切れた知らせで待ちを
         // machine_unavailable として履歴に残してしまう。止める＝待ちは履歴に残さず取り消し、送っている途中の結果も書かない）。graph.close の前。
         graphEngine.stop();
+        lineage.close();
         remoteLinks.closeAll();
         await machines.stop();
         // 閉じ始めたら新しい `/ws` を受け付けない（closeAll の後に届いた upgrade を通さない。D102）。
