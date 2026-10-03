@@ -40,3 +40,8 @@ events:
   - { ts: 2026-10-03T13:28:01Z, phase: test, event: start, metrics: { marks: 0 } }
   - { ts: 2026-10-03T13:31:00Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
   - { ts: 2026-10-03T13:41:57Z, phase: test, event: approved, metrics: { passed: 6888, failed: 0 } }
+  - { ts: 2026-10-03T13:41:57Z, phase: review, event: start, metrics: { marks: 0 } }
+  - { ts: 2026-10-03T13:45:38Z, phase: review, event: sent_back }
+  - { ts: 2026-10-03T13:45:38Z, phase: test, event: sent_back, metrics: { by: unapprove } }
+  - { ts: 2026-10-03T13:45:38Z, phase: coding, event: sent_back, metrics: { by: unapprove } }
+  - { ts: 2026-10-03T13:45:38Z, phase: coding, event: start }

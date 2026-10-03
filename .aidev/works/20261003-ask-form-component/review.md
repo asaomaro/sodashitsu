@@ -39,3 +39,17 @@ coding 工程のタスク単位の独立点検（委譲）で見つけ、その�
 - T8 [nit] 画面に収まることの確認が最終ページだけ [conv:-]
 - cross [nit] 「手で直していない」検査が、`SOURCE.json` も書き換えられた場合は抜ける → README に前提を書いた（元のコミットとの突き合わせは `--check --from`） [conv:-]
 - cross [nit] 回答のフレームを数える補助が 2 実装ある（`ask-form.spec.ts` と `support/askSent.ts`）→ `askSent.ts` の 1 つにした [conv:-]
+
+## ラウンド 1（HEAD = test-result の記録のコミット・作業全体の差分・委譲）
+
+must 0・should 3・nit 3。should があるので coding へ差し戻す。`aidev coverage` は tasks 承認時と同じ（ac=21・gaps=0）。
+AC1〜AC16・AC-I1〜AC-I5 は、実装と `test-result.md` の判定に食い違いなし。読み替え（D4・D5・D7・D9・D11）は目的を損なわない。`AskDialog.vue`（`spec` を入れる時機・`loadedAskId`・取り次ぎのキー・`structuredClone` の失敗）、`ask.ts`（`reason`・`paging`／`page` の検査・`valueOf` の空文字と「その他」の区別）、`sync-ask-form.mjs`（`git show` 経由で作業ツリーを触らない・バイトを変えない）に欠陥は見つからなかった。`ask.fixtures.test.ts` の `writtenKeys`（試験データが書いている項目名を集めて比べる）は、部品側が項目を足したとき通し忘れが落ちる安全網になっている。
+
+- [should] 次に部品を取り込む人向けの手順が、E2E が部品の内部の属性（`data-ask-question`・`data-ask-submit`・`data-ask-page`・`data-ask-next`・`data-ask-title` など、E2E 4 本で計約 100 箇所）に強く依っていることを書いていない。写し直して属性名が変わると、E2E が一斉に落ちる（または見えないのに緑になる） — 根拠: third_party/ask-form/README.md:41-63 [conv:-]
+- [should] E2E の補助（`dialog`・`openBrowser`・`shownQuestions`・`pageButtons`・`setup` 等）が 3 つの spec に複製されている。部品の属性が変わったときの直し先が 3 か所に増える — 根拠: packages/e2e/src/specs/ask-form.spec.ts:32-51・ask-form-paging.spec.ts:18-52・ask-form-extras.spec.ts:16-51 [conv:-]
+- [should] `AskDialog.test.ts` が 1101 行・56 件に膨らみ、枠の責務（開閉とフォーカス・`spec` を入れる時機・高さ・取り次ぎのキー・取り消しと `ask-unsupported`）が 1 ファイルに混ざっている。次の取り込みで落ちたときの切り分けが重い — 根拠: packages/web/src/components/AskDialog.test.ts [conv:-]
+- [nit] 既存の E2E の `SPEC` は、全部を並べた高さが使える高さを 1px 超えるかで 1 枚か 2 ページかが環境で変わる（577px 対 575px）。AC2 の確認がこの定義に載っている。ページ数は決め打ちにしていないので偽の失敗にはならないが、環境で経路が変わるテストが残る — 根拠: packages/e2e/src/specs/ask-form.spec.ts:19-21 [conv:e2e-observe-browser]
+- [nit] README の「途中で失敗しても元は変わらない」は言い過ぎ（`rename` の途中で失敗すると混ざる。`SOURCE.json` を最後に置き換えるので `--check` が検出する） — 根拠: scripts/sync-ask-form.mjs:117-130・third_party/ask-form/README.md:39 [conv:-]
+- [nit] skill に `page`／`paging` は足したが `filter`／`showValue` が無い（`docs/sodactl.md` の表にはある） — 根拠: packages/cli/skills/sodactl/SKILL.md [conv:-]
+
+範囲外（follow-up の候補）: `normalizeAskSpec` の `showIf` で `dep` が `"__proto__"` のとき `cond[dep] = …` がオブジェクトの原型を差し替える（グローバルの汚染にはならず、値は捨てられるだけ。以前からある書き方。`Object.create(null)` か `Map` にすると明確）／public_docs に LICENSE が無い（NOTICE と README に明記済み。public_docs 側で明示してもらう）／E2E 全体の 18 件・lint の 22 errors・smoke の 1 本目が `/workspaces/sodashitsu` から落ちる件は `main` でも同じ。
