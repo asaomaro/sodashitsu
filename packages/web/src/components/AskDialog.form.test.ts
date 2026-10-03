@@ -11,10 +11,12 @@ import {
   allInForm,
   arrowMove,
   ask,
-  currentPage,
+  currentIndex,
   focusedInForm,
   form,
   formProto,
+  indexItems,
+  indexShown,
   inForm,
   input,
   installAskDialogHooks,
@@ -31,6 +33,7 @@ import {
   shownQuestions,
   spacePick,
   type,
+  withBodyHeight,
 } from "./askDialogTestKit.js";
 
 /** 枠（`AskDialog.vue`）が部品 `<ask-form>` へ定義を入れる動きと、部品が描くもの・確定／取り消し・即確定。共通の土台は `askDialogTestKit.ts`。 */
@@ -80,7 +83,7 @@ describe("AskDialog — 部品へ定義を入れる（1 回だけ・写し・高
     expect(form(w).style.height).toBe("");
   });
 
-  it("大きさが取れたら、いちばん高いページの高さに合わせる（最大は超えない）。resize では最大だけを当て直し、relayout しない", async () => {
+  it("大きさが取れたら、中身の高さに合わせる（最大は超えない）。resize では最大の高さと目次の幅を当て直し、relayout しない", async () => {
     const w = mountDialog();
     vi.spyOn(formProto(), "contentHeight", "get").mockReturnValue(300);
     const relayout = vi.spyOn(formProto(), "relayout");
@@ -98,6 +101,34 @@ describe("AskDialog — 部品へ定義を入れる（1 回だけ・写し・高
     window.dispatchEvent(new Event("resize"));
     expect(form(w).style.height).toBe("300px");
     expect(relayout).toHaveBeenCalledOnce();
+  });
+
+  it("目次が出ているとき（indexWidth > 0）は、その幅の分だけダイアログの幅を広げる。出ていなければ広げない。resize で読み直す", async () => {
+    const w = mountDialog();
+    const dlg = () => w.wrapper.get("dialog").element as HTMLDialogElement;
+    const width = vi.spyOn(formProto(), "indexWidth", "get").mockReturnValue(212);
+    const relayout = vi.spyOn(formProto(), "relayout");
+    await open(w, ask(SPEC));
+    expect(dlg().style.getPropertyValue("--ask-index-width")).toBe("212px");
+    // 幅は、relayout（目次を出すかを決める）の後に読む。
+    expect(relayout).toHaveBeenCalledOnce();
+    expect(width.mock.invocationCallOrder[0]).toBeGreaterThan(
+      relayout.mock.invocationCallOrder[0]!,
+    );
+    // 画面の幅が 768px を割る（部品が目次を隠す）と 0 になる。広げた分を戻す。
+    width.mockReturnValue(0);
+    window.dispatchEvent(new Event("resize"));
+    expect(dlg().style.getPropertyValue("--ask-index-width")).toBe("");
+    width.mockReturnValue(212);
+    window.dispatchEvent(new Event("resize"));
+    expect(dlg().style.getPropertyValue("--ask-index-width")).toBe("212px");
+    expect(relayout).toHaveBeenCalledOnce(); // 目次を出すかは決め直さない
+    // 次の質問で目次が出なければ、前の質問の幅を残さない。
+    width.mockReturnValue(0);
+    w.store.clear();
+    await settle();
+    await open(w, ask(SPEC, "a2"));
+    expect(dlg().style.getPropertyValue("--ask-index-width")).toBe("");
   });
 
   it("resize のリスナーは開いている間だけ付く（閉じる・アンマウントで外す）", async () => {
@@ -181,31 +212,64 @@ describe("AskDialog — 部品が描くもの（AC2）", () => {
     expect(w.answer).toHaveBeenCalledWith("a1", { answers: { theme: "t12", x: "1" } });
   });
 
-  it("page を書いた定義はページに分かれる（番号と題・出ているのは今のページの質問だけ）", async () => {
+  it("page を書いた定義は、目次の見出しと質問の項目を作る。質問は 1 枚に並んだまま、決定はどこからでもできる", async () => {
+    withBodyHeight(500);
     const w = mountDialog();
     await open(w, ask(PAGED));
-    expect(form(w).pageCount).toBe(3);
-    expect(allInForm(w, "[data-ask-page]").map((b) => b.textContent)).toEqual([
-      "1基本",
-      "2詳細",
-      "3確認",
+    expect(form(w).pageCount).toBe(1); // 互換のために残る（ページには分けない）
+    expect(allInForm(w, ".index .sec").map((b) => b.textContent)).toEqual(["基本", "詳細", "確認"]);
+    expect(allInForm(w, "[data-ask-index]").map((b) => b.getAttribute("data-ask-index"))).toEqual([
+      "a",
+      "b",
+      "c",
     ]);
-    expect(currentPage(w)).toBe("1");
-    expect(shownQuestions(w)).toEqual(["a"]);
-    inForm(w, "[data-ask-next]").click();
-    expect(currentPage(w)).toBe("2");
-    expect(shownQuestions(w)).toEqual(["b"]);
-    // 決定はどのページからでもでき、全部のページの回答が入る。
+    expect(allInForm(w, "[data-ask-index]").map((b) => b.textContent)).toEqual(["1A", "2B", "3C"]);
+    expect(indexShown(w)).toBe(true); // page を書いたので、高さに収まっていても出す
+    expect(shownQuestions(w)).toEqual(["a", "b", "c"]);
+    // 項目を押すとその質問へ移る（今の項目・フォーカス）。
+    inForm(w, '[data-ask-index="b"]').click();
+    expect(currentIndex(w)).toBe("b");
+    expect(focusedInForm(w)).toBe(input(w, '[data-ask-question="b"] input[value="x"]'));
+    expect(shownQuestions(w)).toEqual(["a", "b", "c"]);
+    // 全部の質問の回答が入る。
     inForm(w, "[data-ask-submit]").click();
     expect(w.answer).toHaveBeenCalledWith("a1", { answers: { a: "x", b: "x", c: "x" } });
   });
 
-  it("page・paging を書かない定義は、大きさが取れない環境では 1 枚のまま（番号を出さない）", async () => {
+  it("目次を出すかは paging で決まる: true は必ず・false は page を書いても出さない・auto は中身が高さを超えるときだけ", async () => {
+    const small = { note: false, questions: SPEC.questions.slice(0, 2) };
+    const shown = async (spec: object, content: number) => {
+      vi.restoreAllMocks();
+      withBodyHeight(500, content);
+      const w = mountDialog();
+      await open(w, ask(spec));
+      const r = indexShown(w);
+      w.store.clear(); // 同じ質問の id は store が入れ替えないので、件ごとに空にする
+      await settle();
+      w.wrapper.unmount();
+      return r;
+    };
+    expect(await shown({ ...small, paging: true }, 100)).toBe(true);
+    expect(await shown({ ...small, paging: 3 }, 100)).toBe(true); // 数は true と同じ扱い
+    expect(await shown({ ...small, paging: false }, 2000)).toBe(false);
+    expect(await shown({ ...PAGED, paging: false }, 100)).toBe(false);
+    expect(await shown({ ...small, paging: "auto" }, 100)).toBe(false); // 収まる
+    expect(await shown(small, 100)).toBe(false);
+    expect(await shown(small, 2000)).toBe(true); // 収まらない（paging 無指定は "auto"）
+    expect(await shown(small, 502)).toBe(true);
+    expect(await shown(small, 501)).toBe(false); // 1px の許容;
+    expect(await shown({ note: false, questions: [SPEC.questions[0]], paging: true }, 100)).toBe(
+      false,
+    ); // 項目が 1 つ
+  });
+
+  it("page・paging を書かない定義は、大きさが取れない環境では目次を出さない（項目は DOM にある）", async () => {
     const w = mountDialog();
     await open(w, ask(SPEC));
     expect(form(w).pageCount).toBe(1);
-    expect(inForm(w, "nav.steps").hidden).toBe(true);
-    expect(inForm(w, "[data-ask-next]").hidden).toBe(true);
+    expect(form(w).indexWidth).toBe(0);
+    expect(indexShown(w)).toBe(false);
+    expect(indexItems(w)).toEqual(["ch", "m", ""]); // roll は表示条件で隠れている。"" は補足
   });
 
   it("定義のどの文字列に <script>・<img onerror> を入れても、文字のまま表示される。色でない文字列は style に入らない", async () => {
@@ -253,7 +317,8 @@ describe("AskDialog — 部品が描くもの（AC2）", () => {
     expect(inForm(w, "label.opt .name").textContent).toBe(evil);
     expect(inForm(w, "label.opt .desc").textContent).toBe(evil);
     expect(inForm(w, "label.opt.other .name").textContent).toBe(evil);
-    expect(inForm(w, '[data-ask-page="1"]').textContent).toBe(`1${evil}`);
+    expect(inForm(w, ".index .sec").textContent).toBe(evil);
+    expect(inForm(w, '[data-ask-index="q"] .t').textContent).toBe(evil);
     expect(inForm(w, "[data-ask-submit]").textContent).toContain(evil);
     expect(input(w, "label.opt:not(.other) input").value).toBe(evil);
     expect(allInForm(w, ".sw i")).toHaveLength(1);
@@ -267,7 +332,7 @@ describe("AskDialog — 部品が描くもの（AC2）", () => {
     await open(w, ask(SPEC));
     expect(shadow(w).querySelector("img")).toBeNull();
     expect(shadow(w).querySelector(".lb")).toBeNull();
-    // 決定を試みた後・ページを移った後も同じ。
+    // 決定を試みた後・質問を移った後も同じ。
     w.store.clear();
     await settle();
     await open(
@@ -407,7 +472,7 @@ describe("AskDialog — 確定・取り消し（AC-I2）", () => {
     expect(w.answer).toHaveBeenCalledWith("a1", { answers: { a: "x", t: "hi" } });
   });
 
-  it("未回答のまま決定すると、未回答の質問に aria-invalid が付き、最初の未回答の質問のページへ移って、その入力へフォーカスが移る", async () => {
+  it("未回答のまま決定すると、未回答の質問に aria-invalid が付き、最初の未回答の質問の入力へフォーカスが移り、目次の項目に未回答の印が付く", async () => {
     const w = mountDialog();
     await open(
       w,
@@ -423,14 +488,15 @@ describe("AskDialog — 確定・取り消し（AC-I2）", () => {
     const invalid = () =>
       allInForm(w, 'fieldset[aria-invalid="true"]').map((f) => f.getAttribute("data-ask-question"));
     expect(invalid()).toEqual([]); // 決定を試みるまでは付かない
-    expect(currentPage(w)).toBe("1");
+    const lacking = () =>
+      allInForm(w, "[data-ask-index].lack").map((b) => b.getAttribute("data-ask-index"));
+    expect(lacking()).toEqual(["b", "t"]); // 目次の未回答の印は、決定を試みる前から付く
     expect(document.activeElement).toBe(origin(w));
 
     key(origin(w), { key: "Enter", ctrlKey: true });
     expect(w.answer).not.toHaveBeenCalled();
     expect(invalid()).toEqual(["b", "t"]);
     expect(allInForm(w, "fieldset[aria-invalid]")).toHaveLength(2); // 答えてある質問には付かない
-    expect(currentPage(w)).toBe("2");
     // 最初の未回答の質問（b）の最初の入力。選ばれはしない（フォーカスだけ）。
     const first = input(w, '[data-ask-question="b"] input[value="p"]');
     expect(focusedInForm(w)).toBe(first);
@@ -441,7 +507,7 @@ describe("AskDialog — 確定・取り消し（AC-I2）", () => {
     pointerPick(first);
     expect(invalid()).toEqual(["t"]);
     inForm(w, "[data-ask-submit]").click();
-    expect(currentPage(w)).toBe("3");
+    expect(lacking()).toEqual(["t"]);
     expect(focusedInForm(w)).toBe(input(w, '[data-ask-question="t"] input[type=text]'));
     type(input(w, '[data-ask-question="t"] input[type=text]'), "hi");
     expect(allInForm(w, "fieldset[aria-invalid]")).toHaveLength(0);

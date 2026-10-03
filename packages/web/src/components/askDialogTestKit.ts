@@ -20,7 +20,7 @@ import AskDialog from "./AskDialog.vue";
  * `AskDialog*.test.ts`（`AskDialog.test.ts`・`AskDialog.form.test.ts`・`AskDialog.keys.test.ts`）の共通の土台。`.test.ts` ではないので、vitest はこのファイル自身を試験として走らせない。
  * 質問・選択肢・ボタンは部品 `<ask-form>`（Shadow DOM）が描くので、`wrapper.get` では見つからない——部品の中は `inForm`・`allInForm`（`shadowRoot` の中を探す）で見る。
  * 部品の中へ送るキーは `composed: true`（でないと部品の要素へ届かない）。
- * 単体テストの環境（happy-dom）は大きさが全部 0 なので、高さでのページ分けはここでは確かめられない（E2E の担当）。
+ * 単体テストの環境（happy-dom）は大きさが全部 0 なので、高さで目次を出すかはここでは確かめられない（E2E の担当。目次が出る／出ないを決める経路は、`withBodyHeight` で部品が見る大きさを与えて確かめる）。
  */
 
 let pinia: Pinia;
@@ -83,7 +83,7 @@ export const SPEC = {
     { id: "m", label: "告知", type: "multi", options: ["a", "b"], default: ["a"] },
   ],
 };
-/** `page` を書いた定義（3 ページ。高さに依らずに分かれる）。 */
+/** `page` を書いた定義（3 つのまとまり。目次の見出しになる。高さに依らず目次を出す定義）。 */
 export const PAGED = {
   note: false,
   questions: [
@@ -184,14 +184,32 @@ export function inForm<T extends HTMLElement = HTMLElement>(w: Mounted, selector
 }
 export const input = (w: Mounted, selector: string) => inForm<HTMLInputElement>(w, selector);
 export const origin = (w: Mounted) => w.wrapper.get("[data-ask-origin]").element as HTMLElement;
-/** 出ている質問（隠れた質問は `hidden`、ほかのページの質問は class `off` で DOM に残る）。 */
+/** 出ている質問（質問は 1 枚に並ぶ。表示条件で隠れた質問は `hidden`）。 */
 export const shownQuestions = (w: Mounted) =>
-  allInForm(w, "[data-ask-question]:not([hidden]):not(.off)").map((f) =>
-    f.getAttribute("data-ask-question"),
-  );
-/** いまのページ（番号。1 から）。 */
-export const currentPage = (w: Mounted) =>
-  inForm(w, '[data-ask-page][aria-current="page"]').getAttribute("data-ask-page");
+  allInForm(w, "[data-ask-question]:not([hidden])").map((f) => f.getAttribute("data-ask-question"));
+/** 目次の項目の質問の id（隠れた質問の項目は除く。目次を出していなくても DOM にはある）。 */
+export const indexItems = (w: Mounted) =>
+  allInForm(w, "[data-ask-index]:not([hidden])").map((b) => b.getAttribute("data-ask-index"));
+/** 目次で今の項目（印が付いている質問の id）。部品は、移った・スクロールしたときに付ける（まだ何も付けていなければ null）。 */
+export const currentIndex = (w: Mounted) =>
+  shadow(w)
+    .querySelector('[data-ask-index][aria-current="true"]')
+    ?.getAttribute("data-ask-index") ?? null;
+/** 目次を出しているか。 */
+export const indexShown = (w: Mounted) => !inForm(w, "nav.index").hidden;
+/**
+ * 部品が見る大きさを与える（happy-dom は大きさが全部 0 で、部品は目次を出すかを決められない）。`clientHeight` は質問の並びの高さ、
+ * `contentHeight` は中身の高さ（`auto` のとき、これが `clientHeight` を超えると目次を出す）。`mountDialog` の前に呼ぶ。
+ */
+export function withBodyHeight(clientHeight: number, contentHeight = 0): void {
+  // `clientHeight` を持つ prototype は happy-dom の作りによる（`Element` か `HTMLElement`）ので、持ち主を探す。
+  let owner: object | null = HTMLElement.prototype;
+  while (owner && !Object.getOwnPropertyDescriptor(owner, "clientHeight"))
+    owner = Object.getPrototypeOf(owner);
+  if (!owner) throw new Error("clientHeight が見つからない");
+  vi.spyOn(owner as Element, "clientHeight", "get").mockReturnValue(clientHeight);
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(contentHeight);
+}
 
 /** キーを送る（部品の中の要素へ送っても部品の要素・枠へ届くよう `composed`）。送ったイベントを返す（`defaultPrevented` を見る）。 */
 export function key(

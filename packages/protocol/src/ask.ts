@@ -61,7 +61,7 @@ export interface AskQuestion {
   multiline: boolean;
   placeholder?: string;
   minWidth?: number;
-  /** ページの題。書いた質問から新しいページ（空文字も「書いた」）。 */
+  /** まとまりの題（目次の見出し）。書いた質問から新しいまとまり（空文字も「書いた」）。1 つでも書くと、高さに収まっていても目次を出す。 */
   page?: string;
   /** 絞り込みの欄を出すか（無ければ部品の既定: 選択肢 12 件以上で出す）。`text` には無い。 */
   filter?: boolean;
@@ -69,7 +69,7 @@ export interface AskQuestion {
   showValue?: boolean;
 }
 
-/** ページの分け方: `"auto"`・`true`（高さに収まらなければ分ける）／`false`（分けない）／数（その数の質問ずつ。1 以上の整数）。 */
+/** 質問の目次の出し方: `"auto"`（高さに収まらないときだけ出す）／`true`（必ず出す）／`false`（出さない）。1 以上の整数も通す（`true` と同じ扱い。`ask.py` の検査と共通の試験データに合わせる）。 */
 export type AskPaging = "auto" | boolean | number;
 
 /** 検査を通った定義（知らない項目は落としてある）。 */
@@ -80,7 +80,7 @@ export interface AskSpec {
   /** 補足欄を出すか。 */
   note: boolean;
   notePlaceholder?: string;
-  /** 無ければ無いまま（既定は埋めない。部品の既定は `"auto"`）。質問に `page` があれば、そちらが優先。 */
+  /** 無ければ無いまま（既定は埋めない。部品の既定は `"auto"`）。質問に `page` があれば、`false` でなければ目次を出す。 */
   paging?: AskPaging;
   questions: AskQuestion[];
 }
@@ -215,7 +215,7 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
     if (isFail(v)) return v;
     notePlaceholder = v;
   }
-  // `paging`: 無い・null は項目なし（既定は埋めない）。`"auto"`・真偽・1 以上の整数だけ通す（`ask.py` と同じ。`true` は `"auto"` と同じ意味）。
+  // `paging`: 無い・null は項目なし（既定は埋めない）。`"auto"`・真偽・1 以上の整数だけ通す（`ask.py` と同じ。`ask.py` の検査と共通の試験データに合わせる。数は `true` と同じ扱い）。
   let paging: AskPaging | undefined;
   const pg = raw["paging"];
   if (pg !== undefined && pg !== null) {
@@ -241,7 +241,7 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
     if (seen.has(id)) return fail("id_duplicate", `${where}: duplicate id "${id}"`);
     seen.add(id);
     // `page` は `type` より前に見る（`ask.py` と同じ順。対応していない型の質問でも、`page` の誤りは誤り）。
-    // 無い・null は項目なし。空文字は通す（部品は「書いた」と扱い、そこから新しいページ）。文字列でなければ誤り——`str()` の「捨てる」とは違う。
+    // 無い・null は項目なし。空文字は通す（部品は「書いた」と扱い、そこから新しいまとまり）。文字列でなければ誤り——`str()` の「捨てる」とは違う。
     const pageRaw = q["page"];
     let page: string | undefined;
     if (pageRaw !== undefined && pageRaw !== null) {

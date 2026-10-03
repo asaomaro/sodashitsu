@@ -16,7 +16,7 @@ import { useViewStore } from "../store/view.js";
  * 形は他のダイアログと同じネイティブ `<dialog>` ＋ `showModal()` だが、**既存の単一の枠（`view.openDialog`）は使わない**——サーバから届く質問が、
  * 開いている設定・確認を潰さないため（`view.askOpen` で `modalOpen` に入り、キーは端末へ流れない）。
  *
- * ここは**枠だけ**（20261003-ask-form-component）。質問・選択肢・入力欄・ページ・下のボタン・未回答の表示・キーは、部品 `<ask-form>`
+ * ここは**枠だけ**（20261003-ask-form-component）。質問・選択肢・入力欄・質問の目次・下のボタン・未回答の表示・キーは、部品 `<ask-form>`
  * （`third_party/ask-form/ask-form.js`。Shadow DOM）が描いて扱う。枠が持つのは、固定の行・開閉・フォーカス・取り消し・高さ・通信への取り次ぎ。
  *
  * - 最上部の「どの pane からの質問か」の行は**アプリが描く固定の行**（定義の外・部品の外）。定義の文字は部品が全て文字として出す（`innerHTML` を使わない）。
@@ -54,7 +54,7 @@ const origin = computed(() => {
 
 let previousFocus: Element | null = null;
 let previousPaneId: string | null = null;
-/** 部品が最後に答えた「いちばん高いページの高さ」。0 は「大きさが取れていない」（描けなかった・単体テストの環境）。下の `watch` は `immediate` なので、その前に置く。 */
+/** 部品が最後に答えた「中身の高さ」。0 は「大きさが取れていない」（描けなかった・単体テストの環境）。下の `watch` は `immediate` なので、その前に置く。 */
 let contentHeight = 0;
 /** いま部品に入っている定義の質問（`askId`）。部品が遅れて出す `ask-unsupported` を、その時点の先頭ではなく、定義を入れた質問に結び付ける。 */
 let loadedAskId: string | null = null;
@@ -141,7 +141,7 @@ function maxFormHeight(): number {
   return Math.max(0, Math.floor(window.innerHeight - 16 - border - header));
 }
 
-/** 部品の高さを「中身（いちばん高いページ）」に合わせる（最大は超えない）。大きさが取れていなければ与えた高さを消し、中身に任せる。 */
+/** 部品の高さを「中身」に合わせる（最大は超えない）。大きさが取れていなければ与えた高さを消し、中身に任せる。 */
 function applyHeight(): void {
   const el = formEl.value;
   if (!el) return;
@@ -150,9 +150,22 @@ function applyHeight(): void {
 }
 
 /**
+ * 目次が出ているとき、その幅の分だけダイアログの幅を広げる（質問の並びの幅を 720px のときと同じに保つ。画面の幅 − 16px は超えない。CSS 側の `min()`）。
+ * 目次が出ていない（出さない定義・幅 768px 未満で部品が隠している）ときは 0。部品の `indexWidth` は、目次を出すかを決めた後（`relayout()` の後）に読む。
+ */
+function applyWidth(): void {
+  const el = formEl.value;
+  const dlg = dialogEl.value;
+  if (!el || !dlg) return;
+  const w = el.indexWidth;
+  if (w > 0) dlg.style.setProperty("--ask-index-width", `${w}px`);
+  else dlg.style.removeProperty("--ask-index-width");
+}
+
+/**
  * 新しい質問の定義を部品へ入れる（ask-form の単独ウィンドウ `form.html` と同じ手順）: 先に最大の高さを与える → `spec`（部品は高さが付いていれば、
- * 入れた直後に高さでページを分ける）→ `relayout()`（高さがまだ 0 だった場合の保険。同じ高さなので分け方は変わらない）→ いちばん高いページに合わせる
- * （ページを移っても、ダイアログの高さが変わらない）。
+ * 入れた直後に目次を出すかを決める）→ `relayout()`（高さがまだ 0 だった場合の保険。同じ高さなので決め方は変わらない）→ 目次の幅の分だけ幅を広げる
+ * → 広げた幅での中身の高さに合わせる（幅が変わると文の折り返しで高さが変わるので、幅を先に決める）。
  * 渡すのは写し——部品は定義に書き込む（`_image` 等）ので、store の定義（リアクティブ）をそのまま渡さない。
  */
 function loadSpec(a: AskPending): void {
@@ -172,12 +185,18 @@ function loadSpec(a: AskPending): void {
     return;
   }
   el.relayout();
+  applyWidth();
   contentHeight = el.contentHeight;
   applyHeight();
 }
 
-/** 画面の大きさが変わった。最大の高さを当て直すだけ（ページは作り直さない——入力中の欄を見失わせない、部品の決まり）。 */
+/**
+ * 画面の大きさが変わった。幅・高さを当て直すだけ（目次を出すかは決め直さない——入力中の欄を見失わせない、部品の決まり）。
+ * 目次が出ているかは、部品が画面の幅（768px 未満で隠す）で決めるので、幅は読み直す。
+ */
 function onResize(): void {
+  applyWidth();
+  if (contentHeight > 0 && formEl.value) contentHeight = formEl.value.contentHeight;
   applyHeight();
 }
 
@@ -240,7 +259,7 @@ function onKeydown(ev: KeyboardEvent): void {
     ev.preventDefault();
     el.submit();
   } else if (ev.altKey && (ev.key === "PageDown" || ev.key === "PageUp")) {
-    // 部品の公開のメソッドでページを移る（端のページ・1 枚のときは、部品が何もしない。質問が出ていないページは部品が飛ばす）。
+    // 部品の公開のメソッドで次・前の質問へ移る（端の質問では何も起きない。表示条件で隠れている質問は部品が飛ばす）。
     ev.preventDefault();
     el.step(ev.key === "PageUp" ? -1 : 1);
   }
@@ -261,7 +280,8 @@ function onKeydown(ev: KeyboardEvent): void {
 <style scoped>
 .ask-dialog {
   box-sizing: border-box;
-  width: min(720px, calc(100% - 16px));
+  /* 目次が出ているとき（`applyWidth`）は、その幅の分だけ広げる。画面の幅 − 16px は超えない。 */
+  width: min(calc(720px + var(--ask-index-width, 0px)), calc(100% - 16px));
   max-height: calc(100% - 16px);
   padding: 0;
   background: var(--soda-menu-bg, #282a36);

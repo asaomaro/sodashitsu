@@ -6,10 +6,11 @@ import {
   SPEC,
   UNSUPPORTED_TOAST,
   ask,
-  currentPage,
+  currentIndex,
   focusedInForm,
   form,
   formProto,
+  indexItems,
   inForm,
   input,
   installAskDialogHooks,
@@ -28,69 +29,70 @@ import {
 installAskDialogHooks();
 
 describe("AskDialog — 枠が取り次ぐキー（固定の行にフォーカスがあるとき。AC-I3）", () => {
-  it("固定の行での Alt+PageDown・Alt+PageUp は、部品の step(1)・step(-1) でページを移す（preventDefault される）。端のページでは移らない", async () => {
+  it("固定の行での Alt+PageDown・Alt+PageUp は、部品の step(1)・step(-1) で次・前の質問へ移る（preventDefault される）。端の質問では移らない", async () => {
     const w = mountDialog();
     const step = vi.spyOn(formProto(), "step");
     await open(w, ask(PAGED));
-    // 部品のボタンは押さない（公開のメソッドで移る）。
+    // 目次の項目は押さない（公開のメソッドで移る）。
     const clicks = vi.fn();
-    inForm(w, "[data-ask-next]").addEventListener("click", clicks);
-    inForm(w, "[data-ask-prev]").addEventListener("click", clicks);
-    expect(currentPage(w)).toBe("1");
+    for (const id of ["a", "b", "c"])
+      inForm(w, `[data-ask-index="${id}"]`).addEventListener("click", clicks);
     expect(key(origin(w), { key: "PageDown", altKey: true }).defaultPrevented).toBe(true);
     expect(step.mock.calls).toEqual([[1]]);
-    expect(currentPage(w)).toBe("2");
-    expect(shownQuestions(w)).toEqual(["b"]);
-    // 部品は、移った先のページの見出しへフォーカスを移す（固定の行から外れる）。
-    expect(focusedInForm(w)).toBe(inForm(w, '[data-ask-page="2"]'));
+    expect(currentIndex(w)).toBe("b");
+    expect(shownQuestions(w)).toEqual(["a", "b", "c"]); // 質問は 1 枚に並んだまま
+    // 部品は、移った先の質問の入力（ラジオは選ばれているもの）へフォーカスを移す（固定の行から外れる）。
+    expect(focusedInForm(w)).toBe(input(w, '[data-ask-question="b"] input[value="x"]'));
     origin(w).focus();
     expect(key(origin(w), { key: "PageUp", altKey: true }).defaultPrevented).toBe(true);
     expect(step.mock.calls).toEqual([[1], [-1]]);
-    expect(currentPage(w)).toBe("1");
-    // 最初のページでは戻れない——何も起きないが、ブラウザの既定の動きは止める。
+    expect(currentIndex(w)).toBe("a");
+    // 最初の質問では戻れない——何も起きないが、ブラウザの既定の動きは止める。
     origin(w).focus();
     expect(key(origin(w), { key: "PageUp", altKey: true }).defaultPrevented).toBe(true);
-    expect(currentPage(w)).toBe("1");
+    expect(currentIndex(w)).toBe("a");
     expect(document.activeElement).toBe(origin(w));
-    // 最後のページでは進めない。
-    for (const page of ["2", "3", "3"]) {
+    // 最後の質問では進めない。
+    for (const id of ["b", "c", "c"]) {
       origin(w).focus();
       expect(key(origin(w), { key: "PageDown", altKey: true }).defaultPrevented).toBe(true);
-      expect(currentPage(w)).toBe(page);
+      expect(currentIndex(w)).toBe(id);
     }
     expect(document.activeElement).toBe(origin(w)); // 移らなかったときは、フォーカスも動かない
     expect(clicks).not.toHaveBeenCalled();
     expect(w.answer).not.toHaveBeenCalled();
   });
 
-  it("質問が 1 つも出ていないページは飛ばす（部品の step の決まり）", async () => {
+  it("表示条件で隠れている質問は飛ばす（部品の step の決まり）", async () => {
     const w = mountDialog();
     const questions = PAGED.questions.map((q) => (q.id === "b" ? { ...q, showIf: { a: "y" } } : q));
     await open(w, ask({ ...PAGED, questions }));
+    expect(indexItems(w)).toEqual(["a", "c"]); // b の項目も隠れる
     key(origin(w), { key: "PageDown", altKey: true });
-    expect(currentPage(w)).toBe("3"); // b は隠れている（a は x）
-    expect(shownQuestions(w)).toEqual(["c"]);
+    expect(currentIndex(w)).toBe("c"); // b は隠れている（a は x）
     origin(w).focus();
     key(origin(w), { key: "PageUp", altKey: true });
-    expect(currentPage(w)).toBe("1");
+    expect(currentIndex(w)).toBe("a");
     // b を出すと、飛ばさない。
     pointerPick(input(w, '[data-ask-question="a"] input[value="y"]'));
+    expect(indexItems(w)).toEqual(["a", "b", "c"]);
     origin(w).focus();
     key(origin(w), { key: "PageDown", altKey: true });
-    expect(currentPage(w)).toBe("2");
+    expect(currentIndex(w)).toBe("b");
   });
 
-  it("1 枚の定義では、固定の行での Alt+PageDown は何もしない", async () => {
+  it("質問が 1 つの定義では、固定の行での Alt+PageDown は何もしない", async () => {
     const w = mountDialog();
     const step = vi.spyOn(formProto(), "step");
-    await open(w, ask(SPEC));
+    await open(w, ask({ note: false, questions: [SPEC.questions[0]] }));
     expect(key(origin(w), { key: "PageDown", altKey: true }).defaultPrevented).toBe(true);
     expect(step).toHaveBeenCalledOnce();
     expect(form(w).pageCount).toBe(1);
+    expect(currentIndex(w)).toBeNull();
     expect(document.activeElement).toBe(origin(w));
   });
 
-  it("部品の中のキーは部品だけが扱う（枠と二重に効かない）: 部品の中の Alt+PageDown で進むのは 1 ページ", async () => {
+  it("部品の中のキーは部品だけが扱う（枠と二重に効かない）: 部品の中の Alt+PageDown で進むのは 1 つ", async () => {
     const w = mountDialog();
     await open(w, ask(PAGED));
     const seen = vi.fn();
@@ -100,7 +102,7 @@ describe("AskDialog — 枠が取り次ぐキー（固定の行にフォーカ�
       altKey: true,
     });
     expect(ev.defaultPrevented).toBe(true);
-    expect(currentPage(w)).toBe("2");
+    expect(currentIndex(w)).toBe("b");
     expect(seen).not.toHaveBeenCalled(); // 部品が外へ流さない
     key(input(w, '[data-ask-question="b"] input[value="x"]'), { key: "Enter", ctrlKey: true });
     expect(w.answer).toHaveBeenCalledOnce();
@@ -119,10 +121,10 @@ describe("AskDialog — 枠が取り次ぐキー（固定の行にフォーカ�
     Object.defineProperty(ev, "target", { value: form(w) });
     w.wrapper.get("dialog").element.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(false);
-    expect(currentPage(w)).toBe("1");
+    expect(currentIndex(w)).toBeNull();
   });
 
-  it("dialog の中へ移されたトーストなど、固定の行の外のキーでは Ctrl+Enter で決定せず、ページも移らない", async () => {
+  it("dialog の中へ移されたトーストなど、固定の行の外のキーでは Ctrl+Enter で決定せず、質問も移らない", async () => {
     const w = mountDialog();
     const step = vi.spyOn(formProto(), "step");
     await open(w, ask(PAGED));
@@ -132,7 +134,7 @@ describe("AskDialog — 枠が取り次ぐキー（固定の行にフォーカ�
     expect(key(stray, { key: "PageDown", altKey: true }).defaultPrevented).toBe(false);
     expect(step).not.toHaveBeenCalled();
     expect(w.answer).not.toHaveBeenCalled();
-    expect(currentPage(w)).toBe("1");
+    expect(currentIndex(w)).toBeNull();
   });
 });
 

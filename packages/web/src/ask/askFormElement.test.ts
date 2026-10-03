@@ -90,6 +90,57 @@ describe("部品の読み込み", () => {
     expect(submitted).toEqual([{ answers: { color: "a", memo: "" } }]);
   });
 
+  it("質問の目次（部品 1.2.1）: 質問の題の項目を作り、step で次・前の質問へ移る。ページには分けない。大きさが無い環境では目次を出さず、幅は 0", async () => {
+    const { el, root } = await mountForm([
+      {
+        id: "a",
+        label: "エー",
+        type: "single",
+        page: "前半",
+        default: "a",
+        options: OPTIONS.slice(0, 1),
+      },
+      { id: "b", label: "ビー", type: "text", page: "後半" },
+      { id: "c", label: "シー", type: "single", default: "a", options: OPTIONS.slice(0, 1) },
+    ]);
+    expect(
+      [...root.querySelectorAll("[data-ask-index]")].map((b) => b.getAttribute("data-ask-index")),
+    ).toEqual(["a", "b", "c"]);
+    expect([...root.querySelectorAll(".index .sec")].map((b) => b.textContent)).toEqual([
+      "前半",
+      "後半",
+    ]);
+    // 1.1.1 までの印（ページ・次へ・前へ）は無い。質問はどれも隠れない。
+    expect(root.querySelector("[data-ask-page],[data-ask-next],[data-ask-prev]")).toBeNull();
+    expect(root.querySelectorAll("[data-ask-question]:not([hidden])")).toHaveLength(3);
+    expect(el.pageCount).toBe(1);
+    expect(el.indexWidth).toBe(0); // happy-dom は大きさが 0（部品は目次を出すかを決められない）
+    expect((root.querySelector(".index") as HTMLElement).hidden).toBe(true);
+    // step: 最初の質問から次へ、そこから前へ。端では何もしない。移った先の入力へフォーカスが移る。
+    el.step(1);
+    expect(
+      root.querySelector('[data-ask-index][aria-current="true"]')?.getAttribute("data-ask-index"),
+    ).toBe("b");
+    expect(root.activeElement).toBe(root.querySelector('[data-ask-question="b"] input[type=text]'));
+    el.step(-1);
+    expect(
+      root.querySelector('[data-ask-index][aria-current="true"]')?.getAttribute("data-ask-index"),
+    ).toBe("a");
+    el.step(-1);
+    expect(
+      root.querySelector('[data-ask-index][aria-current="true"]')?.getAttribute("data-ask-index"),
+    ).toBe("a");
+    el.step(5);
+    el.step(1);
+    expect(
+      root.querySelector('[data-ask-index][aria-current="true"]')?.getAttribute("data-ask-index"),
+    ).toBe("c");
+    el.step(1);
+    expect(
+      root.querySelector('[data-ask-index][aria-current="true"]')?.getAttribute("data-ask-index"),
+    ).toBe("c");
+  });
+
   it("描けない定義（知らない型）は ask-unsupported を出し、ボタンを描かない", async () => {
     const { root, unsupported } = await mountForm([{ id: "x", label: "X", type: "matrix" }]);
     expect(unsupported).toHaveLength(1);
