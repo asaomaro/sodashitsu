@@ -87,6 +87,17 @@ export function agentReportSocketPathFor(stateDir: string, os: NodeJS.Platform =
   return join(stateDir, "agent-report.sock");
 }
 
+/**
+ * pane の中のプログラム向けのログイン不要の受け口（`pane.sock`。20261003-sodactl-ask-socket）のパス。状態ディレクトリの中の Unix ドメイン socket。
+ * Windows では `undefined`（受け口を開かず、pane の環境にも入れない）——named pipe は繋げる利用者をファイルの権限（0600）で限れないので、
+ * ログイン不要の受け口は出さない（Windows の `sodactl ask` は今までどおり `/ws` の経路）。
+ * 長さの検査は足さない: `agent-report.sock` より短い名前なので、起動時の検査（`resolveServeOptions`）を通った状態ディレクトリなら収まる。
+ */
+export function paneSocketPathFor(stateDir: string, os: NodeJS.Platform = platform()): string | undefined {
+  if (os === "win32") return undefined;
+  return join(stateDir, "pane.sock");
+}
+
 /** Unix ドメイン socket のパスのバイト長の上限（Linux は実測で 108 まで listen できる。macOS 等は 104 から NUL を引いた 103 とみなす。decisions D2）。 */
 export function maxUnixSocketPathBytes(os: NodeJS.Platform): number {
   return os === "linux" ? 108 : 103;

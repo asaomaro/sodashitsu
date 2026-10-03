@@ -8,6 +8,7 @@ import {
   defaultStateDir,
   isBindFailure,
   listenFailureHint,
+  paneSocketPathFor,
   resolveServeOptions,
   stateDirInUseError,
 } from "./config.js";
@@ -125,6 +126,18 @@ describe("resolveServeOptions の名前付き session（20260926-named-session�
     expect(() => resolveServeOptions({ stateDir: dirFor(104) }, env, "darwin")).toThrow(ConfigError);
     // Windows は named pipe（パスの長さに依らない）ので検査しない
     expect(() => resolveServeOptions({ stateDir: dirFor(300) }, env, "win32")).not.toThrow();
+  });
+
+  it("受け口（pane.sock）のパス: Windows は undefined、それ以外は <状態ディレクトリ>/pane.sock（20261003-sodactl-ask-socket の AC5）", () => {
+    expect(paneSocketPathFor("/s", "linux")).toBe(join("/s", "pane.sock"));
+    expect(paneSocketPathFor("/s", "darwin")).toBe(join("/s", "pane.sock"));
+    expect(paneSocketPathFor(join(base, "sessions", "work"), "linux")).toBe(join(base, "sessions", "work", "pane.sock"));
+    // Windows では受け口を開かない（公式フック連携の socket は named pipe の名前を返すが、こちらは何も返さない）
+    expect(paneSocketPathFor("/s", "win32")).toBeUndefined();
+    expect(paneSocketPathFor("C:\\Users\\u\\state", "win32")).toBeUndefined();
+    // 公式フック連携の socket と同じディレクトリで、名前はそれより短い（起動時の長さの検査を通った状態ディレクトリなら収まる）
+    const dirFor = (bytes: number): string => "/" + "d".repeat(bytes - "/".length - "/agent-report.sock".length);
+    expect(Buffer.byteLength(paneSocketPathFor(dirFor(103), "darwin") ?? "")).toBe(103 - "agent-report.sock".length + "pane.sock".length);
   });
 
   it("案内は --state-dir を短くすることを示し、名前付き session のときだけ --session を短くすることも示す", () => {
