@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { RpcError } from "@sodashitsu/protocol";
 import { MemoryLogger } from "../log/Logger.js";
-import { askOpenOp } from "./askOp.js";
 import { PaneOpRegistry, type PaneOpContext, type PaneOpDef } from "./PaneOpRegistry.js";
 
 const EchoParams = z.object({
