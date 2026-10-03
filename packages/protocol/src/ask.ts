@@ -215,7 +215,7 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
     if (isFail(v)) return v;
     notePlaceholder = v;
   }
-  // `paging`: 無い・null は項目なし（既定は埋めない）。`"auto"`・真偽・1 以上の整数だけ通す（`ask.py` と同じ。`ask.py` の検査と共通の試験データに合わせる。数は `true` と同じ扱い）。
+  // `paging`: 無い・null は項目なし（既定は埋めない）。`"auto"`・真偽・1 以上の整数だけ通す（`ask.py` と同じ。共通の試験データに合わせる。数は `true` と同じ扱い）。
   let paging: AskPaging | undefined;
   const pg = raw["paging"];
   if (pg !== undefined && pg !== null) {

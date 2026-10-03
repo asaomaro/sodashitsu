@@ -54,3 +54,15 @@ AC1〜AC16・AC-I1〜AC-I5 は、実装と `test-result.md` の判定に食い�
 
 範囲外（follow-up の候補）: `normalizeAskSpec` の `showIf` で `dep` が `"__proto__"` のとき `cond[dep] = …` がオブジェクトの原型を差し替える（グローバルの汚染にはならず、値は捨てられるだけ。以前からある書き方。`Object.create(null)` か `Map` にすると明確）／public_docs に LICENSE が無い（NOTICE と README に明記済み。public_docs 側で明示してもらう）／E2E 全体の 18 件・lint の 22 errors・smoke の 1 本目が `/workspaces/sodashitsu` から落ちる件は `main` でも同じ。
 - review ラウンド 1 の should 3・nit 3 を直した: README に E2E が読む部品の内部の属性の表と取り込み後の確認手順を足した（98d1877）／E2E の補助を `support/askForm.ts` に共通化し、既存の E2E の定義は確実に分かれる側にした（e49b33c）／`AskDialog.test.ts` を 3 ファイル（11＋34＋11 件＝56 件）に分けた（c59f3d4）／README の「元は変わらない」を実際に合わせた・skill に `filter`・`showValue` を足した（98d1877）。
+
+## ラウンド 2（a1b3e4f..HEAD・部品 1.2.1／1.2.2 への取り込み直しの差分・委譲）
+
+must 0・should 1・nit 4。安全（`ask-form.js` の通しの差分に通信・`window`・`document`・`innerHTML` 系・`eval`・`location`・`cssText`・`href` の追加なし。新しい API は `performance.now()` だけ、新しいリスナーは Shadow DOM の中だけ）・`applyWidth`／`onResize` に再入なし・`ask.ts` はコメントのみの差分・E2E に床読みなし・docs に `data-ask-page`／［次へ］等の残りなし、を確かめた。
+
+- [should] 前の質問で広げた `--ask-index-width` が、次の質問の定義を部品へ入れる時点で残り、部品が広い幅で「収まる」と判断して目次を出さない場面がある — 根拠: AskDialog.vue `loadSpec`／`applyWidth` → `loadSpec` で `el.spec` を入れる前に外した。単体テスト（`spec` の setter の時点で変数が空）を足し、外す行を消すと落ちることを確かめた [conv:regression-negative-control]
+- [nit] README の「取り込んでいる版は 1.2.1」→ 1.2.2 に直した
+- [nit] `ask.integration.test.ts` のコメントの「ページに分かれる」→ 目次に直した
+- [nit] `ask-form.spec.ts` のキーボードの件で、目次への Tab のループが常に 0 回 → 目次が出ないことを `expect(...).toBe(0)` で明示し、目次つきは `ask-form-index.spec.ts` に任せる、とコメントした [conv:e2e-observe-browser]
+- [nit] `ask.ts` のコメントで `ask.py` が 2 回出る → 直した
+
+修正の後: build・typecheck・`pnpm test`（6892 passed）・ask 関連 E2E 4 spec（56 passed）が通る。

@@ -374,13 +374,10 @@ test("キーボードだけで答えられる（見出し → Tab → 矢印 →
   await expect(dialog(page)).toBeVisible();
   await expect(page.locator("[data-ask-origin]")).toBeFocused(); // 開いたら見出し（AC-I4）
   // 見出しの次の Tab 停止は、目次が出ていれば目次の項目（出ている数だけ）、その次が最初の質問のチェック済みのラジオ（ベータ）。
-  // 目次を出すかは描画が落ち着いてから決まる。落ち着いた後に数える（0 のまま読んで、項目への Tab の確認が黙って飛ばないように。この定義は収まるので 0 個になる）。
+  // 目次を出すかは描画が落ち着いてから決まる。落ち着いた後に読む。
   await settle(page);
-  const buttons = (await indexItems(page)).length;
-  for (let i = 0; i < buttons; i++) {
-    await page.keyboard.press("Tab");
-    await expect(page.locator("[data-ask-index]:visible").nth(i)).toBeFocused();
-  }
+  // この定義は収まるので目次は出ない（目次つきの Tab は ask-form-index.spec.ts の「キーだけで完結」で見る）。
+  expect((await indexItems(page)).length).toBe(0);
   await page.keyboard.press("Tab");
   await expect(page.locator("input[type=radio][value=beta]")).toBeFocused();
   // フォーカスが部品の中にある間、ページから見たフォーカスは部品の要素（中の要素は shadowRoot.activeElement）。

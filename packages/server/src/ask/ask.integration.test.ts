@@ -140,7 +140,7 @@ describe("ask.*（実物の /ws。20261002-sodactl-ask）", () => {
   });
 
   // 古い sodactl × 新しいサーバ（20261003-ask-form-component の AC13）: 古い sodactl は `page`・`paging` を知らない項目として検査を通し、
-  // **読んだままの定義**を送る。検査して画面へ配るのはサーバなので、項目は画面に届き（ページに分かれる）、不正な値はサーバが断る。
+  // **読んだままの定義**を送る。検査して画面へ配るのはサーバなので、項目は画面に届き（目次に出る）、不正な値はサーバが断る。
   it("読んだままの定義の page・paging・filter・showValue は、画面が受け取る定義（ask.get・ask.subscribe）に入る。不正な paging・page は invalid_ask_spec", async () => {
     const { paneId, open } = await start();
     const cli = await open("external");

@@ -131,6 +131,23 @@ describe("AskDialog — 部品へ定義を入れる（1 回だけ・写し・高
     expect(dlg().style.getPropertyValue("--ask-index-width")).toBe("");
   });
 
+  it("前の質問で広げた幅は、次の質問の定義を部品へ入れる前に外す（広いままだと目次を出すかの判定が狂う）", async () => {
+    const w = mountDialog();
+    const dlg = () => w.wrapper.get("dialog").element as HTMLDialogElement;
+    vi.spyOn(formProto(), "indexWidth", "get").mockReturnValue(212);
+    await open(w, ask(SPEC));
+    expect(dlg().style.getPropertyValue("--ask-index-width")).toBe("212px");
+    let atSpec: string | null = null;
+    const setter = vi.spyOn(formProto(), "spec", "set").mockImplementation(() => {
+      atSpec = dlg().style.getPropertyValue("--ask-index-width");
+    });
+    w.store.clear();
+    await settle();
+    await open(w, ask(SPEC, "a2"));
+    expect(setter).toHaveBeenCalled();
+    expect(atSpec).toBe("");
+  });
+
   it("resize のリスナーは開いている間だけ付く（閉じる・アンマウントで外す）", async () => {
     const add = vi.spyOn(window, "addEventListener");
     const remove = vi.spyOn(window, "removeEventListener");

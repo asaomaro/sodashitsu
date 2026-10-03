@@ -67,7 +67,7 @@ node scripts/sync-ask-form.mjs --check                                          
 
 - `spec`（検査済みの定義。入れるたびに部品が全部描き直すので、質問が替わったときに 1 回だけ入れる。部品は定義に書き込むので写しを渡す）・`busy`（送信中）。
 - `submit()`・`step(±1)` — 開いた直後はフォーカスが固定の行（部品の外）にあり、部品のキーは届かない。その間の `Ctrl/Cmd+Enter` と
-  `Alt+PageDown`／`Alt+PageUp` を、枠が `submit()`・`step()` で取り次ぐ。**`step()` は部品 1.1.0 から**（それより前のコミットへ戻すと、この取り次ぎが動かない）。取り込んでいる版は 1.2.1。
+  `Alt+PageDown`／`Alt+PageUp` を、枠が `submit()`・`step()` で取り次ぐ。**`step()` は部品 1.1.0 から**（それより前のコミットへ戻すと、この取り次ぎが動かない）。取り込んでいる版は 1.2.2。
 - `relayout()`・`contentHeight` — 枠が先に最大の高さを与えてから定義を入れ、中身の高さにダイアログを合わせる。目次を出すかは、部品が最初の 1 回だけ高さで決める。
 - `indexWidth` — 目次の幅（出ていなければ 0）。枠が、ダイアログの幅を目次の分だけ広げるのに使う（`--ask-index-width`）。
 - イベント `ask-submit`（`detail` のうち `answers`・`custom`・`note` だけをサーバへ送る）・`ask-cancel`・`ask-unsupported`

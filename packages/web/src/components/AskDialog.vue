@@ -175,6 +175,8 @@ function loadSpec(a: AskPending): void {
   loadedAskId = a.askId;
   el.style.height = `${maxFormHeight()}px`;
   el.busy = false;
+  // 前の質問で広げた幅を外してから入れる——部品は入れた直後に、今の幅で目次を出すかを決める（広いままだと、収まるとみなして出さない）
+  dialogEl.value?.style.removeProperty("--ask-index-width");
   try {
     el.spec = structuredClone(toRaw(a.spec));
   } catch (err) {
