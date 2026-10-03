@@ -568,7 +568,7 @@ test("定義の title に何を書いても、出どころの行の文言は変�
 });
 
 // --- 即確定（質問が 1 つだけ・single・補足なし。部品の動き。AC9） -------------------------------------------------------
-// 部品（ask-form 1.1.0）の決まり: 選択肢のクリック・タップ・`Space`・`Enter` で、その時点で確定する（既に選ばれている選択肢でも）。矢印キーで移っただけでは
+// 部品（ask-form 1.1.1）の決まり: 選択肢のクリック・タップ・`Space`・`Enter` で、その時点で確定する（既に選ばれている選択肢でも）。矢印キーで移っただけでは
 // 確定しない。ask-form の側はプログラムから起こしたイベントで確かめているので、ここでは実際のクリックとキー入力（`page.keyboard`）で確かめる
 // （タップは `ask-form-mobile.spec.ts`）。「確定した」の観測は、sodactl の stdout（回答の 1 行）とダイアログが閉じたこと、そして**ブラウザが送った `ask.answer` のフレーム**
 // （確定は 1 回だけ。矢印で移っただけの間は 0 件）。
@@ -655,33 +655,35 @@ test("即確定: 矢印キーで移っただけでは確定しない。Enter で
   expect(sentAnswers()).toBe(3);
 });
 
-test("即確定: 選ばれていない選択肢で Space を押すと、選んで確定する（AC9）", async ({ page, appServer }) => {
+test("即確定: 選ばれていない選択肢で Space を押すと、選んで確定する。回答は 1 回だけ（AC9）", async ({ page, appServer }) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
-  await openBrowser(page, appServer);
+  const { sentAnswers } = await openBrowser(page, appServer);
   const run = await openInstant(page, appServer, p1, ONE_UNSET, "x");
   await expect(dialog(page).locator("input[type=radio]:checked")).toHaveCount(0); // 画面のほかの所にもラジオがあるので、ダイアログの中で数える
   await page.keyboard.press("Space");
   expect((await run.done).json).toEqual({ status: "answered", answers: { a: "x" } });
   await expect(dialog(page)).toHaveCount(0);
+  expect(sentAnswers()).toBe(1); // keydown で決め、ブラウザが出す click では決めない（二重に決定しない）
 });
 
-// fixme: 部品（ask-form 1.1.0・`third_party/ask-form/ask-form.js`）の動きが決まりと違う。部品は Space での確定を `click` で見ているが、Chromium は
-// **既に選ばれているラジオで Space を押しても `click` を出さない**（出るのは keydown・keyup だけ。実際のキー入力で確かめた）。そのため、既定の選択肢に
-// Tab で入って Space、矢印で移った先で Space のどちらも確定しない（Enter・クリックは確定する）。部品は写しなのでここでは直せない——ask-form の側が
-// 直したら（Space の keydown で決める等）、取り込み直してこの fixme を外す。
-test.fixme("即確定: 既に選ばれている選択肢で Space を押すと確定する（既定の選択肢・矢印で移った先）（AC9）", async ({ page, appServer }) => {
+test("即確定: 既に選ばれている選択肢で Space を押すと確定する（既定の選択肢・矢印で移った先）。回答は 1 回ずつ（AC9）", async ({ page, appServer }) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
-  await openBrowser(page, appServer);
+  const { sentAnswers } = await openBrowser(page, appServer);
   const first = await openInstant(page, appServer, p1, ONE, "x");
+  await expect(page.locator("input[type=radio][value=x]")).toBeChecked();
+  expect(sentAnswers()).toBe(0);
   await page.keyboard.press("Space");
   expect((await first.done).json).toEqual({ status: "answered", answers: { a: "x" } });
   await expect(dialog(page)).toHaveCount(0);
+  expect(sentAnswers()).toBe(1);
   const second = await openInstant(page, appServer, p1, ONE, "x");
   await page.keyboard.press("ArrowDown");
   await expect(page.locator("input[type=radio][value=y]")).toBeChecked();
+  expect(sentAnswers()).toBe(1); // 矢印で移っただけでは送らない
   await page.keyboard.press("Space");
   expect((await second.done).json).toEqual({ status: "answered", answers: { a: "y" } });
   await expect(dialog(page)).toHaveCount(0);
+  expect(sentAnswers()).toBe(2);
 });
