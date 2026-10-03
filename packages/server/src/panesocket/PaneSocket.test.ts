@@ -9,6 +9,19 @@ import { MemoryLogger } from "../log/Logger.js";
 import { PaneOpRegistry, type PaneOpContext } from "./PaneOpRegistry.js";
 import { PaneSocket, type PaneSocketLimits } from "./PaneSocket.js";
 
+/** `listenPrivateUnixSocket` が socket を置き終えた後・戻る前に挟む待ち（`listen()` の途中の状態を作る。既定は何も挟まない）。 */
+const placed = vi.hoisted(() => ({ hold: undefined as (() => Promise<void>) | undefined }));
+vi.mock("../infra/privateUnixSocket.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../infra/privateUnixSocket.js")>();
+  return {
+    ...actual,
+    listenPrivateUnixSocket: async (...args: Parameters<typeof actual.listenPrivateUnixSocket>): Promise<void> => {
+      await actual.listenPrivateUnixSocket(...args);
+      await placed.hold?.();
+    },
+  };
+});
+
 /** 1 本の接続（テストのクライアント役）。受け口が書いたものを全部溜め、接続が閉じたら `closed` が解決する。 */
 interface Client {
   sock: Socket;
@@ -90,6 +103,23 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
     return { client, wait: waits[before]! };
   }
 
+  /** 受け口に届いたかたまりを数える（送ったものが実際に別々のかたまりで届いたことを確かめる）。 */
+  function watchChunks(): { count(): number } {
+    const spy = vi.spyOn(socket as unknown as { handleData(conn: unknown, chunk: Buffer): void }, "handleData");
+    return { count: () => spy.mock.calls.length };
+  }
+
+  /** `listen()` を「socket は置いたが、まだ戻っていない」所で止める。`release()` で先へ進める。 */
+  function holdListen(): { reached: Promise<void>; release(): void } {
+    const reached = deferred<void>();
+    const gate = deferred<void>();
+    placed.hold = () => {
+      reached.resolve();
+      return gate.promise;
+    };
+    return { reached: reached.promise, release: () => gate.resolve() };
+  }
+
   beforeEach(async () => {
     dir = await makeTempDir("soda-pane-sock-");
     path = join(dir, "pane.sock");
@@ -120,6 +150,7 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
   });
 
   afterEach(async () => {
+    placed.hold = undefined;
     await socket?.close();
     await rm(dir, { recursive: true, force: true });
   });
@@ -164,13 +195,17 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       await start();
       const line = Buffer.from(`${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "操舵室" } })}\n`);
       const cut = line.indexOf(Buffer.from("舵")) + 1; // 「舵」の 3 バイトの途中
+      const chunks = watchChunks();
       const c = await open(path);
 
       c.sock.write(line.subarray(0, cut));
-      await new Promise((r) => setTimeout(r, 20)); // 別のかたまりとして届かせる
+      // 前半だけが 1 つのかたまりとして届いたのを見てから、後半を送る。
+      await vi.waitFor(() => expect(chunks.count()).toBe(1));
+      expect(echoCalls).toBe(0);
       c.sock.write(line.subarray(cut));
 
       expect(parseReply(await c.closed)).toMatchObject({ ok: true, result: { text: "操舵室" } });
+      expect(chunks.count()).toBe(2);
     });
 
     it("1 接続 1 要求: 2 行目以降は読まない", async () => {
@@ -284,6 +319,22 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       await expectStillServing();
     });
 
+    it("上限未満のかたまりが続いて合計で上限を超える → bad_request（かたまりをまたいで数える）", async () => {
+      // 数え漏らすと行が揃わないまま待ちの上限で何も書かずに切られ、返事が空になって落ちる。
+      await start({ maxLineBytes: 256, requestWaitMs: 1_000 });
+      const chunks = watchChunks();
+      const c = await open(path);
+
+      c.sock.write("x".repeat(200));
+      await vi.waitFor(() => expect(chunks.count()).toBe(1));
+      expect(socket.connectionCount).toBe(1); // 1 つ目だけでは断らない
+      c.sock.write("x".repeat(200));
+
+      expect(parseReply(await c.closed)).toMatchObject({ ok: false, error: { code: "bad_request" } });
+      expect(chunks.count()).toBe(2); // 2 つ目のかたまりで断った（1 つにまとまって届いたのではない）
+      await expectStillServing();
+    });
+
     it("上限ちょうどの行は通る（上限は改行を除くバイト数）", async () => {
       const base = JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "" } });
       const line = JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "あ".repeat(10) } });
@@ -309,7 +360,7 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
     });
 
     it("行が揃わないと、待ちの上限で何も書かずに切る", async () => {
-      await start({ requestWaitMs: 50 });
+      await start({ requestWaitMs: 200 });
       const c = await open(path);
       c.sock.write('{"v":1,"op":"test.echo"'); // 改行を送らない
 
@@ -322,7 +373,7 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
     });
 
     it("何も送らない接続も、待ちの上限で切る", async () => {
-      await start({ requestWaitMs: 50 });
+      await start({ requestWaitMs: 200 });
       const c = await open(path);
 
       expect(await c.closed).toBe("");
@@ -330,10 +381,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
     });
 
     it("待ちの上限は行が揃うまでのもの: 行が揃った後は、操作が上限より長く掛かっても切らない", async () => {
-      await start({ requestWaitMs: 50 });
+      await start({ requestWaitMs: 200 });
       const { client, wait } = await openWaiting();
 
-      await new Promise((r) => setTimeout(r, 150)); // 上限の 3 倍
+      await new Promise((r) => setTimeout(r, 600)); // 上限の 3 倍
       expect(wait.ctx.signal.aborted).toBe(false);
       wait.finish("late");
 
@@ -358,6 +409,48 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       await new Promise((r) => setImmediate(r));
       expect(gone).toEqual([wait.ctx.connId]);
       expect(await call(path, "test.echo", "p1", { text: "x" })).toMatchObject({ ok: true });
+    });
+
+    it("相手が書き込み側だけ閉じる（end で送る）と、すぐ返る操作は返事が届き、待つ操作は取り消される", async () => {
+      await start();
+      const quick = await open(path);
+      quick.sock.end(`${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`);
+      expect(parseReply(await quick.closed)).toMatchObject({ ok: true, result: { text: "x" } });
+      await vi.waitFor(() => expect(gone).toHaveLength(1));
+
+      const slow = await open(path);
+      slow.sock.end(`${JSON.stringify({ v: 1, op: "test.wait", paneId: "p1" })}\n`);
+
+      // 半分だけ閉じたのを「接続が終わった」と扱う: 操作は始まるが、返事を待たずに取り消される。
+      await vi.waitFor(() => expect(waits).toHaveLength(1));
+      const wait = waits[0]!;
+      await vi.waitFor(() => expect(gone).toHaveLength(2));
+      expect(gone[1]).toBe(wait.ctx.connId);
+      expect(wait.ctx.signal.aborted).toBe(true);
+      expect(await slow.closed).toBe("");
+      expect(socket.connectionCount).toBe(0);
+    });
+
+    it("返事を読まない相手は、待ちの上限で切って接続の枠を空ける", async () => {
+      // 相手が読まないと書き切れない大きさの結果（socket のバッファに収まらない）。
+      registry.register({ name: "test.big", params: z.object({}), handler: () => "x".repeat(8 * 1024 * 1024) });
+      await start({ requestWaitMs: 300, maxConnections: 1 });
+      const reader = connect(path); // `data` を聞かない＝読まない
+      reader.on("error", () => undefined);
+      reader.pause();
+      try {
+        reader.write(`${JSON.stringify({ v: 1, op: "test.big", paneId: "p1" })}\n`);
+        // 返事を書き始めた（ここからは「書き切るまでの上限」）。
+        await vi.waitFor(() => expect(logger.lines.some((l) => l.msg === "pane socket: request" && l.fields?.op === "test.big")).toBe(true));
+
+        // 上限が効かなければ接続は残り続け、ここで時間切れになる。
+        await vi.waitFor(() => expect(socket.connectionCount).toBe(0), { timeout: 3_000 });
+        expect(gone).toHaveLength(1);
+        // 枠（上限 1）が空いたので、次の要求が通る。
+        expect(await call(path, "test.echo", "p1", { text: "next" })).toMatchObject({ ok: true, result: { text: "next" } });
+      } finally {
+        reader.destroy();
+      }
     });
 
     it("返事を書いて閉じたときも、onConnectionGone は 1 回だけ呼ばれる", async () => {
@@ -535,6 +628,41 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       expect(gone).toEqual([wait.ctx.connId]);
       expect(await client.closed).toBe("");
       expect(socket.connectionCount).toBe(0);
+    });
+
+    it("listen() が済む前に繋がった接続は、何も書かずに捨てる（要求は読まない）", async () => {
+      const hold = holdListen();
+      const listening = start();
+      await hold.reached;
+      expect((await stat(path)).isSocket()).toBe(true); // もう繋げる場所にある
+
+      const raw = await sendRaw(path, `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`);
+
+      expect(raw).toBe(""); // `pane_socket_busy` も書かない
+      expect(echoCalls).toBe(0);
+      expect(gone).toEqual([]);
+      expect(socket.connectionCount).toBe(0);
+      hold.release();
+      await listening;
+      expect(await call(path, "test.echo", "p1", { text: "x" })).toMatchObject({ ok: true });
+    });
+
+    it("listen() の途中で close() しても、待ち受けと pane.sock を残さない（その間の接続は何も書かずに捨てる）", async () => {
+      const hold = holdListen();
+      const listening = start();
+      await hold.reached;
+
+      const closing = socket.close();
+      // close() を始めた後・待ち受けを閉じる前の接続。
+      expect(await sendRaw(path, `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`)).toBe("");
+      hold.release();
+      await listening;
+      await closing;
+
+      await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(open(path)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readdir(dir)).toEqual([]);
+      expect(echoCalls).toBe(0);
     });
 
     it("close は何度呼んでもよい", async () => {

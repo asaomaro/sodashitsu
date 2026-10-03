@@ -70,7 +70,12 @@ export class PaneSocket {
   private readonly rejected = new Set<Socket>();
   private server: Server | undefined;
   private listenPath: string | undefined;
-  /** 0600 で置き終えてから `close()` を始めるまで真。偽の間に繋がった接続は何も書かずに捨てる。 */
+  /** 進行中の `listen()`（終わると解決する。失敗でも reject しない）。途中で呼ばれた `close()` が待つ。 */
+  private starting: Promise<void> | undefined;
+  /**
+   * `listen()` が済んでから（0600 で置き、一時ディレクトリを消した後）`close()` を始めるまで真。
+   * 偽の間に繋がった接続（置いてから `listen()` が済むまでの間・`close()` を始めた後）は何も書かずに捨てる。
+   */
   private accepting = false;
   /** 引き継ぎの間（`pause()` 〜 `resume()`）は新しい接続を `pane_socket_busy` で断る。 */
   private paused = false;
@@ -92,9 +97,23 @@ export class PaneSocket {
   /**
    * 状態ディレクトリの socket で待ち受ける（0700 の一時ディレクトリ → 0600 → rename。残っていた古いファイルは rename が置き換える）。
    * 失敗したら待ち受けを閉じて投げる（呼び出し側が warn で起動を続ける）。
+   * 途中で `close()` が呼ばれたら、`close()` がこの完了を待ってから閉じる（待ち受けとファイルを残さない）。
    */
   async listen(path: string): Promise<void> {
-    if (this.server) throw new Error("pane socket is already listening");
+    if (this.server || this.starting) throw new Error("pane socket is already listening");
+    const placing = this.place(path);
+    this.starting = placing.then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      await placing;
+    } finally {
+      this.starting = undefined;
+    }
+  }
+
+  private async place(path: string): Promise<void> {
     const server = createServer((sock) => this.handleSocket(sock));
     server.on("error", (err) => this.deps.logger.warn("pane socket error", { path, error: String(err) }));
     await listenPrivateUnixSocket(server, path, { tmpPrefix: TMP_PREFIX });
@@ -119,6 +138,9 @@ export class PaneSocket {
 
   /** 受け付けを止め、接続を捨て、socket のファイルを消す。何度呼んでもよい。 */
   async close(): Promise<void> {
+    this.accepting = false;
+    // `listen()` の途中なら、置き終わるのを待ってから閉じる（待たずに戻ると、後から待ち受けと `pane.sock` が残る）。
+    while (this.starting) await this.starting;
     this.accepting = false;
     // 接続が残っていると `server.close()` が終わらないので、先に捨てる。
     this.dropAll();
