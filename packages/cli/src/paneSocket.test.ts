@@ -302,7 +302,8 @@ describe("callPaneOp（偽の受け口）", () => {
   it("socket でないファイル・誰も待ち受けていない socket（繋がる前のエラー）→ fallback", async () => {
     const file = join(dir, "plain.sock");
     await writeFile(file, "not a socket");
-    expect((await callPaneOp(file, REQ, WAIT)).kind).toBe("fallback");
+    // 普通のファイルへの connect も ECONNREFUSED になる。ここでは繋ぎ直しを見ない（`refusedRetryMs: 0`。繋ぎ直しは下の件）。
+    expect((await callPaneOp(file, REQ, { ...WAIT, refusedRetryMs: 0 })).kind).toBe("fallback");
     // 待ち受けを止めた後に残った socket のファイル（不正終了の残骸と同じ形）。`server.close()` は自分のパスを消すので、
     // 先に別の名前（ハードリンク）を作っておき、そちらを残す。
     const live = join(dir, "live.sock");
