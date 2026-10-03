@@ -66,7 +66,7 @@ describe("sodactl main integration（実サーバ・実 PTY）", () => {
 
   it("workspace create: 初回は --token でログインし、セッションをキャッシュする（AC1, AC7）", async () => {
     const out = captureStdout();
-    await runWorkspaceCreate({ kind: "workspace-create", opts: { url, token }, cwd: process.cwd(), label: "cli-it" }, store);
+    await runWorkspaceCreate({ kind: "workspace-create", opts: { url, token, urlExplicit: false }, cwd: process.cwd(), label: "cli-it" }, store);
     out.restore();
 
     const result = JSON.parse(out.text()) as { workspace: { id: string }; tab: { id: string }; pane: { id: string } };
@@ -82,7 +82,7 @@ describe("sodactl main integration（実サーバ・実 PTY）", () => {
   it("2回目以降はキャッシュ済みセッションを再利用し、/api/login を呼ばない（AC5, AC7）", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const out = captureStdout();
-    await runSnapshot({ kind: "snapshot", opts: { url, token: undefined } }, store);
+    await runSnapshot({ kind: "snapshot", opts: { url, token: undefined, urlExplicit: false } }, store);
     out.restore();
     fetchSpy.mockRestore();
 
@@ -95,7 +95,7 @@ describe("sodactl main integration（実サーバ・実 PTY）", () => {
 
   it("pane split で新しい pane を作る（AC2）", async () => {
     const out = captureStdout();
-    await runPaneSplit({ kind: "pane-split", opts: { url, token: undefined }, target: { kind: "id", paneId }, direction: "right", ratio: undefined }, store);
+    await runPaneSplit({ kind: "pane-split", opts: { url, token: undefined, urlExplicit: false }, target: { kind: "id", paneId }, direction: "right", ratio: undefined }, store);
     out.restore();
 
     const result = JSON.parse(out.text()) as { pane: { id: string } };
@@ -106,7 +106,7 @@ describe("sodactl main integration（実サーバ・実 PTY）", () => {
   it("pane run → pane read: 実 PTY への echo の往復を確認する（AC3, AC4）", async () => {
     const marker = `sodactl-it-${Date.now()}`;
     const runOut = captureStdout();
-    await runPaneRun({ kind: "pane-run", opts: { url, token: undefined }, paneId, command: `echo ${marker}` }, store);
+    await runPaneRun({ kind: "pane-run", opts: { url, token: undefined, urlExplicit: false }, paneId, command: `echo ${marker}` }, store);
     runOut.restore();
     expect(JSON.parse(runOut.text())).toEqual({ ok: true, paneId });
 
@@ -117,7 +117,7 @@ describe("sodactl main integration（実サーバ・実 PTY）", () => {
       const deadline = Date.now() + 8_000;
       for (;;) {
         const out = captureStdout();
-        await runPaneRead({ kind: "pane-read", opts: { url, token: undefined }, paneId, follow: false, raw: false, timeoutMs: 3_000 }, store);
+        await runPaneRead({ kind: "pane-read", opts: { url, token: undefined, urlExplicit: false }, paneId, follow: false, raw: false, timeoutMs: 3_000 }, store);
         out.restore();
         seenText = out.text();
         if (seenText.includes(marker)) return;
@@ -141,21 +141,21 @@ describe("sodactl main integration（実サーバ・実 PTY）", () => {
       if (!dedicatedServer.freshToken) throw new Error("expected a freshly generated token");
       const dedicatedUrl = `http://${dedicatedServer.options.host}:${dedicatedServer.options.port}`;
       const createOut = captureStdout();
-      await runWorkspaceCreate({ kind: "workspace-create", opts: { url: dedicatedUrl, token: dedicatedServer.freshToken }, cwd: process.cwd(), label: "follow-it" }, store);
+      await runWorkspaceCreate({ kind: "workspace-create", opts: { url: dedicatedUrl, token: dedicatedServer.freshToken, urlExplicit: false }, cwd: process.cwd(), label: "follow-it" }, store);
       createOut.restore();
       const followPaneId = (JSON.parse(createOut.text()) as { pane: { id: string } }).pane.id;
 
       const marker = `sodactl-follow-${Date.now()}`;
       const out = captureStdout();
       const followPromise = runPaneRead(
-        { kind: "pane-read", opts: { url: dedicatedUrl, token: undefined }, paneId: followPaneId, follow: true, raw: false, timeoutMs: 5_000 },
+        { kind: "pane-read", opts: { url: dedicatedUrl, token: undefined, urlExplicit: false }, paneId: followPaneId, follow: true, raw: false, timeoutMs: 5_000 },
         store,
       ).catch(() => undefined);
 
       // 最初の SNAPSHOT が届く（=購読が成立した）まで待ってから入力を送る。
       await waitUntil(() => out.text().length > 0, 5_000);
 
-      await runPaneRun({ kind: "pane-run", opts: { url: dedicatedUrl, token: undefined }, paneId: followPaneId, command: `echo ${marker}` }, store);
+      await runPaneRun({ kind: "pane-run", opts: { url: dedicatedUrl, token: undefined, urlExplicit: false }, paneId: followPaneId, command: `echo ${marker}` }, store);
       await waitUntil(() => out.text().includes(marker), 8_000);
 
       out.restore();
@@ -176,7 +176,7 @@ describe("sodactl main integration（実サーバ・実 PTY）", () => {
       const dedicatedUrl = `http://${dedicatedServer.options.host}:${dedicatedServer.options.port}`;
 
       const out = captureStdout();
-      const watchPromise = runWatch({ kind: "watch", opts: { url: dedicatedUrl, token: dedicatedServer.freshToken }, json: true }, store).catch(() => undefined);
+      const watchPromise = runWatch({ kind: "watch", opts: { url: dedicatedUrl, token: dedicatedServer.freshToken, urlExplicit: false }, json: true }, store).catch(() => undefined);
 
       // watch 接続が実際にイベントを受け取れる状態になるまでの時間は、システム負荷（一式実行時は特に）に
       // 左右される。固定の待ち時間ではなく、「workspace を作る → イベントが見えるまで確かめる」を
@@ -189,7 +189,7 @@ describe("sodactl main integration（実サーバ・実 PTY）", () => {
         // `token` は毎回渡す（キャッシュがあればそちらが優先されるので害は無く、watch 接続側の
         // ログイン完了を待たずに済む——ここで無認証エラーになると retry 自体が働かない）。
         await runWorkspaceCreate(
-          { kind: "workspace-create", opts: { url: dedicatedUrl, token: dedicatedServer.freshToken }, cwd: process.cwd(), label: `watch-target-${attempt++}` },
+          { kind: "workspace-create", opts: { url: dedicatedUrl, token: dedicatedServer.freshToken, urlExplicit: false }, cwd: process.cwd(), label: `watch-target-${attempt++}` },
           store,
         );
         if (out.text().includes("workspace.created")) {
@@ -213,7 +213,7 @@ describe("sodactl main integration（実サーバ・実 PTY）", () => {
     try {
       const otherStore = new FsSessionStore(join(otherDir, "session.json"));
       const out = captureStdout();
-      await runLogin({ kind: "login", opts: { url, token } }, otherStore);
+      await runLogin({ kind: "login", opts: { url, token, urlExplicit: false } }, otherStore);
       out.restore();
 
       expect(JSON.parse(out.text())).toEqual({ ok: true });

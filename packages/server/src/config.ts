@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { AGENT_REPORT_SOCKET_BASENAME, PANE_SOCKET_BASENAME } from "@sodashitsu/protocol";
 import { ConfigError } from "./configError.js";
 import { DEFAULT_SESSION_NAME, resolveSessionStateDir } from "./persist/namedSession.js";
 import { isLoopbackHost, unbracketHost } from "./util/net.js";
@@ -84,7 +85,18 @@ export function agentReportSocketPathFor(stateDir: string, os: NodeJS.Platform =
     const hash = createHash("sha256").update(stateDir).digest("hex").slice(0, 16);
     return `\\\\.\\pipe\\soda-agent-report-${hash}`;
   }
-  return join(stateDir, "agent-report.sock");
+  return join(stateDir, AGENT_REPORT_SOCKET_BASENAME);
+}
+
+/**
+ * pane の中のプログラム向けのログイン不要の受け口（`pane.sock`。20261003-sodactl-ask-socket）のパス。状態ディレクトリの中の Unix ドメイン socket。
+ * Windows では `undefined`（受け口を開かず、pane の環境にも入れない）——named pipe は繋げる利用者をファイルの権限（0600）で限れないので、
+ * ログイン不要の受け口は出さない（Windows の `sodactl ask` は今までどおり `/ws` の経路）。
+ * 長さの検査は足さない: `agent-report.sock` より短い名前なので、起動時の検査（`resolveServeOptions`）を通った状態ディレクトリなら収まる。
+ */
+export function paneSocketPathFor(stateDir: string, os: NodeJS.Platform = platform()): string | undefined {
+  if (os === "win32") return undefined;
+  return join(stateDir, PANE_SOCKET_BASENAME);
 }
 
 /** Unix ドメイン socket のパスのバイト長の上限（Linux は実測で 108 まで listen できる。macOS 等は 104 から NUL を引いた 103 とみなす。decisions D2）。 */

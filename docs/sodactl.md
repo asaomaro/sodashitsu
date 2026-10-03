@@ -2,7 +2,8 @@
 
 `sodactl` は、動いている `soda serve` をブラウザを介さずに操作する CLI（`packages/cli`）。
 ブラウザと同じ認証（token でのログイン → session cookie）と同じ接続（`/ws`。Origin/Host の検査つき）を使う。
-新しいソケットや認証の入口は持たない。
+例外は pane の中の `sodactl ask` だけで、Linux・macOS ではログイン不要のローカルの受け口（状態ディレクトリの `pane.sock`）を使う（下の「ログイン不要の受け口（pane.sock）」）。
+ほかのコマンドは、新しいソケットや認証の入口を持たない。
 
 ## 接続とログイン
 
@@ -212,6 +213,8 @@ sodactl pane control p2 --takeover                           # 既に所有者�
 - **質問のフォーム**（`ask`）: 定義全体 256 KiB（JSON の UTF-8）・質問 100・1 つの質問の選択肢 200・`id`／`value` 200 文字・`title`／`label` 等の短い文字列 500 文字・
   `intro`／`help`／`desc` 4,000 文字・1 つの選択肢の `colors` 16 個（超えた分は捨てる）。回答の自由入力・`text` の答え・補足は 10,000 文字まで。`--timeout` は 1,000〜86,400,000 ミリ秒。
   定義の上限の超過は使い方の誤り（終了コード 2）。標準入力は 1 MiB までしか読まない。サーバが同時に待てる質問は総数 32・1 つの接続あたり 8 まで（超えると `ask_busy`。終了コード 1）。
+- **ログイン不要の受け口**（`pane.sock`。下の「ログイン不要の受け口（pane.sock）」）: 同時に開いている接続 64（超えた接続と `soda handoff` の途中の接続は、要求を読まずに `pane_socket_busy`。sodactl は 5 秒まで繋ぎ直す）・要求の 1 行 1 MiB（超えると `bad_request`）・
+  接続してから要求の 1 行が揃うまで 10 秒（過ぎたら何も返さずに切る）。受け口から出した質問も、上の総数 32 と「1 つの pane に同時に 1 つ」に数える。
 - 複数ホストの中継（`--machine`・`/ws?machine=`）では、判定するのは**先のマシンの `soda serve`**（`docs/machines.md`）。
 
 ## 質問のフォーム（`ask`）
@@ -241,6 +244,8 @@ ask-form の質問の定義と同じ。全体: `title`・`intro`・`submit`・`n
 - 標準入力が端末のとき（定義を渡していないとき）は、読まずに使い方の誤り。
 - 対象は**呼び出し元の pane**（`SODA_PANE_ID`・`SODA_SERVER_URL`。pane の外・別のサーバへ向けると接続せずに `caller_pane_unknown`）。`--pane`・位置引数は取らない。`--machine` は `local` 以外では使えない
   （別のマシンの pane の質問は、そのマシンの pane の中で `sodactl ask` を打つ）。
+- **Linux・macOS の pane の中では `sodactl login` が要らない**（その pane のサーバのログイン不要の受け口 `pane.sock` を使う。条件と、使えないときの動きは下の「ログイン不要の受け口（pane.sock）」）。
+  Windows（ネイティブ）・`--url`／`SODACTL_URL` を明示したとき・受け口を持たない古いサーバでは、今までどおり `/ws` の経路で、`sodactl login` が要る。
 
 ### 出力
 
@@ -253,8 +258,8 @@ stdout に 1 行の JSON。`status` は次の 4 つで、**どれも終了コー
 | `timeout` | `--timeout` が過ぎた（既定 540000 ミリ秒） | — |
 | `unavailable` | この pane のサーバに、質問を出せるブラウザが 1 つもつながっていない・**定義に、この版の `sodactl ask` が対応していない型の質問がある** | `reason`（理由） |
 
-終了コード: 上の 4 つは 0。サーバ・接続・認証のエラーは 1（stderr に `{"error":{code,message}}`）、使い方と定義の誤りは 2。1 になるもの: `caller_pane_unknown`・`unauthenticated`・`not_found`
-（古いサーバ・pane が無い）・`ask_busy`（同じ pane の前の質問がまだ答えを待っている・待っている質問の総数か接続あたりの上限）・`connection_closed`（待っている間にサーバが閉じた・止まった）・`timeout`（**stdout の `status: "timeout"` とは別物**——
+終了コード: 上の 4 つは 0。サーバ・接続・認証のエラーは 1（stderr に `{"error":{code,message}}`）、使い方と定義の誤りは 2。1 になるもの: `caller_pane_unknown`・`unauthenticated`（**受け口を使えず `/ws` の経路へ落ちて、ログインしていないときだけ**。受け口を使えていれば出ない）・`not_found`
+（古いサーバ・pane が無い）・`ask_busy`（同じ pane の前の質問がまだ答えを待っている・待っている質問の総数か接続あたりの上限）・`connection_closed`（待っている間にサーバが閉じた・止まった・`soda handoff` が始まった）・`pane_socket_busy`（受け口が `soda handoff` の途中・同時接続の上限 64。sodactl が 5 秒まで繋ぎ直しても続いたとき。質問は出ていないので打ち直してよい）・`timeout`（**stdout の `status: "timeout"` とは別物**——
 サーバが `--timeout` を過ぎても応答しないときの保険で、`--timeout` に 15 秒を足して待った後の sodactl 側の時間切れ）。
 
 ### どのブラウザに出るか
@@ -270,7 +275,8 @@ stdout に 1 行の JSON。`status` は次の 4 つで、**どれも終了コー
 - `sodactl ask` を止めた（Ctrl+C・接続が切れた）・時間切れ・pane が閉じた・サーバが止まると、ダイアログは閉じる。
 - 同じ pane からの質問は同時に 1 つまで。2 つめは `ask_busy`（終了コード 1）で、前の質問はそのまま。別の pane からは同時に出せ、受けた順に 1 つずつ出る。
 - **保存した SSH のマシン**（`docs/machines.md`）の pane の質問は、**そのマシンを表示中の手元のブラウザ**に出る（既存の中継のまま）。そのマシンを表示していないブラウザ（別のマシン・ローカルを表示中）には出ず、
-  表示中のブラウザが無ければ `unavailable`。リモートのマシンの pane の中で `sodactl ask` を打つので、**リモートのマシンで `sodactl login` 済み**であることが前提（pane の環境に token は入らない。既存の sodactl と同じ）。
+  表示中のブラウザが無ければ `unavailable`。リモートのマシンの pane の中で `sodactl ask` を打つ。リモートのマシンの受け口（`pane.sock`）で動くので、**リモートのマシンでの `sodactl login` は要らない**
+  （リモートのサーバが受け口を持たない古い版のときは、今までどおりリモートのマシンで `sodactl login` 済みであることが前提。pane の環境に token は入らない）。
 
 ### 画面の操作
 
@@ -501,6 +507,7 @@ skill は、最初に pane の中にいるか（`SODA_PANE_ID` があるか）�
 | `SODA_PANE_ID` | その pane の ID（`p3` 等）。pane の中にいる印を兼ねる（herdr の `HERDR_ENV=1`・`HERDR_PANE_ID` に当たる） |
 | `SODA_SERVER_URL` | その pane を動かしているサーバへ sodactl がつなげる URL（URL にできない待ち受け〔ゾーン付きの IPv6 等〕では入れない）。待ち受けが `0.0.0.0` なら `http(s)://127.0.0.1:<port>`、`::` なら `[::1]`、それ以外は待ち受けのホスト。ポートは実際に待ち受けているもの |
 | `SODA_AGENT_REPORT_SOCKET` | 公式フック連携の report の socket（あれば） |
+| `SODA_PANE_SOCKET` | ログイン不要の受け口（状態ディレクトリの `pane.sock`）のパス（Linux・macOS。Windows では入れない）。値は socket のパスだけで、秘密は含まない。下の「ログイン不要の受け口（pane.sock）」 |
 
 workspace・tab の ID は環境変数に**入れない**（herdr の `HERDR_WORKSPACE_ID`・`HERDR_TAB_ID` に当たるものは無い）。pane は別の tab・workspace へ移せ
 （pane の ID は変わらない）、環境変数は起動した時の値のまま変わらないので、移された後に古い workspace を操作させてしまうため。今の値は
@@ -521,6 +528,68 @@ workspace・tab の ID は環境変数に**入れない**（herdr の `HERDR_WOR
   **pane の中の接続先と同じ origin で** login しておく（`http://localhost:7780` で login していても、`http://127.0.0.1:7780` では見つからない）。
   まだなら、利用者が `sodactl login --url <URL> --token <TOKEN>` を打つ（`<URL>` は pane の中の `echo "$SODA_SERVER_URL"` の値。pane の外の端末には
   この変数が無いので値そのものを渡す。skill はエージェントに、その値を示して利用者に頼ませる）。
+- **`sodactl ask` だけは例外**で、Linux・macOS の pane の中ではログインなしで動く（下の「ログイン不要の受け口（pane.sock）」）。ほかのコマンドは上のとおり login が要る。
+
+### ログイン不要の受け口（`pane.sock`）
+
+サーバ（Linux・macOS。macOS は未検証）は、状態ディレクトリに Unix ドメイン socket **`pane.sock`**（権限 0600。0700 の一時ディレクトリの中で待ち受けて 0600 にしてから、rename で置く）を立て、
+pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中のプログラム向けの、ログイン不要のローカルの受け口**で、`/ws` の RPC は通さず、**受け口に登録した操作だけ**を受ける。
+今載っている操作は `ask.open`（`sodactl ask`）だけ。**`sodactl` のほかのコマンドは何も変わらない**（今までどおり `sodactl login` が要る）。新しいネットワーク（TCP）の待ち受けは作らない。
+
+- **使われる条件**（全部を満たすとき。`sodactl ask` が自分で選ぶので、利用者が指定するものは無い）:
+  - Windows（ネイティブ）でない。
+  - pane の中（`SODA_PANE_ID` と `SODA_SERVER_URL` がある）。
+  - 受け口のパスが分かる: `SODA_PANE_SOCKET`（絶対パス。サーバは `--state-dir` が相対でも絶対パスにして入れる。相対の値は使わない）。無ければ、`SODA_AGENT_REPORT_SOCKET` が絶対パスで末尾がちょうど `/agent-report.sock` のとき、同じディレクトリの `pane.sock`
+    （版を上げて `soda handoff` した後の、前から動いている pane のため——その pane の環境には `SODA_PANE_SOCKET` が無い）。
+  - 接続先を明示していない（`--url`・`SODACTL_URL` のどちらも無い。明示した先がその pane のサーバとは限らないため）。
+  - `--machine` が無い（`--machine local` は可）。
+- **使えないときは、黙って今までの `/ws` の経路（session cookie）へ落ちる**: 上の条件を満たさない・受け口へ繋げない（ファイルが無い・サーバが受け口を置けなかった・権限が無い等）・
+  受け口がその操作を知らない（`unknown_op`）・要求を読めない（`bad_request`。どちらも版の違う受け口）。落ちたことは表示しない。落ちた先で未ログインなら、今までどおり `unauthenticated`（終了コード 1）。
+  受け口のファイルはあるのに誰も待ち受けていないとき（`ECONNREFUSED`。`soda handoff` で古い版が入れ替わってから、新しい版が受け口を置き直すまでの間）だけは、すぐには落ちずに 5 秒まで繋ぎ直す
+  （一時的な入れ替えの間に `unauthenticated` を出さないため。繋がっていないので質問は出ておらず、二重にはならない）。
+  **`sodactl ask` が `unauthenticated` で終わったら、受け口を使えていない**（これが見分け方）。そのときは上の「接続先と認証」のとおり `sodactl login` する。
+- **`/ws` へ落ちないもの**（操作が既に始まっているかもしれず、落ちると質問を二重に出すため）:
+  - 繋がった後に、返事なしで閉じた（サーバの停止・`soda handoff` の開始）→ `connection_closed`（終了コード 1）。
+  - `soda handoff` の途中・同時接続の上限（64）→ 受け口は要求を読まずに `pane_socket_busy` で断る。**sodactl はこれも 5 秒まで自動で繋ぎ直す**（上の `ECONNREFUSED` の繋ぎ直しと合わせて 1 つの上限）。
+    それでも続いたときだけ `pane_socket_busy`（終了コード 1）で終わる。要求は読まれていない（質問は出ていない）ので、打ち直してよい。
+    `soda handoff` が成功して新しい版に入れ替わった直後は、ブラウザがまだ繋ぎ直していないので、繋ぎ直した `sodactl ask` は `unavailable`（終了コード 0）になることがある（質問を出せる画面がまだ無い）。
+  - 繋がった後に、返事が読めない（1 行の JSON でない・上限 8 MiB を超える）・受け口が要求の 1 行を 10 秒待っても揃わずに切った → 同じく `connection_closed`。
+  - sodactl 側の時間切れ（`--timeout` に 15 秒を足して待っても返事が無い）→ `timeout`（終了コード 1。stdout の `status: "timeout"` とは別物）。
+  - 操作のエラー（`not_found`・`ask_busy`・`invalid_ask_spec` 等）は `/ws` の経路と同じ code・同じ終了コード。
+- **`/ws` の経路と同じもの**: 結果の JSON・終了コード・定義の検査・どのブラウザに出るか・「どの pane からの質問か」の固定の表示・呼び出し側（`sodactl ask`）が終わったら質問を取り消すこと。
+  待っている質問の総数（32）と「1 つの pane に同時に 1 つ」は、`/ws` から出した質問と合わせて数える（受け口は 1 接続 1 要求なので、接続あたりの上限 8 には届かない）。
+- **Windows（ネイティブ）では受け口を出さない**（名前付きパイプに繋げる相手を同じ利用者に限れるかを確かめられていないため）。`SODA_PANE_SOCKET` も入らず、今までどおり `sodactl login` が要る。
+  WSL2 の中の `soda serve` は Linux として受け口を出す。
+- サーバが受け口を置けなかったとき（ログに `cannot start the pane socket`）も、起動は続く。pane の中の `sodactl ask` は `/ws` の経路へ落ちる。
+
+**安全の境界**
+
+- 受け口を守るのは**ファイルの権限だけ**（サーバと同じ OS の利用者だけが繋げる）。token・cookie は要らず、pane の環境に token・cookie を入れない方針も変わらない（`SODA_PANE_SOCKET` の値は socket のパスだけ）。
+  「同じ OS の利用者の権限で動くプロセスは信頼する」という前提は `bridge.sock`・`handoff.sock`（`docs/machines.md`）と同じ。
+- 受け口へ繋げるプロセスは、要求の `paneId` を**自由に名乗れる**（受け口が確かめるのは、その pane が実在することだけ）。同じ session のほかの pane の名前で質問を出せ、ダイアログの
+  「どの pane からの質問か」には**名乗った pane** が出る。今までの `/ws` の経路でも、ログイン済みなら `SODA_PANE_ID` を書き換えて同じことが出来た（`ask.open` は `paneId` を引数で受け、実在だけを確かめる）。
+  受け口で変わるのは、それに**ログインが要らなくなった**こと。
+- 受け口から出来るのは登録した操作だけなので、pane の入出力・ほかの pane の操作・設定・認証には届かない（`agent.send_keys`・`workspace.create` 等の `/ws` の RPC は、今までどおりログインした接続だけ）。
+- 名前付き session（`soda serve --session <名前>`）は状態ディレクトリが別なので、受け口も session ごとに別。ある session の受け口からは、別の session の pane を名乗れない（同じ OS の利用者なら、その session の受け口へ繋げば名乗れる）。
+
+**受け口に操作を足すとき**（開発者向け）
+
+載せてよいのは、次の 4 つを全部満たす操作だけ（受け口には認証が無いため）。**`/ws` の handler をそのまま登録しない**。
+
+1. 対象が呼び出し元の pane に限られる。
+2. pane のプログラムがもともと出来ることを超えない（pane の入出力・ほかの pane・設定・認証に触れない）。
+3. 秘密を返さない。
+4. 量の上限がある。
+
+- protocol: 操作の名前の定数と引数の schema を `packages/protocol/src/paneSocket.ts` に足す（サーバと sodactl の両方がここから読む。例は `PANE_OP_ASK_OPEN`・`PaneAskOpenParams`）。
+- サーバ: `packages/server/src/panesocket/PaneOpRegistry.ts` の `PaneOpDef`（名前・引数の schema・handler）を作り、`packages/server/src/composeServer.ts` で `register` する（例は `panesocket/askOp.ts`）。
+- 結果を待つ操作（返事までに時間がかかる）は、handler に渡る `ctx.signal` の abort で自分の待ちを取り消す（接続が終わると abort する。取り消しの配線を登録の外に持たない。例は `panesocket/askOp.ts`）。
+- sodactl: `packages/cli/src/paneSocket.ts` の `viaPaneSocketOrSession` を使う（受け口を使うか・`/ws` へ落ちるかの判断をコマンドごとに持たない）。
+- やりとりの形は `packages/protocol/src/paneSocket.ts`: **1 接続 1 要求**。要求は 1 行の JSON（`{"v":1,"op":"<名前>","paneId":"<id>","params":{…}}`。上限 1 MiB）、返事も 1 行の JSON
+  （`{"ok":true,"result":…}` か `{"ok":false,"error":{"code","message"}}`。sodactl が読む上限は 8 MiB）で、受け口は返事を書いたら閉じる
+  （要求を読まずに断るとき〔`pane_socket_busy`・行の上限の超過〕は、返事が相手に届くよう、相手が閉じるか 1 秒たつまで待ってから閉じる）。検査の順は「行の形（`bad_request`）→ 操作（`unknown_op`）→ pane の実在（`not_found`）→ 引数（`invalid_params`）」。
+  受け口だけの code は `unknown_op`・`bad_request`・`pane_socket_busy` の 3 つ。呼び出し側は要求を書いた後、返事の行を読むまで接続を閉じない（受け口は相手が閉じたら、呼び出し元が終わったものとして操作を取り消す）。
+- 上限は上の「サーバ側の上限」。
 
 ### 呼び出し元の pane を対象にする（`--current`・対象の省略・`pane current`）
 
@@ -643,7 +712,8 @@ herdr の agent skill（`skills/herdr/SKILL.md`・`herdr --skill`）と pane の
 
 - skill は `sodactl skill` で出す（herdr は `herdr --skill`）。中身は本製品のコマンドに合わせて書き直した日本語のもの。`npx skills add` 等の配布は無い。
 - pane の中にいる印は `SODA_PANE_ID`（herdr は `HERDR_ENV=1`）。接続先は socket のパスではなく URL（`SODA_SERVER_URL`）で、認証は利用者の login の
-  キャッシュ（herdr の socket はファイルの権限で守られ、認証が無い）。`HERDR_WORKSPACE_ID`・`HERDR_TAB_ID`・`HERDR_BIN_PATH` に当たる変数は無い（workspace・tab は `pane current` で聞く）。
+  キャッシュ（herdr の socket はファイルの権限で守られ、認証が無い）。**`sodactl ask` だけ**は、herdr と同じく socket のパス（`SODA_PANE_SOCKET`）で繋ぐ、ファイルの権限で守られた認証の無い受け口を使う
+  （Linux・macOS。載っている操作は質問のフォームだけで、herdr の socket のように全操作を受けるものではない。ほかのコマンドは今までどおり URL と login）。`HERDR_WORKSPACE_ID`・`HERDR_TAB_ID`・`HERDR_BIN_PATH` に当たる変数は無い（workspace・tab は `pane current` で聞く）。
 - `--current`・`pane split` の対象の省略・`pane current` は herdr と同じ（呼び出し元の pane・pane の外ではフォーカスの pane・`--machine` では呼び出し元を使わない）。違い:
   - `--current` を受けるのは `pane split`・`pane current` だけ（herdr の `pane layout`・`process-info`・`neighbor`・`edges`・`focus`・`resize`・`zoom`・`swap` は
     コマンド自体が無く、herdr の `pane input --right-click` は sodactl の `pane input`〔文字の送信〕とは別物の右クリックの設定で、これも無い）。

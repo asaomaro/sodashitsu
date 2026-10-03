@@ -1,9 +1,9 @@
 import { X509Certificate } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { hostname as osHostname, platform } from "node:os";
 import { parseId, type HostInfo, type LinkRun } from "@sodashitsu/protocol";
-import { ConfigError, type RawServeArgs, type ServeOptions, agentReportSocketPathFor, resolveServeOptions, stateDirInUseError } from "./config.js";
+import { ConfigError, type RawServeArgs, type ServeOptions, agentReportSocketPathFor, paneSocketPathFor, resolveServeOptions, stateDirInUseError } from "./config.js";
 import { FileLogger, type Logger } from "./log/Logger.js";
 import { EventBus } from "./bus/EventBus.js";
 import { NodePtyBackend } from "./pty/NodePtyBackend.js";
@@ -38,6 +38,9 @@ import { registerAllMethods } from "./surface/methods/index.js";
 import { IMAGE_DIR_NAME, ImageStore } from "./image/ImageStore.js";
 import { ImageUploads } from "./image/ImageUploads.js";
 import { AskService } from "./ask/AskService.js";
+import { PaneOpRegistry } from "./panesocket/PaneOpRegistry.js";
+import { PaneSocket } from "./panesocket/PaneSocket.js";
+import { askOpenOp } from "./panesocket/askOp.js";
 import { FileAccess } from "./file/FileAccess.js";
 import { FileOpener } from "./file/FileOpener.js";
 import { DROP_DIR_NAME, FileStore } from "./file/FileStore.js";
@@ -236,6 +239,9 @@ export async function composeServer(
   const defaultCwd = process.cwd();
   // 公式フック連携（20260923-agent-session-resume）：会話IDの report 経路・導入/解除・自動再開設定。
   const agentReportSocketPath = agentReportSocketPathFor(options.stateDir);
+  // pane の中のプログラム向けのログイン不要の受け口（`pane.sock`。20261003-sodactl-ask-socket）のパス。Windows では undefined（受け口を立てず、pane の環境にも入れない）。
+  // 受け口を立てるのは `listen()` の 4.7 だが、パスは pane の環境（`SODA_PANE_SOCKET`）に入れるので組み立て時に決める。
+  const paneSocketPath = paneSocketPathFor(options.stateDir);
   const integrationFile = new FsIntegrationFile(options.stateDir);
   const agentIntegrationInstaller = new FsAgentIntegrationInstaller(agentHookScriptFor());
   const agentIntegrations = await DefaultAgentIntegrationService.load(agentIntegrationInstaller, integrationFile, bus);
@@ -251,6 +257,8 @@ export async function composeServer(
     scrollbackLines: options.scrollbackLines,
     defaultCwd,
     agentReportSocketPath,
+    // pane の環境へは絶対パスで渡す（`--state-dir` が相対でも、pane の cwd に依らず同じ受け口を指す。sodactl は相対の値を使わない）。
+    paneSocketPath: paneSocketPath === undefined ? undefined : resolve(paneSocketPath),
     getAutoResumeEnabled: agentIntegrations.getAutoResumeEnabled,
     // pane の中の sodactl の接続先（20260926-agent-skill-file）。待ち受けた後（`listen()` の 1.）に決まる。pane を起動するのはその後。
     serverUrlForPanes: () => paneUrl,
@@ -314,13 +322,24 @@ export async function composeServer(
     logger,
   });
   // 質問のフォーム（20261002-sodactl-ask）。pane のプログラムの質問を、`ask.subscribe` した画面（desktop / mobile）に出す。回答待ちはメモリだけ（再起動・引き継ぎをまたがない）。
+  const paneExists = (paneId: string): boolean => session.getPane(paneId) !== undefined;
   const asks = new AskService({
-    paneExists: (paneId) => session.getPane(paneId) !== undefined,
+    paneExists,
     isBrowserKind: (clientId) => {
       const kind = clients.get(clientId)?.kind;
       return kind === "desktop" || kind === "mobile";
     },
     bus,
+    logger,
+  });
+  // ログイン不要の受け口（20261003-sodactl-ask-socket）。受けるのはここに登録した操作だけ（`/ws` の RPC は通さない）。いま載せるのは `ask.open` だけ。
+  // pane の実在は `AskService` と同じ判定。接続が終わったら、その接続が持ち主の質問を閉じるのは操作の中（`askOpenOp` が `ctx.signal` の abort で取り消す）。
+  // 待ち受けは `listen()` の 4.7、閉じるのは `close()`。引き継ぎの間は `pause()`（`HandoffController` の `closeClients`）。
+  const paneOps = new PaneOpRegistry(logger);
+  paneOps.register(askOpenOp(asks));
+  const paneSocket = new PaneSocket({
+    registry: paneOps,
+    paneExists,
     logger,
   });
   // 端末のファイルのリンクとドロップ。ドロップされたファイルは画像と同じく状態ディレクトリの下の私的なディレクトリに置く（切断では消さない）。
@@ -470,10 +489,14 @@ export async function composeServer(
       wsServer.closeAll(1012, "server restarting");
       bridgeEndpoint.setReady(false);
       bridgeEndpoint.closeAll(1012, "server restarting");
+      // ログイン不要の受け口（20261003-sodactl-ask-socket）も `/ws` と揃える: 待っている接続は何も書かずに捨て（質問は取り消し）、
+      // 最中の新しい接続は `pane_socket_busy` で断る。待ち受けは閉じない（execve の後、新しい版が同じパスに置き直す）。
+      paneSocket.pause();
     },
     reopenClients: () => {
       wsServer.setReady(true);
       bridgeEndpoint.setReady(true);
+      paneSocket.resume();
     },
     flushLog: () => logger.flush(),
     preflight: internal.handoffPreflight ?? (() => runPreflight()),
@@ -687,6 +710,13 @@ export async function composeServer(
             (err: unknown) => logger.warn("cannot start the bridge socket; other machines cannot connect to this server", { error: err instanceof Error ? err.message : String(err) }),
           );
         }
+        // 4.7. ログイン不要の受け口（Linux/macOS。20261003-sodactl-ask-socket）。置けなくても起動は続ける（pane の中の `sodactl ask` が
+        //      繋げずに `/ws` の経路〔ログインが要る〕へ落ちるだけ）。Windows ではパスが無いので立てない。
+        if (paneSocketPath !== undefined) {
+          await paneSocket.listen(paneSocketPath).catch((err: unknown) =>
+            logger.warn("cannot start the pane socket; `sodactl ask` in a pane needs a login", { error: err instanceof Error ? err.message : String(err) }),
+          );
+        }
         // 5. `/ws` の受け付けを始める。復元は bus にイベントを出さないので、ここより前に hello したクライアントは
         //    作りかけのスナップショットのまま取り残される（それまでは 503。ブラウザは間隔を空けて繋ぎ直す）。
         wsServer.setReady(true);
@@ -702,6 +732,7 @@ export async function composeServer(
         imageSweeper?.stop();
         dropSweeper?.stop();
         await agentReportSocket?.close();
+        await paneSocket.close(); // 立てていなければ何もしない
         await handoffSocket?.close();
         if (bridgeListening) await bridgeEndpoint.close();
         await localLogin.stop();
@@ -729,6 +760,8 @@ export async function composeServer(
         wsServer.setReady(false);
         bridgeEndpoint.setReady(false);
         await agentReportSocket?.close();
+        // ログイン不要の受け口（20261003-sodactl-ask-socket）。開いている接続は何も書かずに捨てる（待っていた質問は取り消し。呼び出し側は接続が閉じたことで知る）。
+        await paneSocket.close();
         // 実行中の判定周期を待ってから terminals/session を破棄する（review 指摘。should。D51 の隣の
         // agent/AgentMonitor.ts 参照）。
         await agentMonitor.stop();
@@ -753,7 +786,10 @@ export async function composeServer(
       } finally {
         // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
         commands.dispose();
-        asks.dispose(); // 待っている質問を閉じる（接続を閉じた後。応答は誰にも届かない）
+        // 受け口は質問を閉じる前に閉じる——`try` が上の `paneSocket.close()` より前で投げた経路でも、待っていた接続へ `cancelled` の返事を
+        // 書かずに捨てる（2 回目は何もしない。`pane.sock` も残さない）。
+        await paneSocket.close().catch(() => undefined);
+        asks.dispose(); // 待っている質問を閉じる（受け口と `/ws` の接続を閉じた後。応答は誰にも届かない）
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
         // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。
         metadata.dispose();

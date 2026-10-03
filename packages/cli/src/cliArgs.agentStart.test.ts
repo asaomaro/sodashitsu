@@ -37,7 +37,7 @@ describe("parseArgs — agent start", () => {
       ),
     ).toEqual({
       kind: "agent-start",
-      opts: { url: "http://127.0.0.1:7780", token: undefined },
+      opts: { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false },
       name: "reviewer",
       agentKind: "claude",
       paneId: "p3",

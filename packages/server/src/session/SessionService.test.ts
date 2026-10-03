@@ -2778,6 +2778,37 @@ describe("SessionService — 独自コマンドの pane 種・文脈・環境（
     expect(service.commandEnv("p7", {})["SODA_PANE_ID"]).toBe("p7");
   });
 
+  it("paneSocketPath を渡すと、pane の環境と独自コマンドの環境の SODA_PANE_SOCKET に入る。渡さなければ入らない（20261003-sodactl-ask-socket）", async () => {
+    const build = (paneSocketPath: string | undefined) => {
+      const terminals = new FakeTerminalManager();
+      const service = new SessionService({
+        model: new SessionModel(),
+        terminals,
+        bus: new EventBus(),
+        persist: new FakePersistScheduler(),
+        serverVersion: "0.1.0-test",
+        host: HOST_INFO,
+        scrollbackLines: 1000,
+        spawnGraceMs: 5,
+        defaultCwd: "/home/u",
+        logger: new MemoryLogger(),
+        paneSocketPath,
+      });
+      return { terminals, service };
+    };
+    const withPath = build("/s/pane.sock");
+    await withPath.service.createWorkspace("/home/u", "w");
+    expect(withPath.terminals.createOptions[0]?.env?.["SODA_PANE_SOCKET"]).toBe("/s/pane.sock");
+    expect(withPath.service.commandEnv(undefined, {})["SODA_PANE_SOCKET"]).toBe("/s/pane.sock");
+    expect(withPath.service.commandEnv("p7", {})["SODA_PANE_SOCKET"]).toBe("/s/pane.sock");
+
+    const without = build(undefined);
+    await without.service.createWorkspace("/home/u", "w");
+    expect(without.terminals.createOptions[0]?.env).toBeDefined();
+    expect("SODA_PANE_SOCKET" in (without.terminals.createOptions[0]?.env ?? {})).toBe(false);
+    expect("SODA_PANE_SOCKET" in without.service.commandEnv(undefined, {})).toBe(false);
+  });
+
   it("reservePaneId は pane と同じ番号の列から払い出す（衝突しない）", async () => {
     const { service } = setupCmd();
     const { pane } = await service.createWorkspace("/home/u", "w");

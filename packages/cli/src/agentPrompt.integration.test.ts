@@ -91,7 +91,12 @@ describe("sodactl agent prompt / send-keys integration（偽のエージェン�
     const out = captureStdout();
     try {
       await runPaneRun(
-        { kind: "pane-run", opts: { url, token: server.freshToken }, paneId, command },
+        {
+          kind: "pane-run",
+          opts: { url, token: server.freshToken, urlExplicit: false },
+          paneId,
+          command,
+        },
         store,
       );
     } finally {
@@ -113,7 +118,7 @@ describe("sodactl agent prompt / send-keys integration（偽のエージェン�
     await rm(dir, { recursive: true, force: true });
   });
 
-  const opts = () => ({ url, token: undefined });
+  const opts = () => ({ url, token: undefined, urlExplicit: false });
 
   it("複数行の本文を 1 つの貼り付けとして届け、300ms 後の Enter で確定し、working を経て idle/done で返る（AC13）", async () => {
     const text = "first line\nsecond line";

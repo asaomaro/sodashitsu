@@ -25,7 +25,7 @@ function fakeClient(requestImpl: (method: string, params: unknown) => unknown): 
   } as unknown as SodaClient;
 }
 
-const OPTS = { url: "http://127.0.0.1:7780", token: undefined };
+const OPTS = { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false };
 const store = {} as SessionStore;
 
 beforeEach(() => {

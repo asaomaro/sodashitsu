@@ -26,3 +26,9 @@ export {
   getFreePort,
   type ComposeOnFreePortOptions,
 } from "./composeServerOnFreePort.js";
+/**
+ * ログイン不要の受け口（`pane.sock`。20261003-sodactl-ask-socket）。cli の結合テストが、実物の受け口にテスト用の操作を登録して、
+ * 実物のクライアント（`callPaneOp`）で呼ぶのに使う（受け口・クライアントのコードに手を入れずに新しい操作が通ることを確かめる。AC13）。
+ */
+export { PaneSocket, type PaneSocketDeps, type PaneSocketLimits } from "./panesocket/PaneSocket.js";
+export { PaneOpRegistry, type PaneOpContext, type PaneOpDef } from "./panesocket/PaneOpRegistry.js";

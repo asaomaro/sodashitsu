@@ -86,7 +86,7 @@ function harness(requestResult: (method: string) => unknown = () => ({})): Harne
   };
 }
 
-const OPTS = { url: "http://127.0.0.1:7780", token: undefined };
+const OPTS = { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false };
 const store = {} as SessionStore;
 
 beforeEach(() => {

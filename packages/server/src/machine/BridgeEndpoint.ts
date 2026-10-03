@@ -87,6 +87,9 @@ export class BridgeEndpoint implements WsServer {
    * 状態ディレクトリの socket で待ち受ける。**0600 になってから見える場所に置く**: 0700 の一時ディレクトリの中で待ち受けて 0600 にし、
    * それから `bridge.sock` へ rename する（rename は残っていた古い socket のファイルを置き換える）。待ち受けと chmod の間に、状態ディレクトリを
    * 読める別の利用者（umask で group に開いている等）が繋いで認証済みのチャネルを得る窓を作らない。失敗したら待ち受けを閉じて投げる。
+   *
+   * **同じ手順が `infra/privateUnixSocket.ts` の `listenPrivateUnixSocket` にある**（`pane.sock` 用。この手順の写し）。
+   * 手順を変えるときは両方を直すこと（1 つに寄せるのは別の作業）。
    */
   async listen(path: string): Promise<void> {
     const server = createServer((sock: Socket) => {

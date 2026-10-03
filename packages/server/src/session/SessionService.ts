@@ -112,6 +112,12 @@ export interface SessionServiceOptions {
    */
   agentReportSocketPath?: string | undefined;
   /**
+   * pane の中のプログラム向けのログイン不要の受け口（`pane.sock`。20261003-sodactl-ask-socket）のパス。
+   * pane 起動時に `SODA_PANE_SOCKET` として環境変数に渡す（独自コマンドの環境にも）。未設定（Windows 等）なら渡さない——
+   * sodactl は変数が無ければ `/ws` の経路を使う。
+   */
+  paneSocketPath?: string | undefined;
+  /**
    * 自動再開の可否を都度読む（設定画面から切り替えられるため、構築時に固定値で受け取らない。
    * design D3）。省略時は既定 ON（herdr の `resume_agents_on_restore` の既定に合わせる）。
    */
@@ -147,6 +153,7 @@ export class SessionService {
   private readonly newCwdDeps: NewCwdDeps | undefined;
   private readonly workspaceLabelDeps: WorkspaceLabelDeps;
   private readonly agentReportSocketPath: string | undefined;
+  private readonly paneSocketPath: string | undefined;
   private readonly getAutoResumeEnabled: () => boolean;
   private readonly serverUrlForPanes: () => string | undefined;
   private readonly sessionName: string | undefined;
@@ -199,6 +206,7 @@ export class SessionService {
     this.newCwdDeps = opts.newCwdDeps;
     this.clock = opts.clock ?? { now: monotonicNow };
     this.agentReportSocketPath = opts.agentReportSocketPath;
+    this.paneSocketPath = opts.paneSocketPath;
     this.getAutoResumeEnabled = opts.getAutoResumeEnabled ?? (() => true);
     this.serverUrlForPanes = opts.serverUrlForPanes ?? (() => undefined);
     this.sessionName = opts.sessionName;
@@ -765,6 +773,7 @@ export class SessionService {
       paneId: ownPaneId,
       serverUrl: this.serverUrlForPanes(),
       agentReportSocketPath: this.agentReportSocketPath,
+      paneSocketPath: this.paneSocketPath,
       sessionName: this.sessionName,
       extra,
     });
@@ -1160,6 +1169,7 @@ export class SessionService {
       paneId,
       serverUrl: this.serverUrlForPanes(),
       agentReportSocketPath: this.agentReportSocketPath,
+      paneSocketPath: this.paneSocketPath,
       sessionName: this.sessionName,
     });
   }

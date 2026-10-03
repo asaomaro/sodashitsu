@@ -16,7 +16,7 @@ vi.mock("../withSession.js", () => ({ withSession: vi.fn() }));
 import { withSession } from "../withSession.js";
 
 const mockedWithSession = vi.mocked(withSession);
-const OPTS = { url: "http://127.0.0.1:7780", token: undefined };
+const OPTS = { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false };
 const store = {} as SessionStore;
 const enc = new TextEncoder();
 

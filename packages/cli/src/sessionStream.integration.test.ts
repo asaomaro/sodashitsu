@@ -135,7 +135,7 @@ describe("sodactl pane observe / pane control integration（実サーバ・実 P
     token = server.freshToken;
     url = `http://${server.options.host}:${server.options.port}`;
     store = new FsSessionStore(join(dir, "session.json"));
-    await withSession({ url, token }, store, (c) => c.hello()); // セッションをキャッシュする
+    await withSession({ url, token, urlExplicit: false }, store, (c) => c.hello()); // セッションをキャッシュする
   }, 30_000);
 
   afterAll(async () => {
@@ -143,7 +143,7 @@ describe("sodactl pane observe / pane control integration（実サーバ・実 P
     await rm(dir, { recursive: true, force: true });
   });
 
-  const opts = () => ({ url, token: undefined });
+  const opts = () => ({ url, token: undefined, urlExplicit: false });
   const observeCmd = (paneId: string) => ({ kind: "pane-observe" as const, opts: opts(), paneId });
   const controlCmd = (
     paneId: string,
@@ -461,7 +461,7 @@ describe("sodactl pane observe / pane control integration（実サーバ・実 P
       const obs = memIo();
       await expect(
         runPaneObserve(
-          { kind: "pane-observe", opts: { url, token: undefined }, paneId },
+          { kind: "pane-observe", opts: { url, token: undefined, urlExplicit: false }, paneId },
           empty,
           obs,
         ),
@@ -472,7 +472,7 @@ describe("sodactl pane observe / pane control integration（実サーバ・実 P
       const ctl = memIo();
       const marker = `UNAUTH_${Date.now()}`;
       const run = runPaneControl(
-        { ...controlCmd(paneId), opts: { url, token: "not-the-token" } },
+        { ...controlCmd(paneId), opts: { url, token: "not-the-token", urlExplicit: false } },
         wrong,
         ctl,
       );

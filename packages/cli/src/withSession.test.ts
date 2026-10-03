@@ -51,7 +51,7 @@ beforeEach(() => {
 describe("withSession", () => {
   it("キャッシュも token も無ければ UnauthenticatedError（login/connect は呼ばれない）", async () => {
     const store = memoryStore();
-    await expect(withSession({ url: URL_, token: undefined }, store, vi.fn())).rejects.toThrow(UnauthenticatedError);
+    await expect(withSession({ url: URL_, token: undefined, urlExplicit: false }, store, vi.fn())).rejects.toThrow(UnauthenticatedError);
     expect(mockedLogin).not.toHaveBeenCalled();
     expect(mockedConnect).not.toHaveBeenCalled();
   });
@@ -63,7 +63,7 @@ describe("withSession", () => {
     mockedConnect.mockResolvedValue(client);
     const fn = vi.fn().mockResolvedValue("ok");
 
-    const result = await withSession({ url: URL_, token: "tok" }, store, fn);
+    const result = await withSession({ url: URL_, token: "tok", urlExplicit: false }, store, fn);
 
     expect(result).toBe("ok");
     expect(mockedLogin).toHaveBeenCalledWith(URL_, "tok");
@@ -79,7 +79,7 @@ describe("withSession", () => {
     mockedConnect.mockResolvedValue(client);
     const fn = vi.fn().mockResolvedValue("ok");
 
-    await withSession({ url: URL_, token: undefined }, store, fn);
+    await withSession({ url: URL_, token: undefined, urlExplicit: false }, store, fn);
 
     expect(mockedLogin).not.toHaveBeenCalled();
     expect(mockedConnect).toHaveBeenCalledWith(URL_, "soda_session=cached");
@@ -91,7 +91,7 @@ describe("withSession", () => {
     mockedLogin.mockResolvedValue("soda_session=fresh");
     const fn = vi.fn().mockResolvedValue("ok");
 
-    const result = await withSession({ url: URL_, token: "tok" }, store, fn);
+    const result = await withSession({ url: URL_, token: "tok", urlExplicit: false }, store, fn);
 
     expect(result).toBe("ok");
     expect(store.clear).toHaveBeenCalledWith(URL_);
@@ -104,7 +104,7 @@ describe("withSession", () => {
     const store = memoryStore({ [URL_]: "soda_session=stale" });
     mockedConnect.mockRejectedValueOnce(new AuthError("401"));
 
-    await expect(withSession({ url: URL_, token: undefined }, store, vi.fn())).rejects.toThrow(UnauthenticatedError);
+    await expect(withSession({ url: URL_, token: undefined, urlExplicit: false }, store, vi.fn())).rejects.toThrow(UnauthenticatedError);
     expect(store.clear).toHaveBeenCalledWith(URL_);
     expect(mockedLogin).not.toHaveBeenCalled();
   });
@@ -114,7 +114,7 @@ describe("withSession", () => {
     mockedConnect.mockRejectedValueOnce(new AuthError("401"));
     mockedLogin.mockRejectedValue(new AuthError("login failed: HTTP 401"));
 
-    await expect(withSession({ url: URL_, token: "bad-tok" }, store, vi.fn())).rejects.toThrow("login failed");
+    await expect(withSession({ url: URL_, token: "bad-tok", urlExplicit: false }, store, vi.fn())).rejects.toThrow("login failed");
     expect(mockedLogin).toHaveBeenCalledTimes(1);
     expect(mockedConnect).toHaveBeenCalledTimes(1); // 2回目の connect は呼ばれない
   });
@@ -123,7 +123,7 @@ describe("withSession", () => {
     const store = memoryStore({ [URL_]: "soda_session=cached" });
     mockedConnect.mockRejectedValueOnce(new RpcFailure("internal", "boom"));
 
-    await expect(withSession({ url: URL_, token: "tok" }, store, vi.fn())).rejects.toThrow(RpcFailure);
+    await expect(withSession({ url: URL_, token: "tok", urlExplicit: false }, store, vi.fn())).rejects.toThrow(RpcFailure);
     expect(store.clear).not.toHaveBeenCalled();
     expect(mockedLogin).not.toHaveBeenCalled();
   });
@@ -134,7 +134,7 @@ describe("withSession", () => {
     mockedConnect.mockResolvedValue(client);
     const fn = vi.fn().mockRejectedValue(new RpcFailure("not_found", "pane not found"));
 
-    await expect(withSession({ url: URL_, token: undefined }, store, fn)).rejects.toThrow("pane not found");
+    await expect(withSession({ url: URL_, token: undefined, urlExplicit: false }, store, fn)).rejects.toThrow("pane not found");
     expect(client.close).toHaveBeenCalledOnce();
   });
 
@@ -142,7 +142,7 @@ describe("withSession", () => {
     const client = fakeClient();
     mockedConnect.mockResolvedValue(client);
     const store = memoryStore({ [URL_]: "soda_session=cached" });
-    await withSession({ url: URL_, token: undefined, machine: "GPU" }, store, async () => "ok");
+    await withSession({ url: URL_, token: undefined, urlExplicit: false, machine: "GPU" }, store, async () => "ok");
     expect(mockedConnect).toHaveBeenCalledWith(URL_, "soda_session=cached", "GPU");
   });
 });

@@ -11,21 +11,21 @@ describe("parseArgs — help", () => {
 
 describe("parseArgs — global opts (--url/--token, env fallback, defaults)", () => {
   it("既定は DEFAULT_URL・token 無し", () => {
-    expect(parseArgs(["snapshot"], noEnv)).toEqual({ kind: "snapshot", opts: { url: DEFAULT_URL, token: undefined } });
+    expect(parseArgs(["snapshot"], noEnv)).toEqual({ kind: "snapshot", opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false } });
   });
   it("--url/--token を優先する", () => {
     expect(parseArgs(["snapshot", "--url", "http://h:1", "--token", "t"], noEnv)).toEqual({
       kind: "snapshot",
-      opts: { url: "http://h:1", token: "t" },
+      opts: { url: "http://h:1", token: "t", urlExplicit: true },
     });
   });
   it("環境変数 SODACTL_URL/SODACTL_TOKEN にフォールバックする", () => {
     const env = { SODACTL_URL: "http://envhost:2", SODACTL_TOKEN: "envtoken" } as NodeJS.ProcessEnv;
-    expect(parseArgs(["snapshot"], env)).toEqual({ kind: "snapshot", opts: { url: "http://envhost:2", token: "envtoken" } });
+    expect(parseArgs(["snapshot"], env)).toEqual({ kind: "snapshot", opts: { url: "http://envhost:2", token: "envtoken", urlExplicit: true } });
   });
   it("--url は環境変数より優先する", () => {
     const env = { SODACTL_URL: "http://envhost:2" } as NodeJS.ProcessEnv;
-    expect(parseArgs(["snapshot", "--url", "http://flag:3"], env)).toEqual({ kind: "snapshot", opts: { url: "http://flag:3", token: undefined } });
+    expect(parseArgs(["snapshot", "--url", "http://flag:3"], env)).toEqual({ kind: "snapshot", opts: { url: "http://flag:3", token: undefined, urlExplicit: true } });
   });
 });
 
@@ -36,7 +36,7 @@ describe("parseArgs — login", () => {
   it("正常系", () => {
     expect(parseArgs(["login", "--url", "http://h:1", "--token", "t"], noEnv)).toEqual({
       kind: "login",
-      opts: { url: "http://h:1", token: "t" },
+      opts: { url: "http://h:1", token: "t", urlExplicit: true },
     });
   });
 });
@@ -45,7 +45,7 @@ describe("parseArgs — workspace", () => {
   it("create（フラグ無し）", () => {
     expect(parseArgs(["workspace", "create"], noEnv)).toEqual({
       kind: "workspace-create",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       cwd: undefined,
       label: undefined,
     });
@@ -53,7 +53,7 @@ describe("parseArgs — workspace", () => {
   it("create --cwd --label", () => {
     expect(parseArgs(["workspace", "create", "--cwd", "/repo", "--label", "api"], noEnv)).toEqual({
       kind: "workspace-create",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       cwd: "/repo",
       label: "api",
     });
@@ -64,7 +64,7 @@ describe("parseArgs — workspace", () => {
   it("close 正常系", () => {
     expect(parseArgs(["workspace", "close", "w1"], noEnv)).toEqual({
       kind: "workspace-close",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       workspaceId: "w1",
     });
   });
@@ -74,7 +74,7 @@ describe("parseArgs — workspace", () => {
   it("rename 正常系", () => {
     expect(parseArgs(["workspace", "rename", "w1", "new-name"], noEnv)).toEqual({
       kind: "workspace-rename",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       workspaceId: "w1",
       label: "new-name",
     });
@@ -94,7 +94,7 @@ describe("parseArgs — tab", () => {
   it("create（フラグ無し）", () => {
     expect(parseArgs(["tab", "create"], noEnv)).toEqual({
       kind: "tab-create",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       workspaceId: undefined,
       label: undefined,
     });
@@ -102,7 +102,7 @@ describe("parseArgs — tab", () => {
   it("create --workspace --label", () => {
     expect(parseArgs(["tab", "create", "--workspace", "w1", "--label", "logs"], noEnv)).toEqual({
       kind: "tab-create",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       workspaceId: "w1",
       label: "logs",
     });
@@ -125,7 +125,7 @@ describe("parseArgs — pane split", () => {
   it("正常系（--ratio 省略）", () => {
     expect(parseArgs(["pane", "split", "p1", "--direction", "right"], noEnv)).toEqual({
       kind: "pane-split",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       target: { kind: "id", paneId: "p1" },
       direction: "right",
       ratio: undefined,
@@ -175,7 +175,7 @@ describe("parseArgs — pane の対象の指定（20260927-caller-pane-default�
   it("pane current は --pane・--current・省略を受け、位置引数は取らない（AC5・AC7）", () => {
     expect(parseArgs(["pane", "current"], inPane)).toEqual({
       kind: "pane-current",
-      opts: { url: "http://127.0.0.1:7780", token: undefined, caller: { paneId: "p3", serverUrl: "http://127.0.0.1:7780" } },
+      opts: { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false, caller: { paneId: "p3", serverUrl: "http://127.0.0.1:7780" } },
       target: { kind: "caller", paneId: "p3", explicit: false },
     });
     expect(parseArgs(["pane", "current", "--current"], inPane)).toMatchObject({ target: { kind: "caller", explicit: true } });
@@ -202,7 +202,7 @@ describe("parseArgs — pane close/input/run", () => {
   it("input 正常系", () => {
     expect(parseArgs(["pane", "input", "p1", "echo hi"], noEnv)).toEqual({
       kind: "pane-input",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       paneId: "p1",
       text: "echo hi",
     });
@@ -213,7 +213,7 @@ describe("parseArgs — pane close/input/run", () => {
   it("run 正常系", () => {
     expect(parseArgs(["pane", "run", "p1", "ls -la"], noEnv)).toEqual({
       kind: "pane-run",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       paneId: "p1",
       command: "ls -la",
     });
@@ -224,7 +224,7 @@ describe("parseArgs — pane read", () => {
   it("既定（--follow/--raw 無し・--timeout 既定 5000）", () => {
     expect(parseArgs(["pane", "read", "p1"], noEnv)).toEqual({
       kind: "pane-read",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       paneId: "p1",
       follow: false,
       raw: false,
@@ -234,7 +234,7 @@ describe("parseArgs — pane read", () => {
   it("--follow --raw --timeout", () => {
     expect(parseArgs(["pane", "read", "p1", "--follow", "--raw", "--timeout", "1000"], noEnv)).toEqual({
       kind: "pane-read",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       paneId: "p1",
       follow: true,
       raw: true,
@@ -251,7 +251,7 @@ describe("parseArgs — pane attach", () => {
   it("既定は --takeover 無し", () => {
     expect(parseArgs(["pane", "attach", "p1"], noEnv)).toEqual({
       kind: "pane-attach",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       paneId: "p1",
       takeover: false,
     });
@@ -259,7 +259,7 @@ describe("parseArgs — pane attach", () => {
   it("--takeover と --url/--token", () => {
     expect(parseArgs(["pane", "attach", "p1", "--takeover", "--url", "http://h:1", "--token", "t"], noEnv)).toEqual({
       kind: "pane-attach",
-      opts: { url: "http://h:1", token: "t" },
+      opts: { url: "http://h:1", token: "t", urlExplicit: true },
       paneId: "p1",
       takeover: true,
     });
@@ -279,14 +279,14 @@ describe("parseArgs — pane observe / pane control", () => {
   it("observe は paneId と --url/--token だけ", () => {
     expect(parseArgs(["pane", "observe", "p1", "--url", "http://h:1", "--token", "t"], noEnv)).toEqual({
       kind: "pane-observe",
-      opts: { url: "http://h:1", token: "t" },
+      opts: { url: "http://h:1", token: "t", urlExplicit: true },
       paneId: "p1",
     });
   });
   it("control の既定は 120x40・--takeover 無し（AC6）", () => {
     expect(parseArgs(["pane", "control", "p1"], noEnv)).toEqual({
       kind: "pane-control",
-      opts: { url: DEFAULT_URL, token: undefined },
+      opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false },
       paneId: "p1",
       takeover: false,
       cols: 120,
@@ -336,10 +336,10 @@ describe("parseArgs — snapshot/watch", () => {
     expect(() => parseArgs(["snapshot", "extra"], noEnv)).toThrow(CliUsageError);
   });
   it("watch 既定は --json 無し", () => {
-    expect(parseArgs(["watch"], noEnv)).toEqual({ kind: "watch", opts: { url: DEFAULT_URL, token: undefined }, json: false });
+    expect(parseArgs(["watch"], noEnv)).toEqual({ kind: "watch", opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false }, json: false });
   });
   it("watch --json", () => {
-    expect(parseArgs(["watch", "--json"], noEnv)).toEqual({ kind: "watch", opts: { url: DEFAULT_URL, token: undefined }, json: true });
+    expect(parseArgs(["watch", "--json"], noEnv)).toEqual({ kind: "watch", opts: { url: DEFAULT_URL, token: undefined, urlExplicit: false }, json: true });
   });
 });
 
@@ -362,7 +362,7 @@ describe("parseArgs — 未知のオプション・値の欠落・未知のコ�
 });
 
 describe("parseArgs — agent", () => {
-  const opts = { url: DEFAULT_URL, token: undefined };
+  const opts = { url: DEFAULT_URL, token: undefined, urlExplicit: false };
   it("list", () => {
     expect(parseArgs(["agent", "list"], noEnv)).toEqual({ kind: "agent-list", opts });
   });
@@ -465,7 +465,7 @@ describe("parseArgs — agent", () => {
 
 // 20260926-agent-start-rename（AC6）。
 describe("parseArgs — agent rename", () => {
-  const opts = { url: DEFAULT_URL, token: undefined };
+  const opts = { url: DEFAULT_URL, token: undefined, urlExplicit: false };
   it("<target> <name> で名前を付け、<target> --clear で外す", () => {
     expect(parseArgs(["agent", "rename", "p1", "reviewer"], noEnv)).toEqual({ kind: "agent-rename", opts, paneId: "p1", name: "reviewer" });
     expect(parseArgs(["agent", "rename", "reviewer", "--clear"], noEnv)).toEqual({ kind: "agent-rename", opts, paneId: "reviewer", name: null });
@@ -500,7 +500,7 @@ describe("parseArgs — pane の中の接続先と呼び出し元（20260926-age
   it("SODA_PANE_ID と SODA_SERVER_URL がどちらもあれば caller を持つ", () => {
     expect(parseArgs(["snapshot"], inPane)).toEqual({
       kind: "snapshot",
-      opts: { url: "http://127.0.0.1:7790", token: undefined, caller: { paneId: "p1", serverUrl: "http://127.0.0.1:7790" } },
+      opts: { url: "http://127.0.0.1:7790", token: undefined, urlExplicit: false, caller: { paneId: "p1", serverUrl: "http://127.0.0.1:7790" } },
     });
   });
 
@@ -512,7 +512,90 @@ describe("parseArgs — pane の中の接続先と呼び出し元（20260926-age
   ])("%s なら caller を持たない（AC13）", (_label, env) => {
     const cmd = parseArgs(["snapshot"], env as NodeJS.ProcessEnv);
     expect(cmd.kind).toBe("snapshot");
-    expect(cmd.kind === "snapshot" ? Object.keys(cmd.opts).sort() : []).toEqual(["token", "url"]);
+    expect(cmd.kind === "snapshot" ? Object.keys(cmd.opts).sort() : []).toEqual(["token", "url", "urlExplicit"]);
+  });
+});
+
+/** 20261003-sodactl-ask-socket（AC8・AC11）。 */
+describe("parseArgs — 接続先を明示したかの印（urlExplicit）と受け口のパス（paneSocket）", () => {
+  const inPane = { SODA_PANE_ID: "p1", SODA_SERVER_URL: "http://127.0.0.1:7790" } as NodeJS.ProcessEnv;
+  const optsOf = (argv: string[], env: NodeJS.ProcessEnv, platform: NodeJS.Platform = "linux") => {
+    const cmd = parseArgs(argv, env, platform);
+    if (!("opts" in cmd)) throw new Error(`no opts: ${cmd.kind}`);
+    return cmd.opts;
+  };
+
+  it("--url を指定すると urlExplicit（SODA_SERVER_URL と同じ文字列でも明示した扱い）", () => {
+    expect(optsOf(["ask", "--url", "http://h:1"], noEnv).urlExplicit).toBe(true);
+    expect(optsOf(["ask", "--url", "http://127.0.0.1:7790"], inPane)).toMatchObject({ url: "http://127.0.0.1:7790", urlExplicit: true });
+  });
+
+  it("空でない SODACTL_URL でも urlExplicit。空の SODACTL_URL は明示したことにしない", () => {
+    expect(optsOf(["ask"], { ...inPane, SODACTL_URL: "http://envhost:2" }).urlExplicit).toBe(true);
+    expect(optsOf(["ask"], { ...inPane, SODACTL_URL: "" }).urlExplicit).toBe(false);
+  });
+
+  it("空の SODACTL_URL のとき url は空文字のまま（`??` は空文字を通す）。明示した扱いにはしない", () => {
+    // この作業（受け口の追加）より前からの挙動で、変えると全コマンドの接続先の決め方が変わるので、ここでは固定するだけにする。
+    expect(optsOf(["ask"], { ...inPane, SODACTL_URL: "" })).toMatchObject({ url: "", urlExplicit: false });
+    expect(optsOf(["snapshot"], { SODACTL_URL: "" } as NodeJS.ProcessEnv)).toMatchObject({ url: "", urlExplicit: false });
+  });
+
+  it("SODA_SERVER_URL・既定から決まった接続先は urlExplicit でない", () => {
+    expect(optsOf(["ask"], inPane)).toMatchObject({ url: "http://127.0.0.1:7790", urlExplicit: false });
+    expect(optsOf(["ask"], noEnv)).toMatchObject({ url: DEFAULT_URL, urlExplicit: false });
+  });
+
+  it("SODA_PANE_SOCKET があればそのパス（SODA_AGENT_REPORT_SOCKET からの導出より先）", () => {
+    expect(optsOf(["ask"], { ...inPane, SODA_PANE_SOCKET: "/s/pane.sock" }).paneSocket).toBe("/s/pane.sock");
+    expect(optsOf(["ask"], { ...inPane, SODA_PANE_SOCKET: "/s/pane.sock", SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock" }).paneSocket).toBe("/s/pane.sock");
+  });
+
+  it("相対パスの SODA_PANE_SOCKET は使わない（どの受け口かが cwd で変わるため。導出にも落ちない）", () => {
+    expect(optsOf(["ask"], { ...inPane, SODA_PANE_SOCKET: "st/pane.sock" }).paneSocket).toBeUndefined();
+    expect(optsOf(["ask"], { ...inPane, SODA_PANE_SOCKET: "st/pane.sock", SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock" }).paneSocket).toBeUndefined();
+  });
+
+  it("SODA_PANE_SOCKET が無い・空なら、SODA_AGENT_REPORT_SOCKET（/x/agent-report.sock）と同じディレクトリの pane.sock", () => {
+    expect(optsOf(["ask"], { ...inPane, SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock" }).paneSocket).toBe("/x/pane.sock");
+    expect(optsOf(["ask"], { ...inPane, SODA_PANE_SOCKET: "", SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock" }).paneSocket).toBe("/x/pane.sock");
+    // 実行中の OS の流儀に依らず、スラッシュ区切り（`path.posix`）で組む。深いディレクトリ・ルート直下でも同じ。
+    expect(optsOf(["ask"], { ...inPane, SODA_AGENT_REPORT_SOCKET: "/home/u/.local/state/sodashitsu/agent-report.sock" }).paneSocket).toBe("/home/u/.local/state/sodashitsu/pane.sock");
+    expect(optsOf(["ask"], { ...inPane, SODA_AGENT_REPORT_SOCKET: "/agent-report.sock" }).paneSocket).toBe("/pane.sock");
+  });
+
+  it.each([
+    ["別の名前", { SODA_AGENT_REPORT_SOCKET: "/x/other.sock" }],
+    ["名前の一部が同じだけ", { SODA_AGENT_REPORT_SOCKET: "/x/my-agent-report.sock" }],
+    ["ディレクトリの名前が同じだけ", { SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock/y" }],
+    ["末尾がスラッシュ", { SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock/" }],
+    ["相対パス（ファイル名だけ）", { SODA_AGENT_REPORT_SOCKET: "agent-report.sock" }],
+    ["相対パス（ディレクトリつき）", { SODA_AGENT_REPORT_SOCKET: "x/agent-report.sock" }],
+    ["Windows の区切り（win32 以外では 1 つのファイル名）", { SODA_AGENT_REPORT_SOCKET: "C:\\x\\agent-report.sock" }],
+    ["空", { SODA_AGENT_REPORT_SOCKET: "" }],
+    ["どちらも無い", {}],
+  ])("SODA_AGENT_REPORT_SOCKET が %s なら paneSocket は無い（キーも持たない）", (_label, extra) => {
+    const opts = optsOf(["ask"], { ...inPane, ...extra } as NodeJS.ProcessEnv);
+    expect(opts.paneSocket).toBeUndefined();
+    expect("paneSocket" in opts).toBe(false);
+  });
+
+  it("Windows では、どちらの変数があっても常に無い（同じ環境が linux・darwin では入る）", () => {
+    const env = { ...inPane, SODA_PANE_SOCKET: "/s/pane.sock", SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock" } as NodeJS.ProcessEnv;
+    expect(optsOf(["ask"], env, "win32").paneSocket).toBeUndefined();
+    expect(optsOf(["ask"], { ...inPane, SODA_AGENT_REPORT_SOCKET: "\\\\.\\pipe\\soda-agent-report-0123456789abcdef" }, "win32").paneSocket).toBeUndefined();
+    expect(optsOf(["ask"], env, "linux").paneSocket).toBe("/s/pane.sock");
+    expect(optsOf(["ask"], env, "darwin").paneSocket).toBe("/s/pane.sock");
+  });
+
+  it("どのコマンドの opts にも入り、--machine の前置きでも残る（使うかどうかは実行時に決める）。接続先を持たないコマンドは変わらない", () => {
+    const env = { ...inPane, SODA_PANE_SOCKET: "/s/pane.sock" } as NodeJS.ProcessEnv;
+    expect(optsOf(["snapshot"], env).paneSocket).toBe("/s/pane.sock");
+    expect(optsOf(["pane", "current"], env).paneSocket).toBe("/s/pane.sock");
+    expect(optsOf(["--machine", "local", "ask"], env)).toMatchObject({ paneSocket: "/s/pane.sock", urlExplicit: false });
+    expect(optsOf(["--machine", "box", "snapshot"], env)).toMatchObject({ machine: "box", paneSocket: "/s/pane.sock" });
+    expect(parseArgs(["skill"], env, "linux")).toEqual({ kind: "skill" });
+    expect(parseArgs(["help"], env, "linux")).toEqual({ kind: "help" });
   });
 });
 
@@ -526,7 +609,7 @@ describe("parseArgs — skill", () => {
 });
 
 describe("parseArgs — report-metadata（20260927-sidebar-row-tokens の AC8）", () => {
-  const url = { url: DEFAULT_URL, token: undefined };
+  const url = { url: DEFAULT_URL, token: undefined, urlExplicit: false };
 
   it("workspace: --token NAME=VALUE と --clear-token を指定の順に並べ、seq・ttl-ms を数にする", () => {
     expect(
@@ -562,7 +645,7 @@ describe("parseArgs — report-metadata（20260927-sidebar-row-tokens の AC8）
 
   it("= を含まない --token は接続の token（最後が勝つ）。独自トークンと混ぜられる（decisions D5）", () => {
     const cmd = parseArgs(["workspace", "report-metadata", "w1", "--token", "AUTH1", "--source", "s", "--token", "a=1", "--token", "AUTH2"], noEnv);
-    expect(cmd).toMatchObject({ opts: { url: DEFAULT_URL, token: "AUTH2" }, report: { tokens: [{ name: "a", value: "1" }] } });
+    expect(cmd).toMatchObject({ opts: { url: DEFAULT_URL, token: "AUTH2", urlExplicit: false }, report: { tokens: [{ name: "a", value: "1" }] } });
   });
 
   it("接続の token が無ければ環境変数（SODACTL_TOKEN）を使い、独自トークンを接続の token にしない", () => {

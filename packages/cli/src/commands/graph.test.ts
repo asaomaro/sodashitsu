@@ -87,7 +87,7 @@ function fakeClient(
   return client as unknown as SodaClient & { calls: [string, unknown][] };
 }
 
-const OPTS = { url: "http://127.0.0.1:7780", token: undefined };
+const OPTS = { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false };
 const store = {} as SessionStore;
 function cmd(action: GraphAction, json = false): Extract<Command, { kind: "graph" }> {
   return { kind: "graph", opts: OPTS, json, action };

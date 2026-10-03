@@ -3,7 +3,7 @@ import { CliUsageError, parseArgs, USAGE_LINES } from "./cliArgs.js";
 
 /** `sodactl graph …`（20260927-agent-graph の 05 T1）。 */
 const noEnv = {} as NodeJS.ProcessEnv;
-const OPTS = { url: "http://127.0.0.1:7780", token: undefined };
+const OPTS = { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false };
 
 function usageError(argv: string[]): CliUsageError {
   try {

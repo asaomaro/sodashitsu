@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +13,7 @@ import { FsSessionStore } from "./session.js";
  * pane の環境変数（20260926-agent-skill-file。AC7・AC9・AC15）を実サーバ・実 PTY で確かめる。
  * - 起動時に作られる最初の pane（`listen()` の中の `ensureNotEmpty`）にも `SODA_SERVER_URL` が入る——URL を決めるのが pane の起動より後だと、ここが空になる。
  * - サーバのプロセスの環境に置いた `SODACTL_TOKEN`・`SODACTL_URL`・古い `SODA_SERVER_URL` が pane に渡らない。
+ * - `SODA_PANE_SOCKET` は、そのサーバが実際に立てたログイン不要の受け口（`<状態ディレクトリ>/pane.sock`）のパス（20261003-sodactl-ask-socket の AC1・AC15）。
  */
 
 /** `fn` の間の標準出力を集める（投げても元に戻す）。 */
@@ -46,6 +47,7 @@ const INHERITED = {
   SODACTL_URL: "http://127.0.0.1:1",
   SODA_SERVER_URL: "http://stale.invalid:2",
   SODA_AGENT_REPORT_SOCKET: "/stale/agent-report.sock",
+  SODA_PANE_SOCKET: "/stale/pane.sock", // 20261003-sodactl-ask-socket
   SODA_SESSION: "inherited-session", // 20260926-named-session-ui（AC15）
 } as const;
 
@@ -59,7 +61,7 @@ async function paneVar(
     runPaneRun(
       {
         kind: "pane-run",
-        opts: { url: ctx.url, token: ctx.token },
+        opts: { url: ctx.url, token: ctx.token, urlExplicit: false },
         paneId,
         command: `printf '<${name}=%s>\\n' "\${${name}-unset}"`,
       },
@@ -75,7 +77,7 @@ async function paneVar(
         runPaneRead(
           {
             kind: "pane-read",
-            opts: { url: ctx.url, token: undefined },
+            opts: { url: ctx.url, token: undefined, urlExplicit: false },
             paneId,
             follow: false,
             raw: false,
@@ -143,7 +145,7 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
       runPaneRun(
         {
           kind: "pane-run",
-          opts: { url, token },
+          opts: { url, token, urlExplicit: false },
           paneId,
           command: `printf '<%s|%s|%s|%s|%s>\\n' "\${SODA_SERVER_URL-unset}" "\${SODACTL_TOKEN-unset}" "\${SODACTL_URL-unset}" "\${SODA_PANE_ID-unset}" "\${SODA_AGENT_REPORT_SOCKET-unset}"`,
         },
@@ -158,7 +160,7 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
           runPaneRead(
             {
               kind: "pane-read",
-              opts: { url, token: undefined },
+              opts: { url, token: undefined, urlExplicit: false },
               paneId,
               follow: false,
               raw: false,
@@ -184,7 +186,9 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   }
 
   it("起動時に作られた最初の pane: SODA_SERVER_URL は待ち受けたポート、受け継いだ sodactl の設定は無い（AC7・AC9・AC15）", async () => {
-    const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token } }, store));
+    const snap = await quiet(() =>
+      runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store),
+    );
     const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
 
     const line = await envLineOf(first);
@@ -193,7 +197,9 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   }, 30_000);
 
   it("既定の session の pane には、サーバを起動した環境の SODA_SESSION を渡さない（20260926-named-session-ui の AC15）", async () => {
-    const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token } }, store));
+    const snap = await quiet(() =>
+      runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store),
+    );
     const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
     expect(await paneVar({ url, token, store }, first, "SODA_SESSION")).toBe("unset");
   }, 30_000);
@@ -201,7 +207,12 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   it("sodactl で作った workspace の pane も同じ（AC7・AC9）", async () => {
     const created = await quiet(() =>
       runWorkspaceCreate(
-        { kind: "workspace-create", opts: { url, token }, cwd: process.cwd(), label: "env-it" },
+        {
+          kind: "workspace-create",
+          opts: { url, token, urlExplicit: false },
+          cwd: process.cwd(),
+          label: "env-it",
+        },
         store,
       ),
     );
@@ -210,6 +221,105 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
     const line = await envLineOf(paneId);
     expect(line.startsWith(`<${url}|unset|unset|${paneId}|`)).toBe(true);
     expect(socketOf(line)).not.toBe(INHERITED.SODA_AGENT_REPORT_SOCKET);
+  }, 30_000);
+
+  /** pane の環境の全部（`env` の出力）。画面は折り返し・行数で欠けるので、pane にファイルへ書かせて読む。 */
+  async function fullEnvOf(paneId: string): Promise<string> {
+    const out = join(sessionDir, `env-${paneId}.txt`);
+    // 書き終えてから名前を付け替える（書きかけを読まない）。
+    await quiet(() =>
+      runPaneRun(
+        {
+          kind: "pane-run",
+          opts: { url, token, urlExplicit: false },
+          paneId,
+          command: `env > '${out}.tmp' && mv '${out}.tmp' '${out}'`,
+        },
+        store,
+      ),
+    );
+    return vi.waitFor(() => readFile(out, "utf8"), { timeout: 10_000, interval: 100 });
+  }
+
+  it("SODA_PANE_SOCKET は、そのサーバの実在する pane.sock（socket のファイル・0600）のパス。受け継いだ古い値ではない（20261003-sodactl-ask-socket の AC1）", async () => {
+    const snap = await quiet(() =>
+      runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store),
+    );
+    const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
+    const created = await quiet(() =>
+      runWorkspaceCreate(
+        {
+          kind: "workspace-create",
+          opts: { url, token, urlExplicit: false },
+          cwd: process.cwd(),
+          label: "sock-it",
+        },
+        store,
+      ),
+    );
+    const second = (JSON.parse(created) as { pane: { id: string } }).pane.id;
+
+    const expected = join(stateDir, "pane.sock");
+    // 起動時に作られた最初の pane（受け口を立てるより前に起動する）にも、後から作った pane にも同じパスが入る。
+    // 受け継いだ古い値（`INHERITED.SODA_PANE_SOCKET` = `/stale/pane.sock`）でないことは、この一致が兼ねる。
+    for (const paneId of [first, second]) {
+      expect(await paneVar({ url, token, store }, paneId, "SODA_PANE_SOCKET")).toBe(expected);
+    }
+    const st = await stat(expected);
+    expect(st.isSocket()).toBe(true);
+    expect(st.mode & 0o777).toBe(0o600);
+  }, 30_000);
+
+  it("pane の環境のどの値にも、token・session cookie・local-auth.json の秘密が現れない（20261003-sodactl-ask-socket の AC15）", async () => {
+    const snap = await quiet(() =>
+      runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store),
+    );
+    const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
+    const created = await quiet(() =>
+      runWorkspaceCreate(
+        {
+          kind: "workspace-create",
+          opts: { url, token, urlExplicit: false },
+          cwd: process.cwd(),
+          label: "secret-it",
+        },
+        store,
+      ),
+    );
+    const second = (JSON.parse(created) as { pane: { id: string } }).pane.id;
+
+    // そのサーバの実物の秘密を集める: token、いまのログインの cookie（名前=値 の値）、`local-auth.json` の secret。
+    const cookie = await store.get(url);
+    if (cookie === undefined) throw new Error("expected a cached session cookie");
+    const cookieValue = cookie.slice(cookie.indexOf("=") + 1).split(";")[0]!;
+    const localAuth = JSON.parse(await readFile(join(stateDir, "local-auth.json"), "utf8")) as {
+      secret?: unknown;
+    };
+    if (typeof localAuth.secret !== "string")
+      throw new Error("expected a secret in local-auth.json");
+    const secrets = {
+      token,
+      cookieValue,
+      localAuthSecret: localAuth.secret,
+      inheritedToken: INHERITED.SODACTL_TOKEN,
+    };
+    // 起動時に作られた最初の pane と、ログインした後に作った pane（その時点でサーバは cookie を発行している）の両方。
+    for (const paneId of [first, second]) {
+      const env = await fullEnvOf(paneId);
+      // 読んだのが本当にその pane の環境であること（空・別の出力を「現れない」と数えない）。
+      expect(env).toContain(`SODA_PANE_ID=${paneId}\n`);
+      expect(env).toContain(`SODA_PANE_SOCKET=${join(stateDir, "pane.sock")}\n`);
+      for (const [name, secret] of Object.entries(secrets)) {
+        // 短い値との偶然の一致で落ちない・空の値で常に通らない。
+        expect(secret.length, name).toBeGreaterThanOrEqual(16);
+        expect(
+          env.includes(secret),
+          `${name} must not appear in the environment of ${paneId}`,
+        ).toBe(false);
+      }
+      // 秘密の置き場所を指す値も無い（受け口のパスは socket の場所だけ）。
+      expect(env).not.toMatch(/local-auth\.json/);
+    }
   }, 30_000);
 });
 
@@ -254,7 +364,10 @@ describe.skipIf(process.platform === "win32")(
 
     it("起動時に作られた最初の pane に SODA_SESSION=work が入る", async () => {
       const snap = await quiet(() =>
-        runSnapshot({ kind: "snapshot", opts: { url: ctx.url, token: ctx.token } }, ctx.store),
+        runSnapshot(
+          { kind: "snapshot", opts: { url: ctx.url, token: ctx.token, urlExplicit: false } },
+          ctx.store,
+        ),
       );
       const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
       expect(await paneVar(ctx, first, "SODA_SESSION")).toBe("work");

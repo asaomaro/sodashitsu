@@ -90,7 +90,9 @@ describe("sodactl pane attach integration（実サーバ・実 PTY・偽の手�
     if (!server.freshToken) throw new Error("expected a freshly generated token");
     url = `http://${server.options.host}:${server.options.port}`;
     store = new FsSessionStore(join(dir, "session.json"));
-    await withSession({ url, token: server.freshToken }, store, (c) => c.hello()); // セッションをキャッシュする
+    await withSession({ url, token: server.freshToken, urlExplicit: false }, store, (c) =>
+      c.hello(),
+    ); // セッションをキャッシュする
     cookie = (await store.get(url))!;
   }, 30_000);
 
@@ -99,7 +101,7 @@ describe("sodactl pane attach integration（実サーバ・実 PTY・偽の手�
     await rm(dir, { recursive: true, force: true });
   });
 
-  const opts = () => ({ url, token: undefined });
+  const opts = () => ({ url, token: undefined, urlExplicit: false });
   const attachCmd = (paneId: string, takeover = false) => ({
     kind: "pane-attach" as const,
     opts: opts(),

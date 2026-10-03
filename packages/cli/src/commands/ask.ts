@@ -1,6 +1,7 @@
-import { normalizeAskSpec, unsupportedTypeReason, type AskResult } from "@sodashitsu/protocol";
+import { PANE_OP_ASK_OPEN, normalizeAskSpec, unsupportedTypeReason, type AskResult } from "@sodashitsu/protocol";
 import { CliUsageError, type Command } from "../cliArgs.js";
 import { printJson } from "../output.js";
+import { callPaneOp, viaPaneSocketOrSession } from "../paneSocket.js";
 import { resolveCallerPane } from "../paneTarget.js";
 import type { SessionStore } from "../session.js";
 import { withSession } from "../withSession.js";
@@ -21,6 +22,8 @@ export interface AskDeps {
   /** 標準入力を最後まで読む（`ASK_STDIN_MAX_BYTES` を超えたら使い方の誤り）。端末なら使い方の誤り。 */
   readStdin(): Promise<Buffer>;
   print(value: unknown): void;
+  /** 受け口（`pane.sock`）へ 1 要求を送る（省くと実物の `callPaneOp`。テストが差し替える）。 */
+  callPaneOp?: typeof callPaneOp;
 }
 
 /** 標準入力を最後まで読む。端末（TTY）からは読まない（定義を打つ待ちで固まらないように）。 */
@@ -75,6 +78,8 @@ export async function readAskSpec(deps: AskDeps): Promise<{ kind: "send"; spec: 
 /**
  * 呼び出し元の pane の質問を出し、結果が決まるまで待って 1 行の JSON で出す。4 つの `status` はどれも終了コード 0（区別は `status`）。
  * サーバ・接続・認証のエラーは終了コード 1（`reportAndExit`）、使い方・定義の誤りは 2。
+ * 経路は 2 つ（20261003-sodactl-ask-socket）: その pane のサーバのログイン不要の受け口（`pane.sock`）を使えればそれで送り、使えなければ今までの
+ * `/ws`（ログインが要る）。選ぶのは `viaPaneSocketOrSession`。pane の確認と定義の検査は、どちらの経路でも繋ぐ前に済ませる。
  * Ctrl+C・SIGTERM は何もしない（既定の動作でプロセスが終わり、接続が閉じる → サーバが質問を取り消してブラウザのダイアログを閉じる）。
  */
 export async function runAsk(cmd: AskCmd, store: SessionStore, deps: AskDeps = REAL_DEPS): Promise<void> {
@@ -89,22 +94,34 @@ export async function runAsk(cmd: AskCmd, store: SessionStore, deps: AskDeps = R
     return;
   }
   const spec = read.spec;
-  const result = await withSession(cmd.opts, store, async (client) => {
-    await client.hello();
-    return requestAsk(client, paneId, spec, cmd.timeoutMs);
-  });
+  const timeoutMs = cmd.timeoutMs;
+  let result: AskResult;
+  try {
+    result = await viaPaneSocketOrSession<AskResult>(
+      cmd.opts,
+      paneId,
+      { name: PANE_OP_ASK_OPEN, params: { spec, timeoutMs }, timeoutMs: timeoutMs + ASK_REQUEST_SLACK_MS },
+      () =>
+        withSession(cmd.opts, store, async (client) => {
+          await client.hello();
+          return requestAsk(client, paneId, spec, timeoutMs);
+        }),
+      deps.callPaneOp,
+    );
+  } catch (err) {
+    // 版の違いで sodactl の検査を通った定義をサーバが断ったときも、使い方の誤りとして終わる（終了コード 2）。受け口・`/ws` のどちらが返しても同じ。
+    if (err instanceof RpcFailure && err.code === "invalid_ask_spec") throw new CliUsageError(`invalid ask spec: ${err.message}`, ASK_USAGE);
+    throw err;
+  }
   deps.print(result);
 }
 
-/** `ask.open` を送り、結果・接続の切断のどちらか早いほうで終わる（接続が切れても保留の要求は reject されないため）。 */
+/** `/ws` の経路: `ask.open` を送り、結果・接続の切断のどちらか早いほうで終わる（接続が切れても保留の要求は reject されないため）。 */
 function requestAsk(client: SodaClient, paneId: string, spec: Record<string, unknown>, timeoutMs: number): Promise<AskResult> {
   return new Promise<AskResult>((resolve, reject) => {
     // `onClose` の購読は外せない（`SodaClient` に外す手段が無い）。結果が先に決まれば、あとの reject は無効で、接続を閉じても（`withSession` の finally）呼ばれない。
     client.onClose((_code, reason) => reject(new RpcFailure("connection_closed", `the server closed the connection${reason ? `: ${reason}` : ""}`)));
-    client.request("ask.open", { paneId, spec, timeoutMs }, { timeoutMs: timeoutMs + ASK_REQUEST_SLACK_MS }).then(resolve, (err: unknown) => {
-      // 版の違いで sodactl の検査を通った定義をサーバが断ったときも、使い方の誤りとして終わる（終了コード 2）。
-      if (err instanceof RpcFailure && err.code === "invalid_ask_spec") reject(new CliUsageError(`invalid ask spec: ${err.message}`, ASK_USAGE));
-      else reject(err);
-    });
+    // `invalid_ask_spec` の読み替えは `runAsk`（受け口の経路と同じ 1 か所）。
+    client.request("ask.open", { paneId, spec, timeoutMs }, { timeoutMs: timeoutMs + ASK_REQUEST_SLACK_MS }).then(resolve, reject);
   });
 }

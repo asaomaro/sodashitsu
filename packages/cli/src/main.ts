@@ -59,6 +59,7 @@ function printHelp(): void {
       "ask は pane の中のプログラムの質問のフォームを、その pane を見ているブラウザの画面に出し、答えを stdout に 1 行の JSON で返します",
       "（定義は標準入力。status は answered・cancelled・timeout・unavailable で、どれも終了コード 0。--timeout は 1000〜86400000 ミリ秒、既定 540000）。",
       "同じ pane の質問は同時に 1 つだけ（ask_busy）。pane の外・別のマシン（--machine）からは使えません。",
+      "ask は pane の中ではログインなしで動きます（Windows を除く。その pane のサーバのローカルの受け口を使います）。unauthenticated で終わったら受け口を使えていないので、sodactl login してください。",
       "sodactl skill はエージェントに sodactl の使い方を教える Markdown（skill ファイル）を出します。",
       "workspace/pane report-metadata はサイドバーの行の $名前 に出す独自トークンを設定（--token NAME=VALUE）・消去（--clear-token NAME）します。",
       "--token は値が = を含めば独自トークン、含まなければ接続の token です。値は前後の空白と制御文字を除いて 80 文字まで、空なら消去。",

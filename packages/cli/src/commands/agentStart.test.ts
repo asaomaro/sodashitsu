@@ -71,7 +71,7 @@ function harness(request: (method: string, params: unknown) => Promise<unknown>)
 
 const CMD = {
   kind: "agent-start" as const,
-  opts: { url: "http://127.0.0.1:7780", token: undefined },
+  opts: { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false },
   name: "reviewer",
   agentKind: "claude",
   paneId: "p3",

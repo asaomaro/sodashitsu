@@ -93,7 +93,12 @@ describe.skipIf(process.platform === "win32")(
       const a = JSON.parse(
         await quiet(() =>
           runWorkspaceCreate(
-            { kind: "workspace-create", opts: { url, token }, cwd: undefined, label: "a" },
+            {
+              kind: "workspace-create",
+              opts: { url, token, urlExplicit: false },
+              cwd: undefined,
+              label: "a",
+            },
             store,
           ),
         ),
@@ -105,7 +110,12 @@ describe.skipIf(process.platform === "win32")(
       const b = JSON.parse(
         await quiet(() =>
           runWorkspaceCreate(
-            { kind: "workspace-create", opts: { url, token }, cwd: undefined, label: "b" },
+            {
+              kind: "workspace-create",
+              opts: { url, token, urlExplicit: false },
+              cwd: undefined,
+              label: "b",
+            },
             store,
           ),
         ),
@@ -118,7 +128,7 @@ describe.skipIf(process.platform === "win32")(
           runPaneSplit(
             {
               kind: "pane-split",
-              opts: { url, token },
+              opts: { url, token, urlExplicit: false },
               target: { kind: "id", paneId: a.pane.id },
               direction: "right",
               ratio: undefined,
@@ -132,7 +142,7 @@ describe.skipIf(process.platform === "win32")(
       const before = await currentFrom(moving);
       expect(before).toMatchObject({ id: moving, tabId: a.tab.id, workspaceId: a.workspace.id });
 
-      const moved = await withSession({ url, token }, store, async (client) => {
+      const moved = await withSession({ url, token, urlExplicit: false }, store, async (client) => {
         await client.hello();
         return client.request("pane.move_to_new_tab", {
           paneId: moving,
@@ -144,7 +154,12 @@ describe.skipIf(process.platform === "win32")(
       // 移動でフォーカスは動かした pane へ移るので、別の workspace を作ってフォーカスを外す（フォーカスの pane を返す実装を見分ける）。
       await quiet(() =>
         runWorkspaceCreate(
-          { kind: "workspace-create", opts: { url, token }, cwd: undefined, label: "elsewhere" },
+          {
+            kind: "workspace-create",
+            opts: { url, token, urlExplicit: false },
+            cwd: undefined,
+            label: "elsewhere",
+          },
           store,
         ),
       );
@@ -164,7 +179,12 @@ describe.skipIf(process.platform === "win32")(
       const ws = JSON.parse(
         await quiet(() =>
           runWorkspaceCreate(
-            { kind: "workspace-create", opts: { url, token }, cwd: undefined, label: "c" },
+            {
+              kind: "workspace-create",
+              opts: { url, token, urlExplicit: false },
+              cwd: undefined,
+              label: "c",
+            },
             store,
           ),
         ),
@@ -175,7 +195,12 @@ describe.skipIf(process.platform === "win32")(
       // フォーカスを別の workspace へ移す（呼び出し元とフォーカスの pane を別にし、フォーカスに落ちていないことを見分ける）。
       await quiet(() =>
         runWorkspaceCreate(
-          { kind: "workspace-create", opts: { url, token }, cwd: undefined, label: "d" },
+          {
+            kind: "workspace-create",
+            opts: { url, token, urlExplicit: false },
+            cwd: undefined,
+            label: "d",
+          },
           store,
         ),
       );
