@@ -11,6 +11,7 @@ import {
   ASK_TIMEOUT_MAX_MS,
   ASK_TIMEOUT_MIN_MS,
 } from "@sodashitsu/protocol";
+import { basename, dirname, join } from "node:path";
 import { AGENT_STATUSES, type AgentStatus } from "./agentStatus.js";
 import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
 
@@ -122,6 +123,41 @@ export interface GlobalOpts {
   caller?: CallerPane;
   /** `--machine <名前|id>`（20260927-multi-host-machines）。手元の `soda serve` の `/ws?machine=` で、そのマシンへ送る。 */
   machine?: string;
+  /**
+   * 接続先を利用者が明示した（`--url` か、空でない `SODACTL_URL`）。20261003-sodactl-ask-socket。`url` は 1 つの文字列にまとまっていて、
+   * 明示したものか `SODA_SERVER_URL`・既定から決まったものかが後から分からないので、印を別に持つ（明示したときは受け口を使わない）。
+   */
+  urlExplicit: boolean;
+  /**
+   * その pane のサーバのログイン不要の受け口（`pane.sock`）のパス（20261003-sodactl-ask-socket）。環境から決める（`paneSocketPathFromEnv`）。
+   * 無ければ受け口は使わない。実際に使うか（pane の中か・`urlExplicit`・`--machine`）はここでは見ない。
+   */
+  paneSocket?: string;
+}
+
+/** 公式フック連携の socket のファイル名（サーバの `agentReportSocketPathFor`）。受け口はこれと同じディレクトリ（状態ディレクトリ）にある。 */
+const AGENT_REPORT_SOCKET_BASENAME = "agent-report.sock";
+/** 受け口のファイル名（サーバの `paneSocketPathFor`）。 */
+const PANE_SOCKET_BASENAME = "pane.sock";
+
+/**
+ * 受け口（`pane.sock`）のパスを環境から決める（20261003-sodactl-ask-socket）。
+ * 1. `SODA_PANE_SOCKET`（空でなければ）——サーバが pane の環境に入れた値。
+ * 2. 無ければ、`SODA_AGENT_REPORT_SOCKET` のファイル名が `agent-report.sock` のとき、同じディレクトリの `pane.sock`——
+ *    `SODA_PANE_SOCKET` を入れる前のサーバが起動した pane（更新時の引き継ぎを跨いで生きている pane）でも、新しいサーバの受け口に届く。
+ *    別の名前（利用者が差し替えた等）からは推測しない。
+ * 3. どちらも無ければ undefined。
+ *
+ * Windows では常に undefined（受け口は Unix ドメイン socket のファイルで、Windows のサーバは開かない。`SODA_AGENT_REPORT_SOCKET` も named pipe で、
+ * ディレクトリを持たない）。
+ */
+export function paneSocketPathFromEnv(env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): string | undefined {
+  if (platform === "win32") return undefined;
+  const explicit = env["SODA_PANE_SOCKET"];
+  if (explicit) return explicit;
+  const report = env["SODA_AGENT_REPORT_SOCKET"];
+  if (report && basename(report) === AGENT_REPORT_SOCKET_BASENAME) return join(dirname(report), PANE_SOCKET_BASENAME);
+  return undefined;
 }
 
 /**
@@ -303,6 +339,7 @@ function parseFlags(rest: readonly string[], spec: FlagSpec): ParsedFlags {
 /**
  * `--url`/`--token` を取り出す（全コマンド共通）。接続先は `--url` → `SODACTL_URL` → `SODA_SERVER_URL`（サーバが pane の環境に入れる、その pane の
  * サーバの URL）→ 既定の順（20260926-agent-skill-file）。利用者が明示した設定を、サーバの推定より上にする。
+ * `paneSocket` はここでは入れない（引数に依らず環境と OS だけで決まるので、`parseArgs` が最後に 1 か所で足す）。
  */
 function globalOptsFrom(values: Map<string, string>, env: NodeJS.ProcessEnv): GlobalOpts {
   const paneId = env["SODA_PANE_ID"];
@@ -310,6 +347,7 @@ function globalOptsFrom(values: Map<string, string>, env: NodeJS.ProcessEnv): Gl
   const opts: GlobalOpts = {
     url: values.get("--url") ?? env["SODACTL_URL"] ?? (serverUrl ? serverUrl : DEFAULT_URL),
     token: values.get("--token") ?? env["SODACTL_TOKEN"],
+    urlExplicit: values.has("--url") || Boolean(env["SODACTL_URL"]),
   };
   if (paneId && serverUrl) opts.caller = { paneId, serverUrl };
   return opts;
@@ -341,8 +379,18 @@ function rejectExtra(positionals: readonly string[], expected: number, usage: st
   if (positionals.length > expected) throw new CliUsageError(`unexpected argument: ${positionals[expected]}`, usage);
 }
 
-/** `process.argv.slice(2)` を渡す。`env` は既定 `process.env`（テストで差し替える）。 */
-export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): Command {
+/**
+ * `process.argv.slice(2)` を渡す。`env` は既定 `process.env`、`platform` は既定 `process.platform`（どちらもテストで差し替える）。
+ * 接続先を持つコマンド（`opts` がある）には、受け口のパス（`GlobalOpts.paneSocket`）をここで足す（20261003-sodactl-ask-socket）。
+ */
+export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): Command {
+  const cmd = parseCommand(argv, env);
+  const paneSocket = paneSocketPathFromEnv(env, platform);
+  if (paneSocket === undefined || !("opts" in cmd)) return cmd;
+  return { ...cmd, opts: { ...cmd.opts, paneSocket } } as Command;
+}
+
+function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command {
   // `--machine <名前|id>` は前置き（herdr の `herdr --machine … <command>`）。20260927-multi-host-machines。
   if (argv[0] === "--machine") return parseMachinePrefixed(argv, env);
   const [word0, word1, ...rest0] = argv;
@@ -960,7 +1008,7 @@ function parseMachinePrefixed(argv: readonly string[], env: NodeJS.ProcessEnv): 
   if (selector !== "local" && sub === "pane" && rest.includes("--current")) {
     throw new CliUsageError("--current cannot be used with --machine (the calling pane belongs to this machine)", MACHINE_USAGE_LINE);
   }
-  const cmd = parseArgs(rest, env);
+  const cmd = parseCommand(rest, env);
   if (!("opts" in cmd)) throw new CliUsageError(`--machine cannot be used with ${sub}`, MACHINE_USAGE_LINE);
   // `ask` の対象は呼び出し元の pane（手元の SODA_PANE_ID）で、別のマシンの pane ではない。
   if (cmd.kind === "ask" && selector !== "local")

@@ -97,7 +97,7 @@ function statusChanged(paneId: string, a: AgentInfo | null): ServerEvent {
   return { event: "pane.agent_status_changed", data: { paneId, agent: a } };
 }
 
-const OPTS = { url: "http://127.0.0.1:7780", token: undefined };
+const OPTS = { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false };
 const store = {} as SessionStore;
 
 function useClient(client: FakeClient): void {

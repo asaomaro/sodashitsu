@@ -70,7 +70,7 @@ describe.skipIf(
   let url: string;
   let argvLog: string;
   let savedEnv: Record<string, string | undefined> = {};
-  const opts = () => ({ url, token: server.freshToken });
+  const opts = () => ({ url, token: server.freshToken, urlExplicit: false });
 
   async function quiet<T>(fn: () => Promise<T>): Promise<{ value: T; out: string }> {
     const out = captureStdout();

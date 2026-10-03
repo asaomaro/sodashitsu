@@ -59,7 +59,7 @@ async function paneVar(
     runPaneRun(
       {
         kind: "pane-run",
-        opts: { url: ctx.url, token: ctx.token },
+        opts: { url: ctx.url, token: ctx.token, urlExplicit: false },
         paneId,
         command: `printf '<${name}=%s>\\n' "\${${name}-unset}"`,
       },
@@ -75,7 +75,7 @@ async function paneVar(
         runPaneRead(
           {
             kind: "pane-read",
-            opts: { url: ctx.url, token: undefined },
+            opts: { url: ctx.url, token: undefined, urlExplicit: false },
             paneId,
             follow: false,
             raw: false,
@@ -143,7 +143,7 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
       runPaneRun(
         {
           kind: "pane-run",
-          opts: { url, token },
+          opts: { url, token, urlExplicit: false },
           paneId,
           command: `printf '<%s|%s|%s|%s|%s>\\n' "\${SODA_SERVER_URL-unset}" "\${SODACTL_TOKEN-unset}" "\${SODACTL_URL-unset}" "\${SODA_PANE_ID-unset}" "\${SODA_AGENT_REPORT_SOCKET-unset}"`,
         },
@@ -158,7 +158,7 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
           runPaneRead(
             {
               kind: "pane-read",
-              opts: { url, token: undefined },
+              opts: { url, token: undefined, urlExplicit: false },
               paneId,
               follow: false,
               raw: false,
@@ -184,7 +184,7 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   }
 
   it("起動時に作られた最初の pane: SODA_SERVER_URL は待ち受けたポート、受け継いだ sodactl の設定は無い（AC7・AC9・AC15）", async () => {
-    const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token } }, store));
+    const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store));
     const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
 
     const line = await envLineOf(first);
@@ -193,7 +193,7 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   }, 30_000);
 
   it("既定の session の pane には、サーバを起動した環境の SODA_SESSION を渡さない（20260926-named-session-ui の AC15）", async () => {
-    const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token } }, store));
+    const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store));
     const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
     expect(await paneVar({ url, token, store }, first, "SODA_SESSION")).toBe("unset");
   }, 30_000);
@@ -201,7 +201,7 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   it("sodactl で作った workspace の pane も同じ（AC7・AC9）", async () => {
     const created = await quiet(() =>
       runWorkspaceCreate(
-        { kind: "workspace-create", opts: { url, token }, cwd: process.cwd(), label: "env-it" },
+        { kind: "workspace-create", opts: { url, token, urlExplicit: false }, cwd: process.cwd(), label: "env-it" },
         store,
       ),
     );
@@ -254,7 +254,7 @@ describe.skipIf(process.platform === "win32")(
 
     it("起動時に作られた最初の pane に SODA_SESSION=work が入る", async () => {
       const snap = await quiet(() =>
-        runSnapshot({ kind: "snapshot", opts: { url: ctx.url, token: ctx.token } }, ctx.store),
+        runSnapshot({ kind: "snapshot", opts: { url: ctx.url, token: ctx.token, urlExplicit: false } }, ctx.store),
       );
       const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
       expect(await paneVar(ctx, first, "SODA_SESSION")).toBe("work");

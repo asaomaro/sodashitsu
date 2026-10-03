@@ -54,7 +54,7 @@ describe("runLogin", () => {
     const setSpy = vi.fn(async () => undefined);
     const s = { get: vi.fn(), set: setSpy, clear: vi.fn() } as unknown as SessionStore;
 
-    await runLogin({ kind: "login", opts: { url: "http://127.0.0.1:7780", token: "tok" } }, s);
+    await runLogin({ kind: "login", opts: { url: "http://127.0.0.1:7780", token: "tok", urlExplicit: false } }, s);
 
     expect(mockedLogin).toHaveBeenCalledWith("http://127.0.0.1:7780", "tok");
     expect(setSpy).toHaveBeenCalledWith("http://127.0.0.1:7780", "soda_session=abc");
@@ -63,7 +63,7 @@ describe("runLogin", () => {
   });
 
   it("--token が無ければ CliUsageError", async () => {
-    await expect(runLogin({ kind: "login", opts: { url: "http://127.0.0.1:7780", token: undefined } }, store)).rejects.toThrow(CliUsageError);
+    await expect(runLogin({ kind: "login", opts: { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false } }, store)).rejects.toThrow(CliUsageError);
     expect(mockedLogin).not.toHaveBeenCalled();
   });
 });
@@ -73,7 +73,7 @@ describe("runSnapshot", () => {
     const client = fakeClient();
     mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
 
-    await runSnapshot({ kind: "snapshot", opts: { url: "http://127.0.0.1:7780", token: undefined } }, store);
+    await runSnapshot({ kind: "snapshot", opts: { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false } }, store);
 
     expect(mockedPrintJson).toHaveBeenCalledWith({ workspaces: [], tabs: [], panes: [] });
   });
@@ -84,7 +84,7 @@ describe("runWatch", () => {
     const client = fakeClient();
     mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
 
-    const promise = runWatch({ kind: "watch", opts: { url: "http://127.0.0.1:7780", token: undefined }, json: false }, store);
+    const promise = runWatch({ kind: "watch", opts: { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false }, json: false }, store);
     await new Promise((r) => setTimeout(r, 10));
     client.emitEvent({ event: "workspace.created", data: { workspace: { id: "w1" } } });
     client.emitClose(1000, "done");
@@ -100,7 +100,7 @@ describe("runWatch", () => {
     const client = fakeClient();
     mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
 
-    const promise = runWatch({ kind: "watch", opts: { url: "http://127.0.0.1:7780", token: undefined }, json: true }, store);
+    const promise = runWatch({ kind: "watch", opts: { url: "http://127.0.0.1:7780", token: undefined, urlExplicit: false }, json: true }, store);
     await new Promise((r) => setTimeout(r, 10));
     const evt = { event: "pane.closed", data: { paneId: "p1" } };
     client.emitEvent(evt);

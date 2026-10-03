@@ -96,7 +96,7 @@ describe("sodactl agent integration（実サーバ・実 PTY）", () => {
       await runPaneSplit(
         {
           kind: "pane-split",
-          opts: { url, token: server.freshToken },
+          opts: { url, token: server.freshToken, urlExplicit: false },
           target: { kind: "id", paneId: agentPaneId },
           direction: "right",
           ratio: undefined,
@@ -115,7 +115,7 @@ describe("sodactl agent integration（実サーバ・実 PTY）", () => {
     await rm(sessionDir, { recursive: true, force: true });
   });
 
-  const opts = () => ({ url, token: undefined });
+  const opts = () => ({ url, token: undefined, urlExplicit: false });
 
   it("list: エージェントの居る pane だけを出す（AC1）", async () => {
     server.session.updatePaneRuntime(agentPaneId, { agent: agentInfo() });
