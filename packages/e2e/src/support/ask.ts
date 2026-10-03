@@ -31,8 +31,13 @@ export interface AskRun {
 
 export async function runAsk(appServer: AppServer, paneId: string, spec: unknown, args: string[] = []): Promise<AskRun> {
   const home = await mkdtemp(join(tmpdir(), "soda-e2e-ask-"));
+  const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, USERPROFILE: home, SODA_PANE_ID: paneId, SODA_SERVER_URL: appServer.origin, SODACTL_TOKEN: appServer.token };
+  // E2E を soda の pane の中で走らせると、その pane のサーバ（開発者の本物のサーバ）の受け口のパスが `process.env` にある。
+  // 子の sodactl へ渡すと、テストのサーバではなくそちらへ繋ぎに行く（質問が開発者の画面に出る）ので外す（20261003-sodactl-ask-socket）。
+  delete env["SODA_PANE_SOCKET"];
+  delete env["SODA_AGENT_REPORT_SOCKET"];
   const child = spawn(process.execPath, [CLI_MAIN, "ask", "--token", appServer.token, ...args], {
-    env: { ...process.env, HOME: home, USERPROFILE: home, SODA_PANE_ID: paneId, SODA_SERVER_URL: appServer.origin, SODACTL_TOKEN: appServer.token },
+    env,
     stdio: ["pipe", "pipe", "pipe"],
   });
   let stdout = "";

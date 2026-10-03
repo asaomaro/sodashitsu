@@ -259,6 +259,11 @@ async function main(): Promise<void> {
 
     // `USERPROFILE` は Windows 版 Node の `os.homedir()` が見る変数（`HOME` だけ差し替えても Windows では効かない）。
     const env: NodeJS.ProcessEnv = { ...process.env, HOME: homeDir, USERPROFILE: homeDir };
+    // この smoke を soda の pane の中で走らせると、その pane のサーバ（開発者の本物のサーバ）の受け口のパスが `process.env` にある。
+    // 子の sodactl へ渡すと、この smoke のサーバではなくそちらへ繋ぎに行く（質問が開発者の画面に出る）ので外す（20261003-sodactl-ask-socket）。
+    // 下の `inPaneEnv`・`freshHome` の環境はどれもこの `env` から作るので、ここで外せば全部に効く。
+    delete env["SODA_PANE_SOCKET"];
+    delete env["SODA_AGENT_REPORT_SOCKET"];
 
     const created = await runCli(["workspace", "create", "--cwd", process.cwd(), "--label", "smoke", "--url", url, "--token", token], env);
     if (created.exitCode !== 0) throw new Error(`workspace create failed (exit ${created.exitCode}): ${created.stderr}`);
