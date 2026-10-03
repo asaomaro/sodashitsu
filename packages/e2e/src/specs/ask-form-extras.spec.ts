@@ -195,7 +195,7 @@ test("showValue: false で、表示名と値が違う選択肢に値が出ない
 
 // --- 安全（AC10） -----------------------------------------------------------------------------------------------------
 
-test("題・説明・質問・選択肢・ページの題・決定ボタンの HTML は文字として出て、script・img も実行も CSP 違反も無い（AC10）", async ({
+test("題・説明・質問・選択肢・目次の見出し（page）・決定ボタンの HTML は文字として出て、script・img も実行も CSP 違反も無い（AC10）", async ({
   page,
   appServer,
 }) => {
@@ -247,7 +247,7 @@ test("題・説明・質問・選択肢・ページの題・決定ボタンの H
     ],
   });
   await expect(dialog(page)).toBeVisible();
-  // 1 ページ目（題・説明・質問・help・選択肢・説明・ページの題）が、タグのまま文字として出ている。
+  // 1 問目（題・説明・質問・help・選択肢・説明）が、タグのまま文字として出ている。
   await expect(page.locator("[data-ask-title]")).toHaveText(evil(1));
   await expect(page.locator("ask-form .intro")).toHaveText(evil(2));
   await expect(page.locator('[data-ask-question="q1"] legend')).toContainText(evil(5));
@@ -258,12 +258,14 @@ test("題・説明・質問・選択肢・ページの題・決定ボタンの H
   await expect(page.locator('[data-ask-question="q1"] label.opt .desc').first()).toHaveText(
     evil(9),
   );
-  await expect(page.locator("[data-ask-page]:visible")).toHaveCount(2);
-  await expect(page.locator("[data-ask-page]:visible").nth(0)).toContainText(evil(7));
-  await expect(page.locator("[data-ask-page]:visible").nth(1)).toContainText(evil(12));
+  // page（まとまりの題）を書いたので目次が出て、見出しがタグのまま文字として出ている。
+  await expect(page.locator("nav.index")).toBeVisible();
+  await expect(page.locator("nav.index .sec")).toHaveText([evil(7), evil(12)]);
+  await expect(page.locator('[data-ask-index="q1"]')).toContainText(evil(5));
+  await expect(page.locator('[data-ask-index="q2"]')).toContainText(evil(10));
   await expect(page.locator("[data-ask-submit]")).toContainText(evil(3)); // 末尾にキーの案内（Ctrl+Enter）が付く
-  // 2 ページ目。
-  await page.locator("[data-ask-next]").click();
+  // 2 問目（1 枚に並んでいる。目次の項目から移る）。
+  await page.locator('[data-ask-index="q2"]').click();
   await expect(page.locator('[data-ask-question="q2"] legend')).toContainText(evil(10));
   await expect(page.locator('[data-ask-question="q2"] .help')).toHaveText(evil(11));
   await expect(page.locator('[data-ask-question="q2"] label.opt .name').first()).toHaveText(
@@ -273,7 +275,7 @@ test("題・説明・質問・選択肢・ページの題・決定ボタンの H
     evil(14),
   );
   await expect(page.locator("textarea[aria-label=補足]")).toHaveAttribute("placeholder", evil(4)); // 補足の案内（属性）も文字のまま
-  // script も、src を持つ img も無い（ロケータは Shadow DOM の中も数える。ほかの質問・ページの分も DOM にある）。部品の中の style は 1 つだけ。
+  // script も、src を持つ img も無い（ロケータは Shadow DOM の中も数える。目次の項目の分も含む）。部品の中の style は 1 つだけ。
   expect(await page.locator("dialog#soda-ask-dialog script").count()).toBe(0);
   expect(await page.locator("dialog#soda-ask-dialog img[src]").count()).toBe(0);
   expect(

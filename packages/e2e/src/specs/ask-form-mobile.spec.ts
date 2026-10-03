@@ -2,9 +2,10 @@ import { devices, type Page } from "@playwright/test";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
 import { askFixture, runAsk, watchAskSubscriptions } from "../support/ask.js";
+import { indexItems, indexWidth, settle } from "../support/askForm.js";
 
 /**
- * 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）をモバイルの画面で（AC4・AC-I3）。`mobile.spec.ts` と同じく、実機の代わりに Playwright の
+ * 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）をモバイルの画面で（AC4・AC-I3）。幅 390px では質問の目次は出ない（質問は 1 枚に並ぶ）。`mobile.spec.ts` と同じく、実機の代わりに Playwright の
  * `devices["iPhone 13"]`（タッチ・狭い viewport・モバイル UA）を chromium で使う。
  * 中身は部品 `<ask-form>`（Shadow DOM。20261003-ask-form-component）が描く。Playwright の CSS ロケータは Shadow DOM を越える。
  */
@@ -31,12 +32,14 @@ test("モバイルの画面で、13 件のテーマ一覧を最後までスク�
   const viewport = page.viewportSize()!;
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
-  // この画面では、定義は 1 問ずつのページに分かれて出る（確かめた値: 8 ページ＝7 問＋補足）。最初のページはテーマだけで、13 件はそのページの中をスクロールして見る。
-  // ページ分けは高さの当て直しの後に決まるので、決まるまで待って読む。
-  await expect.poll(() => page.locator("[data-ask-page]:visible").count()).toBeGreaterThan(1);
-  await expect
-    .poll(() => page.locator("[data-ask-question]:visible").evaluateAll((els) => els.map((e) => e.getAttribute("data-ask-question"))))
-    .toEqual(["theme"]);
+  // この画面（幅 390px）では目次は出ない（部品は viewport の幅 767px 以下で隠す）。質問は 7 つとも 1 枚に並んだまま、本文をスクロールして見る。
+  // 目次を出すかは高さの当て直しの後に決まるので、描画が落ち着いてから「出ない」を読む（項目は DOM にあるので、出ているかは可視性と indexWidth で見る）。
+  await expect(page.locator('[data-ask-question="theme"]')).toBeVisible();
+  await settle(page);
+  expect(await indexWidth(page)).toBe(0);
+  await expect(page.locator("nav.index")).toBeHidden();
+  expect(await indexItems(page)).toEqual([]);
+  await expect(page.locator("[data-ask-question]")).toHaveCount(7);
   const themes = fixture.questions[0]!.options;
   const cards = page.locator('[data-ask-question="theme"] label.opt');
   await expect(cards).toHaveCount(13);
@@ -52,10 +55,11 @@ test("モバイルの画面で、13 件のテーマ一覧を最後までスク�
   await last.scrollIntoViewIfNeeded();
   await last.tap();
   await expect(page.locator(`input[type=radio][value="${themes[12]!.value}"]`)).toBeChecked();
-  // 一覧を最後までスクロールした後も、ページを移った後も見える。
+  // 一覧を最後までスクロールした後も、さらに最後の質問までスクロールした後も見える。
   await expect(submit).toBeInViewport({ ratio: 1 });
-  await page.locator("[data-ask-next]").tap();
-  await expect(page.locator('[data-ask-question="theme"]')).toBeHidden();
+  const lastQuestion = page.locator('[data-ask-question="auto-figure"]');
+  await lastQuestion.scrollIntoViewIfNeeded();
+  await expect(lastQuestion).toBeInViewport();
   await expect(submit).toBeInViewport({ ratio: 1 });
   await submit.tap();
   const r = await run.done;

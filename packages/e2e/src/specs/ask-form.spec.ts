@@ -1,8 +1,8 @@
-import type { BrowserContext, Locator, Page } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
 import { askFixture, runAsk, runAskWithoutLogin } from "../support/ask.js";
-import { dialog, openBrowser, pageButtons, shownQuestions, walkPages } from "../support/askForm.js";
+import { dialog, indexItems, openBrowser, settle, shownQuestions } from "../support/askForm.js";
 import { watchReceivedFrames, watchSentInput } from "../support/frames.js";
 import { focusTerminal, prefixKey, typeLine } from "../support/keys.js";
 
@@ -14,15 +14,13 @@ import { focusTerminal, prefixKey, typeLine } from "../support/keys.js";
  * ダイアログは枠（`AskDialog.vue`。固定の行 `[data-ask-origin]`）と、中身を描く部品 `<ask-form>`（Shadow DOM。20261003-ask-form-component）でできている。
  * - Playwright の CSS ロケータは open の Shadow DOM を越える（`[data-ask-title]`・`label.opt`・`input[...]` は部品の中に届く）。`evaluate` の中の
  *   `querySelector` は越えないので、部品の中は `shadowRoot` から探す。
- * - 部品は、与えられた高さに収まらない定義を**ページに分ける**。表示条件で隠れた質問・ほかのページの質問も DOM に残るので、出ている質問は見え方（`:visible`）で絞る。
- *   補足欄は最後のページ。`Tab` の最初の行き先は、ページに分かれていればページの番号。
- * - この spec の画面（1280×720）での出方（確かめた値）: `SPEC` は 2 ページ（質問 2 つ｜補足）。`SPEC` の件はページの数を決め打ちにしない。
- *   確かめ用の定義は 6 ページ（テーマだけで高さを超える）。
+ * - 部品（1.2.1）は質問を 1 枚に並べ、与えられた高さに収まらない定義には左に**質問の目次**（`nav.index`・項目は `[data-ask-index]`）を出す。表示条件で隠れた質問も DOM に残るので、
+ *   出ている質問は見え方（`:visible`）で絞る。補足欄は最後。`Tab` の最初の行き先は、目次が出ていれば目次の項目。目次の出し分けは `ask-form-index.spec.ts`。
+ * - この spec の画面（1280×720）での出方（確かめた値）: `SPEC`（3 問）は目次が出ない（収まる）。確かめ用の定義（7 問）は目次が出る（テーマの 13 件だけで高さを超える）。`SPEC` の件は目次の有無を決め打ちにしない。
  */
 
-// `SPEC` は、この画面で**余裕を持って 2 ページに分かれる**ようにしてある（「告知」に長めの `help` を足した。回答の JSON には影響しない）。
-// 以前は全部を並べた高さが使える高さを 1px 超えるだけで、文字の描き方が違う環境では 1 枚になりえた（回答の JSON の期待は 1 枚でも 2 ページでも同じ。
-// 件の意図は回答・キー・フォーカスの確認で、収まる側に寄せると既存の経路〔2 ページ〕が変わるので、確実に分かれる側にした）。
+// `SPEC` は、この画面（1280×720）では 1 枚に収まり、目次は出ない（部品 1.2.1 で確かめた値。以前のページ分けでは 2 ページに分かれていた）。回答の JSON の期待は目次が出ても出なくても同じで、
+// 件の意図は回答・キー・フォーカスの確認なので、`SPEC` を目次が出る側へ変えず、目次の有無を決め打ちにしない書き方にしてある（出し分けは `ask-form-index.spec.ts`）。
 const SPEC = {
   title: "配布先",
   questions: [
@@ -31,13 +29,6 @@ const SPEC = {
     { id: "notes", label: "告知", type: "multi", options: ["changelog", "blog", "mail"], default: ["changelog"], help: "告知の経路は複数選べます。変更履歴だけでよい場合は、そのままにしてください。メールは配布の直前にまとめて送ります。" },
   ],
 };
-
-/** `target` が見えるページまで［次へ］で進む（ページに分かれていなければ何もしない）。 */
-async function nextUntilVisible(page: Page, target: Locator): Promise<void> {
-  const next = page.locator("[data-ask-next]");
-  for (let i = 0; i < 50 && !(await target.isVisible()); i++) await next.click();
-  await expect(target).toBeVisible();
-}
 
 /** 固定の行（どの pane からの質問か）の文言の形。 */
 const ORIGIN_LINE = /^pane「.+」.*のプログラムからの質問$/;
@@ -83,26 +74,26 @@ test("確かめ用の定義（7 問・テーマ 13 件・出し分け 2 つ）: 
   await expect(dialog(page)).toBeVisible();
   const themes = fixture.questions[0]!.options;
   expect(themes).toHaveLength(13);
-  // この定義は高さに収まらない（テーマの 13 件だけで超える）ので、ページに分かれて出る。質問は DOM に 7 つとも残るが、見えているのは今のページの分だけ。
+  // この定義は高さに収まらない（テーマの 13 件だけで超える）ので、左に目次が出る。質問は 1 枚に並んだまま、7 つとも DOM にあり、出ている（表示条件を満たす）。
   await expect(page.locator("[data-ask-question]")).toHaveCount(7);
-  // ページ分けは高さの当て直しの後に決まるので、決まるまで待って読む。
-  await expect.poll(() => pageButtons(page).count()).toBeGreaterThan(1);
-  await expect.poll(() => shownQuestions(page)).toEqual(["theme"]);
-  // 全部のページを回ると、7 問が 1 回ずつ、定義の順に出る（design・motion は条件を満たしているので出ている）。
+  // 目次を出すかは高さの当て直しの後に決まるので、出るまで待って読む。
+  await expect(page.locator("nav.index")).toBeVisible();
+  // 7 問が定義の順に出ている（design・motion は条件を満たしているので出ている）。目次の項目も同じ（補足の項目は値が空）。
   const ids = fixture.questions.map((q) => q.id);
   expect(ids).toHaveLength(7);
-  expect((await walkPages(page)).flat()).toEqual(ids);
-  // テーマの最後の 1 つ（最初のページ。スクロールして選ぶ）と、mode を print にする（別のページ。motion が隠れる）。
-  await pageButtons(page).first().click();
+  await expect.poll(() => shownQuestions(page)).toEqual(ids);
+  expect((await indexItems(page)).filter((v) => v !== "")).toEqual(ids);
+  // テーマの最後の 1 つ（本文をスクロールして選ぶ）と、mode を print にする（motion が隠れる）。
   const last = page.locator(`input[type=radio][value="${themes[12]!.value}"]`);
   await last.scrollIntoViewIfNeeded();
   await last.check();
   const print = page.locator('input[type=radio][value="print"]');
-  await nextUntilVisible(page, print);
+  await print.scrollIntoViewIfNeeded();
   await print.check();
-  expect((await walkPages(page)).flat()).toEqual(ids.filter((id) => id !== "motion"));
+  await expect.poll(() => shownQuestions(page)).toEqual(ids.filter((id) => id !== "motion"));
+  expect((await indexItems(page)).filter((v) => v !== "")).toEqual(ids.filter((id) => id !== "motion")); // 隠れた質問は目次にも出ない
   await expect(page.locator('[data-ask-question="motion"]')).toBeHidden();
-  // 決定はどのページからでもでき、全部のページの回答が入る。
+  // 決定はどこからでもでき、全部の回答が入る。
   await page.locator("[data-ask-submit]").click();
   const r = await run.done;
   expect(r.code).toBe(0);
@@ -120,10 +111,10 @@ test("「その他」の自由入力は custom に id が入り、補足は note
   await expect(dialog(page)).toBeVisible();
   await page.locator('[data-ask-question="channel"] label.opt.other input[type=text]').fill("  金曜は避ける  ");
   await expect(page.locator('[data-ask-question="channel"] input[data-other]')).toBeChecked(); // 書くと「その他」が選ばれる
-  // 補足欄は最後のページ（ページに分かれていれば、移ってから書く）。
+  // 補足欄は最後（本文をスクロールして書く。`fill` が見える所までスクロールする）。
   const note = page.locator("textarea[aria-label=補足]");
-  await nextUntilVisible(page, note);
   await note.fill("メモです");
+  await expect(note).toBeInViewport();
   await page.keyboard.press("Control+Enter"); // フォーカスは補足欄（部品の中）
   const r = await run.done;
   expect(r.json).toEqual({ status: "answered", answers: { channel: "金曜は避ける", notes: ["changelog"] }, custom: ["channel"], note: "メモです" });
@@ -382,13 +373,13 @@ test("キーボードだけで答えられる（見出し → Tab → 矢印 →
   const run = await runAsk(appServer, p1, SPEC);
   await expect(dialog(page)).toBeVisible();
   await expect(page.locator("[data-ask-origin]")).toBeFocused(); // 開いたら見出し（AC-I4）
-  // 見出しの次の Tab 停止は、ページに分かれていればページの番号（出ている数だけ）、その次が最初の質問のチェック済みのラジオ（ベータ）。
-  // ページ分けが決まる（この画面では 2 ページ）まで待つ。0 のまま読むと、番号への Tab の確認が黙って飛ぶ。
-  await expect.poll(() => pageButtons(page).count()).toBeGreaterThan(1);
-  const buttons = await pageButtons(page).count();
+  // 見出しの次の Tab 停止は、目次が出ていれば目次の項目（出ている数だけ）、その次が最初の質問のチェック済みのラジオ（ベータ）。
+  // 目次を出すかは描画が落ち着いてから決まる。落ち着いた後に数える（0 のまま読んで、項目への Tab の確認が黙って飛ばないように。この定義は収まるので 0 個になる）。
+  await settle(page);
+  const buttons = (await indexItems(page)).length;
   for (let i = 0; i < buttons; i++) {
     await page.keyboard.press("Tab");
-    await expect(pageButtons(page).nth(i)).toBeFocused();
+    await expect(page.locator("[data-ask-index]:visible").nth(i)).toBeFocused();
   }
   await page.keyboard.press("Tab");
   await expect(page.locator("input[type=radio][value=beta]")).toBeFocused();
@@ -530,7 +521,7 @@ const ONE = { note: false, questions: [{ id: "a", label: "A", default: "x", opti
 /** 既定なし（どれも選ばれていない。`Tab` は最初の選択肢 `x` に止まる）。 */
 const ONE_UNSET = { note: false, questions: [{ id: "a", label: "A", options: ONE.questions[0]!.options }] };
 
-/** 即確定の定義を出し、固定の行から `Tab` で選択肢（ラジオ）へ入る（1 枚なのでページの番号は無い）。 */
+/** 即確定の定義を出し、固定の行から `Tab` で選択肢（ラジオ）へ入る（1 問なので目次は出ず、項目への停止も無い）。 */
 async function openInstant(page: Page, appServer: AppServer, paneId: string, spec: unknown, focused: string) {
   const run = await runAsk(appServer, paneId, spec);
   await expect(dialog(page)).toBeVisible();
