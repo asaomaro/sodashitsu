@@ -30,3 +30,5 @@ events:
   - { ts: 2026-10-03T17:29:02Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T7, findings: 4 } }
   - { ts: 2026-10-03T17:29:27Z, phase: coding, event: approved, metrics: { task_checks: 7, task_check_findings: 19, task_check_mode: delegated } }
   - { ts: 2026-10-03T17:34:07Z, phase: test, event: approved }
+  - { ts: 2026-10-03T17:37:43Z, phase: review, event: approved, metrics: { ac_total: 14, ac_covered: 14, tasks_no_ac: 0, tasks_ac_none: 0 } }
+  - { ts: 2026-10-03T17:39:12Z, phase: deliver, event: approved, metrics: { files_changed: 33, insertions: 2431, deletions: 13 } }
