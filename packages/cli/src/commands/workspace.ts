@@ -2,7 +2,7 @@ import type { ParamsOf } from "@sodashitsu/protocol";
 import type { Command } from "../cliArgs.js";
 import { printJson } from "../output.js";
 import type { SessionStore } from "../session.js";
-import { assertNotSelfWorkspace } from "../selfGuard.js";
+import { assertNotSelfWorkspace, callerPaneParam } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 
 /**
@@ -24,6 +24,7 @@ export async function runWorkspaceCreate(cmd: WorkspaceCreateCmd, store: Session
     const params: ParamsOf<"workspace.create"> = {};
     if (cmd.cwd !== undefined) params.cwd = cmd.cwd;
     if (cmd.label !== undefined) params.label = cmd.label;
+    Object.assign(params, callerPaneParam(cmd.opts));
     return client.request("workspace.create", params);
   });
   printJson(result);

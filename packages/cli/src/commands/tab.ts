@@ -2,7 +2,7 @@ import type { ParamsOf } from "@sodashitsu/protocol";
 import type { Command } from "../cliArgs.js";
 import { printJson } from "../output.js";
 import type { SessionStore } from "../session.js";
-import { assertNotSelfTab } from "../selfGuard.js";
+import { assertNotSelfTab, callerPaneParam } from "../selfGuard.js";
 import { withSession } from "../withSession.js";
 
 /** `tab create` / `close`（design.md「`workspace create` / `tab create` / `pane split`」節・
@@ -17,6 +17,7 @@ export async function runTabCreate(cmd: TabCreateCmd, store: SessionStore): Prom
     const params: ParamsOf<"tab.create"> = {};
     if (cmd.workspaceId !== undefined) params.workspaceId = cmd.workspaceId;
     if (cmd.label !== undefined) params.label = cmd.label;
+    Object.assign(params, callerPaneParam(cmd.opts));
     return client.request("tab.create", params);
   });
   printJson(result);
