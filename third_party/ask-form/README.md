@@ -22,6 +22,7 @@ ask-form スキルから**無改変で**写したものです。
 - **写したファイルは手で直さない**（1 バイトも変えない。prettier・eslint も当てない。prettier はリポジトリ直下の
   `.prettierignore` に `third_party/ask-form/` を入れてある）。直したくなったら ask-form の側へ伝え、直った版を写し直す。
 - 手で直していないことは `scripts/sync-ask-form.test.ts`（`pnpm test`）が `SOURCE.json` の SHA-256 と比べて確かめる。
+  これは、写したファイルだけが手で直された場合を捕まえる。`SOURCE.json` も一緒に書き換えられた場合は、元のコミットとの突き合わせ（`node scripts/sync-ask-form.mjs --check --from <public_docs の clone>`）でしか分からない（clone が要るので `pnpm test` には入らない。取り込むたびと、`docs/verification.md` の手順で行う）。
 - 改行の変換でバイトが変わらないよう、`.gitattributes` に `third_party/ask-form/** -text` を置いてある。
 
 ## 更新の手順

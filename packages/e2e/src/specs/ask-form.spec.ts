@@ -2,6 +2,7 @@ import type { BrowserContext, Locator, Page } from "@playwright/test";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
 import { askFixture, runAsk, runAskWithoutLogin, watchAskSubscriptions } from "../support/ask.js";
+import { watchSentAsk } from "../support/askSent.js";
 import { watchReceivedFrames, watchSentInput } from "../support/frames.js";
 import { focusTerminal, prefixKey, typeLine } from "../support/keys.js";
 
@@ -33,30 +34,12 @@ const dialog = (page: Page) => page.locator("dialog#soda-ask-dialog[open]");
 /** ブラウザを開いて「質問を出せる画面」として登録されるまで待つ。 */
 async function openBrowser(page: Page, appServer: { origin: string; token: string }) {
   const subs = await watchAskSubscriptions(page);
-  const sentAnswers = await watchSentAnswers(page);
+  const sent = await watchSentAsk(page);
+  const sentAnswers = sent.answers; // ブラウザが送った `ask.answer` の累計（`support/askSent.ts`）
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
   await subs.waitFor(1);
   return Object.assign(subs, { sentAnswers });
-}
-
-/**
- * ブラウザが送った `ask.answer`（回答）の要求の数（CDP の `Network.webSocketFrameSent`。`support/frames.ts` の流儀。テストの側のクライアントではなく、ブラウザが送ったもの）。
- * このページを開いてからの累計。**`page.goto()` の前に `await` して呼ぶ**（`openBrowser` が呼ぶ）。
- */
-async function watchSentAnswers(page: Page): Promise<() => number> {
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send("Network.enable");
-  let count = 0;
-  cdp.on("Network.webSocketFrameSent", (e) => {
-    if (e.response.opcode !== 1) return; // テキストのフレーム（JSON の要求）だけ
-    try {
-      if ((JSON.parse(e.response.payloadData) as { method?: unknown }).method === "ask.answer") count++;
-    } catch {
-      // JSON でないフレームは無視する
-    }
-  });
-  return () => count;
 }
 
 /** いま出ている質問の id（いまのページにあり、表示条件を満たしているもの）。 */
