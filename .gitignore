@@ -17,3 +17,6 @@ blob-report/
 
 # エディタ
 .DS_Store
+
+# 配布物（scripts/package.mjs）
+release/
