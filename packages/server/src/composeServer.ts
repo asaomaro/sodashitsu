@@ -786,7 +786,10 @@ export async function composeServer(
       } finally {
         // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
         commands.dispose();
-        asks.dispose(); // 待っている質問を閉じる（接続を閉じた後。応答は誰にも届かない）
+        // 受け口は質問を閉じる前に閉じる——`try` が上の `paneSocket.close()` より前で投げた経路でも、待っていた接続へ `cancelled` の返事を
+        // 書かずに捨てる（2 回目は何もしない。`pane.sock` も残さない）。
+        await paneSocket.close().catch(() => undefined);
+        asks.dispose(); // 待っている質問を閉じる（受け口と `/ws` の接続を閉じた後。応答は誰にも届かない）
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
         // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。
         metadata.dispose();
@@ -801,7 +804,6 @@ export async function composeServer(
         // （`HandoffSocket.close()` は今は reject しないが、将来 reject してもロックを残さないよう握る）
         await handoffSocket?.close().catch(() => undefined);
         await bridgeEndpoint.close().catch(() => undefined); // 途中で投げても受け口を残さない（2 回目は何もしない）
-        await paneSocket.close().catch(() => undefined); // 同上（`pane.sock` を残さない）
         // 手元からのログインの秘密を消す（20260927-cli-mode。止まったサーバの秘密を残さない。書いていなければ何もしない）。
         await localLogin.stop();
         // session.json を書き終えてから放す（D103。持っていなければ——ロックで断られた起動等——何もしない）。

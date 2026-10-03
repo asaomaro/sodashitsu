@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { connect as netConnect, type Socket } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -142,7 +142,8 @@ describe.skipIf(process.platform === "win32")("pane.sock の ask.open（実物�
     return { server, stateDir, paneId, sockPath, open, browser };
   }
 
-  it("受け口は状態ディレクトリの pane.sock（0600）で、pane の環境に入れるパスと同じ。止めるとファイルが消える（AC5）", async () => {
+  // 実物の pane の環境（`SODA_PANE_SOCKET`）がこのパスであることは `packages/cli/src/paneEnv.integration.test.ts` が見ている。
+  it("受け口は状態ディレクトリの pane.sock（0600）で、paneSocketPathFor のパスと同じ。止めるとファイルが消える（AC5）", async () => {
     const { server, stateDir, sockPath } = await start();
     expect(paneSocketPathFor(stateDir)).toBe(sockPath);
     const st = await stat(sockPath);
@@ -221,6 +222,8 @@ describe.skipIf(process.platform === "win32")("pane.sock の ask.open（実物�
       ok: false,
       error: { code: "invalid_ask_spec" },
     });
+    // `/ws` は順に届くので、往復の後なら、出ていた質問の `ask.opened` も届いている
+    expect(await b.request("ask.subscribe", {})).toEqual({ asks: [] });
     expect(b.events.filter((e) => e.event === "ask.opened")).toEqual([]);
     // 断った後も、同じ pane に質問を出せる（断った要求が枠を持ったままになっていない）
     const conn = await send(sockPath, { op: PANE_OP_ASK_OPEN, paneId, params: ASK });
@@ -281,8 +284,11 @@ describe.skipIf(process.platform === "win32")("pane.sock の ask.open（実物�
     const onlyInB = created.pane.id;
     expect(a.server.session.getPane(onlyInB)).toBeUndefined();
     expect(await call(a.sockPath, PANE_OP_ASK_OPEN, onlyInB, ASK)).toEqual({ ok: false, error: { code: "not_found", message: `pane not found: ${onlyInB}` } });
+    // どちらのサーバにも質問は出ていない（`/ws` は順に届くので、往復の後なら、出ていた質問の `ask.opened` も届いている）
+    expect(await ab.request("ask.subscribe", {})).toEqual({ asks: [] });
+    expect(await bb.request("ask.subscribe", {})).toEqual({ asks: [] }); // a の受け口への要求は b に届かない
     expect(ab.events.filter((e) => e.event === "ask.opened")).toEqual([]);
-    expect(bb.events.filter((e) => e.event === "ask.opened")).toEqual([]); // a の受け口への要求は b に届かない
+    expect(bb.events.filter((e) => e.event === "ask.opened")).toEqual([]);
     // b の受け口なら出せる
     const conn = await send(b.sockPath, { op: PANE_OP_ASK_OPEN, paneId: onlyInB, params: ASK });
     expect(await bb.waitForEvent("ask.opened")).toMatchObject({ paneId: onlyInB });
@@ -296,6 +302,30 @@ describe.skipIf(process.platform === "win32")("pane.sock の ask.open（実物�
     await b.waitForEvent("ask.opened");
     await server.close();
     expect(await conn.closed).toBe("");
+  });
+
+  it("受け口を置けなくても warn を出して起動を続ける。/ws は使え、止めた後にロックと一時ディレクトリが残らない", async () => {
+    const stateDir = await makeTempDir("soda-psock-");
+    cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+    // `pane.sock` の場所に空でないディレクトリを置く（socket を rename で置き換えられない）
+    const sockPath = paneSocketPathFor(stateDir)!;
+    await mkdir(sockPath);
+    await writeFile(join(sockPath, "keep"), "x");
+    const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
+    cleanups.push(() => server.close());
+    // 起動は成功していて、`/ws` はログインして使える
+    const c = await connectWs(server, "desktop");
+    cleanups.push(() => c.ws.close());
+    expect(await c.request("ask.subscribe", {})).toEqual({ asks: [] });
+    // 受け口は立っていない（置いたディレクトリのまま）
+    expect((await stat(sockPath)).isDirectory()).toBe(true);
+    await (server.logger as unknown as { flush(): Promise<void> }).flush();
+    expect(await readFile(join(stateDir, "server.log"), "utf8")).toContain("cannot start the pane socket");
+    await server.close();
+    const left = await readdir(stateDir);
+    expect(left).toContain("pane.sock"); // 置いたディレクトリには触らない
+    expect(left).not.toContain("soda.lock");
+    expect(left.filter((n) => n.startsWith(".p-"))).toEqual([]);
   });
 
   it("server.log に定義・回答・補足の文字列が出ない（操作の名前・pane・接続・結果の code だけ）", async () => {
