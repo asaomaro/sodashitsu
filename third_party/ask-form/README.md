@@ -36,7 +36,7 @@ node scripts/sync-ask-form.mjs --check                                          
 ```
 
 終了コードは 0 成功／1 食い違い（`--check`）／2 使い方の誤り・取れない（リポジトリでない・コミットが無い・ファイルが無い）・
-書けない（写した先が既存のファイル・書けないフォルダ。全部を一時の名前で書いてから置き換えるので、途中で失敗しても元は変わらない）。
+書けない（写した先が既存のファイル・書けないフォルダ。全部を一時の名前で書いてから置き換える。書く段階での失敗なら元は変わらない。置き換え（rename）の途中で失敗したら、`SOURCE.json` を最後に置き換えるので `--check` が食い違いを検出する）。
 
 ### 取り込むコミットを替えるたびに確かめること
 
@@ -55,7 +55,10 @@ node scripts/sync-ask-form.mjs --check                                          
 3. **枠が使っている部品の公開の受け渡しが変わっていない**ことを確かめる（下の「枠が使っている部品の受け渡し」。
    名前・意味が変わっていたら `askFormElement.ts` の型と `AskDialog.vue` を合わせる）。
 4. 部品の先頭の `VERSION` と `SOURCE.json` の `version` が同じこと（`scripts/sync-ask-form.test.ts` が比べる）。
-5. 確かめた結果を、その作業の `decisions.md` に 1 件として残す。
+5. **E2E が読む部品の内部の属性・要素が残っている**ことを確かめる（下の「E2E が読む部品の内部」）。
+6. `fixtures/*.json` の `sodashitsu` の欄（Sodashitsu だけ結果が違う例）を見直す（下の「試験データの `sodashitsu` の欄」）。
+7. 部品の動きを書いた `docs/verification.md`・`docs/sodactl.md`（「画面の部品と同期」「質問のフォーム」）の段を、新しい版に合わせて見直す。
+8. 確かめた結果を、その作業の `decisions.md` に 1 件として残す。
 
 ## 枠が使っている部品の受け渡し
 
@@ -84,3 +87,52 @@ node scripts/sync-ask-form.mjs --check                                          
 - `packages/protocol/src/ask.test.ts`・`ask.fixtures.test.ts` — 試験データで足りない境界の例。
 - `packages/web/src/ask/askFormElement.ts` — 部品の公開の受け渡しのうち、Sodashitsu が使うものの型。
 - `docs/sodactl.md`「質問のフォーム」・`packages/cli/skills/sodactl/SKILL.md` — 利用者向けの説明。
+
+## E2E が読む部品の内部
+
+「枠が使っている部品の受け渡し」とは別に、ask 関連の E2E 4 本（`packages/e2e/src/specs/ask-form.spec.ts`・`ask-form-paging.spec.ts`・
+`ask-form-extras.spec.ts`・`ask-form-mobile.spec.ts`）は、部品の Shadow DOM の中の属性・要素を CSS ロケータ（Playwright は open の Shadow DOM を越える）で読む。
+共通の読み方は `packages/e2e/src/support/askForm.ts` に集めてある（属性名が変わったときの直し先。spec にも直接書いたものが残る）。
+spec が使っているものを `grep -o` で拾うと次のとおり。
+
+| 属性・要素 | 何を見るか（spec の使い方） |
+| --- | --- |
+| `[data-ask-title]` | 定義の `title`（部品の中の見出し。無ければ「質問」）。枠の `[data-ask-origin]`（Shadow DOM の外・`AskDialog.vue`）とは別物 |
+| `[data-ask-question="<id>"]` | 質問の枠（`:visible` で「いま出ている質問」を数える。`aria-invalid`・クラス `missing` も読む） |
+| `[data-ask-note]` | 補足欄（最後のページ） |
+| `[data-ask-status]` | 状態の行（未回答の知らせ。「未回答」の文字を読む） |
+| `[data-ask-submit]`・`[data-ask-cancel]` | ［決定］・［キャンセル］のボタン |
+| `[data-ask-page]`（`[aria-current="page"]`）・`[data-ask-next]`・`[data-ask-prev]` | ページの番号のボタン・［次へ］・［前へ］（ページ分けの確認の土台。1 枚のときは番号が 0 個） |
+| `label.opt`（`.name`・`.key`）・`label.opt.other input[type=text]`・`input[data-other]` | 選択肢の行（表示名・値の表示）・「その他」の入力欄 |
+| `input[type=radio]`・`textarea`・`input[type=search]`・`fieldset[aria-invalid]` | 選択肢の入力・補足欄・絞り込みの欄・未回答の強調 |
+| `.cnt`・`.intro`・`.help` | 絞り込みの件数の表示・定義の導入文（`intro`）・質問の説明（`help`） |
+
+属性名が変わった場合、E2E は一斉に落ちるのが普通だが、**落ちずに緑になる**ことがある（「見えない要素を数えて 0 件」を期待する件、
+`toHaveCount(0)` や `not.toBeVisible()` は、属性が消えても通る）。取り込んだら次の順で確かめる。
+
+1. 先に ask 関連の E2E 4 本を流す（`pnpm build` のあと、`cd packages/e2e && pnpm exec playwright test src/specs/ask-form.spec.ts src/specs/ask-form-mobile.spec.ts src/specs/ask-form-paging.spec.ts src/specs/ask-form-extras.spec.ts`）。
+2. 落ちなくても、各属性が部品の `ask-form.js` に残っているかを `grep` で確かめる。0 なら名前が変わっている（E2E の側が空振りしている）。
+
+```sh
+for a in data-ask-title data-ask-question data-ask-note data-ask-status data-ask-submit data-ask-cancel \
+         data-ask-page data-ask-next data-ask-prev data-other aria-invalid aria-current; do
+  echo "$a: $(grep -c -- "$a" third_party/ask-form/ask-form.js)"
+done
+grep -c 'data-ask-submit' third_party/ask-form/ask-form.js    # 1 つだけ確かめるなら
+grep -n "type: 'search'\|'search'" third_party/ask-form/ask-form.js   # input[type=search]
+grep -c "'intro'\|'help'\|'cnt'" third_party/ask-form/ask-form.js    # .intro・.help・.cnt
+```
+
+（`data-ask-origin` は部品ではなく枠の `AskDialog.vue` にある属性なので、`ask-form.js` には無い。0 で正しい。）
+`label.opt`・`.name`・`.key` は一般的な語なので、`grep -c` ではなく、E2E の `showValue` の件（`ask-form-extras.spec.ts`）が通ることで確かめる。
+
+## 試験データの `sodashitsu` の欄
+
+`fixtures/normalize.json`・`fixtures/collect.json` の例に、`expect` のほかに `sodashitsu` の欄が付くことがある（`about` に「実装ごとの差は、
+その実装の名前の欄に `expect` を書いて上書きする」とある）。ask-form の側の結果と、**Sodashitsu だけ結果が違う例**で、`note` に理由が書いてある
+（例: 部品の知らない型は ask-form では `unknown_type`、Sodashitsu は「対応していない型」として `unsupported_type`。`edit`・`rank`・`table` の型も Sodashitsu は同じ扱い）。読み方:
+
+- `ask.fixtures.test.ts` は、`sodashitsu` の欄があればそちらの `expect` で比べる。欄の無い例は、ask-form と同じ結果でなければならない。
+- 取り込み後に `sodashitsu` の欄が増えた・減った・`note` が古くなったときは、その差が今も意図したものかを見直す。
+  部品が新しい型・項目を描けるようになったのに Sodashitsu が通していないなら、この欄が残っていて当然（通すかは「通す項目を足すときに直す場所」で決める）。
+  Sodashitsu が通すようにしたら、その例から `sodashitsu` の欄を消す（残すと通した結果と食い違って落ちる）。
