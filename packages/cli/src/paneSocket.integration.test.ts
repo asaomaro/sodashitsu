@@ -26,7 +26,7 @@ describe.skipIf(process.platform === "win32")("callPaneOp × 実物の PaneSocke
   let path: string;
   let socket: PaneSocket;
   let registry: PaneOpRegistry;
-  /** 終わった接続の名前（`onConnectionGone` が呼ばれた順）。 */
+  /** 終わった接続の名前（`test.wait` の handler が `ctx.signal` の abort を聞いて積む。終わった順）。 */
   let gone: string[];
   /** `test.wait` の handler が受け取った文脈と、返事を出させる合図。 */
   let waiting: { ctx: PaneOpContext; release: (value: unknown) => void }[];
@@ -54,12 +54,14 @@ describe.skipIf(process.platform === "win32")("callPaneOp × 実物の PaneSocke
     registry.register({
       name: "test.wait",
       params: ANY_PARAMS,
-      handler: (ctx) => new Promise<unknown>((resolve) => waiting.push({ ctx, release: resolve })),
+      handler: (ctx) => {
+        ctx.signal.addEventListener("abort", () => void gone.push(ctx.connId));
+        return new Promise<unknown>((resolve) => waiting.push({ ctx, release: resolve }));
+      },
     });
     socket = new PaneSocket({
       registry,
       paneExists: (paneId) => paneId === "p1" || paneId === "p2",
-      onConnectionGone: (connId) => void gone.push(connId),
       logger: NO_LOG,
     });
     await socket.listen(path);
@@ -111,7 +113,7 @@ describe.skipIf(process.platform === "win32")("callPaneOp × 実物の PaneSocke
     await vi.waitFor(() => expect(gone).toContain(ctx.connId)); // 返事の後に接続が終わる
   });
 
-  it("クライアントが時間切れで接続を捨てると、受け口の側で取り消しになる（signal と onConnectionGone）", async () => {
+  it("クライアントが時間切れで接続を捨てると、受け口の側で取り消しになる（signal の abort）", async () => {
     const pending = callPaneOp(path, { op: "test.wait", paneId: "p1" }, { timeoutMs: 100 });
     await vi.waitFor(() => expect(waiting).toHaveLength(1));
     await expect(pending).rejects.toMatchObject({ code: "timeout" });
@@ -158,7 +160,7 @@ const { parentPort, workerData } = require("node:worker_threads");
   const { PaneSocket } = await import(workerData.paneSocketUrl);
   const { PaneOpRegistry } = await import(workerData.registryUrl);
   const log = { debug() {}, info() {}, warn() {}, error() {} };
-  const socket = new PaneSocket({ registry: new PaneOpRegistry(log), paneExists: () => true, onConnectionGone() {}, logger: log });
+  const socket = new PaneSocket({ registry: new PaneOpRegistry(log), paneExists: () => true, logger: log });
   await socket.listen(workerData.path);
   socket.pause();
   parentPort.on("message", () => void socket.close().then(() => parentPort.postMessage("closed")));

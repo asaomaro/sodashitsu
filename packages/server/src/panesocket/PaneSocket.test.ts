@@ -86,7 +86,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
   let registry: PaneOpRegistry;
   let socket: PaneSocket;
   let panes: Set<string>;
+  /** 接続が終わった操作の connId（handler が `ctx.signal` の abort を聞いて積む。終わった順）。 */
   let gone: string[];
+  const watchGone = (ctx: PaneOpContext): void =>
+    ctx.signal.addEventListener("abort", () => void gone.push(ctx.connId));
   /** `test.echo` が呼ばれた回数。 */
   let echoCalls: number;
   /** `test.wait` が呼ばれるたびに積む（待っている操作の文脈と、結果を返す口）。 */
@@ -96,7 +99,6 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
     socket = new PaneSocket({
       registry,
       paneExists: (id) => panes.has(id),
-      onConnectionGone: (id) => gone.push(id),
       logger,
       ...(limits ? { limits } : {}),
     });
@@ -148,6 +150,7 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       params: z.object({ text: z.string(), fail: z.boolean().optional() }),
       handler: (ctx, p) => {
         echoCalls++;
+        watchGone(ctx);
         if (p.fail) throw new RpcError("ask_busy", "echo is busy");
         return { text: p.text, paneId: ctx.paneId, connId: ctx.connId };
       },
@@ -157,6 +160,7 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       params: z.object({}),
       handler: (ctx) => {
         const d = deferred<unknown>();
+        watchGone(ctx);
         waits.push({ ctx, finish: d.resolve });
         return d.promise;
       },
@@ -436,7 +440,7 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       c.sock.destroy();
       await c.closed;
 
-      await vi.waitFor(() => expect(gone).toHaveLength(1));
+      await vi.waitFor(() => expect(socket.connectionCount).toBe(0));
       expect(echoCalls).toBe(0);
       await expectStillServing();
     });
@@ -449,8 +453,7 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       // 上限が効かなければ接続は閉じず、このテストは時間切れで落ちる。
       expect(await c.closed).toBe("");
 
-      await vi.waitFor(() => expect(gone).toHaveLength(1));
-      expect(socket.connectionCount).toBe(0);
+      await vi.waitFor(() => expect(socket.connectionCount).toBe(0));
       await expectStillServing();
     });
 
@@ -475,7 +478,7 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
   });
 
   describe("接続の終わり", () => {
-    it("返事を待つ間に相手が接続を閉じると、signal が abort し、onConnectionGone がその connId で 1 回呼ばれる（AC6）", async () => {
+    it("返事を待つ間に相手が接続を閉じると、その操作の signal が abort する（AC6）", async () => {
       await start();
       const { client, wait } = await openWaiting();
       expect(wait.ctx.signal.aborted).toBe(false);
@@ -520,7 +523,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       registry.register({
         name: "test.big",
         params: z.object({}),
-        handler: () => "x".repeat(8 * 1024 * 1024),
+        handler: (ctx) => {
+          watchGone(ctx);
+          return "x".repeat(8 * 1024 * 1024);
+        },
       });
       await start({ requestWaitMs: 300, maxConnections: 1 });
       const reader = connect(path); // `data` を聞かない＝読まない
@@ -550,40 +556,24 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       }
     });
 
-    it("返事を書いて閉じたときも、onConnectionGone は 1 回だけ呼ばれる", async () => {
+    it("返事を書いて閉じたときも、signal は abort する（接続が終わるどの経路でも操作に届く）", async () => {
       await start();
 
       const res = await call(path, "test.echo", "p1", { text: "x" });
 
       const connId = res.ok ? (res.result as { connId: string }).connId : "";
       await vi.waitFor(() => expect(gone).toEqual([connId]));
-      await new Promise((r) => setTimeout(r, 20));
-      expect(gone).toEqual([connId]);
     });
 
-    it("断った要求（bad_request・unknown_op）でも、接続ごとに 1 回呼ばれる", async () => {
-      await start();
+    it("断った要求（bad_request・unknown_op）の接続も終わり、枠を空ける", async () => {
+      await start({ maxConnections: 1 });
 
       await sendRaw(path, "not json\n");
+      await vi.waitFor(() => expect(socket.connectionCount).toBe(0));
       await call(path, "pane.write", "p1");
+      await vi.waitFor(() => expect(socket.connectionCount).toBe(0));
 
-      await vi.waitFor(() => expect(gone).toHaveLength(2));
-      expect(new Set(gone).size).toBe(2);
-    });
-
-    it("onConnectionGone が投げても受け口は止まらない", async () => {
-      socket = new PaneSocket({
-        registry,
-        paneExists: () => true,
-        onConnectionGone: () => {
-          throw new Error("boom");
-        },
-        logger,
-      });
-      await socket.listen(path);
-
-      expect(await call(path, "test.echo", "p1", { text: "a" })).toMatchObject({ ok: true });
-      expect(await call(path, "test.echo", "p1", { text: "b" })).toMatchObject({ ok: true });
+      expect(await call(path, "test.echo", "p1", { text: "next" })).toMatchObject({ ok: true });
     });
   });
 
@@ -612,21 +602,24 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       await b.client.closed;
     });
 
-    it("断った接続では onConnectionGone を呼ばない（操作は始まっていない）", async () => {
+    it("断った接続は、開いている接続の操作に触れない（待っている操作の signal は abort しない）", async () => {
       await start({ maxConnections: 1 });
       const a = await openWaiting();
 
-      await call(path, "test.echo", "p1", { text: "x" });
-      await new Promise((r) => setTimeout(r, 20));
+      expect(await call(path, "test.echo", "p1", { text: "x" })).toMatchObject({
+        ok: false,
+        error: { code: "pane_socket_busy" },
+      });
 
       expect(gone).toEqual([]);
-      a.wait.finish(null);
-      await a.client.closed;
+      expect(a.wait.ctx.signal.aborted).toBe(false);
+      a.wait.finish("a");
+      expect(parseReply(await a.client.closed)).toEqual({ ok: true, result: "a" });
     });
   });
 
   describe("pause / resume（引き継ぎ）", () => {
-    it("pause は開いている接続を何も書かずに捨て、signal を abort し、onConnectionGone を呼ぶ", async () => {
+    it("pause は開いている接続を何も書かずに捨て、戻った時点で signal が abort している（abort は同期で届く）", async () => {
       await start();
       const a = await openWaiting("p1");
       const b = await openWaiting("p2");
@@ -640,7 +633,7 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       expect(socket.connectionCount).toBe(0);
       expect(await a.client.closed).toBe("");
       expect(await b.client.closed).toBe("");
-      expect(gone).toHaveLength(2); // socket の close が後から来ても 2 回目は呼ばない
+      expect(gone).toHaveLength(2);
     });
 
     it("pause 中の新しい接続は要求を読まずに pane_socket_busy、resume で受け付けが戻る", async () => {
@@ -719,7 +712,6 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       expect(socket.connectionCount).toBe(0); // 同時接続の枠には数えない
       c.sock.destroy(); // 相手が閉じたら、すぐ片づける
       await vi.waitFor(() => expect(lingering()).toBe(0));
-      expect(gone).toEqual([]);
     });
 
     it("行の上限超過の bad_request: 同時接続の枠を空け、相手が閉じるまで残りを読み捨てて待つ", async () => {
@@ -735,7 +727,6 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
 
       expect(lingering()).toBe(1);
       expect(socket.connectionCount).toBe(0);
-      expect(gone).toHaveLength(1);
       // 待っている間も、枠（上限 1）は空いている。
       expect(await call(path, "test.echo", "p1", { text: "next" })).toMatchObject({
         ok: true,
@@ -743,7 +734,6 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       });
       c.sock.destroy();
       await vi.waitFor(() => expect(lingering()).toBe(0));
-      expect(gone).toHaveLength(2); // 断った接続の分は 1 回だけ
     });
 
     it("相手が閉じなければ、待ちの上限（refusedLingerMs）で捨てる", async () => {
@@ -819,7 +809,6 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       socket = new PaneSocket({
         registry: fresh,
         paneExists: () => true,
-        onConnectionGone: () => undefined,
         logger,
       });
       try {
@@ -838,7 +827,6 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       socket = new PaneSocket({
         registry,
         paneExists: () => true,
-        onConnectionGone: () => undefined,
         logger,
       });
 
@@ -871,21 +859,20 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       expect(socket.connectionCount).toBe(0);
     });
 
-    it("listen() が済む前に繋がった接続は、何も書かずに捨てる（要求は読まない）", async () => {
+    it("pane.sock が置かれた直後（listen() が済む前）に繋がった接続にも、返事が返る", async () => {
       const hold = holdListen();
       const listening = start();
       await hold.reached;
-      expect((await stat(path)).isSocket()).toBe(true); // もう繋げる場所にある
+      expect((await stat(path)).isSocket()).toBe(true); // もう繋げる場所にある（0600 で置かれている）
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
 
-      const raw = await sendRaw(
-        path,
-        `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`,
-      );
+      // 繋ぎ直している sodactl がここで当たっても、捨てられずに（`connection_closed` にならずに）結果を受け取る。
+      expect(await call(path, "test.echo", "p1", { text: "early" })).toMatchObject({
+        ok: true,
+        result: { text: "early" },
+      });
+      expect(echoCalls).toBe(1);
 
-      expect(raw).toBe(""); // `pane_socket_busy` も書かない
-      expect(echoCalls).toBe(0);
-      expect(gone).toEqual([]);
-      expect(socket.connectionCount).toBe(0);
       hold.release();
       await listening;
       expect(await call(path, "test.echo", "p1", { text: "x" })).toMatchObject({ ok: true });

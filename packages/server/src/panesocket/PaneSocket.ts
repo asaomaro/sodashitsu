@@ -37,8 +37,6 @@ const MAX_REFUSED_LINGERING = PANE_SOCKET_MAX_CONNECTIONS;
 export interface PaneSocketDeps {
   registry: PaneOpRegistry;
   paneExists(paneId: string): boolean;
-  /** 接続が終わった（返事を書いた・切れた・捨てた）ときに 1 回呼ぶ。ask の取り消しに使う。 */
-  onConnectionGone(connId: string): void;
   logger: Logger;
   limits?: Partial<PaneSocketLimits>;
 }
@@ -89,8 +87,10 @@ export class PaneSocket {
   /** 進行中の `listen()`（終わると解決する。失敗でも reject しない）。途中で呼ばれた `close()` が待つ。 */
   private starting: Promise<void> | undefined;
   /**
-   * `listen()` が済んでから（0600 で置き、一時ディレクトリを消した後）`close()` を始めるまで真。
-   * 偽の間に繋がった接続（置いてから `listen()` が済むまでの間・`close()` を始めた後）は何も書かずに捨てる。
+   * `listen()` が待ち受けを始める前から、`close()` を始めるまで真（`listen()` の途中で `close()` が呼ばれたら、そこから偽）。
+   * 置く前のパスは 0700 の一時ディレクトリの中（同じ利用者しか繋げない）で、見える場所に出た時点で 0600 なので、`listen()` が済むのを待たずに受け付ける
+   * （待つと、置いた直後に繋がった接続——繋ぎ直している sodactl——を何も書かずに捨てることになる）。
+   * 偽の間に繋がった接続（`close()` を始めた後）は何も書かずに捨てる。
    */
   private accepting = false;
   /** 引き継ぎの間（`pause()` 〜 `resume()`）は新しい接続を `pane_socket_busy` で断る。 */
@@ -136,10 +136,10 @@ export class PaneSocket {
     server.on("error", (err) =>
       this.deps.logger.warn("pane socket error", { path, error: String(err) }),
     );
+    this.accepting = true; // 待ち受けを始める前から受け付ける（置かれた直後の接続にも返事を返す。`accepting` のコメント）
     await listenPrivateUnixSocket(server, path, { tmpPrefix: TMP_PREFIX });
     this.server = server;
     this.listenPath = path;
-    this.accepting = true;
   }
 
   /**
@@ -161,7 +161,6 @@ export class PaneSocket {
     this.accepting = false;
     // `listen()` の途中なら、置き終わるのを待ってから閉じる（待たずに戻ると、後から待ち受けと `pane.sock` が残る）。
     while (this.starting) await this.starting;
-    this.accepting = false;
     // 接続が残っていると `server.close()` が終わらないので、先に捨てる。
     this.dropAll();
     for (const sock of [...this.refused]) sock.destroy();
@@ -354,7 +353,10 @@ export class PaneSocket {
     }
   }
 
-  /** 接続が終わった（どの終わり方でも 1 回だけ）: `signal` を abort し、`onConnectionGone` を呼ぶ。 */
+  /**
+   * 接続が終わった（どの終わり方でも 1 回だけ。返事を書いた後も含む）: `signal` を abort する。
+   * 結果を待つ操作は、この abort で自分の待ちを取り消す（abort は同期で届くので、`pause()`・`close()` が戻った時点で取り消されている）。
+   */
   private finish(conn: Conn): void {
     if (conn.gone) return;
     conn.gone = true;
@@ -362,13 +364,5 @@ export class PaneSocket {
     this.conns.delete(conn);
     conn.chunks = [];
     conn.abort.abort();
-    try {
-      this.deps.onConnectionGone(conn.id);
-    } catch (err) {
-      this.deps.logger.warn("pane socket: onConnectionGone failed", {
-        connId: conn.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
   }
 }

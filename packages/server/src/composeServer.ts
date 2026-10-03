@@ -333,14 +333,13 @@ export async function composeServer(
     logger,
   });
   // ログイン不要の受け口（20261003-sodactl-ask-socket）。受けるのはここに登録した操作だけ（`/ws` の RPC は通さない）。いま載せるのは `ask.open` だけ。
-  // pane の実在は `AskService` と同じ判定。接続が終わったら、その接続が持ち主の質問を閉じる（返事を書いた後なら、もう無いので何も起きない）。
+  // pane の実在は `AskService` と同じ判定。接続が終わったら、その接続が持ち主の質問を閉じるのは操作の中（`askOpenOp` が `ctx.signal` の abort で取り消す）。
   // 待ち受けは `listen()` の 4.7、閉じるのは `close()`。引き継ぎの間は `pause()`（`HandoffController` の `closeClients`）。
   const paneOps = new PaneOpRegistry(logger);
   paneOps.register(askOpenOp(asks));
   const paneSocket = new PaneSocket({
     registry: paneOps,
     paneExists,
-    onConnectionGone: (connId) => asks.onClientGone(connId),
     logger,
   });
   // 端末のファイルのリンクとドロップ。ドロップされたファイルは画像と同じく状態ディレクトリの下の私的なディレクトリに置く（切断では消さない）。

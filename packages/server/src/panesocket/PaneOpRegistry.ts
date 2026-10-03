@@ -8,7 +8,10 @@ export interface PaneOpContext {
   paneId: string;
   /** 接続ごとの名前 `pane-socket:<連番>`（持ち主として使える。ほかの接続と重ならない）。 */
   connId: string;
-  /** 返事の前に接続が切れた・受け口が閉じた、で abort する。 */
+  /**
+   * 接続が終わったら abort する（返事の前に相手が切った・受け口が捨てた〔`pause()`・`close()`〕。返事を書いた後の終わりでも abort する）。
+   * 結果を待つ操作は、これで自分の待ちを取り消す。listener は同期で呼ばれる。投げないこと。
+   */
   signal: AbortSignal;
 }
 

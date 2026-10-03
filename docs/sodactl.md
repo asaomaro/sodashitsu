@@ -581,6 +581,7 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
 
 - protocol: 操作の名前の定数と引数の schema を `packages/protocol/src/paneSocket.ts` に足す（サーバと sodactl の両方がここから読む。例は `PANE_OP_ASK_OPEN`・`PaneAskOpenParams`）。
 - サーバ: `packages/server/src/panesocket/PaneOpRegistry.ts` の `PaneOpDef`（名前・引数の schema・handler）を作り、`packages/server/src/composeServer.ts` で `register` する（例は `panesocket/askOp.ts`）。
+- 結果を待つ操作（返事までに時間がかかる）は、handler に渡る `ctx.signal` の abort で自分の待ちを取り消す（接続が終わると abort する。取り消しの配線を登録の外に持たない。例は `panesocket/askOp.ts`）。
 - sodactl: `packages/cli/src/paneSocket.ts` の `viaPaneSocketOrSession` を使う（受け口を使うか・`/ws` へ落ちるかの判断をコマンドごとに持たない）。
 - やりとりの形は `packages/protocol/src/paneSocket.ts`: **1 接続 1 要求**。要求は 1 行の JSON（`{"v":1,"op":"<名前>","paneId":"<id>","params":{…}}`。上限 1 MiB）、返事も 1 行の JSON
   （`{"ok":true,"result":…}` か `{"ok":false,"error":{"code","message"}}`。sodactl が読む上限は 8 MiB）で、受け口は返事を書いたら閉じる
