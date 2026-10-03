@@ -12,6 +12,19 @@ contributors, licensed under the Apache License, Version 2.0.
 
 These files are included unmodified. See third_party/herdr/README.md for details.
 
+This product includes the ask-form web component (the <ask-form> custom
+element) and its shared test fixtures, copied from the ask-form skill in
+public_docs (https://github.com/asaomaro/public_docs). That repository does
+not contain a LICENSE file or any other license statement.
+
+  Location in this repository: third_party/ask-form/ask-form.js
+                               third_party/ask-form/fixtures/*.json
+  Source path:                 docs/ClaudeCode/skills/other/ask-form/
+  Source commit, retrieved date and SHA-256 of each file:
+                               third_party/ask-form/SOURCE.json
+
+These files are included unmodified. See third_party/ask-form/README.md for details.
+
 This product also includes source code translated (ported) from Herdr's Rust
 implementation into TypeScript, Copyright (c) Ogulcan Celik and Herdr
 contributors, licensed under the Apache License, Version 2.0. These files are
