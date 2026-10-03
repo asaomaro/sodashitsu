@@ -196,6 +196,17 @@ describe("buildPaneEnv の SODA_PANE_SOCKET", () => {
     ]);
     expect(Object.values(after).some((v) => v.includes(TOKEN))).toBe(false);
     expect(Object.keys(after).some((k) => /token|cookie|secret|auth/i.test(k))).toBe(false);
-    expect(Object.values(after).some((v) => /local-auth\.json|soda_session=|token=/i.test(v))).toBe(false);
+    // 親の環境の「落とす変数」に cookie・token・`local-auth.json` の形の値が居ても、pane へ渡らない（サーバの値を入れない呼び方でも残らない。
+    // `PANE_ENV_DROPPED` からどれかを外すと落ちる）。
+    const leaky = {
+      ...inherited,
+      SODACTL_URL: `http://elsewhere:1/?token=${TOKEN}`,
+      SODA_SERVER_URL: "http://old:2/#soda_session=COOKIE-VALUE",
+      SODA_AGENT_REPORT_SOCKET: "/old/local-auth.json",
+      SODA_PANE_SOCKET: "/old/local-auth.json",
+    } as NodeJS.ProcessEnv;
+    const bare = buildPaneEnv(leaky, { paneId: "p1", paneSocketPath: "/s/pane.sock" }, "linux");
+    expect(bare).toEqual({ PATH: "/usr/bin", SODA_PANE_ID: "p1", SODA_PANE_SOCKET: "/s/pane.sock" });
+    expect(Object.values(bare).filter((v) => /local-auth\.json|soda_session=|token=/i.test(v))).toEqual([]);
   });
 });
