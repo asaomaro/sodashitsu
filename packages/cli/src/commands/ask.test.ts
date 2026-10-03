@@ -162,7 +162,7 @@ describe("runAsk", () => {
   });
 });
 
-/** 20261003-sodactl-ask-socket（AC1・AC7・AC8・AC17）。受け口の側は `AskDeps.callPaneOp` を差し替える（実物の socket へは繋がない）。 */
+/** 20261003-sodactl-ask-socket（AC1・AC7・AC8・AC17）。受け口の側は `AskDeps.callPaneOp` を差し替える（実物の socket へは繋がない。最後の 1 件だけは差し替えず、実物の `callPaneOp` を実在しないパスへ向ける——どのサーバにも届かない）。 */
 describe("runAsk — 経路の選択（ログイン不要の受け口 pane.sock）", () => {
   const SOCK_ENV = { ...ENV, SODA_PANE_SOCKET: "/s/pane.sock" } as NodeJS.ProcessEnv;
   /** 偽の受け口つきの依存。`pane` は受け口への呼び出し（`callPaneOp`）の偽物。 */
