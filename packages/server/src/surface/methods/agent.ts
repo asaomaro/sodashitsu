@@ -138,8 +138,18 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
       schema: AgentStartParams,
       // 起動したエージェントが操作したクライアントの大きさで始まるよう、打ち込む前に記録する。agent.prompt と同じく、
       // 検査を通った要求だけを記録する（拒否した busy の再試行等は記録しない。review ラウンド 1）。
-      handler: (ctx, params) =>
-        starter.start(params, () => deps.sizeAuthority.noteInteraction(ctx.clientId, params.paneId)),
+      // 20261003-graph-auto-nodes: 親の記録も onAccepted の中（拒否された要求は記録しない）。書き込みなどで start が投げたら、その親の記録だけ取り消す。
+      handler: async (ctx, params) => {
+        try {
+          return await starter.start(params, () => {
+            deps.sizeAuthority.noteInteraction(ctx.clientId, params.paneId);
+            deps.lineage?.noteStarted(params.paneId, params.callerPaneId);
+          });
+        } catch (err) {
+          if (params.callerPaneId !== undefined) deps.lineage?.forgetStart(params.paneId, params.callerPaneId);
+          throw err;
+        }
+      },
     });
   }
 }

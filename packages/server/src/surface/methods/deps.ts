@@ -16,6 +16,7 @@ import type { FileOpener } from "../../file/FileOpener.js";
 import type { FileUploads } from "../../file/FileUploads.js";
 import type { PrefsStore } from "../../persist/PrefsStore.js";
 import type { GraphStore } from "../../persist/GraphStore.js";
+import type { AgentLineage } from "../../graph/AgentLineage.js";
 import type { StopReply } from "../../handoff/HandoffSocket.js";
 import type { LinkRun } from "@sodashitsu/protocol";
 
@@ -51,6 +52,8 @@ export interface MethodDeps {
   prefs?: PrefsStore;
   /** 連携のグラフ（20260927-agent-graph）。無ければ `graph.*` を登録しない。 */
   graph?: GraphStore;
+  /** エージェントが起動したエージェントの自動載せ（20261003-graph-auto-nodes）。無ければ記録しない。 */
+  lineage?: Pick<AgentLineage, "noteCreated" | "noteStarted" | "forgetStart">;
   /** 連携の実行の履歴（`graph.history`。20260927-agent-graph の 02）。無ければ履歴は空。 */
   graphHistory?: (linkId: string | undefined, limit: number | undefined) => LinkRun[];
   /**
