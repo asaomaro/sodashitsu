@@ -10,7 +10,12 @@ import {
   type NodeKey,
   type ServerEvent,
 } from "@sodashitsu/protocol";
-import { applyGraphOps, defaultApprovalConfig, LINK_LIMIT_DEFAULT } from "@sodashitsu/client-core";
+import {
+  applyGraphOps,
+  defaultApprovalConfig,
+  defaultTriggerConfig,
+  LINK_LIMIT_DEFAULT,
+} from "@sodashitsu/client-core";
 import { EventBus } from "../bus/EventBus.js";
 import type { Logger } from "../log/Logger.js";
 import { GraphInvalidError, GraphRevConflictError } from "../persist/GraphStore.js";
@@ -37,6 +42,7 @@ function link(id: number, kind: LinkKind, from: NodeKey, to: NodeKey): GraphLink
     from,
     to,
     ...(kind === "approval" ? { approval: defaultApprovalConfig() } : {}),
+    ...(kind === "trigger" ? { trigger: defaultTriggerConfig() } : {}),
     limit: 10,
     count: 0,
     paused: null,
@@ -224,6 +230,58 @@ describe("AgentLineage.attach", () => {
     expect(s.store.graph.nodes).toHaveLength(GRAPH_NODES_MAX);
   });
 
+  it("ノード 63 本＋子だけ足して 64 になるなら足す（親は既にある）", async () => {
+    const nodes = [
+      { key: P, x: 0, y: 0 },
+      ...Array.from({ length: GRAPH_NODES_MAX - 2 }, (_, i) => ({
+        key: `local:p${i + 10}` as NodeKey,
+        x: i * 10,
+        y: 0,
+      })),
+    ];
+    expect(nodes).toHaveLength(GRAPH_NODES_MAX - 1);
+    const s = setup({ nodes });
+    await s.run();
+    expect(s.store.graph.nodes).toHaveLength(GRAPH_NODES_MAX);
+    expect(s.store.graph.nodes.map((n) => n.key)).toContain(C);
+  });
+
+  // 親子と無関係の 17 ノード間の trigger 線（向きは添字の昇順だけで輪にならない。上限の境界用の詰め物）。
+  const fillerNodes = Array.from({ length: 17 }, (_, i) => ({
+    key: `local:p${i + 10}` as NodeKey,
+    x: i * 300,
+    y: 300,
+  }));
+  const fillerLinks = (count: number, firstId: number): GraphLink[] =>
+    fillerNodes
+      .flatMap((a, i) => fillerNodes.slice(i + 1).map((b) => [a.key, b.key] as const))
+      .slice(0, count)
+      .map(([from, to], i) => link(firstId + i, "trigger", from, to));
+
+  it("線 127 本＋1 本（片方が外れる）で 128 になるなら足す（境界）", async () => {
+    const links = [link(1, "supervise", C, P), ...fillerLinks(GRAPH_LINKS_MAX - 2, 2)];
+    expect(links).toHaveLength(GRAPH_LINKS_MAX - 1);
+    const s = setup({
+      nodes: [{ key: P, x: 0, y: 0 }, { key: C, x: 300, y: 0 }, ...fillerNodes],
+      links,
+    });
+    await s.run();
+    expect(s.reasons()).toEqual(["duplicate_link"]);
+    expect(s.store.graph.links).toHaveLength(GRAPH_LINKS_MAX);
+  });
+
+  it("線がすでに 128 本なら 1 本足すだけでも何も足さない", async () => {
+    const links = [link(1, "supervise", C, P), ...fillerLinks(GRAPH_LINKS_MAX - 1, 2)];
+    expect(links).toHaveLength(GRAPH_LINKS_MAX);
+    const s = setup({
+      nodes: [{ key: P, x: 0, y: 0 }, { key: C, x: 300, y: 0 }, ...fillerNodes],
+      links,
+    });
+    await s.run();
+    expect(s.reasons()).toEqual(["duplicate_link", "too_many_links"]);
+    expect(s.store.updates).toEqual([]);
+  });
+
   it("追加後の線が 128 を超えるなら何も足さない（too_many_links。ノードも足さない）", async () => {
     const links = Array.from({ length: GRAPH_LINKS_MAX - 1 }, (_, i) =>
       link(i + 1, "trigger", `local:p${i + 10}`, `local:p${i + 500}`),
@@ -291,6 +349,37 @@ describe("AgentLineage.attach", () => {
       expect.objectContaining({ reason: "conflict" }),
     );
     expect(addedLog(s.log)).toEqual([]);
+  });
+
+  it("競合を挟んでも同じ skip の理由は 1 回だけ出る", async () => {
+    const s = setup({
+      nodes: [P, C, "local:p9" as NodeKey].map((key) => ({ key, x: 0, y: 0 })),
+      links: [link(1, "supervise", C, "local:p9")],
+    });
+    s.store.conflicts = 2;
+    await s.run();
+    expect(s.store.updates).toHaveLength(3);
+    expect(s.reasons()).toEqual(["supervisor_taken"]);
+  });
+
+  it("競合の間に子が閉じたら、死んだ pane のノードを載せない（黙る）", async () => {
+    const s = setup();
+    s.store.conflicts = 1;
+    s.store.beforeUpdate = () => s.live.delete("p2");
+    await s.run();
+    expect(s.store.updates).toHaveLength(1);
+    expect(s.store.graph.nodes).toEqual([]);
+    expect(s.log.warn).not.toHaveBeenCalled();
+  });
+
+  it("競合の間に親が閉じたら載せずに parent_gone をログする", async () => {
+    const s = setup();
+    s.store.conflicts = 1;
+    s.store.beforeUpdate = () => s.live.delete("p1");
+    await s.run();
+    expect(s.store.updates).toHaveLength(1);
+    expect(s.store.graph.nodes).toEqual([]);
+    expect(s.reasons()).toEqual(["parent_gone"]);
   });
 
   it("競合が 2 回なら 3 回目で通る", async () => {

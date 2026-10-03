@@ -145,25 +145,34 @@ export class AgentLineage {
    */
   private async attachToGraph(childId: string, parentId: string): Promise<void> {
     const { paneExists, logger, store } = this.deps;
-    if (childId === parentId || !paneExists(childId)) return; // 子が閉じていた（F7）は黙る
+    if (childId === parentId) return;
     const skip = (reason: LineageSkipReason, level: "info" | "warn" = "info"): void =>
       logger[level]("graph.auto: skipped", { child: childId, parent: parentId, reason });
-    if (!paneExists(parentId)) return skip("parent_gone");
     const parent: NodeKey = `local:${parentId}`;
     const child: NodeKey = `local:${childId}`;
 
     const retries = this.deps.retries ?? RETRIES_DEFAULT;
     for (let attempt = 0; attempt < retries; attempt++) {
+      // 競合の間に閉じた pane のノードを載せない。子が閉じていた（F7）は黙る。
+      if (this.closed || !paneExists(childId)) return;
+      if (!paneExists(parentId)) return skip("parent_gone");
       const g = store.get();
-      const plan = this.plan(g, parent, child, skip);
-      if (plan === null || plan.ops.length === 0) return;
+      // skip の理由は試行ごとに集め、採用した試行のぶんだけ出す（競合の再試行で重複させない）。
+      const reasons: LineageSkipReason[] = [];
+      const plan = this.plan(g, parent, child, (r) => reasons.push(r));
+      if (plan === null || plan.ops.length === 0) {
+        reasons.forEach((r) => skip(r));
+        return;
+      }
       try {
         await store.update(g.rev, plan.ops, "graph");
       } catch (err) {
         if (err instanceof GraphRevConflictError) continue;
+        reasons.forEach((r) => skip(r));
         if (err instanceof GraphInvalidError) return skip("invalid", "warn");
         throw err;
       }
+      reasons.forEach((r) => skip(r));
       logger.info("graph.auto: added", {
         child: childId,
         parent: parentId,
@@ -192,6 +201,7 @@ export class AgentLineage {
       return null;
     }
 
+    // 線が 0 本でもノードは足す: 既に別の監督役が居る子も、グラフに見えるようにする（意図）。
     const ops: GraphOp[] = addMissingNodeOps(g, [parent, child]);
     const nodes = ops.length;
     if (g.nodes.length + nodes > GRAPH_NODES_MAX) {

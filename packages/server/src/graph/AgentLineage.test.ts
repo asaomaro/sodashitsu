@@ -136,11 +136,20 @@ describe("AgentLineage", () => {
     expect(s.calls).toEqual([["p2", "p1"]]);
   });
 
-  it("forgetStart はその親の記録だけを消す", async () => {
+  it("forgetStart は別の親の取り消しでは消えない", async () => {
     const s = setup();
     s.lineage.noteCreated("p2", "p1");
     s.lineage.noteStarted("p2", "p3");
-    s.lineage.forgetStart("p2", "p4"); // 別の親の取り消しでは消えない
+    s.lineage.forgetStart("p2", "p4");
+    s.detect("p2");
+    await s.tick();
+    expect(s.calls).toEqual([["p2", "p3"]]);
+  });
+
+  it("forgetStart はその親の記録を消し、created の親に戻る", async () => {
+    const s = setup();
+    s.lineage.noteCreated("p2", "p1");
+    s.lineage.noteStarted("p2", "p3");
     s.lineage.forgetStart("p2", "p3");
     s.detect("p2");
     await s.tick();
