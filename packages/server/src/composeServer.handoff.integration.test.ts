@@ -366,9 +366,10 @@ describe.skipIf(process.platform === "win32")(
       // 待っていた質問が取り消されていることの確かめも兼ねる——残っていれば、同じ pane への 2 つめは `ask_busy` で断られる。
       await vi.waitFor(
         async () =>
-          expect(await call(sockPath, paneId)).toMatchObject({
+          // 落ちたときに返事の code が読めるよう、返事の全体を比べる
+          expect(await call(sockPath, paneId)).toEqual({
             ok: true,
-            result: { status: "unavailable" },
+            result: { status: "unavailable", reason: expect.any(String) },
           }),
         {
           timeout: 10_000,
