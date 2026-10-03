@@ -146,8 +146,16 @@ export class AgentLineage {
   private async attachToGraph(childId: string, parentId: string): Promise<void> {
     const { paneExists, logger, store } = this.deps;
     if (childId === parentId) return;
+    // 上限に当たると利用者の手動操作も塞がれる（閉じた pane のノードは自動で消えない）ので、見落とされないよう warn にする。
     const skip = (reason: LineageSkipReason, level: "info" | "warn" = "info"): void =>
-      logger[level]("graph.auto: skipped", { child: childId, parent: parentId, reason });
+      logger[reason === "too_many_nodes" || reason === "too_many_links" ? "warn" : level](
+        "graph.auto: skipped",
+        {
+          child: childId,
+          parent: parentId,
+          reason,
+        },
+      );
     const parent: NodeKey = `local:${parentId}`;
     const child: NodeKey = `local:${childId}`;
 

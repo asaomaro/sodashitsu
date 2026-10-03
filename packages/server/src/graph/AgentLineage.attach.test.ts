@@ -217,6 +217,11 @@ describe("AgentLineage.attach", () => {
     await s.run();
     expect(s.reasons()).toEqual(["too_many_nodes"]);
     expect(s.store.updates).toEqual([]);
+    // 利用者の手動操作を塞ぐので、見落とされないよう warn で出す
+    expect(s.log.warn).toHaveBeenCalledWith(
+      "graph.auto: skipped",
+      expect.objectContaining({ reason: "too_many_nodes" }),
+    );
   });
 
   it("ちょうど 64 になるなら足す（境界）", async () => {
