@@ -1,6 +1,6 @@
 import { X509Certificate } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { hostname as osHostname, platform } from "node:os";
 import { parseId, type HostInfo, type LinkRun } from "@sodashitsu/protocol";
 import { ConfigError, type RawServeArgs, type ServeOptions, agentReportSocketPathFor, paneSocketPathFor, resolveServeOptions, stateDirInUseError } from "./config.js";
@@ -257,7 +257,8 @@ export async function composeServer(
     scrollbackLines: options.scrollbackLines,
     defaultCwd,
     agentReportSocketPath,
-    paneSocketPath,
+    // pane の環境へは絶対パスで渡す（`--state-dir` が相対でも、pane の cwd に依らず同じ受け口を指す。sodactl は相対の値を使わない）。
+    paneSocketPath: paneSocketPath === undefined ? undefined : resolve(paneSocketPath),
     getAutoResumeEnabled: agentIntegrations.getAutoResumeEnabled,
     // pane の中の sodactl の接続先（20260926-agent-skill-file）。待ち受けた後（`listen()` の 1.）に決まる。pane を起動するのはその後。
     serverUrlForPanes: () => paneUrl,

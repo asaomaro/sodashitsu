@@ -155,7 +155,8 @@ const PANE_SOCKET_BASENAME = "pane.sock";
 export function paneSocketPathFromEnv(env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): string | undefined {
   if (platform === "win32") return undefined;
   const explicit = env["SODA_PANE_SOCKET"];
-  if (explicit) return explicit;
+  // 絶対パスだけを使う（相対だと、どの受け口かが sodactl の cwd で変わる。サーバは絶対パスを入れる）。
+  if (explicit) return posix.isAbsolute(explicit) ? explicit : undefined;
   const report = env["SODA_AGENT_REPORT_SOCKET"];
   if (report && posix.isAbsolute(report) && report.endsWith(`/${AGENT_REPORT_SOCKET_BASENAME}`)) {
     return posix.join(posix.dirname(report), PANE_SOCKET_BASENAME);

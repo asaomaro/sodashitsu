@@ -551,6 +551,11 @@ describe("parseArgs — 接続先を明示したかの印（urlExplicit）と受
     expect(optsOf(["ask"], { ...inPane, SODA_PANE_SOCKET: "/s/pane.sock", SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock" }).paneSocket).toBe("/s/pane.sock");
   });
 
+  it("相対パスの SODA_PANE_SOCKET は使わない（どの受け口かが cwd で変わるため。導出にも落ちない）", () => {
+    expect(optsOf(["ask"], { ...inPane, SODA_PANE_SOCKET: "st/pane.sock" }).paneSocket).toBeUndefined();
+    expect(optsOf(["ask"], { ...inPane, SODA_PANE_SOCKET: "st/pane.sock", SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock" }).paneSocket).toBeUndefined();
+  });
+
   it("SODA_PANE_SOCKET が無い・空なら、SODA_AGENT_REPORT_SOCKET（/x/agent-report.sock）と同じディレクトリの pane.sock", () => {
     expect(optsOf(["ask"], { ...inPane, SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock" }).paneSocket).toBe("/x/pane.sock");
     expect(optsOf(["ask"], { ...inPane, SODA_PANE_SOCKET: "", SODA_AGENT_REPORT_SOCKET: "/x/agent-report.sock" }).paneSocket).toBe("/x/pane.sock");

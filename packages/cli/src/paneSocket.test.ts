@@ -1,4 +1,4 @@
-import { link, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { link, mkdtemp, rename, rm, stat, writeFile } from "node:fs/promises";
 import { connect, createServer, Socket, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -312,11 +312,49 @@ describe("callPaneOp（偽の受け口）", () => {
     await link(live, stale);
     await new Promise<void>((resolve) => server.close(() => resolve()));
     expect((await stat(stale)).isSocket()).toBe(true);
-    const out = await callPaneOp(stale, REQ, WAIT);
+    // 繋ぎ直しを待たない設定（`refusedRetryMs: 0`）なら、すぐ fallback。
+    const out = await callPaneOp(stale, REQ, { ...WAIT, refusedRetryMs: 0 });
     expect(out).toMatchObject({
       kind: "fallback",
       reason: expect.stringContaining("ECONNREFUSED"),
+      errno: "ECONNREFUSED",
     });
+  });
+
+  /** 誰も待ち受けていない socket のファイル（`soda handoff` で古い版が execve した後に残る受け口と同じ形）を作る。 */
+  async function staleSocket(name: string): Promise<string> {
+    const live = join(dir, `${name}-live.sock`);
+    const stale = join(dir, `${name}.sock`);
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(live, () => resolve()));
+    await link(live, stale);
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    return stale;
+  }
+
+  it("誰も待ち受けていない受け口（ECONNREFUSED）は、上限まで繋ぎ直してから fallback（すぐには落ちない）", async () => {
+    const stale = await staleSocket("gone");
+    const started = Date.now();
+    const out = await callPaneOp(stale, REQ, { ...WAIT, refusedRetryMs: 400 });
+    expect(out).toMatchObject({ kind: "fallback", errno: "ECONNREFUSED" });
+    // 1 回で諦めていない（間隔 150ms で少なくとも 1 回は繋ぎ直している）。
+    expect(Date.now() - started).toBeGreaterThanOrEqual(150);
+  });
+
+  it("繋ぎ直している間に受け口が置き直されたら（handoff の後の新しい版）、その受け口の結果を返す", async () => {
+    const stale = await staleSocket("swap");
+    const pending = callPaneOp(stale, REQ, { ...WAIT, refusedRetryMs: 5_000 });
+    // 新しい受け口を別の名前で立ててから、同じパスへ rename で置き直す（サーバの置き方と同じ）。
+    const f = await fake({ onLine: replyWith({ ok: true, result: { from: "new" } }) });
+    await rename(f.path, stale);
+    expect(await pending).toEqual({ kind: "result", result: { from: "new" } });
+  });
+
+  it("ファイルが無い（ENOENT）ときは繋ぎ直さず、すぐ fallback", async () => {
+    const started = Date.now();
+    const out = await callPaneOp(join(dir, "none2.sock"), REQ, { ...WAIT, refusedRetryMs: 5_000 });
+    expect(out).toMatchObject({ kind: "fallback", errno: "ENOENT" });
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 
   it.each(["unknown_op", "bad_request"])(

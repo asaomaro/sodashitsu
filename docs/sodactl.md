@@ -539,12 +539,14 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
 - **使われる条件**（全部を満たすとき。`sodactl ask` が自分で選ぶので、利用者が指定するものは無い）:
   - Windows（ネイティブ）でない。
   - pane の中（`SODA_PANE_ID` と `SODA_SERVER_URL` がある）。
-  - 受け口のパスが分かる: `SODA_PANE_SOCKET`。無ければ、`SODA_AGENT_REPORT_SOCKET` が絶対パスで末尾がちょうど `/agent-report.sock` のとき、同じディレクトリの `pane.sock`
+  - 受け口のパスが分かる: `SODA_PANE_SOCKET`（絶対パス。サーバは `--state-dir` が相対でも絶対パスにして入れる。相対の値は使わない）。無ければ、`SODA_AGENT_REPORT_SOCKET` が絶対パスで末尾がちょうど `/agent-report.sock` のとき、同じディレクトリの `pane.sock`
     （版を上げて `soda handoff` した後の、前から動いている pane のため——その pane の環境には `SODA_PANE_SOCKET` が無い）。
   - 接続先を明示していない（`--url`・`SODACTL_URL` のどちらも無い。明示した先がその pane のサーバとは限らないため）。
   - `--machine` が無い（`--machine local` は可）。
 - **使えないときは、黙って今までの `/ws` の経路（session cookie）へ落ちる**: 上の条件を満たさない・受け口へ繋げない（ファイルが無い・サーバが受け口を置けなかった・権限が無い等）・
   受け口がその操作を知らない（`unknown_op`）・要求を読めない（`bad_request`。どちらも版の違う受け口）。落ちたことは表示しない。落ちた先で未ログインなら、今までどおり `unauthenticated`（終了コード 1）。
+  受け口のファイルはあるのに誰も待ち受けていないとき（`soda handoff` で古い版が入れ替わってから、新しい版が受け口を置き直すまでの間）だけは、すぐには落ちずに 5 秒まで繋ぎ直す
+  （一時的な入れ替えの間に `unauthenticated` を出さないため。繋がっていないので質問は出ておらず、二重にはならない）。
   **`sodactl ask` が `unauthenticated` で終わったら、受け口を使えていない**（これが見分け方）。そのときは上の「接続先と認証」のとおり `sodactl login` する。
 - **`/ws` へ落ちないもの**（操作が既に始まっているかもしれず、落ちると質問を二重に出すため）:
   - 繋がった後に、返事なしで閉じた（サーバの停止・`soda handoff` の開始）→ `connection_closed`（終了コード 1）。

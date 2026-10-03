@@ -25,12 +25,16 @@ export function paneSocketFor(opts: GlobalOpts): string | undefined {
 export type PaneOpOutcome =
   | { kind: "result"; result: unknown }
   /** 受け口が使えない（繋げない・その操作を知らない）。呼び出し側は今までの `/ws` の経路へ。操作は始まっていない。 */
-  | { kind: "fallback"; reason: string };
+  | { kind: "fallback"; reason: string; errno?: string };
 
 /** 受け口が「その操作を知らない・要求を読めない」と返す code（版の違う受け口。操作は始まっていないので `/ws` へ落ちてよい）。 */
 const FALLBACK_CODES: readonly string[] = ["unknown_op", "bad_request"];
 
 const NEWLINE = 0x0a;
+
+/** 受け口のファイルはあるのに誰も待ち受けていない（`ECONNREFUSED`）とき、繋ぎ直しを続ける上限と間隔（下の `callPaneOp`）。 */
+export const PANE_SOCKET_REFUSED_RETRY_MS = 5_000;
+const REFUSED_RETRY_INTERVAL_MS = 150;
 
 /**
  * 受け口へ 1 要求を送って返事を待つ（design「`callPaneOp` の分岐」の表）。
@@ -42,8 +46,29 @@ const NEWLINE = 0x0a;
  * - `timeoutMs` を過ぎた → 接続を捨てて `RpcFailure("timeout")`。
  *
  * **要求は `write` で送り、返事の行を読むまで `end` しない**（受け口は相手の EOF を「呼び出し元が終わった」＝取り消しとして扱う）。
+ *
+ * **`ECONNREFUSED` だけは、すぐには落ちずに繋ぎ直す**（`refusedRetryMs`。既定 `PANE_SOCKET_REFUSED_RETRY_MS`）: 受け口のファイルはあるのに誰も待ち受けていないのは、
+ * `soda handoff` で古い版が execve してから新しい版が受け口を置き直すまでの間（古い版はファイルを残す）。ここで `/ws` へ落ちると、ログインしていない pane では
+ * `unauthenticated` になり、一時的な入れ替えの間に「login が要る」と誤って伝わる。繋がっていないので操作は始まっておらず、繋ぎ直しても二重にはならない。
+ * 上限まで待っても同じなら（不正終了の残骸など）`fallback`。ファイルが無い（`ENOENT`）等のほかのエラーは、今までどおりすぐ `fallback`。
  */
-export function callPaneOp(
+export async function callPaneOp(
+  path: string,
+  req: { op: string; paneId: string; params?: Record<string, unknown> },
+  opts: { timeoutMs: number; maxReplyBytes?: number; refusedRetryMs?: number },
+): Promise<PaneOpOutcome> {
+  const deadline =
+    Date.now() + Math.min(opts.refusedRetryMs ?? PANE_SOCKET_REFUSED_RETRY_MS, opts.timeoutMs);
+  for (;;) {
+    const outcome = await callPaneOpOnce(path, req, opts);
+    if (outcome.kind !== "fallback" || outcome.errno !== "ECONNREFUSED") return outcome;
+    if (Date.now() + REFUSED_RETRY_INTERVAL_MS > deadline) return outcome;
+    await new Promise<void>((r) => setTimeout(r, REFUSED_RETRY_INTERVAL_MS));
+  }
+}
+
+/** 1 回だけ繋いで送る（`callPaneOp` の本体）。繋がる前のエラーの `fallback` には、エラーの code を `errno` に入れる。 */
+function callPaneOpOnce(
   path: string,
   req: { op: string; paneId: string; params?: Record<string, unknown> },
   opts: { timeoutMs: number; maxReplyBytes?: number },
@@ -130,6 +155,7 @@ export function callPaneOp(
           resolve({
             kind: "fallback",
             reason: `cannot connect to the pane socket: ${err.code ?? err.message}`,
+            ...(err.code === undefined ? {} : { errno: err.code }),
           }),
         );
         return;
