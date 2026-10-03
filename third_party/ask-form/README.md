@@ -67,13 +67,13 @@ node scripts/sync-ask-form.mjs --check                                          
 
 - `spec`（検査済みの定義。入れるたびに部品が全部描き直すので、質問が替わったときに 1 回だけ入れる。部品は定義に書き込むので写しを渡す）・`busy`（送信中）。
 - `submit()`・`step(±1)` — 開いた直後はフォーカスが固定の行（部品の外）にあり、部品のキーは届かない。その間の `Ctrl/Cmd+Enter` と
-  `Alt+PageDown`／`Alt+PageUp` を、枠が `submit()`・`step()` で取り次ぐ。**`step()` は部品 1.1.0 から**（それより前のコミットへ戻すと、この取り次ぎが動かない）。
-- `relayout()`・`contentHeight` — 枠が先に最大の高さを与えてから定義を入れ、いちばん高いページの高さにダイアログを合わせる
-  （ページを移っても高さが変わらない）。高さでのページ分けは部品が最初の 1 回だけ行う。
+  `Alt+PageDown`／`Alt+PageUp` を、枠が `submit()`・`step()` で取り次ぐ。**`step()` は部品 1.1.0 から**（それより前のコミットへ戻すと、この取り次ぎが動かない）。取り込んでいる版は 1.2.1。
+- `relayout()`・`contentHeight` — 枠が先に最大の高さを与えてから定義を入れ、中身の高さにダイアログを合わせる。目次を出すかは、部品が最初の 1 回だけ高さで決める。
+- `indexWidth` — 目次の幅（出ていなければ 0）。枠が、ダイアログの幅を目次の分だけ広げるのに使う（`--ask-index-width`）。
 - イベント `ask-submit`（`detail` のうち `answers`・`custom`・`note` だけをサーバへ送る）・`ask-cancel`・`ask-unsupported`
   （質問を取り消してトーストで知らせる。`reason` は定義に由来する文字を含むので画面に出さない）。`Esc` は部品が `ask-cancel` を出さないので、枠（`<dialog>` の `cancel`）が取り消す。
 - 配色の変数 `--ask-bg`・`--ask-fg`・`--ask-border`・`--ask-accent`・`--ask-accent-fg`・`--ask-error`・`--ask-warn`（テーマの変数を割り当てる）。
-- 使っていないもの: `resolveMedia`（入れないので、画像・音のプレビューは出ない）・`notify()`・`value`・`pageCount`。
+- 使っていないもの: `resolveMedia`（入れないので、画像・音のプレビューは出ない）・`notify()`・`value`・`pageCount`（部品 1.2.1 ではいつも 1。互換のために残っているだけ）。
 
 ## 通す項目を足すときに直す場所
 
@@ -90,7 +90,7 @@ node scripts/sync-ask-form.mjs --check                                          
 
 ## E2E が読む部品の内部
 
-「枠が使っている部品の受け渡し」とは別に、ask 関連の E2E 4 本（`packages/e2e/src/specs/ask-form.spec.ts`・`ask-form-paging.spec.ts`・
+「枠が使っている部品の受け渡し」とは別に、ask 関連の E2E 4 本（`packages/e2e/src/specs/ask-form.spec.ts`・`ask-form-paging.spec.ts`（目次の spec に改名される予定）・
 `ask-form-extras.spec.ts`・`ask-form-mobile.spec.ts`）は、部品の Shadow DOM の中の属性・要素を CSS ロケータ（Playwright は open の Shadow DOM を越える）で読む。
 共通の読み方は `packages/e2e/src/support/askForm.ts` に集めてある（属性名が変わったときの直し先。spec にも直接書いたものが残る）。
 spec が使っているものを `grep -o` で拾うと次のとおり。
@@ -99,10 +99,10 @@ spec が使っているものを `grep -o` で拾うと次のとおり。
 | --- | --- |
 | `[data-ask-title]` | 定義の `title`（部品の中の見出し。無ければ「質問」）。枠の `[data-ask-origin]`（Shadow DOM の外・`AskDialog.vue`）とは別物 |
 | `[data-ask-question="<id>"]` | 質問の枠（`:visible` で「いま出ている質問」を数える。`aria-invalid`・クラス `missing` も読む） |
-| `[data-ask-note]` | 補足欄（最後のページ） |
+| `[data-ask-note]` | 補足欄 |
 | `[data-ask-status]` | 状態の行（未回答の知らせ。「未回答」の文字を読む） |
 | `[data-ask-submit]`・`[data-ask-cancel]` | ［決定］・［キャンセル］のボタン |
-| `[data-ask-page]`（`[aria-current="page"]`）・`[data-ask-next]`・`[data-ask-prev]` | ページの番号のボタン・［次へ］・［前へ］（ページ分けの確認の土台。1 枚のときは番号が 0 個） |
+| `nav.index`（目次。出ていないときは `hidden`）・`[data-ask-index]`（目次の項目。値は質問の id、補足は空）・`[aria-current="true"]`（今の項目）・`.index .sec`（まとまりの題の見出し）・`.lack`（未回答の項目） | 質問の目次が出ているか・項目の数・今見ている項目・見出し・未回答の印（目次が出ないときは項目が 0 個見える） |
 | `label.opt`（`.name`・`.key`）・`label.opt.other input[type=text]`・`input[data-other]` | 選択肢の行（表示名・値の表示）・「その他」の入力欄 |
 | `input[type=radio]`・`textarea`・`input[type=search]`・`fieldset[aria-invalid]` | 選択肢の入力・補足欄・絞り込みの欄・未回答の強調 |
 | `.cnt`・`.intro`・`.help` | 絞り込みの件数の表示・定義の導入文（`intro`）・質問の説明（`help`） |
@@ -115,10 +115,11 @@ spec が使っているものを `grep -o` で拾うと次のとおり。
 
 ```sh
 for a in data-ask-title data-ask-question data-ask-note data-ask-status data-ask-submit data-ask-cancel \
-         data-ask-page data-ask-next data-ask-prev data-other aria-invalid aria-current; do
+         data-ask-index data-other aria-invalid aria-current; do
   echo "$a: $(grep -c -- "$a" third_party/ask-form/ask-form.js)"
 done
 grep -c 'data-ask-submit' third_party/ask-form/ask-form.js    # 1 つだけ確かめるなら
+grep -c "class: 'index'\|class: 'sec'\|'lack'" third_party/ask-form/ask-form.js    # nav.index・.index .sec・.lack
 grep -n "type: 'search'\|'search'" third_party/ask-form/ask-form.js   # input[type=search]
 grep -c "'intro'\|'help'\|'cnt'" third_party/ask-form/ask-form.js    # .intro・.help・.cnt
 ```
