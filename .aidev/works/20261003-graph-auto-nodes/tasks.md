@@ -34,7 +34,7 @@ design.md のとおり、下から積む。(1) プロトコルに省略可能な
       対象: `packages/server/src/composeServer.graph.integration.test.ts`、`packages/cli/src/agentStart.integration.test.ts`（偽 `claude` の実検出の手本）、`packages/cli/src/graph.integration.test.ts`
       依存: T2, T5
       AC: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8, AC9, AC10, AC11, AC12, AC13
-- [ ] T7: 文書——`docs/agent-graph.md`（自動で載る条件・載らない条件・外し方・上限・引き継ぎ・Windows）、`docs/sodactl.md`（`callerPaneId` を送る条件）、`packages/cli/skills/sodactl/SKILL.md`、`docs/verification.md`（「共通：エージェントが起動したエージェントの自動載せ」の節を新設し実機の手順を書く）。`AGENTS.md` の索引は変えない
+- [x] T7: 文書——`docs/agent-graph.md`（自動で載る条件・載らない条件・外し方・上限・引き継ぎ・Windows）、`docs/sodactl.md`（`callerPaneId` を送る条件）、`packages/cli/skills/sodactl/SKILL.md`、`docs/verification.md`（「共通：エージェントが起動したエージェントの自動載せ」の節を新設し実機の手順を書く）。`AGENTS.md` の索引は変えない
       対象: `docs/agent-graph.md`「pane を載せる（ノード）」、`docs/sodactl.md`「呼び出し元の pane を対象にする」、`packages/cli/skills/sodactl/SKILL.md`、`packages/cli/skills/sodactl/skill.test.ts`（skill と docs の一致の検査）、`docs/verification.md`（「共通：…」の形式の節）
       依存: T6
       AC: AC14
