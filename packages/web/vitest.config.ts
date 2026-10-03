@@ -2,7 +2,10 @@ import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [vue()],
+  // `<ask-form>` は Vue の部品ではなくカスタム要素（`src/ask/askFormElement.ts` が登録する）。Vue に解決させない。
+  plugins: [
+    vue({ template: { compilerOptions: { isCustomElement: (tag) => tag === "ask-form" } } }),
+  ],
   test: {
     environment: "happy-dom",
     include: ["src/**/*.test.ts"],

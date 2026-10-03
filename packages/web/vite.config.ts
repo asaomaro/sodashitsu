@@ -6,7 +6,10 @@ import { defineConfig } from "vite";
  * 出力は packages/web/dist（サーバの composeServer.ts の webDistDirFor() が配る場所）。
  */
 export default defineConfig({
-  plugins: [vue()],
+  // `<ask-form>` は Vue の部品ではなくカスタム要素（`src/ask/askFormElement.ts` が登録する）。Vue に解決させない。
+  plugins: [
+    vue({ template: { compilerOptions: { isCustomElement: (tag) => tag === "ask-form" } } }),
+  ],
   server: {
     proxy: {
       "/api": "http://127.0.0.1:7780",
