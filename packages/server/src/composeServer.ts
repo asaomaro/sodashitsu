@@ -489,10 +489,14 @@ export async function composeServer(
       wsServer.closeAll(1012, "server restarting");
       bridgeEndpoint.setReady(false);
       bridgeEndpoint.closeAll(1012, "server restarting");
+      // ログイン不要の受け口（20261003-sodactl-ask-socket）も `/ws` と揃える: 待っている接続は何も書かずに捨て（質問は取り消し）、
+      // 最中の新しい接続は `pane_socket_busy` で断る。待ち受けは閉じない（execve の後、新しい版が同じパスに置き直す）。
+      paneSocket.pause();
     },
     reopenClients: () => {
       wsServer.setReady(true);
       bridgeEndpoint.setReady(true);
+      paneSocket.resume();
     },
     flushLog: () => logger.flush(),
     preflight: internal.handoffPreflight ?? (() => runPreflight()),
