@@ -327,6 +327,43 @@ async function main(): Promise<void> {
     if (askedOutside.exitCode !== 1 || !askedOutside.stderr.includes("caller_pane_unknown")) throw new Error(`sodactl ask (outside a pane) returned exit ${askedOutside.exitCode}: ${askedOutside.stderr}`);
     console.log("smoke(cli): sodactl ask (unavailable without a browser / bad spec → 2 / outside a pane) ok");
 
+    // 20261003-sodactl-ask-socket: ログインなしの ask。セッションのキャッシュの無い HOME・token なし・接続先の明示なしで、pane の中の環境
+    // （`SODA_PANE_ID`・`SODA_SERVER_URL`）と、**この smoke が起動したサーバ**の受け口のパスだけを渡す。
+    const noLoginHome = join(homeDir, "no-login-home");
+    await mkdir(noLoginHome, { recursive: true });
+    const noLoginEnv: NodeJS.ProcessEnv = { ...inPaneEnv, HOME: noLoginHome, USERPROFILE: noLoginHome };
+    delete noLoginEnv["SODACTL_TOKEN"];
+    // 陰性対照: 受け口のパスを渡さなければ、今までどおりログインが要る（下の成功が、どこかに残ったログインによるものではない）。
+    const askedNoLogin = await runCliWithStdin(["ask"], noLoginEnv, askSpec);
+    if (askedNoLogin.exitCode !== 1 || !askedNoLogin.stderr.includes("unauthenticated")) {
+      throw new Error(`sodactl ask (no login, no pane socket) should fail with unauthenticated (exit ${askedNoLogin.exitCode}): ${askedNoLogin.stdout} ${askedNoLogin.stderr}`);
+    }
+    if (process.platform === "win32") {
+      // Windows には受け口が無い（sodactl も使わない）。ログインなしの ask は上のとおり unauthenticated のまま。
+      console.log("smoke(cli): sodactl ask without a login → unauthenticated ok (no pane socket on Windows)");
+    } else {
+      const paneSocket = join(serverStateDir, "pane.sock");
+      if (!existsSync(paneSocket)) throw new Error(`the server did not place the pane socket: ${paneSocket}`);
+      // 受け口を通れば、画面が無いので `unavailable`・終了コード 0（通らなければ上と同じ unauthenticated・終了コード 1 になる）。
+      // 2 つ目は「古い pane の環境」: `SODA_PANE_SOCKET` が無く、`SODA_AGENT_REPORT_SOCKET` だけがある（同じ状態ディレクトリの `pane.sock` を導く）。
+      const socketEnvs: [string, NodeJS.ProcessEnv][] = [
+        ["SODA_PANE_SOCKET", { ...noLoginEnv, SODA_PANE_SOCKET: paneSocket }],
+        ["SODA_AGENT_REPORT_SOCKET only", { ...noLoginEnv, SODA_AGENT_REPORT_SOCKET: join(serverStateDir, "agent-report.sock") }],
+      ];
+      for (const [name, socketEnv] of socketEnvs) {
+        const viaSocket = await runCliWithStdin(["ask"], socketEnv, askSpec);
+        const viaSocketResult = JSON.parse(viaSocket.stdout.trim() || "null") as { status?: string } | null;
+        if (viaSocket.exitCode !== 0 || viaSocketResult?.status !== "unavailable") {
+          throw new Error(`sodactl ask (no login, ${name}) returned exit ${viaSocket.exitCode}: ${viaSocket.stdout} ${viaSocket.stderr}`);
+        }
+      }
+      const viaSocketBad = await runCliWithStdin(["ask"], socketEnvs[0]![1], JSON.stringify({ questions: [] }));
+      if (viaSocketBad.exitCode !== 2) throw new Error(`sodactl ask (no login, bad spec) did not exit 2 (exit ${viaSocketBad.exitCode}): ${viaSocketBad.stderr}`);
+      // ログインは起きていない（セッションのキャッシュが作られていない）。
+      if (existsSync(join(noLoginHome, ".sodactl"))) throw new Error("sodactl ask through the pane socket must not create a session cache");
+      console.log("smoke(cli): sodactl ask without a login ok (pane socket → unavailable / derived from SODA_AGENT_REPORT_SOCKET / bad spec → 2; without the socket → unauthenticated)");
+    }
+
     // 20260927-sidebar-row-tokens: 独自トークンの報告。`--token` を接続の token（= を含まない）と独自トークン（NAME=VALUE）の両方に使い、
     // 値が整えられて snapshot の workspace・pane に載ること、消去で消えることを、ビルドした sodactl で確かめる。**接続の token が実際に使われるよう、
     // この 1 回はセッションのキャッシュの無い HOME で打つ**（キャッシュがあると `--token` は読まれない——`withSession.ts`。タスク点検 T11 の指摘）。
