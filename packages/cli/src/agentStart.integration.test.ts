@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { parseArgs } from "./cliArgs.js";
 import { runAgentGet, runAgentList } from "./commands/agent.js";
 import { runAgentStart } from "./commands/agentStart.js";
 import { runPaneInput, runPaneRead } from "./commands/pane.js";
@@ -269,25 +270,32 @@ describe.skipIf(
 
   it("pane の中の環境（SODA_PANE_ID・SODA_SERVER_URL）で agent start すると、打った pane が親として実サーバのグラフに載る。pane の外では載らない（20261003-graph-auto-nodes AC1・AC3・AC4・AC12）", async () => {
     const parent = server.session.snapshot().panes[0]!.id;
-    const startFrom = (
-      caller: { paneId: string; serverUrl: string } | undefined,
-      paneId: string,
-      name: string,
-    ) =>
-      quiet(() =>
-        runAgentStart(
-          {
-            kind: "agent-start",
-            opts: { ...opts(), ...(caller === undefined ? {} : { caller }) },
-            name,
-            agentKind: "claude",
-            paneId,
-            timeoutMs: 30_000,
-            args: [],
-          },
-          store,
-        ),
+    // 本物の経路と同じく、pane の環境変数（SODA_PANE_ID・SODA_SERVER_URL）から parseArgs で caller を作って渡す。
+    const startFrom = (callerPane: string | undefined, paneId: string, name: string) => {
+      const env: NodeJS.ProcessEnv = {
+        SODACTL_TOKEN: server.freshToken,
+        ...(callerPane === undefined ? {} : { SODA_PANE_ID: callerPane, SODA_SERVER_URL: url }),
+      };
+      // pane の外では SODA_SERVER_URL が無いので接続先は --url で与える（caller は付かない）。
+      const argv = [
+        "agent",
+        "start",
+        name,
+        "--kind",
+        "claude",
+        "--pane",
+        paneId,
+        "--timeout",
+        "30000",
+      ];
+      if (callerPane === undefined) argv.push("--url", url);
+      const cmd = parseArgs(argv, env);
+      if (cmd.kind !== "agent-start") throw new Error(`unexpected command: ${cmd.kind}`);
+      expect(cmd.opts.caller).toEqual(
+        callerPane === undefined ? undefined : { paneId: callerPane, serverUrl: url },
       );
+      return quiet(() => runAgentStart(cmd, store));
+    };
     const outside = await newPane();
     const rev0 = server.graph.get().rev;
     await startFrom(undefined, outside, "outsider");
@@ -295,7 +303,7 @@ describe.skipIf(
     expect(server.graph.get().rev).toBe(rev0); // 呼び出し元が無ければ何も載らない
 
     const child = await newPane();
-    await startFrom({ paneId: parent, serverUrl: url }, child, "lineage-kid");
+    await startFrom(parent, child, "lineage-kid");
     await vi.waitFor(() => expect(server.graph.get().rev).toBe(rev0 + 1), {
       timeout: 10_000,
       interval: 50,

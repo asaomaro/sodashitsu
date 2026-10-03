@@ -1,5 +1,5 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -16,10 +16,16 @@ import type { ComposedServer } from "./composeServer.js";
  */
 vi.setConfig({ testTimeout: 30_000 });
 
-const FAKE_AGENT = `
+const fakeAgent = (sinkDir: string) => `
+import { appendFileSync } from "node:fs";
 process.stdin.setRawMode(true);
 process.stdout.write("\\u001b]0;\\u2733 fake\\u0007fake agent ready\\r\\n");
-process.stdin.on("data", (d) => { if (String(d).includes("q")) process.exit(0); });
+// 受け取った入力はファイルへ書き出す（親に届く監督の知らせを外から見るため。pane の環境の SODA_SERVER_URL・SODA_PANE_ID で名前を決める）。
+const sink = ${JSON.stringify(sinkDir)} + "/input-" + String(process.env.SODA_SERVER_URL).replace(/\\W/g, "_") + "-" + process.env.SODA_PANE_ID;
+process.stdin.on("data", (d) => {
+  appendFileSync(sink, String(d));
+  if (String(d).includes("q")) process.exit(0);
+});
 `;
 
 interface Client {
@@ -48,7 +54,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
     beforeAll(async () => {
       dir = await mkdtemp(join(tmpdir(), "soda-lineage-it-"));
       await mkdir(join(dir, "bin"));
-      await writeFile(join(dir, "fake-agent.mjs"), FAKE_AGENT);
+      await writeFile(join(dir, "fake-agent.mjs"), fakeAgent(dir));
       const wrapper = join(dir, "bin", "claude");
       await writeFile(
         wrapper,
@@ -212,6 +218,16 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
         interval: 50,
       });
     }
+    /** 偽のエージェント（pane の環境で名前が決まる）が受け取った入力。 */
+    const inputOf = (server: ComposedServer, paneId: string): string => {
+      const name = `input-${`http://127.0.0.1:${server.options.port}`.replace(/\W/g, "_")}-${paneId}`;
+      return existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "";
+    };
+    /**
+     * 「何も起きない」ことの確認の前の短い待ち。検出（agent の現れ）は呼び出し側が待ってあるので、ここで待つのは検出の後に
+     * 非同期で走る自動載せの処理（グラフの更新）が、もし起きるなら起きるのに足りる時間だけ。起きた場合は rev が進んで検査が落ちる。
+     */
+    const settle = () => sleep(300);
     const waitRev = (server: ComposedServer, rev: number) =>
       vi.waitFor(() => expect(graphOf(server).rev).toBe(rev), { timeout: 10_000, interval: 25 });
 
@@ -248,12 +264,39 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
         "graph.auto: added",
       );
 
-      // 1 pane につき 1 回だけ：エージェントが終わって別のものが現れても、重ねて載せない。
+      // 1 pane につき 1 回だけ：利用者が子のノード（線も一緒に消える）を外したあと、エージェントが入れ替わって再検出されても重ねて載せない。
+      // （「載せ済み」の記録が無ければ、子のノードが無いので再び載ってしまう。重複する線で何も足されないだけの状態では確かめられない。）
+      await ok(
+        c.request("graph.update", { baseRev: 1, ops: [{ op: "remove_node", key: key(child) }] }),
+      );
+      expect(graphOf(server).links).toEqual([]);
       await quitAgent(server, child);
       await typeClaude(server, child);
-      await sleep(300);
-      expect(graphOf(server).rev).toBe(1);
-      expect(clients[0]!.changedRevs).toEqual([1]);
+      await settle();
+      expect(graphOf(server).rev).toBe(2);
+      expect(graphOf(server).nodes.map((n) => n.key)).toEqual([key(parent)]);
+      expect(graphOf(server).links).toEqual([]);
+      expect(clients[0]!.changedRevs).toEqual([1, 2]);
+    });
+
+    it("親もエージェントなら、子が載って約 2 秒後に、親へ配下（子の pane ID）を知らせる監督の知らせが実際に届く。承認の代理の知らせは出ない（AC5）", async () => {
+      const { server, clients } = await boot();
+      const [c] = clients as [Client, Client];
+      const parent = server.session.snapshot().panes[0]!.id;
+      const child = await split(c, parent, parent);
+      await shellReady(server, parent);
+      await shellReady(server, child);
+      await typeClaude(server, parent); // 親もエージェント（監督役になれる）
+      expect(inputOf(server, parent)).toBe("");
+      await typeClaude(server, child);
+      await waitRev(server, 1);
+      // 約 2 秒のまとめ待ちのあと、監督役（親のエージェント）の入力として知らせが届く。固定の待ちは置かず、届くまで待つ。
+      await vi.waitFor(() => expect(inputOf(server, parent)).toContain(child), {
+        timeout: 15_000,
+        interval: 50,
+      });
+      expect(inputOf(server, parent)).toContain("監督役");
+      expect(inputOf(server, child)).toBe(""); // 子には何も届かない（承認待ちは起きていない）
     });
 
     it("agent.start 経由：agent start を打った pane が親になる（作った人とは別の pane）。作った人が居ても打った人を優先する（AC1・AC3）", async () => {
@@ -294,7 +337,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       );
       await vi.waitFor(() => expect(agentOf(server, other)).not.toBeNull(), { timeout: 15_000 });
       await typeClaude(server, manual);
-      await sleep(300);
+      await settle();
       expect(graphOf(server).rev).toBe(0);
       expect(graphOf(server).nodes).toEqual([]);
       expect(await logLines(server.options.stateDir)).toEqual([]);
@@ -326,7 +369,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       await shellReady(server, ghost);
       await typeClaude(server, legacy);
       await typeClaude(server, ghost);
-      await sleep(300);
+      await settle();
       expect(graphOf(server).rev).toBe(0);
       expect(clients[0]!.changedRevs).toEqual([]);
     });
@@ -451,7 +494,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       expect(graphOf(server).nodes.map((n) => n.key)).toEqual([key(parent)]);
       await quitAgent(server, c1);
       await typeClaude(server, c1);
-      await sleep(300);
+      await settle();
       expect(graphOf(server).rev).toBe(2);
       expect(graphOf(server).nodes.map((n) => n.key)).toEqual([key(parent)]);
 
@@ -461,7 +504,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       );
       await quitAgent(server, c1);
       await typeClaude(server, c1);
-      await sleep(300);
+      await settle();
       expect(graphOf(server).rev).toBe(3);
       expect(graphOf(server).nodes).toEqual([]);
 
