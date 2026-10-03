@@ -550,8 +550,9 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
   **`sodactl ask` が `unauthenticated` で終わったら、受け口を使えていない**（これが見分け方）。そのときは上の「接続先と認証」のとおり `sodactl login` する。
 - **`/ws` へ落ちないもの**（操作が既に始まっているかもしれず、落ちると質問を二重に出すため）:
   - 繋がった後に、返事なしで閉じた（サーバの停止・`soda handoff` の開始）→ `connection_closed`（終了コード 1）。
-  - `soda handoff` の途中・同時接続の上限（64）→ 受け口は要求を読まずに `pane_socket_busy` で断る。**sodactl はこれも 5 秒まで自動で繋ぎ直す**（下の `ECONNREFUSED` の繋ぎ直しと合わせて 1 つの上限）。
+  - `soda handoff` の途中・同時接続の上限（64）→ 受け口は要求を読まずに `pane_socket_busy` で断る。**sodactl はこれも 5 秒まで自動で繋ぎ直す**（上の `ECONNREFUSED` の繋ぎ直しと合わせて 1 つの上限）。
     それでも続いたときだけ `pane_socket_busy`（終了コード 1）で終わる。要求は読まれていない（質問は出ていない）ので、打ち直してよい。
+    `soda handoff` が成功して新しい版に入れ替わった直後は、ブラウザがまだ繋ぎ直していないので、繋ぎ直した `sodactl ask` は `unavailable`（終了コード 0）になることがある（質問を出せる画面がまだ無い）。
   - 繋がった後に、返事が読めない（1 行の JSON でない・上限 8 MiB を超える）・受け口が要求の 1 行を 10 秒待っても揃わずに切った → 同じく `connection_closed`。
   - sodactl 側の時間切れ（`--timeout` に 15 秒を足して待っても返事が無い）→ `timeout`（終了コード 1。stdout の `status: "timeout"` とは別物）。
   - 操作のエラー（`not_found`・`ask_busy`・`invalid_ask_spec` 等）は `/ws` の経路と同じ code・同じ終了コード。

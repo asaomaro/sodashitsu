@@ -25,6 +25,8 @@ export function askOpenOp(
         spec: p.spec,
         timeoutMs: p.timeoutMs,
       });
+      // この listener は投げないこと: abort の listener の例外は受け口では捕まえられず、uncaughtException（`soda serve` ごと落ちる）になる。
+      // `onClientGone` は投げない（イベントの配信は中で捕まえている）。
       const cancel = (): void => asks.onClientGone(ctx.connId);
       if (ctx.signal.aborted) cancel();
       else ctx.signal.addEventListener("abort", cancel, { once: true });

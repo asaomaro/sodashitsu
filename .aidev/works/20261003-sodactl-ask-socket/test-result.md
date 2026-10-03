@@ -7,7 +7,7 @@
 
 - `pnpm build`（Node 20）— 終了コード 0
 - `pnpm typecheck`（Node 20）— 終了コード 0
-- `pnpm test`（全体。**Node 24**）— 379 ファイル・**6753 passed / 0 failed / 0 skipped**・終了コード 0
+- `pnpm test`（全体。**Node 24**）— 379 ファイル・**6756 passed / 0 failed / 0 skipped**・終了コード 0（review の差し戻しの修正の後。その前のラウンド 2 は 6753 passed）
 - `pnpm test`（全体。Node 20）— ラウンド 2 の 4 回: 3 回は 6751 passed / 1 failed / 1 skipped、1 回は 6750 passed / 2 failed / 1 skipped（下の「失敗の証跡」ラウンド 2）
 - `pnpm lint`（Node 20）— 終了コード 1・22 errors。**`main`（9514847）でも同じ 22 errors・同じファイル**（worktree で `eslint . --ext .ts` を走らせて比べた。`no-control-regex` 17 件ほか。この work で足した・変えた行のものは無い）
 - 起動確認（smoke。`aidev smoke`・10 本。**Node 24**・別のパスの checkout）— pass（下の「起動確認」）
@@ -27,7 +27,7 @@
 - AC8: pass — `paneSocket.test.ts`・`ask.test.ts`・`cliArgs.test.ts`（`--url`・空でない `SODACTL_URL` で受け口を使わない）。
 - AC9: pass — `PaneSocket.test.ts`（JSON でない・`v` 違い・上限を超える行〔1 回・小分け〕・途中で切れる・行が揃わない、の後も次の要求が通る）。
 - AC10: pass — 結合テスト: 2 つの状態ディレクトリのサーバで、片方にしか無い pane をもう片方の受け口へ送ると `not_found`、相手のサーバに質問が出ない。名前付き session（`--session`）そのものでは走らせていない（パスは状態ディレクトリから決まる。`config.ts`）。
-- AC11: pass（Node 24）— smoke 6 本目: 実物の `soda handoff` の後、`SODA_PANE_SOCKET` なし・`SODA_AGENT_REPORT_SOCKET` だけの環境の sodactl が `unavailable`・終了コード 0（socket の変数なしは `unauthenticated`・1）。結合テスト（handoff の間は `pane_socket_busy`・元に戻ると受け付ける）。停止後に `pane.sock` が無い・残骸があっても起動できる、は `PaneSocket.test.ts`・`privateUnixSocket.test.ts`。**版をまたぐ handoff（古い版 → この版）は未検証**。
+- AC11: pass（Node 24）— 結合テストと cli の結合テスト（`pause` の間の `sodactl` の呼び出しは繋ぎ直して待ち、`resume` の後に結果を返す）。smoke 6 本目: 実物の `soda handoff` の後、`SODA_PANE_SOCKET` なし・`SODA_AGENT_REPORT_SOCKET` だけの環境の sodactl が `unavailable`・終了コード 0（socket の変数なしは `unauthenticated`・1）。結合テスト（handoff の間は `pane_socket_busy`・元に戻ると受け付ける）。停止後に `pane.sock` が無い・残骸があっても起動できる、は `PaneSocket.test.ts`・`privateUnixSocket.test.ts`。**版をまたぐ handoff（古い版 → この版）は未検証**。
 - AC12: pass — `docs/sodactl.md`「ログイン不要の受け口（`pane.sock`）」ほか。点検で実装と 1 つずつ照合（`review.md` T14）。`skill.test.ts` と smoke 4 本目（`sodactl skill | cmp`）。
 - AC13: pass — `PaneOpRegistry.test.ts`・`PaneSocket.test.ts`（`test.echo` を登録して呼ぶ）、`packages/cli/src/paneSocket.integration.test.ts`（実物の `PaneSocket` × 実物の `callPaneOp`）。
 - AC14: pass — `PaneSocket.test.ts`（知らない操作 → `unknown_op`。実在しない pane と組み合わせても）、`paneSocket.test.ts`（`unknown_op` → fallback）。
@@ -169,6 +169,36 @@ smoke: fail (exit 1, 10 本)
 - この work の変更が原因ではない（`main` のビルドでも同じ場所で同じように落ち、この work のビルドは別の場所では通る。`packages/web` と `packages/server/src/smoke.ts` はこの work で変えていない）。
 - 原因は**未特定**（推測: サーバを起動した場所が pane のシェルの cwd になり、プロンプトの長さで入力位置が変わって、1 行目にあるとき枠の上辺の当たり判定と重なる）。Web UI の既存の問題の可能性があるので follow-up に挙げる。
 
+### ラウンド 3（review の差し戻しの修正の後。HEAD = bb09bc6 と記録のコミット）
+
+review のラウンド 1（should 1・nit 5）の修正の後に、全部を流し直した。**このラウンドでは、この work に由来する失敗は発生していない。**
+
+```
+$ node -v
+v24.21.0
+$ pnpm typecheck            # 終了コード 0
+$ pnpm test
+ Test Files  379 passed (379)
+      Tests  6756 passed (6756)
+$ aidev smoke               # 別のパスの checkout（worktree）で。理由はラウンド 2 と同じ
+smoke: pass (exit 0, 10 本)
+$ pnpm exec playwright test src/specs/ask-form.spec.ts src/specs/ask-form-mobile.spec.ts
+  23 passed (43.6s)
+```
+
+```
+$ node -v
+v20.20.2
+$ pnpm test
+ FAIL  |@sodashitsu/server| src/composeServer.graph.integration.test.ts > composeServer: 連携の実行（20260927-agent-graph の 02） > 引き継ぎの間は実行を止め…
+ Test Files  1 failed | 378 passed (379)
+      Tests  1 failed | 6754 passed | 1 skipped (6756)
+```
+
+- Node 20 の 1 件は、ラウンド 1・2 と同じ（`process.execve` が無い環境の制約。この work では触っていないファイル）。
+- ラウンド 2 で 1 回出た T8 の結合テストの失敗は、review で原因の見当が付いた（テストの側の競合: 元に戻した直後、閉じかけの画面役がまだ購読者に数えられている間に受け口へ届いた質問が実際に出て待つ。`decisions.md` D8）。テストは画面役の接続の `close` を待ってから受け口を叩き、止まったら 3 秒で分かる誤りを出す形にした。その後の Node 20・24 の全体の実行（各 1 回）では出ていない。**競合を再現して確かめたわけではない**（推定のまま）。
+- E2E 全体（22 spec）と lint は、このラウンドでは流し直していない（ラウンド 2 の結果のまま。`packages/web` と E2E のほかの spec は変えていない）。
+
 ## 起動確認（smoke）
 
 `aidev smoke` を、**この work の HEAD を別のパスに checkout した worktree**（scratchpad の下。`pnpm install --offline` → smoke の 1 本目がビルドする）で、**Node v24.21.0** で走らせた。
@@ -225,7 +255,9 @@ smoke: pass (exit 0, 10 本)
 - **版をまたぐ handoff**（`pane.sock` を持たない古い版から、この版へ `soda handoff` した後の、前から動いている pane）。smoke は同じ版どうしの handoff で、古い pane の環境を模している。
 - **handoff の入れ替えの間の繋ぎ直し**（`ECONNREFUSED` で 5 秒まで）は単体テスト（残骸の socket → 置き直し）だけ。実物の handoff の最中に `sodactl ask` を打つ確認はしていない。
 - **名前付き session（`--session`）の実物**・**保存した SSH のマシンの pane の中**でのログインなしの ask。
-- **Node 20 で 1 回だけ出た T8 の結合テストの失敗**（原因未特定・再現せず）。
+- **Node 20 で 1 回だけ出た T8 の結合テストの失敗**（テストの側の競合と推定して直したが、競合そのものは再現して確かめていない）。
+- **Claude Code のサンドボックスを有効にした状態**で、pane の中から `pane.sock` に繋げるか（この環境に `socat` が無く、サンドボックスが起動しない。無効の状態では、Bash から状態ディレクトリの unix socket へ繋げることを確かめた）。
+- **実物の Claude Code ＋ ask-form** での、ログインなしの質問（動いているサーバが古い版のため。サーバをこの版にしてから確かめる）。
 - **smoke の 1 本目が `/workspaces/sodashitsu` から落ちる件**と、**E2E 全体の 18 件の失敗**は、どちらも `main` で同じように落ちる（この work の範囲外。原因は未調査）。
 - `pnpm lint` は `main` と同じ 22 errors のまま（この work の範囲外）。
 - 受け口から質問を 32 件出して総数の上限に当てる確認、`close()` が途中で投げた経路での受け口と質問の後始末の順（コードを直したが、その経路だけを起こすテストは無い）。

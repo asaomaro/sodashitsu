@@ -56,3 +56,17 @@ AC1〜AC17 は実装と `test-result.md` の判定に食い違いなし（弱い
 - [nit] handoff の結合テストの最後の `vi.waitFor` の `call` に時間切れが無く、最後の試行が待って止まると本当の原因が読めない（Node 20 で 1 回出た原因未特定の失敗は、これで説明がつく可能性——推測） — 根拠: packages/server/src/composeServer.handoff.integration.test.ts:228-249・367-378 [conv:-]
 
 範囲外（follow-up の候補。`decisions.md` D8 と PR 本文へ）: handoff で待っている質問が取り消される（既存）／`SODA_SERVER_URL` を入れられない待ち受けでは受け口があっても `caller_pane_unknown`／空の `SODACTL_URL`／受け口を置くのは復元の後なので、自動再開したエージェントがその前に打つと `/ws` へ落ちる・復元が 5 秒を超えても同じ／Claude Code のサンドボックスの中から unix socket へ繋げるかは未確認／smoke 1 本目・E2E 18 件・lint 22 件は `main` と同じ。
+
+## ラウンド 2（8e813c5。ラウンド 1 の後の差分だけ・委譲）
+
+must 0・should 0・nit 2。ラウンド 1 の 6 件は全部解消。nit 2 件はその場で直した（docs の 1 語とコメント。差し戻さない）。
+繋ぎ直しの条件（`pane_socket_busy` を返すのは要求を読む前の 1 か所だけ・上限は最初に 1 回決めて延びない）、`accepting` の前倒し（0600 になる前に見える場所へ出ない・失敗後と `close()` 後に受け付けない）、取り消し（open と listener の登録の間に隙間が無い・全経路で abort・二重の取り消しなし）に欠陥は見つからなかった。
+
+- [nit] docs の `pane_socket_busy` の項が「下の `ECONNREFUSED` の繋ぎ直し」と書くが、その説明は上にある → 直した — 根拠: docs/sodactl.md:553 [conv:-]
+- [nit] 取り消しの listener が投げると uncaughtException（`soda serve` ごと落ちる）になるが、その結果がコメントにも判断にも無い → `askOp.ts` のコメントに書いた（いまの `onClientGone` に投げる経路は無い） — 根拠: packages/server/src/panesocket/askOp.ts:28-30 [conv:-]
+
+範囲外（follow-up の候補に追加）: `soda handoff` が成功した直後は、ブラウザが繋ぎ直すまで質問を出せる画面が無く、繋ぎ直した `sodactl ask` は `unavailable`（終了コード 0）になる（呼び出し側は別の聞き方へ切り替わる）。docs に 1 文足した。`close()` が `server.close()` を待つ間に `listen()` を呼ぶと待ち受けだけ残る（いまの呼び方では起きない）。
+
+## 通算
+
+must 0・should 1・nit 7（ラウンド 1: should 1・nit 5／ラウンド 2: nit 2）。差し戻し 1 回。
