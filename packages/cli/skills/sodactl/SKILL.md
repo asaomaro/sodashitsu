@@ -154,6 +154,10 @@ JSON
 | 監督（`supervise`） | 監督役（線の先）に、配下（線の元）の pane の ID・呼び名・マシンと sodactl での操作方法を知らせる。配下が変わると知らせ直す |
 | 承認の代理（`approval`） | 配下が承認待ちになったら、監督役へ画面の末尾を知らせる。`delegate` の線だけ監督役が答えてよい。`notify`（既定）は知らせだけで、答えるのは利用者 |
 
+pane の中から `sodactl pane split`・`workspace create`・`tab create`・`agent start` で作った・起動したエージェントは、検出されると**自動でグラフに載り**、
+自分（起動した側）を監督役とする監督の線と、承認待ちを自分へ知らせるだけの線（`notify`）が引かれる。手で線を引かなくてよい。
+載らないのは、`--machine` で別のマシンに作ったとき・すでに別の監督役がいるとき。利用者が外したノードは戻らない。
+
 **監督役として知らせを受けたら**:
 
 - 配下へは `sodactl agent prompt`・`sodactl agent wait`・`sodactl agent read`・`sodactl agent send-keys` で指示・待機・読み取りをする。別のマシンの配下は
