@@ -2,6 +2,8 @@ import type { Page } from "@playwright/test";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
 import { runAsk, watchAskSubscriptions } from "../support/ask.js";
+import { watchSentAsk } from "../support/askSent.js";
+import { watchReceivedEvents } from "../support/frames.js";
 import { focusTerminal, prefixKey } from "../support/keys.js";
 
 /**
@@ -13,9 +15,16 @@ import { focusTerminal, prefixKey } from "../support/keys.js";
 
 const dialog = (page: Page) => page.locator("dialog#soda-ask-dialog[open]");
 
+/** ページごとの、ブラウザが送った `ask.answer`・`ask.cancel` の数と、受けた JSON のイベント（`openBrowser` が `goto` の前に張る）。 */
+const sentOf = new WeakMap<Page, Awaited<ReturnType<typeof watchSentAsk>>>();
+const sent = (page: Page) => sentOf.get(page)!;
+const receivedOf = new WeakMap<Page, () => { event: string }[]>();
+
 /** ブラウザを開いて「質問を出せる画面」として登録されるまで待つ。 */
 async function openBrowser(page: Page, appServer: { origin: string; token: string }) {
   const subs = await watchAskSubscriptions(page);
+  sentOf.set(page, await watchSentAsk(page));
+  receivedOf.set(page, await watchReceivedEvents(page));
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
   await subs.waitFor(1);
@@ -170,10 +179,15 @@ test("絞り込みの欄に文字があるときの Esc は絞り込みを消す
   await expect(search).toHaveValue(""); // 絞り込みが消えた
   await expect(count).toHaveText("13 件");
   await expect(dialog(page)).toBeVisible(); // ダイアログは開いたまま
-  expect(run.finished()).toBe(false); // sodactl は終わっていない
+  // 取り消しも決定も送られていない（ブラウザが送った ask.cancel・ask.answer が 0 件）。sodactl も終わっていない。
+  expect(sent(page).cancels()).toBe(0);
+  expect(sent(page).answers()).toBe(0);
+  expect(run.finished()).toBe(false);
   await expect(search).toBeFocused();
   await page.keyboard.press("Escape"); // 欄が空なので、今度は取り消し
   const r = await run.done;
+  expect(sent(page).cancels()).toBe(1); // 欄が空の Esc で初めて取り消しが送られる
+  expect(sent(page).answers()).toBe(0);
   expect(r.code).toBe(0);
   expect(r.json).toEqual({ status: "cancelled" });
   await expect(dialog(page)).toHaveCount(0);
@@ -283,6 +297,9 @@ test("題・説明・質問・選択肢・ページの題・決定ボタンの H
   await expect(page.locator('[data-ask-question="q2"] label.opt .name').first()).toHaveText(
     evil(13),
   );
+  await expect(page.locator('[data-ask-question="q2"] label.opt .desc').first()).toHaveText(
+    evil(14),
+  );
   await expect(page.locator("textarea[aria-label=補足]")).toHaveAttribute("placeholder", evil(4)); // 補足の案内（属性）も文字のまま
   // script も、src を持つ img も無い（ロケータは Shadow DOM の中も数える。ほかの質問・ページの分も DOM にある）。部品の中の style は 1 つだけ。
   expect(await page.locator("dialog#soda-ask-dialog script").count()).toBe(0);
@@ -329,9 +346,14 @@ test('paging: "many" の定義は終了コード 2 で、ダイアログは出�
   expect(bad.stderr).toContain("invalid ask spec");
   expect(bad.stdout).toBe("");
   await expect(dialog(page)).toHaveCount(0);
+  // ブラウザへ質問が届いていない: ブラウザが受けた ask.opened のフレームが 0 件（イベントは質問を開いたときに全接続へ配られる）。
+  expect(receivedOf.get(page)!().filter((e) => e.event === "ask.opened")).toEqual([]);
   // 対照: 同じ定義で paging が "auto" なら出る（誤りは paging の値だけ）。
   const ok = await runAsk(appServer, p1, { paging: "auto", questions: [q("a"), q("b")] });
   await expect(dialog(page)).toBeVisible();
+  await expect
+    .poll(() => receivedOf.get(page)!().filter((e) => e.event === "ask.opened").length)
+    .toBe(1); // 対照: 正しい定義ならブラウザが ask.opened を受ける（上の 0 件が「数えられない」ではない）
   await page.keyboard.press("Escape");
   await ok.done;
 });
