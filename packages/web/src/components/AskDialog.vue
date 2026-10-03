@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { collectAsk, initialAskState, isAskColor, type AskFormState, type AskPending, type AskQuestion } from "@sodashitsu/protocol";
+import type { AskAnswerBody, AskPending } from "@sodashitsu/protocol";
 import { paneNameOf } from "@sodashitsu/client-core";
-import { computed, inject, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, ref, toRaw, watch } from "vue";
 import { focusPaneIfShown } from "../actions/paneFocus.js";
+// 副作用: `<ask-form>` を登録する（型だけの import は消えるので、別に書く）。
+import "../ask/askFormElement.js";
+import type { AskFormElement, AskFormSubmitDetail } from "../ask/askFormElement.js";
 import { AskControllerKey, TerminalRegistryKey } from "../injection.js";
 import { useAskStore } from "../store/ask.js";
 import { useSessionStore } from "../store/session.js";
@@ -13,10 +16,14 @@ import { useViewStore } from "../store/view.js";
  * 形は他のダイアログと同じネイティブ `<dialog>` ＋ `showModal()` だが、**既存の単一の枠（`view.openDialog`）は使わない**——サーバから届く質問が、
  * 開いている設定・確認を潰さないため（`view.askOpen` で `modalOpen` に入り、キーは端末へ流れない）。
  *
- * - 最上部の「どの pane からの質問か」の行は**アプリが描く固定の行**（定義の外）。定義の文字は全て文字として出す（`v-html` を使わない）。
+ * ここは**枠だけ**（20261003-ask-form-component）。質問・選択肢・入力欄・質問の目次・下のボタン・未回答の表示・キーは、部品 `<ask-form>`
+ * （`third_party/ask-form/ask-form.js`。Shadow DOM）が描いて扱う。枠が持つのは、固定の行・開閉・フォーカス・取り消し・高さ・通信への取り次ぎ。
+ *
+ * - 最上部の「どの pane からの質問か」の行は**アプリが描く固定の行**（定義の外・部品の外）。定義の文字は部品が全て文字として出す（`innerHTML` を使わない）。
  * - 開いたときのフォーカスは操作部品ではなく見出し（打っている途中の `Space`・`Enter` が回答として効かない。APG の「内容が長いとき」と同じ）。
- * - 背景のクリックでは閉じない（選びかけの回答を守る）。`Esc`・［キャンセル］で取り消す。決定は［決定］・`Ctrl/Cmd+Enter`・1 行の入力欄の `Enter`（IME の変換中は除く）。
- * - 質問が 1 つだけ・`single`・`note: false` のときは、選択肢を**クリック・タップ・`Space`・`Enter`** で選んだときだけ確定する（矢印キーで移っただけでは確定しない）。
+ * - 背景のクリックでは閉じない（選びかけの回答を守る）。`Esc`・部品の［キャンセル］で取り消す。決定は部品（［決定］・`Ctrl/Cmd+Enter`・1 行の入力欄の `Enter`）。
+ * - 部品のキーは部品の中にフォーカスがあるときだけ効く。固定の行にフォーカスがある間の `Ctrl/Cmd+Enter`・`Alt+PageDown/Up` は、枠が部品へ取り次ぐ。
+ * - 定義（`spec`）は Vue の束縛では渡さない——入れるたびに部品が全部描き直して入力が消えるので、質問が替わったときに**命令的に 1 回だけ**入れる。
  */
 const store = useAskStore();
 const view = useViewStore();
@@ -25,44 +32,11 @@ const controller = inject(AskControllerKey, undefined);
 const registry = inject(TerminalRegistryKey, undefined);
 
 const dialogEl = ref<HTMLDialogElement | null>(null);
+const headerEl = ref<HTMLElement | null>(null);
 const titleEl = ref<HTMLElement | null>(null);
-const mainEl = ref<HTMLElement | null>(null);
+const formEl = ref<AskFormElement | null>(null);
 
 const ask = computed<AskPending | null>(() => store.current);
-const spec = computed(() => ask.value?.spec ?? null);
-
-/** 入力の状態。質問が替わるたびに既定から作り直す。 */
-const form = reactive<AskFormState>({ picked: {}, otherPicked: {}, otherText: {}, text: {}, note: "" });
-function resetForm(a: AskPending): void {
-  const fresh = initialAskState(a.spec);
-  form.picked = fresh.picked;
-  form.otherPicked = fresh.otherPicked;
-  form.otherText = fresh.otherText;
-  form.text = fresh.text;
-  form.note = "";
-  missing.value = new Set();
-  statusWarn.value = false;
-  sending.value = false;
-}
-
-const missing = ref<Set<string>>(new Set());
-const statusWarn = ref(false);
-const sending = ref(false);
-
-const collected = computed(() => (spec.value ? collectAsk(spec.value, form) : { answers: {}, custom: [], visible: [], lacking: [] as string[] }));
-/** 表示する質問と、振り直した番号。 */
-const shown = computed(() => {
-  const s = spec.value;
-  if (!s) return [] as { q: AskQuestion; index: number; no: number }[];
-  const visible = new Set(collected.value.visible);
-  let no = 0;
-  return s.questions.flatMap((q, index) => (visible.has(q.id) ? [{ q, index, no: ++no }] : []));
-});
-const statusText = computed(() => {
-  const n = collected.value.lacking.length;
-  if (statusWarn.value && n > 0) return `未回答 ${n} 件 — 選んでから決定してください`;
-  return n > 0 ? `未回答 ${n} 件` : "すべて回答済み";
-});
 
 /** 「どの pane からの質問か」（定義の外。pane の名前・workspace・tab）。 */
 const origin = computed(() => {
@@ -76,23 +50,20 @@ const origin = computed(() => {
   return `pane「${name}」${where.length > 0 ? `（${where.join("／")}）` : ""}のプログラムからの質問`;
 });
 
-/** 質問が 1 つだけ・`single`・補足なし（選んだ時点で確定する形）。 */
-const instant = computed(() => {
-  const s = spec.value;
-  return s !== null && s.questions.length === 1 && s.questions[0]!.type === "single" && !s.note;
-});
-
 // --- 開閉・フォーカス ------------------------------------------------------------------
 
 let previousFocus: Element | null = null;
 let previousPaneId: string | null = null;
+/** 部品が最後に答えた「中身の高さ」。0 は「大きさが取れていない」（描けなかった・単体テストの環境）。下の `watch` は `immediate` なので、その前に置く。 */
+let contentHeight = 0;
+/** いま部品に入っている定義の質問（`askId`）。部品が遅れて出す `ask-unsupported` を、その時点の先頭ではなく、定義を入れた質問に結び付ける。 */
+let loadedAskId: string | null = null;
 
 watch(
   () => ask.value?.askId ?? null,
   (id, oldId) => {
     const a = ask.value;
     if (a && id !== oldId) {
-      resetForm(a);
       void nextTick(() => {
         const el = dialogEl.value;
         if (!el) return;
@@ -102,8 +73,10 @@ watch(
         if (!el.open) el.showModal();
         view.setAskOpen(true);
         previousPaneId = a.paneId;
-        if (mainEl.value) mainEl.value.scrollTop = 0;
         titleEl.value?.focus();
+        // 開いた後（大きさが取れるようになってから）に入れる。同じ `askId` のままの再描画ではここを通らない＝入力が消えない。
+        window.addEventListener("resize", onResize);
+        loadSpec(a);
       });
     } else if (!a) {
       closeDialog();
@@ -114,6 +87,9 @@ watch(
 );
 
 function closeDialog(): void {
+  window.removeEventListener("resize", onResize);
+  contentHeight = 0;
+  loadedAskId = null; // 質問が無くなった後に遅れて届く ask-unsupported で、古い質問を取り消さない
   view.setAskOpen(false);
   dialogEl.value?.close();
   const paneId = previousPaneId;
@@ -146,84 +122,108 @@ function restoreFocus(paneId: string | null, back: Element | null): void {
   if (back instanceof HTMLElement && back.isConnected) back.focus();
 }
 
-onBeforeUnmount(() => view.setAskOpen(false));
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", onResize);
+  view.setAskOpen(false);
+});
 
-// --- 操作 ------------------------------------------------------------------------------
+// --- 部品へ定義を入れる・高さ ----------------------------------------------------------
 
-function isChecked(q: AskQuestion, value: string): boolean {
-  return (form.picked[q.id] ?? []).includes(value);
+/**
+ * 部品に与えられる最大の高さ。ダイアログは `max-height: calc(100% - 16px)`（枠線を含む）で、その中に固定の行と部品が縦に並ぶ。
+ */
+function maxFormHeight(): number {
+  const el = dialogEl.value;
+  if (!el) return 0;
+  const style = getComputedStyle(el);
+  const border = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+  const header = headerEl.value?.getBoundingClientRect().height ?? 0;
+  return Math.max(0, Math.floor(window.innerHeight - 16 - border - header));
 }
-function pick(q: AskQuestion, value: string, on = true): void {
-  if (q.type === "multi") {
-    const cur = new Set(form.picked[q.id] ?? []);
-    if (on) cur.add(value);
-    else cur.delete(value);
-    form.picked[q.id] = q.options.map((o) => o.value).filter((v) => cur.has(v));
-  } else {
-    form.picked[q.id] = [value];
-    form.otherPicked[q.id] = false;
-  }
-}
-function pickOther(q: AskQuestion, on = true): void {
-  form.otherPicked[q.id] = on;
-  if (on && q.type === "single") form.picked[q.id] = [];
-}
-function onOtherInput(q: AskQuestion, ev: Event): void {
-  form.otherText[q.id] = (ev.target as HTMLInputElement).value;
-  if (form.otherText[q.id] !== "") pickOther(q);
+
+/** 部品の高さを「中身」に合わせる（最大は超えない）。大きさが取れていなければ与えた高さを消し、中身に任せる。 */
+function applyHeight(): void {
+  const el = formEl.value;
+  if (!el) return;
+  if (contentHeight > 0) el.style.height = `${Math.min(maxFormHeight(), contentHeight)}px`;
+  else el.style.removeProperty("height");
 }
 
 /**
- * 直前の操作がポインタ（マウス・タッチ）か。選択肢は `<label>` のカード全体なので、クリックは label から input へ転送された合成の `click` になり、`detail` では
- * 見分けられない——`pointerdown` と `keydown` の新しいほうで覚える。
+ * 目次が出ているとき、その幅の分だけダイアログの幅を広げる（質問の並びの幅を 720px のときと同じに保つ。画面の幅 − 16px は超えない。CSS 側の `min()`）。
+ * 目次が出ていない（出さない定義・幅 768px 未満で部品が隠している）ときは 0。部品の `indexWidth` は、目次を出すかを決めた後（`relayout()` の後）に読む。
  */
-let lastInputWasPointer = false;
-function onPointerdown(): void {
-  lastInputWasPointer = true;
-}
-/** 選択肢が選ばれた（`change`）。即確定の形で、直前の操作がポインタなら確定する（矢印キーで移っただけの `change` は確定しない）。 */
-function onOptionChange(q: AskQuestion, value: string, ev: Event): void {
-  const checked = (ev.target as HTMLInputElement).checked;
-  pick(q, value, checked);
-  if (q.type === "single" && checked && instant.value && lastInputWasPointer) void submit();
-}
-/** 選択肢で `Space`・`Enter`。即確定の形なら選んで確定する。 */
-function onOptionKeydown(q: AskQuestion, value: string, ev: KeyboardEvent): void {
-  if (ev.isComposing || ev.keyCode === 229) return;
-  if (!instant.value || q.type !== "single") return;
-  if (ev.key === " " || ev.key === "Enter") {
-    if (ev.ctrlKey || ev.metaKey) return; // Ctrl/Cmd+Enter は通常の決定
-    ev.preventDefault();
-    pick(q, value);
-    void submit();
-  }
+function applyWidth(): void {
+  const el = formEl.value;
+  const dlg = dialogEl.value;
+  if (!el || !dlg) return;
+  const w = el.indexWidth;
+  if (w > 0) dlg.style.setProperty("--ask-index-width", `${w}px`);
+  else dlg.style.removeProperty("--ask-index-width");
 }
 
-async function submit(): Promise<void> {
-  const a = ask.value;
-  if (!a || !spec.value || sending.value) return;
-  const c = collected.value;
-  if (c.lacking.length > 0) {
-    missing.value = new Set(c.lacking);
-    statusWarn.value = true;
-    const first = c.lacking[0]!;
-    const index = spec.value.questions.findIndex((q) => q.id === first);
-    void nextTick(() => document.getElementById(`ask-q-${index}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" }));
+/**
+ * 新しい質問の定義を部品へ入れる（ask-form の単独ウィンドウ `form.html` と同じ手順）: 先に最大の高さを与える → `spec`（部品は高さが付いていれば、
+ * 入れた直後に目次を出すかを決める）→ `relayout()`（高さがまだ 0 だった場合の保険。同じ高さなので決め方は変わらない）→ 目次の幅の分だけ幅を広げる
+ * → 広げた幅での中身の高さに合わせる（幅が変わると文の折り返しで高さが変わるので、幅を先に決める）。
+ * 渡すのは写し——部品は定義に書き込む（`_image` 等）ので、store の定義（リアクティブ）をそのまま渡さない。
+ */
+function loadSpec(a: AskPending): void {
+  const el = formEl.value;
+  if (!el) return;
+  contentHeight = 0;
+  loadedAskId = a.askId;
+  el.style.height = `${maxFormHeight()}px`;
+  el.busy = false;
+  // 前の質問で広げた幅を外してから入れる——部品は入れた直後に、今の幅で目次を出すかを決める（広いままだと、収まるとみなして出さない）
+  dialogEl.value?.style.removeProperty("--ask-index-width");
+  try {
+    el.spec = structuredClone(toRaw(a.spec));
+  } catch (err) {
+    // 起きない見込み（定義は JSON 由来）。前の質問の中身を残さず、描けない定義と同じに扱う。
+    el.spec = null;
+    applyHeight();
+    unsupported(a.askId, `clone failed: ${String(err)}`);
     return;
   }
-  if (!controller) return;
-  sending.value = true;
-  const body: { answers: typeof c.answers; custom?: string[]; note?: string } = { answers: c.answers };
-  if (c.custom.length > 0) body.custom = c.custom;
-  if (c.note !== undefined) body.note = c.note;
-  const ok = await controller.answer(a.askId, body);
-  if (!ok && ask.value?.askId === a.askId) sending.value = false;
+  el.relayout();
+  applyWidth();
+  contentHeight = el.contentHeight;
+  applyHeight();
 }
 
+/**
+ * 画面の大きさが変わった。幅・高さを当て直すだけ（目次を出すかは決め直さない——入力中の欄を見失わせない、部品の決まり）。
+ * 目次が出ているかは、部品が画面の幅（768px 未満で隠す）で決めるので、幅は読み直す。
+ */
+function onResize(): void {
+  applyWidth();
+  if (contentHeight > 0 && formEl.value) contentHeight = formEl.value.contentHeight;
+  applyHeight();
+}
+
+// --- 操作 ------------------------------------------------------------------------------
+
+/** 部品の決定（`ask-submit`。未回答があるときは出ない）。回答を送り、送れなかったらもう一度決定できるように戻す（知らせるのは `AskController` のトースト）。 */
+async function onSubmit(ev: Event): Promise<void> {
+  const a = ask.value;
+  const el = formEl.value;
+  if (!a || !el || !controller) return;
+  // 部品は ask-form の単独ウィンドウと共用で、`detail` にはここで使わない項目（`edited` 等）が入りうる。サーバが知っている項目だけを送る。
+  const detail = (ev as CustomEvent<AskFormSubmitDetail>).detail;
+  const body: AskAnswerBody = { answers: detail.answers };
+  if (detail.custom !== undefined) body.custom = detail.custom;
+  if (detail.note !== undefined) body.note = detail.note;
+  el.busy = true;
+  const ok = await controller.answer(a.askId, body);
+  if (!ok && ask.value?.askId === a.askId) el.busy = false;
+}
+
+/** 取り消す（部品の［キャンセル］・`Esc`）。送信中でも取り消せる（`busy` を見ない）。 */
 async function cancel(): Promise<void> {
   const a = ask.value;
   if (!a || !controller) return;
-  sending.value = true;
+  if (formEl.value) formEl.value.busy = true;
   await controller.cancel(a.askId);
 }
 
@@ -232,106 +232,49 @@ function onNativeCancel(ev: Event): void {
   void cancel();
 }
 
+/**
+ * 部品が描けない（`ask-unsupported`。検査済みの定義では、部品の中の例外でしか起きない）。部品にはボタンが無く利用者は答えられないので、
+ * 取り消して知らせる（sodactl には `cancelled`）。理由は定義に由来する文字列（質問の id・型の名前・例外の文）を含むので、画面には出さない。
+ * 部品はこのイベントをマイクロタスクで遅らせて出すので、届いた時点の先頭の質問ではなく、**定義を入れた質問**を取り消す
+ * （その間に先頭が替わっていても、描けなかった質問でないものを取り消さない）。
+ */
+function unsupported(askId: string, reason: string): void {
+  console.warn(`[ask] cannot render the form (askId=${askId}): ${reason}`);
+  view.toast("このフォームは、この画面では出せません（質問は取り消しました）");
+  void controller?.cancel(askId);
+}
+function onUnsupported(ev: Event): void {
+  if (loadedAskId === null) return;
+  unsupported(loadedAskId, String((ev as CustomEvent<{ reason?: unknown }>).detail?.reason));
+}
+
+/**
+ * 枠が部品へ取り次ぐキー。部品の中のキーは部品が扱い、扱ったものは外へ流さない（ここへは届かない）。ここで扱うのは、**固定の行にフォーカスがあるとき**
+ * （開いた直後）だけ——部品が扱わずに流したキー（`target` は `<ask-form>`）や、Teleport でこの dialog の中へ移されたトースト・再接続の表示のキーは扱わない
+ * （トーストのボタンで Ctrl+Enter を押しても決定しない）。
+ */
 function onKeydown(ev: KeyboardEvent): void {
-  lastInputWasPointer = false;
-  // Teleport でこの dialog の中へ移されたトースト・再接続の表示のキーは扱わない（トーストのボタンで Ctrl+Enter を押しても決定しない）。
-  if (!(ev.target as HTMLElement | null)?.closest?.(".ask-header, .ask-main, .ask-footer")) return;
+  const el = formEl.value;
+  if (!el || !(ev.target as HTMLElement | null)?.closest?.(".ask-header")) return;
   if (ev.isComposing || ev.keyCode === 229) return;
   if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
     ev.preventDefault();
-    void submit();
-  } else if (ev.key === "Enter" && !ev.shiftKey && (ev.target as HTMLElement | null)?.matches?.("input[type=text]")) {
+    el.submit();
+  } else if (ev.altKey && (ev.key === "PageDown" || ev.key === "PageUp")) {
+    // 部品の公開のメソッドで次・前の質問へ移る（端の質問では何も起きない。表示条件で隠れている質問は部品が飛ばす）。
     ev.preventDefault();
-    void submit();
+    el.step(ev.key === "PageUp" ? -1 : 1);
   }
-}
-
-/** 色の帯（色として妥当なものだけ）。 */
-function swatches(colors: readonly string[] | undefined): string[] {
-  return (colors ?? []).filter(isAskColor);
-}
-function groupName(index: number): string {
-  return `ask-${ask.value?.askId ?? ""}-${index}`;
 }
 </script>
 
 <template>
-  <dialog id="soda-ask-dialog" ref="dialogEl" class="ask-dialog" aria-labelledby="ask-origin" @cancel="onNativeCancel" @keydown="onKeydown" @pointerdown="onPointerdown">
-    <template v-if="ask && spec">
-      <header class="ask-header">
+  <dialog id="soda-ask-dialog" ref="dialogEl" class="ask-dialog" aria-labelledby="ask-origin" @cancel="onNativeCancel" @keydown="onKeydown">
+    <template v-if="ask">
+      <header ref="headerEl" class="ask-header">
         <h2 id="ask-origin" ref="titleEl" class="ask-origin" tabindex="-1" data-ask-origin>{{ origin }}</h2>
       </header>
-      <div ref="mainEl" class="ask-main" data-ask-main>
-        <h3 class="ask-title" data-ask-title>{{ spec.title }}</h3>
-        <p v-if="spec.intro" class="ask-intro">{{ spec.intro }}</p>
-        <fieldset
-          v-for="item in shown"
-          :id="`ask-q-${item.index}`"
-          :key="item.q.id"
-          class="ask-q"
-          :class="{ 'ask-missing': missing.has(item.q.id) && collected.lacking.includes(item.q.id) }"
-          data-ask-question
-        >
-          <legend class="ask-legend">
-            <span class="ask-num">{{ item.no }}</span> {{ item.q.label }}
-            <span class="ask-kind">{{ item.q.type === "multi" ? "複数選べます" : item.q.type === "text" ? "自由記述" : "1 つ選ぶ" }}</span>
-          </legend>
-          <p v-if="item.q.help" class="ask-help">{{ item.q.help }}</p>
-          <template v-if="item.q.type === 'text'">
-            <textarea v-if="item.q.multiline" v-model="form.text[item.q.id]" class="ask-text" rows="4" :placeholder="item.q.placeholder" :maxlength="10000" :aria-label="item.q.label" />
-            <input v-else v-model="form.text[item.q.id]" type="text" class="ask-text" :placeholder="item.q.placeholder" :maxlength="10000" :aria-label="item.q.label" />
-          </template>
-          <div v-else class="ask-options" :style="{ '--ask-min': `${item.q.minWidth ?? 180}px` }">
-            <label v-for="o in item.q.options" :key="o.value" class="ask-opt">
-              <input
-                :type="item.q.type === 'multi' ? 'checkbox' : 'radio'"
-                :name="groupName(item.index)"
-                :value="o.value"
-                :checked="isChecked(item.q, o.value) && !(item.q.type === 'single' && form.otherPicked[item.q.id])"
-                @change="onOptionChange(item.q, o.value, $event)"
-                @keydown="onOptionKeydown(item.q, o.value, $event)"
-              />
-              <span class="ask-opt-body">
-                <span class="ask-opt-name">{{ o.label }}<span v-if="o.recommended" class="ask-rec">おすすめ</span></span>
-                <span v-if="o.desc" class="ask-opt-desc">{{ o.desc }}</span>
-                <span v-if="swatches(o.colors).length > 0" class="ask-swatches" aria-hidden="true">
-                  <span v-for="(c, i) in swatches(o.colors)" :key="i" class="ask-swatch" :style="{ background: c }" />
-                </span>
-              </span>
-            </label>
-            <label v-if="item.q.allowOther" class="ask-opt ask-other">
-              <input
-                :type="item.q.type === 'multi' ? 'checkbox' : 'radio'"
-                :name="groupName(item.index)"
-                :checked="form.otherPicked[item.q.id] === true"
-                @change="pickOther(item.q, ($event.target as HTMLInputElement).checked)"
-              />
-              <span class="ask-opt-body">
-                <span class="ask-opt-name">{{ item.q.otherLabel ?? "その他" }}</span>
-                <input
-                  type="text"
-                  class="ask-other-text"
-                  :value="form.otherText[item.q.id] ?? ''"
-                  :placeholder="item.q.otherPlaceholder ?? '自由に入力'"
-                  :maxlength="10000"
-                  :aria-label="`${item.q.label}（${item.q.otherLabel ?? 'その他'}）`"
-                  @input="onOtherInput(item.q, $event)"
-                  @focus="pickOther(item.q)"
-                />
-              </span>
-            </label>
-          </div>
-        </fieldset>
-        <fieldset v-if="spec.note" class="ask-q ask-note" data-ask-note>
-          <legend class="ask-legend">補足 <span class="ask-kind">任意・選択肢に無い希望があれば</span></legend>
-          <textarea v-model="form.note" class="ask-text" rows="3" :placeholder="spec.notePlaceholder" :maxlength="10000" aria-label="補足" />
-        </fieldset>
-      </div>
-      <footer class="ask-footer">
-        <span class="ask-status" :class="{ 'ask-warn': statusWarn && collected.lacking.length > 0 }" role="status" data-ask-status>{{ statusText }}</span>
-        <button type="button" class="ask-btn" data-ask-cancel :disabled="sending" @click="cancel">キャンセル</button>
-        <button type="button" class="ask-btn ask-primary" data-ask-submit :disabled="sending" @click="submit">{{ spec.submit }}</button>
-      </footer>
+      <ask-form ref="formEl" class="ask-form" @ask-submit="onSubmit" @ask-cancel="cancel" @ask-unsupported="onUnsupported" />
     </template>
   </dialog>
 </template>
@@ -339,7 +282,8 @@ function groupName(index: number): string {
 <style scoped>
 .ask-dialog {
   box-sizing: border-box;
-  width: min(720px, calc(100% - 16px));
+  /* 目次が出ているとき（`applyWidth`）は、その幅の分だけ広げる。画面の幅 − 16px は超えない。 */
+  width: min(calc(720px + var(--ask-index-width, 0px)), calc(100% - 16px));
   max-height: calc(100% - 16px);
   padding: 0;
   background: var(--soda-menu-bg, #282a36);
@@ -371,154 +315,22 @@ function groupName(index: number): string {
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
-.ask-main {
+/* 部品（`<ask-form>`）。中身に合わせて伸び、枠の高さの上限に当たったら部品の中がスクロールする。配色は部品の 7 つの変数にテーマの変数を割り当てる
+   （任意の 3 つは渡さない——部品が `color-mix` で作る）。 */
+.ask-form {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 0.8em 1em;
-}
-.ask-title {
-  margin: 0 0 0.3em;
-  font-size: 1.1em;
-  overflow-wrap: anywhere;
-}
-.ask-intro,
-.ask-help {
-  margin: 0 0 0.6em;
-  opacity: 0.85;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.ask-q {
-  margin: 0 0 0.8em;
-  border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
-  padding: 0.4em 0.8em 0.7em;
-  min-width: 0;
-}
-.ask-q.ask-missing {
-  border-color: var(--soda-error-fg, #ff5555);
-}
-.ask-legend {
-  padding: 0 0.3em;
-  font-weight: bold;
-  overflow-wrap: anywhere;
-}
-.ask-num {
-  display: inline-block;
-  min-width: 1.4em;
-  text-align: center;
-  border-radius: 999px;
-  background: var(--soda-accent, #6070a1);
-  color: var(--soda-accent-fg, #f8f8f2);
-  font-size: 0.85em;
-}
-.ask-kind {
-  margin-left: 0.5em;
-  font-weight: normal;
-  font-size: 0.8em;
-  opacity: 0.7;
-}
-.ask-options {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(var(--ask-min, 180px), 100%), 1fr));
-  gap: 0.4em;
-}
-.ask-opt {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5em;
-  min-height: 2rem;
-  padding: 0.3em 0.5em;
-  border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
-  cursor: pointer;
-}
-.ask-opt:has(input:checked) {
-  border-color: var(--soda-accent, #6070a1);
-  background: color-mix(in srgb, var(--soda-accent, #6070a1) 25%, transparent);
-}
-.ask-opt-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15em;
-  min-width: 0;
-  flex: 1;
-}
-.ask-opt-name {
-  overflow-wrap: anywhere;
-}
-.ask-rec {
-  margin-left: 0.5em;
-  font-size: 0.75em;
-  padding: 0 0.4em;
-  border-radius: 3px;
-  background: var(--soda-accent, #6070a1);
-  color: var(--soda-accent-fg, #f8f8f2);
-}
-.ask-opt-desc {
-  font-size: 0.8em;
-  opacity: 0.75;
-  overflow-wrap: anywhere;
-}
-.ask-swatches {
-  display: flex;
-  height: 0.6em;
-  border-radius: 2px;
-  overflow: hidden;
-}
-.ask-swatch {
-  flex: 1;
-}
-.ask-text,
-.ask-other-text {
-  box-sizing: border-box;
-  width: 100%;
-  font: inherit;
-  /* iOS Safari は 16px 未満の入力欄へフォーカスすると画面を拡大する */
-  font-size: max(16px, 1em);
-}
-.ask-note {
-  margin-bottom: 0;
-}
-.ask-footer {
-  flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.6em;
-  padding: 0.6em 1em;
-  border-top: 1px solid var(--soda-menu-border, #44475a);
-  background: var(--soda-menu-bg, #282a36);
-}
-.ask-status {
-  margin-right: auto;
-  font-size: 0.85em;
-  opacity: 0.85;
-}
-.ask-status.ask-warn {
-  color: var(--soda-warn-fg, #ffb86c);
-  opacity: 1;
-}
-.ask-btn {
-  font: inherit;
-  min-height: 2rem;
-  padding: 0 1em;
-}
-.ask-primary {
-  background: var(--soda-accent, #6070a1);
-  color: var(--soda-accent-fg, #f8f8f2);
-  border: 1px solid transparent;
-  border-radius: 4px;
+  --ask-bg: var(--soda-menu-bg, #282a36);
+  --ask-fg: var(--soda-fg, #f8f8f2);
+  --ask-border: var(--soda-menu-border, #44475a);
+  --ask-accent: var(--soda-accent, #6070a1);
+  --ask-accent-fg: var(--soda-accent-fg, #f8f8f2);
+  --ask-error: var(--soda-error-fg, #ff5555);
+  --ask-warn: var(--soda-warn-fg, #ffb86c);
 }
 @media (max-width: 767px) {
   .ask-dialog {
     width: calc(100% - 16px);
-  }
-  .ask-options {
-    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -139,6 +139,51 @@ describe("ask.*（実物の /ws。20261002-sodactl-ask）", () => {
     await expect(cli2.request("ask.open", { paneId, spec: { questions: [] }, timeoutMs: 20_000 })).rejects.toMatchObject({ code: "invalid_ask_spec" });
   });
 
+  // 古い sodactl × 新しいサーバ（20261003-ask-form-component の AC13）: 古い sodactl は `page`・`paging` を知らない項目として検査を通し、
+  // **読んだままの定義**を送る。検査して画面へ配るのはサーバなので、項目は画面に届き（目次に出る）、不正な値はサーバが断る。
+  it("読んだままの定義の page・paging・filter・showValue は、画面が受け取る定義（ask.get・ask.subscribe）に入る。不正な paging・page は invalid_ask_spec", async () => {
+    const { paneId, open } = await start();
+    const cli = await open("external");
+    const browser = await open("desktop");
+    await browser.request("ask.subscribe", {});
+    const raw = {
+      paging: 2,
+      future: 1,
+      questions: [
+        { id: "a", label: "A", page: "基本", options: ["x", { value: "y", label: "ワイ" }], filter: false, showValue: false, future: 2 },
+        { id: "b", label: "B", type: "multi", page: "", options: ["p"], showIf: {} },
+        { id: "t", label: "T", type: "text", page: null, filter: true },
+      ],
+    };
+    // 不正な値は、質問を待たせずに断る（その pane は空いたまま＝下の ask.open が ask_busy にならない）
+    for (const bad of [{ ...raw, paging: "many" }, { ...raw, paging: 0 }, { ...raw, paging: 1.5 }, { ...raw, questions: [{ id: "a", label: "A", page: 2, options: ["x"] }] }]) {
+      await expect(cli.request("ask.open", { paneId, spec: bad, timeoutMs: 20_000 })).rejects.toMatchObject({ code: "invalid_ask_spec" });
+    }
+    expect(browser.events.filter((e) => e.event === "ask.opened")).toEqual([]);
+
+    const result = cli.request("ask.open", { paneId, spec: raw, timeoutMs: 20_000 });
+    const askId = (await browser.waitForEvent("ask.opened"))["askId"] as string;
+    const want = {
+      title: "質問",
+      submit: "決定",
+      note: true,
+      paging: 2,
+      questions: [
+        { id: "a", label: "A", type: "single", page: "基本", filter: false, showValue: false, options: [{ value: "x", label: "x" }, { value: "y", label: "ワイ" }], allowOther: false, required: false, multiline: false },
+        { id: "b", label: "B", type: "multi", page: "", options: [{ value: "p", label: "p" }], allowOther: false, required: false, multiline: false },
+        { id: "t", label: "T", type: "text", options: [], allowOther: false, required: false, multiline: false },
+      ],
+    };
+    // 完全一致で見る: 通す項目は入り、知らない項目（future）・null の page・text の filter・空の showIf は入らない
+    expect(await browser.request("ask.get", { askId })).toEqual({ askId, paneId, spec: want });
+    // 後から来た画面（再読み込み・別の端末）も、同じ定義を受け取る
+    const late = await open("mobile");
+    expect(await late.request("ask.subscribe", {})).toEqual({ asks: [{ askId, paneId, spec: want }] });
+    // ページをまたいだ回答を、今までどおり受け取れる
+    await late.request("ask.answer", { askId, answers: { a: "y", b: ["p"], t: "" } });
+    expect(await result).toEqual({ status: "answered", answers: { a: "y", b: ["p"], t: "" } });
+  });
+
   it("再接続した画面は ask.subscribe で待っている質問を受け取り、答えられる（出し直し）", async () => {
     const { paneId, open } = await start();
     const cli = await open("external");

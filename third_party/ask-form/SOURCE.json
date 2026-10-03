@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/asaomaro/public_docs",
+  "commit": "690d26d60720aca2144fc85b1a8a80053e4ab7ee",
+  "path": "docs/ClaudeCode/skills/other/ask-form",
+  "retrieved": "2026-10-03",
+  "version": "1.2.2",
+  "files": {
+    "ask-form.js": "2415a785c98eef80d01d855f59faefe420878771e0eb948a0c5f4302d1cb91b6",
+    "fixtures/normalize.json": "b09c2c6e0447ea337595b9a805657f8ce967e9f37c60c394fa9e4f171b6d930d",
+    "fixtures/collect.json": "9c5702e1b4727950bfbadeb5a73223489b299c065cd534eae6aeab5a64d0945a"
+  }
+}

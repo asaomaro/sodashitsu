@@ -26,6 +26,12 @@ const bad = (raw: unknown): string => {
   if (r.ok) throw new Error("expected a failure");
   return r.message;
 };
+/** 誤りの分類（共通の試験データの `reasons` の名前。文言ではなくこれで比べる）。 */
+const reason = (raw: unknown): string => {
+  const r = normalizeAskSpec(raw);
+  if (r.ok) throw new Error("expected a failure");
+  return r.reason;
+};
 const q = (extra: Record<string, unknown> = {}) => ({ id: "a", label: "A", options: ["x", "y"], ...extra });
 
 describe("normalizeAskSpec — 誤り", () => {
@@ -79,9 +85,10 @@ describe("normalizeAskSpec — 誤り", () => {
     expect(s2.questions[1]!.default).toEqual(["x"]);
     expect(s2.questions[1]!.showIf).toEqual({ a: ["x"] });
   });
-  it("showIf: null・空の配列は無いものとして扱う（ask-form と同じ）", () => {
+  it("showIf: null・空の配列・空のオブジェクトは無いものとして扱う（ask-form と同じ。項目ごと落とす）", () => {
     expect(spec({ questions: [q({ showIf: null })] }).questions[0]).not.toHaveProperty("showIf");
     expect(spec({ questions: [q({ showIf: [] })] }).questions[0]).not.toHaveProperty("showIf");
+    expect(spec({ questions: [q({ showIf: {} })] }).questions[0]).not.toHaveProperty("showIf");
   });
   it("text の default が回答の上限を超える定義は誤り（触らずに決定しても送れなくなるため）。id・value は 200 文字（コードポイント）まで", () => {
     expect(bad({ questions: [{ id: "t", label: "T", type: "text", default: "x".repeat(10_001) }] })).toMatch(/default/);
@@ -90,6 +97,96 @@ describe("normalizeAskSpec — 誤り", () => {
     const id = "😀".repeat(200);
     expect(spec({ questions: [q({ id })] }).questions[0]!.id).toBe(id);
     expect(bad({ questions: [q({ id: "😀".repeat(201) })] })).toMatch(/id is longer/);
+  });
+  it("誤りには分類（reason）が付く。上限の超過は全部 too_large・試験データに名前の無い誤りは invalid", () => {
+    for (const raw of [null, 1, "x", []]) expect(reason(raw)).toBe("not_object");
+    for (const raw of [{}, { questions: "x" }, { questions: [] }]) expect(reason(raw)).toBe("questions_empty");
+    expect(reason({ questions: [{ label: "A", options: ["x"] }] })).toBe("id_label_required");
+    expect(reason({ questions: [{ id: "a", label: "", options: ["x"] }] })).toBe("id_label_required");
+    expect(reason({ questions: [q(), q()] })).toBe("id_duplicate");
+    expect(reason({ questions: [{ id: "a", label: "A" }] })).toBe("options_empty");
+    expect(reason({ questions: [q({ options: [] })] })).toBe("options_empty");
+    expect(reason({ questions: [q({ options: [{ label: "L" }] })] })).toBe("option_value_required");
+    expect(reason({ questions: [q({ options: ["x", "x"] })] })).toBe("option_value_duplicate");
+    expect(reason({ questions: [q({ showIf: { nothing: "x" } })] })).toBe("showif_unknown_id");
+    expect(reason(JSON.parse('{"questions":[{"id":"a","label":"A","options":["x"],"showIf":{"__proto__":["x"]}}]}'))).toBe("showif_unknown_id");
+    expect(reason({ questions: [q({ showIf: "x" })] })).toBe("showif_invalid");
+    // 対応していない型（unsupportedType と一緒に返る）
+    for (const type of ["edit", "rank", "table", "slider"]) {
+      expect(normalizeAskSpec({ questions: [q({ type })] })).toMatchObject({ ok: false, reason: "unsupported_type", unsupportedType: type });
+    }
+    // 上限
+    expect(reason({ questions: [q({ help: "x".repeat(ASK_SPEC_MAX_BYTES) })] })).toBe("too_large");
+    expect(reason({ questions: Array.from({ length: ASK_QUESTIONS_MAX + 1 }, (_, i) => q({ id: `q${i}` })) })).toBe("too_large");
+    expect(reason({ questions: [q({ options: Array.from({ length: ASK_OPTIONS_MAX + 1 }, (_, i) => `v${i}`) })] })).toBe("too_large");
+    expect(reason({ title: "x".repeat(501), questions: [q()] })).toBe("too_large");
+    expect(reason({ note: "x".repeat(501), questions: [q()] })).toBe("too_large");
+    expect(reason({ questions: [q({ id: "x".repeat(201) })] })).toBe("too_large");
+    expect(reason({ questions: [q({ label: "x".repeat(501) })] })).toBe("too_large");
+    expect(reason({ questions: [q({ help: "x".repeat(4001) })] })).toBe("too_large");
+    expect(reason({ questions: [q({ options: ["x".repeat(201)] })] })).toBe("too_large");
+    expect(reason({ questions: [q({ options: [{ value: "v", desc: "x".repeat(4001) }] })] })).toBe("too_large");
+    expect(reason({ questions: [{ id: "t", label: "T", type: "text", default: "x".repeat(10_001) }] })).toBe("too_large");
+    // Sodashitsu だけの誤り
+    expect(reason({ questions: ["x"] })).toBe("invalid");
+    expect(reason({ questions: [q({ type: 5 })] })).toBe("invalid");
+    expect(reason(JSON.parse('{"questions":[{"id":"__proto__","label":"A","options":["x"]}]}'))).toBe("invalid");
+  });
+  it("paging: \"auto\"・真偽・1 以上の整数は通る。それ以外は paging_invalid。無い・null は項目なし（既定を埋めない）", () => {
+    for (const paging of ["auto", true, false, 1, 3]) expect(spec({ paging, questions: [q()] }).paging).toBe(paging);
+    expect(spec({ questions: [q()] })).not.toHaveProperty("paging");
+    expect(spec({ paging: null, questions: [q()] })).not.toHaveProperty("paging");
+    for (const paging of [0, -1, 1.5, "many", "3", "", [], {}, Number.NaN]) {
+      const r = normalizeAskSpec({ paging, questions: [q()] });
+      expect(r, JSON.stringify(paging)).toMatchObject({ ok: false, reason: "paging_invalid" });
+      expect(r).not.toHaveProperty("unsupportedType");
+    }
+    expect(bad({ paging: "many", questions: [q()] })).toMatch(/paging/);
+  });
+  it("page: 文字列（空文字も）は通る。null は項目なし。文字列でなければ page_invalid・501 文字は too_large", () => {
+    expect(spec({ questions: [q({ page: "基本" })] }).questions[0]!.page).toBe("基本");
+    expect(spec({ questions: [q({ page: "" })] }).questions[0]!.page).toBe("");
+    expect(spec({ questions: [q({ page: "x".repeat(500) })] }).questions[0]!.page).toHaveLength(500);
+    expect(spec({ questions: [q({ page: null })] }).questions[0]).not.toHaveProperty("page");
+    expect(spec({ questions: [q()] }).questions[0]).not.toHaveProperty("page");
+    // text の質問にも付く
+    expect(spec({ questions: [{ id: "t", label: "T", type: "text", page: "記入" }] }).questions[0]!.page).toBe("記入");
+    for (const page of [2, true, ["a"], {}]) expect(reason({ questions: [q({ page })] }), JSON.stringify(page)).toBe("page_invalid");
+    expect(reason({ questions: [q({ page: "x".repeat(501) })] })).toBe("too_large");
+    expect(bad({ questions: [q({ page: 2 })] })).toMatch(/page must be a string/);
+  });
+  it("page は type より前に見る: 対応していない型の質問の不正な page も誤り（unavailable にしない）。id の重複はそれより前", () => {
+    const r = normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "edit", page: 2 }] });
+    expect(r).toMatchObject({ ok: false, reason: "page_invalid" });
+    expect(r).not.toHaveProperty("unsupportedType");
+    expect(reason({ questions: [{ id: "e", label: "E", type: "edit", page: "x".repeat(501) }] })).toBe("too_large");
+    // page が正しければ、今までどおり対応していない型
+    expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "edit", page: "直す" }] })).toMatchObject({ ok: false, reason: "unsupported_type", unsupportedType: "edit" });
+    expect(reason({ questions: [q(), q({ page: 2 })] })).toBe("id_duplicate");
+  });
+  it("選択肢の value が __other__ の定義は通る（ふつうの選択肢。「その他」の印は値ではない）", () => {
+    for (const extra of [{}, { allowOther: true }, { type: "multi" }]) {
+      expect(spec({ questions: [q({ options: ["x", "__other__"], ...extra })] }).questions[0]!.options.map((o) => o.value)).toEqual(["x", "__other__"]);
+      expect(spec({ questions: [q({ options: ["x", { value: "__other__", label: "ほか" }], ...extra })] }).questions[0]!.options[1]).toEqual({ value: "__other__", label: "ほか" });
+    }
+    // default にも使える（選択済みで出て、触らずに決定するとその値）
+    const s = spec({ questions: [q({ options: ["x", "__other__"], default: "__other__", allowOther: true })] });
+    expect(s.questions[0]!.default).toBe("__other__");
+    const r = collectAsk(s, initialAskState(s));
+    expect(r).toMatchObject({ answers: { a: "__other__" }, custom: [], lacking: [] });
+    expect(checkAskAnswer(s, { answers: r.answers })).toBeNull();
+  });
+  it("選択肢の value が空文字の定義は通る（表示名が無ければ表示名も空文字）。default が空文字なら選択済み", () => {
+    const s = spec({ questions: [q({ options: [{ value: "", label: "なし" }, "x"], default: "" }), q({ id: "m", type: "multi", options: ["", "x"], default: [""] })] });
+    expect(s.questions[0]!.options[0]).toEqual({ value: "", label: "なし" });
+    expect(s.questions[0]!.default).toBe("");
+    expect(s.questions[1]!.options[0]).toEqual({ value: "", label: "" });
+    expect(initialAskState(s).picked).toEqual({ a: [""], m: [""] });
+    // 空文字の値の選択肢が無い質問では、default の空文字は選択済みにしない
+    const none = spec({ questions: [q({ default: "" })] });
+    expect(initialAskState(none).picked).toEqual({ a: [] });
+    // 空文字の値が 2 つあれば重複
+    expect(reason({ questions: [q({ options: ["", { value: "" }] })] })).toBe("option_value_duplicate");
   });
   it("message に定義の文字列（id の重複を除く）を入れない", () => {
     expect(bad({ questions: [q({ label: "SECRET-LABEL", type: "nope" })] })).not.toContain("SECRET");
@@ -134,6 +231,29 @@ describe("normalizeAskSpec — 既定と丸め", () => {
     expect(s.questions[0]).not.toHaveProperty("future");
     expect(s.questions[0]).not.toHaveProperty("help");
     expect(s.questions[0]!.options[0]).toEqual({ value: "x", label: "x" });
+  });
+  it("filter・showValue は真偽のときだけ残す（文字列・数は落とす。誤りにしない）。text の質問では落とす", () => {
+    expect(spec({ questions: [q({ filter: true, showValue: false })] }).questions[0]).toMatchObject({ filter: true, showValue: false });
+    expect(spec({ questions: [q({ type: "multi", filter: false, showValue: true })] }).questions[0]).toMatchObject({ filter: false, showValue: true });
+    for (const v of ["true", "false", 1, 0, null, {}]) {
+      const got = spec({ questions: [q({ filter: v, showValue: v })] }).questions[0];
+      expect(got, JSON.stringify(v)).not.toHaveProperty("filter");
+      expect(got, JSON.stringify(v)).not.toHaveProperty("showValue");
+    }
+    const none = spec({ questions: [q()] }).questions[0];
+    expect(none).not.toHaveProperty("filter");
+    expect(none).not.toHaveProperty("showValue");
+    const text = spec({ questions: [{ id: "t", label: "T", type: "text", filter: true, showValue: false }] }).questions[0];
+    expect(text).not.toHaveProperty("filter");
+    expect(text).not.toHaveProperty("showValue");
+  });
+  it("この作業で通さない項目（code・group・image・audio・preview・thumb）は、正規化後に無い", () => {
+    const s = spec({
+      questions: [{ ...q({ preview: "side", thumb: 120, paging: 2 }), options: [{ value: "x", code: "let a = 1;", lang: "js", group: "G", image: "a.png", audio: "a.mp3" }] }],
+    });
+    expect(s.questions[0]).toEqual({ id: "a", label: "A", type: "single", options: [{ value: "x", label: "x" }], allowOther: false, required: false, multiline: false });
+    // paging は全体の項目（質問に書いても通さない）・page は質問の項目（全体に書いても通さない）
+    expect(spec({ page: "基本", questions: [q()] })).not.toHaveProperty("page");
   });
   it("text は options が無くてよい", () => {
     expect(spec({ questions: [{ id: "t", label: "T", type: "text", default: "d", multiline: true }] }).questions[0]).toMatchObject({ type: "text", options: [], default: "d", multiline: true });
@@ -206,6 +326,15 @@ describe("collectAsk — form.html の collect() と同じ規則", () => {
     const r = collectAsk(s, state(s, { picked: { m: ["a", "c"] }, text: { t: "  hi  " } }));
     expect(r.answers).toEqual({ m: ["a", "c"], t: "hi" });
   });
+  it("multi の値は、選んだ順ではなく定義の順に揃える（「その他」の入力は最後）。選択肢に無い値は入れない", () => {
+    const s = spec({ questions: [q({ id: "m", type: "multi", options: ["x", "y", "z"], allowOther: true })] });
+    expect(collectAsk(s, state(s, { picked: { m: ["z", "x"] } })).answers).toEqual({ m: ["x", "z"] });
+    expect(collectAsk(s, state(s, { picked: { m: ["z", "y", "x"] }, otherPicked: { m: true }, otherText: { m: "a" } })).answers).toEqual({ m: ["x", "y", "z", "a"] });
+    expect(collectAsk(s, state(s, { picked: { m: ["z", "nope", "x"] } })).answers).toEqual({ m: ["x", "z"] });
+    // 定義の順に揃えた回答は、回答の検査を通る
+    const r = collectAsk(s, state(s, { picked: { m: ["z", "x"] }, otherPicked: { m: true }, otherText: { m: "a" } }));
+    expect(checkAskAnswer(s, { answers: r.answers, custom: r.custom })).toBeNull();
+  });
   it("「その他」: 選んで入力があれば値は入力（trim）で custom に id が入る。入力が空なら選択は無いもの（ただし custom には入る＝form.html と同じ）", () => {
     const s = spec({ questions: [q({ id: "a", allowOther: true }), q({ id: "m", type: "multi", options: ["x"], allowOther: true, default: ["x"] })] });
     const r = collectAsk(s, state(s, { picked: { a: [] }, otherPicked: { a: true, m: true }, otherText: { a: "  自由  ", m: "extra" } }));
@@ -214,6 +343,38 @@ describe("collectAsk — form.html の collect() と同じ規則", () => {
     const empty = collectAsk(s, state(s, { picked: { a: [] }, otherPicked: { a: true }, otherText: { a: "   " } }));
     expect(empty.lacking).toEqual(["a"]);
     expect(empty.answers).not.toHaveProperty("a");
+  });
+  it("値が空文字の選択肢: 選べば回答は空文字（未回答ではない）。「その他」の空の入力とは別もの", () => {
+    const s = spec({ questions: [q({ id: "a", options: [{ value: "", label: "なし" }, "x"], allowOther: true }), q({ id: "m", type: "multi", options: ["x", { value: "", label: "なし" }], required: true, allowOther: true })] });
+    // 選択肢の空文字を選んだ: single は ""、multi は [""]（required も満たす）
+    const r = collectAsk(s, state(s, { picked: { a: [""], m: [""] } }));
+    expect(r).toMatchObject({ answers: { a: "", m: [""] }, custom: [], lacking: [] });
+    expect(checkAskAnswer(s, { answers: r.answers })).toBeNull();
+    // multi は定義の順（空文字の値も、その位置）。「その他」の入力は最後
+    const both = collectAsk(s, state(s, { picked: { a: ["x"], m: ["", "x"] }, otherPicked: { m: true }, otherText: { m: "q" } }));
+    expect(both.answers).toEqual({ a: "x", m: ["x", "", "q"] });
+    expect(checkAskAnswer(s, { answers: both.answers, custom: both.custom })).toBeNull();
+    // 何も選ばず「その他」を選んで入力が空: 空文字の値の選択肢があっても未回答（空文字の回答にしない）
+    const other = collectAsk(s, state(s, { otherPicked: { a: true, m: true }, otherText: { a: "  ", m: "" } }));
+    expect(other.lacking).toEqual(["a", "m"]);
+    expect(other.answers).toEqual({ m: [] });
+    // 選択肢の空文字と「その他」の空の入力を両方選んだ: 回答は選択肢の空文字だけ
+    const mixed = collectAsk(s, state(s, { picked: { a: [""], m: [""] }, otherPicked: { a: true, m: true }, otherText: { a: "", m: " " } }));
+    expect(mixed.answers).toEqual({ a: "", m: [""] });
+    expect(mixed.lacking).toEqual([]);
+  });
+  it("空文字の値の選択肢が無い質問では、選んだ値の空文字は何も選んでいないのと同じ", () => {
+    const s = spec({ questions: [q({ id: "a" }), q({ id: "m", type: "multi", required: true })] });
+    const r = collectAsk(s, state(s, { picked: { a: [""], m: [""] } }));
+    expect(r.lacking).toEqual(["a", "m"]);
+    expect(r.answers).toEqual({ m: [] });
+  });
+  it("空文字の値の選択肢は showIf の条件にも使える", () => {
+    const s = spec({ questions: [q({ id: "a", options: ["", "x"] }), q({ id: "b", default: "x", showIf: { a: "" } })] });
+    expect(collectAsk(s, state(s, { picked: { a: [""] } })).answers).toEqual({ a: "", b: "x" });
+    expect(collectAsk(s, state(s, { picked: { a: ["x"] } })).answers).toEqual({ a: "x" });
+    expect(checkAskAnswer(s, { answers: { a: "", b: "x" } })).toBeNull();
+    expect(checkAskAnswer(s, { answers: { a: "x", b: "x" } })).toMatch(/hidden/);
   });
   it("text 型は custom に入らない。補足は trim して空でなければ返す。note: false なら返さない", () => {
     const s = spec({ questions: [{ id: "t", label: "T", type: "text", allowOther: true }] });
@@ -254,6 +415,23 @@ describe("checkAskAnswer", () => {
     expect(checkAskAnswer(s, { answers: { a: "x", b: ["p"] } })).toMatch(/string/);
     expect(checkAskAnswer(s, { answers: { a: "nope", t: "hi" } })).toMatch(/not an option/);
     expect(checkAskAnswer(s, { answers: { a: "x", b: ["zzz"], t: "hi" } })).toMatch(/not an option/);
+  });
+  it("空文字の回答は、値が空文字の選択肢がある質問でだけ通る（「その他」の入力としては通さない）", () => {
+    const withEmpty = spec({ questions: [q({ id: "a", options: ["", "x"], allowOther: true }), q({ id: "m", type: "multi", options: ["", "x"], allowOther: true })] });
+    expect(checkAskAnswer(withEmpty, { answers: { a: "", m: [""] } })).toBeNull();
+    expect(checkAskAnswer(withEmpty, { answers: { a: "", m: ["", "自由"] }, custom: ["a", "m"] })).toBeNull();
+    const without = spec({ questions: [q({ id: "a", options: ["x"], allowOther: true }), q({ id: "m", type: "multi", options: ["x"], allowOther: true })] });
+    expect(checkAskAnswer(without, { answers: { a: "", m: [] } })).toMatch(/questions\[0\].*not an option/);
+    expect(checkAskAnswer(without, { answers: { a: "", m: [] }, custom: ["a"] })).toMatch(/questions\[0\].*not an option/);
+    expect(checkAskAnswer(without, { answers: { a: "x", m: [""] } })).toMatch(/questions\[1\].*not an option/);
+    expect(checkAskAnswer(without, { answers: { a: "x", m: [""] }, custom: ["m"] })).toMatch(/questions\[1\].*not an option/);
+  });
+  it("値が __other__ の回答は、その値の選択肢があれば通る（無ければ、自由入力の印が要る）", () => {
+    const has = spec({ questions: [q({ options: ["x", "__other__"] })] });
+    expect(checkAskAnswer(has, { answers: { a: "__other__" } })).toBeNull();
+    const no = spec({ questions: [q({ options: ["x"], allowOther: true })] });
+    expect(checkAskAnswer(no, { answers: { a: "__other__" } })).toMatch(/not an option/);
+    expect(checkAskAnswer(no, { answers: { a: "__other__" }, custom: ["a"] })).toBeNull();
   });
   it("custom: 重複・自由入力を受けない質問・text 型・隠れた質問は断る。自由入力の値は 1 つまで", () => {
     expect(checkAskAnswer(s, { ...ok, custom: ["a", "a"] })).toMatch(/duplicate/);

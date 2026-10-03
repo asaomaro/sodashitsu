@@ -61,7 +61,16 @@ export interface AskQuestion {
   multiline: boolean;
   placeholder?: string;
   minWidth?: number;
+  /** まとまりの題（目次の見出し）。書いた質問から新しいまとまり（空文字も「書いた」）。1 つでも書くと、高さに収まっていても目次を出す。 */
+  page?: string;
+  /** 絞り込みの欄を出すか（無ければ部品の既定: 選択肢 12 件以上で出す）。`text` には無い。 */
+  filter?: boolean;
+  /** 表示名と値が違う選択肢に、値を出すか（無ければ部品の既定: 出す）。`text` には無い。 */
+  showValue?: boolean;
 }
+
+/** 質問の目次の出し方: `"auto"`（高さに収まらないときだけ出す）／`true`（必ず出す）／`false`（出さない）。1 以上の整数も通す（`true` と同じ扱い。`ask.py` の検査と共通の試験データに合わせる）。 */
+export type AskPaging = "auto" | boolean | number;
 
 /** 検査を通った定義（知らない項目は落としてある）。 */
 export interface AskSpec {
@@ -71,6 +80,8 @@ export interface AskSpec {
   /** 補足欄を出すか。 */
   note: boolean;
   notePlaceholder?: string;
+  /** 無ければ無いまま（既定は埋めない。部品の既定は `"auto"`）。質問に `page` があれば、`false` でなければ目次を出す。 */
+  paging?: AskPaging;
   questions: AskQuestion[];
 }
 
@@ -139,11 +150,32 @@ function len(s: string): number {
 // --- 検査 -------------------------------------------------------------------------------
 
 /**
+ * 定義の誤りの分類。共通の試験データ（`third_party/ask-form/fixtures/normalize.json`）の `reasons` の名前のうち Sodashitsu が出すものに、
+ * Sodashitsu だけの 2 つ（`not_object`: 定義がオブジェクトでない／`invalid`: 試験データに名前の無い誤り）を足したもの。
+ * 上限の超過（大きさ・件数・文字数）は全部 `too_large`。文言（`message`）は直してよいが、分類は ask-form の側と比べるので変えない。
+ */
+export type AskSpecFailReason =
+  | "not_object"
+  | "questions_empty"
+  | "id_label_required"
+  | "id_duplicate"
+  | "unsupported_type"
+  | "options_empty"
+  | "option_value_required"
+  | "option_value_duplicate"
+  | "showif_unknown_id"
+  | "showif_invalid"
+  | "paging_invalid"
+  | "page_invalid"
+  | "too_large"
+  | "invalid";
+
+/**
  * `unsupportedType` は、`type` が文字列だが **sodactl が対応していない型**のとき（ask-form は `edit`・`rank`・`table` 等の型を足していく）。
  * 質問を黙って落とすと、回答が欠けたまま `answered` になって呼び出し元が聞いたつもりで進んでしまうので、定義の誤り（終了コード 2）にはせず、
- * 呼び出し側が `unavailable` として扱う（ダイアログを出さない）。値は型の名前（短い識別子だけ。それ以外は "?"）。
+ * 呼び出し側が `unavailable` として扱う（ダイアログを出さない）。値は型の名前（短い識別子だけ。それ以外は "?"）。そのときの `reason` は `unsupported_type`。
  */
-type Fail = { ok: false; message: string; unsupportedType?: string };
+type Fail = { ok: false; message: string; reason: AskSpecFailReason; unsupportedType?: string };
 type Ok = { ok: true; spec: AskSpec };
 
 /**
@@ -151,16 +183,16 @@ type Ok = { ok: true; spec: AskSpec };
  * `message` は英語で、場所と理由だけ（定義の文字列の中身は入れない。id の重複のときの id を除く）。
  */
 export function normalizeAskSpec(raw: unknown): Ok | Fail {
-  const fail = (message: string): Fail => ({ ok: false, message });
-  if (!isObject(raw)) return fail("the spec must be an object");
-  if (jsonBytes(raw) > ASK_SPEC_MAX_BYTES) return fail(`the spec is larger than ${ASK_SPEC_MAX_BYTES} bytes`);
+  const fail = (reason: AskSpecFailReason, message: string): Fail => ({ ok: false, message, reason });
+  if (!isObject(raw)) return fail("not_object", "the spec must be an object");
+  if (jsonBytes(raw) > ASK_SPEC_MAX_BYTES) return fail("too_large", `the spec is larger than ${ASK_SPEC_MAX_BYTES} bytes`);
   const qs = raw["questions"];
-  if (!Array.isArray(qs) || qs.length === 0) return fail('"questions" must be a non-empty array');
-  if (qs.length > ASK_QUESTIONS_MAX) return fail(`"questions" has more than ${ASK_QUESTIONS_MAX} items`);
+  if (!Array.isArray(qs) || qs.length === 0) return fail("questions_empty", '"questions" must be a non-empty array');
+  if (qs.length > ASK_QUESTIONS_MAX) return fail("too_large", `"questions" has more than ${ASK_QUESTIONS_MAX} items`);
 
   const str = (v: unknown, max: number, where: string): string | undefined | Fail => {
     if (typeof v !== "string") return undefined; // 型の違う任意の文字列の項目は捨てる
-    if (len(v) > max) return fail(`${where} is longer than ${max} characters`);
+    if (len(v) > max) return fail("too_large", `${where} is longer than ${max} characters`);
     return v;
   };
   const isFail = (v: unknown): v is Fail => typeof v === "object" && v !== null && (v as Fail).ok === false;
@@ -183,6 +215,13 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
     if (isFail(v)) return v;
     notePlaceholder = v;
   }
+  // `paging`: 無い・null は項目なし（既定は埋めない）。`"auto"`・真偽・1 以上の整数だけ通す（`ask.py` と同じ。共通の試験データに合わせる。数は `true` と同じ扱い）。
+  let paging: AskPaging | undefined;
+  const pg = raw["paging"];
+  if (pg !== undefined && pg !== null) {
+    if (pg === "auto" || typeof pg === "boolean" || (typeof pg === "number" && Number.isInteger(pg) && pg >= 1)) paging = pg;
+    else return fail("paging_invalid", '"paging" must be "auto", a boolean or an integer of 1 or more');
+  }
 
   const questions: AskQuestion[] = [];
   const seen = new Set<string>();
@@ -191,19 +230,28 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
   for (let i = 0; i < qs.length; i++) {
     const where = `questions[${i}]`;
     const q = qs[i];
-    if (!isObject(q)) return fail(`${where} must be an object`);
+    if (!isObject(q)) return fail("invalid", `${where} must be an object`);
     const id = q["id"];
     const label = q["label"];
     if (typeof id !== "string" || id === "" || typeof label !== "string" || label === "")
-      return fail(`${where}: id and label are required`);
-    if (len(id) > ASK_ID_MAX) return fail(`${where}.id is longer than ${ASK_ID_MAX} characters`);
-    if (len(label) > ASK_LABEL_MAX) return fail(`${where}.label is longer than ${ASK_LABEL_MAX} characters`);
-    if (id === RESERVED_KEY) return fail(`${where}: id "${RESERVED_KEY}" is reserved`);
-    if (seen.has(id)) return fail(`${where}: duplicate id "${id}"`);
+      return fail("id_label_required", `${where}: id and label are required`);
+    if (len(id) > ASK_ID_MAX) return fail("too_large", `${where}.id is longer than ${ASK_ID_MAX} characters`);
+    if (len(label) > ASK_LABEL_MAX) return fail("too_large", `${where}.label is longer than ${ASK_LABEL_MAX} characters`);
+    if (id === RESERVED_KEY) return fail("invalid", `${where}: id "${RESERVED_KEY}" is reserved`);
+    if (seen.has(id)) return fail("id_duplicate", `${where}: duplicate id "${id}"`);
     seen.add(id);
+    // `page` は `type` より前に見る（`ask.py` と同じ順。対応していない型の質問でも、`page` の誤りは誤り）。
+    // 無い・null は項目なし。空文字は通す（部品は「書いた」と扱い、そこから新しいまとまり）。文字列でなければ誤り——`str()` の「捨てる」とは違う。
+    const pageRaw = q["page"];
+    let page: string | undefined;
+    if (pageRaw !== undefined && pageRaw !== null) {
+      if (typeof pageRaw !== "string") return fail("page_invalid", `${where}.page must be a string`);
+      if (len(pageRaw) > ASK_LABEL_MAX) return fail("too_large", `${where}.page is longer than ${ASK_LABEL_MAX} characters`);
+      page = pageRaw;
+    }
     const type = q["type"] === undefined ? "single" : q["type"];
     if (type !== "single" && type !== "multi" && type !== "text") {
-      if (typeof type !== "string") return fail(`${where}.type must be a string`);
+      if (typeof type !== "string") return fail("invalid", `${where}.type must be a string`);
       unsupportedType ??= /^[a-z][a-z0-9_-]{0,31}$/i.test(type) ? type : "?";
       continue; // この質問の中身は読めない（対応していない型の項目）ので、検査せず、答えにも積まない
     }
@@ -229,20 +277,24 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
     }
     const mw = q["minWidth"];
     if (typeof mw === "number" && Number.isInteger(mw) && mw >= 60 && mw <= 600) out.minWidth = mw;
+    if (page !== undefined) out.page = page;
 
     if (type !== "text") {
+      // 真偽のときだけ写す（それ以外は落とす。誤りにしない）。`text` には選択肢が無いので写さない。
+      if (typeof q["filter"] === "boolean") out.filter = q["filter"];
+      if (typeof q["showValue"] === "boolean") out.showValue = q["showValue"];
       const opts = q["options"];
-      if (!Array.isArray(opts) || opts.length === 0) return fail(`${where}.options must be a non-empty array`);
-      if (opts.length > ASK_OPTIONS_MAX) return fail(`${where}.options has more than ${ASK_OPTIONS_MAX} items`);
+      if (!Array.isArray(opts) || opts.length === 0) return fail("options_empty", `${where}.options must be a non-empty array`);
+      if (opts.length > ASK_OPTIONS_MAX) return fail("too_large", `${where}.options has more than ${ASK_OPTIONS_MAX} items`);
       const values = new Set<string>();
       for (let j = 0; j < opts.length; j++) {
         const ow = `${where}.options[${j}]`;
         let o = opts[j];
         if (typeof o === "string") o = { value: o };
-        if (!isObject(o) || !isScalar(o["value"])) return fail(`${ow}: value is required (a string, number or boolean)`);
+        if (!isObject(o) || !isScalar(o["value"])) return fail("option_value_required", `${ow}: value is required (a string, number or boolean)`);
         const value = String(o["value"]);
-        if (len(value) > ASK_ID_MAX) return fail(`${ow}.value is longer than ${ASK_ID_MAX} characters`);
-        if (values.has(value)) return fail(`${where}: duplicate option value`);
+        if (len(value) > ASK_ID_MAX) return fail("too_large", `${ow}.value is longer than ${ASK_ID_MAX} characters`);
+        if (values.has(value)) return fail("option_value_duplicate", `${where}: duplicate option value`);
         values.add(value);
         const ol = str(o["label"], ASK_LABEL_MAX, `${ow}.label`);
         if (isFail(ol)) return ol;
@@ -268,31 +320,32 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
       if (isScalar(first)) out.default = String(first);
     } else if (typeof def === "string") {
       // 回答の上限（`ask.answer` の zod は UTF-16 の長さで見る）を超える初期値は、触らずに決定しても送れなくなるので誤りにする。
-      if (def.length > ASK_ANSWER_TEXT_MAX) return fail(`${where}.default is longer than ${ASK_ANSWER_TEXT_MAX} characters`);
+      if (def.length > ASK_ANSWER_TEXT_MAX) return fail("too_large", `${where}.default is longer than ${ASK_ANSWER_TEXT_MAX} characters`);
       out.default = def;
     }
 
-    // `showIf` が null・空の配列なら無いものとして扱う（ask-form の `q.get("showIf") or {}` と同じ）。
+    // `showIf` が null・空の配列・空のオブジェクトなら無いものとして扱う（ask-form の `q.get("showIf") or {}` と同じ。項目ごと落とす）。
     const sif = q["showIf"];
     if (sif !== undefined && sif !== null && !(Array.isArray(sif) && sif.length === 0)) {
-      if (!isObject(sif)) return fail(`${where}.showIf must be an object`);
+      if (!isObject(sif)) return fail("showif_invalid", `${where}.showIf must be an object`);
       const cond: Record<string, string[]> = {};
       for (const [dep, want] of Object.entries(sif)) {
-        if (dep === RESERVED_KEY) return fail(`${where}.showIf refers to an unknown question id`);
+        if (dep === RESERVED_KEY) return fail("showif_unknown_id", `${where}.showIf refers to an unknown question id`);
         cond[dep] = (Array.isArray(want) ? want : [want]).filter(isScalar).map(String);
       }
-      out.showIf = cond;
+      if (Object.keys(cond).length > 0) out.showIf = cond;
     }
     questions.push(out);
   }
   for (let i = 0; i < questions.length; i++)
     for (const dep of Object.keys(questions[i]!.showIf ?? {}))
-      if (!seen.has(dep)) return fail(`questions[${i}].showIf refers to an unknown question id`);
+      if (!seen.has(dep)) return fail("showif_unknown_id", `questions[${i}].showIf refers to an unknown question id`);
 
-  if (unsupportedType !== undefined) return { ok: false, message: "a question type is not supported", unsupportedType };
+  if (unsupportedType !== undefined) return { ok: false, message: "a question type is not supported", reason: "unsupported_type", unsupportedType };
   const spec: AskSpec = { title: top.title ?? "質問", submit: top.submit ?? "決定", note, questions };
   if (top.intro !== undefined) spec.intro = top.intro;
   if (notePlaceholder !== undefined) spec.notePlaceholder = notePlaceholder;
+  if (paging !== undefined) spec.paging = paging;
   return { ok: true, spec };
 }
 
@@ -300,7 +353,7 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
 
 /** フォームの入力の状態。 */
 export interface AskFormState {
-  /** 質問の id → 選んだ値（`multi` は複数。「その他」の印 `__other__` は `otherPicked` で持つ）。 */
+  /** 質問の id → 選んだ選択肢の値（`multi` は複数。空文字の値の選択肢もある）。「その他」を選んだかは値ではなく `otherPicked` で持つ。 */
   picked: Record<string, string[]>;
   otherPicked: Record<string, boolean>;
   otherText: Record<string, string>;
@@ -337,16 +390,21 @@ export function askVisible(q: AskQuestion, answers: AskAnswers): boolean {
 
 function valueOf(q: AskQuestion, state: AskFormState): string | string[] | null {
   if (q.type === "text") return (state.text[q.id] ?? "").trim();
-  const picked = [...(state.picked[q.id] ?? [])];
+  const picked = state.picked[q.id] ?? [];
   const other = (state.otherText[q.id] ?? "").trim();
-  const vals = picked.filter((v) => v !== "");
+  // 値が空文字の選択肢は、ふつうの選択肢（選べば回答は `""`）。空文字を落とすのは、空文字の値の選択肢が**無い**質問のときだけ
+  // （選択肢に無い空文字は、何も選んでいないのと同じ）。「その他」の空の入力は下の行で別に扱う——選択肢の値とは混ぜない。
+  const hasEmpty = q.options.some((o) => o.value === "");
+  // 複数選択は、選んだ順ではなく**定義の順**に揃える（部品 `<ask-form>` は DOM の順に読む。選択肢に無い値は入れない）。「その他」の入力は最後。
+  const vals = q.type === "multi" ? q.options.map((o) => o.value).filter((v) => picked.includes(v)) : picked.filter((v) => v !== "" || hasEmpty);
   if (state.otherPicked[q.id] === true && other !== "") vals.push(other);
   return q.type === "multi" ? vals : (vals[0] ?? null);
 }
 
 /**
  * 上から順に見て、表示条件（`showIf`）を満たす質問だけを回答に入れる。`single` の未回答は answers に入れず `lacking` に数える。
- * 「その他」を選んでいて入力が空のときは、その選択は無いものとして扱う（`form.html` と同じ）。
+ * 「その他」を選んでいて入力が空のときは、その選択は無いものとして扱う（`form.html` と同じ）。値が空文字の**選択肢**を選んだときは、
+ * 回答が `""`（未回答ではない。`multi` は `[""]` で、`required` も満たす）。
  */
 export function collectAsk(
   spec: AskSpec,
@@ -373,7 +431,7 @@ export function collectAsk(
 
 /**
  * 回答の検査（サーバが `ask.answer` に当てる）。誤りの理由（英語・中身を含めない）を返す。null は可。
- * `collectAsk` と同じ順で上から見る。
+ * `collectAsk` と同じ順で上から見る。空文字の回答は、その質問に値が空文字の選択肢があるときだけ通す（「その他」の入力としては通さない）。
  */
 export function checkAskAnswer(spec: AskSpec, body: AskAnswerBody): string | null {
   const answers = body.answers;
