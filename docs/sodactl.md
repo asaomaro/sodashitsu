@@ -213,7 +213,7 @@ sodactl pane control p2 --takeover                           # 既に所有者�
 - **質問のフォーム**（`ask`）: 定義全体 256 KiB（JSON の UTF-8）・質問 100・1 つの質問の選択肢 200・`id`／`value` 200 文字・`title`／`label` 等の短い文字列 500 文字・
   `intro`／`help`／`desc` 4,000 文字・1 つの選択肢の `colors` 16 個（超えた分は捨てる）。回答の自由入力・`text` の答え・補足は 10,000 文字まで。`--timeout` は 1,000〜86,400,000 ミリ秒。
   定義の上限の超過は使い方の誤り（終了コード 2）。標準入力は 1 MiB までしか読まない。サーバが同時に待てる質問は総数 32・1 つの接続あたり 8 まで（超えると `ask_busy`。終了コード 1）。
-- **ログイン不要の受け口**（`pane.sock`。下の「ログイン不要の受け口（pane.sock）」）: 同時に開いている接続 64（超えた接続と `soda handoff` の途中の接続は、要求を読まずに `pane_socket_busy`）・要求の 1 行 1 MiB（超えると `bad_request`）・
+- **ログイン不要の受け口**（`pane.sock`。下の「ログイン不要の受け口（pane.sock）」）: 同時に開いている接続 64（超えた接続と `soda handoff` の途中の接続は、要求を読まずに `pane_socket_busy`。sodactl は 5 秒まで繋ぎ直す）・要求の 1 行 1 MiB（超えると `bad_request`）・
   接続してから要求の 1 行が揃うまで 10 秒（過ぎたら何も返さずに切る）。受け口から出した質問も、上の総数 32 と「1 つの pane に同時に 1 つ」に数える。
 - 複数ホストの中継（`--machine`・`/ws?machine=`）では、判定するのは**先のマシンの `soda serve`**（`docs/machines.md`）。
 
@@ -259,7 +259,7 @@ stdout に 1 行の JSON。`status` は次の 4 つで、**どれも終了コー
 | `unavailable` | この pane のサーバに、質問を出せるブラウザが 1 つもつながっていない・**定義に、この版の `sodactl ask` が対応していない型の質問がある** | `reason`（理由） |
 
 終了コード: 上の 4 つは 0。サーバ・接続・認証のエラーは 1（stderr に `{"error":{code,message}}`）、使い方と定義の誤りは 2。1 になるもの: `caller_pane_unknown`・`unauthenticated`（**受け口を使えず `/ws` の経路へ落ちて、ログインしていないときだけ**。受け口を使えていれば出ない）・`not_found`
-（古いサーバ・pane が無い）・`ask_busy`（同じ pane の前の質問がまだ答えを待っている・待っている質問の総数か接続あたりの上限）・`connection_closed`（待っている間にサーバが閉じた・止まった・`soda handoff` が始まった）・`pane_socket_busy`（受け口が `soda handoff` の途中・同時接続の上限 64。質問は出ていないので打ち直してよい）・`timeout`（**stdout の `status: "timeout"` とは別物**——
+（古いサーバ・pane が無い）・`ask_busy`（同じ pane の前の質問がまだ答えを待っている・待っている質問の総数か接続あたりの上限）・`connection_closed`（待っている間にサーバが閉じた・止まった・`soda handoff` が始まった）・`pane_socket_busy`（受け口が `soda handoff` の途中・同時接続の上限 64。sodactl が 5 秒まで繋ぎ直しても続いたとき。質問は出ていないので打ち直してよい）・`timeout`（**stdout の `status: "timeout"` とは別物**——
 サーバが `--timeout` を過ぎても応答しないときの保険で、`--timeout` に 15 秒を足して待った後の sodactl 側の時間切れ）。
 
 ### どのブラウザに出るか
@@ -545,12 +545,13 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
   - `--machine` が無い（`--machine local` は可）。
 - **使えないときは、黙って今までの `/ws` の経路（session cookie）へ落ちる**: 上の条件を満たさない・受け口へ繋げない（ファイルが無い・サーバが受け口を置けなかった・権限が無い等）・
   受け口がその操作を知らない（`unknown_op`）・要求を読めない（`bad_request`。どちらも版の違う受け口）。落ちたことは表示しない。落ちた先で未ログインなら、今までどおり `unauthenticated`（終了コード 1）。
-  受け口のファイルはあるのに誰も待ち受けていないとき（`soda handoff` で古い版が入れ替わってから、新しい版が受け口を置き直すまでの間）だけは、すぐには落ちずに 5 秒まで繋ぎ直す
+  受け口のファイルはあるのに誰も待ち受けていないとき（`ECONNREFUSED`。`soda handoff` で古い版が入れ替わってから、新しい版が受け口を置き直すまでの間）だけは、すぐには落ちずに 5 秒まで繋ぎ直す
   （一時的な入れ替えの間に `unauthenticated` を出さないため。繋がっていないので質問は出ておらず、二重にはならない）。
   **`sodactl ask` が `unauthenticated` で終わったら、受け口を使えていない**（これが見分け方）。そのときは上の「接続先と認証」のとおり `sodactl login` する。
 - **`/ws` へ落ちないもの**（操作が既に始まっているかもしれず、落ちると質問を二重に出すため）:
   - 繋がった後に、返事なしで閉じた（サーバの停止・`soda handoff` の開始）→ `connection_closed`（終了コード 1）。
-  - `soda handoff` の途中・同時接続の上限（64）→ `pane_socket_busy`（終了コード 1）。要求は読まれていない（質問は出ていない）ので、少し待って打ち直してよい。
+  - `soda handoff` の途中・同時接続の上限（64）→ 受け口は要求を読まずに `pane_socket_busy` で断る。**sodactl はこれも 5 秒まで自動で繋ぎ直す**（下の `ECONNREFUSED` の繋ぎ直しと合わせて 1 つの上限）。
+    それでも続いたときだけ `pane_socket_busy`（終了コード 1）で終わる。要求は読まれていない（質問は出ていない）ので、打ち直してよい。
   - 繋がった後に、返事が読めない（1 行の JSON でない・上限 8 MiB を超える）・受け口が要求の 1 行を 10 秒待っても揃わずに切った → 同じく `connection_closed`。
   - sodactl 側の時間切れ（`--timeout` に 15 秒を足して待っても返事が無い）→ `timeout`（終了コード 1。stdout の `status: "timeout"` とは別物）。
   - 操作のエラー（`not_found`・`ask_busy`・`invalid_ask_spec` 等）は `/ws` の経路と同じ code・同じ終了コード。
