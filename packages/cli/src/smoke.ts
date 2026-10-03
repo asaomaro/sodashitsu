@@ -358,7 +358,7 @@ async function main(): Promise<void> {
         }
       }
       const viaSocketBad = await runCliWithStdin(["ask"], socketEnvs[0]![1], JSON.stringify({ questions: [] }));
-      if (viaSocketBad.exitCode !== 2) throw new Error(`sodactl ask (no login, bad spec) did not exit 2 (exit ${viaSocketBad.exitCode}): ${viaSocketBad.stderr}`);
+      if (viaSocketBad.exitCode !== 2 || !viaSocketBad.stderr.includes("invalid ask spec")) throw new Error(`sodactl ask (no login, bad spec) did not exit 2 (exit ${viaSocketBad.exitCode}): ${viaSocketBad.stderr}`);
       // ログインは起きていない（セッションのキャッシュが作られていない）。
       if (existsSync(join(noLoginHome, ".sodactl"))) throw new Error("sodactl ask through the pane socket must not create a session cache");
       console.log("smoke(cli): sodactl ask without a login ok (pane socket → unavailable / derived from SODA_AGENT_REPORT_SOCKET / bad spec → 2; without the socket → unauthenticated)");

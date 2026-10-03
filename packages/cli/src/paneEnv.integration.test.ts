@@ -186,7 +186,9 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   }
 
   it("起動時に作られた最初の pane: SODA_SERVER_URL は待ち受けたポート、受け継いだ sodactl の設定は無い（AC7・AC9・AC15）", async () => {
-    const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store));
+    const snap = await quiet(() =>
+      runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store),
+    );
     const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
 
     const line = await envLineOf(first);
@@ -195,7 +197,9 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   }, 30_000);
 
   it("既定の session の pane には、サーバを起動した環境の SODA_SESSION を渡さない（20260926-named-session-ui の AC15）", async () => {
-    const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store));
+    const snap = await quiet(() =>
+      runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store),
+    );
     const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
     expect(await paneVar({ url, token, store }, first, "SODA_SESSION")).toBe("unset");
   }, 30_000);
@@ -203,7 +207,12 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   it("sodactl で作った workspace の pane も同じ（AC7・AC9）", async () => {
     const created = await quiet(() =>
       runWorkspaceCreate(
-        { kind: "workspace-create", opts: { url, token, urlExplicit: false }, cwd: process.cwd(), label: "env-it" },
+        {
+          kind: "workspace-create",
+          opts: { url, token, urlExplicit: false },
+          cwd: process.cwd(),
+          label: "env-it",
+        },
         store,
       ),
     );
@@ -233,11 +242,18 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   }
 
   it("SODA_PANE_SOCKET は、そのサーバの実在する pane.sock（socket のファイル・0600）のパス。受け継いだ古い値ではない（20261003-sodactl-ask-socket の AC1）", async () => {
-    const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store));
+    const snap = await quiet(() =>
+      runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store),
+    );
     const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
     const created = await quiet(() =>
       runWorkspaceCreate(
-        { kind: "workspace-create", opts: { url, token, urlExplicit: false }, cwd: process.cwd(), label: "sock-it" },
+        {
+          kind: "workspace-create",
+          opts: { url, token, urlExplicit: false },
+          cwd: process.cwd(),
+          label: "sock-it",
+        },
         store,
       ),
     );
@@ -255,11 +271,18 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
   }, 30_000);
 
   it("pane の環境のどの値にも、token・session cookie・local-auth.json の秘密が現れない（20261003-sodactl-ask-socket の AC15）", async () => {
-    const snap = await quiet(() => runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store));
+    const snap = await quiet(() =>
+      runSnapshot({ kind: "snapshot", opts: { url, token, urlExplicit: false } }, store),
+    );
     const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
     const created = await quiet(() =>
       runWorkspaceCreate(
-        { kind: "workspace-create", opts: { url, token, urlExplicit: false }, cwd: process.cwd(), label: "secret-it" },
+        {
+          kind: "workspace-create",
+          opts: { url, token, urlExplicit: false },
+          cwd: process.cwd(),
+          label: "secret-it",
+        },
         store,
       ),
     );
@@ -269,8 +292,11 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
     const cookie = await store.get(url);
     if (cookie === undefined) throw new Error("expected a cached session cookie");
     const cookieValue = cookie.slice(cookie.indexOf("=") + 1).split(";")[0]!;
-    const localAuth = JSON.parse(await readFile(join(stateDir, "local-auth.json"), "utf8")) as { secret?: unknown };
-    if (typeof localAuth.secret !== "string") throw new Error("expected a secret in local-auth.json");
+    const localAuth = JSON.parse(await readFile(join(stateDir, "local-auth.json"), "utf8")) as {
+      secret?: unknown;
+    };
+    if (typeof localAuth.secret !== "string")
+      throw new Error("expected a secret in local-auth.json");
     const secrets = {
       token,
       cookieValue,
@@ -286,7 +312,10 @@ describe.skipIf(process.platform === "win32")("pane の環境変数（実サー�
       for (const [name, secret] of Object.entries(secrets)) {
         // 短い値との偶然の一致で落ちない・空の値で常に通らない。
         expect(secret.length, name).toBeGreaterThanOrEqual(16);
-        expect(env.includes(secret), `${name} must not appear in the environment of ${paneId}`).toBe(false);
+        expect(
+          env.includes(secret),
+          `${name} must not appear in the environment of ${paneId}`,
+        ).toBe(false);
       }
       // 秘密の置き場所を指す値も無い（受け口のパスは socket の場所だけ）。
       expect(env).not.toMatch(/local-auth\.json/);
@@ -335,7 +364,10 @@ describe.skipIf(process.platform === "win32")(
 
     it("起動時に作られた最初の pane に SODA_SESSION=work が入る", async () => {
       const snap = await quiet(() =>
-        runSnapshot({ kind: "snapshot", opts: { url: ctx.url, token: ctx.token, urlExplicit: false } }, ctx.store),
+        runSnapshot(
+          { kind: "snapshot", opts: { url: ctx.url, token: ctx.token, urlExplicit: false } },
+          ctx.store,
+        ),
       );
       const first = (JSON.parse(snap) as { panes: { id: string }[] }).panes[0]!.id;
       expect(await paneVar(ctx, first, "SODA_SESSION")).toBe("work");

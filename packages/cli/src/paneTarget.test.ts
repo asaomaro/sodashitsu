@@ -24,7 +24,10 @@ describe("resolveCallerPane", () => {
   it.each([
     ["別のポート", { ...inPane, url: "http://127.0.0.1:7781" }],
     ["別のホスト", { ...inPane, url: "https://myhost.lan:7780" }],
-    ["SODA_SERVER_URL が無い（caller なし）", { url: SERVER, token: undefined, urlExplicit: false }],
+    [
+      "SODA_SERVER_URL が無い（caller なし）",
+      { url: SERVER, token: undefined, urlExplicit: false },
+    ],
     ["SODA_SERVER_URL が読めない", { ...inPane, caller: { paneId: "p3", serverUrl: "not a url" } }],
   ])("%s なら caller_pane_unknown（AC9）", (_label, opts) => {
     expect(() => resolveCallerPane(opts as GlobalOpts, caller(false))).toThrow(
@@ -36,7 +39,9 @@ describe("resolveCallerPane", () => {
   });
 
   it("文面に SODA_PANE_ID と接続先を出し、SODA_SERVER_URL が無ければ (unset)", () => {
-    expect(() => resolveCallerPane({ url: SERVER, token: undefined, urlExplicit: false }, caller(true))).toThrow(
+    expect(() =>
+      resolveCallerPane({ url: SERVER, token: undefined, urlExplicit: false }, caller(true)),
+    ).toThrow(
       /SODA_PANE_ID=p3.*127\.0\.0\.1:7780.*SODA_SERVER_URL=\(unset\)\); if it is, pass the pane ID with --pane$/,
     );
   });

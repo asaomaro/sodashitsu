@@ -133,7 +133,9 @@ export class PaneSocket {
 
   private async place(path: string): Promise<void> {
     const server = createServer((sock) => this.handleSocket(sock));
-    server.on("error", (err) => this.deps.logger.warn("pane socket error", { path, error: String(err) }));
+    server.on("error", (err) =>
+      this.deps.logger.warn("pane socket error", { path, error: String(err) }),
+    );
     await listenPrivateUnixSocket(server, path, { tmpPrefix: TMP_PREFIX });
     this.server = server;
     this.listenPath = path;
@@ -181,7 +183,10 @@ export class PaneSocket {
     }
     if (this.paused || this.conns.size >= this.limits.maxConnections) {
       this.deps.logger.info("pane socket: refused a connection", { code: "pane_socket_busy" });
-      this.refuse(sock, this.failure("pane_socket_busy", "the pane socket is not accepting requests right now"));
+      this.refuse(
+        sock,
+        this.failure("pane_socket_busy", "the pane socket is not accepting requests right now"),
+      );
       return;
     }
     const conn: Conn = {
@@ -232,7 +237,10 @@ export class PaneSocket {
     if (conn.bytes + (nl < 0 ? chunk.length : nl) > this.limits.maxLineBytes) {
       conn.handled = true;
       // 相手はまだ行の残りを書いているかもしれない。同時接続の枠は空け、断った接続として相手が閉じるのを待つ（`refuse`）。
-      const res = this.failure("bad_request", `the request line exceeds ${this.limits.maxLineBytes} bytes`);
+      const res = this.failure(
+        "bad_request",
+        `the request line exceeds ${this.limits.maxLineBytes} bytes`,
+      );
       this.deps.logger.info("pane socket: request", { connId: conn.id, code: "bad_request" });
       this.finish(conn);
       this.refuse(conn.sock, res);
@@ -268,7 +276,11 @@ export class PaneSocket {
   }
 
   /** 検査の順は「形 → 操作 → pane → 引数 → handler」（クラスのコメント）。 */
-  private async dispatch(conn: Conn, line: string, log: { op?: string; paneId?: string }): Promise<PaneSocketResponse> {
+  private async dispatch(
+    conn: Conn,
+    line: string,
+    log: { op?: string; paneId?: string },
+  ): Promise<PaneSocketResponse> {
     let raw: unknown;
     try {
       raw = JSON.parse(line);
@@ -277,13 +289,17 @@ export class PaneSocket {
     }
     const parsed = PaneSocketRequest.safeParse(raw);
     if (!parsed.success) {
-      return this.failure("bad_request", 'expected {"v":1,"op":"<name>","paneId":"<id>","params":{...}}');
+      return this.failure(
+        "bad_request",
+        'expected {"v":1,"op":"<name>","paneId":"<id>","params":{...}}',
+      );
     }
     const req = parsed.data;
     log.op = req.op;
     log.paneId = req.paneId;
     if (!this.deps.registry.has(req.op)) return this.failure("unknown_op", `unknown op: ${req.op}`);
-    if (!this.deps.paneExists(req.paneId)) return this.failure("not_found", `pane not found: ${req.paneId}`);
+    if (!this.deps.paneExists(req.paneId))
+      return this.failure("not_found", `pane not found: ${req.paneId}`);
     return this.deps.registry.invoke(
       req.op,
       { paneId: req.paneId, connId: conn.id, signal: conn.abort.signal },

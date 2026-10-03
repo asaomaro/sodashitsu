@@ -90,7 +90,9 @@ describe("sodactl pane attach integration（実サーバ・実 PTY・偽の手�
     if (!server.freshToken) throw new Error("expected a freshly generated token");
     url = `http://${server.options.host}:${server.options.port}`;
     store = new FsSessionStore(join(dir, "session.json"));
-    await withSession({ url, token: server.freshToken, urlExplicit: false }, store, (c) => c.hello()); // セッションをキャッシュする
+    await withSession({ url, token: server.freshToken, urlExplicit: false }, store, (c) =>
+      c.hello(),
+    ); // セッションをキャッシュする
     cookie = (await store.get(url))!;
   }, 30_000);
 

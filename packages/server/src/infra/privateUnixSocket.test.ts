@@ -120,7 +120,9 @@ describe.skipIf(process.platform === "win32")("listenPrivateUnixSocket", () => {
     const other = join(dir, "other.sock");
     await new Promise<void>((resolve) => server.listen(other, resolve));
 
-    await expect(listenPrivateUnixSocket(server, path, { tmpPrefix: ".p-" })).rejects.toThrow(/already listening/);
+    await expect(listenPrivateUnixSocket(server, path, { tmpPrefix: ".p-" })).rejects.toThrow(
+      /already listening/,
+    );
 
     expect(server.listening).toBe(true);
     expect(await readGreeting(other)).toBe("hello\n");
@@ -128,7 +130,9 @@ describe.skipIf(process.platform === "win32")("listenPrivateUnixSocket", () => {
   });
 
   it("置き場のディレクトリが無ければ投げる（何も作らない）", async () => {
-    await expect(listenPrivateUnixSocket(server, join(dir, "missing", "pane.sock"))).rejects.toThrow();
+    await expect(
+      listenPrivateUnixSocket(server, join(dir, "missing", "pane.sock")),
+    ).rejects.toThrow();
 
     expect(await readdir(dir)).toEqual([]);
     expect(server.listening).toBe(false);

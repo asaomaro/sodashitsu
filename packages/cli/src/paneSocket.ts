@@ -65,16 +65,32 @@ export function callPaneOp(
       fn();
     };
     const closed = (detail: string): void =>
-      settle(() => reject(new RpcFailure("connection_closed", `the pane socket closed the connection ${detail}`)));
+      settle(() =>
+        reject(
+          new RpcFailure("connection_closed", `the pane socket closed the connection ${detail}`),
+        ),
+      );
 
     const timer = setTimeout(
-      () => settle(() => reject(new RpcFailure("timeout", `no reply from the pane socket for ${req.op} within ${opts.timeoutMs}ms`))),
+      () =>
+        settle(() =>
+          reject(
+            new RpcFailure(
+              "timeout",
+              `no reply from the pane socket for ${req.op} within ${opts.timeoutMs}ms`,
+            ),
+          ),
+        ),
       opts.timeoutMs,
     );
 
     sock.on("connect", () => {
       connected = true;
-      const line: Record<string, unknown> = { v: PANE_SOCKET_VERSION, op: req.op, paneId: req.paneId };
+      const line: Record<string, unknown> = {
+        v: PANE_SOCKET_VERSION,
+        op: req.op,
+        paneId: req.paneId,
+      };
       if (req.params !== undefined) line["params"] = req.params;
       sock.write(`${JSON.stringify(line)}\n`);
     });
@@ -82,7 +98,14 @@ export function callPaneOp(
       const nl = chunk.indexOf(NEWLINE);
       // 改行の前までの長さで上限を見る（改行の来ない返事を溜め続けない）。
       if (bytes + (nl < 0 ? chunk.length : nl) > maxReplyBytes) {
-        settle(() => reject(new RpcFailure("connection_closed", `the pane socket sent a reply line larger than ${maxReplyBytes} bytes`)));
+        settle(() =>
+          reject(
+            new RpcFailure(
+              "connection_closed",
+              `the pane socket sent a reply line larger than ${maxReplyBytes} bytes`,
+            ),
+          ),
+        );
         return;
       }
       if (nl < 0) {
@@ -103,7 +126,12 @@ export function callPaneOp(
     sock.on("error", (err: NodeJS.ErrnoException) => {
       // 繋がる前のエラー（ENOENT・ECONNREFUSED・EACCES・ENOTSOCK 等）だけが「受け口が使えない」。
       if (!connected) {
-        settle(() => resolve({ kind: "fallback", reason: `cannot connect to the pane socket: ${err.code ?? err.message}` }));
+        settle(() =>
+          resolve({
+            kind: "fallback",
+            reason: `cannot connect to the pane socket: ${err.code ?? err.message}`,
+          }),
+        );
         return;
       }
       // 繋がった後のエラー（受け口が先に閉じたときの EPIPE・ECONNRESET 等）はここでは決めない。続く `close` で決める——
@@ -117,7 +145,11 @@ export function callPaneOp(
 
 /** 返事の 1 行を結果にする。読めない返事は `connection_closed`（返事が無かったのと同じ扱い。`/ws` へは落ちない）。 */
 function outcomeOf(text: string): PaneOpOutcome {
-  const malformed = (): RpcFailure => new RpcFailure("connection_closed", "the pane socket sent a reply that is not a valid response line");
+  const malformed = (): RpcFailure =>
+    new RpcFailure(
+      "connection_closed",
+      "the pane socket sent a reply that is not a valid response line",
+    );
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -156,7 +188,8 @@ export async function viaPaneSocketOrSession<T>(
 ): Promise<T> {
   const path = paneSocketFor(opts);
   if (path === undefined) return viaSession();
-  const req = op.params === undefined ? { op: op.name, paneId } : { op: op.name, paneId, params: op.params };
+  const req =
+    op.params === undefined ? { op: op.name, paneId } : { op: op.name, paneId, params: op.params };
   const outcome = await call(path, req, { timeoutMs: op.timeoutMs });
   if (outcome.kind === "fallback") return viaSession();
   return outcome.result as T;

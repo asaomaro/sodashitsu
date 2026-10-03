@@ -15,7 +15,9 @@ vi.mock("../infra/privateUnixSocket.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../infra/privateUnixSocket.js")>();
   return {
     ...actual,
-    listenPrivateUnixSocket: async (...args: Parameters<typeof actual.listenPrivateUnixSocket>): Promise<void> => {
+    listenPrivateUnixSocket: async (
+      ...args: Parameters<typeof actual.listenPrivateUnixSocket>
+    ): Promise<void> => {
       await actual.listenPrivateUnixSocket(...args);
       await placed.hold?.();
     },
@@ -59,8 +61,15 @@ function parseReply(raw: string): PaneSocketResponse {
 }
 
 /** sodactl の `callPaneOp` と同じ形の 1 行を送り、返事の 1 行を返す。 */
-async function call(path: string, op: string, paneId: string, params?: Record<string, unknown>): Promise<PaneSocketResponse> {
-  return parseReply(await sendRaw(path, `${JSON.stringify({ v: 1, op, paneId, ...(params ? { params } : {}) })}\n`));
+async function call(
+  path: string,
+  op: string,
+  paneId: string,
+  params?: Record<string, unknown>,
+): Promise<PaneSocketResponse> {
+  return parseReply(
+    await sendRaw(path, `${JSON.stringify({ v: 1, op, paneId, ...(params ? { params } : {}) })}\n`),
+  );
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve(v: T): void } {
@@ -95,7 +104,9 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
   }
 
   /** `test.wait` を送り、handler が呼ばれるまで待つ（返事はまだ来ない）。 */
-  async function openWaiting(paneId = "p1"): Promise<{ client: Client; wait: (typeof waits)[number] }> {
+  async function openWaiting(
+    paneId = "p1",
+  ): Promise<{ client: Client; wait: (typeof waits)[number] }> {
     const before = waits.length;
     const client = await open(path);
     client.sock.write(`${JSON.stringify({ v: 1, op: "test.wait", paneId })}\n`);
@@ -105,7 +116,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
 
   /** 受け口に届いたかたまりを数える（送ったものが実際に別々のかたまりで届いたことを確かめる）。 */
   function watchChunks(): { count(): number } {
-    const spy = vi.spyOn(socket as unknown as { handleData(conn: unknown, chunk: Buffer): void }, "handleData");
+    const spy = vi.spyOn(
+      socket as unknown as { handleData(conn: unknown, chunk: Buffer): void },
+      "handleData",
+    );
     return { count: () => spy.mock.calls.length };
   }
 
@@ -161,7 +175,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
 
       const res = await call(path, "test.echo", "p2", { text: "hi" });
 
-      expect(res).toEqual({ ok: true, result: { text: "hi", paneId: "p2", connId: expect.stringMatching(/^pane-socket:\d+$/) } });
+      expect(res).toEqual({
+        ok: true,
+        result: { text: "hi", paneId: "p2", connId: expect.stringMatching(/^pane-socket:\d+$/) },
+      });
     });
 
     it("接続ごとに別の connId になる", async () => {
@@ -170,7 +187,8 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       const a = await call(path, "test.echo", "p1", { text: "a" });
       const b = await call(path, "test.echo", "p1", { text: "b" });
 
-      const idOf = (r: PaneSocketResponse): unknown => (r.ok ? (r.result as { connId: string }).connId : undefined);
+      const idOf = (r: PaneSocketResponse): unknown =>
+        r.ok ? (r.result as { connId: string }).connId : undefined;
       expect(idOf(a)).not.toBe(idOf(b));
     });
 
@@ -193,7 +211,9 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
 
     it("要求がいくつかのかたまりに分かれて届いても（多バイト文字の途中で割れても）1 行として読む", async () => {
       await start();
-      const line = Buffer.from(`${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "操舵室" } })}\n`);
+      const line = Buffer.from(
+        `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "操舵室" } })}\n`,
+      );
       const cut = line.indexOf(Buffer.from("舵")) + 1; // 「舵」の 3 バイトの途中
       const chunks = watchChunks();
       const c = await open(path);
@@ -210,8 +230,18 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
 
     it("1 接続 1 要求: 2 行目以降は読まない", async () => {
       await start();
-      const one = JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "first" } });
-      const two = JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "second" } });
+      const one = JSON.stringify({
+        v: 1,
+        op: "test.echo",
+        paneId: "p1",
+        params: { text: "first" },
+      });
+      const two = JSON.stringify({
+        v: 1,
+        op: "test.echo",
+        paneId: "p1",
+        params: { text: "second" },
+      });
 
       const res = parseReply(await sendRaw(path, `${one}\n${two}\n`));
 
@@ -222,7 +252,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
     it("知らない項目は無視する", async () => {
       await start();
 
-      const raw = await sendRaw(path, `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" }, token: "t" })}\n`);
+      const raw = await sendRaw(
+        path,
+        `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" }, token: "t" })}\n`,
+      );
 
       expect(parseReply(raw)).toMatchObject({ ok: true });
     });
@@ -232,14 +265,23 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
     it("登録に無い操作は unknown_op（AC3・AC14）", async () => {
       await start();
 
-      expect(await call(path, "pane.write", "p1", { data: "rm -rf /\n" })).toMatchObject({ ok: false, error: { code: "unknown_op" } });
-      expect(await call(path, "workspace.create", "p1")).toMatchObject({ ok: false, error: { code: "unknown_op" } });
+      expect(await call(path, "pane.write", "p1", { data: "rm -rf /\n" })).toMatchObject({
+        ok: false,
+        error: { code: "unknown_op" },
+      });
+      expect(await call(path, "workspace.create", "p1")).toMatchObject({
+        ok: false,
+        error: { code: "unknown_op" },
+      });
     });
 
     it("実在しない pane と知らない操作の組み合わせでも unknown_op（操作を pane より先に見る）", async () => {
       await start();
 
-      expect(await call(path, "pane.write", "nope")).toMatchObject({ ok: false, error: { code: "unknown_op" } });
+      expect(await call(path, "pane.write", "nope")).toMatchObject({
+        ok: false,
+        error: { code: "unknown_op" },
+      });
     });
 
     it("実在しない pane は not_found（handler は呼ばない）", async () => {
@@ -247,28 +289,43 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
 
       const res = await call(path, "test.echo", "nope", { text: "x" });
 
-      expect(res).toEqual({ ok: false, error: { code: "not_found", message: "pane not found: nope" } });
+      expect(res).toEqual({
+        ok: false,
+        error: { code: "not_found", message: "pane not found: nope" },
+      });
       expect(echoCalls).toBe(0);
     });
 
     it("実在しない pane と schema に合わない引数の組み合わせは not_found（pane を引数より先に見る）", async () => {
       await start();
 
-      expect(await call(path, "test.echo", "nope", { text: 1 })).toMatchObject({ ok: false, error: { code: "not_found" } });
+      expect(await call(path, "test.echo", "nope", { text: 1 })).toMatchObject({
+        ok: false,
+        error: { code: "not_found" },
+      });
     });
 
     it("引数が schema に合わなければ invalid_params（handler は呼ばない）", async () => {
       await start();
 
-      expect(await call(path, "test.echo", "p1", { text: 1 })).toMatchObject({ ok: false, error: { code: "invalid_params" } });
-      expect(await call(path, "test.echo", "p1")).toMatchObject({ ok: false, error: { code: "invalid_params" } });
+      expect(await call(path, "test.echo", "p1", { text: 1 })).toMatchObject({
+        ok: false,
+        error: { code: "invalid_params" },
+      });
+      expect(await call(path, "test.echo", "p1")).toMatchObject({
+        ok: false,
+        error: { code: "invalid_params" },
+      });
       expect(echoCalls).toBe(0);
     });
 
     it("形が違う要求は、知らない操作・実在しない pane を名乗っていても bad_request", async () => {
       await start();
 
-      const raw = await sendRaw(path, `${JSON.stringify({ v: 2, op: "pane.write", paneId: "nope" })}\n`);
+      const raw = await sendRaw(
+        path,
+        `${JSON.stringify({ v: 2, op: "pane.write", paneId: "nope" })}\n`,
+      );
 
       expect(parseReply(raw)).toMatchObject({ ok: false, error: { code: "bad_request" } });
     });
@@ -276,7 +333,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
 
   describe("壊れた入力（AC9）: 断った後も次の要求が通る", () => {
     async function expectStillServing(): Promise<void> {
-      expect(await call(path, "test.echo", "p1", { text: "after" })).toMatchObject({ ok: true, result: { text: "after" } });
+      expect(await call(path, "test.echo", "p1", { text: "after" })).toMatchObject({
+        ok: true,
+        result: { text: "after" },
+      });
       expect(socket.connectionCount).toBe(0);
     }
 
@@ -284,11 +344,17 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       ["JSON でない", "not json\n"],
       ["空の行", "\n"],
       ["JSON だがオブジェクトでない", '"ask.open"\n'],
-      ["v が違う", `${JSON.stringify({ v: 2, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`],
+      [
+        "v が違う",
+        `${JSON.stringify({ v: 2, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`,
+      ],
       ["v が無い", `${JSON.stringify({ op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`],
       ["paneId が無い", `${JSON.stringify({ v: 1, op: "test.echo", params: { text: "x" } })}\n`],
       ["op が文字列でない", `${JSON.stringify({ v: 1, op: 7, paneId: "p1" })}\n`],
-      ["params がオブジェクトでない", `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: "x" })}\n`],
+      [
+        "params がオブジェクトでない",
+        `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: "x" })}\n`,
+      ],
     ])("%s → bad_request", async (_name, payload) => {
       await start();
 
@@ -301,7 +367,12 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
 
     it("上限を超える行（改行つき）→ bad_request を書いて切る", async () => {
       await start({ maxLineBytes: 256 });
-      const big = JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x".repeat(300) } });
+      const big = JSON.stringify({
+        v: 1,
+        op: "test.echo",
+        paneId: "p1",
+        params: { text: "x".repeat(300) },
+      });
 
       const res = parseReply(await sendRaw(path, `${big}\n`));
 
@@ -330,19 +401,30 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       expect(socket.connectionCount).toBe(1); // 1 つ目だけでは断らない
       c.sock.write("x".repeat(200));
 
-      expect(parseReply(await c.closed)).toMatchObject({ ok: false, error: { code: "bad_request" } });
+      expect(parseReply(await c.closed)).toMatchObject({
+        ok: false,
+        error: { code: "bad_request" },
+      });
       expect(chunks.count()).toBe(2); // 2 つ目のかたまりで断った（1 つにまとまって届いたのではない）
       await expectStillServing();
     });
 
     it("上限ちょうどの行は通る（上限は改行を除くバイト数）", async () => {
       const base = JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "" } });
-      const line = JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "あ".repeat(10) } });
+      const line = JSON.stringify({
+        v: 1,
+        op: "test.echo",
+        paneId: "p1",
+        params: { text: "あ".repeat(10) },
+      });
       expect(Buffer.byteLength(line)).toBe(base.length + 30); // バイト数で数えている（文字数なら +10）
       await start({ maxLineBytes: Buffer.byteLength(line) });
 
       expect(parseReply(await sendRaw(path, `${line}\n`))).toMatchObject({ ok: true });
-      expect(parseReply(await sendRaw(path, `${line} \n`))).toMatchObject({ ok: false, error: { code: "bad_request" } });
+      expect(parseReply(await sendRaw(path, `${line} \n`))).toMatchObject({
+        ok: false,
+        error: { code: "bad_request" },
+      });
     });
 
     it("行の途中で切れる → 何も返さず後始末する（handler は呼ばない）", async () => {
@@ -414,7 +496,9 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
     it("相手が書き込み側だけ閉じる（end で送る）と、すぐ返る操作は返事が届き、待つ操作は取り消される", async () => {
       await start();
       const quick = await open(path);
-      quick.sock.end(`${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`);
+      quick.sock.end(
+        `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`,
+      );
       expect(parseReply(await quick.closed)).toMatchObject({ ok: true, result: { text: "x" } });
       await vi.waitFor(() => expect(gone).toHaveLength(1));
 
@@ -433,7 +517,11 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
 
     it("返事を読まない相手は、待ちの上限で切って接続の枠を空ける", async () => {
       // 相手が読まないと書き切れない大きさの結果（socket のバッファに収まらない）。
-      registry.register({ name: "test.big", params: z.object({}), handler: () => "x".repeat(8 * 1024 * 1024) });
+      registry.register({
+        name: "test.big",
+        params: z.object({}),
+        handler: () => "x".repeat(8 * 1024 * 1024),
+      });
       await start({ requestWaitMs: 300, maxConnections: 1 });
       const reader = connect(path); // `data` を聞かない＝読まない
       reader.on("error", () => undefined);
@@ -441,13 +529,22 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       try {
         reader.write(`${JSON.stringify({ v: 1, op: "test.big", paneId: "p1" })}\n`);
         // 返事を書き始めた（ここからは「書き切るまでの上限」）。
-        await vi.waitFor(() => expect(logger.lines.some((l) => l.msg === "pane socket: request" && l.fields?.op === "test.big")).toBe(true));
+        await vi.waitFor(() =>
+          expect(
+            logger.lines.some(
+              (l) => l.msg === "pane socket: request" && l.fields?.op === "test.big",
+            ),
+          ).toBe(true),
+        );
 
         // 上限が効かなければ接続は残り続け、ここで時間切れになる。
         await vi.waitFor(() => expect(socket.connectionCount).toBe(0), { timeout: 3_000 });
         expect(gone).toHaveLength(1);
         // 枠（上限 1）が空いたので、次の要求が通る。
-        expect(await call(path, "test.echo", "p1", { text: "next" })).toMatchObject({ ok: true, result: { text: "next" } });
+        expect(await call(path, "test.echo", "p1", { text: "next" })).toMatchObject({
+          ok: true,
+          result: { text: "next" },
+        });
       } finally {
         reader.destroy();
       }
@@ -507,7 +604,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       a.wait.finish("a");
       expect(parseReply(await a.client.closed)).toEqual({ ok: true, result: "a" });
       await vi.waitFor(() => expect(socket.connectionCount).toBe(1));
-      expect(await call(path, "test.echo", "p1", { text: "y" })).toMatchObject({ ok: true, result: { text: "y" } });
+      expect(await call(path, "test.echo", "p1", { text: "y" })).toMatchObject({
+        ok: true,
+        result: { text: "y" },
+      });
       b.wait.finish("b");
       await b.client.closed;
     });
@@ -555,7 +655,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
 
       socket.resume();
 
-      expect(await call(path, "test.echo", "p1", { text: "back" })).toMatchObject({ ok: true, result: { text: "back" } });
+      expect(await call(path, "test.echo", "p1", { text: "back" })).toMatchObject({
+        ok: true,
+        result: { text: "back" },
+      });
       expect(echoCalls).toBe(1);
     });
   });
@@ -565,17 +668,28 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
      * 受け口の FIN を受けても自分からは閉じないクライアント（`allowHalfOpen`）。返事の 1 行と、受け口が書き込み側を閉じたこと（`end`）を待てる。
      * 断ってすぐ接続を捨てる実装では、`end` の時点で受け口の側はもう閉じていて、その後の `write` が EPIPE になる。
      */
-    async function openHalf(): Promise<{ sock: Socket; reply: Promise<string>; write(data: string): Promise<Error | null> }> {
+    async function openHalf(): Promise<{
+      sock: Socket;
+      reply: Promise<string>;
+      write(data: string): Promise<Error | null>;
+    }> {
       const sock = connect({ path, allowHalfOpen: true });
       sock.setEncoding("utf8");
       let buf = "";
       sock.on("data", (chunk: string) => (buf += chunk));
       const failed = new Promise<never>((_, reject) => sock.once("error", reject));
       failed.catch(() => undefined);
-      const reply = Promise.race([new Promise<string>((res) => sock.once("end", () => res(buf))), failed]);
+      const reply = Promise.race([
+        new Promise<string>((res) => sock.once("end", () => res(buf))),
+        failed,
+      ]);
       await Promise.race([new Promise<void>((res) => sock.once("connect", () => res())), failed]);
       halves.push(sock);
-      return { sock, reply, write: (data) => new Promise((res) => sock.write(data, (err) => res(err ?? null))) };
+      return {
+        sock,
+        reply,
+        write: (data) => new Promise((res) => sock.write(data, (err) => res(err ?? null))),
+      };
     }
     const halves: Socket[] = [];
     afterEach(() => {
@@ -590,8 +704,15 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       const c = await openHalf();
 
       // 受け口が返事を書いて書き込み側を閉じた後に、要求を書く（クライアントの書き込みが遅れた形）。
-      expect(parseReply(await c.reply)).toMatchObject({ ok: false, error: { code: "pane_socket_busy" } });
-      expect(await c.write(`${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x".repeat(256 * 1024) } })}\n`)).toBeNull();
+      expect(parseReply(await c.reply)).toMatchObject({
+        ok: false,
+        error: { code: "pane_socket_busy" },
+      });
+      expect(
+        await c.write(
+          `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x".repeat(256 * 1024) } })}\n`,
+        ),
+      ).toBeNull();
 
       expect(echoCalls).toBe(0); // 読み捨てる（操作は始めない）
       expect(lingering()).toBe(1);
@@ -606,14 +727,20 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       const c = await openHalf();
 
       expect(await c.write("x".repeat(300))).toBeNull();
-      expect(parseReply(await c.reply)).toMatchObject({ ok: false, error: { code: "bad_request" } });
+      expect(parseReply(await c.reply)).toMatchObject({
+        ok: false,
+        error: { code: "bad_request" },
+      });
       expect(await c.write(`${"x".repeat(256 * 1024)}\n`)).toBeNull(); // 行の残りを書いても失敗しない
 
       expect(lingering()).toBe(1);
       expect(socket.connectionCount).toBe(0);
       expect(gone).toHaveLength(1);
       // 待っている間も、枠（上限 1）は空いている。
-      expect(await call(path, "test.echo", "p1", { text: "next" })).toMatchObject({ ok: true, result: { text: "next" } });
+      expect(await call(path, "test.echo", "p1", { text: "next" })).toMatchObject({
+        ok: true,
+        result: { text: "next" },
+      });
       c.sock.destroy();
       await vi.waitFor(() => expect(lingering()).toBe(0));
       expect(gone).toHaveLength(2); // 断った接続の分は 1 回だけ
@@ -623,7 +750,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       await start({ refusedLingerMs: 100 });
       socket.pause();
       const c = await openHalf();
-      expect(parseReply(await c.reply)).toMatchObject({ ok: false, error: { code: "pane_socket_busy" } });
+      expect(parseReply(await c.reply)).toMatchObject({
+        ok: false,
+        error: { code: "pane_socket_busy" },
+      });
       expect(lingering()).toBe(1);
 
       // 上限が効かなければ残り続け、ここで時間切れになる（相手は閉じていない）。
@@ -637,7 +767,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       const clients = [];
       for (let i = 0; i < 5; i++) {
         const c = await openHalf();
-        expect(parseReply(await c.reply)).toMatchObject({ ok: false, error: { code: "pane_socket_busy" } });
+        expect(parseReply(await c.reply)).toMatchObject({
+          ok: false,
+          error: { code: "pane_socket_busy" },
+        });
         clients.push(c);
         expect(lingering()).toBe(Math.min(i + 1, 2));
       }
@@ -683,7 +816,12 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       const oldEcho = echoCalls;
       const fresh = new PaneOpRegistry(logger);
       fresh.register({ name: "test.echo", params: z.object({}), handler: () => "new" });
-      socket = new PaneSocket({ registry: fresh, paneExists: () => true, onConnectionGone: () => undefined, logger });
+      socket = new PaneSocket({
+        registry: fresh,
+        paneExists: () => true,
+        onConnectionGone: () => undefined,
+        logger,
+      });
       try {
         await socket.listen(path);
 
@@ -697,7 +835,12 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
     });
 
     it("置けなければ listen が投げる（呼び出し側が warn で続ける）", async () => {
-      socket = new PaneSocket({ registry, paneExists: () => true, onConnectionGone: () => undefined, logger });
+      socket = new PaneSocket({
+        registry,
+        paneExists: () => true,
+        onConnectionGone: () => undefined,
+        logger,
+      });
 
       await expect(socket.listen(join(dir, "missing", "pane.sock"))).rejects.toThrow();
 
@@ -734,7 +877,10 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       await hold.reached;
       expect((await stat(path)).isSocket()).toBe(true); // もう繋げる場所にある
 
-      const raw = await sendRaw(path, `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`);
+      const raw = await sendRaw(
+        path,
+        `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`,
+      );
 
       expect(raw).toBe(""); // `pane_socket_busy` も書かない
       expect(echoCalls).toBe(0);
@@ -752,7 +898,12 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
 
       const closing = socket.close();
       // close() を始めた後・待ち受けを閉じる前の接続。
-      expect(await sendRaw(path, `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`)).toBe("");
+      expect(
+        await sendRaw(
+          path,
+          `${JSON.stringify({ v: 1, op: "test.echo", paneId: "p1", params: { text: "x" } })}\n`,
+        ),
+      ).toBe("");
       hold.release();
       await listening;
       await closing;
@@ -781,9 +932,16 @@ describe.skipIf(process.platform === "win32")("PaneSocket", () => {
       await sendRaw(path, "SECRET-PARAM-TEXT not json\n");
 
       const connId = ok.ok ? (ok.result as { connId: string }).connId : "";
-      const requests = logger.lines.filter((l) => l.msg === "pane socket: request").map((l) => l.fields);
+      const requests = logger.lines
+        .filter((l) => l.msg === "pane socket: request")
+        .map((l) => l.fields);
       expect(requests[0]).toEqual({ op: "test.echo", paneId: "p1", connId, code: "ok" });
-      expect(requests.map((f) => f?.code)).toEqual(["ok", "not_found", "unknown_op", "bad_request"]);
+      expect(requests.map((f) => f?.code)).toEqual([
+        "ok",
+        "not_found",
+        "unknown_op",
+        "bad_request",
+      ]);
       expect(JSON.stringify(logger.lines)).not.toContain("SECRET-PARAM-TEXT");
     });
   });

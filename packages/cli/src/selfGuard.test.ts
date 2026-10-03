@@ -50,7 +50,9 @@ describe("assertNotSelfPane", () => {
     expect(() => assertNotSelfPane(inPane, "p2", "close")).not.toThrow();
   });
   it("caller が無ければ断らない（pane の外）", () => {
-    expect(() => assertNotSelfPane({ url: SERVER, token: undefined, urlExplicit: false }, "p1", "close")).not.toThrow();
+    expect(() =>
+      assertNotSelfPane({ url: SERVER, token: undefined, urlExplicit: false }, "p1", "close"),
+    ).not.toThrow();
   });
   it("接続先の origin が pane のサーバと違えば断らない（別のサーバの同じ ID）", () => {
     expect(() =>
@@ -95,7 +97,12 @@ describe("assertNotSelfPane", () => {
   it('http(s) でない URL（origin が "null"）同士でも一致とみなさない', () => {
     expect(() =>
       assertNotSelfPane(
-        { url: "file:///x", token: undefined, urlExplicit: false, caller: { paneId: "p1", serverUrl: "file:///y" } },
+        {
+          url: "file:///x",
+          token: undefined,
+          urlExplicit: false,
+          caller: { paneId: "p1", serverUrl: "file:///y" },
+        },
         "p1",
         "close",
       ),
@@ -135,7 +142,12 @@ describe("assertNotSelfTab", () => {
   });
   it("caller が無い・別のサーバなら断らない", () => {
     expect(() =>
-      assertNotSelfTab({ url: SERVER, token: undefined, urlExplicit: false }, snapshot, "t1", "close"),
+      assertNotSelfTab(
+        { url: SERVER, token: undefined, urlExplicit: false },
+        snapshot,
+        "t1",
+        "close",
+      ),
     ).not.toThrow();
     expect(() =>
       assertNotSelfTab({ ...inPane, url: "http://127.0.0.1:1" }, snapshot, "t1", "close"),
@@ -166,7 +178,12 @@ describe("assertNotSelfWorkspace", () => {
       ),
     ).not.toThrow();
     expect(() =>
-      assertNotSelfWorkspace({ url: SERVER, token: undefined, urlExplicit: false }, snapshot, "w1", "close"),
+      assertNotSelfWorkspace(
+        { url: SERVER, token: undefined, urlExplicit: false },
+        snapshot,
+        "w1",
+        "close",
+      ),
     ).not.toThrow();
     expect(() =>
       assertNotSelfWorkspace({ ...inPane, url: "http://127.0.0.1:1" }, snapshot, "w1", "close"),

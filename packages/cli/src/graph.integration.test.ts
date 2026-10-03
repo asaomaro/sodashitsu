@@ -158,7 +158,10 @@ describe("sodactl graph integration（実物のサーバ）", () => {
   async function graph<T = { graph: Graph }>(action: GraphAction, json = true): Promise<T> {
     const out = captureStdout();
     try {
-      await runGraph({ kind: "graph", opts: { url, token, urlExplicit: false }, json, action }, store);
+      await runGraph(
+        { kind: "graph", opts: { url, token, urlExplicit: false }, json, action },
+        store,
+      );
     } finally {
       out.restore();
     }

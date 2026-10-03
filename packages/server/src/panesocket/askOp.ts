@@ -12,10 +12,13 @@ import type { PaneOpDef } from "./PaneOpRegistry.js";
  *   `asks.onClientGone(connId)` を呼んで取り消す（配線は `composeServer`）。
  * - `AskService.open` の検査の誤り（`invalid_ask_spec`・`ask_busy` 等）は同期の throw。`PaneOpRegistry.invoke` が `try` の中で呼んで拾う。
  */
-export function askOpenOp(asks: Pick<AskService, "open">): PaneOpDef<z.infer<typeof PaneAskOpenParams>> {
+export function askOpenOp(
+  asks: Pick<AskService, "open">,
+): PaneOpDef<z.infer<typeof PaneAskOpenParams>> {
   return {
     name: PANE_OP_ASK_OPEN,
     params: PaneAskOpenParams,
-    handler: (ctx, p) => asks.open(ctx.connId, { paneId: ctx.paneId, spec: p.spec, timeoutMs: p.timeoutMs }),
+    handler: (ctx, p) =>
+      asks.open(ctx.connId, { paneId: ctx.paneId, spec: p.spec, timeoutMs: p.timeoutMs }),
   };
 }

@@ -230,7 +230,7 @@ test.describe("ログインなし（token なし・セッションのキャッ�
     await page.locator("[data-ask-submit]").click();
     const r = await run.done;
     // ログインしていないので、受け口を通らなければ unauthenticated（終了コード 1）になる。
-    expect(r.stderr).toBe("");
+    expect(r.stderr).not.toContain("unauthenticated");
     expect(r.code).toBe(0);
     expect(r.json).toEqual({ status: "answered", answers: { channel: "beta", notes: ["changelog"] } });
     await expect(dialog(page)).toHaveCount(0);

@@ -159,7 +159,11 @@ describe("buildPaneEnv の SODA_PANE_SOCKET", () => {
   });
 
   it("パスが無ければ入れず、親の環境の古い値も渡さない（Windows のサーバ・受け口の無いサーバ）", () => {
-    for (const managed of [{ paneId: "p1" }, { paneId: "p1", paneSocketPath: undefined }, { paneId: "p1", paneSocketPath: "" }]) {
+    for (const managed of [
+      { paneId: "p1" },
+      { paneId: "p1", paneSocketPath: undefined },
+      { paneId: "p1", paneSocketPath: "" },
+    ]) {
       const env = buildPaneEnv(inherited, managed, "linux");
       expect("SODA_PANE_SOCKET" in env, JSON.stringify(managed)).toBe(false);
       expect(Object.values(env)).not.toContain("/old/pane.sock");
@@ -171,7 +175,10 @@ describe("buildPaneEnv の SODA_PANE_SOCKET", () => {
   it("win32 では大文字小文字を区別せずに古い値を落とし、linux では別の変数として残す", () => {
     const base = { Soda_Pane_Socket: "/old/pane.sock", other: "x" } as NodeJS.ProcessEnv;
     // Windows のサーバは受け口のパスを持たない（`paneSocketPathFor` が undefined）ので、入れる値も無い
-    expect(buildPaneEnv(base, { paneId: "p1", paneSocketPath: undefined }, "win32")).toEqual({ other: "x", SODA_PANE_ID: "p1" });
+    expect(buildPaneEnv(base, { paneId: "p1", paneSocketPath: undefined }, "win32")).toEqual({
+      other: "x",
+      SODA_PANE_ID: "p1",
+    });
     expect(buildPaneEnv(base, { paneId: "p1", paneSocketPath: "/s/pane.sock" }, "linux")).toEqual({
       Soda_Pane_Socket: "/old/pane.sock",
       other: "x",
@@ -181,13 +188,22 @@ describe("buildPaneEnv の SODA_PANE_SOCKET", () => {
   });
 
   it("受け口を足しても増えるのは SODA_PANE_SOCKET（パスだけ）で、token・cookie・local-auth.json の秘密はどの値にも含まれない（AC15）", () => {
-    const managed = { paneId: "p1", serverUrl: "http://127.0.0.1:7780", agentReportSocketPath: "/s/agent-report.sock", sessionName: "work" };
+    const managed = {
+      paneId: "p1",
+      serverUrl: "http://127.0.0.1:7780",
+      agentReportSocketPath: "/s/agent-report.sock",
+      sessionName: "work",
+    };
     const before = buildPaneEnv(inherited, managed, "linux");
     const after = buildPaneEnv(inherited, { ...managed, paneSocketPath: "/s/pane.sock" }, "linux");
     // 増えるのは 1 つだけで、値は渡したパスそのもの（秘密を足す余地が無い）
     expect(after).toEqual({ ...before, SODA_PANE_SOCKET: "/s/pane.sock" });
     // サーバが入れるキーは決まったものだけ（token・cookie・local-auth.json の秘密を運ぶ変数が増えていない）
-    expect(Object.keys(after).filter((k) => /^SODA(CTL)?_/.test(k)).sort()).toEqual([
+    expect(
+      Object.keys(after)
+        .filter((k) => /^SODA(CTL)?_/.test(k))
+        .sort(),
+    ).toEqual([
       "SODA_AGENT_REPORT_SOCKET",
       "SODA_PANE_ID",
       "SODA_PANE_SOCKET",
@@ -206,7 +222,13 @@ describe("buildPaneEnv の SODA_PANE_SOCKET", () => {
       SODA_PANE_SOCKET: "/old/local-auth.json",
     } as NodeJS.ProcessEnv;
     const bare = buildPaneEnv(leaky, { paneId: "p1", paneSocketPath: "/s/pane.sock" }, "linux");
-    expect(bare).toEqual({ PATH: "/usr/bin", SODA_PANE_ID: "p1", SODA_PANE_SOCKET: "/s/pane.sock" });
-    expect(Object.values(bare).filter((v) => /local-auth\.json|soda_session=|token=/i.test(v))).toEqual([]);
+    expect(bare).toEqual({
+      PATH: "/usr/bin",
+      SODA_PANE_ID: "p1",
+      SODA_PANE_SOCKET: "/s/pane.sock",
+    });
+    expect(
+      Object.values(bare).filter((v) => /local-auth\.json|soda_session=|token=/i.test(v)),
+    ).toEqual([]);
   });
 });

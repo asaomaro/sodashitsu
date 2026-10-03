@@ -31,8 +31,4 @@ export {
  * 実物のクライアント（`callPaneOp`）で呼ぶのに使う（受け口・クライアントのコードに手を入れずに新しい操作が通ることを確かめる。AC13）。
  */
 export { PaneSocket, type PaneSocketDeps, type PaneSocketLimits } from "./panesocket/PaneSocket.js";
-export {
-  PaneOpRegistry,
-  type PaneOpContext,
-  type PaneOpDef,
-} from "./panesocket/PaneOpRegistry.js";
+export { PaneOpRegistry, type PaneOpContext, type PaneOpDef } from "./panesocket/PaneOpRegistry.js";

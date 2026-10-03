@@ -209,146 +209,173 @@ describe.skipIf(process.platform !== "linux")("composeServer: 引き継ぎの起
  * execve はテストの差し替えが投げる（＝元に戻す経路）。「引き継ぎの最中」は、pane の読み取りを止める手順（`/ws` を閉じた後・execve の前）を
  * テストが止めて作る。
  */
-describe.skipIf(process.platform === "win32")("composeServer: 引き継ぎの間の pane.sock（20261003-sodactl-ask-socket の T8）", () => {
-  const cleanups: (() => Promise<unknown> | unknown)[] = [];
-  /** テストが置いた `process.execve` の置き場を外す。ほかの後始末が投げても必ず走らせる（置き場を次のテストへ残さない）。 */
-  let removeExecvePlaceholder: (() => void) | undefined;
-  afterEach(async () => {
-    try {
-      for (const fn of cleanups.splice(0).reverse()) await fn();
-    } finally {
-      removeExecvePlaceholder?.();
-      removeExecvePlaceholder = undefined;
-    }
-  });
+describe.skipIf(process.platform === "win32")(
+  "composeServer: 引き継ぎの間の pane.sock（20261003-sodactl-ask-socket の T8）",
+  () => {
+    const cleanups: (() => Promise<unknown> | unknown)[] = [];
+    /** テストが置いた `process.execve` の置き場を外す。ほかの後始末が投げても必ず走らせる（置き場を次のテストへ残さない）。 */
+    let removeExecvePlaceholder: (() => void) | undefined;
+    afterEach(async () => {
+      try {
+        for (const fn of cleanups.splice(0).reverse()) await fn();
+      } finally {
+        removeExecvePlaceholder?.();
+        removeExecvePlaceholder = undefined;
+      }
+    });
 
-  /** 受け口へ 1 行送る（sodactl と同じく `write` で送り、半分だけ閉じない）。`closed` は、接続が閉じるまでに受け口が書いたもの。 */
-  function send(path: string, paneId: string): Promise<{ closed: Promise<string> }> {
-    return new Promise((resolve, reject) => {
-      let buf = "";
-      const sock = netConnect(path);
-      cleanups.push(() => sock.destroy());
-      sock.setEncoding("utf8");
-      sock.on("data", (chunk: string) => (buf += chunk));
-      const closed = new Promise<string>((res) => sock.on("close", () => res(buf)));
-      sock.once("error", reject);
-      sock.once("connect", () => {
-        sock.off("error", reject);
-        sock.on("error", () => undefined);
-        const spec = { questions: [{ id: "q", label: "q", options: ["a", "b"] }] };
-        sock.write(`${JSON.stringify({ v: 1, op: PANE_OP_ASK_OPEN, paneId, params: { spec, timeoutMs: 20_000 } })}\n`);
-        resolve({ closed });
+    /** 受け口へ 1 行送る（sodactl と同じく `write` で送り、半分だけ閉じない）。`closed` は、接続が閉じるまでに受け口が書いたもの。 */
+    function send(path: string, paneId: string): Promise<{ closed: Promise<string> }> {
+      return new Promise((resolve, reject) => {
+        let buf = "";
+        const sock = netConnect(path);
+        cleanups.push(() => sock.destroy());
+        sock.setEncoding("utf8");
+        sock.on("data", (chunk: string) => (buf += chunk));
+        const closed = new Promise<string>((res) => sock.on("close", () => res(buf)));
+        sock.once("error", reject);
+        sock.once("connect", () => {
+          sock.off("error", reject);
+          sock.on("error", () => undefined);
+          const spec = { questions: [{ id: "q", label: "q", options: ["a", "b"] }] };
+          sock.write(
+            `${JSON.stringify({ v: 1, op: PANE_OP_ASK_OPEN, paneId, params: { spec, timeoutMs: 20_000 } })}\n`,
+          );
+          resolve({ closed });
+        });
       });
-    });
-  }
-  const call = async (path: string, paneId: string): Promise<PaneSocketResponse> =>
-    JSON.parse(await (await send(path, paneId)).closed) as PaneSocketResponse;
-
-  /** 質問を出せる画面（`/ws` で `ask.subscribe` した desktop）。`opened` は `ask.opened` が届いたら解決する。 */
-  async function browser(server: ComposedServer): Promise<{ opened: Promise<void> }> {
-    const port = server.options.port;
-    const origin = `http://127.0.0.1:${port}`;
-    const headers = { origin, host: `127.0.0.1:${port}` };
-    const res = await fetch(`${origin}/api/login`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify({ token: server.freshToken }),
-    });
-    expect(res.status).toBe(204);
-    const cookie = (res.headers.get("set-cookie") ?? "").split(";")[0]!;
-    const ws = await new Promise<WebSocket>((resolve, reject) => {
-      const w = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { ...headers, cookie } });
-      w.once("open", () => resolve(w));
-      w.once("error", reject);
-    });
-    cleanups.push(() => ws.close());
-    let seq = 0;
-    const replies = new Map<string, (error?: { code: string }) => void>();
-    let onOpened!: () => void;
-    const opened = new Promise<void>((r) => (onOpened = r));
-    ws.on("message", (data, isBinary) => {
-      if (isBinary) return;
-      const msg = JSON.parse(String(data)) as { id?: string; error?: { code: string }; event?: string };
-      if (msg.id !== undefined) replies.get(msg.id)?.(msg.error);
-      else if (msg.event === "ask.opened") onOpened();
-    });
-    const request = (method: string, params: unknown): Promise<void> =>
-      new Promise((resolve, reject) => {
-        const id = String(++seq);
-        // 誤りの返事は reject する（`paneSocket.integration.test.ts` の `Browser` と同じ。hello・購読が断られたまま先へ進まない）
-        replies.set(id, (error) => (error ? reject(Object.assign(new Error(error.code), { code: error.code })) : resolve()));
-        ws.send(JSON.stringify({ id, method, params }));
-      });
-    await request("client.hello", { protocol: 1, kind: "desktop" });
-    await request("ask.subscribe", {});
-    return { opened };
-  }
-
-  it("引き継ぎの間は、待っていた接続を返事なしで捨て、新しい接続を pane_socket_busy で断る。元に戻ると受け付けが戻る（AC11）", async () => {
-    // 引き継ぎは `process.execve` のある Node でだけ受け付ける（無ければ `unsupported`）。入れ替えそのものは下の `handoffExecve` が差し替えるので、
-    // 無い Node（22.15 より前）では、組み立ての間だけ「ある」ことにする（この関数は呼ばれない）。
-    const proc = process as { execve?: unknown };
-    if (typeof proc.execve !== "function") {
-      proc.execve = () => {
-        throw new Error("the test's process.execve placeholder must not be called");
-      };
-      removeExecvePlaceholder = () => {
-        delete proc.execve;
-      };
     }
-    const stateDir = await makeTempDir("soda-handoff-psock-");
-    cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
-    let execveCalls = 0;
-    const server = await composeServerOnFreePort(
-      { host: "127.0.0.1", stateDir, origin: [] },
-      {
-        internal: {
-          handoffPreflight: () => Promise.resolve({ ok: true }),
-          handoffExecve: () => {
-            execveCalls++;
-            throw new Error("execve refused by the test");
+    const call = async (path: string, paneId: string): Promise<PaneSocketResponse> =>
+      JSON.parse(await (await send(path, paneId)).closed) as PaneSocketResponse;
+
+    /** 質問を出せる画面（`/ws` で `ask.subscribe` した desktop）。`opened` は `ask.opened` が届いたら解決する。 */
+    async function browser(server: ComposedServer): Promise<{ opened: Promise<void> }> {
+      const port = server.options.port;
+      const origin = `http://127.0.0.1:${port}`;
+      const headers = { origin, host: `127.0.0.1:${port}` };
+      const res = await fetch(`${origin}/api/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({ token: server.freshToken }),
+      });
+      expect(res.status).toBe(204);
+      const cookie = (res.headers.get("set-cookie") ?? "").split(";")[0]!;
+      const ws = await new Promise<WebSocket>((resolve, reject) => {
+        const w = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { ...headers, cookie } });
+        w.once("open", () => resolve(w));
+        w.once("error", reject);
+      });
+      cleanups.push(() => ws.close());
+      let seq = 0;
+      const replies = new Map<string, (error?: { code: string }) => void>();
+      let onOpened!: () => void;
+      const opened = new Promise<void>((r) => (onOpened = r));
+      ws.on("message", (data, isBinary) => {
+        if (isBinary) return;
+        const msg = JSON.parse(String(data)) as {
+          id?: string;
+          error?: { code: string };
+          event?: string;
+        };
+        if (msg.id !== undefined) replies.get(msg.id)?.(msg.error);
+        else if (msg.event === "ask.opened") onOpened();
+      });
+      const request = (method: string, params: unknown): Promise<void> =>
+        new Promise((resolve, reject) => {
+          const id = String(++seq);
+          // 誤りの返事は reject する（`paneSocket.integration.test.ts` の `Browser` と同じ。hello・購読が断られたまま先へ進まない）
+          replies.set(id, (error) =>
+            error ? reject(Object.assign(new Error(error.code), { code: error.code })) : resolve(),
+          );
+          ws.send(JSON.stringify({ id, method, params }));
+        });
+      await request("client.hello", { protocol: 1, kind: "desktop" });
+      await request("ask.subscribe", {});
+      return { opened };
+    }
+
+    it("引き継ぎの間は、待っていた接続を返事なしで捨て、新しい接続を pane_socket_busy で断る。元に戻ると受け付けが戻る（AC11）", async () => {
+      // 引き継ぎは `process.execve` のある Node でだけ受け付ける（無ければ `unsupported`）。入れ替えそのものは下の `handoffExecve` が差し替えるので、
+      // 無い Node（22.15 より前）では、組み立ての間だけ「ある」ことにする（この関数は呼ばれない）。
+      const proc = process as { execve?: unknown };
+      if (typeof proc.execve !== "function") {
+        proc.execve = () => {
+          throw new Error("the test's process.execve placeholder must not be called");
+        };
+        removeExecvePlaceholder = () => {
+          delete proc.execve;
+        };
+      }
+      const stateDir = await makeTempDir("soda-handoff-psock-");
+      cleanups.push(() =>
+        rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }),
+      );
+      let execveCalls = 0;
+      const server = await composeServerOnFreePort(
+        { host: "127.0.0.1", stateDir, origin: [] },
+        {
+          internal: {
+            handoffPreflight: () => Promise.resolve({ ok: true }),
+            handoffExecve: () => {
+              execveCalls++;
+              throw new Error("execve refused by the test");
+            },
           },
         },
-      },
-    );
-    cleanups.push(() => server.close());
-    const paneId = server.session.snapshot().panes[0]!.id;
-    const sockPath = join(stateDir, "pane.sock");
+      );
+      cleanups.push(() => server.close());
+      const paneId = server.session.snapshot().panes[0]!.id;
+      const sockPath = join(stateDir, "pane.sock");
 
-    // 「引き継ぎの最中」を止めて作る: pane の読み取りを止める手順は `closeClients` の後・execve の前に呼ばれる。
-    const host = server.terminals.get(paneId)!;
-    const hold = host.holdForHandoff!.bind(host);
-    let reachedHold!: () => void;
-    const duringHandoff = new Promise<void>((r) => (reachedHold = r));
-    let releaseHold!: () => void;
-    const gate = new Promise<void>((r) => (releaseHold = r));
-    host.holdForHandoff = async () => {
-      reachedHold();
-      await gate;
-      return hold();
-    };
+      // 「引き継ぎの最中」を止めて作る: pane の読み取りを止める手順は `closeClients` の後・execve の前に呼ばれる。
+      const host = server.terminals.get(paneId)!;
+      const hold = host.holdForHandoff!.bind(host);
+      let reachedHold!: () => void;
+      const duringHandoff = new Promise<void>((r) => (reachedHold = r));
+      let releaseHold!: () => void;
+      const gate = new Promise<void>((r) => (releaseHold = r));
+      host.holdForHandoff = async () => {
+        reachedHold();
+        await gate;
+        return hold();
+      };
 
-    // 引き継ぎの前から返事を待っている接続（画面が居るので、質問が出て待つ）
-    const b = await browser(server);
-    const waiting = await send(sockPath, paneId);
-    await b.opened;
+      // 引き継ぎの前から返事を待っている接続（画面が居るので、質問が出て待つ）
+      const b = await browser(server);
+      const waiting = await send(sockPath, paneId);
+      await b.opened;
 
-    const answer = askSocket(handoffSocketPathFor(stateDir), JSON.stringify({ op: "handoff" }), 15_000);
-    await duringHandoff;
-    // 待っていた接続は、何も書かれずに閉じる（質問は取り消し。sodactl には `connection_closed`）
-    expect(await waiting.closed).toBe("");
-    // 最中の新しい接続は、要求を読まずに断る（質問は出していない、と呼び出し側に分かる）
-    expect(await call(sockPath, paneId)).toEqual({ ok: false, error: { code: "pane_socket_busy", message: expect.any(String) } });
-    expect(execveCalls).toBe(0);
+      const answer = askSocket(
+        handoffSocketPathFor(stateDir),
+        JSON.stringify({ op: "handoff" }),
+        15_000,
+      );
+      await duringHandoff;
+      // 待っていた接続は、何も書かれずに閉じる（質問は取り消し。sodactl には `connection_closed`）
+      expect(await waiting.closed).toBe("");
+      // 最中の新しい接続は、要求を読まずに断る（質問は出していない、と呼び出し側に分かる）
+      expect(await call(sockPath, paneId)).toEqual({
+        ok: false,
+        error: { code: "pane_socket_busy", message: expect.any(String) },
+      });
+      expect(execveCalls).toBe(0);
 
-    releaseHold();
-    expect(JSON.parse(await answer)).toMatchObject({ ok: true, panes: 1 });
-    // execve が失敗して元に戻ると、受け付けが戻る（画面は引き継ぎで切れたので、質問は待たずに `unavailable`）。
-    // 待っていた質問が取り消されていることの確かめも兼ねる——残っていれば、同じ pane への 2 つめは `ask_busy` で断られる。
-    await vi.waitFor(async () => expect(await call(sockPath, paneId)).toMatchObject({ ok: true, result: { status: "unavailable" } }), {
-      timeout: 10_000,
-      interval: 20,
+      releaseHold();
+      expect(JSON.parse(await answer)).toMatchObject({ ok: true, panes: 1 });
+      // execve が失敗して元に戻ると、受け付けが戻る（画面は引き継ぎで切れたので、質問は待たずに `unavailable`）。
+      // 待っていた質問が取り消されていることの確かめも兼ねる——残っていれば、同じ pane への 2 つめは `ask_busy` で断られる。
+      await vi.waitFor(
+        async () =>
+          expect(await call(sockPath, paneId)).toMatchObject({
+            ok: true,
+            result: { status: "unavailable" },
+          }),
+        {
+          timeout: 10_000,
+          interval: 20,
+        },
+      );
+      expect(execveCalls).toBe(1);
     });
-    expect(execveCalls).toBe(1);
-  });
-});
+  },
+);

@@ -91,7 +91,12 @@ describe("sodactl agent prompt / send-keys integration（偽のエージェン�
     const out = captureStdout();
     try {
       await runPaneRun(
-        { kind: "pane-run", opts: { url, token: server.freshToken, urlExplicit: false }, paneId, command },
+        {
+          kind: "pane-run",
+          opts: { url, token: server.freshToken, urlExplicit: false },
+          paneId,
+          command,
+        },
         store,
       );
     } finally {
