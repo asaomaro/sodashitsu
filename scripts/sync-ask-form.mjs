@@ -10,10 +10,11 @@
 //   - 取り方は `git -C <from> show <commit>:<path>/<file>`。作業ツリーの状態に依らず、<from> へは何も書かない（チェックアウトも切り替えない）。
 //   - ネットワークは使わない。
 //   - 写したファイルは 1 バイトも変えない（git が返したバイトをそのまま書く。改行・文字コードを触らない）。
-// 終了コード: 0 成功／1 食い違い（--check）／2 使い方の誤り・取れない。
+//   - 書くときは全部を一時の名前で書いてから rename で置き換える（途中で失敗したら一時ファイルを消し、元を変えない）。
+// 終了コード: 0 成功／1 食い違い（--check）／2 使い方の誤り・取れない・書けない。
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,7 +43,8 @@ function parseArgs(argv) {
       opts.check = true;
     } else if (a === "--from" || a === "--commit" || a === "--dest") {
       const v = argv[++i];
-      if (v === undefined || v === "") die(`${a} に値がありません\n${USAGE}`);
+      // 次が別の引数（`--` で始まる）なら、値として飲み込まない。
+      if (v === undefined || v === "" || v.startsWith("--")) die(`${a} には値が要ります\n${USAGE}`);
       opts[a.slice(2)] = v;
     } else {
       die(`知らない引数: ${a}\n${USAGE}`);
@@ -108,6 +110,33 @@ function readSourceJson(dest) {
   }
 }
 
+/**
+ * [相対の名前, 中身] を、全部を一時の名前で書いてから rename で置き換える（渡した順。SOURCE.json は最後に渡す）。
+ * どれかが書けなければ、一時ファイルを消し、元を変えずに、理由を 1 行出して終了コード 2。
+ */
+function writeAll(dest, entries) {
+  const pending = [];
+  try {
+    for (const [f, data] of entries) {
+      const p = join(dest, f);
+      mkdirSync(dirname(p), { recursive: true });
+      const tmp = `${p}.tmp-${process.pid}`;
+      pending.push([tmp, p]);
+      writeFileSync(tmp, data);
+    }
+    for (const [tmp, p] of pending) renameSync(tmp, p);
+  } catch (e) {
+    for (const [tmp] of pending) {
+      try {
+        rmSync(tmp, { force: true });
+      } catch {
+        // 消せない一時ファイルは残す（理由は下の 1 行で足りる）。
+      }
+    }
+    die(`書き込めません: ${dest}（${e instanceof Error ? e.message : String(e)}）`);
+  }
+}
+
 function sync(opts, dest) {
   if (opts.from === undefined || opts.commit === undefined)
     die(`--from と --commit が要ります\n${USAGE}`);
@@ -116,6 +145,7 @@ function sync(opts, dest) {
   const hashes = Object.fromEntries(FILES.map((f) => [f, sha256(files.get(f))]));
 
   // 同じコミット・同じ中身を写し直しただけなら、取得日は前のまま（差分を作らない）。
+  // 取得日は UTC の日付（`toISOString()` の先頭 10 文字。手元の時刻帯の日付とは 1 日ずれることがある）。
   let retrieved = new Date().toISOString().slice(0, 10);
   const prevPath = join(dest, "SOURCE.json");
   if (existsSync(prevPath)) {
@@ -133,11 +163,6 @@ function sync(opts, dest) {
     }
   }
 
-  for (const f of FILES) {
-    const p = join(dest, f);
-    mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, files.get(f));
-  }
   const source = {
     repository: REPOSITORY,
     commit,
@@ -146,7 +171,10 @@ function sync(opts, dest) {
     version: readVersion(files.get("ask-form.js")),
     files: hashes,
   };
-  writeFileSync(prevPath, JSON.stringify(source, null, 2) + "\n");
+  writeAll(dest, [
+    ...FILES.map((f) => [f, files.get(f)]),
+    ["SOURCE.json", JSON.stringify(source, null, 2) + "\n"],
+  ]);
   console.log(
     `sync-ask-form: ${commit} から ${FILES.length} ファイルを ${dest} へ写しました（version ${source.version}）`,
   );

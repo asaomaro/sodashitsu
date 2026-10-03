@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -88,10 +88,12 @@ function runSync(...args: string[]): { code: number | null; stdout: string; stde
 const JS_V1 = "// 部品\r\nconst VERSION = '9.8.7';\nexport const x = 1;";
 const NORMALIZE = '{\n "cases": []\n}\n';
 const COLLECT = '{"cases":[]}';
+/** 不正な UTF-8 のバイト（0xff 0xfe）を含む中身。文字列を経由すると U+FFFD に化けて別のバイトになる。 */
+const NOT_UTF8 = Buffer.from([0x7b, 0xff, 0xfe, 0x0d, 0x0a, 0x7d]);
 
 /** 一時のリポジトリに 3 ファイルを置いてコミットし、そのコミット（40 桁）を返す。 */
 async function commitSource(
-  files: Partial<Record<(typeof FILES)[number], string>>,
+  files: Partial<Record<(typeof FILES)[number], string | Buffer>>,
 ): Promise<string> {
   if (!existsSync(join(repo, ".git"))) git("init", "-q");
   for (const [f, content] of Object.entries(files)) {
@@ -167,6 +169,44 @@ describe("sync-ask-form.mjs（写す）", () => {
     });
     expect(runSync("--check", "--dest", dest).code).toBe(0);
     expect(runSync("--check", "--from", repo, "--dest", dest).code).toBe(0);
+  });
+
+  it("不正な UTF-8 のバイトもそのまま写す（文字列を経由しない）", async () => {
+    const commit = await commitSource({ ...allFiles, "fixtures/collect.json": NOT_UTF8 });
+    const r = runSync("--from", repo, "--commit", commit, "--dest", dest);
+    expect(r.stderr).toBe("");
+    expect(r.code).toBe(0);
+
+    const copied = await readFile(join(dest, "fixtures", "collect.json"));
+    expect([...copied]).toEqual([...NOT_UTF8]);
+    expect((await readSourceJson(dest)).files["fixtures/collect.json"]).toBe(sha256(NOT_UTF8));
+    expect(runSync("--check", "--from", repo, "--dest", dest).code).toBe(0);
+  });
+
+  it("同じコミット・同じ中身の写し直しでは retrieved を変えず、中身の違うコミットでは今日（UTC）にする", async () => {
+    const first = await commitSource(allFiles);
+    expect(runSync("--from", repo, "--commit", first, "--dest", dest).code).toBe(0);
+
+    // 取得日を別の日付に書き換えてから、同じコミットで写し直す。
+    const OLD = "2001-02-03";
+    const source = await readSourceJson(dest);
+    expect(source.retrieved).not.toBe(OLD);
+    await writeFile(
+      join(dest, "SOURCE.json"),
+      JSON.stringify({ ...source, retrieved: OLD }, null, 2) + "\n",
+    );
+    expect(runSync("--from", repo, "--commit", first, "--dest", dest).code).toBe(0);
+    expect((await readSourceJson(dest)).retrieved).toBe(OLD);
+
+    // 中身の違うコミットで写し直すと、今日の日付（UTC。日付の変わり目をまたいでも落ちないよう、前後の両方を許す）。
+    const second = await commitSource({ ...allFiles, "fixtures/collect.json": COLLECT + "\n" });
+    const utcDate = (): string => new Date().toISOString().slice(0, 10);
+    const before = utcDate();
+    expect(runSync("--from", repo, "--commit", second, "--dest", dest).code).toBe(0);
+    const after = utcDate();
+    const updated = await readSourceJson(dest);
+    expect(updated.commit).toBe(second);
+    expect([before, after]).toContain(updated.retrieved);
   });
 
   it("作業ツリーの状態に依らない（コミットの中身を写し、元の作業ツリーは変えない）", async () => {
@@ -249,6 +289,17 @@ describe("sync-ask-form.mjs（使い方の誤り・取れない → 終了コー
     expect(existsSync(dest)).toBe(false);
   });
 
+  it("値を取る引数の次が -- で始まるなら、値として飲み込まない", async () => {
+    const commit = await commitSource(allFiles);
+    const r = runSync("--from", "--check", "--dest", dest);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("--from には値が要ります");
+    const r2 = runSync("--from", repo, "--commit", commit, "--dest", "--check");
+    expect(r2.code).toBe(2);
+    expect(r2.stderr).toContain("--dest には値が要ります");
+    expect(existsSync(dest)).toBe(false);
+  });
+
   it("--from が git のリポジトリでない", async () => {
     const plain = join(root, "plain");
     await mkdir(plain);
@@ -293,5 +344,35 @@ describe("sync-ask-form.mjs（使い方の誤り・取れない → 終了コー
     const r = runSync("--check", "--dest", dest);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain("SOURCE.json");
+  });
+
+  it("--dest が既存のファイルなら、理由を 1 行出して終了コード 2（スタックトレースを出さない）", async () => {
+    const commit = await commitSource(allFiles);
+    await writeFile(dest, "ファイル\n");
+    const r = runSync("--from", repo, "--commit", commit, "--dest", dest);
+    expect(r.code).toBe(2);
+    expect(r.stdout).toBe("");
+    expect(r.stderr).toMatch(/^sync-ask-form: 書き込めません: [^\n]*\n$/);
+    expect(r.stderr).not.toMatch(/^\s+at /m);
+    expect(await readFile(dest, "utf8")).toBe("ファイル\n");
+  });
+
+  it("途中で書けなければ、元のファイルを変えず、一時ファイルも残さない", async () => {
+    const first = await commitSource(allFiles);
+    expect(runSync("--from", repo, "--commit", first, "--dest", dest).code).toBe(0);
+    const sourceBefore = await readFile(join(dest, "SOURCE.json"));
+
+    // fixtures をファイルに替える: ask-form.js を書いた後、fixtures/ の下を書く所で失敗する。
+    await rm(join(dest, "fixtures"), { recursive: true });
+    await writeFile(join(dest, "fixtures"), "");
+    const second = await commitSource({ ...allFiles, "ask-form.js": JS_V1 + "\n// 新しい版\n" });
+    const r = runSync("--from", repo, "--commit", second, "--dest", dest);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toMatch(/^sync-ask-form: 書き込めません: [^\n]*\n$/);
+
+    // 新しい ask-form.js と古い SOURCE.json の組み合わせを残さない。
+    expect(await readFile(join(dest, "ask-form.js"), "utf8")).toBe(JS_V1);
+    expect((await readFile(join(dest, "SOURCE.json"))).equals(sourceBefore)).toBe(true);
+    expect((await readdir(dest)).sort()).toEqual(["SOURCE.json", "ask-form.js", "fixtures"]);
   });
 });

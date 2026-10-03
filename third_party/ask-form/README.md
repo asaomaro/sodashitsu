@@ -5,6 +5,7 @@
 ask-form スキルから**無改変で**写したものです。
 
 - 取得元コミット・取得日・部品の版・各ファイルの SHA-256: `SOURCE.json`（同期スクリプトが書く。手で直さない）
+  - 取得日 `retrieved` は UTC の日付。同じコミット・同じ中身を写し直しただけなら変えない。
 - 取得元パス: `docs/ClaudeCode/skills/other/ask-form/`（`ask-form.js`・`fixtures/normalize.json`・`fixtures/collect.json`）
 - ライセンス: public_docs に LICENSE の記載が無い。同じ作者のリポジトリ。
 - 変更点: なし（無改変で取り込み）。
@@ -16,8 +17,8 @@ ask-form スキルから**無改変で**写したものです。
 
 ## 決まり
 
-- **写したファイルは手で直さない**（1 バイトも変えない。prettier・eslint も当てない）。直したくなったら ask-form の側へ伝え、
-  直った版を写し直す。
+- **写したファイルは手で直さない**（1 バイトも変えない。prettier・eslint も当てない。prettier はリポジトリ直下の
+  `.prettierignore` に `third_party/ask-form/` を入れてある）。直したくなったら ask-form の側へ伝え、直った版を写し直す。
 - 手で直していないことは `scripts/sync-ask-form.test.ts`（`pnpm test`）が `SOURCE.json` の SHA-256 と比べて確かめる。
 - 改行の変換でバイトが変わらないよう、`.gitattributes` に `third_party/ask-form/** -text` を置いてある。
 
@@ -31,7 +32,8 @@ node scripts/sync-ask-form.mjs --check --from <public_docs の clone>           
 node scripts/sync-ask-form.mjs --check                                            # 写した先が SOURCE.json と一致するか
 ```
 
-終了コードは 0 成功／1 食い違い（`--check`）／2 使い方の誤り・取れない（リポジトリでない・コミットが無い・ファイルが無い）。
+終了コードは 0 成功／1 食い違い（`--check`）／2 使い方の誤り・取れない（リポジトリでない・コミットが無い・ファイルが無い）・
+書けない（写した先が既存のファイル・書けないフォルダ。全部を一時の名前で書いてから置き換えるので、途中で失敗しても元は変わらない）。
 
 ### 取り込むコミットを替えるたびに確かめること
 
