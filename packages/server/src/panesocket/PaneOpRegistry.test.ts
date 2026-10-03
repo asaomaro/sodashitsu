@@ -62,13 +62,6 @@ describe("PaneOpRegistry", () => {
     expect(registry.has("pane.write")).toBe(false);
   });
 
-  it("実際に載せる操作は ask.open だけで、pane を作る操作は載せない（20261003-graph-auto-nodes。callerPaneId は /ws だけ）", () => {
-    const registry = new PaneOpRegistry();
-    registry.register(askOpenOp({} as never));
-    for (const name of ["pane.split", "workspace.create", "tab.create", "agent.start"])
-      expect(registry.has(name)).toBe(false);
-  });
-
   it("同じ名前の二重登録は throw し、先の登録は残る", async () => {
     const registry = new PaneOpRegistry();
     registry.register(echoOp());

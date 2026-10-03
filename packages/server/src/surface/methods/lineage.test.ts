@@ -78,8 +78,9 @@ describe("pane.split / workspace.create / tab.create の記録（AC1）", () => 
     const p = base as Record<string, unknown>;
     it(`${method}: callerPaneId があれば結果の pane.id を子として記録し、検出で親に載る`, async () => {
       const s = setup();
-      expect(await s.call(method, { ...p, callerPaneId: "p1" })).toMatchObject({ ok: true });
-      expect(await s.detected()).toEqual([["p2", "p1"]]);
+      // 呼び出し元（p3）は、pane.split の分割元（p1）とも新しい pane（p2）とも別にする（親に params.paneId を使う誤りを見分ける）
+      expect(await s.call(method, { ...p, callerPaneId: "p3" })).toMatchObject({ ok: true });
+      expect(await s.detected()).toEqual([["p2", "p3"]]);
     });
     it(`${method}: callerPaneId なし（旧形）は従来どおり成功し、何も記録しない`, async () => {
       const s = setup();
@@ -135,6 +136,25 @@ describe("agent.start の記録（AC1・AC3・AC11）", () => {
     expect(await s.detected()).toEqual([]);
     release();
     await pending;
+  });
+
+  it("同じ親が同じ pane へ出した 2 回目の start が受理の前に断られても、先に受理された 1 回目の記録は消えない", async () => {
+    let n = 0;
+    const s = setup({
+      start: async (_p, onAccepted) => {
+        if (n++ === 0) {
+          onAccepted?.();
+          return RESULT as never;
+        }
+        throw new RpcError("agent_pane_busy", "busy");
+      },
+    });
+    expect(await s.call("agent.start", params)).toMatchObject({ ok: true });
+    expect(await s.call("agent.start", params)).toMatchObject({
+      ok: false,
+      error: { code: "agent_pane_busy" },
+    });
+    expect(await s.detected()).toEqual([["p2", "p1"]]);
   });
 
   it("onAccepted の後で start が投げたら（書き込みの失敗）、その記録を取り消す", async () => {
