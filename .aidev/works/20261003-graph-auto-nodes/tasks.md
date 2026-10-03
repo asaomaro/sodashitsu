@@ -30,7 +30,7 @@ design.md のとおり、下から積む。(1) プロトコルに省略可能な
       対象: `packages/server/src/surface/methods/pane.ts:23`、`workspace.ts:14`、`tab.ts:6`、`agent.ts:137`、`methods/deps.ts`、`packages/server/src/composeServer.ts:359-400`（graph の構築）、`:729`・`:756`・`:776`（停止の並び。`graphEngine.stop()`〜`graph.close()`）、`packages/server/src/agent/AgentStarter.ts:62-63, 115`、`packages/server/src/panesocket/`（`askOp.ts`・登録の既存テスト）
       依存: T3, T4
       AC: AC1, AC3, AC4, AC11, AC13
-- [ ] T6: 結合試験——実物の `composeServer` で、`callerPaneId` つきの `pane.split` → 偽の `claude` を実 PTY で検出 → `graph.get` に子と親のノード・監督・承認の線が出て、`graph.changed` が配信され rev が 1 進む。`agent start` 経由・打ち込み経由・`workspace.create` 経由／手で置いたノードの位置・設定が変わらない（AC8）／手動で外した子は戻らず、外した親は次の子で戻る（AC7）／親 pane を閉じてから子を検出すると何も足さない（AC10）／上限／別の監督役／旧形の params（`callerPaneId` なし）が従来どおり動く。sodactl の結合（`runAgentStart` に `SODA_PANE_ID` を設定）を 1 本。`attempted` を外す／`queueMicrotask` を同期に変えるよう壊して落ちる（または意味のある差が出る）ことを確かめる
+- [x] T6: 結合試験——実物の `composeServer` で、`callerPaneId` つきの `pane.split` → 偽の `claude` を実 PTY で検出 → `graph.get` に子と親のノード・監督・承認の線が出て、`graph.changed` が配信され rev が 1 進む。`agent start` 経由・打ち込み経由・`workspace.create` 経由／手で置いたノードの位置・設定が変わらない（AC8）／手動で外した子は戻らず、外した親は次の子で戻る（AC7）／親 pane を閉じてから子を検出すると何も足さない（AC10）／上限／別の監督役／旧形の params（`callerPaneId` なし）が従来どおり動く。sodactl の結合（`runAgentStart` に `SODA_PANE_ID` を設定）を 1 本。`attempted` を外す／`queueMicrotask` を同期に変えるよう壊して落ちる（または意味のある差が出る）ことを確かめる
       対象: `packages/server/src/composeServer.graph.integration.test.ts`、`packages/cli/src/agentStart.integration.test.ts`（偽 `claude` の実検出の手本）、`packages/cli/src/graph.integration.test.ts`
       依存: T2, T5
       AC: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8, AC9, AC10, AC11, AC12, AC13
