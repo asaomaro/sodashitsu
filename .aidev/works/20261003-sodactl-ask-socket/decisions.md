@@ -84,3 +84,22 @@ research の「design への申し送り」と R1〜R11 への答え。承認者
 - **結果**: should 7・nit 3。全件を反映した: 大きすぎた 2 タスクを割り（11 → 17 タスク）、テストの列挙の漏れ（`pane_socket_busy`・`pause`／`resume`・受け口を通した正常系・`paneSocketFor`・受け口の `invalid_ask_spec`）を足し、docs の前に行う確認（`SODA_PANE_ID` の名乗り）を T14 に入れた。
 - **順序の決定**: 既存の smoke・E2E の環境の漏れを止める T9 を、sodactl が受け口を使い始める T12 の前提にした（このリポジトリのテストは soda の pane の中で走らせているので、順が逆だと開発者の本物のサーバへ質問が飛ぶ）。
 - `sodactl help` の ask の文面（`main.ts`）は design の「対象範囲」に無いが、skill と揃えるため T14 で触る。
+
+## D6: coding の途中の判断（実装者の報告から）
+
+- **タスク点検の進め方**: 実装は数タスクずつ別のコンテキストへ委譲し、タスクごとに commit させて、その commit の差分を 1 タスク 1 コンテキストで点検した。点検は次のタスクの実装と並行で回したので、「点検してから次へ」の順は厳密には守っていない（指摘の修正は後から別 commit で当てた）。同じ作業ツリーでビルドが競合しないよう、実装は直列にした。
+- **`PaneSocket`（T4）の設計との違い**: 返事を書き切ったらサーバ側から `destroy` する（相手が閉じないと接続の枠が空かない）／`pane_socket_busy` で断った接続は `connId` を振らず `onConnectionGone` も呼ばない／`pause()`・`close()` は同期で abort と `onConnectionGone` まで済ませる／0600 で置き終える前と `close()` を始めた後の接続は何も書かずに捨てる／上限をテストで差し替える `limits?`／`listen()` の途中の `close()` は listen を待ってから閉じる。
+- **相手の EOF は取り消し**: 受け口は相手が書き込み側を閉じたら「接続が終わった」と扱う。クライアントは `write` で送り、返事を読むまで `end` しない（テストで固定）。
+- **`/ws` に `pane.write` という方式は無い**（research・design・tasks の例示の誤り）。AC3 のテストは実在する `agent.send_keys`・`workspace.create`・`pane.rename`・`ask.subscribe` も送って `unknown_op` を見ている。docs では実在する名前を使う。
+- **T8 のテスト**: 統合テストで作れた。この環境の Node は v20 で `process.execve` が無く handoff が `unsupported` になるので、テストの中で `process.execve` が無いときだけ投げるだけの関数を置く（実際の入れ替えは既存の差し替え口 `internal.handoffExecve`）。
+- **`paneSocket` を入れる場所（T10）**: design は `globalOptsFrom` としていたが、`parseArgs` の最後の 1 か所にした（`globalOptsFrom` の呼び出しが 30 か所以上あり、platform を通すと差分が大きい）。
+- **sodactl のクライアント（T11・T12）**: `viaPaneSocketOrSession` と `AskDeps` にテストの差し替え口（`callPaneOp`）を足した。形が違う返事・改行の無いまま閉じた返事も `connection_closed`。繋がる前の時間切れは `timeout`（fallback にしない。接続だけの短い上限は足していない）。
+- **空の `SODACTL_URL=""`**: `urlExplicit` は false だが `url` は空文字のまま（この作業より前からの挙動）。pane の中の ask は `caller_pane_unknown` になる。直さない（範囲外。follow-up の候補）。
+- **既存のテストの失敗（この環境）**: `composeServer.graph.integration.test.ts` の「引き継ぎの間は実行を止め…」は、Node v20 に `process.execve` が無く handoff が `unsupported` を返すために落ちる。今回の変更の前から同じ（受け口の配線に届く前の分岐）。
+
+## D7: タスクをまたぐ点検（1 ラウンド・2 件）で足した決定
+
+- **`ECONNREFUSED` は繋ぎ直す**（D3 (m) の「繋げなかったら落ちる」の例外）。受け口のファイルがあって誰も待ち受けていないのは、handoff の入れ替えの間（古い版は `pane.sock` を残して execve し、新しい版は復元の後で置き直す）。ここで `/ws` へ落ちると未ログインの pane は `unauthenticated` になり、docs・skill の案内どおりにエージェントが「login を頼んで止まる」。繋がっていないので操作は始まっておらず、繋ぎ直しても二重にはならない。上限は 5 秒（`--timeout` より短ければそちら）・間隔 150ms。不正終了の残骸では 5 秒待ってから今までの経路へ落ちる（その場合の遅れは受け入れる）。
+  - 採らなかった案: 古い版が execve の前に `pane.sock` を消す（`ENOENT` → すぐ落ちて `unauthenticated` になるので解決にならない）。新しい版が受け口を復元より前に立てる（pane が復元される前は `paneExists` が偽で `not_found` になる）。
+- **pane の環境の `SODA_PANE_SOCKET` は絶対パス**。待ち受けるパスは今までどおり（相対の `--state-dir` ならその相対のまま。起動時のパスの長さの検査と揃える）。sodactl は相対の値を使わない。
+- またぐ点検は 1 ラウンドで終えた（修正は陰性対照つきのテストで確かめた）。

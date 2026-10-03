@@ -1,7 +1,7 @@
 schema: 11
 slug: sodactl-ask-socket
-current: tasks
-approved: [requirements, research, design, tasks]
+current: test
+approved: [requirements, research, design, tasks, coding, test]
 mode: autonomous
 profile: full
 humanGates: []
