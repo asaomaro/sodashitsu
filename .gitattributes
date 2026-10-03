@@ -1,1 +1,2 @@
 *.bat text eol=crlf
+third_party/ask-form/** -text
