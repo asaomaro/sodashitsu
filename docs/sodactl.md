@@ -549,6 +549,8 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
 - **`/ws` へ落ちないもの**（操作が既に始まっているかもしれず、落ちると質問を二重に出すため）:
   - 繋がった後に、返事なしで閉じた（サーバの停止・`soda handoff` の開始）→ `connection_closed`（終了コード 1）。
   - `soda handoff` の途中・同時接続の上限（64）→ `pane_socket_busy`（終了コード 1）。要求は読まれていない（質問は出ていない）ので、少し待って打ち直してよい。
+  - 繋がった後に、返事が読めない（1 行の JSON でない・上限 8 MiB を超える）・受け口が要求の 1 行を 10 秒待っても揃わずに切った → 同じく `connection_closed`。
+  - sodactl 側の時間切れ（`--timeout` に 15 秒を足して待っても返事が無い）→ `timeout`（終了コード 1。stdout の `status: "timeout"` とは別物）。
   - 操作のエラー（`not_found`・`ask_busy`・`invalid_ask_spec` 等）は `/ws` の経路と同じ code・同じ終了コード。
 - **`/ws` の経路と同じもの**: 結果の JSON・終了コード・定義の検査・どのブラウザに出るか・「どの pane からの質問か」の固定の表示・呼び出し側（`sodactl ask`）が終わったら質問を取り消すこと。
   待っている質問の総数（32）と「1 つの pane に同時に 1 つ」は、`/ws` から出した質問と合わせて数える（受け口は 1 接続 1 要求なので、接続あたりの上限 8 には届かない）。
@@ -575,10 +577,12 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
 3. 秘密を返さない。
 4. 量の上限がある。
 
+- protocol: 操作の名前の定数と引数の schema を `packages/protocol/src/paneSocket.ts` に足す（サーバと sodactl の両方がここから読む。例は `PANE_OP_ASK_OPEN`・`PaneAskOpenParams`）。
 - サーバ: `packages/server/src/panesocket/PaneOpRegistry.ts` の `PaneOpDef`（名前・引数の schema・handler）を作り、`packages/server/src/composeServer.ts` で `register` する（例は `panesocket/askOp.ts`）。
 - sodactl: `packages/cli/src/paneSocket.ts` の `viaPaneSocketOrSession` を使う（受け口を使うか・`/ws` へ落ちるかの判断をコマンドごとに持たない）。
 - やりとりの形は `packages/protocol/src/paneSocket.ts`: **1 接続 1 要求**。要求は 1 行の JSON（`{"v":1,"op":"<名前>","paneId":"<id>","params":{…}}`。上限 1 MiB）、返事も 1 行の JSON
-  （`{"ok":true,"result":…}` か `{"ok":false,"error":{"code","message"}}`）で、受け口は返事を書いたら閉じる。検査の順は「行の形（`bad_request`）→ 操作（`unknown_op`）→ pane の実在（`not_found`）→ 引数（`invalid_params`）」。
+  （`{"ok":true,"result":…}` か `{"ok":false,"error":{"code","message"}}`。sodactl が読む上限は 8 MiB）で、受け口は返事を書いたら閉じる
+  （要求を読まずに断るとき〔`pane_socket_busy`・行の上限の超過〕は、返事が相手に届くよう、相手が閉じるか 1 秒たつまで待ってから閉じる）。検査の順は「行の形（`bad_request`）→ 操作（`unknown_op`）→ pane の実在（`not_found`）→ 引数（`invalid_params`）」。
   受け口だけの code は `unknown_op`・`bad_request`・`pane_socket_busy` の 3 つ。呼び出し側は要求を書いた後、返事の行を読むまで接続を閉じない（受け口は相手が閉じたら、呼び出し元が終わったものとして操作を取り消す）。
 - 上限は上の「サーバ側の上限」。
 
