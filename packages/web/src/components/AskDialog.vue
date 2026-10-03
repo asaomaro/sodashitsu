@@ -235,10 +235,9 @@ function onKeydown(ev: KeyboardEvent): void {
     ev.preventDefault();
     el.submit();
   } else if (ev.altKey && (ev.key === "PageDown" || ev.key === "PageUp")) {
-    // 部品にページを移る公開のメソッドは無いので、部品の［次へ］［戻る］を押す（出ていないとき＝端のページ・1 枚のときは何もしない）。
+    // 部品の公開のメソッドでページを移る（端のページ・1 枚のときは、部品が何もしない。質問が出ていないページは部品が飛ばす）。
     ev.preventDefault();
-    const button = el.shadowRoot?.querySelector<HTMLElement>(ev.key === "PageUp" ? "[data-ask-prev]" : "[data-ask-next]");
-    if (button && !button.hidden) button.click();
+    el.step(ev.key === "PageUp" ? -1 : 1);
   }
 }
 </script>

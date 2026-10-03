@@ -130,6 +130,26 @@ function pointerPick(el: HTMLElement): void {
   el.dispatchEvent(new Event("pointerdown", { bubbles: true, composed: true }));
   el.click();
 }
+/** `Space` で選ぶ（`keydown` → クリック。ブラウザは `Space` でラジオを押し、`click` を出す）。 */
+function spacePick(el: HTMLElement): void {
+  key(el, { key: " " });
+  el.click();
+}
+/**
+ * 矢印キーで `from` から `to` へ移る（`keydown` → 移った先の `click` と `change`。ブラウザは矢印で次のラジオを選び、どちらも出す）。
+ * `click()` が `change` を出したかは環境に依るので、出たことを確かめてから返す。
+ */
+function arrowMove(from: HTMLInputElement, to: HTMLInputElement): void {
+  let changed = 0;
+  const count = () => changed++;
+  to.addEventListener("change", count);
+  key(from, { key: "ArrowDown" });
+  to.click();
+  to.removeEventListener("change", count);
+  if (changed !== 1) throw new Error(`矢印で移ったときの change が ${changed} 回（1 回のはず）`);
+}
+/** 部品の中でフォーカスがある要素（Shadow DOM の中は `document.activeElement` では見えない）。 */
+const focusedInForm = (w: Mounted) => shadow(w).activeElement;
 /** 入力欄に書く。 */
 function type(el: HTMLInputElement | HTMLTextAreaElement, text: string): void {
   el.value = text;
@@ -423,8 +443,8 @@ describe("AskDialog — 部品が描くもの（AC2）", () => {
     const dialog = w.wrapper.get("dialog").element;
     const root = shadow(w);
     expect(dialog.querySelectorAll("script, img")).toHaveLength(0);
-    // 部品が常に描く拡大表示の `img` は `src` を持たない。
-    expect(root.querySelectorAll("script, img[src]")).toHaveLength(0);
+    // 部品の中にも無い（拡大表示の `img` は、開いたときにだけ入る）。
+    expect(root.querySelectorAll("script, img")).toHaveLength(0);
     expect(origin(w).textContent).toBe(ORIGIN);
     expect(inForm(w, "[data-ask-title]").textContent).toBe(evil);
     expect(inForm(w, ".intro").textContent).toBe(evil);
@@ -439,6 +459,21 @@ describe("AskDialog — 部品が描くもの（AC2）", () => {
     expect(inForm(w, ".sw i").getAttribute("style")).toContain("#fff");
     expect((window as unknown as { __askXss?: number }).__askXss).toBeUndefined();
     expect(root.innerHTML).not.toContain("javascript:1");
+  });
+
+  it("画像の無い定義では、部品の中に img が無い（拡大表示は、開いたときにだけ Shadow DOM に入る）", async () => {
+    const w = mountDialog();
+    await open(w, ask(SPEC));
+    expect(shadow(w).querySelector("img")).toBeNull();
+    expect(shadow(w).querySelector(".lb")).toBeNull();
+    // 決定を試みた後・ページを移った後も同じ。
+    w.store.clear();
+    await settle();
+    await open(w, ask({ ...PAGED, questions: [...PAGED.questions, { id: "d", label: "D", options: ["x"] }] }, "a2"));
+    inForm(w, "[data-ask-submit]").click();
+    form(w).step(1);
+    expect(w.answer).not.toHaveBeenCalled();
+    expect(shadow(w).querySelector("img, .lb")).toBeNull();
   });
 
   it("定義の検査を通らずに届いた（版の違う中継等）色でない文字列も、部品は style に入れない", async () => {
@@ -530,6 +565,93 @@ describe("AskDialog — 確定・取り消し（AC-I2）", () => {
     expect(w.answer).toHaveBeenCalledWith("a1", { answers: { a: "x", t: "hi" } });
   });
 
+  it("未回答のまま決定すると、未回答の質問に aria-invalid が付き、最初の未回答の質問のページへ移って、その入力へフォーカスが移る", async () => {
+    const w = mountDialog();
+    await open(
+      w,
+      ask({
+        note: false,
+        questions: [
+          { id: "a", label: "A", page: "基本", default: "x", options: ["x", "y"] },
+          { id: "b", label: "B", page: "詳細", options: ["p", "q"] },
+          { id: "t", label: "T", page: "確認", type: "text", required: true },
+        ],
+      }),
+    );
+    const invalid = () => allInForm(w, 'fieldset[aria-invalid="true"]').map((f) => f.getAttribute("data-ask-question"));
+    expect(invalid()).toEqual([]); // 決定を試みるまでは付かない
+    expect(currentPage(w)).toBe("1");
+    expect(document.activeElement).toBe(origin(w));
+
+    key(origin(w), { key: "Enter", ctrlKey: true });
+    expect(w.answer).not.toHaveBeenCalled();
+    expect(invalid()).toEqual(["b", "t"]);
+    expect(allInForm(w, "fieldset[aria-invalid]")).toHaveLength(2); // 答えてある質問には付かない
+    expect(currentPage(w)).toBe("2");
+    // 最初の未回答の質問（b）の最初の入力。選ばれはしない（フォーカスだけ）。
+    const first = input(w, '[data-ask-question="b"] input[value="p"]');
+    expect(focusedInForm(w)).toBe(first);
+    expect(document.activeElement).toBe(form(w));
+    expect(first.checked).toBe(false);
+
+    // 答えた質問からは外れ、次に決定すると、残った未回答の質問（t）の入力へ移る。
+    pointerPick(first);
+    expect(invalid()).toEqual(["t"]);
+    inForm(w, "[data-ask-submit]").click();
+    expect(currentPage(w)).toBe("3");
+    expect(focusedInForm(w)).toBe(input(w, '[data-ask-question="t"] input[type=text]'));
+    type(input(w, '[data-ask-question="t"] input[type=text]'), "hi");
+    expect(allInForm(w, "fieldset[aria-invalid]")).toHaveLength(0);
+    inForm(w, "[data-ask-submit]").click();
+    expect(w.answer).toHaveBeenCalledOnce();
+    expect(w.answer).toHaveBeenCalledWith("a1", { answers: { a: "x", b: "p", t: "hi" } });
+  });
+
+  it("値が __other__ の選択肢を選んで決定すると、その値が回答として送られる（「その他」の自由入力と併用できる）", async () => {
+    const w = mountDialog();
+    await open(
+      w,
+      ask({
+        note: false,
+        questions: [
+          { id: "s", label: "S", allowOther: true, options: ["x", { value: "__other__", label: "ほか" }] },
+          { id: "m", label: "M", type: "multi", allowOther: true, options: ["x", "__other__"] },
+        ],
+      }),
+    );
+    pointerPick(input(w, '[data-ask-question="s"] input[value="__other__"]'));
+    pointerPick(input(w, '[data-ask-question="m"] input[value="__other__"]'));
+    type(input(w, '[data-ask-question="m"] label.opt.other input[type=text]'), "自由");
+    inForm(w, "[data-ask-submit]").click();
+    expect(w.answer).toHaveBeenCalledOnce();
+    expect(w.answer).toHaveBeenCalledWith("a1", { answers: { s: "__other__", m: ["__other__", "自由"] }, custom: ["m"] });
+  });
+
+  it("値が空文字の選択肢を選んで決定すると、空文字が回答として送られる（未回答にならない。「その他」の空の入力は未回答のまま）", async () => {
+    const w = mountDialog();
+    await open(
+      w,
+      ask({
+        note: false,
+        questions: [
+          { id: "s", label: "S", allowOther: true, options: [{ value: "", label: "なし" }, "x"] },
+          { id: "m", label: "M", type: "multi", required: true, options: ["x", { value: "", label: "なし" }] },
+        ],
+      }),
+    );
+    // 「その他」を選んだだけ（入力が空）では未回答。
+    pointerPick(input(w, '[data-ask-question="s"] input[data-other]'));
+    inForm(w, "[data-ask-submit]").click();
+    expect(w.answer).not.toHaveBeenCalled();
+    expect(allInForm(w, 'fieldset[aria-invalid="true"]').map((f) => f.getAttribute("data-ask-question"))).toEqual(["s", "m"]);
+
+    pointerPick(input(w, '[data-ask-question="s"] input[value=""]:not([data-other])'));
+    pointerPick(input(w, '[data-ask-question="m"] input[value=""]'));
+    inForm(w, "[data-ask-submit]").click();
+    expect(w.answer).toHaveBeenCalledOnce();
+    expect(w.answer).toHaveBeenCalledWith("a1", { answers: { s: "", m: [""] } });
+  });
+
   it("「その他」: 入力すると選ばれ、答えは入力で custom に id が入る。補足は note", async () => {
     const w = mountDialog();
     await open(w, ask(SPEC));
@@ -595,26 +717,64 @@ describe("AskDialog — 確定・取り消し（AC-I2）", () => {
 });
 
 describe("AskDialog — 枠が取り次ぐキー（固定の行にフォーカスがあるとき。AC-I3）", () => {
-  it("固定の行での Alt+PageDown・Alt+PageUp でページが移る（preventDefault される）。端のページでは移らない", async () => {
+  it("固定の行での Alt+PageDown・Alt+PageUp は、部品の step(1)・step(-1) でページを移す（preventDefault される）。端のページでは移らない", async () => {
     const w = mountDialog();
+    const step = vi.spyOn(formProto(), "step");
     await open(w, ask(PAGED));
+    // 部品のボタンは押さない（公開のメソッドで移る）。
+    const clicks = vi.fn();
+    inForm(w, "[data-ask-next]").addEventListener("click", clicks);
+    inForm(w, "[data-ask-prev]").addEventListener("click", clicks);
     expect(currentPage(w)).toBe("1");
     expect(key(origin(w), { key: "PageDown", altKey: true }).defaultPrevented).toBe(true);
+    expect(step.mock.calls).toEqual([[1]]);
     expect(currentPage(w)).toBe("2");
     expect(shownQuestions(w)).toEqual(["b"]);
+    // 部品は、移った先のページの見出しへフォーカスを移す（固定の行から外れる）。
+    expect(focusedInForm(w)).toBe(inForm(w, '[data-ask-page="2"]'));
+    origin(w).focus();
+    expect(key(origin(w), { key: "PageUp", altKey: true }).defaultPrevented).toBe(true);
+    expect(step.mock.calls).toEqual([[1], [-1]]);
+    expect(currentPage(w)).toBe("1");
+    // 最初のページでは戻れない——何も起きないが、ブラウザの既定の動きは止める。
     origin(w).focus();
     expect(key(origin(w), { key: "PageUp", altKey: true }).defaultPrevented).toBe(true);
     expect(currentPage(w)).toBe("1");
-    // 最初のページでは［戻る］が出ていない——何も起きないが、ブラウザの既定の動きは止める。
-    expect(key(origin(w), { key: "PageUp", altKey: true }).defaultPrevented).toBe(true);
-    expect(currentPage(w)).toBe("1");
+    expect(document.activeElement).toBe(origin(w));
+    // 最後のページでは進めない。
+    for (const page of ["2", "3", "3"]) {
+      origin(w).focus();
+      expect(key(origin(w), { key: "PageDown", altKey: true }).defaultPrevented).toBe(true);
+      expect(currentPage(w)).toBe(page);
+    }
+    expect(document.activeElement).toBe(origin(w)); // 移らなかったときは、フォーカスも動かない
+    expect(clicks).not.toHaveBeenCalled();
     expect(w.answer).not.toHaveBeenCalled();
+  });
+
+  it("質問が 1 つも出ていないページは飛ばす（部品の step の決まり）", async () => {
+    const w = mountDialog();
+    const questions = PAGED.questions.map((q) => (q.id === "b" ? { ...q, showIf: { a: "y" } } : q));
+    await open(w, ask({ ...PAGED, questions }));
+    key(origin(w), { key: "PageDown", altKey: true });
+    expect(currentPage(w)).toBe("3"); // b は隠れている（a は x）
+    expect(shownQuestions(w)).toEqual(["c"]);
+    origin(w).focus();
+    key(origin(w), { key: "PageUp", altKey: true });
+    expect(currentPage(w)).toBe("1");
+    // b を出すと、飛ばさない。
+    pointerPick(input(w, '[data-ask-question="a"] input[value="y"]'));
+    origin(w).focus();
+    key(origin(w), { key: "PageDown", altKey: true });
+    expect(currentPage(w)).toBe("2");
   });
 
   it("1 枚の定義では、固定の行での Alt+PageDown は何もしない", async () => {
     const w = mountDialog();
+    const step = vi.spyOn(formProto(), "step");
     await open(w, ask(SPEC));
     expect(key(origin(w), { key: "PageDown", altKey: true }).defaultPrevented).toBe(true);
+    expect(step).toHaveBeenCalledOnce();
     expect(form(w).pageCount).toBe(1);
     expect(document.activeElement).toBe(origin(w));
   });
@@ -645,11 +805,13 @@ describe("AskDialog — 枠が取り次ぐキー（固定の行にフォーカ�
 
   it("dialog の中へ移されたトーストなど、固定の行の外のキーでは Ctrl+Enter で決定せず、ページも移らない", async () => {
     const w = mountDialog();
+    const step = vi.spyOn(formProto(), "step");
     await open(w, ask(PAGED));
     const stray = document.createElement("button");
     w.wrapper.get("dialog").element.appendChild(stray); // Teleport されたトーストの代わり
     expect(key(stray, { key: "Enter", ctrlKey: true }).defaultPrevented).toBe(false);
     expect(key(stray, { key: "PageDown", altKey: true }).defaultPrevented).toBe(false);
+    expect(step).not.toHaveBeenCalled();
     expect(w.answer).not.toHaveBeenCalled();
     expect(currentPage(w)).toBe("1");
   });
@@ -658,58 +820,95 @@ describe("AskDialog — 枠が取り次ぐキー（固定の行にフォーカ�
 describe("AskDialog — 質問が 1 つだけ・single・note:false の即確定（部品の動き。AC9）", () => {
   const ONE = { note: false, questions: [{ id: "a", label: "A", default: "x", options: ["x", "y", "z"] }] };
 
-  it("ポインタで選んだら、その時点で確定する", async () => {
+  /** 選択肢を 1 つ操作して、送られた回答を返す（1 件ごとに置き直す）。 */
+  async function fireOnce(raw: unknown, selector: string, fire: (el: HTMLInputElement) => void): Promise<unknown[][]> {
     const w = mountDialog();
-    await open(w, ask(ONE));
-    pointerPick(input(w, 'input[value="y"]'));
-    expect(w.answer).toHaveBeenCalledWith("a1", { answers: { a: "y" } });
-  });
+    await open(w, ask(raw, "k"));
+    fire(input(w, selector));
+    const calls = w.answer.mock.calls.map((c) => [...c]);
+    w.wrapper.unmount();
+    document.body.innerHTML = "";
+    setActivePinia((pinia = createPinia()));
+    return calls;
+  }
+  const HOW: [string, (el: HTMLInputElement) => void][] = [
+    ["ポインタ", pointerPick],
+    ["Space", spacePick],
+    ["Enter", (el) => void key(el, { key: "Enter" })],
+  ];
 
-  it("Enter で選んだら確定する。選ばれていない選択肢の Space（keydown → クリック）でも確定する", async () => {
-    const fires: [string, (el: HTMLInputElement) => void][] = [
-      ["Enter", (el) => void key(el, { key: "Enter" })],
-      [
-        "Space",
-        (el) => {
-          key(el, { key: " " });
-          el.click(); // ブラウザは Space でラジオを押す
-        },
-      ],
-    ];
-    for (const [label, fire] of fires) {
-      const w = mountDialog();
-      await open(w, ask(ONE, "k"));
-      fire(input(w, 'input[value="z"]'));
-      expect(w.answer, label).toHaveBeenCalledWith("k", { answers: { a: "z" } });
-      w.wrapper.unmount();
-      document.body.innerHTML = "";
-      setActivePinia((pinia = createPinia()));
+  it("ポインタ・Space・Enter で、選ばれていない選択肢を選んだら、その時点で確定する（回答は 1 回だけ送る）", async () => {
+    for (const [label, fire] of HOW) {
+      expect(await fireOnce(ONE, 'input[value="z"]', fire), label).toEqual([["k", { answers: { a: "z" } }]]);
     }
   });
 
-  it("矢印キーで移っただけ（直前の操作が矢印の change）では確定しない。ポインタの後でもキーを打てば確定しない", async () => {
+  it("既に選ばれている選択肢でも、ポインタ・Space・Enter で確定する（回答は 1 回だけ送る）", async () => {
+    for (const [label, fire] of HOW) {
+      // x は既定で選ばれている
+      expect(await fireOnce(ONE, 'input[value="x"]', fire), label).toEqual([["k", { answers: { a: "x" } }]]);
+    }
+  });
+
+  it("選択肢の行（label）をポインタで押しても確定する（回答は 1 回だけ送る）", async () => {
+    const w = mountDialog();
+    await open(w, ask(ONE));
+    const y = input(w, 'input[value="y"]');
+    const label = y.closest("label");
+    if (!label) throw new Error("label が無い");
+    pointerPick(label.querySelector<HTMLElement>(".name")!);
+    expect(y.checked).toBe(true);
+    expect(w.answer).toHaveBeenCalledOnce();
+    expect(w.answer).toHaveBeenCalledWith("a1", { answers: { a: "y" } });
+  });
+
+  it("確定した後（送信中）に同じ操作を重ねても、回答は 1 回だけ送る", async () => {
+    const w = mountDialog();
+    await open(w, ask(ONE));
+    const y = input(w, 'input[value="y"]');
+    pointerPick(y);
+    pointerPick(y);
+    spacePick(y);
+    key(y, { key: "Enter" });
+    pointerPick(input(w, 'input[value="z"]'));
+    expect(w.answer).toHaveBeenCalledOnce();
+    expect(w.answer).toHaveBeenCalledWith("a1", { answers: { a: "y" } });
+  });
+
+  it("矢印キーで移っただけ（keydown → 移った先の click と change）では確定しない。ポインタの後でも、矢印で移れば確定しない", async () => {
     const w = mountDialog();
     await open(w, ask(ONE));
     const x = input(w, 'input[value="x"]');
     const y = input(w, 'input[value="y"]');
-    x.dispatchEvent(new Event("pointerdown", { bubbles: true, composed: true }));
-    key(x, { key: "ArrowDown" });
-    // ブラウザは矢印で次のラジオを選び、change を出す。
-    y.checked = true;
-    y.dispatchEvent(new Event("change", { bubbles: true }));
+    const z = input(w, 'input[value="z"]');
+    arrowMove(x, y);
     expect(y.checked).toBe(true);
     expect(w.answer).not.toHaveBeenCalled();
+    // 直前がポインタでも、その後に矢印で移ったのなら確定しない。
+    y.dispatchEvent(new Event("pointerdown", { bubbles: true, composed: true }));
+    arrowMove(y, z);
+    expect(z.checked).toBe(true);
+    expect(w.answer).not.toHaveBeenCalled();
+    // 移った先で Space を押せば確定する（既に選ばれている選択肢）。
+    spacePick(z);
+    expect(w.answer).toHaveBeenCalledOnce();
+    expect(w.answer).toHaveBeenCalledWith("a1", { answers: { a: "z" } });
   });
 
-  it("部品のいまの動き（1.0.1）: 既に選ばれている選択肢での Space・クリックでは確定しない（ask-form の側へ直しを依頼中。直った版に替えたらここを書き直す）", async () => {
+  it("「その他」を選んだだけでは確定しない（入力して Enter で確定する）", async () => {
     const w = mountDialog();
-    await open(w, ask(ONE));
-    const x = input(w, 'input[value="x"]'); // 既定で選ばれている
-    key(x, { key: " " });
-    x.click();
-    pointerPick(x);
-    expect(x.checked).toBe(true);
+    await open(w, ask({ note: false, questions: [{ id: "a", label: "A", default: "x", allowOther: true, options: ["x", "y"] }] }));
+    const other = input(w, "label.opt.other input[data-other]");
+    pointerPick(other);
+    spacePick(other);
+    key(other, { key: "Enter" });
+    expect(other.checked).toBe(true);
     expect(w.answer).not.toHaveBeenCalled();
+    const text = input(w, "label.opt.other input[type=text]");
+    type(text, "自由");
+    key(text, { key: "Enter" });
+    expect(w.answer).toHaveBeenCalledOnce();
+    expect(w.answer).toHaveBeenCalledWith("a1", { answers: { a: "自由" }, custom: ["a"] });
   });
 
   it("質問が 2 つ以上・補足あり・multi では即確定しない", async () => {
