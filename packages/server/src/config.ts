@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { AGENT_REPORT_SOCKET_BASENAME, PANE_SOCKET_BASENAME } from "@sodashitsu/protocol";
 import { ConfigError } from "./configError.js";
 import { DEFAULT_SESSION_NAME, resolveSessionStateDir } from "./persist/namedSession.js";
 import { isLoopbackHost, unbracketHost } from "./util/net.js";
@@ -84,7 +85,7 @@ export function agentReportSocketPathFor(stateDir: string, os: NodeJS.Platform =
     const hash = createHash("sha256").update(stateDir).digest("hex").slice(0, 16);
     return `\\\\.\\pipe\\soda-agent-report-${hash}`;
   }
-  return join(stateDir, "agent-report.sock");
+  return join(stateDir, AGENT_REPORT_SOCKET_BASENAME);
 }
 
 /**
@@ -95,7 +96,7 @@ export function agentReportSocketPathFor(stateDir: string, os: NodeJS.Platform =
  */
 export function paneSocketPathFor(stateDir: string, os: NodeJS.Platform = platform()): string | undefined {
   if (os === "win32") return undefined;
-  return join(stateDir, "pane.sock");
+  return join(stateDir, PANE_SOCKET_BASENAME);
 }
 
 /** Unix ドメイン socket のパスのバイト長の上限（Linux は実測で 108 まで listen できる。macOS 等は 104 から NUL を引いた 103 とみなす。decisions D2）。 */

@@ -225,7 +225,10 @@ describe.skipIf(process.platform === "win32")(
     });
 
     /** 受け口へ 1 行送る（sodactl と同じく `write` で送り、半分だけ閉じない）。`closed` は、接続が閉じるまでに受け口が書いたもの。 */
-    function send(path: string, paneId: string): Promise<{ closed: Promise<string> }> {
+    function send(
+      path: string,
+      paneId: string,
+    ): Promise<{ closed: Promise<string>; destroy(): void }> {
       return new Promise((resolve, reject) => {
         let buf = "";
         const sock = netConnect(path);
@@ -241,15 +244,43 @@ describe.skipIf(process.platform === "win32")(
           sock.write(
             `${JSON.stringify({ v: 1, op: PANE_OP_ASK_OPEN, paneId, params: { spec, timeoutMs: 20_000 } })}\n`,
           );
-          resolve({ closed });
+          resolve({ closed, destroy: () => void sock.destroy() });
         });
       });
     }
-    const call = async (path: string, paneId: string): Promise<PaneSocketResponse> =>
-      JSON.parse(await (await send(path, paneId)).closed) as PaneSocketResponse;
+    /** `call` が返事を待つ上限。この件の `call` はどれも待たずに返る返事（断り・`unavailable`）を期待する。 */
+    const CALL_TIMEOUT_MS = 3_000;
+    /**
+     * 受け口へ 1 行送って返事を読む。返事が来ないまま `CALL_TIMEOUT_MS` を過ぎたら、接続を捨てて（受け口の側では質問が取り消される）
+     * 原因の読める誤りで落とす——待って止まると、外側の `vi.waitFor`・テストの時間切れにしか見えない。
+     */
+    const call = async (path: string, paneId: string): Promise<PaneSocketResponse> => {
+      const { closed, destroy } = await send(path, paneId);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          destroy();
+          reject(
+            new Error(
+              `no reply from pane.sock within ${CALL_TIMEOUT_MS}ms（返事が来ない。質問が実際に出て、回答を待っている可能性）`,
+            ),
+          );
+        }, CALL_TIMEOUT_MS);
+      });
+      try {
+        return JSON.parse(await Promise.race([closed, timedOut])) as PaneSocketResponse;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
 
-    /** 質問を出せる画面（`/ws` で `ask.subscribe` した desktop）。`opened` は `ask.opened` が届いたら解決する。 */
-    async function browser(server: ComposedServer): Promise<{ opened: Promise<void> }> {
+    /**
+     * 質問を出せる画面（`/ws` で `ask.subscribe` した desktop）。`opened` は `ask.opened` が届いたら解決する。
+     * `closed` は、この画面の接続が閉じたら（ws の `close`）解決する。
+     */
+    async function browser(
+      server: ComposedServer,
+    ): Promise<{ opened: Promise<void>; closed: Promise<void> }> {
       const port = server.options.port;
       const origin = `http://127.0.0.1:${port}`;
       const headers = { origin, host: `127.0.0.1:${port}` };
@@ -266,6 +297,7 @@ describe.skipIf(process.platform === "win32")(
         w.once("error", reject);
       });
       cleanups.push(() => ws.close());
+      const closed = new Promise<void>((r) => ws.once("close", () => r()));
       let seq = 0;
       const replies = new Map<string, (error?: { code: string }) => void>();
       let onOpened!: () => void;
@@ -291,7 +323,7 @@ describe.skipIf(process.platform === "win32")(
         });
       await request("client.hello", { protocol: 1, kind: "desktop" });
       await request("ask.subscribe", {});
-      return { opened };
+      return { opened, closed };
     }
 
     it("引き継ぎの間は、待っていた接続を返事なしで捨て、新しい接続を pane_socket_busy で断る。元に戻ると受け付けが戻る（AC11）", async () => {
@@ -362,6 +394,10 @@ describe.skipIf(process.platform === "win32")(
 
       releaseHold();
       expect(JSON.parse(await answer)).toMatchObject({ ok: true, panes: 1 });
+      // 画面の接続が閉じ切るのを待ってから受け口を叩く: 引き継ぎは `/ws` を close の枠で閉じる（相手の返事を待つ閉じ方）ので、
+      // 閉じかけの画面は、サーバの側の `close` が済むまで「質問を出せる画面」に数えられたまま。その間に届いた要求は質問が実際に出て、
+      // 回答を待って止まる（`unavailable` にならない）。
+      await b.closed;
       // execve が失敗して元に戻ると、受け付けが戻る（画面は引き継ぎで切れたので、質問は待たずに `unavailable`）。
       // 待っていた質問が取り消されていることの確かめも兼ねる——残っていれば、同じ pane への 2 つめは `ask_busy` で断られる。
       await vi.waitFor(

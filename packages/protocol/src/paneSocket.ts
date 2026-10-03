@@ -8,6 +8,17 @@ import { AskOpenParams } from "./messages.js";
  * （受け口は返事を書いたら接続を閉じる。2 行目以降は読まない）。`/ws` の RPC は通さず、受け口に登録した操作だけを受ける。
  */
 
+/**
+ * 受け口の socket のファイル名（状態ディレクトリの中）。サーバ（`paneSocketPathFor`）と sodactl（`paneSocketPathFromEnv`）の両方がここから読む。
+ */
+export const PANE_SOCKET_BASENAME = "pane.sock";
+/**
+ * 公式フック連携の report の socket のファイル名（状態ディレクトリの中。サーバの `agentReportSocketPathFor`）。受け口の定義に置くのは、
+ * sodactl が `SODA_PANE_SOCKET` の無い古い pane で、このファイルと同じディレクトリの `PANE_SOCKET_BASENAME` を受け口として導くため
+ * （2 つの名前の組がサーバと sodactl でずれると届かない）。
+ */
+export const AGENT_REPORT_SOCKET_BASENAME = "agent-report.sock";
+
 /** やりとりの版（要求の `v`）。 */
 export const PANE_SOCKET_VERSION = 1;
 /** 要求 1 行の上限（改行を除く UTF-8 のバイト数）。質問の定義の上限（`ASK_SPEC_MAX_BYTES`）より大きい。 */

@@ -10,6 +10,8 @@ import {
   ASK_TIMEOUT_DEFAULT_MS,
   ASK_TIMEOUT_MAX_MS,
   ASK_TIMEOUT_MIN_MS,
+  AGENT_REPORT_SOCKET_BASENAME,
+  PANE_SOCKET_BASENAME,
 } from "@sodashitsu/protocol";
 import { posix } from "node:path";
 import { AGENT_STATUSES, type AgentStatus } from "./agentStatus.js";
@@ -135,15 +137,11 @@ export interface GlobalOpts {
   paneSocket?: string;
 }
 
-/** 公式フック連携の socket のファイル名（サーバの `agentReportSocketPathFor`）。受け口はこれと同じディレクトリ（状態ディレクトリ）にある。 */
-const AGENT_REPORT_SOCKET_BASENAME = "agent-report.sock";
-/** 受け口のファイル名（サーバの `paneSocketPathFor`）。 */
-const PANE_SOCKET_BASENAME = "pane.sock";
-
 /**
  * 受け口（`pane.sock`）のパスを環境から決める（20261003-sodactl-ask-socket）。
  * 1. `SODA_PANE_SOCKET`（空でなければ）——サーバが pane の環境に入れた値。
- * 2. 無ければ、`SODA_AGENT_REPORT_SOCKET` が絶対パスで、末尾がちょうど `/agent-report.sock` のとき、同じディレクトリの `pane.sock`——
+ * 2. 無ければ、`SODA_AGENT_REPORT_SOCKET` が絶対パスで、末尾がちょうど `/agent-report.sock` のとき、同じディレクトリの `pane.sock`
+ *    （2 つのファイル名は protocol の `AGENT_REPORT_SOCKET_BASENAME`・`PANE_SOCKET_BASENAME`。サーバと同じ定数）——
  *    `SODA_PANE_SOCKET` を入れる前のサーバが起動した pane（更新時の引き継ぎを跨いで生きている pane）でも、新しいサーバの受け口に届く。
  *    別の名前（利用者が差し替えた等）・末尾のスラッシュ・相対パス（どのディレクトリの受け口かが sodactl の cwd で変わる）からは推測しない。
  * 3. どちらも無ければ undefined。
