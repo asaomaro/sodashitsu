@@ -1,6 +1,6 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures.js";
-import { askFixture, runAsk, watchAskSubscriptions } from "../support/ask.js";
+import { askFixture, runAsk, runAskWithoutLogin, watchAskSubscriptions } from "../support/ask.js";
 import { watchReceivedFrames, watchSentInput } from "../support/frames.js";
 import { focusTerminal, prefixKey, typeLine } from "../support/keys.js";
 
@@ -207,6 +207,65 @@ test("sodactl を止める（SIGINT）とダイアログが閉じる。サーバ
   await expect(dialog(page)).toHaveCount(0);
   const r = await again.done;
   expect(r.code).toBe(1); // 接続が閉じた（connection_closed）
+});
+
+// 20261003-sodactl-ask-socket（AC1・AC4・AC6）。受け口は Unix ドメイン socket なので Windows では走らせない（sodactl も使わない）。
+test.describe("ログインなし（token なし・セッションのキャッシュなし）で、pane の受け口（pane.sock）から出す", () => {
+  test.skip(process.platform === "win32", "the pane socket is not available on Windows");
+
+  test("ダイアログが出て、最上部に「どの pane からの質問か」が出る。決定で answered・終了コード 0", async ({ page, appServer }) => {
+    const client = await appServer.openClient();
+    const p1 = client.helloSnapshot()!.panes[0]!.id;
+    await openBrowser(page, appServer);
+    const run = await runAskWithoutLogin(appServer, p1, SPEC);
+    await expect(dialog(page)).toBeVisible();
+    // どの pane からか（表示はブラウザが paneId から作る。経路に依らない）。定義の title より上＝ダイアログの最上部に出る。
+    const origin = page.locator("[data-ask-origin]");
+    await expect(origin).toHaveText(/^pane「.+」.*のプログラムからの質問$/);
+    await expect(page.locator("[data-ask-title]")).toHaveText("配布先");
+    const originBox = (await origin.boundingBox())!;
+    const titleBox = (await page.locator("[data-ask-title]").boundingBox())!;
+    expect(originBox.y + originBox.height).toBeLessThanOrEqual(titleBox.y);
+    expect(await dialog(page).evaluate((d) => d.querySelector("h1, h2, h3, [data-ask-title], [data-ask-question]")?.hasAttribute("data-ask-origin"))).toBe(true);
+    await page.locator("[data-ask-submit]").click();
+    const r = await run.done;
+    // ログインしていないので、受け口を通らなければ unauthenticated（終了コード 1）になる。
+    expect(r.stderr).toBe("");
+    expect(r.code).toBe(0);
+    expect(r.json).toEqual({ status: "answered", answers: { channel: "beta", notes: ["changelog"] } });
+    await expect(dialog(page)).toHaveCount(0);
+  });
+
+  test("sodactl を止める（SIGINT）とダイアログが閉じ、同じ pane に出し直せる", async ({ page, appServer }) => {
+    const client = await appServer.openClient();
+    const p1 = client.helloSnapshot()!.panes[0]!.id;
+    await openBrowser(page, appServer);
+    const run = await runAskWithoutLogin(appServer, p1, SPEC);
+    await expect(dialog(page)).toBeVisible();
+    run.child.kill("SIGINT");
+    const stopped = await run.done;
+    expect(stopped.stdout).toBe(""); // 結果は出していない（答えられていない）
+    await expect(dialog(page)).toHaveCount(0);
+    // 閉じた後は同じ pane に出し直せる（前の質問が残っていれば ask_busy・終了コード 1 になる）。
+    const again = await runAskWithoutLogin(appServer, p1, SPEC);
+    await expect(dialog(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    const c = await again.done;
+    expect(c.code).toBe(0);
+    expect(c.json).toEqual({ status: "cancelled" });
+  });
+
+  test("陰性対照: 受け口のパスを渡さなければ、ログインなしの ask は unauthenticated（終了コード 1）でダイアログは出ない", async ({ page, appServer }) => {
+    const client = await appServer.openClient();
+    const p1 = client.helloSnapshot()!.panes[0]!.id;
+    const subs = await openBrowser(page, appServer);
+    const r = await (await runAskWithoutLogin(appServer, p1, SPEC, [], { paneSocket: false })).done;
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("unauthenticated");
+    expect(r.stdout).toBe("");
+    expect(subs.count()).toBe(1); // 画面は登録済みのまま（出せる状態で、出ていない）
+    await expect(dialog(page)).toHaveCount(0);
+  });
 });
 
 test("質問した pane が別の tab にあっても（表示していない）、ダイアログが出る。閉じたら開く前の場所へ戻る（AC10・AC-I4）", async ({ page, appServer }) => {
