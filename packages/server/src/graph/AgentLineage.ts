@@ -1,6 +1,24 @@
+import {
+  GRAPH_LINKS_MAX,
+  GRAPH_NODES_MAX,
+  type Graph,
+  type GraphLink,
+  type GraphOp,
+  type LinkKind,
+  type NodeKey,
+} from "@sodashitsu/protocol";
+import {
+  addMissingNodeOps,
+  defaultApprovalConfig,
+  LINK_LIMIT_DEFAULT,
+} from "@sodashitsu/client-core";
 import type { Disposable } from "../util/Disposable.js";
 import type { EventBus } from "../bus/EventBus.js";
-import type { GraphStore } from "../persist/GraphStore.js";
+import {
+  GraphInvalidError,
+  GraphRevConflictError,
+  type GraphStore,
+} from "../persist/GraphStore.js";
 import type { Logger } from "../log/Logger.js";
 
 /**
@@ -21,6 +39,22 @@ export interface AgentLineageDeps {
   attach?: (childId: string, parentId: string) => Promise<void> | void;
 }
 
+/** ログの `reason`（`graph.auto: skipped`）。 */
+export type LineageSkipReason =
+  | "parent_gone"
+  | "parent_stale"
+  | "child_stale"
+  | "reverse_link"
+  | "duplicate_link"
+  | "supervisor_taken"
+  | "too_many_nodes"
+  | "too_many_links"
+  | "conflict"
+  | "invalid";
+
+const RETRIES_DEFAULT = 3;
+const AUTO_LINK_KINDS: readonly LinkKind[] = ["supervise", "approval"];
+
 export class AgentLineage {
   /** pane を作った pane（弱い関係）。 */
   private readonly created = new Map<string, string>();
@@ -33,7 +67,7 @@ export class AgentLineage {
   private readonly attachFn: (childId: string, parentId: string) => Promise<void> | void;
 
   constructor(private readonly deps: AgentLineageDeps) {
-    this.attachFn = deps.attach ?? (() => undefined);
+    this.attachFn = deps.attach ?? ((c, p) => this.attachToGraph(c, p));
     this.sub = deps.bus.subscribe((e) => {
       try {
         if (this.closed) return;
@@ -104,4 +138,106 @@ export class AgentLineage {
       })();
     });
   }
+
+  /**
+   * 子と親のノード・監督の線・承認の代理の線を、1 回の `store.update` で足す。重複・上限・監督役の取り合いは、ops が全か無かなので組み立て前に自分で外す。
+   * 何も足すものが無ければ `update` を呼ばない（rev は進まない）。
+   */
+  private async attachToGraph(childId: string, parentId: string): Promise<void> {
+    const { paneExists, logger, store } = this.deps;
+    if (childId === parentId || !paneExists(childId)) return; // 子が閉じていた（F7）は黙る
+    const skip = (reason: LineageSkipReason, level: "info" | "warn" = "info"): void =>
+      logger[level]("graph.auto: skipped", { child: childId, parent: parentId, reason });
+    if (!paneExists(parentId)) return skip("parent_gone");
+    const parent: NodeKey = `local:${parentId}`;
+    const child: NodeKey = `local:${childId}`;
+
+    const retries = this.deps.retries ?? RETRIES_DEFAULT;
+    for (let attempt = 0; attempt < retries; attempt++) {
+      const g = store.get();
+      const plan = this.plan(g, parent, child, skip);
+      if (plan === null || plan.ops.length === 0) return;
+      try {
+        await store.update(g.rev, plan.ops, "graph");
+      } catch (err) {
+        if (err instanceof GraphRevConflictError) continue;
+        if (err instanceof GraphInvalidError) return skip("invalid", "warn");
+        throw err;
+      }
+      logger.info("graph.auto: added", {
+        child: childId,
+        parent: parentId,
+        nodes: plan.nodes,
+        links: plan.links,
+      });
+      return;
+    }
+    skip("conflict", "warn");
+  }
+
+  /** 今のグラフに足す ops。何も足さずに終わる理由は `skip` へ記録して null。 */
+  private plan(
+    g: Graph,
+    parent: NodeKey,
+    child: NodeKey,
+    skip: (reason: LineageSkipReason) => void,
+  ): { ops: GraphOp[]; nodes: number; links: number } | null {
+    // session.json が読めず pane の ID を振り直した起動で、古い stale ノードと新しい pane の ID が衝突しうる（F6）。
+    if (g.nodes.some((n) => n.key === parent && n.stale === true)) {
+      skip("parent_stale");
+      return null;
+    }
+    if (g.nodes.some((n) => n.key === child && n.stale === true)) {
+      skip("child_stale");
+      return null;
+    }
+
+    const ops: GraphOp[] = addMissingNodeOps(g, [parent, child]);
+    const nodes = ops.length;
+    if (g.nodes.length + nodes > GRAPH_NODES_MAX) {
+      skip("too_many_nodes");
+      return null;
+    }
+
+    let links = 0;
+    for (const kind of AUTO_LINK_KINDS) {
+      const reason = linkSkipReason(g.links, kind, child, parent);
+      if (reason !== null) {
+        skip(reason);
+        continue;
+      }
+      links++;
+      ops.push(
+        kind === "approval"
+          ? {
+              op: "add_link",
+              kind,
+              from: child,
+              to: parent,
+              approval: defaultApprovalConfig(),
+              limit: LINK_LIMIT_DEFAULT,
+            }
+          : { op: "add_link", kind, from: child, to: parent, limit: LINK_LIMIT_DEFAULT },
+      );
+    }
+    if (g.links.length + links > GRAPH_LINKS_MAX) {
+      skip("too_many_links");
+      return null;
+    }
+    return { ops, nodes, links };
+  }
+}
+
+/** この線を引かない理由（引いてよければ null）。 */
+function linkSkipReason(
+  links: readonly GraphLink[],
+  kind: LinkKind,
+  from: NodeKey,
+  to: NodeKey,
+): LineageSkipReason | null {
+  const sameKind = links.filter((l) => l.kind === kind);
+  if (sameKind.some((l) => l.from === from && l.to === to)) return "duplicate_link";
+  if (sameKind.some((l) => l.from === from)) return "supervisor_taken";
+  if (sameKind.some((l) => l.from === to && l.to === from)) return "reverse_link";
+  return null;
 }
