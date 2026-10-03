@@ -90,7 +90,7 @@ node scripts/sync-ask-form.mjs --check                                          
 
 ## E2E が読む部品の内部
 
-「枠が使っている部品の受け渡し」とは別に、ask 関連の E2E 4 本（`packages/e2e/src/specs/ask-form.spec.ts`・`ask-form-paging.spec.ts`（目次の spec に改名される予定）・
+「枠が使っている部品の受け渡し」とは別に、ask 関連の E2E 4 本（`packages/e2e/src/specs/ask-form.spec.ts`・`ask-form-index.spec.ts`・
 `ask-form-extras.spec.ts`・`ask-form-mobile.spec.ts`）は、部品の Shadow DOM の中の属性・要素を CSS ロケータ（Playwright は open の Shadow DOM を越える）で読む。
 共通の読み方は `packages/e2e/src/support/askForm.ts` に集めてある（属性名が変わったときの直し先。spec にも直接書いたものが残る）。
 spec が使っているものを `grep -o` で拾うと次のとおり。
@@ -110,7 +110,7 @@ spec が使っているものを `grep -o` で拾うと次のとおり。
 属性名が変わった場合、E2E は一斉に落ちるのが普通だが、**落ちずに緑になる**ことがある（「見えない要素を数えて 0 件」を期待する件、
 `toHaveCount(0)` や `not.toBeVisible()` は、属性が消えても通る）。取り込んだら次の順で確かめる。
 
-1. 先に ask 関連の E2E 4 本を流す（`pnpm build` のあと、`cd packages/e2e && pnpm exec playwright test src/specs/ask-form.spec.ts src/specs/ask-form-mobile.spec.ts src/specs/ask-form-paging.spec.ts src/specs/ask-form-extras.spec.ts`）。
+1. 先に ask 関連の E2E 4 本を流す（`pnpm build` のあと、`cd packages/e2e && pnpm exec playwright test src/specs/ask-form.spec.ts src/specs/ask-form-mobile.spec.ts src/specs/ask-form-index.spec.ts src/specs/ask-form-extras.spec.ts`）。
 2. 落ちなくても、各属性が部品の `ask-form.js` に残っているかを `grep` で確かめる。0 なら名前が変わっている（E2E の側が空振りしている）。
 
 ```sh
