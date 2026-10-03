@@ -7,6 +7,8 @@
  * - 前の画面の印が、入れ替えの後に繋いだクライアントの SNAPSHOT に入っている（AC3）
  * - 入れ替えの後も同じ Cookie で `/ws` に繋がり（AC5）、入力がシェルに届き出力が返り、大きさの変更がシェルに見える（AC2）
  * - `handoff.json` が残らない（AC8）・シェルが終わると pane が閉じる（AC7）
+ * - 入れ替えの後、handoff より前からある pane の環境（`SODA_PANE_SOCKET` が無く `SODA_AGENT_REPORT_SOCKET` だけ）でも、ビルドした `sodactl ask` が
+ *   ログインなしで通る（20261003-sodactl-ask-socket の AC11。新しい版が置き直した `pane.sock` を、同じ状態ディレクトリから導く）
  * pane のシェルは `/bin/sh`（`--shell`）——印に `$$`・`$((…))` を使うため。
  * vitest の中では確かめられない（execve の先の新しい版がビルドした成果物であるため。tasks.md「実装方針」）。
  */
@@ -20,6 +22,8 @@ import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@sodashitsu/protocol"
 import WebSocket from "ws";
 
 const MAIN = join(import.meta.dirname, "main.js");
+/** ビルドした sodactl（`packages/cli/dist/main.js`。この smoke は `packages/server/dist/` にある）。 */
+const SODACTL_MAIN = join(import.meta.dirname, "..", "..", "cli", "dist", "main.js");
 const log = (msg: string): void => console.log(`handoff-smoke: ${msg}`);
 
 async function freePort(): Promise<number> {
@@ -138,12 +142,21 @@ function runSoda(args: string[]): { status: number | null; stdout: string; stder
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 
+/** ビルドした `sodactl ask` に定義を標準入力で渡して呼ぶ。 */
+function runSodactlAsk(env: NodeJS.ProcessEnv): { status: number | null; stdout: string; stderr: string } {
+  const spec = JSON.stringify({ title: "handoff-smoke", questions: [{ id: "a", label: "A", options: ["x", "y"] }] });
+  const r = spawnSync(process.execPath, [SODACTL_MAIN, "ask"], { env, input: spec, encoding: "utf8", timeout: 30_000 });
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+}
+
 async function main(): Promise<void> {
   if (process.platform === "win32") {
     log("skipped (live handoff is not supported on Windows)");
     return;
   }
   const stateDir = await mkdtemp(join(tmpdir(), "soda-handoff-smoke-"));
+  /** セッションのキャッシュの無い HOME（`sodactl ask` をログインなしで呼ぶ）。 */
+  const homeDir = await mkdtemp(join(tmpdir(), "soda-handoff-smoke-home-"));
   let server: ChildProcess | undefined;
   let shellPid: number | undefined;
   let serverOut = "";
@@ -271,6 +284,28 @@ async function main(): Promise<void> {
     await after.c.request("pane.detach", { paneId });
     log("resize reaches the adopted pty ok");
 
+    // 6b. handoff より前からある pane の環境で、ログインなしの `sodactl ask`（20261003-sodactl-ask-socket の AC11）。
+    // 古い版が起動した pane には `SODA_PANE_SOCKET` が無く、`SODA_AGENT_REPORT_SOCKET` だけがある。sodactl は同じ状態ディレクトリの `pane.sock` を導く。
+    // 画面（`ask.subscribe` したクライアント）は居ないので、受け口を通れば `unavailable`・終了コード 0。
+    if (!existsSync(join(stateDir, "pane.sock"))) throw new Error("pane.sock is missing after the handoff");
+    // この smoke を soda の pane の中で走らせても、その pane のサーバ（開発者の本物のサーバ）の受け口・token・接続先を子へ渡さない。
+    const oldPaneEnv: NodeJS.ProcessEnv = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, SODA_PANE_ID: paneId, SODA_SERVER_URL: origin };
+    for (const name of ["SODA_PANE_SOCKET", "SODA_AGENT_REPORT_SOCKET", "SODACTL_TOKEN", "SODACTL_URL"]) delete oldPaneEnv[name];
+    // 陰性対照: 受け口のパスを導けなければログインが要る（下の成功が、どこかに残ったログインによるものではない）。
+    const noSocket = runSodactlAsk(oldPaneEnv);
+    if (noSocket.status !== 1 || !noSocket.stderr.includes("unauthenticated"))
+      throw new Error(`sodactl ask without a login and a socket should be unauthenticated (exit ${noSocket.status}): ${noSocket.stdout} ${noSocket.stderr}`);
+    const asked = runSodactlAsk({ ...oldPaneEnv, SODA_AGENT_REPORT_SOCKET: join(stateDir, "agent-report.sock") });
+    let askedStatus: unknown;
+    try {
+      askedStatus = (JSON.parse(asked.stdout.trim()) as { status?: unknown }).status;
+    } catch {
+      askedStatus = undefined;
+    }
+    if (asked.status !== 0 || askedStatus !== "unavailable")
+      throw new Error(`sodactl ask in a pre-handoff pane environment returned exit ${asked.status}: ${asked.stdout} ${asked.stderr}\n--- server ---\n${serverOut}`);
+    log("sodactl ask without a login in a pre-handoff pane environment (SODA_AGENT_REPORT_SOCKET only) → unavailable, exit 0 ok");
+
     // 7. シェルが終わると pane が閉じる
     after.c.type(paneId, "exit\n");
     await until(
@@ -301,6 +336,7 @@ async function main(): Promise<void> {
       }
     }
     await rm(stateDir, { recursive: true, force: true });
+    await rm(homeDir, { recursive: true, force: true });
   }
   log("ok");
 }
