@@ -123,7 +123,7 @@ JSON
 - 定義の形は ask-form と同じ: `title`・`intro`・`submit`・`note`、質問の `id`・`label`・`type`（`single`/`multi`/`text`）・`help`・`options`・`default`・`allowOther`・`showIf`・`required`・`multiline`・`placeholder`。
   `default` はなるべく入れる。`showIf` で参照する質問は、参照する側より上に置く。知らない項目は無視される。
 - 質問が多いと、画面の高さに収まる分ずつのページに分かれて出る（何も書かなくてよい。答えの形は変わらない）。区切りを決めたいときは、ページの最初の質問に `"page": "ページの題"` を書く（次に別の題の `page` が出るまでが 1 ページ）。
-  全体の `paging` は `"auto"`（既定）・`false`（分けない。1 枚でスクロール）・1 以上の整数（1 ページの質問の数）。それ以外の値と、文字列でない `page` は定義の誤り。
+  全体の `paging` は `"auto"`（既定。`true` も同じ）・`false`（分けない。1 枚でスクロール）・1 以上の整数（1 ページの質問の数）。`page` を 1 つでも書くと、`paging` の値に依らず `page` で分かれる。それ以外の値と、文字列でない `page` は定義の誤り。
 - 結果の `status`（どれも終了コード 0）: `answered`（`answers` に id → 値。`multi` は配列。`showIf` で隠れた質問は入らない。`custom` は自由入力した質問の id、`note` は補足の欄）・
   `cancelled`（利用者がキャンセルした・pane が閉じた。勝手に既定で進めず、どうするか聞く）・`timeout`（まだ必要か確かめてから出し直す）・
   `unavailable`（`reason` に理由。この pane を見ているブラウザが無い、または定義に `sodactl ask` が対応していない型〔`edit`・`rank`・`table` 等〕の質問がある。**同じ質問を `AskUserQuestion` に分けて聞き直す**）。

@@ -69,7 +69,7 @@ node scripts/sync-ask-form.mjs --check                                          
 - イベント `ask-submit`（`detail` のうち `answers`・`custom`・`note` だけをサーバへ送る）・`ask-cancel`・`ask-unsupported`
   （質問を取り消してトーストで知らせる。`reason` は定義に由来する文字を含むので画面に出さない）。`Esc` は部品が `ask-cancel` を出さないので、枠（`<dialog>` の `cancel`）が取り消す。
 - 配色の変数 `--ask-bg`・`--ask-fg`・`--ask-border`・`--ask-accent`・`--ask-accent-fg`・`--ask-error`・`--ask-warn`（テーマの変数を割り当てる）。
-- 使っていないもの: `resolveMedia`（入れないので、画像・音のプレビューは出ない）・`notify()`・`value`。
+- 使っていないもの: `resolveMedia`（入れないので、画像・音のプレビューは出ない）・`notify()`・`value`・`pageCount`。
 
 ## 通す項目を足すときに直す場所
 

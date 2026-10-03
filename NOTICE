@@ -15,7 +15,7 @@ These files are included unmodified. See third_party/herdr/README.md for details
 This product includes the ask-form web component (the <ask-form> custom
 element) and its shared test fixtures, copied from the ask-form skill in
 public_docs (https://github.com/asaomaro/public_docs). That repository does
-not contain a LICENSE file or any other license statement.
+not contain a LICENSE file, and the ask-form folder carries no license statement.
 
   Location in this repository: third_party/ask-form/ask-form.js
                                third_party/ask-form/fixtures/*.json
