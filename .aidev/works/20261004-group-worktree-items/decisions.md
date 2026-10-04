@@ -102,3 +102,15 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - `settle()`（レイアウトを持つとき）が全 workspace に実効の `groupId` を保つ: `git.repoKey` があれば `repoGroups.get(repoKey) ?? null`、無ければ workspace 自身の値（存在しないグループなら null）。項目の所属の書き込みは `setItemGroup`（リポジトリなら `repoGroups`、そうでなければ `groupId`）。`deleteGroup` は `repoGroups` のそのグループ行きを消し、`groupId` は計算で null に戻る。
 - `createGroup(label, target?)` は T7 の `group.create` の `workspaceId` のモデル側（位置は design の表のとおり）。RPC のハンドラはまだ `workspaceId` を渡さない（T7）。
 - 既存テストの調整（T8 で意味が変わる範囲ではない）: `SessionService.test.ts`・`WsGateway.integration.test.ts` のイベント列に `sidebar.layout_changed` を足した。`SessionModel.test.ts` の `linkedWorktreeGroupMembers`「手動グループに入った workspace を除く」は、項目丸ごとグループへ入る新しい決まりで期待が `[]` に変わった（この関数は T19 で消える）。
+
+## D14: 判定の反映（T6）
+
+- **入口**: `SessionModel.updateWorkspaceGit(id, result: GitJudgement)`（`GitJudgement` = `git`／`unmanaged`／`unknown`。`ProbeResult` はその別名）。`SessionService.applyWorkspaceIdentity` と `updateWorkspaceGit` は `applyGitJudgement` の 1 つに通す。`unknown` は何もしない（`git` も保つ）。`unmanaged` は `git = null`。
+- **出口**: 項目の判定（`repoKey`・`isLinkedWorktree`。`gitIdentityChanged`）が変わったときだけ、モデルが `beginChange` し、サービスが `publishSidebarChanges`（`workspace.updated`〔`groupId` の変化と重ねて 1 回〕→ `sidebar.layout_changed` → `workspace.order_changed` → `persist.touch()`）で配る。ブランチ・件数だけの変化は今までどおり `workspace.updated` だけで保存の予約はしない。`applyWorkspaceIdentity` の名前の変更の `persist.touch()` は、判定の出口を通るときはそちらに任せ、予約を 1 回にした。
+- **`repoKey` が null の `git`**（テストなど）は `w:<id>` のまま（`itemRefOf` と同じ）。`repoKey` が同じで `isLinkedWorktree` だけ変わるときは、レイアウトは変えず `settle` が Map を並べ直し `workspace.order_changed` を出す。
+- 表の (2) で `r:R` がすでに workspace と**同じグループ G の中**にあるときは、位置を変えず `w:<id>` を外すだけ（設計は「G の末尾へ移す」。同じ入れ物のときの動きを決めていなかったので、並びを乱さない側にした）。
+- 「判定が変わる（R1 → R2）」の R1 は、他に R1 の workspace が居なくなったときだけ `r:R1` を外す（`repoGroups[R1]` は残す）。R2 の置き場所が決まらないときは、元の項目の一番上のまとまり（グループの中ならその `g:`、一番上なら `r:R1` が居た位置）の直後。
+- 「管理外と確定」の `groupId` は、置いた入れ物のグループ（一番上なら null）を明示で書く。
+- **仮の状態（`layout` が `null`）**: `git` だけ入れる（レイアウト・`repoGroups` には触れない）。導いたレイアウトが変わるので `beginChange` は通し、`sidebar.layout_changed` は配る。
+- **`layoutRefOf` の撤去**: D12 の暫定の分岐（`w:<id>` のまま判定が付いた workspace への対応）は、判定が付く時点で `w:` を `r:` に置き換えるようになったので不要になり、消した（`createGroup`・`addToGroup`・`removeFromGroup` は `itemRefOf` を使う）。レイアウトに `w:` が残ったまま `repoKey` を持つ状態は、T9 の復元の `repairLayout` が直す。
+- 既存テストの調整: `SessionModel.test.ts` の `repoModel` から、判定の反映が無かった頃の確定の回り道（`restoreGroup` → `confirmLayout` → `deleteGroup`）を外した。`updateWorkspaceGit`／`applyWorkspaceIdentity` を呼ぶテストは 3 つの結果の形に直した。`SessionService.test.ts` の「repoKey だけ変わる」は、判定が付くのでレイアウトのイベントも出る期待にした。

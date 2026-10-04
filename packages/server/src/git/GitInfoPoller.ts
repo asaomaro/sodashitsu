@@ -1,6 +1,7 @@
-import type { GitInfo, ServerEvent, Workspace, WorkspaceId } from "@sodashitsu/protocol";
+import type { ServerEvent, Workspace, WorkspaceId } from "@sodashitsu/protocol";
 import type { EventBus } from "../bus/EventBus.js";
 import type { Disposable } from "../util/Disposable.js";
+import type { GitJudgement } from "../session/SessionModel.js";
 import type { SessionService } from "../session/SessionService.js";
 import type { GitRunner } from "../infra/GitRunner.js";
 import { resolveCommonDir } from "./worktree.js";
@@ -20,7 +21,7 @@ const FOLLOW_EVENTS: ReadonlySet<ServerEvent["event"]> = new Set(["pane.updated"
  * - `unmanaged`: `rev-parse --abbrev-ref HEAD` の終了コードが 0 でない（git 管理外・コミットが 1 つも無い）と確定。
  * - `unknown`: 時間切れ・git の起動失敗、または HEAD は取れたが `--git-common-dir` が失敗した（半端な結果は信用しない）。
  */
-export type ProbeResult = { kind: "git"; git: GitInfo } | { kind: "unmanaged" } | { kind: "unknown" };
+export type ProbeResult = GitJudgement;
 
 /**
  * workspace のいまの場所（最初の tab の最初の pane の場所）ごとに git 情報と自動の名前を取り、変化したら反映する（architecture.md「GitInfoPoller」。
@@ -121,8 +122,7 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
     const cwd = this.session.identityCwdOf(ws.id) ?? ws.cwd;
     this.polledCwd.set(ws.id, cwd); // 待つ前に——同じ変化で見直しを重ねない
     const [result, label] = await Promise.all([this.probe(cwd), this.session.followedLabel(ws.id, cwd).catch(() => null)]);
-    // T6 まで、サービスは今までどおり「git か null」を受ける（管理外も取れないも null。本格的な反映は T6）。
-    this.session.applyWorkspaceIdentity(ws.id, cwd, result.kind === "git" ? result.git : null, label);
+    this.session.applyWorkspaceIdentity(ws.id, cwd, result, label);
   }
 
   async probe(cwd: string): Promise<ProbeResult> {

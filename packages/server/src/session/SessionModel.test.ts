@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NotFoundError, SessionModel, type NewPaneInit } from "./SessionModel.js";
+import { NotFoundError, SessionModel, type GitJudgement, type NewPaneInit } from "./SessionModel.js";
 import * as Layout from "./LayoutTree.js";
 import type { GitInfo } from "@sodashitsu/protocol";
 
@@ -1031,16 +1031,16 @@ describe("SessionModel — misc mutations", () => {
       const { workspace: main } = model.createWorkspace("/repo", "main", init);
       const { workspace: wt1 } = model.createWorkspace("/repo-wt1", "wt1", init);
       const { workspace: wt2 } = model.createWorkspace("/repo-wt2", "wt2", init);
-      model.updateWorkspaceGit(main.id, { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false });
-      model.updateWorkspaceGit(wt1.id, { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
-      model.updateWorkspaceGit(wt2.id, { branch: "other", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
+      model.updateWorkspaceGit(main.id, { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
+      model.updateWorkspaceGit(wt1.id, { kind: "git", git: { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
+      model.updateWorkspaceGit(wt2.id, { kind: "git", git: { branch: "other", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
       expect(new Set(model.linkedWorktreeGroupMembers(main.id))).toEqual(new Set([wt1.id, wt2.id]));
     });
 
     it("returns [] when id is itself a linked worktree (not the parent)", () => {
       const model = new SessionModel();
       const { workspace: wt1 } = model.createWorkspace("/repo-wt1", "wt1", init);
-      model.updateWorkspaceGit(wt1.id, { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
+      model.updateWorkspaceGit(wt1.id, { kind: "git", git: { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
       expect(model.linkedWorktreeGroupMembers(wt1.id)).toEqual([]);
     });
 
@@ -1053,7 +1053,7 @@ describe("SessionModel — misc mutations", () => {
     it("returns [] when the workspace is the main checkout of a repo with no linked worktrees", () => {
       const model = new SessionModel();
       const { workspace } = model.createWorkspace("/repo", "repo", init);
-      model.updateWorkspaceGit(workspace.id, { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false });
+      model.updateWorkspaceGit(workspace.id, { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
       expect(model.linkedWorktreeGroupMembers(workspace.id)).toEqual([]);
     });
 
@@ -1065,9 +1065,9 @@ describe("SessionModel — misc mutations", () => {
       const { workspace: main } = model.createWorkspace("/repo", "main", init);
       const { workspace: wt1 } = model.createWorkspace("/repo-wt1", "wt1", init);
       const { workspace: wt2 } = model.createWorkspace("/repo-wt2", "wt2", init);
-      model.updateWorkspaceGit(main.id, { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false });
-      model.updateWorkspaceGit(wt1.id, { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
-      model.updateWorkspaceGit(wt2.id, { branch: "other", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
+      model.updateWorkspaceGit(main.id, { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
+      model.updateWorkspaceGit(wt1.id, { kind: "git", git: { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
+      model.updateWorkspaceGit(wt2.id, { kind: "git", git: { branch: "other", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
       const group = model.createGroup("backend");
       model.addToGroup(wt2.id, group.id); // 項目（リポジトリ）丸ごとグループへ入る（20261004-group-worktree-items）。T19 でこの関数ごと消える
       expect(model.linkedWorktreeGroupMembers(main.id)).toEqual([]); // 本体もグループに入ったので束ねない（古い判定のまま）
@@ -1077,8 +1077,8 @@ describe("SessionModel — misc mutations", () => {
       const model = new SessionModel();
       const { workspace: main } = model.createWorkspace("/repo", "main", init);
       const { workspace: wt1 } = model.createWorkspace("/repo-wt1", "wt1", init);
-      model.updateWorkspaceGit(main.id, { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false });
-      model.updateWorkspaceGit(wt1.id, { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
+      model.updateWorkspaceGit(main.id, { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
+      model.updateWorkspaceGit(wt1.id, { kind: "git", git: { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
       const group = model.createGroup("backend");
       model.addToGroup(main.id, group.id);
       expect(model.linkedWorktreeGroupMembers(main.id)).toEqual([]);
@@ -1090,8 +1090,8 @@ describe("SessionModel — misc mutations", () => {
       const model = new SessionModel();
       const { workspace: w1 } = model.createWorkspace("/repo-wt1", "wt1", init);
       const { workspace: w2 } = model.createWorkspace("/repo-wt2", "wt2", init);
-      model.updateWorkspaceGit(w1.id, { branch: "a", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
-      model.updateWorkspaceGit(w2.id, { branch: "b", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
+      model.updateWorkspaceGit(w1.id, { kind: "git", git: { branch: "a", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
+      model.updateWorkspaceGit(w2.id, { kind: "git", git: { branch: "b", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
       expect(model.linkedWorktreeGroupMembers(w1.id)).toEqual([w2.id]); // w1（先頭）が暫定的な親
       expect(model.linkedWorktreeGroupMembers(w2.id)).toEqual([]); // w2 は親ではない
     });
@@ -1105,9 +1105,9 @@ describe("SessionModel — misc mutations", () => {
       const { workspace: main } = model.createWorkspace("/repo", "main", init);
       const { workspace: wt1 } = model.createWorkspace("/repo-wt1", "wt1", init);
       const { workspace: wt2 } = model.createWorkspace("/repo-wt2", "wt2", init);
-      model.updateWorkspaceGit(main.id, { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false });
-      model.updateWorkspaceGit(wt1.id, { branch: "a", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
-      model.updateWorkspaceGit(wt2.id, { branch: "b", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
+      model.updateWorkspaceGit(main.id, { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
+      model.updateWorkspaceGit(wt1.id, { kind: "git", git: { branch: "a", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
+      model.updateWorkspaceGit(wt2.id, { kind: "git", git: { branch: "b", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
       const group = model.createGroup("backend");
       model.addToGroup(main.id, group.id); // 本体だけ手動グループに入る（wt1・wt2 は groupId===null のまま）
       // wt1・wt2 は候補に残るが、候補の中に本体が無い——本体は「実在するが候補から外れている」だけ
@@ -1197,7 +1197,7 @@ describe("SessionModel — misc mutations", () => {
   it("updateWorkspaceGit sets the git info", () => {
     const model = new SessionModel();
     const { workspace } = model.createWorkspace("/home/u", "api", init);
-    model.updateWorkspaceGit(workspace.id, { branch: "main", ahead: 1, behind: 0, repoKey: "/home/u/.git", isLinkedWorktree: false });
+    model.updateWorkspaceGit(workspace.id, { kind: "git", git: { branch: "main", ahead: 1, behind: 0, repoKey: "/home/u/.git", isLinkedWorktree: false } });
     expect(model.getWorkspace(workspace.id)?.git).toEqual({ branch: "main", ahead: 1, behind: 0, repoKey: "/home/u/.git", isLinkedWorktree: false });
   });
 
@@ -1253,21 +1253,17 @@ describe("SessionModel — sidebar layout", () => {
     const { workspace: a } = model.createWorkspace("/repo", "a", init);
     const { workspace: b } = model.createWorkspace("/repo-wt", "b", init);
     const { workspace: c } = model.createWorkspace("/plain", "c", init);
-    model.updateWorkspaceGit(a.id, gitOf("/repo/.git", false));
-    model.updateWorkspaceGit(b.id, gitOf("/repo/.git", true));
-    // 判定の反映（T6）はまだ無いので、仮の状態から確定して `r:` の項目を作る（復元と同じ道）。
-    model.restoreGroup({ id: "g0", label: "restored", collapsed: false });
-    model.confirmLayout();
-    model.deleteGroup("g0");
+    model.updateWorkspaceGit(a.id, { kind: "git", git: gitOf("/repo/.git", false) });
+    model.updateWorkspaceGit(b.id, { kind: "git", git: gitOf("/repo/.git", true) });
     return { model, a: a.id, b: b.id, c: c.id };
   }
 
-  it("addToGroup on a workspace whose judgment arrived but whose layout still holds w:<id> does not leave a duplicate", () => {
+  it("addToGroup on a workspace whose judgment arrived puts the repository item (r:) in the group, with no w:<id> left", () => {
     const model = new SessionModel();
     const { workspace: a } = model.createWorkspace("/a", "a", init);
     model.confirmLayout();
     const group = model.createGroup("g");
-    model.updateWorkspaceGit(a.id, gitOf("/a/.git", false));
+    model.updateWorkspaceGit(a.id, { kind: "git", git: gitOf("/a/.git", false) });
     model.addToGroup(a.id, group.id);
     expect(model.getLayout()).toEqual({ top: [`g:${group.id}`], groups: { [group.id]: ["r:/a/.git"] } });
   });
@@ -1468,6 +1464,207 @@ describe("SessionModel — sidebar layout", () => {
     });
   });
 
+  // design「レイアウトが変わる場面」の判定の行（T6）。
+  describe("judgments are reflected in the layout", () => {
+    const K = "/k/.git";
+    const git = (repoKey: string | null, linked = false): GitJudgement => ({ kind: "git", git: gitOf(repoKey as string, linked) });
+    const open = (model: SessionModel, name: string) => model.createWorkspace(`/${name}`, name, init).workspace;
+
+    it("a judgment turns w:<id> into r:<repoKey> in the same place", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      const c = open(model, "c");
+      model.updateWorkspaceGit(b.id, git(K));
+      expect(model.getLayout()).toEqual({ top: [`w:${a.id}`, `r:${K}`, `w:${c.id}`], groups: {} });
+      expect(model.getWorkspace(b.id)?.groupId).toBeNull();
+    });
+
+    it("(3) a second workspace of the same repository joins the existing r:<repoKey>, and the Map order follows the item (body first)", () => {
+      const model = new SessionModel();
+      const wt = open(model, "wt");
+      const other = open(model, "other");
+      const body = open(model, "body");
+      model.updateWorkspaceGit(wt.id, git(K, true));
+      model.takeChanges();
+      model.updateWorkspaceGit(body.id, git(K, false));
+      expect(model.getLayout()).toEqual({ top: [`r:${K}`, `w:${other.id}`], groups: {} });
+      expect(model.listWorkspaces().map((w) => w.id)).toEqual([body.id, wt.id, other.id]);
+      expect(model.takeChanges()?.order).toEqual([body.id, wt.id, other.id]);
+    });
+
+    it("(2) a workspace in a group hands the repository over: repoGroups is set and the whole item moves to that group", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      model.updateWorkspaceGit(a.id, git(K, false)); // r:K は一番上
+      const g = model.createGroup("g", b.id); // b は管理外のままグループへ
+      model.updateWorkspaceGit(b.id, git(K, true));
+      expect([...model.getRepoGroups()]).toEqual([[K, g.id]]);
+      expect(model.getLayout()).toEqual({ top: [`g:${g.id}`], groups: { [g.id]: [`r:${K}`] } });
+      expect(model.getWorkspace(a.id)?.groupId).toBe(g.id);
+      expect(model.getWorkspace(b.id)?.groupId).toBe(g.id);
+    });
+
+    it("(2) without another member, w:<id> is replaced in place inside the group", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      const g = model.createGroup("g", a.id);
+      model.addToGroup(b.id, g.id);
+      model.updateWorkspaceGit(a.id, git(K));
+      expect(model.getLayout()).toEqual({ top: [`g:${g.id}`], groups: { [g.id]: [`r:${K}`, `w:${b.id}`] } });
+      expect([...model.getRepoGroups()]).toEqual([[K, g.id]]);
+    });
+
+    it("(1) repoGroups is looked at first: a new workspace of a remembered repository goes to its group (at the end when r:<repoKey> is absent)", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      model.updateWorkspaceGit(a.id, git(K));
+      const g = model.createGroup("g", a.id);
+      model.closeWorkspace(a.id); // r:K は消えるが repoGroups[K] は残る
+      const x = open(model, "x");
+      model.addToGroup(x.id, g.id);
+      const b = open(model, "b");
+      model.updateWorkspaceGit(b.id, git(K, true));
+      expect(model.getLayout()).toEqual({ top: [`g:${g.id}`], groups: { [g.id]: [`w:${x.id}`, `r:${K}`] } });
+      expect(model.getWorkspace(b.id)?.groupId).toBe(g.id);
+    });
+
+    it("(1) wins over the workspace's own groupId (the repository's group is the answer)", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      model.updateWorkspaceGit(a.id, git(K));
+      const g1 = model.createGroup("g1", a.id);
+      const g2 = model.createGroup("g2", b.id);
+      model.updateWorkspaceGit(b.id, git(K, true));
+      expect(model.getWorkspace(b.id)?.groupId).toBe(g1.id);
+      expect(model.getLayout()).toEqual({ top: [`g:${g1.id}`, `g:${g2.id}`], groups: { [g1.id]: [`r:${K}`], [g2.id]: [] } });
+    });
+
+    it.each([
+      ["a first", 0],
+      ["b first", 1],
+    ])("the result does not depend on the order the judgments arrive (%s)", (_name, flip) => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      const g = model.createGroup("g", a.id);
+      const order = flip === 0 ? [a, b] : [b, a];
+      for (const w of order) model.updateWorkspaceGit(w.id, git(K, w.id === b.id));
+      expect(model.getLayout()).toEqual({ top: [`g:${g.id}`], groups: { [g.id]: [`r:${K}`] } });
+      expect(model.getWorkspace(a.id)?.groupId).toBe(g.id);
+      expect(model.getWorkspace(b.id)?.groupId).toBe(g.id);
+      expect([...model.getRepoGroups()]).toEqual([[K, g.id]]);
+    });
+
+    it("a changed judgment (R1 -> R2): leaves R1 (removed when empty, repoGroups kept) and, with nothing known about R2, goes right after the original top unit", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const c = open(model, "c");
+      model.updateWorkspaceGit(a.id, git("/r1/.git"));
+      const g = model.createGroup("g", a.id);
+      model.updateWorkspaceGit(a.id, git("/r2/.git"));
+      expect(model.getLayout()).toEqual({ top: [`g:${g.id}`, "r:/r2/.git", `w:${c.id}`], groups: { [g.id]: [] } });
+      expect(model.getRepoGroups().get("/r1/.git")).toBe(g.id);
+      expect(model.getWorkspace(a.id)?.groupId).toBeNull();
+    });
+
+    it("a changed judgment: joins an existing r:R2, or follows repoGroups[R2]", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      const c = open(model, "c");
+      model.updateWorkspaceGit(a.id, git("/r1/.git"));
+      model.updateWorkspaceGit(b.id, git("/r2/.git"));
+      model.updateWorkspaceGit(a.id, git("/r2/.git"));
+      expect(model.getLayout().top).toEqual(["r:/r2/.git", `w:${c.id}`]);
+      // R2 が記憶されたグループへ
+      const g = model.createGroup("g", b.id);
+      model.updateWorkspaceGit(c.id, git("/r3/.git"));
+      model.updateWorkspaceGit(c.id, git("/r2/.git")); // 既にグループの中の r:R2 に加わる
+      expect(model.getLayout()).toEqual({ top: [`g:${g.id}`], groups: { [g.id]: ["r:/r2/.git"] } });
+      model.closeWorkspace(a.id);
+      model.closeWorkspace(b.id);
+      model.closeWorkspace(c.id);
+      const d = open(model, "d");
+      model.updateWorkspaceGit(d.id, git("/r4/.git"));
+      model.updateWorkspaceGit(d.id, git("/r2/.git")); // r:R2 は無いが repoGroups[R2] = g
+      expect(model.getLayout()).toEqual({ top: [`g:${g.id}`], groups: { [g.id]: ["r:/r2/.git"] } });
+    });
+
+    it("R1 stays while other members remain", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      model.updateWorkspaceGit(a.id, git(K));
+      model.updateWorkspaceGit(b.id, git(K, true));
+      model.updateWorkspaceGit(b.id, git("/other/.git"));
+      expect(model.getLayout().top).toEqual([`r:${K}`, "r:/other/.git"]);
+    });
+
+    it("unmanaged (R1 -> none): w:<id> goes right after r:R1 in the same container, and groupId is that group", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      model.updateWorkspaceGit(a.id, git(K));
+      model.updateWorkspaceGit(b.id, git(K, true));
+      const g = model.createGroup("g", a.id);
+      model.updateWorkspaceGit(b.id, { kind: "unmanaged" });
+      expect(model.getLayout()).toEqual({ top: [`g:${g.id}`], groups: { [g.id]: [`r:${K}`, `w:${b.id}`] } });
+      expect(model.getWorkspace(b.id)).toMatchObject({ git: null, groupId: g.id });
+      expect(model.getWorkspace(a.id)?.groupId).toBe(g.id);
+    });
+
+    it("unmanaged on the only member replaces r:R1 in place (repoGroups kept)", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      model.updateWorkspaceGit(a.id, git(K));
+      const g = model.createGroup("g", a.id);
+      model.updateWorkspaceGit(a.id, { kind: "unmanaged" });
+      expect(model.getLayout()).toEqual({ top: [`g:${g.id}`, `w:${b.id}`], groups: { [g.id]: [`w:${a.id}`] } });
+      expect(model.getRepoGroups().get(K)).toBe(g.id);
+    });
+
+    it("unknown changes nothing: git, the layout and the pending changes stay", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      model.updateWorkspaceGit(a.id, git(K));
+      model.takeChanges();
+      const before = model.getLayout();
+      expect(model.updateWorkspaceGit(a.id, { kind: "unknown" })).toBeNull();
+      expect(model.getWorkspace(a.id)?.git?.repoKey).toBe(K);
+      expect(model.getLayout()).toEqual(before);
+      expect(model.takeChanges()).toBeNull();
+    });
+
+    it("isLinkedWorktree changing re-sorts the Map and reports the order, with the layout unchanged", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      model.updateWorkspaceGit(a.id, git(K, true));
+      model.updateWorkspaceGit(b.id, git(K, true)); // 本体が無い: 開いた順
+      model.takeChanges();
+      model.updateWorkspaceGit(b.id, git(K, false)); // b が本体になる
+      expect(model.listWorkspaces().map((w) => w.id)).toEqual([b.id, a.id]);
+      const changes = model.takeChanges();
+      expect(changes?.order).toEqual([b.id, a.id]);
+      expect(changes?.layout).toBeNull();
+    });
+
+    it("a branch-only change touches neither the layout nor the pending changes", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      model.updateWorkspaceGit(a.id, git(K));
+      model.takeChanges();
+      model.updateWorkspaceGit(a.id, { kind: "git", git: { ...gitOf(K, false), branch: "other" } });
+      expect(model.getWorkspace(a.id)?.git?.branch).toBe("other");
+      expect(model.takeChanges()).toBeNull();
+    });
+  });
+
   describe("the provisional state (a restore without a layout)", () => {
     const wsData = (id: string, groupId?: string) =>
       ({
@@ -1496,7 +1693,7 @@ describe("SessionModel — sidebar layout", () => {
       const model = new SessionModel();
       model.restoreGroup({ id: "g1", label: "g", collapsed: false });
       model.restoreWorkspace(wsData("w1", "g1"), false);
-      model.updateWorkspaceGit("w1", gitOf("/r/.git", false));
+      model.updateWorkspaceGit("w1", { kind: "git", git: gitOf("/r/.git", false) });
       model.confirmLayout();
       expect(model.hasLayout()).toBe(true);
       expect(model.getLayout()).toEqual({ top: ["g:g1"], groups: { g1: ["r:/r/.git"] } });
@@ -1511,6 +1708,18 @@ describe("SessionModel — sidebar layout", () => {
       const g = model.createGroup("new");
       expect(model.hasLayout()).toBe(true);
       expect(model.getLayout()).toEqual({ top: ["w:w1", `g:${g.id}`], groups: { [g.id]: [] } });
+    });
+
+    it("in the provisional state the layout is not written, but the derived layout changes are reported", () => {
+      const model = new SessionModel();
+      model.restoreWorkspace(wsData("w1"), false);
+      model.restoreWorkspace(wsData("w2"), false);
+      model.updateWorkspaceGit("w1", { kind: "git", git: gitOf("/r/.git", false) });
+      model.updateWorkspaceGit("w2", { kind: "git", git: gitOf("/r/.git", true) });
+      expect(model.hasLayout()).toBe(false);
+      expect(model.getRepoGroups().size).toBe(0);
+      expect(model.getLayout()).toEqual({ top: [`r:/r/.git`], groups: {} });
+      expect(model.takeChanges()?.layout).toEqual({ top: [`r:/r/.git`], groups: {} });
     });
   });
 });

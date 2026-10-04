@@ -26,7 +26,7 @@ import type { HandoffScrollbackEditor } from "../handoff/HandoffManifest.js";
 import type { TerminalManager } from "../terminal/TerminalManager.js";
 import { removeScrollbackDir, scrollbackEditorArgv, writeScrollbackFile } from "../terminal/scrollbackEditor.js";
 import type { EventBus } from "../bus/EventBus.js";
-import { NotFoundError, SessionModel } from "./SessionModel.js";
+import { gitIdentityChanged, NotFoundError, SessionModel, type GitJudgement } from "./SessionModel.js";
 import * as Layout from "./LayoutTree.js";
 import { resumeCommandFor } from "../agent/resumeCommand.js";
 import { resolveNewCwd, type NewCwdDeps } from "./newCwd.js";
@@ -258,10 +258,14 @@ export class SessionService {
    * 呼ぶ側は保存の予約を重ねて書かない）。
    * レイアウト・所属・workspace の有無を変える経路（作る・閉じる 5 経路・グループの操作・並べ替え）は、モデルを書き換えたらここを通す。
    */
-  private publishSidebarChanges(): void {
+  private publishSidebarChanges(alsoUpdated: Workspace[] = []): void {
     const changes = this.model.takeChanges();
+    // `alsoUpdated`（呼び出し側が変えた workspace。判定の反映）も `workspace.updated` で配る。`groupId` も変わって `changes.updated` に居るものは 1 回だけ。
+    const updated = new Map<WorkspaceId, Workspace>();
+    for (const workspace of alsoUpdated) updated.set(workspace.id, workspace);
+    for (const workspace of changes?.updated ?? []) updated.set(workspace.id, workspace);
+    for (const workspace of updated.values()) this.bus.publish({ event: "workspace.updated", data: { workspace } });
     if (changes) {
-      for (const workspace of changes.updated) this.bus.publish({ event: "workspace.updated", data: { workspace } });
       if (changes.layout) this.bus.publish({ event: "sidebar.layout_changed", data: { layout: changes.layout } });
       if (changes.order) this.bus.publish({ event: "workspace.order_changed", data: { workspaceIds: changes.order } });
     }
@@ -392,20 +396,42 @@ export class SessionService {
    * 追従の見直しの結果を、**同じ場所の結果として**まとめて入れる（design D2。herdr の `apply_workspace_git_statuses`）。いまの場所が `cwd` と違えば
    * 名前も git も捨てる（新しい場所の見直しが別に走る）。名前は自動のままで世代が同じときだけ入れる。変わったら `workspace.updated` を 1 回。
    */
-  applyWorkspaceIdentity(id: WorkspaceId, cwd: string, git: GitInfo | null, label: FollowedLabel | null): void {
+  applyWorkspaceIdentity(id: WorkspaceId, cwd: string, git: GitJudgement, label: FollowedLabel | null): void {
     const ws = this.model.getWorkspace(id);
     if (!ws || this.identityCwdOf(id) !== cwd) return;
     let updated: Workspace | null = null;
+    let renamed = false;
     if (label && ws.autoLabel && (this.labelGen.get(id) ?? 0) === label.gen) {
       if (label.degraded) this.labelCwd.delete(id);
       else this.labelCwd.set(id, cwd);
       if (label.label !== ws.label) {
         updated = this.model.renameWorkspace(id, label.label, true);
-        this.persist.touch();
+        renamed = true;
       }
     }
-    if (!sameGit(ws.git, git)) updated = this.model.updateWorkspaceGit(id, git);
+    const applied = this.applyGitJudgement(id, git);
+    if (applied.identityChanged) {
+      // 判定の反映後の workspace が最新（名前の変更も含む）。出口が `workspace.updated` も配る。
+      this.publishSidebarChanges(applied.updated ? [applied.updated] : []); // 保存の予約も（名前の変更の分を含めて 1 回）
+      return;
+    }
+    if (renamed) this.persist.touch();
+    updated = applied.updated ?? updated;
     if (updated) this.bus.publish({ event: "workspace.updated", data: { workspace: updated } });
+  }
+
+  /**
+   * 判定（3 つの結果）をモデルの同じ入口へ通す（`applyWorkspaceIdentity` と `updateWorkspaceGit` の共通）。取れない結果・今と同じ判定は何もしない。
+   * `identityChanged`（`repoKey`・`isLinkedWorktree` が変わった）ときは、レイアウトと所属も変わりうるので、呼び出し側が共通の出口
+   * （`publishSidebarChanges`。`persist.touch()` を含む）で配る。
+   */
+  private applyGitJudgement(id: WorkspaceId, result: GitJudgement): { updated: Workspace | null; identityChanged: boolean } {
+    const ws = this.model.getWorkspace(id);
+    if (!ws || result.kind === "unknown") return { updated: null, identityChanged: false };
+    const git = result.kind === "git" ? result.git : null;
+    if (sameGit(ws.git, git)) return { updated: null, identityChanged: false };
+    const updated = this.model.updateWorkspaceGit(id, result);
+    return { updated, identityChanged: gitIdentityChanged(ws.git, git) };
   }
 
   /**
@@ -1133,12 +1159,10 @@ export class SessionService {
     return this.agentLaunches.has(paneId);
   }
 
-  updateWorkspaceGit(workspaceId: WorkspaceId, git: GitInfo | null): void {
-    const ws = this.model.getWorkspace(workspaceId);
-    if (!ws) return;
-    if (sameGit(ws.git, git)) return;
-    const updated = this.model.updateWorkspaceGit(workspaceId, git);
-    this.bus.publish({ event: "workspace.updated", data: { workspace: updated } });
+  updateWorkspaceGit(workspaceId: WorkspaceId, result: GitJudgement): void {
+    const applied = this.applyGitJudgement(workspaceId, result);
+    if (applied.identityChanged) this.publishSidebarChanges(applied.updated ? [applied.updated] : []);
+    else if (applied.updated) this.bus.publish({ event: "workspace.updated", data: { workspace: applied.updated } });
   }
 
   // --- lifecycle: シェルの終了（D18） ----------------------------------------

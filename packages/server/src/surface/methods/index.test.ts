@@ -431,8 +431,8 @@ describe("registerAllMethods — client / workspace / tab / pane flow", () => {
     if (!r1.ok || !r2.ok) throw new Error("unreachable");
     const main = (r1.result as { workspace: { id: string } }).workspace;
     const wt = (r2.result as { workspace: { id: string } }).workspace;
-    ctx.session.updateWorkspaceGit(main.id, { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false });
-    ctx.session.updateWorkspaceGit(wt.id, { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
+    ctx.session.updateWorkspaceGit(main.id, { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
+    ctx.session.updateWorkspaceGit(wt.id, { kind: "git", git: { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
 
     const closeResult = await ctx.surface.invoke(c, "workspace.close", { workspaceId: main.id, closeLinkedWorktrees: true });
     expect(closeResult).toEqual({ ok: true, result: {} });

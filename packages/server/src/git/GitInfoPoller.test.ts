@@ -667,6 +667,127 @@ describe("DefaultGitInfoPoller — probe の結果と最初の 1 周の合図", 
   });
 });
 
+// 20261004-group-worktree-items（T6）。実物の git で、判定がレイアウトと所属に反映されることを見る（AC8・AC11）。
+describe("DefaultGitInfoPoller — 判定のレイアウトへの反映（実物の git）", { timeout: 20_000 }, () => {
+  let dirs: string[];
+  let service: SessionService;
+  let poller: DefaultGitInfoPoller;
+
+  async function repo(): Promise<string> {
+    const dir = await makeTempDir("soda-judge-");
+    dirs.push(dir);
+    await runGit(dir, ["init", "-b", "main"]);
+    await runGit(dir, ["config", "user.email", "t@example.com"]);
+    await runGit(dir, ["config", "user.name", "t"]);
+    await runGit(dir, ["commit", "--allow-empty", "-m", "init"]);
+    return dir;
+  }
+
+  beforeEach(() => {
+    dirs = [];
+    service = new SessionService({
+      model: new SessionModel(),
+      terminals: new AlwaysUpTerminalManager(),
+      bus: new EventBus(),
+      persist: new NoopPersist(),
+      serverVersion: "test",
+      host: HOST_INFO,
+      scrollbackLines: 1000,
+      spawnGraceMs: 1,
+      defaultCwd: tmpdir(),
+      logger: new MemoryLogger(),
+      workspaceLabelDeps: { ...defaultWorkspaceLabelDeps, timeoutMs: 3_000 },
+    });
+    poller = new DefaultGitInfoPoller(service, new ChildProcessGitRunner());
+  });
+
+  afterEach(async () => {
+    for (const dir of dirs) await rm(dir, { recursive: true, force: true });
+  });
+
+  const layout = () => service.snapshot().layout!;
+  const keyOf = (id: string) => service.getWorkspace(id)!.git!.repoKey!;
+
+  it("後から開いた worktree は、同じ項目・同じグループに入る（AC8）", async () => {
+    const main = await repo();
+    const plain = await makeTempDir("soda-judge-plain-");
+    dirs.push(plain);
+    const a = (await service.createWorkspace(main, "main")).workspace;
+    const p = (await service.createWorkspace(plain, "plain")).workspace;
+    const group = service.createGroup("g", a.id);
+    await poller.pollNow();
+    const key = keyOf(a.id);
+    expect(layout()).toEqual({ top: [`g:${group.id}`, `w:${p.id}`], groups: { [group.id]: [`r:${key}`] } });
+
+    const wtDir = `${main}-wt`;
+    dirs.push(wtDir);
+    await runGit(main, ["worktree", "add", "-b", "feature", wtDir]);
+    const wt = (await service.createWorkspace(wtDir, "wt")).workspace;
+    expect(layout().top, "判定の前は一番上の末尾").toEqual([`g:${group.id}`, `w:${p.id}`, `w:${wt.id}`]);
+    await poller.pollNow();
+
+    expect(keyOf(wt.id)).toBe(key);
+    expect(layout()).toEqual({ top: [`g:${group.id}`, `w:${p.id}`], groups: { [group.id]: [`r:${key}`] } });
+    expect(service.getWorkspace(wt.id)?.groupId).toBe(group.id);
+    expect(service.snapshot().workspaces.map((w) => w.id)).toEqual([a.id, wt.id, p.id]);
+  });
+
+  it("2 つの workspace に同時に判定が付いても、届く順に依らず同じ結果になる（引き継ぎ）", async () => {
+    const main = await repo();
+    const wtDir = `${main}-wt2`;
+    dirs.push(wtDir);
+    await runGit(main, ["worktree", "add", "-b", "feature2", wtDir]);
+    const a = (await service.createWorkspace(main, "main")).workspace;
+    const b = (await service.createWorkspace(wtDir, "wt")).workspace;
+    const group = service.createGroup("g", a.id); // 本体だけがグループ（b は一番上）
+    await poller.pollNow();
+    expect(layout()).toEqual({ top: [`g:${group.id}`], groups: { [group.id]: [`r:${keyOf(a.id)}`] } });
+    expect(service.getWorkspace(b.id)?.groupId).toBe(group.id);
+  });
+
+  it("pane の場所を別のリポジトリへ・管理外へ・元へ移すと、レイアウトと所属が設計のとおりに変わる（AC11）", async () => {
+    const repoA = await repo();
+    const repoB = await repo();
+    const plain = await makeTempDir("soda-judge-plain-");
+    dirs.push(plain);
+    const { workspace: a, pane } = await service.createWorkspace(repoA, "a");
+    const group = service.createGroup("g", a.id);
+    await poller.pollNow();
+    const keyA = keyOf(a.id);
+    expect(layout()).toEqual({ top: [`g:${group.id}`], groups: { [group.id]: [`r:${keyA}`] } });
+
+    service.updatePaneRuntime(pane.id, { cwd: repoB });
+    await poller.pollNow();
+    const keyB = keyOf(a.id);
+    expect(keyB).not.toBe(keyA);
+    expect(layout(), "別のリポジトリへ: グループの外の、元の項目の一番上のまとまりの直後").toEqual({ top: [`g:${group.id}`, `r:${keyB}`], groups: { [group.id]: [] } });
+    expect(service.getWorkspace(a.id)?.groupId).toBeNull();
+
+    service.updatePaneRuntime(pane.id, { cwd: plain });
+    await poller.pollNow();
+    expect(service.getWorkspace(a.id)?.git).toBeNull();
+    expect(layout(), "管理外へ: 項目が空になるので同じ場所で w:<id> に").toEqual({ top: [`g:${group.id}`, `w:${a.id}`], groups: { [group.id]: [] } });
+
+    service.updatePaneRuntime(pane.id, { cwd: repoA });
+    await poller.pollNow();
+    expect(layout(), "元のリポジトリへ戻ると、覚えているグループへ").toEqual({ top: [`g:${group.id}`], groups: { [group.id]: [`r:${keyA}`] } });
+    expect(service.getWorkspace(a.id)?.groupId).toBe(group.id);
+  });
+
+  it("消えたフォルダに居る pane（取れない）は何も変えない", async () => {
+    const dir = await repo();
+    const { workspace: a, pane } = await service.createWorkspace(dir, "a");
+    await poller.pollNow();
+    const before = layout();
+    const gone = await makeTempDir("soda-judge-gone-");
+    await rm(gone, { recursive: true, force: true });
+    service.updatePaneRuntime(pane.id, { cwd: gone });
+    await poller.pollNow();
+    expect(layout()).toEqual(before);
+    expect(service.getWorkspace(a.id)?.git?.repoKey).toBeTruthy();
+  });
+});
+
 async function mkdirTemp(): Promise<string> {
   const dir = await makeTempDir("soda-gitpoller-plain-");
   await mkdir(dir, { recursive: true });
