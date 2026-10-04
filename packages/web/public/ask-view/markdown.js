@@ -83,8 +83,11 @@
     source.textContent = d.source;
     try {
       await load('marked.umd.js');
-      doc.innerHTML = marked.parse(d.source, { gfm: true });
-      sanitize(doc, true);
+      // 動かない入れ物（template）の中で取り除いてから文書に入れる。文書に入れた後で消すと、`<meta http-equiv=refresh>` が挿入の時点で効いて、枠が外へ移る。
+      var tpl = document.createElement('template');
+      tpl.innerHTML = marked.parse(d.source, { gfm: true });
+      sanitize(tpl.content, true);
+      doc.replaceChildren(tpl.content);
       toggle.hidden = false;
     } catch (e) {
       plain();
