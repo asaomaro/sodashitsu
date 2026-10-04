@@ -56,3 +56,4 @@ events:
   - { ts: 2026-10-04T06:29:11Z, phase: coding, event: taskcheck, metrics: { stage: start, task: cross, mode: delegated } }
   - { ts: 2026-10-04T06:31:31Z, phase: coding, event: taskcheck, metrics: { stage: report, task: cross, findings: 2 } }
   - { ts: 2026-10-04T06:45:23Z, phase: coding, event: approved, metrics: { tasks_done: 21, unplanned_lookups: 0, task_checks: 20, task_check_findings: 56, task_check_mode: delegated } }
+  - { ts: 2026-10-04T07:13:23Z, phase: test, event: start, metrics: { marks: 0 } }
