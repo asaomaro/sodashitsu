@@ -284,6 +284,32 @@ test("mermaid の図の中のリンク（click … href・ラベルの <a href>�
   }
 });
 
+test("Markdown に埋め込んだ <meta http-equiv=refresh> は、文書に入れる前に除かれ、枠は外へ移らない", async ({ page, appServer }) => {
+  const media = await makeMediaDir();
+  try {
+    const p1 = await setup(page, appServer);
+    const md = await media.write(
+      "meta-refresh.md",
+      '# 見出し\n\n<meta http-equiv="refresh" content="0;url=https://example.com/meta">\n\n本文\n',
+    );
+    const run = await runAsk(appServer, p1, SPEC({ file: md }));
+    await expect(dialog(page)).toBeVisible();
+    const f = frameOf(page);
+    await expect(f.locator("html")).toHaveAttribute("data-ready", "1");
+    await expect(f.locator("h1")).toHaveText("見出し");
+    // 移るなら数百 ms 以内に枠の URL が変わる（外部へ移れなくても `chrome-error://` になる）。待ってから見る。
+    await page.waitForTimeout(2500);
+    const frame = page.frames().find((x) => x.url().endsWith("/ask-view/markdown.html"));
+    expect(frame, "枠が /ask-view/markdown.html のまま").toBeTruthy();
+    expect(page.frames().some((x) => x.url().startsWith("chrome-error:") || x.url().includes("example.com"))).toBe(false);
+    await expect(f.locator("meta[http-equiv]")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await run.done;
+  } finally {
+    await media.cleanup();
+  }
+});
+
 test("枠の中にフォーカスがあるときの Esc は取り消し・Ctrl+Enter は決定として親へ届く。枠のスクリプトが送る関係のないメッセージは無視される（AC-I1・AC-I2・AC-I5）", async ({
   page,
   appServer,
