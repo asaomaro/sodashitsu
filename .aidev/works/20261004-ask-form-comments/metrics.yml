@@ -42,3 +42,4 @@ events:
   - { ts: 2026-10-04T04:54:26Z, phase: deliver, event: start }
   - { ts: 2026-10-04T04:54:33Z, phase: deliver, event: approved, metrics: { files_changed: 30, insertions: 1140, deletions: 51 } }
   - { ts: 2026-10-04T04:55:45Z, phase: test, event: smoke, metrics: { result: fail, exit_code: 1, commands: 10, failed_index: 1 } }
+  - { ts: 2026-10-04T04:58:36Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
