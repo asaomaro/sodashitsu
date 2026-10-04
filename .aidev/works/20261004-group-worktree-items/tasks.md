@@ -27,7 +27,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/client-core/src/workspace/sidebarLayout.ts`（新規）、`packages/client-core/src/workspace/sidebarLayout.test.ts`（新規）、`packages/client-core/src/index.ts`
       依存: T1, T2
       AC: AC5, AC10, AC13
-- [ ] T4: サーバの判定——`GitInfoPoller.probe` の結果を 3 つ（git／管理外と確定／取れない）にする。HEAD は取れたが `--git-common-dir` が失敗した場合は「取れない」。起動後の最初の 1 周が終わった合図（T10 が使う。`start()` は引き継ぎの一時停止からの再開でも呼ばれるので、**合図は 2 回以上来うる**）。単体テスト（3 つの結果・1 周目の合図）。**実物の git の結合テスト**: 管理外／消えたフォルダ（取れない）／linked worktree。あわせて、`repoKey` の未確認（symlink を通った場所・bare・サブモジュール・コミットの無いリポジトリ）を実物で確かめ、結果を `decisions.md` に残す（保存のキーにするため。本体と worktree で値がずれる場合は止まって知らせる）
+- [x] T4: サーバの判定——`GitInfoPoller.probe` の結果を 3 つ（git／管理外と確定／取れない）にする。HEAD は取れたが `--git-common-dir` が失敗した場合は「取れない」。起動後の最初の 1 周が終わった合図（T10 が使う。`start()` は引き継ぎの一時停止からの再開でも呼ばれるので、**合図は 2 回以上来うる**）。単体テスト（3 つの結果・1 周目の合図）。**実物の git の結合テスト**: 管理外／消えたフォルダ（取れない）／linked worktree。あわせて、`repoKey` の未確認（symlink を通った場所・bare・サブモジュール・コミットの無いリポジトリ）を実物で確かめ、結果を `decisions.md` に残す（保存のキーにするため。本体と worktree で値がずれる場合は止まって知らせる）
       対象: `packages/server/src/git/GitInfoPoller.ts`（`start`・`pollNow`・`followMoves`・`probe`）、`packages/server/src/infra/GitRunner.ts:21-45`（時間切れ・起動の失敗は reject、終了コードが 0 でないときは resolve）、`packages/server/src/git/worktree.ts:80-82`（`resolveCommonDir`）、`packages/server/src/composeServer.ts:475-482, :698`（`start()` の呼び出し）、`packages/server/src/git/GitInfoPoller.test.ts:108-126`（実物の git の手本）
       依存: なし
       AC: AC9

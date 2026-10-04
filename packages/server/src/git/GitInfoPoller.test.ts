@@ -1,5 +1,6 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, isAbsolute, join } from "node:path";
 import type { HostInfo, Workspace } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Disposable } from "../util/Disposable.js";
@@ -48,6 +49,8 @@ class NoopPersist implements PersistScheduler {
   async flush(): Promise<void> {}
   cancel(): void {}
 }
+
+type GitRunResult = Awaited<ReturnType<GitRunner["run"]>>;
 
 const HOST_INFO: HostInfo = { os: "linux", windowsBuild: null, hostname: "test" };
 
@@ -446,6 +449,221 @@ describe("DefaultGitInfoPoller — 最初の pane のいまの場所への追従
     service.updatePaneRuntime(pane.id, { cwd: repoB });
     await new Promise((r) => setTimeout(r, 50));
     expect(runs.length).toBe(before);
+  });
+});
+
+// 20261004-group-worktree-items T4：probe の 3 つの結果（git／管理外と確定／取れない）と、最初の 1 周の合図。
+describe("DefaultGitInfoPoller — probe の結果と最初の 1 周の合図", { timeout: 15_000 }, () => {
+  let service: SessionService;
+  let dirs: string[];
+
+  beforeEach(() => {
+    dirs = [];
+    service = new SessionService({
+      model: new SessionModel(),
+      terminals: new AlwaysUpTerminalManager(),
+      bus: new EventBus(),
+      persist: new NoopPersist(),
+      serverVersion: "test",
+      host: HOST_INFO,
+      scrollbackLines: 1000,
+      spawnGraceMs: 1,
+      defaultCwd: tmpdir(),
+      logger: new MemoryLogger(),
+    });
+  });
+
+  afterEach(async () => {
+    for (const dir of dirs) await rm(dir, { recursive: true, force: true });
+  });
+
+  async function tempDir(): Promise<string> {
+    const dir = await mkdirTemp();
+    dirs.push(dir);
+    return dir;
+  }
+
+  async function repoWithCommit(): Promise<string> {
+    const dir = await tempDir();
+    await runGit(dir, ["init", "-b", "main"]);
+    await runGit(dir, ["config", "user.email", "t@example.com"]);
+    await runGit(dir, ["config", "user.name", "t"]);
+    await runGit(dir, ["commit", "--allow-empty", "-m", "init"]);
+    return dir;
+  }
+
+  /** 引数の先頭に合う結果を返す偽の git。呼ばれた引数も控える。 */
+  function fakeGit(handlers: Record<string, GitRunResult | Error>) {
+    const calls: string[][] = [];
+    const git: GitRunner = {
+      run: async (_cwd, args) => {
+        calls.push(args);
+        const hit = handlers[args.filter((a) => !a.startsWith("--path-format")).join(" ")];
+        if (hit instanceof Error) throw hit;
+        return hit ?? { code: 1, stdout: "", stderr: "unexpected" };
+      },
+    };
+    return { git, calls };
+  }
+  const ok = (stdout: string): GitRunResult => ({ code: 0, stdout, stderr: "" });
+  const failed = (code: number): GitRunResult => ({ code, stdout: "", stderr: "fatal" });
+
+  describe("単体（偽の git）", () => {
+    it("repoKey まで取れたら git（本体は isLinkedWorktree=false。--path-format=absolute で聞く）", async () => {
+      const { git, calls } = fakeGit({
+        "rev-parse --abbrev-ref HEAD": ok("main\n"),
+        "rev-parse --git-common-dir": ok("/r/.git\n"),
+        "rev-parse --git-dir": ok("/r/.git\n"),
+      });
+      const result = await new DefaultGitInfoPoller(service, git).probe("/r");
+      expect(result).toEqual({ kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: false } });
+      expect(calls.filter((a) => a.includes("--git-common-dir") || a.includes("--git-dir")).every((a) => a.includes("--path-format=absolute"))).toBe(true);
+    });
+
+    it("--git-dir が共通ディレクトリと違えば linked worktree", async () => {
+      const { git } = fakeGit({
+        "rev-parse --abbrev-ref HEAD": ok("f\n"),
+        "rev-parse --git-common-dir": ok("/r/.git\n"),
+        "rev-parse --git-dir": ok("/r/.git/worktrees/wt\n"),
+      });
+      const result = await new DefaultGitInfoPoller(service, git).probe("/wt");
+      expect(result).toMatchObject({ kind: "git", git: { repoKey: "/r/.git", isLinkedWorktree: true } });
+    });
+
+    it("HEAD の終了コードが 0 でなければ unmanaged（管理外・コミットなしと確定）", async () => {
+      const { git } = fakeGit({ "rev-parse --abbrev-ref HEAD": failed(128) });
+      expect(await new DefaultGitInfoPoller(service, git).probe("/x")).toEqual({ kind: "unmanaged" });
+    });
+
+    it("時間切れ・git の起動失敗（reject）は unknown", async () => {
+      const { git } = fakeGit({ "rev-parse --abbrev-ref HEAD": new Error("timed out") });
+      expect(await new DefaultGitInfoPoller(service, git).probe("/x")).toEqual({ kind: "unknown" });
+    });
+
+    it("HEAD は取れたが --git-common-dir が失敗したら unknown（半端な git を作らない）", async () => {
+      const { git } = fakeGit({
+        "rev-parse --abbrev-ref HEAD": ok("main\n"),
+        "rev-parse --git-common-dir": failed(129), // 古い git で --path-format が使えない場合もここ
+        "rev-parse --git-dir": ok("/r/.git\n"),
+      });
+      expect(await new DefaultGitInfoPoller(service, git).probe("/r")).toEqual({ kind: "unknown" });
+    });
+
+    it("HEAD と --git-common-dir は取れたが --git-dir が失敗したら unknown", async () => {
+      const { git } = fakeGit({
+        "rev-parse --abbrev-ref HEAD": ok("main\n"),
+        "rev-parse --git-common-dir": ok("/r/.git\n"),
+        "rev-parse --git-dir": failed(129),
+      });
+      expect(await new DefaultGitInfoPoller(service, git).probe("/r")).toEqual({ kind: "unknown" });
+    });
+
+    it("最初の 1 周の合図: start() ごとに来る（再開で 2 回以上）・dispose した受け手には来ない・受け手が投げても他へ届く", async () => {
+      const { git } = fakeGit({ "rev-parse --abbrev-ref HEAD": failed(128) });
+      const poller = new DefaultGitInfoPoller(service, git, 60_000);
+      let a = 0;
+      let b = 0;
+      let gone = 0;
+      poller.onFirstRoundDone(() => {
+        a++;
+        throw new Error("受け手の失敗");
+      });
+      poller.onFirstRoundDone(() => b++);
+      poller.onFirstRoundDone(() => gone++).dispose();
+      poller.start();
+      await vi.waitFor(() => expect([a, b]).toEqual([1, 1]));
+      poller.stop();
+      poller.start(); // 引き継ぎの一時停止からの再開
+      await vi.waitFor(() => expect([a, b]).toEqual([2, 2]));
+      poller.stop();
+      expect(gone).toBe(0);
+    });
+
+    it("最初の 1 周が失敗しても合図は出る", async () => {
+      const { git } = fakeGit({});
+      const poller = new DefaultGitInfoPoller(service, git, 60_000);
+      vi.spyOn(poller, "pollNow").mockRejectedValue(new Error("boom"));
+      let n = 0;
+      poller.onFirstRoundDone(() => n++);
+      poller.start();
+      await vi.waitFor(() => expect(n).toBe(1));
+      poller.stop();
+    });
+  });
+
+  describe("結合（実物の git）", () => {
+    const probe = (cwd: string) => new DefaultGitInfoPoller(service, new ChildProcessGitRunner()).probe(cwd);
+
+    it("git 管理外のフォルダは unmanaged", async () => {
+      expect(await probe(await tempDir())).toEqual({ kind: "unmanaged" });
+    });
+
+    it("コミットが 1 つも無いリポジトリは unmanaged（HEAD が取れない）", async () => {
+      const dir = await tempDir();
+      await runGit(dir, ["init", "-b", "main"]);
+      expect(await probe(dir)).toEqual({ kind: "unmanaged" });
+    });
+
+    it("消えたフォルダは unknown（git の起動が失敗する）", async () => {
+      const dir = await tempDir();
+      await rm(dir, { recursive: true, force: true });
+      expect(await probe(dir)).toEqual({ kind: "unknown" });
+    });
+
+    it("本体と linked worktree は同じ repoKey（絶対パス）で、isLinkedWorktree だけ違う", async () => {
+      const repo = await repoWithCommit();
+      const wt = `${repo}-wt`;
+      dirs.push(wt);
+      await runGit(repo, ["worktree", "add", "-b", "feature", wt]);
+      const main = await probe(repo);
+      const linked = await probe(wt);
+      expect(main).toMatchObject({ kind: "git", git: { branch: "main", isLinkedWorktree: false } });
+      expect(linked).toMatchObject({ kind: "git", git: { branch: "feature", isLinkedWorktree: true } });
+      if (main.kind !== "git" || linked.kind !== "git") throw new Error("unreachable");
+      expect(isAbsolute(main.git.repoKey ?? "")).toBe(true);
+      expect(linked.git.repoKey).toBe(main.git.repoKey);
+    });
+
+    it("symlink を通った本体・その下の深い場所・symlink 経由の worktree が、実体の worktree と同じ repoKey になる（decisions D9）", async () => {
+      const base = await tempDir();
+      const real = join(base, "real");
+      await mkdir(real);
+      await runGit(real, ["init", "-b", "main"]);
+      await runGit(real, ["config", "user.email", "t@example.com"]);
+      await runGit(real, ["config", "user.name", "t"]);
+      await runGit(real, ["commit", "--allow-empty", "-m", "init"]);
+      await mkdir(join(real, "deep", "dir"), { recursive: true });
+      await symlink(real, join(base, "link"));
+      await runGit(real, ["worktree", "add", "-b", "feature", join(base, "wt")]);
+      await symlink(join(base, "wt"), join(base, "wtlink"));
+
+      const results = await Promise.all([real, join(base, "link"), join(base, "link", "deep", "dir"), join(base, "wt"), join(base, "wtlink")].map(probe));
+      const keys = results.map((r) => (r.kind === "git" ? r.git.repoKey : r.kind));
+      expect(new Set(keys).size, `repoKey: ${JSON.stringify(keys)}`).toBe(1);
+      expect(keys[0]).toMatch(/\/real\/\.git$/);
+      expect(results.map((r) => r.kind === "git" && r.git.isLinkedWorktree)).toEqual([false, false, false, true, true]);
+    });
+
+    it("bare リポジトリの worktree は bare の場所を repoKey にし、サブモジュールは親と別のリポジトリ", async () => {
+      const source = await repoWithCommit();
+      const base = await tempDir();
+      const bare = join(base, "bare.git");
+      await runGit(base, ["clone", "--bare", source, bare]);
+      await runGit(bare, ["worktree", "add", "-b", "fb", join(base, "wtb")]);
+      const wtb = await probe(join(base, "wtb"));
+      const bareResult = await probe(bare);
+      expect(wtb).toMatchObject({ kind: "git", git: { repoKey: bare, isLinkedWorktree: true } });
+      expect(bareResult).toMatchObject({ kind: "git", git: { repoKey: bare, isLinkedWorktree: false } });
+
+      const outer = await repoWithCommit();
+      await new ChildProcessGitRunner().run(outer, ["-c", "protocol.file.allow=always", "submodule", "add", source, "subm"], 10_000);
+      await runGit(outer, ["commit", "-m", "sub"]);
+      const sub = await probe(join(outer, "subm"));
+      const parent = await probe(outer);
+      if (sub.kind !== "git" || parent.kind !== "git") throw new Error("unreachable");
+      expect(sub.git.repoKey).toMatch(/\.git\/modules\/subm$/);
+      expect(sub.git.repoKey).not.toBe(parent.git.repoKey);
+    });
   });
 });
 

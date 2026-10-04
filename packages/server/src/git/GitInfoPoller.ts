@@ -15,6 +15,14 @@ const GIT_TIMEOUT_MS = 3000;
 const FOLLOW_EVENTS: ReadonlySet<ServerEvent["event"]> = new Set(["pane.updated", "pane.closed", "layout.updated", "tab.closed", "workspace.updated"]);
 
 /**
+ * `probe` の結果（20261004-group-worktree-items の design D「判定は 3 つの結果」）。
+ * - `git`: `repoKey` まで取れた。
+ * - `unmanaged`: `rev-parse --abbrev-ref HEAD` の終了コードが 0 でない（git 管理外・コミットが 1 つも無い）と確定。
+ * - `unknown`: 時間切れ・git の起動失敗、または HEAD は取れたが `--git-common-dir` が失敗した（半端な結果は信用しない）。
+ */
+export type ProbeResult = { kind: "git"; git: GitInfo } | { kind: "unmanaged" } | { kind: "unknown" };
+
+/**
  * workspace のいまの場所（最初の tab の最初の pane の場所）ごとに git 情報と自動の名前を取り、変化したら反映する（architecture.md「GitInfoPoller」。
  * 20260926-workspace-label-follow-cwd で開いた場所から、いまの場所へ）。
  */
@@ -36,6 +44,7 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
   private subscription: Disposable | null = null;
   /** workspace ごとに前回見直した場所（design D4）。 */
   private readonly polledCwd = new Map<WorkspaceId, string>();
+  private readonly firstRoundListeners = new Set<() => void>();
 
   constructor(
     private readonly session: SessionService,
@@ -53,7 +62,27 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
       this.pollNow().catch(() => undefined);
     }, this.intervalMs);
     this.timer.unref?.();
-    void this.pollNow();
+    // 1 周が失敗しても合図は出す（判定が取れなかった workspace は「取れない」として確定側が扱う）。
+    void this.pollNow()
+      .catch(() => undefined)
+      .then(() => {
+        for (const listener of [...this.firstRoundListeners]) {
+          try {
+            listener();
+          } catch {
+            // 受け手の失敗で他の受け手と 1 周を止めない
+          }
+        }
+      });
+  }
+
+  /**
+   * 起動後の最初の 1 周（`start()` が走らせる `pollNow()`）が終わった合図を受ける（T10 が移行の確定に使う。インターフェースには載せない）。
+   * `start()` は引き継ぎの一時停止からの再開でも呼ばれるので、**合図は 2 回以上来うる**（受ける側が 1 回だけ扱う）。
+   */
+  onFirstRoundDone(listener: () => void): Disposable {
+    this.firstRoundListeners.add(listener);
+    return { dispose: () => void this.firstRoundListeners.delete(listener) };
   }
 
   stop(): void {
@@ -91,14 +120,15 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
   private async pollWorkspace(ws: Workspace): Promise<void> {
     const cwd = this.session.identityCwdOf(ws.id) ?? ws.cwd;
     this.polledCwd.set(ws.id, cwd); // 待つ前に——同じ変化で見直しを重ねない
-    const [git, label] = await Promise.all([this.probe(cwd), this.session.followedLabel(ws.id, cwd).catch(() => null)]);
-    this.session.applyWorkspaceIdentity(ws.id, cwd, git, label);
+    const [result, label] = await Promise.all([this.probe(cwd), this.session.followedLabel(ws.id, cwd).catch(() => null)]);
+    // T6 まで、サービスは今までどおり「git か null」を受ける（管理外も取れないも null。本格的な反映は T6）。
+    this.session.applyWorkspaceIdentity(ws.id, cwd, result.kind === "git" ? result.git : null, label);
   }
 
-  private async probe(cwd: string): Promise<GitInfo | null> {
+  async probe(cwd: string): Promise<ProbeResult> {
     try {
       const branchResult = await this.git.run(cwd, ["rev-parse", "--abbrev-ref", "HEAD"], GIT_TIMEOUT_MS);
-      if (branchResult.code !== 0) return null; // git 管理外（またはコミットが 1 つも無い）
+      if (branchResult.code !== 0) return { kind: "unmanaged" }; // git 管理外（またはコミットが 1 つも無い）。終了コードで確定する
       const branch = branchResult.stdout.trim() || null;
 
       let ahead = 0;
@@ -110,23 +140,22 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
         ahead = Number(aheadStr) || 0;
       } // 上流ブランチが無ければそのまま 0/0（エラーにしない）
 
-      // worktree 自動グループの判定キー（20260923-workspace-grouping。design「server
-      // （GitInfoPoller.probe の拡張）」）。既存の `WorktreeService.repoNameOf` と同じ
-      // `resolveCommonDir` を再利用する——新しい共有モジュールは作らない。
-      let repoKey: string | null = null;
-      let isLinkedWorktree = false;
-      const commonResult = await this.git.run(cwd, ["rev-parse", "--git-common-dir"], GIT_TIMEOUT_MS);
-      if (commonResult.code === 0) {
-        repoKey = resolveCommonDir(cwd, commonResult.stdout);
-        const dirResult = await this.git.run(cwd, ["rev-parse", "--git-dir"], GIT_TIMEOUT_MS);
-        // 本体は `--git-dir` と `--git-common-dir` が同じパスを指す。linked worktree は異なる
-        // （`--git-dir` が `<common-dir>/worktrees/<name>` を指す標準的な Git の仕組み）。
-        if (dirResult.code === 0) isLinkedWorktree = resolveCommonDir(cwd, dirResult.stdout) !== repoKey;
-      } // 取れなければ repoKey は null のまま（worktree 自動グループの対象外）
+      // 判定キー（20260923-workspace-grouping。`WorktreeService.repoNameOf` と同じ `resolveCommonDir` を再利用）。
+      // `--path-format=absolute` で git に絶対パスを作らせる（git 2.31 以上。古い git ではオプションが失敗して「取れない」になる）。
+      // 付けないと、symlink 経由の本体の cwd では相対の `.git` が返り、cwd のまま解決した `.../link/.git` が worktree の `.../real/.git` とずれる（decisions D9）。
+      // HEAD が取れたのに `--git-common-dir` が失敗したら、半端な結果を作らず「取れない」に寄せる（直前の判定を保つため）。
+      const commonResult = await this.git.run(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"], GIT_TIMEOUT_MS);
+      if (commonResult.code !== 0) return { kind: "unknown" };
+      const repoKey = resolveCommonDir(cwd, commonResult.stdout);
+      const dirResult = await this.git.run(cwd, ["rev-parse", "--path-format=absolute", "--git-dir"], GIT_TIMEOUT_MS);
+      if (dirResult.code !== 0) return { kind: "unknown" };
+      // 本体は `--git-dir` と `--git-common-dir` が同じパスを指す。linked worktree は異なる
+      // （`--git-dir` が `<common-dir>/worktrees/<name>` を指す標準的な Git の仕組み）。
+      const isLinkedWorktree = resolveCommonDir(cwd, dirResult.stdout) !== repoKey;
 
-      return { branch, ahead, behind, repoKey, isLinkedWorktree };
+      return { kind: "git", git: { branch, ahead, behind, repoKey, isLinkedWorktree } };
     } catch {
-      return null; // 時間切れ・git が無い等
+      return { kind: "unknown" }; // 時間切れ・git が無い等
     }
   }
 }

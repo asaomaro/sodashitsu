@@ -142,3 +142,30 @@ AssertionError: expected { top: [ 'w:a', 'g:g1', …(3) ], …(1) } to deeply eq
 ### 点検で直した指摘（1 件 1 行）
 
 - T3 [should] deleteGroupFromLayout の分割代入が no-unused-vars（eslint）で落ちる → delete を使う形に直した [conv:-]
+
+### T4 壊して落ちる確認
+
+1. `probe` の `--path-format=absolute` を 2 か所とも外して実行（元に戻し済み）。symlink 経由の本体の repoKey が `link/.git` にずれる:
+
+```
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > repoKey まで取れたら git（本体は isLinkedWorktree=false。--path-format=absolute で聞く）
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 結合（実物の git） > symlink を通った本体・その下の深い場所・symlink 経由の worktree が、実体の worktree と同じ repoKey になる（decisions D9）
+AssertionError: repoKey: ["/tmp/soda-gitpoller-plain-sAV3RU/real/.git","/tmp/soda-gitpoller-plain-sAV3RU/link/.git","/tmp/soda-gitpoller-plain-sAV3RU/link/.git","/tmp/soda-gitpoller-plain-sAV3RU/real/.git","/tmp/soda-gitpoller-plain-sAV3RU/real/.git"]: expected 2 to be 1 // Object.is equality
+      Tests  2 failed | 35 passed (37)
+```
+
+2. `catch` の結果と `--git-common-dir` 失敗の結果を `unknown` から `unmanaged` に変えて実行（元に戻し済み）:
+
+```
+       × 時間切れ・git の起動失敗（reject）は unknown 5ms
+       × HEAD は取れたが --git-common-dir が失敗したら unknown（半端な git を作らない） 1ms
+       × 消えたフォルダは unknown（git の起動が失敗する） 5ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected { kind: 'unmanaged' } to deeply equal { kind: 'unknown' }
+AssertionError: expected { kind: 'unmanaged' } to deeply equal { kind: 'unknown' }
+AssertionError: expected { kind: 'unmanaged' } to deeply equal { kind: 'unknown' }
+      Tests  3 failed | 34 passed (37)
+```
+- T4 [nit] bare の isLinkedWorktree=false をテストが固定していない → expect に足した。onFirstRoundDone が stop 後にも出る点は D10 に記録（T10 で扱う）。--git-dir 失敗の分岐の壊し確認は新規挙動のため省略 [conv:-]
