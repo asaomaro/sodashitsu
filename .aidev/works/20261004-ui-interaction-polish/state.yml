@@ -1,0 +1,10 @@
+schema: 11
+slug: ui-interaction-polish
+current: requirements
+approved: []
+mode: autonomous
+profile: full
+humanGates: []
+maxSendBacks: 3
+dependsOn: []
+harnessRev: unknown
