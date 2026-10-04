@@ -1719,12 +1719,12 @@ describe("SessionModel — sidebar layout", () => {
       expect(members(model)).toEqual([x.id, y.id, z.id]);
     });
 
-    it("the flat order keeps the representative before the other workspaces of its folder, however the layout puts them", () => {
+    it("the flat order follows the layout tree as is (T33); the representative does not change even when a non-representative is placed before it", () => {
       const { model, a, wt, a2 } = sameFolder();
       const g = model.createGroup("g");
       model.addToGroup(a2, g.id); // 代表でない a2 を、代表の項目より前のまとまりへ
-      expect(model.listWorkspaces().map((w) => w.id).indexOf(a)).toBeLessThan(model.listWorkspaces().map((w) => w.id).indexOf(a2));
-      expect(members(model)).toEqual([a, wt]); // 代表が入れ替わらない
+      expect(model.listWorkspaces().map((w) => w.id).indexOf(a2)).toBeLessThan(model.listWorkspaces().map((w) => w.id).indexOf(a));
+      expect(members(model)).toEqual([a, wt]); // 代表は旗で決まり、入れ替わらない
       expect(model.getLayout().groups[g.id]).toEqual([`w:${a2}`]);
     });
 

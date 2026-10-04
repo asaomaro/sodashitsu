@@ -168,9 +168,9 @@ export function deleteGroupFromLayout(layout: SidebarLayout, groupId: GroupId): 
  * `ungrouped`、`g:` は中身）、項目はその中の順、`r:` は `repoMembers` の順（本体が先頭）。実在しない参照は飛ばし、
  * 重複は先のものだけ。どの項目にも現れない workspace（`top` に無いグループの中身を含む）は、`workspaces` の順で末尾へ付ける。
  *
- * 代表（サーバが決めた旗。旗が無い古いサーバでは `worktreeKey` が同じ workspace の平らな順で最初のもの）が、並べ替えの結果で同じ worktree の代表でない workspace の
- * 後ろへ回らないようにする。回ると代表が入れ替わって項目の参照が変わり続けるため、代表は同じ worktree の workspace が
- * 占める位置のうち一番前に置く（旗が無い古いサーバでは、代表は入力の `workspaces` の順で決める）。
+ * 平らな順はレイアウトの木を上から読んだ順そのまま（T33。代表はサーバが決めた旗で決まるので、並べ替えで入れ替わらない）。
+ * 例外は旗が 1 つも立っていない `worktreeKey` だけ（純関数としての互換。本番ではサーバが `worktreeKey` を持つ workspace に必ず旗を付けてから呼ぶので通らない）。そこでは代表が `workspaces` の順で決まるので、
+ * 代表が入れ替わり続けないよう、同じ `worktreeKey` の workspace が占める位置のうち一番前へ代表を置く（`keepRepresentativesFirst`）。
  */
 export function flattenWorkspaceIds(layout: SidebarLayout, workspaces: Workspace[]): WorkspaceId[] {
   const seen = new Set<WorkspaceId>();
@@ -197,13 +197,19 @@ export function flattenWorkspaceIds(layout: SidebarLayout, workspaces: Workspace
   return keepRepresentativesFirst(ids, workspaces);
 }
 
-/** 同じ `worktreeKey` の workspace が占める位置のうち、一番前へ代表を置く（残りは今の相対順のまま）。 */
+/**
+ * 旗の無い古いサーバの `worktreeKey` だけ、同じ `worktreeKey` の workspace が占める位置のうち一番前へ代表を置く（残りは今の相対順のまま）。
+ * 旗が 1 つでも立っている `worktreeKey` は触らない（代表は旗で決まり、子の順は木のまま）。
+ */
 function keepRepresentativesFirst(ids: WorkspaceId[], workspaces: Workspace[]): WorkspaceId[] {
   const reps = representativeIds(workspaces);
   const keyOf = new Map<WorkspaceId, string>();
+  const flagged = new Set<string>();
   for (const w of workspaces) {
     const key = w.git?.worktreeKey;
-    if (typeof key === "string") keyOf.set(w.id, key);
+    if (typeof key !== "string") continue;
+    keyOf.set(w.id, key);
+    if (w.representative === true) flagged.add(key);
   }
   const slots = new Map<string, number[]>();
   ids.forEach((id, i) => {
@@ -211,8 +217,8 @@ function keepRepresentativesFirst(ids: WorkspaceId[], workspaces: Workspace[]): 
     if (key !== undefined) slots.set(key, [...(slots.get(key) ?? []), i]);
   });
   const result = [...ids];
-  for (const positions of slots.values()) {
-    if (positions.length < 2) continue;
+  for (const [key, positions] of slots) {
+    if (positions.length < 2 || flagged.has(key)) continue;
     const members = positions.map((i) => ids[i]!);
     const ordered = [...members.filter((id) => reps.has(id)), ...members.filter((id) => !reps.has(id))];
     positions.forEach((pos, k) => {

@@ -57,28 +57,14 @@ function expectAgreement(model: SessionModel, step: string): void {
   const serverOrder = snapshot.workspaces.map((w) => w.id);
   // サーバが Map を並べ直すのに使う関数の結果が、サーバの並び。
   expect(flattenWorkspaceIds(layout, snapshot.workspaces), `${step}: flatten`).toEqual(serverOrder);
-  // 画面の木の順も、同じ workspace を 1 度ずつ並べる。順まで同じになるのは、代表でない workspace（同じフォルダの 2 つ目）が
-  // 代表より先に並んでいないとき（先に並べると、Map は代表が入れ替わらないよう代表を先に置くので、木の順と食い違う。T23 の決め）。
+  // 画面の木の順も、同じ workspace を 1 度ずつ並べ、順まで同じになる（T33。サーバは旗で代表を決めるので、代表を先に置く入れ替えは無い）。
   const ids = treeIds(snapshot);
   expect([...ids].sort(), `${step}: tree has every workspace once`).toEqual(
     [...serverOrder].sort(),
   );
-  const reps = representativeIds(snapshot.workspaces);
-  const secondBeforeRep = ids.some((id, i) => {
-    const w = snapshot.workspaces.find((x) => x.id === id)!;
-    return (
-      !reps.has(id) &&
-      ids
-        .slice(i + 1)
-        .some(
-          (other) =>
-            reps.has(other) &&
-            snapshot.workspaces.find((x) => x.id === other)!.git?.worktreeKey ===
-              w.git?.worktreeKey,
-        )
-    );
-  });
-  if (!secondBeforeRep) expect(ids, `${step}: tree order`).toEqual(serverOrder);
+  expect(ids, `${step}: tree order`).toEqual(serverOrder);
+  // settle は何度呼んでも同じ（冪等）。
+  expect(flattenWorkspaceIds(layout, snapshot.workspaces), `${step}: idempotent`).toEqual(serverOrder);
   // 画面がレイアウトを持たない（古いサーバ）ときに導く結果と、確定後のレイアウトが違ってよいのは、利用者が並べ替えた分だけ。
   // 実効の groupId は、木でそのグループの中に居る workspace と一致する。
   const tree = sidebarTree(snapshot.workspaces, snapshot.groups, layout, "opened");
@@ -182,6 +168,43 @@ describe("サーバと画面は同じ純関数で同じ木になる（T19）", (
       { kind: "ungrouped", heading: true, items: [w2] },
       { kind: "group", id: g.id, items: [[m, w1]] },
     ]);
+  });
+
+  it("T33: linked worktree が 2 つ（M・Wa・Wb）で、2 つ目の Wb を選んで＋新規しても、worktree グループの子の順は変わらず、settle は何度呼んでも同じ（画面とサーバの一致）", () => {
+    const model = new SessionModel();
+    const m = model.createWorkspace("/m", "m", init).workspace.id;
+    const wa = model.createWorkspace("/wa", "wa", init).workspace.id;
+    const wb = model.createWorkspace("/wb", "wb", init).workspace.id;
+    model.updateWorkspaceGit(m, { kind: "git", git: gitOf("/r/.git", false, "/r/.git") });
+    model.updateWorkspaceGit(wa, { kind: "git", git: gitOf("/r/.git", true, "/r/.git/worktrees/wa") });
+    model.updateWorkspaceGit(wb, { kind: "git", git: gitOf("/r/.git", true, "/r/.git/worktrees/wb") });
+    const g = model.createGroup("G", m);
+    model.moveItemBy({ kind: "ungrouped" }, "previous"); // top: ["u", g]
+    const shape = (): unknown => {
+      const snapshot = snapshotOf(model);
+      return shapeOf(sidebarTree(snapshot.workspaces, snapshot.groups, snapshot.layout!, "opened"));
+    };
+    expect(shape()).toEqual([
+      { kind: "ungrouped", heading: true, items: [] },
+      { kind: "group", id: g.id, items: [[m, wa, wb]] },
+    ]);
+    const d = model.createWorkspace("/wb", "d", init).workspace.id; // Wb を選んでの「＋新規」
+    expectAgreement(model, "created");
+    model.updateWorkspaceGit(d, { kind: "git", git: gitOf("/r/.git", true, "/r/.git/worktrees/wb") });
+    expectAgreement(model, "judged");
+    const expected = [
+      { kind: "ungrouped", heading: true, items: [d] },
+      { kind: "group", id: g.id, items: [[m, wa, wb]] },
+    ];
+    expect(shape()).toEqual(expected);
+    const order = snapshotOf(model).workspaces.map((w) => w.id);
+    // 何度判定を反映しても（settle を何度通っても）並びも木も変わらない。
+    for (let i = 0; i < 3; i++) {
+      model.updateWorkspaceGit(d, { kind: "git", git: gitOf("/r/.git", true, "/r/.git/worktrees/wb") });
+      expectAgreement(model, `again ${i}`);
+      expect(snapshotOf(model).workspaces.map((w) => w.id)).toEqual(order);
+      expect(shape()).toEqual(expected);
+    }
   });
 
   it("仮の状態（layout の無い保存からの復元）: 配るレイアウトは、画面が古いサーバに対して導くレイアウトと同じ", () => {

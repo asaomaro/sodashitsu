@@ -5083,7 +5083,7 @@ AssertionError: expected [] to deeply equal [ [ 'w2', true ] ]
       Tests  1 failed | 6 passed (7)
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session/SessionModel.clientAgreement.test.ts
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
- FAIL  src/workspace/workspaceGrouping.test.ts > itemRefOf / repoMembers / isRepresentative（追補 01 A） > T29: サーバが決めた旗（representative）があれば、並びの順に依らずそれに従う（先に並ぶ workspace が代表を奪わ�
+ FAIL  src/workspace/workspaceGrouping.test.ts > itemRefOf / repoMembers / isRepresentative（追補 01 A） > T29: サーバが決めた旗（representative）があれば、並びの順に依らずそれに従う（先に並ぶ workspace が代表を奪わ�
 AssertionError: expected [ true, false ] to deeply equal [ false, true ]
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
  FAIL  src/session/SessionModel.clientAgreement.test.ts > サーバと画面は同じ純関数で同じ木になる（T19） > T29: 「グループなし」を上に並べ替えた後に同じフォルダへ workspace が増えても、サーバが配る代表
@@ -5095,10 +5095,10 @@ AssertionError: expected Set{ 'w1', 'w3' } to deeply equal Set{ 'w1', 'w2' }
 
 Running 1 test using 1 worker
 
-  ✘  1 src/specs/workspace-groups.spec.ts:1191:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › T29: 「グループなし」をグループより上に並べ替えてから worktree の workspace を選んで「＋ 新規」し�
+  ✘  1 src/specs/workspace-groups.spec.ts:1191:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › T29: 「グループなし」をグループより上に並べ替えてから worktree の workspace を選んで「＋ 新規」し�
 
 
-  1) src/specs/workspace-groups.spec.ts:1191:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › T29: 「グループなし」をグループより上に並べ替えてから worktree の workspace を選んで「＋ 新規」して�
+  1) src/specs/workspace-groups.spec.ts:1191:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › T29: 「グループなし」をグループより上に並べ替えてから worktree の workspace を選んで「＋ 新規」して�
 
     Error: expect(received).toEqual(expected) // deep equality
 
@@ -5142,7 +5142,7 @@ AssertionError: expected { …(2) } to be null
 AssertionError: expected { …(2) } to deeply equal { …(2) }
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/input
       Tests  8 failed | 86 passed (94)
- FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と、落�
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と、落�
  FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > 項目の並べ替えは、掴んだ項目の workspace 全部と落とし先の項目の先頭の workspac
  FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > worktree グループの先頭の行を掴む：グループ全体が動く。子の行の上に落としても、その項目の位置
  FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの見出しのドラッグ：まとまりどうしを並べ替える（グループ・「グループなし」）
@@ -5165,7 +5165,7 @@ AssertionError: expected { item: { kind: 'group', …(1) }, …(1) } to be null
 AssertionError: expected { …(2) } to be null
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/input
       Tests  7 failed | 87 passed (94)
- FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と、落�
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と、落�
  FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > 項目の並べ替えは、掴んだ項目の workspace 全部と落とし先の項目の先頭の workspac
  FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > worktree グループの先頭の行を掴む：グループ全体が動く。子の行の上に落としても、その項目の位置
  FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの見出しのドラッグ：まとまりどうしを並べ替える（グループ・「グループなし」）
@@ -5271,3 +5271,83 @@ web の Sidebar.vue で `moveItemByDrag(draggedRow.item, drop.before, …)` を 
 - `containerOf`・`listOf` がサーバと client-core に二重にある件は、直さない（同じ定義を 2 つのパッケージが持つ。共有の置き場所を作る費用に見合わないと判断。変えるときは両方を同時に直す）。
 - T32 [should] orderedWorkspaceIds の撤去で docs/herdr-parity.md:58 に死んだ参照が残る → 現状の画面の木の順（visibleWorkspaceIdsInOrder）に直した [conv:-]
 - T32 [nit] D46 の「決定的に落ちる」が 5 回の観測の言い過ぎ → 「この環境で各 5 回」に表現を合わせた [conv:-]
+
+### T33 壊して落ちる確認
+
+壊し方: `sidebarLayout.ts` の `keepRepresentativesFirst` の `positions.length < 2 || flagged.has(key)` から `|| flagged.has(key)` を外し（旗のある worktree でも代表を先に置く入れ替えを復活）、build して流した。確認後に元へ戻し build し直した。
+
+単体（client-core の sidebarLayout.test.ts・server の src/session）:
+
+```
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/workspace/sidebarLayout.test.ts > flattenWorkspaceIds（T33: 旗のある worktree は木の順のまま） > 旗で代表が決まっている worktree は、平らな順を木の順のまま返す（代表を先に置く入れ替えをしない）
+AssertionError: expected [ 'wb', 'd', 'm', 'wa', 'e' ] to deeply equal [ 'e', 'd', 'm', 'wa', 'wb' ]
+      Tests  1 failed | 24 passed (25)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/workspace/sidebarLayout.test.ts
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionModel.clientAgreement.test.ts > サーバと画面は同じ純関数で同じ木になる（T19） > 操作のたびに、サーバの並び・実効の groupId・配るレイアウトが画面の木と一致する（入れる・外す・並べ替える・グループの削除・代表の交代）
+AssertionError: moveItemBy (group): tree order: expected [ 'w5', 'w4', 'w1', 'w2', 'w3', 'w6' ] to deeply equal [ 'w2', 'w4', 'w1', 'w5', 'w3', 'w6' ]
+ FAIL  src/session/SessionModel.clientAgreement.test.ts > サーバと画面は同じ純関数で同じ木になる（T19） > T29: 「グループなし」を上に並べ替えた後に同じフォルダへ workspace が増えても、サーバが配る代表と画面の代表が一致し、worktree グループは崩れない
+AssertionError: judged: tree order: expected [ 'w3', 'w1', 'w2' ] to deeply equal [ 'w2', 'w1', 'w3' ]
+ FAIL  src/session/SessionModel.clientAgreement.test.ts > サーバと画面は同じ純関数で同じ木になる（T19） > T33: linked worktree が 2 つ（M・Wa・Wb）で、2 つ目の Wb を選んで＋新規しても、worktree グループの子の順は変わらず、settle は何度呼んでも同じ（画面とサーバの一致）
+AssertionError: judged: flatten: expected [ 'w3', 'w1', 'w4', 'w2' ] to deeply equal [ 'w3', 'w1', 'w2', 'w4' ]
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > the flat order follows the layout tree as is (T33); the representative does not change even when a non-representative is placed before it
+AssertionError: expected 1 to be less than 0
+      Tests  4 failed | 530 passed (534)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session
+```
+
+E2E（`workspace-groups.spec.ts -g T33`。子の順が M>Wb>Wa に変わる）:
+
+```
+
+Running 1 test using 1 worker
+
+  ✘  1 src/specs/workspace-groups.spec.ts:1405:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › T33: linked worktree が 2 つの形で、「グループなし」を上に並べ替えてから 2 つ目の worktree の workspace を選んで「＋ 新規」しても、worktree グループの子の順は変わらず、新しい行は通常の行 (22.8s)
+
+
+  1) src/specs/workspace-groups.spec.ts:1405:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › T33: linked worktree が 2 つの形で、「グループなし」を上に並べ替えてから 2 つ目の worktree の workspace を選んで「＋ 新規」しても、worktree グループの子の順は変わらず、新しい行は通常の行 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Array [
+        "[u] グループなし (1)",
+        "  second-ws",
+        "[g] g1 (1)",
+        "  wt* main-ws",
+    -   "    wt wa-ws",
+        "    wt wb-ws",
+    +   "    wt wa-ws",
+      ]
+
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1436:11
+
+    Error Context: test-results/workspace-groups-同じフォルダの-2-cbb40-ree-グループの子の順は変わらず、新しい行は通常の行/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/workspace-groups-同じフォルダの-2-cbb40-ree-グループの子の順は変わらず、新しい行は通常の行/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/workspace-groups-同じフォルダの-2-cbb40-ree-グループの子の順は変わらず、新しい行は通常の行/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    src/specs/workspace-groups.spec.ts:1405:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › T33: linked worktree が 2 つの形で、「グループなし」を上に並べ替えてから 2 つ目の worktree の workspace を選んで「＋ 新規」しても、worktree グループの子の順は変わらず、新しい行は通常の行 
+```
+- T33 [nit] 旗の無い経路は本番では通らず D47 の理由づけが不正確 → コメントと D47 に「純関数としての互換」と書き直した [conv:-]
+- T33 [nit] 旗あり／旗なしの混在のテストが無い → T35 で足す [conv:-]

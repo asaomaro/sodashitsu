@@ -1402,6 +1402,51 @@ test.describe("同じフォルダの 2 つ目の workspace（追補 01 A・AC19�
     expect(second.branch, "ブランチ名も出さない").toBeNull();
   });
 
+  test("T33: linked worktree が 2 つの形で、「グループなし」を上に並べ替えてから 2 つ目の worktree の workspace を選んで「＋ 新規」しても、worktree グループの子の順は変わらず、新しい行は通常の行", async ({
+    page,
+    appServer,
+  }) => {
+    const env = await boot(page, appServer);
+    const repo = await makeRepo();
+    const wtA = await addWorktree(repo, "wt-a");
+    const wtB = await addWorktree(repo, "wt-b");
+    const mainWs = await env.open(repo, "main-ws");
+    const aWs = await env.open(wtA, "wa-ws");
+    const bWs = await env.open(wtB, "wb-ws");
+    await env.dropInitial();
+    await createGroupVia(page, "main-ws", "g1");
+    await expectOutline(page, ["[g] g1 (1)", "  wt* main-ws", "    wt wa-ws", "    wt wb-ws", "[u] グループなし (0)"]);
+    await openMenuOn(page, rowOf(page, "グループなし"));
+    await chooseMenu(page, "上へ移動");
+    await expectOutline(page, ["[u] グループなし (0)", "[g] g1 (1)", "  wt* main-ws", "    wt wa-ws", "    wt wb-ws"]);
+
+    // 2 つ目の worktree（wb-ws）を選んで「＋ 新規」。判定の通知を待ってから名前の変更を 1 つ送り、それが DOM に出るのを待つ（T29 と同じ）。
+    await rowOf(page, "wb-ws").click();
+    await expect(rowOf(page, "wb-ws")).toHaveAttribute("aria-current", "true");
+    const known = new Set([mainWs.id, aWs.id, bWs.id]);
+    const judged = env.client.waitForEvent(
+      "workspace.updated",
+      (e) => !known.has(e.data.workspace.id) && typeof e.data.workspace.git?.worktreeKey === "string",
+      SETTLE,
+    );
+    await page.getByRole("button", { name: "＋ 新規" }).click();
+    const created = (await judged).data.workspace;
+    await env.client.request("workspace.rename", { workspaceId: created.id, label: "second-ws" });
+    await expect(rowOf(page, "second-ws")).toBeVisible({ timeout: SETTLE });
+    await expectOutline(page, [
+      "[u] グループなし (1)",
+      "  second-ws",
+      "[g] g1 (1)",
+      "  wt* main-ws",
+      "    wt wa-ws",
+      "    wt wb-ws",
+    ]);
+    const second = (await rowsOf(page)).find((r) => r.label === "second-ws")!;
+    expect(second.kind).toBe("workspace");
+    expect(second.kindIcon, "worktree の印は付かない").toBeNull();
+    expect(second.branch, "ブランチ名も出さない").toBeNull();
+  });
+
   test("同じフォルダの 2 つ目は、worktree グループの所属に引きずられない（グループへ入れても worktree グループは動かない）", async ({
     page,
     appServer,

@@ -397,3 +397,12 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **方法**: `corepack pnpm build` の後に `workspace-tab-pane.spec.ts` を 5 回。このブランチ: 5 回とも「1 failed / 9 passed」（305 の 1 件）。main（`origin/main` c3f1fae を別の作業ディレクトリ `git worktree add /tmp/sodamain` で install・build して同じ回数）: 5 回とも同じ 305 の 1 件だけ失敗（「1 failed / 9 passed」）。差は無い。
 - **原因の見立て**: 失敗の出力では、打った文字は新しい pane に届いて `echo` も実行されている（出力に `soda-e2e-aftersplit-…` の結果行がある）。落ちているのは、この環境の bash（readline）が入力の途中で行を再描画し、`echo soda-e2e-af \rtersplit-…` のように期待の文字列が連続しなくなるため、`waitForOutput` の連続一致が取れないこと。この環境（WSL の bash の prompt・端末幅）に依る。このブランチの変更による退行ではない。
 - **対応**: 退行ではないので直さない。事実だけ残す（この環境で main でも 5 回中 5 回落ちた件。別件として扱う）。作業ディレクトリは `git worktree remove` で片付けた。
+
+## D47: 「代表を平らな順で先に置く」入れ替え（`keepRepresentativesFirst`）を、旗の無い `worktreeKey` だけに限った（T33。review-findings-02 の 1。D27・D42 の補足）
+
+- **不具合**: `top=["u","g:G"]`・G に `r:K`（M・Wa・Wb）で Wb を選んで＋新規（D）→ 判定後の平らな順 [D,M,Wa,Wb] に対し、D27 の入れ替えが同じ `worktreeKey` の D と Wb（代表）を入れ替えて [Wb,M,Wa,D] にし、worktree グループの子が M>Wa,Wb から M>Wb,Wa に変わった。次の `settle` では別の並びになり、冪等でもなかった。
+- **決め**: 代表は旗（D42）で決まり、平らな順に依らない。そこで `flattenWorkspaceIds` は旗が 1 つでも立っている `worktreeKey` では入れ替えず、**レイアウトの木を上から読んだ順そのまま**にする。子の順は＋新規・重複の出入り・並べ替えで変わらず、`settle` は何度呼んでも同じ。
+- **旗の無い経路は残した**: 旗が 1 つも立っていない `worktreeKey`（旗の無い古いサーバ・配信の途中）では、代表が `workspaces` の順で最初のものに決まる（D42）ので、入れ替えをやめると並べ替えのたびに代表が入れ替わり続けうる。そこだけ従来どおり入れ替える（旗の立っている key は除く）。この経路は冪等でない可能性があるが、旗のあるサーバ（この work が出すもの）では通らない。
+- **テスト**: `SessionModel.test.ts` の「平らな順は代表を前に置く」を「木の順のまま・代表は旗で変わらない」に書き直した。`clientAgreement` の木の順の一致から「代表より先に並ぶ場合は除く」の例外を外し、常に一致・冪等を確かめる。M・Wa・Wb の形のモデル／一致のテスト（client-core の純関数のテストを含む）と E2E を 1 件足した。
+
+- D47 補足（T33 の点検）: `flattenWorkspaceIds` を呼ぶのはサーバの `settle` だけで、サーバは `worktreeKey` を持つ workspace に必ず旗を付けてから呼ぶ。つまり旗の無い経路（`keepRepresentativesFirst`）は本番では通らず、純関数としての互換のために残している（古いサーバの画面は `layoutFromLegacy` を使い `flattenWorkspaceIds` を通らない。乱択テストで旗なし・混在でも冪等は崩れなかった）。旗ありと旗なしの混在のテストは T35 で足す。

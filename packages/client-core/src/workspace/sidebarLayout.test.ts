@@ -235,6 +235,21 @@ describe("flattenWorkspaceIds", () => {
   });
 });
 
+describe("flattenWorkspaceIds（T33: 旗のある worktree は木の順のまま）", () => {
+  const k = "/R/worktrees/x";
+  const flagged = (id: string, representative: boolean, key = k) =>
+    ws(id, { git: git("R", true, key), representative });
+  it("旗で代表が決まっている worktree は、平らな順を木の順のまま返す（代表を先に置く入れ替えをしない）", () => {
+    const list = [ws("d"), ws("m", { git: git("R", false, "/R") }), ws("wa", { git: git("R", true, "/R/wa") }), flagged("wb", true), flagged("e", false)];
+    const layout: SidebarLayout = { top: ["u", "g:g1"], groups: { g1: ["r:R"] }, ungrouped: ["w:e", "w:d"] };
+    const flat = flattenWorkspaceIds(layout, list);
+    expect(flat).toEqual(["e", "d", "m", "wa", "wb"]);
+    // 冪等: 結果を入力の順にして流し直しても同じ。
+    const again = flat.map((id) => list.find((w) => w.id === id)!);
+    expect(flattenWorkspaceIds(layout, again)).toEqual(flat);
+  });
+});
+
 describe("repairLayout（AC13）", () => {
   const list = [ws("a"), ws("b"), ws("c"), ws("w1", { git: git("R") })];
 

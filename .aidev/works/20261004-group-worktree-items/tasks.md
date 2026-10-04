@@ -152,7 +152,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
 
 ## 再レビューの指摘（`review-findings-02.md`）
 
-- [ ] T33: `keepRepresentativesFirst`（代表を平らな順で先に置く入れ替え）をやめ、平らな順をレイアウトの木を上から読んだ順そのままにする。`settle` の冪等・worktree グループの子の順が不変（linked worktree 2 つ以上の形）。回帰テスト（モデル・`clientAgreement`・E2E 1 件）と壊して落ちる確認
+- [x] T33: `keepRepresentativesFirst`（代表を平らな順で先に置く入れ替え）をやめ、平らな順をレイアウトの木を上から読んだ順そのままにする。`settle` の冪等・worktree グループの子の順が不変（linked worktree 2 つ以上の形）。回帰テスト（モデル・`clientAgreement`・E2E 1 件）と壊して落ちる確認
       対象: `packages/client-core/src/workspace/sidebarLayout.ts`・`workspaceGrouping.ts`、`packages/server/src/session/SessionModel.ts`・`SessionModel.clientAgreement.test.ts`、`packages/e2e/src/specs/workspace-groups.spec.ts`
       依存: なし
       AC: AC19
