@@ -19,7 +19,7 @@ design.md のとおり、基準の記録（T1）→ 純関数（T2）→ 構造�
       対象: `packages/e2e/src/specs/`（読むだけ・流すだけ）、`decisions.md`
       依存: なし
       AC: AC9
-- [ ] T2: 純関数 `sectionSpy.ts`——`sectionAtScroll`（ask-form の `spy()` の式。線は `y + headerHeight + 40 + k0·(h − headerHeight − 40)`）・`keepChosen(chosen, i, focus)`（見出しが見える範囲 `[y + headerHeight − 2, y + h)` にある、または `focus.section === chosen` で `focus.top` が見える範囲にある。`focus` は部品の側が DOM から作って渡す）・`stepSection`（端で止まる）・`scrollTopFor`（`clamp(tops[i] − headerHeight − 8, 0, 最大)`。最初の節は 0）。単体テストは design「テストの方針」の単体（純関数）の全項目に加えて、`keepChosen` のフォーカスの条件（見出しは外れたがフォーカスの部品が見える → 保つ／両方外れた → null／フォーカスが別の節 → 見出しだけで決まる）と、`scrollTopFor(0) === 0`。`headerHeight` を式から外して落ちることを確かめる
+- [x] T2: 純関数 `sectionSpy.ts`——`sectionAtScroll`（ask-form の `spy()` の式。線は `y + headerHeight + 40 + k0·(h − headerHeight − 40)`）・`keepChosen(chosen, i, focus)`（見出しが見える範囲 `[y + headerHeight − 2, y + h)` にある、または `focus.section === chosen` で `focus.top` が見える範囲にある。`focus` は部品の側が DOM から作って渡す）・`stepSection`（端で止まる）・`scrollTopFor`（`clamp(tops[i] − headerHeight − 8, 0, 最大)`。最初の節は 0）。単体テストは design「テストの方針」の単体（純関数）の全項目に加えて、`keepChosen` のフォーカスの条件（見出しは外れたがフォーカスの部品が見える → 保つ／両方外れた → null／フォーカスが別の節 → 見出しだけで決まる）と、`scrollTopFor(0) === 0`。`headerHeight` を式から外して落ちることを確かめる
       対象: `packages/web/src/settings/sectionSpy.ts`（新規）、`packages/web/src/settings/sectionSpy.test.ts`（新規）
       依存: なし
       AC: AC2, AC3, AC4, AC5
