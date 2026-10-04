@@ -39,7 +39,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/server/src/session/SessionService.ts`（`identityCwdOf`・`applyWorkspaceIdentity`・`updateWorkspaceGit`・`sameGit`〔:1474-1482〕）、`packages/server/src/session/SessionModel.ts`、`packages/server/src/git/GitInfoPoller.ts`、`packages/server/src/git/GitInfoPoller.test.ts:108-126`
       依存: T4, T5
       AC: AC1, AC8, AC9, AC11
-- [ ] T7: サーバの RPC（グループと一括クローズ）——`group.create`（`workspaceId` があればその項目を新しいグループへ。位置は design の決まり）・`group.delete`・`group.add_member`／`remove_member`（項目丸ごと）の入口、`workspace.close` の一括クローズ（グループに入っていても `repoMembers` で全部）。単体テストと壊して落ちる確認
+- [x] T7: サーバの RPC（グループと一括クローズ）——`group.create`（`workspaceId` があればその項目を新しいグループへ。位置は design の決まり）・`group.delete`・`group.add_member`／`remove_member`（項目丸ごと）の入口、`workspace.close` の一括クローズ（グループに入っていても `repoMembers` で全部）。単体テストと壊して落ちる確認
       対象: `packages/server/src/surface/methods/group.ts:14-60`、`packages/server/src/surface/methods/workspace.ts`（`workspace.close`）、`packages/server/src/session/SessionService.ts`（`closeWorkspace`）、`packages/server/src/surface/methods/index.test.ts:399-468`
       依存: T5
       AC: AC2, AC3, AC7, AC10

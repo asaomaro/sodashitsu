@@ -35,6 +35,7 @@ import {
   layoutFromLegacy,
   removeItem,
   removeItemFromGroup,
+  repoMembers,
 } from "@sodashitsu/client-core";
 import * as Layout from "./LayoutTree.js";
 import type { SessionFileGroup, SessionFileWorkspace } from "../persist/SessionFile.js";
@@ -546,6 +547,19 @@ export class SessionModel {
     this.setItemGroup(ws, null);
     this.settle();
     return this.workspaces.get(workspaceId)!;
+  }
+
+  /**
+   * 一括クローズ（`closeLinkedWorktrees`）で `id` と一緒に閉じる workspace。`id` が worktree グループの先頭
+   * （`repoMembers` の先頭。本体、無ければ開いた順の先頭）なら、同じリポジトリの残り全部（グループに入っていても）。
+   * 先頭でない・リポジトリが 1 つだけ・判定が無いときは `[]`。副作用なし。
+   */
+  repoCloseTargets(id: WorkspaceId): WorkspaceId[] {
+    const repoKey = this.workspaces.get(id)?.git?.repoKey;
+    if (!repoKey) return [];
+    const members = repoMembers(this.listWorkspaces(), repoKey);
+    if (members.length < 2 || members[0]!.id !== id) return [];
+    return members.slice(1).map((w) => w.id);
   }
 
   /**

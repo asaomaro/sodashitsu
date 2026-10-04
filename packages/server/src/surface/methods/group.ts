@@ -9,12 +9,12 @@ import {
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
-/** 手動グループの CRUD（herdr に前例が無い独自拡張。20260923-workspace-grouping。decisions.md D1）。 */
+/** 手動グループの CRUD（項目単位。`group.create` の `workspaceId`・`add_member`・`remove_member` はその workspace の項目丸ごと。herdr に前例が無い独自拡張。20260923-workspace-grouping。decisions.md D1）。 */
 export function registerGroupMethods(surface: ControlSurface, deps: MethodDeps): void {
   surface.register("group.create", {
     schema: GroupCreateParams,
     handler: (_ctx, params) => {
-      const group = deps.session.createGroup(params.label);
+      const group = deps.session.createGroup(params.label, params.workspaceId);
       return { group };
     },
   });

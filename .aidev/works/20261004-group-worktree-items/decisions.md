@@ -114,3 +114,9 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **仮の状態（`layout` が `null`）**: `git` だけ入れる（レイアウト・`repoGroups` には触れない）。導いたレイアウトが変わるので `beginChange` は通し、`sidebar.layout_changed` は配る。
 - **`layoutRefOf` の撤去**: D12 の暫定の分岐（`w:<id>` のまま判定が付いた workspace への対応）は、判定が付く時点で `w:` を `r:` に置き換えるようになったので不要になり、消した（`createGroup`・`addToGroup`・`removeFromGroup` は `itemRefOf` を使う）。レイアウトに `w:` が残ったまま `repoKey` を持つ状態は、T9 の復元の `repairLayout` が直す。
 - 既存テストの調整: `SessionModel.test.ts` の `repoModel` から、判定の反映が無かった頃の確定の回り道（`restoreGroup` → `confirmLayout` → `deleteGroup`）を外した。`updateWorkspaceGit`／`applyWorkspaceIdentity` を呼ぶテストは 3 つの結果の形に直した。`SessionService.test.ts` の「repoKey だけ変わる」は、判定が付くのでレイアウトのイベントも出る期待にした。
+
+## D15: グループと一括クローズの入口（T7）
+
+- モデルの出し入れ・作成は T5 で項目単位になっているので、T7 はハンドラの結線（`group.create` が `workspaceId` を渡す）と一括クローズの対象だけを替えた。`group.add_member`／`remove_member` のハンドラは変更なし（モデルが `itemRefOf` で項目丸ごとに動かす）。
+- 一括クローズの対象は新しいモデルのメソッド `SessionModel.repoCloseTargets(id)`（`repoMembers` の先頭が `id` のときだけ、残り全部。先頭でない・1 つだけ・判定なしは `[]`）。所属は見ない。`linkedWorktreeGroupMembers` は呼び出し元が無くなったが、T19（古い関数の撤去）まで残す（既存のテストがある）。
+- 先頭でない子に `closeLinkedWorktrees: true` を付けても、その 1 つだけが閉じる（以前と同じ）。

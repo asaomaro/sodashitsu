@@ -497,14 +497,14 @@ export class SessionService {
 
   /**
    * `closeLinkedWorktrees`（20260923-workspace-grouping。herdr の `close_group` 相当）：true かつ
-   * `id` が worktree 自動グループの本体なら、束ねられた worktree も連鎖して閉じる。対象を
-   * **モデルを書き換える前に**問い合わせる（`linkedWorktreeGroupMembers` は副作用なし）——
+   * `id` が worktree グループの先頭なら、同じリポジトリの workspace を全部（手動グループに入っていても）連鎖して閉じる。対象を
+   * **モデルを書き換える前に**問い合わせる（`repoCloseTargets` は副作用なし）——
    * 本体を先に閉じてから子を探すと git 情報の手掛かりが失われる。それぞれの workspace は
    * 既存の1件ずつのクローズ処理をそのまま繰り返す（design には無いエッジケース。
    * 複数 workspace の確認は client 側の `confirmClose` が既に同じ形でループしている）。
    */
   async closeWorkspace(id: WorkspaceId, closeLinkedWorktrees = false): Promise<void> {
-    const targets = closeLinkedWorktrees ? [id, ...this.model.linkedWorktreeGroupMembers(id)] : [id];
+    const targets = closeLinkedWorktrees ? [id, ...this.model.repoCloseTargets(id)] : [id];
     for (const targetId of targets) await this.closeWorkspaceOne(targetId);
     await this.recreateIfEmpty(); // D24
   }

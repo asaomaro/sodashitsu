@@ -360,3 +360,70 @@ AssertionError: expected [ 'workspace.updated' ] to deeply equal [ 'workspace.up
 AssertionError: expected [ 'workspace.updated' ] to deeply equal [ 'workspace.updated', …(1) ]
       Tests  4 failed | 512 passed (516)
 ```
+
+### T7 壊して落ちる確認
+
+1. `group.ts` の `createGroup(params.label, params.workspaceId)` から `workspaceId` を外す（入口が落とす）:
+
+```
+ FAIL  src/surface/methods/index.test.ts > registerAllMethods — client / workspace / tab / pane flow > 項目単位のグループ操作と一括クローズ > group.create に workspaceId を渡すと、その項目（worktree グループ丸ごと）が新しいグループへ入り、位置にグループが立つ
+AssertionError: expected [ null, null, null ] to deeply equal [ 'g1', 'g1', null ]
+
+- Expected
++ Received
+
+  [
+-   "g1",
+-   "g1",
++   null,
++   null,
+    null,
+  ]
+
+ ❯ src/surface/methods/index.test.ts:496:45
+ FAIL  src/surface/methods/index.test.ts > registerAllMethods — client / workspace / tab / pane flow > 項目単位のグループ操作と一括クローズ > group.create に実在しない workspaceId を渡すと not_found で、グループは作られない
+AssertionError: expected { ok: true, …(1) } to deeply equal { ok: false, error: { …(2) } }
+
+- Expected
++ Received
+
+  {
+-   "error": {
+-     "code": "not_found",
+-     "message": StringContaining "w999",
++   "ok": true,
++   "result": {
++     "group": {
++       "collapsed": false,
++       "id": "g1",
++       "label": "x",
+      },
+-   "ok": false,
++   },
+  }
+
+ ❯ src/surface/methods/index.test.ts:503:22
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/surface/methods/index.test.ts
+```
+
+2. `SessionModel.repoCloseTargets` の先頭判定を外し、`slice(1)` を `filter((w) => w.id !== id)` に替える（子を指しても全部閉じる）:
+
+```
+ FAIL  src/surface/methods/index.test.ts > registerAllMethods — client / workspace / tab / pane flow > 項目単位のグループ操作と一括クローズ > workspace.close の一括クローズは、先頭でない子を指すと、その 1 つだけ閉じる
+AssertionError: expected [ 'w3' ] to deeply equal [ 'w1', 'w3', 'w4' ]
+
+- Expected
++ Received
+
+  [
+-   "w1",
+    "w3",
+-   "w4",
+  ]
+
+ ❯ src/surface/methods/index.test.ts:552:73
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/surface/methods/index.test.ts
+```
+
+確認後は元に戻した（`git diff` で差分が実装と回帰テストだけであることを確認）。
+- T7 [nit] 本体が開かれていないときの一括クローズ（先頭の暫定の頭）のテストが無い → repoMembers 側の単体テスト（T2）で先頭の決まりは固定済みのため、追加せず review に委ねる [conv:-]
