@@ -14,3 +14,8 @@
 - T5 [should] 閉じるとき（`focusout` を伴わない）に `menuFocus` が残り、開き直すと前回の項目が `tabindex=0` になる → 閉じる分岐で `menuFocus = null`。テスト追加。壊して落ちる確認: `menuFocus` を戻さない変異で「メニューにフォーカスがある間に閉じても…」が落ちる（`Tests  1 failed | 116 passed (117)`） [conv:regression-negative-control]
 - T5 [nit] 「移った後も選んだ節が今の節のまま」が `go` の `chosen = i` を縛っていない → 見出しの `focus` を無効にし、末尾の節が 1 画面に収まる高さ（位置だけなら最後の節になる）で確認。`chosen` を入れない変異で落ちる [conv:regression-negative-control]
 - T5 [nit] テスト名が「Enter」だが実際は `click()` → 題名を「ボタンの click で移る」に直した [conv:-]
+- T9 [should] 「節が 1 つも拾えないときは何もしない」のテストが `not.toThrow()` で何も縛っていなかった → `await` して `defaultPrevented`・`scrollTop` を確認 [conv:regression-negative-control]
+- T9 [should] `isComposing` の分岐が未テスト → 修飾キーのテストに追加。壊して落ちる確認: `isComposing` の判定を外すと `AssertionError: {"isComposing":true}: expected true to be false` [conv:regression-negative-control]
+- T9 [nit] `startObserving` が前の監視を外さず、開いたまま開き直すと `matchMedia` のリスナーが二重になる → 頭で `stopObserving()`。テスト追加。壊して落ちる確認: `AssertionError: 前の監視を外してから登録し直す: expected [ [Function onNarrowChange], …(1) ] to have a length of 1 but got 2` [conv:-]
+- T9 [nit] 「伝播を止める」のテストを `document.body` から `document` へ [conv:-]
+- T9（自己の確認）点検の提案の「開いてすぐ閉じたとき、閉じた後に監視を始める」ガードは、`nextTick` の順序（開く側の callback が閉じる側の watcher より先に走る）から起きないことが分かったので入れない（再現するテストが書けなかった） [conv:-]

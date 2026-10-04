@@ -21,7 +21,8 @@ import {
 } from "@sodashitsu/client-core";
 import { CSS_VAR_LABELS, isValidCssColor, type ThemeOverrideBucket } from "../theme/themeOverrides.js";
 import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
-import { keepChosen, scrollTopFor, sectionAtScroll, type SpyInput } from "../settings/sectionSpy.js";
+import { mobileViewportQuery } from "../mobile/detect.js";
+import { keepChosen, scrollTopFor, sectionAtScroll, stepSection, type SpyInput } from "../settings/sectionSpy.js";
 import KeySettings from "./KeySettings.vue";
 import SidebarRowsSettings from "./SidebarRowsSettings.vue";
 
@@ -646,6 +647,16 @@ function onUserScroll(ev: Event): void {
   schedule();
 }
 
+let narrowQuery: MediaQueryList | null = null;
+
+/** 幅が 768px を下回ってメニューが消えるとき、メニューにフォーカスがあったら今の節の見出しへ移す（消えた要素にフォーカスを残さない）。出るときは何もしない。 */
+function onNarrowChange(ev: MediaQueryListEvent): void {
+  if (!ev.matches || menuFocus.value === null) return;
+  const found = sectionHeadings();
+  found[Math.max(current.value, 0)]?.heading.focus({ preventScroll: true });
+  menuFocus.value = null;
+}
+
 let dialogObserver: ResizeObserver | null = null;
 let bodyObserver: ResizeObserver | null = null;
 
@@ -656,7 +667,12 @@ function syncViewHeight(): void {
 }
 
 function startObserving(): void {
+  stopObserving(); // 開き直し・開いたままの切り替えで、前の監視が残って二重にならないように
   syncViewHeight();
+  if (typeof window.matchMedia === "function") {
+    narrowQuery = mobileViewportQuery();
+    narrowQuery.addEventListener("change", onNarrowChange);
+  }
   if (typeof ResizeObserver === "undefined") return; // 無い環境（単体テスト）では、開いたときの 1 回だけ
   dialogObserver = new ResizeObserver(() => {
     syncViewHeight();
@@ -668,6 +684,8 @@ function startObserving(): void {
 }
 
 function stopObserving(): void {
+  narrowQuery?.removeEventListener("change", onNarrowChange);
+  narrowQuery = null;
   dialogObserver?.disconnect();
   bodyObserver?.disconnect();
   dialogObserver = null;
@@ -695,6 +713,21 @@ function go(i: number): void {
   target.heading.focus({ preventScroll: true });
   schedule();
   void nextTick(keepCurrentItemVisible);
+}
+
+/**
+ * `Alt+PageDown`／`Alt+PageUp` で次・前の節へ移る（ask-form の目次と同じキー）。メニューが消えている幅でも効く。端では何もしないが、
+ * `preventDefault` はする（`<select>` の値をブラウザが変えないように）。取り込み待ちの間は、取り込みの部品が先に keydown を受けて伝播を止めるので、ここへは届かない。
+ */
+function onDialogKeydown(ev: KeyboardEvent): void {
+  if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.isComposing) return;
+  if (ev.key !== "PageDown" && ev.key !== "PageUp") return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const count = sectionHeadings().length;
+  if (count === 0) return;
+  const to = stepSection(Math.max(current.value, 0), ev.key === "PageDown" ? 1 : -1, count);
+  if (to !== null) go(to);
 }
 
 /** メニューの中でフォーカスのある項目（無ければ null）。Tab の停止位置に使う。 */
@@ -752,6 +785,7 @@ function onNativeCancel(ev: Event): void {
   <dialog ref="dialogEl" class="settings-dialog" aria-labelledby="settings-title"
     @cancel="onNativeCancel"
     @click.self="cancel"
+    @keydown="onDialogKeydown"
     @scroll.passive="schedule"
     @wheel.passive="onUserScroll"
     @touchmove.passive="onUserScroll"

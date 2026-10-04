@@ -35,7 +35,7 @@ design.md のとおり、基準の記録（T1）→ 純関数（T2）→ 構造�
       対象: `packages/web/src/components/SettingsDialog.vue`、`packages/web/src/components/SettingsDialog.test.ts`
       依存: T4
       AC: AC2, AC7, AC-I2, AC-I3, AC-I4
-- [ ] T9: キーと幅の変化——`<dialog>` の `keydown` の `Alt+PageDown`／`Alt+PageUp`（`stepSection` → `go`。`preventDefault` と `stopPropagation`。端では何もしないが `preventDefault` はする。キーの取り込み待ちの部品が先に受けたときは移らない〔`KeySettings.vue:298` の `stopPropagation`〕。メニューが消えている幅でも効く。節が 1 つも無いときは何もしない）。`mobileViewportQuery()` の `change` で、メニューが消えるときにメニューにフォーカスがあったら今の節の見出しへ移す（`matchMedia` が無い環境では何もしない。閉じるときにリスナーを外す）。単体: `Alt+PageDown` が `preventDefault` される・端で何もしない・取り込み待ちでは移らない・幅の変化でのフォーカス
+- [x] T9: キーと幅の変化——`<dialog>` の `keydown` の `Alt+PageDown`／`Alt+PageUp`（`stepSection` → `go`。`preventDefault` と `stopPropagation`。端では何もしないが `preventDefault` はする。キーの取り込み待ちの部品が先に受けたときは移らない〔`KeySettings.vue:298` の `stopPropagation`〕。メニューが消えている幅でも効く。節が 1 つも無いときは何もしない）。`mobileViewportQuery()` の `change` で、メニューが消えるときにメニューにフォーカスがあったら今の節の見出しへ移す（`matchMedia` が無い環境では何もしない。閉じるときにリスナーを外す）。単体: `Alt+PageDown` が `preventDefault` される・端で何もしない・取り込み待ちでは移らない・幅の変化でのフォーカス
       対象: `packages/web/src/components/SettingsDialog.vue`、`packages/web/src/components/SettingsDialog.test.ts`、`packages/web/src/mobile/detect.ts`（`mobileViewportQuery` を使うだけ。変えない）
       依存: T5
       AC: AC4, AC6, AC8, AC-I3, AC-I5

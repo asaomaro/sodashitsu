@@ -1662,4 +1662,149 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
       expect(document.activeElement).toBe(menuButtons(wrapper)[0]!.element);
     });
   });
+
+  describe("Alt+PageDown／Alt+PageUp・幅の変化", () => {
+    const stubbed = async (before?: Parameters<typeof openWithMenu>[0]) => {
+      const o = await openWithMenu(before);
+      stubLayout(o.wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2600 });
+      return o;
+    };
+    const altKey = async (w: Opened["wrapper"], k: string, init: KeyboardEventInit = {}, target: Element = document.activeElement!) => {
+      const ev = new KeyboardEvent("keydown", { key: k, altKey: true, bubbles: true, cancelable: true, ...init });
+      target.dispatchEvent(ev);
+      await w.vm.$nextTick();
+      return ev;
+    };
+
+    it("Alt+PageDown／PageUp で次・前の節へ移る（preventDefault される）。移った先の見出しにフォーカスが移る", async () => {
+      const { wrapper } = await stubbed();
+      const ev = await altKey(wrapper, "PageDown");
+      expect(ev.defaultPrevented).toBe(true);
+      expect(currentLabels(wrapper)).toEqual(["テーマ"]);
+      expect(document.activeElement).toBe(document.getElementById("settings-theme"));
+      await altKey(wrapper, "PageDown");
+      await altKey(wrapper, "PageDown");
+      expect(currentLabels(wrapper)).toEqual(["端末"]);
+      await altKey(wrapper, "PageUp");
+      expect(currentLabels(wrapper)).toEqual(["表示"]);
+    });
+
+    it("5 回で 6 節（末尾の節が 1 画面に収まっていても 1 つずつ進む）。端では何もしないが preventDefault はする", async () => {
+      const { wrapper } = await openWithMenu();
+      stubLayout(wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2000 });
+      for (let n = 0; n < 5; n++) await altKey(wrapper, "PageDown");
+      expect(currentLabels(wrapper)).toEqual(["キー"]);
+      const ev = await altKey(wrapper, "PageDown");
+      expect(ev.defaultPrevented).toBe(true);
+      expect(currentLabels(wrapper)).toEqual(["キー"]);
+      for (let n = 0; n < 5; n++) await altKey(wrapper, "PageUp");
+      expect(currentLabels(wrapper)).toEqual(["通知"]);
+      expect((await altKey(wrapper, "PageUp")).defaultPrevented).toBe(true);
+      expect(currentLabels(wrapper)).toEqual(["通知"]);
+    });
+
+    it("伝播を止める（上の層・端末へ漏らさない）", async () => {
+      const { wrapper } = await stubbed();
+      const seen = vi.fn();
+      document.addEventListener("keydown", seen);
+      await altKey(wrapper, "PageDown");
+      document.removeEventListener("keydown", seen);
+      expect(seen).not.toHaveBeenCalled();
+    });
+
+    it("ほかの修飾キーが付いたとき・Alt が無いときは取り合わない", async () => {
+      const { wrapper } = await stubbed();
+      for (const init of [{ ctrlKey: true }, { shiftKey: true }, { metaKey: true }, { altKey: false }, { isComposing: true }]) {
+        const ev = await altKey(wrapper, "PageDown", init);
+        expect(ev.defaultPrevented, JSON.stringify(init)).toBe(false);
+      }
+      expect(currentLabels(wrapper)).toEqual(["通知"]);
+    });
+
+    it("節が 1 つも拾えないときは何もしない", async () => {
+      const { wrapper } = await openWithMenu(() => {
+        for (const sec of document.querySelectorAll(".settings-body > section")) sec.removeAttribute("aria-labelledby");
+      });
+      const ev = await altKey(wrapper, "PageDown");
+      expect(ev.defaultPrevented, "ブラウザの既定（<select> の値の変更など）は止める").toBe(true);
+      expect((wrapper.get("dialog").element as HTMLElement).scrollTop).toBe(0);
+      expect(wrapper.find("nav.settings-menu").exists()).toBe(false);
+    });
+
+    it("キーの取り込み待ちの間は移らない（取り込みの部品が先に受ける）", async () => {
+      const { wrapper } = await stubbed();
+      const dialog = wrapper.get("dialog").element as HTMLElement;
+      (wrapper.get(".keys-prefix button").element as HTMLElement).click(); // prefix の［変更］
+      await wrapper.vm.$nextTick();
+      await new Promise((r) => setTimeout(r, 0));
+      const capture = document.querySelector<HTMLElement>(".keys-capture")!;
+      expect(capture).not.toBeNull();
+      expect(currentLabels(wrapper), "取り込みの部品は節「キー」の中").toEqual(["キー"]);
+      const ev = await altKey(wrapper, "PageDown", {}, capture);
+      expect(ev.defaultPrevented, "取り込みの部品が受けた").toBe(true);
+      expect(currentLabels(wrapper), "最後の節でなくても動かないことを、PageUp でも確かめる").toEqual(["キー"]);
+      await altKey(wrapper, "PageUp", {}, capture);
+      expect(currentLabels(wrapper)).toEqual(["キー"]);
+      expect(dialog.scrollTop).toBe(0);
+    });
+
+    describe("幅が 768px をまたぐ", () => {
+      const fake = () => {
+        const listeners: ((ev: { matches: boolean }) => void)[] = [];
+        const mql = {
+          matches: false,
+          addEventListener: vi.fn((_t: string, fn: (ev: { matches: boolean }) => void) => void listeners.push(fn)),
+          removeEventListener: vi.fn((_t: string, fn: (ev: { matches: boolean }) => void) => void listeners.splice(listeners.indexOf(fn), 1)),
+        };
+        vi.spyOn(window, "matchMedia").mockReturnValue(mql as unknown as MediaQueryList);
+        return { listeners, mql };
+      };
+
+      it("メニューが消えるとき、メニューにフォーカスがあれば今の節の見出しへ移す。出るときは何もしない", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const item = menuButtons(wrapper)[3]!.element as HTMLElement;
+        item.focus();
+        item.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        await wrapper.vm.$nextTick();
+        f.listeners.forEach((fn) => fn({ matches: false })); // 広がる → 何もしない
+        expect(document.activeElement).toBe(item);
+        f.listeners.forEach((fn) => fn({ matches: true })); // 狭くなる → 今の節（通知）の見出しへ
+        await wrapper.vm.$nextTick();
+        expect(document.activeElement).toBe(document.getElementById("settings-notify"));
+      });
+
+      it("開閉を繰り返しても、開いたまま開き直しても、リスナーは二重にならない", async () => {
+        const f = fake();
+        const { wrapper, view } = await stubbed();
+        const tick = async () => {
+          await wrapper.vm.$nextTick();
+          await wrapper.vm.$nextTick();
+        };
+        view.closeDialog();
+        await tick();
+        expect(f.listeners).toHaveLength(0);
+        view.openDialogWithContext({ kind: "settings" });
+        await tick();
+        expect(f.listeners).toHaveLength(1);
+        view.openDialogWithContext({ kind: "settings" }); // 開いたまま、別の文脈の値で開き直す
+        await tick();
+        expect(f.listeners, "前の監視を外してから登録し直す").toHaveLength(1);
+      });
+
+      it("メニューにフォーカスが無ければフォーカスは動かない。閉じるとリスナーを外す", async () => {
+        const f = fake();
+        const { wrapper, view } = await stubbed();
+        const sw = switches(wrapper)[1]!.element as HTMLElement;
+        sw.focus();
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        expect(document.activeElement).toBe(sw);
+        expect(f.mql.addEventListener).toHaveBeenCalledTimes(1);
+        view.closeDialog();
+        await wrapper.vm.$nextTick();
+        expect(f.mql.removeEventListener).toHaveBeenCalledTimes(1);
+        expect(f.listeners).toHaveLength(0);
+      });
+    });
+  });
 });
