@@ -45,7 +45,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/server/src/agent/AgentIntegrationInstaller.ts`（`HookSpec` :26-36・`HOOK_SPECS` :96-168・`status`／`install` :219-262）、`AgentIntegrationInstaller.test.ts:36-125, :136-269`
       依存: T2, T3
       AC: AC9, AC10
-- [ ] T8: 設定画面（ブラウザ版・端末版）——連携の行に、`needsUpdate` のとき「更新が必要」と［更新］（`agent_integration.install` を呼ぶ）。説明の文言を直す（Claude Code はフックが 6 つ入ること・サブエージェントの表示に使うこと・更新と削除は、その後に起動した Claude Code から効くこと）。単体テスト。**別の作業（`20261004-settings-side-menu`）も `SettingsDialog.vue` を変えるので、変えるのは「エージェント連携」の節の中だけにする**
+- [x] T8: 設定画面（ブラウザ版・端末版）——連携の行に、`needsUpdate` のとき「更新が必要」と［更新］（`agent_integration.install` を呼ぶ）。説明の文言を直す（Claude Code はフックが 6 つ入ること・サブエージェントの表示に使うこと・更新と削除は、その後に起動した Claude Code から効くこと）。単体テスト。**別の作業（`20261004-settings-side-menu`）も `SettingsDialog.vue` を変えるので、変えるのは「エージェント連携」の節の中だけにする**
       対象: `packages/web/src/components/SettingsDialog.vue:358-388, :926-968`、`packages/web/src/store/agentIntegrations.ts`、`packages/web/src/actions/ActionDispatcher.ts:632-646`、`packages/web/src/components/SettingsDialog.test.ts`、`packages/tui/src/settings/sections.ts:591-651`
       依存: T19
       AC: AC9, AC10, AC14

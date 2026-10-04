@@ -453,3 +453,29 @@ AssertionError: expected { kind: 'global' } to deeply equal { kind: 'pane', pane
  FAIL  … > 一覧が長いとき、↑↓ の印は右端の桁に出て、経過時間の最後の文字を上書きしない
 AssertionError: expected ' ◐ w2     │ T3                       …' to match /1分\s*[↑↓]?\s*│/
 ```
+
+#### T8 設定画面（ブラウザ版 `SettingsDialog.vue`・端末版 `settings/sections.ts`。壊した後に元へ戻した）
+
+```
+=== MUT(web SettingsDialog.vue): 「（更新が必要）」の表示を外す
+ FAIL  src/components/SettingsDialog.test.ts > … > needsUpdate なら「更新が必要」と［更新］を出し、押すと installAgentIntegration(kind) を呼ぶ（解除とは別のボタン）
+AssertionError: expected 'Claude Code導入済み  更新 解除' to contain '更新が必要'
+=== MUT(web): ［更新］を常に出す（v-if="true"）
+ FAIL  … > 導入済みなら「解除」ボタンで uninstallAgentIntegration(kind) を呼ぶ（AC-I2）
+AssertionError: expected '更新' to be '解除' // Object.is equality
+=== MUT(web): ［更新］の動きを install から uninstall に
+ FAIL  … > needsUpdate なら「更新が必要」と［更新］を出し、押すと installAgentIntegration(kind) を呼ぶ（解除とは別のボタン）
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'claude' ]
+=== MUT(web): 説明の「Claude Code はフックが 6 つ」を 1 つに
+ FAIL  … > 説明にフックの数（Claude Code は 6 つ）・サブエージェントの表示に使うこと・更新と解除は起動し直した後から効くことを書く
+AssertionError: expected '各エージェントの公式フックを使い、…' to contain 'Claude Code はフックが 6 つ'
+=== MUT(tui sections.ts): needsUpdate を常に false に
+ FAIL  src/modes/SettingsDialog.test.ts > 設定画面 > エージェント連携：needsUpdate なら「更新が必要」と更新の項目を出し、押すと install の RPC（解除ではない）。足りていれば出さない
+AssertionError: expected ' Spaces       開いた順 + │ 1:t1   +      …' to contain '導入済み（更新が必要）'
+=== MUT(tui sections.ts): 更新の項目の動きを install から uninstall に
+ FAIL  … > 更新の項目…
+AssertionError: expected [] to deeply equal [ { kind: 'claude' } ]
+=== MUT(tui sections.ts): Claude Code の説明の「6 つ」を外す
+ FAIL  … > エージェント連携：Claude Code は 6 つのフックを入れる説明（サブエージェントの表示に使う）。ほかは 1 つ
+AssertionError: expected ' Spaces       開いた順 + … to contain 'フックを 6 つ入れます'
+```
