@@ -151,3 +151,19 @@ AssertionError: expected 'flex-grow: 0.3; flex-shrink: 1; flex-…' to be undefi
      × サイドバーを畳んだ状態では、区画の折りたたみも比も効かない（今の構造のまま全部出す） 17ms
 AssertionError: expected [ 'sidebar-spaces', …(1) ] to not include 'sidebar-section-folded'
 ```
+
+#### T9 `Sidebar.vue` 区画の境目（生の出力。変異ごと）
+```
+変異: SECTION_KEY_STEP 24 → 12
+     × ↑ ↓ で 24px（400px に対し 0.06）ずつ、押すたびに保存する。範囲で止まる 12ms
+AssertionError: expected 0.53 to be close to 0.56, received difference is 0.030000000000000027, but expected 0.000005
+変異: cancel を何もしない
+     × Esc で、始めた比（自動＝null を含む）へ戻り、保存しない 16ms
+AssertionError: expected 0.25 to be null
+変異: sectionDrag.finish() を外す
+     × ドラッグ中にダイアログが開いたら、その時点で終えて保存する 28ms
+AssertionError: expected undefined to be close to 0.25, received difference is NaN, but expected 0.000005
+変異: move の ratioFromOffset（最小で収める）を (ev.clientY - top) / 400 に
+     × ドラッグ: 入れ物の上端からの位置が比になり、最小を割らない。離すと保存する 15ms
+AssertionError: expected 0.025 to be close to 0.25, received difference is 0.225, but expected 0.000005
+```

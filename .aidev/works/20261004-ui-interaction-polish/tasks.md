@@ -47,7 +47,7 @@ design.md のとおり、下から積む。純関数（T1）→ 色の変数（T
       対象: `packages/web/src/components/Sidebar.vue`（template 636-814・style 816-1139）、`Sidebar.test.ts`
       依存: T4, T7
       AC: AC9, AC11, AC15, AC20
-- [ ] T9: 区画の境目（ブラウザ版）——`role="separator"`・`aria-orientation`・`aria-label`・`aria-valuenow/min/max`・`tabindex`・`useResizeDrag`（`begin`＝今の比〔null を含む〕・`move`＝`.sidebar-sections` の rect とポインタから `ratioFromOffset`・`commit`・`cancel`・`reset`＝`resetSectionRatio`）・`box = { total: clientHeight − 1, minTop: 見出し＋2 行＋フッタ, minBottom: 見出し＋2 行 }` の実測・キー（`↑`／`↓` 24px・`Home`・`End`・`Enter`＝自動）・`aria-valuenow` の測り直し（`.sidebar-sections` の `ResizeObserver`・行の数が変わったとき）。両方を開いているときだけ出す。単体テストと壊して落ちる確認
+- [x] T9: 区画の境目（ブラウザ版）——`role="separator"`・`aria-orientation`・`aria-label`・`aria-valuenow/min/max`・`tabindex`・`useResizeDrag`（`begin`＝今の比〔null を含む〕・`move`＝`.sidebar-sections` の rect とポインタから `ratioFromOffset`・`commit`・`cancel`・`reset`＝`resetSectionRatio`）・`box = { total: clientHeight − 1, minTop: 見出し＋2 行＋フッタ, minBottom: 見出し＋2 行 }` の実測・キー（`↑`／`↓` 24px・`Home`・`End`・`Enter`＝自動）・`aria-valuenow` の測り直し（`.sidebar-sections` の `ResizeObserver`・行の数が変わったとき）。両方を開いているときだけ出す。単体テストと壊して落ちる確認
       対象: `packages/web/src/components/Sidebar.vue`、`Sidebar.test.ts`
       依存: T1, T8
       AC: AC10, AC17, AC-I2, AC-I3

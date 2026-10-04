@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, inject, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { AgentInfo, ItemTarget, Workspace } from "@sodashitsu/protocol";
 import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
+import { type SectionBox, clampRatio, ratioFromOffset, ratioPercent, stepRatio } from "../sidebar/sectionSizing.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
 import { orderedAgentPaneIds } from "@sodashitsu/client-core";
@@ -640,6 +641,94 @@ function onDividerKeydown(ev: KeyboardEvent): void {
 }
 
 /*
+ * 区画の境目（spaces と agents の間。両方を開いているときだけ出す。20261004-ui-interaction-polish。design「区画の境目」）。
+ * 比は spaces の取り分で、配るのは CSS の flex（`sectionFlex`）。ここは比を 1 つ決めるだけ。最小の高さは CSS の `min-height` を実測する（定数を二重に持たない）。
+ */
+const sectionsEl = ref<HTMLElement | null>(null);
+const spacesEl = ref<HTMLElement | null>(null);
+const agentsEl = ref<HTMLElement | null>(null);
+const showSectionDivider = computed(() => !view.sidebarCollapsed && !spacesFolded.value && !agentsFolded.value);
+
+/** 配れる高さ（境目の 1px を除く）と、区画ごとの最小（`min-height` の実測）。測れない（描画前・jsdom）ときは total 0＝`clampRatio` が 0.5 を返す。 */
+function measureBox(): SectionBox {
+  const px = (e: HTMLElement | null): number => {
+    if (!e) return 0;
+    const v = parseFloat(getComputedStyle(e).minHeight);
+    return Number.isFinite(v) ? v : 0;
+  };
+  return { total: Math.max(0, (sectionsEl.value?.clientHeight ?? 0) - 1), minTop: px(spacesEl.value), minBottom: px(agentsEl.value) };
+}
+
+/** 自動の配分のときの aria-valuenow 用: spaces の実際の高さ / 配れる高さ。比があるときはその比。 */
+const measuredRatio = ref(0.5);
+function measureRatio(): void {
+  const total = (sectionsEl.value?.clientHeight ?? 0) - 1;
+  const h = spacesEl.value?.offsetHeight ?? 0;
+  if (total > 0 && h > 0) measuredRatio.value = Math.min(1, h / total);
+}
+const sectionRatioNow = computed(() => view.sidebarSectionRatio ?? measuredRatio.value);
+const sectionPercent = computed(() => ratioPercent(sectionRatioNow.value));
+let sectionsObserver: ResizeObserver | null = null;
+onMounted(() => {
+  measureRatio();
+  if (typeof ResizeObserver === "undefined") return;
+  sectionsObserver = new ResizeObserver(() => measureRatio());
+  if (sectionsEl.value) sectionsObserver.observe(sectionsEl.value);
+  if (spacesEl.value) sectionsObserver.observe(spacesEl.value);
+});
+onBeforeUnmount(() => sectionsObserver?.disconnect());
+// 行の数・並び・畳み方が変わったら測り直す（自動の配分は中身の高さで決まる）。
+watch([() => view.sidebarSectionRatio, showSectionDivider, () => session.workspaces.length], () => void nextTick(measureRatio));
+
+const sectionDrag = useResizeDrag<{ ratio: number | null }>({
+  axis: "y",
+  enabled: () => showSectionDivider.value,
+  begin: () => ({ ratio: view.sidebarSectionRatio }),
+  move: (ev) => {
+    const top = sectionsEl.value?.getBoundingClientRect().top ?? 0;
+    view.setSectionRatio(ratioFromOffset(ev.clientY - top, measureBox()));
+  },
+  commit: () => view.commitSectionRatio(),
+  // 始めた比（null＝自動を含む）へ戻す。保存はしない（始める前から保存済みの値のまま）。
+  cancel: (start) => view.setSectionRatio(start.ratio),
+  reset: () => view.resetSectionRatio(),
+});
+
+/** 区画の境目のキー。`↑`／`↓` で 24px、`Home`／`End` で最小・最大、`Enter` で自動。押すたびに保存する。 */
+const SECTION_KEY_STEP = 24;
+function onSectionDividerKeydown(ev: KeyboardEvent): void {
+  if (!showSectionDivider.value) return;
+  const box = measureBox();
+  let next: number | null;
+  switch (ev.key) {
+    case "ArrowUp":
+      next = stepRatio(sectionRatioNow.value, -SECTION_KEY_STEP, box);
+      break;
+    case "ArrowDown":
+      next = stepRatio(sectionRatioNow.value, SECTION_KEY_STEP, box);
+      break;
+    case "Home":
+      next = clampRatio(0, box);
+      break;
+    case "End":
+      next = clampRatio(1, box);
+      break;
+    case "Enter":
+      next = null;
+      break;
+    default:
+      return;
+  }
+  ev.preventDefault();
+  if (next === null) {
+    view.resetSectionRatio();
+    return;
+  }
+  view.setSectionRatio(next);
+  view.commitSectionRatio();
+}
+
+/*
  * **ドラッグ中にダイアログが開いたら、その時点で終えて保存する**（AC-I5）。`showModal()` で文書が inert になったとき、
  * ポインタの捕捉が外れるのか・捕捉先へ `pointerup` が届き続けるのかは確かめた出所が無い。分からない挙動に頼らない。
  * workspace の D&D も同じ理由で同じタイミングに取り消す（20260923-workspace-grouping）。
@@ -649,6 +738,7 @@ watch(
   (open) => {
     if (open) {
       widthDrag.finish();
+      sectionDrag.finish();
       if (view.workspaceDrag) cancelWorkspaceDrag();
     }
   },
@@ -671,8 +761,9 @@ watch(
         <template v-else>session: {{ sessionLabel }} ⇄</template>
       </button>
     </div>
-    <div class="sidebar-sections">
+    <div ref="sectionsEl" class="sidebar-sections" :class="{ 'sidebar-sections-split': showSectionDivider }">
     <section
+      ref="spacesEl"
       class="sidebar-spaces"
       :class="{ 'sidebar-section-folded': spacesFolded, 'sidebar-section-fill': agentsFolded && !spacesFolded }"
       :style="sectionFlex?.spaces"
@@ -781,7 +872,27 @@ watch(
       </div>
     </section>
 
+    <div
+      v-if="showSectionDivider"
+      class="sidebar-section-divider resize-handle resize-handle-y"
+      :class="{ 'resize-handle-active': sectionDrag.dragging.value }"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="spaces と agents の境目"
+      :aria-valuenow="sectionPercent"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      tabindex="0"
+      @pointerdown="sectionDrag.onPointerDown"
+      @pointermove="sectionDrag.onPointerMove"
+      @pointerup="sectionDrag.onPointerEnd"
+      @pointercancel="sectionDrag.onPointerEnd"
+      @lostpointercapture="sectionDrag.onPointerEnd"
+      @keydown="onSectionDividerKeydown"
+    />
+
     <section
+      ref="agentsEl"
       class="sidebar-agents"
       :class="{ 'sidebar-section-folded': agentsFolded, 'sidebar-section-fill': spacesFolded && !agentsFolded }"
       :style="sectionFlex?.agents"
@@ -914,6 +1025,16 @@ watch(
 .sidebar-agents {
   flex: 1 1 0;
   border-top: 1px solid var(--soda-menu-border, #44475a);
+}
+/* 両方を開いているときの境目: 高さ 1px（agents の `border-top` の代わり）。当たり判定と強調の線は `resize-handle`。 */
+.sidebar-sections-split .sidebar-agents {
+  border-top: none;
+}
+.sidebar-section-divider {
+  flex: none;
+  height: 1px;
+  background: var(--soda-menu-border, #44475a);
+  cursor: row-resize;
 }
 /* 区画の上下の余白は body に付ける（section に付けると、比あり `flex: r 1 0` が余白を除いた残りを配り、高さの比がずれる）。 */
 .sidebar-section-body {

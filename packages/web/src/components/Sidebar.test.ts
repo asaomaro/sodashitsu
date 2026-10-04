@@ -1072,6 +1072,162 @@ describe("Sidebar — 区画の構造", () => {
   });
 });
 
+// 20261004-ui-interaction-polish（区画の境目。比・キー・Esc・aria。jsdom は高さを測れないので、入れ物の高さと最小は差し替える）。
+describe("Sidebar — 区画の境目", () => {
+  const TOTAL = 401; // clientHeight（境目の 1px を引いて 400）
+  afterEach(() => vi.restoreAllMocks());
+  function setup() {
+    useSessionStore(pinia).workspaceUpserted(makeWorkspace("w1"));
+    const wrapper = mountSidebar(makeConnection());
+    const sections = wrapper.get(".sidebar-sections").element as HTMLElement;
+    Object.defineProperty(sections, "clientHeight", { configurable: true, value: TOTAL });
+    sections.getBoundingClientRect = () => ({ top: 50, left: 0, right: 200, bottom: 50 + TOTAL, width: 200, height: TOTAL, x: 0, y: 50, toJSON: () => ({}) });
+    const real = window.getComputedStyle.bind(window);
+    vi.spyOn(window, "getComputedStyle").mockImplementation((e: Element, pseudo?: string | null) => {
+      const cs = real(e, pseudo);
+      const min = e.classList.contains("sidebar-spaces") ? "100px" : e.classList.contains("sidebar-agents") ? "80px" : null;
+      return min === null ? cs : ({ minHeight: min } as CSSStyleDeclaration);
+    });
+    return { wrapper, view: useViewStore(pinia), divider: () => wrapper.get(".sidebar-section-divider") };
+  }
+  const saved = (): unknown => readPrefs()["sidebarSectionRatio"];
+
+  it("role・aria・resize-handle のクラス・tabindex=0 を持つ。agents の border-top の代わりに入れ物が split の印を持つ", () => {
+    const { wrapper, divider } = setup();
+    const d = divider();
+    expect(d.attributes("role")).toBe("separator");
+    expect(d.attributes("aria-orientation")).toBe("horizontal");
+    expect(d.attributes("aria-label")).toBe("spaces と agents の境目");
+    expect(d.attributes("aria-valuemin")).toBe("0");
+    expect(d.attributes("aria-valuemax")).toBe("100");
+    expect(d.attributes("tabindex")).toBe("0");
+    expect(d.classes()).toEqual(expect.arrayContaining(["resize-handle", "resize-handle-y"]));
+    expect(wrapper.get(".sidebar-sections").classes()).toContain("sidebar-sections-split");
+    // spaces と agents の間にある
+    expect(wrapper.findAll(".sidebar-sections > *").map((e) => e.element.tagName + "." + e.classes()[0])).toEqual(["SECTION.sidebar-spaces", "DIV.sidebar-section-divider", "SECTION.sidebar-agents"]);
+  });
+
+  it("どちらかを畳んでいる間・サイドバーを畳んだ間は出ない", async () => {
+    const { wrapper, view } = setup();
+    view.toggleSectionCollapsed("spaces");
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(".sidebar-section-divider").exists()).toBe(false);
+    view.toggleSectionCollapsed("spaces");
+    view.toggleSectionCollapsed("agents");
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(".sidebar-section-divider").exists()).toBe(false);
+    view.toggleSectionCollapsed("agents");
+    view.toggleSidebar();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(".sidebar-section-divider").exists()).toBe(false);
+  });
+
+  it("aria-valuenow は比（百分率）に追従する", async () => {
+    const { wrapper, view, divider } = setup();
+    view.setSectionRatio(0.4);
+    await wrapper.vm.$nextTick();
+    expect(divider().attributes("aria-valuenow")).toBe("40");
+  });
+
+  it("ドラッグ: 入れ物の上端からの位置が比になり、最小を割らない。離すと保存する", async () => {
+    const { wrapper, view, divider } = setup();
+    await divider().trigger("pointerdown", { clientY: 250 });
+    await divider().trigger("pointermove", { clientY: 50 + 200 });
+    await frame();
+    await wrapper.vm.$nextTick();
+    expect(view.sidebarSectionRatio).toBeCloseTo(0.5, 5);
+    expect(divider().classes()).toContain("resize-handle-active");
+    await divider().trigger("pointermove", { clientY: 50 + 10 }); // 上へ振り切る → spaces の最小（100/400）
+    await frame();
+    expect(view.sidebarSectionRatio).toBeCloseTo(0.25, 5);
+    await divider().trigger("pointermove", { clientY: 50 + 399 }); // 下へ振り切る → agents の最小（80/400）
+    await frame();
+    expect(view.sidebarSectionRatio).toBeCloseTo(0.8, 5);
+    expect(saved()).toBeUndefined();
+    await divider().trigger("pointerup");
+    expect(saved()).toBeCloseTo(0.8, 5);
+  });
+
+  it("Esc で、始めた比（自動＝null を含む）へ戻り、保存しない", async () => {
+    const { wrapper, view, divider } = setup();
+    await divider().trigger("pointerdown", { clientY: 250 });
+    await divider().trigger("pointermove", { clientY: 150 });
+    await frame();
+    expect(view.sidebarSectionRatio).not.toBeNull();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+    await wrapper.vm.$nextTick();
+    expect(view.sidebarSectionRatio).toBeNull();
+    await divider().trigger("pointerup");
+    expect(saved()).toBeUndefined();
+  });
+
+  it("動かさずに離しただけでは、自動の配分を比に変えない・保存しない", async () => {
+    const { view, divider } = setup();
+    await divider().trigger("pointerdown", { clientY: 250 });
+    await divider().trigger("pointerup");
+    expect(view.sidebarSectionRatio).toBeNull();
+    expect(saved()).toBeUndefined();
+  });
+
+  it("ダブルクリックで自動に戻す（保存の項目も消す）", async () => {
+    const { view, divider } = setup();
+    view.setSectionRatio(0.6);
+    view.commitSectionRatio();
+    await divider().trigger("pointerdown", { clientY: 250 });
+    await divider().trigger("pointerup");
+    await divider().trigger("pointerdown", { clientY: 250 });
+    expect(view.sidebarSectionRatio).toBeNull();
+    expect(saved()).toBeUndefined();
+    await divider().trigger("pointerup");
+  });
+
+  it("↑ ↓ で 24px（400px に対し 0.06）ずつ、押すたびに保存する。範囲で止まる", async () => {
+    const { view, divider } = setup();
+    view.setSectionRatio(0.5);
+    await divider().trigger("keydown", { key: "ArrowDown" });
+    expect(view.sidebarSectionRatio).toBeCloseTo(0.56, 5);
+    expect(saved()).toBeCloseTo(0.56, 5);
+    await divider().trigger("keydown", { key: "ArrowUp" });
+    await divider().trigger("keydown", { key: "ArrowUp" });
+    expect(view.sidebarSectionRatio).toBeCloseTo(0.44, 5);
+    for (let i = 0; i < 20; i++) await divider().trigger("keydown", { key: "ArrowUp" });
+    expect(view.sidebarSectionRatio).toBeCloseTo(0.25, 5);
+  });
+
+  it("Home＝spaces が最小・End＝agents が最小・Enter＝自動", async () => {
+    const { view, divider } = setup();
+    await divider().trigger("keydown", { key: "Home" });
+    expect(view.sidebarSectionRatio).toBeCloseTo(0.25, 5);
+    await divider().trigger("keydown", { key: "End" });
+    expect(view.sidebarSectionRatio).toBeCloseTo(0.8, 5);
+    expect(saved()).toBeCloseTo(0.8, 5);
+    await divider().trigger("keydown", { key: "Enter" });
+    expect(view.sidebarSectionRatio).toBeNull();
+    expect(saved()).toBeUndefined();
+  });
+
+  it("ほかのキーは何もしない（preventDefault もしない）", async () => {
+    const { view, divider } = setup();
+    const ev = new KeyboardEvent("keydown", { key: "a", cancelable: true, bubbles: true });
+    divider().element.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(view.sidebarSectionRatio).toBeNull();
+  });
+
+  it("ドラッグ中にダイアログが開いたら、その時点で終えて保存する", async () => {
+    const { wrapper, view, divider } = setup();
+    await divider().trigger("pointerdown", { clientY: 250 });
+    await divider().trigger("pointermove", { clientY: 150 });
+    await frame();
+    view.openDialogWithContext({ kind: "settings" });
+    await wrapper.vm.$nextTick();
+    expect(saved()).toBeCloseTo(0.25, 5);
+    await divider().trigger("pointermove", { clientY: 350 });
+    await frame();
+    expect(view.sidebarSectionRatio, "終えた後は動かない").toBeCloseTo(0.25, 5);
+  });
+});
+
 // 20260923-workspace-grouping（herdr に前例が無い独自拡張・worktree 自動グループ）。
 describe("Sidebar — グループの表示", () => {
   function rowLabels(wrapper: ReturnType<typeof mountSidebar>): string[] {
