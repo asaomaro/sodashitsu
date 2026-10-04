@@ -168,9 +168,9 @@ export function deleteGroupFromLayout(layout: SidebarLayout, groupId: GroupId): 
  * `ungrouped`、`g:` は中身）、項目はその中の順、`r:` は `repoMembers` の順（本体が先頭）。実在しない参照は飛ばし、
  * 重複は先のものだけ。どの項目にも現れない workspace（`top` に無いグループの中身を含む）は、`workspaces` の順で末尾へ付ける。
  *
- * 代表（`worktreeKey` が同じ workspace の平らな順で最初のもの）が、並べ替えの結果で同じ worktree の代表でない workspace の
+ * 代表（サーバが決めた旗。旗が無い古いサーバでは `worktreeKey` が同じ workspace の平らな順で最初のもの）が、並べ替えの結果で同じ worktree の代表でない workspace の
  * 後ろへ回らないようにする。回ると代表が入れ替わって項目の参照が変わり続けるため、代表は同じ worktree の workspace が
- * 占める位置のうち一番前に置く（代表は入力の `workspaces` の順で決める）。
+ * 占める位置のうち一番前に置く（旗が無い古いサーバでは、代表は入力の `workspaces` の順で決める）。
  */
 export function flattenWorkspaceIds(layout: SidebarLayout, workspaces: Workspace[]): WorkspaceId[] {
   const seen = new Set<WorkspaceId>();

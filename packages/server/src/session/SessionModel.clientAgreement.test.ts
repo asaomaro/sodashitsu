@@ -163,6 +163,27 @@ describe("サーバと画面は同じ純関数で同じ木になる（T19）", (
     expectAgreement(model, "deleteGroup");
   });
 
+  it("T29: 「グループなし」を上に並べ替えた後に同じフォルダへ workspace が増えても、サーバが配る代表と画面の代表が一致し、worktree グループは崩れない", () => {
+    const model = new SessionModel();
+    const m = model.createWorkspace("/m", "m", init).workspace.id;
+    const w1 = model.createWorkspace("/w1", "w1", init).workspace.id;
+    model.updateWorkspaceGit(m, { kind: "git", git: gitOf("/r/.git", false, "/r/.git") });
+    model.updateWorkspaceGit(w1, { kind: "git", git: gitOf("/r/.git", true, "/r/.git/worktrees/w1") });
+    const g = model.createGroup("G", m);
+    model.moveItemBy({ kind: "ungrouped" }, "previous"); // top: ["u", g]
+    const w2 = model.createWorkspace("/w1", "w2", init).workspace.id; // W1 を選んでの「＋新規」: 判定前は平らな順で W1 より前
+    expectAgreement(model, "created");
+    expect(snapshotOf(model).workspaces.map((w) => w.id).indexOf(w2)).toBeLessThan(snapshotOf(model).workspaces.map((w) => w.id).indexOf(w1));
+    model.updateWorkspaceGit(w2, { kind: "git", git: gitOf("/r/.git", true, "/r/.git/worktrees/w1") });
+    expectAgreement(model, "judged");
+    const snapshot = snapshotOf(model);
+    expect(representativeIds(snapshot.workspaces)).toEqual(new Set([m, w1]));
+    expect(shapeOf(sidebarTree(snapshot.workspaces, snapshot.groups, snapshot.layout!, "opened"))).toEqual([
+      { kind: "ungrouped", heading: true, items: [w2] },
+      { kind: "group", id: g.id, items: [[m, w1]] },
+    ]);
+  });
+
   it("仮の状態（layout の無い保存からの復元）: 配るレイアウトは、画面が古いサーバに対して導くレイアウトと同じ", () => {
     const model = new SessionModel();
     const wsData = (id: string, groupId?: string) =>

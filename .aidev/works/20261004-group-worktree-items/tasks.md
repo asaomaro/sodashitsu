@@ -133,7 +133,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
 
 ## 独立レビューの指摘（`review-findings-01.md`。main の取り込みの後）
 
-- [ ] T29: 代表の決め方を「その `worktreeKey` を最初に持った workspace・既存の代表は奪われない」にする（サーバが代表を決めて配る・保存する。古いサーバでは今の導き方）。`SessionModel.test.ts:1684-1693` を新しい決まりに直す。モデルと E2E の回帰テスト（「グループなし」を上に並べ替えてから＋新規／並べ替えた後に別の workspace が cd で同じフォルダへ来る）と壊して落ちる確認
+- [x] T29: 代表の決め方を「その `worktreeKey` を最初に持った workspace・既存の代表は奪われない」にする（サーバが代表を決めて配る・保存する。古いサーバでは今の導き方）。`SessionModel.test.ts:1684-1693` を新しい決まりに直す。モデルと E2E の回帰テスト（「グループなし」を上に並べ替えてから＋新規／並べ替えた後に別の workspace が cd で同じフォルダへ来る）と壊して落ちる確認
       対象: `packages/server/src/session/SessionModel.ts`・`SessionService.ts`・`persist/SessionFile.ts`・`composeServer.ts`、`packages/client-core/src/workspace/workspaceGrouping.ts`・`sidebarLayout.ts`、`packages/protocol`、`packages/e2e/src/specs/workspace-groups.spec.ts`
       依存: なし
       AC: AC19

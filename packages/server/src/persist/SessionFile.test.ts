@@ -121,7 +121,7 @@ describe("FsSessionFile", () => {
       layout: { top: ["g:g1", "u"], groups: { g1: ["r:/r/.git"] }, ungrouped: ["w:w2"] },
       repoGroups: { "/r/.git": "g1", "/closed/.git": "g1" },
       workspaces: [
-        { ...ws, groupId: "g1", repoKey: "/r/.git", isLinkedWorktree: true, worktreeKey: "/r/.git/worktrees/wt" },
+        { ...ws, groupId: "g1", repoKey: "/r/.git", isLinkedWorktree: true, worktreeKey: "/r/.git/worktrees/wt", representative: true },
         { ...ws, id: "w2", repoKey: null },
         { ...ws, id: "w3" },
       ],
@@ -132,6 +132,7 @@ describe("FsSessionFile", () => {
     if (result.kind !== "ok") throw new Error("unreachable");
     expect(result.data.workspaces.map((w) => w.repoKey)).toEqual(["/r/.git", null, undefined]);
     expect(result.data.workspaces.map((w) => w.worktreeKey)).toEqual(["/r/.git/worktrees/wt", undefined, undefined]);
+    expect(result.data.workspaces.map((w) => w.representative)).toEqual([true, undefined, undefined]);
   });
 
   it("古い版が読める形: 新しい項目を落としても、残りは以前のスキーマで読める（版は 1 のまま・追加は optional だけ）", async () => {
@@ -156,6 +157,7 @@ describe("FsSessionFile", () => {
       delete copy["repoKey"];
       delete copy["isLinkedWorktree"];
       delete copy["worktreeKey"];
+      delete copy["representative"];
       return copy;
     });
     await writeFileAtomic(join(dir, "session.json"), JSON.stringify({ ...rest, workspaces: ws }));

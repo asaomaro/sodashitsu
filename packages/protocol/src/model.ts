@@ -29,7 +29,7 @@ export interface GitInfo {
   /**
    * その worktree（フォルダ）を一意に示す絶対パス（正規化済み。`git rev-parse --path-format=absolute --git-dir`。
    * 本体は共通ディレクトリと同じ、linked worktree は `<共通ディレクトリ>/worktrees/<名前>`）。同じ値の workspace のうち
-   * 平らな順で最初のものがその worktree の代表で、リポジトリの項目に入るのは代表だけ（追補 01 A）。
+   * その `worktreeKey` を最初に持った workspace がその worktree の代表（`Workspace.representative`。サーバが決める）で、リポジトリの項目に入るのは代表だけ（追補 01 A）。
    * git 管理外なら null。古いサーバには無い（無ければ同じ `repoKey` を全部メンバーとして扱う）。
    */
   worktreeKey?: string | null;
@@ -57,6 +57,12 @@ export interface Workspace {
    * `$名前` が読む。**サーバのメモリだけ**に持ち `session.json` には保存しない。1 つも無ければ項目ごと無い。値は整え済み（制御文字なし・80 文字まで）。
    */
   tokens?: Record<string, string>;
+  /**
+   * その worktree（`git.worktreeKey`）の**代表**か（追補 01 A・T29）。サーバが決めて配る: 代表は「その `worktreeKey` を最初に持った
+   * workspace」で、既に代表が居る `worktreeKey` では奪われない（代表が閉じる・別のフォルダへ移るまで交代しない）。`worktreeKey` が文字列の
+   * workspace にだけ付く。**古いサーバには無い**——無ければ画面が並びの順から導く（`isRepresentative`）。
+   */
+  representative?: boolean;
 }
 
 export interface Tab {

@@ -5,6 +5,7 @@ import {
   hiddenWorktreeCount,
   type ItemRow,
   isRepresentative,
+  representativeIds,
   isUngroupedNavigateKey,
   navigateKeyOfUngrouped,
   itemRefOf,
@@ -132,6 +133,22 @@ describe("itemRefOf / repoMembers / isRepresentative（追補 01 A）", () => {
     expect(isRepresentative(w2, [w1, w2])).toBe(false);
     const moved = wt("w2", "/r/.git/worktrees/b");
     expect(isRepresentative(moved, [w1, moved])).toBe(true);
+  });
+
+  it("T29: サーバが決めた旗（representative）があれば、並びの順に依らずそれに従う（先に並ぶ workspace が代表を奪わない）", () => {
+    const w2 = { ...wt("w2", "/r/.git/worktrees/a"), representative: false };
+    const w1 = { ...wt("w1", "/r/.git/worktrees/a"), representative: true };
+    const list = [w2, w1]; // 並びでは w2 が先
+    expect(list.map((w) => isRepresentative(w, list))).toEqual([false, true]);
+    expect(itemRefOf(w2, list)).toBe("w:w2");
+    expect(itemRefOf(w1, list)).toBe(`r:${R}`);
+    expect([...representativeIds(list)]).toEqual(["w1"]);
+  });
+
+  it("T29: 旗が 1 つも立っていない（古いサーバ・配信の途中）ときは並びの順で最初のものが代表", () => {
+    const a = { ...wt("a", "/r/.git/worktrees/a"), representative: false };
+    const b = { ...wt("b", "/r/.git/worktrees/a"), representative: false };
+    expect([a, b].map((w) => isRepresentative(w, [a, b]))).toEqual([true, false]);
   });
 
   it("worktreeKey が null（取れていない）の workspace は代表として扱う", () => {

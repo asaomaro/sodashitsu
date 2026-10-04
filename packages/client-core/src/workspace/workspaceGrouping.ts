@@ -45,28 +45,43 @@ export type TopUnit =
 export const UNGROUPED_REF = "u";
 
 /**
- * workspace が、その worktree（`git.worktreeKey`）の代表か（追補 01 A）。同じ `worktreeKey` の workspace のうち
- * `workspaces` の順（平らな順）で最初のものが代表。`worktreeKey` が無い（古いサーバ・管理外）workspace は
- * 全部代表として扱う（今までどおり、同じ `repoKey` を全部メンバーにする）。
+ * 同じ `worktreeKey` の workspace のうち代表になるもの（`representativeIds` と `isRepresentative` の共通の決め方）。サーバが決めた
+ * 旗（`Workspace.representative`。T29）があればそれに従う（旗が立っているもののうち `workspaces` の順で最初のもの）。**旗が 1 つも
+ * 立っていない**（古いサーバ・配信の途中で旗が揃っていない）ときは、`workspaces` の順で最初のもの。
+ */
+function representativeOfKey(workspaces: Workspace[], key: string): Workspace | undefined {
+  const members = workspaces.filter((w) => w.git?.worktreeKey === key);
+  return members.find((w) => w.representative === true) ?? members[0];
+}
+
+/**
+ * workspace が、その worktree（`git.worktreeKey`）の代表か（追補 01 A・T29）。代表はサーバが決める（`Workspace.representative`。
+ * 「その `worktreeKey` を最初に持った workspace」で、既存の代表は奪われない）。旗の無い古いサーバでは `workspaces` の順で最初のもの。
+ * `worktreeKey` が無い（古いサーバ・管理外）workspace は全部代表として扱う（今までどおり、同じ `repoKey` を全部メンバーにする）。
  */
 export function isRepresentative(ws: Workspace, workspaces: Workspace[]): boolean {
   const key = ws.git?.worktreeKey;
   if (typeof key !== "string") return true;
-  const first = workspaces.find((w) => w.git?.worktreeKey === key);
-  return first === undefined || first.id === ws.id;
+  const rep = representativeOfKey(workspaces, key);
+  return rep === undefined || rep.id === ws.id;
 }
 
 /** 代表の workspace の id の集まり（`isRepresentative` を全部について 1 回で求める）。 */
 export function representativeIds(workspaces: Workspace[]): Set<string> {
-  const seen = new Set<string>();
   const reps = new Set<string>();
+  const decided = new Map<string, string>();
   for (const w of workspaces) {
     const key = w.git?.worktreeKey;
-    if (typeof key === "string") {
-      if (seen.has(key)) continue;
-      seen.add(key);
+    if (typeof key !== "string") {
+      reps.add(w.id);
+      continue;
     }
-    reps.add(w.id);
+    let id = decided.get(key);
+    if (id === undefined) {
+      id = representativeOfKey(workspaces, key)!.id;
+      decided.set(key, id);
+      reps.add(id);
+    }
   }
   return reps;
 }

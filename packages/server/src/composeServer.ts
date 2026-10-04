@@ -890,6 +890,7 @@ export function toSessionFileData(session: SessionService): SessionFileData {
       isLinkedWorktree: ws.git?.isLinkedWorktree ?? false,
       // その worktree（フォルダ）を示す値。代表の決まり（追補 01 A）に使うので、起動直後から同じ代表になるよう保存する。
       ...(typeof ws.git?.worktreeKey === "string" ? { worktreeKey: ws.git.worktreeKey } : {}),
+      ...(typeof ws.git?.worktreeKey === "string" && typeof ws.representative === "boolean" ? { representative: ws.representative } : {}),
       cwd: ws.cwd,
       activeTabId: ws.activeTabId,
       // tab は並べ替えた順（`ws.tabIds`）で保存する——復元の tab の並びと、最初の tab（名前と git を決める場所。20260926-workspace-label-follow-cwd）が保たれる。

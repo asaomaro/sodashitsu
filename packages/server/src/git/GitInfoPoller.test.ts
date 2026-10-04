@@ -9,7 +9,7 @@ import { EventBus } from "../bus/EventBus.js";
 import type { CreatePaneOptions, TerminalManager } from "../terminal/TerminalManager.js";
 import type { TerminalHost } from "../terminal/TerminalHost.js";
 import type { PersistScheduler } from "../session/PersistScheduler.js";
-import { SessionModel } from "../session/SessionModel.js";
+import { SessionModel, type GitJudgement } from "../session/SessionModel.js";
 import { SessionService } from "../session/SessionService.js";
 import { defaultWorkspaceLabelDeps } from "../session/workspaceLabel.js";
 import { makeTempDir } from "../persist/atomicFile.js";
@@ -990,6 +990,34 @@ describe("DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実�
     expect(after.getWorkspace(w.id)?.git).toMatchObject({ branch: "feature", repoKey: key, isLinkedWorktree: true });
     expect(after.snapshot().layout).toEqual(expectedLayout);
     expect(after.snapshot().workspaces.map((x) => x.id)).toEqual(expectedOrder);
+  });
+
+  it("T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代表（保存した representative が作った順に勝つ）。旗の無い保存は作った順", async () => {
+    const dir = await makeTempDir("soda-persist-");
+    dirs.push(dir);
+    const git = (worktreeKey: string): GitJudgement => ({ kind: "git", git: { branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: true, worktreeKey } });
+    const before = makeService();
+    const first = (await before.createWorkspace(dir, "first")).workspace; // 先に作った
+    const second = (await before.createWorkspace(dir, "second")).workspace;
+    before.updateWorkspaceGit(first.id, git("/r/.git/worktrees/elsewhere"));
+    before.updateWorkspaceGit(second.id, git("/r/.git/worktrees/a")); // second が先にそのフォルダを持つ
+    before.updateWorkspaceGit(first.id, git("/r/.git/worktrees/a")); // first は後から cd で来た（作ったのは先）
+    expect(before.getWorkspace(second.id)?.representative).toBe(true);
+    expect(before.getWorkspace(first.id)?.representative).toBe(false);
+
+    const data = await saveAndLoad(before);
+    expect(data.workspaces.map((w) => [w.id, w.representative])).toEqual([[second.id, true], [first.id, false]]) // 平らな順は代表が先;
+    const after = makeService();
+    await after.restore(data);
+    expect(after.getWorkspace(second.id)?.representative).toBe(true);
+    expect(after.getWorkspace(first.id)?.representative).toBe(false);
+    expect(after.snapshot().layout).toEqual(before.snapshot().layout);
+
+    // 旗の無い保存（古い版）は作った順（w<番号> の小さいほう）。
+    const legacy = makeService();
+    await legacy.restore({ ...data, workspaces: data.workspaces.map(({ representative: _r, ...rest }) => rest) });
+    expect(legacy.getWorkspace(first.id)?.representative).toBe(true);
+    expect(legacy.getWorkspace(second.id)?.representative).toBe(false);
   });
 
   it("同じフォルダの 2 つ目（通常の項目）は、復元の直後も最初の 1 周の後も代表にならない（worktreeKey を保存する）", async () => {

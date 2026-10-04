@@ -1681,15 +1681,17 @@ describe("SessionModel — sidebar layout", () => {
       expect(members(model)).toEqual([a2, wt]);
     });
 
-    it("an earlier workspace judged later takes over as the representative; the later one becomes a plain item after the item", () => {
+    it("an earlier workspace judged later does NOT take over the representative: the one that held the folder first keeps it (T29)", () => {
       const model = new SessionModel();
       const first = open(model, "first");
       const second = open(model, "second");
       model.updateWorkspaceGit(second.id, judged(false, W1));
       expect(model.getLayout().ungrouped).toEqual([`w:${first.id}`, `r:${K}`]);
       model.updateWorkspaceGit(first.id, judged(false, W1));
-      expect(members(model)).toEqual([first.id]);
-      expect(model.getLayout().ungrouped).toEqual([`r:${K}`, `w:${second.id}`]);
+      expect(members(model)).toEqual([second.id]); // 先に持った second が代表のまま
+      expect(model.getWorkspace(second.id)?.representative).toBe(true);
+      expect(model.getWorkspace(first.id)?.representative).toBe(false);
+      expect(model.getLayout().ungrouped).toEqual([`w:${first.id}`, `r:${K}`]); // first は通常の行のまま
     });
 
     it("the successor keeps the repository item where it is, even if the successor itself was put in another group (the repository's place wins)", () => {
@@ -1739,6 +1741,99 @@ describe("SessionModel — sidebar layout", () => {
       const { model, a, wt, a2 } = sameFolder();
       expect(model.repoCloseTargets(a)).toEqual([wt]);
       expect(model.repoCloseTargets(a2)).toEqual([]);
+    });
+
+    /** M（本体・K）と W1（linked）を G の中の r:K に入れ、「グループなし」を G より上に並べ替えた状態。 */
+    function ungroupedAbove() {
+      const model = new SessionModel();
+      const early = open(model, "early"); // 一番先に作った判定前の通常の workspace（「グループなし」の先頭）
+      const m = open(model, "m");
+      const w1 = open(model, "w1");
+      model.updateWorkspaceGit(m.id, judged(false, W1));
+      model.updateWorkspaceGit(w1.id, judged(true, W2));
+      const g = model.createGroup("G", m.id);
+      expect(model.moveItem({ kind: "ungrouped" }, { kind: "group", groupId: g.id })).toBe(true);
+      expect(model.getLayout().top).toEqual(["u", `g:${g.id}`]);
+      return { model, early: early.id, m: m.id, w1: w1.id, g: g.id };
+    }
+
+    it("T29: a new workspace opened at W1's folder with the ungrouped unit above the group does not demote W1 (the worktree group keeps W1)", () => {
+      const { model, early, m, w1, g } = ungroupedAbove();
+      const w2 = open(model, "w2"); // 判定前。「グループなし」が上なので、平らな順では W1 より前に入る
+      expect(model.listWorkspaces().map((w) => w.id).indexOf(w2.id)).toBeLessThan(model.listWorkspaces().map((w) => w.id).indexOf(w1));
+      model.updateWorkspaceGit(w2.id, judged(true, W2)); // W1 と同じフォルダと判定される
+      expect(members(model)).toEqual([m, w1]); // 代表は W1 のまま（Map の順で W2 が奪わない）
+      expect(model.getWorkspace(w1)?.representative).toBe(true);
+      expect(model.getWorkspace(w2.id)?.representative).toBe(false);
+      expect(model.getLayout().groups[g]).toEqual([`r:${K}`]);
+      expect(model.getLayout().ungrouped).toEqual([`w:${early}`, `w:${w2.id}`]);
+      expect(model.getWorkspace(w2.id)?.groupId).toBeNull();
+    });
+
+    it("T29: after reordering, another workspace that cds into the folder later (created and placed earlier than the representative) does not take the representative", () => {
+      const { model, early, m, w1, g } = ungroupedAbove();
+      model.updateWorkspaceGit(early, judged(true, "/k/.git/worktrees/else"));
+      model.takeChanges();
+      model.updateWorkspaceGit(early, judged(true, W2)); // 一番先に作った early が、後から cd で W1 のフォルダへ来た
+      expect(model.getWorkspace(w1)?.representative).toBe(true);
+      expect(model.getWorkspace(early)?.representative).toBe(false);
+      expect(members(model)).toEqual([m, w1]);
+      expect(model.getLayout().groups[g]).toEqual([`r:${K}`, `w:${early}`]); // 抜けた r:K の直後（G の中）に通常の行
+    });
+
+    it("T29: the representative leaving the folder hands it to the one that held the folder first among the rest", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      const c = open(model, "c");
+      model.updateWorkspaceGit(a.id, judged(true, W2));
+      model.updateWorkspaceGit(c.id, judged(true, W2)); // c が b より先に持った
+      model.updateWorkspaceGit(b.id, judged(true, W2));
+      expect(model.getWorkspace(a.id)?.representative).toBe(true);
+      model.updateWorkspaceGit(a.id, judged(true, "/k/.git/worktrees/else")); // a が別のフォルダへ移る
+      expect(model.getWorkspace(c.id)?.representative).toBe(true);
+      expect(model.getWorkspace(b.id)?.representative).toBe(false);
+      expect(model.getWorkspace(a.id)?.representative).toBe(true); // 移った先では最初に持った
+    });
+
+    it("T29: a change of the representative flag is reported as workspace.updated even when the effective groupId does not change", () => {
+      const model = new SessionModel();
+      const a = open(model, "a");
+      const b = open(model, "b");
+      model.updateWorkspaceGit(a.id, judged(true, W2));
+      model.updateWorkspaceGit(b.id, judged(true, W2));
+      model.takeChanges();
+      model.closeWorkspace(a.id);
+      const changes = model.takeChanges()!;
+      expect(changes.updated.map((w) => [w.id, w.representative])).toEqual([[b.id, true]]); // a が閉じて b が代表になる
+    });
+
+    const restoreData = (id: string, representative?: boolean) =>
+      ({
+        id,
+        label: id,
+        cwd: "/x",
+        activeTabId: `t-${id}`,
+        repoKey: K,
+        isLinkedWorktree: true,
+        worktreeKey: W2,
+        ...(representative === undefined ? {} : { representative }),
+        tabs: [{ id: `t-${id}`, label: "1", layout: { type: "pane" as const, paneId: `p-${id}` }, focusedPaneId: `p-${id}`, zoomedPaneId: null, panes: [{ id: `p-${id}`, label: null, cwd: "/x", shell: "sh" }] }],
+      }) as never;
+
+    it("T29: a restore keeps the saved representative even if it was created later; a save without the flag falls back to the creation order", () => {
+      const saved = new SessionModel();
+      saved.restoreWorkspace(restoreData("w1", false), false);
+      saved.restoreWorkspace(restoreData("w2", true), false);
+      saved.settleRepresentatives();
+      expect(saved.getWorkspace("w2")?.representative).toBe(true);
+      expect(saved.getWorkspace("w1")?.representative).toBe(false);
+      const old = new SessionModel();
+      old.restoreWorkspace(restoreData("w10"), false);
+      old.restoreWorkspace(restoreData("w9"), false);
+      old.settleRepresentatives();
+      expect(old.getWorkspace("w9")?.representative).toBe(true); // w<番号> の小さいほう
+      expect(old.getWorkspace("w10")?.representative).toBe(false);
     });
   });
 

@@ -1368,6 +1368,7 @@ export class SessionService {
       this.restoreWorkspace(wsData, wsData.autoLabel);
       if (wsData.labelCwd !== null) this.labelCwd.set(wsData.id, wsData.labelCwd);
     }
+    this.model.settleRepresentatives(); // 保存した代表を尊重し、無ければ作った順で決める（T29）
     this.restoreLayout(data);
     for (const wsData of data.workspaces) {
       for (const tabData of wsData.tabs) {

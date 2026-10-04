@@ -356,3 +356,16 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - 衝突は `mouse.ts`・tui `sidebar.ts`・`Sidebar.vue`（import だけ）・`KeySettings.test.ts`・golden 2 つ。両方の変更を残した。tui は main の `subagents` の当たり（`⤷n`）・`badge`・`showSubagentsOf` と、このブランチの `ungrouped`・`autoGroup`・`drag`・`right`・`rule`・`subIndent` を併存させた（右クリックのメニューは `agent` と `subagents` を同じ pane のメニューへ）。
 - キーの表のテストの期待値は 65 から **66** に直した。根拠: このブランチ側は 57+navigate 8（navigate_toggle_collapse を含む）で 65、main 側は 58+navigate 7（show_subagents を含む）で 65。どちらも 1 つずつ足しているので、両方を取り込むと 66（実際の `.keys-details` の数をテストで確かめた）。
 - golden は手で解決せず、解決後のコードで `vitest -u` して取り直した（グループ・「グループなし」・worktree グループの行と、main のエージェントの行の `data-agent-pane` が両方入る）。
+
+## D42: 代表は「その worktreeKey を最初に持った workspace」で、サーバが決めて配る・保存する（T29。review-findings-01 の 1・追補 A の補足）
+
+- **不具合**: 「グループなし」をグループより上に並べ替えた状態で、worktree の workspace（W1）を選んで「＋ 新規」（W2）すると、判定前の W2 が平らな順で W1 より前に入る。D27 の代表の決め方（`workspaces` の順で最初）だと、判定が届いたとき W2 が代表になり W1 が通常の行へ降格した（利用者が挙げた不具合が残る経路）。画面（client-core の純関数）が Map の順から代表を導いていたのが原因。
+- **決め方（依頼元の決定）**: 代表は「その `worktreeKey` を最初に持った workspace」。**既に代表が居る `worktreeKey` では奪わない**。平らな順・並べ替えは影響しない。代表が閉じる・別のフォルダへ移ると、残りのうち最初にその `worktreeKey` を持ったものが次の代表。
+- **サーバが決めて配る**: `Workspace.representative?: boolean`（protocol。`worktreeKey` が文字列の workspace にだけ付く optional。古いサーバには無い）。`SessionModel.settleRepresentatives()` が判定の反映（`updateWorkspaceGit`）・workspace を閉じる・復元の後に旗を決め直す。旗が立っているもの（代表）を優先し、立っているものが無い `worktreeKey`（交代・復元で旗が無い）は「最初に持ち始めた」ものを選ぶ。「持ち始めた順」はメモリの `heldSince`（`worktreeKey` を持ち始めたとき＝作る・判定が付く・別のフォルダへ移るときに連番を振る）。旗が変わった workspace は `takeChanges` の `updated` に入り、共通の出口が `workspace.updated` を配る（`groupId` が変わらなくても）。
+- **保存と復元**: `session.json` の workspace に optional の `representative`（`worktreeKey` が文字列のときだけ書く。版は 1 のまま・D26）。復元は保存した旗を尊重し（作った順に勝つ）、旗の無い古い保存は `w<番号>` の小さい順（作った順）で決める（`SessionService.restore` が `restoreWorkspace` の後に `settleRepresentatives` を呼ぶ）。
+- **画面**: `isRepresentative`／`representativeIds`（`itemRefOf`・`repoMembers`・`resolveRef`・`flattenWorkspaceIds` はこれを通る）は、旗が立っている workspace を代表にする。旗が 1 つも立っていない（古いサーバ・配信の途中で旗の更新が揃っていない）ときは、今までどおり `workspaces` の順で最初のもの。サーバも同じ純関数を通るので、サーバ（`itemRefOf`・`repoMembers`・`repoCloseTargets`・`recomputeGroupIds`・`flattenWorkspaceIds`）と画面は同じ代表を使う。旗は `settleRepresentatives` が `reflectRefs` の前に更新するので、D29 の遷移（`r:`↔`w:`）は更新後の旗で動く。
+- **`flattenWorkspaceIds` の「代表を先に置く」（D27）は残した**: 旗があれば代表は並びに依らないので入れ替わり続ける問題は無くなったが、同じ worktree の代表を前に置く並びのほうが木と Map の順が揃う（D37 の一致のテストが前提にしている）。
+- **既存のテストの書き直し**: `SessionModel.test.ts` の「平らな順で前に居る workspace が後から同じフォルダと判定されると代表を奪う」を、「奪わない（先に持った workspace が代表のまま）」に書き直した。E2E の AC11 の 1 つ（`git 管理外へ移ると…`）は、移った先が既に別の workspace が居る同じフォルダで、旧い決まりの「奪う」に依っていたので、移った先を「D の本体のフォルダ（D の linked worktree の workspace が居る別のフォルダ）」に替えて、同じ意図（所属が引き継がれる）を確かめる形にした。
+- **確かめた事実**: 持ち始めた順が無いと「代表が居ない `worktreeKey`」を作った順で決めるしかなく、後から cd してきた早く作った workspace が代表を取る（`ignoreseq` の壊しで落ちる）。単に旗だけでは、復元・交代の後が決まらない。
+
+- D42 補足（T29 の点検）: 「持ち始めた順」（`heldSince`）はメモリだけで保存しない。再起動後は、旗が付いている workspace が代表で、代表が閉じたあとの次の代表は `w<番号>` の小さい順で決まる（依頼元の決定の「順を持てないなら作った順」）。再起動の前後で、代表が閉じたときの「次の代表」が変わりうる制約を許容する（代表そのものは旗の保存で変わらない）。

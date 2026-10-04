@@ -105,6 +105,8 @@ interface ChangeBaseline {
   layout: SidebarLayout;
   order: WorkspaceId[];
   groupIds: Map<WorkspaceId, GroupId | null>;
+  /** 代表の旗（`Workspace.representative`。代表の交代を `workspace.updated` で配るために控える）。 */
+  representatives: Map<WorkspaceId, boolean | undefined>;
 }
 
 /** 「グループなし」のまとまりの参照（`top` に必ず 1 つ入る。client-core の `UNGROUPED_REF` と同じ）。 */
@@ -186,6 +188,12 @@ export class SessionModel {
   /** リポジトリの所属（`repoKey` → グループ）。開いていないリポジトリの分も残す。`Workspace.groupId`（実効の所属）はここから計算する。 */
   private readonly repoGroups = new Map<string, GroupId>();
   private baseline: ChangeBaseline | null = null;
+  /**
+   * workspace が今の `worktreeKey` を持ち始めた順（代表が居なくなったときの次の代表を決める。メモリだけ。T29）。持ち始めたとき（作る・
+   * 判定が付く・別のフォルダへ移る）に番号を振る。復元では保存に順が無いので、まだ持たない workspace は `w<番号>` の作った順に振る。
+   */
+  private readonly heldSince = new Map<WorkspaceId, { key: string; seq: number }>();
+  private heldCounter = 0;
   private nextIdCounters: NextIdCounters = { w: 1, t: 1, p: 1, s: 1, a: 1, g: 1 };
   private focus: SessionFocus | null = null;
 
@@ -774,6 +782,7 @@ export class SessionModel {
       layout: this.getLayout(),
       order: [...this.workspaces.keys()],
       groupIds: new Map([...this.workspaces.values()].map((w) => [w.id, w.groupId])),
+      representatives: new Map([...this.workspaces.values()].map((w) => [w.id, w.representative])),
     };
   }
 
@@ -793,7 +802,9 @@ export class SessionModel {
     const before = new Set(base.order);
     const was = [...base.order.filter((id) => after.has(id)), ...order.filter((id) => !before.has(id))];
     const now = order;
-    const updated = [...this.workspaces.values()].filter((w) => base.groupIds.has(w.id) && base.groupIds.get(w.id) !== w.groupId);
+    const updated = [...this.workspaces.values()].filter(
+      (w) => base.groupIds.has(w.id) && (base.groupIds.get(w.id) !== w.groupId || base.representatives.get(w.id) !== w.representative),
+    );
     const layoutChanged = !sameLayout(base.layout, layout);
     const orderChanged = was.some((id, i) => id !== now[i]);
     if (updated.length === 0 && !layoutChanged && !orderChanged) return null;
@@ -845,6 +856,8 @@ export class SessionModel {
     this.beginChange();
     const before = this.refSnapshot();
     this.workspaces.delete(id);
+    this.heldSince.delete(id);
+    this.settleRepresentatives();
     this.reflectRefs(before, null);
     this.settle();
     if (this.focus?.workspaceId === id) {
@@ -1184,9 +1197,57 @@ export class SessionModel {
     this.beginChange();
     const before = this.refSnapshot();
     this.workspaces.set(workspaceId, { ...ws, git });
+    this.settleRepresentatives();
     this.reflectRefs(before, workspaceId);
     this.settle();
     return this.workspaces.get(workspaceId)!;
+  }
+
+  /**
+   * 代表（`Workspace.representative`）を決め直す（T29）。代表は「その `worktreeKey` を最初に持った workspace」で、**既に代表が居る
+   * `worktreeKey` では奪わない**（平らな順・並べ替えは影響しない）。代表が居なくなった（閉じた・別のフォルダへ移った）ときだけ、残りのうち
+   * 最初に持ち始めたものが次の代表になる。判定の反映・閉じる・復元の後に呼ぶ。旗が変わった workspace は記録を書き換える（配るのは
+   * `takeChanges` の `updated`）。`worktreeKey` が無い workspace には旗を付けない（全部代表として扱う）。
+   */
+  settleRepresentatives(): void {
+    const all = [...this.workspaces.values()];
+    const keyOf = (w: Workspace): string | null => (typeof w.git?.worktreeKey === "string" ? w.git.worktreeKey : null);
+    const idNumber = (id: string): number => Number(/\d+/.exec(id)?.[0] ?? Number.MAX_SAFE_INTEGER);
+    // 別のフォルダへ移った workspace は、持ち始めた番号を振り直す（新しい番号なので、移った先の既存の代表には勝てない）。
+    const fresh: Workspace[] = [];
+    for (const w of all) {
+      const key = keyOf(w);
+      const held = this.heldSince.get(w.id);
+      if (key === null) {
+        this.heldSince.delete(w.id);
+      } else if (held === undefined) {
+        fresh.push(w);
+      } else if (held.key !== key) {
+        fresh.push(w);
+      }
+    }
+    for (const w of fresh.sort((a, b) => idNumber(a.id) - idNumber(b.id))) {
+      this.heldSince.set(w.id, { key: keyOf(w)!, seq: ++this.heldCounter });
+    }
+    const repOf = new Map<string, Workspace>();
+    const byKey = new Map<string, Workspace[]>();
+    for (const w of all) {
+      const key = keyOf(w);
+      if (key !== null) byKey.set(key, [...(byKey.get(key) ?? []), w]);
+    }
+    const seqOf = (w: Workspace): number => this.heldSince.get(w.id)!.seq;
+    for (const [key, members] of byKey) {
+      const flagged = members.filter((w) => w.representative === true);
+      const pool = flagged.length > 0 ? flagged : members;
+      repOf.set(key, pool.reduce((a, b) => (seqOf(b) < seqOf(a) ? b : a)));
+    }
+    for (const w of all) {
+      const key = keyOf(w);
+      const want = key === null ? undefined : repOf.get(key)!.id === w.id;
+      if (w.representative === want) continue;
+      const { representative: _drop, ...rest } = w;
+      this.workspaces.set(w.id, want === undefined ? rest : { ...rest, representative: want });
+    }
   }
 
   /** いまの全 workspace の項目の参照・`repoKey`・実効の所属（変える前の控え。`reflectRefs` に渡す）。 */
@@ -1354,6 +1415,8 @@ export class SessionModel {
             }
           : null,
       autoLabel, // 呼ぶ側（`SessionService.restore`）が決める
+      // 保存した代表の旗（T29）。無い保存（古い版）は `settleRepresentatives` が作った順で決める。
+      ...(typeof data.worktreeKey === "string" && typeof data.representative === "boolean" ? { representative: data.representative } : {}),
     };
     this.workspaces.set(workspace.id, workspace);
     this.layout = null; // 復元した直後は仮の状態（`layout` の復元は T9。確定は `confirmLayout`）

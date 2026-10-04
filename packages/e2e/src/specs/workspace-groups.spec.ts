@@ -1188,6 +1188,52 @@ test.describe("同じフォルダの 2 つ目の workspace（追補 01 A・AC19�
     expect(after[1]!.branch).toBe("wt-same");
   });
 
+  test("T29: 「グループなし」をグループより上に並べ替えてから worktree の workspace を選んで「＋ 新規」しても、新しい workspace は通常の行になり worktree グループは崩れない", async ({
+    page,
+    appServer,
+  }) => {
+    const env = await boot(page, appServer);
+    const repo = await makeRepo();
+    const wt = await addWorktree(repo, "wt-same");
+    const mainWs = await env.open(repo, "main-ws");
+    const sameWs = await env.open(wt, "same-1");
+    await env.dropInitial();
+    await createGroupVia(page, "main-ws", "g1");
+    await expectOutline(page, ["[g] g1 (1)", "  wt* main-ws", "    wt same-1", "[u] グループなし (0)"]);
+    await openMenuOn(page, rowOf(page, "グループなし"));
+    await chooseMenu(page, "上へ移動");
+    await expectOutline(page, ["[u] グループなし (0)", "[g] g1 (1)", "  wt* main-ws", "    wt same-1"]);
+
+    // worktree の workspace を選んで「＋ 新規」: 新しい workspace は同じフォルダで開き、「グループなし」が上にあるので判定前は
+    // 平らな順で same-1 より前に入る。判定が届いても、先にそのフォルダを持っていた same-1 が代表のまま。
+    // 判定は pane の作成の後に非同期で届くので、サーバのイベント（新しい workspace の判定の通知）を待ち、続けて名前の変更を 1 つ
+    // 送って、その名前が DOM に出るのを待つ（イベントは接続ごとに順序どおりに届くので、判定とそれに伴う並びの更新がブラウザに
+    // 反映された後の状態を見られる。判定前も判定後も同じ見た目になりうるので、固定の待ちでは確かめられない）。
+    await rowOf(page, "same-1").click();
+    await expect(rowOf(page, "same-1")).toHaveAttribute("aria-current", "true");
+    const known = new Set([mainWs.id, sameWs.id]);
+    const judged = env.client.waitForEvent(
+      "workspace.updated",
+      (e) => !known.has(e.data.workspace.id) && typeof e.data.workspace.git?.worktreeKey === "string",
+      SETTLE,
+    );
+    await page.getByRole("button", { name: "＋ 新規" }).click();
+    const created = (await judged).data.workspace;
+    await env.client.request("workspace.rename", { workspaceId: created.id, label: "second-ws" });
+    await expect(rowOf(page, "second-ws")).toBeVisible({ timeout: SETTLE });
+    await expectOutline(page, [
+      "[u] グループなし (1)",
+      "  second-ws",
+      "[g] g1 (1)",
+      "  wt* main-ws",
+      "    wt same-1",
+    ]);
+    const second = (await rowsOf(page)).find((r) => r.label === "second-ws")!;
+    expect(second.kind).toBe("workspace");
+    expect(second.kindIcon, "worktree の印は付かない").toBeNull();
+    expect(second.branch, "ブランチ名も出さない").toBeNull();
+  });
+
   test("同じフォルダの 2 つ目は、worktree グループの所属に引きずられない（グループへ入れても worktree グループは動かない）", async ({
     page,
     appServer,
@@ -1834,25 +1880,27 @@ test.describe("先頭の pane の移動（AC11）", () => {
     const repoA = await makeRepo();
     const wtA = await addWorktree(repoA, "wt-a");
     const repoB = await makeRepo();
-    const repoC = await makeRepo();
+    const repoD = await makeRepo();
+    const wtD = await addWorktree(repoD, "wt-d");
     const plain = await makeDir();
     await env.open(repoA, "a-ws");
     const mover = await env.open(repoB, "mover");
-    // 所属の無い別のリポジトリ C の workspace。mover が C へ移った（判定が反映された）ことを DOM で区別するための目印。
-    await env.open(repoC, "c-ws");
+    // 所属の無い別のリポジトリ D の linked worktree の workspace。mover が D の本体のフォルダへ移った（判定が反映された）ことを
+    // DOM で区別するための目印（別のフォルダなので、mover は代表を奪わず D の worktree グループの本体になる）。
+    await env.open(wtD, "d-ws");
     await env.dropInitial();
     await createGroupVia(page, "a-ws", "g1");
     const cd = (dir: string): void =>
       env.client.sendInput(env.paneOf.get(mover.id)!, `cd ${dir}\r`);
 
     cd(wtA);
-    await expectOutline(page, ["[g] g1 (1)", "  wt* a-ws", "    wt mover", "[u] グループなし (1)", "  c-ws"]);
+    await expectOutline(page, ["[g] g1 (1)", "  wt* a-ws", "    wt mover", "[u] グループなし (1)", "  d-ws"]);
     // git 管理外へ：worktree グループから出て、移る前のグループ（g1）に通常の行として残る。
     cd(plain);
-    await expectOutline(page, ["[g] g1 (2)", "  a-ws", "  mover", "[u] グループなし (1)", "  c-ws"]);
-    // グループに入っている workspace が所属の無いリポジトリ C へ移っても、グループからは出ない（その所属がリポジトリの所属になる）。
-    // cd の前後で並びが変わる場面にしてある（C の項目が「グループなし」から g1 へ付いてくる）。判定の反映前に通ってしまわない。
-    cd(repoC);
-    await expectOutline(page, ["[g] g1 (3)", "  a-ws", "  mover", "  c-ws", "[u] グループなし (0)"]);
+    await expectOutline(page, ["[g] g1 (2)", "  a-ws", "  mover", "[u] グループなし (1)", "  d-ws"]);
+    // グループに入っている workspace が所属の無いリポジトリ D へ移っても、グループからは出ない（その所属がリポジトリの所属になる）。
+    // cd の前後で並びが変わる場面にしてある（D の項目が「グループなし」から g1 へ付いてくる）。判定の反映前に通ってしまわない。
+    cd(repoD);
+    await expectOutline(page, ["[g] g1 (2)", "  a-ws", "  wt* mover", "    wt d-ws", "[u] グループなし (0)"]);
   });
 });

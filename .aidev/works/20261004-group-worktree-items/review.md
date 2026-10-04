@@ -4976,3 +4976,152 @@ AssertionError: expected -1 to be greater than 0
 - cross [nit] 追補 B 以前の古いコメント・旧語が残る → 指定箇所を直した（残りの旧語は指定外のテスト名等。D40） [conv:-]
 - cross [nit] web と tui に itemGroupIdOf・groupsInLayoutOrder・itemWorkspaceIds・ドロップ判定が二重に書かれている → 実害が無いので直さず、60 review に委ねる [conv:-]
 - cross [nit] 追補前の保存を読んだ直後、worktreeKey の null→文字列で全 workspace に publishSidebarChanges が走る（壊れはしない）→ 直さず、60 review に委ねる [conv:-]
+
+### T29 壊して落ちる確認
+
+- 各壊しは実装の該当行を 1 つ書き換えて走らせ、出力（vitest／playwright の生の出力から、落ちたテスト名・断言・件数の行を抜粋）を貼った。確認後は元に戻した（git diff で確認、build し直し済み）。
+
+#### 壊し: 代表を「先に持った」でなく作った順（id の小さい順）で決める（既存の代表を奪う決め方に戻す）。SessionModel.settleRepresentatives
+```
+       × an earlier workspace judged later does NOT take over the representative: the one that held the folder first keeps it (T29) 9ms
+       × T29: after reordering, another workspace that cds into the folder later (created and placed earlier than the representative) does not take the representative 2ms
+       × T29: the representative leaving the folder hands it to the one that held the folder first among the rest 1ms
+       × T29: a restore keeps the saved representative even if it was created later; a save without the flag falls back to the creation order 1ms
+     × T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代表（保存した representative が作った順に勝つ）。旗の無い保存は作った順 12ms
+      Tests  5 failed | 219 passed (224)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session/SessionModel.test.ts src/session/SessionModel.clientAgreement.test.ts src/git/GitInfoPoller.test.ts
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > an earlier workspace judged later does NOT take over the representative: the one that held the folder first keeps it (T29)
+AssertionError: expected [ 'w1' ] to deeply equal [ 'w2' ]
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > T29: after reordering, another workspace that cds into the folder later (created and placed earlier than the representative) does not t
+AssertionError: expected false to be true // Object.is equality
+```
+
+#### 壊し: 保存した旗・既存の旗を無視して持ち始めた順だけで決める（pool = members）
+```
+       × T29: a restore keeps the saved representative even if it was created later; a save without the flag falls back to the creation order 9ms
+     × T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代表（保存した representative が作った順に勝つ）。旗の無い保存は作った順 21ms
+      Tests  2 failed | 222 passed (224)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session/SessionModel.test.ts src/session/SessionModel.clientAgreement.test.ts src/git/GitInfoPoller.test.ts
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > T29: a restore keeps the saved representative even if it was created later; a save without the flag falls back to the creation order
+AssertionError: expected false to be true // Object.is equality
+```
+
+#### 壊し: 代表が居なくなったときの次の代表を持ち始めた順でなく id 順にする
+```
+       × T29: after reordering, another workspace that cds into the folder later (created and placed earlier than the representative) does not take the representative 14ms
+       × T29: the representative leaving the folder hands it to the one that held the folder first among the rest 1ms
+     × T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代表（保存した representative が作った順に勝つ）。旗の無い保存は作った順 11ms
+      Tests  3 failed | 221 passed (224)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session/SessionModel.test.ts src/session/SessionModel.clientAgreement.test.ts src/git/GitInfoPoller.test.ts
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > T29: after reordering, another workspace that cds into the folder later (created and placed earlier than the representative) does not t
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > T29: the representative leaving the folder hands it to the one that held the folder first among the rest
+AssertionError: expected false to be true // Object.is equality
+```
+
+#### 壊し: restoreWorkspace が保存した representative を戻さない
+```
+       × T29: a restore keeps the saved representative even if it was created later; a save without the flag falls back to the creation order 8ms
+     × T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代表（保存した representative が作った順に勝つ）。旗の無い保存は作った順 17ms
+      Tests  2 failed | 222 passed (224)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session/SessionModel.test.ts src/session/SessionModel.clientAgreement.test.ts src/git/GitInfoPoller.test.ts
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > T29: a restore keeps the saved representative even if it was created later; a save without the flag falls back to the creation order
+AssertionError: expected false to be true // Object.is equality
+```
+
+#### 壊し: toSessionFileData が representative を書かない
+```
+     × T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代表（保存した representative が作った順に勝つ）。旗の無い保存は作った順 15ms
+      Tests  1 failed | 223 passed (224)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session/SessionModel.test.ts src/session/SessionModel.clientAgreement.test.ts src/git/GitInfoPoller.test.ts
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代
+AssertionError: expected [ [ 'w2', undefined ], …(1) ] to deeply equal [ [ 'w2', true ], [ 'w1', false ] ]
+```
+
+#### 壊し: 旗の無い保存の作った順（w<番号> の並べ）を外す
+```
+       × T29: a restore keeps the saved representative even if it was created later; a save without the flag falls back to the creation order 14ms
+     × T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代表（保存した representative が作った順に勝つ）。旗の無い保存は作った順 25ms
+      Tests  2 failed | 222 passed (224)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session/SessionModel.test.ts src/session/SessionModel.clientAgreement.test.ts src/git/GitInfoPoller.test.ts
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > T29: a restore keeps the saved representative even if it was created later; a save without the flag falls back to the creation order
+AssertionError: expected false to be true // Object.is equality
+```
+
+#### 壊し: takeChanges の updated から旗の変化を外す（groupId が変わらない交代が配られない）
+```
+       × T29: a change of the representative flag is reported as workspace.updated even when the effective groupId does not change 11ms
+      Tests  1 failed | 223 passed (224)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session/SessionModel.test.ts src/session/SessionModel.clientAgreement.test.ts src/git/GitInfoPoller.test.ts
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > T29: a change of the representative flag is reported as workspace.updated even when the effective groupId does not change
+AssertionError: expected [] to deeply equal [ [ 'w2', true ] ]
+```
+
+#### 壊し: client-core の representativeOfKey がサーバの旗を無視して並びの順で決める（画面の単体テストと、サーバと画面の一致テスト）
+```
+     × T29: サーバが決めた旗（representative）があれば、並びの順に依らずそれに従う（先に並ぶ workspace が代表を奪わない） 7ms
+      Tests  1 failed | 47 passed (48)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/workspace/workspaceGrouping.test.ts
+     × T29: 「グループなし」を上に並べ替えた後に同じフォルダへ workspace が増えても、サーバが配る代表と画面の代表が一致し、worktree グループは崩れない 6ms
+      Tests  1 failed | 6 passed (7)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session/SessionModel.clientAgreement.test.ts
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/workspace/workspaceGrouping.test.ts > itemRefOf / repoMembers / isRepresentative（追補 01 A） > T29: サーバが決めた旗（representative）があれば、並びの順に依らずそれに従う（先に並ぶ workspace が代表を奪わ�
+AssertionError: expected [ true, false ] to deeply equal [ false, true ]
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionModel.clientAgreement.test.ts > サーバと画面は同じ純関数で同じ木になる（T19） > T29: 「グループなし」を上に並べ替えた後に同じフォルダへ workspace が増えても、サーバが配る代表
+AssertionError: expected Set{ 'w1', 'w3' } to deeply equal Set{ 'w1', 'w2' }
+```
+
+#### 壊し（E2E）: client-core の representativeOfKey が旗を無視して並びの順で決める（build し直して workspace-groups.spec.ts -g T29。製品の元の不具合の再現）
+```
+
+Running 1 test using 1 worker
+
+  ✘  1 src/specs/workspace-groups.spec.ts:1191:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › T29: 「グループなし」をグループより上に並べ替えてから worktree の workspace を選んで「＋ 新規」し�
+
+
+  1) src/specs/workspace-groups.spec.ts:1191:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › T29: 「グループなし」をグループより上に並べ替えてから worktree の workspace を選んで「＋ 新規」して�
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 4
+    + Received  + 4
+
+      Array [
+    -   "[u] グループなし (1)",
+    -   "  second-ws",
+    -   "[g] g1 (1)",
+    +   "[u] グループなし (0)",
+    +   "[g] g1 (2)",
+        "  wt* main-ws",
+    -   "    wt same-1",
+    +   "    wt second-ws",
+    +   "  same-1",
+      ]
+
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+
+```
+
+- E2E の元の不具合の再現: 壊すと「＋ 新規」の workspace が worktree グループの子（`wt second-ws`）になり、元の代表 same-1 が通常の行へ降格する。
+- T29 [should] 再起動をまたぐと「次の代表」が変わりうる（heldSince がメモリのみ）→ 依頼元の決定（順を持てないなら作った順）の範囲として D42 に制約を明記 [conv:-]
+- T29 [nit] flattenWorkspaceIds のコメントが古い → 直した [conv:-]

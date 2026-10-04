@@ -1185,7 +1185,7 @@ describe("SessionService — runtime updates", () => {
       bus.subscribe((e) => events.push(e.event));
       persist.touchCount = 0;
       service.updateWorkspaceGit(y.id, wt("/repo/.git/worktrees/y2"));
-      expect(events).toEqual(["workspace.updated", "sidebar.layout_changed"]);
+      expect(events).toEqual(["workspace.updated", "workspace.updated", "sidebar.layout_changed"]); // y と、代表になった z（旗が変わる）
       expect(service.snapshot().layout?.ungrouped).toEqual(["r:/repo/.git"]);
       expect(persist.touchCount).toBe(1);
     });

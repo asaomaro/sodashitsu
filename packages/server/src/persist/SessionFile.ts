@@ -52,6 +52,11 @@ export interface SessionFileWorkspace {
    * 無いまま戻す（同じ `repoKey` の workspace を全部メンバーとして扱う）。
    */
   worktreeKey?: string | undefined;
+  /**
+   * その worktree の代表か（`Workspace.representative`。T29）。再起動をまたいで同じ代表にするために保存する。`worktreeKey` が文字列のときだけ
+   * 意味を持つ。**無い保存**（古い版）は無いまま戻し、`w<番号>` の作った順で決める（版は 1 のまま）。
+   */
+  representative?: boolean | undefined;
   cwd: string;
   activeTabId: string;
   tabs: SessionFileTab[];
@@ -127,6 +132,7 @@ const SessionFileWorkspaceSchema: z.ZodType<SessionFileWorkspace> = z.object({
   repoKey: z.string().nullable().optional(),
   isLinkedWorktree: z.boolean().optional(),
   worktreeKey: z.string().optional(),
+  representative: z.boolean().optional(),
   cwd: z.string(),
   activeTabId: z.string(),
   tabs: z.array(SessionFileTabSchema),
