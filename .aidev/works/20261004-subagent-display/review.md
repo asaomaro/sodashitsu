@@ -22,6 +22,10 @@
 - [nit][conv:-] AgentIntegrationInstaller.ts:287 経路の形の検査が claude 以外の 7 種の `entriesPath` にも掛かるのが無記載 / 対応: 許容（decisions D7 に記録。T7・ラウンド1）
 - [nit][conv:-] AgentIntegrationInstaller.ts:268 追加の経路が配列でないとき `needsUpdate` が true になり、押しても直らない / 対応: 修正済（false にしてテストを足した。T7・ラウンド1）
 
+- [should][conv:-] SubagentTracker.ts:261 `flush` が `publish` の例外を捕まえず、タイマーから漏れる / 対応: 修正済（try/catch とログ。テスト付き。T18・ラウンド1）
+- [nit][conv:-] SubagentTracker.ts:239 X → Y で空の状態を作り直していた / 対応: 修正済（作り直さない。次の報告で `agentInstanceOf` から作る。T18・ラウンド1）
+- [nit][conv:-] SubagentTracker.ts:231 報告を受けていない pane の最初の検出でタイマーを張る / 対応: 修正済（pane の状態は報告を受けたときにしか作られないので、そもそも張らない。テストで固定。T18・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -134,4 +138,39 @@ AssertionError: expected { ok: true, message: '既に導入済みです' } to de
 === MUT: needsUpdate の「追加の経路が配列でない」判定を外す
  FAIL  … > 経路の値が配列でないとき、押しても直らない「更新が必要」を出さない
 AssertionError: expected { cliDetected: false, …(2) } to match object { installed: true, needsUpdate: false }
+```
+
+#### T18 `SubagentTracker` の配る側（`SubagentTracker.ts`。壊した後に元へ戻し `cmp` で一致を確認済み）
+
+```
+=== MUT: まとめ待ちのタイマーが動いている間は新しく張らない条件（pane.timer !== undefined ||）を外す
+ FAIL  … > 最初の変化から 100 ミリ秒後に、その時点の値を 1 回配る（待ちは延ばさない）
+AssertionError: expected [] to have a length of 1 but got +0
+=== MUT: 配れたときだけ記録（if (publish(...)) lastPublished = value）→ 常に記録
+ FAIL  … > 配れなかった値は、同じ内容の報告で再び配る対象になる（配れたときにだけ記録する）
+AssertionError: expected [ { paneId: 'p1', value: { …(2) } } ] to have a length of 2 but got 1
+=== MUT: 最初の検出（無し → X）で lastPublished を消す行（delete pane.lastPublished）を外す
+ FAIL  … > 検出が無いと思っていたのに配れていた値も、最初の検出で配り直す（…）
+AssertionError: expected [ { paneId: 'p1', value: { …(2) } } ] to have a length of 2 but got 1
+=== MUT: X → null・X → Y の捨てる処理（this.discard(paneId);）を外す
+ FAIL  … > X → null: 状態を捨て、まとめ待ちのタイマーも取り消す
+AssertionError: expected 1 to be +0 // Object.is equality
+ FAIL  … > X → Y: 古い一覧は新しい検出に付かない。新しい検出は分からない（undefined）から始まる
+=== MUT: discard でタイマーを取り消す行を外す
+ FAIL  … > X → null: 状態を捨て、まとめ待ちのタイマーも取り消す
+AssertionError: expected 1 to be +0 // Object.is equality
+ FAIL  … > pane.closed: 状態を捨て、タイマーも取り消す
+=== MUT: 同じ instanceId のイベントを止める条件（pane.instanceId === instanceId）を外す
+ FAIL  … > 検出された後の自分の配信（同じ instanceId のイベント）では、何もしない
+AssertionError: expected undefined to be 1 // Object.is equality
+=== MUT: 同じ内容を配らない比較（sameSubagents(value, pane.lastPublished)）を false に
+ FAIL  … > 同じ内容は配らない（配った値と同じに戻ったときも）
+AssertionError: expected [ …(2) ] to have a length of 1 but got 2
+```
+
+（T18・ラウンド1 の修正の分）
+```
+=== MUT: flush の try/catch を外す
+ FAIL  src/agent/SubagentTracker.test.ts > … > 配る処理が例外を投げても、タイマーから漏らさず、配れなかった扱いにする
+AssertionError: expected [Function] to not throw an error but 'Error: boom' was thrown
 ```

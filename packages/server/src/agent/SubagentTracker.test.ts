@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { AgentInfo } from "@sodashitsu/protocol";
+import { EventBus } from "../bus/EventBus.js";
 import { MemoryLogger } from "../log/Logger.js";
 import type { AgentReport } from "./AgentReportSocket.js";
-import { SubagentTracker } from "./SubagentTracker.js";
+import { SubagentTracker, type Subagents } from "./SubagentTracker.js";
 
 type Report = Exclude<AgentReport, { type: "session" }>;
 const base = { paneId: "p1", kind: "claude", sessionId: "s1" };
@@ -10,6 +12,14 @@ describe("SubagentTracker（数える部分）", () => {
   let clock: number;
   let logger: MemoryLogger;
   let tracker: SubagentTracker;
+  let bus: EventBus;
+  /** 手で進めるタイマー。 */
+  let timers: Map<number, { at: number; fn: () => void }>;
+  let nextTimer: number;
+  /** pane → 今検出されているエージェントの instanceId（`agentInstanceOf` の答え）。 */
+  let detected: Map<string, string>;
+  let published: { paneId: string; value: Subagents | undefined }[];
+  let publishResult: boolean;
   // 項目は報告ごとに違うので、テストでは緩い型で渡す（ほかの項目は上の `base`）。
   const rep = (r: { type: Report["type"]; paneId?: string; sessionId?: string; [k: string]: unknown }) => tracker.report({ ...base, ...r } as Report);
   const ids = (paneId = "p1") => tracker.current(paneId)?.items.map((i) => i.id);
@@ -17,8 +27,42 @@ describe("SubagentTracker（数える部分）", () => {
   beforeEach(() => {
     clock = 1_000_000;
     logger = new MemoryLogger();
-    tracker = new SubagentTracker({ now: () => clock, logger });
+    bus = new EventBus();
+    timers = new Map();
+    nextTimer = 1;
+    detected = new Map();
+    published = [];
+    publishResult = true;
+    tracker = new SubagentTracker({
+      bus,
+      agentInstanceOf: (paneId) => detected.get(paneId) ?? null,
+      publish: (paneId, value) => {
+        published.push({ paneId, value });
+        return publishResult;
+      },
+      now: () => clock,
+      setTimer: (fn, ms) => {
+        const id = nextTimer++;
+        timers.set(id, { at: clock + ms, fn });
+        return id;
+      },
+      clearTimer: (h) => void timers.delete(h as number),
+      logger,
+    });
   });
+
+  /** 時計を進め、期限が来たタイマーを順に動かす。 */
+  const advance = (ms: number) => {
+    clock += ms;
+    for (const [id, t] of [...timers]) {
+      if (t.at <= clock && timers.delete(id)) t.fn();
+    }
+  };
+  const detect = (paneId: string, instanceId: string | null) => {
+    if (instanceId === null) detected.delete(paneId);
+    else detected.set(paneId, instanceId);
+    bus.publish({ event: "pane.agent_status_changed", data: { paneId, agent: instanceId === null ? null : ({ instanceId } as AgentInfo) } });
+  };
 
   it("報告を受けていない pane は undefined（分からない）。受ければ 0 件でも持つ", () => {
     expect(tracker.current("p1")).toBeUndefined();
@@ -289,5 +333,217 @@ describe("SubagentTracker（数える部分）", () => {
     const cur = tracker.current("p1");
     cur?.items.splice(0);
     expect(ids()).toEqual(["a1"]);
+  });
+
+  describe("配る（まとめ・同じ内容・検出との順序）", () => {
+    it("最初の変化から 100 ミリ秒後に、その時点の値を 1 回配る（待ちは延ばさない）", () => {
+      detect("p1", "X");
+      rep({ type: "subagent_start", agentId: "a1" });
+      advance(60);
+      rep({ type: "subagent_start", agentId: "a2" });
+      advance(39);
+      expect(published).toEqual([]);
+      advance(1);
+      expect(published).toHaveLength(1);
+      expect(published[0]?.paneId).toBe("p1");
+      expect(published[0]?.value?.items.map((i) => i.id)).toEqual(["a1", "a2"]);
+      advance(1000);
+      expect(published).toHaveLength(1);
+    });
+
+    it("20 件を続けても、100 ミリ秒に 1 回まで", () => {
+      detect("p1", "X");
+      for (let i = 0; i < 20; i++) {
+        rep({ type: "subagent_start", agentId: `a${i}` });
+        advance(4);
+      }
+      expect(published).toHaveLength(0);
+      advance(100);
+      expect(published).toHaveLength(1);
+      expect(published[0]?.value?.count).toBe(20);
+    });
+
+    it("同じ内容は配らない（配った値と同じに戻ったときも）", () => {
+      detect("p1", "X");
+      rep({ type: "subagent_start", agentId: "a1" });
+      advance(100);
+      expect(published).toHaveLength(1);
+      rep({ type: "subagent_start", agentId: "a1" }); // 変わらない
+      rep({ type: "subagent_pending", description: "d" }); // 一覧は変わらない
+      expect(timers.size).toBe(0);
+      advance(1000);
+      expect(published).toHaveLength(1);
+      rep({ type: "subagent_start", agentId: "a2" });
+      rep({ type: "subagent_stop", agentId: "a2" }); // 配る前に元へ戻った
+      advance(100);
+      expect(published).toHaveLength(1);
+    });
+
+    it("配る値は先頭 64 件と、実際の数", () => {
+      detect("p1", "X");
+      for (let i = 0; i < 100; i++) rep({ type: "subagent_start", agentId: `a${i}` });
+      advance(100);
+      expect(published[0]?.value?.count).toBe(100);
+      expect(published[0]?.value?.items).toHaveLength(64);
+    });
+
+    it("0 件に戻ったら {count: 0, items: []} を配る", () => {
+      detect("p1", "X");
+      rep({ type: "subagent_start", agentId: "a1" });
+      advance(100);
+      rep({ type: "subagent_stop", agentId: "a1" });
+      advance(100);
+      expect(published.at(-1)?.value).toEqual({ count: 0, items: [] });
+    });
+
+    it("配れなかった（エージェントが検出されていない）ときは、配ったことにしない", () => {
+      publishResult = false;
+      rep({ type: "subagent_start", agentId: "a1" });
+      advance(100);
+      expect(published).toHaveLength(1);
+      publishResult = true;
+      rep({ type: "subagent_start", agentId: "a2" });
+      advance(100);
+      expect(published).toHaveLength(2);
+      expect(published[1]?.value?.count).toBe(2);
+    });
+
+    it("配れなかった値は、同じ内容の報告で再び配る対象になる（配れたときにだけ記録する）", () => {
+      publishResult = false;
+      rep({ type: "subagent_start", agentId: "a1" });
+      advance(100);
+      publishResult = true;
+      rep({ type: "subagent_start", agentId: "a1" }); // 一覧は変わらないが、まだ配れていない
+      advance(100);
+      expect(published).toHaveLength(2);
+      expect(published[1]?.value?.count).toBe(1);
+    });
+
+    it("検出が無いと思っていたのに配れていた値も、最初の検出で配り直す（新しい検出は subagents を持たないので）", () => {
+      rep({ type: "subagent_start", agentId: "a1" });
+      advance(100);
+      expect(published).toHaveLength(1);
+      detect("p1", "X");
+      advance(0);
+      expect(published).toHaveLength(2);
+    });
+
+    it("配れなかった値は、最初の検出（無し → X）で配り直す（検出より前の報告を失わない）", () => {
+      publishResult = false;
+      rep({ type: "subagent_start", agentId: "a1" });
+      advance(100);
+      publishResult = true;
+      detect("p1", "X");
+      expect(published).toHaveLength(1); // 購読の中では配らない
+      advance(0);
+      expect(published).toHaveLength(2);
+      expect(published[1]?.value?.items.map((i) => i.id)).toEqual(["a1"]);
+    });
+
+    it("配る処理が例外を投げても、タイマーから漏らさず、配れなかった扱いにする", () => {
+      detect("p1", "X");
+      const failing = new SubagentTracker({
+        bus,
+        agentInstanceOf: () => "X",
+        publish: () => {
+          throw new Error("boom");
+        },
+        now: () => clock,
+        setTimer: (fn, ms) => timers.set(99, { at: clock + ms, fn }) && 99,
+        clearTimer: (h) => void timers.delete(h as number),
+        logger,
+      });
+      failing.report({ ...base, type: "subagent_start", agentId: "a1" });
+      expect(() => advance(100)).not.toThrow();
+      expect(logger.lines.some((l) => l.level === "warn" && l.msg.includes("publish failed"))).toBe(true);
+      failing.close();
+    });
+
+    it("報告を受けていない pane の検出・入れ替わりでは、何も作らず、タイマーも張らない", () => {
+      detect("p1", "X");
+      detect("p1", "Y");
+      detect("p1", null);
+      expect(timers.size).toBe(0);
+      expect(tracker.current("p1")).toBeUndefined();
+    });
+
+    it("検出された後の自分の配信（同じ instanceId のイベント）では、何もしない", () => {
+      detect("p1", "X");
+      rep({ type: "subagent_start", agentId: "a1" });
+      advance(100);
+      detect("p1", "X");
+      advance(1000);
+      expect(published).toHaveLength(1);
+      expect(tracker.current("p1")?.count).toBe(1); // 状態は捨てない
+    });
+
+    it("X → null: 状態を捨て、まとめ待ちのタイマーも取り消す", () => {
+      detect("p1", "X");
+      rep({ type: "subagent_start", agentId: "a1" });
+      detect("p1", null);
+      expect(timers.size).toBe(0);
+      advance(1000);
+      expect(published).toEqual([]);
+      expect(tracker.current("p1")).toBeUndefined();
+    });
+
+    it("X → Y: 古い一覧は新しい検出に付かない。新しい検出は分からない（undefined）から始まる", () => {
+      detect("p1", "X");
+      rep({ type: "subagent_start", agentId: "a1" });
+      advance(100);
+      detect("p1", "Y");
+      advance(1000);
+      expect(tracker.current("p1")).toBeUndefined();
+      expect(published).toHaveLength(1);
+      rep({ type: "subagent_start", agentId: "b1" });
+      advance(100);
+      expect(published).toHaveLength(2);
+      expect(published[1]?.value?.items.map((i) => i.id)).toEqual(["b1"]);
+    });
+
+    it("X → Y の直前のまとめ待ちは、Y には配らない", () => {
+      detect("p1", "X");
+      rep({ type: "subagent_start", agentId: "a1" });
+      detect("p1", "Y");
+      advance(1000);
+      expect(published).toEqual([]);
+    });
+
+    it("pane.closed: 状態を捨て、タイマーも取り消す", () => {
+      detect("p1", "X");
+      rep({ type: "subagent_start", agentId: "a1" });
+      bus.publish({ event: "pane.closed", data: { paneId: "p1" } } as never);
+      expect(timers.size).toBe(0);
+      expect(tracker.current("p1")).toBeUndefined();
+      advance(1000);
+      expect(published).toEqual([]);
+    });
+
+    it("報告の時点で既に検出されている pane は、その instanceId から始める（X → Y の捨て方が効く）", () => {
+      detected.set("p1", "X");
+      rep({ type: "subagent_start", agentId: "a1" });
+      detect("p1", "Y");
+      expect(tracker.current("p1")).toBeUndefined();
+    });
+
+    it("pane ごとに別々に配る", () => {
+      detect("p1", "X");
+      detect("p2", "Z");
+      rep({ type: "subagent_start", agentId: "a1" });
+      rep({ type: "subagent_start", agentId: "z1", paneId: "p2" });
+      advance(100);
+      expect(published.map((p) => p.paneId).sort()).toEqual(["p1", "p2"]);
+    });
+
+    it("close: 購読とタイマーを止め、以後の報告は何もしない", () => {
+      detect("p1", "X");
+      rep({ type: "subagent_start", agentId: "a1" });
+      tracker.close();
+      expect(timers.size).toBe(0);
+      rep({ type: "subagent_start", agentId: "a2" });
+      detect("p1", null);
+      advance(1000);
+      expect(published).toEqual([]);
+    });
   });
 });

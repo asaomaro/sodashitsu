@@ -85,7 +85,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `docs/agent-graph.md`、`docs/sodactl.md:344-424, :555-563`、`docs/tui.md:29, :165`、`docs/tui-parity.md`、`docs/machines.md`、`docs/migrate-from-wtm.md:17, :81`、`docs/verification.md:326-355`、`packages/cli/skills/sodactl/SKILL.md`、`packages/cli/src/skill.test.ts`
       依存: T21, T8, T13, T14
       AC: AC14
-- [ ] T18: `SubagentTracker` の配る側——`{count, items: 先頭 64 件}`・同じ内容は配らない・最初の変化から 100 ミリ秒にまとめる・配れたときだけ記録／検出との順序（無し → X は配り直す・X → null と X → Y と `pane.closed` は捨ててタイマーも取り消す）。タイマーを差し込める形にする。単体テストと壊して落ちる確認
+- [x] T18: `SubagentTracker` の配る側——`{count, items: 先頭 64 件}`・同じ内容は配らない・最初の変化から 100 ミリ秒にまとめる・配れたときだけ記録／検出との順序（無し → X は配り直す・X → null と X → Y と `pane.closed` は捨ててタイマーも取り消す）。タイマーを差し込める形にする。単体テストと壊して落ちる確認
       対象: `packages/server/src/agent/SubagentTracker.ts`、`SubagentTracker.test.ts`
       依存: T5
       AC: AC1, AC7, AC15, AC16

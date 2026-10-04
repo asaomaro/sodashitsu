@@ -1,14 +1,28 @@
 import type { AgentInfo, SubagentInfo } from "@sodashitsu/protocol";
+import type { EventBus } from "../bus/EventBus.js";
 import type { Logger } from "../log/Logger.js";
+import type { Disposable } from "../util/Disposable.js";
 import type { AgentReport } from "./AgentReportSocket.js";
 
 /** 配る一覧（`AgentInfo.subagents` と同じ形）。 */
 export type Subagents = NonNullable<AgentInfo["subagents"]>;
 
 export interface SubagentTrackerDeps {
+  /** `pane.agent_status_changed`・`pane.closed` を購読する。 */
+  bus: Pick<EventBus, "subscribe">;
+  /** その pane に今検出されているエージェントの `instanceId`（無ければ null）。 */
+  agentInstanceOf(paneId: string): string | null;
+  /** その pane のエージェントの `subagents` を差し替えて配る。検出されていて配れたら true（`SessionService.setAgentSubagents`）。 */
+  publish(paneId: string, subagents: Subagents | undefined): boolean;
   now(): number;
+  /** まとめ待ちのタイマー（テストで差し替える）。 */
+  setTimer(fn: () => void, ms: number): unknown;
+  clearTimer(handle: unknown): void;
   logger: Logger;
 }
+
+/** 最初の変化から、この時間だけまとめてから配る（待ちは延ばさない）。 */
+const PUBLISH_DELAY_MS = 100;
 
 /** 配る一覧の最大件数（`items`。`count` は実際の数）。 */
 export const SUBAGENTS_ITEMS_MAX = 64;
@@ -42,6 +56,14 @@ interface SessionState {
 
 interface PaneState {
   sessions: Map<string, SessionState>;
+  /** 報告を一度でも受けたか（受けていなければ「分からない」）。 */
+  seen: boolean;
+  /** 最後に見た、その pane のエージェントの `instanceId`（無し = null）。 */
+  instanceId: string | null;
+  /** 最後に**配れた**値。 */
+  lastPublished?: Subagents;
+  /** まとめ待ちのタイマー。 */
+  timer?: unknown;
   /** 上限に達したログを出したか（pane ごとに 1 回）。 */
   capLogged: boolean;
 }
@@ -53,13 +75,36 @@ interface PaneState {
  */
 export class SubagentTracker {
   private readonly panes = new Map<string, PaneState>();
+  private readonly sub: Disposable;
+  private closed = false;
 
-  constructor(private readonly deps: SubagentTrackerDeps) {}
+  constructor(private readonly deps: SubagentTrackerDeps) {
+    this.sub = deps.bus.subscribe((e) => {
+      try {
+        if (this.closed) return;
+        if (e.event === "pane.closed") this.discard(e.data.paneId);
+        else if (e.event === "pane.agent_status_changed") this.onAgentChanged(e.data.paneId, e.data.agent?.instanceId ?? null);
+      } catch (err) {
+        deps.logger.warn("subagents: subscriber failed", { error: String(err) });
+      }
+    });
+  }
 
   report(r: Report): void {
+    if (this.closed) return;
     const pane = this.paneOf(r.paneId);
+    pane.seen = true;
     this.apply(r, pane);
     this.tidy(pane);
+    this.schedule(r.paneId, pane);
+  }
+
+  /** 購読とタイマーを止める。以後は何もしない。 */
+  close(): void {
+    this.closed = true;
+    this.sub.dispose();
+    for (const pane of this.panes.values()) if (pane.timer !== undefined) this.deps.clearTimer(pane.timer);
+    this.panes.clear();
   }
 
   private apply(r: Report, pane: PaneState): void {
@@ -101,7 +146,7 @@ export class SubagentTracker {
   /** その pane の今の一覧。報告を一度も受けていなければ undefined（＝分からない）。 */
   current(paneId: string): Subagents | undefined {
     const pane = this.panes.get(paneId);
-    if (!pane) return undefined;
+    if (!pane?.seen) return undefined;
     const all: SubagentInfo[] = [];
     for (const s of pane.sessions.values()) all.push(...s.items.values());
     all.sort((a, b) => a.startedAt - b.startedAt); // 安定ソート。同じ時刻なら受けた順
@@ -178,10 +223,58 @@ export class SubagentTracker {
     for (const [id, at] of s.stopped) if (now - at > STOPPED_TTL_MS) s.stopped.delete(id);
   }
 
+  /** pane のエージェントが検出された・入れ替わった・終わった。検出より前に届いた報告は捨てず、入れ替わり・終了では捨てる。 */
+  private onAgentChanged(paneId: string, instanceId: string | null): void {
+    const pane = this.panes.get(paneId);
+    if (!pane || pane.instanceId === instanceId) return; // 自分が配った変化（同じ instanceId）もここで止まる
+    const previous = pane.instanceId;
+    if (previous === null) {
+      // 無し → X（最初の検出。サーバの再起動・引き継ぎの直後を含む）: 検出より前の報告を配り直す。
+      // bus の購読の中で配ると、同じイベントを待つほかの購読者へ新しい値が先に届くので、待ち 0 のタイマーで配る。
+      pane.instanceId = instanceId;
+      delete pane.lastPublished;
+      this.startTimer(paneId, pane, 0);
+      return;
+    }
+    // X → null・X → Y: 古い一覧が新しい検出に付かないよう、全部捨てる（新しい検出は `subagents` を持たない）。
+    this.discard(paneId); // 次の報告で `paneOf` が、そのときの検出（`agentInstanceOf`）から作り直す
+  }
+
+  private discard(paneId: string): void {
+    const pane = this.panes.get(paneId);
+    if (pane?.timer !== undefined) this.deps.clearTimer(pane.timer);
+    this.panes.delete(paneId);
+  }
+
+  /** 変わっていれば、最初の変化から `PUBLISH_DELAY_MS` 後に配る。 */
+  private schedule(paneId: string, pane: PaneState): void {
+    if (pane.timer !== undefined || sameSubagents(this.current(paneId), pane.lastPublished)) return;
+    this.startTimer(paneId, pane, PUBLISH_DELAY_MS);
+  }
+
+  private startTimer(paneId: string, pane: PaneState, ms: number): void {
+    if (pane.timer !== undefined) this.deps.clearTimer(pane.timer);
+    pane.timer = this.deps.setTimer(() => this.flush(paneId), ms);
+  }
+
+  private flush(paneId: string): void {
+    const pane = this.panes.get(paneId);
+    if (!pane || this.closed) return;
+    delete pane.timer;
+    const value = this.current(paneId);
+    if (value === undefined || sameSubagents(value, pane.lastPublished)) return;
+    // 配れたとき（エージェントが検出されているとき）だけ「最後に配れた値」を更新する。
+    try {
+      if (this.deps.publish(paneId, value)) pane.lastPublished = value;
+    } catch (err) {
+      this.deps.logger.warn("subagents: publish failed", { paneId, error: String(err) });
+    }
+  }
+
   private paneOf(paneId: string): PaneState {
     let p = this.panes.get(paneId);
     if (!p) {
-      p = { sessions: new Map(), capLogged: false };
+      p = { sessions: new Map(), seen: false, instanceId: this.deps.agentInstanceOf(paneId), capLogged: false };
       this.panes.set(paneId, p);
     }
     return p;
@@ -195,4 +288,13 @@ export class SubagentTracker {
     }
     return s;
   }
+}
+
+function sameSubagents(a: Subagents | undefined, b: Subagents | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  if (a.count !== b.count || a.items.length !== b.items.length) return false;
+  return a.items.every((x, i) => {
+    const y = b.items[i] as SubagentInfo;
+    return x.id === y.id && x.type === y.type && x.description === y.description && x.background === y.background && x.startedAt === y.startedAt;
+  });
 }
