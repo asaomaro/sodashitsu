@@ -15,6 +15,11 @@
 
 - [nit][conv:-] T8 の独立点検は 2 件（前のセッションが実施。指摘の本文は記録前にセッションが止まった）/ 対応: 区画の外側の `overflow: visible` への切り替え・見出し／フッタの `padding-right` の `+ 4px`・畳んだサイドバーの構造の分離として実装に反映済み。
 
+- [should][conv:-] Sidebar.vue 畳んだサイドバーから開き直して区画が畳まれて現れるとき、見出しのボタンが未描画でフォーカスが移らない / 対応: 修正済（T15・ラウンド1。`nextTick` 後に移す）
+- [should][conv:regression-negative-control] 他マシンの件数の枝・spaces 側の並び順・SubagentListDialog の差し込み DOM のテストが薄い / 対応: 許容（cross の点検で見る。decisions D4）
+- [nit][conv:-] 畳んだ見出しの読み上げ名に件数の意味が無い / 対応: 修正済（T15・ラウンド1。aria-label に「n 件」）
+- [nit][conv:-] navigate の watch はサイドバーを畳んでいる間も保存する / 対応: 許容（仕様どおり。decisions D4）
+
 ### 壊して落ちる確認（条項 regression-negative-control。生の出力）
 
 #### T1 `sectionSizing.ts`: `clampRatio` の `Math.min(hi, Math.max(lo, ratio))` を `ratio` に壊す

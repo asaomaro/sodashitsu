@@ -23,3 +23,4 @@ D&D の表現とタブの並べ替えは別の作業（`split-dnd.md`）。`AGEN
 - 畳んだ区画の中にあったフォーカスを見出しのボタンへ移す処理は、`spacesFolded`／`agentsFolded` の watch（`flush: "pre"`）に置いた。クリックでも操作 `toggleSidebarSection`（キー）でも同じに働く（design は操作はフォーカスを動かさないとしているが、それは端末の pane へフォーカスを動かさない、の意味に読み、区画の中のフォーカスが宙に浮くのは防ぐ）。区画の外のフォーカスは動かさない。
 - 区画の最小の高さ（区画の境目の `box.minTop`／`minBottom`）は、定数を二重に持たず、CSS の `min-height` を `getComputedStyle` で実測する。
 - 区画の境目を出すのは、サイドバーを開いていて両方の区画を開いているときだけ。出ている間は agents の `border-top` を外し、境目の 1px がその代わりをする。
+- T15 の独立点検（4 件）: 畳んだサイドバーから開き直して畳んだ区画が現れる経路のフォーカスは `nextTick` 後に見出しへ移す・畳んだ見出しに `aria-label`（件数）を足した。navigate で spaces を開く watch はサイドバーを畳んでいる間も保存する（畳んだマシンのまとまりと同じ扱い。仕様どおり）。他マシンの件数の枝と SubagentListDialog の差し込みの DOM は、全体の点検（cross）で見る。

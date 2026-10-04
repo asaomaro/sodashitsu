@@ -596,15 +596,22 @@ const agentsBlocked = computed(() => agents.value.some((a) => a.state === "block
  * 畳むとき、その区画の中（body・フッタ）にフォーカスがあれば、見出しのボタンへ移す（`display: none` になるとフォーカスが宙に浮く）。
  * 描画の前（`flush: "pre"`）に動かす——隠れた後では要素に `focus()` できない。クリックでも操作（キー）でも同じ。
  */
-function moveFocusOutOfFolded(section: HTMLElement | null, toggle: HTMLElement | null): void {
+function moveFocusOutOfFolded(section: HTMLElement | null, toggle: () => HTMLElement | null): void {
   const active = document.activeElement;
-  if (section && toggle && active instanceof HTMLElement && section.contains(active) && !toggle.contains(active)) toggle.focus();
+  if (!section || !(active instanceof HTMLElement) || !section.contains(active)) return;
+  const t = toggle();
+  if (t) {
+    if (!t.contains(active)) t.focus();
+    return;
+  }
+  // サイドバーを畳んだ状態から開いて畳んだ区画が現れたとき: 見出しのボタンはまだ描かれていない。描かれてから移す。
+  void nextTick(() => toggle()?.focus());
 }
 watch(spacesFolded, (folded) => {
-  if (folded) moveFocusOutOfFolded(spacesEl.value, spacesToggleEl.value);
+  if (folded) moveFocusOutOfFolded(spacesEl.value, () => spacesToggleEl.value);
 });
 watch(agentsFolded, (folded) => {
-  if (folded) moveFocusOutOfFolded(agentsEl.value, agentsToggleEl.value);
+  if (folded) moveFocusOutOfFolded(agentsEl.value, () => agentsToggleEl.value);
 });
 
 /** 比があって両方を開いているときだけ、比で配る（そうでなければ CSS の自動の配分）。 */
@@ -796,7 +803,7 @@ watch(
       aria-label="spaces"
     >
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-header">
-        <button type="button" ref="spacesToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!spacesFolded" aria-controls="sidebar-spaces-body" @click="view.toggleSectionCollapsed('spaces')" @keydown="onButtonKeydown">
+        <button type="button" ref="spacesToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!spacesFolded" :aria-label="spacesFolded ? `spaces（${spacesCount} 件）` : undefined" aria-controls="sidebar-spaces-body" @click="view.toggleSectionCollapsed('spaces')" @keydown="onButtonKeydown">
           <span class="sidebar-section-mark" aria-hidden="true">{{ spacesFolded ? "▸" : "▾" }}</span>
           <span class="sidebar-section-title">spaces</span>
           <span v-if="spacesFolded" class="sidebar-section-count">{{ spacesCount }}</span>
@@ -929,7 +936,7 @@ watch(
       aria-label="agents"
     >
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-header">
-        <button type="button" ref="agentsToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!agentsFolded" aria-controls="sidebar-agents-body" @click="view.toggleSectionCollapsed('agents')" @keydown="onButtonKeydown">
+        <button type="button" ref="agentsToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!agentsFolded" :aria-label="agentsFolded ? `agents（${agents.length} 件${agentsBlocked ? '・入力待ちあり' : ''}）` : undefined" aria-controls="sidebar-agents-body" @click="view.toggleSectionCollapsed('agents')" @keydown="onButtonKeydown">
           <span class="sidebar-section-mark" aria-hidden="true">{{ agentsFolded ? "▸" : "▾" }}</span>
           <span class="sidebar-section-title">agents</span>
           <template v-if="agentsFolded">
