@@ -34,7 +34,9 @@ export class GraphPaneCleanup {
       try {
         if (this.closed || e.event !== "pane.closed") return;
         const paneId = e.data.paneId;
-        void this.remove((g) => g.nodes.filter((n) => nodePane(n.key) === paneId && n.stale !== true).map((n) => n.key));
+        void this.remove((g) =>
+          g.nodes.filter((n) => nodePane(n.key) === paneId && n.stale !== true).map((n) => n.key),
+        );
       } catch (err) {
         deps.logger.warn("graph.cleanup: subscriber failed", { error: String(err) });
       }

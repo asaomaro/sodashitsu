@@ -9,11 +9,20 @@ function logger(): Logger {
   return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 }
 
-const node = (key: string, stale = false) => ({ key, x: 0, y: 0, ...(stale ? { stale: true as const } : {}) });
+const node = (key: string, stale = false) => ({
+  key,
+  x: 0,
+  y: 0,
+  ...(stale ? { stale: true as const } : {}),
+});
 
 function setup(keys: { key: string; stale?: boolean }[], live: string[], conflicts = 0) {
   const bus = new EventBus();
-  const graph = { rev: 1, nodes: keys.map((k) => node(k.key, k.stale)), links: [] } as unknown as Graph;
+  const graph = {
+    rev: 1,
+    nodes: keys.map((k) => node(k.key, k.stale)),
+    links: [],
+  } as unknown as Graph;
   const applied: GraphOp[][] = [];
   let left = conflicts;
   const store = {
@@ -21,13 +30,20 @@ function setup(keys: { key: string; stale?: boolean }[], live: string[], conflic
     update: vi.fn(async (_rev: number, ops: readonly GraphOp[]) => {
       if (left-- > 0) throw new GraphRevConflictError(1, 2);
       applied.push([...ops]);
-      for (const op of ops) if (op.op === "remove_node") graph.nodes = graph.nodes.filter((n) => n.key !== op.key);
+      for (const op of ops)
+        if (op.op === "remove_node") graph.nodes = graph.nodes.filter((n) => n.key !== op.key);
       return graph;
     }),
   };
   const liveSet = new Set(live);
-  const cleanup = new GraphPaneCleanup({ bus, store: store as never, paneExists: (id) => liveSet.has(id), logger: logger() });
-  const close = (paneId: string) => bus.publish({ event: "pane.closed", data: { paneId } } as ServerEvent);
+  const cleanup = new GraphPaneCleanup({
+    bus,
+    store: store as never,
+    paneExists: (id) => liveSet.has(id),
+    logger: logger(),
+  });
+  const close = (paneId: string) =>
+    bus.publish({ event: "pane.closed", data: { paneId } } as ServerEvent);
   const tick = () => new Promise<void>((r) => setTimeout(r, 0));
   return { cleanup, graph, applied, store, close, tick };
 }
@@ -65,7 +81,12 @@ describe("GraphPaneCleanup", () => {
 
   it("pruneMissing: 今の pane に無い手元のノードだけを外す（stale・別のマシンは残す）", async () => {
     const s = setup(
-      [{ key: "local:p1" }, { key: "local:p2" }, { key: "local:p3", stale: true }, { key: "box:p9" }],
+      [
+        { key: "local:p1" },
+        { key: "local:p2" },
+        { key: "local:p3", stale: true },
+        { key: "box:p9" },
+      ],
       ["p1"],
     );
     expect(await s.cleanup.pruneMissing()).toBe(1);
