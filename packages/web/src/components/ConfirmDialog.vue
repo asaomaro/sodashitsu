@@ -9,7 +9,7 @@ import { repoMembers } from "@sodashitsu/client-core";
  * 閉じる確認ダイアログ（T23。design「ダイアログ」）。`view.dialogContext.kind === "confirmClose"` を扱う。
  * `role=alertdialog`・最初のフォーカスは「キャンセル」・`y`/`n` でも確定/取り消しできる。
  * 「束ねた worktree も一緒に閉じる」チェックボックス（20260923-workspace-grouping。herdr の
- * `close_group` 相当）は、対象が worktree 自動グループの本体（親）1件のときだけ出す。
+ * `close_group` 相当）は、対象が worktree グループの本体（親）1件のときだけ出す。
  *
  * `kind === "confirmReplacePane"`（20260924-pane-dnd-split-move。review 指摘 must）も同じ
  * ダイアログで扱う——D&D での分割解除（`pane.replace`）のドロップ先が busy なときの確認。
@@ -70,7 +70,7 @@ const confirmLabel = computed(() => {
   return kind === "confirmWorktreeRemove" || kind === "confirmWorktreeRemoveForce" ? "削除" : "閉じる";
 });
 
-/** 対象が worktree 自動グループの本体（親）1件のときだけ、束ねられた linked worktree を返す（無ければ空）。 */
+/** 対象が worktree グループの本体（親）1件のときだけ、束ねられた linked worktree を返す（無ければ空）。 */
 const linkedWorktrees = computed(() => {
   const ctx = view.dialogContext;
   if (ctx?.kind !== "confirmClose" || ctx.targets.length !== 1) return [];

@@ -4945,3 +4945,34 @@ src/specs/workspace-groups.spec.ts:1800:3 › 先頭の pane の移動（AC11）
 - T21 [should] 実機の手順 (4) が git 管理外（unmanaged）と紛らわしく推測の断定 → 「消えたフォルダ」だけに絞り「想定」とした [conv:-]
 - T21 [nit] まとまり方の手順の文が通らない → 代表を閉じると 2 つ目が入る、に直した [conv:-]
 - T21 [nit] メニューの出し分けの条件が文書間でそろっていない → tui-parity.md・tui.md にそろえた [conv:-]
+
+### cross 点検の修正 壊して落ちる確認
+
+- 対象: `commitWorkspace` の `settle()`（SessionModel.test.ts と SessionService.test.ts の新しいテスト）と、`takeChanges` が新規 workspace を順の比較に含める変更。壊しを元に戻して差分確認済み。
+
+```
+### 壊し1: commitWorkspace の settle() を外す
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionModel.test.ts > SessionModel — cross 点検: commitWorkspace は平らな順へ並べ直す > a workspace created while the ungrouped unit is above a real group lands in the flat order, and takeChanges reports the order
+AssertionError: expected [ 'w1', 'w2' ] to deeply equal [ 'w2', 'w1' ]
+- Expected
++ Received
+ FAIL  src/session/SessionService.test.ts > SessionService — workspace grouping and ordering > createWorkspace publishes workspace.order_changed when the new workspace lands before the others (「グループなし」 above a group)
+AssertionError: expected -1 to be greater than 0
+ Test Files  2 failed (2)
+      Tests  2 failed | 344 passed (346)
+### 壊し2: takeChanges が新規 workspace を順の比較から除く（元の挙動）
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionModel.test.ts > SessionModel — cross 点検: commitWorkspace は平らな順へ並べ直す > a workspace created while the ungrouped unit is above a real group lands in the flat order, and takeChanges reports the order
+AssertionError: expected null to deeply equal [ 'w2', 'w1' ]
+- Expected:
++ Received:
+ FAIL  src/session/SessionService.test.ts > SessionService — workspace grouping and ordering > createWorkspace publishes workspace.order_changed when the new workspace lands before the others (「グループなし」 above a group)
+AssertionError: expected -1 to be greater than 0
+ Test Files  2 failed (2)
+      Tests  2 failed | 344 passed (346)
+```
+- cross [should] commitWorkspace が settle() を呼ばず、作成直後に Map の順とレイアウトの順が食い違う → settle() を呼び takeChanges を直した（回帰テスト 3 件・壊して落ちる確認つき） [conv:-]
+- cross [nit] 追補 B 以前の古いコメント・旧語が残る → 指定箇所を直した（残りの旧語は指定外のテスト名等。D40） [conv:-]
+- cross [nit] web と tui に itemGroupIdOf・groupsInLayoutOrder・itemWorkspaceIds・ドロップ判定が二重に書かれている → 実害が無いので直さず、60 review に委ねる [conv:-]
+- cross [nit] 追補前の保存を読んだ直後、worktreeKey の null→文字列で全 workspace に publishSidebarChanges が走る（壊れはしない）→ 直さず、60 review に委ねる [conv:-]

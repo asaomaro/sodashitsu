@@ -2,9 +2,10 @@ import type { Workspace } from "@sodashitsu/protocol";
 import type { WorkspaceSort } from "../prefs/types.js";
 
 /**
- * workspace の表示順（純関数。20260923-missing-keybinding-actions）。`Sidebar.vue` の `spaces` computed と
- * `ActionDispatcher`（`previous_workspace`/`next_workspace`）が共有する——利用者が画面で見る順と操作の
- * 対象順を構造的に一致させるため（design decisions D4）。
+ * workspace の表示順（純関数。20260923-missing-keybinding-actions）。元は `Sidebar.vue` の `spaces` computed と
+ * `ActionDispatcher`（`previous_workspace`/`next_workspace`）が共有していた。20261004-group-worktree-items 以降、
+ * 画面の順・操作の対象順は `sidebarTree` の木（`visibleWorkspaceIdsInOrder`）が決めるので、本番コードの呼び出し元は無い
+ * （単体テストが「opened/name の順」の定義として使うだけ）。
  */
 export function orderedWorkspaceIds(workspaces: Workspace[], sort: WorkspaceSort): string[] {
   // `opened`（既定）は並べ替えない——渡された配列の順（`session.workspaces` の反復順）のまま（design AC3）。

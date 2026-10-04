@@ -1044,7 +1044,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
    * herdr は worktree グループ経由でも busy 以外の追加確認をする（D56 の訂正 2 の時点では、
    * 本製品はグルーピングが対象外だった）。**20260923-workspace-grouping で対応**——
    * `ConfirmDialog.vue` が「束ねた worktree も一緒に閉じる」チェックボックスを、対象が
-   * worktree 自動グループの本体のときだけ追加で出す（`confirmClose` の `closeLinkedWorktrees`）。
+   * worktree グループの本体のときだけ追加で出す（`confirmClose` の `closeLinkedWorktrees`）。
    */
   private closeWorkspace(): void {
     const workspaceId = this.view.workspaceId;

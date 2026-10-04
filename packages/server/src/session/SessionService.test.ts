@@ -876,6 +876,19 @@ describe("SessionService — workspace grouping and ordering", () => {
     expect(persist.touchCount).toBe(0);
   });
 
+  it("createWorkspace publishes workspace.order_changed when the new workspace lands before the others (「グループなし」 above a group)", async () => {
+    const { workspace: w1 } = await service.createWorkspace("/a", "a");
+    const group = service.createGroup("G", w1.id);
+    service.moveItem({ kind: "ungrouped" }, { kind: "group", groupId: group.id });
+    const events: { event: string; workspaceIds?: string[] }[] = [];
+    bus.subscribe((e) => events.push({ event: e.event, ...(e.data as object) }));
+    const { workspace: w2 } = await service.createWorkspace("/b", "b");
+    const names = events.map((e) => e.event);
+    expect(names.indexOf("workspace.created")).toBeGreaterThanOrEqual(0);
+    expect(names.indexOf("workspace.order_changed")).toBeGreaterThan(names.indexOf("workspace.created"));
+    expect(events.find((e) => e.event === "workspace.order_changed")!.workspaceIds).toEqual([w2.id, w1.id]);
+  });
+
   it("group.* CRUD: create/rename/toggleGroupCollapsed publish group.created/group.updated; add/removeFromGroup publish workspace.updated", async () => {
     const { workspace } = await service.createWorkspace("/a", "a");
     const events: { event: string; group?: { id: string; label: string; collapsed: boolean }; workspace?: { groupId: string | null } }[] = [];

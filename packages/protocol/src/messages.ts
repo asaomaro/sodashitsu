@@ -168,7 +168,7 @@ export const WorkspaceFocusParams = z.object({ workspaceId });
 export type WorkspaceFocusParams = z.infer<typeof WorkspaceFocusParams>;
 
 // `closeLinkedWorktrees`（20260923-workspace-grouping。herdr の `close_group` 相当）：true かつ
-// 対象が worktree 自動グループの本体なら、束ねられた worktree も連鎖して閉じる。**省略可**——
+// 対象が worktree グループの本体なら、束ねられた worktree も連鎖して閉じる。**省略可**——
 // `z.boolean().default(false)` にすると `z.infer` の TS 型で必須フィールドになり、既存の呼び出し元
 // （例: `packages/cli/src/commands/workspace.ts`）が型エラーになる（タスク点検の指摘）。既定は
 // `SessionService.closeWorkspace(id, closeLinkedWorktrees = false)` 側の JS 既定引数が担う。

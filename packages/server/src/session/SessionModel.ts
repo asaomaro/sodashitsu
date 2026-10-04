@@ -317,7 +317,10 @@ export class SessionModel {
     this.beginChange();
     this.workspaces.set(result.workspace.id, result.workspace);
     // 判定前の workspace は `w:<id>` を「グループなし」の末尾へ（仮の状態なら導くので何もしない）。
-    if (this.layout) this.layout = insertItem(this.layout, `w:${result.workspace.id}`, null);
+    if (this.layout) {
+      this.layout = insertItem(this.layout, `w:${result.workspace.id}`, null);
+      this.settle(); // Map の順を平らな順へ（「グループなし」が本物のグループより上にあれば、末尾ではなく途中に入る）
+    }
     this.tabs.set(result.tab.id, result.tab);
     this.panes.set(result.pane.id, result.pane);
     this.focus = { workspaceId: result.workspace.id, tabId: result.tab.id, paneId: result.pane.id };
@@ -784,11 +787,12 @@ export class SessionModel {
     this.baseline = null;
     const layout = this.getLayout();
     const order = [...this.workspaces.keys()];
-    // 順の比較は、前後どちらにも居る workspace だけで行う（作った・消したは、それぞれのイベントが運ぶ）。
+    // 順の比較は、前の順（消えたものを除く）の末尾に新しく作ったものを足した順（`workspace.created` を受けた画面が置く場所）と、
+    // いまの順の間で行う。新しいものが途中に入った（「グループなし」が上にあるとき等）ときも `order_changed` を配る。
     const after = new Set(order);
     const before = new Set(base.order);
-    const was = base.order.filter((id) => after.has(id));
-    const now = order.filter((id) => before.has(id));
+    const was = [...base.order.filter((id) => after.has(id)), ...order.filter((id) => !before.has(id))];
+    const now = order;
     const updated = [...this.workspaces.values()].filter((w) => base.groupIds.has(w.id) && base.groupIds.get(w.id) !== w.groupId);
     const layoutChanged = !sameLayout(base.layout, layout);
     const orderChanged = was.some((id, i) => id !== now[i]);

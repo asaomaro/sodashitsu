@@ -608,7 +608,7 @@ export class SessionService {
     this.persist.touch();
   }
 
-  /** 中の項目はグループのあった位置へ出て、メンバーの `groupId` が null に戻る。それぞれの `workspace.updated`・`sidebar.layout_changed`・
+  /** 中の項目は「グループなし」の末尾へ出て、メンバーの `groupId` が null に戻る。それぞれの `workspace.updated`・`sidebar.layout_changed`・
    *  `workspace.order_changed` は共通の出口が配る（`group.deleted` の後）。 */
   deleteGroup(id: GroupId): void {
     this.model.deleteGroup(id);
@@ -1552,7 +1552,7 @@ function sameGit(a: GitInfo | null, b: GitInfo | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   // repoKey/isLinkedWorktree も比較する（20260923-workspace-grouping。タスク点検の指摘）——
-  // branch/ahead/behind が変わらず repoKey/isLinkedWorktree だけ変わる場合（worktree 自動グループの
+  // branch/ahead/behind が変わらず repoKey/isLinkedWorktree だけ変わる場合（worktree グループの
   // 判定に使う中心的なフィールド）を早期リターンで握りつぶすと、サーバの状態更新・
   // `workspace.updated` の配布ごと止まってしまう。
   return a.branch === b.branch && a.ahead === b.ahead && a.behind === b.behind && a.repoKey === b.repoKey && a.isLinkedWorktree === b.isLinkedWorktree && (a.worktreeKey ?? null) === (b.worktreeKey ?? null);

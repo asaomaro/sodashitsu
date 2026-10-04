@@ -343,3 +343,10 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **AC11（pane の `cd`）**は、テストのクライアントの `sendInput` で pane に `cd` を打ち、DOM の並びが変わるのを待つ（固定待ち無し。実測は数秒以内）。確かめた決まり: (1) 所属のあるリポジトリ A の worktree へ → A の worktree グループの子として同じグループに入る。(2) A の worktree グループの子が所属の無いリポジトリ B へ → 「グループなし」へ出る。(3) A の worktree の子が git 管理外へ → 移る前のグループに通常の行で残る。(4) そのグループに入った通常の行が所属の無いリポジトリ B へ移っても、グループには残り、その所属が B の所属になる（design の遷移表 `w:<id>` → `r:R`（2））。`w:<id>` からの判定は design.md の 130 行（(2) groupId を repoGroups に引き継ぐ）、`r:` から `r:` の判定は 131 行（所属が無ければグループの外）。requirements の AC11「所属が無ければグループの外へ出る」は (2)（グループの項目がリポジトリの項目だったとき）の決まりで、(4) のようにその workspace 自身がグループに入っている場合は残る。
 - **AC19 の「＋ 新規」**は、UI のボタンを押す形に替えた（worktree の行を選んで押す。新しい workspace は選んでいる pane のフォルダで開く）。名前は自動で付くので 3 行目の名前を読む。
 - **AC 番号**は requirements.md に合わせた（外と中をまたぐ＝AC5、一緒に閉じる＝AC7、開き直す・再起動＝AC10 など。tasks.md は触っていない）。常に通る `receivedEvents().toContain("sidebar.layout_changed")` は、並びを変えるのが自分の操作の場面では外し、別の接続の場面では「ブラウザは並びを変える要求を 1 つも送っていない（DOM が追従したのは別の接続の操作による）」と組にして残した。
+
+## D40: cross 点検の修正（commitWorkspace の settle・順の通知・古い記述）
+
+- **`commitWorkspace` で `settle()`**: `layout` があれば、項目を入れた後に実効の `groupId` と Map の順を平らな順へ合わせる（「グループなし」が本物のグループより上にあるとき、新しい workspace は末尾ではなく途中に入る）。
+- **`takeChanges` の順の比較**: 新しい workspace を除いて比べると、途中へ入っても `workspace.order_changed` が出なかった。比べる側を「前の順（消えたものを除く）＋新しく作ったものを末尾に足した順」（`workspace.created` を受けた古い画面が置く場所）にして、いまの順と違えば配る。末尾に入った通常の作成では出ない。`SessionService.createWorkspace` の出口は `workspace.created` の後に `publishSidebarChanges` を通るので、変更は要らなかった（テストで順序を固定）。
+- **`orderedWorkspaceIds`**: 本番コードの呼び出し元は無い（grep: web の `ActionDispatcher.test.ts` のコメントと client-core の単体テストだけ）。client-core の公開の関数でもあるので削除せず、コメントだけを実態に直した。
+- 旧語「worktree 自動グループ」は、指定のコメント（`ConfirmDialog.vue`・`MouseBridge.ts`・`SessionService.ts`・`messages.ts`・`ActionDispatcher.ts`）を「worktree グループ」に直した。テスト名・prefs・`TuiDispatcher.ts`・`view.ts` などの残りは触っていない。

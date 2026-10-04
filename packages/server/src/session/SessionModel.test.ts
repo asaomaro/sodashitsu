@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NotFoundError, SessionModel, type GitJudgement, type NewPaneInit } from "./SessionModel.js";
 import * as Layout from "./LayoutTree.js";
 import type { GitInfo } from "@sodashitsu/protocol";
-import { repoMembers } from "@sodashitsu/client-core";
+import { flattenWorkspaceIds, repoMembers } from "@sodashitsu/client-core";
 
 const init: NewPaneInit = { cwd: "/home/u", shell: "/bin/bash", cols: 80, rows: 24 };
 
@@ -1960,5 +1960,29 @@ describe("SessionModel — item moves", () => {
       expect(model.moveWorkspacesTo([c], d)).toBe(false); // グループの中から外の項目の前（まとまりをまたぐ）
       expect(model.getLayout()).toEqual(before);
     });
+  });
+});
+
+describe("SessionModel — cross 点検: commitWorkspace は平らな順へ並べ直す", () => {
+  it("a workspace created while the ungrouped unit is above a real group lands in the flat order, and takeChanges reports the order", () => {
+    const model = new SessionModel();
+    const { workspace: a } = model.createWorkspace("/a", "a", init);
+    const g = model.createGroup("G", a.id);
+    expect(model.moveItem({ kind: "ungrouped" }, { kind: "group", groupId: g.id })).toBe(true); // 「グループなし」を上へ
+    model.takeChanges();
+    const { workspace: b } = model.createWorkspace("/b", "b", init);
+    const flat = flattenWorkspaceIds(model.getLayout(), model.listWorkspaces());
+    expect(flat).toEqual([b.id, a.id]);
+    expect(model.listWorkspaces().map((w) => w.id)).toEqual(flat);
+    expect(model.takeChanges()?.order).toEqual([b.id, a.id]); // 新しいものが途中へ入ったので、古い画面向けの順も配る
+  });
+
+  it("a workspace appended at the end does not report an order change", () => {
+    const model = new SessionModel();
+    const { workspace: a } = model.createWorkspace("/a", "a", init);
+    model.createGroup("G", a.id);
+    model.takeChanges();
+    model.createWorkspace("/b", "b", init);
+    expect(model.takeChanges()?.order ?? null).toBeNull();
   });
 });
