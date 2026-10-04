@@ -50,14 +50,15 @@ interface SpyInput {
 /** スクロールの位置から決まる今の節（0 始まり）。節が無ければ -1。 */
 function sectionAtScroll(i: SpyInput): number;
 /** 選んだ節 chosen が、見出しが見える範囲にあれば chosen、外れていれば null。 */
-function keepChosen(chosen: number | null, i: SpyInput): number | null;
+// focus: フォーカスのある要素が入っている節の番号と、その要素の上端の位置（スクロールの入れ物の中の座標）。無ければ null
+function keepChosen(chosen: number | null, i: SpyInput, focus: { section: number; top: number } | null): number | null;
 /** 次・前の節。端では null。 */
 function stepSection(current: number, delta: 1 | -1, count: number): number | null;
 /** その節へ移るときの scrollTop（見出しが題名の行のすぐ下。0 未満・最大を超えない）。 */
 function scrollTopFor(index: number, i: SpyInput): number;
 ```
 
-- `sectionAtScroll` は ask-form の `spy()` の式で、`40` を `headerHeight + 8` に替える。スクロールできない（`scrollHeight <= viewHeight`）ときは 0。
+- `sectionAtScroll` は ask-form の `spy()` の式で、線は「振る舞いの詳細 › 今の節」の式（`y + headerHeight + 40 + k0·(h − headerHeight − 40)`）が正。スクロールできない（`scrollHeight <= viewHeight`）ときは 0。
 - 画面の状態（`SettingsDialog.vue` の中）: `menuItems: {id: string; label: string}[]`（節の見出しから作る）、`current: number`、`chosen: number | null`。
 
 ## 振る舞いの詳細
@@ -148,7 +149,7 @@ function scrollTopFor(index: number, i: SpyInput): number;
 ## 受け入れ基準との対応
 
 - AC1: メニューは `<nav aria-label>` で、項目は `.settings-body` の節の見出しから作る。sticky で常に見える。入力は画面の DOM。
-- AC2: `go(i)`（`scrollTopFor`・見出しへフォーカス・`chosen`）。見出しに `tabindex="-1"` と `:focus-visible` の枠。
+- AC2: `go(i)`（`scrollTopFor`・見出しへフォーカス・`chosen`）。見出しに `tabindex="-1"` と `:focus` の枠。
 - AC3: `sectionAtScroll`（ask-form の式）と `aria-current`・太字・左の線。入力は `<dialog>` の `scroll`。
 - AC4: `<dialog>` の `keydown`（`Alt+PageDown`／`PageUp`）→ `stepSection` → `go`。`chosen` が優先されるので、末尾の節が 1 画面に収まっていても 1 つずつ進む。メディアクエリに依らない。
 - AC5: `focusin` で `chosen`。`ResizeObserver` で計算し直す。

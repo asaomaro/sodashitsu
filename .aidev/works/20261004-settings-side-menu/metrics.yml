@@ -8,3 +8,6 @@ events:
   - { ts: 2026-10-04T04:52:13Z, phase: design, event: doccheck, metrics: { stage: report, phase: design, findings: 14 } }
   - { ts: 2026-10-04T04:52:13Z, phase: design, event: approved, metrics: { doc_check_rounds: 1, doc_check_findings: 14, doc_check_mode: delegated } }
   - { ts: 2026-10-04T04:52:13Z, phase: tasks, event: start }
+  - { ts: 2026-10-04T04:54:58Z, phase: tasks, event: doccheck, metrics: { stage: start, phase: tasks, mode: delegated, size: 8585 } }
+  - { ts: 2026-10-04T04:57:20Z, phase: tasks, event: doccheck, metrics: { stage: report, phase: tasks, findings: 17 } }
+  - { ts: 2026-10-04T04:57:58Z, phase: tasks, event: approved, metrics: { doc_check_rounds: 1, doc_check_findings: 17, doc_check_mode: delegated, ac_total: 16, ac_covered: 16, tasks_no_ac: 0, tasks_ac_none: 0 } }
