@@ -12,6 +12,7 @@ import {
   type ResolvedLine,
   orderedAgentPaneIds,
   visibleGroupMembers,
+  hiddenWorktreeCount,
   type ItemRow,
 } from "@sodashitsu/client-core";
 import { currentSidebarTree } from "../../model/sidebarTree.js";
@@ -21,16 +22,22 @@ import { stringWidth, truncate } from "../width.js";
 import { glyphFor, stateColor, type ChromeContext } from "./context.js";
 
 /**
- * 行の種類の印（1 桁の記号。20261004-group-worktree-items・decisions D24）。状態の記号（`×◐✓○·`）・折りたたみの `▸▾` と同じく、
- * 絵文字の属性を持たない（`color` を受け継ぎ、unicode11 の幅 1。絵文字は幅が 2 になり色も受け継がない）。形で見分け、色に頼らない。
- * 位置は折りたたみの記号の次（グループ・worktree グループの先頭の行だけ。通常の行・子の行には付けない）。
+ * worktree の印（worktree グループの先頭の行・子の行。20261004-group-worktree-items・追補 01 の T4）。`⎇`（U+2387）は絵文字の属性を
+ * 持たない幅 1 の字形（unicode11 の規則で幅 1。`render/chrome/sidebar.test.ts` で測って固定）。状態の記号の次に置く。
+ * 木の線 `├`／`└` と、畳んだ worktree グループの `+n` は薄い色で描く。グループの見出しにはフォルダの印を付けない（decisions D34）。
  */
-export const KIND_GLYPH = { group: "≡", worktreeGroup: "ψ" } as const;
+export const WORKTREE_GLYPH = "⎇";
+export const TREE_GLYPH = { branch: "├", last: "└" } as const;
+/** グループの見出しの横線（名前と数の間を埋める）。 */
+const RULE_GLYPH = "─";
 
 /** サイドバーの行が何を指すか（04 のクリック・navigate が使う）。 */
 export type SidebarTarget =
   | { kind: "workspace"; workspaceId: string }
-  | { kind: "group"; groupId: string }
+  /** グループの見出し。左の「▸/▾」は `x <= toggleX`（マシンの見出しと同じ作り。クリックの動作は T18）。 */
+  | { kind: "group"; groupId: string; toggleX: number }
+  /** 「グループなし」の見出し（同形。名前の変更・削除はできない）。 */
+  | { kind: "ungrouped"; toggleX: number }
   /**
    * worktree グループの先頭の行（本体の workspace の行）。左の「▸/▾」（`x <= toggleX`）でその worktree グループを畳み・広げ、
    * ほかは `workspaceId` の workspace として働く（マシンの見出しの `machine` と同じ作り）。
@@ -71,14 +78,20 @@ interface Seg {
   text: string;
   fg?: PackedColor;
   attrs?: number;
+  /** 行の並びの `state_icon` の部品（worktree の印をその次へ差し込むため）。 */
+  stateIcon?: true;
 }
 
 /** サイドバーの 1 項目（workspace・グループの見出し・エージェント）。`rows` は画面の行（2 行目からは字下げ）。 */
 interface Line {
   indent: number;
   rows: Seg[][];
-  /** 2 行目からの追加の字下げ（既定 2 ＝ 状態の印の幅。先頭の行は前に付く「▸ ψ 」の分だけ広げる）。 */
+  /** 2 行目からの追加の字下げ（既定 2 ＝ 状態の印の幅。先頭の行は前に付く「▸ 」「⎇ 」の分だけ広げる）。 */
   subIndent?: number;
+  /** 1 行目の右端に寄せる部品（ブランチ名・見出しの数）。入らなければ左の部品を削って場所を空ける（半分まで）。 */
+  right?: Seg;
+  /** 名前と `right` の間を横線 `─` で埋める（グループの見出し）。 */
+  rule?: boolean;
   selected: boolean;
   navigated?: boolean;
   hit?: SidebarTarget;
@@ -104,7 +117,12 @@ function segsOf(lines: ResolvedLine[], state: DisplayState | null, ctx: ChromeCo
         case "state_icon": {
           const glyph = glyphFor(state, prefs.statusSymbols);
           // 状態が無くても印の欄は空けておく（web の StateIcon と同じく、名前の桁をそろえる）。
-          seg = { text: glyph === "" ? " " : glyph, fg: fg ?? stateColor(theme, state), attrs };
+          seg = {
+            text: glyph === "" ? " " : glyph,
+            fg: fg ?? stateColor(theme, state),
+            attrs,
+            stateIcon: true,
+          };
           break;
         }
         case "git":
@@ -148,48 +166,94 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   const layouts = loadSidebarRows(prefs.shared.sidebarRows);
   const spacesLayout = effectiveLayout(layouts, "spaces");
   const agentsLayout = effectiveLayout(layouts, "agents");
-  const wsLine = (w: Workspace, indent: number): Line => {
-    const state = model.workspaceState(w.id);
+  // 行の並びの 1 行目にブランチを出す項目があれば、worktree グループの行のブランチ名は重ねない（web の `line1HasBranch`）。
+  const line1HasBranch = (spacesLayout[0] ?? []).some(
+    (t) => t.token === "git" || t.token === "branch",
+  );
+  const dim = (text: string): Seg => ({ text, attrs: ATTR.dim });
+  /** 中の全 pane のエージェントの状態のうち優先度の高いもの（workspace の行・グループの見出しで同じ決まり）。 */
+  const stateOfAll = (list: Workspace[]): DisplayState | null =>
+    aggregate(list.map((w) => model.workspaceState(w.id)));
+  const itemWorkspaces = (item: ItemRow): Workspace[] =>
+    item.kind === "workspace" ? [item.workspace] : [item.head, ...item.children];
+  /** workspace の行。`state` は状態のまとめ（既定は自分の pane）。 */
+  const wsLine = (w: Workspace, indent: number, state?: DisplayState | null): Line => {
+    const st = state === undefined ? model.workspaceState(w.id) : state;
     return {
       indent,
-      rows: segsOf(resolveSpaceLines(spacesLayout, { workspace: w, state }), state, ctx),
+      rows: segsOf(resolveSpaceLines(spacesLayout, { workspace: w, state: st }), st, ctx),
       selected: w.id === model.workspaceId,
       navigated: w.id === ctx.navigateSelection,
       hit: { kind: "workspace", workspaceId: w.id },
     };
   };
-  // 項目の木（`sidebarTree`）を 3 段（字下げ 0〜2）に描く。描画とキー操作は同じ木を通る（`model/sidebarTree.ts`）。
-  /** 項目 1 つ分の行。`inGroup` は入れ物がグループの中か（字下げの深さ）、`groupCollapsed` は畳んだグループの中か。 */
-  const pushItem = (item: ItemRow, inGroup: boolean, groupCollapsed: boolean): void => {
-    const base = inGroup ? 2 : 0;
+  /**
+   * 項目の行の頭に部品を足す（T4）。通常の行は折りたたみの桁を空ける（先頭の行の「▾」と状態の記号の桁をそろえる）。
+   * worktree の行は「<頭> ◐ ⎇ 名前」（`⎇` は状態の記号の次。無ければ頭の次）。2 行目は名前の桁（頭 2・状態 2・`⎇` 2）から。
+   */
+  const withLead = (line: Line, lead: Seg, worktree: boolean): Line => {
+    const first = line.rows[0] ?? [];
+    if (worktree) {
+      const at = first.findIndex((g) => g.stateIcon) + 1;
+      line.rows = [
+        [lead, ...first.slice(0, at), dim(WORKTREE_GLYPH), ...first.slice(at)],
+        ...line.rows.slice(1),
+      ];
+      line.subIndent = 6;
+    } else {
+      line.rows = [[lead, ...first], ...line.rows.slice(1)];
+      line.subIndent = 4;
+    }
+    return line;
+  };
+  /** worktree の行の右に出すブランチ名（行の並びの 1 行目に git の項目があれば出さない）。 */
+  const branchOf = (line: Line, w: Workspace): Line => {
+    const branch = w.git?.branch;
+    if (!line1HasBranch && branch) line.right = dim(branch);
+    return line;
+  };
+  // 項目の木（`sidebarTree`）を描く。描画とキー操作は同じ木を通る（`model/sidebarTree.ts`）。
+  /** 項目 1 つ分の行。`base` は項目の字下げ（グループの中は 2）、`unitCollapsed` は畳んだまとまりの中か。 */
+  const pushItem = (item: ItemRow, base: number, unitCollapsed: boolean): void => {
     if (item.kind === "workspace") {
-      if (!groupCollapsed || item.workspace.id === model.workspaceId)
-        lines.push(wsLine(item.workspace, base));
+      if (!unitCollapsed || item.workspace.id === model.workspaceId)
+        lines.push(withLead(wsLine(item.workspace, base), { text: " " }, false));
       return;
     }
     const collapsed = prefs.collapsedAutoGroups.has(item.repoKey);
-    const showHead = !groupCollapsed || item.head.id === model.workspaceId;
-    if (showHead) lines.push(headLine(item, base, collapsed));
-    // 畳んだ worktree グループ・畳んだグループの中は、今いる子の行だけ。
-    for (const w of visibleGroupMembers(
-      item.children,
-      collapsed || groupCollapsed,
-      model.workspaceId,
-    ))
-      lines.push(wsLine(w, base + 2));
+    if (!unitCollapsed || item.head.id === model.workspaceId)
+      lines.push(headLine(item, base, collapsed));
+    // 畳んだ worktree グループ・畳んだまとまりの中は、今いる子の行だけ。
+    const shown = visibleGroupMembers(item.children, collapsed || unitCollapsed, model.workspaceId);
+    for (const w of shown) {
+      const last = shown[shown.length - 1] === w; // 見えている子の最後（web と同じ）
+      lines.push(
+        branchOf(
+          withLead(wsLine(w, base), dim(last ? TREE_GLYPH.last : TREE_GLYPH.branch), true),
+          w,
+        ),
+      );
+    }
   };
-  /** worktree グループの先頭の行：「▸/▾ ψ 」を頭に付ける（2 行目からはその分も下げる）。 */
+  /**
+   * worktree グループの先頭の行：「▾ ◐ ⎇ 名前」。畳んでいるときは本体と worktree 全部の状態のまとめと、隠れている数 `+n`。
+   * 左の「▸/▾」が折りたたみの当たり（`autoGroup`）、ほかは workspace の当たり。
+   */
   const headLine = (
     item: Extract<ItemRow, { kind: "worktreeGroup" }>,
     indent: number,
     collapsed: boolean,
   ): Line => {
-    const line = wsLine(item.head, indent);
-    const first = line.rows[0] ?? [];
-    const prefix: Seg[] = [{ text: collapsed ? "▸" : "▾" }, { text: KIND_GLYPH.worktreeGroup }];
-    line.rows = [[...prefix, ...first], ...line.rows.slice(1)];
-    // 「▸ ψ 」の 4 桁（記号 1・空き 1・記号 1・空き 1）＋状態の印の幅 2。
-    line.subIndent = 6;
+    const line = withLead(
+      wsLine(item.head, indent, collapsed ? stateOfAll(itemWorkspaces(item)) : undefined),
+      { text: collapsed ? "▸" : "▾" },
+      true,
+    );
+    if (collapsed) {
+      const hidden = hiddenWorktreeCount(item, model.workspaceId);
+      if (hidden > 0) line.rows[0] = [...line.rows[0]!, dim(`+${hidden}`)];
+    }
+    branchOf(line, item.head);
     line.hit = {
       kind: "autoGroup",
       repoKey: item.repoKey,
@@ -198,25 +262,52 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     };
     return line;
   };
-  for (const row of tree) {
-    if (row.kind !== "group") {
-      // 暫定（T27 で直す）: 「グループなし」は見出しを描かず、項目を今までの一番上の行として描く。
-      for (const item of row.items) pushItem(item, false, false);
-      continue;
-    }
-    lines.push({
+  /** グループ・「グループなし」の見出し：「▾ ◐ 名前 ───── 数」（名前・線・数は薄い色。状態は中の全部のまとめ）。 */
+  const headingLine = (
+    collapsed: boolean,
+    label: string,
+    items: ItemRow[],
+    hit: SidebarTarget,
+  ): Line => {
+    const state = stateOfAll(items.flatMap(itemWorkspaces));
+    const glyph = glyphFor(state, prefs.statusSymbols);
+    return {
       indent: 0,
       rows: [
         [
-          { text: row.group.collapsed ? "▸" : "▾" },
-          { text: KIND_GLYPH.group },
-          { text: row.group.label },
+          { text: collapsed ? "▸" : "▾" },
+          { text: glyph === "" ? " " : glyph, fg: stateColor(theme, state) },
+          dim(label),
         ],
       ],
+      right: dim(String(items.length)),
+      rule: true,
       selected: false,
-      hit: { kind: "group", groupId: row.group.id },
-    });
-    for (const item of row.items) pushItem(item, true, row.group.collapsed);
+      hit,
+    };
+  };
+  for (const row of tree) {
+    if (row.kind === "ungrouped") {
+      // 見出しは本物のグループが 1 つ以上あるときだけ。無ければ項目がそのまま並ぶ（字下げなし）。
+      if (row.heading) {
+        lines.push(
+          headingLine(row.collapsed, "グループなし", row.items, {
+            kind: "ungrouped",
+            toggleX: rect.x + 1,
+          }),
+        );
+      }
+      for (const item of row.items) pushItem(item, row.heading ? 2 : 0, row.collapsed);
+      continue;
+    }
+    lines.push(
+      headingLine(row.group.collapsed, row.group.label, row.items, {
+        kind: "group",
+        groupId: row.group.id,
+        toggleX: rect.x + 1,
+      }),
+    );
+    for (const item of row.items) pushItem(item, 2, row.group.collapsed);
   }
 
   // 保存した SSH のマシンがあれば、マシンごとの見出しの下に並べる（web の Sidebar・MachineHeader・MachineRows と同じ）。
@@ -501,13 +592,37 @@ function paintSection(
     let x = rect.x + 1 + line.indent + (sub > 0 ? (line.subIndent ?? 2) : 0);
     const end = rect.x + inner - 1;
     const segs = line.rows[sub]!;
+    // 1 行目の右端の部品（ブランチ名・数）。右へ寄せ、広くても残りの半分まで（左の名前を先に残す）。
+    let right: { seg: Seg; text: string; x: number } | null = null;
+    let segEnd = end;
+    if (sub === 0 && line.right) {
+      const text = truncate(line.right.text, Math.max(0, Math.floor((end - x) / 2)));
+      const w = stringWidth(text);
+      if (w > 0) {
+        right = { seg: line.right, text, x: end - w };
+        segEnd = end - w - 1;
+      }
+    }
     segs.forEach((seg, k) => {
-      if (x >= end) return;
-      const text = truncate(seg.text, end - x);
+      if (x >= segEnd) return;
+      const text = truncate(seg.text, segEnd - x);
       const bold = line.selected && sub === 0 && seg.fg === undefined ? ATTR.bold : 0;
-      x += grid.text(x, y, text, seg.fg ?? rowFg, rowBg, (seg.attrs ?? 0) | bold, end - x);
+      x += grid.text(x, y, text, seg.fg ?? rowFg, rowBg, (seg.attrs ?? 0) | bold, segEnd - x);
       if (k < segs.length - 1) x += 1;
     });
+    if (sub === 0 && line.rule)
+      for (let rx = x + 1; rx < segEnd; rx++)
+        grid.set(rx, y, RULE_GLYPH, 1, rowFg, rowBg, ATTR.dim);
+    if (right)
+      grid.text(
+        right.x,
+        y,
+        right.text,
+        right.seg.fg ?? rowFg,
+        rowBg,
+        right.seg.attrs ?? 0,
+        end - right.x,
+      );
   }
   if (offset > 0 && height > 0) grid.set(rect.x + inner - 1, top, "↑", 1, fg, bg);
   if (offset + height < rows.length && height > 0)

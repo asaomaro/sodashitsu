@@ -985,6 +985,19 @@ describe("TuiDispatcher — グループ", () => {
   });
 });
 
+describe("TuiDispatcher — 「グループなし」の折りたたみ", () => {
+  it("共有の設定 ungroupedCollapsed を反転して保存する（追補 01）", () => {
+    const h = harness();
+    h.d.toggleUngroupedCollapsed();
+    expect(h.prefs.ungroupedCollapsed).toBe(true);
+    h.d.toggleUngroupedCollapsed();
+    expect(h.sent("prefs.set")).toEqual([
+      { patch: { ungroupedCollapsed: true } },
+      { patch: { ungroupedCollapsed: false } },
+    ]);
+  });
+});
+
 describe("TuiDispatcher — 移動（ドラッグ）とメニュー専用の操作", () => {
   it("movePaneToTab・movePaneToNewTab：ok なら移し、待つ間に表示が動いていたら追わない", async () => {
     let resolve!: (v: unknown) => void;

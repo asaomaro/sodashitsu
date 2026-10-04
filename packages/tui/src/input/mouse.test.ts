@@ -145,6 +145,22 @@ describe("マウスの操作（AC9・AC-I5）", () => {
     expect(h.app.ui.contextMenu?.target).toEqual({ kind: "workspace", workspaceId: "w1" });
   });
 
+  it("「グループなし」の見出しのクリックは折りたたみ（共有の設定 ungroupedCollapsed。追補 01）", async () => {
+    const h = await start({
+      snapshot: snapshot({
+        workspaces: [workspace("w1", ["t1"]), workspace("w2", ["t2"])],
+        groups: [{ id: "g1", label: "G", collapsed: false }],
+        layout: { top: ["g:g1", "u"], groups: { g1: ["w:w1"] }, ungrouped: ["w:w2"] },
+      }),
+      respond: { "prefs.set": (p: { patch: unknown }) => ({ prefs: p.patch, rev: 1 }) },
+    });
+    // 行: 1 = グループ G の見出し、2 = w1、3 = 「グループなし」の見出し、4 = w2。
+    h.io.type(down(1, 3) + up(1, 3));
+    expect(h.ws.requests("prefs.set").map((r) => r.params)).toEqual([
+      { patch: { ungroupedCollapsed: true } },
+    ]);
+  });
+
   it("右クリックでメニュー（tab・workspace・pane・何も無い所は全体）（M3）", async () => {
     const h = await start();
     h.io.type(down(28, 0, 2));

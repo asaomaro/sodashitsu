@@ -75,7 +75,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/web/src/store/view.ts:347, :545-547`（`navigateSelection`）、`packages/web/src/components/Sidebar.vue:241-252`（メニューを開く watch。今は workspace 固定）・`:466-490`（`sidebar-row-selected` の条件）、`packages/web/src/actions/ActionDispatcher.ts:1003-1040, :1167-1173`、`packages/client-core/src/keys/bindings.ts:206-219`
       依存: T11, T13
       AC: AC5, AC6, AC-I3, AC-I4, AC-I5
-- [ ] T16: 端末版の表示と順——モデルに `layout`（スナップショットとイベント。無いサーバでは `layoutFromLegacy`）。サイドバーを `sidebarTree` で 3 段に描く。種類の印（1 桁の記号。既存の `▸/▾` と並べる。色に頼らない。記号は端末版の既存の方針に合わせて決め、`decisions.md` に残す）。worktree グループの先頭の行に `▸/▾` を描き、当たり判定（`autoGroup`）を作る（先頭の行は、workspace の当たりと折りたたみの当たりの両方が要る。手本はマシンの見出しの `▸/▾` の当たり判定 `sidebar.ts:347`）。**同じタスクで、workspace の切り替え・番号・navigate の順を `visibleWorkspaceIdsOfTree` に替える**。単体テスト
+- [x] T16: 端末版の表示と順——モデルに `layout`（スナップショットとイベント。無いサーバでは `layoutFromLegacy`）。サイドバーを `sidebarTree` で 3 段に描く。種類の印（1 桁の記号。既存の `▸/▾` と並べる。色に頼らない。記号は端末版の既存の方針に合わせて決め、`decisions.md` に残す）。worktree グループの先頭の行に `▸/▾` を描き、当たり判定（`autoGroup`）を作る（先頭の行は、workspace の当たりと折りたたみの当たりの両方が要る。手本はマシンの見出しの `▸/▾` の当たり判定 `sidebar.ts:347`）。**同じタスクで、workspace の切り替え・番号・navigate の順を `visibleWorkspaceIdsOfTree` に替える**。単体テスト
       対象: `packages/tui/src/model/SessionModel.ts`（スナップショット・イベントの分岐 `:229-231`・`workspacesReordered`）、`packages/tui/src/render/chrome/sidebar.ts:26, :133-167, :347`、`packages/tui/src/input/mouse.ts:281-296`、`packages/tui/src/actions/TuiDispatcher.ts:920-928`、`packages/tui/src/model/SessionModel.test.ts`
       依存: T5, T10
       AC: AC1, AC6, AC12, AC15, AC16, AC-I5

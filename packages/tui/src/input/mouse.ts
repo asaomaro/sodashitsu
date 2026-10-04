@@ -296,6 +296,7 @@ export class MouseController {
         actions.focusWorkspaceById(hit.workspaceId);
         this.drag = { kind: "workspace", workspaceId: hit.workspaceId, startY: y, moved: false };
       } else if (hit.kind === "group") actions.toggleGroupCollapsed(hit.groupId);
+      else if (hit.kind === "ungrouped") actions.toggleUngroupedCollapsed();
       else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
       else if (hit.kind === "newWorkspace") actions.run({ type: "newWorkspace" });
       else if (hit.kind === "sort") {

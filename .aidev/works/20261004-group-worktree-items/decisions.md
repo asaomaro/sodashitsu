@@ -282,3 +282,17 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - 既存テストの書き直し: T15 の navigate の順（`group:g2` の次に `ungrouped:` が入る）、T25 の「見出しの右クリックは何も開かない」（T26 で開くのが正）。
 
 - D33 補足（T26 の点検）: 古いサーバ（layout なし）でも「グループなし」の見出しは navigate で選べる。`navigate_open_menu` を押してもメニューは開かず、選択は残る（空メニューを開かないため。利用者には無反応に見える）。許容する。
+
+## D34: 端末版の表示を追補 01 の T4 の見た目にした（T27 のうち T16 の部分）
+
+- **種類の印（D24 の `≡`・`ψ`）をやめた**: 追補の見た目（T4）はグループの見出しにフォルダの印を付けず（名前・線・数だけ）、worktree グループは `⎇`（worktree の印）と木の線 `├`／`└` で区別する。`ψ`・`≡` は T4 に無く、`KIND_GLYPH` ごと撤去した。代わりに `WORKTREE_GLYPH = "⎇"`・`TREE_GLYPH`（`render/chrome/sidebar.ts`）。D24 の「幅 1・絵文字でない」の方針は `⎇` にも当てはまる。
+- **`⎇`（U+2387）の幅**: unicode11 の規則（`render/width.ts` の `stringWidth`）で幅 1 であることを単体テストで固定した（`sidebar.test.ts`）。この環境では崩れなかったので記号は替えていない。外側の端末のフォントで崩れる環境が出たら、`WORKTREE_GLYPH` 1 か所を別の記号（例 `Y`・`ψ`）に替える（D24 の ④のとおり字形の確認は端末次第。`docs/tui-parity.md` H23b）。
+- **行の形**（mock の `tuiRows`）: グループ・「グループなし」の見出しは `▾ ◐ 名前 ───── 数`（`▾` の桁 = サイドバーの左端 +1、名前・線・数は薄い色、数は右端。数は項目の数で worktree グループは 1 つ）。見出しの状態は中の全 workspace（worktree グループの子を含む）の状態のうち優先度の高いもの（`model.workspaceState` を `aggregate` へ。広げていても畳んでいても出す）。中の項目は 2 桁の字下げ。**通常の行は折りたたみの桁（2 桁）を空け**（mock の `  ◐ 名前`）、先頭の行の `▾` と状態の記号の桁をそろえる——このため従来の端末版の通常の行は 2 桁右へずれた（`mouse.r2.test.ts` の桁を直した）。worktree グループは `▾ ◐ ⎇ 名前`（先頭）・`├ ◐ ⎇ 名前`／`└ ◐ ⎇ 名前`（子）。`⎇` は行の並びの `state_icon` の部品の次（無ければ頭の次）。2 行目以降は名前の桁から（worktree の行は 6、通常の行は 4）。
+- **ブランチ名**: worktree グループの先頭・子の行の 1 行目の右端（`Line.right`。左の名前を先に残し、右は残りの半分まで）。行の並びの設定の 1 行目に `git`／`branch` があれば重ねない（web の `line1HasBranch` と同じ。D32）。通常の行・代表でない workspace には出さない。
+- **畳んだ worktree グループ**: `▸ ◐ ⎇ 名前 +n`。状態は本体と worktree 全部のまとめ、`+n` は `hiddenWorktreeCount`（今いる子は見えているので数えない）。広げているときは本体の状態だけ。畳んだまとまり（グループ・「グループなし」）の中は今いる workspace の行だけ（種類の行のまま。畳んだグループの中の子なら `└`／`├` は子の並びの本当の位置で決める）。
+- **「グループなし」**: `sidebarTree` の `heading` が真のときだけ見出しを描く（D32 と同じく中が空でも出す）。見出しが無いときは項目を字下げなしで並べる。畳みは共有の設定 `ungroupedCollapsed`（`PrefsModel.ungroupedCollapsed`・`currentSidebarTree` が `sidebarTree` の引数へ渡す。キー操作の順 `currentVisibleWorkspaceIds` も同じ木を通る）。
+- **当たりの種類（target）**: `autoGroup`（先頭の行。`toggleX` = 字下げ込みの `▾` の桁。D25 のまま）に加え、`group` に `toggleX`、新しく `ungrouped { toggleX }`（見出しの `▾` の桁 = サイドバーの左端 +1）を足した。マシンの見出しと同じ作り。**クリックの動作は T18**: 今は `group` は従来どおり見出しのどこを押しても畳み・広げ、`ungrouped` も同じく `toggleUngroupedCollapsed`（共有の設定を反転して保存）に結んだだけ（見出しが反応しないのを避ける最小限）。右クリックのメニュー・navigate・ドラッグは T17・T18。
+- **`visibleWorkspaceIdsOfTree` の確認**: `currentVisibleWorkspaceIds`（切り替え・番号・navigate の上下）は D25 の時点で `visibleWorkspaceIdsOfTree` を通っている。今回は `ungroupedCollapsed` を足し、描画と同じ順になることを `sidebar.test.ts` で固定した。
+- **名前順**は client-core の `sidebarTree`（D27 の決め）のまま端末版が描く。
+
+- D34 補足（T16 の点検）: 木の線の最後（`└`）は web（T25）と同じく「見えている子の最後」で決める（畳んで今いる子だけのときも `└`）。別のマシンの行（`machineSection`）と「未接続」の行は折りたたみの桁（lead）を持たないので、ローカルの行と状態の記号の桁が揃わない。マシンの行は変えない範囲（追補 01・見本の範囲外）なので許容する。

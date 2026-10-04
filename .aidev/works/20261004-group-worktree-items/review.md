@@ -2478,3 +2478,94 @@ AssertionError: expected [ [ 'item.move_by', { …(2) } ] ] to deeply equal []
 
 - T26 [nit] Sidebar.vue が "ungrouped:" を直書きしていた → navigateKeyOfUngrouped() を使うよう直した [conv:-]
 - T26 [nit] 古いサーバで「グループなし」を選んで開くと無反応になる点が D33 に無い → D33 に補足 [conv:-]
+
+### T27（T16 の部分）壊して落ちる確認
+
+`packages/tui/src/render/chrome/sidebar.test.ts`（実装の 1 行ずつを壊し、落ちたテストの生の出力。確認後は戻して `diff` で一致を確かめた）。
+
+```
+===  見出しの状態のまとめを壊す（見出しは null）
+     × グループの見出しは「▾ ◐ 名前 ──── 数」、中は 2 桁の字下げ。worktree グループは木の線と ⎇ とブランチ名（行の右） 15ms
+     × 見出しの状態は広げていても畳んでいても中の全部のまとめ。「グループなし」も同じ決まり 3ms
+      Tests  2 failed | 10 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+===  畳んだ先頭の行を本体の状態だけにする
+     × 畳んだ worktree グループの先頭の行は、本体と worktree 全部の状態のまとめと、隠れている数 +n。広げていれば本体の状態 7ms
+      Tests  1 failed | 11 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+===  +n を出さない
+     × 畳んだグループの中は今いる workspace の行だけ。畳んだ worktree グループは先頭と今いる子だけ 7ms
+     × 畳んだ worktree グループの先頭の行は、本体と worktree 全部の状態のまとめと、隠れている数 +n。広げていれば本体の状態 2ms
+     × workspace の切り替え・番号・navigate の順（見えている行の順）は描画と同じ木から出る。「グループなし」を畳むと今いる行だけ 2ms
+      Tests  3 failed | 9 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+===  「グループなし」の見出しを常に出す
+     × グループなしの見出しはグループが 1 つ以上あるときだけ（フォルダの印は付けない）。無ければ項目が字下げなしで並ぶ 8ms
+     × 畳んだ worktree グループの先頭の行は、本体と worktree 全部の状態のまとめと、隠れている数 +n。広げていれば本体の状態 1ms
+     × ブランチ名は、行の並びの 1 行目に git の項目があれば重ねない。通常の行（worktree でない行）には出さない 2ms
+      Tests  3 failed | 9 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+===  ブランチ名を常に出さない
+     × グループの見出しは「▾ ◐ 名前 ──── 数」、中は 2 桁の字下げ。worktree グループは木の線と ⎇ とブランチ名（行の右） 12ms
+     × グループなしの見出しはグループが 1 つ以上あるときだけ（フォルダの印は付けない）。無ければ項目が字下げなしで並ぶ 2ms
+     × 畳んだグループの中は今いる workspace の行だけ。畳んだ worktree グループは先頭と今いる子だけ 1ms
+     × 畳んだ worktree グループの先頭の行は、本体と worktree 全部の状態のまとめと、隠れている数 +n。広げていれば本体の状態 1ms
+     × workspace の切り替え・番号・navigate の順（見えている行の順）は描画と同じ木から出る。「グループなし」を畳むと今いる行だけ 3ms
+      Tests  5 failed | 7 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+===  行の並びに git があっても重ねる
+     × ブランチ名は、行の並びの 1 行目に git の項目があれば重ねない。通常の行（worktree でない行）には出さない 6ms
+      Tests  1 failed | 11 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+===  ⎇ を状態の記号の前に置く
+     × グループの見出しは「▾ ◐ 名前 ──── 数」、中は 2 桁の字下げ。worktree グループは木の線と ⎇ とブランチ名（行の右） 11ms
+     × 畳んだ worktree グループの先頭の行は、本体と worktree 全部の状態のまとめと、隠れている数 +n。広げていれば本体の状態 2ms
+      Tests  2 failed | 10 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+===  先頭の行の toggleX をずらす
+     × 当たり判定: 先頭の行（autoGroup）・グループ・「グループなし」の見出しは左の ▸/▾ の桁 toggleX を持つ 9ms
+      Tests  1 failed | 11 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+===  グループの当たりに toggleX を付けない（0）
+     × 当たり判定: 先頭の行（autoGroup）・グループ・「グループなし」の見出しは左の ▸/▾ の桁 toggleX を持つ 8ms
+      Tests  1 failed | 11 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+===  木の線を最後の子でも ├ にする
+     × グループの見出しは「▾ ◐ 名前 ──── 数」、中は 2 桁の字下げ。worktree グループは木の線と ⎇ とブランチ名（行の右） 14ms
+     × グループなしの見出しはグループが 1 つ以上あるときだけ（フォルダの印は付けない）。無ければ項目が字下げなしで並ぶ 3ms
+     × 畳んだグループの中は今いる workspace の行だけ。畳んだ worktree グループは先頭と今いる子だけ 2ms
+     × ブランチ名は、行の並びの 1 行目に git の項目があれば重ねない。通常の行（worktree でない行）には出さない 3ms
+     × layout の無い古いサーバは layoutFromLegacy で本体の所属に描く（子が別のグループでも 1 つの項目） 2ms
+      Tests  5 failed | 7 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+===  「グループなし」の畳みを木へ渡さない
+     × workspace の切り替え・番号・navigate の順（見えている行の順）は描画と同じ木から出る。「グループなし」を畳むと今いる行だけ 8ms
+      Tests  1 failed | 11 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+===  グループの中の字下げをなくす
+     × グループの見出しは「▾ ◐ 名前 ──── 数」、中は 2 桁の字下げ。worktree グループは木の線と ⎇ とブランチ名（行の右） 19ms
+     × グループなしの見出しはグループが 1 つ以上あるときだけ（フォルダの印は付けない）。無ければ項目が字下げなしで並ぶ 5ms
+     × 当たり判定: 先頭の行（autoGroup）・グループ・「グループなし」の見出しは左の ▸/▾ の桁 toggleX を持つ 6ms
+      Tests  3 failed | 9 passed (12)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+```
+
+「グループなし」の見出しのクリック（`input/mouse.test.ts`。`mouse.ts` の `hit.kind === "ungrouped"` の分岐を `void 0` に）:
+
+```
+     × 「グループなし」の見出しのクリックは折りたたみ（共有の設定 ungroupedCollapsed。追補 01） 63ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected [] to deeply equal [ { patch: { …(1) } } ]
+      Tests  1 failed | 21 passed (22)
+```
+
+`toggleUngroupedCollapsed`（`actions/TuiDispatcher.test.ts`。反転を外した）:
+
+```
+     × 共有の設定 ungroupedCollapsed を反転して保存する（追補 01） 5ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected false to be true // Object.is equality
+      Tests  1 failed | 104 passed (105)
+```
+- T16 [nit] 畳んだまとまりで今いる子だけを描くとき、木の線が全子の中の位置で決まり web と食い違う → 見えている子の最後で決めるよう直した（D34 補足） [conv:-]
+- T16 [nit] 別のマシンの行はローカルの行と桁が揃わない → 変えない範囲として D34 に許容と明記 [conv:-]

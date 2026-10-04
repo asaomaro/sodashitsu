@@ -588,6 +588,14 @@ export class TuiDispatcher {
     this.saveSharedPrefs({ collapsedAutoGroups: [...now] }, "折りたたみを保存できませんでした");
   }
 
+  /** 「グループなし」の折りたたみ（共有の設定 `ungroupedCollapsed`。web の `view.toggleUngroupedCollapsed`）。 */
+  toggleUngroupedCollapsed(): void {
+    this.saveSharedPrefs(
+      { ungroupedCollapsed: !this.host.prefs.ungroupedCollapsed },
+      "折りたたみを保存できませんでした",
+    );
+  }
+
   /** spaces の並び順を 2 値で行き来する（web の `view.toggleWorkspaceSort`。サイドバーのボタン。herdr の M14）。 */
   toggleWorkspaceSort(): void {
     const next = this.host.prefs.workspaceSort === "opened" ? "name" : "opened";

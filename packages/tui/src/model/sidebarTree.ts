@@ -9,20 +9,21 @@ import type { SessionModel } from "./SessionModel.js";
  */
 export function currentSidebarTree(
   model: SessionModel,
-  prefs: Pick<PrefsModel, "workspaceSort">,
+  prefs: Pick<PrefsModel, "workspaceSort" | "ungroupedCollapsed">,
 ): TopRow[] {
   return sidebarTree(
     [...model.workspaces.values()],
     [...model.groups.values()],
     model.effectiveLayout(),
     prefs.workspaceSort,
+    prefs.ungroupedCollapsed,
   );
 }
 
 /** サイドバーに見えている workspace の id（上から下へ）。畳んだ入れ物の中は今いる workspace だけ。 */
 export function currentVisibleWorkspaceIds(
   model: SessionModel,
-  prefs: Pick<PrefsModel, "workspaceSort" | "collapsedAutoGroups">,
+  prefs: Pick<PrefsModel, "workspaceSort" | "collapsedAutoGroups" | "ungroupedCollapsed">,
 ): string[] {
   return visibleWorkspaceIdsOfTree(
     currentSidebarTree(model, prefs),
