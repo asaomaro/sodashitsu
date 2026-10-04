@@ -2172,7 +2172,7 @@ describe("ActionDispatcher — workspaceDelta（previous_workspace/next_workspac
 
   // レビューの指摘（must）：`Sidebar.vue` は 20260923-workspace-grouping でグループを1ブロックとして
   // まとめる描画（旧 `groupedWorkspaceRows`）に切り替わったが、`workspaceDelta` は素の「開いた順」
-  // （`orderedWorkspaceIds`）のままだったため、画面上の隣と実際に切り替わる先が食い違っていた。
+  // （素の開いた順）のままだったため、画面上の隣と実際に切り替わる先が食い違っていた。
   it("画面上の並び（グループはまとめて1ブロック）を辿る——開いた順が A, C, B でも次は画面上隣の B", () => {
     const conn = makeConnection();
     const session = useSessionStore(pinia);

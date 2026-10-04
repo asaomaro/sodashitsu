@@ -348,7 +348,7 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 
 - **`commitWorkspace` で `settle()`**: `layout` があれば、項目を入れた後に実効の `groupId` と Map の順を平らな順へ合わせる（「グループなし」が本物のグループより上にあるとき、新しい workspace は末尾ではなく途中に入る）。
 - **`takeChanges` の順の比較**: 新しい workspace を除いて比べると、途中へ入っても `workspace.order_changed` が出なかった。比べる側を「前の順（消えたものを除く）＋新しく作ったものを末尾に足した順」（`workspace.created` を受けた古い画面が置く場所）にして、いまの順と違えば配る。末尾に入った通常の作成では出ない。`SessionService.createWorkspace` の出口は `workspace.created` の後に `publishSidebarChanges` を通るので、変更は要らなかった（テストで順序を固定）。
-- **`orderedWorkspaceIds`**: 本番コードの呼び出し元は無い（grep: web の `ActionDispatcher.test.ts` のコメントと client-core の単体テストだけ）。client-core の公開の関数でもあるので削除せず、コメントだけを実態に直した。
+- **`orderedWorkspaceIds`**: 本番コードの呼び出し元は無い（grep: web の `ActionDispatcher.test.ts` のコメントと client-core の単体テストだけ）。client-core の公開の関数でもあるので削除せず、コメントだけを実態に直した。**（D45 で撤去に改めた）**
 - 旧語「worktree 自動グループ」は、指定のコメント（`ConfirmDialog.vue`・`MouseBridge.ts`・`SessionService.ts`・`messages.ts`・`ActionDispatcher.ts`）を「worktree グループ」に直した。テスト名・prefs・`TuiDispatcher.ts`・`view.ts` などの残りは触っていない。
 
 ## D41: origin/main（PR #79・#80）の取り込みでの衝突の解決
@@ -384,3 +384,16 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - docs（`docs/verification.md`）の「古い git ではオプションが失敗する」を、この動きに合わせて直した。
 
 - D44 補足（T31 の点検）: `parseAbsoluteGitPath` は検査の後に `resolve` を通して返す。git for Windows が出す `C:/x/.git` を、以前の `resolveCommonDir`（`path.resolve`）と同じ `C:\x\.git` にそろえ、共有の設定 `collapsedAutoGroups` に入っている `repoKey` を孤児にしないため（Linux では絶対パスの正規化のみで値は変わらない）。Windows ネイティブでの実測は未実施（実機の確認項目）。`WorktreeService.repoNameOf` は `--path-format` を付けず表示名だけを得る別経路で、`repoKey` には関与しない。
+
+## D45: nit の整理（T32。review-findings-01 の 4〜7）
+
+- **`layoutConfirmWiring.test.ts`**: 固定 20ms の待ちで「合図が来ない」を見ているので、同じ待ちで止めずに `start()` した場合は確定が起きる陽性の対照を足した（待ちが短すぎて「起きない」が見えているのではないことの確認）。
+- **`repoGroups` の形の不一致**: `SessionFileDataSchema` の `repoGroups` に `.catch(undefined)` を付け、`layout` と同じく捨てるだけにした（保存全体は壊れた扱いにしない）。テスト 3 件（配列・値が文字列でない・文字列）。`.catch` を外すと 3 件とも落ちる（review.md に記録）。
+- **保存の `repoKey` のコメント**: 実装は判定前でも `null` を書く（`composeServer.ts` の `toSessionFileData`）。コメントを実装に合わせた（`null`＝管理外または判定前／項目が無い＝以前の版の保存）。実装は変えていない。
+- **`orderedWorkspaceIds` の撤去**: `workspaceOrder.ts` とそのテストを削除し、`client-core/src/index.ts` の export を外した。呼び出しが無いことは `git grep`（web・tui・server・client-core・e2e・docs）で確かめた。残るのはコメントの言及（`ActionDispatcher.test.ts`・`workspaceGrouping.ts`・`paneDragZone.ts`）で、実態に直した。過去の work（`.aidev/works/2026092*`）の記録は当時の事実なので触らない。D40 の「残した」は撤去に改めた。
+
+## D46: `workspace-tab-pane.spec.ts:305`（D99）の落ちは main でも同じ（この環境で各 5 回の観測）（T32。review-findings-01 の確かめること）
+
+- **方法**: `corepack pnpm build` の後に `workspace-tab-pane.spec.ts` を 5 回。このブランチ: 5 回とも「1 failed / 9 passed」（305 の 1 件）。main（`origin/main` c3f1fae を別の作業ディレクトリ `git worktree add /tmp/sodamain` で install・build して同じ回数）: 5 回とも同じ 305 の 1 件だけ失敗（「1 failed / 9 passed」）。差は無い。
+- **原因の見立て**: 失敗の出力では、打った文字は新しい pane に届いて `echo` も実行されている（出力に `soda-e2e-aftersplit-…` の結果行がある）。落ちているのは、この環境の bash（readline）が入力の途中で行を再描画し、`echo soda-e2e-af \rtersplit-…` のように期待の文字列が連続しなくなるため、`waitForOutput` の連続一致が取れないこと。この環境（WSL の bash の prompt・端末幅）に依る。このブランチの変更による退行ではない。
+- **対応**: 退行ではないので直さない。事実だけ残す（この環境で main でも 5 回中 5 回落ちた件。別件として扱う）。作業ディレクトリは `git worktree remove` で片付けた。

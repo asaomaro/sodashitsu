@@ -183,6 +183,25 @@ describe("FsSessionFile", () => {
     expect(result.data.workspaces).toEqual(data.workspaces);
   });
 
+  // review-findings-01 の 5: `repoGroups` の形が合わなくても、`layout` と同じく捨てるだけ（保存全体は壊れた扱いにしない）。
+  it.each([
+    ["配列", ["a"]],
+    ["値が文字列でない", { "/r/.git": 5 }],
+    ["文字列", "x"],
+  ])("repoGroups が壊れた形（%s）なら repoGroups だけ捨て、残りは読める", async (_name, repoGroups) => {
+    const { writeFileAtomic } = await import("./atomicFile.js");
+    const { join } = await import("node:path");
+    const file = new FsSessionFile(dir);
+    const data = sample();
+    await writeFileAtomic(join(dir, "session.json"), JSON.stringify({ ...data, layout: { top: ["u"], groups: {}, ungrouped: ["w:w1"] }, repoGroups }));
+    const result = await file.load();
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error("unreachable");
+    expect(result.data.repoGroups).toBeUndefined();
+    expect(result.data.layout).toEqual({ top: ["u"], groups: {}, ungrouped: ["w:w1"] });
+    expect(result.data.workspaces).toEqual(data.workspaces);
+  });
+
   it("reports corrupt for an unsupported schema version", async () => {
     const file = new FsSessionFile(dir);
     // 直接壊れたスキーマを書き込む（将来のバージョンからの読み込みなど）。

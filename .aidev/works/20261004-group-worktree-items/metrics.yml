@@ -78,3 +78,5 @@ events:
   - { ts: 2026-10-04T09:16:48Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T30, findings: 3 } }
   - { ts: 2026-10-04T09:19:11Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T31, mode: delegated } }
   - { ts: 2026-10-04T09:20:54Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T31, findings: 3 } }
+  - { ts: 2026-10-04T09:31:01Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T32, mode: delegated } }
+  - { ts: 2026-10-04T09:31:57Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T32, findings: 2 } }

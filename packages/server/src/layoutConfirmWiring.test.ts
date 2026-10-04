@@ -23,4 +23,18 @@ describe("wireLayoutConfirmation", () => {
     await vi.waitFor(() => expect(confirmLayout).toHaveBeenCalledTimes(1));
     poller.stop();
   });
+
+  // 陽性の対照: 上のテストの固定待ち（20ms）で、止めていなければ 1 周の合図は確かに届く（待ちが短すぎて「起きない」が見えているのではない）。
+  it("止めていなければ、同じ待ちの中で 1 周の合図が届いて確定する", async () => {
+    const poller = new DefaultGitInfoPoller({} as never, {} as never, 60_000);
+    const pollNow = vi.spyOn(poller, "pollNow").mockResolvedValue(undefined);
+    const confirmLayout = vi.fn();
+    wireLayoutConfirmation(poller, { confirmLayout });
+
+    poller.start();
+    await vi.waitFor(() => expect(pollNow).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(confirmLayout).toHaveBeenCalledTimes(1);
+    poller.stop();
+  });
 });

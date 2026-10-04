@@ -5248,3 +5248,26 @@ web の Sidebar.vue で `moveItemByDrag(draggedRow.item, drop.before, …)` を 
 - T31 [should] Windows で repoKey の文字列の形が変わる（旧 resolve → git の出力そのまま）→ resolve を通して同じ形にそろえた（実測は実機の確認項目） [conv:-]
 - T31 [nit] 正常な出力（CRLF・空白・日本語）のテストが無い → 足した [conv:-]
 - T31 [nit] repoNameOf が別経路である点が docs に無い → D44 に記録（repoKey には関与しない） [conv:-]
+
+
+### T32 壊して落ちる確認
+
+`SessionFile.ts` の `repoGroups` の `.catch(undefined)` を外して `vitest run src/persist/SessionFile.test.ts`:
+
+```
+     × repoGroups が壊れた形（配列）なら repoGroups だけ捨て、残りは読める 14ms
+     × repoGroups が壊れた形（値が文字列でない）なら repoGroups だけ捨て、残りは読める 6ms
+     × repoGroups が壊れた形（文字列）なら repoGroups だけ捨て、残りは読める 5ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/persist/SessionFile.test.ts > FsSessionFile > repoGroups が壊れた形（配列）なら repoGroups だけ捨て、残りは読める
+ FAIL  src/persist/SessionFile.test.ts > FsSessionFile > repoGroups が壊れた形（値が文字列でない）なら repoGroups だけ捨て、残りは読める
+ FAIL  src/persist/SessionFile.test.ts > FsSessionFile > repoGroups が壊れた形（文字列）なら repoGroups だけ捨て、残りは読める
+      Tests  3 failed | 11 passed (14)
+```
+戻すと 14 passed。`layoutConfirmWiring.test.ts` の陽性の対照は、それ自体が「同じ待ちで確定が起きる」ことの観測（元のテストと対）。
+
+### 直さないもの（review-findings-01）
+
+- `containerOf`・`listOf` がサーバと client-core に二重にある件は、直さない（同じ定義を 2 つのパッケージが持つ。共有の置き場所を作る費用に見合わないと判断。変えるときは両方を同時に直す）。
+- T32 [should] orderedWorkspaceIds の撤去で docs/herdr-parity.md:58 に死んだ参照が残る → 現状の画面の木の順（visibleWorkspaceIdsInOrder）に直した [conv:-]
+- T32 [nit] D46 の「決定的に落ちる」が 5 回の観測の言い過ぎ → 「この環境で各 5 回」に表現を合わせた [conv:-]

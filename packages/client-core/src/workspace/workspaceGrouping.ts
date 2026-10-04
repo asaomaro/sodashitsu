@@ -2,8 +2,8 @@ import type { ItemRef, SidebarLayout, Workspace, WorkspaceGroup } from "@sodashi
 import type { WorkspaceSort } from "../prefs/types.js";
 
 /**
- * workspace のグルーピング（純関数。20260923-workspace-grouping）。`store/workspaceOrder.ts` と
- * 同じ「純関数・複数箇所から共有」の形——`Sidebar.vue`（描画）と `ConfirmDialog.vue`
+ * workspace のグルーピング（純関数。20260923-workspace-grouping）。複数箇所から共有する純関数
+ * の形——`Sidebar.vue`（描画）と `ConfirmDialog.vue`
  * （一括クローズのチェックボックス表示）の両方から使う。
  */
 

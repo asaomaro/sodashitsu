@@ -41,8 +41,9 @@ export interface SessionFileWorkspace {
    *  null（`autoLabel` と同じ「optional 追加」方式）。 */
   groupId?: string | null | undefined;
   /**
-   * 直前の git の判定（20261004-group-worktree-items）。**以前の版の保存には無い**。読み分け: 項目が無い＝まだ一度も確定していない／
-   * `null`＝管理外／文字列＝そのリポジトリ（`GitInfo.repoKey`）。復元で `git` を戻す（ブランチ名・件数は最初の確認で入る）。
+   * 直前の git の判定（20261004-group-worktree-items）。**以前の版の保存には無い**。読み分け: 文字列＝そのリポジトリ（`GitInfo.repoKey`）／
+   * `null`＝管理外**または判定前**（保存は判定前でも `null` を書く。復元は `git: null`＝並びを変えない仮の状態から始まる）／
+   * 項目が無い＝以前の版の保存。復元で `git` を戻す（ブランチ名・件数は最初の確認で入る）。
    */
   repoKey?: string | null | undefined;
   /** linked worktree か。`repoKey` が文字列のときだけ意味を持つ。無ければ false。 */
@@ -159,10 +160,10 @@ const SessionFileDataSchema: z.ZodType<SessionFileData> = z.object({
   groups: z.array(SessionFileGroupSchema).default([]),
   workspaces: z.array(SessionFileWorkspaceSchema),
   // 以前の版の保存には無い（20261004-group-worktree-items）。形が合わない `layout`（`ungrouped` が無い追補 01 より前の途中の形など）は、
-  // 保存全体を壊れた扱いにせず `layout` だけ捨てる——仮の状態から始め直す（decisions D28）。`repoGroups` は `layout` と対で使うので、
+  // 保存全体を壊れた扱いにせず `layout` だけ捨てる——仮の状態から始め直す（decisions D28）。`repoGroups` も形が合わなければ捨てるだけ（decisions D45）。`repoGroups` は `layout` と対で使うので、
   // `layout` が無ければ復元は読まない。
   layout: SidebarLayoutSchema.optional().catch(undefined),
-  repoGroups: z.record(z.string(), z.string()).optional(),
+  repoGroups: z.record(z.string(), z.string()).optional().catch(undefined),
   focus: z.object({ workspaceId: z.string(), tabId: z.string(), paneId: z.string() }).nullable(),
 });
 

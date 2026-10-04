@@ -145,7 +145,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/server/src/git/GitInfoPoller.ts`・`worktree.ts`、`docs/verification.md`
       依存: なし
       AC: AC9
-- [ ] T32: nit の整理（`layoutConfirmWiring.test.ts` の固定待ち・`SessionFile.ts` の `repoGroups` の形の不一致・保存の `repoKey` のコメント・`orderedWorkspaceIds` の撤去）と、`workspace-tab-pane.spec.ts:305` の落ちる件の確認
+- [x] T32: nit の整理（`layoutConfirmWiring.test.ts` の固定待ち・`SessionFile.ts` の `repoGroups` の形の不一致・保存の `repoKey` のコメント・`orderedWorkspaceIds` の撤去）と、`workspace-tab-pane.spec.ts:305` の落ちる件の確認
       対象: review-findings-01.md の 4〜7 と「確かめること」
       依存: T29, T30, T31
       AC: AC9, AC10
