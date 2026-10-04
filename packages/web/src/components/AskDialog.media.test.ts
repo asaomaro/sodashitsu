@@ -40,9 +40,11 @@ describe("AskDialog — resolveMedia", () => {
     const w = mountDialog();
     await open(w, { ...pending("media:0"), warnings: 2 });
     expect(w.wrapper.get("[data-ask-warnings]").text()).toBe("画像 2 件を取得できませんでした（プレビューなしで出しています）");
-    const w2 = mountDialog();
-    await open(w2, pending("media:0"));
-    expect(w2.wrapper.find("[data-ask-warnings]").exists()).toBe(false);
+  });
+  it("0 件なら固定の行に出さない", async () => {
+    const w = mountDialog();
+    await open(w, pending("media:0"));
+    expect(w.wrapper.find("[data-ask-warnings]").exists()).toBe(false);
   });
 
   it("メディアの無い質問（resolved なし）でも resolveMedia は入り、何も解かない", async () => {

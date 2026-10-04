@@ -36,6 +36,33 @@ const SECURITY_HEADERS: Record<string, string> = {
 
 const MAX_BODY_BYTES = 64 * 1024;
 
+/**
+ * 成果物（`view`）の隔離表示の静的ページ（`packages/web/public/ask-view/`。20261004-ask-media-popup）。アプリ本体の iframe（`sandbox="allow-scripts"`・`allow-same-origin` なし）が
+ * 開く。**この経路だけ**、応答のヘッダを本体と変える。許可リストにある名前だけを配る（それ以外は `index.html` へ落とさず 404）。
+ * - markdown.html: `script-src 'self'` だけ（インラインのスクリプト・eval・外への通信は止まる。Markdown の無害化はこのヘッダと不透明 origin に任せる）。
+ * - html.html: 成果物の HTML をそのまま動かす（インラインのスクリプト・eval を許す）が、`default-src 'none'`（`connect-src` も拒否）で外へは送れない。
+ * - どちらも `sandbox`（`allow-scripts` だけ。`allow-same-origin`・`allow-popups`・`allow-downloads` は付けない）を応答のヘッダでも付ける（直接開かれても隔離する）。
+ */
+const ASK_VIEW_SANDBOX = "sandbox allow-scripts";
+const ASK_VIEW_PAGE_HEADERS: Record<string, string> = {
+  "X-Frame-Options": "SAMEORIGIN",
+};
+const ASK_VIEW_FILES: Record<string, { type: string; csp?: string }> = {
+  "markdown.html": {
+    type: "text/html; charset=utf-8",
+    csp: `${ASK_VIEW_SANDBOX}; default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`,
+  },
+  "html.html": {
+    type: "text/html; charset=utf-8",
+    csp: `${ASK_VIEW_SANDBOX}; default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`,
+  },
+  "markdown.js": { type: "text/javascript; charset=utf-8" },
+  "html.js": { type: "text/javascript; charset=utf-8" },
+  "keys.js": { type: "text/javascript; charset=utf-8" },
+  "vendor/marked.umd.js": { type: "text/javascript; charset=utf-8" },
+  "vendor/mermaid.min.js": { type: "text/javascript; charset=utf-8" },
+};
+
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -99,7 +126,37 @@ export class HttpServer {
     if (req.method === "POST" && pathname === "/api/local-login") return this.handleLocalLogin(req, res);
     if (req.method === "POST" && pathname === "/api/logout") return this.handleLogout(req, res);
     if (req.method === "GET" && pathname === "/api/session") return this.handleSession(req, res);
+    if (pathname.startsWith("/ask-view/")) return this.handleAskView(req, res, pathname);
     return this.handleStatic(req, res, pathname);
+  }
+
+  /** 成果物の隔離表示の静的ページ（`ASK_VIEW_FILES` の許可リストにあるものだけ。専用のヘッダ）。 */
+  private async handleAskView(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
+    const entry = Object.hasOwn(ASK_VIEW_FILES, pathname.slice("/ask-view/".length)) ? ASK_VIEW_FILES[pathname.slice("/ask-view/".length)] : undefined;
+    if ((req.method !== "GET" && req.method !== "HEAD") || entry === undefined) {
+      res.statusCode = req.method === "GET" || req.method === "HEAD" ? 404 : 405;
+      res.end();
+      return;
+    }
+    const distRoot = resolve(this.opts.webDistDir);
+    const contents = await readFile(join(distRoot, "ask-view", ...pathname.slice("/ask-view/".length).split("/"))).catch(() => null);
+    if (contents === null) {
+      res.statusCode = 404;
+      res.end();
+      return;
+    }
+    res.statusCode = 200;
+    res.setHeader("Content-Type", entry.type);
+    if (entry.csp !== undefined) {
+      // 隔離表示のページ: 本体の CSP・X-Frame-Options を置き換える（枠を同じ origin の iframe に入れられるように）。
+      res.setHeader("Content-Security-Policy", entry.csp);
+      for (const [k, v] of Object.entries(ASK_VIEW_PAGE_HEADERS)) res.setHeader(k, v);
+    } else {
+      // スクリプトの読み込みだけ（本体の CSP・枠の禁止は文書にだけ意味がある）。
+      res.removeHeader("Content-Security-Policy");
+      res.removeHeader("X-Frame-Options");
+    }
+    res.end(req.method === "HEAD" ? undefined : contents);
   }
 
   private clientIp(req: IncomingMessage): string {

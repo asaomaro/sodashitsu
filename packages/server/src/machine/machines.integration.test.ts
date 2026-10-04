@@ -1,4 +1,5 @@
-import { readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect } from "node:net";
 import { PassThrough } from "node:stream";
@@ -432,6 +433,50 @@ describe.skipIf(process.platform === "win32")(
       // 質問ごとの自由記述（comments）も中継が素通しする（前後の空白はリモートのサーバが除く）。
       await browser.request("ask.answer", { askId: opened.askId, answers: { a: "y" }, comments: { a: "  金曜は避けたい " } });
       expect(await result).toEqual({ status: "answered", answers: { a: "y" }, comments: { a: "金曜は避けたい" } });
+    });
+
+    it("質問のフォームの画像・成果物（20261004-ask-media-popup の AC20）: ファイルを読むのはリモートのサーバで、手元の画面は中継越しに ask.media で受け取れる。機能確認も中継を通る", async () => {
+      const { local, remoteServer } = await startPair({ withMachine: true });
+      const { cookie, port } = await login(local);
+      const localWs = new Client((await openWs(port, "", cookie)) as WebSocket);
+      cleanups.push(() => localWs.ws.close());
+      await localWs.request("client.hello", { protocol: 1, kind: "external" });
+      await until("online", async () => {
+        const r = await localWs.request<{ machines: MachineStatus[] }>("machine.list", {});
+        return r.machines[0]?.state === "online" ? true : undefined;
+      });
+      const remote = remoteServer()!;
+      const direct = await login(remote);
+      const cli = new Client((await openWs(direct.port, "", direct.cookie)) as WebSocket);
+      cleanups.push(() => cli.ws.close());
+      const hello = await cli.request<{ snapshot: { panes: { id: string }[] } }>("client.hello", { protocol: 1, kind: "external" });
+      const paneId = hello.snapshot.panes[0]!.id;
+      // リモートのマシンにだけあるファイル（手元には無い）。
+      const dir = await mkdtemp(join(tmpdir(), "soda-remote-media-"));
+      cleanups.push(() => rm(dir, { recursive: true, force: true }));
+      const png = Buffer.concat([Buffer.from([0x89]), Buffer.from("PNG\r\n"), Buffer.from([0x1a, 0x0a]), Buffer.alloc(2000, 5)]);
+      await writeFile(join(dir, "r.png"), png);
+      await writeFile(join(dir, "doc.md"), "# リモートの成果物\n");
+      const browser = new Client((await openWs(port, "?machine=Remote", cookie)) as WebSocket);
+      cleanups.push(() => browser.ws.close());
+      await browser.request("client.hello", { protocol: 1, kind: "desktop" });
+      await browser.request("ask.subscribe", {});
+      // 機能確認（中継越し）
+      expect(await browser.request("ask.features", {})).toMatchObject({ features: expect.arrayContaining(["media", "view"]) });
+      const result = cli.request("ask.open", {
+        paneId,
+        timeoutMs: 20_000,
+        spec: { questions: [{ id: "a", label: "A", options: [{ value: "x", image: join(dir, "r.png") }] }], view: { file: join(dir, "doc.md") } },
+      });
+      const opened = await until("ask.opened over the relay", async () => browser.events.find((e) => e.event === "ask.opened")?.data as { askId: string } | undefined);
+      const got = await browser.request<{ media: { id: number; kind: string }[]; view: { kind: string; media: number }[] }>("ask.get", { askId: opened.askId });
+      const img = got.media.find((m) => m.kind === "image")!;
+      const part = await browser.request<{ base64: string; size: number; eof: boolean }>("ask.media", { askId: opened.askId, id: img.id, offset: 0 });
+      expect(Buffer.from(part.base64, "base64").equals(png)).toBe(true);
+      const doc = await browser.request<{ base64: string }>("ask.media", { askId: opened.askId, id: got.view[0]!.media, offset: 0 });
+      expect(Buffer.from(doc.base64, "base64").toString()).toBe("# リモートの成果物\n");
+      await browser.request("ask.cancel", { askId: opened.askId });
+      expect(await result).toEqual({ status: "cancelled" });
     });
 
     it("クリップボードの画像（20260927-clipboard-image-paste の T6）: 中継越しに分けて送ると、リモートの状態ディレクトリに置かれてリモートのパスが返る。中継の接続が切れると送信は捨てられる", async () => {
