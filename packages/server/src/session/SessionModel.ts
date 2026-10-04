@@ -7,6 +7,7 @@ import type {
   GroupId,
   HostInfo,
   IdKind,
+  ItemRef,
   NextIdCounters,
   Pane,
   PaneId,
@@ -15,6 +16,7 @@ import type {
   SessionFocus,
   SessionLimits,
   SessionSnapshot,
+  SidebarLayout,
   SplitDirection,
   SplitId,
   Tab,
@@ -24,6 +26,16 @@ import type {
   WorkspaceId,
 } from "@sodashitsu/protocol";
 import { formatId } from "@sodashitsu/protocol";
+import {
+  addItemToGroup,
+  deleteGroupFromLayout,
+  flattenWorkspaceIds,
+  insertItem,
+  itemRefOf,
+  layoutFromLegacy,
+  removeItem,
+  removeItemFromGroup,
+} from "@sodashitsu/client-core";
 import * as Layout from "./LayoutTree.js";
 import type { SessionFileGroup, SessionFileWorkspace } from "../persist/SessionFile.js";
 
@@ -68,6 +80,37 @@ export interface RemovalResult {
   successorPaneId?: PaneId;
 }
 
+/**
+ * 1 回の操作の間に変わった、サイドバーまわりの状態（20261004-group-worktree-items）。`SessionModel.takeChanges()` が返し、
+ * `SessionService` の共通の出口がイベント（`workspace.updated`・`sidebar.layout_changed`・`workspace.order_changed`）にして配る。
+ */
+export interface ModelChanges {
+  /** 実効の `groupId` が変わった workspace（新しく入った・消えたものは含めない。それぞれ `workspace.created`・`workspace.closed` が運ぶ）。 */
+  updated: Workspace[];
+  /** レイアウトが変わったときだけ、新しいレイアウト。 */
+  layout: SidebarLayout | null;
+  /** workspace の平らな順が変わったときだけ、新しい全順序。 */
+  order: WorkspaceId[] | null;
+}
+
+/** 変わる前の状態の控え（`beginChange`）。 */
+interface ChangeBaseline {
+  layout: SidebarLayout;
+  order: WorkspaceId[];
+  groupIds: Map<WorkspaceId, GroupId | null>;
+}
+
+/** 項目が今いる入れ物（`null` は一番上、無ければ undefined）。 */
+function containerOf(layout: SidebarLayout, ref: ItemRef): GroupId | null | undefined {
+  if (layout.top.includes(ref)) return null;
+  for (const [groupId, list] of Object.entries(layout.groups)) if (list.includes(ref)) return groupId;
+  return undefined;
+}
+
+function sameLayout(a: SidebarLayout, b: SidebarLayout): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export class NotFoundError extends Error {
   constructor(kind: string, id: string) {
     super(`${kind} not found: ${id}`);
@@ -93,6 +136,15 @@ export class SessionModel {
   private readonly tabs = new Map<TabId, Tab>();
   private readonly panes = new Map<PaneId, Pane>();
   private readonly groups = new Map<GroupId, WorkspaceGroup>();
+  /**
+   * サイドバーの項目の並び（サーバが正。20261004-group-worktree-items）。`null` は**仮の状態**（`layout` を持たない保存から復元した直後）:
+   * 並びは持たず、読むたびに `layoutFromLegacy` で導く（`getLayout`）。最初に書き換える操作の前に `confirmLayout` で確定する。
+   * 新しく始めたサーバは空のレイアウトを持つ。
+   */
+  private layout: SidebarLayout | null = { top: [], groups: {} };
+  /** リポジトリの所属（`repoKey` → グループ）。開いていないリポジトリの分も残す。`Workspace.groupId`（実効の所属）はここから計算する。 */
+  private readonly repoGroups = new Map<string, GroupId>();
+  private baseline: ChangeBaseline | null = null;
   private nextIdCounters: NextIdCounters = { w: 1, t: 1, p: 1, s: 1, a: 1, g: 1 };
   private focus: SessionFocus | null = null;
 
@@ -221,7 +273,10 @@ export class SessionModel {
 
   /** `reserveWorkspace` が組み立てたオブジェクトを実際に Map へ入れ、focus する。 */
   commitWorkspace(result: CreateWorkspaceResult): void {
+    this.beginChange();
     this.workspaces.set(result.workspace.id, result.workspace);
+    // 判定前の workspace は `w:<id>` を一番上の末尾へ（仮の状態なら導くので何もしない）。
+    if (this.layout) this.layout = insertItem(this.layout, `w:${result.workspace.id}`, null);
     this.tabs.set(result.tab.id, result.tab);
     this.panes.set(result.pane.id, result.pane);
     this.focus = { workspaceId: result.workspace.id, tabId: result.tab.id, paneId: result.pane.id };
@@ -389,10 +444,35 @@ export class SessionModel {
 
   // --- groups & workspace ordering (20260923-workspace-grouping) --------------
 
-  createGroup(label: string): WorkspaceGroup {
+  /**
+   * グループを作る。`target` があればその workspace の**項目**を新しいグループへ入れる（リポジトリなら丸ごと）。位置は design の決まり:
+   * 対象が一番上にあればその位置にグループを置いて項目を中へ／対象がグループ G の中なら G の直後に置いて項目を移す／
+   * 対象が無ければ一番上の末尾。
+   */
+  createGroup(label: string, target?: WorkspaceId): WorkspaceGroup {
+    const ws = target !== undefined ? this.requireWorkspace(target) : undefined;
+    this.beginChange();
+    const layout = this.confirmedLayout();
     const id = this.nextId("g");
     const group: WorkspaceGroup = { id, label, collapsed: false };
     this.groups.set(id, group);
+    const gref: ItemRef = `g:${id}`;
+    const base: SidebarLayout = { top: layout.top, groups: { ...layout.groups, [id]: [] } };
+    const ref = ws ? this.layoutRefOf(layout, ws) : null;
+    const container = ref === null ? undefined : containerOf(layout, ref);
+    if (ref !== null && container === null) {
+      this.layout = { top: base.top.map((r) => (r === ref ? gref : r)), groups: { ...base.groups, [id]: [ref] } };
+    } else if (ref !== null && container !== undefined) {
+      const without = removeItem(base, ref);
+      const top = [...without.top];
+      const at = top.indexOf(`g:${container}`);
+      top.splice(at === -1 ? top.length : at + 1, 0, gref);
+      this.layout = { top, groups: { ...without.groups, [id]: [ref] } };
+    } else {
+      this.layout = insertItem(base, gref, null);
+    }
+    if (ws) this.setItemGroup(ws, id);
+    this.settle();
     return group;
   }
 
@@ -414,31 +494,45 @@ export class SessionModel {
     return updated;
   }
 
-  /** メンバーの groupId を null に戻す（design「server（SessionModel）」）。グループ自体の
-   *  実体だけを消す——`Workspace` は消えない。 */
+  /**
+   * グループを消す。中の項目はグループのあった位置へ順に出し、`repoGroups` のそのグループ行きを全部消す
+   * （メンバーの `groupId` は null に戻る）。`Workspace` は消えない。
+   */
   deleteGroup(id: GroupId): void {
     this.requireGroup(id);
+    this.beginChange();
+    const layout = this.confirmedLayout();
     this.groups.delete(id);
-    for (const ws of this.workspaces.values()) {
-      if (ws.groupId === id) this.workspaces.set(ws.id, { ...ws, groupId: null });
-    }
+    this.layout = deleteGroupFromLayout(layout, id);
+    for (const [repoKey, groupId] of [...this.repoGroups]) if (groupId === id) this.repoGroups.delete(repoKey);
+    this.settle();
   }
 
+  /** workspace の**項目**（リポジトリなら丸ごと）をグループの末尾へ入れる（別のグループに居れば移す）。 */
   addToGroup(workspaceId: WorkspaceId, groupId: GroupId): Workspace {
     const ws = this.requireWorkspace(workspaceId);
     this.requireGroup(groupId);
-    const updated = { ...ws, groupId };
-    this.workspaces.set(workspaceId, updated);
-    return updated;
+    this.beginChange();
+    const layout = this.confirmedLayout();
+    const ref = this.layoutRefOf(layout, ws);
+    // 判定が付いたのにレイアウトがまだ `w:<id>` のままのときは、その参照を外して項目の参照で入れる。
+    const stale = removeItem(layout, `w:${ws.id}`);
+    this.layout = addItemToGroup(itemRefOf(ws) === ref ? layout : stale, itemRefOf(ws), groupId);
+    this.setItemGroup(ws, groupId);
+    this.settle();
+    return this.workspaces.get(workspaceId)!;
   }
 
-  /** 現在のグループから外す（groupId を null に戻す）。既にどのグループにも属していなくても
-   *  無害（同じ結果を返すだけ）。 */
+  /** 項目をグループから出し、一番上の、そのグループの直後へ置く。既にどのグループにも属していなくても無害（同じ結果を返すだけ）。 */
   removeFromGroup(workspaceId: WorkspaceId): Workspace {
     const ws = this.requireWorkspace(workspaceId);
-    const updated = { ...ws, groupId: null };
-    this.workspaces.set(workspaceId, updated);
-    return updated;
+    this.beginChange();
+    const layout = this.confirmedLayout();
+    const ref = this.layoutRefOf(layout, ws);
+    this.layout = removeItemFromGroup(layout, ref);
+    this.setItemGroup(ws, null);
+    this.settle();
+    return this.workspaces.get(workspaceId)!;
   }
 
   /**
@@ -493,7 +587,9 @@ export class SessionModel {
     const newIdx = direction === "next" ? (idx === last ? 0 : idx + 1) : idx === 0 ? last : idx - 1;
     ids.splice(idx, 1);
     ids.splice(newIdx, 0, id);
+    this.beginChange();
     this.reorderWorkspaces(ids);
+    this.syncLayoutFromOrder();
     return this.listWorkspaces();
   }
 
@@ -516,7 +612,9 @@ export class SessionModel {
     // 実質無変化（ドロップ先が既に今の位置と同じ）なら null（`moveTab`/`moveWorkspace` と同じ規約。
     // タスク点検の指摘——揃っていないと、意味の無い `workspace.order_changed` 配布と永続化書き込みが起きる）。
     if (after.every((id, i) => id === before[i])) return null;
+    this.beginChange();
     this.reorderWorkspaces(after);
+    this.syncLayoutFromOrder();
     return this.listWorkspaces();
   }
 
@@ -526,6 +624,126 @@ export class SessionModel {
     const entries = order.map((id) => [id, this.workspaces.get(id)!] as const);
     this.workspaces.clear();
     for (const [id, ws] of entries) this.workspaces.set(id, ws);
+  }
+
+  /**
+   * 平らな順の入れ替え（`moveWorkspace`・`moveWorkspacesTo`）の後に、レイアウトを今の平らな順から導き直す。
+   * T8 で、この 2 つがレイアウトの操作（`item.move`・`item.move_by`）へ委ねる形になるまでのつなぎ
+   * （今は平らな順が先に動くので、レイアウトを後から合わせる）。
+   */
+  private syncLayoutFromOrder(): void {
+    if (this.layout) this.layout = layoutFromLegacy(this.listWorkspaces(), this.listGroups());
+  }
+
+  // --- サイドバーのレイアウト（20261004-group-worktree-items） -------------------------------
+
+  /** 今のレイアウト。仮の状態（`layout` を持たない保存から復元した直後）なら、今の平らな順と `groupId` から導く。 */
+  getLayout(): SidebarLayout {
+    return this.layout ?? layoutFromLegacy(this.listWorkspaces(), this.listGroups());
+  }
+
+  /** レイアウトを持っているか（false は仮の状態）。 */
+  hasLayout(): boolean {
+    return this.layout !== null;
+  }
+
+  getRepoGroups(): ReadonlyMap<string, GroupId> {
+    return this.repoGroups;
+  }
+
+  /**
+   * 仮の状態を確定する（既に確定していれば何もしない）。そのときの `layoutFromLegacy` の結果をレイアウトにし、
+   * グループに入っているリポジトリの所属を `repoGroups` に書く。以後は表の決まりで保つ。
+   */
+  confirmLayout(): void {
+    if (this.layout) return;
+    this.beginChange();
+    this.confirmedLayout();
+    this.settle();
+  }
+
+  /** 書き換える操作の入口。仮の状態なら先に確定してから、そのレイアウトを返す。 */
+  private confirmedLayout(): SidebarLayout {
+    if (this.layout) return this.layout;
+    const layout = layoutFromLegacy(this.listWorkspaces(), this.listGroups());
+    this.layout = layout;
+    for (const [groupId, refs] of Object.entries(layout.groups)) {
+      for (const ref of refs) if (ref.startsWith("r:")) this.repoGroups.set(ref.slice(2), groupId);
+    }
+    return layout;
+  }
+
+  /**
+   * workspace がレイアウトの中で今いる項目の参照。判定が付いたのにレイアウトがまだ `w:<id>` のままなら、そちら
+   * （判定の反映は `itemRefOf` に合わせて置き換える。T6）。
+   */
+  private layoutRefOf(layout: SidebarLayout, ws: Workspace): ItemRef {
+    const ref = itemRefOf(ws);
+    if (containerOf(layout, ref) !== undefined) return ref;
+    const own: ItemRef = `w:${ws.id}`;
+    return containerOf(layout, own) !== undefined ? own : ref;
+  }
+
+  /** workspace の項目の所属を書く。リポジトリなら `repoGroups`、そうでなければ workspace の `groupId`。`null` は所属なし。 */
+  private setItemGroup(ws: Workspace, groupId: GroupId | null): void {
+    const repoKey = ws.git?.repoKey;
+    if (repoKey) {
+      if (groupId === null) this.repoGroups.delete(repoKey);
+      else this.repoGroups.set(repoKey, groupId);
+    } else {
+      this.workspaces.set(ws.id, { ...ws, groupId });
+    }
+  }
+
+  /** 実効の `groupId`（リポジトリなら `repoGroups`、そうでなければ自分の値。無いグループは null）を全 workspace に保つ。 */
+  private recomputeGroupIds(): void {
+    for (const ws of this.workspaces.values()) {
+      const repoKey = ws.git?.repoKey;
+      const own = ws.groupId !== null && this.groups.has(ws.groupId) ? ws.groupId : null;
+      const effective = repoKey ? (this.repoGroups.get(repoKey) ?? null) : own;
+      if (effective !== ws.groupId) this.workspaces.set(ws.id, { ...ws, groupId: effective });
+    }
+  }
+
+  /** 書き換えの後始末: 実効の `groupId` を合わせ、Map を平らな順（レイアウトを平らにしたもの）へ並べ直す。仮の状態では何もしない。 */
+  private settle(): void {
+    if (!this.layout) return;
+    this.recomputeGroupIds();
+    const order = flattenWorkspaceIds(this.layout, this.listWorkspaces());
+    const current = [...this.workspaces.keys()];
+    if (order.some((id, i) => id !== current[i])) this.reorderWorkspaces(order);
+  }
+
+  /** 変わる前の状態を控える（1 回の `takeChanges` までに最初の 1 回だけ）。書き換える操作は、書き換える前に呼ぶ。 */
+  private beginChange(): void {
+    if (this.baseline) return;
+    this.baseline = {
+      layout: this.getLayout(),
+      order: [...this.workspaces.keys()],
+      groupIds: new Map([...this.workspaces.values()].map((w) => [w.id, w.groupId])),
+    };
+  }
+
+  /**
+   * 前回の `takeChanges` からの変わったものを返して、控えを捨てる（副作用なしの問い合わせではなく、1 回で消える）。
+   * 何も変わらなければ null。呼び出し側（`SessionService`）が共通の出口で配る。
+   */
+  takeChanges(): ModelChanges | null {
+    const base = this.baseline;
+    if (!base) return null;
+    this.baseline = null;
+    const layout = this.getLayout();
+    const order = [...this.workspaces.keys()];
+    // 順の比較は、前後どちらにも居る workspace だけで行う（作った・消したは、それぞれのイベントが運ぶ）。
+    const after = new Set(order);
+    const before = new Set(base.order);
+    const was = base.order.filter((id) => after.has(id));
+    const now = order.filter((id) => before.has(id));
+    const updated = [...this.workspaces.values()].filter((w) => base.groupIds.has(w.id) && base.groupIds.get(w.id) !== w.groupId);
+    const layoutChanged = !sameLayout(base.layout, layout);
+    const orderChanged = was.some((id, i) => id !== now[i]);
+    if (updated.length === 0 && !layoutChanged && !orderChanged) return null;
+    return { updated, layout: layoutChanged ? layout : null, order: orderChanged ? order : null };
   }
 
   private closeTabInternal(id: TabId): RemovalResult {
@@ -570,7 +788,9 @@ export class SessionModel {
         removedTabIds.push(tabId);
       }
     }
+    this.beginChange();
     this.workspaces.delete(id);
+    this.removeFromLayout(ws);
     if (this.focus?.workspaceId === id) {
       this.focus = null;
       const first = this.workspaces.values().next();
@@ -581,6 +801,19 @@ export class SessionModel {
       }
     }
     return { removedPaneIds, removedTabIds, closedWorkspaceId: id };
+  }
+
+  /**
+   * 消えた workspace をレイアウトから外す（モデルの削除の 1 か所。`workspace.closed` を出す 5 経路はすべてここを通る）。
+   * リポジトリの項目は、同じリポジトリの workspace が他に残っていれば残す。空になった項目は外す（`repoGroups` は残す）。
+   */
+  private removeFromLayout(ws: Workspace): void {
+    if (!this.layout) return;
+    let layout = removeItem(this.layout, `w:${ws.id}`);
+    const ref = itemRefOf(ws);
+    if (!ref.startsWith("w:") && ![...this.workspaces.values()].some((w) => itemRefOf(w) === ref)) layout = removeItem(layout, ref);
+    this.layout = layout;
+    this.settle();
   }
 
   /** tab を閉じた結果（a）に、それが引き起こした workspace の閉鎖の結果（b）を重ねる。 */
@@ -915,6 +1148,7 @@ export class SessionModel {
       tabs: this.listTabs(),
       panes: this.listPanes(),
       groups: this.listGroups(),
+      layout: this.getLayout(),
       focus: this.focus,
       limits,
     };
@@ -943,6 +1177,7 @@ export class SessionModel {
       autoLabel, // 呼ぶ側（`SessionService.restore`）が決める
     };
     this.workspaces.set(workspace.id, workspace);
+    this.layout = null; // 復元した直後は仮の状態（`layout` の復元は T9。確定は `confirmLayout`）
     for (const tabData of data.tabs) {
       const tab: Tab = {
         id: tabData.id,
@@ -984,5 +1219,6 @@ export class SessionModel {
    *  id は払い出さない。`restoreWorkspace` と同じ形。20260923-workspace-grouping）。 */
   restoreGroup(data: SessionFileGroup): void {
     this.groups.set(data.id, { id: data.id, label: data.label, collapsed: data.collapsed });
+    this.layout = null; // 同上（仮の状態）
   }
 }

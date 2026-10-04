@@ -82,3 +82,23 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - 起動後の最初の 1 周の合図 `onFirstRoundDone` は `DefaultGitInfoPoller` のクラスだけに置いた（`GitInfoPoller` インターフェースに載せると既存の fake が壊れるため）。`start()` が走らせる 1 周が失敗しても出し、`start()` ごとに出る（再開で 2 回以上）。
 - T6 まで、`pollWorkspace` は `unmanaged`／`unknown` をどちらも今までどおり `null` として `applyWorkspaceIdentity` へ渡す（SessionService の署名は変えていない）。
 - 合図 `onFirstRoundDone` は `stop()` の後（一時停止中）に届きうる。T10 の確定は 1 回だけで冪等なので、ここでは止めない（T10 で扱う）。
+
+## D11: モデルの「変わったもの」は控えの差分で返す（T5。`beginChange` / `takeChanges`）
+
+- 書き換える操作（作る・閉じる 5 経路・グループの出し入れ・並べ替え）は、書き換える**前**に `beginChange()`（前回の `takeChanges` からの最初の 1 回だけ、レイアウト・平らな順・各 workspace の `groupId` を控える）を呼ぶ。`takeChanges()` が控えと今を比べ、`{ updated, layout, order }`（変わったものだけ。何も変わらなければ null）を返して控えを捨てる。`updated` は前後どちらにも居る workspace のうち実効の `groupId` が変わったもの（作った・消したは `workspace.created`・`workspace.closed` が運ぶ）。`order` は前後どちらにも居る workspace だけで比べる。
+- 理由: `workspace.closed` を出す 5 経路は `moveToTab`（boolean）・`moveToNewTab`・`RemovalResult` と戻り値の形がばらばらで、全部に「変わったもの」を足すと既存の呼び出しとテストを広く壊す。差分方式なら戻り値を変えずに、`SessionService` の共通の出口 `publishSidebarChanges()`（`workspace.updated` → `sidebar.layout_changed` → `workspace.order_changed` → `persist.touch()`）が 1 か所で配れる。モデルはイベントを出さない（副作用なし）。控えが残っても、次の `takeChanges` までの差分が増えるだけで無害。
+- 共通の出口は変化が無くても `persist.touch()` を呼ぶので、出口を呼ぶ経路（作る・`closeWorkspaceOne`・グループ操作・並べ替え）の個別の `persist.touch()` は外した（保存の予約は 1 回のまま）。`closeTab`・`closePane`・`moveToTab`・`moveToNewTab` は workspace が消えた分岐だけ出口を呼び、既存の `persist.touch()` はそのまま。
+
+## D12: 仮の状態の持ち方と T5 のつなぎ（T5）
+
+- `SessionModel.layout: SidebarLayout | null`。**新しく始めたモデルは空のレイアウトを持つ**（確定済み）。`restoreWorkspace`／`restoreGroup` が `null`（仮の状態）にする。T9 が `layout` の復元（`null` に戻さない）を足す。
+- 仮の状態: `getLayout()` は読むたびに `layoutFromLegacy` で導く。仮の間に workspace を作っても `w:` は足さない（導く結果に入る）。`settle`（実効の `groupId` の計算と Map の並べ直し）は何もしない（`groupId`・Map の順がそのまま正）。
+- 確定: `confirmLayout()`（公開。`layout` が `null` のときだけ働く。T10 の確定のきっかけがこれを呼ぶ）。書き換える操作（`createGroup`・`deleteGroup`・`addToGroup`・`removeFromGroup`）は先に同じ確定をしてから当てる（design の「確定のきっかけ (b)」の入口。サービス層の「どの RPC が確定か」の判定は T10）。確定は `layoutFromLegacy` の結果をレイアウトにし、グループの中の `r:<repoKey>` を `repoGroups` に書く。
+- **`moveWorkspace`／`moveWorkspacesTo`（T8 で `item.move_by`／`item.move` に委ねる）は T5 ではつなぎ**: 今までどおり Map を並べ替えてから、レイアウトを今の平らな順から `layoutFromLegacy` で導き直す（`settle` は通さない）。平らな順が先に動く今の作りと、新しい「レイアウトが正」の作りが食い違わないようにするだけで、T8 で置き換わる。これにより `SessionModel.test.ts:948-1025`（巡回する・1 件だけ動く等）は T5 では変わらず通る。
+- 判定が付いたのに（T6 より前なので）レイアウトがまだ `w:<id>` の workspace に当たる操作のため、`layoutRefOf` を置いた: レイアウトに `itemRefOf(ws)` があればそれ、無く `w:<id>` があればそれ。`addToGroup` は `w:<id>` を外して項目の参照で入れる。T6 が判定の反映で `w:` を `r:` に置き換えれば使われなくなる（残してよい防御）。
+
+## D13: 実効の `groupId` の計算（T5）
+
+- `settle()`（レイアウトを持つとき）が全 workspace に実効の `groupId` を保つ: `git.repoKey` があれば `repoGroups.get(repoKey) ?? null`、無ければ workspace 自身の値（存在しないグループなら null）。項目の所属の書き込みは `setItemGroup`（リポジトリなら `repoGroups`、そうでなければ `groupId`）。`deleteGroup` は `repoGroups` のそのグループ行きを消し、`groupId` は計算で null に戻る。
+- `createGroup(label, target?)` は T7 の `group.create` の `workspaceId` のモデル側（位置は design の表のとおり）。RPC のハンドラはまだ `workspaceId` を渡さない（T7）。
+- 既存テストの調整（T8 で意味が変わる範囲ではない）: `SessionService.test.ts`・`WsGateway.integration.test.ts` のイベント列に `sidebar.layout_changed` を足した。`SessionModel.test.ts` の `linkedWorktreeGroupMembers`「手動グループに入った workspace を除く」は、項目丸ごとグループへ入る新しい決まりで期待が `[]` に変わった（この関数は T19 で消える）。

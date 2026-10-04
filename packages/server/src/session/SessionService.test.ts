@@ -268,7 +268,7 @@ describe("SessionService — workspace creation", () => {
     const { workspace, pane } = await service.createWorkspace("/home/u/api", "api");
     expect(workspace.cwd).toBe("/home/u/api");
     expect(pane.status).toBe("running");
-    expect(events).toEqual(["workspace.created", "tab.created", "pane.created"]); // D88
+    expect(events).toEqual(["workspace.created", "tab.created", "pane.created", "sidebar.layout_changed"]); // D88（最後は新しい項目 `w:<id>` が一番上の末尾に入った知らせ）
     expect(persist.touchCount).toBe(1);
     expect(terminals.get(pane.id)).toBeDefined();
   });
@@ -508,7 +508,7 @@ describe("SessionService — tabs and panes", () => {
       const ok = service.moveToTab(p1.id, t2.id);
 
       expect(ok).toBe(true);
-      expect(events).toEqual(["pane.updated", "tab.closed", "workspace.closed", "layout.updated"]);
+      expect(events).toEqual(["pane.updated", "tab.closed", "workspace.closed", "sidebar.layout_changed", "layout.updated"]);
       expect(service.snapshot().tabs.map((t) => t.id)).not.toContain(t1.id);
       expect(service.snapshot().workspaces.map((w) => w.id)).not.toContain(w1.id);
       expect(service.snapshot().workspaces.map((w) => w.id)).toContain(w2.id);
@@ -586,7 +586,7 @@ describe("SessionService — tabs and panes", () => {
       const newTab = service.moveToNewTab(p1.id, w2.id); // w1 の唯一の tab の唯一の pane を、別 workspace へ
 
       expect(newTab).not.toBeNull();
-      expect(events).toEqual(["pane.updated", "tab.created", "workspace.updated", "tab.closed", "workspace.closed"]);
+      expect(events).toEqual(["pane.updated", "tab.created", "workspace.updated", "tab.closed", "workspace.closed", "sidebar.layout_changed"]);
       expect(service.snapshot().tabs.map((t) => t.id)).not.toContain(t1.id);
       expect(service.snapshot().workspaces.map((w) => w.id)).not.toContain(w1.id);
       expect(service.snapshot().workspaces.map((w) => w.id)).toContain(w2.id);
@@ -647,7 +647,16 @@ describe("SessionService — tabs and panes", () => {
     await service.closePane(pane.id);
 
     expect(host.disposed).toBe(true);
-    expect(events).toEqual(["pane.closed", "tab.closed", "workspace.closed", "workspace.created", "tab.created", "pane.created"]); // D88
+    expect(events).toEqual([
+      "pane.closed",
+      "tab.closed",
+      "workspace.closed",
+      "sidebar.layout_changed",
+      "workspace.created",
+      "tab.created",
+      "pane.created",
+      "sidebar.layout_changed",
+    ]); // D88
     expect(service.snapshot().workspaces.length).toBe(1);
     expect(service.snapshot().workspaces[0]!.id).not.toBe(workspace.id); // 新しく作られた別の workspace
   });
@@ -849,7 +858,8 @@ describe("SessionService — workspace grouping and ordering", () => {
     bus.subscribe((e) => events.push({ event: e.event, ...(e.data as { group?: { id: string; label: string; collapsed: boolean }; workspace?: { groupId: string | null } }) }));
 
     const group = service.createGroup("backend");
-    expect(events.at(-1)).toEqual({ event: "group.created", group });
+    expect(events.map((e) => e.event)).toEqual(["group.created", "sidebar.layout_changed"]); // グループの項目 `g:<id>` が一番上の末尾に入る
+    expect(events[0]).toEqual({ event: "group.created", group });
 
     service.renameGroup(group.id, "frontend");
     expect(events.at(-1)?.event).toBe("group.updated");
@@ -860,13 +870,106 @@ describe("SessionService — workspace grouping and ordering", () => {
     service.toggleGroupCollapsed(group.id); // もう一度で戻る（競合しない。タスク点検の指摘）
     expect(events.at(-1)).toEqual({ event: "group.updated", group: { id: group.id, label: "frontend", collapsed: false } });
 
+    const updatedEvents = (): typeof events => events.filter((e) => e.event === "workspace.updated");
     service.addToGroup(workspace.id, group.id);
-    expect(events.at(-1)?.event).toBe("workspace.updated");
-    expect(events.at(-1)?.workspace?.groupId).toBe(group.id);
+    expect(updatedEvents().at(-1)?.workspace?.groupId).toBe(group.id);
 
     service.removeFromGroup(workspace.id);
-    expect(events.at(-1)?.event).toBe("workspace.updated");
-    expect(events.at(-1)?.workspace?.groupId).toBeNull();
+    expect(updatedEvents().at(-1)?.workspace?.groupId).toBeNull();
+  });
+
+  // 20261004-group-worktree-items（T5）。`workspace.closed` を出す 5 経路は、どれもサイドバーの共通の出口を通る。
+  describe("sidebar.layout_changed (the common exit)", () => {
+    type Seen = { event: string; layout?: { top: string[]; groups: Record<string, string[]> }; workspaceId?: string };
+    const watch = (): Seen[] => {
+      const seen: Seen[] = [];
+      bus.subscribe((e) => seen.push({ event: e.event, ...(e.data as object) }));
+      return seen;
+    };
+    /** `workspace.closed` の後に、閉じた workspace を含まない `sidebar.layout_changed` が届いている。 */
+    const expectLeftLayout = (seen: Seen[], closedId: string): void => {
+      const closedAt = seen.findIndex((e) => e.event === "workspace.closed" && e.workspaceId === closedId);
+      expect(closedAt).toBeGreaterThanOrEqual(0);
+      const layoutEvent = seen.slice(closedAt).find((e) => e.event === "sidebar.layout_changed");
+      expect(layoutEvent).toBeDefined();
+      expect(JSON.stringify(layoutEvent!.layout)).not.toContain(`w:${closedId}`);
+    };
+
+    it("closeWorkspace", async () => {
+      const { workspace: w1 } = await service.createWorkspace("/a", "a");
+      const { workspace: w2 } = await service.createWorkspace("/b", "b");
+      const seen = watch();
+      persist.touchCount = 0;
+      await service.closeWorkspace(w1.id);
+      expectLeftLayout(seen, w1.id);
+      expect(service.snapshot().layout?.top).toEqual([`w:${w2.id}`]);
+      expect(persist.touchCount).toBeGreaterThan(0);
+    });
+
+    it("closeTab (the last tab of the workspace)", async () => {
+      const { workspace: w1, tab } = await service.createWorkspace("/a", "a");
+      await service.createWorkspace("/b", "b");
+      const seen = watch();
+      await service.closeTab(tab.id);
+      expectLeftLayout(seen, w1.id);
+    });
+
+    it("closePane (the last pane of the workspace)", async () => {
+      const { workspace: w1, pane } = await service.createWorkspace("/a", "a");
+      await service.createWorkspace("/b", "b");
+      const seen = watch();
+      await service.closePane(pane.id);
+      expectLeftLayout(seen, w1.id);
+    });
+
+    it("moveToTab (the source workspace becomes empty)", async () => {
+      const { workspace: w1, pane } = await service.createWorkspace("/a", "a");
+      const { tab: t2 } = await service.createWorkspace("/b", "b");
+      const seen = watch();
+      service.moveToTab(pane.id, t2.id);
+      expectLeftLayout(seen, w1.id);
+    });
+
+    it("moveToNewTab (the source workspace becomes empty)", async () => {
+      const { workspace: w1, pane } = await service.createWorkspace("/a", "a");
+      const { workspace: w2 } = await service.createWorkspace("/b", "b");
+      const seen = watch();
+      service.moveToNewTab(pane.id, w2.id);
+      expectLeftLayout(seen, w1.id);
+    });
+
+    it("createWorkspace publishes the layout with the new workspace at the end", async () => {
+      const { workspace: w1 } = await service.createWorkspace("/a", "a");
+      const seen = watch();
+      const { workspace: w2 } = await service.createWorkspace("/b", "b");
+      expect(seen.find((e) => e.event === "sidebar.layout_changed")?.layout?.top).toEqual([`w:${w1.id}`, `w:${w2.id}`]);
+    });
+
+    it("group operations publish workspace.updated, then sidebar.layout_changed, then workspace.order_changed", async () => {
+      const { workspace: w1 } = await service.createWorkspace("/a", "a");
+      const { workspace: w2 } = await service.createWorkspace("/b", "b");
+      const g1 = service.createGroup("g1", w2.id); // w2 を新しいグループへ（一番上の位置にグループが入る）
+      const seen = watch();
+      persist.touchCount = 0;
+      service.addToGroup(w1.id, g1.id);
+      expect(seen.map((e) => e.event)).toEqual(["workspace.updated", "sidebar.layout_changed", "workspace.order_changed"]); // 平らな順は [w1, w2] → [w2, w1]
+      expect(persist.touchCount).toBeGreaterThan(0);
+      seen.length = 0;
+      service.removeFromGroup(w2.id); // w2 がグループの直後へ出る → 平らな順が [w1, w2] に戻る
+      expect(seen.map((e) => e.event)).toEqual(["workspace.updated", "sidebar.layout_changed", "workspace.order_changed"]);
+      seen.length = 0;
+      service.deleteGroup(g1.id);
+      expect(seen.map((e) => e.event)).toEqual(["group.deleted", "workspace.updated", "sidebar.layout_changed"]);
+    });
+
+    it("createGroup with a workspaceId puts that item into the new group", async () => {
+      const { workspace: w1 } = await service.createWorkspace("/a", "a");
+      const seen = watch();
+      const group = service.createGroup("g", w1.id);
+      expect(seen.map((e) => e.event)).toEqual(["group.created", "workspace.updated", "sidebar.layout_changed"]);
+      expect(service.snapshot().layout).toEqual({ top: [`g:${group.id}`], groups: { [group.id]: [`w:${w1.id}`] } });
+      expect(service.getWorkspace(w1.id)?.groupId).toBe(group.id);
+    });
   });
 
   it("deleteGroup publishes group.deleted, then workspace.updated for every member whose groupId is cleared", async () => {

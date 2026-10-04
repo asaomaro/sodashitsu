@@ -314,6 +314,8 @@ describe("WsGateway (integration, real ws + real PTY)", () => {
       expect(tabCreatedEvt.event).toBe("tab.created");
       const paneCreatedEvt = JSON.parse((await nextMessage(ws)).data.toString("utf8"));
       expect(paneCreatedEvt.event).toBe("pane.created");
+      const layoutEvt = JSON.parse((await nextMessage(ws)).data.toString("utf8")); // 20261004-group-worktree-items
+      expect(layoutEvt.event).toBe("sidebar.layout_changed");
       const createResp = JSON.parse((await nextMessage(ws)).data.toString("utf8"));
       expect(createResp.id).toBe("r2");
       const paneId = createResp.result.pane.id as string;
@@ -387,6 +389,7 @@ describe("WsGateway (integration, real ws + real PTY)", () => {
     await nextMessage(first.ws); // workspace.created
     await nextMessage(first.ws); // tab.created（D88）
     await nextMessage(first.ws); // pane.created
+    await nextMessage(first.ws); // sidebar.layout_changed（20261004-group-worktree-items）
     const createResp = JSON.parse((await nextMessage(first.ws)).data.toString("utf8"));
     const paneId = createResp.result.pane.id as string;
 
@@ -425,12 +428,14 @@ describe("WsGateway (integration, real ws + real PTY)", () => {
       await firstInbox.next(); // workspace.created（first 自身）
       await firstInbox.next(); // tab.created（同上。D88）
       await firstInbox.next(); // pane.created（first 自身）
+      await firstInbox.next(); // sidebar.layout_changed（20261004-group-worktree-items）
       const createResp = JSON.parse((await firstInbox.next()).data.toString("utf8"));
       const paneId = createResp.result.pane.id as string;
 
       await secondInbox.next(); // workspace.created（second への配信。AC9 の「どちらからも見える」）
       await secondInbox.next(); // tab.created（同上。D88）
       await secondInbox.next(); // pane.created（同上）
+      await secondInbox.next(); // sidebar.layout_changed（同上）
 
       request(first.ws, "r2", "pane.subscribe", { paneId, scrollbackLines: 100 });
       await firstInbox.next();

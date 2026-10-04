@@ -169,3 +169,127 @@ AssertionError: expected { kind: 'unmanaged' } to deeply equal { kind: 'unknown'
       Tests  3 failed | 34 passed (37)
 ```
 - T4 [nit] bare の isLinkedWorktree=false をテストが固定していない → expect に足した。onFirstRoundDone が stop 後にも出る点は D10 に記録（T10 で扱う）。--git-dir 失敗の分岐の壊し確認は新規挙動のため省略 [conv:-]
+
+### T5 壊して落ちる確認
+
+1. モデルの削除の 1 か所（`closeWorkspaceInternal`）で `this.removeFromLayout(ws)` を外し、あわせて `closePane` の `workspace.closed` の分岐から `this.publishSidebarChanges()` も外して実行（元に戻し済み）。5 経路すべてのテストと、グループ・リポジトリの項目のテストが落ちる:
+
+```
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+ ❯ src/session/SessionModel.test.ts (121 tests | 7 failed) 41ms
+   ❯ SessionModel — sidebar layout (22)
+     ❯ a workspace that disappears leaves the layout through every path (7)
+       × closeWorkspace 7ms
+       × closeTab on the last tab 1ms
+       × closePane on the last pane 1ms
+       × moveToTab that empties the source workspace 1ms
+       × moveToNewTab that empties the source workspace 1ms
+       × a workspace inside a group leaves the group's list too 1ms
+       × a repository item stays until its last workspace is gone; repoGroups is kept 1ms
+ ❯ src/session/SessionService.test.ts (162 tests | 8 failed) 2458ms
+   ❯ SessionService — tabs and panes (32)
+     ❯ moveToTab (4)
+       × 移動元 workspace も連鎖して空になるとき（D18）: tab.closed → workspace.closed を publish する 19ms
+     ❯ moveToNewTab (4)
+       × 移動元 workspace も連鎖して空になるとき（D18）: tab.closed → workspace.closed を publish する（moveToTab と同じ分岐。taskcheck 指摘） 12ms
+     × closing the only pane closes the tab and workspace, disposes the PTY, and auto-creates a replacement (D24) 11ms
+   ❯ SessionService — workspace grouping and ordering (16)
+     ❯ sidebar.layout_changed (the common exit) (8)
+       × closeWorkspace 12ms
+       × closeTab (the last tab of the workspace) 12ms
+       × closePane (the last pane of the workspace) 11ms
+       × moveToTab (the source workspace becomes empty) 11ms
+       × moveToNewTab (the source workspace becomes empty) 11ms
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > a workspace that disappears leaves the layout through every path > closeWorkspace
+AssertionError: expected [ 'w:w1', 'w:w2' ] to deeply equal [ 'w:w2' ]
+- Expected
++ Received
+  [
++   "w:w1",
+    "w:w2",
+  ]
+ ❯ src/session/SessionModel.test.ts:1281:37
+    1279|       model.takeChanges();
+    1280|       model.closeWorkspace(a.id);
+    1281|       expect(model.getLayout().top).toEqual([`w:${b.id}`]);
+       |                                     ^
+    1282|       expect(model.takeChanges()?.layout).toEqual({ top: [`w:${b.id}`]…
+    1283|     });
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > a workspace that disappears leaves the layout through every path > closeTab on the last tab
+AssertionError: expected [ 'w:w1', 'w:w2' ] to deeply equal [ 'w:w2' ]
+- Expected
++ Received
+```
+
+2. `closePane` の分岐の `publishSidebarChanges()` だけを外して実行（元に戻し済み。モデルは正しいので、出口を通らないことだけが落ちる）:
+
+```
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+ ❯ src/session/SessionService.test.ts (162 tests | 2 failed) 2460ms
+   ❯ SessionService — tabs and panes (32)
+     × closing the only pane closes the tab and workspace, disposes the PTY, and auto-creates a replacement (D24) 22ms
+   ❯ SessionService — workspace grouping and ordering (16)
+     ❯ sidebar.layout_changed (the common exit) (8)
+       × closePane (the last pane of the workspace) 11ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionService.test.ts > SessionService — tabs and panes > closing the only pane closes the tab and workspace, disposes the PTY, and auto-creates a replacement (D24)
+AssertionError: expected [ 'pane.closed', 'tab.closed', …(5) ] to deeply equal [ 'pane.closed', 'tab.closed', …(6) ]
+- Expected
++ Received
+  [
+    "pane.closed",
+    "tab.closed",
+    "workspace.closed",
+-   "sidebar.layout_changed",
+    "workspace.created",
+    "tab.created",
+    "pane.created",
+    "sidebar.layout_changed",
+  ]
+ ❯ src/session/SessionService.test.ts:650:20
+    648|
+    649|     expect(host.disposed).toBe(true);
+    650|     expect(events).toEqual([
+       |                    ^
+    651|       "pane.closed",
+    652|       "tab.closed",
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+```
+
+### T5 点検で足した回帰テストの壊して落ちる確認（addToGroup の二重）
+
+```
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+ ❯ src/session/SessionModel.test.ts (122 tests | 1 failed) 35ms
+   ❯ SessionModel — sidebar layout (23)
+     × addToGroup on a workspace whose judgment arrived but whose layout still holds w:<id> does not leave a duplicate 7ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > addToGroup on a workspace whose judgment arrived but whose layout still holds w:<id> does not leave a duplicate
+AssertionError: expected { top: [ 'w:w1', 'g:g1' ], …(1) } to deeply equal { top: [ 'g:g1' ], …(1) }
+- Expected
++ Received
+@@ -3,8 +3,9 @@
+      "g1": [
+        "r:/a/.git",
+      ],
+    },
+    "top": [
++     "w:w1",
+      "g:g1",
+    ],
+  }
+ ❯ src/session/SessionModel.test.ts:1272:31
+    1270|     model.updateWorkspaceGit(a.id, gitOf("/a/.git", false));
+    1271|     model.addToGroup(a.id, group.id);
+    1272|     expect(model.getLayout()).toEqual({ top: [`g:${group.id}`], groups…
+       |                               ^
+    1273|   });
+    1274|
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+   Start at  12:33:11
+```
+- T5 [should] addToGroup の判定が逆で、判定が付いたが layout が w:<id> のままの workspace に w: と r: の二重ができる → itemRefOf(ws) === ref のときだけ layout を使う形に直し、テストを足した [conv:-]

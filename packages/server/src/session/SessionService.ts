@@ -251,6 +251,23 @@ export class SessionService {
     return this.model.buildSnapshot(this.serverVersion, this.host, { scrollbackLines: this.scrollbackLines });
   }
 
+  /**
+   * サイドバーまわりの共通の出口（20261004-group-worktree-items）。モデルが控えた「前回からの変わったもの」を、
+   * (1) 実効の `groupId` が変わった workspace の `workspace.updated`、(2) レイアウトが変わっていれば `sidebar.layout_changed`、
+   * (3) 平らな順が変わっていれば `workspace.order_changed`（古い画面向け）の順に配り、最後に `persist.touch()` する（変わらなくても呼ぶ。
+   * 呼ぶ側は保存の予約を重ねて書かない）。
+   * レイアウト・所属・workspace の有無を変える経路（作る・閉じる 5 経路・グループの操作・並べ替え）は、モデルを書き換えたらここを通す。
+   */
+  private publishSidebarChanges(): void {
+    const changes = this.model.takeChanges();
+    if (changes) {
+      for (const workspace of changes.updated) this.bus.publish({ event: "workspace.updated", data: { workspace } });
+      if (changes.layout) this.bus.publish({ event: "sidebar.layout_changed", data: { layout: changes.layout } });
+      if (changes.order) this.bus.publish({ event: "workspace.order_changed", data: { workspaceIds: changes.order } });
+    }
+    this.persist.touch();
+  }
+
   // --- 読み取り専用のアクセサ（`SizeAuthority`・`AgentMonitor` 等、読むだけの相手向け） -------
 
   getWorkspace(id: WorkspaceId): Workspace | undefined {
@@ -320,8 +337,8 @@ export class SessionService {
     // E2E で発見。D88）。
     this.bus.publish({ event: "tab.created", data: { tab: reserved.tab } });
     this.bus.publish({ event: "pane.created", data: { pane: reserved.pane } });
+    this.publishSidebarChanges();
     if (naming.autoLabel && !naming.degraded) this.labelCwd.set(reserved.workspace.id, resolvedCwd); // 最初の pane の場所＝開いた場所
-    this.persist.touch();
     if (spawn.alreadyExited) await this.closePaneAfterExit(reserved.pane.id, 0); // D37：猶予中に code 0 で即終了していた
     return { workspace: reserved.workspace, tab: reserved.tab, pane: reserved.pane, ...(place.fellBack ? { cwdFallback: true as const } : {}) };
   }
@@ -494,7 +511,7 @@ export class SessionService {
     for (const tabId of result.removedTabIds) this.bus.publish({ event: "tab.closed", data: { tabId } });
     this.bus.publish({ event: "workspace.closed", data: { workspaceId: id } });
     this.forgetWorkspace(id);
-    this.persist.touch();
+    this.publishSidebarChanges();
   }
 
   // --- workspace の並べ替えとグループ（20260923-workspace-grouping） ----------------------
@@ -504,25 +521,20 @@ export class SessionService {
    *  `workspace.order_changed` で配る（decisions.md D5：個々の Workspace は変わらないため）。 */
   moveWorkspace(id: WorkspaceId, direction: "previous" | "next"): void {
     const updated = this.model.moveWorkspace(id, direction);
-    if (updated) {
-      this.bus.publish({ event: "workspace.order_changed", data: { workspaceIds: updated.map((w) => w.id) } });
-      this.persist.touch();
-    }
+    if (updated) this.publishSidebarChanges();
   }
 
   /** `workspace.move_to`（D&D。単一・グループ一括の両方を同じ経路で扱う）。 */
   moveWorkspacesTo(workspaceIds: WorkspaceId[], beforeWorkspaceId: WorkspaceId | null): void {
     const updated = this.model.moveWorkspacesTo(workspaceIds, beforeWorkspaceId);
-    if (updated) {
-      this.bus.publish({ event: "workspace.order_changed", data: { workspaceIds: updated.map((w) => w.id) } });
-      this.persist.touch();
-    }
+    if (updated) this.publishSidebarChanges();
   }
 
-  createGroup(label: string): WorkspaceGroup {
-    const group = this.model.createGroup(label);
+  /** `workspaceId` があれば、その workspace の項目を新しいグループへ入れる（リポジトリなら丸ごと）。 */
+  createGroup(label: string, workspaceId?: WorkspaceId): WorkspaceGroup {
+    const group = this.model.createGroup(label, workspaceId);
     this.bus.publish({ event: "group.created", data: { group } });
-    this.persist.touch();
+    this.publishSidebarChanges();
     return group;
   }
 
@@ -538,30 +550,24 @@ export class SessionService {
     this.persist.touch();
   }
 
-  /** メンバーの `groupId` が null に戻る（`SessionModel.deleteGroup`）ので、それぞれ
-   *  `workspace.updated` で知らせる——**削除する前に**対象を控える（削除後は `groupId` が
-   *  既に外れていて探せない）。 */
+  /** 中の項目はグループのあった位置へ出て、メンバーの `groupId` が null に戻る。それぞれの `workspace.updated`・`sidebar.layout_changed`・
+   *  `workspace.order_changed` は共通の出口が配る（`group.deleted` の後）。 */
   deleteGroup(id: GroupId): void {
-    const members = this.model.listWorkspaces().filter((w) => w.groupId === id);
     this.model.deleteGroup(id);
     this.bus.publish({ event: "group.deleted", data: { groupId: id } });
-    for (const ws of members) {
-      const updated = this.model.getWorkspace(ws.id);
-      if (updated) this.bus.publish({ event: "workspace.updated", data: { workspace: updated } });
-    }
-    this.persist.touch();
+    this.publishSidebarChanges();
   }
 
+  /** workspace の項目（リポジトリなら丸ごと）をグループの末尾へ入れる。 */
   addToGroup(workspaceId: WorkspaceId, groupId: GroupId): void {
-    const updated = this.model.addToGroup(workspaceId, groupId);
-    this.bus.publish({ event: "workspace.updated", data: { workspace: updated } });
-    this.persist.touch();
+    this.model.addToGroup(workspaceId, groupId);
+    this.publishSidebarChanges();
   }
 
+  /** 項目をグループから出し、一番上の、そのグループの直後へ置く。 */
   removeFromGroup(workspaceId: WorkspaceId): void {
-    const updated = this.model.removeFromGroup(workspaceId);
-    this.bus.publish({ event: "workspace.updated", data: { workspace: updated } });
-    this.persist.touch();
+    this.model.removeFromGroup(workspaceId);
+    this.publishSidebarChanges();
   }
 
   // --- tab --------------------------------------------------------------------
@@ -634,6 +640,7 @@ export class SessionService {
     if (result.closedWorkspaceId) {
       this.bus.publish({ event: "workspace.closed", data: { workspaceId: result.closedWorkspaceId } });
       this.forgetWorkspace(result.closedWorkspaceId);
+      this.publishSidebarChanges();
     } else {
       // workspace 自体は生き残った＝`model.closeTab` が `tabIds`/`activeTabId` を更新している
       // （`SessionModel.closeTabInternal`）。その変化を知らせる（D88。上の createTab と対）。
@@ -811,6 +818,7 @@ export class SessionService {
     if (result.closedWorkspaceId) {
       this.bus.publish({ event: "workspace.closed", data: { workspaceId: result.closedWorkspaceId } });
       this.forgetWorkspace(result.closedWorkspaceId);
+      this.publishSidebarChanges();
     } else if (result.removedTabIds.length > 0 && workspaceId) {
       // pane を閉じた結果、tab ごと連鎖して閉じたが workspace は生き残った（D18 の連鎖・closeTab と同じ形。D88）。
       const updatedWs = this.model.getWorkspace(workspaceId);
@@ -949,6 +957,7 @@ export class SessionService {
       } else {
         this.bus.publish({ event: "workspace.closed", data: { workspaceId: sourceWorkspaceId } });
         this.forgetWorkspace(sourceWorkspaceId);
+        this.publishSidebarChanges();
       }
     }
     this.bus.publish({ event: "layout.updated", data: { tab: this.requireTab(targetTabId) } });
@@ -984,6 +993,7 @@ export class SessionService {
       } else {
         this.bus.publish({ event: "workspace.closed", data: { workspaceId: sourceWorkspaceId } });
         this.forgetWorkspace(sourceWorkspaceId);
+        this.publishSidebarChanges();
       }
     }
     this.persist.touch();

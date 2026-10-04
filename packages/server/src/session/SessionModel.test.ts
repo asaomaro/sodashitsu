@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NotFoundError, SessionModel, type NewPaneInit } from "./SessionModel.js";
 import * as Layout from "./LayoutTree.js";
+import type { GitInfo } from "@sodashitsu/protocol";
 
 const init: NewPaneInit = { cwd: "/home/u", shell: "/bin/bash", cols: 80, rows: 24 };
 
@@ -1068,8 +1069,8 @@ describe("SessionModel — misc mutations", () => {
       model.updateWorkspaceGit(wt1.id, { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
       model.updateWorkspaceGit(wt2.id, { branch: "other", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
       const group = model.createGroup("backend");
-      model.addToGroup(wt2.id, group.id); // wt2 は手動グループに入っている
-      expect(model.linkedWorktreeGroupMembers(main.id)).toEqual([wt1.id]); // wt2 は含まれない
+      model.addToGroup(wt2.id, group.id); // 項目（リポジトリ）丸ごとグループへ入る（20261004-group-worktree-items）。T19 でこの関数ごと消える
+      expect(model.linkedWorktreeGroupMembers(main.id)).toEqual([]); // 本体もグループに入ったので束ねない（古い判定のまま）
     });
 
     it("returns [] when the main checkout itself is in a manual group", () => {
@@ -1239,5 +1240,277 @@ describe("SessionModel — snapshot and id counters", () => {
     const { workspace } = model.createWorkspace("/home/u", "api", init);
     expect(workspace.id).toBe("w5");
     expect(model.getNextIdCounters().w).toBe(6);
+  });
+});
+
+// 20261004-group-worktree-items（サイドバーの項目の並び。T5）。
+describe("SessionModel — sidebar layout", () => {
+  const gitOf = (repoKey: string, isLinkedWorktree: boolean): GitInfo => ({ branch: "b", ahead: 0, behind: 0, repoKey, isLinkedWorktree });
+
+  /** a・b が同じリポジトリ K（a が本体）、c が管理外。レイアウトは確定済み（`r:K` と `w:c` が一番上）。 */
+  function repoModel(): { model: SessionModel; a: string; b: string; c: string } {
+    const model = new SessionModel();
+    const { workspace: a } = model.createWorkspace("/repo", "a", init);
+    const { workspace: b } = model.createWorkspace("/repo-wt", "b", init);
+    const { workspace: c } = model.createWorkspace("/plain", "c", init);
+    model.updateWorkspaceGit(a.id, gitOf("/repo/.git", false));
+    model.updateWorkspaceGit(b.id, gitOf("/repo/.git", true));
+    // 判定の反映（T6）はまだ無いので、仮の状態から確定して `r:` の項目を作る（復元と同じ道）。
+    model.restoreGroup({ id: "g0", label: "restored", collapsed: false });
+    model.confirmLayout();
+    model.deleteGroup("g0");
+    return { model, a: a.id, b: b.id, c: c.id };
+  }
+
+  it("addToGroup on a workspace whose judgment arrived but whose layout still holds w:<id> does not leave a duplicate", () => {
+    const model = new SessionModel();
+    const { workspace: a } = model.createWorkspace("/a", "a", init);
+    model.confirmLayout();
+    const group = model.createGroup("g");
+    model.updateWorkspaceGit(a.id, gitOf("/a/.git", false));
+    model.addToGroup(a.id, group.id);
+    expect(model.getLayout()).toEqual({ top: [`g:${group.id}`], groups: { [group.id]: ["r:/a/.git"] } });
+  });
+
+  it("a new workspace goes to the end of the top level as w:<id>, and the snapshot carries the layout", () => {
+    const model = new SessionModel();
+    const { workspace: a } = model.createWorkspace("/a", "a", init);
+    const { workspace: b } = model.createWorkspace("/b", "b", init);
+    expect(model.getLayout()).toEqual({ top: [`w:${a.id}`, `w:${b.id}`], groups: {} });
+    const snapshot = model.buildSnapshot("0.1.0", { os: "linux", windowsBuild: null, hostname: "h" }, { scrollbackLines: 5000 });
+    expect(snapshot.layout).toEqual(model.getLayout());
+  });
+
+  describe("a workspace that disappears leaves the layout through every path", () => {
+    it("closeWorkspace", () => {
+      const model = new SessionModel();
+      const { workspace: a } = model.createWorkspace("/a", "a", init);
+      const { workspace: b } = model.createWorkspace("/b", "b", init);
+      model.takeChanges();
+      model.closeWorkspace(a.id);
+      expect(model.getLayout().top).toEqual([`w:${b.id}`]);
+      expect(model.takeChanges()?.layout).toEqual({ top: [`w:${b.id}`], groups: {} });
+    });
+
+    it("closeTab on the last tab", () => {
+      const model = new SessionModel();
+      const { workspace: a, tab } = model.createWorkspace("/a", "a", init);
+      const { workspace: b } = model.createWorkspace("/b", "b", init);
+      model.takeChanges();
+      model.closeTab(tab.id);
+      expect(model.getLayout().top).toEqual([`w:${b.id}`]);
+      expect(model.getWorkspace(a.id)).toBeUndefined();
+    });
+
+    it("closePane on the last pane", () => {
+      const model = new SessionModel();
+      const { workspace: a, pane } = model.createWorkspace("/a", "a", init);
+      const { workspace: b } = model.createWorkspace("/b", "b", init);
+      model.takeChanges();
+      model.closePane(pane.id);
+      expect(model.getLayout().top).toEqual([`w:${b.id}`]);
+      expect(model.getWorkspace(a.id)).toBeUndefined();
+    });
+
+    it("moveToTab that empties the source workspace", () => {
+      const model = new SessionModel();
+      const { workspace: a, pane } = model.createWorkspace("/a", "a", init);
+      const { workspace: b, tab: bTab } = model.createWorkspace("/b", "b", init);
+      model.takeChanges();
+      model.moveToTab(pane.id, bTab.id);
+      expect(model.getLayout().top).toEqual([`w:${b.id}`]);
+      expect(model.getWorkspace(a.id)).toBeUndefined();
+    });
+
+    it("moveToNewTab that empties the source workspace", () => {
+      const model = new SessionModel();
+      const { workspace: a, pane } = model.createWorkspace("/a", "a", init);
+      const { workspace: b } = model.createWorkspace("/b", "b", init);
+      model.takeChanges();
+      model.moveToNewTab(pane.id, b.id);
+      expect(model.getLayout().top).toEqual([`w:${b.id}`]);
+      expect(model.getWorkspace(a.id)).toBeUndefined();
+    });
+
+    it("a workspace inside a group leaves the group's list too", () => {
+      const model = new SessionModel();
+      const { workspace: a } = model.createWorkspace("/a", "a", init);
+      const group = model.createGroup("g");
+      model.addToGroup(a.id, group.id);
+      expect(model.getLayout().groups[group.id]).toEqual([`w:${a.id}`]);
+      model.closeWorkspace(a.id);
+      expect(model.getLayout().groups[group.id]).toEqual([]);
+      expect(model.getLayout().top).toEqual([`g:${group.id}`]);
+    });
+
+    it("a repository item stays until its last workspace is gone; repoGroups is kept", () => {
+      const { model, a, b } = repoModel();
+      const group = model.createGroup("g");
+      model.addToGroup(a, group.id);
+      expect(model.getLayout().groups[group.id]).toEqual(["r:/repo/.git"]);
+      model.closeWorkspace(a);
+      expect(model.getLayout().groups[group.id]).toEqual(["r:/repo/.git"]); // b が残っている
+      model.closeWorkspace(b);
+      expect(model.getLayout().groups[group.id]).toEqual([]);
+      expect(model.getRepoGroups().get("/repo/.git")).toBe(group.id); // 開いていないリポジトリの所属は覚えておく
+    });
+  });
+
+  describe("groups work on whole items", () => {
+    it("createGroup appends the group to the end of the top level when there is no target", () => {
+      const { model } = repoModel();
+      const group = model.createGroup("g");
+      expect(model.getLayout().top.at(-1)).toBe(`g:${group.id}`);
+      expect(model.getLayout().groups[group.id]).toEqual([]);
+    });
+
+    it("createGroup with a top-level item target puts the group at its position and the item inside", () => {
+      const { model, a, c } = repoModel();
+      const group = model.createGroup("g", a);
+      expect(model.getLayout()).toEqual({ top: [`g:${group.id}`, `w:${c}`], groups: { [group.id]: ["r:/repo/.git"] } });
+      expect(model.getRepoGroups().get("/repo/.git")).toBe(group.id);
+    });
+
+    it("createGroup with a target inside group G puts the new group right after G and moves the item", () => {
+      const { model, a, c } = repoModel();
+      const g1 = model.createGroup("g1", a);
+      model.addToGroup(c, g1.id);
+      const g2 = model.createGroup("g2", c);
+      expect(model.getLayout()).toEqual({
+        top: [`g:${g1.id}`, `g:${g2.id}`],
+        groups: { [g1.id]: ["r:/repo/.git"], [g2.id]: [`w:${c}`] },
+      });
+      expect(model.getWorkspace(c)?.groupId).toBe(g2.id);
+    });
+
+    it("addToGroup moves the whole repository item: every member gets the group, and the flat order follows the layout", () => {
+      const { model, a, b, c } = repoModel();
+      const g = model.createGroup("g");
+      model.addToGroup(c, g.id);
+      model.addToGroup(b, g.id); // 子の workspace を指しても項目（リポジトリ）丸ごと
+      expect(model.getLayout().groups[g.id]).toEqual([`w:${c}`, "r:/repo/.git"]);
+      expect(model.getWorkspace(a)?.groupId).toBe(g.id);
+      expect(model.getWorkspace(b)?.groupId).toBe(g.id);
+      expect(model.listWorkspaces().map((w) => w.id)).toEqual([c, a, b]); // グループの中の順（本体が先頭）
+    });
+
+    it("addToGroup moves an item from one group to another", () => {
+      const { model, a } = repoModel();
+      const g1 = model.createGroup("g1", a);
+      const g2 = model.createGroup("g2");
+      model.addToGroup(a, g2.id);
+      expect(model.getLayout().groups).toEqual({ [g1.id]: [], [g2.id]: ["r:/repo/.git"] });
+      expect(model.getRepoGroups().get("/repo/.git")).toBe(g2.id);
+    });
+
+    it("removeFromGroup puts the item right after its group at the top level and clears the membership", () => {
+      const { model, a, b, c } = repoModel();
+      const g = model.createGroup("g", a);
+      model.removeFromGroup(b); // 子を指しても項目全体
+      expect(model.getLayout()).toEqual({ top: [`g:${g.id}`, "r:/repo/.git", `w:${c}`], groups: { [g.id]: [] } });
+      expect(model.getWorkspace(a)?.groupId).toBeNull();
+      expect(model.getWorkspace(b)?.groupId).toBeNull();
+      expect(model.getRepoGroups().has("/repo/.git")).toBe(false);
+    });
+
+    it("deleteGroup puts the items back where the group was, and drops the repoGroups rows for it", () => {
+      const { model, a, c } = repoModel();
+      const g = model.createGroup("g", a);
+      model.addToGroup(c, g.id);
+      model.deleteGroup(g.id);
+      expect(model.getLayout()).toEqual({ top: ["r:/repo/.git", `w:${c}`], groups: {} });
+      expect(model.getRepoGroups().size).toBe(0);
+      expect(model.getWorkspace(a)?.groupId).toBeNull();
+      expect(model.getWorkspace(c)?.groupId).toBeNull();
+    });
+
+    it("createGroup with an unknown target throws NotFoundError and changes nothing", () => {
+      const model = new SessionModel();
+      expect(() => model.createGroup("g", "w99")).toThrow(NotFoundError);
+      expect(model.listGroups()).toEqual([]);
+    });
+  });
+
+  describe("takeChanges", () => {
+    it("reports the workspaces whose group changed, the new layout and the new flat order — once", () => {
+      const model = new SessionModel();
+      const { workspace: a } = model.createWorkspace("/a", "a", init);
+      const { workspace: b } = model.createWorkspace("/b", "b", init);
+      const g = model.createGroup("g");
+      model.takeChanges();
+      model.addToGroup(b.id, g.id);
+      const changes = model.takeChanges();
+      expect(changes?.updated.map((w) => w.id)).toEqual([b.id]);
+      expect(changes?.layout).toEqual({ top: [`w:${a.id}`, `g:${g.id}`], groups: { [g.id]: [`w:${b.id}`] } });
+      expect(model.takeChanges()).toBeNull(); // 取ったら消える
+    });
+
+    it("reports the flat order when the layout moves workspaces", () => {
+      const model = new SessionModel();
+      const { workspace: a } = model.createWorkspace("/a", "a", init);
+      const { workspace: b } = model.createWorkspace("/b", "b", init);
+      const g = model.createGroup("g", a.id);
+      model.takeChanges();
+      model.addToGroup(b.id, g.id);
+      expect(model.takeChanges()?.order).toBeNull(); // [a, b] のまま
+      model.removeFromGroup(a.id); // a はグループの直後へ出るので、グループに残る b の後ろに並ぶ
+      expect(model.listWorkspaces().map((w) => w.id)).toEqual([b.id, a.id]);
+      expect(model.takeChanges()?.order).toEqual([b.id, a.id]);
+    });
+
+    it("is null when nothing changed, and does not count a created workspace as an update", () => {
+      const model = new SessionModel();
+      model.createWorkspace("/a", "a", init);
+      const created = model.takeChanges();
+      expect(created?.updated).toEqual([]);
+      expect(created?.order).toBeNull();
+      expect(model.takeChanges()).toBeNull();
+    });
+  });
+
+  describe("the provisional state (a restore without a layout)", () => {
+    const wsData = (id: string, groupId?: string) =>
+      ({
+        id,
+        label: id,
+        cwd: "/x",
+        activeTabId: `t-${id}`,
+        ...(groupId ? { groupId } : {}),
+        tabs: [{ id: `t-${id}`, label: "1", layout: { type: "pane" as const, paneId: `p-${id}` }, focusedPaneId: `p-${id}`, zoomedPaneId: null, panes: [{ id: `p-${id}`, label: null, cwd: "/x", shell: "sh" }] }],
+      }) as never;
+
+    it("derives the layout from the flat order and groupId until it is confirmed", () => {
+      const model = new SessionModel();
+      model.setNextIdCounters({ w: 3, t: 3, p: 3, s: 1, a: 1, g: 2 });
+      model.restoreGroup({ id: "g1", label: "g", collapsed: false });
+      model.restoreWorkspace(wsData("w1"), false);
+      model.restoreWorkspace(wsData("w2", "g1"), false);
+      expect(model.hasLayout()).toBe(false);
+      expect(model.getLayout()).toEqual({ top: ["w:w1", "g:g1"], groups: { g1: ["w:w2"] } });
+      model.createWorkspace("/n", "n", init); // 仮の状態のまま作っても、導いた結果に入る
+      expect(model.hasLayout()).toBe(false);
+      expect(model.getLayout().top).toContain("w:w3");
+    });
+
+    it("confirmLayout fixes the derived layout once, and writes the repository memberships to repoGroups", () => {
+      const model = new SessionModel();
+      model.restoreGroup({ id: "g1", label: "g", collapsed: false });
+      model.restoreWorkspace(wsData("w1", "g1"), false);
+      model.updateWorkspaceGit("w1", gitOf("/r/.git", false));
+      model.confirmLayout();
+      expect(model.hasLayout()).toBe(true);
+      expect(model.getLayout()).toEqual({ top: ["g:g1"], groups: { g1: ["r:/r/.git"] } });
+      expect([...model.getRepoGroups()]).toEqual([["/r/.git", "g1"]]);
+      model.confirmLayout(); // 2 回目は何もしない
+      expect(model.getLayout()).toEqual({ top: ["g:g1"], groups: { g1: ["r:/r/.git"] } });
+    });
+
+    it("a mutating operation confirms first", () => {
+      const model = new SessionModel();
+      model.restoreWorkspace(wsData("w1"), false);
+      const g = model.createGroup("new");
+      expect(model.hasLayout()).toBe(true);
+      expect(model.getLayout()).toEqual({ top: ["w:w1", `g:${g.id}`], groups: { [g.id]: [] } });
+    });
   });
 });
