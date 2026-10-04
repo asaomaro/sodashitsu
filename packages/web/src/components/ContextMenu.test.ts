@@ -38,6 +38,7 @@ function makeActions() {
     createGroupForWorkspace: vi.fn(),
     openGroupPicker: vi.fn(),
     removeWorkspaceFromGroup: vi.fn(),
+    moveGroupBy: vi.fn(),
     renameGroupById: vi.fn(),
     deleteGroupById: vi.fn(),
   };
@@ -218,16 +219,17 @@ describe("ContextMenu — workspace", () => {
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(actions);
     const labels = wrapper.findAll("li").map((li) => li.text());
-    expect(labels).toEqual(["名前の変更", "閉じる", "新しいグループを作る…", "グループへ追加…"]);
-    await wrapper.findAll("li")[2]!.trigger("click");
+    // design「画面」：所属なし →「グループへ追加…」「新しいグループを作る…」の順。
+    expect(labels).toEqual(["名前の変更", "閉じる", "グループへ追加…", "新しいグループを作る…"]);
+    await wrapper.findAll("li")[3]!.trigger("click");
     expect(actions.createGroupForWorkspace).toHaveBeenCalledWith("w1");
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const reopened = mountMenu(actions);
-    await reopened.findAll("li")[3]!.trigger("click");
+    await reopened.findAll("li")[2]!.trigger("click");
     expect(actions.openGroupPicker).toHaveBeenCalledWith("w1");
   });
 
-  it("グループに所属していれば「グループへ追加…」の代わりに「グループから外す」を出す", async () => {
+  it("グループに所属していれば「別のグループへ移す…」「グループから外す」「新しいグループを作る…」を出す（移し先が他に無ければ「移す」は出さない）", async () => {
     const session = useSessionStore(pinia);
     const view = useViewStore(pinia);
     const actions = makeActions();
@@ -235,9 +237,30 @@ describe("ContextMenu — workspace", () => {
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(actions);
-    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "新しいグループを作る…", "グループから外す"]);
-    await wrapper.findAll("li")[3]!.trigger("click");
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "グループから外す", "新しいグループを作る…"]);
+    await wrapper.findAll("li")[2]!.trigger("click");
     expect(actions.removeWorkspaceFromGroup).toHaveBeenCalledWith("w1");
+
+    session.groupUpserted({ id: "g2", label: "frontend", collapsed: false });
+    view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
+    const withOther = mountMenu(actions);
+    expect(withOther.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "別のグループへ移す…", "グループから外す", "新しいグループを作る…"]);
+    await withOther.findAll("li")[2]!.trigger("click");
+    expect(actions.openGroupPicker).toHaveBeenCalledWith("w1");
+  });
+
+  // 子の行でも項目全体に働く：所属は本体（`layout` の `r:`）で決まり、子の `groupId` には頼らない。
+  it("worktree の子の行でも、項目（リポジトリ）の所属で出し分ける", () => {
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+    session.workspaceUpserted(makeWorkspace("w1", { git: git(false), groupId: "g1" }));
+    session.workspaceUpserted(makeWorkspace("w2", { git: git(true), groupId: null }));
+    session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+    session.layoutChanged({ top: ["g:g1"], groups: { g1: ["r:/r/.git"] } });
+    view.openContextMenu({ kind: "workspace", workspaceId: "w2" }, { x: 0, y: 0 });
+    const wrapper = mountMenu(makeActions());
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "新しい worktree", "worktree を開く…", "グループから外す", "新しいグループを作る…"]);
   });
 
   it("グループが0件なら「グループへ追加…」は出ない", () => {
@@ -252,18 +275,32 @@ describe("ContextMenu — workspace", () => {
 
 // 20260923-workspace-grouping：グループのヘッダー行専用のメニュー（herdr に前例が無い独自拡張）。
 describe("ContextMenu — group", () => {
-  it("名前の変更・グループを削除の2項目を出し、それぞれの入口を呼ぶ", async () => {
+  it("layout を持つサーバでは名前の変更・上へ移動・下へ移動・グループを削除を出し、それぞれの入口を呼ぶ", async () => {
+    const session = useSessionStore(pinia);
     const view = useViewStore(pinia);
     const actions = makeActions();
+    session.layoutChanged({ top: ["g:g1"], groups: { g1: [] } });
     view.openContextMenu({ kind: "group", groupId: "g1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(actions);
-    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "グループを削除"]);
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "上へ移動", "下へ移動", "グループを削除"]);
     await wrapper.findAll("li")[0]!.trigger("click");
     expect(actions.renameGroupById).toHaveBeenCalledWith("g1");
     view.openContextMenu({ kind: "group", groupId: "g1" }, { x: 0, y: 0 });
-    const reopened = mountMenu(actions);
-    await reopened.findAll("li")[1]!.trigger("click");
+    await mountMenu(actions).findAll("li")[1]!.trigger("click");
+    expect(actions.moveGroupBy).toHaveBeenCalledWith("g1", "previous");
+    view.openContextMenu({ kind: "group", groupId: "g1" }, { x: 0, y: 0 });
+    await mountMenu(actions).findAll("li")[2]!.trigger("click");
+    expect(actions.moveGroupBy).toHaveBeenCalledWith("g1", "next");
+    view.openContextMenu({ kind: "group", groupId: "g1" }, { x: 0, y: 0 });
+    await mountMenu(actions).findAll("li")[3]!.trigger("click");
     expect(actions.deleteGroupById).toHaveBeenCalledWith("g1");
+  });
+
+  it("layout の無い古いサーバでは「上へ移動」「下へ移動」を出さない", () => {
+    const view = useViewStore(pinia);
+    view.openContextMenu({ kind: "group", groupId: "g1" }, { x: 0, y: 0 });
+    const wrapper = mountMenu(makeActions());
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "グループを削除"]);
   });
 });
 

@@ -142,6 +142,21 @@ describe("ConfirmDialog — 束ねた worktree も一緒に閉じる", () => {
     expect(wrapper.get(".confirm-dialog-linked-worktrees").text()).toContain("1 件");
   });
 
+  // 20261004-group-worktree-items：件数は `repoMembers`（グループへ入っていても数える。3 つ以上でも全部）。
+  it("本体がグループへ入っていても、束ねられた worktree の件数（repoMembers の残り全部）を出す", async () => {
+    const session = useSessionStore(pinia);
+    const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+    session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+    session.workspaceUpserted(makeWorkspace("w1", { git: git(false), groupId: "g1" }));
+    session.workspaceUpserted(makeWorkspace("w2", { git: git(true), groupId: null }));
+    session.workspaceUpserted(makeWorkspace("w3", { git: git(true), groupId: null }));
+    const view = useViewStore(pinia);
+    const wrapper = mountDialog(makeActions());
+    view.openDialogWithContext({ kind: "confirmClose", targets: [{ type: "workspace", id: "w1" }] });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get(".confirm-dialog-linked-worktrees").text()).toContain("2 件");
+  });
+
   it("チェックを入れて確定すると true を渡す", async () => {
     setUpAutoGroup();
     const view = useViewStore(pinia);

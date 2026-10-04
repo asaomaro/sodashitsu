@@ -20,6 +20,8 @@ const listEl = ref<HTMLElement | null>(null);
 const selected = ref(0);
 
 const groups = computed(() => (view.dialogContext?.kind === "addToGroup" ? view.dialogContext.groups : []));
+/** 「別のグループへ移す…」から開いたときは見出しを変える。 */
+const title = computed(() => (view.dialogContext?.kind === "addToGroup" && view.dialogContext.moving ? "別のグループへ移す" : "グループへ追加"));
 
 watch(
   () => view.dialogContext,
@@ -91,12 +93,12 @@ function onKeydown(ev: KeyboardEvent): void {
   <dialog
     ref="dialogEl"
     class="group-picker-dialog"
-    aria-label="グループへ追加"
+    :aria-label="title"
     @cancel="onNativeCancel"
     @click.self="cancel"
     @keydown="onKeydown"
   >
-    <p class="group-picker-dialog-title">グループへ追加</p>
+    <p class="group-picker-dialog-title">{{ title }}</p>
     <ul ref="listEl" class="group-picker-dialog-list" role="listbox" tabindex="-1">
       <li
         v-for="(group, index) in groups"

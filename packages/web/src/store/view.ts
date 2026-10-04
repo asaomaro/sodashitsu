@@ -275,7 +275,8 @@ export type DialogContext =
   | { kind: "createGroup"; workspaceId: string }
   | { kind: "renameGroup"; groupId: string; currentLabel: string }
   // `worktreeOpen` と同じ「一覧から選ぶ」形。`groups` は開く時点のグループ一覧（GroupPickerDialog）。
-  | { kind: "addToGroup"; workspaceId: string; groups: WorkspaceGroup[] }
+  // `moving` は「別のグループへ移す…」（今のグループがあるとき。`groups` は今のグループを除く）。
+  | { kind: "addToGroup"; workspaceId: string; groups: WorkspaceGroup[]; moving?: true }
   // サーバを止める確認（`stop_server`。20260927-cli-mode）。押し間違えると全ての pane が止まる。
   /**
    * `target` は止まるサーバの名前（ローカルならホスト名、保存したマシンを選んでいればそのマシンの名前）、`remote` は保存したマシンか（02 の review。

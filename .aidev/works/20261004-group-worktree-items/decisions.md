@@ -160,3 +160,13 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **D&D（古い `workspace.move_to`）は次のタスク（T14）まで暫定のまま**: ハイライトの正規化は「worktree グループの子 → 先頭の行」「グループの中の通常の行 → グループの見出し行」（D16 の (a)(b) で動く）。グループの中の並べ替えのドラッグは T14 で `item.move` に替える。
 - 既存テスト・golden の調整: `Sidebar.defaultLayout` の golden（展開・畳んだ）に種類の印と折りたたみの読み上げ名の変化を反映した。「手動が優先」を前提にした Sidebar のテストは `layout` の無い入力で `layoutFromLegacy` を通り、期待の変更なしで通った（グループに入っていない worktree が 1 つの項目になる点は同じ並び）。
 - `protocol/src/model.ts` の `WorkspaceGroup` のコメント（「ブラウザ側」）を現状に直した（worktree グループの折りたたみは共有の設定 `collapsedAutoGroups`）。
+
+## D21: ブラウザ版のメニューと出し入れ（T13）
+
+- **所属は項目で見る**: メニューの「所属あり／なし」は `store/sidebarTree.ts` の `itemGroupIdOf`（`effectiveLayout` の `groups` の中に `itemRefOf(workspace)` があるか）で決める。子の行でも本体の所属で答える。古いサーバでも `layoutFromLegacy` が本体の所属で導くので同じ関数で足りる。
+- **「別のグループへ移す…」は、今のグループ以外に移し先があるときだけ出す**（design は所属ありの 3 項目としか書いていない。移し先が無いのに開いても選べず「まだグループがありません」と出るだけなので）。
+  - **design「画面」の所属ありの 3 項目からの差**: design は所属ありを「別のグループへ移す…」「グループから外す」「新しいグループを作る…」の 3 項目としているが、所属ありで今のグループ以外にグループが無いときは「別のグループへ移す…」を出さず 2 項目になる。design 本文は変えない（この判断を D21 に残す）。ピッカーの選択肢も今のグループを除く。ダイアログの文脈 `addToGroup` に `moving?: true` を足し、見出しを「別のグループへ移す」に変える。選択肢の並びは `effectiveLayout.top` の `g:` の順（レイアウトに無いグループは末尾）。
+- **メニューの順**: 所属なし →「グループへ追加…」「新しいグループを作る…」、所属あり →「別のグループへ移す…」「グループから外す」「新しいグループを作る…」（design のとおり。以前は「新しいグループを作る…」が先だった）。worktree の 2 項目の後ろに置く点は変えない。
+- **古いサーバ**（`session.hasServerLayout` が false）: 出し入れは項目の workspace 全部（`repoMembers` の順）に順に送り、1 件でも失敗したら止める。グループの作成は 2 段のまま（2 段目も全部）。「上へ／下へ移動」は出さない。`layout` を持つサーバは `group.create` に `workspaceId` を添えて 1 回、出し入れも 1 回。
+- **グループの「上へ／下へ移動」**: `ActionDispatcher.moveGroupBy` が `item.move_by` を送る。名前順（`view.workspaceSort === "name"`）のときは送らず「名前順では並べ替えできません」と知らせる（メニュー自体は出す）。端での `moved: false` は黙って何もしない。
+- **`ConfirmDialog` の件数**: `repoMembers` で数える（対象が `repoMembers` の先頭のときだけ、残り全部。グループへ入っているかは見ない。サーバの `repoCloseTargets` と同じ）。`linkedWorktreeChildrenOf` は web からは使わなくなった（端末版 `tui/src/modes/dialogs.ts` はまだ使う。T19 で撤去）。

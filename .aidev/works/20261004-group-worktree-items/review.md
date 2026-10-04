@@ -953,3 +953,165 @@ AssertionError: expected [ [ 'img', undefined ], …(1) ] to deeply equal [ [ 'i
 なお nit 対応で `.sidebar-kind-text` を `.sidebar-kind-icon`（position: relative を付与）の中へ移した（兄弟では基準にならないため）。それに伴い外枠の `aria-hidden` は外し、図形の svg だけ `aria-hidden` のまま。golden 2 件（sidebar-default-*.html）は構造の移動分だけ更新。
 - T12 [should] layout_changed の反映・clear の null 戻し・種類の印の読み上げ文言の壊して落ちる確認が無い → 追補に生の出力を貼り、clear のテストを足した [conv:regression-negative-control!]
 - T12 [nit] 視覚的に隠した文言の基準になる祖先に position:relative が無い → .sidebar-kind-icon の中へ移して relative を付けた（golden 2 件を更新） [conv:-]
+
+### T13 壊して落ちる確認
+
+以下 3 つの壊し方を当て、落ちることを確かめてから元に戻した（git diff で確認）。生の出力（`vitest run` の失敗の見出しと 1 行目）。
+
+```
+
+#### 追補（独立点検の指摘: 振る舞いごとの壊して落ちる確認）
+
+実装を 1 行ずつ壊して該当ファイルの `vitest run` を当て、毎回元に戻した（最後に git diff で差分が変わらないことを確認）。出力は失敗の見出しと比較の差分（長いものは先頭を省略）。対象は ① `moveGroupBy` の名前順の拒否と `item.move_by` の送信（A1・A2）、② layout ありサーバの `group.create`（`workspaceId` 添え 1 回）・`add_member`・`remove_member` が 1 回（B1〜B3）、③ `openGroupPicker` の今のグループ除外とレイアウト順（C1・C2）、④ ContextMenu の「別のグループへ移す…」とメニュー順（D1・D2）、⑤ 子の行で項目の所属により出し分ける `itemGroupIdOf`（E）、⑥ GroupPickerDialog の見出し切替（F）、⑦ ConfirmDialog の「本体がグループへ入っていても 2 件」（G）。壊してもテストが落ちないものは無かった。
+
+```
+## 壊しA1: moveGroupBy の名前順の拒否を外す
+ Test Files  1 failed (1)
+      Tests  1 failed | 186 passed (187)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — 手動グループ（herdr に前例が無い独自拡張） > layout を持つサーバ > moveGroupBy: 名前順のときは送らず「名前順では並べ替えできません」と知らせる
+AssertionError: expected [ [ 'item.move_by', …(1) ] ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   [
++     "item.move_by",
++     {
++       "direction": "previous",
++       "item": {
++         "groupId": "g1",
++         "kind": "group",
++       },
++     },
++   ],
++ ]
+## 壊しA2: moveGroupBy が item.move_by を送らない（item.move を送る）
+ Test Files  1 failed (1)
+      Tests  1 failed | 186 passed (187)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — 手動グループ（herdr に前例が無い独自拡張） > layout を持つサーバ > moveGroupBy: item.move_by を送る
+AssertionError: expected [ [ 'item.move', …(1) ] ] to deeply equal [ [ 'item.move_by', …(1) ] ]
+- Expected
++ Received
+-     "item.move_by",
++     "item.move",
+## 壊しB1: layout ありの group.create に workspaceId を添えない
+ Test Files  1 failed (1)
+      Tests  1 failed | 186 passed (187)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — 手動グループ（herdr に前例が無い独自拡張） > layout を持つサーバ > confirmCreateGroup: group.create に workspaceId を添えて 1 回だけ送る
+AssertionError: expected [ [ 'group.create', …(1) ] ] to deeply equal [ [ 'group.create', …(1) ] ]
+- Expected
++ Received
+-       "workspaceId": "w1",
+## 壊しB2: layout ありの add_member が項目の全 workspace に送る（古い道を通る）
+ Test Files  1 failed (1)
+      Tests  1 failed | 186 passed (187)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — 手動グループ（herdr に前例が無い独自拡張） > layout を持つサーバ > confirmAddToGroup: 項目の workspace が複数でも group.add_member は 1 回
+AssertionError: expected [ [ 'group.add_member', …(1) ] ] to deeply equal [ [ 'group.add_member', …(1) ] ]
+- Expected
++ Received
++       "workspaceId": "w1",
++     },
++   ],
++   [
++     "group.add_member",
++     {
++       "groupId": "g1",
+## 壊しB3: layout ありの remove_member が全 workspace に送る
+ Test Files  1 failed (1)
+      Tests  1 failed | 186 passed (187)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — 手動グループ（herdr に前例が無い独自拡張） > layout を持つサーバ > removeWorkspaceFromGroup: group.remove_member は 1 回
+AssertionError: expected [ [ 'group.remove_member', …(1) ] ] to deeply equal [ [ 'group.remove_member', …(1) ] ]
+- Expected
++ Received
++       "workspaceId": "w1",
++     },
++   ],
++   [
++     "group.remove_member",
++     {
+## 壊しC1: openGroupPicker が今のグループを除かない
+ Test Files  1 failed (1)
+      Tests  1 failed | 186 passed (187)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — 手動グループ（herdr に前例が無い独自拡張） > openGroupPicker: 選択肢はレイアウトの順で、移すときは今のグループを除く（moving 付き）
+AssertionError: expected [ 'g3', 'g2', 'g1' ] to deeply equal [ 'g3', 'g1' ]
+- Expected
++ Received
++   "g2",
+## 壊しC2: openGroupPicker がレイアウト順でなく groups の順
+ Test Files  1 failed (1)
+      Tests  1 failed | 186 passed (187)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — 手動グループ（herdr に前例が無い独自拡張） > openGroupPicker: 選択肢はレイアウトの順で、移すときは今のグループを除く（moving 付き）
+AssertionError: expected [ 'g1', 'g3' ] to deeply equal [ 'g3', 'g1' ]
+- Expected
++ Received
+-   "g3",
++   "g3",
+## 壊しD1: 「別のグループへ移す…」を出さない
+ Test Files  1 failed (1)
+      Tests  1 failed | 32 passed (33)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/ContextMenu.test.ts > ContextMenu — workspace > グループに所属していれば「別のグループへ移す…」「グループから外す」「新しいグループを作る…」を出す（移し先が他に無ければ「移す」は出さない）
+AssertionError: expected [ '名前の変更', '閉じる', 'グループから外す', …(1) ] to deeply equal [ '名前の変更', '閉じる', '別のグループへ移す…', …(2) ]
+- Expected
++ Received
+-   "別のグループへ移す…",
+## 壊しD2: 「新しいグループを作る…」を所属の項目より前へ戻す（メニュー順だけを変える）
+ FAIL  src/components/ContextMenu.test.ts > ContextMenu — workspace > グループに未所属なら「新しいグループを作る…」を呼び、グループが1件以上あれば「グループへ追加…」も出る
+AssertionError: expected [ '名前の変更', '閉じる', '新しいグループを作る…', …(1) ] to deeply equal [ '名前の変更', '閉じる', 'グループへ追加…', …(1) ]
+ FAIL  src/components/ContextMenu.test.ts > ContextMenu — workspace > グループに所属していれば「別のグループへ移す…」「グループから外す」「新しいグループを作る…」を出す（移し先が他に無ければ「移す」は出さない）
+AssertionError: expected [ '名前の変更', '閉じる', '新しいグループを作る…', …(1) ] to deeply equal [ '名前の変更', '閉じる', 'グループから外す', …(1) ]
+ FAIL  src/components/ContextMenu.test.ts > ContextMenu — workspace > worktree の子の行でも、項目（リポジトリ）の所属で出し分ける
+      Tests  3 failed | 30 passed (33)
+## 壊しE: itemGroupIdOf を行の workspace の groupId で答える（項目で見ない）
+ Test Files  1 failed (1)
+      Tests  1 failed | 32 passed (33)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/ContextMenu.test.ts > ContextMenu — workspace > worktree の子の行でも、項目（リポジトリ）の所属で出し分ける
+AssertionError: expected [ Array(6) ] to deeply equal [ Array(6) ]
+- Expected
++ Received
+-   "グループから外す",
++   "グループへ追加…",
+## 壊しF: GroupPickerDialog の見出しを切り替えない
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/GroupPickerDialog.test.ts > GroupPickerDialog > 「別のグループへ移す…」から開いたときは見出しを変える
+AssertionError: expected 'グループへ追加' to be '別のグループへ移す' // Object.is equality
+## 壊しG: ConfirmDialog が本体のグループ所属で 0 件にする
+ Test Files  1 failed (1)
+      Tests  1 failed | 40 passed (41)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/ConfirmDialog.test.ts > ConfirmDialog — 束ねた worktree も一緒に閉じる > 本体がグループへ入っていても、束ねられた worktree の件数（repoMembers の残り全部）を出す
+Error: Unable to get .confirm-dialog-linked-worktrees within: <dialog data-v-d3e333dd="" role="alertdialog" aria-modal="true" class="confirm-dialog">
+```
+
+## 壊し1: ContextMenu の session.hasServerLayout を true に
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/ContextMenu.test.ts > ContextMenu — group > layout の無い古いサーバでは「上へ移動」「下へ移動」を出さない
+AssertionError: expected [ '名前の変更', '上へ移動', '下へ移動', 'グループを削除' ] to deeply equal [ '名前の変更', 'グループを削除' ]
+      Tests  1 failed | 32 passed (33)
+## 壊し2: itemWorkspaceIds を [workspaceId] だけに
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — 手動グループ（herdr に前例が無い独自拡張） > layout の無い古いサーバ（今までの RPC） > confirmAddToGroup: 項目の workspace 全部（repoMembers の順）に group.add_member を順に送る
+AssertionError: expected [ [ 'group.add_member', …(1) ] ] to deeply equal [ [ 'group.add_member', …(1) ], …(1) ]
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — 手動グループ（herdr に前例が無い独自拡張） > layout の無い古いサーバ（今までの RPC） > removeWorkspaceFromGroup: 項目の workspace 全部に group.remove_member を順に送る
+AssertionError: expected [ [ 'group.remove_member', …(1) ] ] to deeply equal [ …(2) ]
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — 手動グループ（herdr に前例が無い独自拡張） > layout の無い古いサーバ（今までの RPC） > confirmCreateGroup: 2 段（group.create の後に項目の workspace 全部へ add_member）
+AssertionError: expected [ [ 'group.create', …(1) ], …(1) ] to deeply equal [ [ 'group.create', …(1) ], …(2) ]
+      Tests  3 failed | 184 passed (187)
+## 壊し3: ConfirmDialog の件数を本体判定なしに（members[0] 条件を外す）
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/ConfirmDialog.test.ts > ConfirmDialog — 束ねた worktree も一緒に閉じる > 対象が worktree 自動グループの本体でなければチェックボックスを出さない
+AssertionError: expected true to be false // Object.is equality
+      Tests  1 failed | 40 passed (41)
+```
+- T13 [should] 回帰テストの壊して落ちる確認が一部の振る舞いにしか無い → 12 の壊しを追補に貼った（落ちないテストは無かった） [conv:regression-negative-control!]
+- T13 [nit] 所属ありで移し先が無いとき「別のグループへ移す…」を出さない判断が design に無い → D21 に design との差として明記 [conv:-]

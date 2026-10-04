@@ -1,4 +1,4 @@
-import { sidebarTree, visibleWorkspaceIdsOfTree, type TopRow } from "@sodashitsu/client-core";
+import { itemRefOf, sidebarTree, visibleWorkspaceIdsOfTree, type TopRow } from "@sodashitsu/client-core";
 import type { useSessionStore } from "./session.js";
 import type { useViewStore } from "./view.js";
 
@@ -22,4 +22,16 @@ export function currentVisibleWorkspaceIds(
   view: ReturnType<typeof useViewStore>,
 ): string[] {
   return visibleWorkspaceIdsOfTree(currentSidebarTree(session, view), view.collapsedAutoGroups, view.workspaceId);
+}
+
+/**
+ * その workspace の項目（リポジトリなら丸ごと）が今いるグループの id（一番上なら null）。レイアウトで見るので、
+ * 古いサーバでも `layoutFromLegacy` が導いた本体の所属で答える（worktree の子の行でも同じ答え）。
+ */
+export function itemGroupIdOf(session: ReturnType<typeof useSessionStore>, workspaceId: string): string | null {
+  const ws = session.workspaces.get(workspaceId);
+  if (!ws) return null;
+  const ref = itemRefOf(ws);
+  for (const [groupId, refs] of Object.entries(session.effectiveLayout.groups)) if (refs.includes(ref)) return groupId;
+  return null;
 }

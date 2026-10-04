@@ -3,7 +3,7 @@ import { computed, inject, nextTick, ref, watch } from "vue";
 import { ActionDispatcherKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { type DialogContext, useViewStore } from "../store/view.js";
-import { linkedWorktreeChildrenOf } from "@sodashitsu/client-core";
+import { repoMembers } from "@sodashitsu/client-core";
 
 /**
  * 閉じる確認ダイアログ（T23。design「ダイアログ」）。`view.dialogContext.kind === "confirmClose"` を扱う。
@@ -76,7 +76,12 @@ const linkedWorktrees = computed(() => {
   if (ctx?.kind !== "confirmClose" || ctx.targets.length !== 1) return [];
   const target = ctx.targets[0]!;
   if (target.type !== "workspace") return [];
-  return linkedWorktreeChildrenOf(target.id, [...session.workspaces.values()]);
+  // 一括クローズの対象は、リポジトリの本体（`repoMembers` の先頭）のときの残り全部（サーバの `repoCloseTargets` と同じ。
+  // グループへ入っているかは見ない）。
+  const repoKey = session.workspaces.get(target.id)?.git?.repoKey;
+  if (!repoKey) return [];
+  const members = repoMembers([...session.workspaces.values()], repoKey);
+  return members.length > 1 && members[0]!.id === target.id ? members.slice(1) : [];
 });
 
 const CONFIRM_DIALOG_KINDS: DialogContext["kind"][] = ["confirmClose", "confirmReplacePane", "confirmWorktreeRemove", "confirmWorktreeRemoveForce", "confirmStopServer"];

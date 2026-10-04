@@ -63,7 +63,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/web/src/store/session.ts`・`StoreAdapter.ts:118-202`、`packages/web/src/components/Sidebar.vue`（行の型 `SpaceRow`・`spaces` の組み立て・折りたたみ・描画・スタイル）、`packages/web/src/store/view.ts`（`collapsedAutoGroups`）、`packages/web/src/actions/ActionDispatcher.ts:1010, :1082, :1091`、`packages/web/src/components/Sidebar.test.ts:715-1036`
       依存: T5, T10
       AC: AC1, AC4, AC6, AC12, AC15, AC-I1, AC-I5
-- [ ] T13: ブラウザ版のメニュー——所属なし:「グループへ追加…」「新しいグループを作る…」／所属あり:「別のグループへ移す…」「グループから外す」「新しいグループを作る…」／見出し:「名前の変更」「上へ移動」「下へ移動」「グループを削除」。worktree の子の行でも同じ項目で全体に働く。選択肢の並びはレイアウトの順。`ConfirmDialog` の件数は `repoMembers`。`layout` の無いサーバでは今までの RPC（出し入れは項目の workspace 全部に順に送る・グループの作成は 2 段・「上へ／下へ移動」は出さない）。名前順のとき「上へ／下へ移動」は受け付けず知らせる。単体テストと壊して落ちる確認
+- [x] T13: ブラウザ版のメニュー——所属なし:「グループへ追加…」「新しいグループを作る…」／所属あり:「別のグループへ移す…」「グループから外す」「新しいグループを作る…」／見出し:「名前の変更」「上へ移動」「下へ移動」「グループを削除」。worktree の子の行でも同じ項目で全体に働く。選択肢の並びはレイアウトの順。`ConfirmDialog` の件数は `repoMembers`。`layout` の無いサーバでは今までの RPC（出し入れは項目の workspace 全部に順に送る・グループの作成は 2 段・「上へ／下へ移動」は出さない）。名前順のとき「上へ／下へ移動」は受け付けず知らせる。単体テストと壊して落ちる確認
       対象: `packages/web/src/components/ContextMenu.vue:89-112`、`GroupPickerDialog.vue:22`、`ConfirmDialog.vue:79`、`packages/web/src/actions/ActionDispatcher.ts:549-627`、`packages/web/src/components/Sidebar.vue:227-231`（メニューの入口）、`ContextMenu.test.ts:177-255`、`ConfirmDialog.test.ts:126-168`、`GroupPickerDialog.test.ts`、`ActionDispatcher.test.ts:1576-1727`
       依存: T7, T8, T12
       AC: AC2, AC3, AC7, AC-I2, AC-I4

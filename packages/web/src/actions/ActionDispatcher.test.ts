@@ -1665,6 +1665,121 @@ describe("ActionDispatcher — 手動グループ（herdr に前例が無い独�
     expect(view.toasts.map((t) => t.message)).not.toContain("グループを作成できませんでした");
   });
 
+  // 20261004-group-worktree-items：`layout` を持つサーバは 1 回、持たない古いサーバは今までどおり。
+  describe("layout を持つサーバ", () => {
+    it("confirmCreateGroup: group.create に workspaceId を添えて 1 回だけ送る", async () => {
+      const conn = makeConnection();
+      useSessionStore(pinia).layoutChanged({ top: [], groups: {} });
+      const view = useViewStore(pinia);
+      view.openDialogWithContext({ kind: "createGroup", workspaceId: "w1" });
+      makeDispatcher(conn).dispatcher.confirmCreateGroup("backend");
+      await flush();
+      expect(conn.requests).toEqual([["group.create", { label: "backend", workspaceId: "w1" }]]);
+    });
+
+    it("confirmAddToGroup: 項目の workspace が複数でも group.add_member は 1 回", () => {
+      const conn = makeConnection();
+      const session = useSessionStore(pinia);
+      session.layoutChanged({ top: ["g:g1"], groups: { g1: [] } });
+      const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+      session.workspaceUpserted(makeWorkspace("w1", [], { git: git(false) }));
+      session.workspaceUpserted(makeWorkspace("w2", [], { git: git(true) }));
+      useViewStore(pinia).openDialogWithContext({ kind: "addToGroup", workspaceId: "w2", groups: [] });
+      makeDispatcher(conn).dispatcher.confirmAddToGroup("g1");
+      expect(conn.requests).toEqual([["group.add_member", { groupId: "g1", workspaceId: "w2" }]]);
+    });
+
+    it("removeWorkspaceFromGroup: group.remove_member は 1 回", () => {
+      const conn = makeConnection();
+      const session = useSessionStore(pinia);
+      session.layoutChanged({ top: [], groups: {} });
+      const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+      session.workspaceUpserted(makeWorkspace("w1", [], { git: git(false) }));
+      session.workspaceUpserted(makeWorkspace("w2", [], { git: git(true) }));
+      makeDispatcher(conn).dispatcher.removeWorkspaceFromGroup("w2");
+      expect(conn.requests).toEqual([["group.remove_member", { workspaceId: "w2" }]]);
+    });
+
+    it("moveGroupBy: item.move_by を送る", () => {
+      const conn = makeConnection();
+      useSessionStore(pinia).layoutChanged({ top: ["g:g1"], groups: { g1: [] } });
+      makeDispatcher(conn).dispatcher.moveGroupBy("g1", "next");
+      expect(conn.requests).toEqual([["item.move_by", { item: { kind: "group", groupId: "g1" }, direction: "next" }]]);
+    });
+
+    it("moveGroupBy: 名前順のときは送らず「名前順では並べ替えできません」と知らせる", () => {
+      const conn = makeConnection();
+      useSessionStore(pinia).layoutChanged({ top: ["g:g1"], groups: { g1: [] } });
+      const view = useViewStore(pinia);
+      view.workspaceSort = "name";
+      makeDispatcher(conn).dispatcher.moveGroupBy("g1", "previous");
+      expect(conn.requests).toEqual([]);
+      expect(view.toasts.map((t) => t.message)).toContain("名前順では並べ替えできません");
+    });
+  });
+
+  describe("layout の無い古いサーバ（今までの RPC）", () => {
+    function setUpRepo(session: ReturnType<typeof useSessionStore>): void {
+      const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+      session.workspaceUpserted(makeWorkspace("w1", [], { git: git(false) }));
+      session.workspaceUpserted(makeWorkspace("w2", [], { git: git(true) }));
+    }
+
+    it("confirmAddToGroup: 項目の workspace 全部（repoMembers の順）に group.add_member を順に送る", async () => {
+      const conn = makeConnection();
+      const session = useSessionStore(pinia);
+      setUpRepo(session);
+      useViewStore(pinia).openDialogWithContext({ kind: "addToGroup", workspaceId: "w2", groups: [] });
+      makeDispatcher(conn).dispatcher.confirmAddToGroup("g1");
+      await flush();
+      expect(conn.requests).toEqual([
+        ["group.add_member", { groupId: "g1", workspaceId: "w1" }],
+        ["group.add_member", { groupId: "g1", workspaceId: "w2" }],
+      ]);
+    });
+
+    it("removeWorkspaceFromGroup: 項目の workspace 全部に group.remove_member を順に送る", async () => {
+      const conn = makeConnection();
+      const session = useSessionStore(pinia);
+      setUpRepo(session);
+      makeDispatcher(conn).dispatcher.removeWorkspaceFromGroup("w2");
+      await flush();
+      expect(conn.requests).toEqual([
+        ["group.remove_member", { workspaceId: "w1" }],
+        ["group.remove_member", { workspaceId: "w2" }],
+      ]);
+    });
+
+    it("confirmCreateGroup: 2 段（group.create の後に項目の workspace 全部へ add_member）", async () => {
+      const conn = makeConnection();
+      conn.resolveWith["group.create"] = { group: { id: "g9", label: "backend", collapsed: false } };
+      const session = useSessionStore(pinia);
+      setUpRepo(session);
+      useViewStore(pinia).openDialogWithContext({ kind: "createGroup", workspaceId: "w2" });
+      makeDispatcher(conn).dispatcher.confirmCreateGroup("backend");
+      await flush();
+      expect(conn.requests).toEqual([
+        ["group.create", { label: "backend" }],
+        ["group.add_member", { groupId: "g9", workspaceId: "w1" }],
+        ["group.add_member", { groupId: "g9", workspaceId: "w2" }],
+      ]);
+    });
+  });
+
+  it("openGroupPicker: 選択肢はレイアウトの順で、移すときは今のグループを除く（moving 付き）", () => {
+    const conn = makeConnection();
+    const session = useSessionStore(pinia);
+    session.groupUpserted({ id: "g1", label: "a", collapsed: false });
+    session.groupUpserted({ id: "g2", label: "b", collapsed: false });
+    session.groupUpserted({ id: "g3", label: "c", collapsed: false });
+    session.workspaceUpserted(makeWorkspace("w1", [], { groupId: "g2" }));
+    session.layoutChanged({ top: ["g:g3", "g:g2", "g:g1"], groups: { g1: [], g2: ["w:w1"], g3: [] } });
+    makeDispatcher(conn).dispatcher.openGroupPicker("w1");
+    const ctx = useViewStore(pinia).dialogContext;
+    expect(ctx).toMatchObject({ kind: "addToGroup", workspaceId: "w1", moving: true });
+    expect(ctx?.kind === "addToGroup" && ctx.groups.map((g) => g.id)).toEqual(["g3", "g1"]);
+  });
+
   it("renameGroupById: 現在の名前を入れて renameGroup ダイアログを開く", () => {
     const conn = makeConnection();
     const session = useSessionStore(pinia);

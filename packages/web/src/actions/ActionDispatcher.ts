@@ -1,4 +1,4 @@
-import type { AgentIntegrationInstallResult, AgentIntegrationKind, NewCwd } from "@sodashitsu/protocol";
+import type { AgentIntegrationInstallResult, AgentIntegrationKind, NewCwd, WorkspaceGroup } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { KeyInputController, ActionPort, FocusPort } from "../keys/KeyInputController.js";
 import type { Action, CopyCommand, Dir } from "@sodashitsu/client-core";
@@ -6,12 +6,12 @@ import type { InputHold } from "@sodashitsu/client-core";
 import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
-import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
+import { LOCAL_MACHINE_ID, repoMembers } from "@sodashitsu/client-core";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
 import { orderedAgentPaneIds, type AgentOrderEntry } from "@sodashitsu/client-core";
-import { currentVisibleWorkspaceIds } from "../store/sidebarTree.js";
+import { currentVisibleWorkspaceIds, itemGroupIdOf } from "../store/sidebarTree.js";
 import {
   buildNewCwd,
   loadNewCwdPath,
@@ -551,10 +551,12 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /**
-   * `NameDialog` が確定したときに呼ぶ。`group.create` → 作成したグループへ workspace を追加。
+   * `NameDialog` が確定したときに呼ぶ。`layout` を持つサーバには `group.create` に `workspaceId` を添えて 1 回で送る
+   * （項目丸ごと入る）。`layout` の無い古いサーバは `workspaceId` を黙って落とすので、今までの 2 段（`group.create` →
+   * 作成したグループへ項目の workspace 全部を追加）を残す（design「古いサーバ・古い画面」）。
    * **2段階の失敗を区別する**（タスク点検の指摘）：`group.create` 自体が失敗すればグループは
-   * 存在しないので「作成できませんでした」。それが成功した後の `group.add_member` だけが
-   * 失敗した場合はグループ自体は残っている（空のグループとしてサイドバーに出る）ので、
+   * 存在しないので「作成できませんでした」。それが成功した後の追加だけが失敗した場合は
+   * グループ自体は残っている（空のグループとしてサイドバーに出る）ので、
    * 「作成できませんでした」と伝えると実際の状態と食い違う——別の文言にする（ロールバック＝
    * 作ったグループを削除する、まではしない。空のグループは無害で design のエラー処理どおり）。
    */
@@ -564,14 +566,37 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.view.closeDialog();
     const trimmed = label.trim();
     if (!trimmed) return; // 空では確定しない（ボタンも disabled）
+    if (this.session.hasServerLayout) {
+      void this.conn.request("group.create", { label: trimmed, workspaceId: ctx.workspaceId }).catch(() => this.view.toast("グループを作成できませんでした"));
+      return;
+    }
     void this.conn
       .request("group.create", { label: trimmed })
       .then((r) =>
-        this.conn
-          .request("group.add_member", { groupId: r.group.id, workspaceId: ctx.workspaceId })
-          .catch(() => this.view.toast("グループは作成しましたが、workspace の追加に失敗しました。")),
+        this.addItemToGroupLegacy(r.group.id, ctx.workspaceId).catch(() =>
+          this.view.toast("グループは作成しましたが、workspace の追加に失敗しました。"),
+        ),
       )
       .catch(() => this.view.toast("グループを作成できませんでした"));
+  }
+
+  /**
+   * 古いサーバ向け：項目（同じ `repoKey` の workspace 全部）へ `group.add_member` を順に送る。古いサーバは 1 件ずつしか
+   * 動かさず、入った workspace だけが所属を持つ（`SessionModel.ts:427-442`）。順に送って 1 件でも失敗したら止めて投げ直す。
+   */
+  private async addItemToGroupLegacy(groupId: string, workspaceId: string): Promise<void> {
+    for (const id of this.itemWorkspaceIds(workspaceId)) {
+      await this.conn.request("group.add_member", { groupId, workspaceId: id });
+    }
+  }
+
+  /** workspace の項目に含まれる workspace の id（リポジトリなら `repoMembers` の順で全部。そうでなければ自分だけ）。 */
+  private itemWorkspaceIds(workspaceId: string): string[] {
+    const ws = this.session.workspaces.get(workspaceId);
+    const repoKey = ws?.git?.repoKey;
+    if (!repoKey) return [workspaceId];
+    const members = repoMembers([...this.session.workspaces.values()], repoKey);
+    return members.length > 0 ? members.map((m) => m.id) : [workspaceId];
   }
 
   renameGroupById(groupId: string): void {
@@ -604,26 +629,68 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     void this.conn.request("group.toggle_collapsed", { groupId }).catch(() => undefined);
   }
 
-  /** 「グループへ追加…」（既存グループが1件以上あるとき）。**空なら開かずに知らせる**（`openWorktree` と同じ形）。 */
+  /** グループの選択肢（レイアウトの順。一番上の `g:` の並び、レイアウトに無いものは末尾）。 */
+  private groupsInLayoutOrder(): WorkspaceGroup[] {
+    const groups = this.session.groups;
+    const ordered: WorkspaceGroup[] = [];
+    for (const ref of this.session.effectiveLayout.top) {
+      const group = ref.startsWith("g:") ? groups.get(ref.slice(2)) : undefined;
+      if (group && !ordered.includes(group)) ordered.push(group);
+    }
+    for (const group of groups.values()) if (!ordered.includes(group)) ordered.push(group);
+    return ordered;
+  }
+
+  /**
+   * 「グループへ追加…」「別のグループへ移す…」。選択肢はレイアウトの順。移すときは今のグループを除く。
+   * **選べるグループが無ければ開かずに知らせる**（`openWorktree` と同じ形）。
+   */
   openGroupPicker(workspaceId: string): void {
-    const groups = [...this.session.groups.values()];
+    const current = itemGroupIdOf(this.session, workspaceId);
+    const groups = this.groupsInLayoutOrder().filter((g) => g.id !== current);
     if (groups.length === 0) {
       this.view.toast("まだグループがありません。");
       return;
     }
-    this.view.openDialogWithContext({ kind: "addToGroup", workspaceId, groups });
+    this.view.openDialogWithContext({ kind: "addToGroup", workspaceId, groups, ...(current !== null ? { moving: true as const } : {}) });
   }
 
   confirmAddToGroup(groupId: string): void {
     const ctx = this.view.dialogContext;
     if (ctx?.kind !== "addToGroup") return;
     this.view.closeDialog();
-    void this.conn.request("group.add_member", { groupId, workspaceId: ctx.workspaceId }).catch(() => this.view.toast("グループへ追加できませんでした"));
+    const failed = (): void => {
+      this.view.toast("グループへ追加できませんでした");
+    };
+    // `layout` を持つサーバは項目丸ごとを 1 回で動かす。古いサーバは項目の workspace 全部に順に送る。
+    if (this.session.hasServerLayout) {
+      void this.conn.request("group.add_member", { groupId, workspaceId: ctx.workspaceId }).catch(failed);
+      return;
+    }
+    void this.addItemToGroupLegacy(groupId, ctx.workspaceId).catch(failed);
   }
 
-  /** 「グループから外す」（`groupId !== null` のときだけ `ContextMenu` が出す）。 */
+  /** 「グループから外す」（項目がグループに入っているときだけ `ContextMenu` が出す）。古いサーバは項目の workspace 全部に順に送る。 */
   removeWorkspaceFromGroup(workspaceId: string): void {
-    void this.conn.request("group.remove_member", { workspaceId }).catch(() => undefined);
+    if (this.session.hasServerLayout) {
+      void this.conn.request("group.remove_member", { workspaceId }).catch(() => undefined);
+      return;
+    }
+    void (async () => {
+      for (const id of this.itemWorkspaceIds(workspaceId)) await this.conn.request("group.remove_member", { workspaceId: id });
+    })().catch(() => undefined);
+  }
+
+  /**
+   * グループの見出しの「上へ移動」「下へ移動」（`item.move_by`。一番上の項目として 1 つ動かす）。
+   * 名前順のときは一番上の並べ替えを受け付けず知らせる（design「並びと名前順」）。端では動かない（`moved: false`・何も知らせない）。
+   */
+  moveGroupBy(groupId: string, direction: "previous" | "next"): void {
+    if (this.view.workspaceSort === "name") {
+      this.view.toast("名前順では並べ替えできません");
+      return;
+    }
+    void this.conn.request("item.move_by", { item: { kind: "group", groupId }, direction }).catch(() => this.view.toast("グループを移動できませんでした"));
   }
 
   // --- 公式フック連携（20260923-agent-session-resume）-------------------------
