@@ -637,7 +637,7 @@ export class MouseController {
       case "sidebar":
         this.host.setSidebarCols(Math.max(10, ev.x + 1), done);
         break;
-      case "section":
+      case "section": {
         // 動かしたときだけ高さを変える（動かさずに離しただけでは保存しない）。どちらかを畳んでいる間は動かしても高さを変えない。
         if (ev.y !== drag.startY) drag.moved = true;
         const folded = this.host.sectionsCollapsed?.();
@@ -645,6 +645,7 @@ export class MouseController {
           this.host.setSidebarSpacesRows?.(Math.max(2, ev.y - drag.top), done);
         if (done && !drag.moved) this.host.toggleSidebarSection?.("agents");
         break;
+      }
       case "tab": {
         if (Math.abs(ev.x - drag.startX) > 1) drag.moved = true;
         if (done && drag.moved) this.dropTab(drag.tabId, ev.x, layout);

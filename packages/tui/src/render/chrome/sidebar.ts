@@ -517,7 +517,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   const headerY = rect.y;
   const spacesTitle = `${spacesFolded ? "▸" : "▾"} Spaces`;
   // 「＋」と並び順が入る幅（`inner >= 10`）では、その手前までに収める。入らない狭い幅では印と題だけ（件数は出さない）。
-  const headerRoom = inner >= 10 ? inner - 4 : inner - 1;
+  const headerRoom = inner >= 12 ? inner - 4 : inner - 1;
   const countText = ` ${workspaces.length}`;
   const spacesHead =
     spacesFolded && stringWidth(spacesTitle + countText) <= headerRoom
@@ -525,7 +525,8 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       : spacesTitle;
   grid.text(rect.x + 1, headerY, truncate(spacesHead, inner - 1), fg, bg, ATTR.dim);
   hits.push({ y: headerY, kind: "sectionHeader", section: "spaces" });
-  if (inner >= 10) {
+  // 「＋」は題（8 桁）の次の桁から（`inner - 2 > 9`）。それより狭いと題の末尾に重なるので出さない。
+  if (inner >= 12) {
     const x = rect.x + inner - 2;
     grid.set(x, headerY, "+", 1, fg, activeBg);
     hits.push({ y: headerY, kind: "newWorkspace", x });

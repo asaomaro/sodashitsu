@@ -522,6 +522,21 @@ describe("サイドバーの区画の折りたたみ", () => {
     expect(row).toEqual(["sectionHeader", "newWorkspace", "sort"]);
   });
 
+  it("「＋」は題に重ならない幅（inner 12 以上）でだけ出る", () => {
+    for (const w of [11, 12]) {
+      const r = build({}, { w });
+      expect(r.text(0).startsWith(" ▾ Spaces")).toBe(true);
+      expect(r.hits.some((h) => h.kind === "newWorkspace")).toBe(false);
+    }
+    expect(build({}, { w: 13 }).hits.some((h) => h.kind === "newWorkspace")).toBe(true);
+  });
+
+  it("区切りの行: 狭い幅では畳んでいても印と題だけ（件数・字形は出さない）", () => {
+    const r = build({ agents: true }, { blocked: true, w: 16 });
+    expect(r.text(r.divY)).toMatch(/^─ ▸ Agents/);
+    expect(r.text(r.divY)).not.toMatch(/Agents 2/);
+  });
+
   it("狭い幅では、畳んでいても印と題だけ（件数は出さない）", () => {
     const r = build({ spaces: true }, { w: 13 });
     expect(r.text(0)).toMatch(/^ ▸ Spaces\s+\+$/);

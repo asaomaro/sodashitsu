@@ -20,6 +20,11 @@
 - [nit][conv:-] 畳んだ見出しの読み上げ名に件数の意味が無い / 対応: 修正済（T15・ラウンド1。aria-label に「n 件」）
 - [nit][conv:-] navigate の watch はサイドバーを畳んでいる間も保存する / 対応: 許容（仕様どおり。decisions D4）
 
+- [should][conv:-] tui/render/chrome/sidebar.ts 幅 inner 10・11 で「＋」が見出し「▾ Spaces」の末尾に重なる / 対応: 修正済（T10・ラウンド1。「＋」は inner 12 以上。テストを足した）
+- [nit][conv:-] 区切りの行の狭い幅のテストが無い / 対応: 修正済（T10・ラウンド1）
+- [should][conv:-] tui/input/mouse.ts `case "section"` の `const` が no-case-declarations / 対応: 修正済（T11・ラウンド1。ブロックで囲んだ）
+- [nit][conv:-] 動かして元の行へ戻して離したときの挙動のテストが無い / 対応: 修正済（T11・ラウンド1）
+
 ### 壊して落ちる確認（条項 regression-negative-control。生の出力）
 
 #### T1 `sectionSizing.ts`: `clampRatio` の `Math.min(hi, Math.max(lo, ratio))` を `ratio` に壊す
