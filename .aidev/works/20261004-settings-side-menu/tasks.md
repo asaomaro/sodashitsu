@@ -43,7 +43,7 @@ design.md のとおり、基準の記録（T1）→ 純関数（T2）→ 構造�
       対象: `packages/e2e/src/specs/settings.spec.ts`、`packages/e2e/src/specs/key-bindings.spec.ts`
       依存: なし
       AC: AC9
-- [ ] T7: E2E `settings-menu.spec.ts`——design「テストの方針」の E2E の全場面（AC1〜AC8・AC11・AC-I1〜I5）。観測を壊して落ちる確認。2 回続けて同じ結果
+- [x] T7: E2E `settings-menu.spec.ts`——design「テストの方針」の E2E の全場面（AC1〜AC8・AC11・AC-I1〜I5）。観測を壊して落ちる確認。2 回続けて同じ結果
       対象: `packages/e2e/src/specs/settings-menu.spec.ts`（新規）
       依存: T9, T6
       AC: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8, AC11, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5

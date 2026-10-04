@@ -1703,6 +1703,23 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
       expect(currentLabels(wrapper)).toEqual(["通知"]);
     });
 
+    it("フォーカスを移した直後（計算の予約が実行される前）でも、今の節から数える", async () => {
+      const { wrapper } = await openWithMenu();
+      const queue: FrameRequestCallback[] = [];
+      vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => queue.push(cb));
+      stubLayout(wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2600 });
+      const keysControl = wrapper.get('section[aria-labelledby="settings-keys"] :is(input, button)').element as HTMLElement;
+      keysControl.focus();
+      keysControl.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      while (queue.length) queue.shift()!(0);
+      await wrapper.vm.$nextTick();
+      expect(currentLabels(wrapper)).toEqual(["キー"]);
+      document.getElementById("settings-notify")!.focus();
+      document.getElementById("settings-notify")!.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      await altKey(wrapper, "PageDown"); // 予約はまだ実行されていない
+      expect(document.activeElement).toBe(document.getElementById("settings-theme"));
+    });
+
     it("伝播を止める（上の層・端末へ漏らさない）", async () => {
       const { wrapper } = await stubbed();
       const seen = vi.fn();
@@ -1790,6 +1807,33 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
         view.openDialogWithContext({ kind: "settings" }); // 開いたまま、別の文脈の値で開き直す
         await tick();
         expect(f.listeners, "前の監視を外してから登録し直す").toHaveLength(1);
+      });
+
+      it("メニューが消える拍にブラウザが先にフォーカスを外していても（focusout が先）、直前なら今の節の見出しへ移す。時間が経っていれば動かさない", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const now = vi.spyOn(performance, "now");
+        const item = menuButtons(wrapper)[3]!.element as HTMLElement;
+        item.focus();
+        item.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        now.mockReturnValue(1000);
+        item.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+        await wrapper.vm.$nextTick();
+        now.mockReturnValue(1100);
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        await wrapper.vm.$nextTick();
+        expect(document.activeElement).toBe(document.getElementById("settings-notify"));
+
+        // 古い focusout（普通にメニューを離れた）の後の幅の変化では、フォーカスを動かさない。
+        const sw = switches(wrapper)[1]!.element as HTMLElement;
+        item.focus();
+        item.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        now.mockReturnValue(2000);
+        item.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+        sw.focus();
+        now.mockReturnValue(5000);
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        expect(document.activeElement).toBe(sw);
       });
 
       it("メニューにフォーカスが無ければフォーカスは動かない。閉じるとリスナーを外す", async () => {

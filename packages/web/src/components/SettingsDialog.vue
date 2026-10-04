@@ -135,6 +135,7 @@ watch(
       stopObserving();
       chosen.value = null; // 次に開いたときは最初の節から
       menuFocus.value = null;
+      menuLeftAt = null;
       current.value = 0;
       dialogEl.value?.close();
       confirmingOverrideReset.value = false; // 開き直したとき、確認が出たままにならない
@@ -651,7 +652,11 @@ let narrowQuery: MediaQueryList | null = null;
 
 /** 幅が 768px を下回ってメニューが消えるとき、メニューにフォーカスがあったら今の節の見出しへ移す（消えた要素にフォーカスを残さない）。出るときは何もしない。 */
 function onNarrowChange(ev: MediaQueryListEvent): void {
-  if (!ev.matches || menuFocus.value === null) return;
+  // メニューが `display: none` になると、ブラウザが先にフォーカスを外す（`focusout` が先に来て `menuFocus` が null になる）ことがある。
+  // 直前（このタスクの中）にメニューからフォーカスが外れていたなら、メニューにあったものとして扱う。
+  const justLeft = menuLeftAt !== null && performance.now() - menuLeftAt < MENU_LEFT_WINDOW_MS;
+  if (!ev.matches || (menuFocus.value === null && !justLeft)) return;
+  menuLeftAt = null;
   const found = sectionHeadings();
   found[Math.max(current.value, 0)]?.heading.focus({ preventScroll: true });
   menuFocus.value = null;
@@ -726,6 +731,7 @@ function onDialogKeydown(ev: KeyboardEvent): void {
   ev.stopPropagation();
   const count = sectionHeadings().length;
   if (count === 0) return;
+  updateCurrent(); // 直前のフォーカス・スクロールの計算が、次の描画まで待っている間に押されても、今の節から数える
   const to = stepSection(Math.max(current.value, 0), ev.key === "PageDown" ? 1 : -1, count);
   if (to !== null) go(to);
 }
@@ -738,9 +744,14 @@ function onMenuFocusin(ev: FocusEvent): void {
   menuFocus.value = at >= 0 ? at : null;
 }
 
+/** メニューから、行き先の無いままフォーカスが外れた時刻（要素が消えた・見えなくなったときのフォーカスの外れを見分ける）。 */
+let menuLeftAt: number | null = null;
+const MENU_LEFT_WINDOW_MS = 300;
+
 function onMenuFocusout(ev: FocusEvent): void {
   if (ev.relatedTarget instanceof Node && menuEl.value?.contains(ev.relatedTarget)) return; // 項目の間の移動
   menuFocus.value = null;
+  menuLeftAt = ev.relatedTarget === null ? performance.now() : null;
 }
 
 /** メニューの中の矢印キー。端で止まる（回り込まない）。 */

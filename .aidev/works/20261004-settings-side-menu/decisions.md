@@ -46,3 +46,18 @@
 - `theme-settings.spec.ts:193`（`input.settings-path` が 2 要素で strict mode violation）・`:271`（テーマの色 `rgb(40, 42, 54)` を期待して `rgb(239, 241, 245)`）・`:354`（OSC 色の問い合わせ `rgb:1010/…` を期待して `rgb:fbfb/…`）・`:528`（`#6070a1` を期待して `#222222`）
 
 流し方: `cd packages/e2e && pnpm exec playwright test <8 spec> --reporter=list`（`workers: 1`）。T10 の比較ではこの 15 件を基準にする。生の出力は作業のセッションの一時フォルダ（`base1.txt`・`base2.txt`）にあり、リポジトリには入れていない。
+
+## D6: T3 の独立点検の「題名の行の sticky が grid で効かない」は誤検知（実測）
+
+点検は、grid の子の sticky は自分の grid 領域の中でしか動けないと推定した。実 Chromium で、design の CSS を写した `<dialog>`（`display: grid`・題名の行 `grid-column: 1/-1`・メニュー sticky）を 900px スクロールして実測した。`dialog.scrollTop=882` のとき、［閉じる］の上端は dialog の上端から 19px のまま、メニューも固定された。E2E（`settings-menu.spec.ts` の AC1・AC6）でも実物で確かめている。
+
+## D7: E2E で見つけて直した、design に無かった 2 点（T7）
+
+- **幅が 768px を下回ってメニューが消える拍に、ブラウザが先にフォーカスを外すことがある**（`focusout` が `matchMedia` の `change` より先に来て、`menuFocus` が null になっていた。E2E「開いたまま 768 をまたぐ」が間欠的に落ちた）。design は「`focusin`／`focusout` で持っておく」としていたが、それだけでは足りない。メニューから行き先の無いまま（`relatedTarget` が null）フォーカスが外れた時刻を持ち、300ms 以内の `change` はメニューにあったものとして扱う。
+- **`Alt+PageDown`／`PageUp` は、押した時点で今の節を計算し直してから数える**。今の節の更新は `requestAnimationFrame` でまとめるので、フォーカスを移した直後（次の描画の前）に押されると、古い今の節から数えていた（E2E「絞り込みで末尾の 2 節が 1 画面に収まる」が間欠的に落ちた）。
+- E2E の「末尾の 2 節が 1 画面に収まる」場面は、1280×720 では「キー」の節が絞り込んでも約 540px 残り、収まらない。高さ 1400px の画面に分けた（位置だけで決めると末尾の節を飛ばすことを、`chosen` を無効にする変異で確認済み）。
+- `Alt+PageDown` が `<select>` の値を変えないことは、Chromium では元から変わらないため値だけでは確かめられない。ダイアログ自身の後ろの listener で `defaultPrevented` を見る（`preventDefault` を外す変異で落ちる）。
+
+## D8: `SettingsDialog.vue` の節の中身は再インデントしていない
+
+節を `<div class="settings-body">` で包んだが、中身（約 430 行）は再インデントしていない。別の作業（`subagent-display`）が「エージェント連携」の節を変えるので、再インデントすると衝突が膨らむ。元からこのファイルは prettier が通らない（`prettier --check` で警告）ため、`--write` も当てていない。マージ後に整形したくなったら、別の変更で一括して行う。
