@@ -35,7 +35,7 @@ design.md のとおり、下から積む。純関数（T1）→ 色の変数（T
       対象: research.md「G5」の一覧（`actions.ts`・`bindings.ts`・`ActionDispatcher.ts`・`TuiDispatcher.ts`・`bindings.test.ts`・`keymap.test.ts`・`TuiDispatcher.test.ts`・`KeySettings.test.ts`）。手本は `show_subagents` を足したコミット ccf58e6・ee49c39
       依存: T4
       AC: AC-I3, AC13
-- [ ] T6: pane の間の境目（`Splitter.vue`）——`resize-handle` のクラスと `useResizeDrag`（`begin`＝今の比・`cancel`＝始めた比を送る・`reset`＝0.5 を送る。**cancel・reset は、ためていた送信のタイマーと `pendingRatio` を捨ててから送る**）。`.pane-layout-side` に `isolation: isolate`。キーは今のまま。`:focus-visible` の背景と outline は線に置き換える（消す）。`z-index: 1`。単体テスト（ダブルクリック・Esc・取り消しの後に古い比で上書きされない）。`useResizeDrag` が move を rAF で 1 回にまとめるので、`Splitter.test.ts:112` ほかは rAF を流す形に直すと壊して落ちる確認。既存の `Splitter.test.ts`・E2E が通ること
+- [x] T6: pane の間の境目（`Splitter.vue`）——`resize-handle` のクラスと `useResizeDrag`（`begin`＝今の比・`cancel`＝始めた比を送る・`reset`＝0.5 を送る。**cancel・reset は、ためていた送信のタイマーと `pendingRatio` を捨ててから送る**）。`.pane-layout-side` に `isolation: isolate`。キーは今のまま。`:focus-visible` の背景と outline は線に置き換える（消す）。`z-index: 1`。単体テスト（ダブルクリック・Esc・取り消しの後に古い比で上書きされない）。`useResizeDrag` が move を rAF で 1 回にまとめるので、`Splitter.test.ts:112` ほかは rAF を流す形に直すと壊して落ちる確認。既存の `Splitter.test.ts`・E2E が通ること
       対象: `packages/web/src/components/Splitter.vue`・`Splitter.test.ts`、`PaneLayout.vue:260-266`
       依存: T3
       AC: AC1, AC2, AC17, AC15

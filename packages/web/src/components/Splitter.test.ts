@@ -101,20 +101,125 @@ describe("Splitter", () => {
     wrapper.unmount();
   });
 
-  it("ドラッグ（Pointer Events）で比率を動かす", async () => {
+  function mockParent(el: { element: Element }): void {
+    const parent = el.element.parentElement!;
+    vi.spyOn(parent, "getBoundingClientRect").mockReturnValue({ width: 1000, height: 500, x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 500, toJSON: () => ({}) } as DOMRect);
+  }
+
+  it("ドラッグ（Pointer Events）で比率を動かす（move は描画ごとに 1 回にまとまる）", async () => {
     const conn = makeConnection();
     const wrapper = mountSplitter(conn);
     const el = wrapper.get('[role="separator"]');
-    const parent = el.element.parentElement!;
-    vi.spyOn(parent, "getBoundingClientRect").mockReturnValue({ width: 1000, height: 500, x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 500, toJSON: () => ({}) } as DOMRect);
+    mockParent(el);
 
     await el.trigger("pointerdown", { clientX: 500, clientY: 0 });
     await el.trigger("pointermove", { clientX: 600, clientY: 0 }); // +100px / 1000px = +0.1
+    await vi.advanceTimersByTimeAsync(20); // rAF を流す（`useResizeDrag` が 1 回にまとめる）
     expect(el.attributes("aria-valuenow")).toBe("60");
     await el.trigger("pointerup");
 
     await vi.advanceTimersByTimeAsync(50);
     expect(conn.requests).toEqual([["layout.set_split_ratio", { tabId: "t1", splitId: "s1", ratio: 0.6 }]]);
+    wrapper.unmount();
+  });
+
+  it("ドラッグ中は resize-handle-active が付き、離すと外れる。境目は resize-handle と向きのクラスを持つ", async () => {
+    const wrapper = mountSplitter(makeConnection());
+    const el = wrapper.get('[role="separator"]');
+    mockParent(el);
+    expect(el.classes()).toEqual(expect.arrayContaining(["resize-handle", "resize-handle-x"]));
+    await el.trigger("pointerdown", { clientX: 500 });
+    expect(el.classes()).toContain("resize-handle-active");
+    await el.trigger("pointerup");
+    expect(el.classes()).not.toContain("resize-handle-active");
+    expect(mountSplitter(makeConnection(), "down").get('[role="separator"]').classes()).toContain("resize-handle-y");
+    wrapper.unmount();
+  });
+
+  it("pointercancel でもドラッグは終わる", async () => {
+    const wrapper = mountSplitter(makeConnection());
+    const el = wrapper.get('[role="separator"]');
+    mockParent(el);
+    await el.trigger("pointerdown", { clientX: 500 });
+    await el.trigger("pointercancel");
+    expect(el.classes()).not.toContain("resize-handle-active");
+    wrapper.unmount();
+  });
+
+  it("lostpointercapture でもドラッグは終わる", async () => {
+    const wrapper = mountSplitter(makeConnection());
+    const el = wrapper.get('[role="separator"]');
+    mockParent(el);
+    await el.trigger("pointerdown", { clientX: 500 });
+    await el.trigger("lostpointercapture");
+    expect(el.classes()).not.toContain("resize-handle-active");
+    wrapper.unmount();
+  });
+
+  it("ダブルクリックで半分（0.5）に戻す（ドラッグは始めない）", async () => {
+    const conn = makeConnection();
+    const wrapper = mount(Splitter, {
+      props: { splitId: "s1", tabId: "t1", ratio: 0.7, dir: "right" },
+      global: { provide: { [ConnectionKey as symbol]: conn } },
+      attachTo: document.body,
+    });
+    const el = wrapper.get('[role="separator"]');
+    mockParent(el);
+    await el.trigger("pointerdown", { clientX: 700 });
+    await el.trigger("pointerup");
+    await vi.advanceTimersByTimeAsync(100);
+    await el.trigger("pointerdown", { clientX: 700 });
+    expect(el.attributes("aria-valuenow")).toBe("50");
+    expect(conn.requests).toEqual([["layout.set_split_ratio", { tabId: "t1", splitId: "s1", ratio: 0.5 }]]);
+    expect(el.classes()).not.toContain("resize-handle-active");
+    wrapper.unmount();
+  });
+
+  it("Esc で始めた比へ戻し、ためていた送信（ドラッグ中の比）は捨てる——取り消しの後に古い比で上書きしない", async () => {
+    const conn = makeConnection();
+    const wrapper = mountSplitter(conn);
+    const el = wrapper.get('[role="separator"]');
+    mockParent(el);
+    await el.trigger("pointerdown", { clientX: 500 });
+    await el.trigger("pointermove", { clientX: 800 });
+    await vi.advanceTimersByTimeAsync(20); // 描画で 0.8 を反映し、送信は 50ms 待ちのタイマーに入る
+    expect(el.attributes("aria-valuenow")).toBe("80");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+    await wrapper.vm.$nextTick();
+    expect(el.attributes("aria-valuenow")).toBe("50");
+    await vi.advanceTimersByTimeAsync(200);
+    expect(conn.requests).toEqual([["layout.set_split_ratio", { tabId: "t1", splitId: "s1", ratio: 0.5 }]]);
+    wrapper.unmount();
+  });
+
+  it("描画の前（rAF が未実行）に Esc を押しても、ためた移動は反映されず、始めた比が送られる", async () => {
+    const conn = makeConnection();
+    const wrapper = mountSplitter(conn);
+    const el = wrapper.get('[role="separator"]');
+    mockParent(el);
+    await el.trigger("pointerdown", { clientX: 500 });
+    await el.trigger("pointermove", { clientX: 800 });
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(el.attributes("aria-valuenow")).toBe("50");
+    expect(conn.requests).toEqual([["layout.set_split_ratio", { tabId: "t1", splitId: "s1", ratio: 0.5 }]]);
+    wrapper.unmount();
+  });
+
+  it("ダブルクリックでも、ためていた送信を捨てる", async () => {
+    const conn = makeConnection();
+    const wrapper = mountSplitter(conn);
+    const el = wrapper.get('[role="separator"]');
+    mockParent(el);
+    await el.trigger("keydown", { key: "ArrowRight" }); // 0.52 を 50ms 後に送る予約
+    await el.trigger("pointerdown", { clientX: 500 });
+    await el.trigger("pointerup");
+    await vi.advanceTimersByTimeAsync(100); // 予約は 50ms で送られてしまう
+    conn.requests.length = 0;
+    await el.trigger("keydown", { key: "ArrowRight" });
+    await el.trigger("pointerdown", { clientX: 500 }); // 350ms 以内の 2 回目
+    await vi.advanceTimersByTimeAsync(200);
+    expect(conn.requests).toEqual([["layout.set_split_ratio", { tabId: "t1", splitId: "s1", ratio: 0.5 }]]);
     wrapper.unmount();
   });
 

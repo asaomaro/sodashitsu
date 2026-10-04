@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { inject, ref, watch } from "vue";
 import { ConnectionKey } from "../injection.js";
+import { useResizeDrag } from "../composables/useResizeDrag.js";
 
 /**
  * pane の境界（M2。architecture「マウス操作」・APG の Window Splitter）。Pointer Events でドラッグし、
  * 動いている間は `layout.set_split_ratio` を 50ms 間隔にまとめて送る。キーボードの矢印で 2% ずつ動かす。
+ * `Esc` で始めた比へ戻し、ダブルクリックで半分にする（20261004-ui-interaction-polish）。
  */
 const props = defineProps<{
   splitId: string;
@@ -22,23 +24,15 @@ const SEND_INTERVAL_MS = 50;
 const localRatio = ref(props.ratio);
 const el = ref<HTMLElement | null>(null);
 
-let dragging = false;
-let dragStartClient = 0;
-let dragStartRatio = 0;
-let containerSize = 0;
-
 let sendTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingRatio: number | null = null;
 
-watch(
-  () => props.ratio,
-  (next) => {
-    if (!dragging) localRatio.value = next;
-  },
-);
-
 function clamp(r: number): number {
   return Math.min(0.95, Math.max(0.05, r));
+}
+
+function send(ratio: number): void {
+  void conn!.request("layout.set_split_ratio", { tabId: props.tabId, splitId: props.splitId, ratio }).catch(() => undefined);
 }
 
 function scheduleSend(ratio: number): void {
@@ -49,32 +43,68 @@ function scheduleSend(ratio: number): void {
     if (pendingRatio === null) return;
     const ratioToSend = pendingRatio;
     pendingRatio = null;
-    void conn!.request("layout.set_split_ratio", { tabId: props.tabId, splitId: props.splitId, ratio: ratioToSend }).catch(() => undefined);
+    send(ratioToSend);
   }, SEND_INTERVAL_MS);
 }
 
-function onPointerDown(ev: PointerEvent): void {
-  const parent = el.value?.parentElement;
-  if (!parent) return;
-  const rect = parent.getBoundingClientRect();
-  containerSize = props.dir === "right" ? rect.width : rect.height;
-  dragStartClient = props.dir === "right" ? ev.clientX : ev.clientY;
-  dragStartRatio = localRatio.value;
-  dragging = true;
-  (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
+/** ためていた送信を捨てる（取り消し・リセットの後に、ドラッグ中の比で上書きされないように）。 */
+function dropPendingSend(): void {
+  if (sendTimer) clearTimeout(sendTimer);
+  sendTimer = null;
+  pendingRatio = null;
 }
 
-function onPointerMove(ev: PointerEvent): void {
-  if (!dragging || containerSize <= 0) return;
-  const client = props.dir === "right" ? ev.clientX : ev.clientY;
-  const next = clamp(dragStartRatio + (client - dragStartClient) / containerSize);
-  localRatio.value = next;
-  scheduleSend(next);
+/** 戻す先の比で今すぐ送る（取り消し・リセット）。 */
+function sendNow(ratio: number): void {
+  dropPendingSend();
+  localRatio.value = ratio;
+  send(ratio);
 }
 
-function onPointerUp(): void {
-  dragging = false;
+/**
+ * ドラッグ・`Esc`・ダブルクリック・見た目は `useResizeDrag` と `resize-handle`（20261004-ui-interaction-polish）。
+ * 始めた時点の比・位置・親の大きさを `begin` が持ち帰る。
+ */
+interface DragStart {
+  ratio: number;
+  client: number;
+  size: number;
 }
+const drag = useResizeDrag<DragStart>({
+  axis: props.dir === "right" ? "x" : "y",
+  enabled: () => !!el.value?.parentElement,
+  begin(ev) {
+    const rect = el.value!.parentElement!.getBoundingClientRect();
+    return {
+      ratio: localRatio.value,
+      client: props.dir === "right" ? ev.clientX : ev.clientY,
+      size: props.dir === "right" ? rect.width : rect.height,
+    };
+  },
+  move(ev, start) {
+    if (start.size <= 0) return;
+    const client = props.dir === "right" ? ev.clientX : ev.clientY;
+    const next = clamp(start.ratio + (client - start.client) / start.size);
+    localRatio.value = next;
+    scheduleSend(next);
+  },
+  commit() {
+    // 送信は 50ms ごとに済んでいる（最後の分もタイマーが送る）。
+  },
+  cancel(start) {
+    sendNow(start.ratio);
+  },
+  reset() {
+    sendNow(0.5);
+  },
+});
+
+watch(
+  () => props.ratio,
+  (next) => {
+    if (!drag.dragging.value) localRatio.value = next;
+  },
+);
 
 function onKeydown(ev: KeyboardEvent): void {
   const growKey = props.dir === "right" ? "ArrowRight" : "ArrowDown";
@@ -96,11 +126,13 @@ function onKeydown(ev: KeyboardEvent): void {
     aria-valuemin="5"
     aria-valuemax="95"
     tabindex="0"
-    class="splitter"
-    :class="dir"
-    @pointerdown="onPointerDown"
-    @pointermove="onPointerMove"
-    @pointerup="onPointerUp"
+    class="splitter resize-handle"
+    :class="[dir, dir === 'right' ? 'resize-handle-x' : 'resize-handle-y', { 'resize-handle-active': drag.dragging.value }]"
+    @pointerdown="drag.onPointerDown"
+    @pointermove="drag.onPointerMove"
+    @pointerup="drag.onPointerEnd"
+    @pointercancel="drag.onPointerEnd"
+    @lostpointercapture="drag.onPointerEnd"
     @keydown="onKeydown"
   />
 </template>
@@ -114,10 +146,7 @@ function onKeydown(ev: KeyboardEvent): void {
   background: var(--soda-menu-border, #44475a);
   touch-action: none;
 }
-.splitter:focus-visible {
-  background: var(--soda-menu-active-bg, #44475a);
-  outline: 1px solid var(--soda-fg, #f8f8f2);
-}
+/* 掴める印・focus の印は、`resize-handle`（`styles/resizeHandle.css`）の強調の線が受け持つ（以前の `:focus-visible` の背景と outline は置き換えた）。 */
 /* 太さは `PaneFrame.vue` の枠と同じ CSS 変数（`--soda-pane-gap`。既定 4px。20260922-appearance-settings-rest）。 */
 .splitter.right {
   width: var(--soda-pane-gap, 4px);

@@ -9,6 +9,10 @@
 - [nit][conv:-] packages/protocol/src/messages.ts:601 端末ごとの項目の説明が旧 2 項目のまま / 対応: 修正済（T4・ラウンド1。`DEVICE_LOCAL_PREF_KEYS` を指す形に）
 - [nit][conv:regression-negative-control] view.test.ts の NaN は JSON を通ると null になり `Number.isFinite` を覆わない／PrefsSync 側に `undefined` の書き込みと新しい 2 項目のテストが無い / 対応: 修正済（T4・ラウンド1。load 関数を直接見るテストと、PrefsSync が送らないテストを足した）
 
+- [should][conv:regression-negative-control] review.md に T6 の壊して落ちる確認の出力が無い / 対応: 修正済（T6・ラウンド1。下に貼った）
+- [nit][conv:-] packages/web/src/components/Splitter.vue:73 `axis` を setup 時の `props.dir` で 1 回だけ決めている / 対応: 許容（分割の向きは分割ごとに固定で、`dir` が変わる再利用は無い）
+- [nit][conv:-] Splitter.test.ts の Esc のテストが「描画後」の 1 経路だけ / 対応: 修正済（T6・ラウンド1。描画前に Esc のテストを足した）
+
 ### 壊して落ちる確認（条項 regression-negative-control。生の出力）
 
 #### T1 `sectionSizing.ts`: `clampRatio` の `Math.min(hi, Math.max(lo, ratio))` を `ratio` に壊す
@@ -79,4 +83,25 @@ AssertionError: expected true to be false // Object.is equality
      × localStorage（soda.prefs.v1）の今の値を settings・view ストアへ読み直し、トーストを出す（AC13・AC14） 12ms
 変異: isDeviceLocalPref が sidebarSection* を端末ごとと見ない
      × 区画の比・折りたたみ（端末ごとの項目）の保存・消去は送らない（undefined で項目を消す書き込みも含む。20261004-ui-interaction-polish） 7ms
+```
+
+```
+T5 変異: ActionDispatcher の toggleSectionCollapsed(action.section) を void action に
+     × toggleSidebarSection: その区画の折りたたみを切り替える（何も送らない・サイドバーを畳んでいても変わる・フォーカスは動かさない） 9ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — help/goto/toggleSidebar/detach > toggleSidebarSection: その区画の折りたたみを切り替える（何も送らない・サイドバーを畳んでいても変わる・フォーカスは動かさない）
+```
+
+#### T6 `Splitter.vue`（生の出力。変異ごと）
+```
+変異: cancel/reset の dropPendingSend(); を消す
+     × Esc で始めた比へ戻し、ためていた送信（ドラッグ中の比）は捨てる——取り消しの後に古い比で上書きしない 11ms
+     × ダブルクリックでも、ためていた送信を捨てる 5ms
+変異: cancel の sendNow(start.ratio) を localRatio.value = start.ratio に
+     × Esc で始めた比へ戻し、ためていた送信（ドラッグ中の比）は捨てる——取り消しの後に古い比で上書きしない 12ms
+変異: @pointercancel="drag.onPointerEnd" を消す
+     × pointercancel でもドラッグは終わる 7ms
+変異: @lostpointercapture="drag.onPointerEnd" を消す
+     × lostpointercapture でもドラッグは終わる 7ms
+（T3 の変異「requestAnimationFrame を flush() に」は composable 側で useResizeDrag.test.ts が落ちる。Splitter.test.ts の描画待ちは、rAF を流さないと aria-valuenow が変わらない形に直してある）
 ```

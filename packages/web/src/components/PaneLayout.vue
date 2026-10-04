@@ -263,5 +263,7 @@ defineExpose({ commitView });
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  /* 境目（Splitter）の当たり判定を、端末のスクロールバー（xterm の z-index 11）より上に出すため、重なりの文脈をここで閉じる（20261004-ui-interaction-polish）。 */
+  isolation: isolate;
 }
 </style>
