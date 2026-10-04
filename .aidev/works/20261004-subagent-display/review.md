@@ -724,3 +724,7 @@ AssertionError: PreToolUse: expected { SessionStart: [ { …(2) } ], …(5) } to
 AssertionError: expected undefined to deeply equal [ { matcher: 'compact', …(1) } ]
 ```
 - 13: 定数の後の空行を 1 つに。
+
+## 独立レビュー（依頼元。全体の差分）
+
+must 0・should 7・nit 6。should 6 件（1〜6）と nit 3 件（8・9・13）を b29918c・e4f02f9 で直した（内容は `review-findings-01.md`）。直さなかったもの: 7（端末版のキーボードの道筋は `show_subagents` へのキー割り当てだけ。既定のキーを付けるかは利用者の判断待ち）／10（`SessionStart` だけ手で消した状態では、残りを外す入口が出ない。導入してから解除すれば外せる）／11（「起きないこと」の固定の待ち。陽性の対照あり）／12（E2E のイベント待ち。判定はブラウザ）。
