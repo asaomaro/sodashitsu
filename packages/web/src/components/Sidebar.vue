@@ -2,6 +2,7 @@
 import { computed, inject, ref, watch } from "vue";
 import type { AgentInfo, ItemTarget, Workspace } from "@sodashitsu/protocol";
 import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
+import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
 import { orderedAgentPaneIds } from "@sodashitsu/client-core";
@@ -51,10 +52,6 @@ watch(
 const conn = inject(ConnectionKey);
 
 const el = ref<HTMLElement | null>(null);
-let dragging = false;
-let dragStartX = 0;
-let dragStartWidth = 0;
-let lastDividerClick = 0;
 
 /** 並び順の表示名（20260922-appearance-settings-rest。`AGENT_SORT_LABEL` と同じパターン）。 */
 const WORKSPACE_SORT_LABEL: Record<WorkspaceSort, string> = { opened: "開いた順", name: "名前順" };
@@ -581,39 +578,51 @@ function onRowPointerCancel(ev: PointerEvent): void {
  * 幅は `view.sidebarWidth`（このブラウザに残る。20260921-herdr-settings-gaps の AC1）。
  * **ドラッグ中は反映だけ**（`setSidebarWidth`）で、**保存はドラッグを終えたときに 1 回**（`commitSidebarWidth`）——
  * `pointermove` ごとに `localStorage` へ書くと、毎フレーム同期の I/O が走る。
+ * ドラッグ・`Esc`・ダブルクリック・見た目は `useResizeDrag` と `resize-handle`（20261004-ui-interaction-polish）。
  */
-function onDividerPointerDown(ev: PointerEvent): void {
+const widthDrag = useResizeDrag<{ width: number; x: number }>({
+  axis: "x",
   // **畳んでいる間は幅を動かさない**。幅が効くのは展開中だけ（`nav` の style）なので、畳んだまま動かすと
   // 利用者が一度も見ていない幅が保存され、展開したときにその幅で開く（タスク点検 T6 の指摘）。
-  if (view.sidebarCollapsed) return;
-  const now = Date.now();
-  if (now - lastDividerClick < 350) {
-    // ダブルクリックで既定幅へ戻す（D56 の訂正 11）。戻した幅も覚える。
+  enabled: () => !view.sidebarCollapsed,
+  begin: (ev) => ({ width: view.sidebarWidth, x: ev.clientX }),
+  move: (ev, start) => view.setSidebarWidth(start.width + (ev.clientX - start.x)), // 範囲に収めるのはストア
+  commit: () => view.commitSidebarWidth(),
+  // 始めた幅へ戻す。保存はしない（始める前から保存済みの値のまま）。
+  cancel: (start) => view.setSidebarWidth(start.width),
+  // ダブルクリックで既定幅へ戻す（D56 の訂正 11）。戻した幅も覚える。
+  reset: () => {
     view.setSidebarWidth(SIDEBAR_WIDTH.default);
     view.commitSidebarWidth();
-    lastDividerClick = 0;
-    return;
+  },
+});
+
+/** 幅の境目のキー（フォーカスがあるとき）。`←`／`→` で 16px、`Home`＝最小、`End`＝最大、`Enter`＝既定。押すたびに保存する。 */
+const WIDTH_KEY_STEP = 16;
+function onDividerKeydown(ev: KeyboardEvent): void {
+  if (view.sidebarCollapsed) return;
+  let next: number;
+  switch (ev.key) {
+    case "ArrowLeft":
+      next = view.sidebarWidth - WIDTH_KEY_STEP;
+      break;
+    case "ArrowRight":
+      next = view.sidebarWidth + WIDTH_KEY_STEP;
+      break;
+    case "Home":
+      next = SIDEBAR_WIDTH.min;
+      break;
+    case "End":
+      next = SIDEBAR_WIDTH.max;
+      break;
+    case "Enter":
+      next = SIDEBAR_WIDTH.default;
+      break;
+    default:
+      return;
   }
-  lastDividerClick = now;
-  dragging = true;
-  dragStartX = ev.clientX;
-  dragStartWidth = view.sidebarWidth;
-  (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
-}
-
-function onDividerPointerMove(ev: PointerEvent): void {
-  if (!dragging) return;
-  view.setSidebarWidth(dragStartWidth + (ev.clientX - dragStartX)); // 範囲に収めるのはストア
-}
-
-/**
- * ドラッグを終えて、**見えている幅を覚える**。`pointerup` だけでなく `pointercancel`・`lostpointercapture` でも
- * 呼ぶ——取り消されたドラッグでも見えている幅を保存する（戻す先の値を持っていないうえ、見えている幅と保存値が
- * 食い違うほうが分かりにくい）。`pointerup` の後にも `lostpointercapture` が来るが、2 回目は何もしない。
- */
-function endDrag(): void {
-  if (!dragging) return;
-  dragging = false;
+  ev.preventDefault();
+  view.setSidebarWidth(next);
   view.commitSidebarWidth();
 }
 
@@ -626,7 +635,7 @@ watch(
   () => view.modalOpen, // グラフ画面（20260927-agent-graph）も同じ
   (open) => {
     if (open) {
-      endDrag();
+      widthDrag.finish();
       if (view.workspaceDrag) cancelWorkspaceDrag();
     }
   },
@@ -803,12 +812,22 @@ watch(
     </div>
 
     <div
-      class="sidebar-divider"
-      @pointerdown="onDividerPointerDown"
-      @pointermove="onDividerPointerMove"
-      @pointerup="endDrag"
-      @pointercancel="endDrag"
-      @lostpointercapture="endDrag"
+      class="sidebar-divider resize-handle resize-handle-x"
+      :class="{ 'resize-handle-active': widthDrag.dragging.value }"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="サイドバーの幅"
+      :aria-valuenow="view.sidebarWidth"
+      :aria-valuemin="SIDEBAR_WIDTH.min"
+      :aria-valuemax="SIDEBAR_WIDTH.max"
+      :tabindex="view.sidebarCollapsed ? -1 : 0"
+      :aria-hidden="view.sidebarCollapsed ? 'true' : undefined"
+      @pointerdown="widthDrag.onPointerDown"
+      @pointermove="widthDrag.onPointerMove"
+      @pointerup="widthDrag.onPointerEnd"
+      @pointercancel="widthDrag.onPointerEnd"
+      @lostpointercapture="widthDrag.onPointerEnd"
+      @keydown="onDividerKeydown"
     />
   </nav>
 </template>
@@ -1066,7 +1085,7 @@ watch(
 }
 /* 以前は `right: -3px` で外へ 3px はみ出しており、文字が 1 つも無くても横スクロールバーが出ていた
  * （decisions.md D3）。幅の変更は移動量の差分で決まるので、内側へ寄せても操作感は変わらない。 */
-/* ボタンの帯（20260920-sidebar-tabbar-controls）。`.sidebar-divider` が右端 6px を縦一杯に覆うので、
+/* ボタンの帯（20260920-sidebar-tabbar-controls）。`.sidebar-divider` が右端 8px を縦一杯に覆うので、
  * その分だけ内側に寄せてボタンがつまみの下に潜らないようにする。 */
 .sidebar-section-footer,
 .sidebar-section-header,
@@ -1076,7 +1095,7 @@ watch(
   gap: 0.4em;
   flex: none;
   padding: 0.2em 0.8em;
-  padding-right: calc(0.8em + 6px);
+  padding-right: calc(0.8em + 8px);
 }
 .sidebar-section-header {
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
@@ -1112,7 +1131,7 @@ watch(
   flex: none;
   padding: 0.2em 0.8em;
   /* 右端のつまみ（.sidebar-divider）の分を空ける（.sidebar-section-header と同じ）。 */
-  padding-right: calc(0.8em + 6px);
+  padding-right: calc(0.8em + 8px);
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
 /* 畳んだ幅（3em）では左右の余白を詰めて ⇄ が … に切れないようにする。 */
@@ -1131,9 +1150,14 @@ watch(
   position: absolute;
   top: 0;
   right: 0;
-  width: 6px;
+  width: 8px;
   height: 100%;
   cursor: col-resize;
   touch-action: none;
+}
+/* 畳んでいる間は動かせない（hover の線も出さない）。 */
+.sidebar-collapsed .sidebar-divider {
+  cursor: default;
+  pointer-events: none;
 }
 </style>

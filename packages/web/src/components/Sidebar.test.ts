@@ -741,6 +741,10 @@ describe("Sidebar — 折りたたみ", () => {
   });
 });
 
+/** `useResizeDrag` は pointermove を描画ごとに 1 回にまとめる（20261004-ui-interaction-polish）。まとめた分を反映させる。 */
+const frame = (): Promise<unknown> =>
+  vi.isFakeTimers() ? vi.advanceTimersByTimeAsync(20) : new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
 describe("Sidebar — 幅のドラッグとダブルクリックでの復元（D56 の訂正 11）", () => {
   it("ドラッグで幅が変わる", async () => {
     const session = useSessionStore(pinia);
@@ -749,6 +753,7 @@ describe("Sidebar — 幅のドラッグとダブルクリックでの復元（D
     const divider = wrapper.find(".sidebar-divider");
     await divider.trigger("pointerdown", { clientX: 240 });
     await divider.trigger("pointermove", { clientX: 300 });
+    await frame();
     expect((wrapper.find(".sidebar").element as HTMLElement).style.width).toBe("300px");
   });
 
@@ -842,6 +847,7 @@ describe("Sidebar — 幅を覚える", () => {
     await divider.trigger("pointerdown", { clientX: 100 });
     await divider.trigger("pointermove", { clientX: 120 });
     await divider.trigger("pointermove", { clientX: 150 });
+    await frame();
     expect((wrapper.find(".sidebar").element as HTMLElement).style.width).toBe("330px");
   });
 
@@ -869,6 +875,110 @@ describe("Sidebar — 幅を覚える", () => {
     pinia = createPinia(); // ストアは作る時点で読む
     const { wrapper } = setup();
     expect((wrapper.find(".sidebar").element as HTMLElement).style.width).toBe("280px");
+  });
+});
+
+// 20261004-ui-interaction-polish（境目のサイズ変更の決まり。role・aria・キー・Esc・フォーカス）。
+describe("Sidebar — 幅の境目（role・aria・キー・Esc）", () => {
+  function setup() {
+    useSessionStore(pinia).workspaceUpserted(makeWorkspace("w1"));
+    const wrapper = mountSidebar(makeConnection());
+    return { wrapper, divider: wrapper.get(".sidebar-divider") };
+  }
+  const widthOf = (w: ReturnType<typeof mountSidebar>): string => (w.find(".sidebar").element as HTMLElement).style.width;
+  const saved = (): unknown => readPrefs()["sidebarWidth"];
+
+  it("role=separator・aria-orientation・aria-label・aria-valuenow/min/max・tabindex=0 を持ち、resize-handle のクラスが付く", () => {
+    const { divider } = setup();
+    expect(divider.attributes("role")).toBe("separator");
+    expect(divider.attributes("aria-orientation")).toBe("vertical");
+    expect(divider.attributes("aria-label")).toBe("サイドバーの幅");
+    expect(divider.attributes("aria-valuenow")).toBe("240");
+    expect(divider.attributes("aria-valuemin")).toBe("160");
+    expect(divider.attributes("aria-valuemax")).toBe("360");
+    expect(divider.attributes("tabindex")).toBe("0");
+    expect(divider.attributes("aria-hidden")).toBeUndefined();
+    expect(divider.classes()).toEqual(expect.arrayContaining(["resize-handle", "resize-handle-x"]));
+  });
+
+  it("畳んでいる間は tabindex=-1・aria-hidden（動かせない）", async () => {
+    const { wrapper, divider } = setup();
+    useViewStore(pinia).toggleSidebar();
+    await wrapper.vm.$nextTick();
+    expect(divider.attributes("tabindex")).toBe("-1");
+    expect(divider.attributes("aria-hidden")).toBe("true");
+  });
+
+  it("aria-valuenow は幅に追従する", async () => {
+    const { wrapper, divider } = setup();
+    await divider.trigger("pointerdown", { clientX: 240 });
+    await divider.trigger("pointermove", { clientX: 300 });
+    await frame();
+    await wrapper.vm.$nextTick();
+    expect(divider.attributes("aria-valuenow")).toBe("300");
+    await divider.trigger("pointerup");
+  });
+
+  it("← → で 16px ずつ、押すたびに保存する。範囲で止まる", async () => {
+    const { wrapper, divider } = setup();
+    await divider.trigger("keydown", { key: "ArrowRight" });
+    expect(widthOf(wrapper)).toBe("256px");
+    expect(saved()).toBe(256);
+    await divider.trigger("keydown", { key: "ArrowLeft" });
+    await divider.trigger("keydown", { key: "ArrowLeft" });
+    expect(widthOf(wrapper)).toBe("224px");
+    expect(saved()).toBe(224);
+    for (let i = 0; i < 20; i++) await divider.trigger("keydown", { key: "ArrowLeft" });
+    expect(widthOf(wrapper)).toBe("160px");
+  });
+
+  it("Home＝最小・End＝最大・Enter＝既定（240）", async () => {
+    const { wrapper, divider } = setup();
+    await divider.trigger("keydown", { key: "Home" });
+    expect(widthOf(wrapper)).toBe("160px");
+    expect(saved()).toBe(160);
+    await divider.trigger("keydown", { key: "End" });
+    expect(widthOf(wrapper)).toBe("360px");
+    expect(saved()).toBe(360);
+    await divider.trigger("keydown", { key: "Enter" });
+    expect(widthOf(wrapper)).toBe("240px");
+    expect(saved()).toBe(240);
+  });
+
+  it("ほかのキーは何もしない（preventDefault もしない）", async () => {
+    const { wrapper, divider } = setup();
+    const ev = new KeyboardEvent("keydown", { key: "a", cancelable: true, bubbles: true });
+    divider.element.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(widthOf(wrapper)).toBe("240px");
+  });
+
+  it("Esc でドラッグを取り消すと、始めた幅へ戻り、保存しない", async () => {
+    const { wrapper, divider } = setup();
+    await divider.trigger("pointerdown", { clientX: 240 });
+    await divider.trigger("pointermove", { clientX: 320 });
+    await frame();
+    expect(widthOf(wrapper)).toBe("320px");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+    await wrapper.vm.$nextTick();
+    expect(widthOf(wrapper)).toBe("240px");
+    await divider.trigger("pointerup");
+    expect(saved()).toBeUndefined();
+  });
+
+  it("動かさずに離しただけでは保存しない", async () => {
+    const { divider } = setup();
+    await divider.trigger("pointerdown", { clientX: 240 });
+    await divider.trigger("pointerup");
+    expect(saved()).toBeUndefined();
+  });
+
+  it("ドラッグ中は resize-handle-active が付く", async () => {
+    const { divider } = setup();
+    await divider.trigger("pointerdown", { clientX: 240 });
+    expect(divider.classes()).toContain("resize-handle-active");
+    await divider.trigger("pointerup");
+    expect(divider.classes()).not.toContain("resize-handle-active");
   });
 });
 

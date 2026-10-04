@@ -105,3 +105,37 @@ T5 変異: ActionDispatcher の toggleSectionCollapsed(action.section) を void 
      × lostpointercapture でもドラッグは終わる 7ms
 （T3 の変異「requestAnimationFrame を flush() に」は composable 側で useResizeDrag.test.ts が落ちる。Splitter.test.ts の描画待ちは、rAF を流さないと aria-valuenow が変わらない形に直してある）
 ```
+
+#### T7 `Sidebar.vue` 幅の境目（生の出力。変異ごと）
+```
+== s/const WIDTH_KEY_STEP = 16;/const WIDTH_KEY_STEP = 8;/
+     × ← → で 16px ずつ、押すたびに保存する。範囲で止まる 17ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — 幅の境目（role・aria・キー・Esc） > ← → で 16px ずつ、押すたびに保存する。範囲で止まる
+AssertionError: expected '248px' to be '256px' // Object.is equality
+== s/  cancel: (start) => view.setSidebarWidth(start.width),/  cancel: () => undefined,/
+     × Esc でドラッグを取り消すと、始めた幅へ戻り、保存しない 13ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — 幅の境目（role・aria・キー・Esc） > Esc でドラッグを取り消すと、始めた幅へ戻り、保存しない
+AssertionError: expected '320px' to be '240px' // Object.is equality
+== s/  enabled: () => !view.sidebarCollapsed,/  enabled: () => true,/
+     × 畳んでいる間は、境目を動かしても幅も保存値も変わらない 19ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — 幅を覚える > 畳んでいる間は、境目を動かしても幅も保存値も変わらない
+AssertionError: expected 340 to be 240 // Object.is equality
+== s/      aria-label="サイドバーの幅"//
+     × role=separator・aria-orientation・aria-label・aria-valuenow/min/max・tabindex=0 を持ち、resize-handle のクラスが付く 28ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — 幅の境目（role・aria・キー・Esc） > role=separator・aria-orientation・aria-label・aria-valuenow/min/max・tabindex=0 を持ち、resize-handle のクラスが付く
+AssertionError: expected undefined to be 'サイドバーの幅' // Object.is equality
+== s/    case "End":/    case "Endx":/
+     × Home＝最小・End＝最大・Enter＝既定（240） 10ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — 幅の境目（role・aria・キー・Esc） > Home＝最小・End＝最大・Enter＝既定（240）
+AssertionError: expected '160px' to be '360px' // Object.is equality
+== s/      widthDrag.finish();/      void 0;/
+     × ドラッグ中にダイアログが開いたら、その時点で終えて保存し、以後の pointermove を無視する 8ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — 幅を覚える > ドラッグ中にダイアログが開いたら、その時点で終えて保存し、以後の pointermove を無視する
+AssertionError: expected undefined to be 320 // Object.is equality
+```
