@@ -33,3 +33,9 @@ research.md「F-H1」〜「F-H16」。要点: 同期のフックでは実行前 
 - **(4) matcher `Agent\|Task`**: 同じ実行で `TaskCreate` が呼ばれたが、`PreToolUse` の記録は `tool_name: "Agent"` の 3 件だけ。**`TaskCreate` には当たらない**。スクリプト側の `tool_name` の絞り込みは保険として残す。
 - **(5) スクリプトが無い状態**: 同期・非同期のどのフックも `exit_code: 1`・`outcome: "error"`（stderr に `Cannot find module`）になるが、**エージェントの動きは止まらず**、`claude -p` は正常に終わった（`is_error: false`）。対話の画面にエラーが出るかは `-p` では確かめられず**未確認**。害は無いが、利用者に見えうる雑音なので、**`uninstall()` は設計どおり、スクリプトを消さず何もしない中身に差し替える**（T19）。
 - ほか: `SubagentStop` の `background_tasks` には、終わる直前のものを含めて動いているものが `running` で載る（F-H11 と同じ）。`Stop` の時点で `background_tasks` に `running` のものが 1 件残る場面があり（バックグラウンドの A が、まだ `SubagentStop` を出す前）、その後に `SubagentStop` が来た。**`Stop` の突き合わせで足されたものを、遅れて来る `SubagentStop` が外す**順は実在するので、`stopped` の扱い（設計）に加えて、`subagent_stop` は無い ID でも `stopped` に入れる（設計どおり）ことを T5 のテストで押さえる。
+
+## D5: T3 で決めたこと（スクリプトの細部）
+
+- **`Stop` に `background_tasks` が無い**（古い Claude Code）ときは、`{type:"agent_stop", running: [], truncated: true}` を送る。`truncated` は「足すだけ・外さない」なので、動いているものを誤って外さず、`pending` の掃除だけが効く（design は `truncated` を「64 件を超えたとき」としていたが、意味は同じ「一覧が完全でない」）。
+- **kind が claude 以外**は、イベントの種類にかかわらず今までどおりセッション ID の報告（`type` なし）。
+- **`agent_id` は 129 文字まで残す**（128 を超える ID を切って別の ID にしない。受け口が 128 超を捨てる）。

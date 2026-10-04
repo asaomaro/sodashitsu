@@ -25,7 +25,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/protocol/src/model.ts`（`AgentInfo`。:114-134 付近）、`packages/protocol/src/messages.ts`（`agent_integration.status` の結果の型。:652-681 付近）
       依存: なし
       AC: AC13
-- [ ] T3: フックのスクリプト——`hook_event_name` で報告の種類を分ける（design「報告の電文」）。`type` つきは `kind === "claude"` のときだけ／`PreToolUse` は `tool_name` が Agent・Task のときだけ（ほかは何も送らない）／切り詰め（説明 200・種類 64）／`Stop` の `running`（`type === "subagent"` かつ `status === "running"`・128 文字を超える ID は飛ばす・64 件までで `truncated`）／`prompt`・`last_assistant_message` を送らない／知らないイベント・`hook_event_name` の無い入力は今までどおり。今の決まり（環境変数が無ければ何もしない・stdout に書かない・非ゼロで終わらない・接続 1 秒・stdin 2 秒）を保つ。単体テスト（イベントごとの電文・送らないもの・切り詰め・今までの 4 件）と壊して落ちる確認
+- [x] T3: フックのスクリプト——`hook_event_name` で報告の種類を分ける（design「報告の電文」）。`type` つきは `kind === "claude"` のときだけ／`PreToolUse` は `tool_name` が Agent・Task のときだけ（ほかは何も送らない）／切り詰め（説明 200・種類 64）／`Stop` の `running`（`type === "subagent"` かつ `status === "running"`・128 文字を超える ID は飛ばす・64 件までで `truncated`）／`prompt`・`last_assistant_message` を送らない／知らないイベント・`hook_event_name` の無い入力は今までどおり。今の決まり（環境変数が無ければ何もしない・stdout に書かない・非ゼロで終わらない・接続 1 秒・stdin 2 秒）を保つ。単体テスト（イベントごとの電文・送らないもの・切り詰め・今までの 4 件）と壊して落ちる確認
       対象: `packages/server/assets/agent-hook-report.cjs`、`packages/server/assets/agent-hook-report.test.ts`
       依存: T1
       AC: AC1, AC5, AC12, AC13
