@@ -5,7 +5,7 @@
 ## やること
 
 1. aidev の coding 工程（skill `aidev-40-coding`）を、この work（`20261004-ui-interaction-polish`。mode は autonomous・profile は full）で実行する。`tasks.md` の T1〜T15（T15 は T9 から分けたもの。順は `依存:` に従う） を、`依存:` の順に 1 つずつ消化する（既定は直列）。
-2. タスクごとに: 実装 → テスト → 壊して落ちる確認 → **独立点検**（`aidev taskcheck start <T> --mode delegated` → 別のコンテキスト〔サブエージェント〕にそのタスクの差分だけを点検させる → `aidev taskcheck report <T> --findings <n>` → 指摘を直す）→ `tasks.md` にチェック → コミット。全タスクの後に `aidev taskcheck start cross` の点検を 1 回。
+2. タスクごとに: 実装 → テスト → 壊して落ちる確認 → `tasks.md` にチェック → コミット。**独立点検（`aidev taskcheck start <T> --mode delegated` → 別のコンテキスト〔サブエージェント〕にそのタスクの差分だけを点検させる → `aidev taskcheck report <T> --findings <n>` → 指摘を直す）は、T3・T4・T6・T8・T10・T11・T15 だけ。**全タスクの後に `aidev taskcheck start cross` の点検を 1 回。
 3. 全部終わったら `aidev approve coding` を打ち、**そこで止まる**（test 工程へ進まない）。最後に、やったこと・テストの結果・残った懸念・`decisions.md` に足した判断を短く報告する。
 
 ## 読む順
