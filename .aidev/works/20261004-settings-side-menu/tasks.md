@@ -47,7 +47,7 @@ design.md のとおり、基準の記録（T1）→ 純関数（T2）→ 構造�
       対象: `packages/e2e/src/specs/settings-menu.spec.ts`（新規）
       依存: T9, T6
       AC: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8, AC11, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
-- [ ] T8: 文書——`docs/verification.md` に実機の手順（開く・押して移る・キーで移る・印・狭い画面と、design「テストの方針」の実機のみ の項目。自動テストで確かめた範囲と分けて書く）、`docs/herdr-parity.md:53`（H25 の行の「通知・テーマ・表示・端末・キーの 5 節」を 6 節に直し、サイドメニューを足す）
+- [x] T8: 文書——`docs/verification.md` に実機の手順（開く・押して移る・キーで移る・印・狭い画面と、design「テストの方針」の実機のみ の項目。自動テストで確かめた範囲と分けて書く）、`docs/herdr-parity.md:53`（H25 の行の「通知・テーマ・表示・端末・キーの 5 節」を 6 節に直し、サイドメニューを足す）
       対象: `docs/verification.md`、`docs/herdr-parity.md`
       依存: T9
       AC: AC9, AC10
