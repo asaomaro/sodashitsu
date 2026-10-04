@@ -16,6 +16,7 @@ export type MenuTarget =
   | { kind: "tab"; tabId: string }
   | { kind: "workspace"; workspaceId: string }
   | { kind: "group"; groupId: string }
+  | { kind: "ungrouped" }
   | { kind: "global" };
 
 export interface UiPort {

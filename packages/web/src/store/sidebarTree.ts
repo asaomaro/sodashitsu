@@ -24,13 +24,12 @@ export function currentVisibleWorkspaceIds(
   return visibleWorkspaceIdsOfTree(currentSidebarTree(session, view), view.collapsedAutoGroups, view.workspaceId);
 }
 
-/** navigate で選べる行（グループの見出しを含む。上から下へ）。選択のキーは `navigateKeyOfRow`。 */
+/** navigate で選べる行（グループの見出し・「グループなし」の見出しを含む。上から下へ）。選択のキーは `navigateKeyOfRow`。 */
 export function currentNavigableRows(
   session: ReturnType<typeof useSessionStore>,
   view: ReturnType<typeof useViewStore>,
 ): NavigateRow[] {
-  // 暫定（T26 で直す）: 「グループなし」の見出しはまだ描かないので、選べる行から外す。
-  return navigableRowsOfTree(currentSidebarTree(session, view), view.collapsedAutoGroups, view.workspaceId).filter((r) => r.kind !== "ungrouped");
+  return navigableRowsOfTree(currentSidebarTree(session, view), view.collapsedAutoGroups, view.workspaceId);
 }
 
 /**

@@ -127,6 +127,16 @@ const items = computed<MenuItem[]>(() => {
       { label: "グループを削除", run: () => actions.deleteGroupById(target.groupId) },
     ];
   }
+  if (target.kind === "ungrouped") {
+    // 「グループなし」の見出し（追補 01 B）：名前の変更・削除は無い。並べ替えは `item.move_by` が要るので、`layout` の無い古いサーバには何も出さない
+    // （そのときはメニュー自体を開かない。`Sidebar.vue`）。
+    return session.hasServerLayout
+      ? [
+          { label: "上へ移動", run: () => actions.moveUngroupedBy("previous") },
+          { label: "下へ移動", run: () => actions.moveUngroupedBy("next") },
+        ]
+      : [];
+  }
   // global：どこにも属さない全体の操作。**「設定」は入れる**（20260920-agent-notifications で通知の設定として足し、
   // 20260921-herdr-settings-gaps で通知・表示・端末の設定全体に広げた）。herdr の `reload config` / `what's new` は
   // 引き続き入れない。

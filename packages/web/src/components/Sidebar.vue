@@ -5,7 +5,7 @@ import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
 import { orderedAgentPaneIds } from "@sodashitsu/client-core";
-import { type ItemRow, groupIdOfNavigateKey, hiddenWorktreeCount, visibleGroupMembers } from "@sodashitsu/client-core";
+import { type ItemRow, groupIdOfNavigateKey, isUngroupedNavigateKey, navigateKeyOfUngrouped, hiddenWorktreeCount, visibleGroupMembers } from "@sodashitsu/client-core";
 import { currentSidebarTree } from "../store/sidebarTree.js";
 import SidebarKindIcon from "./SidebarKindIcon.vue";
 import { type AgentSort, SIDEBAR_WIDTH, type WorkspaceSort, useViewStore } from "../store/view.js";
@@ -198,7 +198,7 @@ const spaces = computed<SpaceRow[]>(() => {
       // 見出しは本物のグループがあるときだけ（`heading`）。無ければ項目がそのまま並ぶ（今までと同じ見た目）。
       if (row.heading) {
         out.push({
-          key: "ungrouped:",
+          key: navigateKeyOfUngrouped(),
           kind: "ungrouped",
           workspace: null,
           state: aggregateStateOf(allWorkspaces),
@@ -336,7 +336,14 @@ function focusPane(paneId: string, tabId: string, workspaceId: string): void {
 function onRowContextMenu(ev: MouseEvent, row: SpaceRow): void {
   ev.preventDefault();
   if (row.workspace) actions?.openContextMenu({ kind: "workspace", workspaceId: row.workspace.id }, { x: ev.clientX, y: ev.clientY });
+  else if (row.groupKind === "ungrouped") openUngroupedMenu({ x: ev.clientX, y: ev.clientY });
   else if (row.groupTargetId) actions?.openContextMenu({ kind: "group", groupId: row.groupTargetId }, { x: ev.clientX, y: ev.clientY });
+}
+
+/** 「グループなし」の見出しのメニュー（上へ／下へ移動だけ）。`layout` の無い古いサーバでは出す項目が無いので開かない。 */
+function openUngroupedMenu(at: { x: number; y: number }): void {
+  if (!session.hasServerLayout) return;
+  actions?.openContextMenu({ kind: "ungrouped" }, at);
 }
 
 /**
@@ -361,10 +368,17 @@ watch(
       view.setNavigateSelection(null);
       return;
     }
-    const rowEl = el.value?.querySelector<HTMLElement>(groupId !== null ? `[data-workspace-row-key="${selected}"]` : `[data-drop-workspace-id="${selected}"]`);
+    const ungrouped = isUngroupedNavigateKey(selected);
+    // 見出しが出ていない（グループが無くなった）のに「グループなし」が選択に残っていたら、メニューは開かず選択を外す。
+    if (ungrouped && !spaces.value.some((r) => r.key === selected)) {
+      view.setNavigateSelection(null);
+      return;
+    }
+    const rowEl = el.value?.querySelector<HTMLElement>(groupId !== null || ungrouped ? `[data-workspace-row-key="${selected}"]` : `[data-drop-workspace-id="${selected}"]`);
     const rect = rowEl?.getBoundingClientRect();
     const at = { x: rect?.left ?? 0, y: rect?.top ?? 0 };
-    if (groupId !== null) actions?.openContextMenu({ kind: "group", groupId }, at);
+    if (ungrouped) openUngroupedMenu(at);
+    else if (groupId !== null) actions?.openContextMenu({ kind: "group", groupId }, at);
     else actions?.openContextMenu({ kind: "workspace", workspaceId: selected }, at);
   },
 );

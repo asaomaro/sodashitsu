@@ -2896,17 +2896,17 @@ describe("ActionDispatcher — キーボード（行の選択・折りたたみ�
     return session;
   }
 
-  it("up/down はグループの見出しも順に選ぶ（空のグループにも届く）。キーは workspace の id と混ざらない", () => {
+  it("up/down はグループの見出しと「グループなし」の見出しも順に選ぶ（空のグループにも届く）。キーは workspace の id と混ざらない", () => {
     setup();
     const view = useViewStore(pinia);
     const { dispatcher } = makeDispatcher(makeConnection());
     view.setNavigateSelection("group:g1");
     const seen: (string | null)[] = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       dispatcher.run({ type: "navigate", op: "down" });
       seen.push(view.navigateSelection);
     }
-    expect(seen).toEqual(["M", "W1", "A", "group:g2", "B", "group:g1"]);
+    expect(seen).toEqual(["M", "W1", "A", "group:g2", "ungrouped:", "B", "group:g1"]);
     dispatcher.run({ type: "navigate", op: "up" });
     expect(view.navigateSelection).toBe("B");
   });
@@ -3031,6 +3031,118 @@ describe("ActionDispatcher — キーボード（行の選択・折りたたみ�
     expect(conn.requests).toEqual([["item.move_by", { item: { kind: "group", groupId: "g1" }, direction: "previous" }]]);
     expect(view.navigateSelection).toBe("group:g1");
     wrapper.unmount();
+  });
+
+  // 追補 01 B / T26：「グループなし」の見出しの選択・畳む・メニュー・並べ替え。
+  it("「グループなし」の見出しを畳むと、中の項目は up/down で選べなくなる（見出し自体には届く）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    view.setView("M", "tM");
+    const { dispatcher } = makeDispatcher(makeConnection());
+    view.setNavigateSelection("group:g2");
+    dispatcher.run({ type: "navigate", op: "down" });
+    expect(view.navigateSelection).toBe("ungrouped:");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.ungroupedCollapsed).toBe(true);
+    dispatcher.run({ type: "navigate", op: "down" });
+    expect(view.navigateSelection).toBe("group:g1"); // 畳んだ中の B（今いる workspace ではない）は飛ばす
+    dispatcher.run({ type: "navigate", op: "up" });
+    expect(view.navigateSelection).toBe("ungrouped:");
+  });
+
+  it("toggleCollapse: 「グループなし」は共有の設定を切り替えるだけで、サーバへは何も送らない（広げ直せる）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.setNavigateSelection("ungrouped:");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.ungroupedCollapsed).toBe(true);
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.ungroupedCollapsed).toBe(false);
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("toggleCollapse: 見出しが出ていない（グループが無くなった）のに「グループなし」が選択に残っていたら、畳まずに選択を外す", () => {
+    const session = setup();
+    const view = useViewStore(pinia);
+    session.groupDeleted("g1");
+    session.groupDeleted("g2");
+    session.layoutChanged({ top: ["u"], groups: {}, ungrouped: ["w:A", "w:B", "r:/r/.git"] });
+    view.setNavigateSelection("ungrouped:");
+    makeDispatcher(makeConnection()).dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.ungroupedCollapsed).toBe(false);
+    expect(view.navigateSelection).toBeNull();
+  });
+
+  it("activate: 「グループなし」を選んでいるときは選択をやめるだけで workspace.focus を送らない", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setNavigateSelection("ungrouped:");
+    makeDispatcher(conn).dispatcher.run({ type: "navigate", op: "activate" });
+    expect(view.navigateSelection).toBeNull();
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("openMenu: 「グループなし」を選んでいても要求を立てる（開く先の判断は Sidebar.vue）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    view.setNavigateSelection("ungrouped:");
+    makeDispatcher(makeConnection()).dispatcher.run({ type: "navigate", op: "openMenu" });
+    expect(view.navigateMenuRequested).toBe(true);
+    expect(view.navigateSelection).toBe("ungrouped:");
+  });
+
+  it("moveUngroupedBy: 「グループなし」の項目で item.move_by を送る", () => {
+    setup();
+    const conn = makeConnection();
+    makeDispatcher(conn).dispatcher.moveUngroupedBy("previous");
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "ungrouped" }, direction: "previous" }]]);
+  });
+
+  it("moveUngroupedBy: 名前順のときは送らず「名前順では並べ替えできません」と知らせる", () => {
+    setup();
+    const view = useViewStore(pinia);
+    view.toggleWorkspaceSort();
+    const conn = makeConnection();
+    makeDispatcher(conn).dispatcher.moveUngroupedBy("next");
+    expect(conn.requests).toEqual([]);
+    expect(view.toasts.map((t) => t.message)).toEqual(["名前順では並べ替えできません"]);
+  });
+
+  it("「グループなし」の見出しのメニューから「下へ移動」を実行しても、見出しの選択が残る", async () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.onModeChange("navigate");
+    view.setNavigateSelection("ungrouped:");
+    dispatcher.openContextMenu({ kind: "ungrouped" }, { x: 0, y: 0 });
+    const wrapper = mount(ContextMenu, { global: { plugins: [pinia], provide: { [ActionDispatcherKey as symbol]: dispatcher } }, attachTo: document.body });
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["上へ移動", "下へ移動"]);
+    await wrapper.findAll("li")[1]!.trigger("click");
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "ungrouped" }, direction: "next" }]]);
+    expect(view.navigateSelection).toBe("ungrouped:");
+    wrapper.unmount();
+  });
+
+  it("moveWorkspace: 「グループなし」の中の項目は項目の item.move_by", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.setView("B", "tB");
+    dispatcher.run({ type: "moveWorkspace", direction: "previous" });
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "workspace", workspaceId: "B" }, direction: "previous" }]]);
+  });
+
+  it("openGroupPicker: 「グループなし」の項目からは全部のグループを選べる（moving は付かない）", () => {
+    setup();
+    makeDispatcher(makeConnection()).dispatcher.openGroupPicker("B");
+    const ctx = useViewStore(pinia).dialogContext;
+    expect(ctx?.kind === "addToGroup" && ctx.groups.map((g) => g.id)).toEqual(["g1", "g2"]);
+    expect(ctx).not.toHaveProperty("moving");
   });
 
   it("toggleCollapse: 別の画面で消されたグループが選択に残っていたら、何も送らず選択を外す", () => {

@@ -6,7 +6,7 @@ import type { InputHold } from "@sodashitsu/client-core";
 import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
-import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
+import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, isUngroupedNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
@@ -693,6 +693,15 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     void this.conn.request("item.move_by", { item: { kind: "group", groupId }, direction }).catch(() => this.view.toast("グループを移動できませんでした"));
   }
 
+  /** 「グループなし」の見出しの「上へ移動」「下へ移動」（`item.move_by`。グループと同じ決まり）。 */
+  moveUngroupedBy(direction: "previous" | "next"): void {
+    if (this.view.workspaceSort === "name") {
+      this.view.toast("名前順では並べ替えできません");
+      return;
+    }
+    void this.conn.request("item.move_by", { item: { kind: "ungrouped" }, direction }).catch(() => this.view.toast("「グループなし」を移動できませんでした"));
+  }
+
   // --- 公式フック連携（20260923-agent-session-resume）-------------------------
 
   /** 設定画面の「エージェント連携」節を開いたときに呼ぶ（`client.hello` のスナップショットには含まれない）。 */
@@ -1102,12 +1111,18 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /**
-   * `navigate_toggle_collapse`。選んでいる行がグループの見出しならそのグループ（サーバ）を、worktree グループの
+   * `navigate_toggle_collapse`。選んでいる行が「グループなし」の見出しなら共有の設定 `ungroupedCollapsed` を、グループの見出しならそのグループ（サーバ）を、worktree グループの
    * 先頭・子ならその worktree グループ（共有の設定 `collapsedAutoGroups`）を畳む・広げる。通常の行は何もしない。
    */
   private toggleCollapseOfSelection(): void {
     const key = this.view.navigateSelection;
     if (!key) return;
+    // 「グループなし」の見出しの畳みは共有の設定（`ungroupedCollapsed`）。見出しが出ていない（グループが無くなった）なら選択を外す。
+    if (isUngroupedNavigateKey(key)) {
+      if (!currentNavigableRows(this.session, this.view).some((r) => r.kind === "ungrouped")) this.view.setNavigateSelection(null);
+      else this.view.toggleUngroupedCollapsed();
+      return;
+    }
     const groupId = groupIdOfNavigateKey(key);
     if (groupId !== null) {
       // 別の画面で消されたグループが選択に残っていたら、何も送らず選択を外す。
@@ -1125,7 +1140,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     const workspaceId = this.view.navigateSelection;
     this.view.setNavigateSelection(null);
     // グループの見出しを選んでいるときの Enter は、選択をやめるだけ（畳むのは `navigate_toggle_collapse`）。
-    if (!workspaceId || groupIdOfNavigateKey(workspaceId) !== null) return;
+    if (!workspaceId || groupIdOfNavigateKey(workspaceId) !== null || isUngroupedNavigateKey(workspaceId)) return;
     this.focusWorkspaceById(workspaceId);
   }
 

@@ -2391,3 +2391,90 @@ AssertionError: expected [ 'sidebar-row', …(3) ] to include 'sidebar-row-tree-
 - T25 [should] 空の「グループなし」の見出し（D32）を固定するテストが無い → 全項目がグループ内の場面のテストと壊して落ちる確認を足した [conv:regression-negative-control]
 - T25 [nit] 畳んだサイドバーでの新しい描画のテストが無い → テストと壊して落ちる確認（H2〜H7）を足した [conv:regression-negative-control]
 - T25 [nit] treeLast が畳んだときに全子の最後で決まる → 見えている子の最後で判定するよう直した [conv:-]
+
+### T26 壊して落ちる確認
+
+実装の該当行を 1 つずつ壊して対応するテストファイルを走らせた生の出力（抜粋: 落ちたテスト名と最初の AssertionError）。各回とも確認後に元へ戻した（`git diff` で意図した差分のみ。戻した後の web 全体 2219 件 pass）。
+
+### B1 メニューの項目（「グループなし」見出しを古いサーバ扱い）
+      Tests  2 failed | 35 passed (37)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/ContextMenu.test.ts > ContextMenu — 「グループなし」の見出し（追補 01 B） > layout を持つサーバでは「上へ移動」「下へ移動」だけ（名前の変更・グループを削除は出ない）。それぞれの入口を呼ぶ
+AssertionError: expected [] to deeply equal [ '上へ移動', '下へ移動' ]
+ FAIL  src/components/ContextMenu.test.ts > ContextMenu — 「グループなし」の見出し（追補 01 B） > layout の無い古いサーバでは項目を出さない
+AssertionError: expected [ DOMWrapper{ …(3) }, …(1) ] to deeply equal []
+
+### B2 メニューの「下へ移動」の向き
+      Tests  1 failed | 36 passed (37)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/ContextMenu.test.ts > ContextMenu — 「グループなし」の見出し（追補 01 B） > layout を持つサーバでは「上へ移動」「下へ移動」だけ（名前の変更・グループを削除は出ない）。それぞれの入口を呼ぶ
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'next' ]
+
+### B3 見出しの右クリックがメニューを開かない
+      Tests  1 failed | 135 passed (136)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 見出しの右クリックは「グループなし」のメニュー（上へ／下へ移動だけ。名前の変更・削除は ContextMenu に出ない）を開く
+AssertionError: expected "vi.fn()" to be called with arguments: [ { kind: 'ungrouped' }, …(1) ]
+
+### B4 古いサーバでもメニューを開く
+      Tests  1 failed | 135 passed (136)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > layout の無い古いサーバでは、見出しの右クリックはメニューを開かない（出す項目が無い）
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+### B5 navigate のメニューが「グループなし」を開かない
+      Tests  1 failed | 135 passed (136)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > navigate の「メニューを開く」は、選んでいる「グループなし」の見出しの位置で「グループなし」のメニューを開く
+AssertionError: expected "vi.fn()" to be called with arguments: [ { kind: 'ungrouped' }, …(1) ]
+
+### B6 見出しが無いのに残った選択の扱い（Sidebar）
+      Tests  1 failed | 135 passed (136)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 見出しが出ていない（グループが無い）のに「グループなし」が選択に残っていたら、メニューは開かず選択を外す
+AssertionError: expected 'ungrouped:' to be null
+
+### B7 navigate の選択から「グループなし」を外す
+      Tests  3 failed | 210 passed (213)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > up/down はグループの見出しと「グループなし」の見出しも順に選ぶ（空のグループにも届く）。キーは workspace の id と混ざらない
+AssertionError: expected [ 'M', 'W1', 'A', 'group:g2', …(3) ] to deeply equal [ 'M', 'W1', 'A', 'group:g2', …(3) ]
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > 「グループなし」の見出しを畳むと、中の項目は up/down で選べなくなる（見出し自体には届く）
+AssertionError: expected 'B' to be 'ungrouped:' // Object.is equality
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > toggleCollapse: 「グループなし」は共有の設定を切り替えるだけで、サーバへは何も送らない（広げ直せる）
+AssertionError: expected false to be true // Object.is equality
+
+### B8 toggleCollapse が共有の設定を切り替えない
+      Tests  2 failed | 211 passed (213)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > 「グループなし」の見出しを畳むと、中の項目は up/down で選べなくなる（見出し自体には届く）
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > toggleCollapse: 「グループなし」は共有の設定を切り替えるだけで、サーバへは何も送らない（広げ直せる）
+AssertionError: expected false to be true // Object.is equality
+
+### B9 toggleCollapse の見出し無しガード
+      Tests  1 failed | 212 passed (213)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > toggleCollapse: 見出しが出ていない（グループが無くなった）のに「グループなし」が選択に残っていたら、畳まずに選択を外す
+AssertionError: expected true to be false // Object.is equality
+
+### B10 activate が「グループなし」の選択で workspace.focus を送る
+      Tests  1 failed | 212 passed (213)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > activate: 「グループなし」を選んでいるときは選択をやめるだけで workspace.focus を送らない
+AssertionError: expected [ [ 'workspace.focus', …(1) ] ] to deeply equal []
+
+### B11 moveUngroupedBy が item.move_by の向きを逆に送る
+      Tests  1 failed | 212 passed (213)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > moveUngroupedBy: 「グループなし」の項目で item.move_by を送る
+AssertionError: expected [ [ 'item.move_by', { …(2) } ] ] to deeply equal [ [ 'item.move_by', { …(2) } ] ]
+
+### B12 moveUngroupedBy が名前順でも送る
+      Tests  1 failed | 212 passed (213)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > moveUngroupedBy: 名前順のときは送らず「名前順では並べ替えできません」と知らせる
+AssertionError: expected [ [ 'item.move_by', { …(2) } ] ] to deeply equal []
+
+- T26 [nit] Sidebar.vue が "ungrouped:" を直書きしていた → navigateKeyOfUngrouped() を使うよう直した [conv:-]
+- T26 [nit] 古いサーバで「グループなし」を選んで開くと無反応になる点が D33 に無い → D33 に補足 [conv:-]

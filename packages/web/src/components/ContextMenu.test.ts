@@ -39,6 +39,7 @@ function makeActions() {
     openGroupPicker: vi.fn(),
     removeWorkspaceFromGroup: vi.fn(),
     moveGroupBy: vi.fn(),
+    moveUngroupedBy: vi.fn(),
     renameGroupById: vi.fn(),
     deleteGroupById: vi.fn(),
   };
@@ -270,6 +271,50 @@ describe("ContextMenu — workspace", () => {
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(makeActions());
     expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "新しいグループを作る…"]);
+  });
+});
+
+describe("ContextMenu — 「グループなし」の項目の出入り（追補 01 B）", () => {
+  const layoutWithUngrouped = () => {
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1"));
+    session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+    session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: [] }, ungrouped: ["w:w1"] });
+  };
+  it("「グループなし」の項目は「グループへ追加…」「新しいグループを作る…」（「外す」「移す」は出ない）", () => {
+    layoutWithUngrouped();
+    useViewStore(pinia).openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
+    expect(mountMenu(makeActions()).findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "グループへ追加…", "新しいグループを作る…"]);
+  });
+  it("グループの中の項目は「グループから外す」を出す（移し先が他に無ければ「移す」は出ない）", () => {
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1"));
+    session.groupUpserted({ id: "g1", label: "a", collapsed: false });
+    session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: ["w:w1"] }, ungrouped: [] });
+    useViewStore(pinia).openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
+    expect(mountMenu(makeActions()).findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "グループから外す", "新しいグループを作る…"]);
+  });
+});
+
+describe("ContextMenu — 「グループなし」の見出し（追補 01 B）", () => {
+  it("layout を持つサーバでは「上へ移動」「下へ移動」だけ（名前の変更・グループを削除は出ない）。それぞれの入口を呼ぶ", async () => {
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    const actions = makeActions();
+    session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: [] }, ungrouped: [] });
+    view.openContextMenu({ kind: "ungrouped" }, { x: 0, y: 0 });
+    const wrapper = mountMenu(actions);
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["上へ移動", "下へ移動"]);
+    await wrapper.findAll("li")[0]!.trigger("click");
+    expect(actions.moveUngroupedBy).toHaveBeenCalledWith("previous");
+    view.openContextMenu({ kind: "ungrouped" }, { x: 0, y: 0 });
+    await mountMenu(actions).findAll("li")[1]!.trigger("click");
+    expect(actions.moveUngroupedBy).toHaveBeenCalledWith("next");
+  });
+
+  it("layout の無い古いサーバでは項目を出さない", () => {
+    useViewStore(pinia).openContextMenu({ kind: "ungrouped" }, { x: 0, y: 0 });
+    expect(mountMenu(makeActions()).findAll("li")).toEqual([]);
   });
 });
 

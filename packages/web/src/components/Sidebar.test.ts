@@ -1673,14 +1673,59 @@ describe("Sidebar — B3 の見た目（グループの見出し・「グルー�
       expect(view.ungroupedCollapsed).toBe(true);
     });
 
-    it("見出しの右クリックでは何のメニューも開かない（名前の変更・削除はできない）", async () => {
+    it("見出しの右クリックは「グループなし」のメニュー（上へ／下へ移動だけ。名前の変更・削除は ContextMenu に出ない）を開く", async () => {
       const session = worktreeSet();
       session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
       session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: [] }, ungrouped: ["w:plain"] });
       const openContextMenu = vi.fn();
       const wrapper = mountSidebar(makeConnection(), { openContextMenu });
+      await rowByKey(wrapper, "ungrouped:").trigger("contextmenu", { clientX: 3, clientY: 4 });
+      expect(openContextMenu).toHaveBeenCalledWith({ kind: "ungrouped" }, { x: 3, y: 4 });
+    });
+    it("layout の無い古いサーバでは、見出しの右クリックはメニューを開かない（出す項目が無い）", async () => {
+      const session = worktreeSet();
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      expect(session.hasServerLayout).toBe(false);
+      const openContextMenu = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { openContextMenu });
       await rowByKey(wrapper, "ungrouped:").trigger("contextmenu");
       expect(openContextMenu).not.toHaveBeenCalled();
+    });
+    it("navigate の「メニューを開く」は、選んでいる「グループなし」の見出しの位置で「グループなし」のメニューを開く", async () => {
+      const session = worktreeSet();
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: [] }, ungrouped: ["w:plain"] });
+      const view = useViewStore(pinia);
+      view.onModeChange("navigate");
+      view.setNavigateSelection("ungrouped:");
+      const openContextMenu = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { openContextMenu });
+      view.requestNavigateMenu();
+      await wrapper.vm.$nextTick();
+      expect(openContextMenu).toHaveBeenCalledWith({ kind: "ungrouped" }, { x: expect.any(Number), y: expect.any(Number) });
+      expect(view.navigateSelection).toBe("ungrouped:");
+    });
+    it("見出しが出ていない（グループが無い）のに「グループなし」が選択に残っていたら、メニューは開かず選択を外す", async () => {
+      worktreeSet();
+      const view = useViewStore(pinia);
+      view.onModeChange("navigate");
+      view.setNavigateSelection("ungrouped:");
+      const openContextMenu = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { openContextMenu });
+      view.requestNavigateMenu();
+      await wrapper.vm.$nextTick();
+      expect(openContextMenu).not.toHaveBeenCalled();
+      expect(view.navigateSelection).toBeNull();
+    });
+    it("navigate の選択中の「グループなし」の見出しに選択の印が付く", () => {
+      const session = worktreeSet();
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: [] }, ungrouped: ["w:plain"] });
+      const view = useViewStore(pinia);
+      view.onModeChange("navigate");
+      view.setNavigateSelection("ungrouped:");
+      const wrapper = mountSidebar(makeConnection());
+      expect(rowByKey(wrapper, "ungrouped:").classes()).toContain("sidebar-row-selected");
     });
     it("全部の項目がグループの中で「グループなし」が空でも、見出しは出す（数 0。動かせる・畳めるまとまりとして残す。D32）", () => {
       const session = worktreeSet();

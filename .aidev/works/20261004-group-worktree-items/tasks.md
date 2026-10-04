@@ -118,7 +118,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/web/src/components/Sidebar.vue`（`rowStateFor`・行の組み立て・描画・スタイル）、`packages/web/src/store/view.ts`（畳んだ状態）、`packages/web/src/components/Sidebar.test.ts`、見本は `.aidev/works/20261004-group-worktree-items/mock-sidebar.html`
       依存: T24
       AC: AC19, AC20, AC21, AC12
-- [ ] T26: ブラウザ版の操作——メニュー（「グループなし」の見出しは「上へ移動」「下へ移動」だけ。「グループから外す」は「グループなし」の末尾へ）、ドラッグ（項目は同じまとまりの中だけ・まとまりどうしの並べ替え・「グループなし」の見出しも掴める）、navigate の選択と `navigate_toggle_collapse`・`navigate_open_menu`（「グループなし」の見出し）、`move_workspace_previous`／`next`。`layout` の無いサーバでの扱いは今までどおり。単体テストと壊して落ちる確認
+- [x] T26: ブラウザ版の操作——メニュー（「グループなし」の見出しは「上へ移動」「下へ移動」だけ。「グループから外す」は「グループなし」の末尾へ）、ドラッグ（項目は同じまとまりの中だけ・まとまりどうしの並べ替え・「グループなし」の見出しも掴める）、navigate の選択と `navigate_toggle_collapse`・`navigate_open_menu`（「グループなし」の見出し）、`move_workspace_previous`／`next`。`layout` の無いサーバでの扱いは今までどおり。単体テストと壊して落ちる確認
       対象: `packages/web/src/components/ContextMenu.vue`・`GroupPickerDialog.vue`、`packages/web/src/actions/ActionDispatcher.ts`、`packages/web/src/components/Sidebar.vue`（D&D・navigate）とそのテスト
       依存: T25
       AC: AC20, AC5, AC-I2, AC-I3
