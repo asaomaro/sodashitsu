@@ -35,3 +35,10 @@
 
 - `packages/cli/src/commands/ask.ts`: 定義は `readAskSpec` が検査だけして**読んだままのオブジェクト**を返し（:75 付近）、結果は `runAsk` が `deps.print(result)` でそのまま出す（:116 付近。`status` 別の組み立て・項目の選り分けは無い）。受け口 `pane.sock` 経由も、サーバの `askOpenOp` が `AskService.open` の結果をそのまま返し（`packages/server/src/panesocket/askOp.ts:23-33`）、CLI は `viaPaneSocketOrSession` の返り値をそのまま出す。したがって `comments` を通すための CLI 側の変更は要らない（製品コードは変えない）。`ask.test.ts` が「同じオブジェクトをそのまま出す」ことを固定した。
 - 受け口・中継越し（`machines.integration.test.ts` の質問の件）でも `comments` つきの回答が結果に出ることを統合テストで確かめた。
+
+## D8: T7 既存の E2E を 1.3.0 に合わせた（README「取り込むコミットを替えるたびに確かめること」の確認）
+
+- 既存の ask の E2E 4 本（56 件）を `pnpm build` の後に流した。初回の落ちは 2 件: ① `ask-form-index.spec.ts`「質問を移っても…高さは変わらない」（自由記述のボタンで中身が 672px になり、「上限より十分小さい」の閾値 604px を超えた）、② `ask-form.spec.ts`「キーボードだけで答えられる」（SPEC が背が高くなって画面に収まらず、目次が 3 項目出た。件の前提は「目次は出ない」）。どちらも、部品が各質問に自由記述のボタンを足したことで中身が高くなったための、定義の側の合わせ直し: ① はその定義に `comments: false`（件の主題は「質問を移っても高さが変わらない」で、自由記述と無関係）、② は `paging: false`（目次なしの Tab を見る件）。**期待（閾値・Tab の順・回答の JSON）は変えていない**。ただし ② の「目次は出ない」は `paging: false` による固定の観測になった（「収まれば目次は出ない」の確認は `ask-form-index.spec.ts` の目次の件が引き続き担う）。
+- 直した後、4 本を 2 回続けて流して 56 件とも通った（同じ結果）。`Tab` を数える件（`ask-form.spec.ts` の 382・401・527 行目〔T7 の差分でコメントが 1 行増えた後の行番号〕・`ask-form-index.spec.ts:654-657`）は変更なしで通る（自由記述のボタンは、ラジオの後ろ・次の質問の前に入るが、これらの件は 1 問目のラジオから `ArrowDown` や `Alt+PageDown` で動くので順番に影響しない）。
+- 「E2E が読む部品の内部」の `grep`: README の属性 10 個はすべて 1 以上（`data-ask-title` 2・`data-ask-question` 1・`data-ask-note` 1・`data-ask-status` 1・`data-ask-submit` 1・`data-ask-cancel` 1・`data-ask-index` 1・`data-other` 3・`aria-invalid` 2・`aria-current` 1）、`nav.index`/`.sec`/`.lack` 3・`intro`/`help`/`cnt` 5。新しい `data-ask-comment` 4・`data-ask-comment-toggle` 1 を T8 以降の E2E が読む（README の表は T10 で足す）。
+- 共通の試験データの `sodashitsu` の欄: `normalize.json` の「誤り: 知らない型」だけ（`collect.json` は無し）。自由記述の例は欄を持たない（ask-form と同じ結果）ので見直す必要は無い。

@@ -37,7 +37,7 @@ design.md のとおり、下から積む。(1) 部品と試験データを写す
       対象: `packages/cli/src/commands/ask.ts:75, :98-116`、`packages/cli/src/commands/ask.test.ts:93, :103`、`packages/server/src/panesocket/paneSocket.integration.test.ts:195`（「ログインなしで質問を出し、画面が答えると answered が返る」の形）、`packages/server/src/panesocket/askOp.ts:23-33`、`packages/server/src/machine/machines.integration.test.ts:398-432`（中継越しの質問の件）
       依存: T4
       AC: AC4, AC9
-- [ ] T7: 既存の E2E を新しい部品に合わせる——`pnpm build` の後、既存の ask の E2E 4 本（`ask-form.spec.ts`・`ask-form-index.spec.ts`・`ask-form-mobile.spec.ts`・`ask-form-extras.spec.ts`）を流し、自由記述のボタンが増えたことで変わった期待（`Tab` を数える件: `ask-form.spec.ts:381, :400, :526`・`ask-form-index.spec.ts:654-657`、高さ・目次の閾値を見る件）を直す。期待を弱めない（回答の JSON の期待は変えない）。`third_party/ask-form/README.md` の「部品を替えるたびに確かめること」の手順（E2E を流し直す・「E2E が読む部品の内部」の `grep`・共通の試験データの `sodashitsu` の欄の見直し・`decisions.md` に 1 件残す）を行う。4 本を 2 回続けて流し、同じ結果になること
+- [x] T7: 既存の E2E を新しい部品に合わせる——`pnpm build` の後、既存の ask の E2E 4 本（`ask-form.spec.ts`・`ask-form-index.spec.ts`・`ask-form-mobile.spec.ts`・`ask-form-extras.spec.ts`）を流し、自由記述のボタンが増えたことで変わった期待（`Tab` を数える件: `ask-form.spec.ts:381, :400, :526`・`ask-form-index.spec.ts:654-657`、高さ・目次の閾値を見る件）を直す。期待を弱めない（回答の JSON の期待は変えない）。`third_party/ask-form/README.md` の「部品を替えるたびに確かめること」の手順（E2E を流し直す・「E2E が読む部品の内部」の `grep`・共通の試験データの `sodashitsu` の欄の見直し・`decisions.md` に 1 件残す）を行う。4 本を 2 回続けて流し、同じ結果になること
       対象: `packages/e2e/src/specs/ask-form.spec.ts:381, :400, :526`、`packages/e2e/src/specs/ask-form-index.spec.ts:654-657`、`packages/e2e/src/specs/ask-form-mobile.spec.ts`、`ask-form-extras.spec.ts`、`packages/e2e/src/support/askForm.ts`、`third_party/ask-form/README.md:41-60, :113-124`
       依存: T5, T6
       AC: AC2
