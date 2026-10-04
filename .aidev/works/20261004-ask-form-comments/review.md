@@ -66,4 +66,16 @@ AssertionError: expected { status: 'answered', …(2) } to deeply equal { status
       Tests  2 failed | 30 passed (32)
 ```
 
+#### T5（`onSubmit` の `comments`・`onFormClick` の守り〔今の質問・contentHeight>0〕・ボタンだけに反応する条件、の 3 か所をまとめて壊した）
+```
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/AskDialog.form.test.ts > AskDialog — 部品へ定義を入れる（1 回だけ・写し・高さ） > 自由記述のボタンの click で高さを読み直す（部品 1.3.0） > ほかの click と input では読み直さない（絞り込み・表示条件で高さが変わっても、ダイアログの高さは変えない）
+AssertionError: expected '500px' to be '300px' // Object.is equality
+ FAIL  src/components/AskDialog.form.test.ts > AskDialog — 部品へ定義を入れる（1 回だけ・写し・高さ） > 自由記述のボタンの click で高さを読み直す（部品 1.3.0） > 今の質問でないとき・contentHeight が 0 のときは何もしない
+AssertionError: expected '380px' to be '111px' // Object.is equality
+ FAIL  src/components/AskDialog.form.test.ts > AskDialog — 確定・取り消し（AC-I2） > 送るのは answers・custom・note・comments だけ（部品の detail のほかの項目は送らない）
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'a1', { answers: { …(2) }, …(3) } ]
+      Tests  3 failed | 38 passed (41)
+```
+
 ### 点検の指摘

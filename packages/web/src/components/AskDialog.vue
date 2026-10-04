@@ -202,6 +202,20 @@ function onResize(): void {
   applyHeight();
 }
 
+/**
+ * 自由記述のボタンが押された（部品の中の `click` は `composed` で Shadow DOM の外へ届く。部品のボタン自身のリスナーが先に走り、欄は開閉済み）。
+ * 欄の開閉で中身の高さが変わるので、その場で（同期で。1 フレームだけ中がスクロールして戻るのを避ける）読み直して当て直す。
+ * 反応するのはこのボタンの `click` だけ——絞り込みの入力や表示条件の出し入れで高さが変わっても、今までどおりダイアログの高さは変えない（打っている欄が動かないように）。
+ * 幅・目次は決め直さない。枠が部品の内部の属性（`data-ask-comment-toggle`）を読む唯一の例外（`third_party/ask-form/README.md`）。
+ */
+function onFormClick(ev: Event): void {
+  const t = ev.composedPath()[0];
+  if (!(t instanceof Element) || !t.matches("[data-ask-comment-toggle]")) return;
+  if (loadedAskId === null || loadedAskId !== ask.value?.askId || contentHeight <= 0 || !formEl.value) return;
+  contentHeight = formEl.value.contentHeight;
+  applyHeight();
+}
+
 // --- 操作 ------------------------------------------------------------------------------
 
 /** 部品の決定（`ask-submit`。未回答があるときは出ない）。回答を送り、送れなかったらもう一度決定できるように戻す（知らせるのは `AskController` のトースト）。 */
@@ -214,6 +228,7 @@ async function onSubmit(ev: Event): Promise<void> {
   const body: AskAnswerBody = { answers: detail.answers };
   if (detail.custom !== undefined) body.custom = detail.custom;
   if (detail.note !== undefined) body.note = detail.note;
+  if (detail.comments !== undefined) body.comments = detail.comments;
   el.busy = true;
   const ok = await controller.answer(a.askId, body);
   if (!ok && ask.value?.askId === a.askId) el.busy = false;
@@ -274,7 +289,7 @@ function onKeydown(ev: KeyboardEvent): void {
       <header ref="headerEl" class="ask-header">
         <h2 id="ask-origin" ref="titleEl" class="ask-origin" tabindex="-1" data-ask-origin>{{ origin }}</h2>
       </header>
-      <ask-form ref="formEl" class="ask-form" @ask-submit="onSubmit" @ask-cancel="cancel" @ask-unsupported="onUnsupported" />
+      <ask-form ref="formEl" class="ask-form" @ask-submit="onSubmit" @ask-cancel="cancel" @ask-unsupported="onUnsupported" @click="onFormClick" />
     </template>
   </dialog>
 </template>
