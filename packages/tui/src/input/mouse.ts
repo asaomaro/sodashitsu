@@ -283,7 +283,10 @@ export class MouseController {
           ui.openContextMenu({ kind: "workspace", workspaceId: hit.workspaceId }, { x, y });
         else if (hit?.kind === "group")
           ui.openContextMenu({ kind: "group", groupId: hit.groupId }, { x, y });
-        else if (hit?.kind === "agent")
+        else if (hit?.kind === "ungrouped") {
+          // 「グループなし」の見出し：上へ／下へ移動だけ。`layout` の無い古いサーバでは出す項目が無いので開かない（web と同じ）。
+          if (model.hasServerLayout) ui.openContextMenu({ kind: "ungrouped" }, { x, y });
+        } else if (hit?.kind === "agent")
           ui.openContextMenu({ kind: "pane", paneId: hit.paneId }, { x, y });
         else ui.openContextMenu({ kind: "global" }, { x, y });
         return;

@@ -2337,37 +2337,37 @@ AssertionError: expected [ 'backend', 'api', 'worker' ] to deeply equal [ Array(
 AssertionError: expected [ 'backend' ] to deeply equal [ 'backend', 'グループなし' ]
  FAIL  src/components/Sidebar.test.ts > Sidebar — グループの表示 > 折りたたみ中でも focus 中の workspace があればその行だけは見える（AC6）
 AssertionError: expected [ 'backend', 'worker' ] to deeply equal [ 'backend', 'worker', 'グループなし' ]
- FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 全部の項目がグループの中で「グループなし」が空�
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 全部の項目がグループの中で「グループなし」が空�
 AssertionError: expected [ 'backend', 'main', 'wt', 'plain' ] to deeply equal [ 'backend', 'main', 'wt', …(2) ]
  Test Files  1 failed (1)
       Tests  4 failed | 128 passed (132)
 ##### H2: 畳んだサイドバーで見出しの状態アイコンを出さない
 
- FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
 AssertionError: expected false to be true // Object.is equality
  Test Files  1 failed (1)
       Tests  1 failed | 131 passed (132)
 ##### H3: 畳んだサイドバーでも見出しの数を出す
 
- FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
 AssertionError: expected true to be false // Object.is equality
  Test Files  1 failed (1)
       Tests  1 failed | 131 passed (132)
 ##### H4: 畳んだサイドバーでも見出しの横線を出す
 
- FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
 AssertionError: expected true to be false // Object.is equality
  Test Files  1 failed (1)
       Tests  1 failed | 131 passed (132)
 ##### H5: 畳んだサイドバーでも +n を出す
 
- FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
 AssertionError: expected true to be false // Object.is equality
  Test Files  1 failed (1)
       Tests  1 failed | 131 passed (132)
 ##### H6: 畳んだサイドバーでもブランチ名を出す
 
- FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
 AssertionError: expected true to be false // Object.is equality
  Test Files  1 failed (1)
       Tests  1 failed | 131 passed (132)
@@ -2377,13 +2377,13 @@ AssertionError: expected true to be false // Object.is equality
 AssertionError: expected true to be false // Object.is equality
  FAIL  src/components/Sidebar.test.ts > Sidebar — 行の並びの設定と独自トークン（20260927-sidebar-row-tokens の AC9・AC12・AC13） > 畳んだサイドバーは並びの設定に関わらず今までどおり（状態の印だけ）
 AssertionError: expected '◐w1' to be '◐' // Object.is equality
- FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
 AssertionError: expected true to be false // Object.is equality
  Test Files  1 failed (1)
       Tests  3 failed | 129 passed (132)
 ##### H8: treeLast を全子の最後で決める（元の実装）
 
- FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 畳んでいて今いる子が最後でないときは、見えている子（今い�
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 畳んでいて今いる子が最後でないときは、見えている子（今い�
 AssertionError: expected [ 'sidebar-row', …(3) ] to include 'sidebar-row-tree-last'
  Test Files  1 failed (1)
       Tests  1 failed | 131 passed (132)
@@ -2569,3 +2569,531 @@ AssertionError: expected false to be true // Object.is equality
 ```
 - T16 [nit] 畳んだまとまりで今いる子だけを描くとき、木の線が全子の中の位置で決まり web と食い違う → 見えている子の最後で決めるよう直した（D34 補足） [conv:-]
 - T16 [nit] 別のマシンの行はローカルの行と桁が揃わない → 変えない範囲として D34 に許容と明記 [conv:-]
+
+
+### T27（T17 の部分）壊して落ちる確認
+
+実装の該当行を 1 つずつ一時的に壊して、足したテストが落ちることを確かめた（確認後は元に戻し、全体で 500 件通過）。各ブロックは `vitest run` の出力のうち失敗の行（`×`・`FAIL`・`AssertionError`・件数）を抜いた生の出力。
+
+壊し: 木の線の最後: 見えている子の最後 → 子全体の最後（途中の子が今いるとき ├ になる）
+
+```
+     × 畳んだまとまりで今いる子が途中の子のとき、木の線の最後は「見えている子の最後」で決まる（└。├ にしない） 6ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (15)
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバー：木の線の最後と navigate の見出しの選択（T17） > 畳んだまとまりで今いる子が途中の子のとき、木の線の最後は「見えている子の最後」で決まる（└。├ にしない）
+AssertionError: expected [ '▸ G ─ 2', '├ ⎇ wt-a feat-a', …(1) ] to deeply equal [ '▸ G ─ 2', '└ ⎇ wt-a feat-a', …(1) ]
+- Expected
++ Received
+```
+
+壊し: 見出しの navigate 強調を外す
+
+```
+     × navigate でグループの見出し・「グループなし」の見出しを選ぶと、その行だけアクセントの色になる 5ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (15)
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバー：木の線の最後と navigate の見出しの選択（T17） > navigate でグループの見出し・「グループなし」の見出しを選ぶと、その行だけアクセントの色になる
+AssertionError: expected 36186678 not to be 36186678 // Object.is equality
+```
+
+壊し: reveal: グループの見出しに合わせない
+
+```
+     × 区画の外へ出ているグループ・「グループなし」の見出しを選ぶと、そこまで動かす（reveal） 6ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (15)
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバー：木の線の最後と navigate の見出しの選択（T17） > 区画の外へ出ているグループ・「グループなし」の見出しを選ぶと、そこまで動かす（reveal）
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+```
+
+壊し: navigate の up/down が見出しを選ばない
+
+```
+     × navigate の up/down は、グループの見出しと「グループなし」の見出しも順に選ぶ（空のグループにも届く） 8ms
+     × 畳んだグループの見出しにも届く（中は今いる workspace だけ） 2ms
+     × toggleCollapse: 「グループなし」は共有の設定 ungroupedCollapsed を切り替える。畳むと中の行は up/down で飛ばされ、見出しには届く 1ms
+ Test Files  1 failed (1)
+      Tests  3 failed | 119 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > navigate の up/down は、グループの見出しと「グループなし」の見出しも順に選ぶ（空のグループにも届く）
+AssertionError: expected [ 'M', 'W1', 'A', 'B', 'M', 'W1', 'A' ] to deeply equal [ 'M', 'W1', 'A', 'group:g2', …(3) ]
+- Expected
++ Received
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > 畳んだグループの見出しにも届く（中は今いる workspace だけ）
+AssertionError: expected 'B' to be 'group:g2' // Object.is equality
+Expected: "group:g2"
+```
+
+壊し: activate: 見出しでも workspace.focus を送る
+
+```
+     × activate（Enter）: 見出しを選んでいるときは選択をやめるだけで workspace.focus を送らない 7ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > activate（Enter）: 見出しを選んでいるときは選択をやめるだけで workspace.focus を送らない
+AssertionError: expected [ [ 'workspace.focus', …(1) ], …(1) ] to deeply equal []
+- Expected
++ Received
+```
+
+壊し: toggleCollapse: グループの見出しがサーバへ送らない
+
+```
+     × toggleCollapse: グループの見出しは group.toggle_collapsed（サーバ） 7ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > toggleCollapse: グループの見出しは group.toggle_collapsed（サーバ）
+AssertionError: expected [ Array(1) ] to deeply equal [ [ 'group.toggle_collapsed', …(1) ] ]
+- Expected
++ Received
+```
+
+壊し: toggleCollapse: 「グループなし」の畳みが働かない
+
+```
+     × toggleCollapse: 「グループなし」は共有の設定 ungroupedCollapsed を切り替える。畳むと中の行は up/down で飛ばされ、見出しには届く 7ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > toggleCollapse: 「グループなし」は共有の設定 ungroupedCollapsed を切り替える。畳むと中の行は up/down で飛ばされ、見出しには届く
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+```
+
+壊し: toggleCollapse: 消えた「グループなし」の選択を外さない
+
+```
+     × toggleCollapse: 見出しが消えているのに選択が残っていたら、何も送らず選択を外す（グループ・「グループなし」とも） 7ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > toggleCollapse: 見出しが消えているのに選択が残っていたら、何も送らず選択を外す（グループ・「グループなし」とも）
+AssertionError: expected 'ungrouped:' to be null
+- Expected:
++ Received:
+```
+
+壊し: toggleCollapse: 消えたグループの選択を外さない
+
+```
+     × toggleCollapse: 見出しが消えているのに選択が残っていたら、何も送らず選択を外す（グループ・「グループなし」とも） 8ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > toggleCollapse: 見出しが消えているのに選択が残っていたら、何も送らず選択を外す（グループ・「グループなし」とも）
+AssertionError: expected 'group:g2' to be null
+- Expected:
++ Received:
+```
+
+壊し: toggleCollapse: worktree グループの畳み（共有の設定）が働かない
+
+```
+     × toggleCollapse: worktree グループの先頭でも子でも、その worktree グループを共有の設定で畳む・広げる（サーバへは送らない） 6ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > toggleCollapse: worktree グループの先頭でも子でも、その worktree グループを共有の設定で畳む・広げる（サーバへは送らない）
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+```
+
+壊し: moveWorkspace: 名前順の拒否が無い
+
+```
+     × moveWorkspace: 名前順で一番上の項目（グループ外）は送らず知らせる。グループの中は送る。古いサーバにも同じ 8ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > moveWorkspace: 名前順で一番上の項目（グループ外）は送らず知らせる。グループの中は送る。古いサーバにも同じ
+AssertionError: expected [ [ 'item.move_by', …(1) ] ] to deeply equal []
+- Expected
++ Received
+```
+
+壊し: moveWorkspace: グループの中でも名前順で拒否する
+
+```
+     × moveWorkspace: 名前順で一番上の項目（グループ外）は送らず知らせる。グループの中は送る。古いサーバにも同じ 10ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > moveWorkspace: 名前順で一番上の項目（グループ外）は送らず知らせる。グループの中は送る。古いサーバにも同じ
+AssertionError: expected [] to deeply equal [ { item: { …(2) }, …(1) } ]
+- Expected
++ Received
+```
+
+壊し: moveWorkspace: 項目の item.move_by にしない（常に workspace.move）
+
+```
+     × moveWorkspace: layout を持つサーバには項目の item.move_by（対象は今いる workspace）。layout の無いサーバは workspace.move 11ms
+     × moveWorkspace: 名前順で一番上の項目（グループ外）は送らず知らせる。グループの中は送る。古いサーバにも同じ 2ms
+ Test Files  1 failed (1)
+      Tests  2 failed | 120 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > moveWorkspace: layout を持つサーバには項目の item.move_by（対象は今いる workspace）。layout の無いサーバは workspace.move
+AssertionError: expected [ [ 'workspace.move', …(1) ] ] to deeply equal [ [ 'item.move_by', …(1) ] ]
+- Expected
++ Received
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > moveWorkspace: 名前順で一番上の項目（グループ外）は送らず知らせる。グループの中は送る。古いサーバにも同じ
+AssertionError: expected [] to deeply equal [ { item: { …(2) }, …(1) } ]
+- Expected
++ Received
+```
+
+壊し: moveGroupBy/moveUngroupedBy: 名前順の拒否が無い
+
+```
+     × moveGroupBy・moveUngroupedBy: item.move_by を送る。名前順は送らず知らせる 8ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > moveGroupBy・moveUngroupedBy: item.move_by を送る。名前順は送らず知らせる
+AssertionError: expected [ [ 'item.move_by', …(1) ], …(2) ] to have a length of 2 but got 3
+- Expected
++ Received
+```
+
+壊し: moveUngroupedBy: 名前順の拒否が無い
+
+```
+     × moveGroupBy・moveUngroupedBy: item.move_by を送る。名前順は送らず知らせる 15ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > moveGroupBy・moveUngroupedBy: item.move_by を送る。名前順は送らず知らせる
+AssertionError: expected [ [ 'item.move_by', …(1) ], …(2) ] to have a length of 2 but got 3
+- Expected
++ Received
+```
+
+壊し: group.create: workspaceId を添えない
+
+```
+     × group.create: layout を持つサーバは workspaceId を添えて 1 回。古いサーバは 2 段で、項目の workspace 全部に add_member 13ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > group.create: layout を持つサーバは workspaceId を添えて 1 回。古いサーバは 2 段で、項目の workspace 全部に add_member
+AssertionError: expected [ [ 'group.create', { label: '新' } ] ] to deeply equal [ [ 'group.create', …(1) ] ]
+- Expected
++ Received
+```
+
+壊し: 古いサーバの追加: 項目の workspace 全部に送らず 1 件だけ
+
+```
+     × group.create: layout を持つサーバは workspaceId を添えて 1 回。古いサーバは 2 段で、項目の workspace 全部に add_member 17ms
+     × group.add_member／remove_member: layout を持つサーバは項目で 1 回。古いサーバは項目の workspace 全部に順に送り、1 件失敗したら止める 13ms
+ Test Files  1 failed (1)
+      Tests  2 failed | 120 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > group.create: layout を持つサーバは workspaceId を添えて 1 回。古いサーバは 2 段で、項目の workspace 全部に add_member
+AssertionError: expected [ …(2) ] to deeply equal [ …(3) ]
+- Expected
++ Received
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > group.add_member／remove_member: layout を持つサーバは項目で 1 回。古いサーバは項目の workspace 全部に順に送り、1 件失敗したら止める
+AssertionError: expected [ [ 'group.add_member', …(1) ], …(2) ] to deeply equal [ [ 'group.add_member', …(1) ], …(3) ]
+- Expected
++ Received
+```
+
+壊し: 古いサーバの外す: 項目の workspace 全部に送らず 1 件だけ
+
+```
+     × group.add_member／remove_member: layout を持つサーバは項目で 1 回。古いサーバは項目の workspace 全部に順に送り、1 件失敗したら止める 23ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > group.add_member／remove_member: layout を持つサーバは項目で 1 回。古いサーバは項目の workspace 全部に順に送り、1 件失敗したら止める
+AssertionError: expected [ [ 'group.add_member', …(1) ], …(2) ] to deeply equal [ [ 'group.add_member', …(1) ], …(3) ]
+- Expected
++ Received
+```
+
+壊し: 選択肢: 今のグループを除かない
+
+```
+     × 「別のグループへ移す…」の一覧は題が「別のグループへ移す」で、今のグループを除く。「グループへ追加」の題は変えない 9ms
+     × openGroupPicker: 選択肢はレイアウトの順。グループ外の項目は全部のグループ（moving なし）、グループの中は今のグループを除き moving 付き 7ms
+ Test Files  2 failed (2)
+      Tests  2 failed | 149 passed (151)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > openGroupPicker: 選択肢はレイアウトの順。グループ外の項目は全部のグループ（moving なし）、グループの中は今のグループを除き moving 付き
+AssertionError: expected [ 'g2', 'g1' ] to deeply equal [ 'g2' ]
+- Expected
++ Received
+ FAIL  src/modes/overlays.test.ts > 右クリックのメニュー：グループ・「グループなし」の項目（T17。web の ContextMenu.vue と同じ並び） > 「別のグループへ移す…」の一覧は題が「別のグループへ移す」で、今のグループを除く。「グループへ追加」の題は変えない
+AssertionError: expected '                                     …' not to contain 'G1'
+- Expected
++ Received
+```
+
+壊し: 選択肢: レイアウトの順にしない（グループの配列の順）
+
+```
+     × openGroupPicker: 選択肢はレイアウトの順。グループ外の項目は全部のグループ（moving なし）、グループの中は今のグループを除き moving 付き 8ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > openGroupPicker: 選択肢はレイアウトの順。グループ外の項目は全部のグループ（moving なし）、グループの中は今のグループを除き moving 付き
+AssertionError: expected [ 'g1', 'g2' ] to deeply equal [ 'g2', 'g1' ]
+- Expected
++ Received
+```
+
+壊し: 選択肢: moving を付けない
+
+```
+     × 「別のグループへ移す…」の一覧は題が「別のグループへ移す」で、今のグループを除く。「グループへ追加」の題は変えない 8ms
+     × openGroupPicker: 選択肢はレイアウトの順。グループ外の項目は全部のグループ（moving なし）、グループの中は今のグループを除き moving 付き 9ms
+ Test Files  2 failed (2)
+      Tests  2 failed | 149 passed (151)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > openGroupPicker: 選択肢はレイアウトの順。グループ外の項目は全部のグループ（moving なし）、グループの中は今のグループを除き moving 付き
+AssertionError: expected { kind: 'addToGroup', …(2) } to match object { moving: true }
+- Expected
++ Received
+ FAIL  src/modes/overlays.test.ts > 右クリックのメニュー：グループ・「グループなし」の項目（T17。web の ContextMenu.vue と同じ並び） > 「別のグループへ移す…」の一覧は題が「別のグループへ移す」で、今のグループを除く。「グループへ追加」の題は変えない
+AssertionError: expected '                                     …' to contain '別のグループへ移す'
+- Expected
++ Received
+```
+
+壊し: メニュー: 所属を workspace.groupId で見る（子の行で外れる）
+
+```
+     × 所属なし:「グループへ追加…」「新しいグループを作る…」。所属あり:「別のグループへ移す…」「グループから外す」「新しいグループを作る…」。子の行でも項目全体の所属で出る 8ms
+     × 所属ありで移し先が無い（今のグループしか無い）ときは「別のグループへ移す…」を出さない 2ms
+ Test Files  1 failed (1)
+      Tests  2 failed | 27 passed (29)
+ FAIL  src/modes/overlays.test.ts > 右クリックのメニュー：グループ・「グループなし」の項目（T17。web の ContextMenu.vue と同じ並び） > 所属なし:「グループへ追加…」「新しいグループを作る…」。所属あり:「別のグループへ移す…」「グループから外す」「新しいグループを作る…」。子の行でも項目全体の所属で出る
+AssertionError: expected [ Array(6) ] to deeply equal [ Array(7) ]
+- Expected
++ Received
+ FAIL  src/modes/overlays.test.ts > 右クリックのメニュー：グループ・「グループなし」の項目（T17。web の ContextMenu.vue と同じ並び） > 所属ありで移し先が無い（今のグループしか無い）ときは「別のグループへ移す…」を出さない
+AssertionError: expected [ '名前の変更', '閉じる', 'グループへ追加…', …(1) ] to deeply equal [ '名前の変更', '閉じる', 'グループから外す', …(1) ]
+- Expected
++ Received
+```
+
+壊し: メニュー: 移し先が無くても「別のグループへ移す…」を出す
+
+```
+     × 所属ありで移し先が無い（今のグループしか無い）ときは「別のグループへ移す…」を出さない 6ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 passed (29)
+ FAIL  src/modes/overlays.test.ts > 右クリックのメニュー：グループ・「グループなし」の項目（T17。web の ContextMenu.vue と同じ並び） > 所属ありで移し先が無い（今のグループしか無い）ときは「別のグループへ移す…」を出さない
+AssertionError: expected [ '名前の変更', '閉じる', '別のグループへ移す…', …(2) ] to deeply equal [ '名前の変更', '閉じる', 'グループから外す', …(1) ]
+- Expected
++ Received
+```
+
+壊し: メニュー: グループに上へ／下へ移動を出さない
+
+```
+     × グループの見出し:「名前の変更」「上へ移動」「下へ移動」「グループを削除」。layout の無い古いサーバでは上へ／下へは出さない 6ms
+     × 項目を押すと閉じてから item.move_by を送る（見出し 2 種） 3ms
+ Test Files  1 failed (1)
+      Tests  2 failed | 27 passed (29)
+ FAIL  src/modes/overlays.test.ts > 右クリックのメニュー：グループ・「グループなし」の項目（T17。web の ContextMenu.vue と同じ並び） > グループの見出し:「名前の変更」「上へ移動」「下へ移動」「グループを削除」。layout の無い古いサーバでは上へ／下へは出さない
+AssertionError: expected [ '名前の変更', 'グループを削除' ] to deeply equal [ '名前の変更', '上へ移動', '下へ移動', 'グループを削除' ]
+- Expected
++ Received
+ FAIL  src/modes/overlays.test.ts > 右クリックのメニュー：グループ・「グループなし」の項目（T17。web の ContextMenu.vue と同じ並び） > 項目を押すと閉じてから item.move_by を送る（見出し 2 種）
+AssertionError: expected [ [ 'item.move_by', { …(2) } ], …(1) ] to deeply equal [ [ 'item.move_by', { …(2) } ], …(1) ]
+- Expected
++ Received
+```
+
+壊し: メニュー: 古いサーバでも「グループなし」の項目を出す
+
+```
+     × 「グループなし」の見出し:「上へ移動」「下へ移動」だけ（名前の変更・削除は無い）。古いサーバでは項目が無い 7ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 passed (29)
+ FAIL  src/modes/overlays.test.ts > 右クリックのメニュー：グループ・「グループなし」の項目（T17。web の ContextMenu.vue と同じ並び） > 「グループなし」の見出し:「上へ移動」「下へ移動」だけ（名前の変更・削除は無い）。古いサーバでは項目が無い
+AssertionError: expected [ '上へ移動', '下へ移動' ] to deeply equal []
+- Expected
++ Received
+```
+
+壊し: 一括クローズの件数: 代表でない workspace も数える（repoKey が同じ全部）
+
+```
+     × 同じフォルダの 2 つ目（代表でない workspace）は数えない。グループに入っていても数える。先頭でなければ出ない 10ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 passed (29)
+ FAIL  src/modes/overlays.test.ts > 確認：一括クローズの件数は repoMembers（代表だけ。T17） > 同じフォルダの 2 つ目（代表でない workspace）は数えない。グループに入っていても数える。先頭でなければ出ない
+AssertionError: expected '                                     …' to contain '[ ] 束ねた worktree も一緒に閉じる（1 件）'
+- Expected
++ Received
+```
+
+壊し: 一括クローズの件数: 先頭でなくても出す
+
+```
+     × 同じフォルダの 2 つ目（代表でない workspace）は数えない。グループに入っていても数える。先頭でなければ出ない 7ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 passed (29)
+ FAIL  src/modes/overlays.test.ts > 確認：一括クローズの件数は repoMembers（代表だけ。T17） > 同じフォルダの 2 つ目（代表でない workspace）は数えない。グループに入っていても数える。先頭でなければ出ない
+AssertionError: expected '                                     …' not to contain '束ねた worktree'
+- Expected
++ Received
+```
+
+壊し: ピッカーの題を「別のグループへ移す」にしない
+
+```
+     × 「別のグループへ移す…」の一覧は題が「別のグループへ移す」で、今のグループを除く。「グループへ追加」の題は変えない 13ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 passed (29)
+ FAIL  src/modes/overlays.test.ts > 右クリックのメニュー：グループ・「グループなし」の項目（T17。web の ContextMenu.vue と同じ並び） > 「別のグループへ移す…」の一覧は題が「別のグループへ移す」で、今のグループを除く。「グループへ追加」の題は変えない
+AssertionError: expected '                                     …' to contain '別のグループへ移す'
+- Expected
++ Received
+```
+
+壊し: navigate の Space: 見出しのメニューを開かない（常に workspace のメニュー）
+
+```
+     × navigate の Space で、選んだ見出しのメニューを開く（グループ・「グループなし」）。見出しが消えていれば何も開かず選択を外す（T17） 1115ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+ FAIL  src/app/TuiApp.modes.test.ts > TuiApp：モード（navigate・copy・resize・goto。AC5・AC7・AC-I1・AC-I3） > navigate の Space で、選んだ見出しのメニューを開く（グループ・「グループなし」）。見出しが消えていれば何も開かず選択を外す（T17）
+AssertionError: expected { kind: 'workspace', …(1) } to deeply equal { kind: 'group', groupId: 'g1' }
+- Expected
++ Received
+```
+
+壊し: navigate の Space: 消えたグループの選択を外さない
+
+```
+     × navigate の Space で、選んだ見出しのメニューを開く（グループ・「グループなし」）。見出しが消えていれば何も開かず選択を外す（T17） 1222ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+ FAIL  src/app/TuiApp.modes.test.ts > TuiApp：モード（navigate・copy・resize・goto。AC5・AC7・AC-I1・AC-I3） > navigate の Space で、選んだ見出しのメニューを開く（グループ・「グループなし」）。見出しが消えていれば何も開かず選択を外す（T17）
+AssertionError: expected 'group:g1' to be null
+- Expected:
++ Received:
+```
+
+壊し: 右クリック: 「グループなし」の見出しのメニューを開かない
+
+```
+     × 見出しの右クリックでメニュー（グループ・「グループなし」）。layout の無い古いサーバでは「グループなし」のメニューは開かない（T17） 90ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 passed (23)
+ FAIL  src/input/mouse.test.ts > マウスの操作（AC9・AC-I5） > 見出しの右クリックでメニュー（グループ・「グループなし」）。layout の無い古いサーバでは「グループなし」のメニューは開かない（T17）
+AssertionError: expected undefined to deeply equal { kind: 'ungrouped' }
+- Expected:
++ Received:
+```
+
+壊し: 右クリック: 古いサーバでも「グループなし」のメニューを開く
+
+```
+     × 見出しの右クリックでメニュー（グループ・「グループなし」）。layout の無い古いサーバでは「グループなし」のメニューは開かない（T17） 130ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 22 passed (23)
+ FAIL  src/input/mouse.test.ts > マウスの操作（AC9・AC-I5） > 見出しの右クリックでメニュー（グループ・「グループなし」）。layout の無い古いサーバでは「グループなし」のメニューは開かない（T17）
+AssertionError: expected { target: { kind: 'ungrouped' }, …(1) } to be null
+- Expected:
++ Received:
+```
+
+壊し: reveal: 「グループなし」の見出しに合わせない
+
+```
+     × 区画の外へ出ているグループ・「グループなし」の見出しを選ぶと、そこまで動かす（reveal） 9ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 14 passed (15)
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバー：木の線の最後と navigate の見出しの選択（T17） > 区画の外へ出ているグループ・「グループなし」の見出しを選ぶと、そこまで動かす（reveal）
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+```
+
+壊し: 追加: layout を持つサーバでも 2 段（項目で 1 回にしない）
+
+```
+     × group.add_member／remove_member: layout を持つサーバは項目で 1 回。古いサーバは項目の workspace 全部に順に送り、1 件失敗したら止める 11ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > group.add_member／remove_member: layout を持つサーバは項目で 1 回。古いサーバは項目の workspace 全部に順に送り、1 件失敗したら止める
+AssertionError: expected [ [ 'group.add_member', …(1) ], …(1) ] to deeply equal [ [ 'group.add_member', …(1) ], …(1) ]
+- Expected
++ Received
+```
+
+壊し: 外す: layout を持つサーバでも項目の workspace 全部に送る
+
+```
+     × group.add_member／remove_member: layout を持つサーバは項目で 1 回。古いサーバは項目の workspace 全部に順に送り、1 件失敗したら止める 9ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > group.add_member／remove_member: layout を持つサーバは項目で 1 回。古いサーバは項目の workspace 全部に順に送り、1 件失敗したら止める
+AssertionError: expected [ [ 'group.add_member', …(1) ], …(1) ] to deeply equal [ [ 'group.add_member', …(1) ], …(1) ]
+- Expected
++ Received
+```
+
+壊し: navigate の openMenu: 別のマシンの行にも要求を立てる
+
+```
+     × openMenu: 見出しを選んでいても要求を立てる（開く先は TuiApp が決める）。別のマシンの行には立てない 7ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > openMenu: 見出しを選んでいても要求を立てる（開く先は TuiApp が決める）。別のマシンの行には立てない
+AssertionError: expected true to be false // Object.is equality
+- Expected
++ Received
+```
+
+壊し: メニューを閉じると navigate の選択が消える（見出しの選択が残らない）
+
+```
+     × 見出しのメニューから「下へ移動」を実行しても、見出しの選択が残る 13ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 121 passed (122)
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17） > 見出しのメニューから「下へ移動」を実行しても、見出しの選択が残る
+AssertionError: expected null to be 'ungrouped:' // Object.is equality
+- Expected:
++ Received:
+```
+
+
+### T17 追補 壊して落ちる確認（独立点検の指摘: 代表でない行で畳まない）
+
+壊し: `toggleCollapseOfSelection` の `isRepresentative` の条件を外す（web・端末版の両方）
+
+```
+     × toggleCollapse: 代表でない通常の行（同じフォルダの 2 つ目）では、同じリポジトリの worktree グループを畳まない 21ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 1 to be +0 // Object.is equality
+- Expected
++ Received
+- 0
++ 1
+      Tests  1 failed | 213 passed (214)
+     × toggleCollapse: 代表でない通常の行（同じフォルダの 2 つ目）では、同じリポジトリの worktree グループを畳まない 6ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 1 to be +0 // Object.is equality
+- Expected
++ Received
+- 0
++ 1
+      Tests  1 failed | 122 passed (123)
+```
+
+壊し: `parseRemoteKey` の正規表現を `machine:` 前置きなしでも拾うものに変える
+
+```
+     × 見出しのキーは別のマシンの行のキー（machine:…）と混ざらない 5ms
+     × openMenu: 見出しを選んでいても要求を立てる（開く先は TuiApp が決める）。別のマシンの行には立てない 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected { machineId: 'group', …(1) } to be null
+- Expected:
++ Received:
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+- true
++ false
+      Tests  2 failed | 121 passed (123)
+```
+
+確認後は両方とも元に戻し、git diff で確認した。
+- T17 [should] navigate_toggle_collapse が代表でない通常の行でも worktree グループを畳む（web の T15 から持ち越し）→ web・端末版で isRepresentative のときだけに直した（D35 を書き換え） [conv:-]
+- T17 [should] 上の回帰テストと壊して落ちる確認が無い → web・端末版に足して確認を貼った [conv:regression-negative-control]
+- T17 [nit] 見出しのキーと remoteKey の非衝突の固定 → テストは既にあり、parseRemoteKey を壊して落ちる確認を貼った [conv:-]

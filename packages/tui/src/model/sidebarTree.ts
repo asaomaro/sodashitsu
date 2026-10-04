@@ -1,4 +1,11 @@
-import { sidebarTree, visibleWorkspaceIdsOfTree, type TopRow } from "@sodashitsu/client-core";
+import {
+  itemRefOf,
+  navigableRowsOfTree,
+  sidebarTree,
+  visibleWorkspaceIdsOfTree,
+  type NavigateRow,
+  type TopRow,
+} from "@sodashitsu/client-core";
 import type { PrefsModel } from "./PrefsModel.js";
 import type { SessionModel } from "./SessionModel.js";
 
@@ -30,4 +37,29 @@ export function currentVisibleWorkspaceIds(
     prefs.collapsedAutoGroups,
     model.workspaceId,
   );
+}
+
+/** navigate で選べる行（グループの見出し・「グループなし」の見出しを含む。上から下へ）。選択のキーは `navigateKeyOfRow`。 */
+export function currentNavigableRows(
+  model: SessionModel,
+  prefs: Pick<PrefsModel, "workspaceSort" | "collapsedAutoGroups" | "ungroupedCollapsed">,
+): NavigateRow[] {
+  return navigableRowsOfTree(
+    currentSidebarTree(model, prefs),
+    prefs.collapsedAutoGroups,
+    model.workspaceId,
+  );
+}
+
+/**
+ * その workspace の項目（リポジトリなら丸ごと）が今いるグループの id（「グループなし」なら null）。レイアウトで見るので、
+ * 古いサーバでも `layoutFromLegacy` が導いた本体の所属で答える（worktree の子の行でも同じ答え。web の `itemGroupIdOf`）。
+ */
+export function itemGroupIdOf(model: SessionModel, workspaceId: string): string | null {
+  const ws = model.workspaces.get(workspaceId);
+  if (!ws) return null;
+  const ref = itemRefOf(ws, [...model.workspaces.values()]);
+  for (const [groupId, refs] of Object.entries(model.effectiveLayout().groups))
+    if (refs.includes(ref)) return groupId;
+  return null;
 }

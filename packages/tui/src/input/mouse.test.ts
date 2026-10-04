@@ -161,6 +161,30 @@ describe("マウスの操作（AC9・AC-I5）", () => {
     ]);
   });
 
+  it("見出しの右クリックでメニュー（グループ・「グループなし」）。layout の無い古いサーバでは「グループなし」のメニューは開かない（T17）", async () => {
+    const snap = (layout: boolean) =>
+      snapshot({
+        workspaces: [
+          workspace("w1", ["t1"], layout ? {} : { groupId: "g1" }),
+          workspace("w2", ["t2"]),
+        ],
+        groups: [{ id: "g1", label: "G", collapsed: false }],
+        ...(layout
+          ? { layout: { top: ["g:g1", "u"], groups: { g1: ["w:w1"] }, ungrouped: ["w:w2"] } }
+          : {}),
+      });
+    // 行: 1 = グループ G の見出し、2 = w1、3 = 「グループなし」の見出し、4 = w2。
+    const h = await start({ snapshot: snap(true) });
+    h.io.type(down(8, 1, 2));
+    expect(h.app.ui.contextMenu?.target).toEqual({ kind: "group", groupId: "g1" });
+    h.app.ui.closeContextMenu();
+    h.io.type(down(8, 3, 2));
+    expect(h.app.ui.contextMenu?.target).toEqual({ kind: "ungrouped" });
+    const old = await start({ snapshot: snap(false) });
+    old.io.type(down(8, 3, 2));
+    expect(old.app.ui.contextMenu).toBeNull();
+  });
+
   it("右クリックでメニュー（tab・workspace・pane・何も無い所は全体）（M3）", async () => {
     const h = await start();
     h.io.type(down(28, 0, 2));

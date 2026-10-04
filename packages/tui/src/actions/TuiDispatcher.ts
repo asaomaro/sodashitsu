@@ -1,11 +1,16 @@
-import type { CommandListResult } from "@sodashitsu/protocol";
+import type { CommandListResult, ItemTarget, WorkspaceGroup } from "@sodashitsu/protocol";
 import {
   LOCAL_MACHINE_ID,
   clientErrorMessage,
   depthFirstPaneIds,
   errorCodeOf,
+  groupIdOfNavigateKey,
+  isUngroupedNavigateKey,
+  navigateKeyOfRow,
   neighborPaneId,
   orderedAgentPaneIds,
+  isRepresentative,
+  repoMembers,
   type Action,
   type AgentOrderEntry,
   type CopyCommand,
@@ -15,7 +20,11 @@ import {
 } from "@sodashitsu/client-core";
 import { parseRemoteKey, remoteKey, type MachinesModel } from "../model/MachinesModel.js";
 import type { PrefsModel } from "../model/PrefsModel.js";
-import { currentVisibleWorkspaceIds } from "../model/sidebarTree.js";
+import {
+  currentNavigableRows,
+  currentVisibleWorkspaceIds,
+  itemGroupIdOf,
+} from "../model/sidebarTree.js";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { MenuTarget, UiState } from "../model/UiState.js";
 import type { RequestPort } from "../term/PaneRegistry.js";
@@ -515,20 +524,46 @@ export class TuiDispatcher {
     this.ui.openDialogWithContext({ kind: "createGroup", workspaceId });
   }
 
+  /**
+   * 名前を確定したとき。`layout` を持つサーバには `group.create` に `workspaceId` を添えて 1 回で送る（項目丸ごと入る）。
+   * 無い古いサーバは `workspaceId` を黙って落とすので、今までの 2 段（作成 → 項目の workspace 全部を追加）を残す（web と同じ）。
+   * 2 段目だけの失敗は、グループは残っているので別の文言にする。
+   */
   confirmCreateGroup(label: string): void {
     const ctx = this.ui.dialogContext;
     if (ctx?.kind !== "createGroup") return;
     this.ui.closeDialog();
     const trimmed = label.trim();
     if (!trimmed) return;
+    if (this.model.hasServerLayout) {
+      void this.conn
+        .request("group.create", { label: trimmed, workspaceId: ctx.workspaceId })
+        .catch(() => this.ui.toast("グループを作成できませんでした"));
+      return;
+    }
     void this.conn
       .request("group.create", { label: trimmed })
       .then((r) =>
-        this.conn
-          .request("group.add_member", { groupId: r.group.id, workspaceId: ctx.workspaceId })
-          .catch(() => this.ui.toast("グループは作成しましたが、workspace の追加に失敗しました。")),
+        this.addItemToGroupLegacy(r.group.id, ctx.workspaceId).catch(() =>
+          this.ui.toast("グループは作成しましたが、workspace の追加に失敗しました。"),
+        ),
       )
       .catch(() => this.ui.toast("グループを作成できませんでした"));
+  }
+
+  /** 古いサーバ向け：項目（代表の workspace 全部）へ `group.add_member` を順に送る。1 件でも失敗したら止めて投げ直す。 */
+  private async addItemToGroupLegacy(groupId: string, workspaceId: string): Promise<void> {
+    for (const id of this.itemWorkspaceIds(workspaceId)) {
+      await this.conn.request("group.add_member", { groupId, workspaceId: id });
+    }
+  }
+
+  /** workspace の項目に含まれる workspace の id（リポジトリなら `repoMembers` の順で全部。そうでなければ自分だけ）。 */
+  private itemWorkspaceIds(workspaceId: string): string[] {
+    const repoKey = this.model.workspaces.get(workspaceId)?.git?.repoKey;
+    if (!repoKey) return [workspaceId];
+    const members = repoMembers([...this.model.workspaces.values()], repoKey);
+    return members.length > 0 ? members.map((m) => m.id) : [workspaceId];
   }
 
   renameGroupById(groupId: string): void {
@@ -558,26 +593,85 @@ export class TuiDispatcher {
     void this.conn.request("group.toggle_collapsed", { groupId }).catch(() => undefined);
   }
 
+  /** グループの選択肢（レイアウトの順。`top` の `g:` の並び、レイアウトに無いものは末尾）。 */
+  private groupsInLayoutOrder(): WorkspaceGroup[] {
+    const groups = this.model.groups;
+    const ordered: WorkspaceGroup[] = [];
+    for (const ref of this.model.effectiveLayout().top) {
+      const group = ref.startsWith("g:") ? groups.get(ref.slice(2)) : undefined;
+      if (group && !ordered.includes(group)) ordered.push(group);
+    }
+    for (const group of groups.values()) if (!ordered.includes(group)) ordered.push(group);
+    return ordered;
+  }
+
+  /** 「グループへ追加…」「別のグループへ移す…」。選択肢はレイアウトの順。移すときは今のグループを除く。選べるグループが無ければ開かずに知らせる。 */
   openGroupPicker(workspaceId: string): void {
-    const groups = [...this.model.groups.values()];
+    const current = itemGroupIdOf(this.model, workspaceId);
+    const groups = this.groupsInLayoutOrder().filter((g) => g.id !== current);
     if (groups.length === 0) {
       this.ui.toast("まだグループがありません。");
       return;
     }
-    this.ui.openDialogWithContext({ kind: "addToGroup", workspaceId, groups });
+    this.ui.openDialogWithContext({
+      kind: "addToGroup",
+      workspaceId,
+      groups,
+      ...(current !== null ? { moving: true as const } : {}),
+    });
   }
 
   confirmAddToGroup(groupId: string): void {
     const ctx = this.ui.dialogContext;
     if (ctx?.kind !== "addToGroup") return;
     this.ui.closeDialog();
-    void this.conn
-      .request("group.add_member", { groupId, workspaceId: ctx.workspaceId })
-      .catch(() => this.ui.toast("グループへ追加できませんでした"));
+    const failed = (): void => {
+      this.ui.toast("グループへ追加できませんでした");
+    };
+    // `layout` を持つサーバは項目丸ごとを 1 回で動かす。古いサーバは項目の workspace 全部に順に送る。
+    if (this.model.hasServerLayout) {
+      void this.conn
+        .request("group.add_member", { groupId, workspaceId: ctx.workspaceId })
+        .catch(failed);
+      return;
+    }
+    void this.addItemToGroupLegacy(groupId, ctx.workspaceId).catch(failed);
   }
 
+  /** 「グループから外す」（項目がグループに入っているときだけメニューが出す）。古いサーバは項目の workspace 全部に順に送る。 */
   removeWorkspaceFromGroup(workspaceId: string): void {
-    void this.conn.request("group.remove_member", { workspaceId }).catch(() => undefined);
+    if (this.model.hasServerLayout) {
+      void this.conn.request("group.remove_member", { workspaceId }).catch(() => undefined);
+      return;
+    }
+    void (async () => {
+      for (const id of this.itemWorkspaceIds(workspaceId))
+        await this.conn.request("group.remove_member", { workspaceId: id });
+    })().catch(() => undefined);
+  }
+
+  /** 名前順のときの一番上（グループ・「グループなし」・グループに入っていない項目）の並べ替えは受け付けず知らせる（web と同じ）。 */
+  private refuseTopMoveByName(): boolean {
+    if (this.host.prefs.workspaceSort !== "name") return false;
+    this.ui.toast("名前順では並べ替えできません");
+    return true;
+  }
+
+  /** グループの見出しの「上へ移動」「下へ移動」（`item.move_by`。端では動かない〔`moved: false`・何も知らせない〕）。 */
+  moveGroupBy(groupId: string, direction: "previous" | "next"): void {
+    if (this.refuseTopMoveByName()) return;
+    void this.conn
+      .request("item.move_by", { item: { kind: "group", groupId }, direction })
+      .catch(() => this.ui.toast("グループを移動できませんでした"));
+  }
+
+  /** 「グループなし」の見出しの「上へ移動」「下へ移動」（グループと同じ決まり）。 */
+  moveUngroupedBy(direction: "previous" | "next"): void {
+    if (this.refuseTopMoveByName()) return;
+    const item: ItemTarget = { kind: "ungrouped" };
+    void this.conn
+      .request("item.move_by", { item, direction })
+      .catch(() => this.ui.toast("「グループなし」を移動できませんでした"));
   }
 
   /** worktree 自動グループの折りたたみ（共有の設定 `collapsedAutoGroups`。web は設定に持つ）。 */
@@ -906,14 +1000,22 @@ export class TuiDispatcher {
    */
   private navigateIds(): string[] {
     const m = this.host.machines;
-    if (!m?.hasMachines) return this.visibleWorkspaceIds();
+    if (!m?.hasMachines) return this.navigableKeys();
     const out: string[] = [];
     for (const s of m.sections) {
-      if (s.id === m.selectedId) out.push(...this.visibleWorkspaceIds());
+      if (s.id === m.selectedId) out.push(...this.navigableKeys());
       else if (!m.collapsed[s.id])
         for (const ws of m.summaries[s.id]?.workspaces ?? []) out.push(remoteKey(s.id, ws.id));
     }
     return out;
+  }
+
+  /**
+   * 今のマシンで選べる行のキー（グループの見出し `group:<id>`・「グループなし」の見出し `ungrouped:` を含む。畳んだ・空のグループにも届く）。
+   * 別のマシンの行のキー `machine:…`（`remoteKey`）とは前置きが違うので混ざらない。
+   */
+  private navigableKeys(): string[] {
+    return currentNavigableRows(this.model, this.host.prefs).map(navigateKeyOfRow);
   }
 
   /** 別のマシンの workspace へ（そのマシンへ切り替えて、その workspace へ移る）。 */
@@ -960,9 +1062,21 @@ export class TuiDispatcher {
     void this.conn.request("pane.focus", { paneId }).catch(() => undefined);
   }
 
+  /**
+   * `move_workspace_previous`／`next`。対象は今いる workspace の項目（子ならその worktree グループ全体。同じ入れ物の中で 1 つ動く）。
+   * `layout` を持つサーバには `item.move_by`、無いサーバには今までの `workspace.move`。名前順で項目が一番上（グループに入っていない）なら
+   * 受け付けず知らせる（グループの中は並べ替えられる）。
+   */
   private moveWorkspace(direction: "previous" | "next"): void {
     const workspaceId = this.model.workspaceId;
     if (!workspaceId || !this.model.workspaces.has(workspaceId)) return;
+    if (itemGroupIdOf(this.model, workspaceId) === null && this.refuseTopMoveByName()) return;
+    if (this.model.hasServerLayout) {
+      void this.conn
+        .request("item.move_by", { item: { kind: "workspace", workspaceId }, direction })
+        .catch(() => undefined);
+      return;
+    }
     void this.conn.request("workspace.move", { workspaceId, direction }).catch(() => undefined);
   }
 
@@ -1032,9 +1146,16 @@ export class TuiDispatcher {
       case "activate": {
         const workspaceId = this.ui.navigateSelection;
         this.ui.setNavigateSelection(null);
-        const remote = workspaceId ? parseRemoteKey(workspaceId) : null;
+        // 見出し（グループ・「グループなし」）を選んでいるときの Enter は、選択をやめるだけ（畳むのは `navigate_toggle_collapse`）。
+        if (
+          !workspaceId ||
+          groupIdOfNavigateKey(workspaceId) !== null ||
+          isUngroupedNavigateKey(workspaceId)
+        )
+          return;
+        const remote = parseRemoteKey(workspaceId);
         if (remote) this.openRemoteWorkspace(remote.machineId, remote.workspaceId);
-        else if (workspaceId) this.focusWorkspaceById(workspaceId);
+        else this.focusWorkspaceById(workspaceId);
         return;
       }
       case "cancel":
@@ -1046,9 +1167,39 @@ export class TuiDispatcher {
           this.ui.requestNavigateMenu();
         return;
       case "toggleCollapse":
-        // 受け口だけ（group-worktree-items T11。動きは T17 で入れる）。
+        this.toggleCollapseOfSelection();
         return;
     }
+  }
+
+  /**
+   * `navigate_toggle_collapse`。選んでいる行が「グループなし」の見出しなら共有の設定 `ungroupedCollapsed` を、グループの見出しなら
+   * そのグループ（サーバ）を、worktree グループの先頭・子（代表の行）ならその worktree グループ（共有の設定 `collapsedAutoGroups`）を畳む・広げる。
+   * 通常の行（代表でない行も）・別のマシンの行は何もしない。見出しが消えているのに選択が残っていたら、何もせず選択を外す（web と同じ）。
+   */
+  private toggleCollapseOfSelection(): void {
+    const key = this.ui.navigateSelection;
+    if (!key) return;
+    if (isUngroupedNavigateKey(key)) {
+      if (!currentNavigableRows(this.model, this.host.prefs).some((r) => r.kind === "ungrouped"))
+        this.ui.setNavigateSelection(null);
+      else this.toggleUngroupedCollapsed();
+      return;
+    }
+    const groupId = groupIdOfNavigateKey(key);
+    if (groupId !== null) {
+      if (!this.model.groups.has(groupId)) this.ui.setNavigateSelection(null);
+      else this.toggleGroupCollapsed(groupId);
+      return;
+    }
+    if (parseRemoteKey(key)) return;
+    const all = [...this.model.workspaces.values()];
+    const ws = this.model.workspaces.get(key);
+    // 代表でない通常の行（同じフォルダの 2 つ目）は worktree の印が付かないので何もしない（追補 A）。
+    if (!ws || !isRepresentative(ws, all)) return;
+    const repoKey = ws.git?.repoKey ?? null;
+    if (repoKey === null || repoMembers(all, repoKey).length < 2) return;
+    this.toggleAutoGroupCollapsed(repoKey);
   }
 
   private resizeBy(dir: Dir, amount: number): void {

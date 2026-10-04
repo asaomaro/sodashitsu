@@ -13,6 +13,9 @@ import {
   orderedAgentPaneIds,
   visibleGroupMembers,
   hiddenWorktreeCount,
+  isUngroupedNavigateKey,
+  navigateKeyOfGroup,
+  navigateKeyOfUngrouped,
   type ItemRow,
 } from "@sodashitsu/client-core";
 import { currentSidebarTree } from "../../model/sidebarTree.js";
@@ -268,6 +271,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     label: string,
     items: ItemRow[],
     hit: SidebarTarget,
+    navigateKey: string,
   ): Line => {
     const state = stateOfAll(items.flatMap(itemWorkspaces));
     const glyph = glyphFor(state, prefs.statusSymbols);
@@ -283,6 +287,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       right: dim(String(items.length)),
       rule: true,
       selected: false,
+      navigated: ctx.navigateSelection === navigateKey,
       hit,
     };
   };
@@ -291,21 +296,26 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       // 見出しは本物のグループが 1 つ以上あるときだけ。無ければ項目がそのまま並ぶ（字下げなし）。
       if (row.heading) {
         lines.push(
-          headingLine(row.collapsed, "グループなし", row.items, {
-            kind: "ungrouped",
-            toggleX: rect.x + 1,
-          }),
+          headingLine(
+            row.collapsed,
+            "グループなし",
+            row.items,
+            { kind: "ungrouped", toggleX: rect.x + 1 },
+            navigateKeyOfUngrouped(),
+          ),
         );
       }
       for (const item of row.items) pushItem(item, row.heading ? 2 : 0, row.collapsed);
       continue;
     }
     lines.push(
-      headingLine(row.group.collapsed, row.group.label, row.items, {
-        kind: "group",
-        groupId: row.group.id,
-        toggleX: rect.x + 1,
-      }),
+      headingLine(
+        row.group.collapsed,
+        row.group.label,
+        row.items,
+        { kind: "group", groupId: row.group.id, toggleX: rect.x + 1 },
+        navigateKeyOfGroup(row.group.id),
+      ),
     );
     for (const item of row.items) pushItem(item, 2, row.group.collapsed);
   }
@@ -389,6 +399,10 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
           (h) =>
             ((h.kind === "workspace" || h.kind === "autoGroup") &&
               h.workspaceId === scroll.reveal!.workspaceId) ||
+            // 見出しを選んでいるとき（navigate の選択のキー `group:<id>`・`ungrouped:`）もその行まで動かす。
+            (h.kind === "group" && navigateKeyOfGroup(h.groupId) === scroll.reveal!.workspaceId) ||
+            (h.kind === "ungrouped" &&
+              isUngroupedNavigateKey(scroll.reveal!.workspaceId ?? null)) ||
             (h.kind === "machineWorkspace" &&
               remoteKey(h.machineId, h.workspaceId) === scroll.reveal!.workspaceId),
         )

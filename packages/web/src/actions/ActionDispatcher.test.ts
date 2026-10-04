@@ -2977,6 +2977,24 @@ describe("ActionDispatcher — キーボード（行の選択・折りたたみ�
     expect(conn.requests).toEqual([]);
   });
 
+  it("toggleCollapse: 代表でない通常の行（同じフォルダの 2 つ目）では、同じリポジトリの worktree グループを畳まない", () => {
+    const session = setup();
+    // M と同じフォルダ（worktreeKey が同じ）の 2 つ目。代表は M・W1 の 2 つあるので、代表なら畳める状況。
+    session.workspaceUpserted({ ...makeWorkspace("M2", ["tM2"]), activeTabId: "tM2", git: { ...git(false), worktreeKey: "/r" } });
+    session.workspaceUpserted({ ...session.workspaces.get("M")!, git: { ...git(false), worktreeKey: "/r" } });
+    session.workspaceUpserted({ ...session.workspaces.get("W1")!, git: { ...git(true), worktreeKey: "/r-w1" } });
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.setNavigateSelection("M2");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.collapsedAutoGroups.size).toBe(0);
+    view.setNavigateSelection("M");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.collapsedAutoGroups.has("/r/.git")).toBe(true);
+    expect(conn.requests).toEqual([]);
+  });
+
   it("moveWorkspace: layout を持つサーバには項目の item.move_by を送る（対象は今いる workspace。サーバが項目に読み替える）", () => {
     setup();
     const view = useViewStore(pinia);

@@ -30,6 +30,8 @@ function setup(
     focus?: string;
     /** workspace ごとのエージェントの状態（その workspace の pane に居る）。 */
     states?: Record<string, Partial<AgentInfo> | AgentInfo["state"]>;
+    /** navigate モードで選んでいる行のキー（workspace の id・`group:<id>`・`ungrouped:`）。 */
+    navigateSelection?: string | null;
   } = {},
 ) {
   const model = new SessionModel();
@@ -61,6 +63,7 @@ function setup(
     mode: "terminal",
     connection: "open",
     notice: null,
+    ...(opts.navigateSelection !== undefined ? { navigateSelection: opts.navigateSelection } : {}),
   };
   const paint = () => {
     const grid = new Grid(40, 24);
@@ -75,9 +78,9 @@ function setup(
     // 下の agents の区画（区切りの行から先）は見ない。
     const cut = all.findIndex((l) => l.startsWith("─"));
     const lines = cut < 0 ? all : all.slice(0, cut);
-    return { lines, hits: hits as SidebarHit[] };
+    return { lines, hits: hits as SidebarHit[], grid };
   };
-  return { model, prefs, paint };
+  return { model, prefs, paint, ctx };
 }
 
 const REPO = [
@@ -347,5 +350,95 @@ describe("サイドバーの木（T16・T27。追補 01 の T4 の見た目）",
       `▸ ${WORKTREE_GLYPH} main +2 main`,
     ]);
     expect(currentVisibleWorkspaceIds(model, prefs)).toEqual(["main"]);
+  });
+});
+
+describe("サイドバー：木の線の最後と navigate の見出しの選択（T17）", () => {
+  const all = [...REPO, ws("solo")];
+  const layout: SidebarLayout = {
+    top: ["g:g1", "u"],
+    groups: { g1: ["r:r1", "w:solo"] },
+    ungrouped: [],
+  };
+
+  it("畳んだまとまりで今いる子が途中の子のとき、木の線の最後は「見えている子の最後」で決まる（└。├ にしない）", () => {
+    // 子は wt-a・wt-b の 2 つ。今いるのは途中の wt-a。畳んだグループでも、畳んだ worktree グループでも、見えている子は wt-a だけなので └。
+    const closed = setup(all, {
+      groups: [{ id: "g1", label: "G", collapsed: true }],
+      layout,
+      focus: "wt-a",
+    });
+    expect(closed.paint().lines.map(norm)).toEqual([
+      "▸ G ─ 2",
+      `└ ${WORKTREE_GLYPH} wt-a feat-a`,
+      "▾ グループなし ─ 0",
+    ]);
+    const open = setup(all, {
+      groups: [{ id: "g1", label: "G", collapsed: false }],
+      layout,
+      focus: "wt-a",
+    });
+    open.prefs.apply({ collapsedAutoGroups: ["r1"] }, 1);
+    expect(open.paint().lines.map(norm)).toEqual([
+      "▾ G ─ 2",
+      `▸ ${WORKTREE_GLYPH} main +1 main`,
+      `└ ${WORKTREE_GLYPH} wt-a feat-a`,
+      "solo",
+      "▾ グループなし ─ 0",
+    ]);
+  });
+
+  /** 行 y の左端の背景色（navigate で選んでいる行はアクセントの色）。 */
+  const bgAt = (grid: Grid, y: number) => grid.cell(5, y).bg;
+
+  it("navigate でグループの見出し・「グループなし」の見出しを選ぶと、その行だけアクセントの色になる", () => {
+    for (const [key, row] of [
+      ["group:g1", 1],
+      ["ungrouped:", 6],
+    ] as const) {
+      const { paint } = setup(all, {
+        groups: [{ id: "g1", label: "G", collapsed: false }],
+        layout,
+        navigateSelection: key,
+      });
+      const { grid } = paint();
+      const plain = setup(all, {
+        groups: [{ id: "g1", label: "G", collapsed: false }],
+        layout,
+      }).paint().grid;
+      expect(bgAt(grid, row)).not.toBe(bgAt(plain, row));
+      // 隣の行は変わらない。
+      expect(bgAt(grid, row + 1)).toBe(bgAt(plain, row + 1));
+    }
+  });
+
+  it("区画の外へ出ているグループ・「グループなし」の見出しを選ぶと、そこまで動かす（reveal）", () => {
+    const many = Array.from({ length: 10 }, (_, i) => ws(`n${i}`));
+    const refs = many.map((w) => `w:${w.id}` as const);
+    // 見出しが下にあり、上のまとまりの 10 行で区画（高さ 8）の外へ出ている。
+    for (const [key, kind, layout] of [
+      ["ungrouped:", "ungrouped", { top: ["g:g1", "u"], groups: { g1: refs }, ungrouped: [] }],
+      ["group:g1", "group", { top: ["u", "g:g1"], groups: { g1: [] }, ungrouped: refs }],
+    ] as const) {
+      const s = setup(many, {
+        groups: [{ id: "g1", label: "G", collapsed: false }],
+        layout: {
+          top: [...layout.top],
+          groups: { g1: [...layout.groups.g1] },
+          ungrouped: [...layout.ungrouped],
+        },
+        navigateSelection: key,
+      });
+      const hitsOf = (reveal: boolean) => {
+        s.ctx.sidebarScroll = {
+          spaces: 0,
+          agents: 0,
+          reveal: reveal ? { workspaceId: key } : null,
+        };
+        return paintSidebar(new Grid(40, 8), { x: 0, y: 0, w: 40, h: 8 }, s.ctx) as SidebarHit[];
+      };
+      expect(hitsOf(false).some((h) => h.kind === kind)).toBe(false); // 動かさなければ見えない
+      expect(hitsOf(true).some((h) => h.kind === kind)).toBe(true);
+    }
   });
 });

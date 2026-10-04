@@ -1,6 +1,7 @@
 import type { KeyInput } from "@sodashitsu/client-core";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { SessionModel } from "../model/SessionModel.js";
+import { itemGroupIdOf } from "../model/sidebarTree.js";
 import type { ContextMenuState, UiState } from "../model/UiState.js";
 import { ATTR } from "../render/color.js";
 import type { CursorState, Rect } from "../render/Screen.js";
@@ -31,7 +32,7 @@ export interface MenuDeps {
 }
 
 /**
- * 右クリックのメニューの項目（web の `ContextMenu.vue` の `items` を写した）。pane・tab・workspace・手動グループ・全体。
+ * 右クリックのメニューの項目（web の `ContextMenu.vue` の `items` を写した）。pane・tab・workspace・グループ・「グループなし」・全体。
  */
 export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
   const { model, actions } = deps;
@@ -78,7 +79,12 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
   if (target.kind === "workspace") {
     const ws = model.workspaces.get(target.workspaceId);
     const isGit = ws?.git != null;
-    const inGroup = ws?.groupId != null;
+    // 所属は項目で見る（worktree の子の行でも、操作は項目の全体に働く。web の `ContextMenu.vue` と同じ）。
+    const currentGroupId = itemGroupIdOf(model, target.workspaceId);
+    const inGroup = currentGroupId !== null;
+    // 移し先に選べるグループがあるか（所属ありのときは今のグループを除く）。
+    const hasOtherGroup =
+      model.groups.size - (inGroup && model.groups.has(currentGroupId) ? 1 : 0) > 0;
     return [
       { label: "名前の変更", run: () => actions.renameWorkspaceById(target.workspaceId) },
       { label: "閉じる", run: () => actions.closeWorkspaceById(target.workspaceId) },
@@ -88,27 +94,52 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
             { label: "worktree を開く…", run: () => actions.openWorktree(target.workspaceId) },
           ]
         : []),
-      {
-        label: "新しいグループを作る…",
-        run: () => actions.createGroupForWorkspace(target.workspaceId),
-      },
+      // 所属なし: 追加・新規／所属あり: 移す・外す・新規（web と同じ並び）。
       ...(inGroup
         ? [
+            ...(hasOtherGroup
+              ? [
+                  {
+                    label: "別のグループへ移す…",
+                    run: () => actions.openGroupPicker(target.workspaceId),
+                  },
+                ]
+              : []),
             {
               label: "グループから外す",
               run: () => actions.removeWorkspaceFromGroup(target.workspaceId),
             },
           ]
-        : model.groups.size > 0
+        : hasOtherGroup
           ? [{ label: "グループへ追加…", run: () => actions.openGroupPicker(target.workspaceId) }]
           : []),
+      {
+        label: "新しいグループを作る…",
+        run: () => actions.createGroupForWorkspace(target.workspaceId),
+      },
     ];
   }
   if (target.kind === "group") {
     return [
       { label: "名前の変更", run: () => actions.renameGroupById(target.groupId) },
+      // 「上へ／下へ移動」は `item.move_by` が要る。`layout` の無い古いサーバには出さない。
+      ...(model.hasServerLayout
+        ? [
+            { label: "上へ移動", run: () => actions.moveGroupBy(target.groupId, "previous") },
+            { label: "下へ移動", run: () => actions.moveGroupBy(target.groupId, "next") },
+          ]
+        : []),
       { label: "グループを削除", run: () => actions.deleteGroupById(target.groupId) },
     ];
+  }
+  if (target.kind === "ungrouped") {
+    // 「グループなし」の見出し：名前の変更・削除は無い。`layout` の無い古いサーバには出す項目が無い（そのときはメニュー自体を開かない）。
+    return model.hasServerLayout
+      ? [
+          { label: "上へ移動", run: () => actions.moveUngroupedBy("previous") },
+          { label: "下へ移動", run: () => actions.moveUngroupedBy("next") },
+        ]
+      : [];
   }
   target satisfies { kind: "global" };
   return [

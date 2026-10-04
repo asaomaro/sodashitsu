@@ -6,7 +6,7 @@ import type { InputHold } from "@sodashitsu/client-core";
 import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
-import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, isUngroupedNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
+import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, isRepresentative, isUngroupedNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
@@ -1112,7 +1112,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   /**
    * `navigate_toggle_collapse`。選んでいる行が「グループなし」の見出しなら共有の設定 `ungroupedCollapsed` を、グループの見出しならそのグループ（サーバ）を、worktree グループの
-   * 先頭・子ならその worktree グループ（共有の設定 `collapsedAutoGroups`）を畳む・広げる。通常の行は何もしない。
+   * 先頭・子（代表の行）ならその worktree グループ（共有の設定 `collapsedAutoGroups`）を畳む・広げる。通常の行（代表でない行も）は何もしない。
    */
   private toggleCollapseOfSelection(): void {
     const key = this.view.navigateSelection;
@@ -1131,8 +1131,11 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       return;
     }
     const ws = this.session.workspaces.get(key);
-    const repoKey = ws?.git?.repoKey ?? null;
-    if (repoKey === null || repoMembers([...this.session.workspaces.values()], repoKey).length < 2) return;
+    const all = [...this.session.workspaces.values()];
+    // 代表でない通常の行（同じフォルダの 2 つ目）は worktree の印が付かないので何もしない（追補 A）。
+    if (!ws || !isRepresentative(ws, all)) return;
+    const repoKey = ws.git?.repoKey ?? null;
+    if (repoKey === null || repoMembers(all, repoKey).length < 2) return;
     this.view.toggleAutoGroupCollapsed(repoKey);
   }
 

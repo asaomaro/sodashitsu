@@ -79,7 +79,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/tui/src/model/SessionModel.ts`（スナップショット・イベントの分岐 `:229-231`・`workspacesReordered`）、`packages/tui/src/render/chrome/sidebar.ts:26, :133-167, :347`、`packages/tui/src/input/mouse.ts:281-296`、`packages/tui/src/actions/TuiDispatcher.ts:920-928`、`packages/tui/src/model/SessionModel.test.ts`
       依存: T5, T10
       AC: AC1, AC6, AC12, AC15, AC16, AC-I5
-- [ ] T17: 端末版のメニューとキー——メニューを T13 と同じ項目に（worktree の子の行でも全体に働く。見出しのメニューに「上へ移動」「下へ移動」）。選択肢の並びはレイアウトの順。一括クローズの件数は `repoMembers`。navigate の選択を行に広げ（見出しのキーは、別のマシンの行のキー `remoteKey` と衝突しない形）、`navigate_open_menu` が見出しのメニューを開く（今は workspace の行固定）。`navigate_toggle_collapse` の動き。`move_workspace_previous`／`next` は項目の `item.move_by`。名前順のとき一番上の並べ替えは受け付けず知らせる。`layout` の無いサーバでの扱いは T13・T15 と同じ。単体テストと壊して落ちる確認
+- [x] T17: 端末版のメニューとキー——メニューを T13 と同じ項目に（worktree の子の行でも全体に働く。見出しのメニューに「上へ移動」「下へ移動」）。選択肢の並びはレイアウトの順。一括クローズの件数は `repoMembers`。navigate の選択を行に広げ（見出しのキーは、別のマシンの行のキー `remoteKey` と衝突しない形）、`navigate_open_menu` が見出しのメニューを開く（今は workspace の行固定）。`navigate_toggle_collapse` の動き。`move_workspace_previous`／`next` は項目の `item.move_by`。名前順のとき一番上の並べ替えは受け付けず知らせる。`layout` の無いサーバでの扱いは T13・T15 と同じ。単体テストと壊して落ちる確認
       対象: `packages/tui/src/modes/ContextMenu.ts:81-110`、`packages/tui/src/app/TuiApp.ts:1053, :1309-1321`、`packages/tui/src/actions/TuiDispatcher.ts:514-589, :622-636, :961-971, :1011-1047`、`packages/tui/src/model/UiState.ts:102-103, :165`、`packages/tui/src/modes/dialogs.ts:230-235`、`packages/tui/src/actions/TuiDispatcher.test.ts:869-938`、`packages/tui/src/modes/overlays.test.ts`
       依存: T7, T8, T11, T16
       AC: AC2, AC5, AC7, AC15, AC16, AC-I2, AC-I3, AC-I4, AC-I5

@@ -296,3 +296,16 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **名前順**は client-core の `sidebarTree`（D27 の決め）のまま端末版が描く。
 
 - D34 補足（T16 の点検）: 木の線の最後（`└`）は web（T25）と同じく「見えている子の最後」で決める（畳んで今いる子だけのときも `└`）。別のマシンの行（`machineSection`）と「未接続」の行は折りたたみの桁（lead）を持たないので、ローカルの行と状態の記号の桁が揃わない。マシンの行は変えない範囲（追補 01・見本の範囲外）なので許容する。
+
+## D35: 端末版のメニューとキー（T27 のうち T17）
+
+- **web の T13・T15・T26 と同じ決まりを写した**: メニューの項目と並び（所属なし＝「グループへ追加…」「新しいグループを作る…」、所属あり＝「別のグループへ移す…」〔今のグループ以外が無ければ出さない。D21〕「グループから外す」「新しいグループを作る…」。見出し＝名前の変更・上へ移動・下へ移動・グループを削除、「グループなし」の見出し＝上へ移動・下へ移動だけ）。所属は `model/sidebarTree.ts` の `itemGroupIdOf`（web の同名の関数と同じ。子の行でも本体の所属で答える）。選択肢の並びは `effectiveLayout().top` の `g:` の順。`DialogContext` の `addToGroup` に `moving?: true` を足し、一覧の題を「別のグループへ移す」にした。
+- **古いサーバ（`hasServerLayout` が false）**: 出し入れ・作成は項目の workspace 全部（`repoMembers` の順）へ順に送り 1 件失敗したら止める。グループの「上へ／下へ移動」は出さない。**「グループなし」の見出しは出す項目が無いので、メニューを開かない**（右クリックも navigate の Space も。web の D33 と同じ。navigate の Space は無反応に見える）。
+- **選択のキー**: workspace は id、グループの見出しは `group:<id>`、「グループなし」は `ungrouped:`（client-core の `navigateKeyOfRow` など）。別のマシンの行は `machine:<マシン>:<id>`（`remoteKey`）で前置きが違うので衝突しない（テストで `parseRemoteKey` が見出しのキーを拾わないことを固定）。`TuiDispatcher.navigateIds` は、今のマシンの分に `currentNavigableRows`（`model/sidebarTree.ts`）の行を使い、別のマシンの行は今までどおり。
+- **`navigate_open_menu`**: `TuiDispatcher` は web と同じく要求を立てるだけ（別のマシンの行には立てない）。開く先は `TuiApp.openRequestedNavigateMenu` が選択のキーで分け、見出しならその行の位置（当たり判定 `group`／`ungrouped`）にグループのメニュー・「グループなし」のメニューを開く。消えたグループ・出ていない「グループなし」の選択は、何も開かず選択を外す（web の T15 と同じ）。
+- **`navigate_toggle_collapse`**: グループ＝`group.toggle_collapsed`、「グループなし」＝共有の設定 `ungroupedCollapsed`（`toggleUngroupedCollapsed`。サーバへは送らない）、worktree グループの先頭・子＝`collapsedAutoGroups`（`repoMembers` が 2 つ以上のとき）。通常の行・別のマシンの行は何もしない。`Enter`（activate）は見出しでは選択をやめるだけ。
+- **選択の表示**: サイドバーの見出しの行も `navigated`（アクセントの色）で強調し、見出しを選んだときの区画のスクロール（reveal）はその見出しの行まで動かす（選択のキーを `group`／`ungrouped` の当たり判定に合わせる）。
+- **名前順**: 一番上（グループ・「グループなし」・グループに入っていない項目）の `item.move_by` は送らず「名前順では並べ替えできません」と知らせる（`move_workspace_*` はグループの中なら送る。古いサーバにも同じ）。
+- **一括クローズの件数**（確認ダイアログ）: `repoMembers`（代表だけ）で数え、対象が先頭（本体）のときだけ残り全部。グループへ入っているかは見ない（サーバの `repoCloseTargets` と同じ。web の `ConfirmDialog.vue` と同じ）。`linkedWorktreeChildrenOf` は端末版からも使わなくなった（T19 で撤去）。
+- **代表の行だけが worktree グループを畳む（独立点検の指摘で直した）**: `navigate_toggle_collapse` は、選んでいる workspace が client-core の `isRepresentative` のときだけ worktree グループを畳む。代表でない通常の行（同じフォルダの 2 つ目。追補 A で worktree の印が付かない）では何もしない。web の `toggleCollapseOfSelection` と端末版の両方に入れた。
+- **この T17 で触れていないもの**: 見出しのクリック・ドラッグ（T18）。
