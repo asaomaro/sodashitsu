@@ -11,6 +11,9 @@ import {
   GroupRemoveMemberParams,
   GroupRenameParams,
   GroupToggleCollapsedParams,
+  ItemMoveByParams,
+  ItemMoveParams,
+  SidebarLayoutSchema,
   MachineListParams,
   MAX_AGENT_PROMPT_BYTES,
   METADATA_RAW_TEXT_MAX,
@@ -97,6 +100,36 @@ describe("messages", () => {
       workspaceId: "w1",
       closeLinkedWorktrees: true,
     });
+  });
+
+  // 20261004-group-worktree-items
+  it("validates group.create's optional workspaceId", () => {
+    expect(GroupCreateParams.parse({ label: "x", workspaceId: "w1" })).toEqual({ label: "x", workspaceId: "w1" });
+    expect(GroupCreateParams.parse({ label: "x" })).toEqual({ label: "x" });
+    expect(() => GroupCreateParams.parse({ label: "x", workspaceId: "" })).toThrow();
+  });
+
+  it("validates item.move / item.move_by params", () => {
+    const g = { kind: "group", groupId: "g1" } as const;
+    const w = { kind: "workspace", workspaceId: "w1" } as const;
+    expect(ItemMoveParams.parse({ item: g, before: w })).toEqual({ item: g, before: w });
+    expect(ItemMoveParams.parse({ item: w, before: null })).toEqual({ item: w, before: null });
+    expect(() => ItemMoveParams.parse({ item: w })).toThrow(); // before は必須（末尾は null）
+    expect(() => ItemMoveParams.parse({ item: { kind: "repo", repoKey: "/a" }, before: null })).toThrow();
+    expect(() => ItemMoveParams.parse({ item: { kind: "group" }, before: null })).toThrow();
+    expect(ItemMoveByParams.parse({ item: g, direction: "next" })).toEqual({ item: g, direction: "next" });
+    expect(() => ItemMoveByParams.parse({ item: g, direction: "up" })).toThrow();
+  });
+
+  it("parses SidebarLayout (with/without groups, unknown refs and extra keys from older shapes)", () => {
+    const l = { top: ["g:g1", "r:/a", "w:w2"], groups: { g1: ["r:/b"], g2: [] } };
+    expect(SidebarLayoutSchema.parse(l)).toEqual(l);
+    expect(SidebarLayoutSchema.parse({ top: [], groups: {} })).toEqual({ top: [], groups: {} });
+    // 未知の参照の種類・余計なキーを持つ形も通る（余計なキーは落とす）
+    expect(SidebarLayoutSchema.parse({ top: ["x:unknown"], groups: {}, extra: 1 })).toEqual({ top: ["x:unknown"], groups: {} });
+    expect(() => SidebarLayoutSchema.parse({ top: "g:g1", groups: {} })).toThrow();
+    expect(() => SidebarLayoutSchema.parse({ top: [], groups: { g1: "r:/a" } })).toThrow();
+    expect(() => SidebarLayoutSchema.parse({ top: [] })).toThrow();
   });
 
   // 20260923-workspace-grouping（キーバインド用。tab.move と同じ delta 指定の形）。

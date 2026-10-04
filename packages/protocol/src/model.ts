@@ -204,6 +204,23 @@ export interface WorkspaceGroup {
   collapsed: boolean;
 }
 
+/**
+ * サイドバーの項目の参照（20261004-group-worktree-items）。`g:<groupId>`（グループ）・`r:<repoKey>`（リポジトリ。
+ * worktree をまとめた 1 項目）・`w:<workspaceId>`（git 管理外・判定前の workspace）。
+ */
+export type ItemRef = string;
+
+/** サイドバーの項目の並び（サーバが正。`SessionSnapshot.layout`・`sidebar.layout_changed`）。 */
+export interface SidebarLayout {
+  /** 一番上の項目の順。 */
+  top: ItemRef[];
+  /** グループの中の項目の順（キーは GroupId。`g:` は入らない）。空のグループも空の配列で持つ。 */
+  groups: Record<GroupId, ItemRef[]>;
+}
+
+/** 項目に対する操作の対象。workspace を指すと、その workspace の項目（リポジトリなら丸ごと）になる。 */
+export type ItemTarget = { kind: "group"; groupId: GroupId } | { kind: "workspace"; workspaceId: WorkspaceId };
+
 export interface SessionSnapshot {
   protocol: 1;
   serverVersion: string;
@@ -212,6 +229,8 @@ export interface SessionSnapshot {
   tabs: Tab[];
   panes: Pane[];
   groups: WorkspaceGroup[];
+  /** 項目の並び。古いサーバには無い（無ければ画面が `layoutFromLegacy` で導く）。 */
+  layout?: SidebarLayout;
   focus: SessionFocus | null;
   limits: SessionLimits;
 }

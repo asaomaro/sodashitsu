@@ -15,7 +15,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
 
 ## チェックリスト
 
-- [ ] T1: プロトコル——`ItemRef`・`SidebarLayout`・`ItemTarget` の型、`SessionSnapshot.layout?`、イベント `sidebar.layout_changed`、RPC `item.move`・`item.move_by`（結果 `{moved}`）、`group.create` の省略可能な `workspaceId`。スキーマの単体テスト（あり・なし・不正な形・未知の項目を持つ旧形が通る）。**古い画面が知らないイベントを無視することを、`main` の版のコードで確かめる**（`git show main:packages/web/src/store/StoreAdapter.ts`・`main:packages/tui/src/model/SessionModel.ts`・`main:packages/client-core/src/net/Connection.ts` のイベントの分岐）。無視しないなら止まって知らせる
+- [x] T1: プロトコル——`ItemRef`・`SidebarLayout`・`ItemTarget` の型、`SessionSnapshot.layout?`、イベント `sidebar.layout_changed`、RPC `item.move`・`item.move_by`（結果 `{moved}`）、`group.create` の省略可能な `workspaceId`。スキーマの単体テスト（あり・なし・不正な形・未知の項目を持つ旧形が通る）。**古い画面が知らないイベントを無視することを、`main` の版のコードで確かめる**（`git show main:packages/web/src/store/StoreAdapter.ts`・`main:packages/tui/src/model/SessionModel.ts`・`main:packages/client-core/src/net/Connection.ts` のイベントの分岐）。無視しないなら止まって知らせる
       対象: `packages/protocol/src/model.ts:39, :200-214`、`packages/protocol/src/events.ts:36-55`、`packages/protocol/src/messages.ts`（`WorkspaceMoveParams`・`WorkspaceMoveToParams`・`Group*Params`・`METHOD_SCHEMAS` の登録表・結果型の表）、`packages/protocol/src/messages.test.ts:93-135`（グループと並べ替えのテスト）
       依存: なし
       AC: AC14

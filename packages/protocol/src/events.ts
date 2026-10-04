@@ -3,6 +3,7 @@ import type {
   MachineStatus,
   Pane,
   SessionFocus,
+  SidebarLayout,
   Tab,
   Workspace,
   WorkspaceGroup,
@@ -36,6 +37,11 @@ export interface WorkspaceClosedEvent {
 export interface WorkspaceOrderChangedEvent {
   event: "workspace.order_changed";
   data: { workspaceIds: string[] };
+}
+/** サイドバーの項目の並びが変わった（20261004-group-worktree-items）。新しい並びの全体を配る。 */
+export interface SidebarLayoutChangedEvent {
+  event: "sidebar.layout_changed";
+  data: { layout: SidebarLayout };
 }
 /** 手動グループを作った（20260923-workspace-grouping）。 */
 export interface GroupCreatedEvent {
@@ -187,6 +193,7 @@ export type ServerEvent =
   | GroupCreatedEvent
   | GroupUpdatedEvent
   | GroupDeletedEvent
+  | SidebarLayoutChangedEvent
   | TabCreatedEvent
   | TabUpdatedEvent
   | TabClosedEvent
