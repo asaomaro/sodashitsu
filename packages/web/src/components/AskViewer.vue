@@ -67,15 +67,9 @@ function onMessage(ev: MessageEvent): void {
   }
   const key = readViewKey(ev.data);
   if (key === null) return;
-  // 決定は、利用者が実際に枠の中で操作した直後だけ受ける（`navigator.userActivation`。キー・クリックなどの操作で、枠の祖先の文書にも立つ）。
-  // 枠の中のスクリプトが操作なしに `postMessage` するだけで、既定のままの回答が確定するのを防ぐ。Esc は操作の扱いにならない（取り消しは害が小さいので許す）。
-  // 対応していない環境では決定を取り次がない（［決定］・質問側のキーで操作できる）。
-  if (
-    key === "submit" &&
-    (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation
-      ?.isActive !== true
-  )
-    return;
+  // ここでは決定しない: 取り次ぐのは「枠の中で決定のキーが押された」という知らせだけ（受けた側は、決定せずに質問側へフォーカスを移す。AskDialog の `onViewKey`）。
+  // 枠の中のスクリプトは本物のキー操作と見分けがつかない `postMessage` を送れる（`navigator.userActivation` は親ページの操作でも立ち、枠のフォーカスはスクリプトが
+  // `focus()` で奪える。実測は ask-view の E2E）ので、枠からの知らせだけで回答を確定させない。
   emit("key", key);
 }
 onMounted(() => window.addEventListener("message", onMessage));

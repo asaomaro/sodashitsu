@@ -612,6 +612,10 @@ describe("メディア・コード・view の定義（20261004-ask-media-popup�
       ["data:text/html;base64,PGI+", "image"],
       ["data:image/png,abc", "image"], // base64 でない
       ["\\\\host\\share\\a.png", "image"], // UNC
+      ["//evil/share/a.png", "image"], // UNC（区切りが /）
+      ["/\\evil\\s\\a.png", "image"], // UNC（/ と \\ の混在）
+      ["\\/evil/s/a.png", "image"],
+      ["//?/C:/a.png", "image"], // デバイスパス
       ["/a\0b.png", "image"],
       ["", "image"],
     ] as const) {
@@ -621,6 +625,9 @@ describe("メディア・コード・view の定義（20261004-ask-media-popup�
     expect(classifyMediaRef("a.png", "image", true)).toBe("path");
     expect(classifyMediaRef("~/a.png", "image", true)).toBe("path");
     expect(classifyMediaRef("file:///x", "image", true)).toBeNull();
+    for (const ref of ["//evil/s/a.png", "/\\evil\\s\\a.png", "\\\\host\\s\\a.png"])
+      expect(classifyMediaRef(ref, "image", true), ref).toBeNull(); // 相対も通す事前の検査でも UNC は通さない
+    expect(classifyMediaRef("/a//b.png", "image")).toBe("path"); // 途中の区切りの重なりは普通のパス
   });
 
   it("image・audio の誤りは media_invalid、code が文字列でなければ code_invalid", () => {

@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures.js";
 import { runAsk } from "../support/ask.js";
-import { dialog, q, setup } from "../support/askForm.js";
+import { choice, dialog, q, setup } from "../support/askForm.js";
 import { EVIL_SVG, makeMediaDir, makePng } from "../support/media.js";
 
 /**
@@ -197,7 +197,7 @@ test("Markdown に埋め込んだ <script>・onerror・javascript: は動かな�
     const p1 = await setup(page, appServer);
     const md = await media.write(
       "evil.md",
-      '# 題\n\n<script>window.__mdScript = 1; parent.postMessage({type:"key",key:"Escape"}, "*")</script>\n\n<img src="x" onerror="window.__mdOnerror = 1">\n\n[リンク](https://example.com/) と [危険](javascript:window.__mdJs=1)\n\n<a href="#x" onclick="window.__mdClick=1">内部</a>\n',
+      '# 題\n\n<script>window.__mdScript = 1; parent.postMessage({type:"key",key:"Escape"}, "*")</script>\n\n<img src="x" onerror="window.__mdOnerror = 1">\n\n[リンク](https://example.com/) と [危険](javascript:window.__mdJs=1)\n\n<a href="#x" onclick="window.__mdClick=1">内部</a>\n\n<svg width="120" height="30"><a xlink:href="https://example.com/svg"><text x="5" y="20">svg リンク</text></a><a href="https://example.com/svg2"><text x="60" y="20">svg2</text></a></svg>\n',
     );
     const run = await runAsk(appServer, p1, SPEC({ file: md }));
     await expect(dialog(page)).toBeVisible();
@@ -220,6 +220,15 @@ test("Markdown に埋め込んだ <script>・onerror・javascript: は動かな�
     await expect(f.locator('a[title="https://example.com/"]')).not.toHaveAttribute("href", /.+/);
     await expect(f.locator("a[title^='javascript:']")).not.toHaveAttribute("href", /.+/);
     await expect(f.locator('a[href="#x"]')).toHaveCount(1);
+    // SVG の中のリンク（`xlink:href`・`href`）も外してある（枠自身の遷移になるので）。
+    expect(
+      await frame.evaluate(
+        () =>
+          Array.from(document.querySelectorAll("svg a")).map(
+            (a) => a.hasAttribute("xlink:href") || a.hasAttribute("href"),
+          ),
+      ),
+    ).toEqual([false, false]);
     // 枠の中から親へ偽のキー（Escape）を送っても、<script> が動かないので質問は閉じない。
     await page.waitForTimeout(300);
     expect(run.finished()).toBe(false);
@@ -254,6 +263,11 @@ test("枠の中にフォーカスがあるときの Esc は取り消し・Ctrl+E
     const answered = await runAsk(appServer, p1, SPEC({ file }));
     await expect(dialog(page)).toBeVisible();
     await frameOf(page).locator("#b").click();
+    await page.keyboard.press("Control+Enter");
+    // 枠の中の Ctrl+Enter は決定しない（成果物のスクリプトは同じ知らせを送れる）。質問側の固定の行へフォーカスが移り、そこでもう一度押すと決定する。
+    await expect(page.locator("[data-ask-origin]")).toBeFocused();
+    await page.waitForTimeout(300);
+    expect(answered.finished()).toBe(false);
     await page.keyboard.press("Control+Enter");
     expect((await answered.done).json).toEqual({ status: "answered", answers: { ok: "o1" } });
     // (3) 枠の中のスクリプトが、取り次ぎの形でないメッセージ（形違い・別のキー）を送っても何も起きない。
@@ -306,6 +320,36 @@ test("枠の中のスクリプトが、利用者の操作なしに決定のメ�
     await page.locator("[data-ask-origin]").focus();
     await page.keyboard.press("Control+Enter");
     expect((await run.done).json).toEqual({ status: "answered", answers: { ok: "o1" } });
+  } finally {
+    await media.cleanup();
+  }
+});
+
+test("枠のスクリプトが決定の知らせを送り続けても（質問側をクリックした直後で親が操作の扱いを持つ間も、枠のフォーカスを奪っても）、質問は確定しない。確定は質問側の固定の行での決定だけ（AC-I5）", async ({
+  page,
+  appServer,
+}) => {
+  const media = await makeMediaDir();
+  test.setTimeout(60_000);
+  try {
+    const p1 = await setup(page, appServer);
+    // 枠のスクリプトは 50ms ごとに決定を送り、フォーカスを自分へ寄せる（`navigator.userActivation` も枠のフォーカスも、成果物のスクリプトに作れる）。
+    const file = await media.write(
+      "spam.html",
+      `<!doctype html><body><input id=i><p>連打</p><script>setInterval(() => { try { window.focus(); document.getElementById("i").focus(); } catch (e) {} parent.postMessage({ type: "key", key: "Enter", ctrl: true }, "*"); document.body.dataset.sent = String(Number(document.body.dataset.sent || 0) + 1); }, 50);</script>`,
+    );
+    const run = await runAsk(appServer, p1, SPEC({ file }));
+    await expect(dialog(page)).toBeVisible();
+    // 利用者が質問側（枠の外）の選択肢をクリックする。親ページに操作の扱い（約 5 秒）が付く。その後も枠は送り続ける。
+    await choice(page, "ok", "o2").click();
+    await new Promise((r) => setTimeout(r, 7000));
+    expect(run.finished()).toBe(false);
+    await expect(dialog(page)).toBeVisible();
+    await expect(frameOf(page).locator("body")).toHaveAttribute("data-sent", /^[1-9]\d+$/);
+    // 利用者は、質問側の固定の行で決定すれば確定できる（枠の知らせはそこへフォーカスを移すだけ）。
+    await page.locator("[data-ask-origin]").focus();
+    await page.keyboard.press("Control+Enter");
+    expect((await run.done).json).toMatchObject({ status: "answered" });
   } finally {
     await media.cleanup();
   }

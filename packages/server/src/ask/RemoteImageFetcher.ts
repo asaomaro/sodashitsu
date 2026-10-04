@@ -201,12 +201,13 @@ export class RemoteImageFetcher implements ImageFetcher {
   async fetchImage(
     urlText: string,
     signal: AbortSignal,
+    onBytes?: (n: number) => void,
   ): Promise<{ bytes: Buffer; contentType: string }> {
     await this.acquire();
     try {
       const all = AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]);
       all.throwIfAborted(); // 枠を待っている間に中止・時間切れになっていたら始めない
-      return await this.run(urlText, all);
+      return await this.run(urlText, all, onBytes);
     } finally {
       this.release();
     }
@@ -230,6 +231,7 @@ export class RemoteImageFetcher implements ImageFetcher {
   private async run(
     urlText: string,
     signal: AbortSignal,
+    onBytes?: (n: number) => void,
   ): Promise<{ bytes: Buffer; contentType: string }> {
     let url = new URL(urlText);
     for (let hop = 0; ; hop++) {
@@ -286,6 +288,12 @@ export class RemoteImageFetcher implements ImageFetcher {
         if (size > this.maxBytes) {
           res.destroy();
           throw new Error("too large");
+        }
+        try {
+          onBytes?.(chunk.length); // 呼び出し側の合計の上限を超えたら投げる（取得を止める）
+        } catch (err) {
+          res.destroy();
+          throw err;
         }
         chunks.push(Buffer.from(chunk));
       }

@@ -5,6 +5,7 @@ import {
   ASK_MEDIA_FILE_MAX,
   ASK_MEDIA_FILES_MAX,
   ASK_MEDIA_REF_PREFIX,
+  ASK_MEDIA_SERVER_MAX,
   ASK_MEDIA_TEXT_MAX,
   ASK_MEDIA_TOTAL_MAX,
   RpcError,
@@ -22,9 +23,16 @@ import {
   type SniffKind,
 } from "./mediaSniff.js";
 
-/** 外部 URL の画像を取る口（`RemoteImageFetcher`。テストは偽のものを渡す）。失敗は投げる。 */
+/**
+ * 外部 URL の画像を取る口（`RemoteImageFetcher`。テストは偽のものを渡す）。失敗は投げる。
+ * `onBytes` は、本文を受け取るたびに、その分のバイト数を知らせる（呼び出し側が質問の合計・サーバ全体の上限を超えたと見たら投げる。取得は止めて失敗にする）。
+ */
 export interface ImageFetcher {
-  fetchImage(url: string, signal: AbortSignal): Promise<{ bytes: Buffer; contentType: string }>;
+  fetchImage(
+    url: string,
+    signal: AbortSignal,
+    onBytes?: (n: number) => void,
+  ): Promise<{ bytes: Buffer; contentType: string }>;
 }
 
 /** 保持する 1 つのメディア（`info.id` は質問の中の連番）。 */
@@ -76,9 +84,25 @@ const invalid = (where: string, why: string): RpcError =>
  * ローカルのファイル・`data:`・`view` の誤りと上限の超過は `invalid_ask_spec`（質問は出さない）。外部 URL の取得失敗はその画像だけ外して数える。
  */
 export class AskMedia {
+  /** `prepare` の最中に溜めているバイトの合計（全部の質問。取得中の分を含む）。サーバ全体の上限の判定に使う。 */
+  private inflight = 0;
+
   constructor(private readonly opts: AskMediaOptions) {}
 
-  async prepare(spec: AskSpec, signal: AbortSignal): Promise<Prepared> {
+  /** いま `prepare` が読み込み・取得で溜めているバイト数（テスト・診断用）。 */
+  get inflightBytes(): number {
+    return this.inflight;
+  }
+
+  /**
+   * `serverHeld` は、画面へ出して保持している質問のメディアの合計（サーバ全体の上限 `ASK_MEDIA_SERVER_MAX` の判定に、取得中の分と足す）。
+   * 外部 URL は受け取るたびに質問の合計とサーバ全体へ足し、超えたら残りの取得を中止して失敗にする（合計を、全部取り終えてから判定しない）。
+   */
+  async prepare(
+    spec: AskSpec,
+    signal: AbortSignal,
+    serverHeld: () => number = () => 0,
+  ): Promise<Prepared> {
     interface Slot {
       where: string;
       remote: boolean;
@@ -117,7 +141,7 @@ export class AskMedia {
             throw invalid(where, "unsupported reference");
           const slot = claim(`${kind}:${ref}`, where, type === "https", () =>
             type === "https"
-              ? this.loadRemote(ref, signal)
+              ? this.loadRemote(ref, fetchSignal, charge, refund)
               : this.loadLocalOrData(type, ref, kind, where, remaining),
           );
           bindings.push({
@@ -158,33 +182,59 @@ export class AskMedia {
     }
 
     // 2. 読む。外部 URL は先に並べて取り始め、ローカルは 1 つずつ読む（読む前の大きさ・読んだ後の大きさで合計を先に断つ）。
+    // 溜めたバイトは、読んだ・受け取った時点で質問の合計（`total`）とサーバ全体（`this.inflight`）へ足す。超えたら誤りを投げ、残りの取得を中止する。
     let total = 0;
+    let mine = 0; // この `prepare` が `this.inflight` へ足した分（終わりに戻す）
+    let fatal: RpcError | undefined;
+    let done = false; // `prepare` が終わった後に、中止された取得が遅れて知らせてきても、数に足さない・戻さない
     const remaining = (): number => ASK_MEDIA_TOTAL_MAX - total;
-    const account = (n: number, where: string): void => {
+    const abortFetches = new AbortController();
+    const fetchSignal = AbortSignal.any([signal, abortFetches.signal]);
+    const charge = (n: number, where: string): void => {
+      if (done) throw new Error("aborted");
       total += n;
+      mine += n;
+      this.inflight += n;
+      if (fatal !== undefined) throw fatal;
       if (total > ASK_MEDIA_TOTAL_MAX)
-        throw invalid(
+        fatal = invalid(
           where,
           `the media in one question are larger than ${ASK_MEDIA_TOTAL_MAX} bytes in total`,
         );
+      else if (serverHeld() + this.inflight > ASK_MEDIA_SERVER_MAX)
+        fatal = new RpcError("ask_busy", "too much media is waiting for an answer");
+      if (fatal !== undefined) {
+        abortFetches.abort();
+        throw fatal;
+      }
+    };
+    const refund = (n: number): void => {
+      if (done) return;
+      total -= n;
+      mine -= n;
+      this.inflight -= n;
     };
     for (const slot of slots.values())
       if (slot.remote) (slot.result = slot.load()).catch(() => undefined);
     try {
       for (const slot of slots.values()) {
         if (signal.aborted) throw new Error("aborted");
+        if (fatal !== undefined) throw fatal;
         if (slot.remote) continue;
         slot.result = slot.load();
         const loaded = await slot.result;
-        if (loaded) account(loaded.bytes.length, slot.where);
+        if (loaded) charge(loaded.bytes.length, slot.where);
       }
       for (const slot of slots.values()) {
         if (!slot.remote) continue;
-        const loaded = await slot.result!;
-        if (loaded) account(loaded.bytes.length, slot.where);
+        await slot.result!; // 受け取った分は取得の途中で数えている（超えたらここで誤りが投げられる）
+        if (fatal !== undefined) throw fatal;
       }
     } finally {
+      abortFetches.abort(); // 終わったもの以外の取得を止める（先に投げられた誤りで、残りが溜め続けない）
       for (const slot of slots.values()) slot.result?.catch(() => undefined); // 先に投げられた誤りで、残りの reject を未処理にしない
+      done = true;
+      this.inflight -= mine; // 保持は `AskService` が `totalBytes` で数え直す
     }
     if (signal.aborted) throw new Error("aborted");
 
@@ -259,14 +309,29 @@ export class AskMedia {
     return { kind: sniffed.media, mime: sniffed.mime, bytes };
   }
 
-  private async loadRemote(url: string, signal: AbortSignal): Promise<Loaded | null> {
+  private async loadRemote(
+    url: string,
+    signal: AbortSignal,
+    charge: (n: number, where: string) => void,
+    refund: (n: number) => void,
+  ): Promise<Loaded | null> {
+    // 取得の宛先はホスト名だけをログに残す（URL の全文・パス・クエリは残さない。pane のプロセスが、サーバの権限で外へ通信させられた跡を追えるように）。
+    this.opts.logger?.info("ask remote image fetch", { host: new URL(url).hostname });
+    let counted = 0; // この取得で質問の合計へ足した分
+    const count = (n: number): void => {
+      counted += n;
+      charge(n, "remote image");
+    };
     try {
-      const got = await this.opts.fetcher.fetchImage(url, signal);
-      if (got.bytes.length > ASK_MEDIA_FILE_MAX) return null;
+      const got = await this.opts.fetcher.fetchImage(url, signal, count);
+      if (got.bytes.length > counted) count(got.bytes.length - counted); // 受け取りを知らせない取得器の分
+      if (got.bytes.length > ASK_MEDIA_FILE_MAX) throw new Error("too large");
       const sniffed = sniffMedia(got.bytes);
-      if (sniffed === null || sniffed.media !== "image") return null;
+      if (sniffed === null || sniffed.media !== "image") throw new Error("not an image");
       return { kind: "image", mime: sniffed.mime, bytes: got.bytes };
-    } catch {
+    } catch (e) {
+      if (e instanceof RpcError) throw e; // 合計の上限の超過は、画像を外す扱いにせず質問ごとの誤り
+      refund(counted); // 失敗した取得の分は戻す（画像なしで出す）
       this.opts.logger?.info("ask remote image failed"); // 宛先・理由は書かない（定義の中身）
       return null;
     }

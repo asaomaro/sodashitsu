@@ -282,6 +282,24 @@ describe("RemoteImageFetcher — 検査を通ったアドレスを順に試す�
     });
     await expect(fetcher.fetchImage("https://hang.example/a.png", sig())).rejects.toThrow();
   });
+  it("受け取るたびに onBytes へ知らせ、呼び出し側が投げたらそこで読むのをやめる（destroy）", async () => {
+    let destroyed = 0;
+    const seen: number[] = [];
+    const h = harness(() =>
+      response({
+        chunks: [Buffer.alloc(100, 1), Buffer.alloc(100, 1), Buffer.alloc(100, 1)],
+        destroy: () => void destroyed++,
+      }),
+    );
+    await expect(
+      h.fetcher.fetchImage("https://example.com/a.png", sig(), (n) => {
+        seen.push(n);
+        if (seen.length === 2) throw new Error("over budget");
+      }),
+    ).rejects.toThrow(/over budget/);
+    expect(seen).toEqual([100, 100]); // 3 つ目は読んでいない
+    expect(destroyed).toBe(1);
+  });
   it("上限を超えた応答・リダイレクトの応答は、読むのをやめる（destroy）", async () => {
     let destroyed = 0;
     const big = harness(

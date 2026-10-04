@@ -172,7 +172,7 @@ export class AskService {
         this.onPrepared(entry, { spec: checked.spec, media: [], warnings: 0, totalBytes: 0 });
         return;
       }
-      this.opts.media.prepare(checked.spec, entry.abort.signal).then(
+      this.opts.media.prepare(checked.spec, entry.abort.signal, () => this.mediaTotal).then(
         (prepared) => this.onPrepared(entry, prepared),
         (err: unknown) => this.onPrepareFailed(entry, err),
       );

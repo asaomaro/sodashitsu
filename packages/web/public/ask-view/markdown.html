@@ -45,7 +45,7 @@ input[type=checkbox]{margin-right:.4em}
 <body>
 <div id="bar"><button type="button" id="toggle" aria-pressed="false" hidden>ソースを見る</button></div>
 <main><article id="doc"></article><pre id="source" hidden></pre></main>
-<!-- このページには専用のヘッダ（sandbox・default-src 'none'・script-src 'self'）が付く: インラインのスクリプト・eval・外への通信は止まる。 -->
+<!-- このページには専用のヘッダ（sandbox・default-src 'none'・script-src 'self'）が付く: インラインのスクリプト・eval・外への読み込み（fetch・画像など）は止まる。枠自身の遷移は止められない。 -->
 <script src="keys.js"></script>
 <script src="markdown.js"></script>
 </body>

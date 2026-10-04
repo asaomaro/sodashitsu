@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   ASK_MEDIA_FILE_MAX,
   ASK_MEDIA_FILES_MAX,
+  ASK_MEDIA_SERVER_MAX,
   ASK_MEDIA_TEXT_MAX,
   ASK_MEDIA_TOTAL_MAX,
   normalizeAskSpec,
@@ -220,6 +221,16 @@ describe("AskMedia.prepare — 外部 URL（偽の取得）", () => {
     }).prepare(spec([{ value: "x", image: URL1 }]), signal());
     expect(r2.warnings).toBe(1);
   });
+  it("取得の宛先はホスト名だけをログに残す（パス・クエリ・URL の全文は残さない）", async () => {
+    const lines: { msg: string; f?: Record<string, unknown> }[] = [];
+    const m = new AskMedia({
+      fetcher: { fetchImage: async () => ({ bytes: PNG, contentType: "image/png" }) },
+      logger: { info: (msg, f) => void lines.push({ msg, ...(f ? { f } : {}) }) },
+    });
+    await m.prepare(spec([{ value: "x", image: "https://img.example.com/p/a.png?token=SECRET" }]), signal());
+    expect(lines).toEqual([{ msg: "ask remote image fetch", f: { host: "img.example.com" } }]);
+    expect(JSON.stringify(lines)).not.toMatch(/SECRET|a\.png/);
+  });
   it("同じ URL は 1 回だけ取る", async () => {
     let calls = 0;
     const r = await media({
@@ -240,6 +251,88 @@ describe("AskMedia.prepare — 外部 URL（偽の取得）", () => {
     await expect(
       media().prepare(spec([{ value: "x", image: p("a.png") }]), c.signal),
     ).rejects.toThrow();
+  });
+});
+
+describe("AskMedia.prepare — 外部 URL の受け取り中の合計（取り終えるのを待たずに止める）", () => {
+  const MIB = 1024 * 1024;
+  const urls = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ value: `v${i}`, image: `https://example.com/${i}.png` }));
+  /** 256 KiB ずつ `mib` MiB 分を受け取る偽の取得器。受け取るたびに知らせ、中止されたらそこで止まる。 */
+  const streaming = (mib: number, stats = { reported: 0, aborted: 0, completed: 0 }) => ({
+    stats,
+    fetcher: {
+      fetchImage: async (_url, sig, onBytes) => {
+        const STEP = MIB / 4;
+        for (let i = 0; i < mib * 4; i++) {
+          if (sig.aborted) {
+            stats.aborted++;
+            throw new Error("aborted");
+          }
+          stats.reported += STEP;
+          onBytes?.(STEP);
+          await new Promise((r) => setImmediate(r));
+        }
+        stats.completed++;
+        return { bytes: Buffer.concat([PNG, Buffer.alloc(mib * MIB - PNG.length)]), contentType: "image/png" };
+      },
+    } satisfies ImageFetcher,
+  });
+
+  it("質問の合計 24 MiB を、取り終える前の受け取りで超えたら、残りの取得を中止して誤りにする。溜めた分は戻る", async () => {
+    const { fetcher, stats } = streaming(7); // 7 MiB × 4 件 = 28 MiB
+    const m = media(fetcher);
+    await expect(m.prepare(spec(urls(4)), signal())).rejects.toMatchObject({
+      code: "invalid_ask_spec",
+    });
+    await new Promise((r) => setTimeout(r, 30)); // 中止された取得が次の周で止まるのを待つ
+    expect(stats.completed).toBe(0); // どれも取り終えていない
+    expect(stats.aborted).toBeGreaterThan(0); // 途中で中止された
+    expect(stats.reported).toBeLessThanOrEqual(ASK_MEDIA_TOTAL_MAX + 4 * MIB); // 受け取った量は上限の少し先まで
+    expect(m.inflightBytes).toBe(0);
+  });
+  it("サーバ全体の上限は、取得中の分も含めて判定する（保持している分との合計）。超えたら ask_busy", async () => {
+    const { fetcher, stats } = streaming(4);
+    const m = media(fetcher);
+    await expect(
+      m.prepare(spec(urls(2)), signal(), () => ASK_MEDIA_SERVER_MAX - 3 * MIB),
+    ).rejects.toMatchObject({ code: "ask_busy" });
+    expect(stats.completed).toBe(0);
+    expect(m.inflightBytes).toBe(0);
+  });
+  it("別の質問の取得中の分も、サーバ全体に数える（同時に 2 つの質問）", async () => {
+    const m = media(streaming(4).fetcher);
+    const held = ASK_MEDIA_SERVER_MAX - 6 * MIB; // 1 つなら 4 MiB で収まる。2 つ同時だと 8 MiB で超える
+    const [a, b] = await Promise.allSettled([
+      m.prepare(spec(urls(1)), signal(), () => held),
+      m.prepare(spec(urls(1)), signal(), () => held),
+    ]);
+    expect([a.status, b.status].sort()).toEqual(["fulfilled", "rejected"]);
+    expect(m.inflightBytes).toBe(0);
+  });
+  it("取得に失敗した画像の受け取り済みの分は戻る（失敗は画像なし。合計を食わない）", async () => {
+    const m = media({
+      fetchImage: async (url, _sig, onBytes) => {
+        if (url.endsWith("/0.png")) {
+          onBytes?.(20 * MIB);
+          throw new Error("down");
+        }
+        onBytes?.(PNG.length);
+        return { bytes: PNG, contentType: "image/png" };
+      },
+    });
+    const r = await m.prepare(spec(urls(2)), signal());
+    expect(r.warnings).toBe(1);
+    expect(r.media).toHaveLength(1);
+    expect(m.inflightBytes).toBe(0);
+  });
+  it("受け取りを知らせない取得器でも、取り終えた時点で合計に数える", async () => {
+    const big = Buffer.concat([PNG, Buffer.alloc(7 * MIB)]);
+    const m = media({ fetchImage: async () => ({ bytes: big, contentType: "image/png" }) });
+    await expect(m.prepare(spec(urls(4)), signal())).rejects.toMatchObject({
+      code: "invalid_ask_spec",
+    });
+    expect(m.inflightBytes).toBe(0);
   });
 });
 

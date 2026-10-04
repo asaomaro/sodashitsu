@@ -322,8 +322,9 @@ export function classifyMediaRef(ref: string, kind: AskMediaKind | "file", relat
   }
   if (ref.length > ASK_REF_MAX) return null;
   if (SCHEME_RE.test(ref) && !WIN_DRIVE_RE.test(ref)) return null;
-  // UNC（`\\\\host\\share`）は通さない（Windows のサーバが外部の SMB へ繋ぎに行く）。
-  if (ref.startsWith("\\\\")) return null;
+  // UNC（`\\host\share`・`//host/share`・`/\host\share`・`\/host/share`）は通さない（Windows のサーバが外部の SMB へ繋ぎに行く。`\\?\` 系のデバイスパスも同じ形）。
+  // 先頭が区切り 2 つのもの（`/` と `\` のどの組み合わせも）を拒否する。POSIX でも `//` 始まりは実装依存で曖昧なので同じく拒否する（docs・既存の期待に `//` 始まりのパスは無い）。
+  if (/^[\\/]{2}/.test(ref)) return null;
   if (ref.startsWith("/") || WIN_DRIVE_RE.test(ref)) return "path";
   return relativePaths ? "path" : null;
 }

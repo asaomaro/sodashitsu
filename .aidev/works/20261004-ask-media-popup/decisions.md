@@ -49,7 +49,7 @@ public_docs 側に必要な改修案は、coding の終わりにこのファイ�
 - **`ask.opened` はメディアが揃ってから**。メディアの無い定義は `prepare` を呼ばず同期で出す（既存の振る舞い・テストを変えない）。
 - **同じファイルが image/audio と view の両方に出る**ときは別々に保持する（キーが種類別）。合計には両方数える（安全側）。
 - **外部 URL の取得は検査済みの全アドレスを順に試す**（IPv6 の経路が無い環境で IPv4 へ回る）。接続先の固定は `https.request` の `lookup` で行い、自己署名の証明書の local サーバで実物を確かめるテストを置いた（`makeRealRequest({ca})` の `ca` はテスト専用）。
-- **決定（Ctrl/Cmd+Enter）の取り次ぎは `navigator.userActivation.isActive` のときだけ**（独立点検 T12 の指摘）。残余のリスクと E2E で待つ理由は review.md のタスク点検ログ。
+- **（D9 で置き換え）決定（Ctrl/Cmd+Enter）の取り次ぎは `navigator.userActivation.isActive` のときだけ**（独立点検 T12 の指摘）。残余のリスクと E2E で待つ理由は review.md のタスク点検ログ。
 - **タスク点検の範囲**は D5 のとおり（T1〜T5・T9・T11・T12。T6〜T8・T10・T13・T14 は掛けず、`cross` を 1 回）。T15（AC22 の変異確認）は test 工程で消化する（coding の承認時は未チェックのまま。上の D4 とは別に、ここで再掲）。
 - **public_docs 側の `ask.py`・`SKILL.md` の改修案**は D7。
 
@@ -67,7 +67,7 @@ public_docs 側に必要な改修案は、coding の終わりにこのファイ�
 4. **`--review`**: 成果物の `view` を持つ定義を作るだけなので、上の 1〜3 で画面内に出る。`SODA_*` の判定は `view` の除外を外す。
 5. **SKILL.md**: 「Sodashitsu の pane の中で動いているとき」の節の「次のときは `sodactl ask` を使わず…（`edit`・`rank`・`table`／`image`・`audio`・`code`／成果物がある）」を、「`sodactl ask --features` で確かめて、使えるときは画面内に出す。使えない（古い `sodactl`・`soda`・繋がっていない）ときだけ窓へ」に直す。
    「成果物があるときは、Sodashitsu の pane の中でも、このマシンのウィンドウで聞く」の行を削除する。画像は絶対パス・相対パス・`https://`（`soda` が取得する。社内プロキシ越しの環境では取れず画像なしになる）・`data:` が使え、上限は 1 ファイル 8 MiB・合計 24 MiB・32 ファイル、と書く。
-   成果物の HTML は**スクリプトが動くが外へ通信しない**（CDN・Google Fonts は崩れる）ことと、決定は枠の中の操作の直後だけ効くことも書く。
+   成果物の HTML は**スクリプトが動くが外へ通信しない**（CDN・Google Fonts は崩れる）ことと、枠の中の Ctrl/Cmd+Enter は確定せず、質問側の固定の行へフォーカスを移すだけ（もう一度押すと確定。D9）ことも書く。
 6. **利用者に確認が要る点**: (a) 窓へ落とさずエラーにする範囲（上の 3。`sodactl` が終了コード 2 のときを窓へ落とすか）。(b) 外部 URL の画像の取得をサーバ側にした結果、`ask.py` の窓（ローカルのブラウザが直接取る）と見え方が変わる（プロキシ越しで差が出る）。(c) HTML の `allow-popups`・`allow-downloads` を
    窓の側は許し、画面内の枠は許さない（外へ通信させない決定）。窓の側も揃えるか。
 
@@ -75,3 +75,17 @@ public_docs 側に必要な改修案は、coding の終わりにこのファイ�
 
 - origin/main（実体の id の UUID 化・サイドバーの区画）を取り込んだ。衝突は `AskDialog.vue` の 1 か所（pane の呼び名）。この作業の `paneName`（computed。成果物の枠のラベルにも渡す）を残し、main の「pane が無いときは `shortId(paneId)`」を代替表記に取り入れた。pane の id を `p3` の形と決め打ちしない。
 - T15（AC22）の変異確認を実施。落ちない変異が 1 つ（成果物の SVG を `<img>` 以外でも開く）見つかったので、E2E（`ask-view.spec.ts`）に対照を足した。詳細は `test-result.md`。
+
+## D9: 独立レビュー ラウンド 1 の判断
+
+1. **枠からの決定を取り次がない（質問側へフォーカスを移すだけにする）**。指摘は「`userActivation` に加えて枠の iframe がフォーカスを持つことも条件にする」だったが、実測で成り立たなかった:
+   枠のスクリプトが `window.focus(); input.focus()` を呼ぶと、親ページの操作の直後でも iframe にフォーカスが移る（質問側をクリックした直後に枠が 50ms ごとに送る E2E で、条件を足しても確定した）。
+   `userActivation`・フォーカスのどちらも成果物のスクリプトに作れる／借りられる信号なので、組み合わせても枠からの `postMessage` を本物のキー操作と見分けられない（枠のページと成果物は同じ文書で、枠の側に「本物のキーだけを見る」場所が無い）。
+   指摘が許した選択肢のうち「決定は取り次がない」に近い形を採った: 枠の Ctrl/Cmd+Enter は `AskDialog.onViewKey` が質問側の固定の行（`data-ask-origin`）へフォーカスを移すだけにし、確定は質問側での 2 度目の Ctrl/Cmd+Enter か［決定］。
+   取り消し・前後の質問は今までどおり取り次ぐ。残る害は、フォーカスを奪い続けられること（回答は変わらない）。`AskViewer` の `userActivation` の条件・単体テストは外した。
+2. **UNC**: 先頭が区切り 2 つ（`/` と `\` の組み合わせ）を `classifyMediaRef` が拒否する。`//` 始まりの正当な用途は docs・既存のテストに無い（絶対パスは `/` 1 つ始まり）。
+3. **外部取得の合計**: `ImageFetcher.fetchImage` に `onBytes`（受け取るたびの通知）を足し、`AskMedia.prepare` が質問の合計とサーバ全体（`AskService` の保持量 + 全 `prepare` の取得中の合計）へ足す。超えたら取得を中止して質問ごとの誤り（質問の合計は `invalid_ask_spec`、サーバ全体は `ask_busy`）。
+   失敗した取得の受け取り済みの分は戻す。受け取りを通知しない取得器は、取り終えた時点で数える。
+4. **pane.sock の権限**: docs の「安全の境界」に、読み出し・外部 GET をさせられること、サンドボックスで socket を許可しない対処を書いた。外部取得の宛先は**ホスト名だけ**をログに残す（`ask remote image fetch`。URL の全文・パス・クエリは残さない）。
+   なお、取得の失敗のログ（`ask remote image failed`）は今までどおり宛先・理由を書かない。
+5. **dark**: アプリのテーマ（root の `color-scheme`。`ThemeController` が当てる）に合わせた。質問が替わるたびに読み直し、開いている間のテーマ変更には追従しない（記録のみ）。

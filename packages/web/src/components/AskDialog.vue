@@ -50,8 +50,17 @@ const paneName = computed(() => {
 /** 成果物（`view`）つきか。つきなら左（モバイルは上）に枠を置き、ダイアログを広く・高く固定する。 */
 const views = computed(() => ask.value?.resolved?.views ?? []);
 const hasView = computed(() => views.value.length > 0);
-/** 成果物の枠へ渡す配色（アプリの背景の明暗）。 */
-const dark = computed(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches === true);
+/**
+ * 成果物の枠へ渡す配色（アプリのテーマの明暗）。`ThemeController` が root に当てた `color-scheme`（`light`／`dark`）に合わせ、
+ * 当たっていないときだけ OS の設定を見る。質問が替わるたびに読み直す（開いている間のテーマ変更には追従しない）。
+ */
+const dark = computed(() => {
+  void ask.value;
+  const scheme = document.documentElement.style.colorScheme;
+  if (scheme === "dark") return true;
+  if (scheme === "light") return false;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches === true;
+});
 
 /** 「どの pane からの質問か」（定義の外。pane の名前・workspace・tab）。 */
 const origin = computed(() => {
@@ -314,7 +323,9 @@ function onKeydown(ev: KeyboardEvent): void {
 function onViewKey(key: AskViewKey): void {
   const el = formEl.value;
   if (key === "cancel") void cancel();
-  else if (key === "submit") el?.submit();
+  // 決定は枠からの知らせだけでは確定しない（成果物のスクリプトは本物のキー操作と同じ知らせを送れる）。質問側の固定の行へフォーカスを移し、利用者がもう一度
+  // Ctrl/Cmd+Enter（`onKeydown`）か［決定］で確定する。
+  else if (key === "submit") titleEl.value?.focus();
   else el?.step(key === "prev" ? -1 : 1);
 }
 </script>
