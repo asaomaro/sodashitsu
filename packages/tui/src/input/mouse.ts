@@ -260,8 +260,15 @@ export class MouseController {
       row.find(
         (h) =>
           ((h.kind === "newWorkspace" || h.kind === "collapse") && h.x === x) ||
-          (h.kind === "sort" && x >= h.x && x < h.x + h.w),
-      ) ?? row.find((h) => h.kind !== "newWorkspace" && h.kind !== "collapse" && h.kind !== "sort")
+          ((h.kind === "sort" || h.kind === "subagents") && x >= h.x && x < h.x + h.w),
+      ) ??
+      row.find(
+        (h) =>
+          h.kind !== "newWorkspace" &&
+          h.kind !== "collapse" &&
+          h.kind !== "sort" &&
+          h.kind !== "subagents",
+      )
     );
   }
 
@@ -298,7 +305,7 @@ export class MouseController {
         else if (hit?.kind === "ungrouped") {
           // 「グループなし」の見出し：上へ／下へ移動だけ。`layout` の無い古いサーバでは出す項目が無いので開かない（web と同じ）。
           if (model.hasServerLayout) ui.openContextMenu({ kind: "ungrouped" }, { x, y });
-        } else if (hit?.kind === "agent")
+        } else if (hit?.kind === "agent" || hit?.kind === "subagents")
           ui.openContextMenu({ kind: "pane", paneId: hit.paneId }, { x, y });
         else ui.openContextMenu({ kind: "global" }, { x, y });
         return;
@@ -331,6 +338,7 @@ export class MouseController {
           onClick: () => this.toggleHeading(hit),
         };
       } else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
+      else if (hit.kind === "subagents") actions.showSubagentsOf(hit.paneId);
       else if (hit.kind === "newWorkspace") actions.run({ type: "newWorkspace" });
       else if (hit.kind === "sort") {
         if (hit.section === "spaces") actions.toggleWorkspaceSort();

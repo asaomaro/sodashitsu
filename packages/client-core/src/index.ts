@@ -17,6 +17,7 @@ export * from "./keys/ResizeMode.js";
 export * from "./agent/agentOrder.js";
 export * from "./agent/agentState.js";
 export * from "./agent/stateIndicator.js";
+export * from "./agent/subagents.js";
 export * from "./workspace/paneName.js";
 export * from "./workspace/viewRepair.js";
 export * from "./workspace/sidebarLayout.js";

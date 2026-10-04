@@ -359,6 +359,19 @@ stdout に 1 行の JSON。`status` は次の 4 つで、**どれも終了コー
 pane の中で検出されたコーディングエージェント（Claude Code・Codex 等。ブラウザのサイドバーに状態が出るもの）を、
 **その pane の ID** か、**`agent rename` で付けた名前**で指して扱う（下の `<target>`）。
 
+### エージェントが動かしているサブエージェント（`subagents`）
+
+`agent list`・`get`（と、`agent wait`・`start`・`rename` が返す `agent`）の各要素に、エージェントが中で動かしているサブエージェント（Claude Code の Agent ツール）の `subagents` が付く（20261004-subagent-display）。
+サブエージェントは pane を持たないので、`agent` の一覧には出ない。値は 2 通り（項目の有無は揺れない）:
+
+- `null` … **分からない**（フック連携を導入していない・Claude Code 以外・サーバが古い・報告をまだ受けていない）。
+- `{"count": 2, "items": [{"id": "…", "type": "Explore", "description": "調べる", "background": true, "startedAt": 1700000000000}, …]}` … 報告を受けている。0 件なら `{"count": 0, "items": []}`。
+  `items` は起動した順で最大 64 件、`count` は実際の数（64 を超えれば `items` より大きい）。各項目の `type`・`description`・`background` は分からなければ `null`、`startedAt` はサーバが起動（または作業の終わりの報告での突き合わせ）を知った時刻（epoch ms）。
+  `description` はエージェントが書いた短い説明で、そのまま文字として扱う（画面でも HTML としては出さない）。
+
+`agent wait` の `--until` や待ちの判定は、`subagents` の変化では動かない（状態の変化だけで動く）。「作業中」の中身（並行で何件動いているか）を知りたいときに読む。
+仕組み・対象外・制約は `docs/agent-graph.md`「サブエージェントの表示の仕組みと制約」。
+
 ### 名前と `<target>`
 
 - `agent rename <target> <name>` … エージェントに名前を付ける（既に名前があれば置き換える）。`--clear` で外す。
@@ -393,7 +406,7 @@ pane の中で検出されたコーディングエージェント（Claude Code�
 
 - `agent list` … エージェントの居る pane の一覧 `{"agents":[…]}`。各要素は `paneId`・`name`（名前。無ければ `null`）・`workspaceId`・`tabId`・
   `status`（上の 5 値）・`kind`（`claude` 等）・`label`・`state`（サーバの生の状態。`done` を含まない）・
-  `instanceId`・`since` など。
+  `instanceId`・`since`・`subagents` など。
 - `agent get <target>` … 1 件 `{"agent":{…}}`。
 - `agent wait <target>` … 状態が `--until` のどれかになったら `{"agent":{…}}` を出して終わる。
   - 呼び出した時点で一致していれば即座に返る。`--until` は繰り返し指定でき、省略時は `idle`・`done`・`blocked`。
@@ -572,7 +585,7 @@ skill は、最初に pane の中にいるか（`SODA_PANE_ID` があるか）�
 |---|---|
 | `SODA_PANE_ID` | その pane の ID（`p3` 等）。pane の中にいる印を兼ねる（herdr の `HERDR_ENV=1`・`HERDR_PANE_ID` に当たる） |
 | `SODA_SERVER_URL` | その pane を動かしているサーバへ sodactl がつなげる URL（URL にできない待ち受け〔ゾーン付きの IPv6 等〕では入れない）。待ち受けが `0.0.0.0` なら `http(s)://127.0.0.1:<port>`、`::` なら `[::1]`、それ以外は待ち受けのホスト。ポートは実際に待ち受けているもの |
-| `SODA_AGENT_REPORT_SOCKET` | 公式フック連携の report の socket（あれば） |
+| `SODA_AGENT_REPORT_SOCKET` | 公式フック連携の report の socket（あれば）。フックのスクリプトが、セッション ID に加えて、サブエージェントの起動・終了・作業の終わり（Claude Code だけ。20261004-subagent-display）を 1 接続 1 行の JSON で報告する |
 | `SODA_PANE_SOCKET` | ログイン不要の受け口（状態ディレクトリの `pane.sock`）のパス（Linux・macOS。Windows では入れない）。値は socket のパスだけで、秘密は含まない。下の「ログイン不要の受け口（pane.sock）」 |
 
 workspace・tab の ID は環境変数に**入れない**（herdr の `HERDR_WORKSPACE_ID`・`HERDR_TAB_ID` に当たるものは無い）。pane は別の tab・workspace へ移せ

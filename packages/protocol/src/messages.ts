@@ -688,6 +688,8 @@ export interface AgentIntegrationStatus {
   cliDetected: boolean;
   /** 対象の hooks 設定に本製品のフックが登録されているか（都度判定。design D4）。 */
   installed: boolean;
+  /** 導入済みだが、本製品のフックが足りない・スクリプトが古い（［更新］で足せる）。無ければ false 扱い（20261004-subagent-display）。 */
+  needsUpdate?: boolean;
 }
 export interface AgentIntegrationStatusResult {
   /** herdr の `resume_agents_on_restore` に相当（design D3）。 */

@@ -14,6 +14,7 @@ import {
   WorktreeCreateDialog,
 } from "./dialogs.js";
 import { HelpDialog, type HelpGroup } from "./HelpDialog.js";
+import { SubagentList } from "./SubagentList.js";
 import type { Overlay, OverlayMouse } from "./overlay.js";
 
 export interface OverlayHostDeps {
@@ -69,6 +70,7 @@ export class OverlayHost {
     if (ctx.kind === "worktreeOpen" || ctx.kind === "addToGroup") return new ListDialog(ctx, deps);
     if (ctx.kind === "worktreeCreate") return new WorktreeCreateDialog(ctx, deps);
     if (ctx.kind === "help") return new HelpDialog(deps.ui, () => deps.helpGroups());
+    if (ctx.kind === "subagents") return new SubagentList(ctx.paneId, deps.ui, deps.model);
     return deps.extra?.(ctx) ?? null;
   }
 

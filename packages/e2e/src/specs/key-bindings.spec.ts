@@ -872,6 +872,7 @@ test.describe("モバイル", () => {
       "テーマ",
       "表示",
       "端末",
+      "エージェント連携",
       "キー",
     ]);
     await expect(keysSection(page).locator(".keys-mobile-note")).toContainText(

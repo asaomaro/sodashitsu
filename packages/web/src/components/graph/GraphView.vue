@@ -45,6 +45,7 @@ import GraphConfirm from "./GraphConfirm.vue";
 import GraphEdge from "./GraphEdge.vue";
 import GraphNode from "./GraphNode.vue";
 import HistoryPanel from "./HistoryPanel.vue";
+import SubagentPanel from "./SubagentPanel.vue";
 import MobileGraphSheet from "./MobileGraphSheet.vue";
 import PaneChecklist from "./PaneChecklist.vue";
 import RekeyPicker from "./RekeyPicker.vue";
@@ -980,6 +981,27 @@ function closeHistory(): void {
   );
 }
 
+// --- サブエージェントの一覧（20261004-subagent-display）--------------------------------------------------------------
+
+/** 開いているサブエージェントの一覧のノード。グラフの `<dialog>` の中の横のパネル（`view.dialogContext` は使わない——グラフ画面の文脈と戻り先を上書きするため）。 */
+const subagentsKey = ref<NodeKey | null>(null);
+function subagentCountOf(key: string): number {
+  const info = graph.nodeInfo(key as NodeKey);
+  // 繋がっているノードだけ（切れたマシンの最後の要約の件数は、ボタンと同じく出さない・開かない）。
+  return info.exists === true ? (info.agent?.subagents?.count ?? 0) : 0;
+}
+/** 開く（件数が 1 以上のノードだけ。読み取りだけのモバイルは開かない）。 */
+function openSubagents(key: string): void {
+  if (isMobile.value || subagentCountOf(key) < 1) return;
+  subagentsKey.value = key as NodeKey;
+}
+/** 閉じる。そのノードがまだあれば、フォーカスをそのノードへ戻す。 */
+function closeSubagents(): void {
+  const key = subagentsKey.value;
+  subagentsKey.value = null;
+  if (key && graph.nodes.some((n) => n.key === key)) focusNode(key);
+}
+
 // --- ノードから pane へ（AC2・AC-I4）----------------------------------------------------------------------------------
 
 /** グラフ画面を閉じて、そのマシンのその pane へ移る（閉じた後の焦点はその pane。画面を閉じたときの戻り先を上書きする）。 */
@@ -1144,6 +1166,10 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
     ev.preventDefault();
     ev.stopPropagation();
     openRekey(key);
+  } else if ((ev.key === "s" || ev.key === "S") && !isMobile.value && subagentCountOf(key) > 0) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    openSubagents(key);
   } else if (ev.key === "Enter") {
     ev.preventDefault();
     ev.stopPropagation();
@@ -1238,6 +1264,7 @@ watch(
       checklistOpen.value = false;
       rekeyKey.value = null;
       history.value = null;
+      subagentsKey.value = null;
       liveMessage.value = "";
       if (el?.open) el.close();
       // `closeGraph` は焦点の pane を同じ値に戻すだけで、`TerminalPane` の watch が動かない——端末へ明示的に戻す（`CommandPopup` と同じ）。
@@ -1382,6 +1409,10 @@ function escape(): void {
   }
   if (rekeyKey.value) {
     closeRekey();
+    return;
+  }
+  if (subagentsKey.value) {
+    closeSubagents();
     return;
   }
   if (panel.value) {
@@ -1540,6 +1571,7 @@ function chipAria(e: EdgeView): string {
               @handle-pointerdown="onHandlePointerdown($event, n.key)"
               @goto="gotoNode(n.key)"
               @rekey="openRekey(n.key)"
+              @subagents="openSubagents(n.key)"
             />
             <button
               v-for="e in edges"
@@ -1574,7 +1606,7 @@ function chipAria(e: EdgeView): string {
             線の先のノードを選んでください（Tab・矢印で移動、Enter で決定、Esc で取り消し）
           </p>
         </div>
-        <div v-if="(panel && graph.graph) || history" class="graph-side">
+        <div v-if="(panel && graph.graph) || history || subagentsKey" class="graph-side">
           <LinkPanel
             v-if="panel && graph.graph"
             ref="panelRef"
@@ -1599,6 +1631,12 @@ function chipAria(e: EdgeView): string {
             :link-id="history.linkId"
             @close="closeHistory"
             @clear-filter="history = { linkId: null }"
+          />
+          <SubagentPanel
+            v-if="subagentsKey"
+            :key="subagentsKey"
+            :node-key="subagentsKey"
+            @close="closeSubagents"
           />
         </div>
       </div>

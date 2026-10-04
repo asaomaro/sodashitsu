@@ -350,3 +350,9 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **`takeChanges` の順の比較**: 新しい workspace を除いて比べると、途中へ入っても `workspace.order_changed` が出なかった。比べる側を「前の順（消えたものを除く）＋新しく作ったものを末尾に足した順」（`workspace.created` を受けた古い画面が置く場所）にして、いまの順と違えば配る。末尾に入った通常の作成では出ない。`SessionService.createWorkspace` の出口は `workspace.created` の後に `publishSidebarChanges` を通るので、変更は要らなかった（テストで順序を固定）。
 - **`orderedWorkspaceIds`**: 本番コードの呼び出し元は無い（grep: web の `ActionDispatcher.test.ts` のコメントと client-core の単体テストだけ）。client-core の公開の関数でもあるので削除せず、コメントだけを実態に直した。
 - 旧語「worktree 自動グループ」は、指定のコメント（`ConfirmDialog.vue`・`MouseBridge.ts`・`SessionService.ts`・`messages.ts`・`ActionDispatcher.ts`）を「worktree グループ」に直した。テスト名・prefs・`TuiDispatcher.ts`・`view.ts` などの残りは触っていない。
+
+## D41: origin/main（PR #79・#80）の取り込みでの衝突の解決
+
+- 衝突は `mouse.ts`・tui `sidebar.ts`・`Sidebar.vue`（import だけ）・`KeySettings.test.ts`・golden 2 つ。両方の変更を残した。tui は main の `subagents` の当たり（`⤷n`）・`badge`・`showSubagentsOf` と、このブランチの `ungrouped`・`autoGroup`・`drag`・`right`・`rule`・`subIndent` を併存させた（右クリックのメニューは `agent` と `subagents` を同じ pane のメニューへ）。
+- キーの表のテストの期待値は 65 から **66** に直した。根拠: このブランチ側は 57+navigate 8（navigate_toggle_collapse を含む）で 65、main 側は 58+navigate 7（show_subagents を含む）で 65。どちらも 1 つずつ足しているので、両方を取り込むと 66（実際の `.keys-details` の数をテストで確かめた）。
+- golden は手で解決せず、解決後のコードで `vitest -u` して取り直した（グループ・「グループなし」・worktree グループの行と、main のエージェントの行の `data-agent-pane` が両方入る）。

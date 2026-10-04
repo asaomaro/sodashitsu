@@ -258,17 +258,17 @@ test("設定：何も設定しない利用者に記号が出る。入力待ち�
   await expect(agentIcon).toHaveAttribute("data-symbols", "off");
 });
 
-test("設定：prefix+s とサイドバーの［メニュー］で開け、5 節（テーマは 20260921-theme-settings、キーは 20260921-keybinding-customization で足した）が見え、Esc で閉じる（AC12・AC-I1）", async ({ page, appServer }) => {
+test("設定：prefix+s とサイドバーの［メニュー］で開け、6 節（テーマは 20260921-theme-settings、キーは 20260921-keybinding-customization、エージェント連携は 20260923-agent-session-resume で足した）が見え、Esc で閉じる（AC12・AC-I1）", async ({ page, appServer }) => {
   await openApp(page, appServer);
   await openSettingsByKey(page);
-  await expect(dialog(page).locator("section h3")).toHaveText(["通知", "テーマ", "表示", "端末", "キー"]);
+  await expect(dialog(page).locator("section h3")).toHaveText(["通知", "テーマ", "表示", "端末", "エージェント連携", "キー"]);
   await page.keyboard.press("Escape");
   await expect(dialog(page)).not.toHaveAttribute("open", "");
 
   await page.locator(".sidebar-section-footer button", { hasText: "メニュー" }).click();
   await page.locator(".context-menu li", { hasText: /^設定$/ }).click();
   await expect(dialog(page)).toHaveAttribute("open", "");
-  await expect(dialog(page).locator("section h3")).toHaveText(["通知", "テーマ", "表示", "端末", "キー"]);
+  await expect(dialog(page).locator("section h3")).toHaveText(["通知", "テーマ", "表示", "端末", "エージェント連携", "キー"]);
   await page.keyboard.press("Escape");
   await expect(dialog(page)).not.toHaveAttribute("open", "");
 });
@@ -301,11 +301,11 @@ delete (IPHONE_13 as { defaultBrowserType?: string }).defaultBrowserType;
 test.describe("モバイル", () => {
   test.use(IPHONE_13);
 
-  test("設定：上のバーの［設定］で開き、5 節と「自動（この端末では 1,000 行）」が見える（AC13）", async ({ page, appServer }) => {
+  test("設定：上のバーの［設定］で開き、6 節と「自動（この端末では 1,000 行）」が見える（AC13）", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await page.locator(".mobile-shell-settings-btn").click();
     await expect(dialog(page)).toHaveAttribute("open", "");
-    await expect(dialog(page).locator("section h3")).toHaveText(["通知", "テーマ", "表示", "端末", "キー"]);
+    await expect(dialog(page).locator("section h3")).toHaveText(["通知", "テーマ", "表示", "端末", "エージェント連携", "キー"]);
     // `DeviceKindKey` の結線の安全網：provide を落とすとダイアログは既定の "desktop" になり、ここが 5,000 行になる。
     await expect(checkedRadioLabel(page)).toHaveText("自動（この端末では 1,000 行）");
     // モバイルには Esc キーが無い。画面の「閉じる」で閉じられる（review ラウンド1 の指摘）。

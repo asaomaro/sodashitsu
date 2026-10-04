@@ -12,6 +12,7 @@
 - `sodactl ask` の画面の部品 `<ask-form>`（ask-form と同じ部品を `third_party/ask-form/` に無改変で写したもの。写し直す手順・替えるたびに確かめること・定義の項目を足すときに直す場所）は `docs/sodactl.md`「画面の部品と同期」と `third_party/ask-form/README.md`。
 - ブラウザ版の端末のファイルのリンクとドロップ（同じマシンかの判定・開き方・送ったファイルの置き場所）は `docs/file-links.md`。
 - エージェントの連携のグラフ（画面・線の種類・上限と一時停止・受け渡しの注意・別のマシン）は `docs/agent-graph.md`、`sodactl graph` は `docs/sodactl.md`。
+- エージェントが動かしているサブエージェントの件数と一覧（フックの導入と更新・仕組み・対象外と制約）は `docs/agent-graph.md`「サブエージェントの件数と一覧」「サブエージェントの表示の仕組みと制約」、`sodactl agent get` の `subagents` は `docs/sodactl.md`。
 
 ## コーディング規約の条項
 

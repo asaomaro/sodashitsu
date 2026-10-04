@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { DEFAULT_THEME_NAME, isThemeName, THEME_APPEARANCE, THEME_NAMES, type AgentIntegrationKind, type ThemeName } from "@sodashitsu/protocol";
-import { computed, inject, nextTick, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { ActionDispatcherKey, DeviceKindKey, NotificationControllerKey } from "../injection.js";
 import type { PaneBorders } from "../layout/paneChrome.js";
 import type { DesktopPermission } from "../notify/ports.js";
@@ -21,18 +21,20 @@ import {
 } from "@sodashitsu/client-core";
 import { CSS_VAR_LABELS, isValidCssColor, type ThemeOverrideBucket } from "../theme/themeOverrides.js";
 import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
+import { mobileViewportQuery } from "../mobile/detect.js";
+import { keepChosen, scrollTopFor, sectionAtScroll, stepSection, type SpyInput } from "../settings/sectionSpy.js";
 import KeySettings from "./KeySettings.vue";
 import SidebarRowsSettings from "./SidebarRowsSettings.vue";
 
 /**
- * 設定（20260921-herdr-settings-gaps の D7）。**見出しで 5 節（通知・テーマ・表示・端末・キー）に分けた 1 枚**（テーマは 20260921-theme-settings の
- * decisions D11 で、キーは 20260921-keybinding-customization の design「節「キー」の構成」で足した）。
+ * 設定（20260921-herdr-settings-gaps の D7）。**見出しで 6 節（通知・テーマ・表示・端末・エージェント連携・キー）に分けた 1 枚**（テーマは 20260921-theme-settings の
+ * decisions D11 で、キーは 20260921-keybinding-customization の design「節「キー」の構成」で、エージェント連携は 20260923-agent-session-resume で足した）。
  * 以前は通知だけのダイアログ（`NotificationSettingsDialog.vue`。20260920-agent-notifications の AC6〜AC8・AC12・AC13）で、
  * 通知の節はその実装をそのまま移した。`view.dialogContext.kind === "settings"` を扱う。形は `ConfirmDialog` と同じ
  * （ネイティブ `<dialog>` ＋ `showModal()` ＋ `@cancel` の抑止）。
  *
- * **節は Tabs にも Accordion にもしない**（10 項目ほどなら全部見えてよい。見出し付きのグループは Tab で順に進むだけで
- * キー処理が要らない。先例は `HelpDialog.vue`）。
+ * **節は Tabs にも Accordion にもしない**（全部の節が 1 枚に並んだまま見える。先例は `HelpDialog.vue`）。節が増えて長くなったので、幅 768px 以上では
+ * 左に節の一覧（サイドメニュー。20261004-settings-side-menu）を出し、押すとその節へ移る。
  *
  * **切り替えは `role="switch"`**（decisions D2）——APG は switch を「on/off を表し、**操作が即座に効く**もの」
  * と定義しており、AC-I2（押した時点で反映・確定ボタンを置かない）と一致する。
@@ -60,6 +62,14 @@ const kind = inject(DeviceKindKey, "desktop");
 
 const dialogEl = ref<HTMLDialogElement | null>(null);
 const firstSwitch = ref<HTMLButtonElement | null>(null);
+/** 左のサイドメニューの項目（節の見出しから作る。20261004-settings-side-menu）。 */
+const menuItems = ref<{ id: string; label: string }[]>([]);
+/** 今の節（`menuItems` の番号。節が無ければ -1）。**選んだ節** `chosen`（項目を押した・節の中にフォーカスが入った）があれば、
+ *  利用者が自分でスクロールするまでそれを優先する（20261004-settings-side-menu の D2）。 */
+const current = ref(0);
+const chosen = ref<number | null>(null);
+const menuEl = ref<HTMLElement | null>(null);
+const bodyEl = ref<HTMLElement | null>(null);
 /**
  * 「指定した場所」の入力欄の下書き（`NameDialog` と同じく ref と v-model で持つ）。`:value` を保存値へ一方向に結ぶと、ほかの状態
  * （通知の可否・サーバの上限）で描き直されるたびに、打ちかけの文字が保存値で上書きされる（Vue は描き直しのたびに value を当て直す）。
@@ -117,8 +127,15 @@ watch(
       void nextTick(() => {
         dialogEl.value?.showModal();
         firstSwitch.value?.focus();
+        buildMenu();
+        startObserving();
+        updateCurrent();
       });
     } else {
+      stopObserving();
+      chosen.value = null; // 次に開いたときは最初の節から
+      menuFocus.value = null;
+      current.value = 0;
       dialogEl.value?.close();
       confirmingOverrideReset.value = false; // 開き直したとき、確認が出たままにならない
       overrideMessage.value = ""; // 前回の結果の文を持ち越さない
@@ -383,6 +400,18 @@ async function toggleAgentIntegration(kind: AgentIntegrationKind, installed: boo
   }
 }
 
+/** 導入済みで足りないフックがある（`needsUpdate`）ときの［更新］。導入の入口が「足りない分だけ足す」ので、`install` を呼ぶ（20261004-subagent-display）。 */
+async function updateAgentIntegration(kind: AgentIntegrationKind): Promise<void> {
+  if (!actions || agentIntegrationBusy.value) return;
+  agentIntegrationBusy.value = kind;
+  try {
+    const result = await actions.installAgentIntegration(kind);
+    agentIntegrationMessage.value = result.ok ? (result.message ?? "更新しました。すでに動いている Claude Code は、起動し直すと新しいフックが効きます。") : (result.message ?? "更新に失敗しました");
+  } finally {
+    agentIntegrationBusy.value = null;
+  }
+}
+
 function toggleAgentIntegrationAutoResume(): void {
   const current = agentIntegrations.status?.autoResumeEnabled ?? true;
   void actions?.setAgentIntegrationAutoResume(!current);
@@ -516,6 +545,265 @@ function openOnboarding(): void {
   view.openDialogWithContext({ kind: "onboarding" });
 }
 
+/** 画面の節（`.settings-body` の直下の `section[aria-labelledby]`）とその見出し。見出しの無い節は飛ばす。 */
+function sectionHeadings(): { section: HTMLElement; heading: HTMLElement }[] {
+  const out: { section: HTMLElement; heading: HTMLElement }[] = [];
+  for (const section of Array.from(bodyEl.value?.querySelectorAll<HTMLElement>(":scope > section[aria-labelledby]") ?? [])) {
+    const heading = document.getElementById(section.getAttribute("aria-labelledby") ?? "");
+    if (heading) out.push({ section, heading });
+  }
+  return out;
+}
+
+/** 開くたびに、画面の節の見出しからメニューを作る（節を足せばメニューにも出る。見出しを 2 か所に書かない）。
+ *  見出しにはプログラムからフォーカスできるよう `tabindex="-1"` を付ける（節「キー」の見出しは子のコンポーネントの中なので、外から付ける）。 */
+function buildMenu(): void {
+  const found = sectionHeadings();
+  for (const { heading } of found) heading.setAttribute("tabindex", "-1");
+  menuItems.value = found.map(({ heading }) => ({ id: heading.id, label: heading.textContent?.trim() ?? "" }));
+}
+
+/** `<dialog>`（スクロールの入れ物）の中での位置。`scrollTop` と同じ座標。 */
+function topInDialog(el: Element, dialog: HTMLElement): number {
+  return el.getBoundingClientRect().top - dialog.getBoundingClientRect().top - dialog.clientTop + dialog.scrollTop;
+}
+
+/** 題名の行の高さ＋その下の余白（`scroll-padding-top` の式と同じ高さ。その下が「見えている範囲」の上端）。 */
+function headerHeightOf(dialog: HTMLElement): number {
+  const header = dialog.querySelector<HTMLElement>(".settings-header");
+  if (!header) return 0;
+  return header.offsetHeight + (parseFloat(getComputedStyle(header).marginBottom) || 0);
+}
+
+function readSpyInput(found: { heading: HTMLElement }[]): SpyInput | null {
+  const dialog = dialogEl.value;
+  if (!dialog || found.length === 0) return null;
+  return {
+    tops: found.map(({ heading }) => topInDialog(heading, dialog)),
+    scrollTop: dialog.scrollTop,
+    viewHeight: dialog.clientHeight,
+    scrollHeight: dialog.scrollHeight,
+    headerHeight: headerHeightOf(dialog),
+  };
+}
+
+/** フォーカスのある要素が入っている節の番号（どの節にも含まれない末尾の段落は最後の節）。`.settings-body` の外なら null。 */
+function sectionOfElement(el: Element | null, found: { section: HTMLElement }[]): number | null {
+  const body = bodyEl.value;
+  if (!el || !body || !body.contains(el) || found.length === 0) return null;
+  const at = found.findIndex(({ section }) => section.contains(el));
+  return at >= 0 ? at : found.length - 1;
+}
+
+/** 今の節を計算し直す。**1 回の描画につき 1 回**（`schedule` でまとめる）。 */
+function updateCurrent(): void {
+  const dialog = dialogEl.value;
+  const found = sectionHeadings();
+  const input = readSpyInput(found);
+  if (!dialog || !input) {
+    current.value = -1;
+    return;
+  }
+  const active = document.activeElement;
+  const at = sectionOfElement(active, found);
+  const focus = at !== null && active ? { section: at, top: topInDialog(active, dialog) } : null;
+  chosen.value = keepChosen(chosen.value, input, focus);
+  const next = chosen.value ?? sectionAtScroll(input);
+  if (next !== current.value) {
+    current.value = next;
+    void nextTick(keepCurrentItemVisible);
+  }
+}
+
+let frame: number | null = null;
+let framePending = false;
+function schedule(): void {
+  if (typeof requestAnimationFrame !== "function") {
+    updateCurrent();
+    return;
+  }
+  if (framePending) return;
+  framePending = true;
+  frame = requestAnimationFrame(() => {
+    framePending = false;
+    updateCurrent();
+  });
+}
+
+/** 今の節の項目が、メニュー（高さが足りないときはメニューの中がスクロールする）の中で見える位置にあるようにする。 */
+function keepCurrentItemVisible(): void {
+  const menu = menuEl.value;
+  const item = menu?.children[current.value] as HTMLElement | undefined;
+  if (!menu || !item || menu.scrollHeight <= menu.clientHeight) return;
+  const margin = 8;
+  if (item.offsetTop < menu.scrollTop + margin) menu.scrollTop = Math.max(0, item.offsetTop - margin);
+  else if (item.offsetTop + item.offsetHeight > menu.scrollTop + menu.clientHeight - margin) {
+    menu.scrollTop = item.offsetTop + item.offsetHeight - menu.clientHeight + margin;
+  }
+}
+
+/** 本文の中にフォーカスが入った → その節を選んだ節にする（キーで部品を辿っても印が追従する）。 */
+function onBodyFocusin(ev: FocusEvent): void {
+  const at = sectionOfElement(ev.target as Element | null, sectionHeadings());
+  if (at === null) return;
+  chosen.value = at;
+  schedule();
+}
+
+/** 利用者が自分でスクロールし始めたら、選んだ節を外す。**メニューの中で、メニューがスクロールできるときは外さない**（メニューだけが動く）。 */
+function onUserScroll(ev: Event): void {
+  const menu = menuEl.value;
+  if (menu && ev.target instanceof Node && menu.contains(ev.target) && menu.scrollHeight > menu.clientHeight) return;
+  if (chosen.value === null) return;
+  chosen.value = null;
+  schedule();
+}
+
+let narrowQuery: MediaQueryList | null = null;
+
+/**
+ * 幅が 768px を下回ってメニューが消えるとき、メニューにフォーカスがあったら今の節の見出しへ移す（消えた要素にフォーカスを残さない）。出るときは何もしない。
+ * 判定は**そのときの実際のフォーカス**で行う: フォーカスがメニューの中にある、または、ブラウザが先に（メニューが見えなくなる拍に、あるいはウィンドウが
+ * 非アクティブになって）行き先の無いままフォーカスを外していて（`activeElement` が `body`／`<dialog>` 自身）、直前までメニューにあった（`menuFocus`）。
+ * 自分でメニューの外へ移した後は、`menuFocus` が消えているので奪わない。
+ */
+function onNarrowChange(ev: MediaQueryListEvent): void {
+  if (!ev.matches) return;
+  const dialog = dialogEl.value;
+  const active = document.activeElement;
+  const inMenu = active !== null && menuEl.value?.contains(active) === true;
+  const lost = active === null || active === document.body || active === dialog;
+  if (!inMenu && !(lost && menuFocus.value !== null)) return;
+  menuFocus.value = null;
+  const found = sectionHeadings();
+  const at = Math.max(current.value, 0);
+  const target = found[at];
+  if (!dialog || !target) return;
+  target.heading.focus({ preventScroll: true });
+  // 見出しが見える範囲に無ければ、`go` と同じ位置へスクロールする（フォーカスだけ画面の外へ移さない）。
+  const input = readSpyInput(found);
+  const top = input?.tops[at];
+  if (input && top !== undefined && (top < input.scrollTop + input.headerHeight - 2 || top >= input.scrollTop + input.viewHeight)) {
+    dialog.scrollTop = scrollTopFor(at, input);
+  }
+}
+
+let dialogObserver: ResizeObserver | null = null;
+let bodyObserver: ResizeObserver | null = null;
+
+/** `<dialog>` の見えている高さをメニューの `max-height` に渡す（`100vh` は iOS Safari でツールバーの分ずれるので使わない）。 */
+function syncViewHeight(): void {
+  const dialog = dialogEl.value;
+  if (dialog) dialog.style.setProperty("--settings-view-h", `${dialog.clientHeight}px`);
+}
+
+function startObserving(): void {
+  stopObserving(); // 開き直し・開いたままの切り替えで、前の監視が残って二重にならないように
+  syncViewHeight();
+  if (typeof window.matchMedia === "function") {
+    narrowQuery = mobileViewportQuery();
+    narrowQuery.addEventListener("change", onNarrowChange);
+  }
+  if (typeof ResizeObserver === "undefined") return; // 無い環境（単体テスト）では、開いたときの 1 回だけ
+  dialogObserver = new ResizeObserver(() => {
+    syncViewHeight();
+    schedule();
+  });
+  if (dialogEl.value) dialogObserver.observe(dialogEl.value);
+  bodyObserver = new ResizeObserver(schedule);
+  if (bodyEl.value) bodyObserver.observe(bodyEl.value);
+}
+
+function stopObserving(): void {
+  narrowQuery?.removeEventListener("change", onNarrowChange);
+  narrowQuery = null;
+  dialogObserver?.disconnect();
+  bodyObserver?.disconnect();
+  dialogObserver = null;
+  bodyObserver = null;
+  if (frame !== null && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+  frame = null;
+  framePending = false;
+}
+
+onBeforeUnmount(stopObserving);
+
+/**
+ * その節へ移る。`chosen` を入れ（利用者が自分でスクロールするまで今の節にする）、見出しが題名の行のすぐ下に来る位置へ即時にスクロールし、
+ * **見出しへフォーカスを移す**（節の最初の部品ではない。最初の部品は switch・ボタンで、続けて押した Space／Enter で設定が即保存されてしまう）。
+ */
+function go(i: number): void {
+  const dialog = dialogEl.value;
+  const found = sectionHeadings();
+  const input = readSpyInput(found);
+  const target = found[i];
+  if (!dialog || !input || !target) return;
+  chosen.value = i;
+  current.value = i;
+  dialog.scrollTop = scrollTopFor(i, input);
+  target.heading.focus({ preventScroll: true });
+  schedule();
+  void nextTick(keepCurrentItemVisible);
+}
+
+/**
+ * `Alt+PageDown`／`Alt+PageUp` で次・前の節へ移る（ask-form の目次と同じキー）。メニューが消えている幅でも効く。端では何もしないが、
+ * `preventDefault` はする（`<select>` の値をブラウザが変えないように）。取り込み待ちの間は、取り込みの部品が先に keydown を受けて伝播を止めるので、ここへは届かない。
+ */
+function onDialogKeydown(ev: KeyboardEvent): void {
+  if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.isComposing) return;
+  if (ev.key !== "PageDown" && ev.key !== "PageUp") return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const count = sectionHeadings().length;
+  if (count === 0) return;
+  updateCurrent(); // 直前のフォーカス・スクロールの計算が、次の描画まで待っている間に押されても、今の節から数える
+  const to = stepSection(Math.max(current.value, 0), ev.key === "PageDown" ? 1 : -1, count);
+  if (to !== null) go(to);
+}
+
+/** メニューの中でフォーカスのある項目（無ければ null）。Tab の停止位置に使う。 */
+const menuFocus = ref<number | null>(null);
+
+function onMenuFocusin(ev: FocusEvent): void {
+  const at = Array.from(menuEl.value?.children ?? []).indexOf(ev.target as Element);
+  menuFocus.value = at >= 0 ? at : null;
+}
+
+/**
+ * メニューからフォーカスが外れた。**行き先が無い（`relatedTarget` が null。要素が見えなくなった・ウィンドウが非アクティブになった）ときは
+ * `menuFocus` を残す**（幅が狭くなる拍の判定に使う。`onNarrowChange`）。別の要素へ移ったときは外す（ダイアログの `focusin` も外す）。
+ */
+function onMenuFocusout(ev: FocusEvent): void {
+  if (ev.relatedTarget instanceof Node && menuEl.value?.contains(ev.relatedTarget)) return; // 項目の間の移動
+  if (ev.relatedTarget !== null) menuFocus.value = null;
+}
+
+/** メニューの外にフォーカスが入った → もうメニューにはいない。 */
+function onDialogFocusin(ev: FocusEvent): void {
+  if (ev.target instanceof Node && menuEl.value?.contains(ev.target)) return;
+  menuFocus.value = null;
+}
+
+/** メニューの中の矢印キー。端で止まる（回り込まない）。 */
+function onMenuKeydown(ev: KeyboardEvent): void {
+  if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+  const items = Array.from(menuEl.value?.children ?? []) as HTMLElement[];
+  const at = items.indexOf(ev.target as HTMLElement);
+  if (at < 0) return;
+  let to: number;
+  if (ev.key === "ArrowDown") to = Math.min(items.length - 1, at + 1);
+  else if (ev.key === "ArrowUp") to = Math.max(0, at - 1);
+  else if (ev.key === "Home") to = 0;
+  else if (ev.key === "End") to = items.length - 1;
+  else return;
+  ev.preventDefault();
+  items[to]?.focus();
+}
+
+/** Tab の停止位置: メニューにフォーカスが無い間は今の節の項目だけ。ある間は、フォーカスのある項目だけ（矢印で動いた後の Tab がメニューの外へ出る）。 */
+const menuStop = (i: number): number => (menuFocus.value !== null ? menuFocus.value : current.value) === i ? 0 : -1;
+
 function cancel(): void {
   commitNewCwdPath(); // 「指定した場所」以外では入力欄が使えず、下書きは保存値のまま（開くたびに戻す）なので何もしない
   view.closeDialog();
@@ -536,13 +824,39 @@ function onNativeCancel(ev: Event): void {
 </script>
 
 <template>
-  <dialog ref="dialogEl" class="settings-dialog" aria-labelledby="settings-title" @cancel="onNativeCancel" @click.self="cancel">
+  <dialog ref="dialogEl" class="settings-dialog" aria-labelledby="settings-title"
+    @cancel="onNativeCancel"
+    @click.self="cancel"
+    @keydown="onDialogKeydown"
+    @focusin="onDialogFocusin"
+    @scroll.passive="schedule"
+    @wheel.passive="onUserScroll"
+    @touchmove.passive="onUserScroll"
+  >
     <!-- ［閉じる］は確定ボタンではない（押した結果はその場で保存済み）。**モバイルには Esc キーが無く**、ダイアログが画面いっぱいだと
          背景のタップの余地も無いので、閉じる手段を画面に出す（review ラウンド1 の指摘。先例は HelpDialog の［閉じる］）。 -->
     <div class="settings-header">
       <h2 id="settings-title" class="settings-title">設定</h2>
       <button type="button" class="settings-close" @click="cancel">閉じる</button>
     </div>
+    <!-- 左の列（幅 768px 以上だけ）。**入れ物は grid のセルいっぱいに伸ばす**——`@click.self` は `<dialog>` 自身が押されたときだけ閉じるので、
+         メニューを直に grid の子にしてセルより短くすると、その下の空きを押して閉じてしまう。項目は右の節の見出しから作る（20261004-settings-side-menu の design）。 -->
+    <div class="settings-menu-col">
+      <nav v-if="menuItems.length > 0" ref="menuEl" class="settings-menu" aria-label="設定の節" @focusin="onMenuFocusin" @focusout="onMenuFocusout" @keydown="onMenuKeydown">
+        <button
+          v-for="(item, i) in menuItems"
+          :key="item.id"
+          type="button"
+          class="settings-menu-item"
+          :aria-current="i === current ? 'true' : undefined"
+          :tabindex="menuStop(i)"
+          @click="go(i)"
+        >
+          {{ item.label }}
+        </button>
+      </nav>
+    </div>
+    <div ref="bodyEl" class="settings-body" @focusin="onBodyFocusin">
     <section class="settings-section" aria-labelledby="settings-notify">
       <h3 id="settings-notify" class="settings-heading">通知</h3>
       <ul class="settings-list">
@@ -927,7 +1241,10 @@ function onNativeCancel(ev: Event): void {
       <h3 id="settings-agent-integration" class="settings-heading">エージェント連携</h3>
       <p class="settings-note">
         各エージェントの公式フックを使い、サーバの再起動後にその会話を自動で再開します。導入すると、
-        そのエージェントの設定ファイルにフックが1件だけ追加されます（他の設定は変更しません）。
+        そのエージェントの設定ファイルにフックが追加されます（Codex など: 1 つ。他の設定は変更しません）。
+        <strong>Claude Code はフックが 6 つ</strong>入ります——会話の再開に加えて、エージェントが動かしているサブエージェントの表示に使います。
+        足りないフックがあれば「更新が必要」と出るので、［更新］で足せます（押すまで設定ファイルは書き換えません）。
+        更新と解除は、その後に起動した Claude Code から効きます（すでに動いているものは前のままです）。
         この設定は<strong>サーバ全体</strong>で共有されます（ほかの節と違い、ブラウザごとではありません）。
       </p>
       <ul class="settings-list">
@@ -938,10 +1255,21 @@ function onNativeCancel(ev: Event): void {
               <template v-if="!agentIntegrations.status">確認中…</template>
               <template v-else>
                 {{ agentIntegrations.status.agents[k.value].installed ? "導入済み" : "未導入" }}
+                <template v-if="agentIntegrations.status.agents[k.value].needsUpdate">（更新が必要）</template>
                 <template v-if="!agentIntegrations.status.agents[k.value].cliDetected">（この PATH には見つかりません）</template>
               </template>
             </span>
           </div>
+          <button
+            v-if="agentIntegrations.status?.agents[k.value].needsUpdate"
+            type="button"
+            class="settings-btn agent-integration-update"
+            :disabled="agentIntegrationBusy === k.value"
+            :aria-label="`${k.label} のフックを更新する`"
+            @click="updateAgentIntegration(k.value)"
+          >
+            更新
+          </button>
           <button
             type="button"
             class="settings-btn"
@@ -974,13 +1302,14 @@ function onNativeCancel(ev: Event): void {
     <p class="settings-hint">
       この設定はこのブラウザにだけ残ります（テーマは、このブラウザが操作している pane の色の問い合わせの答えにも使います）。Esc か「閉じる」で閉じます。
     </p>
+    </div>
   </dialog>
 </template>
 
 <style scoped>
 .settings-dialog {
   /* 狭い画面（幅 320〜385px の携帯）でもはみ出さない。以前の `min-width: 22em` は content-box で、枠と padding を含めて 386px になっていた。
-     背が高くなった（いまは 5 節）ので、画面の高さも越えないようにして中をスクロールさせる（`overflow` は UA の `dialog:modal` の既定が auto）。
+     背が高くなった（いまは 6 節）ので、画面の高さも越えないようにして中をスクロールさせる（`overflow` は UA の `dialog:modal` の既定が auto）。
      **`100vh` ではなく `100%`**（モーダルの `<dialog>` の包含ブロックは見えている領域）——iOS Safari の `100vh` はツールバーを畳んだときの
      高さなので、ツールバーが出ている間はダイアログが画面から切れる。 */
   box-sizing: border-box;
@@ -1001,6 +1330,80 @@ function onNativeCancel(ev: Event): void {
 }
 .settings-dialog::backdrop {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
+}
+/* 左に節の一覧（サイドメニュー。20261004-settings-side-menu）。**スクロールの入れ物は `<dialog>` 自身のまま**——題名の行・節「キー」の下の帯・
+   `scroll-padding`・既存の E2E がそれに依存する。そこで `<dialog>` の中を grid の 2 列にし、メニューを sticky にする。
+   幅 767px 以下は 1 列のまま（メニューを出さない。`mobileViewportQuery()` と同じ式）。`--settings-view-h` は `<dialog>` の見えている高さ（script が入れる）。 */
+.settings-dialog {
+  --settings-menu-w: 13em;
+  --settings-header-h: calc(1em + 2rem + 0.8em);
+}
+.settings-dialog[open] {
+  display: grid;
+  grid-template-columns: var(--settings-menu-w) minmax(0, 1fr);
+  column-gap: 1em;
+  align-content: start;
+  /* 本文の幅（34em）に、メニューの幅と、列の間（`column-gap` の 1em）を足す。 */
+  max-width: min(calc(34em + var(--settings-menu-w) + 1em), calc(100% - 16px));
+}
+.settings-dialog[open] > .settings-header {
+  grid-column: 1 / -1;
+}
+.settings-menu-col {
+  align-self: stretch;
+}
+.settings-menu {
+  position: sticky;
+  top: var(--settings-header-h);
+  max-height: calc(var(--settings-view-h, 100dvh) - var(--settings-header-h) - 1em);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+.settings-menu-item {
+  flex: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 0 4px 4px 0;
+  padding: 0.35em 0.7em;
+  cursor: pointer;
+}
+/* メニューは `overflow-y: auto` で、外側の枠（UA の outline）は切れる。キーでフォーカスしたときは内側に枠を描く。 */
+.settings-menu-item:focus-visible {
+  outline: 2px solid var(--soda-focus, #8be9fd);
+  outline-offset: -2px;
+}
+.settings-menu-item:hover {
+  background: var(--soda-menu-hover, rgba(255, 255, 255, 0.08));
+}
+/* 今の節。色に頼らない（太字と左の線）。 */
+.settings-menu-item[aria-current="true"] {
+  font-weight: bold;
+  border-left-color: currentColor;
+}
+.settings-body {
+  min-width: 0;
+}
+/* 見出しへのフォーカス（節へ移った後）。**`:focus-visible` は使わない**——マウスで項目を押してプログラムから移したときは付かず、枠が出ない。
+   見出しはプログラムからしかフォーカスされない。節「キー」の見出しは子のコンポーネントなので `:deep`。 */
+.settings-body :deep(h3[tabindex="-1"]:focus) {
+  outline: 2px solid var(--soda-focus, #8be9fd);
+  outline-offset: 2px;
+}
+@media (max-width: 767px) {
+  .settings-dialog[open] {
+    display: block;
+    max-width: min(34em, calc(100% - 16px));
+  }
+  .settings-menu-col {
+    display: none;
+  }
 }
 /* 題名の行（「閉じる」）は、ダイアログを下までスクロールしても見えるようにする——小さい画面では端末の節まで下げると流れてしまう。 */
 .settings-header {
@@ -1182,6 +1585,10 @@ function onNativeCancel(ev: Event): void {
 }
 .agent-integration-status {
   margin: 0;
+}
+/* 「更新」は、右端の導入・解除のボタンの隣へ寄せる（行は両端寄せ）。 */
+.agent-integration-update {
+  margin-left: auto;
 }
 .tabbar-right-fieldset {
   margin: 0;
