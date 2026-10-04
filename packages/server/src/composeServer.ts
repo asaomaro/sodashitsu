@@ -75,6 +75,7 @@ import { PrefsStore } from "./persist/PrefsStore.js";
 import { GraphStore } from "./persist/GraphStore.js";
 import { GraphEngine } from "./graph/GraphEngine.js";
 import { AgentLineage } from "./graph/AgentLineage.js";
+import { SubagentTracker } from "./agent/SubagentTracker.js";
 import { LocalAgentPort } from "./graph/LocalAgentPort.js";
 import { RemoteLinks } from "./graph/RemoteLinks.js";
 import type { ClientSink } from "./terminal/OutputFanout.js";
@@ -383,6 +384,16 @@ export async function composeServer(
   });
   // エージェントが起動したエージェントの自動載せ（20261003-graph-auto-nodes）。記録はメモリだけ（引き継ぎで消える）なので、handoff の pausePollers では止めない。
   const lineage = new AgentLineage({ bus, store: graph, paneExists, logger });
+  // エージェントが中で動かしているサブエージェントの数え上げ（20261004-subagent-display）。フックの報告を受け口から受ける。
+  const subagents = new SubagentTracker({
+    bus,
+    agentInstanceOf: (paneId) => session.getPane(paneId)?.agent?.instanceId ?? null,
+    publish: (paneId, value) => session.setAgentSubagents(paneId, value),
+    now: () => Date.now(),
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (h) => clearTimeout(h as NodeJS.Timeout),
+    logger,
+  });
   registerAllMethods(surface, {
     session,
     clients,
@@ -648,9 +659,10 @@ export async function composeServer(
         agentReportSocket = await startAgentReportSocket(
           agentReportSocketPath,
           (report) => {
-            // `type` つきの報告（サブエージェント）は T6 で `SubagentTracker` へ渡す。
-            if (report.type === "session" && (report.kind === "claude" || report.kind === "codex")) {
-              session.reportAgentSession(report.paneId, report.kind, report.sessionId);
+            if (report.type === "session") {
+              if (report.kind === "claude" || report.kind === "codex") session.reportAgentSession(report.paneId, report.kind, report.sessionId);
+            } else if (report.kind === "claude") {
+              subagents.report(report); // サブエージェントの報告は claude だけ
             }
           },
           logger,
@@ -735,6 +747,7 @@ export async function composeServer(
         if (!sessionLoaded) persist.cancel();
         graphEngine.stop();
         lineage.close();
+        subagents.close();
         remoteLinks.closeAll();
         paneHistory?.stop();
         imageSweeper?.stop();
@@ -763,6 +776,7 @@ export async function composeServer(
         // machine_unavailable として履歴に残してしまう。止める＝待ちは履歴に残さず取り消し、送っている途中の結果も書かない）。graph.close の前。
         graphEngine.stop();
         lineage.close();
+        subagents.close();
         remoteLinks.closeAll();
         await machines.stop();
         // 閉じ始めたら新しい `/ws` を受け付けない（closeAll の後に届いた upgrade を通さない。D102）。

@@ -37,7 +37,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/server/src/agent/SubagentTracker.ts`（新規）、`SubagentTracker.test.ts`（新規）、手本は `packages/server/src/graph/AgentLineage.ts`（bus を購読して pane ごとにメモリで持つ形）
       依存: T4
       AC: AC1, AC2, AC5, AC8, AC16, AC17
-- [ ] T6: `SessionService` と配線——`setAgentSubagents(paneId, subagents | undefined): boolean`（検出されていれば差し替えて配る）、`updatePaneRuntime` の引き継ぎ（同じ `instanceId` の間、同じ参照のまま）、`sameAgent` に `subagents` の参照の比較。`composeServer` で `SubagentTracker` を作り、受け口の `type` つきの報告（`kind === "claude"` だけ）を渡し、停止で `close`。`agent` を保存していないことを確かめる。単体テスト（周期の更新・`renameAgent` で落ちない・入れ替わりで消える・検出が無いと false）と壊して落ちる確認
+- [x] T6: `SessionService` と配線——`setAgentSubagents(paneId, subagents | undefined): boolean`（検出されていれば差し替えて配る）、`updatePaneRuntime` の引き継ぎ（同じ `instanceId` の間、同じ参照のまま）、`sameAgent` に `subagents` の参照の比較。`composeServer` で `SubagentTracker` を作り、受け口の `type` つきの報告（`kind === "claude"` だけ）を渡し、停止で `close`。`agent` を保存していないことを確かめる。単体テスト（周期の更新・`renameAgent` で落ちない・入れ替わりで消える・検出が無いと false）と壊して落ちる確認
       対象: `packages/server/src/session/SessionService.ts`（`updatePaneRuntime` :1023-1068・`renameAgent`・`sameAgent` :1485-1499）、`packages/server/src/composeServer.ts:646-654`（受け口の配線）と停止の並び、`packages/server/src/session/SessionService.test.ts`
       依存: T18
       AC: AC1, AC7, AC15

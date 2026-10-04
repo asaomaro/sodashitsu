@@ -26,6 +26,8 @@
 - [nit][conv:-] SubagentTracker.ts:239 X → Y で空の状態を作り直していた / 対応: 修正済（作り直さない。次の報告で `agentInstanceOf` から作る。T18・ラウンド1）
 - [nit][conv:-] SubagentTracker.ts:231 報告を受けていない pane の最初の検出でタイマーを張る / 対応: 修正済（pane の状態は報告を受けたときにしか作られないので、そもそも張らない。テストで固定。T18・ラウンド1）
 
+- [nit][conv:regression-negative-control] composeServer.ts:662,750,779 受け口の配線（`kind === "claude"` の絞り込み・停止での `close`）を直接確かめるテストが無い / 対応: 許容（T15 の統合テストで、実物のスクリプト → 実 socket → `SubagentTracker` → bus の経路として確かめ、壊して落ちる確認もそこで行う。T6・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -173,4 +175,22 @@ AssertionError: expected [ …(2) ] to have a length of 1 but got 2
 === MUT: flush の try/catch を外す
  FAIL  src/agent/SubagentTracker.test.ts > … > 配る処理が例外を投げても、タイマーから漏らさず、配れなかった扱いにする
 AssertionError: expected [Function] to not throw an error but 'Error: boom' was thrown
+```
+
+#### T6 `SessionService` と配線（`packages/server/src/session/SessionService.ts`。壊した後に元へ戻し `cmp` で一致を確認済み。`agent` は `SessionFile.ts` が保存していないこと〔`agentSession` だけ〕も確かめた）
+
+```
+=== MUT: sameAgent の subagents の参照比較（a.subagents === b.subagents）を true に
+ FAIL  … > setAgentSubagents > 検出されていれば差し替えて pane.agent_status_changed を配り true。…
+AssertionError: expected [] to have a length of 1 but got +0
+ FAIL  … > 周期の更新（AgentTracker が毎回 subagents の無い新しい AgentInfo を渡す）で落ちず、同じ参照のまま引き継ぐ。状態が変わっても保つ
+=== MUT: updatePaneRuntime の引き継ぎを false に
+ FAIL  … > 周期の更新（…）で落ちず、同じ参照のまま引き継ぐ。状態が変わっても保つ
+AssertionError: expected [ 'pane.agent_status_changed' ] to deeply equal []
+=== MUT: 引き継ぎの instanceId の一致条件を true に
+ FAIL  … > エージェントの入れ替わり（別の instanceId）・終了（null）で消え、新しい検出は subagents を持たない
+AssertionError: expected { instanceId: 'a2', …(8) } to not have property "subagents"
+=== MUT: setAgentSubagents の検出の有無の確認（!agent）を外す
+ FAIL  … > エージェントが検出されていなければ何もせず false（イベントも出さない）
+AssertionError: expected true to be false // Object.is equality
 ```

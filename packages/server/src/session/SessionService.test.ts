@@ -1054,6 +1054,95 @@ describe("SessionService — runtime updates", () => {
     expect(events).toEqual(["pane.updated", "pane.agent_status_changed"]);
   });
 
+  describe("setAgentSubagents（20261004-subagent-display）", () => {
+    const agentOf = (over: Partial<AgentInfo> = {}): AgentInfo => ({
+      instanceId: "a1",
+      kind: "claude",
+      label: "Claude Code",
+      state: "working",
+      completionSeq: 0,
+      serverSeenSeq: 0,
+      verified: true,
+      since: 12345,
+      ...over,
+    });
+    const subs = (...ids: string[]) => ({ count: ids.length, items: ids.map((id) => ({ id, startedAt: 1 })) });
+
+    it("エージェントが検出されていなければ何もせず false（イベントも出さない）", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      const events: string[] = [];
+      bus.subscribe((e) => events.push(e.event));
+      expect(service.setAgentSubagents(pane.id, subs("s1"))).toBe(false);
+      expect(service.setAgentSubagents("no-such-pane", subs("s1"))).toBe(false);
+      expect(events).toEqual([]);
+      expect(service.getPane(pane.id)?.agent).toBeNull();
+    });
+
+    it("検出されていれば差し替えて pane.agent_status_changed を配り true。同じ参照ならもう配らない。undefined で外す", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      const events: { event: string; data: { agent: AgentInfo | null } }[] = [];
+      bus.subscribe((e) => e.event === "pane.agent_status_changed" && events.push(e as never));
+      const value = subs("s1", "s2");
+      expect(service.setAgentSubagents(pane.id, value)).toBe(true);
+      expect(events).toHaveLength(1);
+      expect(events[0]?.data.agent?.subagents).toBe(value);
+      expect(service.getPane(pane.id)?.agent?.subagents).toBe(value);
+      expect(service.setAgentSubagents(pane.id, value)).toBe(true);
+      expect(events).toHaveLength(1);
+      expect(service.setAgentSubagents(pane.id, undefined)).toBe(true);
+      expect(events).toHaveLength(2);
+      expect(service.getPane(pane.id)?.agent).not.toHaveProperty("subagents");
+    });
+
+    it("周期の更新（AgentTracker が毎回 subagents の無い新しい AgentInfo を渡す）で落ちず、同じ参照のまま引き継ぐ。状態が変わっても保つ", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      const value = subs("s1");
+      service.setAgentSubagents(pane.id, value);
+      const events: string[] = [];
+      bus.subscribe((e) => events.push(e.event));
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      expect(events).toEqual([]); // 何も変わらない
+      expect(service.getPane(pane.id)?.agent?.subagents).toBe(value);
+      service.updatePaneRuntime(pane.id, { agent: agentOf({ state: "idle", completionSeq: 1 }) });
+      expect(events).toEqual(["pane.agent_status_changed"]);
+      expect(service.getPane(pane.id)?.agent?.subagents).toBe(value);
+    });
+
+    it("renameAgent で落ちない（名前を付けても外しても subagents は残る）", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      const value = subs("s1");
+      service.setAgentSubagents(pane.id, value);
+      service.renameAgent(pane.id, "a1", "worker");
+      expect(service.getPane(pane.id)?.agent?.subagents).toBe(value);
+      service.renameAgent(pane.id, "a1", null);
+      expect(service.getPane(pane.id)?.agent?.subagents).toBe(value);
+    });
+
+    it("エージェントの入れ替わり（別の instanceId）・終了（null）で消え、新しい検出は subagents を持たない", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      service.setAgentSubagents(pane.id, subs("s1"));
+      service.updatePaneRuntime(pane.id, { agent: agentOf({ instanceId: "a2" }) });
+      expect(service.getPane(pane.id)?.agent).not.toHaveProperty("subagents");
+      service.setAgentSubagents(pane.id, subs("s2"));
+      service.updatePaneRuntime(pane.id, { agent: null });
+      expect(service.getPane(pane.id)?.agent).toBeNull();
+      service.updatePaneRuntime(pane.id, { agent: agentOf({ instanceId: "a2" }) }); // 同じ instanceId でも、一度消えた後は引き継がない
+      expect(service.getPane(pane.id)?.agent).not.toHaveProperty("subagents");
+    });
+
+    it("保存しない（session.json の保存を予約しない）", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      persist.touchCount = 0;
+      service.setAgentSubagents(pane.id, subs("s1"));
+      expect(persist.touchCount).toBe(0);
+    });
+  });
+
   it("updatePaneRuntime schedules a save only when cwd changes", async () => {
     const { pane } = await service.createWorkspace("/home/u", "api");
     persist.touchCount = 0;
