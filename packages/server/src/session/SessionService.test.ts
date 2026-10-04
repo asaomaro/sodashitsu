@@ -10,7 +10,7 @@ import { EventBus } from "../bus/EventBus.js";
 import type { CreatePaneOptions, TerminalManager } from "../terminal/TerminalManager.js";
 import type { TerminalHost } from "../terminal/TerminalHost.js";
 import type { PersistScheduler } from "./PersistScheduler.js";
-import { NotFoundError, SessionModel } from "./SessionModel.js";
+import { NotFoundError, SessionModel, type GitJudgement } from "./SessionModel.js";
 import { SessionService } from "./SessionService.js";
 import * as Layout from "./LayoutTree.js";
 import type { NewCwdDeps } from "./newCwd.js";
@@ -268,7 +268,7 @@ describe("SessionService — workspace creation", () => {
     const { workspace, pane } = await service.createWorkspace("/home/u/api", "api");
     expect(workspace.cwd).toBe("/home/u/api");
     expect(pane.status).toBe("running");
-    expect(events).toEqual(["workspace.created", "tab.created", "pane.created"]); // D88
+    expect(events).toEqual(["workspace.created", "tab.created", "pane.created", "sidebar.layout_changed"]); // D88（最後は新しい項目 `w:<id>` が一番上の末尾に入った知らせ）
     expect(persist.touchCount).toBe(1);
     expect(terminals.get(pane.id)).toBeDefined();
   });
@@ -508,7 +508,7 @@ describe("SessionService — tabs and panes", () => {
       const ok = service.moveToTab(p1.id, t2.id);
 
       expect(ok).toBe(true);
-      expect(events).toEqual(["pane.updated", "tab.closed", "workspace.closed", "layout.updated"]);
+      expect(events).toEqual(["pane.updated", "tab.closed", "workspace.closed", "sidebar.layout_changed", "layout.updated"]);
       expect(service.snapshot().tabs.map((t) => t.id)).not.toContain(t1.id);
       expect(service.snapshot().workspaces.map((w) => w.id)).not.toContain(w1.id);
       expect(service.snapshot().workspaces.map((w) => w.id)).toContain(w2.id);
@@ -586,7 +586,7 @@ describe("SessionService — tabs and panes", () => {
       const newTab = service.moveToNewTab(p1.id, w2.id); // w1 の唯一の tab の唯一の pane を、別 workspace へ
 
       expect(newTab).not.toBeNull();
-      expect(events).toEqual(["pane.updated", "tab.created", "workspace.updated", "tab.closed", "workspace.closed"]);
+      expect(events).toEqual(["pane.updated", "tab.created", "workspace.updated", "tab.closed", "workspace.closed", "sidebar.layout_changed"]);
       expect(service.snapshot().tabs.map((t) => t.id)).not.toContain(t1.id);
       expect(service.snapshot().workspaces.map((w) => w.id)).not.toContain(w1.id);
       expect(service.snapshot().workspaces.map((w) => w.id)).toContain(w2.id);
@@ -647,7 +647,16 @@ describe("SessionService — tabs and panes", () => {
     await service.closePane(pane.id);
 
     expect(host.disposed).toBe(true);
-    expect(events).toEqual(["pane.closed", "tab.closed", "workspace.closed", "workspace.created", "tab.created", "pane.created"]); // D88
+    expect(events).toEqual([
+      "pane.closed",
+      "tab.closed",
+      "workspace.closed",
+      "sidebar.layout_changed",
+      "workspace.created",
+      "tab.created",
+      "pane.created",
+      "sidebar.layout_changed",
+    ]); // D88
     expect(service.snapshot().workspaces.length).toBe(1);
     expect(service.snapshot().workspaces[0]!.id).not.toBe(workspace.id); // 新しく作られた別の workspace
   });
@@ -843,13 +852,51 @@ describe("SessionService — workspace grouping and ordering", () => {
     expect(orderChanged[0]!.workspaceIds).toEqual([w2.id, w3.id, w1.id]);
   });
 
+  // 20261004-group-worktree-items（T8）。
+  it("moveItem publishes sidebar.layout_changed and workspace.order_changed and returns {moved: true}; a rejected move publishes nothing", async () => {
+    const { workspace: w1 } = await service.createWorkspace("/a", "a");
+    const { workspace: w2 } = await service.createWorkspace("/b", "b");
+    const { workspace: w3 } = await service.createWorkspace("/c", "c");
+    const events: { event: string; workspaceIds?: string[]; layout?: { top: string[]; ungrouped: string[] } }[] = [];
+    bus.subscribe((e) => events.push({ event: e.event, ...(e.data as object) }));
+    persist.touchCount = 0;
+
+    expect(service.moveItem({ kind: "workspace", workspaceId: w3.id }, { kind: "workspace", workspaceId: w1.id })).toEqual({ moved: true });
+    expect(events.map((e) => e.event)).toEqual(["sidebar.layout_changed", "workspace.order_changed"]);
+    expect(events[0]!.layout!.ungrouped).toEqual([`w:${w3.id}`, `w:${w1.id}`, `w:${w2.id}`]);
+    expect(events[1]!.workspaceIds).toEqual([w3.id, w1.id, w2.id]);
+    expect(persist.touchCount).toBeGreaterThan(0);
+
+    events.length = 0;
+    persist.touchCount = 0;
+    expect(service.moveItemBy({ kind: "workspace", workspaceId: w3.id }, "previous")).toEqual({ moved: false }); // 端
+    expect(service.moveItem({ kind: "workspace", workspaceId: w1.id }, { kind: "workspace", workspaceId: w1.id })).toEqual({ moved: false }); // 自分自身の前
+    service.moveWorkspacesTo([w1.id, w2.id, w3.id], w3.id); // 落とし先が動かす対象自身
+    expect(events).toEqual([]);
+    expect(persist.touchCount).toBe(0);
+  });
+
+  it("createWorkspace publishes workspace.order_changed when the new workspace lands before the others (「グループなし」 above a group)", async () => {
+    const { workspace: w1 } = await service.createWorkspace("/a", "a");
+    const group = service.createGroup("G", w1.id);
+    service.moveItem({ kind: "ungrouped" }, { kind: "group", groupId: group.id });
+    const events: { event: string; workspaceIds?: string[] }[] = [];
+    bus.subscribe((e) => events.push({ event: e.event, ...(e.data as object) }));
+    const { workspace: w2 } = await service.createWorkspace("/b", "b");
+    const names = events.map((e) => e.event);
+    expect(names.indexOf("workspace.created")).toBeGreaterThanOrEqual(0);
+    expect(names.indexOf("workspace.order_changed")).toBeGreaterThan(names.indexOf("workspace.created"));
+    expect(events.find((e) => e.event === "workspace.order_changed")!.workspaceIds).toEqual([w2.id, w1.id]);
+  });
+
   it("group.* CRUD: create/rename/toggleGroupCollapsed publish group.created/group.updated; add/removeFromGroup publish workspace.updated", async () => {
     const { workspace } = await service.createWorkspace("/a", "a");
     const events: { event: string; group?: { id: string; label: string; collapsed: boolean }; workspace?: { groupId: string | null } }[] = [];
     bus.subscribe((e) => events.push({ event: e.event, ...(e.data as { group?: { id: string; label: string; collapsed: boolean }; workspace?: { groupId: string | null } }) }));
 
     const group = service.createGroup("backend");
-    expect(events.at(-1)).toEqual({ event: "group.created", group });
+    expect(events.map((e) => e.event)).toEqual(["group.created", "sidebar.layout_changed"]); // グループの項目 `g:<id>` が一番上の末尾に入る
+    expect(events[0]).toEqual({ event: "group.created", group });
 
     service.renameGroup(group.id, "frontend");
     expect(events.at(-1)?.event).toBe("group.updated");
@@ -860,13 +907,106 @@ describe("SessionService — workspace grouping and ordering", () => {
     service.toggleGroupCollapsed(group.id); // もう一度で戻る（競合しない。タスク点検の指摘）
     expect(events.at(-1)).toEqual({ event: "group.updated", group: { id: group.id, label: "frontend", collapsed: false } });
 
+    const updatedEvents = (): typeof events => events.filter((e) => e.event === "workspace.updated");
     service.addToGroup(workspace.id, group.id);
-    expect(events.at(-1)?.event).toBe("workspace.updated");
-    expect(events.at(-1)?.workspace?.groupId).toBe(group.id);
+    expect(updatedEvents().at(-1)?.workspace?.groupId).toBe(group.id);
 
     service.removeFromGroup(workspace.id);
-    expect(events.at(-1)?.event).toBe("workspace.updated");
-    expect(events.at(-1)?.workspace?.groupId).toBeNull();
+    expect(updatedEvents().at(-1)?.workspace?.groupId).toBeNull();
+  });
+
+  // 20261004-group-worktree-items（T5）。`workspace.closed` を出す 5 経路は、どれもサイドバーの共通の出口を通る。
+  describe("sidebar.layout_changed (the common exit)", () => {
+    type Seen = { event: string; layout?: { top: string[]; groups: Record<string, string[]>; ungrouped: string[] }; workspaceId?: string };
+    const watch = (): Seen[] => {
+      const seen: Seen[] = [];
+      bus.subscribe((e) => seen.push({ event: e.event, ...(e.data as object) }));
+      return seen;
+    };
+    /** `workspace.closed` の後に、閉じた workspace を含まない `sidebar.layout_changed` が届いている。 */
+    const expectLeftLayout = (seen: Seen[], closedId: string): void => {
+      const closedAt = seen.findIndex((e) => e.event === "workspace.closed" && e.workspaceId === closedId);
+      expect(closedAt).toBeGreaterThanOrEqual(0);
+      const layoutEvent = seen.slice(closedAt).find((e) => e.event === "sidebar.layout_changed");
+      expect(layoutEvent).toBeDefined();
+      expect(JSON.stringify(layoutEvent!.layout)).not.toContain(`w:${closedId}`);
+    };
+
+    it("closeWorkspace", async () => {
+      const { workspace: w1 } = await service.createWorkspace("/a", "a");
+      const { workspace: w2 } = await service.createWorkspace("/b", "b");
+      const seen = watch();
+      persist.touchCount = 0;
+      await service.closeWorkspace(w1.id);
+      expectLeftLayout(seen, w1.id);
+      expect(service.snapshot().layout?.ungrouped).toEqual([`w:${w2.id}`]);
+      expect(persist.touchCount).toBeGreaterThan(0);
+    });
+
+    it("closeTab (the last tab of the workspace)", async () => {
+      const { workspace: w1, tab } = await service.createWorkspace("/a", "a");
+      await service.createWorkspace("/b", "b");
+      const seen = watch();
+      await service.closeTab(tab.id);
+      expectLeftLayout(seen, w1.id);
+    });
+
+    it("closePane (the last pane of the workspace)", async () => {
+      const { workspace: w1, pane } = await service.createWorkspace("/a", "a");
+      await service.createWorkspace("/b", "b");
+      const seen = watch();
+      await service.closePane(pane.id);
+      expectLeftLayout(seen, w1.id);
+    });
+
+    it("moveToTab (the source workspace becomes empty)", async () => {
+      const { workspace: w1, pane } = await service.createWorkspace("/a", "a");
+      const { tab: t2 } = await service.createWorkspace("/b", "b");
+      const seen = watch();
+      service.moveToTab(pane.id, t2.id);
+      expectLeftLayout(seen, w1.id);
+    });
+
+    it("moveToNewTab (the source workspace becomes empty)", async () => {
+      const { workspace: w1, pane } = await service.createWorkspace("/a", "a");
+      const { workspace: w2 } = await service.createWorkspace("/b", "b");
+      const seen = watch();
+      service.moveToNewTab(pane.id, w2.id);
+      expectLeftLayout(seen, w1.id);
+    });
+
+    it("createWorkspace publishes the layout with the new workspace at the end", async () => {
+      const { workspace: w1 } = await service.createWorkspace("/a", "a");
+      const seen = watch();
+      const { workspace: w2 } = await service.createWorkspace("/b", "b");
+      expect(seen.find((e) => e.event === "sidebar.layout_changed")?.layout?.ungrouped).toEqual([`w:${w1.id}`, `w:${w2.id}`]);
+    });
+
+    it("group operations publish workspace.updated, then sidebar.layout_changed, then workspace.order_changed", async () => {
+      const { workspace: w1 } = await service.createWorkspace("/a", "a");
+      const { workspace: w2 } = await service.createWorkspace("/b", "b");
+      const g1 = service.createGroup("g1", w2.id); // w2 を新しいグループへ（グループは「グループなし」の前に入る。平らな順は [w2, w1]）
+      const seen = watch();
+      persist.touchCount = 0;
+      service.addToGroup(w1.id, g1.id);
+      expect(seen.map((e) => e.event)).toEqual(["workspace.updated", "sidebar.layout_changed"]); // 平らな順は [w2, w1] のまま（order_changed は出ない）
+      expect(persist.touchCount).toBeGreaterThan(0);
+      seen.length = 0;
+      service.removeFromGroup(w2.id); // w2 が「グループなし」の末尾へ出る → 平らな順が [w1, w2] になる
+      expect(seen.map((e) => e.event)).toEqual(["workspace.updated", "sidebar.layout_changed", "workspace.order_changed"]);
+      seen.length = 0;
+      service.deleteGroup(g1.id); // w1 が「グループなし」の末尾へ出る → 平らな順が [w2, w1] になる
+      expect(seen.map((e) => e.event)).toEqual(["group.deleted", "workspace.updated", "sidebar.layout_changed", "workspace.order_changed"]);
+    });
+
+    it("createGroup with a workspaceId puts that item into the new group", async () => {
+      const { workspace: w1 } = await service.createWorkspace("/a", "a");
+      const seen = watch();
+      const group = service.createGroup("g", w1.id);
+      expect(seen.map((e) => e.event)).toEqual(["group.created", "workspace.updated", "sidebar.layout_changed"]);
+      expect(service.snapshot().layout).toEqual({ top: [`g:${group.id}`, "u"], groups: { [group.id]: [`w:${w1.id}`] }, ungrouped: [] });
+      expect(service.getWorkspace(w1.id)?.groupId).toBe(group.id);
+    });
   });
 
   it("deleteGroup publishes group.deleted, then workspace.updated for every member whose groupId is cleared", async () => {
@@ -889,8 +1029,8 @@ describe("SessionService — workspace grouping and ordering", () => {
   it("closeWorkspace(closeLinkedWorktrees=true) also closes every linked worktree sharing the same repoKey (herdr の close_group 相当)", async () => {
     const { workspace: main, pane: mainPane } = await service.createWorkspace("/repo", "main");
     const { workspace: wt, pane: wtPane } = await service.createWorkspace("/repo-wt", "wt");
-    service.updateWorkspaceGit(main.id, { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false });
-    service.updateWorkspaceGit(wt.id, { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
+    service.updateWorkspaceGit(main.id, { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
+    service.updateWorkspaceGit(wt.id, { kind: "git", git: { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
     const [mainHost, wtHost] = [mainPane.id, wtPane.id].map((id) => terminals.get(id) as FakeTerminalHost); // dispose 前に控える
     const events: { event: string; workspaceId?: string }[] = [];
     bus.subscribe((e) => events.push({ event: e.event, ...(e.data as { workspaceId?: string }) }));
@@ -916,8 +1056,8 @@ describe("SessionService — workspace grouping and ordering", () => {
   it("closeWorkspace without closeLinkedWorktrees (既定 false) leaves the linked worktree open (回帰なし)", async () => {
     const { workspace: main } = await service.createWorkspace("/repo", "main");
     const { workspace: wt } = await service.createWorkspace("/repo-wt", "wt");
-    service.updateWorkspaceGit(main.id, { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false });
-    service.updateWorkspaceGit(wt.id, { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
+    service.updateWorkspaceGit(main.id, { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
+    service.updateWorkspaceGit(wt.id, { kind: "git", git: { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
 
     await service.closeWorkspace(main.id);
 
@@ -953,23 +1093,24 @@ describe("SessionService — runtime updates", () => {
   // （worktree 自動グループの判定の要）で更新が握りつぶされていた。
   it("updateWorkspaceGit emits workspace.updated when only repoKey changes (branch/ahead/behind unchanged)", async () => {
     const { workspace } = await service.createWorkspace("/repo", "repo");
-    service.updateWorkspaceGit(workspace.id, { branch: "main", ahead: 0, behind: 0, repoKey: null, isLinkedWorktree: false });
+    service.updateWorkspaceGit(workspace.id, { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: null, isLinkedWorktree: false } });
     const events: string[] = [];
     bus.subscribe((e) => events.push(e.event));
 
-    service.updateWorkspaceGit(workspace.id, { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false });
+    service.updateWorkspaceGit(workspace.id, { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
 
-    expect(events).toEqual(["workspace.updated"]);
+    // 判定が付く（`w:<id>` → `r:`）ので、レイアウトも変わる。
+    expect(events).toEqual(["workspace.updated", "sidebar.layout_changed"]);
     expect(service.snapshot().workspaces[0]!.git?.repoKey).toBe("/repo/.git");
   });
 
   it("updateWorkspaceGit emits workspace.updated when only isLinkedWorktree changes", async () => {
     const { workspace } = await service.createWorkspace("/repo-wt", "wt");
-    service.updateWorkspaceGit(workspace.id, { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false });
+    service.updateWorkspaceGit(workspace.id, { kind: "git", git: { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
     const events: string[] = [];
     bus.subscribe((e) => events.push(e.event));
 
-    service.updateWorkspaceGit(workspace.id, { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
+    service.updateWorkspaceGit(workspace.id, { kind: "git", git: { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
 
     expect(events).toEqual(["workspace.updated"]);
     expect(service.snapshot().workspaces[0]!.git?.isLinkedWorktree).toBe(true);
@@ -978,13 +1119,101 @@ describe("SessionService — runtime updates", () => {
   it("updateWorkspaceGit is a no-op when nothing (including repoKey/isLinkedWorktree) changes", async () => {
     const { workspace } = await service.createWorkspace("/repo", "repo");
     const git = { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false };
-    service.updateWorkspaceGit(workspace.id, git);
+    service.updateWorkspaceGit(workspace.id, { kind: "git", git: git });
     const events: string[] = [];
     bus.subscribe((e) => events.push(e.event));
 
-    service.updateWorkspaceGit(workspace.id, { ...git });
+    service.updateWorkspaceGit(workspace.id, { kind: "git", git: { ...git } });
 
     expect(events).toEqual([]);
+  });
+
+  // 20261004-group-worktree-items（T6）。判定の 3 つの結果を、共通の出口でレイアウトと所属に反映する。
+  describe("judgments (git / unmanaged / unknown) go through the one model entry", () => {
+    const judged = (repoKey: string, linked = false): GitJudgement => ({ kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey, isLinkedWorktree: linked } });
+
+    it("a repoKey change publishes workspace.updated once, then the layout, and schedules a save; applyWorkspaceIdentity takes the same path", async () => {
+      const { workspace } = await service.createWorkspace("/repo", "repo");
+      const events: { event: string; data: unknown }[] = [];
+      bus.subscribe((e) => events.push(e));
+      persist.touchCount = 0;
+      service.applyWorkspaceIdentity(workspace.id, "/repo", judged("/repo/.git"), null);
+      expect(events.map((e) => e.event)).toEqual(["workspace.updated", "sidebar.layout_changed"]);
+      expect(events[1]!.data).toEqual({ layout: { top: ["u"], groups: {}, ungrouped: ["r:/repo/.git"] } });
+      expect(persist.touchCount).toBe(1);
+    });
+
+    it("a group-changing judgment publishes the one workspace.updated that carries both the git and the new groupId", async () => {
+      const a = (await service.createWorkspace("/a", "a")).workspace;
+      const b = (await service.createWorkspace("/b", "b")).workspace;
+      service.updateWorkspaceGit(a.id, judged("/repo/.git"));
+      const g = service.createGroup("g", a.id);
+      const events: { event: string; data: unknown }[] = [];
+      bus.subscribe((e) => events.push(e));
+      service.updateWorkspaceGit(b.id, judged("/repo/.git", true));
+      const updates = events.filter((e) => e.event === "workspace.updated");
+      expect(updates).toHaveLength(1);
+      expect((updates[0]!.data as { workspace: { id: string; groupId: string | null; git: unknown } }).workspace).toMatchObject({ id: b.id, groupId: g.id, git: { repoKey: "/repo/.git" } });
+    });
+
+    it("unmanaged on a judged workspace gives the w:<id> back (null git); unknown changes nothing and publishes nothing", async () => {
+      const { workspace } = await service.createWorkspace("/repo", "repo");
+      service.updateWorkspaceGit(workspace.id, judged("/repo/.git"));
+      const events: string[] = [];
+      bus.subscribe((e) => events.push(e.event));
+      persist.touchCount = 0;
+      service.updateWorkspaceGit(workspace.id, { kind: "unknown" });
+      expect(events).toEqual([]);
+      expect(persist.touchCount).toBe(0);
+      expect(service.getWorkspace(workspace.id)?.git?.repoKey).toBe("/repo/.git");
+      service.updateWorkspaceGit(workspace.id, { kind: "unmanaged" });
+      expect(events).toEqual(["workspace.updated", "sidebar.layout_changed"]);
+      expect(service.getWorkspace(workspace.id)?.git).toBeNull();
+      expect(service.snapshot().layout).toEqual({ top: ["u"], groups: {}, ungrouped: [`w:${workspace.id}`] });
+    });
+
+    it("a worktreeKey-only change (same repoKey, same isLinkedWorktree) still goes through the layout exit: the next workspace of the old folder becomes the representative", async () => {
+      const wt = (key: string): GitJudgement => ({ kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true, worktreeKey: key } });
+      const x = (await service.createWorkspace("/x", "x")).workspace;
+      const y = (await service.createWorkspace("/y", "y")).workspace;
+      const z = (await service.createWorkspace("/z", "z")).workspace;
+      service.updateWorkspaceGit(x.id, wt("/repo/.git/worktrees/x"));
+      service.updateWorkspaceGit(y.id, wt("/repo/.git/worktrees/y"));
+      service.updateWorkspaceGit(z.id, wt("/repo/.git/worktrees/y")); // y と同じフォルダ。代表でないので通常の項目
+      expect(service.snapshot().layout?.ungrouped).toEqual(["r:/repo/.git", `w:${z.id}`]);
+      const events: string[] = [];
+      bus.subscribe((e) => events.push(e.event));
+      persist.touchCount = 0;
+      service.updateWorkspaceGit(y.id, wt("/repo/.git/worktrees/y2"));
+      expect(events).toEqual(["workspace.updated", "workspace.updated", "sidebar.layout_changed"]); // y と、代表になった z（旗が変わる）
+      expect(service.snapshot().layout?.ungrouped).toEqual(["r:/repo/.git"]);
+      expect(persist.touchCount).toBe(1);
+    });
+
+    it("a branch-only change publishes workspace.updated but neither the layout nor a save", async () => {
+      const { workspace } = await service.createWorkspace("/repo", "repo");
+      service.updateWorkspaceGit(workspace.id, judged("/repo/.git"));
+      const events: string[] = [];
+      bus.subscribe((e) => events.push(e.event));
+      persist.touchCount = 0;
+      service.updateWorkspaceGit(workspace.id, { kind: "git", git: { branch: "dev", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
+      expect(events).toEqual(["workspace.updated"]);
+      expect(persist.touchCount).toBe(0);
+    });
+
+    it("isLinkedWorktree changing publishes the new order and schedules a save", async () => {
+      const a = (await service.createWorkspace("/a", "a")).workspace;
+      const b = (await service.createWorkspace("/b", "b")).workspace;
+      service.updateWorkspaceGit(a.id, judged("/repo/.git", true));
+      service.updateWorkspaceGit(b.id, judged("/repo/.git", true));
+      const events: { event: string; data: unknown }[] = [];
+      bus.subscribe((e) => events.push(e));
+      persist.touchCount = 0;
+      service.updateWorkspaceGit(b.id, judged("/repo/.git", false));
+      expect(events.map((e) => e.event)).toEqual(["workspace.updated", "workspace.order_changed"]);
+      expect(events[1]!.data).toEqual({ workspaceIds: [b.id, a.id] });
+      expect(persist.touchCount).toBe(1);
+    });
   });
 
   it("resizePane updates the model, resizes the pty, and emits pane.size_changed", async () => {
@@ -1052,6 +1281,95 @@ describe("SessionService — runtime updates", () => {
     // 実際にフィールドが変われば、通常どおり発行される。
     service.updatePaneRuntime(pane.id, { agent: { ...agent, state: "idle", completionSeq: 1 } });
     expect(events).toEqual(["pane.updated", "pane.agent_status_changed"]);
+  });
+
+  describe("setAgentSubagents（20261004-subagent-display）", () => {
+    const agentOf = (over: Partial<AgentInfo> = {}): AgentInfo => ({
+      instanceId: "a1",
+      kind: "claude",
+      label: "Claude Code",
+      state: "working",
+      completionSeq: 0,
+      serverSeenSeq: 0,
+      verified: true,
+      since: 12345,
+      ...over,
+    });
+    const subs = (...ids: string[]) => ({ count: ids.length, items: ids.map((id) => ({ id, startedAt: 1 })) });
+
+    it("エージェントが検出されていなければ何もせず false（イベントも出さない）", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      const events: string[] = [];
+      bus.subscribe((e) => events.push(e.event));
+      expect(service.setAgentSubagents(pane.id, subs("s1"))).toBe(false);
+      expect(service.setAgentSubagents("no-such-pane", subs("s1"))).toBe(false);
+      expect(events).toEqual([]);
+      expect(service.getPane(pane.id)?.agent).toBeNull();
+    });
+
+    it("検出されていれば差し替えて pane.agent_status_changed を配り true。同じ参照ならもう配らない。undefined で外す", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      const events: { event: string; data: { agent: AgentInfo | null } }[] = [];
+      bus.subscribe((e) => e.event === "pane.agent_status_changed" && events.push(e as never));
+      const value = subs("s1", "s2");
+      expect(service.setAgentSubagents(pane.id, value)).toBe(true);
+      expect(events).toHaveLength(1);
+      expect(events[0]?.data.agent?.subagents).toBe(value);
+      expect(service.getPane(pane.id)?.agent?.subagents).toBe(value);
+      expect(service.setAgentSubagents(pane.id, value)).toBe(true);
+      expect(events).toHaveLength(1);
+      expect(service.setAgentSubagents(pane.id, undefined)).toBe(true);
+      expect(events).toHaveLength(2);
+      expect(service.getPane(pane.id)?.agent).not.toHaveProperty("subagents");
+    });
+
+    it("周期の更新（AgentTracker が毎回 subagents の無い新しい AgentInfo を渡す）で落ちず、同じ参照のまま引き継ぐ。状態が変わっても保つ", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      const value = subs("s1");
+      service.setAgentSubagents(pane.id, value);
+      const events: string[] = [];
+      bus.subscribe((e) => events.push(e.event));
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      expect(events).toEqual([]); // 何も変わらない
+      expect(service.getPane(pane.id)?.agent?.subagents).toBe(value);
+      service.updatePaneRuntime(pane.id, { agent: agentOf({ state: "idle", completionSeq: 1 }) });
+      expect(events).toEqual(["pane.agent_status_changed"]);
+      expect(service.getPane(pane.id)?.agent?.subagents).toBe(value);
+    });
+
+    it("renameAgent で落ちない（名前を付けても外しても subagents は残る）", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      const value = subs("s1");
+      service.setAgentSubagents(pane.id, value);
+      service.renameAgent(pane.id, "a1", "worker");
+      expect(service.getPane(pane.id)?.agent?.subagents).toBe(value);
+      service.renameAgent(pane.id, "a1", null);
+      expect(service.getPane(pane.id)?.agent?.subagents).toBe(value);
+    });
+
+    it("エージェントの入れ替わり（別の instanceId）・終了（null）で消え、新しい検出は subagents を持たない", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      service.setAgentSubagents(pane.id, subs("s1"));
+      service.updatePaneRuntime(pane.id, { agent: agentOf({ instanceId: "a2" }) });
+      expect(service.getPane(pane.id)?.agent).not.toHaveProperty("subagents");
+      service.setAgentSubagents(pane.id, subs("s2"));
+      service.updatePaneRuntime(pane.id, { agent: null });
+      expect(service.getPane(pane.id)?.agent).toBeNull();
+      service.updatePaneRuntime(pane.id, { agent: agentOf({ instanceId: "a2" }) }); // 同じ instanceId でも、一度消えた後は引き継がない
+      expect(service.getPane(pane.id)?.agent).not.toHaveProperty("subagents");
+    });
+
+    it("保存しない（session.json の保存を予約しない）", async () => {
+      const { pane } = await service.createWorkspace("/home/u", "api");
+      service.updatePaneRuntime(pane.id, { agent: agentOf() });
+      persist.touchCount = 0;
+      service.setAgentSubagents(pane.id, subs("s1"));
+      expect(persist.touchCount).toBe(0);
+    });
   });
 
   it("updatePaneRuntime schedules a save only when cwd changes", async () => {
@@ -2092,11 +2410,11 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
     expect(label).toMatchObject({ label: "q", degraded: false });
     const touches = h.persist.touchCount;
     h.updated.length = 0;
-    h.service.applyWorkspaceIdentity(workspace.id, "/q/pkg/deep", GIT, label);
+    h.service.applyWorkspaceIdentity(workspace.id, "/q/pkg/deep", { kind: "git", git: GIT }, label);
     expect(h.updated.map((w) => [w.label, w.autoLabel, w.git?.branch])).toEqual([["q", true, "main"]]);
     expect(h.persist.touchCount - touches, "名前は保存にある").toBe(1);
     h.service.updatePaneRuntime(pane.id, { cwd: "/srv/plain" });
-    h.service.applyWorkspaceIdentity(workspace.id, "/srv/plain", null, await h.service.followedLabel(workspace.id, "/srv/plain"));
+    h.service.applyWorkspaceIdentity(workspace.id, "/srv/plain", { kind: "unmanaged" }, await h.service.followedLabel(workspace.id, "/srv/plain"));
     expect(h.updated.at(-1)).toMatchObject({ label: "plain", autoLabel: true, git: null });
   });
 
@@ -2109,7 +2427,7 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
     expect(c.calls.length).toBe(asked);
     const moved = await h.service.followedLabel(workspace.id, "/q/x");
     h.service.updatePaneRuntime(h.service.snapshot().panes[0]!.id, { cwd: "/q/x" });
-    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", null, moved);
+    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", { kind: "unmanaged" }, moved);
     const after = c.calls.length;
     expect(await h.service.followedLabel(workspace.id, "/q/x"), "決め直した場所も記録する").toBeNull();
     expect(c.calls.length).toBe(after);
@@ -2128,7 +2446,7 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
     const same = await h.service.followedLabel(workspace.id, "/data/proj-2024");
     expect(same, "いまの名前のまま、場所だけ記録する").toMatchObject({ label: "proj", degraded: false });
     expect(c.calls, "名前を決めるために fs をたどらない").toBe(asked);
-    h.service.applyWorkspaceIdentity(workspace.id, "/data/proj-2024", null, same);
+    h.service.applyWorkspaceIdentity(workspace.id, "/data/proj-2024", { kind: "unmanaged" }, same);
     expect(h.service.getWorkspace(workspace.id)!.label).toBe("proj");
     expect(await h.service.followedLabel(workspace.id, "/data/proj-2024"), "記録したので次は問い合わせもしない").toBeNull();
     h.service.updatePaneRuntime(pane.id, { cwd: "/data/other" });
@@ -2167,7 +2485,7 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
     h.service.updatePaneRuntime(pane.id, { cwd: "/q/x" });
     const label = await h.service.followedLabel(workspace.id, "/q/x");
     expect(label).toBeNull();
-    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", GIT, label);
+    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", { kind: "git", git: GIT }, label);
     expect(h.service.getWorkspace(workspace.id)).toMatchObject({ label: "mine", autoLabel: false, git: GIT });
   });
 
@@ -2178,7 +2496,7 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
     const label = await h.service.followedLabel(workspace.id, "/q/x");
     h.service.updatePaneRuntime(pane.id, { cwd: "/srv/next" });
     h.updated.length = 0;
-    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", GIT, label);
+    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", { kind: "git", git: GIT }, label);
     expect(h.updated).toEqual([]);
     expect(h.service.getWorkspace(workspace.id)).toMatchObject({ label: "r", git: null });
   });
@@ -2190,7 +2508,7 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
     const label = await h.service.followedLabel(workspace.id, "/q/x");
     await h.service.renameWorkspace(workspace.id, "mine");
     await h.service.renameWorkspace(workspace.id, null); // 自動に戻したが世代が進んでいる
-    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", GIT, { ...label!, label: "stale" });
+    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", { kind: "git", git: GIT }, { ...label!, label: "stale" });
     expect(h.service.getWorkspace(workspace.id)).toMatchObject({ label: "q", autoLabel: true, git: GIT });
   });
 
@@ -2275,7 +2593,7 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
     await new Promise((r) => setTimeout(r, 10));
     const label = await h.service.followedLabel(workspace.id, "/r/src");
     expect(label, "同じ場所でも決め直す").toMatchObject({ label: "r", degraded: false });
-    h.service.applyWorkspaceIdentity(workspace.id, "/r/src", null, label);
+    h.service.applyWorkspaceIdentity(workspace.id, "/r/src", { kind: "unmanaged" }, label);
     expect(h.service.getWorkspace(workspace.id)!.label).toBe("r");
   });
 
@@ -2294,7 +2612,7 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
     await h.service.renameWorkspace(workspace.id, null);
     release();
     const label = await following;
-    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", null, { ...label!, label: "stale" });
+    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", { kind: "unmanaged" }, { ...label!, label: "stale" });
     expect(h.service.getWorkspace(workspace.id)).toMatchObject({ label: "q", autoLabel: true });
   });
 
@@ -2313,7 +2631,7 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
     const h = setup();
     const { workspace, pane } = await h.service.createWorkspace("/r/src", undefined);
     h.service.updatePaneRuntime(pane.id, { cwd: "/q/x" });
-    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", null, { label: "x", gen: 0, degraded: true });
+    h.service.applyWorkspaceIdentity(workspace.id, "/q/x", { kind: "unmanaged" }, { label: "x", gen: 0, degraded: true });
     expect(h.service.getWorkspace(workspace.id)!.label).toBe("x");
     expect(await h.service.followedLabel(workspace.id, "/q/x")).toMatchObject({ label: "q", degraded: false });
   });
@@ -2815,5 +3133,324 @@ describe("SessionService — 独自コマンドの pane 種・文脈・環境（
     const id = service.reservePaneId();
     const { pane: next } = await service.splitPane(pane.id, "right", undefined);
     expect(new Set([pane.id, id, next.id]).size).toBe(3);
+  });
+});
+
+// 20261004-group-worktree-items（T9）：サイドバーの並びと所属の保存・復元。
+describe("SessionService — layout の復元（保存と復元）", () => {
+  const saved = (id: string, extra: Partial<SessionFileData["workspaces"][number]> = {}): SessionFileData["workspaces"][number] => ({
+    id,
+    label: id,
+    cwd: `/home/u/${id}`,
+    activeTabId: `t-${id}`,
+    tabs: [
+      {
+        id: `t-${id}`,
+        label: "1",
+        focusedPaneId: `p-${id}`,
+        zoomedPaneId: null,
+        layout: { type: "pane", paneId: `p-${id}` },
+        panes: [{ id: `p-${id}`, label: null, cwd: `/home/u/${id}`, shell: "" }],
+      },
+    ],
+    ...extra,
+  });
+  const fileData = (over: Partial<SessionFileData>): SessionFileData => ({
+    schema: 1,
+    savedAt: "2026-10-04T00:00:00Z",
+    nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 5 },
+    groups: [],
+    workspaces: [],
+    focus: null,
+    ...over,
+  });
+  const make = () => {
+    const logger = new MemoryLogger();
+    const service = new SessionService({
+      model: new SessionModel(),
+      terminals: new FakeTerminalManager(),
+      bus: new EventBus(),
+      persist: new FakePersistScheduler(),
+      serverVersion: "0.1.0-test",
+      host: HOST_INFO,
+      scrollbackLines: 1000,
+      spawnGraceMs: 5,
+      defaultCwd: "/home/u",
+      logger,
+    });
+    return { service, logger };
+  };
+  const K = "/repos/app/.git";
+  const withGit = { repoKey: K } as const;
+
+  it("layout と repoGroups を戻すと、停止前と同じ並び・所属になり、git は repoKey だけ戻る（ブランチ null・件数 0）", async () => {
+    const { service } = make();
+    await service.restore(
+      fileData({
+        groups: [{ id: "g1", label: "work", collapsed: false }],
+        // 平らな順はレイアウトと違う（レイアウトが正）。「グループなし」（w3）がグループ g1（app のリポジトリ w1・w2）の前。
+        workspaces: [
+          saved("w1", { ...withGit, isLinkedWorktree: false, groupId: "g1" }),
+          saved("w2", { ...withGit, isLinkedWorktree: true, groupId: "g1" }),
+          saved("w3", { repoKey: null }),
+        ],
+        layout: { top: ["u", "g:g1"], groups: { g1: [`r:${K}`] }, ungrouped: ["w:w3"] },
+        repoGroups: { [K]: "g1" },
+      }),
+    );
+    const snap = service.snapshot();
+    expect(snap.layout).toEqual({ top: ["u", "g:g1"], groups: { g1: [`r:${K}`] }, ungrouped: ["w:w3"] });
+    expect(snap.workspaces.map((w) => w.id)).toEqual(["w3", "w1", "w2"]);
+    expect(snap.workspaces.map((w) => w.groupId)).toEqual([null, "g1", "g1"]);
+    expect(service.getWorkspace("w1")?.git).toEqual({ branch: null, ahead: 0, behind: 0, repoKey: K, isLinkedWorktree: false });
+    expect(service.getWorkspace("w2")?.git?.isLinkedWorktree).toBe(true);
+    expect(service.getWorkspace("w3")?.git).toBeNull();
+    expect(service.persistedLayout()).toEqual({ layout: snap.layout, repoGroups: { [K]: "g1" } });
+  });
+
+  it("壊れた参照（実在しない workspace・グループ・重複・repoKey を持つのに w:）でも起動し、捨てた参照をログに出す", async () => {
+    const { service, logger } = make();
+    await service.restore(
+      fileData({
+        groups: [{ id: "g1", label: "work", collapsed: false }],
+        workspaces: [saved("w1", { ...withGit }), saved("w2"), saved("w3")],
+        layout: {
+          top: ["w:gone", "g:g1", "g:g9", "u", "u", "w:w1"],
+          groups: { g1: ["w:w3", "w:w3", "r:/gone/.git"], g9: ["w:w2"] },
+          ungrouped: ["w:w2", "w:w2"],
+        },
+        repoGroups: { [K]: "g1", "/other/.git": "g9" },
+      }),
+    );
+    // w:w1 は repoKey を持つので r: へ直る。レイアウトに無いので、覚えているグループ（repoGroups[K] = g1）の末尾へ入る。w3 は g1 の中に残る。
+    expect(service.snapshot().layout).toEqual({ top: ["g:g1", "u"], groups: { g1: ["w:w3", `r:${K}`] }, ungrouped: ["w:w2"] });
+    expect(service.persistedLayout()?.repoGroups).toEqual({ [K]: "g1" }); // 実在しないグループ行きは捨てる
+    expect(service.getWorkspace("w1")?.groupId).toBe("g1");
+    const warn = logger.lines.find((e) => e.msg.includes("sidebar layout"));
+    expect(warn).toBeDefined();
+    expect((warn!.fields?.["dropped"] as string[]).sort()).toEqual(["g:g9", "r:/gone/.git", "u", "w:gone", "w:w1", "w:w2", "w:w2", "w:w3"].sort());
+  });
+
+  it("管理外・代表でない workspace（w:<id>）の所属はレイアウトの入れ物が正で、groupId を合わせる。r:<repoKey> は repoGroups が正で、食い違えば覚えているグループへ入る", async () => {
+    const { service } = make();
+    await service.restore(
+      fileData({
+        groups: [
+          { id: "g1", label: "one", collapsed: false },
+          { id: "g2", label: "two", collapsed: false },
+        ],
+        // w2 は保存の groupId が無いのにレイアウトは g1 の中、w3 は groupId が g1 なのにレイアウトは「グループなし」。
+        // w1（リポジトリ K）はレイアウトでは g1 の中だが、repoGroups は g2 を覚えている。
+        workspaces: [saved("w1", { ...withGit, isLinkedWorktree: false }), saved("w2"), saved("w3", { groupId: "g1" })],
+        layout: { top: ["g:g1", "g:g2", "u"], groups: { g1: [`r:${K}`, "w:w2"], g2: [] }, ungrouped: ["w:w3"] },
+        repoGroups: { [K]: "g2" },
+      }),
+    );
+    expect(service.snapshot().layout).toEqual({ top: ["g:g1", "g:g2", "u"], groups: { g1: ["w:w2"], g2: [`r:${K}`] }, ungrouped: ["w:w3"] });
+    expect(service.snapshot().workspaces.map((w) => [w.id, w.groupId])).toEqual([
+      ["w2", "g1"],
+      ["w1", "g2"],
+      ["w3", null],
+    ]);
+  });
+
+  it("レイアウトに無い workspace は「グループなし」の末尾に足す", async () => {
+    const { service } = make();
+    await service.restore(fileData({ workspaces: [saved("w1"), saved("w2")], layout: { top: ["u"], groups: {}, ungrouped: ["w:w2"] } }));
+    expect(service.snapshot().layout).toEqual({ top: ["u"], groups: {}, ungrouped: ["w:w2", "w:w1"] });
+    expect(service.snapshot().workspaces.map((w) => w.id)).toEqual(["w2", "w1"]);
+  });
+
+  it("layout の無い保存は仮の状態のまま（導いた layout を載せ、書き出さない）。repoKey があれば起動直後から束ねる", async () => {
+    const { service } = make();
+    await service.restore(
+      fileData({
+        groups: [{ id: "g1", label: "work", collapsed: false }],
+        workspaces: [saved("w1", { ...withGit, isLinkedWorktree: false, groupId: "g1" }), saved("w2"), saved("w3", { ...withGit, isLinkedWorktree: true })],
+      }),
+    );
+    expect(service.persistedLayout()).toBeNull();
+    // 本体 w1 の所属 g1 が項目 r:K の所属になる（w3 の groupId は見ない）。
+    expect(service.snapshot().layout).toEqual({ top: ["g:g1", "u"], groups: { g1: [`r:${K}`] }, ungrouped: ["w:w2"] });
+    expect(service.getWorkspace("w1")?.git?.repoKey).toBe(K);
+  });
+});
+
+// 20261004-group-worktree-items（T10）：layout の無い保存の移行。仮の状態 → 最初の 1 周の合図（または最初の操作）で 1 回だけ確定する。
+describe("SessionService — 移行の確定（仮の状態 → confirmLayout）", () => {
+  const saved = (id: string, extra: Partial<SessionFileData["workspaces"][number]> = {}): SessionFileData["workspaces"][number] => ({
+    id,
+    label: id,
+    cwd: `/home/u/${id}`,
+    activeTabId: `t-${id}`,
+    tabs: [
+      {
+        id: `t-${id}`,
+        label: "1",
+        focusedPaneId: `p-${id}`,
+        zoomedPaneId: null,
+        layout: { type: "pane", paneId: `p-${id}` },
+        panes: [{ id: `p-${id}`, label: null, cwd: `/home/u/${id}`, shell: "" }],
+      },
+    ],
+    ...extra,
+  });
+  const GROUPS = [
+    { id: "g1", label: "one", collapsed: false },
+    { id: "g2", label: "two", collapsed: false },
+  ];
+  const fileData = (workspaces: SessionFileData["workspaces"], over: Partial<SessionFileData> = {}): SessionFileData => ({
+    schema: 1,
+    savedAt: "2026-10-04T00:00:00Z",
+    nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 5 },
+    groups: GROUPS,
+    workspaces,
+    focus: null,
+    ...over,
+  });
+  const K = "/repos/app/.git";
+  const body = (id: string, groupId: string | null) => saved(id, { repoKey: K, isLinkedWorktree: false, groupId });
+  const tree = (id: string, groupId: string | null) => saved(id, { repoKey: K, isLinkedWorktree: true, groupId });
+  const make = () => {
+    const bus = new EventBus();
+    const persist = new FakePersistScheduler();
+    const service = new SessionService({
+      model: new SessionModel(),
+      terminals: new FakeTerminalManager(),
+      bus,
+      persist,
+      serverVersion: "0.1.0-test",
+      host: HOST_INFO,
+      scrollbackLines: 1000,
+      spawnGraceMs: 5,
+      defaultCwd: "/home/u",
+      logger: new MemoryLogger(),
+    });
+    return { service, bus, persist };
+  };
+  const restored = async (workspaces: SessionFileData["workspaces"]) => {
+    const t = make();
+    await t.service.restore(fileData(workspaces));
+    return t;
+  };
+
+  it("別々のグループに居る本体と worktree: 本体の所属に揃う（worktree の workspace.updated が出る）。保存は確定の後に layout を書く", async () => {
+    const { service, bus, persist } = await restored([body("w1", "g1"), tree("w2", "g2"), saved("w3")]);
+    expect(service.persistedLayout()).toBeNull();
+    const events: { event: string; data: unknown }[] = [];
+    bus.subscribe((e) => events.push(e));
+    persist.touchCount = 0;
+    service.confirmLayout();
+    expect(service.snapshot().layout).toEqual({ top: ["g:g1", "g:g2", "u"], groups: { g1: [`r:${K}`], g2: [] }, ungrouped: ["w:w3"] });
+    expect(service.persistedLayout()).toEqual({ layout: service.snapshot().layout, repoGroups: { [K]: "g1" } });
+    expect(service.getWorkspace("w2")?.groupId).toBe("g1");
+    // 導いたレイアウトと同じなので sidebar.layout_changed は出ない。groupId が変わった w2 だけ workspace.updated。保存は 1 回予約する。
+    expect(events.map((e) => e.event)).toEqual(["workspace.updated"]);
+    expect(persist.touchCount).toBe(1);
+  });
+
+  it("本体だけがグループに居る: worktree も同じグループに入る", async () => {
+    const { service } = await restored([body("w1", "g1"), tree("w2", null)]);
+    service.confirmLayout();
+    expect(service.persistedLayout()?.repoGroups).toEqual({ [K]: "g1" });
+    expect(service.getWorkspace("w2")?.groupId).toBe("g1");
+  });
+
+  it("worktree だけがグループに居る（本体は所属なし）: 本体の所属（なし）に揃い、一番上の項目になる", async () => {
+    const { service } = await restored([body("w1", null), tree("w2", "g1")]);
+    service.confirmLayout();
+    expect(service.snapshot().layout).toEqual({ top: ["g:g1", "g:g2", "u"], groups: { g1: [], g2: [] }, ungrouped: [`r:${K}`] });
+    expect(service.persistedLayout()?.repoGroups).toEqual({});
+    expect(service.getWorkspace("w2")?.groupId).toBeNull();
+  });
+
+  it("本体が開かれていない: 最初に開いた worktree の所属になる", async () => {
+    const { service } = await restored([tree("w2", "g2"), tree("w3", "g1")]);
+    service.confirmLayout();
+    expect(service.persistedLayout()?.repoGroups).toEqual({ [K]: "g2" });
+    expect(service.getWorkspace("w3")?.groupId).toBe("g2");
+  });
+
+  it("単独の workspace（判定なし）は自分の groupId のまま", async () => {
+    const { service } = await restored([saved("w1", { groupId: "g1" }), saved("w2")]);
+    service.confirmLayout();
+    expect(service.snapshot().layout).toEqual({ top: ["g:g1", "g:g2", "u"], groups: { g1: ["w:w1"], g2: [] }, ungrouped: ["w:w2"] });
+    expect(service.getWorkspace("w1")?.groupId).toBe("g1");
+  });
+
+  it("本体の判定だけが 1 周目で取れなかった（D2）: 取れた worktree の所属で確定し、本体は後から判定が付いてリポジトリの所属に加わる", async () => {
+    // 本体 w1 は repoKey を持たない保存（判定前）。worktree w2 は g2。F13 の「本体の g1」とは結果が違いうる場面。
+    const { service } = await restored([saved("w1", { groupId: "g1" }), tree("w2", "g2")]);
+    service.confirmLayout();
+    expect(service.snapshot().layout).toEqual({ top: ["g:g1", "g:g2", "u"], groups: { g1: ["w:w1"], g2: [`r:${K}`] }, ungrouped: [] });
+    expect(service.persistedLayout()?.repoGroups).toEqual({ [K]: "g2" });
+    // 後から本体の判定が付く: repoGroups が先に見られ、本体は g2 の r:K へ加わる。
+    service.updateWorkspaceGit("w1", { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: K, isLinkedWorktree: false } });
+    expect(service.getWorkspace("w1")?.groupId).toBe("g2");
+    expect(service.snapshot().layout?.groups).toEqual({ g1: [], g2: [`r:${K}`] });
+  });
+
+  it("確定は 1 回だけ: 2 回目の合図は何も配らず、保存も予約しない", async () => {
+    const { service, bus, persist } = await restored([body("w1", "g1"), tree("w2", "g2")]);
+    service.confirmLayout();
+    const events: string[] = [];
+    bus.subscribe((e) => events.push(e.event));
+    persist.touchCount = 0;
+    service.confirmLayout();
+    expect(events).toEqual([]);
+    expect(persist.touchCount).toBe(0);
+  });
+
+  it("確定の前に止めても（layout を書いていない）、次の起動で同じ導き方になる", async () => {
+    const files = [body("w1", "g1"), tree("w2", "g2"), saved("w3")];
+    const first = await restored(files);
+    expect(first.service.persistedLayout()).toBeNull();
+    const second = await restored(files);
+    expect(second.service.snapshot().layout).toEqual(first.service.snapshot().layout);
+    expect(second.service.snapshot().workspaces.map((w) => w.groupId)).toEqual(first.service.snapshot().workspaces.map((w) => w.groupId));
+  });
+
+  it("確定の後の保存を復元すると移行はしない（グループの並びが保存のまま）", async () => {
+    const { service } = await restored([body("w1", "g1"), tree("w2", "g2")]);
+    service.confirmLayout();
+    const persisted = service.persistedLayout()!;
+    // 保存済みの layout・repoGroups を持つファイル。workspace の groupId は古い値（g2）のままでも、layout と repoGroups が正。
+    const next = make();
+    await next.service.restore(fileData([body("w1", "g1"), tree("w2", "g2")], { layout: persisted.layout, repoGroups: persisted.repoGroups }));
+    expect(next.service.snapshot().layout).toEqual(persisted.layout);
+    expect(next.service.getWorkspace("w2")?.groupId).toBe("g1");
+    next.service.confirmLayout(); // 仮の状態ではないので何もしない
+    expect(next.service.snapshot().layout).toEqual(persisted.layout);
+  });
+
+  it("確定のきっかけ (b): 受け付けた並べ替え・グループの操作は確定する。受け付けない移動と rename・畳みは確定しない", async () => {
+    const make1 = async () => restored([body("w1", "g1"), tree("w2", "g2"), saved("w3")]);
+    // 受け付けない移動（端での move_by・自分自身の前）は確定しない。
+    const a = await make1();
+    expect(a.service.moveItemBy({ kind: "group", groupId: "g1" }, "previous")).toEqual({ moved: false });
+    expect(a.service.moveItem({ kind: "workspace", workspaceId: "w3" }, { kind: "workspace", workspaceId: "w3" })).toEqual({ moved: false });
+    a.service.renameGroup("g1", "renamed");
+    a.service.toggleGroupCollapsed("g1");
+    expect(a.service.persistedLayout()).toBeNull();
+    // 受け付けた操作は確定し、その操作の結果が layout に載る。
+    const b = await make1();
+    expect(b.service.moveItemBy({ kind: "group", groupId: "g2" }, "previous")).toEqual({ moved: true });
+    expect(b.service.persistedLayout()).not.toBeNull();
+    expect(b.service.snapshot().layout?.top).toEqual(["g:g2", "g:g1", "u"]);
+    const c = await make1();
+    c.service.addToGroup("w3", "g2");
+    expect(c.service.persistedLayout()?.layout.groups["g2"]).toEqual(["w:w3"]);
+    const d = await make1();
+    d.service.createGroup("new", "w3");
+    expect(d.service.persistedLayout()).not.toBeNull();
+    const e = await make1();
+    e.service.deleteGroup("g2");
+    expect(e.service.persistedLayout()).not.toBeNull();
+    const f = await make1();
+    f.service.removeFromGroup("w1");
+    expect(f.service.persistedLayout()?.repoGroups).toEqual({});
+    const g = await make1();
+    g.service.moveWorkspacesTo(["w3"], null);
+    expect(g.service.persistedLayout()).not.toBeNull();
   });
 });

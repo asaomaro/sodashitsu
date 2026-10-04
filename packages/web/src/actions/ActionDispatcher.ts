@@ -1,4 +1,4 @@
-import type { AgentIntegrationInstallResult, AgentIntegrationKind, NewCwd } from "@sodashitsu/protocol";
+import type { AgentIntegrationInstallResult, AgentIntegrationKind, ItemTarget, NewCwd, WorkspaceGroup } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { KeyInputController, ActionPort, FocusPort } from "../keys/KeyInputController.js";
 import type { Action, CopyCommand, Dir } from "@sodashitsu/client-core";
@@ -6,12 +6,12 @@ import type { InputHold } from "@sodashitsu/client-core";
 import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
-import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
+import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, isRepresentative, isUngroupedNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
 import { orderedAgentPaneIds, type AgentOrderEntry } from "@sodashitsu/client-core";
-import { visibleWorkspaceIdsInOrder } from "@sodashitsu/client-core";
+import { currentNavigableRows, currentVisibleWorkspaceIds, itemGroupIdOf } from "../store/sidebarTree.js";
 import {
   buildNewCwd,
   loadNewCwdPath,
@@ -256,6 +256,16 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       case "openGraph":
         this.view.openGraph();
         return;
+      // 20261004-subagent-display。フォーカスしている pane のエージェントの一覧を開く。件数が 0・分からない（報告を受けていない）・
+      // エージェントが居ないときは何もしない（開いても見るものが無い。サイドバーの件数のボタンが 1 件以上のときだけ出るのと同じ）。
+      case "showSubagents": {
+        const paneId = this.view.focusedPaneId;
+        if (!paneId) return;
+        const count = this.session.panes.get(paneId)?.agent?.subagents?.count ?? 0;
+        if (count < 1) return;
+        this.view.openDialogWithContext({ kind: "subagents", machineId: this.machines.selectedId, paneId });
+        return;
+      }
     }
   }
 
@@ -551,10 +561,12 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /**
-   * `NameDialog` が確定したときに呼ぶ。`group.create` → 作成したグループへ workspace を追加。
+   * `NameDialog` が確定したときに呼ぶ。`layout` を持つサーバには `group.create` に `workspaceId` を添えて 1 回で送る
+   * （項目丸ごと入る）。`layout` の無い古いサーバは `workspaceId` を黙って落とすので、今までの 2 段（`group.create` →
+   * 作成したグループへ項目の workspace 全部を追加）を残す（design「古いサーバ・古い画面」）。
    * **2段階の失敗を区別する**（タスク点検の指摘）：`group.create` 自体が失敗すればグループは
-   * 存在しないので「作成できませんでした」。それが成功した後の `group.add_member` だけが
-   * 失敗した場合はグループ自体は残っている（空のグループとしてサイドバーに出る）ので、
+   * 存在しないので「作成できませんでした」。それが成功した後の追加だけが失敗した場合は
+   * グループ自体は残っている（空のグループとしてサイドバーに出る）ので、
    * 「作成できませんでした」と伝えると実際の状態と食い違う——別の文言にする（ロールバック＝
    * 作ったグループを削除する、まではしない。空のグループは無害で design のエラー処理どおり）。
    */
@@ -564,14 +576,37 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.view.closeDialog();
     const trimmed = label.trim();
     if (!trimmed) return; // 空では確定しない（ボタンも disabled）
+    if (this.session.hasServerLayout) {
+      void this.conn.request("group.create", { label: trimmed, workspaceId: ctx.workspaceId }).catch(() => this.view.toast("グループを作成できませんでした"));
+      return;
+    }
     void this.conn
       .request("group.create", { label: trimmed })
       .then((r) =>
-        this.conn
-          .request("group.add_member", { groupId: r.group.id, workspaceId: ctx.workspaceId })
-          .catch(() => this.view.toast("グループは作成しましたが、workspace の追加に失敗しました。")),
+        this.addItemToGroupLegacy(r.group.id, ctx.workspaceId).catch(() =>
+          this.view.toast("グループは作成しましたが、workspace の追加に失敗しました。"),
+        ),
       )
       .catch(() => this.view.toast("グループを作成できませんでした"));
+  }
+
+  /**
+   * 古いサーバ向け：項目（同じ `repoKey` の workspace 全部）へ `group.add_member` を順に送る。古いサーバは 1 件ずつしか
+   * 動かさず、入った workspace だけが所属を持つ（`SessionModel.ts:427-442`）。順に送って 1 件でも失敗したら止めて投げ直す。
+   */
+  private async addItemToGroupLegacy(groupId: string, workspaceId: string): Promise<void> {
+    for (const id of this.itemWorkspaceIds(workspaceId)) {
+      await this.conn.request("group.add_member", { groupId, workspaceId: id });
+    }
+  }
+
+  /** workspace の項目に含まれる workspace の id（リポジトリなら `repoMembers` の順で全部。そうでなければ自分だけ）。 */
+  private itemWorkspaceIds(workspaceId: string): string[] {
+    const ws = this.session.workspaces.get(workspaceId);
+    const repoKey = ws?.git?.repoKey;
+    if (!repoKey) return [workspaceId];
+    const members = repoMembers([...this.session.workspaces.values()], repoKey);
+    return members.length > 0 ? members.map((m) => m.id) : [workspaceId];
   }
 
   renameGroupById(groupId: string): void {
@@ -604,26 +639,77 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     void this.conn.request("group.toggle_collapsed", { groupId }).catch(() => undefined);
   }
 
-  /** 「グループへ追加…」（既存グループが1件以上あるとき）。**空なら開かずに知らせる**（`openWorktree` と同じ形）。 */
+  /** グループの選択肢（レイアウトの順。一番上の `g:` の並び、レイアウトに無いものは末尾）。 */
+  private groupsInLayoutOrder(): WorkspaceGroup[] {
+    const groups = this.session.groups;
+    const ordered: WorkspaceGroup[] = [];
+    for (const ref of this.session.effectiveLayout.top) {
+      const group = ref.startsWith("g:") ? groups.get(ref.slice(2)) : undefined;
+      if (group && !ordered.includes(group)) ordered.push(group);
+    }
+    for (const group of groups.values()) if (!ordered.includes(group)) ordered.push(group);
+    return ordered;
+  }
+
+  /**
+   * 「グループへ追加…」「別のグループへ移す…」。選択肢はレイアウトの順。移すときは今のグループを除く。
+   * **選べるグループが無ければ開かずに知らせる**（`openWorktree` と同じ形）。
+   */
   openGroupPicker(workspaceId: string): void {
-    const groups = [...this.session.groups.values()];
+    const current = itemGroupIdOf(this.session, workspaceId);
+    const groups = this.groupsInLayoutOrder().filter((g) => g.id !== current);
     if (groups.length === 0) {
       this.view.toast("まだグループがありません。");
       return;
     }
-    this.view.openDialogWithContext({ kind: "addToGroup", workspaceId, groups });
+    this.view.openDialogWithContext({ kind: "addToGroup", workspaceId, groups, ...(current !== null ? { moving: true as const } : {}) });
   }
 
   confirmAddToGroup(groupId: string): void {
     const ctx = this.view.dialogContext;
     if (ctx?.kind !== "addToGroup") return;
     this.view.closeDialog();
-    void this.conn.request("group.add_member", { groupId, workspaceId: ctx.workspaceId }).catch(() => this.view.toast("グループへ追加できませんでした"));
+    const failed = (): void => {
+      this.view.toast("グループへ追加できませんでした");
+    };
+    // `layout` を持つサーバは項目丸ごとを 1 回で動かす。古いサーバは項目の workspace 全部に順に送る。
+    if (this.session.hasServerLayout) {
+      void this.conn.request("group.add_member", { groupId, workspaceId: ctx.workspaceId }).catch(failed);
+      return;
+    }
+    void this.addItemToGroupLegacy(groupId, ctx.workspaceId).catch(failed);
   }
 
-  /** 「グループから外す」（`groupId !== null` のときだけ `ContextMenu` が出す）。 */
+  /** 「グループから外す」（項目がグループに入っているときだけ `ContextMenu` が出す）。古いサーバは項目の workspace 全部に順に送る。 */
   removeWorkspaceFromGroup(workspaceId: string): void {
-    void this.conn.request("group.remove_member", { workspaceId }).catch(() => undefined);
+    if (this.session.hasServerLayout) {
+      void this.conn.request("group.remove_member", { workspaceId }).catch(() => undefined);
+      return;
+    }
+    void (async () => {
+      for (const id of this.itemWorkspaceIds(workspaceId)) await this.conn.request("group.remove_member", { workspaceId: id });
+    })().catch(() => undefined);
+  }
+
+  /**
+   * グループの見出しの「上へ移動」「下へ移動」（`item.move_by`。一番上の項目として 1 つ動かす）。
+   * 名前順のときは一番上の並べ替えを受け付けず知らせる（design「並びと名前順」）。端では動かない（`moved: false`・何も知らせない）。
+   */
+  moveGroupBy(groupId: string, direction: "previous" | "next"): void {
+    if (this.view.workspaceSort === "name") {
+      this.view.toast("名前順では並べ替えできません");
+      return;
+    }
+    void this.conn.request("item.move_by", { item: { kind: "group", groupId }, direction }).catch(() => this.view.toast("グループを移動できませんでした"));
+  }
+
+  /** 「グループなし」の見出しの「上へ移動」「下へ移動」（`item.move_by`。グループと同じ決まり）。 */
+  moveUngroupedBy(direction: "previous" | "next"): void {
+    if (this.view.workspaceSort === "name") {
+      this.view.toast("名前順では並べ替えできません");
+      return;
+    }
+    void this.conn.request("item.move_by", { item: { kind: "ungrouped" }, direction }).catch(() => this.view.toast("「グループなし」を移動できませんでした"));
   }
 
   // --- 公式フック連携（20260923-agent-session-resume）-------------------------
@@ -968,7 +1054,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
    * herdr は worktree グループ経由でも busy 以外の追加確認をする（D56 の訂正 2 の時点では、
    * 本製品はグルーピングが対象外だった）。**20260923-workspace-grouping で対応**——
    * `ConfirmDialog.vue` が「束ねた worktree も一緒に閉じる」チェックボックスを、対象が
-   * worktree 自動グループの本体のときだけ追加で出す（`confirmClose` の `closeLinkedWorktrees`）。
+   * worktree グループの本体のときだけ追加で出す（`confirmClose` の `closeLinkedWorktrees`）。
    */
   private closeWorkspace(): void {
     const workspaceId = this.view.workspaceId;
@@ -1000,18 +1086,17 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   // --- T18: navigate・resize・copy・名前の変更・その他 ----------------------
 
-  private navigate(op: "up" | "down" | "paneDir" | "activate" | "cancel" | "openMenu", dir?: Dir): void {
+  private navigate(op: "up" | "down" | "paneDir" | "activate" | "cancel" | "openMenu" | "toggleCollapse", dir?: Dir): void {
     switch (op) {
       case "up":
       case "down": {
-        // Sidebar.vue の描画（`groupedWorkspaceRows`）と同じ並び・同じ可視範囲を辿る
-        // （20260923-workspace-grouping レビューの指摘：グループ導入前は素の反復順だったため
-        // 画面の並びと一致していたが、グループ導入後は乖離していた）。
-        const ids = visibleWorkspaceIdsInOrder([...this.session.workspaces.values()], [...this.session.groups.values()], this.view.workspaceSort, this.view.collapsedAutoGroups, this.view.workspaceId);
-        if (ids.length === 0) return;
-        const current = this.view.navigateSelection ? ids.indexOf(this.view.navigateSelection) : -1;
+        // Sidebar.vue の描画（`sidebarTree`）と同じ並び・同じ可視範囲を辿る。選べるのは行（グループの見出しを含む。
+        // 畳んだグループ・空のグループにも届く。20261004-group-worktree-items）。
+        const keys = currentNavigableRows(this.session, this.view).map(navigateKeyOfRow);
+        if (keys.length === 0) return;
+        const current = this.view.navigateSelection ? keys.indexOf(this.view.navigateSelection) : -1;
         const delta = op === "up" ? -1 : 1;
-        const next = ids[(current === -1 ? 0 : current + delta + ids.length) % ids.length];
+        const next = keys[(current === -1 ? 0 : current + delta + keys.length) % keys.length];
         if (next) this.view.setNavigateSelection(next);
         return;
       }
@@ -1029,13 +1114,46 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         // （20260925-sidebar-keyboard-menu）。
         if (this.view.navigateSelection) this.view.requestNavigateMenu();
         return;
+      case "toggleCollapse":
+        this.toggleCollapseOfSelection();
+        return;
     }
+  }
+
+  /**
+   * `navigate_toggle_collapse`。選んでいる行が「グループなし」の見出しなら共有の設定 `ungroupedCollapsed` を、グループの見出しならそのグループ（サーバ）を、worktree グループの
+   * 先頭・子（代表の行）ならその worktree グループ（共有の設定 `collapsedAutoGroups`）を畳む・広げる。通常の行（代表でない行も）は何もしない。
+   */
+  private toggleCollapseOfSelection(): void {
+    const key = this.view.navigateSelection;
+    if (!key) return;
+    // 「グループなし」の見出しの畳みは共有の設定（`ungroupedCollapsed`）。見出しが出ていない（グループが無くなった）なら選択を外す。
+    if (isUngroupedNavigateKey(key)) {
+      if (!currentNavigableRows(this.session, this.view).some((r) => r.kind === "ungrouped")) this.view.setNavigateSelection(null);
+      else this.view.toggleUngroupedCollapsed();
+      return;
+    }
+    const groupId = groupIdOfNavigateKey(key);
+    if (groupId !== null) {
+      // 別の画面で消されたグループが選択に残っていたら、何も送らず選択を外す。
+      if (!this.session.groups.has(groupId)) this.view.setNavigateSelection(null);
+      else this.toggleGroupCollapsed(groupId);
+      return;
+    }
+    const ws = this.session.workspaces.get(key);
+    const all = [...this.session.workspaces.values()];
+    // 代表でない通常の行（同じフォルダの 2 つ目）は worktree の印が付かないので何もしない（追補 A）。
+    if (!ws || !isRepresentative(ws, all)) return;
+    const repoKey = ws.git?.repoKey ?? null;
+    if (repoKey === null || repoMembers(all, repoKey).length < 2) return;
+    this.view.toggleAutoGroupCollapsed(repoKey);
   }
 
   private activateNavigateSelection(): void {
     const workspaceId = this.view.navigateSelection;
     this.view.setNavigateSelection(null);
-    if (!workspaceId) return;
+    // グループの見出しを選んでいるときの Enter は、選択をやめるだけ（畳むのは `navigate_toggle_collapse`）。
+    if (!workspaceId || groupIdOfNavigateKey(workspaceId) !== null || isUngroupedNavigateKey(workspaceId)) return;
     this.focusWorkspaceById(workspaceId);
   }
 
@@ -1077,9 +1195,9 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   // --- 20260923-missing-keybinding-actions（herdr にあって本製品に操作自体が無かったもの） -------------
 
   private workspaceDelta(delta: 1 | -1): void {
-    // Sidebar.vue の描画（`groupedWorkspaceRows`）と同じ並び・同じ可視範囲を辿る（上の `navigate`
+    // Sidebar.vue の描画（`sidebarTree`）と同じ並び・同じ可視範囲を辿る（上の `navigate`
     // 「up」「down」と同じ理由。20260923-workspace-grouping レビューの指摘）。
-    const ids = visibleWorkspaceIdsInOrder([...this.session.workspaces.values()], [...this.session.groups.values()], this.view.workspaceSort, this.view.collapsedAutoGroups, this.view.workspaceId);
+    const ids = currentVisibleWorkspaceIds(this.session, this.view);
     if (ids.length <= 1) return; // AC4
     const current = this.view.workspaceId ? ids.indexOf(this.view.workspaceId) : -1;
     const next = ids[(current === -1 ? 0 : current + delta + ids.length) % ids.length];
@@ -1088,7 +1206,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   /** `switch_workspace`（1〜9。20260927-cli-mode）。サイドバーの並び（`workspaceDelta` と同じ可視範囲）の N 番目へ。無ければ何もしない。 */
   private workspaceIndex(index: number): void {
-    const ids = visibleWorkspaceIdsInOrder([...this.session.workspaces.values()], [...this.session.groups.values()], this.view.workspaceSort, this.view.collapsedAutoGroups, this.view.workspaceId);
+    const ids = currentVisibleWorkspaceIds(this.session, this.view);
     const target = ids[index - 1];
     if (target) this.focusWorkspaceById(target);
   }
@@ -1159,26 +1277,42 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /**
-   * `move_workspace_previous`/`move_workspace_next`（20260923-workspace-grouping。`moveTab` と
-   * 同じ形）。対象は現在 focus 中の workspace。グループの内側・外側を問わず、フラットな順序上で
-   * 隣と入れ替わる——キーバインドはグループのまとまりを保つ動きはしない（design「振る舞いの詳細
-   * （キーバインド）」。まとまりを保った移動は D&D の役割＝`moveWorkspacesByDrag`）。
+   * `move_workspace_previous`/`move_workspace_next`（`moveTab` と同じ形）。対象は現在 focus 中の workspace の**項目**
+   * （20261004-group-worktree-items。リポジトリなら worktree グループ丸ごと。同じ入れ物の中で 1 つ動く）。
    */
   private moveWorkspace(direction: "previous" | "next"): void {
     const workspaceId = this.view.workspaceId;
     // `moveTab` と同じく実在を確かめてから送る（タスク点検の指摘：閉じた直後の stale な id で
     // 空振りの要求を送らない。サーバ側では無視されるだけだが、意図を読める形にそろえる）。
     if (!workspaceId || !this.session.workspaces.has(workspaceId)) return;
+    // 名前順のときの一番上は並べ替えを受け付けない（見た目が名前で決まる。グループの中は並べ替えられる）。
+    if (this.view.workspaceSort === "name" && itemGroupIdOf(this.session, workspaceId) === null) {
+      this.view.toast("名前順では並べ替えできません");
+      return;
+    }
+    // `layout` を持つサーバは項目単位（子ならその worktree グループ全体。端では動かない）。無いサーバは今までの `workspace.move`。
+    if (this.session.hasServerLayout) {
+      void this.conn.request("item.move_by", { item: { kind: "workspace", workspaceId }, direction }).catch(() => undefined);
+      return;
+    }
     void this.conn.request("workspace.move", { workspaceId, direction }).catch(() => undefined);
   }
 
   /**
-   * workspace 行・グループのヘッダー行の D&D 確定（20260923-workspace-grouping。design「振る舞いの
-   * 詳細（D&D）」）。`workspaceIds` は動かす対象（通常の行なら1件、グループのヘッダー行ならそのグループの
-   * 全メンバー id）。`Sidebar.vue` の `onRowPointerUp` から呼ぶ。
+   * サイドバーの行のドラッグの確定（20261004-group-worktree-items。design「画面」のドラッグ）。動かすのは項目
+   * （`item`。子を掴めばその worktree グループ）で、`before` の項目の前へ（null は入れ物の末尾。決め方は client-core の `dropBefore`）。入れ物が同じか・名前順の一番上かは
+   * 呼び出し側（`Sidebar.vue`）が見て、ここへ来るのは受け付けてよい移動だけ。`layout` を持たない古いサーバには
+   * 今までの `workspace.move_to`（項目の workspace の ID の集まりと、落とし先の項目の先頭の workspace。D22 のまま）を送る。
    */
-  moveWorkspacesByDrag(workspaceIds: string[], beforeWorkspaceId: string | null): void {
-    void this.conn.request("workspace.move_to", { workspaceIds, beforeWorkspaceId }).catch(() => undefined);
+  moveItemByDrag(item: ItemTarget, before: ItemTarget | null, legacy: { workspaceIds: string[]; beforeWorkspaceId: string | null }): void {
+    if (!this.session.hasServerLayout) {
+      // 古いサーバへ落とし先 null（末尾へ）を送ると意味が変わる。落とし先の無い行（空のグループ）の上では何も送らない。
+      // 動かす workspace が無い（空のグループ）ときも送らない。
+      if (legacy.beforeWorkspaceId === null || legacy.workspaceIds.length === 0) return;
+      void this.conn.request("workspace.move_to", { workspaceIds: legacy.workspaceIds, beforeWorkspaceId: legacy.beforeWorkspaceId }).catch(() => undefined);
+      return;
+    }
+    void this.conn.request("item.move", { item, before }).catch(() => this.view.toast("移動できませんでした"));
   }
 
   /** `previous_agent`/`next_agent`/`focus_agent` が共有する対象の組み立て（design「振る舞いの詳細」）。 */

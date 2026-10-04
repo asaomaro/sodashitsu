@@ -253,6 +253,44 @@ describe("設定画面", () => {
     await vi.waitFor(async () => expect(await h.text()).toContain("Claude Code：入れました"));
   });
 
+  // 20261004-subagent-display。導入済みで足りないフックがあれば「更新が必要」と、押すと足す項目（解除とは別の項目）。
+  it("エージェント連携：needsUpdate なら「更新が必要」と更新の項目を出し、押すと install の RPC（解除ではない）。足りていれば出さない", async () => {
+    const h = await open({
+      respond: {
+        "agent_integration.status": {
+          autoResumeEnabled: true,
+          agents: {
+            claude: { cliDetected: true, installed: true, needsUpdate: true },
+            codex: { cliDetected: true, installed: true },
+          },
+        },
+      },
+    });
+    await vi.waitFor(() => expect(h.ws.requests("agent_integration.status")).toHaveLength(1));
+    await h.section(4);
+    const t = await h.text();
+    expect(t).toContain("導入済み（更新が必要）");
+    expect(t).toContain("Claude Codeのフックを更新");
+    expect(t).not.toContain("Codexのフックを更新");
+    h.io.type("j"); // 更新の項目へ（Claude Code の次）
+    h.io.type(ENTER);
+    expect(h.ws.requests("agent_integration.install").map((r) => r.params)).toEqual([
+      { kind: "claude" },
+    ]);
+    expect(h.ws.requests("agent_integration.uninstall")).toEqual([]);
+    await vi.waitFor(async () => expect(await h.text()).toContain("Claude Code：更新しました"));
+  });
+
+  it("エージェント連携：Claude Code は 6 つのフックを入れる説明（サブエージェントの表示に使う）。ほかは 1 つ", async () => {
+    const h = await open();
+    await vi.waitFor(() => expect(h.ws.requests("agent_integration.status")).toHaveLength(1));
+    await h.section(4);
+    await vi.waitFor(async () => expect(await h.text()).toContain("未導入"));
+    const t = await h.text();
+    expect(t).toContain("フックを 6 つ入れます");
+    expect(t).toContain("サブエージェントの表示");
+  });
+
   it("状態を記号でも示すを切にすると、サイドバーの記号は色の点になる", async () => {
     const snap = snapshot({
       panes: [

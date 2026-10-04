@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   ASK_COLORS_MAX,
+  ASK_COMMENTS_TOTAL_MAX,
   ASK_OPTIONS_MAX,
   ASK_QUESTIONS_MAX,
   ASK_SPEC_MAX_BYTES,
+  askCommentable,
   checkAskAnswer,
   collectAsk,
   initialAskState,
@@ -274,6 +276,46 @@ describe("normalizeAskSpec — 既定と丸め", () => {
   });
 });
 
+describe("自由記述の指定（comments・comment）", () => {
+  it("comments・comment は false のときだけ残す。true・無い・真偽でない値は項目なし（誤りにしない）", () => {
+    const s = spec({ comments: false, questions: [q({ comment: false })] });
+    expect(s.comments).toBe(false);
+    expect(s.questions[0]!.comment).toBe(false);
+    for (const v of [true, undefined, null, "false", 0, "", [], {}]) {
+      const t = spec({ comments: v, questions: [q({ comment: v })] });
+      expect(t).not.toHaveProperty("comments");
+      expect(t.questions[0]).not.toHaveProperty("comment");
+    }
+  });
+  it("comment の値が真偽でなくても誤りにならない", () => {
+    expect(normalizeAskSpec({ questions: [q({ id: "a", comment: "x" })] }).ok).toBe(true);
+  });
+  it("askCommentable: 定義の comments: false・質問の comment: false・text・即確定のフォームでは付けない（4 条件）", () => {
+    const two = (extra: Record<string, unknown> = {}, top: Record<string, unknown> = {}) => spec({ ...top, questions: [q({ id: "a", ...extra }), q({ id: "b" })] });
+    const base = two();
+    expect(askCommentable(base, base.questions[0]!)).toBe(true);
+    const multi = two({ type: "multi" });
+    expect(askCommentable(multi, multi.questions[0]!)).toBe(true);
+    const off = two({}, { comments: false });
+    expect(askCommentable(off, off.questions[0]!)).toBe(false);
+    const qoff = two({ comment: false });
+    expect(askCommentable(qoff, qoff.questions[0]!)).toBe(false);
+    expect(askCommentable(qoff, qoff.questions[1]!)).toBe(true);
+    const text = spec({ questions: [{ id: "t", label: "T", type: "text" }, q({ id: "b" })] });
+    expect(askCommentable(text, text.questions[0]!)).toBe(false);
+    // 即確定: 質問が 1 つ・single・補足なし
+    const instant = spec({ note: false, questions: [q()] });
+    expect(askCommentable(instant, instant.questions[0]!)).toBe(false);
+    // 補足あり・multi・質問が 2 つなら即確定ではない
+    const withNote = spec({ questions: [q()] });
+    expect(askCommentable(withNote, withNote.questions[0]!)).toBe(true);
+    const oneMulti = spec({ note: false, questions: [q({ type: "multi" })] });
+    expect(askCommentable(oneMulti, oneMulti.questions[0]!)).toBe(true);
+    const twoNoNote = spec({ note: false, questions: [q({ id: "a" }), q({ id: "b" })] });
+    expect(askCommentable(twoNoNote, twoNoNote.questions[0]!)).toBe(true);
+  });
+});
+
 describe("isAskColor", () => {
   it("#rgb・#rgba・#rrggbb・#rrggbbaa だけ", () => {
     for (const c of ["#fff", "#FFFF", "#1a56db", "#1a56dbcc"]) expect(isAskColor(c)).toBe(true);
@@ -452,5 +494,81 @@ describe("checkAskAnswer", () => {
     const off = spec({ note: false, questions: [q({ default: "x" })] });
     expect(checkAskAnswer(off, { answers: { a: "x" } })).toBeNull();
     expect(checkAskAnswer(off, { answers: { a: "x" }, note: "n" })).toMatch(/no note/);
+  });
+});
+
+describe("自由記述の回答（comments）", () => {
+  // a: 付けられる / b: showIf で隠れうる / t: text（付けられない）/ n: comment: false
+  const s = spec({
+    questions: [
+      q({ id: "a", default: "x" }),
+      q({ id: "b", showIf: { a: "x" } }),
+      { id: "t", label: "T", type: "text" },
+      q({ id: "n", comment: false }),
+    ],
+  });
+  const answers = { a: "x", b: "x", t: "", n: "x" };
+  const state = (comments: Record<string, string>): AskFormState => ({ ...initialAskState(s), comments });
+  describe("collectAsk", () => {
+    it("見えていて付けられる質問の自由記述が、前後の空白を除いて入る。空白だけ・無いものは入らない", () => {
+      const r = collectAsk(s, state({ a: " 金曜は避けたい ", b: "   " }));
+      expect(r.comments).toEqual({ a: "金曜は避けたい" });
+    });
+    it("1 つも無ければ comments の項目が無い（state.comments が無いときも）", () => {
+      expect(collectAsk(s, state({ a: "  " }))).not.toHaveProperty("comments");
+      expect(collectAsk(s, initialAskState(s))).not.toHaveProperty("comments");
+    });
+    it("隠れている質問・text・comment: false の質問・定義が comments: false のときは入らない", () => {
+      const hidden = collectAsk(s, { ...state({ a: "x", b: "隠れた" }), picked: { ...initialAskState(s).picked, a: ["y"] } });
+      expect(hidden.comments).toEqual({ a: "x" });
+      expect(collectAsk(s, state({ t: "text", n: "off" }))).not.toHaveProperty("comments");
+      const off = spec({ comments: false, questions: [q({ id: "a" }), q({ id: "b" })] });
+      expect(collectAsk(off, { ...initialAskState(off), comments: { a: "x" } })).not.toHaveProperty("comments");
+      const instant = spec({ note: false, questions: [q({ id: "a" })] });
+      expect(collectAsk(instant, { ...initialAskState(instant), comments: { a: "x" } })).not.toHaveProperty("comments");
+    });
+    it("constructor・toString のような継承された値は、自分の項目でないので拾わない", () => {
+      const p = spec({ questions: [q({ id: "constructor" }), q({ id: "toString" }), q({ id: "a" })] });
+      const inherited = Object.create({ constructor: "継承", toString: "継承" }) as Record<string, string>;
+      expect(collectAsk(p, { ...initialAskState(p), comments: inherited })).not.toHaveProperty("comments");
+      expect(collectAsk(p, { ...initialAskState(p), comments: Object.assign(inherited, { toString: "自分の" }) }).comments).toEqual({ toString: "自分の" });
+    });
+  });
+  describe("checkAskAnswer", () => {
+    const check = (comments: unknown, spec_ = s, ans: Record<string, string> = answers) =>
+      checkAskAnswer(spec_, { answers: ans, comments } as never);
+    it("付けられる質問の自由記述は通る。{} も通る。10000 文字は通る", () => {
+      expect(check({ a: "希望", b: "x" })).toBeNull();
+      expect(check({})).toBeNull();
+      expect(check({ a: "あ".repeat(10_000) })).toBeNull();
+    });
+    it("定義に無い id・隠れている質問・text・comment: false・文字列でない値は断る", () => {
+      expect(check({ zzz: "x" })).toMatch(/unknown/);
+      expect(check({ b: "x" }, s, { a: "y", t: "", n: "x" })).toMatch(/unknown/);
+      expect(check({ t: "x" })).toMatch(/does not accept/);
+      expect(check({ n: "x" })).toMatch(/does not accept/);
+      expect(check({ a: 1 })).toMatch(/string/);
+      expect(check({ a: ["x"] })).toMatch(/string/);
+    });
+    it("定義が comments: false・即確定のフォームでは、どの質問の自由記述も断る", () => {
+      const off = spec({ comments: false, questions: [q({ id: "a" })] });
+      expect(check({ a: "x" }, off, { a: "x" })).toMatch(/does not accept/);
+      const instant = spec({ note: false, questions: [q({ id: "a" })] });
+      expect(check({ a: "x" }, instant, { a: "x" })).toMatch(/does not accept/);
+    });
+    it("長さの合計が上限（100000）を超えたら断る。ちょうどは通る", () => {
+      const many = spec({ questions: Array.from({ length: 11 }, (_, i) => q({ id: `q${i}` })) });
+      const ans = Object.fromEntries(many.questions.map((x) => [x.id, "x"]));
+      const part = (n: number) => Object.fromEntries(many.questions.slice(0, 11).map((x, i) => [x.id, "あ".repeat(i < 10 ? 10_000 : n)]));
+      expect(check(part(0), many, ans)).toBeNull();
+      expect(ASK_COMMENTS_TOTAL_MAX).toBe(100_000);
+      expect(check(part(1), many, ans)).toMatch(/in total/);
+    });
+    it("__proto__ のキーは、定義の id になれないので「知らない id」として断る。constructor は定義に無ければ断り、あれば通る", () => {
+      expect(check(JSON.parse('{"__proto__":"x"}'))).toMatch(/unknown/);
+      expect(check({ constructor: "x" })).toMatch(/unknown/);
+      const c = spec({ questions: [q({ id: "constructor" }), q({ id: "b" })] });
+      expect(check({ constructor: "x" }, c, { constructor: "x", b: "x" })).toBeNull();
+    });
   });
 });

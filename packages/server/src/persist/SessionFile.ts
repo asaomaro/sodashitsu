@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import type { LayoutNode, PaneStatus, SplitDirection } from "@sodashitsu/protocol";
-import type { NextIdCounters } from "@sodashitsu/protocol";
+import { SidebarLayoutSchema, type NextIdCounters, type SidebarLayout } from "@sodashitsu/protocol";
 import { readFileWithBackup, writeFileAtomic, type ReadResult } from "./atomicFile.js";
 
 /**
@@ -40,6 +40,24 @@ export interface SessionFileWorkspace {
   /** 手動グループの所属先（20260923-workspace-grouping）。**以前の版の保存には無い**——無ければ
    *  null（`autoLabel` と同じ「optional 追加」方式）。 */
   groupId?: string | null | undefined;
+  /**
+   * 直前の git の判定（20261004-group-worktree-items）。**以前の版の保存には無い**。読み分け: 文字列＝そのリポジトリ（`GitInfo.repoKey`）／
+   * `null`＝管理外**または判定前**（保存は判定前でも `null` を書く。復元は `git: null`＝並びを変えない仮の状態から始まる）／
+   * 項目が無い＝以前の版の保存。復元で `git` を戻す（ブランチ名・件数は最初の確認で入る）。
+   */
+  repoKey?: string | null | undefined;
+  /** linked worktree か。`repoKey` が文字列のときだけ意味を持つ。無ければ false。 */
+  isLinkedWorktree?: boolean | undefined;
+  /**
+   * その worktree（フォルダ）を示す値（`GitInfo.worktreeKey`。追補 01 A）。`repoKey` が文字列のときだけ意味を持つ。**無い保存**（追補の前・管理外）は
+   * 無いまま戻す（同じ `repoKey` の workspace を全部メンバーとして扱う）。
+   */
+  worktreeKey?: string | undefined;
+  /**
+   * その worktree の代表か（`Workspace.representative`。T29）。再起動をまたいで同じ代表にするために保存する。`worktreeKey` が文字列のときだけ
+   * 意味を持つ。**無い保存**（古い版）は無いまま戻し、`w<番号>` の作った順で決める（版は 1 のまま）。
+   */
+  representative?: boolean | undefined;
   cwd: string;
   activeTabId: string;
   tabs: SessionFileTab[];
@@ -57,6 +75,13 @@ export interface SessionFileData {
   workspaces: SessionFileWorkspace[];
   /** **以前の版の保存には無い**——無ければ空配列（20260923-workspace-grouping）。 */
   groups: SessionFileGroup[];
+  /**
+   * サイドバーの項目の並び（20261004-group-worktree-items）。**以前の版の保存には無い**——無ければ移行待ち（仮の状態）で復元する。
+   * 仮の状態の間の保存には書かない（途中で止まっても次の起動が同じ移行をやり直せるように）。
+   */
+  layout?: SidebarLayout | undefined;
+  /** リポジトリの所属（`repoKey` → グループ id）。`layout` と同じく、仮の状態の間は書かない。 */
+  repoGroups?: Record<string, string> | undefined;
   focus: { workspaceId: string; tabId: string; paneId: string } | null;
 }
 
@@ -104,6 +129,11 @@ const SessionFileWorkspaceSchema: z.ZodType<SessionFileWorkspace> = z.object({
   autoLabel: z.boolean().optional(),
   // 以前の版の保存には無い——無ければ null として読む（20260923-workspace-grouping）。
   groupId: z.string().nullable().optional(),
+  // 以前の版の保存には無い（20261004-group-worktree-items）。
+  repoKey: z.string().nullable().optional(),
+  isLinkedWorktree: z.boolean().optional(),
+  worktreeKey: z.string().optional(),
+  representative: z.boolean().optional(),
   cwd: z.string(),
   activeTabId: z.string(),
   tabs: z.array(SessionFileTabSchema),
@@ -129,6 +159,11 @@ const SessionFileDataSchema: z.ZodType<SessionFileData> = z.object({
   // 以前の版の保存には無い——無ければ空配列（20260923-workspace-grouping）。
   groups: z.array(SessionFileGroupSchema).default([]),
   workspaces: z.array(SessionFileWorkspaceSchema),
+  // 以前の版の保存には無い（20261004-group-worktree-items）。形が合わない `layout`（`ungrouped` が無い追補 01 より前の途中の形など）は、
+  // 保存全体を壊れた扱いにせず `layout` だけ捨てる——仮の状態から始め直す（decisions D28）。`repoGroups` も形が合わなければ捨てるだけ（decisions D45）。`repoGroups` は `layout` と対で使うので、
+  // `layout` が無ければ復元は読まない。
+  layout: SidebarLayoutSchema.optional().catch(undefined),
+  repoGroups: z.record(z.string(), z.string()).optional().catch(undefined),
   focus: z.object({ workspaceId: z.string(), tabId: z.string(), paneId: z.string() }).nullable(),
 });
 

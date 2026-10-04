@@ -74,6 +74,7 @@ export function helpGroups(keymap: ResolvedKeymap, nav: ResolvedNavigateKeymap):
         navEntry("navigate_workspace_up"),
         navEntry("navigate_workspace_down"),
         navEntry("navigate_open_menu"),
+        navEntry("navigate_toggle_collapse"),
         {
           keys: `${navText("navigate_pane_left")} ・ ←`,
           label: navigateKeyDef("navigate_pane_left")!.label,

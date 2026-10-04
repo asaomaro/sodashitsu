@@ -1,5 +1,6 @@
 import type { MethodName, ParamsOf, ResultOf } from "@sodashitsu/protocol";
 import type { AgentInfo, AgentIntegrationStatusResult, Pane, Tab, Workspace } from "@sodashitsu/protocol";
+import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KeyInputController } from "../keys/KeyInputController.js";
@@ -17,6 +18,8 @@ import { useMachinesStore } from "../store/machines.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import { InputGate } from "@sodashitsu/client-core";
+import ContextMenu from "../components/ContextMenu.vue";
+import { ActionDispatcherKey } from "../injection.js";
 import { ActionDispatcher } from "./ActionDispatcher.js";
 
 let pinia: Pinia;
@@ -1598,16 +1601,47 @@ describe("ActionDispatcher — workspace の並べ替え", () => {
     expect(conn.requests).toEqual([]);
   });
 
-  it("moveWorkspacesByDrag: 渡した id 配列と beforeWorkspaceId をそのまま workspace.move_to へ送る（グループ一括も同じ経路）", () => {
+  const legacyArg = { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" };
+
+  it("moveItemByDrag: layout を持つサーバには item.move（項目と落とし先の項目）を送る", () => {
     const conn = makeConnection();
-    makeDispatcher(conn).dispatcher.moveWorkspacesByDrag(["w1", "w2"], "w3");
+    useSessionStore(pinia).layoutChanged({ top: ["r:/r/.git", "w:w3"], groups: {}, ungrouped: [] });
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w3" }, legacyArg);
+    expect(conn.requests).toEqual([["item.move", { item: { kind: "workspace", workspaceId: "w1" }, before: { kind: "workspace", workspaceId: "w3" } }]]);
+  });
+
+  it("moveItemByDrag: グループも項目として送る", () => {
+    const conn = makeConnection();
+    useSessionStore(pinia).layoutChanged({ top: ["g:g1", "w:w3"], groups: { g1: [] }, ungrouped: [] });
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "group", groupId: "g1" }, { kind: "workspace", workspaceId: "w3" }, legacyArg);
+    expect(conn.requests).toEqual([["item.move", { item: { kind: "group", groupId: "g1" }, before: { kind: "workspace", workspaceId: "w3" } }]]);
+  });
+
+  it("moveItemByDrag: layout の無い古いサーバには workspace.move_to（id の集まりと落とし先）を送る", () => {
+    const conn = makeConnection();
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w3" }, legacyArg);
     expect(conn.requests).toEqual([["workspace.move_to", { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" }]]);
   });
 
-  it("moveWorkspacesByDrag: beforeWorkspaceId が null なら末尾へ", () => {
+  it("moveItemByDrag: item.move が失敗したら「移動できませんでした」と知らせる", async () => {
     const conn = makeConnection();
-    makeDispatcher(conn).dispatcher.moveWorkspacesByDrag(["w1"], null);
-    expect(conn.requests).toEqual([["workspace.move_to", { workspaceIds: ["w1"], beforeWorkspaceId: null }]]);
+    conn.rejectWith["item.move"] = "internal";
+    useSessionStore(pinia).layoutChanged({ top: ["w:w1", "w:w3"], groups: {}, ungrouped: [] });
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w3" }, legacyArg);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useViewStore(pinia).toasts.map((t) => t.message)).toEqual(["移動できませんでした"]);
+  });
+
+  it("moveItemByDrag: 古いサーバで動かす workspace が無い（空のグループ）なら何も送らない（workspaceIds: [] を送らない）", () => {
+    const conn = makeConnection();
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "group", groupId: "g1" }, { kind: "workspace", workspaceId: "w3" }, { workspaceIds: [], beforeWorkspaceId: "w3" });
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("moveItemByDrag: 古いサーバで落とし先の workspace が無い（空のグループの上）なら何も送らない（null は末尾の意味になる）", () => {
+    const conn = makeConnection();
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "workspace", workspaceId: "w1" }, { kind: "group", groupId: "g1" }, { workspaceIds: ["w1"], beforeWorkspaceId: null });
+    expect(conn.requests).toEqual([]);
   });
 });
 
@@ -1663,6 +1697,121 @@ describe("ActionDispatcher — 手動グループ（herdr に前例が無い独�
     await flush();
     expect(view.toasts.map((t) => t.message)).toContain("グループは作成しましたが、workspace の追加に失敗しました。");
     expect(view.toasts.map((t) => t.message)).not.toContain("グループを作成できませんでした");
+  });
+
+  // 20261004-group-worktree-items：`layout` を持つサーバは 1 回、持たない古いサーバは今までどおり。
+  describe("layout を持つサーバ", () => {
+    it("confirmCreateGroup: group.create に workspaceId を添えて 1 回だけ送る", async () => {
+      const conn = makeConnection();
+      useSessionStore(pinia).layoutChanged({ top: [], groups: {}, ungrouped: [] });
+      const view = useViewStore(pinia);
+      view.openDialogWithContext({ kind: "createGroup", workspaceId: "w1" });
+      makeDispatcher(conn).dispatcher.confirmCreateGroup("backend");
+      await flush();
+      expect(conn.requests).toEqual([["group.create", { label: "backend", workspaceId: "w1" }]]);
+    });
+
+    it("confirmAddToGroup: 項目の workspace が複数でも group.add_member は 1 回", () => {
+      const conn = makeConnection();
+      const session = useSessionStore(pinia);
+      session.layoutChanged({ top: ["g:g1"], groups: { g1: [] }, ungrouped: [] });
+      const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+      session.workspaceUpserted(makeWorkspace("w1", [], { git: git(false) }));
+      session.workspaceUpserted(makeWorkspace("w2", [], { git: git(true) }));
+      useViewStore(pinia).openDialogWithContext({ kind: "addToGroup", workspaceId: "w2", groups: [] });
+      makeDispatcher(conn).dispatcher.confirmAddToGroup("g1");
+      expect(conn.requests).toEqual([["group.add_member", { groupId: "g1", workspaceId: "w2" }]]);
+    });
+
+    it("removeWorkspaceFromGroup: group.remove_member は 1 回", () => {
+      const conn = makeConnection();
+      const session = useSessionStore(pinia);
+      session.layoutChanged({ top: [], groups: {}, ungrouped: [] });
+      const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+      session.workspaceUpserted(makeWorkspace("w1", [], { git: git(false) }));
+      session.workspaceUpserted(makeWorkspace("w2", [], { git: git(true) }));
+      makeDispatcher(conn).dispatcher.removeWorkspaceFromGroup("w2");
+      expect(conn.requests).toEqual([["group.remove_member", { workspaceId: "w2" }]]);
+    });
+
+    it("moveGroupBy: item.move_by を送る", () => {
+      const conn = makeConnection();
+      useSessionStore(pinia).layoutChanged({ top: ["g:g1"], groups: { g1: [] }, ungrouped: [] });
+      makeDispatcher(conn).dispatcher.moveGroupBy("g1", "next");
+      expect(conn.requests).toEqual([["item.move_by", { item: { kind: "group", groupId: "g1" }, direction: "next" }]]);
+    });
+
+    it("moveGroupBy: 名前順のときは送らず「名前順では並べ替えできません」と知らせる", () => {
+      const conn = makeConnection();
+      useSessionStore(pinia).layoutChanged({ top: ["g:g1"], groups: { g1: [] }, ungrouped: [] });
+      const view = useViewStore(pinia);
+      view.workspaceSort = "name";
+      makeDispatcher(conn).dispatcher.moveGroupBy("g1", "previous");
+      expect(conn.requests).toEqual([]);
+      expect(view.toasts.map((t) => t.message)).toContain("名前順では並べ替えできません");
+    });
+  });
+
+  describe("layout の無い古いサーバ（今までの RPC）", () => {
+    function setUpRepo(session: ReturnType<typeof useSessionStore>): void {
+      const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+      session.workspaceUpserted(makeWorkspace("w1", [], { git: git(false) }));
+      session.workspaceUpserted(makeWorkspace("w2", [], { git: git(true) }));
+    }
+
+    it("confirmAddToGroup: 項目の workspace 全部（repoMembers の順）に group.add_member を順に送る", async () => {
+      const conn = makeConnection();
+      const session = useSessionStore(pinia);
+      setUpRepo(session);
+      useViewStore(pinia).openDialogWithContext({ kind: "addToGroup", workspaceId: "w2", groups: [] });
+      makeDispatcher(conn).dispatcher.confirmAddToGroup("g1");
+      await flush();
+      expect(conn.requests).toEqual([
+        ["group.add_member", { groupId: "g1", workspaceId: "w1" }],
+        ["group.add_member", { groupId: "g1", workspaceId: "w2" }],
+      ]);
+    });
+
+    it("removeWorkspaceFromGroup: 項目の workspace 全部に group.remove_member を順に送る", async () => {
+      const conn = makeConnection();
+      const session = useSessionStore(pinia);
+      setUpRepo(session);
+      makeDispatcher(conn).dispatcher.removeWorkspaceFromGroup("w2");
+      await flush();
+      expect(conn.requests).toEqual([
+        ["group.remove_member", { workspaceId: "w1" }],
+        ["group.remove_member", { workspaceId: "w2" }],
+      ]);
+    });
+
+    it("confirmCreateGroup: 2 段（group.create の後に項目の workspace 全部へ add_member）", async () => {
+      const conn = makeConnection();
+      conn.resolveWith["group.create"] = { group: { id: "g9", label: "backend", collapsed: false } };
+      const session = useSessionStore(pinia);
+      setUpRepo(session);
+      useViewStore(pinia).openDialogWithContext({ kind: "createGroup", workspaceId: "w2" });
+      makeDispatcher(conn).dispatcher.confirmCreateGroup("backend");
+      await flush();
+      expect(conn.requests).toEqual([
+        ["group.create", { label: "backend" }],
+        ["group.add_member", { groupId: "g9", workspaceId: "w1" }],
+        ["group.add_member", { groupId: "g9", workspaceId: "w2" }],
+      ]);
+    });
+  });
+
+  it("openGroupPicker: 選択肢はレイアウトの順で、移すときは今のグループを除く（moving 付き）", () => {
+    const conn = makeConnection();
+    const session = useSessionStore(pinia);
+    session.groupUpserted({ id: "g1", label: "a", collapsed: false });
+    session.groupUpserted({ id: "g2", label: "b", collapsed: false });
+    session.groupUpserted({ id: "g3", label: "c", collapsed: false });
+    session.workspaceUpserted(makeWorkspace("w1", [], { groupId: "g2" }));
+    session.layoutChanged({ top: ["g:g3", "g:g2", "g:g1"], groups: { g1: [], g2: ["w:w1"], g3: [] }, ungrouped: [] });
+    makeDispatcher(conn).dispatcher.openGroupPicker("w1");
+    const ctx = useViewStore(pinia).dialogContext;
+    expect(ctx).toMatchObject({ kind: "addToGroup", workspaceId: "w1", moving: true });
+    expect(ctx?.kind === "addToGroup" && ctx.groups.map((g) => g.id)).toEqual(["g3", "g1"]);
   });
 
   it("renameGroupById: 現在の名前を入れて renameGroup ダイアログを開く", () => {
@@ -2022,8 +2171,8 @@ describe("ActionDispatcher — workspaceDelta（previous_workspace/next_workspac
   });
 
   // レビューの指摘（must）：`Sidebar.vue` は 20260923-workspace-grouping でグループを1ブロックとして
-  // まとめる描画（`groupedWorkspaceRows`）に切り替わったが、`workspaceDelta` は素の「開いた順」
-  // （`orderedWorkspaceIds`）のままだったため、画面上の隣と実際に切り替わる先が食い違っていた。
+  // まとめる描画（旧 `groupedWorkspaceRows`）に切り替わったが、`workspaceDelta` は素の「開いた順」
+  // （素の開いた順）のままだったため、画面上の隣と実際に切り替わる先が食い違っていた。
   it("画面上の並び（グループはまとめて1ブロック）を辿る——開いた順が A, C, B でも次は画面上隣の B", () => {
     const conn = makeConnection();
     const session = useSessionStore(pinia);
@@ -2649,6 +2798,55 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     expect(conn.requests).toEqual([]);
   });
 
+  // 20261004-subagent-display（show_subagents）。
+  describe("showSubagents（show_subagents）", () => {
+    const subs = (n: number) => ({ count: n, items: Array.from({ length: n }, (_, i) => ({ id: `s${i}`, startedAt: 0 })) });
+    function setup(agent: AgentInfo | null) {
+      const session = useSessionStore(pinia);
+      const view = useViewStore(pinia);
+      session.workspaceUpserted(makeWorkspace("w1", ["t1"]));
+      session.tabUpserted(makeTab("t1", "w1"));
+      session.paneUpserted({ ...makePane("p1", "t1"), agent });
+      view.setView("w1", "t1");
+      view.focusPane("p1");
+      return { session, view };
+    }
+
+    it("フォーカスしている pane のエージェントの一覧を開く（ボタンから開いたのではないので opener は無い。何も送らない）", () => {
+      const { view } = setup(makeAgent({ subagents: subs(2) }));
+      const conn = makeConnection();
+      const { dispatcher } = makeDispatcher(conn);
+      dispatcher.run({ type: "showSubagents" });
+      expect(view.dialogContext).toEqual({ kind: "subagents", machineId: "local", paneId: "p1" });
+      expect(conn.requests).toEqual([]);
+    });
+
+    it("0 件・分からない（項目なし）・エージェントが居ない・フォーカスが無いときは何もしない", () => {
+      for (const agent of [makeAgent({ subagents: subs(0) }), makeAgent(), null]) {
+        pinia = createPinia();
+        const { view } = setup(agent);
+        const { dispatcher } = makeDispatcher(makeConnection());
+        dispatcher.run({ type: "showSubagents" });
+        expect(view.dialogContext).toBeNull();
+      }
+      pinia = createPinia();
+      const view = useViewStore(pinia);
+      const { dispatcher } = makeDispatcher(makeConnection());
+      dispatcher.run({ type: "showSubagents" });
+      expect(view.dialogContext).toBeNull();
+    });
+
+    it("別のマシンを選んでいれば、そのマシンの対象として開く", () => {
+      const { view } = setup(makeAgent({ subagents: subs(1) }));
+      const machines = useMachinesStore(pinia);
+      machines.setMachines([{ id: "gpu", label: "GPU", host: "h", enabled: true, state: "connected" } as never]);
+      machines.select("gpu");
+      const { dispatcher } = makeDispatcher(makeConnection());
+      dispatcher.run({ type: "showSubagents" });
+      expect(view.dialogContext).toMatchObject({ kind: "subagents", machineId: "gpu", paneId: "p1" });
+    });
+  });
+
   it("openGraph（open_graph。20260927-agent-graph）: グラフ画面を開く（ダイアログの枠は使わない・何も送らない）", () => {
     const conn = makeConnection();
     const view = useViewStore(pinia);
@@ -2659,5 +2857,370 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     expect(view.preGraphFocusPaneId).toBe("p1");
     expect(view.dialogContext).toBeNull();
     expect(conn.requests).toEqual([]);
+  });
+});
+
+// 20261004-group-worktree-items：描画とキー操作の順は同じ関数（サーバが配るレイアウトの順）を通る。
+describe("ActionDispatcher — レイアウトの順（20261004-group-worktree-items）", () => {
+  const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+  /** 開いた順（flat）は A, W1(worktree の子), B, M(本体)。レイアウトは top: [g1, B]、g1: [r:/r/.git, A]。 */
+  function setup() {
+    const session = useSessionStore(pinia);
+    for (const [id, o] of [
+      ["A", {}],
+      ["W1", { git: git(true), groupId: "g1" }],
+      ["B", {}],
+      ["M", { git: git(false), groupId: "g1" }],
+    ] as const) {
+      session.workspaceUpserted({ ...makeWorkspace(id, ["t" + id]), activeTabId: "t" + id, ...o });
+      session.tabUpserted(makeTab("t" + id, id, "p" + id));
+    }
+    session.groupUpserted({ id: "g1", label: "grp", collapsed: false });
+    session.layoutChanged({ top: ["g:g1", "w:B"], groups: { g1: ["r:/r/.git", "w:A"] }, ungrouped: [] });
+    return session;
+  }
+
+  it("workspaceDelta・workspaceIndex・navigate は、レイアウトの順（グループ → worktree グループの本体・子 → グループの中の通常の行 → 一番上の行）を辿る", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(makeConnection());
+    view.setView("M", "tM");
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("W1"); // 本体の次は子（開いた順では B の前）
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("A");
+    dispatcher.run({ type: "workspaceIndex", index: 4 });
+    expect(view.workspaceId).toBe("B");
+    view.setNavigateSelection("M");
+    dispatcher.run({ type: "navigate", op: "down" });
+    expect(view.navigateSelection).toBe("W1");
+  });
+
+  it("畳んだグループの中は今いる workspace だけが対象（畳んだ worktree グループも同じ）", () => {
+    const session = setup();
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(makeConnection());
+    session.groupUpserted({ id: "g1", label: "grp", collapsed: true });
+    view.setView("W1", "tW1");
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("B"); // グループの中は今いる W1 だけ。次は一番上の B
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("B"); // 今いる B だけが見える（グループの中は見えない）ので動かない
+  });
+
+  it("layout の無い古いサーバでも、layoutFromLegacy で導いた順を辿る（同じリポジトリは本体の所属で 1 つの項目）", () => {
+    const session = setup();
+    session.layout = null;
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(makeConnection());
+    // 導く順（追補 01 B）: グループ g1 = [r:/r/.git(本体 M の所属 g1)] が先、グループなし = [A, B]（平らな順）が後。
+    view.setView("M", "tM");
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("W1"); // 本体の次は子
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("A"); // グループの次はグループなしの先頭
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("B");
+  });
+});
+
+// 20261004-group-worktree-items T15：navigate の選択を行に広げ、畳む・開く・項目の並べ替え。
+describe("ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15）", () => {
+  const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+  /** top: [g1, g2(空), B]、g1: [r:/r/.git(M 本体・W1 子), A]。 */
+  function setup(opts: { collapsed?: boolean } = {}) {
+    const session = useSessionStore(pinia);
+    for (const [id, o] of [
+      ["A", {}],
+      ["W1", { git: git(true) }],
+      ["B", {}],
+      ["M", { git: git(false) }],
+    ] as const) {
+      session.workspaceUpserted({ ...makeWorkspace(id, ["t" + id]), activeTabId: "t" + id, ...o });
+      session.tabUpserted(makeTab("t" + id, id, "p" + id));
+    }
+    session.groupUpserted({ id: "g1", label: "grp", collapsed: opts.collapsed ?? false });
+    session.groupUpserted({ id: "g2", label: "空", collapsed: false });
+    session.layoutChanged({ top: ["g:g1", "g:g2", "w:B"], groups: { g1: ["r:/r/.git", "w:A"], g2: [] }, ungrouped: [] });
+    return session;
+  }
+
+  it("up/down はグループの見出しと「グループなし」の見出しも順に選ぶ（空のグループにも届く）。キーは workspace の id と混ざらない", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(makeConnection());
+    view.setNavigateSelection("group:g1");
+    const seen: (string | null)[] = [];
+    for (let i = 0; i < 7; i++) {
+      dispatcher.run({ type: "navigate", op: "down" });
+      seen.push(view.navigateSelection);
+    }
+    expect(seen).toEqual(["M", "W1", "A", "group:g2", "ungrouped:", "B", "group:g1"]);
+    dispatcher.run({ type: "navigate", op: "up" });
+    expect(view.navigateSelection).toBe("B");
+  });
+
+  it("畳んだグループの見出しにも届く（中は今いる workspace だけ）", () => {
+    setup({ collapsed: true });
+    const view = useViewStore(pinia);
+    view.setView("B", "tB");
+    const { dispatcher } = makeDispatcher(makeConnection());
+    view.setNavigateSelection("group:g1");
+    dispatcher.run({ type: "navigate", op: "down" });
+    expect(view.navigateSelection).toBe("group:g2");
+  });
+
+  it("openMenu: 見出しを選んでいても要求を立てる（開く先の判断は Sidebar.vue）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    view.setNavigateSelection("group:g1");
+    makeDispatcher(makeConnection()).dispatcher.run({ type: "navigate", op: "openMenu" });
+    expect(view.navigateMenuRequested).toBe(true);
+    expect(view.navigateSelection).toBe("group:g1");
+  });
+
+  it("activate: 見出しを選んでいるときは選択をやめるだけで workspace.focus を送らない", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setNavigateSelection("group:g1");
+    makeDispatcher(conn).dispatcher.run({ type: "navigate", op: "activate" });
+    expect(view.navigateSelection).toBeNull();
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("toggleCollapse: 見出しならグループを group.toggle_collapsed で切り替える", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setNavigateSelection("group:g2");
+    makeDispatcher(conn).dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(conn.requests).toEqual([["group.toggle_collapsed", { groupId: "g2" }]]);
+  });
+
+  it("toggleCollapse: worktree グループの先頭でも子でも、その worktree グループを畳む・広げる（サーバへは送らない）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.setNavigateSelection("M");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.collapsedAutoGroups.has("/r/.git")).toBe(true);
+    view.setNavigateSelection("W1");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.collapsedAutoGroups.has("/r/.git")).toBe(false);
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("toggleCollapse: 通常の行・選択なしは何もしない（1 つだけのリポジトリも worktree グループではない）", () => {
+    const session = setup();
+    session.workspaceUpserted({ ...makeWorkspace("S", ["tS"]), git: { ...git(false), repoKey: "/s/.git" } });
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    for (const sel of ["B", "S", null]) {
+      view.setNavigateSelection(sel);
+      dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    }
+    expect(view.collapsedAutoGroups.size).toBe(0);
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("toggleCollapse: 代表でない通常の行（同じフォルダの 2 つ目）では、同じリポジトリの worktree グループを畳まない", () => {
+    const session = setup();
+    // M と同じフォルダ（worktreeKey が同じ）の 2 つ目。代表は M・W1 の 2 つあるので、代表なら畳める状況。
+    session.workspaceUpserted({ ...makeWorkspace("M2", ["tM2"]), activeTabId: "tM2", git: { ...git(false), worktreeKey: "/r" } });
+    session.workspaceUpserted({ ...session.workspaces.get("M")!, git: { ...git(false), worktreeKey: "/r" } });
+    session.workspaceUpserted({ ...session.workspaces.get("W1")!, git: { ...git(true), worktreeKey: "/r-w1" } });
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.setNavigateSelection("M2");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.collapsedAutoGroups.size).toBe(0);
+    view.setNavigateSelection("M");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.collapsedAutoGroups.has("/r/.git")).toBe(true);
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("moveWorkspace: layout を持つサーバには項目の item.move_by を送る（対象は今いる workspace。サーバが項目に読み替える）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setView("W1", "tW1");
+    makeDispatcher(conn).dispatcher.run({ type: "moveWorkspace", direction: "previous" });
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "workspace", workspaceId: "W1" }, direction: "previous" }]]);
+  });
+
+  it("moveWorkspace: 名前順の一番上は送らず知らせる。グループの中は送る", () => {
+    setup();
+    const view = useViewStore(pinia);
+    view.toggleWorkspaceSort();
+    expect(view.workspaceSort).toBe("name");
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.setView("B", "tB"); // 一番上
+    dispatcher.run({ type: "moveWorkspace", direction: "next" });
+    expect(conn.requests).toEqual([]);
+    expect(view.toasts.map((t) => t.message)).toEqual(["名前順では並べ替えできません"]);
+    view.setView("A", "tA"); // グループの中
+    dispatcher.run({ type: "moveWorkspace", direction: "next" });
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "workspace", workspaceId: "A" }, direction: "next" }]]);
+  });
+
+  it("moveWorkspace: layout の無い古いサーバには今までの workspace.move を送る", () => {
+    const session = setup();
+    session.layout = null;
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setView("B", "tB");
+    makeDispatcher(conn).dispatcher.run({ type: "moveWorkspace", direction: "next" });
+    expect(conn.requests).toEqual([["workspace.move", { workspaceId: "B", direction: "next" }]]);
+  });
+
+  // AC-I4。実際のメニュー経路（見出しのメニューを開く→「上へ移動」を押す→ moveGroupBy）を通して、選択が消えないことを確かめる。
+  it("見出しのメニューから「上へ移動」を実行しても、見出しの選択が残る（メニューを閉じる経路でも消えない）", async () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.onModeChange("navigate");
+    view.setNavigateSelection("group:g1");
+    dispatcher.run({ type: "navigate", op: "openMenu" });
+    view.clearNavigateMenuRequest(); // Sidebar.vue が要求を受けて消す
+    dispatcher.openContextMenu({ kind: "group", groupId: "g1" }, { x: 0, y: 0 });
+    const wrapper = mount(ContextMenu, { global: { plugins: [pinia], provide: { [ActionDispatcherKey as symbol]: dispatcher } }, attachTo: document.body });
+    expect(view.navigateSelection).toBe("group:g1");
+    const up = wrapper.findAll("li").find((li) => li.text() === "上へ移動");
+    await up!.trigger("click");
+    expect(view.contextMenu).toBeNull();
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "group", groupId: "g1" }, direction: "previous" }]]);
+    expect(view.navigateSelection).toBe("group:g1");
+    wrapper.unmount();
+  });
+
+  // 追補 01 B / T26：「グループなし」の見出しの選択・畳む・メニュー・並べ替え。
+  it("「グループなし」の見出しを畳むと、中の項目は up/down で選べなくなる（見出し自体には届く）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    view.setView("M", "tM");
+    const { dispatcher } = makeDispatcher(makeConnection());
+    view.setNavigateSelection("group:g2");
+    dispatcher.run({ type: "navigate", op: "down" });
+    expect(view.navigateSelection).toBe("ungrouped:");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.ungroupedCollapsed).toBe(true);
+    dispatcher.run({ type: "navigate", op: "down" });
+    expect(view.navigateSelection).toBe("group:g1"); // 畳んだ中の B（今いる workspace ではない）は飛ばす
+    dispatcher.run({ type: "navigate", op: "up" });
+    expect(view.navigateSelection).toBe("ungrouped:");
+  });
+
+  it("toggleCollapse: 「グループなし」は共有の設定を切り替えるだけで、サーバへは何も送らない（広げ直せる）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.setNavigateSelection("ungrouped:");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.ungroupedCollapsed).toBe(true);
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.ungroupedCollapsed).toBe(false);
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("toggleCollapse: 見出しが出ていない（グループが無くなった）のに「グループなし」が選択に残っていたら、畳まずに選択を外す", () => {
+    const session = setup();
+    const view = useViewStore(pinia);
+    session.groupDeleted("g1");
+    session.groupDeleted("g2");
+    session.layoutChanged({ top: ["u"], groups: {}, ungrouped: ["w:A", "w:B", "r:/r/.git"] });
+    view.setNavigateSelection("ungrouped:");
+    makeDispatcher(makeConnection()).dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.ungroupedCollapsed).toBe(false);
+    expect(view.navigateSelection).toBeNull();
+  });
+
+  it("activate: 「グループなし」を選んでいるときは選択をやめるだけで workspace.focus を送らない", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setNavigateSelection("ungrouped:");
+    makeDispatcher(conn).dispatcher.run({ type: "navigate", op: "activate" });
+    expect(view.navigateSelection).toBeNull();
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("openMenu: 「グループなし」を選んでいても要求を立てる（開く先の判断は Sidebar.vue）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    view.setNavigateSelection("ungrouped:");
+    makeDispatcher(makeConnection()).dispatcher.run({ type: "navigate", op: "openMenu" });
+    expect(view.navigateMenuRequested).toBe(true);
+    expect(view.navigateSelection).toBe("ungrouped:");
+  });
+
+  it("moveUngroupedBy: 「グループなし」の項目で item.move_by を送る", () => {
+    setup();
+    const conn = makeConnection();
+    makeDispatcher(conn).dispatcher.moveUngroupedBy("previous");
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "ungrouped" }, direction: "previous" }]]);
+  });
+
+  it("moveUngroupedBy: 名前順のときは送らず「名前順では並べ替えできません」と知らせる", () => {
+    setup();
+    const view = useViewStore(pinia);
+    view.toggleWorkspaceSort();
+    const conn = makeConnection();
+    makeDispatcher(conn).dispatcher.moveUngroupedBy("next");
+    expect(conn.requests).toEqual([]);
+    expect(view.toasts.map((t) => t.message)).toEqual(["名前順では並べ替えできません"]);
+  });
+
+  it("「グループなし」の見出しのメニューから「下へ移動」を実行しても、見出しの選択が残る", async () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.onModeChange("navigate");
+    view.setNavigateSelection("ungrouped:");
+    dispatcher.openContextMenu({ kind: "ungrouped" }, { x: 0, y: 0 });
+    const wrapper = mount(ContextMenu, { global: { plugins: [pinia], provide: { [ActionDispatcherKey as symbol]: dispatcher } }, attachTo: document.body });
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["上へ移動", "下へ移動"]);
+    await wrapper.findAll("li")[1]!.trigger("click");
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "ungrouped" }, direction: "next" }]]);
+    expect(view.navigateSelection).toBe("ungrouped:");
+    wrapper.unmount();
+  });
+
+  it("moveWorkspace: 「グループなし」の中の項目は項目の item.move_by", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.setView("B", "tB");
+    dispatcher.run({ type: "moveWorkspace", direction: "previous" });
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "workspace", workspaceId: "B" }, direction: "previous" }]]);
+  });
+
+  it("openGroupPicker: 「グループなし」の項目からは全部のグループを選べる（moving は付かない）", () => {
+    setup();
+    makeDispatcher(makeConnection()).dispatcher.openGroupPicker("B");
+    const ctx = useViewStore(pinia).dialogContext;
+    expect(ctx?.kind === "addToGroup" && ctx.groups.map((g) => g.id)).toEqual(["g1", "g2"]);
+    expect(ctx).not.toHaveProperty("moving");
+  });
+
+  it("toggleCollapse: 別の画面で消されたグループが選択に残っていたら、何も送らず選択を外す", () => {
+    setup();
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setNavigateSelection("group:g2");
+    session.groupDeleted("g2");
+    makeDispatcher(conn).dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(conn.requests).toEqual([]);
+    expect(view.navigateSelection).toBeNull();
   });
 });

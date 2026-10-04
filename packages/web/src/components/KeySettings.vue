@@ -802,7 +802,7 @@ watch(
 
 <style scoped>
 /* Vue の scoped は、親（`SettingsDialog`）の属性が子のルート要素にしか付かない——見出しと案内文に親の `.settings-heading`・`.settings-note` は当たらないので、
-   ほかの 4 節と同じ見た目をここに持たせる。 */
+   ほかの節と同じ見た目をここに持たせる。 */
 .settings-heading {
   margin: 0 0 0.5em;
   font-size: 0.95em;

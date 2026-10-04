@@ -4,6 +4,7 @@ import { registerClientMethods } from "./client.js";
 import { registerSubscribeMethods } from "./subscribe.js";
 import { registerWorkspaceMethods } from "./workspace.js";
 import { registerGroupMethods } from "./group.js";
+import { registerItemMethods } from "./item.js";
 import { registerTabMethods } from "./tab.js";
 import { registerPaneMethods } from "./pane.js";
 import { registerLayoutMethods } from "./layout.js";
@@ -31,6 +32,7 @@ export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): v
   registerSubscribeMethods(surface, deps);
   registerWorkspaceMethods(surface, deps);
   registerGroupMethods(surface, deps);
+  registerItemMethods(surface, deps); // 20261004-group-worktree-items
   registerTabMethods(surface, deps);
   registerPaneMethods(surface, deps);
   registerLayoutMethods(surface, deps);

@@ -11,6 +11,7 @@ import type {
   SessionFocus,
   SessionLimits,
   SessionSnapshot,
+  SidebarLayout,
   Tab,
   Workspace,
   WorkspaceGroup,
@@ -18,6 +19,7 @@ import type {
 import {
   aggregate,
   displayStateFor,
+  layoutFromLegacy,
   LOCAL_MACHINE_ID,
   repairView,
   sweepMarkSeen,
@@ -51,12 +53,29 @@ export class SessionModel {
   tabs = new Map<string, Tab>();
   panes = new Map<string, Pane>();
   groups = new Map<string, WorkspaceGroup>();
+  /**
+   * サーバが配るサイドバーの項目の並び（`SessionSnapshot.layout`・`sidebar.layout_changed`。20261004-group-worktree-items）。
+   * 古いサーバには無い（null）。描画・キー操作は `effectiveLayout()` を使う（web の `session.effectiveLayout` と同じ）。
+   */
+  layout: SidebarLayout | null = null;
   focus: SessionFocus | null = null;
   limits: SessionLimits = { scrollbackLines: 5000 };
   /** 公式フック連携の状態（設定画面を開いたときの `agent_integration.status` と `agent_integration.changed`）。 */
   agentIntegration: AgentIntegrationStatusResult | null = null;
   /** 独自コマンドの一覧（接続ごとの `command.list`・`command.updated`・`reload_config`。コマンドの文字列は来ない）。 */
   commands: CommandListResult = { commands: [], problem: null };
+
+  /** サーバが配ったレイアウト、無ければ（古いサーバ）`layoutFromLegacy` で導いたもの。仮か確定かは区別しない。 */
+  effectiveLayout(): SidebarLayout {
+    return (
+      this.layout ?? layoutFromLegacy([...this.workspaces.values()], [...this.groups.values()])
+    );
+  }
+
+  /** サーバがレイアウトを配っているか（無ければ古いサーバ。古い RPC を使う分岐の判定に使う）。 */
+  get hasServerLayout(): boolean {
+    return this.layout !== null;
+  }
 
   /** 独自コマンドの一覧を置き換える（`command.list`・`command.reload` の結果）。 */
   setCommands(r: CommandListResult): void {
@@ -100,6 +119,7 @@ export class SessionModel {
     this.tabs = new Map();
     this.panes = new Map();
     this.groups = new Map();
+    this.layout = null;
     this.focus = null;
     this.host = null;
     this.workspaceId = null;
@@ -120,6 +140,7 @@ export class SessionModel {
     this.tabs = new Map(s.tabs.map((t) => [t.id, t]));
     this.panes = new Map(s.panes.map((p) => [p.id, p]));
     this.groups = new Map(s.groups.map((g) => [g.id, g]));
+    this.layout = s.layout ?? null;
     this.focus = s.focus;
     this.limits = s.limits;
     // 表示の復元：前の表示（再接続）がまだ生きていればそのまま、無ければサーバの焦点、それも無ければ修復の規則（先頭）。
@@ -164,6 +185,9 @@ export class SessionModel {
         );
         return;
       }
+      case "sidebar.layout_changed":
+        this.layout = e.data.layout;
+        return;
       case "group.created":
       case "group.updated":
         this.groups.set(e.data.group.id, e.data.group);

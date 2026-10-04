@@ -105,6 +105,28 @@ describe("ask.*（実物の /ws。20261002-sodactl-ask）", () => {
     for (const e of [...cli.events, ...browser.events].filter((x) => x.event.startsWith("ask."))) expect(JSON.stringify(e)).not.toContain("SECRET");
   });
 
+  it("comments つきの回答が結果に出る。10001 文字・付けられない質問・合計の超過は invalid_params で、質問は開いたまま残る。空白だけは落ちる", async () => {
+    const { paneId, open } = await start();
+    const cli = await open("external");
+    const browser = await open("desktop");
+    await browser.request("ask.subscribe", {});
+    const extra = Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, label: `C${i}`, options: ["p"] }));
+    const spec = { questions: [{ id: "a", label: "A", options: ["x", "y"] }, { id: "b", label: "B", options: ["p", "q"] }, { id: "t", label: "T", type: "text" }, ...extra] };
+    const result = cli.request("ask.open", { paneId, spec, timeoutMs: 20_000 });
+    const askId = (await browser.waitForEvent("ask.opened"))["askId"] as string;
+    const answers = { a: "x", b: "p", t: "", ...Object.fromEntries(extra.map((q) => [q.id, "p"])) };
+    const rejected = (comments: unknown) => expect(browser.request("ask.answer", { askId, answers, comments })).rejects.toMatchObject({ code: "invalid_params" });
+    await rejected({ a: "あ".repeat(10_001) });
+    await rejected({ t: "text には付かない" });
+    await rejected({ zzz: "x" });
+    // 12 問 × 10000 文字 = 合計の上限（100000）を超える
+    await rejected(Object.fromEntries(["a", "b", ...extra.map((q) => q.id)].map((id) => [id, "あ".repeat(10_000)])));
+    // 質問が開いたまま残っている
+    expect(await browser.request("ask.get", { askId })).toMatchObject({ askId });
+    await browser.request("ask.answer", { askId, answers, comments: { a: "  金曜は避けたい ", b: "   " } });
+    expect(await result).toEqual({ status: "answered", answers, comments: { a: "金曜は避けたい" } });
+  });
+
   it("画面が居なければ待たずに unavailable。端末版の形（desktop で hello しただけで ask.subscribe しない）・external だけでも同じ", async () => {
     const { paneId, open } = await start();
     const cli = await open("external");
@@ -229,7 +251,7 @@ describe("ask.*（実物の /ws。20261002-sodactl-ask）", () => {
     void result;
   });
 
-  it("server.log に定義・回答・補足の文字列が出ない", async () => {
+  it("server.log に定義・回答・補足・自由記述の文字列が出ない", async () => {
     const { stateDir, paneId, open } = await start();
     const cli = await open("external");
     const browser = await open("desktop");
@@ -238,7 +260,8 @@ describe("ask.*（実物の /ws。20261002-sodactl-ask）", () => {
     const askId = (await browser.waitForEvent("ask.opened"))["askId"] as string;
     await expect(browser.request("ask.answer", { askId, answers: { "SECRET-ID": "nope" }, note: "SECRET-NOTE" })).rejects.toMatchObject({ code: "invalid_params" });
     await expect(cli.request("ask.open", { paneId, spec: { questions: [{ id: "SECRET-BAD", label: "SECRET-BAD", options: [] }] }, timeoutMs: 20_000 })).rejects.toMatchObject({ code: "invalid_ask_spec" });
-    await browser.request("ask.answer", { askId, answers: { "SECRET-ID": "SECRET-OPT" }, note: "SECRET-NOTE" });
+    await expect(browser.request("ask.answer", { askId, answers: { "SECRET-ID": "SECRET-OPT" }, comments: { "SECRET-BAD": "SECRET-COMMENT" } })).rejects.toMatchObject({ code: "invalid_params" });
+    await browser.request("ask.answer", { askId, answers: { "SECRET-ID": "SECRET-OPT" }, note: "SECRET-NOTE", comments: { "SECRET-ID": "SECRET-COMMENT" } });
     await result;
     const log = await readFile(join(stateDir, "server.log"), "utf8");
     expect(log).toContain("ask opened");

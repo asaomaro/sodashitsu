@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { ACTIONS, type Action, type ActionDef } from "@sodashitsu/client-core";
-import type { SessionSnapshot } from "@sodashitsu/protocol";
+import type { SessionSnapshot, Workspace } from "@sodashitsu/protocol";
 import { PrefsModel } from "../model/PrefsModel.js";
-import { MachinesModel } from "../model/MachinesModel.js";
+import { MachinesModel, parseRemoteKey, remoteKey } from "../model/MachinesModel.js";
+import { menuItems } from "../modes/ContextMenu.js";
 import { SessionModel } from "../model/SessionModel.js";
 import { UiState } from "../model/UiState.js";
+import type { SidebarDragInfo } from "../render/chrome/sidebar.js";
+import { REFUSE_BY_NAME, REFUSE_CONTAINER } from "../input/sidebarDrag.js";
 import { agent, leaf, pane, snapshot, split, tab, workspace } from "../testing/fixtures.js";
 import {
   PASTE_UNAVAILABLE,
@@ -113,7 +116,7 @@ const flush = async () => {
 };
 
 /**
- * 全操作（カタログの 57 操作。添字つきは 1）の効果の表。**web の `ActionDispatcher` の同じ操作と同じ RPC・引数・ダイアログ**（焦点は p1・w1/t1〔p1|p2〕・w2/t2〔p3〕）。
+ * 全操作（カタログの 58 操作。添字つきは 1）の効果の表。**web の `ActionDispatcher` の同じ操作と同じ RPC・引数・ダイアログ**（焦点は p1・w1/t1〔p1|p2〕・w2/t2〔p3〕）。
  * 表に無い操作があれば落ちる（足し忘れの検出）。
  */
 const EFFECTS: Record<
@@ -133,6 +136,8 @@ const EFFECTS: Record<
   open_notification_target: { host: "focusNextNotification" },
   reload_config: { rpc: ["prefs.get", {}] },
   stop_server: { dialog: "confirmStopServer" },
+  // 20261004-subagent-display。エージェントが無い pane では何も起きない（動きは T13 で足す）。
+  show_subagents: { none: true },
   workspace_picker: { mode: true },
   goto: { dialog: "goto" },
   new_workspace: {
@@ -194,10 +199,10 @@ const EFFECTS: Record<
   open_graph: { toast: true },
 };
 
-describe("TuiDispatcher — 全操作の効果（web の 57 操作と同じ RPC・引数・ダイアログ）", () => {
+describe("TuiDispatcher — 全操作の効果（web の 58 操作と同じ RPC・引数・ダイアログ）", () => {
   it("表はカタログの全操作をちょうど覆う", () => {
     expect(Object.keys(EFFECTS).sort()).toEqual(ACTIONS.map((d) => d.id).sort());
-    expect(ACTIONS).toHaveLength(57);
+    expect(ACTIONS).toHaveLength(58);
   });
 
   it.each(ACTIONS.map((d) => [d.id, d as ActionDef] as const))("%s", (id, def) => {
@@ -395,6 +400,44 @@ describe("TuiDispatcher — tab・workspace", () => {
     expect(h.sent("workspace.focus")).toEqual([{ workspaceId: "w2" }, { workspaceId: "w1" }]);
   });
 
+  it("workspaceDelta・workspaceIndex は layout の順（描画と同じ木）で動き、畳んだグループの中は今いる workspace だけ（T16）", () => {
+    const wsList = ["w1", "w2", "w3"].map((id) => workspace(id, [`t-${id}`]));
+    const h = harness(
+      snapshot({
+        workspaces: wsList,
+        tabs: wsList.map((w) => tab(w.tabIds[0]!, w.id, leaf(`p-${w.id}`))),
+        panes: wsList.map((w) => pane(`p-${w.id}`, w.tabIds[0]!)),
+        groups: [{ id: "g1", label: "G", collapsed: true }],
+        // 開いた順は w1・w2・w3、レイアウトは グループなし（w3）→ グループ（w1・w2）。
+        layout: { top: ["u", "g:g1"], groups: { g1: ["w:w1", "w:w2"] }, ungrouped: ["w:w3"] },
+        focus: { workspaceId: "w1", tabId: "t-w1", paneId: "p-w1" },
+      }),
+    );
+    // 畳んだグループの中は今いる w1 だけ：見える順は w3・w1（開いた順の w1・w2・w3 ではない）。
+    h.d.run({ type: "workspaceIndex", index: 1 });
+    expect(h.model.workspaceId).toBe("w3");
+    // w3 に居ると、畳んだグループの中は何も見えない（w1 も隠れる）。
+    h.d.run({ type: "workspaceIndex", index: 2 });
+    expect(h.model.workspaceId).toBe("w3");
+    // グループを開くと layout の順 w3・w1・w2。
+    h.model.applyEvent({
+      event: "group.updated",
+      data: { group: { id: "g1", label: "G", collapsed: false } },
+    });
+    h.d.run({ type: "workspaceDelta", delta: 1 });
+    expect(h.model.workspaceId).toBe("w1");
+    h.d.run({ type: "workspaceDelta", delta: 1 });
+    expect(h.model.workspaceId).toBe("w2");
+    h.d.run({ type: "workspaceDelta", delta: 1 });
+    expect(h.model.workspaceId).toBe("w3");
+    expect(h.sent("workspace.focus")).toEqual([
+      { workspaceId: "w3" },
+      { workspaceId: "w1" },
+      { workspaceId: "w2" },
+      { workspaceId: "w3" },
+    ]);
+  });
+
   it("workspaceDelta：workspace が 1 つなら何もしない", () => {
     const h = harness(
       snapshot({
@@ -407,16 +450,10 @@ describe("TuiDispatcher — tab・workspace", () => {
     expect(h.calls).toEqual([]);
   });
 
-  it("moveWorkspace・moveWorkspacesByDrag", () => {
+  it("moveWorkspace（layout の無いサーバは workspace.move）", () => {
     const h = harness();
     h.d.run({ type: "moveWorkspace", direction: "next" });
-    h.d.moveWorkspacesByDrag(["w2"], "w1");
-    h.d.moveWorkspacesByDrag(["w1"], null);
-    expect(h.calls).toEqual([
-      ["workspace.move", { workspaceId: "w1", direction: "next" }],
-      ["workspace.move_to", { workspaceIds: ["w2"], beforeWorkspaceId: "w1" }],
-      ["workspace.move_to", { workspaceIds: ["w1"], beforeWorkspaceId: null }],
-    ]);
+    expect(h.calls).toEqual([["workspace.move", { workspaceId: "w1", direction: "next" }]]);
   });
 });
 
@@ -947,6 +984,332 @@ describe("TuiDispatcher — グループ", () => {
   });
 });
 
+describe("TuiDispatcher — 「グループなし」の折りたたみ", () => {
+  it("共有の設定 ungroupedCollapsed を反転して保存する（追補 01）", () => {
+    const h = harness();
+    h.d.toggleUngroupedCollapsed();
+    expect(h.prefs.ungroupedCollapsed).toBe(true);
+    h.d.toggleUngroupedCollapsed();
+    expect(h.sent("prefs.set")).toEqual([
+      { patch: { ungroupedCollapsed: true } },
+      { patch: { ungroupedCollapsed: false } },
+    ]);
+  });
+});
+
+/**
+ * 端末版のメニューとキー（group-worktree-items T17。web の `ActionDispatcher.test.ts` の T13・T15・T26 の場合を写した）。
+ * top: [g1, g2(空), u]、g1: [r:/r/.git(M 本体・W1 子), A]、ungrouped: [B]。
+ */
+describe("TuiDispatcher — グループの出し入れ・並べ替え・navigate（T17）", () => {
+  const gitOf = (linked: boolean) => ({
+    branch: "b",
+    ahead: 0,
+    behind: 0,
+    repoKey: "/r/.git",
+    isLinkedWorktree: linked,
+  });
+  const IDS = ["A", "W1", "B", "M"] as const;
+  function fixture(
+    opts: { collapsed?: boolean; layout?: boolean; focus?: string } = {},
+  ): SessionSnapshot {
+    const extra: Record<string, Partial<Workspace>> = {
+      W1: { git: gitOf(true) },
+      M: { git: gitOf(false) },
+    };
+    const focus = opts.focus ?? "A";
+    return snapshot({
+      workspaces: IDS.map((id) => workspace(id, [`t${id}`], { label: id, ...extra[id] })),
+      tabs: IDS.map((id) => tab(`t${id}`, id, leaf(`p${id}`))),
+      panes: IDS.map((id) => pane(`p${id}`, `t${id}`)),
+      groups: [
+        { id: "g1", label: "grp", collapsed: opts.collapsed ?? false },
+        { id: "g2", label: "空", collapsed: false },
+      ],
+      focus: { workspaceId: focus, tabId: `t${focus}`, paneId: `p${focus}` },
+      ...(opts.layout === false
+        ? {}
+        : {
+            layout: {
+              top: ["g:g1", "g:g2", "u"],
+              groups: { g1: ["r:/r/.git", "w:A"], g2: [] },
+              ungrouped: ["w:B"],
+            },
+          }),
+    });
+  }
+  const down = (h: ReturnType<typeof harness>) => {
+    h.d.run({ type: "navigate", op: "down" });
+    return h.ui.navigateSelection;
+  };
+
+  it("navigate の up/down は、グループの見出しと「グループなし」の見出しも順に選ぶ（空のグループにも届く）", () => {
+    const h = harness(fixture());
+    h.ui.setNavigateSelection("group:g1");
+    const seen: (string | null)[] = [];
+    for (let i = 0; i < 7; i++) seen.push(down(h));
+    expect(seen).toEqual(["M", "W1", "A", "group:g2", "ungrouped:", "B", "group:g1"]);
+    h.d.run({ type: "navigate", op: "up" });
+    expect(h.ui.navigateSelection).toBe("B");
+  });
+
+  it("見出しのキーは別のマシンの行のキー（machine:…）と混ざらない", () => {
+    expect(parseRemoteKey("group:g1")).toBeNull();
+    expect(parseRemoteKey("ungrouped:")).toBeNull();
+    expect(parseRemoteKey(remoteKey("m1", "w1"))).not.toBeNull();
+  });
+
+  it("畳んだグループの見出しにも届く（中は今いる workspace だけ）", () => {
+    const h = harness(fixture({ collapsed: true, focus: "B" }));
+    h.ui.setNavigateSelection("group:g1");
+    expect(down(h)).toBe("group:g2");
+  });
+
+  it("activate（Enter）: 見出しを選んでいるときは選択をやめるだけで workspace.focus を送らない", () => {
+    const h = harness(fixture());
+    for (const key of ["group:g1", "ungrouped:"]) {
+      h.ui.setNavigateSelection(key);
+      h.d.run({ type: "navigate", op: "activate" });
+      expect(h.ui.navigateSelection).toBeNull();
+    }
+    expect(h.calls).toEqual([]);
+    h.ui.setNavigateSelection("B");
+    h.d.run({ type: "navigate", op: "activate" });
+    expect(h.sent("workspace.focus")).toEqual([{ workspaceId: "B" }]);
+  });
+
+  it("openMenu: 見出しを選んでいても要求を立てる（開く先は TuiApp が決める）。別のマシンの行には立てない", () => {
+    const h = harness(fixture());
+    h.ui.setNavigateSelection("group:g1");
+    h.d.run({ type: "navigate", op: "openMenu" });
+    expect(h.ui.navigateMenuRequested).toBe(true);
+    expect(h.ui.navigateSelection).toBe("group:g1");
+    h.ui.clearNavigateMenuRequest();
+    h.ui.setNavigateSelection(remoteKey("m1", "w1"));
+    h.d.run({ type: "navigate", op: "openMenu" });
+    expect(h.ui.navigateMenuRequested).toBe(false);
+  });
+
+  it("toggleCollapse: グループの見出しは group.toggle_collapsed（サーバ）", () => {
+    const h = harness(fixture());
+    h.ui.setNavigateSelection("group:g2");
+    h.d.run({ type: "navigate", op: "toggleCollapse" });
+    expect(h.calls).toEqual([["group.toggle_collapsed", { groupId: "g2" }]]);
+  });
+
+  it("toggleCollapse: worktree グループの先頭でも子でも、その worktree グループを共有の設定で畳む・広げる（サーバへは送らない）", () => {
+    const h = harness(fixture());
+    h.ui.setNavigateSelection("M");
+    h.d.run({ type: "navigate", op: "toggleCollapse" });
+    expect(h.prefs.collapsedAutoGroups.has("/r/.git")).toBe(true);
+    h.ui.setNavigateSelection("W1");
+    h.d.run({ type: "navigate", op: "toggleCollapse" });
+    expect(h.prefs.collapsedAutoGroups.has("/r/.git")).toBe(false);
+    expect(h.sent("group.toggle_collapsed")).toEqual([]);
+  });
+
+  it("toggleCollapse: 通常の行・選択なし・別のマシンの行は何もしない", () => {
+    const h = harness(fixture());
+    for (const sel of ["B", "A", null, remoteKey("m1", "w1")]) {
+      h.ui.setNavigateSelection(sel);
+      h.d.run({ type: "navigate", op: "toggleCollapse" });
+    }
+    expect(h.prefs.collapsedAutoGroups.size).toBe(0);
+    expect(h.calls).toEqual([]);
+  });
+
+  it("toggleCollapse: 代表でない通常の行（同じフォルダの 2 つ目）では、同じリポジトリの worktree グループを畳まない", () => {
+    const snap = fixture();
+    const wsOf = (id: string, git: NonNullable<Workspace["git"]>) => workspace(id, [`t${id}`], { label: id, git });
+    // M と同じフォルダ（worktreeKey が同じ）の 2 つ目 M2。代表は M・W1 の 2 つあるので、代表なら畳める状況。
+    const h = harness({
+      ...snap,
+      workspaces: [
+        ...snap.workspaces.map((w) =>
+          w.id === "M"
+            ? { ...w, git: { ...gitOf(false), worktreeKey: "/r" } }
+            : w.id === "W1"
+              ? { ...w, git: { ...gitOf(true), worktreeKey: "/r-w1" } }
+              : w,
+        ),
+        wsOf("M2", { ...gitOf(false), worktreeKey: "/r" }),
+      ],
+      tabs: [...snap.tabs, tab("tM2", "M2", leaf("pM2"))],
+      panes: [...snap.panes, pane("pM2", "tM2")],
+    });
+    h.ui.setNavigateSelection("M2");
+    h.d.run({ type: "navigate", op: "toggleCollapse" });
+    expect(h.prefs.collapsedAutoGroups.size).toBe(0);
+    h.ui.setNavigateSelection("M");
+    h.d.run({ type: "navigate", op: "toggleCollapse" });
+    expect(h.prefs.collapsedAutoGroups.has("/r/.git")).toBe(true);
+    expect(h.sent("group.toggle_collapsed")).toEqual([]);
+  });
+
+  it("toggleCollapse: 「グループなし」は共有の設定 ungroupedCollapsed を切り替える。畳むと中の行は up/down で飛ばされ、見出しには届く", () => {
+    const h = harness(fixture({ focus: "M" }));
+    h.ui.setNavigateSelection("group:g2");
+    expect(down(h)).toBe("ungrouped:");
+    h.d.run({ type: "navigate", op: "toggleCollapse" });
+    expect(h.prefs.ungroupedCollapsed).toBe(true);
+    expect(h.sent("prefs.set")).toEqual([{ patch: { ungroupedCollapsed: true } }]);
+    expect(down(h)).toBe("group:g1"); // 畳んだ中の B は飛ばす
+    h.d.run({ type: "navigate", op: "up" });
+    expect(h.ui.navigateSelection).toBe("ungrouped:");
+  });
+
+  it("toggleCollapse: 見出しが消えているのに選択が残っていたら、何も送らず選択を外す（グループ・「グループなし」とも）", () => {
+    const h = harness(fixture());
+    h.model.applyEvent({ event: "group.deleted", data: { groupId: "g2" } } as never);
+    h.ui.setNavigateSelection("group:g2");
+    h.d.run({ type: "navigate", op: "toggleCollapse" });
+    expect(h.ui.navigateSelection).toBeNull();
+    // グループが 1 つも無くなれば「グループなし」の見出しは出ない。
+    h.model.applyEvent({ event: "group.deleted", data: { groupId: "g1" } } as never);
+    h.model.applyEvent({
+      event: "sidebar.layout_changed",
+      data: { layout: { top: ["u"], groups: {}, ungrouped: ["r:/r/.git", "w:A", "w:B"] } },
+    } as never);
+    h.ui.setNavigateSelection("ungrouped:");
+    h.d.run({ type: "navigate", op: "toggleCollapse" });
+    expect(h.ui.navigateSelection).toBeNull();
+    expect(h.prefs.ungroupedCollapsed).toBe(false);
+    expect(h.calls).toEqual([]);
+  });
+
+  it("moveWorkspace: layout を持つサーバには項目の item.move_by（対象は今いる workspace）。layout の無いサーバは workspace.move", () => {
+    const h = harness(fixture({ focus: "W1" }));
+    h.d.run({ type: "moveWorkspace", direction: "previous" });
+    expect(h.calls).toEqual([
+      ["item.move_by", { item: { kind: "workspace", workspaceId: "W1" }, direction: "previous" }],
+    ]);
+    const old = harness(fixture({ layout: false, focus: "B" }));
+    old.d.run({ type: "moveWorkspace", direction: "next" });
+    expect(old.calls).toEqual([["workspace.move", { workspaceId: "B", direction: "next" }]]);
+  });
+
+  it("moveWorkspace: 名前順で一番上の項目（グループ外）は送らず知らせる。グループの中は送る。古いサーバにも同じ", () => {
+    const h = harness(fixture({ focus: "B" }));
+    h.prefs.apply({ workspaceSort: "name" }, 1);
+    h.d.run({ type: "moveWorkspace", direction: "next" });
+    expect(h.calls).toEqual([]);
+    expect(h.ui.toasts.map((t) => t.message)).toEqual(["名前順では並べ替えできません"]);
+    h.model.setView("A", "tA", "pA");
+    h.d.run({ type: "moveWorkspace", direction: "next" });
+    expect(h.sent("item.move_by")).toEqual([
+      { item: { kind: "workspace", workspaceId: "A" }, direction: "next" },
+    ]);
+    const old = harness(fixture({ layout: false, focus: "B" }));
+    old.prefs.apply({ workspaceSort: "name" }, 1);
+    old.d.run({ type: "moveWorkspace", direction: "next" });
+    expect(old.calls).toEqual([]);
+    expect(old.ui.toasts).toHaveLength(1);
+  });
+
+  it("moveGroupBy・moveUngroupedBy: item.move_by を送る。名前順は送らず知らせる", () => {
+    const h = harness(fixture());
+    h.d.moveGroupBy("g1", "next");
+    h.d.moveUngroupedBy("previous");
+    expect(h.calls).toEqual([
+      ["item.move_by", { item: { kind: "group", groupId: "g1" }, direction: "next" }],
+      ["item.move_by", { item: { kind: "ungrouped" }, direction: "previous" }],
+    ]);
+    h.prefs.apply({ workspaceSort: "name" }, 1);
+    h.d.moveGroupBy("g1", "previous");
+    h.d.moveUngroupedBy("next");
+    expect(h.calls).toHaveLength(2);
+    expect(h.ui.toasts.map((t) => t.message)).toEqual([
+      "名前順では並べ替えできません",
+      "名前順では並べ替えできません",
+    ]);
+  });
+
+  it("見出しのメニューから「下へ移動」を実行しても、見出しの選択が残る", () => {
+    const h = harness(fixture());
+    h.ui.setNavigateSelection("ungrouped:");
+    h.ui.openContextMenu({ kind: "ungrouped" }, { x: 0, y: 0 });
+    const items = menuItems(h.ui.contextMenu!, { ui: h.ui, model: h.model, actions: h.d });
+    items[1]!.run();
+    h.ui.closeContextMenu();
+    expect(h.calls).toEqual([["item.move_by", { item: { kind: "ungrouped" }, direction: "next" }]]);
+    expect(h.ui.navigateSelection).toBe("ungrouped:");
+  });
+
+  it("group.create: layout を持つサーバは workspaceId を添えて 1 回。古いサーバは 2 段で、項目の workspace 全部に add_member", async () => {
+    const h = harness(fixture());
+    h.d.createGroupForWorkspace("W1");
+    h.d.confirmCreateGroup("新");
+    await flush();
+    expect(h.calls).toEqual([["group.create", { label: "新", workspaceId: "W1" }]]);
+    const old = harness(fixture({ layout: false }), {
+      "group.create": { group: { id: "g9", label: "新", collapsed: false } },
+    });
+    old.d.createGroupForWorkspace("W1");
+    old.d.confirmCreateGroup("新");
+    await flush();
+    expect(old.calls).toEqual([
+      ["group.create", { label: "新" }],
+      ["group.add_member", { groupId: "g9", workspaceId: "M" }],
+      ["group.add_member", { groupId: "g9", workspaceId: "W1" }],
+    ]);
+  });
+
+  it("group.add_member／remove_member: layout を持つサーバは項目で 1 回。古いサーバは項目の workspace 全部に順に送り、1 件失敗したら止める", async () => {
+    const h = harness(fixture());
+    // 子の行（W1）でも、項目（M と W1 の worktree グループ）に対して 1 回ずつ。
+    h.d.openGroupPicker("W1");
+    h.d.confirmAddToGroup("g2");
+    h.d.removeWorkspaceFromGroup("W1");
+    expect(h.calls).toEqual([
+      ["group.add_member", { groupId: "g2", workspaceId: "W1" }],
+      ["group.remove_member", { workspaceId: "W1" }],
+    ]);
+    const old = harness(fixture({ layout: false }));
+    old.d.openGroupPicker("W1");
+    old.d.confirmAddToGroup("g1");
+    await flush();
+    old.d.removeWorkspaceFromGroup("W1");
+    await flush();
+    expect(old.calls).toEqual([
+      ["group.add_member", { groupId: "g1", workspaceId: "M" }],
+      ["group.add_member", { groupId: "g1", workspaceId: "W1" }],
+      ["group.remove_member", { workspaceId: "M" }],
+      ["group.remove_member", { workspaceId: "W1" }],
+    ]);
+    const failing = harness(fixture({ layout: false }), { "group.add_member": new Error("x") });
+    failing.d.openGroupPicker("W1");
+    failing.d.confirmAddToGroup("g1");
+    await flush();
+    expect(failing.sent("group.add_member")).toHaveLength(1);
+    expect(failing.ui.toasts.map((t) => t.message)).toEqual(["グループへ追加できませんでした"]);
+  });
+
+  it("openGroupPicker: 選択肢はレイアウトの順。グループ外の項目は全部のグループ（moving なし）、グループの中は今のグループを除き moving 付き", () => {
+    const h = harness(fixture());
+    // レイアウトの並びを g2 → g1 に入れ替える（グループの配列の順ではなくレイアウトの順で並ぶ）。
+    h.model.applyEvent({
+      event: "sidebar.layout_changed",
+      data: {
+        layout: {
+          top: ["g:g2", "g:g1", "u"],
+          groups: { g1: ["r:/r/.git", "w:A"], g2: [] },
+          ungrouped: ["w:B"],
+        },
+      },
+    } as never);
+    h.d.openGroupPicker("B");
+    const outside = h.ui.dialogContext;
+    expect(outside?.kind === "addToGroup" && outside.groups.map((g) => g.id)).toEqual(["g2", "g1"]);
+    expect(outside).not.toHaveProperty("moving");
+    h.ui.closeDialog();
+    // 子の行（W1）でも本体の所属（g1）で答える。
+    h.d.openGroupPicker("W1");
+    const inside = h.ui.dialogContext;
+    expect(inside?.kind === "addToGroup" && inside.groups.map((g) => g.id)).toEqual(["g2"]);
+    expect(inside).toMatchObject({ moving: true });
+  });
+});
+
 describe("TuiDispatcher — 移動（ドラッグ）とメニュー専用の操作", () => {
   it("movePaneToTab・movePaneToNewTab：ok なら移し、待つ間に表示が動いていたら追わない", async () => {
     let resolve!: (v: unknown) => void;
@@ -985,6 +1348,85 @@ describe("TuiDispatcher — 移動（ドラッグ）とメニュー専用の操�
       ["pane.input.set", { paneId: "p1", rightClick: "pane" }],
     ]);
     expect(h.host.pasteText).toHaveBeenCalledWith("p2", "clip");
+  });
+});
+
+describe("TuiDispatcher — dropSidebarItem（サイドバーのドラッグの確定）", () => {
+  const w = (id: string) => ({ kind: "workspace", workspaceId: id }) as const;
+  /** グループ g1 の中の 2 つの項目（w1・w2）の掴んだ行の情報。 */
+  const info = (id: string, index: number, container: string | null = "g1"): SidebarDragInfo => ({
+    item: w(id),
+    container,
+    index,
+    workspaceIds: [id],
+    anchorId: id,
+    next: index === 0 ? { item: w("w2"), anchorId: "w2" } : null,
+  });
+  const withLayout = () =>
+    snapshot({
+      workspaces: [workspace("w1", ["t1"]), workspace("w2", ["t2"])],
+      groups: [{ id: "g1", label: "G1", collapsed: false }],
+      layout: { top: ["g:g1", "u"], groups: { g1: ["w:w1", "w:w2"] }, ungrouped: [] },
+    });
+  const toasts = (h: ReturnType<typeof harness>) => h.ui.toasts.map((t) => t.message);
+
+  it("layout ありは item.move（下へは落とした項目の次の前、上へは落とした項目の前）", async () => {
+    const h = harness(withLayout());
+    h.d.dropSidebarItem(info("w1", 0), info("w2", 1));
+    h.d.dropSidebarItem(info("w2", 1), info("w1", 0));
+    await flush();
+    expect(h.calls).toEqual([
+      ["item.move", { item: w("w1"), before: null }],
+      ["item.move", { item: w("w2"), before: w("w1") }],
+    ]);
+  });
+
+  it("layout の無いサーバは workspace.move_to（動かす workspace 全部と落とし先の先頭の workspace）", async () => {
+    const h = harness(snapshot({ workspaces: [workspace("w1", ["t1"]), workspace("w2", ["t2"])] }));
+    h.d.dropSidebarItem(info("w2", 1, null), info("w1", 0, null));
+    h.d.dropSidebarItem(info("w1", 0, null), info("w2", 1, null));
+    await flush();
+    expect(h.calls).toEqual([
+      ["workspace.move_to", { workspaceIds: ["w2"], beforeWorkspaceId: "w1" }],
+      ["workspace.move_to", { workspaceIds: ["w1"], beforeWorkspaceId: null }],
+    ]);
+  });
+
+  it("名前順の拒否・入れ物をまたぐ拒否は送らず知らせる。行の外・自分の上は黙って何もしない", async () => {
+    const h = harness(withLayout());
+    h.d.dropSidebarItem(info("w1", 0), info("w2", 1, "g2"));
+    h.prefs.apply({ workspaceSort: "name" }, 1);
+    h.d.dropSidebarItem(info("w1", 0, null), info("w2", 1, null));
+    h.d.dropSidebarItem(info("w1", 0), undefined);
+    h.d.dropSidebarItem(info("w1", 0), info("w1", 0));
+    await flush();
+    expect(toasts(h)).toEqual([REFUSE_CONTAINER, REFUSE_BY_NAME]);
+    expect(h.calls).toEqual([]);
+  });
+
+  it("古いサーバで動かす workspace が無い（空のグループ）ときは送らない", async () => {
+    const h = harness(snapshot({ workspaces: [workspace("w1", ["t1"])] }));
+    h.d.dropSidebarItem(
+      { ...info("w1", 0, null), workspaceIds: [], anchorId: "w1" },
+      info("w2", 1, null),
+    );
+    await flush();
+    expect(h.calls).toEqual([]);
+    expect(toasts(h)).toEqual([]);
+  });
+
+  it("送った RPC が失敗したら「移動できませんでした」と知らせる（item.move・workspace.move_to）", async () => {
+    const h = harness(withLayout(), { "item.move": new Error("x") });
+    h.d.dropSidebarItem(info("w1", 0), info("w2", 1));
+    await flush();
+    expect(toasts(h)).toEqual(["移動できませんでした"]);
+    const old = harness(
+      snapshot({ workspaces: [workspace("w1", ["t1"]), workspace("w2", ["t2"])] }),
+      { "workspace.move_to": new Error("x") },
+    );
+    old.d.dropSidebarItem(info("w1", 0, null), info("w2", 1, null));
+    await flush();
+    expect(toasts(old)).toEqual(["移動できませんでした"]);
   });
 });
 

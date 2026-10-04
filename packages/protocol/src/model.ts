@@ -26,6 +26,13 @@ export interface GitInfo {
    * `repoKey` が null（git 管理外）のときは常に false（20260923-workspace-grouping）。
    */
   isLinkedWorktree: boolean;
+  /**
+   * その worktree（フォルダ）を一意に示す絶対パス（正規化済み。`git rev-parse --path-format=absolute --git-dir`。
+   * 本体は共通ディレクトリと同じ、linked worktree は `<共通ディレクトリ>/worktrees/<名前>`）。同じ値の workspace のうち
+   * その `worktreeKey` を最初に持った workspace がその worktree の代表（`Workspace.representative`。サーバが決める）で、リポジトリの項目に入るのは代表だけ（追補 01 A）。
+   * git 管理外なら null。古いサーバには無い（無ければ同じ `repoKey` を全部メンバーとして扱う）。
+   */
+  worktreeKey?: string | null;
 }
 
 export interface Workspace {
@@ -50,6 +57,12 @@ export interface Workspace {
    * `$名前` が読む。**サーバのメモリだけ**に持ち `session.json` には保存しない。1 つも無ければ項目ごと無い。値は整え済み（制御文字なし・80 文字まで）。
    */
   tokens?: Record<string, string>;
+  /**
+   * その worktree（`git.worktreeKey`）の**代表**か（追補 01 A・T29）。サーバが決めて配る: 代表は「その `worktreeKey` を最初に持った
+   * workspace」で、既に代表が居る `worktreeKey` では奪われない（代表が閉じる・別のフォルダへ移るまで交代しない）。`worktreeKey` が文字列の
+   * workspace にだけ付く。**古いサーバには無い**——無ければ画面が並びの順から導く（`isRepresentative`）。
+   */
+  representative?: boolean;
 }
 
 export interface Tab {
@@ -111,6 +124,18 @@ export interface AgentSessionRef {
   reportedAt: number;
 }
 
+/** エージェントが中で動かしているサブエージェント 1 件（pane は持たない。20261004-subagent-display）。 */
+export interface SubagentInfo {
+  id: string;
+  /** サブエージェントの種類。分からなければ項目なし。 */
+  type?: string;
+  description?: string;
+  /** バックグラウンドの実行か。分からなければ項目なし。 */
+  background?: boolean;
+  /** サーバが起動（または突き合わせ）の報告を受けた時刻（epoch ms）。 */
+  startedAt: number;
+}
+
 export interface AgentInfo {
   /** 検出のたびに振る id（再起動後も重複しない）。既読の記録のキーに使う。 */
   instanceId: AgentInstanceId;
@@ -131,6 +156,11 @@ export interface AgentInfo {
    * この検出（`instanceId`）にだけ付き、終了・入れ替わりで消える。無ければ項目自体を持たない。
    */
   name?: string;
+  /**
+   * 実行中のサブエージェント（20261004-subagent-display）。フックの報告を一度も受けていない検出では項目なし（＝分からない）。
+   * 受けたことがあれば持つ（0 件なら `count: 0`）。`items` は起動した順で最大 64 件、`count` は実際の数。この検出（`instanceId`）にだけ付く。
+   */
+  subagents?: { count: number; items: SubagentInfo[] };
 }
 
 export interface HostInfo {
@@ -194,15 +224,39 @@ export interface SessionLimits {
 }
 
 /**
- * 利用者が名前を付けて作る手動グループ（herdr に前例が無い独自拡張。20260923-workspace-grouping）。
- * worktree 自動グループとは別物——こちらはサーバに永続化する実体（`session.json` の一部）。
+ * 利用者が名前を付けて作るグループ（herdr に前例が無い独自拡張。20260923-workspace-grouping）。
+ * worktree グループ（同じリポジトリの workspace をまとめた行）とは別物——こちらはサーバに永続化する実体
+ * （`session.json` の一部）で、中に通常の workspace と worktree グループを入れられる（入れ子は 1 段）。
  */
 export interface WorkspaceGroup {
   id: GroupId; // "g1", "g2", ... （既存の id 採番の流儀に揃える）
   label: string;
-  /** 折りたたみ状態（サーバ全体で共有。worktree 自動グループの折りたたみ状態はブラウザ側に持つ別物）。 */
+  /** 折りたたみ状態（サーバ全体で共有。worktree グループの折りたたみは共有の設定 `collapsedAutoGroups` に持つ別物）。 */
   collapsed: boolean;
 }
+
+/**
+ * サイドバーの項目の参照（20261004-group-worktree-items）。`g:<groupId>`（グループ）・`r:<repoKey>`（リポジトリ。
+ * worktree をまとめた 1 項目）・`w:<workspaceId>`（git 管理外・判定前の workspace）。
+ */
+export type ItemRef = string;
+
+/** サイドバーの項目の並び（サーバが正。`SessionSnapshot.layout`・`sidebar.layout_changed`）。 */
+export interface SidebarLayout {
+  /** まとまりの順。`g:<groupId>` と、グループなしを表す `"u"`（必ず 1 つ。追補 01 B）。グループの間にグループ外の項目は挟めない。 */
+  top: string[];
+  /** グループの中の項目の順（キーは GroupId。`g:` は入らない）。空のグループも空の配列で持つ。 */
+  groups: Record<GroupId, ItemRef[]>;
+  /** グループなしの中の項目の順（`r:` / `w:`）。 */
+  ungrouped: ItemRef[];
+}
+
+/** 項目に対する操作の対象。workspace を指すと、その workspace の項目（リポジトリなら丸ごと）になる。 */
+export type ItemTarget =
+  | { kind: "group"; groupId: GroupId }
+  | { kind: "workspace"; workspaceId: WorkspaceId }
+  /** 「グループなし」のまとまり（`top` の `"u"`）。まとまりどうしの並べ替えの対象になる。 */
+  | { kind: "ungrouped" };
 
 export interface SessionSnapshot {
   protocol: 1;
@@ -212,6 +266,8 @@ export interface SessionSnapshot {
   tabs: Tab[];
   panes: Pane[];
   groups: WorkspaceGroup[];
+  /** 項目の並び。古いサーバには無い（無ければ画面が `layoutFromLegacy` で導く）。 */
+  layout?: SidebarLayout;
   focus: SessionFocus | null;
   limits: SessionLimits;
 }

@@ -38,6 +38,7 @@ const raw = {
   agentSort: "priority",
   workspaceSort: "name",
   collapsedAutoGroups: ["/r/.git"],
+  ungroupedCollapsed: true,
   notify: { toast: false, desktop: true, sound: false },
   notifyHintPending: true,
   notifyHintDone: true,
@@ -70,6 +71,7 @@ describe("applyPrefsToStores", () => {
     expect(view.agentSort).toBe("priority");
     expect(view.workspaceSort).toBe("name");
     expect([...view.collapsedAutoGroups]).toEqual(["/r/.git"]);
+    expect(view.ungroupedCollapsed).toBe(true);
     expect(notifications.prefs).toEqual({ toast: false, desktop: true, sound: false });
     expect(notifications.hintPending).toBe(true);
     expect(notifications.hintDone).toBe(true);
@@ -114,6 +116,10 @@ describe("applyPrefsToStores", () => {
     watch(
       () => view.collapsedAutoGroups,
       () => fired.push("collapsedAutoGroups"),
+    );
+    watch(
+      () => view.ungroupedCollapsed,
+      () => fired.push("ungroupedCollapsed"),
     );
     watch(
       () => notifications.prefs,

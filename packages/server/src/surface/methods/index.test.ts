@@ -424,6 +424,32 @@ describe("registerAllMethods — client / workspace / tab / pane flow", () => {
     expect(ctx.session.snapshot().workspaces.map((w) => w.id)).toEqual([w2.id, w3.id, w1.id]);
   });
 
+  // 20261004-group-worktree-items（T8）。
+  it("item.move / item.move_by return {moved}, reject out-of-container moves with moved:false, and not_found for unknown ids", async () => {
+    const c = { clientId, sink: fakeSink(clientId) };
+    const r1 = await ctx.surface.invoke(c, "workspace.create", { cwd: "/a", label: "a" });
+    const r2 = await ctx.surface.invoke(c, "workspace.create", { cwd: "/b", label: "b" });
+    if (!r1.ok || !r2.ok) throw new Error("unreachable");
+    const w1 = (r1.result as { workspace: { id: string } }).workspace;
+    const w2 = (r2.result as { workspace: { id: string } }).workspace;
+
+    const moved = await ctx.surface.invoke(c, "item.move_by", { item: { kind: "workspace", workspaceId: w1.id }, direction: "next" });
+    expect(moved).toEqual({ ok: true, result: { moved: true } });
+    expect(ctx.session.snapshot().workspaces.map((w) => w.id)).toEqual([w2.id, w1.id]);
+    const atEnd = await ctx.surface.invoke(c, "item.move_by", { item: { kind: "workspace", workspaceId: w1.id }, direction: "next" });
+    expect(atEnd).toEqual({ ok: true, result: { moved: false } });
+    const toTop = await ctx.surface.invoke(c, "item.move", { item: { kind: "workspace", workspaceId: w1.id }, before: { kind: "workspace", workspaceId: w2.id } });
+    expect(toTop).toEqual({ ok: true, result: { moved: true } });
+    expect(ctx.session.snapshot().workspaces.map((w) => w.id)).toEqual([w1.id, w2.id]);
+
+    const unknown = await ctx.surface.invoke(c, "item.move", { item: { kind: "group", groupId: "g99" }, before: null });
+    expect(unknown.ok).toBe(false);
+    if (!unknown.ok) expect(unknown.error.code).toBe("not_found");
+    const unknownBefore = await ctx.surface.invoke(c, "item.move", { item: { kind: "workspace", workspaceId: w1.id }, before: { kind: "workspace", workspaceId: "w99" } });
+    if (unknownBefore.ok) throw new Error("expected not_found");
+    expect(unknownBefore.error.code).toBe("not_found");
+  });
+
   it("workspace.close with closeLinkedWorktrees=true closes linked worktrees sharing the same repoKey", async () => {
     const c = { clientId, sink: fakeSink(clientId) };
     const r1 = await ctx.surface.invoke(c, "workspace.create", { cwd: "/repo", label: "main" });
@@ -431,8 +457,8 @@ describe("registerAllMethods — client / workspace / tab / pane flow", () => {
     if (!r1.ok || !r2.ok) throw new Error("unreachable");
     const main = (r1.result as { workspace: { id: string } }).workspace;
     const wt = (r2.result as { workspace: { id: string } }).workspace;
-    ctx.session.updateWorkspaceGit(main.id, { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false });
-    ctx.session.updateWorkspaceGit(wt.id, { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true });
+    ctx.session.updateWorkspaceGit(main.id, { kind: "git", git: { branch: "main", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: false } });
+    ctx.session.updateWorkspaceGit(wt.id, { kind: "git", git: { branch: "feature", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree: true } });
 
     const closeResult = await ctx.surface.invoke(c, "workspace.close", { workspaceId: main.id, closeLinkedWorktrees: true });
     expect(closeResult).toEqual({ ok: true, result: {} });
@@ -469,6 +495,132 @@ describe("registerAllMethods — client / workspace / tab / pane flow", () => {
     const c = { clientId, sink: fakeSink(clientId) };
     const result = await ctx.surface.invoke(c, "group.rename", { groupId: "g999", label: "x" });
     expect(result).toEqual({ ok: false, error: { code: "not_found", message: expect.stringContaining("g999") } });
+  });
+
+  // 20261004-group-worktree-items T7。グループの入口は項目単位（リポジトリは worktree グループ丸ごと）。
+  describe("項目単位のグループ操作と一括クローズ", () => {
+    const git = (isLinkedWorktree: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/repo/.git", isLinkedWorktree });
+    async function repoWithTwo(c: { clientId: string; sink: ReturnType<typeof fakeSink> }) {
+      const r1 = await ctx.surface.invoke(c, "workspace.create", { cwd: "/repo", label: "main" });
+      const r2 = await ctx.surface.invoke(c, "workspace.create", { cwd: "/repo-wt", label: "wt" });
+      const r3 = await ctx.surface.invoke(c, "workspace.create", { cwd: "/other", label: "other" });
+      if (!r1.ok || !r2.ok || !r3.ok) throw new Error("unreachable");
+      const id = (r: { result: unknown }) => (r.result as { workspace: { id: string } }).workspace.id;
+      const [main, wt, other] = [id(r1), id(r2), id(r3)];
+      ctx.session.updateWorkspaceGit(main, { kind: "git", git: git(false) });
+      ctx.session.updateWorkspaceGit(wt, { kind: "git", git: git(true) });
+      return { main, wt, other };
+    }
+    const groupIdsOf = (ids: string[]) => ids.map((i) => ctx.session.snapshot().workspaces.find((w) => w.id === i)?.groupId);
+
+    it("group.create に workspaceId を渡すと、その項目（worktree グループ丸ごと）が新しいグループへ入り、グループは「グループなし」の前に立つ", async () => {
+      const c = { clientId, sink: fakeSink(clientId) };
+      const { main, wt, other } = await repoWithTwo(c);
+      const result = await ctx.surface.invoke(c, "group.create", { label: "work", workspaceId: wt });
+      if (!result.ok) throw new Error("unreachable");
+      const group = (result.result as { group: { id: string } }).group;
+      expect(groupIdsOf([main, wt, other])).toEqual([group.id, group.id, null]);
+      expect(ctx.session.snapshot().layout).toEqual({ top: [`g:${group.id}`, "u"], groups: { [group.id]: ["r:/repo/.git"] }, ungrouped: [`w:${other}`] });
+    });
+
+    it("group.create に実在しない workspaceId を渡すと not_found で、グループは作られない", async () => {
+      const c = { clientId, sink: fakeSink(clientId) };
+      const result = await ctx.surface.invoke(c, "group.create", { label: "x", workspaceId: "w999" });
+      expect(result).toEqual({ ok: false, error: { code: "not_found", message: expect.stringContaining("w999") } });
+      expect(ctx.session.snapshot().groups).toEqual([]);
+    });
+
+    it("group.add_member / remove_member は子を指しても項目丸ごと動かし、出した項目は「グループなし」の末尾へ置く", async () => {
+      const c = { clientId, sink: fakeSink(clientId) };
+      const { main, wt, other } = await repoWithTwo(c);
+      const created = await ctx.surface.invoke(c, "group.create", { label: "g" });
+      if (!created.ok) throw new Error("unreachable");
+      const gid = (created.result as { group: { id: string } }).group.id;
+
+      expect(await ctx.surface.invoke(c, "group.add_member", { groupId: gid, workspaceId: wt })).toEqual({ ok: true, result: {} });
+      expect(groupIdsOf([main, wt, other])).toEqual([gid, gid, null]);
+      expect(ctx.session.snapshot().layout?.groups[gid]).toEqual(["r:/repo/.git"]);
+
+      expect(await ctx.surface.invoke(c, "group.remove_member", { workspaceId: wt })).toEqual({ ok: true, result: {} });
+      expect(groupIdsOf([main, wt, other])).toEqual([null, null, null]);
+      expect(ctx.session.snapshot().layout).toEqual({ top: [`g:${gid}`, "u"], groups: { [gid]: [] }, ungrouped: [`w:${other}`, "r:/repo/.git"] }); // 出した項目は「グループなし」の末尾
+    });
+
+    it("group.delete は項目を「グループなし」の末尾へ出し、同じリポジトリの所属も消える", async () => {
+      const c = { clientId, sink: fakeSink(clientId) };
+      const { main, wt, other } = await repoWithTwo(c);
+      const created = await ctx.surface.invoke(c, "group.create", { label: "g", workspaceId: main });
+      if (!created.ok) throw new Error("unreachable");
+      const gid = (created.result as { group: { id: string } }).group.id;
+      expect(await ctx.surface.invoke(c, "group.delete", { groupId: gid })).toEqual({ ok: true, result: {} });
+      expect(groupIdsOf([main, wt, other])).toEqual([null, null, null]);
+      expect(ctx.session.snapshot().layout).toEqual({ top: ["u"], groups: {}, ungrouped: [`w:${other}`, "r:/repo/.git"] });
+    });
+
+    it("workspace.close の一括クローズは、worktree グループがグループに入っていても同じリポジトリを全部閉じる", async () => {
+      const c = { clientId, sink: fakeSink(clientId) };
+      const { main, wt, other } = await repoWithTwo(c);
+      await ctx.surface.invoke(c, "group.create", { label: "g", workspaceId: main });
+      const result = await ctx.surface.invoke(c, "workspace.close", { workspaceId: main, closeLinkedWorktrees: true });
+      expect(result).toEqual({ ok: true, result: {} });
+      expect(ctx.session.snapshot().workspaces.map((w) => w.id)).toEqual([other]);
+      void wt;
+    });
+
+    it("workspace.close の一括クローズは、先頭でない子を指すと、その 1 つだけ閉じる", async () => {
+      const c = { clientId, sink: fakeSink(clientId) };
+      const { main, wt, other } = await repoWithTwo(c);
+      const r4 = await ctx.surface.invoke(c, "workspace.create", { cwd: "/repo-wt2", label: "wt2" });
+      if (!r4.ok) throw new Error("unreachable");
+      const wt2 = (r4.result as { workspace: { id: string } }).workspace.id;
+      ctx.session.updateWorkspaceGit(wt2, { kind: "git", git: git(true) });
+      await ctx.surface.invoke(c, "workspace.close", { workspaceId: wt, closeLinkedWorktrees: true });
+      expect(ctx.session.snapshot().workspaces.map((w) => w.id).sort()).toEqual([main, other, wt2].sort());
+    });
+
+    // 追補 01: 同じフォルダの 2 つ目は代表ではなく、通常の項目。一括クローズも代表だけ。
+    it("同じフォルダの 2 つ目は通常の項目で、group.add_member は 2 つ目だけを動かし、一括クローズの対象にならない", async () => {
+      const c = { clientId, sink: fakeSink(clientId) };
+      const { main, wt, other } = await repoWithTwo(c);
+      const r4 = await ctx.surface.invoke(c, "workspace.create", { cwd: "/repo", label: "main2" });
+      if (!r4.ok) throw new Error("unreachable");
+      const main2 = (r4.result as { workspace: { id: string } }).workspace.id;
+      const wk = (isLinkedWorktree: boolean, worktreeKey: string) => ({ ...git(isLinkedWorktree), worktreeKey });
+      ctx.session.updateWorkspaceGit(main, { kind: "git", git: wk(false, "/repo/.git") });
+      ctx.session.updateWorkspaceGit(wt, { kind: "git", git: wk(true, "/repo/.git/worktrees/wt") });
+      ctx.session.updateWorkspaceGit(main2, { kind: "git", git: wk(false, "/repo/.git") });
+      expect(ctx.session.snapshot().layout?.ungrouped).toContain(`w:${main2}`);
+
+      const created = await ctx.surface.invoke(c, "group.create", { label: "g" });
+      if (!created.ok) throw new Error("unreachable");
+      const gid = (created.result as { group: { id: string } }).group.id;
+      expect(await ctx.surface.invoke(c, "group.add_member", { groupId: gid, workspaceId: main2 })).toEqual({ ok: true, result: {} });
+      expect(ctx.session.snapshot().layout?.groups[gid]).toEqual([`w:${main2}`]);
+      expect(groupIdsOf([main, wt, main2])).toEqual([null, null, gid]);
+
+      await ctx.surface.invoke(c, "workspace.close", { workspaceId: main, closeLinkedWorktrees: true });
+      expect(ctx.session.snapshot().workspaces.map((w) => w.id)).toEqual([main2, other]); // 代表（main・wt）だけが閉じ、2 つ目は残る
+      // main2 は代表になり、リポジトリの項目（その位置・所属）に加わる。自分で入れたグループには残らない。
+      expect(ctx.session.snapshot().layout?.groups[gid]).toEqual([]);
+      expect(ctx.session.snapshot().layout?.ungrouped).toEqual([`r:/repo/.git`, `w:${other}`]);
+    });
+
+    it("item.move_by / item.move は「グループなし」のまとまりも、グループと並べ替えられる", async () => {
+      const c = { clientId, sink: fakeSink(clientId) };
+      const { other } = await repoWithTwo(c);
+      const g1 = await ctx.surface.invoke(c, "group.create", { label: "g1", workspaceId: other });
+      const g2 = await ctx.surface.invoke(c, "group.create", { label: "g2" });
+      if (!g1.ok || !g2.ok) throw new Error("unreachable");
+      const id1 = (g1.result as { group: { id: string } }).group.id;
+      const id2 = (g2.result as { group: { id: string } }).group.id;
+      expect(ctx.session.snapshot().layout?.top).toEqual([`g:${id1}`, `g:${id2}`, "u"]);
+      expect(await ctx.surface.invoke(c, "item.move_by", { item: { kind: "ungrouped" }, direction: "previous" })).toEqual({ ok: true, result: { moved: true } });
+      expect(ctx.session.snapshot().layout?.top).toEqual([`g:${id1}`, "u", `g:${id2}`]);
+      expect(await ctx.surface.invoke(c, "item.move", { item: { kind: "group", groupId: id2 }, before: { kind: "ungrouped" } })).toEqual({ ok: true, result: { moved: true } });
+      expect(ctx.session.snapshot().layout?.top).toEqual([`g:${id1}`, `g:${id2}`, "u"]);
+      expect(await ctx.surface.invoke(c, "item.move_by", { item: { kind: "ungrouped" }, direction: "next" })).toEqual({ ok: true, result: { moved: false } }); // 端
+      expect(await ctx.surface.invoke(c, "item.move", { item: { kind: "workspace", workspaceId: other }, before: { kind: "ungrouped" } })).toEqual({ ok: true, result: { moved: false } }); // 項目をまとまりの前へは動かせない
+    });
   });
 });
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEVICE_LOCAL_PREF_KEYS,
   AgentIntegrationInstallParams,
+  AskAnswerParams,
   AgentStartParams,
   AgentPromptParams,
   AgentSendKeysParams,
@@ -11,6 +13,9 @@ import {
   GroupRemoveMemberParams,
   GroupRenameParams,
   GroupToggleCollapsedParams,
+  ItemMoveByParams,
+  ItemMoveParams,
+  SidebarLayoutSchema,
   MachineListParams,
   MAX_AGENT_PROMPT_BYTES,
   METADATA_RAW_TEXT_MAX,
@@ -97,6 +102,49 @@ describe("messages", () => {
       workspaceId: "w1",
       closeLinkedWorktrees: true,
     });
+  });
+
+  // 20261004-group-worktree-items
+  it("validates group.create's optional workspaceId", () => {
+    expect(GroupCreateParams.parse({ label: "x", workspaceId: "w1" })).toEqual({ label: "x", workspaceId: "w1" });
+    expect(GroupCreateParams.parse({ label: "x" })).toEqual({ label: "x" });
+    expect(() => GroupCreateParams.parse({ label: "x", workspaceId: "" })).toThrow();
+  });
+
+  it("validates item.move / item.move_by params", () => {
+    const g = { kind: "group", groupId: "g1" } as const;
+    const w = { kind: "workspace", workspaceId: "w1" } as const;
+    expect(ItemMoveParams.parse({ item: g, before: w })).toEqual({ item: g, before: w });
+    expect(ItemMoveParams.parse({ item: w, before: null })).toEqual({ item: w, before: null });
+    expect(() => ItemMoveParams.parse({ item: w })).toThrow(); // before は必須（末尾は null）
+    expect(() => ItemMoveParams.parse({ item: { kind: "repo", repoKey: "/a" }, before: null })).toThrow();
+    expect(() => ItemMoveParams.parse({ item: { kind: "group" }, before: null })).toThrow();
+    // 「グループなし」のまとまり（追補 01 B）。対象にも before にも置ける
+    const u = { kind: "ungrouped" };
+    expect(ItemMoveParams.parse({ item: u, before: g })).toEqual({ item: u, before: g });
+    expect(ItemMoveParams.parse({ item: g, before: u })).toEqual({ item: g, before: u });
+    expect(ItemMoveByParams.parse({ item: u, direction: "previous" })).toEqual({ item: u, direction: "previous" });
+    expect(() => ItemMoveParams.parse({ item: { kind: "ungrouped", groupId: "g1" }, before: null })).not.toThrow(); // 余計なキーは落ちる
+    expect(ItemMoveParams.parse({ item: { kind: "ungrouped", groupId: "g1" }, before: null }).item).toEqual(u);
+    expect(ItemMoveByParams.parse({ item: g, direction: "next" })).toEqual({ item: g, direction: "next" });
+    expect(() => ItemMoveByParams.parse({ item: g, direction: "up" })).toThrow();
+  });
+
+  it("parses SidebarLayout (top に \"u\"・ungrouped、未知の参照と余計なキーは通る)", () => {
+    const l = { top: ["g:g1", "u", "g:g2"], groups: { g1: ["r:/b"], g2: [] }, ungrouped: ["r:/a", "w:w2"] };
+    expect(SidebarLayoutSchema.parse(l)).toEqual(l);
+    expect(SidebarLayoutSchema.parse({ top: ["u"], groups: {}, ungrouped: [] })).toEqual({ top: ["u"], groups: {}, ungrouped: [] });
+    // 未知の参照の種類・余計なキーを持つ形も通る（余計なキーは落とす）
+    expect(SidebarLayoutSchema.parse({ top: ["x:unknown"], groups: {}, ungrouped: [], extra: 1 })).toEqual({ top: ["x:unknown"], groups: {}, ungrouped: [] });
+    expect(() => SidebarLayoutSchema.parse({ top: "g:g1", groups: {}, ungrouped: [] })).toThrow();
+    expect(() => SidebarLayoutSchema.parse({ top: [], groups: { g1: "r:/a" }, ungrouped: [] })).toThrow();
+    expect(() => SidebarLayoutSchema.parse({ top: [], groups: {} })).toThrow(); // ungrouped は必須
+    expect(() => SidebarLayoutSchema.parse({ top: [], groups: {}, ungrouped: "w:w1" })).toThrow();
+  });
+
+  it("共有の設定の ungroupedCollapsed は端末ごとの設定に入れない（共有のまま）", () => {
+    expect(DEVICE_LOCAL_PREF_KEYS).not.toContain("ungroupedCollapsed");
+    expect(DEVICE_LOCAL_PREF_KEYS).not.toContain("collapsedAutoGroups");
   });
 
   // 20260923-workspace-grouping（キーバインド用。tab.move と同じ delta 指定の形）。
@@ -376,5 +424,23 @@ describe("独自トークンの報告（20260927-sidebar-row-tokens）", () => {
     const many = Array.from({ length: METADATA_TOKEN_ENTRIES_MAX + 1 }, (_, i) => ({ name: `k${i}`, value: "v" }));
     expect(WorkspaceReportMetadataParams.safeParse({ ...base, tokens: many }).success).toBe(false);
     expect(WorkspaceReportMetadataParams.safeParse({ ...base, tokens: many.slice(1) }).success).toBe(true);
+  });
+});
+
+describe("AskAnswerParams.comments（質問ごとの自由記述）", () => {
+  const base = { askId: "ask-1", answers: { a: "x" } };
+  it("無くてもよい。10000 文字は通り、10001 文字は断る。{} も通る", () => {
+    expect(AskAnswerParams.safeParse(base).success).toBe(true);
+    expect(AskAnswerParams.safeParse({ ...base, comments: {} }).success).toBe(true);
+    expect(AskAnswerParams.safeParse({ ...base, comments: { a: "あ".repeat(10_000) } }).success).toBe(true);
+    expect(AskAnswerParams.safeParse({ ...base, comments: { a: "あ".repeat(10_001) } }).success).toBe(false);
+  });
+  it("値が文字列でなければ断る。長すぎるキーも断る", () => {
+    expect(AskAnswerParams.safeParse({ ...base, comments: { a: 1 } }).success).toBe(false);
+    expect(AskAnswerParams.safeParse({ ...base, comments: { ["k".repeat(401)]: "x" } }).success).toBe(false);
+  });
+  it("__proto__ のキー（JSON.parse が作る自分の項目）は、スキーマが黙って落とす（ほかのキーは残る）", () => {
+    const r = AskAnswerParams.safeParse({ ...base, comments: JSON.parse('{"__proto__":"x","b":"y"}') });
+    expect(r.success ? Object.getOwnPropertyNames(r.data.comments ?? {}) : "rejected").toEqual(["b"]);
   });
 });

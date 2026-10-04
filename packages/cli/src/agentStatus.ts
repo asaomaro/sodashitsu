@@ -38,6 +38,15 @@ export interface AgentLocation {
   workspaceId: string | null;
 }
 
+/** サブエージェント 1 件の出力（項目の有無を揺らさない。分からない値は null）。 */
+export interface SubagentView {
+  id: string;
+  type: string | null;
+  description: string | null;
+  background: boolean | null;
+  startedAt: number;
+}
+
 export interface AgentView {
   paneId: string;
   /** `agent rename` で付けた名前（無ければ null。20260926-agent-start-rename）。 */
@@ -53,6 +62,26 @@ export interface AgentView {
   serverSeenSeq: number;
   since: number;
   verified: boolean;
+  /**
+   * 動かしているサブエージェント（20261004-subagent-display）。フックの報告を受けていない（古いサーバ・導入していない・Claude Code 以外）なら null＝分からない。
+   * 報告を受けていれば `{count, items}`（0 件なら `count: 0`）。`items` は起動した順で最大 64 件、`count` は実際の数。
+   */
+  subagents: { count: number; items: SubagentView[] } | null;
+}
+
+/** `AgentInfo.subagents` を出力の形に写す。無ければ null。項目の有無を揺らさず、分からないものは null で埋める。 */
+export function subagentsViewOf(subagents: AgentInfo["subagents"]): AgentView["subagents"] {
+  if (!subagents) return null;
+  return {
+    count: subagents.count,
+    items: subagents.items.map((s) => ({
+      id: s.id,
+      type: s.type ?? null,
+      description: s.description ?? null,
+      background: s.background ?? null,
+      startedAt: s.startedAt,
+    })),
+  };
 }
 
 export function toAgentView(loc: AgentLocation, agent: AgentInfo): AgentView {
@@ -70,6 +99,7 @@ export function toAgentView(loc: AgentLocation, agent: AgentInfo): AgentView {
     serverSeenSeq: agent.serverSeenSeq,
     since: agent.since,
     verified: agent.verified,
+    subagents: subagentsViewOf(agent.subagents),
   };
 }
 

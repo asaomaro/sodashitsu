@@ -14,6 +14,8 @@ import {
   type Mode,
   type ResolvedKeymap,
   type ResolvedNavigateKeymap,
+  groupIdOfNavigateKey,
+  isUngroupedNavigateKey,
 } from "@sodashitsu/client-core";
 import { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import { GotoDialog } from "../modes/GotoDialog.js";
@@ -57,6 +59,7 @@ import { spawn } from "node:child_process";
 import { readTuiState, tuiStateExists, writeTuiState, type TuiState } from "../local/tuiState.js";
 import { PrefsModel } from "../model/PrefsModel.js";
 import { SessionModel } from "../model/SessionModel.js";
+import { currentNavigableRows } from "../model/sidebarTree.js";
 import { TuiNet, type TuiNetDeps } from "../net/TuiNet.js";
 import type { ChromeContext } from "../render/chrome/context.js";
 import type { SidebarHit, SidebarScroll } from "../render/chrome/sidebar.js";
@@ -97,6 +100,8 @@ export interface TuiAppOptions {
 export const RENDER_INTERVAL_MS = 16;
 /** tab バーの日時を描き直す間隔。 */
 const CLOCK_TICK_MS = 1000;
+/** サブエージェントの一覧を開いている間の、経過時間の描き直しの間隔（20261004-subagent-display。F6「少なくとも 10 秒ごと」）。 */
+const SUBAGENTS_REDRAW_MS = 10_000;
 /** pane の BEL を外側の端末へ回す最短の間隔。 */
 const BELL_INTERVAL_MS = 100;
 /** 接続が開いていない間の打鍵の知らせ。 */
@@ -135,6 +140,8 @@ export class TuiApp {
   /** 直近のフレームの当たり判定（04 のマウスが使う）。 */
   protected lastLayout: LayoutResult | null = null;
   protected sidebarHits: SidebarHit[] = [];
+  /** サブエージェントの一覧を最後に時間で描き直した時刻（epoch ms）。 */
+  private subagentsDrawnAt = 0;
   protected tabHits: TabHit[] = [];
   protected newTabButton: TabBarHits["newTab"] = null;
   protected tabBarHits: TabBarHits = { tabs: [], newTab: null };
@@ -481,6 +488,14 @@ export class TuiApp {
     const clock = setInterval(() => {
       if (this.lastLayout?.tabBar.h && this.prefs.tabBarRight.some((e) => e.kind === "datetime"))
         this.scheduleRender();
+      // サブエージェントの一覧を開いている間だけ、経過時間を進めるために 10 秒ごとに描き直す（閉じたら何もしない。20261004-subagent-display）。
+      if (this.ui.dialogContext?.kind === "subagents") {
+        const now = Date.now();
+        if (now - this.subagentsDrawnAt >= SUBAGENTS_REDRAW_MS) {
+          this.subagentsDrawnAt = now;
+          this.scheduleRender();
+        }
+      }
     }, CLOCK_TICK_MS);
     clock.unref?.();
     this.disposers.push(() => clearInterval(clock));
@@ -634,8 +649,20 @@ export class TuiApp {
     const back = this.ui.preDialogFocusPaneId;
     if (back !== null && !this.model.panes.has(back))
       this.ui.retargetPreDialogFocus(this.model.focusedPaneId);
+    this.closeSubagentsIfGone();
     this.commitView();
     this.scheduleRender();
+  }
+
+  /**
+   * サブエージェントの一覧を開いている間に、対象のエージェントが居なくなった・入れ替わった（`instanceId` が変わった）・pane が閉じたら閉じる
+   * （20261004-subagent-display。web の `SubagentListDialog` の監視と同じ）。
+   */
+  private closeSubagentsIfGone(): void {
+    const ctx = this.ui.dialogContext;
+    if (ctx?.kind !== "subagents") return;
+    const agent = this.model.panes.get(ctx.paneId)?.agent;
+    if (!agent || agent.instanceId !== ctx.instanceId) this.ui.closeDialog();
   }
 
   protected onPrefsChange(): void {
@@ -727,6 +754,12 @@ export class TuiApp {
     }
     switch (ev.kind) {
       case "key":
+        if (ev.key.key === "Escape" && this.mouse.itemDragging) {
+          // サイドバーの項目の掴みの途中の Esc は取り消し（離しても何も送らない）。
+          this.mouse.cancel();
+          this.scheduleRender();
+          return;
+        }
         if (this.mouse.selection) {
           this.mouse.selection = null; // 打鍵で選択の表示を消す（コピーは済んでいる）
           this.scheduleRender();
@@ -1306,19 +1339,40 @@ export class TuiApp {
     this.io.write(want ? "\x1b[?1003h" : `\x1b[?1003l${capture ? ENABLE_MOUSE : ""}`);
   }
 
-  /** navigate モードの Space（`navigate_open_menu`）：選んでいる workspace の行の横にメニューを開く（web の Sidebar と同じ役）。 */
+  /**
+   * navigate モードの Space（`navigate_open_menu`）：選んでいる行の横にメニューを開く（web の Sidebar と同じ役）。workspace の行なら
+   * workspace のメニュー、グループの見出しならグループのメニュー、「グループなし」の見出しならそのメニュー（`layout` の無い古いサーバでは
+   * 出す項目が無いので開かない）。見出しが消えているのに選択が残っていたら、何も開かず選択を外す。
+   */
   private openRequestedNavigateMenu(layout: LayoutResult): void {
     if (!this.ui.navigateMenuRequested) return;
     this.ui.clearNavigateMenuRequest();
-    const workspaceId = this.ui.navigateSelection;
-    if (!workspaceId) return;
-    const hit = this.sidebarHits.find(
-      (h) => h.kind === "workspace" && h.workspaceId === workspaceId,
+    const key = this.ui.navigateSelection;
+    if (!key) return;
+    const groupId = groupIdOfNavigateKey(key);
+    const ungrouped = isUngroupedNavigateKey(key);
+    const hit = this.sidebarHits.find((h) =>
+      ungrouped
+        ? h.kind === "ungrouped"
+        : groupId !== null
+          ? h.kind === "group" && h.groupId === groupId
+          : (h.kind === "workspace" || h.kind === "autoGroup") && h.workspaceId === key,
     );
     const at = hit
       ? { x: layout.sidebar ? layout.sidebar.x + 2 : 0, y: hit.y + 1 }
       : { x: 2, y: 2 };
-    this.ui.openContextMenu({ kind: "workspace", workspaceId }, at);
+    if (ungrouped) {
+      if (!currentNavigableRows(this.model, this.prefs).some((r) => r.kind === "ungrouped"))
+        this.ui.setNavigateSelection(null);
+      else if (this.model.hasServerLayout) this.ui.openContextMenu({ kind: "ungrouped" }, at);
+      return;
+    }
+    if (groupId !== null) {
+      if (!this.model.groups.has(groupId)) this.ui.setNavigateSelection(null);
+      else this.ui.openContextMenu({ kind: "group", groupId }, at);
+      return;
+    }
+    this.ui.openContextMenu({ kind: "workspace", workspaceId: key }, at);
   }
 
   /** 切り離し（`prefix+q`・SIGHUP・SIGTERM・SIGINT）。`client.detach` を送れるなら送る。サーバとエージェントは動き続ける。 */

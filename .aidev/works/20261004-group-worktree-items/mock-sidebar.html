@@ -1,0 +1,384 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;font:14px system-ui}</style></head><body>
+<title>サイドバーのグループ案</title>
+<style>
+/* layout: 上に前提、下にブラウザ版 3 案・端末版 3 案を横並びのカードで比べる。モックの中は製品の暗い配色で固定 */
+:root{
+  --bg:#f3f4f7; --fg:#1c2030; --muted:#5d6477; --line:#d5d8e2; --panel:#ffffff; --accent:#3d5afe;
+  --mono: ui-monospace,"Cascadia Mono","Noto Sans Mono CJK JP","MS Gothic",Menlo,Consolas,monospace;
+  --sans: "Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
+  /* モック（製品の配色。両テーマで同じ） */
+  --m-bg:#262935; --m-row:#2f3342; --m-sel:#454a5e; --m-fg:#e9ebf3; --m-dim:#9aa1b6; --m-line:#565c74;
+  --m-accent:#8fa2ff; --m-warn:#f1e58a; --m-tint:rgba(143,162,255,.10);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#14161d; --fg:#e7e9f2; --muted:#9aa1b6; --line:#333848; --panel:#1c1f2a; --accent:#8fa2ff; color-scheme:dark } }
+:root[data-theme="dark"]{ --bg:#14161d; --fg:#e7e9f2; --muted:#9aa1b6; --line:#333848; --panel:#1c1f2a; --accent:#8fa2ff; color-scheme:dark }
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.7;padding-block:28px 56px;padding-inline:max(16px,4vw)}
+main{max-width:1180px;margin-inline:auto;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.5rem;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0;padding-bottom:6px;border-bottom:2px solid var(--fg)}
+p{margin:0;max-width:68ch}
+.lede{color:var(--muted)}
+.facts{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:.9rem;color:var(--muted);padding:0;margin:0;list-style:none}
+.facts b{color:var(--fg);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.opt{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.opt h3{margin:0;font-size:1rem}
+.opt h3 small{font-weight:500;color:var(--accent);margin-left:.4em}
+.opt ul{margin:0;padding-left:1.2em;font-size:.88rem;color:var(--muted)}
+.opt ul b{color:var(--fg)}
+
+/* ---- ブラウザ版のモック ---- */
+.sb{background:var(--m-bg);color:var(--m-fg);border-radius:4px;padding:8px 0;font-size:14px;line-height:1.35;overflow:hidden}
+.row{display:flex;align-items:center;gap:8px;padding:6px 12px;min-width:0;position:relative}
+.row.sel{background:var(--m-sel)}
+.row .name{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .br{flex:none;font-size:12px;color:var(--m-dim);max-width:9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.car{flex:none;width:10px;color:var(--m-dim);font-size:10px}
+.st{flex:none;width:14px;height:14px;border-radius:50%;border:2px solid var(--m-warn);background:linear-gradient(90deg,var(--m-warn) 50%,transparent 50%)}
+.st.idle{background:none;border-color:var(--m-dim)}
+.ic{flex:none;width:14px;height:14px;color:var(--m-accent)}
+.ic.f{color:var(--m-fg)}
+.cnt{flex:none;font-size:11px;color:var(--m-dim);border:1px solid var(--m-line);border-radius:9px;padding:0 6px}
+/* worktree の木の線: 子の行の左に縦線と枝 */
+.wt{position:relative}
+.row.child::before{content:"";position:absolute;left:var(--x);top:0;bottom:0;border-left:1.5px solid var(--m-line)}
+.row.child::after{content:"";position:absolute;left:var(--x);top:50%;width:10px;border-top:1.5px solid var(--m-line)}
+.row.child.last::before{bottom:50%}
+/* B1: 帯＋薄い面 */
+.b1 .grp{border-left:3px solid var(--m-accent);background:var(--m-tint);margin:4px 0}
+.b1 .ghead{font-weight:600}
+/* B2: カード */
+.b2 .grp{margin:6px 8px;border:1px solid var(--m-line);border-radius:8px;background:var(--m-row);overflow:hidden}
+.b2 .ghead{background:rgba(255,255,255,.05);font-weight:600;border-bottom:1px solid var(--m-line)}
+/* B3: 見出しだけ */
+.b3 .ghead{font-size:12px;letter-spacing:.06em;color:var(--m-dim);padding-top:10px}
+.b3 .ghead .name{flex:none}
+.b3 .ghead .rule{flex:1;border-top:1px solid var(--m-line)}
+
+/* ---- 端末版のモック ---- */
+.tm{background:var(--m-bg);color:var(--m-fg);border-radius:4px;padding:10px 0;font-family:var(--mono);font-size:13.5px;line-height:1.5;overflow-x:auto}
+.tr{display:flex;gap:1ch;padding:0 1ch;white-space:pre}
+.tr .l{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tr .r{flex:none;color:var(--m-dim)}
+.tr.sel{background:var(--m-sel)}
+.d{color:var(--m-dim)} .a{color:var(--m-accent)} .w{color:var(--m-warn)}
+.band{background:var(--m-accent);color:var(--m-bg);font-weight:700}
+.band .r{color:var(--m-bg)}
+.tint{background:var(--m-tint)}
+.note{font-size:.88rem;color:var(--muted)}
+
+.plus{flex:none;font-size:11px;color:var(--m-dim)}
+.b1 .grp+.grp{margin-top:6px}
+.fill{flex:1 1 0;min-width:1ch;height:0;align-self:center;border-top:1px solid var(--m-dim)}
+.sep{border-top:1px solid var(--m-line);margin:8px 12px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.88rem;color:var(--muted);margin:0;padding:0;list-style:none}
+.legend b{color:var(--fg)}
+</style>
+
+<main>
+  <header>
+    <h1>サイドバーのグループの見せ方</h1>
+    <p class="lede">利用者が作るグループと worktree グループを、ブラウザ版と端末版でそれぞれどう見分けるかの案です。どの案も、同じ中身を並べています。</p>
+  </header>
+
+  <ul class="facts">
+    <li><b>グループ「リリース準備」</b>（広げている）: worktree グループ「操舵室」（広げている。本体と worktree 2 つ）と、通常の workspace「設計メモ」</li>
+    <li><b>グループ「調査」</b>（広げている）: worktree グループ「public_docs」（<b>畳んでいる</b>。中に worktree 1 つ）と、通常の workspace「ログ解析」</li>
+    <li><b>グループ「保留」</b>（<b>畳んでいる</b>。中に 3 つ）</li>
+    <li><b>グループの外</b>: worktree グループ「ui-kit」（広げている）と、通常の workspace「メモ」「操舵室(2)」</li>
+  </ul>
+  <ul class="legend">
+    <li><b>▾ / ▸</b> 広げている／畳んでいる</li>
+    <li><b>見出しの状態の印</b> 中の状態のまとめ（常に出す）</li>
+    <li><b>数字</b> グループの中の項目の数</li>
+    <li><b>+1</b> 畳んだ worktree グループの、隠れている worktree の数</li>
+  </ul>
+
+  <section style="display:flex;flex-direction:column;gap:14px">
+    <h2>ブラウザ版</h2>
+    <div class="grid">
+      <article class="opt">
+        <h3>B1 帯と薄い面<small>おすすめ</small></h3>
+        <div class="sb b1" id="b1"></div>
+        <ul>
+          <li>グループは<b>左の色の帯と薄い面</b>。worktree グループは<b>木の線と枝の印</b>。</li>
+          <li>グループが続くときは、間に少し隙間を空けて帯を切る。</li>
+          <li>畳んだグループは、帯の付いた見出しの 1 行になる。</li>
+          <li>幅をほとんど使わない。選択中の行の色とも重ならない。</li>
+        </ul>
+      </article>
+      <article class="opt">
+        <h3>B2 カード</h3>
+        <div class="sb b2" id="b2"></div>
+        <ul>
+          <li>グループを<b>角丸の枠と別の面</b>で囲む。2 つ並んでも、境目が一番はっきりする。</li>
+          <li>畳んだグループは、見出しだけの小さなカードになる。</li>
+          <li>左右に余白を取るので、名前とブランチ名が切れやすい。グループが多いと画面が重くなる。</li>
+        </ul>
+      </article>
+      <article class="opt">
+        <h3>B3 区切りの見出し</h3>
+        <div class="sb b3" id="b3"></div>
+        <ul>
+          <li>グループは<b>小さな見出しの行と字下げ</b>だけ。面も帯も無く、画面が一番静か。</li>
+          <li>グループが続くと、次の見出しが前のグループの終わりを示す。</li>
+          <li>グループの後ろにグループ外の行が来ると、境目は字下げが戻ることでしか分からない（「保留」と「ui-kit」の間）。</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:14px">
+    <h2>端末版</h2>
+    <p class="note">端末版は 1 文字単位で描きます。使えるのは、罫線の文字・記号・文字の色・行の背景色です。worktree の印 <code>⎇</code> は、フォントによって幅が崩れることがあるので、実物の端末で確かめてから決めます。</p>
+    <div class="grid">
+      <article class="opt">
+        <h3>T1 左の帯と木の線<small>おすすめ</small></h3>
+        <div class="tm" id="t1"></div>
+        <ul>
+          <li>グループは<b>左端の太い帯（文字）</b>。色が出ない端末でも、帯の文字で分かる。</li>
+          <li>使う幅は 1 文字。行は増えない。</li>
+          <li>グループが続くと帯がつながるので、見出しの行（太字）で区切りを見分ける。</li>
+        </ul>
+      </article>
+      <article class="opt">
+        <h3>T2 見出しの帯と面</h3>
+        <div class="tm" id="t2"></div>
+        <ul>
+          <li>グループの見出しを<b>色の付いた帯</b>にし、中の行に<b>薄い背景色</b>を付ける。</li>
+          <li>グループが続いても、見出しの帯で区切りがはっきりする。畳んだグループは帯の 1 行。</li>
+          <li>背景色の差が小さいテーマや、色の少ない端末では、中の範囲が分かりにくい。選択中の行の背景と重なる。</li>
+        </ul>
+      </article>
+      <article class="opt">
+        <h3>T4 区切りの見出し<small>B3 と同じ考え方</small></h3>
+        <div class="tm" id="t4"></div>
+        <ul>
+          <li>グループは<b>薄い色の見出しの行（名前と横線と数）と字下げ</b>だけ。帯も枠も背景も無い。</li>
+          <li>行は増えない。使う幅は字下げの 2 文字。</li>
+          <li>グループが続くと、次の見出しが前のグループの終わりを示す。</li>
+          <li>グループの後ろにグループ外の行が来ると、境目は字下げが戻ることでしか分からない（「保留」と「ui-kit」の間）。</li>
+        </ul>
+      </article>
+      <article class="opt">
+        <h3>T3 罫線の枠</h3>
+        <div class="tm" id="t3"></div>
+        <ul>
+          <li>グループを<b>罫線の枠</b>で囲む。色が無くても範囲がはっきり分かる。</li>
+          <li>枠の下の線で 1 行、左右で 4 文字を使う。グループが 3 つあると 3 行増える。</li>
+          <li>畳んだグループは、上下の線だけの 1 行にする。</li>
+          <li>右の T3a・T3b は、この案の行と幅を減らした改良版。</li>
+        </ul>
+      </article>
+      <article class="opt">
+        <h3>T3a 罫線の枠（線を共有）<small>改良 1</small></h3>
+        <div class="tm" id="t3a"></div>
+        <ul>
+          <li><b>続くグループは、間の線を 1 本にまとめる</b>（次の見出しが前のグループを閉じる）。増えるのは、最後の下の線の 1 行だけ。</li>
+          <li><b>右の線を省く</b>。使う幅は左の 2 文字だけになり、ブランチ名が切れにくい。</li>
+          <li>線は薄い色。色が出ない端末でも、形で範囲が分かる。</li>
+        </ul>
+      </article>
+      <article class="opt">
+        <h3>T3b 罫線の枠（下の線なし）<small>改良 2</small></h3>
+        <div class="tm" id="t3b"></div>
+        <ul>
+          <li>下の線も省き、<b>グループの最後の行の左を └ で閉じる</b>。行は 1 行も増えない。</li>
+          <li>畳んだグループは、線の付いた見出しの 1 行。</li>
+          <li>グループの最後が worktree のとき、左端に └ が 2 つ並ぶ（グループの └ と、木の線の └）。少し込み入って見える。</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+
+  <section style="display:flex;flex-direction:column;gap:14px">
+    <h2>グループに入っていないものの扱い（B3・T4 の場合）</h2>
+    <p class="note">見出しで区切る案（B3・T4）は、グループの後ろにグループ外の行が来ると境目が分かりにくくなります。その直し方の 2 案です。どちらも、グループに入っていないものを 1 か所にまとめます（グループの間に、グループ外の行を挟めなくなります）。</p>
+    <div class="grid">
+      <article class="opt">
+        <h3>案 1 最後のグループの下に罫線（ブラウザ版）</h3>
+        <div class="sb b3" id="b3r"></div>
+        <ul>
+          <li>グループに入っていないものは、<b>必ずグループの下</b>に並ぶ。境目に罫線を 1 本引く。</li>
+          <li>グループが 1 つも無ければ、罫線も出ない（今と同じ見た目）。</li>
+        </ul>
+      </article>
+      <article class="opt">
+        <h3>案 1 最後のグループの下に罫線（端末版）</h3>
+        <div class="tm" id="t4r"></div>
+        <ul>
+          <li>罫線で 1 行使う。</li>
+          <li>新しく開いた workspace は、いちばん下に出る。</li>
+        </ul>
+      </article>
+      <article class="opt">
+        <h3>案 2 「グループなし」をグループとして出す（ブラウザ版）</h3>
+        <div class="sb b3" id="b3n"></div>
+        <ul>
+          <li>グループに入っていないものを、<b>「グループなし」という見出しの下</b>にまとめる。ほかのグループと同じ見た目で、畳める・並べ替えられる。</li>
+          <li>ほかのグループが 1 つも無い間は、「グループなし」の見出しは出ない（今と同じ見た目）。</li>
+        </ul>
+      </article>
+      <article class="opt">
+        <h3>案 2 「グループなし」をグループとして出す（端末版）</h3>
+        <div class="tm" id="t4n"></div>
+        <ul>
+          <li>行の数は案 1 と同じ（罫線の代わりに見出し）。字下げが 1 段増える。</li>
+          <li>「グループなし」の位置を、ほかのグループの間や上に動かせる。</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:8px">
+    <h2>共通の決まり</h2>
+    <p><b>グループの見出しには、中の状態をまとめたアイコンを常に出します</b>（広げていても、畳んでいても）。まとめ方は workspace の行と同じで、中のエージェントのうち優先度の高い状態が 1 つ出ます。「リリース準備」と「調査」は中に作業中のエージェントがあるので作業中の印、「保留」は全部手が空いているので手が空いている印です。</p>
+    <p>worktree グループの先頭の行は、広げているときは本体の状態、畳んでいるときは本体と worktree の全部をまとめた状態を出します。畳んだ「public_docs」は、本体は手が空いていますが、隠れている worktree が作業中なので、作業中の印になっています。</p>
+    <p>worktree グループは、どの案でも「木の線」と「worktree の印」と「ブランチ名」で表します。先頭の行が本体で、子が worktree です。</p>
+    <p>通常の workspace には worktree の印が付きません。本体と同じフォルダで開いた 2 つ目（操舵室(2)）は、印が無いことで、worktree グループの一員ではないと分かります。</p>
+  </section>
+</main>
+
+<script>
+const DATA = [
+  { g: "リリース準備", open: true, state: "work", count: 2, items: [
+    { wt: true, open: true, rows: [
+      { n: "操舵室", b: "main", s: "work", sel: true },
+      { n: "ask-form-comments", b: "feature/ask-form-comments", s: "work" },
+      { n: "subagent-display", b: "feature/subagent-display", s: "idle" } ] },
+    { n: "設計メモ", s: "idle" } ] },
+  { g: "調査", open: true, state: "work", count: 2, items: [
+    { wt: true, open: false, agg: "work", rows: [
+      { n: "public_docs", b: "main", s: "idle" },
+      { n: "opening", b: "feat/opening-patterns", s: "work" } ] },
+    { n: "ログ解析", s: "idle" } ] },
+  { g: "保留", open: false, state: "idle", count: 3, items: [] },
+  { wt: true, open: true, rows: [
+    { n: "ui-kit", b: "main", s: "idle" },
+    { n: "tokens", b: "feat/tokens", s: "idle" } ] },
+  { n: "メモ", s: "idle" },
+  { n: "操舵室(2)", b: "main", s: "idle" },
+];
+const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const WT = '<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="4" cy="3.5" r="1.7"/><circle cx="4" cy="12.5" r="1.7"/><circle cx="12" cy="6" r="1.7"/><path d="M4 5.2v5.6M12 7.7c0 2.4-8 1.4-8 3.1"/></svg>';
+const FOLDER = '<svg class="ic f" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 3.5h4.2l1.4 1.6h7.4v8.4h-13z"/></svg>';
+
+// ---- ブラウザ版 ----
+function webRow(o) {
+  const pad = 12 + o.depth * 18;
+  const x = pad - 12;   // 木の線は、親の折りたたみの印の下
+  const cls = ["row", o.cls || "", o.sel ? "sel" : "", o.child ? "child" : "", o.last ? "last" : ""].join(" ");
+  return `<div class="${cls}" style="padding-left:${pad}px;--x:${x}px">` +
+    (o.child ? "" : `<span class="car">${o.caret || ""}</span>`) +
+    `<span class="st ${o.s === "idle" ? "idle" : ""}"></span>` +
+    (o.icon === "wt" ? WT : o.icon === "folder" ? FOLDER : "") +
+    `<span class="name">${esc(o.n)}</span>` +
+    (o.rule ? '<span class="rule"></span>' : "") +
+    (o.plus ? `<span class="plus">+${o.plus}</span>` : "") +
+    (o.b ? `<span class="br">${esc(o.b)}</span>` : "") +
+    (o.cnt != null ? `<span class="cnt">${o.cnt}</span>` : "") + "</div>";
+}
+function webItem(it, depth) {
+  if (!it.wt) return webRow({ depth, n: it.n, s: it.s, b: it.b });
+  const [head, ...kids] = it.rows;
+  let h = webRow({ depth, caret: it.open ? "▾" : "▸", n: head.n, b: head.b, s: it.open ? head.s : it.agg, sel: head.sel, icon: "wt", plus: it.open ? 0 : kids.length });
+  if (it.open) kids.forEach((k, i) => { h += webRow({ depth: depth + 1, child: true, last: i === kids.length - 1, n: k.n, b: k.b, s: k.s, icon: "wt" }); });
+  return h;
+}
+function web(id, variant, mode) {
+  let h = "";
+  const loose = DATA.filter((x) => !x.g);
+  let looseDone = false;
+  for (const it of DATA) {
+    if (!it.g) {
+      if (!mode) { h += webItem(it, 0); continue; }
+      if (looseDone) continue;
+      looseDone = true;
+      if (mode === "rule") { h += '<div class="sep"></div>'; for (const m of loose) h += webItem(m, 0); }
+      else {   // 「グループなし」をグループとして出す
+        h += '<div class="grp">' + webRow({ depth: 0, cls: "ghead", caret: "▾", n: "グループなし", s: "idle", cnt: loose.length, rule: variant === "b3" });
+        for (const m of loose) h += webItem(m, variant === "b2" ? 0 : 1);
+        h += "</div>";
+      }
+      continue;
+    }
+    const inner = variant === "b2" ? 0 : 1;
+    h += '<div class="grp">' + webRow({ depth: 0, cls: "ghead", caret: it.open ? "▾" : "▸", n: it.g, s: it.state, icon: "folder", cnt: it.count, rule: variant === "b3" });
+    if (it.open) for (const m of it.items) h += webItem(m, inner);
+    h += "</div>";
+  }
+  document.getElementById(id).innerHTML = h;
+}
+
+// ---- 端末版 ----
+const ST = { work: '<span class="w">◐</span>', idle: '<span class="d">○</span>' };
+const d = (t) => `<span class="d">${t}</span>`;
+const tr = (l, r, cls) => `<div class="tr ${cls || ""}"><span class="l">${l}</span>${r ? `<span class="r">${r}</span>` : ""}</div>`;
+const br = (b) => (b ? esc(b.length > 12 ? b.slice(0, 11) + "…" : b) : "");
+// 1 つの項目を、行の配列 [左, 右, 選択中か] にする
+function tuiRows(it, indent) {
+  const sp = " ".repeat(indent);
+  if (!it.wt) return [[`${sp}  ${ST[it.s]} ${esc(it.n)}`, br(it.b), false]];
+  const [head, ...kids] = it.rows;
+  const rows = [[`${sp}${it.open ? "▾" : "▸"} ${ST[it.open ? head.s : it.agg]} <span class="a">⎇</span> ${esc(head.n)}${it.open ? "" : " " + d("+" + kids.length)}`, br(head.b), !!head.sel]];
+  if (it.open) kids.forEach((k, i) => rows.push([`${sp}${d(i === kids.length - 1 ? "└" : "├")} ${ST[k.s]} <span class="a">⎇</span> ${esc(k.n)}`, br(k.b), false]));
+  return rows;
+}
+function tui(id, variant, mode) {
+  const looseAll = DATA.filter((x) => !x.g);
+  let looseDone = false;
+  const RULE = "─".repeat(60);
+  const head = (lead, it, tail) => `<div class="tr">${d(lead)} ${it.open ? "▾" : "▸"} ${ST[it.state]} <b>${esc(it.g)}</b> <span class="fill"></span> ${d(it.count + (tail ? " " + tail : ""))}</div>`;
+  const close = (l, r) => `<div class="tr">${d(l)}<span class="fill"></span>${r ? d(r) : ""}</div>`;
+  let h = "";
+  DATA.forEach((it, idx) => {
+    const prevG = idx > 0 && !!DATA[idx - 1].g, nextG = idx + 1 < DATA.length && !!DATA[idx + 1].g;
+    if (!it.g && mode) {
+      if (looseDone) return;
+      looseDone = true;
+      if (mode === "rule") { h += '<div class="tr"><span class="fill"></span></div>'; for (const m of looseAll) for (const [l, r, sel] of tuiRows(m, 0)) h += tr(l, r, sel ? "sel" : ""); }
+      else {
+        h += `<div class="tr">▾ ${ST.idle} ${d("グループなし")} <span class="fill"></span> ${d(String(looseAll.length))}</div>`;
+        for (const m of looseAll) for (const [l, r, sel] of tuiRows(m, 2)) h += tr(l, r, sel ? "sel" : "");
+      }
+      return;
+    }
+    if (!it.g) {
+      const pre = variant === "t1" ? " " : variant === "t2" || variant === "t4" ? "" : "  ";
+      for (const [l, r, sel] of tuiRows(it, 0)) h += tr(pre + l, r, sel ? "sel" : "");
+      return;
+    }
+    const members = it.open ? it.items.flatMap((m) => tuiRows(m, variant === "t1" || variant === "t2" || variant === "t4" ? 2 : 0)) : [];
+    if (variant === "t4") {                   // B3 と同じ考え方: 薄い見出しの行と字下げだけ
+      h += `<div class="tr">${it.open ? "▾" : "▸"} ${ST[it.state]} ${d(esc(it.g))} <span class="fill"></span> ${d(String(it.count))}</div>`;
+      for (const [l, r, sel] of members) h += tr(l, r, sel ? "sel" : "");
+      return;
+    }
+    if (variant === "t1") {
+      const bar = '<span class="a">▌</span>';
+      h += tr(`${bar}${it.open ? "▾" : "▸"} ${ST[it.state]} <b>${esc(it.g)}</b>`, String(it.count));
+      for (const [l, r, sel] of members) h += tr(bar + l, r, sel ? "sel" : "");
+    } else if (variant === "t2") {
+      h += tr(`${it.open ? "▾" : "▸"} ${it.state === "work" ? "◐" : "○"} ${esc(it.g)}`, String(it.count), "band");
+      for (const [l, r, sel] of members) h += tr(l, r, sel ? "sel" : "tint");
+    } else if (variant === "t3") {            // 元の案: 四方を囲む
+      h += head(it.open ? "┌" : "─", it, it.open ? "┐" : "─");
+      for (const [l, r, sel] of members) h += tr(d("│") + " " + l, r + " " + d("│"), sel ? "sel" : "");
+      if (it.open) h += close("└", "┘");
+    } else if (variant === "t3a") {           // 改良 1: 続くグループは線を共有。右の線なし
+      h += head(prevG ? "├" : "┌", it, "");
+      for (const [l, r, sel] of members) h += tr(d("│") + " " + l, r, sel ? "sel" : "");
+      if (!nextG) h += close("└", "");
+    } else {                                  // 改良 2 (t3b): 下の線も省き、最後の行を └ で閉じる
+      h += head(it.open && members.length ? "┌" : "─", it, "");
+      members.forEach(([l, r, sel], i) => { h += tr(d(i === members.length - 1 ? "└" : "│") + " " + l, r, sel ? "sel" : ""); });
+    }
+  });
+  document.getElementById(id).innerHTML = h;
+}
+web("b1", "b1"); web("b2", "b2"); web("b3", "b3");
+tui("t1", "t1"); tui("t2", "t2"); tui("t3", "t3"); tui("t3a", "t3a"); tui("t3b", "t3b"); tui("t4", "t4");
+web("b3r", "b3", "rule"); tui("t4r", "t4", "rule"); web("b3n", "b3", "nogroup"); tui("t4n", "t4", "nogroup");
+</script>
+</body></html>

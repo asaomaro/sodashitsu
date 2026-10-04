@@ -315,6 +315,11 @@ export class PrefsModel {
     return loadCollapsedAutoGroups(this.raw.collapsedAutoGroups);
   }
 
+  /** 「グループなし」を畳んでいるか（共有の設定 `ungroupedCollapsed`。`true` のときだけ畳む。web の `loadUngroupedCollapsed` と同じ）。 */
+  get ungroupedCollapsed(): boolean {
+    return this.raw.ungroupedCollapsed === true;
+  }
+
   /** 新しく開く場所の方針（web の `loadNewCwdPolicy` と同じ正規化。既定は「引き継ぐ」）。 */
   get newCwdPolicy(): NewCwdPolicy {
     return loadNewCwdPolicy(this.raw.newCwdPolicy);

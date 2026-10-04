@@ -609,39 +609,62 @@ function agentSection(env: SettingsEnv): SettingsSection {
     items: () => {
       const status = env.agentIntegration.status();
       if (!status) return [{ label: "状態を読み込んでいます…", disabled: true }];
-      const items: SettingItem[] = AGENT_KINDS.map((k) => {
+      const items: SettingItem[] = AGENT_KINDS.flatMap((k): SettingItem[] => {
         const s = status.agents?.[k.value];
         const installed = s?.installed === true;
-        return {
+        const needsUpdate = installed && s?.needsUpdate === true;
+        /** 導入・解除・更新の共通の動き（二重に押せない。結果は画面の知らせに出す）。 */
+        const run = (kind: "install" | "uninstall" | "update"): string => {
+          busy = k.value;
+          const op =
+            kind === "uninstall"
+              ? env.agentIntegration.uninstall(k.value)
+              : env.agentIntegration.install(k.value);
+          const done = { install: "入れました", uninstall: "外しました", update: "更新しました" }[
+            kind
+          ];
+          const doing = {
+            install: "入れています",
+            uninstall: "外しています",
+            update: "更新しています",
+          }[kind];
+          op.then(
+            (r) =>
+              env.message(
+                r.ok ? (r.message ?? `${k.label}：${done}`) : (r.message ?? "操作に失敗しました"),
+              ),
+            () => env.message("操作に失敗しました"),
+          ).finally(() => {
+            busy = null;
+          });
+          return `${k.label}：${doing}…`;
+        };
+        const main: SettingItem = {
           label: k.label,
           value:
             busy === k.value
               ? "操作中…"
-              : `${installed ? "導入済み" : "未導入"}${s?.cliDetected === false ? "（コマンドが見つかりません）" : ""}`,
+              : `${installed ? "導入済み" : "未導入"}${needsUpdate ? "（更新が必要）" : ""}${s?.cliDetected === false ? "（コマンドが見つかりません）" : ""}`,
           note: installed
-            ? "押すと本製品のフックを外します。"
-            : "押すと本製品のフックを入れます（状態の検出・セッションの再開に使います）。",
+            ? "押すと本製品のフックを外します（その後に起動したエージェントから効きます）。"
+            : k.value === "claude"
+              ? "押すと本製品のフックを 6 つ入れます（セッションの再開・サブエージェントの表示に使います）。"
+              : "押すと本製品のフックを入れます（状態の検出・セッションの再開に使います）。",
           disabled: busy !== null,
-          activate: () => {
-            if (busy) return;
-            busy = k.value;
-            const op = installed
-              ? env.agentIntegration.uninstall(k.value)
-              : env.agentIntegration.install(k.value);
-            op.then(
-              (r) =>
-                env.message(
-                  r.ok
-                    ? (r.message ?? `${k.label}：${installed ? "外しました" : "入れました"}`)
-                    : (r.message ?? "操作に失敗しました"),
-                ),
-              () => env.message("操作に失敗しました"),
-            ).finally(() => {
-              busy = null;
-            });
-            return `${k.label}：${installed ? "外しています" : "入れています"}…`;
-          },
+          activate: () => (busy ? undefined : run(installed ? "uninstall" : "install")),
         };
+        if (!needsUpdate) return [main];
+        // 導入済みで足りないフックがある（20261004-subagent-display）。押したときだけ足す（設定ファイルは勝手に書き換えない）。
+        return [
+          main,
+          {
+            label: `${k.label}のフックを更新`,
+            value: "更新が必要",
+            note: "足りないフックを足します。すでに動いている Claude Code は、起動し直すと新しいフックが効きます。",
+            disabled: busy !== null,
+            activate: () => (busy ? undefined : run("update")),
+          },
+        ];
       });
       items.push(
         toggleItem(

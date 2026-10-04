@@ -128,6 +128,9 @@ export class StoreAdapter implements StorePort {
       case "workspace.order_changed":
         session.workspacesReordered(e.data.workspaceIds);
         return;
+      case "sidebar.layout_changed":
+        session.layoutChanged(e.data.layout);
+        return;
       case "group.created":
       case "group.updated":
         session.groupUpserted(e.data.group);

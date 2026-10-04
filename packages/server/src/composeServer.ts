@@ -30,6 +30,7 @@ import { OsNetworkInfo } from "./infra/OsNetworkInfo.js";
 import { ChildProcessGitRunner } from "./infra/GitRunner.js";
 import { DefaultWorktreeService } from "./git/WorktreeService.js";
 import { DefaultGitInfoPoller } from "./git/GitInfoPoller.js";
+import { wireLayoutConfirmation } from "./layoutConfirmWiring.js";
 import { createPaletteSource } from "./clients/answerPalette.js";
 import { DefaultClientRegistry } from "./clients/ClientRegistry.js";
 import { DefaultSizeAuthority } from "./clients/SizeAuthority.js";
@@ -75,6 +76,7 @@ import { PrefsStore } from "./persist/PrefsStore.js";
 import { GraphStore } from "./persist/GraphStore.js";
 import { GraphEngine } from "./graph/GraphEngine.js";
 import { AgentLineage } from "./graph/AgentLineage.js";
+import { SubagentTracker } from "./agent/SubagentTracker.js";
 import { LocalAgentPort } from "./graph/LocalAgentPort.js";
 import { RemoteLinks } from "./graph/RemoteLinks.js";
 import type { ClientSink } from "./terminal/OutputFanout.js";
@@ -383,6 +385,17 @@ export async function composeServer(
   });
   // エージェントが起動したエージェントの自動載せ（20261003-graph-auto-nodes）。記録はメモリだけ（引き継ぎで消える）なので、handoff の pausePollers では止めない。
   const lineage = new AgentLineage({ bus, store: graph, paneExists, logger });
+  // エージェントが中で動かしているサブエージェントの数え上げ（20261004-subagent-display）。フックの報告を受け口から受ける。
+  const subagents = new SubagentTracker({
+    bus,
+    agentInstanceOf: (paneId) => session.getPane(paneId)?.agent?.instanceId ?? null,
+    paneExists: (paneId) => session.getPane(paneId) !== undefined,
+    publish: (paneId, value) => session.setAgentSubagents(paneId, value),
+    now: () => Date.now(),
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (h) => clearTimeout(h as NodeJS.Timeout),
+    logger,
+  });
   registerAllMethods(surface, {
     session,
     clients,
@@ -647,8 +660,12 @@ export async function composeServer(
         //      resume コマンドを投入した pane が hook を発火させうるため、それより前に立てる。
         agentReportSocket = await startAgentReportSocket(
           agentReportSocketPath,
-          (paneId, kind, sessionId) => {
-            if (kind === "claude" || kind === "codex") session.reportAgentSession(paneId, kind, sessionId);
+          (report) => {
+            if (report.type === "session") {
+              if (report.kind === "claude" || report.kind === "codex") session.reportAgentSession(report.paneId, report.kind, report.sessionId);
+            } else if (report.kind === "claude") {
+              subagents.report(report); // サブエージェントの報告は claude だけ
+            }
           },
           logger,
         );
@@ -694,7 +711,8 @@ export async function composeServer(
         dropSweeper = dropStore.startSweeping(); // ドロップされたファイルも同じ間隔で片付ける
         // 3.5. 連携の実行（20260927-agent-graph）。状態の変化を購読するので agentMonitor より前に始める（最初の判定の変化から拾う）。
         graphEngine.start();
-        // 4. poller。
+        // 4. poller。最初の 1 周の確認が終わったら、layout の無い保存から始めた移行を確定する（一時停止中の合図は捨てる。D18）。
+        wireLayoutConfirmation(gitPoller, session);
         gitPoller.start();
         agentMonitor.start();
         // 4.5. 更新時の引き継ぎの指示の受け口（Linux/macOS。20260926-live-handoff）。復元と poller の開始の後に置く——起動の途中の指示で、
@@ -732,6 +750,7 @@ export async function composeServer(
         if (!sessionLoaded) persist.cancel();
         graphEngine.stop();
         lineage.close();
+        subagents.close();
         remoteLinks.closeAll();
         paneHistory?.stop();
         imageSweeper?.stop();
@@ -760,6 +779,7 @@ export async function composeServer(
         // machine_unavailable として履歴に残してしまう。止める＝待ちは履歴に残さず取り消し、送っている途中の結果も書かない）。graph.close の前。
         graphEngine.stop();
         lineage.close();
+        subagents.close();
         remoteLinks.closeAll();
         await machines.stop();
         // 閉じ始めたら新しい `/ws` を受け付けない（closeAll の後に届いた upgrade を通さない。D102）。
@@ -850,18 +870,27 @@ async function readPem(path: string, flag: "--cert" | "--key"): Promise<string> 
   }
 }
 
-function toSessionFileData(session: SessionService): SessionFileData {
+export function toSessionFileData(session: SessionService): SessionFileData {
   const snapshot = session.snapshot();
+  // 仮の状態（移行の確定前）の間は `layout`・`repoGroups` を書かない（20261004-group-worktree-items）。
+  const persistedLayout = session.persistedLayout();
   return {
     schema: 1,
     savedAt: new Date().toISOString(),
     nextId: session.getNextIdCounters(),
     groups: snapshot.groups.map((g) => ({ id: g.id, label: g.label, collapsed: g.collapsed })),
+    ...(persistedLayout ? { layout: persistedLayout.layout, repoGroups: persistedLayout.repoGroups } : {}),
     workspaces: snapshot.workspaces.map((ws) => ({
       id: ws.id,
       label: ws.label,
       autoLabel: ws.autoLabel,
       groupId: ws.groupId,
+      // 直前の判定。`git` が無いとき（管理外・判定前）は null——判定前でも項目は書く（「項目が無い」は以前の版の保存だけ）。復元で `git: null` に戻り、並びは変わらない。
+      repoKey: ws.git?.repoKey ?? null,
+      isLinkedWorktree: ws.git?.isLinkedWorktree ?? false,
+      // その worktree（フォルダ）を示す値。代表の決まり（追補 01 A）に使うので、起動直後から同じ代表になるよう保存する。
+      ...(typeof ws.git?.worktreeKey === "string" ? { worktreeKey: ws.git.worktreeKey } : {}),
+      ...(typeof ws.git?.worktreeKey === "string" && typeof ws.representative === "boolean" ? { representative: ws.representative } : {}),
       cwd: ws.cwd,
       activeTabId: ws.activeTabId,
       // tab は並べ替えた順（`ws.tabIds`）で保存する——復元の tab の並びと、最初の tab（名前と git を決める場所。20260926-workspace-label-follow-cwd）が保たれる。

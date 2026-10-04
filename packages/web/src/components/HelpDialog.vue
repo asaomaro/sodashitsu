@@ -80,6 +80,7 @@ const navigateEntries = computed<HelpEntry[]>(() => [
   navigateEntry("navigate_workspace_up"),
   navigateEntry("navigate_workspace_down"),
   navigateEntry("navigate_open_menu"),
+  navigateEntry("navigate_toggle_collapse"),
   { keys: `${navigateBindingText("navigate_pane_left")} ・ ←`, label: navigateKeyDef("navigate_pane_left")!.label },
   navigateEntry("navigate_pane_down"),
   navigateEntry("navigate_pane_up"),

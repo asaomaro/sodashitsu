@@ -35,6 +35,8 @@ const emit = defineEmits<{
   handleClick: [];
   goto: [];
   rekey: [];
+  /** サブエージェントの一覧を開く（件数のボタン。20261004-subagent-display）。 */
+  subagents: [];
 }>();
 
 const invalid = computed(() => props.info.exists === false || props.info.stale);
@@ -46,6 +48,12 @@ const agentLine = computed(() => {
   return name;
 });
 
+/** エージェントが動かしているサブエージェントの件数（報告を受けていない・0 件は 0。ボタンは 1 件以上のときだけ出す）。 */
+// 切れたマシンの最後の要約の件数は出さない（状態の印と同じ。`exists` が true のときだけ＝繋がっている）。
+const subagentCount = computed(() =>
+  props.info.exists === true ? (props.info.agent?.subagents?.count ?? 0) : 0,
+);
+
 const ariaLabel = computed(() => {
   const parts = [props.info.name, props.info.machineLabel];
   if (invalid.value) parts.push("無効（pane がありません）");
@@ -53,6 +61,7 @@ const ariaLabel = computed(() => {
   parts.push(agentLine.value);
   const s = stateLabel(props.info.state);
   if (s) parts.push(s);
+  if (subagentCount.value > 0) parts.push(`サブエージェント ${subagentCount.value} 件`);
   parts.push(`出る線 ${props.outCount} 本・入る線 ${props.inCount} 本`);
   return parts.join("・");
 });
@@ -87,6 +96,44 @@ const ariaLabel = computed(() => {
     <div class="graph-node-agent">
       <StateIcon class="graph-node-state" :state="info.state" />
       <span class="graph-node-agent-name">{{ agentLine }}</span>
+      <!-- サブエージェントの件数（20261004-subagent-display）。エージェントの行の右。ノードの大きさは変えない。読み取りだけ（モバイル）では数だけで押せない。 -->
+      <template v-if="subagentCount > 0">
+        <span
+          v-if="readOnly"
+          class="graph-node-subagents graph-node-subagents-static"
+          :aria-label="`サブエージェント ${subagentCount} 件`"
+        >
+          <svg class="graph-node-subagents-icon" viewBox="0 0 12 12" aria-hidden="true">
+            <path
+              d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+            />
+          </svg>
+          <span aria-hidden="true">{{ subagentCount }}</span>
+        </span>
+        <button
+          v-else
+          type="button"
+          class="graph-node-subagents"
+          tabindex="-1"
+          :aria-label="`${info.name} のサブエージェント ${subagentCount} 件を表示`"
+          data-subagents-button
+          @pointerdown.stop
+          @click.stop="emit('subagents')"
+        >
+          <svg class="graph-node-subagents-icon" viewBox="0 0 12 12" aria-hidden="true">
+            <path
+              d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+            />
+          </svg>
+          <span aria-hidden="true">{{ subagentCount }}</span>
+        </button>
+      </template>
     </div>
     <div v-if="invalid" class="graph-node-warn">
       ⚠ 無効（pane がありません）
@@ -191,6 +238,31 @@ const ariaLabel = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.graph-node-subagents {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  margin-left: auto;
+  padding: 0 5px;
+  height: 14px;
+  line-height: 1;
+  font-size: 11px;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+}
+button.graph-node-subagents {
+  cursor: pointer;
+}
+button.graph-node-subagents:hover {
+  background: var(--soda-subtle-bg, #343746);
+}
+.graph-node-subagents-icon {
+  width: 10px;
+  height: 10px;
 }
 .graph-node-warn {
   color: var(--soda-warn-fg, #ffb86c);

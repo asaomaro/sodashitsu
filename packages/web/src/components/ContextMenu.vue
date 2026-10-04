@@ -2,6 +2,7 @@
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ActionDispatcherKey, TerminalRegistryKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
+import { itemGroupIdOf } from "../store/sidebarTree.js";
 import { useViewStore } from "../store/view.js";
 
 /**
@@ -86,7 +87,11 @@ const items = computed<MenuItem[]>(() => {
     // その間は `prefix+G` から始められるようにしてある（decisions.md D3）。
     const ws = session.workspaces.get(target.workspaceId);
     const isGit = ws?.git != null;
-    const inGroup = ws?.groupId != null;
+    // 所属は項目で見る（worktree の子の行でも、操作は項目の全体に働く）。
+    const currentGroupId = itemGroupIdOf(session, target.workspaceId);
+    const inGroup = currentGroupId !== null;
+    // 移し先に選べるグループがあるか（所属ありのときは今のグループを除く）。
+    const hasOtherGroup = session.groups.size - (inGroup && session.groups.has(currentGroupId) ? 1 : 0) > 0;
     return [
       { label: "名前の変更", run: () => actions.renameWorkspaceById(target.workspaceId) },
       { label: "閉じる", run: () => actions.closeWorkspaceById(target.workspaceId) },
@@ -96,20 +101,41 @@ const items = computed<MenuItem[]>(() => {
             { label: "worktree を開く…", run: () => actions.openWorktree(target.workspaceId) },
           ]
         : []),
-      // 20260923-workspace-grouping（herdr に前例が無い独自拡張）。
-      { label: "新しいグループを作る…", run: () => actions.createGroupForWorkspace(target.workspaceId) },
+      // 20260923-workspace-grouping（herdr に前例が無い独自拡張）。項目の並びは design「画面」のとおり
+      // （所属なし: 追加・新規／所属あり: 移す・外す・新規）。
       ...(inGroup
-        ? [{ label: "グループから外す", run: () => actions.removeWorkspaceFromGroup(target.workspaceId) }]
-        : session.groups.size > 0
+        ? [
+            ...(hasOtherGroup ? [{ label: "別のグループへ移す…", run: () => actions.openGroupPicker(target.workspaceId) }] : []),
+            { label: "グループから外す", run: () => actions.removeWorkspaceFromGroup(target.workspaceId) },
+          ]
+        : hasOtherGroup
           ? [{ label: "グループへ追加…", run: () => actions.openGroupPicker(target.workspaceId) }]
           : []),
+      { label: "新しいグループを作る…", run: () => actions.createGroupForWorkspace(target.workspaceId) },
     ];
   }
   if (target.kind === "group") {
     return [
       { label: "名前の変更", run: () => actions.renameGroupById(target.groupId) },
+      // 「上へ／下へ移動」は `item.move_by` が要る。`layout` の無い古いサーバには出さない（design「古いサーバ・古い画面」）。
+      ...(session.hasServerLayout
+        ? [
+            { label: "上へ移動", run: () => actions.moveGroupBy(target.groupId, "previous") },
+            { label: "下へ移動", run: () => actions.moveGroupBy(target.groupId, "next") },
+          ]
+        : []),
       { label: "グループを削除", run: () => actions.deleteGroupById(target.groupId) },
     ];
+  }
+  if (target.kind === "ungrouped") {
+    // 「グループなし」の見出し（追補 01 B）：名前の変更・削除は無い。並べ替えは `item.move_by` が要るので、`layout` の無い古いサーバには何も出さない
+    // （そのときはメニュー自体を開かない。`Sidebar.vue`）。
+    return session.hasServerLayout
+      ? [
+          { label: "上へ移動", run: () => actions.moveUngroupedBy("previous") },
+          { label: "下へ移動", run: () => actions.moveUngroupedBy("next") },
+        ]
+      : [];
   }
   // global：どこにも属さない全体の操作。**「設定」は入れる**（20260920-agent-notifications で通知の設定として足し、
   // 20260921-herdr-settings-gaps で通知・表示・端末の設定全体に広げた）。herdr の `reload config` / `what's new` は

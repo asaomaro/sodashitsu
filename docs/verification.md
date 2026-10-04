@@ -742,7 +742,7 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
       `python3 <public_docs>/docs/ClaudeCode/skills/other/md-to-doc/generate.py <任意の.md> --ask-spec` の出力）。期待：そのブラウザの画面の上にフォームが出る（サーバ側の画面にウィンドウは開かない・新しいタブも開かない）。
       13 件のテーマを最後までスクロールして選び、［決定］で `{"status":"answered",…}` が 1 行返る。出どころの行に pane の名前・workspace・tab が出る。
 - [ ] 同じマシンのブラウザ（`http://127.0.0.1:7780`）でも同じ（別ウィンドウは開かない）。
-- [ ] ask-form 本体との同じ結果: 同じ定義・同じ操作（既定のまま決定・`showIf` を外す・「その他」・補足）を `python3 <ask-form>/ask.py - < spec.json`（同じマシンのブラウザ）と `sodactl ask < spec.json` で行い、`answers`・`custom`・`note` が同じ。
+- [ ] ask-form 本体との同じ結果: 同じ定義・同じ操作（既定のまま決定・`showIf` を外す・「その他」・補足・質問ごとの自由記述）を `python3 <ask-form>/ask.py - < spec.json`（同じマシンのブラウザ）と `sodactl ask < spec.json` で行い、`answers`・`custom`・`note`・`comments` が同じ。
       質問が 1 つだけ・`single`・`note: false` の定義では、どちらも矢印キーで移っただけでは決定せず、クリック・`Space`・`Enter` で決定する（同じ部品 `<ask-form>` を使う。`docs/sodactl.md`「画面の操作」）。
 - [ ] 2 つのブラウザ（PC とスマートフォン等）で同じ session を開く。両方にフォームが出て、片方で決定するともう片方が閉じる。再読み込みすると出し直される。`sodactl ask` を Ctrl+C で止めると両方閉じる。
 - [ ] pane を表示していないブラウザ（別の tab・workspace を見ている）でも出て、閉じたら表示は切り替わらず、いまの tab の端末へフォーカスが戻る。設定のダイアログ（`prefix+s`）を開いている間に質問が来ても、
@@ -787,6 +787,40 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
 - [ ] Firefox・Safari で、`Alt+PageDown`／`Alt+PageUp`・`Ctrl+Enter`／`Cmd+Enter` がブラウザの既定の動きに取られずに効く。
 - [ ] テーマを切り替えて、フォームの地・文字・枠・選択中の選択肢の色がテーマに合う（読めない組み合わせが無い）。
 - [ ] 部品の同期: `node scripts/sync-ask-form.mjs --check --from <public_docs の clone>` が終了コード 0（写した先・`SOURCE.json`・元のコミットが一致）。
+
+### 共通：設定画面のサイドメニュー（20261004-settings-side-menu。`prefix+s`・全体メニューの「設定」）
+
+設定画面は、幅 768px 以上のとき左に節の一覧（通知・テーマ・表示・端末・エージェント連携・キー。画面の節の見出しから作る）を出す。スクロールの入れ物は今までどおり設定のダイアログ自身で、メニューはその中で上に貼り付く。
+**自動で確かめた範囲**: 単体テスト（`packages/web/src/settings/sectionSpy.test.ts`: 今の節の式・選んだ節を保つ条件・次／前・移る位置。`packages/web/src/components/SettingsDialog.test.ts`: 項目が見出しから作られる・印・移る操作・矢印／`Home`／`End`・`Tab` の停止位置・`Alt+PageDown`／`PageUp`・幅をまたぐときのフォーカス・閉じたときの後始末）と、
+E2E（`packages/e2e/src/specs/settings-menu.spec.ts`。Chromium。幅 1280・800・767・700 と、開いたまま 768 をまたぐ場面、高さ 320px・1400px。メニューが見えたまま・題名の行の固定・押して移る位置とフォーカスと枠・ホイールでの印・`Alt+PageDown` 5 回で 6 節・`<select>` の値が変わらず端末へ漏れない・取り込み待ち中の動き・メニューの中のスクロール・「すべて既定に戻す」の確認中にメニューを押す場面・キーの節の下の帯の固定）。
+下は、**自動では確かめていない範囲**を実物で確かめる。
+
+- [ ] 設定を開く（`prefix+s`）。期待：左にサイドメニューが出て、6 節の名前が並ぶ。開いた直後のフォーカスは通知の最初の switch のまま。中身をいちばん下までスクロールしても、メニューと題名の行（［閉じる］）は見えたまま。**Firefox・Safari でも同じ**（`position: sticky` の固定は、E2E の Chromium でだけ確かめている）。キーの節の下の帯（結果の文）も見える範囲に固定される。
+- [ ] メニューの項目をマウスで押す。期待：その節の見出しが題名の行のすぐ下に来て（動きはアニメーションなし）、見出しにフォーカスの枠が出る。続けて `Tab` で、その節の最初の部品へ移る。見出しにフォーカスがある間に `Space`／`Enter` を押しても、設定は何も変わらない。いちばん下の「キー」は、スクロールしきれる所まで。
+- [ ] ホイール・タッチ・スクロールバーで中身をスクロールする。期待：印（太字と左の線。`aria-current`）が、題名の行のすぐ下に掛かっている節に移る。いちばん上は「通知」、いちばん下は「キー」。印は常に 1 つ。
+- [ ] `Alt+PageDown`／`Alt+PageUp`。期待：どこにフォーカスがあっても（メニュー・節の中の部品・テーマなどの選択欄）次・前の節へ移る。最後・最初では何も起きない。**Firefox・Safari で、選択欄（`<select>`）の値が変わらず、ブラウザの既定の動きに取られない**（Chromium は自動で確認済み）。背面の端末へ届かない。
+- [ ] キーだけで: 開く → `Shift+Tab` でメニューへ → 上下の矢印で項目を移る（移っただけでは節は移らない）→ `Enter` でその節へ → `Tab` で節の中の部品へ。メニューの中で矢印を押した後の `Tab` はメニューの外へ出る。
+- [ ] ブラウザのウィンドウの幅を 768px 未満に狭める（開いたままでよい。ブラウザの拡大でも同じ）。期待：メニューが消えて、ダイアログの幅が今までに戻る。メニューにフォーカスがあったなら今の節の見出しへ移る。`Alt+PageDown` は効く。広げ直すとメニューが戻る。
+- [ ] ウィンドウの高さを低くする（例: 400px 以下）。期待：メニューの中だけがスクロールし、今の節の項目が見える位置に保たれる。メニューの上でのホイールは本文を動かさない。
+- [ ] 画面の文字を大きくする（ブラウザの文字サイズ・拡大）。期待：ブラウザの拡大では、画面の幅（CSS px）が減るので本文の列が縮み、768px を割るとメニューが消える。文字サイズだけを上げると、メニューの幅（`13em`）も文字に合わせて広がり、本文の列が縮む。どちらもダイアログは画面からはみ出さない。
+- [ ] テーマを切り替える（明・暗を含む）。期待：メニューの項目・印・フォーカスの枠が読める。
+- [ ] キーの節で、取り込み待ち（［変更］）にして `Alt+PageDown` を押す。期待：節は移らず、割り当ての候補として取り込まれる。取り込み待ちのままメニューの項目を押すと、取り込みは元のまま終わって節へ移る。
+- [ ] タッチ（スマートフォンの実機）: 幅 767px 以下ではメニューが出ず、設定は今までと同じに使える。幅の広いタブレットではメニューの項目をタップして移れる。
+- [ ] 読み上げ（スクリーンリーダー）: メニューが「設定の節」というナビゲーションとして読まれ、今の節の項目が「現在の項目」と伝わる。
+
+### 共通：質問ごとの自由記述（20261004-ask-form-comments・`docs/sodactl.md`「質問ごとの自由記述」）
+
+自動のテストは、定義の検査（`comments`・`comment` は `false` のときだけ残す）・回答の集め方と検査（共通の試験データ・サーバの上限〔1 つ 10,000 文字・合計 100,000 文字〕・不正な回答の断り）・実物の `/ws` と受け口（`pane.sock`）と中継越しの結合・枠の送信と高さの読み直し・
+実物の Chromium での一巡（開閉・文言・結果の `comments`・隠れた質問・HTML が動かない・キー・フォーカス・高さ・キーとホイールが端末へ漏れない・モバイルのエミュレーション）を確かめた。**実機のスマートフォン・Firefox・Safari・別のマシンのブラウザ・保存した SSH のマシン・
+ask-form 本体と同じ定義で同じ結果になることの突き合わせは、実物では確かめていない**。
+
+- [ ] 各質問（`single`・`multi`）の下に「＋ 自由記述」が出る。押すと欄が開き（フォーカスが欄に移る）、もう一度押すと閉じる。書いて閉じると文言が「自由記述（入力あり）を開く」になる。`text` の質問には出ない。
+      `"comments": false` の定義ではどの質問にも出ない。`"comment": false` の質問にだけ出ない。質問が 1 つ・`single`・`note: false` の定義には出ず、選んだ時点で決定する。
+- [ ] 書いて決定する。期待：`sodactl ask` の結果に `"comments":{"<質問の id>":"<書いた文>"}`（前後の空白なし。閉じた欄の内容も入る。空白だけの欄・`showIf` で隠れた質問の欄は入らない）。何も書かなければ `comments` が無い。
+- [ ] ask-form 本体との同じ結果: 同じ定義で `ask.py` のウィンドウと `sodactl ask` の両方に同じ自由記述を書き、`comments` が同じ。
+- [ ] 欄の中で `Enter`（改行になり決定しない）・`Ctrl+Enter`（決定）・`Esc`（取り消し）。欄の上でキー・ホイールを操作しても、背面の端末へ届かない。
+- [ ] 欄を開くと、ダイアログの高さが増える（画面いっぱいのフォームでは、はみ出さず欄が見える位置までスクロールする）。スマートフォンの実機でも、タップで開いて書ける（画面のキーボードで欄が隠れないか確かめる）。
+- [ ] 別のマシンのブラウザ・保存した SSH のマシン（リモートの `soda` が新しい版）の pane の `sodactl ask` でも、`comments` が届く。リモートの `soda` が古い版だと `comments: false`・`comment: false` が効かず、書いた文が届かない（`docs/machines.md`）。
 
 ### 共通：ログインなしの `sodactl ask`（`pane.sock`。20261003-sodactl-ask-socket・`docs/sodactl.md`「ログイン不要の受け口（pane.sock）」）
 
@@ -867,6 +901,33 @@ pnpm --filter @sodashitsu/server exec vitest run src/graph/AgentLineage src/comp
 - [ ] 閉じた子の pane を `sodactl pane close` で閉じる。期待：ノードは自動では消えず、`⚠ 無効` として残る（外すか選び直す）。
 - [ ] `soda serve` を再起動する。期待：グラフに載った子と線は残る。再起動の前に作った pane に後からエージェントが現れても、新たには載らない。
 - [ ] Windows ネイティブの `soda serve`: `agent start` は `unsupported_agent_shell`。`pane split` で作った pane に、手で `claude` を打ち込んだときに載る。
+
+### 共通：サブエージェントの表示（20261004-subagent-display・`docs/agent-graph.md`「サブエージェントの件数と一覧」「サブエージェントの表示の仕組みと制約」）
+
+自動のテストで確かめた範囲（実物の Claude Code は使っていない）:
+
+- フックのスクリプト（`packages/server/assets/agent-hook-report.test.ts`。イベントごとの電文・送らないもの・切り詰め）、受け口（`AgentReportSocket.test.ts`）、数える部品（`SubagentTracker.test.ts`）、`SessionService.test.ts`（引き継ぎ）、インストーラ（`AgentIntegrationInstaller.test.ts`。旧版の導入済み → 更新・削除）。
+- **実物のスクリプトを子プロセスで動かす結合試験**（`packages/server/src/composeServer.subagents.integration.test.ts`。スクリプト → 実 socket → `SubagentTracker` → `SessionService` → 2 つの接続と snapshot。偽の `claude`）。
+- ブラウザ・端末版・グラフ・設定画面の単体（`Sidebar.test.ts`・`SubagentListDialog.test.ts`・`GraphView.subagents.test.ts`・`TuiApp.subagents.test.ts`・`SettingsDialog.test.ts` ほか）と、**E2E**（`packages/e2e/src/specs/subagents.spec.ts`。偽の `claude` に、テストが `agent-report.sock` へ電文を送る）。
+- 実物の Claude Code（2.1.289）の `claude -p --settings <一時の設定>` で確かめた事実: 実行前 → 起動の順序・同期と非同期を混ぜたときの順序・`SessionEnd` の発火・フックの所要・matcher・スクリプトが無いときの見え方（`.aidev/works/20261004-subagent-display/decisions.md` D4）。
+
+```sh
+pnpm --filter @sodashitsu/server exec vitest run assets src/agent src/composeServer.subagents.integration.test.ts   # フック・受け口・数える部品・結合
+pnpm --filter @sodashitsu/e2e exec playwright test src/specs/subagents.spec.ts                                       # E2E（先に pnpm build）
+```
+
+**自動のテストでは確かめていない（実機で）**。利用者の本物の `~/.claude/settings.json` を書き換えるので、導入の確認は `CLAUDE_CONFIG_DIR` で別の場所を指した Claude Code か、バックアップを取ってから行う。新しい状態ディレクトリか名前付き session で始める。
+
+- [ ] 導入: 設定画面の「エージェント連携」で Claude Code を［導入］。期待: `settings.json` の `hooks` に `SessionStart`・`PreToolUse`（matcher `Agent|Task`）・`SubagentStart`・`Stop`・`SubagentStop`・`SessionEnd` の 6 つが入り（ほかのフックは変わらない）、すでに動いている Claude Code は起動し直すと効く。
+- [ ] 更新: 旧版（`SessionStart` だけ）の導入済みの環境で設定画面を開く。期待: 「更新が必要」と［更新］が出る。押す前は設定ファイルが変わらない。押すと足りない 5 つだけが足りる（重ならない・ほかのフックが残る）。
+- [ ] 前面のサブエージェント: pane の Claude Code に「Agent ツールで 2 つのサブエージェントを並行に動かして、それぞれ 20 秒待ってから終わって」と頼む。期待: サイドバーの行（と、グラフを開いていればそのノード）に件数 `2` が出て、一覧に種類・短い説明・経過時間が並び、終わると 0 になってボタンが消える。
+- [ ] バックグラウンドのサブエージェント: 「バックグラウンドで 1 つ動かして、すぐ次の話をして」と頼む。期待: 親の作業が終わった後も件数が残り（バックグラウンドの印つき）、サブエージェントが終わると消える。
+- [ ] 並行・入れ子: 1 つのメッセージで複数のサブエージェントを起動させる。期待: 件数が同じだけ増え、それぞれに短い説明が付く（付かないものは種類だけ）。サブエージェントの中のサブエージェントは、フックが出す範囲だけが数に入る（出さなければ数えない）。
+- [ ] 取りこぼし: Claude Code を強制終了（`kill -9`）した後、`soda` の画面の件数は残りうる（既知の制約）。pane のエージェントが居なくなる・入れ替わると消える。
+- [ ] 更新と解除は、その後に起動した Claude Code から効く: 解除した後、動いたままの Claude Code が、フックのスクリプト（何もしない中身になっている）を呼び続けても、エラーを出さずに動く。
+- [ ] 別のマシン: 別のマシンのノードの件数が、そのマシンにフックを入れていれば出る。入れていなければ出ない。
+- [ ] 端末版: エージェントの行の末尾の `⤷n` が、使っている端末のフォントで 1 桁に見え、桁がずれない（ずれたら記号を替える。`decisions.md` D11）。
+- [ ] Windows ネイティブ: フックの導入・更新・解除と、サブエージェントの表示が動く。
 
 ### 任意：Tailscale・リバースプロキシ（使う構成だけ）
 
@@ -1168,6 +1229,107 @@ pnpm --filter @sodashitsu/web exec vitest run src/components/graph/GraphView.per
 `docs/machines.md` の手順で 2 台を登録し、手元の pane と別のマシンの pane を線で結んで上の 2〜6 を行う。そのマシンの `soda serve` を止めて、止めている間の完了が
 `machine_unavailable` で見送られ、繋がり直しても後から送られないこと、監督役への知らせが繋がったときに届くことを見る。
 
+## グループ・worktree グループ・「グループなし」（20261004-group-worktree-items）
+
+サイドバーの workspace のまとまり（利用者が作る「グループ」・git の「worktree グループ」・グループに入っていない項目の「グループなし」）を確かめる。
+決まりの本文は `docs/herdr-parity.md` の H04・H37b（herdr との違い）、`docs/tui.md`「サイドバーのグループ」（端末版の見た目と操作）、`docs/tui-parity.md` の H04w・H37b・W04。
+**自動のテストが見ている範囲と、実機・実物の端末でしか確かめられない範囲を分けて書く。**
+
+### 自動で確かめた範囲
+
+```sh
+pnpm -s build
+pnpm --filter @sodashitsu/e2e exec playwright test src/specs/workspace-groups.spec.ts   # E2E（ブラウザ版。26 件・数分）
+pnpm --filter @sodashitsu/client-core exec vitest run src/workspace                      # 純関数（木・レイアウトの操作）
+pnpm --filter @sodashitsu/server exec vitest run src/git/GitInfoPoller.test.ts src/session src/persist/SessionFile.test.ts src/ws/WsGateway.integration.test.ts
+pnpm --filter @sodashitsu/web exec vitest run src/components/Sidebar.test.ts src/components/ContextMenu.test.ts src/actions/ActionDispatcher.test.ts
+pnpm --filter @sodashitsu/tui exec vitest run src/render/chrome/sidebar.test.ts src/input/mouse.sidebarDrag.test.ts src/actions/TuiDispatcher.test.ts
+```
+
+**E2E**（`packages/e2e/src/specs/workspace-groups.spec.ts`。実物のサーバと実物の git〔worktree は spec が `git worktree add` で作る〕・実物の Chromium。合否はブラウザの DOM と、ブラウザが送った／受けたフレームで見る）:
+
+| 場面（`test.describe`） | 確かめていること（AC） |
+|---|---|
+| グループの作成と出入り | メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る。削除すると中身は「グループなし」の末尾へ出て、グループが無くなると見出しが消える（AC10・AC20）。見出し・行を右クリックしてもメニューが開くだけで折りたたみは変わらない（AC-I1） |
+| worktree グループ | グループの中でまとまって並び、子の行のメニューでも全体が動く（AC1〜AC4）。種類の印と読み上げ用の文言・畳んだサイドバーでは印が名前を持つ（AC12）。グループと worktree グループの折りたたみ・今いる workspace の行は畳んでも残る（AC6）。本体を閉じるとき、グループの中でも「worktree も一緒に閉じる」が出て全部閉じる／子の行には出ない（AC7） |
+| 後から開く・開き直す・再起動 | 後から worktree を開くと同じ worktree グループ・同じグループに入る（AC8）。全部閉じて開き直す・サーバを再起動しても同じ並び・同じグループ・同じ折りたたみ（AC10） |
+| ドラッグ | グループの中で並べ替え、外と中をまたぐと落とせない（AC5）。子の行をつかんでも worktree グループ全体が動く・まとまりどうしの並べ替え（AC5・AC20）。Esc・行の外で取り消し、何も送らない（AC-I2）。グループの見出しをつかんでグループを並べ替える（AC5）。下へは落とした項目の次の前・最後の項目の上は末尾へ（端末版と同じ。T30） |
+| 同じフォルダの 2 つ目の workspace | worktree グループには入らず通常の行（worktree の印なし）。代表を閉じると次が worktree グループに入る。2 つ目をグループへ入れても worktree グループは動かない。「グループなし」をグループより上に並べ替えてから worktree の workspace を選んで「＋ 新規」しても、新しい workspace は通常の行のまま worktree グループは崩れない（代表は先にそのフォルダを持った workspace で、奪われない）（AC19） |
+| 「グループなし」 | 畳める・グループと並べ替えられる・名前の変更と削除は無い・外すと末尾へ（AC20） |
+| 状態のまとめと `+n` | グループの見出しは中の状態をまとめて常に出す。畳んだ worktree グループの先頭の行は全体をまとめ、`+n` を添える（AC21） |
+| 別の接続からの操作 | 別の接続（テストのクライアント）の操作に、ブラウザの DOM が読み込み直しなしで追従する（AC15 のブラウザ側） |
+| キーだけの操作 | navigate の選択・メニュー・折りたたみ（`z`）・並べ替え（`move_workspace_previous`／`next`。端で止まる）・メニューとダイアログをキーだけで操作・Esc で取り消し（AC-I2・AC-I3・AC5・AC6） |
+| 先頭の pane の移動 | pane に `cd` を打って別のリポジトリへ移ると、移った先の項目に従う（所属が無ければグループの外へ）。git 管理外へ移ると、移る前のグループに通常の行として残り、その後リポジトリへ移ってもグループに残って所属が引き継がれる（AC11） |
+
+**単体・結合**（vitest）:
+
+- 純関数（`packages/client-core/src/workspace/workspaceGrouping.test.ts`・`sidebarLayout.test.ts`）: 項目・代表・木・「グループなし」・畳んだ worktree グループの隠れている数・キー操作の順・`layoutFromLegacy`・レイアウトの操作。
+- サーバ（`packages/server/src/session/SessionModel.test.ts`・`SessionService.test.ts`・`surface/methods/index.test.ts`・`persist/SessionFile.test.ts`）: 判定の反映の表（判定が付く・変わる・管理外・取れない）・代表の交代・グループと一括クローズの RPC・`item.move`／`item.move_by`・古い `workspace.move_to` の読み替え・保存と復元・移行の確定。
+  実物の git の結合テスト（`packages/server/src/git/GitInfoPoller.test.ts`）: 管理外・消えたフォルダ・linked worktree・symlink・bare・サブモジュール・コミットの無いリポジトリの判定、worktree を作って同じ項目に入る・別のリポジトリ／管理外へ移る・同じフォルダの 2 つ目が通常の行・代表を閉じると次が入る、保存 → 復元 → 最初の 1 周で並びが変わらない。
+- サーバと画面が同じ木になること（`packages/server/src/session/SessionModel.clientAgreement.test.ts`。仮の状態・配信の途中の状態を含む）と、**2 つの接続**（`packages/server/src/ws/WsGateway.integration.test.ts`。実物の ws。一方の操作がもう一方と新しい接続に同じ木で届く）。
+- ブラウザ版（`packages/web/src/components/Sidebar.test.ts`・`ContextMenu.test.ts`・`ConfirmDialog.test.ts`・`GroupPickerDialog.test.ts`・`actions/ActionDispatcher.test.ts`）と、**端末版**（`packages/tui/src/render/chrome/sidebar.test.ts`・`input/mouse.sidebarDrag.test.ts`・`actions/TuiDispatcher.test.ts`・`model/SessionModel.test.ts`・`modes/overlays.test.ts`）:
+  描画の行・メニュー・クリックの当たり判定・ドラッグの落とし先・navigate・古いサーバ〔`layout` が無い〕での RPC の分け方。端末版は偽の外側の端末の文字で確かめる。
+
+**自動では確かめていない範囲**（下の手作業で見る）:
+
+- **端末版（引数なしの `soda`）の実物の端末での見え方と操作**。E2E はブラウザ版だけで、`scripts/tui-pty-verify.mjs`（疑似端末での一巡）もグループを見ない。端末のフォントでの `⎇`・`├└`・`─` の見え方、端末のマウス（クリック・ドラッグ）は実機でだけ確かめられる。
+- 端末版とブラウザ版を**同じサーバで並べて**見たときの一致（サーバと画面の一致・2 つの接続は自動で見たが、実物の端末版の画面とブラウザの画面を並べてはいない）。
+- 実物のエージェント（Claude Code 等）の状態が、グループの見出し・畳んだ worktree グループに反映されること（E2E は状態をサーバの中から偽って出している）。
+- 実際の利用者のリポジトリ・シェルでの `cd`（E2E は pane に `cd` を打つが、5 秒周期の判定を使う短い構成で、利用者の `PROMPT_COMMAND` 等は通らない）。
+- 読み込み済みの古いブラウザのタブ（古い画面）と新しいサーバの組み合わせ。単体で `workspace.move_to` の読み替え・知らないイベントの無視を見たが、実物の古い版の画面では確かめていない。
+- Windows ネイティブ・macOS（git の判定とパスの扱い。symlink・bare 等は Linux の git 2.43.0 で確かめた）。
+
+### 実機の手順
+
+新しい状態ディレクトリか名前付き session（上の「端末版」と同じ。利用者の本物の並びを汚さない）で始める。リポジトリは使い捨てのものを作る（コミットが 1 つも無いと管理外として扱われる）:
+
+```sh
+r=$(mktemp -d); cd "$r"
+git init -q app && git -C app commit -q --allow-empty -m init
+git -C app worktree add -q ../app-feat -b feat
+git -C app worktree add -q ../app-fix -b fix
+git -C app worktree add -q ../app-hot -b hot      # 手順の cd 用（まだ workspace を開かない）
+git init -q other && git -C other commit -q --allow-empty -m init
+git init -q third && git -C third commit -q --allow-empty -m init   # 手順の cd 用（所属の無いリポジトリ）
+mkdir memo
+```
+
+「＋ 新規」や `workspace.create` で、`app`・`app-feat`・`app-fix`・`other`・`memo` をそれぞれの場所で開く（pane で `cd` してもよいが、判定は最初の pane の今の場所に追従し、5 秒周期なので数秒待つ）。
+
+- [ ] **まとまり方（AC1・AC4・AC19〜AC21）**: `app`・`app-feat`・`app-fix` は 1 つの worktree グループ（`app` が先頭）になる。`app-feat` の workspace を選んだまま「＋新規」で 2 つ目を開くと、worktree グループには入らず通常の行（`⎇` なし）になる。
+      `app-feat` の最初の workspace（代表）を閉じると、2 つ目が worktree グループに入る。グループが 1 つも無い間は「グループなし」の見出しが出ない。
+- [ ] **グループ（AC2・AC3・AC10）**: `app` の行の右クリック（キーなら navigate〔`prefix+w`〕で選んで Space）→「新しいグループを作る…」で名前を付ける。worktree グループ全体が入り、見出しが出て「グループなし」の見出しも出る。
+      `other`・`memo` を「グループへ追加…」で入れる。`app-feat`〔子の行〕から「グループから外す」を選ぶと worktree グループ全体が「グループなし」の末尾へ出る（子だけは動かない）。グループを削除すると中身は「グループなし」の末尾へ出る。
+- [ ] **再起動で戻る（AC10）**: グループに入れた状態で `soda session stop <名前>` → 同じ引数で起動。同じ並び・同じグループ・同じ折りたたみで戻る。`app` の workspace を全部閉じて開き直しても、同じグループに戻る。
+- [ ] **状態のまとめ（AC21）**: `app-feat` の pane で Claude Code 等を動かし、動作中の間、グループの見出しと「グループなし」の見出しに作業中の状態の記号が出る（広げていても畳んでいても）。worktree グループを畳むと、先頭の行が全体をまとめた状態になり、隠れている worktree の数が `+2` のように出る。
+- [ ] **`cd` で別のリポジトリへ移る（AC11）**: 最初の pane の今の場所に追従する（判定は 5 秒周期なので、`cd` の後は数秒待つ）。`app` の worktree グループ・`other`・`memo` がグループ G に入っている状態で行う（前の項目でグループを削除したなら作り直す）。
+      (1) G に入れた `memo` の workspace の pane で `cd "$r/app-hot"`（`app` の、まだ workspace を開いていない worktree）。`memo` の workspace が `app` の worktree グループの子に加わる（G の中・`app` の項目の中）。
+      (2) その workspace の pane で `cd "$r/third"`（所属の無い別のリポジトリ）。worktree グループから外れ、グループの外（「グループなし」）へ出る。
+      (3) G に入れた `other` の workspace の pane で `cd "$r/memo"`（git 管理外）。移る前の G に通常の行として残る（名前・並びは変わらない）。
+      (4) **消えたフォルダ**: workspace の pane のあるフォルダを消す（`rmdir`）。想定は、直前の並び・所属のまま変わらないこと（削除済みの cwd への追従の挙動は推測で、実機では未確認。結果を記録する）。
+- [ ] **端末版とブラウザ版を同じサーバで並べる（AC15・AC16）**: 同じ状態ディレクトリで、ブラウザ（`http://127.0.0.1:<ポート>`。`docs/tui.md`「起動と終了」の token）と端末版（`soda --state-dir <同じ場所>`）を並べて開く。
+      (1) ブラウザでグループを作る・入れる・外す・並べ替える・畳むと、端末版がそのつど読み込み直しなしで同じ並びになる。逆に端末版で行って、ブラウザが追従する。
+      (2) 端末版で、見出しのクリックと worktree グループの先頭の行の左端 `▸`/`▾` のクリックで畳み・広げ。navigate〔`prefix+w`〕で見出し・行を上下で選び、`z` で畳み、Space でメニュー。
+      (3) 端末版のマウスで、worktree グループの子の行・先頭の行をつかんで同じグループの中の項目の間へ落とすと worktree グループ全体が動く。グループの見出しをつかんで別のグループの上へ落とすとグループが並べ替わる。
+      グループの外へ落とす・別のまとまりの項目の上に落とすと何も起きず、理由が知らせで出る。Esc か行の外で離すと取り消し。名前順（サイドバーの並び順のボタン）では一番上の並べ替えが「名前順では並べ替えできません」になる。
+      (4) 見出しの数・`◐`・`+n`・ブランチ名がブラウザ版と同じ。
+- [ ] **端末のフォントでの見え方（実機でしか確かめられない）**: Windows Terminal・VS Code の統合端末・tmux の中・SSH 越し等、使う端末で `⎇`（U+2387）・`├`／`└`・`─`・`▸`／`▾` が崩れず、幅 1 桁で縦がそろう。
+- [ ] **Windows ネイティブでの `repoKey` の形（実機でしか確かめられない）**: git for Windows が `C:/x/.git` の形で出す値を、サーバは `path.resolve` を通して `C:\x\.git` にそろえて `repoKey`・`worktreeKey` にする（以前の判定と同じ形。共有の設定 `collapsedAutoGroups` の `repoKey` を孤児にしないため）。本体と linked worktree が同じ worktree グループに束ねられ、畳んだ状態が再起動後も残ることを確かめる（20261004-group-worktree-items D44 補足）。
+      崩れるときは `packages/tui/src/render/chrome/sidebar.ts` の `WORKTREE_GLYPH` を別の記号に替え、どの端末・フォントで崩れたかを記録する（幅の規則〔unicode11〕では 1 桁として単体テストで固定している。フォントは実機次第）。
+- [ ] **古い保存からの移行（AC13。任意）**: この work より前の版（`main`）で、同じリポジトリの本体と worktree を別々のグループに入れた状態を作って停止し、この版で同じ状態ディレクトリを起動する。
+      起動直後から、本体の所属に合わせた worktree グループが 1 つのまとまりとして並び、何度起動し直しても同じになる。
+
+#### `repoKey` の既知の制約
+
+所属を覚えるキー（`repoKey`）は、`git rev-parse --path-format=absolute --git-common-dir` の値で、worktree グループの束ねと同じ値を使う（decisions D9・D10。実物の git 2.43.0 で確かめた）。
+
+- **古い git（2.31 未満）では main と同じ決め方に落ちる**（`--path-format` は 2.31 で導入された）。古い git は知らないオプションを**エラーにせず、そのまま出力して終了コード 0 を返す**（`--path-format=absolute\n.git`。実物の git 2.43.0 で `git rev-parse --bogus-option --git-common-dir` が同じ動きになることを確かめた）。サーバは 1 行目がそのまま `--path-format=absolute` のとき、残りの行（相対のこともある）を cwd から解決して使う。**symlink 経由の cwd では、本体と worktree が別の項目になりうる**（相対の `.git` が論理パスの `…/link/.git` になり、worktree の実体のパスとずれる。decisions D9・D48）。それ以外の壊れた出力（別の `--` のオプション・行数の違い・空）は判定が「取れない」になる（直前の判定を保つ。新しい workspace は判定が付かないままで、worktree グループにもグループの自動の所属にもならない）。
+- symlink を通った場所からでも、git 2.31 以上では、本体・worktree のどちらも実体のパスで一致する（`--path-format=absolute` が実体を返す）。同じリポジトリが別のパス（別の clone・bind mount・パスの付け替え）で見える場合や、リポジトリのフォルダを移動・改名した場合は、絶対パスのキーからの推論では別のリポジトリとして扱われる（実機では未確認）。
+- **bare リポジトリ**: bare とその worktree は同じ `repoKey` で束ねられるが、bare 自身を workspace として開いていなければ本体の行は無く、worktree だけの worktree グループ（2 つ以上のとき）になる（先頭は最初に開いたもの）。
+- **サブモジュール**: 親とは別のリポジトリとして扱う（`<親>/.git/modules/<名前>`。親の worktree グループには入らない）。
+- **コミットが 1 つも無いリポジトリ**は、今までどおり git 管理外として扱う（`rev-parse --abbrev-ref HEAD` が失敗するため）。最初のコミットの後の判定（5 秒周期）で git に変わる。
+- **消えたフォルダ・確認の時間切れ**は「取れない」で、直前の判定・並び・所属を保つ。起動直後は、保存した判定で停止前と同じに束ねて並び、最初の確認の結果に合わせる。
+
 ## 性能の計測（AC17）
 
 requirements.md の非機能要件（目安）：**応答性**——同一 LAN での接続で、キー入力から画面へ反映されるまでの追加の遅延が
@@ -1354,6 +1516,11 @@ pnpm --filter @sodashitsu/e2e exec playwright test performance agent-detection -
 - **色の個別の上書き：上書きした値に自動のコントラスト調整はしない**（20260922-theme-custom-overrides の design「ドメイン固有の考慮」・AC2）。herdr の
   `[theme.custom]` と同じで、読みにくい・見えにくい色を入れても止められない（利用者の責任）。herdr の `.light`/`.dark` と違い、
   「常に当たる」層は無く「明るいとき」「暗いとき」の 2 層だけ（同 work の research F2）。
+
+- **グループ・worktree グループの所属を覚えるキー（`repoKey`）の制約**（20261004-group-worktree-items の decisions D9・D10）。古い git（2.31 未満）では `--path-format=absolute` が使えず main と同じ決め方（cwd から解決）に落ちる。symlink 経由の cwd では本体と worktree が別の項目になりうる。それ以外の壊れた出力は `unknown` で判定が付かない。
+  同じリポジトリが別のパス（別の clone・bind mount）で見える場合・リポジトリのフォルダを移動・改名した場合は、絶対パスのキーからの推論では別のリポジトリとして扱われる（未確認）。bare は worktree だけの worktree グループになり、サブモジュールは親と別のリポジトリ、
+  コミットが無いリポジトリは最初のコミットまで git 管理外として扱う。詳しくは「グループ・worktree グループ・「グループなし」」の「`repoKey` の既知の制約」。
+- **端末版のサイドバーの `⎇`（worktree の印）・`├└`・`─` は、外側の端末のフォントによっては崩れる**（幅 1 桁の字形だが、字形の確認は端末次第。`docs/tui-parity.md` H23b と同じ）。崩れるときは `WORKTREE_GLYPH`（`packages/tui/src/render/chrome/sidebar.ts`）を別の記号に替える。
 
 ほかに、各節に書いた制約：xterm.js のモバイルの未解決課題（「実機（iOS Safari・Android Chrome。AC12）」の「既知の未解決課題」）・
 リバースプロキシの無通信のタイムアウト（`docs/tls-setup.md`「リバースプロキシの後ろに置く」）。

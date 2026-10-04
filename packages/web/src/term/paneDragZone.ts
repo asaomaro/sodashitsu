@@ -1,7 +1,7 @@
 /**
  * pane の名前ラベルドラッグ中、ホバー中の pane 内のどこ（縁/中央）に反応するかの判定
  * （20260924-pane-dnd-split-move。design「振る舞いの詳細 > クライアント側: ゾーン判定」）。
- * `PaneFrame.vue` から切り出した純関数（decisions.md D2。`workspaceOrder.ts` 等と同じ
+ * `PaneFrame.vue` から切り出した純関数（decisions.md D2。`agentOrder.ts` 等と同じ
  * 「純関数は切り出して単体テストする」慣習）。
  */
 export type Zone = "top" | "bottom" | "left" | "right" | "center";
