@@ -37,3 +37,4 @@ events:
   - { ts: 2026-10-04T13:11:25Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
   - { ts: 2026-10-04T13:39:14Z, phase: test, event: approved }
   - { ts: 2026-10-04T13:39:21Z, phase: review, event: approved, metrics: { ac_total: 19, ac_covered: 19, tasks_no_ac: 0, tasks_ac_none: 0 } }
+  - { ts: 2026-10-04T14:03:02Z, phase: deliver, event: approved, metrics: { files_changed: 67, insertions: 3921, deletions: 167 } }
