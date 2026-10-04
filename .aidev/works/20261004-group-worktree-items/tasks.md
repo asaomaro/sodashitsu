@@ -130,3 +130,22 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: T20・T21 の `対象:` と同じ
       依存: T26, T27, T19
       AC: AC19, AC20, AC21, AC18
+
+## 独立レビューの指摘（`review-findings-01.md`。main の取り込みの後）
+
+- [ ] T29: 代表の決め方を「その `worktreeKey` を最初に持った workspace・既存の代表は奪われない」にする（サーバが代表を決めて配る・保存する。古いサーバでは今の導き方）。`SessionModel.test.ts:1684-1693` を新しい決まりに直す。モデルと E2E の回帰テスト（「グループなし」を上に並べ替えてから＋新規／並べ替えた後に別の workspace が cd で同じフォルダへ来る）と壊して落ちる確認
+      対象: `packages/server/src/session/SessionModel.ts`・`SessionService.ts`・`persist/SessionFile.ts`・`composeServer.ts`、`packages/client-core/src/workspace/workspaceGrouping.ts`・`sidebarLayout.ts`、`packages/protocol`、`packages/e2e/src/specs/workspace-groups.spec.ts`
+      依存: なし
+      AC: AC19
+- [ ] T30: ブラウザ版のドラッグの落とす位置を端末版の決まり（上へなら落とした項目の前・下へなら次の項目の前・末尾は null）に揃える。計算は client-core の共有の純関数に。E2E に下へ・末尾へのドラッグを足す
+      対象: `packages/web/src/components/Sidebar.vue`、`packages/web/src/actions/ActionDispatcher.ts`、`packages/tui/src/input/sidebarDrag.ts`、`packages/client-core/src/workspace/`、`workspace-groups.spec.ts`
+      依存: なし
+      AC: AC5
+- [ ] T31: `git rev-parse` の出力の検査（古い git が知らないオプションをそのまま出力して終了コード 0 を返す）。壊れた値は `unknown` 扱い。単体テスト・docs の記述の訂正
+      対象: `packages/server/src/git/GitInfoPoller.ts`・`worktree.ts`、`docs/verification.md`
+      依存: なし
+      AC: AC9
+- [ ] T32: nit の整理（`layoutConfirmWiring.test.ts` の固定待ち・`SessionFile.ts` の `repoGroups` の形の不一致・保存の `repoKey` のコメント・`orderedWorkspaceIds` の撤去）と、`workspace-tab-pane.spec.ts:305` の落ちる件の確認
+      対象: review-findings-01.md の 4〜7 と「確かめること」
+      依存: T29, T30, T31
+      AC: AC9, AC10
