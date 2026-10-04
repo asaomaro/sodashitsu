@@ -97,7 +97,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/web/src/components/SubagentListDialog.vue`、`packages/web/src/components/Sidebar.vue`、`packages/web/src/actions/ActionDispatcher.ts`、`packages/web/src/store/view.ts`
       依存: T10
       AC: AC4, AC-I3, AC-I4
-- [ ] T21: E2E（グラフと漏れ）——グラフのノードの件数とパネル（クリック・キー `s`・`Esc` の順・閉じた後のフォーカス）／サイドバーの一覧とグラフのパネルの上でのキー・ホイールが端末へ漏れない。観測を壊して落ちる確認。2 回続けて同じ結果
+- [x] T21: E2E（グラフと漏れ）——グラフのノードの件数とパネル（クリック・キー `s`・`Esc` の順・閉じた後のフォーカス）／サイドバーの一覧とグラフのパネルの上でのキー・ホイールが端末へ漏れない。観測を壊して落ちる確認。2 回続けて同じ結果
       対象: `packages/e2e/src/specs/subagents.spec.ts`（T16 に足す）
       依存: T16, T11, T12
       AC: AC3, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5

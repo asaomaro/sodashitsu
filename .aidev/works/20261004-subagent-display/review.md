@@ -65,6 +65,13 @@
 - [nit][conv:-] subagents.spec.ts:251 HTML の注入の確認が `onerror` の非同期の動きを待たない / 対応: 修正済（500 ミリ秒置く。T16・ラウンド1）
 - [nit][conv:-] subagents.spec.ts:55 受け口のパスが posix 前提であることが無記載 / 対応: 修正済（コメント。T16・ラウンド1）
 
+- [must][conv:regression-negative-control] subagents.spec.ts:430 グラフのパネルの上のキーの漏れの試験が、`0` で元へ戻す形で、漏れても通る（ホイールの対照も無い） / 対応: 修正済（キーを 1 つずつ押してそのつど transform が変わらないことを見る。`+`・`-`・キャンバスの上のホイールが transform を変えることを先に確かめる陽性の対照。T21・ラウンド1）
+- [should][conv:e2e-observe-browser] 同:421 transform の文字列の完全一致が浮動小数点の誤差で落ちうる / 対応: 修正済（「戻す」比較をやめ、対照の後の値を基準にする。T21・ラウンド1）
+- [should][conv:e2e-observe-browser!] 同:320 ボタン上のドラッグで graph.update が送られないことの陽性の対照が無い / 対応: 修正済（ノード本体のドラッグで graph.update が送られ、ノードが動くことを先に確かめる。T21・ラウンド1）
+- [should][conv:-] 同:365 「パネルの外の Esc」が一覧にフォーカスがあるときと区別できない / 対応: 修正済（一覧のフォーカスを待ってからノードへフォーカスを移し、移ったことを確かめる。T21・ラウンド1）
+- [nit][conv:-] 同:383 確かめずに Esc を 2 回押している・誤字 / 対応: 修正済（1 回ごとに確かめる。居なくなって閉じたときのノードへのフォーカスも確かめる。T21・ラウンド1）
+- [nit][conv:-] 同:12 先頭の説明が T21 を反映していない / 対応: 修正済（T21・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -577,4 +584,45 @@ AssertionError: expected [ { id: 'marker', …(3) } ] to deeply equal [ { id: 'm
     + Received  + 3
   1 failed
   5 passed (19.4s)
+```
+
+#### T21 E2E（グラフと漏れ。`packages/e2e/src/specs/subagents.spec.ts` の後半。壊した後に元へ戻して `pnpm build` し直した。2 回続けて同じ結果: `--repeat-each=2` で全 18 件通過）
+
+```
+=== E2E MUT(SubagentPanel.vue): キーの ev.stopPropagation() を外す
+  ✘  3 src/specs/subagents.spec.ts:404:1 › グラフのパネルの上のキー・ホイールは、グラフ（ズーム・パン・ノードの移動）へ届かない（AC-I5） (2.6s)
+  1 failed
+  2 passed (9.3s)
+=== E2E MUT(GraphNode.vue): 件数のボタンの @pointerdown.stop を外す
+  ✘  1 src/specs/subagents.spec.ts:311:1 › グラフのノード: 件数のボタンが出て、押すと横のパネルが開く。ノードを動かさず・pane へ移らない（AC3・AC-I1・AC-I2） (2.8s)
+  1 failed
+  2 passed (9.5s)
+=== E2E MUT(GraphView.vue): 閉じたときのノードへのフォーカス（focusNode(key)）を外す
+  ✘  2 src/specs/subagents.spec.ts:363:1 › グラフのパネル: キー s で開く・Esc は 1 段ずつ（まずパネル）・閉じるとノードへフォーカスが戻る。居なくなったら閉じる（AC-I1・AC-I3・AC-I4） (7.6s)
+    Error: expect(locator).toBeFocused() failed
+  1 failed
+  2 passed (15.8s)
+=== E2E MUT(GraphView.vue): escape() の段の subagentsKey の項を外す（パネルを開いたままフォーカスがノードにある Esc の試験を足した後）
+  ✘  2 src/specs/subagents.spec.ts:363:1 › グラフのパネル: …（AC-I1・AC-I3・AC-I4） (7.4s)
+    Error: expect(locator).toBeHidden() failed
+  1 failed
+  2 passed (15.8s)
+```
+
+（落ちなかった変異: パネルの `@wheel.stop`。ホイールのパンを受けるのは `.graph-canvas` で、パネルはその外側（`.graph-side`）にあるので、ホイールは元からパンへ届かない。二重の守りとして残す。）
+
+（T21・ラウンド1 の修正の分。`pnpm build` し直して確認。2 回続けて同じ結果: `--repeat-each=2` で全 18 件通過）
+```
+=== E2E MUT(SubagentPanel.vue): キーの ev.stopPropagation() を外す
+  ✘  3 src/specs/subagents.spec.ts:420:1 › グラフのパネルの上のキー・ホイールは、グラフ（ズーム・パン・ノードの移動）へ届かない（AC-I5） (2.8s)
+    Error: キー +
+  1 failed
+=== E2E MUT(GraphNode.vue): 件数のボタンの @pointerdown.stop を外す
+  ✘  1 src/specs/subagents.spec.ts:311:1 › グラフのノード: 件数のボタンが出て、…（AC3・AC-I1・AC-I2） (3.4s)
+    Error: expect(received).toBe(expected) // Object.is equality
+  1 failed
+=== E2E MUT(GraphView.vue): escape() の段の subagentsKey の項を外す
+  ✘  2 src/specs/subagents.spec.ts:368:1 › グラフのパネル: キー s で開く・Esc は 1 段ずつ（…） (7.9s)
+    Error: expect(locator).toBeHidden() failed
+  1 failed
 ```

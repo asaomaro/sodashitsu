@@ -9,7 +9,7 @@ import { focusTerminal, prefixKey, typeLine } from "../support/keys.js";
 import type { SodaTestClient } from "../support/wsClient.js";
 
 /**
- * 20261004-subagent-display の E2E（T16。グラフと、キー・ホイールの漏れは T21）。**実物の Claude Code は使わない**: 偽の `claude`（`exec -a claude` の
+ * 20261004-subagent-display の E2E（T16: サイドバーの一覧。T21: 連携のグラフと、グラフのパネルの上のキー・ホイール。サイドバーの一覧の漏れは T16 のキーボードの試験）。**実物の Claude Code は使わない**: 偽の `claude`（`exec -a claude` の
  * 長く居座るプロセス。`agent-detection.spec.ts` と同じ検出の仕組み）を pane で動かして検出させ、テスト側から、テストが立てたサーバの
  * `stateDir` の `agent-report.sock` **だけ**へ電文（フックのスクリプトが送るものと同じ 1 行の JSON）を送る（環境変数から受け口のパスを拾わない。
  * この試験を動かしている pane から継いだ `SODA_*` が、利用者のサーバへ報告を届けないように）。
@@ -282,4 +282,194 @@ test("短い説明に HTML を書いても動かない（文字として出る�
   expect(
     await page.evaluate(() => (window as unknown as { __pwned?: number }).__pwned),
   ).toBeUndefined();
+});
+
+// --- 連携のグラフ（T21）---
+
+const graphView = (page: Page) => page.locator("dialog.graph-view");
+const panel = (page: Page) => graphView(page).locator(".subagent-panel");
+const graphNode = (page: Page, paneId: string) =>
+  graphView(page).locator(`[data-node-key="local:${paneId}"]`);
+const nodeBtn = (page: Page, paneId: string) =>
+  graphNode(page, paneId).locator("[data-subagents-button]");
+
+/** 偽のエージェントの pane をグラフに載せて、グラフの画面を開く（`prefix+a`）。 */
+async function openGraphWithNode(
+  page: Page,
+  client: SodaTestClient,
+  paneId: string,
+): Promise<void> {
+  await client.request("graph.update", {
+    baseRev: 0,
+    ops: [{ op: "add_node", key: `local:${paneId}`, x: 0, y: 0 }],
+  });
+  await prefixKey(page, "a");
+  await expect(graphView(page)).toBeVisible();
+  await expect(graphNode(page, paneId)).toBeVisible();
+}
+
+test("グラフのノード: 件数のボタンが出て、押すと横のパネルが開く。ノードを動かさず・pane へ移らない（AC3・AC-I1・AC-I2）", async ({
+  page,
+  appServer,
+}) => {
+  const { paneId, client } = await startFakeClaude(page, appServer);
+  await startSub(appServer, paneId, "g1", { agentType: "Explore" });
+  await startSub(appServer, paneId, "g2", { agentType: "Plan" });
+  await openGraphWithNode(page, client, paneId);
+  await expect(nodeBtn(page, paneId)).toHaveText("2");
+  await expect(nodeBtn(page, paneId)).toHaveAttribute("tabindex", "-1");
+  const sizeBefore = await graphNode(page, paneId).boundingBox();
+  // 件数が 0 のノードにはボタンが無い（増減で出入りする）。
+  await report(appServer, paneId, { type: "agent_stop", running: [], truncated: false });
+  await expect(nodeBtn(page, paneId)).toHaveCount(0);
+  const sizeWithout = await graphNode(page, paneId).boundingBox();
+  expect({ w: sizeWithout?.width, h: sizeWithout?.height }).toEqual({
+    w: sizeBefore?.width,
+    h: sizeBefore?.height,
+  }); // ボタンの有無でノードの大きさが変わらない
+  await startSub(appServer, paneId, "g3", { agentType: "Explore" });
+  await expect(nodeBtn(page, paneId)).toHaveText("1");
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Network.enable");
+  const sent: string[] = [];
+  cdp.on("Network.webSocketFrameSent", (e) => sent.push(e.response.payloadData));
+  const styleOf = () => graphNode(page, paneId).evaluate((el) => (el as HTMLElement).style.cssText);
+  const updates = () => sent.filter((f) => f.includes('"graph.update"'));
+  // 観測が効いていること（陽性の対照）: ノード本体（ボタン以外）をドラッグすると、ノードが動き、ブラウザが graph.update を送る。
+  const body = (await graphNode(page, paneId).boundingBox())!;
+  await page.mouse.move(body.x + 20, body.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(body.x + 120, body.y + 66, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(() => updates().length).toBeGreaterThan(0);
+  const posBefore = await styleOf();
+  await new Promise((r) => setTimeout(r, 300)); // 遅れて届くフレームを巻き込まない
+  sent.length = 0;
+  // ドラッグしそうな動き（押す → 動かす → 離す）でも、ボタンの上ではノードを動かさない。
+  const box = (await nodeBtn(page, paneId).boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 80, box.y + 60, { steps: 5 });
+  await page.mouse.up();
+  expect(await styleOf()).toBe(posBefore); // 動かしていない
+  await expect(panel(page)).toBeHidden(); // 動かして離したので、押したことにはならない
+  await nodeBtn(page, paneId).click();
+  await expect(panel(page)).toBeVisible();
+  await expect(panel(page).locator("h3")).toContainText("サブエージェント — ");
+  await expect(panel(page).locator(".subagent-list-item")).toHaveCount(1);
+  expect(await styleOf()).toBe(posBefore);
+  await new Promise((r) => setTimeout(r, 500));
+  expect(sent.filter((f) => f.includes('"graph.update"') || f.includes('"pane.focus"'))).toEqual(
+    [],
+  );
+  await expect(graphView(page)).toBeVisible(); // pane へ移ってグラフを閉じていない
+});
+
+test("グラフのパネル: キー s で開く・Esc は 1 段ずつ（まずパネル）・閉じるとノードへフォーカスが戻る。居なくなったら閉じる（AC-I1・AC-I3・AC-I4）", async ({
+  page,
+  appServer,
+}) => {
+  const { paneId, client } = await startFakeClaude(page, appServer);
+  await startSub(appServer, paneId, "g1", { agentType: "Explore" });
+  await openGraphWithNode(page, client, paneId);
+  await expect(nodeBtn(page, paneId)).toHaveText("1");
+  // ノードにフォーカスして s。
+  await graphNode(page, paneId).focus();
+  await page.keyboard.press("s");
+  await expect(panel(page)).toBeVisible();
+  await expect(panel(page).locator(".subagent-list")).toBeFocused();
+  // Esc はまずパネルだけを閉じる（グラフの画面は開いたまま）。フォーカスはノードへ戻る。
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toBeHidden();
+  await expect(graphView(page)).toBeVisible();
+  await expect(graphNode(page, paneId)).toBeFocused();
+  // パネルを開いたまま、フォーカスをノードへ戻して Esc（パネルの外の Esc）。グラフの画面の段（パネル → 選択 → 画面）の最初で、まずパネルが閉じる。
+  await page.keyboard.press("s");
+  await expect(panel(page)).toBeVisible();
+  await expect(panel(page).locator(".subagent-list")).toBeFocused(); // 一覧へフォーカスが移ってから、ノードへ戻す
+  await graphNode(page, paneId).focus();
+  await expect(graphNode(page, paneId)).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toBeHidden();
+  await expect(graphView(page)).toBeVisible();
+  // もう一度開いて、× でも同じ。
+  await page.keyboard.press("s");
+  await expect(panel(page)).toBeVisible();
+  await panel(page).locator(".subagent-panel-close").click();
+  await expect(panel(page)).toBeHidden();
+  await expect(graphNode(page, paneId)).toBeFocused();
+  // 開いている間に、そのエージェントが居なくなったら閉じる。
+  await page.keyboard.press("s");
+  await expect(panel(page)).toBeVisible();
+  const gone = client.waitForEvent(
+    "pane.agent_status_changed",
+    (e) => e.data.paneId === paneId && e.data.agent === null,
+    15_000,
+  );
+  client.sendInput(paneId, "\x03");
+  await gone;
+  await expect(panel(page)).toBeHidden({ timeout: 5000 });
+  await expect(graphNode(page, paneId)).toBeFocused(); // 居なくなって閉じたときも、ノードへフォーカスが戻る
+  // Esc は 1 段ずつ（選択の解除 → 画面を閉じる）。
+  await page.keyboard.press("Escape");
+  await expect(graphView(page)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(graphView(page)).toBeHidden();
+});
+
+test("グラフのパネルの上のキー・ホイールは、グラフ（ズーム・パン・ノードの移動）へ届かない（AC-I5）", async ({
+  page,
+  appServer,
+}) => {
+  const { paneId, client } = await startFakeClaude(page, appServer);
+  for (let i = 0; i < 40; i++)
+    await startSub(appServer, paneId, `gk${i}`, { agentType: "Explore" });
+  await openGraphWithNode(page, client, paneId);
+  await expect(nodeBtn(page, paneId)).toHaveText("40");
+  await graphNode(page, paneId).focus();
+  // 観測が効いていること（陽性の対照）: ノードにフォーカスがあるとき、`+` はグラフを拡大する（`.graph-world` の transform が変わる）。
+  const world = graphView(page).locator(".graph-world");
+  const transform = () => world.evaluate((el) => (el as HTMLElement).style.transform);
+  // 観測が効いていること（陽性の対照）: ノードにフォーカスがあるとき、`+`・`-` はグラフを拡大・縮小し、キャンバスの上のホイールはパンする（`.graph-world` の transform が変わる）。
+  const t0 = await transform();
+  await page.keyboard.press("+");
+  await expect.poll(transform).not.toBe(t0);
+  const t1 = await transform();
+  await page.keyboard.press("-");
+  await expect.poll(transform).not.toBe(t1);
+  await graphView(page)
+    .locator(".graph-canvas")
+    .hover({ position: { x: 300, y: 300 } });
+  const t2 = await transform();
+  await page.mouse.wheel(0, 200);
+  await expect.poll(transform).not.toBe(t2);
+  const base = await transform(); // 以後、これが変わらないことを見る（`0` で戻す形にしない。浮動小数点の誤差と、漏れの打ち消しを避ける）
+  const nodeStyle = await graphNode(page, paneId).evaluate(
+    (el) => (el as HTMLElement).style.cssText,
+  );
+  await page.keyboard.press("s");
+  const list = panel(page).locator(".subagent-list");
+  await expect(list).toBeFocused();
+  expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  const top = await list.evaluate((el) => el.scrollTop);
+  // 一覧の上のキー（ズームの + - 1 0・矢印・PageDown）: 1 つずつ押して、そのつど、グラフが動かないことを見る。
+  for (const k of ["+", "-", "1", "0", "ArrowDown", "ArrowDown", "PageDown"]) {
+    await page.keyboard.press(k);
+    await new Promise((r) => setTimeout(r, 150)); // 漏れていれば、ハンドラが transform を書き換えるのに足りる時間
+    expect(await transform(), `キー ${k}`).toBe(base);
+  }
+  await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeGreaterThan(top); // キーは一覧のスクロールになった
+  // ホイール: 一覧の上では一覧がスクロールし、グラフはパンしない。
+  await list.evaluate((el) => (el.scrollTop = 0));
+  await list.hover();
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  await page.mouse.wheel(0, -600);
+  await page.mouse.wheel(0, 40);
+  await new Promise((r) => setTimeout(r, 150));
+  expect(await transform()).toBe(base); // ズーム・パンは変わらない
+  expect(await graphNode(page, paneId).evaluate((el) => (el as HTMLElement).style.cssText)).toBe(
+    nodeStyle,
+  ); // ノードも動かない
+  await expect(panel(page)).toBeVisible();
 });
