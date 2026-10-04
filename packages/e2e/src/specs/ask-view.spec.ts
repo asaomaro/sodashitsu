@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures.js";
 import { runAsk } from "../support/ask.js";
-import { choice, dialog, q, setup } from "../support/askForm.js";
+import { choice, commentBox, commentToggle, dialog, q, setup } from "../support/askForm.js";
 import { EVIL_SVG, makeMediaDir, makePng } from "../support/media.js";
 
 /**
@@ -197,7 +197,7 @@ test("Markdown に埋め込んだ <script>・onerror・javascript: は動かな�
     const p1 = await setup(page, appServer);
     const md = await media.write(
       "evil.md",
-      '# 題\n\n<script>window.__mdScript = 1; parent.postMessage({type:"key",key:"Escape"}, "*")</script>\n\n<img src="x" onerror="window.__mdOnerror = 1">\n\n[リンク](https://example.com/) と [危険](javascript:window.__mdJs=1)\n\n<a href="#x" onclick="window.__mdClick=1">内部</a>\n\n<svg width="120" height="30"><a xlink:href="https://example.com/svg"><text x="5" y="20">svg リンク</text></a><a href="https://example.com/svg2"><text x="60" y="20">svg2</text></a></svg>\n',
+      '# 題\n\n<script>window.__mdScript = 1; parent.postMessage({type:"key",key:"Escape"}, "*")</script>\n\n<img src="x" onerror="window.__mdOnerror = 1">\n\n[リンク](https://example.com/) と [危険](javascript:window.__mdJs=1)\n\n<a href="#x" onclick="window.__mdClick=1">内部</a>\n\n<svg width="120" height="30"><a xlink:href="https://example.com/svg"><text x="5" y="20">svg リンク</text></a><a href="#x"><set attributeName="href" to="https://example.com/x"/><text x="60" y="20">set</text></a><a><animate attributeName="href" values="https://example.com/a2" dur="1s" fill="freeze"/><text x="90" y="20">anim</text></a></svg>\n\n<math><mrow href="https://example.com/m"><mi>x</mi></mrow></math>\n\n<map name="m"><area href="https://example.com/area" shape="rect" coords="0,0,50,50"></map>\n\n<a id="mixed" href="#x" xlink:href="https://example.com/mix">混在</a>\n',
     );
     const run = await runAsk(appServer, p1, SPEC({ file: md }));
     await expect(dialog(page)).toBeVisible();
@@ -219,16 +219,22 @@ test("Markdown に埋め込んだ <script>・onerror・javascript: は動かな�
     // リンクは外へ飛べない（href を外してある）。内部の # は残る。
     await expect(f.locator('a[title="https://example.com/"]')).not.toHaveAttribute("href", /.+/);
     await expect(f.locator("a[title^='javascript:']")).not.toHaveAttribute("href", /.+/);
-    await expect(f.locator('a[href="#x"]')).toHaveCount(1);
-    // SVG の中のリンク（`xlink:href`・`href`）も外してある（枠自身の遷移になるので）。
+    // SVG・MathML・map/area は取り除かれている（`<set>`・`<animate>` で `href` を書き換えるリンクが枠自身を外へ移すため）。リンクは `href` も `xlink:href` も残らない。
     expect(
-      await frame.evaluate(
-        () =>
-          Array.from(document.querySelectorAll("svg a")).map(
-            (a) => a.hasAttribute("xlink:href") || a.hasAttribute("href"),
-          ),
-      ),
-    ).toEqual([false, false]);
+      await frame.evaluate(() => ({
+        shapes: document.querySelectorAll("#doc svg, #doc math, #doc map, #doc area, #doc set, #doc animate").length,
+        links: Array.from(document.querySelectorAll("#doc a")).filter(
+          (a) => a.hasAttribute("xlink:href") || (a.hasAttribute("href") && a.getAttribute("href") !== "#x"),
+        ).length,
+        mixed: document.querySelector("#doc a#mixed")?.hasAttribute("xlink:href"),
+      })),
+    ).toEqual({ shapes: 0, links: 0, mixed: false });
+    // SMIL で `href` を書き換えるパターン（レビューが実測した 2 つ）を、クリックしても枠は移らない。
+    // （取り除く処理が無いと、`svg a` が残っているので押すと外へ移る。あるときは何も無く、押す対象が無い）
+    for (const a of await f.locator("#doc svg a").all()) await a.click({ timeout: 1500 }).catch(() => undefined);
+    await page.waitForTimeout(1500);
+    expect(frame.url().endsWith("/ask-view/markdown.html")).toBe(true);
+    await expect(f.locator('a[href="#x"]')).toHaveCount(2); // 内部の `#x` は残る（本文の 1 つと混在の 1 つ）
     // 枠の中から親へ偽のキー（Escape）を送っても、<script> が動かないので質問は閉じない。
     await page.waitForTimeout(300);
     expect(run.finished()).toBe(false);
@@ -350,6 +356,38 @@ test("枠のスクリプトが決定の知らせを送り続けても（質問�
     await page.locator("[data-ask-origin]").focus();
     await page.keyboard.press("Control+Enter");
     expect((await run.done).json).toMatchObject({ status: "answered" });
+  } finally {
+    await media.cleanup();
+  }
+});
+
+test("限界の実測: HTML の枠のスクリプトは、質問側の入力欄に文字を打っている利用者からフォーカスを奪い、打った文字を自分の入力欄で受け取れる（docs の「枠の中のキー」の裏付け）。決定は確定しない", async ({
+  page,
+  appServer,
+}) => {
+  const media = await makeMediaDir();
+  test.setTimeout(60_000);
+  try {
+    const p1 = await setup(page, appServer);
+    const file = await media.write(
+      "steal.html",
+      `<!doctype html><body><input id=i><script>setInterval(() => { try { window.focus(); document.getElementById("i").focus(); } catch (e) {} }, 50);</script>`,
+    );
+    const run = await runAsk(appServer, p1, SPEC({ file }));
+    await expect(dialog(page)).toBeVisible();
+    await commentToggle(page, "ok").click();
+    await commentBox(page, "ok").click();
+    // 実測 1: 枠がフォーカスを奪った（`document.activeElement` が iframe）。
+    await expect.poll(() => page.evaluate(() => document.activeElement?.localName)).toBe("iframe");
+    // 実測 2: その後に打った文字は枠の入力欄に入り、質問側の欄には入らない（成果物のスクリプトは読める）。
+    await page.keyboard.type("secret");
+    const frame = page.frames().find((x) => x.url().endsWith("/ask-view/html.html"))!;
+    expect(await frame.evaluate(() => (document.getElementById("i") as HTMLInputElement).value)).toBe("secret");
+    await expect(commentBox(page, "ok")).toHaveValue("");
+    expect(run.finished()).toBe(false); // 回答の確定は防げている
+    await page.locator("[data-ask-origin]").focus();
+    await page.keyboard.press("Escape");
+    await run.done;
   } finally {
     await media.cleanup();
   }

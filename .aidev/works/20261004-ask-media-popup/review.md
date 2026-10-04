@@ -86,3 +86,29 @@ AssertionError: expected [ 'fulfilled', 'fulfilled' ] to deeply equal [ 'fulfill
 - `pnpm build` 通過。`pnpm typecheck` は E2E の型 2 件（自分の足した spec）を直して通過。
 - 単体: `npx vitest run packages/protocol packages/server/src/ask packages/web/src packages/cli scripts` → 181 ファイル・3908 件通過。
 - E2E: `ask-view`・`ask-media`・`ask-types`（24 件）、`ask-form*`（73 件）通過。
+
+## ラウンド 2（d180d44 の再レビュー）
+
+1. [should] SMIL（`<set>`・`<animate>`）でリンク外しをすり抜けて枠が外へ遷移 → Markdown の枠が `svg`・`math`・`map`・`area` を取り除く（decisions.md D10-1。mermaid の SVG は整形の後に足すので残る）。E2E に SMIL の 2 パターン・`<math href>`・`<area href>`・`href="#x"` と `xlink:href` の混在を足した（取り除いた後はクリックしても遷移せず、`svg a` 自体が無い）。
+2. [should] フォーカス奪取による入力の横取り → **防げない**と実測して docs を正直に直した（確定は防げるが入力の漏えいは防げない・信頼できる成果物だけにする・入力のある質問と信頼できない成果物を組み合わせない）。`inert`・`visibility:hidden`・`display:none` はどれも防げず（実測）、検知して戻す案は窓が残るので入れない（D10-2）。E2E は限界を実測で assert する（iframe がフォーカスを得る・打った文字が枠の入力欄に入る・確定はしない）。
+3. [nit] `href="#x"` と `xlink:href` の混在 → `xlink:href` を常に外す（E2E に混在のケース）。
+4. [nit] `remaining()` が取得中の途中経過に左右される → 許容と記録（D10-3）。
+
+### 壊して落ちる確認（`markdown.js` の取り除く対象から `svg, math, map, area` を外す。戻した後は `/tmp` の控えと差分なし）
+
+```
+$ npx playwright test src/specs/ask-view.spec.ts -g "Markdown に埋め込んだ"
+  ✘  1 src/specs/ask-view.spec.ts:189:1 › Markdown に埋め込んだ <script>・onerror・javascript: は動かない… (2.4s)
+    - Expected  - 1
+    + Received  + 1
+        "links": 0,
+        "mixed": false,
+    -   "shapes": 0,
+    +   "shapes": 6,
+      231 |     ).toEqual({ shapes: 0, links: 0, mixed: false });
+  1 failed
+```
+
+### 検証
+
+`pnpm build`・`pnpm typecheck` 通過。単体（protocol・server/ask・web・cli・scripts）181 ファイル・3908 件通過。E2E: `ask-view`・`ask-media`・`ask-types` 25 件、`ask-form*` 73 件通過。
