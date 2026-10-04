@@ -318,3 +318,11 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **見出しのドラッグ**: 見出しの名前・線の上で押すと掴み、動かさずに離すと畳み・広げ（今までは押した時点で畳んでいた）。左の「▸/▾」（`x <= toggleX`）は押した時点で畳み・広げでドラッグの掴みにしない（先頭の行の `autoGroup` と同じ）。古いサーバで掴めない行（空のグループ・「グループなし」の見出し）は動かしても「動いた」にならず、離すとクリック扱い（web と同じ）。
 - **取り消し**: Esc（`TuiApp` の key の入口で、動かしている最中だけ奪う）、行の外・別の区画で離す。ドロップ先の強調（印）は端末版には今までもなく、足していない（落とせないときは離したときの知らせ）。
 - **`moveWorkspacesByDrag` を `dropSidebarItem(source, target)` に置き換えた**（`layout` のあるサーバは `item.move`、無ければ `workspace.move_to`。失敗は「移動できませんでした」）。
+
+## D37: 古い関数の撤去と一致のテスト（T19）
+
+- **撤去**: client-core の `autoGroupsOf`・`manualGroupsOf`・`linkedWorktreeChildrenOf`・`groupedWorkspaceRows`・古い `visibleWorkspaceIdsInOrder`・行の型 `WorkspaceRow`・`groupBy` と、それらの単体テスト、サーバの `SessionModel.linkedWorktreeGroupMembers`（と `describe("linkedWorktreeGroupMembers")`）。web・tui・server・e2e・docs を grep し、残る呼び出しが無いことを確かめた（`visibleGroupMembers` は新しい木からも使うので残す）。`visibleWorkspaceIdsOfTree` は元の名前 `visibleWorkspaceIdsInOrder` に戻した（web `store/sidebarTree.ts`・tui `model/sidebarTree.ts`・client-core のコメントとテスト）。
+- **確かめた事実（平らな順と木の順）**: `flattenWorkspaceIds` は、同じ worktree の代表が入れ替わり続けないよう、代表でない workspace（同じフォルダの 2 つ目）が代表より前に並ぶとき代表を先に置く（D27）。このとき Map の順（サーバの平らな順）と、画面の木を辿った順は食い違いうる（集合は同じ。画面は木の順で描き・操作するので影響はない）。一致のテストは、`flattenWorkspaceIds(layout, workspaces)` ＝ Map の順を常に、木の順 ＝ Map の順を「代表でないものが代表より前に並ばないとき」に確かめる。
+- **一致のテスト**: `SessionModel.clientAgreement.test.ts`（スナップショットの `layout`・並び・実効の `groupId` を画面の `sidebarTree` に通す。仮の状態〔`layoutFromLegacy` と同じ〕・配信の途中〔`workspace.created`／`workspace.closed` が `layout` より先に届いた状態〕・「グループなし」の見出し・代表の交代を含む）。
+- **2 つの接続の統合テスト**: `WsGateway.integration.test.ts`（実物の ws・HTTP。`TestServer` に `session` を足した）。操作する接続 A・見ている接続 B・新しくつないだ接続 C の木が、操作ごとに同じ（イベントだけで状態を組み立てる `Screen` が `StoreAdapter` の役）。判定は poller の代わりに `session.updateWorkspaceGit` で入れた。
+- **閉じた後のフォーカス先**: `closeWorkspace` の後に移るフォーカス先は Map の先頭で、画面の一番上の workspace とは限らない（画面の木の順と Map の順は代表の交代で食い違いうるため）。実害は無いと判断した（どの workspace に移っても操作は変わらない）。

@@ -3330,3 +3330,142 @@ AssertionError: expected [ [ 'workspace.move_to', …(1) ] ] to deeply equal []
 ```
 - T18 [should] 古いサーバでグループの見出しを掴んで並べ替える成功経路のテストと壊して落ちる確認が無い → テストを足し M〜P を貼った [conv:regression-negative-control]
 - T18 [nit] 失敗時のトーストと dropSidebarItem の単体テストが無い → TuiDispatcher.test.ts に足し Q〜U を貼った [conv:-]
+
+### T19 壊して落ちる確認
+
+対象: `SessionModel.clientAgreement.test.ts`（サーバと画面の木の一致）と `WsGateway.integration.test.ts` の「サイドバーの並びが 2 つの接続で同じ木になる」。実装の 1 行を壊して該当テストだけを流した生の出力（壊した行は確認後に `git checkout`／バックアップから戻し、`git diff` で確認済み）。
+
+壊し: N1 layout_changed を配らない（`SessionService.ts`／`SessionModel.ts` の該当行を `// BROKEN` に）
+
+```
+ ❯ src/ws/WsGateway.integration.test.ts (19 tests | 1 failed | 18 skipped) 3598ms
+     × 入れる・外す・並べ替える（グループ・グループなし）・畳む・グループの削除・閉じる: 操作した接続と見ている接続が、新しい接続のスナップショットと同じ木になる 3597ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+Error: timed out waiting for workspace.created, sidebar.layout_changed; got: workspace.created, tab.created, pane.created, workspace.updated
+ Test Files  1 failed | 1 skipped (2)
+      Tests  1 failed | 22 skipped (23)
+```
+
+壊し: N2 workspace.updated を配らない（`SessionService.ts`／`SessionModel.ts` の該当行を `// BROKEN` に）
+
+```
+ ❯ src/ws/WsGateway.integration.test.ts (19 tests | 1 failed | 18 skipped) 659ms
+     × 入れる・外す・並べ替える（グループ・グループなし）・畳む・グループの削除・閉じる: 操作した接続と見ている接続が、新しい接続のスナップショットと同じ木になる 658ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected { rows: [ { …(3) } ], …(2) } to deeply equal { rows: [ { …(3) } ], …(2) }
+ Test Files  1 failed | 1 skipped (2)
+      Tests  1 failed | 22 skipped (23)
+```
+
+壊し: N3 order_changed を配らない（`SessionService.ts`／`SessionModel.ts` の該当行を `// BROKEN` に）
+
+```
+ ❯ src/ws/WsGateway.integration.test.ts (19 tests | 1 failed | 18 skipped) 701ms
+     × 入れる・外す・並べ替える（グループ・グループなし）・畳む・グループの削除・閉じる: 操作した接続と見ている接続が、新しい接続のスナップショットと同じ木になる 700ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: group.add_member (second): B == snapshot: expected { …(3) } to deeply equal { …(3) }
+ Test Files  1 failed | 1 skipped (2)
+      Tests  1 failed | 22 skipped (23)
+```
+
+壊し: N4 group.updated を配らない（`SessionService.ts`／`SessionModel.ts` の該当行を `// BROKEN` に）
+
+```
+ ❯ src/ws/WsGateway.integration.test.ts (19 tests | 1 failed | 18 skipped) 3701ms
+     × 入れる・外す・並べ替える（グループ・グループなし）・畳む・グループの削除・閉じる: 操作した接続と見ている接続が、新しい接続のスナップショットと同じ木になる 3700ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+Error: timed out waiting for group.updated; got: 
+ Test Files  1 failed | 1 skipped (2)
+      Tests  1 failed | 22 skipped (23)
+```
+
+壊し: N5 settle が Map を並べ直さない（`SessionService.ts`／`SessionModel.ts` の該当行を `// BROKEN` に）
+
+```
+ ❯ src/session/SessionModel.clientAgreement.test.ts (4 tests | 1 failed) 15ms
+     × 操作のたびに、サーバの並び・実効の groupId・配るレイアウトが画面の木と一致する（入れる・外す・並べ替える・グループの削除・代表の交代） 10ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: moveItem: flatten: expected [ 'w4', 'w1', 'w2', 'w3', 'w5', 'w6' ] to deeply equal [ 'w1', 'w2', 'w3', 'w4', 'w5', 'w6' ]
+ Test Files  1 failed | 1 skipped (2)
+      Tests  1 failed | 3 passed | 19 skipped (23)
+```
+
+壊し: N6 仮の状態で layoutFromLegacy を使わない（`SessionService.ts`／`SessionModel.ts` の該当行を `// BROKEN` に）
+
+```
+ ❯ src/session/SessionModel.clientAgreement.test.ts (4 tests | 1 failed) 22ms
+     × 仮の状態（layout の無い保存からの復元）: 配るレイアウトは、画面が古いサーバに対して導くレイアウトと同じ 11ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected { top: [ 'u' ], groups: {}, …(1) } to deeply equal { top: [ 'g:g2', 'g:g1', 'u' ], …(2) }
+ Test Files  1 failed | 1 skipped (2)
+      Tests  1 failed | 3 passed | 19 skipped (23)
+```
+
+- N1 は最初の待ち（`workspace.created`＋`sidebar.layout_changed`）で落ちる（配らなければ見ている接続が木を作れない）。N2 は `workspace.updated`（グループの実効の `groupId`）、N3 は `workspace.order_changed`（`item.move` の後の平らな順）、N4 は `group.updated`（畳み）がそれぞれ届かず落ちる。
+- N5（`settle` が Map を並べ直さない）と N6（仮の状態で `layoutFromLegacy` を使わない）は、サーバと画面が同じ関数で同じ結果になるテストが落ちる。
+
+### T19 壊して落ちる確認（独立点検の指摘の修正後）
+
+統合テストは固定時間の待ちをやめ（判定のイベントを数えて待つ・`sync()` で同じ接続の応答まで待つ・新しい接続は毎回つなぎ直してすぐ閉じる）、`SessionModel.clientAgreement.test.ts` に「layout が先に届く向き」「git 判定前」のテストを足した。実装の 1 行を壊して流した生の出力（確認ごとに元へ戻し `diff` で確認済み。client-core は戻して build し直し）。
+
+壊し: P1 `sidebar.layout_changed` を step 単位で止める（`SessionService.ts:271` を `if (changes.layout && changes.layout.top.length === 1)` に）
+
+```
+     × 入れる・外す・並べ替える（…）: 操作した接続と見ている接続が、新しい接続のスナップショットと同じ木になる 3648ms
+Error: timed out waiting for group.created, workspace.updated, sidebar.layout_changed; got: group.created, workspace.updated
+ ❯ step src/ws/WsGateway.integration.test.ts:644:9
+ ❯ src/ws/WsGateway.integration.test.ts:661:7
+      Tests  1 failed | 18 skipped (19)
+```
+
+壊し: P2 `group.created` を配らない（`SessionService.ts:594` を `// BROKEN`）
+
+```
+     × 入れる・外す・並べ替える（…）: 操作した接続と見ている接続が、新しい接続のスナップショットと同じ木になる 3652ms
+Error: timed out waiting for group.created, workspace.updated, sidebar.layout_changed; got: workspace.updated, sidebar.layout_changed
+ ❯ step src/ws/WsGateway.integration.test.ts:644:9
+      Tests  1 failed | 18 skipped (19)
+```
+
+壊し: P3 `group.deleted` を配らない（`SessionService.ts:615`）
+
+```
+     × 入れる・外す・並べ替える（…）: 操作した接続と見ている接続が、新しい接続のスナップショットと同じ木になる 4046ms
+Error: timed out waiting for group.deleted, workspace.updated, sidebar.layout_changed; got: workspace.updated, sidebar.layout_changed
+ ❯ step src/ws/WsGateway.integration.test.ts:687:7
+      Tests  1 failed | 18 skipped (19)
+```
+
+壊し: P4 `workspace.closed` を配らない（`SessionService.ts:560`。699・877 だけでは `workspace.close` の経路に当たらず通る）
+
+```
+     × 入れる・外す・並べ替える（…）: 操作した接続と見ている接続が、新しい接続のスナップショットと同じ木になる 4086ms
+Error: timed out waiting for workspace.closed, sidebar.layout_changed; got: pane.closed, tab.closed, sidebar.layout_changed
+ ❯ step src/ws/WsGateway.integration.test.ts:684:7
+      Tests  1 failed | 18 skipped (19)
+```
+
+壊し: P6 画面の木が「レイアウトに無い workspace を『グループなし』の末尾へ足す」を止める（client-core `placeItems` の `ungrouped.items.push(...take(...))` を `// BROKEN`）。新テスト「layout が先に届く向き」が落ちる
+
+```
+     × 配信の途中（workspace.created が layout の前に届いた）でも、…… 8ms
+     × 配信の途中（layout が workspace.created／workspace.closed より先に届いた）: 実在しない workspace を指すレイアウトでも、画面の木は今ある workspace を 1 度ずつ並べる 2ms
+AssertionError: expected [ 'w1', 'w2', 'w3', 'w4', 'w5', 'w6' ] to deeply equal [ 'w1', 'w2', 'w3', 'w4', 'w5', …(2) ]
+ ❯ src/session/SessionModel.clientAgreement.test.ts:274:35
+      Tests  2 failed | 4 passed (6)
+```
+
+壊し: P7 git の判定が無い workspace を木に載せない（`placeItems` に `if (!w.git) continue;`）。新テスト「git 判定前」が落ちる（ほかの 5 件も落ちる粗い壊し。判定なしだけに効く細かい壊しは作れなかった）
+
+```
+ Tests  6 failed (6)
+     × workspace.created の直後（updateWorkspaceGit の前。git の判定がまだ無い）でも、サーバの並び・実効の groupId・レイアウトは画面の木と一致する 4ms
+TypeError: Cannot read properties of undefined (reading 'startsWith')
+ ❯ placeItems ../client-core/src/workspace/workspaceGrouping.ts:175:27
+ ❯ expectAgreement src/session/SessionModel.clientAgreement.test.ts:280:5
+```
+- T19 [should] 統合テストの no-inner-declarations（eslint）→ const の関数式に直した [conv:-]
+- T19 [should] 統合テストに固定時間の待ち（setTimeout 50）→ イベント待ち（waitForCount・sync）に替え、c は毎回つなぎ直す [conv:e2e-observe-browser]
+- T19 [should] 配信の途中の入力（layout 先行・判定前）の一致テストが無い → 2 件足した [conv:-]
+- T19 [nit] 壊して落ちる確認の網羅（操作ごとの layout_changed・group.created／deleted・workspace.closed）→ P1〜P7 を貼った [conv:regression-negative-control]
+- T19 [nit] 閉じた後のフォーカス先が Map の先頭である点 → D37 に追記 [conv:-]

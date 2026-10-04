@@ -1,6 +1,7 @@
 import { createServer as createHttpServer, type Server as HttpServerType } from "node:http";
 import { connect } from "node:net";
-import type { HostInfo } from "@sodashitsu/protocol";
+import type { GitInfo, HostInfo, SessionSnapshot, SidebarLayout, Workspace, WorkspaceGroup } from "@sodashitsu/protocol";
+import { layoutFromLegacy, sidebarTree, visibleWorkspaceIdsInOrder } from "@sodashitsu/client-core";
 import { decodeFrame, encodeInputFrame, FRAME_TYPE } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
@@ -75,6 +76,8 @@ interface TestServer {
   connectAuthorized: () => Promise<{ ws: WebSocket; cookie: string }>;
   /** `WsServerWs` に渡したロガー（Origin の拒否のログを確かめる。D102）。 */
   wsLogger: MemoryLogger;
+  /** 配線したサービス（判定の反映のように、RPC の無い入口から状態を動かすテストが使う。20261004-group-worktree-items）。 */
+  session: SessionService;
 }
 
 async function startTestServer(
@@ -145,6 +148,7 @@ async function startTestServer(
     httpServer,
     stateDir,
     wsLogger,
+    session,
     close: () => new Promise<void>((r) => httpServer.close(() => r())),
     connectAuthorized,
   };
@@ -473,6 +477,222 @@ async function waitForOutputContaining(ws: WebSocket, needle: string): Promise<s
   }
   throw new Error(`timed out waiting for "${needle}" in output; got: ${JSON.stringify(collected)}`);
 }
+
+/**
+ * サイドバーの並びを 2 つの接続で見る（20261004-group-worktree-items T19）。一方の接続の操作（入れる・外す・並べ替える・畳む・
+ * グループの作成と削除・workspace を閉じる）が、もう一方の接続に `workspace.updated`／`group.*`／`sidebar.layout_changed` として
+ * 届き、イベントだけで組み立てた画面の状態が、新しくつないだ接続が受け取るスナップショットと同じ木になる。
+ */
+describe("WsGateway — サイドバーの並びが 2 つの接続で同じ木になる（20261004-group-worktree-items）", () => {
+  let server: TestServer;
+  beforeEach(async () => {
+    server = await startTestServer();
+  });
+  afterEach(async () => {
+    await server.close();
+  });
+
+  type Msg = { id?: string; result?: Record<string, unknown>; error?: unknown; event?: string; data?: Record<string, unknown> };
+
+  /** 接続直後から文字のメッセージを貯め、ブラウザの `StoreAdapter` と同じようにイベントを状態へ当てる。 */
+  class Screen {
+    workspaces: Workspace[] = [];
+    groups: WorkspaceGroup[] = [];
+    layout: SidebarLayout | null = null;
+    readonly log: Msg[] = [];
+    private readonly responses = new Map<string, (m: Msg) => void>();
+    private nextId = 0;
+    constructor(readonly ws: WebSocket) {
+      ws.on("message", (data: Buffer, isBinary: boolean) => {
+        if (isBinary) return;
+        const msg = JSON.parse(data.toString("utf8")) as Msg;
+        if (msg.id !== undefined) this.responses.get(msg.id)?.(msg);
+        else if (msg.event) {
+          this.log.push(msg);
+          this.apply(msg);
+        }
+      });
+    }
+    call(method: string, params: unknown): Promise<Msg> {
+      const id = `s${this.nextId++}`;
+      return new Promise((resolve) => {
+        this.responses.set(id, resolve);
+        request(this.ws, id, method, params);
+      });
+    }
+    async hello(): Promise<void> {
+      const res = await this.call("client.hello", { protocol: 1, kind: "desktop" });
+      const snapshot = res.result!.snapshot as SessionSnapshot;
+      this.workspaces = snapshot.workspaces;
+      this.groups = snapshot.groups;
+      this.layout = snapshot.layout ?? null;
+    }
+    private apply(msg: Msg): void {
+      const d = msg.data!;
+      switch (msg.event) {
+        case "workspace.created":
+          this.workspaces = [...this.workspaces, d.workspace as Workspace];
+          break;
+        case "workspace.updated": {
+          const w = d.workspace as Workspace;
+          this.workspaces = this.workspaces.map((x) => (x.id === w.id ? w : x));
+          break;
+        }
+        case "workspace.closed":
+          this.workspaces = this.workspaces.filter((x) => x.id !== d.workspaceId);
+          break;
+        case "workspace.order_changed": {
+          const order = d.workspaceIds as string[];
+          this.workspaces = order.map((id) => this.workspaces.find((x) => x.id === id)!).filter(Boolean);
+          break;
+        }
+        case "group.created":
+          this.groups = [...this.groups, d.group as WorkspaceGroup];
+          break;
+        case "group.updated": {
+          const g = d.group as WorkspaceGroup;
+          this.groups = this.groups.map((x) => (x.id === g.id ? g : x));
+          break;
+        }
+        case "group.deleted":
+          this.groups = this.groups.filter((x) => x.id !== d.groupId);
+          break;
+        case "sidebar.layout_changed":
+          this.layout = d.layout as SidebarLayout;
+          break;
+        default:
+          break;
+      }
+    }
+    /** `mark` 以降に、`names` の全部のイベントが届くまで待つ。 */
+    async waitForEvents(mark: number, names: string[]): Promise<void> {
+      const start = Date.now();
+      for (;;) {
+        const seen = new Set(this.log.slice(mark).map((m) => m.event));
+        if (names.every((n) => seen.has(n))) return;
+        if (Date.now() - start > 3000) throw new Error(`timed out waiting for ${names.join(", ")}; got: ${[...seen].join(", ")}`);
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    }
+    /** `mark` 以降に、`name` のイベントが `count` 個届くまで待つ。 */
+    async waitForCount(mark: number, name: string, count: number): Promise<void> {
+      const start = Date.now();
+      while (this.log.slice(mark).filter((m) => m.event === name).length < count) {
+        if (Date.now() - start > 3000) throw new Error(`timed out waiting for ${count} x ${name}`);
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    }
+    /** 同じ接続で応答が返るまで待つ。サーバはイベントを送った順に流すので、これより前に送られたイベントは全部届いている。 */
+    async sync(): Promise<void> {
+      await this.call("client.hello", { protocol: 1, kind: "desktop" });
+    }
+    /** 画面の木（全部広げた並び。グループの折りたたみは木の `group.collapsed` のまま）。 */
+    shape(): unknown {
+      const tree = sidebarTree(this.workspaces, this.groups, this.layout ?? layoutFromLegacy(this.workspaces, this.groups), "opened");
+      return {
+        rows: tree.map((row) => ({
+          kind: row.kind,
+          ...(row.kind === "group" ? { id: row.group.id, collapsed: row.group.collapsed } : { heading: row.heading }),
+          items: row.items.map((it) => (it.kind === "workspace" ? it.workspace.id : [it.head.id, ...it.children.map((c) => c.id)])),
+        })),
+        visible: visibleWorkspaceIdsInOrder(tree, new Set(), null),
+        order: this.workspaces.map((w) => w.id),
+      };
+    }
+  }
+
+  it("入れる・外す・並べ替える（グループ・グループなし）・畳む・グループの削除・閉じる: 操作した接続と見ている接続が、新しい接続のスナップショットと同じ木になる", async () => {
+    const aConn = await server.connectAuthorized();
+    const bConn = await server.connectAuthorized();
+    const a = new Screen(aConn.ws);
+    const b = new Screen(bConn.ws);
+    /** 新しくつなぎ直した接続が受け取るスナップショットの木（サーバの今の状態）。接続は毎回新規にし、すぐ閉じる（イベントを重ねて当てない）。 */
+    const snapshotShape = async (): Promise<unknown> => {
+      const conn = await server.connectAuthorized();
+      try {
+        const c = new Screen(conn.ws);
+        await c.hello();
+        return c.shape();
+      } finally {
+        conn.ws.close();
+      }
+    };
+    try {
+      await a.hello();
+      await b.hello();
+      const ids: string[] = [];
+      for (const label of ["x", "y", "z", "w"]) {
+        const res = await a.call("workspace.create", { cwd: process.cwd(), label });
+        ids.push((res.result!.workspace as Workspace).id);
+      }
+      const [x, y, z, w] = ids as [string, string, string, string];
+      // x は本体、y は x の linked worktree（worktree グループになる）、z・w は管理外。判定は poller の代わりに直接入れる。
+      const git = (isLinked: boolean, key: string): GitInfo => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: isLinked, worktreeKey: key });
+      await b.sync(); // workspace.create に伴うイベントを受け切ってから、判定のイベントを数え始める
+      const markGit = b.log.length;
+      server.session.updateWorkspaceGit(x, { kind: "git", git: git(false, "/r/.git") });
+      server.session.updateWorkspaceGit(y, { kind: "git", git: git(true, "/r/.git/worktrees/y") });
+      server.session.updateWorkspaceGit(z, { kind: "unmanaged" });
+      server.session.updateWorkspaceGit(w, { kind: "unmanaged" });
+
+      /** 操作 → 見ている接続に届くイベント → 3 つの接続の木が同じ、を 1 段ずつ確かめる。 */
+      const step = async (label: string, method: string, params: unknown, expected: string[]): Promise<void> => {
+        const markA = a.log.length;
+        const markB = b.log.length;
+        const res = await a.call(method, params);
+        expect(res.error, `${label}: rpc error`).toBeUndefined();
+        await b.waitForEvents(markB, expected);
+        await a.waitForEvents(markA, expected);
+        await a.sync(); // 期待したイベントのあとに続く分（order_changed など）も届いてから比べる
+        await b.sync();
+        const snap = await snapshotShape();
+        expect(b.shape(), `${label}: B == snapshot`).toEqual(snap);
+        expect(a.shape(), `${label}: A == snapshot`).toEqual(snap);
+      };
+      // 初めの状態（workspace と判定が届いたあと）。グループはまだ無く、見出しは出ない。
+      await b.waitForEvents(0, ["workspace.created", "sidebar.layout_changed"]);
+      await b.waitForCount(markGit, "workspace.updated", 2); // 判定が変わるのは x・y（管理外は変わらず、イベントは出ない）
+      await b.sync();
+      const initial = await snapshotShape();
+      expect(b.shape()).toEqual(initial);
+      expect((b.shape() as { rows: { heading: boolean }[] }).rows).toEqual([expect.objectContaining({ kind: "ungrouped", heading: false })]);
+
+      // 入れる: 本体 x を入れて作る（worktree グループごと入る）。
+      await step("group.create with a workspace", "group.create", { label: "g1", workspaceId: x }, ["group.created", "workspace.updated", "sidebar.layout_changed"]);
+      const g1 = b.groups[0]!.id;
+      expect(b.layout!.groups[g1]).toEqual(["r:/r/.git"]);
+      expect(b.workspaces.find((v) => v.id === y)!.groupId).toBe(g1); // 子の y も実効のグループが変わった
+      await step("group.create (empty)", "group.create", { label: "g2" }, ["group.created", "sidebar.layout_changed"]);
+      const g2 = b.groups[1]!.id;
+      await step("group.add_member", "group.add_member", { groupId: g2, workspaceId: z }, ["workspace.updated", "sidebar.layout_changed"]);
+      expect(b.layout!.groups[g2]).toEqual([`w:${z}`]);
+      // 並べ替える: グループの中の項目・グループ・「グループなし」。
+      await step("group.add_member (second)", "group.add_member", { groupId: g1, workspaceId: w }, ["workspace.updated", "sidebar.layout_changed"]);
+      await step("item.move in a group", "item.move", { item: { kind: "workspace", workspaceId: w }, before: { kind: "workspace", workspaceId: x } }, ["sidebar.layout_changed", "workspace.order_changed"]);
+      expect(b.layout!.groups[g1]).toEqual([`w:${w}`, "r:/r/.git"]);
+      await step("item.move_by (group)", "item.move_by", { item: { kind: "group", groupId: g2 }, direction: "previous" }, ["sidebar.layout_changed"]);
+      expect(b.layout!.top).toEqual([`g:${g2}`, `g:${g1}`, "u"]);
+      await step("item.move_by (ungrouped)", "item.move_by", { item: { kind: "ungrouped" }, direction: "previous" }, ["sidebar.layout_changed"]);
+      expect(b.layout!.top).toEqual([`g:${g2}`, "u", `g:${g1}`]);
+      // 畳む（グループ）。サーバが持つ状態なので group.updated が届く。
+      await step("group.toggle_collapsed", "group.toggle_collapsed", { groupId: g1 }, ["group.updated"]);
+      expect(b.groups.find((g) => g.id === g1)!.collapsed).toBe(true);
+      // 外す: 「グループなし」の末尾へ。
+      await step("group.remove_member", "group.remove_member", { workspaceId: z }, ["workspace.updated", "sidebar.layout_changed"]);
+      expect(b.layout!.ungrouped.at(-1)).toBe(`w:${z}`);
+      // 閉じる（代表の y を閉じるのではなく管理外の w）。
+      await step("workspace.close", "workspace.close", { workspaceId: w }, ["workspace.closed", "sidebar.layout_changed"]);
+      expect(JSON.stringify(b.layout)).not.toContain(`w:${w}`);
+      // グループの削除: 中身は「グループなし」の末尾へ出る。
+      await step("group.delete", "group.delete", { groupId: g1 }, ["group.deleted", "workspace.updated", "sidebar.layout_changed"]);
+      expect(b.layout!.top).toEqual([`g:${g2}`, "u"]);
+      expect(b.layout!.ungrouped).toContain("r:/r/.git");
+    } finally {
+      aConn.ws.close();
+      bConn.ws.close();
+    }
+  }, 20000);
+});
 
 /**
  * 流量制御（design「流量制御」。D98）。1 つ目の pane を `yes`（大量出力）、2 つ目を `cat` で起動するサーバで確かめる。

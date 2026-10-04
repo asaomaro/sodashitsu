@@ -1,4 +1,4 @@
-import { itemRefOf, navigableRowsOfTree, sidebarTree, visibleWorkspaceIdsOfTree, type NavigateRow, type TopRow } from "@sodashitsu/client-core";
+import { itemRefOf, navigableRowsOfTree, sidebarTree, visibleWorkspaceIdsInOrder, type NavigateRow, type TopRow } from "@sodashitsu/client-core";
 import type { useSessionStore } from "./session.js";
 import type { useViewStore } from "./view.js";
 
@@ -21,7 +21,7 @@ export function currentVisibleWorkspaceIds(
   session: ReturnType<typeof useSessionStore>,
   view: ReturnType<typeof useViewStore>,
 ): string[] {
-  return visibleWorkspaceIdsOfTree(currentSidebarTree(session, view), view.collapsedAutoGroups, view.workspaceId);
+  return visibleWorkspaceIdsInOrder(currentSidebarTree(session, view), view.collapsedAutoGroups, view.workspaceId);
 }
 
 /** navigate で選べる行（グループの見出し・「グループなし」の見出しを含む。上から下へ）。選択のキーは `navigateKeyOfRow`。 */

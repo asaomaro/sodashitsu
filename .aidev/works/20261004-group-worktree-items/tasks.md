@@ -87,7 +87,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/tui/src/input/mouse.ts:292-296, :716-729`、`packages/tui/src/render/chrome/sidebar.ts:148`、`packages/tui/src/actions/TuiDispatcher.ts`（`moveWorkspacesByDrag`）
       依存: T17
       AC: AC5, AC16, AC-I2
-- [ ] T19: 古い関数の撤去と一致のテスト——`workspaceGrouping.ts` の古い関数（`autoGroupsOf`・`manualGroupsOf`・`groupedWorkspaceRows`・`linkedWorktreeChildrenOf`・古い `visibleWorkspaceIdsInOrder` と古い行の型）と、サーバの `linkedWorktreeGroupMembers`（とそのテスト `SessionModel.test.ts:1027-1110`）を消す（呼び出しが残っていないことを確かめる）。`visibleWorkspaceIdsOfTree` を元の名前 `visibleWorkspaceIdsInOrder` に戻す。**サーバと画面が同じ純関数を使い、同じ入力で同じ結果になるテスト**（配信の途中の状態を含む）。**2 つの接続の統合テスト**: 一方の接続で入れる・外す・並べ替える・畳むと、もう一方の接続に `sidebar.layout_changed`／`workspace.updated`／`group.updated` が届き、同じ木になる
+- [x] T19: 古い関数の撤去と一致のテスト——`workspaceGrouping.ts` の古い関数（`autoGroupsOf`・`manualGroupsOf`・`groupedWorkspaceRows`・`linkedWorktreeChildrenOf`・古い `visibleWorkspaceIdsInOrder` と古い行の型）と、サーバの `linkedWorktreeGroupMembers`（とそのテスト `SessionModel.test.ts:1027-1110`）を消す（呼び出しが残っていないことを確かめる）。`visibleWorkspaceIdsOfTree` を元の名前 `visibleWorkspaceIdsInOrder` に戻す。**サーバと画面が同じ純関数を使い、同じ入力で同じ結果になるテスト**（配信の途中の状態を含む）。**2 つの接続の統合テスト**: 一方の接続で入れる・外す・並べ替える・畳むと、もう一方の接続に `sidebar.layout_changed`／`workspace.updated`／`group.updated` が届き、同じ木になる
       対象: `packages/client-core/src/workspace/workspaceGrouping.ts`・`workspaceGrouping.test.ts`、`packages/server/src/session/SessionModel.ts`（`linkedWorktreeGroupMembers`）・`SessionModel.test.ts:1027-1110`、`packages/server/src/composeServer.integration.test.ts`（2 接続の統合テストの手本。場所は grep で確かめる）
       依存: T10, T15, T18
       AC: AC14, AC15, AC17

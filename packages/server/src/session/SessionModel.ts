@@ -572,44 +572,6 @@ export class SessionModel {
   }
 
   /**
-   * id が worktree 自動グループの本体（親）なら、束ねられた linked worktree の id 一覧を返す
-   * （副作用なしの問い合わせ）。一括クローズ（`closeLinkedWorktrees`）の対象を求めるのに使う
-   * （design「振る舞いの詳細（一括クローズ）」）。本体でなければ・git 情報が無ければ・束ねられた
-   * worktree が無ければ `[]`。
-   *
-   * **`packages/web/src/store/workspaceGrouping.ts` の `autoGroupsOf` と全く同じ判定を行う**
-   * （cross-check の指摘：以前は `groupId`（手動グループ優先。design「設計方針」）を見ておらず、
-   * `ConfirmDialog` が表示する「束ねた worktree」の件数〔クライアント側の計算〕と、実際にここが
-   * 閉じる件数〔サーバ側の計算〕が食い違っていた。GitInfoPoller の周期の谷間で本体が候補に
-   * 無いときに先頭を暫定的に親にするフォールバックも、クライアント側にしか無く、サーバ側は
-   * `isLinkedWorktree` を理由に本体でないと判定して空を返していた——`closeLinkedWorktrees` の
-   * チェックが実際には何も束ねずに終わる無言の不整合になっていた）。サーバとクライアントは別
-   * ランタイムで実装を共有できないので、**判定のロジック自体をここに書き写して揃える**。
-   */
-  linkedWorktreeGroupMembers(id: WorkspaceId): WorkspaceId[] {
-    const ws = this.workspaces.get(id);
-    const repoKey = ws?.git?.repoKey;
-    if (!ws || !repoKey || ws.groupId !== null) return [];
-    const allWorkspaces = [...this.workspaces.values()];
-    // 手動グループが優先（design「設計方針」）——groupId が付いている workspace は候補から外す。
-    const candidates = allWorkspaces.filter((w) => w.groupId === null && w.git?.repoKey === repoKey);
-    if (candidates.length < 2) return [];
-    const explicitParent = candidates.find((w) => w.git!.isLinkedWorktree === false);
-    if (!explicitParent) {
-      // 本体は実在するが候補から外れている（手動グループに入っている等）——誤って暫定親の
-      // フォールバックへ進まない（client 側 `autoGroupsOf` と同じガード。cross-check round2 の
-      // 指摘：ここが抜けていて「候補の中に本体が無ければ無条件に先頭へフォールバック」していた
-      // ため、本体が手動グループにあるケースで client は「束ねるものは無い」と判断するのに
-      // server 単体は「束ねるものがある」と答える食い違いが残っていた）。
-      const realMainExistsElsewhere = allWorkspaces.some((w) => w.git?.repoKey === repoKey && w.git.isLinkedWorktree === false);
-      if (realMainExistsElsewhere) return [];
-    }
-    const parentId = explicitParent ? explicitParent.id : candidates[0]!.id;
-    if (parentId !== id) return []; // id は本体（親）ではない
-    return candidates.filter((w) => w.id !== id).map((w) => w.id);
-  }
-
-  /**
    * 項目を、同じ入れ物の中の `before` の項目の前（null は末尾）へ動かす（`item.move`）。`ItemTarget` は workspace を指すと
    * その workspace の項目に読み替える。実在しない ID は NotFoundError。受け付けない（入れ物が違う・自分自身の前・
    * グループの中へ `g:`）なら何も変えず false。位置が変わらなくても受け付ければ true。

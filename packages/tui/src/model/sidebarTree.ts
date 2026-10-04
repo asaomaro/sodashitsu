@@ -2,7 +2,7 @@ import {
   itemRefOf,
   navigableRowsOfTree,
   sidebarTree,
-  visibleWorkspaceIdsOfTree,
+  visibleWorkspaceIdsInOrder,
   type NavigateRow,
   type TopRow,
 } from "@sodashitsu/client-core";
@@ -32,7 +32,7 @@ export function currentVisibleWorkspaceIds(
   model: SessionModel,
   prefs: Pick<PrefsModel, "workspaceSort" | "collapsedAutoGroups" | "ungroupedCollapsed">,
 ): string[] {
-  return visibleWorkspaceIdsOfTree(
+  return visibleWorkspaceIdsInOrder(
     currentSidebarTree(model, prefs),
     prefs.collapsedAutoGroups,
     model.workspaceId,
