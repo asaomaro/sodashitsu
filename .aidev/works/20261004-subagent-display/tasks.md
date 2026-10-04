@@ -73,7 +73,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/cli/src/agentStatus.ts:41-74`、`packages/cli/src/commands/agent.ts:52-65`、`packages/cli/src/agentStatus.test.ts`
       依存: T2
       AC: AC11
-- [ ] T15: 統合テスト——実物のスクリプトを子プロセスで起動（stdin にフックの入力・環境変数に `SODA_PANE_ID` と受け口のパス）→ 実 socket → `SubagentTracker` → `SessionService` → bus の `pane.agent_status_changed` と snapshot。場面: 起動 → 終了／実行前の報告つき（説明が付く）／作業の終わりの突き合わせ（外す・残る・足す）／セッションの終了／検出より前の報告と最初の検出／エージェントの入れ替わり／2 つの接続に同じ件数・読み込み直し（新しい接続の snapshot に載る）／同じ内容の報告でイベントが増えない・20 件を続けても 100 ミリ秒に 1 回まで／古い形の電文（`type` なし）で会話の再開が今までどおり／サーバのログに説明の中身が出ない。壊して落ちる確認
+- [x] T15: 統合テスト——実物のスクリプトを子プロセスで起動（stdin にフックの入力・環境変数に `SODA_PANE_ID` と受け口のパス）→ 実 socket → `SubagentTracker` → `SessionService` → bus の `pane.agent_status_changed` と snapshot。場面: 起動 → 終了／実行前の報告つき（説明が付く）／作業の終わりの突き合わせ（外す・残る・足す）／セッションの終了／検出より前の報告と最初の検出／エージェントの入れ替わり／2 つの接続に同じ件数・読み込み直し（新しい接続の snapshot に載る）／同じ内容の報告でイベントが増えない・20 件を続けても 100 ミリ秒に 1 回まで／古い形の電文（`type` なし）で会話の再開が今までどおり／サーバのログに説明の中身が出ない。壊して落ちる確認
       対象: `packages/server/src/`（新規の `*.integration.test.ts`。手本は `composeServer.lineage.integration.test.ts`〔実 PTY の偽 `claude` で検出を作る〕と `packages/server/assets/agent-hook-report.test.ts`）
       依存: T6, T3
       AC: AC1, AC7, AC8, AC12, AC13, AC15, AC16

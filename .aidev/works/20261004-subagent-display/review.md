@@ -53,6 +53,11 @@
 - [nit][conv:-] 全角・2 桁の件数・狭い幅の確認が足りない / 対応: 修正済（試験を足した。T13・ラウンド1）
 - [nit][conv:-] decisions D11 の文言と実装の食い違い / 対応: 修正済（D11 を実装に合わせ、条件の理由をコメントに。T13・ラウンド1）
 
+- [should][conv:regression-negative-control] composeServer.subagents.integration.test.ts:274 ログの確認が、ログが非同期に書かれるのを待たず、読めなくても通る / 対応: 修正済（256 件の上限の警告がログに出るまで待ち、ログの経路が使われた上で確かめる。変異で落ちることを確認。T15・ラウンド1）
+- [should][conv:-] 同:375 20 件が 1 回の配信にまとまる、が時間に依存する（[1, 21] の完全一致） / 対応: 修正済（「20 回ではなく数回」に緩めた。T15・ラウンド1）
+- [nit][conv:-] 同: 「起きないこと」を固定の sleep で確かめている / 対応: 修正済（後続の有効な報告を合図にして、前の報告が処理済みであることを確かめる形に。検出前の sleep は不要なので外した。T15・ラウンド1）
+- [nit][conv:-] 同: 先頭の AC・重複した codex の試験・`Client` 型の `hello` / 対応: 修正済（AC に AC5・AC17 を足し、スクリプト経由の codex の試験を外した。T15・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -478,4 +483,46 @@ AssertionError: expected [] to deeply equal [ { kind: 'claude' } ]
 === MUT(tui sections.ts): Claude Code の説明の「6 つ」を外す
  FAIL  … > エージェント連携：Claude Code は 6 つのフックを入れる説明（サブエージェントの表示に使う）。ほかは 1 つ
 AssertionError: expected ' Spaces       開いた順 + … to contain 'フックを 6 つ入れます'
+```
+
+#### T15 統合テスト（`packages/server/src/composeServer.subagents.integration.test.ts`。実物のスクリプト → 実 socket → SubagentTracker → SessionService → 2 つの接続。壊した後に元へ戻した）
+
+```
+=== MUT(composeServer.ts): 受け口の type つきの報告を SubagentTracker へ渡す行（subagents.report(report)）を外す
+ FAIL  src/composeServer.subagents.integration.test.ts > … > 起動 → 終了: 両方の接続に pane.agent_status_changed で件数が届き、…
+AssertionError: expected undefined to be 1 // Object.is equality
+ FAIL  … > 作業の終わりの突き合わせ: …
+=== MUT(composeServer.ts): kind === "claude" の絞り込みを true に
+ FAIL  … > 種類つきの電文は claude だけを数える（受け口へ直接 codex の名乗りで送っても無視される）
+AssertionError: expected { count: 1, items: [ { …(2) } ] } to be undefined
+=== MUT(SubagentTracker.ts): 最初の検出（無し → X）の配り直しを外す
+ FAIL  … > 検出より前に届いた報告は捨てず、最初の検出で配られる（AC15）。…
+AssertionError: expected undefined to deeply equal [ 'early' ]
+=== MUT(SubagentTracker.ts): 入れ替わりで状態を捨てる（this.discard(paneId)）を外す
+ FAIL  … > 検出より前に届いた報告は捨てず、…（AC7）
+AssertionError: expected [ 'early', 'fresh' ] to deeply equal [ 'fresh' ]
+=== MUT(SubagentTracker.ts): まとめ待ち 100 ミリ秒を 0 に
+ FAIL  … > 同じ内容の報告ではイベントが増えない。20 件を続けても、まとめて 1 回で配る（100 ミリ秒のまとめ）
+AssertionError: expected [ 1, 6, 8, 12, 15, 18, 21 ] to deeply equal [ 1, 21 ]
+=== MUT(agent-hook-report.cjs): Agent・Task 以外の PreToolUse を送らない条件を外す
+ FAIL  … > Agent 以外の PreToolUse は何も送らない（検出済みでも件数は出ない）
+AssertionError: expected { count: +0, items: [] } to be undefined
+```
+
+（落ちなかった変異: `SessionService.updatePaneRuntime` の同じ検出の間の引き継ぎ。偽の `claude` は状態が変わらず、判定の周期が新しい `AgentInfo` を渡す場面が実 PTY では起きないため、統合では観測できない。T6 の単体テスト〔周期の更新・状態の変化で保つ〕が固定している。統合には「周期の判定が走っても件数が消えない」試験を置いてある。）
+
+（T15・ラウンド1 の修正の分）
+```
+=== MUT(SubagentTracker.ts): 「数えない」の警告に種類を含める
+ FAIL  … > サーバのログに説明の中身が出ない（ログの経路が実際に使われた上で確かめる）（AC12）
+AssertionError: expected '{"ts":"2026-10-04T05:58:28.353Z","lev…' not to contain '秘密の種類'
+=== MUT(SubagentTracker.ts): まとめ待ち 100 ミリ秒を 0 に
+ FAIL  … > 同じ内容の報告ではイベントが増えない。20 件を続けても、まとめて数回に配る（100 ミリ秒のまとめ）
+AssertionError: expected 4 to be less than or equal to 3
+=== MUT(composeServer.ts): kind === "claude" の絞り込みを true に
+ FAIL  … > 種類つきの電文は claude だけを数える（…）
+AssertionError: expected [ 'x', 'marker' ] to deeply equal [ 'marker' ]
+=== MUT(agent-hook-report.cjs): Agent・Task 以外の PreToolUse を送らない条件を外す
+ FAIL  … > Agent 以外の PreToolUse は何も送らない（検出済みでも件数は出ない）
+AssertionError: expected [ { id: 'marker', …(3) } ] to deeply equal [ { id: 'marker', …(2) } ]
 ```
