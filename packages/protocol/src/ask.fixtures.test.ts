@@ -49,6 +49,7 @@ interface CollectCase {
     lacking: string[];
     custom?: string[];
     note?: string;
+    comments?: Record<string, string>;
   };
 }
 interface CollectDoc {
@@ -163,12 +164,15 @@ describe("共通の試験データ: collect.json（collectAsk・checkAskAnswer�
     // custom・note は、無いときは項目ごと無い（`collectAsk` の custom は空の配列）。
     expect(got.custom).toEqual(c.expect.custom ?? []);
     expect(got.note).toEqual(c.expect.note);
+    // comments は、無いときは項目ごと無い（1 つ以上あるときだけ付く）。
+    expect(got.comments).toEqual(c.expect.comments);
 
     if (c.expect.lacking.length === 0) {
       // 未回答が無ければ、その回答はサーバの検査（`ask.answer`）を通る。
       const body: AskAnswerBody = { answers: got.answers };
       if (got.custom.length > 0) body.custom = got.custom;
       if (got.note !== undefined) body.note = got.note;
+      if (got.comments !== undefined) body.comments = got.comments;
       expect(checkAskAnswer(spec, body)).toBeNull();
     }
   });

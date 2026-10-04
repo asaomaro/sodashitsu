@@ -370,13 +370,14 @@ test("キーボードだけで答えられる（見出し → Tab → 矢印 →
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
-  const run = await runAsk(appServer, p1, SPEC);
+  // 部品 1.3.0 で各質問に自由記述のボタンが付いて背が高くなり、画面の高さに収まらず目次が出るようになった。この件は目次なしの Tab を見るので、目次を出さない（paging: false）。
+  const run = await runAsk(appServer, p1, { ...SPEC, paging: false });
   await expect(dialog(page)).toBeVisible();
   await expect(page.locator("[data-ask-origin]")).toBeFocused(); // 開いたら見出し（AC-I4）
   // 見出しの次の Tab 停止は、目次が出ていれば目次の項目（出ている数だけ）、その次が最初の質問のチェック済みのラジオ（ベータ）。
   // 目次を出すかは描画が落ち着いてから決まる。落ち着いた後に読む。
   await settle(page);
-  // この定義は収まるので目次は出ない（目次つきの Tab は ask-form-index.spec.ts の「キーだけで完結」で見る）。
+  // 目次は出さない（目次つきの Tab は ask-form-index.spec.ts の「キーだけで完結」で見る）。
   expect((await indexItems(page)).length).toBe(0);
   await page.keyboard.press("Tab");
   await expect(page.locator("input[type=radio][value=beta]")).toBeFocused();
