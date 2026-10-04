@@ -58,6 +58,13 @@
 - [nit][conv:-] 同: 「起きないこと」を固定の sleep で確かめている / 対応: 修正済（後続の有効な報告を合図にして、前の報告が処理済みであることを確かめる形に。検出前の sleep は不要なので外した。T15・ラウンド1）
 - [nit][conv:-] 同: 先頭の AC・重複した codex の試験・`Client` 型の `hello` / 対応: 修正済（AC に AC5・AC17 を足し、スクリプト経由の codex の試験を外した。T15・ラウンド1）
 
+- [should][conv:e2e-observe-browser!] subagents.spec.ts:106 「pane へ移らない」の題が、`pane.focus` のフレームしか見ていない / 対応: 修正済（ブラウザの描画〔`[data-pane-id][aria-current]`〕で、p2 が現在の pane のままであることも見る。T16・ラウンド1）
+- [should][conv:e2e-observe-browser] subagents.spec.ts:196 端末への入力の漏れの確認に陽性の対照が無く、文字だけを見ていた / 対応: 修正済（一覧を開く前に端末へ打った文字・矢印のエコーが出力に出ることを先に確かめ、漏れの検査を文字と矢印〔`^[[B`〕の両方に。T16・ラウンド1）
+- [should][conv:-] subagents.spec.ts:198 ホイールのスクロールが ArrowDown だけでも通る / 対応: 修正済（先頭へ戻してから、ホイールだけで増えることを別に確かめる。T16・ラウンド1）
+- [nit][conv:e2e-observe-browser] subagents.spec.ts:119 `sent.length = 0` が遅れて届くフレームを巻き込む・不要な `.map` / 対応: 修正済（T16・ラウンド1）
+- [nit][conv:-] subagents.spec.ts:251 HTML の注入の確認が `onerror` の非同期の動きを待たない / 対応: 修正済（500 ミリ秒置く。T16・ラウンド1）
+- [nit][conv:-] subagents.spec.ts:55 受け口のパスが posix 前提であることが無記載 / 対応: 修正済（コメント。T16・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -525,4 +532,49 @@ AssertionError: expected [ 'x', 'marker' ] to deeply equal [ 'marker' ]
 === MUT(agent-hook-report.cjs): Agent・Task 以外の PreToolUse を送らない条件を外す
  FAIL  … > Agent 以外の PreToolUse は何も送らない（検出済みでも件数は出ない）
 AssertionError: expected [ { id: 'marker', …(3) } ] to deeply equal [ { id: 'marker', …(2) } ]
+```
+
+#### T16 E2E（`packages/e2e/src/specs/subagents.spec.ts`。実物の Claude Code は使わない。壊した後に元へ戻して `pnpm build` し直した。2 回続けて同じ結果: `--repeat-each=2` で 12 件とも通過）
+
+```
+=== E2E MUT(Sidebar.vue): 件数のボタンの @click.stop を @click に（行へ伝わる）
+  ✘  2 src/specs/subagents.spec.ts:102:1 › ボタンを押しても pane へ移らない（行へ伝えない。ブラウザが pane.focus を送らない）。一覧が開く（AC-I1・AC-I2） (3.6s)
+  1 failed
+  5 passed (21.3s)
+=== E2E MUT(Sidebar.vue): 件数のボタンの出す条件を「項目があれば 0 件でも」に
+  ✘  1 src/specs/subagents.spec.ts:77:1 › 件数のボタン: 起動で出て、増減し、0 件で消える。作業の終わりの突き合わせで直る（AC1・AC2） (7.6s)
+  ✘  3 src/specs/subagents.spec.ts:141:1 › 一覧: 種類・説明・経過時間・バックグラウンドの印。0 件の文言（開いたまま）。64 件を超えたら「ほか n 件」（AC4・AC17） (7.6s)
+    Error: expect(locator).toHaveCount(expected) failed
+  2 failed
+  4 passed (28.1s)
+=== E2E MUT(SubagentList.vue): 説明を {{ }} から v-html に
+  ✘  6 src/specs/subagents.spec.ts:235:1 › 短い説明に HTML を書いても動かない（文字として出る）（AC12） (7.1s)
+    Error: expect(locator).toHaveText(expected) failed
+  1 failed
+  5 passed (22.7s)
+=== E2E MUT(SubagentListDialog.vue): 閉じたときにフォーカスを戻す行（el?.focus()）を外す（ボタンが無く、行へ戻す場面）
+  ✘  3 src/specs/subagents.spec.ts:141:1 › 一覧: 種類・説明・経過時間・バックグラウンドの印。0 件の文言（開いたまま）。64 件を超えたら「ほか n 件」（AC4・AC17） (7.5s)
+    Error: expect(locator).toBeFocused() failed
+    Expected: focused
+    Received: inactive
+  1 failed
+  5 passed (23.1s)
+=== E2E MUT(SubagentListDialog.vue): 対象が居なくなったら閉じる watch を外す
+  ✘  5 src/specs/subagents.spec.ts:215:1 › 開いている間に対象のエージェントが居なくなったら、一覧は閉じる（AC-I4） (7.4s)
+    Error: expect(locator).toBeFocused() failed → toBeHidden() failed
+  1 failed
+  5 passed (23.2s)
+```
+
+（落ちなかった変異: ボタンから開いて同じボタンへ戻る場面でのフォーカスを戻す行。ブラウザの `<dialog>` が、閉じたときに開く前にフォーカスのあった要素へ戻すので、同じ結果になる。ボタンが無い場面〔行へ戻る〕で固定した。）
+
+（T16・ラウンド1 の修正の分。`pnpm build` し直して確認。2 回続けて同じ結果: `--repeat-each=2` で 12 件とも通過）
+```
+=== E2E MUT(Sidebar.vue): 件数のボタンの @click.stop を @click に
+  ✘  2 src/specs/subagents.spec.ts:102:1 › ボタンを押しても pane へ移らない（焦点は p2 のまま。ブラウザが pane.focus を送らない）。一覧が開く（AC-I1・AC-I2） (3.7s)
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 1
+    + Received  + 3
+  1 failed
+  5 passed (19.4s)
 ```

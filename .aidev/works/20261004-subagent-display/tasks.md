@@ -77,7 +77,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/server/src/`（新規の `*.integration.test.ts`。手本は `composeServer.lineage.integration.test.ts`〔実 PTY の偽 `claude` で検出を作る〕と `packages/server/assets/agent-hook-report.test.ts`）
       依存: T6, T3
       AC: AC1, AC7, AC8, AC12, AC13, AC15, AC16
-- [ ] T16: E2E（実物の Claude Code は使わない）——偽の `claude` を pane で動かして検出させ、テスト側から `agent-report.sock` へ電文を送る。ブラウザで観測: 件数が出る・増減する・消える／ボタンを押しても pane へ移らない／一覧（各行・経過時間・0 件の文言・「ほか n 件」）／`Tab` → `Enter` → 上下 → `Esc` とフォーカスの戻り先／対象が居なくなると閉じる／短い説明に HTML を書いても動かない。グラフと、キー・ホイールの漏れは T21。偽の `claude` とテストの電文は、テストが立てたサーバの `stateDir` の `agent-report.sock` だけに送る（環境変数から受け口を拾わない）。観測を壊して落ちる確認。2 回続けて同じ結果
+- [x] T16: E2E（実物の Claude Code は使わない）——偽の `claude` を pane で動かして検出させ、テスト側から `agent-report.sock` へ電文を送る。ブラウザで観測: 件数が出る・増減する・消える／ボタンを押しても pane へ移らない／一覧（各行・経過時間・0 件の文言・「ほか n 件」）／`Tab` → `Enter` → 上下 → `Esc` とフォーカスの戻り先／対象が居なくなると閉じる／短い説明に HTML を書いても動かない。グラフと、キー・ホイールの漏れは T21。偽の `claude` とテストの電文は、テストが立てたサーバの `stateDir` の `agent-report.sock` だけに送る（環境変数から受け口を拾わない）。観測を壊して落ちる確認。2 回続けて同じ結果
       対象: `packages/e2e/src/specs/subagents.spec.ts`（新規）、手本は `packages/e2e/src/specs/agent-detection.spec.ts`（偽のエージェントの検出）・`ask-form-index.spec.ts`（フォーカスとキーの見方）、`packages/e2e/src/support/appServer.ts`（`stateDir`）
       依存: T20, T15
       AC: AC1, AC2, AC4, AC12, AC17, AC-I1, AC-I2, AC-I3, AC-I4
