@@ -33,3 +33,6 @@ events:
   - { ts: 2026-10-04T03:26:12Z, phase: coding, event: taskcheck, metrics: { stage: start, task: cross, mode: delegated } }
   - { ts: 2026-10-04T03:27:33Z, phase: coding, event: taskcheck, metrics: { stage: report, task: cross, findings: 0 } }
   - { ts: 2026-10-04T03:30:37Z, phase: coding, event: approved, metrics: { tasks_done: 10, unplanned_lookups: 0, task_checks: 9, task_check_findings: 10, task_check_mode: delegated } }
+  - { ts: 2026-10-04T03:31:38Z, phase: test, event: start, metrics: { marks: 0 } }
+  - { ts: 2026-10-04T03:32:19Z, phase: test, event: smoke, metrics: { result: fail, exit_code: 1, commands: 10, failed_index: 1 } }
+  - { ts: 2026-10-04T03:33:09Z, phase: test, event: smoke, metrics: { result: fail, exit_code: 1, commands: 10, failed_index: 1 } }
