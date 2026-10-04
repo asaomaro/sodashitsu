@@ -41,16 +41,18 @@ const MAX_BODY_BYTES = 64 * 1024;
  * 開く。**この経路だけ**、応答のヘッダを本体と変える。許可リストにある名前だけを配る（それ以外は `index.html` へ落とさず 404）。
  * - markdown.html: `script-src 'self'` だけ（インラインのスクリプト・eval・外への通信は止まる。Markdown の無害化はこのヘッダと不透明 origin に任せる）。
  * - html.html: 成果物の HTML をそのまま動かす（インラインのスクリプト・eval を許す）が、`default-src 'none'`（`connect-src` も拒否）で外へは送れない。
- * - どちらも `sandbox`（`allow-scripts` だけ。`allow-same-origin`・`allow-popups`・`allow-downloads` は付けない）を応答のヘッダでも付ける（直接開かれても隔離する）。
+ * - `sandbox` を応答のヘッダでも付ける（html.html は `allow-scripts` だけ。markdown.html は加えて `allow-popups`・`allow-popups-to-escape-sandbox`。どちらも `allow-same-origin`・`allow-downloads`・`allow-top-navigation` は付けない）（直接開かれても隔離する）。
  */
 const ASK_VIEW_SANDBOX = "sandbox allow-scripts";
+/** Markdown の枠だけ、リンクを新しいタブで開けるよう popup を許す（スクリプトが動かず、ポップアップの URL に本文を載せて外へ出す経路が無い）。`allow-same-origin`・`allow-top-navigation` は付けない。 */
+const ASK_VIEW_MARKDOWN_SANDBOX = "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox";
 const ASK_VIEW_PAGE_HEADERS: Record<string, string> = {
   "X-Frame-Options": "SAMEORIGIN",
 };
 const ASK_VIEW_FILES: Record<string, { type: string; csp?: string }> = {
   "markdown.html": {
     type: "text/html; charset=utf-8",
-    csp: `${ASK_VIEW_SANDBOX}; default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`,
+    csp: `${ASK_VIEW_MARKDOWN_SANDBOX}; default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`,
   },
   "html.html": {
     type: "text/html; charset=utf-8",
@@ -58,6 +60,7 @@ const ASK_VIEW_FILES: Record<string, { type: string; csp?: string }> = {
   },
   "markdown.js": { type: "text/javascript; charset=utf-8" },
   "html.js": { type: "text/javascript; charset=utf-8" },
+  "links.js": { type: "text/javascript; charset=utf-8" },
   "keys.js": { type: "text/javascript; charset=utf-8" },
   "vendor/marked.umd.js": { type: "text/javascript; charset=utf-8" },
   "vendor/mermaid.min.js": { type: "text/javascript; charset=utf-8" },

@@ -152,7 +152,7 @@ describe("HttpServer — アプリ本体の CSP と成果物の隔離表示（/a
     webDistDir = await makeTempDir("soda-http-dist-");
     await writeFile(join(webDistDir, "index.html"), "<!doctype html><title>app</title>");
     await mkdir(join(webDistDir, "ask-view", "vendor"), { recursive: true });
-    for (const f of ["markdown.html", "html.html", "markdown.js", "html.js", "keys.js", "vendor/marked.umd.js", "vendor/mermaid.min.js", "secret.txt"])
+    for (const f of ["markdown.html", "html.html", "markdown.js", "html.js", "keys.js", "links.js", "vendor/marked.umd.js", "vendor/mermaid.min.js", "secret.txt"])
       await writeFile(join(webDistDir, "ask-view", f), `// ${f}\n`);
   });
   afterEach(async () => {
@@ -173,15 +173,15 @@ describe("HttpServer — アプリ本体の CSP と成果物の隔離表示（/a
     }
   });
 
-  it("markdown.html: script-src 'self' だけ・default-src 'none'・sandbox は allow-scripts だけ（allow-same-origin なし）。同じ origin の iframe に入れられる", async () => {
+  it("markdown.html: script-src 'self' だけ・default-src 'none'・sandbox は allow-scripts allow-popups allow-popups-to-escape-sandbox（allow-same-origin・allow-top-navigation なし）。同じ origin の iframe に入れられる", async () => {
     const s = await startServer(webDistDir);
     try {
       const res = await get(s, "/ask-view/markdown.html");
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
       const csp = res.headers.get("content-security-policy")!;
-      expect(csp).toContain("sandbox allow-scripts;");
-      expect(csp).not.toMatch(/allow-same-origin|allow-popups|allow-downloads|allow-top-navigation/);
+      expect(csp).toContain("sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox;");
+      expect(csp).not.toMatch(/allow-same-origin|allow-downloads|allow-top-navigation|allow-forms/);
       expect(csp).toContain("default-src 'none'");
       expect(csp).toContain("script-src 'self';");
       expect(csp).not.toContain("connect-src"); // 外への通信の許可を足していない（default-src 'none' に従う＝拒否）
@@ -212,7 +212,7 @@ describe("HttpServer — アプリ本体の CSP と成果物の隔離表示（/a
   it("枠が読むスクリプト（markdown.js・keys.js・vendor）は専用ヘッダを持たない（CSP・X-Frame-Options なし）。ログインなしで読める", async () => {
     const s = await startServer(webDistDir);
     try {
-      for (const f of ["markdown.js", "html.js", "keys.js", "vendor/marked.umd.js", "vendor/mermaid.min.js"]) {
+      for (const f of ["markdown.js", "html.js", "keys.js", "links.js", "vendor/marked.umd.js", "vendor/mermaid.min.js"]) {
         const res = await get(s, `/ask-view/${f}`);
         expect(res.status, f).toBe(200);
         expect(res.headers.get("content-type"), f).toBe("text/javascript; charset=utf-8");

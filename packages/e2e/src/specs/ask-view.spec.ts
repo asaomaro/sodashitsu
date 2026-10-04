@@ -186,7 +186,7 @@ test("負の対照: 同じ実測を枠の外（アプリのページ）で動か
   }
 });
 
-test("Markdown に埋め込んだ <script>・onerror・javascript: は動かない（CSP がインラインを止める）。HTML の埋め込みは文字として見える形で残らず、リンクは開けない（AC11）", async ({
+test("Markdown に埋め込んだ <script>・onerror・javascript: は動かない（CSP がインラインを止める）。HTML の埋め込みは文字として見える形で残らず、http(s) 以外のリンクは開けない（AC11）", async ({
   page,
   appServer,
 }) => {
@@ -216,15 +216,18 @@ test("Markdown に埋め込んだ <script>・onerror・javascript: は動かな�
     expect(
       consoleErrors.some((t) => /Content Security Policy/.test(t) && /script|inline/i.test(t)),
     ).toBe(true);
-    // リンクは外へ飛べない（href を外してある）。内部の # は残る。
-    await expect(f.locator('a[title="https://example.com/"]')).not.toHaveAttribute("href", /.+/);
+    // http(s) のリンクは残り（新しいタブで開く。別のテストが実測）、`javascript:` は外れる。内部の # は残る。
+    await expect(f.locator('a[title="https://example.com/"]')).toHaveAttribute("href", "https://example.com/");
+    await expect(f.locator('a[title="https://example.com/"]')).toHaveAttribute("target", "_blank");
     await expect(f.locator("a[title^='javascript:']")).not.toHaveAttribute("href", /.+/);
     // SVG・MathML・map/area は取り除かれている（`<set>`・`<animate>` で `href` を書き換えるリンクが枠自身を外へ移すため）。リンクは `href` も `xlink:href` も残らない。
     expect(
       await frame.evaluate(() => ({
         shapes: document.querySelectorAll("#doc svg, #doc math, #doc map, #doc area, #doc set, #doc animate").length,
         links: Array.from(document.querySelectorAll("#doc a")).filter(
-          (a) => a.hasAttribute("xlink:href") || (a.hasAttribute("href") && a.getAttribute("href") !== "#x"),
+          (a) =>
+            a.hasAttribute("xlink:href") ||
+            (a.hasAttribute("href") && a.getAttribute("href") !== "#x" && !/^https:\/\/example\.com\/$/.test(a.getAttribute("href")!)),
         ).length,
         mixed: document.querySelector("#doc a#mixed")?.hasAttribute("xlink:href"),
       })),
@@ -248,10 +251,13 @@ test("Markdown に埋め込んだ <script>・onerror・javascript: は動かな�
 
 test("mermaid の図の中のリンク（click … href・ラベルの <a href>・SMIL）も外され、図のリンクを押しても Markdown の枠は外へ移らない", async ({
   page,
+  context,
   appServer,
 }) => {
   const media = await makeMediaDir();
   try {
+    let opened = 0;
+    context.on("page", () => void opened++); // 図のリンクは Markdown の本文と違い、新しいタブでも開かせない
     const p1 = await setup(page, appServer);
     const md = await media.write(
       "diagram-links.md",
@@ -276,6 +282,7 @@ test("mermaid の図の中のリンク（click … href・ラベルの <a href>�
     for (const a of await f.locator(".mermaid a").all()) await a.click({ timeout: 1500, force: true }).catch(() => undefined);
     for (const n of await f.locator(".mermaid g.node").all()) await n.click({ timeout: 1500 }).catch(() => undefined);
     await page.waitForTimeout(1500);
+    expect(opened).toBe(0);
     expect(frame.url().endsWith("/ask-view/markdown.html")).toBe(true);
     await page.keyboard.press("Escape");
     await run.done;
@@ -586,6 +593,165 @@ test("成果物の SVG は <img> だけで描かれ、スクリプトは動か�
     ).toBeUndefined();
     expect(logs.filter((l) => l.includes("svg-script-ran"))).toEqual([]);
     await page.keyboard.press("Control+Enter");
+    await run.done;
+  } finally {
+    await media.cleanup();
+  }
+});
+
+const EXT = "https://links.example.test/";
+/** 外部のホストへは実際に繋がらない: この名前への要求は、偽の応答を返して数える。 */
+async function fakeExternal(context: import("@playwright/test").BrowserContext): Promise<string[]> {
+  const hits: string[] = [];
+  await context.route(/^https?:\/\/links\.example\.test\//, async (route) => {
+    hits.push(route.request().url());
+    await route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: "<!doctype html><title>外部</title><p id=ext>外部の偽のページ</p>" });
+  });
+  return hits;
+}
+
+test("Markdown の枠の https リンクは新しいタブで開く（opener なし・rel/target 付き）。元のダイアログは開いたまま・回答は変わらない", async ({
+  page,
+  context,
+  appServer,
+}) => {
+  const media = await makeMediaDir();
+  try {
+    const hits = await fakeExternal(context);
+    const p1 = await setup(page, appServer);
+    const md = await media.write("links.md", `# 題\n\n[外部](${EXT}path?q=1) と [同じ文書](#x)\n\n## x\n`);
+    const run = await runAsk(appServer, p1, SPEC({ file: md }));
+    await expect(dialog(page)).toBeVisible();
+    const f = frameOf(page);
+    await expect(f.locator("html")).toHaveAttribute("data-ready", "1");
+    const a = f.locator("a", { hasText: "外部" });
+    await expect(a).toHaveAttribute("href", `${EXT}path?q=1`);
+    await expect(a).toHaveAttribute("target", "_blank");
+    await expect(a).toHaveAttribute("rel", "noopener noreferrer");
+    // 枠の sandbox 属性（実測）: allow-same-origin は無い。
+    const sandbox = await page.locator("iframe[data-ask-view-frame]").getAttribute("sandbox");
+    expect(sandbox).toBe("allow-scripts allow-popups allow-popups-to-escape-sandbox");
+    expect(sandbox).not.toContain("allow-same-origin");
+    await choice(page, "ok", "o2").click(); // 回答を既定から変えておく
+    const popupP = context.waitForEvent("page");
+    await a.click();
+    const popup = await popupP;
+    await popup.waitForLoadState("domcontentloaded");
+    expect(popup.url()).toBe(`${EXT}path?q=1`);
+    expect(await popup.evaluate(() => window.opener)).toBeNull();
+    await expect(popup.locator("#ext")).toHaveText("外部の偽のページ");
+    expect(hits).toEqual([`${EXT}path?q=1`]);
+    // 元のタブ: ダイアログは開いたまま・枠は移っていない・回答はそのまま。
+    await expect(dialog(page)).toBeVisible();
+    expect(page.frames().some((x) => x.url().endsWith("/ask-view/markdown.html"))).toBe(true);
+    expect(run.finished()).toBe(false);
+    await popup.close();
+    await page.bringToFront();
+    // 枠をクリックした後でも、親のキー（フォーカスを質問へ戻して Ctrl+Enter）は今までどおり。Esc は枠の中から親へ届く。
+    await f.locator("h1").click();
+    await page.keyboard.press("Escape");
+    expect((await run.done).json).toEqual({ status: "cancelled" });
+    const run2 = await runAsk(appServer, p1, SPEC({ file: md }));
+    await expect(dialog(page)).toBeVisible();
+    await choice(page, "ok", "o2").click();
+    await page.locator("[data-ask-origin]").focus();
+    await page.keyboard.press("Control+Enter");
+    expect((await run2.done).json).toEqual({ status: "answered", answers: { ok: "o2" } });
+  } finally {
+    await media.cleanup();
+  }
+});
+
+test("Markdown の枠の危険・曖昧なリンク（javascript:・data:・相対・//host・HTTP://・大文字小文字・制御文字・空白・改行）は href が外れ、押しても何も開かない", async ({
+  page,
+  context,
+  appServer,
+}) => {
+  const media = await makeMediaDir();
+  try {
+    const hits = await fakeExternal(context);
+    const p1 = await setup(page, appServer);
+    const bad = [
+      "javascript:window.__x=1",
+      "JaVaScRiPt:window.__x=1",
+      "data:text/html,<b>x</b>",
+      "vbscript:x",
+      "file:///etc/passwd",
+      "rel/path.md",
+      "/abs/path",
+      "//links.example.test/proto-relative",
+      "HTTP://links.example.test/upper",
+      "Https://links.example.test/mixed",
+      " https://links.example.test/lead-space",
+      "https://links.example.test/trail-space ",
+      "https://links.example.test/&#x0a;newline",
+      "https://links.example.test/&#x09;tab",
+      "java&#x09;script:window.__x=1",
+      "https:///links.example.test/triple",
+    ];
+    const body = bad.map((h, i) => `<a id="b${i}" href="${h}">b${i}</a>`).join("\n\n");
+    const md = await media.write("bad.md", `# 悪いリンク\n\n${body}\n\n<a id="ok" href="${EXT}ok">ok</a>\n`);
+    const run = await runAsk(appServer, p1, SPEC({ file: md }));
+    await expect(dialog(page)).toBeVisible();
+    const f = frameOf(page);
+    await expect(f.locator("html")).toHaveAttribute("data-ready", "1");
+    const frame = page.frames().find((x) => x.url().endsWith("/ask-view/markdown.html"))!;
+    expect(
+      await frame.evaluate((n) => {
+        const out: Record<string, unknown> = {};
+        for (let i = 0; i < n; i++) {
+          const a = document.getElementById("b" + i)!;
+          out["b" + i] = [a.hasAttribute("href"), a.hasAttribute("target")].join();
+        }
+        return out;
+      }, bad.length),
+    ).toEqual(Object.fromEntries(bad.map((_, i) => ["b" + i, "false,false"])));
+    await expect(f.locator("#ok")).toHaveAttribute("href", `${EXT}ok`); // 正しいものは残る（対照）
+    let opened = 0;
+    context.on("page", () => void opened++);
+    for (let i = 0; i < bad.length; i++) await f.locator("#b" + i).click({ timeout: 2000 });
+    await page.waitForTimeout(1500);
+    expect(opened).toBe(0);
+    expect(hits).toEqual([]);
+    expect(await frame.evaluate(() => (window as unknown as Record<string, unknown>)["__x"])).toBeUndefined();
+    expect(frame.url().endsWith("/ask-view/markdown.html")).toBe(true);
+    await expect(dialog(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await run.done;
+  } finally {
+    await media.cleanup();
+  }
+});
+
+test("HTML の成果物の枠は新しいページを開けない（sandbox に allow-popups が無い・window.open は null・リンクを押しても開かない）", async ({
+  page,
+  context,
+  appServer,
+}) => {
+  const media = await makeMediaDir();
+  try {
+    const hits = await fakeExternal(context);
+    const p1 = await setup(page, appServer);
+    const file = await media.write(
+      "pop.html",
+      `<!doctype html><body><a id=l href="${EXT}h" target="_blank">リンク</a><script>var w = null; try { w = window.open("${EXT}w"); } catch (e) {} document.body.dataset.open = String(w); document.body.dataset.done = "1";</script>`,
+    );
+    let opened = 0;
+    context.on("page", () => void opened++);
+    const run = await runAsk(appServer, p1, SPEC({ file }));
+    await expect(dialog(page)).toBeVisible();
+    const f = frameOf(page);
+    await expect(f.locator("body")).toHaveAttribute("data-done", "1");
+    const sandbox = await page.locator("iframe[data-ask-view-frame]").getAttribute("sandbox");
+    expect(sandbox).toBe("allow-scripts");
+    expect(sandbox).not.toContain("allow-popups");
+    await expect(f.locator("body")).toHaveAttribute("data-open", "null");
+    await f.locator("#l").click();
+    await page.waitForTimeout(1500);
+    expect(opened).toBe(0);
+    expect(hits).toEqual([]);
+    await expect(dialog(page)).toBeVisible();
+    await page.keyboard.press("Escape");
     await run.done;
   } finally {
     await media.cleanup();

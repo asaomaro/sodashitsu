@@ -1,6 +1,8 @@
 <script lang="ts">
 /** 成果物の枠の `sandbox`。**`allow-same-origin` を付けない**（付けると枠の中のスクリプトがアプリの origin になり、隔離が全部崩れる）。テストがこの値を見る。 */
 export const ASK_VIEW_SANDBOX = "allow-scripts";
+/** Markdown の枠だけ、リンクを新しいタブで開けるよう popup を許す（枠にスクリプトが動かないので、本文を外へ出す経路にならない）。HTML の枠は `ASK_VIEW_SANDBOX` のまま。 */
+export const ASK_VIEW_MARKDOWN_SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox";
 /** 枠から親へ取り次ぐキー（枠のページ `keys.js` と同じ 3 種）。 */
 export type AskViewKey = "cancel" | "submit" | "prev" | "next";
 /** 枠の静的ページ（サーバの `/ask-view/*`。専用のヘッダ）。 */
@@ -142,7 +144,7 @@ function onTabKey(ev: KeyboardEvent): void {
           ref="frame"
           :key="`${active}-${item.kind}`"
           class="ask-viewer-frame"
-          :sandbox="ASK_VIEW_SANDBOX"
+          :sandbox="item.kind === 'markdown' ? ASK_VIEW_MARKDOWN_SANDBOX : ASK_VIEW_SANDBOX"
           referrerpolicy="no-referrer"
           :src="pageOf(item.kind) ?? undefined"
           title="成果物（隔離表示）"

@@ -2,7 +2,7 @@ import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 import type { AskViewLoaded } from "../ask/mediaUrl.js";
-import AskViewer, { ASK_VIEW_PAGES, ASK_VIEW_SANDBOX, readViewKey } from "./AskViewer.vue";
+import AskViewer, { ASK_VIEW_MARKDOWN_SANDBOX, ASK_VIEW_PAGES, ASK_VIEW_SANDBOX, readViewKey } from "./AskViewer.vue";
 
 /** 成果物の枠（20261004-ask-media-popup の AC8・AC9・AC10・AC-I5）。隔離の実測は E2E（`ask-view.spec.ts`）が実ブラウザで行う。 */
 
@@ -34,15 +34,15 @@ function mountViewer(items: AskViewLoaded[], paneName = "build") {
 }
 
 describe("sandbox", () => {
-  it("iframe の sandbox は allow-scripts だけ（allow-same-origin・allow-popups・allow-top-navigation を付けない）。referrer も送らない", () => {
+  it("iframe の sandbox: html は allow-scripts だけ。markdown だけ allow-popups・allow-popups-to-escape-sandbox を足す。どちらも allow-same-origin・allow-top-navigation を付けない。referrer も送らない", () => {
     expect(ASK_VIEW_SANDBOX).toBe("allow-scripts");
+    expect(ASK_VIEW_MARKDOWN_SANDBOX).toBe("allow-scripts allow-popups allow-popups-to-escape-sandbox");
     for (const item of [md, html]) {
       const { w } = mountViewer([item]);
       const frame = w.get("iframe").element;
-      expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
-      expect(frame.getAttribute("sandbox")).not.toMatch(
-        /same-origin|popups|top-navigation|downloads|forms/,
-      );
+      expect(frame.getAttribute("sandbox")).toBe(item === md ? ASK_VIEW_MARKDOWN_SANDBOX : "allow-scripts");
+      expect(frame.getAttribute("sandbox")).not.toMatch(/same-origin|top-navigation|downloads|forms/);
+      if (item === html) expect(frame.getAttribute("sandbox")).not.toContain("popups");
       expect(frame.getAttribute("referrerpolicy")).toBe("no-referrer");
       expect(frame.getAttribute("src")).toBe(ASK_VIEW_PAGES[item.kind as "markdown" | "html"]);
     }

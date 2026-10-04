@@ -21,7 +21,7 @@
 1. ファイルの運び方: **R2（サーバが読み `ask.media` で分割配布）**。退けた: R1（sodactl が data URL 化。1 MiB/256 KiB に当たる）・R3（HTTP 配信。リモートに届かない）。
 2. view の枠: **専用静的ページ + `sandbox="allow-scripts"` の iframe + `postMessage`**。退けた: `srcdoc`/`blob:`（CSP を継ぐ）。
 3. html を含む Markdown の無害化: **サニタイザを足さず、枠の CSP（`script-src 'self'`・`default-src 'none'`）と不透明 origin に任せる**（実験で `<script>`・インラインを止めることを確認）。退けた: DOMPurify（依存と見え方の変化のわりに上乗せが小さい）。
-4. html の枠に `allow-popups`・`allow-downloads` を付けない（popup の URL へ本文を載せて外へ出せるため。外部リンクが開けないのは許容）。ask.py は付けているが、「外への通信は止める」決定を優先。
+4. html の枠に `allow-popups`・`allow-downloads` を付けない（popup の URL へ本文を載せて外へ出せるため。外部リンクが開けないのは許容）。**（2026-10-05 更新: Markdown の枠だけ `allow-popups`・`allow-popups-to-escape-sandbox` を付け、http(s) のリンクを新しいタブで開けるようにした。Markdown の枠はスクリプトが動かず、本文を載せたポップアップの URL を作れないため。HTML の枠は今のまま。`docs/sodactl.md`「成果物（view）」）**ask.py は付けているが、「外への通信は止める」決定を優先。
 5. モバイル: **縦積み**。退けた: 別の全画面（開閉と戻りのフォーカスが増える）。
 6. 外部画像の取得失敗: **画像なしで出し、件数を固定の行に出す**。ローカル・data:・view の誤りは質問を出さず `invalid_ask_spec`（終了コード 2）。
 7. 機能確認: **サーバ RPC `ask.features` と `sodactl ask --features`**。退けた: `requires` を `ask.open` に足す案（古いサーバは未知の項目を黙って無視するので見分けられない）／版の比較（版の取り決めが無い）。
