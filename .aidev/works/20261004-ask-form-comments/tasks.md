@@ -13,7 +13,7 @@ design.md のとおり、下から積む。(1) 部品と試験データを写す
 
 ## チェックリスト
 
-- [ ] T1: 部品と試験データを public_docs `12a13b2`（1.3.0）に写し直す——`node scripts/sync-ask-form.mjs --from /workspaces/public_docs --commit 12a13b2`、`--check --from /workspaces/public_docs` が一致すること。`git -C /workspaces/public_docs diff 690d26d..12a13b2 -- docs/ClaudeCode/skills/other/ask-form/ask-form.js` を読み、`decisions.md` D2 の安全の確認と食い違いが無いことを確かめる。写した直後に `pnpm test` 全体を流して、落ちた件を記録する。**落ちるはずなのは、共通の試験データの normalize の 1 例「自由記述: 付けないとき（comments・comment が false）だけ残す。既定（付ける）は書かない」だけ**（`comments: true` の質問は今の実装が項目を落とすので通る。collect の新しい例は、この時点では `comments` を比べていないので通る）。それ以外（web の単体など）が落ちたら、部品の変更が原因かを見て、原因と直すタスク（T5・T7）を記録する
+- [x] T1: 部品と試験データを public_docs `12a13b2`（1.3.0）に写し直す——`node scripts/sync-ask-form.mjs --from /workspaces/public_docs --commit 12a13b2`、`--check --from /workspaces/public_docs` が一致すること。`git -C /workspaces/public_docs diff 690d26d..12a13b2 -- docs/ClaudeCode/skills/other/ask-form/ask-form.js` を読み、`decisions.md` D2 の安全の確認と食い違いが無いことを確かめる。写した直後に `pnpm test` 全体を流して、落ちた件を記録する。**落ちるはずなのは、共通の試験データの normalize の 1 例「自由記述: 付けないとき（comments・comment が false）だけ残す。既定（付ける）は書かない」だけ**（`comments: true` の質問は今の実装が項目を落とすので通る。collect の新しい例は、この時点では `comments` を比べていないので通る）。それ以外（web の単体など）が落ちたら、部品の変更が原因かを見て、原因と直すタスク（T5・T7）を記録する
       対象: `scripts/sync-ask-form.mjs`、`third_party/ask-form/{ask-form.js,fixtures/normalize.json,fixtures/collect.json,SOURCE.json}`、`packages/protocol/src/ask.fixtures.test.ts:74-92, :141`（実行だけ）
       依存: なし
       AC: AC1

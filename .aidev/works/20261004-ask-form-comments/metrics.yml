@@ -11,3 +11,4 @@ events:
   - { ts: 2026-10-04T02:53:51Z, phase: tasks, event: doccheck, metrics: { stage: start, phase: tasks, mode: delegated, size: 8168 } }
   - { ts: 2026-10-04T02:57:54Z, phase: tasks, event: doccheck, metrics: { stage: report, phase: tasks, findings: 10 } }
   - { ts: 2026-10-04T02:57:54Z, phase: tasks, event: approved, metrics: { tasks_planned: 10, tasks_anchored: 10, doc_check_rounds: 1, doc_check_findings: 10, doc_check_mode: delegated, ac_total: 15, ac_covered: 15, tasks_no_ac: 0, tasks_ac_none: 0 } }
+  - { ts: 2026-10-04T02:58:51Z, phase: coding, event: start }
