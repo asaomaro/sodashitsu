@@ -856,6 +856,7 @@ export class SessionModel {
     const before = this.refSnapshot();
     this.workspaces.delete(id);
     this.heldSince.delete(id);
+    this.createdRank.delete(id);
     this.settleRepresentatives();
     this.reflectRefs(before, null);
     this.settle();

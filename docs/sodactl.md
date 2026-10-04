@@ -559,7 +559,7 @@ sodactl graph history "$l" --limit 5
 - 監督・承認の代理の線は `<from>` が配下、`<to>` が監督役。
 - `<linkId>`（`link set|rm|pause|resume`・`history`）も、線の ID（UUID）か先頭の部分（4 文字以上で一意）。表の `link`・`node`・`from`・`to` は先頭 8 文字の短い呼び名で、そのまま指定に使える（完全な ID は `key` の列・`--json`）。
   曖昧な部分は `id_ambiguous`（候補が出る）、当たらなければ `not_found`。
-- `node rm` はそのノードの線も消す。`node rekey` は pane の無いノード（`status` が `closed`。別のマシンの pane が閉じたもの。手元の閉じた pane のノードは自動で外れる）を同じマシンの別の pane に付け替える（線はそのまま。別のマシンの pane へは
+- `node rm` はそのノードの線も消す。`node rekey` は pane の無いノード（画面で無効と出る、別のマシンの pane が閉じたもの。`graph show` の `status` は `-` なので完全な id で指す。手元の閉じた pane のノードは自動で外れる）を同じマシンの別の pane に付け替える（線はそのまま。別のマシンの pane へは
   `invalid_params`）。
 - 変更は、送る前に画面と同じ規則（client-core の検証）で確かめ、落ちれば送らずに `invalid_params`（メッセージに `supervisor_taken` 等の理由）。
 - 変更は取り出した rev を添えて送る。その間に画面などが変えていれば（`rev_conflict`）、**取り直して操作を組み立て直し、1 回だけ送り直す**。2 回目も衝突したら

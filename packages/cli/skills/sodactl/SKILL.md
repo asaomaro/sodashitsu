@@ -189,7 +189,7 @@ sodactl graph history "$l" --json | jq '.runs[:5]'
 - 線ごとに実行回数の上限（`--limit`。既定 10、1〜100）があり、達するとその線は止まる（`paused: "limit"`）。**上限で止まった線・利用者が止めた線を自分で再開しない**。
 - 往復する線（A→B と B→A）は上限まで回り続ける。作るときは上限を小さくする。
 - 変えられなかったときの `rev_conflict` は、取り直して 1 回送り直した後も他で変わり続けたということ。`sodactl graph show` で今の形を見てから決める。
-- 閉じた pane のノードは、手元の pane なら閉じたときに自動で外れる（線も消える）。別のマシンの pane が閉じたノード（`status` が `closed`）は残るので、
+- 閉じた pane のノードは、手元の pane なら閉じたときに自動で外れる（線も消える）。別のマシンの pane が閉じたノード（画面では無効と出る。`graph show` の `status` は `-`）は残るので、
   `sodactl graph node rekey <pane> <新しい pane>` で同じマシンの pane に選び直すか、`sodactl graph node rm <pane>` で外す（外すとその線も消える。閉じた pane は完全な ID で指す）。
 - `sodactl graph link set <線>` で設定を変え、`sodactl graph link rm <線>` で消す。
 - 文面が `--` で始まるときは `--prompt=<文面>` の形で渡す（離して書くと値の無いオプションとして断られる）。
