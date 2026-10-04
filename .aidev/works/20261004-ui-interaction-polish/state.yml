@@ -1,7 +1,7 @@
 schema: 11
 slug: ui-interaction-polish
 current: requirements
-approved: []
+approved: [requirements]
 mode: autonomous
 profile: full
 humanGates: []
