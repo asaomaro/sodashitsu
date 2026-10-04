@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AskAnswerBody, AskPending } from "@sodashitsu/protocol";
+import { shortId } from "@sodashitsu/protocol";
 import { paneNameOf } from "@sodashitsu/client-core";
 import { computed, inject, nextTick, onBeforeUnmount, ref, toRaw, watch } from "vue";
 import { focusPaneIfShown } from "../actions/paneFocus.js";
@@ -43,7 +44,7 @@ const origin = computed(() => {
   const a = ask.value;
   if (!a) return "";
   const pane = session.panes.get(a.paneId);
-  const name = pane ? paneNameOf(pane) : `pane ${a.paneId}`;
+  const name = pane ? paneNameOf(pane) : `pane ${shortId(a.paneId)}`;
   const tab = pane ? session.tabs.get(pane.tabId) : undefined;
   const ws = tab ? session.workspaces.get(tab.workspaceId) : undefined;
   const where = [ws?.label, tab?.label].filter((v): v is string => typeof v === "string" && v !== "");
