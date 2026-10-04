@@ -60,25 +60,35 @@ describe("repoNameFromGitCommonDir", () => {
 
 describe("parseAbsoluteGitPath", () => {
   it("絶対パス 1 行ならそのパス（末尾の改行は除く）", () => {
-    expect(parseAbsoluteGitPath("/r/.git\n")).toBe("/r/.git");
-    expect(parseAbsoluteGitPath("/r/.git")).toBe("/r/.git");
+    expect(parseAbsoluteGitPath("/r/.git\n", "/c")).toBe("/r/.git");
+    expect(parseAbsoluteGitPath("/r/.git", "/c")).toBe("/r/.git");
   });
 
   it("CRLF・空白入りのパス・日本語のパスを落とさない", () => {
-    expect(parseAbsoluteGitPath("/r/.git\r\n")).toBe("/r/.git");
-    expect(parseAbsoluteGitPath("/my repo/.git\n")).toBe("/my repo/.git");
-    expect(parseAbsoluteGitPath("/作業/リポジトリ/.git\n")).toBe("/作業/リポジトリ/.git");
+    expect(parseAbsoluteGitPath("/r/.git\r\n", "/c")).toBe("/r/.git");
+    expect(parseAbsoluteGitPath("/my repo/.git\n", "/c")).toBe("/my repo/.git");
+    expect(parseAbsoluteGitPath("/作業/リポジトリ/.git\n", "/c")).toBe("/作業/リポジトリ/.git");
   });
 
   it("出力は resolve を通した形（以前の resolveCommonDir と同じ。冗長な区切りと末尾の / を整える）", () => {
-    expect(parseAbsoluteGitPath("/r//a/../.git\n")).toBe(resolve("/r/.git"));
+    expect(parseAbsoluteGitPath("/r//a/../.git\n", "/c")).toBe(resolve("/r/.git"));
   });
 
-  it("知らないオプションの出力・相対パス・行数の違い・空は null", () => {
-    expect(parseAbsoluteGitPath("--path-format=absolute\n.git\n")).toBeNull();
-    expect(parseAbsoluteGitPath("--path-format=absolute\n")).toBeNull();
-    expect(parseAbsoluteGitPath(".git\n")).toBeNull();
-    expect(parseAbsoluteGitPath("/r/.git\n/r/.git\n")).toBeNull();
-    expect(parseAbsoluteGitPath("")).toBeNull();
+  it("古い git: 1 行目が --path-format=absolute なら、残りの行を cwd から解決する（相対も絶対も。decisions D48）", () => {
+    expect(parseAbsoluteGitPath("--path-format=absolute\n.git\n", "/c/r")).toBe(resolve("/c/r/.git"));
+    expect(parseAbsoluteGitPath("--path-format=absolute\n../r/.git\n", "/c/r")).toBe(resolve("/c/r/.git"));
+    expect(parseAbsoluteGitPath("--path-format=absolute\n/x/.git\n", "/c/r")).toBe("/x/.git");
+    expect(parseAbsoluteGitPath("--path-format=absolute\r\n.git\r\n", "/c/r")).toBe(resolve("/c/r/.git"));
+  });
+
+  it("壊れた出力は null（別のオプション・行数の違い・相対パスだけ・空）", () => {
+    expect(parseAbsoluteGitPath("--bogus-option\n.git\n", "/c")).toBeNull();
+    expect(parseAbsoluteGitPath("--path-format=absolute\n", "/c")).toBeNull();
+    expect(parseAbsoluteGitPath("--path-format=absolute\n.git\n.git\n", "/c")).toBeNull();
+    expect(parseAbsoluteGitPath("--path-format=absolute\n--bogus-option\n", "/c")).toBeNull();
+    expect(parseAbsoluteGitPath("--path-format=absolute\n\n", "/c")).toBeNull();
+    expect(parseAbsoluteGitPath(".git\n", "/c")).toBeNull();
+    expect(parseAbsoluteGitPath("/r/.git\n/r/.git\n", "/c")).toBeNull();
+    expect(parseAbsoluteGitPath("", "/c")).toBeNull();
   });
 });

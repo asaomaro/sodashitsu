@@ -82,15 +82,23 @@ export function resolveCommonDir(cwd: string, commonDir: string): string {
 }
 
 /**
- * `git rev-parse --path-format=absolute --git-common-dir`（や `--git-dir`）の出力から絶対パスを取る。取れなければ null。
+ * `git rev-parse --path-format=absolute --git-common-dir`（や `--git-dir`）の出力からパスを取る。取れなければ null。
  *
  * `git rev-parse` は**知らないオプションをそのまま出力して終了コード 0 を返す**（git 2.43.0 で
  * `git rev-parse --bogus-option --git-common-dir` が `--bogus-option\n.git`・終了コード 0）。
- * git 2.31 未満の `--path-format=absolute` も同じ動きになり、終了コードだけでは壊れた値を見分けられないので、出力を検査する:
- * 行がちょうど 1 つで、絶対パスであること（`--` で始まる行・相対パス・行数の違いは null）。
+ * git 2.31 未満の `--path-format=absolute` も同じ動きになり、終了コードだけでは見分けられないので、出力を検査する:
+ * - 新しい git: 絶対パスの 1 行。
+ * - 古い git: 1 行目がそのまま `--path-format=absolute`。残りの 1 行（相対のこともある）を `cwd` から解決して使う（main の `resolveCommonDir(cwd, …)` と同じ決め方。decisions D48）。
+ * - それ以外（行数の違い・別の `--` で始まる行・相対パスだけ・空）は null。
  */
-export function parseAbsoluteGitPath(stdout: string): string | null {
+export function parseAbsoluteGitPath(stdout: string, cwd: string): string | null {
   const lines = stdout.replace(/\r?\n$/, "").split(/\r?\n/);
+  if (lines[0] === "--path-format=absolute") {
+    if (lines.length !== 2) return null;
+    const rest = lines[1] as string;
+    if (rest === "" || rest.startsWith("--")) return null;
+    return resolve(cwd, rest);
+  }
   if (lines.length !== 1) return null;
   const line = lines[0] as string;
   if (line === "" || line.startsWith("--") || !isAbsolute(line)) return null;

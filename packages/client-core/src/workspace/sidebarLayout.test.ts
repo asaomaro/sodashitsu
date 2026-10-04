@@ -250,6 +250,25 @@ describe("flattenWorkspaceIds（T33: 旗のある worktree は木の順のまま
   });
 });
 
+describe("flattenWorkspaceIds（T35: 旗のある worktreeKey と旗の無い worktreeKey が混ざった入力）", () => {
+  it("旗のある key（kA）は木の順のまま（代表 wb より非代表 e が前でも入れ替えない）、旗の無い key（kB）だけ代表 p が前へ", () => {
+    const kA = "/R/wt/a";
+    const kB = "/R/wt/b";
+    const list = [
+      ws("m", { git: git("R", false, "/R") }),
+      ws("wb", { git: git("R", true, kA), representative: true }),
+      ws("e", { git: git("R", true, kA), representative: false }),
+      ws("p", { git: git("R", true, kB) }), // 旗なし（workspaces の順で最初なので代表）
+      ws("q", { git: git("R", true, kB) }),
+    ];
+    const layout: SidebarLayout = { top: ["u"], groups: {}, ungrouped: ["w:e", "w:q", "r:R"] };
+    const flat = flattenWorkspaceIds(layout, list);
+    // 木の順（e, q, m, wb, p）。kA は e が wb の前のまま。kB は q の位置（先頭側）へ代表 p が来て、q は p の位置へ。
+    expect(flat).toEqual(["e", "p", "m", "wb", "q"]);
+    // 旗の無い key の経路は冪等でない可能性がある（D47 補足）ので、ここでは冪等を確かめない。
+  });
+});
+
 describe("repairLayout（AC13）", () => {
   const list = [ws("a"), ws("b"), ws("c"), ws("w1", { git: git("R") })];
 

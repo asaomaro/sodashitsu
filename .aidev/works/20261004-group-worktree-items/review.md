@@ -5351,3 +5351,166 @@ Running 1 test using 1 worker
 ```
 - T33 [nit] 旗の無い経路は本番では通らず D47 の理由づけが不正確 → コメントと D47 に「純関数としての互換」と書き直した [conv:-]
 - T33 [nit] 旗あり／旗なしの混在のテストが無い → T35 で足す [conv:-]
+
+### T34 壊して落ちる確認（`parseAbsoluteGitPath` を 1 つずつ壊した。各確認の後に元へ戻した）
+
+```
+=== 古い git の分岐を無効化(if (false))
+     × 古い git: 1 行目が --path-format=absolute なら、残りの行を cwd から解決する（相対も絶対も。decisions D48） 3ms
+       × 古い git（1 行目が --path-format=absolute）: 残りの相対／絶対パスを cwd から解決して git を返す（--git-common-dir・--git-dir の両方。本体） 6ms
+       × 古い git: linked worktree（どちらも絶対） 1ms
+       × 実物の git: 知らないオプションは出力に混ざって終了コード 0 になる（前提）・古い git と同じ形なので残りを cwd から解決する 26ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > 古い git（1 行目が --path-format=absolute）: 残りの相対／絶対パスを cwd から解決して git を返す（--git-common-dir・--git-dir の両方。本体）
+AssertionError: expected { kind: 'unknown' } to deeply equal { kind: 'git', git: { …(6) } }
+- Expected
++ Received
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > 古い git: linked worktree（どちらも絶対）
+AssertionError: expected { kind: 'unknown' } to deeply equal { kind: 'git', git: { …(6) } }
+- Expected
++ Received
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > 実物の git: 知らないオプションは出力に混ざって終了コード 0 になる（前提）・古い git と同じ形なので残りを cwd から解決する
+AssertionError: expected { kind: 'unknown' } to match object { kind: 'git', git: { …(2) } }
+- Expected
+=== resolve(cwd, rest) を resolve(rest) に
+     × 古い git: 1 行目が --path-format=absolute なら、残りの行を cwd から解決する（相対も絶対も。decisions D48） 4ms
+       × 古い git（1 行目が --path-format=absolute）: 残りの相対／絶対パスを cwd から解決して git を返す（--git-common-dir・--git-dir の両方。本体） 7ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > 古い git（1 行目が --path-format=absolute）: 残りの相対／絶対パスを cwd から解決して git を返す（--git-common-dir・--git-dir の両方。本体）
+AssertionError: expected { kind: 'git', git: { …(6) } } to deeply equal { kind: 'git', git: { …(6) } }
+- Expected
++ Received
+ FAIL  src/git/worktree.test.ts > parseAbsoluteGitPath > 古い git: 1 行目が --path-format=absolute なら、残りの行を cwd から解決する（相対も絶対も。decisions D48）
+AssertionError: expected '/workspaces/sodashitsu/packages/serve…' to be '/c/r/.git' // Object.is equality
+Expected: "/c/r/.git"
+Received: "/workspaces/sodashitsu/packages/server/.git"
+      Tests  2 failed | 120 passed (122)
+=== 残りの行の -- 検査を外す
+     × 壊れた出力は null（別のオプション・行数の違い・相対パスだけ・空） 4ms
+       × --git-common-dir の出力が壊れていれば unknown（古い git で残りが別のオプション） 8ms
+       × --git-dir の出力が壊れていれば unknown（古い git で残りが別のオプション） 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-common-dir の出力が壊れていれば unknown（古い git で残りが別のオプション）
+AssertionError: expected { kind: 'git', git: { …(6) } } to deeply equal { kind: 'unknown' }
+- Expected
++ Received
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-dir の出力が壊れていれば unknown（古い git で残りが別のオプション）
+AssertionError: expected { kind: 'git', git: { …(6) } } to deeply equal { kind: 'unknown' }
+=== 古い git の行数検査を外す
+     × 壊れた出力は null（別のオプション・行数の違い・相対パスだけ・空） 3ms
+       × --git-common-dir の出力が壊れていれば unknown（古い git で残りの行が多い） 7ms
+       × --git-dir の出力が壊れていれば unknown（古い git で残りの行が多い） 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-common-dir の出力が壊れていれば unknown（古い git で残りの行が多い）
+AssertionError: expected { kind: 'git', git: { …(6) } } to deeply equal { kind: 'unknown' }
+- Expected
++ Received
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-dir の出力が壊れていれば unknown（古い git で残りの行が多い）
+AssertionError: expected { kind: 'git', git: { …(6) } } to deeply equal { kind: 'unknown' }
+```
+
+### T34 点検の修正（(c) 古い git の相対パスの linked worktree）壊して落ちる確認
+
+`worktree.ts` の `return resolve(cwd, rest);` を `return rest;`（cwd から解決しない）に壊して `GitInfoPoller.test.ts` を流した生の出力（確認後に元へ戻した）:
+
+```
+       × 古い git（1 行目が --path-format=absolute）: 残りの相対／絶対パスを cwd から解決して git を返す（--git-common-dir・--git-dir の両方。本体） 7ms
+       × 古い git: linked worktree の相対パス（../ を cwd から解決。--git-common-dir・--git-dir の両方。isLinkedWorktree が true） 1ms
+       × 実物の linked worktree + 古い git の再現（出力を相対パスに差し替える）: 本体と同じ repoKey で isLinkedWorktree=true 63ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+- Expected
++ Received
+-     "repoKey": "/r/.git",
+-     "worktreeKey": "/r/.git",
++     "repoKey": ".git",
++     "worktreeKey": ".git",
+- Expected
++ Received
+-     "repoKey": "/r/.git",
+-     "worktreeKey": "/r/.git/worktrees/w",
++     "repoKey": "../../r/.git",
++     "worktreeKey": "../../r/.git/worktrees/w",
+Expected: ".git"
+Received: "../soda-gitpoller-plain-8vNaI5/.git"
+      Tests  3 failed | 67 passed (70)
+```
+
+### T35 (B) 同じ周で届いた判定を作った順で反映する 壊して落ちる確認
+
+(1) `pollNow` の反映を従来の「届いた順（`Promise.all(workspaces.map(pollWorkspace))`）」へ戻した出力（1 つ目の判定を遅らせた向きで落ちる。2 つ目を遅らせた向きは届いた順でも a が先に反映されて通る）。(2) `judged.sort(...)` だけを外した出力（平らな順で b が a の前に居るテストが落ちる）:
+
+```
+     × 同じフォルダの 2 つの workspace の判定が同じ周で届く順（b が先）に依らず、作った順の a が代表になる 185ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+- true
++ false
+      Tests  1 failed | 71 passed (72)
+     × 平らな順で b が a より前に居ても（判定が届く順・平らな順に依らず）作った順の a が代表になる 34ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+- true
++ false
+      Tests  1 failed | 72 passed (73)
+```
+
+### T35 (f) 旗のある／無い worktreeKey が混ざった入力 壊して落ちる確認
+
+`keepRepresentativesFirst` の `flagged.has(key)` を外した出力（旗のある key まで入れ替わる）:
+
+```
+     × 旗で代表が決まっている worktree は、平らな順を木の順のまま返す（代表を先に置く入れ替えをしない） 5ms
+     × 旗のある key（kA）は木の順のまま（代表 wb より非代表 e が前でも入れ替えない）、旗の無い key（kB）だけ代表 p が前へ 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected [ 'wb', 'd', 'm', 'wa', 'e' ] to deeply equal [ 'e', 'd', 'm', 'wa', 'wb' ]
+- Expected
++ Received
+-   "e",
++   "wb",
+-   "wb",
++   "e",
+AssertionError: expected [ 'wb', 'p', 'm', 'e', 'q' ] to deeply equal [ 'e', 'p', 'm', 'wb', 'q' ]
+- Expected
++ Received
+-   "e",
++   "wb",
+-   "wb",
++   "e",
+      Tests  2 failed | 24 passed (26)
+```
+
+入れ替えを全部やめた出力（旗の無い key の代表が前へ来ない）:
+
+```
+     × AC19: r: の展開は代表だけ。代表でない workspace は w: の位置に出る 5ms
+     × AC19: 代表でない workspace を代表の前へ並べても、代表は同じ worktree の workspace の一番前に残る（代表が入れ替わり続けない） 1ms
+     × 旗のある key（kA）は木の順のまま（代表 wb より非代表 e が前でも入れ替えない）、旗の無い key（kB）だけ代表 p が前へ 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected [ 'q', 'p' ] to deeply equal [ 'p', 'q' ]
+- Expected
++ Received
+-   "p",
++   "p",
+AssertionError: expected [ 'q', 'a', 'p' ] to deeply equal [ 'p', 'a', 'q' ]
+- Expected
++ Received
+-   "p",
+-   "a",
++   "a",
++   "p",
+AssertionError: expected [ 'e', 'q', 'm', 'wb', 'p' ] to deeply equal [ 'e', 'p', 'm', 'wb', 'q' ]
+- Expected
++ Received
+-   "p",
++   "q",
+-   "q",
++   "p",
+      Tests  3 failed | 23 passed (26)
+```
+- T35 [should] pollNow が全 workspace の判定を待つ代償（遅い 1 件で全体が遅れる・周が重なる）が decisions に無い → D49 補足に明記（許容） [conv:-]
+- T35 [should] 単独の見直し（followMoves）と周の競合の実害が D49 の制約より広い → D49 補足に (a)(b) を明記（許容） [conv:-]
+- T35 [nit] 判定が届く順のテストの片向きが元のコードでも通る・保存からの復元を通していない・reject と w10/w9 の観測が無い → 記録のみ（片向きで壊して落ちる確認はある） [conv:regression-negative-control]

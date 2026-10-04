@@ -60,7 +60,7 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 
 - **理由**: 本体の cwd が symlink 経由のとき、`--git-common-dir` は相対の `.git` を返し、cwd に対して解決すると本体は `.../link/.git`、worktree（`.git` ファイルが実体を指す）は `.../real/.git` とずれる。`repoKey` は保存のキーなので、ずれると本体と worktree が別の項目になる。`--path-format=absolute` なら git が実体のパスで返し、link・link/deep/dir・real・worktree・worktree への symlink の全部が `.../real/.git` で一致した（実物の git 2.43.0、結合テストで固定）。
 - `isLinkedWorktree` の比較に使う `--git-dir` も同じ形式（`--path-format=absolute`）に揃えた。
-- **git 2.31 以上が要る**（`--path-format` の導入）。古い git ではオプションが失敗し、`--git-common-dir` の失敗として「取れない」（`unknown`）になる。判定が付かないだけで、直前の判定は保たれる。
+- **git 2.31 以上が要る**（`--path-format` の導入）。古い git ではオプションが失敗し、`--git-common-dir` の失敗として「取れない」（`unknown`）になる。判定が付かないだけで、直前の判定は保たれる。（→ D48 で訂正: 古い git は知らないオプションを出力して終了コード 0 を返し、main と同じ道〔cwd から解決〕に落ちる）
 - `WorktreeService.repoNameOf`（名前の取り出し）は今までどおり `resolveCommonDir` を使う（名前しか使わないので symlink の違いは効かない）。
 
 ## D10: `repoKey` の未確認ケースを実物の git で確かめた結果（T4）
@@ -380,6 +380,7 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 ## D44: `git rev-parse` の出力を検査し、絶対パス 1 行でなければ `unknown`（T31。review-findings-01 の 3。D9・D10 の補足）
 
 - **確かめた事実**: git 2.43.0 で `git rev-parse --bogus-option --git-common-dir` は `--bogus-option\n.git` を出力して**終了コード 0**。知らないオプションはエラーにならずそのまま出る。git 2.31 未満の `--path-format=absolute` も同じ動きになり、終了コードだけでは壊れた値が `repoKey`・`worktreeKey` になる。
+- **（→ D48 で訂正: 古い git〔1 行目が `--path-format=absolute`〕は `unknown` にせず、main と同じ道〔残りの行を cwd から解決〕へ落とす）**
 - **決まり**: `worktree.ts` の `parseAbsoluteGitPath` が出力を検査する（1 行・`--` で始まらない・絶対パス）。`GitInfoPoller.probe` は `--git-common-dir`・`--git-dir` の両方でこれを通し、null なら `unknown`（直前の判定を保つ）。`resolveCommonDir` を使うのは `WorktreeService.repoNameOf` だけになった（そちらは `--path-format` を付けない）。
 - docs（`docs/verification.md`）の「古い git ではオプションが失敗する」を、この動きに合わせて直した。
 
@@ -406,3 +407,26 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **テスト**: `SessionModel.test.ts` の「平らな順は代表を前に置く」を「木の順のまま・代表は旗で変わらない」に書き直した。`clientAgreement` の木の順の一致から「代表より先に並ぶ場合は除く」の例外を外し、常に一致・冪等を確かめる。M・Wa・Wb の形のモデル／一致のテスト（client-core の純関数のテストを含む）と E2E を 1 件足した。
 
 - D47 補足（T33 の点検）: `flattenWorkspaceIds` を呼ぶのはサーバの `settle` だけで、サーバは `worktreeKey` を持つ workspace に必ず旗を付けてから呼ぶ。つまり旗の無い経路（`keepRepresentativesFirst`）は本番では通らず、純関数としての互換のために残している（古いサーバの画面は `layoutFromLegacy` を使い `flattenWorkspaceIds` を通らない。乱択テストで旗なし・混在でも冪等は崩れなかった）。旗ありと旗なしの混在のテストは T35 で足す。
+
+## D48: 古い git（2.31 未満）は、返ってきた `--path-format=absolute` の後ろの行を cwd から解決して使う（T34。review-findings-02 の 2。D9・D44 の補足）
+
+- **退行**: D44（T31）は検査に落ちた出力をすべて `unknown` にしたため、古い git では `--path-format=absolute\n.git` が `unknown` になり、ブランチ名も worktree グループも出なくなった（main は `resolveCommonDir(cwd, …)` で相対パスを cwd から解決していた）。
+- **決め（依頼元）**: `parseAbsoluteGitPath(stdout, cwd)` は、1 行目がそのまま `--path-format=absolute`（知らないオプションの出力。古い git）なら、残りがちょうど 1 行で空でも `--` 始まりでもないときに限り、それを `resolve(cwd, 残り)` で解決して返す。新しい git は従来どおり絶対パス 1 行。それ以外（別の `--` のオプション・行数の違い・相対パスだけ・空）は null で `unknown`。`--git-common-dir`・`--git-dir` の両方に効く。
+- **既知の制約が戻る（D9）**: symlink 経由の cwd では、古い git の相対 `.git` が論理パス（`…/link/.git`）に解決され、worktree の実体のパスとずれて本体と worktree が別の項目になりうる（main と同じ）。新しい git（2.31 以上）では起きない。`docs/verification.md` の「古い git では main と同じ決め方に落ちる」に事実を合わせた。
+- **テスト**: `worktree.test.ts`（古い git の相対・`../`・絶対・CRLF、壊れた出力）・`GitInfoPoller.test.ts`（偽の出力で新しい git／古い git〔本体・linked worktree〕／壊れた出力を `--git-common-dir`・`--git-dir` の両方で）。実物の git の再現は、`--bogus-option` を 1 行目に出す壊れた出力は `unknown`、実物の出力の前に `--path-format=absolute` を足して古い git の形にしたものは `git` を返す、の 2 つに直した（実物の git 2.43 は `--path-format=absolute` を知っているので、古い git の出力は差し替えで再現した）。
+
+## D49: 同じ周で届いた判定は、届いた順ではなく作った順（`w<番号>` の小さい順）で反映する（T35。review-findings-02 の 3・T34 点検が見つけた元からのレース。D42 の補足）
+
+- **レース**: `GitInfoPoller.pollNow` は `Promise.all(workspaces.map(pollWorkspace))` で複数 workspace の probe を同時に走らせ、判定が届いた順に `applyWorkspaceIdentity` を呼んでいた。代表は「その `worktreeKey` を最初に持ち始めたもの」（D42）なので、同じフォルダの 2 つ目が先に判定されると 2 つ目が代表になり、再起動直後（保存に旗も `worktreeKey` も無い同じフォルダの workspace が複数）の代表が判定の速さで決まっていた。`GitInfoPoller.test.ts` の「同じフォルダの 2 つ目…代表にならない」が全体並列実行で間欠的に落ちた原因もこれ。
+- **直し（poller 側）**: `pollNow` は判定（probe と名前）を並べて走らせ、**全部そろってから** `w<番号>` の小さい順に 1 つずつ反映する（`judgeWorkspace` で判定、`applyWorkspaceIdentity` は後）。`snapshot().workspaces` は平らな順（並べ替えで作った順と変わる）なので、`Promise.all` の結果の順ではなく id の番号で並べ直す。単独の見直し（`pollWorkspaceNow`・`followMoves`）は従来どおり届いた順（1 つしか無いので順は問題にならない）。
+- **モデル側を直さなかった理由**: `settleRepresentatives` は 1 回の呼び出しの中の「新しく持ち始めたもの」を `w<番号>` 順で振るが、呼び出しをまたぐ順（判定の 1 件ごとの反映）は「先に持ち始めた＝先に反映された」で決める（D42）。ここを作った順に変えると、後から cd してきた早く作った workspace が既存の代表を奪い、D42（既に代表が居る `worktreeKey` では奪わない）を破る。poller が作った順で反映するほうが最小で決定的。
+- **テスト**: 判定の届く順を両方向に入れ替えた（1 つ目を遅らせる／2 つ目を遅らせる）実物の git の結合テスト 2 件と、平らな順で b が a の前に居ても a が代表になるテスト 1 件。
+- 制約: 同じ周に入る前に別の経路（`pollWorkspaceNow`）で先に反映された workspace は、その経路の順（届いた順）で代表が決まる。
+
+## D50: パスに改行を含むフォルダは常に `unknown`（T35。review-findings-02 の 4。D44・D48 の補足・記録だけ）
+
+- `parseAbsoluteGitPath` は行数でも検査するため、パスに改行を含むフォルダ（`git rev-parse` の出力が 2 行以上になる）は常に `unknown` になる（判定が付かない。直前の判定を保つ）。改行を含むフォルダ名は実用上ほぼ無いので、このまま許容する。
+
+- D49 補足（T35 の点検）:
+  - **代償**: `pollNow` は全 workspace の判定がそろってから 1 件ずつ反映するので、1 つの probe が遅いと（1 回の git 実行が最大 3 秒で、probe は最大 4 回を直列に実行するため最悪 10 秒以上）、その間は他の workspace の git 情報・名前の反映も一緒に遅れる（以前は個別に反映していた）。周期は 5 秒で、`pollNow` に重なり防止の旗は無い（元からの作りで、この work では変えない）。決定的な代表を優先してこの代償を許容する。probe は throw せず（`catch` で `unknown`）、`followedLabel` も `.catch(() => null)` なので、reject で全体が落ちることはない。
+  - **制約の広がり**: 「作った順」の保証は `pollNow` の 1 周の中だけ。`followMoves` は `polledCwd`（`judgeWorkspace` が判定の開始時に書く）を見て、cwd が変わった workspace に `pollWorkspaceNow` を即時に走らせるので、同じ周の判定待ちの間に cd が起きると、その workspace だけが周の外で先に反映される。(a) 同じ周で 2 つ目の workspace が先に反映されて代表を取りうる（D42 は守られるが「作った順」は崩れる）。(b) 周の遅い古い結果が、後から単独の見直しの新しい結果を上書きしうる。`applyWorkspaceIdentity` は cwd の一致だけを見て判定の新旧は見ない（`SessionService.ts:421-423`）。どちらも実害は小さい（次の周で正しい値に戻る）として許容する。

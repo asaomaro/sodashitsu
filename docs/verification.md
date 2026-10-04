@@ -1323,8 +1323,8 @@ mkdir memo
 
 所属を覚えるキー（`repoKey`）は、`git rev-parse --path-format=absolute --git-common-dir` の値で、worktree グループの束ねと同じ値を使う（decisions D9・D10。実物の git 2.43.0 で確かめた）。
 
-- **git 2.31 以上が要る**（`--path-format` の導入）。古い git は知らないオプションを**エラーにせず、そのまま出力して終了コード 0 を返す**（`--path-format=absolute\n.git`。実物の git 2.43.0 で `git rev-parse --bogus-option --git-common-dir` が同じ動きになることを確かめた）。そのためサーバは出力が「絶対パスの 1 行」かを検査し（`--` で始まる行・相対パス・行数の違いは不可）、満たさなければ判定は「取れない」になる（直前の判定を保つ。新しい workspace は判定が付かないままで、worktree グループにもグループの自動の所属にもならない）。
-- symlink を通った場所からでも、本体・worktree のどちらも実体のパスで一致する（`--path-format=absolute` が実体を返す）。同じリポジトリが別のパス（別の clone・bind mount・パスの付け替え）で見える場合や、リポジトリのフォルダを移動・改名した場合は、絶対パスのキーからの推論では別のリポジトリとして扱われる（実機では未確認）。
+- **古い git（2.31 未満）では main と同じ決め方に落ちる**（`--path-format` は 2.31 で導入された）。古い git は知らないオプションを**エラーにせず、そのまま出力して終了コード 0 を返す**（`--path-format=absolute\n.git`。実物の git 2.43.0 で `git rev-parse --bogus-option --git-common-dir` が同じ動きになることを確かめた）。サーバは 1 行目がそのまま `--path-format=absolute` のとき、残りの行（相対のこともある）を cwd から解決して使う。**symlink 経由の cwd では、本体と worktree が別の項目になりうる**（相対の `.git` が論理パスの `…/link/.git` になり、worktree の実体のパスとずれる。decisions D9・D48）。それ以外の壊れた出力（別の `--` のオプション・行数の違い・空）は判定が「取れない」になる（直前の判定を保つ。新しい workspace は判定が付かないままで、worktree グループにもグループの自動の所属にもならない）。
+- symlink を通った場所からでも、git 2.31 以上では、本体・worktree のどちらも実体のパスで一致する（`--path-format=absolute` が実体を返す）。同じリポジトリが別のパス（別の clone・bind mount・パスの付け替え）で見える場合や、リポジトリのフォルダを移動・改名した場合は、絶対パスのキーからの推論では別のリポジトリとして扱われる（実機では未確認）。
 - **bare リポジトリ**: bare とその worktree は同じ `repoKey` で束ねられるが、bare 自身を workspace として開いていなければ本体の行は無く、worktree だけの worktree グループ（2 つ以上のとき）になる（先頭は最初に開いたもの）。
 - **サブモジュール**: 親とは別のリポジトリとして扱う（`<親>/.git/modules/<名前>`。親の worktree グループには入らない）。
 - **コミットが 1 つも無いリポジトリ**は、今までどおり git 管理外として扱う（`rev-parse --abbrev-ref HEAD` が失敗するため）。最初のコミットの後の判定（5 秒周期）で git に変わる。
@@ -1517,7 +1517,7 @@ pnpm --filter @sodashitsu/e2e exec playwright test performance agent-detection -
   `[theme.custom]` と同じで、読みにくい・見えにくい色を入れても止められない（利用者の責任）。herdr の `.light`/`.dark` と違い、
   「常に当たる」層は無く「明るいとき」「暗いとき」の 2 層だけ（同 work の research F2）。
 
-- **グループ・worktree グループの所属を覚えるキー（`repoKey`）の制約**（20261004-group-worktree-items の decisions D9・D10）。git 2.31 以上が要る（`--path-format=absolute`。古い git は出力がそのまま返るが、絶対パスの 1 行かを検査して `unknown` にするので判定が付かない）。
+- **グループ・worktree グループの所属を覚えるキー（`repoKey`）の制約**（20261004-group-worktree-items の decisions D9・D10）。古い git（2.31 未満）では `--path-format=absolute` が使えず main と同じ決め方（cwd から解決）に落ちる。symlink 経由の cwd では本体と worktree が別の項目になりうる。それ以外の壊れた出力は `unknown` で判定が付かない。
   同じリポジトリが別のパス（別の clone・bind mount）で見える場合・リポジトリのフォルダを移動・改名した場合は、絶対パスのキーからの推論では別のリポジトリとして扱われる（未確認）。bare は worktree だけの worktree グループになり、サブモジュールは親と別のリポジトリ、
   コミットが無いリポジトリは最初のコミットまで git 管理外として扱う。詳しくは「グループ・worktree グループ・「グループなし」」の「`repoKey` の既知の制約」。
 - **端末版のサイドバーの `⎇`（worktree の印）・`├└`・`─` は、外側の端末のフォントによっては崩れる**（幅 1 桁の字形だが、字形の確認は端末次第。`docs/tui-parity.md` H23b と同じ）。崩れるときは `WORKTREE_GLYPH`（`packages/tui/src/render/chrome/sidebar.ts`）を別の記号に替える。

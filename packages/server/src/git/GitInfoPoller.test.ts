@@ -1,6 +1,6 @@
 import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { HostInfo, Workspace } from "@sodashitsu/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Disposable } from "../util/Disposable.js";
@@ -562,14 +562,18 @@ describe("DefaultGitInfoPoller — probe の結果と最初の 1 周の合図", 
       expect(await new DefaultGitInfoPoller(service, git).probe("/r")).toEqual({ kind: "unknown" });
     });
 
-    // git は知らないオプションをそのまま出力して終了コード 0 を返す（2.31 未満の --path-format=absolute）。壊れた値を repoKey・worktreeKey にしない（decisions D44）。
+    // git は知らないオプションをそのまま出力して終了コード 0 を返す（2.31 未満の --path-format=absolute）。
+    // 1 行目がそのまま --path-format=absolute なら古い git とみなし、残りの行を cwd から解決する（main と同じ決め方。decisions D48）。それ以外の壊れた値は repoKey・worktreeKey にしない（D44）。
     for (const [name, out] of [
-      ["知らないオプションがそのまま出る", "--path-format=absolute\n.git\n"],
-      ["相対パス", ".git\n"],
+      ["別のオプションがそのまま出る", "--bogus-option\n.git\n"],
+      ["古い git で残りが無い", "--path-format=absolute\n"],
+      ["古い git で残りの行が多い", "--path-format=absolute\n.git\n.git\n"],
+      ["古い git で残りが別のオプション", "--path-format=absolute\n--bogus-option\n"],
+      ["相対パスだけ", ".git\n"],
       ["行数が多い", "/r/.git\n/r/.git\n"],
       ["空", ""],
     ] as const) {
-      it(`--git-common-dir の出力が絶対パス 1 行でなければ unknown（${name}）`, async () => {
+      it(`--git-common-dir の出力が壊れていれば unknown（${name}）`, async () => {
         const { git } = fakeGit({
           "rev-parse --abbrev-ref HEAD": ok("main\n"),
           "rev-parse --git-common-dir": ok(out),
@@ -577,7 +581,7 @@ describe("DefaultGitInfoPoller — probe の結果と最初の 1 周の合図", 
         });
         expect(await new DefaultGitInfoPoller(service, git).probe("/r")).toEqual({ kind: "unknown" });
       });
-      it(`--git-dir の出力が絶対パス 1 行でなければ unknown（${name}）`, async () => {
+      it(`--git-dir の出力が壊れていれば unknown（${name}）`, async () => {
         const { git } = fakeGit({
           "rev-parse --abbrev-ref HEAD": ok("main\n"),
           "rev-parse --git-common-dir": ok("/r/.git\n"),
@@ -587,12 +591,82 @@ describe("DefaultGitInfoPoller — probe の結果と最初の 1 周の合図", 
       });
     }
 
-    it("実物の git: 知らないオプションは出力に混ざって終了コード 0 になる（前提）・その出力は検査で弾かれる", async () => {
+    it("古い git（1 行目が --path-format=absolute）: 残りの相対／絶対パスを cwd から解決して git を返す（--git-common-dir・--git-dir の両方。本体）", async () => {
+      const { git } = fakeGit({
+        "rev-parse --abbrev-ref HEAD": ok("main\n"),
+        "rev-parse --git-common-dir": ok("--path-format=absolute\n.git\n"),
+        "rev-parse --git-dir": ok("--path-format=absolute\n.git\n"),
+      });
+      expect(await new DefaultGitInfoPoller(service, git).probe("/r")).toEqual({
+        kind: "git",
+        git: { branch: "main", ahead: 0, behind: 0, repoKey: resolve("/r/.git"), isLinkedWorktree: false, worktreeKey: resolve("/r/.git") },
+      });
+    });
+
+    it("古い git: linked worktree（どちらも絶対）", async () => {
+      const { git } = fakeGit({
+        "rev-parse --abbrev-ref HEAD": ok("feat\n"),
+        "rev-parse --git-common-dir": ok("--path-format=absolute\n/r/.git\n"),
+        "rev-parse --git-dir": ok("--path-format=absolute\n/r/.git/worktrees/w\n"),
+      });
+      expect(await new DefaultGitInfoPoller(service, git).probe("/wt/w")).toEqual({
+        kind: "git",
+        git: { branch: "feat", ahead: 0, behind: 0, repoKey: resolve("/r/.git"), isLinkedWorktree: true, worktreeKey: resolve("/r/.git/worktrees/w") },
+      });
+    });
+
+    it("古い git: linked worktree の相対パス（../ を cwd から解決。--git-common-dir・--git-dir の両方。isLinkedWorktree が true）", async () => {
+      const { git } = fakeGit({
+        "rev-parse --abbrev-ref HEAD": ok("feat\n"),
+        "rev-parse --git-common-dir": ok("--path-format=absolute\n../../r/.git\n"),
+        "rev-parse --git-dir": ok("--path-format=absolute\n../../r/.git/worktrees/w\n"),
+      });
+      expect(await new DefaultGitInfoPoller(service, git).probe("/wt/w")).toEqual({
+        kind: "git",
+        git: { branch: "feat", ahead: 0, behind: 0, repoKey: resolve("/r/.git"), isLinkedWorktree: true, worktreeKey: resolve("/r/.git/worktrees/w") },
+      });
+    });
+
+    it("実物の linked worktree + 古い git の再現（出力を相対パスに差し替える）: 本体と同じ repoKey で isLinkedWorktree=true", async () => {
+      const main = await repoWithCommit();
+      const wt = `${main}-wt`;
+      const real = new ChildProcessGitRunner();
+      expect((await real.run(main, ["worktree", "add", "-b", "feature", wt], 10_000)).code).toBe(0);
+      const old: GitRunner = {
+        run: async (cwd, args, t) => {
+          const r = await real.run(cwd, args.filter((a) => a !== "--path-format=absolute"), t);
+          if (!args.includes("--path-format=absolute") || r.code !== 0) return r;
+          // 旧 git は --path-format を知らず、素の出力（本体は相対の `.git`、linked worktree は git の版により相対／絶対）を返す。絶対のときは cwd からの相対に直して、相対入力の形にする
+          const raw = r.stdout.trim();
+          return { ...r, stdout: `--path-format=absolute\n${isAbsolute(raw) ? relative(cwd, raw) : raw}\n` };
+        },
+      };
+      const poller = new DefaultGitInfoPoller(service, old);
+      const m = await poller.probe(main);
+      const l = await poller.probe(wt);
+      if (m.kind !== "git" || l.kind !== "git") throw new Error("unreachable");
+      expect(l.git.isLinkedWorktree).toBe(true);
+      expect(m.git.isLinkedWorktree).toBe(false);
+      expect(l.git.repoKey).toBe(m.git.repoKey);
+      expect(l.git.worktreeKey).not.toBe(m.git.worktreeKey);
+    });
+
+    it("実物の git: 知らないオプションは出力に混ざって終了コード 0 になる（前提）・古い git と同じ形なので残りを cwd から解決する", async () => {
       const dir = await repoWithCommit();
       const real = new ChildProcessGitRunner();
       const raw = await real.run(dir, ["rev-parse", "--bogus-option", "--git-common-dir"], 5000);
       expect(raw.code).toBe(0);
       expect(raw.stdout.split("\n")[0]).toBe("--bogus-option");
+      // 古い git の再現: --path-format=absolute を、知らないオプションとして git が出力に返す形にする（`--path-format=absolute` と同じ綴りの未知のオプションは作れないので、出力を差し替える）。
+      const old: GitRunner = {
+        run: async (cwd, args, t) => {
+          const r = await real.run(cwd, args.filter((a) => a !== "--path-format=absolute"), t);
+          return args.includes("--path-format=absolute") && r.code === 0 ? { ...r, stdout: `--path-format=absolute\n${r.stdout}` } : r;
+        },
+      };
+      const result = await new DefaultGitInfoPoller(service, old).probe(dir);
+      expect(result).toMatchObject({ kind: "git", git: { branch: "main", isLinkedWorktree: false } });
+      // 別のオプションが 1 行目に出る壊れた出力は unknown
       const bogus: GitRunner = { run: (cwd, args, t) => real.run(cwd, args.map((a) => (a === "--path-format=absolute" ? "--bogus-option" : a)), t) };
       expect(await new DefaultGitInfoPoller(service, bogus).probe(dir)).toEqual({ kind: "unknown" });
     });
@@ -1073,6 +1147,45 @@ describe("DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実�
     await new DefaultGitInfoPoller(after, new ChildProcessGitRunner()).pollNow();
     expect(after.snapshot().layout).toEqual(before.snapshot().layout);
     expect(after.snapshot().workspaces.map((w) => w.id)).toEqual([a.id, a2.id]);
+  });
+
+  // 同じ周に入った判定は、届いた順ではなく作った順で反映する（decisions D49）。1 つ目の判定を遅らせる／2 つ目を遅らせる、の両方向で a が代表。
+  for (const slow of ["first", "second"] as const) {
+    it(`同じフォルダの 2 つの workspace の判定が同じ周で届く順（${slow === "first" ? "b が先" : "a が先"}）に依らず、作った順の a が代表になる`, async () => {
+      const main = await repo();
+      const svc = makeService();
+      const a = (await svc.createWorkspace(main, "a")).workspace;
+      const b = (await svc.createWorkspace(main, "b")).workspace;
+      const real = new ChildProcessGitRunner();
+      let heads = 0;
+      const delayed: GitRunner = {
+        run: async (cwd, args, t) => {
+          if (args.join(" ") === "rev-parse --abbrev-ref HEAD") {
+            const n = ++heads; // 1 つ目の workspace の probe が先に始まる
+            if ((slow === "first" && n === 1) || (slow === "second" && n === 2)) await new Promise((r) => setTimeout(r, 150));
+          }
+          return real.run(cwd, args, t);
+        },
+      };
+      await new DefaultGitInfoPoller(svc, delayed).pollNow();
+      expect(heads).toBe(2);
+      expect(svc.getWorkspace(a.id)?.representative).toBe(true);
+      expect(svc.getWorkspace(b.id)?.representative).toBe(false);
+      const key = svc.getWorkspace(a.id)!.git!.repoKey!;
+      expect(svc.snapshot().layout).toEqual({ top: ["u"], groups: {}, ungrouped: [`r:${key}`, `w:${b.id}`] });
+    });
+  }
+
+  it("平らな順で b が a より前に居ても（判定が届く順・平らな順に依らず）作った順の a が代表になる", async () => {
+    const main = await repo();
+    const svc = makeService();
+    const a = (await svc.createWorkspace(main, "a")).workspace;
+    const b = (await svc.createWorkspace(main, "b")).workspace;
+    svc.moveItem({ kind: "workspace", workspaceId: b.id }, { kind: "workspace", workspaceId: a.id }); // b を a の前へ
+    expect(svc.snapshot().workspaces.map((w) => w.id)).toEqual([b.id, a.id]);
+    await new DefaultGitInfoPoller(svc, new ChildProcessGitRunner()).pollNow();
+    expect(svc.getWorkspace(a.id)?.representative).toBe(true);
+    expect(svc.getWorkspace(b.id)?.representative).toBe(false);
   });
 
   it("フォルダが消えて判定が取れない workspace は、復元した判定・並びのまま残る（取れない結果は何も変えない）", async () => {

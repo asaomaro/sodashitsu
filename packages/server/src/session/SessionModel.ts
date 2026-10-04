@@ -1245,8 +1245,10 @@ export class SessionModel {
       const key = keyOf(w);
       const want = key === null ? undefined : repOf.get(key)!.id === w.id;
       if (w.representative === want) continue;
-      const { representative: _drop, ...rest } = w;
-      this.workspaces.set(w.id, want === undefined ? rest : { ...rest, representative: want });
+      const next: Workspace = { ...w };
+      delete next.representative; // 省略はキーごと省く（exactOptionalPropertyTypes）
+      if (want !== undefined) next.representative = want;
+      this.workspaces.set(w.id, next);
     }
   }
 
