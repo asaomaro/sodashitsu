@@ -73,7 +73,7 @@ export type Action =
   | { type: "reloadConfig" } // prefix+shift+r（20260922-appearance-settings-rest の herdr `reload_config` 相当）
   | { type: "runCommand"; commandId: string } // 独自コマンド（20260927-custom-command-keys の herdr `[[keys.command]]`。既定のキーは無い）
   | { type: "pasteImage" } // クリップボードの画像を貼り付け（20260927-clipboard-image-paste の herdr `remote_image_paste`。既定 ctrl+v）。`KeyInputController` が扱う
-  | { type: "navigate"; op: "up" | "down" | "paneDir" | "activate" | "cancel" | "openMenu"; dir?: Dir }
+  | { type: "navigate"; op: "up" | "down" | "paneDir" | "activate" | "cancel" | "openMenu" | "toggleCollapse"; dir?: Dir }
   | { type: "resizeBy"; dir: Dir; amount: number }
   | { type: "copy"; cmd: CopyCommand }
   // 20260923-missing-keybinding-actions（herdr にあって本製品に操作自体が無かったもの）。

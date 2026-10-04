@@ -68,6 +68,12 @@ export const NAVIGATE_KEYS = [
     defaults: ["space"],
     action: { type: "navigate", op: "openMenu" },
   },
+  {
+    id: "navigate_toggle_collapse",
+    label: "選択した項目（グループ・リポジトリ）を畳む／開く",
+    defaults: ["z"],
+    action: { type: "navigate", op: "toggleCollapse" },
+  },
 ] as const satisfies readonly NavigateKeyDef[];
 
 export type NavigateKeyId = (typeof NAVIGATE_KEYS)[number]["id"];
@@ -85,7 +91,7 @@ export function isNavigateKeyId(id: unknown): id is NavigateKeyId {
 }
 
 /**
- * herdr の予約キー（research F7。`herdr:src/config/keybinds.rs:729-749`）。navigate の6操作の表には
+ * herdr の予約キー（research F7。`herdr:src/config/keybinds.rs:729-749`）。navigate の操作の表には
  * これらの chord を登録できない（既定・利用者の上書きのどちらでも）。`esc`/`enter`/`tab`/`shift+tab` は
  * `NavigateMode` 自身の確定/取消・将来の herdr 追随機能のため、`left`/`right` は pane 左右移動の固定
  * フォールバック（`NavigateMode` の bare な `ArrowLeft`/`ArrowRight` の分岐。修飾付き〔`ctrl+left` 等〕

@@ -793,3 +793,4 @@ Number of calls: 1
 ```
 - T10 [should] 一時停止中の合図を捨てる分岐に壊して落ちる確認が無い → 配線を layoutConfirmWiring.ts に切り出し、stop 中に 1 周が終わる→確定しない→再開後に確定するテストを足して確認 [conv:regression-negative-control!]
 - T10 [nit] stop→再開→確定の通しの確認が無い → 同じテストで通した [conv:-]
+- T11 [nit] コメントの「navigate の6操作」が現在の数と合わない → 現在形の 2 か所を直した（「当初は…7つ目」の経緯の記述は履歴なので残す） [conv:-]

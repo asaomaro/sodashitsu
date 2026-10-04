@@ -3,7 +3,7 @@ import type { NavigateKeyId } from "./navigateKeys.js";
 import { DEFAULT_NAVIGATE_KEYMAP, resolveNavigateKeymap } from "./navigateKeymap.js";
 
 describe("DEFAULT_NAVIGATE_KEYMAP — 既定は現行の固定値と1:1（AC3・AC8）", () => {
-  it("7操作の既定の割り当て（20260925-sidebar-keyboard-menu で navigate_open_menu が7件目に加わった）", () => {
+  it("8操作の既定の割り当て（20260925-sidebar-keyboard-menu で navigate_open_menu が7件目に加わった）", () => {
     const km = DEFAULT_NAVIGATE_KEYMAP;
     expect(km.bindingsOf("navigate_workspace_up")).toEqual(["up"]);
     expect(km.bindingsOf("navigate_workspace_down")).toEqual(["down"]);
@@ -12,6 +12,7 @@ describe("DEFAULT_NAVIGATE_KEYMAP — 既定は現行の固定値と1:1（AC3・
     expect(km.bindingsOf("navigate_pane_up")).toEqual(["k"]);
     expect(km.bindingsOf("navigate_pane_right")).toEqual(["l"]);
     expect(km.bindingsOf("navigate_open_menu")).toEqual(["space"]);
+    expect(km.bindingsOf("navigate_toggle_collapse")).toEqual(["z"]);
   });
 
   it("ownerOf・actionFor", () => {
@@ -24,6 +25,9 @@ describe("DEFAULT_NAVIGATE_KEYMAP — 既定は現行の固定値と1:1（AC3・
     expect(km.actionFor("x")).toBeUndefined();
     expect(km.ownerOf("space")).toBe("navigate_open_menu");
     expect(km.actionFor("space")).toEqual({ type: "navigate", op: "openMenu" });
+    // 畳む／開く（group-worktree-items T11）。既定 z は他の既定・予約 chord と重ならず、表にそのまま載る。
+    expect(km.ownerOf("z")).toBe("navigate_toggle_collapse");
+    expect(km.actionFor("z")).toEqual({ type: "navigate", op: "toggleCollapse" });
     // 予約キーは表に登録されない（left/right は pane 左右移動の既定にも使われない）。
     expect(km.ownerOf("left")).toBeNull();
     expect(km.ownerOf("right")).toBeNull();

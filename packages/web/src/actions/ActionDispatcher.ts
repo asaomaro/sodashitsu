@@ -1000,7 +1000,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   // --- T18: navigate・resize・copy・名前の変更・その他 ----------------------
 
-  private navigate(op: "up" | "down" | "paneDir" | "activate" | "cancel" | "openMenu", dir?: Dir): void {
+  private navigate(op: "up" | "down" | "paneDir" | "activate" | "cancel" | "openMenu" | "toggleCollapse", dir?: Dir): void {
     switch (op) {
       case "up":
       case "down": {
@@ -1028,6 +1028,9 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         // DOM には触れない（design「設計方針」）——実際に位置を計算して開くのは Sidebar.vue の役目
         // （20260925-sidebar-keyboard-menu）。
         if (this.view.navigateSelection) this.view.requestNavigateMenu();
+        return;
+      case "toggleCollapse":
+        // 受け口だけ（group-worktree-items T11。動きは T15 で入れる）。
         return;
     }
   }

@@ -1009,7 +1009,7 @@ export class TuiDispatcher {
   // --- navigate・resize・copy ---
 
   private navigate(
-    op: "up" | "down" | "paneDir" | "activate" | "cancel" | "openMenu",
+    op: "up" | "down" | "paneDir" | "activate" | "cancel" | "openMenu" | "toggleCollapse",
     dir?: Dir,
   ): void {
     switch (op) {
@@ -1042,6 +1042,9 @@ export class TuiDispatcher {
         // 別のマシンの workspace にはメニューが無い（そのマシンへ切り替えてから）。
         if (this.ui.navigateSelection && !parseRemoteKey(this.ui.navigateSelection))
           this.ui.requestNavigateMenu();
+        return;
+      case "toggleCollapse":
+        // 受け口だけ（group-worktree-items T11。動きは T17 で入れる）。
         return;
     }
   }

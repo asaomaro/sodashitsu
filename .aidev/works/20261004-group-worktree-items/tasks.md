@@ -55,7 +55,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/server/src/session/SessionService.ts`（`restore`）、`packages/server/src/session/SessionModel.ts`、`packages/server/src/composeServer.ts:853-890`、`packages/server/src/git/GitInfoPoller.ts`（1 周目の合図）
       依存: T9
       AC: AC13
-- [ ] T11: キーの定義（web・端末版の共通）——`Action` の `navigate` の `op` に折りたたみの切り替えを足し、`NAVIGATE_KEYS` に `navigate_toggle_collapse`（既定 `z`。既存の 7 つの既定・予約済みの chord と重ならないことは点検で確認済み。実装でも確かめる）を足す。web と端末版の dispatcher に**何もしない受け口**を置き（型検査を通すため。動きは T15・T17）、設定の「キー」の一覧・キー一覧（HelpDialog）に出す。既存のテストの期待（キーの数）を直す
+- [x] T11: キーの定義（web・端末版の共通）——`Action` の `navigate` の `op` に折りたたみの切り替えを足し、`NAVIGATE_KEYS` に `navigate_toggle_collapse`（既定 `z`。既存の 7 つの既定・予約済みの chord と重ならないことは点検で確認済み。実装でも確かめる）を足す。web と端末版の dispatcher に**何もしない受け口**を置き（型検査を通すため。動きは T15・T17）、設定の「キー」の一覧・キー一覧（HelpDialog）に出す。既存のテストの期待（キーの数）を直す
       対象: `packages/client-core/src/keys/actions.ts:76`、`packages/client-core/src/keys/navigateKeys.ts:28-71, :99-116`、`packages/client-core/src/keys/navigateKeys.test.ts:7-8, :19`、`packages/web/src/components/KeySettings.test.ts:77, :1111`（場所は grep で確かめる）、`packages/tui/src/settings/keySection.ts:355`、`packages/tui/src/actions/TuiDispatcher.ts:178-180, :1011-1014`、`packages/web/src/actions/ActionDispatcher.ts:1003-1040`、web と tui の HelpDialog
       依存: なし
       AC: AC-I3
