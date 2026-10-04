@@ -678,7 +678,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => sectionsObserver?.disconnect());
 // 行の数・並び・畳み方が変わったら測り直す（自動の配分は中身の高さで決まる）。
-watch([() => view.sidebarSectionRatio, showSectionDivider, () => session.workspaces.length], () => void nextTick(measureRatio));
+watch([() => view.sidebarSectionRatio, showSectionDivider, () => session.workspaces.size], () => void nextTick(measureRatio));
 
 const sectionDrag = useResizeDrag<{ ratio: number | null }>({
   axis: "y",
