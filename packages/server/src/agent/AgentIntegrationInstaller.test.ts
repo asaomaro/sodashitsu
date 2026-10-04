@@ -107,22 +107,57 @@ describe("FsAgentIntegrationInstaller", () => {
     expect(await readFile(join(claudeDir, "settings.json"), "utf8")).toBe("{ not json");
   });
 
-  it("uninstall removes only our entry and the copied script, leaving other hooks intact", async () => {
+  it("uninstall removes only our entries from every path, leaving other hooks intact, and blanks the copied script", async () => {
     const installer = makeInstaller();
     await installer.install("claude");
     await mkdir(join(claudeDir, "hooks"), { recursive: true });
     const settingsPath = join(claudeDir, "settings.json");
     const before = JSON.parse(await readFile(settingsPath, "utf8"));
-    before.hooks.SessionStart.push({ matcher: "compact", hooks: [{ type: "command", command: "echo hi" }] });
+    const userHook = { matcher: "compact", hooks: [{ type: "command", command: "echo hi" }] };
+    before.hooks.SessionStart.push(userHook);
+    before.hooks.Stop.unshift(userHook);
     await writeFile(settingsPath, JSON.stringify(before));
 
     const result = await installer.uninstall("claude");
     expect(result).toEqual({ ok: true, message: null });
 
     const after = JSON.parse(await readFile(settingsPath, "utf8"));
-    expect(after.hooks.SessionStart).toHaveLength(1);
-    expect(after.hooks.SessionStart[0].hooks[0].command).toBe("echo hi");
-    await expect(readFile(join(claudeDir, "hooks", "soda-agent-report.cjs"))).rejects.toThrow();
+    expect(after.hooks.SessionStart).toEqual([userHook]);
+    expect(after.hooks.Stop).toEqual([userHook]);
+    for (const ev of ["PreToolUse", "SubagentStart", "SubagentStop", "SessionEnd"]) expect(after.hooks[ev]).toEqual([]);
+    expect(await installer.status("claude")).toMatchObject({ installed: false, needsUpdate: false });
+    // 動いている Claude Code が古いフックのまま呼び続けても失敗しないよう、消さずに何もしない中身へ差し替える（decisions D9）。
+    const script = await readFile(join(claudeDir, "hooks", "soda-agent-report.cjs"), "utf8");
+    expect(script).not.toContain("fake hook script");
+    expect(script).toContain("何もしません");
+  });
+
+  it("uninstall は SessionStart のエントリだけを手で消した状態からも、残りの経路から外す", async () => {
+    const installer = makeInstaller();
+    await installer.install("claude");
+    const settingsPath = join(claudeDir, "settings.json");
+    const settings = JSON.parse(await readFile(settingsPath, "utf8"));
+    settings.hooks.SessionStart = [];
+    await writeFile(settingsPath, JSON.stringify(settings));
+    expect(await installer.uninstall("claude")).toEqual({ ok: true, message: null });
+    const after = JSON.parse(await readFile(settingsPath, "utf8"));
+    for (const ev of ["PreToolUse", "SubagentStart", "Stop", "SubagentStop", "SessionEnd"]) expect(after.hooks[ev]).toEqual([]);
+  });
+
+  it("uninstall の後に install し直すと、本物のスクリプトに写し直される", async () => {
+    const installer = makeInstaller();
+    await installer.install("claude");
+    await installer.uninstall("claude");
+    expect(await installer.install("claude")).toEqual({ ok: true, message: null });
+    expect(await readFile(join(claudeDir, "hooks", "soda-agent-report.cjs"), "utf8")).toContain("fake hook script");
+    expect(await installer.status("claude")).toMatchObject({ installed: true, needsUpdate: false });
+  });
+
+  it("追加のエントリを持たない kind（codex）の uninstall は、今までどおりスクリプトを消す", async () => {
+    const installer = makeInstaller();
+    await installer.install("codex");
+    expect(await installer.uninstall("codex")).toEqual({ ok: true, message: null });
+    await expect(readFile(join(codexDir, "hooks", "soda-agent-report.cjs"))).rejects.toThrow();
   });
 
   it("uninstall reports 未導入 when nothing was installed", async () => {

@@ -54,3 +54,8 @@ research.md「F-H1」〜「F-H16」。要点: 同期のフックでは実行前 
 
 - **最初の検出（無し → X）での配り直しは、待ち 0 のタイマーで行う**（design は「その場で」）。bus の購読の中で `publish` すると、同じイベントを待つ後ろの購読者に、新しい値のイベントが元のイベントより先に届き、最後に古い値が残るため。待ち 0 でもほぼ「その場」で、タイマーは差し込める。
 - `current()` は「報告を一度でも受けたか」（`seen`）で undefined を決める。入れ替わりで捨てた後の新しい検出は、また報告を受けるまで undefined（分からない）。
+
+## D9: T19 で決めたこと（削除・配布物）
+
+- **`uninstall()` は、写したスクリプトを消さず、何もしない中身に差し替える**（Claude Code のように追加のエントリを持つ kind だけ。持たない kind は今までどおり消す）。T1 の (5) で、スクリプトが無いとフックが `exit_code: 1`（`outcome: error`）になり続けることを確かめた（エージェントの動きは止まらない）。動いている Claude Code は起動時のフックの設定のまま同期のフックで呼び続けるので、消さない。次の導入で本物に写し直す（テストあり）。
+- **配布物にフックのスクリプトが入っていなかった**: `scripts/package.mjs` は各パッケージの `dist` と `package.json` だけを写しており、`packages/server/assets/agent-hook-report.cjs` が無かった（修正前の `package.mjs` で作ると `packages/server/` は `dist`・`package.json` だけ）。サーバは `dist` から見て `../assets/agent-hook-report.cjs` を読むので、**配布した `soda` では、今までも導入（`copyFile`）が失敗していた**はず。この work で `assets/`（テストを除く）を配布物に入れるようにした。

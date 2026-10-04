@@ -89,7 +89,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/server/src/agent/SubagentTracker.ts`、`SubagentTracker.test.ts`
       依存: T5
       AC: AC1, AC7, AC15, AC16
-- [ ] T19: インストーラの削除と配布——`uninstall()` は全経路から除く（どの経路にも無いときだけ「未導入でした」）、スクリプトは何もしない中身に差し替える（T1 の (5) で害が無いと分かれば、今までどおり消す。どちらにしたかを `decisions.md` に残す）。`AgentIntegrationService` が `needsUpdate` を配る。**配布物の確認**: `scripts/package.mjs` が `packages/server/assets`（フックのスクリプト）を配布物に入れているかを確かめ、入っていなければ入れる（入れないと、配布した `soda` では同梱のスクリプトが読めず、導入も `needsUpdate` も働かない。今の導入がどう動いているかも確かめて `decisions.md` に残す）。単体テスト（全経路の削除・どの経路にも無い・サービスが `needsUpdate` を配る）と壊して落ちる確認
+- [x] T19: インストーラの削除と配布——`uninstall()` は全経路から除く（どの経路にも無いときだけ「未導入でした」）、スクリプトは何もしない中身に差し替える（T1 の (5) で害が無いと分かれば、今までどおり消す。どちらにしたかを `decisions.md` に残す）。`AgentIntegrationService` が `needsUpdate` を配る。**配布物の確認**: `scripts/package.mjs` が `packages/server/assets`（フックのスクリプト）を配布物に入れているかを確かめ、入っていなければ入れる（入れないと、配布した `soda` では同梱のスクリプトが読めず、導入も `needsUpdate` も働かない。今の導入がどう動いているかも確かめて `decisions.md` に残す）。単体テスト（全経路の削除・どの経路にも無い・サービスが `needsUpdate` を配る）と壊して落ちる確認
       対象: `packages/server/src/agent/AgentIntegrationInstaller.ts`（`uninstall`）、`AgentIntegrationService.ts:47-75`、`AgentIntegrationInstaller.test.ts`、`scripts/package.mjs`
       依存: T7
       AC: AC9, AC10

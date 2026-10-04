@@ -15,6 +15,10 @@ export interface AgentIntegrationInstaller {
 const HOOK_SCRIPT_NAME = "soda-agent-report.cjs";
 const MATCHER = "startup|resume";
 
+/** 削除した後に残す、何もしないスクリプト（標準出力にも書かず、正常に終わる）。 */
+const NOOP_HOOK_SCRIPT = '#!/usr/bin/env node\n"use strict";\n// 本製品のフック連携は削除されました。何もしません（導入し直すと、本物のスクリプトに写し直されます）。\n';
+
+
 type JsonObject = Record<string, unknown>;
 
 /**
@@ -314,14 +318,26 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     const hooksDir = spec.hooksDir(this.env, this.home);
     const read = await readJsonObject(configFile);
     if (!read.ok) return { ok: false, message: `設定ファイルを解釈できませんでした（${configFile}）` };
-    const root = read.data;
-    const entries = getPath(root, spec.entriesPath);
-    if (!entries.some(spec.isOurs)) return { ok: true, message: "未導入でした" };
+    // 全経路から自分のエントリを除く。どの経路にも無いときだけ「未導入でした」（`SessionStart` だけ手で消した状態からも外せる）。
+    let updated = read.data;
+    let found = false;
+    for (const path of [spec.entriesPath, ...(spec.extraEntries ?? []).map((e) => e.path)]) {
+      const entries = getPath(updated, path);
+      if (!entries.some(spec.isOurs)) continue;
+      found = true;
+      updated = setPath(updated, path, entries.filter((e) => !spec.isOurs(e)));
+    }
+    if (!found) return { ok: true, message: "未導入でした" };
 
-    const remaining = entries.filter((e) => !spec.isOurs(e));
-    const updated = setPath(root, spec.entriesPath, remaining);
     await writeFileAtomic(configFile, JSON.stringify(updated, null, 2));
-    await rm(hookScriptPathFor(hooksDir), { force: true });
+    const scriptPath = hookScriptPathFor(hooksDir);
+    if (spec.extraEntries) {
+      // 動いている Claude Code は、起動した時点のフックの設定のまま、同期のフックでこのスクリプトを呼び続ける。消すと失敗（exit 1）が続くので、
+      // 何もしない中身に差し替える（次の導入で本物に写し直す。20261004-subagent-display の decisions D9）。
+      if (await access(scriptPath).then(() => true, () => false)) await writeFileAtomic(scriptPath, NOOP_HOOK_SCRIPT);
+    } else {
+      await rm(scriptPath, { force: true });
+    }
     return { ok: true, message: null };
   }
 }

@@ -28,6 +28,10 @@
 
 - [nit][conv:regression-negative-control] composeServer.ts:662,750,779 受け口の配線（`kind === "claude"` の絞り込み・停止での `close`）を直接確かめるテストが無い / 対応: 許容（T15 の統合テストで、実物のスクリプト → 実 socket → `SubagentTracker` → bus の経路として確かめ、壊して落ちる確認もそこで行う。T6・ラウンド1）
 
+- [nit][conv:-] AgentIntegrationInstaller.test.ts テストの変数名 `mine` が利用者のほかのフックを指していて読み違えやすい / 対応: 修正済（`userHook`。T19・ラウンド1）
+- [nit][conv:-] AgentIntegrationInstaller.ts `NOOP_HOOK_SCRIPT` がクラスの後ろにあり、周囲の定数の並びと違う / 対応: 修正済（定数の並びへ移した。T19・ラウンド1）
+- [nit][conv:-] AgentIntegrationInstaller.ts 存在確認に `readFile` で中身を丸ごと読んでいた / 対応: 修正済（`access`。T19・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -193,4 +197,29 @@ AssertionError: expected { instanceId: 'a2', …(8) } to not have property "suba
 === MUT: setAgentSubagents の検出の有無の確認（!agent）を外す
  FAIL  … > エージェントが検出されていなければ何もせず false（イベントも出さない）
 AssertionError: expected true to be false // Object.is equality
+```
+
+#### T19 インストーラの削除と配布（`AgentIntegrationInstaller.ts`・`AgentIntegrationService.ts`・`scripts/package.mjs`。壊した後に元へ戻した）
+
+```
+=== MUT(AgentIntegrationService.ts): status の各 kind の状態から needsUpdate を落とす
+ FAIL  … > DefaultAgentIntegrationService — needsUpdate > status に各 kind の needsUpdate を載せる
+AssertionError: expected { cliDetected: true, installed: true } to match object { installed: true, needsUpdate: true }
+ FAIL  … > 更新（install）の後の agent_integration.changed に、直った needsUpdate が載る
+=== MUT(AgentIntegrationInstaller.ts): uninstall が entriesPath だけを見る
+ FAIL  … > uninstall removes only our entries from every path, leaving other hooks intact, and blanks the copied script
+AssertionError: expected [ { matcher: 'compact', …(1) }, …(1) ] to deeply equal [ { matcher: 'compact', …(1) } ]
+ FAIL  … > uninstall は SessionStart のエントリだけを手で消した状態からも、残りの経路から外す
+=== MUT: スクリプトを何もしない中身に差し替える代わりに消す
+ FAIL  … > uninstall removes only our entries from every path, leaving other hooks intact, and blanks the copied script
+=== MUT: 「未導入でした」を SessionStart だけで判定する
+ FAIL  … > uninstall は SessionStart のエントリだけを手で消した状態からも、残りの経路から外す
+AssertionError: expected { ok: true, message: '未導入でした' } to deeply equal { ok: true, message: null }
+```
+
+配布物（`node scripts/package.mjs --no-build --no-install --no-archive`。作った `release/` は確認後に消した）:
+
+```
+修正前の package.mjs で作った配布物:   find release -path '*server/assets*' | wc -l  → 0（packages/server/ は dist と package.json だけ）
+修正後:                               release/sodashitsu-0.1.0/packages/server/assets/agent-hook-report.cjs（テストは入らない）
 ```
