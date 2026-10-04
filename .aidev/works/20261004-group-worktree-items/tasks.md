@@ -43,7 +43,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/server/src/surface/methods/group.ts:14-60`、`packages/server/src/surface/methods/workspace.ts`（`workspace.close`）、`packages/server/src/session/SessionService.ts`（`closeWorkspace`）、`packages/server/src/surface/methods/index.test.ts:399-468`
       依存: T5
       AC: AC2, AC3, AC7, AC10
-- [ ] T8: サーバの RPC（並べ替え）——新しい `item.move`／`item.move_by`（結果 `{moved}`。実在しない ID は `not_found`）のハンドラと登録。`workspace.move` は項目の `item.move_by` として扱う。`workspace.move_to` の読み替え (a)(b)(c)。`moveWorkspace`／`moveWorkspacesTo` はレイアウトの操作へ委ねる薄い入口にする。**意味が変わる既存のテストを新しい決まりで書き直す**（`SessionModel.test.ts:948-1025`〔:955 の「端で巡回する」は逆になる〕・`SessionService.test.ts:809-927`）。単体テスト（古い要求の (a)(b)(c)・受け付けない移動は `{moved: false}`／何も配らない）と壊して落ちる確認
+- [x] T8: サーバの RPC（並べ替え）——新しい `item.move`／`item.move_by`（結果 `{moved}`。実在しない ID は `not_found`）のハンドラと登録。`workspace.move` は項目の `item.move_by` として扱う。`workspace.move_to` の読み替え (a)(b)(c)。`moveWorkspace`／`moveWorkspacesTo` はレイアウトの操作へ委ねる薄い入口にする。**意味が変わる既存のテストを新しい決まりで書き直す**（`SessionModel.test.ts:948-1025`〔:955 の「端で巡回する」は逆になる〕・`SessionService.test.ts:809-927`）。単体テスト（古い要求の (a)(b)(c)・受け付けない移動は `{moved: false}`／何も配らない）と壊して落ちる確認
       対象: `packages/server/src/surface/methods/item.ts`（新規）、`packages/server/src/surface/methods/index.ts:29-49`（`registerXxxMethods` を足す）、`packages/server/src/surface/methods/workspace.ts:67-82`、`packages/server/src/session/SessionModel.ts`（`moveWorkspace`・`moveWorkspacesTo`）、`packages/server/src/session/SessionModel.test.ts:948-1025`、`SessionService.test.ts:809-927`
       依存: T5
       AC: AC2, AC5, AC14

@@ -5,6 +5,7 @@ import type {
   GitInfo,
   GroupId,
   HostInfo,
+  ItemTarget,
   NewCwd,
   Pane,
   PaneId,
@@ -542,18 +543,28 @@ export class SessionService {
 
   // --- workspace の並べ替えとグループ（20260923-workspace-grouping） ----------------------
 
-  /** `workspace.move`。無変化（`model.moveWorkspace` が null）なら何も配布しない
-   *  （`moveTab` と同じ形。design「エラー処理 / 異常系」）。動いた全順序を
-   *  `workspace.order_changed` で配る（decisions.md D5：個々の Workspace は変わらないため）。 */
+  /** `workspace.move`（古い入口）。その workspace の項目の `item.move_by`。動かなければ何も配らない（`moveTab` と同じ形）。 */
   moveWorkspace(id: WorkspaceId, direction: "previous" | "next"): void {
-    const updated = this.model.moveWorkspace(id, direction);
-    if (updated) this.publishSidebarChanges();
+    if (this.model.moveWorkspace(id, direction)) this.publishSidebarChanges();
   }
 
-  /** `workspace.move_to`（D&D。単一・グループ一括の両方を同じ経路で扱う）。 */
+  /** `workspace.move_to`（古い画面の D&D）。項目の動きに読み替える（`SessionModel.moveWorkspacesTo`）。動かなければ何も配らない。 */
   moveWorkspacesTo(workspaceIds: WorkspaceId[], beforeWorkspaceId: WorkspaceId | null): void {
-    const updated = this.model.moveWorkspacesTo(workspaceIds, beforeWorkspaceId);
-    if (updated) this.publishSidebarChanges();
+    if (this.model.moveWorkspacesTo(workspaceIds, beforeWorkspaceId)) this.publishSidebarChanges();
+  }
+
+  /** `item.move`。受け付けなければ `{moved: false}` で何も配らない。 */
+  moveItem(item: ItemTarget, before: ItemTarget | null): { moved: boolean } {
+    const moved = this.model.moveItem(item, before);
+    if (moved) this.publishSidebarChanges();
+    return { moved };
+  }
+
+  /** `item.move_by`。端では `{moved: false}` で何も配らない。 */
+  moveItemBy(item: ItemTarget, direction: "previous" | "next"): { moved: boolean } {
+    const moved = this.model.moveItemBy(item, direction);
+    if (moved) this.publishSidebarChanges();
+    return { moved };
   }
 
   /** `workspaceId` があれば、その workspace の項目を新しいグループへ入れる（リポジトリなら丸ごと）。 */

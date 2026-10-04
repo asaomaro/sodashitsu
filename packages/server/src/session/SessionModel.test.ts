@@ -945,23 +945,31 @@ describe("SessionModel — misc mutations", () => {
     });
   });
 
-  // 20260923-workspace-grouping。`moveTab` と同じ splice remove→insert（decisions D10 と同じ理由）。
+  // 20260923-workspace-grouping。20261004-group-worktree-items で、項目の `item.move_by` へ委ねる形（端で巡回しない）。
   describe("moveWorkspace", () => {
-    it("single workspace: no-op (returns null)", () => {
+    it("single workspace: nothing moves (false)", () => {
       const model = new SessionModel();
       const { workspace } = model.createWorkspace("/home/u", "api", init);
-      expect(model.moveWorkspace(workspace.id, "next")).toBeNull();
+      expect(model.moveWorkspace(workspace.id, "next")).toBe(false);
     });
 
-    it("wraps around at the ends", () => {
+    it("does not wrap around at the ends (false, order unchanged)", () => {
       const model = new SessionModel();
       const { workspace: w1 } = model.createWorkspace("/a", "a", init);
       const { workspace: w2 } = model.createWorkspace("/b", "b", init);
       const { workspace: w3 } = model.createWorkspace("/c", "c", init);
+      expect(model.moveWorkspace(w1.id, "previous")).toBe(false);
+      expect(model.moveWorkspace(w3.id, "next")).toBe(false);
       expect(model.listWorkspaces().map((w) => w.id)).toEqual([w1.id, w2.id, w3.id]);
+    });
 
-      expect(model.moveWorkspace(w1.id, "previous")?.map((w) => w.id)).toEqual([w2.id, w3.id, w1.id]);
-      expect(model.moveWorkspace(w1.id, "next")?.map((w) => w.id)).toEqual([w1.id, w2.id, w3.id]);
+    it("swaps with the neighbour inside", () => {
+      const model = new SessionModel();
+      const { workspace: w1 } = model.createWorkspace("/a", "a", init);
+      const { workspace: w2 } = model.createWorkspace("/b", "b", init);
+      const { workspace: w3 } = model.createWorkspace("/c", "c", init);
+      expect(model.moveWorkspace(w2.id, "next")).toBe(true);
+      expect(model.listWorkspaces().map((w) => w.id)).toEqual([w1.id, w3.id, w2.id]);
     });
 
     it("throws NotFoundError for an unknown workspace id", () => {
@@ -970,50 +978,42 @@ describe("SessionModel — misc mutations", () => {
     });
   });
 
-  // 20260923-workspace-grouping（D&D。anchor 指定。単一・グループ一括の両方を同じ経路で扱う）。
+  // 20260923-workspace-grouping（D&D。anchor 指定）。項目の動きへの読み替えの (a)(b)(c) は「item moves」の describe。
   describe("moveWorkspacesTo", () => {
     it("moves a single workspace before another (anchor)", () => {
       const model = new SessionModel();
       const { workspace: w1 } = model.createWorkspace("/a", "a", init);
       const { workspace: w2 } = model.createWorkspace("/b", "b", init);
       const { workspace: w3 } = model.createWorkspace("/c", "c", init);
-      expect(model.moveWorkspacesTo([w3.id], w1.id)?.map((w) => w.id)).toEqual([w3.id, w1.id, w2.id]);
+      expect(model.moveWorkspacesTo([w3.id], w1.id)).toBe(true);
+      expect(model.listWorkspaces().map((w) => w.id)).toEqual([w3.id, w1.id, w2.id]);
     });
 
-    it("moves a block of workspace ids together, preserving their relative order (group block move)", () => {
+    it("moves a block of items together, preserving their relative order", () => {
       const model = new SessionModel();
       const { workspace: w1 } = model.createWorkspace("/a", "a", init);
       const { workspace: w2 } = model.createWorkspace("/b", "b", init);
       const { workspace: w3 } = model.createWorkspace("/c", "c", init);
       const { workspace: w4 } = model.createWorkspace("/d", "d", init);
       // w1・w3 を w4 の前へまとめて動かす → 相対順序（w1 の方が w3 より前）は保たれる。
-      expect(model.moveWorkspacesTo([w1.id, w3.id], w4.id)?.map((w) => w.id)).toEqual([w2.id, w1.id, w3.id, w4.id]);
+      expect(model.moveWorkspacesTo([w3.id, w1.id], w4.id)).toBe(true);
+      expect(model.listWorkspaces().map((w) => w.id)).toEqual([w2.id, w1.id, w3.id, w4.id]);
     });
 
     it("null beforeWorkspaceId moves to the end", () => {
       const model = new SessionModel();
       const { workspace: w1 } = model.createWorkspace("/a", "a", init);
       const { workspace: w2 } = model.createWorkspace("/b", "b", init);
-      expect(model.moveWorkspacesTo([w1.id], null)?.map((w) => w.id)).toEqual([w2.id, w1.id]);
+      expect(model.moveWorkspacesTo([w1.id], null)).toBe(true);
+      expect(model.listWorkspaces().map((w) => w.id)).toEqual([w2.id, w1.id]);
     });
 
-    it("returns null when beforeWorkspaceId is itself one of the ids being moved (no-op)", () => {
+    it("returns false when beforeWorkspaceId is itself one of the ids being moved (no-op)", () => {
       const model = new SessionModel();
       const { workspace: w1 } = model.createWorkspace("/a", "a", init);
       const { workspace: w2 } = model.createWorkspace("/b", "b", init);
-      expect(model.moveWorkspacesTo([w1.id, w2.id], w2.id)).toBeNull();
+      expect(model.moveWorkspacesTo([w1.id, w2.id], w2.id)).toBe(false);
       expect(model.listWorkspaces().map((w) => w.id)).toEqual([w1.id, w2.id]); // 変化していない
-    });
-
-    // タスク点検の指摘：`moveTab`/`moveWorkspace` と同じ「無変化なら null」規約に揃える。
-    it("returns null when the drop target already matches the current position (no-op)", () => {
-      const model = new SessionModel();
-      const { workspace: w1 } = model.createWorkspace("/a", "a", init);
-      const { workspace: w2 } = model.createWorkspace("/b", "b", init);
-      const { workspace: w3 } = model.createWorkspace("/c", "c", init);
-      // w2 を w3 の直前へ——既にその位置にいる（実質無変化）。
-      expect(model.moveWorkspacesTo([w2.id], w3.id)).toBeNull();
-      expect(model.listWorkspaces().map((w) => w.id)).toEqual([w1.id, w2.id, w3.id]); // 変化していない
     });
 
     it("throws NotFoundError for an unknown id in workspaceIds or beforeWorkspaceId", () => {
@@ -1720,6 +1720,147 @@ describe("SessionModel — sidebar layout", () => {
       expect(model.getRepoGroups().size).toBe(0);
       expect(model.getLayout()).toEqual({ top: [`r:/r/.git`], groups: {} });
       expect(model.takeChanges()?.layout).toEqual({ top: [`r:/r/.git`], groups: {} });
+    });
+  });
+});
+
+// 20261004-group-worktree-items（T8。項目の並べ替えと、古い `workspace.move_to` の読み替え）。
+describe("SessionModel — item moves", () => {
+  const gitOf = (repoKey: string, isLinkedWorktree: boolean): GitInfo => ({ branch: "b", ahead: 0, behind: 0, repoKey, isLinkedWorktree });
+
+  /** a・b が同じリポジトリ K（a が本体）、c・d・e が管理外。一番上は `r:K`・`w:c`・`w:d`・`w:e`。 */
+  function setup(): { model: SessionModel; a: string; b: string; c: string; d: string; e: string } {
+    const model = new SessionModel();
+    const { workspace: a } = model.createWorkspace("/repo", "a", init);
+    const { workspace: b } = model.createWorkspace("/repo-wt", "b", init);
+    const { workspace: c } = model.createWorkspace("/c", "c", init);
+    const { workspace: d } = model.createWorkspace("/d", "d", init);
+    const { workspace: e } = model.createWorkspace("/e", "e", init);
+    model.updateWorkspaceGit(a.id, { kind: "git", git: gitOf("/repo/.git", false) });
+    model.updateWorkspaceGit(b.id, { kind: "git", git: gitOf("/repo/.git", true) });
+    model.confirmLayout();
+    return { model, a: a.id, b: b.id, c: c.id, d: d.id, e: e.id };
+  }
+  const ws = (workspaceId: string): { kind: "workspace"; workspaceId: string } => ({ kind: "workspace", workspaceId });
+  const grp = (groupId: string): { kind: "group"; groupId: string } => ({ kind: "group", groupId });
+
+  describe("moveItem / moveItemBy", () => {
+    it("a worktree-group child moves the whole repository item", () => {
+      const { model, a, b, c, d, e } = setup();
+      expect(model.moveItem(ws(b), ws(d))).toBe(true);
+      expect(model.getLayout().top).toEqual([`w:${c}`, "r:/repo/.git", `w:${d}`, `w:${e}`]);
+      expect(model.listWorkspaces().map((w) => w.id)).toEqual([c, a, b, d, e]);
+    });
+
+    it("null before moves to the end of the container", () => {
+      const { model, a, b, c, d, e } = setup();
+      expect(model.moveItem(ws(a), null)).toBe(true);
+      expect(model.listWorkspaces().map((w) => w.id)).toEqual([c, d, e, a, b]);
+    });
+
+    it("moveItemBy moves one item and does not wrap at the ends (false, nothing changes)", () => {
+      const { model, a, b, c, d, e } = setup();
+      expect(model.moveItemBy(ws(b), "previous")).toBe(false); // 先頭
+      expect(model.moveItemBy(ws(e), "next")).toBe(false); // 末尾
+      expect(model.moveItemBy(ws(a), "next")).toBe(true);
+      expect(model.listWorkspaces().map((w) => w.id)).toEqual([c, a, b, d, e]);
+    });
+
+    it("a group moves as one item at the top, and cannot cross containers", () => {
+      const { model, c, d } = setup();
+      const g = model.createGroup("G", c); // c の位置にグループを置いて c を中へ
+      expect(model.getLayout()).toEqual({ top: ["r:/repo/.git", `g:${g.id}`, `w:${d}`, expect.any(String)], groups: { [g.id]: [`w:${c}`] } });
+      expect(model.moveItemBy(grp(g.id), "previous")).toBe(true);
+      expect(model.getLayout().top[0]).toBe(`g:${g.id}`);
+      expect(model.moveItem(ws(c), ws(d))).toBe(false); // グループの中 → 一番上の項目の前: 入れ物が違う
+      expect(model.moveItem(grp(g.id), grp(g.id))).toBe(false); // 自分自身の前
+    });
+
+    it("an item in a group moves only inside the group", () => {
+      const { model, c, d } = setup();
+      const g = model.createGroup("G");
+      model.addToGroup(c, g.id);
+      model.addToGroup(d, g.id);
+      expect(model.moveItemBy(ws(d), "previous")).toBe(true);
+      expect(model.getLayout().groups[g.id]).toEqual([`w:${d}`, `w:${c}`]);
+      expect(model.moveItemBy(ws(d), "previous")).toBe(false);
+    });
+
+    it("an unknown workspace or group is NotFoundError", () => {
+      const { model, a } = setup();
+      expect(() => model.moveItem(ws("w99"), null)).toThrow(NotFoundError);
+      expect(() => model.moveItem(ws(a), ws("w99"))).toThrow(NotFoundError);
+      expect(() => model.moveItemBy(grp("g99"), "next")).toThrow(NotFoundError);
+    });
+
+    it("a rejected move changes nothing, and takeChanges reports nothing", () => {
+      const { model, e } = setup();
+      model.takeChanges();
+      expect(model.moveItemBy(ws(e), "next")).toBe(false);
+      expect(model.takeChanges()).toBeNull();
+    });
+  });
+
+  describe("moveWorkspacesTo reads an old request as an item move", () => {
+    it("(a) the whole worktree group (all of its workspaces) moves as one item, anchored on a head workspace", () => {
+      const { model, a, b, c, d, e } = setup();
+      expect(model.moveWorkspacesTo([a, b], d)).toBe(true);
+      expect(model.getLayout().top).toEqual([`w:${c}`, "r:/repo/.git", `w:${d}`, `w:${e}`]);
+    });
+
+    it("(a) a plain workspace moves before the head of a worktree group, and to the end with null", () => {
+      const { model, a, c, d, e } = setup();
+      expect(model.moveWorkspacesTo([e], a)).toBe(true);
+      expect(model.getLayout().top).toEqual([`w:${e}`, "r:/repo/.git", `w:${c}`, `w:${d}`]);
+      expect(model.moveWorkspacesTo([e], null)).toBe(true);
+      expect(model.getLayout().top.at(-1)).toBe(`w:${e}`);
+    });
+
+    it("(a) inside a group, items move among themselves", () => {
+      const { model, a, c } = setup();
+      const g = model.createGroup("G");
+      model.addToGroup(a, g.id);
+      model.addToGroup(c, g.id);
+      expect(model.moveWorkspacesTo([c], a)).toBe(true);
+      expect(model.getLayout().groups[g.id]).toEqual([`w:${c}`, "r:/repo/.git"]);
+    });
+
+    it("(c) only a part of a worktree group, or a non-head child as the anchor, changes nothing", () => {
+      const { model, a, b, d, e } = setup();
+      const before = model.getLayout();
+      expect(model.moveWorkspacesTo([b], d)).toBe(false); // 一部だけ
+      expect(model.moveWorkspacesTo([a], e)).toBe(false);
+      expect(model.moveWorkspacesTo([d], b)).toBe(false); // 子は項目の先頭ではない
+      expect(model.getLayout()).toEqual(before);
+    });
+
+    it("(b) all the effective members of a group move the group, before the head of a top item, the first member of another group, or the end", () => {
+      const { model, a, b, c, d, e } = setup();
+      const g = model.createGroup("G");
+      model.addToGroup(a, g.id);
+      model.addToGroup(c, g.id); // G = [r:K, w:c]（実効のメンバーは a・b・c）
+      const h = model.createGroup("H");
+      model.addToGroup(e, h.id);
+      expect(model.getLayout().top).toEqual([`w:${d}`, `g:${g.id}`, `g:${h.id}`]);
+
+      expect(model.moveWorkspacesTo([c, b, a], null)).toBe(true);
+      expect(model.getLayout().top).toEqual([`w:${d}`, `g:${h.id}`, `g:${g.id}`]);
+      expect(model.moveWorkspacesTo([a, b, c], d)).toBe(true);
+      expect(model.getLayout().top).toEqual([`g:${g.id}`, `w:${d}`, `g:${h.id}`]);
+      expect(model.moveWorkspacesTo([a, b, c], e)).toBe(true); // H の先頭メンバー = グループ H の前
+      expect(model.getLayout().top).toEqual([`w:${d}`, `g:${g.id}`, `g:${h.id}`]);
+    });
+
+    it("(c) the members of a group plus an outside workspace, or the anchor inside the moved group, change nothing", () => {
+      const { model, a, b, c, d } = setup();
+      const g = model.createGroup("G");
+      model.addToGroup(a, g.id);
+      model.addToGroup(c, g.id);
+      const before = model.getLayout();
+      expect(model.moveWorkspacesTo([a, b, c, d], null)).toBe(false); // 外の項目が混ざる
+      expect(model.moveWorkspacesTo([a, b, c], c)).toBe(false); // 落とし先が動かす対象自身
+      expect(model.moveWorkspacesTo([c], d)).toBe(false); // グループの中から外の項目の前（入れ物をまたぐ）
+      expect(model.getLayout()).toEqual(before);
     });
   });
 });

@@ -427,3 +427,22 @@ AssertionError: expected [ 'w3' ] to deeply equal [ 'w1', 'w3', 'w4' ]
 
 確認後は元に戻した（`git diff` で差分が実装と回帰テストだけであることを確認）。
 - T7 [nit] 本体が開かれていないときの一括クローズ（先頭の暫定の頭）のテストが無い → repoMembers 側の単体テスト（T2）で先頭の決まりは固定済みのため、追加せず review に委ねる [conv:-]
+
+### T8 壊して落ちる確認
+
+実装を 2 か所壊して `vitest run src/session` を流した（出力は失敗の行だけ抜粋。`grep -E "×|FAIL|Tests |AssertionError"`）。
+(1) `planLegacyMove` の (b)（グループ全体の読み替え）の条件を `if (false && typeof groupId === "string" && ...)` にする。
+(2) `SessionService.moveWorkspacesTo` を、動かなかったときも `publishSidebarChanges()` する形にする。
+
+```
+       × (b) all the effective members of a group move the group, before the head of a top item, the first member of another group, or the end 8ms
+     × moveItem publishes sidebar.layout_changed and workspace.order_changed and returns {moved: true}; a rejected move publishes nothing 24ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionModel.test.ts > SessionModel — item moves > moveWorkspacesTo reads an old request as an item move > (b) all the effective members of a group move the group, before the head of a top item, the first member of another group, or the end
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/session/SessionService.test.ts > SessionService — workspace grouping and ordering > moveItem publishes sidebar.layout_changed and workspace.order_changed and returns {moved: true}; a rejected move publishes nothing
+AssertionError: expected 1 to be +0 // Object.is equality
+      Tests  2 failed | 487 passed (489)
+```
+
+元に戻した後は 489 件すべて通過（`git diff` で差分が実装と回帰テストだけ）。

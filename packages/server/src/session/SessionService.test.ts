@@ -852,6 +852,30 @@ describe("SessionService — workspace grouping and ordering", () => {
     expect(orderChanged[0]!.workspaceIds).toEqual([w2.id, w3.id, w1.id]);
   });
 
+  // 20261004-group-worktree-items（T8）。
+  it("moveItem publishes sidebar.layout_changed and workspace.order_changed and returns {moved: true}; a rejected move publishes nothing", async () => {
+    const { workspace: w1 } = await service.createWorkspace("/a", "a");
+    const { workspace: w2 } = await service.createWorkspace("/b", "b");
+    const { workspace: w3 } = await service.createWorkspace("/c", "c");
+    const events: { event: string; workspaceIds?: string[]; layout?: { top: string[] } }[] = [];
+    bus.subscribe((e) => events.push({ event: e.event, ...(e.data as object) }));
+    persist.touchCount = 0;
+
+    expect(service.moveItem({ kind: "workspace", workspaceId: w3.id }, { kind: "workspace", workspaceId: w1.id })).toEqual({ moved: true });
+    expect(events.map((e) => e.event)).toEqual(["sidebar.layout_changed", "workspace.order_changed"]);
+    expect(events[0]!.layout!.top).toEqual([`w:${w3.id}`, `w:${w1.id}`, `w:${w2.id}`]);
+    expect(events[1]!.workspaceIds).toEqual([w3.id, w1.id, w2.id]);
+    expect(persist.touchCount).toBeGreaterThan(0);
+
+    events.length = 0;
+    persist.touchCount = 0;
+    expect(service.moveItemBy({ kind: "workspace", workspaceId: w3.id }, "previous")).toEqual({ moved: false }); // 端
+    expect(service.moveItem({ kind: "workspace", workspaceId: w1.id }, { kind: "workspace", workspaceId: w1.id })).toEqual({ moved: false }); // 自分自身の前
+    service.moveWorkspacesTo([w1.id, w2.id, w3.id], w3.id); // 落とし先が動かす対象自身
+    expect(events).toEqual([]);
+    expect(persist.touchCount).toBe(0);
+  });
+
   it("group.* CRUD: create/rename/toggleGroupCollapsed publish group.created/group.updated; add/removeFromGroup publish workspace.updated", async () => {
     const { workspace } = await service.createWorkspace("/a", "a");
     const events: { event: string; group?: { id: string; label: string; collapsed: boolean }; workspace?: { groupId: string | null } }[] = [];

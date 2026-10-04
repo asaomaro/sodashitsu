@@ -424,6 +424,32 @@ describe("registerAllMethods — client / workspace / tab / pane flow", () => {
     expect(ctx.session.snapshot().workspaces.map((w) => w.id)).toEqual([w2.id, w3.id, w1.id]);
   });
 
+  // 20261004-group-worktree-items（T8）。
+  it("item.move / item.move_by return {moved}, reject out-of-container moves with moved:false, and not_found for unknown ids", async () => {
+    const c = { clientId, sink: fakeSink(clientId) };
+    const r1 = await ctx.surface.invoke(c, "workspace.create", { cwd: "/a", label: "a" });
+    const r2 = await ctx.surface.invoke(c, "workspace.create", { cwd: "/b", label: "b" });
+    if (!r1.ok || !r2.ok) throw new Error("unreachable");
+    const w1 = (r1.result as { workspace: { id: string } }).workspace;
+    const w2 = (r2.result as { workspace: { id: string } }).workspace;
+
+    const moved = await ctx.surface.invoke(c, "item.move_by", { item: { kind: "workspace", workspaceId: w1.id }, direction: "next" });
+    expect(moved).toEqual({ ok: true, result: { moved: true } });
+    expect(ctx.session.snapshot().workspaces.map((w) => w.id)).toEqual([w2.id, w1.id]);
+    const atEnd = await ctx.surface.invoke(c, "item.move_by", { item: { kind: "workspace", workspaceId: w1.id }, direction: "next" });
+    expect(atEnd).toEqual({ ok: true, result: { moved: false } });
+    const toTop = await ctx.surface.invoke(c, "item.move", { item: { kind: "workspace", workspaceId: w1.id }, before: { kind: "workspace", workspaceId: w2.id } });
+    expect(toTop).toEqual({ ok: true, result: { moved: true } });
+    expect(ctx.session.snapshot().workspaces.map((w) => w.id)).toEqual([w1.id, w2.id]);
+
+    const unknown = await ctx.surface.invoke(c, "item.move", { item: { kind: "group", groupId: "g99" }, before: null });
+    expect(unknown.ok).toBe(false);
+    if (!unknown.ok) expect(unknown.error.code).toBe("not_found");
+    const unknownBefore = await ctx.surface.invoke(c, "item.move", { item: { kind: "workspace", workspaceId: w1.id }, before: { kind: "workspace", workspaceId: "w99" } });
+    if (unknownBefore.ok) throw new Error("expected not_found");
+    expect(unknownBefore.error.code).toBe("not_found");
+  });
+
   it("workspace.close with closeLinkedWorktrees=true closes linked worktrees sharing the same repoKey", async () => {
     const c = { clientId, sink: fakeSink(clientId) };
     const r1 = await ctx.surface.invoke(c, "workspace.create", { cwd: "/repo", label: "main" });

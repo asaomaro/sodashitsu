@@ -120,3 +120,11 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - モデルの出し入れ・作成は T5 で項目単位になっているので、T7 はハンドラの結線（`group.create` が `workspaceId` を渡す）と一括クローズの対象だけを替えた。`group.add_member`／`remove_member` のハンドラは変更なし（モデルが `itemRefOf` で項目丸ごとに動かす）。
 - 一括クローズの対象は新しいモデルのメソッド `SessionModel.repoCloseTargets(id)`（`repoMembers` の先頭が `id` のときだけ、残り全部。先頭でない・1 つだけ・判定なしは `[]`）。所属は見ない。`linkedWorktreeGroupMembers` は呼び出し元が無くなったが、T19（古い関数の撤去）まで残す（既存のテストがある）。
 - 先頭でない子に `closeLinkedWorktrees: true` を付けても、その 1 つだけが閉じる（以前と同じ）。
+
+## D16: 並べ替えの入口（T8）
+
+- モデルの `moveItem(item, before)`・`moveItemBy(item, direction)` が `ItemTarget`（workspace → `itemRefOf`、group → `g:<id>`。実在しなければ NotFoundError）を参照へ読み替え、T3 の純関数に渡す。戻りは「受け付けたか」の boolean（位置が変わらなくても受け付ければ true）。受け付けたときだけ、仮の状態を確定（`confirmedLayout`）してレイアウトを当て `settle`。受け付けない移動は確定もしない（何も変えず、サービスは何も配らない）。
+- `moveWorkspace`＝`moveItemBy`（端で巡回しない。以前の「巡回する」は逆になった）。`moveWorkspacesTo` は design の (a)(b)(c) の読み替え（`planLegacyMove`）。戻りは boolean（以前の `Workspace[] | null` をやめた。呼び出し元はサービスだけ）。`syncLayoutFromOrder`（T5 のつなぎ）は消した。
+- (a) の「落とし先」は、入れ物の項目のうち先頭の workspace が `beforeWorkspaceId` のもの（リポジトリは `repoMembers` の先頭、グループは中の先頭の項目の先頭）。複数の項目は、レイアウトでの今の相対順のまま、落とし先の前へ。落とし先が動かす項目自身なら (c)（以前の「null」と同じ）。
+- 設計の曖昧な点: ID の集まりが**グループの全メンバー**で `beforeWorkspaceId` が null のとき、(a)（グループの中で全項目を末尾へ。実質無変化）ではなく (b)（グループを一番上の末尾へ）に読む。古い画面は必ず具体的な落とし先を送るので影響はなく、外部の呼び出し元向けの決め。
+- `item.move`・`item.move_by` のハンドラは `surface/methods/item.ts`。結果は `{moved}`。

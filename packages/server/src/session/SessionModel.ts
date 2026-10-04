@@ -8,6 +8,7 @@ import type {
   HostInfo,
   IdKind,
   ItemRef,
+  ItemTarget,
   NextIdCounters,
   Pane,
   PaneId,
@@ -33,6 +34,8 @@ import {
   insertItem,
   itemRefOf,
   layoutFromLegacy,
+  moveItem,
+  moveItemBy,
   removeItem,
   removeItemFromGroup,
   repoMembers,
@@ -601,48 +604,114 @@ export class SessionModel {
   }
 
   /**
-   * 対象 workspace を1つ隣へ（巡回込み）。`moveTab`（直上）と同じ splice remove→insert
-   * （decisions.md D10 と同じ理由）。workspace が1個以下なら意味の無い変化なので null
-   * （design「エラー処理 / 異常系」。SessionService はこのとき配布しない）。
+   * 項目を、同じ入れ物の中の `before` の項目の前（null は末尾）へ動かす（`item.move`）。`ItemTarget` は workspace を指すと
+   * その workspace の項目に読み替える。実在しない ID は NotFoundError。受け付けない（入れ物が違う・自分自身の前・
+   * グループの中へ `g:`）なら何も変えず false。位置が変わらなくても受け付ければ true。
    */
-  moveWorkspace(id: WorkspaceId, direction: "previous" | "next"): Workspace[] | null {
-    this.requireWorkspace(id);
-    const ids = [...this.workspaces.keys()];
-    if (ids.length <= 1) return null;
-    const idx = ids.indexOf(id);
-    const last = ids.length - 1;
-    const newIdx = direction === "next" ? (idx === last ? 0 : idx + 1) : idx === 0 ? last : idx - 1;
-    ids.splice(idx, 1);
-    ids.splice(newIdx, 0, id);
-    this.beginChange();
-    this.reorderWorkspaces(ids);
-    this.syncLayoutFromOrder();
-    return this.listWorkspaces();
+  moveItem(item: ItemTarget, before: ItemTarget | null): boolean {
+    const ref = this.refOfTarget(item);
+    const beforeRef = before === null ? null : this.refOfTarget(before);
+    const result = moveItem(this.getLayout(), ref, beforeRef);
+    if (!result.moved) return false;
+    this.applyMovedLayout(result.layout);
+    return true;
+  }
+
+  /** 項目を同じ入れ物の中で 1 つ動かす（`item.move_by`。`workspace.move` もこれ）。端では巡回せず false。 */
+  moveItemBy(item: ItemTarget, direction: "previous" | "next"): boolean {
+    const ref = this.refOfTarget(item);
+    const result = moveItemBy(this.getLayout(), ref, direction);
+    if (!result.moved) return false;
+    this.applyMovedLayout(result.layout);
+    return true;
+  }
+
+  /** `workspace.move`（キーバインド用の古い入口）。その workspace の項目の `moveItemBy`。 */
+  moveWorkspace(id: WorkspaceId, direction: "previous" | "next"): boolean {
+    return this.moveItemBy({ kind: "workspace", workspaceId: id }, direction);
   }
 
   /**
-   * `workspaceIds` をまとめて `beforeWorkspaceId` の直前へ（null なら末尾）。相対順序は保つ
-   * （herdr の `WorkspaceMoveBlockParams` 相当。design「振る舞いの詳細（D&D）」）。
-   * `beforeWorkspaceId` が動かす対象自身を指す場合（グループの一括移動で、ドロップ先が
-   * そのグループ自身のメンバーだった等）は意味の無い要求として null（design には無い
-   * エッジケース——`moveTab`/`moveWorkspace` の「無変化なら null」と同じ扱いに揃えた）。
+   * `workspace.move_to`（古い画面の D&D）。`workspaceIds` を `beforeWorkspaceId` の前へ、項目の動きとして読み替える（design「古い画面 × 新しいサーバ」）。
+   * (a) ID の集まりが、同じ入れ物の中の 1 つ以上の項目のちょうど全部で、落とし先が同じ入れ物の項目の先頭の workspace（または null）→ その項目を動かす。
+   * (b) ID の集まりが、グループ G の実効のメンバーのちょうど全部で、落とし先が一番上の項目の先頭（グループの先頭メンバーならそのグループ。または null）→ `g:G` を動かす。
+   * (c) それ以外（一部だけ・外と中をまたぐ・落とし先が動かす対象自身）→ 何も変えず false。実在しない ID は NotFoundError。
    */
-  moveWorkspacesTo(workspaceIds: WorkspaceId[], beforeWorkspaceId: WorkspaceId | null): Workspace[] | null {
+  moveWorkspacesTo(workspaceIds: WorkspaceId[], beforeWorkspaceId: WorkspaceId | null): boolean {
     for (const id of workspaceIds) this.requireWorkspace(id);
     if (beforeWorkspaceId !== null) this.requireWorkspace(beforeWorkspaceId);
-    const moving = new Set(workspaceIds);
-    if (beforeWorkspaceId !== null && moving.has(beforeWorkspaceId)) return null;
-    const before = [...this.workspaces.keys()];
-    const rest = before.filter((id) => !moving.has(id));
-    const insertAt = beforeWorkspaceId === null ? rest.length : rest.indexOf(beforeWorkspaceId);
-    const after = [...rest.slice(0, insertAt), ...workspaceIds, ...rest.slice(insertAt)];
-    // 実質無変化（ドロップ先が既に今の位置と同じ）なら null（`moveTab`/`moveWorkspace` と同じ規約。
-    // タスク点検の指摘——揃っていないと、意味の無い `workspace.order_changed` 配布と永続化書き込みが起きる）。
-    if (after.every((id, i) => id === before[i])) return null;
+    const next = this.planLegacyMove(workspaceIds, beforeWorkspaceId);
+    if (!next) return false;
+    this.applyMovedLayout(next);
+    return true;
+  }
+
+  private refOfTarget(target: ItemTarget): ItemRef {
+    if (target.kind === "group") {
+      this.requireGroup(target.groupId);
+      return `g:${target.groupId}`;
+    }
+    return itemRefOf(this.requireWorkspace(target.workspaceId));
+  }
+
+  /** 並べ替えの結果を当てる（仮の状態なら先に確定する。design「確定のきっかけ (b)」）。 */
+  private applyMovedLayout(layout: SidebarLayout): void {
     this.beginChange();
-    this.reorderWorkspaces(after);
-    this.syncLayoutFromOrder();
-    return this.listWorkspaces();
+    this.confirmedLayout();
+    this.layout = layout;
+    this.settle();
+  }
+
+  /** 項目に属する workspace（`g:` は中の項目の全部）。 */
+  private itemMembers(layout: SidebarLayout, ref: ItemRef): Workspace[] {
+    const all = this.listWorkspaces();
+    if (ref.startsWith("g:")) return (layout.groups[ref.slice(2)] ?? []).flatMap((r) => this.itemMembers(layout, r));
+    if (ref.startsWith("r:")) return repoMembers(all, ref.slice(2));
+    return all.filter((w) => itemRefOf(w) === ref);
+  }
+
+  /** `workspace.move_to` の読み替え。動かせるなら新しいレイアウト、(c) なら null。 */
+  private planLegacyMove(ids: WorkspaceId[], beforeId: WorkspaceId | null): SidebarLayout | null {
+    if (ids.length === 0) return null;
+    const layout = this.getLayout();
+    const idSet = new Set(ids);
+    const sameSet = (members: Workspace[]): boolean => members.length === idSet.size && members.every((w) => idSet.has(w.id));
+    const listOf = (container: GroupId | null): readonly ItemRef[] => (container === null ? layout.top : (layout.groups[container] ?? []));
+    const containerOf = (ref: ItemRef): GroupId | null | undefined => {
+      if (layout.top.includes(ref)) return null;
+      for (const [groupId, list] of Object.entries(layout.groups)) if (list.includes(ref)) return groupId;
+      return undefined;
+    };
+    /** 入れ物の項目のうち、先頭の workspace が `beforeId` のもの（null は末尾）。無ければ undefined。 */
+    const anchorIn = (container: GroupId | null): ItemRef | null | undefined => {
+      if (beforeId === null) return null;
+      return listOf(container).find((r) => this.itemMembers(layout, r)[0]?.id === beforeId);
+    };
+    const apply = (refs: ItemRef[], container: GroupId | null, anchor: ItemRef | null): SidebarLayout | null => {
+      if (anchor !== null && refs.includes(anchor)) return null; // 落とし先が動かす対象自身
+      let next = layout;
+      for (const ref of listOf(container).filter((r) => refs.includes(r))) next = moveItem(next, ref, anchor).layout;
+      return next;
+    };
+
+    // (a) 同じ入れ物の中の項目のちょうど全部。
+    const refs = [...new Set(ids.map((id) => itemRefOf(this.requireWorkspace(id))))];
+    const containers = new Set(refs.map(containerOf));
+    const [only] = containers;
+    // グループの全メンバーを null（末尾）へ、は (b)（グループを一番上の末尾へ）に読む（(a) だと、中の項目を全部末尾へ動かす実質無変化になる）。
+    const wholeGroupToEnd = beforeId === null && typeof only === "string" && sameSet(this.itemMembers(layout, `g:${only}`));
+    if (containers.size === 1 && only !== undefined && !wholeGroupToEnd && sameSet(refs.flatMap((r) => this.itemMembers(layout, r)))) {
+      const container = only;
+      const anchor = anchorIn(container);
+      if (anchor !== undefined) return apply(refs, container, anchor);
+    }
+    // (b) グループ G の実効のメンバーのちょうど全部 → `g:G` を一番上で動かす。
+    const groupId = containerOf(refs[0]!);
+    if (typeof groupId === "string" && sameSet(this.itemMembers(layout, `g:${groupId}`))) {
+      const anchor = anchorIn(null);
+      if (anchor !== undefined) return apply([`g:${groupId}`], null, anchor);
+    }
+    return null; // (c)
   }
 
   /** `[...map.entries()]` を並べ替えてから作り直す（design「設計方針」）。個々の `Workspace`
@@ -651,15 +720,6 @@ export class SessionModel {
     const entries = order.map((id) => [id, this.workspaces.get(id)!] as const);
     this.workspaces.clear();
     for (const [id, ws] of entries) this.workspaces.set(id, ws);
-  }
-
-  /**
-   * 平らな順の入れ替え（`moveWorkspace`・`moveWorkspacesTo`）の後に、レイアウトを今の平らな順から導き直す。
-   * T8 で、この 2 つがレイアウトの操作（`item.move`・`item.move_by`）へ委ねる形になるまでのつなぎ
-   * （今は平らな順が先に動くので、レイアウトを後から合わせる）。
-   */
-  private syncLayoutFromOrder(): void {
-    if (this.layout) this.layout = layoutFromLegacy(this.listWorkspaces(), this.listGroups());
   }
 
   // --- サイドバーのレイアウト（20261004-group-worktree-items） -------------------------------
