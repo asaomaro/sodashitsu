@@ -30,11 +30,30 @@
     source.hidden = !on;
   });
 
+  // 枠自身を動かす・外へ繋ぐ要素と、リンクを取り除く。整形の直後（`marked` の出力）と、mermaid の図を挿入した直後の両方に掛ける
+  // （図のラベルの HTML・`click … href` は `<a>` を作り、SMIL は `href` を後から書き換えるので、図の中にも掛けないと枠自身が外へ移れる）。
+  // `whole` が真のときは `svg`・`math` も取り除く（Markdown への直書きは捨てる）。図の SVG そのものは残すので、図には偽を渡す。
+  var SMIL = 'set, animate, animateTransform, animateMotion, animateColor';
+  function sanitize(root, whole) {
+    // CSP の default-src 'none' では止まらない `<meta http-equiv=refresh>`・`<base>`・`<form>` 等。
+    var sel = 'meta, link, base, form, iframe, frame, object, embed, map, area, script, ' + SMIL;
+    if (whole) sel += ', svg, math';
+    Array.prototype.forEach.call(root.querySelectorAll(sel), function (el) { el.remove(); });
+    // リンクは開けない（外への通信を止める）。文字として残し、行き先は title に出す。同じ文書の中の `#` は残す。`xlink:href` は常に外す。
+    Array.prototype.forEach.call(root.querySelectorAll('a'), function (a) {
+      var href = a.getAttribute('href') || a.getAttribute('xlink:href') || '';
+      a.removeAttribute('xlink:href');
+      if (href.charAt(0) === '#') return;
+      a.removeAttribute('href');
+      if (href !== '') a.setAttribute('title', href);
+    });
+  }
+
   async function diagrams(dark) {
     var blocks = Array.prototype.slice.call(doc.querySelectorAll('pre > code.language-mermaid'));
     if (!blocks.length) return;
     await load('mermaid.min.js'); // 図があるときだけ読む（大きいので）
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'default' });
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', flowchart: { htmlLabels: false }, theme: dark ? 'dark' : 'default' });
     for (var i = 0; i < blocks.length; i++) {
       var pre = blocks[i].parentNode;
       try {
@@ -42,6 +61,7 @@
         var fig = document.createElement('div');
         fig.className = 'mermaid';
         fig.innerHTML = out.svg;
+        sanitize(fig, false); // 図の中のリンク・SMIL も外す（枠自身の遷移を許さない）
         pre.replaceWith(fig);
       } catch (e) { // 描けない図は、コードのまま残して理由を添える
         var note = document.createElement('div');
@@ -64,18 +84,7 @@
     try {
       await load('marked.umd.js');
       doc.innerHTML = marked.parse(d.source, { gfm: true });
-      // 枠自身を動かす・外へ繋ぐ要素は取り除く（CSP の default-src 'none' では止まらない `<meta http-equiv=refresh>`・`<base>`・`<form>` 等）。
-      // `svg`・`math`・`map`・`area` も取り除く: SVG の `<a>` は `<set>`・`<animate>` で `href` を後から書き換えられ（SMIL）、リンクを外す処理をすり抜けて枠自身が外へ移る。
-      // Markdown に SVG・MathML を直書きする用途は捨てる（図は ```mermaid で書く。mermaid の SVG は、ここの後で足すので残る）。
-      Array.prototype.forEach.call(doc.querySelectorAll('meta, link, base, form, iframe, frame, object, embed, svg, math, map, area'), function (el) { el.remove(); });
-      // リンクは開けない（外への通信を止める）。文字として残し、行き先は title に出す。同じ文書の中の `#` は残す。`xlink:href` は常に外す。
-      Array.prototype.forEach.call(doc.querySelectorAll('a'), function (a) {
-        var href = a.getAttribute('href') || a.getAttribute('xlink:href') || '';
-        a.removeAttribute('xlink:href');
-        if (href.charAt(0) === '#') return;
-        a.removeAttribute('href');
-        if (href !== '') a.title = href;
-      });
+      sanitize(doc, true);
       toggle.hidden = false;
     } catch (e) {
       plain();

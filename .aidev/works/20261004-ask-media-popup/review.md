@@ -112,3 +112,24 @@ $ npx playwright test src/specs/ask-view.spec.ts -g "Markdown に埋め込んだ
 ### 検証
 
 `pnpm build`・`pnpm typecheck` 通過。単体（protocol・server/ask・web・cli・scripts）181 ファイル・3908 件通過。E2E: `ask-view`・`ask-media`・`ask-types` 25 件、`ask-form*` 73 件通過。
+
+## ラウンド 3（532270d の再々レビュー）
+
+[must] mermaid の図の中のリンク（`click … href`・ラベルの `<a href>`）から枠が外へ移れた → 取り除きを `sanitize()` にまとめ、図の挿入直後にも掛けた（decisions.md D11・docs/sodactl.md を合わせた）。E2E を足した（2 パターンの図で、図は 2 つ描かれ・リンク 0・SMIL 0・押しても枠の URL が変わらない）。
+
+### 壊して落ちる確認（`/tmp/markdown.js.fix2` と置き換えて戻し、`git diff` は修正どおり）
+
+```
+== A: 図への sanitize を外す
+  ✘  1 src/specs/ask-view.spec.ts:249:1 › mermaid の図の中のリンク（…）も外され、図のリンクを押しても Markdown の枠は外へ移らない (3.7s)
+    -   "links": 0,
+    +   "links": 2,
+        "smil": 0,
+    > 274 |     ).toEqual({ figures: 2, links: 0, smil: 0 });
+  1 failed
+== B: さらに htmlLabels 設定も外す
+  ✘  1 src/specs/ask-view.spec.ts:249:1 › mermaid の図の中のリンク（…）も外され、図のリンクを押しても Markdown の枠は外へ移らない (3.5s)
+    -   "links": 0,
+    +   "links": 2,
+  1 failed
+```

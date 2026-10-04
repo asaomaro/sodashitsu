@@ -246,6 +246,44 @@ test("Markdown に埋め込んだ <script>・onerror・javascript: は動かな�
   }
 });
 
+test("mermaid の図の中のリンク（click … href・ラベルの <a href>・SMIL）も外され、図のリンクを押しても Markdown の枠は外へ移らない", async ({
+  page,
+  appServer,
+}) => {
+  const media = await makeMediaDir();
+  try {
+    const p1 = await setup(page, appServer);
+    const md = await media.write(
+      "diagram-links.md",
+      "# 図\n\n```mermaid\ngraph TD\n A-->B\n click A href \"https://example.com/click\"\n```\n\n```mermaid\ngraph TD\n A[\"<a href='https://example.com/label'>label</a>\"]-->B\n```\n",
+    );
+    const run = await runAsk(appServer, p1, SPEC({ file: md }));
+    await expect(dialog(page)).toBeVisible();
+    const f = frameOf(page);
+    await expect(f.locator("html")).toHaveAttribute("data-ready", "1");
+    const frame = page.frames().find((x) => x.url().endsWith("/ask-view/markdown.html"))!;
+    // 図は描かれている（図そのものは残る）が、図の中のリンクは 0（href・xlink:href とも）。
+    expect(
+      await frame.evaluate(() => ({
+        figures: document.querySelectorAll(".mermaid svg").length,
+        links: Array.from(document.querySelectorAll(".mermaid a")).filter(
+          (a) => a.hasAttribute("href") || a.hasAttribute("xlink:href"),
+        ).length,
+        smil: document.querySelectorAll(".mermaid set, .mermaid animate").length,
+      })),
+    ).toEqual({ figures: 2, links: 0, smil: 0 });
+    // 図の中のリンク（があれば）を押しても、枠は移らない。
+    for (const a of await f.locator(".mermaid a").all()) await a.click({ timeout: 1500, force: true }).catch(() => undefined);
+    for (const n of await f.locator(".mermaid g.node").all()) await n.click({ timeout: 1500 }).catch(() => undefined);
+    await page.waitForTimeout(1500);
+    expect(frame.url().endsWith("/ask-view/markdown.html")).toBe(true);
+    await page.keyboard.press("Escape");
+    await run.done;
+  } finally {
+    await media.cleanup();
+  }
+});
+
 test("枠の中にフォーカスがあるときの Esc は取り消し・Ctrl+Enter は決定として親へ届く。枠のスクリプトが送る関係のないメッセージは無視される（AC-I1・AC-I2・AC-I5）", async ({
   page,
   appServer,
