@@ -94,4 +94,23 @@ AssertionError: expected "vi.fn()" to be called once with arguments: [ { status:
       Tests  3 failed | 25 passed (28)
 ```
 
+#### T8（枠の `onSubmit` が `comments` を送らない／`normalizeAskSpec` が `comments: false` を残さない、を別々に壊して `pnpm build` 後に E2E）
+```
+  1) src/specs/ask-form-comments.spec.ts:74:1 › 端から端まで: 書いた質問の id と文（前後の空白なし）が sodactl の結果の comments に入る。閉じた欄も入る。空白だけは入らない（AC4） 
+  2) src/specs/ask-form-comments.spec.ts:98:1 › 表示条件（showIf）で隠れた質問の欄は入らない。いったん隠れて再び見えた質問の欄は、内容が残っていて入る（AC4） 
+  3) src/specs/ask-form-comments.spec.ts:138:1 › 自由記述に HTML（<script>・<img onerror>）を書いても動かず、DOM に要素もできず、結果には書いた文字のまま入る（AC8） 
+  4) src/specs/ask-form-mobile.spec.ts:92:1 › モバイルの画面で、自由記述のボタンをタップして欄を開き、書いて決定すると comments に入る（AC2・AC4） 
+  4 failed
+  6 passed (18.3s)
+  1) src/specs/ask-form-comments.spec.ts:42:1 › comments: false の定義ではどの質問にもボタンが出ない。comment: false の質問にだけ出ない定義では、ほかの質問には出る（AC3） 
+    Error: expect(locator).toHaveCount(expected) failed
+  1 failed
+  6 passed (17.2s)
+```
+
 ### 点検の指摘
+- [nit][conv:-] decisions.md D8 の Tab の行番号が差分で 1 行ずれていた / 対応: 修正済（T7・ラウンド1）
+- [nit][conv:-] ask-form.spec.ts の「目次は出ない」が paging: false による固定の観測になったことを D8 に書くとよい / 対応: 修正済（T7・ラウンド1）
+- [nit][conv:-] ask-form-comments.spec.ts・ask-form-mobile.spec.ts が部品の内部属性（`[data-ask-submit]`・`textarea[data-ask-comment]` 等）を askForm.ts を経由せず直書き / 対応: 修正済（T8・ラウンド1。`submitForm`・`commentToggle`・`commentBox` に集約）
+- [nit][conv:-] multi の質問に自由記述を書く例が端から端までに無い / 対応: 修正済（T8・ラウンド1。d に書く）
+- [nit][conv:-] HTML の件が入力直後の DOM だけを見ている / 対応: 修正済（T8・ラウンド1。閉じて開き直した後も見る）

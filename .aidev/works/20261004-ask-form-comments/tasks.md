@@ -41,7 +41,7 @@ design.md のとおり、下から積む。(1) 部品と試験データを写す
       対象: `packages/e2e/src/specs/ask-form.spec.ts:381, :400, :526`、`packages/e2e/src/specs/ask-form-index.spec.ts:654-657`、`packages/e2e/src/specs/ask-form-mobile.spec.ts`、`ask-form-extras.spec.ts`、`packages/e2e/src/support/askForm.ts`、`third_party/ask-form/README.md:41-60, :113-124`
       依存: T5, T6
       AC: AC2
-- [ ] T8: 新しい E2E（表示と結果）——`ask-form-comments.spec.ts`: ボタンと欄の開閉・文言（「＋ 自由記述」「自由記述を閉じる」「自由記述（入力あり）を開く」）・`text` の質問に無い／`comments: false`・`comment: false`・即確定のフォーム（付かず、選んだ時点で決定する）／端から端まで（書いた質問の id と文・閉じた欄も入る・空白だけは入らない・隠れた質問は入らない・隠れて戻った質問は入る・何も書かなければ項目が無い）／HTML（`<script>`・`<img onerror>`）を書いても動かず、文字のまま届く。`ask-form-mobile.spec.ts` に、タップで開いて書く件。補助 `support/askForm.ts` に自由記述のロケータ。壊して落ちる確認（`onSubmit` の `comments`・`normalizeAskSpec` の `comments`）
+- [x] T8: 新しい E2E（表示と結果）——`ask-form-comments.spec.ts`: ボタンと欄の開閉・文言（「＋ 自由記述」「自由記述を閉じる」「自由記述（入力あり）を開く」）・`text` の質問に無い／`comments: false`・`comment: false`・即確定のフォーム（付かず、選んだ時点で決定する）／端から端まで（書いた質問の id と文・閉じた欄も入る・空白だけは入らない・隠れた質問は入らない・隠れて戻った質問は入る・何も書かなければ項目が無い）／HTML（`<script>`・`<img onerror>`）を書いても動かず、文字のまま届く。`ask-form-mobile.spec.ts` に、タップで開いて書く件。補助 `support/askForm.ts` に自由記述のロケータ。壊して落ちる確認（`onSubmit` の `comments`・`normalizeAskSpec` の `comments`）
       対象: `packages/e2e/src/specs/ask-form-comments.spec.ts`（新規）、`packages/e2e/src/specs/ask-form-mobile.spec.ts`、`packages/e2e/src/support/askForm.ts`・`askSent.ts`、手本は `packages/e2e/src/specs/ask-form-extras.spec.ts`
       依存: T7
       AC: AC2, AC3, AC4, AC8

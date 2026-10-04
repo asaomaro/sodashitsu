@@ -2,7 +2,7 @@ import { devices, type Page } from "@playwright/test";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
 import { askFixture, runAsk, watchAskSubscriptions } from "../support/ask.js";
-import { indexItems, indexWidth, settle } from "../support/askForm.js";
+import { commentBox, commentToggle, indexItems, indexWidth, settle } from "../support/askForm.js";
 
 /**
  * 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）をモバイルの画面で（AC4・AC-I3）。幅 390px では質問の目次は出ない（質問は 1 枚に並ぶ）。`mobile.spec.ts` と同じく、実機の代わりに Playwright の
@@ -86,5 +86,38 @@ test("即確定（質問が 1 つだけ・single・補足なし）: 選択肢の
   await expect(page.locator("input[type=radio][value=x]")).toBeChecked();
   await page.locator("label.opt", { hasText: "エックス" }).tap();
   expect((await second.done).json).toEqual({ status: "answered", answers: { a: "x" } });
+  await expect(dialog).toHaveCount(0);
+});
+
+test("モバイルの画面で、自由記述のボタンをタップして欄を開き、書いて決定すると comments に入る（AC2・AC4）", async ({ page, appServer }) => {
+  const client = await appServer.openClient("mobile");
+  const p1 = client.helloSnapshot()!.panes[0]!.id;
+  await openBrowser(page, appServer);
+  const run = await runAsk(appServer, p1, {
+    questions: [
+      { id: "a", label: "A", default: "x", options: ["x", "y"] },
+      { id: "b", label: "B", default: "p", options: ["p", "q"] },
+    ],
+  });
+  const dialog = page.locator("dialog#soda-ask-dialog[open]");
+  await expect(dialog).toBeVisible();
+  const toggle = commentToggle(page, "a");
+  await toggle.scrollIntoViewIfNeeded();
+  await toggle.tap();
+  const box = commentBox(page, "a");
+  await expect(box).toBeVisible();
+  await expect(toggle).toHaveText("自由記述を閉じる");
+  await box.fill("スマホから書いた");
+  // 開いた欄は画面（ダイアログ）からはみ出さない。
+  const d = (await dialog.boundingBox())!;
+  const b = (await box.boundingBox())!;
+  expect(b.x).toBeGreaterThanOrEqual(d.x);
+  expect(b.x + b.width).toBeLessThanOrEqual(d.x + d.width);
+  const submit = page.locator("[data-ask-submit]");
+  await submit.scrollIntoViewIfNeeded();
+  await submit.tap();
+  const r = await run.done;
+  expect(r.code).toBe(0);
+  expect(r.json).toEqual({ status: "answered", answers: { a: "x", b: "p" }, comments: { a: "スマホから書いた" } });
   await expect(dialog).toHaveCount(0);
 });
