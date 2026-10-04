@@ -35,3 +35,7 @@ events:
   - { ts: 2026-10-04T14:18:42Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
   - { ts: 2026-10-04T14:19:27Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
   - { ts: 2026-10-04T14:54:05Z, phase: test, event: approved, metrics: { passed: 8040, failed: 0 } }
+  - { ts: 2026-10-04T22:10:44Z, phase: review, event: approved, metrics: { ac_total: 27, ac_covered: 27, tasks_no_ac: 0, tasks_ac_none: 0 } }
+  - { ts: 2026-10-04T22:11:57Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-10-04T22:13:05Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-10-04T22:13:09Z, phase: deliver, event: approved, metrics: { files_changed: 69, insertions: 11813, deletions: 112 } }
