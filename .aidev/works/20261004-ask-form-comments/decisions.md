@@ -42,3 +42,8 @@
 - 直した後、4 本を 2 回続けて流して 56 件とも通った（同じ結果）。`Tab` を数える件（`ask-form.spec.ts` の 382・401・527 行目〔T7 の差分でコメントが 1 行増えた後の行番号〕・`ask-form-index.spec.ts:654-657`）は変更なしで通る（自由記述のボタンは、ラジオの後ろ・次の質問の前に入るが、これらの件は 1 問目のラジオから `ArrowDown` や `Alt+PageDown` で動くので順番に影響しない）。
 - 「E2E が読む部品の内部」の `grep`: README の属性 10 個はすべて 1 以上（`data-ask-title` 2・`data-ask-question` 1・`data-ask-note` 1・`data-ask-status` 1・`data-ask-submit` 1・`data-ask-cancel` 1・`data-ask-index` 1・`data-other` 3・`aria-invalid` 2・`aria-current` 1）、`nav.index`/`.sec`/`.lack` 3・`intro`/`help`/`cnt` 5。新しい `data-ask-comment` 4・`data-ask-comment-toggle` 1 を T8 以降の E2E が読む（README の表は T10 で足す）。
 - 共通の試験データの `sodashitsu` の欄: `normalize.json` の「誤り: 知らない型」だけ（`collect.json` は無し）。自由記述の例は欄を持たない（ask-form と同じ結果）ので見直す必要は無い。
+
+## D9: deliver の `aidev verify` が「起動確認が失敗のまま」で FAIL する（この work と無関係。着地は報告つきで続けた）
+
+- 作業フォルダ `/workspaces/sodashitsu-wt/ask-form-comments` で `aidev smoke` を実行すると、1 本目（`pnpm -s build && pnpm -s smoke`）の Web の段で、端末の入力欄（`.xterm-helper-textarea`）のクリックを `.pane-frame-edge` が遮って失敗する。この work の前（96efb87）をこのフォルダで実行しても同じ（`test-result.md`）。`SHELL=/bin/sh` にしても同じ。作業フォルダの外の git worktree で同じコミットを実行すると 10 本とも pass する。原因（作業フォルダのパスか環境か）は調べていない。
+- そのため `aidev verify` は FAIL のまま。依頼元の指示（push と PR まで）を受けて、この FAIL を承知のうえで着地した。PR 本文の「テスト」に書いた。直す・調べるのは別の作業。
