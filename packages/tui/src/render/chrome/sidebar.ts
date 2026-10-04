@@ -38,7 +38,9 @@ export type SidebarTarget =
   /** 選んでいないマシンの workspace の行（押すとそのマシンのその workspace へ）。 */
   | { kind: "machineWorkspace"; machineId: string; workspaceId: string; tabId: string }
   /** 区画の中の何も無い行（ホイールでその区画を動かす）。 */
-  | { kind: "area"; section: "spaces" | "agents" };
+  | { kind: "area"; section: "spaces" | "agents" }
+  /** エージェントの行の末尾の件数（`⤷n`。20261004-subagent-display）。`x`〜`x+w` だけが当たり（押すとサブエージェントの一覧）。 */
+  | { kind: "subagents"; paneId: string; x: number; w: number };
 export type SidebarHit = SidebarTarget & { y: number; section?: "spaces" | "agents" };
 
 /**
@@ -68,6 +70,8 @@ interface Line {
   selected: boolean;
   navigated?: boolean;
   hit?: SidebarTarget;
+  /** 1 行目の末尾に右寄せで出す印（サブエージェントの件数）。 */
+  badge?: { text: string; paneId: string };
 }
 
 /** 画面の 1 行（項目の何行目か）。 */
@@ -207,6 +211,10 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
         ),
         selected: id === model.focusedPaneId,
         hit: { kind: "agent", paneId: id },
+        // サブエージェントの件数（1 件以上のとき。20261004-subagent-display）。`⤷` は unicode11 で 1 桁（環境で崩れるなら別の記号にする。decisions D11）。
+        ...((p.agent?.subagents?.count ?? 0) > 0
+          ? { badge: { text: `⤷${p.agent!.subagents!.count}`, paneId: id } }
+          : {}),
       });
     }
   }
@@ -446,7 +454,18 @@ function paintSection(
     else hits.push({ y, kind: "area", section });
     // 1 行目は項目の頭から、2 行目からは状態の印の幅（2 桁）だけ下げる（web の line2 と同じ）。
     let x = rect.x + 1 + line.indent + (sub > 0 ? 2 : 0);
-    const end = rect.x + inner - 1;
+    const lineEnd = rect.x + inner - 1;
+    // 1 行目の末尾の印（件数）。名前の行の幅（字下げを除く）が印＋2 桁を超えるときだけ出し、文字はその手前（印と 1 桁あけて）までに縮める。
+    // 入らない狭い幅では出さない（文字の最小幅の保証はしない。一覧へは pane のメニュー・`show_subagents` からも行ける）。
+    const badge = sub === 0 ? line.badge : undefined;
+    const badgeW = badge ? stringWidth(badge.text) : 0;
+    const showBadge = badge !== undefined && lineEnd - rect.x - 1 - line.indent > badgeW + 2;
+    const end = showBadge ? lineEnd - badgeW - 1 : lineEnd;
+    if (showBadge) {
+      const bx = lineEnd - badgeW;
+      grid.text(bx, y, badge!.text, rowFg, rowBg, ATTR.underline, badgeW);
+      hits.push({ y, section, kind: "subagents", paneId: badge!.paneId, x: bx, w: badgeW });
+    }
     const segs = line.rows[sub]!;
     segs.forEach((seg, k) => {
       if (x >= end) return;

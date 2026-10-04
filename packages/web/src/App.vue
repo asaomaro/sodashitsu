@@ -17,6 +17,7 @@ import PaneLayout from "./components/PaneLayout.vue";
 import PrefixIndicator from "./components/PrefixIndicator.vue";
 import ReconnectOverlay from "./components/ReconnectOverlay.vue";
 import Sidebar from "./components/Sidebar.vue";
+import SubagentListDialog from "./components/SubagentListDialog.vue";
 import TabBar from "./components/TabBar.vue";
 import TerminalPane from "./components/TerminalPane.vue";
 import Toast from "./components/Toast.vue";
@@ -90,6 +91,7 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
     <GroupPickerDialog />
     <SessionSwitchDialog />
     <ConfirmDialog />
+    <SubagentListDialog />
     <SettingsDialog />
     <HelpDialog />
     <OnboardingDialog />

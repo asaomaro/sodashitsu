@@ -2649,6 +2649,55 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     expect(conn.requests).toEqual([]);
   });
 
+  // 20261004-subagent-display（show_subagents）。
+  describe("showSubagents（show_subagents）", () => {
+    const subs = (n: number) => ({ count: n, items: Array.from({ length: n }, (_, i) => ({ id: `s${i}`, startedAt: 0 })) });
+    function setup(agent: AgentInfo | null) {
+      const session = useSessionStore(pinia);
+      const view = useViewStore(pinia);
+      session.workspaceUpserted(makeWorkspace("w1", ["t1"]));
+      session.tabUpserted(makeTab("t1", "w1"));
+      session.paneUpserted({ ...makePane("p1", "t1"), agent });
+      view.setView("w1", "t1");
+      view.focusPane("p1");
+      return { session, view };
+    }
+
+    it("フォーカスしている pane のエージェントの一覧を開く（ボタンから開いたのではないので opener は無い。何も送らない）", () => {
+      const { view } = setup(makeAgent({ subagents: subs(2) }));
+      const conn = makeConnection();
+      const { dispatcher } = makeDispatcher(conn);
+      dispatcher.run({ type: "showSubagents" });
+      expect(view.dialogContext).toEqual({ kind: "subagents", machineId: "local", paneId: "p1" });
+      expect(conn.requests).toEqual([]);
+    });
+
+    it("0 件・分からない（項目なし）・エージェントが居ない・フォーカスが無いときは何もしない", () => {
+      for (const agent of [makeAgent({ subagents: subs(0) }), makeAgent(), null]) {
+        pinia = createPinia();
+        const { view } = setup(agent);
+        const { dispatcher } = makeDispatcher(makeConnection());
+        dispatcher.run({ type: "showSubagents" });
+        expect(view.dialogContext).toBeNull();
+      }
+      pinia = createPinia();
+      const view = useViewStore(pinia);
+      const { dispatcher } = makeDispatcher(makeConnection());
+      dispatcher.run({ type: "showSubagents" });
+      expect(view.dialogContext).toBeNull();
+    });
+
+    it("別のマシンを選んでいれば、そのマシンの対象として開く", () => {
+      const { view } = setup(makeAgent({ subagents: subs(1) }));
+      const machines = useMachinesStore(pinia);
+      machines.setMachines([{ id: "gpu", label: "GPU", host: "h", enabled: true, state: "connected" } as never]);
+      machines.select("gpu");
+      const { dispatcher } = makeDispatcher(makeConnection());
+      dispatcher.run({ type: "showSubagents" });
+      expect(view.dialogContext).toMatchObject({ kind: "subagents", machineId: "gpu", paneId: "p1" });
+    });
+  });
+
   it("openGraph（open_graph。20260927-agent-graph）: グラフ画面を開く（ダイアログの枠は使わない・何も送らない）", () => {
     const conn = makeConnection();
     const view = useViewStore(pinia);

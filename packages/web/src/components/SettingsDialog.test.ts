@@ -353,6 +353,55 @@ describe("SettingsDialog — 節「エージェント連携」（20260923-agent-
     expect(uninstallAgentIntegration).toHaveBeenCalledWith("claude");
   });
 
+  // 20261004-subagent-display。導入済みで足りないフックがあれば「更新が必要」と［更新］（押すまで設定ファイルは書き換えない）。
+  it("needsUpdate なら「更新が必要」と［更新］を出し、押すと installAgentIntegration(kind) を呼ぶ（解除とは別のボタン）", async () => {
+    const status: AgentIntegrationStatusResult = {
+      autoResumeEnabled: true,
+      agents: { claude: { cliDetected: true, installed: true, needsUpdate: true }, codex: { cliDetected: true, installed: true }, ...defaultOtherAgentStatuses() },
+    };
+    const { actions, installAgentIntegration, uninstallAgentIntegration } = makeAgentIntegrationActions(status);
+    const { wrapper } = await openDialog(makeController(), undefined, actions);
+    const rows = agentIntegrationSection(wrapper).findAll("li.agent-integration-row");
+    expect(rows[0]!.text()).toContain("更新が必要");
+    expect(rows[1]!.text()).not.toContain("更新が必要"); // codex は needsUpdate の項目なし
+    expect(rows[1]!.find(".agent-integration-update").exists()).toBe(false);
+    const update = rows[0]!.get(".agent-integration-update");
+    expect(update.text()).toBe("更新");
+    expect(update.attributes("aria-label")).toBe("Claude Code のフックを更新する");
+    expect(rows[0]!.findAll("button.settings-btn").map((b) => b.text())).toEqual(["更新", "解除"]);
+    await update.trigger("click");
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(installAgentIntegration).toHaveBeenCalledWith("claude");
+    expect(uninstallAgentIntegration).not.toHaveBeenCalled();
+    expect(agentIntegrationSection(wrapper).text()).toContain("起動し直すと新しいフックが効きます");
+  });
+
+  it("needsUpdate が false・項目なしなら［更新］は出ない。更新の失敗はそのまま伝える", async () => {
+    const status: AgentIntegrationStatusResult = {
+      autoResumeEnabled: true,
+      agents: { claude: { cliDetected: true, installed: true, needsUpdate: false }, codex: { cliDetected: true, installed: true, needsUpdate: true }, ...defaultOtherAgentStatuses() },
+    };
+    const { actions } = makeAgentIntegrationActions(status);
+    actions.installAgentIntegration = vi.fn(async () => ({ ok: false, message: "設定ファイルの形が想定と違うため、何も変えませんでした" }));
+    const { wrapper } = await openDialog(makeController(), undefined, actions);
+    const rows = agentIntegrationSection(wrapper).findAll("li.agent-integration-row");
+    expect(rows[0]!.find(".agent-integration-update").exists()).toBe(false);
+    await rows[1]!.get(".agent-integration-update").trigger("click");
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(agentIntegrationSection(wrapper).text()).toContain("設定ファイルの形が想定と違うため");
+  });
+
+  it("説明にフックの数（Claude Code は 6 つ）・サブエージェントの表示に使うこと・更新と解除は起動し直した後から効くことを書く", async () => {
+    const { actions } = makeAgentIntegrationActions({ autoResumeEnabled: true, agents: { claude: { cliDetected: true, installed: false }, codex: { cliDetected: true, installed: false }, ...defaultOtherAgentStatuses() } });
+    const { wrapper } = await openDialog(makeController(), undefined, actions);
+    const note = agentIntegrationSection(wrapper).get(".settings-note").text();
+    expect(note).toContain("Claude Code はフックが 6 つ");
+    expect(note).toContain("サブエージェントの表示");
+    expect(note).toContain("その後に起動した Claude Code から効きます");
+  });
+
   it("自動再開の switch は現在値を反映し、押すと反転して setAgentIntegrationAutoResume を呼ぶ（AC-I4）", async () => {
     const status: AgentIntegrationStatusResult = {
       autoResumeEnabled: true,

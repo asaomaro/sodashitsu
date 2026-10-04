@@ -3,7 +3,7 @@
 //
 // 中身（release/sodashitsu-<version>/）:
 //   bin/soda, bin/soda.cmd, bin/sodactl, bin/sodactl.cmd   起動用のコマンド（sh と bat）
-//   packages/{protocol,client-core,tui,server,cli}/（package.json と dist）, packages/web/dist
+//   packages/{protocol,client-core,tui,server,cli}/（package.json と dist）, packages/web/dist, packages/server/assets（フックのスクリプト）
 //   third_party/, docs/, LICENSE, NOTICE                  サーバが相対パスで読むので、リポジトリと同じ並びで持つ
 //   node_modules/                                         本番の依存だけ（node-pty は OS ごとのネイティブなので、作った OS 用）
 // サーバは ../../web/dist と ../../../third_party を相対で探すため、packages/ の並びは変えない。
@@ -44,6 +44,12 @@ for (const p of [...runtimePackages, "web"]) {
   cpSync(dist, join(dest, "dist"), { recursive: true, filter: (s) => !s.endsWith(".map") || p !== "web" });
   if (p !== "web") cpSync(join(root, "packages", p, "package.json"), join(dest, "package.json"));
 }
+// フックのスクリプト（20261004-subagent-display）。サーバは dist から見て ../assets/agent-hook-report.cjs を読んで利用者の設定の側へ写す
+// （導入・更新）ので、配布物にも要る。テストは持ち歩かない。
+cpSync(join(root, "packages", "server", "assets"), join(out, "packages", "server", "assets"), {
+  recursive: true,
+  filter: (s) => !s.endsWith(".test.ts"),
+});
 for (const f of ["third_party", "docs", "LICENSE", "NOTICE", "pnpm-workspace.yaml", "pnpm-lock.yaml"]) {
   cpSync(join(root, f), join(out, f), { recursive: true });
 }

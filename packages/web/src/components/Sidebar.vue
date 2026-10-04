@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch } from "vue";
-import type { Workspace } from "@sodashitsu/protocol";
+import type { AgentInfo, Workspace } from "@sodashitsu/protocol";
 import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
@@ -269,6 +269,16 @@ function onButtonKeydown(ev: KeyboardEvent): void {
   if ((ev.key === "Enter" || ev.key === " ") && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
     ev.stopPropagation();
   }
+}
+
+/** サブエージェントの件数（報告を受けていない・0 件は 0。件数のボタンは 1 件以上のときだけ出す）。 */
+function subagentCount(agent: AgentInfo): number {
+  return agent.subagents?.count ?? 0;
+}
+
+/** その pane のエージェントのサブエージェントの一覧を開く（ダイアログ。対象は選んでいるマシンの pane）。 */
+function openSubagents(paneId: string): void {
+  view.openDialogWithContext({ kind: "subagents", machineId: machines.selectedId, paneId, opener: "button" });
 }
 
 /** 新しい workspace を作る。キーの `prefix+shift+n` と同じ経路（`ActionDispatcher.run`）を通す。 */
@@ -550,7 +560,8 @@ watch(
           {{ AGENT_SORT_LABEL[view.agentSort] }}
         </button>
       </div>
-      <div v-for="{ pane, workspace, state, lines } in agents" :key="pane.id" class="sidebar-row" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
+      <!-- `tabindex="-1"` と `data-agent-pane` は、一覧のダイアログを閉じたときのフォーカスの戻り先（ボタンが無ければ行。20261004-subagent-display）。Tab の順には入れない。 -->
+      <div v-for="{ pane, workspace, state, lines, agent } in agents" :key="pane.id" class="sidebar-row" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
         <!-- 畳んだサイドバーは今までどおり状態の印だけ（20260927-sidebar-row-tokens）。 -->
         <div v-if="view.sidebarCollapsed" class="sidebar-row-line1">
           <StateIcon class="sidebar-state-icon" :state="state" />
@@ -561,6 +572,20 @@ watch(
               <StateIcon v-if="t.kind === 'state_icon'" class="sidebar-state-icon" :state="state" :style="tokenStyleAttr(t.style)" />
               <span v-else-if="t.kind === 'text'" v-bind="textTokenAttrs(t, i)">{{ t.text }}</span>
             </template>
+            <!-- サブエージェントの件数（20261004-subagent-display）。1 行目の右端（利用者の行の並びの設定で 1 行目が空なら出ない）。行のクリック（その pane へ移る）・ドラッグの開始へ伝えない。 -->
+            <button
+              v-if="i === 0 && subagentCount(agent) > 0"
+              type="button"
+              class="sidebar-subagent-btn"
+              :data-subagent-pane="pane.id"
+              :aria-label="`サブエージェント ${subagentCount(agent)} 件を表示`"
+              @pointerdown.stop
+              @click.stop="openSubagents(pane.id)"
+              @keydown="onButtonKeydown"
+            >
+              <svg class="sidebar-subagent-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.4" /></svg>
+              <span aria-hidden="true">{{ subagentCount(agent) }}</span>
+            </button>
           </div>
         </template>
       </div>
@@ -662,6 +687,30 @@ watch(
   display: flex;
   align-items: center;
   gap: 0.5em;
+}
+/* サブエージェントの件数のボタン。1 行目の右端に置き、行の高さを変えない（枠線・余白を最小に。文字の高さに収める）。 */
+.sidebar-subagent-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+  flex: none;
+  margin-left: auto;
+  padding: 0 0.3em;
+  height: 1.2em;
+  line-height: 1;
+  font-size: 0.85em;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 0.6em;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.sidebar-subagent-btn:hover {
+  background: var(--soda-menu-hover-bg, #343746);
+}
+.sidebar-subagent-icon {
+  width: 0.9em;
+  height: 0.9em;
 }
 .sidebar-row-line2 {
   display: flex;

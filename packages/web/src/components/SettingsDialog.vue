@@ -400,6 +400,18 @@ async function toggleAgentIntegration(kind: AgentIntegrationKind, installed: boo
   }
 }
 
+/** 導入済みで足りないフックがある（`needsUpdate`）ときの［更新］。導入の入口が「足りない分だけ足す」ので、`install` を呼ぶ（20261004-subagent-display）。 */
+async function updateAgentIntegration(kind: AgentIntegrationKind): Promise<void> {
+  if (!actions || agentIntegrationBusy.value) return;
+  agentIntegrationBusy.value = kind;
+  try {
+    const result = await actions.installAgentIntegration(kind);
+    agentIntegrationMessage.value = result.ok ? (result.message ?? "更新しました。すでに動いている Claude Code は、起動し直すと新しいフックが効きます。") : (result.message ?? "更新に失敗しました");
+  } finally {
+    agentIntegrationBusy.value = null;
+  }
+}
+
 function toggleAgentIntegrationAutoResume(): void {
   const current = agentIntegrations.status?.autoResumeEnabled ?? true;
   void actions?.setAgentIntegrationAutoResume(!current);
@@ -1229,7 +1241,10 @@ function onNativeCancel(ev: Event): void {
       <h3 id="settings-agent-integration" class="settings-heading">エージェント連携</h3>
       <p class="settings-note">
         各エージェントの公式フックを使い、サーバの再起動後にその会話を自動で再開します。導入すると、
-        そのエージェントの設定ファイルにフックが1件だけ追加されます（他の設定は変更しません）。
+        そのエージェントの設定ファイルにフックが追加されます（Codex など: 1 つ。他の設定は変更しません）。
+        <strong>Claude Code はフックが 6 つ</strong>入ります——会話の再開に加えて、エージェントが動かしているサブエージェントの表示に使います。
+        足りないフックがあれば「更新が必要」と出るので、［更新］で足せます（押すまで設定ファイルは書き換えません）。
+        更新と解除は、その後に起動した Claude Code から効きます（すでに動いているものは前のままです）。
         この設定は<strong>サーバ全体</strong>で共有されます（ほかの節と違い、ブラウザごとではありません）。
       </p>
       <ul class="settings-list">
@@ -1240,10 +1255,21 @@ function onNativeCancel(ev: Event): void {
               <template v-if="!agentIntegrations.status">確認中…</template>
               <template v-else>
                 {{ agentIntegrations.status.agents[k.value].installed ? "導入済み" : "未導入" }}
+                <template v-if="agentIntegrations.status.agents[k.value].needsUpdate">（更新が必要）</template>
                 <template v-if="!agentIntegrations.status.agents[k.value].cliDetected">（この PATH には見つかりません）</template>
               </template>
             </span>
           </div>
+          <button
+            v-if="agentIntegrations.status?.agents[k.value].needsUpdate"
+            type="button"
+            class="settings-btn agent-integration-update"
+            :disabled="agentIntegrationBusy === k.value"
+            :aria-label="`${k.label} のフックを更新する`"
+            @click="updateAgentIntegration(k.value)"
+          >
+            更新
+          </button>
           <button
             type="button"
             class="settings-btn"
@@ -1559,6 +1585,10 @@ function onNativeCancel(ev: Event): void {
 }
 .agent-integration-status {
   margin: 0;
+}
+/* 「更新」は、右端の導入・解除のボタンの隣へ寄せる（行は両端寄せ）。 */
+.agent-integration-update {
+  margin-left: auto;
 }
 .tabbar-right-fieldset {
   margin: 0;

@@ -1049,6 +1049,11 @@ export class SessionService {
     if (patch.agent && patch.agent.name === undefined && pane.agent?.name !== undefined && pane.agent.instanceId === patch.agent.instanceId) {
       patch = { ...patch, agent: { ...patch.agent, name: pane.agent.name } };
     }
+    // サブエージェントの一覧（20261004-subagent-display）も、検出（instanceId）が続く間だけ引き継ぐ。AgentTracker は知らない。
+    // 周期の更新のたびに新しい `AgentInfo` が来るので、同じ参照のまま写す（`sameAgent` は参照で比べる）。
+    if (patch.agent && patch.agent.subagents === undefined && pane.agent?.subagents !== undefined && pane.agent.instanceId === patch.agent.instanceId) {
+      patch = { ...patch, agent: { ...patch.agent, subagents: pane.agent.subagents } };
+    }
     const agentChanged = patch.agent !== undefined && !sameAgent(pane.agent, patch.agent);
     // 画面判定でエージェントが消えたら（非 null → null）、報告されていた会話参照も一緒に捨てる
     // （20260923-agent-session-resume design D9）。エージェントを終了して別の作業をしている pane が、
@@ -1065,6 +1070,24 @@ export class SessionService {
     // 会話参照の消滅も保存契機にする（design D8）——さもないと、サーバが不意に落ちたときに
     // 「もう有効ではない」という事実が session.json に反映されないまま残ることがある。
     if (cwdChanged || clearsAgentSession) this.persist.touch();
+  }
+
+  /**
+   * その pane のエージェントの `subagents` を差し替える（`undefined` なら外す。20261004-subagent-display）。エージェントが検出されていれば
+   * 変わったときだけ `pane.agent_status_changed` を配って true。検出されていなければ何もせず false（呼び出し側は最初の検出で配り直す）。
+   * 保存はしない。`updatePaneRuntime` を通さず、モデルへ直接書く（`renameAgent` と同じ。引き継ぎの規則に邪魔されない）。
+   */
+  setAgentSubagents(paneId: PaneId, subagents: AgentInfo["subagents"] | undefined): boolean {
+    const pane = this.model.getPane(paneId);
+    const agent = pane?.agent;
+    if (!pane || !agent) return false;
+    const next: AgentInfo = { ...agent };
+    if (subagents === undefined) delete next.subagents;
+    else next.subagents = subagents;
+    if (sameAgent(agent, next)) return true;
+    const updated = this.model.updatePaneRuntime(paneId, { agent: next });
+    this.bus.publish({ event: "pane.agent_status_changed", data: { paneId, agent: updated.agent } });
+    return true;
   }
 
   /**
@@ -1494,7 +1517,8 @@ function sameAgent(a: AgentInfo | null, b: AgentInfo | null): boolean {
     a.serverSeenSeq === b.serverSeenSeq &&
     a.verified === b.verified &&
     a.since === b.since &&
-    a.name === b.name
+    a.name === b.name &&
+    a.subagents === b.subagents // 参照で比べる（周期の更新のたびに最大 64 件を比べない。引き継ぎは同じ参照を写す）
   );
 }
 

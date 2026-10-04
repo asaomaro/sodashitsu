@@ -111,6 +111,18 @@ export interface AgentSessionRef {
   reportedAt: number;
 }
 
+/** エージェントが中で動かしているサブエージェント 1 件（pane は持たない。20261004-subagent-display）。 */
+export interface SubagentInfo {
+  id: string;
+  /** サブエージェントの種類。分からなければ項目なし。 */
+  type?: string;
+  description?: string;
+  /** バックグラウンドの実行か。分からなければ項目なし。 */
+  background?: boolean;
+  /** サーバが起動（または突き合わせ）の報告を受けた時刻（epoch ms）。 */
+  startedAt: number;
+}
+
 export interface AgentInfo {
   /** 検出のたびに振る id（再起動後も重複しない）。既読の記録のキーに使う。 */
   instanceId: AgentInstanceId;
@@ -131,6 +143,11 @@ export interface AgentInfo {
    * この検出（`instanceId`）にだけ付き、終了・入れ替わりで消える。無ければ項目自体を持たない。
    */
   name?: string;
+  /**
+   * 実行中のサブエージェント（20261004-subagent-display）。フックの報告を一度も受けていない検出では項目なし（＝分からない）。
+   * 受けたことがあれば持つ（0 件なら `count: 0`）。`items` は起動した順で最大 64 件、`count` は実際の数。この検出（`instanceId`）にだけ付く。
+   */
+  subagents?: { count: number; items: SubagentInfo[] };
 }
 
 export interface HostInfo {

@@ -6,7 +6,9 @@ import { writeFileAtomic } from "../persist/atomicFile.js";
 
 /** 導入・解除・状態判定（20260923-agent-session-resume design「振る舞いの詳細・導入/解除」）。 */
 export interface AgentIntegrationInstaller {
-  status(kind: AgentIntegrationKind): Promise<{ cliDetected: boolean; installed: boolean }>;
+  status(
+    kind: AgentIntegrationKind,
+  ): Promise<{ cliDetected: boolean; installed: boolean; needsUpdate: boolean }>;
   install(kind: AgentIntegrationKind): Promise<{ ok: boolean; message: string | null }>;
   uninstall(kind: AgentIntegrationKind): Promise<{ ok: boolean; message: string | null }>;
 }
@@ -14,6 +16,10 @@ export interface AgentIntegrationInstaller {
 /** 本製品の hook エントリだと分かる目印。install/uninstall/status のすべてがこれで一致を見る（design D4）。 */
 const HOOK_SCRIPT_NAME = "soda-agent-report.cjs";
 const MATCHER = "startup|resume";
+
+/** 削除した後に残す、何もしないスクリプト（標準出力にも書かず、正常に終わる）。 */
+const NOOP_HOOK_SCRIPT =
+  '#!/usr/bin/env node\n"use strict";\n// 本製品のフック連携は削除されました。何もしません（導入し直すと、本物のスクリプトに写し直されます）。\n';
 
 type JsonObject = Record<string, unknown>;
 
@@ -31,6 +37,14 @@ interface HookSpec {
   entriesPath: string[];
   /** 1エントリを組み立てる。 */
   buildEntry(scriptPath: string, kind: AgentIntegrationKind): JsonObject;
+  /**
+   * `entriesPath` のほかに入れるエントリ（20261004-subagent-display。サブエージェントの表示に使うイベント）。持つのは claude だけ。
+   * 導入済みの利用者には `needsUpdate` で知らせ、［更新］で足りない分だけ足す。
+   */
+  extraEntries?: {
+    path: string[];
+    build(scriptPath: string, kind: AgentIntegrationKind): JsonObject;
+  }[];
   /** そのエントリが本製品の hook か判定する（コマンド文字列に `HOOK_SCRIPT_NAME` を含むか）。 */
   isOurs(entry: unknown): boolean;
 }
@@ -51,8 +65,36 @@ function setPath(root: JsonObject, path: readonly string[], entries: unknown[]):
   const [head, ...rest] = path as [string, ...string[]];
   if (rest.length === 0) return { ...root, [head]: entries };
   const childRaw = root[head];
-  const child = typeof childRaw === "object" && childRaw !== null && !Array.isArray(childRaw) ? (childRaw as JsonObject) : {};
+  const child =
+    typeof childRaw === "object" && childRaw !== null && !Array.isArray(childRaw)
+      ? (childRaw as JsonObject)
+      : {};
   return { ...root, [head]: setPath(child, rest, entries) };
+}
+
+/** 経路が「配列」「無い」「配列でない値（途中がオブジェクトでないのも含む）」のどれか。配列でなければ、書き込むと利用者の設定を壊すので断る。 */
+function pathShape(root: JsonObject, path: readonly string[]): "array" | "absent" | "invalid" {
+  let cur: unknown = root;
+  for (const key of path) {
+    if (cur === undefined) return "absent";
+    if (typeof cur !== "object" || cur === null || Array.isArray(cur)) return "invalid";
+    cur = (cur as JsonObject)[key];
+  }
+  if (cur === undefined) return "absent";
+  return Array.isArray(cur) ? "array" : "invalid";
+}
+
+/** ネストした経路のキーを消す（他のキーは保つ。経路が無ければそのまま）。 */
+function deletePath(root: JsonObject, path: readonly string[]): JsonObject {
+  const [head, ...rest] = path as [string, ...string[]];
+  if (rest.length === 0) {
+    const others = { ...root };
+    delete others[head];
+    return others;
+  }
+  const child = root[head];
+  if (typeof child !== "object" || child === null || Array.isArray(child)) return root;
+  return { ...root, [head]: deletePath(child as JsonObject, rest) };
 }
 
 /** `{hooks:[{command}]}` のようにコマンドが1段ネストしているエントリからコマンド文字列を集める。 */
@@ -85,22 +127,54 @@ function hookCommand(scriptPath: string, kind: AgentIntegrationKind): string {
 
 /** Claude Code・Codex と同じ形（`{matcher, hooks:[{type:"command",command,async:true}]}`）。 */
 function nestedAsyncEntry(scriptPath: string, kind: AgentIntegrationKind): JsonObject {
-  return { matcher: MATCHER, hooks: [{ type: "command", command: hookCommand(scriptPath, kind), async: true }] };
+  return {
+    matcher: MATCHER,
+    hooks: [{ type: "command", command: hookCommand(scriptPath, kind), async: true }],
+  };
 }
 
 /** Devin CLI・Droid と同じ形（`{matcher, hooks:[{type:"command",command,timeout}]}`。`async`ではなく`timeout`）。 */
 function nestedTimeoutEntry(scriptPath: string, kind: AgentIntegrationKind): JsonObject {
-  return { matcher: "", hooks: [{ type: "command", command: hookCommand(scriptPath, kind), timeout: 10 }] };
+  return {
+    matcher: "",
+    hooks: [{ type: "command", command: hookCommand(scriptPath, kind), timeout: 10 }],
+  };
+}
+
+/** 同期で動かす（`timeout` 秒で打ち切る）。実行前 → 起動の報告が順に届くようにするため（design「フックごとに同期・非同期を決める」）。 */
+function nestedSyncEntry(
+  matcher: string,
+): (scriptPath: string, kind: AgentIntegrationKind) => JsonObject {
+  return (scriptPath, kind) => ({
+    matcher,
+    hooks: [{ type: "command", command: hookCommand(scriptPath, kind), timeout: 5 }],
+  });
+}
+
+/** 非同期で動かす（順序に頼らない報告）。 */
+function nestedAsyncAnyEntry(scriptPath: string, kind: AgentIntegrationKind): JsonObject {
+  return {
+    matcher: "",
+    hooks: [{ type: "command", command: hookCommand(scriptPath, kind), async: true }],
+  };
 }
 
 const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
   claude: {
-    configFile: (env, home) => join(env.CLAUDE_CONFIG_DIR || join(home, ".claude"), "settings.json"), // research.md F4.5（旧 F4.5 相当）
+    configFile: (env, home) =>
+      join(env.CLAUDE_CONFIG_DIR || join(home, ".claude"), "settings.json"), // research.md F4.5（旧 F4.5 相当）
     hooksDir: (env, home) => join(env.CLAUDE_CONFIG_DIR || join(home, ".claude"), "hooks"),
     binName: "claude",
     entriesPath: ["hooks", "SessionStart"],
     buildEntry: nestedAsyncEntry,
     isOurs: isOursNested,
+    extraEntries: [
+      { path: ["hooks", "PreToolUse"], build: nestedSyncEntry("Agent|Task") },
+      { path: ["hooks", "SubagentStart"], build: nestedSyncEntry("") },
+      { path: ["hooks", "Stop"], build: nestedSyncEntry("") },
+      { path: ["hooks", "SubagentStop"], build: nestedAsyncAnyEntry },
+      { path: ["hooks", "SessionEnd"], build: nestedAsyncAnyEntry },
+    ],
   },
   codex: {
     configFile: (env, home) => join(env.CODEX_HOME || join(home, ".codex"), "hooks.json"), // research.md F5.5（旧 F5.5 相当）
@@ -154,7 +228,12 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
     hooksDir: (_env, home) => join(home, ".grok", "hooks"),
     binName: "grok",
     entriesPath: ["hooks", "SessionStart"],
-    buildEntry: (scriptPath, kind) => ({ matcher: "", type: "command", command: hookCommand(scriptPath, kind), timeout: 10 }),
+    buildEntry: (scriptPath, kind) => ({
+      matcher: "",
+      type: "command",
+      command: hookCommand(scriptPath, kind),
+      timeout: 10,
+    }),
     isOurs: isOursField("command"),
   },
   qwen: {
@@ -162,12 +241,19 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
     hooksDir: (_env, home) => join(home, ".qwen", "hooks"),
     binName: "qwen",
     entriesPath: ["hooks", "SessionStart"],
-    buildEntry: (scriptPath, kind) => ({ type: "command", command: hookCommand(scriptPath, kind), name: "soda-agent-report", async: true }),
+    buildEntry: (scriptPath, kind) => ({
+      type: "command",
+      command: hookCommand(scriptPath, kind),
+      name: "soda-agent-report",
+      async: true,
+    }),
     isOurs: isOursField("command"),
   },
 };
 
-async function readJsonObject(path: string): Promise<{ ok: true; data: JsonObject } | { ok: false }> {
+async function readJsonObject(
+  path: string,
+): Promise<{ ok: true; data: JsonObject } | { ok: false }> {
   let raw: string;
   try {
     raw = await readFile(path, "utf8");
@@ -177,7 +263,8 @@ async function readJsonObject(path: string): Promise<{ ok: true; data: JsonObjec
   }
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return { ok: false };
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+      return { ok: false };
     return { ok: true, data: parsed as JsonObject };
   } catch {
     return { ok: false };
@@ -185,7 +272,12 @@ async function readJsonObject(path: string): Promise<{ ok: true; data: JsonObjec
 }
 
 function isEnoent(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "code" in err && (err as { code?: string }).code === "ENOENT";
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "ENOENT"
+  );
 }
 
 function hookScriptPathFor(hooksDir: string): string {
@@ -194,7 +286,10 @@ function hookScriptPathFor(hooksDir: string): string {
 
 async function isOnPath(binName: string, env: NodeJS.ProcessEnv): Promise<boolean> {
   const dirs = (env.PATH ?? "").split(delimiter).filter(Boolean);
-  const candidates = process.platform === "win32" ? [binName, `${binName}.cmd`, `${binName}.exe`, `${binName}.bat`] : [binName];
+  const candidates =
+    process.platform === "win32"
+      ? [binName, `${binName}.cmd`, `${binName}.exe`, `${binName}.bat`]
+      : [binName];
   for (const dir of dirs) {
     for (const name of candidates) {
       try {
@@ -216,12 +311,40 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     private readonly home: string = homedir(),
   ) {}
 
-  async status(kind: AgentIntegrationKind): Promise<{ cliDetected: boolean; installed: boolean }> {
+  async status(
+    kind: AgentIntegrationKind,
+  ): Promise<{ cliDetected: boolean; installed: boolean; needsUpdate: boolean }> {
     const spec = HOOK_SPECS[kind];
     const configFile = spec.configFile(this.env, this.home);
-    const [cliDetected, read] = await Promise.all([isOnPath(spec.binName, this.env), readJsonObject(configFile)]);
+    const [cliDetected, read] = await Promise.all([
+      isOnPath(spec.binName, this.env),
+      readJsonObject(configFile),
+    ]);
     const installed = read.ok && getPath(read.data, spec.entriesPath).some(spec.isOurs);
-    return { cliDetected, installed };
+    const needsUpdate = installed && read.ok && (await this.needsUpdate(spec, read.data));
+    return { cliDetected, installed, needsUpdate };
+  }
+
+  /**
+   * 導入済みで、本製品のフックが足りない（追加のエントリのどれかの経路に自分のエントリが無い）か、写した先のスクリプトが古い。
+   * 追加のエントリを持たない kind は常に false。同梱のスクリプトが読めないときも false（押しても直らない「更新が必要」を出さない）。
+   */
+  private async needsUpdate(spec: HookSpec, root: JsonObject): Promise<boolean> {
+    const extras = spec.extraEntries;
+    if (!extras || extras.length === 0) return false;
+    let bundled: Buffer;
+    try {
+      bundled = await readFile(this.hookScriptSource);
+    } catch {
+      return false;
+    }
+    // 経路の値が配列でないとき、`install()` は断る（直せない）ので、「更新が必要」は出さない。
+    if (extras.some((e) => pathShape(root, e.path) === "invalid")) return false;
+    if (extras.some((e) => !getPath(root, e.path).some(spec.isOurs))) return true;
+    const installedScript = await readFile(
+      hookScriptPathFor(spec.hooksDir(this.env, this.home)),
+    ).catch(() => undefined);
+    return installedScript === undefined || !installedScript.equals(bundled);
   }
 
   async install(kind: AgentIntegrationKind): Promise<{ ok: boolean; message: string | null }> {
@@ -229,16 +352,33 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     const configFile = spec.configFile(this.env, this.home);
     const hooksDir = spec.hooksDir(this.env, this.home);
     const read = await readJsonObject(configFile);
-    if (!read.ok) return { ok: false, message: `設定ファイルを解釈できませんでした（${configFile}）` };
+    if (!read.ok)
+      return { ok: false, message: `設定ファイルを解釈できませんでした（${configFile}）` };
     const root = read.data;
-    const entries = getPath(root, spec.entriesPath);
-    if (entries.some(spec.isOurs)) return { ok: true, message: "既に導入済みです" };
+    const targets = [
+      { path: spec.entriesPath, build: spec.buildEntry },
+      ...(spec.extraEntries ?? []),
+    ];
+    if (targets.some((t) => pathShape(root, t.path) === "invalid")) {
+      return {
+        ok: false,
+        message: `設定ファイルの形が想定と違うため、何も変えませんでした（${configFile}）`,
+      };
+    }
+    const installed = getPath(root, spec.entriesPath).some(spec.isOurs);
+    if (installed && !(await this.needsUpdate(spec, root)))
+      return { ok: true, message: "既に導入済みです" };
 
     await mkdir(hooksDir, { recursive: true });
     await copyFile(this.hookScriptSource, hookScriptPathFor(hooksDir));
 
     const scriptPath = hookScriptPathFor(hooksDir);
-    const updated = setPath(root, spec.entriesPath, [...entries, spec.buildEntry(scriptPath, kind)]);
+    let updated = root;
+    for (const t of targets) {
+      const entries = getPath(updated, t.path);
+      if (entries.some(spec.isOurs)) continue; // 足りない経路にだけ足す（重ねない。利用者のほかのフックは保つ）
+      updated = setPath(updated, t.path, [...entries, t.build(scriptPath, kind)]);
+    }
     await mkdir(dirname(configFile), { recursive: true });
     await writeFileAtomic(configFile, JSON.stringify(updated, null, 2));
     return { ok: true, message: null };
@@ -249,15 +389,37 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     const configFile = spec.configFile(this.env, this.home);
     const hooksDir = spec.hooksDir(this.env, this.home);
     const read = await readJsonObject(configFile);
-    if (!read.ok) return { ok: false, message: `設定ファイルを解釈できませんでした（${configFile}）` };
-    const root = read.data;
-    const entries = getPath(root, spec.entriesPath);
-    if (!entries.some(spec.isOurs)) return { ok: true, message: "未導入でした" };
+    if (!read.ok)
+      return { ok: false, message: `設定ファイルを解釈できませんでした（${configFile}）` };
+    // 全経路から自分のエントリを除く。どの経路にも無いときだけ「未導入でした」（`SessionStart` だけ手で消した状態からも外せる）。
+    let updated = read.data;
+    let found = false;
+    for (const path of [spec.entriesPath, ...(spec.extraEntries ?? []).map((e) => e.path)]) {
+      const entries = getPath(updated, path);
+      if (!entries.some(spec.isOurs)) continue;
+      found = true;
+      const remaining = entries.filter((e) => !spec.isOurs(e));
+      // 自分のエントリを除いて空になった経路は、キーごと消す（元から空だった経路・自分のエントリが無かった経路は触らない）。
+      updated =
+        remaining.length === 0 ? deletePath(updated, path) : setPath(updated, path, remaining);
+    }
+    if (!found) return { ok: true, message: "未導入でした" };
 
-    const remaining = entries.filter((e) => !spec.isOurs(e));
-    const updated = setPath(root, spec.entriesPath, remaining);
     await writeFileAtomic(configFile, JSON.stringify(updated, null, 2));
-    await rm(hookScriptPathFor(hooksDir), { force: true });
+    const scriptPath = hookScriptPathFor(hooksDir);
+    if (spec.extraEntries) {
+      // 動いている Claude Code は、起動した時点のフックの設定のまま、同期のフックでこのスクリプトを呼び続ける。消すと失敗（exit 1）が続くので、
+      // 何もしない中身に差し替える（次の導入で本物に写し直す。20261004-subagent-display の decisions D9）。
+      if (
+        await access(scriptPath).then(
+          () => true,
+          () => false,
+        )
+      )
+        await writeFileAtomic(scriptPath, NOOP_HOOK_SCRIPT);
+    } else {
+      await rm(scriptPath, { force: true });
+    }
     return { ok: true, message: null };
   }
 }

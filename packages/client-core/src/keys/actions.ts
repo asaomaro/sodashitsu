@@ -91,4 +91,6 @@ export type Action =
   | { type: "swapWithFocused"; paneId?: string } // swap_with_focused（pane のメニュー。paneId が無ければ直前の pane と）
   | { type: "stopServer" } // stop_server（サーバを止める。確認つき）
   // 20260927-agent-graph（本製品の追加）。
-  | { type: "openGraph" }; // open_graph（連携のグラフ画面を開く・閉じる。端末版は知らせだけ）
+  | { type: "openGraph" } // open_graph（連携のグラフ画面を開く・閉じる。端末版は知らせだけ）
+  // 20261004-subagent-display（本製品の追加）。
+  | { type: "showSubagents" }; // show_subagents（フォーカスしている pane のエージェントが動かしているサブエージェントの一覧を開く）

@@ -289,7 +289,11 @@ export type DialogContext =
   // session の一覧（20260926-named-session-ui）。**サーバへ聞いてから開く**（`worktreeOpen` と同じ）。
   | { kind: "sessionSwitch"; sessions: ServerSessionEntry[] }
   // 独自コマンドの popup（20260927-custom-command-keys）。開く時点の名前と大きさの指定。`paneId` は走らせる基準の pane（フォーカス中）。
-  | { kind: "commandPopup"; commandId: string; paneId: string; title: string; width?: PopupDimension; height?: PopupDimension };
+  | { kind: "commandPopup"; commandId: string; paneId: string; title: string; width?: PopupDimension; height?: PopupDimension }
+  // エージェントが動かしているサブエージェントの一覧（20261004-subagent-display）。対象は `{machineId, paneId}`（pane の ID はマシンをまたいで衝突する。手元は `local`）。
+  // 中身は開いている間も画面のストアから引く（`store/subagents.ts`）ので、文脈に持たない。
+  // `opener: "button"` は、サイドバーの件数のボタンから開いたとき。閉じたときのフォーカスを、そのボタン（無ければ行）へ戻す。無ければ（`show_subagents`）端末へ。
+  | { kind: "subagents"; machineId: string; paneId: string; opener?: "button" };
 
 /**
  * このクライアントの表示・モード・接続状態（architecture.md「store/view」）。
