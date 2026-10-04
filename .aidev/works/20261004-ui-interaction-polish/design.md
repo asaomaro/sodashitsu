@@ -153,7 +153,7 @@ function useResizeDrag<T>(o: ResizeDragOptions<T>): {
 ### 区画の境目
 
 - `role="separator"`・`aria-orientation="horizontal"`・`aria-label="spaces と agents の境目"`・`aria-valuenow`（`ratioPercent`。自動のときは、実際の高さから計算した値）・`aria-valuemin="0"`・`aria-valuemax="100"`・`tabindex="0"`。高さ 1px（今の `border-top` の代わり。agents の `border-top` は外す）。
-- ドラッグは `useResizeDrag`（`begin`＝今の比〔null を含む〕、`move`＝`.sidebar-sections` の rect とポインタから `ratioFromOffset` → `view.setSectionRatio`、`commit`＝`view.commitSectionRatio`、`cancel`＝始めた比へ戻す、`reset`＝`view.resetSectionRatio`）。`box.total` は `.sidebar-sections` の `clientHeight − 1`（境目）、`box.min` は区画ごとの最小（spaces は見出し＋行×2＋フッタ、agents は見出し＋行×2 の実測。`clampRatio` は `{ total, minTop, minBottom }` を受ける形にする）。`aria-valuenow` は、比があるときは比から、自動のときは spaces の実際の高さから計算し、`.sidebar-sections` の `ResizeObserver` と、spaces の body の中身が変わったとき（行の数）に測り直す。
+- ドラッグは `useResizeDrag`（`begin`＝今の比〔null を含む〕、`move`＝`.sidebar-sections` の rect とポインタから `ratioFromOffset` → `view.setSectionRatio`、`commit`＝`view.commitSectionRatio`、`cancel`＝始めた比へ戻す、`reset`＝`view.resetSectionRatio`）。`box.total` は `.sidebar-sections` の `clientHeight − 1`（境目）、`box.minTop`／`box.minBottom` は区画ごとの最小（spaces は見出し＋行×2＋フッタ、agents は見出し＋行×2 の実測。`clampRatio` は `{ total, minTop, minBottom }` を受ける形にする）。`aria-valuenow` は、比があるときは比から、自動のときは spaces の実際の高さから計算し、`.sidebar-sections` の `ResizeObserver` と、spaces の body の中身が変わったとき（行の数）に測り直す。
 - キー: `↑`／`↓` で 24px、`Home`／`End` で最小・最大、`Enter` で自動。押すたびに保存。
 
 ### 区画の見出し
@@ -186,7 +186,8 @@ function useResizeDrag<T>(o: ResizeDragOptions<T>): {
 
 - `keys-mouse-dialogs.spec.ts:266, :330`（`Tab` の順の `role=separator`）: サイドバーの幅の境目と区画の境目が `Tab` の順に入る。期待を直す。
 - `settings.spec.ts:46-57`（`dragDivider`）: 動きは同じ。ダブルクリックは pointerdown 2 回のまま。
-- `Sidebar.test.ts` の golden（`__golden__/sidebar-default-*.html`）: 構造が変わるので更新する（差分が、区画の入れ物・見出しのボタン・境目だけであることを確かめる）。
+- `Sidebar.defaultLayout.test.ts` の golden（`__golden__/sidebar-default-*.html`）は `.sidebar-row` の outerHTML だけを写したもので、**更新しない**（区画の入れ物・見出し・境目を足しても行の HTML は変わらない。差分が出たら行の退行）。
+- `Sidebar.test.ts:744-875` は、`pointermove` の直後に幅を同期で見ているので、`useResizeDrag` の rAF のまとめに合わせて rAF を流す形に直す。
 - 操作の数: 58 → 60、群は pane 27 → 29（全体 7・workspace / tab 24 は変わらない）、prefix の後のキー 46 → 48、`KeySettings` の 66 → 68（research.md「G5」）。
 - `tui/src/render/Renderer.test.ts:111-123`（当たりの並びに `sectionHeader` が入る）と `mouse.test.ts:417-423`（区切りのドラッグ。動かしてから離すので、「動かしたときだけ高さを変える」と衝突しない）。E2E は `keys-mouse-dialogs.spec.ts`・`settings.spec.ts`。
 

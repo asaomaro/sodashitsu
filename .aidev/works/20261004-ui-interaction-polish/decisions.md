@@ -12,3 +12,9 @@ D&D の表現とタブの並べ替えは別の作業（`split-dnd.md`）。`AGEN
 - 端末版: agents が 0 件のときは区切りの行を出さない（今のまま）。navigate に入ると畳んだ spaces を開く。
 - 利用者の決定（見本を見て OK）: 線は 3px・強調色・乗せて 0.15 秒で出る。畳んだ見出しは件数と入力待ちの印。
 - 既定のキー（利用者の決定）: `prefix+shift+b`＝spaces、`prefix+shift+a`＝agents（どちらも空き）。
+
+## D3: tasks の独立点検で決めたこと（15 件）
+- `--soda-resize-line` は色の上書きの対象にする（`CSS_VAR_LABELS` に「境目の線」を足す。利用者が線の色を変えられる）。
+- T7（サイドバーの幅の境目）は nav の内側のまま・`overflow` も今のままにし、外へ出す（`right: -4px`・`overflow: visible`）のは区画のスクロールが入る T8 で行う。
+- golden は `.sidebar-row` の outerHTML だけなので更新しない。
+- 区画の見出しは T9 から T15 に分けた。独立点検は T3・T4・T6・T8・T10・T11・T15。
