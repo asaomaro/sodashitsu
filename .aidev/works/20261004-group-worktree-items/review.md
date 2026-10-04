@@ -3097,3 +3097,236 @@ AssertionError: expected false to be true // Object.is equality
 - T17 [should] navigate_toggle_collapse が代表でない通常の行でも worktree グループを畳む（web の T15 から持ち越し）→ web・端末版で isRepresentative のときだけに直した（D35 を書き換え） [conv:-]
 - T17 [should] 上の回帰テストと壊して落ちる確認が無い → web・端末版に足して確認を貼った [conv:regression-negative-control]
 - T17 [nit] 見出しのキーと remoteKey の非衝突の固定 → テストは既にあり、parseRemoteKey を壊して落ちる確認を貼った [conv:-]
+
+### T18 壊して落ちる確認
+
+実装の 1 行ずつを壊して `vitest run src/input/mouse.sidebarDrag.test.ts src/input/mouse.test.ts`（出力は `×`・`FAIL`・`AssertionError`・件数の行だけに絞った生の出力）。確認後は全部元に戻し（バックアップとの `cmp` で同一を確認）、tui の 513 件が通ることを確かめた。
+
+壊し: A 下へ落とすと落とした項目の次の前（向きの判定） `src/input/sidebarDrag.ts`
+
+```
+× グループの中の項目：下へ落とすと落とした項目の次の前（末尾なら null）、上へなら落とした項目の前 90ms
+     × worktree グループの先頭の行を掴む：グループ全体が動く。子の行の上に落としても、その項目の位置 64ms
+     × グループの見出しのドラッグ：まとまりどうしを並べ替える（グループ・「グループなし」） 63ms
+     × 名前順：一番上（グループの並び・「グループなし」の中）は送らず知らせる。グループの中は送る 70ms
+       × 項目の並べ替えは、掴んだ項目の workspace 全部と落とし先の項目の先頭の workspace 62ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの中の項目：下へ落とすと落とした項目の次の前（末尾なら null）、上へなら落とした項目の前
+AssertionError: expected [ Array(1) ] to deeply equal [ { item: { …(2) }, before: null } ]
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > worktree グループの先頭の行を掴む：グループ全体が動く。子の行の上に落としても、その項目の位置
+AssertionError: expected { …(2) } to deeply equal { …(2) }
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの見出しのドラッグ：まとまりどうしを並べ替える（グループ・「グループなし」）
+AssertionError: expected [ { item: { …(2) }, …(1) }, …(3) ] to deeply equal [ { item: { …(2) }, …(1) }, …(3) ]
+```
+
+壊し: B 入れ物をまたぐ落とし先を拒否 `src/input/sidebarDrag.ts`
+
+```
+× 入れ物をまたぐ落とし先（別のグループの項目・見出し・「グループなし」の項目）は送らず知らせる 65ms
+     × グループの見出しは項目の行の上へは落とせない（まとまりの中の項目・グループなしの項目）。自分の中の行の上は何も起きない 61ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > 入れ物をまたぐ落とし先（別のグループの項目・見出し・「グループなし」の項目）は送らず知らせる
+AssertionError: expected [] to deeply equal [ …(3) ]
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの見出しは項目の行の上へは落とせない（まとまりの中の項目・グループなしの項目）。自分の中の行の上は何も起きない
+AssertionError: expected [] to deeply equal [ Array(1) ]
+      Tests  2 failed | 33 passed (35)
+```
+
+壊し: C 名前順の拒否 `src/input/sidebarDrag.ts`
+
+```
+× 名前順：一番上（グループの並び・「グループなし」の中）は送らず知らせる。グループの中は送る 70ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > 名前順：一番上（グループの並び・「グループなし」の中）は送らず知らせる。グループの中は送る
+AssertionError: expected [ { item: { …(2) }, …(1) }, …(1) ] to deeply equal []
+      Tests  1 failed | 34 passed (35)
+```
+
+壊し: D 自分の項目の上は何も起きない（掴んだグループの中の行） `src/input/sidebarDrag.ts`
+
+```
+× グループの見出しは項目の行の上へは落とせない（まとまりの中の項目・グループなしの項目）。自分の中の行の上は何も起きない 68ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの見出しは項目の行の上へは落とせない（まとまりの中の項目・グループなしの項目）。自分の中の行の上は何も起きない
+AssertionError: expected [ …(3) ] to deeply equal [ Array(1) ]
+      Tests  1 failed | 34 passed (35)
+```
+
+壊し: E 古いサーバで落とし先に workspace が無い行を落とし先にしない `src/input/sidebarDrag.ts`
+
+```
+× グループの見出しはメンバー全部。空のグループは掴めず、落とし先にもならない。「グループなし」の見出しは掴めない 62ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > グループの見出しはメンバー全部。空のグループは掴めず、落とし先にもならない。「グループなし」の見出しは掴めない
+AssertionError: expected [ { workspaceIds: [ 'w1' ], …(1) } ] to deeply equal []
+      Tests  1 failed | 34 passed (35)
+```
+
+壊し: F 古いサーバで掴めない行（空のグループ・「グループなし」の見出し） `src/input/sidebarDrag.ts`
+
+```
+× グループの見出しはメンバー全部。空のグループは掴めず、落とし先にもならない。「グループなし」の見出しは掴めない 61ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > グループの見出しはメンバー全部。空のグループは掴めず、落とし先にもならない。「グループなし」の見出しは掴めない
+AssertionError: expected [ { …(2) } ] to deeply equal []
+      Tests  1 failed | 34 passed (35)
+```
+
+壊し: G Esc で取り消し `src/app/TuiApp.ts`
+
+```
+× Esc で取り消し（そのあと離しても送らない） 103ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > Esc で取り消し（そのあと離しても送らない）
+AssertionError: expected [ { item: { …(2) }, before: null } ] to deeply equal []
+      Tests  1 failed | 34 passed (35)
+```
+
+壊し: H 見出しは動かさずに離すと畳み・広げ `src/input/mouse.ts`
+
+```
+× 見出し：動かさずに離すと畳み・広げ、動かして離すと畳まない。左の ▸/▾ は押した時点で畳み・広げ 61ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > 見出し：動かさずに離すと畳み・広げ、動かして離すと畳まない。左の ▸/▾ は押した時点で畳み・広げ
+AssertionError: expected [] to deeply equal [ { groupId: 'g1' } ]
+      Tests  1 failed | 34 passed (35)
+```
+
+壊し: I 見出しの ▸/▾ は押した時点で畳む `src/input/mouse.ts`
+
+```
+× 見出し：動かさずに離すと畳み・広げ、動かして離すと畳まない。左の ▸/▾ は押した時点で畳み・広げ 63ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > 見出し：動かさずに離すと畳み・広げ、動かして離すと畳まない。左の ▸/▾ は押した時点で畳み・広げ
+AssertionError: expected [ { id: '9', …(2) } ] to have a length of 2 but got 1
+      Tests  1 failed | 34 passed (35)
+```
+
+壊し: J 子の行は worktree グループ全体（先頭の workspace の項目） `src/render/chrome/sidebar.ts`
+
+```
+× グループの中の項目：下へ落とすと落とした項目の次の前（末尾なら null）、上へなら落とした項目の前 82ms
+     × worktree グループの先頭の行を掴む：グループ全体が動く。子の行の上に落としても、その項目の位置 61ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの中の項目：下へ落とすと落とした項目の次の前（末尾なら null）、上へなら落とした項目の前
+AssertionError: expected { …(2) } to deeply equal { …(2) }
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > worktree グループの先頭の行を掴む：グループ全体が動く。子の行の上に落としても、その項目の位置
+AssertionError: expected [ Array(1) ] to deeply equal [ Array(1) ]
+      Tests  2 failed | 33 passed (35)
+```
+
+壊し: K layout の無いサーバは workspace.move_to `src/actions/TuiDispatcher.ts`
+
+```
+× 項目の並べ替えは、掴んだ項目の workspace 全部と落とし先の項目の先頭の workspace 60ms
+     × サイドバーの workspace の行のドラッグで並べ替え 65ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > 項目の並べ替えは、掴んだ項目の workspace 全部と落とし先の項目の先頭の workspace
+AssertionError: expected [] to deeply equal [ { workspaceIds: [ 'w4' ], …(1) } ]
+ FAIL  src/input/mouse.test.ts > マウスの操作（AC9・AC-I5） > サイドバーの workspace の行のドラッグで並べ替え
+AssertionError: expected [] to deeply equal [ { workspaceIds: [ 'w2' ], …(1) } ]
+      Tests  2 failed | 33 passed (35)
+```
+
+壊し: L 見出しも掴める（ドラッグの開始） `src/input/mouse.ts`
+
+```
+× グループの見出しのドラッグ：まとまりどうしを並べ替える（グループ・「グループなし」） 65ms
+     × グループの見出しは項目の行の上へは落とせない（まとまりの中の項目・グループなしの項目）。自分の中の行の上は何も起きない 57ms
+     × 見出し：動かさずに離すと畳み・広げ、動かして離すと畳まない。左の ▸/▾ は押した時点で畳み・広げ 60ms
+     × 名前順：一番上（グループの並び・「グループなし」の中）は送らず知らせる。グループの中は送る 62ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの見出しのドラッグ：まとまりどうしを並べ替える（グループ・「グループなし」）
+AssertionError: expected [] to deeply equal [ { item: { …(2) }, …(1) }, …(3) ]
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの見出しは項目の行の上へは落とせない（まとまりの中の項目・グループなしの項目）。自分の中の行の上は何も起きない
+AssertionError: expected [] to deeply equal [ Array(1) ]
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > 見出し：動かさずに離すと畳み・広げ、動かして離すと畳まない。左の ▸/▾ は押した時点で畳み・広げ
+AssertionError: expected [ { id: '9', …(2) }, …(1) ] to have a length of 1 but got 2
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > 名前順：一番上（グループの並び・「グループなし」の中）は送らず知らせる。グループの中は送る
+```
+
+
+### T18 追加の壊して落ちる確認（独立点検の指摘: 古いサーバのまとまりの並べ替え・失敗のトースト・dropSidebarItem の単体）
+
+足したテスト: `mouse.sidebarDrag.test.ts`「グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と…」（古いサーバ。g2 を g1 の上へ＝`{w3, before w1}`、g1 を g2 へ＝`{w1,w2, before w4}`、g1 を「グループなし」の見出しへ＝`{w1,w2, before null}`）、`TuiDispatcher.test.ts` の `dropSidebarItem` 5 件（layout あり＝item.move・無し＝workspace.move_to・名前順/入れ物の拒否と黙る場合・空の workspaceIds を送らない・RPC 失敗のトースト）。旧 `moveWorkspacesByDrag` のテストの置き換え。各行を 1 つずつ壊し（`vitest run src/input/mouse.sidebarDrag.test.ts src/actions/TuiDispatcher.test.ts`、出力は `×`・`FAIL`・`AssertionError`・件数に絞った生の出力）、全部元に戻して `cmp` で同一を確認。
+
+壊し: M `unitDrag` の `workspaceIds: ids` → `ids.slice(0, 1)`（sidebar.ts）
+
+```
+       × グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と、落とし先の見出しの先頭の workspace（末尾なら null） 63ms
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と、落とし先の見出しの先頭の workspace（末尾なら null）
+AssertionError: expected [ …(3) ] to deeply equal [ …(3) ]
+      Tests  1 failed | 140 passed (141)
+```
+
+壊し: N `unitDrag` の `next` の `anchorId: unitIds(nx)[0] ?? null` → `null`（sidebar.ts）
+
+```
+       × グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と、落とし先の見出しの先頭の workspace（末尾なら null） 62ms
+ FAIL  src/input/mouse.sidebarDrag.test.ts > ... > layout の無い古いサーバ（workspace.move_to） > グループの見出しを掴んでまとまりどうしを並べ替える：...
+AssertionError: expected [ …(2) ] to deeply equal [ …(3) ]
+      Tests  1 failed | 140 passed (141)
+```
+
+壊し: O `planDrop` の legacy `beforeWorkspaceId: before?.anchorId ?? null` → `null`（sidebarDrag.ts）
+
+```
+     × layout の無いサーバは workspace.move_to（動かす workspace 全部と落とし先の先頭の workspace） 13ms
+       × 項目の並べ替えは、掴んだ項目の workspace 全部と落とし先の項目の先頭の workspace 64ms
+       × グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と、落とし先の見出しの先頭の workspace（末尾なら null） 59ms
+AssertionError: expected [ …(2) ] to deeply equal [ …(2) ]（3 件とも）
+      Tests  3 failed | 138 passed (141)
+```
+
+壊し: P `planDrop` の legacy `workspaceIds: source.workspaceIds` → `.slice(0, 1)`（sidebarDrag.ts）
+
+```
+       × グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と、落とし先の見出しの先頭の workspace（末尾なら null） 64ms
+AssertionError: expected [ …(3) ] to deeply equal [ …(3) ]
+      Tests  1 failed | 140 passed (141)
+```
+
+壊し: Q `item.move` の `.catch` のトーストを外す（TuiDispatcher.ts）
+
+```
+     × 送った RPC が失敗したら「移動できませんでした」と知らせる（item.move・workspace.move_to） 16ms
+AssertionError: expected [] to deeply equal [ '移動できませんでした' ]
+      Tests  1 failed | 140 passed (141)
+```
+
+壊し: R `workspace.move_to` の `.catch` のトーストを外す（TuiDispatcher.ts）
+
+```
+     × 送った RPC が失敗したら「移動できませんでした」と知らせる（item.move・workspace.move_to） 20ms
+AssertionError: expected [] to deeply equal [ '移動できませんでした' ]
+      Tests  1 failed | 140 passed (141)
+```
+
+壊し: S 古いサーバで `workspaceIds` が空なら送らない行を削る（TuiDispatcher.ts）
+
+```
+     × 古いサーバで動かす workspace が無い（空のグループ）ときは送らないテスト
+AssertionError: expected [ [ 'workspace.move_to', …(1) ] ] to deeply equal []
+      Tests  1 failed | 140 passed (141)
+```
+
+壊し: T 拒否の知らせ `this.ui.toast(plan.reason)` を外す（TuiDispatcher.ts）
+
+```
+     × 名前順の拒否・入れ物をまたぐ拒否は送らず知らせる。行の外・自分の上は黙って何もしない 13ms
+     × 入れ物をまたぐ落とし先（別のグループの項目・見出し・「グループなし」の項目）は送らず知らせる 62ms
+     × グループの見出しは項目の行の上へは落とせない（...） 57ms
+     × 名前順：一番上（グループの並び・「グループなし」の中）は送らず知らせる。グループの中は送る 63ms
+      Tests  4 failed | 137 passed (141)
+```
+
+壊し: U layout ありでも workspace.move_to へ分岐（`if (!this.model.hasServerLayout)` → `if (true)`、TuiDispatcher.ts）
+
+```
+     × layout ありは item.move（下へは落とした項目の次の前、上へは落とした項目の前） 15ms
+     × グループの中の項目：下へ落とすと落とした項目の次の前（末尾なら null）、上へなら落とした項目の前 93ms
+     （ほか mouse.sidebarDrag の 8 件中 6 件が item.move を送らず落ちる）
+      Tests  8 failed | 133 passed (141)
+```
+- T18 [should] 古いサーバでグループの見出しを掴んで並べ替える成功経路のテストと壊して落ちる確認が無い → テストを足し M〜P を貼った [conv:regression-negative-control]
+- T18 [nit] 失敗時のトーストと dropSidebarItem の単体テストが無い → TuiDispatcher.test.ts に足し Q〜U を貼った [conv:-]

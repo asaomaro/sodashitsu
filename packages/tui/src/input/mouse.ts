@@ -2,7 +2,8 @@ import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { Divider, LayoutResult, PaneBox, Rect } from "../layout/computeLayout.js";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
-import type { SidebarHit } from "../render/chrome/sidebar.js";
+import type { SidebarDragInfo, SidebarHit } from "../render/chrome/sidebar.js";
+import { canGrab } from "./sidebarDrag.js";
 import type { TabBarHits, TabHit } from "../render/chrome/tabBar.js";
 import type { RequestPort } from "../term/PaneRegistry.js";
 import {
@@ -126,7 +127,18 @@ type Drag =
   /** サイドバーの spaces と agents の区切り（herdr の H19b）。 */
   | { kind: "section"; top: number }
   | { kind: "tab"; tabId: string; startX: number; moved: boolean }
-  | { kind: "workspace"; workspaceId: string; startY: number; moved: boolean }
+  /**
+   * サイドバーの行（項目・グループの見出し・「グループなし」の見出し）の掴み。`source` は掴んだ行の情報（押した時点のもの）。
+   * 動かさずに離した見出しは `onClick`（折りたたみ）。古いサーバで掴めない行は動かしても `moved` にしない（クリック扱い）。
+   */
+  | {
+      kind: "item";
+      source: SidebarDragInfo | null;
+      startY: number;
+      moved: boolean;
+      grabbable: boolean;
+      onClick: (() => void) | null;
+    }
   | { kind: "paneName"; paneId: string; startX: number; startY: number; moved: boolean };
 
 /**
@@ -295,12 +307,30 @@ export class MouseController {
       if (hit.kind === "autoGroup" && x <= hit.toggleX)
         // worktree グループの先頭の行の左の「▸/▾」で畳み・広げ（マシンの見出しの toggleX と同じ。ほかは workspace の行）。
         actions.toggleAutoGroupCollapsed(hit.repoKey);
+      else if ((hit.kind === "group" || hit.kind === "ungrouped") && x <= hit.toggleX)
+        // 見出しの左の「▸/▾」は押した時点で畳み・広げ（ドラッグの掴みにしない）。
+        this.toggleHeading(hit);
       else if (hit.kind === "workspace" || hit.kind === "autoGroup") {
         actions.focusWorkspaceById(hit.workspaceId);
-        this.drag = { kind: "workspace", workspaceId: hit.workspaceId, startY: y, moved: false };
-      } else if (hit.kind === "group") actions.toggleGroupCollapsed(hit.groupId);
-      else if (hit.kind === "ungrouped") actions.toggleUngroupedCollapsed();
-      else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
+        this.drag = {
+          kind: "item",
+          source: hit.drag ?? null,
+          startY: y,
+          moved: false,
+          grabbable: hit.drag !== undefined && canGrab(hit.drag, model.hasServerLayout),
+          onClick: null,
+        };
+      } else if (hit.kind === "group" || hit.kind === "ungrouped") {
+        // 見出しの名前・線の上：動かさずに離せば畳み・広げ、動かせば項目（グループ・「グループなし」）の並べ替え。
+        this.drag = {
+          kind: "item",
+          source: hit.drag ?? null,
+          startY: y,
+          moved: false,
+          grabbable: hit.drag !== undefined && canGrab(hit.drag, model.hasServerLayout),
+          onClick: () => this.toggleHeading(hit),
+        };
+      } else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
       else if (hit.kind === "newWorkspace") actions.run({ type: "newWorkspace" });
       else if (hit.kind === "sort") {
         if (hit.section === "spaces") actions.toggleWorkspaceSort();
@@ -602,9 +632,12 @@ export class MouseController {
         if (done && drag.moved) this.dropTab(drag.tabId, ev.x, layout);
         break;
       }
-      case "workspace": {
-        if (ev.y !== drag.startY) drag.moved = true;
-        if (done && drag.moved) this.dropWorkspace(drag.workspaceId, ev.x, ev.y, layout);
+      case "item": {
+        if (ev.y !== drag.startY && drag.grabbable) drag.moved = true;
+        if (done) {
+          if (drag.moved) this.dropItem(drag.source, ev.x, ev.y, layout);
+          else drag.onClick?.();
+        }
         break;
       }
       case "paneName": {
@@ -720,21 +753,21 @@ export class MouseController {
       void this.host.rpc.request("tab.move", { tabId, direction }).catch(() => undefined);
   }
 
-  private dropWorkspace(workspaceId: string, x: number, y: number, layout: LayoutResult): void {
-    const rows = this.host
-      .sidebarHits()
-      .filter(
-        (h): h is Extract<SidebarHit, { kind: "workspace" | "autoGroup" }> =>
-          h.kind === "workspace" || h.kind === "autoGroup",
-      );
-    const target = this.sidebarAt(x, y, layout);
-    const from = rows.findIndex((r) => r.workspaceId === workspaceId);
-    if ((target?.kind !== "workspace" && target?.kind !== "autoGroup") || from < 0) return;
-    const to = rows.findIndex((r) => r.workspaceId === target.workspaceId);
-    if (to === from) return;
-    // 上へ動かすなら落とした行の前、下へなら落とした行の次の前（末尾なら null）。web の D&D と同じ位置。
-    const before = to < from ? rows[to]!.workspaceId : (rows[to + 1]?.workspaceId ?? null);
-    this.host.actions.moveWorkspacesByDrag([workspaceId], before);
+  /** 見出し（グループ・「グループなし」）の畳み・広げ。 */
+  private toggleHeading(hit: Extract<SidebarHit, { kind: "group" | "ungrouped" }>): void {
+    if (hit.kind === "group") this.host.actions.toggleGroupCollapsed(hit.groupId);
+    else this.host.actions.toggleUngroupedCollapsed();
+  }
+
+  /** 掴んだ項目を、離した行（`drag` を持つ行）の項目へ並べ替える。行の外（何も無い所・別の区画）で離したときは何もしない（取り消し）。 */
+  private dropItem(
+    source: SidebarDragInfo | null,
+    x: number,
+    y: number,
+    layout: LayoutResult,
+  ): void {
+    if (!source) return;
+    this.host.actions.dropSidebarItem(source, this.sidebarAt(x, y, layout)?.drag);
   }
 
   private paneDropTarget(
@@ -765,6 +798,11 @@ export class MouseController {
     else if (t.kind === "workspace") actions.movePaneToNewTab(paneId, t.workspaceId);
     else if (t.zone === "center") actions.replacePaneWithDrag(paneId, t.paneId);
     else actions.movePaneToEdge(paneId, t.paneId, t.zone);
+  }
+
+  /** サイドバーの項目の掴みの途中か（`Esc` で取り消すため。TuiApp が見る）。 */
+  get itemDragging(): boolean {
+    return this.drag?.kind === "item" && this.drag.moved;
   }
 
   /** ドラッグの途中でマウスの報告が途切れた（外側の端末の外で離した等）ときの後始末。 */

@@ -1,4 +1,4 @@
-import type { DisplayState, MachineState, Pane, Workspace } from "@sodashitsu/protocol";
+import type { DisplayState, ItemTarget, MachineState, Pane, Workspace } from "@sodashitsu/protocol";
 import { remoteKey, type MachineSection } from "../../model/MachinesModel.js";
 import {
   aggregate,
@@ -17,6 +17,7 @@ import {
   navigateKeyOfGroup,
   navigateKeyOfUngrouped,
   type ItemRow,
+  UNGROUPED_REF,
 } from "@sodashitsu/client-core";
 import { currentSidebarTree } from "../../model/sidebarTree.js";
 import { ATTR, hexColor, type PackedColor } from "../color.js";
@@ -61,7 +62,28 @@ export type SidebarTarget =
   | { kind: "machineWorkspace"; machineId: string; workspaceId: string; tabId: string }
   /** 区画の中の何も無い行（ホイールでその区画を動かす）。 */
   | { kind: "area"; section: "spaces" | "agents" };
-export type SidebarHit = SidebarTarget & { y: number; section?: "spaces" | "agents" };
+/**
+ * ドラッグの掴み・落とし先になる行の情報（項目の行と、グループ・「グループなし」の見出し。web の `SpaceRow` の `item`・`container`・
+ * `dragIds`・`dropAnchorId` に当たる）。子の行は親の worktree グループの項目を指す。
+ */
+export interface SidebarDragInfo {
+  item: ItemTarget;
+  /** 入れ物。`null` は一番上のまとまりの列（グループ・「グループなし」の見出し）、`"u"`（UNGROUPED_REF）は「グループなし」の中、それ以外はグループの id。 */
+  container: string | null;
+  /** 同じ入れ物の中での並びの番号（上下どちらへ動かすかの判定。畳んで見えない項目も数える）。 */
+  index: number;
+  /** 動かすときの workspace 全部（`layout` の無い古いサーバの `workspace.move_to` 用。worktree グループは先頭から全部）。 */
+  workspaceIds: string[];
+  /** 古いサーバの落とし先に使う、この項目の先頭の workspace（空のグループは null）。 */
+  anchorId: string | null;
+  /** 同じ入れ物の次の項目（下へ動かすとき、落とした項目の次の前へ入れる）。最後なら null。 */
+  next: { item: ItemTarget; anchorId: string | null } | null;
+}
+export type SidebarHit = SidebarTarget & {
+  y: number;
+  section?: "spaces" | "agents";
+  drag?: SidebarDragInfo;
+};
 
 /**
  * サイドバーの区画の表示の位置（端末版の状態。描くたびに収まる範囲へ寄せ直す）。`reveal` の workspace・pane が隠れていれば見える所まで動かす
@@ -98,6 +120,7 @@ interface Line {
   selected: boolean;
   navigated?: boolean;
   hit?: SidebarTarget;
+  drag?: SidebarDragInfo;
 }
 
 /** 画面の 1 行（項目の何行目か）。 */
@@ -216,27 +239,53 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     return line;
   };
   // 項目の木（`sidebarTree`）を描く。描画とキー操作は同じ木を通る（`model/sidebarTree.ts`）。
-  /** 項目 1 つ分の行。`base` は項目の字下げ（グループの中は 2）、`unitCollapsed` は畳んだまとまりの中か。 */
-  const pushItem = (item: ItemRow, base: number, unitCollapsed: boolean): void => {
+  /** 項目 1 つ分の行。`base` は項目の字下げ（グループの中は 2）、`unitCollapsed` は畳んだまとまりの中か。`drag` は掴み・落とし先の情報。 */
+  const pushItem = (
+    item: ItemRow,
+    base: number,
+    unitCollapsed: boolean,
+    drag: SidebarDragInfo,
+  ): void => {
     if (item.kind === "workspace") {
       if (!unitCollapsed || item.workspace.id === model.workspaceId)
-        lines.push(withLead(wsLine(item.workspace, base), { text: " " }, false));
+        lines.push({
+          ...withLead(wsLine(item.workspace, base), { text: " " }, false),
+          drag,
+        });
       return;
     }
     const collapsed = prefs.collapsedAutoGroups.has(item.repoKey);
     if (!unitCollapsed || item.head.id === model.workspaceId)
-      lines.push(headLine(item, base, collapsed));
+      lines.push({ ...headLine(item, base, collapsed), drag });
     // 畳んだ worktree グループ・畳んだまとまりの中は、今いる子の行だけ。
     const shown = visibleGroupMembers(item.children, collapsed || unitCollapsed, model.workspaceId);
     for (const w of shown) {
       const last = shown[shown.length - 1] === w; // 見えている子の最後（web と同じ）
-      lines.push(
-        branchOf(
+      lines.push({
+        ...branchOf(
           withLead(wsLine(w, base), dim(last ? TREE_GLYPH.last : TREE_GLYPH.branch), true),
           w,
         ),
-      );
+        drag,
+      });
     }
+  };
+  /** 入れ物の中の `i` 番目の項目の掴み・落とし先の情報（子の行は親の worktree グループ＝先頭の workspace の項目）。 */
+  const itemDrag = (items: ItemRow[], i: number, container: string): SidebarDragInfo => {
+    const ids = itemWorkspaces(items[i]!).map((w) => w.id);
+    const nextItem = items[i + 1];
+    const nextId = nextItem ? itemWorkspaces(nextItem)[0]!.id : null;
+    return {
+      item: { kind: "workspace", workspaceId: ids[0]! },
+      container,
+      index: i,
+      workspaceIds: ids,
+      anchorId: ids[0]!,
+      next:
+        nextId === null
+          ? null
+          : { item: { kind: "workspace", workspaceId: nextId }, anchorId: nextId },
+    };
   };
   /**
    * worktree グループの先頭の行：「▾ ◐ ⎇ 名前」。畳んでいるときは本体と worktree 全部の状態のまとめと、隠れている数 `+n`。
@@ -291,33 +340,58 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       hit,
     };
   };
+  // まとまりの列（見出しのあるグループ・「グループなし」）。見出しのドラッグはこの中で並べ替える。
+  const units = tree.filter((r) => r.kind === "group" || r.heading);
+  const unitItem = (row: (typeof units)[number]): ItemTarget =>
+    row.kind === "group" ? { kind: "group", groupId: row.group.id } : { kind: "ungrouped" };
+  const unitIds = (row: (typeof units)[number]): string[] =>
+    row.items.flatMap(itemWorkspaces).map((w) => w.id);
+  const unitDrag = (row: (typeof units)[number]): SidebarDragInfo => {
+    const i = units.indexOf(row);
+    const nx = units[i + 1];
+    const ids = unitIds(row);
+    return {
+      item: unitItem(row),
+      container: null,
+      index: i,
+      workspaceIds: ids,
+      anchorId: ids[0] ?? null,
+      next: nx ? { item: unitItem(nx), anchorId: unitIds(nx)[0] ?? null } : null,
+    };
+  };
   for (const row of tree) {
     if (row.kind === "ungrouped") {
       // 見出しは本物のグループが 1 つ以上あるときだけ。無ければ項目がそのまま並ぶ（字下げなし）。
       if (row.heading) {
-        lines.push(
-          headingLine(
+        lines.push({
+          ...headingLine(
             row.collapsed,
             "グループなし",
             row.items,
             { kind: "ungrouped", toggleX: rect.x + 1 },
             navigateKeyOfUngrouped(),
           ),
-        );
+          drag: unitDrag(row),
+        });
       }
-      for (const item of row.items) pushItem(item, row.heading ? 2 : 0, row.collapsed);
+      row.items.forEach((item, i) =>
+        pushItem(item, row.heading ? 2 : 0, row.collapsed, itemDrag(row.items, i, UNGROUPED_REF)),
+      );
       continue;
     }
-    lines.push(
-      headingLine(
+    lines.push({
+      ...headingLine(
         row.group.collapsed,
         row.group.label,
         row.items,
         { kind: "group", groupId: row.group.id, toggleX: rect.x + 1 },
         navigateKeyOfGroup(row.group.id),
       ),
+      drag: unitDrag(row),
+    });
+    row.items.forEach((item, i) =>
+      pushItem(item, 2, row.group.collapsed, itemDrag(row.items, i, row.group.id)),
     );
-    for (const item of row.items) pushItem(item, 2, row.group.collapsed);
   }
 
   // 保存した SSH のマシンがあれば、マシンごとの見出しの下に並べる（web の Sidebar・MachineHeader・MachineRows と同じ）。
@@ -600,7 +674,7 @@ function paintSection(
     const rowBg = line.navigated ? theme.ui("--soda-accent") : line.selected ? activeBg : bg;
     const rowFg = line.navigated ? theme.ui("--soda-accent-fg") : fg;
     if (line.selected || line.navigated) grid.fill({ x: rect.x, y, w: inner, h: 1 }, rowFg, rowBg);
-    if (line.hit) hits.push({ y, section, ...line.hit });
+    if (line.hit) hits.push({ y, section, ...line.hit, ...(line.drag ? { drag: line.drag } : {}) });
     else hits.push({ y, kind: "area", section });
     // 1 行目は項目の頭から、2 行目からは状態の印の幅（2 桁）だけ下げる（web の line2 と同じ）。
     let x = rect.x + 1 + line.indent + (sub > 0 ? (line.subIndent ?? 2) : 0);

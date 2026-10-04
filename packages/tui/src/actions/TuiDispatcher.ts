@@ -27,7 +27,9 @@ import {
 } from "../model/sidebarTree.js";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { MenuTarget, UiState } from "../model/UiState.js";
+import type { SidebarDragInfo } from "../render/chrome/sidebar.js";
 import type { RequestPort } from "../term/PaneRegistry.js";
+import { planDrop } from "../input/sidebarDrag.js";
 
 /** copy モードの対象（pane の headless の上のカーソル・選択・検索。`term/CopyTarget.ts`）。 */
 export interface CopyResult {
@@ -1080,11 +1082,32 @@ export class TuiDispatcher {
     void this.conn.request("workspace.move", { workspaceId, direction }).catch(() => undefined);
   }
 
-  /** サイドバーの行のドラッグで並べ替える（`workspaceIds` は動かす対象。グループのヘッダーならそのメンバー全部）。 */
-  moveWorkspacesByDrag(workspaceIds: string[], beforeWorkspaceId: string | null): void {
+  /**
+   * サイドバーの項目（workspace・worktree グループ・グループ・「グループなし」）のドラッグの確定。`target` は離した行の情報
+   * （行の外なら undefined で何もしない）。落とせるのは同じ入れ物の中の項目の間だけで、落とせないときは知らせる。
+   * `layout` を持つサーバには `item.move`、無いサーバには今までの `workspace.move_to`（web の `moveItemByDrag` と同じ）。
+   */
+  dropSidebarItem(source: SidebarDragInfo, target: SidebarDragInfo | undefined): void {
+    const plan = planDrop(source, target, {
+      hasServerLayout: this.model.hasServerLayout,
+      sortByName: this.host.prefs.workspaceSort === "name",
+    });
+    if (plan.kind === "none") return;
+    if (plan.kind === "refuse") {
+      this.ui.toast(plan.reason);
+      return;
+    }
+    if (!this.model.hasServerLayout) {
+      // 動かす workspace が無い（空のグループ）ときは送らない（掴めないが、念のため）。
+      if (plan.legacy.workspaceIds.length === 0) return;
+      void this.conn
+        .request("workspace.move_to", plan.legacy)
+        .catch(() => this.ui.toast("移動できませんでした"));
+      return;
+    }
     void this.conn
-      .request("workspace.move_to", { workspaceIds, beforeWorkspaceId })
-      .catch(() => undefined);
+      .request("item.move", { item: plan.item, before: plan.before })
+      .catch(() => this.ui.toast("移動できませんでした"));
   }
 
   // --- エージェント・直前の pane ---

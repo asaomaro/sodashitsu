@@ -730,6 +730,12 @@ export class TuiApp {
     }
     switch (ev.kind) {
       case "key":
+        if (ev.key.key === "Escape" && this.mouse.itemDragging) {
+          // サイドバーの項目の掴みの途中の Esc は取り消し（離しても何も送らない）。
+          this.mouse.cancel();
+          this.scheduleRender();
+          return;
+        }
         if (this.mouse.selection) {
           this.mouse.selection = null; // 打鍵で選択の表示を消す（コピーは済んでいる）
           this.scheduleRender();

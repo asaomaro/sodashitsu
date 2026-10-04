@@ -83,7 +83,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/tui/src/modes/ContextMenu.ts:81-110`、`packages/tui/src/app/TuiApp.ts:1053, :1309-1321`、`packages/tui/src/actions/TuiDispatcher.ts:514-589, :622-636, :961-971, :1011-1047`、`packages/tui/src/model/UiState.ts:102-103, :165`、`packages/tui/src/modes/dialogs.ts:230-235`、`packages/tui/src/actions/TuiDispatcher.test.ts:869-938`、`packages/tui/src/modes/overlays.test.ts`
       依存: T7, T8, T11, T16
       AC: AC2, AC5, AC7, AC15, AC16, AC-I2, AC-I3, AC-I4, AC-I5
-- [ ] T18: 端末版のマウス——worktree グループの `▸/▾` のクリックで折りたたみ。ドラッグを項目単位に（グループの見出しのドラッグの開始を新設・worktree グループ全体・落とせるのは同じ入れ物の中だけ。落とせないときは知らせる）。`item.move` を送る（`layout` の無いサーバでは `workspace.move_to`）。名前順の決まりは T14 と同じ。単体テストと壊して落ちる確認
+- [x] T18: 端末版のマウス——worktree グループの `▸/▾` のクリックで折りたたみ。ドラッグを項目単位に（グループの見出しのドラッグの開始を新設・worktree グループ全体・落とせるのは同じ入れ物の中だけ。落とせないときは知らせる）。`item.move` を送る（`layout` の無いサーバでは `workspace.move_to`）。名前順の決まりは T14 と同じ。単体テストと壊して落ちる確認
       対象: `packages/tui/src/input/mouse.ts:292-296, :716-729`、`packages/tui/src/render/chrome/sidebar.ts:148`、`packages/tui/src/actions/TuiDispatcher.ts`（`moveWorkspacesByDrag`）
       依存: T17
       AC: AC5, AC16, AC-I2
@@ -122,7 +122,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/web/src/components/ContextMenu.vue`・`GroupPickerDialog.vue`、`packages/web/src/actions/ActionDispatcher.ts`、`packages/web/src/components/Sidebar.vue`（D&D・navigate）とそのテスト
       依存: T25
       AC: AC20, AC5, AC-I2, AC-I3
-- [ ] T27: 端末版——T16〜T18 の内容を、追補の構造と T4 の見た目で行う（グループの見出し `▾ ◐ <名前> ─── <数>`・「グループなし」・状態のまとめ・worktree グループの木の線と `⎇` と `+n`・ブランチ名・メニュー・navigate・クリックの当たり判定・項目とまとまりのドラッグ）。**T16・T17・T18 は、このタスクの中で、追補の決まりで消化する**（別々のコミットにしてよい）
+- [x] T27: 端末版——T16〜T18 の内容を、追補の構造と T4 の見た目で行う（グループの見出し `▾ ◐ <名前> ─── <数>`・「グループなし」・状態のまとめ・worktree グループの木の線と `⎇` と `+n`・ブランチ名・メニュー・navigate・クリックの当たり判定・項目とまとまりのドラッグ）。**T16・T17・T18 は、このタスクの中で、追補の決まりで消化する**（別々のコミットにしてよい）
       対象: T16・T17・T18 の `対象:` と同じ
       依存: T24
       AC: AC19, AC20, AC21, AC15, AC16

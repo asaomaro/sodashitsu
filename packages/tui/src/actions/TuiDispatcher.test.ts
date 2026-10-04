@@ -6,6 +6,8 @@ import { MachinesModel, parseRemoteKey, remoteKey } from "../model/MachinesModel
 import { menuItems } from "../modes/ContextMenu.js";
 import { SessionModel } from "../model/SessionModel.js";
 import { UiState } from "../model/UiState.js";
+import type { SidebarDragInfo } from "../render/chrome/sidebar.js";
+import { REFUSE_BY_NAME, REFUSE_CONTAINER } from "../input/sidebarDrag.js";
 import { agent, leaf, pane, snapshot, split, tab, workspace } from "../testing/fixtures.js";
 import {
   PASTE_UNAVAILABLE,
@@ -446,16 +448,10 @@ describe("TuiDispatcher — tab・workspace", () => {
     expect(h.calls).toEqual([]);
   });
 
-  it("moveWorkspace・moveWorkspacesByDrag", () => {
+  it("moveWorkspace（layout の無いサーバは workspace.move）", () => {
     const h = harness();
     h.d.run({ type: "moveWorkspace", direction: "next" });
-    h.d.moveWorkspacesByDrag(["w2"], "w1");
-    h.d.moveWorkspacesByDrag(["w1"], null);
-    expect(h.calls).toEqual([
-      ["workspace.move", { workspaceId: "w1", direction: "next" }],
-      ["workspace.move_to", { workspaceIds: ["w2"], beforeWorkspaceId: "w1" }],
-      ["workspace.move_to", { workspaceIds: ["w1"], beforeWorkspaceId: null }],
-    ]);
+    expect(h.calls).toEqual([["workspace.move", { workspaceId: "w1", direction: "next" }]]);
   });
 });
 
@@ -1350,6 +1346,85 @@ describe("TuiDispatcher — 移動（ドラッグ）とメニュー専用の操�
       ["pane.input.set", { paneId: "p1", rightClick: "pane" }],
     ]);
     expect(h.host.pasteText).toHaveBeenCalledWith("p2", "clip");
+  });
+});
+
+describe("TuiDispatcher — dropSidebarItem（サイドバーのドラッグの確定）", () => {
+  const w = (id: string) => ({ kind: "workspace", workspaceId: id }) as const;
+  /** グループ g1 の中の 2 つの項目（w1・w2）の掴んだ行の情報。 */
+  const info = (id: string, index: number, container: string | null = "g1"): SidebarDragInfo => ({
+    item: w(id),
+    container,
+    index,
+    workspaceIds: [id],
+    anchorId: id,
+    next: index === 0 ? { item: w("w2"), anchorId: "w2" } : null,
+  });
+  const withLayout = () =>
+    snapshot({
+      workspaces: [workspace("w1", ["t1"]), workspace("w2", ["t2"])],
+      groups: [{ id: "g1", label: "G1", collapsed: false }],
+      layout: { top: ["g:g1", "u"], groups: { g1: ["w:w1", "w:w2"] }, ungrouped: [] },
+    });
+  const toasts = (h: ReturnType<typeof harness>) => h.ui.toasts.map((t) => t.message);
+
+  it("layout ありは item.move（下へは落とした項目の次の前、上へは落とした項目の前）", async () => {
+    const h = harness(withLayout());
+    h.d.dropSidebarItem(info("w1", 0), info("w2", 1));
+    h.d.dropSidebarItem(info("w2", 1), info("w1", 0));
+    await flush();
+    expect(h.calls).toEqual([
+      ["item.move", { item: w("w1"), before: null }],
+      ["item.move", { item: w("w2"), before: w("w1") }],
+    ]);
+  });
+
+  it("layout の無いサーバは workspace.move_to（動かす workspace 全部と落とし先の先頭の workspace）", async () => {
+    const h = harness(snapshot({ workspaces: [workspace("w1", ["t1"]), workspace("w2", ["t2"])] }));
+    h.d.dropSidebarItem(info("w2", 1, null), info("w1", 0, null));
+    h.d.dropSidebarItem(info("w1", 0, null), info("w2", 1, null));
+    await flush();
+    expect(h.calls).toEqual([
+      ["workspace.move_to", { workspaceIds: ["w2"], beforeWorkspaceId: "w1" }],
+      ["workspace.move_to", { workspaceIds: ["w1"], beforeWorkspaceId: null }],
+    ]);
+  });
+
+  it("名前順の拒否・入れ物をまたぐ拒否は送らず知らせる。行の外・自分の上は黙って何もしない", async () => {
+    const h = harness(withLayout());
+    h.d.dropSidebarItem(info("w1", 0), info("w2", 1, "g2"));
+    h.prefs.apply({ workspaceSort: "name" }, 1);
+    h.d.dropSidebarItem(info("w1", 0, null), info("w2", 1, null));
+    h.d.dropSidebarItem(info("w1", 0), undefined);
+    h.d.dropSidebarItem(info("w1", 0), info("w1", 0));
+    await flush();
+    expect(toasts(h)).toEqual([REFUSE_CONTAINER, REFUSE_BY_NAME]);
+    expect(h.calls).toEqual([]);
+  });
+
+  it("古いサーバで動かす workspace が無い（空のグループ）ときは送らない", async () => {
+    const h = harness(snapshot({ workspaces: [workspace("w1", ["t1"])] }));
+    h.d.dropSidebarItem(
+      { ...info("w1", 0, null), workspaceIds: [], anchorId: "w1" },
+      info("w2", 1, null),
+    );
+    await flush();
+    expect(h.calls).toEqual([]);
+    expect(toasts(h)).toEqual([]);
+  });
+
+  it("送った RPC が失敗したら「移動できませんでした」と知らせる（item.move・workspace.move_to）", async () => {
+    const h = harness(withLayout(), { "item.move": new Error("x") });
+    h.d.dropSidebarItem(info("w1", 0), info("w2", 1));
+    await flush();
+    expect(toasts(h)).toEqual(["移動できませんでした"]);
+    const old = harness(
+      snapshot({ workspaces: [workspace("w1", ["t1"]), workspace("w2", ["t2"])] }),
+      { "workspace.move_to": new Error("x") },
+    );
+    old.d.dropSidebarItem(info("w1", 0, null), info("w2", 1, null));
+    await flush();
+    expect(toasts(old)).toEqual(["移動できませんでした"]);
   });
 });
 
