@@ -227,3 +227,11 @@ requirements F13 は「本体の判定がまだ取れていない間は決めず
 - AC-I3: navigate の選択を行に広げ（見出しを選べる）、`navigate_open_menu` で workspace の行・見出しのメニュー（作る・入れる・外す・移す・グループの上へ／下へ）、`navigate_toggle_collapse` でグループと worktree グループの折りたたみ、`move_workspace_previous`／`next` で項目の並べ替え。ブラウザ版・端末版とも同じ。
 - AC-I4: メニュー・ダイアログは今の仕組み（開く前の場所へ戻る）。並べ替えの後も今いる workspace は変わらず、動かした見出しに navigate の選択が残る。折りたたみの印はフォーカスが残る（端末版は選択が残る）。
 - AC-I5: サイドバーの入力の扱いは変えない。pane のドロップ先（workspace の行）・workspace の切り替え・番号での切り替えは `visibleWorkspaceIdsInOrder` の新しい順を使う。
+
+## 追補（`amendment-01.md`）
+
+利用者の追加の決定で、(A) worktree グループに入るのは worktree ごとに 1 つの代表だけ、(B) 一番上の並びはまとまり（グループと「グループなし」）だけ、(C) 見た目は B3・T4 と状態のまとめ、に変わった。決まりの本文は `amendment-01.md`。上の節のうち、`itemRefOf`・`repoMembers`・`SidebarLayout` の形・「レイアウトが変わる場面」の表（グループの作成・削除・外す・新しい workspace の置き場）・「画面」の見た目は、追補で読み替える。
+
+- AC19: `GitInfo.worktreeKey`（`--git-dir` の絶対パス）と、代表の決まり（同じ `worktreeKey` の最初の workspace）。入力は `GitInfoPoller` の判定と平らな順。
+- AC20: `SidebarLayout` の `top`（まとまりの順。`"u"` がグループなし）・`ungrouped`。見出しを出すかは、本物のグループの有無で画面が決める。
+- AC21: 状態のまとめは、画面が既存の `aggregate`・`displayStateFor` で、まとまり・畳んだ worktree グループの中の全 workspace について計算する。入力は各 pane のエージェントの状態。
