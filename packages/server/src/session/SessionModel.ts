@@ -6,10 +6,8 @@ import type {
   GitInfo,
   GroupId,
   HostInfo,
-  IdKind,
   ItemRef,
   ItemTarget,
-  NextIdCounters,
   Pane,
   PaneId,
   PaneStatus,
@@ -26,7 +24,7 @@ import type {
   WorkspaceGroup,
   WorkspaceId,
 } from "@sodashitsu/protocol";
-import { formatId } from "@sodashitsu/protocol";
+import { randomUUID } from "node:crypto";
 import {
   addItemToGroup,
   deleteGroupFromLayout,
@@ -175,6 +173,9 @@ function withTokens<T extends { tokens?: Record<string, string> }>(obj: T, token
  * ここが持つのは、レイアウト木（`LayoutTree`。純関数）を使ったデータの整合性だけ。
  */
 export class SessionModel {
+  /** `generateId` は id の採番（既定は `randomUUID`。テストで決まった値を差し込める）。 */
+  constructor(private readonly generateId: () => string = randomUUID) {}
+
   private readonly workspaces = new Map<WorkspaceId, Workspace>();
   private readonly tabs = new Map<TabId, Tab>();
   private readonly panes = new Map<PaneId, Pane>();
@@ -190,28 +191,25 @@ export class SessionModel {
   private baseline: ChangeBaseline | null = null;
   /**
    * workspace が今の `worktreeKey` を持ち始めた順（代表が居なくなったときの次の代表を決める。メモリだけ。T29）。持ち始めたとき（作る・
-   * 判定が付く・別のフォルダへ移る）に番号を振る。復元では保存に順が無いので、まだ持たない workspace は `w<番号>` の作った順に振る。
+   * 判定が付く・別のフォルダへ移る）に番号を振る。復元では保存に順が無いので、まだ持たない workspace は作った順（`creationRank`）に振る。
    */
   private readonly heldSince = new Map<WorkspaceId, { key: string; seq: number }>();
   private heldCounter = 0;
-  private nextIdCounters: NextIdCounters = { w: 1, t: 1, p: 1, s: 1, a: 1, g: 1 };
+  /** workspace を作った順（id は UUID で順を表さないので別に持つ。メモリだけ。復元では保存の並びの順）。 */
+  private readonly createdRank = new Map<WorkspaceId, number>();
+  private createdCounter = 0;
   private focus: SessionFocus | null = null;
 
   // --- id -----------------------------------------------------------------
 
-  nextId(kind: IdKind): string {
-    const n = this.nextIdCounters[kind];
-    this.nextIdCounters = { ...this.nextIdCounters, [kind]: n + 1 };
-    return formatId(kind, n);
+  /** 実体の id を払い出す（UUID。連番ではないので再利用されない）。 */
+  newId(): string {
+    return this.generateId();
   }
 
-  getNextIdCounters(): NextIdCounters {
-    return { ...this.nextIdCounters };
-  }
-
-  /** 復元時に、保存されていた `nextId` を引き継ぐ（新規採番と衝突しないように）。 */
-  setNextIdCounters(counters: NextIdCounters): void {
-    this.nextIdCounters = { ...counters };
+  /** workspace を作った順の番号（小さいほど先に作った）。知らない id は末尾。 */
+  creationRank(id: WorkspaceId): number {
+    return this.createdRank.get(id) ?? Number.MAX_SAFE_INTEGER;
   }
 
   // --- lookups --------------------------------------------------------------
@@ -293,9 +291,9 @@ export class SessionModel {
    * モデルを更新する順にする」——`splitPane` の `reserveNextPaneId` と同じ考え方を workspace/tab にも揃えた）。
    */
   reserveWorkspace(cwd: string, label: string, autoLabel: boolean, init: NewPaneInit): CreateWorkspaceResult {
-    const workspaceId = this.nextId("w");
-    const tabId = this.nextId("t");
-    const paneId = this.nextId("p");
+    const workspaceId = this.newId();
+    const tabId = this.newId();
+    const paneId = this.newId();
 
     const pane = this.makePane(paneId, tabId, init);
     const tab: Tab = {
@@ -324,6 +322,7 @@ export class SessionModel {
   commitWorkspace(result: CreateWorkspaceResult): void {
     this.beginChange();
     this.workspaces.set(result.workspace.id, result.workspace);
+    this.createdRank.set(result.workspace.id, ++this.createdCounter);
     // 判定前の workspace は `w:<id>` を「グループなし」の末尾へ（仮の状態なら導くので何もしない）。
     if (this.layout) {
       this.layout = insertItem(this.layout, `w:${result.workspace.id}`, null);
@@ -364,8 +363,8 @@ export class SessionModel {
     if (!wsId) throw new NotFoundError("workspace", "(none focused)");
     const ws = this.requireWorkspace(wsId); // 予約時点では存在を確認するだけ（実際に生きているかは commit 時に取り直す）
 
-    const tabId = this.nextId("t");
-    const paneId = this.nextId("p");
+    const tabId = this.newId();
+    const paneId = this.newId();
     const pane = this.makePane(paneId, tabId, init);
     const tab: Tab = {
       id: tabId,
@@ -419,7 +418,7 @@ export class SessionModel {
   splitPane(paneId: PaneId, direction: SplitDirection, ratio: number | undefined, newPaneId: PaneId, init: NewPaneInit): SplitPaneResult {
     const target = this.requirePane(paneId);
     const tab = this.requireTab(target.tabId);
-    const splitId = this.nextId("s");
+    const splitId = this.newId();
 
     const newPane = this.makePane(newPaneId, tab.id, init);
     const layout = Layout.split(tab.layout, paneId, direction, newPaneId, splitId, ratio ?? 0.5);
@@ -433,7 +432,7 @@ export class SessionModel {
 
   /** 新しい pane の id を、split の前に確保したいとき用（spawn の cwd 決定などで先に id が要る場合）。 */
   reserveNextPaneId(): PaneId {
-    return this.nextId("p");
+    return this.newId();
   }
 
   /** `preferredSuccessor`: 閉じた後の tab に残っていれば、焦点の後継と `successorPaneId` にする（20260926-edit-scrollback）。 */
@@ -504,7 +503,7 @@ export class SessionModel {
     const ws = target !== undefined ? this.requireWorkspace(target) : undefined;
     this.beginChange();
     const layout = this.confirmedLayout();
-    const id = this.nextId("g");
+    const id = this.newId();
     const group: WorkspaceGroup = { id, label, collapsed: false };
     this.groups.set(id, group);
     const created = insertGroup(layout, id);
@@ -857,6 +856,7 @@ export class SessionModel {
     const before = this.refSnapshot();
     this.workspaces.delete(id);
     this.heldSince.delete(id);
+    this.createdRank.delete(id);
     this.settleRepresentatives();
     this.reflectRefs(before, null);
     this.settle();
@@ -923,7 +923,7 @@ export class SessionModel {
     const sourceTab = this.requireTab(pane.tabId);
 
     const withoutPane = Layout.remove(sourceTab.layout, paneId);
-    const splitId = this.nextId("s");
+    const splitId = this.newId();
     const newLayout = Layout.insertAtEdge(targetTab.layout, targetTab.focusedPaneId, "right", paneId, splitId);
     this.panes.set(paneId, { ...pane, tabId: targetTabId });
     this.tabs.set(targetTabId, { ...targetTab, layout: newLayout, focusedPaneId: paneId, zoomedPaneId: null });
@@ -953,7 +953,7 @@ export class SessionModel {
     const sourceTab = this.requireTab(pane.tabId);
 
     const withoutPane = Layout.remove(sourceTab.layout, paneId);
-    const newTabId = this.nextId("t");
+    const newTabId = this.newId();
     const newTab: Tab = {
       id: newTabId,
       workspaceId: targetWorkspaceId,
@@ -1054,7 +1054,7 @@ export class SessionModel {
     // `paneId` が tab で唯一の pane なら `targetPaneId` は同じ tab に存在しえない（上のガードで
     // 既に弾かれているはず）。念のための防御。
     if (withoutSource === null) return false;
-    const splitId = this.nextId("s");
+    const splitId = this.newId();
     const newLayout = Layout.insertAtEdge(withoutSource, targetPaneId, edge, paneId, splitId);
     this.tabs.set(tab.id, { ...tab, layout: newLayout });
     // グローバル focus を動かした pane（paneId）へ（20260925-pane-move-global-focus。design「設計方針」）。
@@ -1212,7 +1212,6 @@ export class SessionModel {
   settleRepresentatives(): void {
     const all = [...this.workspaces.values()];
     const keyOf = (w: Workspace): string | null => (typeof w.git?.worktreeKey === "string" ? w.git.worktreeKey : null);
-    const idNumber = (id: string): number => Number(/\d+/.exec(id)?.[0] ?? Number.MAX_SAFE_INTEGER);
     // 別のフォルダへ移った workspace は、持ち始めた番号を振り直す（新しい番号なので、移った先の既存の代表には勝てない）。
     const fresh: Workspace[] = [];
     for (const w of all) {
@@ -1226,7 +1225,7 @@ export class SessionModel {
         fresh.push(w);
       }
     }
-    for (const w of fresh.sort((a, b) => idNumber(a.id) - idNumber(b.id))) {
+    for (const w of fresh.sort((a, b) => this.creationRank(a.id) - this.creationRank(b.id))) {
       this.heldSince.set(w.id, { key: keyOf(w)!, seq: ++this.heldCounter });
     }
     const repOf = new Map<string, Workspace>();
@@ -1421,6 +1420,7 @@ export class SessionModel {
       ...(typeof data.worktreeKey === "string" && typeof data.representative === "boolean" ? { representative: data.representative } : {}),
     };
     this.workspaces.set(workspace.id, workspace);
+    this.createdRank.set(workspace.id, ++this.createdCounter);
     this.layout = null; // 復元した直後は仮の状態（`layout` の復元は T9。確定は `confirmLayout`）
     for (const tabData of data.tabs) {
       const tab: Tab = {

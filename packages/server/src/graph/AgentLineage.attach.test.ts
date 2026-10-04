@@ -51,17 +51,16 @@ function link(id: number, kind: LinkKind, from: NodeKey, to: NodeKey): GraphLink
 
 class FakeStore {
   graph: Graph;
-  nextLinkId: number;
   readonly updates: { baseRev: number; ops: GraphOp[] }[] = [];
   getCalls = 0;
   /** update の前に呼ばれる（他の編集が割り込んだことにする）。 */
   beforeUpdate: (() => void) | null = null;
   conflicts = 0;
   failWith: Error | null = null;
+  private linkSeq = 0;
 
   constructor(seed: Partial<Graph> = {}) {
     this.graph = { rev: 5, paused: false, nodes: [], links: [], ...seed };
-    this.nextLinkId = this.graph.links.length + 1;
   }
   get(): Graph {
     this.getCalls++;
@@ -77,10 +76,9 @@ class FakeStore {
       throw new GraphRevConflictError(baseRev, this.graph.rev);
     }
     if (baseRev !== this.graph.rev) throw new GraphRevConflictError(baseRev, this.graph.rev);
-    const r = applyGraphOps({ graph: this.graph, nextLinkId: this.nextLinkId }, ops);
+    const r = applyGraphOps({ graph: this.graph }, ops, () => `new-${++this.linkSeq}`);
     if (!r.ok) throw new GraphInvalidError(r.issues);
     this.graph = { ...r.graph, rev: this.graph.rev + 1 };
-    this.nextLinkId = r.nextLinkId;
     return this.graph;
   }
 }
@@ -294,20 +292,6 @@ describe("AgentLineage.attach", () => {
     const s = setup({ links });
     await s.run();
     expect(s.reasons()).toEqual(["too_many_links"]);
-    expect(s.store.updates).toEqual([]);
-  });
-
-  it("親のノードが stale なら何も足さない（parent_stale）", async () => {
-    const s = setup({ nodes: [{ key: P, x: 0, y: 0, stale: true }] });
-    await s.run();
-    expect(s.reasons()).toEqual(["parent_stale"]);
-    expect(s.store.updates).toEqual([]);
-  });
-
-  it("子のキーのノードが stale なら何も足さない（child_stale）", async () => {
-    const s = setup({ nodes: [{ key: C, x: 0, y: 0, stale: true }] });
-    await s.run();
-    expect(s.reasons()).toEqual(["child_stale"]);
     expect(s.store.updates).toEqual([]);
   });
 

@@ -1,7 +1,8 @@
 import type { ParamsOf } from "@sodashitsu/protocol";
 import { stripAnsi } from "../ansiStrip.js";
-import type { Command } from "../cliArgs.js";
+import type { Command, GlobalOpts } from "../cliArgs.js";
 import { printJson, printLine, printRaw } from "../output.js";
+import { resolvePaneRef } from "../idRef.js";
 import { paneTargetIdBeforeConnect, resolveFocusedPane } from "../paneTarget.js";
 import type { SessionStore } from "../session.js";
 import { assertNotSelfPane, callerPaneParam } from "../selfGuard.js";
@@ -31,7 +32,7 @@ export async function runPaneSplit(cmd: PaneSplitCmd, store: SessionStore): Prom
   const knownPaneId = paneTargetIdBeforeConnect(cmd.opts, cmd.target);
   const result = await withSession(cmd.opts, store, async (client) => {
     const hello = await client.hello();
-    const paneId = knownPaneId ?? resolveFocusedPane(hello.snapshot);
+    const paneId = knownPaneId === undefined ? resolveFocusedPane(hello.snapshot) : resolvePaneRef(hello.snapshot, knownPaneId);
     const params: ParamsOf<"pane.split"> = { paneId, direction: cmd.direction };
     if (cmd.ratio !== undefined) params.ratio = cmd.ratio;
     Object.assign(params, callerPaneParam(cmd.opts));
@@ -47,7 +48,7 @@ export async function runPaneSplit(cmd: PaneSplitCmd, store: SessionStore): Prom
 export async function runPaneCurrent(cmd: PaneCurrentCmd, store: SessionStore): Promise<void> {
   const knownPaneId = paneTargetIdBeforeConnect(cmd.opts, cmd.target);
   const snapshot = await withSession(cmd.opts, store, async (client) => (await client.hello()).snapshot);
-  const paneId = knownPaneId ?? resolveFocusedPane(snapshot);
+  const paneId = knownPaneId === undefined ? resolveFocusedPane(snapshot) : resolvePaneRef(snapshot, knownPaneId);
   const pane = snapshot.panes.find((p) => p.id === paneId);
   if (pane === undefined) throw new RpcFailure("not_found", `pane not found: ${paneId}`);
   const workspaceId = snapshot.tabs.find((t) => t.id === pane.tabId)?.workspaceId ?? null;
@@ -57,8 +58,10 @@ export async function runPaneCurrent(cmd: PaneCurrentCmd, store: SessionStore): 
 export async function runPaneClose(cmd: PaneCloseCmd, store: SessionStore): Promise<void> {
   assertNotSelfPane(cmd.opts, cmd.paneId, "close"); // 自分の pane は閉じない（20260926-agent-skill-file。接続する前に断る）
   const result = await withSession(cmd.opts, store, async (client) => {
-    await client.hello();
-    return client.request("pane.close", { paneId: cmd.paneId });
+    const hello = await client.hello();
+    const paneId = resolvePaneRef(hello.snapshot, cmd.paneId);
+    assertNotSelfPane(cmd.opts, paneId, "close"); // 部分の指定が自分の pane に当たっていたときもここで断る
+    return client.request("pane.close", { paneId });
   });
   printJson(result);
 }
@@ -68,29 +71,34 @@ export async function runPaneClose(cmd: PaneCloseCmd, store: SessionStore): Prom
  * （design「依拠する既存の事実」：INPUT フレームにサーバからの ack は無く、存在しない pane への送信は
  * 黙って無視されるため。pane が hello の後・送信の前に閉じる TOCTOU は許容する — 既知の限界）。
  */
-async function requirePaneExists(client: SodaClient, paneId: string): Promise<void> {
+async function requirePaneExists(client: SodaClient, spec: string, opts: GlobalOpts, action: string): Promise<string> {
   const hello = await client.hello();
+  const paneId = resolvePaneRef(hello.snapshot, spec);
   if (!hello.snapshot.panes.some((p) => p.id === paneId)) {
     throw new RpcFailure("not_found", `pane not found: ${paneId}`);
   }
+  assertNotSelfPane(opts, paneId, action); // 部分の指定が自分の pane に当たっていたときもここで断る
+  return paneId;
 }
 
 export async function runPaneInput(cmd: PaneInputCmd, store: SessionStore): Promise<void> {
   assertNotSelfPane(cmd.opts, cmd.paneId, "send input to"); // 自分の入力欄に混ざる（20260926-agent-skill-file）
-  await withSession(cmd.opts, store, async (client) => {
-    await requirePaneExists(client, cmd.paneId);
-    client.sendInput(cmd.paneId, new TextEncoder().encode(cmd.text));
+  const paneId = await withSession(cmd.opts, store, async (client) => {
+    const id = await requirePaneExists(client, cmd.paneId, cmd.opts, "send input to");
+    client.sendInput(id, new TextEncoder().encode(cmd.text));
+    return id;
   });
-  printJson({ ok: true, paneId: cmd.paneId });
+  printJson({ ok: true, paneId });
 }
 
 export async function runPaneRun(cmd: PaneRunCmd, store: SessionStore): Promise<void> {
   assertNotSelfPane(cmd.opts, cmd.paneId, "run a command in"); // 同上（20260926-agent-skill-file）
-  await withSession(cmd.opts, store, async (client) => {
-    await requirePaneExists(client, cmd.paneId);
-    client.sendInput(cmd.paneId, new TextEncoder().encode(`${cmd.command}\n`));
+  const paneId = await withSession(cmd.opts, store, async (client) => {
+    const id = await requirePaneExists(client, cmd.paneId, cmd.opts, "run a command in");
+    client.sendInput(id, new TextEncoder().encode(`${cmd.command}\n`));
+    return id;
   });
-  printJson({ ok: true, paneId: cmd.paneId });
+  printJson({ ok: true, paneId });
 }
 
 /** タイムアウト付きで、対象 pane の最初の SNAPSHOT を待つ（design「`pane read`」節・手順3）。 */
@@ -135,22 +143,23 @@ export async function readPaneSnapshot(client: SodaClient, paneId: string, scrol
 export async function runPaneRead(cmd: PaneReadCmd, store: SessionStore): Promise<void> {
   await withSession(cmd.opts, store, async (client) => {
     const hello = await client.hello();
-    const text = await readPaneSnapshot(client, cmd.paneId, hello.snapshot.limits.scrollbackLines, cmd.timeoutMs);
+    const paneId = resolvePaneRef(hello.snapshot, cmd.paneId);
+    const text = await readPaneSnapshot(client, paneId, hello.snapshot.limits.scrollbackLines, cmd.timeoutMs);
     printLine(cmd.raw ? text : stripAnsi(text));
 
     if (!cmd.follow) {
-      await client.request("pane.unsubscribe", { paneId: cmd.paneId });
+      await client.request("pane.unsubscribe", { paneId });
       return;
     }
-    await followOutput(client, cmd.paneId, cmd.raw);
+    await followOutput(client, paneId, cmd.raw);
   });
 }
 
 /** 独自トークンの報告（20260927-sidebar-row-tokens。herdr の `pane report-metadata` のトークンの部分）。自分の pane への報告は断らない。結果は `{}`。 */
 export async function runPaneReportMetadata(cmd: PaneReportMetadataCmd, store: SessionStore): Promise<void> {
   const result = await withSession(cmd.opts, store, async (client) => {
-    await client.hello();
-    return client.request("pane.report_metadata", { paneId: cmd.paneId, ...metadataParams(cmd.report) });
+    const hello = await client.hello();
+    return client.request("pane.report_metadata", { paneId: resolvePaneRef(hello.snapshot, cmd.paneId), ...metadataParams(cmd.report) });
   });
   printJson(result);
 }

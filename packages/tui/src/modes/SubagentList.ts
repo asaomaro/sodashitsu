@@ -1,3 +1,4 @@
+import { shortId } from "@sodashitsu/protocol";
 import {
   formatSubagentElapsed,
   paneNameOf,
@@ -100,7 +101,7 @@ export class SubagentList implements Overlay {
     this.total = Math.max(1, lines);
     const r = centeredRect(grid, Math.min(80, grid.w - 2), Math.max(1, lines) + 4);
     this.rect = r;
-    const title = `サブエージェント — ${pane ? paneNameOf(pane) : `pane ${this.paneId}`}`;
+    const title = `サブエージェント — ${pane ? paneNameOf(pane) : `pane ${shortId(this.paneId)}`}`;
     const inner = drawBox(grid, r, c, title);
     this.visible = Math.max(0, inner.h - 1);
     this.scroll = Math.max(0, Math.min(this.scroll, Math.max(0, this.total - this.visible)));

@@ -1,6 +1,7 @@
 import { AGENT_START_DEFAULT_TIMEOUT_MS, type AgentInfo, type ServerEvent } from "@sodashitsu/protocol";
 import { StartWait, type StartVerdict } from "../agentStartWait.js";
 import type { AgentView } from "../agentStatus.js";
+import { resolvePaneRef } from "../idRef.js";
 import type { Command } from "../cliArgs.js";
 import { printJson } from "../output.js";
 import type { SessionStore } from "../session.js";
@@ -55,14 +56,16 @@ async function requestStart(
 }
 
 export async function runAgentStart(
-  cmd: AgentStartCmd,
+  cmd0: AgentStartCmd,
   store: SessionStore,
   deps: AgentStartDeps = REAL_DEPS,
 ): Promise<void> {
-  assertNotSelfPane(cmd.opts, cmd.paneId, "start an agent in"); // 自分の pane に打ち込まない（20260926-agent-skill-file。接続する前に断る）
-  const agent = await withSession(cmd.opts, store, async (client): Promise<AgentView> => {
+  assertNotSelfPane(cmd0.opts, cmd0.paneId, "start an agent in"); // 自分の pane に打ち込まない（20260926-agent-skill-file。接続する前に断る）
+  const agent = await withSession(cmd0.opts, store, async (client): Promise<AgentView> => {
     const events = new EventFeed();
     const hello = await client.hello(events.push);
+    const cmd = { ...cmd0, paneId: resolvePaneRef(hello.snapshot, cmd0.paneId) }; // 部分の指定は完全な id に直す
+    if (cmd.paneId !== cmd0.paneId) assertNotSelfPane(cmd.opts, cmd.paneId, "start an agent in");
     const deadline = deps.now() + (cmd.timeoutMs ?? AGENT_START_DEFAULT_TIMEOUT_MS);
     const workspaces = workspacesByTab(hello.snapshot);
     const pane = hello.snapshot.panes.find((p) => p.id === cmd.paneId);

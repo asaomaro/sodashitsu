@@ -1,6 +1,7 @@
 import { clampTerminalSize, type ServerEvent } from "@sodashitsu/protocol";
 import { AttachKeyFilter } from "../attachKeys.js";
 import { TerminalQueryFilter } from "../attachOutput.js";
+import { resolvePaneRefViaConnect } from "../idRef.js";
 import type { Command } from "../cliArgs.js";
 import type { SessionStore } from "../session.js";
 import { assertNotSelfPane } from "../selfGuard.js";
@@ -94,14 +95,21 @@ export function processTerminal(): AttachTerminal {
 }
 
 export async function runPaneAttach(
-  cmd: PaneAttachCmd,
+  cmd0: PaneAttachCmd,
   store: SessionStore,
   term: AttachTerminal = processTerminal(),
 ): Promise<void> {
+  let cmd = cmd0;
   // 自分の pane に直結すると、直結の出力が自分の pane に書かれて流れ続ける（20260926-agent-skill-file）。端末を触る前・接続する前に断る。
   assertNotSelfPane(cmd.opts, cmd.paneId, "attach to");
   if (!term.isTTY) {
     throw new RpcFailure("not_a_tty", "pane attach needs a terminal on both stdin and stdout");
+  }
+  // 部分の指定（先頭 4 文字以上）は完全な id に直す。自分の pane に当たっていたらここで断る。
+  const paneId = await resolvePaneRefViaConnect(cmd.opts, store, cmd.paneId);
+  if (paneId !== cmd.paneId) {
+    assertNotSelfPane(cmd.opts, paneId, "attach to");
+    cmd = { ...cmd, paneId };
   }
   await withSession(cmd.opts, store, (client) => attachSession(client, cmd, term));
   process.stderr.write(`sodactl: detached from ${cmd.paneId}\n`);

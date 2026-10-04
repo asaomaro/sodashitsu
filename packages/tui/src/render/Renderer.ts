@@ -1,3 +1,4 @@
+import { shortId } from "@sodashitsu/protocol";
 import { paneNameOf } from "@sodashitsu/client-core";
 import type { LayoutResult, PaneBox } from "../layout/computeLayout.js";
 import type { PaneRegistry } from "../term/PaneRegistry.js";
@@ -246,5 +247,5 @@ function paintScrollbar(
 /** 枠の名前：付けた名前、無ければ（設定が入なら）エージェントの名前、無ければ端末のタイトル。 */
 function frameNameOf(pane: Parameters<typeof paneNameOf>[0], agentVisible: boolean): string {
   if (agentVisible) return paneNameOf(pane);
-  return pane.label || pane.title || `pane ${pane.id}`;
+  return pane.label || pane.title || `pane ${shortId(pane.id)}`;
 }

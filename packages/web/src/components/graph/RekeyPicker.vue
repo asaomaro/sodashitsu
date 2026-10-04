@@ -1,9 +1,8 @@
 <script setup lang="ts">
 /**
- * 無効なノードを別の pane に選び直す（20260927-agent-graph の design「`session.json` が読めなかった起動で手元のノードを stale にする…利用者がノードを
- * 選び直すか除去するまで」・g03 点検）。`rekey_node` で送るので、ノードに繋がる線はそのまま付け替わる。
- * 候補はグラフに載っていない同じマシンの pane と、同じ番号の今の pane（id を振り直した後に同じ番号で開いた pane。選べば「無効」の印だけが外れる）。
- * 別のマシンのノード（その pane が閉じた）も同じマシンの pane から選び直せる（04）。
+ * 無効なノード（pane がもう無い）を別の pane に選び直す（20260927-agent-graph・g03 点検）。`rekey_node` で送るので、ノードに繋がる線はそのまま付け替わる。
+ * 候補はグラフに載っていない同じマシンの pane。pane の id は再利用されないので、手元の閉じた pane のノードは自動で外れる——ここに来るのは
+ * 別のマシンのノード（その pane が閉じた）で、同じマシンの pane から選び直せる（04）。
  * `Esc`・取り消し・外側のクリックは何も変えずに閉じる。
  */
 import { computed, nextTick, onMounted, ref } from "vue";
@@ -40,10 +39,10 @@ const rows = computed<Row[]>(() => {
   const onGraph = new Set<string>(graph.nodes.map((n) => n.key));
   const out: Row[] = [];
   const push = (key: NodeKey, name: string, agent: string | null): void => {
-    if (onGraph.has(key) && key !== props.nodeKey) return;
+    if (onGraph.has(key)) return;
     // 同じマシンの pane だけ（規則はサーバ・sodactl と同じ client-core の 1 つ。統合レビュー R1）
     if (!sameNodeMachine(props.nodeKey, key)) return;
-    const note = key === props.nodeKey ? "同じ番号の今の pane" : agent;
+    const note = agent;
     out.push({
       key,
       name,

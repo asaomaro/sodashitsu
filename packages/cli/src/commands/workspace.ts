@@ -1,3 +1,4 @@
+import { resolveWorkspaceRef } from "../idRef.js";
 import type { ParamsOf } from "@sodashitsu/protocol";
 import type { Command } from "../cliArgs.js";
 import { printJson } from "../output.js";
@@ -33,16 +34,17 @@ export async function runWorkspaceCreate(cmd: WorkspaceCreateCmd, store: Session
 export async function runWorkspaceClose(cmd: WorkspaceCloseCmd, store: SessionStore): Promise<void> {
   const result = await withSession(cmd.opts, store, async (client) => {
     const hello = await client.hello();
-    assertNotSelfWorkspace(cmd.opts, hello.snapshot, cmd.workspaceId, "close"); // 自分の pane を含む workspace は閉じない（20260926-agent-skill-file）
-    return client.request("workspace.close", { workspaceId: cmd.workspaceId });
+    const workspaceId = resolveWorkspaceRef(hello.snapshot, cmd.workspaceId);
+    assertNotSelfWorkspace(cmd.opts, hello.snapshot, workspaceId, "close"); // 自分の pane を含む workspace は閉じない（20260926-agent-skill-file）
+    return client.request("workspace.close", { workspaceId });
   });
   printJson(result);
 }
 
 export async function runWorkspaceRename(cmd: WorkspaceRenameCmd, store: SessionStore): Promise<void> {
   const result = await withSession(cmd.opts, store, async (client) => {
-    await client.hello();
-    return client.request("workspace.rename", { workspaceId: cmd.workspaceId, label: cmd.label });
+    const hello = await client.hello();
+    return client.request("workspace.rename", { workspaceId: resolveWorkspaceRef(hello.snapshot, cmd.workspaceId), label: cmd.label });
   });
   printJson(result);
 }
@@ -53,8 +55,8 @@ export async function runWorkspaceRename(cmd: WorkspaceRenameCmd, store: Session
  */
 export async function runWorkspaceReportMetadata(cmd: WorkspaceReportMetadataCmd, store: SessionStore): Promise<void> {
   const result = await withSession(cmd.opts, store, async (client) => {
-    await client.hello();
-    return client.request("workspace.report_metadata", { workspaceId: cmd.workspaceId, ...metadataParams(cmd.report) });
+    const hello = await client.hello();
+    return client.request("workspace.report_metadata", { workspaceId: resolveWorkspaceRef(hello.snapshot, cmd.workspaceId), ...metadataParams(cmd.report) });
   });
   printJson(result);
 }

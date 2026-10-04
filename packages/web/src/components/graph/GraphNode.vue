@@ -39,7 +39,7 @@ const emit = defineEmits<{
   subagents: [];
 }>();
 
-const invalid = computed(() => props.info.exists === false || props.info.stale);
+const invalid = computed(() => props.info.exists === false);
 
 const agentLine = computed(() => {
   const a = props.info.agent;
