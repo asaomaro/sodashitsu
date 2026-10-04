@@ -108,9 +108,20 @@ AssertionError: expected "vi.fn()" to be called once with arguments: [ { status:
   6 passed (17.2s)
 ```
 
+#### T9（`AskDialog.vue` の `onFormClick` が高さを読み直さない、を壊して `pnpm build` 後に E2E）
+```
+  1) src/specs/ask-form-comments.spec.ts:294:1 › 高さ: 上限に達していないフォームで欄を開くと増え、閉じると戻る。絞り込みの入力・表示条件の出し入れでは変わらない（AC-I5） 
+  1 failed
+  15 passed (31.4s)
+```
+
 ### 点検の指摘
 - [nit][conv:-] decisions.md D8 の Tab の行番号が差分で 1 行ずれていた / 対応: 修正済（T7・ラウンド1）
 - [nit][conv:-] ask-form.spec.ts の「目次は出ない」が paging: false による固定の観測になったことを D8 に書くとよい / 対応: 修正済（T7・ラウンド1）
 - [nit][conv:-] ask-form-comments.spec.ts・ask-form-mobile.spec.ts が部品の内部属性（`[data-ask-submit]`・`textarea[data-ask-comment]` 等）を askForm.ts を経由せず直書き / 対応: 修正済（T8・ラウンド1。`submitForm`・`commentToggle`・`commentBox` に集約）
 - [nit][conv:-] multi の質問に自由記述を書く例が端から端までに無い / 対応: 修正済（T8・ラウンド1。d に書く）
 - [nit][conv:-] HTML の件が入力直後の DOM だけを見ている / 対応: 修正済（T8・ラウンド1。閉じて開き直した後も見る）
+- [should][conv:e2e-observe-browser] ask-form-comments.spec.ts:239-243 漏れないテストの待った後の「届いていない」の読みに、その旨のコメントが無い / 対応: 修正済（T9・ラウンド1。猶予の理由と、値 "xc" をキーが処理された印にすることを書いた）
+- [should][conv:e2e-observe-browser] ask-form-comments.spec.ts:216-223 対照のホイールが固定の 500ms の後に 1 回だけで、間欠的に落ちうる / 対応: 修正済（T9・ラウンド1。届くまでホイールを送り直す poll にした）
+- [should][conv:-] ask-form-comments.spec.ts:190-201 上限のフォームの「欄が見える位置までスクロール」が部品の動きが無くても通りうる / 対応: 修正済（T9・ラウンド1。ボタンを本文の下端へ寄せ、開く前の位置と、上限なので高さが増えないことを対照に足した）
+- [nit][conv:-] ask-form-comments.spec.ts:49-52 Esc のコメントとフォーカスの実態が合わない / 対応: 修正済（T9・ラウンド1。ボタンへフォーカスを戻してから Esc）

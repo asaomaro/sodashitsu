@@ -45,7 +45,7 @@ design.md のとおり、下から積む。(1) 部品と試験データを写す
       対象: `packages/e2e/src/specs/ask-form-comments.spec.ts`（新規）、`packages/e2e/src/specs/ask-form-mobile.spec.ts`、`packages/e2e/src/support/askForm.ts`・`askSent.ts`、手本は `packages/e2e/src/specs/ask-form-extras.spec.ts`
       依存: T7
       AC: AC2, AC3, AC4, AC8
-- [ ] T9: 新しい E2E（操作）——同じ spec に: `aria-expanded` と欄の読み上げ用の名前／欄の中の `Enter`（改行が入り `ask.answer` は 0 件）・`Ctrl+Enter`（1 件）・`Esc`（`ask.cancel` が 1 件）／キーだけで一巡（`Tab` → 開く → 書く → `Ctrl+Enter`）／フォーカス（開いた後は欄・もう一度開いても欄・キーで閉じた後はボタン・目次と `Alt+PageDown` と未回答への移動は自由記述の欄へ行かない）／高さ（上限に達していないフォームで開くと増え、閉じると戻る・上限のフォームで画面に収まり欄が見える・絞り込みの入力と `showIf` の出し入れではダイアログの高さが変わらない）／欄にフォーカスがある間のキー・ホイールが端末の pane へ漏れない。壊して落ちる確認（高さの読み直し）。新しい spec を 2 回続けて流し、同じ結果になること
+- [x] T9: 新しい E2E（操作）——同じ spec に: `aria-expanded` と欄の読み上げ用の名前／欄の中の `Enter`（改行が入り `ask.answer` は 0 件）・`Ctrl+Enter`（1 件）・`Esc`（`ask.cancel` が 1 件）／キーだけで一巡（`Tab` → 開く → 書く → `Ctrl+Enter`）／フォーカス（開いた後は欄・もう一度開いても欄・キーで閉じた後はボタン・目次と `Alt+PageDown` と未回答への移動は自由記述の欄へ行かない）／高さ（上限に達していないフォームで開くと増え、閉じると戻る・上限のフォームで画面に収まり欄が見える・絞り込みの入力と `showIf` の出し入れではダイアログの高さが変わらない）／欄にフォーカスがある間のキー・ホイールが端末の pane へ漏れない。壊して落ちる確認（高さの読み直し）。新しい spec を 2 回続けて流し、同じ結果になること
       対象: `packages/e2e/src/specs/ask-form-comments.spec.ts`、手本は `packages/e2e/src/specs/ask-form-index.spec.ts`（フォーカス・高さ・`defaultPrevented` の見方）・`ask-form.spec.ts`（キーが漏れない件）
       依存: T8
       AC: AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
