@@ -21,7 +21,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `.aidev/works/20261004-subagent-display/research.md`（「実物で確かめたこと」の手順）、`decisions.md`
       依存: なし
       AC: AC1, AC9, AC12
-- [ ] T2: プロトコル——`SubagentInfo`・`AgentInfo.subagents?`、連携の状態の `needsUpdate?`。型のテスト（あれば）と、既存の型の利用箇所が通ること
+- [x] T2: プロトコル——`SubagentInfo`・`AgentInfo.subagents?`、連携の状態の `needsUpdate?`。型のテスト（あれば）と、既存の型の利用箇所が通ること
       対象: `packages/protocol/src/model.ts`（`AgentInfo`。:114-134 付近）、`packages/protocol/src/messages.ts`（`agent_integration.status` の結果の型。:652-681 付近）
       依存: なし
       AC: AC13
