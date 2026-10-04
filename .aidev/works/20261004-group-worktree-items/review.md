@@ -1115,3 +1115,157 @@ AssertionError: expected true to be false // Object.is equality
 ```
 - T13 [should] 回帰テストの壊して落ちる確認が一部の振る舞いにしか無い → 12 の壊しを追補に貼った（落ちないテストは無かった） [conv:regression-negative-control!]
 - T13 [nit] 所属ありで移し先が無いとき「別のグループへ移す…」を出さない判断が design に無い → D21 に design との差として明記 [conv:-]
+
+### T14 壊して落ちる確認
+
+以下は 1 つずつ実装の 1 行を壊し、該当のテストファイルを実行した生の出力（`grep` で失敗の行だけ抜いた）。確認後に元へ戻し、`diff` で一致を確かめた。
+
+```
+--- 壊す: 別の入れ物の判定を外す（row.container !== dragged.container → false）
+ 1 file changed, 51 insertions(+), 35 deletions(-)
+     × 一番上の項目を、グループの中の行の上へ落とすことはできない（印が付き、離しても送らず知らせる） 9ms
+     × グループの中の項目を、一番上の行の上へ落とすことはできない（送らず知らせる） 6ms
+     × グループを、別のグループの中の行の上へ落とすことはできない 5ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 一番上の項目を、グループの中の行の上へ落とすことはできない（印が付き、離しても送らず知らせる）
+AssertionError: expected [ 'sidebar-row', …(2) ] to include 'sidebar-row-drop-invalid'
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > グループの中の項目を、一番上の行の上へ落とすことはできない（送らず知らせる）
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > グループを、別のグループの中の行の上へ落とすことはできない
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+      Tests  3 failed | 99 passed (102)
+--- 壊す: 名前順の一番上の拒否を外す
+ 1 file changed, 51 insertions(+), 35 deletions(-)
+       × 一番上の項目の並べ替えは受け付けず、送らずに「名前順では並べ替えできません」と知らせる 8ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 名前順（design「並びと名前順」） > 一番上の項目の並べ替えは受け付けず、送らずに「名前順では並べ替えできません」と知らせる
+AssertionError: expected [ 'sidebar-row', …(1) ] to include 'sidebar-row-drop-invalid'
+      Tests  1 failed | 101 passed (102)
+--- 壊す: 子の行の項目を自分自身にする（itemHeadId → ws.id）
+ 1 file changed, 51 insertions(+), 35 deletions(-)
+       × 子の行を掴むと、worktree グループ（先頭の workspace で指す項目）と全メンバーの id が渡る 11ms
+       × 子の行の上へ落とすと、落とし先は親の worktree グループ（先頭の workspace）になる 5ms
+       × 自分の worktree グループの別の行（先頭・子）の上で離しても何も送らず、知らせない 4ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > worktree グループ（子を掴んでも動くのは worktree グループ全体） > 子の行を掴むと、worktree グループ（先頭の workspace で指す項目）と全メンバーの id が渡る
+AssertionError: expected "vi.fn()" to be called with arguments: [ { kind: 'workspace', …(1) }, …(2) ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > worktree グループ（子を掴んでも動くのは worktree グループ全体） > 子の行の上へ落とすと、落とし先は親の worktree グループ（先頭の workspace）になる
+AssertionError: expected "vi.fn()" to be called with arguments: [ { kind: 'workspace', …(1) }, …(2) ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > worktree グループ（子を掴んでも動くのは worktree グループ全体） > 自分の worktree グループの別の行（先頭・子）の上で離しても何も送らず、知らせない
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+      Tests  3 failed | 99 passed (102)
+--- 壊す: 自分の項目の上を self としない
+ 1 file changed, 51 insertions(+), 35 deletions(-)
+       × 自分の worktree グループの別の行（先頭・子）の上で離しても何も送らず、知らせない 9ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > worktree グループ（子を掴んでも動くのは worktree グループ全体） > 自分の worktree グループの別の行（先頭・子）の上で離しても何も送らず、知らせない
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+      Tests  1 failed | 101 passed (102)
+--- 壊す: 古いサーバの分岐を外す（常に item.move）
+ 1 file changed, 14 insertions(+), 7 deletions(-)
+     × moveItemByDrag: layout の無い古いサーバには workspace.move_to（id の集まりと落とし先）を送る 8ms
+     × moveItemByDrag: 古いサーバで落とし先の workspace が無い（空のグループの上）なら何も送らない（null は末尾の意味になる） 2ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — workspace の並べ替え > moveItemByDrag: layout の無い古いサーバには workspace.move_to（id の集まりと落とし先）を送る
+AssertionError: expected [ [ 'item.move', …(1) ] ] to deeply equal [ [ 'workspace.move_to', { …(2) } ] ]
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — workspace の並べ替え > moveItemByDrag: 古いサーバで落とし先の workspace が無い（空のグループの上）なら何も送らない（null は末尾の意味になる）
+AssertionError: expected [ [ 'item.move', …(1) ] ] to deeply equal []
+      Tests  2 failed | 187 passed (189)
+--- 壊す: 古いサーバの null の落とし先の guard を外す
+ 1 file changed, 14 insertions(+), 7 deletions(-)
+     × moveItemByDrag: 古いサーバで落とし先の workspace が無い（空のグループの上）なら何も送らない（null は末尾の意味になる） 9ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — workspace の並べ替え > moveItemByDrag: 古いサーバで落とし先の workspace が無い（空のグループの上）なら何も送らない（null は末尾の意味になる）
+AssertionError: expected [ [ 'workspace.move_to', { …(2) } ] ] to deeply equal []
+      Tests  1 failed | 188 passed (189)
+--- 壊す: item.move を item.move_by にする
+ 1 file changed, 14 insertions(+), 7 deletions(-)
+     × moveItemByDrag: layout を持つサーバには item.move（項目と落とし先の項目）を送る 9ms
+     × moveItemByDrag: グループも項目として送る 2ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — workspace の並べ替え > moveItemByDrag: layout を持つサーバには item.move（項目と落とし先の項目）を送る
+AssertionError: expected [ [ 'item.move_by', …(1) ] ] to deeply equal [ [ 'item.move', …(1) ] ]
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — workspace の並べ替え > moveItemByDrag: グループも項目として送る
+AssertionError: expected [ [ 'item.move_by', …(1) ] ] to deeply equal [ [ 'item.move', …(1) ] ]
+      Tests  2 failed | 187 passed (189)
+```
+
+#### T14 追補（独立点検の指摘: 振る舞いごとの壊して落ちる確認）
+
+(a) の Esc のテストは、離した位置に行が無く、Esc が効かなくても何も送られないため落ちなかった（最初の壊しで `Tests 296 passed`）。離した位置に落とせる行を用意し、`workspaceDrag` が null になることも見るよう書き直した。書き直し後の壊しは末尾。(b)(3)(4) のあとに足したテスト（フォーカス・古いサーバの空のグループ・item.move の失敗）もここで確かめた。
+
+```
+--- 壊す: (a) Esc の取り消しを外す（書き直す前のテスト。落ちなかった）
+      Tests  296 passed (296)
+--- 壊す: (b) 行の外で離したときの取り消しを外す（drop が null のとき最後の行へ落とす）
+     × 行の外で離すと取り消し（送らず、知らせない） 11ms
+       × その行の上は落とし先にならない（印を出さず、離しても送らず知らせない） 5ms
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 行の外で離すと取り消し（送らず、知らせない）
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 古いサーバ（layout が無い）で、メンバーのいない空のグループ > その行の上は落とし先にならない（印を出さず、離しても送らず知らせない）
+      Tests  2 failed | 294 passed (296)
+--- 壊す: (c) 名前順の拒否が入れ物を見ない（dragged.container === null && を外す）
+       × グループの中の並べ替えは名前順でもできる 10ms
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 名前順（design「並びと名前順」） > グループの中の並べ替えは名前順でもできる
+AssertionError: expected "vi.fn()" to be called with arguments: [ { kind: 'workspace', …(1) }, …(2) ]
+      Tests  1 failed | 295 passed (296)
+--- 壊す: (d) 掴んだグループの中の行を self にしない
+     × 掴んだグループ自身の中の行の上で離しても何も送らず、知らせない（自分の項目の上） 12ms
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 掴んだグループ自身の中の行の上で離しても何も送らず、知らせない（自分の項目の上）
+AssertionError: expected [ { id: 4, …(1) } ] to have a length of +0 but got 1
+      Tests  1 failed | 295 passed (296)
+--- 壊す: (e) 別の入れ物の上で離したときの知らせを外す
+     × 一番上の項目を、グループの中の行の上へ落とすことはできない（印が付き、離しても送らず知らせる） 11ms
+     × グループの中の項目を、一番上の行の上へ落とすことはできない（送らず知らせる） 6ms
+     × グループを、別のグループの中の行の上へ落とすことはできない 6ms
+       × 一番上の項目の並べ替えは受け付けず、送らずに「名前順では並べ替えできません」と知らせる 6ms
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 一番上の項目を、グループの中の行の上へ落とすことはできない（印が付き、離しても送らず知らせる）
+AssertionError: expected [] to include '同じグループの中、または一番上の項目の間でだけ並べ替えできます'
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > グループの中の項目を、一番上の行の上へ落とすことはできない（送らず知らせる）
+AssertionError: expected [] to include '同じグループの中、または一番上の項目の間でだけ並べ替えできます'
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > グループを、別のグループの中の行の上へ落とすことはできない
+AssertionError: expected [] to have a length of 1 but got +0
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 名前順（design「並びと名前順」） > 一番上の項目の並べ替えは受け付けず、送らずに「名前順では並べ替えできません」と知らせる
+AssertionError: expected [] to deeply equal [ '名前順では並べ替えできません' ]
+      Tests  4 failed | 292 passed (296)
+--- 壊す: (f) 落とせる行の sidebar-row-drop-target を外す
+     × ドラッグ中に別の行の上へ来ると sidebar-row-drop-target が付き、ドラッグ元自身には付かない 9ms
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > ドラッグ中に別の行の上へ来ると sidebar-row-drop-target が付き、ドラッグ元自身には付かない
+AssertionError: expected [ 'sidebar-row' ] to include 'sidebar-row-drop-target'
+      Tests  1 failed | 295 passed (296)
+--- 壊す: (g) item.move 失敗時の知らせを外す
+     × moveItemByDrag: item.move が失敗したら「移動できませんでした」と知らせる 10ms
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — workspace の並べ替え > moveItemByDrag: item.move が失敗したら「移動できませんでした」と知らせる
+AssertionError: expected [] to deeply equal [ '移動できませんでした' ]
+      Tests  1 failed | 295 passed (296)
+--- 壊す: (h) 離した後の focusWorkspace を外す
+     × 離したあと、掴んだ行の workspace にフォーカスを残す（workspace.focus も送る） 9ms
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 離したあと、掴んだ行の workspace にフォーカスを残す（workspace.focus も送る）
+AssertionError: expected 'w2' to be 'w1' // Object.is equality
+      Tests  1 failed | 295 passed (296)
+--- 壊す: (3) 古いサーバの落とし先なしを落とし先にする
+       × その行の上は落とし先にならない（印を出さず、離しても送らず知らせない） 9ms
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 古いサーバ（layout が無い）で、メンバーのいない空のグループ > その行の上は落とし先にならない（印を出さず、離しても送らず知らせない）
+AssertionError: expected [ 'sidebar-row', …(1) ] to not include 'sidebar-row-drop-target'
+      Tests  1 failed | 295 passed (296)
+--- 壊す: (4) 古いサーバの空のグループを掴めるようにする（Sidebar 側）
+       × 空のグループは掴めない（ドラッグが始まらず、workspaceIds: [] を送らない） 9ms
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 古いサーバ（layout が無い）で、メンバーのいない空のグループ > 空のグループは掴めない（ドラッグが始まらず、workspaceIds: [] を送らない）
+AssertionError: expected { sourceIds: [], …(2) } to be null
+      Tests  1 failed | 295 passed (296)
+--- 壊す: (4) 古いサーバの空 workspaceIds を送る（ActionDispatcher 側）
+     × moveItemByDrag: 古いサーバで動かす workspace が無い（空のグループ）なら何も送らない（workspaceIds: [] を送らない） 9ms
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — workspace の並べ替え > moveItemByDrag: 古いサーバで動かす workspace が無い（空のグループ）なら何も送らない（workspaceIds: [] を送らない）
+AssertionError: expected [ [ 'workspace.move_to', …(1) ] ] to deeply equal []
+      Tests  1 failed | 295 passed (296)
+--- 壊す: (a) Esc の取り消しを外す（書き直し後。window の keydown 登録を外す）
+     × Esc で取り消し、moveItemByDrag を呼ばない 11ms
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > Esc で取り消し、moveItemByDrag を呼ばない
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+      Tests  1 failed | 104 passed (105)
+```
+
+- 元に戻して `diff` で一致を確認した。web の components・actions は 1138 件すべて通る。
+- T14 [should] 壊して落ちる確認が一部の振る舞いにしか無い → (a)〜(h) を追補に貼り、落ちなかった Esc のテストを書き直した [conv:regression-negative-control!]
+- T14 [nit] 他のテストの古いモック moveWorkspacesByDrag が残っていた → moveItemByDrag に直した [conv:-]
+- T14 [nit] 古いサーバで空のグループの上に落とせる印が出るのに何も起きない → 落とし先にしない（印を出さない）ようにした [conv:-]
+- T14 [nit] 古いサーバで空のグループを掴むと workspace_ids が空の move_to を送りうる → ドラッグを始めない・送らない guard を足した [conv:-]

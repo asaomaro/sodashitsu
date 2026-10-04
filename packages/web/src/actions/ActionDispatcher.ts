@@ -1,4 +1,4 @@
-import type { AgentIntegrationInstallResult, AgentIntegrationKind, NewCwd, WorkspaceGroup } from "@sodashitsu/protocol";
+import type { AgentIntegrationInstallResult, AgentIntegrationKind, ItemTarget, NewCwd, WorkspaceGroup } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { KeyInputController, ActionPort, FocusPort } from "../keys/KeyInputController.js";
 import type { Action, CopyCommand, Dir } from "@sodashitsu/client-core";
@@ -1232,7 +1232,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
    * `move_workspace_previous`/`move_workspace_next`（20260923-workspace-grouping。`moveTab` と
    * 同じ形）。対象は現在 focus 中の workspace。グループの内側・外側を問わず、フラットな順序上で
    * 隣と入れ替わる——キーバインドはグループのまとまりを保つ動きはしない（design「振る舞いの詳細
-   * （キーバインド）」。まとまりを保った移動は D&D の役割＝`moveWorkspacesByDrag`）。
+   * （キーバインド）」。まとまりを保った移動は D&D の役割＝`moveItemByDrag`）。
    */
   private moveWorkspace(direction: "previous" | "next"): void {
     const workspaceId = this.view.workspaceId;
@@ -1243,12 +1243,20 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /**
-   * workspace 行・グループのヘッダー行の D&D 確定（20260923-workspace-grouping。design「振る舞いの
-   * 詳細（D&D）」）。`workspaceIds` は動かす対象（通常の行なら1件、グループのヘッダー行ならそのグループの
-   * 全メンバー id）。`Sidebar.vue` の `onRowPointerUp` から呼ぶ。
+   * サイドバーの行のドラッグの確定（20261004-group-worktree-items。design「画面」のドラッグ）。動かすのは項目
+   * （`item`。子を掴めばその worktree グループ）で、`before` の項目の前へ。入れ物が同じか・名前順の一番上かは
+   * 呼び出し側（`Sidebar.vue`）が見て、ここへ来るのは受け付けてよい移動だけ。`layout` を持たない古いサーバには
+   * 今までの `workspace.move_to`（項目の workspace の ID の集まりと、落とし先の項目の先頭の workspace）を送る。
    */
-  moveWorkspacesByDrag(workspaceIds: string[], beforeWorkspaceId: string | null): void {
-    void this.conn.request("workspace.move_to", { workspaceIds, beforeWorkspaceId }).catch(() => undefined);
+  moveItemByDrag(item: ItemTarget, before: ItemTarget, legacy: { workspaceIds: string[]; beforeWorkspaceId: string | null }): void {
+    if (!this.session.hasServerLayout) {
+      // 古いサーバへ落とし先 null（末尾へ）を送ると意味が変わる。落とし先の無い行（空のグループ）の上では何も送らない。
+      // 動かす workspace が無い（空のグループ）ときも送らない。
+      if (legacy.beforeWorkspaceId === null || legacy.workspaceIds.length === 0) return;
+      void this.conn.request("workspace.move_to", { workspaceIds: legacy.workspaceIds, beforeWorkspaceId: legacy.beforeWorkspaceId }).catch(() => undefined);
+      return;
+    }
+    void this.conn.request("item.move", { item, before }).catch(() => this.view.toast("移動できませんでした"));
   }
 
   /** `previous_agent`/`next_agent`/`focus_agent` が共有する対象の組み立て（design「振る舞いの詳細」）。 */

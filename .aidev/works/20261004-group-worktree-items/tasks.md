@@ -67,7 +67,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/web/src/components/ContextMenu.vue:89-112`、`GroupPickerDialog.vue:22`、`ConfirmDialog.vue:79`、`packages/web/src/actions/ActionDispatcher.ts:549-627`、`packages/web/src/components/Sidebar.vue:227-231`（メニューの入口）、`ContextMenu.test.ts:177-255`、`ConfirmDialog.test.ts:126-168`、`GroupPickerDialog.test.ts`、`ActionDispatcher.test.ts:1576-1727`
       依存: T7, T8, T12
       AC: AC2, AC3, AC7, AC-I2, AC-I4
-- [ ] T14: ブラウザ版のドラッグ——どの行を掴んでも項目が動く（子を掴めばその worktree グループ）。落とせるのは同じ入れ物の項目の間だけ。それ以外の上では落とせない印を出し、離しても何も送らず知らせる。`Esc`・行の外で取り消し。`item.move` を送る（`layout` の無いサーバでは `workspace.move_to`）。**名前順のときのドラッグの今の動きを先に確かめ**、一番上の並べ替えは受け付けず「名前順では並べ替えできません」と知らせる（グループの中は並べ替えられる）。単体テストと壊して落ちる確認
+- [x] T14: ブラウザ版のドラッグ——どの行を掴んでも項目が動く（子を掴めばその worktree グループ）。落とせるのは同じ入れ物の項目の間だけ。それ以外の上では落とせない印を出し、離しても何も送らず知らせる。`Esc`・行の外で取り消し。`item.move` を送る（`layout` の無いサーバでは `workspace.move_to`）。**名前順のときのドラッグの今の動きを先に確かめ**、一番上の並べ替えは受け付けず「名前順では並べ替えできません」と知らせる（グループの中は並べ替えられる）。単体テストと壊して落ちる確認
       対象: `packages/web/src/components/Sidebar.vue:285-372`（D&D）、`packages/web/src/actions/ActionDispatcher.ts:1180-1182`（`moveWorkspacesByDrag`）、`packages/web/src/store/view.ts`（`workspaceDrag`）、`packages/web/src/components/Sidebar.test.ts`
       依存: T8, T12
       AC: AC2, AC5, AC-I2, AC-I5

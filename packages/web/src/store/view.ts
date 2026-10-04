@@ -383,7 +383,7 @@ export const useViewStore = defineStore("view", () => {
    * 先頭メンバー行は同じ `dropAnchorId`〔drop 先として使う workspace id〕を持ちうるので、ホバー中の
    * 行を一意に特定するには行固有の `key` を使う必要がある）。
    */
-  const workspaceDrag = ref<{ sourceIds: string[]; overRowKey: string | null } | null>(null);
+  const workspaceDrag = ref<{ sourceIds: string[]; overRowKey: string | null; overInvalid: boolean } | null>(null);
   const connectionState = ref<ConnectionState>("connecting");
   const authRequired = ref(false);
   /**
@@ -605,13 +605,14 @@ export const useViewStore = defineStore("view", () => {
   /** workspace の D&D 開始（20260923-workspace-grouping。`startPaneDrag` と同じ形。閾値を超えて初めて呼ぶ）。
    *  `sourceIds` は通常の行なら1件、グループのヘッダー行ならそのグループの全メンバー id（AC9）。 */
   function startWorkspaceDrag(sourceIds: string[]): void {
-    workspaceDrag.value = { sourceIds, overRowKey: null };
+    workspaceDrag.value = { sourceIds, overRowKey: null, overInvalid: false };
   }
 
-  /** `rowKey` は `SpaceRow.key`（`Sidebar.vue`）——workspace id そのものではない。上の注記参照。 */
-  function setWorkspaceDragOver(rowKey: string | null): void {
-    if (!workspaceDrag.value || workspaceDrag.value.overRowKey === rowKey) return;
-    workspaceDrag.value = { ...workspaceDrag.value, overRowKey: rowKey };
+  /** `rowKey` は `SpaceRow.key`（`Sidebar.vue`）——workspace id そのものではない。上の注記参照。
+   *  `invalid` は「その行の上には落とせない」印（別の入れ物の上・名前順の一番上。20261004-group-worktree-items）。 */
+  function setWorkspaceDragOver(rowKey: string | null, invalid = false): void {
+    if (!workspaceDrag.value || (workspaceDrag.value.overRowKey === rowKey && workspaceDrag.value.overInvalid === invalid)) return;
+    workspaceDrag.value = { ...workspaceDrag.value, overRowKey: rowKey, overInvalid: invalid };
   }
 
   function endWorkspaceDrag(): void {

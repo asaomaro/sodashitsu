@@ -170,3 +170,13 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **古いサーバ**（`session.hasServerLayout` が false）: 出し入れは項目の workspace 全部（`repoMembers` の順）に順に送り、1 件でも失敗したら止める。グループの作成は 2 段のまま（2 段目も全部）。「上へ／下へ移動」は出さない。`layout` を持つサーバは `group.create` に `workspaceId` を添えて 1 回、出し入れも 1 回。
 - **グループの「上へ／下へ移動」**: `ActionDispatcher.moveGroupBy` が `item.move_by` を送る。名前順（`view.workspaceSort === "name"`）のときは送らず「名前順では並べ替えできません」と知らせる（メニュー自体は出す）。端での `moved: false` は黙って何もしない。
 - **`ConfirmDialog` の件数**: `repoMembers` で数える（対象が `repoMembers` の先頭のときだけ、残り全部。グループへ入っているかは見ない。サーバの `repoCloseTargets` と同じ）。`linkedWorktreeChildrenOf` は web からは使わなくなった（端末版 `tui/src/modes/dialogs.ts` はまだ使う。T19 で撤去）。
+
+## D22: ブラウザ版のドラッグを項目単位の `item.move` にした（T14）
+
+- **名前順のときの今のドラッグの動き（変える前に確かめた事実）**: 名前順（`workspaceSort === "name"`）でもドラッグは止められず、`workspace.move_to` を送っていた（Sidebar.vue に並び順の分岐が無い）。サーバはレイアウトの順を変えるが、一番上の描画は名前で決まるので**送るが見た目が変わらない**。実物の Sidebar を名前順で mount して確かめた：2 行（"b"=w1・"a"=w2）で w1 を w2 の上へ落とすと `moveWorkspacesByDrag(["w2"], "w1")`（古い名前。今の `moveItemByDrag`）が呼ばれ、サーバが順を入れ替えた後（Map の順を変えた）も描画は `["a","b"]` のまま。グループの中は、古い画面が行を「グループの見出し」に寄せていたので（D20）中の並べ替え自体ができなかった。design の「今が『送るが見た目が変わらない』なら、この決まりに変える」に従い、名前順の一番上は受け付けず、離したときに「名前順では並べ替えできません」と知らせる。
+- **行ごとの項目と入れ物**: `SpaceRow` に `item`（`ItemTarget`。子の行は親の worktree グループ＝先頭の workspace、グループの見出しは `group`）と `container`（一番上は null、グループの中はそのグループの id）を持たせた。子の行の `dragIds` は worktree グループ全体にした（古いサーバの `workspace.move_to` の (a) の「項目のちょうど全部」に合わせるため）。旧 `groupHeadRowKeyFor`（メンバー行を見出しへ寄せる）と `dropAnchorForRowKey` は廃止。
+- **落とせる条件**（`dropStateFor`）: ① 自分の項目の上（掴んだグループの中の行を含む）は何も起きない（印なし・離しても送らず知らせない）。② 入れ物が違う行の上は落とせない（印＝破線 `sidebar-row-drop-invalid`＋`not-allowed` カーソル。離すと送らず「同じグループの中、または一番上の項目の間でだけ並べ替えできます」）。③ 名前順で掴んだ項目が一番上なら、同じ入れ物の上でも落とせない（印あり・離すと「名前順では並べ替えできません」）。④ 行の外で離す・`Esc`・ダイアログが開く、は今までどおり取り消し（送らず知らせない）。`view.workspaceDrag` に `overInvalid` を足した。
+- **落とし先は「その項目の前」だけ**（末尾へ落とす入口は今までもなく、変えていない。`before` は常に項目）。位置が変わらない落とし先（すぐ後ろの項目）はサーバが受け付けて何も変わらない（D8）。
+- **送り分け**: `ActionDispatcher.moveItemByDrag(item, before, legacy)`（旧 `moveWorkspacesByDrag`）。`session.hasServerLayout` なら `item.move`（失敗は「移動できませんでした」）、無ければ `workspace.move_to`（掴んだ項目の workspace 全部と、落とし先の項目の先頭の workspace）。古いサーバで落とし先の workspace が無いとき（メンバーのいない空のグループの上）は、null が「末尾」の意味になってしまうので何も送らない。
+- 端末版の `moveWorkspacesByDrag`（`TuiDispatcher`・`mouse.ts`）は T18 まで触らない。
+- **古いサーバで落とし先・動かす対象が無い場合（T14 点検の指摘）**: メンバーのいない空のグループは古いサーバでは `workspace.move_to` の落とし先にならない。**落とし先にしない**方を選んだ：`dropStateFor` が null を返し、印（`sidebar-row-drop-target` も `-invalid` も）を出さず、離しても送らず知らせない（印が出るのに何も起きない状態をなくした）。同じ空のグループを**掴む**ことも古いサーバではできない（`dragIds` が空で `workspaceIds: []` を送りうるため、閾値を超えてもドラッグを始めない）。`moveItemByDrag` にも保険として、古いサーバで落とし先が null または `workspaceIds` が空なら何も送らない guard を置いた。`layout` を持つサーバは空のグループも `item.move` で動かせるので変えない。

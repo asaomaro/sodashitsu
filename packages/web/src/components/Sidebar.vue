@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch } from "vue";
-import type { Workspace } from "@sodashitsu/protocol";
+import type { ItemTarget, Workspace } from "@sodashitsu/protocol";
 import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
@@ -85,12 +85,14 @@ interface SpaceRow {
   collapsed: boolean;
   /** ドラッグしたときに一緒に動かす workspace id（通常の行は自分自身の1件。グループの頭は全メンバー）。 */
   dragIds: string[];
+  /** この行が表す項目（ドラッグで動くのも、落とし先になるのもこの単位。子の行は親の worktree グループ）。 */
+  item: ItemTarget;
+  /** 項目の入れ物（`null` は一番上、それ以外はグループの id。グループの見出し自身は一番上の項目）。 */
+  container: string | null;
   /**
-   * ドロップを確定するときに `workspace.move_to` へ渡す anchor（workspace id）。無ければドロップ先に
-   * ならない（メンバーが1人もいないグループのヘッダー行等）。**ホバー中の行の特定には使わない**
-   * （タスク点検の指摘）——グループのヘッダー行とその先頭メンバー行は同じ `dropAnchorId` を
-   * 持ちうる（ヘッダーは先頭メンバーの id をそのまま使うため）ので、行を一意に特定できない。
-   * ホバー中の行の特定・ハイライトの対象には代わりに一意な `key` を使う（`dropAnchorForRowKey`）。
+   * 古いサーバ（`layout` が無い）の `workspace.move_to` へ渡す落とし先（workspace id。項目の先頭の workspace）。
+   * 無ければ（メンバーが 1 人もいないグループ）古いサーバへは送れない。**ホバー中の行の特定には使わない**
+   * ——グループの見出しとその先頭メンバーの行は同じ値を持ちうる。行の特定・ハイライトは一意な `key` で行う。
    */
   dropAnchorId: string | null;
   /**
@@ -107,8 +109,9 @@ function rowStateFor(ws: Workspace): { state: keyof typeof STATE_PRIORITY | null
   return { state, isCurrent, lines: resolveSpaceLines(settings.spacesLayout, { workspace: ws, state }) };
 }
 
-function workspaceRow(ws: Workspace, opts: { depth: 0 | 1 | 2; parentGroupId: string | null; kind: SpaceRow["kind"]; groupKind: SpaceRow["groupKind"]; groupTargetId: string | null; dragIds: string[] }): SpaceRow {
-  return { key: ws.id, kind: opts.kind, workspace: ws, ...rowStateFor(ws), depth: opts.depth, parentGroupId: opts.parentGroupId, indent: opts.depth > 0, isGroupHead: false, groupKind: opts.groupKind, groupTargetId: opts.groupTargetId, groupLabel: "", collapsed: false, dragIds: opts.dragIds, dropAnchorId: ws.id };
+/** `itemHeadId` はこの行の項目の先頭の workspace（通常の行は自分、worktree グループの子は先頭の行）。 */
+function workspaceRow(ws: Workspace, opts: { depth: 0 | 1 | 2; parentGroupId: string | null; kind: SpaceRow["kind"]; groupKind: SpaceRow["groupKind"]; groupTargetId: string | null; dragIds: string[]; itemHeadId: string }): SpaceRow {
+  return { key: ws.id, kind: opts.kind, workspace: ws, ...rowStateFor(ws), depth: opts.depth, parentGroupId: opts.parentGroupId, indent: opts.depth > 0, isGroupHead: false, groupKind: opts.groupKind, groupTargetId: opts.groupTargetId, groupLabel: "", collapsed: false, dragIds: opts.dragIds, item: { kind: "workspace", workspaceId: opts.itemHeadId }, container: opts.parentGroupId, dropAnchorId: opts.itemHeadId };
 }
 
 const spaces = computed<SpaceRow[]>(() => {
@@ -118,17 +121,17 @@ const spaces = computed<SpaceRow[]>(() => {
   /** 項目（worktree グループ・通常の行）の行を足す。`groupCollapsed` なら今いる workspace の行だけ（AC6）。 */
   const pushItem = (item: ItemRow, depth: 0 | 1, parentGroupId: string | null, groupCollapsed: boolean): void => {
     if (item.kind === "workspace") {
-      if (!groupCollapsed || item.workspace.id === view.workspaceId) out.push(workspaceRow(item.workspace, { depth, parentGroupId, kind: "workspace", groupKind: null, groupTargetId: null, dragIds: [item.workspace.id] }));
+      if (!groupCollapsed || item.workspace.id === view.workspaceId) out.push(workspaceRow(item.workspace, { depth, parentGroupId, kind: "workspace", groupKind: null, groupTargetId: null, dragIds: [item.workspace.id], itemHeadId: item.workspace.id }));
       return;
     }
     // worktree グループ：先頭（本体）の行自体がグループの頭を兼ねる（herdr と同じ並び）。
     const collapsed = view.collapsedAutoGroups.has(item.repoKey);
     const allIds = [item.head.id, ...item.children.map((w) => w.id)];
     if (!groupCollapsed || item.head.id === view.workspaceId) {
-      out.push({ ...workspaceRow(item.head, { depth, parentGroupId, kind: "worktreeHead", groupKind: "auto", groupTargetId: item.repoKey, dragIds: allIds }), isGroupHead: true, collapsed });
+      out.push({ ...workspaceRow(item.head, { depth, parentGroupId, kind: "worktreeHead", groupKind: "auto", groupTargetId: item.repoKey, dragIds: allIds, itemHeadId: item.head.id }), isGroupHead: true, collapsed });
     }
     const children = groupCollapsed ? item.children.filter((w) => w.id === view.workspaceId) : visibleGroupMembers(item.children, collapsed, view.workspaceId);
-    for (const w of children) out.push(workspaceRow(w, { depth: (depth + 1) as 1 | 2, parentGroupId, kind: "worktreeChild", groupKind: "auto", groupTargetId: item.repoKey, dragIds: [w.id] }));
+    for (const w of children) out.push(workspaceRow(w, { depth: (depth + 1) as 1 | 2, parentGroupId, kind: "worktreeChild", groupKind: "auto", groupTargetId: item.repoKey, dragIds: allIds, itemHeadId: item.head.id }));
   };
   for (const row of tree) {
     if (row.kind !== "group") {
@@ -151,6 +154,8 @@ const spaces = computed<SpaceRow[]>(() => {
       groupLabel: row.group.label,
       collapsed: row.group.collapsed,
       dragIds: allIds,
+      item: { kind: "group", groupId: row.group.id },
+      container: null,
       dropAnchorId: allIds[0] ?? null,
       lines: [],
     });
@@ -330,28 +335,28 @@ function workspaceRowKeyAt(x: number, y: number): string | null {
   return (target?.closest("[data-workspace-row-key]") as HTMLElement | null)?.dataset.workspaceRowKey ?? null;
 }
 
-/** 行 key から、実際に D&D のドロップ先として使う workspace id（`dropAnchorId`）を引く。 */
-function dropAnchorForRowKey(key: string | null): string | null {
-  if (!key) return null;
-  return spaces.value.find((r) => r.key === key)?.dropAnchorId ?? null;
+function sameItem(a: ItemTarget, b: ItemTarget): boolean {
+  return a.kind === "group" ? b.kind === "group" && a.groupId === b.groupId : b.kind === "workspace" && a.workspaceId === b.workspaceId;
 }
 
 /**
- * ホバー中の行がグループのメンバー行（頭の行以外）なら、そのグループの頭の行 key に正規化する
- * （20260923-workspace-grouping レビューの指摘）。今は古い `workspace.move_to` を送るので、グループの中の
- * 行にドロップしても実際の効果は「グループの直前へ挿入」（頭の行へドロップしたのと同じ）でしかない。
- * 正規化しないと、ホバー中のハイライトが特定のメンバー行に付くのに実際の見た目は変わらないという食い違いが起きる。
- * worktree グループの子も先頭の行に寄せる。グループの中の並べ替えのドラッグは `item.move` に替わる次のタスクで入れる。
+ * ホバー中の行の上へ落とせるか（20261004-group-worktree-items。design「画面」のドラッグ）。動くのは掴んだ行の項目
+ * （子を掴めばその worktree グループ）で、落とせるのは**同じ入れ物**（一番上・同じグループの中）の項目の間だけ。
+ * 自分の項目の上は何も起きない（`self`。印も出さない）。名前順のときの一番上は並べ替えを受け付けない
+ * （見た目が名前で決まり、送っても変わらないため。グループの中は並べ替えられる）。
+ * `reason` は離したときの知らせ（落とせる・自分の上のときは null）。
  */
-function groupHeadRowKeyFor(key: string | null): string | null {
+function dropStateFor(dragged: SpaceRow, key: string | null): { row: SpaceRow; self: boolean; reason: string | null } | null {
   if (!key) return null;
   const row = spaces.value.find((r) => r.key === key);
-  if (!row || row.kind === "group") return key;
-  // worktree グループの子 → その先頭の行。
-  if (row.kind === "worktreeChild") return spaces.value.find((r) => r.kind === "worktreeHead" && r.groupTargetId === row.groupTargetId)?.key ?? key;
-  // グループの中の通常の行 → グループの見出し行（グループの中の並び替えは次のタスク〔item.move〕で入る）。
-  if (row.kind === "workspace" && row.parentGroupId) return `group:${row.parentGroupId}`;
-  return key;
+  if (!row) return null;
+  // 古いサーバ（`layout` が無い）は落とし先の workspace が要る。無い行（メンバーのいない空のグループ）は落とし先にならない（印も出さず、離しても何も起きない）。
+  if (!session.hasServerLayout && row.dropAnchorId === null) return null;
+  // 自分の項目の上（掴んだグループの中の行も含む）は何も起きない。
+  if (sameItem(row.item, dragged.item) || (dragged.item.kind === "group" && row.container === dragged.item.groupId)) return { row, self: true, reason: null };
+  if (row.container !== dragged.container) return { row, self: false, reason: "同じグループの中、または一番上の項目の間でだけ並べ替えできます" };
+  if (dragged.container === null && view.workspaceSort === "name") return { row, self: false, reason: "名前順では並べ替えできません" };
+  return { row, self: false, reason: null };
 }
 
 function onRowPointerDown(ev: PointerEvent, row: SpaceRow): void {
@@ -365,10 +370,14 @@ function onRowPointerMove(ev: PointerEvent): void {
     const dx = ev.clientX - workspaceDragStart.x;
     const dy = ev.clientY - workspaceDragStart.y;
     if (Math.hypot(dx, dy) < WORKSPACE_DRAG_THRESHOLD_PX) return;
+    // 古いサーバで空のグループは動かす workspace が無く、`workspace.move_to` に空の配列を送ってしまう。掴めない。
+    if (!session.hasServerLayout && workspaceDragStart.row.dragIds.length === 0) return;
     view.startWorkspaceDrag(workspaceDragStart.row.dragIds);
     window.addEventListener("keydown", onEscapeDuringWorkspaceDrag);
   }
-  view.setWorkspaceDragOver(groupHeadRowKeyFor(workspaceRowKeyAt(ev.clientX, ev.clientY)));
+  const state = dropStateFor(workspaceDragStart.row, workspaceRowKeyAt(ev.clientX, ev.clientY));
+  if (!state || state.self) view.setWorkspaceDragOver(null);
+  else view.setWorkspaceDragOver(state.row.key, state.reason !== null);
 }
 
 /**
@@ -382,16 +391,20 @@ function onRowPointerUp(ev: PointerEvent, row: SpaceRow): void {
   if (!workspaceDragStart || ev.pointerId !== workspaceDragStart.pointerId) return;
   const wasDragging = !!view.workspaceDrag;
   const draggedRow = workspaceDragStart.row;
-  const target = wasDragging ? dropAnchorForRowKey(groupHeadRowKeyFor(workspaceRowKeyAt(ev.clientX, ev.clientY))) : null;
+  const drop = wasDragging ? dropStateFor(draggedRow, workspaceRowKeyAt(ev.clientX, ev.clientY)) : null;
   workspaceDragStart = null;
   if (wasDragging) {
     view.endWorkspaceDrag();
     window.removeEventListener("keydown", onEscapeDuringWorkspaceDrag);
-    if (target) {
-      actions?.moveWorkspacesByDrag(draggedRow.dragIds, target);
-      // ドラッグした対象にフォーカスを残す（AC-I4）。頭に own workspace があるときだけ
-      // （グループのヘッダー行はどの workspace でもないので、focus は動かさない）。
-      if (draggedRow.workspace) focusWorkspace(draggedRow.workspace.id);
+    // 行の外・自分の項目の上で離したときは取り消し（何も送らず、知らせない）。落とせない行の上では送らず知らせる。
+    if (drop && !drop.self) {
+      if (drop.reason !== null) view.toast(drop.reason);
+      else {
+        actions?.moveItemByDrag(draggedRow.item, drop.row.item, { workspaceIds: draggedRow.dragIds, beforeWorkspaceId: drop.row.dropAnchorId });
+        // ドラッグした対象にフォーカスを残す（AC-I4）。頭に own workspace があるときだけ
+        // （グループのヘッダー行はどの workspace でもないので、focus は動かさない）。
+        if (draggedRow.workspace) focusWorkspace(draggedRow.workspace.id);
+      }
     }
   } else if (row.workspace) {
     focusWorkspace(row.workspace.id);
@@ -497,7 +510,8 @@ watch(
                 'sidebar-row-depth-2': row.depth === 2,
                 'sidebar-row-selected': view.mode === 'navigate' && !!row.workspace && view.navigateSelection === row.workspace.id,
                 'sidebar-row-indent': row.indent,
-                'sidebar-row-drop-target': view.workspaceDrag?.overRowKey === row.key && !!row.dropAnchorId && !view.workspaceDrag.sourceIds.includes(row.dropAnchorId),
+                'sidebar-row-drop-target': view.workspaceDrag?.overRowKey === row.key && !view.workspaceDrag.overInvalid,
+                'sidebar-row-drop-invalid': view.workspaceDrag?.overRowKey === row.key && view.workspaceDrag.overInvalid,
                 'sidebar-row-pane-drop-target': !!row.workspace && view.paneDrag?.overWorkspaceId === row.workspace.id,
               }"
               :data-workspace-row-key="row.key"
@@ -688,6 +702,12 @@ watch(
 .sidebar-row.sidebar-row-drop-target {
   outline: 2px solid var(--soda-fg, #f8f8f2);
   outline-offset: -2px;
+}
+/* 落とせない行（別の入れ物の上・名前順の一番上。20261004-group-worktree-items）。色に頼らず、破線と「落とせない」カーソルで示す。 */
+.sidebar-row.sidebar-row-drop-invalid {
+  outline: 2px dotted var(--soda-warn-fg, #ffb86c);
+  outline-offset: -2px;
+  cursor: not-allowed;
 }
 /* pane を D&D でこの workspace へ移す（20260924-pane-move-cross-tab。design「クライアント側:
  * ドロップ先の拡張」）。上の workspace 並べ替え用のドロップ候補とは別の見た目にする

@@ -130,7 +130,7 @@ function mountWith(opts: { withMachines: boolean }) {
           openContextMenu: vi.fn(),
           run: vi.fn(),
           toggleGroupCollapsed: vi.fn(),
-          moveWorkspacesByDrag: vi.fn(),
+          moveItemByDrag: vi.fn(),
           openSessionSwitcher: vi.fn(),
         },
         [MachineSwitcherKey as symbol]: { switchTo },

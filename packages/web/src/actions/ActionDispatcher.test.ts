@@ -1598,16 +1598,47 @@ describe("ActionDispatcher — workspace の並べ替え", () => {
     expect(conn.requests).toEqual([]);
   });
 
-  it("moveWorkspacesByDrag: 渡した id 配列と beforeWorkspaceId をそのまま workspace.move_to へ送る（グループ一括も同じ経路）", () => {
+  const legacyArg = { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" };
+
+  it("moveItemByDrag: layout を持つサーバには item.move（項目と落とし先の項目）を送る", () => {
     const conn = makeConnection();
-    makeDispatcher(conn).dispatcher.moveWorkspacesByDrag(["w1", "w2"], "w3");
+    useSessionStore(pinia).layoutChanged({ top: ["r:/r/.git", "w:w3"], groups: {} });
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w3" }, legacyArg);
+    expect(conn.requests).toEqual([["item.move", { item: { kind: "workspace", workspaceId: "w1" }, before: { kind: "workspace", workspaceId: "w3" } }]]);
+  });
+
+  it("moveItemByDrag: グループも項目として送る", () => {
+    const conn = makeConnection();
+    useSessionStore(pinia).layoutChanged({ top: ["g:g1", "w:w3"], groups: { g1: [] } });
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "group", groupId: "g1" }, { kind: "workspace", workspaceId: "w3" }, legacyArg);
+    expect(conn.requests).toEqual([["item.move", { item: { kind: "group", groupId: "g1" }, before: { kind: "workspace", workspaceId: "w3" } }]]);
+  });
+
+  it("moveItemByDrag: layout の無い古いサーバには workspace.move_to（id の集まりと落とし先）を送る", () => {
+    const conn = makeConnection();
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w3" }, legacyArg);
     expect(conn.requests).toEqual([["workspace.move_to", { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" }]]);
   });
 
-  it("moveWorkspacesByDrag: beforeWorkspaceId が null なら末尾へ", () => {
+  it("moveItemByDrag: item.move が失敗したら「移動できませんでした」と知らせる", async () => {
     const conn = makeConnection();
-    makeDispatcher(conn).dispatcher.moveWorkspacesByDrag(["w1"], null);
-    expect(conn.requests).toEqual([["workspace.move_to", { workspaceIds: ["w1"], beforeWorkspaceId: null }]]);
+    conn.rejectWith["item.move"] = "internal";
+    useSessionStore(pinia).layoutChanged({ top: ["w:w1", "w:w3"], groups: {} });
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w3" }, legacyArg);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useViewStore(pinia).toasts.map((t) => t.message)).toEqual(["移動できませんでした"]);
+  });
+
+  it("moveItemByDrag: 古いサーバで動かす workspace が無い（空のグループ）なら何も送らない（workspaceIds: [] を送らない）", () => {
+    const conn = makeConnection();
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "group", groupId: "g1" }, { kind: "workspace", workspaceId: "w3" }, { workspaceIds: [], beforeWorkspaceId: "w3" });
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("moveItemByDrag: 古いサーバで落とし先の workspace が無い（空のグループの上）なら何も送らない（null は末尾の意味になる）", () => {
+    const conn = makeConnection();
+    makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "workspace", workspaceId: "w1" }, { kind: "group", groupId: "g1" }, { workspaceIds: ["w1"], beforeWorkspaceId: null });
+    expect(conn.requests).toEqual([]);
   });
 });
 

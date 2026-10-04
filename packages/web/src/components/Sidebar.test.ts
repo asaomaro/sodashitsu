@@ -58,7 +58,7 @@ function makeConnection(): ConnectionPort & { requests: [MethodName, unknown][] 
 
 function makeActions() {
   // 20260923-workspace-grouping。
-  return { openContextMenu: vi.fn(), run: vi.fn(), toggleGroupCollapsed: vi.fn(), moveWorkspacesByDrag: vi.fn(), openSessionSwitcher: vi.fn() };
+  return { openContextMenu: vi.fn(), run: vi.fn(), toggleGroupCollapsed: vi.fn(), moveItemByDrag: vi.fn(), openSessionSwitcher: vi.fn() };
 }
 
 function mountSidebar(conn: ConnectionPort, actions?: Partial<ReturnType<typeof makeActions>>, opts: { attachTo?: boolean } = {}) {
@@ -824,29 +824,29 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     const view = useViewStore(pinia);
     session.workspaceUpserted(makeWorkspace("w1", { activeTabId: "t1" }));
     session.tabUpserted(makeTab("t1", "w1", "p1"));
-    const moveWorkspacesByDrag = vi.fn();
-    const wrapper = mountSidebar(makeConnection(), { moveWorkspacesByDrag });
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
     const row = wrapper.get(".sidebar-spaces .sidebar-row").element;
     row.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
     row.dispatchEvent(pointerEvent("pointermove", { clientX: 12, clientY: 10 })); // 2px。閾値(6px)未満
     row.dispatchEvent(pointerEvent("pointerup", { clientX: 12, clientY: 10 }));
     await wrapper.vm.$nextTick();
-    expect(moveWorkspacesByDrag).not.toHaveBeenCalled();
+    expect(moveItemByDrag).not.toHaveBeenCalled();
     expect(view.workspaceId).toBe("w1"); // クリックとして扱われた
   });
 
-  it("閾値を超えて動かし別の行の上で離すと moveWorkspacesByDrag([自分], 相手) を呼ぶ", async () => {
+  it("閾値を超えて動かし別の行の上で離すと moveItemByDrag(自分の項目, 相手の項目, 古いサーバ用の id) を呼ぶ", async () => {
     const session = useSessionStore(pinia);
     session.workspaceUpserted(makeWorkspace("w1", { label: "a" }));
     session.workspaceUpserted(makeWorkspace("w2", { label: "b" }));
-    const moveWorkspacesByDrag = vi.fn();
-    const wrapper = mountSidebar(makeConnection(), { moveWorkspacesByDrag });
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
     const rows = wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.element as HTMLElement);
     const elementFromPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(rows[1]!);
     rows[0]!.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
     rows[0]!.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 40 })); // 30px。閾値を超える
     rows[0]!.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 40 }));
-    expect(moveWorkspacesByDrag).toHaveBeenCalledWith(["w1"], "w2");
+    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w2" }, { workspaceIds: ["w1"], beforeWorkspaceId: "w2" });
     elementFromPoint.mockRestore();
   });
 
@@ -856,30 +856,34 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     session.workspaceUpserted(makeWorkspace("w2", { groupId: "g1" }));
     session.workspaceUpserted(makeWorkspace("w3", { label: "other" }));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
-    const moveWorkspacesByDrag = vi.fn();
-    const wrapper = mountSidebar(makeConnection(), { moveWorkspacesByDrag });
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
     const rows = wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.element as HTMLElement);
     // rows: [0]=グループヘッダー, [1]=w1, [2]=w2, [3]=w3(other)
     const elementFromPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(rows[3]!);
     rows[0]!.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
     rows[0]!.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 60 }));
     rows[0]!.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
-    expect(moveWorkspacesByDrag).toHaveBeenCalledWith(["w1", "w2"], "w3");
+    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "group", groupId: "g1" }, { kind: "workspace", workspaceId: "w3" }, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" });
     elementFromPoint.mockRestore();
   });
 
-  it("Esc で取り消し、moveWorkspacesByDrag を呼ばない", async () => {
+  it("Esc で取り消し、moveItemByDrag を呼ばない", async () => {
     const session = useSessionStore(pinia);
     session.workspaceUpserted(makeWorkspace("w1"));
     session.workspaceUpserted(makeWorkspace("w2"));
-    const moveWorkspacesByDrag = vi.fn();
-    const wrapper = mountSidebar(makeConnection(), { moveWorkspacesByDrag });
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
     const rows = wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.element as HTMLElement);
+    // 離した位置に落とせる行がある状態にする（無いと Esc が効かなくても何も送られず、取り消しを確かめられない）。
+    const elementFromPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(rows[1]!);
     rows[0]!.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
     rows[0]!.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 40 }));
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     rows[0]!.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 40 }));
-    expect(moveWorkspacesByDrag).not.toHaveBeenCalled();
+    expect(useViewStore(pinia).workspaceDrag).toBeNull();
+    expect(moveItemByDrag).not.toHaveBeenCalled();
+    elementFromPoint.mockRestore();
   });
 
   // タスク点検の指摘：ドロップ候補のハイライトは「ドラッグの発生源に含まれない、今ホバー中の行」
@@ -902,65 +906,209 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     elementFromPoint.mockRestore();
   });
 
-  // レビューの指摘（should）：グループの中の並びは常に「開いた順」で固定（design「設計方針」）なので、
-  // メンバー行（頭以外）のどこにドロップしても実際の効果は「グループの直前へ挿入」（頭の行へ
-  // ドロップしたのと同じ）でしかない。正規化しないと、ホバー中のハイライトが特定のメンバー行に
-  // 付くのに実際の見た目は変わらない（メンバーの数だけドロップ位置があるように見えて実は1箇所しか
-  // 無い）という食い違いが起きる——`groupHeadRowKeyFor` がメンバー行を頭の行の key に正規化する。
-  it("手動グループのメンバー行（頭以外）のどこへホバーしても、ハイライトはグループの頭の行に付く", async () => {
+  // 20261004-group-worktree-items：落とせるのは同じ入れ物（一番上・同じグループの中）の項目の間だけ。
+  // 掴んだ行・ホバーした行を使うテストの共通の動かし方。
+  afterEach(() => vi.restoreAllMocks());
+  function drag(wrapper: ReturnType<typeof mountSidebar>, fromKey: string, overKey: string | null, release = true): { overEl: HTMLElement | null } {
+    const rowOf = (key: string) => wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.element as HTMLElement).find((e) => e.dataset.workspaceRowKey === key)!;
+    const from = rowOf(fromKey);
+    const overEl = overKey === null ? null : rowOf(overKey);
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(overEl);
+    from.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+    from.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 60 }));
+    if (release) from.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
+    return { overEl };
+  }
+
+  function setUpGroupWithOther(): void {
     const session = useSessionStore(pinia);
-    session.workspaceUpserted(makeWorkspace("w1", { label: "member1", groupId: "g1" }));
-    session.workspaceUpserted(makeWorkspace("w2", { label: "member2", groupId: "g1" }));
+    session.workspaceUpserted(makeWorkspace("w1", { label: "m1", groupId: "g1" }));
+    session.workspaceUpserted(makeWorkspace("w2", { label: "m2", groupId: "g1" }));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
     session.workspaceUpserted(makeWorkspace("w3", { label: "other" }));
-    const wrapper = mountSidebar(makeConnection());
-    const rows = wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.element as HTMLElement);
-    // rows: [0]=グループヘッダー（頭。dropAnchorId="w1"）, [1]=w1（dropAnchorId="w1"。頭と同じ値）,
-    // [2]=w2（メンバーだが頭ではない）, [3]=w3（グループ外）
-    const elementFromPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(rows[2]!); // w2（頭でないメンバー）を実際にホバー
-    rows[3]!.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
-    rows[3]!.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 40 }));
+    session.layoutChanged({ top: ["g:g1", "w:w3"], groups: { g1: ["w:w1", "w:w2"] } });
+  }
+
+  it("一番上の項目を、グループの中の行の上へ落とすことはできない（印が付き、離しても送らず知らせる）", async () => {
+    setUpGroupWithOther();
+    const view = useViewStore(pinia);
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+    drag(wrapper, "w3", "w2", false);
     await wrapper.vm.$nextTick();
-    const rowsAfter = wrapper.findAll(".sidebar-spaces .sidebar-row");
-    expect(rowsAfter[0]!.classes()).toContain("sidebar-row-drop-target"); // 頭の行（ヘッダー）に正規化される
-    expect(rowsAfter[2]!.classes()).not.toContain("sidebar-row-drop-target"); // 実際にホバーした w2 自身には付かない
-    elementFromPoint.mockRestore();
+    const row = wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "w2")!;
+    expect(row.classes()).toContain("sidebar-row-drop-invalid");
+    expect(row.classes()).not.toContain("sidebar-row-drop-target");
+    // ポインタは掴んだ行（w3）に捕捉されているので、pointerup は掴んだ行へ届く。
+    wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "w3")!.element.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
+    expect(moveItemByDrag).not.toHaveBeenCalled();
+    expect(view.toasts.map((t) => t.message)).toContain("同じグループの中、または一番上の項目の間でだけ並べ替えできます");
   });
 
-  it("手動グループの頭の行そのものへホバーしたときもハイライトは頭の行に付く（自明ケース）", async () => {
-    const session = useSessionStore(pinia);
-    session.workspaceUpserted(makeWorkspace("w1", { label: "member1", groupId: "g1" }));
-    session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
-    session.workspaceUpserted(makeWorkspace("w3", { label: "other" }));
-    const wrapper = mountSidebar(makeConnection());
-    const rows = wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.element as HTMLElement);
-    // rows: [0]=グループヘッダー（頭）, [1]=w1, [2]=w3
-    const elementFromPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(rows[0]!);
-    rows[2]!.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
-    rows[2]!.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 40 }));
-    await wrapper.vm.$nextTick();
-    const rowsAfter = wrapper.findAll(".sidebar-spaces .sidebar-row");
-    expect(rowsAfter[0]!.classes()).toContain("sidebar-row-drop-target");
-    elementFromPoint.mockRestore();
+  it("グループの中の項目を、一番上の行の上へ落とすことはできない（送らず知らせる）", () => {
+    setUpGroupWithOther();
+    const view = useViewStore(pinia);
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+    drag(wrapper, "w1", "w3");
+    expect(moveItemByDrag).not.toHaveBeenCalled();
+    expect(view.toasts.map((t) => t.message)).toContain("同じグループの中、または一番上の項目の間でだけ並べ替えできます");
   });
 
-  it("ドロップ先をメンバー行（頭以外）にしても、実際に送る対象はグループの頭の dropAnchorId になる", async () => {
+  it("グループの中の項目は、同じグループの別の項目の前へ並べ替えられる（item.move 用の項目を渡す）", () => {
+    setUpGroupWithOther();
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+    drag(wrapper, "w2", "w1");
+    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "workspace", workspaceId: "w2" }, { kind: "workspace", workspaceId: "w1" }, { workspaceIds: ["w2"], beforeWorkspaceId: "w1" });
+  });
+
+  it("グループを、別のグループの中の行の上へ落とすことはできない", () => {
+    setUpGroupWithOther();
     const session = useSessionStore(pinia);
-    session.workspaceUpserted(makeWorkspace("w1", { label: "member1", groupId: "g1" }));
-    session.workspaceUpserted(makeWorkspace("w2", { label: "member2", groupId: "g1" }));
-    session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
-    session.workspaceUpserted(makeWorkspace("w3", { label: "other" }));
-    const moveWorkspacesByDrag = vi.fn();
-    const wrapper = mountSidebar(makeConnection(), { moveWorkspacesByDrag });
-    const rows = wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.element as HTMLElement);
-    // rows: [0]=グループヘッダー, [1]=w1, [2]=w2, [3]=w3
-    const elementFromPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(rows[2]!); // w2 の上で離す
-    rows[3]!.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
-    rows[3]!.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 40 }));
-    rows[3]!.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 40 }));
-    // 頭の dropAnchorId（= w1、グループの先頭メンバーの id）が渡る。w2（実際にホバーした行）ではない。
-    expect(moveWorkspacesByDrag).toHaveBeenCalledWith(["w3"], "w1");
-    elementFromPoint.mockRestore();
+    session.workspaceUpserted(makeWorkspace("w4", { label: "x4", groupId: "g2" }));
+    session.groupUpserted({ id: "g2", label: "front", collapsed: false });
+    session.layoutChanged({ top: ["g:g1", "g:g2", "w:w3"], groups: { g1: ["w:w1", "w:w2"], g2: ["w:w4"] } });
+    const view = useViewStore(pinia);
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+    drag(wrapper, "group:g1", "w4");
+    expect(moveItemByDrag).not.toHaveBeenCalled();
+    expect(view.toasts).toHaveLength(1);
+  });
+
+  it("掴んだグループ自身の中の行の上で離しても何も送らず、知らせない（自分の項目の上）", () => {
+    setUpGroupWithOther();
+    const view = useViewStore(pinia);
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+    drag(wrapper, "group:g1", "w2");
+    expect(moveItemByDrag).not.toHaveBeenCalled();
+    expect(view.toasts).toHaveLength(0);
+  });
+
+  it("行の外で離すと取り消し（送らず、知らせない）", () => {
+    setUpGroupWithOther();
+    const view = useViewStore(pinia);
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+    drag(wrapper, "w3", null);
+    expect(moveItemByDrag).not.toHaveBeenCalled();
+    expect(view.toasts).toHaveLength(0);
+  });
+
+  it("離したあと、掴んだ行の workspace にフォーカスを残す（workspace.focus も送る）", () => {
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", { label: "a", activeTabId: "t1" }));
+    session.workspaceUpserted(makeWorkspace("w2", { label: "b", activeTabId: "t2" }));
+    session.tabUpserted(makeTab("t1", "w1", "p1"));
+    session.tabUpserted(makeTab("t2", "w2", "p2"));
+    view.setView("w2", "t2");
+    const conn = makeConnection();
+    const wrapper = mountSidebar(conn);
+    drag(wrapper, "w1", "w2");
+    expect(view.workspaceId).toBe("w1");
+    expect(conn.requests).toContainEqual(["workspace.focus", { workspaceId: "w1" }]);
+  });
+
+  describe("古いサーバ（layout が無い）で、メンバーのいない空のグループ", () => {
+    function setUpEmptyGroup(): void {
+      const session = useSessionStore(pinia);
+      session.groupUpserted({ id: "g1", label: "empty", collapsed: false });
+      session.workspaceUpserted(makeWorkspace("w3", { label: "other" }));
+    }
+
+    it("その行の上は落とし先にならない（印を出さず、離しても送らず知らせない）", async () => {
+      setUpEmptyGroup();
+      const view = useViewStore(pinia);
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "w3", "group:g1", false);
+      await wrapper.vm.$nextTick();
+      const row = wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "group:g1")!;
+      expect(row.classes()).not.toContain("sidebar-row-drop-target");
+      expect(row.classes()).not.toContain("sidebar-row-drop-invalid");
+      wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "w3")!.element.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
+      expect(moveItemByDrag).not.toHaveBeenCalled();
+      expect(view.toasts).toHaveLength(0);
+    });
+
+    it("空のグループは掴めない（ドラッグが始まらず、workspaceIds: [] を送らない）", () => {
+      setUpEmptyGroup();
+      const view = useViewStore(pinia);
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "group:g1", "w3", false);
+      expect(view.workspaceDrag).toBeNull();
+      wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "group:g1")!.element.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
+      expect(moveItemByDrag).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("worktree グループ（子を掴んでも動くのは worktree グループ全体）", () => {
+    function setUpWorktree(): void {
+      const session = useSessionStore(pinia);
+      const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+      session.workspaceUpserted(makeWorkspace("w1", { label: "main", git: git(false) }));
+      session.workspaceUpserted(makeWorkspace("w2", { label: "feat", git: git(true) }));
+      session.workspaceUpserted(makeWorkspace("w3", { label: "other" }));
+      session.layoutChanged({ top: ["r:/r/.git", "w:w3"], groups: {} });
+    }
+
+    it("子の行を掴むと、worktree グループ（先頭の workspace で指す項目）と全メンバーの id が渡る", () => {
+      setUpWorktree();
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "w2", "w3");
+      expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w3" }, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" });
+    });
+
+    it("子の行の上へ落とすと、落とし先は親の worktree グループ（先頭の workspace）になる", () => {
+      setUpWorktree();
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "w3", "w2");
+      expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "workspace", workspaceId: "w3" }, { kind: "workspace", workspaceId: "w1" }, { workspaceIds: ["w3"], beforeWorkspaceId: "w1" });
+    });
+
+    it("自分の worktree グループの別の行（先頭・子）の上で離しても何も送らず、知らせない", () => {
+      setUpWorktree();
+      const view = useViewStore(pinia);
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "w2", "w1");
+      expect(moveItemByDrag).not.toHaveBeenCalled();
+      expect(view.toasts).toHaveLength(0);
+    });
+  });
+
+  describe("名前順（design「並びと名前順」）", () => {
+    it("一番上の項目の並べ替えは受け付けず、送らずに「名前順では並べ替えできません」と知らせる", async () => {
+      setUpGroupWithOther();
+      const view = useViewStore(pinia);
+      view.workspaceSort = "name";
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "group:g1", "w3", false);
+      await wrapper.vm.$nextTick();
+      const target = wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "w3")!;
+      expect(target.classes()).toContain("sidebar-row-drop-invalid"); // 落とせない印
+      wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "group:g1")!.element.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
+      expect(moveItemByDrag).not.toHaveBeenCalled();
+      expect(view.toasts.map((t) => t.message)).toEqual(["名前順では並べ替えできません"]);
+    });
+
+    it("グループの中の並べ替えは名前順でもできる", () => {
+      setUpGroupWithOther();
+      const view = useViewStore(pinia);
+      view.workspaceSort = "name";
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "w2", "w1");
+      expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "workspace", workspaceId: "w2" }, { kind: "workspace", workspaceId: "w1" }, { workspaceIds: ["w2"], beforeWorkspaceId: "w1" });
+      expect(view.toasts).toHaveLength(0);
+    });
   });
 
   // タスク点検の指摘：トグルボタンの pointerdown/pointerup が行へ伝播すると、`onToggleCollapse` が
@@ -1007,8 +1155,8 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     session.workspaceUpserted(makeWorkspace("w2", { groupId: "g1" }));
     session.workspaceUpserted(makeWorkspace("w3", { label: "other" }));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
-    const moveWorkspacesByDrag = vi.fn();
-    const wrapper = mountSidebar(makeConnection(), { moveWorkspacesByDrag });
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
     const rows = wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.element as HTMLElement);
     // rows: [0]=グループヘッダー, [1]=w1, [2]=w2, [3]=w3(other)
     const elementFromPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(rows[3]!);
@@ -1019,7 +1167,7 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     await wrapper.vm.$nextTick();
     rows[0]!.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
     // 開始時点のメンバー（w1・w2 の両方）で移動する——ドロップ時点の最新の構成（w1 だけ）ではない。
-    expect(moveWorkspacesByDrag).toHaveBeenCalledWith(["w1", "w2"], "w3");
+    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "group", groupId: "g1" }, { kind: "workspace", workspaceId: "w3" }, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" });
     elementFromPoint.mockRestore();
   });
 });
