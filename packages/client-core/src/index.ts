@@ -19,6 +19,7 @@ export * from "./agent/agentState.js";
 export * from "./agent/stateIndicator.js";
 export * from "./workspace/paneName.js";
 export * from "./workspace/viewRepair.js";
+export * from "./workspace/sidebarLayout.js";
 export * from "./workspace/workspaceGrouping.js";
 export * from "./workspace/workspaceOrder.js";
 export * from "./sidebar/resolveRows.js";

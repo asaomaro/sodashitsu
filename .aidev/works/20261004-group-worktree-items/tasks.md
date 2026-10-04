@@ -23,7 +23,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/client-core/src/workspace/workspaceGrouping.ts`（今の行の型・`autoGroupsOf`・`groupedWorkspaceRows`・`visibleGroupMembers`・`visibleWorkspaceIdsInOrder`）、`packages/client-core/src/workspace/workspaceGrouping.test.ts`、`packages/client-core/src/index.ts`（`export *` の並び）
       依存: T1
       AC: AC1, AC4, AC6, AC13, AC17
-- [ ] T3: 純関数（レイアウトの操作）——`sidebarLayout.ts`（新規）: `insertItem`・`removeItem`・`moveItem`（同じ入れ物の中だけ。入れ物が違う・自分自身・グループをグループの中へは動かさない）・`moveItemBy`（端で止まる）・`addItemToGroup`（末尾へ）・`removeItemFromGroup`（一番上の、そのグループの直後へ）・`deleteGroupFromLayout`（中身をグループのあった位置へ順に出す）・`flattenWorkspaceIds`・`repairLayout`（実在しない参照を捨てる・無い workspace を末尾へ・重複を除く。捨てた参照を返す）。単体テストと壊して落ちる確認
+- [x] T3: 純関数（レイアウトの操作）——`sidebarLayout.ts`（新規）: `insertItem`・`removeItem`・`moveItem`（同じ入れ物の中だけ。入れ物が違う・自分自身・グループをグループの中へは動かさない）・`moveItemBy`（端で止まる）・`addItemToGroup`（末尾へ）・`removeItemFromGroup`（一番上の、そのグループの直後へ）・`deleteGroupFromLayout`（中身をグループのあった位置へ順に出す）・`flattenWorkspaceIds`・`repairLayout`（実在しない参照を捨てる・無い workspace を末尾へ・重複を除く。捨てた参照を返す）。単体テストと壊して落ちる確認
       対象: `packages/client-core/src/workspace/sidebarLayout.ts`（新規）、`packages/client-core/src/workspace/sidebarLayout.test.ts`（新規）、`packages/client-core/src/index.ts`
       依存: T1, T2
       AC: AC5, AC10, AC13
