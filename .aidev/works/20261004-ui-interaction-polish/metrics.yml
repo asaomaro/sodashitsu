@@ -4,3 +4,5 @@ events:
   - { ts: 2026-10-04T05:02:07Z, phase: requirements, event: doccheck, metrics: { stage: report, phase: requirements, findings: 24 } }
   - { ts: 2026-10-04T05:02:07Z, phase: requirements, event: approved, metrics: { doc_check_rounds: 1, doc_check_findings: 24, doc_check_mode: delegated } }
   - { ts: 2026-10-04T11:22:54Z, phase: design, event: start }
+  - { ts: 2026-10-04T11:22:54Z, phase: design, event: doccheck, metrics: { stage: start, phase: design, mode: delegated, size: 25176 } }
+  - { ts: 2026-10-04T11:33:33Z, phase: design, event: doccheck, metrics: { stage: report, phase: design, findings: 19 } }
