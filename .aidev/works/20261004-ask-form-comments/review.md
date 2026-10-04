@@ -125,3 +125,4 @@ AssertionError: expected "vi.fn()" to be called once with arguments: [ { status:
 - [should][conv:e2e-observe-browser] ask-form-comments.spec.ts:216-223 対照のホイールが固定の 500ms の後に 1 回だけで、間欠的に落ちうる / 対応: 修正済（T9・ラウンド1。届くまでホイールを送り直す poll にした）
 - [should][conv:-] ask-form-comments.spec.ts:190-201 上限のフォームの「欄が見える位置までスクロール」が部品の動きが無くても通りうる / 対応: 修正済（T9・ラウンド1。ボタンを本文の下端へ寄せ、開く前の位置と、上限なので高さが増えないことを対照に足した）
 - [nit][conv:-] ask-form-comments.spec.ts:49-52 Esc のコメントとフォーカスの実態が合わない / 対応: 修正済（T9・ラウンド1。ボタンへフォーカスを戻してから Esc）
+- [nit][conv:-] docs/machines.md:120 足した文のつなぎ目で「。（」になり括弧が文頭に来ていた / 対応: 修正済（T10・ラウンド1）

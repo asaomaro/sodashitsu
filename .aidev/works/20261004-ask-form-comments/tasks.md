@@ -49,7 +49,7 @@ design.md のとおり、下から積む。(1) 部品と試験データを写す
       対象: `packages/e2e/src/specs/ask-form-comments.spec.ts`、手本は `packages/e2e/src/specs/ask-form-index.spec.ts`（フォーカス・高さ・`defaultPrevented` の見方）・`ask-form.spec.ts`（キーが漏れない件）
       依存: T8
       AC: AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
-- [ ] T10: 文書——design の AC10 に挙げた箇所: `third_party/ask-form/README.md`（「取り込んでいる版」→ 1.3.0／「`detail` のうちサーバへ送る項目」に `comments`／「通す項目を足すときに直す場所」のいま通している項目に `comments`・`comment`／「E2E が読む部品の内部」の本数〔5 本〕・ファイル名・実行コマンド・表・`grep` に `data-ask-comment`・`data-ask-comment-toggle`／「枠が使っている部品の受け渡し」に、枠が `[data-ask-comment-toggle]` の `click` を読む例外）、`docs/sodactl.md`（定義の `comments`・`comment`、結果の `comments`、上限）、`packages/cli/skills/sodactl/SKILL.md`、`docs/verification.md`（ask-form 本体と比べる項目に `comments`・実機の手順）、`docs/machines.md`（リモートもこの版が要る）。`packages/cli/src/skill.test.ts` が通ること
+- [x] T10: 文書——design の AC10 に挙げた箇所: `third_party/ask-form/README.md`（「取り込んでいる版」→ 1.3.0／「`detail` のうちサーバへ送る項目」に `comments`／「通す項目を足すときに直す場所」のいま通している項目に `comments`・`comment`／「E2E が読む部品の内部」の本数〔5 本〕・ファイル名・実行コマンド・表・`grep` に `data-ask-comment`・`data-ask-comment-toggle`／「枠が使っている部品の受け渡し」に、枠が `[data-ask-comment-toggle]` の `click` を読む例外）、`docs/sodactl.md`（定義の `comments`・`comment`、結果の `comments`、上限）、`packages/cli/skills/sodactl/SKILL.md`、`docs/verification.md`（ask-form 本体と比べる項目に `comments`・実機の手順）、`docs/machines.md`（リモートもこの版が要る）。`packages/cli/src/skill.test.ts` が通ること
       対象: `third_party/ask-form/README.md`、`docs/sodactl.md:228, :233, :265`、`packages/cli/skills/sodactl/SKILL.md:123, :128`、`docs/verification.md:745, :759-`、`docs/machines.md:118-121`、`packages/cli/src/skill.test.ts`
       依存: T9
       AC: AC10
