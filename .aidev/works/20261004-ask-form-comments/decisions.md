@@ -30,3 +30,8 @@
 
 - `AskAnswerParams`（zod の `z.record`）は、`JSON.parse` が作った自分の項目 `__proto__` を**黙って落とす**（ほかのキーは残る。`{"__proto__":"x","b":"y"}` → `["b"]`）。`messages.test.ts` で固定した。
 - スキーマをすり抜けて `checkAskAnswer` に届いた場合に備え、`checkAskAnswer` は `__proto__` を「定義に無い id」として断る（`ask.test.ts` で確認。定義の id に `__proto__` は使えない）。どちらの経路でも、`__proto__` が結果の `comments` に入ることは無い。
+
+## D7: `sodactl ask` は結果を作り直さない（T6 でコードを読んで確かめた）
+
+- `packages/cli/src/commands/ask.ts`: 定義は `readAskSpec` が検査だけして**読んだままのオブジェクト**を返し（:75 付近）、結果は `runAsk` が `deps.print(result)` でそのまま出す（:116 付近。`status` 別の組み立て・項目の選り分けは無い）。受け口 `pane.sock` 経由も、サーバの `askOpenOp` が `AskService.open` の結果をそのまま返し（`packages/server/src/panesocket/askOp.ts:23-33`）、CLI は `viaPaneSocketOrSession` の返り値をそのまま出す。したがって `comments` を通すための CLI 側の変更は要らない（製品コードは変えない）。`ask.test.ts` が「同じオブジェクトをそのまま出す」ことを固定した。
+- 受け口・中継越し（`machines.integration.test.ts` の質問の件）でも `comments` つきの回答が結果に出ることを統合テストで確かめた。

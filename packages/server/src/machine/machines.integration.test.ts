@@ -429,8 +429,9 @@ describe.skipIf(process.platform === "win32")(
       const result = cli.request("ask.open", { paneId, spec, timeoutMs: 20_000 });
       const opened = await until("ask.opened over the relay", async () => browser.events.find((e) => e.event === "ask.opened")?.data as { askId: string } | undefined);
       expect(await browser.request("ask.get", { askId: opened.askId })).toMatchObject({ paneId, spec: { title: "T" } });
-      await browser.request("ask.answer", { askId: opened.askId, answers: { a: "y" } });
-      expect(await result).toEqual({ status: "answered", answers: { a: "y" } });
+      // 質問ごとの自由記述（comments）も中継が素通しする（前後の空白はリモートのサーバが除く）。
+      await browser.request("ask.answer", { askId: opened.askId, answers: { a: "y" }, comments: { a: "  金曜は避けたい " } });
+      expect(await result).toEqual({ status: "answered", answers: { a: "y" }, comments: { a: "金曜は避けたい" } });
     });
 
     it("クリップボードの画像（20260927-clipboard-image-paste の T6）: 中継越しに分けて送ると、リモートの状態ディレクトリに置かれてリモートのパスが返る。中継の接続が切れると送信は捨てられる", async () => {

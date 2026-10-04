@@ -225,6 +225,18 @@ describe.skipIf(process.platform === "win32")(
         expect(JSON.stringify(e)).not.toContain("SECRET");
     });
 
+    it("画面が comments つきで答えると、結果に comments が出る（20261004-ask-form-comments）", async () => {
+      const { paneId, sockPath, browser } = await start();
+      const b = await browser();
+      const conn = await send(sockPath, { op: PANE_OP_ASK_OPEN, paneId, params: ASK });
+      const askId = (await b.waitForEvent("ask.opened"))["askId"] as string;
+      await b.request("ask.answer", { askId, answers: { "SECRET-ID": "自由" }, custom: ["SECRET-ID"], comments: { "SECRET-ID": " 金曜は避けたい " } });
+      expect(parseReply(await conn.closed)).toEqual({
+        ok: true,
+        result: { status: "answered", answers: { "SECRET-ID": "自由" }, custom: ["SECRET-ID"], comments: { "SECRET-ID": "金曜は避けたい" } },
+      });
+    });
+
     it("画面が取り消すと cancelled、期限が来ると timeout（AC2）", async () => {
       const { paneId, sockPath, browser } = await start();
       const b = await browser();

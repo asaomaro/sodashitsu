@@ -33,7 +33,7 @@ design.md のとおり、下から積む。(1) 部品と試験データを写す
       対象: `packages/web/src/ask/askFormElement.ts:22-35`、`packages/web/src/components/AskDialog.vue:145-150`（`applyHeight`）・`:171-193`（`loadSpec`）・`:199-203`（`onResize`）・`:208-220`（`onSubmit`）・`:277`（`<ask-form>` のイベントの並び）、`packages/web/src/components/AskDialog.test.ts`・`AskDialog.form.test.ts:86-88`（`contentHeight` を差し替える手本）・`askDialogTestKit.ts`、`packages/web/src/ask/askFormElement.test.ts`
       依存: T3
       AC: AC2, AC4, AC9, AC-I5
-- [ ] T6: 通り道の確認のテスト——(1) `sodactl ask` が `comments` つきの結果をそのまま出す、(2) 受け口 `pane.sock` 経由で質問を出して画面が答えたとき、`comments` が結果に出る、(3) 中継（別のマシン）越しでも `comments` つきの回答が素通しする。製品コードは変えない見込み（結果を作り直している箇所があれば通す。そのときは止まって主エージェントに知らせる）。`sodactl ask` が結果を作り直さないことをコードで確かめ、`decisions.md` に 1 件残す
+- [x] T6: 通り道の確認のテスト——(1) `sodactl ask` が `comments` つきの結果をそのまま出す、(2) 受け口 `pane.sock` 経由で質問を出して画面が答えたとき、`comments` が結果に出る、(3) 中継（別のマシン）越しでも `comments` つきの回答が素通しする。製品コードは変えない見込み（結果を作り直している箇所があれば通す。そのときは止まって主エージェントに知らせる）。`sodactl ask` が結果を作り直さないことをコードで確かめ、`decisions.md` に 1 件残す
       対象: `packages/cli/src/commands/ask.ts:75, :98-116`、`packages/cli/src/commands/ask.test.ts:93, :103`、`packages/server/src/panesocket/paneSocket.integration.test.ts:195`（「ログインなしで質問を出し、画面が答えると answered が返る」の形）、`packages/server/src/panesocket/askOp.ts:23-33`、`packages/server/src/machine/machines.integration.test.ts:398-432`（中継越しの質問の件）
       依存: T4
       AC: AC4, AC9

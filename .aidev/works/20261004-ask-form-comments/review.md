@@ -78,4 +78,20 @@ AssertionError: expected "vi.fn()" to be called with arguments: [ 'a1', { answer
       Tests  3 failed | 38 passed (41)
 ```
 
+#### T6（サーバが結果に `comments` を写さない／CLI が結果を作り直して `comments` を落とす、を壊した）
+```
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/machine/machines.integration.test.ts > 保存した SSH のマシン（2 つの composeServer。T8） > 質問のフォーム（20261002-sodactl-ask の T5）: リモートの pane の質問は、そのマシンを表示中の（中継越しの）画面に出て、答えが返る。軽い接続（external）だけなら待たずに unavailable
+ FAIL  src/panesocket/paneSocket.integration.test.ts > pane.sock の ask.open（実物のサーバ。ログインなし。20261003-sodactl-ask-socket） > 画面が comments つきで答えると、結果に comments が出る（20261004-ask-form-comments）
+      Tests  2 failed | 18 passed (20)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/commands/ask.test.ts > runAsk > 結果は作り直さずそのまま出す（comments つきの answered も、知らない項目も。古い sodactl でも comments が出る）
+AssertionError: expected { status: 'answered', …(1) } to be { status: 'answered', …(3) } // Object.is equality
+ FAIL  src/commands/ask.test.ts > runAsk > 4 つの status はどれもそのまま出す（unavailable の reason を含む）
+AssertionError: expected "vi.fn()" to be called with arguments: [ { status: 'unavailable', …(1) } ]
+ FAIL  src/commands/ask.test.ts > runAsk — 経路の選択（ログイン不要の受け口 pane.sock） > 受け口の 4 つの status はどれもそのまま出す
+AssertionError: expected "vi.fn()" to be called once with arguments: [ { status: 'unavailable', …(1) } ]
+      Tests  3 failed | 25 passed (28)
+```
+
 ### 点検の指摘
