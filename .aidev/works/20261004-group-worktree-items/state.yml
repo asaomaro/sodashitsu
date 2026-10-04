@@ -1,7 +1,7 @@
 schema: 11
 slug: group-worktree-items
-current: coding
-approved: [requirements, design, tasks, coding]
+current: review
+approved: [requirements, design, tasks, coding, test, review]
 mode: autonomous
 profile: full
 humanGates: []

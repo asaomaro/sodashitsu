@@ -5514,3 +5514,9 @@ AssertionError: expected [ 'e', 'q', 'm', 'wb', 'p' ] to deeply equal [ 'e', 'p'
 - T35 [should] pollNow が全 workspace の判定を待つ代償（遅い 1 件で全体が遅れる・周が重なる）が decisions に無い → D49 補足に明記（許容） [conv:-]
 - T35 [should] 単独の見直し（followMoves）と周の競合の実害が D49 の制約より広い → D49 補足に (a)(b) を明記（許容） [conv:-]
 - T35 [nit] 判定が届く順のテストの片向きが元のコードでも通る・保存からの復元を通していない・reject と w10/w9 の観測が無い → 記録のみ（片向きで壊して落ちる確認はある） [conv:regression-negative-control]
+
+## 独立レビュー（依頼元。3 回）
+
+1. 差分全体: must 1（「グループなし」が上のときに＋新規が代表を奪う）・should 5・nit 5 → T29〜T32 で直した（`review-findings-01.md`）。
+2. 修正と main の取り込み: must 1（代表を平らな順の先頭へ動かす入れ替えで、worktree グループの子の順が変わる）・should 1（古い git でブランチ名が出なくなる）・nit 2 → T33〜T35 で直した（`review-findings-02.md`）。
+3. 2 回目の修正: must 0・should 2（poller が全件そろうまで反映を待つ）・nit 6 → 依頼元が b5d8b9d で直した（decisions.md D51。nit は記録だけ）。
