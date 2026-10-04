@@ -15,7 +15,7 @@ design.md のとおり、基準の記録（T1）→ 純関数（T2）→ 構造�
 
 ## チェックリスト
 
-- [ ] T1: 基準の記録（製品コードは変えない）——設定のダイアログを開く 8 つの spec（`settings`・`theme-settings`・`appearance-settings`・`key-bindings`・`new-terminal-cwd`・`notifications`・`ask-form`・`ask-form-extras`）を、変更前のコミットで **2 回**流し、落ちる件の名前と失敗の文言を `decisions.md`（D5）に記録する。2 回で結果が違う件は「揺れる件」として分けて書く
+- [x] T1: 基準の記録（製品コードは変えない）——設定のダイアログを開く 8 つの spec（`settings`・`theme-settings`・`appearance-settings`・`key-bindings`・`new-terminal-cwd`・`notifications`・`ask-form`・`ask-form-extras`）を、変更前のコミットで **2 回**流し、落ちる件の名前と失敗の文言を `decisions.md`（D5）に記録する。2 回で結果が違う件は「揺れる件」として分けて書く
       対象: `packages/e2e/src/specs/`（読むだけ・流すだけ）、`decisions.md`
       依存: なし
       AC: AC9

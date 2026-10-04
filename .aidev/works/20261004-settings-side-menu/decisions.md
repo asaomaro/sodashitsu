@@ -30,3 +30,19 @@
 - メニューの上のホイールは、メニューがスクロールできるときは選んだ節を外さない。
 - 幅の判定は、既存の `mobileViewportQuery()`（`(max-width: 767px)`）に揃える。
 - 既存の E2E の比較は、設定を開く 8 つの spec を、変更の前後で 2 回ずつ流す（この環境では落ちる件数が揺れる）。
+
+## D5: 既存の E2E の基準（T1。変更前のコミット `81170f3` 相当のビルドで、設定を開く 8 つの spec〔98 件〕を 2 回流した）
+
+製品コードは変えていない（`sectionSpy.ts` だけが増えた時点のビルド。web の `dist` は変更前のまま）。**2 回とも同じ 15 件が落ち、83 件が通った。揺れる件は無かった。**
+
+「5 節」の期待が原因（requirements AC9。T6 で直す）:
+- `settings.spec.ts:261`（desktop）・`:304`（モバイル）・`key-bindings.spec.ts:841`（モバイル）— `toHaveText([... 5 つ])` が 6 節の実際と合わない（`Received + 1`）。
+
+別の原因（この作業の対象外。`main` でも落ちる既知の件）:
+- `appearance-settings.spec.ts:40`（spaces の並び順トグル。`toEqual` の差）・`:113`（tab バーの時刻が見つからない）・`:130`（`CompileError: WebAssembly.instantiate() … Content Security policy … 'unsafe-eval'`）
+- `key-bindings.spec.ts:632`（Tab で「こちらへ移す」へ届かない。`Received: inactive`）・`:699`（同じ `CompileError` が例外として出る）
+- `new-terminal-cwd.spec.ts:128`（サーバを起動した場所で開く。端末の出力が `asaomaro@my-notePC:~$` で `pwd=…` が出ない）
+- `settings.spec.ts:167`（仕込みの値が `{"statusSymbols":false}` で届かない）・`:187`（`on` を期待して `off`）
+- `theme-settings.spec.ts:193`（`input.settings-path` が 2 要素で strict mode violation）・`:271`（テーマの色 `rgb(40, 42, 54)` を期待して `rgb(239, 241, 245)`）・`:354`（OSC 色の問い合わせ `rgb:1010/…` を期待して `rgb:fbfb/…`）・`:528`（`#6070a1` を期待して `#222222`）
+
+流し方: `cd packages/e2e && pnpm exec playwright test <8 spec> --reporter=list`（`workers: 1`）。T10 の比較ではこの 15 件を基準にする。生の出力は作業のセッションの一時フォルダ（`base1.txt`・`base2.txt`）にあり、リポジトリには入れていない。
