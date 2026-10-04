@@ -51,7 +51,7 @@ design.md のとおり、基準の記録（T1）→ 純関数（T2）→ 構造�
       対象: `docs/verification.md`、`docs/herdr-parity.md`
       依存: T9
       AC: AC9, AC10
-- [ ] T10: 既存の E2E との比較——T1 の 8 つの spec を変更後のコミットで 2 回流し、T1 の記録と比べる（増えた件は単独で流し直して、揺れか退行かを判定し、結果を `decisions.md` に書く。退行は直す）
+- [x] T10: 既存の E2E との比較——T1 の 8 つの spec を変更後のコミットで 2 回流し、T1 の記録と比べる（増えた件は単独で流し直して、揺れか退行かを判定し、結果を `decisions.md` に書く。退行は直す）
       対象: `packages/e2e/src/specs/`（流すだけ）、`decisions.md`
       依存: T1, T7
       AC: AC9

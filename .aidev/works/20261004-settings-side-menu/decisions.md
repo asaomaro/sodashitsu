@@ -61,3 +61,11 @@
 ## D8: `SettingsDialog.vue` の節の中身は再インデントしていない
 
 節を `<div class="settings-body">` で包んだが、中身（約 430 行）は再インデントしていない。別の作業（`subagent-display`）が「エージェント連携」の節を変えるので、再インデントすると衝突が膨らむ。元からこのファイルは prettier が通らない（`prettier --check` で警告）ため、`--write` も当てていない。マージ後に整形したくなったら、別の変更で一括して行う。
+
+## D9: 既存の E2E との比較（T10。変更後のコミット `a210c5e` のビルドで、D5 と同じ 8 つの spec〔98 件〕を 2 回流した）
+
+**2 回とも同じ 12 件が落ち、86 件が通った。D5 の基準（15 件）に対して、増えた件は 0。** 基準から消えた 3 件は、T6 で直した「5 節」の期待の 3 件（`settings.spec.ts:261`・`:304`、`key-bindings.spec.ts:841`）。揺れる件は無かった。
+
+残った 12 件は D5 の「別の原因」の 12 件と同一（`appearance-settings.spec.ts:40`・`:113`・`:130`、`key-bindings.spec.ts:632`・`:699`、`new-terminal-cwd.spec.ts:128`、`settings.spec.ts:167`・`:187`、`theme-settings.spec.ts:193`・`:271`・`:354`・`:528`）。この作業の対象外（`main` でも落ちる）。
+
+新しい `settings-menu.spec.ts`（22 件）は、変更後に 3 回続けて全件通った（途中で見つけた 2 件の間欠的な落ち方は D7 で直し、その後 `--repeat-each 3` の 66 件・`--repeat-each 4` の 80 件が通った）。
