@@ -52,3 +52,35 @@
 - `packages/web/src/components/TabBar.vue:159, :236-239`
 - `packages/web/src/store/view.ts:55, :168, :669-670`（端末ごとの保存）
 - `packages/tui/src/render/chrome/sidebar.ts:214-304`、`input/mouse.ts:312-313, :591-597`、`local/tuiState.ts`
+
+## 追記（2026-10-04。PR #81 が main に入った後の構造。行番号は HEAD 0f9e621）
+
+### G1 `Sidebar.vue`（1139 行。script 1-634・template 636-814・style 816-1139）
+- template: `<nav class="sidebar">` 637／セッションの行 638-651／spaces の section 652-752（見出し 653-658〔題 654・並び順 655-657〕・行 659-737・フッタ〔＋ 新規・メニュー〕739-751）／agents の section 754-790（見出し 755-760・行 762-789）／畳むボタン `.sidebar-footer` 792-803／`.sidebar-divider` 805-812。
+- CSS: `.sidebar` 821-832（縦の flex・`overflow-y: auto`。**スクロールするのは nav 全体**）／`.sidebar-collapsed` 833-835（`width: 3em !important`）／`.sidebar-spaces, .sidebar-agents` 836-842（padding と border だけ）／見出し・フッタ 1071-1088（`flex: none`。`.sidebar-footer` は `margin-top: auto`）／`.sidebar-divider` 1130-1138（absolute・右端・幅 6px）。
+- 幅のドラッグ: 変数 54-57、`onDividerPointerDown` 585-602（畳んでいる間は何もしない・350ms 以内の 2 回目の pointerdown で既定へ・`setPointerCapture`）、`onDividerPointerMove` 604-607、`endDrag` 614-618（pointerup／pointercancel／lostpointercapture）。Esc・キーボード・role・aria は無い。`watch(view.modalOpen)` 625-633 で `endDrag()`。
+- 見出しの行（グループ・グループなし）と折りたたみ: `onToggleCollapse` 417-426、ボタン 696-708。行の D&D は 463-578（この作業では触らない）。
+- エージェントの行 762-789（件数のボタン 774-786）。`agents` computed 322-338。状態のまとめ `aggregateStateOf` 123-126。
+- `view.sidebarCollapsed` の出し分け: 637・648-649・653・660・691・712・715-717・730-731・735・739・755・764/767・796-801、CSS 833・863-870・1047-1050・1119-1121。
+
+### G2 端末ごとの保存（`store/view.ts`）
+- `PREFS_KEY` 55・`readPrefs` 65-74・`writePrefs` 100-109・`SIDEBAR_WIDTH` 168・`loadSidebarWidth` 174-177・ref 413-428・`setSidebarWidth` 687-689・`commitSidebarWidth` 692-694・return 736-737。
+- 端末ごとの項目は `DEVICE_LOCAL_PREF_KEYS`（`protocol/src/messages.ts:658`。今は `sidebarWidth`・`sidebarCollapsed`・`fileLocality`）。ここに入れないとサーバへ送られて共有になる。サーバ側でも落とす（`server/src/persist/PrefsStore.ts:45-49`）。テスト: `view.test.ts:395-437`・`prefsApply.test.ts:45,79`・`protocol/src/messages.test.ts:146-147`。
+
+### G3 `Splitter.vue`（130 行）
+- props `splitId`・`tabId`・`ratio`・`dir`。`STEP = 0.02`・`SEND_INTERVAL_MS = 50`。`onPointerDown` 56-65・`onPointerMove` 67-73・`onPointerUp` 75-77（**pointercancel／lostpointercapture・ダブルクリック・Esc・ドラッグ中のクラスは無い**）・`onKeydown` 79-87（矢印 2 つだけ）。CSS 112-129（太さ `var(--soda-pane-gap, 4px)`。hover の規則なし）。
+- `--soda-pane-gap` は `App.vue:62` が配る。`.pane-layout-side` は `overflow: hidden`（`PaneLayout.vue:260-266`）。
+- テスト: `Splitter.test.ts`（8 件）、E2E `workspace-tab-pane.spec.ts:172-191`・`keys-mouse-dialogs.spec.ts:266, :330`（`Tab` の順に `role=separator`）、サイドバーの幅 `settings.spec.ts:46-57`。
+
+### G4 端末版
+- `tui/src/render/chrome/sidebar.ts`: 高さの計算 449-464、spaces の見出しの行 503-517（**見出しの行そのものの hit は無い**。「+」と並び順だけ）、区切りの行 531-545（hit `sectionDivider`。**agents が 0 件だと出ない**）、最下行「«」547-553。
+- `tui/src/input/mouse.ts`: `Drag` の `{ kind: "section"; top }` 128（`startY`・`moved` を持たない）、押した時点 356-357、動かした・離した時点 635-637（どちらも `setSidebarSpacesRows`。**動かさずに離しても保存される**）。クリックとドラッグを分ける手本は `item`（330-339・643-650）。
+- 手元の保存: `tui/src/local/tuiState.ts` 9-19・24-45、`model/PrefsModel.ts:170-174`、`app/TuiApp.ts:264, :411-413, :1030-1034`。
+
+### G5 操作の足し方（手本: `show_subagents` を足した ccf58e6・ee49c39）
+- `client-core/src/keys/actions.ts:47-96`・`bindings.ts`（`ACTIONS`）・`web/src/actions/ActionDispatcher.ts`（`toggleSidebar` :162）・`tui/src/actions/TuiDispatcher.ts`（:158）。
+- 数を数えるテスト: `bindings.test.ts:41-51`（操作 58・群 7／24／27）、`keymap.test.ts:60-76, :383`（prefix の後のキー 46）、`TuiDispatcher.test.ts:191-205`、`web/src/components/KeySettings.test.ts:70, :77, :822, :846`（66 = 58 + 8）。
+- 空いている既定のキー: 無修飾 `d f i m t u y`、shift つき `a b c e f i m o q u v y z`。
+
+### G6 エージェントの状態
+- `AgentState = "blocked" | "working" | "idle" | "unknown"`、`DisplayState` は `done` を足したもの（`protocol/src/model.ts:4-6`）。**入力待ちと承認待ちは、どちらも `blocked` の 1 つの値**。まとめる純関数 `aggregate`（`client-core/src/agent/agentState.ts:23`）、アイコン `web/src/components/StateIcon.vue`。
