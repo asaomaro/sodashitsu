@@ -67,22 +67,26 @@ node scripts/sync-ask-form.mjs --check                                          
 
 - `spec`（検査済みの定義。入れるたびに部品が全部描き直すので、質問が替わったときに 1 回だけ入れる。部品は定義に書き込むので写しを渡す）・`busy`（送信中）。
 - `submit()`・`step(±1)` — 開いた直後はフォーカスが固定の行（部品の外）にあり、部品のキーは届かない。その間の `Ctrl/Cmd+Enter` と
-  `Alt+PageDown`／`Alt+PageUp` を、枠が `submit()`・`step()` で取り次ぐ。**`step()` は部品 1.1.0 から**（それより前のコミットへ戻すと、この取り次ぎが動かない）。取り込んでいる版は 1.2.2。
+  `Alt+PageDown`／`Alt+PageUp` を、枠が `submit()`・`step()` で取り次ぐ。**`step()` は部品 1.1.0 から**（それより前のコミットへ戻すと、この取り次ぎが動かない）。取り込んでいる版は 1.3.0（取得元コミット `12a13b2`。各質問の下の「＋ 自由記述」が入った版）。
 - `relayout()`・`contentHeight` — 枠が先に最大の高さを与えてから定義を入れ、中身の高さにダイアログを合わせる。目次を出すかは、部品が最初の 1 回だけ高さで決める。
 - `indexWidth` — 目次の幅（出ていなければ 0）。枠が、ダイアログの幅を目次の分だけ広げるのに使う（`--ask-index-width`）。
-- イベント `ask-submit`（`detail` のうち `answers`・`custom`・`note` だけをサーバへ送る）・`ask-cancel`・`ask-unsupported`
+- イベント `ask-submit`（`detail` のうち `answers`・`custom`・`note`・`comments`〔質問の id → 自由記述。書いた質問だけ。部品 1.3.0 から〕だけをサーバへ送る）・`ask-cancel`・`ask-unsupported`
   （質問を取り消してトーストで知らせる。`reason` は定義に由来する文字を含むので画面に出さない）。`Esc` は部品が `ask-cancel` を出さないので、枠（`<dialog>` の `cancel`）が取り消す。
+- **例外（部品の内部を読む唯一の箇所）**: 自由記述の欄を開閉するとダイアログの中身の高さが変わるが、部品は高さの変化を外へ知らせない。枠（`AskDialog.vue` の `onFormClick`）は、部品の要素に届いた `click`
+  （ネイティブの `click` は `composed` で Shadow DOM の外へ届き、部品はこれを止めない）のうち、`ev.composedPath()[0]` が `[data-ask-comment-toggle]`（自由記述のボタン）のものだけを合図に、その場で `contentHeight` を読み直して高さを当て直す。
+  絞り込みの入力・`showIf` の出し入れなど、ほかの `click`・`input` には反応しない（今までどおり高さは変えない）。属性名が変わったら、ここと `AskDialog.vue`・E2E を直す。
 - 配色の変数 `--ask-bg`・`--ask-fg`・`--ask-border`・`--ask-accent`・`--ask-accent-fg`・`--ask-error`・`--ask-warn`（テーマの変数を割り当てる）。
 - 使っていないもの: `resolveMedia`（入れないので、画像・音のプレビューは出ない）・`notify()`・`value`・`pageCount`（部品 1.2.1 ではいつも 1。互換のために残っているだけ）。
 
 ## 通す項目を足すときに直す場所
 
 部品を写し直しても、定義の新しい項目は自動では届かない（サーバの `normalizeAskSpec` が、知っている項目だけを通す）。
-いま通しているのは `single`・`multi`・`text` の型と、`paging`・`page`・`filter`・`showValue` を含む項目
+いま通しているのは `single`・`multi`・`text` の型と、`paging`・`page`・`filter`・`showValue`・`comments`・`comment`（どちらも `false` のときだけ残す）を含む項目
 （一覧は `docs/sodactl.md`「質問のフォーム」の「入力」）。部品が描ける `edit`・`rank`・`table` の型と、`code`・`group`・`image`・`audio`・
 `preview`・`thumb` 等の項目は通していない（型は `unavailable`・項目は落とす）。
 
-- `packages/protocol/src/ask.ts` — 型（`AskSpec`・`AskQuestion`）と `normalizeAskSpec`（検査して写す行）。
+- `packages/protocol/src/ask.ts` — 型（`AskSpec`・`AskQuestion`）と `normalizeAskSpec`（検査して写す行）。回答の側は `AskAnswerBody`・`AskResult`・`collectAsk`・`checkAskAnswer`
+  （`comments` はここと `packages/protocol/src/messages.ts` の `AskAnswerParams`、サーバの `AskService.answer`、枠の `AskDialog.vue` の `onSubmit` を通る）。
   誤りには分類 `AskSpecFailReason`（試験データ `normalize.json` の `reasons` の名前）を付ける。
 - `packages/protocol/src/ask.test.ts`・`ask.fixtures.test.ts` — 試験データで足りない境界の例。
 - `packages/web/src/ask/askFormElement.ts` — 部品の公開の受け渡しのうち、Sodashitsu が使うものの型。
@@ -90,8 +94,8 @@ node scripts/sync-ask-form.mjs --check                                          
 
 ## E2E が読む部品の内部
 
-「枠が使っている部品の受け渡し」とは別に、ask 関連の E2E 4 本（`packages/e2e/src/specs/ask-form.spec.ts`・`ask-form-index.spec.ts`・
-`ask-form-extras.spec.ts`・`ask-form-mobile.spec.ts`）は、部品の Shadow DOM の中の属性・要素を CSS ロケータ（Playwright は open の Shadow DOM を越える）で読む。
+「枠が使っている部品の受け渡し」とは別に、ask 関連の E2E 5 本（`packages/e2e/src/specs/ask-form.spec.ts`・`ask-form-index.spec.ts`・
+`ask-form-extras.spec.ts`・`ask-form-mobile.spec.ts`・`ask-form-comments.spec.ts`）は、部品の Shadow DOM の中の属性・要素を CSS ロケータ（Playwright は open の Shadow DOM を越える）で読む。
 共通の読み方は `packages/e2e/src/support/askForm.ts` に集めてある（属性名が変わったときの直し先。spec にも直接書いたものが残る）。
 spec が使っているものを `grep -o` で拾うと次のとおり。
 
@@ -104,18 +108,20 @@ spec が使っているものを `grep -o` で拾うと次のとおり。
 | `[data-ask-submit]`・`[data-ask-cancel]` | ［決定］・［キャンセル］のボタン |
 | `nav.index`（目次。出ていないときは `hidden`）・`[data-ask-index]`（目次の項目。値は質問の id、補足は空）・`[aria-current="true"]`（今の項目）・`.index .sec`（まとまりの題の見出し）・`.lack`（未回答の項目） | 質問の目次が出ているか・項目の数・今見ている項目・見出し・未回答の印（目次が出ないときは項目が 0 個見える） |
 | `label.opt`（`.name`・`.key`）・`label.opt.other input[type=text]`・`input[data-other]` | 選択肢の行（表示名・値の表示）・「その他」の入力欄 |
+| `[data-ask-comment-toggle="<id>"]` | 質問ごとの自由記述のボタン（文言・`aria-expanded`。部品 1.3.0。`ask-form-comments.spec.ts`・`ask-form-mobile.spec.ts`。枠の高さの読み直しも、このボタンの `click` を合図にする） |
+| `textarea[data-ask-comment="<id>"]` | 質問ごとの自由記述の欄（`hidden`・`aria-label`・値。補足欄の `[data-ask-note]` とは別） |
 | `input[type=radio]`・`textarea`・`input[type=search]`・`fieldset[aria-invalid]` | 選択肢の入力・補足欄・絞り込みの欄・未回答の強調 |
 | `.cnt`・`.intro`・`.help` | 絞り込みの件数の表示・定義の導入文（`intro`）・質問の説明（`help`） |
 
 属性名が変わった場合、E2E は一斉に落ちるのが普通だが、**落ちずに緑になる**ことがある（「見えない要素を数えて 0 件」を期待する件、
 `toHaveCount(0)` や `not.toBeVisible()` は、属性が消えても通る）。取り込んだら次の順で確かめる。
 
-1. 先に ask 関連の E2E 4 本を流す（`pnpm build` のあと、`cd packages/e2e && pnpm exec playwright test src/specs/ask-form.spec.ts src/specs/ask-form-mobile.spec.ts src/specs/ask-form-index.spec.ts src/specs/ask-form-extras.spec.ts`）。
+1. 先に ask 関連の E2E 5 本を流す（`pnpm build` のあと、`cd packages/e2e && pnpm exec playwright test src/specs/ask-form.spec.ts src/specs/ask-form-mobile.spec.ts src/specs/ask-form-index.spec.ts src/specs/ask-form-extras.spec.ts src/specs/ask-form-comments.spec.ts`）。
 2. 落ちなくても、各属性が部品の `ask-form.js` に残っているかを `grep` で確かめる。0 なら名前が変わっている（E2E の側が空振りしている）。
 
 ```sh
 for a in data-ask-title data-ask-question data-ask-note data-ask-status data-ask-submit data-ask-cancel \
-         data-ask-index data-other aria-invalid aria-current; do
+         data-ask-index data-other aria-invalid aria-current data-ask-comment data-ask-comment-toggle; do
   echo "$a: $(grep -c -- "$a" third_party/ask-form/ask-form.js)"
 done
 grep -c 'data-ask-submit' third_party/ask-form/ask-form.js    # 1 つだけ確かめるなら

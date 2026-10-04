@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEVICE_LOCAL_PREF_KEYS,
   AgentIntegrationInstallParams,
+  AskAnswerParams,
   AgentStartParams,
   AgentPromptParams,
   AgentSendKeysParams,
@@ -423,5 +424,23 @@ describe("独自トークンの報告（20260927-sidebar-row-tokens）", () => {
     const many = Array.from({ length: METADATA_TOKEN_ENTRIES_MAX + 1 }, (_, i) => ({ name: `k${i}`, value: "v" }));
     expect(WorkspaceReportMetadataParams.safeParse({ ...base, tokens: many }).success).toBe(false);
     expect(WorkspaceReportMetadataParams.safeParse({ ...base, tokens: many.slice(1) }).success).toBe(true);
+  });
+});
+
+describe("AskAnswerParams.comments（質問ごとの自由記述）", () => {
+  const base = { askId: "ask-1", answers: { a: "x" } };
+  it("無くてもよい。10000 文字は通り、10001 文字は断る。{} も通る", () => {
+    expect(AskAnswerParams.safeParse(base).success).toBe(true);
+    expect(AskAnswerParams.safeParse({ ...base, comments: {} }).success).toBe(true);
+    expect(AskAnswerParams.safeParse({ ...base, comments: { a: "あ".repeat(10_000) } }).success).toBe(true);
+    expect(AskAnswerParams.safeParse({ ...base, comments: { a: "あ".repeat(10_001) } }).success).toBe(false);
+  });
+  it("値が文字列でなければ断る。長すぎるキーも断る", () => {
+    expect(AskAnswerParams.safeParse({ ...base, comments: { a: 1 } }).success).toBe(false);
+    expect(AskAnswerParams.safeParse({ ...base, comments: { ["k".repeat(401)]: "x" } }).success).toBe(false);
+  });
+  it("__proto__ のキー（JSON.parse が作る自分の項目）は、スキーマが黙って落とす（ほかのキーは残る）", () => {
+    const r = AskAnswerParams.safeParse({ ...base, comments: JSON.parse('{"__proto__":"x","b":"y"}') });
+    expect(r.success ? Object.getOwnPropertyNames(r.data.comments ?? {}) : "rejected").toEqual(["b"]);
   });
 });

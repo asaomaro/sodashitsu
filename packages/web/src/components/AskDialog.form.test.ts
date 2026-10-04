@@ -103,6 +103,55 @@ describe("AskDialog — 部品へ定義を入れる（1 回だけ・写し・高
     expect(relayout).toHaveBeenCalledOnce();
   });
 
+  describe("自由記述のボタンの click で高さを読み直す（部品 1.3.0）", () => {
+    const toggle = (w: Mounted) => inForm<HTMLButtonElement>(w, "[data-ask-comment-toggle]");
+    const setup = async (height: number) => {
+      const w = mountDialog();
+      const get = vi.spyOn(formProto(), "contentHeight", "get").mockReturnValue(height);
+      await open(w, ask(SPEC));
+      return { w, get };
+    };
+    it("ボタンを押すと、その場で contentHeight を読み直して高さを当て直す（開くと増え、閉じると戻る）。幅・目次は決め直さない", async () => {
+      const { w, get } = await setup(300);
+      expect(form(w).style.height).toBe("300px");
+      const relayout = vi.spyOn(formProto(), "relayout");
+      get.mockReturnValue(380);
+      toggle(w).click(); // 部品のリスナーが欄を開く → 枠のリスナーが読み直す（同期）
+      expect(form(w).style.height).toBe("380px");
+      expect(inForm<HTMLTextAreaElement>(w, "[data-ask-comment]").hidden).toBe(false);
+      get.mockReturnValue(300);
+      toggle(w).click();
+      expect(form(w).style.height).toBe("300px");
+      expect(relayout).not.toHaveBeenCalled();
+    });
+    it("ほかの click と input では読み直さない（絞り込み・表示条件で高さが変わっても、ダイアログの高さは変えない）", async () => {
+      const { w, get } = await setup(300);
+      get.mockReturnValue(500);
+      inForm<HTMLElement>(w, "[data-ask-title]").click();
+      input(w, 'input[type="radio"]').click();
+      inForm<HTMLTextAreaElement>(w, "[data-ask-comment]").dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      expect(form(w).style.height).toBe("300px");
+    });
+    it("今の質問でないとき・contentHeight が 0 のときは何もしない", async () => {
+      const { w, get } = await setup(300);
+      get.mockReturnValue(380);
+      // 先頭の質問が替わった直後（部品へ次の定義を入れる前）の click は、前の質問の部品のものなので読み直さない
+      const stale = toggle(w);
+      w.store.add(ask(SPEC, "a2")); // a1 の後ろに積む（先頭は a1 のまま）
+      w.store.remove("a1");
+      form(w).style.height = "111px";
+      stale.click();
+      expect(form(w).style.height).toBe("111px");
+
+      const w2 = mountDialog();
+      const zero = vi.spyOn(formProto(), "contentHeight", "get").mockReturnValue(0);
+      await open(w2, ask(SPEC));
+      zero.mockReturnValue(380);
+      toggle(w2).click();
+      expect(form(w2).style.height).toBe("");
+    });
+  });
+
   it("目次が出ているとき（indexWidth > 0）は、その幅の分だけダイアログの幅を広げる。出ていなければ広げない。resize で読み直す", async () => {
     const w = mountDialog();
     const dlg = () => w.wrapper.get("dialog").element as HTMLDialogElement;
@@ -427,7 +476,7 @@ describe("AskDialog — 確定・取り消し（AC-I2）", () => {
     expect(w.answer).toHaveBeenCalledOnce();
   });
 
-  it("送るのは answers・custom・note だけ（部品の detail のほかの項目は送らない）", async () => {
+  it("送るのは answers・custom・note・comments だけ（部品の detail のほかの項目は送らない）", async () => {
     const w = mountDialog();
     await open(w, ask(SPEC));
     const detail = {
@@ -435,6 +484,7 @@ describe("AskDialog — 確定・取り消し（AC-I2）", () => {
       custom: ["ch"],
       edited: ["ch"],
       note: "メモ",
+      comments: { ch: "金曜は避けたい" },
       lacking: [],
     };
     form(w).dispatchEvent(new CustomEvent("ask-submit", { detail, bubbles: true, composed: true }));
@@ -442,12 +492,21 @@ describe("AskDialog — 確定・取り消し（AC-I2）", () => {
       answers: { ch: "beta", m: ["a"] },
       custom: ["ch"],
       note: "メモ",
+      comments: { ch: "金曜は避けたい" },
     });
     expect(Object.keys(w.answer.mock.calls[0]![1] as object).sort()).toEqual([
       "answers",
+      "comments",
       "custom",
       "note",
     ]);
+  });
+
+  it("comments が無い決定（古い部品・書かなかったとき）は、comments の項目ごと送らない", async () => {
+    const w = mountDialog();
+    await open(w, ask(SPEC));
+    form(w).dispatchEvent(new CustomEvent("ask-submit", { detail: { answers: { ch: "beta", m: ["a"] } }, bubbles: true, composed: true }));
+    expect(Object.keys(w.answer.mock.calls[0]![1] as object)).toEqual(["answers"]);
   });
 
   it("IME の変換中（isComposing・keyCode 229）の Enter では送らない（部品の中・固定の行のどちらも）", async () => {

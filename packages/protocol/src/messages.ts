@@ -442,6 +442,8 @@ export const AskAnswerParams = z.object({
   answers: z.record(z.string().max(ASK_ID_MAX * 2), z.union([askAnswerText, z.array(askAnswerText).max(ASK_OPTIONS_MAX + 1)])),
   custom: z.array(z.string().max(ASK_ID_MAX * 2)).max(ASK_QUESTIONS_MAX).optional(),
   note: askAnswerText.optional(),
+  // 質問ごとの自由記述。キーの数は `checkAskAnswer`（見えている質問にあること）で質問の数以内に収まる。長さの合計の上限も `checkAskAnswer`。
+  comments: z.record(z.string().max(ASK_ID_MAX * 2), askAnswerText).optional(),
 });
 export type AskAnswerParams = z.infer<typeof AskAnswerParams>;
 export const AskCancelParams = z.object({ askId });

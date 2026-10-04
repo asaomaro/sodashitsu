@@ -338,3 +338,42 @@ describe("部品の動き（1.1.0）: 値が空文字の選択肢も選べる", 
     expect(submitted).toEqual([{ answers: { q: ["a", "", "z"] }, custom: ["q"] }]);
   });
 });
+
+describe("部品の動き（1.3.0）: 質問ごとの自由記述", () => {
+  const Q = [
+    { id: "a", label: "A", type: "single", options: [{ value: "x", label: "X" }] },
+    { id: "m", label: "M", type: "multi", options: [{ value: "p", label: "P" }] },
+    { id: "t", label: "T", type: "text" },
+  ];
+  it("single・multi の下にボタンと欄（閉じている）がある。text には無い", async () => {
+    const { root } = await mountForm(Q);
+    const toggles = [...root.querySelectorAll("[data-ask-comment-toggle]")].map((b) => b.getAttribute("data-ask-comment-toggle"));
+    expect(toggles).toEqual(["a", "m"]);
+    const ta = root.querySelector<HTMLTextAreaElement>('[data-ask-comment="a"]');
+    expect(ta?.hidden).toBe(true);
+    expect(root.querySelector('[data-ask-comment-toggle="a"]')?.textContent).toBe("＋ 自由記述");
+    expect(root.querySelector('[data-ask-comment-toggle="a"]')?.getAttribute("aria-expanded")).toBe("false");
+  });
+  it("comments: false・comment: false では付かない", async () => {
+    const off = await mountForm(Q.map((q) => ({ ...q })));
+    off.el.spec = { title: "確認", submit: "決定", note: false, comments: false, questions: Q };
+    await Promise.resolve();
+    expect(off.root.querySelectorAll("[data-ask-comment-toggle]")).toHaveLength(0);
+    const one = await mountForm([{ ...Q[0], comment: false }, Q[1]!]);
+    expect([...one.root.querySelectorAll("[data-ask-comment-toggle]")].map((b) => b.getAttribute("data-ask-comment-toggle"))).toEqual(["m"]);
+  });
+  it("書いて決定すると、ask-submit の detail.comments に前後の空白を除いた文が入る（閉じていても。空白だけは入らない）", async () => {
+    const { el, root, submitted } = await mountForm(Q);
+    check(root, 'input[value="x"]');
+    root.querySelector<HTMLButtonElement>('[data-ask-comment-toggle="a"]')!.click();
+    const a = root.querySelector<HTMLTextAreaElement>('[data-ask-comment="a"]')!;
+    expect(a.hidden).toBe(false);
+    a.value = "  金曜は避けたい \n";
+    root.querySelector<HTMLButtonElement>('[data-ask-comment-toggle="a"]')!.click(); // 閉じる
+    expect(a.hidden).toBe(true);
+    expect(root.querySelector('[data-ask-comment-toggle="a"]')?.textContent).toBe("自由記述（入力あり）を開く");
+    root.querySelector<HTMLTextAreaElement>('[data-ask-comment="m"]')!.value = "   ";
+    el.submit();
+    expect(submitted).toEqual([{ answers: { a: "x", m: [], t: "" }, comments: { a: "金曜は避けたい" } }]);
+  });
+});
