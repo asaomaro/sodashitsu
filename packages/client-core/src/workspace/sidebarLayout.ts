@@ -26,8 +26,8 @@ function listOf(layout: SidebarLayout, container: Container): readonly ItemRef[]
 
 function withList(layout: SidebarLayout, container: Container, list: ItemRef[]): SidebarLayout {
   return container === null
-    ? { top: list, groups: layout.groups }
-    : { top: layout.top, groups: { ...layout.groups, [container]: list } };
+    ? { top: list, groups: layout.groups, ungrouped: layout.ungrouped }
+    : { top: layout.top, groups: { ...layout.groups, [container]: list }, ungrouped: layout.ungrouped };
 }
 
 /** 項目が今いる入れ物。どこにも無ければ `undefined`（`null` は一番上）。 */
@@ -129,7 +129,7 @@ export function removeItemFromGroup(layout: SidebarLayout, ref: ItemRef): Sideba
   const top = [...without.top];
   const at = top.indexOf(groupRef(container));
   top.splice(at === -1 ? top.length : at + 1, 0, ref);
-  return { top, groups: without.groups };
+  return { top, groups: without.groups, ungrouped: without.ungrouped };
 }
 
 /** グループを消し、中の項目をグループのあった位置へ順に出す。グループが一番上に無ければ末尾へ出す。 */
@@ -143,7 +143,7 @@ export function deleteGroupFromLayout(layout: SidebarLayout, groupId: GroupId): 
   else top.splice(at, 1, ...items);
   const groups = { ...layout.groups };
   delete groups[groupId];
-  return { top, groups };
+  return { top, groups, ungrouped: layout.ungrouped };
 }
 
 /**
@@ -224,5 +224,5 @@ export function repairLayout(
       top.push(ref);
     }
   }
-  return { layout: { top, groups: fixedGroups }, dropped };
+  return { layout: { top, groups: fixedGroups, ungrouped: [] }, dropped };
 }

@@ -732,7 +732,7 @@ describe("DefaultGitInfoPoller — 判定のレイアウトへの反映（実物
     const group = service.createGroup("g", a.id);
     await poller.pollNow();
     const key = keyOf(a.id);
-    expect(layout()).toEqual({ top: [`g:${group.id}`, `w:${p.id}`], groups: { [group.id]: [`r:${key}`] } });
+    expect(layout()).toEqual({ top: [`g:${group.id}`, `w:${p.id}`], groups: { [group.id]: [`r:${key}`] }, ungrouped: [] });
 
     const wtDir = `${main}-wt`;
     dirs.push(wtDir);
@@ -742,7 +742,7 @@ describe("DefaultGitInfoPoller — 判定のレイアウトへの反映（実物
     await poller.pollNow();
 
     expect(keyOf(wt.id)).toBe(key);
-    expect(layout()).toEqual({ top: [`g:${group.id}`, `w:${p.id}`], groups: { [group.id]: [`r:${key}`] } });
+    expect(layout()).toEqual({ top: [`g:${group.id}`, `w:${p.id}`], groups: { [group.id]: [`r:${key}`] }, ungrouped: [] });
     expect(service.getWorkspace(wt.id)?.groupId).toBe(group.id);
     expect(service.snapshot().workspaces.map((w) => w.id)).toEqual([a.id, wt.id, p.id]);
   });
@@ -756,7 +756,7 @@ describe("DefaultGitInfoPoller — 判定のレイアウトへの反映（実物
     const b = (await service.createWorkspace(wtDir, "wt")).workspace;
     const group = service.createGroup("g", a.id); // 本体だけがグループ（b は一番上）
     await poller.pollNow();
-    expect(layout()).toEqual({ top: [`g:${group.id}`], groups: { [group.id]: [`r:${keyOf(a.id)}`] } });
+    expect(layout()).toEqual({ top: [`g:${group.id}`], groups: { [group.id]: [`r:${keyOf(a.id)}`] }, ungrouped: [] });
     expect(service.getWorkspace(b.id)?.groupId).toBe(group.id);
   });
 
@@ -769,23 +769,23 @@ describe("DefaultGitInfoPoller — 判定のレイアウトへの反映（実物
     const group = service.createGroup("g", a.id);
     await poller.pollNow();
     const keyA = keyOf(a.id);
-    expect(layout()).toEqual({ top: [`g:${group.id}`], groups: { [group.id]: [`r:${keyA}`] } });
+    expect(layout()).toEqual({ top: [`g:${group.id}`], groups: { [group.id]: [`r:${keyA}`] }, ungrouped: [] });
 
     service.updatePaneRuntime(pane.id, { cwd: repoB });
     await poller.pollNow();
     const keyB = keyOf(a.id);
     expect(keyB).not.toBe(keyA);
-    expect(layout(), "別のリポジトリへ: グループの外の、元の項目の一番上のまとまりの直後").toEqual({ top: [`g:${group.id}`, `r:${keyB}`], groups: { [group.id]: [] } });
+    expect(layout(), "別のリポジトリへ: グループの外の、元の項目の一番上のまとまりの直後").toEqual({ top: [`g:${group.id}`, `r:${keyB}`], groups: { [group.id]: [] }, ungrouped: [] });
     expect(service.getWorkspace(a.id)?.groupId).toBeNull();
 
     service.updatePaneRuntime(pane.id, { cwd: plain });
     await poller.pollNow();
     expect(service.getWorkspace(a.id)?.git).toBeNull();
-    expect(layout(), "管理外へ: 項目が空になるので同じ場所で w:<id> に").toEqual({ top: [`g:${group.id}`, `w:${a.id}`], groups: { [group.id]: [] } });
+    expect(layout(), "管理外へ: 項目が空になるので同じ場所で w:<id> に").toEqual({ top: [`g:${group.id}`, `w:${a.id}`], groups: { [group.id]: [] }, ungrouped: [] });
 
     service.updatePaneRuntime(pane.id, { cwd: repoA });
     await poller.pollNow();
-    expect(layout(), "元のリポジトリへ戻ると、覚えているグループへ").toEqual({ top: [`g:${group.id}`], groups: { [group.id]: [`r:${keyA}`] } });
+    expect(layout(), "元のリポジトリへ戻ると、覚えているグループへ").toEqual({ top: [`g:${group.id}`], groups: { [group.id]: [`r:${keyA}`] }, ungrouped: [] });
     expect(service.getWorkspace(a.id)?.groupId).toBe(group.id);
   });
 
@@ -871,7 +871,7 @@ describe("DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実�
     const key = before.getWorkspace(a.id)!.git!.repoKey!;
     const expectedLayout = before.snapshot().layout!;
     const expectedOrder = before.snapshot().workspaces.map((x) => x.id);
-    expect(expectedLayout).toEqual({ top: [`g:${group.id}`, `w:${p.id}`, `r:${(before.getWorkspace(o.id)!.git!.repoKey)}`], groups: { [group.id]: [`r:${key}`] } });
+    expect(expectedLayout).toEqual({ top: [`g:${group.id}`, `w:${p.id}`, `r:${(before.getWorkspace(o.id)!.git!.repoKey)}`], groups: { [group.id]: [`r:${key}`] }, ungrouped: [] });
 
     const data = await saveAndLoad(before);
     expect(data.layout).toEqual(expectedLayout);
@@ -933,9 +933,9 @@ describe("DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実�
     await after.restore(legacy);
     const key = full.workspaces[0]!.repoKey!;
     expect(after.persistedLayout()).toBeNull();
-    expect(after.snapshot().layout).toEqual({ top: [`r:${key}`], groups: {} });
+    expect(after.snapshot().layout).toEqual({ top: [`r:${key}`], groups: {}, ungrouped: [] });
     await new DefaultGitInfoPoller(after, new ChildProcessGitRunner()).pollNow();
-    expect(after.snapshot().layout).toEqual({ top: [`r:${key}`], groups: {} });
+    expect(after.snapshot().layout).toEqual({ top: [`r:${key}`], groups: {}, ungrouped: [] });
     const resaved = toSessionFileData(after);
     expect("layout" in resaved).toBe(false);
     expect("repoGroups" in resaved).toBe(false);

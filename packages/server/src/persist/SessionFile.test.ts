@@ -118,7 +118,7 @@ describe("FsSessionFile", () => {
     const withLayout: SessionFileData = {
       ...data,
       groups: [{ id: "g1", label: "backend", collapsed: false }],
-      layout: { top: ["g:g1", "w:w2"], groups: { g1: ["r:/r/.git"] } },
+      layout: { top: ["g:g1", "w:w2"], groups: { g1: ["r:/r/.git"] }, ungrouped: [] },
       repoGroups: { "/r/.git": "g1", "/closed/.git": "g1" },
       workspaces: [
         { ...ws, groupId: "g1", repoKey: "/r/.git", isLinkedWorktree: true },
@@ -140,7 +140,7 @@ describe("FsSessionFile", () => {
     const data = sample();
     await file.save({
       ...data,
-      layout: { top: ["w:w1"], groups: {} },
+      layout: { top: ["w:w1"], groups: {}, ungrouped: [] },
       repoGroups: { "/r/.git": "g1" },
       workspaces: [{ ...data.workspaces[0]!, repoKey: "/r/.git", isLinkedWorktree: false }],
     });

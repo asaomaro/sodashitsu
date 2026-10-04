@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEVICE_LOCAL_PREF_KEYS,
   AgentIntegrationInstallParams,
   AgentStartParams,
   AgentPromptParams,
@@ -117,19 +118,32 @@ describe("messages", () => {
     expect(() => ItemMoveParams.parse({ item: w })).toThrow(); // before は必須（末尾は null）
     expect(() => ItemMoveParams.parse({ item: { kind: "repo", repoKey: "/a" }, before: null })).toThrow();
     expect(() => ItemMoveParams.parse({ item: { kind: "group" }, before: null })).toThrow();
+    // 「グループなし」のまとまり（追補 01 B）。対象にも before にも置ける
+    const u = { kind: "ungrouped" };
+    expect(ItemMoveParams.parse({ item: u, before: g })).toEqual({ item: u, before: g });
+    expect(ItemMoveParams.parse({ item: g, before: u })).toEqual({ item: g, before: u });
+    expect(ItemMoveByParams.parse({ item: u, direction: "previous" })).toEqual({ item: u, direction: "previous" });
+    expect(() => ItemMoveParams.parse({ item: { kind: "ungrouped", groupId: "g1" }, before: null })).not.toThrow(); // 余計なキーは落ちる
+    expect(ItemMoveParams.parse({ item: { kind: "ungrouped", groupId: "g1" }, before: null }).item).toEqual(u);
     expect(ItemMoveByParams.parse({ item: g, direction: "next" })).toEqual({ item: g, direction: "next" });
     expect(() => ItemMoveByParams.parse({ item: g, direction: "up" })).toThrow();
   });
 
-  it("parses SidebarLayout (with/without groups, unknown refs and extra keys from older shapes)", () => {
-    const l = { top: ["g:g1", "r:/a", "w:w2"], groups: { g1: ["r:/b"], g2: [] } };
+  it("parses SidebarLayout (top に \"u\"・ungrouped、未知の参照と余計なキーは通る)", () => {
+    const l = { top: ["g:g1", "u", "g:g2"], groups: { g1: ["r:/b"], g2: [] }, ungrouped: ["r:/a", "w:w2"] };
     expect(SidebarLayoutSchema.parse(l)).toEqual(l);
-    expect(SidebarLayoutSchema.parse({ top: [], groups: {} })).toEqual({ top: [], groups: {} });
+    expect(SidebarLayoutSchema.parse({ top: ["u"], groups: {}, ungrouped: [] })).toEqual({ top: ["u"], groups: {}, ungrouped: [] });
     // 未知の参照の種類・余計なキーを持つ形も通る（余計なキーは落とす）
-    expect(SidebarLayoutSchema.parse({ top: ["x:unknown"], groups: {}, extra: 1 })).toEqual({ top: ["x:unknown"], groups: {} });
-    expect(() => SidebarLayoutSchema.parse({ top: "g:g1", groups: {} })).toThrow();
-    expect(() => SidebarLayoutSchema.parse({ top: [], groups: { g1: "r:/a" } })).toThrow();
-    expect(() => SidebarLayoutSchema.parse({ top: [] })).toThrow();
+    expect(SidebarLayoutSchema.parse({ top: ["x:unknown"], groups: {}, ungrouped: [], extra: 1 })).toEqual({ top: ["x:unknown"], groups: {}, ungrouped: [] });
+    expect(() => SidebarLayoutSchema.parse({ top: "g:g1", groups: {}, ungrouped: [] })).toThrow();
+    expect(() => SidebarLayoutSchema.parse({ top: [], groups: { g1: "r:/a" }, ungrouped: [] })).toThrow();
+    expect(() => SidebarLayoutSchema.parse({ top: [], groups: {} })).toThrow(); // ungrouped は必須
+    expect(() => SidebarLayoutSchema.parse({ top: [], groups: {}, ungrouped: "w:w1" })).toThrow();
+  });
+
+  it("共有の設定の ungroupedCollapsed は端末ごとの設定に入れない（共有のまま）", () => {
+    expect(DEVICE_LOCAL_PREF_KEYS).not.toContain("ungroupedCollapsed");
+    expect(DEVICE_LOCAL_PREF_KEYS).not.toContain("collapsedAutoGroups");
   });
 
   // 20260923-workspace-grouping（キーバインド用。tab.move と同じ delta 指定の形）。

@@ -221,7 +221,7 @@ describe("Sidebar — spaces", () => {
     session.workspaceUpserted(makeWorkspace("w1"));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
     session.groupUpserted({ id: "g2", label: "空", collapsed: false });
-    session.layoutChanged({ top: ["g:g1", "g:g2"], groups: { g1: ["w:w1"], g2: [] } });
+    session.layoutChanged({ top: ["g:g1", "g:g2"], groups: { g1: ["w:w1"], g2: [] }, ungrouped: [] });
     view.onModeChange("navigate");
     view.setNavigateSelection("group:g2");
     const openContextMenu = vi.fn();
@@ -240,7 +240,7 @@ describe("Sidebar — spaces", () => {
     const view = useViewStore(pinia);
     session.workspaceUpserted(makeWorkspace("w1"));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
-    session.layoutChanged({ top: ["g:g1"], groups: { g1: ["w:w1"] } });
+    session.layoutChanged({ top: ["g:g1"], groups: { g1: ["w:w1"] }, ungrouped: [] });
     view.onModeChange("navigate");
     view.setNavigateSelection("group:g1");
     const openContextMenu = vi.fn();
@@ -964,7 +964,7 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     session.workspaceUpserted(makeWorkspace("w2", { label: "m2", groupId: "g1" }));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
     session.workspaceUpserted(makeWorkspace("w3", { label: "other" }));
-    session.layoutChanged({ top: ["g:g1", "w:w3"], groups: { g1: ["w:w1", "w:w2"] } });
+    session.layoutChanged({ top: ["g:g1", "w:w3"], groups: { g1: ["w:w1", "w:w2"] }, ungrouped: [] });
   }
 
   it("一番上の項目を、グループの中の行の上へ落とすことはできない（印が付き、離しても送らず知らせる）", async () => {
@@ -1006,7 +1006,7 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     const session = useSessionStore(pinia);
     session.workspaceUpserted(makeWorkspace("w4", { label: "x4", groupId: "g2" }));
     session.groupUpserted({ id: "g2", label: "front", collapsed: false });
-    session.layoutChanged({ top: ["g:g1", "g:g2", "w:w3"], groups: { g1: ["w:w1", "w:w2"], g2: ["w:w4"] } });
+    session.layoutChanged({ top: ["g:g1", "g:g2", "w:w3"], groups: { g1: ["w:w1", "w:w2"], g2: ["w:w4"] }, ungrouped: [] });
     const view = useViewStore(pinia);
     const moveItemByDrag = vi.fn();
     const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
@@ -1091,7 +1091,7 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
       session.workspaceUpserted(makeWorkspace("w1", { label: "main", git: git(false) }));
       session.workspaceUpserted(makeWorkspace("w2", { label: "feat", git: git(true) }));
       session.workspaceUpserted(makeWorkspace("w3", { label: "other" }));
-      session.layoutChanged({ top: ["r:/r/.git", "w:w3"], groups: {} });
+      session.layoutChanged({ top: ["r:/r/.git", "w:w3"], groups: {}, ungrouped: [] });
     }
 
     it("子の行を掴むと、worktree グループ（先頭の workspace で指す項目）と全メンバーの id が渡る", () => {
@@ -1446,7 +1446,7 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
     session.workspaceUpserted(makeWorkspace("main", { label: "main", git: git(false), groupId: "g1" }));
     session.workspaceUpserted(makeWorkspace("plain", { label: "plain" }));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
-    if (layout) session.layoutChanged({ top: ["g:g1", "w:plain"], groups: { g1: ["w:a", "r:/r/.git"] } });
+    if (layout) session.layoutChanged({ top: ["g:g1", "w:plain"], groups: { g1: ["w:a", "r:/r/.git"] }, ungrouped: [] });
     return session;
   }
 
@@ -1500,7 +1500,7 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
   it("layout が変わると（sidebar.layout_changed）描画の順も変わる", async () => {
     const session = populate(true);
     const wrapper = mountSidebar(makeConnection());
-    session.layoutChanged({ top: ["w:plain", "g:g1"], groups: { g1: ["r:/r/.git", "w:a"] } });
+    session.layoutChanged({ top: ["w:plain", "g:g1"], groups: { g1: ["r:/r/.git", "w:a"] }, ungrouped: [] });
     await nextTick();
     expect(rows(wrapper).map((r) => r.label)).toEqual(["plain", "backend", "main", "wt", "a"]);
   });

@@ -520,7 +520,7 @@ describe("registerAllMethods — client / workspace / tab / pane flow", () => {
       if (!result.ok) throw new Error("unreachable");
       const group = (result.result as { group: { id: string } }).group;
       expect(groupIdsOf([main, wt, other])).toEqual([group.id, group.id, null]);
-      expect(ctx.session.snapshot().layout).toEqual({ top: [`g:${group.id}`, `w:${other}`], groups: { [group.id]: ["r:/repo/.git"] } });
+      expect(ctx.session.snapshot().layout).toEqual({ top: [`g:${group.id}`, `w:${other}`], groups: { [group.id]: ["r:/repo/.git"] }, ungrouped: [] });
     });
 
     it("group.create に実在しない workspaceId を渡すと not_found で、グループは作られない", async () => {
@@ -554,7 +554,7 @@ describe("registerAllMethods — client / workspace / tab / pane flow", () => {
       const gid = (created.result as { group: { id: string } }).group.id;
       expect(await ctx.surface.invoke(c, "group.delete", { groupId: gid })).toEqual({ ok: true, result: {} });
       expect(groupIdsOf([main, wt, other])).toEqual([null, null, null]);
-      expect(ctx.session.snapshot().layout).toEqual({ top: ["r:/repo/.git", `w:${other}`], groups: {} });
+      expect(ctx.session.snapshot().layout).toEqual({ top: ["r:/repo/.git", `w:${other}`], groups: {}, ungrouped: [] });
     });
 
     it("workspace.close の一括クローズは、worktree グループがグループに入っていても同じリポジトリを全部閉じる", async () => {

@@ -77,7 +77,7 @@ describe("サイドバーの木（T16。グループ・worktree グループ・�
     const all = [...REPO, ws("solo")];
     const { paint } = setup(all, {
       groups: [{ id: "g1", label: "仕事", collapsed: false }],
-      layout: { top: ["g:g1"], groups: { g1: ["r:r1", "w:solo"] } },
+      layout: { top: ["g:g1"], groups: { g1: ["r:r1", "w:solo"] }, ungrouped: [] },
     });
     const { lines } = paint();
     // 字下げ: グループ 0・項目 2・子 4（workspace の行は頭に状態の印の欄 2 桁があるので、最初の文字は +2 桁）。
@@ -94,7 +94,7 @@ describe("サイドバーの木（T16。グループ・worktree グループ・�
 
   it("畳んだグループの中は今いる workspace の行だけ。畳んだ worktree グループは先頭と今いる子だけ", () => {
     const all = [...REPO, ws("solo")];
-    const layout = { top: ["g:g1"], groups: { g1: ["r:r1", "w:solo"] } };
+    const layout = { top: ["g:g1"], groups: { g1: ["r:r1", "w:solo"] }, ungrouped: [] };
     const closed = setup(all, {
       groups: [{ id: "g1", label: "G", collapsed: true }],
       layout,
@@ -120,7 +120,7 @@ describe("サイドバーの木（T16。グループ・worktree グループ・�
     const all = [ws("zz"), ws("b-in"), ws("a-in"), ws("m")];
     const { prefs, paint } = setup(all, {
       groups: [{ id: "g1", label: "grp", collapsed: false }],
-      layout: { top: ["w:zz", "g:g1", "w:m"], groups: { g1: ["w:b-in", "w:a-in"] } },
+      layout: { top: ["w:zz", "g:g1", "w:m"], groups: { g1: ["w:b-in", "w:a-in"] }, ungrouped: [] },
     });
     prefs.apply({ workspaceSort: "name" }, 1);
     expect(paint().lines.map((l) => l.replace(/\s+/g, " ").trim())).toEqual([
@@ -133,7 +133,7 @@ describe("サイドバーの木（T16。グループ・worktree グループ・�
   });
 
   it("先頭の行の当たり判定: 左の ▸/▾ が折りたたみ、ほかの桁は workspace。畳んだ・開いたの両方を持つ", () => {
-    const { paint } = setup(REPO, { layout: { top: ["r:r1"], groups: {} } });
+    const { paint } = setup(REPO, { layout: { top: ["r:r1"], groups: {}, ungrouped: [] } });
     const head = paint().hits.find((h) => h.kind === "autoGroup");
     expect(head).toMatchObject({
       kind: "autoGroup",
@@ -151,7 +151,7 @@ describe("サイドバーの木（T16。グループ・worktree グループ・�
 
   it("行の並びが 2 行以上でも、先頭の行の 2 行目は「▸ ψ 」の分だけ下げる（通常の行は状態の印の幅だけ）", () => {
     const { prefs, paint } = setup([...REPO, ws("solo")], {
-      layout: { top: ["r:r1", "w:solo"], groups: {} },
+      layout: { top: ["r:r1", "w:solo"], groups: {}, ungrouped: [] },
     });
     prefs.apply(
       {
@@ -187,7 +187,7 @@ describe("サイドバーの木（T16。グループ・worktree グループ・�
     const all = [...REPO, ws("solo")];
     const { model, prefs, paint } = setup(all, {
       groups: [{ id: "g1", label: "G", collapsed: false }],
-      layout: { top: ["w:solo", "g:g1"], groups: { g1: ["r:r1"] } },
+      layout: { top: ["w:solo", "g:g1"], groups: { g1: ["r:r1"] }, ungrouped: [] },
     });
     // 描画の順（見出しを除く）と、キー操作の順が一致する。
     const drawn = paint().lines.map((l) => l.trim().split(" ").at(-1)!);

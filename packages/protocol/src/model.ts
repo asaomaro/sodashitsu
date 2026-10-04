@@ -26,6 +26,13 @@ export interface GitInfo {
    * `repoKey` が null（git 管理外）のときは常に false（20260923-workspace-grouping）。
    */
   isLinkedWorktree: boolean;
+  /**
+   * その worktree（フォルダ）を一意に示す絶対パス（正規化済み。`git rev-parse --path-format=absolute --git-dir`。
+   * 本体は共通ディレクトリと同じ、linked worktree は `<共通ディレクトリ>/worktrees/<名前>`）。同じ値の workspace のうち
+   * 平らな順で最初のものがその worktree の代表で、リポジトリの項目に入るのは代表だけ（追補 01 A）。
+   * git 管理外なら null。古いサーバには無い（無ければ同じ `repoKey` を全部メンバーとして扱う）。
+   */
+  worktreeKey?: string | null;
 }
 
 export interface Workspace {
@@ -213,14 +220,20 @@ export type ItemRef = string;
 
 /** サイドバーの項目の並び（サーバが正。`SessionSnapshot.layout`・`sidebar.layout_changed`）。 */
 export interface SidebarLayout {
-  /** 一番上の項目の順。 */
-  top: ItemRef[];
+  /** まとまりの順。`g:<groupId>` と、グループなしを表す `"u"`（必ず 1 つ。追補 01 B）。グループの間にグループ外の項目は挟めない。 */
+  top: string[];
   /** グループの中の項目の順（キーは GroupId。`g:` は入らない）。空のグループも空の配列で持つ。 */
   groups: Record<GroupId, ItemRef[]>;
+  /** グループなしの中の項目の順（`r:` / `w:`）。 */
+  ungrouped: ItemRef[];
 }
 
 /** 項目に対する操作の対象。workspace を指すと、その workspace の項目（リポジトリなら丸ごと）になる。 */
-export type ItemTarget = { kind: "group"; groupId: GroupId } | { kind: "workspace"; workspaceId: WorkspaceId };
+export type ItemTarget =
+  | { kind: "group"; groupId: GroupId }
+  | { kind: "workspace"; workspaceId: WorkspaceId }
+  /** 「グループなし」のまとまり（`top` の `"u"`）。まとまりどうしの並べ替えの対象になる。 */
+  | { kind: "ungrouped" };
 
 export interface SessionSnapshot {
   protocol: 1;

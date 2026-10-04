@@ -38,6 +38,7 @@ const groups: WorkspaceGroup[] = [
 const base = (): SidebarLayout => ({
   top: ["w:a", "g:g1", "w:b", "g:g2"],
   groups: { g1: ["r:R", "w:c"], g2: [] },
+  ungrouped: [],
 });
 
 describe("insertItem / removeItem", () => {
@@ -175,7 +176,7 @@ describe("flattenWorkspaceIds", () => {
   });
   it("レイアウトに無い workspace は末尾へ、実在しない参照は飛ばす、重複は先のものだけ", () => {
     const list = [ws("a"), ws("z")];
-    const layout: SidebarLayout = { top: ["w:ghost", "w:a", "w:a", "g:nope"], groups: {} };
+    const layout: SidebarLayout = { top: ["w:ghost", "w:a", "w:a", "g:nope"], groups: {}, ungrouped: [] };
     expect(flattenWorkspaceIds(layout, list)).toEqual(["a", "z"]);
   });
 });
@@ -192,24 +193,26 @@ describe("repairLayout（AC13）", () => {
     const broken: SidebarLayout = {
       top: ["w:a", "w:ghost", "g:g1", "g:gone", "w:a", "r:Gone", "w:b", "g:g2"],
       groups: { g1: ["r:R", "g:g2", "w:c", "w:b"], gone: ["w:z"] },
+      ungrouped: [],
     };
     const r = repairLayout(broken, list, groups);
     expect(r.layout).toEqual({
       top: ["w:a", "g:g1", "w:b", "g:g2"],
       groups: { g1: ["r:R", "w:c"], g2: [] },
+      ungrouped: [],
     });
     expect([...r.dropped].sort()).toEqual(
       ["g:g2", "g:gone", "r:Gone", "w:a", "w:b", "w:ghost", "w:z"].sort(),
     );
   });
   it("無い workspace・無いグループは一番上の末尾へ足す", () => {
-    const r = repairLayout({ top: ["w:a"], groups: {} }, list, groups);
+    const r = repairLayout({ top: ["w:a"], groups: {}, ungrouped: [] }, list, groups);
     expect(r.layout.top).toEqual(["w:a", "g:g1", "g:g2", "w:b", "w:c", "r:R"]);
     expect(r.layout.groups).toEqual({ g1: [], g2: [] });
     expect(r.dropped).toEqual([]);
   });
   it("workspace の今の判定と合わない参照（w: なのに repoKey を持つ）は捨て、判定どおりの項目を足す", () => {
-    const r = repairLayout({ top: ["w:w1"], groups: {} }, [ws("w1", { git: git("R") })], []);
+    const r = repairLayout({ top: ["w:w1"], groups: {}, ungrouped: [] }, [ws("w1", { git: git("R") })], []);
     expect(r.layout.top).toEqual(["r:R"]);
     expect(r.dropped).toEqual(["w:w1"]);
   });

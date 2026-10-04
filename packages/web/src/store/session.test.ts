@@ -174,7 +174,7 @@ describe("useSessionStore", () => {
   // 20261004-group-worktree-items：切断で clear() したら layout も null に戻る（古いサーバの layout を引きずらない）。
   it("clear は layout を null に戻す", () => {
     const store = useSessionStore(pinia);
-    store.layoutChanged({ top: ["w:w1"], groups: {} });
+    store.layoutChanged({ top: ["w:w1"], groups: {}, ungrouped: [] });
     expect(store.hasServerLayout).toBe(true);
     store.clear();
     expect(store.layout).toBeNull();

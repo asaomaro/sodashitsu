@@ -257,7 +257,7 @@ describe("ContextMenu — workspace", () => {
     session.workspaceUpserted(makeWorkspace("w1", { git: git(false), groupId: "g1" }));
     session.workspaceUpserted(makeWorkspace("w2", { git: git(true), groupId: null }));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
-    session.layoutChanged({ top: ["g:g1"], groups: { g1: ["r:/r/.git"] } });
+    session.layoutChanged({ top: ["g:g1"], groups: { g1: ["r:/r/.git"] }, ungrouped: [] });
     view.openContextMenu({ kind: "workspace", workspaceId: "w2" }, { x: 0, y: 0 });
     const wrapper = mountMenu(makeActions());
     expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "新しい worktree", "worktree を開く…", "グループから外す", "新しいグループを作る…"]);
@@ -279,7 +279,7 @@ describe("ContextMenu — group", () => {
     const session = useSessionStore(pinia);
     const view = useViewStore(pinia);
     const actions = makeActions();
-    session.layoutChanged({ top: ["g:g1"], groups: { g1: [] } });
+    session.layoutChanged({ top: ["g:g1"], groups: { g1: [] }, ungrouped: [] });
     view.openContextMenu({ kind: "group", groupId: "g1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(actions);
     expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "上へ移動", "下へ移動", "グループを削除"]);

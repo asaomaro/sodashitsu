@@ -277,6 +277,7 @@ const linked = (id: string, repoKey = R, extra: Partial<Workspace> = {}) =>
 const lay = (top: string[], groups: Record<string, string[]> = {}): SidebarLayout => ({
   top,
   groups,
+  ungrouped: [],
 });
 
 /** 木を「種類:識別子」の文字列にして比べやすくする（グループは `[g: 中身…]`）。 */

@@ -206,3 +206,12 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **`autoGroup` の当たり判定**: マシンの見出し（`machine`）と同じく 1 つの当たりに `toggleX` を持たせた。`{ kind: "autoGroup", repoKey, workspaceId, toggleX }`。`x <= toggleX`（先頭の行の ▸/▾ の桁）なら `toggleAutoGroupCollapsed(repoKey)`、ほかの桁は workspace の当たりとして働く（クリックで移る・ドラッグの開始・右クリックのメニュー・ドラッグの落とし先・pane のドロップ先・navigate の `reveal`・`openRequestedNavigateMenu` を `workspace` と同じ扱いにした）。
 - **畳んだ入れ物の描き方**: web と同じ決まり（D20）。畳んだグループの中は今いる workspace の行だけ（先頭でも子でも、その種類の行として）。畳んだ worktree グループは先頭と今いる子だけ。
 - **ドラッグは T18 まで暫定**: 先頭の行から掴んだドラッグ・落とし先は今まで通りその workspace 1 つの `workspace.move_to`（`moveWorkspacesByDrag`）。項目単位への置き換えは T18。
+
+## D26: 型の追加（T22）と、下流の暫定の適応（T23 以降で直す）
+
+- **protocol**: `SidebarLayout` に `top: string[]`（`"u"` を含む）と `ungrouped: ItemRef[]`（必須）、`ItemTarget` に `{ kind: "ungrouped" }`（`ItemTargetSchema` も）、`SidebarLayoutSchema` に `ungrouped`（必須）、共有の設定 `SharedPrefs.ungroupedCollapsed?: boolean`（`collapsedAutoGroups` の隣。`DEVICE_LOCAL_PREF_KEYS` には入れない＝共有のまま）、`GitInfo.worktreeKey`。
+- **`GitInfo.worktreeKey` は optional（`worktreeKey?: string | null`）にした**: 追補 A の「古いサーバには無い（全部メンバー）」を型で表すため。サーバは T24 から常に `string | null` を入れる。必須にすると古いサーバ前提の画面側テストの `GitInfo` を全部直すことになる。
+- **保存の layout に `ungrouped` が必須になった**: 追補どおり途中の形の移行は要らないので、`ungrouped` の無い `layout` を持つ保存は読めない（`SidebarLayoutSchema` で弾かれる）。配布前の形なので許容。
+- **暫定（T23・T24 で直す）**: client-core の `sidebarLayout.ts`・`workspaceGrouping.ts` の `layoutFromLegacy` と、server の `SessionModel` は、`ungrouped` を持ち回す（`layoutFromLegacy`・`repairLayout` は `[]`）だけで、まだ旧構造（`top` に項目が直接並ぶ・`"u"` は入らない）のまま動く。`SessionModel.refOfTarget` は `{ kind: "ungrouped" }` を `"u"` に読み替えるだけで、`"u"` が `top` に無いので並べ替えは `moved:false` になる。web `Sidebar.vue` の `sameItem` は `ungrouped` の分岐だけ足した。既存の単体テストは `ungrouped: []` を足して通した（意味の書き直しは T23〜）。
+
+- D26 補足（T22 の点検）: `ungrouped` の無い旧形の `layout` を持つ session.json は、`SessionFileDataSchema` が全体を壊れたファイルとして扱う（layout だけ捨てるのではない）。この work の変更は未配布なので許容する。T24 で保存を扱うときに、`layout` だけ `.catch(undefined)` にして仮の状態から始める形にするかを決める。

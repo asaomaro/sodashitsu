@@ -1605,14 +1605,14 @@ describe("ActionDispatcher — workspace の並べ替え", () => {
 
   it("moveItemByDrag: layout を持つサーバには item.move（項目と落とし先の項目）を送る", () => {
     const conn = makeConnection();
-    useSessionStore(pinia).layoutChanged({ top: ["r:/r/.git", "w:w3"], groups: {} });
+    useSessionStore(pinia).layoutChanged({ top: ["r:/r/.git", "w:w3"], groups: {}, ungrouped: [] });
     makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w3" }, legacyArg);
     expect(conn.requests).toEqual([["item.move", { item: { kind: "workspace", workspaceId: "w1" }, before: { kind: "workspace", workspaceId: "w3" } }]]);
   });
 
   it("moveItemByDrag: グループも項目として送る", () => {
     const conn = makeConnection();
-    useSessionStore(pinia).layoutChanged({ top: ["g:g1", "w:w3"], groups: { g1: [] } });
+    useSessionStore(pinia).layoutChanged({ top: ["g:g1", "w:w3"], groups: { g1: [] }, ungrouped: [] });
     makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "group", groupId: "g1" }, { kind: "workspace", workspaceId: "w3" }, legacyArg);
     expect(conn.requests).toEqual([["item.move", { item: { kind: "group", groupId: "g1" }, before: { kind: "workspace", workspaceId: "w3" } }]]);
   });
@@ -1626,7 +1626,7 @@ describe("ActionDispatcher — workspace の並べ替え", () => {
   it("moveItemByDrag: item.move が失敗したら「移動できませんでした」と知らせる", async () => {
     const conn = makeConnection();
     conn.rejectWith["item.move"] = "internal";
-    useSessionStore(pinia).layoutChanged({ top: ["w:w1", "w:w3"], groups: {} });
+    useSessionStore(pinia).layoutChanged({ top: ["w:w1", "w:w3"], groups: {}, ungrouped: [] });
     makeDispatcher(conn).dispatcher.moveItemByDrag({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w3" }, legacyArg);
     await new Promise((r) => setTimeout(r, 0));
     expect(useViewStore(pinia).toasts.map((t) => t.message)).toEqual(["移動できませんでした"]);
@@ -1703,7 +1703,7 @@ describe("ActionDispatcher — 手動グループ（herdr に前例が無い独�
   describe("layout を持つサーバ", () => {
     it("confirmCreateGroup: group.create に workspaceId を添えて 1 回だけ送る", async () => {
       const conn = makeConnection();
-      useSessionStore(pinia).layoutChanged({ top: [], groups: {} });
+      useSessionStore(pinia).layoutChanged({ top: [], groups: {}, ungrouped: [] });
       const view = useViewStore(pinia);
       view.openDialogWithContext({ kind: "createGroup", workspaceId: "w1" });
       makeDispatcher(conn).dispatcher.confirmCreateGroup("backend");
@@ -1714,7 +1714,7 @@ describe("ActionDispatcher — 手動グループ（herdr に前例が無い独�
     it("confirmAddToGroup: 項目の workspace が複数でも group.add_member は 1 回", () => {
       const conn = makeConnection();
       const session = useSessionStore(pinia);
-      session.layoutChanged({ top: ["g:g1"], groups: { g1: [] } });
+      session.layoutChanged({ top: ["g:g1"], groups: { g1: [] }, ungrouped: [] });
       const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
       session.workspaceUpserted(makeWorkspace("w1", [], { git: git(false) }));
       session.workspaceUpserted(makeWorkspace("w2", [], { git: git(true) }));
@@ -1726,7 +1726,7 @@ describe("ActionDispatcher — 手動グループ（herdr に前例が無い独�
     it("removeWorkspaceFromGroup: group.remove_member は 1 回", () => {
       const conn = makeConnection();
       const session = useSessionStore(pinia);
-      session.layoutChanged({ top: [], groups: {} });
+      session.layoutChanged({ top: [], groups: {}, ungrouped: [] });
       const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
       session.workspaceUpserted(makeWorkspace("w1", [], { git: git(false) }));
       session.workspaceUpserted(makeWorkspace("w2", [], { git: git(true) }));
@@ -1736,14 +1736,14 @@ describe("ActionDispatcher — 手動グループ（herdr に前例が無い独�
 
     it("moveGroupBy: item.move_by を送る", () => {
       const conn = makeConnection();
-      useSessionStore(pinia).layoutChanged({ top: ["g:g1"], groups: { g1: [] } });
+      useSessionStore(pinia).layoutChanged({ top: ["g:g1"], groups: { g1: [] }, ungrouped: [] });
       makeDispatcher(conn).dispatcher.moveGroupBy("g1", "next");
       expect(conn.requests).toEqual([["item.move_by", { item: { kind: "group", groupId: "g1" }, direction: "next" }]]);
     });
 
     it("moveGroupBy: 名前順のときは送らず「名前順では並べ替えできません」と知らせる", () => {
       const conn = makeConnection();
-      useSessionStore(pinia).layoutChanged({ top: ["g:g1"], groups: { g1: [] } });
+      useSessionStore(pinia).layoutChanged({ top: ["g:g1"], groups: { g1: [] }, ungrouped: [] });
       const view = useViewStore(pinia);
       view.workspaceSort = "name";
       makeDispatcher(conn).dispatcher.moveGroupBy("g1", "previous");
@@ -1807,7 +1807,7 @@ describe("ActionDispatcher — 手動グループ（herdr に前例が無い独�
     session.groupUpserted({ id: "g2", label: "b", collapsed: false });
     session.groupUpserted({ id: "g3", label: "c", collapsed: false });
     session.workspaceUpserted(makeWorkspace("w1", [], { groupId: "g2" }));
-    session.layoutChanged({ top: ["g:g3", "g:g2", "g:g1"], groups: { g1: [], g2: ["w:w1"], g3: [] } });
+    session.layoutChanged({ top: ["g:g3", "g:g2", "g:g1"], groups: { g1: [], g2: ["w:w1"], g3: [] }, ungrouped: [] });
     makeDispatcher(conn).dispatcher.openGroupPicker("w1");
     const ctx = useViewStore(pinia).dialogContext;
     expect(ctx).toMatchObject({ kind: "addToGroup", workspaceId: "w1", moving: true });
@@ -2827,7 +2827,7 @@ describe("ActionDispatcher — レイアウトの順（20261004-group-worktree-i
       session.tabUpserted(makeTab("t" + id, id, "p" + id));
     }
     session.groupUpserted({ id: "g1", label: "grp", collapsed: false });
-    session.layoutChanged({ top: ["g:g1", "w:B"], groups: { g1: ["r:/r/.git", "w:A"] } });
+    session.layoutChanged({ top: ["g:g1", "w:B"], groups: { g1: ["r:/r/.git", "w:A"] }, ungrouped: [] });
     return session;
   }
 
@@ -2889,7 +2889,7 @@ describe("ActionDispatcher — キーボード（行の選択・折りたたみ�
     }
     session.groupUpserted({ id: "g1", label: "grp", collapsed: opts.collapsed ?? false });
     session.groupUpserted({ id: "g2", label: "空", collapsed: false });
-    session.layoutChanged({ top: ["g:g1", "g:g2", "w:B"], groups: { g1: ["r:/r/.git", "w:A"], g2: [] } });
+    session.layoutChanged({ top: ["g:g1", "g:g2", "w:B"], groups: { g1: ["r:/r/.git", "w:A"], g2: [] }, ungrouped: [] });
     return session;
   }
 

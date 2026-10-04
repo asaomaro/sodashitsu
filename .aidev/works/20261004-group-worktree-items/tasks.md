@@ -102,7 +102,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
 
 ## 追補 01 のタスク（`amendment-01.md`。T16〜T21 より先に行う）
 
-- [ ] T22: 型——`GitInfo.worktreeKey`、`SidebarLayout` を追補 B の形（`top` はまとまりの順で `"u"` を含む・`ungrouped`）に、`ItemTarget` に `{ kind: "ungrouped" }`、共有の設定に「グループなし」を畳んだかの真偽。スキーマと型のテストを直す
+- [x] T22: 型——`GitInfo.worktreeKey`、`SidebarLayout` を追補 B の形（`top` はまとまりの順で `"u"` を含む・`ungrouped`）に、`ItemTarget` に `{ kind: "ungrouped" }`、共有の設定に「グループなし」を畳んだかの真偽。スキーマと型のテストを直す
       対象: `packages/protocol/src/model.ts`（`GitInfo`・`SidebarLayout`）、`packages/protocol/src/messages.ts`（`ItemTarget`・`item.move`／`item.move_by`・共有の設定の型。`collapsedAutoGroups` の隣）、`packages/protocol/src/messages.test.ts`
       依存: T15
       AC: AC19, AC20

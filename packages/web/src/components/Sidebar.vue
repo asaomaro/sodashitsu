@@ -345,7 +345,9 @@ function workspaceRowKeyAt(x: number, y: number): string | null {
 }
 
 function sameItem(a: ItemTarget, b: ItemTarget): boolean {
-  return a.kind === "group" ? b.kind === "group" && a.groupId === b.groupId : b.kind === "workspace" && a.workspaceId === b.workspaceId;
+  if (a.kind === "group") return b.kind === "group" && a.groupId === b.groupId;
+  if (a.kind === "ungrouped") return b.kind === "ungrouped";
+  return b.kind === "workspace" && a.workspaceId === b.workspaceId;
 }
 
 /**

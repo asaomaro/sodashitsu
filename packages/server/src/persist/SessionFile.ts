@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import type { LayoutNode, PaneStatus, SplitDirection } from "@sodashitsu/protocol";
-import { SidebarLayoutSchema, type NextIdCounters } from "@sodashitsu/protocol";
+import { SidebarLayoutSchema, type NextIdCounters, type SidebarLayout } from "@sodashitsu/protocol";
 import { readFileWithBackup, writeFileAtomic, type ReadResult } from "./atomicFile.js";
 
 /**
@@ -68,7 +68,7 @@ export interface SessionFileData {
    * サイドバーの項目の並び（20261004-group-worktree-items）。**以前の版の保存には無い**——無ければ移行待ち（仮の状態）で復元する。
    * 仮の状態の間の保存には書かない（途中で止まっても次の起動が同じ移行をやり直せるように）。
    */
-  layout?: { top: string[]; groups: Record<string, string[]> } | undefined;
+  layout?: SidebarLayout | undefined;
   /** リポジトリの所属（`repoKey` → グループ id）。`layout` と同じく、仮の状態の間は書かない。 */
   repoGroups?: Record<string, string> | undefined;
   focus: { workspaceId: string; tabId: string; paneId: string } | null;

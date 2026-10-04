@@ -145,7 +145,7 @@ describe("SessionModel: snapshot とイベントの適用（web の StoreAdapter
 });
 
 describe("SessionModel: サイドバーのレイアウト（T16）", () => {
-  const layout = { top: ["w:w2", "w:w1"], groups: {} };
+  const layout = { top: ["w:w2", "w:w1"], groups: {}, ungrouped: [] };
   it("snapshot の layout を持ち、sidebar.layout_changed で置き換える。無ければ null（古いサーバ）", () => {
     const m = new SessionModel();
     m.applySnapshot(snapshot(), "c1");
@@ -158,7 +158,7 @@ describe("SessionModel: サイドバーのレイアウト（T16）", () => {
     m.onChange(changed);
     m.applyEvent({
       event: "sidebar.layout_changed",
-      data: { layout: { top: ["w:w1", "w:w2"], groups: {} } },
+      data: { layout: { top: ["w:w1", "w:w2"], groups: {}, ungrouped: [] } },
     });
     expect(m.layout?.top).toEqual(["w:w1", "w:w2"]);
     expect(changed).toHaveBeenCalledTimes(1);
@@ -167,7 +167,7 @@ describe("SessionModel: サイドバーのレイアウト（T16）", () => {
   it("effectiveLayout は layout が無ければ layoutFromLegacy で導き、マシンの切り替え（reset）で空に戻る", () => {
     const m = new SessionModel();
     m.applySnapshot(snapshot(), "c1");
-    expect(m.effectiveLayout()).toEqual({ top: ["w:w1", "w:w2"], groups: {} });
+    expect(m.effectiveLayout()).toEqual({ top: ["w:w1", "w:w2"], groups: {}, ungrouped: [] });
     m.applySnapshot(snapshot({ layout }), "c1");
     expect(m.effectiveLayout()).toEqual(layout);
     m.reset();

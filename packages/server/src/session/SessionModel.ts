@@ -118,7 +118,9 @@ function insertAt(layout: SidebarLayout, ref: ItemRef, container: GroupId | null
   if (!list || list.includes(ref)) return layout;
   const next = [...list];
   next.splice(index < 0 || index > next.length ? next.length : index, 0, ref);
-  return container === null ? { top: next, groups: layout.groups } : { top: layout.top, groups: { ...layout.groups, [container]: next } };
+  return container === null
+    ? { top: next, groups: layout.groups, ungrouped: layout.ungrouped }
+    : { top: layout.top, groups: { ...layout.groups, [container]: next }, ungrouped: layout.ungrouped };
 }
 
 /** 判定の 3 つの結果（`GitInfoPoller.probe`）。`unknown` は取れなかった（直前の判定を保つ）。 */
@@ -163,7 +165,7 @@ export class SessionModel {
    * 並びは持たず、読むたびに `layoutFromLegacy` で導く（`getLayout`）。最初に書き換える操作の前に `confirmLayout` で確定する。
    * 新しく始めたサーバは空のレイアウトを持つ。
    */
-  private layout: SidebarLayout | null = { top: [], groups: {} };
+  private layout: SidebarLayout | null = { top: [], groups: {}, ungrouped: [] };
   /** リポジトリの所属（`repoKey` → グループ）。開いていないリポジトリの分も残す。`Workspace.groupId`（実効の所属）はここから計算する。 */
   private readonly repoGroups = new Map<string, GroupId>();
   private baseline: ChangeBaseline | null = null;
@@ -479,17 +481,17 @@ export class SessionModel {
     const group: WorkspaceGroup = { id, label, collapsed: false };
     this.groups.set(id, group);
     const gref: ItemRef = `g:${id}`;
-    const base: SidebarLayout = { top: layout.top, groups: { ...layout.groups, [id]: [] } };
+    const base: SidebarLayout = { top: layout.top, groups: { ...layout.groups, [id]: [] }, ungrouped: layout.ungrouped };
     const ref = ws ? itemRefOf(ws) : null;
     const container = ref === null ? undefined : containerOf(layout, ref);
     if (ref !== null && container === null) {
-      this.layout = { top: base.top.map((r) => (r === ref ? gref : r)), groups: { ...base.groups, [id]: [ref] } };
+      this.layout = { top: base.top.map((r) => (r === ref ? gref : r)), groups: { ...base.groups, [id]: [ref] }, ungrouped: layout.ungrouped };
     } else if (ref !== null && container !== undefined) {
       const without = removeItem(base, ref);
       const top = [...without.top];
       const at = top.indexOf(`g:${container}`);
       top.splice(at === -1 ? top.length : at + 1, 0, gref);
-      this.layout = { top, groups: { ...without.groups, [id]: [ref] } };
+      this.layout = { top, groups: { ...without.groups, [id]: [ref] }, ungrouped: layout.ungrouped };
     } else {
       this.layout = insertItem(base, gref, null);
     }
@@ -652,6 +654,8 @@ export class SessionModel {
       this.requireGroup(target.groupId);
       return `g:${target.groupId}`;
     }
+    // 暫定（T24 で直す）: 「グループなし」のまとまり `"u"` はまだ `top` に入らないので、動かす操作は受け付けない（moved:false）。
+    if (target.kind === "ungrouped") return "u";
     return itemRefOf(this.requireWorkspace(target.workspaceId));
   }
 

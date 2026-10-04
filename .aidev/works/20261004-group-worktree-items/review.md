@@ -1579,3 +1579,18 @@ AssertionError: expected 3 to be 7 // Object.is equality
       Tests  1 failed | 6 passed (7)
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/render/chrome
 ```
+
+### T22 壊して落ちる確認
+
+`ItemTargetSchema` の `ungrouped` と `SidebarLayoutSchema` の `ungrouped` を消して `messages.test.ts` を実行（確認後に戻した。`git diff` で差分が T22 の追加分だけであることを確認）。
+
+```
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/messages.test.ts > messages > validates item.move / item.move_by params
+ZodError: [
+ FAIL  src/messages.test.ts > messages > parses SidebarLayout (top に "u"・ungrouped、未知の参照と余計なキーは通る)
+AssertionError: expected { top: [ 'g:g1', 'u', 'g:g2' ], …(1) } to deeply equal { top: [ 'g:g1', 'u', 'g:g2' ], …(2) }
+      Tests  2 failed | 46 passed (48)
+```
+- T22 [nit] 旧形の layout を持つ保存が全体として壊れた扱いになる点が D26 に無い → D26 に補足（T24 で決める） [conv:-]
+- T22 [nit] 壊して落ちる確認の戻しの cmp/diff の出力が無い → 現状の差分で protocol 279 件が通ることを点検で確認済み。記録のみ [conv:regression-negative-control]

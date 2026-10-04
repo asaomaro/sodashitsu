@@ -225,6 +225,7 @@ export type GroupToggleCollapsedParams = z.infer<typeof GroupToggleCollapsedPara
 export const ItemTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), groupId }),
   z.object({ kind: z.literal("workspace"), workspaceId }),
+  z.object({ kind: z.literal("ungrouped") }),
 ]);
 // 同じ入れ物の中で `before` の前へ。null は末尾。入れ物が違う・自分自身などは `{moved:false}`（エラーにしない）。
 export const ItemMoveParams = z.object({ item: ItemTargetSchema, before: ItemTargetSchema.nullable() });
@@ -240,6 +241,7 @@ export interface ItemMoveResult {
 export const SidebarLayoutSchema = z.object({
   top: z.array(z.string()),
   groups: z.record(z.string(), z.array(z.string())),
+  ungrouped: z.array(z.string()),
 });
 
 // --- tab ------------------------------------------------------------------
@@ -635,6 +637,8 @@ export interface SharedPrefs {
   agentSort?: "grouped" | "priority";
   workspaceSort?: "opened" | "name";
   collapsedAutoGroups?: string[];
+  /** 「グループなし」の見出しを畳んでいるか（共有。端末ごとの設定ではない。追補 01 B）。 */
+  ungroupedCollapsed?: boolean;
   onboarding?: boolean;
   tui?: SharedTuiPrefs;
   /** 知らない項目（新しい版のクライアントが書いたもの）も捨てずに持つ。 */

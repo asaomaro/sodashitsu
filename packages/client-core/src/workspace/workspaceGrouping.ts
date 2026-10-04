@@ -447,7 +447,7 @@ export function layoutFromLegacy(workspaces: Workspace[], groups: WorkspaceGroup
     });
   }
   const sorted = [...items].sort((a, b) => a[1].position - b[1].position);
-  const layout: SidebarLayout = { top: [], groups: {} };
+  const layout: SidebarLayout = { top: [], groups: {}, ungrouped: [] };
   for (const g of groups) layout.groups[g.id] = [];
   const topUnits: { ref: ItemRef; position: number }[] = [];
   for (const [ref, item] of sorted) {
