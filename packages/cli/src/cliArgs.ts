@@ -1,5 +1,6 @@
 import {
   AGENT_START_KINDS,
+  ENTITY_ID_RE,
   GRAPH_HISTORY_PER_LINK,
   GRAPH_LINKS_MAX,
   LINK_LIMIT_MAX,
@@ -827,7 +828,7 @@ function parseAgentStart(rest: readonly string[], env: NodeJS.ProcessEnv): Comma
 }
 
 const GRAPH_USAGE = USAGE_LINES.filter((l) => l.startsWith("sodactl graph ")).join("\n");
-const LINK_ID_RE = /^l[1-9][0-9]*$/;
+const LINK_ID_RE = ENTITY_ID_RE;
 /** 線の設定のフラグ（`link add`・`link set` で共通）。 */
 const LINK_CONFIG_VALUES = ["--on", "--prompt", "--output", "--when-busy", "--mode", "--lines", "--limit"] as const;
 /** トリガの線だけの項目・承認の代理の線だけの項目（`--limit` はどの線にも使える）。 */
@@ -849,7 +850,7 @@ function parseChoice<T extends string>(raw: string, flag: string, choices: reado
 }
 
 function parseLinkId(raw: string): string {
-  if (!LINK_ID_RE.test(raw)) throw new CliUsageError(`invalid link id: ${raw}`, "線の id は l1・l2… の形です（sodactl graph show で見られます）。");
+  if (!LINK_ID_RE.test(raw)) throw new CliUsageError(`invalid link id: ${raw}`, "線の id は UUID（先頭 4 文字以上の部分でも指定できます）です。sodactl graph show で見られます。");
   return raw;
 }
 

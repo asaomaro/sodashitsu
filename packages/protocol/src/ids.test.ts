@@ -1,24 +1,27 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { formatId, parseId } from "./ids.js";
+import { ENTITY_ID_RE, shortId, UUID_RE } from "./ids.js";
 
 describe("ids", () => {
-  it("formats an id from kind and number", () => {
-    expect(formatId("w", 1)).toBe("w1");
-    expect(formatId("p", 12)).toBe("p12");
+  it("UUID（小文字・ハイフン付き 36 文字）の形を判定する", () => {
+    expect(UUID_RE.test(randomUUID())).toBe(true);
+    expect(UUID_RE.test("p1")).toBe(false);
+    expect(UUID_RE.test(randomUUID().toUpperCase())).toBe(false);
+    expect(UUID_RE.test(`${randomUUID()}x`)).toBe(false);
   });
 
-  it("parses a well-formed id", () => {
-    expect(parseId("w1")).toEqual({ kind: "w", n: 1 });
-    expect(parseId("p12")).toEqual({ kind: "p", n: 12 });
-    expect(parseId("s4")).toEqual({ kind: "s", n: 4 });
-    expect(parseId("g3")).toEqual({ kind: "g", n: 3 }); // 手動グループ（20260923-workspace-grouping）
+  it("実体の id の形は UUID と、テストが使う短い固定の文字列を通し、空・記号・長すぎるものは通さない", () => {
+    expect(ENTITY_ID_RE.test(randomUUID())).toBe(true);
+    expect(ENTITY_ID_RE.test("p1")).toBe(true);
+    expect(ENTITY_ID_RE.test("")).toBe(false);
+    expect(ENTITY_ID_RE.test("p 1")).toBe(false);
+    expect(ENTITY_ID_RE.test("a:b")).toBe(false);
+    expect(ENTITY_ID_RE.test("a".repeat(65))).toBe(false);
   });
 
-  it("rejects malformed or unknown-kind ids", () => {
-    expect(parseId("")).toBeNull();
-    expect(parseId("w0")).toBeNull(); // 先頭の 0 は許さない（採番は 1 始まりの想定）
-    expect(parseId("x1")).toBeNull(); // 未知の種類
-    expect(parseId("w")).toBeNull();
-    expect(parseId("1w")).toBeNull();
+  it("shortId は先頭 8 文字（短い id はそのまま）", () => {
+    const id = randomUUID();
+    expect(shortId(id)).toBe(id.slice(0, 8));
+    expect(shortId("p1")).toBe("p1");
   });
 });

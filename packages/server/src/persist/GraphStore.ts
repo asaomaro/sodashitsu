@@ -3,8 +3,6 @@ import { GraphSchema, type Graph, type GraphOp } from "@sodashitsu/protocol";
 import {
   applyGraphOps,
   emptyGraph,
-  isLocalNodeKey,
-  parseNodeKey,
   validateGraph,
   type GraphDraftState,
   type GraphIssue,
@@ -20,8 +18,6 @@ export const GRAPH_FILE_NAME = "graph.json";
 interface GraphFileData {
   schema: 1;
   rev: number;
-  /** 次に振る線の番号（消した線の id を使い回さない）。 */
-  nextLinkId: number;
   graph: Omit<Graph, "rev">;
   savedAt: string;
 }
@@ -61,10 +57,6 @@ export class GraphStoreClosedError extends Error {
   }
 }
 
-function linkNumber(id: string): number {
-  return Number(id.slice(1));
-}
-
 function parseGraphFile(raw: string): GraphDraftState {
   const v: unknown = JSON.parse(raw);
   if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("not an object");
@@ -77,17 +69,13 @@ function parseGraphFile(raw: string): GraphDraftState {
   const graph = GraphSchema.parse({ ...inner, rev: r["rev"] }) as Graph;
   // 意味の検証にも落ちるなら壊れているとみなす（手で書き換えたファイル等。起動は止めない）。
   if (validateGraph(graph).length > 0) throw new Error("invalid graph");
-  const maxId = Math.max(0, ...graph.links.map((l) => linkNumber(l.id)));
-  const next = r["nextLinkId"];
-  const nextLinkId =
-    typeof next === "number" && Number.isSafeInteger(next) && next > maxId ? next : maxId + 1;
-  return { graph, nextLinkId };
+  return { graph };
 }
 
 export class GraphStore {
   private readonly filePath: string;
   private readonly backupsDir: string;
-  private state: GraphDraftState = { graph: emptyGraph(), nextLinkId: 1 };
+  private state: GraphDraftState = { graph: emptyGraph() };
   /** 書き込みを 1 本に並べる（rev の確かめと保存の間に別の変更が割り込まない）。 */
   private queue: Promise<unknown> = Promise.resolve();
   private readonly listeners = new Set<(graph: Graph, byClientId: string | null) => void>();
@@ -97,6 +85,8 @@ export class GraphStore {
     stateDir: string,
     /** 変更の知らせ（`onChange`）が投げたとき（ログに残す。既定は何もしない）。 */
     private readonly onListenerError?: (err: unknown) => void,
+    /** 線の id の採番（既定は UUID。テストで決まった値を差し込める）。 */
+    private readonly newLinkId?: () => string,
   ) {
     this.filePath = join(stateDir, GRAPH_FILE_NAME);
     this.backupsDir = join(stateDir, "graph-backups");
@@ -109,27 +99,8 @@ export class GraphStore {
       this.state = result.data;
       return "ok";
     }
-    this.state = { graph: emptyGraph(), nextLinkId: 1 };
+    this.state = { graph: emptyGraph() };
     return result.kind === "missing" ? "missing" : { corrupt: result.backupPath };
-  }
-
-  /**
-   * 手元のノードをすべて無効（`stale`）にする。`session.json` が読めずに pane の id を 1 から振り直した起動で呼ぶ（research F1.2）——保存した `local:p3` が
-   * 別の pane を指さないよう、利用者が選び直すか除くまで線を動かさない。無効にしたノードの数を返す（0 なら保存しない）。
-   * `only` を渡すと、その pane の id（`p3` 等）に当てはまる手元のノードだけを無効にする（読めた `session.json` より新しい pane を指すノード。composeServer）。
-   */
-  async markLocalStale(only?: (paneId: string) => boolean): Promise<number> {
-    let marked = 0;
-    await this.commit((s) => {
-      const nodes = s.graph.nodes.map((n) => {
-        if (!isLocalNodeKey(n.key) || n.stale === true) return n;
-        if (only !== undefined && !only(parseNodeKey(n.key)!.paneId)) return n;
-        marked++;
-        return { ...n, stale: true as const };
-      });
-      return marked === 0 ? null : { ...s, graph: { ...s.graph, nodes } };
-    }, null);
-    return marked;
   }
 
   get(): Graph {
@@ -140,9 +111,9 @@ export class GraphStore {
   update(baseRev: number, ops: readonly GraphOp[], byClientId: string): Promise<Graph> {
     return this.commit((s) => {
       if (baseRev !== s.graph.rev) throw new GraphRevConflictError(baseRev, s.graph.rev);
-      const r = applyGraphOps(s, ops);
+      const r = applyGraphOps(s, ops, this.newLinkId);
       if (!r.ok) throw new GraphInvalidError(r.issues);
-      return { graph: r.graph, nextLinkId: r.nextLinkId };
+      return { graph: r.graph };
     }, byClientId);
   }
 
@@ -254,13 +225,11 @@ export class GraphStore {
       if (changed === null) return this.get();
       const next: GraphDraftState = {
         graph: { ...changed.graph, rev: this.state.graph.rev + (opts.bumpRev ? 1 : 0) },
-        nextLinkId: changed.nextLinkId,
       };
       const { rev, ...graph } = next.graph;
       const data: GraphFileData = {
         schema: 1,
         rev,
-        nextLinkId: next.nextLinkId,
         graph,
         savedAt: new Date().toISOString(),
       };

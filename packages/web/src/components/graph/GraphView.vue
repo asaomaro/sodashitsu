@@ -173,7 +173,7 @@ const infos = computed(
 );
 const nodeInvalid = (key: string): boolean => {
   const i = infos.value.get(key);
-  return !i || i.exists === false || i.stale;
+  return !i || i.exists === false;
 };
 
 interface EdgeView {

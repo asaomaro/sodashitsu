@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ENTITY_ID_RE } from "./ids.js";
 
 /**
  * エージェントの連携のグラフ（20260927-agent-graph の design「インターフェース / データ構造」）。session（`soda serve`）ごとに 1 枚をサーバが持ち、
@@ -8,7 +9,7 @@ import { z } from "zod";
 
 /** ノードの鍵。手元の pane は `local:<paneId>`、登録したマシンの pane は `<machineId(32 桁の 16 進)>:<paneId>`。 */
 export type NodeKey = `${"local" | (string & {})}:${string}`;
-export const NODE_KEY_RE = /^(local|[0-9a-f]{32}):p[1-9][0-9]*$/;
+export const NODE_KEY_RE = /^(local|[0-9a-f]{32}):[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 
 export const GRAPH_NODES_MAX = 64;
 export const GRAPH_LINKS_MAX = 128;
@@ -49,15 +50,10 @@ export interface GraphNode {
   /** 位置（ズーム前の px。グリッドへの吸着はクライアントが行う）。 */
   x: number;
   y: number;
-  /**
-   * 無効（`session.json` が読めずに pane の id を振り直した起動で、手元のノードに付く。research F1.2）。付いたノードの線は動かない。
-   * 利用者がノードを選び直す（`rekey_node`）か除くまで残る。無効でなければ項目ごと無い。
-   */
-  stale?: true;
 }
 
 export interface GraphLink {
-  /** "l1"…（サーバが採番。消した線の id は使い回さない）。 */
+  /** UUID（サーバが採番。消した線の id は使い回さない）。 */
   id: string;
   kind: LinkKind;
   /** trigger: 元 / supervise・approval: 配下。 */
@@ -116,7 +112,7 @@ function utf8Bytes(s: string): number {
 // 実行時は正規表現で確かめ、型はテンプレート文字列の `NodeKey` として扱う（zod の推論は string になるため）。
 const nodeKey = z.string().regex(NODE_KEY_RE) as unknown as z.ZodType<NodeKey>;
 const coord = z.number().finite().min(-GRAPH_COORD_MAX).max(GRAPH_COORD_MAX);
-const linkId = z.string().regex(/^l[1-9][0-9]*$/);
+const linkId = z.string().regex(ENTITY_ID_RE);
 const lines = z.number().int().min(LINK_LINES_MIN).max(LINK_LINES_MAX);
 const limit = z.number().int().min(LINK_LIMIT_MIN).max(LINK_LIMIT_MAX);
 const linkKind = z.enum(["trigger", "supervise", "approval"]);
@@ -136,7 +132,6 @@ export const GraphNodeSchema = z.object({
   key: nodeKey,
   x: coord,
   y: coord,
-  stale: z.literal(true).optional(),
 });
 export const GraphLinkSchema = z.object({
   id: linkId,
@@ -162,7 +157,7 @@ export const GraphSchema = z.object({
 
 /**
  * `graph.update` の 1 つの操作。まとめて 1 rev で当てる（途中で 1 つでも不正なら何も変えない）。
- * - `add_node`・`move_node`・`remove_node`（線も一緒に消える）・`rekey_node`（無効なノードを別の pane に選び直す。線はそのまま付け替え、`stale` を外す）
+ * - `add_node`・`move_node`・`remove_node`（線も一緒に消える）・`rekey_node`（ノードを別の pane に選び直す。線はそのまま付け替える）
  * - `add_link`（id はサーバが採番。`approval`・`limit` は省けば既定）・`update_link`（設定だけ。`count`・`paused` は変えない）・`remove_link`
  */
 export const GraphOpSchema = z.discriminatedUnion("op", [

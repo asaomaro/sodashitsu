@@ -273,7 +273,7 @@ describe("store/graph", () => {
     expect(useViewStore().toasts[0]!.message).toContain("再開できませんでした");
   });
 
-  it("nodeInfo: 画面の接続が向いているマシンの pane は呼び名・エージェント・場所まで。無い pane・stale は無効", () => {
+  it("nodeInfo: 画面の接続が向いているマシンの pane は呼び名・エージェント・場所まで。無い pane は無効", () => {
     const g = useGraphStore();
     const session = useSessionStore();
     session.tabs.set("t1", { id: "t1", workspaceId: "w1" } as never);
@@ -282,7 +282,7 @@ describe("store/graph", () => {
       graphOf({
         nodes: [
           { key: "local:p1", x: 0, y: 0 },
-          { key: "local:p2", x: 0, y: 0, stale: true },
+          { key: "local:p2", x: 0, y: 0 },
         ],
       }),
       "fresh",
@@ -294,7 +294,7 @@ describe("store/graph", () => {
       state: "working",
       location: { workspaceId: "w1", tabId: "t1" },
     });
-    expect(g.nodeInfo("local:p2")).toMatchObject({ name: "pane p2", exists: false, stale: true });
+    expect(g.nodeInfo("local:p2")).toMatchObject({ name: "pane p2", exists: false });
     expect(g.nodeInfo("local:p3")).toMatchObject({ exists: false });
   });
 

@@ -1,3 +1,4 @@
+import { shortId, UUID_RE } from "@sodashitsu/protocol";
 import type {
   Graph,
   GraphLink,
@@ -24,6 +25,7 @@ import {
   type GraphAction,
   type GraphLinkConfigArgs,
 } from "../cliArgs.js";
+import { needsLookup, resolveIdRef, resolvePaneRef } from "../idRef.js";
 import { formatTable, printJson, printLine } from "../output.js";
 import type { SessionStore } from "../session.js";
 import { withSession } from "../withSession.js";
@@ -41,7 +43,8 @@ import { RpcFailure, type SodaClient } from "../wsClient.js";
 
 type GraphCmd = Extract<Command, { kind: "graph" }>;
 
-const PANE_ID_RE = /^p[1-9][0-9]*$/;
+/** 別のマシンの pane の id（そのマシンの一覧は引けないので、完全な id〔UUID〕の形だけ確かめる）。 */
+const REMOTE_PANE_ID_RE = UUID_RE;
 const MACHINE_ID_RE = /^[0-9a-f]{32}$/;
 
 /** 接続した後に引く材料（snapshot は hello のもの、マシンの一覧は要るときに 1 回だけ取る）。 */
@@ -74,10 +77,10 @@ export class GraphContext {
       !mustExist,
     );
     if (machine === LOCAL_MACHINE) return nodeKey(LOCAL_MACHINE, this.localPane(pane, mustExist));
-    if (!PANE_ID_RE.test(pane)) {
+    if (!REMOTE_PANE_ID_RE.test(pane)) {
       throw new CliUsageError(
         `invalid pane in ${spec}`,
-        "別のマシンの pane は <マシンの名前|id>:<pane ID>（例 box:p7）で指定してください（エージェントの名前は手元の pane だけ）。",
+        "別のマシンの pane は <マシンの名前|id>:<pane の完全な id>（UUID）で指定してください（先頭の部分・エージェントの名前は手元の pane だけ）。",
       );
     }
     return nodeKey(machine, pane);
@@ -101,22 +104,25 @@ export class GraphContext {
     }
     if (named[0] !== undefined) return named[0].id;
     if (byId !== undefined) return byId.id;
-    if (PANE_ID_RE.test(spec)) {
+    // 完全な id でも名前でもなければ、pane の id の先頭の部分（4 文字以上で一意）として引く。
+    const prefixed = resolvePaneRef(this.snapshot, spec);
+    if (prefixed !== spec) return prefixed;
+    if (UUID_RE.test(spec)) {
       if (mustExist) throw new RpcFailure("not_found", `pane not found: ${spec}`);
       return spec;
     }
     throw new RpcFailure("not_found", `pane or agent not found: ${spec}`);
   }
 
-  /** 表に出すノードの呼び方（手元は `p3`、別のマシンは `<名前>:p7`。名前が引けない・重なるなら id）。 */
+  /** 表に出すノードの呼び方（手元は id の先頭 8 文字、別のマシンは `<名前>:<先頭 8 文字>`。名前が引けない・重なるなら id。完全な id は `key` の列・`--json`）。 */
   displayOf(key: string): string {
     const parsed = parseNodeKey(key);
     if (parsed === null) return key;
-    if (parsed.machine === LOCAL_MACHINE) return parsed.paneId;
+    if (parsed.machine === LOCAL_MACHINE) return shortId(parsed.paneId);
     const list = this.machines ?? [];
     const label = list.find((m) => m.id === parsed.machine)?.label;
     const unique = label !== undefined && list.filter((m) => m.label === label).length === 1;
-    return `${unique ? label : parsed.machine}:${parsed.paneId}`;
+    return `${unique ? label : parsed.machine}:${shortId(parsed.paneId)}`;
   }
 }
 
@@ -178,7 +184,21 @@ export async function updateGraph(
   }
 }
 
-function findLink(graph: Graph, linkId: string): GraphLink {
+/** 線の指定（完全な id か、一意に決まる先頭の部分）。部分かもしれないときだけグラフを取って引く。 */
+async function lookupLinkRef(client: SodaClient, spec: string): Promise<string> {
+  return needsLookup(spec) ? linkRef(await client.request("graph.get", {}), spec) : spec;
+}
+
+function linkRef(graph: Graph, spec: string): string {
+  return resolveIdRef(
+    graph.links.map((l) => l.id),
+    spec,
+    "link",
+  );
+}
+
+function findLink(graph: Graph, spec: string): GraphLink {
+  const linkId = linkRef(graph, spec);
   const link = graph.links.find((l) => l.id === linkId);
   if (link === undefined) throw new RpcFailure("not_found", `link not found: ${linkId}`);
   return link;
@@ -260,19 +280,25 @@ async function perform(
     case "link-pause":
       return {
         kind: "graph",
-        graph: await client.request("graph.pause", { linkId: action.linkId }),
+        graph: await client.request("graph.pause", {
+          linkId: await lookupLinkRef(client, action.linkId),
+        }),
       };
     case "link-resume":
       return {
         kind: "graph",
-        graph: await client.request("graph.resume", { linkId: action.linkId }),
+        graph: await client.request("graph.resume", {
+          linkId: await lookupLinkRef(client, action.linkId),
+        }),
       };
     case "history":
       return {
         kind: "history",
         runs: (
           await client.request("graph.history", {
-            ...(action.linkId === undefined ? {} : { linkId: action.linkId }),
+            ...(action.linkId === undefined
+              ? {}
+              : { linkId: await lookupLinkRef(client, action.linkId) }),
             ...(action.limit === undefined ? {} : { limit: action.limit }),
           })
         ).runs,
@@ -384,7 +410,7 @@ export function formatLinks(links: readonly GraphLink[], ctx: Display): string {
   return formatTable(
     ["link", "kind", "from", "to", "count", "state", "settings"],
     links.map((l) => [
-      l.id,
+      shortId(l.id),
       l.kind,
       ctx.displayOf(l.from),
       ctx.displayOf(l.to),
@@ -395,9 +421,8 @@ export function formatLinks(links: readonly GraphLink[], ctx: Display): string {
   );
 }
 
-/** ノードの状態: 無効（stale）・閉じた（手元の pane が無い）・ok。別のマシンの pane はここからは確かめられないので `-`。 */
+/** ノードの状態: 閉じた（手元の pane が無い）・ok。別のマシンの pane はここからは確かめられないので `-`。 */
 function nodeStatus(node: Graph["nodes"][number], ctx: Display): string {
-  if (node.stale) return "stale";
   const parsed = parseNodeKey(node.key);
   if (parsed?.machine !== LOCAL_MACHINE) return "-";
   return ctx.snapshot.panes.some((p) => p.id === parsed.paneId) ? "ok" : "closed";
@@ -421,7 +446,7 @@ export function formatHistory(runs: readonly LinkRun[]): string {
     ["time", "link", "result", "reason", "text"],
     runs.map((r) => [
       new Date(r.at).toISOString(),
-      r.linkId,
+      shortId(r.linkId),
       r.result,
       r.reason ?? "-",
       r.text === undefined ? "" : JSON.stringify(clip(r.text, 80)),

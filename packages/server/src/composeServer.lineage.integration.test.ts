@@ -243,7 +243,6 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
 
       const g = graphOf(server);
       expect(g.nodes.map((n) => n.key).sort()).toEqual([key(child), key(parent)].sort());
-      expect(g.nodes.every((n) => n.stale !== true)).toBe(true);
       const sup = linksOf(g, "supervise");
       expect(sup).toHaveLength(1);
       expect(sup[0]).toMatchObject({ from: key(child), to: key(parent), limit: 10 });

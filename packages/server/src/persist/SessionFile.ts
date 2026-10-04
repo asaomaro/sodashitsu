@@ -1,12 +1,12 @@
 import { join } from "node:path";
 import { z } from "zod";
 import type { LayoutNode, PaneStatus, SplitDirection } from "@sodashitsu/protocol";
-import { SidebarLayoutSchema, type NextIdCounters, type SidebarLayout } from "@sodashitsu/protocol";
+import { SidebarLayoutSchema, type SidebarLayout } from "@sodashitsu/protocol";
 import { readFileWithBackup, writeFileAtomic, type ReadResult } from "./atomicFile.js";
 
 /**
- * `session.json` の保存形式（design.md「永続化の形式」。`nextId` は architecture.md の独立点検で
- * split/agent の id も持つよう拡張済み）。プロセスの実体は持たない（cwd から新しいシェルを起動して復元する）。
+ * `session.json` の保存形式（design.md「永続化の形式」）。プロセスの実体は持たない（cwd から新しいシェルを起動して復元する）。
+ * id（workspace・tab・pane・分割・手動グループ）は UUID で、保存した id をそのまま復元する（採番の続きは持たない。連番だった以前の `nextId` は読み捨てる）。
  */
 export interface SessionFilePane {
   id: string;
@@ -71,7 +71,6 @@ export interface SessionFileGroup {
 export interface SessionFileData {
   schema: 1;
   savedAt: string;
-  nextId: NextIdCounters;
   workspaces: SessionFileWorkspace[];
   /** **以前の版の保存には無い**——無ければ空配列（20260923-workspace-grouping）。 */
   groups: SessionFileGroup[];
@@ -143,19 +142,9 @@ const SessionFileGroupSchema: z.ZodType<SessionFileGroup> = z.object({
   label: z.string(),
   collapsed: z.boolean(),
 });
-const NextIdCountersSchema: z.ZodType<NextIdCounters> = z.object({
-  w: z.number(),
-  t: z.number(),
-  p: z.number(),
-  s: z.number(),
-  a: z.number(),
-  // 以前の版の保存には無い——無ければ 1 から採番する（20260923-workspace-grouping）。
-  g: z.number().default(1),
-});
 const SessionFileDataSchema: z.ZodType<SessionFileData> = z.object({
   schema: z.literal(1),
   savedAt: z.string(),
-  nextId: NextIdCountersSchema,
   // 以前の版の保存には無い——無ければ空配列（20260923-workspace-grouping）。
   groups: z.array(SessionFileGroupSchema).default([]),
   workspaces: z.array(SessionFileWorkspaceSchema),

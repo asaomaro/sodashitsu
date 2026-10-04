@@ -1,7 +1,14 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentInfo, Graph, GraphLink, LinkRun } from "@sodashitsu/protocol";
+import {
+  shortId,
+  UUID_RE,
+  type AgentInfo,
+  type Graph,
+  type GraphLink,
+  type LinkRun,
+} from "@sodashitsu/protocol";
 import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
@@ -83,6 +90,8 @@ describe("sodactl graph integration（実物のサーバ）", () => {
   let url: string;
   let token: string;
   let panes: string[];
+  /** 最初の試験で作る線の id（UUID。以後の試験が使う）。 */
+  let l1 = "";
   /** 画面の代わりの接続が受けた `graph.changed`。 */
   const changed: { graph: Graph; byClientId: string | null }[] = [];
 
@@ -213,8 +222,9 @@ describe("sodactl graph integration（実物のサーバ）", () => {
       linkKind: "trigger",
       config: { prompt: "レビューして {output}", output: 40 },
     });
+    l1 = r.link.id;
+    expect(l1).toMatch(UUID_RE);
     expect(r.link).toMatchObject({
-      id: "l1",
       kind: "trigger",
       from: local(p1),
       to: local(p2),
@@ -223,24 +233,27 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     expect(r.graph.nodes.map((n) => n.key)).toEqual([local(p1), local(p2)]);
     expect(server.graph.get().links).toHaveLength(1);
     await waitFor("graph.changed on the viewer", () => changed.length > before);
-    expect(changed.at(-1)!.graph.links.map((l) => l.id)).toEqual(["l1"]);
+    expect(changed.at(-1)!.graph.links.map((l) => l.id)).toEqual([l1]);
 
     const text = await graph<string>({ kind: "show" }, false);
     expect(text).toContain("graph: running");
     expect(text).toMatch(
-      new RegExp(`^l1 +trigger +${p1} +${p2} +0/10 +active +on=done output=40 busy=wait`, "m"),
+      new RegExp(
+        `^${shortId(l1)} +trigger +${shortId(p1)} +${shortId(p2)} +0/10 +active +on=done output=40 busy=wait`,
+        "m",
+      ),
     );
   });
 
   it("link set・link pause・link resume・pause・resume が保存と画面へ反映される", async () => {
-    let r = await graph({ kind: "link-set", linkId: "l1", config: { whenBusy: "skip", limit: 3 } });
+    let r = await graph({ kind: "link-set", linkId: l1, config: { whenBusy: "skip", limit: 3 } });
     expect(r.graph.links[0]).toMatchObject({
       limit: 3,
       trigger: { whenBusy: "skip", prompt: "レビューして {output}" },
     });
-    r = await graph({ kind: "link-pause", linkId: "l1" });
+    r = await graph({ kind: "link-pause", linkId: l1 });
     expect(r.graph.links[0]!.paused).toBe("user");
-    r = await graph({ kind: "link-resume", linkId: "l1" });
+    r = await graph({ kind: "link-resume", linkId: l1 });
     expect(r.graph.links[0]!.paused).toBeNull();
     r = await graph({ kind: "pause" });
     expect(r.graph.paused).toBe(true);
@@ -249,7 +262,7 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     expect(r.graph.paused).toBe(false);
     expect(server.graph.get()).toMatchObject({
       paused: false,
-      links: [{ id: "l1", limit: 3, paused: null }],
+      links: [{ id: l1, limit: 3, paused: null }],
     });
   });
 
@@ -297,9 +310,30 @@ describe("sodactl graph integration（実物のサーバ）", () => {
       local(p4),
     ]);
     r = await graph({ kind: "node-rm", pane: p4 });
-    expect(r.graph.links.map((l) => l.id)).toEqual(["l1"]);
+    expect(r.graph.links.map((l) => l.id)).toEqual([l1]);
     const f = await failure({ kind: "node-add", panes: ["p999"] });
     expect(f.exit).toBe(1);
+    expect(JSON.parse(f.stderr)).toMatchObject({ error: { code: "not_found" } });
+  });
+
+  it("pane・線の指定は、完全な id か一意に決まる先頭の部分（4 文字以上）。曖昧・無い指定は断る", async () => {
+    const [p1, p2] = panes as [string, string];
+    // 先頭の部分で線を指す（線の id も pane の id も）
+    const r = await graph({ kind: "link-set", linkId: l1.slice(0, 8), config: { limit: 3 } });
+    expect(r.graph.links[0]).toMatchObject({ id: l1, limit: 3 });
+    const added = await graph<{ link: GraphLink }>({
+      kind: "link-add",
+      from: p1.slice(0, 8),
+      to: p2.slice(0, 8),
+      linkKind: "approval",
+      config: {},
+    });
+    expect(added.link).toMatchObject({ from: local(p1), to: local(p2) });
+    await graph({ kind: "link-rm", linkId: added.link.id.slice(0, 8) });
+    // 無い部分は not_found、4 文字未満は部分として扱わない
+    const none = await failure({ kind: "link-pause", linkId: "ffffffff" });
+    expect(JSON.parse(none.stderr)).toMatchObject({ error: { code: "not_found" } });
+    const f = await failure({ kind: "node-add", panes: [p1.slice(0, 2)] });
     expect(JSON.parse(f.stderr)).toMatchObject({ error: { code: "not_found" } });
   });
 
@@ -307,17 +341,21 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     const [p1] = panes as [string];
     server.session.updatePaneRuntime(p1, { agent: agentInfo(0) as never });
     server.session.updatePaneRuntime(p1, { agent: agentInfo(1) as never }); // 完了 → 先（p2）にはエージェントが居ない
-    await waitFor("a run", () => server.graphHistory("l1").length > 0);
-    const r = await graph<{ runs: LinkRun[] }>({ kind: "history", linkId: "l1", limit: undefined });
-    expect(r.runs[0]).toMatchObject({ linkId: "l1", result: "skipped", reason: "target_absent" });
+    await waitFor("a run", () => server.graphHistory(l1).length > 0);
+    const r = await graph<{ runs: LinkRun[] }>({ kind: "history", linkId: l1, limit: undefined });
+    expect(r.runs[0]).toMatchObject({ linkId: l1, result: "skipped", reason: "target_absent" });
     const text = await graph<string>({ kind: "history", linkId: undefined, limit: 1 }, false);
-    expect(text).toMatch(/^time +link +result +reason +text\n\S+ +l1 +skipped +target_absent/);
+    expect(text).toMatch(
+      new RegExp(
+        `^time +link +result +reason +text\\n\\S+ +${shortId(l1)} +skipped +target_absent`,
+      ),
+    );
   });
 
   it("rev_conflict（読んだ後に画面が変えた）は取り直して 1 回だけ送り直し、成功する", async () => {
     const revBefore = server.graph.get().rev;
     conflictsToInject = 1;
-    const r = await graph({ kind: "link-set", linkId: "l1", config: { limit: 7 } });
+    const r = await graph({ kind: "link-set", linkId: l1, config: { limit: 7 } });
     expect(conflictsToInject).toBe(0);
     expect(r.graph.links[0]!.limit).toBe(7);
     expect(r.graph.rev).toBe(revBefore + 2); // 割り込んだ変更 + 送り直した変更
@@ -326,7 +364,7 @@ describe("sodactl graph integration（実物のサーバ）", () => {
 
   it("2 回続けて rev_conflict なら送り直しをやめて終了コード 1（rev_conflict）", async () => {
     conflictsToInject = 2;
-    const f = await failure({ kind: "link-set", linkId: "l1", config: { limit: 9 } });
+    const f = await failure({ kind: "link-set", linkId: l1, config: { limit: 9 } });
     expect(conflictsToInject).toBe(0);
     expect(f.exit).toBe(1);
     expect(JSON.parse(f.stderr)).toMatchObject({ error: { code: "rev_conflict" } });
@@ -335,14 +373,14 @@ describe("sodactl graph integration（実物のサーバ）", () => {
 
   it("知らない線は not_found（終了コード 1）", async () => {
     for (const action of [
-      { kind: "link-pause", linkId: "l99" },
-      { kind: "link-rm", linkId: "l99" },
+      { kind: "link-pause", linkId: "99999999" },
+      { kind: "link-rm", linkId: "99999999" },
     ] as const) {
       const f = await failure(action);
       expect(f.exit).toBe(1);
       expect(JSON.parse(f.stderr)).toMatchObject({ error: { code: "not_found" } });
     }
-    const removed = await graph({ kind: "link-rm", linkId: "l1" });
+    const removed = await graph({ kind: "link-rm", linkId: l1 });
     expect(removed.graph.links).toEqual([]);
   });
 

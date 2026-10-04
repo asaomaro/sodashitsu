@@ -42,7 +42,7 @@ function setup() {
   useGraphStore().applyGraph(
     graphOf({
       nodes: [
-        { key: "local:p9", x: 0, y: 0, stale: true },
+        { key: "local:p9", x: 0, y: 0 },
         { key: `${M}:p8`, x: 0, y: 100 },
         { key: `${M}:p1`, x: 0, y: 200 },
       ],

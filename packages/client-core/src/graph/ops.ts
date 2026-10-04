@@ -4,12 +4,13 @@ import { graphNodeRect, nextFreeGraphPosition } from "./geometry.js";
 import { sameNodeMachine } from "./nodeKey.js";
 import { validateGraph, type GraphIssue } from "./validate.js";
 
-/** 採番の続き（消した線の id を使い回さない。`graph.json` に保存する）。 */
+/** 操作を当てる対象（線の id は UUID で採番するので、採番の続きは持たない）。 */
 export interface GraphDraftState {
   graph: Graph;
-  /** 次に振る線の番号（"l<n>"）。 */
-  nextLinkId: number;
 }
+
+/** 線の id（UUID）。 */
+export type LinkIdGenerator = () => string;
 
 export type ApplyOpsResult = ({ ok: true } & GraphDraftState) | { ok: false; issues: GraphIssue[] };
 
@@ -37,9 +38,12 @@ function cloneGraph(g: Graph): Graph {
  * `graph.update` の操作をまとめて当てる（20260927-agent-graph の design「`graph.update`」）。途中で 1 つでも当てられない・当てた結果が
  * 検証に落ちるなら何も変えずに問題を返す。`rev` は変えない（保存する側が +1 する）。純粋（入力を書き換えない）。
  */
-export function applyGraphOps(state: GraphDraftState, ops: readonly GraphOp[]): ApplyOpsResult {
+export function applyGraphOps(
+  state: GraphDraftState,
+  ops: readonly GraphOp[],
+  newLinkId: LinkIdGenerator = () => globalThis.crypto.randomUUID(),
+): ApplyOpsResult {
   const graph = cloneGraph(state.graph);
-  let nextLinkId = state.nextLinkId;
   const fail = (issue: GraphIssue): ApplyOpsResult => ({ ok: false, issues: [issue] });
   const findNode = (key: string): GraphNode | undefined => graph.nodes.find((n) => n.key === key);
   const findLink = (id: string): GraphLink | undefined => graph.links.find((l) => l.id === id);
@@ -91,7 +95,6 @@ export function applyGraphOps(state: GraphDraftState, ops: readonly GraphOp[]): 
           });
         }
         node.key = op.newKey;
-        delete node.stale;
         for (const l of graph.links) {
           if (l.from === op.key) l.from = op.newKey;
           if (l.to === op.key) l.to = op.newKey;
@@ -100,7 +103,7 @@ export function applyGraphOps(state: GraphDraftState, ops: readonly GraphOp[]): 
       }
       case "add_link": {
         const link: GraphLink = {
-          id: `l${nextLinkId}`,
+          id: newLinkId(),
           kind: op.kind,
           from: op.from,
           to: op.to,
@@ -111,7 +114,6 @@ export function applyGraphOps(state: GraphDraftState, ops: readonly GraphOp[]): 
         if (op.trigger !== undefined) link.trigger = op.trigger;
         if (op.approval !== undefined) link.approval = op.approval;
         else if (op.kind === "approval") link.approval = defaultApprovalConfig();
-        nextLinkId++;
         graph.links.push(link);
         break;
       }
@@ -137,7 +139,7 @@ export function applyGraphOps(state: GraphDraftState, ops: readonly GraphOp[]): 
   }
   const issues = validateGraph(graph);
   if (issues.length > 0) return { ok: false, issues };
-  return { ok: true, graph, nextLinkId };
+  return { ok: true, graph };
 }
 
 /**
@@ -160,11 +162,11 @@ export function addMissingNodeOps(
 }
 
 /**
- * サーバの採番の続き（`nextLinkId`）を知らないクライアントが、`graph.update` を送る前に同じ規則で当ててみる（問題が無ければ空）。
- * 採番は今の線の最大の番号の次とみなす（検証は番号の値に依らない）。
+ * `graph.update` を送る前に、同じ規則で当ててみる（問題が無ければ空）。線の id は検証に関わらないので、仮の値を使う
+ * （ブラウザの非セキュアな文脈では `crypto.randomUUID` が無いこともあるため、ここでは使わない）。
  */
 export function checkGraphOps(graph: Graph, ops: readonly GraphOp[]): GraphIssue[] {
-  const maxId = graph.links.reduce((m, l) => Math.max(m, Number(l.id.slice(1)) || 0), 0);
-  const r = applyGraphOps({ graph, nextLinkId: maxId + 1 }, ops);
+  let n = 0;
+  const r = applyGraphOps({ graph }, ops, () => `check-${++n}`);
   return r.ok ? [] : r.issues;
 }

@@ -898,7 +898,7 @@ pnpm --filter @sodashitsu/server exec vitest run src/graph/AgentLineage src/comp
 - [ ] 自動で載ったノードを動かし、線を一時停止する。期待：次の子が載っても、動かしたノードの位置・一時停止の状態は変わらない。別のブラウザ・`sodactl graph show` にも追加が届く。
 - [ ] 載らない場合: ブラウザの端末で手で `claude` を起動した pane・`sodactl --machine <名前> agent start …` で別のマシンに起動した pane は、グラフに出ない。
 - [ ] 打ち込みの起動: Claude に「`sodactl pane split` で pane を作って、そこに `sodactl pane run` で `claude` を打ち込んで」と頼む。期待：`agent start` を使わなくても、検出されたときに載る。
-- [ ] 閉じた子の pane を `sodactl pane close` で閉じる。期待：ノードは自動では消えず、`⚠ 無効` として残る（外すか選び直す）。
+- [ ] 閉じた子の pane を `sodactl pane close` で閉じる。期待：その pane のノードがグラフから自動で外れる（線も一緒に消える。pane の id は UUID で再利用されない）。
 - [ ] `soda serve` を再起動する。期待：グラフに載った子と線は残る。再起動の前に作った pane に後からエージェントが現れても、新たには載らない。
 - [ ] Windows ネイティブの `soda serve`: `agent start` は `unsupported_agent_shell`。`pane split` で作った pane に、手で `claude` を打ち込んだときに載る。
 
@@ -1086,10 +1086,10 @@ AC11 の LAN 用（8443・`~/.local/state/soda-lan`）の `soda serve` を止め
 - [ ] もう一度押すと手放す：期待：押されていない表示に戻り、画面の幅に縮めた表示になる。PC のブラウザが同じ tab を開いて
       いれば、何もしなくても PTY はすぐ PC の窓の大きさに戻る（手放した大きさの権限は、その tab を見ている大きさを決められる
       クライアントへ移る。`stty size` で確かめる）。
-- [ ] 隠れた pane の大きさ（D105）：「この端末に合わせる」を押したまま、pane（p1）で `while sleep 1; do stty size; done` を
-      動かし、`Prefix` → `v` で分割する（スマートフォンは新しい pane を表示し、p1 は隠れる）。10 秒ほど待ってから
-      `Prefix` → `h` で p1 に戻る。期待：p1 に出ている値が、隠れている間もずっと同じ（`1 1` のような値が一度も出ない）。
-      PC のブラウザでも p1 の表示が崩れない。
+- [ ] 隠れた pane の大きさ（D105）：「この端末に合わせる」を押したまま、最初の pane で `while sleep 1; do stty size; done` を
+      動かし、`Prefix` → `v` で分割する（スマートフォンは新しい pane を表示し、最初の pane は隠れる）。10 秒ほど待ってから
+      `Prefix` → `h` で最初の pane に戻る。期待：最初の pane に出ている値が、隠れている間もずっと同じ（`1 1` のような値が一度も出ない）。
+      PC のブラウザでも最初の pane の表示が崩れない。
 
 ### 再接続（D95・D107・D108）
 
@@ -1228,8 +1228,8 @@ pnpm --filter @sodashitsu/web exec vitest run src/components/graph/GraphView.per
    **取り消せない操作を承認させないこと**（確かめるのは無害な操作で）。
 7. impl ⇄ reviewer に往復のトリガを結び上限を 3 にする。3 回で `⏸ 上限` になり、画面の下に知らせが出る。線の再開で回数が 0 に戻る。
    「全体を一時停止」の間は完了させても動かない（履歴に「一時停止中」）。
-8. `soda serve` を再起動（`soda session stop <名前>`〔既定の session は `default`〕か起動した窓で Ctrl+C → 同じ引数で起動）し、配置・線・一時停止の状態が戻り、履歴は空になる。`session.json` を消して起動すると手元のノードが
-   `⚠ 無効` になり、「選び直す…」（`r`）で付け替えられる。
+8. `soda serve` を再起動（`soda session stop <名前>`〔既定の session は `default`〕か起動した窓で Ctrl+C → 同じ引数で起動）し、配置・線・一時停止の状態が戻り、履歴は空になる。`session.json` を消して起動すると、pane の id が前とは別の UUID になり、前の pane の手元のノード（と線）は起動の後に外れる
+   （別の pane に線が付くことはない）。
 
 ### 実物のブラウザで（Chrome・Edge・モバイル）
 

@@ -1439,13 +1439,15 @@ describe("GraphView（無効なノードの選び直し。g03 点検 T4）", () 
     localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
   });
 
-  it("無効（stale）なノードの「選び直す」から pane を選ぶと rekey_node を送り（線は付け替わる）、選び直したノードへフォーカス", async () => {
+  it("無効（pane が無い）なノードの「選び直す」から pane を選ぶと rekey_node を送り（線は付け替わる）、選び直したノードへフォーカス", async () => {
     const { wrapper, fake, store } = await openWithGraph({
       nodes: [
-        { key: "local:p1", x: 0, y: 0, stale: true },
+        { key: "local:p1", x: 0, y: 0 },
         { key: "local:p2", x: 300, y: 0 },
       ],
     });
+    useSessionStore(pinia).panes.delete("p1"); // pane が閉じた（ノードだけ残る）
+    await flush();
     useSessionStore(pinia).panes.set("p3", paneOf("p3", "t1", { label: "fixer" }));
     await flush();
     fake.handlers["graph.update"] = () =>
@@ -1461,12 +1463,10 @@ describe("GraphView（無効なノードの選び直し。g03 点検 T4）", () 
     expect(btn.text()).toBe("選び直す…");
     await btn.trigger("click");
     await flush();
-    // 候補: 同じ番号の今の pane（p1）と、載っていない p3（p2 は載っているので出さない）
+    // 候補: 載っていない p3（p2 は載っているので出さない）
     expect(wrapper.findAll("[data-rekey-key]").map((r) => r.attributes("data-rekey-key"))).toEqual([
-      "local:p1",
       "local:p3",
     ]);
-    expect(wrapper.find(".rekey-picker").text()).toContain("同じ番号の今の pane");
     await wrapper.find('[data-rekey-key="local:p3"]').setValue(true);
     await wrapper.find(".rekey-picker-apply").trigger("click");
     await flush();
@@ -1483,10 +1483,12 @@ describe("GraphView（無効なノードの選び直し。g03 点検 T4）", () 
   it("無効なノードの r でも選び直しを開き、Esc は何も変えずに閉じてノードへ戻る。有効なノードには出さない", async () => {
     const { wrapper, fake } = await openWithGraph({
       nodes: [
-        { key: "local:p1", x: 0, y: 0, stale: true },
+        { key: "local:p1", x: 0, y: 0 },
         { key: "local:p2", x: 300, y: 0 },
       ],
     });
+    useSessionStore(pinia).panes.delete("p1"); // pane が閉じた（ノードだけ残る）
+    await flush();
     expect(wrapper.find('[data-node-key="local:p2"] .graph-node-rekey').exists()).toBe(false);
     const n1 = wrapper.find('[data-node-key="local:p1"]');
     await n1.trigger("keydown", { key: "r" });
@@ -1700,9 +1702,10 @@ describe("GraphView（選び直し・チェックリスト・パネルは排他�
   beforeEach(() => {
     localStorage.setItem("soda.graphView.v1", JSON.stringify({ zoom: 1, panX: 0, panY: 0 }));
   });
+  // 無効なノード＝pane が閉じたノード（p1 の pane を session から外して使う）。
   const staleGraph = {
     nodes: [
-      { key: "local:p1" as const, x: 0, y: 0, stale: true as const },
+      { key: "local:p1" as const, x: 0, y: 0 },
       { key: "local:p2" as const, x: 300, y: 0 },
     ],
   };
@@ -1714,6 +1717,8 @@ describe("GraphView（選び直し・チェックリスト・パネルは排他�
 
   it("選び直しを開いたままチップ・線を押すと選び直しを閉じるだけ（パネルは開かない。probe D）", async () => {
     const { wrapper } = await openWithGraph(staleGraph);
+    useSessionStore(pinia).panes.delete("p1");
+    await flush();
     await wrapper.find('[data-node-key="local:p1"]').trigger("keydown", { key: "r" });
     await flush();
     const chip = wrapper.find('[data-link-chip="l1"]');
@@ -1734,6 +1739,8 @@ describe("GraphView（選び直し・チェックリスト・パネルは排他�
 
   it("選び直しを開いたまま「pane を載せる」でチェックリストだけにし、チェックリストを開いたままの r は選び直しだけにする（probe D2）", async () => {
     const { wrapper } = await openWithGraph(staleGraph);
+    useSessionStore(pinia).panes.delete("p1");
+    await flush();
     await wrapper.find('[data-node-key="local:p1"]').trigger("keydown", { key: "r" });
     await flush();
     await wrapper.find(".graph-add-panes").trigger("click");
@@ -1887,10 +1894,12 @@ describe("GraphView（閉じた後のフォーカスの戻り先。レビュー 
   it("選び直しの応答を待つ間はそのノード、失敗してもそのノードに居る", async () => {
     const { wrapper, fake } = await openWithGraph({
       nodes: [
-        { key: "local:p1", x: 0, y: 0, stale: true },
+        { key: "local:p1", x: 0, y: 0 },
         { key: "local:p2", x: 300, y: 0 },
       ],
     });
+    useSessionStore(pinia).panes.delete("p1"); // pane が閉じた（ノードだけ残る）
+    await flush();
     seedPane3();
     let reject!: (e: unknown) => void;
     fake.handlers["graph.update"] = () => new Promise((_res, rej) => (reject = rej));

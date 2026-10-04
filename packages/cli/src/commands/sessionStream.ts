@@ -1,6 +1,7 @@
 import type { ServerEvent } from "@sodashitsu/protocol";
 import { TerminalQueryFilter } from "../attachOutput.js";
 import type { Command } from "../cliArgs.js";
+import { resolvePaneRefViaConnect } from "../idRef.js";
 import type { SessionStore } from "../session.js";
 import {
   FrameWriter,
@@ -309,10 +310,11 @@ export async function subscribeAndWait(
 }
 
 export async function runPaneObserve(
-  cmd: PaneObserveCmd,
+  cmd0: PaneObserveCmd,
   store: SessionStore,
   io: StreamIo = processStreamIo(),
 ): Promise<void> {
+  const cmd = { ...cmd0, paneId: await resolvePaneRefViaConnect(cmd0.opts, store, cmd0.paneId) }; // 部分の指定は完全な id に直す
   await withSession(cmd.opts, store, async (client) => {
     const stream = new PaneStream(client, cmd.paneId, io);
     await client.hello((evt) => stream.onEvent(evt));
@@ -333,12 +335,14 @@ type PaneControlCmd = Extract<Command, { kind: "pane-control" }>;
  * INPUT フレーム・`pane.attach_resize`・`pane.detach` に写す。不正な行は stderr に理由を出して読み飛ばす（decisions D5）。
  */
 export async function runPaneControl(
-  cmd: PaneControlCmd,
+  cmd0: PaneControlCmd,
   store: SessionStore,
   io: StreamIo = processStreamIo(),
 ): Promise<void> {
   // 自分の pane を制御すると、自分の出力が自分の pane に書かれて流れ続け、入力は自分の入力欄に混ざる（`pane attach` と同じ歯止め。
   // 20260926-agent-skill-file の self_target）。接続する前に断る。observe は読み取りなので断らない。
+  assertNotSelfPane(cmd0.opts, cmd0.paneId, "control");
+  const cmd = { ...cmd0, paneId: await resolvePaneRefViaConnect(cmd0.opts, store, cmd0.paneId) }; // 部分の指定は完全な id に直す
   assertNotSelfPane(cmd.opts, cmd.paneId, "control");
   await withSession(cmd.opts, store, async (client) => {
     const { paneId } = cmd;

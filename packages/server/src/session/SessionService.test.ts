@@ -1,5 +1,5 @@
 import type { AgentInfo, GitInfo, HostInfo, LayoutNode, Workspace } from "@sodashitsu/protocol";
-import { RpcError } from "@sodashitsu/protocol";
+import { RpcError, UUID_RE } from "@sodashitsu/protocol";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -167,7 +167,6 @@ describe("SessionService — `--shell`（T27）", () => {
     const data: SessionFileData = {
       schema: 1,
       savedAt: "2026-09-18T00:00:00Z",
-      nextId: { w: 2, t: 2, p: 2, s: 1, a: 1, g: 1 },
       groups: [],
       workspaces: [
         {
@@ -216,7 +215,6 @@ describe("SessionService — シェルの場所の知らせ（trackCwd）", () =
       await makeService(restored, new EventBus(), new FakePersistScheduler(), shell).restore({
         schema: 1,
         savedAt: "2026-09-28T00:00:00Z",
-        nextId: { w: 2, t: 2, p: 3, s: 1, a: 1, g: 1 },
         groups: [],
         workspaces: [
           {
@@ -1078,14 +1076,13 @@ describe("SessionService — runtime updates", () => {
     service = makeService(terminals, bus, persist);
   });
 
-  it("allocateAgentInstanceId returns monotonically unique ids and schedules a save (T8)", async () => {
+  it("allocateAgentInstanceId returns unique UUIDs and schedules a save (T8)", async () => {
     const a1 = service.allocateAgentInstanceId();
     const a2 = service.allocateAgentInstanceId();
     expect(a1).not.toBe(a2);
-    expect(a1).toMatch(/^a\d+$/);
+    expect(a1).toMatch(UUID_RE);
+    expect(a2).toMatch(UUID_RE);
     expect(persist.touchCount).toBeGreaterThanOrEqual(2);
-    // session.json の nextId に反映され、再起動後も重複しない（getNextIdCounters 経由で確認）。
-    expect(service.getNextIdCounters().a).toBeGreaterThan(2);
   });
 
   // 20260923-workspace-grouping。タスク点検の指摘：sameGit が repoKey/isLinkedWorktree を比較して
@@ -1413,7 +1410,6 @@ describe("SessionService — startup and restore", () => {
     const data: SessionFileData = {
       schema: 1,
       savedAt: "2026-09-18T00:00:00Z",
-      nextId: { w: 2, t: 2, p: 3, s: 1, a: 1, g: 1 },
       groups: [],
       workspaces: [
         {
@@ -1458,13 +1454,14 @@ describe("SessionService — startup and restore", () => {
     expect(p2.status).toBe("running");
     expect(snap.focus).toEqual({ workspaceId: "w1", tabId: "t1", paneId: "p1" });
 
-    // 復元後の新規採番が、保存されていた nextId から続く。
+    // 復元後の新規採番は UUID で、復元した id とは重ならない。
     const { workspace } = await service.createWorkspace("/home/u", "new");
-    expect(workspace.id).toBe("w2");
+    expect(workspace.id).toMatch(UUID_RE);
+    expect(workspace.id).not.toBe("w1");
   });
 
   // 20260923-workspace-grouping。
-  it("restore rebuilds manual groups and each workspace's groupId, and new group ids continue from nextId.g", async () => {
+  it("restore rebuilds manual groups and each workspace's groupId, and new group ids are UUIDs", async () => {
     const terminals = new FakeTerminalManager();
     const bus = new EventBus();
     const persist = new FakePersistScheduler();
@@ -1473,7 +1470,6 @@ describe("SessionService — startup and restore", () => {
     const data: SessionFileData = {
       schema: 1,
       savedAt: "2026-09-18T00:00:00Z",
-      nextId: { w: 2, t: 2, p: 2, s: 1, a: 1, g: 3 },
       groups: [
         { id: "g1", label: "backend", collapsed: true },
         { id: "g2", label: "frontend", collapsed: false },
@@ -1509,7 +1505,7 @@ describe("SessionService — startup and restore", () => {
     ]);
     expect(snap.workspaces[0]!.groupId).toBe("g1");
     const created = service.createGroup("ops");
-    expect(created.id).toBe("g3"); // 保存されていた nextId.g から続く
+    expect(created.id).toMatch(UUID_RE); // 復元した g1・g2 とは別の UUID
   });
 
   // 以前の版の保存には groups・groupId が無い——復元しても空のまま（`autoLabel` と同じ後方互換）。
@@ -1522,7 +1518,6 @@ describe("SessionService — startup and restore", () => {
     const data: SessionFileData = {
       schema: 1,
       savedAt: "2026-09-18T00:00:00Z",
-      nextId: { w: 2, t: 2, p: 2, s: 1, a: 1, g: 1 },
       groups: [],
       workspaces: [
         {
@@ -1881,7 +1876,6 @@ describe("SessionService — workspace の自動の名前", () => {
       await h.service.restore({
         schema: 1,
         savedAt: "2026-09-21T00:00:00Z",
-        nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
         groups: [],
         workspaces: [
           workspaceData("w1", "sub", "/r/sub", true), // 自動（保存した印）→ 決め直して r
@@ -1947,7 +1941,6 @@ describe("SessionService — workspace の自動の名前", () => {
       await service.restore({
         schema: 1,
         savedAt: "2026-09-23T00:00:00Z",
-        nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
         groups: [],
         workspaces: [oneWorkspace("w1", "/r", [paneData("p1", "/r", { kind: "claude", sessionId: "abc-123", reportedAt: 1 })])],
         focus: null,
@@ -1961,7 +1954,6 @@ describe("SessionService — workspace の自動の名前", () => {
       await service.restore({
         schema: 1,
         savedAt: "2026-09-23T00:00:00Z",
-        nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
         groups: [],
         workspaces: [oneWorkspace("w1", "/r", [paneData("p1", "/r", { kind: "codex", sessionId: "thr_1", reportedAt: 1 })])],
         focus: null,
@@ -1975,7 +1967,6 @@ describe("SessionService — workspace の自動の名前", () => {
       await service.restore({
         schema: 1,
         savedAt: "2026-09-23T00:00:00Z",
-        nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
         groups: [],
         workspaces: [oneWorkspace("w1", "/r", [paneData("p1", "/r")])],
         focus: null,
@@ -1989,7 +1980,6 @@ describe("SessionService — workspace の自動の名前", () => {
       await service.restore({
         schema: 1,
         savedAt: "2026-09-23T00:00:00Z",
-        nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
         groups: [],
         workspaces: [oneWorkspace("w1", "/r", [paneData("p1", "/r", { kind: "gemini", sessionId: "x", reportedAt: 1 })])],
         focus: null,
@@ -2003,7 +1993,6 @@ describe("SessionService — workspace の自動の名前", () => {
       await service.restore({
         schema: 1,
         savedAt: "2026-09-23T00:00:00Z",
-        nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
         groups: [],
         workspaces: [oneWorkspace("w1", "/r", [paneData("p1", "/r", { kind: "claude", sessionId: "abc-123", reportedAt: 1 })])],
         focus: null,
@@ -2017,7 +2006,6 @@ describe("SessionService — workspace の自動の名前", () => {
       await service.restore({
         schema: 1,
         savedAt: "2026-09-23T00:00:00Z",
-        nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
         groups: [],
         workspaces: [
           oneWorkspace("w1", "/r", [
@@ -2037,7 +2025,6 @@ describe("SessionService — workspace の自動の名前", () => {
       await service.restore({
         schema: 1,
         savedAt: "2026-09-23T00:00:00Z",
-        nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
         groups: [],
         workspaces: [oneWorkspace("w1", "/r", [paneData("p1", "/r", { kind: "claude", sessionId: "abc-123", reportedAt: 1 })])],
         focus: null,
@@ -2055,7 +2042,6 @@ describe("SessionService — workspace の自動の名前", () => {
         return {
           schema: 1,
           savedAt: "2026-09-26T00:00:00Z",
-          nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
           groups: [],
           workspaces: [oneWorkspace("w1", "/r", panes)],
           focus: null,
@@ -2309,7 +2295,6 @@ describe("SessionService — workspace の自動の名前", () => {
       await service.restore({
         schema: 1,
         savedAt: "2026-09-21T00:00:00Z",
-        nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
         groups: [],
         // w3 は付けた名前（期限を過ぎても決め直さない・フォルダ名にしない——期限は自動の名前のときだけ見る。review ラウンド 4）。
         workspaces: [ws("w1", "/r/a"), ws("w2", "/r/b"), { ...ws("w3", "/r/c"), label: "mine", autoLabel: false }, ws("w4", "/r/d")],
@@ -2336,7 +2321,6 @@ describe("SessionService — workspace の自動の名前", () => {
       await service.restore({
         schema: 1,
         savedAt: "2026-09-21T00:00:00Z",
-        nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
         groups: [],
         workspaces: [ws("w1", "/r/a"), ws("w2", "/r/b"), ws("w3", "/r/c")],
         focus: null,
@@ -2549,7 +2533,6 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
     await h.service.restore({
       schema: 1,
       savedAt: "2026-09-21T00:00:00Z",
-      nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
       groups: [],
       workspaces: [
         {
@@ -2670,7 +2653,6 @@ describe("SessionService — 最初の pane のいまの場所（名前の追従
     await h.service.restore({
       schema: 1,
       savedAt: "2026-09-26T00:00:00Z",
-      nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
       groups: [],
       workspaces: [{ id: "w1", label: "1", cwd: "/q/sub", activeTabId: "t-w1", tabs: [paneTab("w1", "/q/sub")] }],
       focus: null,
@@ -2969,7 +2951,6 @@ describe("SessionService — スクロールバックを $EDITOR で開く（202
     const data: SessionFileData = {
       schema: 1,
       savedAt: "2026-09-26T00:00:00Z",
-      nextId: { w: 2, t: 2, p: 3, s: 2, a: 1, g: 1 },
       groups: [],
       workspaces: [
         {
@@ -3158,7 +3139,6 @@ describe("SessionService — layout の復元（保存と復元）", () => {
   const fileData = (over: Partial<SessionFileData>): SessionFileData => ({
     schema: 1,
     savedAt: "2026-10-04T00:00:00Z",
-    nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 5 },
     groups: [],
     workspaces: [],
     focus: null,
@@ -3302,7 +3282,6 @@ describe("SessionService — 移行の確定（仮の状態 → confirmLayout）
   const fileData = (workspaces: SessionFileData["workspaces"], over: Partial<SessionFileData> = {}): SessionFileData => ({
     schema: 1,
     savedAt: "2026-10-04T00:00:00Z",
-    nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 5 },
     groups: GROUPS,
     workspaces,
     focus: null,

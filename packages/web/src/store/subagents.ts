@@ -1,4 +1,5 @@
 import type { AgentInfo } from "@sodashitsu/protocol";
+import { shortId } from "@sodashitsu/protocol";
 import { paneNameOf, type AgentLookup, type SubagentTarget } from "@sodashitsu/client-core";
 import { summaryPaneName, useMachinesStore } from "./machines.js";
 import { useSessionStore } from "./session.js";
@@ -21,8 +22,8 @@ export function lookupPaneName(target: SubagentTarget): string {
   const machines = useMachinesStore();
   if (target.machineId === machines.selectedId) {
     const pane = useSessionStore().panes.get(target.paneId);
-    return pane ? paneNameOf(pane) : `pane ${target.paneId}`;
+    return pane ? paneNameOf(pane) : `pane ${shortId(target.paneId)}`;
   }
   const entry = machines.summaries[target.machineId]?.panes[target.paneId];
-  return entry ? summaryPaneName(target.paneId, entry) : `pane ${target.paneId}`;
+  return entry ? summaryPaneName(target.paneId, entry) : `pane ${shortId(target.paneId)}`;
 }

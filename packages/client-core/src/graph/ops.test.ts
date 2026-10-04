@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import type { Graph, GraphOp, NodeKey } from "@sodashitsu/protocol";
+import { beforeEach, describe, expect, it } from "vitest";
+import { UUID_RE, type Graph, type GraphOp, type NodeKey } from "@sodashitsu/protocol";
 import {
   APPROVAL_LINES_DEFAULT,
   defaultTriggerConfig,
@@ -7,18 +7,23 @@ import {
   LINK_LIMIT_DEFAULT,
 } from "./defaults.js";
 import { addMissingNodeOps, applyGraphOps, checkGraphOps, type GraphDraftState } from "./ops.js";
-import { GRAPH_LINK_ID_MAX } from "./validate.js";
 
 // 20260927-agent-graph の T2（ops）：graph.update の操作をまとめて当てる。
 const A = "local:p1";
 const B = "local:p2";
 const R: NodeKey = `${"f".repeat(32)}:p1`;
 
-function state(graph: Partial<Graph> = {}, nextLinkId = 1): GraphDraftState {
-  return { graph: { ...emptyGraph(), ...graph }, nextLinkId };
+function state(graph: Partial<Graph> = {}): GraphDraftState {
+  return { graph: { ...emptyGraph(), ...graph } };
 }
+// 線の id は UUID（既定）。形を決め打ちしない試験は、決まった順の id を差し込む。
+let linkSeq = 0;
+const nextLink = (): string => `l${++linkSeq}`;
+beforeEach(() => {
+  linkSeq = 0;
+});
 function ok(s: GraphDraftState, ops: GraphOp[]) {
-  const r = applyGraphOps(s, ops);
+  const r = applyGraphOps(s, ops, nextLink);
   if (!r.ok) throw new Error(JSON.stringify(r.issues));
   return r;
 }
@@ -31,7 +36,6 @@ describe("applyGraphOps", () => {
       { op: "add_link", kind: "trigger", from: A, to: B, trigger: defaultTriggerConfig() },
       { op: "add_link", kind: "approval", from: A, to: B },
     ]);
-    expect(r.nextLinkId).toBe(3);
     expect(r.graph.links).toEqual([
       {
         id: "l1",
@@ -80,27 +84,24 @@ describe("applyGraphOps", () => {
   });
 
   it("move_node・update_link は位置・設定だけを変え、回数・一時停止は保つ", () => {
-    const s1 = state(
-      {
-        nodes: [
-          { key: A, x: 0, y: 0 },
-          { key: B, x: 0, y: 0 },
-        ],
-        links: [
-          {
-            id: "l1",
-            kind: "trigger",
-            from: A,
-            to: B,
-            trigger: defaultTriggerConfig(),
-            limit: 10,
-            count: 7,
-            paused: "limit",
-          },
-        ],
-      },
-      2,
-    );
+    const s1 = state({
+      nodes: [
+        { key: A, x: 0, y: 0 },
+        { key: B, x: 0, y: 0 },
+      ],
+      links: [
+        {
+          id: "l1",
+          kind: "trigger",
+          from: A,
+          to: B,
+          trigger: defaultTriggerConfig(),
+          limit: 10,
+          count: 7,
+          paused: "limit",
+        },
+      ],
+    });
     const r = ok(s1, [
       { op: "move_node", key: B, x: 40, y: 60 },
       {
@@ -119,17 +120,14 @@ describe("applyGraphOps", () => {
     });
   });
 
-  it("rekey_node は無効の印を外し、線を付け替える", () => {
-    const s1 = state(
-      {
-        nodes: [
-          { key: A, x: 0, y: 0, stale: true },
-          { key: B, x: 0, y: 0 },
-        ],
-        links: [{ id: "l1", kind: "supervise", from: A, to: B, limit: 10, count: 0, paused: null }],
-      },
-      2,
-    );
+  it("rekey_node は線を付け替える", () => {
+    const s1 = state({
+      nodes: [
+        { key: A, x: 0, y: 0 },
+        { key: B, x: 0, y: 0 },
+      ],
+      links: [{ id: "l1", kind: "supervise", from: A, to: B, limit: 10, count: 0, paused: null }],
+    });
     const C = "local:p5";
     const r = ok(s1, [{ op: "rekey_node", key: A, newKey: C }]);
     expect(r.graph.nodes[0]).toEqual({ key: C, x: 0, y: 0 });
@@ -145,7 +143,7 @@ describe("applyGraphOps", () => {
     const R2: NodeKey = `${"e".repeat(32)}:p1`;
     const s1 = state({
       nodes: [
-        { key: A, x: 0, y: 0, stale: true },
+        { key: A, x: 0, y: 0 },
         { key: R, x: 0, y: 0 },
       ],
     });
@@ -168,7 +166,7 @@ describe("applyGraphOps", () => {
   it("rekey_node で既に載っている鍵へ移すのは duplicate_node、トリガの線を設定なしで足すのは config_mismatch（g01 点検）", () => {
     const s1 = state({
       nodes: [
-        { key: A, x: 0, y: 0, stale: true },
+        { key: A, x: 0, y: 0 },
         { key: B, x: 0, y: 0 },
       ],
     });
@@ -178,47 +176,39 @@ describe("applyGraphOps", () => {
     });
     expect(applyGraphOps(s1, [{ op: "rekey_node", key: A, newKey: A }])).toMatchObject({
       ok: true,
-    }); // 同じ鍵は選び直し（印だけ外れる）
+    }); // 同じ鍵は何も変えない
     expect(applyGraphOps(s1, [{ op: "add_link", kind: "trigger", from: A, to: B }])).toMatchObject({
       ok: false,
       issues: [{ code: "config_mismatch" }],
     });
   });
 
-  it("次の番号が安全な整数の範囲を超えるなら add_link を断る（01 のレビュー ラウンド 1）", () => {
-    const s1 = state(
-      {
-        nodes: [
-          { key: A, x: 0, y: 0 },
-          { key: B, x: 0, y: 0 },
-        ],
-      },
-      GRAPH_LINK_ID_MAX,
-    );
-    expect(ok(s1, [{ op: "add_link", kind: "supervise", from: A, to: B }]).graph.links[0]!.id).toBe(
-      `l${GRAPH_LINK_ID_MAX}`,
-    );
-    const s2 = { ...s1, nextLinkId: GRAPH_LINK_ID_MAX + 1 };
-    expect(
-      applyGraphOps(s2, [{ op: "add_link", kind: "supervise", from: A, to: B }]),
-    ).toMatchObject({
-      ok: false,
-      issues: [{ code: "link_id_too_large" }],
+  it("既定の線の id は UUID で、採番のたびに別の値（消した線の id も使い回さない）", () => {
+    const s0 = state({
+      nodes: [
+        { key: A, x: 0, y: 0 },
+        { key: B, x: 0, y: 0 },
+      ],
     });
+    const r1 = applyGraphOps(s0, [{ op: "add_link", kind: "supervise", from: A, to: B }]);
+    if (!r1.ok) throw new Error(JSON.stringify(r1.issues));
+    const id1 = r1.graph.links[0]!.id;
+    expect(id1).toMatch(UUID_RE);
+    const r2 = applyGraphOps(s0, [{ op: "add_link", kind: "supervise", from: A, to: B }]);
+    if (!r2.ok) throw new Error(JSON.stringify(r2.issues));
+    expect(r2.graph.links[0]!.id).toMatch(UUID_RE);
+    expect(r2.graph.links[0]!.id).not.toBe(id1);
   });
 
   it("update_link で上限を回数以下に下げたら paused: limit にする（既に止まっている線・上限が回数より大きい線は変えない。g02 点検）", () => {
     const base = (count: number, paused: "user" | "limit" | null) =>
-      state(
-        {
-          nodes: [
-            { key: A, x: 0, y: 0 },
-            { key: B, x: 0, y: 0 },
-          ],
-          links: [{ id: "l1", kind: "supervise", from: A, to: B, limit: 10, count, paused }],
-        },
-        2,
-      );
+      state({
+        nodes: [
+          { key: A, x: 0, y: 0 },
+          { key: B, x: 0, y: 0 },
+        ],
+        links: [{ id: "l1", kind: "supervise", from: A, to: B, limit: 10, count, paused }],
+      });
     expect(
       ok(base(5, null), [{ op: "update_link", id: "l1", limit: 5 }]).graph.links[0],
     ).toMatchObject({ limit: 5, count: 5, paused: "limit" });

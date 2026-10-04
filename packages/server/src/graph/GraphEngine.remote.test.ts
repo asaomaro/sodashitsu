@@ -402,7 +402,7 @@ describe("GraphEngine — 別のマシンの監督役（04）", () => {
     expect(text).toContain("r-p2（pane p2・claude・手元）");
   });
 
-  it("監督役のマシンが切れている間は知らせず、繋がったら知らせる。同じエージェントのまま繋ぎ直しても知らせ直さない", async () => {
+  it("監督役のマシンが切れている間は知らせず、繋がったら知らせる。繋ぎ直しても・エージェントが入れ替わっても知らせ直さない", async () => {
     const t = setup([]);
     t.remote.setUp(false);
     t.store.set(graphOf([supervise("l1", L1, R1)]));
@@ -420,13 +420,13 @@ describe("GraphEngine — 別のマシンの監督役（04）", () => {
     t.advance(SUPERVISOR_DEBOUNCE_MS * 2);
     await flush();
     expect(t.remote.prompts).toHaveLength(1);
-    // 入れ替わっていれば知らせる
+    // 入れ替わっても知らせ直さない（pane に残った古い配下の知らせを、新しいエージェントに送らない）
     t.remote.setUp(false);
     t.remote.agents.set("p1", agent("ra2", 0));
     t.remote.setUp(true);
-    t.advance(SUPERVISOR_DEBOUNCE_MS);
+    t.advance(SUPERVISOR_DEBOUNCE_MS * 2);
     await flush();
-    expect(t.remote.prompts).toHaveLength(2);
+    expect(t.remote.prompts).toHaveLength(1);
   });
 
   it("知らせの送信で切れていた（machine_unavailable）なら、失敗を残さず繋がったときに送り直す", async () => {

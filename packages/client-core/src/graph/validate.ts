@@ -25,13 +25,7 @@ export type GraphIssueCode =
   | "prompt_too_long"
   | "empty_prompt"
   | "config_mismatch"
-  | "duplicate_link_id"
-  | "link_id_too_large";
-
-/**
- * 線の id（"l<n>"）の番号の上限。次の番号（+1）も安全な整数に収まるよう `MAX_SAFE_INTEGER - 1`（超えると +1 が丸められて id が重なる）。
- */
-export const GRAPH_LINK_ID_MAX = Number.MAX_SAFE_INTEGER - 1;
+  | "duplicate_link_id";
 
 export interface GraphIssue {
   code: GraphIssueCode;
@@ -153,13 +147,6 @@ export function validateGraph(graph: Pick<Graph, "nodes" | "links">): GraphIssue
         linkId: link.id,
       });
     linkIds.add(link.id);
-    if (!(Number(link.id.slice(1)) <= GRAPH_LINK_ID_MAX)) {
-      issues.push({
-        code: "link_id_too_large",
-        message: "線の番号が大きすぎます。",
-        linkId: link.id,
-      });
-    }
     for (const end of [link.from, link.to]) {
       if (!keys.has(end))
         issues.push({
