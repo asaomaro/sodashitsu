@@ -175,6 +175,12 @@ export class PrefsModel {
     return this.local.sidebarCollapsed === true;
   }
 
+  /** サイドバーの区画（spaces・agents）の折りたたみ（手元の状態。20261004-ui-interaction-polish）。 */
+  get sectionsCollapsed(): { spaces: boolean; agents: boolean } {
+    const f = this.local.sidebarSectionsCollapsed;
+    return { spaces: f?.spaces === true, agents: f?.agents === true };
+  }
+
   get narrowThreshold(): number {
     return this.tuiNumber("narrowThreshold", DEFAULT_NARROW_THRESHOLD, 0, 1000);
   }

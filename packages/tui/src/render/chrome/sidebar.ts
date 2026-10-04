@@ -50,8 +50,10 @@ export type SidebarTarget =
   | { kind: "agent"; paneId: string }
   /** 「＋」（新しい workspace。herdr の M14）。`x` の桁だけが当たり。 */
   | { kind: "newWorkspace"; x: number }
-  /** spaces と agents の区切りの行（ドラッグで spaces の区画の高さ。herdr の H19b）。 */
+  /** spaces と agents の区切りの行（ドラッグで spaces の区画の高さ。動かさずに離せば agents の折りたたみ。herdr の H19b）。 */
   | { kind: "sectionDivider" }
+  /** spaces の見出しの行（押すと spaces の折りたたみ。「＋」と並び順の桁は別の当たり。20261004-ui-interaction-polish）。 */
+  | { kind: "sectionHeader"; section: "spaces" }
   /** 並び順の切り替え（web の `sidebar-sort-btn`・herdr の `agent_sort_toggle`。M14）。`x`〜`x+w` だけが当たり。 */
   | { kind: "sort"; section: "spaces" | "agents"; x: number; w: number }
   /** サイドバーを畳む「«」（web の開閉のボタン・herdr の `sidebar_toggle`。M14）。 */
@@ -454,14 +456,25 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     list.flatMap((line) => line.rows.map((_, sub) => ({ line, sub })));
   const spacesLines = visual(lines);
   const agentRows = visual(agentLines);
+  // 区画の折りたたみ（手元の tui-state。20261004-ui-interaction-polish）。agents が 0 件のときは畳む対象が無いので agents の折りたたみは効かない。
+  const folded = prefs.sectionsCollapsed;
+  const spacesFolded = folded.spaces;
+  const agentsFolded = agentLines.length > 0 && folded.agents;
   let spacesH: number;
   let agentsH = 0;
   if (agentLines.length > 0) {
-    // spaces の区画の高さ（手元の tui-state の `sidebarSpacesRows`。無ければ中身の高さ＋1）。区切りの行は必ず見える所に置く。
-    const natural = spacesLines.length + 1;
-    spacesH = Math.max(1, Math.min((prefs.sidebarSpacesRows ?? natural + 1) - 1, bodyH - 3));
-    agentsH = Math.max(0, bodyH - 1 - spacesH - 1);
-  } else spacesH = Math.max(0, bodyH - 1);
+    if (spacesFolded || agentsFolded) {
+      // 畳んだ区画は 0 行（見出し・区切りの行だけ）。もう片方が残りを使う。両方畳めば、残りは空く。
+      const rest = Math.max(0, bodyH - 2);
+      spacesH = spacesFolded ? 0 : rest;
+      agentsH = agentsFolded ? 0 : rest;
+    } else {
+      // spaces の区画の高さ（手元の tui-state の `sidebarSpacesRows`。無ければ中身の高さ＋1）。区切りの行は必ず見える所に置く。
+      const natural = spacesLines.length + 1;
+      spacesH = Math.max(1, Math.min((prefs.sidebarSpacesRows ?? natural + 1) - 1, bodyH - 3));
+      agentsH = Math.max(0, bodyH - 1 - spacesH - 1);
+    }
+  } else spacesH = spacesFolded ? 0 : Math.max(0, bodyH - 1);
 
   /** 見せる項目の最初の行と行数（複数行の項目は全部の行を見せる。見つからなければ -1）。 */
   const revealRange = (
@@ -500,19 +513,30 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   );
   scroll.reveal = null;
 
-  // 見出し「Spaces」＋並び順＋「＋」
+  // 見出し「▾ Spaces」（畳んでいれば「▸ Spaces <数>」）＋並び順＋「＋」。押すと spaces の折りたたみ（「＋」と並び順は別の当たり）。
   const headerY = rect.y;
-  grid.text(rect.x + 1, headerY, truncate("Spaces", inner - 1), fg, bg, ATTR.dim);
+  const spacesTitle = `${spacesFolded ? "▸" : "▾"} Spaces`;
+  // 「＋」と並び順が入る幅（`inner >= 10`）では、その手前までに収める。入らない狭い幅では印と題だけ（件数は出さない）。
+  const headerRoom = inner >= 10 ? inner - 4 : inner - 1;
+  const countText = ` ${workspaces.length}`;
+  const spacesHead =
+    spacesFolded && stringWidth(spacesTitle + countText) <= headerRoom
+      ? spacesTitle + countText
+      : spacesTitle;
+  grid.text(rect.x + 1, headerY, truncate(spacesHead, inner - 1), fg, bg, ATTR.dim);
+  hits.push({ y: headerY, kind: "sectionHeader", section: "spaces" });
   if (inner >= 10) {
     const x = rect.x + inner - 2;
     grid.set(x, headerY, "+", 1, fg, activeBg);
     hits.push({ y: headerY, kind: "newWorkspace", x });
-    const label = WORKSPACE_SORT_LABEL[prefs.workspaceSort];
-    const lw = stringWidth(label);
-    const lx = x - 1 - lw;
-    if (lx > rect.x + 1 + stringWidth("Spaces")) {
-      grid.text(lx, headerY, label, fg, bg, ATTR.underline);
-      hits.push({ y: headerY, kind: "sort", section: "spaces", x: lx, w: lw });
+    if (!spacesFolded) {
+      const label = WORKSPACE_SORT_LABEL[prefs.workspaceSort];
+      const lw = stringWidth(label);
+      const lx = x - 1 - lw;
+      if (lx > rect.x + 1 + stringWidth(spacesTitle)) {
+        grid.text(lx, headerY, label, fg, bg, ATTR.underline);
+        hits.push({ y: headerY, kind: "sort", section: "spaces", x: lx, w: lw });
+      }
     }
   }
   paintSection(
@@ -530,16 +554,31 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
 
   if (agentLines.length > 0) {
     const y = headerY + 1 + spacesH;
-    // 区切りの行：罫線と見出しと並び順。ドラッグで区画の高さを変える。
+    // 区切りの行：罫線と見出し（`▾ Agents`。畳んでいれば `▸ Agents <数> <状態>`）と並び順。ドラッグで区画の高さを変え、動かさずに離せば agents の折りたたみ。
     for (let x = rect.x; x < rect.x + inner; x++) grid.set(x, y, "─", 1, border, bg);
-    grid.text(rect.x + 1, y, ` ${truncate("Agents", inner - 4)} `, fg, bg, ATTR.dim);
+    const agentsTitle = `${agentsFolded ? "▸" : "▾"} Agents`;
+    const blocked = agentPanes.some((p) => model.displayStateOf(p) === "blocked");
+    const glyph = blocked ? glyphFor("blocked", prefs.statusSymbols) : "";
+    const countPart = agentsFolded ? ` ${agentLines.length}` : "";
+    const glyphPart = agentsFolded && glyph !== "" ? ` ${glyph}` : "";
+    // 入りきらない狭い幅では印と題だけ。
+    const room = inner - 4;
+    const full = stringWidth(agentsTitle + countPart + glyphPart);
+    const head = full <= room ? agentsTitle + countPart : agentsTitle;
+    grid.text(rect.x + 1, y, ` ${truncate(head, room)} `, fg, bg, ATTR.dim);
+    if (full <= room && glyphPart !== "") {
+      const gx = rect.x + 1 + 1 + stringWidth(head) + 1;
+      grid.text(gx, y, glyph, stateColor(theme, "blocked"), bg);
+    }
     hits.push({ y, kind: "sectionDivider" });
-    const label = AGENT_SORT_LABEL[prefs.agentSort];
-    const lw = stringWidth(label);
-    const lx = rect.x + inner - 1 - lw;
-    if (lx > rect.x + 10) {
-      grid.text(lx, y, label, fg, bg, ATTR.underline);
-      hits.push({ y, kind: "sort", section: "agents", x: lx, w: lw });
+    if (!agentsFolded) {
+      const label = AGENT_SORT_LABEL[prefs.agentSort];
+      const lw = stringWidth(label);
+      const lx = rect.x + inner - 1 - lw;
+      if (lx > rect.x + 2 + stringWidth(agentsTitle) + 1) {
+        grid.text(lx, y, label, fg, bg, ATTR.underline);
+        hits.push({ y, kind: "sort", section: "agents", x: lx, w: lw });
+      }
     }
     paintSection(grid, rect, inner, y + 1, agentsH, agentRows, scroll.agents, "agents", ctx, hits);
   }

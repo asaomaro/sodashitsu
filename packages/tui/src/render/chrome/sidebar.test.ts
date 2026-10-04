@@ -442,3 +442,88 @@ describe("サイドバー：木の線の最後と navigate の見出しの選択
     }
   });
 });
+
+// 20261004-ui-interaction-polish（区画の折りたたみ。高さの 4 通り・見出しと区切りの行・当たり）。
+describe("サイドバーの区画の折りたたみ", () => {
+  const H = 24;
+  function build(collapsed: { spaces?: true; agents?: true }, opts: { agents?: boolean; blocked?: boolean; w?: number } = {}) {
+    const list = [ws("a"), ws("b"), ws("c")];
+    const states: Record<string, AgentInfo["state"]> =
+      opts.agents === false ? {} : { a: opts.blocked ? "blocked" : "working", b: "idle" };
+    const s = setup(list, { states });
+    s.prefs.setLocal({ sidebarSectionsCollapsed: collapsed });
+    const w = opts.w ?? 40;
+    const grid = new Grid(w, H);
+    const hits = paintSidebar(grid, { x: 0, y: 0, w, h: H }, s.ctx) as SidebarHit[];
+    const text = (y: number) => {
+      let t = "";
+      for (let x = 0; x < w - 1; x++) t += grid.cell(x, y).ch;
+      return t.trimEnd();
+    };
+    const divY = hits.find((h) => h.kind === "sectionDivider")?.y ?? -1;
+    const agentsH = hits.filter((h) => h.section === "agents" && h.kind !== "sectionDivider" && h.kind !== "sort").length;
+    const spacesH = hits.filter((h) => h.section === "spaces" && h.kind !== "sort" && h.kind !== "sectionHeader").length;
+    return { hits, text, divY, agentsH, spacesH };
+  }
+
+  it("両方開いている: 見出しは「▾ Spaces」・区切りは「▾ Agents」（今の高さのまま）", () => {
+    const r = build({});
+    expect(r.text(0)).toMatch(/^ ▾ Spaces/);
+    expect(r.text(r.divY)).toMatch(/^─ ▾ Agents/);
+    expect(r.spacesH + r.agentsH + 3).toBe(H);
+  });
+
+  it("spaces を畳む: 見出しは「▸ Spaces 3」・spaces は 0 行・区切りは見出しのすぐ下・agents が残りを使う（並び順は出ない）", () => {
+    const r = build({ spaces: true });
+    expect(r.text(0)).toMatch(/^ ▸ Spaces 3/);
+    expect(r.text(0)).not.toContain("開いた順");
+    expect(r.divY).toBe(1);
+    expect(r.spacesH).toBe(0);
+    expect(r.agentsH).toBe(H - 3);
+  });
+
+  it("agents を畳む: 区切りはいちばん下（「«」の上）・agents は 0 行・spaces が残りを使う。「▸ Agents 2」と並び順なし", () => {
+    const r = build({ agents: true });
+    expect(r.divY).toBe(H - 2);
+    expect(r.text(r.divY)).toMatch(/^─ ▸ Agents 2/);
+    expect(r.text(r.divY)).not.toContain("優先度順");
+    expect(r.text(r.divY)).not.toContain("グループ順");
+    expect(r.agentsH).toBe(0);
+    expect(r.spacesH).toBe(H - 3);
+  });
+
+  it("両方畳む: どちらも 0 行・区切りは見出しのすぐ下", () => {
+    const r = build({ spaces: true, agents: true });
+    expect(r.spacesH).toBe(0);
+    expect(r.agentsH).toBe(0);
+    expect(r.divY).toBe(1);
+  });
+
+  it("畳んだ agents の見出しに、入力待ち（blocked）があるときだけ状態の字形が付く", () => {
+    const plain = build({ agents: true });
+    const blocked = build({ agents: true }, { blocked: true });
+    expect(plain.text(plain.divY)).toMatch(/Agents 2\s*$|Agents 2 ─/);
+    expect(blocked.text(blocked.divY)).toMatch(/Agents 2 \S/);
+    expect(blocked.text(blocked.divY)).not.toBe(plain.text(plain.divY));
+  });
+
+  it("agents が 0 件: 区切りの行は今までどおり出ない。agents の折りたたみは効かず、spaces の折りたたみは見出しだけにする", () => {
+    const open = build({ agents: true }, { agents: false });
+    expect(open.divY).toBe(-1);
+    expect(open.spacesH).toBe(H - 2);
+    const folded = build({ spaces: true }, { agents: false });
+    expect(folded.spacesH).toBe(0);
+    expect(folded.text(0)).toMatch(/^ ▸ Spaces 3/);
+  });
+
+  it("spaces の見出しの行に sectionHeader の当たり（「＋」・並び順より前）", () => {
+    const r = build({});
+    const row = r.hits.filter((h) => h.y === 0).map((h) => h.kind);
+    expect(row).toEqual(["sectionHeader", "newWorkspace", "sort"]);
+  });
+
+  it("狭い幅では、畳んでいても印と題だけ（件数は出さない）", () => {
+    const r = build({ spaces: true }, { w: 13 });
+    expect(r.text(0)).toMatch(/^ ▸ Spaces\s+\+$/);
+  });
+});

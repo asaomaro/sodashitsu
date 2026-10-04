@@ -191,3 +191,17 @@ AssertionError: expected <button …(2)></button> to be <button …(1)></button>
      × 押すと畳み（aria-expanded=false・印 ▸・件数）、もう一度で開く。並び順のボタンは畳んでいる間は出ない 20ms
 AssertionError: expected true to be false // Object.is equality
 ```
+
+#### T10 `tui/render/chrome/sidebar.ts`（生の出力。変異ごと）
+```
+変異: spaces を畳んでも spacesH を 0 にしない
+     × spaces を畳む: 見出しは「▸ Spaces 3」・spaces は 0 行・区切りは見出しのすぐ下・agents が残りを使う 6ms
+     × 両方畳む: どちらも 0 行・区切りは見出しのすぐ下 1ms
+AssertionError: expected 22 to be 1 // Object.is equality
+変異: blocked の字形を出さない（const blocked = false）
+     × 畳んだ agents の見出しに、入力待ち（blocked）があるときだけ状態の字形が付く 4ms
+AssertionError: expected '─ ▸ Agents 2 ────…' not to be '─ ▸ Agents 2 ────…'
+変異: 畳んでも agents の並び順を出す（if (!agentsFolded) → if (true)）
+     × agents を畳む: 区切りはいちばん下… 5ms
+AssertionError: expected '─ ▸ Agents 2 ───────────────グループ順─' not to contain 'グループ順'
+```

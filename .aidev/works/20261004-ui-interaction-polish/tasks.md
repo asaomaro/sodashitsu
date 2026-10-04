@@ -51,7 +51,7 @@ design.md のとおり、下から積む。純関数（T1）→ 色の変数（T
       対象: `packages/web/src/components/Sidebar.vue`、`Sidebar.test.ts`
       依存: T1, T8
       AC: AC10, AC17, AC-I2, AC-I3
-- [ ] T10: 端末版の保存と描画——`tuiState.ts` の `sidebarSectionsCollapsed`（読み込みの検証・書き出し）、`PrefsModel` の getter、`sidebar.ts` の高さの計算（design「端末版」の 4 通り。agents が 0 件のときは今のまま）・見出しの行（`▾ Spaces`／`▸ Spaces <数>`）・区切りの行（`─ ▾ Agents ─…`／`─ ▸ Agents <数> <状態> ─…`。畳んでいる間は並び順のラベルなし・狭い幅では印と題だけ）・hit `sectionHeader`。単体テスト（4 通りの高さ・文字・hit・保存）
+- [x] T10: 端末版の保存と描画——`tuiState.ts` の `sidebarSectionsCollapsed`（読み込みの検証・書き出し）、`PrefsModel` の getter、`sidebar.ts` の高さの計算（design「端末版」の 4 通り。agents が 0 件のときは今のまま）・見出しの行（`▾ Spaces`／`▸ Spaces <数>`）・区切りの行（`─ ▾ Agents ─…`／`─ ▸ Agents <数> <状態> ─…`。畳んでいる間は並び順のラベルなし・狭い幅では印と題だけ）・hit `sectionHeader`。単体テスト（4 通りの高さ・文字・hit・保存）
       対象: `packages/tui/src/local/tuiState.ts`・`model/PrefsModel.ts`・`render/chrome/sidebar.ts`、`sidebar.test.ts`・`PrefsModel.test.ts`・`render/Renderer.test.ts:111-123`
       依存: T4
       AC: AC13
