@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { PANE_OP_ASK_OPEN, PaneAskOpenParams } from "@sodashitsu/protocol";
+import { AskFeaturesParams, PANE_OP_ASK_FEATURES, PANE_OP_ASK_OPEN, PaneAskOpenParams, type AskFeatures } from "@sodashitsu/protocol";
 import type { AskService } from "../ask/AskService.js";
 import type { PaneOpDef } from "./PaneOpRegistry.js";
 
@@ -32,5 +32,14 @@ export function askOpenOp(
       else ctx.signal.addEventListener("abort", cancel, { once: true });
       return result;
     },
+  };
+}
+
+/** 機能確認（`ask.features`。20261004-ask-media-popup）。ログイン不要の受け口でも読める（定義も回答も含まない）。 */
+export function askFeaturesOp(asks: Pick<AskService, "features">): PaneOpDef<z.infer<typeof AskFeaturesParams>> {
+  return {
+    name: PANE_OP_ASK_FEATURES,
+    params: AskFeaturesParams,
+    handler: (): AskFeatures => asks.features(),
   };
 }

@@ -1,7 +1,7 @@
 import type { AskAnswers, AskResult, ServerEvent } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { EventBus } from "../bus/EventBus.js";
-import { AskService, type AskServiceTimers } from "./AskService.js";
+import { AskService, type AskServiceOptions, type AskServiceTimers } from "./AskService.js";
 
 class FakeTimers implements AskServiceTimers {
   private seq = 0;
@@ -33,7 +33,7 @@ const SPEC = {
   ],
 };
 
-function setup(o: { browsers?: string[]; panes?: string[] } = {}) {
+function setup(o: { browsers?: string[]; panes?: string[]; media?: AskServiceOptions["media"] } = {}) {
   const bus = new EventBus();
   const events: ServerEvent[] = [];
   bus.subscribe((e) => events.push(e));
@@ -49,6 +49,7 @@ function setup(o: { browsers?: string[]; panes?: string[] } = {}) {
     timers,
     random: () => `ask${++n}`,
     logger: { info: (msg, fields) => void logs.push({ msg, fields }) },
+    media: o.media ?? { prepare: () => Promise.reject(new Error("prepare is not expected here")) },
   });
   const askEvents = (): string[] => events.filter((e) => e.event.startsWith("ask.")).map((e) => `${e.event}:${(e.data as { askId: string }).askId}`);
   return { asks, bus, timers, panes, browsers, events, askEvents, logs };
@@ -334,5 +335,177 @@ describe("AskService", () => {
     expect(await t.done).toMatchObject({ comments: { "SECRET-ID": "SECRET-COMMENT" } });
     expect(s.logs.map((l) => l.msg)).toEqual(["ask opened", "ask closed"]);
     expect(JSON.stringify(s.logs)).not.toContain("SECRET");
+  });
+});
+
+describe("AskService — メディア（20261004-ask-media-popup）", () => {
+  const IMG_SPEC = { title: "T", questions: [{ id: "a", label: "A", options: [{ value: "x", image: "/tmp/a.png" }] }] };
+  const prepared = (bytes: number, extra: Record<string, unknown> = {}) => ({
+    spec: { title: "T", submit: "決定", note: true, questions: [{ id: "a", label: "A", type: "single", options: [{ value: "x", label: "x", image: "media:0" }], allowOther: false, required: false, multiline: false }] },
+    media: [{ info: { id: 0, kind: "image" as const, mime: "image/png", bytes }, bytes: Buffer.alloc(bytes, 7) }],
+    warnings: 0,
+    totalBytes: bytes,
+    ...extra,
+  });
+  /** `prepare` の完了を手元で決める。 */
+  function deferred() {
+    let resolve!: (v: ReturnType<typeof prepared>) => void;
+    let reject!: (e: unknown) => void;
+    let signal: AbortSignal | undefined;
+    const media = {
+      prepare: (_s: unknown, sig: AbortSignal) => {
+        signal = sig;
+        return new Promise<ReturnType<typeof prepared>>((res, rej) => ((resolve = res), (reject = rej)));
+      },
+    };
+    return { media: media as never, resolve: (v: ReturnType<typeof prepared>) => resolve(v), reject: (e: unknown) => reject(e), signal: () => signal };
+  }
+
+  it("メディアが揃ってから ask.opened を配る。揃うまで subscribe にも出ず、pane は占有される", async () => {
+    const d = deferred();
+    const s = setup({ media: d.media });
+    s.asks.subscribe("b1");
+    const t = track(s.asks.open("cli", { paneId: "p1", spec: IMG_SPEC, timeoutMs: 1000 }));
+    expect(s.askEvents()).toEqual([]);
+    expect(s.asks.subscribe("b1")).toEqual([]);
+    expect(() => s.asks.open("cli2", { paneId: "p1", spec: IMG_SPEC, timeoutMs: 1000 })).toThrowError(expect.objectContaining({ code: "ask_busy" }));
+    d.resolve(prepared(10, { view: [{ title: "v", kind: "markdown", media: 0 }], warnings: 2 }));
+    await settle();
+    expect(s.askEvents()).toEqual(["ask.opened:ask1"]);
+    const got = s.asks.get("b1", "ask1");
+    expect(got).toMatchObject({ media: [{ id: 0, kind: "image", mime: "image/png", bytes: 10 }], view: [{ title: "v", kind: "markdown", media: 0 }], warnings: 2 });
+    expect(got.spec.questions[0]!.options[0]!.image).toBe("media:0");
+    expect(s.asks.mediaBytes).toBe(10);
+    s.asks.cancel("b1", "ask1");
+    expect(await t.done).toEqual({ status: "cancelled" });
+  });
+
+  it("閉じる 5 経路（回答・取り消し・時間切れ・pane が閉じた・切断）どれでも、保持したメディアを全体の合計へ戻す", async () => {
+    const run = async (close: (s: ReturnType<typeof setup>) => void): Promise<void> => {
+      const d = deferred();
+      const s = setup({ media: d.media });
+      s.asks.subscribe("b1");
+      const t = track(s.asks.open("cli", { paneId: "p1", spec: IMG_SPEC, timeoutMs: 1000 }));
+      d.resolve(prepared(100));
+      await settle();
+      expect(s.asks.mediaBytes).toBe(100);
+      close(s);
+      await t.done;
+      expect(s.asks.mediaBytes).toBe(0);
+      expect(s.asks.pendingCount).toBe(0);
+      expect(() => s.asks.media("b1", "ask1", 0, 0)).toThrowError(expect.objectContaining({ code: "ask_closed" }));
+    };
+    await run((s) => s.asks.answer("b1", { askId: "ask1", answers: { a: "x" } }));
+    await run((s) => s.asks.cancel("b1", "ask1"));
+    await run((s) => s.timers.advance(1000));
+    await run((s) => s.bus.publish({ event: "pane.closed", data: { paneId: "p1" } } as never));
+    await run((s) => s.asks.onClientGone("cli"));
+    // dispose
+    const d = deferred();
+    const s = setup({ media: d.media });
+    s.asks.subscribe("b1");
+    track(s.asks.open("cli", { paneId: "p1", spec: IMG_SPEC, timeoutMs: 1000 }));
+    d.resolve(prepared(100));
+    await settle();
+    s.asks.dispose();
+    expect(s.asks.mediaBytes).toBe(0);
+  });
+
+  it("読んでいる最中に閉じたら中断し、後から揃っても出さず・数えない", async () => {
+    const d = deferred();
+    const s = setup({ media: d.media });
+    s.asks.subscribe("b1");
+    const t = track(s.asks.open("cli", { paneId: "p1", spec: IMG_SPEC, timeoutMs: 1000 }));
+    s.asks.onClientGone("cli");
+    expect(d.signal()!.aborted).toBe(true);
+    expect(await t.done).toEqual({ status: "cancelled" });
+    d.resolve(prepared(50));
+    await settle();
+    expect(s.asks.mediaBytes).toBe(0);
+    expect(s.askEvents()).toEqual([]);
+    // pane は空いている
+    expect(() => s.asks.open("cli", { paneId: "p1", spec: SPEC, timeoutMs: 1000 })).not.toThrow();
+  });
+
+  it("読む途中の誤り（invalid_ask_spec）は ask.open の誤りで返り、画面には何も配らず、pane は空く", async () => {
+    const d = deferred();
+    const s = setup({ media: d.media });
+    s.asks.subscribe("b1");
+    const p = s.asks.open("cli", { paneId: "p1", spec: IMG_SPEC, timeoutMs: 1000 });
+    const failed = p.catch((e: unknown) => e);
+    d.reject(new (await import("@sodashitsu/protocol")).RpcError("invalid_ask_spec", "questions[0].options[0].image: file not found"));
+    expect(await failed).toMatchObject({ code: "invalid_ask_spec" });
+    expect(s.askEvents()).toEqual([]);
+    expect(s.asks.pendingCount).toBe(0);
+    expect(s.timers.active.size).toBe(0);
+  });
+
+  it("想定外の例外は中身を漏らさず invalid_ask_spec にする", async () => {
+    const d = deferred();
+    const s = setup({ media: d.media });
+    s.asks.subscribe("b1");
+    const failed = s.asks.open("cli", { paneId: "p1", spec: IMG_SPEC, timeoutMs: 1000 }).catch((e: unknown) => e);
+    d.reject(new Error("/home/secret/path"));
+    const err = (await failed) as { code: string; message: string };
+    expect(err.code).toBe("invalid_ask_spec");
+    expect(err.message).not.toContain("secret");
+  });
+
+  it("サーバ全体の合計（128 MiB）を超える質問は ask_busy。ちょうどは通る", async () => {
+    const { ASK_MEDIA_SERVER_MAX } = await import("@sodashitsu/protocol");
+    const d1 = deferred();
+    const d2 = deferred();
+    let n = 0;
+    const s = setup({ media: { prepare: (...a: unknown[]) => (n++ === 0 ? d1 : d2).media.prepare(...(a as [unknown, AbortSignal])) } as never });
+    s.asks.subscribe("b1");
+    track(s.asks.open("cli", { paneId: "p1", spec: IMG_SPEC, timeoutMs: 1000 }));
+    const second = s.asks.open("cli", { paneId: "p2", spec: IMG_SPEC, timeoutMs: 1000 }).catch((e: unknown) => e);
+    d1.resolve({ ...prepared(1), totalBytes: ASK_MEDIA_SERVER_MAX - 5 } as never);
+    await settle();
+    expect(s.asks.mediaBytes).toBe(ASK_MEDIA_SERVER_MAX - 5);
+    d2.resolve({ ...prepared(1), totalBytes: 6 } as never);
+    expect(await second).toMatchObject({ code: "ask_busy" });
+    expect(s.asks.mediaBytes).toBe(ASK_MEDIA_SERVER_MAX - 5);
+  });
+
+  it("ask.media: 768 KiB ごとの片に分けて返す。購読していない接続・知らない id・範囲外の offset は断る", async () => {
+    const { ASK_MEDIA_CHUNK_BYTES } = await import("@sodashitsu/protocol");
+    const d = deferred();
+    const s = setup({ media: d.media });
+    s.asks.subscribe("b1");
+    track(s.asks.open("cli", { paneId: "p1", spec: IMG_SPEC, timeoutMs: 1000 }));
+    const size = ASK_MEDIA_CHUNK_BYTES * 2 + 5;
+    d.resolve(prepared(size));
+    await settle();
+    const a = s.asks.media("b1", "ask1", 0, 0);
+    const b = s.asks.media("b1", "ask1", 0, ASK_MEDIA_CHUNK_BYTES);
+    const c = s.asks.media("b1", "ask1", 0, ASK_MEDIA_CHUNK_BYTES * 2);
+    expect([a.eof, b.eof, c.eof]).toEqual([false, false, true]);
+    expect(a.size).toBe(size);
+    expect(Buffer.concat([a, b, c].map((r) => Buffer.from(r.base64, "base64"))).equals(Buffer.alloc(size, 7))).toBe(true);
+    expect(a.base64 + b.base64 + c.base64).toBe(Buffer.alloc(size, 7).toString("base64")); // 3 の倍数の片は文字列のまま連結できる
+    expect(() => s.asks.media("other", "ask1", 0, 0)).toThrowError(expect.objectContaining({ code: "ask_closed" }));
+    expect(() => s.asks.media("b1", "nope", 0, 0)).toThrowError(expect.objectContaining({ code: "ask_closed" }));
+    expect(() => s.asks.media("b1", "ask1", 1, 0)).toThrowError(expect.objectContaining({ code: "invalid_params" }));
+    expect(() => s.asks.media("b1", "ask1", 0, 5)).toThrowError(expect.objectContaining({ code: "invalid_params" }));
+    expect(() => s.asks.media("b1", "ask1", 0, ASK_MEDIA_CHUNK_BYTES * 3)).toThrowError(expect.objectContaining({ code: "invalid_params" }));
+  });
+
+  it("揃った時に画面が 1 つも居なければ unavailable", async () => {
+    const d = deferred();
+    const s = setup({ media: d.media });
+    s.asks.subscribe("b1");
+    const t = track(s.asks.open("cli", { paneId: "p1", spec: IMG_SPEC, timeoutMs: 1000 }));
+    s.browsers.clear();
+    d.resolve(prepared(10));
+    expect(await t.done).toMatchObject({ status: "unavailable" });
+    expect(s.asks.mediaBytes).toBe(0);
+  });
+
+  it("features: 機能と上限を返す", () => {
+    const s = setup();
+    const f = s.asks.features();
+    expect(f.features).toEqual(expect.arrayContaining(["media", "view", "types:edit", "types:rank", "types:table", "remote-image"]));
+    expect(f.limits).toMatchObject({ fileBytes: 8 * 1024 * 1024, totalBytes: 24 * 1024 * 1024, files: 32, serverBytes: 128 * 1024 * 1024 });
   });
 });
