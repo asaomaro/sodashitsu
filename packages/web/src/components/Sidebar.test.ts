@@ -765,8 +765,9 @@ describe("Sidebar — グループの表示", () => {
     session.workspaceUpserted(makeWorkspace("w2", { label: "worker", groupId: "g1" }));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
     const wrapper = mountSidebar(makeConnection());
-    expect(rowLabels(wrapper)).toEqual(["backend", "api", "worker"]);
-    expect(rowIndents(wrapper)).toEqual([false, true, true]);
+    // 本物のグループがあるので、末尾に「グループなし」の見出し（中は空）が付く（追補 01 B）。
+    expect(rowLabels(wrapper)).toEqual(["backend", "api", "worker", "グループなし"]);
+    expect(rowIndents(wrapper)).toEqual([false, true, true, false]);
   });
 
   it("worktree 自動グループ：本体の行が頭を兼ね、子だけインデントする（herdr と同じ並び）", () => {
@@ -785,7 +786,7 @@ describe("Sidebar — グループの表示", () => {
     session.workspaceUpserted(makeWorkspace("w1", { label: "api", groupId: "g1" }));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: true });
     const wrapper = mountSidebar(makeConnection());
-    expect(rowLabels(wrapper)).toEqual(["backend"]);
+    expect(rowLabels(wrapper)).toEqual(["backend", "グループなし"]);
   });
 
   it("折りたたみ中でも focus 中の workspace があればその行だけは見える（AC6）", () => {
@@ -796,7 +797,7 @@ describe("Sidebar — グループの表示", () => {
     session.groupUpserted({ id: "g1", label: "backend", collapsed: true });
     view.setView("w2", "t1");
     const wrapper = mountSidebar(makeConnection());
-    expect(rowLabels(wrapper)).toEqual(["backend", "worker"]);
+    expect(rowLabels(wrapper)).toEqual(["backend", "worker", "グループなし"]);
   });
 
   // AC3（worktree 自動グループ版。上と同じ挙動を manual/auto の両方で確かめる——test 工程で見つけた
@@ -897,12 +898,13 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     const moveItemByDrag = vi.fn();
     const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
     const rows = wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.element as HTMLElement);
-    // rows: [0]=グループヘッダー, [1]=w1, [2]=w2, [3]=w3(other)
+    // rows: [0]=グループヘッダー, [1]=w1, [2]=w2, [3]=「グループなし」の見出し, [4]=w3(other)
+    // グループは、まとまりの列（グループ・「グループなし」）の中でだけ並べ替えられる。
     const elementFromPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(rows[3]!);
     rows[0]!.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
     rows[0]!.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 60 }));
     rows[0]!.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
-    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "group", groupId: "g1" }, { kind: "workspace", workspaceId: "w3" }, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" });
+    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "group", groupId: "g1" }, { kind: "ungrouped" }, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" });
     elementFromPoint.mockRestore();
   });
 
@@ -964,10 +966,11 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     session.workspaceUpserted(makeWorkspace("w2", { label: "m2", groupId: "g1" }));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
     session.workspaceUpserted(makeWorkspace("w3", { label: "other" }));
-    session.layoutChanged({ top: ["g:g1", "w:w3"], groups: { g1: ["w:w1", "w:w2"] }, ungrouped: [] });
+    session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: ["w:w1", "w:w2"] }, ungrouped: ["w:w3"] });
   }
+  const CROSS_CONTAINER_MESSAGE = "同じグループの中、または同じ「グループなし」の中の項目の間でだけ並べ替えできます";
 
-  it("一番上の項目を、グループの中の行の上へ落とすことはできない（印が付き、離しても送らず知らせる）", async () => {
+  it("「グループなし」の項目を、グループの中の行の上へ落とすことはできない（印が付き、離しても送らず知らせる）", async () => {
     setUpGroupWithOther();
     const view = useViewStore(pinia);
     const moveItemByDrag = vi.fn();
@@ -980,17 +983,17 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     // ポインタは掴んだ行（w3）に捕捉されているので、pointerup は掴んだ行へ届く。
     wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "w3")!.element.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
     expect(moveItemByDrag).not.toHaveBeenCalled();
-    expect(view.toasts.map((t) => t.message)).toContain("同じグループの中、または一番上の項目の間でだけ並べ替えできます");
+    expect(view.toasts.map((t) => t.message)).toContain(CROSS_CONTAINER_MESSAGE);
   });
 
-  it("グループの中の項目を、一番上の行の上へ落とすことはできない（送らず知らせる）", () => {
+  it("グループの中の項目を、「グループなし」の行の上へ落とすことはできない（送らず知らせる）", () => {
     setUpGroupWithOther();
     const view = useViewStore(pinia);
     const moveItemByDrag = vi.fn();
     const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
     drag(wrapper, "w1", "w3");
     expect(moveItemByDrag).not.toHaveBeenCalled();
-    expect(view.toasts.map((t) => t.message)).toContain("同じグループの中、または一番上の項目の間でだけ並べ替えできます");
+    expect(view.toasts.map((t) => t.message)).toContain(CROSS_CONTAINER_MESSAGE);
   });
 
   it("グループの中の項目は、同じグループの別の項目の前へ並べ替えられる（item.move 用の項目を渡す）", () => {
@@ -1006,13 +1009,55 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     const session = useSessionStore(pinia);
     session.workspaceUpserted(makeWorkspace("w4", { label: "x4", groupId: "g2" }));
     session.groupUpserted({ id: "g2", label: "front", collapsed: false });
-    session.layoutChanged({ top: ["g:g1", "g:g2", "w:w3"], groups: { g1: ["w:w1", "w:w2"], g2: ["w:w4"] }, ungrouped: [] });
+    session.layoutChanged({ top: ["g:g1", "g:g2", "u"], groups: { g1: ["w:w1", "w:w2"], g2: ["w:w4"] }, ungrouped: ["w:w3"] });
     const view = useViewStore(pinia);
     const moveItemByDrag = vi.fn();
     const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
     drag(wrapper, "group:g1", "w4");
     expect(moveItemByDrag).not.toHaveBeenCalled();
     expect(view.toasts).toHaveLength(1);
+  });
+
+  it("グループを、「グループなし」の中の行の上へ落とすことはできない（グループは見出しの間でだけ動く）", () => {
+    setUpGroupWithOther();
+    const view = useViewStore(pinia);
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+    drag(wrapper, "group:g1", "w3");
+    expect(moveItemByDrag).not.toHaveBeenCalled();
+    expect(view.toasts.map((t) => t.message)).toEqual([CROSS_CONTAINER_MESSAGE]);
+  });
+
+  it("「グループなし」の見出しは掴める。ほかのグループの見出しの前へ落とすと、見出しの項目（{ kind: \"ungrouped\" }）を渡す", () => {
+    setUpGroupWithOther();
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+    drag(wrapper, "ungrouped:", "group:g1");
+    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "ungrouped" }, { kind: "group", groupId: "g1" }, { workspaceIds: ["w3"], beforeWorkspaceId: "w1" });
+  });
+
+  it("掴んだ「グループなし」の中の行の上で離しても何も送らず、知らせない（自分の項目の上）", () => {
+    setUpGroupWithOther();
+    const view = useViewStore(pinia);
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+    drag(wrapper, "ungrouped:", "w3");
+    expect(moveItemByDrag).not.toHaveBeenCalled();
+    expect(view.toasts).toHaveLength(0);
+  });
+
+  it("古いサーバ（layout が無い）では「グループなし」の見出しは掴めない（workspace.move_to では動かせない）", () => {
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", { label: "m1", groupId: "g1" }));
+    session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+    session.workspaceUpserted(makeWorkspace("w3", { label: "other" }));
+    const view = useViewStore(pinia);
+    const moveItemByDrag = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+    drag(wrapper, "ungrouped:", "group:g1", false);
+    expect(view.workspaceDrag).toBeNull();
+    wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "ungrouped:")!.element.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
+    expect(moveItemByDrag).not.toHaveBeenCalled();
   });
 
   it("掴んだグループ自身の中の行の上で離しても何も送らず、知らせない（自分の項目の上）", () => {
@@ -1122,17 +1167,30 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
   });
 
   describe("名前順（design「並びと名前順」）", () => {
-    it("一番上の項目の並べ替えは受け付けず、送らずに「名前順では並べ替えできません」と知らせる", async () => {
+    it("グループどうしの並べ替えは受け付けず、送らずに「名前順では並べ替えできません」と知らせる", async () => {
       setUpGroupWithOther();
       const view = useViewStore(pinia);
       view.workspaceSort = "name";
       const moveItemByDrag = vi.fn();
       const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
-      drag(wrapper, "group:g1", "w3", false);
+      drag(wrapper, "group:g1", "ungrouped:", false);
       await wrapper.vm.$nextTick();
-      const target = wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "w3")!;
+      const target = wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "ungrouped:")!;
       expect(target.classes()).toContain("sidebar-row-drop-invalid"); // 落とせない印
       wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === "group:g1")!.element.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
+      expect(moveItemByDrag).not.toHaveBeenCalled();
+      expect(view.toasts.map((t) => t.message)).toEqual(["名前順では並べ替えできません"]);
+    });
+
+    it("「グループなし」の中の項目の並べ替えも受け付けない（名前で決まるので、送っても変わらない）", () => {
+      setUpGroupWithOther();
+      useSessionStore(pinia).workspaceUpserted(makeWorkspace("w4", { label: "other2" }));
+      useSessionStore(pinia).layoutChanged({ top: ["g:g1", "u"], groups: { g1: ["w:w1", "w:w2"] }, ungrouped: ["w:w3", "w:w4"] });
+      const view = useViewStore(pinia);
+      view.workspaceSort = "name";
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "w4", "w3");
       expect(moveItemByDrag).not.toHaveBeenCalled();
       expect(view.toasts.map((t) => t.message)).toEqual(["名前順では並べ替えできません"]);
     });
@@ -1196,7 +1254,7 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     const moveItemByDrag = vi.fn();
     const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
     const rows = wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.element as HTMLElement);
-    // rows: [0]=グループヘッダー, [1]=w1, [2]=w2, [3]=w3(other)
+    // rows: [0]=グループヘッダー, [1]=w1, [2]=w2, [3]=「グループなし」の見出し, [4]=w3(other)
     const elementFromPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(rows[3]!);
     rows[0]!.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
     rows[0]!.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 60 }));
@@ -1205,7 +1263,8 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     await wrapper.vm.$nextTick();
     rows[0]!.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
     // 開始時点のメンバー（w1・w2 の両方）で移動する——ドロップ時点の最新の構成（w1 だけ）ではない。
-    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "group", groupId: "g1" }, { kind: "workspace", workspaceId: "w3" }, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" });
+    // 落とし先の「グループなし」の先頭は、w2 が加わった最新の構成の w2。
+    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "group", groupId: "g1" }, { kind: "ungrouped" }, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w2" });
     elementFromPoint.mockRestore();
   });
 });
@@ -1450,7 +1509,7 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
     return session;
   }
 
-  it("グループの中の worktree グループは字下げ 1（先頭）・2（子）。種類の印は見出しと先頭の行だけ（読み上げ用の文言つき）", () => {
+  it("グループの中の worktree グループは字下げ 1（先頭）・2（子）。「グループなし」の中は字下げ 1。種類の印は見出し（「グループなし」には付けない）と worktree グループの行（先頭・子）だけ（読み上げ用の文言つき）", () => {
     populate(true);
     const wrapper = mountSidebar(makeConnection());
     expect(rows(wrapper)).toEqual([
@@ -1458,11 +1517,12 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
       { label: "a", depth: 1 },
       { label: "main", depth: 1 },
       { label: "wt", depth: 2 },
-      { label: "plain", depth: 0 },
+      { label: "グループなし", depth: 0 },
+      { label: "plain", depth: 1 },
     ]);
     const all = wrapper.findAll(".sidebar-spaces .sidebar-row");
-    expect(all.map((r) => r.find(".sidebar-kind-text").exists() ? r.find(".sidebar-kind-text").text() : null)).toEqual(["グループ", null, "worktree グループ", null, null]);
-    expect(all.map((r) => r.find(".sidebar-kind-icon svg").exists())).toEqual([true, false, true, false, false]);
+    expect(all.map((r) => r.find(".sidebar-kind-text").exists() ? r.find(".sidebar-kind-text").text() : null)).toEqual(["グループ", null, "worktree グループ", "worktree グループ", null, null]);
+    expect(all.map((r) => r.find(".sidebar-kind-icon svg").exists())).toEqual([true, false, true, true, false, false]);
   });
 
   it("畳んだサイドバーでは種類の印はアイコンだけ（文言は出さず、アイコン自身が読み上げの名前を持つ）", () => {
@@ -1474,6 +1534,7 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
     expect(icons.map((i) => [i.attributes("role"), i.attributes("aria-label")])).toEqual([
       ["img", "グループ"],
       ["img", "worktree グループ"],
+      ["img", "worktree グループ"],
     ]);
   });
 
@@ -1481,11 +1542,11 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
     const session = populate(true);
     session.groupUpserted({ id: "g1", label: "backend", collapsed: true });
     const view = useViewStore(pinia);
-    expect(rows(mountSidebar(makeConnection())).map((r) => r.label)).toEqual(["backend", "plain"]);
+    expect(rows(mountSidebar(makeConnection())).map((r) => r.label)).toEqual(["backend", "グループなし", "plain"]);
     view.setView("wt", "t1");
-    expect(rows(mountSidebar(makeConnection())).map((r) => r.label)).toEqual(["backend", "wt", "plain"]);
+    expect(rows(mountSidebar(makeConnection())).map((r) => r.label)).toEqual(["backend", "wt", "グループなし", "plain"]);
     view.setView("main", "t1");
-    expect(rows(mountSidebar(makeConnection())).map((r) => r.label)).toEqual(["backend", "main", "plain"]);
+    expect(rows(mountSidebar(makeConnection())).map((r) => r.label)).toEqual(["backend", "main", "グループなし", "plain"]);
   });
 
   it("worktree グループだけ畳むと、先頭だけ残る（グループは開いたまま）。折りたたみのボタンの名前は種類ごと", async () => {
@@ -1493,8 +1554,8 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
     const view = useViewStore(pinia);
     view.toggleAutoGroupCollapsed("/r/.git");
     const wrapper = mountSidebar(makeConnection());
-    expect(rows(wrapper).map((r) => r.label)).toEqual(["backend", "a", "main", "plain"]);
-    expect(wrapper.findAll(".sidebar-group-toggle").map((b) => b.attributes("aria-label"))).toEqual(["グループを折りたたむ", "worktree グループを展開"]);
+    expect(rows(wrapper).map((r) => r.label)).toEqual(["backend", "a", "main", "グループなし", "plain"]);
+    expect(wrapper.findAll(".sidebar-group-toggle").map((b) => b.attributes("aria-label"))).toEqual(["グループを折りたたむ", "worktree グループを展開", "「グループなし」を折りたたむ"]);
   });
 
   it("layout が変わると（sidebar.layout_changed）描画の順も変わる", async () => {
@@ -1502,7 +1563,7 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
     const wrapper = mountSidebar(makeConnection());
     session.layoutChanged({ top: ["u", "g:g1"], groups: { g1: ["r:/r/.git", "w:a"] }, ungrouped: ["w:plain"] });
     await nextTick();
-    expect(rows(wrapper).map((r) => r.label)).toEqual(["plain", "backend", "main", "wt", "a"]);
+    expect(rows(wrapper).map((r) => r.label)).toEqual(["グループなし", "plain", "backend", "main", "wt", "a"]);
   });
 
   it("layout の無い古いサーバでは layoutFromLegacy で導く（同じリポジトリは本体の所属 1 つにまとまる）", () => {
@@ -1516,7 +1577,8 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
       { label: "a", depth: 1 },
       { label: "main", depth: 1 },
       { label: "wt", depth: 2 },
-      { label: "plain", depth: 0 },
+      { label: "グループなし", depth: 0 },
+      { label: "plain", depth: 1 },
     ]);
   });
 
@@ -1530,5 +1592,269 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
     const rendered = wrapper.findAll(".sidebar-spaces .sidebar-row").flatMap((r) => (r.attributes("data-drop-workspace-id") ? [r.attributes("data-drop-workspace-id")!] : []));
     expect(rendered).toEqual(currentVisibleWorkspaceIds(session, view));
     expect(rendered).toEqual(["a", "main", "wt", "plain"]);
+  });
+});
+
+// 追補 01 C（B3 の見た目）：グループの見出し・「グループなし」の見出し・worktree グループの木の線・ブランチ名・畳んだときの状態のまとめ。
+describe("Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ）", () => {
+  const git = (linked: boolean, branch: string, repoKey = "/r/.git", worktreeKey: string | null = linked ? `${repoKey}/worktrees/x` : repoKey) => ({ branch, ahead: 0, behind: 0, repoKey, isLinkedWorktree: linked, worktreeKey });
+  const rowByKey = (wrapper: ReturnType<typeof mountSidebar>, key: string) => wrapper.findAll(".sidebar-spaces .sidebar-row").find((r) => r.attributes("data-workspace-row-key") === key)!;
+  const labels = (wrapper: ReturnType<typeof mountSidebar>) => wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.find(".sidebar-label").text());
+  /** workspace に 1 つのエージェントの pane を付ける。 */
+  function withAgent(id: string, state: AgentInfo["state"]): void {
+    const session = useSessionStore(pinia);
+    session.tabUpserted(makeTab(`t-${id}`, id, `p-${id}`));
+    session.paneUpserted(makePane(`p-${id}`, `t-${id}`, makeAgent({ instanceId: `i-${id}`, state })));
+  }
+  /** 本体 main・worktree wt（作業中）・通常の plain。 */
+  function worktreeSet(opts: { mainState?: AgentInfo["state"]; wtState?: AgentInfo["state"] } = {}) {
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted(makeWorkspace("main", { label: "main", activeTabId: "t-main", git: git(false, "main") }));
+    session.workspaceUpserted(makeWorkspace("wt", { label: "wt", activeTabId: "t-wt", git: git(true, "feature/x") }));
+    session.workspaceUpserted(makeWorkspace("plain", { label: "plain", activeTabId: "t-plain" }));
+    withAgent("main", opts.mainState ?? "idle");
+    withAgent("wt", opts.wtState ?? "working");
+    return session;
+  }
+  const stateOf = (row: { find: (s: string) => { attributes: (n: string) => string | undefined } }) => row.find(".sidebar-state-icon").attributes("data-state");
+
+  describe("「グループなし」の見出し", () => {
+    it("本物のグループが 1 つも無ければ出さず、項目はそのまま並ぶ（字下げなし）", () => {
+      const session = worktreeSet();
+      session.layoutChanged({ top: ["u"], groups: {}, ungrouped: ["r:/r/.git", "w:plain"] });
+      const wrapper = mountSidebar(makeConnection());
+      expect(wrapper.find('[data-workspace-row-key="ungrouped:"]').exists()).toBe(false);
+      expect(labels(wrapper)).toEqual(["main", "wt", "plain"]);
+      expect(wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => r.classes().includes("sidebar-row-indent"))).toEqual([false, true, false]);
+    });
+
+    it("本物のグループがあれば出す。中の項目は 1 段字下げ。フォルダの印は付けず、数と状態のまとめがある", () => {
+      const session = worktreeSet({ mainState: "idle", wtState: "working" });
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: [] }, ungrouped: ["r:/r/.git", "w:plain"] });
+      const wrapper = mountSidebar(makeConnection());
+      const head = rowByKey(wrapper, "ungrouped:");
+      expect(labels(wrapper)).toEqual(["backend", "グループなし", "main", "wt", "plain"]);
+      expect(head.find(".sidebar-label").text()).toBe("グループなし");
+      expect(head.find(".sidebar-kind-icon").exists()).toBe(false);
+      expect(head.find(".sidebar-group-count").text()).toBe("2"); // worktree グループは 1 つと数える
+      expect(stateOf(head)).toBe("working"); // 中の全 pane のうち優先度の高い状態（worktree の作業中）
+      expect(head.find(".sidebar-group-toggle").attributes("aria-label")).toBe("「グループなし」を折りたたむ");
+      expect(rowByKey(wrapper, "main").classes()).toContain("sidebar-row-indent");
+      expect(rowByKey(wrapper, "plain").classes()).toContain("sidebar-row-indent");
+    });
+
+    it("見出しの折りたたみの印を押すと共有の設定 ungroupedCollapsed を切り替えて保存し、中は今いる workspace の行だけになる", async () => {
+      const session = worktreeSet();
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: [] }, ungrouped: ["r:/r/.git", "w:plain"] });
+      const view = useViewStore(pinia);
+      view.setView("plain", "t1");
+      const wrapper = mountSidebar(makeConnection());
+      await rowByKey(wrapper, "ungrouped:").get(".sidebar-group-toggle").trigger("click");
+      expect(view.ungroupedCollapsed).toBe(true);
+      expect(readPrefs()["ungroupedCollapsed"]).toBe(true);
+      expect(labels(wrapper)).toEqual(["backend", "グループなし", "plain"]);
+      expect(rowByKey(wrapper, "ungrouped:").get(".sidebar-group-toggle").attributes("aria-label")).toBe("「グループなし」を展開");
+      // 状態のまとめは畳んでいても出る（隠れた worktree の作業中が見える）。
+      expect(stateOf(rowByKey(wrapper, "ungrouped:"))).toBe("working");
+      await rowByKey(wrapper, "ungrouped:").get(".sidebar-group-toggle").trigger("click");
+      expect(view.ungroupedCollapsed).toBe(false);
+      expect(labels(wrapper)).toEqual(["backend", "グループなし", "main", "wt", "plain"]);
+    });
+
+    it("見出しの行をクリックしても畳む・広げる（押した印と同じ）", () => {
+      const session = worktreeSet();
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: [] }, ungrouped: ["w:plain"] });
+      const view = useViewStore(pinia);
+      const wrapper = mountSidebar(makeConnection());
+      clickRow(rowByKey(wrapper, "ungrouped:"));
+      expect(view.ungroupedCollapsed).toBe(true);
+    });
+
+    it("見出しの右クリックでは何のメニューも開かない（名前の変更・削除はできない）", async () => {
+      const session = worktreeSet();
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: [] }, ungrouped: ["w:plain"] });
+      const openContextMenu = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { openContextMenu });
+      await rowByKey(wrapper, "ungrouped:").trigger("contextmenu");
+      expect(openContextMenu).not.toHaveBeenCalled();
+    });
+    it("全部の項目がグループの中で「グループなし」が空でも、見出しは出す（数 0。動かせる・畳めるまとまりとして残す。D32）", () => {
+      const session = worktreeSet();
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: ["r:/r/.git", "w:plain"] }, ungrouped: [] });
+      const wrapper = mountSidebar(makeConnection());
+      expect(labels(wrapper)).toEqual(["backend", "main", "wt", "plain", "グループなし"]);
+      expect(rowByKey(wrapper, "ungrouped:").find(".sidebar-group-count").text()).toBe("0");
+    });
+  });
+
+  describe("畳んだサイドバー（view.sidebarCollapsed）の見出し", () => {
+    it("見出しの状態アイコンは出るが、名前・横線・数・+n・ブランチ名は出ない", () => {
+      const session = worktreeSet({ mainState: "idle", wtState: "working" });
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: ["w:plain"] }, ungrouped: ["r:/r/.git"] });
+      const view = useViewStore(pinia);
+      view.toggleAutoGroupCollapsed("/r/.git"); // 先頭の行に +n・ブランチ名が付く形（広いサイドバーなら）
+      view.sidebarCollapsed = true;
+      const wrapper = mountSidebar(makeConnection());
+      expect(wrapper.findAll(".sidebar-spaces .sidebar-row")).toHaveLength(4); // backend・plain・グループなし・main
+      for (const k of ["group:g1", "ungrouped:"]) expect(rowByKey(wrapper, k).find(".sidebar-state-icon").exists()).toBe(true);
+      expect(stateOf(rowByKey(wrapper, "ungrouped:"))).toBe("working");
+      expect(wrapper.find(".sidebar-label").exists()).toBe(false);
+      expect(wrapper.find(".sidebar-group-rule").exists()).toBe(false);
+      expect(wrapper.find(".sidebar-group-count").exists()).toBe(false);
+      expect(wrapper.find(".sidebar-wt-plus").exists()).toBe(false);
+      expect(wrapper.find(".sidebar-wt-branch").exists()).toBe(false);
+    });
+  });
+
+  describe("グループの見出し", () => {
+    it("広げていても畳んでいても、中の状態をまとめたアイコンと、中の項目の数（worktree グループは 1 つ）を出す", async () => {
+      const session = worktreeSet({ mainState: "idle", wtState: "working" });
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: ["r:/r/.git", "w:plain"] }, ungrouped: [] });
+      const wrapper = mountSidebar(makeConnection());
+      expect(stateOf(rowByKey(wrapper, "group:g1"))).toBe("working");
+      expect(rowByKey(wrapper, "group:g1").find(".sidebar-group-count").text()).toBe("2");
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: true });
+      await nextTick();
+      expect(stateOf(rowByKey(wrapper, "group:g1"))).toBe("working");
+    });
+
+    it("エージェントが居ない中身なら状態のまとめは空（none）。優先度の低い状態だけなら、その状態", () => {
+      const session = useSessionStore(pinia);
+      session.workspaceUpserted(makeWorkspace("a", { groupId: "g1", activeTabId: "t-a" }));
+      session.workspaceUpserted(makeWorkspace("b", { groupId: "g2", activeTabId: "t-b" }));
+      withAgent("b", "idle");
+      session.groupUpserted({ id: "g1", label: "empty-ish", collapsed: false });
+      session.groupUpserted({ id: "g2", label: "idle-only", collapsed: false });
+      const wrapper = mountSidebar(makeConnection());
+      expect(stateOf(rowByKey(wrapper, "group:g1"))).toBe("none");
+      expect(stateOf(rowByKey(wrapper, "group:g2"))).toBe("idle");
+    });
+
+    it("見出しは名前・横線・数で、面や枠の印は付けない（グループの見出しの行に専用のクラス）", () => {
+      const session = worktreeSet();
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: ["w:plain"] }, ungrouped: [] });
+      const wrapper = mountSidebar(makeConnection());
+      const head = rowByKey(wrapper, "group:g1");
+      expect(head.classes()).toContain("sidebar-row-group");
+      expect(head.find(".sidebar-group-label").text()).toBe("backend");
+      expect(head.find(".sidebar-group-rule").exists()).toBe(true);
+      expect(rowByKey(wrapper, "plain").classes()).not.toContain("sidebar-row-group");
+    });
+  });
+
+  describe("worktree グループ", () => {
+    it("広げているときの先頭の行は本体の状態。+n は出さない", () => {
+      const session = worktreeSet({ mainState: "idle", wtState: "working" });
+      session.layoutChanged({ top: ["u"], groups: {}, ungrouped: ["r:/r/.git", "w:plain"] });
+      const wrapper = mountSidebar(makeConnection());
+      expect(stateOf(rowByKey(wrapper, "main"))).toBe("idle");
+      expect(rowByKey(wrapper, "main").find(".sidebar-wt-plus").exists()).toBe(false);
+    });
+
+    it("畳んでいるときの先頭の行は本体と worktree の全部をまとめた状態で、隠れている worktree の数を +n で添える", () => {
+      const session = worktreeSet({ mainState: "idle", wtState: "working" });
+      session.layoutChanged({ top: ["u"], groups: {}, ungrouped: ["r:/r/.git", "w:plain"] });
+      useViewStore(pinia).toggleAutoGroupCollapsed("/r/.git");
+      const wrapper = mountSidebar(makeConnection());
+      expect(stateOf(rowByKey(wrapper, "main"))).toBe("working");
+      expect(rowByKey(wrapper, "main").find(".sidebar-wt-plus").text()).toBe("+1");
+    });
+
+    it("畳んでいて worktree を開いているときは、その行が見えているので +n に数えない（状態のまとめは全部のまま）", () => {
+      const session = worktreeSet({ mainState: "idle", wtState: "working" });
+      session.layoutChanged({ top: ["u"], groups: {}, ungrouped: ["r:/r/.git", "w:plain"] });
+      const view = useViewStore(pinia);
+      view.toggleAutoGroupCollapsed("/r/.git");
+      view.setView("wt", "t1");
+      const wrapper = mountSidebar(makeConnection());
+      expect(labels(wrapper)).toEqual(["main", "wt", "plain"]);
+      expect(rowByKey(wrapper, "main").find(".sidebar-wt-plus").exists()).toBe(false);
+      expect(stateOf(rowByKey(wrapper, "main"))).toBe("working");
+    });
+
+    it("先頭と子に木の線のクラスを付け、最後の子だけ縦線が止まる印を持つ。通常の行には付けない", () => {
+      const session = useSessionStore(pinia);
+      session.workspaceUpserted(makeWorkspace("main", { git: git(false, "main") }));
+      session.workspaceUpserted(makeWorkspace("wt1", { git: git(true, "f1", "/r/.git", "/r/.git/worktrees/1") }));
+      session.workspaceUpserted(makeWorkspace("wt2", { git: git(true, "f2", "/r/.git", "/r/.git/worktrees/2") }));
+      session.workspaceUpserted(makeWorkspace("plain"));
+      const wrapper = mountSidebar(makeConnection());
+      const cls = (k: string) => rowByKey(wrapper, k).classes();
+      expect(cls("main")).not.toContain("sidebar-row-tree");
+      expect(cls("wt1")).toContain("sidebar-row-tree");
+      expect(cls("wt1")).not.toContain("sidebar-row-tree-last");
+      expect(cls("wt2")).toContain("sidebar-row-tree");
+      expect(cls("wt2")).toContain("sidebar-row-tree-last");
+      expect(cls("plain")).not.toContain("sidebar-row-tree");
+    });
+
+    it("畳んでいて今いる子が最後でないときは、見えている子（今いる子）が最後として縦線を止める", () => {
+      const session = useSessionStore(pinia);
+      session.workspaceUpserted(makeWorkspace("main", { git: git(false, "main") }));
+      session.workspaceUpserted(makeWorkspace("wt1", { git: git(true, "f1", "/r/.git", "/r/.git/worktrees/1") }));
+      session.workspaceUpserted(makeWorkspace("wt2", { git: git(true, "f2", "/r/.git", "/r/.git/worktrees/2") }));
+      const view = useViewStore(pinia);
+      view.toggleAutoGroupCollapsed("/r/.git");
+      view.setView("wt1", "t1");
+      const wrapper = mountSidebar(makeConnection());
+      expect(labels(wrapper)).toHaveLength(2); // main・wt1（wt2 は隠れている）
+      expect(rowByKey(wrapper, "wt1").classes()).toContain("sidebar-row-tree-last");
+    });
+
+    it("先頭の行にも子の行にも worktree の印を出し、通常の行には出さない", () => {
+      worktreeSet();
+      const wrapper = mountSidebar(makeConnection());
+      const hasIcon = (k: string) => rowByKey(wrapper, k).find('.sidebar-kind-icon[data-kind="worktreeGroup"]').exists();
+      expect([hasIcon("main"), hasIcon("wt"), hasIcon("plain")]).toEqual([true, true, false]);
+    });
+
+    it("ブランチ名を worktree グループの行（先頭・子）の 1 行目の右に出す。通常の行には出さない", () => {
+      worktreeSet();
+      const wrapper = mountSidebar(makeConnection());
+      const branch = (k: string) => (rowByKey(wrapper, k).find(".sidebar-row-line1 .sidebar-wt-branch").exists() ? rowByKey(wrapper, k).find(".sidebar-wt-branch").text() : null);
+      expect([branch("main"), branch("wt"), branch("plain")]).toEqual(["main", "feature/x", null]);
+    });
+
+    it("行の並びの設定に git の項目が無くても出す（1 行目に branch・git があれば重ねない）", () => {
+      worktreeSet();
+      const settings = useSettingsStore(pinia);
+      settings.setSidebarLayout("spaces", [[{ token: "state_icon" }, { token: "workspace" }]]);
+      const wrapper = mountSidebar(makeConnection());
+      expect(rowByKey(wrapper, "wt").find(".sidebar-wt-branch").text()).toBe("feature/x");
+      settings.setSidebarLayout("spaces", [[{ token: "state_icon" }, { token: "workspace" }, { token: "branch" }]]);
+      return nextTick().then(() => {
+        expect(rowByKey(wrapper, "wt").find(".sidebar-wt-branch").exists()).toBe(false);
+        settings.setSidebarLayout("spaces", [[{ token: "state_icon" }, { token: "workspace" }, { token: "git" }]]);
+        return nextTick().then(() => expect(rowByKey(wrapper, "wt").find(".sidebar-wt-branch").exists()).toBe(false));
+      });
+    });
+
+    it("1 行目に git の項目が無く 2 行目にあるだけなら、1 行目の右にブランチ名を出す（既定の並び）", () => {
+      worktreeSet();
+      const wrapper = mountSidebar(makeConnection());
+      expect(rowByKey(wrapper, "wt").find(".sidebar-row-line1 .sidebar-wt-branch").exists()).toBe(true);
+    });
+
+    it("同じフォルダの 2 つ目の workspace（代表でない）は通常の行。worktree の印・木の線・ブランチ名は付かない", () => {
+      const session = useSessionStore(pinia);
+      session.workspaceUpserted(makeWorkspace("main", { git: git(false, "main") }));
+      session.workspaceUpserted(makeWorkspace("wt", { git: git(true, "feature/x") }));
+      session.workspaceUpserted(makeWorkspace("main2", { label: "main2", git: git(false, "main") })); // main と同じ worktreeKey
+      const wrapper = mountSidebar(makeConnection());
+      const row = rowByKey(wrapper, "main2");
+      expect(row.find(".sidebar-kind-icon").exists()).toBe(false);
+      expect(row.classes()).not.toContain("sidebar-row-tree");
+      expect(row.find(".sidebar-wt-branch").exists()).toBe(false);
+      expect(rowByKey(wrapper, "main").find(".sidebar-kind-icon").exists()).toBe(true);
+      expect(rowByKey(wrapper, "wt").classes()).toContain("sidebar-row-tree");
+    });
   });
 });

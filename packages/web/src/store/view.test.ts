@@ -4,6 +4,7 @@ import {
   SIDEBAR_WIDTH,
   loadSidebarCollapsed,
   loadSidebarWidth,
+  loadUngroupedCollapsed,
   readPrefs,
   useViewStore,
   writePrefs,
@@ -146,6 +147,25 @@ describe("soda.prefs.v1 の読み書き（併合式）", () => {
     } finally {
       Storage.prototype.setItem = original;
     }
+  });
+});
+
+describe("useViewStore — 「グループなし」の折りたたみ（共有の設定 ungroupedCollapsed）", () => {
+  it("既定は広げている。切り替えるたびに soda.prefs.v1 へ書く", () => {
+    localStorage.clear();
+    const view = useViewStore(createPinia());
+    expect(view.ungroupedCollapsed).toBe(false);
+    view.toggleUngroupedCollapsed();
+    expect(view.ungroupedCollapsed).toBe(true);
+    expect(readPrefs()["ungroupedCollapsed"]).toBe(true);
+    view.toggleUngroupedCollapsed();
+    expect(readPrefs()["ungroupedCollapsed"]).toBe(false);
+  });
+
+  it("保存された true だけ畳む（壊れた値は広げる）", () => {
+    expect(loadUngroupedCollapsed(true)).toBe(true);
+    expect(loadUngroupedCollapsed("true")).toBe(false);
+    expect(loadUngroupedCollapsed(undefined)).toBe(false);
   });
 });
 

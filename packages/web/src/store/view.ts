@@ -191,6 +191,15 @@ function saveCollapsedAutoGroups(v: ReadonlySet<string>): void {
   writePrefs({ collapsedAutoGroups: [...v] });
 }
 
+/** 「グループなし」を畳んでいるか（共有の設定 `ungroupedCollapsed`。追補 01 B）。`true` のときだけ畳む（壊れた値は展開）。 */
+export function loadUngroupedCollapsed(raw: unknown): boolean {
+  return raw === true;
+}
+
+function saveUngroupedCollapsed(v: boolean): void {
+  writePrefs({ ungroupedCollapsed: v });
+}
+
 let nextToastId = 1;
 
 /** トーストの行動ボタン（`sticky` のときだけ置く。20260920-agent-notifications）。 */
@@ -411,6 +420,8 @@ export const useViewStore = defineStore("view", () => {
   const agentSort = ref(loadAgentSort());
   const workspaceSort = ref(loadWorkspaceSort(initialPrefs["workspaceSort"]));
   const collapsedAutoGroups = ref(loadCollapsedAutoGroups(initialPrefs["collapsedAutoGroups"]));
+  /** 「グループなし」の見出しを畳んでいるか（共有。本物のグループが無いときは見出し自体が出ないので効かない）。 */
+  const ungroupedCollapsed = ref(loadUngroupedCollapsed(initialPrefs["ungroupedCollapsed"]));
   const toasts = ref<Toast[]>([]);
 
   /**
@@ -629,6 +640,12 @@ export const useViewStore = defineStore("view", () => {
     saveCollapsedAutoGroups(next);
   }
 
+  /** 「グループなし」の折りたたみを切り替える（`toggleAutoGroupCollapsed` と同じく切り替えるたびに保存する）。 */
+  function toggleUngroupedCollapsed(): void {
+    ungroupedCollapsed.value = !ungroupedCollapsed.value;
+    saveUngroupedCollapsed(ungroupedCollapsed.value);
+  }
+
   function onConnectionState(s: ConnectionState): void {
     connectionState.value = s;
     // `rejected`（`/api/session` が 403 で `/ws` も開く前に閉じた）も下ろす：サーバは Cookie を先に確かめ、無効なら Host を問わず
@@ -707,6 +724,7 @@ export const useViewStore = defineStore("view", () => {
     paneDrag,
     workspaceDrag,
     collapsedAutoGroups,
+    ungroupedCollapsed,
     connectionState,
     authRequired,
     authRequiredCount,
@@ -748,6 +766,7 @@ export const useViewStore = defineStore("view", () => {
     setWorkspaceDragOver,
     endWorkspaceDrag,
     toggleAutoGroupCollapsed,
+    toggleUngroupedCollapsed,
     onConnectionState,
     onAuthRequired,
     setOriginRejectSuspected,

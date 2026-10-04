@@ -114,7 +114,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/server/src/git/GitInfoPoller.ts`、`packages/server/src/session/SessionModel.ts`・`SessionService.ts`、`packages/server/src/surface/methods/{group,item,workspace}.ts`、`packages/server/src/persist/SessionFile.ts`、`packages/server/src/composeServer.ts`（`toSessionFileData`）と各テスト
       依存: T23
       AC: AC19, AC20, AC8, AC10, AC13
-- [ ] T25: ブラウザ版の表示——B3 の見た目（グループの見出し: 折りたたみ・状態のまとめ・フォルダの印・名前・横線・数。面・帯なし）、「グループなし」の見出し（本物のグループがあるときだけ・フォルダの印なし・畳める）、worktree グループの木の線・worktree の印・ブランチ名、畳んだ worktree グループの状態のまとめと `+n`、代表でない workspace は通常の行。状態のまとめは既存の `aggregate`・`displayStateFor` で計算する。単体テスト
+- [x] T25: ブラウザ版の表示——B3 の見た目（グループの見出し: 折りたたみ・状態のまとめ・フォルダの印・名前・横線・数。面・帯なし）、「グループなし」の見出し（本物のグループがあるときだけ・フォルダの印なし・畳める）、worktree グループの木の線・worktree の印・ブランチ名、畳んだ worktree グループの状態のまとめと `+n`、代表でない workspace は通常の行。状態のまとめは既存の `aggregate`・`displayStateFor` で計算する。単体テスト
       対象: `packages/web/src/components/Sidebar.vue`（`rowStateFor`・行の組み立て・描画・スタイル）、`packages/web/src/store/view.ts`（畳んだ状態）、`packages/web/src/components/Sidebar.test.ts`、見本は `.aidev/works/20261004-group-worktree-items/mock-sidebar.html`
       依存: T24
       AC: AC19, AC20, AC21, AC12

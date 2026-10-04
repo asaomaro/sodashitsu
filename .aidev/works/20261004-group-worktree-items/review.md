@@ -2118,3 +2118,276 @@ AssertionError: expected [ 'w:w1', …(1) ] to deeply equal [ …(2) ]
     885|       const snap = service.snapshot();
 ```
 - T24 [nit] linkedWorktreeGroupMembers が追補 A の代表を見ない旧判定のまま残り、テストだけが参照する → T19（古い関数の撤去）で消す前提のため残す [conv:-]
+
+### T25 壊して落ちる確認
+
+実装の 1 行（または 1 つの条件）を壊して `vitest run`（web）を流した生の出力（`FAIL` 行と最初の `AssertionError`。各ケースとも壊した行は元に戻し、`git diff` で確認済み）。ケース名は壊した内容。
+
+#### B1: 「グループなし」の見出しを本物のグループが無くても出す（if (row.heading) を外す）
+ Test Files  1 failed (1)
+      Tests  23 failed | 106 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — spaces > workspace の行に状態の印と名前を出す
+AssertionError: expected '▾×グループなし1' to contain 'my-project'
+ FAIL  src/components/Sidebar.test.ts > Sidebar — spaces > クリックで workspace の active tab へ切り替え、workspace.focus を送る
+AssertionError: expected null to be 'w1' // Object.is equality
+ FAIL  src/components/Sidebar.test.ts > Sidebar — spaces > 右クリックで UiPort.openContextMenu を呼ぶ（workspace 対象）
+AssertionError: expected "vi.fn()" to be called with arguments: [ { kind: 'workspace', …(1) }, …(1) ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — spaces > navigate モードで選択中の workspace に選択スタイルを付ける
+AssertionError: expected [ 'sidebar-row', 'sidebar-row-group' ] to include 'sidebar-row-selected'
+ FAIL  src/components/Sidebar.test.ts > Sidebar — spaces > 表示中の workspace の行に、モードに関係なく表示中のスタイルと aria-current を付ける
+AssertionError: expected [ 'sidebar-row', 'sidebar-row-group' ] to include 'sidebar-row-current'
+ FAIL  src/components/Sidebar.test.ts > Sidebar — spaces > 表示中かつ navigate で選択中の行には、2 つのクラスが同時に付く
+AssertionError: expected [ 'sidebar-row', 'sidebar-row-group' ] to include 'sidebar-row-current'
+
+#### B2: 「グループなし」の見出しの折りたたみが共有の設定を切り替えない
+ Test Files  1 failed (1)
+      Tests  2 failed | 127 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 見出しの折りたたみの印を押すと共有の設定 ungroupedCollapsed を切り替えて保存し、中は今いる workspace の行だけになる
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 見出しの行をクリックしても畳む・広げる（押した印と同じ）
+AssertionError: expected false to be true // Object.is equality
+
+#### B3: 「グループなし」の見出しにフォルダの印を付ける
+ Test Files  1 failed (1)
+      Tests  3 failed | 126 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — レイアウトの 3 段（グループ／worktree グループ／通常の行） > グループの中の worktree グループは字下げ 1（先頭）・2（子）。「グループなし」の中は字下げ 1。種類の印は見出し（「グループなし」には付けない）と worktree グループの行（先頭・子）だけ（読み上げ用の文言つき）
+AssertionError: expected [ 'グループ', null, 'worktree グループ', …(3) ] to deeply equal [ 'グループ', null, 'worktree グループ', …(3) ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — レイアウトの 3 段（グループ／worktree グループ／通常の行） > 畳んだサイドバーでは種類の印はアイコンだけ（文言は出さず、アイコン自身が読み上げの名前を持つ）
+AssertionError: expected [ [ 'img', 'グループ' ], …(3) ] to deeply equal [ [ 'img', 'グループ' ], …(2) ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 本物のグループがあれば出す。中の項目は 1 段字下げ。フォルダの印は付けず、数と状態のまとめがある
+AssertionError: expected true to be false // Object.is equality
+
+#### B4: グループの見出しの状態のまとめを空にする（グループだけ。「グループなし」は残す）
+ Test Files  1 failed (1)
+      Tests  2 failed | 127 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > グループの見出し > 広げていても畳んでいても、中の状態をまとめたアイコンと、中の項目の数（worktree グループは 1 つ）を出す
+AssertionError: expected 'none' to be 'working' // Object.is equality
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > グループの見出し > エージェントが居ない中身なら状態のまとめは空（none）。優先度の低い状態だけなら、その状態
+AssertionError: expected 'none' to be 'idle' // Object.is equality
+
+#### B4b: 「グループなし」の見出しの状態のまとめを空にする
+ Test Files  1 failed (1)
+      Tests  2 failed | 127 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 本物のグループがあれば出す。中の項目は 1 段字下げ。フォルダの印は付けず、数と状態のまとめがある
+AssertionError: expected 'none' to be 'working' // Object.is equality
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 見出しの折りたたみの印を押すと共有の設定 ungroupedCollapsed を切り替えて保存し、中は今いる workspace の行だけになる
+AssertionError: expected 'none' to be 'working' // Object.is equality
+
+#### B5: 見出しの数を workspace の数で数える（worktree グループを 1 つと数えない）
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > グループの見出し > 広げていても畳んでいても、中の状態をまとめたアイコンと、中の項目の数（worktree グループは 1 つ）を出す
+AssertionError: expected '3' to be '2' // Object.is equality
+
+#### B5b: 「グループなし」の見出しの数を workspace の数で数える
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 本物のグループがあれば出す。中の項目は 1 段字下げ。フォルダの印は付けず、数と状態のまとめがある
+AssertionError: expected '3' to be '2' // Object.is equality
+
+#### B6: 畳んだ worktree グループの先頭の行の状態を、本体だけにする（まとめない）
+ Test Files  1 failed (1)
+      Tests  2 failed | 127 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 畳んでいるときの先頭の行は本体と worktree の全部をまとめた状態で、隠れている worktree の数を +n で添える
+AssertionError: expected 'idle' to be 'working' // Object.is equality
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 畳んでいて worktree を開いているときは、その行が見えているので +n に数えない（状態のまとめは全部のまま）
+AssertionError: expected 'idle' to be 'working' // Object.is equality
+
+#### B7: 畳んだ worktree グループの +n を、今いる子も数えて出す（hiddenWorktreeCount を使わず子の数）
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 畳んでいて worktree を開いているときは、その行が見えているので +n に数えない（状態のまとめは全部のまま）
+AssertionError: expected true to be false // Object.is equality
+
+#### B7b: +n を畳んでいなくても出す
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 広げているときの先頭の行は本体の状態。+n は出さない
+AssertionError: expected 'working' to be 'idle' // Object.is equality
+
+#### B8: 最後の子の縦線止めの印（treeLast）を付けない
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 先頭と子に木の線のクラスを付け、最後の子だけ縦線が止まる印を持つ。通常の行には付けない
+AssertionError: expected [ 'sidebar-row', …(2) ] to include 'sidebar-row-tree-last'
+
+#### B8b: 子の行に木の線のクラスを付けない
+ Test Files  1 failed (1)
+      Tests  2 failed | 127 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 先頭と子に木の線のクラスを付け、最後の子だけ縦線が止まる印を持つ。通常の行には付けない
+AssertionError: expected [ 'sidebar-row', 'sidebar-row-indent' ] to include 'sidebar-row-tree'
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 同じフォルダの 2 つ目の workspace（代表でない）は通常の行。worktree の印・木の線・ブランチ名は付かない
+AssertionError: expected [ 'sidebar-row', …(2) ] to include 'sidebar-row-tree'
+
+#### B9: 子の行に worktree の印を付けない
+ Test Files  1 failed (1)
+      Tests  3 failed | 126 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — レイアウトの 3 段（グループ／worktree グループ／通常の行） > グループの中の worktree グループは字下げ 1（先頭）・2（子）。「グループなし」の中は字下げ 1。種類の印は見出し（「グループなし」には付けない）と worktree グループの行（先頭・子）だけ（読み上げ用の文言つき）
+AssertionError: expected [ 'グループ', null, 'worktree グループ', …(3) ] to deeply equal [ 'グループ', null, 'worktree グループ', …(3) ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — レイアウトの 3 段（グループ／worktree グループ／通常の行） > 畳んだサイドバーでは種類の印はアイコンだけ（文言は出さず、アイコン自身が読み上げの名前を持つ）
+AssertionError: expected [ [ 'img', 'グループ' ], …(1) ] to deeply equal [ [ 'img', 'グループ' ], …(2) ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 先頭の行にも子の行にも worktree の印を出し、通常の行には出さない
+AssertionError: expected [ true, false, false ] to deeply equal [ true, true, false ]
+
+#### B10: ブランチ名を出さない
+ Test Files  1 failed (1)
+      Tests  3 failed | 126 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > ブランチ名を worktree グループの行（先頭・子）の 1 行目の右に出す。通常の行には出さない
+AssertionError: expected [ null, null, null ] to deeply equal [ 'main', 'feature/x', null ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 行の並びの設定に git の項目が無くても出す（1 行目に branch・git があれば重ねない）
+Error: Cannot call text on an empty DOMWrapper.
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 1 行目に git の項目が無く 2 行目にあるだけなら、1 行目の右にブランチ名を出す（既定の並び）
+AssertionError: expected false to be true // Object.is equality
+
+#### B10b: 通常の行にもブランチ名を出す
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 同じフォルダの 2 つ目の workspace（代表でない）は通常の行。worktree の印・木の線・ブランチ名は付かない
+AssertionError: expected true to be false // Object.is equality
+
+#### B11: 1 行目に git の項目があってもブランチ名を重ねる
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 行の並びの設定に git の項目が無くても出す（1 行目に branch・git があれば重ねない）
+AssertionError: expected true to be false // Object.is equality
+
+#### B11b: 設定に git の項目が無いときはブランチ名を出さない（常に「ある」扱い）
+ Test Files  1 failed (1)
+      Tests  3 failed | 126 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > ブランチ名を worktree グループの行（先頭・子）の 1 行目の右に出す。通常の行には出さない
+AssertionError: expected [ null, null, null ] to deeply equal [ 'main', 'feature/x', null ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 行の並びの設定に git の項目が無くても出す（1 行目に branch・git があれば重ねない）
+Error: Cannot call text on an empty DOMWrapper.
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 1 行目に git の項目が無く 2 行目にあるだけなら、1 行目の右にブランチ名を出す（既定の並び）
+AssertionError: expected false to be true // Object.is equality
+
+#### B12: 「グループなし」の見出しの右クリックでグループのメニューを開く（groupTargetId を持たせる）
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 見出しの右クリックでは何のメニューも開かない（名前の変更・削除はできない）
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+#### B13: 見出しの行のクリックで畳まない（クリックの分岐を空に）
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 見出しの行をクリックしても畳む・広げる（押した印と同じ）
+AssertionError: expected false to be true // Object.is equality
+
+#### B14: 「グループなし」の中の項目の入れ物を一番上（null）にする
+ Test Files  1 failed (1)
+      Tests  2 failed | 127 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > グループを、「グループなし」の中の行の上へ落とすことはできない（グループは見出しの間でだけ動く）
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 掴んだ「グループなし」の中の行の上で離しても何も送らず、知らせない（自分の項目の上）
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+#### B15: 名前順で「グループなし」の中の項目の並べ替えを受け付ける
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 名前順（design「並びと名前順」） > 「グループなし」の中の項目の並べ替えも受け付けない（名前で決まるので、送っても変わらない）
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+#### B16: 掴んだ「グループなし」の見出しが自分の項目の上でも落とせる扱いにする
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 掴んだ「グループなし」の中の行の上で離しても何も送らず、知らせない（自分の項目の上）
+AssertionError: expected [ { id: 5, …(1) } ] to have a length of +0 but got 1
+
+#### B17: 古いサーバで「グループなし」の見出しを掴めるようにする
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 古いサーバ（layout が無い）では「グループなし」の見出しは掴めない（workspace.move_to では動かせない）
+AssertionError: expected { sourceIds: [ 'w3' ], …(2) } to be null
+
+#### B18: 畳んだ「グループなし」の中を畳まず描く（ungroupedCollapsed を木へ渡さない）
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 見出しの折りたたみの印を押すと共有の設定 ungroupedCollapsed を切り替えて保存し、中は今いる workspace の行だけになる
+AssertionError: expected [ 'backend', 'グループなし', 'main', …(2) ] to deeply equal [ 'backend', 'グループなし', 'plain' ]
+
+#### B19: ungroupedCollapsed を保存しない
+ Test Files  2 failed (2)
+      Tests  2 failed | 176 passed (178)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 見出しの折りたたみの印を押すと共有の設定 ungroupedCollapsed を切り替えて保存し、中は今いる workspace の行だけになる
+AssertionError: expected undefined to be true // Object.is equality
+ FAIL  src/store/view.test.ts > useViewStore — 「グループなし」の折りたたみ（共有の設定 ungroupedCollapsed） > 既定は広げている。切り替えるたびに soda.prefs.v1 へ書く
+AssertionError: expected undefined to be true // Object.is equality
+
+#### B20: 共有の設定から ungroupedCollapsed を当てない
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+ FAIL  src/store/prefsApply.test.ts > applyPrefsToStores > 保存の項目名をストアの値へ（読み込みと同じ load* で）当てる
+AssertionError: expected false to be true // Object.is equality
+
+#### C1: 代表でない workspace も代表として扱う（client-core の `isRepresentative` が常に true。dist をビルドし直して web を実行。確認後に元へ戻して再ビルド）
+ Test Files  1 failed (1)
+      Tests  1 failed | 128 passed (129)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 同じフォルダの 2 つ目の workspace（代表でない）は通常の行。worktree の印・木の線・ブランチ名は付かない
+AssertionError: expected true to be false // Object.is equality
+
+#### 独立点検の指摘への追加（H1〜H8。各ケースとも壊した行は元に戻し、`git diff` で差分が増えていないことを確認済み）
+
+指摘 1（空でも見出しを出す）は H1、指摘 2（畳んだサイドバー）は H2〜H7、指摘 3（treeLast を見えている子の最後で決める）は H8。
+
+##### H1: 「グループなし」が空なら見出しを隠す（if (row.heading && row.items.length > 0)）
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — グループの表示 > 手動グループ：ヘッダー行（グループ名）＋インデントしたメンバー行
+AssertionError: expected [ 'backend', 'api', 'worker' ] to deeply equal [ Array(4) ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — グループの表示 > 手動グループが折りたたまれていればメンバー行を隠す
+AssertionError: expected [ 'backend' ] to deeply equal [ 'backend', 'グループなし' ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — グループの表示 > 折りたたみ中でも focus 中の workspace があればその行だけは見える（AC6）
+AssertionError: expected [ 'backend', 'worker' ] to deeply equal [ 'backend', 'worker', 'グループなし' ]
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 「グループなし」の見出し > 全部の項目がグループの中で「グループなし」が空�
+AssertionError: expected [ 'backend', 'main', 'wt', 'plain' ] to deeply equal [ 'backend', 'main', 'wt', …(2) ]
+ Test Files  1 failed (1)
+      Tests  4 failed | 128 passed (132)
+##### H2: 畳んだサイドバーで見出しの状態アイコンを出さない
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+AssertionError: expected false to be true // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 131 passed (132)
+##### H3: 畳んだサイドバーでも見出しの数を出す
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+AssertionError: expected true to be false // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 131 passed (132)
+##### H4: 畳んだサイドバーでも見出しの横線を出す
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+AssertionError: expected true to be false // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 131 passed (132)
+##### H5: 畳んだサイドバーでも +n を出す
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+AssertionError: expected true to be false // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 131 passed (132)
+##### H6: 畳んだサイドバーでもブランチ名を出す
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+AssertionError: expected true to be false // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 131 passed (132)
+##### H7: 畳んだサイドバーでも名前を出す
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — 折りたたみ > view.sidebarCollapsed のときラベル類を出さない
+AssertionError: expected true to be false // Object.is equality
+ FAIL  src/components/Sidebar.test.ts > Sidebar — 行の並びの設定と独自トークン（20260927-sidebar-row-tokens の AC9・AC12・AC13） > 畳んだサイドバーは並びの設定に関わらず今までどおり（状態の印だけ）
+AssertionError: expected '◐w1' to be '◐' // Object.is equality
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > 畳んだサイドバー（view.sidebarCollapsed）の見出し > 見出しの状態アイコンは出るが�
+AssertionError: expected true to be false // Object.is equality
+ Test Files  1 failed (1)
+      Tests  3 failed | 129 passed (132)
+##### H8: treeLast を全子の最後で決める（元の実装）
+
+ FAIL  src/components/Sidebar.test.ts > Sidebar — B3 の見た目（グループの見出し・「グループなし」・worktree グループ） > worktree グループ > 畳んでいて今いる子が最後でないときは、見えている子（今い�
+AssertionError: expected [ 'sidebar-row', …(3) ] to include 'sidebar-row-tree-last'
+ Test Files  1 failed (1)
+      Tests  1 failed | 131 passed (132)
+- 指摘 3 の直し: `treeLast` を `children`（見えている子）の最後で決める。畳んだとき今いる子が最後でなくても縦線が行の下端まで伸びない。
+- T25 [should] 空の「グループなし」の見出し（D32）を固定するテストが無い → 全項目がグループ内の場面のテストと壊して落ちる確認を足した [conv:regression-negative-control]
+- T25 [nit] 畳んだサイドバーでの新しい描画のテストが無い → テストと壊して落ちる確認（H2〜H7）を足した [conv:regression-negative-control]
+- T25 [nit] treeLast が畳んだときに全子の最後で決まる → 見えている子の最後で判定するよう直した [conv:-]
