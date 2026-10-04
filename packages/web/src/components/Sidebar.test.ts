@@ -214,6 +214,44 @@ describe("Sidebar — spaces", () => {
     expect(wrapper.find(".sidebar-spaces .sidebar-row").classes()).toContain("sidebar-row-selected");
   });
 
+  // 20261004-group-worktree-items T15：navigate の選択はグループの見出しの行にも付き、メニューは見出しの位置でグループのメニューを開く。
+  it("navigate モードで見出しを選ぶと見出しの行に選択スタイルが付き、メニューの要求はグループのメニューを開く", async () => {
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1"));
+    session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+    session.groupUpserted({ id: "g2", label: "空", collapsed: false });
+    session.layoutChanged({ top: ["g:g1", "g:g2"], groups: { g1: ["w:w1"], g2: [] } });
+    view.onModeChange("navigate");
+    view.setNavigateSelection("group:g2");
+    const openContextMenu = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { openContextMenu });
+    const selected = wrapper.findAll(".sidebar-spaces .sidebar-row-selected");
+    expect(selected).toHaveLength(1);
+    expect(selected[0]!.attributes("data-workspace-row-key")).toBe("group:g2");
+    view.requestNavigateMenu();
+    await wrapper.vm.$nextTick();
+    expect(openContextMenu).toHaveBeenCalledWith({ kind: "group", groupId: "g2" }, { x: expect.any(Number), y: expect.any(Number) });
+    expect(view.navigateSelection).toBe("group:g2");
+  });
+
+  it("navigate モードで、別の画面で消されたグループの見出しが選択に残っていても、メニューは開かず選択を外す", async () => {
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1"));
+    session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+    session.layoutChanged({ top: ["g:g1"], groups: { g1: ["w:w1"] } });
+    view.onModeChange("navigate");
+    view.setNavigateSelection("group:g1");
+    const openContextMenu = vi.fn();
+    const wrapper = mountSidebar(makeConnection(), { openContextMenu });
+    session.groupDeleted("g1");
+    view.requestNavigateMenu();
+    await wrapper.vm.$nextTick();
+    expect(openContextMenu).not.toHaveBeenCalled();
+    expect(view.navigateSelection).toBeNull();
+  });
+
   // 20260920-ui-selection-visuals：以前は「表示中」を示す見た目が無く、navigate モード中のカーソルだけだった（AC1）。
   it("表示中の workspace の行に、モードに関係なく表示中のスタイルと aria-current を付ける", () => {
     const session = useSessionStore(pinia);

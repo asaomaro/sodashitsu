@@ -180,3 +180,14 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **送り分け**: `ActionDispatcher.moveItemByDrag(item, before, legacy)`（旧 `moveWorkspacesByDrag`）。`session.hasServerLayout` なら `item.move`（失敗は「移動できませんでした」）、無ければ `workspace.move_to`（掴んだ項目の workspace 全部と、落とし先の項目の先頭の workspace）。古いサーバで落とし先の workspace が無いとき（メンバーのいない空のグループの上）は、null が「末尾」の意味になってしまうので何も送らない。
 - 端末版の `moveWorkspacesByDrag`（`TuiDispatcher`・`mouse.ts`）は T18 まで触らない。
 - **古いサーバで落とし先・動かす対象が無い場合（T14 点検の指摘）**: メンバーのいない空のグループは古いサーバでは `workspace.move_to` の落とし先にならない。**落とし先にしない**方を選んだ：`dropStateFor` が null を返し、印（`sidebar-row-drop-target` も `-invalid` も）を出さず、離しても送らず知らせない（印が出るのに何も起きない状態をなくした）。同じ空のグループを**掴む**ことも古いサーバではできない（`dragIds` が空で `workspaceIds: []` を送りうるため、閾値を超えてもドラッグを始めない）。`moveItemByDrag` にも保険として、古いサーバで落とし先が null または `workspaceIds` が空なら何も送らない guard を置いた。`layout` を持つサーバは空のグループも `item.move` で動かせるので変えない。
+
+## D23: ブラウザ版のキーボード（T15）
+
+- **選択のキー**: navigate の選択（`view.navigateSelection`）は文字列のまま、workspace なら id、グループの見出しなら `group:<id>`（サイドバーの行のキー `row.key` と同じ形。workspace の id は `group:` で始まらないので混ざらない）。変換は client-core の `navigateKeyOfGroup`・`groupIdOfNavigateKey`・`navigateKeyOfRow`。選べる行の順は `navigableRowsOfTree`（`visibleWorkspaceIdsOfTree` に、グループの見出しを中の行の前へ差し込んだもの。畳んだ・空のグループの見出しも含む）。端末版（T17）も同じ関数を使える。
+- **`navigate_open_menu`**: `Sidebar.vue` が選択のキーで分け、見出しならその行の位置でグループのメニュー、workspace なら今までどおり。`ActionDispatcher` 側の要求（`requestNavigateMenu`）は変えない。
+- **`navigate_toggle_collapse`**: 見出しなら `group.toggle_collapsed`（サーバ）、workspace の行は、その workspace が `repoMembers` で 2 つ以上のリポジトリに属すとき（先頭でも子でも）`view.toggleAutoGroupCollapsed(repoKey)`（共有の設定）。通常の行は何もしない。
+- **設計に無い決め**: 見出しを選んでいるときの `Enter`（activate）は、選択をやめるだけで何も送らない（見出しは「移る先」ではない。畳むのは `navigate_toggle_collapse` とクリック）。
+- **`move_workspace_previous`／`next`**: 対象は今いる workspace（navigate の選択ではない。今までと同じ）。`layout` を持つサーバには `item.move_by`、無いサーバには `workspace.move`。名前順で今いる workspace の項目が一番上（グループに入っていない）なら送らず「名前順では並べ替えできません」と知らせる（古いサーバにも同じ。グループの中は送る）。
+- **「上へ／下へ移動」の後の選択**: 選択は ID（キー）で持ち、メニューの操作では消さないので、動かした見出しに選択が残る（テストで固定）。
+- **選択が消える経路（T15 点検の指摘）**: メニューを閉じる（`ContextMenu.vue` の `close`・実行の `activate`）と `moveGroupBy` は `navigateSelection` を触らない。選択を消すのは `navigate_cancel`/`activate`（`ActionDispatcher`）とマシン切り替え（`view.resetForMachineSwitch`）だけだと実物で確かめた。「上へ移動」の後も見出しの選択が残るテストは、実際のメニュー経路（見出しのメニュー→「上へ移動」）で通し、`close`／実行に選択を消す行を仮に入れると落ちることを確かめた（review.md）。
+- **消されたグループの選択**: 別の画面でグループが消されても選択が `group:<id>` のまま残りうる。`navigate_open_menu`（`Sidebar.vue`）と `navigate_toggle_collapse`（`toggleCollapseOfSelection`）は `session.groups` に実在するかを確かめ、無ければ何も開かず・送らず、選択を外す。

@@ -344,7 +344,7 @@ export const useViewStore = defineStore("view", () => {
    * ダイアログ・グラフ画面・質問のフォームのどれかが開いている（キーを端末へ送らない dialog モード・window の keydown の抑止・ドラッグの取り消しの判定。research-web §1.5）。
    */
   const modalOpen = computed(() => openDialog.value !== null || graphOpen.value || askOpen.value);
-  /** navigate モード中に選択中の workspace（`↑/↓` で動かす。Enter で確定）。 */
+  /** navigate モード中に選択中の行（workspace の id、グループの見出しなら `group:<id>`。`↑/↓` で動かす。Enter で確定）。 */
   const navigateSelection = ref<string | null>(null);
   /**
    * navigate モード中に「選択中の workspace のメニューを開いてほしい」という一度きりの要求

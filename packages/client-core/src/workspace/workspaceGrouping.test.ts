@@ -13,6 +13,10 @@ import {
   visibleGroupMembers,
   visibleWorkspaceIdsInOrder,
   visibleWorkspaceIdsOfTree,
+  navigableRowsOfTree,
+  navigateKeyOfGroup,
+  groupIdOfNavigateKey,
+  navigateKeyOfRow,
 } from "./workspaceGrouping.js";
 
 const NO_GIT: GitInfo | null = null;
@@ -438,6 +442,46 @@ describe("visibleWorkspaceIdsOfTree", () => {
     expect(visibleWorkspaceIdsOfTree(tree, new Set(), "w3")).toEqual(["w3", "w5"]);
     expect(visibleWorkspaceIdsOfTree(tree, new Set(), "w1")).toEqual(["w1", "w5"]);
     expect(visibleWorkspaceIdsOfTree(tree, new Set(), "w4")).toEqual(["w4", "w5"]);
+  });
+});
+
+describe("navigableRowsOfTree（AC-I3）", () => {
+  const list = [body("w1"), linked("w2"), ws("w4"), ws("w5")];
+  const mk = (collapsed: boolean, extra: Record<string, string[]> = {}): [SidebarLayout, WorkspaceGroup[]] => [
+    lay(["g:g1", "g:g2", "w:w5"], { g1: [`r:${R}`, "w:w4"], g2: [], ...extra }),
+    [group("g1", "G", collapsed), group("g2", "空", false)],
+  ];
+  const keys = (rows: ReturnType<typeof navigableRowsOfTree>): string[] =>
+    rows.map((r) => (r.kind === "group" ? navigateKeyOfGroup(r.groupId) : r.workspaceId));
+
+  it("見出しを中の行の前に差し込む（空のグループにも届く）", () => {
+    const [l, g] = mk(false);
+    expect(keys(navigableRowsOfTree(sidebarTree(list, g, l, "opened"), new Set(), null))).toEqual([
+      "group:g1", "w1", "w2", "w4", "group:g2", "w5",
+    ]);
+  });
+
+  it("畳んだグループも見出しは残り、中は今いる workspace だけ", () => {
+    const [l, g] = mk(true);
+    const tree = sidebarTree(list, g, l, "opened");
+    expect(keys(navigableRowsOfTree(tree, new Set(), null))).toEqual(["group:g1", "group:g2", "w5"]);
+    expect(keys(navigableRowsOfTree(tree, new Set(), "w2"))).toEqual(["group:g1", "w2", "group:g2", "w5"]);
+  });
+
+  it("選択のキーの読み替え（workspace の id とは混ざらない）", () => {
+    expect(groupIdOfNavigateKey("group:g1")).toBe("g1");
+    expect(groupIdOfNavigateKey("w1")).toBeNull();
+    expect(groupIdOfNavigateKey(null)).toBeNull();
+    // 先頭が `group:` でない id は見出しとして読まない・中ほどの `group:` も読まない。
+    expect(groupIdOfNavigateKey("xgroup:g1")).toBeNull();
+    expect(groupIdOfNavigateKey("group:")).toBe("");
+  });
+
+  it("navigateKeyOfGroup は group:<id>、navigateKeyOfRow は見出しなら group:<id>・workspace なら id そのもの", () => {
+    expect(navigateKeyOfGroup("g1")).toBe("group:g1");
+    expect(navigateKeyOfRow({ kind: "group", groupId: "g1" })).toBe("group:g1");
+    expect(navigateKeyOfRow({ kind: "workspace", workspaceId: "w1" })).toBe("w1");
+    expect(groupIdOfNavigateKey(navigateKeyOfGroup("g9"))).toBe("g9");
   });
 });
 

@@ -1,5 +1,6 @@
 import type { MethodName, ParamsOf, ResultOf } from "@sodashitsu/protocol";
 import type { AgentInfo, AgentIntegrationStatusResult, Pane, Tab, Workspace } from "@sodashitsu/protocol";
+import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KeyInputController } from "../keys/KeyInputController.js";
@@ -17,6 +18,8 @@ import { useMachinesStore } from "../store/machines.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import { InputGate } from "@sodashitsu/client-core";
+import ContextMenu from "../components/ContextMenu.vue";
+import { ActionDispatcherKey } from "../injection.js";
 import { ActionDispatcher } from "./ActionDispatcher.js";
 
 let pinia: Pinia;
@@ -2866,5 +2869,176 @@ describe("ActionDispatcher — レイアウトの順（20261004-group-worktree-i
     dispatcher.run({ type: "workspaceDelta", delta: 1 });
     // 一番上は A(0)、g1（先頭メンバー r:/r/.git の位置 = W1 の 1）、B(2) の順 → A の次は g1 の中の本体 M。
     expect(view.workspaceId).toBe("M");
+  });
+});
+
+// 20261004-group-worktree-items T15：navigate の選択を行に広げ、畳む・開く・項目の並べ替え。
+describe("ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15）", () => {
+  const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+  /** top: [g1, g2(空), B]、g1: [r:/r/.git(M 本体・W1 子), A]。 */
+  function setup(opts: { collapsed?: boolean } = {}) {
+    const session = useSessionStore(pinia);
+    for (const [id, o] of [
+      ["A", {}],
+      ["W1", { git: git(true) }],
+      ["B", {}],
+      ["M", { git: git(false) }],
+    ] as const) {
+      session.workspaceUpserted({ ...makeWorkspace(id, ["t" + id]), activeTabId: "t" + id, ...o });
+      session.tabUpserted(makeTab("t" + id, id, "p" + id));
+    }
+    session.groupUpserted({ id: "g1", label: "grp", collapsed: opts.collapsed ?? false });
+    session.groupUpserted({ id: "g2", label: "空", collapsed: false });
+    session.layoutChanged({ top: ["g:g1", "g:g2", "w:B"], groups: { g1: ["r:/r/.git", "w:A"], g2: [] } });
+    return session;
+  }
+
+  it("up/down はグループの見出しも順に選ぶ（空のグループにも届く）。キーは workspace の id と混ざらない", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(makeConnection());
+    view.setNavigateSelection("group:g1");
+    const seen: (string | null)[] = [];
+    for (let i = 0; i < 6; i++) {
+      dispatcher.run({ type: "navigate", op: "down" });
+      seen.push(view.navigateSelection);
+    }
+    expect(seen).toEqual(["M", "W1", "A", "group:g2", "B", "group:g1"]);
+    dispatcher.run({ type: "navigate", op: "up" });
+    expect(view.navigateSelection).toBe("B");
+  });
+
+  it("畳んだグループの見出しにも届く（中は今いる workspace だけ）", () => {
+    setup({ collapsed: true });
+    const view = useViewStore(pinia);
+    view.setView("B", "tB");
+    const { dispatcher } = makeDispatcher(makeConnection());
+    view.setNavigateSelection("group:g1");
+    dispatcher.run({ type: "navigate", op: "down" });
+    expect(view.navigateSelection).toBe("group:g2");
+  });
+
+  it("openMenu: 見出しを選んでいても要求を立てる（開く先の判断は Sidebar.vue）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    view.setNavigateSelection("group:g1");
+    makeDispatcher(makeConnection()).dispatcher.run({ type: "navigate", op: "openMenu" });
+    expect(view.navigateMenuRequested).toBe(true);
+    expect(view.navigateSelection).toBe("group:g1");
+  });
+
+  it("activate: 見出しを選んでいるときは選択をやめるだけで workspace.focus を送らない", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setNavigateSelection("group:g1");
+    makeDispatcher(conn).dispatcher.run({ type: "navigate", op: "activate" });
+    expect(view.navigateSelection).toBeNull();
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("toggleCollapse: 見出しならグループを group.toggle_collapsed で切り替える", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setNavigateSelection("group:g2");
+    makeDispatcher(conn).dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(conn.requests).toEqual([["group.toggle_collapsed", { groupId: "g2" }]]);
+  });
+
+  it("toggleCollapse: worktree グループの先頭でも子でも、その worktree グループを畳む・広げる（サーバへは送らない）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.setNavigateSelection("M");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.collapsedAutoGroups.has("/r/.git")).toBe(true);
+    view.setNavigateSelection("W1");
+    dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(view.collapsedAutoGroups.has("/r/.git")).toBe(false);
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("toggleCollapse: 通常の行・選択なしは何もしない（1 つだけのリポジトリも worktree グループではない）", () => {
+    const session = setup();
+    session.workspaceUpserted({ ...makeWorkspace("S", ["tS"]), git: { ...git(false), repoKey: "/s/.git" } });
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    for (const sel of ["B", "S", null]) {
+      view.setNavigateSelection(sel);
+      dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    }
+    expect(view.collapsedAutoGroups.size).toBe(0);
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("moveWorkspace: layout を持つサーバには項目の item.move_by を送る（対象は今いる workspace。サーバが項目に読み替える）", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setView("W1", "tW1");
+    makeDispatcher(conn).dispatcher.run({ type: "moveWorkspace", direction: "previous" });
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "workspace", workspaceId: "W1" }, direction: "previous" }]]);
+  });
+
+  it("moveWorkspace: 名前順の一番上は送らず知らせる。グループの中は送る", () => {
+    setup();
+    const view = useViewStore(pinia);
+    view.toggleWorkspaceSort();
+    expect(view.workspaceSort).toBe("name");
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.setView("B", "tB"); // 一番上
+    dispatcher.run({ type: "moveWorkspace", direction: "next" });
+    expect(conn.requests).toEqual([]);
+    expect(view.toasts.map((t) => t.message)).toEqual(["名前順では並べ替えできません"]);
+    view.setView("A", "tA"); // グループの中
+    dispatcher.run({ type: "moveWorkspace", direction: "next" });
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "workspace", workspaceId: "A" }, direction: "next" }]]);
+  });
+
+  it("moveWorkspace: layout の無い古いサーバには今までの workspace.move を送る", () => {
+    const session = setup();
+    session.layout = null;
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setView("B", "tB");
+    makeDispatcher(conn).dispatcher.run({ type: "moveWorkspace", direction: "next" });
+    expect(conn.requests).toEqual([["workspace.move", { workspaceId: "B", direction: "next" }]]);
+  });
+
+  // AC-I4。実際のメニュー経路（見出しのメニューを開く→「上へ移動」を押す→ moveGroupBy）を通して、選択が消えないことを確かめる。
+  it("見出しのメニューから「上へ移動」を実行しても、見出しの選択が残る（メニューを閉じる経路でも消えない）", async () => {
+    setup();
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    view.onModeChange("navigate");
+    view.setNavigateSelection("group:g1");
+    dispatcher.run({ type: "navigate", op: "openMenu" });
+    view.clearNavigateMenuRequest(); // Sidebar.vue が要求を受けて消す
+    dispatcher.openContextMenu({ kind: "group", groupId: "g1" }, { x: 0, y: 0 });
+    const wrapper = mount(ContextMenu, { global: { plugins: [pinia], provide: { [ActionDispatcherKey as symbol]: dispatcher } }, attachTo: document.body });
+    expect(view.navigateSelection).toBe("group:g1");
+    const up = wrapper.findAll("li").find((li) => li.text() === "上へ移動");
+    await up!.trigger("click");
+    expect(view.contextMenu).toBeNull();
+    expect(conn.requests).toEqual([["item.move_by", { item: { kind: "group", groupId: "g1" }, direction: "previous" }]]);
+    expect(view.navigateSelection).toBe("group:g1");
+    wrapper.unmount();
+  });
+
+  it("toggleCollapse: 別の画面で消されたグループが選択に残っていたら、何も送らず選択を外す", () => {
+    setup();
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    view.setNavigateSelection("group:g2");
+    session.groupDeleted("g2");
+    makeDispatcher(conn).dispatcher.run({ type: "navigate", op: "toggleCollapse" });
+    expect(conn.requests).toEqual([]);
+    expect(view.navigateSelection).toBeNull();
   });
 });

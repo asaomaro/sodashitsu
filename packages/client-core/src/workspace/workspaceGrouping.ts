@@ -353,6 +353,53 @@ export function visibleWorkspaceIdsOfTree(
 }
 
 /**
+ * navigate の選択の行（20261004-group-worktree-items。design「画面」）。グループの見出しの行と workspace の行。
+ * 選択のキーは、見出しなら `group:<id>`（`navigateKeyOfGroup`）、workspace なら workspace の id そのもの
+ * （workspace の id は `group:` で始まらないので混ざらない。サイドバーの行のキー `row.key` と同じ形）。
+ */
+export type NavigateRow = { kind: "group"; groupId: string } | { kind: "workspace"; workspaceId: string };
+
+const NAVIGATE_GROUP_PREFIX = "group:";
+
+/** グループの見出しの行の選択のキー。 */
+export function navigateKeyOfGroup(groupId: string): string {
+  return `${NAVIGATE_GROUP_PREFIX}${groupId}`;
+}
+
+/** 選択のキーが見出しならそのグループの id、workspace（または null）なら null。 */
+export function groupIdOfNavigateKey(key: string | null): string | null {
+  return key !== null && key.startsWith(NAVIGATE_GROUP_PREFIX) ? key.slice(NAVIGATE_GROUP_PREFIX.length) : null;
+}
+
+/** 選択のキーが指す行（`NavigateRow`）。 */
+export function navigateKeyOfRow(row: NavigateRow): string {
+  return row.kind === "group" ? navigateKeyOfGroup(row.groupId) : row.workspaceId;
+}
+
+/**
+ * 木の上で、navigate で選べる行を上から下へ辿った順で返す。`visibleWorkspaceIdsOfTree` に、グループの見出しの行
+ * （畳んだグループ・空のグループも含む）を、そのグループの中の行の前へ差し込んだもの。
+ */
+export function navigableRowsOfTree(
+  tree: TopRow[],
+  collapsedRepos: ReadonlySet<string>,
+  focusedWorkspaceId: string | null,
+): NavigateRow[] {
+  const rows: NavigateRow[] = [];
+  for (const row of tree) {
+    if (row.kind === "group") {
+      rows.push({ kind: "group", groupId: row.group.id });
+      for (const id of visibleWorkspaceIdsOfTree([row], collapsedRepos, focusedWorkspaceId))
+        rows.push({ kind: "workspace", workspaceId: id });
+    } else {
+      for (const id of visibleWorkspaceIdsOfTree([row], collapsedRepos, focusedWorkspaceId))
+        rows.push({ kind: "workspace", workspaceId: id });
+    }
+  }
+  return rows;
+}
+
+/**
  * workspace の「一番上のまとまり」。グループの中の項目ならそのグループ、2 つ以上の workspace を持つ
  * リポジトリなら worktree グループ（`repo`）、それ以外は workspace 単体。`workspaceId` が無ければ null。
  */

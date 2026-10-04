@@ -5,7 +5,7 @@ import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
 import { orderedAgentPaneIds } from "@sodashitsu/client-core";
-import { type ItemRow, visibleGroupMembers } from "@sodashitsu/client-core";
+import { type ItemRow, groupIdOfNavigateKey, visibleGroupMembers } from "@sodashitsu/client-core";
 import { currentSidebarTree } from "../store/sidebarTree.js";
 import SidebarKindIcon from "./SidebarKindIcon.vue";
 import { type AgentSort, SIDEBAR_WIDTH, type WorkspaceSort, useViewStore } from "../store/view.js";
@@ -261,12 +261,21 @@ watch(
   () => view.navigateMenuRequested,
   (requested) => {
     if (!requested) return;
-    const workspaceId = view.navigateSelection;
+    const selected = view.navigateSelection;
     view.clearNavigateMenuRequest();
-    if (!workspaceId) return;
-    const rowEl = el.value?.querySelector<HTMLElement>(`[data-drop-workspace-id="${workspaceId}"]`);
+    if (!selected) return;
+    // 見出しを選んでいればグループのメニュー（行は `data-workspace-row-key="group:<id>"`）。
+    const groupId = groupIdOfNavigateKey(selected);
+    // 別の画面で消されたグループが選択に残っていたら、メニューは開かず選択を外す。
+    if (groupId !== null && !session.groups.has(groupId)) {
+      view.setNavigateSelection(null);
+      return;
+    }
+    const rowEl = el.value?.querySelector<HTMLElement>(groupId !== null ? `[data-workspace-row-key="${selected}"]` : `[data-drop-workspace-id="${selected}"]`);
     const rect = rowEl?.getBoundingClientRect();
-    actions?.openContextMenu({ kind: "workspace", workspaceId }, { x: rect?.left ?? 0, y: rect?.top ?? 0 });
+    const at = { x: rect?.left ?? 0, y: rect?.top ?? 0 };
+    if (groupId !== null) actions?.openContextMenu({ kind: "group", groupId }, at);
+    else actions?.openContextMenu({ kind: "workspace", workspaceId: selected }, at);
   },
 );
 
@@ -508,7 +517,7 @@ watch(
               :class="{
                 'sidebar-row-current': row.isCurrent,
                 'sidebar-row-depth-2': row.depth === 2,
-                'sidebar-row-selected': view.mode === 'navigate' && !!row.workspace && view.navigateSelection === row.workspace.id,
+                'sidebar-row-selected': view.mode === 'navigate' && view.navigateSelection === row.key,
                 'sidebar-row-indent': row.indent,
                 'sidebar-row-drop-target': view.workspaceDrag?.overRowKey === row.key && !view.workspaceDrag.overInvalid,
                 'sidebar-row-drop-invalid': view.workspaceDrag?.overRowKey === row.key && view.workspaceDrag.overInvalid,

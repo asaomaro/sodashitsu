@@ -1269,3 +1269,206 @@ AssertionError: expected "vi.fn()" to not be called at all, but actually been ca
 - T14 [nit] 他のテストの古いモック moveWorkspacesByDrag が残っていた → moveItemByDrag に直した [conv:-]
 - T14 [nit] 古いサーバで空のグループの上に落とせる印が出るのに何も起きない → 落とし先にしない（印を出さない）ようにした [conv:-]
 - T14 [nit] 古いサーバで空のグループを掴むと workspace_ids が空の move_to を送りうる → ドラッグを始めない・送らない guard を足した [conv:-]
+
+### T15 壊して落ちる確認
+
+実装の該当行を 1 つずつ壊し、足したテストが落ちることを確かめた（確認後はすべて元に戻した）。生の出力（絞り込み済み）:
+
+```
+#### navigate up/down が見出しを選ばない
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > up/down はグループの見出しも順に選ぶ（空のグループにも届く）。キーは workspace の id と混ざらない
+AssertionError: expected [ 'M', 'W1', 'A', 'B', 'M', 'W1' ] to deeply equal [ 'M', 'W1', 'A', 'group:g2', …(2) ]
+- Expected
++ Received
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > 畳んだグループの見出しにも届く（中は今いる workspace だけ）
+AssertionError: expected 'B' to be 'group:g2' // Object.is equality
+Expected: "group:g2"
+Received: "B"
+      Tests  2 failed | 200 passed (202)
+#### toggleCollapse が見出しを無視
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > toggleCollapse: 見出しならグループを group.toggle_collapsed で切り替える
+AssertionError: expected [] to deeply equal [ [ 'group.toggle_collapsed', …(1) ] ]
+- Expected
++ Received
+      Tests  1 failed | 201 passed (202)
+#### toggleCollapse が worktree グループを畳まない
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > toggleCollapse: worktree グループの先頭でも子でも、その worktree グループを畳む・広げる（サーバへは送らない）
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+      Tests  1 failed | 201 passed (202)
+#### 1 つだけのリポジトリも畳む
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > toggleCollapse: 通常の行・選択なしは何もしない（1 つだけのリポジトリも worktree グループではない）
+AssertionError: expected 1 to be +0 // Object.is equality
+- Expected
++ Received
+      Tests  1 failed | 201 passed (202)
+#### moveWorkspace が item.move_by でなく workspace.move
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > moveWorkspace: layout を持つサーバには項目の item.move_by を送る（対象は今いる workspace。サーバが項目に読み替える）
+AssertionError: expected [ [ 'workspace.move', …(1) ] ] to deeply equal [ [ 'item.move_by', …(1) ] ]
+- Expected
++ Received
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > moveWorkspace: 名前順の一番上は送らず知らせる。グループの中は送る
+AssertionError: expected [ [ 'workspace.move', …(1) ] ] to deeply equal [ [ 'item.move_by', …(1) ] ]
+- Expected
++ Received
+      Tests  2 failed | 200 passed (202)
+#### 古いサーバにも item.move_by
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — workspace の並べ替え > moveWorkspace: 表示中の workspace を対象に workspace.move を送る
+AssertionError: expected [ [ 'item.move_by', …(1) ] ] to deeply equal [ [ 'workspace.move', …(1) ] ]
+- Expected
++ Received
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > moveWorkspace: layout の無い古いサーバには今までの workspace.move を送る
+AssertionError: expected [ [ 'item.move_by', …(1) ] ] to deeply equal [ [ 'workspace.move', …(1) ] ]
+- Expected
++ Received
+      Tests  2 failed | 200 passed (202)
+#### 名前順の一番上を受け付ける
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > moveWorkspace: 名前順の一番上は送らず知らせる。グループの中は送る
+AssertionError: expected [ [ 'item.move_by', …(1) ] ] to deeply equal []
+- Expected
++ Received
+      Tests  1 failed | 201 passed (202)
+#### 名前順でグループの中も拒否
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > moveWorkspace: 名前順の一番上は送らず知らせる。グループの中は送る
+AssertionError: expected [] to deeply equal [ [ 'item.move_by', …(1) ] ]
+- Expected
++ Received
+      Tests  1 failed | 201 passed (202)
+#### 見出しの Enter で focus を送る
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > activate: 見出しを選んでいるときは選択をやめるだけで workspace.focus を送らない
+AssertionError: expected [ [ 'workspace.focus', …(1) ] ] to deeply equal []
+- Expected
++ Received
+      Tests  1 failed | 201 passed (202)
+#### Sidebar: 見出しの選択スタイル
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — spaces > navigate モードで見出しを選ぶと見出しの行に選択スタイルが付き、メニューの要求はグループのメニューを開く
+AssertionError: expected [] to have a length of 1 but got +0
+- Expected
++ Received
+      Tests  1 failed | 105 passed (106)
+#### Sidebar: 見出しのメニューを開かない
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — spaces > navigate モードで見出しを選ぶと見出しの行に選択スタイルが付き、メニューの要求はグループのメニューを開く
+AssertionError: expected "vi.fn()" to be called with arguments: [ …(2) ]
+Received:
+      Tests  1 failed | 105 passed (106)
+#### client-core: navigableRowsOfTree が見出しを差し込まない
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/workspace/workspaceGrouping.test.ts > navigableRowsOfTree（AC-I3） > 見出しを中の行の前に差し込む（空のグループにも届く）
+AssertionError: expected [ 'w1', 'w2', 'w4', 'w5' ] to deeply equal [ 'group:g1', 'w1', 'w2', 'w4', …(2) ]
+ FAIL  src/workspace/workspaceGrouping.test.ts > navigableRowsOfTree（AC-I3） > 畳んだグループも見出しは残り、中は今いる workspace だけ
+AssertionError: expected [ 'w5' ] to deeply equal [ 'group:g1', 'group:g2', 'w5' ]
+      Tests  2 failed | 53 passed (55)
+```
+
+
+### T15 壊して落ちる確認（独立点検の指摘への追加）
+
+Enter・openMenu・Sidebar の見出し・client-core のキー変換、選択が消える経路（メニューを閉じる・項目の実行）、消えたグループの実在確認を 1 行ずつ壊した（確認後はすべて元に戻した）。「見出しのメニューから上へ移動を実行しても選択が残る」テストは、実際の `ContextMenu` を実物の `ActionDispatcher` で動かして通す。生の出力（絞り込み済み）:
+
+```
+#### 見出しの Enter で focus を送る
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > activate: 見出しを選んでいるときは選択をやめるだけで workspace.focus を送らない
+AssertionError: expected [ [ 'workspace.focus', …(1) ] ] to deeply equal []
+- Expected
++ Received
+      Tests  1 failed | 309 passed (310)
+#### openMenu: 見出しのとき要求を立てない
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > openMenu: 見出しを選んでいても要求を立てる（開く先の判断は Sidebar.vue）
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+      Tests  1 failed | 309 passed (310)
+#### openMenu: 選択が無くても要求を立てる
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — navigate > openMenu: 選択が無ければ何もしない
+AssertionError: expected true to be false // Object.is equality
+- Expected
++ Received
+      Tests  1 failed | 309 passed (310)
+#### Sidebar: 見出しの選択スタイル
+ FAIL  src/components/Sidebar.test.ts > Sidebar — spaces > navigate モードで見出しを選ぶと見出しの行に選択スタイルが付き、メニューの要求はグループのメニューを開く
+AssertionError: expected [] to have a length of 1 but got +0
+- Expected
++ Received
+      Tests  1 failed | 309 passed (310)
+#### Sidebar: 見出しでグループのメニューを開かない
+ FAIL  src/components/Sidebar.test.ts > Sidebar — spaces > navigate モードで見出しを選ぶと見出しの行に選択スタイルが付き、メニューの要求はグループのメニューを開く
+AssertionError: expected "vi.fn()" to be called with arguments: [ …(2) ]
+Received:
+      Tests  1 failed | 309 passed (310)
+#### Sidebar: 消えたグループの実在確認を外す
+ FAIL  src/components/Sidebar.test.ts > Sidebar — spaces > navigate モードで、別の画面で消されたグループの見出しが選択に残っていても、メニューは開かず選択を外す
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+Received:
+      Tests  1 failed | 309 passed (310)
+#### dispatcher: 消えたグループの実在確認を外す
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > toggleCollapse: 別の画面で消されたグループが選択に残っていたら、何も送らず選択を外す
+AssertionError: expected [ [ 'group.toggle_collapsed', …(1) ] ] to deeply equal []
+- Expected
++ Received
+      Tests  1 failed | 309 passed (310)
+#### client-core: navigateKeyOfGroup の接頭辞を変える
+ FAIL  src/workspace/workspaceGrouping.test.ts > navigableRowsOfTree（AC-I3） > 見出しを中の行の前に差し込む（空のグループにも届く）
+AssertionError: expected [ 'g:g1', 'w1', 'w2', 'w4', …(2) ] to deeply equal [ 'group:g1', 'w1', 'w2', 'w4', …(2) ]
+- Expected
++ Received
+ FAIL  src/workspace/workspaceGrouping.test.ts > navigableRowsOfTree（AC-I3） > 畳んだグループも見出しは残り、中は今いる workspace だけ
+AssertionError: expected [ 'g:g1', 'g:g2', 'w5' ] to deeply equal [ 'group:g1', 'group:g2', 'w5' ]
+- Expected
++ Received
+ FAIL  src/workspace/workspaceGrouping.test.ts > navigableRowsOfTree（AC-I3） > navigateKeyOfGroup は group:<id>、navigateKeyOfRow は見出しなら group:<id>・workspace なら id そのもの
+AssertionError: expected 'g:g1' to be 'group:g1' // Object.is equality
+Expected: "group:g1"
+Received: "g:g1"
+      Tests  3 failed | 53 passed (56)
+#### client-core: groupIdOfNavigateKey が先頭でなく含むだけで読む
+ FAIL  src/workspace/workspaceGrouping.test.ts > navigableRowsOfTree（AC-I3） > 選択のキーの読み替え（workspace の id とは混ざらない）
+AssertionError: expected ':g1' to be null
+- Expected:
++ Received:
+      Tests  1 failed | 55 passed (56)
+#### client-core: groupIdOfNavigateKey が null を読む
+ FAIL  src/workspace/workspaceGrouping.test.ts > navigableRowsOfTree（AC-I3） > 選択のキーの読み替え（workspace の id とは混ざらない）
+AssertionError: expected '' to be null
+- Expected:
++ Received:
+      Tests  1 failed | 55 passed (56)
+#### client-core: navigateKeyOfRow が見出しを id のまま返す
+ FAIL  src/workspace/workspaceGrouping.test.ts > navigableRowsOfTree（AC-I3） > navigateKeyOfGroup は group:<id>、navigateKeyOfRow は見出しなら group:<id>・workspace なら id そのもの
+AssertionError: expected 'g1' to be 'group:g1' // Object.is equality
+Expected: "group:g1"
+Received: "g1"
+      Tests  1 failed | 55 passed (56)
+#### client-core: navigateKeyOfRow が workspace に接頭辞を付ける
+ FAIL  src/workspace/workspaceGrouping.test.ts > navigableRowsOfTree（AC-I3） > navigateKeyOfGroup は group:<id>、navigateKeyOfRow は見出しなら group:<id>・workspace なら id そのもの
+AssertionError: expected 'group:w1' to be 'w1' // Object.is equality
+Expected: "w1"
+Received: "group:w1"
+      Tests  1 failed | 55 passed (56)
+#### ContextMenu: メニューを閉じるときに選択を消す
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > 見出しのメニューから「上へ移動」を実行しても、見出しの選択が残る（メニューを閉じる経路でも消えない）
+AssertionError: expected null to be 'group:g1' // Object.is equality
+- Expected:
++ Received:
+      Tests  1 failed | 309 passed (310)
+#### ContextMenu: 項目の実行で選択を消す
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — キーボード（行の選択・折りたたみ・項目の並べ替え。T15） > 見出しのメニューから「上へ移動」を実行しても、見出しの選択が残る（メニューを閉じる経路でも消えない）
+AssertionError: expected null to be 'group:g1' // Object.is equality
+- Expected:
++ Received:
+      Tests  1 failed | 309 passed (310)
+```
+- T15 [should] Enter・openMenu・Sidebar の見出し・navigableRowsOfTree 等の壊して落ちる確認が無い → 14 箇所を追補に貼った [conv:regression-negative-control!]
+- T15 [should] 「上へ／下へ移動の後も見出しに選択が残る」のテストが何も確かめていなかった → 実物の ContextMenu と ActionDispatcher を通すテストに書き直した [conv:regression-negative-control]
+- T15 [nit] 選択中のグループが消えても group:<id> の選択が残る → 実在確認を入れて何もせず選択を外す（テストと壊して落ちる確認つき、D23 に追記） [conv:-]

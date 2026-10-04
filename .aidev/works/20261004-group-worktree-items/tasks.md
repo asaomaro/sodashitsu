@@ -71,7 +71,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/web/src/components/Sidebar.vue:285-372`（D&D）、`packages/web/src/actions/ActionDispatcher.ts:1180-1182`（`moveWorkspacesByDrag`）、`packages/web/src/store/view.ts`（`workspaceDrag`）、`packages/web/src/components/Sidebar.test.ts`
       依存: T8, T12
       AC: AC2, AC5, AC-I2, AC-I5
-- [ ] T15: ブラウザ版のキーボード——navigate の選択を「行」に広げる（グループの見出しも上下で選べる。畳んだグループ・空のグループにも届く。見出しのキーの形は `group:<id>` 等にし、workspace の ID と混ざらないようにする）。`navigate_open_menu` は見出しを選んでいればグループのメニュー。`navigate_toggle_collapse` の動き（見出しならグループ、worktree グループの先頭ならその worktree グループ、子なら親の worktree グループ）。`move_workspace_previous`／`next` は項目の `item.move_by`（`layout` の無いサーバでは `workspace.move`。名前順のとき一番上は受け付けず知らせる）。「上へ／下へ移動」の後も見出しに選択が残る。単体テスト
+- [x] T15: ブラウザ版のキーボード——navigate の選択を「行」に広げる（グループの見出しも上下で選べる。畳んだグループ・空のグループにも届く。見出しのキーの形は `group:<id>` 等にし、workspace の ID と混ざらないようにする）。`navigate_open_menu` は見出しを選んでいればグループのメニュー。`navigate_toggle_collapse` の動き（見出しならグループ、worktree グループの先頭ならその worktree グループ、子なら親の worktree グループ）。`move_workspace_previous`／`next` は項目の `item.move_by`（`layout` の無いサーバでは `workspace.move`。名前順のとき一番上は受け付けず知らせる）。「上へ／下へ移動」の後も見出しに選択が残る。単体テスト
       対象: `packages/web/src/store/view.ts:347, :545-547`（`navigateSelection`）、`packages/web/src/components/Sidebar.vue:241-252`（メニューを開く watch。今は workspace 固定）・`:466-490`（`sidebar-row-selected` の条件）、`packages/web/src/actions/ActionDispatcher.ts:1003-1040, :1167-1173`、`packages/client-core/src/keys/bindings.ts:206-219`
       依存: T11, T13
       AC: AC5, AC6, AC-I3, AC-I4, AC-I5

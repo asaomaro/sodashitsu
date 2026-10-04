@@ -6,12 +6,12 @@ import type { InputHold } from "@sodashitsu/client-core";
 import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
-import { LOCAL_MACHINE_ID, repoMembers } from "@sodashitsu/client-core";
+import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
 import { orderedAgentPaneIds, type AgentOrderEntry } from "@sodashitsu/client-core";
-import { currentVisibleWorkspaceIds, itemGroupIdOf } from "../store/sidebarTree.js";
+import { currentNavigableRows, currentVisibleWorkspaceIds, itemGroupIdOf } from "../store/sidebarTree.js";
 import {
   buildNewCwd,
   loadNewCwdPath,
@@ -1071,14 +1071,13 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     switch (op) {
       case "up":
       case "down": {
-        // Sidebar.vue の描画（`sidebarTree`）と同じ並び・同じ可視範囲を辿る
-        // （20260923-workspace-grouping レビューの指摘：グループ導入前は素の反復順だったため
-        // 画面の並びと一致していたが、グループ導入後は乖離していた）。
-        const ids = currentVisibleWorkspaceIds(this.session, this.view);
-        if (ids.length === 0) return;
-        const current = this.view.navigateSelection ? ids.indexOf(this.view.navigateSelection) : -1;
+        // Sidebar.vue の描画（`sidebarTree`）と同じ並び・同じ可視範囲を辿る。選べるのは行（グループの見出しを含む。
+        // 畳んだグループ・空のグループにも届く。20261004-group-worktree-items）。
+        const keys = currentNavigableRows(this.session, this.view).map(navigateKeyOfRow);
+        if (keys.length === 0) return;
+        const current = this.view.navigateSelection ? keys.indexOf(this.view.navigateSelection) : -1;
         const delta = op === "up" ? -1 : 1;
-        const next = ids[(current === -1 ? 0 : current + delta + ids.length) % ids.length];
+        const next = keys[(current === -1 ? 0 : current + delta + keys.length) % keys.length];
         if (next) this.view.setNavigateSelection(next);
         return;
       }
@@ -1097,15 +1096,36 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         if (this.view.navigateSelection) this.view.requestNavigateMenu();
         return;
       case "toggleCollapse":
-        // 受け口だけ（group-worktree-items T11。動きは T15 で入れる）。
+        this.toggleCollapseOfSelection();
         return;
     }
+  }
+
+  /**
+   * `navigate_toggle_collapse`。選んでいる行がグループの見出しならそのグループ（サーバ）を、worktree グループの
+   * 先頭・子ならその worktree グループ（共有の設定 `collapsedAutoGroups`）を畳む・広げる。通常の行は何もしない。
+   */
+  private toggleCollapseOfSelection(): void {
+    const key = this.view.navigateSelection;
+    if (!key) return;
+    const groupId = groupIdOfNavigateKey(key);
+    if (groupId !== null) {
+      // 別の画面で消されたグループが選択に残っていたら、何も送らず選択を外す。
+      if (!this.session.groups.has(groupId)) this.view.setNavigateSelection(null);
+      else this.toggleGroupCollapsed(groupId);
+      return;
+    }
+    const ws = this.session.workspaces.get(key);
+    const repoKey = ws?.git?.repoKey ?? null;
+    if (repoKey === null || repoMembers([...this.session.workspaces.values()], repoKey).length < 2) return;
+    this.view.toggleAutoGroupCollapsed(repoKey);
   }
 
   private activateNavigateSelection(): void {
     const workspaceId = this.view.navigateSelection;
     this.view.setNavigateSelection(null);
-    if (!workspaceId) return;
+    // グループの見出しを選んでいるときの Enter は、選択をやめるだけ（畳むのは `navigate_toggle_collapse`）。
+    if (!workspaceId || groupIdOfNavigateKey(workspaceId) !== null) return;
     this.focusWorkspaceById(workspaceId);
   }
 
@@ -1229,16 +1249,24 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /**
-   * `move_workspace_previous`/`move_workspace_next`（20260923-workspace-grouping。`moveTab` と
-   * 同じ形）。対象は現在 focus 中の workspace。グループの内側・外側を問わず、フラットな順序上で
-   * 隣と入れ替わる——キーバインドはグループのまとまりを保つ動きはしない（design「振る舞いの詳細
-   * （キーバインド）」。まとまりを保った移動は D&D の役割＝`moveItemByDrag`）。
+   * `move_workspace_previous`/`move_workspace_next`（`moveTab` と同じ形）。対象は現在 focus 中の workspace の**項目**
+   * （20261004-group-worktree-items。リポジトリなら worktree グループ丸ごと。同じ入れ物の中で 1 つ動く）。
    */
   private moveWorkspace(direction: "previous" | "next"): void {
     const workspaceId = this.view.workspaceId;
     // `moveTab` と同じく実在を確かめてから送る（タスク点検の指摘：閉じた直後の stale な id で
     // 空振りの要求を送らない。サーバ側では無視されるだけだが、意図を読める形にそろえる）。
     if (!workspaceId || !this.session.workspaces.has(workspaceId)) return;
+    // 名前順のときの一番上は並べ替えを受け付けない（見た目が名前で決まる。グループの中は並べ替えられる）。
+    if (this.view.workspaceSort === "name" && itemGroupIdOf(this.session, workspaceId) === null) {
+      this.view.toast("名前順では並べ替えできません");
+      return;
+    }
+    // `layout` を持つサーバは項目単位（子ならその worktree グループ全体。端では動かない）。無いサーバは今までの `workspace.move`。
+    if (this.session.hasServerLayout) {
+      void this.conn.request("item.move_by", { item: { kind: "workspace", workspaceId }, direction }).catch(() => undefined);
+      return;
+    }
     void this.conn.request("workspace.move", { workspaceId, direction }).catch(() => undefined);
   }
 
