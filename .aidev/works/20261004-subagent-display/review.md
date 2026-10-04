@@ -13,6 +13,12 @@
 - [nit][conv:-] AgentReportSocket.test.ts running の 64 件ちょうど・65 件の境界のテストが無い / 対応: 修正済（T4・ラウンド1）
 - [nit][conv:-] AgentReportSocket.ts `MAX_LINE_BYTES` が文字数を測っているのに名前が BYTES / 対応: 修正済（`MAX_LINE_CHARS` に改名。T4・ラウンド1）
 
+- [should][conv:-] SubagentTracker.ts:5-10 クラスの説明が `Subagents` 型の直前に付いていた / 対応: 修正済（T5・ラウンド1）
+- [should][conv:-] SubagentTracker.ts `sessionOf` が空のセッション状態を作り続け、数に上限が無い / 対応: 修正済（空のセッションを畳む `tidy` とセッション 32 件の上限。T5・ラウンド1）
+- [nit][conv:-] SubagentTracker.ts 終了が起動より先に届いた ID の起動を数えてしまう / 対応: 修正済（`stopped` にある ID の起動は数えない。decisions D6。T5・ラウンド1）
+- [nit][conv:-] SubagentTracker.ts 上限で数えなかった起動でも実行前の報告が消えるのが無記載 / 対応: 修正済（コメントとテスト。T5・ラウンド1）
+- [nit][conv:-] SubagentTracker.test.ts 60 秒の刈り取り・期限切れの実行前の報告・agentType だけの running・同時刻の並びのテストが無い / 対応: 修正済（T5・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -56,4 +62,42 @@ AssertionError: expected '[{"level":"debug","msg":"agent report…' not to conta
 === MUT: Array.from(v).length <= MAX_ID -> true
  FAIL  … > 128 文字を超える agentId の電文は捨てる。running の 128 文字を超える ID の項目は飛ばす
 AssertionError: expected [ { type: 'subagent_start', …(4) } ] to deeply equal []
+```
+
+#### T5 `SubagentTracker`（`packages/server/src/agent/SubagentTracker.ts`。壊した後に元へ戻し `cmp` で一致を確認済み）
+
+```
+=== MUT: now - s.pending.at > PENDING_TTL_MS -> now - s.pending.at >= PENDING_TTL_MS
+ FAIL  src/agent/SubagentTracker.test.ts > … > 実行前の報告の対応づけ > 10 秒ちょうどなら付ける
+AssertionError: expected undefined to be 'ぎりぎり' // Object.is equality
+=== MUT: s.items.has(x.id) || s.stopped.has(x.id) -> s.items.has(x.id)
+ FAIL  … > 最近終了した ID は足し直さない（60 秒を過ぎたら足す）
+AssertionError: expected [ 'a1' ] to deeply equal []
+ FAIL  … > 起動していない ID の終了も覚える（Stop より後に届く終了と、足し直しを防ぐ）
+AssertionError: expected [ 'late' ] to deeply equal []
+=== MUT: if (total >= PANE_ITEMS_MAX) -> if (total > PANE_ITEMS_MAX)
+ FAIL  … > 256 件の上限 > pane の合計が 256 件に達したら数えない。ログは pane ごとに 1 回
+AssertionError: expected 257 to be 256 // Object.is equality
+=== MUT: if (!r.truncated) { -> if (true) {
+ FAIL  … > truncated のときは足すだけで、外さない
+AssertionError: expected [ 'a2' ] to deeply equal [ 'a1', 'a2' ]
+=== MUT: this.markStopped(s, r.agentId); -> （削除）
+ FAIL  … > 最近終了した ID は足し直さない（60 秒を過ぎたら足す）
+AssertionError: expected [ 'a1' ] to deeply equal []
+=== MUT: 種類の一致の条件 -> true
+ FAIL  … > 種類が食い違うときは付けない（実行前の報告は残る）
+AssertionError: expected { id: 'a1', type: 'Plan', …(2) } to not have property "description"
+```
+
+（T5・ラウンド1 の修正の分）
+```
+=== MUT: 終了済み ID の起動を数えない条件（|| s.stopped.has(r.agentId)）を外す
+ FAIL  … > 終了の報告が先に届いた ID の起動は数えない
+AssertionError: expected [ 'a1' ] to deeply equal []
+=== MUT: while (pane.sessions.size > SESSIONS_MAX) -> while (false)
+ FAIL  … > セッションの数は 32 まで。終了の報告が来ないセッション ID が溜まっても、古いものから捨てる
+AssertionError: expected 40 to be 32 // Object.is equality
+=== MUT: tidy（空のセッションを畳む）を外す
+ FAIL  … > 中身の無いセッションの状態は残さない（空のセッションが上限の枠を使って、動いているセッションを押し出さない）
+AssertionError: expected [] to deeply equal [ 'keep' ]
 ```

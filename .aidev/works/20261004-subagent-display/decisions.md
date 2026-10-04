@@ -39,3 +39,8 @@ research.md「F-H1」〜「F-H16」。要点: 同期のフックでは実行前 
 - **`Stop` に `background_tasks` が無い**（古い Claude Code）ときは、`{type:"agent_stop", running: [], truncated: true}` を送る。`truncated` は「足すだけ・外さない」なので、動いているものを誤って外さず、`pending` の掃除だけが効く（design は `truncated` を「64 件を超えたとき」としていたが、意味は同じ「一覧が完全でない」）。
 - **kind が claude 以外**は、イベントの種類にかかわらず今までどおりセッション ID の報告（`type` なし）。
 - **`agent_id` は 129 文字まで残す**（128 を超える ID を切って別の ID にしない。受け口が 128 超を捨てる）。
+
+## D6: T5 で決めたこと（`SubagentTracker` の細部。設計に足した 2 点）
+
+- **終了の報告が先に届いた ID の起動は数えない**（`stopped` にある ID の `subagent_start` は無視）。フックは並行に走るので、非同期の `SubagentStop` が同期の `SubagentStart` より先に届きうる。設計は「突き合わせで足し直さない」だけだったが、起動でも同じ理由で数えない（ID は一意なので、本物の起動が終了済みの ID を持つことは無い）。
+- **セッションの状態は pane ごとに 32 件まで**で、中身（`items`・`pending`・`stopped`）が空になったものは畳む。終了の報告が来ないセッション ID（強制終了等）が溜まり続けないようにするため。

@@ -33,7 +33,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/server/src/agent/AgentReportSocket.ts`（`MAX_LINE_BYTES`・`handleLine`・`isReportPayload`・`AgentReportHandler`）、`AgentReportSocket.test.ts`、`packages/server/src/composeServer.ts:646-654`
       依存: T2
       AC: AC12, AC13
-- [ ] T5: `SubagentTracker`（新規）——design「振る舞いの詳細 › `SubagentTracker`」の全部: `pending`（最新の 1 件・10 秒・種類の一致）／256 件の上限（ログは pane ごとに 1 回）／`subagent_stop` と `stopped`（64 件・60 秒）／`agent_stop` の突き合わせ（外す・足す・`stopped` にあるものは足し直さない・`truncated` は足すだけ）／`session_end`。配るところは T18（この時点では、今の一覧を返す読み取りの関数まで）。時計を差し込める形にする。単体テスト（上の各項目）と壊して落ちる確認
+- [x] T5: `SubagentTracker`（新規）——design「振る舞いの詳細 › `SubagentTracker`」の全部: `pending`（最新の 1 件・10 秒・種類の一致）／256 件の上限（ログは pane ごとに 1 回）／`subagent_stop` と `stopped`（64 件・60 秒）／`agent_stop` の突き合わせ（外す・足す・`stopped` にあるものは足し直さない・`truncated` は足すだけ）／`session_end`。配るところは T18（この時点では、今の一覧を返す読み取りの関数まで）。時計を差し込める形にする。単体テスト（上の各項目）と壊して落ちる確認
       対象: `packages/server/src/agent/SubagentTracker.ts`（新規）、`SubagentTracker.test.ts`（新規）、手本は `packages/server/src/graph/AgentLineage.ts`（bus を購読して pane ごとにメモリで持つ形）
       依存: T4
       AC: AC1, AC2, AC5, AC8, AC16, AC17
