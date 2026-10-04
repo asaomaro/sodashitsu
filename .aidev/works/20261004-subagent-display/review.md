@@ -37,6 +37,9 @@
 - [nit][conv:-] App.vue:5 import が名前順でない / 対応: 修正済（T10・ラウンド1）
 - [nit][conv:-] SubagentListDialog.test.ts 上下キーのスクロールを直接確かめるテストが無い / 対応: 許容（`tabindex` と role を単体で固定。キーの観測は T16 の E2E。T10・ラウンド1）
 
+- [should][conv:-] SubagentPanel.vue:22 パネルを開いたまま別のノードのボタンを押すと、`openedInstanceId` が古いままで閉じてしまう / 対応: 修正済（`GraphView` が `:key` で作り直す。テスト付き。T11・ラウンド1）
+- [should][conv:-] SubagentPanel.vue:6 ノードがグラフから外れても、pane と agent が残っていれば閉じない / 対応: 修正済（ノードが載っているかも見る。テスト付き。T11・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -314,4 +317,48 @@ AssertionError: expected { kind: 'subagents', …(2) } to be null
 === MUT: 対象のマシンを this.machines.selectedId から "local" に
  FAIL  … > showSubagents（show_subagents） > 別のマシンを選んでいれば、そのマシンの対象として開く
 AssertionError: expected { kind: 'subagents', …(2) } to match object { kind: 'subagents', …(2) }
+```
+
+#### T11 ブラウザ版のグラフ（`GraphNode.vue`・`GraphView.vue`・`SubagentPanel.vue`・`SubagentList.vue`。壊した後に元へ戻し `cmp` で一致を確認済み）
+
+```
+=== MUT(GraphNode.vue): 件数のボタンの @pointerdown.stop を外す
+ FAIL  src/components/graph/GraphView.subagents.test.ts > グラフのノードの件数のボタン > 押すとグラフの中のパネルが開く。ノードの選択・ドラッグ・線の作成・pane への移動を始めない
+AssertionError: expected [ 'graph-node', 'graph-node-selected' ] to not include 'graph-node-selected'
+=== MUT(GraphNode.vue): <template v-if="subagentCount > 0"> -> v-if="true"
+ FAIL  … > 1 件以上のときだけ出る（数・読み上げの名前つき）。…
+AssertionError: expected true to be false // Object.is equality
+=== MUT(GraphNode.vue): 読み取り専用（モバイル）の数だけの表示（v-if="readOnly"）を外す
+ FAIL  … > モバイルの読み取り専用のグラフ: 数だけを出し（ボタンではない）、押しても s でも開かない
+AssertionError: expected true to be false // Object.is equality
+=== MUT(GraphView.vue): 閉じたときにノードへフォーカスを戻す行（focusNode(key)）を外す
+ FAIL  … > Esc は 1 段ずつ: まずパネルを閉じてノードへフォーカスが戻り、グラフ画面は閉じない。…
+AssertionError: expected <body><div data-v-app>…(1)</div></body> to be <div data-v-c147c260 …(8)>…(4)</div> // Object.is equality
+=== MUT(GraphView.vue): グラフ画面を閉じるときの subagentsKey の取り消しを外す
+ FAIL  … > グラフ画面を閉じたら、パネルも閉じる（開き直しても開いたままにならない）
+AssertionError: expected true to be false // Object.is equality
+=== MUT(GraphView.vue): escape() の段の subagentsKey の項を外す
+ FAIL  … > Esc は 1 段ずつ: まずパネルを閉じてノードへフォーカスが戻り、グラフ画面は閉じない。…
+AssertionError: expected true to be false // Object.is equality
+=== MUT(SubagentPanel.vue): キーの ev.stopPropagation() を外す
+ FAIL  … > パネルの上のキー・ホイールを、グラフ画面（ズーム・パン）へ渡さない
+AssertionError: expected [ 'key:ArrowDown', 'key:+', 'key:1' ] to deeply equal []
+=== MUT(SubagentPanel.vue): @wheel.stop を外す
+ FAIL  … > パネルの上のキー・ホイールを、グラフ画面（ズーム・パン）へ渡さない
+AssertionError: expected [ 'wheel' ] to deeply equal []
+=== MUT(SubagentPanel.vue): 対象が居なくなった・入れ替わったときに閉じる watch を外す
+ FAIL  … > 対象のエージェントが居なくなったら閉じる。入れ替わっても閉じる。同じ instanceId の更新では閉じない
+AssertionError: expected true to be false // Object.is equality
+```
+
+（落ちなかった変異: 件数のボタンの `@click.stop`、キー `s` の `count > 0` と `openSubagents` 内のモバイル・件数の検査。ノードに click の受けが無く、`openSubagents` が同じ検査を持つ二重の守りで、片方だけを外しても挙動が変わらないため。どちらも残す。）
+
+（T11・ラウンド1 の修正の分）
+```
+=== MUT(GraphView.vue): SubagentPanel の :key="subagentsKey" を外す
+ FAIL  … > パネルを開いたまま別のノードの件数のボタンを押すと、そのノードの一覧に切り替わる（閉じない）。…
+AssertionError: expected [] to have a length of 1 but got +0
+=== MUT(SubagentPanel.vue): ノードが載っているか（onGraph）の判定を外す
+ FAIL  … > 対象のノードがグラフから外れたら（pane とエージェントが残っていても）閉じる
+AssertionError: expected true to be false // Object.is equality
 ```

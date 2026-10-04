@@ -62,7 +62,7 @@ describe("SubagentListDialog — 表示", () => {
     const dialog = dialogOf(wrapper);
     expect(dialog.open).toBe(true);
     expect(wrapper.get("h2").text()).toBe("サブエージェント — Claude Code");
-    const items = wrapper.findAll(".subagent-dialog-item");
+    const items = wrapper.findAll(".subagent-list-item");
     expect(items).toHaveLength(2);
     expect(items[0]!.text()).toContain("Explore");
     expect(items[0]!.text()).toContain("調べる");
@@ -71,12 +71,12 @@ describe("SubagentListDialog — 表示", () => {
     expect(items[1]!.text()).toContain("サブエージェント"); // 種類が分からないとき
     expect(items[1]!.text()).toContain("バックグラウンド");
     expect(items[1]!.text()).toContain("5秒");
-    expect(document.activeElement).toBe(wrapper.get(".subagent-dialog-list").element);
+    expect(document.activeElement).toBe(wrapper.get(".subagent-list").element);
   });
 
   it("一覧は tabindex を持つ 1 つの領域（上下キーのスクロールの受け手）で、縦に溢れたらスクロールする", async () => {
     const { wrapper } = await setup({ count: 1, items: [sub("a")] });
-    const list = wrapper.get(".subagent-dialog-list");
+    const list = wrapper.get(".subagent-list");
     expect(list.attributes("tabindex")).toBe("0");
     expect(list.attributes("role")).toBe("list");
   });
@@ -97,44 +97,44 @@ describe("SubagentListDialog — 表示", () => {
 
   it("起動した順（items の順）に出す", async () => {
     const { wrapper } = await setup({ count: 3, items: [sub("c", { type: "T1" }), sub("a", { type: "T2" }), sub("b", { type: "T3" })] });
-    expect(wrapper.findAll(".subagent-dialog-type").map((e) => e.text())).toEqual(["T1", "T2", "T3"]);
+    expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual(["T1", "T2", "T3"]);
   });
 
   it("count が items より多ければ、末尾に「ほか n 件」", async () => {
     const { wrapper } = await setup({ count: 70, items: Array.from({ length: 64 }, (_, i) => sub(`a${i}`)) });
-    expect(wrapper.findAll(".subagent-dialog-item")).toHaveLength(64);
-    expect(wrapper.get(".subagent-dialog-more").text()).toBe("ほか 6 件");
+    expect(wrapper.findAll(".subagent-list-item")).toHaveLength(64);
+    expect(wrapper.get(".subagent-list-more").text()).toBe("ほか 6 件");
   });
 
   it("0 件なら「実行中のサブエージェントはありません」（開いたまま）", async () => {
     const { wrapper } = await setup({ count: 0, items: [] });
     expect(dialogOf(wrapper).open).toBe(true);
-    expect(wrapper.get(".subagent-dialog-empty").text()).toBe("実行中のサブエージェントはありません");
-    expect(wrapper.find(".subagent-dialog-more").exists()).toBe(false);
+    expect(wrapper.get(".subagent-list-empty").text()).toBe("実行中のサブエージェントはありません");
+    expect(wrapper.find(".subagent-list-more").exists()).toBe(false);
   });
 
   it("説明は文字として出す（HTML を書いても要素にならない）", async () => {
     const { wrapper } = await setup({ count: 1, items: [sub("a", { description: '<img src=x onerror="window.__pwned=1"><b>太字</b>', type: "<i>t</i>" })] });
-    expect(wrapper.find(".subagent-dialog-desc img").exists()).toBe(false);
-    expect(wrapper.find(".subagent-dialog-desc b").exists()).toBe(false);
-    expect(wrapper.get(".subagent-dialog-desc").text()).toBe('<img src=x onerror="window.__pwned=1"><b>太字</b>');
-    expect(wrapper.get(".subagent-dialog-type").text()).toBe("<i>t</i>");
+    expect(wrapper.find(".subagent-list-desc img").exists()).toBe(false);
+    expect(wrapper.find(".subagent-list-desc b").exists()).toBe(false);
+    expect(wrapper.get(".subagent-list-desc").text()).toBe('<img src=x onerror="window.__pwned=1"><b>太字</b>');
+    expect(wrapper.get(".subagent-list-type").text()).toBe("<i>t</i>");
   });
 
   it("経過時間は 10 秒ごとに進む", async () => {
     const { wrapper } = await setup({ count: 1, items: [sub("a")] });
-    expect(wrapper.get(".subagent-dialog-elapsed").text()).toBe("0秒");
+    expect(wrapper.get(".subagent-list-elapsed").text()).toBe("0秒");
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(wrapper.get(".subagent-dialog-elapsed").text()).toBe("10秒");
+    expect(wrapper.get(".subagent-list-elapsed").text()).toBe("10秒");
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(wrapper.get(".subagent-dialog-elapsed").text()).toBe("1分");
+    expect(wrapper.get(".subagent-list-elapsed").text()).toBe("1分");
   });
 
   it("開いている間に件数が変わると、一覧も変わる", async () => {
     const { wrapper, session } = await setup({ count: 1, items: [sub("a", { type: "A" })] });
     session.paneUpserted(paneOf(agentOf({ count: 2, items: [sub("a", { type: "A" }), sub("b", { type: "B" })] })));
     await wrapper.vm.$nextTick();
-    expect(wrapper.findAll(".subagent-dialog-type").map((e) => e.text())).toEqual(["A", "B"]);
+    expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual(["A", "B"]);
   });
 });
 
@@ -206,7 +206,7 @@ describe("SubagentListDialog — 閉じる", () => {
       const { wrapper, view } = await setup({ count: 1, items: [sub("a")] });
       if (how === "button") await wrapper.get(".subagent-dialog-actions button").trigger("click");
       if (how === "backdrop") {
-        await wrapper.get(".subagent-dialog-list").trigger("click"); // 中のクリック
+        await wrapper.get(".subagent-list").trigger("click"); // 中のクリック
         expect(view.dialogContext).not.toBeNull();
         await wrapper.get("dialog").trigger("click"); // 背景（dialog 自身）
       }

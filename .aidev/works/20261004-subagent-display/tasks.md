@@ -57,7 +57,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/web/src/components/Sidebar.vue:190-206, :546-567`（エージェントの行）、`packages/web/src/components/SubagentListDialog.vue`（新規。手本は `ConfirmDialog.vue` の `<dialog>` の形）、`packages/web/src/store/view.ts:285-286, :502-523`（`DialogContext`・`closeDialog`）、`packages/web/src/App.vue:62-93`（ダイアログの置き場）、`packages/web/src/actions/ActionDispatcher.ts`、`packages/web/src/components/Sidebar.test.ts`
       依存: T6, T9
       AC: AC1, AC2, AC5, AC17, AC-I1, AC-I2, AC-I5
-- [ ] T11: ブラウザ版のグラフ——ノードのエージェントの行の右に件数のボタン（`tabindex="-1"`。ノードの大きさは変えない。別のマシンのノードは要約から件数を引く。読み取り専用のモバイルのグラフでは数だけで、押せない）。グラフの中の一覧 `SubagentPanel.vue`（`HistoryPanel` と同じ横のパネル。開く入口はボタンのクリックと、ノードを選んでいるときのキー `s`〔既存のノードのキーと重ならないことを確かめる〕。`escape()` の段に足す。閉じるとノードへフォーカスが戻る。対象が居なくなったら閉じる）。ボタンの `pointerdown`・`click` がノードの選択・ドラッグ・線の作成を始めない。単体テストと壊して落ちる確認
+- [x] T11: ブラウザ版のグラフ——ノードのエージェントの行の右に件数のボタン（`tabindex="-1"`。ノードの大きさは変えない。別のマシンのノードは要約から件数を引く。読み取り専用のモバイルのグラフでは数だけで、押せない）。グラフの中の一覧 `SubagentPanel.vue`（`HistoryPanel` と同じ横のパネル。開く入口はボタンのクリックと、ノードを選んでいるときのキー `s`〔既存のノードのキーと重ならないことを確かめる〕。`escape()` の段に足す。閉じるとノードへフォーカスが戻る。対象が居なくなったら閉じる）。ボタンの `pointerdown`・`click` がノードの選択・ドラッグ・線の作成を始めない。単体テストと壊して落ちる確認
       対象: `packages/web/src/components/graph/GraphNode.vue:83-130`、`packages/web/src/components/graph/GraphView.vue:1120-1163, :1376-1408`（キーと `escape()`）、`packages/web/src/components/graph/HistoryPanel.vue`（手本）、`packages/web/src/store/graph.ts:54-70, :319-360`（`GraphNodeInfo`）、`packages/web/src/store/machines.ts:36-45`（要約）、`packages/client-core/src/graph/geometry.ts:10-11`（大きさは変えない）
       依存: T20
       AC: AC3, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
