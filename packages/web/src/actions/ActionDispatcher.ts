@@ -256,6 +256,9 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       case "openGraph":
         this.view.openGraph();
         return;
+      // 20261004-subagent-display。一覧を開く動きは T20 で足す（型の網羅のため、ここに受け口だけ置く）。
+      case "showSubagents":
+        return;
     }
   }
 

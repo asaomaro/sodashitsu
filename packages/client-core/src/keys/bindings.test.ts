@@ -26,6 +26,8 @@ const UNBOUND_BY_DEFAULT_IDS = [
   "open_worktree",
   "remove_worktree",
   "swap_with_focused",
+  // 20261004-subagent-display。既定のキーは無い（利用者が設定で割り当てる）。
+  "show_subagents",
 ];
 
 describe("操作のカタログ（design「操作のカタログ」）", () => {
@@ -36,17 +38,18 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
   // 20260927-clipboard-image-paste で remote_image_paste（pane。既定は直接のキー ctrl+v）を追加し 51 個になった。
   // 20260927-cli-mode で stop_server（全体）・switch_workspace・open_worktree・remove_worktree（workspace / tab）・swap_with_focused（pane）を追加し 56 個になった。
   // 20260927-agent-graph で open_graph（全体）を追加し 57 個になった。
-  it("57 個あり、id は重複しない・表示名は空でない", () => {
-    expect(ACTIONS).toHaveLength(57);
-    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(57);
+  // 20261004-subagent-display で show_subagents（pane。既定は割り当てなし）を追加し 58 個になった。
+  it("58 個あり、id は重複しない・表示名は空でない", () => {
+    expect(ACTIONS).toHaveLength(58);
+    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(58);
     for (const a of ACTIONS) expect(a.label.length, a.id).toBeGreaterThan(0);
   });
 
-  it("群は 全体 7・workspace / tab 24・pane 26（この順に並ぶ）", () => {
+  it("群は 全体 7・workspace / tab 24・pane 27（この順に並ぶ）", () => {
     const groups = ACTIONS.map((a) => a.group);
     expect(groups.filter((g) => g === "全体")).toHaveLength(7);
     expect(groups.filter((g) => g === "workspace / tab")).toHaveLength(24);
-    expect(groups.filter((g) => g === "pane")).toHaveLength(26);
+    expect(groups.filter((g) => g === "pane")).toHaveLength(27);
     // 群ごとにまとまっている（全体 → workspace / tab → pane）
     expect(groups.join(",")).toBe(
       [...groups]

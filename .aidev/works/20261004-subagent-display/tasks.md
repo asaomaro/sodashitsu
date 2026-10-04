@@ -49,7 +49,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/web/src/components/SettingsDialog.vue:358-388, :926-968`、`packages/web/src/store/agentIntegrations.ts`、`packages/web/src/actions/ActionDispatcher.ts:632-646`、`packages/web/src/components/SettingsDialog.test.ts`、`packages/tui/src/settings/sections.ts:591-651`
       依存: T19
       AC: AC9, AC10, AC14
-- [ ] T9: 共有の純関数と操作——経過時間の文言（秒・分・時間。負は 0 秒）と「ほか n 件」、`{machineId, paneId}` からエージェントの情報を引く関数の**型**を `client-core` に置く（実体は画面ごと。web は T10 でストアに作る〔サイドバーは `machines.selectedId` のマシン、グラフはノードのマシン〕。tui は T13）。操作 `show_subagents`（既定のキーなし）を `actions.ts`・`bindings.ts` に足し、web と tui の dispatcher に受け口を置く（動きは T10・T13。型検査を通すため）。設定の「キー」の一覧とキー一覧に出す。既存のテストの期待（操作の数）を直す
+- [x] T9: 共有の純関数と操作——経過時間の文言（秒・分・時間。負は 0 秒）と「ほか n 件」、`{machineId, paneId}` からエージェントの情報を引く関数の**型**を `client-core` に置く（実体は画面ごと。web は T10 でストアに作る〔サイドバーは `machines.selectedId` のマシン、グラフはノードのマシン〕。tui は T13）。操作 `show_subagents`（既定のキーなし）を `actions.ts`・`bindings.ts` に足し、web と tui の dispatcher に受け口を置く（動きは T10・T13。型検査を通すため）。設定の「キー」の一覧とキー一覧に出す。既存のテストの期待（操作の数）を直す
       対象: `packages/client-core/src/agent/`（新しい純関数の置き場。`stateIndicator.ts` の隣）、`packages/client-core/src/keys/actions.ts`・`bindings.ts`（`defaults: []` の操作の手本）、`packages/web/src/actions/ActionDispatcher.ts`、`packages/tui/src/actions/TuiDispatcher.ts`、キーの設定の一覧（web の `KeySettings`・tui の `keySection.ts`）とそのテスト
       依存: T2
       AC: AC4, AC-I3

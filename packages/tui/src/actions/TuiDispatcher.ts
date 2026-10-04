@@ -238,6 +238,9 @@ export class TuiDispatcher {
         // 連携のグラフ画面はブラウザにだけある（20260927-agent-graph の decisions D1-8。操作表は共有のまま、端末版は知らせる）。
         this.ui.toast("グラフの画面はブラウザで開けます。");
         return;
+      case "showSubagents":
+        // 一覧の overlay を開く動きは T13 で足す（型の網羅のため、ここに受け口だけ置く）。
+        return;
       default:
         // 網羅の検査：`Action` に種類が増えたらここで型が落ちる（web は `switch` に網羅の検査が無く、足し忘れが黙って無反応になっていた）。
         action satisfies never;

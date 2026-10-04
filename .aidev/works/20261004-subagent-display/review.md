@@ -223,3 +223,17 @@ AssertionError: expected { ok: true, message: '未導入でした' } to deeply e
 修正前の package.mjs で作った配布物:   find release -path '*server/assets*' | wc -l  → 0（packages/server/ は dist と package.json だけ）
 修正後:                               release/sodashitsu-0.1.0/packages/server/assets/agent-hook-report.cjs（テストは入らない）
 ```
+
+#### T9 共有の純関数と操作（`packages/client-core/src/agent/subagents.ts`。壊した後に元へ戻し `cmp` で一致を確認済み）
+
+```
+=== MUT: 負を 0 に丸める（Math.max(0, …)）を外す
+ FAIL  src/agent/subagents.test.ts > formatSubagentElapsed > 負（時計のずれ）は 0 秒
+AssertionError: expected '-5秒' to be '0秒' // Object.is equality
+=== MUT: if (seconds < 60) return -> if (seconds <= 60) return
+ FAIL  src/agent/subagents.test.ts > formatSubagentElapsed > 60 秒以上 60 分未満は分
+AssertionError: expected '60秒' to be '1分' // Object.is equality
+=== MUT: return hidden > 0 ? -> return hidden >= 0 ?
+ FAIL  src/agent/subagents.test.ts > ほか n 件 > count が items より多いときだけ出す
+AssertionError: expected 'ほか 0 件' to be null
+```

@@ -113,7 +113,7 @@ const flush = async () => {
 };
 
 /**
- * 全操作（カタログの 57 操作。添字つきは 1）の効果の表。**web の `ActionDispatcher` の同じ操作と同じ RPC・引数・ダイアログ**（焦点は p1・w1/t1〔p1|p2〕・w2/t2〔p3〕）。
+ * 全操作（カタログの 58 操作。添字つきは 1）の効果の表。**web の `ActionDispatcher` の同じ操作と同じ RPC・引数・ダイアログ**（焦点は p1・w1/t1〔p1|p2〕・w2/t2〔p3〕）。
  * 表に無い操作があれば落ちる（足し忘れの検出）。
  */
 const EFFECTS: Record<
@@ -133,6 +133,8 @@ const EFFECTS: Record<
   open_notification_target: { host: "focusNextNotification" },
   reload_config: { rpc: ["prefs.get", {}] },
   stop_server: { dialog: "confirmStopServer" },
+  // 20261004-subagent-display。エージェントが無い pane では何も起きない（動きは T13 で足す）。
+  show_subagents: { none: true },
   workspace_picker: { mode: true },
   goto: { dialog: "goto" },
   new_workspace: {
@@ -194,10 +196,10 @@ const EFFECTS: Record<
   open_graph: { toast: true },
 };
 
-describe("TuiDispatcher — 全操作の効果（web の 57 操作と同じ RPC・引数・ダイアログ）", () => {
+describe("TuiDispatcher — 全操作の効果（web の 58 操作と同じ RPC・引数・ダイアログ）", () => {
   it("表はカタログの全操作をちょうど覆う", () => {
     expect(Object.keys(EFFECTS).sort()).toEqual(ACTIONS.map((d) => d.id).sort());
-    expect(ACTIONS).toHaveLength(57);
+    expect(ACTIONS).toHaveLength(58);
   });
 
   it.each(ACTIONS.map((d) => [d.id, d as ActionDef] as const))("%s", (id, def) => {
