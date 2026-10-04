@@ -41,7 +41,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/server/src/session/SessionService.ts`（`updatePaneRuntime` :1023-1068・`renameAgent`・`sameAgent` :1485-1499）、`packages/server/src/composeServer.ts:646-654`（受け口の配線）と停止の並び、`packages/server/src/session/SessionService.test.ts`
       依存: T18
       AC: AC1, AC7, AC15
-- [ ] T7: インストーラ——`HookSpec` に追加のエントリ（claude だけ: `PreToolUse`・`SubagentStart`・`Stop` は同期で `timeout: 5`、`SubagentStop`・`SessionEnd` は `async: true`）。`status()` の `needsUpdate`（エントリの不足・スクリプトの違い。同梱が読めないときは false。追加のエントリを持たない kind は常に false）。`install()` は足りない分だけ足す（スクリプトを写し直す・既にあるものは重ねない・利用者のほかのフックを保つ・経路が配列でなければ断る）。`uninstall()` は T19。単体テスト（一時の HOME。旧版の導入済み → `needsUpdate` → 更新／既存のフックを保つ／`SessionStart` だけ手で消した状態／ほかの 7 種／同梱が読めない／経路が配列でない／既存の「既に導入済みです」）と壊して落ちる確認
+- [x] T7: インストーラ——`HookSpec` に追加のエントリ（claude だけ: `PreToolUse`・`SubagentStart`・`Stop` は同期で `timeout: 5`、`SubagentStop`・`SessionEnd` は `async: true`）。`status()` の `needsUpdate`（エントリの不足・スクリプトの違い。同梱が読めないときは false。追加のエントリを持たない kind は常に false）。`install()` は足りない分だけ足す（スクリプトを写し直す・既にあるものは重ねない・利用者のほかのフックを保つ・経路が配列でなければ断る）。`uninstall()` は T19。単体テスト（一時の HOME。旧版の導入済み → `needsUpdate` → 更新／既存のフックを保つ／`SessionStart` だけ手で消した状態／ほかの 7 種／同梱が読めない／経路が配列でない／既存の「既に導入済みです」）と壊して落ちる確認
       対象: `packages/server/src/agent/AgentIntegrationInstaller.ts`（`HookSpec` :26-36・`HOOK_SPECS` :96-168・`status`／`install` :219-262）、`AgentIntegrationInstaller.test.ts:36-125, :136-269`
       依存: T2, T3
       AC: AC9, AC10

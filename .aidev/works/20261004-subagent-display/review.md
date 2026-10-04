@@ -19,6 +19,9 @@
 - [nit][conv:-] SubagentTracker.ts 上限で数えなかった起動でも実行前の報告が消えるのが無記載 / 対応: 修正済（コメントとテスト。T5・ラウンド1）
 - [nit][conv:-] SubagentTracker.test.ts 60 秒の刈り取り・期限切れの実行前の報告・agentType だけの running・同時刻の並びのテストが無い / 対応: 修正済（T5・ラウンド1）
 
+- [nit][conv:-] AgentIntegrationInstaller.ts:287 経路の形の検査が claude 以外の 7 種の `entriesPath` にも掛かるのが無記載 / 対応: 許容（decisions D7 に記録。T7・ラウンド1）
+- [nit][conv:-] AgentIntegrationInstaller.ts:268 追加の経路が配列でないとき `needsUpdate` が true になり、押しても直らない / 対応: 修正済（false にしてテストを足した。T7・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -100,4 +103,35 @@ AssertionError: expected 40 to be 32 // Object.is equality
 === MUT: tidy（空のセッションを畳む）を外す
  FAIL  … > 中身の無いセッションの状態は残さない（空のセッションが上限の枠を使って、動いているセッションを押し出さない）
 AssertionError: expected [] to deeply equal [ 'keep' ]
+```
+
+#### T7 インストーラ（`packages/server/src/agent/AgentIntegrationInstaller.ts`。壊した後に元へ戻し `cmp` で一致を確認済み）
+
+```
+=== MUT: 自分のエントリがある経路を飛ばす条件（if (entries.some(spec.isOurs)) continue;）を無効化
+ FAIL  … > 旧版の導入済み → needsUpdate が true → install で更新される（…）
+AssertionError: expected [ { …(2) }, { …(2) } ] to have a length of 1 but got 2
+ FAIL  … > SessionStart のエントリだけを手で消した状態: installed は false。install で全部が揃い、重ならない
+AssertionError: expected [ …(2) ] to have a length of 1 but got 2
+=== MUT: 経路の形の検査（pathShape(...) === "invalid"）を false に
+ FAIL  … > 経路の値が配列でないときは、何も変えずに断る
+AssertionError: expected true to be false // Object.is equality
+ FAIL  … > hooks 自体がオブジェクトでないときも、何も変えずに断る
+AssertionError: expected true to be false // Object.is equality
+=== MUT: スクリプトの中身の比較（!installedScript.equals(bundled)）を外す
+ FAIL  … > エントリは揃っているがスクリプトが古い／無い → needsUpdate が true。install で写し直す
+AssertionError: expected false to be true // Object.is equality
+=== MUT: 同梱が読めないときの戻り値 false -> true
+ FAIL  … > 同梱のスクリプトが読めないときは needsUpdate を出さない（押しても直らない）
+AssertionError: expected true to be false // Object.is equality
+=== MUT: if (installed && !(await this.needsUpdate(spec, root))) -> if (installed)
+ FAIL  … > 旧版の導入済み → needsUpdate が true → install で更新される（…）
+AssertionError: expected { ok: true, message: '既に導入済みです' } to deeply equal { ok: true, message: null }
+```
+
+（T7・ラウンド1 の修正の分）
+```
+=== MUT: needsUpdate の「追加の経路が配列でない」判定を外す
+ FAIL  … > 経路の値が配列でないとき、押しても直らない「更新が必要」を出さない
+AssertionError: expected { cliDetected: false, …(2) } to match object { installed: true, needsUpdate: false }
 ```

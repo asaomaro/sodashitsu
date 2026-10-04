@@ -35,7 +35,7 @@ describe("FsAgentIntegrationInstaller", () => {
 
   it("reports not installed / cliDetected false before anything is set up", async () => {
     const installer = makeInstaller();
-    expect(await installer.status("claude")).toEqual({ cliDetected: false, installed: false });
+    expect(await installer.status("claude")).toEqual({ cliDetected: false, installed: false, needsUpdate: false });
   });
 
   it("installs into a fresh (missing) settings.json for Claude Code", async () => {
@@ -51,6 +51,9 @@ describe("FsAgentIntegrationInstaller", () => {
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("soda-agent-report.cjs");
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("claude");
     expect(settings.hooks.SessionStart[0].hooks[0].async).toBe(true);
+    // サブエージェントの表示（20261004-subagent-display）のフックも入る。SessionStart と合わせて 6 つ。
+    expect(Object.keys(settings.hooks).sort()).toEqual(["PreToolUse", "SessionEnd", "SessionStart", "Stop", "SubagentStart", "SubagentStop"]);
+    expect(status.needsUpdate).toBe(false);
 
     // hook スクリプトが実際にコピーされている
     const copied = await readFile(join(claudeDir, "hooks", "soda-agent-report.cjs"), "utf8");
@@ -125,6 +128,155 @@ describe("FsAgentIntegrationInstaller", () => {
   it("uninstall reports 未導入 when nothing was installed", async () => {
     const installer = makeInstaller();
     expect(await installer.uninstall("claude")).toEqual({ ok: true, message: "未導入でした" });
+  });
+});
+
+// 20261004-subagent-display。導入済みの利用者には、足りないフックを［更新］で足す（押すまで設定ファイルは書き換えない）。
+describe("FsAgentIntegrationInstaller — Claude Code のフックの追加と更新", () => {
+  let workDir: string;
+  let hookScriptSource: string;
+  let claudeDir: string;
+  let settingsPath: string;
+  let installedScript: string;
+
+  beforeEach(async () => {
+    workDir = await makeTempDir("soda-integration-update-");
+    hookScriptSource = join(workDir, "agent-hook-report.cjs");
+    await writeFile(hookScriptSource, "// new hook script\n");
+    claudeDir = join(workDir, "claude-home");
+    settingsPath = join(claudeDir, "settings.json");
+    installedScript = join(claudeDir, "hooks", "soda-agent-report.cjs");
+  });
+
+  afterEach(async () => {
+    await rm(workDir, { recursive: true, force: true });
+  });
+
+  const makeInstaller = (source = hookScriptSource) =>
+    new FsAgentIntegrationInstaller(source, { PATH: "", CLAUDE_CONFIG_DIR: claudeDir } as NodeJS.ProcessEnv, join(workDir, "unused-home"));
+
+  /** 旧版（SessionStart だけ）の導入済みの状態を作る。 */
+  async function installOldVersion(extraHooks: Record<string, unknown> = {}): Promise<void> {
+    await mkdir(join(claudeDir, "hooks"), { recursive: true });
+    await writeFile(installedScript, "// old hook script\n");
+    await writeFile(
+      settingsPath,
+      JSON.stringify({
+        hooks: {
+          SessionStart: [{ matcher: "startup|resume", hooks: [{ type: "command", command: `node "${installedScript}" claude`, async: true }] }],
+          ...extraHooks,
+        },
+      }),
+    );
+  }
+  const readSettings = async () => JSON.parse(await readFile(settingsPath, "utf8"));
+
+  it("追加のエントリの形: PreToolUse・SubagentStart・Stop は同期（timeout 5）、SubagentStop・SessionEnd は async", async () => {
+    await makeInstaller().install("claude");
+    const { hooks } = await readSettings();
+    expect(hooks.PreToolUse).toEqual([{ matcher: "Agent|Task", hooks: [{ type: "command", command: `node "${installedScript}" claude`, timeout: 5 }] }]);
+    for (const ev of ["SubagentStart", "Stop"]) {
+      expect(hooks[ev]).toEqual([{ matcher: "", hooks: [{ type: "command", command: `node "${installedScript}" claude`, timeout: 5 }] }]);
+    }
+    for (const ev of ["SubagentStop", "SessionEnd"]) {
+      expect(hooks[ev]).toEqual([{ matcher: "", hooks: [{ type: "command", command: `node "${installedScript}" claude`, async: true }] }]);
+    }
+  });
+
+  it("旧版の導入済み → needsUpdate が true → install で更新される（スクリプトを写し直し、足りない分だけ足す）", async () => {
+    await installOldVersion();
+    const installer = makeInstaller();
+    expect(await installer.status("claude")).toMatchObject({ installed: true, needsUpdate: true });
+    expect(await installer.install("claude")).toEqual({ ok: true, message: null });
+    expect(await installer.status("claude")).toMatchObject({ installed: true, needsUpdate: false });
+    const { hooks } = await readSettings();
+    expect(hooks.SessionStart).toHaveLength(1); // 重ねない
+    expect(Object.keys(hooks)).toHaveLength(6);
+    expect(await readFile(installedScript, "utf8")).toBe("// new hook script\n");
+    expect(await installer.install("claude")).toEqual({ ok: true, message: "既に導入済みです" });
+  });
+
+  it("status() は設定ファイルを書き換えない（押すまで）", async () => {
+    await installOldVersion();
+    const before = await readFile(settingsPath, "utf8");
+    await makeInstaller().status("claude");
+    expect(await readFile(settingsPath, "utf8")).toBe(before);
+    expect(await readFile(installedScript, "utf8")).toBe("// old hook script\n");
+  });
+
+  it("エントリは揃っているがスクリプトが古い／無い → needsUpdate が true。install で写し直す", async () => {
+    const installer = makeInstaller();
+    await installer.install("claude");
+    await writeFile(installedScript, "// stale\n");
+    expect((await installer.status("claude")).needsUpdate).toBe(true);
+    await rm(installedScript);
+    expect((await installer.status("claude")).needsUpdate).toBe(true);
+    await installer.install("claude");
+    expect(await readFile(installedScript, "utf8")).toBe("// new hook script\n");
+    expect((await installer.status("claude")).needsUpdate).toBe(false);
+  });
+
+  it("利用者の既存の PreToolUse・Stop 等のフックを保つ", async () => {
+    const mine = { matcher: "Bash", hooks: [{ type: "command", command: "echo mine" }] };
+    await installOldVersion({ PreToolUse: [mine], Stop: [mine] });
+    await makeInstaller().install("claude");
+    const { hooks } = await readSettings();
+    expect(hooks.PreToolUse).toHaveLength(2);
+    expect(hooks.PreToolUse[0]).toEqual(mine);
+    expect(hooks.Stop).toHaveLength(2);
+    expect(hooks.Stop[0]).toEqual(mine);
+  });
+
+  it("SessionStart のエントリだけを手で消した状態: installed は false。install で全部が揃い、重ならない", async () => {
+    const installer = makeInstaller();
+    await installer.install("claude");
+    const settings = await readSettings();
+    settings.hooks.SessionStart = [];
+    await writeFile(settingsPath, JSON.stringify(settings));
+    expect(await installer.status("claude")).toMatchObject({ installed: false, needsUpdate: false });
+    await installer.install("claude");
+    const { hooks } = await readSettings();
+    expect(hooks.SessionStart).toHaveLength(1);
+    expect(hooks.PreToolUse).toHaveLength(1);
+    expect(hooks.Stop).toHaveLength(1);
+  });
+
+  it("同梱のスクリプトが読めないときは needsUpdate を出さない（押しても直らない）", async () => {
+    await installOldVersion();
+    expect((await makeInstaller(join(workDir, "missing.cjs")).status("claude")).needsUpdate).toBe(false);
+  });
+
+  it("経路の値が配列でないときは、何も変えずに断る", async () => {
+    await installOldVersion({ PreToolUse: { not: "an array" } });
+    const before = await readFile(settingsPath, "utf8");
+    const result = await makeInstaller().install("claude");
+    expect(result.ok).toBe(false);
+    expect(await readFile(settingsPath, "utf8")).toBe(before);
+    expect(await readFile(installedScript, "utf8")).toBe("// old hook script\n");
+  });
+
+  it("経路の値が配列でないとき、押しても直らない「更新が必要」を出さない", async () => {
+    await installOldVersion({ Stop: { not: "an array" } });
+    expect(await makeInstaller().status("claude")).toMatchObject({ installed: true, needsUpdate: false });
+  });
+
+  it("hooks 自体がオブジェクトでないときも、何も変えずに断る", async () => {
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(settingsPath, JSON.stringify({ hooks: [] }));
+    const result = await makeInstaller().install("claude");
+    expect(result.ok).toBe(false);
+    expect(await readFile(settingsPath, "utf8")).toBe(JSON.stringify({ hooks: [] }));
+  });
+
+  it("ほかの 7 種は追加のエントリを持たず、needsUpdate は常に false", async () => {
+    const home = join(workDir, "other-home");
+    const installer = new FsAgentIntegrationInstaller(hookScriptSource, { PATH: "", CODEX_HOME: join(workDir, "codex") } as NodeJS.ProcessEnv, home);
+    for (const kind of ["codex", "cursor", "copilot", "devin", "droid", "grok", "qwen"] as const) {
+      await installer.install(kind);
+      expect(await installer.status(kind)).toMatchObject({ installed: true, needsUpdate: false });
+    }
+    const codex = JSON.parse(await readFile(join(workDir, "codex", "hooks.json"), "utf8"));
+    expect(Object.keys(codex.hooks)).toEqual(["SessionStart"]);
   });
 });
 
