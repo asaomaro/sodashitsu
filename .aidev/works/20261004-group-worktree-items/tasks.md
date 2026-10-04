@@ -95,7 +95,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/e2e/src/specs/workspace-groups.spec.ts`（新規）、手本は `packages/e2e/src/specs/workspace-tab-pane.spec.ts:501, :541`（`makePlainRepo` と worktree の作成）、`packages/e2e/src/support/appServer.ts:33, :86`（`openClient`・`restart`）・`wsClient.ts`（`waitForEvent`）
       依存: T19
       AC: AC1, AC2, AC4, AC5, AC6, AC7, AC8, AC9, AC10, AC12, AC15, AC18, AC-I1, AC-I2, AC-I3
-- [ ] T21: 文書——`docs/herdr-parity.md`（H04・H37b: グループは独自の拡張、メンバーは項目）、`docs/tui-parity.md`（H04w・H37b・W04 を実態に直す）、`docs/tui.md`、`docs/machines.md`（別のマシンの行は今までどおり）、`docs/verification.md`（グループの節を新設し、自動テストで確かめた範囲と実機の手順を分けて書く。AC11〔cd で別のリポジトリへ移る〕・AC15／AC16〔端末版とブラウザ版を同じサーバで並べて見る・端末版の折りたたみとドラッグ〕の実機の手順、`repoKey` の既知の制約〔T4 の結果〕を含める）
+- [x] T21: 文書——`docs/herdr-parity.md`（H04・H37b: グループは独自の拡張、メンバーは項目）、`docs/tui-parity.md`（H04w・H37b・W04 を実態に直す）、`docs/tui.md`、`docs/machines.md`（別のマシンの行は今までどおり）、`docs/verification.md`（グループの節を新設し、自動テストで確かめた範囲と実機の手順を分けて書く。AC11〔cd で別のリポジトリへ移る〕・AC15／AC16〔端末版とブラウザ版を同じサーバで並べて見る・端末版の折りたたみとドラッグ〕の実機の手順、`repoKey` の既知の制約〔T4 の結果〕を含める）
       対象: `docs/herdr-parity.md:30, :73`、`docs/tui-parity.md:35, :88, :129`、`docs/tui.md:133`、`docs/machines.md:60, :132`、`docs/verification.md`（「共通：…」の形式の節・既知の制約）
       依存: T20
       AC: AC11, AC16, AC18
@@ -126,7 +126,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: T16・T17・T18 の `対象:` と同じ
       依存: T24
       AC: AC19, AC20, AC21, AC15, AC16
-- [ ] T28: E2E と文書の反映——T20（E2E）と T21（文書）に、AC19〜AC21 の場面（同じフォルダの 2 つ目・「グループなし」の出入りと並べ替え・見出しの状態のまとめ・畳んだ worktree グループの `+n`）を足して行う
+- [x] T28: E2E と文書の反映——T20（E2E）と T21（文書）に、AC19〜AC21 の場面（同じフォルダの 2 つ目・「グループなし」の出入りと並べ替え・見出しの状態のまとめ・畳んだ worktree グループの `+n`）を足して行う
       対象: T20・T21 の `対象:` と同じ
       依存: T26, T27, T19
       AC: AC19, AC20, AC21, AC18
