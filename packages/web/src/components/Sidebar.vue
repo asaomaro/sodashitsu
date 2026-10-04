@@ -1427,6 +1427,7 @@ watch(
 }
 /* 畳んでいる間は動かせない（hover の線も出さない）。 */
 .sidebar-collapsed .sidebar-divider {
+  right: 0; /* 畳んだ状態は nav が `overflow-x: hidden` で、外へはみ出すと `scrollWidth` が増える */
   cursor: default;
   pointer-events: none;
 }
