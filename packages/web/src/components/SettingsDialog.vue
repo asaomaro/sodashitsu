@@ -25,14 +25,14 @@ import KeySettings from "./KeySettings.vue";
 import SidebarRowsSettings from "./SidebarRowsSettings.vue";
 
 /**
- * 設定（20260921-herdr-settings-gaps の D7）。**見出しで 5 節（通知・テーマ・表示・端末・キー）に分けた 1 枚**（テーマは 20260921-theme-settings の
- * decisions D11 で、キーは 20260921-keybinding-customization の design「節「キー」の構成」で足した）。
+ * 設定（20260921-herdr-settings-gaps の D7）。**見出しで 6 節（通知・テーマ・表示・端末・エージェント連携・キー）に分けた 1 枚**（テーマは 20260921-theme-settings の
+ * decisions D11 で、キーは 20260921-keybinding-customization の design「節「キー」の構成」で、エージェント連携は 20260923-agent-session-resume で足した）。
  * 以前は通知だけのダイアログ（`NotificationSettingsDialog.vue`。20260920-agent-notifications の AC6〜AC8・AC12・AC13）で、
  * 通知の節はその実装をそのまま移した。`view.dialogContext.kind === "settings"` を扱う。形は `ConfirmDialog` と同じ
  * （ネイティブ `<dialog>` ＋ `showModal()` ＋ `@cancel` の抑止）。
  *
- * **節は Tabs にも Accordion にもしない**（10 項目ほどなら全部見えてよい。見出し付きのグループは Tab で順に進むだけで
- * キー処理が要らない。先例は `HelpDialog.vue`）。
+ * **節は Tabs にも Accordion にもしない**（全部の節が 1 枚に並んだまま見える。先例は `HelpDialog.vue`）。節が増えて長くなったので、幅 768px 以上では
+ * 左に節の一覧（サイドメニュー。20261004-settings-side-menu）を出し、押すとその節へ移る。
  *
  * **切り替えは `role="switch"`**（decisions D2）——APG は switch を「on/off を表し、**操作が即座に効く**もの」
  * と定義しており、AC-I2（押した時点で反映・確定ボタンを置かない）と一致する。
@@ -60,6 +60,8 @@ const kind = inject(DeviceKindKey, "desktop");
 
 const dialogEl = ref<HTMLDialogElement | null>(null);
 const firstSwitch = ref<HTMLButtonElement | null>(null);
+/** 左のサイドメニューの項目（節の見出しから作る。20261004-settings-side-menu）。 */
+const menuItems = ref<{ id: string; label: string }[]>([]);
 /**
  * 「指定した場所」の入力欄の下書き（`NameDialog` と同じく ref と v-model で持つ）。`:value` を保存値へ一方向に結ぶと、ほかの状態
  * （通知の可否・サーバの上限）で描き直されるたびに、打ちかけの文字が保存値で上書きされる（Vue は描き直しのたびに value を当て直す）。
@@ -543,6 +545,14 @@ function onNativeCancel(ev: Event): void {
       <h2 id="settings-title" class="settings-title">設定</h2>
       <button type="button" class="settings-close" @click="cancel">閉じる</button>
     </div>
+    <!-- 左の列（幅 768px 以上だけ）。**入れ物は grid のセルいっぱいに伸ばす**——`@click.self` は `<dialog>` 自身が押されたときだけ閉じるので、
+         メニューを直に grid の子にしてセルより短くすると、その下の空きを押して閉じてしまう。項目は右の節の見出しから作る（20261004-settings-side-menu の design）。 -->
+    <div class="settings-menu-col">
+      <nav v-if="menuItems.length > 0" class="settings-menu" aria-label="設定の節">
+        <button v-for="item in menuItems" :key="item.id" type="button" class="settings-menu-item">{{ item.label }}</button>
+      </nav>
+    </div>
+    <div class="settings-body">
     <section class="settings-section" aria-labelledby="settings-notify">
       <h3 id="settings-notify" class="settings-heading">通知</h3>
       <ul class="settings-list">
@@ -974,13 +984,14 @@ function onNativeCancel(ev: Event): void {
     <p class="settings-hint">
       この設定はこのブラウザにだけ残ります（テーマは、このブラウザが操作している pane の色の問い合わせの答えにも使います）。Esc か「閉じる」で閉じます。
     </p>
+    </div>
   </dialog>
 </template>
 
 <style scoped>
 .settings-dialog {
   /* 狭い画面（幅 320〜385px の携帯）でもはみ出さない。以前の `min-width: 22em` は content-box で、枠と padding を含めて 386px になっていた。
-     背が高くなった（いまは 5 節）ので、画面の高さも越えないようにして中をスクロールさせる（`overflow` は UA の `dialog:modal` の既定が auto）。
+     背が高くなった（いまは 6 節）ので、画面の高さも越えないようにして中をスクロールさせる（`overflow` は UA の `dialog:modal` の既定が auto）。
      **`100vh` ではなく `100%`**（モーダルの `<dialog>` の包含ブロックは見えている領域）——iOS Safari の `100vh` はツールバーを畳んだときの
      高さなので、ツールバーが出ている間はダイアログが画面から切れる。 */
   box-sizing: border-box;
@@ -1001,6 +1012,54 @@ function onNativeCancel(ev: Event): void {
 }
 .settings-dialog::backdrop {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
+}
+/* 左に節の一覧（サイドメニュー。20261004-settings-side-menu）。**スクロールの入れ物は `<dialog>` 自身のまま**——題名の行・節「キー」の下の帯・
+   `scroll-padding`・既存の E2E がそれに依存する。そこで `<dialog>` の中を grid の 2 列にし、メニューを sticky にする。
+   幅 767px 以下は 1 列のまま（メニューを出さない。`mobileViewportQuery()` と同じ式）。`--settings-view-h` は `<dialog>` の見えている高さ（script が入れる）。 */
+.settings-dialog {
+  --settings-menu-w: 13em;
+  --settings-header-h: calc(1em + 2rem + 0.8em);
+}
+.settings-dialog[open] {
+  display: grid;
+  grid-template-columns: var(--settings-menu-w) minmax(0, 1fr);
+  column-gap: 1em;
+  align-content: start;
+  max-width: min(calc(34em + var(--settings-menu-w) + 1em), calc(100% - 16px));
+}
+.settings-dialog[open] > .settings-header {
+  grid-column: 1 / -1;
+}
+.settings-menu-col {
+  align-self: stretch;
+}
+.settings-menu {
+  position: sticky;
+  top: var(--settings-header-h);
+  max-height: calc(var(--settings-view-h, 100dvh) - var(--settings-header-h) - 1em);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+.settings-body {
+  min-width: 0;
+}
+/* 見出しへのフォーカス（節へ移った後）。**`:focus-visible` は使わない**——マウスで項目を押してプログラムから移したときは付かず、枠が出ない。
+   見出しはプログラムからしかフォーカスされない。節「キー」の見出しは子のコンポーネントなので `:deep`。 */
+.settings-body :deep(h3[tabindex="-1"]:focus) {
+  outline: 2px solid var(--soda-focus, #8be9fd);
+  outline-offset: 2px;
+}
+@media (max-width: 767px) {
+  .settings-dialog[open] {
+    display: block;
+    max-width: min(34em, calc(100% - 16px));
+  }
+  .settings-menu-col {
+    display: none;
+  }
 }
 /* 題名の行（「閉じる」）は、ダイアログを下までスクロールしても見えるようにする——小さい画面では端末の節まで下げると流れてしまう。 */
 .settings-header {
