@@ -22,3 +22,14 @@ research.md「F-H1」〜「F-H16」。要点: 同期のフックでは実行前 
 - **フックごとの同期・非同期**（design の表）。
 - **別のマシンの要約にも最大 64 件の一覧が載る**ことは許す（サーバは要約の接続を見分けられない。100 ミリ秒のまとめで量を抑える）。
 - `sodactl` の一覧の項目は `null` で埋め、項目の有無を揺らさない。
+
+## D4: T1 の実物の確認（Claude Code 2.1.289・2026-10-04。`claude -p --model haiku --settings <一時の設定>`。SODA_* は子プロセスから消した）
+
+設計と食い違う事実は無かった。確かめたこと:
+
+- **(1) `SessionEnd`**: `claude -p` の終わりに 1 回発火した（最後の `Stop` の約 80ms 後）。入力は `session_id`・`transcript_path`・`cwd`・`prompt_id`・`hook_event_name`・`reason`（この場合 `"other"`）。`/clear` でセッション ID が変わるかは対話が要るので**未確認のまま**（`SessionEnd` が来ても来なくても、`agent_stop` の突き合わせと、エージェントの入れ替わりで捨てる仕組みで外れる）。
+- **(2) 同期と非同期の混在**（`PreToolUse`・`SubagentStart`・`Stop` を同期、`SubagentStop`・`SessionEnd` を `async: true`。前面 2・バックグラウンド 1 を 1 メッセージで並行に起動）: 起動順は `PreToolUse`(A) → `SubagentStart`(A) → `PreToolUse`(B) → `SubagentStart`(B) → `PreToolUse`(C) → `SubagentStart`(C) で、**対の順序は保たれた**（各対は 90〜100ms 差。F-H9 と同じ）。非同期の `SubagentStop` は、起動の報告より後に届いた。
+- **(3) 所要**: 実物のスクリプトを 10 回起動した平均で、環境変数が無い（pane の外）と約 24ms（素の `node -e 0` と同じ）、socket へ送ると約 52ms。同期のフックが Agent ツールの呼び出し・ターンの終わりごとに足す遅れは、この程度（目標の 0.3 秒に十分収まる）。
+- **(4) matcher `Agent\|Task`**: 同じ実行で `TaskCreate` が呼ばれたが、`PreToolUse` の記録は `tool_name: "Agent"` の 3 件だけ。**`TaskCreate` には当たらない**。スクリプト側の `tool_name` の絞り込みは保険として残す。
+- **(5) スクリプトが無い状態**: 同期・非同期のどのフックも `exit_code: 1`・`outcome: "error"`（stderr に `Cannot find module`）になるが、**エージェントの動きは止まらず**、`claude -p` は正常に終わった（`is_error: false`）。対話の画面にエラーが出るかは `-p` では確かめられず**未確認**。害は無いが、利用者に見えうる雑音なので、**`uninstall()` は設計どおり、スクリプトを消さず何もしない中身に差し替える**（T19）。
+- ほか: `SubagentStop` の `background_tasks` には、終わる直前のものを含めて動いているものが `running` で載る（F-H11 と同じ）。`Stop` の時点で `background_tasks` に `running` のものが 1 件残る場面があり（バックグラウンドの A が、まだ `SubagentStop` を出す前）、その後に `SubagentStop` が来た。**`Stop` の突き合わせで足されたものを、遅れて来る `SubagentStop` が外す**順は実在するので、`stopped` の扱い（設計）に加えて、`subagent_stop` は無い ID でも `stopped` に入れる（設計どおり）ことを T5 のテストで押さえる。
