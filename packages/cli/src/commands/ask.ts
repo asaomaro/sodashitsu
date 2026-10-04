@@ -139,15 +139,15 @@ export function absolutizePaths(
   const view = spec["view"];
   const items: unknown[] = Array.isArray(view) ? view : view === undefined || view === null ? [] : [view];
   items.forEach((v, i) => {
-    const holder = typeof v === "string" ? null : v;
     const file = typeof v === "string" ? v : isObj(v) ? v["file"] : undefined;
     if (typeof file !== "string" || file === "" || classifyMediaRef(file, "file", true) !== "path") return;
     const abs = absolutizeRef(file, cwd, home);
-    if (holder === null) (view as unknown[])[i] = { file: abs };
-    else if (isObj(holder)) holder["file"] = abs;
-    else if (!Array.isArray(view)) spec["view"] = { file: abs };
+    if (isObj(v)) v["file"] = abs;
+    else if (Array.isArray(view)) view[i] = { file: abs }; // 文字列の項目は辞書にして絶対パスを入れる
+    else spec["view"] = { file: abs };
     const ext = extname(abs).toLowerCase();
-    refs.push({ where: Array.isArray(view) ? `view[${i}]` : "view", path: abs, kind: ext === ".html" || ext === ".htm" ? "view-html" : [".md", ".markdown"].includes(ext) || ![".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg"].includes(ext) ? "view-text" : "view-other" });
+    const isImage = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg"].includes(ext);
+    refs.push({ where: Array.isArray(view) ? `view[${i}]` : "view", path: abs, kind: ext === ".html" || ext === ".htm" ? "view-html" : isImage ? "view-other" : "view-text" });
   });
   return { spec, refs };
 }

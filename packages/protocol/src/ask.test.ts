@@ -55,19 +55,19 @@ describe("normalizeAskSpec — 誤り", () => {
     expect(bad({ questions: [q({ showIf: { nothing: "x" } })] })).toMatch(/unknown question id/);
     expect(bad({ questions: [q({ showIf: "x" })] })).toMatch(/showIf must be an object/);
   });
-  it("対応していない型（edit・rank・table・知らない文字列）は誤りでなく unsupportedType として返す（黙って落とさない）。型の名前は短い識別子だけ", () => {
-    for (const type of ["edit", "rank", "table", "radio"]) {
+  it("対応していない型（知らない文字列。edit・rank・table は対応済み）は誤りでなく unsupportedType として返す（黙って落とさない）。型の名前は短い識別子だけ", () => {
+    for (const type of ["slider", "radio"]) {
       const r = normalizeAskSpec({ questions: [q({ id: "a" }), { id: "e", label: "E", type, text: "文面" }] });
       expect(r).toMatchObject({ ok: false, unsupportedType: type });
     }
     expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "<script>x</script>" }] })).toMatchObject({ ok: false, unsupportedType: "?" });
-    expect(unsupportedTypeReason("edit")).toContain('"edit"');
+    expect(unsupportedTypeReason("slider")).toContain('"slider"');
     // 未対応の型の質問より後ろの誤りも見逃さない（誤りが優先）。前の誤りも同じ
-    expect(bad({ questions: [{ id: "e", label: "E", type: "edit" }, { id: "b", label: "B" }] })).toMatch(/options/);
-    expect(bad({ questions: [{ id: "e", label: "E", type: "edit" }, q({ id: "b", showIf: { nothing: "x" } })] })).toMatch(/unknown question id/);
-    expect(bad({ questions: [{ id: "e", label: "E", type: "edit" }, { id: "e", label: "E2", type: "rank" }] })).toContain('duplicate id "e"');
+    expect(bad({ questions: [{ id: "e", label: "E", type: "slider" }, { id: "b", label: "B" }] })).toMatch(/options/);
+    expect(bad({ questions: [{ id: "e", label: "E", type: "slider" }, q({ id: "b", showIf: { nothing: "x" } })] })).toMatch(/unknown question id/);
+    expect(bad({ questions: [{ id: "e", label: "E", type: "slider" }, { id: "e", label: "E2", type: "rank" }] })).toContain('duplicate id "e"');
     // 未対応の質問の id を showIf が指すのは誤りでない
-    expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "edit" }, q({ id: "b", showIf: { e: "x" } })] })).toMatchObject({ ok: false, unsupportedType: "edit" });
+    expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "slider" }, q({ id: "b", showIf: { e: "x" } })] })).toMatchObject({ ok: false, unsupportedType: "slider" });
     // 対応している型どうしの誤りは、今までどおり誤り
     expect(normalizeAskSpec({ questions: [{ id: "a", label: "A" }] })).not.toHaveProperty("unsupportedType");
   });
@@ -117,7 +117,7 @@ describe("normalizeAskSpec — 誤り", () => {
     expect(reason(JSON.parse('{"questions":[{"id":"a","label":"A","options":["x"],"showIf":{"__proto__":["x"]}}]}'))).toBe("showif_unknown_id");
     expect(reason({ questions: [q({ showIf: "x" })] })).toBe("showif_invalid");
     // 対応していない型（unsupportedType と一緒に返る）
-    for (const type of ["edit", "rank", "table", "slider"]) {
+    for (const type of ["slider"]) {
       expect(normalizeAskSpec({ questions: [q({ type })] })).toMatchObject({ ok: false, reason: "unsupported_type", unsupportedType: type });
     }
     // 上限
@@ -161,12 +161,12 @@ describe("normalizeAskSpec — 誤り", () => {
     expect(bad({ questions: [q({ page: 2 })] })).toMatch(/page must be a string/);
   });
   it("page は type より前に見る: 対応していない型の質問の不正な page も誤り（unavailable にしない）。id の重複はそれより前", () => {
-    const r = normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "edit", page: 2 }] });
+    const r = normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "slider", page: 2 }] });
     expect(r).toMatchObject({ ok: false, reason: "page_invalid" });
     expect(r).not.toHaveProperty("unsupportedType");
-    expect(reason({ questions: [{ id: "e", label: "E", type: "edit", page: "x".repeat(501) }] })).toBe("too_large");
+    expect(reason({ questions: [{ id: "e", label: "E", type: "slider", page: "x".repeat(501) }] })).toBe("too_large");
     // page が正しければ、今までどおり対応していない型
-    expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "edit", page: "直す" }] })).toMatchObject({ ok: false, reason: "unsupported_type", unsupportedType: "edit" });
+    expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "slider", page: "直す" }] })).toMatchObject({ ok: false, reason: "unsupported_type", unsupportedType: "slider" });
     expect(reason({ questions: [q(), q({ page: 2 })] })).toBe("id_duplicate");
   });
   it("選択肢の value が __other__ の定義は通る（ふつうの選択肢。「その他」の印は値ではない）", () => {
@@ -651,5 +651,73 @@ describe("メディア・コード・view の定義（20261004-ask-media-popup�
     for (const view of [[], {}, { file: "/a", text: "b" }, { text: 5 }, { file: "rel.md" }, { file: "http://x/a.html" }, 5])
       expect(reason({ view, questions: [q()] }), JSON.stringify(view)).toBe("view_invalid");
     expect(reason({ view: Array.from({ length: ASK_VIEW_MAX + 1 }, () => ({ text: "x" })), questions: [q()] })).toBe("too_large");
+  });
+});
+
+describe("edit・rank・table（20261004-ask-media-popup）", () => {
+  const edit = (extra: Record<string, unknown> = {}) => ({ id: "e", label: "E", type: "edit", text: "1. a\n2. b\n", ...extra });
+  const rank = (extra: Record<string, unknown> = {}) => ({ id: "r", label: "R", type: "rank", options: ["a", "b", "c"], ...extra });
+  const table = (extra: Record<string, unknown> = {}) => ({ id: "t", label: "T", type: "table", options: ["ok", "ng"], rows: ["x", { value: "y", label: "Y", desc: "d", default: "ng" }], ...extra });
+
+  it("検査: edit は必須が既定・text（無ければ default の文字列）・rows は 1〜60・mono。options は持たない", () => {
+    const q0 = spec({ questions: [edit({ rows: 7, mono: false })] }).questions[0]!;
+    expect(q0).toMatchObject({ type: "edit", required: true, text: "1. a\n2. b\n", rows: 7, mono: false, options: [] });
+    expect(spec({ questions: [edit({ required: false, text: undefined, default: "d" })] }).questions[0]).toMatchObject({ required: false, text: "d" });
+    expect(spec({ questions: [edit({ text: undefined })] }).questions[0]).toMatchObject({ text: "" });
+    for (const rows of [0, 61, 1.5, "5"]) expect(spec({ questions: [edit({ rows })] }).questions[0]).not.toHaveProperty("rows");
+    expect(reason({ questions: [edit({ text: "x".repeat(10_001) })] })).toBe("too_large");
+  });
+  it("検査: rank・table は options が要る。table は rows（1 つ以上・重複なし・default は選択肢）", () => {
+    expect(reason({ questions: [{ id: "r", label: "R", type: "rank" }] })).toBe("options_empty");
+    expect(reason({ questions: [table({ rows: undefined })] })).toBe("options_empty");
+    expect(reason({ questions: [table({ rows: [] })] })).toBe("options_empty");
+    expect(reason({ questions: [table({ rows: ["x", "x"] })] })).toBe("option_value_duplicate");
+    expect(reason({ questions: [table({ rows: [{ value: "x", default: "zzz" }] })] })).toBe("row_default_unknown");
+    expect(reason({ questions: [table({ rows: [{ label: "L" }] })] })).toBe("option_value_required");
+    const t = spec({ questions: [table({ rowLabel: "節", pickLabel: "配置", default: "ng" })] }).questions[0]!;
+    expect(t).toMatchObject({ rowLabel: "節", pickLabel: "配置", default: "ng", rows: [{ value: "x", label: "x" }, { value: "y", label: "Y", desc: "d", default: "ng" }] });
+    expect(spec({ questions: [table({ default: "zzz" })] }).questions[0]).not.toHaveProperty("default"); // 選択肢に無い既定は落とす
+  });
+  it("検査: rank の default は選択肢の並べ替えのときだけ残す", () => {
+    expect(spec({ questions: [rank({ default: ["c", "a", "b"] })] }).questions[0]!.default).toEqual(["c", "a", "b"]);
+    for (const d of [["a", "b"], ["a", "a", "b"], ["a", "b", "z"], "a"]) expect(spec({ questions: [rank({ default: d })] }).questions[0]).not.toHaveProperty("default");
+  });
+  it("collectAsk: edit は末尾の空白を除いて返し、直したら edited。rank は並べた順（不正は既定の順）。table は行ごと（既定は行の default → 質問の default → 先頭）", () => {
+    const s = spec({ questions: [edit(), rank({ default: ["b", "a", "c"] }), table()] });
+    const base = collectAsk(s, initialAskState(s));
+    expect(base.answers).toEqual({ e: "1. a\n2. b", r: ["b", "a", "c"], t: { x: "ok", y: "ng" } });
+    expect(base.edited).toEqual([]);
+    expect(base.lacking).toEqual([]);
+    const st = initialAskState(s);
+    st.text["e"] = "1. a\n2. B\n\n";
+    st.order = { r: ["c", "b", "a"] };
+    st.rowPick = { t: { x: "ng" } };
+    const got = collectAsk(s, st);
+    expect(got.answers).toEqual({ e: "1. a\n2. B", r: ["c", "b", "a"], t: { x: "ng", y: "ng" } });
+    expect(got.edited).toEqual(["e"]);
+    st.order = { r: ["a", "a", "b"] }; // 不正な順は既定へ
+    st.rowPick = { t: { x: "zzz" } };
+    expect(collectAsk(s, st).answers).toMatchObject({ r: ["b", "a", "c"], t: { x: "ok" } });
+  });
+  it("collectAsk: 必須の edit が空（空白だけ）なら未回答。required: false なら空でよい", () => {
+    const s = spec({ questions: [edit({ text: "" }), edit({ id: "e2", required: false, text: "" })] });
+    expect(collectAsk(s, initialAskState(s)).lacking).toEqual(["e"]);
+  });
+  it("checkAskAnswer: edit は文字列（必須なら空を断る）、rank は並べ替え、table は行と値、edited は edit の質問だけ", () => {
+    const s = spec({ questions: [edit(), rank(), table()] });
+    const ok = { e: "x", r: ["c", "a", "b"], t: { x: "ok", y: "ng" } };
+    expect(checkAskAnswer(s, { answers: ok, edited: ["e"] })).toBeNull();
+    expect(checkAskAnswer(s, { answers: { ...ok, e: "" } })).toMatch(/required/);
+    expect(checkAskAnswer(s, { answers: { ...ok, e: ["x"] } })).toMatch(/string/);
+    for (const r of [["a", "b"], ["a", "a", "b"], ["a", "b", "z"], "a", { a: "b" }]) expect(checkAskAnswer(s, { answers: { ...ok, r } as never }), JSON.stringify(r)).toMatch(/every option exactly once/);
+    for (const t of [{ x: "ok" }, { x: "ok", y: "ng", z: "ok" }, { x: "ok", y: "zzz" }, { x: "ok", z: "ng" }, ["ok"], "ok"]) expect(checkAskAnswer(s, { answers: { ...ok, t } as never }), JSON.stringify(t)).not.toBeNull();
+    expect(checkAskAnswer(s, { answers: ok, edited: ["r"] })).toMatch(/not an edit/);
+    expect(checkAskAnswer(s, { answers: ok, edited: ["e", "e"] })).toMatch(/duplicate/);
+    expect(checkAskAnswer(s, { answers: ok, edited: ["nope"] })).toMatch(/not an edit/);
+    expect(checkAskAnswer(s, { answers: ok, custom: ["e"] })).toMatch(/free text/);
+  });
+  it("showIf は single・multi の質問だけが条件になる（辞書の回答は満たさない）", () => {
+    const s = spec({ questions: [table({ id: "t" }), q({ id: "b", showIf: { t: "ok" } })] });
+    expect(collectAsk(s, initialAskState(s)).visible).toEqual(["t"]);
   });
 });

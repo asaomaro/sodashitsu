@@ -75,7 +75,7 @@ export interface AskOption {
   group?: string;
 }
 
-export type AskQuestionType = "single" | "multi" | "text";
+export type AskQuestionType = "single" | "multi" | "text" | "edit" | "rank" | "table";
 
 export interface AskQuestion {
   id: string;
@@ -107,6 +107,23 @@ export interface AskQuestion {
   preview?: AskPreview;
   /** `inline` の画像の高さ（px。20〜2000 の整数だけ残す）。 */
   thumb?: number;
+  /** `edit`: 最初の文面（直して返してもらう）。 */
+  text?: string;
+  /** `edit` は行数（1〜60）、`table` は行の一覧。 */
+  rows?: number | AskRow[];
+  /** `edit`: `false` のとき等幅にしない。 */
+  mono?: boolean;
+  /** `table`: 見出し（行の列・選ぶ列）。 */
+  rowLabel?: string;
+  pickLabel?: string;
+}
+
+/** `table` の行。`default` はこの行の最初の選択（選択肢の value）。 */
+export interface AskRow {
+  value: string;
+  label: string;
+  desc?: string;
+  default?: string;
 }
 
 export type AskPreview = "side" | "inline";
@@ -333,6 +350,7 @@ export type AskSpecFailReason =
   | "page_invalid"
   | "code_invalid"
   | "preview_invalid"
+  | "row_default_unknown"
   | "media_invalid"
   | "view_invalid"
   | "too_large"
@@ -449,7 +467,7 @@ export function normalizeAskSpec(raw: unknown, refOpts: { relativePaths?: boolea
       page = pageRaw;
     }
     const type = q["type"] === undefined ? "single" : q["type"];
-    if (type !== "single" && type !== "multi" && type !== "text") {
+    if (type !== "single" && type !== "multi" && type !== "text" && type !== "edit" && type !== "rank" && type !== "table") {
       if (typeof type !== "string") return fail("invalid", `${where}.type must be a string`);
       unsupportedType ??= /^[a-z][a-z0-9_-]{0,31}$/i.test(type) ? type : "?";
       continue; // この質問の中身は読めない（対応していない型の項目）ので、検査せず、答えにも積まない
@@ -461,7 +479,8 @@ export function normalizeAskSpec(raw: unknown, refOpts: { relativePaths?: boolea
       type,
       options: [],
       allowOther: q["allowOther"] === true,
-      required: q["required"] === true,
+      // `edit` は空を許さないのが既定（`required: false` で許す）。ほかは `true` のときだけ必須。
+      required: type === "edit" ? q["required"] !== false : q["required"] === true,
       multiline: q["multiline"] === true,
     };
     for (const [key, max] of [
@@ -480,8 +499,8 @@ export function normalizeAskSpec(raw: unknown, refOpts: { relativePaths?: boolea
     // `comment` は `false` のときだけ残す（`ask.py` と同じ。`true`・無い・真偽でない値は項目なし。誤りにしない）。
     if (q["comment"] === false) out.comment = false;
 
-    if (type !== "text") {
-      // 真偽のときだけ写す（それ以外は落とす。誤りにしない）。`text` には選択肢が無いので写さない。
+    if (type !== "text" && type !== "edit") {
+      // 真偽のときだけ写す（それ以外は落とす。誤りにしない）。`text`・`edit` には選択肢が無いので写さない。
       if (typeof q["filter"] === "boolean") out.filter = q["filter"];
       if (typeof q["showValue"] === "boolean") out.showValue = q["showValue"];
       const pv = q["preview"];
@@ -537,6 +556,51 @@ export function normalizeAskSpec(raw: unknown, refOpts: { relativePaths?: boolea
         }
         out.options.push(opt);
       }
+      if (type === "table") {
+        // 行（`ask.py` の `items(q, "rows")`）: 1 つ以上・文字列か {value,label,desc,default}・value は重複なし・`default` は選択肢の value。
+        const rr = q["rows"];
+        if (!Array.isArray(rr) || rr.length === 0) return fail("options_empty", `${where}.rows must be a non-empty array`);
+        if (rr.length > ASK_OPTIONS_MAX) return fail("too_large", `${where}.rows has more than ${ASK_OPTIONS_MAX} items`);
+        const rowValues = new Set<string>();
+        const rows: AskRow[] = [];
+        for (let j = 0; j < rr.length; j++) {
+          const rw = `${where}.rows[${j}]`;
+          let r = rr[j];
+          if (typeof r === "string") r = { value: r };
+          if (!isObject(r) || !isScalar(r["value"])) return fail("option_value_required", `${rw}: value is required (a string, number or boolean)`);
+          const value = String(r["value"]);
+          if (len(value) > ASK_ID_MAX) return fail("too_large", `${rw}.value is longer than ${ASK_ID_MAX} characters`);
+          if (rowValues.has(value)) return fail("option_value_duplicate", `${where}: duplicate row value`);
+          rowValues.add(value);
+          const rl = str(r["label"], ASK_LABEL_MAX, `${rw}.label`);
+          if (isFail(rl)) return rl;
+          const rd = str(r["desc"], ASK_TEXT_MAX, `${rw}.desc`);
+          if (isFail(rd)) return rd;
+          const row: AskRow = { value, label: rl ?? value };
+          if (rd !== undefined) row.desc = rd;
+          if (r["default"] !== undefined && r["default"] !== null) {
+            if (!isScalar(r["default"]) || !values.has(String(r["default"]))) return fail("row_default_unknown", `${rw}.default is not one of the options`);
+            row.default = String(r["default"]);
+          }
+          rows.push(row);
+        }
+        out.rows = rows;
+        for (const key of ["rowLabel", "pickLabel"] as const) {
+          const v = str(q[key], ASK_LABEL_MAX, `${where}.${key}`);
+          if (isFail(v)) return v;
+          if (v !== undefined) out[key] = v;
+        }
+      }
+    }
+
+    if (type === "edit") {
+      // 最初の文面は `text`（無ければ文字列の `default`）。回答の上限を超える文面は、触らずに決定しても送れなくなるので誤りにする。
+      const text = typeof q["text"] === "string" ? q["text"] : typeof q["default"] === "string" ? q["default"] : "";
+      if (text.length > ASK_ANSWER_TEXT_MAX) return fail("too_large", `${where}.text is longer than ${ASK_ANSWER_TEXT_MAX} characters`);
+      out.text = text;
+      const rw = q["rows"];
+      if (typeof rw === "number" && Number.isInteger(rw) && rw >= 1 && rw <= 60) out.rows = rw;
+      if (typeof q["mono"] === "boolean") out.mono = q["mono"];
     }
 
     const def = q["default"];
@@ -546,7 +610,16 @@ export function normalizeAskSpec(raw: unknown, refOpts: { relativePaths?: boolea
     } else if (type === "single") {
       const first = Array.isArray(def) ? def[0] : def;
       if (isScalar(first)) out.default = String(first);
-    } else if (typeof def === "string") {
+    } else if (type === "rank") {
+      // 最初の順（選択肢の value の並べ替えだけ。そうでなければ項目なし＝選択肢の順）。
+      if (Array.isArray(def)) {
+        const want = def.filter(isScalar).map(String);
+        const have = new Set(out.options.map((o) => o.value));
+        if (want.length === have.size && new Set(want).size === want.length && want.every((v) => have.has(v))) out.default = want;
+      }
+    } else if (type === "table") {
+      if (isScalar(def) && out.options.some((o) => o.value === String(def))) out.default = String(def);
+    } else if (type === "text" && typeof def === "string") {
       // 回答の上限（`ask.answer` の zod は UTF-16 の長さで見る）を超える初期値は、触らずに決定しても送れなくなるので誤りにする。
       if (def.length > ASK_ANSWER_TEXT_MAX) return fail("too_large", `${where}.default is longer than ${ASK_ANSWER_TEXT_MAX} characters`);
       out.default = def;
@@ -595,6 +668,10 @@ export interface AskFormState {
   note: string;
   /** 質問の id → 自由記述の欄の中身（省略可）。 */
   comments?: Record<string, string>;
+  /** `rank`: 質問の id → 並べた選択肢の value（省略か不正は選択肢の順）。 */
+  order?: Record<string, string[]>;
+  /** `table`: 質問の id → {行の value: 選んだ value}（省略した行は、その行の `default` → 質問の `default` → 最初の選択肢）。 */
+  rowPick?: Record<string, Record<string, string>>;
 }
 
 /** `default` を選択済みにした初期状態。 */
@@ -603,6 +680,18 @@ export function initialAskState(spec: AskSpec): AskFormState {
   for (const q of spec.questions) {
     if (q.type === "text") {
       state.text[q.id] = typeof q.default === "string" ? q.default : "";
+      continue;
+    }
+    if (q.type === "edit") {
+      state.text[q.id] = q.text ?? "";
+      continue;
+    }
+    if (q.type === "rank") {
+      (state.order ??= {})[q.id] = rankOrder(q, undefined);
+      continue;
+    }
+    if (q.type === "table") {
+      (state.rowPick ??= {})[q.id] = rowPicks(q, undefined);
       continue;
     }
     const values = new Set(q.options.map((o) => o.value));
@@ -634,8 +723,34 @@ export function askVisible(q: AskQuestion, answers: AskAnswers): boolean {
   return true;
 }
 
-function valueOf(q: AskQuestion, state: AskFormState): string | string[] | null {
+/** `rank` の並び: 渡された順が選択肢の value の並べ替えならそれ、そうでなければ `default`、それも無ければ選択肢の順（部品の `set` と同じ）。 */
+function rankOrder(q: AskQuestion, given: readonly string[] | undefined): string[] {
+  const values = q.options.map((o) => o.value);
+  const ok = (a: readonly string[] | undefined): a is readonly string[] => a !== undefined && a.length === values.length && new Set(a).size === a.length && a.every((v) => values.includes(v));
+  if (ok(given)) return [...given];
+  if (Array.isArray(q.default) && ok(q.default)) return [...q.default];
+  return values;
+}
+
+/** `table` の選択: 行ごとに、渡された値（選択肢にあるもの）→ 行の `default` → 質問の `default` → 最初の選択肢。 */
+function rowPicks(q: AskQuestion, given: Record<string, string> | undefined): Record<string, string> {
+  const values = new Set(q.options.map((o) => o.value));
+  const first = q.options[0]?.value ?? "";
+  const out: Record<string, string> = {};
+  for (const r of Array.isArray(q.rows) ? q.rows : []) {
+    const g = given !== undefined && Object.hasOwn(given, r.value) ? given[r.value] : undefined;
+    const qd = typeof q.default === "string" && values.has(q.default) ? q.default : undefined;
+    out[r.value] = g !== undefined && values.has(g) ? g : (r.default ?? qd ?? first);
+  }
+  return out;
+}
+
+function valueOf(q: AskQuestion, state: AskFormState): AskAnswerValue | null {
   if (q.type === "text") return (state.text[q.id] ?? "").trim();
+  // 直す: 末尾の空白だけ除く（部品の `get` と同じ。先頭の空白・行頭の字下げは文面の一部）。
+  if (q.type === "edit") return (state.text[q.id] ?? q.text ?? "").replace(/\s+$/, "");
+  if (q.type === "rank") return rankOrder(q, state.order?.[q.id]);
+  if (q.type === "table") return rowPicks(q, state.rowPick?.[q.id]);
   const picked = state.picked[q.id] ?? [];
   const other = (state.otherText[q.id] ?? "").trim();
   // 値が空文字の選択肢は、ふつうの選択肢（選べば回答は `""`）。空文字を落とすのは、空文字の値の選択肢が**無い**質問のときだけ
@@ -655,27 +770,30 @@ function valueOf(q: AskQuestion, state: AskFormState): string | string[] | null 
 export function collectAsk(
   spec: AskSpec,
   state: AskFormState,
-): { answers: AskAnswers; custom: string[]; note?: string; comments?: AskComments; visible: string[]; lacking: string[] } {
+): { answers: AskAnswers; custom: string[]; edited: string[]; note?: string; comments?: AskComments; visible: string[]; lacking: string[] } {
   const answers: AskAnswers = {};
   const comments: AskComments = {};
   const custom: string[] = [];
+  const edited: string[] = [];
   const visible: string[] = [];
   const lacking: string[] = [];
   for (const q of spec.questions) {
     if (!askVisible(q, answers)) continue;
     visible.push(q.id);
     const v = valueOf(q, state);
-    const missing = q.type === "single" ? v === null : q.required ? (v as string | string[]).length === 0 : false;
+    const missing =
+      q.type === "single" ? v === null : q.type === "rank" || q.type === "table" ? false : q.required ? (v as string | string[]).length === 0 : false;
     if (missing) lacking.push(q.id);
-    if (!missing || q.type !== "single") answers[q.id] = v as string | string[];
-    if (q.type !== "text" && state.otherPicked[q.id] === true) custom.push(q.id);
+    if (!missing || q.type !== "single") answers[q.id] = v as AskAnswerValue;
+    if ((q.type === "single" || q.type === "multi") && state.otherPicked[q.id] === true) custom.push(q.id);
+    if (q.type === "edit" && (state.text[q.id] ?? q.text ?? "") !== (q.text ?? "")) edited.push(q.id);
     // 自由記述: 見えていて付けられる質問の、自分の項目（継承された値は拾わない）。空白だけは入れない。
     if (askCommentable(spec, q) && state.comments !== undefined && Object.hasOwn(state.comments, q.id)) {
       const c = state.comments[q.id];
       if (typeof c === "string" && c.trim() !== "") comments[q.id] = c.trim();
     }
   }
-  const out: { answers: AskAnswers; custom: string[]; note?: string; comments?: AskComments; visible: string[]; lacking: string[] } = { answers, custom, visible, lacking };
+  const out: { answers: AskAnswers; custom: string[]; edited: string[]; note?: string; comments?: AskComments; visible: string[]; lacking: string[] } = { answers, custom, edited, visible, lacking };
   if (Object.keys(comments).length > 0) out.comments = comments;
   const note = spec.note ? state.note.trim() : "";
   if (note !== "") out.note = note;
@@ -703,6 +821,20 @@ export function checkAskAnswer(spec: AskSpec, body: AskAnswerBody): string | nul
     if (q.type === "text") {
       if (typeof a !== "string") return `questions[${index(spec, q.id)}] must be answered with a string`;
       if (q.required && a === "") return `questions[${index(spec, q.id)}] is required`;
+    } else if (q.type === "edit") {
+      if (typeof a !== "string") return `questions[${index(spec, q.id)}] must be answered with a string`;
+      if (q.required && a === "") return `questions[${index(spec, q.id)}] is required`;
+    } else if (q.type === "rank") {
+      // 選択肢の value の並べ替え（過不足・重複なし）。
+      if (!Array.isArray(a) || a.length !== q.options.length || new Set(a).size !== a.length || !a.every((v) => typeof v === "string" && q.options.some((o) => o.value === v)))
+        return `questions[${index(spec, q.id)}] must be answered with every option exactly once`;
+    } else if (q.type === "table") {
+      // 行の value 全部をキーに持ち、値はすべて選択肢の value。
+      const rows = Array.isArray(q.rows) ? q.rows : [];
+      if (typeof a !== "object" || a === null || Array.isArray(a)) return `questions[${index(spec, q.id)}] must be answered with an object`;
+      const keys = Object.keys(a);
+      if (keys.length !== rows.length || !rows.every((r) => Object.hasOwn(a, r.value))) return `questions[${index(spec, q.id)}] must have exactly one value for each row`;
+      if (!keys.every((k) => q.options.some((o) => o.value === (a as Record<string, string>)[k]))) return `questions[${index(spec, q.id)}] has a value that is not an option`;
     } else if (q.type === "single") {
       if (typeof a !== "string") return `questions[${index(spec, q.id)}] must be answered with a string`;
       if (!isAllowedValue(q, a, customSet.has(q.id))) return `questions[${index(spec, q.id)}] has a value that is not an option`;
@@ -719,13 +851,16 @@ export function checkAskAnswer(spec: AskSpec, body: AskAnswerBody): string | nul
       }
       if (others > 1) return `questions[${index(spec, q.id)}] has more than one free-text value`;
     }
-    seen[q.id] = a as string | string[];
+    seen[q.id] = a as AskAnswerValue;
   }
   for (const id of Object.keys(answers)) if (!shown.has(id)) return "answers has an unknown question id";
   for (const id of custom) {
     const q = shown.get(id);
-    if (!q || q.type === "text" || !q.allowOther) return "custom has an id that does not accept free text";
+    if (!q || (q.type !== "single" && q.type !== "multi") || !q.allowOther) return "custom has an id that does not accept free text";
   }
+  const edited = body.edited ?? [];
+  if (new Set(edited).size !== edited.length) return "edited has duplicate ids";
+  for (const id of edited) if (shown.get(id)?.type !== "edit") return "edited has an id that is not an edit question";
   if (body.note !== undefined && !spec.note) return "this form has no note field";
   if (body.comments !== undefined) {
     let total = 0;

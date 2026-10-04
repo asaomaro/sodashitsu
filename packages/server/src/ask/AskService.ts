@@ -236,16 +236,18 @@ export class AskService {
   }
 
   /** 回答を受ける。誤った形の回答は断り（質問は閉じない）、通れば質問を閉じる。 */
-  answer(clientId: string, p: { askId: string; answers: AskAnswers; custom?: string[] | undefined; note?: string | undefined; comments?: AskComments | undefined }): void {
+  answer(clientId: string, p: { askId: string; answers: AskAnswers; custom?: string[] | undefined; edited?: string[] | undefined; note?: string | undefined; comments?: AskComments | undefined }): void {
     const entry = this.require(clientId, p.askId);
     const body: AskAnswerBody = { answers: p.answers };
     if (p.custom !== undefined) body.custom = p.custom;
+    if (p.edited !== undefined) body.edited = p.edited;
     if (p.note !== undefined) body.note = p.note;
     if (p.comments !== undefined) body.comments = p.comments;
     const reason = checkAskAnswer(entry.spec, body);
     if (reason !== null) throw new RpcError("invalid_params", reason);
     const result: AskResult = { status: "answered", answers: body.answers };
     if (body.custom !== undefined && body.custom.length > 0) result.custom = body.custom;
+    if (body.edited !== undefined && body.edited.length > 0) result.edited = body.edited;
     if (body.note !== undefined && body.note !== "") result.note = body.note;
     // 自由記述: 前後の空白を除いて、空になったものは落とす（断らない）。1 つも残らなければ項目を付けない。
     const comments: AskComments = {};

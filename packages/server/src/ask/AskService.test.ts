@@ -166,12 +166,12 @@ describe("AskService", () => {
   it("対応していない型の質問がある定義は、ダイアログを出さず（台帳に置かず）すぐ unavailable。黙って落とさない（追補）", async () => {
     const s = setup();
     s.asks.subscribe("b1");
-    const r = await s.asks.open("cli", { paneId: "p1", spec: { questions: [{ id: "a", label: "A", options: ["x"] }, { id: "e", label: "E", type: "edit", text: "文面" }] }, timeoutMs: 1000 });
-    expect(r).toEqual({ status: "unavailable", reason: expect.stringContaining('"edit"') });
+    const r = await s.asks.open("cli", { paneId: "p1", spec: { questions: [{ id: "a", label: "A", options: ["x"] }, { id: "e", label: "E", type: "slider" }] }, timeoutMs: 1000 });
+    expect(r).toEqual({ status: "unavailable", reason: expect.stringContaining('"slider"') });
     expect(s.asks.pendingCount).toBe(0);
     expect(s.askEvents()).toEqual([]);
     // pane が無ければ not_found、同じ pane に質問があれば ask_busy が先（通常の定義と同じ順）
-    const spec = { questions: [{ id: "e", label: "E", type: "edit" }] };
+    const spec = { questions: [{ id: "e", label: "E", type: "slider" }] };
     expect(() => s.asks.open("cli", { paneId: "p9", spec, timeoutMs: 1000 })).toThrowError(expect.objectContaining({ code: "not_found" }));
     track(s.asks.open("cli", { paneId: "p1", spec: SPEC, timeoutMs: 1000 }));
     expect(() => s.asks.open("cli2", { paneId: "p1", spec, timeoutMs: 1000 })).toThrowError(expect.objectContaining({ code: "ask_busy" }));
@@ -547,5 +547,26 @@ describe("AskService — 準備中に閉じる・全体の上限の後片付け"
     expect(s.asks.pendingCount).toBe(0);
     expect(s.timers.active.size).toBe(0);
     expect(() => s.asks.open("cli", { paneId: "p1", spec: SPEC, timeoutMs: 1000 })).not.toThrow();
+  });
+});
+
+describe("AskService — edit・rank・table の回答（20261004-ask-media-popup）", () => {
+  const SPEC2 = {
+    questions: [
+      { id: "e", label: "E", type: "edit", text: "案" },
+      { id: "r", label: "R", type: "rank", options: ["a", "b"] },
+      { id: "t", label: "T", type: "table", options: ["ok", "ng"], rows: ["x", "y"] },
+    ],
+  };
+  it("正しい回答は結果に（edited つきで）載る。並べ替えでない・行が足りない回答は invalid_params で、質問は開いたまま", async () => {
+    const s = setup();
+    s.asks.subscribe("b1");
+    const t = track(s.asks.open("cli", { paneId: "p1", spec: SPEC2, timeoutMs: 1000 }));
+    expect(() => s.asks.answer("b1", { askId: "ask1", answers: { e: "案", r: ["a"], t: { x: "ok", y: "ng" } } })).toThrowError(expect.objectContaining({ code: "invalid_params" }));
+    expect(() => s.asks.answer("b1", { askId: "ask1", answers: { e: "案", r: ["b", "a"], t: { x: "ok" } } })).toThrowError(expect.objectContaining({ code: "invalid_params" }));
+    expect(() => s.asks.answer("b1", { askId: "ask1", answers: { e: "案", r: ["b", "a"], t: { x: "ok", y: "ng" } }, edited: ["r"] })).toThrowError(expect.objectContaining({ code: "invalid_params" }));
+    expect(t.result()).toBeUndefined();
+    s.asks.answer("b1", { askId: "ask1", answers: { e: "直した案", r: ["b", "a"], t: { x: "ok", y: "ng" } }, edited: ["e"] });
+    expect(await t.done).toEqual({ status: "answered", answers: { e: "直した案", r: ["b", "a"], t: { x: "ok", y: "ng" } }, edited: ["e"] });
   });
 });
