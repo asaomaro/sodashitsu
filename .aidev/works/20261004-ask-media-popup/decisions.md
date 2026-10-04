@@ -70,3 +70,8 @@ public_docs 側に必要な改修案は、coding の終わりにこのファイ�
    成果物の HTML は**スクリプトが動くが外へ通信しない**（CDN・Google Fonts は崩れる）ことと、決定は枠の中の操作の直後だけ効くことも書く。
 6. **利用者に確認が要る点**: (a) 窓へ落とさずエラーにする範囲（上の 3。`sodactl` が終了コード 2 のときを窓へ落とすか）。(b) 外部 URL の画像の取得をサーバ側にした結果、`ask.py` の窓（ローカルのブラウザが直接取る）と見え方が変わる（プロキシ越しで差が出る）。(c) HTML の `allow-popups`・`allow-downloads` を
    窓の側は許し、画面内の枠は許さない（外へ通信させない決定）。窓の側も揃えるか。
+
+## D8: test 工程（origin/main の取り込みと T15）
+
+- origin/main（実体の id の UUID 化・サイドバーの区画）を取り込んだ。衝突は `AskDialog.vue` の 1 か所（pane の呼び名）。この作業の `paneName`（computed。成果物の枠のラベルにも渡す）を残し、main の「pane が無いときは `shortId(paneId)`」を代替表記に取り入れた。pane の id を `p3` の形と決め打ちしない。
+- T15（AC22）の変異確認を実施。落ちない変異が 1 つ（成果物の SVG を `<img>` 以外でも開く）見つかったので、E2E（`ask-view.spec.ts`）に対照を足した。詳細は `test-result.md`。

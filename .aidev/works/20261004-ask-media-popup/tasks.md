@@ -93,7 +93,7 @@ protocol（型・検査・上限）→ server（読む・取得・台帳・RPC�
       対象: `docs/sodactl.md`・`docs/verification.md`・`packages/cli/skills/sodactl/SKILL.md`・`AGENTS.md`・`.aidev/works/20261004-ask-media-popup/decisions.md`
       依存: T8, T13
       AC: AC19, AC21
-- [ ] T15: 負の対照の確認（AC22）。対策を外した版（種類確認・IP 検査・`allow-same-origin`・SVG の `<img>` 限定）でテストが落ちることを確かめ、生の出力を `test-result.md` に残す。**coding ではなく test 工程で消化する**（coding の承認時は未チェックで残る前提。decisions D4）
+- [x] T15: 負の対照の確認（AC22）。対策を外した版（種類確認・IP 検査・`allow-same-origin`・SVG の `<img>` 限定）でテストが落ちることを確かめ、生の出力を `test-result.md` に残す。**coding ではなく test 工程で消化する**（coding の承認時は未チェックで残る前提。decisions D4）
       対象: `packages/server/src/ask/AskMedia.ts`・`RemoteImageFetcher.ts`・`packages/web/src/components/AskViewer.vue`（変異させる箇所。test 工程で一時的に戻す）
       依存: T13
       AC: AC22

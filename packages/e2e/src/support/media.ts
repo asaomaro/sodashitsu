@@ -70,8 +70,8 @@ export function makeWav(): Buffer {
   return Buffer.concat([h, data]);
 }
 
-/** スクリプトを仕込んだ SVG（`<img>` で描かれる限り動かない。動けば `window.__svgScript` が立つ）。 */
-export const EVIL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30" onload="window.__svgScript=1"><script>window.__svgScript=2</script><rect width="40" height="30" fill="#36c"/></svg>`;
+/** スクリプトを仕込んだ SVG（`<img>` で描かれる限り動かない。動けば `window.__svgScript` が立ち、コンソールに `svg-script-ran` が出る。iframe 等の中で動いても、コンソールは見える）。 */
+export const EVIL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30" onload="window.__svgScript=1;console.log('svg-script-ran')"><script>window.__svgScript=2;console.log('svg-script-ran')</script><rect width="40" height="30" fill="#36c"/></svg>`;
 
 export interface MediaDir {
   dir: string;

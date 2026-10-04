@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures.js";
 import { runAsk } from "../support/ask.js";
 import { dialog, q, setup } from "../support/askForm.js";
-import { makeMediaDir, makePng } from "../support/media.js";
+import { EVIL_SVG, makeMediaDir, makePng } from "../support/media.js";
 
 /**
  * 成果物（`view`: text・image・markdown・html）の隔離表示（20261004-ask-media-popup の AC8〜AC11・AC-I1〜AC-I5）の E2E。ビルドした `sodactl` を子プロセスで起動し、
@@ -400,6 +400,47 @@ test("成果物が読めない（存在しない・UTF-8 でないバイナリ�
       expect(r.stderr, name).toMatch(re);
     }
     await expect(dialog(page)).toHaveCount(0);
+  } finally {
+    await media.cleanup();
+  }
+});
+
+test("成果物の SVG は <img> だけで描かれ、スクリプトは動かない。iframe・object・embed では開かない（AC5・AC22 の対照）", async ({
+  page,
+  appServer,
+}) => {
+  const media = await makeMediaDir();
+  try {
+    const logs: string[] = [];
+    page.on("console", (m) => logs.push(m.text())); // 枠（iframe）の中のコンソールも page に届く
+    const p1 = await setup(page, appServer);
+    const svg = await media.write("evil.svg", EVIL_SVG);
+    const run = await runAsk(appServer, p1, SPEC([{ file: svg, title: "図" }]));
+    await expect(dialog(page)).toBeVisible();
+    await expect
+      .poll(() =>
+        page.locator("[data-ask-view-image]").evaluate((i) => (i as HTMLImageElement).naturalWidth),
+      )
+      .toBe(40);
+    expect(await page.locator("[data-ask-view-image]").evaluate((i) => i.tagName)).toBe("IMG");
+    expect(await page.locator("[data-ask-view-image]").getAttribute("src")).toMatch(
+      /^(data:image\/svg\+xml|blob:)/,
+    );
+    // SVG を文書として開く経路（iframe・object・embed）が成果物の枠に無く、スクリプトも動いていない（動けば印かコンソールに出る）。
+    expect(
+      await page
+        .locator(
+          "[data-ask-view-stage] iframe, [data-ask-view-stage] object, [data-ask-view-stage] embed",
+        )
+        .count(),
+    ).toBe(0);
+    await page.waitForTimeout(500); // 開いてしまっていれば、スクリプトが動く時間
+    expect(
+      await page.evaluate(() => (window as unknown as { __svgScript?: number }).__svgScript),
+    ).toBeUndefined();
+    expect(logs.filter((l) => l.includes("svg-script-ran"))).toEqual([]);
+    await page.keyboard.press("Control+Enter");
+    await run.done;
   } finally {
     await media.cleanup();
   }

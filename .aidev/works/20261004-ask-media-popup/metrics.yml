@@ -31,3 +31,7 @@ events:
   - { ts: 2026-10-04T14:11:31Z, phase: coding, event: taskcheck, metrics: { stage: start, task: cross, mode: delegated } }
   - { ts: 2026-10-04T14:14:15Z, phase: coding, event: taskcheck, metrics: { stage: report, task: cross, findings: 4 } }
   - { ts: 2026-10-04T14:15:30Z, phase: coding, event: approved, metrics: { tasks_done: 14, unplanned_lookups: 2, task_checks: 8, task_check_findings: 27, task_check_mode: delegated } }
+  - { ts: 2026-10-04T14:17:57Z, phase: test, event: start, metrics: { marks: 0 } }
+  - { ts: 2026-10-04T14:18:42Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-10-04T14:19:27Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-10-04T14:54:05Z, phase: test, event: approved, metrics: { passed: 8040, failed: 0 } }
