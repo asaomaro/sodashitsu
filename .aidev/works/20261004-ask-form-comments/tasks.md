@@ -25,7 +25,7 @@ design.md のとおり、下から積む。(1) 部品と試験データを写す
       対象: `packages/protocol/src/ask.ts:19-23`（上限の定数）・`:88-113`（`AskResult`・`AskAnswerBody`）・`:354-362`（`AskFormState`）・`:409-430`（`collectAsk`）・`:436-478`（`checkAskAnswer`）、`packages/protocol/src/messages.ts:413-419`、`packages/protocol/src/ask.test.ts`、`packages/protocol/src/ask.fixtures.test.ts:47-52, :150-172`、`packages/protocol/src/messages.test.ts`、`packages/protocol/src/paneSocket.ts:28`
       依存: T2
       AC: AC6, AC7, AC10
-- [ ] T4: サーバ——`AskService.answer` が `comments` を受けて検査し、値を `trim` して空を落とし、残れば結果に写す（`{}`・全部空なら項目なし）。ログに中身を出さない。`ask.answer` のハンドラ（`params` をそのまま渡している）は、型が通ることを確かめるだけ。単体と統合（`/ws` 越し: `comments` つきの回答が結果に出る／10001 文字・付けられない質問・合計の超過は `invalid_params` で質問が開いたまま残る／空白だけは落ちて結果に項目が無い／ログに自由記述の文が出ない）と壊して落ちる確認
+- [x] T4: サーバ——`AskService.answer` が `comments` を受けて検査し、値を `trim` して空を落とし、残れば結果に写す（`{}`・全部空なら項目なし）。ログに中身を出さない。`ask.answer` のハンドラ（`params` をそのまま渡している）は、型が通ることを確かめるだけ。単体と統合（`/ws` 越し: `comments` つきの回答が結果に出る／10001 文字・付けられない質問・合計の超過は `invalid_params` で質問が開いたまま残る／空白だけは落ちて結果に項目が無い／ログに自由記述の文が出ない）と壊して落ちる確認
       対象: `packages/server/src/ask/AskService.ts:138-149`、`packages/server/src/surface/methods/ask.ts:24`、`packages/server/src/ask/AskService.test.ts`、`packages/server/src/ask/ask.integration.test.ts:232-247`（ログの件）
       依存: T3
       AC: AC4, AC7, AC8, AC9

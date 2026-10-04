@@ -44,4 +44,26 @@ AssertionError: expected { answers: {}, custom: [], …(3) } to not have propert
       Tests  1 failed | 56 passed (57)
 ```
 
+#### T4（`answer` が `p.comments` を body に渡さない／空白を除かず空も落とさない、を別々に壊した）
+```
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/ask/AskService.test.ts > AskService > comments は前後の空白を除いて結果に入る。空白だけの値は落とし、全部落ちた・{} なら項目が無い
+AssertionError: expected { status: 'answered', …(1) } to deeply equal { status: 'answered', …(2) }
+ FAIL  src/ask/AskService.test.ts > AskService > 不正な comments（定義に無い id・隠れている質問・付けられない質問・文字列でない値・合計の超過）は invalid_params で断り、質問は開いたまま残る
+AssertionError: expected function to throw an error, but it didn't
+ FAIL  src/ask/AskService.test.ts > AskService > ログに定義・回答の中身を出さない（askId・paneId・件数・結果の種類だけ）
+AssertionError: expected { status: 'answered', …(2) } to match object { Object (comments) }
+ FAIL  src/ask/ask.integration.test.ts > ask.*（実物の /ws。20261002-sodactl-ask） > comments つきの回答が結果に出る。10001 文字・付けられない質問・合計の超過は invalid_params で、質問は開いたまま残る。空白だけは落ちる
+AssertionError: promise resolved "{}" instead of rejecting
+ FAIL  src/ask/ask.integration.test.ts > ask.*（実物の /ws。20261002-sodactl-ask） > server.log に定義・回答・補足・自由記述の文字列が出ない
+AssertionError: promise resolved "{}" instead of rejecting
+      Tests  5 failed | 27 passed (32)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/ask/AskService.test.ts > AskService > comments は前後の空白を除いて結果に入る。空白だけの値は落とし、全部落ちた・{} なら項目が無い
+AssertionError: expected { status: 'answered', …(2) } to deeply equal { status: 'answered', …(2) }
+ FAIL  src/ask/ask.integration.test.ts > ask.*（実物の /ws。20261002-sodactl-ask） > comments つきの回答が結果に出る。10001 文字・付けられない質問・合計の超過は invalid_params で、質問は開いたまま残る。空白だけは落ちる
+AssertionError: expected { status: 'answered', …(2) } to deeply equal { status: 'answered', …(2) }
+      Tests  2 failed | 30 passed (32)
+```
+
 ### 点検の指摘
