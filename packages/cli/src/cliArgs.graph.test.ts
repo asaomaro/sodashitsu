@@ -169,7 +169,7 @@ describe("parseArgs — graph", () => {
       action: { kind: "link-set", linkId: "l3", config: { mode: "delegate" } },
     });
     expect(usageError(["graph", "link", "set", "l3"]).message).toMatch(/nothing to change/);
-    expect(usageError(["graph", "link", "set", "x3", "--limit", "2"]).message).toMatch(
+    expect(usageError(["graph", "link", "set", "x:3", "--limit", "2"]).message).toMatch(
       /invalid link id/,
     );
   });
@@ -181,7 +181,7 @@ describe("parseArgs — graph", () => {
       });
       expect(() => parseArgs(["graph", "link", sub], noEnv)).toThrow(CliUsageError);
       expect(() => parseArgs(["graph", "link", sub, "l1", "l2"], noEnv)).toThrow(CliUsageError);
-      expect(() => parseArgs(["graph", "link", sub, "l0"], noEnv)).toThrow(CliUsageError);
+      expect(() => parseArgs(["graph", "link", sub, "l 0"], noEnv)).toThrow(CliUsageError);
     }
   });
 

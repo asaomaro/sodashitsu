@@ -347,3 +347,35 @@ describe("runPaneReportMetadata（20260927-sidebar-row-tokens の AC2・AC8）",
     expect(mockedPrintJson).toHaveBeenCalledWith({});
   });
 });
+
+describe("pane の指定は先頭の部分（4 文字以上で一意）でもよい", () => {
+  const A = "3f2a9c10-1111-4111-8111-aaaaaaaaaaaa";
+  const B = "9d000000-2222-4222-8222-bbbbbbbbbbbb";
+  const IN_A = { ...OPTS, caller: { paneId: A, serverUrl: "http://127.0.0.1:7780" } };
+
+  it("close・input・run・read は完全な id に直して送る", async () => {
+    const client = fakeClient({ panes: [A, B] });
+    mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
+    await runPaneClose({ kind: "pane-close", opts: OPTS, paneId: "3f2a" }, store);
+    expect(client.request).toHaveBeenCalledWith("pane.close", { paneId: A });
+    await runPaneInput({ kind: "pane-input", opts: OPTS, paneId: "9d00", text: "ls" }, store);
+    expect(client.sendInput).toHaveBeenCalledWith(B, new TextEncoder().encode("ls"));
+    expect(mockedPrintJson).toHaveBeenLastCalledWith({ ok: true, paneId: B });
+  });
+
+  it("部分の指定が自分の pane に当たるときも self_target（接続した後に断る。何も送らない）", async () => {
+    const client = fakeClient({ panes: [A, B] });
+    mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
+    await expect(runPaneClose({ kind: "pane-close", opts: IN_A, paneId: "3f2a" }, store)).rejects.toMatchObject({ code: "self_target" });
+    await expect(runPaneInput({ kind: "pane-input", opts: IN_A, paneId: "3f2a", text: "x" }, store)).rejects.toMatchObject({ code: "self_target" });
+    expect(client.request).not.toHaveBeenCalled();
+    expect(client.sendInput).not.toHaveBeenCalled();
+  });
+
+  it("曖昧な部分は id_ambiguous で何も送らない", async () => {
+    const client = fakeClient({ panes: [A, A.replace("3f2a9c10", "3f2a9c11")] });
+    mockedWithSession.mockImplementation(async (_o, _s, fn) => fn(client));
+    await expect(runPaneClose({ kind: "pane-close", opts: OPTS, paneId: "3f2a" }, store)).rejects.toMatchObject({ code: "id_ambiguous" });
+    expect(client.request).not.toHaveBeenCalled();
+  });
+});

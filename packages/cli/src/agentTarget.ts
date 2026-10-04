@@ -1,4 +1,5 @@
 import type { AgentInfo, SessionSnapshot } from "@sodashitsu/protocol";
+import { resolvePaneRef } from "./idRef.js";
 import { RpcFailure } from "./wsClient.js";
 
 /**
@@ -25,5 +26,13 @@ export function resolveAgentTarget(snapshot: SessionSnapshot, target: string): A
   const match = named[0];
   if (match?.agent) return { paneId: match.id, tabId: match.tabId, agent: match.agent };
   if (byId) throw new RpcFailure("agent_not_found", `no agent detected in pane: ${target}`);
+  // 完全な id でも名前でもなければ、pane の id の先頭の部分（4 文字以上で一意）として引く。
+  const byPrefix = resolvePaneRef(snapshot, target);
+  const prefixed = snapshot.panes.find((p) => p.id === byPrefix);
+  if (prefixed !== undefined && byPrefix !== target) {
+    if (prefixed.agent)
+      return { paneId: prefixed.id, tabId: prefixed.tabId, agent: prefixed.agent };
+    throw new RpcFailure("agent_not_found", `no agent detected in pane: ${prefixed.id}`);
+  }
   throw new RpcFailure("agent_not_found", `agent target not found: ${target}`);
 }

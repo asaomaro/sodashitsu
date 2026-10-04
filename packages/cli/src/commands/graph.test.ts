@@ -99,6 +99,12 @@ beforeEach(() => {
   vi.mocked(printLine).mockReset();
 });
 
+/** 別のマシンの pane の id（UUID）。 */
+const U1 = "11111111-1111-4111-8111-111111111111";
+const U2 = "22222222-2222-4222-8222-222222222222";
+const U7 = "77777777-7777-4777-8777-777777777777";
+const U9 = "99999999-9999-4999-8999-999999999999";
+
 describe("resolveMachineSelector（--machine と同じ引き方）", () => {
   it("local・id の完全一致・名前が 1 台", () => {
     expect(resolveMachineSelector("local", MACHINES)).toBe("local");
@@ -128,21 +134,21 @@ describe("GraphContext.resolve（端の指定 → ノードの鍵）", () => {
     expect(await c.resolve("p3", true)).toBe("local:p3");
     expect(await c.resolve("reviewer", true)).toBe("local:p2");
     expect(await c.resolve("local:impl", true)).toBe("local:p1");
-    expect(await c.resolve("box:p7", true)).toBe(`${BOX}:p7`);
-    expect(await c.resolve(`${BOX}:p7`, true)).toBe(`${BOX}:p7`);
+    expect(await c.resolve(`box:${U7}`, true)).toBe(`${BOX}:${U7}`);
+    expect(await c.resolve(`${BOX}:${U7}`, true)).toBe(`${BOX}:${U7}`);
   });
   it("手元に無い pane は mustExist のときだけ not_found（外す・選び直す前のノードは閉じた pane を指しうる）", async () => {
     const c = ctx();
-    await expect(c.resolve("p9", true)).rejects.toMatchObject({ code: "not_found" });
-    expect(await c.resolve("p9", false)).toBe("local:p9");
+    await expect(c.resolve(U9, true)).rejects.toMatchObject({ code: "not_found" });
+    expect(await c.resolve(U9, false)).toBe(`local:${U9}`);
     await expect(c.resolve("ghost", false)).rejects.toMatchObject({ code: "not_found" });
   });
   it("一覧に無い 32 桁の id は、外す・選び直す前の端（mustExist でない）だけ通す（g05 点検）", async () => {
     const c = ctx();
-    await expect(c.resolve(`${"e".repeat(32)}:p1`, true)).rejects.toMatchObject({
+    await expect(c.resolve(`${"e".repeat(32)}:${U1}`, true)).rejects.toMatchObject({
       code: "machine_not_found",
     });
-    expect(await c.resolve(`${"e".repeat(32)}:p1`, false)).toBe(`${"e".repeat(32)}:p1`);
+    expect(await c.resolve(`${"e".repeat(32)}:${U1}`, false)).toBe(`${"e".repeat(32)}:${U1}`);
   });
   it("エージェントの名前の解決は agent 系（resolveAgentTarget）と同じ順（g05 点検）", async () => {
     const snap = {
@@ -169,11 +175,11 @@ describe("GraphContext.resolve（端の指定 → ノードの鍵）", () => {
   it("マシンの一覧は 1 回だけ取り、表では名前で出す（名前が重なるなら id）", async () => {
     const client = fakeClient({ "machine.list": () => ({ machines: MACHINES }) });
     const c = new GraphContext(client, SNAPSHOT);
-    await c.resolve("box:p1", true);
-    await c.resolve("box:p2", true);
+    await c.resolve(`box:${U1}`, true);
+    await c.resolve(`box:${U2}`, true);
     expect(client.calls.filter(([m]) => m === "machine.list")).toHaveLength(1);
-    expect(c.displayOf(`${BOX}:p1`)).toBe("box:p1");
-    expect(c.displayOf(`${OTHER}:p1`)).toBe(`${OTHER}:p1`);
+    expect(c.displayOf(`${BOX}:${U1}`)).toBe("box:11111111"); // 表の呼び名は先頭 8 文字
+    expect(c.displayOf(`${OTHER}:${U1}`)).toBe(`${OTHER}:11111111`);
     expect(c.displayOf("local:p4")).toBe("p4");
   });
 });
@@ -335,7 +341,7 @@ describe("runGraph", () => {
       "machine.list": () => ({ machines: MACHINES }),
     });
     await expect(
-      run(client, cmd({ kind: "node-rekey", pane: "p1", newPane: "box:p2" })),
+      run(client, cmd({ kind: "node-rekey", pane: "p1", newPane: `box:${U2}` })),
     ).rejects.toMatchObject({
       code: "invalid_params",
       // 規則はサーバと同じ client-core の applyGraphOps（checkGraphOps）にある（統合レビュー R1）
@@ -372,15 +378,15 @@ describe("runGraph", () => {
           nodes: [
             { key: "local:p1", x: 0, y: 0 },
             { key: "local:p8", x: 0, y: 0 },
-            { key: "local:p9", x: 0, y: 0, stale: true },
-            { key: `${BOX}:p2`, x: 0, y: 0 },
+            { key: "local:p9", x: 0, y: 0 },
+            { key: `${BOX}:${U2}`, x: 0, y: 0 },
           ],
           links: [
             link({ count: 10, paused: "limit" }),
             {
               id: "l2",
               kind: "supervise",
-              from: `${BOX}:p2`,
+              from: `${BOX}:${U2}`,
               to: "local:p1",
               limit: 10,
               count: 0,
@@ -395,15 +401,15 @@ describe("runGraph", () => {
       [
         "graph: paused (rev 7)",
         "",
-        `node    ${"key".padEnd(35)}  status`,
-        `p1      ${"local:p1".padEnd(35)}  ok`,
-        `p8      ${"local:p8".padEnd(35)}  closed`,
-        `p9      ${"local:p9".padEnd(35)}  stale`,
-        `box:p2  ${BOX}:p2  -`,
+        `node          ${"key".padEnd(69)}  status`,
+        `p1            ${"local:p1".padEnd(69)}  ok`,
+        `p8            ${"local:p8".padEnd(69)}  closed`,
+        `p9            ${"local:p9".padEnd(69)}  closed`, // 手元に居ない pane のノードは closed（id は再利用されないので「別の pane を指す」ことはない）
+        `box:22222222  ${BOX}:${U2}  -`,
         "",
-        "link  kind       from    to  count  state          settings",
-        'l1    trigger    p1      p2  10/10  paused(limit)  on=done output=80 busy=wait prompt="見て {output}"',
-        "l2    supervise  box:p2  p1  0/10   paused",
+        "link  kind       from          to  count  state          settings",
+        'l1    trigger    p1            p2  10/10  paused(limit)  on=done output=80 busy=wait prompt="見て {output}"',
+        "l2    supervise  box:22222222  p1  0/10   paused",
       ].join("\n"),
     );
   });
