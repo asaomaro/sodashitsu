@@ -868,6 +868,33 @@ pnpm --filter @sodashitsu/server exec vitest run src/graph/AgentLineage src/comp
 - [ ] `soda serve` を再起動する。期待：グラフに載った子と線は残る。再起動の前に作った pane に後からエージェントが現れても、新たには載らない。
 - [ ] Windows ネイティブの `soda serve`: `agent start` は `unsupported_agent_shell`。`pane split` で作った pane に、手で `claude` を打ち込んだときに載る。
 
+### 共通：サブエージェントの表示（20261004-subagent-display・`docs/agent-graph.md`「サブエージェントの件数と一覧」「サブエージェントの表示の仕組みと制約」）
+
+自動のテストで確かめた範囲（実物の Claude Code は使っていない）:
+
+- フックのスクリプト（`packages/server/assets/agent-hook-report.test.ts`。イベントごとの電文・送らないもの・切り詰め）、受け口（`AgentReportSocket.test.ts`）、数える部品（`SubagentTracker.test.ts`）、`SessionService.test.ts`（引き継ぎ）、インストーラ（`AgentIntegrationInstaller.test.ts`。旧版の導入済み → 更新・削除）。
+- **実物のスクリプトを子プロセスで動かす結合試験**（`packages/server/src/composeServer.subagents.integration.test.ts`。スクリプト → 実 socket → `SubagentTracker` → `SessionService` → 2 つの接続と snapshot。偽の `claude`）。
+- ブラウザ・端末版・グラフ・設定画面の単体（`Sidebar.test.ts`・`SubagentListDialog.test.ts`・`GraphView.subagents.test.ts`・`TuiApp.subagents.test.ts`・`SettingsDialog.test.ts` ほか）と、**E2E**（`packages/e2e/src/specs/subagents.spec.ts`。偽の `claude` に、テストが `agent-report.sock` へ電文を送る）。
+- 実物の Claude Code（2.1.289）の `claude -p --settings <一時の設定>` で確かめた事実: 実行前 → 起動の順序・同期と非同期を混ぜたときの順序・`SessionEnd` の発火・フックの所要・matcher・スクリプトが無いときの見え方（`.aidev/works/20261004-subagent-display/decisions.md` D4）。
+
+```sh
+pnpm --filter @sodashitsu/server exec vitest run assets src/agent src/composeServer.subagents.integration.test.ts   # フック・受け口・数える部品・結合
+pnpm --filter @sodashitsu/e2e exec playwright test src/specs/subagents.spec.ts                                       # E2E（先に pnpm build）
+```
+
+**自動のテストでは確かめていない（実機で）**。利用者の本物の `~/.claude/settings.json` を書き換えるので、導入の確認は `CLAUDE_CONFIG_DIR` で別の場所を指した Claude Code か、バックアップを取ってから行う。新しい状態ディレクトリか名前付き session で始める。
+
+- [ ] 導入: 設定画面の「エージェント連携」で Claude Code を［導入］。期待: `settings.json` の `hooks` に `SessionStart`・`PreToolUse`（matcher `Agent|Task`）・`SubagentStart`・`Stop`・`SubagentStop`・`SessionEnd` の 6 つが入り（ほかのフックは変わらない）、すでに動いている Claude Code は起動し直すと効く。
+- [ ] 更新: 旧版（`SessionStart` だけ）の導入済みの環境で設定画面を開く。期待: 「更新が必要」と［更新］が出る。押す前は設定ファイルが変わらない。押すと足りない 5 つだけが足りる（重ならない・ほかのフックが残る）。
+- [ ] 前面のサブエージェント: pane の Claude Code に「Agent ツールで 2 つのサブエージェントを並行に動かして、それぞれ 20 秒待ってから終わって」と頼む。期待: サイドバーの行（と、グラフを開いていればそのノード）に件数 `2` が出て、一覧に種類・短い説明・経過時間が並び、終わると 0 になってボタンが消える。
+- [ ] バックグラウンドのサブエージェント: 「バックグラウンドで 1 つ動かして、すぐ次の話をして」と頼む。期待: 親の作業が終わった後も件数が残り（バックグラウンドの印つき）、サブエージェントが終わると消える。
+- [ ] 並行・入れ子: 1 つのメッセージで複数のサブエージェントを起動させる。期待: 件数が同じだけ増え、それぞれに短い説明が付く（付かないものは種類だけ）。サブエージェントの中のサブエージェントは、フックが出す範囲だけが数に入る（出さなければ数えない）。
+- [ ] 取りこぼし: Claude Code を強制終了（`kill -9`）した後、`soda` の画面の件数は残りうる（既知の制約）。pane のエージェントが居なくなる・入れ替わると消える。
+- [ ] 更新と解除は、その後に起動した Claude Code から効く: 解除した後、動いたままの Claude Code が、フックのスクリプト（何もしない中身になっている）を呼び続けても、エラーを出さずに動く。
+- [ ] 別のマシン: 別のマシンのノードの件数が、そのマシンにフックを入れていれば出る。入れていなければ出ない。
+- [ ] 端末版: エージェントの行の末尾の `⤷n` が、使っている端末のフォントで 1 桁に見え、桁がずれない（ずれたら記号を替える。`decisions.md` D11）。
+- [ ] Windows ネイティブ: フックの導入・更新・解除と、サブエージェントの表示が動く。
+
 ### 任意：Tailscale・リバースプロキシ（使う構成だけ）
 
 どちらもこの検証環境では実機で確かめていない（`docs/tls-setup.md` の手順は公式の docs に合わせて書いた）。使うなら、最後に

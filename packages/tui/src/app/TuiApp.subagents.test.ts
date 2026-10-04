@@ -193,7 +193,7 @@ describe("端末版のサブエージェントの表示", () => {
       .find((i) => i.label === "サブエージェントの一覧")!
       .run();
     expect(h.app.ui.dialogContext).toMatchObject({ kind: "subagents", paneId: "p3" });
-    // キーボードだけ: 右クリックのメニューを開いて項目を選ぶ代わりに、メニューの部品に ↓ と Enter を送る。
+    // メニューの部品の操作（メニューを開くのは右クリックだけ。キーボードだけの道筋ではない）: 項目まで ↓ を送って Enter。
     h.app.ui.closeDialog();
     h.app.ui.openContextMenu({ kind: "pane", paneId: "p3" }, { x: 5, y: 5 });
     const n = menuItems({ target: { kind: "pane", paneId: "p3" } } as never, deps).findIndex(

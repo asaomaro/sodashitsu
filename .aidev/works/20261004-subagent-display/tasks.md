@@ -81,7 +81,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/e2e/src/specs/subagents.spec.ts`（新規）、手本は `packages/e2e/src/specs/agent-detection.spec.ts`（偽のエージェントの検出）・`ask-form-index.spec.ts`（フォーカスとキーの見方）、`packages/e2e/src/support/appServer.ts`（`stateDir`）
       依存: T20, T15
       AC: AC1, AC2, AC4, AC12, AC17, AC-I1, AC-I2, AC-I3, AC-I4
-- [ ] T17: 文書——`docs/agent-graph.md`（件数と一覧・グラフのノード・キー `s`）、`docs/sodactl.md`（`agent list`／`get` の `subagents`・フック連携の報告）、`docs/tui.md`・`docs/tui-parity.md`（件数・一覧・`show_subagents`）、`docs/machines.md`（別のマシンはそのマシンに導入が要る）、`docs/migrate-from-wtm.md`（フックの記述）、`docs/verification.md`（実機の手順: 実物の Claude Code での一巡〔前面・バックグラウンド・並行〕・導入と更新・Windows。自動テストで確かめた範囲と分ける）、`packages/cli/skills/sodactl/SKILL.md`。対象外と制約（Claude Code だけ・チームメイトや Workflow は専用の表示なし・再起動で消える・0 件と「分からない」を画面では区別しない・上限・更新は起動し直した後から効く・強制終了されたセッションの分は残りうる）を書く。`skill.test.ts` が通ること
+- [x] T17: 文書——`docs/agent-graph.md`（件数と一覧・グラフのノード・キー `s`）、`docs/sodactl.md`（`agent list`／`get` の `subagents`・フック連携の報告）、`docs/tui.md`・`docs/tui-parity.md`（件数・一覧・`show_subagents`）、`docs/machines.md`（別のマシンはそのマシンに導入が要る）、`docs/migrate-from-wtm.md`（フックの記述）、`docs/verification.md`（実機の手順: 実物の Claude Code での一巡〔前面・バックグラウンド・並行〕・導入と更新・Windows。自動テストで確かめた範囲と分ける）、`packages/cli/skills/sodactl/SKILL.md`。対象外と制約（Claude Code だけ・チームメイトや Workflow は専用の表示なし・再起動で消える・0 件と「分からない」を画面では区別しない・上限・更新は起動し直した後から効く・強制終了されたセッションの分は残りうる）を書く。`skill.test.ts` が通ること
       対象: `docs/agent-graph.md`、`docs/sodactl.md:344-424, :555-563`、`docs/tui.md:29, :165`、`docs/tui-parity.md`、`docs/machines.md`、`docs/migrate-from-wtm.md:17, :81`、`docs/verification.md:326-355`、`packages/cli/skills/sodactl/SKILL.md`、`packages/cli/src/skill.test.ts`
       依存: T21, T8, T13, T14
       AC: AC14

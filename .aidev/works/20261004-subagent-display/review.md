@@ -72,6 +72,9 @@
 - [nit][conv:-] 同:383 確かめずに Esc を 2 回押している・誤字 / 対応: 修正済（1 回ごとに確かめる。居なくなって閉じたときのノードへのフォーカスも確かめる。T21・ラウンド1）
 - [nit][conv:-] 同:12 先頭の説明が T21 を反映していない / 対応: 修正済（T21・ラウンド1）
 
+- [should][conv:-] docs/tui.md・tui-parity.md 端末版の「pane のメニューをキーで開く」道筋の記述が実装と合わない（pane のメニューを開くのは右クリックだけ） / 対応: 修正済（文書を「キーボードだけなら割り当てた `show_subagents`」に直し、decisions D11 に食い違いを記録。T17・ラウンド1）
+- [nit][conv:-] docs/verification.md E2E コマンドの書式が周囲と違う / 対応: 修正済（`pnpm --filter @sodashitsu/e2e exec …`。T17・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
