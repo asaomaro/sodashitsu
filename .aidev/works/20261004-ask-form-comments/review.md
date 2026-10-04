@@ -126,3 +126,6 @@ AssertionError: expected "vi.fn()" to be called once with arguments: [ { status:
 - [should][conv:-] ask-form-comments.spec.ts:190-201 上限のフォームの「欄が見える位置までスクロール」が部品の動きが無くても通りうる / 対応: 修正済（T9・ラウンド1。ボタンを本文の下端へ寄せ、開く前の位置と、上限なので高さが増えないことを対照に足した）
 - [nit][conv:-] ask-form-comments.spec.ts:49-52 Esc のコメントとフォーカスの実態が合わない / 対応: 修正済（T9・ラウンド1。ボタンへフォーカスを戻してから Esc）
 - [nit][conv:-] docs/machines.md:120 足した文のつなぎ目で「。（」になり括弧が文頭に来ていた / 対応: 修正済（T10・ラウンド1）
+
+## ラウンド 1（2026-10-04）
+（指摘なし。製品コードの差分〔`ask.ts`・`messages.ts`・`AskService.ts`・`AskDialog.vue`・`askFormElement.ts`・`paneSocket.ts` のコメント〕を全部読んだ。要件適合: `aidev coverage` は tasks 承認時と同じ 15/15・gap 0。価値適合: 利用者が質問ごとに書いた自由記述が `sodactl ask` の `comments` に端から端まで届き（E2E で確認）、付けない指定も効く。正確性: `askCommentable` の 4 条件は部品の `commentable` と同じ・検査の順はスキーマ → `checkAskAnswer` → 空の値を落とす・`__proto__`／`constructor` の id・上限 10000／合計 100000・ログに中身を出さないことをテストで確認。規約適合: 条項 `e2e-observe-browser`〔合否はブラウザ側の観測。待った後に「起きていない」を読む件にはその旨をコメント〕・`regression-negative-control`〔壊して落ちる生の出力を「タスク点検ログ」に貼った〕に沿っている。`prettier --check` が通らないファイルは、元から通らないもの〔`--write` は当てていない〕。）
