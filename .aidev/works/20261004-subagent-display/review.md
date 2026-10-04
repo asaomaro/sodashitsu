@@ -279,3 +279,19 @@ AssertionError: backdrop: expected { kind: 'subagents', … } to be null
  FAIL  src/components/SubagentListDialog.test.ts > … > 開く時点で対象のエージェントが居なければ、開かずに閉じる（0 件の文言のまま開き続けない）
 AssertionError: expected { kind: 'subagents', … } to be null
 ```
+
+#### T14 `sodactl`（`packages/cli/src/agentStatus.ts`。壊した後に元へ戻し `cmp` で一致を確認済み）
+
+```
+=== MUT: 項目が無いとき null を返す行を { count: 0, items: [] } に
+ FAIL  src/agentStatus.test.ts > subagents > 報告を受けていない（項目が無い）エージェントは null（分からない）
+AssertionError: expected { paneId: 'p1', name: null, …(12) } to deeply equal { paneId: 'p1', name: null, …(12) }
+=== MUT: type: s.type ?? null -> type: s.type
+ FAIL  … > 各項目は {id, type, description, background, startedAt}。分からない値は null で埋め、項目の有無を揺らさない
+=== MUT: background: s.background ?? null -> s.background || null
+ FAIL  … > background: false は false のまま（null にしない）。count は items より大きくてもそのまま
+AssertionError: expected null to be false // Object.is equality
+=== MUT: subagents: subagentsViewOf(agent.subagents) -> null
+ FAIL  … > 0 件なら {count: 0, items: []}（null と区別する）
+AssertionError: expected null to deeply equal { count: +0, items: [] }
+```

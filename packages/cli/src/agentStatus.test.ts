@@ -9,6 +9,7 @@ import {
   PromptWait,
   resolveUntil,
   statusOf,
+  subagentsViewOf,
   toAgentView,
 } from "./agentStatus.js";
 
@@ -103,6 +104,7 @@ describe("toAgentView", () => {
       serverSeenSeq: 0,
       since: 1000,
       verified: true,
+      subagents: null,
     });
   });
 
@@ -190,5 +192,52 @@ describe("PromptWait（agent prompt --wait の活動の確認 → 状態待ち�
     expect(
       new PromptWait("a1", DEFAULT_UNTIL, true).observe(agent({ instanceId: "a2", state: "idle" })),
     ).toBe("gone");
+  });
+});
+
+// 20261004-subagent-display（AC11）。
+describe("subagents", () => {
+  const loc = { paneId: "p1", tabId: "t1", workspaceId: "w1" };
+
+  it("報告を受けていない（項目が無い）エージェントは null（分からない）", () => {
+    expect(toAgentView(loc, agent()).subagents).toBeNull();
+    expect(subagentsViewOf(undefined)).toBeNull();
+  });
+
+  it("0 件なら {count: 0, items: []}（null と区別する）", () => {
+    expect(toAgentView(loc, agent({ subagents: { count: 0, items: [] } })).subagents).toEqual({ count: 0, items: [] });
+  });
+
+  it("各項目は {id, type, description, background, startedAt}。分からない値は null で埋め、項目の有無を揺らさない", () => {
+    const view = toAgentView(
+      loc,
+      agent({
+        subagents: {
+          count: 2,
+          items: [
+            { id: "a1", type: "Explore", description: "調べる", background: true, startedAt: 5 },
+            { id: "a2", startedAt: 6 },
+          ],
+        },
+      }),
+    );
+    expect(view.subagents).toEqual({
+      count: 2,
+      items: [
+        { id: "a1", type: "Explore", description: "調べる", background: true, startedAt: 5 },
+        { id: "a2", type: null, description: null, background: null, startedAt: 6 },
+      ],
+    });
+    expect(Object.keys(view.subagents!.items[1]!)).toEqual(["id", "type", "description", "background", "startedAt"]);
+  });
+
+  it("background: false は false のまま（null にしない）。count は items より大きくてもそのまま", () => {
+    const view = toAgentView(loc, agent({ subagents: { count: 70, items: [{ id: "a1", background: false, startedAt: 1 }] } }));
+    expect(view.subagents?.count).toBe(70);
+    expect(view.subagents?.items[0]?.background).toBe(false);
+  });
+
+  it("JSON にしたときも subagents のキーが常にある（null か オブジェクト）", () => {
+    expect(JSON.parse(JSON.stringify(toAgentView(loc, agent()))).subagents).toBeNull();
   });
 });

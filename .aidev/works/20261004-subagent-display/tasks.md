@@ -69,7 +69,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/tui/src/render/chrome/sidebar.ts:177-212`（エージェントの行。桁範囲の当たり判定の手本は `sort`・`toggleX`）、`packages/tui/src/modes/NotificationList.ts`・`modes/overlay.ts`・`OverlayHost.ts`、`packages/tui/src/model/UiState.ts`、`packages/tui/src/modes/ContextMenu.ts`、`packages/tui/src/app/TuiApp.ts`、`packages/tui/src/actions/TuiDispatcher.ts`、`packages/tui/src/input/mouse.ts`
       依存: T6, T9
       AC: AC6, AC-I1, AC-I3, AC-I4, AC-I5
-- [ ] T14: `sodactl`——`AgentView.subagents`（`AgentInfo.subagents` が無ければ `null`。あれば `{count, items}` で、各項目は `{id, type, description, background, startedAt}`。分からない値は `null`）。単体テスト
+- [x] T14: `sodactl`——`AgentView.subagents`（`AgentInfo.subagents` が無ければ `null`。あれば `{count, items}` で、各項目は `{id, type, description, background, startedAt}`。分からない値は `null`）。単体テスト
       対象: `packages/cli/src/agentStatus.ts:41-74`、`packages/cli/src/commands/agent.ts:52-65`、`packages/cli/src/agentStatus.test.ts`
       依存: T2
       AC: AC11
