@@ -519,15 +519,15 @@ describe("StoreAdapter — 通知への注入口", () => {
     const { adapter } = makeAdapter();
     const session = useSessionStore(pinia);
     const base = { protocol: 1 as const, serverVersion: "test", host: { os: "linux" as const, windowsBuild: null, hostname: "h" }, workspaces: [makeWorkspace("w1")], tabs: [], panes: [], groups: [], focus: null, limits: { scrollbackLines: 5000 } };
-    adapter.applySnapshot({ ...base, layout: { top: ["w:w1"], groups: {}, ungrouped: [] } }, "c1");
-    expect(session.layout).toEqual({ top: ["w:w1"], groups: {}, ungrouped: [] });
+    adapter.applySnapshot({ ...base, layout: { top: ["u"], groups: {}, ungrouped: ["w:w1"] } }, "c1");
+    expect(session.layout).toEqual({ top: ["u"], groups: {}, ungrouped: ["w:w1"] });
     expect(session.hasServerLayout).toBe(true);
-    adapter.applyEvent({ event: "sidebar.layout_changed", data: { layout: { top: ["g:g1"], groups: { g1: ["w:w1"] }, ungrouped: [] } } });
-    expect(session.layout).toEqual({ top: ["g:g1"], groups: { g1: ["w:w1"] }, ungrouped: [] });
+    adapter.applyEvent({ event: "sidebar.layout_changed", data: { layout: { top: ["g:g1", "u"], groups: { g1: ["w:w1"] }, ungrouped: [] } } });
+    expect(session.layout).toEqual({ top: ["g:g1", "u"], groups: { g1: ["w:w1"] }, ungrouped: [] });
     adapter.applySnapshot(base, "c1"); // layout の無い古いサーバ
     expect(session.layout).toBeNull();
     expect(session.hasServerLayout).toBe(false);
     // 描画に使うレイアウトは layoutFromLegacy で導く。
-    expect(session.effectiveLayout).toEqual({ top: ["w:w1"], groups: {}, ungrouped: [] });
+    expect(session.effectiveLayout).toEqual({ top: ["u"], groups: {}, ungrouped: ["w:w1"] });
   });
 });

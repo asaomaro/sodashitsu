@@ -482,7 +482,7 @@ export class SessionModel {
     this.groups.set(id, group);
     const gref: ItemRef = `g:${id}`;
     const base: SidebarLayout = { top: layout.top, groups: { ...layout.groups, [id]: [] }, ungrouped: layout.ungrouped };
-    const ref = ws ? itemRefOf(ws) : null;
+    const ref = ws ? itemRefOf(ws, this.listWorkspaces()) : null;
     const container = ref === null ? undefined : containerOf(layout, ref);
     if (ref !== null && container === null) {
       this.layout = { top: base.top.map((r) => (r === ref ? gref : r)), groups: { ...base.groups, [id]: [ref] }, ungrouped: layout.ungrouped };
@@ -538,7 +538,7 @@ export class SessionModel {
     this.requireGroup(groupId);
     this.beginChange();
     const layout = this.confirmedLayout();
-    this.layout = addItemToGroup(layout, itemRefOf(ws), groupId);
+    this.layout = addItemToGroup(layout, itemRefOf(ws, this.listWorkspaces()), groupId);
     this.setItemGroup(ws, groupId);
     this.settle();
     return this.workspaces.get(workspaceId)!;
@@ -549,7 +549,7 @@ export class SessionModel {
     const ws = this.requireWorkspace(workspaceId);
     this.beginChange();
     const layout = this.confirmedLayout();
-    this.layout = removeItemFromGroup(layout, itemRefOf(ws));
+    this.layout = removeItemFromGroup(layout, itemRefOf(ws, this.listWorkspaces()));
     this.setItemGroup(ws, null);
     this.settle();
     return this.workspaces.get(workspaceId)!;
@@ -656,7 +656,7 @@ export class SessionModel {
     }
     // 暫定（T24 で直す）: 「グループなし」のまとまり `"u"` はまだ `top` に入らないので、動かす操作は受け付けない（moved:false）。
     if (target.kind === "ungrouped") return "u";
-    return itemRefOf(this.requireWorkspace(target.workspaceId));
+    return itemRefOf(this.requireWorkspace(target.workspaceId), this.listWorkspaces());
   }
 
   /** 並べ替えの結果を当てる（仮の状態なら先に確定する。design「確定のきっかけ (b)」）。 */
@@ -672,7 +672,7 @@ export class SessionModel {
     const all = this.listWorkspaces();
     if (ref.startsWith("g:")) return (layout.groups[ref.slice(2)] ?? []).flatMap((r) => this.itemMembers(layout, r));
     if (ref.startsWith("r:")) return repoMembers(all, ref.slice(2));
-    return all.filter((w) => itemRefOf(w) === ref);
+    return all.filter((w) => itemRefOf(w, all) === ref);
   }
 
   /** `workspace.move_to` の読み替え。動かせるなら新しいレイアウト、(c) なら null。 */
@@ -700,7 +700,7 @@ export class SessionModel {
     };
 
     // (a) 同じ入れ物の中の項目のちょうど全部。
-    const refs = [...new Set(ids.map((id) => itemRefOf(this.requireWorkspace(id))))];
+    const refs = [...new Set(ids.map((id) => itemRefOf(this.requireWorkspace(id), this.listWorkspaces())))];
     const containers = new Set(refs.map(containerOf));
     const [only] = containers;
     // グループの全メンバーを null（末尾）へ、は (b)（グループを一番上の末尾へ）に読む（(a) だと、中の項目を全部末尾へ動かす実質無変化になる）。
@@ -891,8 +891,9 @@ export class SessionModel {
   private removeFromLayout(ws: Workspace): void {
     if (!this.layout) return;
     let layout = removeItem(this.layout, `w:${ws.id}`);
-    const ref = itemRefOf(ws);
-    if (!ref.startsWith("w:") && ![...this.workspaces.values()].some((w) => itemRefOf(w) === ref)) layout = removeItem(layout, ref);
+    const all = this.listWorkspaces();
+    const ref = itemRefOf(ws, all);
+    if (!ref.startsWith("w:") && !all.some((w) => itemRefOf(w, all) === ref)) layout = removeItem(layout, ref);
     this.layout = layout;
     this.settle();
   }

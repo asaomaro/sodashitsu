@@ -200,7 +200,8 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   };
   for (const row of tree) {
     if (row.kind !== "group") {
-      pushItem(row, false, false);
+      // 暫定（T27 で直す）: 「グループなし」は見出しを描かず、項目を今までの一番上の行として描く。
+      for (const item of row.items) pushItem(item, false, false);
       continue;
     }
     lines.push({

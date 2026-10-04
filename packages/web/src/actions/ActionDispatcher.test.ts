@@ -2864,11 +2864,14 @@ describe("ActionDispatcher — レイアウトの順（20261004-group-worktree-i
     session.layout = null;
     const view = useViewStore(pinia);
     const { dispatcher } = makeDispatcher(makeConnection());
-    // 導く順: g1 = [r:/r/.git(本体 M の所属 g1), ...]、A・B は一番上。位置は先頭の workspace の平らな順。
-    view.setView("A", "tA");
+    // 導く順（追補 01 B）: グループ g1 = [r:/r/.git(本体 M の所属 g1)] が先、グループなし = [A, B]（平らな順）が後。
+    view.setView("M", "tM");
     dispatcher.run({ type: "workspaceDelta", delta: 1 });
-    // 一番上は A(0)、g1（先頭メンバー r:/r/.git の位置 = W1 の 1）、B(2) の順 → A の次は g1 の中の本体 M。
-    expect(view.workspaceId).toBe("M");
+    expect(view.workspaceId).toBe("W1"); // 本体の次は子
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("A"); // グループの次はグループなしの先頭
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("B");
   });
 });
 

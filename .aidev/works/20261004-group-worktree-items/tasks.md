@@ -106,7 +106,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/protocol/src/model.ts`（`GitInfo`・`SidebarLayout`）、`packages/protocol/src/messages.ts`（`ItemTarget`・`item.move`／`item.move_by`・共有の設定の型。`collapsedAutoGroups` の隣）、`packages/protocol/src/messages.test.ts`
       依存: T15
       AC: AC19, AC20
-- [ ] T23: 純関数——代表の決まり（`itemRefOf(ws, workspaces)`・`repoMembers` は代表だけ・`worktreeKey` が無い古いサーバでは全部メンバー）、`sidebarTree` をまとまりの列（グループと「グループなし」。本物のグループが無ければ見出しなし）に、畳んだ worktree グループの隠れている数、`visibleWorkspaceIdsOfTree`（畳んだ「グループなし」）、`topUnitOf`（「グループなし」の中はグループ扱いしない）、`layoutFromLegacy`、`sidebarLayout.ts` の操作を新しい形に（新しい workspace・外す・グループの削除は `ungrouped` の末尾へ、新しいグループは `"u"` の直前、まとまりの並べ替え、`flattenWorkspaceIds`・`repairLayout`）。単体テストを新しい決まりで書き直し、壊して落ちる確認
+- [x] T23: 純関数——代表の決まり（`itemRefOf(ws, workspaces)`・`repoMembers` は代表だけ・`worktreeKey` が無い古いサーバでは全部メンバー）、`sidebarTree` をまとまりの列（グループと「グループなし」。本物のグループが無ければ見出しなし）に、畳んだ worktree グループの隠れている数、`visibleWorkspaceIdsOfTree`（畳んだ「グループなし」）、`topUnitOf`（「グループなし」の中はグループ扱いしない）、`layoutFromLegacy`、`sidebarLayout.ts` の操作を新しい形に（新しい workspace・外す・グループの削除は `ungrouped` の末尾へ、新しいグループは `"u"` の直前、まとまりの並べ替え、`flattenWorkspaceIds`・`repairLayout`）。単体テストを新しい決まりで書き直し、壊して落ちる確認
       対象: `packages/client-core/src/workspace/workspaceGrouping.ts`・`sidebarLayout.ts` とそのテスト
       依存: T22
       AC: AC19, AC20, AC17

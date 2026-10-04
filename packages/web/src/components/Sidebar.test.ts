@@ -1438,7 +1438,7 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
       depth: r.classes().includes("sidebar-row-depth-2") ? 2 : r.classes().includes("sidebar-row-indent") ? 1 : 0,
     }));
   }
-  /** 開いた順は a, wt, main, plain。レイアウトは top: [g1, plain]、g1: [a, r:/r/.git]。 */
+  /** 開いた順は a, wt, main, plain。レイアウトは top: [g1, u]、g1: [a, r:/r/.git]、ungrouped: [plain]。 */
   function populate(layout: boolean) {
     const session = useSessionStore(pinia);
     session.workspaceUpserted(makeWorkspace("a", { label: "a", groupId: "g1" }));
@@ -1446,7 +1446,7 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
     session.workspaceUpserted(makeWorkspace("main", { label: "main", git: git(false), groupId: "g1" }));
     session.workspaceUpserted(makeWorkspace("plain", { label: "plain" }));
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
-    if (layout) session.layoutChanged({ top: ["g:g1", "w:plain"], groups: { g1: ["w:a", "r:/r/.git"] }, ungrouped: [] });
+    if (layout) session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: ["w:a", "r:/r/.git"] }, ungrouped: ["w:plain"] });
     return session;
   }
 
@@ -1500,7 +1500,7 @@ describe("Sidebar — レイアウトの 3 段（グループ／worktree グル�
   it("layout が変わると（sidebar.layout_changed）描画の順も変わる", async () => {
     const session = populate(true);
     const wrapper = mountSidebar(makeConnection());
-    session.layoutChanged({ top: ["w:plain", "g:g1"], groups: { g1: ["r:/r/.git", "w:a"] }, ungrouped: [] });
+    session.layoutChanged({ top: ["u", "g:g1"], groups: { g1: ["r:/r/.git", "w:a"] }, ungrouped: ["w:plain"] });
     await nextTick();
     expect(rows(wrapper).map((r) => r.label)).toEqual(["plain", "backend", "main", "wt", "a"]);
   });

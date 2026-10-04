@@ -403,8 +403,8 @@ describe("TuiDispatcher — tab・workspace", () => {
         tabs: wsList.map((w) => tab(w.tabIds[0]!, w.id, leaf(`p-${w.id}`))),
         panes: wsList.map((w) => pane(`p-${w.id}`, w.tabIds[0]!)),
         groups: [{ id: "g1", label: "G", collapsed: true }],
-        // 開いた順は w1・w2・w3、レイアウトは w3 → グループ（w1・w2）。
-        layout: { top: ["w:w3", "g:g1"], groups: { g1: ["w:w1", "w:w2"] }, ungrouped: [] },
+        // 開いた順は w1・w2・w3、レイアウトは グループなし（w3）→ グループ（w1・w2）。
+        layout: { top: ["u", "g:g1"], groups: { g1: ["w:w1", "w:w2"] }, ungrouped: ["w:w3"] },
         focus: { workspaceId: "w1", tabId: "t-w1", paneId: "p-w1" },
       }),
     );

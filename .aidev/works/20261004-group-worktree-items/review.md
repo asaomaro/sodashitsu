@@ -1594,3 +1594,170 @@ AssertionError: expected { top: [ 'g:g1', 'u', 'g:g2' ], …(1) } to deeply equa
 ```
 - T22 [nit] 旧形の layout を持つ保存が全体として壊れた扱いになる点が D26 に無い → D26 に補足（T24 で決める） [conv:-]
 - T22 [nit] 壊して落ちる確認の戻しの cmp/diff の出力が無い → 現状の差分で protocol 279 件が通ることを点検で確認済み。記録のみ [conv:regression-negative-control]
+
+### T23 壊して落ちる確認
+
+実装の 1 行ずつを壊して `vitest run src/workspace`（client-core）を流した、落ちたテストの行（vitest の出力から `×` の行と件数の行を抜粋）。壊す→流す→元へ戻す、を 1 件ずつ行い、最後に全部戻した状態で client-core 785 件が通ることを確かめた。
+
+```
+#### 代表: 同じ worktreeKey の 2 つ目以降も代表にする (workspaceGrouping.ts)
+     × AC19: 代表でない workspace の参照は w:<id>。代表の r:R を残し、w:<id> も有効 5ms
+     × AC19: 同じ worktreeKey は平らな順で最初の 1 つだけが代表（r:）。2 つ目以降は w: の通常の項目で、repoMembers に入らない 6ms
+     × AC19: worktreeKey が別の場所へ変わった workspace は、新しい worktreeKey の側で代表かどうかを決める 1ms
+     × AC19: 代表でない workspace（同じフォルダの 2 つ目）は、worktree グループの一員ではなく workspace 単体 4ms
+     × AC19: 代表でない workspace は w:<id> で自分の groupId に従い、代表の項目とは別に置く 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  5 failed | 112 passed (117)
+
+#### 代表: representativeIds が全員を代表にする (workspaceGrouping.ts)
+     × AC19: r: の展開は代表だけ。代表でない workspace は w: の位置に出る 5ms
+     × AC19: 代表でない workspace を代表の前へ並べても、代表は同じ worktree の workspace の一番前に残る（代表が入れ替わり続けない） 1ms
+     × AC19: 同じ worktreeKey は平らな順で最初の 1 つだけが代表（r:）。2 つ目以降は w: の通常の項目で、repoMembers に入らない 6ms
+     × AC19: 代表が閉じる（一覧から消える）と、同じ worktreeKey の次の workspace が代表になる 1ms
+     × AC19: 同じフォルダ（worktreeKey）の 2 つ目は worktree グループに入らず、通常の行として「グループなし」の末尾に出る 2ms
+     × AC19: 代表でない workspace（同じフォルダの 2 つ目）は、worktree グループの一員ではなく workspace 単体 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  6 failed | 111 passed (117)
+
+#### repoMembers: 代表でない workspace も含める (workspaceGrouping.ts)
+     × AC19: 同じ worktreeKey は平らな順で最初の 1 つだけが代表（r:）。2 つ目以降は w: の通常の項目で、repoMembers に入らない 6ms
+     × AC19: 代表が閉じる（一覧から消える）と、同じ worktreeKey の次の workspace が代表になる 1ms
+     × AC19: 同じフォルダ（worktreeKey）の 2 つ目は worktree グループに入らず、通常の行として「グループなし」の末尾に出る 2ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 114 passed (117)
+
+#### 見出し: 本物のグループが無くても見出しを出す (workspaceGrouping.ts)
+     × AC1: 同じリポジトリの代表が 2 つ以上なら worktree グループ（本体が先頭）、1 つなら通常の行。グループに入っていても同じ。グループが無ければ「グループなし」だけ（見出しなし） 8ms
+     × AC20: 「グループなし」の見出しは、本物のグループが 1 つ以上あるときだけ。畳めるのも見出しがあるときだけ 1ms
+     × AC20: 見出しが無い（本物のグループが無い）ときは畳む設定が残っていても全部見える 1ms
+     × AC20: 畳んだ「グループなし」は見出しだけ（今いる workspace は残る）。本物のグループが無ければ見出しの行は無い 2ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  4 failed | 113 passed (117)
+
+#### まとまり: top に無いグループを末尾へ足す（u の直前でなく） (workspaceGrouping.ts)
+     × 配信の途中: top に無いグループは「グループなし」の直前、「グループなし」が top に無ければ末尾に出る（中身は layout.groups の順） 8ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 116 passed (117)
+
+#### まとまり: top に無い u を足さない (workspaceGrouping.ts)
+     × 配信の途中: top に無いグループは「グループなし」の直前、「グループなし」が top に無ければ末尾に出る（中身は layout.groups の順） 4ms
+     × 配信の途中（レイアウトに無い workspace）でも一番上のまとまりを返す 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 115 passed (117)
+
+#### どこにも無い workspace を「グループなし」の末尾へ足さない (workspaceGrouping.ts)
+     × AC19: 同じフォルダ（worktreeKey）の 2 つ目は worktree グループに入らず、通常の行として「グループなし」の末尾に出る 7ms
+     × 配信の途中: レイアウトに無い workspace は「グループなし」の末尾（同じリポジトリは 1 項目） 1ms
+     × 配信の途中: 判定とレイアウトが食い違うときは今の判定で項目を決め、置き場所は先に見つかった参照 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 114 passed (117)
+
+#### （1 回目は名前順のテストの入力がレイアウトの順と同じで落ちなかったため、テストの入力を直して再実行した。以下が再実行の出力）
+#### 名前順: グループなしの中の項目を並べない (workspaceGrouping.ts)
+     × 名前順: グループどうしはグループの名前、「グループなし」の中は項目の名前で並べる（「グループなし」はまとまりの中の位置のまま）。グループの中・worktree グループの中はレイアウトの順 7ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 116 passed (117)
+
+#### 可視: 畳んだグループなしを無視する (workspaceGrouping.ts)
+     × AC20: 「グループなし」を畳むと、中は今いる workspace の行だけ（worktree グループの子でもその子だけ） 7ms
+     × AC20: 畳んだ「グループなし」は見出しだけ（今いる workspace は残る）。本物のグループが無ければ見出しの行は無い 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 115 passed (117)
+
+#### 畳む設定: 見出しが無くても畳む (workspaceGrouping.ts)
+     × AC20: 「グループなし」の見出しは、本物のグループが 1 つ以上あるときだけ。畳めるのも見出しがあるときだけ 8ms
+     × AC20: 見出しが無い（本物のグループが無い）ときは畳む設定が残っていても全部見える 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 115 passed (117)
+
+#### navigate: グループなしの見出しの行を足さない (workspaceGrouping.ts)
+     × 見出しを中の行の前に差し込む（空のグループにも届く。「グループなし」の見出しも） 7ms
+     × 畳んだグループも見出しは残り、中は今いる workspace だけ 1ms
+     × AC20: 畳んだ「グループなし」は見出しだけ（今いる workspace は残る）。本物のグループが無ければ見出しの行は無い 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 114 passed (117)
+
+#### topUnitOf: グループなしの中をグループ扱いする (workspaceGrouping.ts)
+     × グループの中ならグループ、「グループなし」の中の 1 つの repo・管理外は workspace 単体（「グループなし」はグループ扱いしない） 7ms
+     × 「グループなし」の中の worktree グループは repo 1ms
+     × AC19: 代表でない workspace（同じフォルダの 2 つ目）は、worktree グループの一員ではなく workspace 単体 3ms
+     × 配信の途中（レイアウトに無い workspace）でも一番上のまとまりを返す 1ms
+     × sidebarTree と同じ決まり: 食い違い（w: で持つが今は repo）も今の判定 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  5 failed | 112 passed (117)
+
+#### hiddenWorktreeCount: 今いる子も数える (workspaceGrouping.ts)
+     × AC21: 畳んだ worktree グループで隠れている子の数（今いる子は数えない） 6ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 116 passed (117)
+
+#### layoutFromLegacy: u を末尾でなく先頭に置く (workspaceGrouping.ts)
+     × 同じリポジトリが別々のグループ → 本体の所属に揃う（空のグループはその後ろ、u は末尾） 8ms
+     × 単独の workspace（管理外）は自分の groupId で置く。1 つだけの repo も r: の項目。グループに入らないものは ungrouped 1ms
+     × 位置: グループは先頭のメンバーの平らな順、空のグループはその後ろ、u は末尾。グループなしの項目は先頭の workspace の順 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 114 passed (117)
+
+#### layoutFromLegacy: 空のグループを埋まったグループより前に置く (workspaceGrouping.ts)
+     × 同じリポジトリが別々のグループ → 本体の所属に揃う（空のグループはその後ろ、u は末尾） 8ms
+     × 単独の workspace（管理外）は自分の groupId で置く。1 つだけの repo も r: の項目。グループに入らないものは ungrouped 1ms
+     × 位置: グループは先頭のメンバーの平らな順、空のグループはその後ろ、u は末尾。グループなしの項目は先頭の workspace の順 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed | 114 passed (117)
+
+#### sidebarLayout: グループから外すと末尾でなくグループなしの先頭へ (sidebarLayout.ts)
+     × 外すと「グループなし」の末尾へ置く。グループに居なければ何もしない 7ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 116 passed (117)
+
+#### sidebarLayout: グループの削除で中身を捨てる (sidebarLayout.ts)
+     × 中身を「グループなし」の末尾へ順に出し、グループのキーと top の参照を消す 9ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 116 passed (117)
+
+#### sidebarLayout: 新しいグループを u の直後へ置く (sidebarLayout.ts)
+     × top の u の直前へ足し、groups に空のキーを作る 6ms
+     × u が先頭にあればその直前（グループの前）。u が top に無ければ末尾。すでにあれば同じ参照 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 115 passed (117)
+
+#### sidebarLayout: moveItem がまとまりを top で動かさない (sidebarLayout.ts)
+     × まとまり（グループ・グループなし）は top の中で動く 9ms
+     × 位置が変わらない移動は受け付ける（moved: true・同じ参照） 2ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 115 passed (117)
+
+#### sidebarLayout: moveItemBy がまとまりを動かさない (sidebarLayout.ts)
+     × 1 つ動かす。端では巡回せず止まる 8ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 116 passed (117)
+
+#### sidebarLayout: 項目をまとまりの外（top）へ入れられる (sidebarLayout.ts)
+     × まとまり（g:・u）は入れない。存在しないグループへも入れない 8ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 116 passed (117)
+
+#### flatten: 代表を同じ worktree の先頭に保たない (sidebarLayout.ts)
+     × AC19: r: の展開は代表だけ。代表でない workspace は w: の位置に出る 6ms
+     × AC19: 代表でない workspace を代表の前へ並べても、代表は同じ worktree の workspace の一番前に残る（代表が入れ替わり続けない） 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 115 passed (117)
+
+#### flatten: グループなしを u の位置でなく先頭に展開する (sidebarLayout.ts)
+     × 平らな順: top の順にまとまりの中身を並べる。r: は本体が先頭で展開、グループなしは u の位置 8ms
+     × AC19: 代表でない workspace を代表の前へ並べても、代表は同じ worktree の workspace の一番前に残る（代表が入れ替わり続けない） 1ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 115 passed (117)
+
+#### repairLayout: u を足さない (sidebarLayout.ts)
+     × 無い workspace は「グループなし」の末尾へ、無いグループは u の直前へ、u が無ければ末尾に足す 6ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 116 passed (117)
+
+#### repairLayout: 無い workspace をグループなしへ足さない (sidebarLayout.ts)
+     × 無い workspace は「グループなし」の末尾へ、無いグループは u の直前へ、u が無ければ末尾に足す 6ms
+     × workspace の今の判定と合わない参照（w: なのに repoKey を持つ代表）は捨て、判定どおりの項目を足す 2ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  2 failed | 115 passed (117)
+```
+- T23 [nit] repairLayout の重複の先勝ちの順（groups のキー順→ungrouped）が描画（top 順）と違いうる → docstring に順を明記（壊れた保存の復元時のみ） [conv:-]

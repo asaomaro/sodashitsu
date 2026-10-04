@@ -187,7 +187,7 @@ describe("サイドバーの木（T16。グループ・worktree グループ・�
     const all = [...REPO, ws("solo")];
     const { model, prefs, paint } = setup(all, {
       groups: [{ id: "g1", label: "G", collapsed: false }],
-      layout: { top: ["w:solo", "g:g1"], groups: { g1: ["r:r1"] }, ungrouped: [] },
+      layout: { top: ["u", "g:g1"], groups: { g1: ["r:r1"] }, ungrouped: ["w:solo"] },
     });
     // 描画の順（見出しを除く）と、キー操作の順が一致する。
     const drawn = paint().lines.map((l) => l.trim().split(" ").at(-1)!);

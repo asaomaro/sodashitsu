@@ -135,7 +135,8 @@ const spaces = computed<SpaceRow[]>(() => {
   };
   for (const row of tree) {
     if (row.kind !== "group") {
-      pushItem(row, 0, null, false);
+      // 暫定（T25 で直す）: 「グループなし」は見出しを描かず、項目を今までの一番上の行として描く。
+      for (const item of row.items) pushItem(item, 0, null, false);
       continue;
     }
     const allIds = row.items.flatMap((item) => (item.kind === "workspace" ? [item.workspace.id] : [item.head.id, ...item.children.map((w) => w.id)]));

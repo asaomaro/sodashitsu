@@ -29,7 +29,8 @@ export function currentNavigableRows(
   session: ReturnType<typeof useSessionStore>,
   view: ReturnType<typeof useViewStore>,
 ): NavigateRow[] {
-  return navigableRowsOfTree(currentSidebarTree(session, view), view.collapsedAutoGroups, view.workspaceId);
+  // 暫定（T26 で直す）: 「グループなし」の見出しはまだ描かないので、選べる行から外す。
+  return navigableRowsOfTree(currentSidebarTree(session, view), view.collapsedAutoGroups, view.workspaceId).filter((r) => r.kind !== "ungrouped");
 }
 
 /**
@@ -39,7 +40,7 @@ export function currentNavigableRows(
 export function itemGroupIdOf(session: ReturnType<typeof useSessionStore>, workspaceId: string): string | null {
   const ws = session.workspaces.get(workspaceId);
   if (!ws) return null;
-  const ref = itemRefOf(ws);
+  const ref = itemRefOf(ws, [...session.workspaces.values()]);
   for (const [groupId, refs] of Object.entries(session.effectiveLayout.groups)) if (refs.includes(ref)) return groupId;
   return null;
 }
