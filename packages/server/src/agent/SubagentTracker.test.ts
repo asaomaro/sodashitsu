@@ -18,6 +18,8 @@ describe("SubagentTracker（数える部分）", () => {
   let nextTimer: number;
   /** pane → 今検出されているエージェントの instanceId（`agentInstanceOf` の答え）。 */
   let detected: Map<string, string>;
+  /** 閉じた pane（`paneExists` が偽を返す）。 */
+  let gone: Set<string>;
   let published: { paneId: string; value: Subagents | undefined }[];
   let publishResult: boolean;
   // 項目は報告ごとに違うので、テストでは緩い型で渡す（ほかの項目は上の `base`）。
@@ -36,11 +38,13 @@ describe("SubagentTracker（数える部分）", () => {
     timers = new Map();
     nextTimer = 1;
     detected = new Map();
+    gone = new Set();
     published = [];
     publishResult = true;
     tracker = new SubagentTracker({
       bus,
       agentInstanceOf: (paneId) => detected.get(paneId) ?? null,
+      paneExists: (paneId) => !gone.has(paneId),
       publish: (paneId, value) => {
         published.push({ paneId, value });
         return publishResult;
@@ -379,6 +383,19 @@ describe("SubagentTracker（数える部分）", () => {
     expect(ids()).toEqual(["a1"]);
   });
 
+  describe("閉じた pane への遅れた報告", () => {
+    it("pane が無ければ、状態を作らずに捨てる（非同期の SessionEnd・SubagentStop が pane の後に届く）。pane があれば検出前でも持つ", () => {
+      gone.add("p1");
+      rep({ type: "subagent_stop", agentId: "a1" });
+      rep({ type: "session_end" });
+      expect(tracker.current("p1")).toBeUndefined();
+      expect(timers.size).toBe(0);
+      gone.delete("p1");
+      rep({ type: "subagent_start", agentId: "a2" }); // 検出前でも、pane があれば持つ
+      expect(ids()).toEqual(["a2"]);
+    });
+  });
+
   describe("配る（まとめ・同じ内容・検出との順序）", () => {
     it("最初の変化から 100 ミリ秒後に、その時点の値を 1 回配る（待ちは延ばさない）", () => {
       detect("p1", "X");
@@ -489,6 +506,7 @@ describe("SubagentTracker（数える部分）", () => {
       const failing = new SubagentTracker({
         bus,
         agentInstanceOf: () => "X",
+        paneExists: () => true,
         publish: () => {
           throw new Error("boom");
         },

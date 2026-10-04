@@ -388,6 +388,7 @@ export async function composeServer(
   const subagents = new SubagentTracker({
     bus,
     agentInstanceOf: (paneId) => session.getPane(paneId)?.agent?.instanceId ?? null,
+    paneExists: (paneId) => session.getPane(paneId) !== undefined,
     publish: (paneId, value) => session.setAgentSubagents(paneId, value),
     now: () => Date.now(),
     setTimer: (fn, ms) => setTimeout(fn, ms),

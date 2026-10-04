@@ -75,6 +75,11 @@
 - [should][conv:-] docs/tui.md・tui-parity.md 端末版の「pane のメニューをキーで開く」道筋の記述が実装と合わない（pane のメニューを開くのは右クリックだけ） / 対応: 修正済（文書を「キーボードだけなら割り当てた `show_subagents`」に直し、decisions D11 に食い違いを記録。T17・ラウンド1）
 - [nit][conv:-] docs/verification.md E2E コマンドの書式が周囲と違う / 対応: 修正済（`pnpm --filter @sodashitsu/e2e exec …`。T17・ラウンド1）
 
+### 全タスクをまたぐ点検（cross。1 ラウンド・2 件）
+
+- [should][conv:-] SubagentTracker.ts:94 閉じた pane・無い pane への遅れた報告（非同期の SessionEnd・SubagentStop）で、tracker が状態を作って捨てず、マップが増え、入れ替わり直後の古い SessionEnd が「0 件」を付ける / 対応: 修正済（`paneExists` を依存に足し、pane が無ければ捨てる。検出前でも pane があれば持つ。テストと壊して落ちる確認つき。cross・ラウンド1。decisions D12）
+- [nit][conv:-] GraphNode.vue:52 切れたマシンの最後の要約の件数がグラフに出続け、状態の印と食い違う / 対応: 修正済（`exists === true`〔繋がっている〕のときだけ出す。テストと壊して落ちる確認つき。cross・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -628,4 +633,14 @@ AssertionError: expected [ { id: 'marker', …(3) } ] to deeply equal [ { id: 'm
   ✘  2 src/specs/subagents.spec.ts:368:1 › グラフのパネル: キー s で開く・Esc は 1 段ずつ（…） (7.9s)
     Error: expect(locator).toBeHidden() failed
   1 failed
+```
+
+（cross・ラウンド1 の修正の分）
+```
+=== MUT(GraphNode.vue): 件数を exists === true のときだけ出す条件を外す
+ FAIL  src/components/graph/GraphView.subagents.test.ts > … > 切れているマシンのノードには、最後の要約の件数を出さない（状態の印と同じ。繋がり直せば出る）
+AssertionError: expected true to be false // Object.is equality
+=== MUT(SubagentTracker.ts): pane が無ければ捨てる行（!this.deps.paneExists(r.paneId)）を外す
+ FAIL  src/agent/SubagentTracker.test.ts > … > 閉じた pane への遅れた報告 > pane が無ければ、状態を作らずに捨てる（…）
+AssertionError: expected { count: +0, items: [] } to be undefined
 ```

@@ -12,6 +12,8 @@ export interface SubagentTrackerDeps {
   bus: Pick<EventBus, "subscribe">;
   /** その pane に今検出されているエージェントの `instanceId`（無ければ null）。 */
   agentInstanceOf(paneId: string): string | null;
+  /** その pane が今あるか。無い pane（閉じた後に遅れて届く非同期の報告）の報告は、状態を作らずに捨てる。 */
+  paneExists(paneId: string): boolean;
   /** その pane のエージェントの `subagents` を差し替えて配る。検出されていて配れたら true（`SessionService.setAgentSubagents`）。 */
   publish(paneId: string, subagents: Subagents | undefined): boolean;
   now(): number;
@@ -92,7 +94,7 @@ export class SubagentTracker {
   }
 
   report(r: Report): void {
-    if (this.closed) return;
+    if (this.closed || !this.deps.paneExists(r.paneId)) return;
     const pane = this.paneOf(r.paneId);
     pane.seen = true;
     this.apply(r, pane);

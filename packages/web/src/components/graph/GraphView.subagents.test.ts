@@ -414,6 +414,33 @@ describe("別のマシンのノード・モバイル・古いサーバ", () => {
     wrapper.unmount();
   });
 
+  it("切れているマシンのノードには、最後の要約の件数を出さない（状態の印と同じ。繋がり直せば出る）", async () => {
+    const M = "e".repeat(32);
+    const { wrapper } = await open({ nodes: ["local:p1", `${M}:p1`] });
+    const machines = useMachinesStore(pinia);
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }] as never);
+    const snap = remoteSnap(agentOf("idle", { instanceId: "r1", subagents: subs(5) }));
+    (snap as unknown as { panes: unknown[] }).panes = [
+      paneOf("p1", "t9", {
+        label: "remote-p1",
+        agent: agentOf("idle", { instanceId: "r1", subagents: subs(5) }),
+      }),
+    ];
+    machines.applySummarySnapshot(M, snap);
+    await flush();
+    expect(btn(wrapper, `${M}:p1`).text()).toBe("5");
+    machines.summaries[M]!.connected = false; // マシンが切れた（最後の要約は残る）
+    await flush();
+    expect(btn(wrapper, `${M}:p1`).exists()).toBe(false);
+    expect(wrapper.get(`[data-node-key="${M}:p1"]`).attributes("aria-label")).not.toContain(
+      "サブエージェント",
+    );
+    machines.summaries[M]!.connected = true;
+    await flush();
+    expect(btn(wrapper, `${M}:p1`).text()).toBe("5");
+    wrapper.unmount();
+  });
+
   it("モバイルの読み取り専用のグラフ: 数だけを出し（ボタンではない）、押しても s でも開かない", async () => {
     vi.spyOn(window, "matchMedia").mockReturnValue({
       matches: true,

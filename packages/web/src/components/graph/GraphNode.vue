@@ -49,7 +49,10 @@ const agentLine = computed(() => {
 });
 
 /** エージェントが動かしているサブエージェントの件数（報告を受けていない・0 件は 0。ボタンは 1 件以上のときだけ出す）。 */
-const subagentCount = computed(() => props.info.agent?.subagents?.count ?? 0);
+// 切れたマシンの最後の要約の件数は出さない（状態の印と同じ。`exists` が true のときだけ＝繋がっている）。
+const subagentCount = computed(() =>
+  props.info.exists === true ? (props.info.agent?.subagents?.count ?? 0) : 0,
+);
 
 const ariaLabel = computed(() => {
   const parts = [props.info.name, props.info.machineLabel];
