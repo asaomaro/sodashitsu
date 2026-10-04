@@ -242,6 +242,36 @@ describe("端末版のサブエージェントの表示", () => {
     expect(h.app.ui.dialogContext).toBeNull();
   });
 
+  it("一覧を開いている間は、経過時間が進む（10 秒ごとに描き直す）。閉じたら描き直さない", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    try {
+      vi.setSystemTime(10_000_000);
+      const h = await start({
+        subagents: { count: 1, items: [sub("a", { type: "T", startedAt: 10_000_000 - 5_000 })] },
+      });
+      // tab バーの日時を出していると毎秒描き直されて区別できないので、日時を出さない設定にする。
+      h.app.prefs.apply({ tabBarRight: [] }, 1);
+      dispatcherOf(h.app).showSubagentsOf("p3");
+      h.app.renderNow();
+      expect(await h.screen()).toMatch(/T\s+5秒/);
+      await new Promise((r) => setTimeout(r, 150)); // 開いたときに予約された描画（実時間のタイマー）を先に済ませる
+      await h.screen();
+      // 開いている間: 時間が進むと、キーを押さなくても描き直されて経過時間が進む。
+      await vi.advanceTimersByTimeAsync(12_000);
+      await vi.waitFor(async () => expect(await h.screen()).toMatch(/T\s+17秒/));
+      // 閉じたら、時間が進んでも描き直さない（余計な描画をしない）。
+      h.io.type("\x1b");
+      await vi.waitFor(() => expect(h.app.ui.dialogContext).toBeNull());
+      await h.screen();
+      const before = h.io.output().length;
+      await vi.advanceTimersByTimeAsync(30_000);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(h.io.output().length).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("説明の中の制御文字は空白にして出す（画面を壊さない）", async () => {
     const h = await start({
       subagents: { count: 1, items: [sub("a", { type: "T", description: "行1\x1b[2J\n行2" })] },

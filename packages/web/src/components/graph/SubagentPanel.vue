@@ -19,7 +19,10 @@ const listRef = ref<InstanceType<typeof SubagentList> | null>(null);
 const info = computed(() => graph.nodeInfo(props.nodeKey as NodeKey));
 /** ノードがグラフに載っているか（外されたら、pane とエージェントが残っていても閉じる）。 */
 const onGraph = computed(() => graph.nodes.some((n) => n.key === props.nodeKey));
-const agent = computed(() => (onGraph.value ? (info.value.agent ?? undefined) : undefined));
+/** 繋がっているマシンのノードだけ（切れたら閉じる。ボタンと同じ規則）。 */
+const agent = computed(() =>
+  onGraph.value && info.value.exists === true ? (info.value.agent ?? undefined) : undefined,
+);
 /** 開いた時点のエージェントの `instanceId`。入れ替わりの判定に使う。 */
 let openedInstanceId: string | null = null;
 

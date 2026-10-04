@@ -262,6 +262,8 @@ test("開いている間に対象のエージェントが居なくなったら�
   await gone;
   await expect(dialog(page)).toBeHidden({ timeout: 5000 });
   await expect(countBtn(page)).toHaveCount(0);
+  // ボタンも行も無くなったので、フォーカスは今の pane の端末へ戻る（AC-I4。宙に浮かない）。
+  await expect(page.locator(".xterm-helper-textarea").first()).toBeFocused();
 });
 
 test("短い説明に HTML を書いても動かない（文字として出る）（AC12）", async ({

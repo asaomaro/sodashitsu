@@ -435,9 +435,36 @@ describe("別のマシンのノード・モバイル・古いサーバ", () => {
     expect(wrapper.get(`[data-node-key="${M}:p1"]`).attributes("aria-label")).not.toContain(
       "サブエージェント",
     );
+    // キー s でも古い一覧は開かない。
+    const node = wrapper.get(`[data-node-key="${M}:p1"]`).element as HTMLElement;
+    node.focus();
+    // 一瞬でもパネルが作られていないこと（作ってから閉じる、にしない）を、DOM の変化の記録で見る。
+    let everAppeared = false;
+    const observer = new MutationObserver((records) => {
+      for (const r of records)
+        for (const n of Array.from(r.addedNodes))
+          if (
+            n instanceof Element &&
+            (n.matches(".subagent-panel") || n.querySelector(".subagent-panel"))
+          )
+            everAppeared = true;
+    });
+    observer.observe(wrapper.element, { childList: true, subtree: true });
+    node.dispatchEvent(new KeyboardEvent("keydown", { key: "s", bubbles: true, cancelable: true }));
+    await flush();
+    observer.disconnect();
+    expect(everAppeared).toBe(false);
+    expect(wrapper.find(".subagent-panel").exists()).toBe(false);
     machines.summaries[M]!.connected = true;
     await flush();
     expect(btn(wrapper, `${M}:p1`).text()).toBe("5");
+    // 開いている間にマシンが切れたら、パネルは閉じる。
+    await btn(wrapper, `${M}:p1`).trigger("click");
+    await flush();
+    expect(wrapper.find(".subagent-panel").exists()).toBe(true);
+    machines.summaries[M]!.connected = false;
+    await flush();
+    expect(wrapper.find(".subagent-panel").exists()).toBe(false);
     wrapper.unmount();
   });
 

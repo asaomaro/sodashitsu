@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMachinesStore } from "../store/machines.js";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
+import { TerminalRegistryKey } from "../injection.js";
 import SubagentListDialog from "./SubagentListDialog.vue";
 
 let pinia: Pinia;
@@ -215,10 +216,12 @@ describe("SubagentListDialog — 閉じたときのフォーカスの戻り先",
     session.workspaceUpserted(ws);
     session.tabUpserted(tab);
     session.paneUpserted(paneOf(agentOf({ count: 1, items: [sub("a")] })));
+    const registry = { focus: vi.fn() };
     const wrapper = mount(SubagentListDialog, {
-      global: { plugins: [pinia] },
+      global: { plugins: [pinia], provide: { [TerminalRegistryKey as symbol]: registry } },
       attachTo: document.body,
     });
+    view.focusPane("p1");
     view.openDialogWithContext({
       kind: "subagents",
       machineId: "local",
@@ -227,7 +230,7 @@ describe("SubagentListDialog — 閉じたときのフォーカスの戻り先",
     });
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
-    return { wrapper, view };
+    return { wrapper, view, registry };
   }
   const active = () => document.activeElement;
 
@@ -245,22 +248,41 @@ describe("SubagentListDialog — 閉じたときのフォーカスの戻り先",
     expect(active()).toBe(document.querySelector("[data-agent-pane]"));
   });
 
-  it("ボタンから開いたが、ボタンも行も無い: どちらにも移さない（端末は closeDialog が戻す）", async () => {
-    const { wrapper, view } = await setupWithSidebarDom("button", false);
+  it("ボタンから開いたが、ボタンも行も無い（エージェントが居なくなった・pane が閉じた）: 今フォーカスのある pane の端末へ明示的に戻す（AC-I4）", async () => {
+    const { wrapper, view, registry } = await setupWithSidebarDom("button", false);
     document.querySelector(".sidebar-agents")!.remove();
-    (document.querySelector("#term") as HTMLElement).focus();
     await wrapper.get("dialog").trigger("cancel");
     await wrapper.vm.$nextTick();
-    expect(active()).toBe(document.querySelector("#term"));
+    await wrapper.vm.$nextTick();
+    expect(registry.focus).toHaveBeenCalledWith("p1");
     expect(view.dialogContext).toBeNull();
   });
 
-  it("show_subagents から開いた（opener なし）: ボタンがあっても移さない（端末へ）", async () => {
-    const { wrapper } = await setupWithSidebarDom(undefined, true);
-    (document.querySelector("#term") as HTMLElement).focus();
+  it("show_subagents から開いた（opener なし）: ボタンがあっても移さず、端末へ戻す", async () => {
+    const { wrapper, registry } = await setupWithSidebarDom(undefined, true);
     await wrapper.get(".subagent-dialog-actions button").trigger("click");
     await wrapper.vm.$nextTick();
-    expect(active()).toBe(document.querySelector("#term"));
+    await wrapper.vm.$nextTick();
+    expect(active()).not.toBe(document.querySelector(".sidebar-subagent-btn"));
+    expect(registry.focus).toHaveBeenCalledWith("p1");
+  });
+
+  it("対象のエージェントが居なくなって自分で閉じ、行も無いときは、端末へ戻す", async () => {
+    const { wrapper, registry } = await setupWithSidebarDom("button", false);
+    document.querySelector(".sidebar-agents")!.remove();
+    useSessionStore(pinia).paneUpserted(paneOf(null));
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(registry.focus).toHaveBeenCalledWith("p1");
+  });
+
+  it("ボタンがあれば、端末へは戻さない（ボタンへ戻す）", async () => {
+    const { wrapper, registry } = await setupWithSidebarDom("button", true);
+    await wrapper.get(".subagent-dialog-actions button").trigger("click");
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(registry.focus).not.toHaveBeenCalled();
   });
 
   it("対象が居なくなって自分で閉じたときも、同じ戻り先（行）", async () => {

@@ -986,7 +986,9 @@ function closeHistory(): void {
 /** 開いているサブエージェントの一覧のノード。グラフの `<dialog>` の中の横のパネル（`view.dialogContext` は使わない——グラフ画面の文脈と戻り先を上書きするため）。 */
 const subagentsKey = ref<NodeKey | null>(null);
 function subagentCountOf(key: string): number {
-  return graph.nodeInfo(key as NodeKey).agent?.subagents?.count ?? 0;
+  const info = graph.nodeInfo(key as NodeKey);
+  // 繋がっているノードだけ（切れたマシンの最後の要約の件数は、ボタンと同じく出さない・開かない）。
+  return info.exists === true ? (info.agent?.subagents?.count ?? 0) : 0;
 }
 /** 開く（件数が 1 以上のノードだけ。読み取りだけのモバイルは開かない）。 */
 function openSubagents(key: string): void {

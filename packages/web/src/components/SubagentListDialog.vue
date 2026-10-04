@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, inject, nextTick, ref, watch } from "vue";
+import { TerminalRegistryKey } from "../injection.js";
 import { useViewStore } from "../store/view.js";
 import { lookupAgent, lookupPaneName } from "../store/subagents.js";
 import SubagentList from "./SubagentList.vue";
@@ -11,6 +12,7 @@ import SubagentList from "./SubagentList.vue";
  * 短い説明などはエージェントが書いた文なので、文字として出す（HTML として解釈しない）。
  */
 const view = useViewStore();
+const registry = inject(TerminalRegistryKey, null);
 
 const dialogEl = ref<HTMLDialogElement | null>(null);
 const listRef = ref<InstanceType<typeof SubagentList> | null>(null);
@@ -61,20 +63,27 @@ watch(agent, (a) => {
 });
 
 /**
- * 閉じる。件数のボタンから開いたなら、フォーカスをそのボタンへ戻す（ボタンがもう無ければその行、行も無ければ今までどおり `closeDialog` が戻す端末）。
+ * 閉じる。件数のボタンから開いたなら、フォーカスをそのボタンへ戻す（ボタンがもう無ければその行）。ボタンも行も無い（エージェントが居なくなった・pane が閉じた）とき、
+ * ボタンから開いていないとき（`show_subagents`）は、今フォーカスのある pane の端末へ明示的に戻す——`closeDialog` は `focusedPaneId` に同じ値を書くだけで、
+ * `TerminalPane` の watch が動かず、フォーカスが宙に浮く（AC-I4）。
  * ボタンは件数が 1 以上のときだけ描かれるので、閉じる前に探さず、閉じて描き直された後（`nextTick`）に探す。
  */
 function close(): void {
   const wasButton = openedByButton.value;
   const paneId = target.value?.paneId;
   view.closeDialog();
-  if (!wasButton || paneId === undefined) return;
   void nextTick(() => {
-    const css = CSS.escape(paneId);
-    const el =
-      document.querySelector<HTMLElement>(`.sidebar-agents [data-subagent-pane="${css}"]`) ??
-      document.querySelector<HTMLElement>(`.sidebar-agents [data-agent-pane="${css}"]`);
-    el?.focus();
+    if (wasButton && paneId !== undefined) {
+      const css = CSS.escape(paneId);
+      const el =
+        document.querySelector<HTMLElement>(`.sidebar-agents [data-subagent-pane="${css}"]`) ??
+        document.querySelector<HTMLElement>(`.sidebar-agents [data-agent-pane="${css}"]`);
+      if (el) {
+        el.focus();
+        return;
+      }
+    }
+    if (view.focusedPaneId) registry?.focus(view.focusedPaneId);
   });
 }
 

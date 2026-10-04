@@ -97,6 +97,8 @@ export interface TuiAppOptions {
 export const RENDER_INTERVAL_MS = 16;
 /** tab バーの日時を描き直す間隔。 */
 const CLOCK_TICK_MS = 1000;
+/** サブエージェントの一覧を開いている間の、経過時間の描き直しの間隔（20261004-subagent-display。F6「少なくとも 10 秒ごと」）。 */
+const SUBAGENTS_REDRAW_MS = 10_000;
 /** pane の BEL を外側の端末へ回す最短の間隔。 */
 const BELL_INTERVAL_MS = 100;
 /** 接続が開いていない間の打鍵の知らせ。 */
@@ -135,6 +137,8 @@ export class TuiApp {
   /** 直近のフレームの当たり判定（04 のマウスが使う）。 */
   protected lastLayout: LayoutResult | null = null;
   protected sidebarHits: SidebarHit[] = [];
+  /** サブエージェントの一覧を最後に時間で描き直した時刻（epoch ms）。 */
+  private subagentsDrawnAt = 0;
   protected tabHits: TabHit[] = [];
   protected newTabButton: TabBarHits["newTab"] = null;
   protected tabBarHits: TabBarHits = { tabs: [], newTab: null };
@@ -481,6 +485,14 @@ export class TuiApp {
     const clock = setInterval(() => {
       if (this.lastLayout?.tabBar.h && this.prefs.tabBarRight.some((e) => e.kind === "datetime"))
         this.scheduleRender();
+      // サブエージェントの一覧を開いている間だけ、経過時間を進めるために 10 秒ごとに描き直す（閉じたら何もしない。20261004-subagent-display）。
+      if (this.ui.dialogContext?.kind === "subagents") {
+        const now = Date.now();
+        if (now - this.subagentsDrawnAt >= SUBAGENTS_REDRAW_MS) {
+          this.subagentsDrawnAt = now;
+          this.scheduleRender();
+        }
+      }
     }, CLOCK_TICK_MS);
     clock.unref?.();
     this.disposers.push(() => clearInterval(clock));
