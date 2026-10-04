@@ -40,3 +40,33 @@ public_docs 側に必要な改修案は、coding の終わりにこのファイ�
 
 - should 4・nit 2。反映: T11 を T7 の後に（`HttpServer.ts` の共有）・T12 を T10 の後に（`AskDialog.vue` の共有）・T5 の対象にテストファイルを追記・T15 の対象を明記・各タスクに「点検: あり」を記載。T5 などの粒度は、段ごとに動く状態を保つ単位として据え置く（1 つの `AskService` の変更は分けるとテストが書けない）。
 - **タスク単位の点検の範囲**: aidev の autonomous の既定は全タスクだが、依頼元の指示と AGENTS.md の「点検とテストの掛け方」（壊れやすいタスクだけに掛ける）に従い、T1・T2・T3・T4・T5・T9・T11・T12 だけに掛け、全タスクの後に `cross` を 1 回掛ける。
+
+## D6: coding での判断・設計からの差分
+
+- **機能確認の差し替え口**: テスト用の取得の差し替えは `composeServer(args, { askImageFetcher })`（design の `askMedia: { fetcher }` を、実装した名前に直した）。E2E は fixture `askImageFetcher`（`test.use`）で渡す。
+- **成果物の枠の読み込み失敗の固定の文**（design「エラー処理」）は実装しなかった。iframe の `error` は 404 では発火せず（ブラウザのエラーページが枠に出る）、検知の手段が無い。成果物が出ていないまま答えられる点は、質問側の文面で扱う。
+- **js・vendor の応答は CSP・X-Frame-Options を外す**（design どおり）。`/ask-view/*` の html ページは `X-Frame-Options: SAMEORIGIN`・`frame-ancestors 'self'`。許可リスト外（`SOURCE.json`・`LICENSE` を含む）は 404。
+- **`ask.opened` はメディアが揃ってから**。メディアの無い定義は `prepare` を呼ばず同期で出す（既存の振る舞い・テストを変えない）。
+- **同じファイルが image/audio と view の両方に出る**ときは別々に保持する（キーが種類別）。合計には両方数える（安全側）。
+- **外部 URL の取得は検査済みの全アドレスを順に試す**（IPv6 の経路が無い環境で IPv4 へ回る）。接続先の固定は `https.request` の `lookup` で行い、自己署名の証明書の local サーバで実物を確かめるテストを置いた（`makeRealRequest({ca})` の `ca` はテスト専用）。
+- **決定（Ctrl/Cmd+Enter）の取り次ぎは `navigator.userActivation.isActive` のときだけ**（独立点検 T12 の指摘）。残余のリスクと E2E で待つ理由は review.md のタスク点検ログ。
+- **タスク点検の範囲**は D5 のとおり（T1〜T5・T9・T11・T12。T6〜T8・T10・T13・T14 は掛けず、`cross` を 1 回）。T15（AC22 の変異確認）は test 工程で消化する（coding の承認時は未チェックのまま。上の D4 とは別に、ここで再掲）。
+- **public_docs 側の `ask.py`・`SKILL.md` の改修案**は D7。
+
+## D7: public_docs の ask.py・SKILL.md に必要な改修案（この作業では public_docs を変えない。別の PR）
+
+窓に落ちる条件をなくすための、ask.py の変更案。Sodashitsu 側の口は `sodactl ask --features`（docs/sodactl.md「機能確認」）。
+
+1. **`ask_via_soda` の落とす条件を、機能確認に置き換える**（今の `SODA_TYPES`・`view`・`image`/`audio`/`code` の除外を外す）:
+   - `sodactl ask --features` を 1 回呼ぶ（`subprocess`。終了コード 0 で 1 行の JSON）。**古い `sodactl` は `--features` を知らず終了コード 2 → 窓へ**。`server` が `null`（繋げない・古い・pane の外）でも窓へ。
+   - 定義が使う機能（`edit`/`rank`/`table` → `types:<型>`、`image`/`audio`/`code`/`lang`/`group`/`preview`/`thumb` → `media`、`https://` の `image` → `remote-image`、`view` → `view`）が `server.features` に全部あるときだけ `sodactl ask` へ渡す。足りなければ窓へ（今までどおり）。
+2. **パスの扱い**: ask.py の `normalize()` が `local_file`/`normalize_view` で `file/N`・`view/N` に書き換える**前**の定義（`raw`。`ask_via_soda` は既に `raw` を渡している）を渡す。`image`・`audio`・`view.file` の**相対パスは `base_dir`（定義ファイルの場所）から解いた絶対パスに直して**渡す
+   （`sodactl` は自分の cwd から解くので、定義ファイルが別の場所にあるとずれる）。`~/` も ask.py 側で展開してよい。
+3. **上限の事前確認**: `--features` の `limits`（`fileBytes`・`textBytes`・`totalBytes`・`files`・`views`）で、ローカルのファイルの大きさ・個数・合計を確かめ、超えるなら**窓へ落とさず**エラー（終了コード 1・理由）にする。`sodactl ask` が終了コード 2 を返したとき（定義の誤り・上限・種類の不一致。stderr に
+   `invalid ask spec: …`）も、**窓へ落とさず**その理由を標準エラーへ出して終了コード 1 にする（今は終了コード 0 以外を `None`＝窓へ、にしている。`unavailable`・古い `sodactl`・サーバのエラー〔終了コード 1〕だけが窓へ）。
+4. **`--review`**: 成果物の `view` を持つ定義を作るだけなので、上の 1〜3 で画面内に出る。`SODA_*` の判定は `view` の除外を外す。
+5. **SKILL.md**: 「Sodashitsu の pane の中で動いているとき」の節の「次のときは `sodactl ask` を使わず…（`edit`・`rank`・`table`／`image`・`audio`・`code`／成果物がある）」を、「`sodactl ask --features` で確かめて、使えるときは画面内に出す。使えない（古い `sodactl`・`soda`・繋がっていない）ときだけ窓へ」に直す。
+   「成果物があるときは、Sodashitsu の pane の中でも、このマシンのウィンドウで聞く」の行を削除する。画像は絶対パス・相対パス・`https://`（`soda` が取得する。社内プロキシ越しの環境では取れず画像なしになる）・`data:` が使え、上限は 1 ファイル 8 MiB・合計 24 MiB・32 ファイル、と書く。
+   成果物の HTML は**スクリプトが動くが外へ通信しない**（CDN・Google Fonts は崩れる）ことと、決定は枠の中の操作の直後だけ効くことも書く。
+6. **利用者に確認が要る点**: (a) 窓へ落とさずエラーにする範囲（上の 3。`sodactl` が終了コード 2 のときを窓へ落とすか）。(b) 外部 URL の画像の取得をサーバ側にした結果、`ask.py` の窓（ローカルのブラウザが直接取る）と見え方が変わる（プロキシ越しで差が出る）。(c) HTML の `allow-popups`・`allow-downloads` を
+   窓の側は許し、画面内の枠は許さない（外へ通信させない決定）。窓の側も揃えるか。

@@ -121,7 +121,7 @@ sodactl --machine <id> pane read p3
 pane のプログラムからの質問のフォーム（`sodactl ask`。`docs/sodactl.md`「質問のフォーム」）も、ほかのマシンの pane で使えます。リモートのマシンの pane の中で `sodactl ask` を打つと、
 **そのマシンを表示している手元のブラウザ**にダイアログが出ます（画面の接続が既存の中継でリモートの `soda serve` につながっているため）。そのマシンを表示していないブラウザ
 （ローカルや別のマシンを表示中）には出ず、表示中のブラウザが無ければ待たずに `unavailable` です。リモートの `soda` もこの機能を含む版である必要があります（古い版では `sodactl ask` が
-`not_found` で失敗し、古い画面〔手元の `soda` が古い〕では `unavailable` になります）。質問ごとの自由記述（`comments`。`docs/sodactl.md`「質問ごとの自由記述」）も同じで、リモートの `soda` がそれを含む版でないと、`comments: false`・`comment: false` が効かず（付けない指定の質問にもボタンが出る）、書いた文も結果に届きません（回答は成功し、自由記述だけが落ちます）。リモートのマシンの pane の中の `sodactl ask` は、リモートの `soda serve` のログイン不要の受け口（`pane.sock`。`docs/sodactl.md`「ログイン不要の受け口（pane.sock）」）で動くので、
+`not_found` で失敗し、古い画面〔手元の `soda` が古い〕では `unavailable` になります）。画像・音・成果物（`view`）・`edit`/`rank`/`table`（`docs/sodactl.md`「画像・音・コード」「成果物（view）」）では、**ファイルを読むのはリモートの `soda`**（その pane のマシンにあるファイル）で、手元のブラウザへは既存の中継で運ばれます。リモートの `soda` がこの機能を含む版でないと、リモートの pane の `sodactl ask` が送る前に `ask.features` で確かめて `unavailable` にします。質問ごとの自由記述（`comments`。`docs/sodactl.md`「質問ごとの自由記述」）も同じで、リモートの `soda` がそれを含む版でないと、`comments: false`・`comment: false` が効かず（付けない指定の質問にもボタンが出る）、書いた文も結果に届きません（回答は成功し、自由記述だけが落ちます）。リモートのマシンの pane の中の `sodactl ask` は、リモートの `soda serve` のログイン不要の受け口（`pane.sock`。`docs/sodactl.md`「ログイン不要の受け口（pane.sock）」）で動くので、
 リモートのマシンでの `sodactl login` は要りません（受け口を持たない古い版のリモートでは、今までどおり `sodactl login` を済ませておく必要があります。pane の環境に token は入りません）。
 
 ファイルのリンクとドロップ（`docs/file-links.md`）も、ほかのマシンの pane で使えます。そのマシンは常に「別のマシン」として扱うので、リンクは

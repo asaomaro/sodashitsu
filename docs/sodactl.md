@@ -230,8 +230,9 @@ sodactl ask [--timeout <ms>] < spec.json
 
 ### 入力（標準入力の JSON）
 
-ask-form の質問の定義と同じ。全体: `title`・`intro`・`submit`・`note`（`false` で補足欄なし・文字列なら入力例）・`paging`・`comments`（`false` で自由記述を全部付けない）・`questions`。質問: `id`・`label`・`type`（`single`〔既定〕・`multi`・`text`）・`help`・
-`options`・`default`・`allowOther`（`otherLabel`・`otherPlaceholder`）・`showIf`・`required`・`multiline`・`placeholder`・`minWidth`・`page`・`filter`・`showValue`・`comment`（`false` でその質問に自由記述を付けない）。選択肢は文字列か `{value, label, desc, recommended, colors}`。
+ask-form の質問の定義と同じ。全体: `title`・`intro`・`submit`・`note`（`false` で補足欄なし・文字列なら入力例）・`paging`・`comments`（`false` で自由記述を全部付けない）・`view`（成果物。下の「成果物」）・`questions`。質問: `id`・`label`・`type`（`single`〔既定〕・`multi`・`text`・`edit`・`rank`・`table`）・`help`・
+`options`・`default`・`allowOther`（`otherLabel`・`otherPlaceholder`）・`showIf`・`required`・`multiline`・`placeholder`・`minWidth`・`page`・`filter`・`showValue`・`preview`・`thumb`・`comment`（`false` でその質問に自由記述を付けない）。選択肢は文字列か `{value, label, desc, recommended, colors, image, audio, code, lang, group}`。
+`edit`・`rank`・`table` は下の「選ぶ以外の質問」、`image`・`audio`・`code`・`preview`・`thumb`・`group` は下の「画像・音・コード」。
 **知らない項目は無視する**。`showIf` は `{"他の質問の id": 値 または 値の配列}`（複数なら「かつ」。上の質問から順に判定する）。
 
 | 項目 | どこに書く | 値 | 意味 |
@@ -248,15 +249,85 @@ ask-form の質問の定義と同じ。全体: `title`・`intro`・`submit`・`n
   `colors` は `#rgb`・`#rgba`・`#rrggbb`・`#rrggbbaa` の形だけを色として使い、ほかは捨てる（誤りにしない）。
 - 選択肢の値に特別な文字列は無い。値が `__other__`・空文字の選択肢も、ふつうの選択肢として使える（選べばその値が回答になる。空文字の値の選択肢を選んだ回答は `""` で、未回答ではない）。
   「その他」（`allowOther`）の自由入力とは別もので、同じ質問で併用できる。
-- **対応していない型**: ask-form は質問の型を足していく（`edit`・`rank`・`table` 等）。この版の `sodactl ask` が対応するのは `single`・`multi`・`text` だけで、**それ以外の型（知らない文字列を含む）の質問が 1 つでもあれば、
+- **対応していない型**: この版の `sodactl ask` が対応するのは `single`・`multi`・`text`・`edit`・`rank`・`table` で、**それ以外の型（知らない文字列を含む）の質問が 1 つでもあれば、
   質問を黙って落とさず、ダイアログを出さずに `{"status":"unavailable","reason":"…"}`（終了コード 0）を返す**（サーバへ送らない）。回答が欠けたまま `answered` になって、呼び出し側が聞いたつもりで進むのを防ぐため。
-  呼び出し側（ask-form）は `AskUserQuestion` へ切り替える。`type` が文字列でないなど、型以外の誤りは今までどおり使い方の誤り（終了コード 2）。`image`・`audio`・`code`・`group`・`preview`・`thumb` など質問・選択肢に足された項目は
-  知らない項目として無視される（プレビューや見出しが出ないだけ）。`remember` は ask-form 側（`ask.py`）が処理する。
+  呼び出し側（ask-form）は `AskUserQuestion` へ切り替える。`type` が文字列でないなど、型以外の誤りは今までどおり使い方の誤り（終了コード 2）。`remember` は ask-form 側（`ask.py`）が処理する。
 - 標準入力が端末のとき（定義を渡していないとき）は、読まずに使い方の誤り。
 - 対象は**呼び出し元の pane**（`SODA_PANE_ID`・`SODA_SERVER_URL`。pane の外・別のサーバへ向けると接続せずに `caller_pane_unknown`）。`--pane`・位置引数は取らない。`--machine` は `local` 以外では使えない
   （別のマシンの pane の質問は、そのマシンの pane の中で `sodactl ask` を打つ）。
 - **Linux・macOS の pane の中では `sodactl login` が要らない**（その pane のサーバのログイン不要の受け口 `pane.sock` を使う。条件と、使えないときの動きは下の「ログイン不要の受け口（pane.sock）」）。
   Windows（ネイティブ）・`--url`／`SODACTL_URL` を明示したとき・受け口を持たない古いサーバでは、今までどおり `/ws` の経路で、`sodactl login` が要る。
+
+### 選ぶ以外の質問（`edit`・`rank`・`table`）
+
+| 型 | 画面 | 回答の値 | 項目 |
+|---|---|---|---|
+| `edit` | 文面が入った編集欄（直して返してもらう） | 直した後の文字列（末尾の空白は除く）。直されたら結果の `edited` に質問の id が入る | `text`（最初の文面。無ければ文字列の `default`。10000 文字まで）・`rows`（行数。1〜60）・`mono`（`false` で等幅にしない）・`required`（**既定で true**＝空は答えにできない。`false` で許す） |
+| `rank` | ドラッグか `↑` `↓` で並べ替える一覧 | 並べた順の選択肢の `value` の配列（全部を 1 回ずつ） | `options`・`default`（最初の順の配列。選択肢の並べ替えでなければ無視して、`options` の順） |
+| `table` | 行ごとに 1 つ選ぶ表（選択肢が 5 つまでは並んだボタン、より多ければ選択欄） | `{行の value: 選んだ value}`（全部の行が入る） | `rows`（行。文字列か `{value, label, desc, default}`。1 つ以上・`value` の重複なし）・`options`・`default`（行に `default` が無いときの値）・`rowLabel`・`pickLabel`（見出し） |
+
+- サーバは回答を検査する: `rank` が選択肢の並べ替えでない・`table` の行が足りない／余る・値が選択肢にない・`edit` が必須なのに空・`edited` が直された `edit` 以外を指す、のとき `invalid_params` で断る（質問は開いたまま。画面は再度の決定を促す）。
+  部品が出す正しい回答は断らない。`edit`・`rank`・`table` は `showIf` の条件にならない（`single`・`multi` だけ）。`table` の行・`rank` の選択肢にも `group`・`desc` が使える。
+- 定義の誤りの分類（`ask.py` の `reason` と同じ名前）: `table` の `rows` が無い・空は `options_empty`、行の `default` が選択肢に無いのは `row_default_unknown`。
+
+### 画像・音・コード（選択肢の `image`・`audio`・`code`・`lang`・`group`、質問の `preview`・`thumb`）
+
+画面案の見比べ・実装方針の差分の比較に使う。**ファイルを読むのは `soda serve` の動くマシン**（pane のシェルと同じ権限で読める範囲。別のマシンの pane なら、そのマシンの `soda` が自分のファイルを読み、手元のブラウザへは既存の中継で運ばれる）。
+
+| 項目 | 内容 |
+|---|---|
+| `image` | 画像の参照: **絶対パス**（相対パス・`~/` は `sodactl` が呼び出し元の cwd・ホームから絶対にして送る）・`https://…` の URL・`data:image/…;base64,…`。png・jpg・jpeg・gif・webp・avif・svg |
+| `audio` | 音の参照（試聴）: 絶対パス・`data:audio/…;base64,…`（外部 URL は不可）。wav・mp3・ogg・oga・opus・m4a・aac・flac |
+| `code` / `lang` | 等幅で出す文字列（5 万文字まで）と種類の名前。`lang` が `diff` なら `+`・`-`・`@@` の行を色分けする |
+| `group` | 分類の見出し（同じ分類の選択肢は続けて並べる） |
+| `preview` / `thumb` | `side`（横の枠）か `inline`（カードの中）／`inline` の画像の高さ（20〜2000） |
+
+- **安全のため検査する**: 通常のファイルだけ（ディレクトリ・FIFO・デバイスは断る。シンボリックリンクは辿る）・拡張子が許可の一覧にあること・**先頭バイトが拡張子の種類と合うこと**（`.png` の名前のテキストや `/etc/passwd` は読めない）。
+  MIME は拡張子ではなくサーバが先頭バイトから決める。SVG は `<img>` でだけ描く（中のスクリプトは動かない。拡大表示・単独で開く経路はない）。誤りは**定義の誤り（終了コード 2）**で、窓にも画面にも出さない。
+- **`https://` の画像**: **サーバが取得して一時保存し、ブラウザには自分の経路（`/ws` の分割取得）で渡す**。ブラウザは画像の取得先へリクエストを出さない（利用者の IP が取得先に見えない）。サーバの取得は `https` のポート 443 だけ・解決した**全部**のアドレスが
+  公開アドレスであること（ループバック・プライベート・リンクローカル・メタデータ・CGNAT・予約は拒否。接続は検査したアドレスに固定）・リダイレクトは 3 回まで（毎回検査し直す）・Cookie などは付けない・10 秒・8 MiB・種類は本文の先頭バイトも確かめる。
+  **取得に失敗した画像は、質問ごと失敗にせず画像なしで出す**（ダイアログ最上部に「画像 N 件を取得できませんでした」の固定の行が出る）。社内のプロキシ越しにしか外へ出られない環境では、取得できず画像なしになる。
+- 大きさの上限（超えたら**窓へ落とさず**、理由つきの定義の誤り〔終了コード 2〕）: 1 ファイル 8 MiB（Markdown・テキストの成果物は 2 MiB）・1 つの質問の合計 24 MiB・32 ファイルまで・`soda` が待っている質問全部の合計 128 MiB（超えたら `ask_busy`）。同じファイル・URL は 1 つに数える。
+  `data:` の画像・音は定義全体の 256 KiB の中に入れる。
+- 質問が閉じると（回答・取り消し・時間切れ・pane が閉じた・切断）、サーバは保持したメディアを捨てる（メモリだけ。ディスクには書かない）。
+
+### 成果物（`view`）
+
+質問の横に、スキルが作った成果物を見せて確認してもらう（`ask.py --review` の `view`）。定義の全体に `view`（1 つ〔文字列のパスか辞書〕か、8 件までの配列）。項目は `file`（ファイル。上と同じ絶対化）か `text`（その場の文字。定義全体の 256 KiB の中）の片方と、
+任意の `title`（タブの名前）・`raw`（`true` で Markdown を整形せず文字のまま）。`view` があると `paging` の既定は `false`（質問の欄が狭いため。書けばそれに従う）。
+
+| 見せるもの | 出し方 |
+|---|---|
+| HTML（`.html`・`.htm`。8 MiB まで） | 隔離した枠（`iframe sandbox="allow-scripts"`）に表示。**スクリプトも動く**（md-to-doc の文書など）が、**外への通信は止まる**（CDN・Google Fonts を読む HTML は崩れる）。相対パスで読む別ファイルは配らない |
+| Markdown（`.md`・`.markdown`。2 MiB まで） | 整形して表示（見出し・表・コード・チェックリスト）。` ```mermaid ` は図（SVG）になる。右上で「ソースを見る」に切り替え。リンクは開けない（外へ飛ばさない） |
+| 画像 | `<img>` で表示（SVG のスクリプトは動かない） |
+| そのほか（UTF-8 のテキスト。2 MiB まで） | `<pre>` に文字のまま |
+
+- ダイアログは広く・高くなり、**左に成果物・右に質問**（幅 767px 以下のモバイルは**上に成果物・下に質問**の縦積み）。成果物が複数ならタブ（矢印キー・`Home`・`End`）。
+- **枠の上に固定のラベル「pane『…』の成果物（隔離表示）」**が出る（アプリが描く。成果物の題・本文では変えられない）。成果物の中に soda の確認画面に似せたものがあっても、利用者が見分けられる。質問の出どころの固定の行は今までどおり最上部にある。
+- 隔離の仕組み: 枠は `allow-same-origin` を付けない iframe（不透明 origin）で、`/ask-view/*` の専用ページを専用の応答ヘッダ（`sandbox allow-scripts`・`default-src 'none'`）で開き、本文は `postMessage` で渡す。枠の中のスクリプトからは、アプリの DOM・Cookie・`localStorage`・`/ws`・親の
+  `document` に触れず、`fetch`・WebSocket・外への画像・フォーム送信も拒否される。Markdown の枠は `script-src 'self'` だけで、埋め込まれた `<script>`・`onerror=` 等のインラインは動かない（無害化の代わりに CSP と隔離に任せる）。ポップアップ・ダウンロードも許さない。
+  アプリ本体の CSP は、音の試聴のための `media-src data:` を足した以外は変えていない。
+- **枠の中のキー**: 枠にフォーカスがあると、キーは親に届かないので、枠のページが `Esc`（取り消し）・`Ctrl/Cmd+Enter`（決定）・`Alt+PageUp/PageDown`（前後の質問）だけを `postMessage` で親へ渡す（親は自分の枠からのものだけを受ける）。HTML の中のスクリプトがこれらのキーを先に止めると、効かない（［キャンセル］・［決定］で操作できる）。**決定（`Ctrl/Cmd+Enter`）は、利用者が枠の中で実際に操作した直後（ブラウザの `navigator.userActivation` が有効な約 5 秒）だけ受ける**——成果物のスクリプトが操作なしに決定を送って、既定のままの回答を確定させないため（残る危険: 利用者が操作した直後の数秒に送られること）。
+- 成果物が読めない（存在しない・UTF-8 でない・大きすぎる）定義は、質問を出さず定義の誤り（終了コード 2）。サーバから成果物を取れなかったときは、見ないまま答えさせないために質問を取り消す（`cancelled`）。
+- 見せるのは自分のスキルが作ったものにする（外から取ってきた HTML をそのまま見せない）。成果物なしで承認されることを避けたいときは、質問の文面に「成果物を見たか」を入れない（画面は成果物を出せたときだけ質問を出す）。
+
+### 機能確認（`sodactl ask --features`）と、古い版との組み合わせ
+
+```bash
+sodactl ask --features
+# → {"sodactl":["media","view","types:edit","types:rank","types:table","remote-image"],"limits":{"fileBytes":8388608,"textBytes":2097152,"totalBytes":25165824,"files":32,"serverBytes":134217728,"views":8},"server":{"features":[…],"limits":{…}}}
+```
+
+定義は読まない（標準入力を使わない）。`server` は、その pane のサーバに繋いで `ask.features` で確かめた結果で、**繋げない・古いサーバ（`ask.features` を知らない）・pane の外のときは `null`**。終了コードは常に 0。呼び出し側（ask-form の `ask.py`）は、これで画像・成果物・新しい型を渡してよいかを確かめ、
+`limits` で上限を超えないかを事前に確かめる。
+
+| sodactl | サーバ | 動き |
+|---|---|---|
+| 新 | 新 | すべて使える |
+| 新 | 旧 | 新しい項目（メディア・`view`・`edit`/`rank`/`table`）がある定義は、送る前に `ask.features` で確かめ、`{"status":"unavailable","reason":"this server does not support … in ask forms (update soda)"}`（終了コード 0）。新しい項目が無い定義は今までどおり |
+| 旧 | 新 | `--features` を知らない（使い方の誤り＝終了コード 2）ので、呼び出し側は使えないと判断する。旧 sodactl が定義を送ると、`edit`/`rank`/`table` は旧 sodactl 自身が `unavailable`、`image` は相対パスのまま新サーバに届き `invalid_ask_spec`（終了コード 2） |
+| 旧 | 旧 | 新しい項目は黙って無視される（プレビューなし）。**`view` が捨てられて成果物なしで質問が出る**ので、呼び出し側は `--features` で確かめてから渡す |
 
 ### 出力
 
@@ -264,7 +335,7 @@ stdout に 1 行の JSON。`status` は次の 4 つで、**どれも終了コー
 
 | `status` | いつ | ほかの項目 |
 |---|---|---|
-| `answered` | 決定が押された | `answers`（id → 値。`single`・`text` は文字列、`multi` は配列。`showIf` で隠れた質問は入らない）・`custom`（自由入力した質問の id。あれば）・`note`（補足。あれば）・`comments`（質問ごとの自由記述。id → 文。書いた質問だけで、無ければ項目ごと無い） |
+| `answered` | 決定が押された | `answers`（id → 値。`single`・`text`・`edit` は文字列、`multi`・`rank` は配列、`table` は `{行: 値}`。`showIf` で隠れた質問は入らない）・`custom`（自由入力した質問の id。あれば）・`edited`（直された `edit` の質問の id。あれば）・`note`（補足。あれば）・`comments`（質問ごとの自由記述。id → 文。書いた質問だけで、無ければ項目ごと無い） |
 | `cancelled` | キャンセル・`Esc`・pane が閉じられた | — |
 | `timeout` | `--timeout` が過ぎた（既定 540000 ミリ秒） | — |
 | `unavailable` | この pane のサーバに、質問を出せるブラウザが 1 つもつながっていない・**定義に、この版の `sodactl ask` が対応していない型の質問がある** | `reason`（理由） |
