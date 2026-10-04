@@ -1,7 +1,7 @@
 schema: 11
 slug: ask-media-popup
-current: tasks
-approved: [requirements, design, tasks]
+current: coding
+approved: [requirements, design, tasks, coding]
 mode: autonomous
 profile: full
 humanGates: []
