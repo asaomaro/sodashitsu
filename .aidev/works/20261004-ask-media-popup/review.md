@@ -8,3 +8,5 @@
 - T4: 検査済みのアドレスを順に試す（IPv6 の経路が無い環境）・名前解決にも時間の上限（`raceAbort`）・IP リテラルに SNI を付けない・実物の `https.request` の固定を自己署名の証明書の local サーバで確かめるテストを足した（`makeRealRequest({ca})`）・destroy の確認。直した。
 - T5: 全体の合計に足した値を Entry に持たせて引く（`heldBytes`）・準備中に時間切れ/pane が閉じた/dispose・全体の上限で断った後の後片付けのテストを足した。差し替え口の名前（`askImageFetcher`）を design に反映。
 - T9: `rowPicks` が行の value `__proto__` で代入によりプロトタイプへ設定してしまう（部品は `Object.fromEntries`）→ `Object.fromEntries` に直し、回帰テストを足した。
+- T11: 許可リストの名前を 1 度だけ作る・405 に `Allow` を付ける・Markdown の枠で `meta`・`link`・`base`・`form`・`iframe`・`object`・`embed` を取り除く（`<meta http-equiv=refresh>` は CSP では止まらない）。直した。
+- T12（should）: 枠の中のスクリプトが `postMessage` するだけで決定（Ctrl+Enter 相当）できる→ **決定は `navigator.userActivation.isActive`（利用者の操作の直後・約 5 秒）のときだけ取り次ぐ**ようにした（未対応の環境では取り次がない）。残余のリスク: 利用者が枠の中で操作した直後の 5 秒以内に、成果物のスクリプトが決定を送ること（成果物は自分のスキルが作ったものに限る、と docs に書く）。Esc の取り消しは操作の扱いにならず、害が小さいので許す。E2E は Playwright の操作が操作の扱いを付けるため、送る前に待つ形にした。dark の配色変更の追従は据え置き（開いている間の変更は稀）。

@@ -102,8 +102,26 @@ describe("postMessage（枠 ↔ 親）", () => {
     send(win2, { type: "ready" });
     expect(win2.postMessage).toHaveBeenCalledWith({ type: "ask-view", source: "# 見出し", dark: false }, "*");
   });
+  it("決定（Ctrl/Cmd+Enter）は、利用者の操作の直後（navigator.userActivation が有効）だけ取り次ぐ。操作なしの postMessage では決定させない", () => {
+    const { w, fakeWindow, send } = mountViewer([md]);
+    const win = fakeWindow();
+    const nav = navigator as Navigator & { userActivation?: { isActive: boolean } };
+    // 対応していない・操作が無い: 取り次がない（Esc は取り次ぐ）
+    send(win, { type: "key", key: "Enter", ctrl: true });
+    expect(w.emitted("key")).toBeUndefined();
+    Object.defineProperty(nav, "userActivation", { value: { isActive: false }, configurable: true });
+    send(win, { type: "key", key: "Enter", ctrl: true });
+    expect(w.emitted("key")).toBeUndefined();
+    send(win, { type: "key", key: "Escape" });
+    expect(w.emitted("key")).toEqual([["cancel"]]);
+    Object.defineProperty(nav, "userActivation", { value: { isActive: true }, configurable: true });
+    send(win, { type: "key", key: "Enter", meta: true });
+    expect(w.emitted("key")).toEqual([["cancel"], ["submit"]]);
+    delete (nav as { userActivation?: unknown }).userActivation;
+  });
   it("枠から取り次ぐキーは 3 種だけ（Esc・Ctrl/Cmd+Enter・Alt+PageUp/Down）。それ以外・形の違うものは何も起こさない（AC-I5）", () => {
     const { w, fakeWindow, send } = mountViewer([md]);
+    Object.defineProperty(navigator, "userActivation", { value: { isActive: true }, configurable: true });
     const win = fakeWindow();
     send(win, { type: "key", key: "Escape" });
     send(win, { type: "key", key: "Enter", ctrl: true });
@@ -129,6 +147,7 @@ describe("postMessage（枠 ↔ 親）", () => {
     send({ postMessage: vi.fn() }, { type: "key", key: "Escape" });
     send(window, { type: "key", key: "Escape" });
     expect(w.emitted("key")).toHaveLength(5);
+    delete (navigator as { userActivation?: unknown }).userActivation;
   });
   it("readViewKey", () => {
     expect(readViewKey({ type: "key", key: "Escape" })).toBe("cancel");

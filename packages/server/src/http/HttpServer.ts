@@ -132,14 +132,17 @@ export class HttpServer {
 
   /** 成果物の隔離表示の静的ページ（`ASK_VIEW_FILES` の許可リストにあるものだけ。専用のヘッダ）。 */
   private async handleAskView(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
-    const entry = Object.hasOwn(ASK_VIEW_FILES, pathname.slice("/ask-view/".length)) ? ASK_VIEW_FILES[pathname.slice("/ask-view/".length)] : undefined;
-    if ((req.method !== "GET" && req.method !== "HEAD") || entry === undefined) {
-      res.statusCode = req.method === "GET" || req.method === "HEAD" ? 404 : 405;
+    const name = pathname.slice("/ask-view/".length);
+    const entry = Object.hasOwn(ASK_VIEW_FILES, name) ? ASK_VIEW_FILES[name] : undefined;
+    const readOnly = req.method === "GET" || req.method === "HEAD";
+    if (!readOnly || entry === undefined) {
+      res.statusCode = readOnly ? 404 : 405;
+      if (!readOnly) res.setHeader("Allow", "GET, HEAD");
       res.end();
       return;
     }
     const distRoot = resolve(this.opts.webDistDir);
-    const contents = await readFile(join(distRoot, "ask-view", ...pathname.slice("/ask-view/".length).split("/"))).catch(() => null);
+    const contents = await readFile(join(distRoot, "ask-view", ...name.split("/"))).catch(() => null);
     if (contents === null) {
       res.statusCode = 404;
       res.end();

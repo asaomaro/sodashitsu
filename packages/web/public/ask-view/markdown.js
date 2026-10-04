@@ -64,6 +64,8 @@
     try {
       await load('marked.umd.js');
       doc.innerHTML = marked.parse(d.source, { gfm: true });
+      // 枠自身を動かす・外へ繋ぐ要素は取り除く（CSP の default-src 'none' では止まらない `<meta http-equiv=refresh>`・`<base>`・`<form>` 等）。
+      Array.prototype.forEach.call(doc.querySelectorAll('meta, link, base, form, iframe, frame, object, embed'), function (el) { el.remove(); });
       // リンクは開けない（外への通信を止める）。文字として残し、行き先は title に出す。同じ文書の中の `#` は残す。
       Array.prototype.forEach.call(doc.querySelectorAll('a[href]'), function (a) {
         var href = a.getAttribute('href') || '';

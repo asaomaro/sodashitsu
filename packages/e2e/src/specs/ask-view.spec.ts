@@ -212,6 +212,30 @@ test("枠の中にフォーカスがあるときの Esc は取り消し・Ctrl+E
   }
 });
 
+test("枠の中のスクリプトが、利用者の操作なしに決定のメッセージを送っても、質問は確定しない（既定のままの承認を成果物の側から起こせない。AC-I5）", async ({ page, appServer }) => {
+  const media = await makeMediaDir();
+  test.setTimeout(60_000);
+  try {
+    const p1 = await setup(page, appServer);
+    // 枠のスクリプトが読み込み後に、決定（Ctrl+Enter）と取り消しでない取り次ぎを自分で送る。利用者の操作は 1 つも無い。
+    const file = await media.write("auto.html", `<!doctype html><body><p>自動</p><script>setTimeout(() => { parent.postMessage({ type: "key", key: "Enter", ctrl: true }, "*"); parent.postMessage({ type: "key", key: "Enter", meta: true }, "*"); document.body.dataset.sent = "1"; }, 6500);</script>`);
+    const run = await runAsk(appServer, p1, SPEC({ file }));
+    await expect(dialog(page)).toBeVisible();
+    // 枠のスクリプトは 6.5 秒後に送る。Playwright の操作（evaluate・locator の確認）は「利用者の操作」の扱い（transient activation。約 5 秒）を
+    // ページに付けるので、その間は何も呼ばずに待ち（送られた後まで）、その後で確定していないことを見る。
+    await new Promise((r) => setTimeout(r, 9000));
+    expect(run.finished()).toBe(false);
+    await expect(dialog(page)).toBeVisible();
+    await expect(frameOf(page).locator("body")).toHaveAttribute("data-sent", "1"); // 枠のスクリプトは実際に送った
+    // 利用者が実際にキーを押せば決定できる（枠の外の質問のキーは今までどおり）。
+    await page.locator("[data-ask-origin]").focus();
+    await page.keyboard.press("Control+Enter");
+    expect((await run.done).json).toEqual({ status: "answered", answers: { ok: "o1" } });
+  } finally {
+    await media.cleanup();
+  }
+});
+
 test("固定のラベル「pane『…』の成果物（隔離表示）」は、成果物の題・本文では変えられない（AC10）。枠の外観を soda のダイアログに見せかけても、ラベルが残る", async ({ page, appServer }) => {
   const media = await makeMediaDir();
   try {

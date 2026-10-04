@@ -59,7 +59,12 @@ function onMessage(ev: MessageEvent): void {
     return;
   }
   const key = readViewKey(ev.data);
-  if (key !== null) emit("key", key);
+  if (key === null) return;
+  // 決定は、利用者が実際に枠の中で操作した直後だけ受ける（`navigator.userActivation`。キー・クリックなどの操作で、枠の祖先の文書にも立つ）。
+  // 枠の中のスクリプトが操作なしに `postMessage` するだけで、既定のままの回答が確定するのを防ぐ。Esc は操作の扱いにならない（取り消しは害が小さいので許す）。
+  // 対応していない環境では決定を取り次がない（［決定］・質問側のキーで操作できる）。
+  if (key === "submit" && (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive !== true) return;
+  emit("key", key);
 }
 onMounted(() => window.addEventListener("message", onMessage));
 onBeforeUnmount(() => window.removeEventListener("message", onMessage));
