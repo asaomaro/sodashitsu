@@ -248,3 +248,8 @@ AssertionError: expected { spaces: true, agents: true } to deeply equal { spaces
   ✘  1 …:60:1 › workspace が多いと …
   ✘  2 …:78:1 › 区画の境目: ドラッグ・キー・読み込み直しで配分が同じ。最小を割らない (12.2s)
 ```
+
+#### cross 点検の指摘（3 件）
+- [should] Splitter にダイアログが開いたときのドラッグの確定が無い（AC-I5）/ 修正済（`view.modalOpen` の watch で `finish()`。テストは変異 `void open` で「ドラッグ中にダイアログが開いたら、その時点で終える」が落ちることを確認）
+- [nit] `--soda-resize-line` の 3:1 は bg・menu-bg だけに対して判定（端末背景・帯の色は見ていない）/ 許容（design L109・L206 の決めどおり。実機の確認は verification.md の 17 テーマの項目に入れてある）
+- [nit] 端末版で agents が 0 件のとき `prefix+shift+a` が状態を黙って反転 / 修正済（TuiApp.toggleSidebarSection に件数のガード。テストを足した）

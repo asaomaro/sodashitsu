@@ -2,6 +2,7 @@
 import { inject, ref, watch } from "vue";
 import { ConnectionKey } from "../injection.js";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
+import { useViewStore } from "../store/view.js";
 
 /**
  * pane の境界（M2。architecture「マウス操作」・APG の Window Splitter）。Pointer Events でドラッグし、
@@ -70,6 +71,7 @@ interface DragStart {
   client: number;
   size: number;
 }
+const view = useViewStore();
 const drag = useResizeDrag<DragStart>({
   axis: props.dir === "right" ? "x" : "y",
   enabled: () => !!el.value?.parentElement,
@@ -98,6 +100,13 @@ const drag = useResizeDrag<DragStart>({
     sendNow(0.5);
   },
 });
+// ダイアログ（`sodactl ask` 等）が開いたら、その時点でドラッグを終える（AC-I5。Sidebar の 2 か所の境目と同じ）。
+watch(
+  () => view.modalOpen,
+  (open) => {
+    if (open) drag.finish();
+  },
+);
 
 watch(
   () => props.ratio,

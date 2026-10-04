@@ -3,6 +3,8 @@ import { mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectionKey } from "../injection.js";
 import type { ConnectionPort } from "@sodashitsu/client-core";
+import { createPinia } from "pinia";
+import { useViewStore } from "../store/view.js";
 import Splitter from "./Splitter.vue";
 
 function makeConnection(): ConnectionPort & { requests: [MethodName, unknown][] } {
@@ -19,10 +21,10 @@ function makeConnection(): ConnectionPort & { requests: [MethodName, unknown][] 
   };
 }
 
-function mountSplitter(conn: ConnectionPort, dir: "right" | "down" = "right") {
+function mountSplitter(conn: ConnectionPort, dir: "right" | "down" = "right", pinia = createPinia()) {
   return mount(Splitter, {
     props: { splitId: "s1", tabId: "t1", ratio: 0.5, dir },
-    global: { provide: { [ConnectionKey as symbol]: conn } },
+    global: { plugins: [pinia], provide: { [ConnectionKey as symbol]: conn } },
     attachTo: document.body,
   });
 }
@@ -228,6 +230,18 @@ describe("Splitter", () => {
     const wrapper = mountSplitter(conn);
     await wrapper.setProps({ ratio: 0.7 });
     expect(wrapper.get('[role="separator"]').attributes("aria-valuenow")).toBe("70");
+    wrapper.unmount();
+  });
+
+  it("ドラッグ中にダイアログが開いたら、その時点で終える（<html> のクラスと Esc の捕捉が外れる。AC-I5）", async () => {
+    const pinia = createPinia();
+    const wrapper = mountSplitter(makeConnection(), "right", pinia);
+    const el = wrapper.get('[role="separator"]');
+    await el.trigger("pointerdown", { button: 0, clientX: 100, pointerId: 1 });
+    expect(document.documentElement.classList.contains("soda-resizing")).toBe(true);
+    useViewStore(pinia).openDialogWithContext({ kind: "settings" });
+    await wrapper.vm.$nextTick();
+    expect(document.documentElement.classList.contains("soda-resizing")).toBe(false);
     wrapper.unmount();
   });
 });

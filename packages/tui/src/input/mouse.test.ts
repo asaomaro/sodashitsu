@@ -471,6 +471,12 @@ describe("マウスの操作（AC9・AC-I5）", () => {
       expect(h.app.prefs.sectionsCollapsed).toEqual({ spaces: false, agents: false });
     });
 
+    it("agents が 0 件のとき、操作で agents の折りたたみを反転させない（区切りの行が無く見えないため）", async () => {
+      const h = await start();
+      (h.app as unknown as { toggleSidebarSection(s: string): void }).toggleSidebarSection("agents");
+      expect(h.app.prefs.sectionsCollapsed).toEqual({ spaces: false, agents: false });
+    });
+
     it("navigate に入ると、畳んだ spaces を開く（agents は開かない）", async () => {
       const h = await start({ snapshot: agentSnap() });
       h.app.prefs.setLocal({ sidebarSectionsCollapsed: { spaces: true, agents: true } });

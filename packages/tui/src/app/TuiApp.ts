@@ -1085,6 +1085,8 @@ export class TuiApp {
 
   /** 区画（spaces・agents）の折りたたみを切り替え、`tui-state.json` に残す（20261004-ui-interaction-polish）。畳んだ区画だけを持つ。 */
   protected toggleSidebarSection(section: "spaces" | "agents"): void {
+    // agents が 0 件のときは区切りの行が出ず畳む対象が無い（描画と同じ規則）。黙って状態だけ反転させない。
+    if (section === "agents" && ![...this.model.panes.values()].some((p) => p.agent)) return;
     const now = this.prefs.sectionsCollapsed;
     const next = { ...now, [section]: !now[section] };
     const keep: { spaces?: true; agents?: true } = {};
