@@ -568,6 +568,99 @@ describe("Sidebar — agents", () => {
   });
 });
 
+// 20261004-subagent-display。エージェントの行の 1 行目の右端に、サブエージェントの件数のボタン。
+describe("Sidebar — サブエージェントの件数のボタン", () => {
+  const subs = (n: number) => ({ count: n, items: Array.from({ length: Math.min(n, 64) }, (_, i) => ({ id: `s${i}`, startedAt: 0 })) });
+  function setup(agent: AgentInfo) {
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1"));
+    session.tabUpserted(makeTab("t1", "w1"));
+    session.paneUpserted(makePane("p1", "t1", agent));
+    return session;
+  }
+  const btn = (w: ReturnType<typeof mountSidebar>) => w.find(".sidebar-agents .sidebar-subagent-btn");
+
+  it("1 件以上のときだけ出る（分からない・0 件では出さない）", () => {
+    setup(makeAgent());
+    expect(btn(mountSidebar(makeConnection())).exists()).toBe(false);
+    setup(makeAgent({ subagents: subs(0) }));
+    expect(btn(mountSidebar(makeConnection())).exists()).toBe(false);
+    setup(makeAgent({ subagents: subs(3) }));
+    const b = btn(mountSidebar(makeConnection()));
+    expect(b.exists()).toBe(true);
+    expect(b.text()).toBe("3");
+    expect(b.attributes("aria-label")).toBe("サブエージェント 3 件を表示");
+  });
+
+  it("1 行目（状態の印のある行）の中にあり、行の数を増やさない", () => {
+    setup(makeAgent({ subagents: subs(2) }));
+    const w = mountSidebar(makeConnection());
+    expect(btn(w).element.closest(".sidebar-row-line1")).not.toBeNull();
+    const rows = w.findAll(".sidebar-agents .sidebar-row");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.findAll(".sidebar-row-line1")).toHaveLength(1);
+  });
+
+  it("押すと、そのエージェントの一覧のダイアログを開く（選んでいるマシンの pane）。行の click・pointerdown へ伝えない", async () => {
+    setup(makeAgent({ subagents: subs(2) }));
+    const view = useViewStore(pinia);
+    const conn = makeConnection();
+    const rowClick = vi.fn();
+    const w = mountSidebar(conn);
+    w.get(".sidebar-agents .sidebar-row").element.addEventListener("click", rowClick);
+    const rowPointerdown = vi.fn();
+    w.get(".sidebar-agents .sidebar-row").element.addEventListener("pointerdown", rowPointerdown);
+    // 前提: 行の中のボタン以外の場所の pointerdown は、行まで届く（このテストの観測が効いている）。
+    w.get(".sidebar-agents .sidebar-row-line1").element.dispatchEvent(pointerEvent("pointerdown", { clientX: 1, clientY: 1 }));
+    expect(rowPointerdown).toHaveBeenCalledTimes(1);
+    rowPointerdown.mockClear();
+    btn(w).element.dispatchEvent(pointerEvent("pointerdown", { clientX: 1, clientY: 1 }));
+    await btn(w).trigger("click");
+    expect(view.dialogContext).toEqual({ kind: "subagents", machineId: "local", paneId: "p1" });
+    expect(rowClick).not.toHaveBeenCalled();
+    expect(rowPointerdown).not.toHaveBeenCalled();
+    expect(conn.requests).toEqual([]); // pane.focus を送らない（pane へ移らない）
+    expect(view.focusedPaneId).not.toBe("p1");
+  });
+
+  it("畳んだサイドバーでは出さない", () => {
+    setup(makeAgent({ subagents: subs(2) }));
+    useViewStore(pinia).sidebarCollapsed = true;
+    expect(btn(mountSidebar(makeConnection())).exists()).toBe(false);
+  });
+
+  it("Enter・Space は window へ伝えない（ほかのボタンと同じ。クリックとして動く）", () => {
+    setup(makeAgent({ subagents: subs(2) }));
+    const w = mountSidebar(makeConnection(), undefined, { attachTo: true });
+    const seen: string[] = [];
+    const onKey = (e: KeyboardEvent) => seen.push(e.key);
+    window.addEventListener("keydown", onKey);
+    btn(w).element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    btn(w).element.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    window.removeEventListener("keydown", onKey);
+    expect(seen).toEqual(["ArrowDown"]);
+    w.unmount();
+  });
+
+  it("件数が変わると数字が変わり、0 件で消える", async () => {
+    const session = setup(makeAgent({ subagents: subs(2) }));
+    const w = mountSidebar(makeConnection());
+    session.paneUpserted(makePane("p1", "t1", makeAgent({ subagents: subs(5) })));
+    await nextTick();
+    expect(btn(w).text()).toBe("5");
+    session.paneUpserted(makePane("p1", "t1", makeAgent({ subagents: subs(0) })));
+    await nextTick();
+    expect(btn(w).exists()).toBe(false);
+  });
+
+  it("別のエージェントの行には、それぞれの件数が出る", () => {
+    const session = setup(makeAgent({ subagents: subs(2) }));
+    session.paneUpserted(makePane("p2", "t1", makeAgent({ instanceId: "a2", subagents: subs(7) })));
+    const texts = mountSidebar(makeConnection()).findAll(".sidebar-agents .sidebar-subagent-btn").map((b) => b.text()).sort();
+    expect(texts).toEqual(["2", "7"]);
+  });
+});
+
 describe("Sidebar — 折りたたみ", () => {
   it("view.sidebarCollapsed のときラベル類を出さない", () => {
     const session = useSessionStore(pinia);

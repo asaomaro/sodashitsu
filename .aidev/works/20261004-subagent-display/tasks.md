@@ -53,7 +53,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/client-core/src/agent/`（新しい純関数の置き場。`stateIndicator.ts` の隣）、`packages/client-core/src/keys/actions.ts`・`bindings.ts`（`defaults: []` の操作の手本）、`packages/web/src/actions/ActionDispatcher.ts`、`packages/tui/src/actions/TuiDispatcher.ts`、キーの設定の一覧（web の `KeySettings`・tui の `keySection.ts`）とそのテスト
       依存: T2
       AC: AC4, AC-I3
-- [ ] T10: ブラウザ版のサイドバー——エージェントの行の 1 行目の右端に件数のボタン（1 件以上のとき。アイコン＋数・読み上げ用の名前。`pointerdown`・`click` を行へ伝えない。畳んだサイドバーでは出さない。行の高さを変えない）。`view.dialogContext` の種類 `subagents`（`machineId`・`paneId`）と `SubagentListDialog.vue`（題・各行・「ほか n 件」・0 件の文言・10 秒ごとの経過時間・上下キーでスクロール・背景のクリック／`Esc`／［閉じる］で閉じる・対象が居なくなった／入れ替わった／pane が閉じたら閉じる）。`{machineId, paneId}` からエージェントの情報を引く関数の実体をストアに作る（T9 の型）。閉じたときのフォーカスと操作 `show_subagents` は T20。単体テストと壊して落ちる確認
+- [x] T10: ブラウザ版のサイドバー——エージェントの行の 1 行目の右端に件数のボタン（1 件以上のとき。アイコン＋数・読み上げ用の名前。`pointerdown`・`click` を行へ伝えない。畳んだサイドバーでは出さない。行の高さを変えない）。`view.dialogContext` の種類 `subagents`（`machineId`・`paneId`）と `SubagentListDialog.vue`（題・各行・「ほか n 件」・0 件の文言・10 秒ごとの経過時間・上下キーでスクロール・背景のクリック／`Esc`／［閉じる］で閉じる・対象が居なくなった／入れ替わった／pane が閉じたら閉じる）。`{machineId, paneId}` からエージェントの情報を引く関数の実体をストアに作る（T9 の型）。閉じたときのフォーカスと操作 `show_subagents` は T20。単体テストと壊して落ちる確認
       対象: `packages/web/src/components/Sidebar.vue:190-206, :546-567`（エージェントの行）、`packages/web/src/components/SubagentListDialog.vue`（新規。手本は `ConfirmDialog.vue` の `<dialog>` の形）、`packages/web/src/store/view.ts:285-286, :502-523`（`DialogContext`・`closeDialog`）、`packages/web/src/App.vue:62-93`（ダイアログの置き場）、`packages/web/src/actions/ActionDispatcher.ts`、`packages/web/src/components/Sidebar.test.ts`
       依存: T6, T9
       AC: AC1, AC2, AC5, AC17, AC-I1, AC-I2, AC-I5

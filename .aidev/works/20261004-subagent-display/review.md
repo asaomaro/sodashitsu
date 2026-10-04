@@ -32,6 +32,11 @@
 - [nit][conv:-] AgentIntegrationInstaller.ts `NOOP_HOOK_SCRIPT` がクラスの後ろにあり、周囲の定数の並びと違う / 対応: 修正済（定数の並びへ移した。T19・ラウンド1）
 - [nit][conv:-] AgentIntegrationInstaller.ts 存在確認に `readFile` で中身を丸ごと読んでいた / 対応: 修正済（`access`。T19・ラウンド1）
 
+- [should][conv:-] SubagentListDialog.vue:41 開く時点でエージェントを引けないと閉じず、0 件の文言のまま開き続ける / 対応: 修正済（開かずに閉じる。テスト付き。T10・ラウンド1）
+- [nit][conv:-] Sidebar.vue:569 利用者の行の並びの設定で 1 行目が空だと件数のボタンも出ない前提が無記載 / 対応: 修正済（コメント。T10・ラウンド1）
+- [nit][conv:-] App.vue:5 import が名前順でない / 対応: 修正済（T10・ラウンド1）
+- [nit][conv:-] SubagentListDialog.test.ts 上下キーのスクロールを直接確かめるテストが無い / 対応: 許容（`tabindex` と role を単体で固定。キーの観測は T16 の E2E。T10・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -236,4 +241,41 @@ AssertionError: expected '60秒' to be '1分' // Object.is equality
 === MUT: return hidden > 0 ? -> return hidden >= 0 ?
  FAIL  src/agent/subagents.test.ts > ほか n 件 > count が items より多いときだけ出す
 AssertionError: expected 'ほか 0 件' to be null
+```
+
+#### T10 ブラウザ版のサイドバー・一覧ダイアログ・引き方のストア（`Sidebar.vue`・`SubagentListDialog.vue`・`store/subagents.ts`。壊した後に元へ戻し `cmp` で一致を確認済み）
+
+```
+=== MUT(store/subagents.ts): 選んでいるマシンの判定（target.machineId === machines.selectedId）を true に
+ FAIL  src/store/subagents.test.ts > … > 選んでいないマシンの pane は、そのマシンの要約から引く
+AssertionError: expected undefined to deeply equal { instanceId: 'a1', …(8) }
+ FAIL  … > pane の ID が衝突する 2 つのマシンで取り違えない（選んでいるのは local。m2 の p1 は m2 のもの）
+=== MUT(Sidebar.vue): 件数のボタンの @click.stop を @click に
+ FAIL  src/components/Sidebar.test.ts > Sidebar — サブエージェントの件数のボタン > 押すと、そのエージェントの一覧のダイアログを開く（…）。行の click・pointerdown へ伝えない
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+=== MUT(Sidebar.vue): 件数のボタンの @pointerdown.stop を外す
+ FAIL  … > 押すと、そのエージェントの一覧のダイアログを開く（…）。行の click・pointerdown へ伝えない
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+=== MUT(Sidebar.vue): v-if="i === 0 && subagentCount(agent) > 0" -> v-if="i === 0"
+ FAIL  … > 1 件以上のときだけ出る（分からない・0 件では出さない）
+AssertionError: expected true to be false // Object.is equality
+=== MUT(SubagentListDialog.vue): 説明を {{ }} から v-html に
+ FAIL  src/components/SubagentListDialog.test.ts > … > 説明は文字として出す（HTML を書いても要素にならない）
+AssertionError: expected true to be false // Object.is equality
+=== MUT(SubagentListDialog.vue): 入れ替わりの判定（a.instanceId !== openedInstanceId.value）を外す
+ FAIL  … > エージェントが入れ替わったら（instanceId が変わったら）閉じる
+AssertionError: expected { kind: 'subagents', …(2) } to be null
+=== MUT(SubagentListDialog.vue): 10 秒ごとの経過時間の更新（setInterval）を外す
+ FAIL  … > 経過時間は 10 秒ごとに進む
+AssertionError: expected '0秒' to be '10秒' // Object.is equality
+=== MUT(SubagentListDialog.vue): 背景のクリック（@click.self="close"）を外す
+ FAIL  … > ［閉じる］・背景のクリック・Esc（cancel）で閉じる。ダイアログの中のクリックでは閉じない
+AssertionError: backdrop: expected { kind: 'subagents', … } to be null
+```
+
+（T10・ラウンド1 の修正の分）
+```
+=== MUT: 開く時点で対象のエージェントが居なければ閉じる処理を外す
+ FAIL  src/components/SubagentListDialog.test.ts > … > 開く時点で対象のエージェントが居なければ、開かずに閉じる（0 件の文言のまま開き続けない）
+AssertionError: expected { kind: 'subagents', … } to be null
 ```
