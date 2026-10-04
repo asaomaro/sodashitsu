@@ -59,6 +59,8 @@ export type PaneSocketResponse =
 
 /** この受け口に載せる操作の名前（足すときはここに 1 行）。 */
 export const PANE_OP_ASK_OPEN = "ask.open";
+/** 機能確認（引数なし。古い受け口は `unknown_op`）。 */
+export const PANE_OP_ASK_FEATURES = "ask.features";
 /** `ask.open` の引数（`{ spec, timeoutMs }`）。`paneId` は要求の外側の `paneId` を使うので引数には無い。 */
 export const PaneAskOpenParams = AskOpenParams.omit({ paneId: true });
 export type PaneAskOpenParams = z.infer<typeof PaneAskOpenParams>;

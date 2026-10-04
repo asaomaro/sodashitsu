@@ -3,6 +3,8 @@ import {
   DEVICE_LOCAL_PREF_KEYS,
   AgentIntegrationInstallParams,
   AskAnswerParams,
+  AskFeaturesParams,
+  AskMediaParams,
   AgentStartParams,
   AgentPromptParams,
   AgentSendKeysParams,
@@ -442,5 +444,26 @@ describe("AskAnswerParams.comments（質問ごとの自由記述）", () => {
   it("__proto__ のキー（JSON.parse が作る自分の項目）は、スキーマが黙って落とす（ほかのキーは残る）", () => {
     const r = AskAnswerParams.safeParse({ ...base, comments: JSON.parse('{"__proto__":"x","b":"y"}') });
     expect(r.success ? Object.getOwnPropertyNames(r.data.comments ?? {}) : "rejected").toEqual(["b"]);
+  });
+});
+
+describe("ask.media・ask.features・ask.answer の新しい形（20261004-ask-media-popup）", () => {
+  it("AskMediaParams: id・offset は 0 以上の整数。id は個数の上限まで", () => {
+    expect(AskMediaParams.safeParse({ askId: "a", id: 0, offset: 0 }).success).toBe(true);
+    expect(AskMediaParams.safeParse({ askId: "a", id: 31, offset: 786432 }).success).toBe(true);
+    for (const bad of [{ id: -1, offset: 0 }, { id: 32, offset: 0 }, { id: 0, offset: -1 }, { id: 0.5, offset: 0 }, { id: 0, offset: "0" }])
+      expect(AskMediaParams.safeParse({ askId: "a", ...bad }).success).toBe(false);
+    expect(AskMediaParams.safeParse({ id: 0, offset: 0 }).success).toBe(false);
+  });
+  it("AskFeaturesParams は引数なし", () => {
+    expect(AskFeaturesParams.safeParse({}).success).toBe(true);
+  });
+  it("AskAnswerParams: table の回答（辞書）と edited を通し、辞書の値が文字列でなければ断る", () => {
+    const base = { askId: "ask-1" };
+    expect(AskAnswerParams.safeParse({ ...base, answers: { t: { r1: "ok", r2: "ng" } }, edited: ["e"] }).success).toBe(true);
+    expect(AskAnswerParams.safeParse({ ...base, answers: { t: { r1: 1 } } }).success).toBe(false);
+    expect(AskAnswerParams.safeParse({ ...base, answers: { t: "x" }, edited: [1] }).success).toBe(false);
+    const rows = Object.fromEntries(Array.from({ length: 201 }, (_, i) => [`r${i}`, "x"]));
+    expect(AskAnswerParams.safeParse({ ...base, answers: { t: rows } }).success).toBe(false);
   });
 });

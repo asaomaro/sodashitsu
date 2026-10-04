@@ -84,3 +84,11 @@ describe("PaneAskOpenParams", () => {
     expect(PaneAskOpenParams.safeParse({ timeoutMs: ASK_TIMEOUT_MIN_MS }).success).toBe(false);
   });
 });
+
+describe("PANE_OP_ASK_FEATURES", () => {
+  it("操作名は ask.features（受け口の登録の名前）", async () => {
+    const { PANE_OP_ASK_FEATURES, PANE_OP_ASK_OPEN } = await import("./paneSocket.js");
+    expect(PANE_OP_ASK_FEATURES).toBe("ask.features");
+    expect(PANE_OP_ASK_FEATURES).not.toBe(PANE_OP_ASK_OPEN);
+  });
+});

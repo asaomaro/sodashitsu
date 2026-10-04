@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  ASK_CODE_MAX,
   ASK_COLORS_MAX,
   ASK_COMMENTS_TOTAL_MAX,
   ASK_OPTIONS_MAX,
   ASK_QUESTIONS_MAX,
   ASK_SPEC_MAX_BYTES,
+  ASK_VIEW_MAX,
+  classifyMediaRef,
   askCommentable,
   checkAskAnswer,
   collectAsk,
@@ -249,13 +252,10 @@ describe("normalizeAskSpec — 既定と丸め", () => {
     expect(text).not.toHaveProperty("filter");
     expect(text).not.toHaveProperty("showValue");
   });
-  it("この作業で通さない項目（code・group・image・audio・preview・thumb）は、正規化後に無い", () => {
-    const s = spec({
-      questions: [{ ...q({ preview: "side", thumb: 120, paging: 2 }), options: [{ value: "x", code: "let a = 1;", lang: "js", group: "G", image: "a.png", audio: "a.mp3" }] }],
-    });
-    expect(s.questions[0]).toEqual({ id: "a", label: "A", type: "single", options: [{ value: "x", label: "x" }], allowOther: false, required: false, multiline: false });
-    // paging は全体の項目（質問に書いても通さない）・page は質問の項目（全体に書いても通さない）
-    expect(spec({ page: "基本", questions: [q()] })).not.toHaveProperty("page");
+  it("paging は全体の項目（質問に書いても通さない）・page は質問の項目（全体に書いても通さない）。text にはプレビューの項目を付けない", () => {
+    const s = spec({ page: "基本", questions: [{ id: "t", label: "T", type: "text", preview: "side", thumb: 120, paging: 2 }] });
+    expect(s).not.toHaveProperty("page");
+    expect(s.questions[0]).toEqual({ id: "t", label: "T", type: "text", options: [], allowOther: false, required: false, multiline: false });
   });
   it("text は options が無くてよい", () => {
     expect(spec({ questions: [{ id: "t", label: "T", type: "text", default: "d", multiline: true }] }).questions[0]).toMatchObject({ type: "text", options: [], default: "d", multiline: true });
@@ -570,5 +570,86 @@ describe("自由記述の回答（comments）", () => {
       const c = spec({ questions: [q({ id: "constructor" }), q({ id: "b" })] });
       expect(check({ constructor: "x" }, c, { constructor: "x", b: "x" })).toBeNull();
     });
+  });
+});
+
+describe("メディア・コード・view の定義（20261004-ask-media-popup）", () => {
+  const png = "data:image/png;base64,iVBORw0KGgo=";
+  const opt = (extra: Record<string, unknown>) => ({ value: "x", ...extra });
+  const one = (extra: Record<string, unknown>) => spec({ questions: [q({ options: [opt(extra)] })] }).questions[0]!.options[0]!;
+
+  it("image・audio・code・lang・group を写す。空の group・空の参照は項目なし", () => {
+    expect(one({ image: "/tmp/a.png", audio: "/tmp/a.wav", code: "a\nb", lang: "diff", group: "G" })).toMatchObject({
+      image: "/tmp/a.png",
+      audio: "/tmp/a.wav",
+      code: "a\nb",
+      lang: "diff",
+      group: "G",
+    });
+    const o = one({ image: "", audio: null, group: "" });
+    expect(o).not.toHaveProperty("image");
+    expect(o).not.toHaveProperty("audio");
+    expect(o).not.toHaveProperty("group");
+  });
+
+  it("参照の分類: 許すのは絶対パス・https（画像だけ・443 だけ・認証情報なし）・同じ種類の data:", () => {
+    expect(classifyMediaRef("/a/b.png", "image")).toBe("path");
+    expect(classifyMediaRef("C:\\a\\b.png", "image")).toBe("path");
+    expect(classifyMediaRef("https://example.com/a.png", "image")).toBe("https");
+    expect(classifyMediaRef("https://example.com:443/a.png", "image")).toBe("https");
+    expect(classifyMediaRef(png, "image")).toBe("data");
+    for (const [ref, kind] of [
+      ["a.png", "image"], // 相対
+      ["~/a.png", "image"],
+      ["http://example.com/a.png", "image"],
+      ["file:///etc/passwd", "image"],
+      ["javascript:alert(1)", "image"],
+      ["media:0", "image"], // サーバが付け直すもの
+      ["https://u:p@example.com/a.png", "image"],
+      ["https://example.com:8443/a.png", "image"],
+      ["https://example.com/a.wav", "audio"], // 音の https は不可
+      [png, "audio"], // 種類違い
+      ["data:text/html;base64,PGI+", "image"],
+      ["data:image/png,abc", "image"], // base64 でない
+      ["\\\\host\\share\\a.png", "image"], // UNC
+      ["/a\0b.png", "image"],
+      ["", "image"],
+    ] as const) {
+      expect(classifyMediaRef(ref, kind), ref).toBeNull();
+    }
+    // sodactl の事前の検査だけが相対パス・~/ を通す
+    expect(classifyMediaRef("a.png", "image", true)).toBe("path");
+    expect(classifyMediaRef("~/a.png", "image", true)).toBe("path");
+    expect(classifyMediaRef("file:///x", "image", true)).toBeNull();
+  });
+
+  it("image・audio の誤りは media_invalid、code が文字列でなければ code_invalid", () => {
+    expect(reason({ questions: [q({ options: [opt({ image: "a.png" })] })] })).toBe("media_invalid");
+    expect(reason({ questions: [q({ options: [opt({ image: 5 })] })] })).toBe("media_invalid");
+    expect(reason({ questions: [q({ options: [opt({ audio: "https://example.com/a.wav" })] })] })).toBe("media_invalid");
+    expect(reason({ questions: [q({ options: [opt({ code: 5 })] })] })).toBe("code_invalid");
+    expect(reason({ questions: [q({ options: [opt({ code: "x".repeat(ASK_CODE_MAX + 1) })] })] })).toBe("too_large");
+    expect(normalizeAskSpec({ questions: [q({ options: [opt({ image: "a.png" })] })] }, { relativePaths: true }).ok).toBe(true);
+  });
+
+  it("preview は side / inline だけ。thumb は 20〜2000 の整数だけ残す", () => {
+    expect(spec({ questions: [q({ preview: "side", thumb: 200 })] }).questions[0]).toMatchObject({ preview: "side", thumb: 200 });
+    expect(reason({ questions: [q({ preview: "wide" })] })).toBe("preview_invalid");
+    for (const thumb of [19, 2001, 1.5, "130", null]) expect(spec({ questions: [q({ thumb })] }).questions[0]).not.toHaveProperty("thumb");
+    expect(spec({ questions: [q({ preview: null })] }).questions[0]).not.toHaveProperty("preview");
+  });
+
+  it("view: 文字列・辞書・配列。file か text のどちらか 1 つ。題の既定はファイル名・「テキスト」。paging の既定は false", () => {
+    const s1 = spec({ view: "/a/design.md", questions: [q()] });
+    expect(s1.view).toEqual([{ title: "design.md", file: "/a/design.md" }]);
+    expect(s1.paging).toBe(false);
+    const s2 = spec({ view: [{ file: "/a/x.md", raw: true, title: "T" }, { text: "hi" }], paging: true, questions: [q()] });
+    expect(s2.view).toEqual([{ title: "T", file: "/a/x.md", raw: true }, { title: "テキスト", text: "hi" }]);
+    expect(s2.paging).toBe(true);
+    expect(spec({ questions: [q()] })).not.toHaveProperty("view");
+    expect(spec({ view: null, questions: [q()] })).not.toHaveProperty("view");
+    for (const view of [[], {}, { file: "/a", text: "b" }, { text: 5 }, { file: "rel.md" }, { file: "http://x/a.html" }, 5])
+      expect(reason({ view, questions: [q()] }), JSON.stringify(view)).toBe("view_invalid");
+    expect(reason({ view: Array.from({ length: ASK_VIEW_MAX + 1 }, () => ({ text: "x" })), questions: [q()] })).toBe("too_large");
   });
 });

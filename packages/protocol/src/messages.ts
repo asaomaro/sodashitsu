@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
 import { THEME_NAMES, type ThemeName } from "./theme.js";
 import { IMAGE_CHUNK_BASE64_MAX, IMAGE_MIME_TYPES } from "./image.js";
-import { ASK_ANSWER_TEXT_MAX, ASK_ASKID_MAX, ASK_ID_MAX, ASK_OPTIONS_MAX, ASK_QUESTIONS_MAX, ASK_TIMEOUT_MAX_MS, ASK_TIMEOUT_MIN_MS, jsonBytes, type AskPending, type AskResult } from "./ask.js";
+import { ASK_ANSWER_TEXT_MAX, ASK_MEDIA_FILES_MAX, type AskFeatures, ASK_ASKID_MAX, ASK_ID_MAX, ASK_OPTIONS_MAX, ASK_QUESTIONS_MAX, ASK_TIMEOUT_MAX_MS, ASK_TIMEOUT_MIN_MS, jsonBytes, type AskPending, type AskResult } from "./ask.js";
 import { FILE_CHUNK_BASE64_MAX, FILE_NAME_INPUT_MAX, FILE_PATH_MAX, FILE_RESOLVE_MAX_PATHS, type ResolvedFile } from "./file.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 import { GraphGetParams, GraphHistoryParams, GraphPauseParams, GraphResumeParams, GraphUpdateParams, type Graph, type GraphHistoryResult } from "./graph.js";
@@ -439,8 +439,17 @@ export type AskGetParams = z.infer<typeof AskGetParams>;
 export const AskAnswerParams = z.object({
   askId,
   // id の長さは定義の検査（`normalizeAskSpec`）がコードポイントで数えるので、ここは UTF-16 の単位（最大で 2 倍）の余裕を持たせる。実際の照合は `checkAskAnswer`（定義の id との一致）。
-  answers: z.record(z.string().max(ASK_ID_MAX * 2), z.union([askAnswerText, z.array(askAnswerText).max(ASK_OPTIONS_MAX + 1)])),
+  answers: z.record(
+    z.string().max(ASK_ID_MAX * 2),
+    z.union([
+      askAnswerText,
+      z.array(askAnswerText).max(ASK_OPTIONS_MAX + 1),
+      // table: {行の value: 選んだ value}。行の数は選択肢と同じ上限。
+      z.record(z.string().max(ASK_ID_MAX * 2), z.string().max(ASK_ID_MAX * 2)).refine((o) => Object.keys(o).length <= ASK_OPTIONS_MAX, "too many rows"),
+    ]),
+  ),
   custom: z.array(z.string().max(ASK_ID_MAX * 2)).max(ASK_QUESTIONS_MAX).optional(),
+  edited: z.array(z.string().max(ASK_ID_MAX * 2)).max(ASK_QUESTIONS_MAX).optional(),
   note: askAnswerText.optional(),
   // 質問ごとの自由記述。キーの数は `checkAskAnswer`（見えている質問にあること）で質問の数以内に収まる。長さの合計の上限も `checkAskAnswer`。
   comments: z.record(z.string().max(ASK_ID_MAX * 2), askAnswerText).optional(),
@@ -448,6 +457,24 @@ export const AskAnswerParams = z.object({
 export type AskAnswerParams = z.infer<typeof AskAnswerParams>;
 export const AskCancelParams = z.object({ askId });
 export type AskCancelParams = z.infer<typeof AskCancelParams>;
+/** メディアの 1 片を取る（`ask.subscribe` 済みの画面だけ）。`id` は `AskPending.media` の id、`offset` は生のバイトの位置（`ASK_MEDIA_CHUNK_BYTES` の倍数）。 */
+export const AskMediaParams = z.object({
+  askId,
+  id: z.number().int().min(0).max(ASK_MEDIA_FILES_MAX - 1),
+  offset: z.number().int().min(0),
+});
+export type AskMediaParams = z.infer<typeof AskMediaParams>;
+export interface AskMediaResult {
+  /** この片（base64。生のバイトは `ASK_MEDIA_CHUNK_BYTES` まで。最後の片以外は 3 の倍数なので文字列のまま連結できる）。 */
+  base64: string;
+  /** メディア全体の生のバイト数。 */
+  size: number;
+  /** この片が最後か。 */
+  eof: boolean;
+}
+/** 機能確認（引数なし）。古いサーバは `not_found`（知らない方式）を返す。 */
+export const AskFeaturesParams = z.object({});
+export type AskFeaturesParams = z.infer<typeof AskFeaturesParams>;
 // 端末のファイルのリンクとドロップ（`file.ts`）。ブラウザ版はローカルのファイルに触れないので、サーバ越しに確かめる・開く・受け取る・送る。
 const filePath = z.string().min(1).max(FILE_PATH_MAX);
 /** この接続から見たサーバ（リンクを開く方法・ドロップの扱いを「自動」で決める材料）。 */
@@ -889,6 +916,8 @@ export const METHOD_SCHEMAS = {
   "ask.get": AskGetParams,
   "ask.answer": AskAnswerParams,
   "ask.cancel": AskCancelParams,
+  "ask.media": AskMediaParams,
+  "ask.features": AskFeaturesParams,
   "file.info": FileInfoParams,
   "file.resolve": FileResolveParams,
   "file.open": FileOpenParams,
@@ -984,6 +1013,8 @@ export interface MethodResultMap {
   "ask.get": AskPending;
   "ask.answer": Record<string, never>;
   "ask.cancel": Record<string, never>;
+  "ask.media": AskMediaResult;
+  "ask.features": AskFeatures;
   "file.info": FileInfoResult;
   "file.resolve": FileResolveResult;
   "file.open": Record<string, never>;
