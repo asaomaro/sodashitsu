@@ -253,3 +253,51 @@ AssertionError: expected { spaces: true, agents: true } to deeply equal { spaces
 - [should] Splitter にダイアログが開いたときのドラッグの確定が無い（AC-I5）/ 修正済（`view.modalOpen` の watch で `finish()`。テストは変異 `void open` で「ドラッグ中にダイアログが開いたら、その時点で終える」が落ちることを確認）
 - [nit] `--soda-resize-line` の 3:1 は bg・menu-bg だけに対して判定（端末背景・帯の色は見ていない）/ 許容（design L109・L206 の決めどおり。実機の確認は verification.md の 17 テーマの項目に入れてある）
 - [nit] 端末版で agents が 0 件のとき `prefix+shift+a` が状態を黙って反転 / 修正済（TuiApp.toggleSidebarSection に件数のガード。テストを足した）
+
+## ラウンド 1（独立レビュー）
+
+- [must][conv:-] docs/tui-parity.md H19b（spaces / agents の境界のドラッグ）の Web 版の欄が「無し」のまま（requirements AC16 が直すと明示）。H19d の行が H19b と H19c の間で ID の並びが乱れている / 対応: 修正済（H19b の Web 版を「あり」に。H19d を H19c の後へ。冒頭の「そちらに無い ID」の一覧に H19d を足した。herdr-parity.md・tui.md・verification.md に同種の古い記述は無いことを grep で確認）
+- [should][conv:regression-negative-control] resize-handles.spec.ts「区画の境目: ドラッグで高さが変わり、ダブルクリックで自動へ戻る」の題名と中身が違う（Esc で戻すだけ）。ダブルクリックと読み込み直し（AC17）の E2E が無い / 対応: 修正済（題名を「Esc で元の高さへ戻る」に。sidebar-sections.spec.ts に AC17 の E2E を足した: ドラッグ後に style に flex が入り保存される → 素早く 2 回目のドラッグをしても比が残る → ダブルクリックで style が消え・localStorage の比が消え・高さが自動と一致 → 読み込み直しても同じ）
+- [should][conv:regression-negative-control] E2E の穴（AC20・AC2 後半・AC10・AC1）/ 対応: 修正済（AC20・AC10 は sidebar-sections.spec.ts、AC1・AC2 は resize-handles.spec.ts。観測は computed style・`:hover` の一致・`getBoundingClientRect`。AC10 の最小は CSS の `min-height` と 60px の大きいほう——CSS を 0 にする変異を見逃さないため）
+- [nit][conv:regression-negative-control] useResizeDrag: 前の pointerdown から 350ms 以内の 2 回目を reset にするため、素早い 2 回のドラッグで 2 回目が reset になる / 対応: 修正済（動かさずに離した直前の pointerdown からだけ数える。動かした・Esc・reset の後は 1 回目として扱う。単体 3 件。`Sidebar.test.ts` の幅のダブルクリック 2 件は前提が変わったので直した。decisions D5）
+- [nit][conv:-] resize-handles.spec.ts「Tab の順に…」が `focus()` を呼んでいて Tab を押していない・冒頭コメントが `.xterm-rows` と書いている / 対応: 修正済（Tab を押して 2 つの境目に止まるまで上限つきで進める形に・冒頭コメントを `rawOutput` の観測に直した）
+- [nit][conv:regression-negative-control] 区画の境目にフォーカスがある間に区画を畳むと、境目が DOM から消えてフォーカスが失われる / 対応: 修正済（実際に失われることを単体（`document.activeElement` が `body`）と E2E（`toBeFocused` が inactive）で確認。畳んだ区画の見出しのボタンへ移す。単体・E2E を足した）
+
+### 壊して落ちる確認（ラウンド 1。生の出力。変異ごと。戻して `git diff` が自分の変更だけになることを確認）
+
+```
+変異: Sidebar.vue の区画の境目の reset を () => undefined に（AC17）
+  ✘ sidebar-sections.spec.ts:205:1 › 区画の境目: ダブルクリックで自動の配分へ戻り…（AC17）
+    Error: expect(locator).not.toHaveAttribute(expected) failed
+    Expected pattern: not /flex/
+    Received string: "flex: 0.642763 1 0px;"
+変異: useResizeDrag の `lastClick = moved ? 0 : lastDown` を `lastClick = lastDown` に（素早い 2 回のドラッグで reset）
+  ✘ sidebar-sections.spec.ts:205:1 › …（AC17）
+    Error: expect(received).not.toBeNull()   Received: null
+  （単体も × 動かしたドラッグの直後（350ms 以内）の pointerdown は reset ではなく新しいドラッグ…）
+変異: .sidebar-spaces の flex: 0 1 auto を flex: 1 1 0 に（AC20）
+  ✘ sidebar-sections.spec.ts:239:1 › 自動の配分: …（AC20）
+    Expected: > 343.59375   Received: 343.59375
+変異: .sidebar-agents の min-height を 0 に（AC20）
+  ✘ sidebar-sections.spec.ts:239:1 › 自動の配分: …（AC20）
+    Expected: > 100   Received: 0
+変異: 区画の比を固定の高さ（flex: none; height: 300px）に（AC10）
+  ✘ sidebar-sections.spec.ts:266:1 › ウィンドウの高さを変えると、比を保って配り直され、最小は割らない（AC10）
+    Error: 比が保たれる   Expected: < 0.04   Received: 0.20228799620437649
+変異: .sidebar-agents の min-height を 0 に（AC10。最小を CSS の値だけで見ていた初版は通ってしまったので 60px の下限を足した）
+  ✘ sidebar-sections.spec.ts:266:1 › …（AC10）
+    Expected: >= 59.5   Received: 0
+変異: useResizeDrag の setPointerCapture を外す（AC2 hover）
+  ✘ resize-handles.spec.ts:215:1 › ドラッグ中は、ポインタが通った行・ボタンに hover の見た目が出ない（AC2）。離せば出る
+    Error: 行に hover が出ない   Expected: false   Received: true
+変異: resizeHandle.css の .resize-handle-y::after の height: 3px を 2px に（AC1）
+  ✘ resize-handles.spec.ts:195:1 › 3 か所の境目の線は同じ色・同じ太さで、カーソルは向きの矢印（AC1）
+    Expected: "3px"   Received: "2px"
+変異: 区画の境目の tabindex を -1 に（Tab）
+  ✘ resize-handles.spec.ts:159:1 › Tab の順に、サイドバーの幅の境目と区画の境目が入る（実際に Tab を押して移る）
+    Expected: "0"   Received: "-1"
+変異: 区画を畳むとき境目のフォーカスを見出しへ移す 2 行を外す（フォーカス）
+  ✘ sidebar-sections.spec.ts:305:1 › 区画の境目にフォーカスがあるまま prefix+shift+b／prefix+shift+a で畳むと…
+    Error: expect(locator).toBeFocused() failed   Expected: focused   Received: inactive
+  （単体 ✘ 区画の境目にフォーカスがあるまま片方を畳むと…: expected <body> to be <button …>）
+```
