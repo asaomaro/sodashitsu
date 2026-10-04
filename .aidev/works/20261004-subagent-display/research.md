@@ -13,6 +13,14 @@
 - F-H7 フックは並行して走る（複数のフックが同じファイルへ同時に書くと混ざった）。報告は 1 回の書き込みで送る必要がある。
 - F-H8 ツール名は `Agent`（matcher `Agent|Task` で拾えた。`Task` という名前のツール呼び出しは観測していない）。
 
+### 2 回目の確認（同じ環境。フックは同期。1 イベント 1 ファイルで記録。前面 2・バックグラウンド 1 を「1 つのメッセージの中で並行に」起動させた）
+
+- F-H9 **順序**: `PreToolUse`（A）→ 23ms 後に `SubagentStart`（A）→ `PreToolUse`（B）→ 13ms 後に `SubagentStart`（B）→ `PreToolUse`（C）→ 16ms 後に `SubagentStart`（C）。**並行に頼んでも、実行前 → 起動が 1 件ずつ対になって順に来た**（フックが同期のとき）。
+- F-H10 **バックグラウンドの `PostToolUse`**: 起動の直後（`SubagentStart` の 1ms 後）に発火し、`tool_response` は `{isAsync, status: "async_launched", agentId, description, resolvedModel, prompt, outputFile, canReadOutputFile}`。`agentId` と `description` が同じ電文に揃う。前面の `PostToolUse` は完了後で、`status: "completed"`・`agentId`・`agentType` ほか。
+- F-H11 **`background_tasks` の `id` はサブエージェントの `agent_id` と同じ値**。前面の A・B の `SubagentStop` の時点では `[(C の ID, "subagent", "running")]`。C 自身の `SubagentStop` の時点でも、C が `running` のまま載っていた。`Stop` の時点（全部終わった後）は `[]`。
+- F-H12 `Stop` は 2 回発火した（バックグラウンドの完了の通知を受けた後の、もう 1 回のターンの終わり）。どちらも `background_tasks: []`。
+- **未確認**: `background_tasks` の `type` のほかの値（`subagent` 以外）・`status` のほかの値。チームメイト・Workflow のエージェント・サブエージェントの中のサブエージェントが `SubagentStart` を出すか。`/clear`・再開でセッションの ID が変わるか。強制終了のときに `SubagentStop` が来るか。フックを `async: true` にしたときの順序。
+
 ## 公式ドキュメントで確かめたこと（委譲。claude-code-guide）
 
 - `SubagentStart`（サブエージェントが起動したとき）・`SubagentStop`（終わったとき）・`TaskCreated`・`TaskCompleted`・`TeammateIdle` がフックのイベントとして載っている（https://code.claude.com/docs/en/hooks-guide.md）。`SubagentStart`／`SubagentStop` の matcher はエージェントの種類（`general-purpose`・`Explore`・`Plan`・独自の名前）。
