@@ -146,6 +146,108 @@ describe("HttpServer — /api/login, /api/logout, /api/session", () => {
   });
 });
 
+describe("HttpServer — アプリ本体の CSP と成果物の隔離表示（/ask-view/*。20261004-ask-media-popup）", () => {
+  let webDistDir: string;
+  beforeEach(async () => {
+    webDistDir = await makeTempDir("soda-http-dist-");
+    await writeFile(join(webDistDir, "index.html"), "<!doctype html><title>app</title>");
+    await mkdir(join(webDistDir, "ask-view", "vendor"), { recursive: true });
+    for (const f of ["markdown.html", "html.html", "markdown.js", "html.js", "keys.js", "vendor/marked.umd.js", "vendor/mermaid.min.js", "secret.txt"])
+      await writeFile(join(webDistDir, "ask-view", f), `// ${f}\n`);
+  });
+  afterEach(async () => {
+    await rm(webDistDir, { recursive: true, force: true });
+  });
+  const get = (s: { baseUrl: string }, path: string, init?: RequestInit) => fetch(`${s.baseUrl}${path}`, init);
+
+  it("アプリ本体の CSP は、音のための media-src data: を足した以外は変えない（img-src は data: まで・connect-src は self のまま）", async () => {
+    const s = await startServer(webDistDir);
+    try {
+      const res = await get(s, "/");
+      expect(res.headers.get("content-security-policy")).toBe(
+        "default-src 'self'; connect-src 'self'; img-src 'self' data:; media-src data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'",
+      );
+      expect(res.headers.get("x-frame-options")).toBe("DENY");
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("markdown.html: script-src 'self' だけ・default-src 'none'・sandbox は allow-scripts だけ（allow-same-origin なし）。同じ origin の iframe に入れられる", async () => {
+    const s = await startServer(webDistDir);
+    try {
+      const res = await get(s, "/ask-view/markdown.html");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      const csp = res.headers.get("content-security-policy")!;
+      expect(csp).toContain("sandbox allow-scripts;");
+      expect(csp).not.toMatch(/allow-same-origin|allow-popups|allow-downloads|allow-top-navigation/);
+      expect(csp).toContain("default-src 'none'");
+      expect(csp).toContain("script-src 'self';");
+      expect(csp).not.toContain("connect-src"); // 外への通信の許可を足していない（default-src 'none' に従う＝拒否）
+      expect(csp).not.toMatch(/script-src[^;]*unsafe/);
+      expect(csp).toContain("frame-ancestors 'self'");
+      expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("html.html: スクリプト付き HTML を動かすために unsafe-inline・unsafe-eval を許すが、default-src 'none'（外へ送れない）・sandbox は allow-scripts だけ", async () => {
+    const s = await startServer(webDistDir);
+    try {
+      const csp = (await get(s, "/ask-view/html.html")).headers.get("content-security-policy")!;
+      expect(csp).toContain("sandbox allow-scripts;");
+      expect(csp).not.toMatch(/allow-same-origin|allow-popups|allow-downloads/);
+      expect(csp).toContain("default-src 'none'");
+      expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'");
+      expect(csp).not.toContain("connect-src"); // default-src 'none' に従う＝拒否
+      expect(csp).not.toMatch(/(?:img|font|media)-src[^;]*https?:/);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("枠が読むスクリプト（markdown.js・keys.js・vendor）は専用ヘッダを持たない（CSP・X-Frame-Options なし）。ログインなしで読める", async () => {
+    const s = await startServer(webDistDir);
+    try {
+      for (const f of ["markdown.js", "html.js", "keys.js", "vendor/marked.umd.js", "vendor/mermaid.min.js"]) {
+        const res = await get(s, `/ask-view/${f}`);
+        expect(res.status, f).toBe(200);
+        expect(res.headers.get("content-type"), f).toBe("text/javascript; charset=utf-8");
+        expect(res.headers.get("content-security-policy"), f).toBeNull();
+        expect(res.headers.get("x-frame-options"), f).toBeNull();
+        expect(res.headers.get("x-content-type-options"), f).toBe("nosniff");
+      }
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("許可リストにない名前・トラバーサル・GET/HEAD 以外は配らない（index.html へ落とさない）", async () => {
+    const s = await startServer(webDistDir);
+    try {
+      expect((await get(s, "/ask-view/secret.txt")).status).toBe(404);
+      expect((await get(s, "/ask-view/nope.js")).status).toBe(404);
+      expect((await get(s, "/ask-view/")).status).toBe(404);
+      expect((await get(s, "/ask-view/vendor/")).status).toBe(404);
+      expect((await get(s, "/ask-view/vendor/SOURCE.json")).status).toBe(404);
+      expect((await get(s, "/ask-view/__proto__")).status).toBe(404);
+      expect((await get(s, "/ask-view/constructor")).status).toBe(404);
+      expect((await get(s, "/ask-view/..%2Fsecret.txt")).status).toBe(404);
+      expect((await get(s, "/ask-view/vendor/..%2F..%2Fsecret.txt")).status).toBe(404);
+      expect((await rawRequest(s.port, "GET /ask-view/vendor/../secret.txt HTTP/1.1")).split(" ")[1]).not.toBe("200");
+      expect((await get(s, "/ask-view/markdown.html", { method: "POST" })).status).toBe(405);
+      const head = await get(s, "/ask-view/markdown.html", { method: "HEAD" });
+      expect(head.status).toBe(200);
+      expect(await head.text()).toBe("");
+    } finally {
+      await s.close();
+    }
+  });
+});
+
 /** 正しい token でログインし、Cookie（`soda_session=…`）を返す。 */
 async function loginCookie(s: { baseUrl: string; token: string }): Promise<string> {
   const res = await fetch(`${s.baseUrl}/api/login`, {

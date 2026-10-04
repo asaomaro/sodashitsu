@@ -8,7 +8,8 @@ import { focusPaneIfShown } from "../actions/paneFocus.js";
 import "../ask/askFormElement.js";
 import type { AskFormElement, AskFormSubmitDetail } from "../ask/askFormElement.js";
 import { AskControllerKey, TerminalRegistryKey } from "../injection.js";
-import { useAskStore } from "../store/ask.js";
+import AskViewer, { type AskViewKey } from "./AskViewer.vue";
+import { useAskStore, type AskEntry } from "../store/ask.js";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
 
@@ -37,14 +38,36 @@ const headerEl = ref<HTMLElement | null>(null);
 const titleEl = ref<HTMLElement | null>(null);
 const formEl = ref<AskFormElement | null>(null);
 
-const ask = computed<AskPending | null>(() => store.current);
+const ask = computed<AskEntry | null>(() => store.current);
+
+/** 質問を出した pane の名前（固定の行・成果物の枠のラベルに使う。アプリが持つ値）。 */
+const paneName = computed(() => {
+  const a = ask.value;
+  if (!a) return "";
+  const pane = session.panes.get(a.paneId);
+  return pane ? paneNameOf(pane) : `pane ${shortId(a.paneId)}`;
+});
+/** 成果物（`view`）つきか。つきなら左（モバイルは上）に枠を置き、ダイアログを広く・高く固定する。 */
+const views = computed(() => ask.value?.resolved?.views ?? []);
+const hasView = computed(() => views.value.length > 0);
+/**
+ * 成果物の枠へ渡す配色（アプリのテーマの明暗）。`ThemeController` が root に当てた `color-scheme`（`light`／`dark`）に合わせ、
+ * 当たっていないときだけ OS の設定を見る。質問が替わるたびに読み直す（開いている間のテーマ変更には追従しない）。
+ */
+const dark = computed(() => {
+  void ask.value;
+  const scheme = document.documentElement.style.colorScheme;
+  if (scheme === "dark") return true;
+  if (scheme === "light") return false;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches === true;
+});
 
 /** 「どの pane からの質問か」（定義の外。pane の名前・workspace・tab）。 */
 const origin = computed(() => {
   const a = ask.value;
   if (!a) return "";
   const pane = session.panes.get(a.paneId);
-  const name = pane ? paneNameOf(pane) : `pane ${shortId(a.paneId)}`;
+  const name = paneName.value;
   const tab = pane ? session.tabs.get(pane.tabId) : undefined;
   const ws = tab ? session.workspaces.get(tab.workspaceId) : undefined;
   const where = [ws?.label, tab?.label].filter((v): v is string => typeof v === "string" && v !== "");
@@ -146,6 +169,11 @@ function maxFormHeight(): number {
 function applyHeight(): void {
   const el = formEl.value;
   if (!el) return;
+  if (hasView.value) {
+    // 成果物つきは、ダイアログの高さを使える最大に固定し、部品はその残りを埋める（中身に縮めない。成果物を広く見せる）。
+    el.style.removeProperty("height");
+    return;
+  }
   if (contentHeight > 0) el.style.height = `${Math.min(maxFormHeight(), contentHeight)}px`;
   else el.style.removeProperty("height");
 }
@@ -158,6 +186,10 @@ function applyWidth(): void {
   const el = formEl.value;
   const dlg = dialogEl.value;
   if (!el || !dlg) return;
+  if (hasView.value) {
+    dlg.style.removeProperty("--ask-index-width"); // 成果物つきは幅が固定（目次の幅の分だけ広げない）
+    return;
+  }
   const w = el.indexWidth;
   if (w > 0) dlg.style.setProperty("--ask-index-width", `${w}px`);
   else dlg.style.removeProperty("--ask-index-width");
@@ -169,13 +201,16 @@ function applyWidth(): void {
  * → 広げた幅での中身の高さに合わせる（幅が変わると文の折り返しで高さが変わるので、幅を先に決める）。
  * 渡すのは写し——部品は定義に書き込む（`_image` 等）ので、store の定義（リアクティブ）をそのまま渡さない。
  */
-function loadSpec(a: AskPending): void {
+function loadSpec(a: AskEntry): void {
   const el = formEl.value;
   if (!el) return;
   contentHeight = 0;
   loadedAskId = a.askId;
   el.style.height = `${maxFormHeight()}px`;
   el.busy = false;
+  // メディアの参照（`media:<id>`）は、サーバから取り終えた `data:` の URL だけに解く（それ以外の参照・URL は渡さない）。`spec` を入れた時に同期で呼ばれる。
+  const urls = a.resolved?.urls ?? {};
+  el.resolveMedia = (ref: string) => (Object.hasOwn(urls, ref) ? (urls[ref] ?? null) : null);
   // 前の質問で広げた幅を外してから入れる——部品は入れた直後に、今の幅で目次を出すかを決める（広いままだと、収まるとみなして出さない）
   dialogEl.value?.style.removeProperty("--ask-index-width");
   try {
@@ -228,6 +263,7 @@ async function onSubmit(ev: Event): Promise<void> {
   const detail = (ev as CustomEvent<AskFormSubmitDetail>).detail;
   const body: AskAnswerBody = { answers: detail.answers };
   if (detail.custom !== undefined) body.custom = detail.custom;
+  if (detail.edited !== undefined) body.edited = detail.edited;
   if (detail.note !== undefined) body.note = detail.note;
   if (detail.comments !== undefined) body.comments = detail.comments;
   el.busy = true;
@@ -271,7 +307,7 @@ function onUnsupported(ev: Event): void {
  */
 function onKeydown(ev: KeyboardEvent): void {
   const el = formEl.value;
-  if (!el || !(ev.target as HTMLElement | null)?.closest?.(".ask-header")) return;
+  if (!el || !(ev.target as HTMLElement | null)?.closest?.(".ask-header, .ask-viewer")) return;
   if (ev.isComposing || ev.keyCode === 229) return;
   if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
     ev.preventDefault();
@@ -282,15 +318,30 @@ function onKeydown(ev: KeyboardEvent): void {
     el.step(ev.key === "PageUp" ? -1 : 1);
   }
 }
+
+/** 成果物の枠の中で押されたキー（枠が `postMessage` で渡す。`AskViewer` が `event.source` を確かめた後）。枠の外のキーと同じ処理を呼ぶ。 */
+function onViewKey(key: AskViewKey): void {
+  const el = formEl.value;
+  if (key === "cancel") void cancel();
+  // 決定は枠からの知らせだけでは確定しない（成果物のスクリプトは本物のキー操作と同じ知らせを送れる）。質問側の固定の行へフォーカスを移し、利用者がもう一度
+  // Ctrl/Cmd+Enter（`onKeydown`）か［決定］で確定する。
+  else if (key === "submit") titleEl.value?.focus();
+  else el?.step(key === "prev" ? -1 : 1);
+}
 </script>
 
 <template>
-  <dialog id="soda-ask-dialog" ref="dialogEl" class="ask-dialog" aria-labelledby="ask-origin" @cancel="onNativeCancel" @keydown="onKeydown">
+  <dialog id="soda-ask-dialog" ref="dialogEl" class="ask-dialog" :class="{ 'has-view': hasView }" aria-labelledby="ask-origin" @cancel="onNativeCancel" @keydown="onKeydown">
     <template v-if="ask">
       <header ref="headerEl" class="ask-header">
         <h2 id="ask-origin" ref="titleEl" class="ask-origin" tabindex="-1" data-ask-origin>{{ origin }}</h2>
+        <!-- 外部 URL の画像の取得に失敗して外した件数（アプリが描く固定の文。定義の文字は使わない）。 -->
+        <p v-if="(ask.warnings ?? 0) > 0" class="ask-warn" data-ask-warnings>画像 {{ ask.warnings }} 件を取得できませんでした（プレビューなしで出しています）</p>
       </header>
-      <ask-form ref="formEl" class="ask-form" @ask-submit="onSubmit" @ask-cancel="cancel" @ask-unsupported="onUnsupported" @click="onFormClick" />
+      <div class="ask-body" :class="{ 'has-view': hasView }">
+        <AskViewer v-if="hasView" class="ask-view" :items="views" :pane-name="paneName" :dark="dark" @key="onViewKey" />
+        <ask-form ref="formEl" class="ask-form" @ask-submit="onSubmit" @ask-cancel="cancel" @ask-unsupported="onUnsupported" @click="onFormClick" />
+      </div>
     </template>
   </dialog>
 </template>
@@ -312,6 +363,27 @@ function onKeydown(ev: KeyboardEvent): void {
   display: flex;
   flex-direction: column;
 }
+/* 成果物つき: 広く・高く固定する（左に成果物・右に質問）。成果物の無い質問は今までどおり（`.ask-body` は箱を作らない）。 */
+.ask-body:not(.has-view) {
+  display: contents;
+}
+.ask-dialog.has-view {
+  width: min(1400px, calc(100% - 16px));
+  height: calc(100% - 16px);
+}
+.ask-body.has-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+.ask-body.has-view .ask-view {
+  flex: 1 1 0;
+}
+.ask-body.has-view .ask-form {
+  flex: 0 0 430px;
+  min-width: 0;
+}
 .ask-dialog::backdrop {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
@@ -326,6 +398,11 @@ function onKeydown(ev: KeyboardEvent): void {
   font-size: 0.95em;
   font-weight: bold;
   overflow-wrap: anywhere;
+}
+.ask-warn {
+  margin: 0.3em 0 0;
+  font-size: 0.85em;
+  opacity: 0.95;
 }
 .ask-origin:focus-visible {
   outline: 2px solid currentColor;
@@ -347,6 +424,16 @@ function onKeydown(ev: KeyboardEvent): void {
 @media (max-width: 767px) {
   .ask-dialog {
     width: calc(100% - 16px);
+  }
+  /* 成果物つきは縦積み（成果物を上・質問を下）。 */
+  .ask-body.has-view {
+    flex-direction: column;
+  }
+  .ask-body.has-view .ask-view {
+    flex: 0 0 42%;
+  }
+  .ask-body.has-view .ask-form {
+    flex: 1 1 auto;
   }
 }
 </style>

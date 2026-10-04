@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  ASK_CODE_MAX,
   ASK_COLORS_MAX,
   ASK_COMMENTS_TOTAL_MAX,
   ASK_OPTIONS_MAX,
   ASK_QUESTIONS_MAX,
   ASK_SPEC_MAX_BYTES,
+  ASK_VIEW_MAX,
+  classifyMediaRef,
   askCommentable,
   checkAskAnswer,
   collectAsk,
@@ -52,19 +55,19 @@ describe("normalizeAskSpec — 誤り", () => {
     expect(bad({ questions: [q({ showIf: { nothing: "x" } })] })).toMatch(/unknown question id/);
     expect(bad({ questions: [q({ showIf: "x" })] })).toMatch(/showIf must be an object/);
   });
-  it("対応していない型（edit・rank・table・知らない文字列）は誤りでなく unsupportedType として返す（黙って落とさない）。型の名前は短い識別子だけ", () => {
-    for (const type of ["edit", "rank", "table", "radio"]) {
+  it("対応していない型（知らない文字列。edit・rank・table は対応済み）は誤りでなく unsupportedType として返す（黙って落とさない）。型の名前は短い識別子だけ", () => {
+    for (const type of ["slider", "radio"]) {
       const r = normalizeAskSpec({ questions: [q({ id: "a" }), { id: "e", label: "E", type, text: "文面" }] });
       expect(r).toMatchObject({ ok: false, unsupportedType: type });
     }
     expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "<script>x</script>" }] })).toMatchObject({ ok: false, unsupportedType: "?" });
-    expect(unsupportedTypeReason("edit")).toContain('"edit"');
+    expect(unsupportedTypeReason("slider")).toContain('"slider"');
     // 未対応の型の質問より後ろの誤りも見逃さない（誤りが優先）。前の誤りも同じ
-    expect(bad({ questions: [{ id: "e", label: "E", type: "edit" }, { id: "b", label: "B" }] })).toMatch(/options/);
-    expect(bad({ questions: [{ id: "e", label: "E", type: "edit" }, q({ id: "b", showIf: { nothing: "x" } })] })).toMatch(/unknown question id/);
-    expect(bad({ questions: [{ id: "e", label: "E", type: "edit" }, { id: "e", label: "E2", type: "rank" }] })).toContain('duplicate id "e"');
+    expect(bad({ questions: [{ id: "e", label: "E", type: "slider" }, { id: "b", label: "B" }] })).toMatch(/options/);
+    expect(bad({ questions: [{ id: "e", label: "E", type: "slider" }, q({ id: "b", showIf: { nothing: "x" } })] })).toMatch(/unknown question id/);
+    expect(bad({ questions: [{ id: "e", label: "E", type: "slider" }, { id: "e", label: "E2", type: "rank" }] })).toContain('duplicate id "e"');
     // 未対応の質問の id を showIf が指すのは誤りでない
-    expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "edit" }, q({ id: "b", showIf: { e: "x" } })] })).toMatchObject({ ok: false, unsupportedType: "edit" });
+    expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "slider" }, q({ id: "b", showIf: { e: "x" } })] })).toMatchObject({ ok: false, unsupportedType: "slider" });
     // 対応している型どうしの誤りは、今までどおり誤り
     expect(normalizeAskSpec({ questions: [{ id: "a", label: "A" }] })).not.toHaveProperty("unsupportedType");
   });
@@ -114,7 +117,7 @@ describe("normalizeAskSpec — 誤り", () => {
     expect(reason(JSON.parse('{"questions":[{"id":"a","label":"A","options":["x"],"showIf":{"__proto__":["x"]}}]}'))).toBe("showif_unknown_id");
     expect(reason({ questions: [q({ showIf: "x" })] })).toBe("showif_invalid");
     // 対応していない型（unsupportedType と一緒に返る）
-    for (const type of ["edit", "rank", "table", "slider"]) {
+    for (const type of ["slider"]) {
       expect(normalizeAskSpec({ questions: [q({ type })] })).toMatchObject({ ok: false, reason: "unsupported_type", unsupportedType: type });
     }
     // 上限
@@ -158,12 +161,12 @@ describe("normalizeAskSpec — 誤り", () => {
     expect(bad({ questions: [q({ page: 2 })] })).toMatch(/page must be a string/);
   });
   it("page は type より前に見る: 対応していない型の質問の不正な page も誤り（unavailable にしない）。id の重複はそれより前", () => {
-    const r = normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "edit", page: 2 }] });
+    const r = normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "slider", page: 2 }] });
     expect(r).toMatchObject({ ok: false, reason: "page_invalid" });
     expect(r).not.toHaveProperty("unsupportedType");
-    expect(reason({ questions: [{ id: "e", label: "E", type: "edit", page: "x".repeat(501) }] })).toBe("too_large");
+    expect(reason({ questions: [{ id: "e", label: "E", type: "slider", page: "x".repeat(501) }] })).toBe("too_large");
     // page が正しければ、今までどおり対応していない型
-    expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "edit", page: "直す" }] })).toMatchObject({ ok: false, reason: "unsupported_type", unsupportedType: "edit" });
+    expect(normalizeAskSpec({ questions: [{ id: "e", label: "E", type: "slider", page: "直す" }] })).toMatchObject({ ok: false, reason: "unsupported_type", unsupportedType: "slider" });
     expect(reason({ questions: [q(), q({ page: 2 })] })).toBe("id_duplicate");
   });
   it("選択肢の value が __other__ の定義は通る（ふつうの選択肢。「その他」の印は値ではない）", () => {
@@ -249,13 +252,10 @@ describe("normalizeAskSpec — 既定と丸め", () => {
     expect(text).not.toHaveProperty("filter");
     expect(text).not.toHaveProperty("showValue");
   });
-  it("この作業で通さない項目（code・group・image・audio・preview・thumb）は、正規化後に無い", () => {
-    const s = spec({
-      questions: [{ ...q({ preview: "side", thumb: 120, paging: 2 }), options: [{ value: "x", code: "let a = 1;", lang: "js", group: "G", image: "a.png", audio: "a.mp3" }] }],
-    });
-    expect(s.questions[0]).toEqual({ id: "a", label: "A", type: "single", options: [{ value: "x", label: "x" }], allowOther: false, required: false, multiline: false });
-    // paging は全体の項目（質問に書いても通さない）・page は質問の項目（全体に書いても通さない）
-    expect(spec({ page: "基本", questions: [q()] })).not.toHaveProperty("page");
+  it("paging は全体の項目（質問に書いても通さない）・page は質問の項目（全体に書いても通さない）。text にはプレビューの項目を付けない", () => {
+    const s = spec({ page: "基本", questions: [{ id: "t", label: "T", type: "text", preview: "side", thumb: 120, paging: 2 }] });
+    expect(s).not.toHaveProperty("page");
+    expect(s.questions[0]).toEqual({ id: "t", label: "T", type: "text", options: [], allowOther: false, required: false, multiline: false });
   });
   it("text は options が無くてよい", () => {
     expect(spec({ questions: [{ id: "t", label: "T", type: "text", default: "d", multiline: true }] }).questions[0]).toMatchObject({ type: "text", options: [], default: "d", multiline: true });
@@ -570,5 +570,167 @@ describe("自由記述の回答（comments）", () => {
       const c = spec({ questions: [q({ id: "constructor" }), q({ id: "b" })] });
       expect(check({ constructor: "x" }, c, { constructor: "x", b: "x" })).toBeNull();
     });
+  });
+});
+
+describe("メディア・コード・view の定義（20261004-ask-media-popup）", () => {
+  const png = "data:image/png;base64,iVBORw0KGgo=";
+  const opt = (extra: Record<string, unknown>) => ({ value: "x", ...extra });
+  const one = (extra: Record<string, unknown>) => spec({ questions: [q({ options: [opt(extra)] })] }).questions[0]!.options[0]!;
+
+  it("image・audio・code・lang・group を写す。空の group・空の参照は項目なし", () => {
+    expect(one({ image: "/tmp/a.png", audio: "/tmp/a.wav", code: "a\nb", lang: "diff", group: "G" })).toMatchObject({
+      image: "/tmp/a.png",
+      audio: "/tmp/a.wav",
+      code: "a\nb",
+      lang: "diff",
+      group: "G",
+    });
+    const o = one({ image: "", audio: null, group: "" });
+    expect(o).not.toHaveProperty("image");
+    expect(o).not.toHaveProperty("audio");
+    expect(o).not.toHaveProperty("group");
+  });
+
+  it("参照の分類: 許すのは絶対パス・https（画像だけ・443 だけ・認証情報なし）・同じ種類の data:", () => {
+    expect(classifyMediaRef("/a/b.png", "image")).toBe("path");
+    expect(classifyMediaRef("C:\\a\\b.png", "image")).toBe("path");
+    expect(classifyMediaRef("https://example.com/a.png", "image")).toBe("https");
+    expect(classifyMediaRef("https://example.com:443/a.png", "image")).toBe("https");
+    expect(classifyMediaRef(png, "image")).toBe("data");
+    for (const [ref, kind] of [
+      ["a.png", "image"], // 相対
+      ["~/a.png", "image"],
+      ["http://example.com/a.png", "image"],
+      ["file:///etc/passwd", "image"],
+      ["javascript:alert(1)", "image"],
+      ["media:0", "image"], // サーバが付け直すもの
+      ["https://u:p@example.com/a.png", "image"],
+      ["https://example.com:8443/a.png", "image"],
+      ["https://example.com/a.wav", "audio"], // 音の https は不可
+      [png, "audio"], // 種類違い
+      ["data:text/html;base64,PGI+", "image"],
+      ["data:image/png,abc", "image"], // base64 でない
+      ["\\\\host\\share\\a.png", "image"], // UNC
+      ["//evil/share/a.png", "image"], // UNC（区切りが /）
+      ["/\\evil\\s\\a.png", "image"], // UNC（/ と \\ の混在）
+      ["\\/evil/s/a.png", "image"],
+      ["//?/C:/a.png", "image"], // デバイスパス
+      ["/a\0b.png", "image"],
+      ["", "image"],
+    ] as const) {
+      expect(classifyMediaRef(ref, kind), ref).toBeNull();
+    }
+    // sodactl の事前の検査だけが相対パス・~/ を通す
+    expect(classifyMediaRef("a.png", "image", true)).toBe("path");
+    expect(classifyMediaRef("~/a.png", "image", true)).toBe("path");
+    expect(classifyMediaRef("file:///x", "image", true)).toBeNull();
+    for (const ref of ["//evil/s/a.png", "/\\evil\\s\\a.png", "\\\\host\\s\\a.png"])
+      expect(classifyMediaRef(ref, "image", true), ref).toBeNull(); // 相対も通す事前の検査でも UNC は通さない
+    expect(classifyMediaRef("/a//b.png", "image")).toBe("path"); // 途中の区切りの重なりは普通のパス
+  });
+
+  it("image・audio の誤りは media_invalid、code が文字列でなければ code_invalid", () => {
+    expect(reason({ questions: [q({ options: [opt({ image: "a.png" })] })] })).toBe("media_invalid");
+    expect(reason({ questions: [q({ options: [opt({ image: 5 })] })] })).toBe("media_invalid");
+    expect(reason({ questions: [q({ options: [opt({ audio: "https://example.com/a.wav" })] })] })).toBe("media_invalid");
+    expect(reason({ questions: [q({ options: [opt({ code: 5 })] })] })).toBe("code_invalid");
+    expect(reason({ questions: [q({ options: [opt({ code: "x".repeat(ASK_CODE_MAX + 1) })] })] })).toBe("too_large");
+    expect(normalizeAskSpec({ questions: [q({ options: [opt({ image: "a.png" })] })] }, { relativePaths: true }).ok).toBe(true);
+  });
+
+  it("preview は side / inline だけ。thumb は 20〜2000 の整数だけ残す", () => {
+    expect(spec({ questions: [q({ preview: "side", thumb: 200 })] }).questions[0]).toMatchObject({ preview: "side", thumb: 200 });
+    expect(reason({ questions: [q({ preview: "wide" })] })).toBe("preview_invalid");
+    for (const thumb of [19, 2001, 1.5, "130", null]) expect(spec({ questions: [q({ thumb })] }).questions[0]).not.toHaveProperty("thumb");
+    expect(spec({ questions: [q({ preview: null })] }).questions[0]).not.toHaveProperty("preview");
+  });
+
+  it("view: 文字列・辞書・配列。file か text のどちらか 1 つ。題の既定はファイル名・「テキスト」。paging の既定は false", () => {
+    const s1 = spec({ view: "/a/design.md", questions: [q()] });
+    expect(s1.view).toEqual([{ title: "design.md", file: "/a/design.md" }]);
+    expect(s1.paging).toBe(false);
+    const s2 = spec({ view: [{ file: "/a/x.md", raw: true, title: "T" }, { text: "hi" }], paging: true, questions: [q()] });
+    expect(s2.view).toEqual([{ title: "T", file: "/a/x.md", raw: true }, { title: "テキスト", text: "hi" }]);
+    expect(s2.paging).toBe(true);
+    expect(spec({ questions: [q()] })).not.toHaveProperty("view");
+    expect(spec({ view: null, questions: [q()] })).not.toHaveProperty("view");
+    for (const view of [[], {}, { file: "/a", text: "b" }, { text: 5 }, { file: "rel.md" }, { file: "http://x/a.html" }, 5])
+      expect(reason({ view, questions: [q()] }), JSON.stringify(view)).toBe("view_invalid");
+    expect(reason({ view: Array.from({ length: ASK_VIEW_MAX + 1 }, () => ({ text: "x" })), questions: [q()] })).toBe("too_large");
+  });
+});
+
+describe("edit・rank・table（20261004-ask-media-popup）", () => {
+  const edit = (extra: Record<string, unknown> = {}) => ({ id: "e", label: "E", type: "edit", text: "1. a\n2. b\n", ...extra });
+  const rank = (extra: Record<string, unknown> = {}) => ({ id: "r", label: "R", type: "rank", options: ["a", "b", "c"], ...extra });
+  const table = (extra: Record<string, unknown> = {}) => ({ id: "t", label: "T", type: "table", options: ["ok", "ng"], rows: ["x", { value: "y", label: "Y", desc: "d", default: "ng" }], ...extra });
+
+  it("検査: edit は必須が既定・text（無ければ default の文字列）・rows は 1〜60・mono。options は持たない", () => {
+    const q0 = spec({ questions: [edit({ rows: 7, mono: false })] }).questions[0]!;
+    expect(q0).toMatchObject({ type: "edit", required: true, text: "1. a\n2. b\n", rows: 7, mono: false, options: [] });
+    expect(spec({ questions: [edit({ required: false, text: undefined, default: "d" })] }).questions[0]).toMatchObject({ required: false, text: "d" });
+    expect(spec({ questions: [edit({ text: undefined })] }).questions[0]).toMatchObject({ text: "" });
+    for (const rows of [0, 61, 1.5, "5"]) expect(spec({ questions: [edit({ rows })] }).questions[0]).not.toHaveProperty("rows");
+    expect(reason({ questions: [edit({ text: "x".repeat(10_001) })] })).toBe("too_large");
+  });
+  it("検査: rank・table は options が要る。table は rows（1 つ以上・重複なし・default は選択肢）", () => {
+    expect(reason({ questions: [{ id: "r", label: "R", type: "rank" }] })).toBe("options_empty");
+    expect(reason({ questions: [table({ rows: undefined })] })).toBe("options_empty");
+    expect(reason({ questions: [table({ rows: [] })] })).toBe("options_empty");
+    expect(reason({ questions: [table({ rows: ["x", "x"] })] })).toBe("option_value_duplicate");
+    expect(reason({ questions: [table({ rows: [{ value: "x", default: "zzz" }] })] })).toBe("row_default_unknown");
+    expect(reason({ questions: [table({ rows: [{ label: "L" }] })] })).toBe("option_value_required");
+    const t = spec({ questions: [table({ rowLabel: "節", pickLabel: "配置", default: "ng" })] }).questions[0]!;
+    expect(t).toMatchObject({ rowLabel: "節", pickLabel: "配置", default: "ng", rows: [{ value: "x", label: "x" }, { value: "y", label: "Y", desc: "d", default: "ng" }] });
+    expect(spec({ questions: [table({ default: "zzz" })] }).questions[0]).not.toHaveProperty("default"); // 選択肢に無い既定は落とす
+  });
+  it("検査: rank の default は選択肢の並べ替えのときだけ残す", () => {
+    expect(spec({ questions: [rank({ default: ["c", "a", "b"] })] }).questions[0]!.default).toEqual(["c", "a", "b"]);
+    for (const d of [["a", "b"], ["a", "a", "b"], ["a", "b", "z"], "a"]) expect(spec({ questions: [rank({ default: d })] }).questions[0]).not.toHaveProperty("default");
+  });
+  it("collectAsk: edit は末尾の空白を除いて返し、直したら edited。rank は並べた順（不正は既定の順）。table は行ごと（既定は行の default → 質問の default → 先頭）", () => {
+    const s = spec({ questions: [edit(), rank({ default: ["b", "a", "c"] }), table()] });
+    const base = collectAsk(s, initialAskState(s));
+    expect(base.answers).toEqual({ e: "1. a\n2. b", r: ["b", "a", "c"], t: { x: "ok", y: "ng" } });
+    expect(base.edited).toEqual([]);
+    expect(base.lacking).toEqual([]);
+    const st = initialAskState(s);
+    st.text["e"] = "1. a\n2. B\n\n";
+    st.order = { r: ["c", "b", "a"] };
+    st.rowPick = { t: { x: "ng" } };
+    const got = collectAsk(s, st);
+    expect(got.answers).toEqual({ e: "1. a\n2. B", r: ["c", "b", "a"], t: { x: "ng", y: "ng" } });
+    expect(got.edited).toEqual(["e"]);
+    st.order = { r: ["a", "a", "b"] }; // 不正な順は既定へ
+    st.rowPick = { t: { x: "zzz" } };
+    expect(collectAsk(s, st).answers).toMatchObject({ r: ["b", "a", "c"], t: { x: "ok" } });
+  });
+  it("collectAsk: 必須の edit が空（空白だけ）なら未回答。required: false なら空でよい", () => {
+    const s = spec({ questions: [edit({ text: "" }), edit({ id: "e2", required: false, text: "" })] });
+    expect(collectAsk(s, initialAskState(s)).lacking).toEqual(["e"]);
+  });
+  it("checkAskAnswer: edit は文字列（必須なら空を断る）、rank は並べ替え、table は行と値、edited は edit の質問だけ", () => {
+    const s = spec({ questions: [edit(), rank(), table()] });
+    const ok = { e: "x", r: ["c", "a", "b"], t: { x: "ok", y: "ng" } };
+    expect(checkAskAnswer(s, { answers: ok, edited: ["e"] })).toBeNull();
+    expect(checkAskAnswer(s, { answers: { ...ok, e: "" } })).toMatch(/required/);
+    expect(checkAskAnswer(s, { answers: { ...ok, e: ["x"] } })).toMatch(/string/);
+    for (const r of [["a", "b"], ["a", "a", "b"], ["a", "b", "z"], "a", { a: "b" }]) expect(checkAskAnswer(s, { answers: { ...ok, r } as never }), JSON.stringify(r)).toMatch(/every option exactly once/);
+    for (const t of [{ x: "ok" }, { x: "ok", y: "ng", z: "ok" }, { x: "ok", y: "zzz" }, { x: "ok", z: "ng" }, ["ok"], "ok"]) expect(checkAskAnswer(s, { answers: { ...ok, t } as never }), JSON.stringify(t)).not.toBeNull();
+    expect(checkAskAnswer(s, { answers: ok, edited: ["r"] })).toMatch(/not an edit/);
+    expect(checkAskAnswer(s, { answers: ok, edited: ["e", "e"] })).toMatch(/duplicate/);
+    expect(checkAskAnswer(s, { answers: ok, edited: ["nope"] })).toMatch(/not an edit/);
+    expect(checkAskAnswer(s, { answers: ok, custom: ["e"] })).toMatch(/free text/);
+  });
+  it("行の value が __proto__ でも、回答に自分のキーとして入り、サーバの検査を通る", () => {
+    const s = spec({ questions: [JSON.parse('{"id":"t","label":"T","type":"table","options":["ok","ng"],"rows":["__proto__","y"]}')] });
+    const got = collectAsk(s, initialAskState(s));
+    expect(Object.keys(got.answers["t"] as object)).toEqual(["__proto__", "y"]);
+    expect(checkAskAnswer(s, { answers: got.answers })).toBeNull();
+  });
+  it("showIf は single・multi の質問だけが条件になる（辞書の回答は満たさない）", () => {
+    const s = spec({ questions: [table({ id: "t" }), q({ id: "b", showIf: { t: "ok" } })] });
+    expect(collectAsk(s, initialAskState(s)).visible).toEqual(["t"]);
   });
 });

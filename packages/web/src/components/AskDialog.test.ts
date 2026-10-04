@@ -41,7 +41,9 @@ describe("AskDialog — 表示と開閉（AC3・AC-I1）", () => {
     const w = mountDialog();
     await open(w, ask(SPEC));
     const children = [...w.wrapper.get("dialog").element.children];
-    expect(children.map((c) => c.localName)).toEqual(["header", "ask-form"]);
+    // 部品は `.ask-body`（成果物の無い質問では箱を作らない `display: contents`）の中。固定の行（header）は部品より前。
+    expect(children.map((c) => c.localName)).toEqual(["header", "div"]);
+    expect([...children[1]!.children].map((c) => c.localName)).toEqual(["ask-form"]);
     expect(children[0]!.contains(origin(w))).toBe(true);
     expect(shadow(w).querySelector("[data-ask-origin], #ask-origin")).toBeNull();
     // 題・ボタンは部品の中にだけある（枠は描かない）。

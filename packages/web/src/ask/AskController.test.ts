@@ -113,3 +113,85 @@ describe("AskController", () => {
     expect(fail.store.queue).toEqual([]);
   });
 });
+
+describe("AskController — メディア（20261004-ask-media-popup）", () => {
+  const withMedia = (askId: string, extra: Partial<AskPending> = {}): AskPending => ({
+    ...ask(askId),
+    media: [{ id: 0, kind: "image", mime: "image/png", bytes: 2 }],
+    ...extra,
+  });
+  const mediaOk = (): unknown => ({ base64: btoa("ab"), size: 2, eof: true });
+
+  it("ask.opened → ask.get の後に ask.media で取り、取り終えてから store に足す（resolved に data: の URL）", async () => {
+    const s = setup({ "ask.get": () => withMedia("m1"), "ask.media": mediaOk });
+    s.ctl.onEvent({ event: "ask.opened", data: { askId: "m1", paneId: "p1" } });
+    expect(s.store.queue).toEqual([]); // まだ（取っている最中は出さない）
+    await settle();
+    expect(s.calls.map((c) => c[0])).toEqual(["ask.get", "ask.media"]);
+    expect(s.store.queue[0]!.resolved).toEqual({ urls: { "media:0": `data:image/png;base64,${btoa("ab")}` }, views: [] });
+  });
+
+  it("ask.subscribe の応答も、メディアを取り終えてから置き換える。メディアの無い質問は resolved を持たない", async () => {
+    const s = setup({ "ask.subscribe": () => ({ asks: [withMedia("m1"), ask("plain")] }), "ask.media": mediaOk });
+    s.ctl.onOpened();
+    await settle();
+    expect(s.store.queue.map((q) => q.askId)).toEqual(["m1", "plain"]);
+    expect(s.store.queue[0]!.resolved).toBeDefined();
+    expect(s.store.queue[1]).not.toHaveProperty("resolved");
+  });
+
+  it("画像が取れなくても質問は出る（参照なし）。成果物が取れなければ、トーストして取り消す（見ないまま答えさせない）", async () => {
+    const noImage = setup({ "ask.get": () => withMedia("m1"), "ask.media": () => code("internal") });
+    noImage.ctl.onEvent({ event: "ask.opened", data: { askId: "m1", paneId: "p1" } });
+    await settle();
+    expect(noImage.store.queue[0]!.resolved).toEqual({ urls: {}, views: [] });
+    const noView = setup({
+      "ask.get": () => withMedia("v1", { media: [{ id: 0, kind: "markdown", mime: "text/markdown", bytes: 2 }], view: [{ title: "t", kind: "markdown", media: 0 }] }),
+      "ask.media": () => code("internal"),
+    });
+    noView.ctl.onEvent({ event: "ask.opened", data: { askId: "v1", paneId: "p1" } });
+    await settle();
+    expect(noView.store.queue).toEqual([]);
+    expect(noView.toasts).toEqual(["成果物を読み込めませんでした（質問は取り消しました）"]);
+    expect(noView.calls.map((c) => c[0])).toContain("ask.cancel");
+  });
+
+  it("メディアを取っている間に ask.closed・切断・マシンの切り替えが来たら、足さない", async () => {
+    for (const interrupt of [(s: ReturnType<typeof setup>) => s.ctl.onClosed(), (s: ReturnType<typeof setup>) => s.ctl.resetForMachineSwitch()]) {
+      let release!: (v: unknown) => void;
+      const s = setup({ "ask.get": () => withMedia("m1"), "ask.media": () => new Promise((r) => (release = r)) as never });
+      s.ctl.onEvent({ event: "ask.opened", data: { askId: "m1", paneId: "p1" } });
+      await settle();
+      interrupt(s);
+      release(mediaOk());
+      await settle();
+      expect(s.store.queue).toEqual([]);
+    }
+  });
+});
+
+
+describe("AskController — メディアを取っている間に閉じた質問（20261004-ask-media-popup）", () => {
+  it("ask.opened の後・メディアを取り終える前に ask.closed が来たら、取り終えても足さない（答えられない質問を出さない）", async () => {
+    let release!: (v: unknown) => void;
+    const withMedia: AskPending = { ...ask("m1"), media: [{ id: 0, kind: "image", mime: "image/png", bytes: 2 }] };
+    const s = setup({ "ask.get": () => withMedia, "ask.media": () => new Promise((r) => (release = r)) as never });
+    s.ctl.onEvent({ event: "ask.opened", data: { askId: "m1", paneId: "p1" } });
+    await settle();
+    s.ctl.onEvent({ event: "ask.closed", data: { askId: "m1", paneId: "p1" } });
+    release({ base64: btoa("ab"), size: 2, eof: true }); // 取り終えたが、もう閉じている
+    await settle();
+    expect(s.store.queue).toEqual([]);
+  });
+  it("ask.subscribe の応答のメディアを取っている間に閉じた質問も、置き換えに入れない", async () => {
+    let release!: (v: unknown) => void;
+    const withMedia: AskPending = { ...ask("m1"), media: [{ id: 0, kind: "image", mime: "image/png", bytes: 2 }] };
+    const s = setup({ "ask.subscribe": () => ({ asks: [withMedia, ask("plain")] }), "ask.media": () => new Promise((r) => (release = r)) as never });
+    s.ctl.onOpened();
+    await settle();
+    s.ctl.onEvent({ event: "ask.closed", data: { askId: "m1", paneId: "p1" } });
+    release({ base64: btoa("ab"), size: 2, eof: true });
+    await settle();
+    expect(s.store.queue.map((q) => q.askId)).toEqual(["plain"]);
+  });
+});

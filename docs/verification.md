@@ -756,6 +756,25 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
 - [ ] ブラウザを 1 つも開いていない session で `sodactl ask`。期待：待たずに `unavailable`。同じ pane で 2 つ続けて打つと 2 つめは `ask_busy`（終了コード 1）。
 - [ ] Claude Code（`claude`）を pane で動かし、ask-form のスキルで質問させる（ask-form 側が `sodactl ask` に対応した後）。期待：ブラウザの画面の上に出て、答えが Claude Code に戻る。
 
+### 共通：質問のフォームの画像・音・コード・成果物・edit/rank/table（20261004-ask-media-popup・`docs/sodactl.md`「画像・音・コード」「成果物（view）」）
+
+自動のテストは、定義の検査と上限（`packages/protocol/src/ask.test.ts`）・種類の確認（先頭バイト。`packages/server/src/ask/mediaSniff.test.ts`）・ファイルの読み出しと上限の境界（`AskMedia.test.ts`）・外部 URL の取得と SSRF の拒否
+（アドレスの表・リダイレクト・ヘッダ・時間・サイズ・実物の `https.request` で接続先が固定されること。`RemoteImageFetcher.test.ts`）・台帳（準備中・閉じる 5 経路でメディアの合計が戻る・全体の上限。`AskService.test.ts`）・実物の `/ws`・`pane.sock`・
+保存した SSH のマシンの中継越しの結合（`ask.media.integration.test.ts`・`machines.integration.test.ts`）・応答ヘッダ（アプリ本体の CSP が `media-src data:` だけの追加・`/ask-view/*` の専用ヘッダと許可リスト。`HttpServer.integration.test.ts`）・
+同梱ライブラリの sha256（`scripts/ask-view-vendor.test.ts`）・画面（メディアの取得と `resolveMedia`・成果物の枠の `sandbox` 属性・`postMessage` の `event.source` の検査・取り次ぐキー。`packages/web`）・`sodactl ask`（絶対化・事前確認・機能確認）、
+実物の Chromium での一巡（`ask-media.spec.ts`・`ask-types.spec.ts`・`ask-view.spec.ts`。画像の `naturalWidth`・`currentSrc`、CSP 違反、`Audio` の包み〔音は聞けないので `src` と `play()` の呼び出しを観測〕、SVG のスクリプトが動かないこと、SSRF の宛先、
+`sandbox` 属性・枠の中の `parent.document` の SecurityError・`fetch` の拒否・枠の中のキーが親へ届くこと・Markdown のインラインが動かないこと・モバイルの縦積み）を確かめた。**確かめていないもの**: 実際の音が鳴ること・実物のインターネット上の画像の取得・
+別のマシンのブラウザ・実機のスマートフォン・Firefox・Safari・動画・実物の ask-form（`ask.py`）の改修後の連携・mermaid の全図種・社内プロキシ越しの環境。
+
+- [ ] 画像付きのフォーム: `sodactl ask` に、画面案の PNG（数 MB）を `image` に持つ質問を渡す。期待：Edge などの別ウィンドウは開かず、画面内のダイアログに画像が出る（拡大表示もできる）。`https://` の画像（公開の画像）を渡すと、画像が出る
+      （ブラウザの開発者ツールのネットワークに画像の取得先へのリクエストが無い＝取得はサーバがした）。`https://127.0.0.1/x.png` を渡すと、画像なしで出て、最上部に「画像 1 件を取得できませんでした」が出る。
+- [ ] 音: `audio` に短い wav を渡し、［▶ 試聴］で**実際に鳴る**（自動のテストは聞けない）。
+- [ ] 成果物: md-to-doc で作った HTML（スクリプト付き）と Markdown（mermaid の図つき）を `view` に渡す。期待：左に枠（モバイルは上）、枠の上に「pane『…』の成果物（隔離表示）」。HTML が動き（外の CDN を読む部分は崩れてよい）、
+      Markdown が整形されて図が出る。枠の中をクリックしてから `Esc`（取り消し）・`Ctrl+Enter`（決定）が効く。
+- [ ] `edit`・`rank`・`table` を実機のブラウザで操作し、結果の JSON の形（`edited`・並べた配列・`{行: 値}`）を確かめる。
+- [ ] 別のマシン（保存した SSH のマシン）の pane から、そのマシンにある画像・Markdown を渡して、手元のブラウザに出る。
+- [ ] `sodactl ask --features` の出力（`server` が null でない）。古いサーバでは、新しい項目のある定義が `unavailable` になる。
+
 ### 共通：質問のフォームの目次と部品（20261003-ask-form-component・`docs/sodactl.md`「目次」「画面の操作」「画面の部品と同期」）
 
 画面の中身は、ask-form と同じ部品 `<ask-form>`（`third_party/ask-form/ask-form.js`）が描く。質問は 1 枚に並んだまま、高さに収まらないとき（または `page` を書いた・`paging: true`）に左に質問の目次が出る。

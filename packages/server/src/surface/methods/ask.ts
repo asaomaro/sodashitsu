@@ -1,4 +1,4 @@
-import { AskAnswerParams, AskCancelParams, AskGetParams, AskOpenParams, AskSubscribeParams } from "@sodashitsu/protocol";
+import { AskAnswerParams, AskCancelParams, AskFeaturesParams, AskGetParams, AskMediaParams, AskOpenParams, AskSubscribeParams } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
@@ -20,6 +20,15 @@ export function registerAskMethods(surface: ControlSurface, deps: MethodDeps): v
   surface.register("ask.get", {
     schema: AskGetParams,
     handler: (ctx, params) => asks.get(ctx.clientId, params.askId),
+  });
+  surface.register("ask.media", {
+    schema: AskMediaParams,
+    handler: (ctx, params) => asks.media(ctx.clientId, params.askId, params.id, params.offset),
+  });
+  // 機能確認（20261004-ask-media-popup）。どの接続でも読める（定義も回答も含まない）。古いサーバは「知らない方式」を返す。
+  surface.register("ask.features", {
+    schema: AskFeaturesParams,
+    handler: () => asks.features(),
   });
   surface.register("ask.answer", {
     schema: AskAnswerParams,

@@ -4,7 +4,7 @@ import { CliUsageError, parseArgs, type GlobalOpts } from "../cliArgs.js";
 import type { callPaneOp, PaneOpOutcome } from "../paneSocket.js";
 import type { SessionStore } from "../session.js";
 import { RpcFailure } from "../wsClient.js";
-import { ASK_REQUEST_SLACK_MS, readStdinAll, runAsk } from "./ask.js";
+import { ASK_REQUEST_SLACK_MS, absolutizePaths, absolutizeRef, missingFeaturesReason, readStdinAll, requiredFeatures, runAsk } from "./ask.js";
 
 const ENV = { SODA_PANE_ID: "p3", SODA_SERVER_URL: "http://127.0.0.1:7780" };
 const SPEC = { title: "T", questions: [{ id: "a", label: "A", default: "x", options: ["x", "y"] }] };
@@ -123,7 +123,7 @@ describe("runAsk", () => {
   });
 
   it("対応していない型の質問（edit・rank・table）があれば、接続もサーバへの送信もせず unavailable（終了コード 0）。黙って落とさない（追補）", async () => {
-    for (const type of ["edit", "rank", "table"]) {
+    for (const type of ["slider", "matrix"]) {
       const s = setup();
       mockState.client = s.client;
       const deps = input({ questions: [{ id: "a", label: "A", options: ["x"] }, { id: "e", label: "E", type, text: "文面", rows: ["r1"], options: ["x"] }] });
@@ -272,9 +272,9 @@ describe("runAsk — 経路の選択（ログイン不要の受け口 pane.sock�
       await expect(runAsk(cmd([], SOCK_ENV), store, deps)).rejects.toBeInstanceOf(CliUsageError);
       expect(deps.pane).not.toHaveBeenCalled();
     }
-    const deps = socketDeps(answered, { questions: [{ id: "e", label: "E", type: "edit", text: "文面" }] });
+    const deps = socketDeps(answered, { questions: [{ id: "e", label: "E", type: "slider" }] });
     await runAsk(cmd([], SOCK_ENV), store, deps);
-    expect(deps.print).toHaveBeenCalledExactlyOnceWith({ status: "unavailable", reason: expect.stringContaining('"edit"') });
+    expect(deps.print).toHaveBeenCalledExactlyOnceWith({ status: "unavailable", reason: expect.stringContaining('"slider"') });
     expect(deps.pane).not.toHaveBeenCalled();
     expect(mockState.sessions).toBe(0);
   });
@@ -325,5 +325,139 @@ describe("runAsk — 経路の選択（ログイン不要の受け口 pane.sock�
     await runAsk(cmd([], { ...ENV, SODA_PANE_SOCKET: "/nonexistent-sodashitsu-test/pane.sock" }), store, deps);
     expect(mockState.sessions).toBe(1);
     expect(deps.print).toHaveBeenCalledExactlyOnceWith({ status: "answered", answers: { a: "y" } });
+  });
+});
+
+
+describe("メディア・成果物（20261004-ask-media-popup）", () => {
+  const FEATURES = { features: ["media", "view", "types:edit", "types:rank", "types:table", "remote-image"], limits: { fileBytes: 1 } };
+  /** `ask.features`・`ask.open` を方式ごとに答える偽のクライアント。`features` が Error なら、その code で失敗する。 */
+  function twoMethods(features: unknown) {
+    const calls: { method: string; params: unknown }[] = [];
+    mockState.client = {
+      hello: vi.fn(async () => ({})),
+      request: vi.fn(async (method: string, params: unknown) => {
+        calls.push({ method, params });
+        if (method === "ask.features") {
+          if (features instanceof Error) throw features;
+          return features;
+        }
+        return { status: "answered", answers: { a: "x" } };
+      }),
+      onClose: () => undefined,
+      close: vi.fn(),
+    } as never;
+    return calls;
+  }
+  const IMG = (image: string) => ({ questions: [{ id: "a", label: "A", options: [{ value: "x", image }] }] });
+  const deps = (value: unknown, extra: Record<string, unknown> = {}) => ({
+    ...input(value),
+    cwd: () => "/work/dir",
+    home: () => "/home/u",
+    stat: async () => ({ isFile: true, size: 10 }),
+    ...extra,
+  });
+
+  it("absolutizeRef: 相対は cwd から、~/ はホームから。絶対・URL・data: はそのまま", () => {
+    expect(absolutizeRef("mock/a.png", "/w", "/h")).toBe("/w/mock/a.png");
+    expect(absolutizeRef("../a.png", "/w/d", "/h")).toBe("/w/a.png");
+    expect(absolutizeRef("~/a.png", "/w", "/h")).toBe("/h/a.png");
+    for (const same of ["/abs/a.png", "https://example.com/a.png", "data:image/png;base64,AAAA", "C:\\a\\b.png"]) expect(absolutizeRef(same, "/w", "/h")).toBe(same);
+  });
+
+  it("absolutizePaths: image・audio・view.file（文字列・辞書・配列）を絶対にし、知らない項目・文字列の選択肢はそのまま。元の定義は変えない", () => {
+    const raw = {
+      future: 1,
+      questions: [{ id: "a", label: "A", options: ["plain", { value: "x", image: "a.png", audio: "s.wav", extra: 2 }, { value: "y", image: "https://e.com/a.png" }] }],
+      view: [{ file: "d.md", title: "T" }, "e.html", { text: "t" }],
+    };
+    const copy = structuredClone(raw);
+    const r = absolutizePaths(raw, "/w", "/h");
+    expect(raw).toEqual(copy);
+    expect(r.spec).toEqual({
+      future: 1,
+      questions: [{ id: "a", label: "A", options: ["plain", { value: "x", image: "/w/a.png", audio: "/w/s.wav", extra: 2 }, { value: "y", image: "https://e.com/a.png" }] }],
+      view: [{ file: "/w/d.md", title: "T" }, { file: "/w/e.html" }, { text: "t" }],
+    });
+    expect(r.refs.map((x) => x.path)).toEqual(["/w/a.png", "/w/s.wav", "/w/d.md", "/w/e.html"]);
+    expect(absolutizePaths({ questions: [], view: "x.md" }, "/w", "/h").spec["view"]).toEqual({ file: "/w/x.md" });
+  });
+
+  it("requiredFeatures: 使う機能だけ数える（新しい項目が無ければ空）", () => {
+    expect(requiredFeatures({ title: "", submit: "", note: true, questions: [{ id: "a", label: "A", type: "single", options: [{ value: "x", label: "x" }], allowOther: false, required: false, multiline: false }] })).toEqual([]);
+    expect(
+      requiredFeatures({
+        title: "",
+        submit: "",
+        note: true,
+        view: [{ title: "t", text: "x" }],
+        questions: [
+          { id: "a", label: "A", type: "single", options: [{ value: "x", label: "x", image: "https://e.com/a.png" }], allowOther: false, required: false, multiline: false },
+          { id: "b", label: "B", type: "table", options: [], allowOther: false, required: false, multiline: false },
+        ],
+      }).sort(),
+    ).toEqual(["media", "remote-image", "types:table", "view"]);
+  });
+
+  it("新しい項目がある定義は、先に ask.features を確かめ、足りれば絶対パスにした定義で ask.open を送る", async () => {
+    const calls = twoMethods(FEATURES);
+    const d = deps(IMG("mock/a.png"));
+    await runAsk(cmd(), store, d);
+    expect(calls.map((c) => c.method)).toEqual(["ask.features", "ask.open"]);
+    expect((calls[1]!.params as { spec: unknown }).spec).toEqual(IMG("/work/dir/mock/a.png"));
+    expect(d.print).toHaveBeenCalledWith({ status: "answered", answers: { a: "x" } });
+  });
+
+  it("古いサーバ（ask.features を知らない＝not_found）は、新しい項目のある定義を unavailable にして ask.open を送らない。古い形の定義は今までどおり", async () => {
+    const calls = twoMethods(new RpcFailure("not_found", "unknown method: ask.features"));
+    const d = deps(IMG("a.png"));
+    await runAsk(cmd(), store, d);
+    expect(d.print).toHaveBeenCalledExactlyOnceWith({ status: "unavailable", reason: missingFeaturesReason(["media"]) });
+    expect(calls.map((c) => c.method)).toEqual(["ask.features"]);
+    const calls2 = twoMethods(new RpcFailure("not_found", "unknown method"));
+    await runAsk(cmd(), store, deps(SPEC));
+    expect(calls2.map((c) => c.method)).toEqual(["ask.open"]); // 新しい項目が無ければ確認もしない
+  });
+
+  it("サーバが一部の機能を持たなければ、足りない機能の名前を理由にする。ほかの失敗（認証など）はそのまま投げる", async () => {
+    twoMethods({ features: ["media"], limits: {} });
+    const d = deps({ ...IMG("/a.png"), view: { text: "x" } });
+    await runAsk(cmd(), store, d);
+    expect(d.print).toHaveBeenCalledExactlyOnceWith({ status: "unavailable", reason: missingFeaturesReason(["view"]) });
+    twoMethods(new RpcFailure("unauthenticated", "x"));
+    await expect(runAsk(cmd(), store, deps(IMG("/a.png")))).rejects.toMatchObject({ code: "unauthenticated" });
+  });
+
+  it("送る前の確認: 存在しない・通常のファイルでない・8 MiB 超・個数・合計は、理由つきの使い方の誤り（終了コード 2）。何も送らない", async () => {
+    const calls = twoMethods(FEATURES);
+    const bad = async (stat: (p: string) => Promise<{ isFile: boolean; size: number } | null>, value: unknown, re: RegExp) => {
+      await expect(runAsk(cmd(), store, deps(value, { stat }))).rejects.toThrowError(re);
+    };
+    await bad(async () => null, IMG("a.png"), /questions\[0\]\.options\[0\]\.image: file not found/);
+    await bad(async () => ({ isFile: false, size: 0 }), IMG("a.png"), /not a regular file/);
+    await bad(async () => ({ isFile: true, size: 8 * 1024 * 1024 + 1 }), IMG("a.png"), /larger than 8388608/);
+    await bad(async () => ({ isFile: true, size: 2 * 1024 * 1024 + 1 }), { ...IMG("/ok.png"), view: "/d.md" }, /larger than 2097152/);
+    await bad(async () => ({ isFile: true, size: 8 * 1024 * 1024 }), { questions: [{ id: "a", label: "A", options: ["1", "2", "3", "4"].map((v) => ({ value: v, image: `/${v}.png` })) }] }, /in total/);
+    const many = { questions: [{ id: "a", label: "A", options: Array.from({ length: 33 }, (_, i) => ({ value: String(i), image: `/${i}.png` })) }] };
+    await bad(async () => ({ isFile: true, size: 1 }), many, /more than 32/);
+    expect(calls).toEqual([]);
+  });
+
+  it("sodactl ask --features: sodactl の機能と上限と、サーバの機能（古い・繋げなければ null）を 1 行で出す。定義は読まない", async () => {
+    twoMethods(FEATURES);
+    const d = { readStdin: vi.fn(), print: vi.fn() };
+    await runAsk(cmd(["--features"]), store, d);
+    expect(d.readStdin).not.toHaveBeenCalled();
+    expect(d.print).toHaveBeenCalledWith({ sodactl: expect.arrayContaining(["media", "view", "types:edit"]), limits: expect.objectContaining({ fileBytes: 8 * 1024 * 1024, files: 32 }), server: FEATURES });
+    for (const failure of [new RpcFailure("not_found", "x"), new RpcFailure("unauthenticated", "x"), new Error("boom")]) {
+      twoMethods(failure);
+      const d2 = { readStdin: vi.fn(), print: vi.fn() };
+      await runAsk(cmd(["--features"]), store, d2);
+      expect(d2.print).toHaveBeenCalledWith(expect.objectContaining({ server: null }));
+    }
+    // pane の外（caller なし）でも落ちず server: null
+    const d3 = { readStdin: vi.fn(), print: vi.fn() };
+    await runAsk(parseArgs(["ask", "--features"], {}, "linux") as never, store, d3);
+    expect(d3.print).toHaveBeenCalledWith(expect.objectContaining({ server: null }));
   });
 });

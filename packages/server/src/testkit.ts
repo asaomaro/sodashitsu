@@ -6,6 +6,7 @@
  * （`package.json` の `main`/`types` はこのファイルを指す）。
  */
 export { composeServer, type ComposedServer } from "./composeServer.js";
+export type { ImageFetcher } from "./ask/AskMedia.js";
 export type { RawServeArgs, ServeOptions } from "./config.js";
 /**
  * 起動時に表示する LAN の IPv4 を選ぶ純関数（サーバ自身が使うもの）。e2e の tls-lan が「このマシンに表示されるべき

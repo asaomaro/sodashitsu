@@ -41,7 +41,9 @@ import { ImageUploads } from "./image/ImageUploads.js";
 import { AskService } from "./ask/AskService.js";
 import { PaneOpRegistry } from "./panesocket/PaneOpRegistry.js";
 import { PaneSocket } from "./panesocket/PaneSocket.js";
-import { askOpenOp } from "./panesocket/askOp.js";
+import { askFeaturesOp, askOpenOp } from "./panesocket/askOp.js";
+import { AskMedia, type ImageFetcher } from "./ask/AskMedia.js";
+import { RemoteImageFetcher } from "./ask/RemoteImageFetcher.js";
 import { FileAccess } from "./file/FileAccess.js";
 import { FileOpener } from "./file/FileOpener.js";
 import { DROP_DIR_NAME, FileStore } from "./file/FileStore.js";
@@ -170,6 +172,8 @@ export async function composeServer(
     machineSpawn?: SpawnFn;
     /** ファイルを開く係の差し替え（結合テスト・E2E が実物のアプリを起動させない）。 */
     fileOpener?: FileOpener;
+    /** 外部 URL の画像の取得の差し替え（結合テスト・E2E が偽の取得を渡す。20261004-ask-media-popup）。 */
+    askImageFetcher?: ImageFetcher;
   } = {},
 ): Promise<ComposedServer> {
   const options = await withRememberedPort(resolveServeOptions(rawArgs), rawArgs);
@@ -335,12 +339,14 @@ export async function composeServer(
     },
     bus,
     logger,
+    media: new AskMedia({ fetcher: internal.askImageFetcher ?? new RemoteImageFetcher(), logger }),
   });
   // ログイン不要の受け口（20261003-sodactl-ask-socket）。受けるのはここに登録した操作だけ（`/ws` の RPC は通さない）。いま載せるのは `ask.open` だけ。
   // pane の実在は `AskService` と同じ判定。接続が終わったら、その接続が持ち主の質問を閉じるのは操作の中（`askOpenOp` が `ctx.signal` の abort で取り消す）。
   // 待ち受けは `listen()` の 4.7、閉じるのは `close()`。引き継ぎの間は `pause()`（`HandoffController` の `closeClients`）。
   const paneOps = new PaneOpRegistry(logger);
   paneOps.register(askOpenOp(asks));
+  paneOps.register(askFeaturesOp(asks));
   const paneSocket = new PaneSocket({
     registry: paneOps,
     paneExists,

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>成果物</title>
+</head>
+<body>
+<!-- Sodashitsu の質問のダイアログが、隔離した枠（iframe の sandbox・allow-same-origin なし）で開く。本文は親から postMessage で受けて描く。
+     このページには専用のヘッダ（sandbox・default-src 'none'）が付き、fetch・WebSocket・画像などの外への読み込みはできない（枠自身の遷移は止められない）。 -->
+<script src="keys.js"></script>
+<script src="html.js"></script>
+</body>
+</html>
