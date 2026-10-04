@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, inject, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { AgentInfo, ItemTarget, Workspace } from "@sodashitsu/protocol";
 import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
+import { useResizeDrag } from "../composables/useResizeDrag.js";
+import { type SectionBox, clampRatio, ratioFromOffset, ratioPercent, stepRatio } from "../sidebar/sectionSizing.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
 import { orderedAgentPaneIds } from "@sodashitsu/client-core";
@@ -46,15 +48,13 @@ watch(
   () => view.mode,
   (mode) => {
     if (mode === "navigate" && machines.collapsed[machines.selectedId]) machines.toggleCollapsed(machines.selectedId);
+    // 畳んだ spaces も開く（行の選択の枠が見えない）。agents は navigate の対象外。
+    if (mode === "navigate" && view.sectionsCollapsed.spaces) view.toggleSectionCollapsed("spaces");
   },
 );
 const conn = inject(ConnectionKey);
 
 const el = ref<HTMLElement | null>(null);
-let dragging = false;
-let dragStartX = 0;
-let dragStartWidth = 0;
-let lastDividerClick = 0;
 
 /** 並び順の表示名（20260922-appearance-settings-rest。`AGENT_SORT_LABEL` と同じパターン）。 */
 const WORKSPACE_SORT_LABEL: Record<WorkspaceSort, string> = { opened: "開いた順", name: "名前順" };
@@ -578,43 +578,196 @@ function onRowPointerCancel(ev: PointerEvent): void {
 }
 
 /*
+ * 区画（spaces・agents）の配り方（20261004-ui-interaction-polish。design「区画の構造」）。畳んでいる区画・比は CSS の flex で配る（JS は比を 1 つ持つだけ）。
+ * **サイドバーを畳んだ状態では区画の折りたたみ・比は効かない**（今の構造＝nav 全体が 1 つのスクロール）。
+ */
+const spacesFolded = computed(() => !view.sidebarCollapsed && view.sectionsCollapsed.spaces);
+const agentsFolded = computed(() => !view.sidebarCollapsed && view.sectionsCollapsed.agents);
+const spacesToggleEl = ref<HTMLElement | null>(null);
+const agentsToggleEl = ref<HTMLElement | null>(null);
+/** 畳んだ見出しの件数。spaces は選んでいるマシンの workspace の数、agents は一覧に出ているエージェントの数。 */
+const spacesCount = computed(() =>
+  machines.selectedId === LOCAL_MACHINE_ID ? session.workspaces.size : (machines.summaries[machines.selectedId]?.workspaces.length ?? 0),
+);
+/** 入力待ち・承認待ち（どちらも `blocked`）のエージェントが 1 つでもあるか。畳んだ agents の見出しに印を出す。 */
+const agentsBlocked = computed(() => agents.value.some((a) => a.state === "blocked"));
+
+/**
+ * 畳むとき、その区画の中（body・フッタ）にフォーカスがあれば、見出しのボタンへ移す（`display: none` になるとフォーカスが宙に浮く）。
+ * 描画の前（`flush: "pre"`）に動かす——隠れた後では要素に `focus()` できない。クリックでも操作（キー）でも同じ。
+ */
+function moveFocusOutOfFolded(section: HTMLElement | null, toggle: () => HTMLElement | null): void {
+  const active = document.activeElement;
+  if (!section || !(active instanceof HTMLElement) || !section.contains(active)) return;
+  const t = toggle();
+  if (t) {
+    if (!t.contains(active)) t.focus();
+    return;
+  }
+  // サイドバーを畳んだ状態から開いて畳んだ区画が現れたとき: 見出しのボタンはまだ描かれていない。描かれてから移す。
+  void nextTick(() => toggle()?.focus());
+}
+/** 区画の境目は、どちらかを畳むと DOM から消える。フォーカスがあれば、畳んだ区画の見出しのボタンへ移す。 */
+const sectionDividerEl = ref<HTMLElement | null>(null);
+function moveFocusFromDivider(toggle: () => HTMLElement | null): void {
+  if (sectionDividerEl.value && document.activeElement === sectionDividerEl.value) toggle()?.focus();
+}
+watch(spacesFolded, (folded) => {
+  if (!folded) return;
+  moveFocusOutOfFolded(spacesEl.value, () => spacesToggleEl.value);
+  moveFocusFromDivider(() => spacesToggleEl.value);
+});
+watch(agentsFolded, (folded) => {
+  if (!folded) return;
+  moveFocusOutOfFolded(agentsEl.value, () => agentsToggleEl.value);
+  moveFocusFromDivider(() => agentsToggleEl.value);
+});
+
+/** 比があって両方を開いているときだけ、比で配る（そうでなければ CSS の自動の配分）。 */
+const sectionFlex = computed(() => {
+  const r = view.sidebarSectionRatio;
+  if (view.sidebarCollapsed || r === null || spacesFolded.value || agentsFolded.value) return null;
+  return { spaces: { flex: `${r} 1 0px` }, agents: { flex: `${1 - r} 1 0px` } };
+});
+
+/*
  * 幅は `view.sidebarWidth`（このブラウザに残る。20260921-herdr-settings-gaps の AC1）。
  * **ドラッグ中は反映だけ**（`setSidebarWidth`）で、**保存はドラッグを終えたときに 1 回**（`commitSidebarWidth`）——
  * `pointermove` ごとに `localStorage` へ書くと、毎フレーム同期の I/O が走る。
+ * ドラッグ・`Esc`・ダブルクリック・見た目は `useResizeDrag` と `resize-handle`（20261004-ui-interaction-polish）。
  */
-function onDividerPointerDown(ev: PointerEvent): void {
+const widthDrag = useResizeDrag<{ width: number; x: number }>({
+  axis: "x",
   // **畳んでいる間は幅を動かさない**。幅が効くのは展開中だけ（`nav` の style）なので、畳んだまま動かすと
   // 利用者が一度も見ていない幅が保存され、展開したときにその幅で開く（タスク点検 T6 の指摘）。
-  if (view.sidebarCollapsed) return;
-  const now = Date.now();
-  if (now - lastDividerClick < 350) {
-    // ダブルクリックで既定幅へ戻す（D56 の訂正 11）。戻した幅も覚える。
+  enabled: () => !view.sidebarCollapsed,
+  begin: (ev) => ({ width: view.sidebarWidth, x: ev.clientX }),
+  move: (ev, start) => view.setSidebarWidth(start.width + (ev.clientX - start.x)), // 範囲に収めるのはストア
+  commit: () => view.commitSidebarWidth(),
+  // 始めた幅へ戻す。保存はしない（始める前から保存済みの値のまま）。
+  cancel: (start) => view.setSidebarWidth(start.width),
+  // ダブルクリックで既定幅へ戻す（D56 の訂正 11）。戻した幅も覚える。
+  reset: () => {
     view.setSidebarWidth(SIDEBAR_WIDTH.default);
     view.commitSidebarWidth();
-    lastDividerClick = 0;
+  },
+});
+
+/** 幅の境目のキー（フォーカスがあるとき）。`←`／`→` で 16px、`Home`＝最小、`End`＝最大、`Enter`＝既定。押すたびに保存する。 */
+const WIDTH_KEY_STEP = 16;
+function onDividerKeydown(ev: KeyboardEvent): void {
+  if (view.sidebarCollapsed) return;
+  let next: number;
+  switch (ev.key) {
+    case "ArrowLeft":
+      next = view.sidebarWidth - WIDTH_KEY_STEP;
+      break;
+    case "ArrowRight":
+      next = view.sidebarWidth + WIDTH_KEY_STEP;
+      break;
+    case "Home":
+      next = SIDEBAR_WIDTH.min;
+      break;
+    case "End":
+      next = SIDEBAR_WIDTH.max;
+      break;
+    case "Enter":
+      next = SIDEBAR_WIDTH.default;
+      break;
+    default:
+      return;
+  }
+  ev.preventDefault();
+  view.setSidebarWidth(next);
+  view.commitSidebarWidth();
+}
+
+/*
+ * 区画の境目（spaces と agents の間。両方を開いているときだけ出す。20261004-ui-interaction-polish。design「区画の境目」）。
+ * 比は spaces の取り分で、配るのは CSS の flex（`sectionFlex`）。ここは比を 1 つ決めるだけ。最小の高さは CSS の `min-height` を実測する（定数を二重に持たない）。
+ */
+const sectionsEl = ref<HTMLElement | null>(null);
+const spacesEl = ref<HTMLElement | null>(null);
+const agentsEl = ref<HTMLElement | null>(null);
+const showSectionDivider = computed(() => !view.sidebarCollapsed && !spacesFolded.value && !agentsFolded.value);
+
+/** 配れる高さ（境目の 1px を除く）と、区画ごとの最小（`min-height` の実測）。測れない（描画前・jsdom）ときは total 0＝`clampRatio` が 0.5 を返す。 */
+function measureBox(): SectionBox {
+  const px = (e: HTMLElement | null): number => {
+    if (!e) return 0;
+    const v = parseFloat(getComputedStyle(e).minHeight);
+    return Number.isFinite(v) ? v : 0;
+  };
+  return { total: Math.max(0, (sectionsEl.value?.clientHeight ?? 0) - 1), minTop: px(spacesEl.value), minBottom: px(agentsEl.value) };
+}
+
+/** 自動の配分のときの aria-valuenow 用: spaces の実際の高さ / 配れる高さ。比があるときはその比。 */
+const measuredRatio = ref(0.5);
+function measureRatio(): void {
+  const total = (sectionsEl.value?.clientHeight ?? 0) - 1;
+  const h = spacesEl.value?.offsetHeight ?? 0;
+  if (total > 0 && h > 0) measuredRatio.value = Math.min(1, h / total);
+}
+const sectionRatioNow = computed(() => view.sidebarSectionRatio ?? measuredRatio.value);
+const sectionPercent = computed(() => ratioPercent(sectionRatioNow.value));
+let sectionsObserver: ResizeObserver | null = null;
+onMounted(() => {
+  measureRatio();
+  if (typeof ResizeObserver === "undefined") return;
+  sectionsObserver = new ResizeObserver(() => measureRatio());
+  if (sectionsEl.value) sectionsObserver.observe(sectionsEl.value);
+  if (spacesEl.value) sectionsObserver.observe(spacesEl.value);
+});
+onBeforeUnmount(() => sectionsObserver?.disconnect());
+// 行の数・並び・畳み方が変わったら測り直す（自動の配分は中身の高さで決まる）。
+watch([() => view.sidebarSectionRatio, showSectionDivider, () => session.workspaces.size], () => void nextTick(measureRatio));
+
+const sectionDrag = useResizeDrag<{ ratio: number | null }>({
+  axis: "y",
+  enabled: () => showSectionDivider.value,
+  begin: () => ({ ratio: view.sidebarSectionRatio }),
+  move: (ev) => {
+    const top = sectionsEl.value?.getBoundingClientRect().top ?? 0;
+    view.setSectionRatio(ratioFromOffset(ev.clientY - top, measureBox()));
+  },
+  commit: () => view.commitSectionRatio(),
+  // 始めた比（null＝自動を含む）へ戻す。保存はしない（始める前から保存済みの値のまま）。
+  cancel: (start) => view.setSectionRatio(start.ratio),
+  reset: () => view.resetSectionRatio(),
+});
+
+/** 区画の境目のキー。`↑`／`↓` で 24px、`Home`／`End` で最小・最大、`Enter` で自動。押すたびに保存する。 */
+const SECTION_KEY_STEP = 24;
+function onSectionDividerKeydown(ev: KeyboardEvent): void {
+  if (!showSectionDivider.value) return;
+  const box = measureBox();
+  let next: number | null;
+  switch (ev.key) {
+    case "ArrowUp":
+      next = stepRatio(sectionRatioNow.value, -SECTION_KEY_STEP, box);
+      break;
+    case "ArrowDown":
+      next = stepRatio(sectionRatioNow.value, SECTION_KEY_STEP, box);
+      break;
+    case "Home":
+      next = clampRatio(0, box);
+      break;
+    case "End":
+      next = clampRatio(1, box);
+      break;
+    case "Enter":
+      next = null;
+      break;
+    default:
+      return;
+  }
+  ev.preventDefault();
+  if (next === null) {
+    view.resetSectionRatio();
     return;
   }
-  lastDividerClick = now;
-  dragging = true;
-  dragStartX = ev.clientX;
-  dragStartWidth = view.sidebarWidth;
-  (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
-}
-
-function onDividerPointerMove(ev: PointerEvent): void {
-  if (!dragging) return;
-  view.setSidebarWidth(dragStartWidth + (ev.clientX - dragStartX)); // 範囲に収めるのはストア
-}
-
-/**
- * ドラッグを終えて、**見えている幅を覚える**。`pointerup` だけでなく `pointercancel`・`lostpointercapture` でも
- * 呼ぶ——取り消されたドラッグでも見えている幅を保存する（戻す先の値を持っていないうえ、見えている幅と保存値が
- * 食い違うほうが分かりにくい）。`pointerup` の後にも `lostpointercapture` が来るが、2 回目は何もしない。
- */
-function endDrag(): void {
-  if (!dragging) return;
-  dragging = false;
-  view.commitSidebarWidth();
+  view.setSectionRatio(next);
+  view.commitSectionRatio();
 }
 
 /*
@@ -626,7 +779,8 @@ watch(
   () => view.modalOpen, // グラフ画面（20260927-agent-graph）も同じ
   (open) => {
     if (open) {
-      endDrag();
+      widthDrag.finish();
+      sectionDrag.finish();
       if (view.workspaceDrag) cancelWorkspaceDrag();
     }
   },
@@ -649,13 +803,25 @@ watch(
         <template v-else>session: {{ sessionLabel }} ⇄</template>
       </button>
     </div>
-    <section class="sidebar-spaces" aria-label="spaces">
+    <div ref="sectionsEl" class="sidebar-sections" :class="{ 'sidebar-sections-split': showSectionDivider }">
+    <section
+      ref="spacesEl"
+      class="sidebar-spaces"
+      :class="{ 'sidebar-section-folded': spacesFolded, 'sidebar-section-fill': agentsFolded && !spacesFolded }"
+      :style="sectionFlex?.spaces"
+      aria-label="spaces"
+    >
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-header">
-        <span class="sidebar-section-title">spaces</span>
-        <button type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${WORKSPACE_SORT_LABEL[view.workspaceSort]}（押すと切り替え）`" @click="view.toggleWorkspaceSort()" @keydown="onButtonKeydown">
+        <button type="button" ref="spacesToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!spacesFolded" :aria-label="spacesFolded ? `spaces（${spacesCount} 件）` : undefined" aria-controls="sidebar-spaces-body" @click="view.toggleSectionCollapsed('spaces')" @keydown="onButtonKeydown">
+          <span class="sidebar-section-mark" aria-hidden="true">{{ spacesFolded ? "▸" : "▾" }}</span>
+          <span class="sidebar-section-title">spaces</span>
+          <span v-if="spacesFolded" class="sidebar-section-count">{{ spacesCount }}</span>
+        </button>
+        <button v-if="!spacesFolded" type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${WORKSPACE_SORT_LABEL[view.workspaceSort]}（押すと切り替え）`" @click="view.toggleWorkspaceSort()" @keydown="onButtonKeydown">
           {{ WORKSPACE_SORT_LABEL[view.workspaceSort] }}
         </button>
       </div>
+      <div id="sidebar-spaces-body" class="sidebar-section-body">
       <template v-for="section in machineSections" :key="section.id">
         <MachineHeader v-if="machines.hasMachines" :machine-id="section.id" :label="section.label" :compact="view.sidebarCollapsed" />
         <template v-if="!machines.hasMachines || !machines.collapsed[section.id]">
@@ -735,6 +901,7 @@ watch(
           <MachineRows v-else :machine-id="section.id" :compact="view.sidebarCollapsed" />
         </template>
       </template>
+      </div>
 
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-footer">
         <button type="button" class="sidebar-btn" @click="onNewWorkspace" @keydown="onButtonKeydown">＋ 新規</button>
@@ -751,13 +918,47 @@ watch(
       </div>
     </section>
 
-    <section class="sidebar-agents" aria-label="agents">
+    <div
+      v-if="showSectionDivider"
+      ref="sectionDividerEl"
+      class="sidebar-section-divider resize-handle resize-handle-y"
+      :class="{ 'resize-handle-active': sectionDrag.dragging.value }"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="spaces と agents の境目"
+      :aria-valuenow="sectionPercent"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      tabindex="0"
+      @pointerdown="sectionDrag.onPointerDown"
+      @pointermove="sectionDrag.onPointerMove"
+      @pointerup="sectionDrag.onPointerEnd"
+      @pointercancel="sectionDrag.onPointerEnd"
+      @lostpointercapture="sectionDrag.onPointerEnd"
+      @keydown="onSectionDividerKeydown"
+    />
+
+    <section
+      ref="agentsEl"
+      class="sidebar-agents"
+      :class="{ 'sidebar-section-folded': agentsFolded, 'sidebar-section-fill': spacesFolded && !agentsFolded }"
+      :style="sectionFlex?.agents"
+      aria-label="agents"
+    >
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-header">
-        <span class="sidebar-section-title">agents</span>
-        <button type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${AGENT_SORT_LABEL[view.agentSort]}（押すと切り替え）`" @click="view.toggleAgentSort()" @keydown="onButtonKeydown">
+        <button type="button" ref="agentsToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!agentsFolded" :aria-label="agentsFolded ? `agents（${agents.length} 件${agentsBlocked ? '・入力待ちあり' : ''}）` : undefined" aria-controls="sidebar-agents-body" @click="view.toggleSectionCollapsed('agents')" @keydown="onButtonKeydown">
+          <span class="sidebar-section-mark" aria-hidden="true">{{ agentsFolded ? "▸" : "▾" }}</span>
+          <span class="sidebar-section-title">agents</span>
+          <template v-if="agentsFolded">
+            <span class="sidebar-section-count">{{ agents.length }}</span>
+            <StateIcon v-if="agentsBlocked" class="sidebar-state-icon" state="blocked" />
+          </template>
+        </button>
+        <button v-if="!agentsFolded" type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${AGENT_SORT_LABEL[view.agentSort]}（押すと切り替え）`" @click="view.toggleAgentSort()" @keydown="onButtonKeydown">
           {{ AGENT_SORT_LABEL[view.agentSort] }}
         </button>
       </div>
+      <div id="sidebar-agents-body" class="sidebar-section-body">
       <!-- `tabindex="-1"` と `data-agent-pane` は、一覧のダイアログを閉じたときのフォーカスの戻り先（ボタンが無ければ行。20261004-subagent-display）。Tab の順には入れない。 -->
       <div v-for="{ pane, workspace, state, lines, agent } in agents" :key="pane.id" class="sidebar-row" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
         <!-- 畳んだサイドバーは今までどおり状態の印だけ（20260927-sidebar-row-tokens）。 -->
@@ -787,7 +988,9 @@ watch(
           </div>
         </template>
       </div>
+      </div>
     </section>
+    </div>
 
     <div class="sidebar-footer">
       <button
@@ -803,12 +1006,22 @@ watch(
     </div>
 
     <div
-      class="sidebar-divider"
-      @pointerdown="onDividerPointerDown"
-      @pointermove="onDividerPointerMove"
-      @pointerup="endDrag"
-      @pointercancel="endDrag"
-      @lostpointercapture="endDrag"
+      class="sidebar-divider resize-handle resize-handle-x"
+      :class="{ 'resize-handle-active': widthDrag.dragging.value }"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="サイドバーの幅"
+      :aria-valuenow="view.sidebarWidth"
+      :aria-valuemin="SIDEBAR_WIDTH.min"
+      :aria-valuemax="SIDEBAR_WIDTH.max"
+      :tabindex="view.sidebarCollapsed ? -1 : 0"
+      :aria-hidden="view.sidebarCollapsed ? 'true' : undefined"
+      @pointerdown="widthDrag.onPointerDown"
+      @pointermove="widthDrag.onPointerMove"
+      @pointerup="widthDrag.onPointerEnd"
+      @pointercancel="widthDrag.onPointerEnd"
+      @lostpointercapture="widthDrag.onPointerEnd"
+      @keydown="onDividerKeydown"
     />
   </nav>
 </template>
@@ -823,22 +1036,89 @@ watch(
   position: relative;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  /* `overflow-y` を指定すると `overflow-x` も `auto` に計算されるので、横は明示して止める（AC3）。 */
-  overflow-x: hidden;
+  /*
+   * 開いているときは visible——幅の境目（`.sidebar-divider`）が右の罫線をまたいで外へ 4px はみ出し、そこも掴めるようにする（切られると外側の当たり判定が 0px になる）。
+   * 区画ごとのスクロールは `.sidebar-sections` が `overflow: hidden`・各区画の body が `overflow-y: auto` で受ける（20261004-ui-interaction-polish）。
+   */
+  overflow: visible;
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
   border-right: 1px solid var(--soda-menu-border, #44475a);
 }
 .sidebar-collapsed {
   width: 3em !important;
+  /* 畳んだ状態は今の構造に戻す: nav 全体が 1 つのスクロール。`overflow-y` を指定すると `overflow-x` も `auto` に計算されるので、横は明示して止める（AC3）。 */
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/*
+ * 区画の入れ物。2 区画に配れる高さは `flex: 1 1 0`・`min-height: 0` で受け、はみ出した分（低いウィンドウ）は切る。
+ * `--section-min` は 1 区画の最小（見出し＋行 2 つ＋body の上下の余白）。実測（16px・既定の行の並び）: 見出し 2.05em・行（2 行の workspace／agent）3.75em・余白 1em
+ * ＝ 10.55em。spaces はフッタ（`flex: none`・実測 2em）の高さを足す。
+ */
+.sidebar-sections {
+  --section-min: 10.6em;
+  --section-footer: 2em;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .sidebar-spaces,
 .sidebar-agents {
-  padding: 0.5em 0;
+  display: flex;
+  flex-direction: column;
+  min-height: var(--section-min);
+}
+.sidebar-spaces {
+  /* 自動の配分: 中身の高さ。多ければ agents の最小を残して縮む。 */
+  flex: 0 1 auto;
+  min-height: calc(var(--section-min) + var(--section-footer));
 }
 .sidebar-agents {
+  flex: 1 1 0;
   border-top: 1px solid var(--soda-menu-border, #44475a);
+}
+/* 両方を開いているときの境目: 高さ 1px（agents の `border-top` の代わり）。当たり判定と強調の線は `resize-handle`。 */
+.sidebar-sections-split .sidebar-agents {
+  border-top: none;
+}
+.sidebar-section-divider {
+  flex: none;
+  height: 1px;
+  background: var(--soda-menu-border, #44475a);
+  cursor: row-resize;
+}
+/* 区画の上下の余白は body に付ける（section に付けると、比あり `flex: r 1 0` が余白を除いた残りを配り、高さの比がずれる）。 */
+.sidebar-section-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5em 0;
+}
+/* 片方を畳んでいるとき: 畳んだ区画は見出しだけ（高さは中身のまま・最小も 0）。もう片方が残りを使う。両方畳めば、`.sidebar-sections` の残りは空く。 */
+.sidebar-section-folded {
+  flex: none;
+  min-height: 0;
+}
+.sidebar-section-folded > .sidebar-section-body,
+.sidebar-section-folded > .sidebar-section-footer {
+  display: none;
+}
+.sidebar-section-fill {
+  flex: 1 1 0;
+}
+/* サイドバーを畳んだ状態: 区画の入れ物・スクロールは使わない（区画の折りたたみも無視して全部出す）。 */
+.sidebar-collapsed .sidebar-sections,
+.sidebar-collapsed .sidebar-spaces,
+.sidebar-collapsed .sidebar-agents {
+  display: block;
+  flex: none;
+  min-height: 0;
+}
+.sidebar-collapsed .sidebar-section-body {
+  overflow: visible;
 }
 .sidebar-row {
   display: flex;
@@ -1066,7 +1346,7 @@ watch(
 }
 /* 以前は `right: -3px` で外へ 3px はみ出しており、文字が 1 つも無くても横スクロールバーが出ていた
  * （decisions.md D3）。幅の変更は移動量の差分で決まるので、内側へ寄せても操作感は変わらない。 */
-/* ボタンの帯（20260920-sidebar-tabbar-controls）。`.sidebar-divider` が右端 6px を縦一杯に覆うので、
+/* ボタンの帯（20260920-sidebar-tabbar-controls）。`.sidebar-divider` が右の罫線をまたいで内側 4px まで覆うので、
  * その分だけ内側に寄せてボタンがつまみの下に潜らないようにする。 */
 .sidebar-section-footer,
 .sidebar-section-header,
@@ -1076,12 +1356,12 @@ watch(
   gap: 0.4em;
   flex: none;
   padding: 0.2em 0.8em;
-  padding-right: calc(0.8em + 6px);
+  padding-right: calc(0.8em + 4px);
 }
 .sidebar-section-header {
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
-/* 内容が短いときは下端へ寄る。`.sidebar` の overflow は動かさない（decisions.md D3）。 */
+/* 畳んだサイドバー（nav 全体が 1 つのスクロール）で、内容が短いときは下端へ寄る。開いているときは `.sidebar-sections` が残りを使うので、いつも下端。 */
 .sidebar-footer {
   margin-top: auto;
   justify-content: flex-end;
@@ -1090,6 +1370,23 @@ watch(
   font-size: 0.85em;
   opacity: 0.75;
 }
+/* 見出しのボタン（押すと畳む・開く）。印・題・（畳んでいるとき）件数と状態を並べる。並び順のボタンは兄弟の要素。 */
+.sidebar-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding-left: 0;
+}
+.sidebar-section-mark {
+  font-size: 0.85em;
+  opacity: 0.75;
+  width: 1em;
+}
+.sidebar-section-count {
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
 .sidebar-btn {
   font: inherit;
   font-size: 0.85em;
@@ -1112,7 +1409,7 @@ watch(
   flex: none;
   padding: 0.2em 0.8em;
   /* 右端のつまみ（.sidebar-divider）の分を空ける（.sidebar-section-header と同じ）。 */
-  padding-right: calc(0.8em + 6px);
+  padding-right: calc(0.8em + 4px);
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
 /* 畳んだ幅（3em）では左右の余白を詰めて ⇄ が … に切れないようにする。 */
@@ -1130,10 +1427,18 @@ watch(
 .sidebar-divider {
   position: absolute;
   top: 0;
-  right: 0;
-  width: 6px;
+  /* 中心を nav の右の罫線の上に置く（外へ 4px・内へ 4px）。 */
+  right: -4px;
+  z-index: 3;
+  width: 8px;
   height: 100%;
   cursor: col-resize;
   touch-action: none;
+}
+/* 畳んでいる間は動かせない（hover の線も出さない）。 */
+.sidebar-collapsed .sidebar-divider {
+  right: 0; /* 畳んだ状態は nav が `overflow-x: hidden` で、外へはみ出すと `scrollWidth` が増える */
+  cursor: default;
+  pointer-events: none;
 }
 </style>

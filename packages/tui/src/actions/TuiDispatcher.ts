@@ -67,6 +67,8 @@ export interface DispatcherHost {
   /** 手元のサーバの停止（`server.stop`）が通った（この後にサーバが居なくなったら終了コード 0 で終える）。 */
   serverStopRequested?(): void;
   toggleSidebar(): void;
+  /** サイドバーの区画（spaces・agents）の折りたたみを切り替える（手元の状態に残す。20261004-ui-interaction-polish）。 */
+  toggleSidebarSection?(section: "spaces" | "agents"): void;
   /** 独自コマンドの一覧を受け取った（reload_config）。 */
   setCommands?(catalog: CommandListResult): void;
   /** 次の通知へ（prefix+o）。 */
@@ -157,6 +159,9 @@ export class TuiDispatcher {
         return;
       case "toggleSidebar":
         this.host.toggleSidebar();
+        return;
+      case "toggleSidebarSection":
+        this.host.toggleSidebarSection?.(action.section);
         return;
       case "newWorktree": {
         // キーは `workspace.git` を見ない（作った直後でも始められるように。git でなければサーバの `not_a_git_repository` を知らせる）。

@@ -118,7 +118,7 @@ export function onPrefsWritten(fn: (patch: Record<string, unknown>) => void): ()
   return () => prefsWriteListeners.delete(fn);
 }
 
-/** 端末ごとに持ち、サーバと共有しない項目か（サイドバーの幅・折りたたみ。design「設定」）。 */
+/** 端末ごとに持ち、サーバと共有しない項目か（サイドバーの幅・折りたたみ・区画の比と折りたたみ。design「設定」）。 */
 export function isDeviceLocalPref(key: string): boolean {
   return (DEVICE_LOCAL_PREF_KEYS as readonly string[]).includes(key);
 }
@@ -174,6 +174,23 @@ export const SIDEBAR_WIDTH = { default: 240, min: 160, max: 360 } as const;
 export function loadSidebarWidth(raw: unknown): number {
   const ok = typeof raw === "number" && Number.isFinite(raw) && raw >= SIDEBAR_WIDTH.min && raw <= SIDEBAR_WIDTH.max;
   return ok ? raw : SIDEBAR_WIDTH.default;
+}
+
+/**
+ * 保存された、spaces の取り分（0〜1。agents との高さの比。20261004-ui-interaction-polish）を読む。**0 より大きく 1 より小さい有限の数だけ**を採り、
+ * それ以外は「無い」（null＝自動の配分）。
+ */
+export function loadSidebarSectionRatio(raw: unknown): number | null {
+  return typeof raw === "number" && Number.isFinite(raw) && raw > 0 && raw < 1 ? raw : null;
+}
+
+/** サイドバーの 2 区画のうち、畳んでいるもの（保存は畳んでいる区画だけを持つ）。 */
+export type SectionsCollapsed = { spaces: boolean; agents: boolean };
+
+/** 保存された区画の折りたたみを読む。**値が `true` のキーだけ**を採る（壊れた値は開いた状態＝既定）。 */
+export function loadSidebarSectionsCollapsed(raw: unknown): SectionsCollapsed {
+  const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  return { spaces: o["spaces"] === true, agents: o["agents"] === true };
 }
 
 /** 保存された折りたたみを読む。`true` のときだけ畳む（壊れた値は展開＝既定。20260921-herdr-settings-gaps の AC3）。 */
@@ -421,6 +438,13 @@ export const useViewStore = defineStore("view", () => {
    * （`commitSidebarWidth`）に 1 回——`pointermove` ごとに `localStorage` へ書くと、毎フレーム同期の I/O が走る。
    */
   const sidebarWidth = ref(loadSidebarWidth(initialPrefs["sidebarWidth"]));
+  /**
+   * spaces と agents の高さの比（spaces の取り分。null＝自動の配分）。**ドラッグ中は `setSectionRatio` で反映するだけ**で、
+   * 保存は終えたとき（`commitSectionRatio`）に 1 回（幅と同じ）。この機器だけの保存（20261004-ui-interaction-polish）。
+   */
+  const sidebarSectionRatio = ref<number | null>(loadSidebarSectionRatio(initialPrefs["sidebarSectionRatio"]));
+  /** 畳んでいる区画。**切り替えるたびに保存する**（この機器だけ）。 */
+  const sectionsCollapsed = ref<SectionsCollapsed>(loadSidebarSectionsCollapsed(initialPrefs["sidebarSectionsCollapsed"]));
   const agentSort = ref(loadAgentSort());
   const workspaceSort = ref(loadWorkspaceSort(initialPrefs["workspaceSort"]));
   const collapsedAutoGroups = ref(loadCollapsedAutoGroups(initialPrefs["collapsedAutoGroups"]));
@@ -693,6 +717,30 @@ export const useViewStore = defineStore("view", () => {
     writePrefs({ sidebarWidth: sidebarWidth.value });
   }
 
+  /** 比を反映する。**保存はしない**（ドラッグの途中。保存は `commitSectionRatio`）。範囲に収めるのは呼び元（`sectionSizing`）。 */
+  function setSectionRatio(r: number | null): void {
+    sidebarSectionRatio.value = r;
+  }
+
+  /** いまの比を保存する（ドラッグを終えたとき・キーで動かしたとき）。比が無い（自動）ときは保存の項目を消す。 */
+  function commitSectionRatio(): void {
+    writePrefs({ sidebarSectionRatio: sidebarSectionRatio.value ?? undefined });
+  }
+
+  /** 自動の配分に戻す。保存からも項目を消す。 */
+  function resetSectionRatio(): void {
+    sidebarSectionRatio.value = null;
+    writePrefs({ sidebarSectionRatio: undefined });
+  }
+
+  /** 区画を畳む／開く。保存は畳んでいる区画だけ（どちらも開いていれば項目を消す）。 */
+  function toggleSectionCollapsed(which: keyof SectionsCollapsed): void {
+    sectionsCollapsed.value = { ...sectionsCollapsed.value, [which]: !sectionsCollapsed.value[which] };
+    const saved: Record<string, true> = {};
+    for (const k of ["spaces", "agents"] as const) if (sectionsCollapsed.value[k]) saved[k] = true;
+    writePrefs({ sidebarSectionsCollapsed: Object.keys(saved).length > 0 ? saved : undefined });
+  }
+
   /** `opts` を省けば今までどおり（4 秒で消える 1 行）。`kind: "sticky"` は消えない（20260920-agent-notifications）。 */
   function toast(message: string, opts?: ToastOptions): number {
     const id = nextToastId++;
@@ -735,6 +783,8 @@ export const useViewStore = defineStore("view", () => {
     originRejectSuspected,
     sidebarCollapsed,
     sidebarWidth,
+    sidebarSectionRatio,
+    sectionsCollapsed,
     agentSort,
     toggleAgentSort,
     workspaceSort,
@@ -777,6 +827,10 @@ export const useViewStore = defineStore("view", () => {
     toggleSidebar,
     setSidebarWidth,
     commitSidebarWidth,
+    setSectionRatio,
+    commitSectionRatio,
+    resetSectionRatio,
+    toggleSectionCollapsed,
     toast,
     dismissToast,
   };

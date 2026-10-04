@@ -79,3 +79,26 @@ describe("tui-state.json", () => {
     }
   });
 });
+
+describe("区画の折りたたみ（20261004-ui-interaction-polish）", () => {
+  it("既定は両方開いている。getter は畳んでいる区画だけ true", () => {
+    expect(new PrefsModel().sectionsCollapsed).toEqual({ spaces: false, agents: false });
+    expect(new PrefsModel({ sidebarSectionsCollapsed: { agents: true } }).sectionsCollapsed).toEqual({ spaces: false, agents: true });
+  });
+
+  it("tui-state.json: 書いて読める。値が true のキーだけを採り、壊れた値は開いた状態", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "tui-state-"));
+    try {
+      await writeTuiState(dir, { sidebarSectionsCollapsed: { spaces: true } });
+      expect(readTuiState(dir)).toEqual({ sidebarSectionsCollapsed: { spaces: true } });
+      for (const bad of [{ spaces: false, agents: "yes" }, [true], "x", null, {}]) {
+        await writeFile(join(dir, TUI_STATE_FILE), JSON.stringify({ sidebarSectionsCollapsed: bad }));
+        expect(readTuiState(dir)).toEqual({});
+      }
+      await writeFile(join(dir, TUI_STATE_FILE), JSON.stringify({ sidebarSectionsCollapsed: { spaces: true, agents: 1, extra: true } }));
+      expect(readTuiState(dir)).toEqual({ sidebarSectionsCollapsed: { spaces: true } });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

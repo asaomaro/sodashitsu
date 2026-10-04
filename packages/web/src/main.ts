@@ -3,6 +3,8 @@ import type { ITerminalOptions } from "@xterm/xterm";
 // xterm.js の必須の CSS（canvas の重ね方・入力用 textarea の隠し方）。無いと描画用の canvas が端末の下へ
 // 押し出され、端末の中身が一切見えない（親の統合 test で発見。D96）。
 import "@xterm/xterm/css/xterm.css";
+// 境目（サイドバーの幅・pane の間・spaces と agents）の見た目。動きは composables/useResizeDrag.ts（20261004-ui-interaction-polish）。
+import "./styles/resizeHandle.css";
 import { createPinia } from "pinia";
 import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";

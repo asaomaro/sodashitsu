@@ -1079,11 +1079,11 @@ describe("SettingsDialog — 色の個別の上書き", () => {
     overridesDetails(w).get<HTMLInputElement>(`[data-override-input="${bucket}:${key}"]`);
   const status = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) => overridesDetails(w).get('[role="status"]');
 
-  it("折りたたみ（既定は閉じている）に、19 個の CSS 変数それぞれ、ラベル・説明・明るいとき／暗いときの入力欄がある（AC1・AC12・AC-I1）", async () => {
+  it("折りたたみ（既定は閉じている）に、20 個の CSS 変数それぞれ、ラベル・説明・明るいとき／暗いときの入力欄がある（AC1・AC12・AC-I1）", async () => {
     const { wrapper } = await openDialog();
     const details = overridesDetails(wrapper);
     expect(details.attributes("open")).toBeUndefined();
-    expect(rows(wrapper)).toHaveLength(19);
+    expect(rows(wrapper)).toHaveLength(20);
     const first = rows(wrapper)[0]!;
     expect(first.get("code").text()).toBe("--soda-bg");
     expect(first.text()).toContain("画面地の背景");

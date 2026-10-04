@@ -44,6 +44,8 @@ const raw = {
   notifyHintDone: true,
   sidebarWidth: 300,
   sidebarCollapsed: true,
+  sidebarSectionRatio: 0.3,
+  sidebarSectionsCollapsed: { agents: true },
 };
 
 describe("applyPrefsToStores", () => {
@@ -78,6 +80,8 @@ describe("applyPrefsToStores", () => {
     // 端末ごとの項目には触れない
     expect(view.sidebarWidth).not.toBe(300);
     expect(view.sidebarCollapsed).toBe(false);
+    expect(view.sidebarSectionRatio).toBeNull();
+    expect(view.sectionsCollapsed).toEqual({ spaces: false, agents: false });
   });
 
   it("壊れた値・無い項目は既定へ落とす", () => {

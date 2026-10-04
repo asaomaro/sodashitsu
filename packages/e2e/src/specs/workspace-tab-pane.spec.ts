@@ -393,10 +393,15 @@ async function makeAheadRepo(branch: string): Promise<string> {
   return work;
 }
 
-/** `.sidebar` のスクロール領域と表示領域。横スクロールバーが出るのは前者が後者より広いとき。 */
+/**
+ * スクロール領域と表示領域。横に溢れるのは前者が後者より広いとき。開いているサイドバーは `.sidebar` が `overflow: visible`（幅の境目が外へ 4px
+ * はみ出すため。20261004-ui-interaction-polish）で、はみ出した境目が `scrollWidth` に入る。中身が溢れるかは区画の入れ物 `.sidebar-sections` で見る。
+ * 畳んだサイドバーは今までどおり `.sidebar`。
+ */
 function sidebarWidths(page: Page): Promise<{ scroll: number; client: number }> {
   return page.evaluate(() => {
-    const el = document.querySelector(".sidebar") as HTMLElement;
+    const nav = document.querySelector(".sidebar") as HTMLElement;
+    const el = (nav.classList.contains("sidebar-collapsed") ? nav : document.querySelector(".sidebar-sections")) as HTMLElement;
     return { scroll: el.scrollWidth, client: el.clientWidth };
   });
 }

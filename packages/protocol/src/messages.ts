@@ -598,7 +598,7 @@ export interface SharedTuiPrefs {
 }
 
 /**
- * 共有する設定（web の `soda.prefs.v1` から端末ごとの項目〔`sidebarWidth`・`sidebarCollapsed`〕を除いたもの）。型は web が書く形
+ * 共有する設定（web の `soda.prefs.v1` から端末ごとの項目〔`DEVICE_LOCAL_PREF_KEYS`〕を除いたもの）。型は web が書く形
  * （`packages/web/src/store/{settings,view,notifications,onboarding}.ts` の保存の形。中身の細かい形は client-core の各 `load*`・`serialize*` が持つ）。
  * **型は約束であって検査ではない**——サーバは値の形を問わずに保存し（下のスキーマ）、版の違うクライアントが混ざると知らない項目・壊れた値も届くので、
  * 読む側は必ず `load*` で正規化する。
@@ -655,7 +655,13 @@ export interface SharedPrefs {
 export const SharedPrefs = z.object({ tui: z.object({}).passthrough().optional() }).passthrough() as unknown as z.ZodType<SharedPrefs>;
 
 /** 端末ごとに持ち、共有しない項目（web の localStorage に残す。design「設定」）。 */
-export const DEVICE_LOCAL_PREF_KEYS = ["sidebarWidth", "sidebarCollapsed", "fileLocality"] as const;
+export const DEVICE_LOCAL_PREF_KEYS = [
+  "sidebarWidth",
+  "sidebarCollapsed",
+  "fileLocality",
+  "sidebarSectionRatio",
+  "sidebarSectionsCollapsed",
+] as const;
 
 /** 共有の設定を読む。`rev` は保存のたびに +1（0 = サーバが一度も保存していない。web の初回の移行の目印）。 */
 export const PrefsGetParams = z.object({});

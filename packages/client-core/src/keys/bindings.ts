@@ -466,6 +466,21 @@ export const ACTIONS = [
     defaults: ["prefix+shift+s"],
     action: { type: "showSubagents" },
   },
+  // 20261004-ui-interaction-polish（本製品の追加）。サイドバーの区画（spaces・agents）の折りたたみ。prefix+b（サイドバー全体）の shift を spaces に、agents は頭文字。
+  {
+    id: "toggle_spaces_section",
+    label: "サイドバーの spaces を折りたたむ／開く",
+    group: "pane",
+    defaults: ["prefix+shift+b"],
+    action: { type: "toggleSidebarSection", section: "spaces" },
+  },
+  {
+    id: "toggle_agents_section",
+    label: "サイドバーの agents を折りたたむ／開く",
+    group: "pane",
+    defaults: ["prefix+shift+a"],
+    action: { type: "toggleSidebarSection", section: "agents" },
+  },
 ] as const satisfies readonly ActionDef[];
 
 export type ActionId = (typeof ACTIONS)[number]["id"];
