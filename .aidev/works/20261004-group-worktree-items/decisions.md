@@ -326,3 +326,20 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **一致のテスト**: `SessionModel.clientAgreement.test.ts`（スナップショットの `layout`・並び・実効の `groupId` を画面の `sidebarTree` に通す。仮の状態〔`layoutFromLegacy` と同じ〕・配信の途中〔`workspace.created`／`workspace.closed` が `layout` より先に届いた状態〕・「グループなし」の見出し・代表の交代を含む）。
 - **2 つの接続の統合テスト**: `WsGateway.integration.test.ts`（実物の ws・HTTP。`TestServer` に `session` を足した）。操作する接続 A・見ている接続 B・新しくつないだ接続 C の木が、操作ごとに同じ（イベントだけで状態を組み立てる `Screen` が `StoreAdapter` の役）。判定は poller の代わりに `session.updateWorkspaceGit` で入れた。
 - **閉じた後のフォーカス先**: `closeWorkspace` の後に移るフォーカス先は Map の先頭で、画面の一番上の workspace とは限らない（画面の木の順と Map の順は代表の交代で食い違いうるため）。実害は無いと判断した（どの workspace に移っても操作は変わらない）。
+
+## D38: E2E（T20・T28 の E2E の部分）で確かめた事実と決め
+
+- **spec**: `packages/e2e/src/specs/workspace-groups.spec.ts`（26 件を `test.describe` 10 個に分けた（独立点検の指摘で 20 件から増やした）。グループの作成と出入り／worktree グループ／後から開く・開き直す・再起動／ドラッグ／同じフォルダの 2 つ目〔AC19〕／「グループなし」〔AC20〕／状態のまとめと `+n`〔AC21〕／別の接続／キーだけ／pane の移動〔AC11〕）。合否はブラウザの DOM（行のキー `data-workspace-row-key`・クラス・`aria-expanded`/`aria-label`・`data-kind`・`data-state`・読み上げ用の文言）と、CDP で見たブラウザが送った／受けたフレームだけ。テスト自身のクライアントは前提作りと「別の接続の操作」にだけ使い、その後は DOM が変わるのを待つ。固定時間の待ちは無し。
+- **Sidebar.vue に観測用の印は足していない**。行の種類は、キー（`group:`・`ungrouped:`）・折りたたみのボタンの有無・`sidebar-row-tree` で DOM から決められる（`data-row-kind` を足す案は golden が全部変わるのでやめた）。
+- **worktree は spec が自分で `git worktree add`（リポジトリの隣の一時ディレクトリ）で作る**。`worktree.create`（サーバの既定の作成先は利用者の `~/.sodashitsu/worktrees`）は使わない。git の判定は `workspace.create` 直後に走る（`pollWorkspaceNow`）ので、5 秒周期を待たずに worktree グループになる（DOM を `expect.poll` で待つ）。最初から居る workspace（このリポジトリの中を cwd とする）は並びに混ざるので、作り終えてから閉じる。
+- **直した不具合（右クリックで見出しの折りたたみが切り替わる）**: `Sidebar.vue` の `onRowPointerDown` が `ev.button` を見ず、右クリックの `pointerup` が行のクリック扱いになっていた（グループの見出し・「グループなし」は折りたたみが切り替わり、通常の workspace の行は `focusWorkspace` が呼ばれた。main から同じ）。先頭で `ev.button !== 0` なら戻すように直した（独立点検の指摘。web の単体テスト `Sidebar.test.ts` に回帰テスト、E2E に「見出し・行を右クリックしてもメニューが開くだけ」）。見出しのメニューは E2E でも右クリックで開く（前の版の「キーで開く」回避はやめた）。
+- **同じフォルダの 2 つ目（AC19）**: 代表を閉じると次が worktree グループの子になること、2 つ目をグループへ入れても worktree グループが動かないことを DOM で固定した。
+- **壊して落ちる確認**は review.md の「T20・T28 壊して落ちる確認」に 13 件（web 8・client-core 3・server 2）。`isRepresentative` だけを壊しても `representativeIds`（並びの代表）は別の関数で、AC19 の最初のテストは落ちない（`z` のテストだけ落ちる）。並びの代表は `representativeIds` を壊して確かめた。
+
+## D39: E2E の追加（独立点検の指摘への対応）で確かめた事実と決め
+
+- **既定のキー割り当ての無い操作**（`move_workspace_previous`／`next`）は、ブラウザの設定 `soda.prefs.v1`（`keys.bindings`）を開く前に `page.addInitScript` で入れて割り当てる（`boot(page, appServer, { prefs })`。key-bindings.spec.ts と同じ形式）。spec では `prefix+u`／`prefix+i`。端で止まることは「端で押す → 反対のキーを押す → 並びが元どおり」の順序で確かめる（端で回り込む実装だと並びが変わる）。ブラウザは端でも `item.move_by` を送る（止めるのはサーバ）ので、送った件数も数える。
+- **ドラッグの取り消し（Esc・行の外）**は、取り消しの後に本物のドラッグを 1 つ行い、`item.move` が 1 件だけであることと並びで確かめる（何も待たずに「送っていない」を数えると、送る前でも通る）。落とせない行の上で離す場面は、同じ理由の知らせが出るのを待ってから数える。
+- **AC11（pane の `cd`）**は、テストのクライアントの `sendInput` で pane に `cd` を打ち、DOM の並びが変わるのを待つ（固定待ち無し。実測は数秒以内）。確かめた決まり: (1) 所属のあるリポジトリ A の worktree へ → A の worktree グループの子として同じグループに入る。(2) A の worktree グループの子が所属の無いリポジトリ B へ → 「グループなし」へ出る。(3) A の worktree の子が git 管理外へ → 移る前のグループに通常の行で残る。(4) そのグループに入った通常の行が所属の無いリポジトリ B へ移っても、グループには残り、その所属が B の所属になる（design の遷移表 `w:<id>` → `r:R`（2））。`w:<id>` からの判定は design.md の 130 行（(2) groupId を repoGroups に引き継ぐ）、`r:` から `r:` の判定は 131 行（所属が無ければグループの外）。requirements の AC11「所属が無ければグループの外へ出る」は (2)（グループの項目がリポジトリの項目だったとき）の決まりで、(4) のようにその workspace 自身がグループに入っている場合は残る。
+- **AC19 の「＋ 新規」**は、UI のボタンを押す形に替えた（worktree の行を選んで押す。新しい workspace は選んでいる pane のフォルダで開く）。名前は自動で付くので 3 行目の名前を読む。
+- **AC 番号**は requirements.md に合わせた（外と中をまたぐ＝AC5、一緒に閉じる＝AC7、開き直す・再起動＝AC10 など。tasks.md は触っていない）。常に通る `receivedEvents().toContain("sidebar.layout_changed")` は、並びを変えるのが自分の操作の場面では外し、別の接続の場面では「ブラウザは並びを変える要求を 1 つも送っていない（DOM が追従したのは別の接続の操作による）」と組にして残した。

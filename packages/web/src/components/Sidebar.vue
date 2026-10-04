@@ -486,6 +486,8 @@ function dropStateFor(dragged: SpaceRow, key: string | null): { row: SpaceRow; s
 }
 
 function onRowPointerDown(ev: PointerEvent, row: SpaceRow): void {
+  // 左ボタン以外（右クリックのメニュー・中ボタン）はドラッグ・クリックの開始にしない。
+  if (ev.button !== 0) return;
   workspaceDragStart = { x: ev.clientX, y: ev.clientY, pointerId: ev.pointerId, row };
   (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
 }

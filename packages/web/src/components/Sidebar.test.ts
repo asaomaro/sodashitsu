@@ -1243,6 +1243,43 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     expect(conn.requests.filter(([m]) => m === "workspace.focus")).toEqual([]);
   });
 
+  // 右クリック（button=2）の pointerup が行のクリック扱いになり、見出しの折りたたみが切り替わる・workspace の行で
+  // focusWorkspace が呼ばれる不具合の回帰。メニューは contextmenu で開く。左クリックは従来どおり。
+  describe("左ボタン以外の押下は行のクリックにしない", () => {
+    function pressRow(row: Element, button: number): void {
+      row.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10, button }));
+      row.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 10, button }));
+    }
+    it("グループの見出しを右クリックしても折りたたみが切り替わらない（左クリックは切り替わる）", () => {
+      const session = useSessionStore(pinia);
+      session.workspaceUpserted(makeWorkspace("w1", { groupId: "g1" }));
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      const toggleGroupCollapsed = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { toggleGroupCollapsed });
+      const head = wrapper.findAll(".sidebar-row")[0]!.element;
+      pressRow(head, 2);
+      pressRow(head, 1);
+      expect(toggleGroupCollapsed).not.toHaveBeenCalled();
+      pressRow(head, 0);
+      expect(toggleGroupCollapsed).toHaveBeenCalledTimes(1);
+    });
+    it("通常の workspace の行を右クリックしても workspace が切り替わらない（左クリックは切り替わる）", () => {
+      const session = useSessionStore(pinia);
+      const view = useViewStore(pinia);
+      session.workspaceUpserted(makeWorkspace("w1"));
+      session.tabUpserted(makeTab("t1", "w1"));
+      const conn = makeConnection();
+      const wrapper = mountSidebar(conn);
+      const row = wrapper.get(".sidebar-spaces .sidebar-row").element;
+      pressRow(row, 2);
+      expect(view.workspaceId).toBeNull();
+      expect(conn.requests).toEqual([]);
+      pressRow(row, 0);
+      expect(view.workspaceId).toBe("w1");
+      expect(conn.requests).toEqual([["workspace.focus", { workspaceId: "w1" }]]);
+    });
+  });
+
   // タスク点検の指摘：ドロップ確定時は「ドラッグ開始時点のスナップショット」を使う。ドラッグ中に
   // グループ構成が変わっても（他クライアントの操作等）、実際に動かす対象がドラッグ開始時と変わらない。
   it("ドラッグ中にグループの構成が変わっても、開始時点のメンバー集合で移動する", async () => {

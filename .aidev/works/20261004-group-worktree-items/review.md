@@ -3469,3 +3469,1475 @@ TypeError: Cannot read properties of undefined (reading 'startsWith')
 - T19 [should] 配信の途中の入力（layout 先行・判定前）の一致テストが無い → 2 件足した [conv:-]
 - T19 [nit] 壊して落ちる確認の網羅（操作ごとの layout_changed・group.created／deleted・workspace.closed）→ P1〜P7 を貼った [conv:regression-negative-control]
 - T19 [nit] 閉じた後のフォーカス先が Map の先頭である点 → D37 に追記 [conv:-]
+
+### T20・T28 壊して落ちる確認（E2E: workspace-groups.spec.ts）
+
+各行は、製品の該当行を 1 つずつ壊して（壊した差分は下に貼る）ビルドし直し、該当のテストを走らせた生の出力（失敗した最初のテストの要点）。確認のたびに `git checkout` で元に戻し、最後に `pnpm build` し直して全 20 件が通ることを確かめた。合否はどれもブラウザの DOM（行の並び・クラス・読み上げ用の文言）かブラウザが送ったフレームで落ちている。
+
+#### ドラッグ：入れ物が違う行の上を「落とせない」にする判定（`Sidebar.vue` の `dropStateFor`）
+
+壊し方: `row.container !== dragged.container` の分岐を無効にする（外と中をまたいでも落とせる）
+
+```diff
+-  if (row.container !== dragged.container) return { row, self: false, reason: "同じグループの中、または同じ「グループなし」の中の項目の間でだけ並べ替えできます" };
++  if (false as boolean) return { row, self: false, reason: "同じグループの中、または同じ「グループなし」の中の項目の間でだけ並べ替えできます" };
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:846:3 › ドラッグ › グループの中で項目を並べ替える。外と中をまたぐと落とせない（AC5・AC7） (8.7s)
+  1 failed
+
+  1) src/specs/workspace-groups.spec.ts:846:3 › ドラッグ › グループの中で項目を並べ替える。外と中をまたぐと落とせない（AC5・AC7） ──────
+
+    Error: expect(locator).toHaveClass(expected) failed
+
+    Locator: locator('.sidebar-spaces .sidebar-row[data-workspace-row-key]').filter({ has: locator('.sidebar-label').filter({ hasText: /^delta$/ }) })
+    Expected pattern: /sidebar-row-drop-invalid/
+    Received string:  "sidebar-row sidebar-row-indent sidebar-row-drop-target"
+    Timeout: 5000ms
+
+
+
+      883 |     const sentBefore = sentMethods(env.frames, "item.move").length;
+      884 |     await dragOver(page, rowOf(page, "beta"), rowOf(page, "delta"));
+    > 885 |     await expect(rowOf(page, "delta")).toHaveClass(/sidebar-row-drop-invalid/);
+          |                                        ^
+      886 |     await expect(rowOf(page, "delta")).not.toHaveClass(/sidebar-row-drop-target/);
+      887 |     await page.mouse.up();
+      888 |     await expect(
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:885:40
+
+```
+
+#### 畳んだ worktree グループの `+n`（`Sidebar.vue`）
+
+壊し方: `+n` の表示条件 `row.hiddenCount > 0` を `false` にする
+
+```diff
+-                <span v-if="i === 0 && !view.sidebarCollapsed && row.hiddenCount > 0" class="sidebar-wt-plus" :aria-label="`隠れている worktree ${row.hiddenCount} 件`">+{{ row.hiddenCount }}</span>
++                <span v-if="i === 0 && !view.sidebarCollapsed && false" class="sidebar-wt-plus" :aria-label="`隠れている worktree ${row.hiddenCount} 件`">+{{ row.hiddenCount }}</span>
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:603:3 › worktree グループ › 畳む：グループと worktree グループ。今いる workspace の行は畳んでも残る（AC6） (22.1s)
+  ✘  2 src/specs/workspace-groups.spec.ts:1171:3 › 状態のまとめと +n（追補 01 C・AC21） › グループの見出しは中の状態をまとめて常に出す。畳んだ worktree グループの先頭の行は全体をまとめ、+n を添える (26.7s)
+  2 failed
+
+  1) src/specs/workspace-groups.spec.ts:603:3 › worktree グループ › 畳む：グループと worktree グループ。今いる workspace の行は畳んでも残る（AC6）
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Array [
+        "[g] work (1)",
+    -   "  wt*▸ main-ws +2",
+    +   "  wt*▸ main-ws",
+        "[u] グループなし (1)",
+        "  solo",
+      ]
+
+
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:628:11
+
+```
+
+#### 「グループなし」の見出しを本物のグループがあるときだけ出す（`Sidebar.vue` の `row.heading`）
+
+壊し方: `if (row.heading)` を常に真にする（グループが無くても見出しが出る）
+
+```diff
+-      if (row.heading) {
++      if (true as boolean) {
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:344:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC1・AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20） (21.2s)
+  1 failed
+
+  1) src/specs/workspace-groups.spec.ts:344:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC1・AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20）
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 0
+    + Received  + 1
+
+      Array [
+    +   "[u] グループなし (3)",
+        "alpha",
+        "beta",
+        "gamma",
+      ]
+
+
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:353:11
+
+```
+
+#### worktree グループの読み上げ用の文言（`SidebarKindIcon.vue`）
+
+壊し方: 文言 `worktree グループ` を `WT` にする
+
+```diff
+-const TEXT = { group: "グループ", worktreeGroup: "worktree グループ" } as const;
++const TEXT = { group: "グループ", worktreeGroup: "WT" } as const;
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:553:3 › worktree グループ › 種類の印と読み上げ用の文言（AC12）。畳んだサイドバーでは印が名前を持つ (3.9s)
+  1 failed
+
+  1) src/specs/workspace-groups.spec.ts:553:3 › worktree グループ › 種類の印と読み上げ用の文言（AC12）。畳んだサイドバーでは印が名前を持つ
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 3
+    + Received  + 3
+
+    @@ -3,19 +3,19 @@
+          "group",
+          "グループ",
+        ],
+        Array [
+          "worktreeGroup",
+    -     "worktree グループ",
+    +     "WT",
+        ],
+        Array [
+          "worktreeGroup",
+    -     "worktree グループ",
+    +     "WT",
+        ],
+        Array [
+          "worktreeGroup",
+    -     "worktree グループ",
+    +     "WT",
+        ],
+        Array [
+          null,
+          null,
+        ],
+
+      571 |     // 展開：見出しは「グループ」、worktree グループの先頭の行と子は「worktree グループ」を読み上げ用の文字で持つ。「グループなし」・通常の行は印なし。
+      572 |     const rows = await rowsOf(page);
+    > 573 |     expect(rows.map((r) => [r.kindIcon, r.kindText])).toEqual([
+          |                                                       ^
+      574 |       ["group", "グループ"],
+      575 |       ["worktreeGroup", "worktree グループ"],
+      576 |       ["worktreeGroup", "worktree グループ"],
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:573:55
+
+```
+
+#### 本体を閉じるときの「worktree も一緒に閉じる」（`ConfirmDialog.vue`）
+
+壊し方: 対象の本体でも一緒に閉じる対象を空にする
+
+```diff
+-  return members.length > 1 && members[0]!.id === target.id ? members.slice(1) : [];
++  return members.length > 1 && members[0]!.id === target.id ? [] : [];
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:679:3 › worktree グループ › 本体を閉じるとき、グループの中でも「worktree も一緒に閉じる」が出て全部閉じる（AC9） (7.9s)
+  1 failed
+
+  1) src/specs/workspace-groups.spec.ts:679:3 › worktree グループ › 本体を閉じるとき、グループの中でも「worktree も一緒に閉じる」が出て全部閉じる（AC9）
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.confirm-dialog').getByLabel('束ねた worktree も一緒に閉じる（2 件）')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+
+
+      701 |     // グループの中でも出る。数は代表（worktree）の分。
+      702 |     const check = confirm.getByLabel("束ねた worktree も一緒に閉じる（2 件）");
+    > 703 |     await expect(check).toBeVisible();
+          |                         ^
+      704 |     await check.check();
+      705 |     await confirm.getByRole("button", { name: "閉じる", exact: true }).click();
+      706 |     await expect(confirm).toBeHidden();
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:703:25
+
+```
+
+#### navigate の `z`（折りたたみ。`ActionDispatcher.toggleCollapseOfSelection`）
+
+壊し方: 関数の先頭で何もせず戻る
+
+```diff
++    if (Date.now() > 0) return;
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:1342:3 › キーだけの操作 › navigate の選択・メニュー・折りたたみ・並べ替えがキーだけでできる (21.6s)
+  ✘  2 src/specs/workspace-groups.spec.ts:1420:3 › キーだけの操作 › worktree グループの先頭の行で z を押すと畳み、通常の行・同じフォルダの 2 つ目では何も起きない（AC6） (22.0s)
+  2 failed
+
+  1) src/specs/workspace-groups.spec.ts:1342:3 › キーだけの操作 › navigate の選択・メニュー・折りたたみ・並べ替えがキーだけでできる ───
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 2
+
+      Array [
+    -   "[g▸] g1 (2)",
+    +   "[g] g1 (2)",
+        "  alpha",
+    +   "  beta",
+        "[u] グループなし (1)",
+        "  gamma",
+      ]
+
+
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1380:11
+
+```
+
+#### 「グループなし」の見出しのメニュー項目（`ContextMenu.vue`）
+
+壊し方: 「名前の変更」を余分に出す
+
+```diff
++          { label: "名前の変更", run: () => undefined },
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:1061:3 › 「グループなし」（追補 01 B・AC20） › 畳める・グループと並べ替えられる・名前の変更と削除は無い。外すと末尾へ (4.8s)
+  1 failed
+
+  1) src/specs/workspace-groups.spec.ts:1061:3 › 「グループなし」（追補 01 B・AC20） › 畳める・グループと並べ替えられる・名前の変更と削除は無い。外すと末尾へ
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 0
+    + Received  + 1
+
+      Array [
+    +   "名前の変更",
+        "上へ移動",
+        "下へ移動",
+      ]
+
+      1096 |     // メニューは「上へ移動」「下へ移動」だけ（名前の変更・削除は無い）。上へ動かすとグループの前に出る。
+      1097 |     await openHeadingMenuByKeys(page, "グループなし");
+    > 1098 |     expect(await menuItems(page)).toEqual(["上へ移動", "下へ移動"]);
+           |                                   ^
+      1099 |     await chooseMenu(page, "上へ移動");
+      1100 |     await leaveNavigate(page);
+      1101 |     await expectOutline(page, [
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1098:35
+
+```
+
+#### グループの見出しの状態のまとめ（`Sidebar.vue`）
+
+壊し方: グループの見出しの `state` を常に `null`（まとめない）にする
+
+```diff
+-      state: aggregateStateOf(allWorkspaces),
++      state: null,
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:1171:3 › 状態のまとめと +n（追補 01 C・AC21） › グループの見出しは中の状態をまとめて常に出す。畳んだ worktree グループの先頭の行は全体をまとめ、+n を添える (1.0m)
+  1 failed
+
+  1) src/specs/workspace-groups.spec.ts:1171:3 › 状態のまとめと +n（追補 01 C・AC21） › グループの見出しは中の状態をまとめて常に出す。畳んだ worktree グループの先頭の行は全体をまとめ、+n を添える
+
+    Error: 子の行・グループの見出しに blocked が出る
+
+    子の行・グループの見出しに blocked が出る
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Array [
+    -   "blocked",
+    +   "none",
+        "none",
+        "blocked",
+        "none",
+        "none",
+      ]
+
+
+      1207 |         message: "子の行・グループの見出しに blocked が出る",
+      1208 |       })
+    > 1209 |       .toEqual(["blocked", "none", "blocked", "none", "none"]);
+           |        ^
+      1210 |     // 広げているときの worktree グループの先頭の行は、本体の状態のまま（none）。見出しは中の全部（子を含む）をまとめて blocked。
+      1211 |     // 「グループなし」の見出しは中（solo）だけなので none。
+      1212 |
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1209:8
+
+```
+
+#### 代表でない行で `z` が畳まない（client-core `isRepresentative`）
+
+壊し方: `isRepresentative` を常に真にする
+
+```diff
+-  if (typeof key !== "string") return true;
++  if (typeof key !== "string" || Date.now() > 0) return true;
+```
+
+```
+  ✓  1 src/specs/workspace-groups.spec.ts:999:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › worktree グループには入らず通常の行（worktree の印なし）。代表を閉じると次が worktree グループに入る (2.4s)
+  ✘  2 src/specs/workspace-groups.spec.ts:1033:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › 同じフォルダの 2 つ目は、worktree グループの所属に引きずられない（グループへ入れても worktree グループは動かない） (21.6s)
+  ✘  3 src/specs/workspace-groups.spec.ts:1420:3 › キーだけの操作 › worktree グループの先頭の行で z を押すと畳み、通常の行・同じフォルダの 2 つ目では何も起きない（AC6） (21.4s)
+  2 failed
+  1 passed (47.0s)
+
+  1) src/specs/workspace-groups.spec.ts:1033:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › 同じフォルダの 2 つ目は、worktree グループの所属に引きずられない（グループへ入れても worktree グループは動かない）
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+      Array [
+        "[g] g1 (1)",
+    -   "  same-2",
+    -   "[u] グループなし (1)",
+        "  wt* main-ws",
+        "    wt same-1",
+    +   "[u] グループなし (1)",
+    +   "  same-2",
+      ]
+
+
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1046:11
+
+```
+
+#### 同じフォルダの 2 つ目は代表にならない（client-core `representativeIds`）
+
+壊し方: 同じ `worktreeKey` を重複として読み飛ばす行を無効にする（2 つ目も代表になる）
+
+```diff
+-      if (seen.has(key)) continue;
++      if (Date.now() < 0 && seen.has(key)) continue;
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:999:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › worktree グループには入らず通常の行（worktree の印なし）。代表を閉じると次が worktree グループに入る (21.4s)
+  ✘  2 src/specs/workspace-groups.spec.ts:1033:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › 同じフォルダの 2 つ目は、worktree グループの所属に引きずられない（グループへ入れても worktree グループは動かない） (21.2s)
+  ✘  3 src/specs/workspace-groups.spec.ts:1420:3 › キーだけの操作 › worktree グループの先頭の行で z を押すと畳み、通常の行・同じフォルダの 2 つ目では何も起きない（AC6） (21.3s)
+  3 failed
+
+  1) src/specs/workspace-groups.spec.ts:999:3 › 同じフォルダの 2 つ目の workspace（追補 01 A・AC19） › worktree グループには入らず通常の行（worktree の印なし）。代表を閉じると次が worktree グループに入る
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Array [
+        "wt* main-ws",
+        "  wt same-1",
+    -   "same-2",
+    +   "  wt same-2",
+      ]
+
+
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1013:11
+
+```
+
+#### グループの削除で中身は「グループなし」の末尾へ（client-core `deleteGroupFromLayout`）
+
+壊し方: 中身を「グループなし」の先頭側へ入れる
+
+```diff
+-    ungrouped: [...layout.ungrouped, ...(layout.groups[groupId] ?? []).filter((r) => !layout.ungrouped.includes(r))],
++    ungrouped: [...(layout.groups[groupId] ?? []).filter((r) => !layout.ungrouped.includes(r)), ...layout.ungrouped],
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:441:3 › グループの作成と出入り › グループを削除すると中身は「グループなし」の末尾へ出る。グループが無くなると見出しは消える（AC10・AC20） (21.9s)
+  1 failed
+
+  1) src/specs/workspace-groups.spec.ts:441:3 › グループの作成と出入り › グループを削除すると中身は「グループなし」の末尾へ出る。グループが無くなると見出しは消える（AC10・AC20）
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Array [
+        "[g] g2 (1)",
+        "  beta",
+        "[u] グループなし (2)",
+    -   "  gamma",
+        "  alpha",
+    +   "  gamma",
+      ]
+
+
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:463:11
+
+```
+
+#### サーバの再起動で並びを戻す（server `SessionService.persistedLayout`）
+
+壊し方: 保存する `layout`・`repoGroups` を書かない（常に null）
+
+```diff
+-    if (!this.model.hasLayout()) return null;
++    if (!this.model.hasLayout() || Date.now() > 0) return null;
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:809:3 › 後から開く・開き直す・再起動 › サーバを再起動しても、同じ並び・同じグループ・同じ折りたたみ（AC18） (3.3s)
+  1 failed
+
+  1) src/specs/workspace-groups.spec.ts:809:3 › 後から開く・開き直す・再起動 › サーバを再起動しても、同じ並び・同じグループ・同じ折りたたみ（AC18）
+
+    Error: second が work の前・work は畳んでいる
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Array [
+        "[g] second (1)",
+        "  other",
+    -   "[g▸] work (1)",
+    +   "[g] work (1)",
+      ]
+
+      826 |     await rowOf(page, "work").getByRole("button", { name: "グループを折りたたむ" }).click();
+      827 |     const before = await outline(page);
+    > 828 |     expect(before.slice(0, 3), "second が work の前・work は畳んでいる").toEqual([
+          |                                                                ^
+      829 |       "[g] second (1)",
+      830 |       "  other",
+      831 |       "[g▸] work (1)",
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:828:64
+
+```
+
+#### 全部閉じて開き直したとき同じグループへ戻る（server `SessionModel` の `repoGroups` の参照）
+
+壊し方: 覚えているグループを無視する
+
+```diff
+-    const repoGroup = liveGroup(this.repoGroups.get(newKey));
++    const repoGroup = liveGroup(undefined);
+```
+
+```
+  ✘  1 src/specs/workspace-groups.spec.ts:775:3 › 後から開く・開き直す・再起動 › 全部閉じて開き直すと、同じグループに戻る（AC8） (22.1s)
+  1 failed
+
+  1) src/specs/workspace-groups.spec.ts:775:3 › 後から開く・開き直す・再起動 › 全部閉じて開き直すと、同じグループに戻る（AC8） ─────────
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 3
+    + Received  + 3
+
+      Array [
+    -   "[g] work (1)",
+    -   "  main-ws",
+    -   "[u] グループなし (1)",
+    +   "[g] work (0)",
+    +   "[u] グループなし (2)",
+        "  solo",
+    +   "  main-ws",
+      ]
+
+
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:798:11
+
+```
+
+
+2 回続けて同じ結果: 壊していない状態で `workspace-groups.spec.ts` を 2 回続けて走らせ、どちらも 20 件通った（1.2 分）。
+
+### T20・T28 壊して落ちる確認（独立点検の指摘への追加。workspace-groups.spec.ts・Sidebar.test.ts）
+
+独立点検の指摘（右クリックの不具合の修正と、壊して落ちる確認が無かった場面）への追加。各項目は、製品の該当 1 か所を壊して `corepack pnpm build` し直し、該当のテストだけを走らせた生の出力（失敗した最初のテストの要点。トレースの案内は省いた）。確認ごとに元へ戻し、最後に `pnpm build` し直した。壊した差分は各項目の先頭（`-` が元、`+` が壊した形）。
+
+#### 右クリックの回帰（web の単体テスト `Sidebar.test.ts`。`Sidebar.vue` の `if (ev.button !== 0) return;` を外す）
+
+```
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/web
+ ❯ src/components/Sidebar.test.ts (138 tests | 2 failed) 706ms
+   ❯ Sidebar — workspace 行の D&D（20260923-workspace-grouping） (29)
+     ❯ 左ボタン以外の押下は行のクリックにしない (2)
+       × グループの見出しを右クリックしても折りたたみが切り替わらない（左クリックは切り替わる） 15ms
+       × 通常の workspace の行を右クリックしても workspace が切り替わらない（左クリックは切り替わる） 18ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 左ボタン以外の押下は行のクリックにしない > グループの見出しを右クリックしても折りたたみが切り替わらない（左クリックは切り替わる）
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 2 times
+Received:
+  1st vi.fn() call:
+    Array [
+      "g1",
+    ]
+  2nd vi.fn() call:
+    Array [
+      "g1",
+    ]
+Number of calls: 2
+ ❯ src/components/Sidebar.test.ts:1262:40
+    1260|       pressRow(head, 2);
+    1261|       pressRow(head, 1);
+    1262|       expect(toggleGroupCollapsed).not.toHaveBeenCalled();
+       |                                        ^
+    1263|       pressRow(head, 0);
+    1264|       expect(toggleGroupCollapsed).toHaveBeenCalledTimes(1);
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 左ボタン以外の押下は行のクリックにしない > 通常の workspace の行を右クリックしても workspace が切り替わらない（左クリックは切り替わる）
+AssertionError: expected 'w1' to be null
+- Expected:
+null
++ Received:
+"w1"
+ ❯ src/components/Sidebar.test.ts:1275:32
+    1273|       const row = wrapper.get(".sidebar-spaces .sidebar-row").element;
+    1274|       pressRow(row, 2);
+    1275|       expect(view.workspaceId).toBeNull();
+       |                                ^
+    1276|       expect(conn.requests).toEqual([]);
+    1277|       pressRow(row, 0);
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+ Test Files  1 failed (1)
+      Tests  2 failed | 136 passed (138)
+   Start at  16:27:56
+   Duration  2.01s (transform 47%, tests 37%, import 8%, environment 8%)
+undefined
+/workspaces/sodashitsu/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/Sidebar.test.ts
+```
+
+#### 01-rightclick: 右クリックで見出しの折りたたみ・行の workspace が切り替わる（`Sidebar.vue` の `onRowPointerDown` の `ev.button` ガードを外す）
+
+```
+--- diff
+-   if (ev.button !== 0) return;
++ 
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:528:3 › グループの作成と出入り › 見出し・行を右クリックしてもメニューが開くだけで、折りたたみも今いる workspace も変わらない（AC-I1）
+src/specs/workspace-groups.spec.ts:528:3 › グループの作成と出入り › 見出し・行を右クリックしてもメニューが開くだけで、折りたたみも今いる workspace も変わらない（AC-I1）
+  1) src/specs/workspace-groups.spec.ts:528:3 › グループの作成と出入り › 見出し・行を右クリックしてもメニューが開くだけで、折りたたみも今いる workspace も変わらない（AC-I1） 
+    Test timeout of 30000ms exceeded.
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for locator('.sidebar-spaces .sidebar-row[data-workspace-row-key]').filter({ has: locator('.sidebar-label').filter({ hasText: /^gamma$/ }) })
+      269 |
+      270 | async function openMenuOn(page: Page, row: Locator): Promise<void> {
+    > 271 |   await row.click({ button: "right" });
+          |             ^
+      272 |   await expect(page.locator(".context-menu")).toBeVisible();
+      273 | }
+      274 |
+        at openMenuOn (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:271:13)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:554:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:528:3 › グループの作成と出入り › 見出し・行を右クリックしてもメニューが開くだけで、折りたたみも今いる workspace も変わらない（AC-I1） 
+```
+
+#### 02c-late-open-members: 後から開いた worktree が worktree グループに束ねられない（`client-core` の `repoMembers` から linked worktree を外す）。なお `SessionModel.transition` の `w:`→`r:` の分岐だけを壊しても落ちない（`r:` の項目が既にあれば、描画の木は代表から導かれるため。`02-late-open` の出力は `1 passed`）
+
+```
+--- diff
+- const members = workspaces.filter((w) => w.git?.repoKey === repoKey && reps.has(w.id));
++ const members = workspaces.filter((w) => w.git?.repoKey === repoKey && reps.has(w.id) && w.git?.isLinkedWorktree !== true);
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:832:3 › 後から開く・開き直す・再起動 › 後から worktree を開くと、同じ worktree グループ・同じグループに入る（AC8）
+src/specs/workspace-groups.spec.ts:832:3 › 後から開く・開き直す・再起動 › 後から worktree を開くと、同じ worktree グループ・同じグループに入る（AC8）
+  1) src/specs/workspace-groups.spec.ts:832:3 › 後から開く・開き直す・再起動 › 後から worktree を開くと、同じ worktree グループ・同じグループに入る（AC8） 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 2
+    + Received  + 1
+      Array [
+        "[g] work (1)",
+    -   "  wt* main-ws",
+    -   "    wt late-ws",
+    +   "  main-ws",
+        "[u] グループなし (1)",
+        "  solo",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:847:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:832:3 › 後から開く・開き直す・再起動 › 後から worktree を開くと、同じ worktree グループ・同じグループに入る（AC8） 
+```
+
+#### 03-reopen: 全部閉じて開き直したとき、覚えているグループへ戻らず「グループなし」へ入る（`SessionModel.transition`）
+
+```
+--- diff
+- return exists ? without : addItemToGroup(without, to, repoGroup);
++ return exists ? without : insertItem(without, to, null);
+--- output
+Running 3 tests using 1 worker
+[1/3] src/specs/workspace-groups.spec.ts:832:3 › 後から開く・開き直す・再起動 › 後から worktree を開くと、同じ worktree グループ・同じグループに入る（AC8）
+src/specs/workspace-groups.spec.ts:832:3 › 後から開く・開き直す・再起動 › 後から worktree を開くと、同じ worktree グループ・同じグループに入る（AC8）
+[2/3] src/specs/workspace-groups.spec.ts:863:3 › 後から開く・開き直す・再起動 › 全部閉じて開き直すと、同じグループに戻る（AC10）
+src/specs/workspace-groups.spec.ts:863:3 › 後から開く・開き直す・再起動 › 全部閉じて開き直すと、同じグループに戻る（AC10）
+  1) src/specs/workspace-groups.spec.ts:863:3 › 後から開く・開き直す・再起動 › 全部閉じて開き直すと、同じグループに戻る（AC10） ────────
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 3
+    + Received  + 3
+      Array [
+    -   "[g] work (1)",
+    -   "  main-ws",
+    -   "[u] グループなし (1)",
+    +   "[g] work (0)",
+    +   "[u] グループなし (2)",
+        "  solo",
+    +   "  main-ws",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:886:11
+[3/3] src/specs/workspace-groups.spec.ts:897:3 › 後から開く・開き直す・再起動 › サーバを再起動しても、同じ並び・同じグループ・同じ折りたたみ（AC10）
+src/specs/workspace-groups.spec.ts:897:3 › 後から開く・開き直す・再起動 › サーバを再起動しても、同じ並び・同じグループ・同じ折りたたみ（AC10）
+  1 failed
+    src/specs/workspace-groups.spec.ts:863:3 › 後から開く・開き直す・再起動 › 全部閉じて開き直すと、同じグループに戻る（AC10） ─────────
+  2 passed (34.6s)
+```
+
+#### 04-other-conn: 別の接続の並びの変更（`sidebar.layout_changed`）をブラウザが反映しない（`StoreAdapter.ts`）
+
+```
+--- diff
+-         session.layoutChanged(e.data.layout);
++         void e.data.layout;
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1397:3 › 別の接続からの操作 › 別の接続（テストのクライアント）の操作に、ブラウザの DOM が追従する
+src/specs/workspace-groups.spec.ts:1397:3 › 別の接続からの操作 › 別の接続（テストのクライアント）の操作に、ブラウザの DOM が追従する
+  1) src/specs/workspace-groups.spec.ts:1397:3 › 別の接続からの操作 › 別の接続（テストのクライアント）の操作に、ブラウザの DOM が追従する ──
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 2
+    + Received  + 2
+      Array [
+    -   "[g] g1 (1)",
+    +   "[g] g1 (0)",
+    +   "[u] グループなし (3)",
+        "  alpha",
+    -   "[u] グループなし (2)",
+        "  beta",
+        "  gamma",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1409:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:1397:3 › 別の接続からの操作 › 別の接続（テストのクライアント）の操作に、ブラウザの DOM が追従する ───
+```
+
+#### 05-drag-plain: 同じグループの中のドラッグ（通常の行の項目が正しくない。`Sidebar.vue` の `workspaceRow`）
+
+```
+--- diff
+- item: { kind: "workspace", workspaceId: opts.itemHeadId },
++ item: { kind: "workspace", workspaceId: opts.kind === "workspace" ? "w-none" : opts.itemHeadId },
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:935:3 › ドラッグ › グループの中で項目を並べ替える。外と中をまたぐと落とせない（AC5）
+src/specs/workspace-groups.spec.ts:935:3 › ドラッグ › グループの中で項目を並べ替える。外と中をまたぐと落とせない（AC5）
+  1) src/specs/workspace-groups.spec.ts:935:3 › ドラッグ › グループの中で項目を並べ替える。外と中をまたぐと落とせない（AC5） ──────────
+    Error: expect(locator).toHaveClass(expected) failed
+    Locator: locator('.sidebar-spaces .sidebar-row[data-workspace-row-key]').filter({ has: locator('.sidebar-label').filter({ hasText: /^alpha$/ }) })
+    Expected pattern: /sidebar-row-drop-target/
+    Received string:  "sidebar-row sidebar-row-current sidebar-row-indent"
+    Timeout: 5000ms
+    Call log:
+      - Expect "toHaveClass" locator('.sidebar-spaces .sidebar-row[data-workspace-row-key]').filter({ has: locator('.sidebar-label').filter({ hasText: /^alpha$/ }) }) with timeout 5000ms
+      - waiting for locator('.sidebar-spaces .sidebar-row[data-workspace-row-key]').filter({ has: locator('.sidebar-label').filter({ hasText: /^alpha$/ }) })
+        14 × locator resolved to <div data-v-a158a173="" aria-current="true" data-workspace-row-key="w2" data-drop-workspace-id="w2" class="sidebar-row sidebar-row-current sidebar-row-indent">…</div>
+           - unexpected value "sidebar-row sidebar-row-current sidebar-row-indent"
+      957 |     // 同じグループの中：gamma を alpha の前へ。落とせる行には印（drop-target）が付く（離す前の DOM）。
+      958 |     await dragOver(page, rowOf(page, "gamma"), rowOf(page, "alpha"));
+    > 959 |     await expect(rowOf(page, "alpha")).toHaveClass(/sidebar-row-drop-target/);
+          |                                        ^
+      960 |     await page.mouse.up();
+      961 |     await expectOutline(page, [
+      962 |       "[g] g1 (3)",
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:959:40
+  1 failed
+    src/specs/workspace-groups.spec.ts:935:3 › ドラッグ › グループの中で項目を並べ替える。外と中をまたぐと落とせない（AC5） ───────────
+```
+
+#### 06-drag-child: 子の行をつかんでも全体が動く（サーバの `refOfTarget` が workspace を代表の項目へ引かず `w:<id>` にする）
+
+```
+--- diff
+- return itemRefOf(this.requireWorkspace(target.workspaceId), this.listWorkspaces());
++ return `w:${this.requireWorkspace(target.workspaceId).id}`;
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1018:3 › ドラッグ › worktree グループは子の行をつかんでも全体が動く。まとまり（グループ・グループなし）はまとまりどうしで並べ替える（AC5・AC20）
+src/specs/workspace-groups.spec.ts:1018:3 › ドラッグ › worktree グループは子の行をつかんでも全体が動く。まとまり（グループ・グループなし）はまとまりどうしで並べ替える（AC5・AC20）
+  1) src/specs/workspace-groups.spec.ts:1018:3 › ドラッグ › worktree グループは子の行をつかんでも全体が動く。まとまり（グループ・グループなし）はまとまりどうしで並べ替える（AC5・AC20） 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 1
+    + Received  + 1
+      Array [
+        "[g] g1 (2)",
+    +   "  solo",
+        "  wt* main-ws",
+        "    wt wt-a-ws",
+        "    wt wt-b-ws",
+    -   "  solo",
+        "[u] グループなし (1)",
+        "  other",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1045:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:1018:3 › ドラッグ › worktree グループは子の行をつかんでも全体が動く。まとまり（グループ・グループなし）はまとまりどうしで並べ替える（AC5・AC20） 
+```
+
+#### 07-drag-group-heading: グループの見出しのドラッグ（見出しの項目が「グループなし」になる）
+
+```
+--- diff
+- item: { kind: "group", groupId: row.group.id },
++ item: { kind: "ungrouped" },
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1118:3 › ドラッグ › グループの見出しをつかんで、別のグループの上へ落とすとグループが並べ替わる（AC5）
+src/specs/workspace-groups.spec.ts:1118:3 › ドラッグ › グループの見出しをつかんで、別のグループの上へ落とすとグループが並べ替わる（AC5）
+  1) src/specs/workspace-groups.spec.ts:1118:3 › ドラッグ › グループの見出しをつかんで、別のグループの上へ落とすとグループが並べ替わる（AC5） ─
+    Error: expect(locator).toHaveClass(expected) failed
+    Locator: locator('.sidebar-spaces .sidebar-row[data-workspace-row-key]').filter({ has: locator('.sidebar-label').filter({ hasText: /^g1$/ }) })
+    Expected pattern: /sidebar-row-drop-target/
+    Received string:  "sidebar-row sidebar-row-group"
+    Timeout: 5000ms
+    Call log:
+      - Expect "toHaveClass" locator('.sidebar-spaces .sidebar-row[data-workspace-row-key]').filter({ has: locator('.sidebar-label').filter({ hasText: /^g1$/ }) }) with timeout 5000ms
+      - waiting for locator('.sidebar-spaces .sidebar-row[data-workspace-row-key]').filter({ has: locator('.sidebar-label').filter({ hasText: /^g1$/ }) })
+        14 × locator resolved to <div data-v-37a3171a="" data-workspace-row-key="group:g1" class="sidebar-row sidebar-row-group">…</div>
+           - unexpected value "sidebar-row sidebar-row-group"
+      1133 |     ]);
+      1134 |     await dragOver(page, rowOf(page, "g2"), rowOf(page, "g1"));
+    > 1135 |     await expect(rowOf(page, "g1")).toHaveClass(/sidebar-row-drop-target/);
+           |                                     ^
+      1136 |     await page.mouse.up();
+      1137 |     await expectOutline(page, [
+      1138 |       "[g] g2 (1)",
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1135:37
+  1 failed
+    src/specs/workspace-groups.spec.ts:1118:3 › ドラッグ › グループの見出しをつかんで、別のグループの上へ落とすとグループが並べ替わる（AC5） ──
+```
+
+#### 08-drag-ungrouped-heading: 「グループなし」の見出しの並べ替え（見出しの項目が無いグループになる）
+
+```
+--- diff
+-           item: { kind: "ungrouped" },
++           item: { kind: "group", groupId: "g-none" },
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1018:3 › ドラッグ › worktree グループは子の行をつかんでも全体が動く。まとまり（グループ・グループなし）はまとまりどうしで並べ替える（AC5・AC20）
+src/specs/workspace-groups.spec.ts:1018:3 › ドラッグ › worktree グループは子の行をつかんでも全体が動く。まとまり（グループ・グループなし）はまとまりどうしで並べ替える（AC5・AC20）
+  1) src/specs/workspace-groups.spec.ts:1018:3 › ドラッグ › worktree グループは子の行をつかんでも全体が動く。まとまり（グループ・グループなし）はまとまりどうしで並べ替える（AC5・AC20） 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 2
+    + Received  + 2
+      Array [
+    -   "[u] グループなし (1)",
+    -   "  other",
+        "[g] g1 (2)",
+        "  wt* main-ws",
+        "    wt wt-a-ws",
+        "    wt wt-b-ws",
+        "  solo",
+    +   "[u] グループなし (1)",
+    +   "  other",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1059:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:1018:3 › ドラッグ › worktree グループは子の行をつかんでも全体が動く。まとまり（グループ・グループなし）はまとまりどうしで並べ替える（AC5・AC20） 
+```
+
+#### 09-child-menu-remove: 子の行のメニュー「グループから外す」で全体が動かない（サーバの `removeFromGroup` が `w:<id>` を外そうとする）
+
+```
+--- diff
+- this.layout = removeItemFromGroup(layout, itemRefOf(ws, this.listWorkspaces()));
++ this.layout = removeItemFromGroup(layout, `w:${ws.id}`);
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:591:3 › worktree グループ › グループの中でまとまって並び、子の行のメニューでも全体が動く（AC1・AC2・AC3・AC4・AC12）
+src/specs/workspace-groups.spec.ts:591:3 › worktree グループ › グループの中でまとまって並び、子の行のメニューでも全体が動く（AC1・AC2・AC3・AC4・AC12）
+  1) src/specs/workspace-groups.spec.ts:591:3 › worktree グループ › グループの中でまとまって並び、子の行のメニューでも全体が動く（AC1・AC2・AC3・AC4・AC12） 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 3
+    + Received  + 3
+      Array [
+    -   "[g] work (0)",
+    -   "[u] グループなし (2)",
+    -   "  solo",
+    +   "[g] work (1)",
+        "  wt* main-ws",
+        "    wt wt-a-ws",
+        "    wt wt-b-ws",
+    +   "[u] グループなし (1)",
+    +   "  solo",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:627:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:591:3 › worktree グループ › グループの中でまとまって並び、子の行のメニューでも全体が動く（AC1・AC2・AC3・AC4・AC12） 
+```
+
+#### 10-child-menu-add: 子の行のメニュー「グループへ追加…」で全体が動かない（サーバの `addToGroup` が `w:<id>` を入れようとする）
+
+```
+--- diff
+- this.layout = addItemToGroup(layout, itemRefOf(ws, this.listWorkspaces()), groupId);
++ this.layout = addItemToGroup(layout, `w:${ws.id}`, groupId);
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:591:3 › worktree グループ › グループの中でまとまって並び、子の行のメニューでも全体が動く（AC1・AC2・AC3・AC4・AC12）
+src/specs/workspace-groups.spec.ts:591:3 › worktree グループ › グループの中でまとまって並び、子の行のメニューでも全体が動く（AC1・AC2・AC3・AC4・AC12）
+  1) src/specs/workspace-groups.spec.ts:591:3 › worktree グループ › グループの中でまとまって並び、子の行のメニューでも全体が動く（AC1・AC2・AC3・AC4・AC12） 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 1
+    + Received  + 1
+      Array [
+        "[g] work (1)",
+        "  wt* main-ws",
+    -   "    wt wt-a-ws",
+        "    wt wt-b-ws",
+    +   "    wt wt-a-ws",
+        "[u] グループなし (1)",
+        "  solo",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:640:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:591:3 › worktree グループ › グループの中でまとまって並び、子の行のメニューでも全体が動く（AC1・AC2・AC3・AC4・AC12） 
+```
+
+#### 11-create: 「新しいグループを作る…」が項目を入れない（サーバの `createGroup`）
+
+```
+--- diff
+- this.layout = ws ? addItemToGroup(created, itemRefOf(ws, this.listWorkspaces()), id) : created;
++ this.layout = created;
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20）
+src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20）
+  1) src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20） 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 2
+    + Received  + 2
+      Array [
+    -   "[g] g1 (1)",
+    +   "[g] g1 (0)",
+    +   "[u] グループなし (3)",
+        "  alpha",
+    -   "[u] グループなし (2)",
+        "  beta",
+        "  gamma",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:416:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20） 
+```
+
+#### 12-add: 「グループへ追加…」が何もしない（サーバの `addToGroup`）
+
+```
+--- diff
+- this.layout = addItemToGroup(layout, itemRefOf(ws, this.listWorkspaces()), groupId);
++ this.layout = layout;
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20）
+src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20）
+  1) src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20） 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 2
+    + Received  + 2
+      Array [
+    -   "[g] g1 (2)",
+    +   "[g] g1 (1)",
+        "  alpha",
+    +   "[u] グループなし (2)",
+        "  beta",
+    -   "[u] グループなし (1)",
+        "  gamma",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:434:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20） 
+```
+
+#### 13-remove: 「グループから外す」が何もしない（サーバの `removeFromGroup`）
+
+```
+--- diff
+- this.layout = removeItemFromGroup(layout, itemRefOf(ws, this.listWorkspaces()));
++ this.layout = layout;
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20）
+src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20）
+  1) src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20） 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 3
+    + Received  + 3
+      Array [
+    -   "[g] g1 (1)",
+    +   "[g] g1 (2)",
+        "  alpha",
+    -   "[u] グループなし (2)",
+    +   "  beta",
+    +   "[u] グループなし (1)",
+        "  gamma",
+    -   "  beta",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:451:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20） 
+```
+
+#### 14-move-picker: 「別のグループへ移す…」の選択肢が今のグループを除かない（`ActionDispatcher.openGroupPicker`）
+
+```
+--- diff
+- const groups = this.groupsInLayoutOrder().filter((g) => g.id !== current);
++ const groups = this.groupsInLayoutOrder();
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20）
+src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20）
+  1) src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20） 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 0
+    + Received  + 1
+      Array [
+    +   "g1",
+        "g2",
+      ]
+      479 |     await chooseMenu(page, "別のグループへ移す…");
+      480 |     await expect(page.locator(".group-picker-dialog-title")).toHaveText("別のグループへ移す");
+    > 481 |     expect(await pickGroup(page, "g2")).toEqual(["g2"]);
+          |                                         ^
+      482 |     await expectOutline(page, [
+      483 |       "[g] g1 (0)",
+      484 |       "[g] g2 (2)",
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:481:41
+  1 failed
+    src/specs/workspace-groups.spec.ts:398:3 › グループの作成と出入り › メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る（AC20） 
+```
+
+#### 15-child-close-checkbox: 子の行にも「worktree も一緒に閉じる」が出る（`ConfirmDialog.vue` の本体判定を外す）
+
+```
+--- diff
+- members.length > 1 && members[0]!.id === target.id ? members.slice(1) : [];
++ members.length > 1 ? members.slice(1) : [];
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:808:3 › worktree グループ › 子の行には「worktree も一緒に閉じる」は出ない（閉じるのはその 1 つだけ。AC7）
+src/specs/workspace-groups.spec.ts:808:3 › worktree グループ › 子の行には「worktree も一緒に閉じる」は出ない（閉じるのはその 1 つだけ。AC7）
+  1) src/specs/workspace-groups.spec.ts:808:3 › worktree グループ › 子の行には「worktree も一緒に閉じる」は出ない（閉じるのはその 1 つだけ。AC7） 
+    Error: expect(locator).toHaveCount(expected) failed
+    Locator:  locator('.confirm-dialog').locator('.confirm-dialog-linked-worktrees')
+    Expected: 0
+    Received: 1
+    Timeout:  5000ms
+    Call log:
+      - Expect "toHaveCount" locator('.confirm-dialog').locator('.confirm-dialog-linked-worktrees') with timeout 5000ms
+      - waiting for locator('.confirm-dialog').locator('.confirm-dialog-linked-worktrees')
+        14 × locator resolved to 1 element
+           - unexpected value "1"
+      819 |     const confirm = page.locator(".confirm-dialog");
+      820 |     await expect(confirm).toBeVisible();
+    > 821 |     await expect(confirm.locator(".confirm-dialog-linked-worktrees")).toHaveCount(0);
+          |                                                                       ^
+      822 |     await confirm.getByRole("button", { name: "閉じる", exact: true }).click();
+      823 |     await expectOutline(page, ["wt* main-ws", "  wt wt-b-ws"]);
+      824 |   });
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:821:71
+  1 failed
+    src/specs/workspace-groups.spec.ts:808:3 › worktree グループ › 子の行には「worktree も一緒に閉じる」は出ない（閉じるのはその 1 つだけ。AC7） 
+```
+
+#### 16-drag-esc: ドラッグ中の Esc が取り消さない（`Sidebar.vue` の `onEscapeDuringWorkspaceDrag`）
+
+```
+--- diff
+-   if (ev.key !== "Escape") return;
+  cancelWorkspaceDrag();
++   if (ev.key !== "Escape") return;
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1070:3 › ドラッグ › ドラッグは Esc・行の外で離すと取り消され、何も送らず並びも変わらない（AC-I2）
+src/specs/workspace-groups.spec.ts:1070:3 › ドラッグ › ドラッグは Esc・行の外で離すと取り消され、何も送らず並びも変わらない（AC-I2）
+  1) src/specs/workspace-groups.spec.ts:1070:3 › ドラッグ › ドラッグは Esc・行の外で離すと取り消され、何も送らず並びも変わらない（AC-I2） 
+    Error: expect(locator).toHaveCount(expected) failed
+    Locator:  locator('.sidebar-row-drop-target')
+    Expected: 0
+    Received: 1
+    Timeout:  5000ms
+    Call log:
+      - Expect "toHaveCount" locator('.sidebar-row-drop-target') with timeout 5000ms
+      - waiting for locator('.sidebar-row-drop-target')
+        14 × locator resolved to 1 element
+           - unexpected value "1"
+      1088 |     await expect(rowOf(page, "alpha")).toHaveClass(/sidebar-row-drop-target/);
+      1089 |     await page.keyboard.press("Escape");
+    > 1090 |     await expect(page.locator(".sidebar-row-drop-target")).toHaveCount(0);
+           |                                                            ^
+      1091 |     await page.mouse.up();
+      1092 |
+      1093 |     // 行の外：落とせる行の上から、サイドバーの外（端末の領域）へ動かして離す → 印が消え、取り消し。
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1090:60
+  1 failed
+    src/specs/workspace-groups.spec.ts:1070:3 › ドラッグ › ドラッグは Esc・行の外で離すと取り消され、何も送らず並びも変わらない（AC-I2） ─
+```
+
+#### 17-drag-outside: 行の外へ出ても落とし先の印が残る（`Sidebar.vue` の `onRowPointerMove`）
+
+```
+--- diff
+- if (!state || state.self) view.setWorkspaceDragOver(null);
+  else view.setWorkspaceDragOver(state.row.key, state.reason !== null);
++ if (!state || state.self) return;
+  view.setWorkspaceDragOver(state.row.key, state.reason !== null);
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1070:3 › ドラッグ › ドラッグは Esc・行の外で離すと取り消され、何も送らず並びも変わらない（AC-I2）
+src/specs/workspace-groups.spec.ts:1070:3 › ドラッグ › ドラッグは Esc・行の外で離すと取り消され、何も送らず並びも変わらない（AC-I2）
+  1) src/specs/workspace-groups.spec.ts:1070:3 › ドラッグ › ドラッグは Esc・行の外で離すと取り消され、何も送らず並びも変わらない（AC-I2） 
+    Error: expect(locator).toHaveCount(expected) failed
+    Locator:  locator('.sidebar-row-drop-target')
+    Expected: 0
+    Received: 1
+    Timeout:  5000ms
+    Call log:
+      - Expect "toHaveCount" locator('.sidebar-row-drop-target') with timeout 5000ms
+      - waiting for locator('.sidebar-row-drop-target')
+        14 × locator resolved to 1 element
+           - unexpected value "1"
+      1098 |       steps: 8,
+      1099 |     });
+    > 1100 |     await expect(page.locator(".sidebar-row-drop-target")).toHaveCount(0);
+           |                                                            ^
+      1101 |     await page.mouse.up();
+      1102 |
+      1103 |     // 取り消しの後に本物のドラッグを 1 つ行う。**この 1 回だけが送られ、並びがこれだけ変わる**ことで、前の 2 回が
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1100:60
+  1 failed
+    src/specs/workspace-groups.spec.ts:1070:3 › ドラッグ › ドラッグは Esc・行の外で離すと取り消され、何も送らず並びも変わらない（AC-I2） ─
+```
+
+#### 18-kbd-reorder-dir: `move_workspace_previous`／`next` の向きが逆（`ActionDispatcher.moveWorkspace`）
+
+```
+--- diff
+- item.move_by", { item: { kind: "workspace", workspaceId }, direction })
++ item.move_by", { item: { kind: "workspace", workspaceId }, direction: direction === "previous" ? "next" : "previous" })
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1715:3 › キーだけの操作 › move_workspace_previous／next のキーで workspace の行・worktree グループが動き、端で止まる（AC5）
+src/specs/workspace-groups.spec.ts:1715:3 › キーだけの操作 › move_workspace_previous／next のキーで workspace の行・worktree グループが動き、端で止まる（AC5）
+  1) src/specs/workspace-groups.spec.ts:1715:3 › キーだけの操作 › move_workspace_previous／next のキーで workspace の行・worktree グループが動き、端で止まる（AC5） 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 1
+    + Received  + 1
+    @@ -1,9 +1,9 @@
+      Array [
+        "[g] g1 (2)",
+    -   "  beta",
+        "  alpha",
+    +   "  beta",
+        "[u] グループなし (2)",
+        "  wt* main-ws",
+        "    wt wt-a-ws",
+        "    wt wt-b-ws",
+        "  solo",
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1756:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:1715:3 › キーだけの操作 › move_workspace_previous／next のキーで workspace の行・worktree グループが動き、端で止まる（AC5） 
+```
+
+#### 19-kbd-reorder-wrap: 並べ替えが端で止まらず回り込む（`client-core` の `moveItemBy`）
+
+```
+--- diff
+-   const target = direction === "previous" ? index - 1 : index + 1;
+  if (target < 0 || target >= list.length) return { layout, moved: false };
++   const target = ((direction === "previous" ? index - 1 : index + 1) + list.length) % list.length;
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1715:3 › キーだけの操作 › move_workspace_previous／next のキーで workspace の行・worktree グループが動き、端で止まる（AC5）
+src/specs/workspace-groups.spec.ts:1715:3 › キーだけの操作 › move_workspace_previous／next のキーで workspace の行・worktree グループが動き、端で止まる（AC5）
+  1) src/specs/workspace-groups.spec.ts:1715:3 › キーだけの操作 › move_workspace_previous／next のキーで workspace の行・worktree グループが動き、端で止まる（AC5） 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 1
+    + Received  + 1
+    @@ -1,9 +1,9 @@
+      Array [
+        "[g] g1 (2)",
+    -   "  alpha",
+        "  beta",
+    +   "  alpha",
+        "[u] グループなし (2)",
+        "  wt* main-ws",
+        "    wt wt-a-ws",
+        "    wt wt-b-ws",
+        "  solo",
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1759:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:1715:3 › キーだけの操作 › move_workspace_previous／next のキーで workspace の行・worktree グループが動き、端で止まる（AC5） 
+```
+
+#### 20-kbd-menu: navigate の `Space` が選んだ行のメニューを開かない（`ActionDispatcher.navigate`）
+
+```
+--- diff
+- if (this.view.navigateSelection) this.view.requestNavigateMenu();
++ 
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1611:3 › キーだけの操作 › グループを作る・入れる・外す・別のグループへ移すが、メニューとダイアログをキーだけで操作してできる。Esc で取り消せる（AC-I2・AC-I3）
+src/specs/workspace-groups.spec.ts:1611:3 › キーだけの操作 › グループを作る・入れる・外す・別のグループへ移すが、メニューとダイアログをキーだけで操作してできる。Esc で取り消せる（AC-I2・AC-I3）
+  1) src/specs/workspace-groups.spec.ts:1611:3 › キーだけの操作 › グループを作る・入れる・外す・別のグループへ移すが、メニューとダイアログをキーだけで操作してできる。Esc で取り消せる（AC-I2・AC-I3） 
+    Error: expect(locator).toBeVisible() failed
+    Locator: locator('.context-menu')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+    Call log:
+      - Expect "toBeVisible" locator('.context-menu') with timeout 5000ms
+      - waiting for locator('.context-menu')
+      297 |   await navigateTo(page, label);
+      298 |   await page.keyboard.press("Space");
+    > 299 |   await expect(page.locator(".context-menu")).toBeVisible();
+          |                                               ^
+      300 | }
+      301 |
+      302 | /** 開いているメニューの項目を ↓ で選んで Enter（選んでいる項目は DOM のクラスで見る）。 */
+        at openMenuByKeys (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:299:47)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1621:5
+  1 failed
+    src/specs/workspace-groups.spec.ts:1611:3 › キーだけの操作 › グループを作る・入れる・外す・別のグループへ移すが、メニューとダイアログをキーだけで操作してできる。Esc で取り消せる（AC-I2・AC-I3） 
+```
+
+#### 21-kbd-picker: グループの選択ダイアログが ↓ キーで動かない（`GroupPickerDialog.vue`）
+
+```
+--- diff
+- if (ev.key === "ArrowDown" || ev.key === "j") {
++ if (ev.key === "j") {
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1611:3 › キーだけの操作 › グループを作る・入れる・外す・別のグループへ移すが、メニューとダイアログをキーだけで操作してできる。Esc で取り消せる（AC-I2・AC-I3）
+src/specs/workspace-groups.spec.ts:1611:3 › キーだけの操作 › グループを作る・入れる・外す・別のグループへ移すが、メニューとダイアログをキーだけで操作してできる。Esc で取り消せる（AC-I2・AC-I3）
+  1) src/specs/workspace-groups.spec.ts:1611:3 › キーだけの操作 › グループを作る・入れる・外す・別のグループへ移すが、メニューとダイアログをキーだけで操作してできる。Esc で取り消せる（AC-I2・AC-I3） 
+    Error: expect(locator).toHaveText(expected) failed
+    Locator:  locator('.group-picker-dialog').locator('.group-picker-dialog-item-selected')
+    Expected: "g2"
+    Received: "g1"
+    Timeout:  5000ms
+    Call log:
+      - Expect "toHaveText" locator('.group-picker-dialog').locator('.group-picker-dialog-item-selected') with timeout 5000ms
+      - waiting for locator('.group-picker-dialog').locator('.group-picker-dialog-item-selected')
+        14 × locator resolved to <li role="option" data-v-97b1863d="" aria-selected="true" class="group-picker-dialog-item group-picker-dialog-item-selected">g1</li>
+           - unexpected value "g1"
+      322 |     await page.keyboard.press("ArrowDown");
+      323 |   }
+    > 324 |   await expect(selected).toHaveText(groupName);
+          |                          ^
+      325 |   await page.keyboard.press("Enter");
+      326 |   await expect(dialog).toBeHidden();
+      327 |   return options;
+        at pickGroupByKeys (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:324:26)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1650:12
+  1 failed
+    src/specs/workspace-groups.spec.ts:1611:3 › キーだけの操作 › グループを作る・入れる・外す・別のグループへ移すが、メニューとダイアログをキーだけで操作してできる。Esc で取り消せる（AC-I2・AC-I3） 
+```
+
+#### 22-cd-nongit: git 管理外へ移ると、移る前のグループに残らず「グループなし」へ出る（`SessionModel.transition`）
+
+```
+--- diff
+- layout = insertAt(layout, own, left.container, left.removed ? left.index : left.index + 1);
++ layout = insertAt(layout, own, null, left.removed ? left.index : left.index + 1);
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1828:3 › 先頭の pane の移動（AC11） › git 管理外へ移ると、移る前のグループに通常の workspace として残る。その後リポジトリへ移っても、グループには残ったまま所属が引き継がれる
+src/specs/workspace-groups.spec.ts:1828:3 › 先頭の pane の移動（AC11） › git 管理外へ移ると、移る前のグループに通常の workspace として残る。その後リポジトリへ移っても、グループには残ったまま所属が引き継がれる
+  1) src/specs/workspace-groups.spec.ts:1828:3 › 先頭の pane の移動（AC11） › git 管理外へ移ると、移る前のグループに通常の workspace として残る。その後リポジトリへ移っても、グループには残ったまま所属が引き継がれる 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 2
+    + Received  + 2
+      Array [
+    -   "[g] g1 (2)",
+    +   "[g] g1 (1)",
+        "  a-ws",
+    +   "[u] グループなし (1)",
+        "  mover",
+    -   "[u] グループなし (0)",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1849:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:1828:3 › 先頭の pane の移動（AC11） › git 管理外へ移ると、移る前のグループに通常の workspace として残る。その後リポジトリへ移っても、グループには残ったまま所属が引き継がれる 
+```
+
+#### 23-cd-follow: 別のリポジトリへ移った先の項目に従わない（`SessionModel.transition`）
+
+```
+--- diff
+-       if (exists) return layout;
+      if (repoGroup !== null) return addItemToGroup(layout, to, repoGroup);
++       if (exists) return removeItem(layout, to);
+      if (repoGroup !== null) return addItemToGroup(layout, to, repoGroup);
+--- output
+Running 1 test using 1 worker
+[1/1] src/specs/workspace-groups.spec.ts:1800:3 › 先頭の pane の移動（AC11） › pane で別のリポジトリへ cd すると、移った先の項目に従う。リポジトリに所属が無ければグループの外へ出る
+src/specs/workspace-groups.spec.ts:1800:3 › 先頭の pane の移動（AC11） › pane で別のリポジトリへ cd すると、移った先の項目に従う。リポジトリに所属が無ければグループの外へ出る
+  1) src/specs/workspace-groups.spec.ts:1800:3 › 先頭の pane の移動（AC11） › pane で別のリポジトリへ cd すると、移った先の項目に従う。リポジトリに所属が無ければグループの外へ出る 
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 2
+    + Received  + 2
+      Array [
+    -   "[g] g1 (1)",
+    +   "[g] g1 (0)",
+    +   "[u] グループなし (1)",
+        "  wt* a-ws",
+        "    wt mover",
+    -   "[u] グループなし (0)",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+      159 |   await expect
+      160 |     .poll(() => outline(page), { timeout: SETTLE, ...(message ? { message } : {}) })
+    > 161 |     .toEqual(expected);
+          |      ^
+      162 | }
+      163 |
+      164 | /** ラベルが完全一致する行（見出しも workspace も `.sidebar-label`）。 */
+        at expectOutline (/workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:161:6)
+        at /workspaces/sodashitsu/packages/e2e/src/specs/workspace-groups.spec.ts:1821:11
+  1 failed
+    src/specs/workspace-groups.spec.ts:1800:3 › 先頭の pane の移動（AC11） › pane で別のリポジトリへ cd すると、移った先の項目に従う。リポジトリに所属が無ければグループの外へ出る 
+```
+
+#### AC11 の 2 つ目（`cd(repoB)` の後が `cd(plain)` の後と同じで常に通っていた観測の組み替え。workspace-groups.spec.ts）
+
+組み替え: 所属の無い別のリポジトリ C に workspace `c-ws` を先に開いておき、mover の最後の `cd` を C へ変えた。`w:<id>`（g1 の通常の行）が C へ移ると `repoGroups[C] = g1` になり C の項目が「グループなし」から g1 へ付いてくるので、`cd` の前後で並びが変わる（前: `g1 (2)`・`グループなし (1)` → 後: `g1 (3)`・`グループなし (0)`）。判定の反映前には通らない。製品の `SessionModel.ts` の `transition`（`w:<id>` → `r:R2`）の `const ownGroup = liveGroup(from.groupId);` を `liveGroup(null as unknown as undefined)`（groupId を引き継がない＝グループの外へ出す）に壊して `corepack pnpm build` し直し、`playwright test -g AC11` を走らせた生の出力（トレースの案内は省いた）。確認後に元へ戻して build し直した。
+
+```
+  ✓  1 src/specs/workspace-groups.spec.ts:1800:3 › 先頭の pane の移動（AC11） › pane で別のリポジトリへ cd すると、…(3.0s)
+  ✘  2 src/specs/workspace-groups.spec.ts:1828:3 › 先頭の pane の移動（AC11） › git 管理外へ移ると、移る前のグループに通常の workspace として残る。その後リポジトリへ移っても、グループには残ったまま所属が引き継がれる (22.7s)
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 2
+    + Received  + 2
+      Array [
+    -   "[g] g1 (3)",
+    +   "[g] g1 (1)",
+        "  a-ws",
+    +   "[u] グループなし (2)",
+        "  mover",
+        "  c-ws",
+    -   "[u] グループなし (0)",
+      ]
+    Call Log:
+    - Timeout 20000ms exceeded while waiting on the predicate
+  1 failed
+  1 passed (26.7s)
+```
+- T20（2 巡目まで）: 1 巡目 8 件（右クリックで見出しが畳まれる製品の不具合・壊して落ちる確認の欠け・反映待ちの欠け・常に通る観測・欠けた場面・AC 番号）を直し、2 巡目 2 件（AC11 の最後の観測が常に通る形・D39 の行番号の補足）も直した。上限の 2 巡で止め、再々点検はしていない [conv:e2e-observe-browser!]

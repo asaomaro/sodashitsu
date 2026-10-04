@@ -91,7 +91,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/client-core/src/workspace/workspaceGrouping.ts`・`workspaceGrouping.test.ts`、`packages/server/src/session/SessionModel.ts`（`linkedWorktreeGroupMembers`）・`SessionModel.test.ts:1027-1110`、`packages/server/src/composeServer.integration.test.ts`（2 接続の統合テストの手本。場所は grep で確かめる）
       依存: T10, T15, T18
       AC: AC14, AC15, AC17
-- [ ] T20: E2E——新しい spec: グループを作る・項目を入れる・外す・別のグループへ移す／worktree グループがグループの中でまとまって並ぶ・子の行のメニューで全体が動く／ドラッグで項目を並べ替える・外と中をまたぐと落とせない／畳む（グループ・worktree グループ）／後から worktree を開くと同じ worktree グループ・同じグループに入る／全部閉じて開き直すと同じグループに戻る・**サーバを再起動しても同じ並び**（`appServer.restart()`）／本体を閉じるときグループの中でも「worktree も一緒に閉じる」が出て全部閉じる／種類の印と読み上げ用の文言／**別の接続からの操作にブラウザの DOM が追従する**／キーだけで一巡（navigate の選択・メニュー・折りたたみ・並べ替え）。合否はブラウザの DOM とフレームで見る。判定は 5 秒周期なので、イベントか DOM を待つ（固定の待ち時間を入れない）。観測を壊して落ちる確認。2 回続けて同じ結果
+- [x] T20: E2E——新しい spec: グループを作る・項目を入れる・外す・別のグループへ移す／worktree グループがグループの中でまとまって並ぶ・子の行のメニューで全体が動く／ドラッグで項目を並べ替える・外と中をまたぐと落とせない／畳む（グループ・worktree グループ）／後から worktree を開くと同じ worktree グループ・同じグループに入る／全部閉じて開き直すと同じグループに戻る・**サーバを再起動しても同じ並び**（`appServer.restart()`）／本体を閉じるときグループの中でも「worktree も一緒に閉じる」が出て全部閉じる／種類の印と読み上げ用の文言／**別の接続からの操作にブラウザの DOM が追従する**／キーだけで一巡（navigate の選択・メニュー・折りたたみ・並べ替え）。合否はブラウザの DOM とフレームで見る。判定は 5 秒周期なので、イベントか DOM を待つ（固定の待ち時間を入れない）。観測を壊して落ちる確認。2 回続けて同じ結果
       対象: `packages/e2e/src/specs/workspace-groups.spec.ts`（新規）、手本は `packages/e2e/src/specs/workspace-tab-pane.spec.ts:501, :541`（`makePlainRepo` と worktree の作成）、`packages/e2e/src/support/appServer.ts:33, :86`（`openClient`・`restart`）・`wsClient.ts`（`waitForEvent`）
       依存: T19
       AC: AC1, AC2, AC4, AC5, AC6, AC7, AC8, AC9, AC10, AC12, AC15, AC18, AC-I1, AC-I2, AC-I3
