@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AgentIntegrationInstallParams,
+  AgentStartParams,
   AgentPromptParams,
   AgentSendKeysParams,
   ClientThemeParams,
@@ -39,6 +40,31 @@ import {
 import { THEME_NAMES } from "./theme.js";
 
 describe("messages", () => {
+  // 20261003-graph-auto-nodes（AC13）。4 つの Params に同じ形の省略可能な callerPaneId。
+  describe("callerPaneId", () => {
+    const cases = [
+      ["workspace.create", WorkspaceCreateParams, {}],
+      ["tab.create", TabCreateParams, {}],
+      ["pane.split", PaneSplitParams, { paneId: "p1", direction: "right" }],
+      ["agent.start", AgentStartParams, { name: "a", kind: "claude", paneId: "p1", args: [] }],
+    ] as const;
+    for (const [method, schema, base] of cases) {
+      it(`${method}: あり・なしを受け取り、空文字は invalid_params`, () => {
+        expect(schema.parse({ ...base, callerPaneId: "p9" })).toEqual({
+          ...base,
+          callerPaneId: "p9",
+        });
+        expect(schema.parse({ ...base })).toEqual({ ...base });
+        expect(() => schema.parse({ ...base, callerPaneId: "" })).toThrow();
+      });
+      it(`${method}: 未知の項目を持つ形は strict でなく無視される（古いサーバ相当）`, () => {
+        expect(Object.keys(schema.shape)).toContain("callerPaneId");
+        expect(schema.parse({ ...base, futureField: 1 })).toEqual({ ...base });
+        expect(METHOD_SCHEMAS[method]).toBe(schema);
+      });
+    }
+  });
+
   it("validates pane.split params", () => {
     const parsed = PaneSplitParams.parse({ paneId: "p1", direction: "right" });
     expect(parsed).toEqual({ paneId: "p1", direction: "right" });

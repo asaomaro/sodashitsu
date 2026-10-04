@@ -31,6 +31,7 @@ export function registerPaneMethods(surface: ControlSurface, deps: MethodDeps): 
         params.newCwd,
       );
       deps.sizeAuthority.noteInteraction(ctx.clientId, result.pane.id);
+      deps.lineage?.noteCreated(result.pane.id, params.callerPaneId); // 20261003-graph-auto-nodes
       return result;
     },
   });

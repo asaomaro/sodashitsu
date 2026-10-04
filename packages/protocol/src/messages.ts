@@ -146,6 +146,8 @@ export interface CwdFallbackResult {
 // --- workspace ----------------------------------------------------------
 
 export const WorkspaceCreateParams = z.object({
+  /** 呼び出し元の pane（pane の中の sodactl が名乗る）。グラフの自動載せの関係の記録にだけ使う。実在しなければ無視する。 */
+  callerPaneId: paneId.optional(),
   /** 場所を明示する（worktree を開く）。**`newCwd` に勝ち、代わりの場所へは回さない**（使えなければ失敗する）。 */
   cwd: z.string().optional(),
   label: z.string().optional(),
@@ -219,6 +221,8 @@ export type GroupToggleCollapsedParams = z.infer<typeof GroupToggleCollapsedPara
 // --- tab ------------------------------------------------------------------
 
 export const TabCreateParams = z.object({
+  /** 呼び出し元の pane（pane の中の sodactl が名乗る）。グラフの自動載せの関係の記録にだけ使う。実在しなければ無視する。 */
+  callerPaneId: paneId.optional(),
   workspaceId: workspaceId.optional(),
   label: z.string().optional(),
   newCwd: NewCwd.optional(),
@@ -247,6 +251,8 @@ export type TabMoveParams = z.infer<typeof TabMoveParams>;
 // --- pane -------------------------------------------------------------------
 
 export const PaneSplitParams = z.object({
+  /** 呼び出し元の pane（pane の中の sodactl が名乗る）。グラフの自動載せの関係の記録にだけ使う。実在しなければ無視する。 */
+  callerPaneId: paneId.optional(),
   paneId,
   direction: splitDirection,
   ratio: z.number().min(0.05).max(0.95).optional(),
@@ -725,6 +731,8 @@ export interface AgentRenameResult {
  * スキーマでは弾かない（サーバが herdr と同じ code で返す）。打ち込んだ時点で応答し、起動完了は呼び出し側がイベントで待つ。
  */
 export const AgentStartParams = z.object({
+  /** 呼び出し元の pane（pane の中の sodactl が名乗る）。グラフの自動載せの関係の記録にだけ使う。実在しなければ無視する。 */
+  callerPaneId: paneId.optional(),
   name: z.string(),
   kind: z.string(),
   paneId,

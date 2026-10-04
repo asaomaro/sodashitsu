@@ -504,6 +504,16 @@ describe("parseArgs — pane の中の接続先と呼び出し元（20260926-age
     });
   });
 
+  it("--machine <local 以外> を付けると caller が無くなる。--machine local では残る", () => {
+    const optsOf = (argv: string[]) => {
+      const cmd = parseArgs(argv, inPane);
+      if (!("opts" in cmd)) throw new Error(`no opts: ${cmd.kind}`);
+      return cmd.opts;
+    };
+    expect(optsOf(["--machine", "box", "snapshot"]).caller).toBeUndefined();
+    expect(optsOf(["--machine", "local", "snapshot"]).caller).toEqual({ paneId: "p1", serverUrl: "http://127.0.0.1:7790" });
+  });
+
   it.each([
     ["SODA_PANE_ID が空", { SODA_PANE_ID: "", SODA_SERVER_URL: "http://127.0.0.1:7790" }],
     ["SODA_PANE_ID が無い", { SODA_SERVER_URL: "http://127.0.0.1:7790" }],
