@@ -11,7 +11,6 @@ import type { Logger } from "../log/Logger.js";
  *
  * - 閉じたとき（`pane.closed`）: その pane の手元のノードを外す。
  * - 起動の復元の後（`pruneMissing`）: 保存したグラフにあって、今の pane に無い手元のノードを外す（サーバが止まっている間に閉じた・古い版が残したもの）。
- *   `stale`（pane の id を振り直した起動で、選び直すまで残すもの）は外さない。
  * - サーバを止めるときは `close()` を先に呼ぶ（止まる途中で pane が閉じても、保存した連携を消さない）。別のマシンのノードは触らない。
  */
 export interface GraphPaneCleanupDeps {
@@ -35,7 +34,7 @@ export class GraphPaneCleanup {
         if (this.closed || e.event !== "pane.closed") return;
         const paneId = e.data.paneId;
         void this.remove((g) =>
-          g.nodes.filter((n) => nodePane(n.key) === paneId && n.stale !== true).map((n) => n.key),
+          g.nodes.filter((n) => nodePane(n.key) === paneId).map((n) => n.key),
         );
       } catch (err) {
         deps.logger.warn("graph.cleanup: subscriber failed", { error: String(err) });
@@ -49,7 +48,7 @@ export class GraphPaneCleanup {
       g.nodes
         .filter((n) => {
           const id = nodePane(n.key);
-          return id !== null && n.stale !== true && !this.deps.paneExists(id);
+          return id !== null && !this.deps.paneExists(id);
         })
         .map((n) => n.key),
     );

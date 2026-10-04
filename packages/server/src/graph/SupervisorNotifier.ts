@@ -79,10 +79,7 @@ export class SupervisorNotifier {
   }
 }
 
-/** 配下の顔ぶれの署名（順に依らない）。呼び名・種類の変化では知らせ直さない（鍵と無効かどうかだけ）。 */
-export function subordinatesSignature(subs: readonly { key: string; stale: boolean }[]): string {
-  return subs
-    .map((s) => `${s.key}${s.stale ? "!" : ""}`)
-    .sort()
-    .join(",");
+/** 配下の顔ぶれの署名（順に依らない）。呼び名・種類の変化では知らせ直さない（鍵だけ）。 */
+export function subordinatesSignature(keys: readonly string[]): string {
+  return [...keys].sort().join(",");
 }

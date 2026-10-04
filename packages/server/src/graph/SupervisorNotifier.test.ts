@@ -125,20 +125,12 @@ describe("SupervisorNotifier", () => {
 });
 
 describe("subordinatesSignature", () => {
-  it("順に依らず、無効かどうかで変わる", () => {
-    expect(
-      subordinatesSignature([
-        { key: "local:p2", stale: false },
-        { key: "local:p1", stale: false },
-      ]),
-    ).toBe(
-      subordinatesSignature([
-        { key: "local:p1", stale: false },
-        { key: "local:p2", stale: false },
-      ]),
+  it("順に依らず、顔ぶれが変われば変わる", () => {
+    expect(subordinatesSignature(["local:p2", "local:p1"])).toBe(
+      subordinatesSignature(["local:p1", "local:p2"]),
     );
-    expect(subordinatesSignature([{ key: "local:p1", stale: true }])).not.toBe(
-      subordinatesSignature([{ key: "local:p1", stale: false }]),
+    expect(subordinatesSignature(["local:p1"])).not.toBe(
+      subordinatesSignature(["local:p1", "local:p2"]),
     );
     expect(subordinatesSignature([])).toBe("");
   });

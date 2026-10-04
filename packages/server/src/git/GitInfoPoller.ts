@@ -9,9 +9,6 @@ import { parseAbsoluteGitPath } from "./worktree.js";
 const DEFAULT_INTERVAL_MS = 5000;
 const GIT_TIMEOUT_MS = 3000;
 
-/** `w<番号>` の番号（作った順）。数字が無い id は末尾。 */
-const idNumber = (id: string): number => Number(/\d+/.exec(id)?.[0] ?? Number.MAX_SAFE_INTEGER);
-
 /**
  * 最初の pane が代わる・その場所が変わるイベント（20260926-workspace-label-follow-cwd の design D4）。これを受けたら、見直した場所と
  * いまの場所を比べ、違う workspace だけすぐ見直す。
@@ -116,7 +113,7 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
     for (const id of this.polledCwd.keys()) if (!alive.has(id)) this.polledCwd.delete(id); // バスを渡さないときの後始末
     // 判定は並べて走らせる。項目の判定（`repoKey`・`isLinkedWorktree`・`worktreeKey`）が**変わらない**結果は、届いた時点でその場で反映する
     // （ブランチ名・件数の更新を、遅い 1 件に引きずらせない。今までどおり 1 件ずつ独立）。**変わる**結果だけをためて、周の終わりに
-    // 作った順（`w<番号>` の小さい順）で反映する——届いた順に反映すると、同じフォルダの workspace の代表（最初に持ち始めたもの。D42）が
+    // 作った順で反映する——届いた順に反映すると、同じフォルダの workspace の代表（最初に持ち始めたもの。D42）が
     // 判定の速さで決まってしまう（decisions D49・D51）。
     const deferred: Judged[] = [];
     await Promise.all(
@@ -126,7 +123,7 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
         else this.apply(j);
       }),
     );
-    deferred.sort((a, b) => idNumber(a.ws.id) - idNumber(b.ws.id));
+    deferred.sort((a, b) => this.session.creationRank(a.ws.id) - this.session.creationRank(b.ws.id));
     for (const j of deferred) this.apply(j);
   }
 

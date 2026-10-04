@@ -8,7 +8,7 @@ import {
   type NodeKey,
 } from "@sodashitsu/protocol";
 import { defaultApprovalConfig, defaultTriggerConfig } from "./defaults.js";
-import { GRAPH_LINK_ID_MAX, validateGraph, validateLink, type GraphIssueCode } from "./validate.js";
+import { validateGraph, validateLink, type GraphIssueCode } from "./validate.js";
 
 // 20260927-agent-graph の T2：線とノードの検証の全規則。
 const A: NodeKey = "local:p1";
@@ -221,17 +221,6 @@ describe("線の id（01 のレビュー ラウンド 1）", () => {
   it("同じ id の線が 2 本は duplicate_link_id（remove_link で両方消えない）", () => {
     const issues = validateGraph(graph([link({ id: "l1" }), link({ id: "l1", from: B, to: C })]));
     expect(issues).toEqual([expect.objectContaining({ code: "duplicate_link_id", linkId: "l1" })]);
-  });
-
-  it("id の番号が安全な整数の範囲を超える（次の番号が丸められて重なる）なら link_id_too_large", () => {
-    expect(GRAPH_LINK_ID_MAX + 1).toBe(Number.MAX_SAFE_INTEGER);
-    expect(validateGraph(graph([link({ id: `l${GRAPH_LINK_ID_MAX}` })]))).toEqual([]);
-    expect(codes(validateGraph(graph([link({ id: `l${Number.MAX_SAFE_INTEGER}` })])))).toEqual([
-      "link_id_too_large",
-    ]);
-    expect(codes(validateGraph(graph([link({ id: "l9007199254740993" })])))).toEqual([
-      "link_id_too_large",
-    ]);
   });
 });
 

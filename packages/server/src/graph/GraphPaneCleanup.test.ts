@@ -9,18 +9,13 @@ function logger(): Logger {
   return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 }
 
-const node = (key: string, stale = false) => ({
-  key,
-  x: 0,
-  y: 0,
-  ...(stale ? { stale: true as const } : {}),
-});
+const node = (key: string) => ({ key, x: 0, y: 0 });
 
-function setup(keys: { key: string; stale?: boolean }[], live: string[], conflicts = 0) {
+function setup(keys: { key: string }[], live: string[], conflicts = 0) {
   const bus = new EventBus();
   const graph = {
     rev: 1,
-    nodes: keys.map((k) => node(k.key, k.stale)),
+    nodes: keys.map((k) => node(k.key)),
     links: [],
   } as unknown as Graph;
   const applied: GraphOp[][] = [];
@@ -64,13 +59,6 @@ describe("GraphPaneCleanup", () => {
     expect(s.store.update).not.toHaveBeenCalled();
   });
 
-  it("無効（stale）なノードは、同じ id の pane が閉じても外さない", async () => {
-    const s = setup([{ key: "local:p2", stale: true }], ["p2"]);
-    s.close("p2");
-    await s.tick();
-    expect(s.store.update).not.toHaveBeenCalled();
-  });
-
   it("rev が競合したらやり直す", async () => {
     const s = setup([{ key: "local:p2" }], [], 1);
     s.close("p2");
@@ -79,18 +67,10 @@ describe("GraphPaneCleanup", () => {
     expect(s.graph.nodes).toEqual([]);
   });
 
-  it("pruneMissing: 今の pane に無い手元のノードだけを外す（stale・別のマシンは残す）", async () => {
-    const s = setup(
-      [
-        { key: "local:p1" },
-        { key: "local:p2" },
-        { key: "local:p3", stale: true },
-        { key: "box:p9" },
-      ],
-      ["p1"],
-    );
+  it("pruneMissing: 今の pane に無い手元のノードだけを外す（別のマシンは残す）", async () => {
+    const s = setup([{ key: "local:p1" }, { key: "local:p2" }, { key: "box:p9" }], ["p1"]);
     expect(await s.cleanup.pruneMissing()).toBe(1);
-    expect(s.graph.nodes.map((n) => n.key)).toEqual(["local:p1", "local:p3", "box:p9"]);
+    expect(s.graph.nodes.map((n) => n.key)).toEqual(["local:p1", "box:p9"]);
     expect(await s.cleanup.pruneMissing()).toBe(0);
   });
 

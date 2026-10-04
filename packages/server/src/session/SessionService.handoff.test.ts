@@ -115,7 +115,6 @@ function sessionData(): SessionFileData {
   return {
     schema: 1,
     savedAt: "2026-09-27T00:00:00Z",
-    nextId: { w: 2, t: 2, p: 4, s: 3, a: 1, g: 1 },
     groups: [],
     workspaces: [
       {

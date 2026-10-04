@@ -42,8 +42,6 @@ export interface AgentLineageDeps {
 /** ログの `reason`（`graph.auto: skipped`）。 */
 export type LineageSkipReason =
   | "parent_gone"
-  | "parent_stale"
-  | "child_stale"
   | "reverse_link"
   | "duplicate_link"
   | "supervisor_taken"
@@ -199,16 +197,6 @@ export class AgentLineage {
     child: NodeKey,
     skip: (reason: LineageSkipReason) => void,
   ): { ops: GraphOp[]; nodes: number; links: number } | null {
-    // session.json が読めず pane の ID を振り直した起動で、古い stale ノードと新しい pane の ID が衝突しうる（F6）。
-    if (g.nodes.some((n) => n.key === parent && n.stale === true)) {
-      skip("parent_stale");
-      return null;
-    }
-    if (g.nodes.some((n) => n.key === child && n.stale === true)) {
-      skip("child_stale");
-      return null;
-    }
-
     // 線が 0 本でもノードは足す: 既に別の監督役が居る子も、グラフに見えるようにする（意図）。
     const ops: GraphOp[] = addMissingNodeOps(g, [parent, child]);
     const nodes = ops.length;

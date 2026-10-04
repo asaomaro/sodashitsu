@@ -215,10 +215,12 @@ describe.skipIf(process.platform === "win32")(
       whenBusy: "wait",
     });
 
-    async function update(t: Pair, ops: unknown[]): Promise<void> {
+    /** 操作を当て、できた線の id（UUID。作った順）を返す。 */
+    async function update(t: Pair, ops: unknown[]): Promise<string[]> {
       const g = (await t.client.request("graph.get", {})).result as { rev: number };
       const r = await t.client.request("graph.update", { baseRev: g.rev, ops });
       expect(r.error).toBeUndefined();
+      return (r.result as { links: { id: string }[] }).links.map((l) => l.id);
     }
     const node = (key: string, i: number) => ({ op: "add_node", key, x: i * 240, y: 0 });
     const sentOf = (t: Pair, linkId: string) =>
@@ -234,7 +236,7 @@ describe.skipIf(process.platform === "win32")(
       setAgent(t.remote, r2!, agentInfo("rb", 0));
       t.remote.terminals.get(r1!)!.write("printf 'REMOTE_%s\\n' RESULT_OK\r");
       await waitFor("remote result", () => /^REMOTE_RESULT_OK$/m.test(screen(t.remote, r1!)));
-      await update(t, [
+      const [k1, k2] = await update(t, [
         node(`local:${l1}`, 0),
         node(`local:${l2}`, 1),
         node(`${MID}:${r1}`, 2),
@@ -257,13 +259,13 @@ describe.skipIf(process.platform === "win32")(
       await waitFor("remote link up", () => t.local.graphRemoteAvailable(MID));
 
       setAgent(t.local, l1!, agentInfo("la", 1));
-      await waitFor("sent to remote", () => sentOf(t, "l1") === 1);
+      await waitFor("sent to remote", () => sentOf(t, k1!) === 1);
       await waitFor("text on the remote pane", () =>
         screen(t.remote, r2!).includes("LOCAL_TO_REMOTE_GO"),
       );
 
       setAgent(t.remote, r1!, agentInfo("ra", 1));
-      await waitFor("sent from remote", () => sentOf(t, "l2") === 1);
+      await waitFor("sent from remote", () => sentOf(t, k2!) === 1);
       await waitFor("remote output on the local pane", () =>
         screen(t.local, l2!).includes("REMOTE_RESULT_OK"),
       );
@@ -271,8 +273,8 @@ describe.skipIf(process.platform === "win32")(
       setAgent(t.remote, r1!, { ...agentInfo("ra", 1), serverSeenSeq: 1 });
       setAgent(t.local, l1!, { ...agentInfo("la", 1), serverSeenSeq: 1 });
       await new Promise((r) => setTimeout(r, 300));
-      expect(sentOf(t, "l1")).toBe(1);
-      expect(sentOf(t, "l2")).toBe(1);
+      expect(sentOf(t, k1!)).toBe(1);
+      expect(sentOf(t, k2!)).toBe(1);
       expect(t.client.runs.filter((r) => r.result === "sent")).toHaveLength(2);
     });
 
@@ -284,7 +286,7 @@ describe.skipIf(process.platform === "win32")(
       setAgent(t.local, l2!, agentInfo("lb", 0));
       setAgent(t.remote, r1!, agentInfo("ra", 0));
       setAgent(t.remote, r2!, agentInfo("rb", 0));
-      await update(t, [
+      const [k1, k2] = await update(t, [
         node(`local:${l1}`, 0),
         node(`local:${l2}`, 1),
         node(`${MID}:${r1}`, 2),
@@ -313,7 +315,7 @@ describe.skipIf(process.platform === "win32")(
       setAgent(t.local, l1!, agentInfo("la", 1));
       await waitFor("skipped while down", () =>
         t.local
-          .graphHistory("l1")
+          .graphHistory(k1!)
           .some((r) => r.result === "skipped" && r.reason === "machine_unavailable"),
       );
       // 切れている間にリモートの元が完了した（手元へは届かない）
@@ -323,15 +325,15 @@ describe.skipIf(process.platform === "win32")(
       t.setCut(false);
       await waitFor("remote link up again", () => t.local.graphRemoteAvailable(MID), 30_000);
       await new Promise((r) => setTimeout(r, 500));
-      expect(t.local.graphHistory("l2")).toEqual([]); // 切れている間の完了では動かない（後から送らない）
-      expect(sentOf(t, "l1")).toBe(0);
+      expect(t.local.graphHistory(k2!)).toEqual([]); // 切れている間の完了では動かない（後から送らない）
+      expect(sentOf(t, k1!)).toBe(0);
       expect(screen(t.remote, r2!)).not.toContain("GO_REMOTE");
 
       setAgent(t.remote, r1!, agentInfo("ra", 3));
-      await waitFor("sent after reconnect", () => sentOf(t, "l2") === 1);
+      await waitFor("sent after reconnect", () => sentOf(t, k2!) === 1);
       await waitFor("text on the local pane", () => screen(t.local, l2!).includes("GO_LOCAL"));
       await new Promise((r) => setTimeout(r, 300));
-      expect(sentOf(t, "l2")).toBe(1);
+      expect(sentOf(t, k2!)).toBe(1);
     });
 
     it("監督役が別のマシン: 手の空いた監督役へ配下（手元の pane はこのマシンの呼び名）と使い方を送る", async () => {
@@ -340,7 +342,7 @@ describe.skipIf(process.platform === "win32")(
       const [, r2] = await panes(t.remote, 2);
       setAgent(t.local, l1!, agentInfo("la", 0));
       setAgent(t.remote, r2!, agentInfo("sup", 0));
-      await update(t, [
+      const [k1] = await update(t, [
         node(`local:${l1}`, 0),
         node(`${MID}:${r2}`, 1),
         { op: "add_link", kind: "supervise", from: `local:${l1}`, to: `${MID}:${r2}` },
@@ -348,8 +350,8 @@ describe.skipIf(process.platform === "win32")(
       await waitFor("notice on the remote supervisor", () =>
         screen(t.remote, r2!).includes("監督役です"),
       );
-      await waitFor("recorded", () => sentOf(t, "l1") === 1);
-      expect(t.local.graphHistory("l1")[0]!.text).toContain(`マシン ${hostname()}`);
+      await waitFor("recorded", () => sentOf(t, k1!) === 1);
+      expect(t.local.graphHistory(k1!)[0]!.text).toContain(`マシン ${hostname()}`);
     });
   },
 );

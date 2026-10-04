@@ -337,27 +337,6 @@ describe("GraphEngine — トリガ", () => {
     ]);
   });
 
-  it("無効（stale）のノードの線は動かない（履歴も残さない）", async () => {
-    const t = setup([trigger()], {
-      nodes: [
-        { key: A, x: 0, y: 0, stale: true },
-        { key: B, x: 0, y: 0 },
-      ],
-    });
-    t.done(1);
-    await flush();
-    expect(t.runs()).toEqual([]);
-    const u = setup([trigger()], {
-      nodes: [
-        { key: A, x: 0, y: 0 },
-        { key: B, x: 0, y: 0, stale: true },
-      ],
-    });
-    u.done(1);
-    await flush();
-    expect(u.runs()).toEqual([]);
-  });
-
   it("送信の失敗: agent_blocked は blocked、agent_not_found は target_absent で見送り、ほかは failed（回数に数えない）", async () => {
     const cases: [Error, Partial<LinkRun>][] = [
       [new AgentPortError("agent_blocked", "blocked"), { result: "skipped", reason: "blocked" }],
@@ -591,21 +570,6 @@ describe("GraphEngine — 監督", () => {
     expect(t.port.prompts[1]![1]).toContain("pane p2");
   });
 
-  it("無効になった配下は知らせに載せず、無効化も知らせ直す", async () => {
-    const t = setup([supervise("l1", A), supervise("l2", B)]);
-    t.advance(SUPERVISOR_DEBOUNCE_MS);
-    await flush();
-    t.store.set({
-      ...t.store.graph,
-      nodes: t.store.graph.nodes.map((n) => (n.key === B ? { ...n, stale: true as const } : n)),
-    });
-    t.port.set("p3", agent("s1", 1, "idle")); // 監督役が最初の知らせを読み終えた
-    t.advance(SUPERVISOR_DEBOUNCE_MS);
-    await flush();
-    expect(t.port.prompts).toHaveLength(2);
-    expect(t.port.prompts[1]![1]).not.toContain("pane p2");
-  });
-
   it("全体の一時停止・監督の線が全部止まっている間は送らない", async () => {
     const t = setup([supervise("l1", A)], { paused: true });
     t.advance(SUPERVISOR_DEBOUNCE_MS * 2);
@@ -644,21 +608,14 @@ describe("GraphEngine — 監督", () => {
     ]);
   });
 
-  it("監督役が別のマシン・無効なら知らせない。監督の線を全部消したら監督役の知らせも止まる", async () => {
+  it("監督役が別のマシンなら知らせない。監督の線を全部消したら監督役の知らせも止まる", async () => {
     const remote = setup([{ ...supervise("l1", A), to: REMOTE }]);
     remote.advance(SUPERVISOR_DEBOUNCE_MS);
-    const stale = setup([supervise("l1", A)], {
-      nodes: [
-        { key: A, x: 0, y: 0 },
-        { key: S, x: 0, y: 0, stale: true },
-      ],
-    });
-    stale.advance(SUPERVISOR_DEBOUNCE_MS);
     const removed = setup([supervise("l1", A)]);
     removed.store.set({ ...removed.store.graph, links: [] });
     removed.advance(SUPERVISOR_DEBOUNCE_MS);
     await flush();
-    for (const t of [remote, stale, removed]) expect(t.port.prompts).toEqual([]);
+    for (const t of [remote, removed]) expect(t.port.prompts).toEqual([]);
   });
 });
 
@@ -751,18 +708,6 @@ describe("GraphEngine — 変異の網羅で見つけた抜け", () => {
     expect(t.runs().map((r) => r.result)).toEqual(["sent"]); // 承認の代理として失敗の記録も残さない
   });
 
-  it("動いていた線の元のノードが後から無効になったら、その線は止まる", async () => {
-    const t = setup([trigger()]);
-    t.store.set({
-      ...t.store.graph,
-      nodes: t.store.graph.nodes.map((n) => (n.key === A ? { ...n, stale: true as const } : n)),
-    });
-    t.done(1);
-    await flush();
-    expect(t.port.prompts).toEqual([]);
-    expect(t.runs()).toEqual([]);
-  });
-
   it("トリガの線だけなら、先を監督役として知らせない", async () => {
     const t = setup([trigger()]);
     t.advance(SUPERVISOR_DEBOUNCE_MS * 3);
@@ -805,17 +750,6 @@ describe("GraphEngine — 変異の網羅で見つけた抜け", () => {
     t.done(1);
     await flush();
     expect(t.runs()).toEqual([expect.objectContaining({ result: "skipped", reason: "busy" })]);
-  });
-
-  it("監督役のノードが後から無効になったら、知らせを止める", async () => {
-    const t = setup([supervise("l1", A)]);
-    t.store.set({
-      ...t.store.graph,
-      nodes: t.store.graph.nodes.map((n) => (n.key === S ? { ...n, stale: true as const } : n)),
-    });
-    t.advance(SUPERVISOR_DEBOUNCE_MS * 2);
-    await flush();
-    expect(t.port.prompts).toEqual([]);
   });
 
   it("配下の状態の変化は監督役の状態として扱わない（監督役が作業中なら、配下が idle になっても送らない）", async () => {

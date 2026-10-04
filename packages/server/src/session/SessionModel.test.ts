@@ -1,40 +1,49 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { NotFoundError, SessionModel, type GitJudgement, type NewPaneInit } from "./SessionModel.js";
 import * as Layout from "./LayoutTree.js";
-import type { GitInfo } from "@sodashitsu/protocol";
+import { UUID_RE, type GitInfo } from "@sodashitsu/protocol";
 import { flattenWorkspaceIds, repoMembers } from "@sodashitsu/client-core";
 
 const init: NewPaneInit = { cwd: "/home/u", shell: "/bin/bash", cols: 80, rows: 24 };
 
 describe("SessionModel — creation", () => {
-  it("creates a workspace with its first tab and pane", () => {
+  it("creates a workspace with its first tab and pane（id はどれも UUID）", () => {
     const model = new SessionModel();
     const { workspace, tab, pane } = model.createWorkspace("/home/u", "api", init);
-    expect(workspace.id).toBe("w1");
-    expect(tab.id).toBe("t1");
-    expect(pane.id).toBe("p1");
-    expect(workspace.tabIds).toEqual(["t1"]);
-    expect(workspace.activeTabId).toBe("t1");
-    expect(tab.focusedPaneId).toBe("p1");
-    expect(tab.layout).toEqual({ type: "pane", paneId: "p1" });
-    expect(model.getFocus()).toEqual({ workspaceId: "w1", tabId: "t1", paneId: "p1" });
+    for (const id of [workspace.id, tab.id, pane.id]) expect(id).toMatch(UUID_RE);
+    expect(new Set([workspace.id, tab.id, pane.id]).size).toBe(3);
+    expect(workspace.tabIds).toEqual([tab.id]);
+    expect(workspace.activeTabId).toBe(tab.id);
+    expect(tab.focusedPaneId).toBe(pane.id);
+    expect(tab.layout).toEqual({ type: "pane", paneId: pane.id });
+    expect(model.getFocus()).toEqual({ workspaceId: workspace.id, tabId: tab.id, paneId: pane.id });
   });
 
-  it("allocates ids that keep increasing across workspaces", () => {
+  it("allocates a new unique UUID for every workspace, tab and pane（連番ではない）", () => {
     const model = new SessionModel();
-    model.createWorkspace("/a", "a", init);
+    const first = model.createWorkspace("/a", "a", init);
     const second = model.createWorkspace("/b", "b", init);
-    expect(second.workspace.id).toBe("w2");
-    expect(second.tab.id).toBe("t2");
-    expect(second.pane.id).toBe("p2");
+    const ids = [first, second].flatMap((r) => [r.workspace.id, r.tab.id, r.pane.id]);
+    expect(new Set(ids).size).toBe(6);
+    for (const id of ids) expect(id).toMatch(UUID_RE);
+    expect(model.newId()).toMatch(UUID_RE);
+  });
+
+  it("採番の関数を差し込める（既定は randomUUID）", () => {
+    let n = 0;
+    const model = new SessionModel(() => `id-${++n}`);
+    const { workspace, tab, pane } = model.createWorkspace("/home/u", "api", init);
+    expect([workspace.id, tab.id, pane.id]).toEqual(["id-1", "id-2", "id-3"]);
+    expect(new SessionModel(randomUUID).newId()).toMatch(UUID_RE);
   });
 
   it("creates a tab inside a workspace and focuses it", () => {
     const model = new SessionModel();
-    const { workspace } = model.createWorkspace("/home/u", "api", init);
+    const { workspace, tab: firstTab } = model.createWorkspace("/home/u", "api", init);
     const { tab, pane } = model.createTab(workspace.id, "logs", init);
     expect(tab.workspaceId).toBe(workspace.id);
-    expect(model.getWorkspace(workspace.id)?.tabIds).toEqual(["t1", tab.id]);
+    expect(model.getWorkspace(workspace.id)?.tabIds).toEqual([firstTab.id, tab.id]);
     expect(model.getWorkspace(workspace.id)?.activeTabId).toBe(tab.id);
     expect(model.getFocus()?.paneId).toBe(pane.id);
   });
@@ -54,7 +63,7 @@ describe("SessionModel — split / close panes", () => {
     const updatedTab = model.getTab(tab.id)!;
     expect(updatedTab.layout).toEqual({
       type: "split",
-      id: "s1",
+      id: expect.stringMatching(UUID_RE),
       dir: "right",
       ratio: 0.5,
       a: { type: "pane", paneId: pane.id },
@@ -893,7 +902,7 @@ describe("SessionModel — misc mutations", () => {
     it("createGroup / renameGroup / toggleGroupCollapsed / deleteGroup", () => {
       const model = new SessionModel();
       const group = model.createGroup("backend");
-      expect(group).toEqual({ id: "g1", label: "backend", collapsed: false });
+      expect(group).toEqual({ id: expect.stringMatching(UUID_RE), label: "backend", collapsed: false });
       expect(model.listGroups()).toEqual([group]);
 
       const renamed = model.renameGroup(group.id, "frontend");
@@ -1140,14 +1149,6 @@ describe("SessionModel — snapshot and id counters", () => {
     expect(snapshot.tabs.length).toBe(1);
     expect(snapshot.panes.length).toBe(1);
     expect(snapshot.focus).toEqual(model.getFocus());
-  });
-
-  it("setNextIdCounters lets restore continue numbering without collisions", () => {
-    const model = new SessionModel();
-    model.setNextIdCounters({ w: 5, t: 5, p: 5, s: 5, a: 5, g: 5 });
-    const { workspace } = model.createWorkspace("/home/u", "api", init);
-    expect(workspace.id).toBe("w5");
-    expect(model.getNextIdCounters().w).toBe(6);
   });
 });
 
@@ -1821,7 +1822,7 @@ describe("SessionModel — sidebar layout", () => {
         tabs: [{ id: `t-${id}`, label: "1", layout: { type: "pane" as const, paneId: `p-${id}` }, focusedPaneId: `p-${id}`, zoomedPaneId: null, panes: [{ id: `p-${id}`, label: null, cwd: "/x", shell: "sh" }] }],
       }) as never;
 
-    it("T29: a restore keeps the saved representative even if it was created later; a save without the flag falls back to the creation order", () => {
+    it("T29: a restore keeps the saved representative even if it was created later; a save without the flag falls back to the saved order", () => {
       const saved = new SessionModel();
       saved.restoreWorkspace(restoreData("w1", false), false);
       saved.restoreWorkspace(restoreData("w2", true), false);
@@ -1832,8 +1833,8 @@ describe("SessionModel — sidebar layout", () => {
       old.restoreWorkspace(restoreData("w10"), false);
       old.restoreWorkspace(restoreData("w9"), false);
       old.settleRepresentatives();
-      expect(old.getWorkspace("w9")?.representative).toBe(true); // w<番号> の小さいほう
-      expect(old.getWorkspace("w10")?.representative).toBe(false);
+      expect(old.getWorkspace("w10")?.representative).toBe(true); // 保存の並びが先のほう（id は作った順を表さない）
+      expect(old.getWorkspace("w9")?.representative).toBe(false);
     });
   });
 
@@ -1850,15 +1851,14 @@ describe("SessionModel — sidebar layout", () => {
 
     it("derives the layout from the flat order and groupId until it is confirmed", () => {
       const model = new SessionModel();
-      model.setNextIdCounters({ w: 3, t: 3, p: 3, s: 1, a: 1, g: 2 });
       model.restoreGroup({ id: "g1", label: "g", collapsed: false });
       model.restoreWorkspace(wsData("w1"), false);
       model.restoreWorkspace(wsData("w2", "g1"), false);
       expect(model.hasLayout()).toBe(false);
       expect(model.getLayout()).toEqual({ top: ["g:g1", "u"], groups: { g1: ["w:w2"] }, ungrouped: ["w:w1"] });
-      model.createWorkspace("/n", "n", init); // 仮の状態のまま作っても、導いた結果に入る
+      const created = model.createWorkspace("/n", "n", init); // 仮の状態のまま作っても、導いた結果に入る
       expect(model.hasLayout()).toBe(false);
-      expect(model.getLayout().ungrouped).toContain("w:w3");
+      expect(model.getLayout().ungrouped).toContain(`w:${created.workspace.id}`);
     });
 
     it("confirmLayout fixes the derived layout once, and writes the repository memberships to repoGroups", () => {

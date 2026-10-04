@@ -3,10 +3,10 @@ import {
   type AgentInfo,
   type Graph,
   type GraphLink,
-  type GraphNode,
   type LinkRun,
   type ServerEvent,
 } from "@sodashitsu/protocol";
+import { shortId } from "@sodashitsu/protocol";
 import {
   approvalNotice,
   buildTriggerText,
@@ -30,7 +30,7 @@ import {
  * 連携の実行（20260927-agent-graph の design「GraphEngine」・architecture）。購読と I/O の配線だけを持ち、「いつ送るか」は `TriggerState`
  * （トリガ・承認の代理の線）と `SupervisorNotifier`（監督役）が決める。
  *
- * - `GraphStore` の変化で対象を作り直す（無効〔stale〕のノードの線は動かさない）。別のマシンの pane は、載っているマシンの口（`remote`。04 の
+ * - `GraphStore` の変化で対象を作り直す。別のマシンの pane は、載っているマシンの口（`remote`。04 の
  *   `RemoteLinks`）で購読・送信する。端のマシンが繋がっていない間の発火は `machine_unavailable` で見送り、待ちも取り消す。繋がった（繋ぎ直した）
  *   ときの値は「基準」——切れている間の完了・承認待ちでは動かない（decisions D1-6）。監督役のマシンが繋がっていない間は知らせを保留する。
  * - 送ったら回数を数え、上限で `paused: "limit"`（`GraphStore.recordRun`）。監督役への知らせは回数に数えない（decisions D5）。
@@ -268,35 +268,24 @@ export class GraphEngine {
     this.graph = graph;
     this.syncRemote(graph);
     const at = this.deps.now();
-    const nodes = new Map<string, GraphNode>(graph.nodes.map((n) => [n.key, n]));
     const liveLinks = new Set<string>();
     for (const link of graph.links) {
       if (link.kind === "supervise") continue;
-      if (this.reconcileLink(link, nodes, graph, at)) liveLinks.add(link.id);
+      if (this.reconcileLink(link, graph, at)) liveLinks.add(link.id);
     }
     // 消えた・無効になった線は状態ごと捨てる（待ちも黙って消える）。
     for (const id of [...this.links.keys()]) if (!liveLinks.has(id)) this.links.delete(id);
     for (const id of [...this.history.keys()])
       if (!graph.links.some((l) => l.id === id)) this.history.delete(id);
-    this.reconcileSupervisors(graph, nodes, at);
+    this.reconcileSupervisors(graph, at);
     this.armHold();
   }
 
-  private reconcileLink(
-    link: GraphLink,
-    nodes: Map<string, GraphNode>,
-    graph: Graph,
-    at: number,
-  ): boolean {
+  private reconcileLink(link: GraphLink, graph: Graph, at: number): boolean {
     const from = this.endOf(link.from);
     const to = this.endOf(link.to);
-    // 無効のノードの線は動かさない（選び直すまで）。元の口が無ければ（別のマシンの口を渡していない）購読できない。
-    if (
-      nodes.get(link.from)?.stale === true ||
-      nodes.get(link.to)?.stale === true ||
-      from.port === null
-    )
-      return false;
+    // 元の口が無ければ（別のマシンの口を渡していない）購読できない。
+    if (from.port === null) return false;
     const settings = this.settingsOf(link, graph, from, to);
     const existing = this.links.get(link.id);
     if (
@@ -343,7 +332,7 @@ export class GraphEngine {
     };
   }
 
-  private reconcileSupervisors(graph: Graph, nodes: Map<string, GraphNode>, at: number): void {
+  private reconcileSupervisors(graph: Graph, at: number): void {
     const bySupervisor = new Map<string, GraphLink[]>();
     for (const link of graph.links) {
       if (link.kind !== "supervise") continue;
@@ -353,14 +342,12 @@ export class GraphEngine {
     }
     for (const [key, links] of bySupervisor) {
       const end = this.endOf(key);
-      // 監督役が無効・口が無いなら知らせない。
-      if (end.port === null || nodes.get(key)?.stale === true) {
+      // 監督役の口が無いなら知らせない。
+      if (end.port === null) {
         this.supervisors.delete(key);
         continue;
       }
-      const signature = subordinatesSignature(
-        links.map((l) => ({ key: l.from, stale: nodes.get(l.from)?.stale === true })),
-      );
+      const signature = subordinatesSignature(links.map((l) => l.from));
       const paused = this.supervisorPaused(graph, links, end);
       const existing = this.supervisors.get(key);
       if (existing !== undefined && existing.end.port !== end.port) this.supervisors.delete(key);
@@ -626,10 +613,8 @@ export class GraphEngine {
 
   private async notifySupervisor(sv: SupervisorRuntime): Promise<void> {
     const gen = this.generation;
-    const nodes = new Map((this.graph?.nodes ?? []).map((n) => [n.key, n]));
     const subs: GraphPaneInfo[] = [];
     for (const l of sv.links) {
-      if (nodes.get(l.from)?.stale === true) continue; // 無効の配下は知らせに載せない
       subs.push(this.paneInfo(this.endOf(l.from), sv.end));
     }
     const text = supervisorNotice(subs);
@@ -688,7 +673,7 @@ export class GraphEngine {
    * 呼び名（`sodactl --machine <名前>` に使う）、手元のサーバの pane を別のマシンの監督役へ知らせるときは `localLabel`。
    */
   private paneInfo(end: End, viewer: End): GraphPaneInfo {
-    const name = end.port?.paneName(end.paneId) ?? `pane ${end.paneId}`;
+    const name = end.port?.paneName(end.paneId) ?? `pane ${shortId(end.paneId)}`;
     const agent = end.port?.status(end.paneId) ?? null;
     const machine =
       end.machine === viewer.machine

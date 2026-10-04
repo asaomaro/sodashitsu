@@ -227,7 +227,6 @@ describe("サーバと画面は同じ純関数で同じ木になる（T19）", (
           },
         ],
       }) as never;
-    model.setNextIdCounters({ w: 5, t: 5, p: 5, s: 1, a: 1, g: 3 });
     model.restoreGroup({ id: "g1", label: "g1", collapsed: false });
     model.restoreGroup({ id: "g2", label: "g2", collapsed: false });
     model.restoreWorkspace(wsData("w1"), false);

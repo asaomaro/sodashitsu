@@ -100,7 +100,6 @@ describe("SessionService — hasPendingResume", () => {
     await service.restore({
       schema: 1,
       savedAt: "2026-09-26T00:00:00Z",
-      nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
       groups: [],
       workspaces: [
         {
