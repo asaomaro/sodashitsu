@@ -30,22 +30,31 @@
     source.hidden = !on;
   });
 
-  // 枠自身を動かす・外へ繋ぐ要素と、リンクを取り除く。整形の直後（`marked` の出力）と、mermaid の図を挿入した直後の両方に掛ける
+  // 枠自身を動かす・外へ繋ぐ要素と、リンクを絞る。整形の直後（`marked` の出力）と、mermaid の図を挿入した直後の両方に掛ける
   // （図のラベルの HTML・`click … href` は `<a>` を作り、SMIL は `href` を後から書き換えるので、図の中にも掛けないと枠自身が外へ移れる）。
   // `whole` が真のときは `svg`・`math` も取り除く（Markdown への直書きは捨てる）。図の SVG そのものは残すので、図には偽を渡す。
   var SMIL = 'set, animate, animateTransform, animateMotion, animateColor';
   function sanitize(root, whole) {
+    var links = whole; // 外へ開けるリンクは本文だけ（図の中のリンクは開かせない）
     // CSP の default-src 'none' では止まらない `<meta http-equiv=refresh>`・`<base>`・`<form>` 等。
     var sel = 'meta, link, base, form, iframe, frame, object, embed, map, area, script, ' + SMIL;
     if (whole) sel += ', svg, math';
     Array.prototype.forEach.call(root.querySelectorAll(sel), function (el) { el.remove(); });
-    // リンクは開けない（外への通信を止める）。文字として残し、行き先は title に出す。同じ文書の中の `#` は残す。`xlink:href` は常に外す。
+    // リンク: 本文（`links` が真）の `a` は、`http:`・`https:` の href だけ残して新しいタブで開く（`rel=noopener noreferrer`。枠にスクリプトが無いので、開く先へ本文は渡らない）。
+    // それ以外（`javascript:`・`data:`・相対・`//host` 等）と、図の中（`links` が偽）の `a` は href を外して文字として残し、行き先は title に出す。同じ文書の中の `#` は残す。`xlink:href` は常に外す。
     Array.prototype.forEach.call(root.querySelectorAll('a'), function (a) {
       var href = a.getAttribute('href') || a.getAttribute('xlink:href') || '';
       a.removeAttribute('xlink:href');
-      if (href.charAt(0) === '#') return;
+      a.removeAttribute('target');
+      a.removeAttribute('rel');
+      if (href.charAt(0) === '#' && a.getAttribute('href') === href) return;
       a.removeAttribute('href');
       if (href !== '') a.setAttribute('title', href);
+      if (links && window.askViewLinks.openableHref(href)) {
+        a.setAttribute('href', href);
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener noreferrer');
+      }
     });
   }
 
