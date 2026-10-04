@@ -1,7 +1,7 @@
 import type { ServerEvent, Workspace, WorkspaceId } from "@sodashitsu/protocol";
 import type { EventBus } from "../bus/EventBus.js";
 import type { Disposable } from "../util/Disposable.js";
-import type { GitJudgement } from "../session/SessionModel.js";
+import { gitIdentityChanged, type GitJudgement } from "../session/SessionModel.js";
 import type { FollowedLabel, SessionService } from "../session/SessionService.js";
 import type { GitRunner } from "../infra/GitRunner.js";
 import { parseAbsoluteGitPath } from "./worktree.js";
@@ -25,6 +25,13 @@ const FOLLOW_EVENTS: ReadonlySet<ServerEvent["event"]> = new Set(["pane.updated"
  * - `unknown`: 時間切れ・git の起動失敗、または HEAD は取れたが `--git-common-dir`・`--git-dir` が失敗した・絶対パス 1 行でなかった（半端な結果は信用しない）。
  */
 export type ProbeResult = GitJudgement;
+
+interface Judged {
+  ws: Workspace;
+  cwd: string;
+  result: ProbeResult;
+  label: FollowedLabel | null;
+}
 
 /**
  * workspace のいまの場所（最初の tab の最初の pane の場所）ごとに git 情報と自動の名前を取り、変化したら反映する（architecture.md「GitInfoPoller」。
@@ -107,11 +114,36 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
     const workspaces = this.session.snapshot().workspaces;
     const alive = new Set(workspaces.map((ws) => ws.id));
     for (const id of this.polledCwd.keys()) if (!alive.has(id)) this.polledCwd.delete(id); // バスを渡さないときの後始末
-    // 判定は並べて走らせるが、反映は**作った順（`w<番号>` の小さい順）**に 1 つずつ行う。届いた順に反映すると、同じフォルダの workspace の代表
-    // （最初に持ち始めたもの。D42）が判定の速さで決まってしまう（decisions D49）。
-    const judged = await Promise.all(workspaces.map((ws) => this.judgeWorkspace(ws)));
-    judged.sort((a, b) => idNumber(a.ws.id) - idNumber(b.ws.id));
-    for (const j of judged) this.session.applyWorkspaceIdentity(j.ws.id, j.cwd, j.result, j.label);
+    // 判定は並べて走らせる。項目の判定（`repoKey`・`isLinkedWorktree`・`worktreeKey`）が**変わらない**結果は、届いた時点でその場で反映する
+    // （ブランチ名・件数の更新を、遅い 1 件に引きずらせない。今までどおり 1 件ずつ独立）。**変わる**結果だけをためて、周の終わりに
+    // 作った順（`w<番号>` の小さい順）で反映する——届いた順に反映すると、同じフォルダの workspace の代表（最初に持ち始めたもの。D42）が
+    // 判定の速さで決まってしまう（decisions D49・D51）。
+    const deferred: Judged[] = [];
+    await Promise.all(
+      workspaces.map(async (ws) => {
+        const j = await this.judgeWorkspace(ws);
+        if (this.changesIdentity(j)) deferred.push(j);
+        else this.apply(j);
+      }),
+    );
+    deferred.sort((a, b) => idNumber(a.ws.id) - idNumber(b.ws.id));
+    for (const j of deferred) this.apply(j);
+  }
+
+  /** 項目の判定が変わる結果か。「取れない」は何も変えないので、変わらない側。 */
+  private changesIdentity(j: Judged): boolean {
+    if (j.result.kind === "unknown") return false;
+    const current = this.session.getWorkspace(j.ws.id)?.git ?? null;
+    return gitIdentityChanged(current, j.result.kind === "git" ? j.result.git : null);
+  }
+
+  /** 1 件の失敗で、ほかの workspace の反映を止めない。 */
+  private apply(j: Judged): void {
+    try {
+      this.session.applyWorkspaceIdentity(j.ws.id, j.cwd, j.result, j.label);
+    } catch {
+      // 次の周でやり直す
+    }
   }
 
   async pollWorkspaceNow(workspaceId: WorkspaceId): Promise<void> {
@@ -135,8 +167,8 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
     this.session.applyWorkspaceIdentity(ws.id, j.cwd, j.result, j.label);
   }
 
-  /** いまの場所で git と自動の名前を決める（反映はしない。`pollNow` は全部そろえてから作った順に反映する）。 */
-  private async judgeWorkspace(ws: Workspace): Promise<{ ws: Workspace; cwd: string; result: ProbeResult; label: FollowedLabel | null }> {
+  /** いまの場所で git と自動の名前を決める（反映はしない）。 */
+  private async judgeWorkspace(ws: Workspace): Promise<Judged> {
     const cwd = this.session.identityCwdOf(ws.id) ?? ws.cwd;
     this.polledCwd.set(ws.id, cwd); // 待つ前に——同じ変化で見直しを重ねない
     const [result, label] = await Promise.all([this.probe(cwd), this.session.followedLabel(ws.id, cwd).catch(() => null)]);

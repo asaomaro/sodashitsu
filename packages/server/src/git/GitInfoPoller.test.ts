@@ -1176,6 +1176,32 @@ describe("DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実�
     });
   }
 
+  // 項目の判定が変わらない結果（ブランチ名だけの更新）は、同じ周の遅い 1 件を待たずに反映する（decisions D51。再レビューの指摘）。
+  it("遅い workspace があっても、ほかの workspace のブランチ名の更新は、その 1 件を待たずに反映される", async () => {
+    const slowRepo = await repo();
+    const fastRepo = await repo();
+    const svc = makeService();
+    const slow = (await svc.createWorkspace(slowRepo, "slow")).workspace;
+    const fast = (await svc.createWorkspace(fastRepo, "fast")).workspace;
+    const real = new ChildProcessGitRunner();
+    await new DefaultGitInfoPoller(svc, real).pollNow(); // 1 周目で判定を確定させる
+    await runGit(fastRepo, ["checkout", "-q", "-b", "topic"]);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const gated: GitRunner = {
+      run: async (cwd, args, t) => {
+        if (cwd === slowRepo) await gate; // slow の git は、門を開けるまで返らない
+        return real.run(cwd, args, t);
+      },
+    };
+    const round = new DefaultGitInfoPoller(svc, gated).pollNow();
+    // 陽性の対照: 門を開ける前に、fast のブランチ名が変わる。
+    await vi.waitFor(() => expect(svc.getWorkspace(fast.id)?.git?.branch).toBe("topic"));
+    expect(svc.getWorkspace(slow.id)?.git?.branch).not.toBe("topic");
+    release();
+    await round;
+  });
+
   it("平らな順で b が a より前に居ても（判定が届く順・平らな順に依らず）作った順の a が代表になる", async () => {
     const main = await repo();
     const svc = makeService();
