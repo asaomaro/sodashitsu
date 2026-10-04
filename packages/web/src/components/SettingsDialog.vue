@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { DEFAULT_THEME_NAME, isThemeName, THEME_APPEARANCE, THEME_NAMES, type AgentIntegrationKind, type ThemeName } from "@sodashitsu/protocol";
-import { computed, inject, nextTick, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { ActionDispatcherKey, DeviceKindKey, NotificationControllerKey } from "../injection.js";
 import type { PaneBorders } from "../layout/paneChrome.js";
 import type { DesktopPermission } from "../notify/ports.js";
@@ -21,6 +21,7 @@ import {
 } from "@sodashitsu/client-core";
 import { CSS_VAR_LABELS, isValidCssColor, type ThemeOverrideBucket } from "../theme/themeOverrides.js";
 import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
+import { keepChosen, sectionAtScroll, type SpyInput } from "../settings/sectionSpy.js";
 import KeySettings from "./KeySettings.vue";
 import SidebarRowsSettings from "./SidebarRowsSettings.vue";
 
@@ -62,6 +63,12 @@ const dialogEl = ref<HTMLDialogElement | null>(null);
 const firstSwitch = ref<HTMLButtonElement | null>(null);
 /** 左のサイドメニューの項目（節の見出しから作る。20261004-settings-side-menu）。 */
 const menuItems = ref<{ id: string; label: string }[]>([]);
+/** 今の節（`menuItems` の番号。節が無ければ -1）。**選んだ節** `chosen`（項目を押した・節の中にフォーカスが入った）があれば、
+ *  利用者が自分でスクロールするまでそれを優先する（20261004-settings-side-menu の D2）。 */
+const current = ref(0);
+const chosen = ref<number | null>(null);
+const menuEl = ref<HTMLElement | null>(null);
+const bodyEl = ref<HTMLElement | null>(null);
 /**
  * 「指定した場所」の入力欄の下書き（`NameDialog` と同じく ref と v-model で持つ）。`:value` を保存値へ一方向に結ぶと、ほかの状態
  * （通知の可否・サーバの上限）で描き直されるたびに、打ちかけの文字が保存値で上書きされる（Vue は描き直しのたびに value を当て直す）。
@@ -119,8 +126,14 @@ watch(
       void nextTick(() => {
         dialogEl.value?.showModal();
         firstSwitch.value?.focus();
+        buildMenu();
+        startObserving();
+        updateCurrent();
       });
     } else {
+      stopObserving();
+      chosen.value = null; // 次に開いたときは最初の節から
+      current.value = 0;
       dialogEl.value?.close();
       confirmingOverrideReset.value = false; // 開き直したとき、確認が出たままにならない
       overrideMessage.value = ""; // 前回の結果の文を持ち越さない
@@ -518,6 +531,153 @@ function openOnboarding(): void {
   view.openDialogWithContext({ kind: "onboarding" });
 }
 
+/** 画面の節（`.settings-body` の直下の `section[aria-labelledby]`）とその見出し。見出しの無い節は飛ばす。 */
+function sectionHeadings(): { section: HTMLElement; heading: HTMLElement }[] {
+  const out: { section: HTMLElement; heading: HTMLElement }[] = [];
+  for (const section of Array.from(bodyEl.value?.querySelectorAll<HTMLElement>(":scope > section[aria-labelledby]") ?? [])) {
+    const heading = document.getElementById(section.getAttribute("aria-labelledby") ?? "");
+    if (heading) out.push({ section, heading });
+  }
+  return out;
+}
+
+/** 開くたびに、画面の節の見出しからメニューを作る（節を足せばメニューにも出る。見出しを 2 か所に書かない）。
+ *  見出しにはプログラムからフォーカスできるよう `tabindex="-1"` を付ける（節「キー」の見出しは子のコンポーネントの中なので、外から付ける）。 */
+function buildMenu(): void {
+  const found = sectionHeadings();
+  for (const { heading } of found) heading.setAttribute("tabindex", "-1");
+  menuItems.value = found.map(({ heading }) => ({ id: heading.id, label: heading.textContent?.trim() ?? "" }));
+}
+
+/** `<dialog>`（スクロールの入れ物）の中での位置。`scrollTop` と同じ座標。 */
+function topInDialog(el: Element, dialog: HTMLElement): number {
+  return el.getBoundingClientRect().top - dialog.getBoundingClientRect().top - dialog.clientTop + dialog.scrollTop;
+}
+
+/** 題名の行の高さ＋その下の余白（`scroll-padding-top` の式と同じ高さ。その下が「見えている範囲」の上端）。 */
+function headerHeightOf(dialog: HTMLElement): number {
+  const header = dialog.querySelector<HTMLElement>(".settings-header");
+  if (!header) return 0;
+  return header.offsetHeight + (parseFloat(getComputedStyle(header).marginBottom) || 0);
+}
+
+function readSpyInput(found: { heading: HTMLElement }[]): SpyInput | null {
+  const dialog = dialogEl.value;
+  if (!dialog || found.length === 0) return null;
+  return {
+    tops: found.map(({ heading }) => topInDialog(heading, dialog)),
+    scrollTop: dialog.scrollTop,
+    viewHeight: dialog.clientHeight,
+    scrollHeight: dialog.scrollHeight,
+    headerHeight: headerHeightOf(dialog),
+  };
+}
+
+/** フォーカスのある要素が入っている節の番号（どの節にも含まれない末尾の段落は最後の節）。`.settings-body` の外なら null。 */
+function sectionOfElement(el: Element | null, found: { section: HTMLElement }[]): number | null {
+  const body = bodyEl.value;
+  if (!el || !body || !body.contains(el) || found.length === 0) return null;
+  const at = found.findIndex(({ section }) => section.contains(el));
+  return at >= 0 ? at : found.length - 1;
+}
+
+/** 今の節を計算し直す。**1 回の描画につき 1 回**（`schedule` でまとめる）。 */
+function updateCurrent(): void {
+  const dialog = dialogEl.value;
+  const found = sectionHeadings();
+  const input = readSpyInput(found);
+  if (!dialog || !input) {
+    current.value = -1;
+    return;
+  }
+  const active = document.activeElement;
+  const at = sectionOfElement(active, found);
+  const focus = at !== null && active ? { section: at, top: topInDialog(active, dialog) } : null;
+  chosen.value = keepChosen(chosen.value, input, focus);
+  const next = chosen.value ?? sectionAtScroll(input);
+  if (next !== current.value) {
+    current.value = next;
+    void nextTick(keepCurrentItemVisible);
+  }
+}
+
+let frame: number | null = null;
+let framePending = false;
+function schedule(): void {
+  if (typeof requestAnimationFrame !== "function") {
+    updateCurrent();
+    return;
+  }
+  if (framePending) return;
+  framePending = true;
+  frame = requestAnimationFrame(() => {
+    framePending = false;
+    updateCurrent();
+  });
+}
+
+/** 今の節の項目が、メニュー（高さが足りないときはメニューの中がスクロールする）の中で見える位置にあるようにする。 */
+function keepCurrentItemVisible(): void {
+  const menu = menuEl.value;
+  const item = menu?.children[current.value] as HTMLElement | undefined;
+  if (!menu || !item || menu.scrollHeight <= menu.clientHeight) return;
+  const margin = 8;
+  if (item.offsetTop < menu.scrollTop + margin) menu.scrollTop = Math.max(0, item.offsetTop - margin);
+  else if (item.offsetTop + item.offsetHeight > menu.scrollTop + menu.clientHeight - margin) {
+    menu.scrollTop = item.offsetTop + item.offsetHeight - menu.clientHeight + margin;
+  }
+}
+
+/** 本文の中にフォーカスが入った → その節を選んだ節にする（キーで部品を辿っても印が追従する）。 */
+function onBodyFocusin(ev: FocusEvent): void {
+  const at = sectionOfElement(ev.target as Element | null, sectionHeadings());
+  if (at === null) return;
+  chosen.value = at;
+  schedule();
+}
+
+/** 利用者が自分でスクロールし始めたら、選んだ節を外す。**メニューの中で、メニューがスクロールできるときは外さない**（メニューだけが動く）。 */
+function onUserScroll(ev: Event): void {
+  const menu = menuEl.value;
+  if (menu && ev.target instanceof Node && menu.contains(ev.target) && menu.scrollHeight > menu.clientHeight) return;
+  if (chosen.value === null) return;
+  chosen.value = null;
+  schedule();
+}
+
+let dialogObserver: ResizeObserver | null = null;
+let bodyObserver: ResizeObserver | null = null;
+
+/** `<dialog>` の見えている高さをメニューの `max-height` に渡す（`100vh` は iOS Safari でツールバーの分ずれるので使わない）。 */
+function syncViewHeight(): void {
+  const dialog = dialogEl.value;
+  if (dialog) dialog.style.setProperty("--settings-view-h", `${dialog.clientHeight}px`);
+}
+
+function startObserving(): void {
+  syncViewHeight();
+  if (typeof ResizeObserver === "undefined") return; // 無い環境（単体テスト）では、開いたときの 1 回だけ
+  dialogObserver = new ResizeObserver(() => {
+    syncViewHeight();
+    schedule();
+  });
+  if (dialogEl.value) dialogObserver.observe(dialogEl.value);
+  bodyObserver = new ResizeObserver(schedule);
+  if (bodyEl.value) bodyObserver.observe(bodyEl.value);
+}
+
+function stopObserving(): void {
+  dialogObserver?.disconnect();
+  bodyObserver?.disconnect();
+  dialogObserver = null;
+  bodyObserver = null;
+  if (frame !== null && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+  frame = null;
+  framePending = false;
+}
+
+onBeforeUnmount(stopObserving);
+
 function cancel(): void {
   commitNewCwdPath(); // 「指定した場所」以外では入力欄が使えず、下書きは保存値のまま（開くたびに戻す）なので何もしない
   view.closeDialog();
@@ -538,7 +698,13 @@ function onNativeCancel(ev: Event): void {
 </script>
 
 <template>
-  <dialog ref="dialogEl" class="settings-dialog" aria-labelledby="settings-title" @cancel="onNativeCancel" @click.self="cancel">
+  <dialog ref="dialogEl" class="settings-dialog" aria-labelledby="settings-title"
+    @cancel="onNativeCancel"
+    @click.self="cancel"
+    @scroll.passive="schedule"
+    @wheel.passive="onUserScroll"
+    @touchmove.passive="onUserScroll"
+  >
     <!-- ［閉じる］は確定ボタンではない（押した結果はその場で保存済み）。**モバイルには Esc キーが無く**、ダイアログが画面いっぱいだと
          背景のタップの余地も無いので、閉じる手段を画面に出す（review ラウンド1 の指摘。先例は HelpDialog の［閉じる］）。 -->
     <div class="settings-header">
@@ -548,11 +714,20 @@ function onNativeCancel(ev: Event): void {
     <!-- 左の列（幅 768px 以上だけ）。**入れ物は grid のセルいっぱいに伸ばす**——`@click.self` は `<dialog>` 自身が押されたときだけ閉じるので、
          メニューを直に grid の子にしてセルより短くすると、その下の空きを押して閉じてしまう。項目は右の節の見出しから作る（20261004-settings-side-menu の design）。 -->
     <div class="settings-menu-col">
-      <nav v-if="menuItems.length > 0" class="settings-menu" aria-label="設定の節">
-        <button v-for="item in menuItems" :key="item.id" type="button" class="settings-menu-item">{{ item.label }}</button>
+      <nav v-if="menuItems.length > 0" ref="menuEl" class="settings-menu" aria-label="設定の節">
+        <button
+          v-for="(item, i) in menuItems"
+          :key="item.id"
+          type="button"
+          class="settings-menu-item"
+          :aria-current="i === current ? 'true' : undefined"
+          :tabindex="i === current ? 0 : -1"
+        >
+          {{ item.label }}
+        </button>
       </nav>
     </div>
-    <div class="settings-body">
+    <div ref="bodyEl" class="settings-body" @focusin="onBodyFocusin">
     <section class="settings-section" aria-labelledby="settings-notify">
       <h3 id="settings-notify" class="settings-heading">通知</h3>
       <ul class="settings-list">
@@ -1042,6 +1217,26 @@ function onNativeCancel(ev: Event): void {
   display: flex;
   flex-direction: column;
   gap: 0.2em;
+}
+.settings-menu-item {
+  flex: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 0 4px 4px 0;
+  padding: 0.35em 0.7em;
+  cursor: pointer;
+}
+.settings-menu-item:hover {
+  background: var(--soda-menu-hover, rgba(255, 255, 255, 0.08));
+}
+/* 今の節。色に頼らない（太字と左の線）。 */
+.settings-menu-item[aria-current="true"] {
+  font-weight: bold;
+  border-left-color: currentColor;
 }
 .settings-body {
   min-width: 0;
