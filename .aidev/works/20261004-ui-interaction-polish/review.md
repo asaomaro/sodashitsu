@@ -13,6 +13,8 @@
 - [nit][conv:-] packages/web/src/components/Splitter.vue:73 `axis` を setup 時の `props.dir` で 1 回だけ決めている / 対応: 許容（分割の向きは分割ごとに固定で、`dir` が変わる再利用は無い）
 - [nit][conv:-] Splitter.test.ts の Esc のテストが「描画後」の 1 経路だけ / 対応: 修正済（T6・ラウンド1。描画前に Esc のテストを足した）
 
+- [nit][conv:-] T8 の独立点検は 2 件（前のセッションが実施。指摘の本文は記録前にセッションが止まった）/ 対応: 区画の外側の `overflow: visible` への切り替え・見出し／フッタの `padding-right` の `+ 4px`・畳んだサイドバーの構造の分離として実装に反映済み。
+
 ### 壊して落ちる確認（条項 regression-negative-control。生の出力）
 
 #### T1 `sectionSizing.ts`: `clampRatio` の `Math.min(hi, Math.max(lo, ratio))` を `ratio` に壊す
@@ -138,4 +140,14 @@ AssertionError: expected '160px' to be '360px' // Object.is equality
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
  FAIL  src/components/Sidebar.test.ts > Sidebar — 幅を覚える > ドラッグ中にダイアログが開いたら、その時点で終えて保存し、以後の pointermove を無視する
 AssertionError: expected undefined to be 320 // Object.is equality
+```
+
+#### T8 `Sidebar.vue` 区画の構造（生の出力。変異ごと）
+```
+変異: sectionFlex の ` || spacesFolded.value || agentsFolded.value` を外す
+     × spaces を畳むと、spaces は folded・agents は fill（比は使わない） 11ms
+AssertionError: expected 'flex-grow: 0.3; flex-shrink: 1; flex-…' to be undefined
+変異: spacesFolded の `!view.sidebarCollapsed &&` を外す
+     × サイドバーを畳んだ状態では、区画の折りたたみも比も効かない（今の構造のまま全部出す） 17ms
+AssertionError: expected [ 'sidebar-spaces', …(1) ] to not include 'sidebar-section-folded'
 ```

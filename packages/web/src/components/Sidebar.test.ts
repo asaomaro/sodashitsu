@@ -982,6 +982,96 @@ describe("Sidebar — 幅の境目（role・aria・キー・Esc）", () => {
   });
 });
 
+// 20261004-ui-interaction-polish（区画の構造。区画ごとのスクロール・比・折りたたみの配り方。実際の高さは E2E が見る）。
+describe("Sidebar — 区画の構造", () => {
+  function setup() {
+    useSessionStore(pinia).workspaceUpserted(makeWorkspace("w1"));
+    const wrapper = mountSidebar(makeConnection());
+    return { wrapper, view: useViewStore(pinia) };
+  }
+  const section = (w: ReturnType<typeof mountSidebar>, which: "spaces" | "agents") => w.get(`.sidebar-${which}`);
+
+  it("2 区画は .sidebar-sections の中。見出し・フッタは区画の直下、行は .sidebar-section-body の中。畳むボタンは外", () => {
+    const { wrapper } = setup();
+    const sections = wrapper.get(".sidebar-sections");
+    expect(sections.findAll(":scope > section").map((e) => e.classes()[0])).toEqual(["sidebar-spaces", "sidebar-agents"]);
+    expect(section(wrapper, "spaces").find(":scope > .sidebar-section-header").exists()).toBe(true);
+    expect(section(wrapper, "spaces").find(":scope > .sidebar-section-body .sidebar-row").exists()).toBe(true);
+    expect(section(wrapper, "spaces").find(":scope > .sidebar-section-footer").exists()).toBe(true);
+    expect(section(wrapper, "agents").find(":scope > .sidebar-section-body").exists()).toBe(true);
+    expect(wrapper.find(".sidebar-sections .sidebar-footer").exists()).toBe(false);
+    expect(wrapper.find(":scope > .sidebar-footer").exists()).toBe(true);
+  });
+
+  it("自動の配分（比が無い・畳んでいない）: インラインの flex も畳んだ印も付かない", () => {
+    const { wrapper } = setup();
+    for (const which of ["spaces", "agents"] as const) {
+      expect(section(wrapper, which).attributes("style")).toBeUndefined();
+      expect(section(wrapper, which).classes()).not.toContain("sidebar-section-folded");
+      expect(section(wrapper, which).classes()).not.toContain("sidebar-section-fill");
+    }
+  });
+
+  it("比があれば、spaces は flex: r 1 0・agents は flex: 1 − r 1 0", async () => {
+    const { wrapper, view } = setup();
+    view.setSectionRatio(0.3);
+    await wrapper.vm.$nextTick();
+    expect((section(wrapper, "spaces").element as HTMLElement).style.flex).toBe("0.3 1 0px");
+    expect((section(wrapper, "agents").element as HTMLElement).style.flex).toBe("0.7 1 0px");
+  });
+
+  it("spaces を畳むと、spaces は folded・agents は fill（比は使わない）", async () => {
+    const { wrapper, view } = setup();
+    view.setSectionRatio(0.3);
+    view.toggleSectionCollapsed("spaces");
+    await wrapper.vm.$nextTick();
+    expect(section(wrapper, "spaces").classes()).toContain("sidebar-section-folded");
+    expect(section(wrapper, "agents").classes()).toContain("sidebar-section-fill");
+    expect(section(wrapper, "spaces").attributes("style")).toBeUndefined();
+    expect(section(wrapper, "agents").attributes("style")).toBeUndefined();
+  });
+
+  it("agents を畳むと、agents は folded・spaces は fill", async () => {
+    const { wrapper, view } = setup();
+    view.toggleSectionCollapsed("agents");
+    await wrapper.vm.$nextTick();
+    expect(section(wrapper, "agents").classes()).toContain("sidebar-section-folded");
+    expect(section(wrapper, "spaces").classes()).toContain("sidebar-section-fill");
+  });
+
+  it("両方を畳むと、どちらも folded（fill は無い）", async () => {
+    const { wrapper, view } = setup();
+    view.toggleSectionCollapsed("spaces");
+    view.toggleSectionCollapsed("agents");
+    await wrapper.vm.$nextTick();
+    for (const which of ["spaces", "agents"] as const) {
+      expect(section(wrapper, which).classes()).toContain("sidebar-section-folded");
+      expect(section(wrapper, which).classes()).not.toContain("sidebar-section-fill");
+    }
+  });
+
+  it("サイドバーを畳んだ状態では、区画の折りたたみも比も効かない（今の構造のまま全部出す）", async () => {
+    const { wrapper, view } = setup();
+    view.setSectionRatio(0.3);
+    view.toggleSectionCollapsed("spaces");
+    view.toggleSectionCollapsed("agents");
+    view.toggleSidebar();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get(".sidebar").classes()).toContain("sidebar-collapsed");
+    for (const which of ["spaces", "agents"] as const) {
+      expect(section(wrapper, which).classes()).not.toContain("sidebar-section-folded");
+      expect(section(wrapper, which).attributes("style")).toBeUndefined();
+    }
+    expect(wrapper.find(".sidebar-spaces .sidebar-row").exists()).toBe(true);
+    expect(wrapper.find(".sidebar-section-header").exists()).toBe(false); // 見出しは出ない（今のまま）
+  });
+
+  it("幅の境目は nav の外へはみ出す位置（right: -4px）にある。CSS の中身は E2E が見るので、ここでは境目が .sidebar の直下にあることだけ", () => {
+    const { wrapper } = setup();
+    expect(wrapper.find(".sidebar > .sidebar-divider").exists()).toBe(true);
+  });
+});
+
 // 20260923-workspace-grouping（herdr に前例が無い独自拡張・worktree 自動グループ）。
 describe("Sidebar — グループの表示", () => {
   function rowLabels(wrapper: ReturnType<typeof mountSidebar>): string[] {

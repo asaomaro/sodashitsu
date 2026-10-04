@@ -575,6 +575,19 @@ function onRowPointerCancel(ev: PointerEvent): void {
 }
 
 /*
+ * 区画（spaces・agents）の配り方（20261004-ui-interaction-polish。design「区画の構造」）。畳んでいる区画・比は CSS の flex で配る（JS は比を 1 つ持つだけ）。
+ * **サイドバーを畳んだ状態では区画の折りたたみ・比は効かない**（今の構造＝nav 全体が 1 つのスクロール）。
+ */
+const spacesFolded = computed(() => !view.sidebarCollapsed && view.sectionsCollapsed.spaces);
+const agentsFolded = computed(() => !view.sidebarCollapsed && view.sectionsCollapsed.agents);
+/** 比があって両方を開いているときだけ、比で配る（そうでなければ CSS の自動の配分）。 */
+const sectionFlex = computed(() => {
+  const r = view.sidebarSectionRatio;
+  if (view.sidebarCollapsed || r === null || spacesFolded.value || agentsFolded.value) return null;
+  return { spaces: { flex: `${r} 1 0px` }, agents: { flex: `${1 - r} 1 0px` } };
+});
+
+/*
  * 幅は `view.sidebarWidth`（このブラウザに残る。20260921-herdr-settings-gaps の AC1）。
  * **ドラッグ中は反映だけ**（`setSidebarWidth`）で、**保存はドラッグを終えたときに 1 回**（`commitSidebarWidth`）——
  * `pointermove` ごとに `localStorage` へ書くと、毎フレーム同期の I/O が走る。
@@ -658,13 +671,20 @@ watch(
         <template v-else>session: {{ sessionLabel }} ⇄</template>
       </button>
     </div>
-    <section class="sidebar-spaces" aria-label="spaces">
+    <div class="sidebar-sections">
+    <section
+      class="sidebar-spaces"
+      :class="{ 'sidebar-section-folded': spacesFolded, 'sidebar-section-fill': agentsFolded && !spacesFolded }"
+      :style="sectionFlex?.spaces"
+      aria-label="spaces"
+    >
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-header">
         <span class="sidebar-section-title">spaces</span>
         <button type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${WORKSPACE_SORT_LABEL[view.workspaceSort]}（押すと切り替え）`" @click="view.toggleWorkspaceSort()" @keydown="onButtonKeydown">
           {{ WORKSPACE_SORT_LABEL[view.workspaceSort] }}
         </button>
       </div>
+      <div class="sidebar-section-body">
       <template v-for="section in machineSections" :key="section.id">
         <MachineHeader v-if="machines.hasMachines" :machine-id="section.id" :label="section.label" :compact="view.sidebarCollapsed" />
         <template v-if="!machines.hasMachines || !machines.collapsed[section.id]">
@@ -744,6 +764,7 @@ watch(
           <MachineRows v-else :machine-id="section.id" :compact="view.sidebarCollapsed" />
         </template>
       </template>
+      </div>
 
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-footer">
         <button type="button" class="sidebar-btn" @click="onNewWorkspace" @keydown="onButtonKeydown">＋ 新規</button>
@@ -760,13 +781,19 @@ watch(
       </div>
     </section>
 
-    <section class="sidebar-agents" aria-label="agents">
+    <section
+      class="sidebar-agents"
+      :class="{ 'sidebar-section-folded': agentsFolded, 'sidebar-section-fill': spacesFolded && !agentsFolded }"
+      :style="sectionFlex?.agents"
+      aria-label="agents"
+    >
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-header">
         <span class="sidebar-section-title">agents</span>
         <button type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${AGENT_SORT_LABEL[view.agentSort]}（押すと切り替え）`" @click="view.toggleAgentSort()" @keydown="onButtonKeydown">
           {{ AGENT_SORT_LABEL[view.agentSort] }}
         </button>
       </div>
+      <div class="sidebar-section-body">
       <!-- `tabindex="-1"` と `data-agent-pane` は、一覧のダイアログを閉じたときのフォーカスの戻り先（ボタンが無ければ行。20261004-subagent-display）。Tab の順には入れない。 -->
       <div v-for="{ pane, workspace, state, lines, agent } in agents" :key="pane.id" class="sidebar-row" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
         <!-- 畳んだサイドバーは今までどおり状態の印だけ（20260927-sidebar-row-tokens）。 -->
@@ -796,7 +823,9 @@ watch(
           </div>
         </template>
       </div>
+      </div>
     </section>
+    </div>
 
     <div class="sidebar-footer">
       <button
@@ -842,22 +871,79 @@ watch(
   position: relative;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  /* `overflow-y` を指定すると `overflow-x` も `auto` に計算されるので、横は明示して止める（AC3）。 */
-  overflow-x: hidden;
+  /*
+   * 開いているときは visible——幅の境目（`.sidebar-divider`）が右の罫線をまたいで外へ 4px はみ出し、そこも掴めるようにする（切られると外側の当たり判定が 0px になる）。
+   * 区画ごとのスクロールは `.sidebar-sections` が `overflow: hidden`・各区画の body が `overflow-y: auto` で受ける（20261004-ui-interaction-polish）。
+   */
+  overflow: visible;
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
   border-right: 1px solid var(--soda-menu-border, #44475a);
 }
 .sidebar-collapsed {
   width: 3em !important;
+  /* 畳んだ状態は今の構造に戻す: nav 全体が 1 つのスクロール。`overflow-y` を指定すると `overflow-x` も `auto` に計算されるので、横は明示して止める（AC3）。 */
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/*
+ * 区画の入れ物。2 区画に配れる高さは `flex: 1 1 0`・`min-height: 0` で受け、はみ出した分（低いウィンドウ）は切る。
+ * `--section-min` は 1 区画の最小（見出し＋行 2 つ＋body の上下の余白）。実測（16px・既定の行の並び）: 見出し 2.05em・行（2 行の workspace／agent）3.75em・余白 1em
+ * ＝ 10.55em。spaces はフッタ（`flex: none`・実測 2em）の高さを足す。
+ */
+.sidebar-sections {
+  --section-min: 10.6em;
+  --section-footer: 2em;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .sidebar-spaces,
 .sidebar-agents {
-  padding: 0.5em 0;
+  display: flex;
+  flex-direction: column;
+  min-height: var(--section-min);
+}
+.sidebar-spaces {
+  /* 自動の配分: 中身の高さ。多ければ agents の最小を残して縮む。 */
+  flex: 0 1 auto;
+  min-height: calc(var(--section-min) + var(--section-footer));
 }
 .sidebar-agents {
+  flex: 1 1 0;
   border-top: 1px solid var(--soda-menu-border, #44475a);
+}
+/* 区画の上下の余白は body に付ける（section に付けると、比あり `flex: r 1 0` が余白を除いた残りを配り、高さの比がずれる）。 */
+.sidebar-section-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5em 0;
+}
+/* 片方を畳んでいるとき: 畳んだ区画は見出しだけ（高さは中身のまま・最小も 0）。もう片方が残りを使う。両方畳めば、`.sidebar-sections` の残りは空く。 */
+.sidebar-section-folded {
+  flex: none;
+  min-height: 0;
+}
+.sidebar-section-folded > .sidebar-section-body,
+.sidebar-section-folded > .sidebar-section-footer {
+  display: none;
+}
+.sidebar-section-fill {
+  flex: 1 1 0;
+}
+/* サイドバーを畳んだ状態: 区画の入れ物・スクロールは使わない（区画の折りたたみも無視して全部出す）。 */
+.sidebar-collapsed .sidebar-sections,
+.sidebar-collapsed .sidebar-spaces,
+.sidebar-collapsed .sidebar-agents {
+  display: block;
+  flex: none;
+  min-height: 0;
+}
+.sidebar-collapsed .sidebar-section-body {
+  overflow: visible;
 }
 .sidebar-row {
   display: flex;
@@ -1085,7 +1171,7 @@ watch(
 }
 /* 以前は `right: -3px` で外へ 3px はみ出しており、文字が 1 つも無くても横スクロールバーが出ていた
  * （decisions.md D3）。幅の変更は移動量の差分で決まるので、内側へ寄せても操作感は変わらない。 */
-/* ボタンの帯（20260920-sidebar-tabbar-controls）。`.sidebar-divider` が右端 8px を縦一杯に覆うので、
+/* ボタンの帯（20260920-sidebar-tabbar-controls）。`.sidebar-divider` が右の罫線をまたいで内側 4px まで覆うので、
  * その分だけ内側に寄せてボタンがつまみの下に潜らないようにする。 */
 .sidebar-section-footer,
 .sidebar-section-header,
@@ -1095,12 +1181,12 @@ watch(
   gap: 0.4em;
   flex: none;
   padding: 0.2em 0.8em;
-  padding-right: calc(0.8em + 8px);
+  padding-right: calc(0.8em + 4px);
 }
 .sidebar-section-header {
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
-/* 内容が短いときは下端へ寄る。`.sidebar` の overflow は動かさない（decisions.md D3）。 */
+/* 畳んだサイドバー（nav 全体が 1 つのスクロール）で、内容が短いときは下端へ寄る。開いているときは `.sidebar-sections` が残りを使うので、いつも下端。 */
 .sidebar-footer {
   margin-top: auto;
   justify-content: flex-end;
@@ -1131,7 +1217,7 @@ watch(
   flex: none;
   padding: 0.2em 0.8em;
   /* 右端のつまみ（.sidebar-divider）の分を空ける（.sidebar-section-header と同じ）。 */
-  padding-right: calc(0.8em + 8px);
+  padding-right: calc(0.8em + 4px);
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
 /* 畳んだ幅（3em）では左右の余白を詰めて ⇄ が … に切れないようにする。 */
@@ -1149,7 +1235,9 @@ watch(
 .sidebar-divider {
   position: absolute;
   top: 0;
-  right: 0;
+  /* 中心を nav の右の罫線の上に置く（外へ 4px・内へ 4px）。 */
+  right: -4px;
+  z-index: 3;
   width: 8px;
   height: 100%;
   cursor: col-resize;
