@@ -513,4 +513,21 @@ describe("StoreAdapter — 通知への注入口", () => {
     expect(() => adapter.applySnapshot(snapshot([]), "c1")).not.toThrow();
     expect(() => adapter.applyEvent({ event: "pane.closed", data: { paneId: "p1" } })).not.toThrow();
   });
+
+  // 20261004-group-worktree-items：サイドバーのレイアウトはスナップショットとイベントで届く。無ければ（古いサーバ）null。
+  it("applySnapshot は layout を保持し、sidebar.layout_changed で差し替わる。layout の無いスナップショットでは null に戻る", () => {
+    const { adapter } = makeAdapter();
+    const session = useSessionStore(pinia);
+    const base = { protocol: 1 as const, serverVersion: "test", host: { os: "linux" as const, windowsBuild: null, hostname: "h" }, workspaces: [makeWorkspace("w1")], tabs: [], panes: [], groups: [], focus: null, limits: { scrollbackLines: 5000 } };
+    adapter.applySnapshot({ ...base, layout: { top: ["w:w1"], groups: {} } }, "c1");
+    expect(session.layout).toEqual({ top: ["w:w1"], groups: {} });
+    expect(session.hasServerLayout).toBe(true);
+    adapter.applyEvent({ event: "sidebar.layout_changed", data: { layout: { top: ["g:g1"], groups: { g1: ["w:w1"] } } } });
+    expect(session.layout).toEqual({ top: ["g:g1"], groups: { g1: ["w:w1"] } });
+    adapter.applySnapshot(base, "c1"); // layout の無い古いサーバ
+    expect(session.layout).toBeNull();
+    expect(session.hasServerLayout).toBe(false);
+    // 描画に使うレイアウトは layoutFromLegacy で導く。
+    expect(session.effectiveLayout).toEqual({ top: ["w:w1"], groups: {} });
+  });
 });

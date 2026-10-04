@@ -11,7 +11,7 @@ import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
 import { orderedAgentPaneIds, type AgentOrderEntry } from "@sodashitsu/client-core";
-import { visibleWorkspaceIdsInOrder } from "@sodashitsu/client-core";
+import { currentVisibleWorkspaceIds } from "../store/sidebarTree.js";
 import {
   buildNewCwd,
   loadNewCwdPath,
@@ -1004,10 +1004,10 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     switch (op) {
       case "up":
       case "down": {
-        // Sidebar.vue の描画（`groupedWorkspaceRows`）と同じ並び・同じ可視範囲を辿る
+        // Sidebar.vue の描画（`sidebarTree`）と同じ並び・同じ可視範囲を辿る
         // （20260923-workspace-grouping レビューの指摘：グループ導入前は素の反復順だったため
         // 画面の並びと一致していたが、グループ導入後は乖離していた）。
-        const ids = visibleWorkspaceIdsInOrder([...this.session.workspaces.values()], [...this.session.groups.values()], this.view.workspaceSort, this.view.collapsedAutoGroups, this.view.workspaceId);
+        const ids = currentVisibleWorkspaceIds(this.session, this.view);
         if (ids.length === 0) return;
         const current = this.view.navigateSelection ? ids.indexOf(this.view.navigateSelection) : -1;
         const delta = op === "up" ? -1 : 1;
@@ -1080,9 +1080,9 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   // --- 20260923-missing-keybinding-actions（herdr にあって本製品に操作自体が無かったもの） -------------
 
   private workspaceDelta(delta: 1 | -1): void {
-    // Sidebar.vue の描画（`groupedWorkspaceRows`）と同じ並び・同じ可視範囲を辿る（上の `navigate`
+    // Sidebar.vue の描画（`sidebarTree`）と同じ並び・同じ可視範囲を辿る（上の `navigate`
     // 「up」「down」と同じ理由。20260923-workspace-grouping レビューの指摘）。
-    const ids = visibleWorkspaceIdsInOrder([...this.session.workspaces.values()], [...this.session.groups.values()], this.view.workspaceSort, this.view.collapsedAutoGroups, this.view.workspaceId);
+    const ids = currentVisibleWorkspaceIds(this.session, this.view);
     if (ids.length <= 1) return; // AC4
     const current = this.view.workspaceId ? ids.indexOf(this.view.workspaceId) : -1;
     const next = ids[(current === -1 ? 0 : current + delta + ids.length) % ids.length];
@@ -1091,7 +1091,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   /** `switch_workspace`（1〜9。20260927-cli-mode）。サイドバーの並び（`workspaceDelta` と同じ可視範囲）の N 番目へ。無ければ何もしない。 */
   private workspaceIndex(index: number): void {
-    const ids = visibleWorkspaceIdsInOrder([...this.session.workspaces.values()], [...this.session.groups.values()], this.view.workspaceSort, this.view.collapsedAutoGroups, this.view.workspaceId);
+    const ids = currentVisibleWorkspaceIds(this.session, this.view);
     const target = ids[index - 1];
     if (target) this.focusWorkspaceById(target);
   }

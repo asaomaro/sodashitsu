@@ -5,7 +5,9 @@ import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
 import { orderedAgentPaneIds } from "@sodashitsu/client-core";
-import { groupedWorkspaceRows, visibleGroupMembers } from "@sodashitsu/client-core";
+import { type ItemRow, visibleGroupMembers } from "@sodashitsu/client-core";
+import { currentSidebarTree } from "../store/sidebarTree.js";
+import SidebarKindIcon from "./SidebarKindIcon.vue";
 import { type AgentSort, SIDEBAR_WIDTH, type WorkspaceSort, useViewStore } from "../store/view.js";
 import { useSettingsStore } from "../store/settings.js";
 import { type ResolvedLine, resolveAgentLines, resolveSpaceLines, tokenStyleAttr } from "@sodashitsu/client-core";
@@ -19,9 +21,9 @@ import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
  * サイドバー（D56 の訂正 9）。「spaces」（workspace の一覧）と「agents」（エージェントの一覧）の 2 区画。
  * `prefix+b` での折りたたみは `view.sidebarCollapsed` を見るだけ（切替自体は `ActionDispatcher`）。
  *
- * spaces 区画は 20260923-workspace-grouping でグループ構造を持つ描画へ拡張した（design
- * 「振る舞いの詳細」）：手動グループ・worktree 自動グループを `groupedWorkspaceRows`（純関数）で
- * 求め、`SpaceRow[]`（グループのヘッダー行・メンバー行・単独行をフラットに並べたもの）に組み立てる。
+ * spaces 区画は 20260923-workspace-grouping でグループ構造を持つ描画へ拡張し、20261004-group-worktree-items で
+ * サーバが配るレイアウトの 3 段（グループ／worktree グループ／通常の行。字下げ 0〜2）へ替えた：`sidebarTree`（純関数）で
+ * 木を求め、`SpaceRow[]`（グループの見出し行・worktree グループの先頭・子・通常の行をフラットに並べたもの）に組み立てる。
  * D&D は `PaneFrame.vue` の `onNamePointerDown`/`onNamePointerMove`/`onNamePointerUp` と同じ流儀
  * （6px の閾値・`setPointerCapture`・`document.elementFromPoint` によるドロップ先判定・Esc での
  * 取り消し）をそのまま踏襲する。
@@ -59,34 +61,40 @@ const WORKSPACE_SORT_LABEL: Record<WorkspaceSort, string> = { opened: "開いた
 
 interface SpaceRow {
   key: string;
-  /** メンバーの workspace（単独行・メンバー行・worktree 自動グループの本体・子）。手動グループの
+  /** 行の種類（20261004-group-worktree-items）：グループの見出し／worktree グループの先頭／worktree グループの子／通常の行。 */
+  kind: "group" | "worktreeHead" | "worktreeChild" | "workspace";
+  /** 入れ物の深さ（字下げ。0〜2）。 */
+  depth: 0 | 1 | 2;
+  /** メンバーの workspace（単独行・メンバー行・worktree グループの本体・子）。グループの
    *  ヘッダー行だけ null（グループ自体は特定の workspace ではないため）。 */
   workspace: Workspace | null;
   state: keyof typeof STATE_PRIORITY | null;
   isCurrent: boolean;
-  /** グループの中の行（インデントする）か。 */
+  /** この行を入れているグループの id（グループの見出し行・一番上の行は null）。 */
+  parentGroupId: string | null;
+  /** 字下げする行（`depth > 0`）か。 */
   indent: boolean;
   /** このグループの「頭」の行（折りたたみの開閉アイコンを持ち、ドラッグするとグループ全体が動く）か。
-   *  手動グループのヘッダー行と、worktree 自動グループの本体（親）行が該当する。 */
+   *  グループの見出し行と、worktree グループの先頭の行が該当する。 */
   isGroupHead: boolean;
   groupKind: "manual" | "auto" | null;
-  /** 折りたたみ・右クリックメニューの対象（手動グループの id、または worktree 自動グループの repoKey）。 */
+  /** 折りたたみ・右クリックメニューの対象（グループの id、または worktree グループの repoKey）。 */
   groupTargetId: string | null;
-  /** ヘッダー行のラベル（`workspace` が null のときだけ使う。手動グループの名前）。 */
+  /** ヘッダー行のラベル（`workspace` が null のときだけ使う。グループの名前）。 */
   groupLabel: string;
   collapsed: boolean;
   /** ドラッグしたときに一緒に動かす workspace id（通常の行は自分自身の1件。グループの頭は全メンバー）。 */
   dragIds: string[];
   /**
    * ドロップを確定するときに `workspace.move_to` へ渡す anchor（workspace id）。無ければドロップ先に
-   * ならない（メンバーが1人もいない手動グループのヘッダー行等）。**ホバー中の行の特定には使わない**
-   * （タスク点検の指摘）——手動グループのヘッダー行とその先頭メンバー行は同じ `dropAnchorId` を
+   * ならない（メンバーが1人もいないグループのヘッダー行等）。**ホバー中の行の特定には使わない**
+   * （タスク点検の指摘）——グループのヘッダー行とその先頭メンバー行は同じ `dropAnchorId` を
    * 持ちうる（ヘッダーは先頭メンバーの id をそのまま使うため）ので、行を一意に特定できない。
    * ホバー中の行の特定・ハイライトの対象には代わりに一意な `key` を使う（`dropAnchorForRowKey`）。
    */
   dropAnchorId: string | null;
   /**
-   * 展開したサイドバーで描く行（設定した並び〔既定なら今と同じ並び〕を解決したもの。20260927-sidebar-row-tokens）。手動グループの見出し行は空
+   * 展開したサイドバーで描く行（設定した並び〔既定なら今と同じ並び〕を解決したもの。20260927-sidebar-row-tokens）。グループの見出し行は空
    * （見出しは今までどおりの 1 行で描く）。
    */
   lines: ResolvedLine[];
@@ -99,48 +107,54 @@ function rowStateFor(ws: Workspace): { state: keyof typeof STATE_PRIORITY | null
   return { state, isCurrent, lines: resolveSpaceLines(settings.spacesLayout, { workspace: ws, state }) };
 }
 
-function workspaceRow(ws: Workspace, opts: { indent: boolean; groupKind: SpaceRow["groupKind"]; groupTargetId: string | null; dragIds: string[] }): SpaceRow {
-  return { key: ws.id, workspace: ws, ...rowStateFor(ws), indent: opts.indent, isGroupHead: false, groupKind: opts.groupKind, groupTargetId: opts.groupTargetId, groupLabel: "", collapsed: false, dragIds: opts.dragIds, dropAnchorId: ws.id };
+function workspaceRow(ws: Workspace, opts: { depth: 0 | 1 | 2; parentGroupId: string | null; kind: SpaceRow["kind"]; groupKind: SpaceRow["groupKind"]; groupTargetId: string | null; dragIds: string[] }): SpaceRow {
+  return { key: ws.id, kind: opts.kind, workspace: ws, ...rowStateFor(ws), depth: opts.depth, parentGroupId: opts.parentGroupId, indent: opts.depth > 0, isGroupHead: false, groupKind: opts.groupKind, groupTargetId: opts.groupTargetId, groupLabel: "", collapsed: false, dragIds: opts.dragIds, dropAnchorId: ws.id };
 }
 
 const spaces = computed<SpaceRow[]>(() => {
-  // 「開いた順」（グループ内の並び・グループ自体の opened 順の基準になる。並べ替え済みでないこと）。
-  const workspaces = [...session.workspaces.values()];
-  const groups = [...session.groups.values()];
-  const rows = groupedWorkspaceRows(workspaces, groups, view.workspaceSort, view.collapsedAutoGroups);
+  // 描画の木（`sidebarTree`。キー操作の順と同じ関数を通る——`currentVisibleWorkspaceIds`）。
+  const tree = currentSidebarTree(session, view);
   const out: SpaceRow[] = [];
-  for (const row of rows) {
-    if (row.kind === "standalone") {
-      out.push(workspaceRow(row.workspace, { indent: false, groupKind: null, groupTargetId: null, dragIds: [row.workspace.id] }));
+  /** 項目（worktree グループ・通常の行）の行を足す。`groupCollapsed` なら今いる workspace の行だけ（AC6）。 */
+  const pushItem = (item: ItemRow, depth: 0 | 1, parentGroupId: string | null, groupCollapsed: boolean): void => {
+    if (item.kind === "workspace") {
+      if (!groupCollapsed || item.workspace.id === view.workspaceId) out.push(workspaceRow(item.workspace, { depth, parentGroupId, kind: "workspace", groupKind: null, groupTargetId: null, dragIds: [item.workspace.id] }));
+      return;
+    }
+    // worktree グループ：先頭（本体）の行自体がグループの頭を兼ねる（herdr と同じ並び）。
+    const collapsed = view.collapsedAutoGroups.has(item.repoKey);
+    const allIds = [item.head.id, ...item.children.map((w) => w.id)];
+    if (!groupCollapsed || item.head.id === view.workspaceId) {
+      out.push({ ...workspaceRow(item.head, { depth, parentGroupId, kind: "worktreeHead", groupKind: "auto", groupTargetId: item.repoKey, dragIds: allIds }), isGroupHead: true, collapsed });
+    }
+    const children = groupCollapsed ? item.children.filter((w) => w.id === view.workspaceId) : visibleGroupMembers(item.children, collapsed, view.workspaceId);
+    for (const w of children) out.push(workspaceRow(w, { depth: (depth + 1) as 1 | 2, parentGroupId, kind: "worktreeChild", groupKind: "auto", groupTargetId: item.repoKey, dragIds: [w.id] }));
+  };
+  for (const row of tree) {
+    if (row.kind !== "group") {
+      pushItem(row, 0, null, false);
       continue;
     }
-    if (row.kind === "manualGroup") {
-      const allIds = row.members.map((w) => w.id);
-      out.push({
-        key: `group:${row.group.id}`,
-        workspace: null,
-        state: null,
-        isCurrent: false,
-        indent: false,
-        isGroupHead: true,
-        groupKind: "manual",
-        groupTargetId: row.group.id,
-        groupLabel: row.group.label,
-        collapsed: row.group.collapsed,
-        dragIds: allIds,
-        dropAnchorId: allIds[0] ?? null,
-        lines: [],
-      });
-      // 折りたたみ中でも focus 中の workspace があればその行だけ見える（AC6。research.md F3）。
-      const visibleMembers = visibleGroupMembers(row.members, row.group.collapsed, view.workspaceId);
-      for (const w of visibleMembers) out.push(workspaceRow(w, { indent: true, groupKind: "manual", groupTargetId: row.group.id, dragIds: [w.id] }));
-      continue;
-    }
-    // autoGroup：本体（親）の行自体がグループの頭を兼ねる（herdr と同じ並び。design「worktree 自動グループの表示」）。
-    const allIds = [row.parent.id, ...row.children.map((w) => w.id)];
-    out.push({ ...workspaceRow(row.parent, { indent: false, groupKind: "auto", groupTargetId: row.repoKey, dragIds: allIds }), isGroupHead: true, collapsed: row.collapsed });
-    const visibleChildren = visibleGroupMembers(row.children, row.collapsed, view.workspaceId);
-    for (const w of visibleChildren) out.push(workspaceRow(w, { indent: true, groupKind: "auto", groupTargetId: row.repoKey, dragIds: [w.id] }));
+    const allIds = row.items.flatMap((item) => (item.kind === "workspace" ? [item.workspace.id] : [item.head.id, ...item.children.map((w) => w.id)]));
+    out.push({
+      key: `group:${row.group.id}`,
+      kind: "group",
+      workspace: null,
+      state: null,
+      isCurrent: false,
+      depth: 0,
+      parentGroupId: null,
+      indent: false,
+      isGroupHead: true,
+      groupKind: "manual",
+      groupTargetId: row.group.id,
+      groupLabel: row.group.label,
+      collapsed: row.group.collapsed,
+      dragIds: allIds,
+      dropAnchorId: allIds[0] ?? null,
+      lines: [],
+    });
+    for (const item of row.items) pushItem(item, 1, row.group.id, row.group.collapsed);
   }
   return out;
 });
@@ -222,7 +236,7 @@ function focusPane(paneId: string, tabId: string, workspaceId: string): void {
   void conn?.request("pane.focus", { paneId }).catch(() => undefined);
 }
 
-/** グループのヘッダー行（手動グループ）は `group` メニュー、それ以外（workspace を持つ行）は
+/** グループのヘッダー行（グループ）は `group` メニュー、それ以外（workspace を持つ行）は
  *  `workspace` メニュー（20260923-workspace-grouping）。 */
 function onRowContextMenu(ev: MouseEvent, row: SpaceRow): void {
   ev.preventDefault();
@@ -251,7 +265,13 @@ watch(
   },
 );
 
-/** グループの頭の折りたたみアイコン。手動グループはサーバに永続化（RPC）、worktree 自動グループは
+/** 折りたたみの印のボタンの読み上げ名（グループと worktree グループを区別する）。 */
+function toggleLabel(row: SpaceRow): string {
+  const noun = row.kind === "group" ? "グループ" : "worktree グループ";
+  return row.collapsed ? `${noun}を展開` : `${noun}を折りたたむ`;
+}
+
+/** グループの頭の折りたたみアイコン。グループはサーバに永続化（RPC）、worktree グループは
  *  ブラウザだけ（`view.toggleAutoGroupCollapsed`。20260923-workspace-grouping）。 */
 function onToggleCollapse(row: SpaceRow): void {
   if (!row.groupTargetId) return;
@@ -301,7 +321,7 @@ function cancelWorkspaceDrag(): void {
 /**
  * `document.elementFromPoint` から最も近い `[data-workspace-row-key]` 祖先の行 key を求める
  * （`PaneFrame.vue` の `dropTargetAt` と同じ形の `closest` 探索）。**`row.key` を使う**（タスク点検の指摘）——
- * `dropAnchorId`（workspace id）は、手動グループのヘッダー行とその先頭メンバー行で同じ値に
+ * `dropAnchorId`（workspace id）は、グループのヘッダー行とその先頭メンバー行で同じ値に
  * なりうる（ヘッダーの `dropAnchorId` は先頭メンバーの id をそのまま使うため）ので、ホバー中の
  * 行を一意に特定できない。`row.key` は常に一意（`group:<id>` または workspace id そのもの）。
  */
@@ -318,18 +338,20 @@ function dropAnchorForRowKey(key: string | null): string | null {
 
 /**
  * ホバー中の行がグループのメンバー行（頭の行以外）なら、そのグループの頭の行 key に正規化する
- * （20260923-workspace-grouping レビューの指摘）。グループの中の並びは常に「開いた順」で固定
- * （design「設計方針」：グループはまとめて1つの単位）なので、メンバー行のどこにドロップしても
- * 実際の効果は「グループの直前へ挿入」（頭の行へドロップしたのと同じ）でしかない。正規化しないと、
- * ホバー中のハイライトが特定のメンバー行に付くのに実際の見た目は変わらない（メンバーの数だけ
- * ドロップ位置があるように見えて実は1箇所しか無い）という食い違いが起きる。
+ * （20260923-workspace-grouping レビューの指摘）。今は古い `workspace.move_to` を送るので、グループの中の
+ * 行にドロップしても実際の効果は「グループの直前へ挿入」（頭の行へドロップしたのと同じ）でしかない。
+ * 正規化しないと、ホバー中のハイライトが特定のメンバー行に付くのに実際の見た目は変わらないという食い違いが起きる。
+ * worktree グループの子も先頭の行に寄せる。グループの中の並べ替えのドラッグは `item.move` に替わる次のタスクで入れる。
  */
 function groupHeadRowKeyFor(key: string | null): string | null {
   if (!key) return null;
   const row = spaces.value.find((r) => r.key === key);
-  if (!row || !row.groupTargetId || row.isGroupHead) return key;
-  const head = spaces.value.find((r) => r.isGroupHead && r.groupKind === row.groupKind && r.groupTargetId === row.groupTargetId);
-  return head?.key ?? key;
+  if (!row || row.kind === "group") return key;
+  // worktree グループの子 → その先頭の行。
+  if (row.kind === "worktreeChild") return spaces.value.find((r) => r.kind === "worktreeHead" && r.groupTargetId === row.groupTargetId)?.key ?? key;
+  // グループの中の通常の行 → グループの見出し行（グループの中の並び替えは次のタスク〔item.move〕で入る）。
+  if (row.kind === "workspace" && row.parentGroupId) return `group:${row.parentGroupId}`;
+  return key;
 }
 
 function onRowPointerDown(ev: PointerEvent, row: SpaceRow): void {
@@ -368,13 +390,13 @@ function onRowPointerUp(ev: PointerEvent, row: SpaceRow): void {
     if (target) {
       actions?.moveWorkspacesByDrag(draggedRow.dragIds, target);
       // ドラッグした対象にフォーカスを残す（AC-I4）。頭に own workspace があるときだけ
-      // （手動グループのヘッダー行はどの workspace でもないので、focus は動かさない）。
+      // （グループのヘッダー行はどの workspace でもないので、focus は動かさない）。
       if (draggedRow.workspace) focusWorkspace(draggedRow.workspace.id);
     }
   } else if (row.workspace) {
     focusWorkspace(row.workspace.id);
   } else {
-    onToggleCollapse(row); // 手動グループのヘッダー行のクリックは折りたたみを切り替える
+    onToggleCollapse(row); // グループのヘッダー行のクリックは折りたたみを切り替える
   }
 }
 
@@ -472,6 +494,7 @@ watch(
               class="sidebar-row"
               :class="{
                 'sidebar-row-current': row.isCurrent,
+                'sidebar-row-depth-2': row.depth === 2,
                 'sidebar-row-selected': view.mode === 'navigate' && !!row.workspace && view.navigateSelection === row.workspace.id,
                 'sidebar-row-indent': row.indent,
                 'sidebar-row-drop-target': view.workspaceDrag?.overRowKey === row.key && !!row.dropAnchorId && !view.workspaceDrag.sourceIds.includes(row.dropAnchorId),
@@ -487,18 +510,18 @@ watch(
               @pointercancel="onRowPointerCancel($event)"
               @lostpointercapture="onRowPointerCancel($event)"
             >
-              <!-- 畳んだサイドバーと手動グループの見出し行は今までどおりの 1 行（行の並びの設定は展開した workspace 行だけ。herdr と同じ。
+              <!-- 畳んだサイドバーとグループの見出し行は今までどおりの 1 行（行の並びの設定は展開した workspace 行だけ。herdr と同じ。
                    20260927-sidebar-row-tokens）。 -->
               <div v-for="(line, i) in view.sidebarCollapsed || !row.workspace ? [null] : row.lines" :key="i" :class="i === 0 ? 'sidebar-row-line1' : 'sidebar-row-line2'">
                 <!-- pointerdown/pointerup を `.stop` で止める（タスク点検の指摘）——止めないと行の
                      onRowPointerDown/onRowPointerUp にも伝播し、`onToggleCollapse` が二重に呼ばれる
-                     （手動グループの頭）か、意図せず focusWorkspace が呼ばれる（worktree 自動グループの
+                     （グループの頭）か、意図せず focusWorkspace が呼ばれる（worktree グループの
                      頭）。`@click.stop` だけでは pointerup 側の伝播は止まらない。 -->
                 <button
                   v-if="i === 0 && row.isGroupHead"
                   type="button"
                   class="sidebar-group-toggle"
-                  :aria-label="row.collapsed ? 'グループを展開' : 'グループを折りたたむ'"
+                  :aria-label="toggleLabel(row)"
                   :aria-expanded="!row.collapsed"
                   @pointerdown.stop
                   @pointerup.stop
@@ -507,6 +530,8 @@ watch(
                 >
                   {{ row.collapsed ? "▸" : "▾" }}
                 </button>
+                <!-- 種類の印（グループの見出し・worktree グループの先頭）。畳んだサイドバーではアイコンだけ。 -->
+                <SidebarKindIcon v-if="i === 0 && (row.kind === 'group' || row.kind === 'worktreeHead')" :kind="row.kind === 'group' ? 'group' : 'worktreeGroup'" :compact="view.sidebarCollapsed" />
                 <template v-if="line === null">
                   <StateIcon v-if="row.workspace" class="sidebar-state-icon" :state="row.state" />
                   <span v-if="!view.sidebarCollapsed" class="sidebar-label">{{ row.workspace ? row.workspace.label : row.groupLabel }}</span>
@@ -630,6 +655,19 @@ watch(
 }
 /* グループのメンバー・子行のインデント（20260923-workspace-grouping。herdr と同じ並び）。 */
 .sidebar-row-indent {
+  padding-left: calc(0.8em + 1.2em);
+}
+/* 入れ子の worktree グループの子（グループ → worktree グループ → 子。字下げ 2）。 */
+.sidebar-row.sidebar-row-depth-2 {
+  padding-left: calc(0.8em + 2.4em);
+}
+/* 畳んだサイドバー（3em）：印が増えた行（折りたたみ・種類・状態）は折り返して切らない。 */
+.sidebar-collapsed .sidebar-row-line1 {
+  flex-wrap: wrap;
+  gap: 0.2em;
+}
+/* 字下げは 1 段まで（畳んだ幅に収まらないので、2 段目は 1 段目と同じ）。 */
+.sidebar-collapsed .sidebar-row.sidebar-row-depth-2 {
   padding-left: calc(0.8em + 1.2em);
 }
 /* 3 つの状態を別の表し方に分ける（20260920-ui-selection-visuals の AC2）。以前は hover と

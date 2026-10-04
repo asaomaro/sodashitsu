@@ -2661,3 +2661,64 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     expect(conn.requests).toEqual([]);
   });
 });
+
+// 20261004-group-worktree-items：描画とキー操作の順は同じ関数（サーバが配るレイアウトの順）を通る。
+describe("ActionDispatcher — レイアウトの順（20261004-group-worktree-items）", () => {
+  const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+  /** 開いた順（flat）は A, W1(worktree の子), B, M(本体)。レイアウトは top: [g1, B]、g1: [r:/r/.git, A]。 */
+  function setup() {
+    const session = useSessionStore(pinia);
+    for (const [id, o] of [
+      ["A", {}],
+      ["W1", { git: git(true), groupId: "g1" }],
+      ["B", {}],
+      ["M", { git: git(false), groupId: "g1" }],
+    ] as const) {
+      session.workspaceUpserted({ ...makeWorkspace(id, ["t" + id]), activeTabId: "t" + id, ...o });
+      session.tabUpserted(makeTab("t" + id, id, "p" + id));
+    }
+    session.groupUpserted({ id: "g1", label: "grp", collapsed: false });
+    session.layoutChanged({ top: ["g:g1", "w:B"], groups: { g1: ["r:/r/.git", "w:A"] } });
+    return session;
+  }
+
+  it("workspaceDelta・workspaceIndex・navigate は、レイアウトの順（グループ → worktree グループの本体・子 → グループの中の通常の行 → 一番上の行）を辿る", () => {
+    setup();
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(makeConnection());
+    view.setView("M", "tM");
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("W1"); // 本体の次は子（開いた順では B の前）
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("A");
+    dispatcher.run({ type: "workspaceIndex", index: 4 });
+    expect(view.workspaceId).toBe("B");
+    view.setNavigateSelection("M");
+    dispatcher.run({ type: "navigate", op: "down" });
+    expect(view.navigateSelection).toBe("W1");
+  });
+
+  it("畳んだグループの中は今いる workspace だけが対象（畳んだ worktree グループも同じ）", () => {
+    const session = setup();
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(makeConnection());
+    session.groupUpserted({ id: "g1", label: "grp", collapsed: true });
+    view.setView("W1", "tW1");
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("B"); // グループの中は今いる W1 だけ。次は一番上の B
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    expect(view.workspaceId).toBe("B"); // 今いる B だけが見える（グループの中は見えない）ので動かない
+  });
+
+  it("layout の無い古いサーバでも、layoutFromLegacy で導いた順を辿る（同じリポジトリは本体の所属で 1 つの項目）", () => {
+    const session = setup();
+    session.layout = null;
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(makeConnection());
+    // 導く順: g1 = [r:/r/.git(本体 M の所属 g1), ...]、A・B は一番上。位置は先頭の workspace の平らな順。
+    view.setView("A", "tA");
+    dispatcher.run({ type: "workspaceDelta", delta: 1 });
+    // 一番上は A(0)、g1（先頭メンバー r:/r/.git の位置 = W1 の 1）、B(2) の順 → A の次は g1 の中の本体 M。
+    expect(view.workspaceId).toBe("M");
+  });
+});

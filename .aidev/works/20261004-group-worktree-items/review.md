@@ -794,3 +794,162 @@ Number of calls: 1
 - T10 [should] 一時停止中の合図を捨てる分岐に壊して落ちる確認が無い → 配線を layoutConfirmWiring.ts に切り出し、stop 中に 1 周が終わる→確定しない→再開後に確定するテストを足して確認 [conv:regression-negative-control!]
 - T10 [nit] stop→再開→確定の通しの確認が無い → 同じテストで通した [conv:-]
 - T11 [nit] コメントの「navigate の6操作」が現在の数と合わない → 現在形の 2 か所を直した（「当初は…7つ目」の経緯の記述は履歴なので残す） [conv:-]
+
+### T12 壊して落ちる確認
+
+#### 壊し 1: `currentVisibleWorkspaceIds`（キー操作の順）を木ではなく平らな順（`session.workspaces.keys()`）に戻す
+
+```
+     × up/down はグループがあっても画面上の並び（グループはまとめて1ブロック）を辿る 9ms
+     × 画面上の並び（グループはまとめて1ブロック）を辿る——開いた順が A, C, B でも次は画面上隣の B 1ms
+     × workspaceDelta・workspaceIndex・navigate は、レイアウトの順（グループ → worktree グループの本体・子 → グループの中の通常の行 → 一番上の行）を辿る 2ms
+     × 畳んだグループの中は今いる workspace だけが対象（畳んだ worktree グループも同じ） 1ms
+     × layout の無い古いサーバでも、layoutFromLegacy で導いた順を辿る（同じリポジトリは本体の所属で 1 つの項目） 1ms
+     × 描画の行の順はキー操作が辿る順（currentVisibleWorkspaceIds）と同じ 12ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — navigate > up/down はグループがあっても画面上の並び（グループはまとめて1ブロック）を辿る
+AssertionError: expected 'C' to be 'B' // Object.is equality
+Expected: "B"
+Received: "C"
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — workspaceDelta（previous_workspace/next_workspace） > 画面上の並び（グループはまとめて1ブロック）を辿る——開いた順が A, C, B でも次は画面上隣の B
+AssertionError: expected 'C' to be 'B' // Object.is equality
+Expected: "B"
+Received: "C"
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — レイアウトの順（20261004-group-worktree-items） > workspaceDelta・workspaceIndex・navigate は、レイアウトの順（グループ → worktree グループの本体・子 → グループの中の通常の行 → 一番上の行）を辿る
+AssertionError: expected 'A' to be 'W1' // Object.is equality
+Expected: "W1"
+Received: "A"
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — レイアウトの順（20261004-group-worktree-items） > 畳んだグループの中は今いる workspace だけが対象（畳んだ worktree グループも同じ）
+AssertionError: expected 'M' to be 'B' // Object.is equality
+Expected: "B"
+Received: "M"
+ FAIL  src/actions/ActionDispatcher.test.ts > ActionDispatcher — レイアウトの順（20261004-group-worktree-items） > layout の無い古いサーバでも、layoutFromLegacy で導いた順を辿る（同じリポジトリは本体の所属で 1 つの項目）
+AssertionError: expected 'W1' to be 'M' // Object.is equality
+Expected: "M"
+Received: "W1"
+ FAIL  src/components/Sidebar.test.ts > Sidebar — レイアウトの 3 段（グループ／worktree グループ／通常の行） > 描画の行の順はキー操作が辿る順（currentVisibleWorkspaceIds）と同じ
+AssertionError: expected [ 'a', 'main', 'wt', 'plain' ] to deeply equal [ 'a', 'wt', 'main', 'plain' ]
+- Expected
++ Received
+      Tests  6 failed | 266 passed (272)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/actions/ActionDispatcher.test.ts src/components/Sidebar.test.ts
+```
+
+#### 壊し 2: `Sidebar.vue` で worktree グループの子の字下げを `depth + 1` から `depth` にする（グループの中の子が 1 段にしかならない）
+
+```
+     × worktree 自動グループ：本体の行が頭を兼ね、子だけインデントする（herdr と同じ並び） 10ms
+     × グループの中の worktree グループは字下げ 1（先頭）・2（子）。種類の印は見出しと先頭の行だけ（読み上げ用の文言つき） 6ms
+     × layout の無い古いサーバでは layoutFromLegacy で導く（同じリポジトリは本体の所属 1 つにまとまる） 4ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected [ false, false ] to deeply equal [ false, true ]
+- Expected
++ Received
+-   true,
++   false,
+AssertionError: expected [ …(5) ] to deeply equal [ …(5) ]
+- Expected
++ Received
+-     "depth": 2,
++     "depth": 1,
+AssertionError: expected [ …(5) ] to deeply equal [ …(5) ]
+- Expected
++ Received
+-     "depth": 2,
++     "depth": 1,
+      Tests  3 failed | 91 passed (94)
+```
+
+確認後は 2 か所とも元に戻し、web の全テスト（103 ファイル・2131 件）が通ることを確かめた。
+
+
+### T12 壊して落ちる確認（追補：独点検の指摘）
+
+#### 壊し 3: `StoreAdapter.ts` の `sidebar.layout_changed` の反映（`session.layoutChanged` の呼び出し）を外す
+
+```
+     × applySnapshot は layout を保持し、sidebar.layout_changed で差し替わる。layout の無いスナップショットでは null に戻る 8ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/store/StoreAdapter.test.ts > StoreAdapter — 通知への注入口 > applySnapshot は layout を保持し、sidebar.layout_changed で差し替わる。layout の無いスナップショットでは null に戻る
+AssertionError: expected { top: [ 'w:w1' ], groups: {} } to deeply equal { top: [ 'g:g1' ], …(1) }
+- Expected
++ Received
+-   "groups": {
+-     "g1": [
++   "groups": {},
++   "top": [
+-     ],
+-   },
+-   "top": [
+-     "g:g1",
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 129 passed (130)
+```
+
+#### 壊し 4: `session.ts` の `clear()` の `layout.value = null` を外す（新規テスト「clear は layout を null に戻す」を `session.test.ts` に追加）
+
+```
+     × clear は layout を null に戻す 5ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/store/session.test.ts > useSessionStore > clear は layout を null に戻す
+AssertionError: expected { top: [ 'w:w1' ], groups: {} } to be null
+- Expected:
++ Received:
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (16)
+```
+
+#### 壊し 5: `SidebarKindIcon.vue` の `v-if="!props.compact"` を外す（畳んだ側にも文言が出る）
+
+```
+     × 畳んだサイドバーでは種類の印はアイコンだけ（文言は出さず、アイコン自身が読み上げの名前を持つ） 11ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — レイアウトの 3 段（グループ／worktree グループ／通常の行） > 畳んだサイドバーでは種類の印はアイコンだけ（文言は出さず、アイコン自身が読み上げの名前を持つ）
+AssertionError: expected true to be false // Object.is equality
+- Expected
++ Received
+- false
++ true
+ Test Files  1 failed (1)
+      Tests  1 failed | 93 passed (94)
+```
+
+#### 壊し 6: 畳んだ側の `role` を外す
+
+```
+     × 畳んだサイドバーでは種類の印はアイコンだけ（文言は出さず、アイコン自身が読み上げの名前を持つ） 13ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — レイアウトの 3 段（グループ／worktree グループ／通常の行） > 畳んだサイドバーでは種類の印はアイコンだけ（文言は出さず、アイコン自身が読み上げの名前を持つ）
+AssertionError: expected [ [ undefined, 'グループ' ], …(1) ] to deeply equal [ [ 'img', 'グループ' ], …(1) ]
+- Expected
++ Received
+-     "img",
++     undefined,
+-     "img",
++     undefined,
+ Test Files  1 failed (1)
+      Tests  1 failed | 93 passed (94)
+```
+
+#### 壊し 7: 畳んだ側の `aria-label` を外す
+
+```
+     × 畳んだサイドバーでは種類の印はアイコンだけ（文言は出さず、アイコン自身が読み上げの名前を持つ） 14ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/Sidebar.test.ts > Sidebar — レイアウトの 3 段（グループ／worktree グループ／通常の行） > 畳んだサイドバーでは種類の印はアイコンだけ（文言は出さず、アイコン自身が読み上げの名前を持つ）
+AssertionError: expected [ [ 'img', undefined ], …(1) ] to deeply equal [ [ 'img', 'グループ' ], …(1) ]
+- Expected
++ Received
+-     "グループ",
++     undefined,
+-     "worktree グループ",
++     undefined,
+ Test Files  1 failed (1)
+      Tests  1 failed | 93 passed (94)
+```
+
+確認後はすべて元に戻した（バックアップとの cmp で一致）。展開時の文言は既存テスト（`.sidebar-kind-text` の文言と有無）が見る。
+
+なお nit 対応で `.sidebar-kind-text` を `.sidebar-kind-icon`（position: relative を付与）の中へ移した（兄弟では基準にならないため）。それに伴い外枠の `aria-hidden` は外し、図形の svg だけ `aria-hidden` のまま。golden 2 件（sidebar-default-*.html）は構造の移動分だけ更新。
+- T12 [should] layout_changed の反映・clear の null 戻し・種類の印の読み上げ文言の壊して落ちる確認が無い → 追補に生の出力を貼り、clear のテストを足した [conv:regression-negative-control!]
+- T12 [nit] 視覚的に隠した文言の基準になる祖先に position:relative が無い → .sidebar-kind-icon の中へ移して relative を付けた（golden 2 件を更新） [conv:-]

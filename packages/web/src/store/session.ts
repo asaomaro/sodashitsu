@@ -1,6 +1,7 @@
-import type { AgentInfo, HostInfo, Pane, SessionFocus, SessionLimits, SessionSnapshot, Tab, Workspace, WorkspaceGroup } from "@sodashitsu/protocol";
+import type { AgentInfo, HostInfo, Pane, SessionFocus, SessionLimits, SessionSnapshot, SidebarLayout, Tab, Workspace, WorkspaceGroup } from "@sodashitsu/protocol";
+import { layoutFromLegacy } from "@sodashitsu/client-core";
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 /**
  * 構造と状態の保持（architecture.md「store/session」）。出力（バイト列）は持たない（規則 5）。
@@ -17,6 +18,17 @@ export const useSessionStore = defineStore("session", () => {
   const panes = ref(new Map<string, Pane>());
   /** 手動グループ（20260923-workspace-grouping。herdr に前例が無い独自拡張）。 */
   const groups = ref(new Map<string, WorkspaceGroup>());
+  /**
+   * サーバが配るサイドバーの項目の並び（`SessionSnapshot.layout`・`sidebar.layout_changed`。20261004-group-worktree-items）。
+   * 古いサーバには無い（null）。描画・キー操作は `effectiveLayout` を使う。
+   */
+  const layout = ref<SidebarLayout | null>(null);
+  /**
+   * 描画に使うレイアウト。サーバが配ればそれ、無ければ（古いサーバ）`layoutFromLegacy` で導く。
+   * `layout` の有無は「サーバが新しいか」の判定にも使う（`hasServerLayout`）。
+   */
+  const effectiveLayout = computed<SidebarLayout>(() => layout.value ?? layoutFromLegacy([...workspaces.value.values()], [...groups.value.values()]));
+  const hasServerLayout = computed(() => layout.value !== null);
   const focus = ref<SessionFocus | null>(null);
   const limits = ref<SessionLimits>({ scrollbackLines: 5000 });
   /**
@@ -38,6 +50,7 @@ export const useSessionStore = defineStore("session", () => {
     tabs.value = new Map(s.tabs.map((t) => [t.id, t]));
     panes.value = new Map(s.panes.map((p) => [p.id, p]));
     groups.value = new Map(s.groups.map((g) => [g.id, g]));
+    layout.value = s.layout ?? null;
     focus.value = s.focus;
     limits.value = s.limits;
   }
@@ -51,6 +64,7 @@ export const useSessionStore = defineStore("session", () => {
     tabs.value = new Map();
     panes.value = new Map();
     groups.value = new Map();
+    layout.value = null;
     focus.value = null;
     clientId.value = null;
     namedSessionCount.value = 0;
@@ -80,6 +94,10 @@ export const useSessionStore = defineStore("session", () => {
     const missing = [...workspaces.value.keys()].filter((id) => !ordered.includes(id));
     const entries = [...ordered, ...missing].map((id) => [id, workspaces.value.get(id)!] as const);
     workspaces.value = new Map(entries);
+  }
+  /** `sidebar.layout_changed`。 */
+  function layoutChanged(l: SidebarLayout): void {
+    layout.value = l;
   }
   function groupUpserted(g: WorkspaceGroup): void {
     groups.value.set(g.id, g);
@@ -129,6 +147,9 @@ export const useSessionStore = defineStore("session", () => {
     tabs,
     panes,
     groups,
+    layout,
+    effectiveLayout,
+    hasServerLayout,
     focus,
     limits,
     namedSessionCount,
@@ -139,6 +160,7 @@ export const useSessionStore = defineStore("session", () => {
     workspaceUpserted,
     workspaceClosed,
     workspacesReordered,
+    layoutChanged,
     groupUpserted,
     groupDeleted,
     tabUpserted,

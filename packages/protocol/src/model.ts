@@ -194,13 +194,14 @@ export interface SessionLimits {
 }
 
 /**
- * 利用者が名前を付けて作る手動グループ（herdr に前例が無い独自拡張。20260923-workspace-grouping）。
- * worktree 自動グループとは別物——こちらはサーバに永続化する実体（`session.json` の一部）。
+ * 利用者が名前を付けて作るグループ（herdr に前例が無い独自拡張。20260923-workspace-grouping）。
+ * worktree グループ（同じリポジトリの workspace をまとめた行）とは別物——こちらはサーバに永続化する実体
+ * （`session.json` の一部）で、中に通常の workspace と worktree グループを入れられる（入れ子は 1 段）。
  */
 export interface WorkspaceGroup {
   id: GroupId; // "g1", "g2", ... （既存の id 採番の流儀に揃える）
   label: string;
-  /** 折りたたみ状態（サーバ全体で共有。worktree 自動グループの折りたたみ状態はブラウザ側に持つ別物）。 */
+  /** 折りたたみ状態（サーバ全体で共有。worktree グループの折りたたみは共有の設定 `collapsedAutoGroups` に持つ別物）。 */
   collapsed: boolean;
 }
 

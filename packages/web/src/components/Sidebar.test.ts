@@ -9,6 +9,7 @@ import { useSessionStore } from "../store/session.js";
 import { readPrefs, useViewStore, writePrefs } from "../store/view.js";
 import { useSettingsStore } from "../store/settings.js";
 import Sidebar from "./Sidebar.vue";
+import { currentVisibleWorkspaceIds } from "../store/sidebarTree.js";
 
 let pinia: Pinia;
 
@@ -1239,5 +1240,109 @@ describe("Sidebar — 行の並びの設定と独自トークン（20260927-side
       expect(row.find(".sidebar-row-line2").exists()).toBe(false);
       expect(row.text()).toBe(row.find(".sidebar-state-icon").text());
     }
+  });
+});
+
+// 20261004-group-worktree-items：サーバが配るレイアウトの 3 段の描画。
+describe("Sidebar — レイアウトの 3 段（グループ／worktree グループ／通常の行）", () => {
+  const git = (linked: boolean, repoKey = "/r/.git") => ({ branch: "b", ahead: 0, behind: 0, repoKey, isLinkedWorktree: linked });
+  function rows(wrapper: ReturnType<typeof mountSidebar>) {
+    return wrapper.findAll(".sidebar-spaces .sidebar-row").map((r) => ({
+      label: r.find(".sidebar-label").text(),
+      depth: r.classes().includes("sidebar-row-depth-2") ? 2 : r.classes().includes("sidebar-row-indent") ? 1 : 0,
+    }));
+  }
+  /** 開いた順は a, wt, main, plain。レイアウトは top: [g1, plain]、g1: [a, r:/r/.git]。 */
+  function populate(layout: boolean) {
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted(makeWorkspace("a", { label: "a", groupId: "g1" }));
+    session.workspaceUpserted(makeWorkspace("wt", { label: "wt", git: git(true), groupId: "g1" }));
+    session.workspaceUpserted(makeWorkspace("main", { label: "main", git: git(false), groupId: "g1" }));
+    session.workspaceUpserted(makeWorkspace("plain", { label: "plain" }));
+    session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+    if (layout) session.layoutChanged({ top: ["g:g1", "w:plain"], groups: { g1: ["w:a", "r:/r/.git"] } });
+    return session;
+  }
+
+  it("グループの中の worktree グループは字下げ 1（先頭）・2（子）。種類の印は見出しと先頭の行だけ（読み上げ用の文言つき）", () => {
+    populate(true);
+    const wrapper = mountSidebar(makeConnection());
+    expect(rows(wrapper)).toEqual([
+      { label: "backend", depth: 0 },
+      { label: "a", depth: 1 },
+      { label: "main", depth: 1 },
+      { label: "wt", depth: 2 },
+      { label: "plain", depth: 0 },
+    ]);
+    const all = wrapper.findAll(".sidebar-spaces .sidebar-row");
+    expect(all.map((r) => r.find(".sidebar-kind-text").exists() ? r.find(".sidebar-kind-text").text() : null)).toEqual(["グループ", null, "worktree グループ", null, null]);
+    expect(all.map((r) => r.find(".sidebar-kind-icon svg").exists())).toEqual([true, false, true, false, false]);
+  });
+
+  it("畳んだサイドバーでは種類の印はアイコンだけ（文言は出さず、アイコン自身が読み上げの名前を持つ）", () => {
+    populate(true);
+    useViewStore(pinia).sidebarCollapsed = true;
+    const wrapper = mountSidebar(makeConnection());
+    expect(wrapper.find(".sidebar-kind-text").exists()).toBe(false);
+    const icons = wrapper.findAll(".sidebar-kind-icon");
+    expect(icons.map((i) => [i.attributes("role"), i.attributes("aria-label")])).toEqual([
+      ["img", "グループ"],
+      ["img", "worktree グループ"],
+    ]);
+  });
+
+  it("グループを畳むと、中の worktree グループも隠れ、今いる workspace の行だけ残る（子でも先頭でも）", () => {
+    const session = populate(true);
+    session.groupUpserted({ id: "g1", label: "backend", collapsed: true });
+    const view = useViewStore(pinia);
+    expect(rows(mountSidebar(makeConnection())).map((r) => r.label)).toEqual(["backend", "plain"]);
+    view.setView("wt", "t1");
+    expect(rows(mountSidebar(makeConnection())).map((r) => r.label)).toEqual(["backend", "wt", "plain"]);
+    view.setView("main", "t1");
+    expect(rows(mountSidebar(makeConnection())).map((r) => r.label)).toEqual(["backend", "main", "plain"]);
+  });
+
+  it("worktree グループだけ畳むと、先頭だけ残る（グループは開いたまま）。折りたたみのボタンの名前は種類ごと", async () => {
+    populate(true);
+    const view = useViewStore(pinia);
+    view.toggleAutoGroupCollapsed("/r/.git");
+    const wrapper = mountSidebar(makeConnection());
+    expect(rows(wrapper).map((r) => r.label)).toEqual(["backend", "a", "main", "plain"]);
+    expect(wrapper.findAll(".sidebar-group-toggle").map((b) => b.attributes("aria-label"))).toEqual(["グループを折りたたむ", "worktree グループを展開"]);
+  });
+
+  it("layout が変わると（sidebar.layout_changed）描画の順も変わる", async () => {
+    const session = populate(true);
+    const wrapper = mountSidebar(makeConnection());
+    session.layoutChanged({ top: ["w:plain", "g:g1"], groups: { g1: ["r:/r/.git", "w:a"] } });
+    await nextTick();
+    expect(rows(wrapper).map((r) => r.label)).toEqual(["plain", "backend", "main", "wt", "a"]);
+  });
+
+  it("layout の無い古いサーバでは layoutFromLegacy で導く（同じリポジトリは本体の所属 1 つにまとまる）", () => {
+    populate(false);
+    // 子の wt だけ所属が違っても、項目は本体の所属（g1）で 1 つに描く。
+    useSessionStore(pinia).workspaceUpserted(makeWorkspace("wt", { label: "wt", git: git(true), groupId: null }));
+    const wrapper = mountSidebar(makeConnection());
+    // 位置は先頭の workspace の平らな順: g1 は a(0) の位置、plain は最後。
+    expect(rows(wrapper)).toEqual([
+      { label: "backend", depth: 0 },
+      { label: "a", depth: 1 },
+      { label: "main", depth: 1 },
+      { label: "wt", depth: 2 },
+      { label: "plain", depth: 0 },
+    ]);
+  });
+
+  it("描画の行の順はキー操作が辿る順（currentVisibleWorkspaceIds）と同じ", () => {
+    const session = populate(true);
+    session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+    const view = useViewStore(pinia);
+    view.toggleAutoGroupCollapsed("/r/.git");
+    view.setView("wt", "t1");
+    const wrapper = mountSidebar(makeConnection());
+    const rendered = wrapper.findAll(".sidebar-spaces .sidebar-row").flatMap((r) => (r.attributes("data-drop-workspace-id") ? [r.attributes("data-drop-workspace-id")!] : []));
+    expect(rendered).toEqual(currentVisibleWorkspaceIds(session, view));
+    expect(rendered).toEqual(["a", "main", "wt", "plain"]);
   });
 });
