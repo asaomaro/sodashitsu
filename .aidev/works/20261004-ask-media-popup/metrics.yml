@@ -16,3 +16,9 @@ events:
   - { ts: 2026-10-04T13:34:07Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T2, mode: delegated } }
   - { ts: 2026-10-04T13:35:09Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T1, findings: 4 } }
   - { ts: 2026-10-04T13:35:09Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T2, findings: 3 } }
+  - { ts: 2026-10-04T13:41:39Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T3, mode: delegated } }
+  - { ts: 2026-10-04T13:41:39Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T4, mode: delegated } }
+  - { ts: 2026-10-04T13:41:39Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T5, mode: delegated } }
+  - { ts: 2026-10-04T13:44:22Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T3, findings: 5 } }
+  - { ts: 2026-10-04T13:44:22Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T4, findings: 5 } }
+  - { ts: 2026-10-04T13:44:22Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T5, findings: 4 } }

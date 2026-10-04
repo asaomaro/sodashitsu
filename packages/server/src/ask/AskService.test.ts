@@ -509,3 +509,43 @@ describe("AskService — メディア（20261004-ask-media-popup）", () => {
     expect(f.limits).toMatchObject({ fileBytes: 8 * 1024 * 1024, totalBytes: 24 * 1024 * 1024, files: 32, serverBytes: 128 * 1024 * 1024 });
   });
 });
+
+describe("AskService — 準備中に閉じる・全体の上限の後片付け", () => {
+  const IMG = { title: "T", questions: [{ id: "a", label: "A", options: [{ value: "x", image: "/tmp/a.png" }] }] };
+  const later = () => {
+    let resolve!: (v: unknown) => void;
+    const media = { prepare: () => new Promise((res) => (resolve = res)) } as never;
+    return { media, resolve: (v: unknown) => resolve(v) };
+  };
+  const ready = (bytes: number) => ({ spec: IMG, media: [{ info: { id: 0, kind: "image", mime: "image/png", bytes }, bytes: Buffer.alloc(bytes) }], warnings: 0, totalBytes: bytes });
+
+  it("準備中に時間切れ・pane が閉じた・dispose になっても、ask.closed を配らず、合計に足さず、後から揃っても出さない", async () => {
+    for (const close of [(s: ReturnType<typeof setup>) => s.timers.advance(1000), (s: ReturnType<typeof setup>) => s.bus.publish({ event: "pane.closed", data: { paneId: "p1" } } as never), (s: ReturnType<typeof setup>) => s.asks.dispose()]) {
+      const d = later();
+      const s = setup({ media: d.media });
+      s.asks.subscribe("b1");
+      const t = track(s.asks.open("cli", { paneId: "p1", spec: IMG, timeoutMs: 1000 }));
+      close(s);
+      await t.done;
+      d.resolve(ready(10));
+      await settle();
+      expect(s.askEvents()).toEqual([]);
+      expect(s.asks.mediaBytes).toBe(0);
+      expect(s.asks.pendingCount).toBe(0);
+    }
+  });
+
+  it("全体の上限で断った後は、pane・件数・タイマーが空き、同じ pane へ出し直せる", async () => {
+    const { ASK_MEDIA_SERVER_MAX } = await import("@sodashitsu/protocol");
+    const d = later();
+    const s = setup({ media: d.media });
+    s.asks.subscribe("b1");
+    const failed = s.asks.open("cli", { paneId: "p1", spec: IMG, timeoutMs: 1000 }).catch((e: unknown) => e);
+    d.resolve({ ...ready(1), totalBytes: ASK_MEDIA_SERVER_MAX + 1 });
+    expect(await failed).toMatchObject({ code: "ask_busy" });
+    expect(s.asks.mediaBytes).toBe(0);
+    expect(s.asks.pendingCount).toBe(0);
+    expect(s.timers.active.size).toBe(0);
+    expect(() => s.asks.open("cli", { paneId: "p1", spec: SPEC, timeoutMs: 1000 })).not.toThrow();
+  });
+});

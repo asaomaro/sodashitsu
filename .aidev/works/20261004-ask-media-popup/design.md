@@ -119,7 +119,7 @@ class AskMedia {
 - 接続は、検査した IP に固定する（`https.request` の `lookup` で検査済みのアドレスを返す＝DNS リバインディングで接続時に別のアドレスへ変わらない）。TLS の SNI・証明書の検証は元のホスト名で行う。プロキシの環境変数は使わない（直接）。
 - リダイレクト（301/302/303/307/308）は最大 3 回、各回で上記を再検査（`Location` は絶対化し、`https:` 以外・別の検査違反は拒否）。**Cookie・Authorization・Referer・Origin は付けない**（付けるのは `Accept`・`User-Agent: sodashitsu-ask`・`Accept-Encoding: identity`）。
 - 全体の時間 10 秒（リダイレクトを含む。`AbortSignal.timeout`）・本文 8 MiB（受信しながら数え、超えたら中断）・`Content-Type` が許可する画像の MIME（`image/png|jpeg|gif|webp|avif|svg+xml`）であること**かつ**先頭バイトが同じ種類であること。同時 4 件まで。
-- テスト用の差し替え口: `AskMediaOptions.fetcher`（インターフェース `fetchImage(url, signal): Promise<{bytes: Buffer, contentType: string}>`）。`composeServer({ askMedia: { fetcher } })`（E2E・結合テストが偽の取得を渡す）。IP の検査（`isBlockedAddress`）・リダイレクトの規則・上限は、`RemoteImageFetcher` を実物のまま、`lookup`・`request` を差し替えて単体テストする。
+- テスト用の差し替え口: `AskMediaOptions.fetcher`（インターフェース `fetchImage(url, signal): Promise<{bytes: Buffer, contentType: string}>`）。`composeServer(args, { askImageFetcher: fetcher })`（実装した名前。coding で決定）（E2E・結合テストが偽の取得を渡す）。IP の検査（`isBlockedAddress`）・リダイレクトの規則・上限は、`RemoteImageFetcher` を実物のまま、`lookup`・`request` を差し替えて単体テストする。
 
 ### `ask.media`・配布
 
@@ -195,7 +195,7 @@ sequenceDiagram
 - AC9: iframe の `sandbox` 属性（実測）・枠の中で評価した `parent.document`（SecurityError）・`localStorage`・`fetch`（拒否）。負の対照: テスト用に `allow-same-origin` を足した iframe で同じ検査が落ちる（検査の関数を使い回す）。
 - AC10: ラベルはアプリが描く（`AskViewer.vue` の固定の文＋pane の名前）。定義の `title` はタブの名前にしか使わない。E2E でラベルの文と、定義の `title` に偽のラベル文を入れても枠のラベルが変わらないこと。
 - AC11: Markdown に `<script>`・`<img onerror>` を入れ、`window` に印が付かない・枠の `securitypolicyviolation`（`script-src`）が出る。
-- AC12: `RemoteImageFetcher`＋`composeServer({askMedia:{fetcher}})` で偽の取得を渡し、ブラウザが画像のリクエストを外へ出さない（Playwright の `page.on('request')` で `https://` 宛が 0・`img` の `src` が `data:`）。アプリの CSP の `img-src` は変えない（ヘッダのテスト）。
+- AC12: `RemoteImageFetcher`＋`composeServer(args, {askImageFetcher})` で偽の取得を渡し、ブラウザが画像のリクエストを外へ出さない（Playwright の `page.on('request')` で `https://` 宛が 0・`img` の `src` が `data:`）。アプリの CSP の `img-src` は変えない（ヘッダのテスト）。
 - AC13: 偽の取得を失敗させ、質問が出て（画像なし）固定の行に件数。
 - AC14: `isBlockedAddress` の表・`RemoteImageFetcher` の単体テスト（`lookup`・`request` を差し替え、`request` が呼ばれないこと）。E2E: ローカルの待ち受け（`127.0.0.1` の `net.createServer`）に接続が届かない。
 - AC15: 単体テストで `request` に渡るヘッダに Cookie・Authorization・Referer が無い。

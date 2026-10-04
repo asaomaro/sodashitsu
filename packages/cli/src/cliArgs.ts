@@ -214,7 +214,7 @@ export type Command =
   | { kind: "workspace-close"; opts: GlobalOpts; workspaceId: string }
   | { kind: "workspace-rename"; opts: GlobalOpts; workspaceId: string; label: string }
   // 20261002-sodactl-ask。呼び出し元の pane の質問のフォームを、その pane を見ているブラウザに出す（定義は標準入力）。
-  | { kind: "ask"; opts: GlobalOpts; timeoutMs: number }
+  | { kind: "ask"; opts: GlobalOpts; timeoutMs: number; /** `--features`: 定義を読まず、機能と上限を返す（20261004-ask-media-popup）。 */ features: boolean }
   // 20260927-sidebar-row-tokens（herdr の workspace/pane report-metadata のトークンの部分）。
   | { kind: "workspace-report-metadata"; opts: GlobalOpts; workspaceId: string; report: MetadataReportArgs }
   | { kind: "pane-report-metadata"; opts: GlobalOpts; paneId: string; report: MetadataReportArgs }
@@ -426,11 +426,11 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
     }
     // 20261002-sodactl-ask。引数は `--timeout` だけ（定義は標準入力）。対象は呼び出し元の pane に決まっているので、`--pane`・位置引数は取らない。
     case "ask": {
-      const { positionals, values } = parseFlags(argv.slice(1), { values: ["--url", "--token", "--timeout"] });
+      const { positionals, values, bools } = parseFlags(argv.slice(1), { values: ["--url", "--token", "--timeout"], bools: ["--features"] });
       rejectExtra(positionals, 0, ASK_USAGE);
       const raw = values.get("--timeout");
       const timeoutMs = raw === undefined ? ASK_TIMEOUT_DEFAULT_MS : parseAskTimeout(raw);
-      return { kind: "ask", opts: globalOptsFrom(values, env), timeoutMs };
+      return { kind: "ask", opts: globalOptsFrom(values, env), timeoutMs, features: bools.has("--features") };
     }
     case "workspace":
       return parseWorkspace(word1, rest0, env);
@@ -672,7 +672,7 @@ function parseStreamDimension(raw: string, flag: string): number {
   return n;
 }
 
-const ASK_USAGE = "sodactl ask [--timeout <ms>] < spec.json";
+const ASK_USAGE = "sodactl ask [--timeout <ms>] < spec.json   |   sodactl ask --features";
 
 function parseAskTimeout(raw: string): number {
   const n = Number(raw);

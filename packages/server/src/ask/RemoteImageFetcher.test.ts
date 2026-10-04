@@ -138,3 +138,72 @@ describe("RemoteImageFetcher — 応答の検査", () => {
     expect(peak).toBe(4);
   });
 });
+
+describe("RemoteImageFetcher — 検査を通ったアドレスを順に試す・名前解決にも時間の上限", () => {
+  it("最初のアドレスに繋げなければ、検査済みの次のアドレスへ回る（IPv6 の経路が無い環境）", async () => {
+    const tried: string[] = [];
+    const h = harness(
+      (a) => {
+        tried.push(a.address);
+        if (a.family === 6) throw new Error("ENETUNREACH");
+        return response();
+      },
+      { "dual.example": ["2606:4700:4700::1111", "93.184.216.34"] },
+    );
+    await h.fetcher.fetchImage("https://dual.example/a.png", sig());
+    expect(tried).toEqual(["2606:4700:4700::1111", "93.184.216.34"]);
+  });
+  it("名前解決が返らなくても、時間の上限で失敗する（枠を塞がない）", async () => {
+    const fetcher = new RemoteImageFetcher({ lookup: () => new Promise(() => undefined), timeoutMs: 30, request: async () => response() });
+    await expect(fetcher.fetchImage("https://hang.example/a.png", sig())).rejects.toThrow();
+  });
+  it("上限を超えた応答・リダイレクトの応答は、読むのをやめる（destroy）", async () => {
+    let destroyed = 0;
+    const big = harness(() => response({ chunks: [Buffer.alloc(100, 1), Buffer.alloc(100, 1)], destroy: () => void destroyed++ }), {}, { maxBytes: 150 });
+    await fails(big, "https://example.com/a.png", /too large/);
+    expect(destroyed).toBe(1);
+    let redirectDestroyed = 0;
+    const redir = harness((_a, n) => (n === 1 ? response({ status: 302, headers: { location: "/b" }, destroy: () => void redirectDestroyed++ }) : response()));
+    await redir.fetcher.fetchImage("https://example.com/a.png", sig());
+    expect(redirectDestroyed).toBe(1);
+  });
+});
+
+describe("makeRealRequest — 実物の https で、接続先が検査したアドレスに固定される", () => {
+  it("名前解決できないホスト名でも address へ繋がり、ホスト名で証明書を検証し、Cookie 等は付かない", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const { mkdtempSync, readFileSync, rmSync } = await import("node:fs");
+    const { createServer } = await import("node:https");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = mkdtempSync(join(tmpdir(), "soda-tls-"));
+    try {
+      execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", join(dir, "k.pem"), "-out", join(dir, "c.pem"), "-days", "1", "-subj", "/CN=fake.test", "-addext", "subjectAltName=DNS:fake.test"], { stdio: "ignore" });
+      const cert = readFileSync(join(dir, "c.pem"), "utf8");
+      let seen: Record<string, string | string[] | undefined> = {};
+      const server = createServer({ key: readFileSync(join(dir, "k.pem")), cert }, (req, res) => {
+        seen = req.headers;
+        res.setHeader("content-type", "image/png");
+        res.end(PNG);
+      });
+      await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+      const port = (server.address() as { port: number }).port;
+      try {
+        const { makeRealRequest } = await import("./RemoteImageFetcher.js");
+        const res = await makeRealRequest({ ca: cert })({ url: new URL(`https://fake.test:${port}/a.png`), address: "127.0.0.1", family: 4, headers: { Accept: "image/png" }, signal: sig() });
+        const chunks: Buffer[] = [];
+        for await (const c of res.body) chunks.push(Buffer.from(c));
+        expect(res.status).toBe(200);
+        expect(Buffer.concat(chunks).equals(PNG)).toBe(true);
+        expect(seen["host"]).toBe(`fake.test:${port}`);
+        for (const bad of ["cookie", "authorization", "referer", "origin"]) expect(seen[bad]).toBeUndefined();
+        // 証明書の名前が違えば（別のホスト名で同じアドレスへ）失敗する＝ホスト名で検証している
+        await expect(makeRealRequest({ ca: cert })({ url: new URL(`https://other.test:${port}/a.png`), address: "127.0.0.1", family: 4, headers: {}, signal: sig() })).rejects.toThrow();
+      } finally {
+        await new Promise((r) => server.close(r));
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

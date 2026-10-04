@@ -40,6 +40,8 @@ export interface RemoteImageFetcherOptions {
   timeoutMs?: number;
   maxBytes?: number;
   concurrency?: number;
+  /** テスト用: 実物の要求が信用する CA の PEM（自己署名の証明書）。 */
+  ca?: string;
 }
 
 // --- アドレスの検査 --------------------------------------------------------------------------
@@ -123,28 +125,38 @@ export function isBlockedAddress(addr: string): boolean {
 
 // --- 実物の 1 回の要求 ---------------------------------------------------------------------
 
-function realRequest(args: RemoteRequestArgs): Promise<RemoteResponse> {
-  return new Promise((resolve, reject) => {
-    const { url, address, family, headers, signal } = args;
-    const req = httpsRequest(
-      {
-        protocol: "https:",
-        hostname: url.hostname,
-        port: 443,
-        path: `${url.pathname}${url.search}`,
-        method: "GET",
-        headers: { ...headers, Host: url.host },
-        servername: url.hostname,
-        agent: false,
-        signal,
-        // 接続先は検査したアドレスに固定する（接続時に名前解決をやり直さない）。
-        lookup: (_host, _opts, cb) => (_opts && (_opts as { all?: boolean }).all ? (cb as (e: null, a: { address: string; family: number }[]) => void)(null, [{ address, family }]) : cb(null, address, family)),
-      },
-      (res) => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: res, destroy: () => res.destroy() }),
-    );
-    req.on("error", reject);
-    req.end();
-  });
+/**
+ * 実物の 1 回の要求（`https.request`）を作る。`ca` はテストが自己署名の証明書を信用させるためだけの口（本番は使わない）。
+ * 接続先は `address` に固定する（`lookup` が検査済みのアドレスを返す＝接続時に名前解決をやり直さない）。SNI・証明書の検証は元のホスト名（IP リテラルには SNI を付けない）。
+ */
+export function makeRealRequest(opts: { ca?: string } = {}): NonNullable<RemoteImageFetcherOptions["request"]> {
+  return (args) =>
+    new Promise((resolve, reject) => {
+      const { url, address, family, headers, signal } = args;
+      const host = url.hostname.replace(/^\[|\]$/g, "");
+      const req = httpsRequest(
+        {
+          protocol: "https:",
+          hostname: host,
+          port: url.port === "" ? 443 : Number(url.port), // `RemoteImageFetcher` が 443 以外を断った後なので、実際には 443
+          path: `${url.pathname}${url.search}`,
+          method: "GET",
+          headers: { ...headers, Host: url.host },
+          ...(isIP(host) === 0 ? { servername: host } : {}),
+          ...(opts.ca !== undefined ? { ca: opts.ca } : {}),
+          agent: false,
+          signal,
+          lookup: (_hostname, lookupOpts, cb) => {
+            const wantsAll = (lookupOpts as { all?: boolean } | undefined)?.all === true;
+            if (wantsAll) (cb as (e: null, a: { address: string; family: number }[]) => void)(null, [{ address, family }]);
+            else cb(null, address, family);
+          },
+        },
+        (res) => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: res, destroy: () => res.destroy() }),
+      );
+      req.on("error", reject);
+      req.end();
+    });
 }
 
 // --- 取得 ------------------------------------------------------------------------------------
@@ -161,7 +173,7 @@ export class RemoteImageFetcher implements ImageFetcher {
 
   constructor(opts: RemoteImageFetcherOptions = {}) {
     this.lookup = opts.lookup ?? ((host) => dnsLookup(host, { all: true, verbatim: true }));
-    this.request = opts.request ?? realRequest;
+    this.request = opts.request ?? makeRealRequest(opts.ca !== undefined ? { ca: opts.ca } : {});
     this.maxRedirects = opts.maxRedirects ?? 3;
     this.timeoutMs = opts.timeoutMs ?? 10_000;
     this.maxBytes = opts.maxBytes ?? ASK_MEDIA_FILE_MAX;
@@ -172,6 +184,7 @@ export class RemoteImageFetcher implements ImageFetcher {
     await this.acquire();
     try {
       const all = AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]);
+      all.throwIfAborted(); // 枠を待っている間に中止・時間切れになっていたら始めない
       return await this.run(urlText, all);
     } finally {
       this.release();
@@ -195,15 +208,22 @@ export class RemoteImageFetcher implements ImageFetcher {
   private async run(urlText: string, signal: AbortSignal): Promise<{ bytes: Buffer; contentType: string }> {
     let url = new URL(urlText);
     for (let hop = 0; ; hop++) {
-      const { address, family } = await this.resolve(url);
-      const res = await this.request({
-        url,
-        address,
-        family,
-        // 付けるのはこれだけ（Cookie・Authorization・Referer・Origin は付けない）。
-        headers: { Accept: "image/png,image/jpeg,image/gif,image/webp,image/avif,image/svg+xml", "User-Agent": "sodashitsu-ask", "Accept-Encoding": "identity" },
-        signal,
-      });
+      const addrs = await this.resolve(url, signal);
+      // 付けるのはこれだけ（Cookie・Authorization・Referer・Origin は付けない）。
+      const headers = { Accept: "image/png,image/jpeg,image/gif,image/webp,image/avif,image/svg+xml", "User-Agent": "sodashitsu-ask", "Accept-Encoding": "identity" };
+      // 検査を通ったアドレスを順に試す（IPv6 の経路が無い環境で IPv4 へ回る）。接続できなかったときだけ次へ。
+      let res: RemoteResponse | undefined;
+      let lastError: unknown;
+      for (const a of addrs) {
+        try {
+          res = await this.request({ url, address: a.address, family: a.family, headers, signal });
+          break;
+        } catch (err) {
+          lastError = err;
+          signal.throwIfAborted();
+        }
+      }
+      if (res === undefined) throw lastError instanceof Error ? lastError : new Error("connection failed");
       if (REDIRECT_STATUS.has(res.status)) {
         res.destroy();
         if (hop >= this.maxRedirects) throw new Error("too many redirects");
@@ -243,22 +263,34 @@ export class RemoteImageFetcher implements ImageFetcher {
     }
   }
 
-  /** 接続してよい先か検査し、接続するアドレスを 1 つ決める。 */
-  private async resolve(url: URL): Promise<{ address: string; family: 4 | 6 }> {
+  /** 接続してよい先か検査し、接続してよいアドレスの一覧を返す（名前解決も時間の上限・中止の対象）。 */
+  private async resolve(url: URL, signal: AbortSignal): Promise<{ address: string; family: 4 | 6 }[]> {
     if (url.protocol !== "https:") throw new Error("only https is allowed");
     if (url.username !== "" || url.password !== "") throw new Error("credentials in the URL are not allowed");
     if (url.port !== "" && url.port !== "443") throw new Error("only port 443 is allowed");
     const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase().replace(/\.$/, "");
     if (host === "" || host === "localhost" || host.endsWith(".localhost")) throw new Error("blocked host");
     const literal = isIP(host);
-    const addrs = literal !== 0 ? [{ address: host, family: literal }] : await this.lookup(host);
+    const addrs = literal !== 0 ? [{ address: host, family: literal }] : await raceAbort(this.lookup(host), signal);
     if (addrs.length === 0) throw new Error("host not found");
     for (const a of addrs) if (isBlockedAddress(a.address)) throw new Error("blocked address");
-    const a = addrs[0]!;
-    return { address: a.address, family: a.family === 6 ? 6 : 4 };
+    return addrs.map((a) => ({ address: a.address, family: a.family === 6 ? 6 : 4 }));
   }
 }
 
 function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
+}
+
+/** `signal` が中止されたら、`p` の結果を待たずに拒否する（名前解決のように中止できない処理に時間の上限を効かせる）。 */
+function raceAbort<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason as Error);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(signal.reason as Error);
+    signal.addEventListener("abort", onAbort, { once: true });
+    p.then(
+      (v) => (signal.removeEventListener("abort", onAbort), resolve(v)),
+      (e: unknown) => (signal.removeEventListener("abort", onAbort), reject(e as Error)),
+    );
+  });
 }

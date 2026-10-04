@@ -72,6 +72,8 @@ interface Entry {
   mediaInfo: AskMediaInfo[];
   view: AskViewItem[] | undefined;
   warnings: number;
+  /** 全体の合計に足した分（引くときも同じ値）。 */
+  heldBytes: number;
 }
 
 /**
@@ -159,6 +161,7 @@ export class AskService {
         mediaInfo: [],
         view: undefined,
         warnings: 0,
+        heldBytes: 0,
       };
       // 時間切れは `prepare`（読む・取る）の時間も含める（呼び出し側が待つ時間は `timeoutMs` の範囲）。占有（pane・数）は読む前に取る。
       entry.timer = this.timers.setTimeout(() => this.close(entry, { status: "timeout" }), p.timeoutMs);
@@ -193,7 +196,8 @@ export class AskService {
     entry.view = prepared.view;
     entry.warnings = prepared.warnings;
     entry.ready = true;
-    this.mediaTotal += prepared.totalBytes;
+    entry.heldBytes = prepared.totalBytes;
+    this.mediaTotal += entry.heldBytes;
     this.opts.logger?.info("ask opened", { askId: entry.askId, paneId: entry.paneId, questions: entry.spec.questions.length, media: prepared.media.length });
     this.publish({ event: "ask.opened", data: { askId: entry.askId, paneId: entry.paneId } });
   }
@@ -308,7 +312,8 @@ export class AskService {
     this.byPane.delete(entry.paneId);
     entry.abort.abort(); // 読んでいる最中なら止める
     if (entry.ready) {
-      for (const m of entry.media.values()) this.mediaTotal -= m.bytes.length; // 保持していた分を全体の合計へ戻す
+      this.mediaTotal -= entry.heldBytes; // 保持していた分を全体の合計へ戻す（足した値と同じ値）
+      entry.heldBytes = 0;
       entry.media.clear();
     }
     this.opts.logger?.info("ask closed", { askId: entry.askId, paneId: entry.paneId, status: result.status });

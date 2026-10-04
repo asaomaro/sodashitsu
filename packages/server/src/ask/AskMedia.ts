@@ -97,7 +97,7 @@ export class AskMedia {
           const type = classifyMediaRef(ref, kind);
           if (type === null || ref.startsWith(ASK_MEDIA_REF_PREFIX)) throw invalid(where, "unsupported reference");
           const slot = claim(`${kind}:${ref}`, where, type === "https", () =>
-            type === "https" ? this.loadRemote(ref, signal) : this.loadLocalOrData(type, ref, kind, where),
+            type === "https" ? this.loadRemote(ref, signal) : this.loadLocalOrData(type, ref, kind, where, remaining),
           );
           bindings.push({
             slot,
@@ -119,12 +119,13 @@ export class AskMedia {
       } else {
         const file = v.file!;
         const raw = v.raw === true;
-        viewSlots.push({ title: v.title, slot: claim(`view:${raw ? 1 : 0}:${file}`, where, false, () => this.loadView(file, raw, where)) });
+        viewSlots.push({ title: v.title, slot: claim(`view:${raw ? 1 : 0}:${file}`, where, false, () => this.loadView(file, raw, where, remaining)) });
       }
     }
 
     // 2. 読む。外部 URL は先に並べて取り始め、ローカルは 1 つずつ読む（読む前の大きさ・読んだ後の大きさで合計を先に断つ）。
     let total = 0;
+    const remaining = (): number => ASK_MEDIA_TOTAL_MAX - total;
     const account = (n: number, where: string): void => {
       total += n;
       if (total > ASK_MEDIA_TOTAL_MAX) throw invalid(where, `the media in one question are larger than ${ASK_MEDIA_TOTAL_MAX} bytes in total`);
@@ -177,12 +178,12 @@ export class AskMedia {
     return prepared;
   }
 
-  private async loadLocalOrData(type: "path" | "data", ref: string, kind: "image" | "audio", where: string): Promise<Loaded> {
+  private async loadLocalOrData(type: "path" | "data", ref: string, kind: "image" | "audio", where: string, remaining: () => number): Promise<Loaded> {
     if (type === "data") return this.loadData(ref, kind, where);
     const ext = extname(ref).toLowerCase();
     const allowed = EXTENSION_KINDS[ext];
     if (allowed === undefined) throw invalid(where, "unsupported file extension");
-    const bytes = await readRegularFile(ref, ASK_MEDIA_FILE_MAX, where);
+    const bytes = await readRegularFile(ref, ASK_MEDIA_FILE_MAX, where, remaining());
     const sniffed = sniffMedia(bytes);
     if (sniffed === null || !allowed.includes(sniffed.kind)) throw invalid(where, "the file content does not match its extension");
     if (sniffed.media !== kind) throw invalid(where, `the file is not ${kind === "image" ? "an image" : "audio"}`);
@@ -214,20 +215,20 @@ export class AskMedia {
     }
   }
 
-  private async loadView(file: string, raw: boolean, where: string): Promise<Loaded> {
+  private async loadView(file: string, raw: boolean, where: string, remaining: () => number): Promise<Loaded> {
     const ext = extname(file).toLowerCase();
     if (EXTENSION_KINDS[ext] !== undefined && sniffKindsAreImage(ext)) {
-      const bytes = await readRegularFile(file, ASK_MEDIA_FILE_MAX, where);
+      const bytes = await readRegularFile(file, ASK_MEDIA_FILE_MAX, where, remaining());
       const sniffed = sniffMedia(bytes);
       if (sniffed === null || !EXTENSION_KINDS[ext]!.includes(sniffed.kind)) throw invalid(where, "the file content does not match its extension");
       return { kind: "image", mime: sniffed.mime, bytes };
     }
     if (VIEW_HTML.has(ext)) {
-      const bytes = await readRegularFile(file, ASK_MEDIA_FILE_MAX, where);
+      const bytes = await readRegularFile(file, ASK_MEDIA_FILE_MAX, where, remaining());
       if (!isUtf8Text(bytes)) throw invalid(where, "the file is not UTF-8 text");
       return { kind: "html", mime: "text/html; charset=utf-8", bytes };
     }
-    const bytes = await readRegularFile(file, ASK_MEDIA_TEXT_MAX, where);
+    const bytes = await readRegularFile(file, ASK_MEDIA_TEXT_MAX, where, remaining());
     if (!isUtf8Text(bytes)) throw invalid(where, "the file is not UTF-8 text (pass an HTML file, an image or a UTF-8 text file)");
     if (VIEW_MARKDOWN.has(ext) && !raw) return { kind: "markdown", mime: "text/markdown; charset=utf-8", bytes };
     return { kind: "text", mime: "text/plain; charset=utf-8", bytes };
@@ -242,10 +243,11 @@ function sniffKindsAreImage(ext: string): boolean {
  * 通常のファイルだけを `max` バイトまで読む。開いた後の `fstat` で種類と大きさを確かめる（FIFO・デバイス・ディレクトリは拒否。FIFO で固まらないよう非ブロックで開く）。
  * シンボリックリンクは辿る（pane のシェルと同じ権限で読めるもの）。
  */
-async function readRegularFile(path: string, max: number, where: string): Promise<Buffer> {
+async function readRegularFile(path: string, max: number, where: string, remaining: number): Promise<Buffer> {
   let fh;
   try {
-    fh = await open(path, fsc.O_RDONLY | (fsc.O_NONBLOCK ?? 0));
+    // 非ブロック（FIFO で固まらない）・制御端末にしない（`/dev/tty` 系を開いても端末を取らない）。
+    fh = await open(path, fsc.O_RDONLY | (fsc.O_NONBLOCK ?? 0) | (fsc.O_NOCTTY ?? 0));
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     throw invalid(where, code === "ENOENT" || code === "ENOTDIR" ? "file not found" : code === "EACCES" || code === "EPERM" ? "file is not readable" : "cannot open the file");
@@ -254,15 +256,21 @@ async function readRegularFile(path: string, max: number, where: string): Promis
     const st = await fh.stat();
     if (!st.isFile()) throw invalid(where, "not a regular file");
     if (st.size > max) throw invalid(where, `the file is larger than ${max} bytes`);
-    const buf = Buffer.allocUnsafe(Math.min(st.size, max) + 1);
+    if (st.size > remaining) throw invalid(where, `the media in one question are larger than ${ASK_MEDIA_TOTAL_MAX} bytes in total`); // 読む前に断つ
+    const limit = Math.min(max, remaining);
+    // `st.size` が 0 のファイル（`/proc` 配下など）は大きさが当てにならないので、上限 +1 まで読んで確かめる。
+    const cap = st.size === 0 ? limit + 1 : Math.min(st.size, limit) + 1;
+    const chunks: Buffer[] = [];
     let n = 0;
-    while (n < buf.length) {
-      const { bytesRead } = await fh.read(buf, n, buf.length - n, n);
+    while (n < cap) {
+      const buf = Buffer.allocUnsafe(Math.min(cap - n, 1024 * 1024));
+      const { bytesRead } = await fh.read(buf, 0, buf.length, null);
       if (bytesRead === 0) break;
+      chunks.push(buf.subarray(0, bytesRead));
       n += bytesRead;
     }
-    if (n > max) throw invalid(where, `the file is larger than ${max} bytes`);
-    return buf.subarray(0, n);
+    if (n > limit) throw invalid(where, n > max ? `the file is larger than ${max} bytes` : `the media in one question are larger than ${ASK_MEDIA_TOTAL_MAX} bytes in total`);
+    return Buffer.concat(chunks, n);
   } finally {
     await fh.close();
   }
