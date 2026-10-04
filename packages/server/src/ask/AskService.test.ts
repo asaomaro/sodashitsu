@@ -456,7 +456,7 @@ describe("AskService — メディア（20261004-ask-media-popup）", () => {
     const d1 = deferred();
     const d2 = deferred();
     let n = 0;
-    const s = setup({ media: { prepare: (...a: unknown[]) => (n++ === 0 ? d1 : d2).media.prepare(...(a as [unknown, AbortSignal])) } as never });
+    const s = setup({ media: { prepare: (...a: unknown[]) => ((n++ === 0 ? d1 : d2).media as unknown as { prepare(s: unknown, sig: AbortSignal): Promise<unknown> }).prepare(...(a as [unknown, AbortSignal])) } as never });
     s.asks.subscribe("b1");
     track(s.asks.open("cli", { paneId: "p1", spec: IMG_SPEC, timeoutMs: 1000 }));
     const second = s.asks.open("cli", { paneId: "p2", spec: IMG_SPEC, timeoutMs: 1000 }).catch((e: unknown) => e);

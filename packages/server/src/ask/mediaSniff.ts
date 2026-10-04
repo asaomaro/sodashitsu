@@ -3,7 +3,8 @@
  * ここで決めた種類から MIME を決める（`.png` の名前のテキストファイルや、`/etc/passwd` を画像として出させない）。
  */
 
-export type SniffKind = "png" | "jpeg" | "gif" | "webp" | "avif" | "svg" | "wav" | "mp3" | "ogg" | "m4a" | "aac" | "flac";
+export type SniffKind =
+  "png" | "jpeg" | "gif" | "webp" | "avif" | "svg" | "wav" | "mp3" | "ogg" | "m4a" | "aac" | "flac";
 
 export interface Sniffed {
   kind: SniffKind;
@@ -78,13 +79,15 @@ function ftypBrands(b: Uint8Array): string[] | null {
   const size = ((b[0]! << 24) | (b[1]! << 16) | (b[2]! << 8) | b[3]!) >>> 0;
   const end = Math.min(b.length, size >= 16 && size <= 4096 ? size : 64);
   const brands = [String.fromCharCode(b[8]!, b[9]!, b[10]!, b[11]!)];
-  for (let at = 16; at + 4 <= end; at += 4) brands.push(String.fromCharCode(b[at]!, b[at + 1]!, b[at + 2]!, b[at + 3]!));
+  for (let at = 16; at + 4 <= end; at += 4)
+    brands.push(String.fromCharCode(b[at]!, b[at + 1]!, b[at + 2]!, b[at + 3]!));
   return brands;
 }
 
 /** SVG か: 先頭の BOM・空白・XML 宣言・コメント・DOCTYPE を読み飛ばして `<svg` で始まる。 */
 function isSvg(b: Uint8Array): boolean {
-  let t = new TextDecoder("utf-8").decode(b.subarray(0, 8192)).replace(/^﻿/, "");
+  // `TextDecoder` は先頭の BOM を取り除く。
+  let t = new TextDecoder("utf-8").decode(b.subarray(0, 8192));
   for (let guard = 0; guard < 32; guard++) {
     t = t.replace(/^\s+/, "");
     if (t.startsWith("<?")) {
@@ -123,11 +126,17 @@ export function sniffMedia(b: Uint8Array): Sniffed | null {
   if (ascii(b, 0, "fLaC")) return make("flac");
   if (ascii(b, 0, "ID3")) return make("mp3");
   const brands = ftypBrands(b);
-  if (brands !== null) return brands[0] === "avif" || brands[0] === "avis" ? make("avif") : brands.includes("avif") && brands[0] !== "M4A " ? make("avif") : make("m4a");
+  if (brands !== null)
+    return brands[0] === "avif" || brands[0] === "avis"
+      ? make("avif")
+      : brands.includes("avif") && brands[0] !== "M4A "
+        ? make("avif")
+        : make("m4a");
   if (b[0] === 0xff) {
     // ADTS（AAC）は同期の 12 ビットの後の layer が 00。MPEG audio は layer が 00 でなく、version が 01（予約）でない。
     if ((b[1]! & 0xf6) === 0xf0) return make("aac");
-    if ((b[1]! & 0xe0) === 0xe0 && ((b[1]! >> 1) & 3) !== 0 && ((b[1]! >> 3) & 3) !== 1) return make("mp3");
+    if ((b[1]! & 0xe0) === 0xe0 && ((b[1]! >> 1) & 3) !== 0 && ((b[1]! >> 3) & 3) !== 1)
+      return make("mp3");
   }
   if (isSvg(b)) return make("svg");
   return null;

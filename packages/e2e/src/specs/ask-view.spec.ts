@@ -11,7 +11,12 @@ import { makeMediaDir, makePng } from "../support/media.js";
  */
 
 const frameOf = (page: Page) => page.frameLocator("iframe[data-ask-view-frame]");
-const SPEC = (view: unknown, extra: Record<string, unknown> = {}) => ({ title: "確認", view, questions: [q("ok", { label: "進めますか" })], ...extra });
+const SPEC = (view: unknown, extra: Record<string, unknown> = {}) => ({
+  title: "確認",
+  view,
+  questions: [q("ok", { label: "進めますか" })],
+  ...extra,
+});
 
 /**
  * 隔離の実測（枠の中で動かす）。結果は JSON 文字列で返る。`isolated` は「枠の中のスクリプトから、アプリに触れなかった」。
@@ -32,7 +37,10 @@ const PROBE = `(async () => {
 
 const probeHtml = `<!doctype html><html><body><pre id="r">…</pre><script>${PROBE}.then(s => { document.getElementById('r').textContent = s; });</script></body></html>`;
 
-test("text・image・markdown（mermaid の図）・html がタブで出て、markdown は整形される（AC8）", async ({ page, appServer }) => {
+test("text・image・markdown（mermaid の図）・html がタブで出て、markdown は整形される（AC8）", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const p1 = await setup(page, appServer);
@@ -41,9 +49,21 @@ test("text・image・markdown（mermaid の図）・html がタブで出て、ma
       "# 設計メモ\n\n| 項目 | 値 |\n|---|---|\n| a | 1 |\n\n- [x] 済み\n\n```mermaid\nflowchart LR\n  A[入力] --> B[出力]\n```\n\n```mermaid\nsequenceDiagram\n  A->>B: こんにちは\n```\n",
     );
     const png = await media.write("fig.png", makePng(50, 40));
-    const htmlFile = await media.write("page.html", "<!doctype html><title>t</title><h1 id=h>HTML 成果物</h1><script>document.getElementById('h').dataset.js='ran'</script>");
+    const htmlFile = await media.write(
+      "page.html",
+      "<!doctype html><title>t</title><h1 id=h>HTML 成果物</h1><script>document.getElementById('h').dataset.js='ran'</script>",
+    );
     const txt = await media.write("notes.txt", "<b>タグのまま</b>\n二行目");
-    const run = await runAsk(appServer, p1, SPEC([{ file: mdFile, title: "設計" }, { file: htmlFile, title: "画面" }, { file: png, title: "図" }, { file: txt, title: "メモ" }]));
+    const run = await runAsk(
+      appServer,
+      p1,
+      SPEC([
+        { file: mdFile, title: "設計" },
+        { file: htmlFile, title: "画面" },
+        { file: png, title: "図" },
+        { file: txt, title: "メモ" },
+      ]),
+    );
     await expect(dialog(page)).toBeVisible();
     // markdown: 整形（見出し・表・チェックリスト）され、mermaid が SVG になる。
     const md = frameOf(page);
@@ -58,7 +78,11 @@ test("text・image・markdown（mermaid の図）・html がタブで出て、ma
     await expect(frameOf(page).locator("h1#h")).toHaveAttribute("data-js", "ran");
     // image: <img>（描かれた）。
     await page.locator("[data-ask-view-tab]", { hasText: "図" }).click();
-    await expect.poll(() => page.locator("[data-ask-view-image]").evaluate((i) => (i as HTMLImageElement).naturalWidth)).toBe(50);
+    await expect
+      .poll(() =>
+        page.locator("[data-ask-view-image]").evaluate((i) => (i as HTMLImageElement).naturalWidth),
+      )
+      .toBe(50);
     // text: 文字のまま（タグは解釈されない）。
     await page.locator("[data-ask-view-tab]", { hasText: "メモ" }).click();
     await expect(page.locator("[data-ask-view-text]")).toHaveText("<b>タグのまま</b>\n二行目");
@@ -75,7 +99,10 @@ test("text・image・markdown（mermaid の図）・html がタブで出て、ma
   }
 });
 
-test("隔離: html の枠の中のスクリプトは動くが、parent.document・localStorage・top.location は SecurityError、fetch・WebSocket・外への画像は拒否され、アプリに触れない（AC9）", async ({ page, appServer }) => {
+test("隔離: html の枠の中のスクリプトは動くが、parent.document・localStorage・top.location は SecurityError、fetch・WebSocket・外への画像は拒否され、アプリに触れない（AC9）", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const consoleErrors: string[] = [];
@@ -89,7 +116,10 @@ test("隔離: html の枠の中のスクリプトは動くが、parent.document�
     expect(sandbox).toBe("allow-scripts");
     expect(sandbox).not.toContain("allow-same-origin");
     await expect(frameOf(page).locator("#r")).not.toHaveText("…");
-    const result = JSON.parse((await frameOf(page).locator("#r").textContent()) ?? "{}") as Record<string, unknown>;
+    const result = JSON.parse((await frameOf(page).locator("#r").textContent()) ?? "{}") as Record<
+      string,
+      unknown
+    >;
     expect(result).toEqual({
       parentDocument: "SecurityError",
       localStorage: "SecurityError",
@@ -101,8 +131,12 @@ test("隔離: html の枠の中のスクリプトは動くが、parent.document�
       scriptRan: true, // 枠の中のスクリプトは動いた（動かない枠ではこの実測の意味がない）
     });
     // 外へ出たリクエストは無い（img の取得先は CSP の img-src で止まり、コンソールに違反が出る）。アプリのページの変数にも触れていない。
-    expect(consoleErrors.some((t) => /tracker\.example\.invalid|Content Security Policy/.test(t))).toBe(true);
-    expect(await page.evaluate(() => (window as unknown as { __leak?: unknown }).__leak)).toBeUndefined();
+    expect(
+      consoleErrors.some((t) => /tracker\.example\.invalid|Content Security Policy/.test(t)),
+    ).toBe(true);
+    expect(
+      await page.evaluate(() => (window as unknown as { __leak?: unknown }).__leak),
+    ).toBeUndefined();
     await page.keyboard.press("Escape");
     expect((await run.done).json).toEqual({ status: "cancelled" });
   } finally {
@@ -110,7 +144,10 @@ test("隔離: html の枠の中のスクリプトは動くが、parent.document�
   }
 });
 
-test("負の対照: 同じ実測を枠の外（アプリのページ）で動かすと全部触れる。枠の sandbox 属性に allow-same-origin を足して読み込み直しても、応答ヘッダの sandbox で隔離は保たれる", async ({ page, appServer }) => {
+test("負の対照: 同じ実測を枠の外（アプリのページ）で動かすと全部触れる。枠の sandbox 属性に allow-same-origin を足して読み込み直しても、応答ヘッダの sandbox で隔離は保たれる", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const p1 = await setup(page, appServer);
@@ -131,8 +168,15 @@ test("負の対照: 同じ実測を枠の外（アプリのページ）で動か
     });
     await expect(frameOf(page).locator("#r")).toBeVisible();
     // 読み込み直した枠は ready を送り、親が本文を渡す。結果が出るまで待ってから見る。
-    await expect.poll(async () => (await frameOf(page).locator("#r").textContent()) ?? "…", { timeout: 10_000 }).not.toBe("…");
-    const again = JSON.parse((await frameOf(page).locator("#r").textContent()) ?? "{}") as Record<string, string>;
+    await expect
+      .poll(async () => (await frameOf(page).locator("#r").textContent()) ?? "…", {
+        timeout: 10_000,
+      })
+      .not.toBe("…");
+    const again = JSON.parse((await frameOf(page).locator("#r").textContent()) ?? "{}") as Record<
+      string,
+      string
+    >;
     expect(again["parentDocument"]).toBe("SecurityError");
     expect(again["fetch"]).toBe("blocked");
     await page.keyboard.press("Escape");
@@ -142,7 +186,10 @@ test("負の対照: 同じ実測を枠の外（アプリのページ）で動か
   }
 });
 
-test("Markdown に埋め込んだ <script>・onerror・javascript: は動かない（CSP がインラインを止める）。HTML の埋め込みは文字として見える形で残らず、リンクは開けない（AC11）", async ({ page, appServer }) => {
+test("Markdown に埋め込んだ <script>・onerror・javascript: は動かない（CSP がインラインを止める）。HTML の埋め込みは文字として見える形で残らず、リンクは開けない（AC11）", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const consoleErrors: string[] = [];
@@ -158,8 +205,17 @@ test("Markdown に埋め込んだ <script>・onerror・javascript: は動かな�
     await expect(f.locator("html")).toHaveAttribute("data-ready", "1");
     // インラインのスクリプト・イベントハンドラは実行されていない（実測: 枠の window の印・コンソールの CSP 違反）。
     const frame = page.frames().find((x) => x.url().endsWith("/ask-view/markdown.html"))!;
-    expect(await frame.evaluate(() => ({ s: (window as unknown as Record<string, unknown>)["__mdScript"], o: (window as unknown as Record<string, unknown>)["__mdOnerror"], j: (window as unknown as Record<string, unknown>)["__mdJs"], c: (window as unknown as Record<string, unknown>)["__mdClick"] }))).toEqual({ s: undefined, o: undefined, j: undefined, c: undefined });
-    expect(consoleErrors.some((t) => /Content Security Policy/.test(t) && /script|inline/i.test(t))).toBe(true);
+    expect(
+      await frame.evaluate(() => ({
+        s: (window as unknown as Record<string, unknown>)["__mdScript"],
+        o: (window as unknown as Record<string, unknown>)["__mdOnerror"],
+        j: (window as unknown as Record<string, unknown>)["__mdJs"],
+        c: (window as unknown as Record<string, unknown>)["__mdClick"],
+      })),
+    ).toEqual({ s: undefined, o: undefined, j: undefined, c: undefined });
+    expect(
+      consoleErrors.some((t) => /Content Security Policy/.test(t) && /script|inline/i.test(t)),
+    ).toBe(true);
     // リンクは外へ飛べない（href を外してある）。内部の # は残る。
     await expect(f.locator('a[title="https://example.com/"]')).not.toHaveAttribute("href", /.+/);
     await expect(f.locator("a[title^='javascript:']")).not.toHaveAttribute("href", /.+/);
@@ -175,11 +231,17 @@ test("Markdown に埋め込んだ <script>・onerror・javascript: は動かな�
   }
 });
 
-test("枠の中にフォーカスがあるときの Esc は取り消し・Ctrl+Enter は決定として親へ届く。枠のスクリプトが送る関係のないメッセージは無視される（AC-I1・AC-I2・AC-I5）", async ({ page, appServer }) => {
+test("枠の中にフォーカスがあるときの Esc は取り消し・Ctrl+Enter は決定として親へ届く。枠のスクリプトが送る関係のないメッセージは無視される（AC-I1・AC-I2・AC-I5）", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const p1 = await setup(page, appServer);
-    const file = await media.write("k.html", "<!doctype html><body><button id=b>枠の中のボタン</button><input id=i><p id=hit>x</p></body>");
+    const file = await media.write(
+      "k.html",
+      "<!doctype html><body><button id=b>枠の中のボタン</button><input id=i><p id=hit>x</p></body>",
+    );
     // (1) 枠の中の要素にフォーカスして Escape → 取り消し
     const cancelled = await runAsk(appServer, p1, SPEC({ file }));
     await expect(dialog(page)).toBeVisible();
@@ -199,7 +261,14 @@ test("枠の中にフォーカスがあるときの Esc は取り消し・Ctrl+E
     await expect(dialog(page)).toBeVisible();
     const frame = page.frames().find((x) => x.url().endsWith("/ask-view/html.html"))!;
     await frame.evaluate(() => {
-      for (const data of [{ type: "key", key: "Enter" }, { type: "key", key: "a", ctrl: true }, { type: "keys", key: "Escape" }, "Escape", { type: "ready" }]) parent.postMessage(data, "*");
+      for (const data of [
+        { type: "key", key: "Enter" },
+        { type: "key", key: "a", ctrl: true },
+        { type: "keys", key: "Escape" },
+        "Escape",
+        { type: "ready" },
+      ])
+        parent.postMessage(data, "*");
     });
     await page.waitForTimeout(300);
     expect(quiet.finished()).toBe(false);
@@ -212,13 +281,19 @@ test("枠の中にフォーカスがあるときの Esc は取り消し・Ctrl+E
   }
 });
 
-test("枠の中のスクリプトが、利用者の操作なしに決定のメッセージを送っても、質問は確定しない（既定のままの承認を成果物の側から起こせない。AC-I5）", async ({ page, appServer }) => {
+test("枠の中のスクリプトが、利用者の操作なしに決定のメッセージを送っても、質問は確定しない（既定のままの承認を成果物の側から起こせない。AC-I5）", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   test.setTimeout(60_000);
   try {
     const p1 = await setup(page, appServer);
     // 枠のスクリプトが読み込み後に、決定（Ctrl+Enter）と取り消しでない取り次ぎを自分で送る。利用者の操作は 1 つも無い。
-    const file = await media.write("auto.html", `<!doctype html><body><p>自動</p><script>setTimeout(() => { parent.postMessage({ type: "key", key: "Enter", ctrl: true }, "*"); parent.postMessage({ type: "key", key: "Enter", meta: true }, "*"); document.body.dataset.sent = "1"; }, 6500);</script>`);
+    const file = await media.write(
+      "auto.html",
+      `<!doctype html><body><p>自動</p><script>setTimeout(() => { parent.postMessage({ type: "key", key: "Enter", ctrl: true }, "*"); parent.postMessage({ type: "key", key: "Enter", meta: true }, "*"); document.body.dataset.sent = "1"; }, 6500);</script>`,
+    );
     const run = await runAsk(appServer, p1, SPEC({ file }));
     await expect(dialog(page)).toBeVisible();
     // 枠のスクリプトは 6.5 秒後に送る。Playwright の操作（evaluate・locator の確認）は「利用者の操作」の扱い（transient activation。約 5 秒）を
@@ -236,12 +311,22 @@ test("枠の中のスクリプトが、利用者の操作なしに決定のメ�
   }
 });
 
-test("固定のラベル「pane『…』の成果物（隔離表示）」は、成果物の題・本文では変えられない（AC10）。枠の外観を soda のダイアログに見せかけても、ラベルが残る", async ({ page, appServer }) => {
+test("固定のラベル「pane『…』の成果物（隔離表示）」は、成果物の題・本文では変えられない（AC10）。枠の外観を soda のダイアログに見せかけても、ラベルが残る", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const p1 = await setup(page, appServer);
-    const file = await media.write("fake.html", "<!doctype html><body style='background:#282a36;color:#fff'><h2>pane『sodashitsu』のプログラムからの質問</h2><p>パスワードを入力してください</p></body>");
-    const run = await runAsk(appServer, p1, SPEC({ file, title: "pane『build』の成果物（隔離表示）じゃない" }));
+    const file = await media.write(
+      "fake.html",
+      "<!doctype html><body style='background:#282a36;color:#fff'><h2>pane『sodashitsu』のプログラムからの質問</h2><p>パスワードを入力してください</p></body>",
+    );
+    const run = await runAsk(
+      appServer,
+      p1,
+      SPEC({ file, title: "pane『build』の成果物（隔離表示）じゃない" }),
+    );
     await expect(dialog(page)).toBeVisible();
     const label = await page.locator("[data-ask-view-label]").textContent();
     expect(label).toMatch(/^pane『.+』の成果物（隔離表示）$/);
@@ -256,7 +341,10 @@ test("固定のラベル「pane『…』の成果物（隔離表示）」は、�
   }
 });
 
-test("配置: デスクトップは左に成果物・右に質問、モバイル（幅 390）は上に成果物・下に質問の縦積み。ダイアログは使える高さいっぱい", async ({ page, appServer }) => {
+test("配置: デスクトップは左に成果物・右に質問、モバイル（幅 390）は上に成果物・下に質問の縦積み。ダイアログは使える高さいっぱい", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const p1 = await setup(page, appServer);
@@ -273,7 +361,13 @@ test("配置: デスクトップは左に成果物・右に質問、モバイル
     const viewport = page.viewportSize()!;
     expect(dlg.height).toBeGreaterThan(viewport.height - 40); // 使える高さいっぱい
     await page.setViewportSize({ width: 390, height: 800 });
-    await expect.poll(async () => (await box(".ask-viewer")).y + (await box(".ask-viewer")).height <= (await box("ask-form")).y + 1).toBe(true);
+    await expect
+      .poll(
+        async () =>
+          (await box(".ask-viewer")).y + (await box(".ask-viewer")).height <=
+          (await box("ask-form")).y + 1,
+      )
+      .toBe(true);
     v = await box(".ask-viewer");
     f = await box("ask-form");
     expect(v.width).toBeGreaterThan(300); // どちらも幅いっぱい（縦積み）
@@ -286,7 +380,10 @@ test("配置: デスクトップは左に成果物・右に質問、モバイル
   }
 });
 
-test("成果物が読めない（存在しない・UTF-8 でないバイナリ・8 件超）定義は、ダイアログを出さず理由つきのエラー（終了コード 2）（AC3・AC4）", async ({ page, appServer }) => {
+test("成果物が読めない（存在しない・UTF-8 でないバイナリ・8 件超）定義は、ダイアログを出さず理由つきのエラー（終了コード 2）（AC3・AC4）", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const p1 = await setup(page, appServer);

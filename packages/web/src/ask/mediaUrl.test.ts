@@ -3,10 +3,17 @@ import { describe, expect, it } from "vitest";
 import { loadMedia } from "./mediaUrl.js";
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
-const b64 = (x: string | Uint8Array): string => btoa(String.fromCharCode(...(typeof x === "string" ? enc(x) : x)));
-const buf = (x: string | number[]): Uint8Array => (typeof x === "string" ? enc(x) : Uint8Array.from(x));
+const b64 = (x: string | Uint8Array): string =>
+  btoa(String.fromCharCode(...(typeof x === "string" ? enc(x) : x)));
+const buf = (x: string | number[]): Uint8Array =>
+  typeof x === "string" ? enc(x) : Uint8Array.from(x);
 const code = (c: string): Error => Object.assign(new Error(`${c}: x`), { code: c });
-const base = (over: Partial<AskPending>): AskPending => ({ askId: "a1", paneId: "p1", spec: { title: "T", submit: "決定", note: true, questions: [] }, ...over });
+const base = (over: Partial<AskPending>): AskPending => ({
+  askId: "a1",
+  paneId: "p1",
+  spec: { title: "T", submit: "決定", note: true, questions: [] },
+  ...over,
+});
 
 /** メディアごとのバイト列を 6 バイトごとの片で返す偽の `ask.media`。 */
 function fake(files: Record<number, Uint8Array | Error>, chunk = 6) {
@@ -42,10 +49,21 @@ describe("loadMedia", () => {
     const f = fake({ 0: png, 1: wav });
     const r = await loadMedia(
       f.request,
-      base({ media: [{ id: 0, kind: "image", mime: "image/png", bytes: png.length }, { id: 1, kind: "audio", mime: "audio/wav", bytes: wav.length }] }),
+      base({
+        media: [
+          { id: 0, kind: "image", mime: "image/png", bytes: png.length },
+          { id: 1, kind: "audio", mime: "audio/wav", bytes: wav.length },
+        ],
+      }),
       yes,
     );
-    expect(r).toEqual({ urls: { "media:0": `data:image/png;base64,${b64(png)}`, "media:1": `data:audio/wav;base64,${b64(wav)}` }, views: [] });
+    expect(r).toEqual({
+      urls: {
+        "media:0": `data:image/png;base64,${b64(png)}`,
+        "media:1": `data:audio/wav;base64,${b64(wav)}`,
+      },
+      views: [],
+    });
     expect(f.calls.filter((c) => c.id === 0).map((c) => c.offset)).toEqual([0, 6, 12, 18]);
   });
 
@@ -86,25 +104,66 @@ describe("loadMedia", () => {
   it("同時に取るのは 3 つまで", async () => {
     const files = Object.fromEntries(Array.from({ length: 8 }, (_, i) => [i, buf("x".repeat(30))]));
     const f = fake(files);
-    await loadMedia(f.request, base({ media: Array.from({ length: 8 }, (_, i) => ({ id: i, kind: "image" as const, mime: "image/png", bytes: 30 })) }), yes);
+    await loadMedia(
+      f.request,
+      base({
+        media: Array.from({ length: 8 }, (_, i) => ({
+          id: i,
+          kind: "image" as const,
+          mime: "image/png",
+          bytes: 30,
+        })),
+      }),
+      yes,
+    );
     expect(f.peak()).toBeLessThanOrEqual(3);
   });
 
   it("画像・音が取れなければ、その参照だけ渡さない（質問は出す）", async () => {
     const f = fake({ 0: code("internal"), 1: buf("ok") });
-    const r = await loadMedia(f.request, base({ media: [{ id: 0, kind: "image", mime: "image/png", bytes: 3 }, { id: 1, kind: "image", mime: "image/png", bytes: 2 }] }), yes);
+    const r = await loadMedia(
+      f.request,
+      base({
+        media: [
+          { id: 0, kind: "image", mime: "image/png", bytes: 3 },
+          { id: 1, kind: "image", mime: "image/png", bytes: 2 },
+        ],
+      }),
+      yes,
+    );
     expect(r).toEqual({ urls: { "media:1": `data:image/png;base64,${b64("ok")}` }, views: [] });
   });
 
   it("成果物が取れなければ view_failed（見ないまま答えさせない）", async () => {
     const f = fake({ 0: code("internal") });
-    expect(await loadMedia(f.request, base({ media: [{ id: 0, kind: "markdown", mime: "text/markdown", bytes: 3 }], view: [{ title: "t", kind: "markdown", media: 0 }] }), yes)).toBe("view_failed");
+    expect(
+      await loadMedia(
+        f.request,
+        base({
+          media: [{ id: 0, kind: "markdown", mime: "text/markdown", bytes: 3 }],
+          view: [{ title: "t", kind: "markdown", media: 0 }],
+        }),
+        yes,
+      ),
+    ).toBe("view_failed");
   });
 
   it("取っている間に質問が閉じた（ask_closed）・もう現在の質問でない（isCurrent が偽）なら null（捨てる）", async () => {
     const closed = fake({ 0: code("ask_closed") });
-    expect(await loadMedia(closed.request, base({ media: [{ id: 0, kind: "image", mime: "image/png", bytes: 3 }] }), yes)).toBeNull();
+    expect(
+      await loadMedia(
+        closed.request,
+        base({ media: [{ id: 0, kind: "image", mime: "image/png", bytes: 3 }] }),
+        yes,
+      ),
+    ).toBeNull();
     const f = fake({ 0: buf("x") });
-    expect(await loadMedia(f.request, base({ media: [{ id: 0, kind: "image", mime: "image/png", bytes: 1 }] }), () => false)).toBeNull();
+    expect(
+      await loadMedia(
+        f.request,
+        base({ media: [{ id: 0, kind: "image", mime: "image/png", bytes: 1 }] }),
+        () => false,
+      ),
+    ).toBeNull();
   });
 });

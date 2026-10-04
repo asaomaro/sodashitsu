@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { isUtf8Text, sniffMedia } from "./mediaSniff.js";
 
 const bytes = (...parts: (string | number[])[]): Uint8Array =>
-  Uint8Array.from(parts.flatMap((p) => (typeof p === "string" ? [...p].map((c) => c.charCodeAt(0)) : p)));
+  Uint8Array.from(
+    parts.flatMap((p) => (typeof p === "string" ? [...p].map((c) => c.charCodeAt(0)) : p)),
+  );
 const box = (brand: string, ...compat: string[]): Uint8Array => {
   const body = bytes("ftyp", brand, [0, 0, 0, 0], ...compat);
   return bytes([0, 0, 0, body.length + 4], [...body]);
@@ -10,7 +12,11 @@ const box = (brand: string, ...compat: string[]): Uint8Array => {
 
 describe("sniffMedia（先頭バイトで種類を決める）", () => {
   it("画像", () => {
-    expect(sniffMedia(bytes([0x89], "PNG\r\n", [0x1a, 0x0a, 0, 0]))).toMatchObject({ kind: "png", mime: "image/png", media: "image" });
+    expect(sniffMedia(bytes([0x89], "PNG\r\n", [0x1a, 0x0a, 0, 0]))).toMatchObject({
+      kind: "png",
+      mime: "image/png",
+      media: "image",
+    });
     expect(sniffMedia(bytes([0xff, 0xd8, 0xff, 0xe0]))).toMatchObject({ kind: "jpeg" });
     expect(sniffMedia(bytes("GIF89a", [0, 0]))).toMatchObject({ kind: "gif" });
     expect(sniffMedia(bytes("RIFF", [0, 0, 0, 0], "WEBPVP8 "))).toMatchObject({ kind: "webp" });
@@ -18,7 +24,10 @@ describe("sniffMedia（先頭バイトで種類を決める）", () => {
     expect(sniffMedia(box("mif1", "avif"))).toMatchObject({ kind: "avif" });
   });
   it("音", () => {
-    expect(sniffMedia(bytes("RIFF", [0, 0, 0, 0], "WAVEfmt "))).toMatchObject({ kind: "wav", media: "audio" });
+    expect(sniffMedia(bytes("RIFF", [0, 0, 0, 0], "WAVEfmt "))).toMatchObject({
+      kind: "wav",
+      media: "audio",
+    });
     expect(sniffMedia(bytes("ID3", [3, 0]))).toMatchObject({ kind: "mp3" });
     expect(sniffMedia(bytes([0xff, 0xfb, 0x90, 0x00]))).toMatchObject({ kind: "mp3" });
     expect(sniffMedia(bytes([0xff, 0xf1, 0x50, 0x80]))).toMatchObject({ kind: "aac" });
@@ -32,8 +41,17 @@ describe("sniffMedia（先頭バイトで種類を決める）", () => {
       "﻿  <?xml version='1.0'?>\n<!-- c -->\n<!DOCTYPE svg PUBLIC 'a' 'b'>\n<svg width='1'/>",
       "<!DOCTYPE svg [<!ENTITY a 'b'>]><svg/>",
     ])
-      expect(sniffMedia(new TextEncoder().encode(t)), t).toMatchObject({ kind: "svg", mime: "image/svg+xml" });
-    for (const t of ["<html><svg/></html>", "<svgx/>", "hello <svg/>", "<?xml version='1.0'?><html/>", "<!-- <svg/> -->"])
+      expect(sniffMedia(new TextEncoder().encode(t)), t).toMatchObject({
+        kind: "svg",
+        mime: "image/svg+xml",
+      });
+    for (const t of [
+      "<html><svg/></html>",
+      "<svgx/>",
+      "hello <svg/>",
+      "<?xml version='1.0'?><html/>",
+      "<!-- <svg/> -->",
+    ])
       expect(sniffMedia(new TextEncoder().encode(t)), t).toBeNull();
   });
   it("種類でないもの（/etc/passwd のようなテキスト・短すぎる・0 バイト）は null", () => {

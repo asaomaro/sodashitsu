@@ -20,17 +20,30 @@ async function watchViolations(page: Page): Promise<() => Promise<string[]>> {
   await page.addInitScript(() => {
     const w = window as unknown as { __csp: string[] };
     w.__csp = [];
-    document.addEventListener("securitypolicyviolation", (e) => void w.__csp.push(`${e.violatedDirective} ${e.blockedURI}`));
+    document.addEventListener(
+      "securitypolicyviolation",
+      (e) => void w.__csp.push(`${e.violatedDirective} ${e.blockedURI}`),
+    );
   });
   return () => page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
 }
 
 const imgs = (page: Page) =>
-  page.locator("ask-form").evaluate((f) =>
-    Array.from(f.shadowRoot!.querySelectorAll("img")).map((i) => ({ src: i.getAttribute("src") ?? "", currentSrc: i.currentSrc, naturalWidth: i.naturalWidth, complete: i.complete })),
-  );
+  page
+    .locator("ask-form")
+    .evaluate((f) =>
+      Array.from(f.shadowRoot!.querySelectorAll("img")).map((i) => ({
+        src: i.getAttribute("src") ?? "",
+        currentSrc: i.currentSrc,
+        naturalWidth: i.naturalWidth,
+        complete: i.complete,
+      })),
+    );
 
-test("ローカルの画像・コード（diff）・分類・thumb・preview が、画面内のダイアログで描かれる。CSP の違反は増えない（AC1・AC2）", async ({ page, appServer }) => {
+test("ローカルの画像・コード（diff）・分類・thumb・preview が、画面内のダイアログで描かれる。CSP の違反は増えない（AC1・AC2）", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const violations = await watchViolations(page);
@@ -65,23 +78,45 @@ test("ローカルの画像・コード（diff）・分類・thumb・preview が
     });
     await expect(dialog(page)).toBeVisible();
     // 画像が実際に描かれた（デコードできて幅がある）。参照は data:（サーバから受けたバイト列）で、外のリクエストではない。
-    await expect.poll(async () => (await imgs(page)).filter((i) => i.naturalWidth > 0).length).toBeGreaterThanOrEqual(2);
+    await expect
+      .poll(async () => (await imgs(page)).filter((i) => i.naturalWidth > 0).length)
+      .toBeGreaterThanOrEqual(2);
     const shown = (await imgs(page)).filter((i) => i.src !== "");
-    expect(shown.every((i) => i.src.startsWith("data:image/png;base64,") && i.currentSrc.startsWith("data:image/png;base64,"))).toBe(true);
+    expect(
+      shown.every(
+        (i) =>
+          i.src.startsWith("data:image/png;base64,") &&
+          i.currentSrc.startsWith("data:image/png;base64,"),
+      ),
+    ).toBe(true);
     expect(shown.map((i) => i.naturalWidth).sort()).toEqual(expect.arrayContaining([48, 64]));
     // コード（diff）は textContent で出て、+ - の行が色分けされる（部品の機能）。分類の見出し・thumb の変数が効いている。
     await expect(page.locator("ask-form")).toContainText("案A");
-    expect(await page.locator("ask-form").evaluate((f) => f.shadowRoot!.querySelectorAll(".grp").length)).toBeGreaterThanOrEqual(2);
-    expect(await page.locator("ask-form").evaluate((f) => (f.shadowRoot!.querySelector(".opts") as HTMLElement).style.getPropertyValue("--thumb"))).toBe("90px");
+    expect(
+      await page.locator("ask-form").evaluate((f) => f.shadowRoot!.querySelectorAll(".grp").length),
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      await page
+        .locator("ask-form")
+        .evaluate((f) =>
+          (f.shadowRoot!.querySelector(".opts") as HTMLElement).style.getPropertyValue("--thumb"),
+        ),
+    ).toBe("90px");
     expect((await violations()).slice(baseline)).toEqual([]);
     await page.keyboard.press("Control+Enter");
-    expect((await run.done).json).toEqual({ status: "answered", answers: { layout: "a", impl: "x" } });
+    expect((await run.done).json).toEqual({
+      status: "answered",
+      answers: { layout: "a", impl: "x" },
+    });
   } finally {
     await media.cleanup();
   }
 });
 
-test("音: 試聴を押すと data: の音源が Audio に渡り play() が呼ばれる。media-src の違反は出ない（AC2。音は聞けないので Audio を包んで観測する）", async ({ page, appServer }) => {
+test("音: 試聴を押すと data: の音源が Audio に渡り play() が呼ばれる。media-src の違反は出ない（AC2。音は聞けないので Audio を包んで観測する）", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     await page.addInitScript(() => {
@@ -104,10 +139,28 @@ test("音: 試聴を押すと data: の音源が Audio に渡り play() が呼�
     const p1 = await setup(page, appServer);
     const baseline = (await violations()).length;
     const wav = await media.write("a.wav", makeWav());
-    const run = await runAsk(appServer, p1, { questions: [{ id: "s", label: "音", default: "a", options: [{ value: "a", label: "A", audio: wav }, { value: "b", label: "B" }] }] });
+    const run = await runAsk(appServer, p1, {
+      questions: [
+        {
+          id: "s",
+          label: "音",
+          default: "a",
+          options: [
+            { value: "a", label: "A", audio: wav },
+            { value: "b", label: "B" },
+          ],
+        },
+      ],
+    });
     await expect(dialog(page)).toBeVisible();
     await page.locator("ask-form button.play").first().click();
-    await expect.poll(() => page.evaluate(() => (window as unknown as { __audio: { src: string; plays: number }[] }).__audio)).toEqual([{ src: expect.stringMatching(/^data:audio\/wav;base64,/), plays: 1 }]);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as unknown as { __audio: { src: string; plays: number }[] }).__audio,
+        ),
+      )
+      .toEqual([{ src: expect.stringMatching(/^data:audio\/wav;base64,/), plays: 1 }]);
     expect((await violations()).slice(baseline)).toEqual([]);
     await page.keyboard.press("Control+Enter");
     expect((await run.done).json).toMatchObject({ status: "answered" });
@@ -116,21 +169,52 @@ test("音: 試聴を押すと data: の音源が Audio に渡り play() が呼�
   }
 });
 
-test("SVG は <img> で描かれ、中のスクリプトは動かない（AC5）。SVG を開く経路（iframe・a・window.open）を画面は作らない", async ({ page, appServer }) => {
+test("SVG は <img> で描かれ、中のスクリプトは動かない（AC5）。SVG を開く経路（iframe・a・window.open）を画面は作らない", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const violations = await watchViolations(page);
     const p1 = await setup(page, appServer);
     const baseline = (await violations()).length;
     const svg = await media.write("evil.svg", EVIL_SVG);
-    const run = await runAsk(appServer, p1, { questions: [{ id: "s", label: "S", default: "a", options: [{ value: "a", label: "A", image: svg }, { value: "b", label: "B" }] }] });
+    const run = await runAsk(appServer, p1, {
+      questions: [
+        {
+          id: "s",
+          label: "S",
+          default: "a",
+          options: [
+            { value: "a", label: "A", image: svg },
+            { value: "b", label: "B" },
+          ],
+        },
+      ],
+    });
     await expect(dialog(page)).toBeVisible();
-    await expect.poll(async () => (await imgs(page)).filter((i) => i.naturalWidth === 40).length).toBeGreaterThanOrEqual(1);
-    expect((await imgs(page)).find((i) => i.naturalWidth === 40)!.src).toMatch(/^data:image\/svg\+xml;base64,/);
+    await expect
+      .poll(async () => (await imgs(page)).filter((i) => i.naturalWidth === 40).length)
+      .toBeGreaterThanOrEqual(1);
+    expect((await imgs(page)).find((i) => i.naturalWidth === 40)!.src).toMatch(
+      /^data:image\/svg\+xml;base64,/,
+    );
     // スクリプトは動いていない（動けば window.__svgScript が立つ）。iframe・object・embed・a は無い（SVG を文書として開く経路が無い）。
-    expect(await page.evaluate(() => (window as unknown as { __svgScript?: number }).__svgScript)).toBeUndefined();
-    expect(await page.locator("dialog#soda-ask-dialog iframe, dialog#soda-ask-dialog object, dialog#soda-ask-dialog embed").count()).toBe(0);
-    expect(await page.locator("ask-form").evaluate((f) => f.shadowRoot!.querySelectorAll("iframe, object, embed, a[href]").length)).toBe(0);
+    expect(
+      await page.evaluate(() => (window as unknown as { __svgScript?: number }).__svgScript),
+    ).toBeUndefined();
+    expect(
+      await page
+        .locator(
+          "dialog#soda-ask-dialog iframe, dialog#soda-ask-dialog object, dialog#soda-ask-dialog embed",
+        )
+        .count(),
+    ).toBe(0);
+    expect(
+      await page
+        .locator("ask-form")
+        .evaluate((f) => f.shadowRoot!.querySelectorAll("iframe, object, embed, a[href]").length),
+    ).toBe(0);
     expect((await violations()).slice(baseline)).toEqual([]);
     await page.keyboard.press("Control+Enter");
     await run.done;
@@ -139,7 +223,10 @@ test("SVG は <img> で描かれ、中のスクリプトは動かない（AC5）
   }
 });
 
-test("負の対照: 存在しない・.png の名のテキスト・/etc/passwd へのリンク・許可外の拡張子・相対でない参照以外は、窓にも画面にも出さず終了コード 2（AC3）", async ({ page, appServer }) => {
+test("負の対照: 存在しない・.png の名のテキスト・/etc/passwd へのリンク・許可外の拡張子・相対でない参照以外は、窓にも画面にも出さず終了コード 2（AC3）", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const p1 = await setup(page, appServer);
@@ -155,7 +242,11 @@ test("負の対照: 存在しない・.png の名のテキスト・/etc/passwd �
       ["file:", "file:///etc/passwd", /image must be/],
     ];
     for (const [name, image, re] of cases) {
-      const r = await (await runAsk(appServer, p1, { questions: [{ id: "q", label: "Q", options: [{ value: "a", image }] }] })).done;
+      const r = await (
+        await runAsk(appServer, p1, {
+          questions: [{ id: "q", label: "Q", options: [{ value: "a", image }] }],
+        })
+      ).done;
       expect(r.code, name).toBe(2);
       expect(r.stderr, name).toMatch(re);
       expect(r.stdout, name).toBe("");
@@ -167,7 +258,10 @@ test("負の対照: 存在しない・.png の名のテキスト・/etc/passwd �
   }
 });
 
-test("負の対照: 上限を超える定義は、窓へ落ちず理由つきのエラー（終了コード 2）になり、ダイアログは出ない。上限ちょうどは通る（AC4）", async ({ page, appServer }) => {
+test("負の対照: 上限を超える定義は、窓へ落ちず理由つきのエラー（終了コード 2）になり、ダイアログは出ない。上限ちょうどは通る（AC4）", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const p1 = await setup(page, appServer);
@@ -175,7 +269,11 @@ test("負の対照: 上限を超える定義は、窓へ落ちず理由つきの
     const big = media.path("big.png");
     await media.write("big.png", makePng(2, 2));
     await truncate(big, 8 * 1024 * 1024 + 1);
-    const r1 = await (await runAsk(appServer, p1, { questions: [{ id: "q", label: "Q", options: [{ value: "a", image: big }] }] })).done;
+    const r1 = await (
+      await runAsk(appServer, p1, {
+        questions: [{ id: "q", label: "Q", options: [{ value: "a", image: big }] }],
+      })
+    ).done;
     expect([r1.code, r1.stderr]).toEqual([2, expect.stringMatching(/larger than 8388608/)]);
     // 合計 24 MiB 超（8 MiB を 4 つ）
     const files: string[] = [];
@@ -185,12 +283,24 @@ test("負の対照: 上限を超える定義は、窓へ落ちず理由つきの
       await truncate(f, 8 * 1024 * 1024);
       files.push(f);
     }
-    const r2 = await (await runAsk(appServer, p1, { questions: [{ id: "q", label: "Q", options: files.map((f, i) => ({ value: String(i), image: f })) }] })).done;
+    const r2 = await (
+      await runAsk(appServer, p1, {
+        questions: [
+          { id: "q", label: "Q", options: files.map((f, i) => ({ value: String(i), image: f })) },
+        ],
+      })
+    ).done;
     expect([r2.code, r2.stderr]).toEqual([2, expect.stringMatching(/in total/)]);
     // 33 個（サーバが上限ちょうどの 32 個を通すことは AskMedia の単体テストが見ている）
     const many: string[] = [];
     for (let i = 0; i < 33; i++) many.push(await media.write(`n${i}.png`, makePng(1 + i, 1)));
-    const r3 = await (await runAsk(appServer, p1, { questions: [{ id: "q", label: "Q", options: many.map((f, i) => ({ value: String(i), image: f })) }] })).done;
+    const r3 = await (
+      await runAsk(appServer, p1, {
+        questions: [
+          { id: "q", label: "Q", options: many.map((f, i) => ({ value: String(i), image: f })) },
+        ],
+      })
+    ).done;
     expect([r3.code, r3.stderr]).toEqual([2, expect.stringMatching(/more than 32/)]);
     await expect(dialog(page)).toHaveCount(0);
   } finally {
@@ -210,7 +320,10 @@ test.describe("外部 URL の画像（偽の取得を差し替え）", () => {
   };
   test.use({ askImageFetcher: fetcher });
 
-  test("サーバが取った画像が data: で出て、ブラウザは画像の取得先へリクエストしない。失敗した画像は画像なしで出て件数が固定の行に出る（AC12・AC13）", async ({ page, appServer }) => {
+  test("サーバが取った画像が data: で出て、ブラウザは画像の取得先へリクエストしない。失敗した画像は画像なしで出て件数が固定の行に出る（AC12・AC13）", async ({
+    page,
+    appServer,
+  }) => {
     fetched.length = 0;
     const requested: string[] = [];
     page.on("request", (r) => void requested.push(r.url()));
@@ -218,14 +331,33 @@ test.describe("外部 URL の画像（偽の取得を差し替え）", () => {
     const p1 = await setup(page, appServer);
     const baseline = (await violations()).length;
     const run = await runAsk(appServer, p1, {
-      questions: [{ id: "q", label: "Q", default: "a", options: [{ value: "a", label: "A", image: "https://img.example.test/a.png" }, { value: "b", label: "B", image: "https://img.example.test/gone.png" }] }],
+      questions: [
+        {
+          id: "q",
+          label: "Q",
+          default: "a",
+          options: [
+            { value: "a", label: "A", image: "https://img.example.test/a.png" },
+            { value: "b", label: "B", image: "https://img.example.test/gone.png" },
+          ],
+        },
+      ],
     });
     await expect(dialog(page)).toBeVisible();
-    await expect.poll(async () => (await imgs(page)).filter((i) => i.naturalWidth === 30).length).toBeGreaterThanOrEqual(1);
-    expect((await imgs(page)).find((i) => i.naturalWidth === 30)!.currentSrc).toMatch(/^data:image\/png;base64,/);
-    await expect(page.locator("[data-ask-warnings]")).toHaveText("画像 1 件を取得できませんでした（プレビューなしで出しています）");
+    await expect
+      .poll(async () => (await imgs(page)).filter((i) => i.naturalWidth === 30).length)
+      .toBeGreaterThanOrEqual(1);
+    expect((await imgs(page)).find((i) => i.naturalWidth === 30)!.currentSrc).toMatch(
+      /^data:image\/png;base64,/,
+    );
+    await expect(page.locator("[data-ask-warnings]")).toHaveText(
+      "画像 1 件を取得できませんでした（プレビューなしで出しています）",
+    );
     // サーバ（soda）が取りに行った。ブラウザは取得先へ何も出していない。
-    expect(fetched.sort()).toEqual(["https://img.example.test/a.png", "https://img.example.test/gone.png"]);
+    expect(fetched.sort()).toEqual([
+      "https://img.example.test/a.png",
+      "https://img.example.test/gone.png",
+    ]);
     expect(requested.filter((u) => u.includes("img.example.test"))).toEqual([]);
     expect((await violations()).slice(baseline)).toEqual([]);
     await page.keyboard.press("Control+Enter");
@@ -233,13 +365,34 @@ test.describe("外部 URL の画像（偽の取得を差し替え）", () => {
   });
 });
 
-test("SSRF: 内部・メタデータ・ループバックの宛先の画像は、実物の取得が接続せずに拒否し、画像なしで出る（AC14）", async ({ page, appServer }) => {
+test("SSRF: 内部・メタデータ・ループバックの宛先の画像は、実物の取得が接続せずに拒否し、画像なしで出る（AC14）", async ({
+  page,
+  appServer,
+}) => {
   const p1 = await setup(page, appServer);
-  const targets = ["https://127.0.0.1/a.png", "https://169.254.169.254/latest/meta-data/x.png", "https://10.0.0.1/a.png", "https://[::1]/a.png", "https://localhost/a.png", "http://example.com/a.png"];
+  const targets = [
+    "https://127.0.0.1/a.png",
+    "https://169.254.169.254/latest/meta-data/x.png",
+    "https://10.0.0.1/a.png",
+    "https://[::1]/a.png",
+    "https://localhost/a.png",
+    "http://example.com/a.png",
+  ];
   const https = targets.filter((t) => t.startsWith("https:"));
-  const run = await runAsk(appServer, p1, { questions: [{ id: "q", label: "Q", default: "o0", options: https.map((u, i) => ({ value: `o${i}`, label: `O${i}`, image: u })) }] });
+  const run = await runAsk(appServer, p1, {
+    questions: [
+      {
+        id: "q",
+        label: "Q",
+        default: "o0",
+        options: https.map((u, i) => ({ value: `o${i}`, label: `O${i}`, image: u })),
+      },
+    ],
+  });
   await expect(dialog(page)).toBeVisible();
-  await expect(page.locator("[data-ask-warnings]")).toHaveText(`画像 ${https.length} 件を取得できませんでした（プレビューなしで出しています）`);
+  await expect(page.locator("[data-ask-warnings]")).toHaveText(
+    `画像 ${https.length} 件を取得できませんでした（プレビューなしで出しています）`,
+  );
   expect((await imgs(page)).filter((i) => i.src !== "")).toEqual([]);
   await page.keyboard.press("Control+Enter");
   expect((await run.done).json).toMatchObject({ status: "answered" });
@@ -252,7 +405,19 @@ test("SSRF: 内部・メタデータ・ループバックの宛先の画像は�
   await new Promise<void>((r) => listener.listen(0, "127.0.0.1", r));
   try {
     const port = (listener.address() as { port: number }).port;
-    const run2 = await runAsk(appServer, p1, { questions: [{ id: "q", label: "Q", default: "a", options: [{ value: "a", image: `https://127.0.0.1:${port}/a.png` }, { value: "b", image: `https://localhost:${port}/a.png` }] }] });
+    const run2 = await runAsk(appServer, p1, {
+      questions: [
+        {
+          id: "q",
+          label: "Q",
+          default: "a",
+          options: [
+            { value: "a", image: `https://127.0.0.1:${port}/a.png` },
+            { value: "b", image: `https://localhost:${port}/a.png` },
+          ],
+        },
+      ],
+    });
     // 443 以外のポートは定義の検査で断られる（終了コード 2）＝接続の前
     expect((await run2.done).code).toBe(2);
     await new Promise((r) => setTimeout(r, 300));
@@ -261,16 +426,40 @@ test("SSRF: 内部・メタデータ・ループバックの宛先の画像は�
     listener.close();
   }
   // http:// は定義の誤り（終了コード 2）
-  const bad = await (await runAsk(appServer, p1, { questions: [{ id: "q", label: "Q", options: [{ value: "a", image: "http://example.com/a.png" }] }] })).done;
+  const bad = await (
+    await runAsk(appServer, p1, {
+      questions: [
+        { id: "q", label: "Q", options: [{ value: "a", image: "http://example.com/a.png" }] },
+      ],
+    })
+  ).done;
   expect(bad.code).toBe(2);
 });
 
-test("sodactl ask --features は、sodactl とサーバの機能と上限を 1 行の JSON で返す（AC18）", async ({ appServer }) => {
-  const r = await (await runAsk(appServer, (await appServer.openClient()).helloSnapshot()!.panes[0]!.id, "", ["--features"])).done;
+test("sodactl ask --features は、sodactl とサーバの機能と上限を 1 行の JSON で返す（AC18）", async ({
+  appServer,
+}) => {
+  const r = await (
+    await runAsk(appServer, (await appServer.openClient()).helloSnapshot()!.panes[0]!.id, "", [
+      "--features",
+    ])
+  ).done;
   expect(r.code).toBe(0);
   expect(r.json).toMatchObject({
-    sodactl: expect.arrayContaining(["media", "view", "types:edit", "types:rank", "types:table", "remote-image"]),
-    limits: { fileBytes: 8 * 1024 * 1024, totalBytes: 24 * 1024 * 1024, files: 32, serverBytes: 128 * 1024 * 1024 },
+    sodactl: expect.arrayContaining([
+      "media",
+      "view",
+      "types:edit",
+      "types:rank",
+      "types:table",
+      "remote-image",
+    ]),
+    limits: {
+      fileBytes: 8 * 1024 * 1024,
+      totalBytes: 24 * 1024 * 1024,
+      files: 32,
+      serverBytes: 128 * 1024 * 1024,
+    },
     server: { features: expect.arrayContaining(["media", "view"]), limits: { files: 32 } },
   });
 });

@@ -11,7 +11,14 @@ import { sniffMedia } from "./mediaSniff.js";
  * （DNS リバインディング対策）・リダイレクトは回数を数えて毎回検査し直す・Cookie などは付けない・時間とサイズに上限。
  */
 
-const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/svg+xml"]);
+const ALLOWED_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "image/svg+xml",
+]);
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
 
 export interface RemoteResponse {
@@ -129,7 +136,9 @@ export function isBlockedAddress(addr: string): boolean {
  * 実物の 1 回の要求（`https.request`）を作る。`ca` はテストが自己署名の証明書を信用させるためだけの口（本番は使わない）。
  * 接続先は `address` に固定する（`lookup` が検査済みのアドレスを返す＝接続時に名前解決をやり直さない）。SNI・証明書の検証は元のホスト名（IP リテラルには SNI を付けない）。
  */
-export function makeRealRequest(opts: { ca?: string } = {}): NonNullable<RemoteImageFetcherOptions["request"]> {
+export function makeRealRequest(
+  opts: { ca?: string } = {},
+): NonNullable<RemoteImageFetcherOptions["request"]> {
   return (args) =>
     new Promise((resolve, reject) => {
       const { url, address, family, headers, signal } = args;
@@ -148,11 +157,20 @@ export function makeRealRequest(opts: { ca?: string } = {}): NonNullable<RemoteI
           signal,
           lookup: (_hostname, lookupOpts, cb) => {
             const wantsAll = (lookupOpts as { all?: boolean } | undefined)?.all === true;
-            if (wantsAll) (cb as (e: null, a: { address: string; family: number }[]) => void)(null, [{ address, family }]);
+            if (wantsAll)
+              (cb as (e: null, a: { address: string; family: number }[]) => void)(null, [
+                { address, family },
+              ]);
             else cb(null, address, family);
           },
         },
-        (res) => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: res, destroy: () => res.destroy() }),
+        (res) =>
+          resolve({
+            status: res.statusCode ?? 0,
+            headers: res.headers,
+            body: res,
+            destroy: () => res.destroy(),
+          }),
       );
       req.on("error", reject);
       req.end();
@@ -180,7 +198,10 @@ export class RemoteImageFetcher implements ImageFetcher {
     this.concurrency = opts.concurrency ?? 4;
   }
 
-  async fetchImage(urlText: string, signal: AbortSignal): Promise<{ bytes: Buffer; contentType: string }> {
+  async fetchImage(
+    urlText: string,
+    signal: AbortSignal,
+  ): Promise<{ bytes: Buffer; contentType: string }> {
     await this.acquire();
     try {
       const all = AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]);
@@ -201,16 +222,24 @@ export class RemoteImageFetcher implements ImageFetcher {
 
   private release(): void {
     const next = this.waiting.shift();
-    if (next) next(); // 枠を渡す（active は減らさない）
+    if (next)
+      next(); // 枠を渡す（active は減らさない）
     else this.active--;
   }
 
-  private async run(urlText: string, signal: AbortSignal): Promise<{ bytes: Buffer; contentType: string }> {
+  private async run(
+    urlText: string,
+    signal: AbortSignal,
+  ): Promise<{ bytes: Buffer; contentType: string }> {
     let url = new URL(urlText);
     for (let hop = 0; ; hop++) {
       const addrs = await this.resolve(url, signal);
       // 付けるのはこれだけ（Cookie・Authorization・Referer・Origin は付けない）。
-      const headers = { Accept: "image/png,image/jpeg,image/gif,image/webp,image/avif,image/svg+xml", "User-Agent": "sodashitsu-ask", "Accept-Encoding": "identity" };
+      const headers = {
+        Accept: "image/png,image/jpeg,image/gif,image/webp,image/avif,image/svg+xml",
+        "User-Agent": "sodashitsu-ask",
+        "Accept-Encoding": "identity",
+      };
       // 検査を通ったアドレスを順に試す（IPv6 の経路が無い環境で IPv4 へ回る）。接続できなかったときだけ次へ。
       let res: RemoteResponse | undefined;
       let lastError: unknown;
@@ -223,7 +252,8 @@ export class RemoteImageFetcher implements ImageFetcher {
           signal.throwIfAborted();
         }
       }
-      if (res === undefined) throw lastError instanceof Error ? lastError : new Error("connection failed");
+      if (res === undefined)
+        throw lastError instanceof Error ? lastError : new Error("connection failed");
       if (REDIRECT_STATUS.has(res.status)) {
         res.destroy();
         if (hop >= this.maxRedirects) throw new Error("too many redirects");
@@ -236,7 +266,10 @@ export class RemoteImageFetcher implements ImageFetcher {
         res.destroy();
         throw new Error(`unexpected status ${res.status}`);
       }
-      const contentType = (first(res.headers["content-type"]) ?? "").split(";")[0]!.trim().toLowerCase();
+      const contentType = (first(res.headers["content-type"]) ?? "")
+        .split(";")[0]!
+        .trim()
+        .toLowerCase();
       if (!ALLOWED_TYPES.has(contentType)) {
         res.destroy();
         throw new Error("unsupported content type");
@@ -258,20 +291,32 @@ export class RemoteImageFetcher implements ImageFetcher {
       }
       const bytes = Buffer.concat(chunks);
       const sniffed = sniffMedia(bytes);
-      if (sniffed === null || sniffed.media !== "image" || sniffed.mime !== contentType) throw new Error("content does not match the content type");
+      if (sniffed === null || sniffed.media !== "image" || sniffed.mime !== contentType)
+        throw new Error("content does not match the content type");
       return { bytes, contentType };
     }
   }
 
   /** 接続してよい先か検査し、接続してよいアドレスの一覧を返す（名前解決も時間の上限・中止の対象）。 */
-  private async resolve(url: URL, signal: AbortSignal): Promise<{ address: string; family: 4 | 6 }[]> {
+  private async resolve(
+    url: URL,
+    signal: AbortSignal,
+  ): Promise<{ address: string; family: 4 | 6 }[]> {
     if (url.protocol !== "https:") throw new Error("only https is allowed");
-    if (url.username !== "" || url.password !== "") throw new Error("credentials in the URL are not allowed");
+    if (url.username !== "" || url.password !== "")
+      throw new Error("credentials in the URL are not allowed");
     if (url.port !== "" && url.port !== "443") throw new Error("only port 443 is allowed");
-    const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase().replace(/\.$/, "");
-    if (host === "" || host === "localhost" || host.endsWith(".localhost")) throw new Error("blocked host");
+    const host = url.hostname
+      .replace(/^\[|\]$/g, "")
+      .toLowerCase()
+      .replace(/\.$/, "");
+    if (host === "" || host === "localhost" || host.endsWith(".localhost"))
+      throw new Error("blocked host");
     const literal = isIP(host);
-    const addrs = literal !== 0 ? [{ address: host, family: literal }] : await raceAbort(this.lookup(host), signal);
+    const addrs =
+      literal !== 0
+        ? [{ address: host, family: literal }]
+        : await raceAbort(this.lookup(host), signal);
     if (addrs.length === 0) throw new Error("host not found");
     for (const a of addrs) if (isBlockedAddress(a.address)) throw new Error("blocked address");
     return addrs.map((a) => ({ address: a.address, family: a.family === 6 ? 6 : 4 }));

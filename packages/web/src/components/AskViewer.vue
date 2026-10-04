@@ -4,7 +4,10 @@ export const ASK_VIEW_SANDBOX = "allow-scripts";
 /** 枠から親へ取り次ぐキー（枠のページ `keys.js` と同じ 3 種）。 */
 export type AskViewKey = "cancel" | "submit" | "prev" | "next";
 /** 枠の静的ページ（サーバの `/ask-view/*`。専用のヘッダ）。 */
-export const ASK_VIEW_PAGES = { markdown: "/ask-view/markdown.html", html: "/ask-view/html.html" } as const;
+export const ASK_VIEW_PAGES = {
+  markdown: "/ask-view/markdown.html",
+  html: "/ask-view/html.html",
+} as const;
 /** 枠から来たメッセージ（`event.data`）を、取り次ぐキーに読む。形が違う・取り次ぎの 3 種でなければ null。 */
 export function readViewKey(data: unknown): AskViewKey | null {
   if (typeof data !== "object" || data === null) return null;
@@ -40,11 +43,15 @@ const active = ref(0);
 const frame = ref<HTMLIFrameElement | null>(null);
 const item = computed<AskViewLoaded | undefined>(() => props.items[active.value]);
 const label = computed(() => `pane『${props.paneName}』の成果物（隔離表示）`);
-const pageOf = (kind: AskViewLoaded["kind"]): string | null => (kind === "markdown" || kind === "html" ? ASK_VIEW_PAGES[kind] : null);
+const pageOf = (kind: AskViewLoaded["kind"]): string | null =>
+  kind === "markdown" || kind === "html" ? ASK_VIEW_PAGES[kind] : null;
 
-watch(() => props.items, () => {
-  active.value = 0;
-});
+watch(
+  () => props.items,
+  () => {
+    active.value = 0;
+  },
+);
 
 /** 枠が読み込めた（`ready` を送ってきた）ら本文を渡す。`event.source` が自分の iframe のときだけ受ける（ほかの窓・ほかの枠のメッセージは無視）。 */
 function onMessage(ev: MessageEvent): void {
@@ -63,7 +70,12 @@ function onMessage(ev: MessageEvent): void {
   // 決定は、利用者が実際に枠の中で操作した直後だけ受ける（`navigator.userActivation`。キー・クリックなどの操作で、枠の祖先の文書にも立つ）。
   // 枠の中のスクリプトが操作なしに `postMessage` するだけで、既定のままの回答が確定するのを防ぐ。Esc は操作の扱いにならない（取り消しは害が小さいので許す）。
   // 対応していない環境では決定を取り次がない（［決定］・質問側のキーで操作できる）。
-  if (key === "submit" && (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive !== true) return;
+  if (
+    key === "submit" &&
+    (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation
+      ?.isActive !== true
+  )
+    return;
   emit("key", key);
 }
 onMounted(() => window.addEventListener("message", onMessage));
@@ -75,18 +87,35 @@ function pick(i: number): void {
 /** タブの矢印キー（← →・Home・End）。 */
 function onTabKey(ev: KeyboardEvent): void {
   const n = props.items.length;
-  const to = ev.key === "ArrowRight" ? (active.value + 1) % n : ev.key === "ArrowLeft" ? (active.value + n - 1) % n : ev.key === "Home" ? 0 : ev.key === "End" ? n - 1 : -1;
+  const to =
+    ev.key === "ArrowRight"
+      ? (active.value + 1) % n
+      : ev.key === "ArrowLeft"
+        ? (active.value + n - 1) % n
+        : ev.key === "Home"
+          ? 0
+          : ev.key === "End"
+            ? n - 1
+            : -1;
   if (to < 0) return;
   ev.preventDefault();
   active.value = to;
-  void nextTick(() => (document.getElementById(`ask-view-tab-${to}`) as HTMLElement | null)?.focus());
+  void nextTick(() =>
+    (document.getElementById(`ask-view-tab-${to}`) as HTMLElement | null)?.focus(),
+  );
 }
 </script>
 
 <template>
   <section class="ask-viewer" aria-label="成果物">
     <p class="ask-viewer-label" data-ask-view-label>{{ label }}</p>
-    <div v-if="items.length > 1" class="ask-viewer-tabs" role="tablist" aria-label="成果物の一覧" @keydown="onTabKey">
+    <div
+      v-if="items.length > 1"
+      class="ask-viewer-tabs"
+      role="tablist"
+      aria-label="成果物の一覧"
+      @keydown="onTabKey"
+    >
       <button
         v-for="(it, i) in items"
         :id="`ask-view-tab-${i}`"
@@ -98,12 +127,22 @@ function onTabKey(ev: KeyboardEvent): void {
         :tabindex="i === active ? 0 : -1"
         data-ask-view-tab
         @click="pick(i)"
-      >{{ it.title }}</button>
+      >
+        {{ it.title }}
+      </button>
     </div>
     <div class="ask-viewer-stage" role="tabpanel" data-ask-view-stage>
       <template v-if="item">
-        <pre v-if="item.kind === 'text'" class="ask-viewer-text" tabindex="0" data-ask-view-text>{{ item.text }}</pre>
-        <img v-else-if="item.kind === 'image'" class="ask-viewer-image" :src="item.url" alt="" data-ask-view-image />
+        <pre v-if="item.kind === 'text'" class="ask-viewer-text" tabindex="0" data-ask-view-text>{{
+          item.text
+        }}</pre>
+        <img
+          v-else-if="item.kind === 'image'"
+          class="ask-viewer-image"
+          :src="item.url"
+          alt=""
+          data-ask-view-image
+        />
         <iframe
           v-else
           ref="frame"
@@ -180,7 +219,12 @@ function onTabKey(ev: KeyboardEvent): void {
   padding: 0.8em 1em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font: 13px/1.6 ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace;
+  font:
+    13px/1.6 ui-monospace,
+    "Cascadia Mono",
+    Consolas,
+    Menlo,
+    monospace;
   flex: 1 1 auto;
 }
 .ask-viewer-image {

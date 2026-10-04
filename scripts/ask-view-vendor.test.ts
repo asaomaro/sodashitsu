@@ -11,7 +11,10 @@ import { describe, expect, it } from "vitest";
 const DIR = join(import.meta.dirname, "..", "packages", "web", "public", "ask-view");
 const VENDOR = join(DIR, "vendor");
 interface Source {
-  files: Record<string, { package: string; version: string; license: string; license_file: string; sha256: string }>;
+  files: Record<
+    string,
+    { package: string; version: string; license: string; license_file: string; sha256: string }
+  >;
 }
 const source = JSON.parse(readFileSync(join(VENDOR, "SOURCE.json"), "utf8")) as Source;
 const sha = (p: string): string => createHash("sha256").update(readFileSync(p)).digest("hex");
@@ -22,14 +25,18 @@ describe("ask-view/vendor", () => {
     for (const [name, info] of Object.entries(source.files)) {
       expect(sha(join(VENDOR, name)), name).toBe(info.sha256);
       expect(info.license).toBe("MIT");
-      expect(readFileSync(join(VENDOR, info.license_file), "utf8")).toMatch(/MIT|Permission is hereby granted/);
+      expect(readFileSync(join(VENDOR, info.license_file), "utf8")).toMatch(
+        /MIT|Permission is hereby granted/,
+      );
     }
   });
 
   it("隔離表示のページ・スクリプトは、外への通信・親の操作の API を呼ばない（fetch・XMLHttpRequest・WebSocket・top・opener・localStorage）。インラインのスクリプトを持たない", () => {
     for (const f of ["markdown.js", "html.js", "keys.js"]) {
       const code = readFileSync(join(DIR, f), "utf8").replace(/\/\/.*$/gm, "");
-      expect(code, f).not.toMatch(/\bfetch\s*\(|XMLHttpRequest|WebSocket|\bwindow\.top\b|\bopener\b|localStorage|sessionStorage|document\.cookie|\beval\s*\(|new Function/);
+      expect(code, f).not.toMatch(
+        /\bfetch\s*\(|XMLHttpRequest|WebSocket|\bwindow\.top\b|\bopener\b|localStorage|sessionStorage|document\.cookie|\beval\s*\(|new Function/,
+      );
     }
     for (const f of ["markdown.html", "html.html"]) {
       const html = readFileSync(join(DIR, f), "utf8");
@@ -45,7 +52,12 @@ describe("ask-view/vendor", () => {
     for (const f of ["markdown.js", "html.js"]) {
       const code = readFileSync(join(DIR, f), "utf8");
       expect(code).toMatch(/ev\.source !== parent/);
-      expect([...code.matchAll(/postMessage\(\{ type: '([a-z]+)'/g)].map((m) => m[1]).every((t) => ["ready", "rendered"].includes(t!)), f).toBe(true);
+      expect(
+        [...code.matchAll(/postMessage\(\{ type: '([a-z]+)'/g)]
+          .map((m) => m[1])
+          .every((t) => ["ready", "rendered"].includes(t!)),
+        f,
+      ).toBe(true);
     }
     expect(readFileSync(join(DIR, "keys.js"), "utf8")).toMatch(/type: 'key'/);
   });

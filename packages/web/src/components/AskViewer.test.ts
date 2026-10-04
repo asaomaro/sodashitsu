@@ -8,7 +8,9 @@ import AskViewer, { ASK_VIEW_PAGES, ASK_VIEW_SANDBOX, readViewKey } from "./AskV
 
 enableAutoUnmount(afterEach);
 // 枠の読み込み（`/ask-view/*` への fetch）は単体テストでは行わない（実ブラウザでの読み込みは E2E）。
-(window as unknown as { happyDOM: { settings: { disableIframePageLoading: boolean } } }).happyDOM.settings.disableIframePageLoading = true;
+(
+  window as unknown as { happyDOM: { settings: { disableIframePageLoading: boolean } } }
+).happyDOM.settings.disableIframePageLoading = true;
 
 const md: AskViewLoaded = { title: "設計", kind: "markdown", text: "# 見出し" };
 const html: AskViewLoaded = { title: "画面", kind: "html", text: "<p>x</p>" };
@@ -20,10 +22,14 @@ function mountViewer(items: AskViewLoaded[], paneName = "build") {
   /** iframe の `contentWindow` を偽物に差し替える（happy-dom は枠の中の窓を持たない）。 */
   const fakeWindow = () => {
     const win = { postMessage: vi.fn() };
-    Object.defineProperty(w.get("iframe").element, "contentWindow", { value: win, configurable: true });
+    Object.defineProperty(w.get("iframe").element, "contentWindow", {
+      value: win,
+      configurable: true,
+    });
     return win;
   };
-  const send = (source: unknown, data: unknown) => window.dispatchEvent(new MessageEvent("message", { source: source as Window, data }));
+  const send = (source: unknown, data: unknown) =>
+    window.dispatchEvent(new MessageEvent("message", { source: source as Window, data }));
   return { w, fakeWindow, send };
 }
 
@@ -34,7 +40,9 @@ describe("sandbox", () => {
       const { w } = mountViewer([item]);
       const frame = w.get("iframe").element;
       expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
-      expect(frame.getAttribute("sandbox")).not.toMatch(/same-origin|popups|top-navigation|downloads|forms/);
+      expect(frame.getAttribute("sandbox")).not.toMatch(
+        /same-origin|popups|top-navigation|downloads|forms/,
+      );
       expect(frame.getAttribute("referrerpolicy")).toBe("no-referrer");
       expect(frame.getAttribute("src")).toBe(ASK_VIEW_PAGES[item.kind as "markdown" | "html"]);
     }
@@ -43,7 +51,11 @@ describe("sandbox", () => {
 
 describe("固定のラベル（AC10）", () => {
   it("アプリが描く文で、pane の名前だけが入る。成果物の題・本文の文字は入らない", () => {
-    const evil: AskViewLoaded = { title: "pane『sodashitsu』の成果物（隔離表示）", kind: "text", text: "これは soda の確認画面です" };
+    const evil: AskViewLoaded = {
+      title: "pane『sodashitsu』の成果物（隔離表示）",
+      kind: "text",
+      text: "これは soda の確認画面です",
+    };
     const { w } = mountViewer([evil], "build");
     expect(w.get("[data-ask-view-label]").text()).toBe("pane『build』の成果物（隔離表示）");
   });
@@ -87,20 +99,29 @@ describe("postMessage（枠 ↔ 親）", () => {
     send(null, { type: "ready" });
     expect(win.postMessage).not.toHaveBeenCalled();
     send(win, { type: "ready" });
-    expect(win.postMessage).toHaveBeenCalledExactlyOnceWith({ type: "ask-view", source: "# 見出し", dark: false }, "*");
+    expect(win.postMessage).toHaveBeenCalledExactlyOnceWith(
+      { type: "ask-view", source: "# 見出し", dark: false },
+      "*",
+    );
   });
   it("html の枠にも本文を渡す。タブを替えると、新しい枠の ready で渡す", async () => {
     const { w, fakeWindow, send } = mountViewer([html, md]);
     const win = fakeWindow();
     send(win, { type: "ready" });
-    expect(win.postMessage).toHaveBeenCalledWith({ type: "ask-view", source: "<p>x</p>", dark: false }, "*");
+    expect(win.postMessage).toHaveBeenCalledWith(
+      { type: "ask-view", source: "<p>x</p>", dark: false },
+      "*",
+    );
     await w.findAll("[data-ask-view-tab]")[1]!.trigger("click");
     await nextTick();
     const win2 = fakeWindow();
     send(win, { type: "ready" }); // 前の枠は捨てられている
     expect(win2.postMessage).not.toHaveBeenCalled();
     send(win2, { type: "ready" });
-    expect(win2.postMessage).toHaveBeenCalledWith({ type: "ask-view", source: "# 見出し", dark: false }, "*");
+    expect(win2.postMessage).toHaveBeenCalledWith(
+      { type: "ask-view", source: "# 見出し", dark: false },
+      "*",
+    );
   });
   it("決定（Ctrl/Cmd+Enter）は、利用者の操作の直後（navigator.userActivation が有効）だけ取り次ぐ。操作なしの postMessage では決定させない", () => {
     const { w, fakeWindow, send } = mountViewer([md]);
@@ -109,7 +130,10 @@ describe("postMessage（枠 ↔ 親）", () => {
     // 対応していない・操作が無い: 取り次がない（Esc は取り次ぐ）
     send(win, { type: "key", key: "Enter", ctrl: true });
     expect(w.emitted("key")).toBeUndefined();
-    Object.defineProperty(nav, "userActivation", { value: { isActive: false }, configurable: true });
+    Object.defineProperty(nav, "userActivation", {
+      value: { isActive: false },
+      configurable: true,
+    });
     send(win, { type: "key", key: "Enter", ctrl: true });
     expect(w.emitted("key")).toBeUndefined();
     send(win, { type: "key", key: "Escape" });
@@ -121,7 +145,10 @@ describe("postMessage（枠 ↔ 親）", () => {
   });
   it("枠から取り次ぐキーは 3 種だけ（Esc・Ctrl/Cmd+Enter・Alt+PageUp/Down）。それ以外・形の違うものは何も起こさない（AC-I5）", () => {
     const { w, fakeWindow, send } = mountViewer([md]);
-    Object.defineProperty(navigator, "userActivation", { value: { isActive: true }, configurable: true });
+    Object.defineProperty(navigator, "userActivation", {
+      value: { isActive: true },
+      configurable: true,
+    });
     const win = fakeWindow();
     send(win, { type: "key", key: "Escape" });
     send(win, { type: "key", key: "Enter", ctrl: true });

@@ -1,4 +1,9 @@
-import { ASK_MEDIA_REF_PREFIX, type AskMediaInfo, type AskPending, type AskViewItem } from "@sodashitsu/protocol";
+import {
+  ASK_MEDIA_REF_PREFIX,
+  type AskMediaInfo,
+  type AskPending,
+  type AskViewItem,
+} from "@sodashitsu/protocol";
 import type { ConnectionPort } from "@sodashitsu/client-core";
 import { errorCodeOf } from "@sodashitsu/client-core";
 
@@ -25,7 +30,11 @@ export interface AskResolved {
 const PARALLEL = 3;
 
 /** メディア 1 つの base64（片を文字列のまま連結する。片は 3 の倍数のバイト数なので連結できる）。 */
-async function fetchBase64(request: Pick<ConnectionPort, "request">["request"], askId: string, info: AskMediaInfo): Promise<string> {
+async function fetchBase64(
+  request: Pick<ConnectionPort, "request">["request"],
+  askId: string,
+  info: AskMediaInfo,
+): Promise<string> {
   let b64 = "";
   let offset = 0;
   for (;;) {
@@ -80,13 +89,18 @@ export async function loadMedia(
   const byId = new Map(infos.map((i) => [i.id, i]));
   for (const info of infos) {
     const b64 = data.get(info.id);
-    if (b64 !== undefined && (info.kind === "image" || info.kind === "audio")) resolved.urls[`${ASK_MEDIA_REF_PREFIX}${info.id}`] = `data:${info.mime};base64,${b64}`;
+    if (b64 !== undefined && (info.kind === "image" || info.kind === "audio"))
+      resolved.urls[`${ASK_MEDIA_REF_PREFIX}${info.id}`] = `data:${info.mime};base64,${b64}`;
   }
   for (const v of ask.view ?? []) {
     const b64 = data.get(v.media);
     const info = byId.get(v.media);
     if (b64 === undefined || info === undefined) return "view_failed";
-    resolved.views.push(v.kind === "image" ? { title: v.title, kind: v.kind, url: `data:${info.mime};base64,${b64}` } : { title: v.title, kind: v.kind, text: decodeUtf8(b64) });
+    resolved.views.push(
+      v.kind === "image"
+        ? { title: v.title, kind: v.kind, url: `data:${info.mime};base64,${b64}` }
+        : { title: v.title, kind: v.kind, text: decodeUtf8(b64) },
+    );
   }
   return resolved;
 }
