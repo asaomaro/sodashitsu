@@ -39,7 +39,7 @@ design.md のとおり、基準の記録（T1）→ 純関数（T2）→ 構造�
       対象: `packages/web/src/components/SettingsDialog.vue`、`packages/web/src/components/SettingsDialog.test.ts`、`packages/web/src/mobile/detect.ts`（`mobileViewportQuery` を使うだけ。変えない）
       依存: T5
       AC: AC4, AC6, AC8, AC-I3, AC-I5
-- [ ] T6: 既存の E2E の期待——`settings.spec.ts`・`key-bindings.spec.ts` の「5 節」の期待を 6 節に直す（3 件のテスト・4 か所: `settings.spec.ts:264, :271, :308` と `key-bindings.spec.ts:870-876`。題名 `settings.spec.ts:261, :304`）。直した 3 件で、「5 節」による失敗が消えること（別の原因で落ち続ける件は、原因を `decisions.md` に記録して対象外にする。requirements AC9）
+- [x] T6: 既存の E2E の期待——`settings.spec.ts`・`key-bindings.spec.ts` の「5 節」の期待を 6 節に直す（3 件のテスト・4 か所: `settings.spec.ts:264, :271, :308` と `key-bindings.spec.ts:870-876`。題名 `settings.spec.ts:261, :304`）。直した 3 件で、「5 節」による失敗が消えること（別の原因で落ち続ける件は、原因を `decisions.md` に記録して対象外にする。requirements AC9）
       対象: `packages/e2e/src/specs/settings.spec.ts`、`packages/e2e/src/specs/key-bindings.spec.ts`
       依存: なし
       AC: AC9
