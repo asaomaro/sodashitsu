@@ -28,7 +28,9 @@ const openedByButton = computed(() => {
 });
 const agent = computed(() => (target.value ? lookupAgent(target.value) : undefined));
 const subagents = computed(() => agent.value?.subagents);
-const title = computed(() => (target.value ? `サブエージェント — ${lookupPaneName(target.value)}` : "サブエージェント"));
+const title = computed(() =>
+  target.value ? `サブエージェント — ${lookupPaneName(target.value)}` : "サブエージェント",
+);
 
 watch(
   target,
@@ -69,7 +71,9 @@ function close(): void {
   if (!wasButton || paneId === undefined) return;
   void nextTick(() => {
     const css = CSS.escape(paneId);
-    const el = document.querySelector<HTMLElement>(`.sidebar-agents [data-subagent-pane="${css}"]`) ?? document.querySelector<HTMLElement>(`.sidebar-agents [data-agent-pane="${css}"]`);
+    const el =
+      document.querySelector<HTMLElement>(`.sidebar-agents [data-subagent-pane="${css}"]`) ??
+      document.querySelector<HTMLElement>(`.sidebar-agents [data-agent-pane="${css}"]`);
     el?.focus();
   });
 }
@@ -81,7 +85,13 @@ function onNativeCancel(ev: Event): void {
 </script>
 
 <template>
-  <dialog ref="dialogEl" class="subagent-dialog" aria-labelledby="subagent-dialog-title" @cancel="onNativeCancel" @click.self="close">
+  <dialog
+    ref="dialogEl"
+    class="subagent-dialog"
+    aria-labelledby="subagent-dialog-title"
+    @cancel="onNativeCancel"
+    @click.self="close"
+  >
     <h2 id="subagent-dialog-title" class="subagent-dialog-title">{{ title }}</h2>
     <SubagentList v-if="target" ref="listRef" :subagents="subagents" />
     <div class="subagent-dialog-actions">

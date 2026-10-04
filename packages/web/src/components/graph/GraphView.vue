@@ -1630,7 +1630,12 @@ function chipAria(e: EdgeView): string {
             @close="closeHistory"
             @clear-filter="history = { linkId: null }"
           />
-          <SubagentPanel v-if="subagentsKey" :key="subagentsKey" :node-key="subagentsKey" @close="closeSubagents" />
+          <SubagentPanel
+            v-if="subagentsKey"
+            :key="subagentsKey"
+            :node-key="subagentsKey"
+            @close="closeSubagents"
+          />
         </div>
       </div>
       <PaneChecklist v-if="checklistOpen" @apply="applyChecklist" @close="closeChecklist" />

@@ -23,8 +23,16 @@ defineExpose({ focus: () => listEl.value?.focus() });
 </script>
 
 <template>
-  <div ref="listEl" class="subagent-list" tabindex="0" role="list" aria-label="サブエージェントの一覧">
-    <p v-if="items.length === 0" class="subagent-list-empty">実行中のサブエージェントはありません</p>
+  <div
+    ref="listEl"
+    class="subagent-list"
+    tabindex="0"
+    role="list"
+    aria-label="サブエージェントの一覧"
+  >
+    <p v-if="items.length === 0" class="subagent-list-empty">
+      実行中のサブエージェントはありません
+    </p>
     <div v-for="item in items" :key="item.id" class="subagent-list-item" role="listitem">
       <div class="subagent-list-item-head">
         <span class="subagent-list-type">{{ item.type ?? "サブエージェント" }}</span>

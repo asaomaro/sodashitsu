@@ -49,10 +49,24 @@ function onKeydown(ev: KeyboardEvent): void {
 </script>
 
 <template>
-  <section class="subagent-panel" role="region" aria-label="サブエージェントの一覧" @keydown="onKeydown" @pointerdown.stop @wheel.stop>
+  <section
+    class="subagent-panel"
+    role="region"
+    aria-label="サブエージェントの一覧"
+    @keydown="onKeydown"
+    @pointerdown.stop
+    @wheel.stop
+  >
     <div class="subagent-panel-head">
       <h3 class="subagent-panel-heading">サブエージェント — {{ info.name }}</h3>
-      <button type="button" class="subagent-panel-close" aria-label="サブエージェントの一覧を閉じる" @click="emit('close')">×</button>
+      <button
+        type="button"
+        class="subagent-panel-close"
+        aria-label="サブエージェントの一覧を閉じる"
+        @click="emit('close')"
+      >
+        ×
+      </button>
     </div>
     <SubagentList ref="listRef" :subagents="agent?.subagents" />
   </section>

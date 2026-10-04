@@ -205,7 +205,10 @@ describe("subagents", () => {
   });
 
   it("0 件なら {count: 0, items: []}（null と区別する）", () => {
-    expect(toAgentView(loc, agent({ subagents: { count: 0, items: [] } })).subagents).toEqual({ count: 0, items: [] });
+    expect(toAgentView(loc, agent({ subagents: { count: 0, items: [] } })).subagents).toEqual({
+      count: 0,
+      items: [],
+    });
   });
 
   it("各項目は {id, type, description, background, startedAt}。分からない値は null で埋め、項目の有無を揺らさない", () => {
@@ -228,11 +231,20 @@ describe("subagents", () => {
         { id: "a2", type: null, description: null, background: null, startedAt: 6 },
       ],
     });
-    expect(Object.keys(view.subagents!.items[1]!)).toEqual(["id", "type", "description", "background", "startedAt"]);
+    expect(Object.keys(view.subagents!.items[1]!)).toEqual([
+      "id",
+      "type",
+      "description",
+      "background",
+      "startedAt",
+    ]);
   });
 
   it("background: false は false のまま（null にしない）。count は items より大きくてもそのまま", () => {
-    const view = toAgentView(loc, agent({ subagents: { count: 70, items: [{ id: "a1", background: false, startedAt: 1 }] } }));
+    const view = toAgentView(
+      loc,
+      agent({ subagents: { count: 70, items: [{ id: "a1", background: false, startedAt: 1 }] } }),
+    );
     expect(view.subagents?.count).toBe(70);
     expect(view.subagents?.items[0]?.background).toBe(false);
   });

@@ -8,7 +8,10 @@ import { useSessionStore } from "./session.js";
 // 20261004-subagent-display。一覧の対象は `{machineId, paneId}`。pane の ID はマシンをまたいで衝突するので、取り違えない。
 beforeEach(() => setActivePinia(createPinia()));
 
-const subs = (...ids: string[]) => ({ count: ids.length, items: ids.map((id) => ({ id, startedAt: 1 })) });
+const subs = (...ids: string[]) => ({
+  count: ids.length,
+  items: ids.map((id) => ({ id, startedAt: 1 })),
+});
 const agent = (over: Partial<AgentInfo> = {}): AgentInfo => ({
   instanceId: "a1",
   kind: "claude",
@@ -20,8 +23,25 @@ const agent = (over: Partial<AgentInfo> = {}): AgentInfo => ({
   since: 0,
   ...over,
 });
-const ws: Workspace = { id: "w1", label: "w1", cwd: "/", tabIds: ["t1"], activeTabId: "t1", groupId: null, git: null, autoLabel: false };
-const tab: Tab = { id: "t1", workspaceId: "w1", label: "t1", layout: { type: "pane", paneId: "p1" }, focusedPaneId: "p1", zoomedPaneId: null, sizeOwnerClientId: null };
+const ws: Workspace = {
+  id: "w1",
+  label: "w1",
+  cwd: "/",
+  tabIds: ["t1"],
+  activeTabId: "t1",
+  groupId: null,
+  git: null,
+  autoLabel: false,
+};
+const tab: Tab = {
+  id: "t1",
+  workspaceId: "w1",
+  label: "t1",
+  layout: { type: "pane", paneId: "p1" },
+  focusedPaneId: "p1",
+  zoomedPaneId: null,
+  sizeOwnerClientId: null,
+};
 const pane = (a: AgentInfo | null, over: Partial<Pane> = {}): Pane => ({
   id: "p1",
   tabId: "t1",
@@ -39,15 +59,16 @@ const pane = (a: AgentInfo | null, over: Partial<Pane> = {}): Pane => ({
   agentSession: null,
   ...over,
 });
-const remoteSnap = (a: AgentInfo | null, over: Partial<Pane> = {}): SessionSnapshot => ({
-  protocol: 1,
-  serverVersion: "t",
-  host: { os: "linux", windowsBuild: null, hostname: "remote" },
-  workspaces: [ws],
-  tabs: [tab],
-  panes: [pane(a, over)],
-  focus: { workspaceId: "w1", tabId: "t1", paneId: "p1" },
-} as unknown as SessionSnapshot);
+const remoteSnap = (a: AgentInfo | null, over: Partial<Pane> = {}): SessionSnapshot =>
+  ({
+    protocol: 1,
+    serverVersion: "t",
+    host: { os: "linux", windowsBuild: null, hostname: "remote" },
+    workspaces: [ws],
+    tabs: [tab],
+    panes: [pane(a, over)],
+    focus: { workspaceId: "w1", tabId: "t1", paneId: "p1" },
+  }) as unknown as SessionSnapshot;
 
 describe("lookupAgent / lookupPaneName", () => {
   it("選んでいるマシンの pane は session のストアから引く", () => {
@@ -73,7 +94,10 @@ describe("lookupAgent / lookupPaneName", () => {
     session.workspaceUpserted(ws);
     session.tabUpserted(tab);
     session.paneUpserted(pane(agent({ instanceId: "local-a", subagents: subs("L1") })));
-    useMachinesStore().applySummarySnapshot("m2", remoteSnap(agent({ instanceId: "remote-a", subagents: subs("R1", "R2") })));
+    useMachinesStore().applySummarySnapshot(
+      "m2",
+      remoteSnap(agent({ instanceId: "remote-a", subagents: subs("R1", "R2") })),
+    );
     expect(lookupAgent({ machineId: "local", paneId: "p1" })?.subagents?.count).toBe(1);
     expect(lookupAgent({ machineId: "m2", paneId: "p1" })?.subagents?.count).toBe(2);
     expect(lookupAgent({ machineId: "m2", paneId: "p1" })?.instanceId).toBe("remote-a");
@@ -111,7 +135,10 @@ describe("lookupAgent / lookupPaneName", () => {
   it("別のマシンの要約は、pane.agent_status_changed で subagents が更新される", () => {
     const machines = useMachinesStore();
     machines.applySummarySnapshot("m2", remoteSnap(agent()));
-    machines.applySummaryEvent("m2", { event: "pane.agent_status_changed", data: { paneId: "p1", agent: agent({ subagents: subs("x") }) } });
+    machines.applySummaryEvent("m2", {
+      event: "pane.agent_status_changed",
+      data: { paneId: "p1", agent: agent({ subagents: subs("x") }) },
+    });
     expect(lookupAgent({ machineId: "m2", paneId: "p1" })?.subagents?.count).toBe(1);
   });
 });

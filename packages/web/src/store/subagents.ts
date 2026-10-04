@@ -11,7 +11,8 @@ import { useSessionStore } from "./session.js";
  */
 export const lookupAgent: AgentLookup = (target: SubagentTarget): AgentInfo | undefined => {
   const machines = useMachinesStore();
-  if (target.machineId === machines.selectedId) return useSessionStore().panes.get(target.paneId)?.agent ?? undefined;
+  if (target.machineId === machines.selectedId)
+    return useSessionStore().panes.get(target.paneId)?.agent ?? undefined;
   return machines.summaries[target.machineId]?.panes[target.paneId]?.agent ?? undefined;
 };
 

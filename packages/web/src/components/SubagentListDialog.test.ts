@@ -19,9 +19,30 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-const ws: Workspace = { id: "w1", label: "w1", cwd: "/", tabIds: ["t1"], activeTabId: "t1", groupId: null, git: null, autoLabel: false };
-const tab: Tab = { id: "t1", workspaceId: "w1", label: "t1", layout: { type: "pane", paneId: "p1" }, focusedPaneId: "p1", zoomedPaneId: null, sizeOwnerClientId: null };
-const sub = (id: string, over: Partial<SubagentInfo> = {}): SubagentInfo => ({ id, startedAt: 1_000_000, ...over });
+const ws: Workspace = {
+  id: "w1",
+  label: "w1",
+  cwd: "/",
+  tabIds: ["t1"],
+  activeTabId: "t1",
+  groupId: null,
+  git: null,
+  autoLabel: false,
+};
+const tab: Tab = {
+  id: "t1",
+  workspaceId: "w1",
+  label: "t1",
+  layout: { type: "pane", paneId: "p1" },
+  focusedPaneId: "p1",
+  zoomedPaneId: null,
+  sizeOwnerClientId: null,
+};
+const sub = (id: string, over: Partial<SubagentInfo> = {}): SubagentInfo => ({
+  id,
+  startedAt: 1_000_000,
+  ...over,
+});
 function agentOf(subagents?: AgentInfo["subagents"], over: Partial<AgentInfo> = {}): AgentInfo {
   return {
     instanceId: "a1",
@@ -37,7 +58,23 @@ function agentOf(subagents?: AgentInfo["subagents"], over: Partial<AgentInfo> = 
   };
 }
 function paneOf(agent: AgentInfo | null, over: Partial<Pane> = {}): Pane {
-  return { id: "p1", tabId: "t1", label: null, cwd: "/", shell: "/bin/bash", cols: 80, rows: 24, status: "running", failure: null, busy: false, title: "", rightClick: "herdr", agent, agentSession: null, ...over };
+  return {
+    id: "p1",
+    tabId: "t1",
+    label: null,
+    cwd: "/",
+    shell: "/bin/bash",
+    cols: 80,
+    rows: 24,
+    status: "running",
+    failure: null,
+    busy: false,
+    title: "",
+    rightClick: "herdr",
+    agent,
+    agentSession: null,
+    ...over,
+  };
 }
 
 async function setup(subagents?: AgentInfo["subagents"]) {
@@ -46,19 +83,26 @@ async function setup(subagents?: AgentInfo["subagents"]) {
   session.workspaceUpserted(ws);
   session.tabUpserted(tab);
   session.paneUpserted(paneOf(agentOf(subagents)));
-  const wrapper = mount(SubagentListDialog, { global: { plugins: [pinia] }, attachTo: document.body });
+  const wrapper = mount(SubagentListDialog, {
+    global: { plugins: [pinia] },
+    attachTo: document.body,
+  });
   view.openDialogWithContext({ kind: "subagents", machineId: "local", paneId: "p1" });
   await wrapper.vm.$nextTick();
   await wrapper.vm.$nextTick();
   return { session, view, wrapper };
 }
-const dialogOf = (w: { get(s: string): { element: Element } }) => w.get("dialog").element as HTMLDialogElement;
+const dialogOf = (w: { get(s: string): { element: Element } }) =>
+  w.get("dialog").element as HTMLDialogElement;
 
 describe("SubagentListDialog — 表示", () => {
   it("開くと題（pane の呼び名）と、各行の種類・説明・経過時間・バックグラウンドの印を出す。先頭の一覧の領域にフォーカスが移る", async () => {
     const { wrapper } = await setup({
       count: 2,
-      items: [sub("a", { type: "Explore", description: "調べる", startedAt: 1_000_000 - 65_000 }), sub("b", { background: true, startedAt: 1_000_000 - 5000 })],
+      items: [
+        sub("a", { type: "Explore", description: "調べる", startedAt: 1_000_000 - 65_000 }),
+        sub("b", { background: true, startedAt: 1_000_000 - 5000 }),
+      ],
     });
     const dialog = dialogOf(wrapper);
     expect(dialog.open).toBe(true);
@@ -88,7 +132,10 @@ describe("SubagentListDialog — 表示", () => {
     session.workspaceUpserted(ws);
     session.tabUpserted(tab);
     session.paneUpserted(paneOf(null));
-    const wrapper = mount(SubagentListDialog, { global: { plugins: [pinia] }, attachTo: document.body });
+    const wrapper = mount(SubagentListDialog, {
+      global: { plugins: [pinia] },
+      attachTo: document.body,
+    });
     view.openDialogWithContext({ kind: "subagents", machineId: "local", paneId: "p1" });
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
@@ -97,12 +144,18 @@ describe("SubagentListDialog — 表示", () => {
   });
 
   it("起動した順（items の順）に出す", async () => {
-    const { wrapper } = await setup({ count: 3, items: [sub("c", { type: "T1" }), sub("a", { type: "T2" }), sub("b", { type: "T3" })] });
+    const { wrapper } = await setup({
+      count: 3,
+      items: [sub("c", { type: "T1" }), sub("a", { type: "T2" }), sub("b", { type: "T3" })],
+    });
     expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual(["T1", "T2", "T3"]);
   });
 
   it("count が items より多ければ、末尾に「ほか n 件」", async () => {
-    const { wrapper } = await setup({ count: 70, items: Array.from({ length: 64 }, (_, i) => sub(`a${i}`)) });
+    const { wrapper } = await setup({
+      count: 70,
+      items: Array.from({ length: 64 }, (_, i) => sub(`a${i}`)),
+    });
     expect(wrapper.findAll(".subagent-list-item")).toHaveLength(64);
     expect(wrapper.get(".subagent-list-more").text()).toBe("ほか 6 件");
   });
@@ -115,10 +168,20 @@ describe("SubagentListDialog — 表示", () => {
   });
 
   it("説明は文字として出す（HTML を書いても要素にならない）", async () => {
-    const { wrapper } = await setup({ count: 1, items: [sub("a", { description: '<img src=x onerror="window.__pwned=1"><b>太字</b>', type: "<i>t</i>" })] });
+    const { wrapper } = await setup({
+      count: 1,
+      items: [
+        sub("a", {
+          description: '<img src=x onerror="window.__pwned=1"><b>太字</b>',
+          type: "<i>t</i>",
+        }),
+      ],
+    });
     expect(wrapper.find(".subagent-list-desc img").exists()).toBe(false);
     expect(wrapper.find(".subagent-list-desc b").exists()).toBe(false);
-    expect(wrapper.get(".subagent-list-desc").text()).toBe('<img src=x onerror="window.__pwned=1"><b>太字</b>');
+    expect(wrapper.get(".subagent-list-desc").text()).toBe(
+      '<img src=x onerror="window.__pwned=1"><b>太字</b>',
+    );
     expect(wrapper.get(".subagent-list-type").text()).toBe("<i>t</i>");
   });
 
@@ -133,7 +196,9 @@ describe("SubagentListDialog — 表示", () => {
 
   it("開いている間に件数が変わると、一覧も変わる", async () => {
     const { wrapper, session } = await setup({ count: 1, items: [sub("a", { type: "A" })] });
-    session.paneUpserted(paneOf(agentOf({ count: 2, items: [sub("a", { type: "A" }), sub("b", { type: "B" })] })));
+    session.paneUpserted(
+      paneOf(agentOf({ count: 2, items: [sub("a", { type: "A" }), sub("b", { type: "B" })] })),
+    );
     await wrapper.vm.$nextTick();
     expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual(["A", "B"]);
   });
@@ -150,8 +215,16 @@ describe("SubagentListDialog — 閉じたときのフォーカスの戻り先",
     session.workspaceUpserted(ws);
     session.tabUpserted(tab);
     session.paneUpserted(paneOf(agentOf({ count: 1, items: [sub("a")] })));
-    const wrapper = mount(SubagentListDialog, { global: { plugins: [pinia] }, attachTo: document.body });
-    view.openDialogWithContext({ kind: "subagents", machineId: "local", paneId: "p1", ...(opener ? { opener } : {}) });
+    const wrapper = mount(SubagentListDialog, {
+      global: { plugins: [pinia] },
+      attachTo: document.body,
+    });
+    view.openDialogWithContext({
+      kind: "subagents",
+      machineId: "local",
+      paneId: "p1",
+      ...(opener ? { opener } : {}),
+    });
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
     return { wrapper, view };
@@ -271,15 +344,37 @@ describe("SubagentListDialog — 2 つのマシン（pane の ID が衝突）", 
       host: { os: "linux", windowsBuild: null, hostname: "h" },
       workspaces: [ws],
       tabs: [tab],
-      panes: [paneOf(agentOf({ count: 5, items: Array.from({ length: 5 }, (_, i) => sub(`l${i}`, { type: "LOCAL" })) }, { instanceId: "local-a" }), { label: "ローカルの p1" })],
+      panes: [
+        paneOf(
+          agentOf(
+            {
+              count: 5,
+              items: Array.from({ length: 5 }, (_, i) => sub(`l${i}`, { type: "LOCAL" })),
+            },
+            { instanceId: "local-a" },
+          ),
+          { label: "ローカルの p1" },
+        ),
+      ],
     } as never);
     machines.select(M2);
     const session = useSessionStore(pinia);
     session.workspaceUpserted(ws);
     session.tabUpserted(tab);
-    session.paneUpserted(paneOf(agentOf({ count: 2, items: [sub("r0", { type: "REMOTE" }), sub("r1", { type: "REMOTE" })] }, { instanceId: "m2-a" }), { label: "M2 の p1" }));
+    session.paneUpserted(
+      paneOf(
+        agentOf(
+          { count: 2, items: [sub("r0", { type: "REMOTE" }), sub("r1", { type: "REMOTE" })] },
+          { instanceId: "m2-a" },
+        ),
+        { label: "M2 の p1" },
+      ),
+    );
     const view = useViewStore(pinia);
-    const wrapper = mount(SubagentListDialog, { global: { plugins: [pinia] }, attachTo: document.body });
+    const wrapper = mount(SubagentListDialog, {
+      global: { plugins: [pinia] },
+      attachTo: document.body,
+    });
     return { wrapper, view };
   }
 
@@ -289,14 +384,23 @@ describe("SubagentListDialog — 2 つのマシン（pane の ID が衝突）", 
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
     expect(wrapper.get("h2").text()).toBe("サブエージェント — M2 の p1");
-    expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual(["REMOTE", "REMOTE"]);
+    expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual([
+      "REMOTE",
+      "REMOTE",
+    ]);
     view.closeDialog();
     await wrapper.vm.$nextTick();
     view.openDialogWithContext({ kind: "subagents", machineId: "local", paneId: "p1" });
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
     expect(wrapper.get("h2").text()).toBe("サブエージェント — ローカルの p1");
-    expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual(["LOCAL", "LOCAL", "LOCAL", "LOCAL", "LOCAL"]);
+    expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual([
+      "LOCAL",
+      "LOCAL",
+      "LOCAL",
+      "LOCAL",
+      "LOCAL",
+    ]);
     wrapper.unmount();
   });
 
@@ -306,11 +410,20 @@ describe("SubagentListDialog — 2 つのマシン（pane の ID が衝突）", 
     view.openDialogWithContext({ kind: "subagents", machineId: "local", paneId: "p1" });
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
-    machines.applySummaryEvent("local", { event: "pane.agent_status_changed", data: { paneId: "p1", agent: agentOf({ count: 1, items: [sub("x", { type: "NEW" })] }, { instanceId: "local-a" }) } });
+    machines.applySummaryEvent("local", {
+      event: "pane.agent_status_changed",
+      data: {
+        paneId: "p1",
+        agent: agentOf({ count: 1, items: [sub("x", { type: "NEW" })] }, { instanceId: "local-a" }),
+      },
+    });
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
     expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual(["NEW"]);
-    machines.applySummaryEvent("local", { event: "pane.agent_status_changed", data: { paneId: "p1", agent: agentOf(undefined, { instanceId: "replaced" }) } });
+    machines.applySummaryEvent("local", {
+      event: "pane.agent_status_changed",
+      data: { paneId: "p1", agent: agentOf(undefined, { instanceId: "replaced" }) },
+    });
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
     expect(view.dialogContext).toBeNull();
@@ -330,7 +443,10 @@ describe("SubagentListDialog — 2 つのマシン（pane の ID が衝突）", 
     } as never);
     machines.select(M2);
     const view = useViewStore(pinia);
-    const wrapper = mount(SubagentListDialog, { global: { plugins: [pinia] }, attachTo: document.body });
+    const wrapper = mount(SubagentListDialog, {
+      global: { plugins: [pinia] },
+      attachTo: document.body,
+    });
     view.openDialogWithContext({ kind: "subagents", machineId: "local", paneId: "p1" });
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();

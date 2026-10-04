@@ -83,7 +83,8 @@ export class SubagentTracker {
       try {
         if (this.closed) return;
         if (e.event === "pane.closed") this.discard(e.data.paneId);
-        else if (e.event === "pane.agent_status_changed") this.onAgentChanged(e.data.paneId, e.data.agent?.instanceId ?? null);
+        else if (e.event === "pane.agent_status_changed")
+          this.onAgentChanged(e.data.paneId, e.data.agent?.instanceId ?? null);
       } catch (err) {
         deps.logger.warn("subagents: subscriber failed", { error: String(err) });
       }
@@ -103,7 +104,8 @@ export class SubagentTracker {
   close(): void {
     this.closed = true;
     this.sub.dispose();
-    for (const pane of this.panes.values()) if (pane.timer !== undefined) this.deps.clearTimer(pane.timer);
+    for (const pane of this.panes.values())
+      if (pane.timer !== undefined) this.deps.clearTimer(pane.timer);
     this.panes.clear();
   }
 
@@ -139,8 +141,11 @@ export class SubagentTracker {
 
   /** 中身の無いセッションの状態を畳み、セッションの数に上限を掛ける。 */
   private tidy(pane: PaneState): void {
-    for (const [id, s] of pane.sessions) if (s.items.size === 0 && s.pending === undefined && s.stopped.size === 0) pane.sessions.delete(id);
-    while (pane.sessions.size > SESSIONS_MAX) pane.sessions.delete(pane.sessions.keys().next().value as string);
+    for (const [id, s] of pane.sessions)
+      if (s.items.size === 0 && s.pending === undefined && s.stopped.size === 0)
+        pane.sessions.delete(id);
+    while (pane.sessions.size > SESSIONS_MAX)
+      pane.sessions.delete(pane.sessions.keys().next().value as string);
   }
 
   /** その pane の今の一覧。報告を一度も受けていなければ undefined（＝分からない）。 */
@@ -161,7 +166,11 @@ export class SubagentTracker {
     let pending: Pending | undefined;
     if (s.pending) {
       if (now - s.pending.at > PENDING_TTL_MS) delete s.pending;
-      else if (s.pending.agentType === undefined || r.agentType === undefined || s.pending.agentType === r.agentType) {
+      else if (
+        s.pending.agentType === undefined ||
+        r.agentType === undefined ||
+        s.pending.agentType === r.agentType
+      ) {
         pending = s.pending;
         delete s.pending;
       }
@@ -204,7 +213,10 @@ export class SubagentTracker {
     if (total >= PANE_ITEMS_MAX) {
       if (!pane.capLogged) {
         pane.capLogged = true;
-        this.deps.logger.warn("subagents: too many, not counting more", { paneId, limit: PANE_ITEMS_MAX });
+        this.deps.logger.warn("subagents: too many, not counting more", {
+          paneId,
+          limit: PANE_ITEMS_MAX,
+        });
       }
       return;
     }
@@ -274,7 +286,12 @@ export class SubagentTracker {
   private paneOf(paneId: string): PaneState {
     let p = this.panes.get(paneId);
     if (!p) {
-      p = { sessions: new Map(), seen: false, instanceId: this.deps.agentInstanceOf(paneId), capLogged: false };
+      p = {
+        sessions: new Map(),
+        seen: false,
+        instanceId: this.deps.agentInstanceOf(paneId),
+        capLogged: false,
+      };
       this.panes.set(paneId, p);
     }
     return p;
@@ -295,6 +312,12 @@ function sameSubagents(a: Subagents | undefined, b: Subagents | undefined): bool
   if (a.count !== b.count || a.items.length !== b.items.length) return false;
   return a.items.every((x, i) => {
     const y = b.items[i] as SubagentInfo;
-    return x.id === y.id && x.type === y.type && x.description === y.description && x.background === y.background && x.startedAt === y.startedAt;
+    return (
+      x.id === y.id &&
+      x.type === y.type &&
+      x.description === y.description &&
+      x.background === y.background &&
+      x.startedAt === y.startedAt
+    );
   });
 }

@@ -95,8 +95,19 @@ const ariaLabel = computed(() => {
       <span class="graph-node-agent-name">{{ agentLine }}</span>
       <!-- サブエージェントの件数（20261004-subagent-display）。エージェントの行の右。ノードの大きさは変えない。読み取りだけ（モバイル）では数だけで押せない。 -->
       <template v-if="subagentCount > 0">
-        <span v-if="readOnly" class="graph-node-subagents graph-node-subagents-static" :aria-label="`サブエージェント ${subagentCount} 件`">
-          <svg class="graph-node-subagents-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.4" /></svg>
+        <span
+          v-if="readOnly"
+          class="graph-node-subagents graph-node-subagents-static"
+          :aria-label="`サブエージェント ${subagentCount} 件`"
+        >
+          <svg class="graph-node-subagents-icon" viewBox="0 0 12 12" aria-hidden="true">
+            <path
+              d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+            />
+          </svg>
           <span aria-hidden="true">{{ subagentCount }}</span>
         </span>
         <button
@@ -109,7 +120,14 @@ const ariaLabel = computed(() => {
           @pointerdown.stop
           @click.stop="emit('subagents')"
         >
-          <svg class="graph-node-subagents-icon" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.4" /></svg>
+          <svg class="graph-node-subagents-icon" viewBox="0 0 12 12" aria-hidden="true">
+            <path
+              d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+            />
+          </svg>
           <span aria-hidden="true">{{ subagentCount }}</span>
         </button>
       </template>

@@ -10,14 +10,21 @@ import { DefaultAgentIntegrationService } from "./AgentIntegrationService.js";
 function makeService(needsUpdate: Partial<Record<AgentIntegrationKind, boolean>>) {
   let updated = needsUpdate;
   const installer: AgentIntegrationInstaller = {
-    status: async (kind) => ({ cliDetected: true, installed: true, needsUpdate: updated[kind] ?? false }),
+    status: async (kind) => ({
+      cliDetected: true,
+      installed: true,
+      needsUpdate: updated[kind] ?? false,
+    }),
     install: async (kind) => {
       updated = { ...updated, [kind]: false };
       return { ok: true, message: null };
     },
     uninstall: async () => ({ ok: true, message: null }),
   };
-  const file = { load: async () => ({ kind: "missing" }), save: async () => undefined } as unknown as IntegrationFile;
+  const file = {
+    load: async () => ({ kind: "missing" }),
+    save: async () => undefined,
+  } as unknown as IntegrationFile;
   const bus = new EventBus();
   const events: ServerEvent[] = [];
   bus.subscribe((e) => events.push(e));
@@ -37,6 +44,9 @@ describe("DefaultAgentIntegrationService — needsUpdate", () => {
     await (await service).install("claude");
     const changed = events.find((e) => e.event === "agent_integration.changed");
     expect(changed).toBeDefined();
-    expect((changed as { data: { agents: { claude: { needsUpdate?: boolean } } } }).data.agents.claude.needsUpdate).toBe(false);
+    expect(
+      (changed as { data: { agents: { claude: { needsUpdate?: boolean } } } }).data.agents.claude
+        .needsUpdate,
+    ).toBe(false);
   });
 });

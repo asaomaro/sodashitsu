@@ -21,7 +21,12 @@ describe("SubagentTracker（数える部分）", () => {
   let published: { paneId: string; value: Subagents | undefined }[];
   let publishResult: boolean;
   // 項目は報告ごとに違うので、テストでは緩い型で渡す（ほかの項目は上の `base`）。
-  const rep = (r: { type: Report["type"]; paneId?: string; sessionId?: string; [k: string]: unknown }) => tracker.report({ ...base, ...r } as Report);
+  const rep = (r: {
+    type: Report["type"];
+    paneId?: string;
+    sessionId?: string;
+    [k: string]: unknown;
+  }) => tracker.report({ ...base, ...r } as Report);
   const ids = (paneId = "p1") => tracker.current(paneId)?.items.map((i) => i.id);
 
   beforeEach(() => {
@@ -61,7 +66,10 @@ describe("SubagentTracker（数える部分）", () => {
   const detect = (paneId: string, instanceId: string | null) => {
     if (instanceId === null) detected.delete(paneId);
     else detected.set(paneId, instanceId);
-    bus.publish({ event: "pane.agent_status_changed", data: { paneId, agent: instanceId === null ? null : ({ instanceId } as AgentInfo) } });
+    bus.publish({
+      event: "pane.agent_status_changed",
+      data: { paneId, agent: instanceId === null ? null : ({ instanceId } as AgentInfo) },
+    });
   };
 
   it("報告を受けていない pane は undefined（分からない）。受ければ 0 件でも持つ", () => {
@@ -89,7 +97,10 @@ describe("SubagentTracker（数える部分）", () => {
     rep({ type: "subagent_start", agentId: "a1" });
     clock += 100;
     rep({ type: "subagent_start", agentId: "a1" });
-    expect(tracker.current("p1")).toEqual({ count: 1, items: [{ id: "a1", startedAt: 1_000_000 }] });
+    expect(tracker.current("p1")).toEqual({
+      count: 1,
+      items: [{ id: "a1", startedAt: 1_000_000 }],
+    });
   });
 
   it("知らない ID の終了は無視する", () => {
@@ -100,9 +111,20 @@ describe("SubagentTracker（数える部分）", () => {
 
   describe("実行前の報告の対応づけ", () => {
     it("直後の起動に説明・種類・background を付ける", () => {
-      rep({ type: "subagent_pending", description: "調べる", agentType: "Explore", background: true });
+      rep({
+        type: "subagent_pending",
+        description: "調べる",
+        agentType: "Explore",
+        background: true,
+      });
       rep({ type: "subagent_start", agentId: "a1", agentType: "Explore" });
-      expect(tracker.current("p1")?.items[0]).toEqual({ id: "a1", type: "Explore", description: "調べる", background: true, startedAt: 1_000_000 });
+      expect(tracker.current("p1")?.items[0]).toEqual({
+        id: "a1",
+        type: "Explore",
+        description: "調べる",
+        background: true,
+        startedAt: 1_000_000,
+      });
     });
 
     it("起動の報告に種類が無ければ、実行前の種類を使う", () => {
@@ -164,7 +186,8 @@ describe("SubagentTracker（数える部分）", () => {
 
     it("複数のセッションの合計で数える", () => {
       for (let i = 0; i < 200; i++) rep({ type: "subagent_start", agentId: `a${i}` });
-      for (let i = 0; i < 100; i++) rep({ type: "subagent_start", agentId: `b${i}`, sessionId: "s2" });
+      for (let i = 0; i < 100; i++)
+        rep({ type: "subagent_start", agentId: `b${i}`, sessionId: "s2" });
       expect(tracker.current("p1")?.count).toBe(256);
     });
 
@@ -187,8 +210,20 @@ describe("SubagentTracker（数える部分）", () => {
 
     it("running にあって無い ID を、説明・種類・background: true で足す", () => {
       clock += 7;
-      rep({ type: "agent_stop", running: [{ id: "bg1", agentType: "Explore", description: "遅い調査" }], truncated: false });
-      expect(tracker.current("p1")?.items).toEqual([{ id: "bg1", type: "Explore", description: "遅い調査", background: true, startedAt: 1_000_007 }]);
+      rep({
+        type: "agent_stop",
+        running: [{ id: "bg1", agentType: "Explore", description: "遅い調査" }],
+        truncated: false,
+      });
+      expect(tracker.current("p1")?.items).toEqual([
+        {
+          id: "bg1",
+          type: "Explore",
+          description: "遅い調査",
+          background: true,
+          startedAt: 1_000_007,
+        },
+      ]);
     });
 
     it("最近終了した ID は足し直さない（60 秒を過ぎたら足す）", () => {
@@ -234,7 +269,11 @@ describe("SubagentTracker（数える部分）", () => {
 
     it("足すときも 256 件の上限に従う", () => {
       for (let i = 0; i < 256; i++) rep({ type: "subagent_start", agentId: `a${i}` });
-      rep({ type: "agent_stop", running: [...Array.from({ length: 256 }, (_, i) => ({ id: `a${i}` })), { id: "extra" }], truncated: false });
+      rep({
+        type: "agent_stop",
+        running: [...Array.from({ length: 256 }, (_, i) => ({ id: `a${i}` })), { id: "extra" }],
+        truncated: false,
+      });
       expect(tracker.current("p1")?.count).toBe(256);
       expect(tracker.current("p1")?.items.map((i) => i.id)).not.toContain("extra");
     });
@@ -279,7 +318,10 @@ describe("SubagentTracker（数える部分）", () => {
       rep({ type: "subagent_start", agentId: "over" });
       for (let i = 0; i < 200; i++) rep({ type: "subagent_stop", agentId: `a${i}` }); // 一覧の先頭 64 件に載る数まで減らす
       rep({ type: "subagent_start", agentId: "next" });
-      expect(tracker.current("p1")?.items.find((i) => i.id === "next")).toEqual({ id: "next", startedAt: 1_000_000 });
+      expect(tracker.current("p1")?.items.find((i) => i.id === "next")).toEqual({
+        id: "next",
+        startedAt: 1_000_000,
+      });
     });
 
     it("終了の記憶は 60 秒で刈る（終了の報告だけが続いても）", () => {
@@ -310,12 +352,14 @@ describe("SubagentTracker（数える部分）", () => {
 
     it("中身の無いセッションの状態は残さない（空のセッションが上限の枠を使って、動いているセッションを押し出さない）", () => {
       rep({ type: "subagent_start", agentId: "keep", sessionId: "real" });
-      for (let i = 0; i < 40; i++) rep({ type: "agent_stop", running: [], truncated: false, sessionId: `x${i}` });
+      for (let i = 0; i < 40; i++)
+        rep({ type: "agent_stop", running: [], truncated: false, sessionId: `x${i}` });
       expect(ids()).toEqual(["keep"]);
     });
 
     it("セッションの数は 32 まで。終了の報告が来ないセッション ID が溜まっても、古いものから捨てる", () => {
-      for (let i = 0; i < 40; i++) rep({ type: "subagent_start", agentId: `a${i}`, sessionId: `s${i}` });
+      for (let i = 0; i < 40; i++)
+        rep({ type: "subagent_start", agentId: `a${i}`, sessionId: `s${i}` });
       expect(tracker.current("p1")?.count).toBe(32);
       expect(ids()?.[0]).toBe("a8");
     });
@@ -455,7 +499,9 @@ describe("SubagentTracker（数える部分）", () => {
       });
       failing.report({ ...base, type: "subagent_start", agentId: "a1" });
       expect(() => advance(100)).not.toThrow();
-      expect(logger.lines.some((l) => l.level === "warn" && l.msg.includes("publish failed"))).toBe(true);
+      expect(logger.lines.some((l) => l.level === "warn" && l.msg.includes("publish failed"))).toBe(
+        true,
+      );
       failing.close();
     });
 

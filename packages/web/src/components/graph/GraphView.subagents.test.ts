@@ -26,32 +26,78 @@ afterEach(() => vi.restoreAllMocks());
 const flush = async (): Promise<void> => {
   for (let i = 0; i < 4; i++) await nextTick();
 };
-const subs = (n: number, type = "Explore") => ({ count: n, items: Array.from({ length: Math.min(n, 64) }, (_, i) => ({ id: `s${i}`, type, description: `説明${i}`, startedAt: Date.now() })) });
-const pointer = (type: string): PointerEvent => new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, button: 0, clientX: 5, clientY: 5 });
-const key = (k: string, init: KeyboardEventInit = {}) => new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init });
+const subs = (n: number, type = "Explore") => ({
+  count: n,
+  items: Array.from({ length: Math.min(n, 64) }, (_, i) => ({
+    id: `s${i}`,
+    type,
+    description: `説明${i}`,
+    startedAt: Date.now(),
+  })),
+});
+const pointer = (type: string): PointerEvent =>
+  new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 1,
+    button: 0,
+    clientX: 5,
+    clientY: 5,
+  });
+const key = (k: string, init: KeyboardEventInit = {}) =>
+  new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init });
 
-async function open(opts: { p1?: AgentInfo["subagents"]; p2?: AgentInfo["subagents"]; nodes?: string[] } = {}) {
+async function open(
+  opts: { p1?: AgentInfo["subagents"]; p2?: AgentInfo["subagents"]; nodes?: string[] } = {},
+) {
   const registry = { focus: vi.fn() };
   const conn = { request: vi.fn(async () => ({})) };
   const switcher = { switchTo: vi.fn(async () => true) };
   const wrapper = mount(GraphView, {
     attachTo: document.body,
-    global: { plugins: [pinia], provide: { [TerminalRegistryKey as symbol]: registry, [ConnectionKey as symbol]: conn, [MachineSwitcherKey as symbol]: switcher } },
+    global: {
+      plugins: [pinia],
+      provide: {
+        [TerminalRegistryKey as symbol]: registry,
+        [ConnectionKey as symbol]: conn,
+        [MachineSwitcherKey as symbol]: switcher,
+      },
+    },
   });
   const view = useViewStore(pinia);
   const session = useSessionStore(pinia);
   session.tabs.set("t1", { id: "t1", workspaceId: "w1" } as never);
-  session.panes.set("p1", paneOf("p1", "t1", { label: "impl", agent: agentOf("working", opts.p1 ? { subagents: opts.p1 } : {}) }));
-  session.panes.set("p2", paneOf("p2", "t1", { label: "reviewer", agent: agentOf("idle", { instanceId: "i2", ...(opts.p2 ? { subagents: opts.p2 } : {}) }) }));
+  session.panes.set(
+    "p1",
+    paneOf("p1", "t1", {
+      label: "impl",
+      agent: agentOf("working", opts.p1 ? { subagents: opts.p1 } : {}),
+    }),
+  );
+  session.panes.set(
+    "p2",
+    paneOf("p2", "t1", {
+      label: "reviewer",
+      agent: agentOf("idle", { instanceId: "i2", ...(opts.p2 ? { subagents: opts.p2 } : {}) }),
+    }),
+  );
   const store = useGraphStore(pinia);
   const fake = fakeGraphPort({});
   store.bind(fake.port);
-  store.applyGraph(graphOf(opts.nodes ? { nodes: opts.nodes.map((k, i) => ({ key: k as never, x: i * 300, y: 0 })) } : {}), "fresh");
+  store.applyGraph(
+    graphOf(
+      opts.nodes
+        ? { nodes: opts.nodes.map((k, i) => ({ key: k as never, x: i * 300, y: 0 })) }
+        : {},
+    ),
+    "fresh",
+  );
   view.openGraph();
   await flush();
   return { wrapper, view, session, store, fake, registry };
 }
-const btn = (w: ReturnType<typeof mount>, k: string) => w.find(`[data-node-key="${k}"] [data-subagents-button]`);
+const btn = (w: ReturnType<typeof mount>, k: string) =>
+  w.find(`[data-node-key="${k}"] [data-subagents-button]`);
 
 describe("グラフのノードの件数のボタン", () => {
   it("1 件以上のときだけ出る（数・読み上げの名前つき）。ノードの大きさは変えない。tabindex は -1", async () => {
@@ -62,12 +108,16 @@ describe("グラフのノードの件数のボタン", () => {
     expect(b.attributes("aria-label")).toBe("impl のサブエージェント 3 件を表示");
     expect(b.attributes("tabindex")).toBe("-1");
     expect(btn(wrapper, "local:p2").exists()).toBe(false); // 0 件
-    const styles = ["local:p1", "local:p2"].map((k) => wrapper.get(`[data-node-key="${k}"]`).attributes("style") ?? "");
+    const styles = ["local:p1", "local:p2"].map(
+      (k) => wrapper.get(`[data-node-key="${k}"]`).attributes("style") ?? "",
+    );
     for (const s of styles) {
       expect(s).toContain(`width: ${GRAPH_NODE_WIDTH}px`);
       expect(s).toContain(`height: ${GRAPH_NODE_HEIGHT}px`);
     }
-    expect(wrapper.get('[data-node-key="local:p1"]').attributes("aria-label")).toContain("サブエージェント 3 件");
+    expect(wrapper.get('[data-node-key="local:p1"]').attributes("aria-label")).toContain(
+      "サブエージェント 3 件",
+    );
     wrapper.unmount();
   });
 
@@ -83,16 +133,24 @@ describe("グラフのノードの件数のボタン", () => {
   it("押すとグラフの中のパネルが開く。ノードの選択・ドラッグ・線の作成・pane への移動を始めない", async () => {
     // 開いた直後は先頭のノード（p1）が選ばれているので、件数のボタンは 2 番目のノード（p2）で試す。
     const { wrapper, store, view, fake, registry } = await open({ p2: subs(2) });
-    expect(wrapper.find('[data-node-key="local:p2"]').classes()).not.toContain("graph-node-selected");
+    expect(wrapper.find('[data-node-key="local:p2"]').classes()).not.toContain(
+      "graph-node-selected",
+    );
     const b = btn(wrapper, "local:p2");
     b.element.dispatchEvent(pointer("pointerdown"));
-    window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 90, clientY: 90 }));
-    window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: 90, clientY: 90 }));
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 90, clientY: 90 }),
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: 90, clientY: 90 }),
+    );
     await b.trigger("click");
     await flush();
     expect(wrapper.find(".subagent-panel").exists()).toBe(true);
     expect(store.dragPositions.size).toBe(0);
-    expect(wrapper.find('[data-node-key="local:p2"]').classes()).not.toContain("graph-node-selected");
+    expect(wrapper.find('[data-node-key="local:p2"]').classes()).not.toContain(
+      "graph-node-selected",
+    );
     expect(wrapper.find(".graph-connect-banner").exists()).toBe(false);
     expect(fake.calls).toEqual([]); // move_node・add_link を送らない
     expect(view.graphOpen).toBe(true); // pane へ移ってグラフを閉じない
@@ -179,18 +237,30 @@ describe("グラフの中の一覧（SubagentPanel）", () => {
     const { wrapper, session } = await open({ p1: subs(2) });
     const reopen = async () => {
       if (!wrapper.find(".subagent-panel").exists()) {
-        session.panes.set("p1", paneOf("p1", "t1", { label: "impl", agent: agentOf("working", { subagents: subs(2) }) }));
+        session.panes.set(
+          "p1",
+          paneOf("p1", "t1", { label: "impl", agent: agentOf("working", { subagents: subs(2) }) }),
+        );
         await flush();
         await btn(wrapper, "local:p1").trigger("click");
         await flush();
       }
     };
     await reopen();
-    session.panes.set("p1", paneOf("p1", "t1", { label: "impl", agent: agentOf("idle", { subagents: subs(1) }) }));
+    session.panes.set(
+      "p1",
+      paneOf("p1", "t1", { label: "impl", agent: agentOf("idle", { subagents: subs(1) }) }),
+    );
     await flush();
     expect(wrapper.find(".subagent-panel").exists()).toBe(true);
     expect(wrapper.findAll(".subagent-list-item")).toHaveLength(1); // 開いている間の更新が映る
-    session.panes.set("p1", paneOf("p1", "t1", { label: "impl", agent: agentOf("working", { instanceId: "other", subagents: subs(1) }) }));
+    session.panes.set(
+      "p1",
+      paneOf("p1", "t1", {
+        label: "impl",
+        agent: agentOf("working", { instanceId: "other", subagents: subs(1) }),
+      }),
+    );
     await flush();
     expect(wrapper.find(".subagent-panel").exists()).toBe(false);
     await reopen();
@@ -234,7 +304,10 @@ describe("グラフの中の一覧（SubagentPanel）", () => {
     const { wrapper, store } = await open({ p1: subs(2) });
     await btn(wrapper, "local:p1").trigger("click");
     await flush();
-    store.applyGraph(graphOf({ rev: 2, nodes: [{ key: "local:p2" as never, x: 300, y: 0 }] }), "fresh");
+    store.applyGraph(
+      graphOf({ rev: 2, nodes: [{ key: "local:p2" as never, x: 300, y: 0 }] }),
+      "fresh",
+    );
     await flush();
     expect(wrapper.find(".subagent-panel").exists()).toBe(false);
     wrapper.unmount();
@@ -259,8 +332,29 @@ describe("別のマシンのノード・モバイル・古いサーバ", () => {
       protocol: 1,
       serverVersion: "t",
       host: { os: "linux", windowsBuild: null, hostname: "remote" },
-      workspaces: [{ id: "w9", label: "w9", cwd: "/", tabIds: ["t9"], activeTabId: "t9", groupId: null, git: null, autoLabel: false }],
-      tabs: [{ id: "t9", workspaceId: "w9", label: "t", layout: { type: "pane", paneId: "p9" }, focusedPaneId: "p9", zoomedPaneId: null, sizeOwnerClientId: null }],
+      workspaces: [
+        {
+          id: "w9",
+          label: "w9",
+          cwd: "/",
+          tabIds: ["t9"],
+          activeTabId: "t9",
+          groupId: null,
+          git: null,
+          autoLabel: false,
+        },
+      ],
+      tabs: [
+        {
+          id: "t9",
+          workspaceId: "w9",
+          label: "t",
+          layout: { type: "pane", paneId: "p9" },
+          focusedPaneId: "p9",
+          zoomedPaneId: null,
+          sizeOwnerClientId: null,
+        },
+      ],
       panes: [paneOf("p9", "t9", { label: "remote-pane", agent: a })],
     }) as unknown as SessionSnapshot;
 
@@ -271,7 +365,12 @@ describe("別のマシンのノード・モバイル・古いサーバ", () => {
     const machines = useMachinesStore(pinia);
     machines.setMachines([{ id: M, label: "box", state: "online", message: null }] as never);
     const snap = remoteSnap(agentOf("idle", { instanceId: "r1", subagents: subs(5) }));
-    (snap as unknown as { panes: unknown[] }).panes = [paneOf("p1", "t9", { label: "remote-p1", agent: agentOf("idle", { instanceId: "r1", subagents: subs(5) }) })];
+    (snap as unknown as { panes: unknown[] }).panes = [
+      paneOf("p1", "t9", {
+        label: "remote-p1",
+        agent: agentOf("idle", { instanceId: "r1", subagents: subs(5) }),
+      }),
+    ];
     machines.applySummarySnapshot(M, snap);
     await flush();
     expect(btn(wrapper, "local:p1").text()).toBe("2");
@@ -290,7 +389,12 @@ describe("別のマシンのノード・モバイル・古いサーバ", () => {
     machines.setMachines([{ id: M, label: "box", state: "online", message: null }] as never);
     const withSubs = (extra: Partial<AgentInfo>) => {
       const snap = remoteSnap(agentOf("idle", { instanceId: "r1", ...extra }));
-      (snap as unknown as { panes: unknown[] }).panes = [paneOf("p1", "t9", { label: "remote-p1", agent: agentOf("idle", { instanceId: "r1", ...extra }) })];
+      (snap as unknown as { panes: unknown[] }).panes = [
+        paneOf("p1", "t9", {
+          label: "remote-p1",
+          agent: agentOf("idle", { instanceId: "r1", ...extra }),
+        }),
+      ];
       machines.applySummarySnapshot(M, snap);
     };
     withSubs({});
@@ -300,7 +404,10 @@ describe("別のマシンのノード・モバイル・古いサーバ", () => {
     withSubs({ subagents: subs(3) });
     await flush();
     const newHtml = wrapper.get(`[data-node-key="${M}:p1"]`).html();
-    const stripButton = (h: string) => h.replace(/<button[^>]*data-subagents-button[\s\S]*?<\/button>/, "").replace("・サブエージェント 3 件", "");
+    const stripButton = (h: string) =>
+      h
+        .replace(/<button[^>]*data-subagents-button[\s\S]*?<\/button>/, "")
+        .replace("・サブエージェント 3 件", "");
     // Vue の注釈（`<!--v-if-->`・テンプレートの注釈）は描かれ方に効かないので除く。
     const norm = (h: string) => h.replace(/<!--[\s\S]*?-->/g, "").replace(/>\s+</g, "><");
     expect(norm(stripButton(newHtml))).toBe(norm(oldHtml));
@@ -308,7 +415,11 @@ describe("別のマシンのノード・モバイル・古いサーバ", () => {
   });
 
   it("モバイルの読み取り専用のグラフ: 数だけを出し（ボタンではない）、押しても s でも開かない", async () => {
-    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList);
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as MediaQueryList);
     const { wrapper } = await open({ p1: subs(4) });
     expect(wrapper.find("[data-subagents-button]").exists()).toBe(false);
     const stat = wrapper.get('[data-node-key="local:p1"] .graph-node-subagents-static');
