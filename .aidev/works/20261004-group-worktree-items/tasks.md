@@ -19,7 +19,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/protocol/src/model.ts:39, :200-214`、`packages/protocol/src/events.ts:36-55`、`packages/protocol/src/messages.ts`（`WorkspaceMoveParams`・`WorkspaceMoveToParams`・`Group*Params`・`METHOD_SCHEMAS` の登録表・結果型の表）、`packages/protocol/src/messages.test.ts:93-135`（グループと並べ替えのテスト）
       依存: なし
       AC: AC14
-- [ ] T2: 純関数（木）——`itemRefOf`・`repoMembers`（本体が先頭・残りは開いた順・本体が無ければ先頭が暫定の頭）・`sidebarTree`（配信の途中の状態の決まり: レイアウトに無い workspace は一番上の末尾／実在しない参照は読み飛ばす／判定とレイアウトの食い違いは今の判定で項目を決める。名前順は一番上だけ）・**`visibleWorkspaceIdsOfTree`**（新しい名前で足す。今の `visibleWorkspaceIdsInOrder` は残す。畳んだグループ・畳んだ worktree グループの中は今いる workspace だけ）・`topUnitOf`・`layoutFromLegacy`（同じ `repoKey` は 1 つの項目、所属は本体の `groupId`、本体が無ければ最初に開いたもの。グループの位置は先頭のメンバーの平らな順、空は末尾）。単体テスト（AC の場面ごと）と、判定を壊して落ちる確認
+- [x] T2: 純関数（木）——`itemRefOf`・`repoMembers`（本体が先頭・残りは開いた順・本体が無ければ先頭が暫定の頭）・`sidebarTree`（配信の途中の状態の決まり: レイアウトに無い workspace は一番上の末尾／実在しない参照は読み飛ばす／判定とレイアウトの食い違いは今の判定で項目を決める。名前順は一番上だけ）・**`visibleWorkspaceIdsOfTree`**（新しい名前で足す。今の `visibleWorkspaceIdsInOrder` は残す。畳んだグループ・畳んだ worktree グループの中は今いる workspace だけ）・`topUnitOf`・`layoutFromLegacy`（同じ `repoKey` は 1 つの項目、所属は本体の `groupId`、本体が無ければ最初に開いたもの。グループの位置は先頭のメンバーの平らな順、空は末尾）。単体テスト（AC の場面ごと）と、判定を壊して落ちる確認
       対象: `packages/client-core/src/workspace/workspaceGrouping.ts`（今の行の型・`autoGroupsOf`・`groupedWorkspaceRows`・`visibleGroupMembers`・`visibleWorkspaceIdsInOrder`）、`packages/client-core/src/workspace/workspaceGrouping.test.ts`、`packages/client-core/src/index.ts`（`export *` の並び）
       依存: T1
       AC: AC1, AC4, AC6, AC13, AC17

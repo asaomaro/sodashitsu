@@ -1,6 +1,19 @@
-import type { GitInfo, Workspace, WorkspaceGroup } from "@sodashitsu/protocol";
+import type { GitInfo, SidebarLayout, Workspace, WorkspaceGroup } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
-import { autoGroupsOf, groupedWorkspaceRows, linkedWorktreeChildrenOf, manualGroupsOf, visibleGroupMembers, visibleWorkspaceIdsInOrder } from "./workspaceGrouping.js";
+import {
+  autoGroupsOf,
+  groupedWorkspaceRows,
+  itemRefOf,
+  layoutFromLegacy,
+  linkedWorktreeChildrenOf,
+  manualGroupsOf,
+  repoMembers,
+  sidebarTree,
+  topUnitOf,
+  visibleGroupMembers,
+  visibleWorkspaceIdsInOrder,
+  visibleWorkspaceIdsOfTree,
+} from "./workspaceGrouping.js";
 
 const NO_GIT: GitInfo | null = null;
 
@@ -246,5 +259,276 @@ describe("visibleWorkspaceIdsInOrder", () => {
     // グループのラベルは "a-group"（アルファベット順で先頭に来る）。
     const ids = visibleWorkspaceIdsInOrder([zManual, aManual, standalone], [group("g1", "a-group")], "name", new Set(), null);
     expect(ids).toEqual(["z-member", "a-member", "s"]); // グループが先（ラベル順）、中は開いた順のまま
+  });
+});
+
+// ---- 項目の木（20261004-group-worktree-items） ----
+
+const R = "/r/.git";
+const R2 = "/r2/.git";
+const body = (id: string, repoKey = R, extra: Partial<Workspace> = {}) =>
+  ws(id, { git: git(repoKey, false), ...extra });
+const linked = (id: string, repoKey = R, extra: Partial<Workspace> = {}) =>
+  ws(id, { git: git(repoKey, true), ...extra });
+const lay = (top: string[], groups: Record<string, string[]> = {}): SidebarLayout => ({
+  top,
+  groups,
+});
+
+/** 木を「種類:識別子」の文字列にして比べやすくする（グループは `[g: 中身…]`）。 */
+function shape(rows: ReturnType<typeof sidebarTree>): unknown[] {
+  return rows.map((r) => {
+    if (r.kind === "group") return { g: r.group.id, items: shape(r.items) };
+    if (r.kind === "workspace") return r.workspace.id;
+    return { r: r.head.id, children: r.children.map((c) => c.id) };
+  });
+}
+
+describe("itemRefOf / repoMembers", () => {
+  it("repoKey があれば r:、無ければ（git 無し・repoKey が null でも）w:", () => {
+    expect(itemRefOf(body("a"))).toBe(`r:${R}`);
+    expect(itemRefOf(ws("b"))).toBe("w:b");
+    expect(itemRefOf(ws("c", { git: git(null) }))).toBe("w:c");
+  });
+
+  it("本体が先頭、残りは開いた順。本体が無ければ開いた順のまま（先頭が暫定の頭）", () => {
+    const list = [linked("w1"), linked("w2"), body("w3"), body("x", R2)];
+    expect(repoMembers(list, R).map((w) => w.id)).toEqual(["w3", "w1", "w2"]);
+    expect(repoMembers([linked("w1"), linked("w2")], R).map((w) => w.id)).toEqual(["w1", "w2"]);
+    expect(repoMembers(list, "/none/.git")).toEqual([]);
+  });
+});
+
+describe("sidebarTree", () => {
+  it("AC1: 同じリポジトリが 2 つ以上なら worktree グループ（本体が先頭）、1 つなら通常の行。グループに入っていても同じ", () => {
+    const list = [linked("w1"), body("w2"), body("w3", R2), ws("w4")];
+    const tree = sidebarTree(list, [], lay([`r:${R}`, `r:${R2}`, "w:w4"]), "opened");
+    expect(shape(tree)).toEqual([{ r: "w2", children: ["w1"] }, "w3", "w4"]);
+    const g = [group("g1", "G")];
+    const inGroup = sidebarTree(
+      list,
+      g,
+      lay(["g:g1", "w:w4"], { g1: [`r:${R}`, `r:${R2}`] }),
+      "opened",
+    );
+    expect(shape(inGroup)).toEqual([
+      { g: "g1", items: [{ r: "w2", children: ["w1"] }, "w3"] },
+      "w4",
+    ]);
+  });
+
+  it("AC1: worktree が 1 つに減っても同じ位置の通常の行として残る", () => {
+    const tree = sidebarTree(
+      [body("w1")],
+      [group("g1", "G")],
+      lay(["g:g1"], { g1: [`r:${R}`] }),
+      "opened",
+    );
+    expect(shape(tree)).toEqual([{ g: "g1", items: ["w1"] }]);
+  });
+
+  it("AC4: グループの中に通常の workspace と worktree グループが項目として並ぶ。空のグループも出る", () => {
+    const list = [body("w1"), linked("w2"), ws("w3")];
+    const groups = [group("g1", "G"), group("g2", "E")];
+    const tree = sidebarTree(
+      list,
+      groups,
+      lay(["g:g1", "g:g2"], { g1: ["w:w3", `r:${R}`], g2: [] }),
+      "opened",
+    );
+    expect(shape(tree)).toEqual([
+      { g: "g1", items: ["w3", { r: "w1", children: ["w2"] }] },
+      { g: "g2", items: [] },
+    ]);
+  });
+
+  it("配信の途中: レイアウトに無い workspace は一番上の末尾（同じリポジトリは 1 項目）", () => {
+    const list = [ws("w1"), body("w2"), linked("w3"), ws("w4")];
+    const tree = sidebarTree(list, [], lay(["w:w1"]), "opened");
+    expect(shape(tree)).toEqual(["w1", { r: "w2", children: ["w3"] }, "w4"]);
+  });
+
+  it("配信の途中: 実在しない参照・実在しないグループ・重複は読み飛ばす", () => {
+    const list = [ws("w1"), ws("w2")];
+    const tree = sidebarTree(
+      list,
+      [group("g1", "G")],
+      lay(["w:gone", `r:/gone/.git`, "g:nope", "w:w2", "w:w2", "g:g1", "w:w1"], {
+        g1: ["w:ghost", "g:g1"],
+      }),
+      "opened",
+    );
+    expect(shape(tree)).toEqual(["w2", { g: "g1", items: [] }, "w1"]);
+  });
+
+  it("配信の途中: レイアウトの一番上に無いグループは末尾に出る（中身は layout.groups の順）", () => {
+    const tree = sidebarTree(
+      [ws("w1"), ws("w2")],
+      [group("g1", "G")],
+      lay(["w:w1", "w:w2"], { g1: ["w:w2"] }),
+      "opened",
+    );
+    // w2 は先に一番上で見つかるので、グループは空で末尾
+    expect(shape(tree)).toEqual(["w1", "w2", { g: "g1", items: [] }]);
+  });
+
+  it("配信の途中: 判定とレイアウトが食い違うときは今の判定で項目を決め、置き場所は先に見つかった参照", () => {
+    // w1・w2 は今は同じリポジトリだが、レイアウトはまだ w:w1・w:w2 の別々で持っている（間に w:w3）
+    const list = [body("w1"), ws("w3"), linked("w2")];
+    const tree = sidebarTree(list, [], lay(["w:w1", "w:w3", "w:w2"]), "opened");
+    expect(shape(tree)).toEqual([{ r: "w1", children: ["w2"] }, "w3"]);
+    // 逆: レイアウトは r:R を持つが、その workspace は管理外になった（r:R に workspace が無い）→ w:id として末尾
+    const tree2 = sidebarTree([ws("w1"), ws("w2")], [], lay([`r:${R}`, "w:w2"]), "opened");
+    expect(shape(tree2)).toEqual(["w2", "w1"]);
+  });
+
+  it("名前順は一番上だけ。グループの中・worktree グループの中はレイアウトの順", () => {
+    const list = [
+      ws("b", { label: "b" }),
+      ws("a", { label: "a" }),
+      ws("z", { label: "z" }),
+      ws("y", { label: "y" }),
+      body("m", R, { label: "m" }),
+      linked("c", R, { label: "c" }),
+    ];
+    const tree = sidebarTree(
+      list,
+      [group("g1", "Q")],
+      lay(["g:g1", "w:b", `r:${R}`], { g1: ["w:z", "w:y", "w:a"] }),
+      "name",
+    );
+    // 一番上: b, m(worktree グループ), Q(グループ) の名前順。グループの中は z, y, a のまま。
+    expect(shape(tree)).toEqual([
+      "b",
+      { r: "m", children: ["c"] },
+      { g: "g1", items: ["z", "y", "a"] },
+    ]);
+  });
+});
+
+describe("visibleWorkspaceIdsOfTree", () => {
+  const list = [body("w1"), linked("w2"), linked("w3"), ws("w4"), ws("w5")];
+  const layout = (collapsed = false): [SidebarLayout, WorkspaceGroup[]] => [
+    lay(["g:g1", "w:w5"], { g1: [`r:${R}`, "w:w4"] }),
+    [group("g1", "G", collapsed)],
+  ];
+
+  it("何も畳んでいなければ上から下へ全部（見出しは含めない）", () => {
+    const [l, g] = layout();
+    expect(visibleWorkspaceIdsOfTree(sidebarTree(list, g, l, "opened"), new Set(), null)).toEqual([
+      "w1",
+      "w2",
+      "w3",
+      "w4",
+      "w5",
+    ]);
+  });
+
+  it("AC6: worktree グループだけ畳むと、先頭と今いる子だけ", () => {
+    const [l, g] = layout();
+    const tree = sidebarTree(list, g, l, "opened");
+    expect(visibleWorkspaceIdsOfTree(tree, new Set([R]), null)).toEqual(["w1", "w4", "w5"]);
+    expect(visibleWorkspaceIdsOfTree(tree, new Set([R]), "w3")).toEqual(["w1", "w3", "w4", "w5"]);
+  });
+
+  it("AC6: グループを畳むと中の worktree グループも隠れ、今いる workspace の行だけ残る（子でもその子だけ）", () => {
+    const [l, g] = layout(true);
+    const tree = sidebarTree(list, g, l, "opened");
+    expect(visibleWorkspaceIdsOfTree(tree, new Set(), null)).toEqual(["w5"]);
+    expect(visibleWorkspaceIdsOfTree(tree, new Set(), "w3")).toEqual(["w3", "w5"]);
+    expect(visibleWorkspaceIdsOfTree(tree, new Set(), "w1")).toEqual(["w1", "w5"]);
+    expect(visibleWorkspaceIdsOfTree(tree, new Set(), "w4")).toEqual(["w4", "w5"]);
+  });
+});
+
+describe("topUnitOf（AC17）", () => {
+  const list = [body("w1"), linked("w2"), ws("w3"), body("w4", R2), ws("w5")];
+  const layout = lay(["g:g1", "w:w3", `r:${R2}`, "w:w5"], { g1: [`r:${R}`] });
+
+  it("グループの中ならグループ、2 つ以上の repo なら repo、1 つの repo・管理外は workspace 単体", () => {
+    expect(topUnitOf("w1", list, layout)).toEqual({ kind: "group", groupId: "g1" });
+    expect(topUnitOf("w2", list, layout)).toEqual({ kind: "group", groupId: "g1" });
+    expect(topUnitOf("w3", list, layout)).toEqual({ kind: "workspace", workspaceId: "w3" });
+    expect(topUnitOf("w4", list, layout)).toEqual({ kind: "workspace", workspaceId: "w4" });
+    expect(topUnitOf("nope", list, layout)).toBeNull();
+  });
+
+  it("グループに入っていない worktree グループは repo", () => {
+    expect(topUnitOf("w2", list, lay(["r:" + R, "w:w3"]))).toEqual({ kind: "repo", repoKey: R });
+  });
+
+  it("配信の途中（レイアウトに無い workspace）でも一番上のまとまりを返す", () => {
+    expect(topUnitOf("w5", list, lay([]))).toEqual({ kind: "workspace", workspaceId: "w5" });
+    expect(topUnitOf("w1", list, lay([]))).toEqual({ kind: "repo", repoKey: R });
+  });
+
+  it("sidebarTree と同じ決まり: 食い違い（w: で持つが今は repo）も今の判定", () => {
+    expect(topUnitOf("w2", [body("w1"), linked("w2")], lay(["w:w1", "w:w2"]))).toEqual({
+      kind: "repo",
+      repoKey: R,
+    });
+  });
+});
+
+describe("layoutFromLegacy（F13・AC13）", () => {
+  const groups = [group("g1", "A"), group("g2", "B"), group("g3", "Empty")];
+
+  it("同じリポジトリが別々のグループ → 本体の所属に揃う", () => {
+    const list = [linked("w1", R, { groupId: "g2" }), body("w2", R, { groupId: "g1" })];
+    const l = layoutFromLegacy(list, groups);
+    expect(l.groups).toEqual({ g1: [`r:${R}`], g2: [], g3: [] });
+    expect(l.top).toEqual(["g:g1", "g:g2", "g:g3"]);
+  });
+
+  it("本体だけがグループに入っている → worktree も同じグループへ", () => {
+    const l = layoutFromLegacy([body("w1", R, { groupId: "g1" }), linked("w2")], groups);
+    expect(l.groups.g1).toEqual([`r:${R}`]);
+  });
+
+  it("worktree だけがグループに入っている → 本体が居るので一番上（グループを抜ける）", () => {
+    const l = layoutFromLegacy([body("w1"), linked("w2", R, { groupId: "g1" })], groups);
+    expect(l.groups.g1).toEqual([]);
+    expect(l.top).toContain(`r:${R}`);
+  });
+
+  it("本体が開かれていない → 最初に開いたものの所属", () => {
+    const l = layoutFromLegacy(
+      [linked("w1", R, { groupId: "g2" }), linked("w2", R, { groupId: "g1" })],
+      groups,
+    );
+    expect(l.groups.g2).toEqual([`r:${R}`]);
+    expect(l.groups.g1).toEqual([]);
+  });
+
+  it("単独の workspace（管理外）は自分の groupId で置く。1 つだけの repo も r: の項目", () => {
+    const l = layoutFromLegacy(
+      [ws("w1", { groupId: "g1" }), ws("w2"), body("w3", R2, { groupId: "g1" })],
+      groups,
+    );
+    expect(l.groups.g1).toEqual(["w:w1", `r:${R2}`]);
+    expect(l.top).toEqual(["g:g1", "w:w2", "g:g2", "g:g3"]);
+  });
+
+  it("位置: グループは先頭のメンバーの平らな順、空のグループは末尾、一番上の項目は先頭の workspace の順", () => {
+    const list = [
+      ws("w1"),
+      ws("w2", { groupId: "g2" }),
+      linked("w3", R),
+      ws("w4", { groupId: "g1" }),
+      body("w5", R),
+    ];
+    const l = layoutFromLegacy(list, groups);
+    expect(l.top).toEqual(["w:w1", "g:g2", `r:${R}`, "g:g1", "g:g3"]);
+    expect(l.groups).toEqual({ g1: ["w:w4"], g2: ["w:w2"], g3: [] });
+  });
+
+  it("存在しないグループを指す groupId は一番上に置く。結果を sidebarTree に通すと元の平らな順と矛盾しない", () => {
+    const list = [ws("w1", { groupId: "gone" }), body("w2"), linked("w3")];
+    const l = layoutFromLegacy(list, []);
+    expect(l.top).toEqual(["w:w1", `r:${R}`]);
+    expect(shape(sidebarTree(list, [], l, "opened"))).toEqual([
+      "w1",
+      { r: "w2", children: ["w3"] },
+    ]);
   });
 });
