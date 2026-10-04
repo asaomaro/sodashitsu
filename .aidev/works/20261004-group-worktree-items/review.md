@@ -673,3 +673,123 @@ AssertionError: expected { top: [ 'w:w1', 'w:w2' ], groups: {} } to deeply equal
 ```
 - T9 [should] 新規テストの分割代入が no-unused-vars で落ちる（GitInfoPoller.test.ts・SessionFile.test.ts）→ コピーして delete する形に直した [conv:-]
 - T9 [nit] 壊れた保存（layout に r:K があるのに repoGroups に K が無い）で実効の groupId が null になる → 通常の保存では起きないため直さず review に委ねる [conv:-]
+
+### T10 壊して落ちる確認
+
+以下 3 つの壊し方を当て、落ちることを確かめてから元に戻した（git diff で確認）。生の出力（`vitest run` の出力から本文以外の空行・RUN 行のログを省いた）:
+
+```
+## A: composeServer の配線を外す
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+ ❯ src/composeServer.layoutMigration.integration.test.ts (1 test | 1 failed) 12091ms
+   ❯ composeServer: 移行の確定（最初の 1 周の合図） (1)
+     × 本体だけがグループに居る古い保存: 最初の 1 周の後に確定し、worktree も同じグループへ入り、session.json に layout・repoGroups が書かれる 12090ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/composeServer.layoutMigration.integration.test.ts > composeServer: 移行の確定（最初の 1 周の合図） > 本体だけがグループに居る古い保存: 最初の 1 周の後に確定し、worktree も同じグループへ入り、session.json に layout・repoGroups が書かれる
+Error: timeout: layout is confirmed after the first round
+ ❯ waitFor src/composeServer.layoutMigration.integration.test.ts:17:35
+     15|   const until = Date.now() + 10_000;
+     16|   while (!cond()) {
+     17|     if (Date.now() > until) throw new Error(`timeout: ${what}`);
+       |                                   ^
+     18|     await new Promise((r) => setTimeout(r, 25));
+     19|   }
+ ❯ src/composeServer.layoutMigration.integration.test.ts:88:5
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:02:56
+   Duration  13.50s (tests 90%, transform 8%, import 2%)
+undefined
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/composeServer.layoutMigration.integration.test.ts
+## B: confirmLayout の「確定済みなら何もしない」を外す
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+ ❯ src/session/SessionService.test.ts (182 tests | 1 failed | 169 skipped) 286ms
+   ❯ SessionService — 移行の確定（仮の状態 → confirmLayout） (10)
+     × 確定は 1 回だけ: 2 回目の合図は何も配らず、保存も予約しない 19ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionService.test.ts > SessionService — 移行の確定（仮の状態 → confirmLayout） > 確定は 1 回だけ: 2 回目の合図は何も配らず、保存も予約しない
+AssertionError: expected 1 to be +0 // Object.is equality
+- Expected
++ Received
+- 0
++ 1
+ ❯ src/session/SessionService.test.ts:3257:32
+    3255|     service.confirmLayout();
+    3256|     expect(events).toEqual([]);
+    3257|     expect(persist.touchCount).toBe(0);
+       |                                ^
+    3258|   });
+    3259|
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 passed | 169 skipped (182)
+   Start at  13:03:10
+   Duration  980ms (transform 56%, tests 32%, import 12%)
+undefined
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session/SessionService.test.ts -t 確定
+## C: 確定の出口（publishSidebarChanges）を通さない
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+ ❯ src/session/SessionService.test.ts (182 tests | 1 failed | 169 skipped) 279ms
+   ❯ SessionService — 移行の確定（仮の状態 → confirmLayout） (10)
+     × 別々のグループに居る本体と worktree: 本体の所属に揃う（worktree の workspace.updated が出る）。保存は確定の後に layout を書く 25ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionService.test.ts > SessionService — 移行の確定（仮の状態 → confirmLayout） > 別々のグループに居る本体と worktree: 本体の所属に揃う（worktree の workspace.updated が出る）。保存は確定の後に layout を書く
+AssertionError: expected [] to deeply equal [ 'workspace.updated' ]
+- Expected
++ Received
+- [
+-   "workspace.updated",
+- ]
++ []
+ ❯ src/session/SessionService.test.ts:3204:40
+    3202|     expect(service.getWorkspace("w2")?.groupId).toBe("g1");
+    3203|     // 導いたレイアウトと同じなので sidebar.layout_changed は出ない。groupId が変わった w2 だけ …
+    3204|     expect(events.map((e) => e.event)).toEqual(["workspace.updated"]);
+       |                                        ^
+    3205|     expect(persist.touchCount).toBe(1);
+    3206|   });
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 12 passed | 169 skipped (182)
+   Start at  13:03:12
+   Duration  1.04s (transform 59%, tests 29%, import 12%)
+undefined
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/session/SessionService.test.ts -t 確定
+```
+
+- A: `composeServer.ts` の `onFirstRoundDone` の中の `session.confirmLayout()` を外す → 結合テストが「layout is confirmed after the first round」で時間切れ。
+- B: `SessionService.confirmLayout` の `hasLayout()` の早期 return を外す → 「確定は 1 回だけ」が落ちる（2 回目に保存を予約する）。
+- C: `confirmLayout` が共通の出口 `publishSidebarChanges` を通さない → 「別々のグループ…」が落ちる（workspace.updated も保存の予約も出ない）。
+
+#### 追記: isRunning ガードの回帰テスト（独自点検の指摘 [should]/[nit]）
+
+配線を `packages/server/src/layoutConfirmWiring.ts` の `wireLayoutConfirmation` に切り出し（composeServer はこれを呼ぶ）、`layoutConfirmWiring.test.ts` で「stop 中に 1 周が終わっても確定せず、再開 start 後の 1 周で確定する」を通しで固定した。`if (poller.isRunning())` を外して落ちることを確認し、戻した。生の出力:
+
+```
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+ ❯ src/layoutConfirmWiring.test.ts (1 test | 1 failed) 26ms
+   ❯ wireLayoutConfirmation (1)
+     × stop 中に 1 周が終わっても確定せず、再開（start）後の 1 周で確定する 25ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/layoutConfirmWiring.test.ts > wireLayoutConfirmation > stop 中に 1 周が終わっても確定せず、再開（start）後の 1 周で確定する
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+Received:
+  1st vi.fn() call:
+    Array []
+Number of calls: 1
+ ❯ src/layoutConfirmWiring.test.ts:20:31
+     18|     await vi.waitFor(() => expect(pollNow).toHaveBeenCalledTimes(1));
+     19|     await new Promise((r) => setTimeout(r, 20)); // 1 周目の合図が届くのを待つ
+     20|     expect(confirmLayout).not.toHaveBeenCalled();
+       |                               ^
+     21|
+     22|     poller.start(); // 再開。また 1 周して合図を出す
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:06:13
+   Duration  153ms (transform 51%, tests 32%, import 13%, worker 3%)
+```
+- T10 [should] 一時停止中の合図を捨てる分岐に壊して落ちる確認が無い → 配線を layoutConfirmWiring.ts に切り出し、stop 中に 1 周が終わる→確定しない→再開後に確定するテストを足して確認 [conv:regression-negative-control!]
+- T10 [nit] stop→再開→確定の通しの確認が無い → 同じテストで通した [conv:-]

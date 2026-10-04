@@ -30,6 +30,7 @@ import { OsNetworkInfo } from "./infra/OsNetworkInfo.js";
 import { ChildProcessGitRunner } from "./infra/GitRunner.js";
 import { DefaultWorktreeService } from "./git/WorktreeService.js";
 import { DefaultGitInfoPoller } from "./git/GitInfoPoller.js";
+import { wireLayoutConfirmation } from "./layoutConfirmWiring.js";
 import { createPaletteSource } from "./clients/answerPalette.js";
 import { DefaultClientRegistry } from "./clients/ClientRegistry.js";
 import { DefaultSizeAuthority } from "./clients/SizeAuthority.js";
@@ -694,7 +695,8 @@ export async function composeServer(
         dropSweeper = dropStore.startSweeping(); // ドロップされたファイルも同じ間隔で片付ける
         // 3.5. 連携の実行（20260927-agent-graph）。状態の変化を購読するので agentMonitor より前に始める（最初の判定の変化から拾う）。
         graphEngine.start();
-        // 4. poller。
+        // 4. poller。最初の 1 周の確認が終わったら、layout の無い保存から始めた移行を確定する（一時停止中の合図は捨てる。D18）。
+        wireLayoutConfirmation(gitPoller, session);
         gitPoller.start();
         agentMonitor.start();
         // 4.5. 更新時の引き継ぎの指示の受け口（Linux/macOS。20260926-live-handoff）。復元と poller の開始の後に置く——起動の途中の指示で、

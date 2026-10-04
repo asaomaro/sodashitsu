@@ -51,7 +51,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/server/src/persist/SessionFile.ts:42, :54, :59, :106, :123, :126, :130`、`packages/server/src/composeServer.ts:853-890`（`toSessionFileData`）、`packages/server/src/session/SessionModel.ts`（`restoreWorkspace`・`restoreGroup`）、`packages/server/src/session/SessionService.ts`（`restore`）、`packages/server/src/persist/SessionFile.test.ts:69, :83`
       依存: T6, T7, T8
       AC: AC9, AC10, AC14
-- [ ] T10: 移行——`layout` の無い保存は**仮の状態**で始める（`layoutFromLegacy` で毎回導く・`layout` と `repoGroups` を保存に書かない・スナップショットとイベントには導いた `layout` を載せる）。**確定は 1 回だけ**: 最初の 1 周の確認が終わったとき（合図が 2 回以上来ても 1 回）か、それより前の最初の操作（`group.*`〔`toggle_collapsed`・`rename` を除く〕・`item.*`・`workspace.move`・`workspace.move_to`）。単体テスト: 古い保存の形〔別々のグループ・本体だけがグループ・worktree だけがグループ・本体が開かれていない・単独の workspace・**本体の判定だけが 1 周目で取れない**（D2 の結果を固定する）〕／確定の前に止めても次の起動で同じ結果／確定の後は移行しない。壊して落ちる確認
+- [x] T10: 移行——`layout` の無い保存は**仮の状態**で始める（`layoutFromLegacy` で毎回導く・`layout` と `repoGroups` を保存に書かない・スナップショットとイベントには導いた `layout` を載せる）。**確定は 1 回だけ**: 最初の 1 周の確認が終わったとき（合図が 2 回以上来ても 1 回）か、それより前の最初の操作（`group.*`〔`toggle_collapsed`・`rename` を除く〕・`item.*`・`workspace.move`・`workspace.move_to`）。単体テスト: 古い保存の形〔別々のグループ・本体だけがグループ・worktree だけがグループ・本体が開かれていない・単独の workspace・**本体の判定だけが 1 周目で取れない**（D2 の結果を固定する）〕／確定の前に止めても次の起動で同じ結果／確定の後は移行しない。壊して落ちる確認
       対象: `packages/server/src/session/SessionService.ts`（`restore`）、`packages/server/src/session/SessionModel.ts`、`packages/server/src/composeServer.ts:853-890`、`packages/server/src/git/GitInfoPoller.ts`（1 周目の合図）
       依存: T9
       AC: AC13

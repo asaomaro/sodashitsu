@@ -86,6 +86,11 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
     return { dispose: () => void this.firstRoundListeners.delete(listener) };
   }
 
+  /** 動いているか（`start()` の後で `stop()` の前）。一時停止中に届いた 1 周の合図を、受け手が見分けるために使う。 */
+  isRunning(): boolean {
+    return this.timer !== null;
+  }
+
   stop(): void {
     this.subscription?.dispose();
     this.subscription = null;

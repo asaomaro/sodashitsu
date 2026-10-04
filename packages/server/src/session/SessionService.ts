@@ -306,6 +306,17 @@ export class SessionService {
     return { layout: this.model.getLayout(), repoGroups: Object.fromEntries(this.model.getRepoGroups()) };
   }
 
+  /**
+   * 移行の確定（起動後の最初の 1 周の確認が終わったとき。20261004-group-worktree-items D2・D18）。仮の状態でなければ何もしない
+   * （合図は 2 回以上来うるので 1 回だけ働く）。確定したら共通の出口で配り、保存を予約する（`layout`・`repoGroups` が書かれる）。
+   * 利用者の操作が先に確定していれば（design「確定のきっかけ (b)」。モデルの書き換え操作が受け付けたときに確定する）何もしない。
+   */
+  confirmLayout(): void {
+    if (this.model.hasLayout()) return;
+    this.model.confirmLayout();
+    this.publishSidebarChanges();
+  }
+
   /** 検出したエージェントのインスタンス id を払い出す（`"a1"` 等。02-agent-detection の `AgentTracker` が使う。T8）。
    *  `nextId` は `session.json` に永続化されるので、再起動後も重複しない（design「done」の注記）。 */
   allocateAgentInstanceId(): string {

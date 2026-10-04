@@ -137,3 +137,10 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **書き出し**: `SessionService.persistedLayout()`（仮の状態なら null）。`toSessionFileData`（結合テストのため `export` した）は null のとき `layout`・`repoGroups` のキーごと省く。仮の状態の間も `repoKey`・`isLinkedWorktree` は書く（起動直後から束ねるため）。
 - **確かめたこと（実物の git・実物の `FsSessionFile`）**: 保存 → 復元の直後に停止前と同じ `layout`・Map の順・実効の `groupId`、`git` は `{branch: null, ahead: 0, behind: 0, repoKey, isLinkedWorktree}`。最初の 1 周でブランチが入り並びは不変。フォルダが消えて「取れない」の workspace は復元した判定・所属のまま。
 - T10 への申し送り: 確定の合図は `SessionModel.confirmLayout()`（`layout` が `null` のときだけ働く）。確定後の保存は `persistedLayout()` が値を返すので `layout`・`repoGroups` が書かれる。
+
+## D18: 移行の確定（T10）
+
+- **確定の合図**: `SessionService.confirmLayout()`（仮の状態でなければ何もしない。確定したら共通の出口 `publishSidebarChanges` で配り、保存を予約する）。`composeServer.ts` が `gitPoller.onFirstRoundDone` に結ぶ（`start()` の前）。合図は `start()` ごとに来るが、確定済みなら何もしないので 1 回だけ働く。確定で導いたレイアウトは変わらないので `sidebar.layout_changed` は出ず、所属が変わる workspace（別のグループの worktree 等）の `workspace.updated` と保存の予約だけが出る。
+- **一時停止中の合図は捨てる**: D10 の「合図は stop の後にも届きうる」への対処。引き継ぎの一時停止（`pausePollers` → `flushSession` → execve）の間に確定すると、保存を流した後に書き換えて予約が残る。`DefaultGitInfoPoller.isRunning()`（`timer` が有るか）を足し、動いていないときの合図は確定しない。再開の `start()` がまた 1 周して合図を出し、execve で置き換わった場合は新しい版が仮の状態から同じ導き方をやり直す（`layout` を書いていないので移行は失われない）。
+- **確定のきっかけ (b) はモデルの書き換え操作の入口で既に実現している（T5・T8）**: `createGroup`・`deleteGroup`・`addToGroup`・`removeFromGroup`・`moveItem`・`moveItemBy`・`moveWorkspace`・`moveWorkspacesTo` が、**受け付けて書き換えるとき**に先に `confirmedLayout()` で確定してから当て、サービスの共通の出口が配る。`group.rename`・`group.toggle_collapsed` は通らない（確定しない）。`item.*`・`workspace.move`・`workspace.move_to` の受け付けない移動は確定しない（D16 のとおり。確定しても何も変わらず、保存と配信が無駄に走るだけで、利用者に見える違いは無い。design の「(b) それより前に利用者が操作したとき」の「操作」は、状態を変える操作と読めるので design と食い違わないと判断した）。存在しない ID を渡す呼び出し（`not_found`）も、検証が確定より先なので確定しない。
+- 結果の固定: 本体の判定だけが 1 周目で取れなかった場合（D2）は、取れた worktree の所属（`repoGroups[K]`）で確定し、本体は後から判定が付いたとき（表の「判定が付く」。`repoGroups` を先に見る）に同じグループの `r:K` へ加わる。`SessionService.test.ts`「移行の確定」で固定した。

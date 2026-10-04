@@ -581,6 +581,19 @@ describe("DefaultGitInfoPoller — probe の結果と最初の 1 周の合図", 
       expect(gone).toBe(0);
     });
 
+    it("isRunning: start() の後で stop() の前だけ true（一時停止中に届いた合図を受け手が見分ける）", async () => {
+      const { git } = fakeGit({ "rev-parse --abbrev-ref HEAD": failed(128) });
+      const poller = new DefaultGitInfoPoller(service, git, 60_000);
+      const atSignal: boolean[] = [];
+      poller.onFirstRoundDone(() => atSignal.push(poller.isRunning()));
+      expect(poller.isRunning()).toBe(false);
+      poller.start();
+      expect(poller.isRunning()).toBe(true);
+      poller.stop(); // 1 周が終わる前に止める（引き継ぎの一時停止）。合図は stop の後に届く
+      expect(poller.isRunning()).toBe(false);
+      await vi.waitFor(() => expect(atSignal).toEqual([false]));
+    });
+
     it("最初の 1 周が失敗しても合図は出る", async () => {
       const { git } = fakeGit({});
       const poller = new DefaultGitInfoPoller(service, git, 60_000);
