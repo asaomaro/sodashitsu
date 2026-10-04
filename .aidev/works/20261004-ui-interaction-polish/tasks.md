@@ -63,7 +63,7 @@ design.md のとおり、下から積む。純関数（T1）→ 色の変数（T
       対象: `packages/e2e/src/specs/resize-handles.spec.ts`（新規）。手本は `settings.spec.ts:46-57`（`dragDivider`）・`workspace-tab-pane.spec.ts:172-191`。`keys-mouse-dialogs.spec.ts:256-270, :330`（`describeFocus` は `role=separator` をすべて `"splitter"` と返す）は、サイドバーの境目と pane の境目を区別できる形に直し、`Tab` の順の期待を確かめる
       依存: T6, T9, T7
       AC: AC1, AC2, AC3, AC14, AC17, AC15, AC-I2, AC-I4, AC-I5
-- [ ] T13: E2E `sidebar-sections.spec.ts`——workspace とエージェントが多いとき区画ごとにスクロールし、見出し・＋新規・メニュー・畳むボタンが見えたまま／区画の境目のドラッグ・キー・読み込み直しで配分が同じ・最小を割らない／見出しを押して畳む・開く（印・`aria-expanded`・片方が空きを使う・両方畳む・境目が消える・読み込み直しで同じ）／畳んだ見出しの件数と、agents の入力待ちの印／操作のキー（`prefix+shift+b`・`prefix+shift+a`）／サイドバー全体を畳むと区画の折りたたみに関わらず全部のアイコンが出る／畳んだ区画の中にあったフォーカスが見出しへ移る／並び順のボタンが開閉を起こさない。観測を壊して落ちる確認。2 回続けて同じ結果
+- [x] T13: E2E `sidebar-sections.spec.ts`——workspace とエージェントが多いとき区画ごとにスクロールし、見出し・＋新規・メニュー・畳むボタンが見えたまま／区画の境目のドラッグ・キー・読み込み直しで配分が同じ・最小を割らない／見出しを押して畳む・開く（印・`aria-expanded`・片方が空きを使う・両方畳む・境目が消える・読み込み直しで同じ）／畳んだ見出しの件数と、agents の入力待ちの印／操作のキー（`prefix+shift+b`・`prefix+shift+a`）／サイドバー全体を畳むと区画の折りたたみに関わらず全部のアイコンが出る／畳んだ区画の中にあったフォーカスが見出しへ移る／並び順のボタンが開閉を起こさない。観測を壊して落ちる確認。2 回続けて同じ結果
       対象: `packages/e2e/src/specs/sidebar-sections.spec.ts`（新規）
       依存: T9, T15
       AC: AC9, AC10, AC11, AC12, AC20, AC15, AC-I1, AC-I3, AC-I4, AC-I5

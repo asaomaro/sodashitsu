@@ -236,3 +236,15 @@ AssertionError: expected { spaces: true, agents: true } to deeply equal { spaces
     Expected: 1
     Received: 0
 ```
+
+#### T13 E2E `sidebar-sections.spec.ts`（生の出力。変異ごと。2 回続けて 7 件 pass を確認済み）
+```
+変異: .sidebar-section-body の overflow-y: auto → visible
+  ✘  1 sidebar-sections.spec.ts:60:1 › workspace が多いと spaces の区画の中だけがスクロールし、見出し・＋新規・メニュー・畳むボタンは見えたまま (8.0s)
+変異: 畳んだ区画の中のフォーカスを見出しへ移す処理を外す
+  ✘  7 sidebar-sections.spec.ts:175:1 › 畳んだ区画の中にあったフォーカスは見出しへ移る。並び順のボタンは開閉を起こさない (6.6s)
+    Error: expect(locator).toBeFocused() failed
+変異: --section-min（区画の最小の高さ）を 0em に
+  ✘  1 …:60:1 › workspace が多いと …
+  ✘  2 …:78:1 › 区画の境目: ドラッグ・キー・読み込み直しで配分が同じ。最小を割らない (12.2s)
+```
