@@ -607,11 +607,20 @@ function moveFocusOutOfFolded(section: HTMLElement | null, toggle: () => HTMLEle
   // サイドバーを畳んだ状態から開いて畳んだ区画が現れたとき: 見出しのボタンはまだ描かれていない。描かれてから移す。
   void nextTick(() => toggle()?.focus());
 }
+/** 区画の境目は、どちらかを畳むと DOM から消える。フォーカスがあれば、畳んだ区画の見出しのボタンへ移す。 */
+const sectionDividerEl = ref<HTMLElement | null>(null);
+function moveFocusFromDivider(toggle: () => HTMLElement | null): void {
+  if (sectionDividerEl.value && document.activeElement === sectionDividerEl.value) toggle()?.focus();
+}
 watch(spacesFolded, (folded) => {
-  if (folded) moveFocusOutOfFolded(spacesEl.value, () => spacesToggleEl.value);
+  if (!folded) return;
+  moveFocusOutOfFolded(spacesEl.value, () => spacesToggleEl.value);
+  moveFocusFromDivider(() => spacesToggleEl.value);
 });
 watch(agentsFolded, (folded) => {
-  if (folded) moveFocusOutOfFolded(agentsEl.value, () => agentsToggleEl.value);
+  if (!folded) return;
+  moveFocusOutOfFolded(agentsEl.value, () => agentsToggleEl.value);
+  moveFocusFromDivider(() => agentsToggleEl.value);
 });
 
 /** 比があって両方を開いているときだけ、比で配る（そうでなければ CSS の自動の配分）。 */
@@ -911,6 +920,7 @@ watch(
 
     <div
       v-if="showSectionDivider"
+      ref="sectionDividerEl"
       class="sidebar-section-divider resize-handle resize-handle-y"
       :class="{ 'resize-handle-active': sectionDrag.dragging.value }"
       role="separator"

@@ -157,6 +157,37 @@ describe("useResizeDrag", () => {
     expect(drag.dragging.value).toBe(false);
   });
 
+  it("動かしたドラッグの直後（350ms 以内）の pointerdown は reset ではなく新しいドラッグ（素早い 2 回のドラッグで保存した値を消さない）", () => {
+    const { calls, drag, ev } = setup();
+    drag.onPointerDown(ev());
+    drag.onPointerMove(ev({ clientX: 5 }));
+    drag.onPointerEnd(ev());
+    vi.advanceTimersByTime(100);
+    drag.onPointerDown(ev());
+    expect(calls).toEqual(["begin", "move:5:100", "commit:100", "begin"]);
+    expect(calls).not.toContain("reset");
+    expect(drag.dragging.value).toBe(true);
+  });
+
+  it("Esc で取り消した直後の pointerdown も reset ではない", () => {
+    const { calls, drag, ev } = setup();
+    drag.onPointerDown(ev());
+    key("Escape");
+    vi.advanceTimersByTime(100);
+    drag.onPointerDown(ev());
+    expect(calls).toEqual(["begin", "cancel:100", "begin"]);
+  });
+
+  it("reset の直後の 3 回目の pointerdown は新しいクリックの 1 回目（続けて reset にならない）", () => {
+    const { calls, drag, ev } = setup();
+    drag.onPointerDown(ev());
+    drag.onPointerEnd(ev());
+    drag.onPointerDown(ev()); // reset
+    vi.advanceTimersByTime(50);
+    drag.onPointerDown(ev());
+    expect(calls).toEqual(["begin", "reset", "begin"]);
+  });
+
   it("ドラッグ中の 2 本目の pointerdown は reset も新しいドラッグも始めない", () => {
     const { calls, drag, ev } = setup();
     drag.onPointerDown(ev());

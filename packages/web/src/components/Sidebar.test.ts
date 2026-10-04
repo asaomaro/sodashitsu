@@ -767,6 +767,9 @@ describe("Sidebar — 幅のドラッグとダブルクリックでの復元（D
       await divider.trigger("pointerdown", { clientX: 240 });
       await divider.trigger("pointermove", { clientX: 300 });
       await divider.trigger("pointerup");
+      vi.advanceTimersByTime(500); // 動かしたドラッグの直後はダブルクリックに数えない。クリック（動かさず離す）の 2 回目から
+      await divider.trigger("pointerdown", { clientX: 300 });
+      await divider.trigger("pointerup");
       await divider.trigger("pointerdown", { clientX: 300 }); // 2 回目（350ms 以内）
       expect((wrapper.find(".sidebar").element as HTMLElement).style.width).toBe("240px");
     } finally {
@@ -819,6 +822,9 @@ describe("Sidebar — 幅を覚える", () => {
       const { divider } = setup();
       await divider.trigger("pointerdown", { clientX: 240 });
       await divider.trigger("pointermove", { clientX: 300 });
+      await divider.trigger("pointerup");
+      vi.advanceTimersByTime(500); // 動かしたドラッグの直後はダブルクリックに数えない。クリック（動かさず離す）の 2 回目から
+      await divider.trigger("pointerdown", { clientX: 300 });
       await divider.trigger("pointerup");
       await divider.trigger("pointerdown", { clientX: 300 }); // 2 回目（350ms 以内）
       expect(saved()).toBe(240);
@@ -1305,6 +1311,21 @@ describe("Sidebar — 区画の見出し", () => {
     await wrapper.vm.$nextTick();
     expect(document.activeElement).toBe(toggle(wrapper, "agents").element);
     wrapper.unmount();
+  });
+
+  it("区画の境目にフォーカスがあるまま片方を畳むと、境目が消える代わりに、畳んだ区画の見出しのボタンへ移る", async () => {
+    for (const which of ["spaces", "agents"] as const) {
+      const { wrapper, view } = setup({ attach: true });
+      const divider = wrapper.get(".sidebar-section-divider").element as HTMLElement;
+      divider.focus();
+      expect(document.activeElement).toBe(divider);
+      view.toggleSectionCollapsed(which);
+      await wrapper.vm.$nextTick();
+      expect(wrapper.find(".sidebar-section-divider").exists()).toBe(false);
+      expect(document.activeElement).toBe(toggle(wrapper, which).element);
+      view.toggleSectionCollapsed(which); // 次の繰り返しのために開き直す（ストアは共有）
+      wrapper.unmount();
+    }
   });
 
   it("畳んだ区画の外のフォーカスは動かさない", async () => {

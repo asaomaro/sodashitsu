@@ -18,7 +18,7 @@ export interface ResizeDragOptions<T> {
   commit(start: T): void;
   /** 取り消し（`Esc`）。`start` へ戻す。 */
   cancel(start: T): void;
-  /** ダブルクリック（350ms 以内の 2 回目の pointerdown）。 */
+  /** ダブルクリック（動かさずに離したクリックから 350ms 以内の 2 回目の pointerdown。続けてドラッグしただけでは呼ばれない）。 */
   reset(): void;
 }
 
@@ -44,6 +44,8 @@ export function useResizeDrag<T>(o: ResizeDragOptions<T>): ResizeDrag {
   let target: HTMLElement | null = null;
   let pointerId = -1;
   let lastDown = 0;
+  /** 動かさずに離した（クリックだった）直前の pointerdown の時刻。ダブルクリックの 1 回目はこれだけ。0 は無し。 */
+  let lastClick = 0;
 
   const root = (): HTMLElement => document.documentElement;
 
@@ -89,6 +91,7 @@ export function useResizeDrag<T>(o: ResizeDragOptions<T>): ResizeDrag {
     if (!dragging.value) return;
     const s = start as T;
     if (cancelled) {
+      lastClick = 0;
       detach();
       o.cancel(s);
       return;
@@ -96,6 +99,7 @@ export function useResizeDrag<T>(o: ResizeDragOptions<T>): ResizeDrag {
     if (raf !== null) cancelAnimationFrame(raf);
     flush();
     detach();
+    lastClick = moved ? 0 : lastDown; // 動かさずに離したときだけ、次の pointerdown がダブルクリックになりうる
     if (moved) o.commit(s);
   }
 
@@ -107,12 +111,14 @@ export function useResizeDrag<T>(o: ResizeDragOptions<T>): ResizeDrag {
     ev.preventDefault();
     if (dragging.value) return; // ドラッグ中の 2 本目のポインタ（タッチ）では reset も新しいドラッグも始めない
     const now = Date.now();
-    if (now - lastDown < DOUBLE_CLICK_MS) {
+    if (lastClick > 0 && now - lastClick < DOUBLE_CLICK_MS) {
+      lastClick = 0;
       lastDown = 0;
       o.reset();
       return;
     }
     lastDown = now;
+    lastClick = 0;
     target = (ev.currentTarget as HTMLElement | null) ?? null;
     pointerId = ev.pointerId;
     target?.setPointerCapture?.(ev.pointerId);
