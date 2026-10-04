@@ -1,7 +1,6 @@
 import { createServer, type Server } from "node:net";
 import { chmod, unlink } from "node:fs/promises";
 import { platform } from "node:os";
-import type { AgentIntegrationKind } from "@sodashitsu/protocol";
 import type { Logger } from "../log/Logger.js";
 
 /**
@@ -10,15 +9,38 @@ import type { Logger } from "../log/Logger.js";
  * `{"paneId": "...", "kind": "claude"|"codex", "sessionId": "..."}` を受け、既知の `kind` かどうかは
  * ここでは検査しない（呼び出し側の `onReport` が `SessionModel` の実在パネル・resume コマンド解決で
  * 未知の値を無害に弾く。report 経路は best-effort——不正・破損したメッセージは黙って捨てる）。
+ *
+ * サブエージェントの表示（20261004-subagent-display）のため、`type` つきの電文も受ける（`type` の無い電文は今までどおり
+ * セッション ID の報告）。スクリプトの切り詰めに頼らず、受け口でも同じ上限を掛ける（名乗りは検証されない）。
  */
 export interface AgentReportSocket {
   readonly path: string;
   close(): Promise<void>;
 }
 
-export type AgentReportHandler = (paneId: string, kind: string, sessionId: string) => void;
+/** 受け口が解釈した報告。`session` は `type` の無い電文（今までのセッション ID の報告）。 */
+export type AgentReport =
+  | { type: "session"; paneId: string; kind: string; sessionId: string }
+  | { type: "subagent_pending"; paneId: string; kind: string; sessionId: string; description?: string; agentType?: string; background?: boolean }
+  | { type: "subagent_start"; paneId: string; kind: string; sessionId: string; agentId: string; agentType?: string }
+  | { type: "subagent_stop"; paneId: string; kind: string; sessionId: string; agentId: string }
+  | {
+      type: "agent_stop";
+      paneId: string;
+      kind: string;
+      sessionId: string;
+      running: { id: string; agentType?: string; description?: string }[];
+      truncated: boolean;
+    }
+  | { type: "session_end"; paneId: string; kind: string; sessionId: string };
 
-const MAX_LINE_BYTES = 4096; // 1メッセージの上限（想定外に大きい入力を溜め込まない）
+export type AgentReportHandler = (report: AgentReport) => void;
+
+const MAX_LINE_CHARS = 32768; // 1メッセージの上限（想定外に大きい入力を溜め込まない。`running` 64 件が収まる大きさ）
+const MAX_DESCRIPTION = 200;
+const MAX_AGENT_TYPE = 64;
+const MAX_ID = 128;
+const MAX_RUNNING = 64;
 
 export async function startAgentReportSocket(path: string, onReport: AgentReportHandler, logger: Logger): Promise<AgentReportSocket> {
   const server = createServer((sock) => {
@@ -26,7 +48,7 @@ export async function startAgentReportSocket(path: string, onReport: AgentReport
     sock.setEncoding("utf8");
     sock.on("data", (chunk) => {
       buf += chunk;
-      if (buf.length > MAX_LINE_BYTES) {
+      if (buf.length > MAX_LINE_CHARS) {
         sock.destroy();
         return;
       }
@@ -96,15 +118,76 @@ function handleLine(raw: string, onReport: AgentReportHandler, logger: Logger): 
     logger.debug("agent report: invalid JSON, ignoring");
     return;
   }
-  if (!isReportPayload(payload)) {
+  const report = parseReport(payload);
+  if (!report) {
     logger.debug("agent report: unexpected shape, ignoring");
     return;
   }
-  onReport(payload.paneId, payload.kind, payload.sessionId);
+  onReport(report);
 }
 
-function isReportPayload(v: unknown): v is { paneId: string; kind: AgentIntegrationKind | string; sessionId: string } {
-  if (typeof v !== "object" || v === null) return false;
+/** 文字（コードポイント）単位で切る。空・文字列でないものは undefined。 */
+function cut(v: unknown, max: number): string | undefined {
+  if (typeof v !== "string" || v === "") return undefined;
+  const chars = Array.from(v);
+  return chars.length > max ? chars.slice(0, max).join("") : v;
+}
+
+/** 長さが 1〜`MAX_ID` 文字の ID だけを通す（超えるものは undefined）。 */
+function idOf(v: unknown): string | undefined {
+  return typeof v === "string" && v !== "" && Array.from(v).length <= MAX_ID ? v : undefined;
+}
+
+function parseReport(v: unknown): AgentReport | undefined {
+  if (typeof v !== "object" || v === null) return undefined;
   const o = v as Record<string, unknown>;
-  return typeof o.paneId === "string" && typeof o.kind === "string" && typeof o.sessionId === "string";
+  if (typeof o.paneId !== "string" || typeof o.kind !== "string" || typeof o.sessionId !== "string") return undefined;
+  const base = { paneId: o.paneId, kind: o.kind, sessionId: o.sessionId };
+  if (o.type === undefined) return { type: "session", ...base };
+  switch (o.type) {
+    case "subagent_pending": {
+      const description = cut(o.description, MAX_DESCRIPTION);
+      const agentType = cut(o.agentType, MAX_AGENT_TYPE);
+      return {
+        type: "subagent_pending",
+        ...base,
+        ...(description !== undefined ? { description } : {}),
+        ...(agentType !== undefined ? { agentType } : {}),
+        ...(typeof o.background === "boolean" ? { background: o.background } : {}),
+      };
+    }
+    case "subagent_start": {
+      const agentId = idOf(o.agentId);
+      if (agentId === undefined) return undefined;
+      const agentType = cut(o.agentType, MAX_AGENT_TYPE);
+      return { type: "subagent_start", ...base, agentId, ...(agentType !== undefined ? { agentType } : {}) };
+    }
+    case "subagent_stop": {
+      const agentId = idOf(o.agentId);
+      return agentId === undefined ? undefined : { type: "subagent_stop", ...base, agentId };
+    }
+    case "agent_stop": {
+      if (!Array.isArray(o.running)) return undefined;
+      const running: { id: string; agentType?: string; description?: string }[] = [];
+      let truncated = o.truncated === true;
+      for (const item of o.running as unknown[]) {
+        if (typeof item !== "object" || item === null) continue;
+        const it = item as Record<string, unknown>;
+        const id = idOf(it.id);
+        if (id === undefined) continue;
+        if (running.length >= MAX_RUNNING) {
+          truncated = true; // 削った分があるので、突き合わせで「外す」を止める
+          break;
+        }
+        const agentType = cut(it.agentType, MAX_AGENT_TYPE);
+        const description = cut(it.description, MAX_DESCRIPTION);
+        running.push({ id, ...(agentType !== undefined ? { agentType } : {}), ...(description !== undefined ? { description } : {}) });
+      }
+      return { type: "agent_stop", ...base, running, truncated };
+    }
+    case "session_end":
+      return { type: "session_end", ...base };
+    default:
+      return undefined; // 知らない type は捨てる
+  }
 }

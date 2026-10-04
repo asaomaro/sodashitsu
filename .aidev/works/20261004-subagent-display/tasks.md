@@ -29,7 +29,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/server/assets/agent-hook-report.cjs`、`packages/server/assets/agent-hook-report.test.ts`
       依存: T1
       AC: AC1, AC5, AC12, AC13
-- [ ] T4: 受け口——電文を `AgentReport`（種類つき）に解釈する。上限を 32768 文字にし、サーバ側でも切り詰め・上限（説明 200・種類 64・ID 128・`running` 64 件）を掛ける。知らない `type` は捨てる。切り詰めで `running` を 64 件に削ったときは、受け口の側でも `truncated: true` を立てる（スクリプトが立てていなくても。突き合わせで「外す」を止めるため）。handler の型を `(report: AgentReport) => void` に変え、既存の 4 件のテストと `composeServer` の呼び出しを合わせる（この時点では `type: "session"` だけを今までどおり処理し、ほかは捨てる）。単体テストと壊して落ちる確認
+- [x] T4: 受け口——電文を `AgentReport`（種類つき）に解釈する。上限を 32768 文字にし、サーバ側でも切り詰め・上限（説明 200・種類 64・ID 128・`running` 64 件）を掛ける。知らない `type` は捨てる。切り詰めで `running` を 64 件に削ったときは、受け口の側でも `truncated: true` を立てる（スクリプトが立てていなくても。突き合わせで「外す」を止めるため）。handler の型を `(report: AgentReport) => void` に変え、既存の 4 件のテストと `composeServer` の呼び出しを合わせる（この時点では `type: "session"` だけを今までどおり処理し、ほかは捨てる）。単体テストと壊して落ちる確認
       対象: `packages/server/src/agent/AgentReportSocket.ts`（`MAX_LINE_BYTES`・`handleLine`・`isReportPayload`・`AgentReportHandler`）、`AgentReportSocket.test.ts`、`packages/server/src/composeServer.ts:646-654`
       依存: T2
       AC: AC12, AC13

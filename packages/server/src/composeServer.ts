@@ -647,8 +647,11 @@ export async function composeServer(
         //      resume コマンドを投入した pane が hook を発火させうるため、それより前に立てる。
         agentReportSocket = await startAgentReportSocket(
           agentReportSocketPath,
-          (paneId, kind, sessionId) => {
-            if (kind === "claude" || kind === "codex") session.reportAgentSession(paneId, kind, sessionId);
+          (report) => {
+            // `type` つきの報告（サブエージェント）は T6 で `SubagentTracker` へ渡す。
+            if (report.type === "session" && (report.kind === "claude" || report.kind === "codex")) {
+              session.reportAgentSession(report.paneId, report.kind, report.sessionId);
+            }
           },
           logger,
         );
