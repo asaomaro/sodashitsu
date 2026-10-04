@@ -141,7 +141,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/web/src/components/Sidebar.vue`、`packages/web/src/actions/ActionDispatcher.ts`、`packages/tui/src/input/sidebarDrag.ts`、`packages/client-core/src/workspace/`、`workspace-groups.spec.ts`
       依存: なし
       AC: AC5
-- [ ] T31: `git rev-parse` の出力の検査（古い git が知らないオプションをそのまま出力して終了コード 0 を返す）。壊れた値は `unknown` 扱い。単体テスト・docs の記述の訂正
+- [x] T31: `git rev-parse` の出力の検査（古い git が知らないオプションをそのまま出力して終了コード 0 を返す）。壊れた値は `unknown` 扱い。単体テスト・docs の記述の訂正
       対象: `packages/server/src/git/GitInfoPoller.ts`・`worktree.ts`、`docs/verification.md`
       依存: なし
       AC: AC9

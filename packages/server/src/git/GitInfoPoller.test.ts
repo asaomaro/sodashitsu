@@ -562,6 +562,41 @@ describe("DefaultGitInfoPoller — probe の結果と最初の 1 周の合図", 
       expect(await new DefaultGitInfoPoller(service, git).probe("/r")).toEqual({ kind: "unknown" });
     });
 
+    // git は知らないオプションをそのまま出力して終了コード 0 を返す（2.31 未満の --path-format=absolute）。壊れた値を repoKey・worktreeKey にしない（decisions D44）。
+    for (const [name, out] of [
+      ["知らないオプションがそのまま出る", "--path-format=absolute\n.git\n"],
+      ["相対パス", ".git\n"],
+      ["行数が多い", "/r/.git\n/r/.git\n"],
+      ["空", ""],
+    ] as const) {
+      it(`--git-common-dir の出力が絶対パス 1 行でなければ unknown（${name}）`, async () => {
+        const { git } = fakeGit({
+          "rev-parse --abbrev-ref HEAD": ok("main\n"),
+          "rev-parse --git-common-dir": ok(out),
+          "rev-parse --git-dir": ok("/r/.git\n"),
+        });
+        expect(await new DefaultGitInfoPoller(service, git).probe("/r")).toEqual({ kind: "unknown" });
+      });
+      it(`--git-dir の出力が絶対パス 1 行でなければ unknown（${name}）`, async () => {
+        const { git } = fakeGit({
+          "rev-parse --abbrev-ref HEAD": ok("main\n"),
+          "rev-parse --git-common-dir": ok("/r/.git\n"),
+          "rev-parse --git-dir": ok(out),
+        });
+        expect(await new DefaultGitInfoPoller(service, git).probe("/r")).toEqual({ kind: "unknown" });
+      });
+    }
+
+    it("実物の git: 知らないオプションは出力に混ざって終了コード 0 になる（前提）・その出力は検査で弾かれる", async () => {
+      const dir = await repoWithCommit();
+      const real = new ChildProcessGitRunner();
+      const raw = await real.run(dir, ["rev-parse", "--bogus-option", "--git-common-dir"], 5000);
+      expect(raw.code).toBe(0);
+      expect(raw.stdout.split("\n")[0]).toBe("--bogus-option");
+      const bogus: GitRunner = { run: (cwd, args, t) => real.run(cwd, args.map((a) => (a === "--path-format=absolute" ? "--bogus-option" : a)), t) };
+      expect(await new DefaultGitInfoPoller(service, bogus).probe(dir)).toEqual({ kind: "unknown" });
+    });
+
     it("最初の 1 周の合図: start() ごとに来る（再開で 2 回以上）・dispose した受け手には来ない・受け手が投げても他へ届く", async () => {
       const { git } = fakeGit({ "rev-parse --abbrev-ref HEAD": failed(128) });
       const poller = new DefaultGitInfoPoller(service, git, 60_000);

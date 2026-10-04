@@ -1314,6 +1314,7 @@ mkdir memo
       グループの外へ落とす・別のまとまりの項目の上に落とすと何も起きず、理由が知らせで出る。Esc か行の外で離すと取り消し。名前順（サイドバーの並び順のボタン）では一番上の並べ替えが「名前順では並べ替えできません」になる。
       (4) 見出しの数・`◐`・`+n`・ブランチ名がブラウザ版と同じ。
 - [ ] **端末のフォントでの見え方（実機でしか確かめられない）**: Windows Terminal・VS Code の統合端末・tmux の中・SSH 越し等、使う端末で `⎇`（U+2387）・`├`／`└`・`─`・`▸`／`▾` が崩れず、幅 1 桁で縦がそろう。
+- [ ] **Windows ネイティブでの `repoKey` の形（実機でしか確かめられない）**: git for Windows が `C:/x/.git` の形で出す値を、サーバは `path.resolve` を通して `C:\x\.git` にそろえて `repoKey`・`worktreeKey` にする（以前の判定と同じ形。共有の設定 `collapsedAutoGroups` の `repoKey` を孤児にしないため）。本体と linked worktree が同じ worktree グループに束ねられ、畳んだ状態が再起動後も残ることを確かめる（20261004-group-worktree-items D44 補足）。
       崩れるときは `packages/tui/src/render/chrome/sidebar.ts` の `WORKTREE_GLYPH` を別の記号に替え、どの端末・フォントで崩れたかを記録する（幅の規則〔unicode11〕では 1 桁として単体テストで固定している。フォントは実機次第）。
 - [ ] **古い保存からの移行（AC13。任意）**: この work より前の版（`main`）で、同じリポジトリの本体と worktree を別々のグループに入れた状態を作って停止し、この版で同じ状態ディレクトリを起動する。
       起動直後から、本体の所属に合わせた worktree グループが 1 つのまとまりとして並び、何度起動し直しても同じになる。
@@ -1322,7 +1323,7 @@ mkdir memo
 
 所属を覚えるキー（`repoKey`）は、`git rev-parse --path-format=absolute --git-common-dir` の値で、worktree グループの束ねと同じ値を使う（decisions D9・D10。実物の git 2.43.0 で確かめた）。
 
-- **git 2.31 以上が要る**（`--path-format` の導入）。古い git ではこのオプションが失敗し、判定は「取れない」になる（直前の判定を保つ。新しい workspace は判定が付かないままで、worktree グループにもグループの自動の所属にもならない）。
+- **git 2.31 以上が要る**（`--path-format` の導入）。古い git は知らないオプションを**エラーにせず、そのまま出力して終了コード 0 を返す**（`--path-format=absolute\n.git`。実物の git 2.43.0 で `git rev-parse --bogus-option --git-common-dir` が同じ動きになることを確かめた）。そのためサーバは出力が「絶対パスの 1 行」かを検査し（`--` で始まる行・相対パス・行数の違いは不可）、満たさなければ判定は「取れない」になる（直前の判定を保つ。新しい workspace は判定が付かないままで、worktree グループにもグループの自動の所属にもならない）。
 - symlink を通った場所からでも、本体・worktree のどちらも実体のパスで一致する（`--path-format=absolute` が実体を返す）。同じリポジトリが別のパス（別の clone・bind mount・パスの付け替え）で見える場合や、リポジトリのフォルダを移動・改名した場合は、絶対パスのキーからの推論では別のリポジトリとして扱われる（実機では未確認）。
 - **bare リポジトリ**: bare とその worktree は同じ `repoKey` で束ねられるが、bare 自身を workspace として開いていなければ本体の行は無く、worktree だけの worktree グループ（2 つ以上のとき）になる（先頭は最初に開いたもの）。
 - **サブモジュール**: 親とは別のリポジトリとして扱う（`<親>/.git/modules/<名前>`。親の worktree グループには入らない）。
@@ -1516,7 +1517,7 @@ pnpm --filter @sodashitsu/e2e exec playwright test performance agent-detection -
   `[theme.custom]` と同じで、読みにくい・見えにくい色を入れても止められない（利用者の責任）。herdr の `.light`/`.dark` と違い、
   「常に当たる」層は無く「明るいとき」「暗いとき」の 2 層だけ（同 work の research F2）。
 
-- **グループ・worktree グループの所属を覚えるキー（`repoKey`）の制約**（20261004-group-worktree-items の decisions D9・D10）。git 2.31 以上が要る（`--path-format=absolute`。古い git では判定が付かない）。
+- **グループ・worktree グループの所属を覚えるキー（`repoKey`）の制約**（20261004-group-worktree-items の decisions D9・D10）。git 2.31 以上が要る（`--path-format=absolute`。古い git は出力がそのまま返るが、絶対パスの 1 行かを検査して `unknown` にするので判定が付かない）。
   同じリポジトリが別のパス（別の clone・bind mount）で見える場合・リポジトリのフォルダを移動・改名した場合は、絶対パスのキーからの推論では別のリポジトリとして扱われる（未確認）。bare は worktree だけの worktree グループになり、サブモジュールは親と別のリポジトリ、
   コミットが無いリポジトリは最初のコミットまで git 管理外として扱う。詳しくは「グループ・worktree グループ・「グループなし」」の「`repoKey` の既知の制約」。
 - **端末版のサイドバーの `⎇`（worktree の印）・`├└`・`─` は、外側の端末のフォントによっては崩れる**（幅 1 桁の字形だが、字形の確認は端末次第。`docs/tui-parity.md` H23b と同じ）。崩れるときは `WORKTREE_GLYPH`（`packages/tui/src/render/chrome/sidebar.ts`）を別の記号に替える。

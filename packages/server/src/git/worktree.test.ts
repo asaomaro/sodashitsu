@@ -1,5 +1,6 @@
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { generatedBranchSlug, parseWorktreeListPorcelain, repoNameFromGitCommonDir, resolveCommonDir } from "./worktree.js";
+import { generatedBranchSlug, parseWorktreeListPorcelain, parseAbsoluteGitPath, repoNameFromGitCommonDir, resolveCommonDir } from "./worktree.js";
 
 // 期待値は herdr（`da6bcd5`）自身のテストの実値（`src/worktree.rs:580-582`・`:585-628`）。
 describe("generatedBranchSlug", () => {
@@ -54,5 +55,30 @@ describe("repoNameFromGitCommonDir", () => {
   it("相対のまま渡すと名前が取れないので、resolveCommonDir で絶対化する", () => {
     expect(repoNameFromGitCommonDir(".git")).toBe("repo"); // 絶対化を忘れた場合の保険
     expect(repoNameFromGitCommonDir(resolveCommonDir("/home/me/soda", ".git"))).toBe("soda");
+  });
+});
+
+describe("parseAbsoluteGitPath", () => {
+  it("絶対パス 1 行ならそのパス（末尾の改行は除く）", () => {
+    expect(parseAbsoluteGitPath("/r/.git\n")).toBe("/r/.git");
+    expect(parseAbsoluteGitPath("/r/.git")).toBe("/r/.git");
+  });
+
+  it("CRLF・空白入りのパス・日本語のパスを落とさない", () => {
+    expect(parseAbsoluteGitPath("/r/.git\r\n")).toBe("/r/.git");
+    expect(parseAbsoluteGitPath("/my repo/.git\n")).toBe("/my repo/.git");
+    expect(parseAbsoluteGitPath("/作業/リポジトリ/.git\n")).toBe("/作業/リポジトリ/.git");
+  });
+
+  it("出力は resolve を通した形（以前の resolveCommonDir と同じ。冗長な区切りと末尾の / を整える）", () => {
+    expect(parseAbsoluteGitPath("/r//a/../.git\n")).toBe(resolve("/r/.git"));
+  });
+
+  it("知らないオプションの出力・相対パス・行数の違い・空は null", () => {
+    expect(parseAbsoluteGitPath("--path-format=absolute\n.git\n")).toBeNull();
+    expect(parseAbsoluteGitPath("--path-format=absolute\n")).toBeNull();
+    expect(parseAbsoluteGitPath(".git\n")).toBeNull();
+    expect(parseAbsoluteGitPath("/r/.git\n/r/.git\n")).toBeNull();
+    expect(parseAbsoluteGitPath("")).toBeNull();
   });
 });

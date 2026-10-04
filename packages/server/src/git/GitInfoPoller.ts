@@ -4,7 +4,7 @@ import type { Disposable } from "../util/Disposable.js";
 import type { GitJudgement } from "../session/SessionModel.js";
 import type { SessionService } from "../session/SessionService.js";
 import type { GitRunner } from "../infra/GitRunner.js";
-import { resolveCommonDir } from "./worktree.js";
+import { parseAbsoluteGitPath } from "./worktree.js";
 
 const DEFAULT_INTERVAL_MS = 5000;
 const GIT_TIMEOUT_MS = 3000;
@@ -19,7 +19,7 @@ const FOLLOW_EVENTS: ReadonlySet<ServerEvent["event"]> = new Set(["pane.updated"
  * `probe` の結果（20261004-group-worktree-items の design D「判定は 3 つの結果」）。
  * - `git`: `repoKey` まで取れた。
  * - `unmanaged`: `rev-parse --abbrev-ref HEAD` の終了コードが 0 でない（git 管理外・コミットが 1 つも無い）と確定。
- * - `unknown`: 時間切れ・git の起動失敗、または HEAD は取れたが `--git-common-dir` が失敗した（半端な結果は信用しない）。
+ * - `unknown`: 時間切れ・git の起動失敗、または HEAD は取れたが `--git-common-dir`・`--git-dir` が失敗した・絶対パス 1 行でなかった（半端な結果は信用しない）。
  */
 export type ProbeResult = GitJudgement;
 
@@ -145,19 +145,22 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
         ahead = Number(aheadStr) || 0;
       } // 上流ブランチが無ければそのまま 0/0（エラーにしない）
 
-      // 判定キー（20260923-workspace-grouping。`WorktreeService.repoNameOf` と同じ `resolveCommonDir` を再利用）。
-      // `--path-format=absolute` で git に絶対パスを作らせる（git 2.31 以上。古い git ではオプションが失敗して「取れない」になる）。
+      // 判定キー（20260923-workspace-grouping）。
+      // `--path-format=absolute` で git に絶対パスを作らせる（git 2.31 以上）。
+      // 古い git は知らないオプションをそのまま出力して終了コード 0 を返す（`--path-format=absolute\n.git`）ので、終了コードに加えて出力が 1 行の絶対パスかを検査し、違えば「取れない」にする（`parseAbsoluteGitPath`。decisions D44）。
       // 付けないと、symlink 経由の本体の cwd では相対の `.git` が返り、cwd のまま解決した `.../link/.git` が worktree の `.../real/.git` とずれる（decisions D9）。
       // HEAD が取れたのに `--git-common-dir` が失敗したら、半端な結果を作らず「取れない」に寄せる（直前の判定を保つため）。
       const commonResult = await this.git.run(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"], GIT_TIMEOUT_MS);
       if (commonResult.code !== 0) return { kind: "unknown" };
-      const repoKey = resolveCommonDir(cwd, commonResult.stdout);
+      const repoKey = parseAbsoluteGitPath(commonResult.stdout);
+      if (repoKey === null) return { kind: "unknown" };
       const dirResult = await this.git.run(cwd, ["rev-parse", "--path-format=absolute", "--git-dir"], GIT_TIMEOUT_MS);
       if (dirResult.code !== 0) return { kind: "unknown" };
+      const worktreeKey = parseAbsoluteGitPath(dirResult.stdout);
+      if (worktreeKey === null) return { kind: "unknown" };
       // 本体は `--git-dir` と `--git-common-dir` が同じパスを指す。linked worktree は異なる
       // （`--git-dir` が `<common-dir>/worktrees/<name>` を指す標準的な Git の仕組み）。
       // `worktreeKey` は `--git-dir` の絶対パスそのもの（その worktree〔フォルダ〕を一意に示す。同じフォルダの workspace は同じ値。追補 01 A）。
-      const worktreeKey = resolveCommonDir(cwd, dirResult.stdout);
       const isLinkedWorktree = worktreeKey !== repoKey;
 
       return { kind: "git", git: { branch, ahead, behind, repoKey, isLinkedWorktree, worktreeKey } };

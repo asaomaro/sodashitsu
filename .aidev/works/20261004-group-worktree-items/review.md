@@ -5214,3 +5214,37 @@ web の Sidebar.vue で `moveItemByDrag(draggedRow.item, drop.before, …)` を 
 - T30 [nit] D43 の docs の記述が事実と合わない → 直した [conv:-]
 - T30 [nit] dropBefore の結果を moveItem に通すテストが無い → 点検が一時テストで全組を確認（off-by-one なし）。恒久テストは足さず review に委ねる [conv:-]
 - T30 [nit] 古いサーバでは web と tui の落とす位置が食い違う → D43 に明記済みの意図（経路は変更前と同じ） [conv:-]
+
+### T31 壊して落ちる確認（`parseAbsoluteGitPath` の検査を外して `return lines[0]` だけにした）
+```
+ ❯ src/git/worktree.test.ts (12 tests | 1 failed) 8ms
+     × 知らないオプションの出力・相対パス・行数の違い・空は null 3ms
+ ❯ src/git/GitInfoPoller.test.ts (60 tests | 9 failed) 2883ms
+       × --git-common-dir の出力が絶対パス 1 行でなければ unknown（知らないオプションがそのまま出る） 6ms
+       × --git-dir の出力が絶対パス 1 行でなければ unknown（知らないオプションがそのまま出る） 1ms
+       × --git-common-dir の出力が絶対パス 1 行でなければ unknown（相対パス） 1ms
+       × --git-dir の出力が絶対パス 1 行でなければ unknown（相対パス） 0ms
+       × --git-common-dir の出力が絶対パス 1 行でなければ unknown（行数が多い） 0ms
+       × --git-dir の出力が絶対パス 1 行でなければ unknown（行数が多い） 0ms
+       × --git-common-dir の出力が絶対パス 1 行でなければ unknown（空） 1ms
+       × --git-dir の出力が絶対パス 1 行でなければ unknown（空） 0ms
+       × 実物の git: 知らないオプションは出力に混ざって終了コード 0 になる（前提）・その出力は検査で弾かれる 26ms
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-common-dir の出力が絶対パス 1 行でなければ unknown（知らないオプションがそのまま出る）
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-dir の出力が絶対パス 1 行でなければ unknown（知らないオプションがそのまま出る）
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-common-dir の出力が絶対パス 1 行でなければ unknown（相対パス）
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-dir の出力が絶対パス 1 行でなければ unknown（相対パス）
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-common-dir の出力が絶対パス 1 行でなければ unknown（行数が多い）
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-dir の出力が絶対パス 1 行でなければ unknown（行数が多い）
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-common-dir の出力が絶対パス 1 行でなければ unknown（空）
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-dir の出力が絶対パス 1 行でなければ unknown（空）
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > 実物の git: 知らないオプションは出力に混ざって終了コード 0 になる（前提）・その出力は検査で弾かれる
+ FAIL  src/git/worktree.test.ts > parseAbsoluteGitPath > 知らないオプションの出力・相対パス・行数の違い・空は null
+ Test Files  2 failed | 1 passed (3)
+      Tests  10 failed | 101 passed (111)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/git
+```
+検査を戻すと src/git は 111 passed。
+- T31 [should] Windows で repoKey の文字列の形が変わる（旧 resolve → git の出力そのまま）→ resolve を通して同じ形にそろえた（実測は実機の確認項目） [conv:-]
+- T31 [nit] 正常な出力（CRLF・空白・日本語）のテストが無い → 足した [conv:-]
+- T31 [nit] repoNameOf が別経路である点が docs に無い → D44 に記録（repoKey には関与しない） [conv:-]

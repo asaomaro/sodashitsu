@@ -1,4 +1,4 @@
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
 import type { WorktreeEntry } from "@sodashitsu/protocol";
 
 /**
@@ -79,4 +79,21 @@ export function repoNameFromGitCommonDir(absCommonDir: string): string {
 /** `cwd` に対して `--git-common-dir` の値を絶対化する。 */
 export function resolveCommonDir(cwd: string, commonDir: string): string {
   return resolve(cwd, commonDir.trim());
+}
+
+/**
+ * `git rev-parse --path-format=absolute --git-common-dir`（や `--git-dir`）の出力から絶対パスを取る。取れなければ null。
+ *
+ * `git rev-parse` は**知らないオプションをそのまま出力して終了コード 0 を返す**（git 2.43.0 で
+ * `git rev-parse --bogus-option --git-common-dir` が `--bogus-option\n.git`・終了コード 0）。
+ * git 2.31 未満の `--path-format=absolute` も同じ動きになり、終了コードだけでは壊れた値を見分けられないので、出力を検査する:
+ * 行がちょうど 1 つで、絶対パスであること（`--` で始まる行・相対パス・行数の違いは null）。
+ */
+export function parseAbsoluteGitPath(stdout: string): string | null {
+  const lines = stdout.replace(/\r?\n$/, "").split(/\r?\n/);
+  if (lines.length !== 1) return null;
+  const line = lines[0] as string;
+  if (line === "" || line.startsWith("--") || !isAbsolute(line)) return null;
+  // `resolve` で区切りを OS の形にそろえる（git for Windows の `C:/x/.git` を `C:\x\.git` に。以前の `resolveCommonDir` と同じ形を保ち、共有の設定 `collapsedAutoGroups` の `repoKey` を孤児にしない）。
+  return resolve(line);
 }

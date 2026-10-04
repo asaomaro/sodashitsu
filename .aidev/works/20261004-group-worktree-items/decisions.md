@@ -376,3 +376,11 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **共有の純関数**: `client-core/src/workspace/dropTarget.ts`（`dropBefore`・`nextAnchorOf`・`sameItemTarget`・型 `DropAnchor`／`DropSlot`）。web の `Sidebar.vue`（`dropStateFor`。行ごとに `dropIndex`・`dropNext` を持たせ、`item.move` の `before` を返す）と端末版の `planDrop` の両方が使う。入れ物の次の項目は、畳んで見えない項目も数える（木の `items`／`units` から作る）。`ActionDispatcher.moveItemByDrag` の `before` は `ItemTarget | null`。
 - **古いサーバ（`workspace.move_to`）は変えない（D22）**: web が渡す落とし先は今までどおり落とした項目の先頭の workspace（`legacy.beforeWorkspaceId`）。端末版は D36 のまま（落とし先が「次の項目」）。両者の違いは古いサーバだけに残る。
 - docs（`docs/tui-parity.md` H04w）の「Web 版との違い」から落とす位置の差を外した。`docs/verification.md` のドラッグの行に「下へは落とした項目の次の前」を足した。`docs/tui.md` に該当の記述は無かった。
+
+## D44: `git rev-parse` の出力を検査し、絶対パス 1 行でなければ `unknown`（T31。review-findings-01 の 3。D9・D10 の補足）
+
+- **確かめた事実**: git 2.43.0 で `git rev-parse --bogus-option --git-common-dir` は `--bogus-option\n.git` を出力して**終了コード 0**。知らないオプションはエラーにならずそのまま出る。git 2.31 未満の `--path-format=absolute` も同じ動きになり、終了コードだけでは壊れた値が `repoKey`・`worktreeKey` になる。
+- **決まり**: `worktree.ts` の `parseAbsoluteGitPath` が出力を検査する（1 行・`--` で始まらない・絶対パス）。`GitInfoPoller.probe` は `--git-common-dir`・`--git-dir` の両方でこれを通し、null なら `unknown`（直前の判定を保つ）。`resolveCommonDir` を使うのは `WorktreeService.repoNameOf` だけになった（そちらは `--path-format` を付けない）。
+- docs（`docs/verification.md`）の「古い git ではオプションが失敗する」を、この動きに合わせて直した。
+
+- D44 補足（T31 の点検）: `parseAbsoluteGitPath` は検査の後に `resolve` を通して返す。git for Windows が出す `C:/x/.git` を、以前の `resolveCommonDir`（`path.resolve`）と同じ `C:\x\.git` にそろえ、共有の設定 `collapsedAutoGroups` に入っている `repoKey` を孤児にしないため（Linux では絶対パスの正規化のみで値は変わらない）。Windows ネイティブでの実測は未実施（実機の確認項目）。`WorktreeService.repoNameOf` は `--path-format` を付けず表示名だけを得る別経路で、`repoKey` には関与しない。
