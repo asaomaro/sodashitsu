@@ -225,3 +225,14 @@ AssertionError: expected 4 to be undefined
      × navigate に入ると、畳んだ spaces を開く（agents は開かない） 67ms
 AssertionError: expected { spaces: true, agents: true } to deeply equal { spaces: false, agents: true }
 ```
+
+#### T12 E2E `resize-handles.spec.ts`（生の出力。変異ごと。2 回続けて 8 件 pass を確認済み）
+```
+変異: useResizeDrag のドラッグ中のキーの preventDefault／stopPropagation を外す
+  ✘  5 src/specs/resize-handles.spec.ts:127:1 › ドラッグ中に打った文字は端末へ漏れない (9.7s)
+変異: .resize-handle:hover::after の opacity を 0 に
+  ✘  1 src/specs/resize-handles.spec.ts:36:1 › hover で線が出て（0.15 秒の待ちの後）、離すと消える (5.4s)
+  ✘  4 src/specs/resize-handles.spec.ts:97:1 › pane の間: 太さ 2px の境目の中心から 3px 外でも掴める。Esc で元へ・ダブルクリックで半分 (5.8s)
+    Expected: 1
+    Received: 0
+```

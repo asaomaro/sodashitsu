@@ -59,7 +59,7 @@ design.md のとおり、下から積む。純関数（T1）→ 色の変数（T
       対象: `packages/tui/src/input/mouse.ts`・`mouse.test.ts`、`app/TuiApp.ts:411-413, :1030-1034`、`actions/TuiDispatcher.ts`・`TuiDispatcher.test.ts`
       依存: T5, T10
       AC: AC13, AC-I3
-- [ ] T12: E2E `resize-handles.spec.ts`——3 か所の境目（サイドバーの幅・pane の間・区画の境目）で: hover で線が出て離すと消える（`getComputedStyle(el, "::after")` の `opacity` を待つ）／ドラッグ中は外れても線とカーソルが続く・端末の文字が選択されない・通った行に hover が出ない／`Esc` で元の大きさ／ダブルクリックで既定（サイドバーは既定の幅・pane は半分・区画は自動）／太さ 2px の pane の境目の中心から 3px で掴める／サイドバーの境目に `Tab` → 矢印・`Home`・`End`・`Enter`／`page.emulateMedia({ reducedMotion: "reduce" })` で transition-duration 0s／ドラッグ中に打った文字が端末へ漏れない。観測を壊して落ちる確認。2 回続けて同じ結果
+- [x] T12: E2E `resize-handles.spec.ts`——3 か所の境目（サイドバーの幅・pane の間・区画の境目）で: hover で線が出て離すと消える（`getComputedStyle(el, "::after")` の `opacity` を待つ）／ドラッグ中は外れても線とカーソルが続く・端末の文字が選択されない・通った行に hover が出ない／`Esc` で元の大きさ／ダブルクリックで既定（サイドバーは既定の幅・pane は半分・区画は自動）／太さ 2px の pane の境目の中心から 3px で掴める／サイドバーの境目に `Tab` → 矢印・`Home`・`End`・`Enter`／`page.emulateMedia({ reducedMotion: "reduce" })` で transition-duration 0s／ドラッグ中に打った文字が端末へ漏れない。観測を壊して落ちる確認。2 回続けて同じ結果
       対象: `packages/e2e/src/specs/resize-handles.spec.ts`（新規）。手本は `settings.spec.ts:46-57`（`dragDivider`）・`workspace-tab-pane.spec.ts:172-191`。`keys-mouse-dialogs.spec.ts:256-270, :330`（`describeFocus` は `role=separator` をすべて `"splitter"` と返す）は、サイドバーの境目と pane の境目を区別できる形に直し、`Tab` の順の期待を確かめる
       依存: T6, T9, T7
       AC: AC1, AC2, AC3, AC14, AC17, AC15, AC-I2, AC-I4, AC-I5
