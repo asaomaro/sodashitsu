@@ -34,6 +34,8 @@ export interface ResizeDrag {
 }
 
 const DOUBLE_CLICK_MS = 350;
+/** 押した位置からこの距離（px）以上動いたときだけ「動かした」とする。 */
+const MOVE_THRESHOLD_PX = 3;
 
 export function useResizeDrag<T>(o: ResizeDragOptions<T>): ResizeDrag {
   const dragging = ref(false);
@@ -44,6 +46,8 @@ export function useResizeDrag<T>(o: ResizeDragOptions<T>): ResizeDrag {
   let target: HTMLElement | null = null;
   let pointerId = -1;
   let lastDown = 0;
+  let downX = 0;
+  let downY = 0;
   /** 動かさずに離した（クリックだった）直前の pointerdown の時刻。ダブルクリックの 1 回目はこれだけ。0 は無し。 */
   let lastClick = 0;
 
@@ -124,12 +128,19 @@ export function useResizeDrag<T>(o: ResizeDragOptions<T>): ResizeDrag {
     target?.setPointerCapture?.(ev.pointerId);
     start = o.begin(ev);
     moved = false;
+    downX = ev.clientX;
+    downY = ev.clientY;
     dragging.value = true;
     attach();
   }
 
   function onPointerMove(ev: PointerEvent): void {
     if (!dragging.value) return;
+    // 押している間の数 px のぶれ（マウス・トラックパッド・タッチ）は、動かしたことにしない（クリックのままなら、次の押下がダブルクリックになる）。
+    if (!moved) {
+      const dist = Math.hypot(ev.clientX - downX, ev.clientY - downY);
+      if (Number.isFinite(dist) && dist < MOVE_THRESHOLD_PX) return;
+    }
     moved = true;
     pending = ev; // 最後のイベントだけを使う
     if (raf === null) raf = requestAnimationFrame(flush);

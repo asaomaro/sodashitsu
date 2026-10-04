@@ -169,6 +169,26 @@ describe("useResizeDrag", () => {
     expect(drag.dragging.value).toBe(true);
   });
 
+  it("押している間の数 px のぶれは動かしたことにしない（commit・move を呼ばず、直後の pointerdown はダブルクリックの reset）", () => {
+    const { calls, drag, ev } = setup();
+    drag.onPointerDown(ev({ clientX: 10, clientY: 10 }));
+    drag.onPointerMove(ev({ clientX: 11, clientY: 12 }));
+    vi.advanceTimersByTime(20);
+    drag.onPointerEnd(ev());
+    vi.advanceTimersByTime(100);
+    drag.onPointerDown(ev({ clientX: 10, clientY: 10 }));
+    expect(calls).toEqual(["begin", "reset"]);
+  });
+
+  it("しきい値（3px）以上動けば動かしたことになる（ぶれを超えた後は小さな動きも反映する）", () => {
+    const { calls, drag, ev } = setup();
+    drag.onPointerDown(ev({ clientX: 10, clientY: 10 }));
+    drag.onPointerMove(ev({ clientX: 13, clientY: 10 }));
+    drag.onPointerMove(ev({ clientX: 11, clientY: 10 }));
+    drag.onPointerEnd(ev());
+    expect(calls).toEqual(["begin", "move:11:100", "commit:100"]);
+  });
+
   it("Esc で取り消した直後の pointerdown も reset ではない", () => {
     const { calls, drag, ev } = setup();
     drag.onPointerDown(ev());

@@ -1137,7 +1137,7 @@ describe("Sidebar — 区画の境目", () => {
 
   it("ドラッグ: 入れ物の上端からの位置が比になり、最小を割らない。離すと保存する", async () => {
     const { wrapper, view, divider } = setup();
-    await divider().trigger("pointerdown", { clientY: 250 });
+    await divider().trigger("pointerdown", { clientY: 240 });
     await divider().trigger("pointermove", { clientY: 50 + 200 });
     await frame();
     await wrapper.vm.$nextTick();
