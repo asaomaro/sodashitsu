@@ -211,7 +211,7 @@ sodactl pane control p2 --takeover                           # 既に所有者�
   知らせを表示するのはブラウザ（画面の下の通知）と `pane control`（stderr）だけ。**`pane attach` は知らせを表示せず**（直結の画面に割り込ませない）、
   `pane input`・`pane run` は 1 通送って `{"ok":true}` を出して終わる（捨てられたかを待たない）——どちらも、固まった pane への入力は黙って消える。
 - **質問のフォーム**（`ask`）: 定義全体 256 KiB（JSON の UTF-8）・質問 100・1 つの質問の選択肢 200・`id`／`value` 200 文字・`title`／`label`／`page` 等の短い文字列 500 文字・
-  `intro`／`help`／`desc` 4,000 文字・1 つの選択肢の `colors` 16 個（超えた分は捨てる）。回答の自由入力・`text` の答え・補足は 10,000 文字まで。`--timeout` は 1,000〜86,400,000 ミリ秒。
+  `intro`／`help`／`desc` 4,000 文字・1 つの選択肢の `colors` 16 個（超えた分は捨てる）。回答の自由入力・`text` の答え・補足・質問ごとの自由記述（`comments`）の 1 つは 10,000 文字まで。自由記述の長さの合計は 100,000 文字まで（超える回答は断られる）。`--timeout` は 1,000〜86,400,000 ミリ秒。
   定義の上限の超過は使い方の誤り（終了コード 2）。標準入力は 1 MiB までしか読まない。サーバが同時に待てる質問は総数 32・1 つの接続あたり 8 まで（超えると `ask_busy`。終了コード 1）。
 - **ログイン不要の受け口**（`pane.sock`。下の「ログイン不要の受け口（pane.sock）」）: 同時に開いている接続 64（超えた接続と `soda handoff` の途中の接続は、要求を読まずに `pane_socket_busy`。sodactl は 5 秒まで繋ぎ直す）・要求の 1 行 1 MiB（超えると `bad_request`）・
   接続してから要求の 1 行が揃うまで 10 秒（過ぎたら何も返さずに切る）。受け口から出した質問も、上の総数 32 と「1 つの pane に同時に 1 つ」に数える。
@@ -225,19 +225,21 @@ pane の中のプログラム（エージェント）が、利用者に選択肢
 ```bash
 sodactl ask [--timeout <ms>] < spec.json
 # → stdout に結果の JSON を 1 行
-{"status":"answered","answers":{"theme":"manual","mode":"single"},"custom":["theme"],"note":"…"}
+{"status":"answered","answers":{"theme":"manual","mode":"single"},"custom":["theme"],"note":"…","comments":{"theme":"…"}}
 ```
 
 ### 入力（標準入力の JSON）
 
-ask-form の質問の定義と同じ。全体: `title`・`intro`・`submit`・`note`（`false` で補足欄なし・文字列なら入力例）・`paging`・`questions`。質問: `id`・`label`・`type`（`single`〔既定〕・`multi`・`text`）・`help`・
-`options`・`default`・`allowOther`（`otherLabel`・`otherPlaceholder`）・`showIf`・`required`・`multiline`・`placeholder`・`minWidth`・`page`・`filter`・`showValue`。選択肢は文字列か `{value, label, desc, recommended, colors}`。
+ask-form の質問の定義と同じ。全体: `title`・`intro`・`submit`・`note`（`false` で補足欄なし・文字列なら入力例）・`paging`・`comments`（`false` で自由記述を全部付けない）・`questions`。質問: `id`・`label`・`type`（`single`〔既定〕・`multi`・`text`）・`help`・
+`options`・`default`・`allowOther`（`otherLabel`・`otherPlaceholder`）・`showIf`・`required`・`multiline`・`placeholder`・`minWidth`・`page`・`filter`・`showValue`・`comment`（`false` でその質問に自由記述を付けない）。選択肢は文字列か `{value, label, desc, recommended, colors}`。
 **知らない項目は無視する**。`showIf` は `{"他の質問の id": 値 または 値の配列}`（複数なら「かつ」。上の質問から順に判定する）。
 
 | 項目 | どこに書く | 値 | 意味 |
 |---|---|---|---|
 | `paging` | 全体 | `"auto"`（既定）・`true`・`false`・1 以上の整数（数は `true` と同じ扱い） | 質問の目次を出すか。`"auto"` はダイアログの高さに収まらないときだけ出す・`true` は必ず出す・`false` は出さない。`null` は書かなかったのと同じ。それ以外の値は使い方の誤り（終了コード 2）。下の「目次」 |
 | `page` | 質問 | 文字列（500 文字まで。空文字も可） | まとまりの題（目次の見出し）。書くと、高さに収まっていても目次が出る（`paging: false` なら出ない）。`null` は書かなかったのと同じ。それ以外で文字列でなければ使い方の誤り（終了コード 2）。下の「目次」 |
+| `comments` | 全体 | `false` | どの質問にも自由記述（各質問の下の「＋ 自由記述」）を付けない。`false` 以外（`true`・無指定・真偽でない値）は書かなかったのと同じ（付ける。誤りにしない）。下の「質問ごとの自由記述」 |
+| `comment` | 質問 | `false` | その質問にだけ自由記述を付けない。`false` 以外は書かなかったのと同じ。`text` の質問には、もともと付かない |
 | `filter` | 質問（`single`・`multi`） | 真偽 | 選択肢の絞り込みの欄を出すか。書かなければ、選択肢が 12 件以上のときに出る。真偽でない値・`text` の質問に書いたものは無視する |
 | `showValue` | 質問（`single`・`multi`） | 真偽 | 表示名（`label`）と値（`value`）が違う選択肢に、値を横に出すか。書かなければ出る。真偽でない値・`text` の質問に書いたものは無視する |
 
@@ -262,7 +264,7 @@ stdout に 1 行の JSON。`status` は次の 4 つで、**どれも終了コー
 
 | `status` | いつ | ほかの項目 |
 |---|---|---|
-| `answered` | 決定が押された | `answers`（id → 値。`single`・`text` は文字列、`multi` は配列。`showIf` で隠れた質問は入らない）・`custom`（自由入力した質問の id。あれば）・`note`（補足。あれば） |
+| `answered` | 決定が押された | `answers`（id → 値。`single`・`text` は文字列、`multi` は配列。`showIf` で隠れた質問は入らない）・`custom`（自由入力した質問の id。あれば）・`note`（補足。あれば）・`comments`（質問ごとの自由記述。id → 文。書いた質問だけで、無ければ項目ごと無い） |
 | `cancelled` | キャンセル・`Esc`・pane が閉じられた | — |
 | `timeout` | `--timeout` が過ぎた（既定 540000 ミリ秒） | — |
 | `unavailable` | この pane のサーバに、質問を出せるブラウザが 1 つもつながっていない・**定義に、この版の `sodactl ask` が対応していない型の質問がある** | `reason`（理由） |
@@ -304,11 +306,22 @@ stdout に 1 行の JSON。`status` は次の 4 つで、**どれも終了コー
   ウィンドウの幅を変えて 768px 未満になると目次が消え、ダイアログの幅も戻る。
 
 
+### 質問ごとの自由記述
+
+各質問（`single`・`multi`）の下に「＋ 自由記述」のボタンが出る（部品 `<ask-form>` 1.3.0 から）。押すと欄が開き、選択肢に無い条件・希望をその質問に添えて書ける。もう一度押すと閉じる（書いた内容は残り、ボタンの文言が「自由記述（入力あり）を開く」に変わる）。
+
+- **付かない場合**: `text` の質問・定義が `comments: false`・質問が `comment: false`・質問が 1 つだけで `single` かつ `note: false`（選んだ時点で決定するフォーム）。
+- **結果**: 書いた質問だけが `comments`（質問の id → 文）に入る。前後の空白は除き、空白だけの欄は入らない。閉じている欄も、書いてあれば入る。`showIf` で隠れている質問の欄は入らない（いったん隠れて再び見えた質問は、書いた内容が残っていて入る）。1 つも無ければ `comments` の項目ごと無い。
+- **上限**: 1 つの欄は 10,000 文字まで、長さの合計は 100,000 文字まで（サーバが検査し、超える・付けない質問への回答は `invalid_params` で断る。質問は開いたままで、画面にトーストが出る）。
+- 自由記述は利用者が書いた文で、`note`・自由入力と同じく「利用者の入力」として扱う（画面・ログに HTML としては出ない。サーバのログにも中身を出さない）。
+- 欄の中の `Enter` は改行（決定しない）。`Ctrl+Enter`（macOS は `Cmd+Enter` も）で決定し、`Esc` で取り消す。欄を開くと、ダイアログの高さが中身に合わせて増える（画面の高さ − 余白で頭打ちになり、それ以上は中がスクロールする）。
+- **版の差**: 古い画面は `comments` を送らないだけで今までどおり答えられる。古い `sodactl` は結果をそのまま出すので `comments` も出る。別のマシンの `soda`（`docs/machines.md`）が古いと、`comments: false`・`comment: false` が効かず、書いた文が届かない。
+
 ### 画面の操作
 
 - ダイアログが開くと、フォーカスは最上部の見出し（どの pane からの質問か）に置かれる（打っている途中の文字が回答として効かない）。`Tab` で目次の項目・質問・選択肢・下のボタンを巡り、ラジオは矢印で選択を移す。
   背面の操作・キーはダイアログが開いている間は届かない（ホイールも）。**背景のクリックでは閉じない**。
-- 決定: ［決定］・`Ctrl+Enter`（macOS は `Cmd+Enter` も）・1 行の入力欄での `Enter`（IME の変換中は除く。**目次が出ているときは次の質問へ移り、最後の質問で決定。目次が出ていない短いフォームでは決定**）。未回答の質問があれば決定せず、
+- 決定: ［決定］・`Ctrl+Enter`（macOS は `Cmd+Enter` も。自由記述の欄の中でも）・1 行の入力欄での `Enter`（IME の変換中は除く。**目次が出ているときは次の質問へ移り、最後の質問で決定。目次が出ていない短いフォームでは決定**）。未回答の質問があれば決定せず、
   その質問を強調して知らせる（上の「目次」）。取り消し: ［キャンセル］・`Esc`。
 - **絞り込みの欄に文字があるときの `Esc`** は、絞り込みを消すだけ（取り消さない）。それ以外の `Esc` は取り消し。絞り込みの欄での `Enter` は何もしない。絞り込んでも、選択中の選択肢は隠れない。
 - 次・前の質問へ移る: `Alt+PageDown`（次）・`Alt+PageUp`（前）。端では何もしない（目次が出ていないときも、次・前の質問へ移る）。

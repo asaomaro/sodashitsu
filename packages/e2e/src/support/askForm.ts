@@ -4,7 +4,7 @@ import { watchAskSubscriptions } from "./ask.js";
 import { watchSentAsk } from "./askSent.js";
 
 /**
- * 質問のフォームの E2E（`ask-form.spec.ts`・`ask-form-index.spec.ts`・`ask-form-extras.spec.ts`）の共通の補助。
+ * 質問のフォームの E2E（`ask-form.spec.ts`・`ask-form-index.spec.ts`・`ask-form-extras.spec.ts`・`ask-form-comments.spec.ts`）の共通の補助。
  * 部品 `<ask-form>`（`third_party/ask-form/ask-form.js`）の内部の属性（`data-ask-question`・`data-ask-index`・`nav.index` など）に依る箇所はここに集める
  * （部品を取り込み直して属性名が変わったときの直し先。手順は `third_party/ask-form/README.md`）。
  */
@@ -134,3 +134,11 @@ export const q = (id: string, extra: Record<string, unknown> = {}) => ({
   options: opts(2),
   ...extra,
 });
+
+/** 質問ごとの自由記述（部品 1.3.0）のボタンと欄。属性名は部品の内部（`data-ask-comment-toggle`・`data-ask-comment`）。 */
+export const commentToggle = (page: Page, id: string) => page.locator(`[data-ask-comment-toggle="${id}"]`);
+export const commentBox = (page: Page, id: string) => page.locator(`textarea[data-ask-comment="${id}"]`);
+/** 質問 `id` の選択肢（ラジオ・チェックボックス）。 */
+export const choice = (page: Page, id: string, value: string) => page.locator(`[data-ask-question="${id}"] input[value="${value}"]`);
+/** ［決定］ボタンを押す。 */
+export const submitForm = (page: Page) => page.locator("[data-ask-submit]").click();
