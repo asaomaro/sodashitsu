@@ -256,9 +256,16 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       case "openGraph":
         this.view.openGraph();
         return;
-      // 20261004-subagent-display。一覧を開く動きは T20 で足す（型の網羅のため、ここに受け口だけ置く）。
-      case "showSubagents":
+      // 20261004-subagent-display。フォーカスしている pane のエージェントの一覧を開く。件数が 0・分からない（報告を受けていない）・
+      // エージェントが居ないときは何もしない（開いても見るものが無い。サイドバーの件数のボタンが 1 件以上のときだけ出るのと同じ）。
+      case "showSubagents": {
+        const paneId = this.view.focusedPaneId;
+        if (!paneId) return;
+        const count = this.session.panes.get(paneId)?.agent?.subagents?.count ?? 0;
+        if (count < 1) return;
+        this.view.openDialogWithContext({ kind: "subagents", machineId: this.machines.selectedId, paneId });
         return;
+      }
     }
   }
 

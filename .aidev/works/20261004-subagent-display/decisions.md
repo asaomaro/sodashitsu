@@ -59,3 +59,8 @@ research.md「F-H1」〜「F-H16」。要点: 同期のフックでは実行前 
 
 - **`uninstall()` は、写したスクリプトを消さず、何もしない中身に差し替える**（Claude Code のように追加のエントリを持つ kind だけ。持たない kind は今までどおり消す）。T1 の (5) で、スクリプトが無いとフックが `exit_code: 1`（`outcome: error`）になり続けることを確かめた（エージェントの動きは止まらない）。動いている Claude Code は起動時のフックの設定のまま同期のフックで呼び続けるので、消さない。次の導入で本物に写し直す（テストあり）。
 - **配布物にフックのスクリプトが入っていなかった**: `scripts/package.mjs` は各パッケージの `dist` と `package.json` だけを写しており、`packages/server/assets/agent-hook-report.cjs` が無かった（修正前の `package.mjs` で作ると `packages/server/` は `dist`・`package.json` だけ）。サーバは `dist` から見て `../assets/agent-hook-report.cjs` を読むので、**配布した `soda` では、今までも導入（`copyFile`）が失敗していた**はず。この work で `assets/`（テストを除く）を配布物に入れるようにした。
+
+## D10: T20 で決めたこと（サイドバーの行・フォーカス）
+
+- **エージェントの行に `tabindex="-1"` と `data-agent-pane` を付けた**（design の「ボタン → 行 → 端末」の戻り先の行）。`__golden__/sidebar-default-*.html`（行の `outerHTML`。「既定の並びは変更前の描画と同じ」）は、この 2 つの属性が 4 行ぶん増えただけの差で更新した（`git diff` で属性の追加以外の差が無いことを確かめた）。Tab の順には入らず、キー・クリックの動きは変わらない。
+- **フォーカスを戻すのは、サイドバーの件数のボタンから開いたときだけ**（`DialogContext` の `opener: "button"`）。操作 `show_subagents` から開いたときは、端末のまま（`closeDialog()` の今の動き）。

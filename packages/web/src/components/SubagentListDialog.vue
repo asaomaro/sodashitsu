@@ -25,6 +25,11 @@ const target = computed(() => {
   const ctx = view.dialogContext;
   return ctx?.kind === "subagents" ? { machineId: ctx.machineId, paneId: ctx.paneId } : null;
 });
+/** サイドバーの件数のボタンから開いたか（閉じたときのフォーカスの戻り先を決める）。 */
+const openedByButton = computed(() => {
+  const ctx = view.dialogContext;
+  return ctx?.kind === "subagents" && ctx.opener === "button";
+});
 const agent = computed(() => (target.value ? lookupAgent(target.value) : undefined));
 const subagents = computed(() => agent.value?.subagents);
 const items = computed(() => subagents.value?.items ?? []);
@@ -70,8 +75,20 @@ watch(agent, (a) => {
 
 onBeforeUnmount(stopTicker);
 
+/**
+ * 閉じる。件数のボタンから開いたなら、フォーカスをそのボタンへ戻す（ボタンがもう無ければその行、行も無ければ今までどおり `closeDialog` が戻す端末）。
+ * ボタンは件数が 1 以上のときだけ描かれるので、閉じる前に探さず、閉じて描き直された後（`nextTick`）に探す。
+ */
 function close(): void {
+  const wasButton = openedByButton.value;
+  const paneId = target.value?.paneId;
   view.closeDialog();
+  if (!wasButton || paneId === undefined) return;
+  void nextTick(() => {
+    const css = CSS.escape(paneId);
+    const el = document.querySelector<HTMLElement>(`.sidebar-agents [data-subagent-pane="${css}"]`) ?? document.querySelector<HTMLElement>(`.sidebar-agents [data-agent-pane="${css}"]`);
+    el?.focus();
+  });
 }
 
 function onNativeCancel(ev: Event): void {

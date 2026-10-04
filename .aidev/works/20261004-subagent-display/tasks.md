@@ -93,7 +93,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/server/src/agent/AgentIntegrationInstaller.ts`（`uninstall`）、`AgentIntegrationService.ts:47-75`、`AgentIntegrationInstaller.test.ts`、`scripts/package.mjs`
       依存: T7
       AC: AC9, AC10
-- [ ] T20: ブラウザ版の一覧のフォーカスと操作——閉じたときのフォーカス（ボタン → 行〔`tabindex="-1"`〕→ 端末）、操作 `show_subagents` の動き（フォーカスのある pane のエージェントの一覧を開く。0 件・エージェントなしのときの動きは design のとおり）。単体テストと壊して落ちる確認
+- [x] T20: ブラウザ版の一覧のフォーカスと操作——閉じたときのフォーカス（ボタン → 行〔`tabindex="-1"`〕→ 端末）、操作 `show_subagents` の動き（フォーカスのある pane のエージェントの一覧を開く。0 件・エージェントなしのときの動きは design のとおり）。単体テストと壊して落ちる確認
       対象: `packages/web/src/components/SubagentListDialog.vue`、`packages/web/src/components/Sidebar.vue`、`packages/web/src/actions/ActionDispatcher.ts`、`packages/web/src/store/view.ts`
       依存: T10
       AC: AC4, AC-I3, AC-I4

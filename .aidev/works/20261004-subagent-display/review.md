@@ -295,3 +295,23 @@ AssertionError: expected null to be false // Object.is equality
  FAIL  … > 0 件なら {count: 0, items: []}（null と区別する）
 AssertionError: expected null to deeply equal { count: +0, items: [] }
 ```
+
+#### T20 一覧のフォーカスと操作 `show_subagents`（`SubagentListDialog.vue`・`ActionDispatcher.ts`。壊した後に元へ戻し `cmp` で一致を確認済み）
+
+```
+=== MUT(SubagentListDialog.vue): フォーカスを戻す行（el?.focus()）を外す
+ FAIL  … > 閉じたときのフォーカスの戻り先 > ボタンから開いた: 閉じるとボタンへ戻る
+AssertionError: expected <div data-v-344d990d …(4)>…(1)</div> to be <button …(2)></button> // Object.is equality
+=== MUT: 「ボタンから開いたときだけ」の条件（!wasButton）を外す
+ FAIL  … > show_subagents から開いた（opener なし）: ボタンがあっても移さない（端末へ）
+AssertionError: expected <button …(2)></button> to be <div id="term" tabindex="0"></div> // Object.is equality
+=== MUT: 行へのフォールバック（?? document.querySelector(… [data-agent-pane] …)）を外す
+ FAIL  … > ボタンから開いたが、ボタンがもう無い（0 件になった等）: 行へ戻る
+AssertionError: expected <div data-v-344d990d …(4)>…(1)</div> to be <div class="sidebar-row" …(2)></div> // Object.is equality
+=== MUT(ActionDispatcher.ts): 件数の確認（if (count < 1) return;）を外す
+ FAIL  … > showSubagents（show_subagents） > 0 件・分からない（項目なし）・エージェントが居ない・フォーカスが無いときは何もしない
+AssertionError: expected { kind: 'subagents', …(2) } to be null
+=== MUT: 対象のマシンを this.machines.selectedId から "local" に
+ FAIL  … > showSubagents（show_subagents） > 別のマシンを選んでいれば、そのマシンの対象として開く
+AssertionError: expected { kind: 'subagents', …(2) } to match object { kind: 'subagents', …(2) }
+```

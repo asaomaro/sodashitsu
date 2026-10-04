@@ -138,6 +138,66 @@ describe("SubagentListDialog — 表示", () => {
   });
 });
 
+// 閉じたときのフォーカス（AC-I4）。ボタンから開いたなら ボタン → 行 → 端末。`show_subagents` から開いたなら端末。
+describe("SubagentListDialog — 閉じたときのフォーカスの戻り先", () => {
+  async function setupWithSidebarDom(opener: "button" | undefined, withButton: boolean) {
+    document.body.innerHTML = `<div class="sidebar-agents"><div class="sidebar-row" tabindex="-1" data-agent-pane="p1">${
+      withButton ? '<button class="sidebar-subagent-btn" data-subagent-pane="p1">1</button>' : ""
+    }</div></div><div id="term" tabindex="0"></div>`;
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted(ws);
+    session.tabUpserted(tab);
+    session.paneUpserted(paneOf(agentOf({ count: 1, items: [sub("a")] })));
+    const wrapper = mount(SubagentListDialog, { global: { plugins: [pinia] }, attachTo: document.body });
+    view.openDialogWithContext({ kind: "subagents", machineId: "local", paneId: "p1", ...(opener ? { opener } : {}) });
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    return { wrapper, view };
+  }
+  const active = () => document.activeElement;
+
+  it("ボタンから開いた: 閉じるとボタンへ戻る", async () => {
+    const { wrapper } = await setupWithSidebarDom("button", true);
+    await wrapper.get(".subagent-dialog-actions button").trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(active()).toBe(document.querySelector(".sidebar-subagent-btn"));
+  });
+
+  it("ボタンから開いたが、ボタンがもう無い（0 件になった等）: 行へ戻る", async () => {
+    const { wrapper } = await setupWithSidebarDom("button", false);
+    await wrapper.get("dialog").trigger("cancel");
+    await wrapper.vm.$nextTick();
+    expect(active()).toBe(document.querySelector("[data-agent-pane]"));
+  });
+
+  it("ボタンから開いたが、ボタンも行も無い: どちらにも移さない（端末は closeDialog が戻す）", async () => {
+    const { wrapper, view } = await setupWithSidebarDom("button", false);
+    document.querySelector(".sidebar-agents")!.remove();
+    (document.querySelector("#term") as HTMLElement).focus();
+    await wrapper.get("dialog").trigger("cancel");
+    await wrapper.vm.$nextTick();
+    expect(active()).toBe(document.querySelector("#term"));
+    expect(view.dialogContext).toBeNull();
+  });
+
+  it("show_subagents から開いた（opener なし）: ボタンがあっても移さない（端末へ）", async () => {
+    const { wrapper } = await setupWithSidebarDom(undefined, true);
+    (document.querySelector("#term") as HTMLElement).focus();
+    await wrapper.get(".subagent-dialog-actions button").trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(active()).toBe(document.querySelector("#term"));
+  });
+
+  it("対象が居なくなって自分で閉じたときも、同じ戻り先（行）", async () => {
+    const { wrapper } = await setupWithSidebarDom("button", false);
+    useSessionStore(pinia).paneUpserted(paneOf(null));
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(active()).toBe(document.querySelector("[data-agent-pane]"));
+  });
+});
+
 describe("SubagentListDialog — 閉じる", () => {
   it("［閉じる］・背景のクリック・Esc（cancel）で閉じる。ダイアログの中のクリックでは閉じない", async () => {
     for (const how of ["button", "backdrop", "cancel"] as const) {

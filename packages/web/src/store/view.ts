@@ -292,7 +292,8 @@ export type DialogContext =
   | { kind: "commandPopup"; commandId: string; paneId: string; title: string; width?: PopupDimension; height?: PopupDimension }
   // エージェントが動かしているサブエージェントの一覧（20261004-subagent-display）。対象は `{machineId, paneId}`（pane の ID はマシンをまたいで衝突する。手元は `local`）。
   // 中身は開いている間も画面のストアから引く（`store/subagents.ts`）ので、文脈に持たない。
-  | { kind: "subagents"; machineId: string; paneId: string };
+  // `opener: "button"` は、サイドバーの件数のボタンから開いたとき。閉じたときのフォーカスを、そのボタン（無ければ行）へ戻す。無ければ（`show_subagents`）端末へ。
+  | { kind: "subagents"; machineId: string; paneId: string; opener?: "button" };
 
 /**
  * このクライアントの表示・モード・接続状態（architecture.md「store/view」）。

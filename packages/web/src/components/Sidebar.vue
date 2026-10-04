@@ -278,7 +278,7 @@ function subagentCount(agent: AgentInfo): number {
 
 /** その pane のエージェントのサブエージェントの一覧を開く（ダイアログ。対象は選んでいるマシンの pane）。 */
 function openSubagents(paneId: string): void {
-  view.openDialogWithContext({ kind: "subagents", machineId: machines.selectedId, paneId });
+  view.openDialogWithContext({ kind: "subagents", machineId: machines.selectedId, paneId, opener: "button" });
 }
 
 /** 新しい workspace を作る。キーの `prefix+shift+n` と同じ経路（`ActionDispatcher.run`）を通す。 */
@@ -560,7 +560,8 @@ watch(
           {{ AGENT_SORT_LABEL[view.agentSort] }}
         </button>
       </div>
-      <div v-for="{ pane, workspace, state, lines, agent } in agents" :key="pane.id" class="sidebar-row" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
+      <!-- `tabindex="-1"` と `data-agent-pane` は、一覧のダイアログを閉じたときのフォーカスの戻り先（ボタンが無ければ行。20261004-subagent-display）。Tab の順には入れない。 -->
+      <div v-for="{ pane, workspace, state, lines, agent } in agents" :key="pane.id" class="sidebar-row" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
         <!-- 畳んだサイドバーは今までどおり状態の印だけ（20260927-sidebar-row-tokens）。 -->
         <div v-if="view.sidebarCollapsed" class="sidebar-row-line1">
           <StateIcon class="sidebar-state-icon" :state="state" />

@@ -616,7 +616,7 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     rowPointerdown.mockClear();
     btn(w).element.dispatchEvent(pointerEvent("pointerdown", { clientX: 1, clientY: 1 }));
     await btn(w).trigger("click");
-    expect(view.dialogContext).toEqual({ kind: "subagents", machineId: "local", paneId: "p1" });
+    expect(view.dialogContext).toEqual({ kind: "subagents", machineId: "local", paneId: "p1", opener: "button" });
     expect(rowClick).not.toHaveBeenCalled();
     expect(rowPointerdown).not.toHaveBeenCalled();
     expect(conn.requests).toEqual([]); // pane.focus を送らない（pane へ移らない）
