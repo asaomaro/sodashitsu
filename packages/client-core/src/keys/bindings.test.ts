@@ -3,7 +3,7 @@ import { expandRange, formatBinding, parseBinding } from "./chord.js";
 import { ACTIONS, actionDef, actionFor, isActionId } from "./bindings.js";
 
 // 既定のキーが無い操作（`defaults: []`）。20260923-missing-keybinding-actions で足した12操作が最初で（herdr と同じく「既定は割り当てなし」。research F1）、
-// 20260923-workspace-grouping の 2 操作と 20260927-cli-mode の 5 操作を合わせて 19 個。
+// 20260923-workspace-grouping の 2 操作と 20260927-cli-mode の 5 操作を合わせて 19 個（20261004-subagent-display の show_subagents は既定が prefix+shift+s なので入らない）。
 const UNBOUND_BY_DEFAULT_IDS = [
   "previous_workspace",
   "next_workspace",
@@ -27,7 +27,6 @@ const UNBOUND_BY_DEFAULT_IDS = [
   "remove_worktree",
   "swap_with_focused",
   // 20261004-subagent-display。既定のキーは無い（利用者が設定で割り当てる）。
-  "show_subagents",
 ];
 
 describe("操作のカタログ（design「操作のカタログ」）", () => {
@@ -38,7 +37,7 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
   // 20260927-clipboard-image-paste で remote_image_paste（pane。既定は直接のキー ctrl+v）を追加し 51 個になった。
   // 20260927-cli-mode で stop_server（全体）・switch_workspace・open_worktree・remove_worktree（workspace / tab）・swap_with_focused（pane）を追加し 56 個になった。
   // 20260927-agent-graph で open_graph（全体）を追加し 57 個になった。
-  // 20261004-subagent-display で show_subagents（pane。既定は割り当てなし）を追加し 58 個になった。
+  // 20261004-subagent-display で show_subagents（pane。既定は prefix+shift+s）を追加し 58 個になった。
   it("58 個あり、id は重複しない・表示名は空でない", () => {
     expect(ACTIONS).toHaveLength(58);
     expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(58);

@@ -141,7 +141,7 @@ describe("端末版のサブエージェントの表示", () => {
     await vi.waitFor(() => expect(h.app.ui.dialogContext).toBeNull());
   });
 
-  it("操作 show_subagents（既定のキーは無い）: フォーカスしている pane のエージェントの一覧を開く。件数が 0・エージェントなしでは何もしない", async () => {
+  it("操作 show_subagents（既定のキーは prefix+shift+s）: フォーカスしている pane のエージェントの一覧を開く。件数が 0・エージェントなしでは何もしない", async () => {
     const h = await start({ subagents: subs(2) });
     dispatcherOf(h.app).run({ type: "showSubagents" });
     expect(h.app.ui.dialogContext).toBeNull(); // 焦点は p1（エージェントなし）
@@ -149,12 +149,11 @@ describe("端末版のサブエージェントの表示", () => {
     dispatcherOf(h.app).run({ type: "showSubagents" });
     expect(h.app.ui.dialogContext).toMatchObject({ kind: "subagents", paneId: "p3" });
     h.app.ui.closeDialog();
-    // 既定のキーは無い（利用者が設定で割り当てる。次の試験）。
-    expect(
-      (h.app as unknown as { keymap: { hintFor(id: string): string | null } }).keymap.hintFor(
-        "show_subagents",
-      ),
-    ).toBeNull();
+    // 既定のキー（prefix+shift+s）で、キーボードだけで開ける。
+    h.io.type("\x02S"); // prefix（ctrl+b）→ shift+s
+    await vi.waitFor(() =>
+      expect(h.app.ui.dialogContext).toMatchObject({ kind: "subagents", paneId: "p3" }),
+    );
   });
 
   it("利用者が設定で割り当てたキー（prefs.keys）で、キーボードだけで一覧が開き、Esc で閉じる", async () => {

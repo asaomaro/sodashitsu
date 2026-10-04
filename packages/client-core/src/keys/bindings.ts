@@ -458,12 +458,12 @@ export const ACTIONS = [
     helpHidden: true,
     action: { type: "swapWithFocused" },
   },
-  // 20261004-subagent-display（本製品の追加）。一覧は画面のボタン・メニューからも開ける。キーボードだけの道筋として、利用者が設定で割り当てられる（既定は割り当てなし）。
+  // 20261004-subagent-display（本製品の追加）。一覧は画面のボタン・メニューからも開ける。キーボードだけの道筋として、既定で prefix+shift+s（設定の prefix+s の隣）。
   {
     id: "show_subagents",
     label: "サブエージェントの一覧",
     group: "pane",
-    defaults: [],
+    defaults: ["prefix+shift+s"],
     action: { type: "showSubagents" },
   },
 ] as const satisfies readonly ActionDef[];

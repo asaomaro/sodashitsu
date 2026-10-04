@@ -63,7 +63,7 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
             pane?.rightClick === "pane" ? "herdr" : "pane",
           ),
       },
-      // エージェントが 1 件以上のサブエージェントを動かしているとき（20261004-subagent-display）。メニューを開くのは右クリックだけなので、これはマウス用の入口（キーボードだけの道筋は、設定で割り当てる `show_subagents`。decisions D11）。
+      // エージェントが 1 件以上のサブエージェントを動かしているとき（20261004-subagent-display）。メニューを開くのは右クリックだけなので、これはマウス用の入口（キーボードは既定の prefix+shift+s）。
       ...((pane?.agent?.subagents?.count ?? 0) > 0
         ? [{ label: "サブエージェントの一覧", run: () => actions.showSubagentsOf(target.paneId) }]
         : []),
