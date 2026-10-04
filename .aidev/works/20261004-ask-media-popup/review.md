@@ -7,3 +7,4 @@
 - T3: 合計の上限を読む前の `stat` で断つ（残りの予算を `readRegularFile` へ）・`st.size` が 0 のファイル（`/proc` 等）は上限+1 まで読んで確かめる・`open` に `O_NOCTTY`。直した。同じファイルが image/audio と view の両方に出たときは別の保持になる（キーが種類別）＝据え置き（合計には両方数える。安全側）。`ftyp` の brand を m4a に絞らない・`data:` の MIME の大文字・`;charset=` は受けない＝拒否側に倒れるので据え置き。
 - T4: 検査済みのアドレスを順に試す（IPv6 の経路が無い環境）・名前解決にも時間の上限（`raceAbort`）・IP リテラルに SNI を付けない・実物の `https.request` の固定を自己署名の証明書の local サーバで確かめるテストを足した（`makeRealRequest({ca})`）・destroy の確認。直した。
 - T5: 全体の合計に足した値を Entry に持たせて引く（`heldBytes`）・準備中に時間切れ/pane が閉じた/dispose・全体の上限で断った後の後片付けのテストを足した。差し替え口の名前（`askImageFetcher`）を design に反映。
+- T9: `rowPicks` が行の value `__proto__` で代入によりプロトタイプへ設定してしまう（部品は `Object.fromEntries`）→ `Object.fromEntries` に直し、回帰テストを足した。

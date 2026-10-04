@@ -7,7 +7,7 @@ import { focusPaneIfShown } from "../actions/paneFocus.js";
 import "../ask/askFormElement.js";
 import type { AskFormElement, AskFormSubmitDetail } from "../ask/askFormElement.js";
 import { AskControllerKey, TerminalRegistryKey } from "../injection.js";
-import { useAskStore } from "../store/ask.js";
+import { useAskStore, type AskEntry } from "../store/ask.js";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
 
@@ -36,7 +36,7 @@ const headerEl = ref<HTMLElement | null>(null);
 const titleEl = ref<HTMLElement | null>(null);
 const formEl = ref<AskFormElement | null>(null);
 
-const ask = computed<AskPending | null>(() => store.current);
+const ask = computed<AskEntry | null>(() => store.current);
 
 /** 「どの pane からの質問か」（定義の外。pane の名前・workspace・tab）。 */
 const origin = computed(() => {
@@ -168,13 +168,16 @@ function applyWidth(): void {
  * → 広げた幅での中身の高さに合わせる（幅が変わると文の折り返しで高さが変わるので、幅を先に決める）。
  * 渡すのは写し——部品は定義に書き込む（`_image` 等）ので、store の定義（リアクティブ）をそのまま渡さない。
  */
-function loadSpec(a: AskPending): void {
+function loadSpec(a: AskEntry): void {
   const el = formEl.value;
   if (!el) return;
   contentHeight = 0;
   loadedAskId = a.askId;
   el.style.height = `${maxFormHeight()}px`;
   el.busy = false;
+  // メディアの参照（`media:<id>`）は、サーバから取り終えた `data:` の URL だけに解く（それ以外の参照・URL は渡さない）。`spec` を入れた時に同期で呼ばれる。
+  const urls = a.resolved?.urls ?? {};
+  el.resolveMedia = (ref: string) => (Object.hasOwn(urls, ref) ? (urls[ref] ?? null) : null);
   // 前の質問で広げた幅を外してから入れる——部品は入れた直後に、今の幅で目次を出すかを決める（広いままだと、収まるとみなして出さない）
   dialogEl.value?.style.removeProperty("--ask-index-width");
   try {
@@ -227,6 +230,7 @@ async function onSubmit(ev: Event): Promise<void> {
   const detail = (ev as CustomEvent<AskFormSubmitDetail>).detail;
   const body: AskAnswerBody = { answers: detail.answers };
   if (detail.custom !== undefined) body.custom = detail.custom;
+  if (detail.edited !== undefined) body.edited = detail.edited;
   if (detail.note !== undefined) body.note = detail.note;
   if (detail.comments !== undefined) body.comments = detail.comments;
   el.busy = true;

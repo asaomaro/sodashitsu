@@ -716,6 +716,12 @@ describe("edit・rank・table（20261004-ask-media-popup）", () => {
     expect(checkAskAnswer(s, { answers: ok, edited: ["nope"] })).toMatch(/not an edit/);
     expect(checkAskAnswer(s, { answers: ok, custom: ["e"] })).toMatch(/free text/);
   });
+  it("行の value が __proto__ でも、回答に自分のキーとして入り、サーバの検査を通る", () => {
+    const s = spec({ questions: [JSON.parse('{"id":"t","label":"T","type":"table","options":["ok","ng"],"rows":["__proto__","y"]}')] });
+    const got = collectAsk(s, initialAskState(s));
+    expect(Object.keys(got.answers["t"] as object)).toEqual(["__proto__", "y"]);
+    expect(checkAskAnswer(s, { answers: got.answers })).toBeNull();
+  });
   it("showIf は single・multi の質問だけが条件になる（辞書の回答は満たさない）", () => {
     const s = spec({ questions: [table({ id: "t" }), q({ id: "b", showIf: { t: "ok" } })] });
     expect(collectAsk(s, initialAskState(s)).visible).toEqual(["t"]);

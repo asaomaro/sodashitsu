@@ -476,7 +476,7 @@ describe("AskDialog — 確定・取り消し（AC-I2）", () => {
     expect(w.answer).toHaveBeenCalledOnce();
   });
 
-  it("送るのは answers・custom・note・comments だけ（部品の detail のほかの項目は送らない）", async () => {
+  it("送るのは answers・custom・edited・note・comments だけ（部品の detail のほかの項目 lacking 等は送らない）", async () => {
     const w = mountDialog();
     await open(w, ask(SPEC));
     const detail = {
@@ -491,6 +491,7 @@ describe("AskDialog — 確定・取り消し（AC-I2）", () => {
     expect(w.answer).toHaveBeenCalledWith("a1", {
       answers: { ch: "beta", m: ["a"] },
       custom: ["ch"],
+      edited: ["ch"],
       note: "メモ",
       comments: { ch: "金曜は避けたい" },
     });
@@ -498,6 +499,7 @@ describe("AskDialog — 確定・取り消し（AC-I2）", () => {
       "answers",
       "comments",
       "custom",
+      "edited",
       "note",
     ]);
   });

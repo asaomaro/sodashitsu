@@ -736,13 +736,14 @@ function rankOrder(q: AskQuestion, given: readonly string[] | undefined): string
 function rowPicks(q: AskQuestion, given: Record<string, string> | undefined): Record<string, string> {
   const values = new Set(q.options.map((o) => o.value));
   const first = q.options[0]?.value ?? "";
-  const out: Record<string, string> = {};
-  for (const r of Array.isArray(q.rows) ? q.rows : []) {
-    const g = given !== undefined && Object.hasOwn(given, r.value) ? given[r.value] : undefined;
-    const qd = typeof q.default === "string" && values.has(q.default) ? q.default : undefined;
-    out[r.value] = g !== undefined && values.has(g) ? g : (r.default ?? qd ?? first);
-  }
-  return out;
+  const qd = typeof q.default === "string" && values.has(q.default) ? q.default : undefined;
+  // `Object.fromEntries`（行の value が `__proto__` でも自分のキーになる。代入だとプロトタイプの差し替えになる）。
+  return Object.fromEntries(
+    (Array.isArray(q.rows) ? q.rows : []).map((r): [string, string] => {
+      const g = given !== undefined && Object.hasOwn(given, r.value) ? given[r.value] : undefined;
+      return [r.value, g !== undefined && values.has(g) ? g : (r.default ?? qd ?? first)];
+    }),
+  );
 }
 
 function valueOf(q: AskQuestion, state: AskFormState): AskAnswerValue | null {

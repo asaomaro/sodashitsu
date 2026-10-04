@@ -21,12 +21,14 @@ export interface HttpServerOptions {
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
+  // media-src data: は、質問のフォームの音の試聴（サーバから受けたバイト列を `data:` にして `Audio` に渡す。20261004-ask-media-popup）。
+  // `media-src` が無いと `default-src 'self'` が効いて `data:` の音は止まる。画像は従来どおり `img-src 'self' data:`。
   // style-src に 'unsafe-inline' が要る：xterm.js の DOM レンダラーが実行時に <style> 要素とインラインの
   // style 属性でテーマの色を書き込む（03-web-desktop T2 で実物のブラウザに読み込ませて確認。CSP のリスク）。
   // xterm.js は任意の外部入力を CSS として書き込まない（テーマの色は固定の設定値）ので、他のディレクティブ
   // （default-src・connect-src 等）は絞ったまま、style-src だけを緩める。
   "Content-Security-Policy":
-    "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'",
+    "default-src 'self'; connect-src 'self'; img-src 'self' data:; media-src data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",

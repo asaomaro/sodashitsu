@@ -10,6 +10,8 @@ export interface AskFormElement extends HTMLElement {
   spec: unknown;
   /** 送信中。真の間は［決定］［キャンセル］が押せない。 */
   busy: boolean;
+  /** 定義の `image`・`audio` の参照を、出してよい URL（`data:` 等）に解く。`spec` を入れた時に**同期で**呼ばれる。null はプレビューなし（部品 1.3.0 から）。 */
+  resolveMedia: ((ref: string, kind: "image" | "audio") => string | null) | null;
   /** 今の回答で決定する（未回答があれば、決定せずにその質問を示す）。 */
   submit(): void;
   /**
@@ -31,6 +33,8 @@ export interface AskFormElement extends HTMLElement {
 export interface AskFormSubmitDetail {
   answers: AskAnswers;
   custom?: string[];
+  /** 直された `edit` の質問の id。 */
+  edited?: string[];
   note?: string;
   /** 質問の id → 自由記述（前後の空白を除いた、書いた質問だけ。部品 1.3.0 から）。 */
   comments?: Record<string, string>;
