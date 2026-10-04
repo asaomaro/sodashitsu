@@ -12,6 +12,7 @@ import type {
   RightClickTarget,
   SessionSnapshot,
   SplitDirection,
+  SidebarLayout,
   SplitId,
   Tab,
   TabId,
@@ -294,6 +295,15 @@ export class SessionService {
   /** `session.json` の保存に使う（`nextId` の引き継ぎ。design「永続化の形式」）。 */
   getNextIdCounters(): ReturnType<SessionModel["getNextIdCounters"]> {
     return this.model.getNextIdCounters();
+  }
+
+  /**
+   * `session.json` に書くサイドバーの並びと所属。仮の状態（`layout` を持たない保存から始めて未確定）なら null（書かない。
+   * 途中で止まっても次の起動が同じ移行をやり直せる。20261004-group-worktree-items）。
+   */
+  persistedLayout(): { layout: SidebarLayout; repoGroups: Record<string, GroupId> } | null {
+    if (!this.model.hasLayout()) return null;
+    return { layout: this.model.getLayout(), repoGroups: Object.fromEntries(this.model.getRepoGroups()) };
   }
 
   /** 検出したエージェントのインスタンス id を払い出す（`"a1"` 等。02-agent-detection の `AgentTracker` が使う。T8）。
@@ -1324,6 +1334,7 @@ export class SessionService {
       this.restoreWorkspace(wsData, wsData.autoLabel);
       if (wsData.labelCwd !== null) this.labelCwd.set(wsData.id, wsData.labelCwd);
     }
+    this.restoreLayout(data);
     for (const wsData of data.workspaces) {
       for (const tabData of wsData.tabs) {
         for (const paneData of tabData.panes) {
@@ -1415,6 +1426,16 @@ export class SessionService {
     if (overBudget()) return { label: folderLabelOf(cwd, this.workspaceLabelDeps), autoLabel: true, labelCwd: null };
     const named = await this.autoLabelFor(cwd);
     return { label: named.label, autoLabel: true, labelCwd: named.degraded ? null : cwd };
+  }
+
+  /**
+   * 保存した `layout`・`repoGroups` を戻す（20261004-group-worktree-items）。`layout` が無い保存は仮の状態のまま（移行は最初の 1 周／操作で確定）。
+   * `repairLayout` が実在しない参照を捨て、無い workspace を一番上の末尾へ足す（壊れた保存でも起動する）。`repoKey` は workspace の復元で戻っている。
+   */
+  private restoreLayout(data: SessionFileData): void {
+    if (data.layout === undefined) return;
+    const dropped = this.model.restoreLayout(data.layout as SidebarLayout, data.repoGroups ?? {});
+    if (dropped.length > 0) this.logger.warn("dropped invalid sidebar layout entries on restore", { dropped });
   }
 
   private restoreWorkspace(wsData: SessionFileWorkspace, autoLabel: boolean): void {

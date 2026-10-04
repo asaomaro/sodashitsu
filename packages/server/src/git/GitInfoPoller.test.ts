@@ -15,6 +15,8 @@ import { defaultWorkspaceLabelDeps } from "../session/workspaceLabel.js";
 import { makeTempDir } from "../persist/atomicFile.js";
 import { ChildProcessGitRunner, type GitRunner } from "../infra/GitRunner.js";
 import { DefaultGitInfoPoller } from "./GitInfoPoller.js";
+import { FsSessionFile } from "../persist/SessionFile.js";
+import { toSessionFileData } from "../composeServer.js";
 
 class AlwaysUpHost implements TerminalHost {
   readonly pid = 1;
@@ -785,6 +787,146 @@ describe("DefaultGitInfoPoller — 判定のレイアウトへの反映（実物
     await poller.pollNow();
     expect(layout()).toEqual(before);
     expect(service.getWorkspace(a.id)?.git?.repoKey).toBeTruthy();
+  });
+});
+
+// 20261004-group-worktree-items（T9）。実物の git と実物の session.json で、保存 → 復元 → 最初の 1 周で判定が戻り並びが変わらないことを見る（AC9）。
+describe("DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json）", { timeout: 20_000 }, () => {
+  let dirs: string[];
+  const logger = new MemoryLogger();
+
+  const makeService = () =>
+    new SessionService({
+      model: new SessionModel(),
+      terminals: new AlwaysUpTerminalManager(),
+      bus: new EventBus(),
+      persist: new NoopPersist(),
+      serverVersion: "test",
+      host: HOST_INFO,
+      scrollbackLines: 1000,
+      spawnGraceMs: 1,
+      defaultCwd: tmpdir(),
+      logger,
+      workspaceLabelDeps: { ...defaultWorkspaceLabelDeps, timeoutMs: 3_000 },
+    });
+
+  async function repo(): Promise<string> {
+    const dir = await makeTempDir("soda-persist-");
+    dirs.push(dir);
+    await runGit(dir, ["init", "-b", "main"]);
+    await runGit(dir, ["config", "user.email", "t@example.com"]);
+    await runGit(dir, ["config", "user.name", "t"]);
+    await runGit(dir, ["commit", "--allow-empty", "-m", "init"]);
+    return dir;
+  }
+
+  /** 保存して読み直す（実物の `FsSessionFile`）。 */
+  async function saveAndLoad(service: SessionService) {
+    const stateDir = await makeTempDir("soda-persist-state-");
+    dirs.push(stateDir);
+    const file = new FsSessionFile(stateDir);
+    await file.save(toSessionFileData(service));
+    const loaded = await file.load();
+    if (loaded.kind !== "ok") throw new Error(`load failed: ${loaded.kind}`);
+    return loaded.data;
+  }
+
+  beforeEach(() => {
+    dirs = [];
+  });
+  afterEach(async () => {
+    for (const dir of dirs) await rm(dir, { recursive: true, force: true });
+  });
+
+  it("グループ・worktree グループ・管理外が混ざった並びは、復元の直後も最初の 1 周の後も停止前と同じ", async () => {
+    const main = await repo();
+    const wtDir = `${main}-wt`;
+    dirs.push(wtDir);
+    await runGit(main, ["worktree", "add", "-b", "feature", wtDir]);
+    const other = await repo();
+    const plain = await makeTempDir("soda-persist-plain-");
+    dirs.push(plain);
+
+    const before = makeService();
+    const a = (await before.createWorkspace(main, "main")).workspace;
+    const w = (await before.createWorkspace(wtDir, "wt")).workspace;
+    const o = (await before.createWorkspace(other, "other")).workspace;
+    const p = (await before.createWorkspace(plain, "plain")).workspace;
+    await new DefaultGitInfoPoller(before, new ChildProcessGitRunner()).pollNow();
+    const group = before.createGroup("work", a.id); // main リポジトリ（本体 + worktree）をグループへ
+    before.moveItem({ kind: "workspace", workspaceId: p.id }, { kind: "workspace", workspaceId: o.id }); // 管理外を other の前へ
+    const key = before.getWorkspace(a.id)!.git!.repoKey!;
+    const expectedLayout = before.snapshot().layout!;
+    const expectedOrder = before.snapshot().workspaces.map((x) => x.id);
+    expect(expectedLayout).toEqual({ top: [`g:${group.id}`, `w:${p.id}`, `r:${(before.getWorkspace(o.id)!.git!.repoKey)}`], groups: { [group.id]: [`r:${key}`] } });
+
+    const data = await saveAndLoad(before);
+    expect(data.layout).toEqual(expectedLayout);
+    expect(data.repoGroups).toEqual({ [key]: group.id });
+
+    const after = makeService();
+    await after.restore(data);
+    // 復元の直後（判定の確認の前）: 保存した repoKey で束ねて並ぶ。ブランチ名と件数はまだ無い。
+    expect(after.snapshot().layout).toEqual(expectedLayout);
+    expect(after.snapshot().workspaces.map((x) => x.id)).toEqual(expectedOrder);
+    expect(after.getWorkspace(w.id)?.git).toEqual({ branch: null, ahead: 0, behind: 0, repoKey: key, isLinkedWorktree: true });
+    expect(after.getWorkspace(w.id)?.groupId).toBe(group.id);
+    expect(after.getWorkspace(p.id)?.git).toBeNull();
+
+    // 最初の 1 周: 判定が戻る（ブランチが入る）が、並びは変わらない。
+    await new DefaultGitInfoPoller(after, new ChildProcessGitRunner()).pollNow();
+    expect(after.getWorkspace(a.id)?.git).toMatchObject({ branch: "main", repoKey: key, isLinkedWorktree: false });
+    expect(after.getWorkspace(w.id)?.git).toMatchObject({ branch: "feature", repoKey: key, isLinkedWorktree: true });
+    expect(after.snapshot().layout).toEqual(expectedLayout);
+    expect(after.snapshot().workspaces.map((x) => x.id)).toEqual(expectedOrder);
+  });
+
+  it("フォルダが消えて判定が取れない workspace は、復元した判定・並びのまま残る（取れない結果は何も変えない）", async () => {
+    const main = await repo();
+    const other = await repo();
+    const before = makeService();
+    const a = (await before.createWorkspace(main, "main")).workspace;
+    const o = (await before.createWorkspace(other, "other")).workspace;
+    await new DefaultGitInfoPoller(before, new ChildProcessGitRunner()).pollNow();
+    const group = before.createGroup("work", a.id);
+    const key = before.getWorkspace(a.id)!.git!.repoKey!;
+    const data = await saveAndLoad(before);
+
+    await rm(main, { recursive: true, force: true }); // 停止の間にフォルダが消えた
+    const after = makeService();
+    await after.restore(data);
+    await new DefaultGitInfoPoller(after, new ChildProcessGitRunner()).pollNow();
+    expect(after.getWorkspace(a.id)?.git).toMatchObject({ repoKey: key, branch: null });
+    expect(after.getWorkspace(a.id)?.groupId).toBe(group.id);
+    expect(after.snapshot().layout!.groups[group.id]).toEqual([`r:${key}`]);
+    expect(after.getWorkspace(o.id)?.git).toMatchObject({ branch: "main" });
+  });
+
+  it("layout の無い古い保存（repoKey だけ有る）は仮の状態で始まり、起動直後から束ねて並び、保存にも layout を書かない", async () => {
+    const main = await repo();
+    const wtDir = `${main}-wt`;
+    dirs.push(wtDir);
+    await runGit(main, ["worktree", "add", "-b", "feature", wtDir]);
+    const before = makeService();
+    await before.createWorkspace(main, "main");
+    await before.createWorkspace(wtDir, "wt");
+    await new DefaultGitInfoPoller(before, new ChildProcessGitRunner()).pollNow();
+    const full = await saveAndLoad(before);
+    const legacy = { ...full }; // 以前の版の保存（repoKey だけ有る形）
+    delete legacy.layout;
+    delete legacy.repoGroups;
+
+    const after = makeService();
+    await after.restore(legacy);
+    const key = full.workspaces[0]!.repoKey!;
+    expect(after.persistedLayout()).toBeNull();
+    expect(after.snapshot().layout).toEqual({ top: [`r:${key}`], groups: {} });
+    await new DefaultGitInfoPoller(after, new ChildProcessGitRunner()).pollNow();
+    expect(after.snapshot().layout).toEqual({ top: [`r:${key}`], groups: {} });
+    const resaved = toSessionFileData(after);
+    expect("layout" in resaved).toBe(false);
+    expect("repoGroups" in resaved).toBe(false);
+    expect(resaved.workspaces.map((x) => x.repoKey)).toEqual([key, key]);
   });
 });
 

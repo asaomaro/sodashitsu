@@ -38,6 +38,7 @@ import {
   moveItemBy,
   removeItem,
   removeItemFromGroup,
+  repairLayout,
   repoMembers,
 } from "@sodashitsu/client-core";
 import * as Layout from "./LayoutTree.js";
@@ -1343,7 +1344,11 @@ export class SessionModel {
       // 以前の版の保存には無い——無ければ null（`autoLabel`/`agentSession` と同じ「optional 追加」方式。
       // 20260923-workspace-grouping）。
       groupId: data.groupId ?? null,
-      git: null,
+      // 保存した直前の判定を戻す（ブランチ名・件数は最初の確認で入る。20261004-group-worktree-items）。
+      git:
+        typeof data.repoKey === "string"
+          ? { branch: null, ahead: 0, behind: 0, repoKey: data.repoKey, isLinkedWorktree: data.isLinkedWorktree ?? false }
+          : null,
       autoLabel, // 呼ぶ側（`SessionService.restore`）が決める
     };
     this.workspaces.set(workspace.id, workspace);
@@ -1383,6 +1388,21 @@ export class SessionModel {
         this.panes.set(pane.id, pane);
       }
     }
+  }
+
+  /**
+   * 保存した `layout`・`repoGroups` を戻して確定した状態にする（全 workspace・グループの復元の後に呼ぶ）。`repairLayout` で整え、
+   * 捨てた参照を返す。`repoGroups` は実在するグループ行きのものだけ残す。イベントは出さない（復元中は購読者がいない）。
+   */
+  restoreLayout(layout: SidebarLayout, repoGroups: Readonly<Record<string, GroupId>>): ItemRef[] {
+    const repaired = repairLayout(layout, this.listWorkspaces(), this.listGroups());
+    this.layout = repaired.layout;
+    this.repoGroups.clear();
+    for (const [repoKey, groupId] of Object.entries(repoGroups)) {
+      if (this.groups.has(groupId)) this.repoGroups.set(repoKey, groupId);
+    }
+    this.settle();
+    return repaired.dropped;
   }
 
   /** `session.json` の `groups` から、保存されていた id をそのまま使って組み立てる（副作用なし。

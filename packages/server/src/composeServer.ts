@@ -850,18 +850,24 @@ async function readPem(path: string, flag: "--cert" | "--key"): Promise<string> 
   }
 }
 
-function toSessionFileData(session: SessionService): SessionFileData {
+export function toSessionFileData(session: SessionService): SessionFileData {
   const snapshot = session.snapshot();
+  // 仮の状態（移行の確定前）の間は `layout`・`repoGroups` を書かない（20261004-group-worktree-items）。
+  const persistedLayout = session.persistedLayout();
   return {
     schema: 1,
     savedAt: new Date().toISOString(),
     nextId: session.getNextIdCounters(),
     groups: snapshot.groups.map((g) => ({ id: g.id, label: g.label, collapsed: g.collapsed })),
+    ...(persistedLayout ? { layout: persistedLayout.layout, repoGroups: persistedLayout.repoGroups } : {}),
     workspaces: snapshot.workspaces.map((ws) => ({
       id: ws.id,
       label: ws.label,
       autoLabel: ws.autoLabel,
       groupId: ws.groupId,
+      // 直前の判定。`git` が無いとき（管理外・判定前）は null（復元で `git: null` に戻り、並びは変わらない）。
+      repoKey: ws.git?.repoKey ?? null,
+      isLinkedWorktree: ws.git?.isLinkedWorktree ?? false,
       cwd: ws.cwd,
       activeTabId: ws.activeTabId,
       // tab は並べ替えた順（`ws.tabIds`）で保存する——復元の tab の並びと、最初の tab（名前と git を決める場所。20260926-workspace-label-follow-cwd）が保たれる。

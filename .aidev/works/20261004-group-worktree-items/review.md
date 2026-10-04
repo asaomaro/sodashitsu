@@ -446,3 +446,230 @@ AssertionError: expected 1 to be +0 // Object.is equality
 ```
 
 元に戻した後は 489 件すべて通過（`git diff` で差分が実装と回帰テストだけ）。
+
+### T9 壊して落ちる確認
+
+実装の 4 か所を一時的に壊し、落ちた生の出力（vitest の先頭 40〜60 行）を貼る。確認後は元に戻した（`git diff` で壊しの痕跡が無いことを確認）。
+
+#### 壊し 1: `toSessionFileData` が `repoKey` を保存しない（`repoKey: undefined`）
+
+```
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+ ❯ src/git/GitInfoPoller.test.ts (44 tests | 3 failed | 41 skipped) 209ms
+   ❯ DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） (3)
+     × グループ・worktree グループ・管理外が混ざった並びは、復元の直後も最初の 1 周の後も停止前と同じ 99ms
+     × フォルダが消えて判定が取れない workspace は、復元した判定・並びのまま残る（取れない結果は何も変えない） 62ms
+     × layout の無い古い保存（repoKey だけ有る）は仮の状態で始まり、起動直後から束ねて並び、保存にも layout を書かない 47ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > グループ・worktree グループ・管理外が混ざった並びは、復元の直後も最初の 1 周の後も停止前と同じ
+AssertionError: expected { top: [ 'g:g1', 'w:w4', …(3) ], …(1) } to deeply equal { top: [ 'g:g1', 'w:w4', …(1) ], …(1) }
+- Expected
++ Received
+  {
+    "groups": {
+-     "g1": [
+-       "r:/tmp/soda-persist-FO91Mz/.git",
+-     ],
++     "g1": [],
+    },
+    "top": [
+      "g:g1",
+      "w:w4",
+-     "r:/tmp/soda-persist-LCDWlt/.git",
++     "w:w1",
++     "w:w2",
++     "w:w3",
+    ],
+  }
+ ❯ src/git/GitInfoPoller.test.ts:870:37
+    868|     await after.restore(data);
+    869|     // 復元の直後（判定の確認の前）: 保存した repoKey で束ねて並ぶ。ブランチ名と件数はまだ無い。
+    870|     expect(after.snapshot().layout).toEqual(expectedLayout);
+       |                                     ^
+    871|     expect(after.snapshot().workspaces.map((x) => x.id)).toEqual(expec…
+    872|     expect(after.getWorkspace(w.id)?.git).toEqual({ branch: null, ahea…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > フォルダが消えて判定が取れない workspace は、復元した判定・並びのまま残る（取れない結果は何も変えない）
+AssertionError: expected null to match object { …(2) }
+- Expected:
+{
+  "branch": null,
+  "repoKey": "/tmp/soda-persist-MJukmb/.git",
+}
++ Received:
+null
+ ❯ src/git/GitInfoPoller.test.ts:899:43
+    897|     await after.restore(data);
+    898|     await new DefaultGitInfoPoller(after, new ChildProcessGitRunner())…
+    899|     expect(after.getWorkspace(a.id)?.git).toMatchObject({ repoKey: key…
+       |                                           ^
+    900|     expect(after.getWorkspace(a.id)?.groupId).toBe(group.id);
+    901|     expect(after.snapshot().layout!.groups[group.id]).toEqual([`r:${ke…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > layout の無い古い保存（repoKey だけ有る）は仮の状態で始まり、起動直後から束ねて並び、保存にも layout を書かない
+AssertionError: expected { top: [ 'w:w1', 'w:w2' ], groups: {} } to deeply equal { top: [ 'r:undefined' ], groups: {} }
+- Expected
++ Received
+  {
+    "groups": {},
+    "top": [
+-     "r:undefined",
+```
+
+#### 壊し 2: `persistedLayout` が仮の状態でも `layout` を返す（`if (false) return null;`）
+
+```
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+ ❯ src/git/GitInfoPoller.test.ts (44 tests | 1 failed | 41 skipped) 209ms
+   ❯ DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） (3)
+     × layout の無い古い保存（repoKey だけ有る）は仮の状態で始まり、起動直後から束ねて並び、保存にも layout を書かない 45ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > layout の無い古い保存（repoKey だけ有る）は仮の状態で始まり、起動直後から束ねて並び、保存にも layout を書かない
+AssertionError: expected { layout: { …(2) }, repoGroups: {} } to be null
+- Expected:
+null
++ Received:
+{
+  "layout": {
+    "groups": {},
+    "top": [
+      "r:/tmp/soda-persist-l2Ghtx/.git",
+    ],
+  },
+  "repoGroups": {},
+}
+ ❯ src/git/GitInfoPoller.test.ts:920:37
+    918|     await after.restore(legacy);
+    919|     const key = full.workspaces[0]!.repoKey!;
+    920|     expect(after.persistedLayout()).toBeNull();
+       |                                     ^
+    921|     expect(after.snapshot().layout).toEqual({ top: [`r:${key}`], group…
+    922|     await new DefaultGitInfoPoller(after, new ChildProcessGitRunner())…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed | 41 skipped (44)
+   Start at  12:57:00
+   Duration  1.61s (transform 72%, import 14%, tests 14%)
+```
+
+#### 壊し 3: `SessionModel.restoreLayout` が `repairLayout` を通さない
+
+```
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+ ❯ src/session/SessionService.test.ts (172 tests | 2 failed | 168 skipped) 76ms
+   ❯ SessionService — layout の復元（保存と復元） (4)
+     × 壊れた参照（実在しない workspace・グループ・重複・repoKey を持つのに w:）でも起動し、捨てた参照をログに出す 26ms
+     × レイアウトに無い workspace は一番上の末尾に足す 11ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/session/SessionService.test.ts > SessionService — layout の復元（保存と復元） > 壊れた参照（実在しない workspace・グループ・重複・repoKey を持つのに w:）でも起動し、捨てた参照をログに出す
+AssertionError: expected { …(2) } to deeply equal { top: [ 'g:g1', 'w:w2', …(1) ], …(1) }
+- Expected
++ Received
+  {
+    "groups": {
+      "g1": [
+        "w:w3",
++       "w:w3",
++       "r:/gone/.git",
++     ],
++     "g9": [
++       "w:w2",
+      ],
+    },
+    "top": [
++     "w:gone",
+      "g:g1",
++     "g:g9",
++     "w:w1",
++     "w:w2",
+      "w:w2",
+-     "r:/repos/app/.git",
+    ],
+  }
+ ❯ src/session/SessionService.test.ts:3105:39
+    3103|     );
+    3104|     // w:w1 は repoKey を持つので r: へ直る（末尾）。w3 は g1 の中に残る。
+    3105|     expect(service.snapshot().layout).toEqual({ top: ["g:g1", "w:w2", …
+       |                                       ^
+    3106|     expect(service.persistedLayout()?.repoGroups).toEqual({ [K]: "g1" …
+    3107|     expect(service.getWorkspace("w1")?.groupId).toBe("g1");
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+ FAIL  src/session/SessionService.test.ts > SessionService — layout の復元（保存と復元） > レイアウトに無い workspace は一番上の末尾に足す
+AssertionError: expected { top: [ 'w:w2' ], groups: {} } to deeply equal { top: [ 'w:w2', 'w:w1' ], groups: {} }
+- Expected
++ Received
+  {
+    "groups": {},
+    "top": [
+      "w:w2",
+-     "w:w1",
+    ],
+  }
+```
+
+#### 壊し 4: `restoreWorkspace` が `repoKey` から `git` を戻さない（`typeof data.repoKey === "never"`）
+
+```
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+ ❯ src/session/SessionService.test.ts (172 tests | 3 failed | 147 skipped) 366ms
+   ❯ SessionService — layout の復元（保存と復元） (4)
+     × layout と repoGroups を戻すと、停止前と同じ並び・所属になり、git は repoKey だけ戻る（ブランチ null・件数 0） 25ms
+     × 壊れた参照（実在しない workspace・グループ・重複・repoKey を持つのに w:）でも起動し、捨てた参照をログに出す 18ms
+     × layout の無い保存は仮の状態のまま（導いた layout を載せ、書き出さない）。repoKey があれば起動直後から束ねる 17ms
+ ❯ src/git/GitInfoPoller.test.ts (44 tests | 3 failed | 40 skipped) 250ms
+   ❯ DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） (3)
+     × グループ・worktree グループ・管理外が混ざった並びは、復元の直後も最初の 1 周の後も停止前と同じ 83ms
+     × フォルダが消えて判定が取れない workspace は、復元した判定・並びのまま残る（取れない結果は何も変えない） 60ms
+     × layout の無い古い保存（repoKey だけ有る）は仮の状態で始まり、起動直後から束ねて並び、保存にも layout を書かない 50ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > グループ・worktree グループ・管理外が混ざった並びは、復元の直後も最初の 1 周の後も停止前と同じ
+AssertionError: expected { top: [ 'g:g1', 'w:w4', …(3) ], …(1) } to deeply equal { top: [ 'g:g1', 'w:w4', …(1) ], …(1) }
+- Expected
++ Received
+  {
+    "groups": {
+-     "g1": [
+-       "r:/tmp/soda-persist-oJ64Sm/.git",
+-     ],
++     "g1": [],
+    },
+    "top": [
+      "g:g1",
+      "w:w4",
+-     "r:/tmp/soda-persist-Y8ujEC/.git",
++     "w:w1",
++     "w:w2",
++     "w:w3",
+    ],
+  }
+ ❯ src/git/GitInfoPoller.test.ts:870:37
+    868|     await after.restore(data);
+    869|     // 復元の直後（判定の確認の前）: 保存した repoKey で束ねて並ぶ。ブランチ名と件数はまだ無い。
+    870|     expect(after.snapshot().layout).toEqual(expectedLayout);
+       |                                     ^
+    871|     expect(after.snapshot().workspaces.map((x) => x.id)).toEqual(expec…
+    872|     expect(after.getWorkspace(w.id)?.git).toEqual({ branch: null, ahea…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > フォルダが消えて判定が取れない workspace は、復元した判定・並びのまま残る（取れない結果は何も変えない）
+AssertionError: expected null to match object { …(2) }
+- Expected:
+{
+  "branch": null,
+  "repoKey": "/tmp/soda-persist-TVSuOj/.git",
+}
++ Received:
+null
+ ❯ src/git/GitInfoPoller.test.ts:899:43
+    897|     await after.restore(data);
+    898|     await new DefaultGitInfoPoller(after, new ChildProcessGitRunner())…
+    899|     expect(after.getWorkspace(a.id)?.git).toMatchObject({ repoKey: key…
+       |                                           ^
+    900|     expect(after.getWorkspace(a.id)?.groupId).toBe(group.id);
+    901|     expect(after.snapshot().layout!.groups[group.id]).toEqual([`r:${ke…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > layout の無い古い保存（repoKey だけ有る）は仮の状態で始まり、起動直後から束ねて並び、保存にも layout を書かない
+AssertionError: expected { top: [ 'w:w1', 'w:w2' ], groups: {} } to deeply equal { …(2) }
+- Expected
+```
+- T9 [should] 新規テストの分割代入が no-unused-vars で落ちる（GitInfoPoller.test.ts・SessionFile.test.ts）→ コピーして delete する形に直した [conv:-]
+- T9 [nit] 壊れた保存（layout に r:K があるのに repoGroups に K が無い）で実効の groupId が null になる → 通常の保存では起きないため直さず review に委ねる [conv:-]

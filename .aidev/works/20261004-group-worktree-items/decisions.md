@@ -128,3 +128,12 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - (a) の「落とし先」は、入れ物の項目のうち先頭の workspace が `beforeWorkspaceId` のもの（リポジトリは `repoMembers` の先頭、グループは中の先頭の項目の先頭）。複数の項目は、レイアウトでの今の相対順のまま、落とし先の前へ。落とし先が動かす項目自身なら (c)（以前の「null」と同じ）。
 - 設計の曖昧な点: ID の集まりが**グループの全メンバー**で `beforeWorkspaceId` が null のとき、(a)（グループの中で全項目を末尾へ。実質無変化）ではなく (b)（グループを一番上の末尾へ）に読む。古い画面は必ず具体的な落とし先を送るので影響はなく、外部の呼び出し元向けの決め。
 - `item.move`・`item.move_by` のハンドラは `surface/methods/item.ts`。結果は `{moved}`。
+
+## D17: 保存と復元（T9）
+
+- **保存の形**: `SessionFileData.layout?`・`repoGroups?`、`SessionFileWorkspace.repoKey?`・`isLinkedWorktree?`（すべて optional・版は 1 のまま）。`layout` のスキーマは protocol の `SidebarLayoutSchema`（参照の中身は問わない）。壊れた形（`top` が配列でない等）は「壊れたファイル」として扱う。
+- **`repoKey` の書き方**: モデルは「管理外と確定」と「まだ判定が付いていない」を区別せず、どちらも `git: null`。保存は `ws.git?.repoKey ?? null`（`git` が無ければ `null`）、`isLinkedWorktree` は `ws.git?.isLinkedWorktree ?? false` で、常に書く。読み分け「項目が無い＝未確定」は**古い版の保存**にだけ現れる。復元は `null` でも無くても `git: null` で、並びに違いは出ない（判定前も管理外も `w:<id>`）。
+- **復元**: 全 workspace・グループを入れた後（pane の起動の前）に `SessionService.restoreLayout` → `SessionModel.restoreLayout(layout, repoGroups)`。`repairLayout` を通して確定した状態にし、`repoGroups` は実在するグループ行きだけ残し、`settle` で実効の `groupId` と Map の順を合わせる。捨てた参照は `warn`（`dropped`）に出す。`layout` が無い保存は何もせず仮の状態のまま（`restoreWorkspace`／`restoreGroup` が `layout = null` にする既存の動き）。`repoGroups` だけ有って `layout` が無い保存は `repoGroups` を読まない（仮の状態は `repoGroups` を空で始める決まり）。
+- **書き出し**: `SessionService.persistedLayout()`（仮の状態なら null）。`toSessionFileData`（結合テストのため `export` した）は null のとき `layout`・`repoGroups` のキーごと省く。仮の状態の間も `repoKey`・`isLinkedWorktree` は書く（起動直後から束ねるため）。
+- **確かめたこと（実物の git・実物の `FsSessionFile`）**: 保存 → 復元の直後に停止前と同じ `layout`・Map の順・実効の `groupId`、`git` は `{branch: null, ahead: 0, behind: 0, repoKey, isLinkedWorktree}`。最初の 1 周でブランチが入り並びは不変。フォルダが消えて「取れない」の workspace は復元した判定・所属のまま。
+- T10 への申し送り: 確定の合図は `SessionModel.confirmLayout()`（`layout` が `null` のときだけ働く）。確定後の保存は `persistedLayout()` が値を返すので `layout`・`repoGroups` が書かれる。

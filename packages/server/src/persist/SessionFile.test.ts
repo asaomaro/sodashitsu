@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeTempDir } from "./atomicFile.js";
 import { FsSessionFile, type SessionFileData } from "./SessionFile.js";
@@ -108,6 +108,64 @@ describe("FsSessionFile", () => {
     expect(result.data.nextId.g).toBe(1);
     expect(result.data.groups).toEqual([]);
     expect(result.data.workspaces[0]!.groupId).toBeUndefined();
+  });
+
+  // 20261004-group-worktree-items（T9）：layout・repoGroups・repoKey・isLinkedWorktree は optional（版は 1 のまま）。
+  it("layout・repoGroups・workspace の repoKey／isLinkedWorktree が往復し、repoKey の null（管理外）と無い（未確定）が区別される", async () => {
+    const file = new FsSessionFile(dir);
+    const data = sample();
+    const ws = data.workspaces[0]!;
+    const withLayout: SessionFileData = {
+      ...data,
+      groups: [{ id: "g1", label: "backend", collapsed: false }],
+      layout: { top: ["g:g1", "w:w2"], groups: { g1: ["r:/r/.git"] } },
+      repoGroups: { "/r/.git": "g1", "/closed/.git": "g1" },
+      workspaces: [
+        { ...ws, groupId: "g1", repoKey: "/r/.git", isLinkedWorktree: true },
+        { ...ws, id: "w2", repoKey: null },
+        { ...ws, id: "w3" },
+      ],
+    };
+    await file.save(withLayout);
+    const result = await file.load();
+    expect(result).toEqual({ kind: "ok", data: withLayout });
+    if (result.kind !== "ok") throw new Error("unreachable");
+    expect(result.data.workspaces.map((w) => w.repoKey)).toEqual(["/r/.git", null, undefined]);
+  });
+
+  it("古い版が読める形: 新しい項目を落としても、残りは以前のスキーマで読める（版は 1 のまま・追加は optional だけ）", async () => {
+    const { writeFileAtomic } = await import("./atomicFile.js");
+    const { join } = await import("node:path");
+    const file = new FsSessionFile(dir);
+    const data = sample();
+    await file.save({
+      ...data,
+      layout: { top: ["w:w1"], groups: {} },
+      repoGroups: { "/r/.git": "g1" },
+      workspaces: [{ ...data.workspaces[0]!, repoKey: "/r/.git", isLinkedWorktree: false }],
+    });
+    // 以前の版（z.object の既定＝知らない項目を落とす）と同じ読み方で、新しい項目を落とした形が元の形と一致する。
+    const raw = JSON.parse(await readFile(join(dir, "session.json"), "utf8")) as Record<string, unknown>;
+    expect(raw["schema"]).toBe(1);
+    const rest = { ...raw };
+    delete rest["layout"];
+    delete rest["repoGroups"];
+    const ws = (rest["workspaces"] as Record<string, unknown>[]).map((w) => {
+      const copy = { ...w };
+      delete copy["repoKey"];
+      delete copy["isLinkedWorktree"];
+      return copy;
+    });
+    await writeFileAtomic(join(dir, "session.json"), JSON.stringify({ ...rest, workspaces: ws }));
+    expect(await file.load()).toEqual({ kind: "ok", data });
+  });
+
+  it("layout が壊れた形（配列でない）なら壊れたファイルとして扱う", async () => {
+    const { writeFileAtomic } = await import("./atomicFile.js");
+    const { join } = await import("node:path");
+    const file = new FsSessionFile(dir);
+    await writeFileAtomic(join(dir, "session.json"), JSON.stringify({ ...sample(), layout: { top: "x", groups: {} } }));
+    expect((await file.load()).kind).toBe("corrupt");
   });
 
   it("reports corrupt for an unsupported schema version", async () => {

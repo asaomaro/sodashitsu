@@ -3015,3 +3015,119 @@ describe("SessionService — 独自コマンドの pane 種・文脈・環境（
     expect(new Set([pane.id, id, next.id]).size).toBe(3);
   });
 });
+
+// 20261004-group-worktree-items（T9）：サイドバーの並びと所属の保存・復元。
+describe("SessionService — layout の復元（保存と復元）", () => {
+  const saved = (id: string, extra: Partial<SessionFileData["workspaces"][number]> = {}): SessionFileData["workspaces"][number] => ({
+    id,
+    label: id,
+    cwd: `/home/u/${id}`,
+    activeTabId: `t-${id}`,
+    tabs: [
+      {
+        id: `t-${id}`,
+        label: "1",
+        focusedPaneId: `p-${id}`,
+        zoomedPaneId: null,
+        layout: { type: "pane", paneId: `p-${id}` },
+        panes: [{ id: `p-${id}`, label: null, cwd: `/home/u/${id}`, shell: "" }],
+      },
+    ],
+    ...extra,
+  });
+  const fileData = (over: Partial<SessionFileData>): SessionFileData => ({
+    schema: 1,
+    savedAt: "2026-10-04T00:00:00Z",
+    nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 5 },
+    groups: [],
+    workspaces: [],
+    focus: null,
+    ...over,
+  });
+  const make = () => {
+    const logger = new MemoryLogger();
+    const service = new SessionService({
+      model: new SessionModel(),
+      terminals: new FakeTerminalManager(),
+      bus: new EventBus(),
+      persist: new FakePersistScheduler(),
+      serverVersion: "0.1.0-test",
+      host: HOST_INFO,
+      scrollbackLines: 1000,
+      spawnGraceMs: 5,
+      defaultCwd: "/home/u",
+      logger,
+    });
+    return { service, logger };
+  };
+  const K = "/repos/app/.git";
+  const withGit = { repoKey: K } as const;
+
+  it("layout と repoGroups を戻すと、停止前と同じ並び・所属になり、git は repoKey だけ戻る（ブランチ null・件数 0）", async () => {
+    const { service } = make();
+    await service.restore(
+      fileData({
+        groups: [{ id: "g1", label: "work", collapsed: false }],
+        // 平らな順はレイアウトと違う（レイアウトが正）。w3 は一番上の先頭、グループ g1 の中に app のリポジトリ（w1・w2）。
+        workspaces: [
+          saved("w1", { ...withGit, isLinkedWorktree: false, groupId: "g1" }),
+          saved("w2", { ...withGit, isLinkedWorktree: true, groupId: "g1" }),
+          saved("w3", { repoKey: null }),
+        ],
+        layout: { top: ["w:w3", "g:g1"], groups: { g1: [`r:${K}`] } },
+        repoGroups: { [K]: "g1" },
+      }),
+    );
+    const snap = service.snapshot();
+    expect(snap.layout).toEqual({ top: ["w:w3", "g:g1"], groups: { g1: [`r:${K}`] } });
+    expect(snap.workspaces.map((w) => w.id)).toEqual(["w3", "w1", "w2"]);
+    expect(snap.workspaces.map((w) => w.groupId)).toEqual([null, "g1", "g1"]);
+    expect(service.getWorkspace("w1")?.git).toEqual({ branch: null, ahead: 0, behind: 0, repoKey: K, isLinkedWorktree: false });
+    expect(service.getWorkspace("w2")?.git?.isLinkedWorktree).toBe(true);
+    expect(service.getWorkspace("w3")?.git).toBeNull();
+    expect(service.persistedLayout()).toEqual({ layout: snap.layout, repoGroups: { [K]: "g1" } });
+  });
+
+  it("壊れた参照（実在しない workspace・グループ・重複・repoKey を持つのに w:）でも起動し、捨てた参照をログに出す", async () => {
+    const { service, logger } = make();
+    await service.restore(
+      fileData({
+        groups: [{ id: "g1", label: "work", collapsed: false }],
+        workspaces: [saved("w1", { ...withGit }), saved("w2"), saved("w3")],
+        layout: {
+          top: ["w:gone", "g:g1", "g:g9", "w:w1", "w:w2", "w:w2"],
+          groups: { g1: ["w:w3", "w:w3", "r:/gone/.git"], g9: ["w:w2"] },
+        },
+        repoGroups: { [K]: "g1", "/other/.git": "g9" },
+      }),
+    );
+    // w:w1 は repoKey を持つので r: へ直る（末尾）。w3 は g1 の中に残る。
+    expect(service.snapshot().layout).toEqual({ top: ["g:g1", "w:w2", `r:${K}`], groups: { g1: ["w:w3"] } });
+    expect(service.persistedLayout()?.repoGroups).toEqual({ [K]: "g1" }); // 実在しないグループ行きは捨てる
+    expect(service.getWorkspace("w1")?.groupId).toBe("g1");
+    const warn = logger.lines.find((e) => e.msg.includes("sidebar layout"));
+    expect(warn).toBeDefined();
+    expect((warn!.fields?.["dropped"] as string[]).sort()).toEqual(["g:g9", "r:/gone/.git", "w:gone", "w:w1", "w:w2", "w:w2", "w:w3"].sort());
+  });
+
+  it("レイアウトに無い workspace は一番上の末尾に足す", async () => {
+    const { service } = make();
+    await service.restore(fileData({ workspaces: [saved("w1"), saved("w2")], layout: { top: ["w:w2"], groups: {} } }));
+    expect(service.snapshot().layout).toEqual({ top: ["w:w2", "w:w1"], groups: {} });
+    expect(service.snapshot().workspaces.map((w) => w.id)).toEqual(["w2", "w1"]);
+  });
+
+  it("layout の無い保存は仮の状態のまま（導いた layout を載せ、書き出さない）。repoKey があれば起動直後から束ねる", async () => {
+    const { service } = make();
+    await service.restore(
+      fileData({
+        groups: [{ id: "g1", label: "work", collapsed: false }],
+        workspaces: [saved("w1", { ...withGit, isLinkedWorktree: false, groupId: "g1" }), saved("w2"), saved("w3", { ...withGit, isLinkedWorktree: true })],
+      }),
+    );
+    expect(service.persistedLayout()).toBeNull();
+    // 本体 w1 の所属 g1 が項目 r:K の所属になる（w3 の groupId は見ない）。
+    expect(service.snapshot().layout).toEqual({ top: ["g:g1", "w:w2"], groups: { g1: [`r:${K}`] } });
+    expect(service.getWorkspace("w1")?.git?.repoKey).toBe(K);
+  });
+});

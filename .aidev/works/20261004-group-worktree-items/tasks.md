@@ -47,7 +47,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/server/src/surface/methods/item.ts`（新規）、`packages/server/src/surface/methods/index.ts:29-49`（`registerXxxMethods` を足す）、`packages/server/src/surface/methods/workspace.ts:67-82`、`packages/server/src/session/SessionModel.ts`（`moveWorkspace`・`moveWorkspacesTo`）、`packages/server/src/session/SessionModel.test.ts:948-1025`、`SessionService.test.ts:809-927`
       依存: T5
       AC: AC2, AC5, AC14
-- [ ] T9: 保存と復元——`session.json` に optional の `layout`・`repoGroups`・workspace の `repoKey`／`isLinkedWorktree`（版は 1 のまま。`repoKey` の読み分け: 無い＝未確定／`null`＝管理外／文字列）。復元で `git` を戻す（`branch: null`・件数 0）。復元時の `repairLayout`（捨てた参照をログに出す）。単体テスト（保存→復元で同じ並び／起動直後に停止前と同じ束ね／壊れた参照でも起動する／古い版が読める形〔新しい項目を落としても読める〕）。**実物の git の結合テスト**: 保存 → 復元 → 最初の 1 周で判定が戻り、並びが変わらない（AC9）。壊して落ちる確認
+- [x] T9: 保存と復元——`session.json` に optional の `layout`・`repoGroups`・workspace の `repoKey`／`isLinkedWorktree`（版は 1 のまま。`repoKey` の読み分け: 無い＝未確定／`null`＝管理外／文字列）。復元で `git` を戻す（`branch: null`・件数 0）。復元時の `repairLayout`（捨てた参照をログに出す）。単体テスト（保存→復元で同じ並び／起動直後に停止前と同じ束ね／壊れた参照でも起動する／古い版が読める形〔新しい項目を落としても読める〕）。**実物の git の結合テスト**: 保存 → 復元 → 最初の 1 周で判定が戻り、並びが変わらない（AC9）。壊して落ちる確認
       対象: `packages/server/src/persist/SessionFile.ts:42, :54, :59, :106, :123, :126, :130`、`packages/server/src/composeServer.ts:853-890`（`toSessionFileData`）、`packages/server/src/session/SessionModel.ts`（`restoreWorkspace`・`restoreGroup`）、`packages/server/src/session/SessionService.ts`（`restore`）、`packages/server/src/persist/SessionFile.test.ts:69, :83`
       依存: T6, T7, T8
       AC: AC9, AC10, AC14

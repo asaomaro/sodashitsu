@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import type { LayoutNode, PaneStatus, SplitDirection } from "@sodashitsu/protocol";
-import type { NextIdCounters } from "@sodashitsu/protocol";
+import { SidebarLayoutSchema, type NextIdCounters } from "@sodashitsu/protocol";
 import { readFileWithBackup, writeFileAtomic, type ReadResult } from "./atomicFile.js";
 
 /**
@@ -40,6 +40,13 @@ export interface SessionFileWorkspace {
   /** 手動グループの所属先（20260923-workspace-grouping）。**以前の版の保存には無い**——無ければ
    *  null（`autoLabel` と同じ「optional 追加」方式）。 */
   groupId?: string | null | undefined;
+  /**
+   * 直前の git の判定（20261004-group-worktree-items）。**以前の版の保存には無い**。読み分け: 項目が無い＝まだ一度も確定していない／
+   * `null`＝管理外／文字列＝そのリポジトリ（`GitInfo.repoKey`）。復元で `git` を戻す（ブランチ名・件数は最初の確認で入る）。
+   */
+  repoKey?: string | null | undefined;
+  /** linked worktree か。`repoKey` が文字列のときだけ意味を持つ。無ければ false。 */
+  isLinkedWorktree?: boolean | undefined;
   cwd: string;
   activeTabId: string;
   tabs: SessionFileTab[];
@@ -57,6 +64,13 @@ export interface SessionFileData {
   workspaces: SessionFileWorkspace[];
   /** **以前の版の保存には無い**——無ければ空配列（20260923-workspace-grouping）。 */
   groups: SessionFileGroup[];
+  /**
+   * サイドバーの項目の並び（20261004-group-worktree-items）。**以前の版の保存には無い**——無ければ移行待ち（仮の状態）で復元する。
+   * 仮の状態の間の保存には書かない（途中で止まっても次の起動が同じ移行をやり直せるように）。
+   */
+  layout?: { top: string[]; groups: Record<string, string[]> } | undefined;
+  /** リポジトリの所属（`repoKey` → グループ id）。`layout` と同じく、仮の状態の間は書かない。 */
+  repoGroups?: Record<string, string> | undefined;
   focus: { workspaceId: string; tabId: string; paneId: string } | null;
 }
 
@@ -104,6 +118,9 @@ const SessionFileWorkspaceSchema: z.ZodType<SessionFileWorkspace> = z.object({
   autoLabel: z.boolean().optional(),
   // 以前の版の保存には無い——無ければ null として読む（20260923-workspace-grouping）。
   groupId: z.string().nullable().optional(),
+  // 以前の版の保存には無い（20261004-group-worktree-items）。
+  repoKey: z.string().nullable().optional(),
+  isLinkedWorktree: z.boolean().optional(),
   cwd: z.string(),
   activeTabId: z.string(),
   tabs: z.array(SessionFileTabSchema),
@@ -129,6 +146,9 @@ const SessionFileDataSchema: z.ZodType<SessionFileData> = z.object({
   // 以前の版の保存には無い——無ければ空配列（20260923-workspace-grouping）。
   groups: z.array(SessionFileGroupSchema).default([]),
   workspaces: z.array(SessionFileWorkspaceSchema),
+  // 以前の版の保存には無い（20261004-group-worktree-items）。
+  layout: SidebarLayoutSchema.optional(),
+  repoGroups: z.record(z.string(), z.string()).optional(),
   focus: z.object({ workspaceId: z.string(), tabId: z.string(), paneId: z.string() }).nullable(),
 });
 
