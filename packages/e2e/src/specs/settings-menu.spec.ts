@@ -72,7 +72,12 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     expect(bodyW).toBeGreaterThan(500);
     expect(bodyW).toBeLessThan(520);
     const dBox = (await dialog(page).boundingBox())!;
-    expect(dBox.width).toBeGreaterThan(740);
+    // ダイアログの幅 = メニューの列 + 列の間（1em）+ 本文 + 余白（左右 1em ずつ）+ 枠（左右 1px ずつ）。メニューの分だけ広がっている。
+    const em = await dialog(page).evaluate((d) => parseFloat(getComputedStyle(d).fontSize));
+    const menuColW = (await dialog(page).locator(".settings-menu-col").boundingBox())!.width;
+    expect(menuColW, "メニューの幅は 13em").toBeCloseTo(13 * em, 0);
+    expect(dBox.width).toBeCloseTo(menuColW + em + bodyW + 2 * em + 2, -1);
+    expect(dBox.width - bodyW, "本文の幅は今までのまま（広がった分はメニューの列と余白）").toBeGreaterThan(menuColW);
     const vp = page.viewportSize()!;
     expect(dBox.x).toBeGreaterThanOrEqual(0);
     expect(dBox.x + dBox.width).toBeLessThanOrEqual(vp.width);
@@ -159,6 +164,25 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     expect(await activeId(page)).toBe("settings-notify");
   });
 
+  test("メニューの項目にキーでフォーカスしたとき、枠が内側に描かれる（メニューの overflow で切れない）", async ({ page, appServer }) => {
+    await openApp(page, appServer);
+    await openSettings(page);
+    await page.keyboard.press("Shift+Tab");
+    await expect(items(page).nth(0)).toBeFocused();
+    const outline = await items(page).nth(0).evaluate((b) => {
+      const s = getComputedStyle(b);
+      return { style: s.outlineStyle, width: parseFloat(s.outlineWidth), offset: parseFloat(s.outlineOffset) };
+    });
+    expect(outline.style).not.toBe("none");
+    expect(outline.width).toBeGreaterThan(0);
+    expect(outline.offset, "内側（負のオフセット）").toBeLessThan(0);
+    // 枠がメニューの外側へはみ出さない（項目の外枠が、メニューの見える範囲に収まる）。
+    const item = (await items(page).nth(0).boundingBox())!;
+    const nav = (await menu(page).boundingBox())!;
+    expect(item.x - outline.width * 0).toBeGreaterThanOrEqual(nav.x);
+    expect(item.x + item.width).toBeLessThanOrEqual(nav.x + nav.width + 0.5);
+  });
+
   test("AC3：ホイールで印が移る。いちばん上は通知、いちばん下はキー。印は 1 つで、色以外（太さ・左の線）でも示す", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
@@ -235,12 +259,17 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     expect(await activeId(page)).toBe("settings-agent-integration");
   });
 
-  test("AC4・AC-I5：<select> にフォーカスがあっても節は移り、<select> の値は変わらない。端末へ漏れない", async ({ page, appServer }) => {
+  test("AC4・AC-I5：<select> にフォーカスがあっても節は移り（印と見出しのフォーカスが次の節へ）、<select> の値は変わらない。端末へ漏れない", async ({ page, appServer }) => {
     const sent = await openApp(page, appServer);
     await openSettings(page);
     const select = dialog(page).locator("select").first();
     await select.focus();
     const value = await select.inputValue();
+    // <select> の入っている節（フォーカスしたので、その節が今の節）。
+    const idx = await select.evaluate((el, ids) => ids.indexOf(el.closest("section")!.getAttribute("aria-labelledby")!), HEADING_IDS);
+    expect(idx, "<select> は最後の節以外にある").toBeGreaterThanOrEqual(0);
+    expect(idx).toBeLessThan(5);
+    await expect.poll(() => currentLabel(page)).toEqual([SECTIONS[idx]!]);
     const n = sent().length;
     // ダイアログ自身の listener（Vue の後に登録）で、既定の動作が止められているかを見る（Chromium は元から値を変えないので、値だけでは見えない）。
     await dialog(page).evaluate((d) => {
@@ -250,12 +279,16 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
       });
     });
     await page.keyboard.press("Alt+PageDown");
+    await expect.poll(() => currentLabel(page), "<select> から次の節へ").toEqual([SECTIONS[idx + 1]!]);
+    expect(await activeId(page), "フォーカスは次の節の見出し").toBe(HEADING_IDS[idx + 1]);
     await page.keyboard.press("Alt+PageUp");
+    await expect.poll(() => currentLabel(page), "戻る").toEqual([SECTIONS[idx]!]);
+    expect(await activeId(page)).toBe(HEADING_IDS[idx]);
     await page.keyboard.press("Alt+PageDown");
+    await expect.poll(() => currentLabel(page)).toEqual([SECTIONS[idx + 1]!]);
     expect(await select.inputValue()).toBe(value);
     expect(sent().length, "端末へ何も送らない").toBe(n);
     expect(await page.evaluate(() => (window as unknown as { __prevented: boolean[] }).__prevented), "3 回とも既定の動作を止めた").toEqual([true, true, true]);
-    await expect.poll(async () => (await currentLabel(page)).length).toBe(1);
   });
 
   test("AC5：節の中の部品に Tab でフォーカスが入ると、その節に印が付く", async ({ page, appServer }) => {
@@ -263,9 +296,13 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     await openSettings(page);
     for (let i = 0; i < 40; i++) {
       await page.keyboard.press("Tab");
-      const inTheme = await page.evaluate(() => !!document.activeElement?.closest('section[aria-labelledby="settings-terminal"]'));
-      if (inTheme) break;
+      const inTerminal = await page.evaluate(() => !!document.activeElement?.closest('section[aria-labelledby="settings-terminal"]'));
+      if (inTerminal) break;
     }
+    expect(
+      await page.evaluate(() => !!document.activeElement?.closest('section[aria-labelledby="settings-terminal"]')),
+      "Tab で端末の節の部品に届いた",
+    ).toBe(true);
     await expect.poll(() => currentLabel(page)).toEqual(["端末"]);
   });
 
@@ -349,7 +386,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     expect(await page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea"))).toBe(true);
   });
 
-  test("AC8：キーの取り込み待ちの間の Alt+PageDown は、節を移さず取り込まれる。メニューの項目を押すと取り込みは元のまま終わり、節へ移る", async ({ page, appServer }) => {
+  test("AC8：キーの取り込み待ちの間の Alt+PageUp（最後の節に居るので、取り込まれなければ前の節へ移る）は、節を移さず取り込まれる。メニューの項目を押すと取り込みは元のまま終わり、節へ移る", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
     await items(page).nth(5).click();
@@ -358,10 +395,17 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     await expect(capture).toBeVisible();
     await expect(capture).toBeFocused();
     const top = await scrollTop(page);
-    await page.keyboard.press("Alt+PageDown");
-    expect(await currentLabel(page), "節は移らない（最後の節のまま）").toEqual(["キー"]);
+    const prefixBefore = await dialog(page).locator(".keys-prefix .keys-binding").innerText();
+    // 最後の節に居るので、`Alt+PageDown` では端で何も起きず、移らなかったことの証明にならない。`Alt+PageUp` なら、取り込まれなければ前の節へ移る。
+    await page.keyboard.press("Alt+PageUp");
+    await settle(page);
+    expect(await currentLabel(page), "節は移らない（キーのまま）").toEqual(["キー"]);
     expect(await scrollTop(page)).toBe(top);
+    expect(await activeId(page), "フォーカスは見出しへ移っていない").not.toBe("settings-agent-integration");
     await expect(dialog(page)).toHaveAttribute("open", "");
+    // 取り込みの部品が候補として受けた（prefix に使えないキーなので、その理由の文が帯に出る）。取り込まれなければ、前の節へ移っているはず。
+    await expect(dialog(page).locator('[role="status"]', { hasText: "prefix には" })).toBeVisible();
+    expect(await dialog(page).locator(".keys-prefix .keys-binding").innerText(), "prefix は変わらない").toBe(prefixBefore);
     // 取り込み待ちを残したまま、メニューの項目を押す。
     await dialog(page).locator("[data-prefix-change]").click(); // 取り込みが終わっていても、続いていても、ここで取り込み待ちになる
     await expect(capture).toBeVisible();

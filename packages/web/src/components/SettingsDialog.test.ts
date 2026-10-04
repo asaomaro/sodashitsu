@@ -1809,6 +1809,104 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
         expect(f.listeners, "前の監視を外してから登録し直す").toHaveLength(1);
       });
 
+      const focusItem = async (w: Opened["wrapper"], i: number) => {
+        const el = menuButtons(w)[i]!.element as HTMLElement;
+        el.focus();
+        el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        await w.vm.$nextTick();
+        return el;
+      };
+
+      it("メニューが消える拍にブラウザが先にフォーカスを外していても（行き先の無い focusout）、今の節の見出しへ移す。時間は関係しない（ウィンドウが非アクティブになった後でも）", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const item = await focusItem(wrapper, 3);
+        item.blur(); // 行き先の無い focusout（relatedTarget が null）。activeElement は body
+        item.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+        await wrapper.vm.$nextTick();
+        expect(document.activeElement).toBe(document.body);
+        vi.spyOn(performance, "now").mockReturnValue(1e9); // いくら時間が経っていても同じ
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        await wrapper.vm.$nextTick();
+        expect(document.activeElement).toBe(document.getElementById("settings-notify"));
+      });
+
+      it("自分でメニューの外へ移した後は、幅が変わってもフォーカスを奪わない", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const item = await focusItem(wrapper, 3);
+        const sw = switches(wrapper)[1]!.element as HTMLElement;
+        sw.focus();
+        item.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: sw }));
+        sw.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        await wrapper.vm.$nextTick();
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        expect(document.activeElement).toBe(sw);
+        // 行き先の無いフォーカスの外れの後でも、その前にメニューの外へ移していれば奪わない。
+        sw.blur();
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        expect(document.activeElement).toBe(document.body);
+      });
+
+      it("行き先の無いフォーカスの外れの後、メニューの外へフォーカスが入ったら（ウィンドウに戻って別の部品を選んだ）、奪わない", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const item = await focusItem(wrapper, 3);
+        item.blur();
+        item.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+        const sw = switches(wrapper)[1]!.element as HTMLElement;
+        sw.focus();
+        sw.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        sw.blur();
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        expect(document.activeElement).toBe(document.body);
+      });
+
+      it("移す先の見出しが見える範囲に無ければ、go と同じ位置へスクロールする", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        await menuButtons(wrapper)[2]!.trigger("click"); // 表示（見出し 800）→ scrollTop 792、選んだ節
+        const dialog = wrapper.get("dialog").element as HTMLElement;
+        expect(dialog.scrollTop).toBe(792);
+        dialog.scrollTop = 0; // 見出しは見える範囲（0〜500）の外へ。scroll のイベントは起こさない
+        await focusItem(wrapper, 2);
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        await wrapper.vm.$nextTick();
+        expect(document.activeElement).toBe(document.getElementById("settings-display"));
+        expect(dialog.scrollTop).toBe(792);
+      });
+
+      it("見出しが見える範囲にあるときはスクロールしない", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const dialog = wrapper.get("dialog").element as HTMLElement;
+        await menuButtons(wrapper)[2]!.trigger("click"); // 表示を選んだ節にする
+        dialog.scrollTop = 600; // 表示（800）が見える範囲（600〜1100）にある
+        await focusItem(wrapper, 2);
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        await wrapper.vm.$nextTick();
+        expect(dialog.scrollTop).toBe(600);
+        expect(document.activeElement).toBe(document.getElementById("settings-display"));
+      });
+
+      it("開閉を繰り返しても、開いたまま開き直しても、リスナーは二重にならない", async () => {
+        const f = fake();
+        const { wrapper, view } = await stubbed();
+        const tick = async () => {
+          await wrapper.vm.$nextTick();
+          await wrapper.vm.$nextTick();
+        };
+        view.closeDialog();
+        await tick();
+        expect(f.listeners).toHaveLength(0);
+        view.openDialogWithContext({ kind: "settings" });
+        await tick();
+        expect(f.listeners).toHaveLength(1);
+        view.openDialogWithContext({ kind: "settings" }); // 開いたまま、別の文脈の値で開き直す
+        await tick();
+        expect(f.listeners, "前の監視を外してから登録し直す").toHaveLength(1);
+      });
+
       it("メニューが消える拍にブラウザが先にフォーカスを外していても（focusout が先）、直前なら今の節の見出しへ移す。時間が経っていれば動かさない", async () => {
         const f = fake();
         const { wrapper } = await stubbed();

@@ -135,7 +135,6 @@ watch(
       stopObserving();
       chosen.value = null; // 次に開いたときは最初の節から
       menuFocus.value = null;
-      menuLeftAt = null;
       current.value = 0;
       dialogEl.value?.close();
       confirmingOverrideReset.value = false; // 開き直したとき、確認が出たままにならない
@@ -650,16 +649,31 @@ function onUserScroll(ev: Event): void {
 
 let narrowQuery: MediaQueryList | null = null;
 
-/** 幅が 768px を下回ってメニューが消えるとき、メニューにフォーカスがあったら今の節の見出しへ移す（消えた要素にフォーカスを残さない）。出るときは何もしない。 */
+/**
+ * 幅が 768px を下回ってメニューが消えるとき、メニューにフォーカスがあったら今の節の見出しへ移す（消えた要素にフォーカスを残さない）。出るときは何もしない。
+ * 判定は**そのときの実際のフォーカス**で行う: フォーカスがメニューの中にある、または、ブラウザが先に（メニューが見えなくなる拍に、あるいはウィンドウが
+ * 非アクティブになって）行き先の無いままフォーカスを外していて（`activeElement` が `body`／`<dialog>` 自身）、直前までメニューにあった（`menuFocus`）。
+ * 自分でメニューの外へ移した後は、`menuFocus` が消えているので奪わない。
+ */
 function onNarrowChange(ev: MediaQueryListEvent): void {
-  // メニューが `display: none` になると、ブラウザが先にフォーカスを外す（`focusout` が先に来て `menuFocus` が null になる）ことがある。
-  // 直前（このタスクの中）にメニューからフォーカスが外れていたなら、メニューにあったものとして扱う。
-  const justLeft = menuLeftAt !== null && performance.now() - menuLeftAt < MENU_LEFT_WINDOW_MS;
-  if (!ev.matches || (menuFocus.value === null && !justLeft)) return;
-  menuLeftAt = null;
-  const found = sectionHeadings();
-  found[Math.max(current.value, 0)]?.heading.focus({ preventScroll: true });
+  if (!ev.matches) return;
+  const dialog = dialogEl.value;
+  const active = document.activeElement;
+  const inMenu = active !== null && menuEl.value?.contains(active) === true;
+  const lost = active === null || active === document.body || active === dialog;
+  if (!inMenu && !(lost && menuFocus.value !== null)) return;
   menuFocus.value = null;
+  const found = sectionHeadings();
+  const at = Math.max(current.value, 0);
+  const target = found[at];
+  if (!dialog || !target) return;
+  target.heading.focus({ preventScroll: true });
+  // 見出しが見える範囲に無ければ、`go` と同じ位置へスクロールする（フォーカスだけ画面の外へ移さない）。
+  const input = readSpyInput(found);
+  const top = input?.tops[at];
+  if (input && top !== undefined && (top < input.scrollTop + input.headerHeight - 2 || top >= input.scrollTop + input.viewHeight)) {
+    dialog.scrollTop = scrollTopFor(at, input);
+  }
 }
 
 let dialogObserver: ResizeObserver | null = null;
@@ -744,14 +758,19 @@ function onMenuFocusin(ev: FocusEvent): void {
   menuFocus.value = at >= 0 ? at : null;
 }
 
-/** メニューから、行き先の無いままフォーカスが外れた時刻（要素が消えた・見えなくなったときのフォーカスの外れを見分ける）。 */
-let menuLeftAt: number | null = null;
-const MENU_LEFT_WINDOW_MS = 300;
-
+/**
+ * メニューからフォーカスが外れた。**行き先が無い（`relatedTarget` が null。要素が見えなくなった・ウィンドウが非アクティブになった）ときは
+ * `menuFocus` を残す**（幅が狭くなる拍の判定に使う。`onNarrowChange`）。別の要素へ移ったときは外す（ダイアログの `focusin` も外す）。
+ */
 function onMenuFocusout(ev: FocusEvent): void {
   if (ev.relatedTarget instanceof Node && menuEl.value?.contains(ev.relatedTarget)) return; // 項目の間の移動
+  if (ev.relatedTarget !== null) menuFocus.value = null;
+}
+
+/** メニューの外にフォーカスが入った → もうメニューにはいない。 */
+function onDialogFocusin(ev: FocusEvent): void {
+  if (ev.target instanceof Node && menuEl.value?.contains(ev.target)) return;
   menuFocus.value = null;
-  menuLeftAt = ev.relatedTarget === null ? performance.now() : null;
 }
 
 /** メニューの中の矢印キー。端で止まる（回り込まない）。 */
@@ -797,6 +816,7 @@ function onNativeCancel(ev: Event): void {
     @cancel="onNativeCancel"
     @click.self="cancel"
     @keydown="onDialogKeydown"
+    @focusin="onDialogFocusin"
     @scroll.passive="schedule"
     @wheel.passive="onUserScroll"
     @touchmove.passive="onUserScroll"
@@ -1297,6 +1317,7 @@ function onNativeCancel(ev: Event): void {
   grid-template-columns: var(--settings-menu-w) minmax(0, 1fr);
   column-gap: 1em;
   align-content: start;
+  /* 本文の幅（34em）に、メニューの幅と、列の間（`column-gap` の 1em）を足す。 */
   max-width: min(calc(34em + var(--settings-menu-w) + 1em), calc(100% - 16px));
 }
 .settings-dialog[open] > .settings-header {
@@ -1326,6 +1347,11 @@ function onNativeCancel(ev: Event): void {
   border-radius: 0 4px 4px 0;
   padding: 0.35em 0.7em;
   cursor: pointer;
+}
+/* メニューは `overflow-y: auto` で、外側の枠（UA の outline）は切れる。キーでフォーカスしたときは内側に枠を描く。 */
+.settings-menu-item:focus-visible {
+  outline: 2px solid var(--soda-focus, #8be9fd);
+  outline-offset: -2px;
 }
 .settings-menu-item:hover {
   background: var(--soda-menu-hover, rgba(255, 255, 255, 0.08));

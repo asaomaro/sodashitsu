@@ -53,7 +53,7 @@
 
 ## D7: E2E で見つけて直した、design に無かった 2 点（T7）
 
-- **幅が 768px を下回ってメニューが消える拍に、ブラウザが先にフォーカスを外すことがある**（`focusout` が `matchMedia` の `change` より先に来て、`menuFocus` が null になっていた。E2E「開いたまま 768 をまたぐ」が間欠的に落ちた）。design は「`focusin`／`focusout` で持っておく」としていたが、それだけでは足りない。メニューから行き先の無いまま（`relatedTarget` が null）フォーカスが外れた時刻を持ち、300ms 以内の `change` はメニューにあったものとして扱う。
+- **幅が 768px を下回ってメニューが消える拍に、ブラウザが先にフォーカスを外すことがある**（`focusout` が `matchMedia` の `change` より先に来て、`menuFocus` が null になっていた。E2E「開いたまま 768 をまたぐ」が間欠的に落ちた）。design は「`focusin`／`focusout` で持っておく」としていたが、それだけでは足りない。**最初は「行き先の無い `focusout` の時刻を持ち、300ms 以内の `change` はメニューにあったものとして扱う」としたが、独立レビューの指摘（review-findings-01 の 4）で、時間の窓をやめた**: `onNarrowChange` の時点の実際のフォーカスで判定する。フォーカスがメニューの中にある、または `activeElement` が `body`／`<dialog>` 自身（ブラウザが先に外した・ウィンドウが非アクティブになった）で、直前までメニューにあった（`menuFocus`）、のとき今の節の見出しへ移す。`menuFocus` は、行き先の無い `focusout`（`relatedTarget` が null）では消さず、別の要素へ移ったとき（`focusout` の `relatedTarget` が非 null、またはメニューの外への `focusin`）に消す。自分でメニューの外へ移した後は奪わない。見出しが見える範囲に無ければ `go` と同じ位置へスクロールする。
 - **`Alt+PageDown`／`PageUp` は、押した時点で今の節を計算し直してから数える**。今の節の更新は `requestAnimationFrame` でまとめるので、フォーカスを移した直後（次の描画の前）に押されると、古い今の節から数えていた（E2E「絞り込みで末尾の 2 節が 1 画面に収まる」が間欠的に落ちた）。
 - E2E の「末尾の 2 節が 1 画面に収まる」場面は、1280×720 では「キー」の節が絞り込んでも約 540px 残り、収まらない。高さ 1400px の画面に分けた（位置だけで決めると末尾の節を飛ばすことを、`chosen` を無効にする変異で確認済み）。
 - `Alt+PageDown` が `<select>` の値を変えないことは、Chromium では元から変わらないため値だけでは確かめられない。ダイアログ自身の後ろの listener で `defaultPrevented` を見る（`preventDefault` を外す変異で落ちる）。
@@ -69,3 +69,7 @@
 残った 12 件は D5 の「別の原因」の 12 件と同一（`appearance-settings.spec.ts:40`・`:113`・`:130`、`key-bindings.spec.ts:632`・`:699`、`new-terminal-cwd.spec.ts:128`、`settings.spec.ts:167`・`:187`、`theme-settings.spec.ts:193`・`:271`・`:354`・`:528`）。この作業の対象外（`main` でも落ちる）。
 
 新しい `settings-menu.spec.ts`（22 件）は、変更後に 3 回続けて全件通った（途中で見つけた 2 件の間欠的な落ち方は D7 で直し、その後 `--repeat-each 3` の 66 件・`--repeat-each 4` の 80 件が通った）。
+
+## D10: `max-width` の `+ 1em` は `column-gap` の分（review-findings-01 の 7）
+
+ダイアログの `max-width` は `min(calc(34em + var(--settings-menu-w) + 1em), calc(100% - 16px))`。34em は本文の幅（今までの幅）、`--settings-menu-w` はメニューの列（13em）、最後の `1em` は 2 列の間の `column-gap`。これを足さないと、画面が十分広くても本文の列が 1em 縮む。
