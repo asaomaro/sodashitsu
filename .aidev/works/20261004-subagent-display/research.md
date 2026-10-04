@@ -21,6 +21,13 @@
 - F-H12 `Stop` は 2 回発火した（バックグラウンドの完了の通知を受けた後の、もう 1 回のターンの終わり）。どちらも `background_tasks: []`。
 - **未確認**: `background_tasks` の `type` のほかの値（`subagent` 以外）・`status` のほかの値。チームメイト・Workflow のエージェント・サブエージェントの中のサブエージェントが `SubagentStart` を出すか。`/clear`・再開でセッションの ID が変わるか。強制終了のときに `SubagentStop` が来るか。フックを `async: true` にしたときの順序。
 
+### 3 回目の確認（同じ環境。バックグラウンドのサブエージェントが動いている間に、親のターンを終えさせた）
+
+- F-H13 **動いている間の `Stop`**: `background_tasks` は `[{"id": "<agent_id と同じ値>", "type": "subagent", "status": "running", "description": "slow task", "agent_type": "general-purpose"}]`。**ID・状態・短い説明・種類が入っている。**全部終わった後の `Stop` は `[]`。
+- F-H14 サブエージェントの中のツール（Bash）の `PreToolUse` は、matcher `Agent|Task` では発火しなかった（記録に `tool_name: "Agent"` の 1 件だけ）。
+- F-H15 ID の長さは、観測した範囲で 17 文字（`a` ＋ 16 桁の 16 進）。
+- F-H16 1〜3 回目とも、`SubagentStart`・`SubagentStop`・`Stop` のフックは `matcher: ""` で登録して発火した。
+
 ## 公式ドキュメントで確かめたこと（委譲。claude-code-guide）
 
 - `SubagentStart`（サブエージェントが起動したとき）・`SubagentStop`（終わったとき）・`TaskCreated`・`TaskCompleted`・`TeammateIdle` がフックのイベントとして載っている（https://code.claude.com/docs/en/hooks-guide.md）。`SubagentStart`／`SubagentStop` の matcher はエージェントの種類（`general-purpose`・`Explore`・`Plan`・独自の名前）。

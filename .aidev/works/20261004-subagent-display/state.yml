@@ -1,7 +1,7 @@
 schema: 11
 slug: subagent-display
-current: requirements
-approved: [requirements]
+current: design
+approved: [requirements, design]
 mode: autonomous
 profile: full
 humanGates: []
