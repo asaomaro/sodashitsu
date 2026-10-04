@@ -5125,3 +5125,92 @@ Running 1 test using 1 worker
 - E2E の元の不具合の再現: 壊すと「＋ 新規」の workspace が worktree グループの子（`wt second-ws`）になり、元の代表 same-1 が通常の行へ降格する。
 - T29 [should] 再起動をまたぐと「次の代表」が変わりうる（heldSince がメモリのみ）→ 依頼元の決定（順を持てないなら作った順）の範囲として D42 に制約を明記 [conv:-]
 - T29 [nit] flattenWorkspaceIds のコメントが古い → 直した [conv:-]
+
+### T30 壊して落ちる確認
+
+共有の純関数 `dropBefore`（client-core/src/workspace/dropTarget.ts）を壊し、client-core を build し直して各パッケージのテストを流した。確認後は元に戻して build し直し、git diff で戻りを確認した。
+
+```
+##### A: 常に落とした項目の前
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/workspace/dropTarget.test.ts
+      Tests  3 failed | 4 passed (7)
+ FAIL  src/workspace/dropTarget.test.ts > dropBefore（ドラッグの before の決め方） > グループ・「グループなし」の項目も同じ決まり
+ FAIL  src/workspace/dropTarget.test.ts > dropBefore（ドラッグの before の決め方） > 下へ動かして落とした項目が最後なら null（末尾）
+ FAIL  src/workspace/dropTarget.test.ts > dropBefore（ドラッグの before の決め方） > 下へ動かすなら、落とした項目の次の前
+AssertionError: expected { item: { kind: 'ungrouped' }, …(1) } to deeply equal { item: { kind: 'group', …(1) }, …(1) }
+AssertionError: expected { …(2) } to be null
+AssertionError: expected { …(2) } to deeply equal { …(2) }
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/input
+      Tests  8 failed | 86 passed (94)
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と、落�
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > 項目の並べ替えは、掴んだ項目の workspace 全部と落とし先の項目の先頭の workspac
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > worktree グループの先頭の行を掴む：グループ全体が動く。子の行の上に落としても、その項目の位置
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの見出しのドラッグ：まとまりどうしを並べ替える（グループ・「グループなし」）
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの中の項目：下へ落とすと落とした項目の次の前（末尾なら null）、上へなら落とした項目の前
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > 名前順：一番上（グループの並び・「グループなし」の中）は送らず知らせる。グループの中は送る
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/Sidebar.test.ts
+      Tests  8 failed | 144 passed (152)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > worktree グループ（子を掴んでも動くのは worktree グループ全体） > 子の行を掴むと、worktree グループ（先頭の worksp
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > グループのヘッダー行をドラッグすると、そのグループの全メンバー id をまとめて動かす（AC9）
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > ドラッグ中にグループの構成が変わっても、開始時点のメンバー集合で移動する
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 落とす位置は端末版と同じ（T30。上へなら落とした項目の前、下へなら次の前、末尾は null） > 下へ動かして最後
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 落とす位置は端末版と同じ（T30。上へなら落とした項目の前、下へなら次の前、末尾は null） > 下へ動かすと、落
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 落とす位置は端末版と同じ（T30。上へなら落とした項目の前、下へなら次の前、末尾は null） > 古いサーバ（layout
+##### B: 末尾でも落とした項目の前
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/workspace/dropTarget.test.ts
+      Tests  2 failed | 5 passed (7)
+ FAIL  src/workspace/dropTarget.test.ts > dropBefore（ドラッグの before の決め方） > グループ・「グループなし」の項目も同じ決まり
+ FAIL  src/workspace/dropTarget.test.ts > dropBefore（ドラッグの before の決め方） > 下へ動かして落とした項目が最後なら null（末尾）
+AssertionError: expected { item: { kind: 'group', …(1) }, …(1) } to be null
+AssertionError: expected { …(2) } to be null
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/input
+      Tests  7 failed | 87 passed (94)
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > グループの見出しを掴んでまとまりどうしを並べ替える：メンバー全部と、落�
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > layout の無い古いサーバ（workspace.move_to） > 項目の並べ替えは、掴んだ項目の workspace 全部と落とし先の項目の先頭の workspac
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > worktree グループの先頭の行を掴む：グループ全体が動く。子の行の上に落としても、その項目の位置
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの見出しのドラッグ：まとまりどうしを並べ替える（グループ・「グループなし」）
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > グループの中の項目：下へ落とすと落とした項目の次の前（末尾なら null）、上へなら落とした項目の前
+ FAIL  src/input/mouse.sidebarDrag.test.ts > サイドバーのドラッグ（項目単位） > 名前順：一番上（グループの並び・「グループなし」の中）は送らず知らせる。グループの中は送る
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/Sidebar.test.ts
+      Tests  5 failed | 147 passed (152)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > worktree グループ（子を掴んでも動くのは worktree グループ全体） > 子の行を掴むと、worktree グループ（先頭の worksp
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > グループのヘッダー行をドラッグすると、そのグループの全メンバー id をまとめて動かす（AC9）
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > ドラッグ中にグループの構成が変わっても、開始時点のメンバー集合で移動する
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 落とす位置は端末版と同じ（T30。上へなら落とした項目の前、下へなら次の前、末尾は null） > 下へ動かして最後
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 閾値を超えて動かし別の行の上で離すと moveItemByDrag(自分の項目, 相手の項目, 古いサーバ用の id) を呼ぶ
+AssertionError: expected "vi.fn()" to be called with arguments: [ { kind: 'workspace', …(1) }, …(2) ]
+```
+
+web の Sidebar.vue で `moveItemByDrag(draggedRow.item, drop.before, …)` を `drop.row.item`（落とした項目の前）へ戻した場合と、A を E2E（ブラウザ・全体 build 後）で流した場合。
+
+```
+##### C: web が常に落とした項目の前を送る
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/Sidebar.test.ts
+      Tests  8 failed | 144 passed (152)
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > worktree グループ（子を掴んでも動くのは worktree グループ全体） > 子の行を掴むと、worktree グループ（先頭の worksp
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > グループのヘッダー行をドラッグすると、そのグループの全メンバー id をまとめて動かす（AC9）
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > ドラッグ中にグループの構成が変わっても、開始時点のメンバー集合で移動する
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 落とす位置は端末版と同じ（T30。上へなら落とした項目の前、下へなら次の前、末尾は null） > 下へ動かして最後
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 落とす位置は端末版と同じ（T30。上へなら落とした項目の前、下へなら次の前、末尾は null） > 下へ動かすと、落
+ FAIL  src/components/Sidebar.test.ts > Sidebar — workspace 行の D&D（20260923-workspace-grouping） > 落とす位置は端末版と同じ（T30。上へなら落とした項目の前、下へなら次の前、末尾は null） > 古いサーバ（layout
+##### D(E2E): 常に落とした項目の前
+  ✘  1 src/specs/workspace-groups.spec.ts:1155:3 › ドラッグ › 下へ・末尾へのドラッグ：グループの中（AC5） (23.0s)
+  ✘  2 src/specs/workspace-groups.spec.ts:1209:3 › ドラッグ › 下へ・末尾へのドラッグ：「グループなし」の中（AC5） (22.6s)
+  ✘  3 src/specs/workspace-groups.spec.ts:1262:3 › ドラッグ › 下へ・末尾へのドラッグ：一番上のまとまり（グループ・グループなし）どうし（AC5・AC20） (22.3s)
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 1
+    + Received  + 1
+    Error Context: test-results/workspace-groups-ドラッグ-下へ・末尾へのドラッグ：グループの中（AC5）/error-context.md
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 1
+    + Received  + 1
+    Error Context: test-results/workspace-groups-ドラッグ-下へ・末尾へのドラッグ：「グループなし」の中（AC5）/error-context.md
+    Error: expect(received).toEqual(expected) // deep equality
+    - Expected  - 2
+    + Received  + 2
+    Error Context: test-results/workspace-groups-ドラッグ-下へ・末-4c198-り（グループ・グループなし）どうし（AC5・AC20）/error-context.md
+  3 failed
+```
+- T30 [nit] D43 の docs の記述が事実と合わない → 直した [conv:-]
+- T30 [nit] dropBefore の結果を moveItem に通すテストが無い → 点検が一時テストで全組を確認（off-by-one なし）。恒久テストは足さず review に委ねる [conv:-]
+- T30 [nit] 古いサーバでは web と tui の落とす位置が食い違う → D43 に明記済みの意図（経路は変更前と同じ） [conv:-]

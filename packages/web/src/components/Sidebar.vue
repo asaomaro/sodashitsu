@@ -5,7 +5,7 @@ import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
 import { orderedAgentPaneIds } from "@sodashitsu/client-core";
-import { type ItemRow, groupIdOfNavigateKey, isUngroupedNavigateKey, navigateKeyOfUngrouped, hiddenWorktreeCount, visibleGroupMembers } from "@sodashitsu/client-core";
+import { type DropAnchor, type ItemRow, dropBefore, nextAnchorOf, sameItemTarget, groupIdOfNavigateKey, isUngroupedNavigateKey, navigateKeyOfUngrouped, hiddenWorktreeCount, visibleGroupMembers } from "@sodashitsu/client-core";
 import { currentSidebarTree } from "../store/sidebarTree.js";
 import SidebarKindIcon from "./SidebarKindIcon.vue";
 import { type AgentSort, SIDEBAR_WIDTH, type WorkspaceSort, useViewStore } from "../store/view.js";
@@ -106,6 +106,9 @@ interface SpaceRow {
    * ——グループの見出しとその先頭メンバーの行は同じ値を持ちうる。行の特定・ハイライトは一意な `key` で行う。
    */
   dropAnchorId: string | null;
+  /** 入れ物の中でのこの項目の番号と、次の項目（落とす位置の計算用。畳んで見えない項目も数える。client-core の `dropBefore`）。 */
+  dropIndex: number;
+  dropNext: DropAnchor | null;
   /**
    * 展開したサイドバーで描く行（設定した並び〔既定なら今と同じ並び〕を解決したもの。20260927-sidebar-row-tokens）。グループの見出し行は空
    * （見出しは今までどおりの 1 行で描く）。
@@ -135,7 +138,7 @@ const line1HasBranch = computed(() => (settings.spacesLayout[0] ?? []).some((t) 
 /** `itemHeadId` はこの行の項目の先頭の workspace（通常の行は自分、worktree グループの子は先頭の行）。 */
 function workspaceRow(
   ws: Workspace,
-  opts: { depth: 0 | 1 | 2; parentGroupId: string | null; container: string | null; kind: SpaceRow["kind"]; groupKind: SpaceRow["groupKind"]; groupTargetId: string | null; dragIds: string[]; itemHeadId: string; rollup?: Workspace[]; hiddenCount?: number; treeLast?: boolean },
+  opts: { depth: 0 | 1 | 2; parentGroupId: string | null; container: string | null; kind: SpaceRow["kind"]; groupKind: SpaceRow["groupKind"]; groupTargetId: string | null; dragIds: string[]; itemHeadId: string; dropIndex: number; dropNext: DropAnchor | null; rollup?: Workspace[]; hiddenCount?: number; treeLast?: boolean },
 ): SpaceRow {
   const isWorktree = opts.kind === "worktreeHead" || opts.kind === "worktreeChild";
   return {
@@ -159,6 +162,8 @@ function workspaceRow(
     hiddenCount: opts.hiddenCount ?? 0,
     treeLast: opts.treeLast ?? false,
     dropAnchorId: opts.itemHeadId,
+    dropIndex: opts.dropIndex,
+    dropNext: opts.dropNext,
   };
 }
 
@@ -167,14 +172,20 @@ function workspacesOfItem(item: ItemRow): Workspace[] {
   return item.kind === "workspace" ? [item.workspace] : [item.head, ...item.children];
 }
 
+/** 項目の落とし先としての姿（先頭の workspace が項目の印）。 */
+function anchorOfItem(item: ItemRow): DropAnchor {
+  const head = workspacesOfItem(item)[0]!;
+  return { item: { kind: "workspace", workspaceId: head.id }, anchorId: head.id };
+}
+
 const spaces = computed<SpaceRow[]>(() => {
   // 描画の木（`sidebarTree`。キー操作の順と同じ関数を通る——`currentVisibleWorkspaceIds`）。
   const tree = currentSidebarTree(session, view);
   const out: SpaceRow[] = [];
   /** 項目（worktree グループ・通常の行）の行を足す。`unitCollapsed`（入れ物のまとまりが畳まれている）なら今いる workspace の行だけ（AC6）。 */
-  const pushItem = (item: ItemRow, depth: 0 | 1, parentGroupId: string | null, container: string | null, unitCollapsed: boolean): void => {
+  const pushItem = (item: ItemRow, depth: 0 | 1, parentGroupId: string | null, container: string | null, unitCollapsed: boolean, dropIndex: number, dropNext: DropAnchor | null): void => {
     if (item.kind === "workspace") {
-      if (!unitCollapsed || item.workspace.id === view.workspaceId) out.push(workspaceRow(item.workspace, { depth, parentGroupId, container, kind: "workspace", groupKind: null, groupTargetId: null, dragIds: [item.workspace.id], itemHeadId: item.workspace.id }));
+      if (!unitCollapsed || item.workspace.id === view.workspaceId) out.push(workspaceRow(item.workspace, { depth, parentGroupId, container, kind: "workspace", groupKind: null, groupTargetId: null, dragIds: [item.workspace.id], itemHeadId: item.workspace.id, dropIndex, dropNext }));
       return;
     }
     // worktree グループ：先頭（本体）の行自体がグループの頭を兼ねる（herdr と同じ並び）。畳んでいるときは、先頭の行の状態を
@@ -183,13 +194,23 @@ const spaces = computed<SpaceRow[]>(() => {
     const allIds = [item.head.id, ...item.children.map((w) => w.id)];
     if (!unitCollapsed || item.head.id === view.workspaceId) {
       out.push({
-        ...workspaceRow(item.head, { depth, parentGroupId, container, kind: "worktreeHead", groupKind: "auto", groupTargetId: item.repoKey, dragIds: allIds, itemHeadId: item.head.id, ...(collapsed ? { rollup: workspacesOfItem(item), hiddenCount: hiddenWorktreeCount(item, view.workspaceId) } : {}) }),
+        ...workspaceRow(item.head, { depth, parentGroupId, container, kind: "worktreeHead", groupKind: "auto", groupTargetId: item.repoKey, dragIds: allIds, itemHeadId: item.head.id, dropIndex, dropNext, ...(collapsed ? { rollup: workspacesOfItem(item), hiddenCount: hiddenWorktreeCount(item, view.workspaceId) } : {}) }),
         isGroupHead: true,
         collapsed,
       });
     }
     const children = unitCollapsed ? item.children.filter((w) => w.id === view.workspaceId) : visibleGroupMembers(item.children, collapsed, view.workspaceId);
-    for (const w of children) out.push(workspaceRow(w, { depth: (depth + 1) as 1 | 2, parentGroupId, container, kind: "worktreeChild", groupKind: "auto", groupTargetId: item.repoKey, dragIds: allIds, itemHeadId: item.head.id, treeLast: w.id === children[children.length - 1]!.id }));
+    for (const w of children) out.push(workspaceRow(w, { depth: (depth + 1) as 1 | 2, parentGroupId, container, kind: "worktreeChild", groupKind: "auto", groupTargetId: item.repoKey, dragIds: allIds, itemHeadId: item.head.id, dropIndex, dropNext, treeLast: w.id === children[children.length - 1]!.id }));
+  };
+  // まとまりの列（見出しのあるグループ・「グループなし」）。見出しのドラッグはこの中で並べ替える。
+  const units = tree.filter((r) => r.kind === "group" || r.heading);
+  const unitAnchor = (r: (typeof units)[number]): DropAnchor => ({
+    item: r.kind === "group" ? { kind: "group", groupId: r.group.id } : { kind: "ungrouped" },
+    anchorId: r.items.flatMap(workspacesOfItem)[0]?.id ?? null,
+  });
+  const unitSlot = (r: (typeof units)[number]): { dropIndex: number; dropNext: DropAnchor | null } => {
+    const i = units.indexOf(r);
+    return { dropIndex: i, dropNext: nextAnchorOf(units, i, unitAnchor) };
   };
   for (const row of tree) {
     const allWorkspaces = row.items.flatMap(workspacesOfItem);
@@ -219,10 +240,11 @@ const spaces = computed<SpaceRow[]>(() => {
           hiddenCount: 0,
           treeLast: false,
           dropAnchorId: allIds[0] ?? null,
+          ...unitSlot(row),
           lines: [],
         });
       }
-      for (const item of row.items) pushItem(item, row.heading ? 1 : 0, null, UNGROUPED_CONTAINER, row.collapsed);
+      row.items.forEach((item, i) => pushItem(item, row.heading ? 1 : 0, null, UNGROUPED_CONTAINER, row.collapsed, i, nextAnchorOf(row.items, i, anchorOfItem)));
       continue;
     }
     out.push({
@@ -247,9 +269,10 @@ const spaces = computed<SpaceRow[]>(() => {
       hiddenCount: 0,
       treeLast: false,
       dropAnchorId: allIds[0] ?? null,
+      ...unitSlot(row),
       lines: [],
     });
-    for (const item of row.items) pushItem(item, 1, row.group.id, row.group.id, row.group.collapsed);
+    row.items.forEach((item, i) => pushItem(item, 1, row.group.id, row.group.id, row.group.collapsed, i, nextAnchorOf(row.items, i, anchorOfItem)));
   }
   return out;
 });
@@ -463,12 +486,6 @@ function workspaceRowKeyAt(x: number, y: number): string | null {
   return (target?.closest("[data-workspace-row-key]") as HTMLElement | null)?.dataset.workspaceRowKey ?? null;
 }
 
-function sameItem(a: ItemTarget, b: ItemTarget): boolean {
-  if (a.kind === "group") return b.kind === "group" && a.groupId === b.groupId;
-  if (a.kind === "ungrouped") return b.kind === "ungrouped";
-  return b.kind === "workspace" && a.workspaceId === b.workspaceId;
-}
-
 /**
  * ホバー中の行の上へ落とせるか（20261004-group-worktree-items。design「画面」のドラッグ）。動くのは掴んだ行の項目
  * （子を掴めばその worktree グループ）で、落とせるのは**同じ入れ物**（一番上・同じグループの中）の項目の間だけ。
@@ -476,7 +493,7 @@ function sameItem(a: ItemTarget, b: ItemTarget): boolean {
  * （見た目が名前で決まり、送っても変わらないため。グループの中は並べ替えられる）。
  * `reason` は離したときの知らせ（落とせる・自分の上のときは null）。
  */
-function dropStateFor(dragged: SpaceRow, key: string | null): { row: SpaceRow; self: boolean; reason: string | null } | null {
+function dropStateFor(dragged: SpaceRow, key: string | null): { row: SpaceRow; self: boolean; reason: string | null; before: ItemTarget | null } | null {
   if (!key) return null;
   const row = spaces.value.find((r) => r.key === key);
   if (!row) return null;
@@ -484,15 +501,18 @@ function dropStateFor(dragged: SpaceRow, key: string | null): { row: SpaceRow; s
   if (!session.hasServerLayout && row.dropAnchorId === null) return null;
   // 自分の項目の上（掴んだグループの中の行も含む）は何も起きない。
   if (
-    sameItem(row.item, dragged.item) ||
+    sameItemTarget(row.item, dragged.item) ||
     (dragged.item.kind === "group" && row.container === dragged.item.groupId) ||
     (dragged.item.kind === "ungrouped" && row.container === UNGROUPED_CONTAINER)
   )
-    return { row, self: true, reason: null };
-  if (row.container !== dragged.container) return { row, self: false, reason: "同じグループの中、または同じ「グループなし」の中の項目の間でだけ並べ替えできます" };
+    return { row, self: true, reason: null, before: null };
+  if (row.container !== dragged.container) return { row, self: false, reason: "同じグループの中、または同じ「グループなし」の中の項目の間でだけ並べ替えできます", before: null };
   // 名前順で並ぶのは、グループどうしと「グループなし」の中の項目（グループの中はレイアウトの順）。
-  if ((dragged.container === null || dragged.container === UNGROUPED_CONTAINER) && view.workspaceSort === "name") return { row, self: false, reason: "名前順では並べ替えできません" };
-  return { row, self: false, reason: null };
+  if ((dragged.container === null || dragged.container === UNGROUPED_CONTAINER) && view.workspaceSort === "name") return { row, self: false, reason: "名前順では並べ替えできません", before: null };
+  // 落とす位置は端末版と同じ（上へなら落とした項目の前、下へなら次の前、末尾は null。client-core の `dropBefore`）。
+  const before = dropBefore({ item: dragged.item, index: dragged.dropIndex }, { item: row.item, anchorId: row.dropAnchorId, index: row.dropIndex, next: row.dropNext });
+  if (before === undefined) return { row, self: true, reason: null, before: null };
+  return { row, self: false, reason: null, before: before === null ? null : before.item };
 }
 
 function onRowPointerDown(ev: PointerEvent, row: SpaceRow): void {
@@ -539,7 +559,7 @@ function onRowPointerUp(ev: PointerEvent, row: SpaceRow): void {
     if (drop && !drop.self) {
       if (drop.reason !== null) view.toast(drop.reason);
       else {
-        actions?.moveItemByDrag(draggedRow.item, drop.row.item, { workspaceIds: draggedRow.dragIds, beforeWorkspaceId: drop.row.dropAnchorId });
+        actions?.moveItemByDrag(draggedRow.item, drop.before, { workspaceIds: draggedRow.dragIds, beforeWorkspaceId: drop.row.dropAnchorId });
         // ドラッグした対象にフォーカスを残す（AC-I4）。頭に own workspace があるときだけ
         // （グループのヘッダー行はどの workspace でもないので、focus は動かさない）。
         if (draggedRow.workspace) focusWorkspace(draggedRow.workspace.id);

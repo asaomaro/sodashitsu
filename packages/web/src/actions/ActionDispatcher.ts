@@ -1300,11 +1300,11 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   /**
    * サイドバーの行のドラッグの確定（20261004-group-worktree-items。design「画面」のドラッグ）。動かすのは項目
-   * （`item`。子を掴めばその worktree グループ）で、`before` の項目の前へ。入れ物が同じか・名前順の一番上かは
+   * （`item`。子を掴めばその worktree グループ）で、`before` の項目の前へ（null は入れ物の末尾。決め方は client-core の `dropBefore`）。入れ物が同じか・名前順の一番上かは
    * 呼び出し側（`Sidebar.vue`）が見て、ここへ来るのは受け付けてよい移動だけ。`layout` を持たない古いサーバには
-   * 今までの `workspace.move_to`（項目の workspace の ID の集まりと、落とし先の項目の先頭の workspace）を送る。
+   * 今までの `workspace.move_to`（項目の workspace の ID の集まりと、落とし先の項目の先頭の workspace。D22 のまま）を送る。
    */
-  moveItemByDrag(item: ItemTarget, before: ItemTarget, legacy: { workspaceIds: string[]; beforeWorkspaceId: string | null }): void {
+  moveItemByDrag(item: ItemTarget, before: ItemTarget | null, legacy: { workspaceIds: string[]; beforeWorkspaceId: string | null }): void {
     if (!this.session.hasServerLayout) {
       // 古いサーバへ落とし先 null（末尾へ）を送ると意味が変わる。落とし先の無い行（空のグループ）の上では何も送らない。
       // 動かす workspace が無い（空のグループ）ときも送らない。

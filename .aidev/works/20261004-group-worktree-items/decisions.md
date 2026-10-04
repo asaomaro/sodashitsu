@@ -369,3 +369,10 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **確かめた事実**: 持ち始めた順が無いと「代表が居ない `worktreeKey`」を作った順で決めるしかなく、後から cd してきた早く作った workspace が代表を取る（`ignoreseq` の壊しで落ちる）。単に旗だけでは、復元・交代の後が決まらない。
 
 - D42 補足（T29 の点検）: 「持ち始めた順」（`heldSince`）はメモリだけで保存しない。再起動後は、旗が付いている workspace が代表で、代表が閉じたあとの次の代表は `w<番号>` の小さい順で決まる（依頼元の決定の「順を持てないなら作った順」）。再起動の前後で、代表が閉じたときの「次の代表」が変わりうる制約を許容する（代表そのものは旗の保存で変わらない）。
+
+## D43: ブラウザ版のドラッグの落とす位置を端末版の決まりに揃えた（T30。review-findings-01 の 2。D22・D36 の「web との違い」を解消）
+
+- **決まり**: 上へ動かすなら落とした項目の前、下へ動かすなら落とした項目の次の前（最後なら `before: null`＝入れ物の末尾）。自分自身の上は受け付けない。以前の web は常に「落とした項目の前」で、すぐ下の項目へ落とすと印が出るのに並びが変わらず、末尾へ動かせなかった。
+- **共有の純関数**: `client-core/src/workspace/dropTarget.ts`（`dropBefore`・`nextAnchorOf`・`sameItemTarget`・型 `DropAnchor`／`DropSlot`）。web の `Sidebar.vue`（`dropStateFor`。行ごとに `dropIndex`・`dropNext` を持たせ、`item.move` の `before` を返す）と端末版の `planDrop` の両方が使う。入れ物の次の項目は、畳んで見えない項目も数える（木の `items`／`units` から作る）。`ActionDispatcher.moveItemByDrag` の `before` は `ItemTarget | null`。
+- **古いサーバ（`workspace.move_to`）は変えない（D22）**: web が渡す落とし先は今までどおり落とした項目の先頭の workspace（`legacy.beforeWorkspaceId`）。端末版は D36 のまま（落とし先が「次の項目」）。両者の違いは古いサーバだけに残る。
+- docs（`docs/tui-parity.md` H04w）の「Web 版との違い」から落とす位置の差を外した。`docs/verification.md` のドラッグの行に「下へは落とした項目の次の前」を足した。`docs/tui.md` に該当の記述は無かった。

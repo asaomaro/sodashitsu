@@ -1007,7 +1007,7 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     rows[0]!.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
     rows[0]!.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 40 })); // 30px。閾値を超える
     rows[0]!.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 40 }));
-    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w2" }, { workspaceIds: ["w1"], beforeWorkspaceId: "w2" });
+    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "workspace", workspaceId: "w1" }, null, { workspaceIds: ["w1"], beforeWorkspaceId: "w2" }); // 下へ・最後の項目の上 → 末尾（before: null）
     elementFromPoint.mockRestore();
   });
 
@@ -1026,7 +1026,7 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     rows[0]!.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
     rows[0]!.dispatchEvent(pointerEvent("pointermove", { clientX: 10, clientY: 60 }));
     rows[0]!.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
-    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "group", groupId: "g1" }, { kind: "ungrouped" }, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" });
+    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "group", groupId: "g1" }, null, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" }); // 下へ・最後のまとまりの上 → 末尾
     elementFromPoint.mockRestore();
   });
 
@@ -1124,6 +1124,62 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
     drag(wrapper, "w2", "w1");
     expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "workspace", workspaceId: "w2" }, { kind: "workspace", workspaceId: "w1" }, { workspaceIds: ["w2"], beforeWorkspaceId: "w1" });
+  });
+
+  describe("落とす位置は端末版と同じ（T30。上へなら落とした項目の前、下へなら次の前、末尾は null）", () => {
+    const W = (id: string) => ({ kind: "workspace" as const, workspaceId: id });
+    function setUpThree(): void {
+      const session = useSessionStore(pinia);
+      for (const id of ["w1", "w2", "w3", "w4"]) session.workspaceUpserted(makeWorkspace(id, { label: id }));
+      session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: ["w:w1", "w:w2", "w:w3"] }, ungrouped: ["w:w4"] });
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+    }
+    it("下へ動かすと、落とした項目の次の項目の前（すぐ下の項目の上でも並びが変わる）", () => {
+      setUpThree();
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "w1", "w2");
+      expect(moveItemByDrag).toHaveBeenCalledWith(W("w1"), W("w3"), expect.anything());
+    });
+    it("下へ動かして最後の項目の上へ落とすと、末尾（before: null）", () => {
+      setUpThree();
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "w1", "w3");
+      expect(moveItemByDrag).toHaveBeenCalledWith(W("w1"), null, expect.anything());
+    });
+    it("上へ動かすと、落とした項目の前", () => {
+      setUpThree();
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "w3", "w1");
+      expect(moveItemByDrag).toHaveBeenCalledWith(W("w3"), W("w1"), expect.anything());
+    });
+    it("畳んで見えない項目も次の項目として数える（worktree グループの子は親の項目の次へ）", () => {
+      const session = useSessionStore(pinia);
+      const git = (linked: boolean) => ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: linked });
+      session.workspaceUpserted(makeWorkspace("w1", { label: "main", git: git(false) }));
+      session.workspaceUpserted(makeWorkspace("w2", { label: "feat", git: git(true) }));
+      session.workspaceUpserted(makeWorkspace("w3", { label: "x" }));
+      session.workspaceUpserted(makeWorkspace("w4", { label: "y" }));
+      session.layoutChanged({ top: ["r:/r/.git", "w:w3", "w:w4"], groups: {}, ungrouped: [] });
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "w3", "w2"); // 子の行 = 親の worktree グループ（w1）。上へなので w1 の前
+      drag(wrapper, "w2", "w3"); // worktree グループを下へ・w3 の上 → 次の w4 の前
+      expect(moveItemByDrag).toHaveBeenNthCalledWith(1, W("w3"), W("w1"), expect.anything());
+      expect(moveItemByDrag).toHaveBeenNthCalledWith(2, W("w1"), W("w4"), expect.anything());
+    });
+    it("古いサーバ（layout が無い）の workspace.move_to へ渡す落とし先は、今までどおり落とした項目の先頭の workspace（D22）", () => {
+      const session = useSessionStore(pinia);
+      session.workspaceUpserted(makeWorkspace("w1", { label: "a" }));
+      session.workspaceUpserted(makeWorkspace("w2", { label: "b" }));
+      session.workspaceUpserted(makeWorkspace("w3", { label: "c" }));
+      const moveItemByDrag = vi.fn();
+      const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
+      drag(wrapper, "w1", "w2");
+      expect(moveItemByDrag).toHaveBeenCalledWith(W("w1"), W("w3"), { workspaceIds: ["w1"], beforeWorkspaceId: "w2" });
+    });
   });
 
   it("グループを、別のグループの中の行の上へ落とすことはできない", () => {
@@ -1266,7 +1322,7 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
       const moveItemByDrag = vi.fn();
       const wrapper = mountSidebar(makeConnection(), { moveItemByDrag });
       drag(wrapper, "w2", "w3");
-      expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "workspace", workspaceId: "w1" }, { kind: "workspace", workspaceId: "w3" }, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" });
+      expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "workspace", workspaceId: "w1" }, null, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w3" });
     });
 
     it("子の行の上へ落とすと、落とし先は親の worktree グループ（先頭の workspace）になる", () => {
@@ -1423,7 +1479,7 @@ describe("Sidebar — workspace 行の D&D（20260923-workspace-grouping）", ()
     rows[0]!.dispatchEvent(pointerEvent("pointerup", { clientX: 10, clientY: 60 }));
     // 開始時点のメンバー（w1・w2 の両方）で移動する——ドロップ時点の最新の構成（w1 だけ）ではない。
     // 落とし先の「グループなし」の先頭は、w2 が加わった最新の構成の w2。
-    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "group", groupId: "g1" }, { kind: "ungrouped" }, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w2" });
+    expect(moveItemByDrag).toHaveBeenCalledWith({ kind: "group", groupId: "g1" }, null, { workspaceIds: ["w1", "w2"], beforeWorkspaceId: "w2" });
     elementFromPoint.mockRestore();
   });
 });

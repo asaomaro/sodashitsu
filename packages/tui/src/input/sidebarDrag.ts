@@ -1,5 +1,5 @@
 import type { ItemTarget } from "@sodashitsu/protocol";
-import { UNGROUPED_REF } from "@sodashitsu/client-core";
+import { UNGROUPED_REF, dropBefore, sameItemTarget } from "@sodashitsu/client-core";
 import type { SidebarDragInfo } from "../render/chrome/sidebar.js";
 
 /** 落とした結果（web の `Sidebar.vue` の `dropStateFor` と同じ決まり。20261004-group-worktree-items・追補 01）。 */
@@ -21,11 +21,6 @@ export const REFUSE_CONTAINER =
   "同じグループの中、または同じ「グループなし」の中の項目の間でだけ並べ替えできます";
 export const REFUSE_BY_NAME = "名前順では並べ替えできません";
 
-const sameItem = (a: ItemTarget, b: ItemTarget): boolean =>
-  a.kind === b.kind &&
-  (a.kind === "workspace" ? a.workspaceId === (b as typeof a).workspaceId : true) &&
-  (a.kind === "group" ? a.groupId === (b as typeof a).groupId : true);
-
 /**
  * 掴んだ行 `source` を `target` の行の上で離したときの扱い。落とせるのは同じ入れ物の中の項目の間だけ（グループの中・「グループなし」の
  * 中・一番上のまとまりの列）。上へ動かすなら落とした項目の前、下へなら落とした項目の次の前（末尾なら null）へ入れる。
@@ -41,7 +36,7 @@ export function planDrop(
   if (!opts.hasServerLayout && target.anchorId === null) return { kind: "none" };
   // 自分の項目の上（掴んだグループの中・掴んだ「グループなし」の中の行も含む）は何も起きない。
   if (
-    sameItem(target.item, source.item) ||
+    sameItemTarget(target.item, source.item) ||
     (source.item.kind === "group" && target.container === source.item.groupId) ||
     (source.item.kind === "ungrouped" && target.container === UNGROUPED_REF)
   )
@@ -49,8 +44,9 @@ export function planDrop(
   if (target.container !== source.container) return { kind: "refuse", reason: REFUSE_CONTAINER };
   if ((source.container === null || source.container === UNGROUPED_REF) && opts.sortByName)
     return { kind: "refuse", reason: REFUSE_BY_NAME };
-  const up = target.index < source.index;
-  const before = up ? { item: target.item, anchorId: target.anchorId } : target.next;
+  // `before` の決め方は web と共有（client-core の `dropBefore`）。
+  const before = dropBefore(source, target);
+  if (before === undefined) return { kind: "none" };
   // 古いサーバで落とし先が「次の項目」なのに workspace が無い（空のグループ）と、null が「末尾」の意味になってしまう。送らない。
   if (!opts.hasServerLayout && before !== null && before.anchorId === null) return { kind: "none" };
   return {

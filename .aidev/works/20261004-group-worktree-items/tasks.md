@@ -137,7 +137,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/server/src/session/SessionModel.ts`・`SessionService.ts`・`persist/SessionFile.ts`・`composeServer.ts`、`packages/client-core/src/workspace/workspaceGrouping.ts`・`sidebarLayout.ts`、`packages/protocol`、`packages/e2e/src/specs/workspace-groups.spec.ts`
       依存: なし
       AC: AC19
-- [ ] T30: ブラウザ版のドラッグの落とす位置を端末版の決まり（上へなら落とした項目の前・下へなら次の項目の前・末尾は null）に揃える。計算は client-core の共有の純関数に。E2E に下へ・末尾へのドラッグを足す
+- [x] T30: ブラウザ版のドラッグの落とす位置を端末版の決まり（上へなら落とした項目の前・下へなら次の項目の前・末尾は null）に揃える。計算は client-core の共有の純関数に。E2E に下へ・末尾へのドラッグを足す
       対象: `packages/web/src/components/Sidebar.vue`、`packages/web/src/actions/ActionDispatcher.ts`、`packages/tui/src/input/sidebarDrag.ts`、`packages/client-core/src/workspace/`、`workspace-groups.spec.ts`
       依存: なし
       AC: AC5

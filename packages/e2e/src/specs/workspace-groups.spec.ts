@@ -383,6 +383,13 @@ async function dragOver(page: Page, from: Locator, to: Locator): Promise<void> {
   await page.mouse.move(t.x + t.width / 2, t.y + t.height / 2, { steps: 8 });
 }
 
+/** 行の `data-workspace-row-key`（workspace の id）。`item.move` のフレームの項目と突き合わせる。 */
+async function rowKeyOf(page: Page, label: string): Promise<string> {
+  const key = await rowOf(page, label).getAttribute("data-workspace-row-key");
+  expect(key).toBeTruthy();
+  return key!;
+}
+
 function sentMethods(frames: BrowserFrames, method: string): unknown[] {
   return frames
     .sent()
@@ -1141,6 +1148,167 @@ test.describe("ドラッグ", () => {
       "  alpha",
       "[u] グループなし (0)",
     ]);
+  });
+
+  // T30（review-findings-01 の 2）：下へ動かすなら落とした項目の次の前、末尾は before: null。ブラウザが送った `item.move` のフレームと
+  // DOM の並びの両方で判定する（以前は常に「落とした項目の前」で、すぐ下の項目へ落とすと印が出るのに並びが変わらず、末尾へ動かせなかった）。
+  test("下へ・末尾へのドラッグ：グループの中（AC5）", async ({ page, appServer }) => {
+    const env = await boot(page, appServer);
+    await openPlain(env, ["alpha", "beta", "gamma", "delta"]);
+    await env.dropInitial();
+    await createGroupVia(page, "alpha", "g1");
+    for (const label of ["beta", "gamma"]) {
+      await openMenuOn(page, rowOf(page, label));
+      await chooseMenu(page, "グループへ追加…");
+      await pickGroup(page, "g1");
+    }
+    const ids = {
+      alpha: await rowKeyOf(page, "alpha"),
+      beta: await rowKeyOf(page, "beta"),
+      gamma: await rowKeyOf(page, "gamma"),
+    };
+
+    // alpha をすぐ下の beta の上へ：beta の次（gamma）の前へ入る → beta, alpha, gamma。
+    await dragOver(page, rowOf(page, "alpha"), rowOf(page, "beta"));
+    await expect(rowOf(page, "beta")).toHaveClass(/sidebar-row-drop-target/);
+    await page.mouse.up();
+    await expectOutline(page, [
+      "[g] g1 (3)",
+      "  beta",
+      "  alpha",
+      "  gamma",
+      "[u] グループなし (1)",
+      "  delta",
+    ]);
+    expect(sentMethods(env.frames, "item.move")).toEqual([
+      {
+        item: { kind: "workspace", workspaceId: ids.alpha },
+        before: { kind: "workspace", workspaceId: ids.gamma },
+      },
+    ]);
+
+    // beta を最後の gamma の上へ：末尾へ（before: null）→ alpha, gamma, beta。
+    await dragOver(page, rowOf(page, "beta"), rowOf(page, "gamma"));
+    await expect(rowOf(page, "gamma")).toHaveClass(/sidebar-row-drop-target/);
+    await page.mouse.up();
+    await expectOutline(page, [
+      "[g] g1 (3)",
+      "  alpha",
+      "  gamma",
+      "  beta",
+      "[u] グループなし (1)",
+      "  delta",
+    ]);
+    expect(sentMethods(env.frames, "item.move")).toHaveLength(2);
+    expect(sentMethods(env.frames, "item.move")[1]).toEqual({
+      item: { kind: "workspace", workspaceId: ids.beta },
+      before: null,
+    });
+  });
+
+  test("下へ・末尾へのドラッグ：「グループなし」の中（AC5）", async ({ page, appServer }) => {
+    const env = await boot(page, appServer);
+    await openPlain(env, ["alpha", "one", "two", "three"]);
+    await env.dropInitial();
+    await createGroupVia(page, "alpha", "g1");
+    await expectOutline(page, [
+      "[g] g1 (1)",
+      "  alpha",
+      "[u] グループなし (3)",
+      "  one",
+      "  two",
+      "  three",
+    ]);
+    const ids = {
+      one: await rowKeyOf(page, "one"),
+      two: await rowKeyOf(page, "two"),
+      three: await rowKeyOf(page, "three"),
+    };
+
+    await dragOver(page, rowOf(page, "one"), rowOf(page, "two"));
+    await expect(rowOf(page, "two")).toHaveClass(/sidebar-row-drop-target/);
+    await page.mouse.up();
+    await expectOutline(page, [
+      "[g] g1 (1)",
+      "  alpha",
+      "[u] グループなし (3)",
+      "  two",
+      "  one",
+      "  three",
+    ]);
+    expect(sentMethods(env.frames, "item.move")).toEqual([
+      {
+        item: { kind: "workspace", workspaceId: ids.one },
+        before: { kind: "workspace", workspaceId: ids.three },
+      },
+    ]);
+
+    await dragOver(page, rowOf(page, "two"), rowOf(page, "three"));
+    await page.mouse.up();
+    await expectOutline(page, [
+      "[g] g1 (1)",
+      "  alpha",
+      "[u] グループなし (3)",
+      "  one",
+      "  three",
+      "  two",
+    ]);
+    expect(sentMethods(env.frames, "item.move")[1]).toEqual({
+      item: { kind: "workspace", workspaceId: ids.two },
+      before: null,
+    });
+  });
+
+  test("下へ・末尾へのドラッグ：一番上のまとまり（グループ・グループなし）どうし（AC5・AC20）", async ({
+    page,
+    appServer,
+  }) => {
+    const env = await boot(page, appServer);
+    await openPlain(env, ["alpha", "beta", "other"]);
+    await env.dropInitial();
+    await createGroupVia(page, "alpha", "g1");
+    await createGroupVia(page, "beta", "g2");
+    await expectOutline(page, [
+      "[g] g1 (1)",
+      "  alpha",
+      "[g] g2 (1)",
+      "  beta",
+      "[u] グループなし (1)",
+      "  other",
+    ]);
+
+    // g1 をすぐ下の g2 の上へ：g2 の次（グループなし）の前へ入る → g2, g1, グループなし。
+    await dragOver(page, rowOf(page, "g1"), rowOf(page, "g2"));
+    await expect(rowOf(page, "g2")).toHaveClass(/sidebar-row-drop-target/);
+    await page.mouse.up();
+    await expectOutline(page, [
+      "[g] g2 (1)",
+      "  beta",
+      "[g] g1 (1)",
+      "  alpha",
+      "[u] グループなし (1)",
+      "  other",
+    ]);
+    const first = sentMethods(env.frames, "item.move");
+    expect(first).toHaveLength(1);
+    expect((first[0] as { item: unknown }).item).toMatchObject({ kind: "group" });
+    expect((first[0] as { before: unknown }).before).toEqual({ kind: "ungrouped" });
+
+    // g2 を最後の「グループなし」の上へ：末尾へ（before: null）→ g1, グループなし, g2。
+    await dragOver(page, rowOf(page, "g2"), rowOf(page, "グループなし"));
+    await expect(rowOf(page, "グループなし")).toHaveClass(/sidebar-row-drop-target/);
+    await page.mouse.up();
+    await expectOutline(page, [
+      "[g] g1 (1)",
+      "  alpha",
+      "[u] グループなし (1)",
+      "  other",
+      "[g] g2 (1)",
+      "  beta",
+    ]);
+    const second = sentMethods(env.frames, "item.move");
+    expect(second).toHaveLength(2);
+    expect((second[1] as { before: unknown }).before).toBeNull();
   });
 });
 
