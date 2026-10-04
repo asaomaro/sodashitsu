@@ -21,7 +21,7 @@ import {
 } from "@sodashitsu/client-core";
 import { CSS_VAR_LABELS, isValidCssColor, type ThemeOverrideBucket } from "../theme/themeOverrides.js";
 import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
-import { keepChosen, sectionAtScroll, type SpyInput } from "../settings/sectionSpy.js";
+import { keepChosen, scrollTopFor, sectionAtScroll, type SpyInput } from "../settings/sectionSpy.js";
 import KeySettings from "./KeySettings.vue";
 import SidebarRowsSettings from "./SidebarRowsSettings.vue";
 
@@ -133,6 +133,7 @@ watch(
     } else {
       stopObserving();
       chosen.value = null; // 次に開いたときは最初の節から
+      menuFocus.value = null;
       current.value = 0;
       dialogEl.value?.close();
       confirmingOverrideReset.value = false; // 開き直したとき、確認が出たままにならない
@@ -678,6 +679,56 @@ function stopObserving(): void {
 
 onBeforeUnmount(stopObserving);
 
+/**
+ * その節へ移る。`chosen` を入れ（利用者が自分でスクロールするまで今の節にする）、見出しが題名の行のすぐ下に来る位置へ即時にスクロールし、
+ * **見出しへフォーカスを移す**（節の最初の部品ではない。最初の部品は switch・ボタンで、続けて押した Space／Enter で設定が即保存されてしまう）。
+ */
+function go(i: number): void {
+  const dialog = dialogEl.value;
+  const found = sectionHeadings();
+  const input = readSpyInput(found);
+  const target = found[i];
+  if (!dialog || !input || !target) return;
+  chosen.value = i;
+  current.value = i;
+  dialog.scrollTop = scrollTopFor(i, input);
+  target.heading.focus({ preventScroll: true });
+  schedule();
+  void nextTick(keepCurrentItemVisible);
+}
+
+/** メニューの中でフォーカスのある項目（無ければ null）。Tab の停止位置に使う。 */
+const menuFocus = ref<number | null>(null);
+
+function onMenuFocusin(ev: FocusEvent): void {
+  const at = Array.from(menuEl.value?.children ?? []).indexOf(ev.target as Element);
+  menuFocus.value = at >= 0 ? at : null;
+}
+
+function onMenuFocusout(ev: FocusEvent): void {
+  if (ev.relatedTarget instanceof Node && menuEl.value?.contains(ev.relatedTarget)) return; // 項目の間の移動
+  menuFocus.value = null;
+}
+
+/** メニューの中の矢印キー。端で止まる（回り込まない）。 */
+function onMenuKeydown(ev: KeyboardEvent): void {
+  if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+  const items = Array.from(menuEl.value?.children ?? []) as HTMLElement[];
+  const at = items.indexOf(ev.target as HTMLElement);
+  if (at < 0) return;
+  let to: number;
+  if (ev.key === "ArrowDown") to = Math.min(items.length - 1, at + 1);
+  else if (ev.key === "ArrowUp") to = Math.max(0, at - 1);
+  else if (ev.key === "Home") to = 0;
+  else if (ev.key === "End") to = items.length - 1;
+  else return;
+  ev.preventDefault();
+  items[to]?.focus();
+}
+
+/** Tab の停止位置: メニューにフォーカスが無い間は今の節の項目だけ。ある間は、フォーカスのある項目だけ（矢印で動いた後の Tab がメニューの外へ出る）。 */
+const menuStop = (i: number): number => (menuFocus.value !== null ? menuFocus.value : current.value) === i ? 0 : -1;
+
 function cancel(): void {
   commitNewCwdPath(); // 「指定した場所」以外では入力欄が使えず、下書きは保存値のまま（開くたびに戻す）なので何もしない
   view.closeDialog();
@@ -714,14 +765,15 @@ function onNativeCancel(ev: Event): void {
     <!-- 左の列（幅 768px 以上だけ）。**入れ物は grid のセルいっぱいに伸ばす**——`@click.self` は `<dialog>` 自身が押されたときだけ閉じるので、
          メニューを直に grid の子にしてセルより短くすると、その下の空きを押して閉じてしまう。項目は右の節の見出しから作る（20261004-settings-side-menu の design）。 -->
     <div class="settings-menu-col">
-      <nav v-if="menuItems.length > 0" ref="menuEl" class="settings-menu" aria-label="設定の節">
+      <nav v-if="menuItems.length > 0" ref="menuEl" class="settings-menu" aria-label="設定の節" @focusin="onMenuFocusin" @focusout="onMenuFocusout" @keydown="onMenuKeydown">
         <button
           v-for="(item, i) in menuItems"
           :key="item.id"
           type="button"
           class="settings-menu-item"
           :aria-current="i === current ? 'true' : undefined"
-          :tabindex="i === current ? 0 : -1"
+          :tabindex="menuStop(i)"
+          @click="go(i)"
         >
           {{ item.label }}
         </button>

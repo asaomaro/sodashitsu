@@ -31,7 +31,7 @@ design.md のとおり、基準の記録（T1）→ 純関数（T2）→ 構造�
       対象: `packages/web/src/components/SettingsDialog.vue`（script・template）、`packages/web/src/components/SettingsDialog.test.ts`
       依存: T2, T3
       AC: AC1, AC3, AC5, AC11, AC-I1
-- [ ] T5: 移る操作——`go(i)`（`scrollTopFor` へスクロール・見出しへフォーカス・`chosen`）。メニューの項目のクリック・`Enter`／`Space`。メニューの中の上下の矢印・`Home`／`End`（端で止まる）と roving tabindex（メニューにフォーカスが無い間は今の節の項目だけ 0、ある間はフォーカスのある項目だけ 0、`focusout` で戻す）。開いた直後のフォーカス（通知の最初の switch）は変えない。単体: 項目のクリックで見出しにフォーカスが移る／矢印・`Home`／`End`／矢印の後の `tabindex`／開いた直後の `activeElement`
+- [x] T5: 移る操作——`go(i)`（`scrollTopFor` へスクロール・見出しへフォーカス・`chosen`）。メニューの項目のクリック・`Enter`／`Space`。メニューの中の上下の矢印・`Home`／`End`（端で止まる）と roving tabindex（メニューにフォーカスが無い間は今の節の項目だけ 0、ある間はフォーカスのある項目だけ 0、`focusout` で戻す）。開いた直後のフォーカス（通知の最初の switch）は変えない。単体: 項目のクリックで見出しにフォーカスが移る／矢印・`Home`／`End`／矢印の後の `tabindex`／開いた直後の `activeElement`
       対象: `packages/web/src/components/SettingsDialog.vue`、`packages/web/src/components/SettingsDialog.test.ts`
       依存: T4
       AC: AC2, AC7, AC-I2, AC-I3, AC-I4

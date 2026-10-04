@@ -11,3 +11,6 @@
 - T4 [should] rAF のまとめ（`framePending`）・閉じるときの `cancelAnimationFrame`・今の節の戻しを縛るテストが無い → 3 件のテストを追加。壊して落ちる確認: `framePending` 無効／`current` を戻さない／`cancelAnimationFrame` 無し、いずれも該当テスト 1 件が落ちる（`Tests  1 failed | 106 passed (107)`） [conv:regression-negative-control]
 - T4 [nit] `touchmove` の外し方と「メニューがスクロールできるときは外さない」例外が未テスト → テスト追加。`touchmove` の登録を外す／例外を `false` にする、いずれも落ちる [conv:-]
 - T4（自己の確認）wheel のテストが `chosen` を外さなくても通った（フォーカスを外していたため位置だけで外れていた）→ 見出しが見えている状態に作り直し、`chosen` を外さない変異で落ちることを確認 [conv:-]
+- T5 [should] 閉じるとき（`focusout` を伴わない）に `menuFocus` が残り、開き直すと前回の項目が `tabindex=0` になる → 閉じる分岐で `menuFocus = null`。テスト追加。壊して落ちる確認: `menuFocus` を戻さない変異で「メニューにフォーカスがある間に閉じても…」が落ちる（`Tests  1 failed | 116 passed (117)`） [conv:regression-negative-control]
+- T5 [nit] 「移った後も選んだ節が今の節のまま」が `go` の `chosen = i` を縛っていない → 見出しの `focus` を無効にし、末尾の節が 1 画面に収まる高さ（位置だけなら最後の節になる）で確認。`chosen` を入れない変異で落ちる [conv:regression-negative-control]
+- T5 [nit] テスト名が「Enter」だが実際は `click()` → 題名を「ボタンの click で移る」に直した [conv:-]
