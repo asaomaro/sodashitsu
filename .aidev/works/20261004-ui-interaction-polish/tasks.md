@@ -67,7 +67,7 @@ design.md のとおり、下から積む。純関数（T1）→ 色の変数（T
       対象: `packages/e2e/src/specs/sidebar-sections.spec.ts`（新規）
       依存: T9, T15
       AC: AC9, AC10, AC11, AC12, AC20, AC15, AC-I1, AC-I3, AC-I4, AC-I5
-- [ ] T14: 文書——`docs/herdr-parity.md`・`docs/tui-parity.md`（「Spaces／Agents の境界のドラッグ」の web 版の欄と、区画の折りたたみの行）・`docs/tui.md`（「マウス」の見出しのクリック・区切りのクリックとドラッグの区別・`prefix+shift+b`／`a`）・`docs/verification.md`（実機の手順: 17 のテーマでの線の見え方・タッチでの境目のサイズ変更・OS の「動きを減らす」。自動テストの範囲と分ける）
+- [x] T14: 文書——`docs/herdr-parity.md`・`docs/tui-parity.md`（「Spaces／Agents の境界のドラッグ」の web 版の欄と、区画の折りたたみの行）・`docs/tui.md`（「マウス」の見出しのクリック・区切りのクリックとドラッグの区別・`prefix+shift+b`／`a`）・`docs/verification.md`（実機の手順: 17 のテーマでの線の見え方・タッチでの境目のサイズ変更・OS の「動きを減らす」。自動テストの範囲と分ける）
       対象: `docs/herdr-parity.md`・`docs/tui-parity.md`・`docs/tui.md`・`docs/verification.md`
       依存: T13, T11
       AC: AC16

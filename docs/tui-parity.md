@@ -49,7 +49,8 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は�
 | H16 | エージェントの検出・5 状態・集約・`done` の既読 | あり（既読はサーバ） | あり（既読はブラウザごと） | 読み替え: 検出・状態・集約は同じ。`done` の既読は端末版ごと・マシンごとにメモリに持つ（Web 版と同じくクライアントごと。decisions D3）。見ていないマシンのサイドバーの要約は、サーバが覚えている既読（`serverSeenSeq`）だけで決まる | AC10 |
 | H17-18 | 検出の拡充・連携の導入 | あり | 後続／一部 | サーバ機能（設定の「エージェント連携」は W25） | AC19 |
 | H19 | サイドバー（spaces・agents）・折りたたみ・並び・幅 | あり | あり | 対応（幅は境界のドラッグと設定「サイドバーの既定の幅」〔`tui.sidebarCols`、既定 26〕。今の幅と折りたたみは端末ごとの `tui-state.json`。エージェントの行は Web と同じ既定で 1 件 2 行〔decisions D17〕） | AC2, AC9 |
-| H19b | spaces / agents の境界のドラッグ | あり | 無し | 対応（herdr と同じ） | AC9 |
+| H19b | spaces / agents の境界のドラッグ | あり | 無し | 対応（herdr と同じ。20261004-ui-interaction-polish: **動かしたときだけ**高さを変える。動かさずに離すと agents の折りたたみ。どちらかを畳んでいる間は動かしても高さを変えない） | AC9, AC13 |
+| H19d | サイドバーの区画の折りたたみ | 無し（ブラウザ版の独自拡張） | あり | 対応（20261004-ui-interaction-polish。spaces の見出し行・agents の区切りの行を押す、または `prefix+shift+b`／`prefix+shift+a`。畳むと件数（agents は入力待ちの字形も）が付き並び順は出ない。状態は端末ごとの `tui-state.json` の `sidebarSectionsCollapsed`。navigate に入ると畳んだ spaces は開く。agents が 0 件のときは区切りの行を出さないので畳めない） | AC13 |
 | H19c | スクロールバー（pane・サイドバー・ヘルプの一覧） | あり | あり（ブラウザのスクロール） | pane は対応（H06）。サイドバーとヘルプの一覧のスクロールバーは非対応（サイドバーはホイールと navigate の選択、ヘルプは j/k・↑↓・PageUp/PageDown で送れるので目的は満たす。端末の 1 桁を常に取るほどの利点が無い。decisions D15） | AC7, AC9 |
 | H20 | Space 行の Git ブランチ・ahead/behind | あり | あり | 対応 | AC2 |
 | H21 | サイドバーの行の並び・色の条件・独自トークン | あり | あり | 対応（client-core の `resolveRows` で Web と同じ行を描く。色は外側の端末の色数へ寄せる） | AC2, AC11 |

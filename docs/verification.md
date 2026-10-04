@@ -929,6 +929,21 @@ pnpm --filter @sodashitsu/e2e exec playwright test src/specs/subagents.spec.ts  
 - [ ] 端末版: エージェントの行の末尾の `⤷n` が、使っている端末のフォントで 1 桁に見え、桁がずれない（ずれたら記号を替える。`decisions.md` D11）。
 - [ ] Windows ネイティブ: フックの導入・更新・解除と、サブエージェントの表示が動く。
 
+### 共通：境目と区画の見え方・操作（20261004-ui-interaction-polish・`docs/herdr-parity.md` H19・`docs/tui.md`「マウス」）
+
+自動のテストで確かめた範囲: 境目の見え方の単体（`uiTokens.test.ts`＝17 のテーマで線の色が両方の背景に 3:1 以上・`useResizeDrag.test.ts`・`Sidebar.test.ts`・`Splitter.test.ts`）と、E2E（`resize-handles.spec.ts`・`sidebar-sections.spec.ts`。Chromium の hover・ドラッグ・キー・「動きを減らす」の emulation・読み込み直し）、端末版の単体（`sidebar.test.ts`・`mouse.test.ts`）。
+
+```sh
+pnpm --filter @sodashitsu/e2e exec playwright test src/specs/resize-handles.spec.ts src/specs/sidebar-sections.spec.ts   # 先に pnpm build
+```
+
+**自動のテストでは確かめていない（実機で）**:
+
+- [ ] 17 のテーマの線の見え方: 設定の「テーマ」を 17 通り切り替え、サイドバーの幅・pane の間・spaces と agents の境目に乗せたときの強調の線が、背景に対して見分けられる（特に dracula・tokyo-night-day・solarized-light・rose-pine-dawn。線の色は設定の色の上書き「境目の線」で変えられる）。
+- [ ] タッチ: タブレット等で、3 か所の境目を指でドラッグして大きさを変えられる（掴みやすさ。画面のスクロールが誘発されない）。1 列のモバイルの画面は対象外。
+- [ ] OS の「動きを減らす」: 入れると、線の出入りが一瞬になる（Chromium の emulation は自動のテストで確認済み。実際の OS の設定で）。
+- [ ] 端末版: 使っている端末で、spaces の見出し・agents の区切りの行の `▾`／`▸` が 1 桁に見え、桁がずれない。見出しの行の押下と、区切りの行の「動かさずに離す」「動かして離す」が意図どおりに分かれる。
+
 ### 任意：Tailscale・リバースプロキシ（使う構成だけ）
 
 どちらもこの検証環境では実機で確かめていない（`docs/tls-setup.md` の手順は公式の docs に合わせて書いた）。使うなら、最後に
