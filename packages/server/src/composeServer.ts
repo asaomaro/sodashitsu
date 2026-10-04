@@ -76,6 +76,7 @@ import { PrefsStore } from "./persist/PrefsStore.js";
 import { GraphStore } from "./persist/GraphStore.js";
 import { GraphEngine } from "./graph/GraphEngine.js";
 import { AgentLineage } from "./graph/AgentLineage.js";
+import { GraphPaneCleanup } from "./graph/GraphPaneCleanup.js";
 import { SubagentTracker } from "./agent/SubagentTracker.js";
 import { LocalAgentPort } from "./graph/LocalAgentPort.js";
 import { RemoteLinks } from "./graph/RemoteLinks.js";
@@ -385,6 +386,8 @@ export async function composeServer(
   });
   // エージェントが起動したエージェントの自動載せ（20261003-graph-auto-nodes）。記録はメモリだけ（引き継ぎで消える）なので、handoff の pausePollers では止めない。
   const lineage = new AgentLineage({ bus, store: graph, paneExists, logger });
+  // 閉じた pane のノードをグラフから外す。復元の後に `pruneMissing` で、止まっている間に閉じたものも外す。
+  const paneCleanup = new GraphPaneCleanup({ bus, store: graph, paneExists, logger });
   // エージェントが中で動かしているサブエージェントの数え上げ（20261004-subagent-display）。フックの報告を受け口から受ける。
   const subagents = new SubagentTracker({
     bus,
@@ -705,6 +708,9 @@ export async function composeServer(
           handoff.recordTaken(handoffResult);
         }
         sessionLoaded = true;
+        // 止まっている間に閉じた pane のノードを外す（復元した pane に無いもの。`stale` は選び直すまで残す）。
+        const prunedNodes = await paneCleanup.pruneMissing();
+        if (prunedNodes > 0) logger.info("graph.json had nodes of closed panes; removed them", { nodes: prunedNodes });
         paneHistory?.start(internal.paneHistorySaveIntervalMs);
         // クリップボードの画像の後片付け（20260927-clipboard-image-paste）。ロックを取った後に、起動時と 1 時間ごと（貼らなくなっても 24 時間で消す）。
         imageSweeper = imageStore.startSweeping();
@@ -750,6 +756,7 @@ export async function composeServer(
         if (!sessionLoaded) persist.cancel();
         graphEngine.stop();
         lineage.close();
+        paneCleanup.close();
         subagents.close();
         remoteLinks.closeAll();
         paneHistory?.stop();
@@ -779,6 +786,7 @@ export async function composeServer(
         // machine_unavailable として履歴に残してしまう。止める＝待ちは履歴に残さず取り消し、送っている途中の結果も書かない）。graph.close の前。
         graphEngine.stop();
         lineage.close();
+        paneCleanup.close();
         subagents.close();
         remoteLinks.closeAll();
         await machines.stop();

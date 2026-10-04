@@ -4,8 +4,9 @@ import { SUPERVISOR_DEBOUNCE_MS } from "@sodashitsu/client-core";
 /**
  * 監督役 1 つへの知らせの決定（20260927-agent-graph の design「監督」・decisions D1-5）。**純粋**——時刻は入力で受ける。
  *
- * - 「知らせが要る」の印: 監督役ができたとき（最初）・配下の顔ぶれ（線の追加・削除・配下のノードの無効化）が変わったとき・監督役のエージェントが
- *   入れ替わったとき（新しいエージェントは前の知らせを知らない）。
+ * - 「知らせが要る」の印: 監督役ができたとき（最初）・配下の顔ぶれ（線の追加・削除・配下のノードの無効化）が変わったとき。
+ *   監督役の pane で別のエージェントが立ち上がっても送り直さない（線は pane に付いたまま残るので、新しく立ち上げたエージェントに、起動の直後に
+ *   古い配下の知らせが届いてしまう）。
  * - 続く変化は 1 回にまとめる: 最後の変化から `SUPERVISOR_DEBOUNCE_MS` 待つ。
  * - 送るのは監督役の手が空いている（idle）ときだけ。作業中・承認待ち・起動直後（unknown）・居ない間は印を持ったまま待つ。一時停止の間も待つ。
  */
@@ -50,10 +51,7 @@ export class SupervisorNotifier {
         }
         break;
       case "supervisor": {
-        const before = this.supervisor;
         this.supervisor = input.agent;
-        if (input.agent !== null && before?.instanceId !== input.agent.instanceId)
-          this.dirtyAt = input.at;
         break;
       }
       case "paused":

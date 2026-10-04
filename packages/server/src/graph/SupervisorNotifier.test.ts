@@ -80,29 +80,29 @@ describe("SupervisorNotifier", () => {
     }
     const none = make(null);
     expect(none.handle({ kind: "tick", at: D * 10 })).toBeNull();
-    // 居なかった監督役が現れた（新しいエージェント）→ そこから 2 秒待つ
-    expect(none.handle({ kind: "supervisor", agent: agent("s1"), at: D * 11 })).toBeNull();
-    expect(none.handle({ kind: "tick", at: D * 12 })).toEqual({ kind: "send" });
+    // 知らせが要るまま居なかった監督役が現れたら、手が空いていて 2 秒たっているので送る（現れたこと自体は印にしない）
+    expect(none.handle({ kind: "supervisor", agent: agent("s1"), at: D * 11 })).toEqual({ kind: "send" });
   });
 
-  it("監督役のエージェントが入れ替わったら知らせ直す（同じエージェントの状態の変化では知らせ直さない）", () => {
+  it("監督役のエージェントが入れ替わっても知らせ直さない（pane に残った古い配下の知らせを、新しく立ち上げたエージェントに起動の直後に送らない）", () => {
     const n = make();
     n.handle({ kind: "tick", at: D });
+    expect(n.pending).toBe(false);
     expect(n.handle({ kind: "supervisor", agent: agent("s1", "working"), at: 5000 })).toBeNull();
     expect(n.handle({ kind: "supervisor", agent: agent("s1", "idle"), at: 6000 })).toBeNull();
-    expect(n.pending).toBe(false);
     expect(n.handle({ kind: "supervisor", agent: agent("s2", "idle"), at: 7000 })).toBeNull();
-    expect(n.pending).toBe(true);
-    expect(n.handle({ kind: "tick", at: 7000 + D })).toEqual({ kind: "send" });
+    expect(n.pending).toBe(false);
+    expect(n.handle({ kind: "tick", at: 7000 + D })).toBeNull();
   });
 
-  it("監督役が居なくなっても印は変えない（戻ってきたら新しいエージェントとして知らせ直す）", () => {
+  it("監督役が居なくなって戻っても印は変えない。入れ替わりの後も、配下の変化では知らせる", () => {
     const n = make();
     n.handle({ kind: "tick", at: D });
     expect(n.handle({ kind: "supervisor", agent: null, at: 5000 })).toBeNull();
+    n.handle({ kind: "supervisor", agent: agent("s2"), at: 6000 });
     expect(n.pending).toBe(false);
-    n.handle({ kind: "supervisor", agent: agent("s1"), at: 6000 });
-    expect(n.pending).toBe(true);
+    n.handle({ kind: "subordinates", signature: "changed", at: 7000 });
+    expect(n.handle({ kind: "tick", at: 7000 + D })).toEqual({ kind: "send" });
   });
 
   it("一時停止の間は送らず、再開したら（2 秒たっていれば）送る", () => {
