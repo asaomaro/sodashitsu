@@ -27,3 +27,8 @@
 - T7 [should 見送り] 利用者が `Alt+PageDown` を端末の操作に割り当てた状態での漏れ・設定画面上のホイールの漏れ・全体メニュー／モバイルの上のバーからの開閉: 割り当て済みの状態は作っていない（既定では元から何も送られないため、`defaultPrevented`＋`stopPropagation` を単体と E2E〔ダイアログ自身の後続 listener〕で見ている）。入口 3 つの開閉は既存の `settings.spec.ts` が確かめている。`menuLeftAt` の 300ms の窓は推測に依る（実害はほぼ無い）として D7 に記録 [conv:-]
 - T8 [should] 実機の手順に Firefox・Safari での sticky の固定が無かった → 1 つ目の項目に追記 [conv:-]
 - T8 [nit] 自動の範囲の列挙に「確認中にメニューを押す」「下の帯の固定」が抜けていた → 追記 [conv:-]
+
+## cross 点検（全タスクをまたぐ不変条件。件数は `taskcheck status` の cross 行）
+
+- cross [nit] `docs/verification.md` の文字を大きくする手順が「メニューの幅は変わらない」と書いていたが、メニューの幅は `13em` で文字サイズに連動する → 拡大（CSS px が減る）と文字サイズだけを上げる場合を分けて書き直した [conv:-]
+- cross [nit] `packages/tui/src/settings/sections.ts:50` のコメントの「web の 5 節（…）とエージェント連携」→ web の 6 節の言い換えとして読めて食い違いではなく、端末版は対象外のため触らない [conv:-]
