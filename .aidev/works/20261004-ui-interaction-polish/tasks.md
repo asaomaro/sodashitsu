@@ -15,7 +15,7 @@ design.md のとおり、下から積む。純関数（T1）→ 色の変数（T
 
 ## チェックリスト
 
-- [ ] T1: 純関数 `sectionSizing.ts`——`clampRatio`・`ratioFromOffset`・`stepRatio`・`ratioPercent`（`SectionBox = { total, minTop, minBottom }`）。単体テスト（範囲内・下限・上限・`total < minTop + minBottom` で 0.5・端で止まる）と、式を壊して落ちる確認
+- [x] T1: 純関数 `sectionSizing.ts`——`clampRatio`・`ratioFromOffset`・`stepRatio`・`ratioPercent`（`SectionBox = { total, minTop, minBottom }`）。単体テスト（範囲内・下限・上限・`total < minTop + minBottom` で 0.5・端で止まる）と、式を壊して落ちる確認
       対象: `packages/web/src/sidebar/sectionSizing.ts`（新規）、`sectionSizing.test.ts`（新規）
       依存: なし
       AC: AC10, AC20
