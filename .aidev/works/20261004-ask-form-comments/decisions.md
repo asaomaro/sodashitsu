@@ -25,3 +25,8 @@
 - `git -C /workspaces/public_docs diff 690d26d..12a13b2 -- docs/ClaudeCode/skills/other/ask-form/ask-form.js` を実装セッションでも全部読んだ。D2 と食い違いは無い（追加は VERSION・FIELDS への `comments`/`comment`・`.cmt` の CSS・`addComment`〔ボタンの `click` 1 つ〕・`collect`/`value` の `comments`・フォーカス先の `textarea:not([data-ask-comment])` だけ。通信・`window`・`document`・`innerHTML` 系・`eval`・`location` は無い）。
 - 写した直後の `pnpm test` 全体（`pnpm build` 後）: 389 ファイル中 1 件だけが落ちた＝ `ask.fixtures.test.ts` の normalize の「自由記述: 付けないとき…」。想定どおり（web の単体は落ちない。T5・T7 で直す必要のある落ちは無い）。
 - T1 は部品の無改変の写しだけで自前の差分が無いので、独立点検（`taskcheck`）は行わない（`--check` の一致が検証）。
+
+## D6: `comments` の `__proto__` のキー（T3 で確かめた）
+
+- `AskAnswerParams`（zod の `z.record`）は、`JSON.parse` が作った自分の項目 `__proto__` を**黙って落とす**（ほかのキーは残る。`{"__proto__":"x","b":"y"}` → `["b"]`）。`messages.test.ts` で固定した。
+- スキーマをすり抜けて `checkAskAnswer` に届いた場合に備え、`checkAskAnswer` は `__proto__` を「定義に無い id」として断る（`ask.test.ts` で確認。定義の id に `__proto__` は使えない）。どちらの経路でも、`__proto__` が結果の `comments` に入ることは無い。
