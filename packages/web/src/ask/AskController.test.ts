@@ -170,3 +170,28 @@ describe("AskController — メディア（20261004-ask-media-popup）", () => {
   });
 });
 
+
+describe("AskController — メディアを取っている間に閉じた質問（20261004-ask-media-popup）", () => {
+  it("ask.opened の後・メディアを取り終える前に ask.closed が来たら、取り終えても足さない（答えられない質問を出さない）", async () => {
+    let release!: (v: unknown) => void;
+    const withMedia: AskPending = { ...ask("m1"), media: [{ id: 0, kind: "image", mime: "image/png", bytes: 2 }] };
+    const s = setup({ "ask.get": () => withMedia, "ask.media": () => new Promise((r) => (release = r)) as never });
+    s.ctl.onEvent({ event: "ask.opened", data: { askId: "m1", paneId: "p1" } });
+    await settle();
+    s.ctl.onEvent({ event: "ask.closed", data: { askId: "m1", paneId: "p1" } });
+    release({ base64: btoa("ab"), size: 2, eof: true }); // 取り終えたが、もう閉じている
+    await settle();
+    expect(s.store.queue).toEqual([]);
+  });
+  it("ask.subscribe の応答のメディアを取っている間に閉じた質問も、置き換えに入れない", async () => {
+    let release!: (v: unknown) => void;
+    const withMedia: AskPending = { ...ask("m1"), media: [{ id: 0, kind: "image", mime: "image/png", bytes: 2 }] };
+    const s = setup({ "ask.subscribe": () => ({ asks: [withMedia, ask("plain")] }), "ask.media": () => new Promise((r) => (release = r)) as never });
+    s.ctl.onOpened();
+    await settle();
+    s.ctl.onEvent({ event: "ask.closed", data: { askId: "m1", paneId: "p1" } });
+    release({ base64: btoa("ab"), size: 2, eof: true });
+    await settle();
+    expect(s.store.queue.map((q) => q.askId)).toEqual(["plain"]);
+  });
+});

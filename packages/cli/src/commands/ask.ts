@@ -97,7 +97,7 @@ export function requiredFeatures(spec: AskSpec): string[] {
     if (q.preview !== undefined || q.thumb !== undefined) need.add("media");
     for (const o of q.options) {
       if (o.image !== undefined || o.audio !== undefined || o.code !== undefined || o.lang !== undefined || o.group !== undefined) need.add("media");
-      if (o.image?.startsWith("https://")) need.add("remote-image");
+      if (o.image !== undefined && classifyMediaRef(o.image, "image", true) === "https") need.add("remote-image");
     }
   }
   return [...need];

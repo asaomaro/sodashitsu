@@ -18,12 +18,15 @@ export interface AskControllerOptions {
 export class AskController {
   /** 切り替え・切断のたびに進める（その前に始めた要求の応答を捨てる印）。 */
   private generation = 0;
+  /** メディアを取っている間に閉じた質問の id（取り終えても画面へ足さない）。切り替え・切断で空にする。 */
+  private readonly closedIds = new Set<string>();
 
   constructor(private readonly opts: AskControllerOptions) {}
 
   /** 新しい接続で hello が通った。 */
   onOpened(): void {
     const generation = ++this.generation;
+    this.closedIds.clear();
     this.opts.conn.request("ask.subscribe", {}).then(
       async (r) => {
         // メディアを取り終えた質問だけを置く（`resolveMedia` は同期なので、取ってから）。
@@ -37,18 +40,21 @@ export class AskController {
   /** 接続が閉じた。質問はサーバが持っている（再接続の `onOpened` で取り直す）ので、画面からは外す。 */
   onClosed(): void {
     this.generation++;
+    this.closedIds.clear();
     this.opts.store.clear();
   }
 
   /** マシンの切り替え。前のマシンの質問・取りに行った途中の応答を捨てる（pane の id はマシンをまたいで重なる）。 */
   resetForMachineSwitch(): void {
     this.generation++;
+    this.closedIds.clear();
     this.opts.store.clear();
   }
 
   /** `ask.opened`（id だけ）→ 定義を取る。`ask.closed` → 外す。 */
   onEvent(e: AskOpenedEvent | AskClosedEvent): void {
     if (e.event === "ask.closed") {
+      this.closedIds.add(e.data.askId); // 取っている最中なら、取り終えても足さない
       this.opts.store.remove(e.data.askId);
       return;
     }
@@ -69,7 +75,7 @@ export class AskController {
   private async hydrate(ask: AskPending, generation: number): Promise<AskEntry | null> {
     if ((ask.media ?? []).length === 0) return ask;
     const r = await loadMedia((m, p) => this.opts.conn.request(m, p), ask, () => generation === this.generation && this.opts.store.queue.every((q) => q.askId !== ask.askId));
-    if (r === null) return null;
+    if (r === null || this.closedIds.has(ask.askId)) return null;
     if (r === "view_failed") {
       this.opts.toast("成果物を読み込めませんでした（質問は取り消しました）");
       if (generation === this.generation) void this.cancel(ask.askId);

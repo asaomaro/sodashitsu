@@ -29,3 +29,4 @@ events:
   - { ts: 2026-10-04T14:08:45Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T11, findings: 3 } }
   - { ts: 2026-10-04T14:08:45Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T12, findings: 2 } }
   - { ts: 2026-10-04T14:11:31Z, phase: coding, event: taskcheck, metrics: { stage: start, task: cross, mode: delegated } }
+  - { ts: 2026-10-04T14:14:15Z, phase: coding, event: taskcheck, metrics: { stage: report, task: cross, findings: 4 } }
