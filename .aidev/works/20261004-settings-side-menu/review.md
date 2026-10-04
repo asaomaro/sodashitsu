@@ -1,0 +1,55 @@
+# レビュー記録
+
+## タスク点検ログ
+
+- T2 [should] `sectionAtScroll` で `tail`（= min(見えている高さ, 最大)）が 0 のとき `k0` が NaN／Infinity になる → `tail > 0` の分岐を足し、`viewHeight: 0` のテストを追加 [conv:-]
+- T2 [should] `keepChosen` の `headerHeight` がテストで縛られていなかった → `scrollTop=10` で `headerHeight` を外すと落ちるテストを追加 [conv:-]
+- T2 [nit] 線の定数 40 が未固定 → 節の上端が線のちょうど上／1px 下のテストを追加 [conv:-]
+- T2 [nit] `inView` の境界（上端 −2px・下端の排他）が未検証 → 境界値のテストを追加 [conv:-]
+- T3 [must→誤検知] 題名の行の sticky が grid 化で効かなくなる疑い → 実 Chromium で CSS を写した `<dialog>` を 900px スクロールして実測（`dialog.scrollTop=882` のとき［閉じる］の上端は dialog の上端から 19px のまま、メニューも固定）。固定は保たれるので修正なし。E2E（T7）で実物でも確かめる [conv:-]
+- T3 [nit] 767px 以下のブロックの `max-width` が基本ルールと二重 → `[open]` の詳細度で上書きされるため必要な書き方。修正なし [conv:-]
+- T4 [should] rAF のまとめ（`framePending`）・閉じるときの `cancelAnimationFrame`・今の節の戻しを縛るテストが無い → 3 件のテストを追加。壊して落ちる確認: `framePending` 無効／`current` を戻さない／`cancelAnimationFrame` 無し、いずれも該当テスト 1 件が落ちる（`Tests  1 failed | 106 passed (107)`） [conv:regression-negative-control]
+- T4 [nit] `touchmove` の外し方と「メニューがスクロールできるときは外さない」例外が未テスト → テスト追加。`touchmove` の登録を外す／例外を `false` にする、いずれも落ちる [conv:-]
+- T4（自己の確認）wheel のテストが `chosen` を外さなくても通った（フォーカスを外していたため位置だけで外れていた）→ 見出しが見えている状態に作り直し、`chosen` を外さない変異で落ちることを確認 [conv:-]
+- T5 [should] 閉じるとき（`focusout` を伴わない）に `menuFocus` が残り、開き直すと前回の項目が `tabindex=0` になる → 閉じる分岐で `menuFocus = null`。テスト追加。壊して落ちる確認: `menuFocus` を戻さない変異で「メニューにフォーカスがある間に閉じても…」が落ちる（`Tests  1 failed | 116 passed (117)`） [conv:regression-negative-control]
+- T5 [nit] 「移った後も選んだ節が今の節のまま」が `go` の `chosen = i` を縛っていない → 見出しの `focus` を無効にし、末尾の節が 1 画面に収まる高さ（位置だけなら最後の節になる）で確認。`chosen` を入れない変異で落ちる [conv:regression-negative-control]
+- T5 [nit] テスト名が「Enter」だが実際は `click()` → 題名を「ボタンの click で移る」に直した [conv:-]
+- T9 [should] 「節が 1 つも拾えないときは何もしない」のテストが `not.toThrow()` で何も縛っていなかった → `await` して `defaultPrevented`・`scrollTop` を確認 [conv:regression-negative-control]
+- T9 [should] `isComposing` の分岐が未テスト → 修飾キーのテストに追加。壊して落ちる確認: `isComposing` の判定を外すと `AssertionError: {"isComposing":true}: expected true to be false` [conv:regression-negative-control]
+- T9 [nit] `startObserving` が前の監視を外さず、開いたまま開き直すと `matchMedia` のリスナーが二重になる → 頭で `stopObserving()`。テスト追加。壊して落ちる確認: `AssertionError: 前の監視を外してから登録し直す: expected [ [Function onNarrowChange], …(1) ] to have a length of 1 but got 2` [conv:-]
+- T9 [nit] 「伝播を止める」のテストを `document.body` から `document` へ [conv:-]
+- T9（自己の確認）点検の提案の「開いてすぐ閉じたとき、閉じた後に監視を始める」ガードは、`nextTick` の順序（開く側の callback が閉じる側の watcher より先に走る）から起きないことが分かったので入れない（再現するテストが書けなかった） [conv:-]
+- T7 [must] AC5「高さが変わる」のテストが実装を縛っていなかった（直前の `fill()` でフォーカスが入り、選んだ節で「キー」のまま通っていた）→ 端末の見出しを題名の行の下に置き、上の節（テーマの色の上書き）を展開して高さだけを変える形に作り直した（スクロール位置は変わらず scroll も起きない）。壊して落ちる確認: 本文の `ResizeObserver` の `observe` を外すと `Error: 高さが変わると今の節が決まり直る` で落ちる [conv:e2e-observe-browser]
+- T7 [should] AC3「中ほど」が空振り → 更新を待ち、見出しが線（題名の行の下 40px）の上・次の節が下、まで固定 [conv:e2e-observe-browser]
+- T7 [should] メニューの項目・節の外の段落にフォーカスがあるときの `Alt+PageDown`／`PageUp`、開いた直後の `Shift+Tab` 1 回、メニューの `Space`、`Esc` での pane への復帰、確認の表示中にメニューを押す場面が未確認 → 追加 [conv:-]
+- T7 [should] 背景クリックのテストで、クリック位置がメニューの下の空きかを確かめていなかった → 位置を計算して検証。題名の「AC-I4」を外した [conv:-]
+- T7 [nit] 否定の確認（端での `Alt+PageDown`）を描画を待たずに見ていた → `settle`（2 回の描画）を挟む [conv:-]
+- T7 [should 見送り] 利用者が `Alt+PageDown` を端末の操作に割り当てた状態での漏れ・設定画面上のホイールの漏れ・全体メニュー／モバイルの上のバーからの開閉: 割り当て済みの状態は作っていない（既定では元から何も送られないため、`defaultPrevented`＋`stopPropagation` を単体と E2E〔ダイアログ自身の後続 listener〕で見ている）。入口 3 つの開閉は既存の `settings.spec.ts` が確かめている。`menuLeftAt` の 300ms の窓は推測に依る（実害はほぼ無い）として D7 に記録 [conv:-]
+- T8 [should] 実機の手順に Firefox・Safari での sticky の固定が無かった → 1 つ目の項目に追記 [conv:-]
+- T8 [nit] 自動の範囲の列挙に「確認中にメニューを押す」「下の帯の固定」が抜けていた → 追記 [conv:-]
+
+## cross 点検（全タスクをまたぐ不変条件。件数は `taskcheck status` の cross 行）
+
+- cross [nit] `docs/verification.md` の文字を大きくする手順が「メニューの幅は変わらない」と書いていたが、メニューの幅は `13em` で文字サイズに連動する → 拡大（CSS px が減る）と文字サイズだけを上げる場合を分けて書き直した [conv:-]
+- cross [nit] `packages/tui/src/settings/sections.ts:50` のコメントの「web の 5 節（…）とエージェント連携」→ web の 6 節の言い換えとして読めて食い違いではなく、端末版は対象外のため触らない [conv:-]
+
+## 独立レビュー（review-findings-01）への対応
+
+直した（should 4・nit 4）:
+- 1 [should] E2E「取り込み待ち中の Alt+PageDown」が最後の節で常に通った → `Alt+PageUp`（取り込まれなければ前の節へ移る）にし、取り込みの部品が受けた結果（帯の「prefix には…」の文・prefix が変わらない・節もフォーカスも移らない）を画面で見る。壊して落ちる確認: 取り込みの部品の `stopPropagation` を外すと該当 E2E が落ちる
+- 2 [should] E2E「`<select>` にフォーカス」の最後の `length == 1` が必ず通った → `<select>` の入っている節から押して、印と見出しのフォーカスが次の節・前の節へ変わることを見る。壊して落ちる確認: `Alt+PageDown` から `go` を外すと落ちる
+- 3 [should] メニューの項目のフォーカスの枠が `overflow-y: auto` で切れる → 項目に `:focus-visible` の内側の outline（`outline-offset: -2px`）。E2E で、キーでフォーカスしたときの計算後の outline（負のオフセット）と、項目がメニューの範囲に収まることを見る。壊して落ちる確認: `outline-offset` を正にすると落ちる
+- 4 [should] D7 の 300ms の窓 → やめて、`onNarrowChange` の時点の実際のフォーカスで判定（D7 を書き直した）。単体: 行き先の無い `focusout` の後（時間に関係なく）見出しへ移す／自分で外へ移した後は奪わない／行き先の無い外れの後にメニューの外へフォーカスが入ったら奪わない。壊して落ちる確認: 4 つの変異（実フォーカスの分岐・`relatedTarget` による `menuFocus` の保持・ダイアログの `focusin`・`menuFocus` の確認）で、それぞれ該当テストが落ちる
+- 5 [nit] 移す先の見出しが見える範囲に無ければ `go` と同じ位置へスクロール → 実装＋単体（スクロールを外す変異で落ちる）
+- 7 [nit] `max-width` の `+ 1em` → decisions.md の D10 と CSS のコメント
+- 9 [nit] AC5 の Tab のテストの変数名（`inTerminal`）と、到達の明示の `expect`
+- 10 [nit] AC6 の幅の検証を、メニューの列の幅（13em）・列の間・余白との関係で見る
+
+直さない（記録のみ）:
+- 6 [nit] `wheel` は位置が変わらなくても `chosen` を外す → design どおり（選んだ節は、利用者が自分でスクロールするまで。D2）
+- 8 [nit] AC5 の展開は 1 種類（テーマの色の上書き）だけ → 仕組み（本文の `ResizeObserver`）は同じ。サイドバーの行・キーの操作の展開は同じ経路で検知される
+- 11 [nit] 単体の 300ms の境界 → 4 で窓が無くなったので不要
+
+## 独立レビュー（依頼元。全体の差分）
+
+must 0・should 4・nit 7。should 4 件と nit 4 件を db9f09a で直した（内容は `review-findings-01.md`）。直さなかった 3 件: wheel は位置が変わらなくても選んだ節を外す（design どおり）／AC5 の展開の E2E は 1 種類（仕組みは同じ `ResizeObserver`）／単体の 300ms の境界（窓そのものを無くした）。

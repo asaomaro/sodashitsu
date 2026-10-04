@@ -1324,3 +1324,629 @@ describe("SettingsDialog — はじめの案内を開く", () => {
     expect(useSettingsStore(pinia).newCwdPath).toBe("~/typed");
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// 20261004-settings-side-menu：左のサイドメニュー（節の一覧）。位置は happy-dom では全部 0 なので、見出しの位置・`<dialog>` の高さを差し替える。
+// 式そのものは `settings/sectionSpy.test.ts`。ここは「DOM から項目を作る・印が移る」の結線。
+
+type Opened = Awaited<ReturnType<typeof openDialog>>;
+const menuButtons = (w: Opened["wrapper"]) => w.findAll("nav.settings-menu button");
+const currentLabels = (w: Opened["wrapper"]) => menuButtons(w).filter((b) => b.attributes("aria-current") === "true").map((b) => b.text());
+
+/** 開く前に、DOM の節に手を入れられるようにして開く（`before` は開く前に呼ばれる）。 */
+async function openWithMenu(before?: (w: ReturnType<typeof mount>) => void) {
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+    cb(0);
+    return 1;
+  });
+  const controller = makeController();
+  const view = useViewStore(pinia);
+  const wrapper = mount(SettingsDialog, {
+    global: { plugins: [pinia], provide: { [NotificationControllerKey as symbol]: controller.c } },
+    attachTo: document.body,
+  });
+  before?.(wrapper);
+  view.openDialogWithContext({ kind: "settings" });
+  await wrapper.vm.$nextTick();
+  await wrapper.vm.$nextTick();
+  return { wrapper, view, controller };
+}
+
+/** 節の見出しの位置（`<dialog>` の先頭からの位置。`scrollTop` を引いた分が `getBoundingClientRect().top`）。 */
+function stubLayout(wrapper: Opened["wrapper"], tops: Record<string, number>, view: { clientHeight: number; scrollHeight: number }) {
+  const dialog = wrapper.get("dialog").element as HTMLDialogElement;
+  Object.defineProperty(dialog, "clientHeight", { configurable: true, get: () => view.clientHeight });
+  Object.defineProperty(dialog, "scrollHeight", { configurable: true, get: () => view.scrollHeight });
+  return vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const top = this.id in tops ? (tops[this.id] as number) - dialog.scrollTop : 0;
+    return { top, bottom: top, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+  });
+}
+
+const HEADING_TOPS = {
+  "settings-notify": 0,
+  "settings-theme": 400,
+  "settings-display": 800,
+  "settings-terminal": 1200,
+  "settings-agent-integration": 1600,
+  "settings-keys": 2000,
+};
+
+describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("<nav> に名前があり、項目は画面の節の見出しから作られる（6 つ・同じ順・同じ文言。見出しを書き換えるとメニューも変わる）", async () => {
+    const { wrapper } = await openWithMenu(() => {
+      document.getElementById("settings-theme")!.textContent = "色合い";
+    });
+    expect(wrapper.get("nav.settings-menu").attributes("aria-label")).toBe("設定の節");
+    expect(menuButtons(wrapper).map((b) => b.text())).toEqual(["通知", "色合い", "表示", "端末", "エージェント連携", "キー"]);
+    expect(wrapper.find("nav.settings-menu").element.parentElement!.classList.contains("settings-menu-col")).toBe(true);
+  });
+
+  it("開くたびに作り直す（見出しの文言を変えて開き直すと反映される）", async () => {
+    const { wrapper, view } = await openWithMenu();
+    view.closeDialog();
+    await wrapper.vm.$nextTick();
+    document.getElementById("settings-terminal")!.textContent = "ターミナル";
+    view.openDialogWithContext({ kind: "settings" });
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(menuButtons(wrapper).map((b) => b.text())[3]).toBe("ターミナル");
+  });
+
+  it("拾った見出しにプログラムからフォーカスできるよう tabindex=-1 が付く（節「キー」の見出しにも）", async () => {
+    await openWithMenu();
+    for (const id of Object.keys(HEADING_TOPS)) expect(document.getElementById(id)!.getAttribute("tabindex"), id).toBe("-1");
+  });
+
+  it("今の節の項目だけ aria-current=true と tabindex=0（開いた直後は先頭）", async () => {
+    const { wrapper } = await openWithMenu();
+    expect(currentLabels(wrapper)).toEqual(["通知"]);
+    expect(menuButtons(wrapper).map((b) => b.attributes("tabindex"))).toEqual(["0", "-1", "-1", "-1", "-1", "-1"]);
+    expect(menuButtons(wrapper).filter((b) => b.attributes("aria-current") === undefined)).toHaveLength(5);
+  });
+
+  it("開いた直後のフォーカスは 1 つ目の switch のまま", async () => {
+    const { wrapper } = await openWithMenu();
+    expect(document.activeElement).toBe(switches(wrapper)[0]!.element);
+  });
+
+  it("スクロールの位置で印が移る", async () => {
+    const { wrapper } = await openWithMenu();
+    stubLayout(wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2600 });
+    (document.activeElement as HTMLElement).blur(); // フォーカスのある節が選んだ節として残らないように
+    const dialog = wrapper.get("dialog");
+    (dialog.element as HTMLElement).scrollTop = 700;
+    await dialog.trigger("scroll");
+    await wrapper.vm.$nextTick();
+    expect(currentLabels(wrapper)).toEqual(["テーマ"]);
+    (dialog.element as HTMLElement).scrollTop = 2100;
+    await dialog.trigger("scroll");
+    await wrapper.vm.$nextTick();
+    expect(currentLabels(wrapper)).toEqual(["キー"]);
+  });
+
+  it("本文の中にフォーカスが入ると、その節が今の節になる（選んだ節）", async () => {
+    const { wrapper } = await openWithMenu();
+    stubLayout(wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2600 });
+    // 表示の節の最初の switch へ。見出しは見える範囲に無い（scrollTop 0 で 800）が、フォーカスの部品の位置は 0 → 見える。
+    const displaySwitch = wrapper.get('section[aria-labelledby="settings-display"] [role="switch"]').element as HTMLElement;
+    displaySwitch.focus();
+    displaySwitch.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(currentLabels(wrapper)).toEqual(["表示"]);
+  });
+
+  it("wheel でスクロールの位置の決まりに戻る（選んだ節を外す。見出しが見えていても外れる）", async () => {
+    const { wrapper } = await openWithMenu();
+    stubLayout(wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2600 });
+    // テーマの見出し（400）は見える範囲（0〜500）にあるので、選んだ節は位置だけでは外れない。位置だけで決めると先頭（通知）。
+    const themeControl = wrapper.get('section[aria-labelledby="settings-theme"] :is(input, select, button)').element as HTMLElement;
+    themeControl.focus();
+    themeControl.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(currentLabels(wrapper)).toEqual(["テーマ"]);
+    await wrapper.get("dialog").trigger("wheel");
+    await wrapper.vm.$nextTick();
+    expect(currentLabels(wrapper), "wheel で選んだ節を外す → 位置で決まる").toEqual(["通知"]);
+  });
+
+  /** テーマの節の部品にフォーカスして、選んだ節をテーマにする（見出し 400 は見える範囲。位置だけなら先頭の通知）。 */
+  async function chooseTheme(wrapper: Opened["wrapper"]) {
+    const control = wrapper.get('section[aria-labelledby="settings-theme"] :is(input, select, button)').element as HTMLElement;
+    control.focus();
+    control.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(currentLabels(wrapper)).toEqual(["テーマ"]);
+  }
+
+  it("touchmove でも選んだ節を外す。ただしメニューの中で、メニューがスクロールできるときは外さない", async () => {
+    const { wrapper } = await openWithMenu();
+    stubLayout(wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2600 });
+    const nav = wrapper.get("nav.settings-menu");
+    // メニューがスクロールできない → メニューの上でも外す。
+    await chooseTheme(wrapper);
+    await nav.trigger("touchmove");
+    await wrapper.vm.$nextTick();
+    expect(currentLabels(wrapper)).toEqual(["通知"]);
+    // メニューがスクロールできる → メニューの上では外さない。本文の上では外す。
+    Object.defineProperty(nav.element, "scrollHeight", { configurable: true, get: () => 900 });
+    Object.defineProperty(nav.element, "clientHeight", { configurable: true, get: () => 300 });
+    await chooseTheme(wrapper);
+    await nav.trigger("touchmove");
+    await wrapper.vm.$nextTick();
+    expect(currentLabels(wrapper), "メニューの中だけがスクロールする").toEqual(["テーマ"]);
+    await wrapper.get("dialog").trigger("touchmove");
+    await wrapper.vm.$nextTick();
+    expect(currentLabels(wrapper)).toEqual(["通知"]);
+  });
+
+  it("計算は 1 回の描画につき 1 回にまとめる（scroll を続けて起こしても requestAnimationFrame は 1 つ）", async () => {
+    const { wrapper } = await openWithMenu();
+    const queue: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => queue.push(cb));
+    await wrapper.get("dialog").trigger("scroll");
+    await wrapper.get("dialog").trigger("scroll");
+    await wrapper.get("dialog").trigger("scroll");
+    expect(queue).toHaveLength(1);
+    queue.shift()!(0);
+    await wrapper.get("dialog").trigger("scroll");
+    expect(queue, "実行した後は、また 1 つ予約できる").toHaveLength(1);
+  });
+
+  it("閉じると今の節・選んだ節を戻す（次に開いたときは最初の節から）。予約済みの計算も取り消す", async () => {
+    const { wrapper, view } = await openWithMenu();
+    stubLayout(wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2600 });
+    await chooseTheme(wrapper);
+    const cancelled: number[] = [];
+    vi.stubGlobal("requestAnimationFrame", () => 42);
+    vi.stubGlobal("cancelAnimationFrame", (h: number) => void cancelled.push(h));
+    await wrapper.get("dialog").trigger("scroll"); // 予約した状態で閉じる
+    view.closeDialog();
+    await wrapper.vm.$nextTick();
+    expect(currentLabels(wrapper)).toEqual(["通知"]);
+    expect(cancelled).toEqual([42]);
+  });
+
+  it("見出しの無い節は飛ばす", async () => {
+    const { wrapper } = await openWithMenu(() => {
+      document.getElementById("settings-terminal")!.remove();
+    });
+    expect(menuButtons(wrapper).map((b) => b.text())).toEqual(["通知", "テーマ", "表示", "エージェント連携", "キー"]);
+  });
+
+  it("節が 1 つも拾えなければメニューを出さない", async () => {
+    const { wrapper } = await openWithMenu(() => {
+      for (const sec of document.querySelectorAll(".settings-body > section")) sec.removeAttribute("aria-labelledby");
+    });
+    expect(wrapper.find("nav.settings-menu").exists()).toBe(false);
+  });
+
+  it("開いたとき、見えている高さを --settings-view-h として <dialog> に入れる", async () => {
+    const { wrapper } = await openWithMenu(() => {
+      Object.defineProperty(document.querySelector("dialog")!, "clientHeight", { configurable: true, get: () => 432 });
+    });
+    expect((wrapper.get("dialog").element as HTMLElement).style.getPropertyValue("--settings-view-h")).toBe("432px");
+  });
+
+  describe("移る・メニューの中のキー", () => {
+    const stubbed = async () => {
+      const o = await openWithMenu();
+      stubLayout(o.wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2600 });
+      return o;
+    };
+    const focusItem = async (w: Opened["wrapper"], i: number) => {
+      const el = menuButtons(w)[i]!.element as HTMLElement;
+      el.focus();
+      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      await w.vm.$nextTick();
+    };
+    const key = async (w: Opened["wrapper"], k: string) => {
+      const ev = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true });
+      (document.activeElement as HTMLElement).dispatchEvent(ev);
+      await w.vm.$nextTick();
+      return ev;
+    };
+    const stops = (w: Opened["wrapper"]) => menuButtons(w).map((b) => b.attributes("tabindex"));
+
+    it("項目を押すと、その節の見出しが題名の行のすぐ下に来る位置へスクロールし、見出しにフォーカスが移る（最初の部品ではない）", async () => {
+      const { wrapper } = await stubbed();
+      await menuButtons(wrapper)[2]!.trigger("click");
+      expect((wrapper.get("dialog").element as HTMLElement).scrollTop).toBe(792); // 800 − 余白 8（題名の行は 0 のテスト環境）
+      expect(document.activeElement).toBe(document.getElementById("settings-display"));
+      expect(currentLabels(wrapper)).toEqual(["表示"]);
+    });
+
+    it("最初の節は 0、最後の節は 1992（2000 − 余白 8）へ", async () => {
+      const { wrapper } = await stubbed();
+      await menuButtons(wrapper)[5]!.trigger("click");
+      expect((wrapper.get("dialog").element as HTMLElement).scrollTop).toBe(1992);
+      await menuButtons(wrapper)[0]!.trigger("click");
+      expect((wrapper.get("dialog").element as HTMLElement).scrollTop).toBe(0);
+      expect(document.activeElement).toBe(document.getElementById("settings-notify"));
+    });
+
+    it("移った後も、選んだ節が今の節のまま（スクロールで位置がずれても、見出しが見えている間）", async () => {
+      const { wrapper } = await stubbed();
+      // 見出しへのフォーカス（→ focusin で選んだ節になる）に頼らず、go 自身が選んだ節を入れることを見る。
+      // 末尾の節が 1 画面に収まる高さ（最大 1500）。移った先（1500）の位置だけで決めると、いちばん下の「キー」になってしまう。
+      stubLayout(wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2000 });
+      vi.spyOn(document.getElementById("settings-agent-integration")!, "focus").mockImplementation(() => {});
+      await menuButtons(wrapper)[4]!.trigger("click");
+      await wrapper.get("dialog").trigger("scroll");
+      await wrapper.vm.$nextTick();
+      expect(currentLabels(wrapper)).toEqual(["エージェント連携"]);
+    });
+
+    it("go は表示の位置とフォーカスだけを変える（設定の値は変わらない）", async () => {
+      const { wrapper } = await stubbed();
+      const before = JSON.stringify(useNotificationsStore(pinia).prefs);
+      await menuButtons(wrapper)[0]!.trigger("click");
+      await menuButtons(wrapper)[3]!.trigger("click");
+      expect(JSON.stringify(useNotificationsStore(pinia).prefs)).toBe(before);
+    });
+
+    it("矢印で次・前の項目へフォーカスが移り、端で止まる。Home／End で最初・最後へ", async () => {
+      const { wrapper } = await stubbed();
+      await focusItem(wrapper, 0);
+      expect((await key(wrapper, "ArrowUp")).defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(menuButtons(wrapper)[0]!.element);
+      await key(wrapper, "ArrowDown");
+      await key(wrapper, "ArrowDown");
+      expect(document.activeElement).toBe(menuButtons(wrapper)[2]!.element);
+      await key(wrapper, "End");
+      expect(document.activeElement).toBe(menuButtons(wrapper)[5]!.element);
+      await key(wrapper, "ArrowDown");
+      expect(document.activeElement, "端で止まる").toBe(menuButtons(wrapper)[5]!.element);
+      await key(wrapper, "Home");
+      expect(document.activeElement).toBe(menuButtons(wrapper)[0]!.element);
+    });
+
+    it("矢印で動いても、フォーカスだけでは印（aria-current）は動かない。ボタンの click で移る", async () => {
+      const { wrapper } = await stubbed();
+      await focusItem(wrapper, 0);
+      await key(wrapper, "ArrowDown");
+      expect(currentLabels(wrapper)).toEqual(["通知"]);
+      await (document.activeElement as HTMLElement).click();
+      await wrapper.vm.$nextTick();
+      expect(currentLabels(wrapper)).toEqual(["テーマ"]);
+    });
+
+    it("Tab の停止位置: フォーカスが無い間は今の節の項目だけ。メニューにフォーカスがある間は、フォーカスのある項目だけ。出たら今の節へ戻る", async () => {
+      const { wrapper } = await stubbed();
+      expect(stops(wrapper)).toEqual(["0", "-1", "-1", "-1", "-1", "-1"]);
+      await focusItem(wrapper, 0);
+      await key(wrapper, "ArrowDown");
+      await key(wrapper, "ArrowDown");
+      await key(wrapper, "ArrowDown");
+      expect(stops(wrapper)).toEqual(["-1", "-1", "-1", "0", "-1", "-1"]);
+      const out = switches(wrapper)[0]!.element as HTMLElement;
+      menuButtons(wrapper)[3]!.element.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: out }));
+      await wrapper.vm.$nextTick();
+      expect(stops(wrapper), "メニューの外へ出たら、今の節（通知）へ戻る").toEqual(["0", "-1", "-1", "-1", "-1", "-1"]);
+    });
+
+    it("メニューにフォーカスがある間に閉じても、開き直したときの停止位置は今の節へ戻っている", async () => {
+      const { wrapper, view } = await stubbed();
+      await focusItem(wrapper, 0);
+      await key(wrapper, "ArrowDown");
+      await key(wrapper, "ArrowDown");
+      expect(stops(wrapper)[2]).toBe("0");
+      view.closeDialog(); // focusout を伴わない閉じ方
+      await wrapper.vm.$nextTick();
+      expect(stops(wrapper)).toEqual(["0", "-1", "-1", "-1", "-1", "-1"]);
+    });
+
+    it("メニューの項目の間の移動では、停止位置は戻らない", async () => {
+      const { wrapper } = await stubbed();
+      await focusItem(wrapper, 1);
+      menuButtons(wrapper)[1]!.element.dispatchEvent(
+        new FocusEvent("focusout", { bubbles: true, relatedTarget: menuButtons(wrapper)[2]!.element }),
+      );
+      await wrapper.vm.$nextTick();
+      expect(stops(wrapper)[1]).toBe("0");
+    });
+
+    it("修飾キー付きの矢印は取り合わない", async () => {
+      const { wrapper } = await stubbed();
+      await focusItem(wrapper, 0);
+      const ev = new KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true, cancelable: true });
+      document.activeElement!.dispatchEvent(ev);
+      expect(ev.defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(menuButtons(wrapper)[0]!.element);
+    });
+  });
+
+  describe("Alt+PageDown／Alt+PageUp・幅の変化", () => {
+    const stubbed = async (before?: Parameters<typeof openWithMenu>[0]) => {
+      const o = await openWithMenu(before);
+      stubLayout(o.wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2600 });
+      return o;
+    };
+    const altKey = async (w: Opened["wrapper"], k: string, init: KeyboardEventInit = {}, target: Element = document.activeElement!) => {
+      const ev = new KeyboardEvent("keydown", { key: k, altKey: true, bubbles: true, cancelable: true, ...init });
+      target.dispatchEvent(ev);
+      await w.vm.$nextTick();
+      return ev;
+    };
+
+    it("Alt+PageDown／PageUp で次・前の節へ移る（preventDefault される）。移った先の見出しにフォーカスが移る", async () => {
+      const { wrapper } = await stubbed();
+      const ev = await altKey(wrapper, "PageDown");
+      expect(ev.defaultPrevented).toBe(true);
+      expect(currentLabels(wrapper)).toEqual(["テーマ"]);
+      expect(document.activeElement).toBe(document.getElementById("settings-theme"));
+      await altKey(wrapper, "PageDown");
+      await altKey(wrapper, "PageDown");
+      expect(currentLabels(wrapper)).toEqual(["端末"]);
+      await altKey(wrapper, "PageUp");
+      expect(currentLabels(wrapper)).toEqual(["表示"]);
+    });
+
+    it("5 回で 6 節（末尾の節が 1 画面に収まっていても 1 つずつ進む）。端では何もしないが preventDefault はする", async () => {
+      const { wrapper } = await openWithMenu();
+      stubLayout(wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2000 });
+      for (let n = 0; n < 5; n++) await altKey(wrapper, "PageDown");
+      expect(currentLabels(wrapper)).toEqual(["キー"]);
+      const ev = await altKey(wrapper, "PageDown");
+      expect(ev.defaultPrevented).toBe(true);
+      expect(currentLabels(wrapper)).toEqual(["キー"]);
+      for (let n = 0; n < 5; n++) await altKey(wrapper, "PageUp");
+      expect(currentLabels(wrapper)).toEqual(["通知"]);
+      expect((await altKey(wrapper, "PageUp")).defaultPrevented).toBe(true);
+      expect(currentLabels(wrapper)).toEqual(["通知"]);
+    });
+
+    it("フォーカスを移した直後（計算の予約が実行される前）でも、今の節から数える", async () => {
+      const { wrapper } = await openWithMenu();
+      const queue: FrameRequestCallback[] = [];
+      vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => queue.push(cb));
+      stubLayout(wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2600 });
+      const keysControl = wrapper.get('section[aria-labelledby="settings-keys"] :is(input, button)').element as HTMLElement;
+      keysControl.focus();
+      keysControl.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      while (queue.length) queue.shift()!(0);
+      await wrapper.vm.$nextTick();
+      expect(currentLabels(wrapper)).toEqual(["キー"]);
+      document.getElementById("settings-notify")!.focus();
+      document.getElementById("settings-notify")!.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      await altKey(wrapper, "PageDown"); // 予約はまだ実行されていない
+      expect(document.activeElement).toBe(document.getElementById("settings-theme"));
+    });
+
+    it("伝播を止める（上の層・端末へ漏らさない）", async () => {
+      const { wrapper } = await stubbed();
+      const seen = vi.fn();
+      document.addEventListener("keydown", seen);
+      await altKey(wrapper, "PageDown");
+      document.removeEventListener("keydown", seen);
+      expect(seen).not.toHaveBeenCalled();
+    });
+
+    it("ほかの修飾キーが付いたとき・Alt が無いときは取り合わない", async () => {
+      const { wrapper } = await stubbed();
+      for (const init of [{ ctrlKey: true }, { shiftKey: true }, { metaKey: true }, { altKey: false }, { isComposing: true }]) {
+        const ev = await altKey(wrapper, "PageDown", init);
+        expect(ev.defaultPrevented, JSON.stringify(init)).toBe(false);
+      }
+      expect(currentLabels(wrapper)).toEqual(["通知"]);
+    });
+
+    it("節が 1 つも拾えないときは何もしない", async () => {
+      const { wrapper } = await openWithMenu(() => {
+        for (const sec of document.querySelectorAll(".settings-body > section")) sec.removeAttribute("aria-labelledby");
+      });
+      const ev = await altKey(wrapper, "PageDown");
+      expect(ev.defaultPrevented, "ブラウザの既定（<select> の値の変更など）は止める").toBe(true);
+      expect((wrapper.get("dialog").element as HTMLElement).scrollTop).toBe(0);
+      expect(wrapper.find("nav.settings-menu").exists()).toBe(false);
+    });
+
+    it("キーの取り込み待ちの間は移らない（取り込みの部品が先に受ける）", async () => {
+      const { wrapper } = await stubbed();
+      const dialog = wrapper.get("dialog").element as HTMLElement;
+      (wrapper.get(".keys-prefix button").element as HTMLElement).click(); // prefix の［変更］
+      await wrapper.vm.$nextTick();
+      await new Promise((r) => setTimeout(r, 0));
+      const capture = document.querySelector<HTMLElement>(".keys-capture")!;
+      expect(capture).not.toBeNull();
+      expect(currentLabels(wrapper), "取り込みの部品は節「キー」の中").toEqual(["キー"]);
+      const ev = await altKey(wrapper, "PageDown", {}, capture);
+      expect(ev.defaultPrevented, "取り込みの部品が受けた").toBe(true);
+      expect(currentLabels(wrapper), "最後の節でなくても動かないことを、PageUp でも確かめる").toEqual(["キー"]);
+      await altKey(wrapper, "PageUp", {}, capture);
+      expect(currentLabels(wrapper)).toEqual(["キー"]);
+      expect(dialog.scrollTop).toBe(0);
+    });
+
+    describe("幅が 768px をまたぐ", () => {
+      const fake = () => {
+        const listeners: ((ev: { matches: boolean }) => void)[] = [];
+        const mql = {
+          matches: false,
+          addEventListener: vi.fn((_t: string, fn: (ev: { matches: boolean }) => void) => void listeners.push(fn)),
+          removeEventListener: vi.fn((_t: string, fn: (ev: { matches: boolean }) => void) => void listeners.splice(listeners.indexOf(fn), 1)),
+        };
+        vi.spyOn(window, "matchMedia").mockReturnValue(mql as unknown as MediaQueryList);
+        return { listeners, mql };
+      };
+
+      it("メニューが消えるとき、メニューにフォーカスがあれば今の節の見出しへ移す。出るときは何もしない", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const item = menuButtons(wrapper)[3]!.element as HTMLElement;
+        item.focus();
+        item.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        await wrapper.vm.$nextTick();
+        f.listeners.forEach((fn) => fn({ matches: false })); // 広がる → 何もしない
+        expect(document.activeElement).toBe(item);
+        f.listeners.forEach((fn) => fn({ matches: true })); // 狭くなる → 今の節（通知）の見出しへ
+        await wrapper.vm.$nextTick();
+        expect(document.activeElement).toBe(document.getElementById("settings-notify"));
+      });
+
+      it("開閉を繰り返しても、開いたまま開き直しても、リスナーは二重にならない", async () => {
+        const f = fake();
+        const { wrapper, view } = await stubbed();
+        const tick = async () => {
+          await wrapper.vm.$nextTick();
+          await wrapper.vm.$nextTick();
+        };
+        view.closeDialog();
+        await tick();
+        expect(f.listeners).toHaveLength(0);
+        view.openDialogWithContext({ kind: "settings" });
+        await tick();
+        expect(f.listeners).toHaveLength(1);
+        view.openDialogWithContext({ kind: "settings" }); // 開いたまま、別の文脈の値で開き直す
+        await tick();
+        expect(f.listeners, "前の監視を外してから登録し直す").toHaveLength(1);
+      });
+
+      const focusItem = async (w: Opened["wrapper"], i: number) => {
+        const el = menuButtons(w)[i]!.element as HTMLElement;
+        el.focus();
+        el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        await w.vm.$nextTick();
+        return el;
+      };
+
+      it("メニューが消える拍にブラウザが先にフォーカスを外していても（行き先の無い focusout）、今の節の見出しへ移す。時間は関係しない（ウィンドウが非アクティブになった後でも）", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const item = await focusItem(wrapper, 3);
+        item.blur(); // 行き先の無い focusout（relatedTarget が null）。activeElement は body
+        item.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+        await wrapper.vm.$nextTick();
+        expect(document.activeElement).toBe(document.body);
+        vi.spyOn(performance, "now").mockReturnValue(1e9); // いくら時間が経っていても同じ
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        await wrapper.vm.$nextTick();
+        expect(document.activeElement).toBe(document.getElementById("settings-notify"));
+      });
+
+      it("自分でメニューの外へ移した後は、幅が変わってもフォーカスを奪わない", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const item = await focusItem(wrapper, 3);
+        const sw = switches(wrapper)[1]!.element as HTMLElement;
+        sw.focus();
+        item.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: sw }));
+        sw.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        await wrapper.vm.$nextTick();
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        expect(document.activeElement).toBe(sw);
+        // 行き先の無いフォーカスの外れの後でも、その前にメニューの外へ移していれば奪わない。
+        sw.blur();
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        expect(document.activeElement).toBe(document.body);
+      });
+
+      it("行き先の無いフォーカスの外れの後、メニューの外へフォーカスが入ったら（ウィンドウに戻って別の部品を選んだ）、奪わない", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const item = await focusItem(wrapper, 3);
+        item.blur();
+        item.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+        const sw = switches(wrapper)[1]!.element as HTMLElement;
+        sw.focus();
+        sw.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        sw.blur();
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        expect(document.activeElement).toBe(document.body);
+      });
+
+      it("移す先の見出しが見える範囲に無ければ、go と同じ位置へスクロールする", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        await menuButtons(wrapper)[2]!.trigger("click"); // 表示（見出し 800）→ scrollTop 792、選んだ節
+        const dialog = wrapper.get("dialog").element as HTMLElement;
+        expect(dialog.scrollTop).toBe(792);
+        dialog.scrollTop = 0; // 見出しは見える範囲（0〜500）の外へ。scroll のイベントは起こさない
+        await focusItem(wrapper, 2);
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        await wrapper.vm.$nextTick();
+        expect(document.activeElement).toBe(document.getElementById("settings-display"));
+        expect(dialog.scrollTop).toBe(792);
+      });
+
+      it("見出しが見える範囲にあるときはスクロールしない", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const dialog = wrapper.get("dialog").element as HTMLElement;
+        await menuButtons(wrapper)[2]!.trigger("click"); // 表示を選んだ節にする
+        dialog.scrollTop = 600; // 表示（800）が見える範囲（600〜1100）にある
+        await focusItem(wrapper, 2);
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        await wrapper.vm.$nextTick();
+        expect(dialog.scrollTop).toBe(600);
+        expect(document.activeElement).toBe(document.getElementById("settings-display"));
+      });
+
+      it("開閉を繰り返しても、開いたまま開き直しても、リスナーは二重にならない", async () => {
+        const f = fake();
+        const { wrapper, view } = await stubbed();
+        const tick = async () => {
+          await wrapper.vm.$nextTick();
+          await wrapper.vm.$nextTick();
+        };
+        view.closeDialog();
+        await tick();
+        expect(f.listeners).toHaveLength(0);
+        view.openDialogWithContext({ kind: "settings" });
+        await tick();
+        expect(f.listeners).toHaveLength(1);
+        view.openDialogWithContext({ kind: "settings" }); // 開いたまま、別の文脈の値で開き直す
+        await tick();
+        expect(f.listeners, "前の監視を外してから登録し直す").toHaveLength(1);
+      });
+
+      it("メニューが消える拍にブラウザが先にフォーカスを外していても（focusout が先）、直前なら今の節の見出しへ移す。時間が経っていれば動かさない", async () => {
+        const f = fake();
+        const { wrapper } = await stubbed();
+        const now = vi.spyOn(performance, "now");
+        const item = menuButtons(wrapper)[3]!.element as HTMLElement;
+        item.focus();
+        item.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        now.mockReturnValue(1000);
+        item.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+        await wrapper.vm.$nextTick();
+        now.mockReturnValue(1100);
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        await wrapper.vm.$nextTick();
+        expect(document.activeElement).toBe(document.getElementById("settings-notify"));
+
+        // 古い focusout（普通にメニューを離れた）の後の幅の変化では、フォーカスを動かさない。
+        const sw = switches(wrapper)[1]!.element as HTMLElement;
+        item.focus();
+        item.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+        now.mockReturnValue(2000);
+        item.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+        sw.focus();
+        now.mockReturnValue(5000);
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        expect(document.activeElement).toBe(sw);
+      });
+
+      it("メニューにフォーカスが無ければフォーカスは動かない。閉じるとリスナーを外す", async () => {
+        const f = fake();
+        const { wrapper, view } = await stubbed();
+        const sw = switches(wrapper)[1]!.element as HTMLElement;
+        sw.focus();
+        f.listeners.forEach((fn) => fn({ matches: true }));
+        expect(document.activeElement).toBe(sw);
+        expect(f.mql.addEventListener).toHaveBeenCalledTimes(1);
+        view.closeDialog();
+        await wrapper.vm.$nextTick();
+        expect(f.mql.removeEventListener).toHaveBeenCalledTimes(1);
+        expect(f.listeners).toHaveLength(0);
+      });
+    });
+  });
+});
