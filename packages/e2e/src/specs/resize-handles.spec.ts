@@ -8,8 +8,8 @@ import { focusTerminal, prefixKey } from "../support/keys.js";
  *
  * **判定はブラウザの側で行う**（条項 `e2e-observe-browser`）: 線は `getComputedStyle(el, "::after")` の `opacity`、カーソルは `getComputedStyle(documentElement)` ではなく
  * ドラッグ中に別の要素の上で測った `cursor`、大きさ・位置は DOM の `style.width`・`getBoundingClientRect`・`aria-valuenow`。内部の状態は覗かない。
- * 「ドラッグ中に打った文字が端末へ漏れない」は、端末の DOM の行ではなく、ブラウザが送った入力のフレームで見る代わりに、端末の `textarea` の値と
- * 端末の表示（`.xterm-rows`）に文字が現れないことで見る（WebGL ではなく DOM の描画を使っている間だけ読める。読めなければこの観測は外れる）。
+ * 「ドラッグ中に打った文字が端末へ漏れない」は、端末の中身は DOM から読めない（描画が canvas）ので、PTY が受けた出力（サーバ側の `rawOutput`）に
+ * 打った文字が現れないことで見る。打つのはブラウザのキーで、ドラッグを終えた後の入力が届くことを対照にする。
  */
 
 async function openApp(page: Page, appServer: AppServer): Promise<void> {
@@ -156,18 +156,28 @@ test("「動きを減らす」では線の出入りの時間が 0 秒", async ({
   expect(dh).toBe("0s");
 });
 
-test("Tab の順に、サイドバーの幅の境目と区画の境目が入る", async ({ page, appServer }) => {
+test("Tab の順に、サイドバーの幅の境目と区画の境目が入る（実際に Tab を押して移る）", async ({ page, appServer }) => {
   await openApp(page, appServer);
-  const widthDivider = page.locator(".sidebar-divider");
-  await widthDivider.focus();
-  await expect(widthDivider).toBeFocused();
   await expect(page.locator(".sidebar-section-divider")).toHaveAttribute("tabindex", "0");
-  await page.locator(".sidebar-section-divider").focus();
-  await expect(page.locator(".sidebar-section-divider")).toBeFocused();
-  await expect.poll(() => afterOpacity(page, ".sidebar-section-divider")).toBe(1); // focus-visible でも線が出る
+  await expect(page.locator(".sidebar-divider")).toHaveAttribute("tabindex", "0");
+  // サイドバーの最初のボタンから Tab を押していき、2 つの境目に止まるまで（上限つき）。止まった要素のクラスを順に集める。
+  await page.locator(".sidebar-spaces .sidebar-section-toggle").focus();
+  const visited: string[] = [];
+  for (let i = 0; i < 80 && visited.length < 2; i++) {
+    await page.keyboard.press("Tab");
+    const cls = await page.evaluate(() => document.activeElement?.className?.toString() ?? "");
+    for (const name of ["sidebar-section-divider", "sidebar-divider"]) {
+      if (cls.split(/\s+/).includes(name) && !visited.includes(name)) {
+        visited.push(name);
+        // focus-visible（キーボード）でも線が出る。
+        await expect.poll(() => afterOpacity(page, `.${name}`)).toBe(1);
+      }
+    }
+  }
+  expect(visited.sort()).toEqual(["sidebar-divider", "sidebar-section-divider"]);
 });
 
-test("区画の境目: ドラッグで高さが変わり、ダブルクリックで自動へ戻る", async ({ page, appServer }) => {
+test("区画の境目: ドラッグで高さが変わり、Esc で元の高さへ戻る", async ({ page, appServer }) => {
   await openApp(page, appServer);
   const spaces = () => page.locator(".sidebar-spaces").evaluate((el) => el.getBoundingClientRect().height);
   const h0 = await spaces();
@@ -180,4 +190,45 @@ test("区画の境目: ドラッグで高さが変わり、ダブルクリック
   await page.mouse.up();
   await expect.poll(spaces).toBeCloseTo(h0, 0);
   await expect(page.locator(".sidebar-section-divider")).toHaveClass(/resize-handle-y/);
+});
+
+test("3 か所の境目の線は同じ色・同じ太さで、カーソルは向きの矢印（AC1）", async ({ page, appServer }) => {
+  await openApp(page, appServer);
+  await splitRight(page);
+  const read = (sel: string, axis: "x" | "y") =>
+    page.locator(sel).first().evaluate((el, a) => {
+      const after = getComputedStyle(el, "::after");
+      return { color: after.backgroundColor, thickness: a === "x" ? after.width : after.height, cursor: getComputedStyle(el).cursor };
+    }, axis);
+  const width = await read(".sidebar-divider", "x");
+  const panes = await read(".splitter", "x");
+  const sections = await read(".sidebar-section-divider", "y");
+  expect(width.thickness).toBe("3px");
+  expect(panes.color).toBe(width.color);
+  expect(sections.color).toBe(width.color);
+  expect(panes.thickness).toBe(width.thickness);
+  expect(sections.thickness).toBe(width.thickness);
+  expect(width.color).not.toBe("rgba(0, 0, 0, 0)");
+  expect([width.cursor, panes.cursor, sections.cursor]).toEqual(["col-resize", "col-resize", "row-resize"]);
+});
+
+test("ドラッグ中は、ポインタが通った行・ボタンに hover の見た目が出ない（AC2）。離せば出る", async ({ page, appServer }) => {
+  await openApp(page, appServer);
+  const isHover = (sel: string) => page.locator(sel).first().evaluate((el) => el.matches(":hover"));
+  const row = await center(page, ".sidebar-spaces .sidebar-row");
+  const c = await center(page, ".sidebar-divider");
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 20, c.y);
+  await page.mouse.move(row.x, row.y); // 境目から外れて、行の上を通る
+  await expect(page.locator("html")).toHaveClass(/soda-resizing-x/);
+  expect(await isHover(".sidebar-spaces .sidebar-row"), "行に hover が出ない").toBe(false);
+  const btn = await center(page, ".sidebar-spaces .sidebar-btn");
+  await page.mouse.move(btn.x, btn.y);
+  expect(await isHover(".sidebar-spaces .sidebar-btn"), "ボタンに hover が出ない").toBe(false);
+  await page.mouse.up();
+  // 対照: 離した後は同じ位置で hover が出る（出なければ、上の確認が何も見ていないことになる）。
+  const row2 = await center(page, ".sidebar-spaces .sidebar-row");
+  await page.mouse.move(row2.x, row2.y);
+  await expect.poll(() => isHover(".sidebar-spaces .sidebar-row")).toBe(true);
 });

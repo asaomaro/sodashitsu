@@ -186,3 +186,133 @@ test("畳んだ区画の中にあったフォーカスは見出しへ移る。�
   await expect(toggle(page, "spaces")).toHaveAttribute("aria-expanded", "false");
   await expect(toggle(page, "spaces")).toBeFocused();
 });
+
+/** ダブルクリック（動かさずに離す 2 回）。 */
+async function doubleClickAt(page: Page, p: { x: number; y: number }): Promise<void> {
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.mouse.down();
+  await page.mouse.up();
+}
+const centerOf = async (page: Page, sel: string): Promise<{ x: number; y: number }> => {
+  const box = (await page.locator(sel).first().boundingBox())!;
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+};
+const savedRatio = (page: Page): Promise<unknown> =>
+  page.evaluate(() => (JSON.parse(localStorage.getItem("soda.prefs.v1") ?? "{}") as Record<string, unknown>)["sidebarSectionRatio"] ?? null);
+
+test("区画の境目: ダブルクリックで自動の配分へ戻り（style が消え・保存した比が消え）、読み込み直しても自動のまま（AC17）", async ({ page, appServer }) => {
+  await addWorkspaces(appServer, 4);
+  await openApp(page, appServer);
+  const spaces = () => height(page, ".sidebar-spaces");
+  const auto = await spaces();
+  await expect(page.locator(".sidebar-spaces")).not.toHaveAttribute("style", /flex/);
+  // ドラッグで動かして離す: style に比が入り、保存される。
+  const c = await centerOf(page, ".sidebar-section-divider");
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x, c.y + 80);
+  await page.mouse.up();
+  await expect(page.locator(".sidebar-spaces")).toHaveAttribute("style", /flex/);
+  expect(await savedRatio(page)).not.toBeNull();
+  await expect.poll(spaces).toBeGreaterThan(auto + 40);
+  // 動かした直後に、時間を置かず素早くもう一度ドラッグしても reset にならない（比が残る）。
+  const c1 = await centerOf(page, ".sidebar-section-divider");
+  await page.mouse.move(c1.x, c1.y);
+  await page.mouse.down();
+  await page.mouse.move(c1.x, c1.y - 20);
+  await page.mouse.up();
+  expect(await savedRatio(page)).not.toBeNull();
+  // ダブルクリックで自動へ。
+  await doubleClickAt(page, await centerOf(page, ".sidebar-section-divider"));
+  await expect(page.locator(".sidebar-spaces")).not.toHaveAttribute("style", /flex/);
+  expect(await savedRatio(page)).toBeNull();
+  await expect.poll(async () => Math.abs((await spaces()) - auto)).toBeLessThan(2);
+  // 読み込み直しても自動のまま（高さが自動の配分と一致）。
+  const next = await reload(page);
+  await expect(next.locator(".sidebar-spaces")).not.toHaveAttribute("style", /flex/);
+  expect(await savedRatio(next)).toBeNull();
+  expect(Math.abs((await height(next, ".sidebar-spaces")) - auto)).toBeLessThan(2);
+});
+
+test("自動の配分: workspace が少ないと spaces は中身の高さで agents が残りを使い、多いと agents に最小が残る（AC20）", async ({ page, appServer }) => {
+  await openApp(page, appServer);
+  const natural = (): Promise<number> =>
+    page.locator(".sidebar-spaces").evaluate((el) => {
+      const h = (sel: string): number => (el.querySelector(sel) as HTMLElement | null)?.getBoundingClientRect().height ?? 0;
+      const body = el.querySelector(".sidebar-section-body") as HTMLElement;
+      return h(".sidebar-section-header") + body.scrollHeight + h(".sidebar-section-footer");
+    });
+  const minOf = (sel: string): Promise<number> => page.locator(sel).evaluate((el) => parseFloat(getComputedStyle(el).minHeight));
+  // 少ない（1 件）: spaces は中身ぴったり、agents は残り全部。
+  const sFew = await height(page, ".sidebar-spaces");
+  expect(Math.abs(sFew - (await natural())), "spaces は中身の高さ").toBeLessThan(4);
+  const aFew = await height(page, ".sidebar-agents");
+  const total = await page.locator(".sidebar-sections").evaluate((el) => el.clientHeight);
+  expect(sFew + aFew + 1, "agents が残りを使う").toBeGreaterThan(total - 3);
+  expect(aFew).toBeGreaterThan(sFew);
+  // 多い（15 件）: spaces は中身より小さく（スクロール）、agents に最小が残る。
+  await addWorkspaces(appServer, 15);
+  await expect(page.locator(".sidebar-spaces .sidebar-row").nth(12)).toBeAttached();
+  const sMany = await height(page, ".sidebar-spaces");
+  const aMany = await height(page, ".sidebar-agents");
+  expect(sMany).toBeLessThan(await natural());
+  expect(aMany, "agents に最小（見出し＋2 行分）が残る").toBeGreaterThanOrEqual((await minOf(".sidebar-agents")) - 0.5);
+  expect(aMany).toBeGreaterThan(100);
+  expect(sMany).toBeGreaterThan(sFew);
+});
+
+test("ウィンドウの高さを変えると、比を保って配り直され、最小は割らない（AC10）", async ({ page, appServer }) => {
+  await addWorkspaces(appServer, 15);
+  await openApp(page, appServer);
+  const spaces = () => height(page, ".sidebar-spaces");
+  const agents = () => height(page, ".sidebar-agents");
+  // 最小は CSS の値と、見出し＋2 行分として 60px の大きいほう（CSS を 0 にされても割れを見逃さない）。
+  const minOf = (sel: string): Promise<number> => page.locator(sel).evaluate((el) => Math.max(60, parseFloat(getComputedStyle(el).minHeight)));
+  const share = async (): Promise<number> => {
+    const s = await spaces();
+    return s / (s + (await agents()));
+  };
+  const divider = page.locator(".sidebar-section-divider");
+  // 中ほどの比（Home の後に ↓ を何回か）で保存してから、高さを縮める。
+  await divider.focus();
+  await page.keyboard.press("Home");
+  for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowDown");
+  const before = await share();
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await expect.poll(async () => (await spaces()) + (await agents())).toBeLessThan(500);
+  const after = await share();
+  expect(Math.abs(after - before), "比が保たれる").toBeLessThan(0.04);
+  expect(await spaces()).toBeGreaterThanOrEqual((await minOf(".sidebar-spaces")) - 0.5);
+  expect(await agents()).toBeGreaterThanOrEqual((await minOf(".sidebar-agents")) - 0.5);
+  // agents が最小になる比（End）のまま、さらに縮めても agents は最小を割らず、spaces もはみ出さない。
+  await divider.focus();
+  await page.keyboard.press("End");
+  await page.setViewportSize({ width: 1280, height: 420 });
+  await expect.poll(async () => (await spaces()) + (await agents())).toBeLessThan(420);
+  expect(await agents()).toBeGreaterThanOrEqual((await minOf(".sidebar-agents")) - 0.5);
+  expect(await spaces()).toBeGreaterThanOrEqual((await minOf(".sidebar-spaces")) - 0.5);
+  const sbScrolls = await page.locator(".sidebar").evaluate((el) => el.scrollHeight > el.clientHeight + 1);
+  expect(sbScrolls, "サイドバー全体はスクロールしない").toBe(false);
+  // 高さを戻しても、どちらも最小を割らない。
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect.poll(async () => (await spaces()) + (await agents())).toBeGreaterThan(500);
+  expect(await agents()).toBeGreaterThanOrEqual((await minOf(".sidebar-agents")) - 0.5);
+  expect(await spaces()).toBeGreaterThanOrEqual((await minOf(".sidebar-spaces")) - 0.5);
+});
+
+test("区画の境目にフォーカスがあるまま prefix+shift+b／prefix+shift+a で畳むと、フォーカスは畳んだ区画の見出しへ移る", async ({ page, appServer }) => {
+  await openApp(page, appServer);
+  const divider = page.locator(".sidebar-section-divider");
+  for (const [which, key] of [["spaces", "Shift+B"], ["agents", "Shift+A"]] as const) {
+    await divider.focus();
+    await expect(divider).toBeFocused();
+    await prefixKey(page, key);
+    await expect(toggle(page, which)).toHaveAttribute("aria-expanded", "false");
+    await expect(divider).toHaveCount(0);
+    await expect(toggle(page, which)).toBeFocused();
+    await prefixKey(page, key); // 開き直す
+    await expect(toggle(page, which)).toHaveAttribute("aria-expanded", "true");
+  }
+});
