@@ -27,9 +27,11 @@ export interface AskFormElement extends HTMLElement {
   readonly indexWidth: number;
 }
 
-/** `ask-submit` の `detail`（`controller.answer` の body と同じ形。`custom`・`note` は空なら項目ごと無い）。 */
+/** `ask-submit` の `detail`（`controller.answer` の body と同じ形。`custom`・`note`・`comments` は空なら項目ごと無い）。 */
 export interface AskFormSubmitDetail {
   answers: AskAnswers;
   custom?: string[];
   note?: string;
+  /** 質問の id → 自由記述（前後の空白を除いた、書いた質問だけ。部品 1.3.0 から）。 */
+  comments?: Record<string, string>;
 }

@@ -122,10 +122,12 @@ JSON
 
 - 定義の形は ask-form と同じ: `title`・`intro`・`submit`・`note`、質問の `id`・`label`・`type`（`single`/`multi`/`text`）・`help`・`options`・`default`・`allowOther`・`showIf`・`required`・`multiline`・`placeholder`。
   `default` はなるべく入れる。`showIf` で参照する質問は、参照する側より上に置く。知らない項目は無視される。
+  各質問（`single`・`multi`）の下には「＋ 自由記述」のボタンが出て、利用者が選択肢に無い条件・希望をその質問に添えて書ける。付けたくないときは全体に `"comments": false`、その質問だけなら `"comment": false`
+  （質問が 1 つで `single`・`note: false` のフォームには、もともと付かない）。
 - 質問が多いと、左に質問の目次が出る（何も書かなくてよい。質問は 1 枚に並んだまま。答えの形は変わらない）。まとまりごとの見出しを付けたいときは、まとまりの最初の質問に `"page": "まとまりの題"` を書く（書くと、少ない質問でも目次が出る）。
   全体の `paging` は `"auto"`（既定。高さに収まらないときだけ目次を出す）・`true`（必ず出す。数も同じ扱い）・`false`（出さない。1 枚でスクロール）。それ以外の値と、文字列でない `page` は定義の誤り。
 - 選択肢の質問（`single`・`multi`）の見た目: `filter`（絞り込みの欄を出すか。書かなければ選択肢が 12 件以上のときに出る。`false` で消す）・`showValue`（表示名と値が違う選択肢に値を横に出すか。書かなければ出す。`false` で消す）。どちらも真偽。答えの形は変わらない。
-- 結果の `status`（どれも終了コード 0）: `answered`（`answers` に id → 値。`multi` は配列。`showIf` で隠れた質問は入らない。`custom` は自由入力した質問の id、`note` は補足の欄）・
+- 結果の `status`（どれも終了コード 0）: `answered`（`answers` に id → 値。`multi` は配列。`showIf` で隠れた質問は入らない。`custom` は自由入力した質問の id、`note` は補足の欄、`comments` は質問ごとの自由記述〔id → 文。書いた質問だけ。無ければ項目ごと無い。**選択肢より優先して読む条件・希望**が書かれていることがある〕）・
   `cancelled`（利用者がキャンセルした・pane が閉じた。勝手に既定で進めず、どうするか聞く）・`timeout`（まだ必要か確かめてから出し直す）・
   `unavailable`（`reason` に理由。この pane を見ているブラウザが無い、または定義に `sodactl ask` が対応していない型〔`edit`・`rank`・`table` 等〕の質問がある。**同じ質問を `AskUserQuestion` に分けて聞き直す**）。
 - 終了コード 2 は定義の誤り（stderr に理由。直して再実行）。`ask_busy`（終了コード 1）は、この pane の前の質問がまだ答えを待っている。

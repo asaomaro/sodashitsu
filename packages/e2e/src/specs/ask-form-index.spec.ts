@@ -702,8 +702,10 @@ test("質問を移っても（目次のクリック・Alt+PageDown・Alt+PageUp�
 }) => {
   const p1 = await setup(page, appServer);
   // 上限（画面の高さ − 16px）より十分低い大きさにする: 高い質問（6 択）と低い質問（2 択）と中くらいの質問（4 択）。`page` で目次を出す。
+  // 部品 1.3.0 の自由記述のボタンで背が高くなり上限に近づくので、この件（質問を移っても高さが変わらない）は `comments: false` で付けない。
   const run = await runAsk(appServer, p1, {
     note: false,
+    comments: false,
     questions: [q("a", { page: "高い", options: opts(6) }), q("b"), q("c", { options: opts(4) })],
   });
   await expect(dialog(page)).toBeVisible();

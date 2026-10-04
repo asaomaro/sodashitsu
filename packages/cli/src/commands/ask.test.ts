@@ -94,6 +94,16 @@ describe("runAsk", () => {
     expect(s.client.hello).toHaveBeenCalledOnce();
   });
 
+  it("結果は作り直さずそのまま出す（comments つきの answered も、知らない項目も。古い sodactl でも comments が出る）", async () => {
+    const result = { status: "answered", answers: { a: "y" }, comments: { a: "金曜は避けたい" }, future: 1 };
+    const s = setup({ result });
+    mockState.client = s.client;
+    const deps = input(SPEC);
+    await runAsk(cmd(), store, deps);
+    expect(deps.print).toHaveBeenCalledOnce();
+    expect(deps.print.mock.calls[0]![0]).toBe(result); // 同じオブジェクト（作り直していない）
+  });
+
   it("4 つの status はどれもそのまま出す（unavailable の reason を含む）", async () => {
     for (const result of [{ status: "cancelled" }, { status: "timeout" }, { status: "unavailable", reason: "no browser" }]) {
       const s = setup({ result });

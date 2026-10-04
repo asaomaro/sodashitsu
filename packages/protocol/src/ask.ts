@@ -21,6 +21,8 @@ export const ASK_TEXT_MAX = 4000;
 export const ASK_COLORS_MAX = 16;
 /** 自由入力・`text` の回答・補足の文字数。 */
 export const ASK_ANSWER_TEXT_MAX = 10_000;
+/** 質問ごとの自由記述（`comments`）の長さの合計（UTF-16 の単位）。回答 1 通が `/ws` の 1 フレームの上限（4MB）に収まるようにする。 */
+export const ASK_COMMENTS_TOTAL_MAX = 100_000;
 export const ASK_TIMEOUT_DEFAULT_MS = 540_000;
 export const ASK_TIMEOUT_MIN_MS = 1_000;
 export const ASK_TIMEOUT_MAX_MS = 86_400_000;
@@ -67,6 +69,8 @@ export interface AskQuestion {
   filter?: boolean;
   /** 表示名と値が違う選択肢に、値を出すか（無ければ部品の既定: 出す）。`text` には無い。 */
   showValue?: boolean;
+  /** `false` のときだけ持つ（この質問に自由記述を付けない）。`true`・無指定・真偽でない値は項目なし。 */
+  comment?: false;
 }
 
 /** 質問の目次の出し方: `"auto"`（高さに収まらないときだけ出す）／`true`（必ず出す）／`false`（出さない）。1 以上の整数も通す（`true` と同じ扱い。`ask.py` の検査と共通の試験データに合わせる）。 */
@@ -82,13 +86,18 @@ export interface AskSpec {
   notePlaceholder?: string;
   /** 無ければ無いまま（既定は埋めない。部品の既定は `"auto"`）。質問に `page` があれば、`false` でなければ目次を出す。 */
   paging?: AskPaging;
+  /** `false` のときだけ持つ（どの質問にも自由記述を付けない）。`true`・無指定・真偽でない値は項目なし。 */
+  comments?: false;
   questions: AskQuestion[];
 }
 
 export type AskAnswers = Record<string, string | string[]>;
 
+/** 質問の id → その質問への自由記述（書いた質問だけ。前後の空白は除いてある）。 */
+export type AskComments = Record<string, string>;
+
 export type AskResult =
-  | { status: "answered"; answers: AskAnswers; custom?: string[]; note?: string }
+  | { status: "answered"; answers: AskAnswers; custom?: string[]; note?: string; comments?: AskComments }
   | { status: "cancelled" }
   | { status: "timeout" }
   | { status: "unavailable"; reason: string };
@@ -110,6 +119,7 @@ export interface AskAnswerBody {
   answers: AskAnswers;
   custom?: string[];
   note?: string;
+  comments?: AskComments;
 }
 
 // --- 補助 -------------------------------------------------------------------------------
@@ -278,6 +288,8 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
     const mw = q["minWidth"];
     if (typeof mw === "number" && Number.isInteger(mw) && mw >= 60 && mw <= 600) out.minWidth = mw;
     if (page !== undefined) out.page = page;
+    // `comment` は `false` のときだけ残す（`ask.py` と同じ。`true`・無い・真偽でない値は項目なし。誤りにしない）。
+    if (q["comment"] === false) out.comment = false;
 
     if (type !== "text") {
       // 真偽のときだけ写す（それ以外は落とす。誤りにしない）。`text` には選択肢が無いので写さない。
@@ -346,6 +358,7 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
   if (top.intro !== undefined) spec.intro = top.intro;
   if (notePlaceholder !== undefined) spec.notePlaceholder = notePlaceholder;
   if (paging !== undefined) spec.paging = paging;
+  if (raw["comments"] === false) spec.comments = false;
   return { ok: true, spec };
 }
 
@@ -359,6 +372,8 @@ export interface AskFormState {
   otherText: Record<string, string>;
   text: Record<string, string>;
   note: string;
+  /** 質問の id → 自由記述の欄の中身（省略可）。 */
+  comments?: Record<string, string>;
 }
 
 /** `default` を選択済みにした初期状態。 */
@@ -376,6 +391,15 @@ export function initialAskState(spec: AskSpec): AskFormState {
     state.otherText[q.id] = "";
   }
   return state;
+}
+
+/**
+ * その質問に自由記述を付けられるか（部品 `<ask-form>` の `commentable` と同じ 4 条件）。
+ * 定義の `comments` が `false` でない・質問の `comment` が `false` でない・`text` でない・即確定のフォーム（質問が 1 つ・`single`・補足なし）でない。
+ */
+export function askCommentable(spec: AskSpec, q: AskQuestion): boolean {
+  if (spec.comments === false || q.comment === false || q.type === "text") return false;
+  return !(spec.questions.length === 1 && spec.questions[0]?.type === "single" && !spec.note);
 }
 
 /** その質問が、いまの回答（上の質問の答え）で表示されるか（`showIf` の判定）。 */
@@ -409,8 +433,9 @@ function valueOf(q: AskQuestion, state: AskFormState): string | string[] | null 
 export function collectAsk(
   spec: AskSpec,
   state: AskFormState,
-): { answers: AskAnswers; custom: string[]; note?: string; visible: string[]; lacking: string[] } {
+): { answers: AskAnswers; custom: string[]; note?: string; comments?: AskComments; visible: string[]; lacking: string[] } {
   const answers: AskAnswers = {};
+  const comments: AskComments = {};
   const custom: string[] = [];
   const visible: string[] = [];
   const lacking: string[] = [];
@@ -422,8 +447,14 @@ export function collectAsk(
     if (missing) lacking.push(q.id);
     if (!missing || q.type !== "single") answers[q.id] = v as string | string[];
     if (q.type !== "text" && state.otherPicked[q.id] === true) custom.push(q.id);
+    // 自由記述: 見えていて付けられる質問の、自分の項目（継承された値は拾わない）。空白だけは入れない。
+    if (askCommentable(spec, q) && state.comments !== undefined && Object.hasOwn(state.comments, q.id)) {
+      const c = state.comments[q.id];
+      if (typeof c === "string" && c.trim() !== "") comments[q.id] = c.trim();
+    }
   }
-  const out: { answers: AskAnswers; custom: string[]; note?: string; visible: string[]; lacking: string[] } = { answers, custom, visible, lacking };
+  const out: { answers: AskAnswers; custom: string[]; note?: string; comments?: AskComments; visible: string[]; lacking: string[] } = { answers, custom, visible, lacking };
+  if (Object.keys(comments).length > 0) out.comments = comments;
   const note = spec.note ? state.note.trim() : "";
   if (note !== "") out.note = note;
   return out;
@@ -474,6 +505,17 @@ export function checkAskAnswer(spec: AskSpec, body: AskAnswerBody): string | nul
     if (!q || q.type === "text" || !q.allowOther) return "custom has an id that does not accept free text";
   }
   if (body.note !== undefined && !spec.note) return "this form has no note field";
+  if (body.comments !== undefined) {
+    let total = 0;
+    for (const [id, text] of Object.entries(body.comments)) {
+      const q = shown.get(id);
+      if (!q) return "comments has an unknown question id";
+      if (!askCommentable(spec, q)) return "comments has an id that does not accept a comment";
+      if (typeof text !== "string") return "comments must have string values";
+      total += text.length;
+    }
+    if (total > ASK_COMMENTS_TOTAL_MAX) return `comments are longer than ${ASK_COMMENTS_TOTAL_MAX} characters in total`;
+  }
   return null;
 }
 
