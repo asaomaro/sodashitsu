@@ -145,7 +145,11 @@ async function checkWebUiRendersAndAcceptsInput(origin: string, token: string, p
     await page.waitForFunction((t) => document.title === t, expectedTitle, { timeout: 5000 });
     console.log(`smoke(web): tab title ok ("${expectedTitle}"。H14/AC4）`);
 
-    await page.locator(".xterm-helper-textarea").click();
+    // 利用者が実際に押す場所（端末の描画領域の中心）を押す。`.xterm-helper-textarea` は不可視の補助要素で、xterm が**カーソルの位置**へ
+    // 動かす——カーソル行が表示領域の上にはみ出していると要素の中心が画面の外になり、押せない（実測: textarea (816,-18) ・
+    // `.xterm-screen` は top=-60 で 840px 高）。押した結果としてフォーカスが補助要素に入ったことも確かめる。
+    await page.locator(".xterm-screen").click();
+    await page.waitForFunction(() => document.activeElement?.classList.contains("xterm-helper-textarea") === true, undefined, { timeout: 5000 });
     // `keyboard.type()` の埋め込み `\n` は Enter キー押下として確実には届かない（実機の Chromium で確認済み
     // ——タイプはされてもコマンドが実行されず、シェルの出力が一切戻ってこなかった）。改行は別に明示的に送る。
     await page.keyboard.type(`echo ${marker}`);

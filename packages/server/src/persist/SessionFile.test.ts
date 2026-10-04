@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeTempDir } from "./atomicFile.js";
 import { FsSessionFile, type SessionFileData } from "./SessionFile.js";
@@ -7,7 +9,6 @@ function sample(): SessionFileData {
   return {
     schema: 1,
     savedAt: "2026-09-18T10:00:00Z",
-    nextId: { w: 2, t: 2, p: 2, s: 1, a: 1, g: 1 },
     groups: [],
     workspaces: [
       {
@@ -54,6 +55,30 @@ describe("FsSessionFile", () => {
     expect(result).toEqual({ kind: "ok", data });
   });
 
+  it("UUID の id（workspace・tab・pane・グループ）はそのまま往復し、保存に採番の続き（nextId）は書かない", async () => {
+    const file = new FsSessionFile(dir);
+    const [w, t, p, g] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    const data: SessionFileData = {
+      ...sample(),
+      groups: [{ id: g, label: "g", collapsed: false }],
+      workspaces: [
+        {
+          id: w,
+          label: "api",
+          cwd: "/home/u/api",
+          groupId: g,
+          activeTabId: t,
+          tabs: [{ id: t, label: "1", focusedPaneId: p, zoomedPaneId: null, layout: { type: "pane", paneId: p }, panes: [{ id: p, label: null, cwd: "/home/u/api", shell: "/bin/bash" }] }],
+        },
+      ],
+      focus: { workspaceId: w, tabId: t, paneId: p },
+    };
+    await file.save(data);
+    const raw = JSON.parse(await readFile(join(dir, "session.json"), "utf8")) as Record<string, unknown>;
+    expect(raw["nextId"]).toBeUndefined();
+    expect(await file.load()).toEqual({ kind: "ok", data });
+  });
+
   // 20260921-workspace-auto-label：名前が自動かの印は任意の項目。以前の版の保存（印が無い）も読める。
   it("workspace の autoLabel は有っても無くても読め、そのまま往復する", async () => {
     const file = new FsSessionFile(dir);
@@ -78,16 +103,15 @@ describe("FsSessionFile", () => {
     expect(await file.load()).toEqual({ kind: "ok", data: withGroup });
   });
 
-  // 以前の版の保存には groups・workspace.groupId・nextId.g のいずれも無い——読めて、既定値で埋まる
+  // 以前の版の保存には groups・workspace.groupId のいずれも無い——読めて、既定値で埋まる
   // （`autoLabel` と同じ「optional 追加」方式。20260923-workspace-grouping）。
-  it("groups・groupId・nextId.g が無い以前の版のファイルも読め、既定値で埋まる", async () => {
+  it("groups・groupId が無い以前の版のファイルも読め、既定値で埋まる", async () => {
     const file = new FsSessionFile(dir);
     const { writeFileAtomic } = await import("./atomicFile.js");
     const { join } = await import("node:path");
     const legacy = {
       schema: 1,
       savedAt: "2026-09-18T10:00:00Z",
-      nextId: { w: 2, t: 2, p: 2, s: 1, a: 1 }, // g が無い
       workspaces: [
         {
           id: "w1",
@@ -105,7 +129,6 @@ describe("FsSessionFile", () => {
     const result = await file.load();
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") throw new Error("unreachable");
-    expect(result.data.nextId.g).toBe(1);
     expect(result.data.groups).toEqual([]);
     expect(result.data.workspaces[0]!.groupId).toBeUndefined();
   });

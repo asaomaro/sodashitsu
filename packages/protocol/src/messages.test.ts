@@ -144,6 +144,11 @@ describe("messages", () => {
     expect(() => SidebarLayoutSchema.parse({ top: [], groups: {}, ungrouped: "w:w1" })).toThrow();
   });
 
+  it("サイドバーの区画の比と折りたたみは端末ごとの設定（サーバへ送らない。20261004-ui-interaction-polish）", () => {
+    expect(DEVICE_LOCAL_PREF_KEYS).toContain("sidebarSectionRatio");
+    expect(DEVICE_LOCAL_PREF_KEYS).toContain("sidebarSectionsCollapsed");
+  });
+
   it("共有の設定の ungroupedCollapsed は端末ごとの設定に入れない（共有のまま）", () => {
     expect(DEVICE_LOCAL_PREF_KEYS).not.toContain("ungroupedCollapsed");
     expect(DEVICE_LOCAL_PREF_KEYS).not.toContain("collapsedAutoGroups");

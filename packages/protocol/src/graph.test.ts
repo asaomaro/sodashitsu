@@ -32,11 +32,15 @@ const link = {
 } as const;
 
 describe("NodeKey", () => {
-  it("local か 32 桁の 16 進のマシン id と、pane の id", () => {
+  it("local か 32 桁の 16 進のマシン id と、pane の id（UUID。固定の短い id も通す）", () => {
+    const uuid = "3f2a9c10-1111-4111-8111-aaaaaaaaaaaa";
+    expect(NODE_KEY_RE.test(`local:${uuid}`)).toBe(true);
+    expect(NODE_KEY_RE.test(`${MACHINE}:${uuid}`)).toBe(true);
     expect(NODE_KEY_RE.test("local:p3")).toBe(true);
     expect(NODE_KEY_RE.test(`${MACHINE}:p12`)).toBe(true);
-    expect(NODE_KEY_RE.test("local:w3")).toBe(false);
-    expect(NODE_KEY_RE.test("local:p0")).toBe(false);
+    expect(NODE_KEY_RE.test("local:")).toBe(false);
+    expect(NODE_KEY_RE.test("local:p 3")).toBe(false);
+    expect(NODE_KEY_RE.test("local:a:b")).toBe(false);
     expect(NODE_KEY_RE.test("box:p3")).toBe(false); // マシンは名前でなく id
     expect(NODE_KEY_RE.test(`${MACHINE.toUpperCase()}:p3`)).toBe(false);
     expect(NODE_KEY_RE.test("local:p3 ")).toBe(false);
@@ -48,7 +52,7 @@ describe("GraphSchema", () => {
     const g = {
       rev: 3,
       paused: false,
-      nodes: [{ key: "local:p1", x: 0, y: 20, stale: true }],
+      nodes: [{ key: "local:p1", x: 0, y: 20 }],
       links: [link],
     };
     expect(GraphSchema.parse(g)).toEqual(g);
@@ -68,15 +72,7 @@ describe("GraphSchema", () => {
     expect(GraphSchema.safeParse({ rev: 0, paused: false, nodes: [], links }).success).toBe(false);
   });
 
-  it("stale は true だけ・座標は有限", () => {
-    expect(
-      GraphSchema.safeParse({
-        rev: 0,
-        paused: false,
-        nodes: [{ key: "local:p1", x: 0, y: 0, stale: false }],
-        links: [],
-      }).success,
-    ).toBe(false);
+  it("座標は有限", () => {
     expect(
       GraphSchema.safeParse({
         rev: 0,
@@ -91,7 +87,10 @@ describe("GraphSchema", () => {
     expect(GraphLinkSchema.safeParse({ ...link, limit: 0 }).success).toBe(false);
     expect(GraphLinkSchema.safeParse({ ...link, limit: 101 }).success).toBe(false);
     expect(GraphLinkSchema.safeParse({ ...link, paused: "x" }).success).toBe(false);
-    expect(GraphLinkSchema.safeParse({ ...link, id: "x1" }).success).toBe(false);
+    expect(GraphLinkSchema.safeParse({ ...link, id: "x:1" }).success).toBe(false);
+    expect(
+      GraphLinkSchema.safeParse({ ...link, id: "3f2a9c10-1111-4111-8111-aaaaaaaaaaaa" }).success,
+    ).toBe(true); // 線の id は UUID
   });
 });
 
@@ -189,7 +188,7 @@ describe("graph.* の方式", () => {
 
   it("pause・resume・history の linkId は省ける", () => {
     expect(GraphPauseParams.parse({})).toEqual({});
-    expect(GraphPauseParams.safeParse({ linkId: "p1" }).success).toBe(false);
+    expect(GraphPauseParams.safeParse({ linkId: "p 1" }).success).toBe(false);
     expect(GraphHistoryParams.safeParse({ limit: 0 }).success).toBe(false);
   });
 });

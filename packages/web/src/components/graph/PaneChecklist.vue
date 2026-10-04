@@ -34,20 +34,6 @@ interface Section {
   rows: Row[];
 }
 
-/** 無効（stale）なノードの鍵（id を振り直す前の pane のノード。同じ番号の今の pane とは別物）。 */
-const staleKeys = computed(
-  () => new Set<string>(graph.nodes.filter((n) => n.stale).map((n) => n.key)),
-);
-/**
- * 行の注記。同じ鍵の無効なノードが載っていれば、その行のチェックは「今の pane が載っている」ではなく「前の pane の無効なノード」なので、
- * そう書く（外せば無効なノードが消える。今の pane に付け替えるならノードの「選び直す…」。g03 点検）。
- */
-function noteOf(key: string, agent: string | null): string | null {
-  if (staleKeys.value.has(key))
-    return "無効: 同じ番号の前の pane のノードが載っています（今の pane とは別。ノードの「選び直す…」か、外してください）";
-  return agent;
-}
-
 /**
  * 1 台のマシンの pane の節（workspace ごと。その中は tab・pane の順）。画面の接続が向いているマシンは session の全体から、ほかのマシン
  * （別のマシンを見ている間の手元を含む）は軽い接続の要約から。手元の節の見出しは workspace の名前だけ、別のマシンは「マシン / workspace」（04）。
@@ -67,7 +53,7 @@ function sectionsOf(machine: string, machineLabel: string | null): Section[] {
           rows.push({
             key,
             name: paneNameOf(pane),
-            note: noteOf(key, pane.agent?.label ?? null),
+            note: pane.agent?.label ?? null,
             disabled: !connected && !initialOnGraph.has(key),
           });
         }
@@ -87,7 +73,7 @@ function sectionsOf(machine: string, machineLabel: string | null): Section[] {
       rows.push({
         key,
         name: summaryPaneName(paneId, p),
-        note: noteOf(key, p.agent?.label ?? null),
+        note: p.agent?.label ?? null,
         disabled: !summary.connected && !initialOnGraph.has(key),
       });
     }
@@ -124,7 +110,7 @@ const otherRows = computed<Row[]>(() => {
     .map((n) => {
       const info = graph.nodeInfo(n.key);
       const note =
-        info.stale || info.exists === false
+        info.exists === false
           ? "無効（pane がありません）"
           : info.exists === null
             ? `${info.machineLabel}（未接続）`

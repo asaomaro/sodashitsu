@@ -1,3 +1,4 @@
+import { resolveTabRef } from "../idRef.js";
 import type { ParamsOf } from "@sodashitsu/protocol";
 import type { Command } from "../cliArgs.js";
 import { printJson } from "../output.js";
@@ -26,8 +27,9 @@ export async function runTabCreate(cmd: TabCreateCmd, store: SessionStore): Prom
 export async function runTabClose(cmd: TabCloseCmd, store: SessionStore): Promise<void> {
   const result = await withSession(cmd.opts, store, async (client) => {
     const hello = await client.hello();
-    assertNotSelfTab(cmd.opts, hello.snapshot, cmd.tabId, "close"); // 自分の pane を含む tab は閉じない（20260926-agent-skill-file）
-    return client.request("tab.close", { tabId: cmd.tabId });
+    const tabId = resolveTabRef(hello.snapshot, cmd.tabId);
+    assertNotSelfTab(cmd.opts, hello.snapshot, tabId, "close"); // 自分の pane を含む tab は閉じない（20260926-agent-skill-file）
+    return client.request("tab.close", { tabId });
   });
   printJson(result);
 }

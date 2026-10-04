@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { createServer } from "node:net";
 import { join } from "node:path";
@@ -879,12 +880,13 @@ describe.skipIf(process.platform === "win32")("composeServer — 画面履歴（
   ])("session.json が%sときは、画面履歴を新しい pane に流さずに消す（AC5）", async (_name, sessionJson) => {
     const stateDir = await tempStateDir();
     if (sessionJson !== null) await writeFile(join(stateDir, "session.json"), sessionJson);
-    // 新しく始める起動の最初の pane と同じ id（p1）の古い画面。
-    await writeFile(join(stateDir, HISTORY), JSON.stringify({ schema: 1, savedAt: "x", panes: [{ paneId: "p1", savedAt: "x", ansi: "STALE_SCREEN" }] }));
+    // 前の起動の pane の古い画面（id は UUID なので新しい pane と衝突はしないが、復元しない起動では持ち越さず消す）。
+    const oldPaneId = randomUUID();
+    await writeFile(join(stateDir, HISTORY), JSON.stringify({ schema: 1, savedAt: "x", panes: [{ paneId: oldPaneId, savedAt: "x", ansi: "STALE_SCREEN" }] }));
     const server = await start(stateDir, true);
     cleanups.unshift(() => server.close());
     const paneId = server.session.snapshot().panes[0]!.id;
-    expect(paneId).toBe("p1");
+    expect(paneId).not.toBe(oldPaneId);
     expect(existsSync(join(stateDir, HISTORY))).toBe(false);
     expect(screenOf(server, paneId)).not.toContain("STALE_SCREEN");
   }, 60_000);

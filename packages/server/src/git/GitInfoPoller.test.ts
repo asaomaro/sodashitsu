@@ -425,7 +425,6 @@ describe("DefaultGitInfoPoller — 最初の pane のいまの場所への追従
     await service.restore({
       schema: 1,
       savedAt: "2026-09-26T00:00:00Z",
-      nextId: { w: 10, t: 10, p: 10, s: 1, a: 1, g: 1 },
       groups: [],
       workspaces: [
         {
@@ -1101,7 +1100,7 @@ describe("DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実�
     expect(after.snapshot().workspaces.map((x) => x.id)).toEqual(expectedOrder);
   });
 
-  it("T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代表（保存した representative が作った順に勝つ）。旗の無い保存は作った順", async () => {
+  it("T29: 後から同じフォルダへ来た workspace は代表にならず、再起動をまたいでも同じ代表（保存した representative が作った順に勝つ）。旗の無い保存は保存の並びの順", async () => {
     const dir = await makeTempDir("soda-persist-");
     dirs.push(dir);
     const git = (worktreeKey: string): GitJudgement => ({ kind: "git", git: { branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree: true, worktreeKey } });
@@ -1122,11 +1121,11 @@ describe("DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実�
     expect(after.getWorkspace(first.id)?.representative).toBe(false);
     expect(after.snapshot().layout).toEqual(before.snapshot().layout);
 
-    // 旗の無い保存（古い版）は作った順（w<番号> の小さいほう）。
+    // 旗の無い保存（古い版）は保存の並びの順（id は UUID で作った順を表さないので、並びの先のほうが代表）。
     const legacy = makeService();
     await legacy.restore({ ...data, workspaces: data.workspaces.map(({ representative: _r, ...rest }) => rest) });
-    expect(legacy.getWorkspace(first.id)?.representative).toBe(true);
-    expect(legacy.getWorkspace(second.id)?.representative).toBe(false);
+    expect(legacy.getWorkspace(second.id)?.representative).toBe(true);
+    expect(legacy.getWorkspace(first.id)?.representative).toBe(false);
   });
 
   it("同じフォルダの 2 つ目（通常の項目）は、復元の直後も最初の 1 周の後も代表にならない（worktreeKey を保存する）", async () => {

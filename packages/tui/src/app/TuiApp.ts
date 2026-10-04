@@ -348,6 +348,7 @@ export class TuiApp {
       detach: () => this.detach(),
       serverStopRequested: () => this.net?.expectStop(),
       toggleSidebar: () => this.toggleSidebar(),
+      toggleSidebarSection: (section) => this.toggleSidebarSection(section),
       focusNextNotification: () => this.notify.focusNext(),
       pasteImage: () => {
         const id = this.model.focusedPaneId;
@@ -414,6 +415,8 @@ export class TuiApp {
       openLink: (url) => this.openLink(url),
       switchMachine: (id, target) => this.switchMachine(id, target),
       toggleMachine: (id) => this.machines.toggleCollapsed(id),
+      toggleSidebarSection: (section) => this.toggleSidebarSection(section),
+      sectionsCollapsed: () => this.prefs.sectionsCollapsed,
       copyOnSelect: () => this.prefs.copyOnSelect,
       toastHits: () => this.toastHits,
       scrollSidebar: (section, delta) => {
@@ -1080,8 +1083,34 @@ export class TuiApp {
     writeTuiState(this.target.stateDir, next).catch(() => undefined);
   }
 
+  /** 区画（spaces・agents）の折りたたみを切り替え、`tui-state.json` に残す（20261004-ui-interaction-polish）。畳んだ区画だけを持つ。 */
+  protected toggleSidebarSection(section: "spaces" | "agents"): void {
+    // agents が 0 件のときは区切りの行が出ず畳む対象が無い（描画と同じ規則）。黙って状態だけ反転させない。
+    if (section === "agents" && ![...this.model.panes.values()].some((p) => p.agent)) return;
+    const now = this.prefs.sectionsCollapsed;
+    const next = { ...now, [section]: !now[section] };
+    const keep: { spaces?: true; agents?: true } = {};
+    if (next.spaces) keep.spaces = true;
+    if (next.agents) keep.agents = true;
+    const { sidebarSectionsCollapsed: _drop, ...rest } = this.prefs.localState;
+    void _drop;
+    const state: TuiState = Object.keys(keep).length > 0 ? { ...rest, sidebarSectionsCollapsed: keep } : rest;
+    this.prefs.setLocal(state);
+    writeTuiState(this.target.stateDir, state).catch(() => undefined);
+    this.scheduleRender();
+  }
+
+  /** navigate に入ったとき、畳んだ spaces を開く（web と同じ。行の選択の枠が見えない）。 */
+  private navigateWasOn = false;
+  private openSpacesForNavigate(): void {
+    const on = this.keys.mode === "navigate";
+    if (on && !this.navigateWasOn && this.prefs.sectionsCollapsed.spaces) this.toggleSidebarSection("spaces");
+    this.navigateWasOn = on;
+  }
+
   /** 見せる workspace・tab・pane・navigate の選択が変わったら、サイドバーの区画と tab バーをそこまで動かす。 */
   private revealChanges(): void {
+    this.openSpacesForNavigate();
     const { workspaceId, tabId, focusedPaneId } = this.model;
     const nav = this.ui.navigateSelection;
     const s = this.shown;

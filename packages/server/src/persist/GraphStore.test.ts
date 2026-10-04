@@ -1,7 +1,7 @@
 import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Graph, GraphOp, NodeKey } from "@sodashitsu/protocol";
+import { UUID_RE, type Graph, type GraphOp, type NodeKey } from "@sodashitsu/protocol";
 import { defaultTriggerConfig } from "@sodashitsu/client-core";
 import { makeTempDir } from "./atomicFile.js";
 import {
@@ -13,7 +13,7 @@ import {
   GraphStoreClosedError,
 } from "./GraphStore.js";
 
-// 20260927-agent-graph の T3：グラフの保存（graph.json・rev・壊れたファイル・stale）。
+// 20260927-agent-graph の T3：グラフの保存（graph.json・rev・壊れたファイル）。
 const A = "local:p1";
 const B = "local:p2";
 const R: NodeKey = `${"e".repeat(32)}:p1`;
@@ -35,7 +35,9 @@ describe("GraphStore", () => {
     return d;
   }
   async function loaded(dir?: string): Promise<GraphStore> {
-    const store = new GraphStore(dir ?? (await tempDir()));
+    // 線の id は決まった順（l1・l2…）を差し込む（既定の UUID は別の試験で確かめる）。
+    let n = 0;
+    const store = new GraphStore(dir ?? (await tempDir()), undefined, () => `l${++n}`);
     await store.load();
     return store;
   }
@@ -62,14 +64,20 @@ describe("GraphStore", () => {
       expect((await stat(join(dir, GRAPH_FILE_NAME))).mode & 0o777).toBe(0o600);
   });
 
-  it("消した線の番号は再起動をまたいでも使い回さない", async () => {
+  it("既定の線の id は UUID で、消した線の id も再起動をまたいで使い回さない", async () => {
     const dir = await tempDir();
-    const a = await loaded(dir);
-    await a.update(0, build, "c1");
-    await a.update(1, [{ op: "remove_link", id: "l1" }], "c1");
-    const b = await loaded(dir);
+    const a = new GraphStore(dir);
+    await a.load();
+    const g1 = await a.update(0, build, "c1");
+    const first = g1.links[0]!.id;
+    expect(first).toMatch(UUID_RE);
+    await a.update(1, [{ op: "remove_link", id: first }], "c1");
+    const b = new GraphStore(dir);
+    await b.load();
     const g = await b.update(2, [{ op: "add_link", kind: "supervise", from: A, to: B }], "c1");
-    expect(g.links.map((l) => l.id)).toEqual(["l2"]);
+    expect(g.links).toHaveLength(1);
+    expect(g.links[0]!.id).toMatch(UUID_RE);
+    expect(g.links[0]!.id).not.toBe(first);
   });
 
   it("baseRev が今の rev と違えば GraphRevConflictError で、保存も rev も変えない", async () => {
@@ -162,7 +170,6 @@ describe("GraphStore", () => {
       JSON.stringify({
         schema: 2,
         rev: 1,
-        nextLinkId: 1,
         graph: { paused: false, nodes: [], links: [] },
       }),
     ],
@@ -171,7 +178,6 @@ describe("GraphStore", () => {
       JSON.stringify({
         schema: 1,
         rev: 1,
-        nextLinkId: 1,
         graph: { paused: "no", nodes: [], links: [] },
       }),
     ],
@@ -180,7 +186,6 @@ describe("GraphStore", () => {
       JSON.stringify({
         schema: 1,
         rev: 1,
-        nextLinkId: 2,
         graph: {
           paused: false,
           nodes: [],
@@ -195,7 +200,6 @@ describe("GraphStore", () => {
       JSON.stringify({
         schema: 1,
         rev: 1,
-        nextLinkId: 3,
         graph: {
           paused: false,
           nodes: [
@@ -209,32 +213,6 @@ describe("GraphStore", () => {
         },
       }),
     ],
-    [
-      "線の id の番号が安全な整数を超える（01 のレビュー ラウンド 1）",
-      JSON.stringify({
-        schema: 1,
-        rev: 1,
-        nextLinkId: 1,
-        graph: {
-          paused: false,
-          nodes: [
-            { key: A, x: 0, y: 0 },
-            { key: B, x: 0, y: 0 },
-          ],
-          links: [
-            {
-              id: "l9007199254740993",
-              kind: "supervise",
-              from: A,
-              to: B,
-              limit: 10,
-              count: 0,
-              paused: null,
-            },
-          ],
-        },
-      }),
-    ],
   ])("壊れたファイル（%s）は退避して空から始める", async (_name, content) => {
     const dir = await tempDir();
     await writeFile(join(dir, GRAPH_FILE_NAME), content);
@@ -242,53 +220,6 @@ describe("GraphStore", () => {
     expect(typeof (await store.load())).toBe("object");
     expect(store.get()).toEqual({ rev: 0, paused: false, nodes: [], links: [] });
     expect((await readdir(join(dir, "graph-backups"))).length).toBe(1);
-  });
-
-  it("nextLinkId が線の番号以下なら最大の番号の次から振る", async () => {
-    const dir = await tempDir();
-    await writeFile(
-      join(dir, GRAPH_FILE_NAME),
-      JSON.stringify({
-        schema: 1,
-        rev: 4,
-        nextLinkId: 1,
-        graph: {
-          paused: false,
-          nodes: [
-            { key: A, x: 0, y: 0 },
-            { key: B, x: 0, y: 0 },
-          ],
-          links: [
-            { id: "l5", kind: "supervise", from: A, to: B, limit: 10, count: 0, paused: null },
-          ],
-        },
-      }),
-    );
-    const store = await loaded(dir);
-    const g = await store.update(4, [{ op: "add_link", kind: "supervise", from: B, to: A }], "c1");
-    expect(g.links.map((l) => l.id)).toEqual(["l5", "l6"]);
-  });
-
-  it("markLocalStale は手元のノードだけを無効にして保存する（別のマシンのノードはそのまま）。無ければ保存しない", async () => {
-    const dir = await tempDir();
-    const empty = await loaded(dir);
-    expect(await empty.markLocalStale()).toBe(0);
-    expect(empty.get().rev).toBe(0);
-    await empty.update(0, build, "c1");
-    const store = await loaded(dir);
-    expect(await store.markLocalStale()).toBe(2);
-    const reread = await loaded(dir);
-    expect(reread.get().nodes).toEqual([
-      { key: A, x: 0, y: 0, stale: true },
-      { key: B, x: 240, y: 0, stale: true },
-      { key: R, x: 480, y: 0 },
-    ]);
-    // 既に無効なら数えない・保存しない
-    expect(await reread.markLocalStale()).toBe(0);
-    expect(reread.get().rev).toBe(2);
-    // 選び直すと無効の印が外れる
-    const g = await reread.update(2, [{ op: "rekey_node", key: A, newKey: "local:p5" }], "c1");
-    expect(g.nodes[0]).toEqual({ key: "local:p5", x: 0, y: 0 });
   });
 
   it("変化の無い pause・resume（既にその状態）は rev を進めず、知らせも保存もしない（g01 点検）", async () => {
@@ -324,21 +255,8 @@ describe("GraphStore", () => {
       store.update(1, [{ op: "move_node", key: A, x: 20, y: 20 }], "c1"),
     ).rejects.toBeInstanceOf(GraphStoreClosedError);
     await expect(store.pause(undefined, "c1")).rejects.toBeInstanceOf(GraphStoreClosedError);
-    await expect(store.markLocalStale()).rejects.toBeInstanceOf(GraphStoreClosedError);
     expect(await readFile(join(dir, GRAPH_FILE_NAME), "utf8")).toBe(before);
     expect(store.get().rev).toBe(1);
-  });
-
-  it("markLocalStale に条件を渡すと、その pane の手元のノードだけを無効にする（01 のレビュー ラウンド 1）", async () => {
-    const dir = await tempDir();
-    const store = await loaded(dir);
-    await store.update(0, build, "c1"); // local:p1・local:p2・リモートの p1
-    expect(await store.markLocalStale((paneId) => paneId === "p2")).toBe(1);
-    expect(store.get().nodes.map((n) => [n.key, n.stale === true])).toEqual([
-      [A, false],
-      [B, true],
-      [R, false],
-    ]);
   });
 
   it("recordRun は回数を 1 増やし、上限に達したら paused: limit にする（サーバの変更なので byClientId は null）。線が無ければ何もしない", async () => {

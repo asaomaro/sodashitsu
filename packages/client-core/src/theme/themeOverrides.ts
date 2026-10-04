@@ -127,4 +127,5 @@ export const CSS_VAR_LABELS: Readonly<Record<CssVar, string>> = {
   "--soda-backdrop": "ダイアログの幕",
   "--soda-backdrop-strong": "再接続の表示の幕",
   "--soda-pane-current": "選ばれている pane の枠",
+  "--soda-resize-line": "境目の線",
 };

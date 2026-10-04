@@ -12,6 +12,7 @@ import type {
   ResultOf,
   ServerEvent,
 } from "@sodashitsu/protocol";
+import { shortId } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import {
@@ -64,7 +65,6 @@ export interface GraphNodeInfo {
   state: DisplayState | null;
   /** pane があるか（無い・閉じた＝false。マシンが繋がっていない・要約がまだ無い＝null〔分からない。未接続の印〕）。 */
   exists: boolean | null;
-  stale: boolean;
   /** pane のある workspace・tab（分かれば）。 */
   location: { workspaceId: string; tabId: string } | null;
 }
@@ -327,20 +327,19 @@ export const useGraphStore = defineStore("graph", () => {
     const machineLabel = local
       ? "ローカル"
       : (machines.machines.find((m) => m.id === machine)?.label ?? "別のマシン");
-    const stale = graph.value?.nodes.find((n) => n.key === key)?.stale === true;
-    const base = { key, machine, paneId, local, machineLabel, stale };
+    const base = { key, machine, paneId, local, machineLabel };
     const connected = machineConnected(machine);
     // 画面の接続が向いているマシンの pane は、session の全体（呼び名・場所）がある。
     if (machine === machines.selectedId) {
       const pane = session.panes.get(paneId);
-      if (!pane || stale)
+      if (!pane)
         return {
           ...base,
-          name: `pane ${paneId}`,
+          name: `pane ${shortId(paneId)}`,
           agent: null,
           state: null,
           // 切れている・切り替えの途中（session が空）は「分からない」（無効と出さない。g04 点検）
-          exists: stale ? false : connected ? false : null,
+          exists: connected ? false : null,
           location: null,
         };
       const agent = pane.agent;
@@ -363,10 +362,10 @@ export const useGraphStore = defineStore("graph", () => {
     if (!entry) {
       return {
         ...base,
-        name: `pane ${paneId}`,
+        name: `pane ${shortId(paneId)}`,
         agent: null,
         state: null,
-        exists: stale ? false : connected ? false : null,
+        exists: connected ? false : null,
         location: null,
       };
     }
@@ -384,7 +383,7 @@ export const useGraphStore = defineStore("graph", () => {
               seen.getSeenSeqIn(machine, agent.instanceId, agent.serverSeenSeq),
             )
           : null,
-      exists: stale ? false : connected ? true : null,
+      exists: connected ? true : null,
       location: workspaceId ? { workspaceId, tabId: entry.tabId } : null,
     };
   }

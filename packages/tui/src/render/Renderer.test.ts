@@ -113,8 +113,8 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
         .filter((h) => h.kind !== "area")
         .map((h) => (h.kind === "sort" ? `sort:${h.section}` : h.kind)),
     ).toEqual([
-      "newWorkspace",
-      "sort:spaces",
+      "sectionHeader", // spaces の見出しの行（押すと折りたたみ。20261004-ui-interaction-polish）
+      "newWorkspace", // 見出しが「▾ Spaces」と 2 桁広がったので、この狭さでは spaces の並び順も出ない（印と題を優先）
       "workspace",
       "workspace",
       "sectionDivider", // 狭いサイドバーでは agents の並び順のボタンは出さない（見出しと重なる）
@@ -122,7 +122,7 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
       "agent",
       "collapse",
     ]);
-    expect(outer.line(0)).toContain("開いた順");
+    expect(outer.line(0)).toContain("▾ Spaces"); // この狭さでは並び順（開いた順）は出ない
     expect(r.tabHits.map((h) => h.tabId)).toEqual(["t1"]);
     // 本物のカーソルは焦点の pane（p1）のカーソルの位置（中身の左上 + カーソル）。
     const p1Box = layout().panes.find((b) => b.paneId === "p1")!.content;

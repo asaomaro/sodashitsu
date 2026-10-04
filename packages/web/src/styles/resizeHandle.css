@@ -1,0 +1,96 @@
+/*
+ * 境目（サイドバーの幅・pane の間・spaces と agents）の見た目（20261004-ui-interaction-polish）。
+ * 3 か所が同じクラス `resize-handle`（と向きの `resize-handle-x`／`-y`）を付ける。動きは `composables/useResizeDrag.ts`。
+ * 通常の細い線は各部品のまま残し、**強調の線は `::after` で重ねる**。当たり判定も `::before` で広げる——境目の要素の大きさ
+ * （＝レイアウト）は変えない。
+ */
+.resize-handle {
+  position: relative;
+  z-index: 1;
+  touch-action: none;
+}
+
+/* 当たり判定: 中心から両側へ合計 8px（太さ 2px の pane の境目でも 8px）。透明。 */
+.resize-handle::before {
+  content: "";
+  position: absolute;
+}
+.resize-handle-x::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 8px;
+  margin-left: -4px;
+}
+.resize-handle-y::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 8px;
+  margin-top: -4px;
+}
+
+/* 強調の線: 中心に太さ 3px。通常は出ない。消えるときは待たずに 0.12 秒。 */
+.resize-handle::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  background: var(--soda-resize-line, #f8f8f2);
+  opacity: 0;
+  transition: opacity 0.12s ease 0s;
+}
+.resize-handle-x::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 3px;
+  margin-left: -1.5px;
+}
+.resize-handle-y::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 3px;
+  margin-top: -1.5px;
+}
+
+/* 出る条件。hover は 0.15 秒待ってから出る（通りすがりに出ない）。キーボードの focus とドラッグ中は待たない。 */
+.resize-handle:hover::after {
+  opacity: 1;
+  transition: opacity 0.12s ease 0.15s;
+}
+.resize-handle:focus-visible::after,
+.resize-handle.resize-handle-active::after {
+  opacity: 1;
+  transition: opacity 0.12s ease 0s;
+}
+/* 線が印になるので outline は出さない。 */
+.resize-handle:focus-visible {
+  outline: none;
+}
+
+/* ドラッグ中（`<html>` のクラス。`useResizeDrag` が付け外しする）: カーソルの固定・文字の選択の禁止・掴んでいない境目の線を出さない。 */
+html.soda-resizing-x,
+html.soda-resizing-x * {
+  cursor: col-resize !important;
+}
+html.soda-resizing-y,
+html.soda-resizing-y * {
+  cursor: row-resize !important;
+}
+html.soda-resizing * {
+  user-select: none !important;
+}
+html.soda-resizing .resize-handle:not(.resize-handle-active)::after {
+  opacity: 0;
+}
+
+/* OS の「動きを減らす」: 動く時間を 0 にする（待ち `transition-delay` は残す）。詳細度の高い規則も覆うため、出る条件を全部並べる。 */
+@media (prefers-reduced-motion: reduce) {
+  .resize-handle::after,
+  .resize-handle:hover::after,
+  .resize-handle:focus-visible::after,
+  .resize-handle.resize-handle-active::after {
+    transition-duration: 0s;
+  }
+}

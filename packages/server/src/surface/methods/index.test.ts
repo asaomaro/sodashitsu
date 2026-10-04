@@ -1,4 +1,4 @@
-import { TERMINAL_PALETTES, type HostInfo } from "@sodashitsu/protocol";
+import { TERMINAL_PALETTES, UUID_RE, type HostInfo } from "@sodashitsu/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Disposable } from "../../util/Disposable.js";
 import { MemoryLogger } from "../../log/Logger.js";
@@ -476,7 +476,7 @@ describe("registerAllMethods — client / workspace / tab / pane flow", () => {
     const createResult = await ctx.surface.invoke(c, "group.create", { label: "backend" });
     if (!createResult.ok) throw new Error("unreachable");
     const group = (createResult.result as { group: { id: string; label: string; collapsed: boolean } }).group;
-    expect(group).toEqual({ id: "g1", label: "backend", collapsed: false });
+    expect(group).toEqual({ id: expect.stringMatching(UUID_RE), label: "backend", collapsed: false });
 
     expect(await ctx.surface.invoke(c, "group.rename", { groupId: group.id, label: "frontend" })).toEqual({ ok: true, result: {} });
     expect(await ctx.surface.invoke(c, "group.toggle_collapsed", { groupId: group.id })).toEqual({ ok: true, result: {} });

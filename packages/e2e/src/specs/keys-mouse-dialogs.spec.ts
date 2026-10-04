@@ -198,8 +198,9 @@ test("右クリック（M7）：「pane に送る」にした pane では、端�
 
   // pane の枠：pane の置き場の左端の縁。以前は端末が置き場の端まであり、同じ所の右クリックもアプリへ届いた。
   const outputMark = client.rawOutput(p1).length;
+  // 左端の 4px はサイドバーの幅の境目が受ける（20261004-ui-interaction-polish の D2）ので、上端の縁で確かめる（下端・右端ではメニューが画面の外へ出る）。
   const area = (await page.locator(".app-panes").boundingBox())!;
-  await page.mouse.click(area.x + 2, area.y + area.height / 2, { button: "right" });
+  await page.mouse.click(area.x + area.width / 2, area.y + 2, { button: "right" });
   await expect(menu).toBeVisible();
   // メニューから既定（herdr のメニュー）へ戻す。
   const updated = client.waitForEvent("pane.updated", (e) => e.data.pane.id === p1 && e.data.pane.rightClick === "herdr");
@@ -208,7 +209,7 @@ test("右クリック（M7）：「pane に送る」にした pane では、端�
   await expect(menu).toBeHidden();
 
   // ブラウザにも反映された（枠のメニューの項目が戻っている）ことを画面で確かめてから、端末の上を右クリックする（D104）。
-  await page.mouse.click(area.x + 2, area.y + area.height / 2, { button: "right" });
+  await page.mouse.click(area.x + area.width / 2, area.y + 2, { button: "right" });
   await expect(menu.getByRole("menuitem", { name: "右クリックを pane に送る" })).toBeVisible();
   await page.keyboard.press("Escape");
   await terminalScreen(page).click({ button: "right", position: { x: 60, y: 40 } });
@@ -263,6 +264,9 @@ function describeFocus(page: Page): Promise<string> {
     const where = index >= 0 ? `@pane${index + 1}` : "";
     if (active.classList.contains("pane-frame-edge")) return `frame${where}`;
     if (active.classList.contains("xterm-helper-textarea")) return `terminal${where}`;
+    // 3 か所の境目（サイドバーの幅・区画・pane の間）を区別する（20261004-ui-interaction-polish）。
+    if (active.classList.contains("sidebar-divider")) return "sidebar-width";
+    if (active.classList.contains("sidebar-section-divider")) return "sidebar-sections";
     if (active.getAttribute("role") === "separator") return "splitter";
     if (active.classList.contains("tab-bar-item")) return "tab";
     if (active.classList.contains("tab-bar-new")) return "newTab";
@@ -449,8 +453,9 @@ test("pane の枠：選ばれている pane を 2px の線で強調し、マウ�
   expect(padding, "枠の外寸（padding）は 4px のまま").toBe("4px");
 
   // 4px の帯にポインタを乗せる。`locator.hover()` は中央を狙うので `.pane-frame-body` に横取りされる。
+  // 左端の 4px は、サイドバーの幅の境目（外へ 4px はみ出して掴める。20261004-ui-interaction-polish の D2）が受けるので、右端の帯で確かめる。
   const area = (await page.locator(".app-panes").boundingBox())!;
-  await page.mouse.move(area.x + 2, area.y + area.height / 2);
+  await page.mouse.move(area.x + area.width - 2, area.y + area.height / 2);
   // **ポインタが本当に帯の上に乗ったか**をブラウザに聞く。これを省くと、座標がずれてホバーが成立しなくても
   // 「前後で変わらない」が成り立ってしまい、`:hover` が復活しても気づけない（空振りのテストになる）。
   await expect
@@ -509,7 +514,7 @@ test("全体のメニュー：キーボードだけで開いて閉じ、開い�
   // サイドバーは DOM の先頭側にあるので、焦点を外した状態から Tab を押すと足したボタンが順に出る。
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   const reached: string[] = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 12; i++) {
     await page.keyboard.press("Tab");
     reached.push(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.className ?? ""));
   }
@@ -517,7 +522,10 @@ test("全体のメニュー：キーボードだけで開いて閉じ、開い�
   // 5 つのボタンが、この順に Tab で出る（DOM の順＝spaces の並び順・＋新規・メニュー・agents の並び順・折りたたみ。
   // 20260922-appearance-settings-rest で spaces 区画にも並び順ボタンが増えた）。
   // 先頭にはクラス名を持たない要素が挟まることがあるので、見たい要素だけを抜き出して順序を見る。
-  const btns = reached.filter((c) => c.includes("sidebar-btn") || c.includes("tab-bar-item"));
+  // 20261004-ui-interaction-polish: 区画の見出しのボタン（`sidebar-section-toggle`）と 2 つの境目（`resize-handle`）も Tab で止まる。この順で挟まる:
+  // spaces の見出し → spaces の並び順 → ＋ → メニュー → 区画の境目 → agents の見出し → agents の並び順 → 折りたたみ → サイドバーの幅の境目。
+  expect(reached.filter((c) => c !== "").slice(0, 9).map((c) => (c.includes("section-toggle") ? "toggle" : c.includes("resize-handle") ? "divider" : c.includes("sort-btn") ? "sort" : c.includes("sidebar-btn-right") ? "menu" : c.includes("collapse") ? "collapse" : "plus")), trail).toEqual(["toggle", "sort", "plus", "menu", "divider", "toggle", "sort", "collapse", "divider"]);
+  const btns = reached.filter((c) => (c.includes("sidebar-btn") && !c.includes("section-toggle")) || c.includes("tab-bar-item"));
   expect(btns[0], trail).toContain("sidebar-sort-btn"); // spaces の並び順
   expect(btns[1], trail).toBe("sidebar-btn"); // ＋ 新規
   expect(btns[2], trail).toContain("sidebar-btn-right"); // メニュー

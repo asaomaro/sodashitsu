@@ -102,6 +102,7 @@ function harness(snap: SessionSnapshot = snapshot(), responses: Record<string, R
     pasteText: vi.fn(),
     detach: vi.fn(),
     toggleSidebar: vi.fn(),
+    toggleSidebarSection: vi.fn(),
     setCommands: vi.fn(),
     focusNextNotification: vi.fn(),
     pasteImage: vi.fn(),
@@ -116,7 +117,7 @@ const flush = async () => {
 };
 
 /**
- * 全操作（カタログの 58 操作。添字つきは 1）の効果の表。**web の `ActionDispatcher` の同じ操作と同じ RPC・引数・ダイアログ**（焦点は p1・w1/t1〔p1|p2〕・w2/t2〔p3〕）。
+ * 全操作（カタログの 60 操作。添字つきは 1）の効果の表。**web の `ActionDispatcher` の同じ操作と同じ RPC・引数・ダイアログ**（焦点は p1・w1/t1〔p1|p2〕・w2/t2〔p3〕）。
  * 表に無い操作があれば落ちる（足し忘れの検出）。
  */
 const EFFECTS: Record<
@@ -124,7 +125,7 @@ const EFFECTS: Record<
   {
     rpc?: [string, unknown];
     dialog?: string;
-    host?: "detach" | "focusNextNotification" | "pasteImage" | "toggleSidebar";
+    host?: "detach" | "focusNextNotification" | "pasteImage" | "toggleSidebar" | "toggleSidebarSection";
     none?: true;
     mode?: true;
     toast?: true;
@@ -138,6 +139,9 @@ const EFFECTS: Record<
   stop_server: { dialog: "confirmStopServer" },
   // 20261004-subagent-display。エージェントが無い pane では何も起きない（動きは T13 で足す）。
   show_subagents: { none: true },
+  // 20261004-ui-interaction-polish。端末版の区画の折りたたみ。
+  toggle_spaces_section: { host: "toggleSidebarSection" },
+  toggle_agents_section: { host: "toggleSidebarSection" },
   workspace_picker: { mode: true },
   goto: { dialog: "goto" },
   new_workspace: {
@@ -199,10 +203,10 @@ const EFFECTS: Record<
   open_graph: { toast: true },
 };
 
-describe("TuiDispatcher — 全操作の効果（web の 58 操作と同じ RPC・引数・ダイアログ）", () => {
+describe("TuiDispatcher — 全操作の効果（web の 60 操作と同じ RPC・引数・ダイアログ）", () => {
   it("表はカタログの全操作をちょうど覆う", () => {
     expect(Object.keys(EFFECTS).sort()).toEqual(ACTIONS.map((d) => d.id).sort());
-    expect(ACTIONS).toHaveLength(58);
+    expect(ACTIONS).toHaveLength(60);
   });
 
   it.each(ACTIONS.map((d) => [d.id, d as ActionDef] as const))("%s", (id, def) => {
@@ -642,6 +646,14 @@ describe("TuiDispatcher — モード・その他", () => {
     expect(h.host.detach).toHaveBeenCalled();
     expect(h.host.focusNextNotification).toHaveBeenCalled();
     expect(h.host.pasteImage).toHaveBeenCalled();
+  });
+
+  it("toggleSidebarSection は host へ区画の名前を渡す（20261004-ui-interaction-polish）", () => {
+    const h = harness();
+    h.d.run({ type: "toggleSidebarSection", section: "spaces" });
+    h.d.run({ type: "toggleSidebarSection", section: "agents" });
+    expect(h.host.toggleSidebarSection).toHaveBeenNthCalledWith(1, "spaces");
+    expect(h.host.toggleSidebarSection).toHaveBeenNthCalledWith(2, "agents");
   });
 
   it("editScrollback：pane.edit_scrollback の応答の pane へ焦点。すぐ閉じていたら元のまま。失敗は知らせる", async () => {

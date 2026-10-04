@@ -41,9 +41,11 @@ test -n "${SODA_PANE_ID:-}"
 
 ## ID と自分の位置
 
-- ID は workspace が `w1`、tab が `t1`、pane が `p1` の形。閉じたものの ID は使い回されない。**ID は推測せず、応答の JSON から読む**
+- ID（workspace・tab・pane・グラフの線）は UUID（`3f2a9c10-1111-4111-8111-aaaaaaaaaaaa` の形）。閉じたものの ID は使い回されない。**ID は推測せず、応答の JSON から読む**
   （`workspace create` は `.workspace.id`・`.tab.id`・`.pane.id`、`tab create` は `.tab.id`・`.pane.id`、`pane split` は `.pane.id`）。
-- 自分の pane は `$SODA_PANE_ID`。自分が**今**居る tab・workspace は `sodactl pane current` で聞く（利用者が pane を別の tab・workspace へ移すことがあるので、
+- 長いので、pane・tab・workspace・線の指定は、**一意に決まる先頭の部分（4 文字以上。例 `3f2a9c10`）**でもよい（`sodactl` が一覧から完全な ID に直す）。
+  曖昧なら `id_ambiguous`（候補が出る）、当たらなければ `not_found`。完全な ID を渡すのが確実で、表（`graph show` など）の短い呼び名（先頭 8 文字）はそのまま写せる。
+- 自分の pane は `$SODA_PANE_ID`（完全な ID）。自分が**今**居る tab・workspace は `sodactl pane current` で聞く（利用者が pane を別の tab・workspace へ移すことがあるので、
   前に読んだ値を使い回さない）:
 
 ```bash
@@ -189,13 +191,13 @@ sodactl graph pause --json                                         # 全部の�
 sodactl graph history "$l" --json | jq '.runs[:5]'
 ```
 
-- 端は pane ID・エージェントの名前・`<マシンの名前>:<pane ID>`（別のマシンの pane）。載っていない pane は線と一緒にグラフへ載る（`sodactl graph node add` で先に載せてもよい）。
-  ノードの鍵は `local:p3`・`<マシンの id>:p7` の形で JSON に出る。
+- 端は pane ID（先頭の部分でも）・エージェントの名前・`<マシンの名前>:<pane の完全な ID>`（別のマシンの pane。部分・名前は不可）。載っていない pane は線と一緒にグラフへ載る（`sodactl graph node add` で先に載せてもよい）。
+  ノードの鍵は `local:<pane の UUID>`・`<マシンの id>:<pane の UUID>` の形で JSON に出る（表の `node`・`from`・`to` は先頭 8 文字の短い呼び名）。
 - 線ごとに実行回数の上限（`--limit`。既定 10、1〜100）があり、達するとその線は止まる（`paused: "limit"`）。**上限で止まった線・利用者が止めた線を自分で再開しない**。
 - 往復する線（A→B と B→A）は上限まで回り続ける。作るときは上限を小さくする。
 - 変えられなかったときの `rev_conflict` は、取り直して 1 回送り直した後も他で変わり続けたということ。`sodactl graph show` で今の形を見てから決める。
-- 無効（`stale`：サーバが起動時に保存した session を読めず、pane の番号を振り直した）・閉じた pane のノードは、`sodactl graph node rekey <pane> <新しい pane>` で同じマシンの pane に選び直すか、
-  `sodactl graph node rm <pane>` で外す（外すとその線も消える）。
+- 閉じた pane のノードは、手元の pane なら閉じたときに自動で外れる（線も消える）。別のマシンの pane が閉じたノード（画面では無効と出る。`graph show` の `status` は `-`）は残るので、
+  `sodactl graph node rekey <pane> <新しい pane>` で同じマシンの pane に選び直すか、`sodactl graph node rm <pane>` で外す（外すとその線も消える。閉じた pane は完全な ID で指す）。
 - `sodactl graph link set <線>` で設定を変え、`sodactl graph link rm <線>` で消す。
 - 文面が `--` で始まるときは `--prompt=<文面>` の形で渡す（離して書くと値の無いオプションとして断られる）。
 

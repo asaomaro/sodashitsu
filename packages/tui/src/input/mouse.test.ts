@@ -423,6 +423,80 @@ describe("マウスの操作（AC9・AC-I5）", () => {
     expect(after.find((x) => x.kind === "sectionDivider")!.y).toBe(div.y + 5);
   });
 
+  // 20261004-ui-interaction-polish（区画の折りたたみ。見出しのクリック・区切りのクリックとドラッグの区別）。
+  describe("区画の折りたたみ", () => {
+    const agentSnap = () =>
+      snapshot({
+        panes: [
+          pane("p1", "t1"),
+          pane("p3", "t2", {
+            agent: { instanceId: "a", kind: "claude", label: "Claude", state: "idle", completionSeq: 0, serverSeenSeq: 0, verified: true, since: 0 },
+          }),
+        ],
+      });
+    const hitsOf = (h: Awaited<ReturnType<typeof start>>) => {
+      h.app.renderNow();
+      return (h.app as unknown as { sidebarHits: { kind: string; y: number }[] }).sidebarHits;
+    };
+
+    it("spaces の見出しの行を押すと spaces を畳み、もう一度で開く（保存する）", async () => {
+      const h = await start({ snapshot: agentSnap() });
+      const header = hitsOf(h).find((x) => x.kind === "sectionHeader")!;
+      h.io.type(down(3, header.y) + up(3, header.y));
+      expect(h.app.prefs.sectionsCollapsed).toEqual({ spaces: true, agents: false });
+      h.io.type(down(3, header.y) + up(3, header.y));
+      expect(h.app.prefs.sectionsCollapsed).toEqual({ spaces: false, agents: false });
+    });
+
+    it("区切りの行を動かさずに離すと agents を畳む。高さは変えない・保存しない", async () => {
+      const h = await start({ snapshot: agentSnap() });
+      const div = hitsOf(h).find((x) => x.kind === "sectionDivider")!;
+      h.io.type(down(3, div.y) + up(3, div.y));
+      expect(h.app.prefs.sectionsCollapsed).toEqual({ spaces: false, agents: true });
+      expect(h.app.prefs.sidebarSpacesRows).toBeUndefined();
+    });
+
+    it("区切りの行を動かすと高さが変わり、畳まない", async () => {
+      const h = await start({ snapshot: agentSnap() });
+      const div = hitsOf(h).find((x) => x.kind === "sectionDivider")!;
+      h.io.type(down(3, div.y) + drag(3, div.y + 2) + up(3, div.y + 2));
+      expect(h.app.prefs.sidebarSpacesRows).toBe(div.y + 2);
+      expect(h.app.prefs.sectionsCollapsed).toEqual({ spaces: false, agents: false });
+    });
+
+    it("区切りを動かしてから元の行へ戻して離しても、畳まない（動かしたことは残る）", async () => {
+      const h = await start({ snapshot: agentSnap() });
+      const div = hitsOf(h).find((x) => x.kind === "sectionDivider")!;
+      h.io.type(down(3, div.y) + drag(3, div.y + 2) + drag(3, div.y) + up(3, div.y));
+      expect(h.app.prefs.sectionsCollapsed).toEqual({ spaces: false, agents: false });
+    });
+
+    it("agents が 0 件のとき、操作で agents の折りたたみを反転させない（区切りの行が無く見えないため）", async () => {
+      const h = await start();
+      (h.app as unknown as { toggleSidebarSection(s: string): void }).toggleSidebarSection("agents");
+      expect(h.app.prefs.sectionsCollapsed).toEqual({ spaces: false, agents: false });
+    });
+
+    it("navigate に入ると、畳んだ spaces を開く（agents は開かない）", async () => {
+      const h = await start({ snapshot: agentSnap() });
+      h.app.prefs.setLocal({ sidebarSectionsCollapsed: { spaces: true, agents: true } });
+      h.io.type("\x02w");
+      await vi.waitFor(() => expect(h.app.keys.mode).toBe("navigate"));
+      h.app.renderNow();
+      expect(h.app.prefs.sectionsCollapsed).toEqual({ spaces: false, agents: true });
+    });
+
+    it("どちらかを畳んでいる間は、区切りを動かしても高さを変えず、畳み直しもしない", async () => {
+      const h = await start({ snapshot: agentSnap() });
+      const header = hitsOf(h).find((x) => x.kind === "sectionHeader")!;
+      h.io.type(down(3, header.y) + up(3, header.y)); // spaces を畳む
+      const div = hitsOf(h).find((x) => x.kind === "sectionDivider")!;
+      h.io.type(down(3, div.y) + drag(3, div.y + 3) + up(3, div.y + 3));
+      expect(h.app.prefs.sidebarSpacesRows).toBeUndefined();
+      expect(h.app.prefs.sectionsCollapsed).toEqual({ spaces: true, agents: false });
+    });
+  });
+
   it("全角の行でもダブルクリックの単語と選択の写しがセルの列で合う（04 の点検）", async () => {
     const h = await start();
     const t = h.app.panes.get("p1")!;

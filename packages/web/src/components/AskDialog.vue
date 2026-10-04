@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AskAnswerBody, AskPending } from "@sodashitsu/protocol";
+import { shortId } from "@sodashitsu/protocol";
 import { paneNameOf } from "@sodashitsu/client-core";
 import { computed, inject, nextTick, onBeforeUnmount, ref, toRaw, watch } from "vue";
 import { focusPaneIfShown } from "../actions/paneFocus.js";
@@ -44,7 +45,7 @@ const paneName = computed(() => {
   const a = ask.value;
   if (!a) return "";
   const pane = session.panes.get(a.paneId);
-  return pane ? paneNameOf(pane) : `pane ${a.paneId}`;
+  return pane ? paneNameOf(pane) : `pane ${shortId(a.paneId)}`;
 });
 /** 成果物（`view`）つきか。つきなら左（モバイルは上）に枠を置き、ダイアログを広く・高く固定する。 */
 const views = computed(() => ask.value?.resolved?.views ?? []);

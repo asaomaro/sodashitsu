@@ -292,9 +292,9 @@ export class SessionService {
     this.model.setTabSizeOwner(tabId, clientId);
   }
 
-  /** `session.json` の保存に使う（`nextId` の引き継ぎ。design「永続化の形式」）。 */
-  getNextIdCounters(): ReturnType<SessionModel["getNextIdCounters"]> {
-    return this.model.getNextIdCounters();
+  /** workspace を作った順の番号（小さいほど先。判定の反映の順に使う）。 */
+  creationRank(id: WorkspaceId): number {
+    return this.model.creationRank(id);
   }
 
   /**
@@ -317,10 +317,9 @@ export class SessionService {
     this.publishSidebarChanges();
   }
 
-  /** 検出したエージェントのインスタンス id を払い出す（`"a1"` 等。02-agent-detection の `AgentTracker` が使う。T8）。
-   *  `nextId` は `session.json` に永続化されるので、再起動後も重複しない（design「done」の注記）。 */
+  /** 検出したエージェントのインスタンス id を払い出す（UUID。02-agent-detection の `AgentTracker` が使う。T8）。 */
   allocateAgentInstanceId(): string {
-    const id = this.model.nextId("a");
+    const id = this.model.newId();
     this.persist.touch();
     return id;
   }
@@ -1340,7 +1339,6 @@ export class SessionService {
     } = {},
   ): Promise<{ adoptedPaneIds: Set<PaneId> }> {
     const adoptedPaneIds = new Set<PaneId>();
-    this.model.setNextIdCounters(data.nextId);
     for (const groupData of data.groups) this.model.restoreGroup(groupData); // 20260923-workspace-grouping
     // 名前を先に決めてから入れる（20260921-workspace-auto-label の design D6・D10）。自動の名前はその場所から決め直し（保存した後に git の状態が
     // 変わっていれば新しい名前になる）、付けた名前はそのまま。**1 つずつ決める**——一度に始めると上限のタイマーも一斉に始まって workspace が

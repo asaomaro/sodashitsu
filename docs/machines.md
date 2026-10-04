@@ -69,24 +69,23 @@ soda machine remove <id>     # 登録を消す（リモートは動いたまま�
 ```sh
 sodactl --machine GPU agent list
 sodactl --machine GPU agent prompt reviewer "今の差分をレビューして" --wait
-sodactl --machine <id> pane read p3
+sodactl --machine <id> pane read 3f2a9c10          # pane の id は先頭 4 文字以上の部分でもよい
 ```
 
 - `--machine <名前|id>` はコマンドの前に置きます（`login`・`skill` 以外の全コマンド）。手元の `soda serve` の `/ws?machine=` を通すので、**手元の `soda serve` が動いていて、そのマシンが繋がっている**必要があります。
-- id（pane・workspace・エージェントの名前）はマシンごとに別です。そのマシンの `snapshot`・`agent list` で調べた id を使ってください。
+- id（pane・workspace・エージェントの名前）はマシンごとに別です（pane・tab・workspace の id は UUID で、先頭 4 文字以上の一意な部分でも指せます）。そのマシンの `snapshot`・`agent list` で調べた id を使ってください。
 - 登録に無い・無効・名前が曖昧なら `machine_not_found`、繋がっていないなら `machine_unavailable`（どちらも終了コード 1）。ローカルへ黙って送ることはありません。
 - `--machine` のときは、pane の中から呼んだときの自分の pane の歯止め（`self_target`）は効きません（`--machine local` は手元そのものなので効きます）。
 
 ## 連携のグラフで使う
 
-グラフ画面（`docs/agent-graph.md`）の「pane を載せる」に登録したマシンの pane が出て、手元の pane と線で結べます（`sodactl graph link add p1 GPU:p3` のように
-`<名前>:<pane ID>` でも）。
+グラフ画面（`docs/agent-graph.md`）の「pane を載せる」に登録したマシンの pane が出て、手元の pane と線で結べます（`sodactl graph link add 3f2a9c10 GPU:<pane の完全な id>` のように
+`<名前>:<pane の完全な id>` でも。別のマシンの pane は部分指定できません）。
 
 - 手元の `soda serve` が、グラフに載っているマシンにだけ接続を張って線を動かします（ブラウザを閉じても動きます）。
 - マシンが繋がっていない間の線は見送られ（履歴に `machine_unavailable`）、繋がり直しても後から送りません。
-- 別のマシンの `soda serve` が保存した session を読めずに pane の番号を振り直しても、そのマシンのノードは無効になりません（手元から見分けられないため）。
-  そのときの線は同じ番号の無関係な pane を相手に動きます（元としてはその pane の完了・承認待ちで動いて画面を渡し、先・監督役としてはその pane へ送ります）。
-  気づいたら、まず線を一時停止して、そのマシンのノードを選び直すか外してください（`docs/agent-graph.md`「無効なノードと選び直し」）。
+- pane の id は UUID で再利用されないので、別のマシンが状態を消して始め直しても、載せたノードが別の pane を指すことはありません（pane が無くなったノードは線が動かず、
+  `docs/agent-graph.md`「pane が無くなったノードと選び直し」のとおり選び直すか外します）。
 - 監督役への知らせの中の「マシン」は監督役から見た名前です。別のマシンの監督役が `sodactl --machine <名前>` で手元の pane を操作できるのは、そのマシンの登録簿に
   手元のマシンを同じ名前で登録しているときだけです。
 

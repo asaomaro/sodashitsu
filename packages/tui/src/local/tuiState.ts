@@ -16,6 +16,8 @@ export interface TuiState {
   colorMode?: "truecolor" | "256";
   /** サイドバーの spaces の区画の行数（区切りのドラッグで変えた値）。 */
   sidebarSpacesRows?: number;
+  /** サイドバーの畳んでいる区画（畳んでいる区画だけを持つ。20261004-ui-interaction-polish）。 */
+  sidebarSectionsCollapsed?: { spaces?: true; agents?: true };
 }
 
 export const TUI_STATE_FILE = "tui-state.json";
@@ -38,6 +40,15 @@ export function readTuiState(stateDir: string): TuiState {
     const spaces = r["sidebarSpacesRows"];
     if (typeof spaces === "number" && Number.isInteger(spaces) && spaces > 0)
       out.sidebarSpacesRows = spaces;
+    // 値が `true` のキーだけを採る（壊れた値は開いた状態）。
+    const folded = r["sidebarSectionsCollapsed"];
+    if (typeof folded === "object" && folded !== null && !Array.isArray(folded)) {
+      const f = folded as Record<string, unknown>;
+      const keep: { spaces?: true; agents?: true } = {};
+      if (f["spaces"] === true) keep.spaces = true;
+      if (f["agents"] === true) keep.agents = true;
+      if (keep.spaces || keep.agents) out.sidebarSectionsCollapsed = keep;
+    }
     return out;
   } catch {
     return {};

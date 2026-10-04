@@ -50,7 +50,7 @@ function mountLayout(
       ...(opts.followResize ? { followResize: true } : {}),
       ...(opts.measureSinglePane ? { measureSinglePane: opts.measureSinglePane } : {}),
     },
-    global: { provide: { [ConnectionKey as symbol]: conn, [ViewSyncKey as symbol]: provided } },
+    global: { plugins: [createPinia()], provide: { [ConnectionKey as symbol]: conn, [ViewSyncKey as symbol]: provided } },
     slots: {
       pane: '<template #pane="{ paneId }"><div class="fake-pane" :data-pane-id="paneId"></div></template>',
     },

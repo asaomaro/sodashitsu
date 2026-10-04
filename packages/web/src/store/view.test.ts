@@ -2,6 +2,9 @@ import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   SIDEBAR_WIDTH,
+  isDeviceLocalPref,
+  loadSidebarSectionRatio,
+  sharedPrefsOf,
   loadSidebarCollapsed,
   loadSidebarWidth,
   loadUngroupedCollapsed,
@@ -429,6 +432,79 @@ describe("useViewStore — サイドバーの幅と折りたたみを覚える",
     const store = useViewStore(createPinia());
     expect(store.sidebarWidth).toBe(240);
     expect(store.sidebarCollapsed).toBe(false);
+  });
+
+  describe("区画の比と折りたたみ（20261004-ui-interaction-polish）", () => {
+    it("何も保存されていなければ自動の配分・どちらも開いている", () => {
+      const store = useViewStore(pinia);
+      expect(store.sidebarSectionRatio).toBeNull();
+      expect(store.sectionsCollapsed).toEqual({ spaces: false, agents: false });
+    });
+
+    it("比は setSectionRatio では保存せず、commitSectionRatio で保存する（ドラッグ中は書かない）", () => {
+      const store = useViewStore(pinia);
+      store.setSectionRatio(0.3);
+      expect(store.sidebarSectionRatio).toBe(0.3);
+      expect(readPrefs()["sidebarSectionRatio"], "ドラッグの途中では書かない").toBeUndefined();
+      store.commitSectionRatio();
+      expect(readPrefs()["sidebarSectionRatio"]).toBe(0.3);
+      expect(useViewStore(createPinia()).sidebarSectionRatio, "新しいストアが読み戻す").toBe(0.3);
+    });
+
+    it("resetSectionRatio は null にして、保存から項目を消す（ほかの項目は残す）", () => {
+      const store = useViewStore(pinia);
+      store.toggleAgentSort();
+      store.setSectionRatio(0.3);
+      store.commitSectionRatio();
+      store.resetSectionRatio();
+      expect(store.sidebarSectionRatio).toBeNull();
+      expect("sidebarSectionRatio" in readPrefs()).toBe(false);
+      expect(readPrefs()["agentSort"]).toBe("priority");
+      expect(useViewStore(createPinia()).sidebarSectionRatio).toBeNull();
+    });
+
+    it("commitSectionRatio は比が無い（自動）なら保存の項目を消す", () => {
+      const store = useViewStore(pinia);
+      store.setSectionRatio(0.3);
+      store.commitSectionRatio();
+      store.setSectionRatio(null);
+      store.commitSectionRatio();
+      expect("sidebarSectionRatio" in readPrefs()).toBe(false);
+    });
+
+    it("toggleSectionCollapsed は切り替えるたびに、畳んでいる区画だけを保存する", () => {
+      const store = useViewStore(pinia);
+      store.toggleSectionCollapsed("agents");
+      expect(store.sectionsCollapsed).toEqual({ spaces: false, agents: true });
+      expect(readPrefs()["sidebarSectionsCollapsed"]).toEqual({ agents: true });
+      store.toggleSectionCollapsed("spaces");
+      expect(readPrefs()["sidebarSectionsCollapsed"]).toEqual({ spaces: true, agents: true });
+      expect(useViewStore(createPinia()).sectionsCollapsed).toEqual({ spaces: true, agents: true });
+      store.toggleSectionCollapsed("agents");
+      store.toggleSectionCollapsed("spaces");
+      expect("sidebarSectionsCollapsed" in readPrefs(), "どちらも開けば項目を消す").toBe(false);
+    });
+
+    it("壊れた値は『無い』（範囲外・数でない比、true でない折りたたみ）", () => {
+      expect(loadSidebarSectionRatio(Number.NaN)).toBeNull(); // JSON を通ると null になるので、読み込みの関数で直接見る
+      expect(loadSidebarSectionRatio(Number.POSITIVE_INFINITY)).toBeNull();
+      for (const bad of [0, 1, -0.5, 1.5, "0.5", null, {}]) {
+        writePrefs({ sidebarSectionRatio: bad });
+        expect(useViewStore(createPinia()).sidebarSectionRatio, String(bad)).toBeNull();
+      }
+      writePrefs({ sidebarSectionsCollapsed: { spaces: "yes", agents: 1 } });
+      expect(useViewStore(createPinia()).sectionsCollapsed).toEqual({ spaces: false, agents: false });
+      writePrefs({ sidebarSectionsCollapsed: "agents" });
+      expect(useViewStore(createPinia()).sectionsCollapsed).toEqual({ spaces: false, agents: false });
+      writePrefs({ sidebarSectionsCollapsed: { agents: true, spaces: "x" } });
+      expect(useViewStore(createPinia()).sectionsCollapsed).toEqual({ spaces: false, agents: true });
+    });
+
+    it("端末ごとの項目なので、共有の項目として取り出さない", () => {
+      expect(isDeviceLocalPref("sidebarSectionRatio")).toBe(true);
+      expect(isDeviceLocalPref("sidebarSectionsCollapsed")).toBe(true);
+      expect(sharedPrefsOf({ sidebarSectionRatio: 0.3, sidebarSectionsCollapsed: { agents: true }, theme: "x" })).toEqual({ theme: "x" });
+    });
   });
 
   // 読み戻しは `setSidebarWidth` と違い**丸めない**（範囲の外は保存しえない＝壊れた値）。9999 を 360 にしない。

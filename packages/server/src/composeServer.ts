@@ -2,7 +2,7 @@ import { X509Certificate } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { hostname as osHostname, platform } from "node:os";
-import { parseId, type HostInfo, type LinkRun } from "@sodashitsu/protocol";
+import { type HostInfo, type LinkRun } from "@sodashitsu/protocol";
 import { ConfigError, type RawServeArgs, type ServeOptions, agentReportSocketPathFor, paneSocketPathFor, resolveServeOptions, stateDirInUseError } from "./config.js";
 import { FileLogger, type Logger } from "./log/Logger.js";
 import { EventBus } from "./bus/EventBus.js";
@@ -78,6 +78,7 @@ import { PrefsStore } from "./persist/PrefsStore.js";
 import { GraphStore } from "./persist/GraphStore.js";
 import { GraphEngine } from "./graph/GraphEngine.js";
 import { AgentLineage } from "./graph/AgentLineage.js";
+import { GraphPaneCleanup } from "./graph/GraphPaneCleanup.js";
 import { SubagentTracker } from "./agent/SubagentTracker.js";
 import { LocalAgentPort } from "./graph/LocalAgentPort.js";
 import { RemoteLinks } from "./graph/RemoteLinks.js";
@@ -391,6 +392,8 @@ export async function composeServer(
   });
   // エージェントが起動したエージェントの自動載せ（20261003-graph-auto-nodes）。記録はメモリだけ（引き継ぎで消える）なので、handoff の pausePollers では止めない。
   const lineage = new AgentLineage({ bus, store: graph, paneExists, logger });
+  // 閉じた pane のノードをグラフから外す。復元の後に `pruneMissing` で、止まっている間に閉じたものも外す。
+  const paneCleanup = new GraphPaneCleanup({ bus, store: graph, paneExists, logger });
   // エージェントが中で動かしているサブエージェントの数え上げ（20261004-subagent-display）。フックの報告を受け口から受ける。
   const subagents = new SubagentTracker({
     bus,
@@ -686,21 +689,12 @@ export async function composeServer(
           takenPending = undefined;
           ({ adoptedPaneIds } = await session.restore(loaded.data, { paneHistory: paneHistoryEntries, adopted }));
           takenPending = pending;
-          // 20260927-agent-graph：session.json は間を置いてまとめて書き、graph.json はすぐ書く。落ちると、読めた session.json に無い新しい pane
-          // （`nextId.p` 以上）を指す手元のノードが残り、次に作る同じ id の pane に線が付いてしまう——それだけを無効にする（それより前の id の
-          // 閉じられた pane のノードは「閉じられた pane」として扱い、無効にしない）。
-          const nextPane = loaded.data.nextId.p;
-          const staledNew = await graph.markLocalStale((paneId) => (parseId(paneId)?.n ?? Infinity) >= nextPane);
-          if (staledNew > 0) logger.warn("graph.json refers to panes newer than session.json; marked them as stale", { nodes: staledNew });
         } else {
           if (loaded.kind === "corrupt") logger.warn("session.json was corrupt; starting fresh", { backupPath: loaded.backupPath });
           // 新しく始める起動では pane の id を採番し直すので、古い画面履歴を新しい pane に取り違えないよう消す（AC5）。
           // 無効のとき（下の `loadPaneHistory` と同じ）も消す。
           await clearPaneHistory(options.paneHistory ? "session.json was not restored" : "pane history disabled");
           await session.ensureNotEmpty();
-          // pane の id を振り直したので、保存したグラフの手元のノード（`local:p3` 等）は別の pane を指しうる。選び直すまで無効にする（20260927-agent-graph。research F1.2）。
-          const staled = await graph.markLocalStale();
-          if (staled > 0) logger.warn("session.json was not restored; marked local graph nodes as stale", { nodes: staled });
         }
         if (takenPending !== undefined) {
           const finished = takenPending;
@@ -711,6 +705,9 @@ export async function composeServer(
           handoff.recordTaken(handoffResult);
         }
         sessionLoaded = true;
+        // 止まっている間に閉じた pane のノードを外す（復元した pane に無いもの。id は再利用されないので、`session.json` が読めなかった起動の保存済みノードもここで外れる）。
+        const prunedNodes = await paneCleanup.pruneMissing();
+        if (prunedNodes > 0) logger.info("graph.json had nodes of closed panes; removed them", { nodes: prunedNodes });
         paneHistory?.start(internal.paneHistorySaveIntervalMs);
         // クリップボードの画像の後片付け（20260927-clipboard-image-paste）。ロックを取った後に、起動時と 1 時間ごと（貼らなくなっても 24 時間で消す）。
         imageSweeper = imageStore.startSweeping();
@@ -756,6 +753,7 @@ export async function composeServer(
         if (!sessionLoaded) persist.cancel();
         graphEngine.stop();
         lineage.close();
+        paneCleanup.close();
         subagents.close();
         remoteLinks.closeAll();
         paneHistory?.stop();
@@ -785,6 +783,7 @@ export async function composeServer(
         // machine_unavailable として履歴に残してしまう。止める＝待ちは履歴に残さず取り消し、送っている途中の結果も書かない）。graph.close の前。
         graphEngine.stop();
         lineage.close();
+        paneCleanup.close();
         subagents.close();
         remoteLinks.closeAll();
         await machines.stop();
@@ -883,7 +882,6 @@ export function toSessionFileData(session: SessionService): SessionFileData {
   return {
     schema: 1,
     savedAt: new Date().toISOString(),
-    nextId: session.getNextIdCounters(),
     groups: snapshot.groups.map((g) => ({ id: g.id, label: g.label, collapsed: g.collapsed })),
     ...(persistedLayout ? { layout: persistedLayout.layout, repoGroups: persistedLayout.repoGroups } : {}),
     workspaces: snapshot.workspaces.map((ws) => ({

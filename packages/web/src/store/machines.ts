@@ -6,6 +6,7 @@ import type {
   SessionSnapshot,
   Workspace,
 } from "@sodashitsu/protocol";
+import { shortId } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
@@ -41,7 +42,7 @@ function summaryPaneOf(p: Pane): SummaryPane {
 
 /** 要約の pane の呼び名（`paneNameOf` と同じ連鎖: 名前 → エージェントの名前 → エージェントの種類 → タイトル → `pane <id>`）。 */
 export function summaryPaneName(paneId: string, p: SummaryPane): string {
-  return p.label || p.agent?.name || p.agent?.label || p.title || `pane ${paneId}`;
+  return p.label || p.agent?.name || p.agent?.label || p.title || `pane ${shortId(paneId)}`;
 }
 
 export interface MachineSection {

@@ -60,6 +60,19 @@ sodactl ask [--timeout <ms>] < spec.json    # pane の中のプログラムの�
 sodactl skill                               # エージェントに sodactl の使い方を教える Markdown（skill ファイル）を出す
 ```
 
+## id の指定（UUID と先頭の部分）
+
+workspace・tab・pane・グラフの線の id は UUID（`3f2a9c10-1111-4111-8111-aaaaaaaaaaaa` の形）で、一度使った id は二度と使われない。長いので、`sodactl` の
+`<workspaceId>`・`<tabId>`（`tab close`）・`<paneId>`・`<target>`（pane の id で指すとき）・`<linkId>` は、**完全な id か、一意に決まる先頭の部分（4 文字以上、UUID に使う
+16 進数字とハイフン）**を受ける。部分はつないだ先の一覧（hello の snapshot・`graph.get`）で完全な id に直してから送る。
+
+- 完全に一致する id があればそれ。2 つ以上に当たる部分は `id_ambiguous`（終了コード 1。メッセージに候補が並ぶ）、当たらなければ `not_found`・`agent_not_found`（既存の扱い）。
+- 自分の pane を対象にする操作の歯止め（`self_target`）は、部分で指しても効く（完全な id に直した後で確かめる）。
+- 環境変数 `SODA_PANE_ID` は完全な id。`pane split`・`pane current` の対象を省いたときも完全な id を使う。
+- `graph` の表の `node`・`link`・`from`・`to` は先頭 8 文字の短い呼び名（そのまま指定に使える）。完全な id は `key` の列と `--json`。別のマシンの pane（`<マシン>:<pane>`）と、
+  手元の閉じた pane のノード（`graph node rm`）は、一覧を引けないので完全な id で指す。
+- `--machine` のときは、そのマシンの一覧から引く（id はマシンごとに別）。
+
 ## ほかのマシンへ送る（`--machine`）
 
 `sodactl --machine <名前|id> <コマンド> …` で、手元の `soda serve` に `soda machine add` で登録したマシンの `soda serve` へコマンドを送る
@@ -76,8 +89,8 @@ sodactl skill                               # エージェントに sodactl の�
 
 ```sh
 sodactl pane report-metadata "$SODA_PANE_ID" --source my-hook --token summary="認証を直している" --token model=opus
-sodactl workspace report-metadata w1 --source ci --token build=green --ttl-ms 600000
-sodactl pane report-metadata p3 --source my-hook --clear-token summary
+sodactl workspace report-metadata 7c1e0a52 --source ci --token build=green --ttl-ms 600000
+sodactl pane report-metadata 3f2a9c10 --source my-hook --clear-token summary
 ```
 
 - **`--token` は値で見分ける**: `=` を含めば独自トークンの `NAME=VALUE`（最初の `=` で分ける）、含まなければ全コマンド共通の接続の token
@@ -100,8 +113,8 @@ sodactl pane report-metadata p3 --source my-hook --clear-token summary
 手元の端末（SSH 先のシェルを含む）を pane 1 枚に直結し、ブラウザを開かずにその場の端末として操作する。
 
 ```bash
-sodactl pane attach p2              # 直結する
-sodactl pane attach p2 --takeover   # 既に別の端末が直結していれば、それを奪って直結する
+sodactl pane attach 3f2a9c10              # 直結する
+sodactl pane attach 3f2a9c10 --takeover   # 既に別の端末が直結していれば、それを奪って直結する
 ```
 
 - つないだ時点の**見えている画面**を描き、以後の出力をそのまま流す。打鍵はそのまま pane へ送る（手元の端末は raw モード・代替画面になる）。
@@ -128,9 +141,9 @@ sodactl pane attach p2 --takeover   # 既に別の端末が直結していれば
 stdout を 1 行ずつ JSON として読む（`control` は stdin に 1 行 1 コマンドを書く）ための形。人が端末で使うなら `pane attach`。
 
 ```bash
-sodactl pane observe p2                                      # 閲覧専用。何本でも同時に動かせる
-sodactl pane control p2 --cols 120 --rows 40                 # 書き込み可能（所有者は pane に 1 つ）
-sodactl pane control p2 --takeover                           # 既に所有者（pane attach か control）がいれば奪う
+sodactl pane observe 3f2a9c10                                  # 閲覧専用。何本でも同時に動かせる
+sodactl pane control 3f2a9c10 --cols 120 --rows 40             # 書き込み可能（所有者は pane に 1 つ）
+sodactl pane control 3f2a9c10 --takeover                       # 既に所有者（pane attach か control）がいれば奪う
 ```
 
 ### stdout の記録（observe・control 共通）
@@ -454,7 +467,7 @@ pane の中で検出されたコーディングエージェント（Claude Code�
   閉じたときに消え、次に現れたエージェントには引き継がれない。検出が一度外れると（前面のプロセスが一瞬見えなかった等）
   別のエージェントとして数え直すので、そのときも消える。サーバを再起動すると消える（保存しない）。
 - `<target>` は、まず **pane ID として**そのエージェントの居る pane を探し、無ければ**名前として**探す。pane ID と同じ形の名前
-  （`p3` 等）も付けられるが、その文字列の pane にエージェントが居ればそちらが優先される。見つからなければ `agent_not_found`。
+  （`3f2a9c10` 等）も付けられるが、その文字列の pane にエージェントが居ればそちらが優先される。見つからなければ `agent_not_found`。
 - 名前で指したときも、コマンドが接続した時点のエージェントにだけ送る・名前を付ける（その後に入れ替わっていたら何もせずに
   `agent_not_found`）。
 - ブラウザでは、サイドバーのエージェントの行・携帯の pane 選択のエージェント一覧・pane の呼び名（pane の枠の見出し・移動の候補・通知）に名前が出る
@@ -556,7 +569,7 @@ pane の中で検出されたコーディングエージェント（Claude Code�
 - 他の code: `unsupported_agent_kind`（サーバ）・`agent_pane_not_found`・`agent_start_input_failed`（端末に書けなかった）。
 
 ```bash
-pane=$(sodactl pane split p1 --direction right | jq -r .pane.id)
+pane=$(sodactl pane split 3f2a9c10 --direction right | jq -r .pane.id)
 sodactl agent start reviewer --kind codex --pane "$pane" -- -m gpt-5.4
 sodactl agent prompt reviewer "この差分をレビューして" --wait --timeout 600000
 ```
@@ -564,7 +577,7 @@ sodactl agent prompt reviewer "この差分をレビューして" --wait --timeo
 ### 例: エージェントに作業させて、終わるのを待って結果を読む
 
 ```bash
-pane=p2                                                    # sodactl agent list で調べた pane ID
+pane=3f2a9c10                                             # sodactl agent list で調べた pane ID（先頭の部分でもよい）
 sodactl agent prompt "$pane" "テストを直して" --wait --timeout 600000   # 送って、作業が始まったのを確かめ、終わるまで待つ
 sodactl agent read "$pane" --lines 120
 ```
@@ -586,14 +599,14 @@ sodactl agent send-keys "$pane" esc                         # 取り消す（答
 sodactl graph show
 # graph: running (rev 4)
 #
-# node    key       status
-# p1      local:p1  ok
-# p2      local:p2  ok
-# box:p7  0123…:p7  -
+# node          key                                            status
+# 3f2a9c10      local:3f2a9c10-1111-4111-8111-aaaaaaaaaaaa      ok
+# 9d000000      local:9d000000-2222-4222-8222-bbbbbbbbbbbb      ok
+# box:5b7e01c4  0123…:5b7e01c4-3333-4333-8333-cccccccccccc      -
 #
-# link  kind       from  to      count  state   settings
-# l1    trigger    p1    p2      2/10   active  on=done output=80 busy=wait prompt="レビューして {output}"
-# l2    supervise  p2    box:p7  0/10   paused
+# link      kind       from          to            count  state   settings
+# 6a41f0d2  trigger    3f2a9c10      9d000000      2/10   active  on=done output=80 busy=wait prompt="レビューして {output}"
+# e07b3395  supervise  9d000000      box:5b7e01c4  0/10   paused
 
 l=$(sodactl graph link add impl reviewer --prompt "次の差分をレビューして。{output}" --output 120 --json | jq -r .link.id)
 sodactl graph link add impl lead --kind approval --mode delegate --limit 5
@@ -603,9 +616,9 @@ sodactl graph pause; sodactl graph resume                        # 全体（線�
 sodactl graph history "$l" --limit 5
 ```
 
-- **端の指定**（`<from>`・`<to>`・`<pane>`）: pane ID（`p3`）・`agent rename` で付けたエージェントの名前（手元だけ。引き方は `agent` の `<target>` と同じ順——
-  その ID の pane にエージェントが居ればその pane、次にその名前のエージェント、最後にエージェントの居ない同じ ID の pane）・`<マシンの名前|id>:<pane ID>`
-  （`soda machine` で登録した別のマシンの pane。例 `box:p7`。`local:p3` は手元）。マシンの名前は `--machine` と同じく、id の完全一致 → 名前の完全一致が 1 台で引き
+- **端の指定**（`<from>`・`<to>`・`<pane>`）: pane ID（UUID。先頭 4 文字以上で一意なら部分でもよい）・`agent rename` で付けたエージェントの名前（手元だけ。引き方は `agent` の `<target>` と同じ順——
+  その ID の pane にエージェントが居ればその pane、次にその名前のエージェント、次にエージェントの居ない同じ ID の pane、最後に pane の ID の先頭の部分）・`<マシンの名前|id>:<pane の完全な ID>`
+  （`soda machine` で登録した別のマシンの pane。完全な ID だけで、部分・エージェントの名前は引けない。例 `box:5b7e01c4-3333-4333-8333-cccccccccccc`。`local:<UUID>` は手元）。マシンの名前は `--machine` と同じく、id の完全一致 → 名前の完全一致が 1 台で引き
   （`machine.list`）、ノードの鍵には id を使う（名前は変えられるため）。同じ名前が 2 台なら `machine_ambiguous`、無ければ `machine_not_found`。
   登録から外したマシンのノードを外す（`node rm`）・選び直す前のノード（`node rekey` の 1 つ目）を指すときだけ、一覧に無い 32 桁の id もそのまま受ける
   （載せる・結ぶ端では `machine_not_found`。打ち間違いで動かない線を作らない）。
@@ -615,7 +628,9 @@ sodactl graph history "$l" --limit 5
   上限 `--limit 10`）。線の種類に合わない項目（監督の線に `--prompt` 等）は使い方の誤り（終了コード 2）。`link set` は書いた項目だけを変える。
   線の種類は変えられない（消して作り直す）。
 - 監督・承認の代理の線は `<from>` が配下、`<to>` が監督役。
-- `node rm` はそのノードの線も消す。`node rekey` は無効なノード（`status` が `stale`・`closed`）を同じマシンの別の pane に付け替える（線はそのまま。別のマシンの pane へは
+- `<linkId>`（`link set|rm|pause|resume`・`history`）も、線の ID（UUID）か先頭の部分（4 文字以上で一意）。表の `link`・`node`・`from`・`to` は先頭 8 文字の短い呼び名で、そのまま指定に使える（完全な ID は `key` の列・`--json`）。
+  曖昧な部分は `id_ambiguous`（候補が出る）、当たらなければ `not_found`。
+- `node rm` はそのノードの線も消す。`node rekey` は pane の無いノード（画面で無効と出る、別のマシンの pane が閉じたもの。`graph show` の `status` は `-` なので完全な id で指す。手元の閉じた pane のノードは自動で外れる）を同じマシンの別の pane に付け替える（線はそのまま。別のマシンの pane へは
   `invalid_params`）。
 - 変更は、送る前に画面と同じ規則（client-core の検証）で確かめ、落ちれば送らずに `invalid_params`（メッセージに `supervisor_taken` 等の理由）。
 - 変更は取り出した rev を添えて送る。その間に画面などが変えていれば（`rev_conflict`）、**取り直して操作を組み立て直し、1 回だけ送り直す**。2 回目も衝突したら
@@ -623,7 +638,7 @@ sodactl graph history "$l" --limit 5
 - 知らない線は `not_found`（終了コード 1）。
 - 表のセルの制御文字（C0・C1・双方向の上書き等）は `\uXXXX` の形に逃がして出す（履歴の文面などで端末の表示を偽装させない）。`--json` はそのまま。
 - `--json` の形: `show` と変更は `{"graph": …}`、`link add` は `{"link": …, "graph": …}`、`history` は `{"runs": […]}`（新しい順）。
-- 表の `status`: `ok`（手元の pane がある）・`closed`（手元の pane が無い）・`stale`（無効）・`-`（別のマシン。ここからは確かめない）。
+- 表の `status`: `ok`（手元の pane がある）・`closed`（手元の pane が無い）・`-`（別のマシン。ここからは確かめない）。
   `state`: `active`・`paused`（利用者が止めた）・`paused(limit)`（上限で止まった）。
 - 履歴はサーバのメモリだけ（線ごとに直近 50 件。再起動で消える）。
 - `--prompt` の文面が `--` で始まるときは `--prompt=<文面>` の形で渡す（離して書くと `missing value for --prompt` の使い方の誤り。終了コード 2）。
@@ -654,7 +669,7 @@ skill は、最初に pane の中にいるか（`SODA_PANE_ID` があるか）�
 
 | 変数 | 中身 |
 |---|---|
-| `SODA_PANE_ID` | その pane の ID（`p3` 等）。pane の中にいる印を兼ねる（herdr の `HERDR_ENV=1`・`HERDR_PANE_ID` に当たる） |
+| `SODA_PANE_ID` | その pane の ID（UUID。完全な ID）。pane の中にいる印を兼ねる（herdr の `HERDR_ENV=1`・`HERDR_PANE_ID` に当たる） |
 | `SODA_SERVER_URL` | その pane を動かしているサーバへ sodactl がつなげる URL（URL にできない待ち受け〔ゾーン付きの IPv6 等〕では入れない）。待ち受けが `0.0.0.0` なら `http(s)://127.0.0.1:<port>`、`::` なら `[::1]`、それ以外は待ち受けのホスト。ポートは実際に待ち受けているもの |
 | `SODA_AGENT_REPORT_SOCKET` | 公式フック連携の report の socket（あれば）。フックのスクリプトが、セッション ID に加えて、サブエージェントの起動・終了・作業の終わり（Claude Code だけ。20261004-subagent-display）を 1 接続 1 行の JSON で報告する |
 | `SODA_PANE_SOCKET` | ログイン不要の受け口（状態ディレクトリの `pane.sock`）のパス（Linux・macOS。Windows では入れない）。値は socket のパスだけで、秘密は含まない。下の「ログイン不要の受け口（pane.sock）」 |

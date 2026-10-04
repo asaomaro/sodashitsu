@@ -35,7 +35,7 @@ const title = computed(() => {
 function invalid(l: GraphLink): boolean {
   const bad = (k: NodeKey) => {
     const i = graph.nodeInfo(k);
-    return i.exists === false || i.stale;
+    return i.exists === false;
   };
   return bad(l.from) || bad(l.to);
 }
