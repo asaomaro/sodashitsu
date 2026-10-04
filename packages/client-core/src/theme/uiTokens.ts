@@ -33,6 +33,7 @@ export const CSS_VARS = [
   "--soda-backdrop",
   "--soda-backdrop-strong",
   "--soda-pane-current",
+  "--soda-resize-line",
 ] as const;
 export type CssVar = (typeof CSS_VARS)[number];
 
@@ -73,6 +74,8 @@ const DRACULA: UiTokens = {
     "--soda-backdrop-strong": "rgba(0, 0, 0, 0.5)",
     // 選ばれている pane の枠（以前は `--soda-menu-border` を使っていた。decisions D15）。dracula は今の値のまま。
     "--soda-pane-current": "#44475a",
+    // 境目の強調の線。accent が menu-bg に 2.94 しか届かないので fg（選び方は `resizeLineColor`。値は uiTokens.test.ts が守る）。
+    "--soda-resize-line": "#f8f8f2",
   },
   colorScheme: "dark",
 };
@@ -291,6 +294,19 @@ function isLightColor(hex: string): boolean {
   return contrastRatio(hex, "#000000") > contrastRatio(hex, "#ffffff");
 }
 
+/** 境目の線に求める、背景に対する最小の比（WCAG 1.4.11 の非テキストの 3:1。20261004-ui-interaction-polish）。 */
+export const MIN_RESIZE_LINE_RATIO = 3;
+
+/**
+ * 境目の強調の線の色（`--soda-resize-line`）。`accent` が `bg`・`menuBg` の両方に 3:1 以上ならそれ、
+ * そうでなければ `fg`（両方を満たすものが無いときは、両方に対する比の低いほうが大きい色）。
+ */
+export function resizeLineColor(bg: string, menuBg: string, accent: string, fg: string): string {
+  const floor = (c: string) => Math.min(contrastRatio(c, bg), contrastRatio(c, menuBg));
+  if (floor(accent) >= MIN_RESIZE_LINE_RATIO) return accent;
+  return floor(fg) >= floor(accent) ? fg : accent;
+}
+
 function build(name: Exclude<ThemeName, "dracula">): UiTokens {
   const p = HERDR[name];
   const dark = THEME_APPEARANCE[name] === "dark";
@@ -350,6 +366,8 @@ function build(name: Exclude<ThemeName, "dracula">): UiTokens {
       "--soda-backdrop-strong": dark ? "rgba(0, 0, 0, 0.5)" : "rgba(255, 255, 255, 0.6)",
       // 選ばれている pane の枠は、周りの背景（bg）と端末の背景に対して 3:1（どの pane に入力が行くかを示す状態の印。WCAG 1.4.11。decisions D15）。
       "--soda-pane-current": ensureContrast(p.surface0, [bg, terminalBg], 3, away),
+      // 境目の強調の線。accent が背景に 3:1 を割るテーマ（dracula・tokyo-night-day・solarized-light・rose-pine-dawn）は fg にする。
+      "--soda-resize-line": resizeLineColor(bg, menuBg, accent, fg),
     },
     colorScheme: dark ? "dark" : "light",
   };

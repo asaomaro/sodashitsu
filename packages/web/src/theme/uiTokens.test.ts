@@ -94,6 +94,18 @@ describe.each(THEME_NAMES)("uiTokens(%s)", (name) => {
     );
   });
 
+  it("境目の線（--soda-resize-line）は、背景と枠の背景の両方に対して 3 以上（AC21）", () => {
+    expect(
+      minRatio(v["--soda-resize-line"], [v["--soda-bg"], v["--soda-menu-bg"]]),
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it("境目の線は、accent が両方の背景に 3 以上ならそれ、そうでなければ fg", () => {
+    const accentOk =
+      minRatio(v["--soda-accent"], [v["--soda-bg"], v["--soda-menu-bg"]]) >= 3;
+    expect(v["--soda-resize-line"]).toBe(accentOk ? v["--soda-accent"] : v["--soda-fg"]);
+  });
+
   it("アクセントの上の文字（押された状態）は 4.5 以上", () => {
     expect(contrastRatio(v["--soda-accent-fg"], v["--soda-accent"])).toBeGreaterThanOrEqual(4.5);
   });
@@ -146,6 +158,7 @@ describe("dracula は今の見た目", () => {
         "--soda-backdrop": "rgba(0, 0, 0, 0.4)",
         "--soda-backdrop-strong": "rgba(0, 0, 0, 0.5)",
         "--soda-pane-current": "#44475a",
+        "--soda-resize-line": "#f8f8f2",
       },
       colorScheme: "dark",
     });
@@ -162,6 +175,20 @@ describe("dracula は今の見た目", () => {
     );
     const t = uiTokens("dracula");
     expect(declared).toEqual({ ...t.vars, "color-scheme": t.colorScheme });
+  });
+});
+
+describe("境目の線の色の選び方（テーマごと。accent が 3:1 を割る 4 テーマは fg）", () => {
+  it.each(["dracula", "tokyo-night-day", "solarized-light", "rose-pine-dawn"] as const)(
+    "%s は fg",
+    (n) => {
+      const v = uiTokens(n).vars;
+      expect(v["--soda-resize-line"]).toBe(v["--soda-fg"]);
+    },
+  );
+  it.each(["catppuccin", "tokyo-night", "nord", "vesper"] as const)("%s は accent", (n) => {
+    const v = uiTokens(n).vars;
+    expect(v["--soda-resize-line"]).toBe(v["--soda-accent"]);
   });
 });
 
@@ -202,6 +229,7 @@ describe("組み立ての規則（design の表）", () => {
       "--soda-backdrop": "rgba(0, 0, 0, 0.4)",
       "--soda-backdrop-strong": "rgba(0, 0, 0, 0.5)",
       "--soda-pane-current": "#696976",
+      "--soda-resize-line": "#89b4fa",
     });
     expect(uiTokens("catppuccin-latte").vars).toEqual({
       "--soda-bg": "#e5e7eb",
@@ -223,6 +251,7 @@ describe("組み立ての規則（design の表）", () => {
       "--soda-backdrop": "rgba(0, 0, 0, 0.4)",
       "--soda-backdrop-strong": "rgba(255, 255, 255, 0.6)",
       "--soda-pane-current": "#818389",
+      "--soda-resize-line": "#1d63ee",
     });
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampRatio, ratioFromOffset, ratioPercent, stepRatio, type SectionBox } from "./sectionSizing";
+import { clampRatio, ratioFromOffset, ratioPercent, stepRatio, type SectionBox } from "./sectionSizing.js";
 
 const box: SectionBox = { total: 400, minTop: 100, minBottom: 80 };
 

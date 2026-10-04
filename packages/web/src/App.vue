@@ -139,6 +139,7 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
   --soda-backdrop: rgba(0, 0, 0, 0.4);
   --soda-backdrop-strong: rgba(0, 0, 0, 0.5);
   --soda-pane-current: #44475a;
+  --soda-resize-line: #f8f8f2;
 }
 html,
 body,

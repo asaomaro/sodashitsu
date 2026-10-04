@@ -19,7 +19,7 @@ design.md のとおり、下から積む。純関数（T1）→ 色の変数（T
       対象: `packages/web/src/sidebar/sectionSizing.ts`（新規）、`sectionSizing.test.ts`（新規）
       依存: なし
       AC: AC10, AC20
-- [ ] T2: 色の変数 `--soda-resize-line`——`uiTokens()` が、`--soda-accent` が `--soda-bg`・`--soda-menu-bg` の両方に 3:1 以上ならそれ、そうでなければ `--soda-fg`（design「境目の見た目」の色）を返す。`ThemeController` の `CSS_VARS` に 1 行と、**`CSS_VAR_LABELS`（`Record<CssVar, string>`。足さないと型検査が落ちる）に「境目の線」**。これは色の上書きの一覧（`SettingsDialog.vue:963`・端末版 `tui/src/settings/sections.ts:284`）にも出る——**上書きの対象にする**（利用者が線の色を変えられる。決め: decisions.md D3）。`App.vue` の `:root` の既定値にも足す（必須。`uiTokens.test.ts` が `Object.keys(uiTokens("dracula")) == CSS_VARS` と `:root` の一致を見る）。単体テスト: 17 のテーマすべてで、両方の背景に 3:1 以上／テーマごとの選び方。`themeOverrides.test.ts:106-113` の「全項目を覆う」「19 個」を 20 個に直す
+- [x] T2: 色の変数 `--soda-resize-line`——`uiTokens()` が、`--soda-accent` が `--soda-bg`・`--soda-menu-bg` の両方に 3:1 以上ならそれ、そうでなければ `--soda-fg`（design「境目の見た目」の色）を返す。`ThemeController` の `CSS_VARS` に 1 行と、**`CSS_VAR_LABELS`（`Record<CssVar, string>`。足さないと型検査が落ちる）に「境目の線」**。これは色の上書きの一覧（`SettingsDialog.vue:963`・端末版 `tui/src/settings/sections.ts:284`）にも出る——**上書きの対象にする**（利用者が線の色を変えられる。決め: decisions.md D3）。`App.vue` の `:root` の既定値にも足す（必須。`uiTokens.test.ts` が `Object.keys(uiTokens("dracula")) == CSS_VARS` と `:root` の一致を見る）。単体テスト: 17 のテーマすべてで、両方の背景に 3:1 以上／テーマごとの選び方。`themeOverrides.test.ts:106-113` の「全項目を覆う」「19 個」を 20 個に直す
       対象: `packages/client-core/src/theme/uiTokens.ts`、`packages/web/src/theme/uiTokens.test.ts`（テストはこちら）・`themeOverrides.test.ts`、`packages/client-core/src/theme/themeOverrides.ts:110`（`CSS_VAR_LABELS`）、`packages/web/src/theme/ThemeController.ts`、`packages/web/src/App.vue:117-140`
       依存: なし
       AC: AC1, AC21

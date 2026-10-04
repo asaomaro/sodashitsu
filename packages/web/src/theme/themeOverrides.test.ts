@@ -103,7 +103,7 @@ describe("mergeVars — 既定の値に層を重ねる（純粋）", () => {
   });
 });
 
-describe("CSS_VAR_LABELS — 19 個すべてに日本語の説明がある（AC12）", () => {
+describe("CSS_VAR_LABELS — 20 個すべてに日本語の説明がある（AC12）", () => {
   it("CSS_VARS の全項目を漏れなくカバーする", () => {
     for (const key of CSS_VARS) {
       expect(CSS_VAR_LABELS[key], key).toBeTypeOf("string");
