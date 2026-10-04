@@ -332,6 +332,20 @@ describe("PrefsSync（変更の送信・prefs.changed の反映）", () => {
     expect(sets).toEqual([{ patch: { statusSymbols: false }, baseRev: 2 }]);
   });
 
+  it("区画の比・折りたたみ（端末ごとの項目）の保存・消去は送らない（undefined で項目を消す書き込みも含む。20261004-ui-interaction-polish）", async () => {
+    const { sync, sets } = setup({ prefs: { theme: "nord" }, rev: 2 });
+    sync.onOpened();
+    await flush();
+    const view = useViewStore(pinia);
+    view.setSectionRatio(0.3);
+    view.commitSectionRatio();
+    view.toggleSectionCollapsed("agents");
+    view.resetSectionRatio();
+    view.toggleSectionCollapsed("agents");
+    await flush();
+    expect(sets).toEqual([]);
+  });
+
   it("prefs.changed は、最後に当てた rev より新しければ（送った本人のものも）置き換えて当てる。古い rev は当てない", async () => {
     localStorage.setItem(PREFS_KEY, JSON.stringify({ sidebarCollapsed: true }));
     const { sync } = setup({ prefs: { theme: "nord" }, rev: 2 });

@@ -46,7 +46,7 @@ const DEVICE_LOCAL = new Set<string>(DEVICE_LOCAL_PREF_KEYS);
 
 /**
  * 保存してよい項目だけにする。`JSON.parse` は `__proto__` を自前の項目として作るので、コピーするときにプロトタイプを差し替えないよう落とす。
- * 端末ごとの項目（`sidebarWidth`・`sidebarCollapsed`）もここで落とす——`passthrough` の schema は通してしまうので、共有しない約束をサーバの境界で守る
+ * 端末ごとの項目（`sidebarWidth`・`sidebarCollapsed`・`sidebarSectionRatio`・`sidebarSectionsCollapsed`）もここで落とす——`passthrough` の schema は通してしまうので、共有しない約束をサーバの境界で守る
  * （読み込みの時も通す。古い版・手で書いたファイルに残っていても配らない）。
  */
 function withoutProto(src: Record<string, unknown>): SharedPrefs {

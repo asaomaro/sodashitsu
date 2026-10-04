@@ -19,7 +19,7 @@ import { errorCodeOf } from "@sodashitsu/client-core";
  *   移し終えた後に rev>0 のサーバから受け取った種（移す途中で失敗したもの）は、サーバに無い項目だけ残す。
  * - 大きすぎる（`invalid_params`）: 2 項目以上の 1 回分なら 1 項目ずつに分けて送り直し、1 項目でも断られたらその項目だけ `localOnly` にして知らせる（ほかの項目の同期は続く）。
  *   その項目を次に書き直したら、もう一度送ってみる。
- * - 端末ごとの項目（`sidebarWidth`・`sidebarCollapsed`）は送らない・置き換えない（`sharedOf`）。
+ * - 端末ごとの項目（`sidebarWidth`・`sidebarCollapsed`・`sidebarSectionRatio`・`sidebarSectionsCollapsed`）は送らない・置き換えない（`sharedOf`）。
  */
 export interface PrefsSyncDeps {
   getPrefs(): Promise<PrefsResult>;

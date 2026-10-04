@@ -889,6 +889,21 @@ describe("ActionDispatcher — help/goto/toggleSidebar/detach", () => {
     expect(view.sidebarCollapsed).toBe(true);
   });
 
+  // 20261004-ui-interaction-polish（toggle_spaces_section・toggle_agents_section）。
+  it("toggleSidebarSection: その区画の折りたたみを切り替える（何も送らない・サイドバーを畳んでいても変わる・フォーカスは動かさない）", () => {
+    const conn = makeConnection();
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(conn);
+    dispatcher.run({ type: "toggleSidebarSection", section: "spaces" });
+    expect(view.sectionsCollapsed).toEqual({ spaces: true, agents: false });
+    view.toggleSidebar();
+    dispatcher.run({ type: "toggleSidebarSection", section: "agents" });
+    expect(view.sectionsCollapsed).toEqual({ spaces: true, agents: true });
+    dispatcher.run({ type: "toggleSidebarSection", section: "spaces" });
+    expect(view.sectionsCollapsed).toEqual({ spaces: false, agents: true });
+    expect(conn.requests).toEqual([]);
+  });
+
   it("detach: client.detach を送る", () => {
     const conn = makeConnection();
     makeDispatcher(conn).dispatcher.run({ type: "detach" });
@@ -1017,6 +1032,8 @@ describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-a
         sidebarRows: { spaces: [[{ token: "$build" }]] },
         sidebarWidth: 300,
         sidebarCollapsed: true,
+        sidebarSectionRatio: 0.3,
+        sidebarSectionsCollapsed: { agents: true },
         agentSort: "priority",
         workspaceSort: "name",
       }),
@@ -1041,6 +1058,8 @@ describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-a
     expect(settings.sidebarRows).toEqual({ spaces: [[{ token: "$build" }]], agents: null }); // 20260927-sidebar-row-tokens
     expect(view.sidebarWidth).toBe(300);
     expect(view.sidebarCollapsed).toBe(true);
+    expect(view.sidebarSectionRatio).toBe(0.3); // 20261004-ui-interaction-polish
+    expect(view.sectionsCollapsed).toEqual({ spaces: false, agents: true });
     expect(view.agentSort).toBe("priority");
     expect(view.workspaceSort).toBe("name");
     expect(view.toasts.map((t) => t.message)).toContain("設定を読み直しました。");

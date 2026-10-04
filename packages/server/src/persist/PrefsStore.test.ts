@@ -116,13 +116,19 @@ describe("PrefsStore", () => {
     expect(errors).toHaveLength(1);
   });
 
-  it("端末ごとの項目（sidebarWidth・sidebarCollapsed）は保存も配りもしない（set でも読み込みでも落とす）", async () => {
+  it("端末ごとの項目（sidebarWidth・sidebarCollapsed・区画の比と折りたたみ）は保存も配りもしない（set でも読み込みでも落とす）", async () => {
     const dir = await tempDir();
     const store = new PrefsStore(dir);
     await store.load();
     expect(
       await store.set(
-        { theme: "x", sidebarWidth: 300, sidebarCollapsed: true } as Record<string, unknown>,
+        {
+          theme: "x",
+          sidebarWidth: 300,
+          sidebarCollapsed: true,
+          sidebarSectionRatio: 0.4,
+          sidebarSectionsCollapsed: { agents: true },
+        } as Record<string, unknown>,
         "c1",
       ),
     ).toEqual({
@@ -134,7 +140,7 @@ describe("PrefsStore", () => {
     });
     await writeFile(
       join(dir, PREFS_FILE_NAME),
-      '{"schema":1,"rev":2,"prefs":{"theme":"y","sidebarWidth":200}}',
+      '{"schema":1,"rev":2,"prefs":{"theme":"y","sidebarWidth":200,"sidebarSectionRatio":0.4,"sidebarSectionsCollapsed":{"spaces":true}}}',
     );
     const again = new PrefsStore(dir);
     await again.load();

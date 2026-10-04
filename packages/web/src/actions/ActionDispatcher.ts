@@ -25,7 +25,7 @@ import {
   loadStatusSymbols,
   useSettingsStore,
 } from "../store/settings.js";
-import { loadAgentSort, loadSidebarCollapsed, loadSidebarWidth, loadWorkspaceSort, readPrefs, useViewStore } from "../store/view.js";
+import { loadAgentSort, loadSidebarCollapsed, loadSidebarSectionRatio, loadSidebarSectionsCollapsed, loadSidebarWidth, loadWorkspaceSort, readPrefs, useViewStore } from "../store/view.js";
 import { loadScrollbackPref } from "../term/scrollback.js";
 import { loadTabBarPosition, loadTabBarRightEntries, loadTabBarRightSeparator } from "@sodashitsu/client-core";
 import { loadSidebarRows } from "@sodashitsu/client-core";
@@ -161,6 +161,10 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         return;
       case "toggleSidebar":
         this.view.toggleSidebar();
+        return;
+      case "toggleSidebarSection":
+        // サイドバーを畳んでいる間も状態は変わる（見た目には出ない）。フォーカスは動かさない（20261004-ui-interaction-polish）。
+        this.view.toggleSectionCollapsed(action.section);
         return;
       case "newWorktree": {
         // メニューは `workspace.git`（5 秒周期）を見るが、キーは見ない——作った直後でも始められるように。
@@ -1491,6 +1495,9 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     // T7 の taskcheck 指摘で `raw` を渡せるようにした〔`loadAgentSort` 自体の定義参照〕）。
     this.view.sidebarWidth = loadSidebarWidth(raw["sidebarWidth"]);
     this.view.sidebarCollapsed = loadSidebarCollapsed(raw["sidebarCollapsed"]);
+    // 20261004-ui-interaction-polish 分（サイドバーの区画の比と折りたたみ。同じく端末ごとの項目）。
+    this.view.sidebarSectionRatio = loadSidebarSectionRatio(raw["sidebarSectionRatio"]);
+    this.view.sectionsCollapsed = loadSidebarSectionsCollapsed(raw["sidebarSectionsCollapsed"]);
     this.view.agentSort = loadAgentSort(raw);
     this.view.workspaceSort = loadWorkspaceSort(raw["workspaceSort"]);
     this.view.toast("設定を読み直しました。");

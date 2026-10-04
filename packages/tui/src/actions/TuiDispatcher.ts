@@ -158,6 +158,8 @@ export class TuiDispatcher {
       case "toggleSidebar":
         this.host.toggleSidebar();
         return;
+      case "toggleSidebarSection":
+        return; // 区画の折りたたみは T11 で host へつなぐ（20261004-ui-interaction-polish）
       case "newWorktree": {
         // キーは `workspace.git` を見ない（作った直後でも始められるように。git でなければサーバの `not_a_git_repository` を知らせる）。
         const workspaceId = this.model.workspaceId;
