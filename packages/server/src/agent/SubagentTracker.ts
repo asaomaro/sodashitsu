@@ -35,6 +35,8 @@ const PENDING_TTL_MS = 10_000;
 /** 終了の報告を受けた ID を覚えておく件数と時間（作業の終わりの突き合わせで足し直さないため）。 */
 const STOPPED_MAX = 64;
 const STOPPED_TTL_MS = 60_000;
+/** 検出の無い間に届いた報告を、最初の検出に引き継いでよい、最後の報告からの時間（検出の遅れを見込んだ上限）。 */
+const ORPHAN_MAX_AGE_MS = 30_000;
 /** pane ごとに持つセッションの数の上限（終了の報告が来ないセッション ID が溜まり続けないように。超えたら古いものから捨てる）。 */
 const SESSIONS_MAX = 32;
 
@@ -60,6 +62,8 @@ interface PaneState {
   sessions: Map<string, SessionState>;
   /** 報告を一度でも受けたか（受けていなければ「分からない」）。 */
   seen: boolean;
+  /** 最後に報告を受けた時刻。検出の無い間に届いた報告を最初の検出へ引き継ぐかの判定に使う。 */
+  lastReportAt: number;
   /** 最後に見た、その pane のエージェントの `instanceId`（無し = null）。 */
   instanceId: string | null;
   /** 最後に**配れた**値。 */
@@ -86,7 +90,7 @@ export class SubagentTracker {
         if (this.closed) return;
         if (e.event === "pane.closed") this.discard(e.data.paneId);
         else if (e.event === "pane.agent_status_changed")
-          this.onAgentChanged(e.data.paneId, e.data.agent?.instanceId ?? null);
+          this.onAgentChanged(e.data.paneId, e.data.agent?.instanceId ?? null, e.data.agent?.kind);
       } catch (err) {
         deps.logger.warn("subagents: subscriber failed", { error: String(err) });
       }
@@ -97,6 +101,7 @@ export class SubagentTracker {
     if (this.closed || !this.deps.paneExists(r.paneId)) return;
     const pane = this.paneOf(r.paneId);
     pane.seen = true;
+    pane.lastReportAt = this.deps.now();
     this.apply(r, pane);
     this.tidy(pane);
     this.schedule(r.paneId, pane);
@@ -146,8 +151,16 @@ export class SubagentTracker {
     for (const [id, s] of pane.sessions)
       if (s.items.size === 0 && s.pending === undefined && s.stopped.size === 0)
         pane.sessions.delete(id);
-    while (pane.sessions.size > SESSIONS_MAX)
-      pane.sessions.delete(pane.sessions.keys().next().value as string);
+    // 上限を超えたら、動いているサブエージェントを持たないセッション（終了の記憶だけが残ったもの）を古い順に先に捨て、それでも超えるときだけ古い順に捨てる。
+    while (pane.sessions.size > SESSIONS_MAX) {
+      let victim: string | undefined;
+      for (const [id, s] of pane.sessions)
+        if (s.items.size === 0) {
+          victim = id;
+          break;
+        }
+      pane.sessions.delete(victim ?? (pane.sessions.keys().next().value as string));
+    }
   }
 
   /** その pane の今の一覧。報告を一度も受けていなければ undefined（＝分からない）。 */
@@ -238,11 +251,23 @@ export class SubagentTracker {
   }
 
   /** pane のエージェントが検出された・入れ替わった・終わった。検出より前に届いた報告は捨てず、入れ替わり・終了では捨てる。 */
-  private onAgentChanged(paneId: string, instanceId: string | null): void {
+  private onAgentChanged(paneId: string, instanceId: string | null, kind?: string): void {
     const pane = this.panes.get(paneId);
     if (!pane || pane.instanceId === instanceId) return; // 自分が配った変化（同じ instanceId）もここで止まる
     const previous = pane.instanceId;
     if (previous === null) {
+      // 検出の無い間に届いた報告（起動直後の、検出より前の報告。サーバの再起動・引き継ぎの直後を含む）を引き継ぐのは、検出されたのが claude で、
+      // 報告に動いているサブエージェントがあり、最後の報告が `ORPHAN_MAX_AGE_MS` 以内のときだけ。さもないと、エージェントが居なくなった後に遅れて届いた報告
+      // （非同期の終了の報告）が作った状態が、後で検出された別のエージェント（codex 等）に「0 件」や古い一覧を付ける（「報告を一度も受けていない」を壊す）。
+      // 捨てた pane は、次の報告で `paneOf` が作り直す（新しい検出は `subagents` を持たない＝分からない）。
+      const carry =
+        kind === "claude" &&
+        this.deps.now() - pane.lastReportAt <= ORPHAN_MAX_AGE_MS &&
+        [...pane.sessions.values()].some((s) => s.items.size > 0);
+      if (!carry) {
+        this.discard(paneId);
+        return;
+      }
       // 無し → X（最初の検出。サーバの再起動・引き継ぎの直後を含む）: 検出より前の報告を配り直す。
       // bus の購読の中で配ると、同じイベントを待つほかの購読者へ新しい値が先に届くので、待ち 0 のタイマーで配る。
       pane.instanceId = instanceId;
@@ -291,6 +316,7 @@ export class SubagentTracker {
       p = {
         sessions: new Map(),
         seen: false,
+        lastReportAt: this.deps.now(),
         instanceId: this.deps.agentInstanceOf(paneId),
         capLogged: false,
       };

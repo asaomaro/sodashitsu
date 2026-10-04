@@ -644,3 +644,83 @@ AssertionError: expected true to be false // Object.is equality
  FAIL  src/agent/SubagentTracker.test.ts > … > 閉じた pane への遅れた報告 > pane が無ければ、状態を作らずに捨てる（…）
 AssertionError: expected { count: +0, items: [] } to be undefined
 ```
+
+
+## 独立レビューの指摘（review-findings-01.md）への対応
+
+直した: 1〜6・8・9・13。直さない（記録だけ）: 7（端末版のキーボードの道筋は `show_subagents` へのキー割り当てだけ。既定のキーを付けるかは利用者の判断待ち）、10（`SessionStart` だけ手で消した状態）、11（「起きないこと」の固定の待ち。陽性の対照あり）、12（E2E のイベント待ち。判定はブラウザ）。
+
+#### 1. 一覧を閉じたときのフォーカス（`SubagentListDialog.vue`。単体＋E2E）
+```
+=== MUT: ボタンも行も無いとき（と show_subagents）に端末へ戻す行（registry?.focus(view.focusedPaneId)）を外す
+ FAIL  src/components/SubagentListDialog.test.ts > … > ボタンから開いたが、ボタンも行も無い（エージェントが居なくなった・pane が閉じた）: 今フォーカスのある pane の端末へ明示的に戻す（AC-I4）
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'p1' ]
+ FAIL  … > show_subagents から開いた（opener なし）: ボタンがあっても移さず、端末へ戻す
+ FAIL  … > 対象のエージェントが居なくなって自分で閉じ、行も無いときは、端末へ戻す
+=== E2E MUT（web を作り直して）: 同じ行を外す
+  ✘  5 src/specs/subagents.spec.ts:243:1 › 開いている間に対象のエージェントが居なくなったら、一覧は閉じる（AC-I4）。件数が変われば一覧も変わる (7.5s)
+    Error: expect(locator).toBeFocused() failed
+    Expected: focused
+    Received: inactive
+```
+
+#### 2. 切れたマシンのノードのキー `s`（`GraphView.vue`・`SubagentPanel.vue`）
+```
+=== MUT(GraphView.vue): subagentCountOf の exists === true の条件を外す
+ FAIL  src/components/graph/GraphView.subagents.test.ts > … > 切れているマシンのノードには、最後の要約の件数を出さない（状態の印と同じ。繋がり直せば出る）
+AssertionError: expected true to be false // Object.is equality   （キー s で一瞬でもパネルが作られたかを DOM の変化の記録で見る）
+=== MUT(SubagentPanel.vue): パネルが繋がっているマシンのときだけ件数を持つ条件（exists === true）を外す
+ FAIL  … > 切れているマシンのノードには、…（開いている間にマシンが切れたら、パネルは閉じる）
+AssertionError: expected true to be false // Object.is equality
+```
+
+#### 3. 端末版の経過時間（`TuiApp.ts`。日時を出さない設定で、偽の時計）
+```
+=== MUT: 一覧を開いている間の 10 秒ごとの描き直し（if (this.ui.dialogContext?.kind === "subagents")）を if (false) に
+ FAIL  src/app/TuiApp.subagents.test.ts > … > 一覧を開いている間は、経過時間が進む（10 秒ごとに描き直す）。閉じたら描き直さない
+AssertionError: expected ' Spaces       開いた順 + │ 1:t1   +      …' to match /T\s+17秒/
+=== MUT: 同じ条件を if (true) に（閉じた後も描き直す）
+ FAIL  … 同じ試験
+AssertionError: expected 21089 to be 21047 // Object.is equality
+```
+
+#### 4・5. `SubagentTracker`（引き継ぎの条件・セッションの捨て方。`decisions.md` D13）
+```
+=== MUT: 引き継ぎの kind === "claude" を true に
+ FAIL  … > 検出の無い間に届いた報告の引き継ぎ > 検出されたのが claude でなければ（codex 等）引き継がない
+AssertionError: expected [ { paneId: 'p1', value: { …(2) } } ] to deeply equal []
+=== MUT: 最後の報告からの時間（ORPHAN_MAX_AGE_MS）の条件を外す
+ FAIL  … > 最後の報告から 30 秒を超えていたら引き継がない（新しい検出は分からない）
+=== MUT: 動いているサブエージェントがあるかの条件を true に
+ FAIL  … > 動いているサブエージェントが無い（終了・作業の終わりの報告だけ）なら引き継がず、「0 件」を新しい検出に付けない
+=== MUT: セッションの上限で、動いているものを持たないセッションを先に捨てる分岐（s.items.size === 0）を外す
+ FAIL  … > 上限を超えたら、動いているサブエージェントを持たないセッション（終了の記憶だけ）を先に捨てる。動いているものを持つセッションは残す
+AssertionError: expected [] to deeply equal [ 'keep' ]
+```
+
+#### 6. フックのスクリプト: 報告に失敗する状況（`agent-hook-report.test.ts`。socket が無い・サーバが止まっている・pane の外 × 6 つのイベント〔Stop を含む〕・stdin が壊れている）
+```
+=== MUT: 接続の失敗で標準エラーに書く
+ FAIL  assets/agent-hook-report.test.ts > … > 報告に失敗する状況で、黙って正常に終わる（AC12） > socket が無い（パスのファイルが無い）
+AssertionError: SessionStart: expected { code: +0, stdout: '', …(1) } to deeply equal { code: +0, stdout: '', stderr: '' }
+ FAIL  … > サーバが止まっている（socket のファイルだけが残り、待ち受けていない）
+=== MUT: pane の外（環境変数なし）で標準出力に書く
+ FAIL  … > pane の外（環境変数が無い）
+=== MUT: 解釈できない入力で終了コードを 1 に
+ FAIL  … > stdin が JSON でない・空でも、黙って正常に終わる
+AssertionError: "": expected { code: 1, stdout: '', stderr: '' } to deeply equal { code: +0, stdout: '', stderr: '' }
+```
+
+#### 8・9・13
+- 8: `ContextMenu.ts` のコメントを事実に合わせた（メニューはマウス用。キーボードの道筋は `show_subagents`）。
+- 9: `uninstall()` は、自分のエントリを除いて空になった経路をキーごと消す（元から空・利用者のエントリが残る経路は触らない）。
+```
+=== MUT: 空になった経路をキーごと消す分岐を外す
+ FAIL  src/agent/AgentIntegrationInstaller.test.ts > … > uninstall removes only our entries from every path, … 
+AssertionError: PreToolUse: expected { SessionStart: [ { …(2) } ], …(5) } to not have property "PreToolUse"
+ FAIL  … > uninstall: 元から空だった経路（自分のエントリが無かった経路）と、利用者のエントリが残る経路は触らない
+=== MUT: 空かどうかを見ずに常にキーごと消す
+ FAIL  … > uninstall removes only our entries …
+AssertionError: expected undefined to deeply equal [ { matcher: 'compact', …(1) } ]
+```
+- 13: 定数の後の空行を 1 つに。

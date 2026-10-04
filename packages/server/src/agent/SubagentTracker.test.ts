@@ -67,12 +67,15 @@ describe("SubagentTracker（数える部分）", () => {
       if (t.at <= clock && timers.delete(id)) t.fn();
     }
   };
-  const detect = (paneId: string, instanceId: string | null) => {
+  const detect = (paneId: string, instanceId: string | null, kind = "claude") => {
     if (instanceId === null) detected.delete(paneId);
     else detected.set(paneId, instanceId);
     bus.publish({
       event: "pane.agent_status_changed",
-      data: { paneId, agent: instanceId === null ? null : ({ instanceId } as AgentInfo) },
+      data: {
+        paneId,
+        agent: instanceId === null ? null : ({ instanceId, kind } as AgentInfo),
+      },
     });
   };
 
@@ -361,6 +364,18 @@ describe("SubagentTracker（数える部分）", () => {
       expect(ids()).toEqual(["keep"]);
     });
 
+    it("上限を超えたら、動いているサブエージェントを持たないセッション（終了の記憶だけ）を先に捨てる。動いているものを持つセッションは残す", () => {
+      rep({ type: "subagent_start", agentId: "keep", sessionId: "first" }); // 最も古いセッション。動いているものを持つ
+      for (let i = 0; i < 40; i++)
+        rep({ type: "subagent_stop", agentId: `x${i}`, sessionId: `stopped${i}` }); // 終了の記憶だけのセッション
+      expect(ids()).toEqual(["keep"]);
+      // 動いているものを持つセッションだけが 33 個になれば、最後は古い順に捨てる。
+      for (let i = 0; i < 40; i++)
+        rep({ type: "subagent_start", agentId: `r${i}`, sessionId: `run${i}` });
+      expect(tracker.current("p1")?.count).toBe(32);
+      expect(ids()).not.toContain("keep");
+    });
+
     it("セッションの数は 32 まで。終了の報告が来ないセッション ID が溜まっても、古いものから捨てる", () => {
       for (let i = 0; i < 40; i++)
         rep({ type: "subagent_start", agentId: `a${i}`, sessionId: `s${i}` });
@@ -393,6 +408,61 @@ describe("SubagentTracker（数える部分）", () => {
       gone.delete("p1");
       rep({ type: "subagent_start", agentId: "a2" }); // 検出前でも、pane があれば持つ
       expect(ids()).toEqual(["a2"]);
+    });
+  });
+
+  describe("検出の無い間に届いた報告の引き継ぎ", () => {
+    it("claude が検出され、動いているサブエージェントを持ち、最後の報告が 30 秒以内なら引き継ぐ（検出より前の報告を拾う）", () => {
+      rep({ type: "subagent_start", agentId: "early" });
+      clock += 30_000;
+      detect("p1", "X", "claude");
+      advance(0);
+      expect(published.at(-1)?.value?.items.map((i) => i.id)).toEqual(["early"]);
+    });
+
+    it("最後の報告から 30 秒を超えていたら引き継がない（新しい検出は分からない）", () => {
+      rep({ type: "subagent_start", agentId: "stale" });
+      clock += 30_001;
+      detect("p1", "X", "claude");
+      advance(0);
+      expect(published).toEqual([]);
+      expect(tracker.current("p1")).toBeUndefined();
+    });
+
+    it("検出されたのが claude でなければ（codex 等）引き継がない", () => {
+      rep({ type: "subagent_start", agentId: "early" });
+      detect("p1", "X", "codex");
+      advance(100);
+      expect(published).toEqual([]);
+      expect(tracker.current("p1")).toBeUndefined();
+    });
+
+    it("動いているサブエージェントが無い（終了・作業の終わりの報告だけ）なら引き継がず、「0 件」を新しい検出に付けない", () => {
+      rep({ type: "session_end" });
+      rep({ type: "subagent_stop", agentId: "gone" });
+      detect("p1", "X", "claude");
+      advance(100);
+      expect(published).toEqual([]);
+      expect(tracker.current("p1")).toBeUndefined();
+    });
+
+    it("エージェントが居なくなった後に遅れて届いた報告（非同期の終了の報告）は、後で検出された別のエージェントに付かない", () => {
+      detect("p1", "X");
+      rep({ type: "subagent_start", agentId: "a1" });
+      advance(100);
+      detect("p1", null); // X → null（状態を捨てる）
+      rep({ type: "subagent_stop", agentId: "a1" }); // 遅れて届く
+      rep({ type: "session_end" });
+      detect("p1", "Y", "codex"); // 後で別のエージェント
+      advance(100);
+      expect(tracker.current("p1")).toBeUndefined();
+      expect(published.filter((p) => p.value?.count === 0)).toEqual([]);
+      // 同じ pane で、そのあとの報告は新しい検出のものとして数える。
+      detect("p1", null);
+      detect("p1", "Z", "claude");
+      rep({ type: "subagent_start", agentId: "z1" });
+      advance(100);
+      expect(ids()).toEqual(["z1"]);
     });
   });
 
