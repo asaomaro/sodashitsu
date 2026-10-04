@@ -395,6 +395,44 @@ describe("TuiDispatcher — tab・workspace", () => {
     expect(h.sent("workspace.focus")).toEqual([{ workspaceId: "w2" }, { workspaceId: "w1" }]);
   });
 
+  it("workspaceDelta・workspaceIndex は layout の順（描画と同じ木）で動き、畳んだグループの中は今いる workspace だけ（T16）", () => {
+    const wsList = ["w1", "w2", "w3"].map((id) => workspace(id, [`t-${id}`]));
+    const h = harness(
+      snapshot({
+        workspaces: wsList,
+        tabs: wsList.map((w) => tab(w.tabIds[0]!, w.id, leaf(`p-${w.id}`))),
+        panes: wsList.map((w) => pane(`p-${w.id}`, w.tabIds[0]!)),
+        groups: [{ id: "g1", label: "G", collapsed: true }],
+        // 開いた順は w1・w2・w3、レイアウトは w3 → グループ（w1・w2）。
+        layout: { top: ["w:w3", "g:g1"], groups: { g1: ["w:w1", "w:w2"] } },
+        focus: { workspaceId: "w1", tabId: "t-w1", paneId: "p-w1" },
+      }),
+    );
+    // 畳んだグループの中は今いる w1 だけ：見える順は w3・w1（開いた順の w1・w2・w3 ではない）。
+    h.d.run({ type: "workspaceIndex", index: 1 });
+    expect(h.model.workspaceId).toBe("w3");
+    // w3 に居ると、畳んだグループの中は何も見えない（w1 も隠れる）。
+    h.d.run({ type: "workspaceIndex", index: 2 });
+    expect(h.model.workspaceId).toBe("w3");
+    // グループを開くと layout の順 w3・w1・w2。
+    h.model.applyEvent({
+      event: "group.updated",
+      data: { group: { id: "g1", label: "G", collapsed: false } },
+    });
+    h.d.run({ type: "workspaceDelta", delta: 1 });
+    expect(h.model.workspaceId).toBe("w1");
+    h.d.run({ type: "workspaceDelta", delta: 1 });
+    expect(h.model.workspaceId).toBe("w2");
+    h.d.run({ type: "workspaceDelta", delta: 1 });
+    expect(h.model.workspaceId).toBe("w3");
+    expect(h.sent("workspace.focus")).toEqual([
+      { workspaceId: "w3" },
+      { workspaceId: "w1" },
+      { workspaceId: "w2" },
+      { workspaceId: "w3" },
+    ]);
+  });
+
   it("workspaceDelta：workspace が 1 つなら何もしない", () => {
     const h = harness(
       snapshot({

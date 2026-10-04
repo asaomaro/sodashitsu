@@ -6,7 +6,6 @@ import {
   errorCodeOf,
   neighborPaneId,
   orderedAgentPaneIds,
-  visibleWorkspaceIdsInOrder,
   type Action,
   type AgentOrderEntry,
   type CopyCommand,
@@ -16,6 +15,7 @@ import {
 } from "@sodashitsu/client-core";
 import { parseRemoteKey, remoteKey, type MachinesModel } from "../model/MachinesModel.js";
 import type { PrefsModel } from "../model/PrefsModel.js";
+import { currentVisibleWorkspaceIds } from "../model/sidebarTree.js";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { MenuTarget, UiState } from "../model/UiState.js";
 import type { RequestPort } from "../term/PaneRegistry.js";
@@ -918,13 +918,7 @@ export class TuiDispatcher {
   }
 
   private visibleWorkspaceIds(): string[] {
-    return visibleWorkspaceIdsInOrder(
-      [...this.model.workspaces.values()],
-      [...this.model.groups.values()],
-      this.host.prefs.workspaceSort,
-      this.host.prefs.collapsedAutoGroups,
-      this.model.workspaceId,
-    );
+    return currentVisibleWorkspaceIds(this.model, this.host.prefs);
   }
 
   private workspaceDelta(delta: 1 | -1): void {

@@ -99,3 +99,34 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `docs/herdr-parity.md:30, :73`、`docs/tui-parity.md:35, :88, :129`、`docs/tui.md:133`、`docs/machines.md:60, :132`、`docs/verification.md`（「共通：…」の形式の節・既知の制約）
       依存: T20
       AC: AC11, AC16, AC18
+
+## 追補 01 のタスク（`amendment-01.md`。T16〜T21 より先に行う）
+
+- [ ] T22: 型——`GitInfo.worktreeKey`、`SidebarLayout` を追補 B の形（`top` はまとまりの順で `"u"` を含む・`ungrouped`）に、`ItemTarget` に `{ kind: "ungrouped" }`、共有の設定に「グループなし」を畳んだかの真偽。スキーマと型のテストを直す
+      対象: `packages/protocol/src/model.ts`（`GitInfo`・`SidebarLayout`）、`packages/protocol/src/messages.ts`（`ItemTarget`・`item.move`／`item.move_by`・共有の設定の型。`collapsedAutoGroups` の隣）、`packages/protocol/src/messages.test.ts`
+      依存: T15
+      AC: AC19, AC20
+- [ ] T23: 純関数——代表の決まり（`itemRefOf(ws, workspaces)`・`repoMembers` は代表だけ・`worktreeKey` が無い古いサーバでは全部メンバー）、`sidebarTree` をまとまりの列（グループと「グループなし」。本物のグループが無ければ見出しなし）に、畳んだ worktree グループの隠れている数、`visibleWorkspaceIdsOfTree`（畳んだ「グループなし」）、`topUnitOf`（「グループなし」の中はグループ扱いしない）、`layoutFromLegacy`、`sidebarLayout.ts` の操作を新しい形に（新しい workspace・外す・グループの削除は `ungrouped` の末尾へ、新しいグループは `"u"` の直前、まとまりの並べ替え、`flattenWorkspaceIds`・`repairLayout`）。単体テストを新しい決まりで書き直し、壊して落ちる確認
+      対象: `packages/client-core/src/workspace/workspaceGrouping.ts`・`sidebarLayout.ts` とそのテスト
+      依存: T22
+      AC: AC19, AC20, AC17
+- [ ] T24: サーバ——`GitInfoPoller` が `worktreeKey` を返す、判定の反映に代表の交代（代表が閉じる・移る・`worktreeKey` が変わる）、レイアウトの保ち方を新しい形に（表の各場面を追補 B の置き場に）、`group.*`・`item.*`・`workspace.move`／`move_to`・一括クローズ（代表だけ）を合わせる、保存と復元（`worktreeKey`・`ungrouped`）、仮の状態と確定。単体テストと、実物の git の結合テスト（同じフォルダで 2 つ目を開くと通常の項目・代表を閉じると次が worktree グループに入る）。壊して落ちる確認
+      対象: `packages/server/src/git/GitInfoPoller.ts`、`packages/server/src/session/SessionModel.ts`・`SessionService.ts`、`packages/server/src/surface/methods/{group,item,workspace}.ts`、`packages/server/src/persist/SessionFile.ts`、`packages/server/src/composeServer.ts`（`toSessionFileData`）と各テスト
+      依存: T23
+      AC: AC19, AC20, AC8, AC10, AC13
+- [ ] T25: ブラウザ版の表示——B3 の見た目（グループの見出し: 折りたたみ・状態のまとめ・フォルダの印・名前・横線・数。面・帯なし）、「グループなし」の見出し（本物のグループがあるときだけ・フォルダの印なし・畳める）、worktree グループの木の線・worktree の印・ブランチ名、畳んだ worktree グループの状態のまとめと `+n`、代表でない workspace は通常の行。状態のまとめは既存の `aggregate`・`displayStateFor` で計算する。単体テスト
+      対象: `packages/web/src/components/Sidebar.vue`（`rowStateFor`・行の組み立て・描画・スタイル）、`packages/web/src/store/view.ts`（畳んだ状態）、`packages/web/src/components/Sidebar.test.ts`、見本は `.aidev/works/20261004-group-worktree-items/mock-sidebar.html`
+      依存: T24
+      AC: AC19, AC20, AC21, AC12
+- [ ] T26: ブラウザ版の操作——メニュー（「グループなし」の見出しは「上へ移動」「下へ移動」だけ。「グループから外す」は「グループなし」の末尾へ）、ドラッグ（項目は同じまとまりの中だけ・まとまりどうしの並べ替え・「グループなし」の見出しも掴める）、navigate の選択と `navigate_toggle_collapse`・`navigate_open_menu`（「グループなし」の見出し）、`move_workspace_previous`／`next`。`layout` の無いサーバでの扱いは今までどおり。単体テストと壊して落ちる確認
+      対象: `packages/web/src/components/ContextMenu.vue`・`GroupPickerDialog.vue`、`packages/web/src/actions/ActionDispatcher.ts`、`packages/web/src/components/Sidebar.vue`（D&D・navigate）とそのテスト
+      依存: T25
+      AC: AC20, AC5, AC-I2, AC-I3
+- [ ] T27: 端末版——T16〜T18 の内容を、追補の構造と T4 の見た目で行う（グループの見出し `▾ ◐ <名前> ─── <数>`・「グループなし」・状態のまとめ・worktree グループの木の線と `⎇` と `+n`・ブランチ名・メニュー・navigate・クリックの当たり判定・項目とまとまりのドラッグ）。**T16・T17・T18 は、このタスクの中で、追補の決まりで消化する**（別々のコミットにしてよい）
+      対象: T16・T17・T18 の `対象:` と同じ
+      依存: T24
+      AC: AC19, AC20, AC21, AC15, AC16
+- [ ] T28: E2E と文書の反映——T20（E2E）と T21（文書）に、AC19〜AC21 の場面（同じフォルダの 2 つ目・「グループなし」の出入りと並べ替え・見出しの状態のまとめ・畳んだ worktree グループの `+n`）を足して行う
+      対象: T20・T21 の `対象:` と同じ
+      依存: T26, T27, T19
+      AC: AC19, AC20, AC21, AC18

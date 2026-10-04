@@ -1472,3 +1472,110 @@ AssertionError: expected null to be 'group:g1' // Object.is equality
 - T15 [should] Enter・openMenu・Sidebar の見出し・navigableRowsOfTree 等の壊して落ちる確認が無い → 14 箇所を追補に貼った [conv:regression-negative-control!]
 - T15 [should] 「上へ／下へ移動の後も見出しに選択が残る」のテストが何も確かめていなかった → 実物の ContextMenu と ActionDispatcher を通すテストに書き直した [conv:regression-negative-control]
 - T15 [nit] 選択中のグループが消えても group:<id> の選択が残る → 実在確認を入れて何もせず選択を外す（テストと壊して落ちる確認つき、D23 に追記） [conv:-]
+
+### T16 壊して落ちる確認
+
+実装行を 1 つずつ壊して vitest を流し、落ちた出力（失敗の行・AssertionError・Expected/Received の抜粋。`grep` で絞ったもの）を貼る。各確認の後は元に戻した（`diff` で一致を確認）。
+
+- A: `SessionModel.applyToSession` の `sidebar.layout_changed`（`this.layout = e.data.layout`）を無視する／A2: `applySnapshot` で `layout` を捨てる
+- B: `mouse.ts` の `x <= hit.toggleX`（先頭の行の ▸/▾ の当たり）を外す／B2: 右クリックで `autoGroup` を workspace として扱わない
+- C: `sidebarTree.ts` の木が `model.effectiveLayout()` を使わず、いつも `layoutFromLegacy` で導く（描画とキー操作の両方が落ちる）
+- D: 先頭の行の種類の印 `ψ` を外す／E: 畳んだグループの中の workspace を全部描く／F: 先頭の行の 2 行目の字下げ（6 → 2）
+
+```
+=== A: sidebar.layout_changed を無視
+ FAIL  src/model/SessionModel.test.ts > SessionModel: サイドバーのレイアウト（T16） > snapshot の layout を持ち、sidebar.layout_changed で置き換える。無ければ null（古いサーバ）
+AssertionError: expected [ 'w:w2', 'w:w1' ] to deeply equal [ 'w:w1', 'w:w2' ]
+- Expected
++ Received
+ ❯ src/model/SessionModel.test.ts:163:27
+      Tests  1 failed | 10 passed (11)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/model/SessionModel.test.ts
+=== A2: snapshot の layout を捨てる
+ FAIL  src/model/SessionModel.test.ts > SessionModel: サイドバーのレイアウト（T16） > snapshot の layout を持ち、sidebar.layout_changed で置き換える。無ければ null（古いサーバ）
+AssertionError: expected null to deeply equal { top: [ 'w:w2', 'w:w1' ], groups: {} }
+- Expected:
++ Received:
+ ❯ src/model/SessionModel.test.ts:155:22
+ FAIL  src/model/SessionModel.test.ts > SessionModel: サイドバーのレイアウト（T16） > effectiveLayout は layout が無ければ layoutFromLegacy で導き、マシンの切り替え（reset）で空に戻る
+AssertionError: expected { top: [ 'w:w1', 'w:w2' ], groups: {} } to deeply equal { top: [ 'w:w2', 'w:w1' ], groups: {} }
+- Expected
++ Received
+ ❯ src/model/SessionModel.test.ts:172:33
+      Tests  2 failed | 9 passed (11)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/model/SessionModel.test.ts
+=== B: toggleX の当たりを外す
+ FAIL  src/input/mouse.test.ts > マウスの操作（AC9・AC-I5） > worktree グループの先頭の行：左の ▸/▾ のクリックは折りたたみ、ほかの桁は workspace へ移る。右クリックは workspace のメニュー（T16）
+AssertionError: expected [] to deeply equal [ { patch: { …(1) } } ]
+- Expected
++ Received
+ ❯ src/input/mouse.test.ts:134:61
+      Tests  1 failed | 20 passed (21)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/input/mouse.test.ts
+=== B2: 右クリックで autoGroup を workspace として扱わない
+ FAIL  src/input/mouse.test.ts > マウスの操作（AC9・AC-I5） > worktree グループの先頭の行：左の ▸/▾ のクリックは折りたたみ、ほかの桁は workspace へ移る。右クリックは workspace のメニュー（T16）
+AssertionError: expected { kind: 'global' } to deeply equal { Object (kind, workspaceId) }
+- Expected
++ Received
+ ❯ src/input/mouse.test.ts:145:42
+      Tests  1 failed | 20 passed (21)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/input/mouse.test.ts
+=== C: 木に layout を使わない
+ FAIL  src/actions/TuiDispatcher.test.ts > TuiDispatcher — tab・workspace > workspaceDelta・workspaceIndex は layout の順（描画と同じ木）で動き、畳んだグループの中は今いる workspace だけ（T16）
+AssertionError: expected 'w1' to be 'w3' // Object.is equality
+Expected: "w3"
+Received: "w1"
+ ❯ src/actions/TuiDispatcher.test.ts:413:33
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバーの木（T16。グループ・worktree グループ・子・通常の行） > グループの中に worktree グループと通常の行を 3 段で描き、先頭の行とグループの見出しに種類の印を付ける
+AssertionError: expected [ '▾ ψ main', 'wt-a', 'wt-b', …(2) ] to deeply equal [ '▾ ≡ 仕事', '▾ ψ main', 'wt-a', …(2) ]
+- Expected
++ Received
+ ❯ src/render/chrome/sidebar.test.ts:81:61
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバーの木（T16。グループ・worktree グループ・子・通常の行） > 畳んだグループの中は今いる workspace の行だけ。畳んだ worktree グループは先頭と今いる子だけ
+AssertionError: expected [ 'main', 'wt-a', 'wt-b', 'solo', 'G' ] to deeply equal [ 'G', 'wt-b' ]
+- Expected
++ Received
+ ❯ src/render/chrome/sidebar.test.ts:99:73
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバーの木（T16。グループ・worktree グループ・子・通常の行） > 名前順は一番上の行だけを並べ、グループの中はレイアウトの順のまま
+AssertionError: expected [ Array(5) ] to deeply equal [ Array(5) ]
+- Expected
++ Received
+ ❯ src/render/chrome/sidebar.test.ts:122:69
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバーの木（T16。グループ・worktree グループ・子・通常の行） > workspace の切り替え・番号・navigate の順（見えている行の順）は描画と同じ木から出る
+AssertionError: expected [ 'main', 'wt-a', 'wt-b', 'solo' ] to deeply equal [ 'solo', 'main', 'wt-a', 'wt-b' ]
+- Expected
++ Received
+=== D: worktree グループの印を外す
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバーの木（T16。グループ・worktree グループ・子・通常の行） > グループの中に worktree グループと通常の行を 3 段で描き、先頭の行とグループの見出しに種類の印を付ける
+AssertionError: expected [ '▾ ≡ 仕事', '▾ main', 'wt-a', …(2) ] to deeply equal [ '▾ ≡ 仕事', '▾ ψ main', 'wt-a', …(2) ]
+- Expected
++ Received
+ ❯ src/render/chrome/sidebar.test.ts:81:61
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバーの木（T16。グループ・worktree グループ・子・通常の行） > 畳んだグループの中は今いる workspace の行だけ。畳んだ worktree グループは先頭と今いる子だけ
+AssertionError: expected [ '▾ ≡ G', '▸ main', 'wt-b', 'solo' ] to deeply equal [ '▾ ≡ G', '▸ ψ main', 'wt-b', 'solo' ]
+- Expected
++ Received
+ ❯ src/render/chrome/sidebar.test.ts:107:61
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバーの木（T16。グループ・worktree グループ・子・通常の行） > layout の無い古いサーバは layoutFromLegacy で本体の所属に描く（子が別のグループでも 1 つの項目）
+AssertionError: expected [ '▾ ≡ G', '▾ main', 'wt-a' ] to deeply equal [ '▾ ≡ G', '▾ ψ main', 'wt-a' ]
+- Expected
++ Received
+=== E: 畳んだグループの中を全部描く
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバーの木（T16。グループ・worktree グループ・子・通常の行） > 畳んだグループの中は今いる workspace の行だけ。畳んだ worktree グループは先頭と今いる子だけ
+AssertionError: expected [ 'G', 'wt-b', 'solo' ] to deeply equal [ 'G', 'wt-b' ]
+- Expected
++ Received
+ ❯ src/render/chrome/sidebar.test.ts:99:73
+      Tests  1 failed | 5 passed (6)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/render/chrome/sidebar.test.ts
+=== F: 先頭の行の 2 行目の字下げ
+      Tests  6 passed (6)
+=== F: 先頭の行の 2 行目の字下げを 6 → 2
+ FAIL  src/render/chrome/sidebar.test.ts > サイドバーの木（T16。グループ・worktree グループ・子・通常の行） > 行の並びが 2 行以上でも、先頭の行の 2 行目は「▸ ψ 」の分だけ下げる（通常の行は状態の印の幅だけ）
+AssertionError: expected 3 to be 7 // Object.is equality
+- Expected
++ Received
+ ❯ src/render/chrome/sidebar.test.ts:158:27
+      Tests  1 failed | 6 passed (7)
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/render/chrome
+```

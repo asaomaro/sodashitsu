@@ -143,3 +143,34 @@ describe("SessionModel: snapshot とイベントの適用（web の StoreAdapter
     expect(m.hasSizeAuthority("t2")).toBe(false);
   });
 });
+
+describe("SessionModel: サイドバーのレイアウト（T16）", () => {
+  const layout = { top: ["w:w2", "w:w1"], groups: {} };
+  it("snapshot の layout を持ち、sidebar.layout_changed で置き換える。無ければ null（古いサーバ）", () => {
+    const m = new SessionModel();
+    m.applySnapshot(snapshot(), "c1");
+    expect(m.layout).toBeNull();
+    expect(m.hasServerLayout).toBe(false);
+    m.applySnapshot(snapshot({ layout }), "c1");
+    expect(m.layout).toEqual(layout);
+    expect(m.hasServerLayout).toBe(true);
+    const changed = vi.fn();
+    m.onChange(changed);
+    m.applyEvent({
+      event: "sidebar.layout_changed",
+      data: { layout: { top: ["w:w1", "w:w2"], groups: {} } },
+    });
+    expect(m.layout?.top).toEqual(["w:w1", "w:w2"]);
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  it("effectiveLayout は layout が無ければ layoutFromLegacy で導き、マシンの切り替え（reset）で空に戻る", () => {
+    const m = new SessionModel();
+    m.applySnapshot(snapshot(), "c1");
+    expect(m.effectiveLayout()).toEqual({ top: ["w:w1", "w:w2"], groups: {} });
+    m.applySnapshot(snapshot({ layout }), "c1");
+    expect(m.effectiveLayout()).toEqual(layout);
+    m.reset();
+    expect(m.layout).toBeNull();
+  });
+});

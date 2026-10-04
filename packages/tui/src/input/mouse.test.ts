@@ -110,6 +110,41 @@ describe("マウスの操作（AC9・AC-I5）", () => {
     expect(h.ws.requests("workspace.create")).toHaveLength(1);
   });
 
+  it("worktree グループの先頭の行：左の ▸/▾ のクリックは折りたたみ、ほかの桁は workspace へ移る。右クリックは workspace のメニュー（T16）", async () => {
+    const g = (linked: boolean) => ({
+      branch: null,
+      ahead: 0,
+      behind: 0,
+      repoKey: "r1",
+      isLinkedWorktree: linked,
+    });
+    const h = await start({
+      snapshot: snapshot({
+        workspaces: [
+          workspace("w1", ["t1"], { git: g(false) }),
+          workspace("w2", ["t2"], { git: g(true) }),
+        ],
+        // 焦点は子（w2）。先頭の行（w1）は 1 行目、子の行は 2 行目。
+        focus: { workspaceId: "w2", tabId: "t2", paneId: "p3" },
+      }),
+      respond: { "prefs.set": (p: { patch: unknown }) => ({ prefs: p.patch, rev: 1 }) },
+    });
+    // 先頭の行の「▸/▾」の桁（x=1）：畳む（共有の設定 collapsedAutoGroups）。workspace へは移らない。
+    h.io.type(down(1, 1) + up(1, 1));
+    expect(h.ws.requests("prefs.set").map((r) => r.params)).toEqual([
+      { patch: { collapsedAutoGroups: ["r1"] } },
+    ]);
+    expect(h.ws.requests("workspace.focus")).toEqual([]);
+    // 記号の外（名前の上）は workspace の行：その workspace へ。
+    h.io.type(down(8, 1) + up(8, 1));
+    expect(h.app.model.workspaceId).toBe("w1");
+    expect(h.ws.requests("workspace.focus").map((r) => r.params)).toEqual([{ workspaceId: "w1" }]);
+    expect(h.ws.requests("prefs.set")).toHaveLength(1);
+    // 右クリックは記号の上でも workspace のメニュー。
+    h.io.type(down(1, 1, 2));
+    expect(h.app.ui.contextMenu?.target).toEqual({ kind: "workspace", workspaceId: "w1" });
+  });
+
   it("右クリックでメニュー（tab・workspace・pane・何も無い所は全体）（M3）", async () => {
     const h = await start();
     h.io.type(down(28, 0, 2));

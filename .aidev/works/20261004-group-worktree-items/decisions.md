@@ -191,3 +191,18 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
 - **「上へ／下へ移動」の後の選択**: 選択は ID（キー）で持ち、メニューの操作では消さないので、動かした見出しに選択が残る（テストで固定）。
 - **選択が消える経路（T15 点検の指摘）**: メニューを閉じる（`ContextMenu.vue` の `close`・実行の `activate`）と `moveGroupBy` は `navigateSelection` を触らない。選択を消すのは `navigate_cancel`/`activate`（`ActionDispatcher`）とマシン切り替え（`view.resetForMachineSwitch`）だけだと実物で確かめた。「上へ移動」の後も見出しの選択が残るテストは、実際のメニュー経路（見出しのメニュー→「上へ移動」）で通し、`close`／実行に選択を消す行を仮に入れると落ちることを確かめた（review.md）。
 - **消されたグループの選択**: 別の画面でグループが消されても選択が `group:<id>` のまま残りうる。`navigate_open_menu`（`Sidebar.vue`）と `navigate_toggle_collapse`（`toggleCollapseOfSelection`）は `session.groups` に実在するかを確かめ、無ければ何も開かず・送らず、選択を外す。
+
+## D24: 端末版の種類の印は `≡`（グループ）・`ψ`（worktree グループ）（T16）
+
+- **端末版の既存の方針（読んで確かめた）**: ① 記号は 1 桁（状態の記号 `×◐✓○·`・折りたたみ `▸▾`・`+`・`«`・`↑↓` はすべて幅 1。幅は `render/width.ts` の unicode11 の規則で測り、枠・pane の中と同じ）。② 絵文字の属性を持たない字形だけを使う（`client-core/agent/stateIndicator.ts` の説明どおり、`color` を受け継ぐ。絵文字は幅 2 になり色も受け継がない）。③ 色に頼らず、形で見分ける（状態は記号＋色。記号表示を切ると `●` になる設定 `statusSymbols` はあるが、種類の印は色を使わないので対象外）。④ 字形の確認は外側の端末のフォント次第（`docs/tui-parity.md` H23b）。
+- **決めた記号**: グループの見出し `≡`（U+2261）、worktree グループの先頭の行 `ψ`（U+03C8。枝分かれの形）。どれも幅 1・絵文字ではない・状態の記号や `▸▾` と形が重ならない。`render/chrome/sidebar.ts` の `KIND_GLYPH` に唯一の置き場を置いた（web の `SidebarKindIcon` の「フォルダ／枝分かれ」に対応）。
+- **位置**: 折りたたみの記号の次（「▸ ≡ グループ名」「▸ ψ main …」）。先頭の行は「▸ ψ 」の 4 桁の後ろに今までの行の部品（状態の印・名前）が続く。複数行の行の並びでは 2 行目を 1 + 6 桁から始める（通常の行は 1 + 2）。通常の行・子の行には付けない（web と同じ）。
+- **読み上げ用の文言は端末版に無い**（画面を端末に描くだけで、スクリーンリーダー向けの別の経路を持たない）。AC12 の「読み上げ用の文言」はブラウザ版だけの要件として扱う。
+
+## D25: 端末版の表示と順（T16）
+
+- **モデル**: `SessionModel.layout`（`SessionSnapshot.layout`・`sidebar.layout_changed`。無ければ null。`reset()` で null）、`effectiveLayout()`（無ければ `layoutFromLegacy`。仮か確定かは区別しない）、`hasServerLayout`（T17・T18 の古いサーバの分岐用）。
+- **描画とキー操作を同じ関数に通す**: `model/sidebarTree.ts` の `currentSidebarTree`／`currentVisibleWorkspaceIds`（web の `store/sidebarTree.ts` と同じ役）。`sidebar.ts` と `TuiDispatcher` の workspace の切り替え・番号・navigate の上下（`visibleWorkspaceIds`）が使う。`TuiDispatcher` は古い `visibleWorkspaceIdsInOrder` を呼ばなくなった（T19 まで関数は残る）。
+- **`autoGroup` の当たり判定**: マシンの見出し（`machine`）と同じく 1 つの当たりに `toggleX` を持たせた。`{ kind: "autoGroup", repoKey, workspaceId, toggleX }`。`x <= toggleX`（先頭の行の ▸/▾ の桁）なら `toggleAutoGroupCollapsed(repoKey)`、ほかの桁は workspace の当たりとして働く（クリックで移る・ドラッグの開始・右クリックのメニュー・ドラッグの落とし先・pane のドロップ先・navigate の `reveal`・`openRequestedNavigateMenu` を `workspace` と同じ扱いにした）。
+- **畳んだ入れ物の描き方**: web と同じ決まり（D20）。畳んだグループの中は今いる workspace の行だけ（先頭でも子でも、その種類の行として）。畳んだ worktree グループは先頭と今いる子だけ。
+- **ドラッグは T18 まで暫定**: 先頭の行から掴んだドラッグ・落とし先は今まで通りその workspace 1 つの `workspace.move_to`（`moveWorkspacesByDrag`）。項目単位への置き換えは T18。

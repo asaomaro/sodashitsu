@@ -10,20 +10,32 @@ import {
   resolveAgentLines,
   resolveSpaceLines,
   type ResolvedLine,
-  groupedWorkspaceRows,
   orderedAgentPaneIds,
   visibleGroupMembers,
+  type ItemRow,
 } from "@sodashitsu/client-core";
+import { currentSidebarTree } from "../../model/sidebarTree.js";
 import { ATTR, hexColor, type PackedColor } from "../color.js";
 import type { Grid, Rect } from "../Screen.js";
 import { stringWidth, truncate } from "../width.js";
 import { glyphFor, stateColor, type ChromeContext } from "./context.js";
 
+/**
+ * 行の種類の印（1 桁の記号。20261004-group-worktree-items・decisions D24）。状態の記号（`×◐✓○·`）・折りたたみの `▸▾` と同じく、
+ * 絵文字の属性を持たない（`color` を受け継ぎ、unicode11 の幅 1。絵文字は幅が 2 になり色も受け継がない）。形で見分け、色に頼らない。
+ * 位置は折りたたみの記号の次（グループ・worktree グループの先頭の行だけ。通常の行・子の行には付けない）。
+ */
+export const KIND_GLYPH = { group: "≡", worktreeGroup: "ψ" } as const;
+
 /** サイドバーの行が何を指すか（04 のクリック・navigate が使う）。 */
 export type SidebarTarget =
   | { kind: "workspace"; workspaceId: string }
   | { kind: "group"; groupId: string }
-  | { kind: "autoGroup"; repoKey: string }
+  /**
+   * worktree グループの先頭の行（本体の workspace の行）。左の「▸/▾」（`x <= toggleX`）でその worktree グループを畳み・広げ、
+   * ほかは `workspaceId` の workspace として働く（マシンの見出しの `machine` と同じ作り）。
+   */
+  | { kind: "autoGroup"; repoKey: string; workspaceId: string; toggleX: number }
   | { kind: "agent"; paneId: string }
   /** 「＋」（新しい workspace。herdr の M14）。`x` の桁だけが当たり。 */
   | { kind: "newWorkspace"; x: number }
@@ -65,6 +77,8 @@ interface Seg {
 interface Line {
   indent: number;
   rows: Seg[][];
+  /** 2 行目からの追加の字下げ（既定 2 ＝ 状態の印の幅。先頭の行は前に付く「▸ ψ 」の分だけ広げる）。 */
+  subIndent?: number;
   selected: boolean;
   navigated?: boolean;
   hit?: SidebarTarget;
@@ -114,7 +128,7 @@ function segsOf(lines: ResolvedLine[], state: DisplayState | null, ctx: ChromeCo
 }
 
 /**
- * サイドバー（20260927-cli-mode の tasks T4 の最小限の chrome）：上に spaces（workspace の行。client-core の `groupedWorkspaceRows` の並び・
+ * サイドバー（20260927-cli-mode の tasks T4 の最小限の chrome）：上に spaces（workspace の行。client-core の `sidebarTree` の並び・
  * 状態の集約の記号）、下に agents（エージェントの居る pane。`orderedAgentPaneIds` の並び）。右端の 1 桁は境界の罫線。
  * 行の並び（`sidebarRows` の独自の行の形）は 05 で client-core の `resolveRows` に寄せる。
  */
@@ -130,12 +144,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
 
   const lines: Line[] = [];
   const workspaces = [...model.workspaces.values()];
-  const rows = groupedWorkspaceRows(
-    workspaces,
-    [...model.groups.values()],
-    prefs.workspaceSort,
-    prefs.collapsedAutoGroups,
-  );
+  const tree = currentSidebarTree(model, prefs);
   const layouts = loadSidebarRows(prefs.shared.sidebarRows);
   const spacesLayout = effectiveLayout(layouts, "spaces");
   const agentsLayout = effectiveLayout(layouts, "agents");
@@ -149,22 +158,64 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       hit: { kind: "workspace", workspaceId: w.id },
     };
   };
-  for (const row of rows) {
-    if (row.kind === "standalone") lines.push(wsLine(row.workspace, 0));
-    else if (row.kind === "manualGroup") {
-      lines.push({
-        indent: 0,
-        rows: [[{ text: row.group.collapsed ? "▸" : "▾" }, { text: row.group.label }]],
-        selected: false,
-        hit: { kind: "group", groupId: row.group.id },
-      });
-      for (const w of visibleGroupMembers(row.members, row.group.collapsed, model.workspaceId))
-        lines.push(wsLine(w, 2));
-    } else {
-      lines.push({ ...wsLine(row.parent, 0) });
-      for (const w of visibleGroupMembers(row.children, row.collapsed, model.workspaceId))
-        lines.push(wsLine(w, 2));
+  // 項目の木（`sidebarTree`）を 3 段（字下げ 0〜2）に描く。描画とキー操作は同じ木を通る（`model/sidebarTree.ts`）。
+  /** 項目 1 つ分の行。`inGroup` は入れ物がグループの中か（字下げの深さ）、`groupCollapsed` は畳んだグループの中か。 */
+  const pushItem = (item: ItemRow, inGroup: boolean, groupCollapsed: boolean): void => {
+    const base = inGroup ? 2 : 0;
+    if (item.kind === "workspace") {
+      if (!groupCollapsed || item.workspace.id === model.workspaceId)
+        lines.push(wsLine(item.workspace, base));
+      return;
     }
+    const collapsed = prefs.collapsedAutoGroups.has(item.repoKey);
+    const showHead = !groupCollapsed || item.head.id === model.workspaceId;
+    if (showHead) lines.push(headLine(item, base, collapsed));
+    // 畳んだ worktree グループ・畳んだグループの中は、今いる子の行だけ。
+    for (const w of visibleGroupMembers(
+      item.children,
+      collapsed || groupCollapsed,
+      model.workspaceId,
+    ))
+      lines.push(wsLine(w, base + 2));
+  };
+  /** worktree グループの先頭の行：「▸/▾ ψ 」を頭に付ける（2 行目からはその分も下げる）。 */
+  const headLine = (
+    item: Extract<ItemRow, { kind: "worktreeGroup" }>,
+    indent: number,
+    collapsed: boolean,
+  ): Line => {
+    const line = wsLine(item.head, indent);
+    const first = line.rows[0] ?? [];
+    const prefix: Seg[] = [{ text: collapsed ? "▸" : "▾" }, { text: KIND_GLYPH.worktreeGroup }];
+    line.rows = [[...prefix, ...first], ...line.rows.slice(1)];
+    // 「▸ ψ 」の 4 桁（記号 1・空き 1・記号 1・空き 1）＋状態の印の幅 2。
+    line.subIndent = 6;
+    line.hit = {
+      kind: "autoGroup",
+      repoKey: item.repoKey,
+      workspaceId: item.head.id,
+      toggleX: rect.x + 1 + indent,
+    };
+    return line;
+  };
+  for (const row of tree) {
+    if (row.kind !== "group") {
+      pushItem(row, false, false);
+      continue;
+    }
+    lines.push({
+      indent: 0,
+      rows: [
+        [
+          { text: row.group.collapsed ? "▸" : "▾" },
+          { text: KIND_GLYPH.group },
+          { text: row.group.label },
+        ],
+      ],
+      selected: false,
+      hit: { kind: "group", groupId: row.group.id },
+    });
+    for (const item of row.items) pushItem(item, true, row.group.collapsed);
   }
 
   // 保存した SSH のマシンがあれば、マシンごとの見出しの下に並べる（web の Sidebar・MachineHeader・MachineRows と同じ）。
@@ -244,7 +295,8 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       ? revealRange(
           spacesLines,
           (h) =>
-            (h.kind === "workspace" && h.workspaceId === scroll.reveal!.workspaceId) ||
+            ((h.kind === "workspace" || h.kind === "autoGroup") &&
+              h.workspaceId === scroll.reveal!.workspaceId) ||
             (h.kind === "machineWorkspace" &&
               remoteKey(h.machineId, h.workspaceId) === scroll.reveal!.workspaceId),
         )
@@ -445,7 +497,7 @@ function paintSection(
     if (line.hit) hits.push({ y, section, ...line.hit });
     else hits.push({ y, kind: "area", section });
     // 1 行目は項目の頭から、2 行目からは状態の印の幅（2 桁）だけ下げる（web の line2 と同じ）。
-    let x = rect.x + 1 + line.indent + (sub > 0 ? 2 : 0);
+    let x = rect.x + 1 + line.indent + (sub > 0 ? (line.subIndent ?? 2) : 0);
     const end = rect.x + inner - 1;
     const segs = line.rows[sub]!;
     segs.forEach((seg, k) => {

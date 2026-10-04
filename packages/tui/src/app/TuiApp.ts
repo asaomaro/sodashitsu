@@ -1313,7 +1313,7 @@ export class TuiApp {
     const workspaceId = this.ui.navigateSelection;
     if (!workspaceId) return;
     const hit = this.sidebarHits.find(
-      (h) => h.kind === "workspace" && h.workspaceId === workspaceId,
+      (h) => (h.kind === "workspace" || h.kind === "autoGroup") && h.workspaceId === workspaceId,
     );
     const at = hit
       ? { x: layout.sidebar ? layout.sidebar.x + 2 : 0, y: hit.y + 1 }

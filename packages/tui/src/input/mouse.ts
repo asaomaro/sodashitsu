@@ -279,7 +279,7 @@ export class MouseController {
       }
       const hit = this.sidebarAt(x, y, layout);
       if (right) {
-        if (hit?.kind === "workspace")
+        if (hit?.kind === "workspace" || hit?.kind === "autoGroup")
           ui.openContextMenu({ kind: "workspace", workspaceId: hit.workspaceId }, { x, y });
         else if (hit?.kind === "group")
           ui.openContextMenu({ kind: "group", groupId: hit.groupId }, { x, y });
@@ -289,11 +289,13 @@ export class MouseController {
         return;
       }
       if (!left || !hit) return;
-      if (hit.kind === "workspace") {
+      if (hit.kind === "autoGroup" && x <= hit.toggleX)
+        // worktree グループの先頭の行の左の「▸/▾」で畳み・広げ（マシンの見出しの toggleX と同じ。ほかは workspace の行）。
+        actions.toggleAutoGroupCollapsed(hit.repoKey);
+      else if (hit.kind === "workspace" || hit.kind === "autoGroup") {
         actions.focusWorkspaceById(hit.workspaceId);
         this.drag = { kind: "workspace", workspaceId: hit.workspaceId, startY: y, moved: false };
       } else if (hit.kind === "group") actions.toggleGroupCollapsed(hit.groupId);
-      else if (hit.kind === "autoGroup") actions.toggleAutoGroupCollapsed(hit.repoKey);
       else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
       else if (hit.kind === "newWorkspace") actions.run({ type: "newWorkspace" });
       else if (hit.kind === "sort") {
@@ -717,10 +719,13 @@ export class MouseController {
   private dropWorkspace(workspaceId: string, x: number, y: number, layout: LayoutResult): void {
     const rows = this.host
       .sidebarHits()
-      .filter((h): h is Extract<SidebarHit, { kind: "workspace" }> => h.kind === "workspace");
+      .filter(
+        (h): h is Extract<SidebarHit, { kind: "workspace" | "autoGroup" }> =>
+          h.kind === "workspace" || h.kind === "autoGroup",
+      );
     const target = this.sidebarAt(x, y, layout);
     const from = rows.findIndex((r) => r.workspaceId === workspaceId);
-    if (target?.kind !== "workspace" || from < 0) return;
+    if ((target?.kind !== "workspace" && target?.kind !== "autoGroup") || from < 0) return;
     const to = rows.findIndex((r) => r.workspaceId === target.workspaceId);
     if (to === from) return;
     // 上へ動かすなら落とした行の前、下へなら落とした行の次の前（末尾なら null）。web の D&D と同じ位置。
@@ -740,7 +745,8 @@ export class MouseController {
         ? null
         : { kind: "tab", tabId: tab.tabId };
     const side = this.sidebarAt(x, y, layout);
-    if (side?.kind === "workspace") return { kind: "workspace", workspaceId: side.workspaceId };
+    if (side?.kind === "workspace" || side?.kind === "autoGroup")
+      return { kind: "workspace", workspaceId: side.workspaceId };
     const box = this.paneAt(layout, x, y);
     if (!box || box.paneId === paneId) return null;
     const zone = zoneAt(box.frame, x, y);
