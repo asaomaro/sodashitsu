@@ -110,7 +110,7 @@ design.md のとおり、下から積む。型（T1）→ 純関数（T2・T3）
       対象: `packages/client-core/src/workspace/workspaceGrouping.ts`・`sidebarLayout.ts` とそのテスト
       依存: T22
       AC: AC19, AC20, AC17
-- [ ] T24: サーバ——`GitInfoPoller` が `worktreeKey` を返す、判定の反映に代表の交代（代表が閉じる・移る・`worktreeKey` が変わる）、レイアウトの保ち方を新しい形に（表の各場面を追補 B の置き場に）、`group.*`・`item.*`・`workspace.move`／`move_to`・一括クローズ（代表だけ）を合わせる、保存と復元（`worktreeKey`・`ungrouped`）、仮の状態と確定。単体テストと、実物の git の結合テスト（同じフォルダで 2 つ目を開くと通常の項目・代表を閉じると次が worktree グループに入る）。壊して落ちる確認
+- [x] T24: サーバ——`GitInfoPoller` が `worktreeKey` を返す、判定の反映に代表の交代（代表が閉じる・移る・`worktreeKey` が変わる）、レイアウトの保ち方を新しい形に（表の各場面を追補 B の置き場に）、`group.*`・`item.*`・`workspace.move`／`move_to`・一括クローズ（代表だけ）を合わせる、保存と復元（`worktreeKey`・`ungrouped`）、仮の状態と確定。単体テストと、実物の git の結合テスト（同じフォルダで 2 つ目を開くと通常の項目・代表を閉じると次が worktree グループに入る）。壊して落ちる確認
       対象: `packages/server/src/git/GitInfoPoller.ts`、`packages/server/src/session/SessionModel.ts`・`SessionService.ts`、`packages/server/src/surface/methods/{group,item,workspace}.ts`、`packages/server/src/persist/SessionFile.ts`、`packages/server/src/composeServer.ts`（`toSessionFileData`）と各テスト
       依存: T23
       AC: AC19, AC20, AC8, AC10, AC13

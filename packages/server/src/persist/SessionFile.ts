@@ -47,6 +47,11 @@ export interface SessionFileWorkspace {
   repoKey?: string | null | undefined;
   /** linked worktree か。`repoKey` が文字列のときだけ意味を持つ。無ければ false。 */
   isLinkedWorktree?: boolean | undefined;
+  /**
+   * その worktree（フォルダ）を示す値（`GitInfo.worktreeKey`。追補 01 A）。`repoKey` が文字列のときだけ意味を持つ。**無い保存**（追補の前・管理外）は
+   * 無いまま戻す（同じ `repoKey` の workspace を全部メンバーとして扱う）。
+   */
+  worktreeKey?: string | undefined;
   cwd: string;
   activeTabId: string;
   tabs: SessionFileTab[];
@@ -121,6 +126,7 @@ const SessionFileWorkspaceSchema: z.ZodType<SessionFileWorkspace> = z.object({
   // 以前の版の保存には無い（20261004-group-worktree-items）。
   repoKey: z.string().nullable().optional(),
   isLinkedWorktree: z.boolean().optional(),
+  worktreeKey: z.string().optional(),
   cwd: z.string(),
   activeTabId: z.string(),
   tabs: z.array(SessionFileTabSchema),
@@ -146,8 +152,10 @@ const SessionFileDataSchema: z.ZodType<SessionFileData> = z.object({
   // 以前の版の保存には無い——無ければ空配列（20260923-workspace-grouping）。
   groups: z.array(SessionFileGroupSchema).default([]),
   workspaces: z.array(SessionFileWorkspaceSchema),
-  // 以前の版の保存には無い（20261004-group-worktree-items）。
-  layout: SidebarLayoutSchema.optional(),
+  // 以前の版の保存には無い（20261004-group-worktree-items）。形が合わない `layout`（`ungrouped` が無い追補 01 より前の途中の形など）は、
+  // 保存全体を壊れた扱いにせず `layout` だけ捨てる——仮の状態から始め直す（decisions D28）。`repoGroups` は `layout` と対で使うので、
+  // `layout` が無ければ復元は読まない。
+  layout: SidebarLayoutSchema.optional().catch(undefined),
   repoGroups: z.record(z.string(), z.string()).optional(),
   focus: z.object({ workspaceId: z.string(), tabId: z.string(), paneId: z.string() }).nullable(),
 });

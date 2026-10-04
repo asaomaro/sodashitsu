@@ -444,7 +444,7 @@ export class SessionService {
 
   /**
    * 判定（3 つの結果）をモデルの同じ入口へ通す（`applyWorkspaceIdentity` と `updateWorkspaceGit` の共通）。取れない結果・今と同じ判定は何もしない。
-   * `identityChanged`（`repoKey`・`isLinkedWorktree` が変わった）ときは、レイアウトと所属も変わりうるので、呼び出し側が共通の出口
+   * `identityChanged`（`repoKey`・`isLinkedWorktree`・`worktreeKey` が変わった）ときは、レイアウトと所属も変わりうるので、呼び出し側が共通の出口
    * （`publishSidebarChanges`。`persist.touch()` を含む）で配る。
    */
   private applyGitJudgement(id: WorkspaceId, result: GitJudgement): { updated: Workspace | null; identityChanged: boolean } {
@@ -622,7 +622,7 @@ export class SessionService {
     this.publishSidebarChanges();
   }
 
-  /** 項目をグループから出し、一番上の、そのグループの直後へ置く。 */
+  /** 項目をグループから出し、「グループなし」の末尾へ置く。 */
   removeFromGroup(workspaceId: WorkspaceId): void {
     this.model.removeFromGroup(workspaceId);
     this.publishSidebarChanges();
@@ -1441,7 +1441,7 @@ export class SessionService {
 
   /**
    * 保存した `layout`・`repoGroups` を戻す（20261004-group-worktree-items）。`layout` が無い保存は仮の状態のまま（移行は最初の 1 周／操作で確定）。
-   * `repairLayout` が実在しない参照を捨て、無い workspace を一番上の末尾へ足す（壊れた保存でも起動する）。`repoKey` は workspace の復元で戻っている。
+   * `repairLayout` が実在しない参照を捨て、無い workspace を「グループなし」の末尾へ足す（壊れた保存でも起動する）。`repoKey` は workspace の復元で戻っている。
    */
   private restoreLayout(data: SessionFileData): void {
     if (data.layout === undefined) return;
@@ -1555,7 +1555,7 @@ function sameGit(a: GitInfo | null, b: GitInfo | null): boolean {
   // branch/ahead/behind が変わらず repoKey/isLinkedWorktree だけ変わる場合（worktree 自動グループの
   // 判定に使う中心的なフィールド）を早期リターンで握りつぶすと、サーバの状態更新・
   // `workspace.updated` の配布ごと止まってしまう。
-  return a.branch === b.branch && a.ahead === b.ahead && a.behind === b.behind && a.repoKey === b.repoKey && a.isLinkedWorktree === b.isLinkedWorktree;
+  return a.branch === b.branch && a.ahead === b.ahead && a.behind === b.behind && a.repoKey === b.repoKey && a.isLinkedWorktree === b.isLinkedWorktree && (a.worktreeKey ?? null) === (b.worktreeKey ?? null);
 }
 
 /** `AgentInfo`（公開している側の全フィールド）が実際に変わったかを見る（`updatePaneRuntime` のレビュー指摘）。 */

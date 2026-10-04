@@ -1761,3 +1761,360 @@ AssertionError: expected { top: [ 'g:g1', 'u', 'g:g2' ], …(1) } to deeply equa
       Tests  2 failed | 115 passed (117)
 ```
 - T23 [nit] repairLayout の重複の先勝ちの順（groups のキー順→ungrouped）が描画（top 順）と違いうる → docstring に順を明記（壊れた保存の復元時のみ） [conv:-]
+
+
+### T24 壊して落ちる確認
+
+実装の該当行を 1 つずつ壊して、足した回帰テストが落ちることを確かめた（壊した行は確認の後に必ず元へ戻し、server 全体のテストが通ることを確認）。出力は vitest の生の出力（長い行は幅で切れている）。B5 は最初の壊し方が構文エラーだったので、条件を `false &&` にして壊し直した出力を載せている。
+
+```
+#### B1: worktreeKey を --git-dir の値でなく repoKey にする(GitInfoPoller.probe)
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller > gives a linked worktree the same repoKey as the main checkout, and isLinkedWorktree=true
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-dir が共通ディレクトリと違えば linked worktree
+AssertionError: expected { kind: 'git', …(1) } to match object { kind: 'git', git: { …(3) } }
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 結合（実物の git） > 本体と linked worktree は同じ repoKey（絶対パス）で、isLinkedWorktree だけ違う
+AssertionError: expected { kind: 'git', git: { …(6) } } to match object { kind: 'git', git: { …(2) } }
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 結合（実物の git） > worktreeKey は --git-dir の絶対パス: 同じフォルダ（とその下・symlink 経由）なら同じ値、linked worktree は <共通ディレクトリ>/worktrees/<名前>（追補 01 A）
+AssertionError: expected '/tmp/soda-gitpoller-plain-6VfY60/real…' to match /\/real\/\.git\/worktrees\/[^/]+$/real\
+---- 中身(最初の失敗の差分)
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+- true
++ false
+ ❯ src/git/GitInfoPoller.test.ts:145:38
+    143|     expect(wt.git?.repoKey).toBe(main.git?.repoKey); // 同じ共通ディレクトリ＝同じグ…
+    144|     expect(main.git?.isLinkedWorktree).toBe(false);
+    145|     expect(wt.git?.isLinkedWorktree).toBe(true);
+       |                                      ^
+    146|     await rm(worktreeDir, { recursive: true, force: true });
+    147|   });
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — probe の結果と最初の 1 周の合図 > 単体（偽の git） > --git-dir が共通ディレクトリと違えば linked worktree
+
+#### B2: 代表の引き継ぎ(同じリポジトリの代表を引き継いだだけなら所属に従う)の行を無効にする
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > the successor keeps the repository item where it is, even if the successor itself was put in another group (the repository's place wins)
+AssertionError: expected [ 'r:/k/.git' ] to deeply equal []
+ Test Files  1 failed (1)
+      Tests  1 failed | 166 passed (167)
+---- 中身(最初の失敗の差分)
+AssertionError: expected [ 'r:/k/.git' ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "r:/k/.git",
++ ]
+ ❯ src/session/SessionModel.test.ts:1792:46
+    1790|       const g = model.createGroup("g", a2); // 代表でない a2 を自分でグループへ
+    1791|       model.closeWorkspace(a);
+    1792|       expect(model.getLayout().groups[g.id]).toEqual([]); // r:K は「グルー…
+       |                                              ^
+    1793|       expect(model.getLayout().ungrouped).toContain(`r:${K}`);
+    1794|       expect(model.getRepoGroups().size).toBe(0);
+
+#### B3: 閉じた workspace の参照を、代表が残っていても外す(reflectRefs の removed 分岐)
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > a workspace that disappears leaves the layout through every path > a repository item stays until its last workspace is gone; repoGroups is kept
+AssertionError: expected [] to deeply equal [ 'r:/repo/.git' ]
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > the successor keeps the repository item where it is, even if the successor itself was put in another group (the repository's place wins)
+AssertionError: expected [ 'r:/k/.git' ] to deeply equal []
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 215 passed (217)
+---- 中身(最初の失敗の差分)
+AssertionError: expected [] to deeply equal [ 'r:/repo/.git' ]
+- Expected
++ Received
+- [
+-   "r:/repo/.git",
+- ]
++ []
+ ❯ src/session/SessionModel.test.ts:1356:50
+    1354|       expect(model.getLayout().groups[group.id]).toEqual(["r:/repo/.gi…
+    1355|       model.closeWorkspace(a);
+    1356|       expect(model.getLayout().groups[group.id]).toEqual(["r:/repo/.gi…
+       |                                                  ^
+    1357|       model.closeWorkspace(b);
+    1358|       expect(model.getLayout().groups[group.id]).toEqual([]);
+
+#### B4: 新しいグループを「グループなし」の直前でなく top の末尾に作る
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > addToGroup on a workspace whose judgment arrived puts the repository item (r:) in the group, with no w:<id> left
+AssertionError: expected { top: [ 'u', 'g:g1' ], …(2) } to deeply equal { top: [ 'g:g1', 'u' ], …(2) }
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > a workspace that disappears leaves the layout through every path > a workspace inside a group leaves the group's list too
+AssertionError: expected [ 'u', 'g:g1' ] to deeply equal [ 'g:g1', 'u' ]
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > groups work on whole items > createGroup with no target puts an empty group right before the ungrouped unit
+AssertionError: expected [ 'u', 'g:g1', 'g:g2' ] to deeply equal [ 'g:g1', 'g:g2', 'u' ]
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > groups work on whole items > createGroup with an item target moves the item into the new group; the group goes before the ungrouped unit
+AssertionError: expected { top: [ 'u', 'g:g1' ], …(2) } to deeply equal { top: [ 'g:g1', 'u' ], …(2) }
+---- 中身(最初の失敗の差分)
+AssertionError: expected { top: [ 'u', 'g:g1' ], …(2) } to deeply equal { top: [ 'g:g1', 'u' ], …(2) }
+- Expected
++ Received
+@@ -3,10 +3,10 @@
+      "g1": [
+        "r:/a/.git",
+      ],
+    },
+    "top": [
+-     "g:g1",
+      "u",
++     "g:g1",
+    ],
+    "ungrouped": [],
+
+#### B5: 復元で r: の項目を repoGroups が覚えているグループへ入れる処理を外す
+ FAIL  src/session/SessionService.test.ts > SessionService — layout の復元（保存と復元） > 壊れた参照（実在しない workspace・グループ・重複・repoKey を持つのに w:�
+AssertionError: expected { top: [ 'g:g1', 'u' ], …(2) } to deeply equal { top: [ 'g:g1', 'u' ], …(2) }
+ FAIL  src/session/SessionService.test.ts > SessionService — layout の復元（保存と復元） > 管理外・代表でない workspace（w:<id>）の所属はレイアウトの入れ物が正で
+AssertionError: expected { top: [ 'g:g1', 'g:g2', 'u' ], …(2) } to deeply equal { top: [ 'g:g1', 'g:g2', 'u' ], …(2) }
+ Test Files  1 failed (1)
+      Tests  2 failed | 182 passed (184)
+---- 中身(最初の失敗の差分)
+AssertionError: expected { top: [ 'g:g1', 'u' ], …(2) } to deeply equal { top: [ 'g:g1', 'u' ], …(2) }
+- Expected
++ Received
+  {
+    "groups": {
+      "g1": [
+        "w:w3",
+-       "r:/repos/app/.git",
+      ],
+    },
+    "top": [
+      "g:g1",
+      "u",
+    ],
+    "ungrouped": [
+      "w:w2",
++     "r:/repos/app/.git",
+    ],
+
+#### B6: 復元で w:<id> の groupId をレイアウトの入れ物に合わせる処理を外す
+ FAIL  src/session/SessionService.test.ts > SessionService — layout の復元（保存と復元） > 管理外・代表でない workspace（w:<id>）の所属はレイアウトの入れ物が正で、groupId を合わせる。r:<repoKey> は repoGroups が正で、食い違えば覚えているグループへ入る
+AssertionError: expected [ Array(3) ] to deeply equal [ Array(3) ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 183 passed (184)
+---- 中身(最初の失敗の差分)
+AssertionError: expected [ Array(3) ] to deeply equal [ Array(3) ]
+- Expected
++ Received
+  [
+    [
+      "w2",
+-     "g1",
++     null,
+    ],
+    [
+      "w1",
+      "g2",
+    ],
+    [
+
+#### B7: 古い move_to の (b): 落とし先の別のまとまり(グループ・グループなし)を探さない
+ FAIL  src/session/SessionModel.test.ts > SessionModel — item moves > moveWorkspacesTo reads an old request as an item move > (b) all the effective members of a group move the group in `top`: before the first workspace of another unit (a group or the ungrouped unit), or to the end
+AssertionError: expected false to be true // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 166 passed (167)
+---- 中身(最初の失敗の差分)
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+- true
++ false
+ ❯ src/session/SessionModel.test.ts:2039:52
+    2037|       expect(model.moveWorkspacesTo([c, b, a], null)).toBe(true); // 末…
+    2038|       expect(model.getLayout().top).toEqual([`g:${h.id}`, "u", `g:${g.…
+    2039|       expect(model.moveWorkspacesTo([a, b, c], d)).toBe(true); // 「グルー…
+       |                                                    ^
+    2040|       expect(model.getLayout().top).toEqual([`g:${h.id}`, `g:${g.id}`,…
+    2041|       expect(model.moveWorkspacesTo([a, b, c], e)).toBe(true); // H の先…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+
+#### B8: 旧形の layout を捨てずに保存全体を壊れた扱いにする(SessionFile)
+ FAIL  src/persist/SessionFile.test.ts > FsSessionFile > layout が壊れた形・旧形（ungrouped が無い途中の形）なら layout だけ捨て、残りは読める
+ FAIL  src/persist/SessionFile.test.ts > FsSessionFile > layout が壊れた形・旧形（top が配列でない）なら layout だけ捨て、残りは読める
+ FAIL  src/persist/SessionFile.test.ts > FsSessionFile > layout が壊れた形・旧形（配列でも object でもない）なら layout だけ捨て、残りは読める
+AssertionError: expected 'corrupt' to be 'ok' // Object.is equality
+ Test Files  1 failed (1)
+      Tests  3 failed | 8 passed (11)
+---- 中身(最初の失敗の差分)
+AssertionError: expected 'corrupt' to be 'ok' // Object.is equality
+Expected: "ok"
+Received: "corrupt"
+ ❯ src/persist/SessionFile.test.ts:178:25
+    176|     await writeFileAtomic(join(dir, "session.json"), JSON.stringify({ …
+    177|     const result = await file.load();
+    178|     expect(result.kind).toBe("ok");
+       |                         ^
+    179|     if (result.kind !== "ok") throw new Error("unreachable");
+    180|     expect(result.data.layout).toBeUndefined();
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+ Test Files  1 failed (1)
+      Tests  3 failed | 8 passed (11)
+   Start at  14:32:51
+
+#### B9: worktreeKey を保存に書かない(toSessionFileData)
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > グループ・worktree グループ・管理外が混ざった並びは、復元の直後も最初の 1 周の後も停止前と同じ
+AssertionError: expected { branch: null, ahead: +0, …(3) } to deeply equal { branch: null, ahead: +0, …(4) }
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > 同じフォルダの 2 つ目（通常の項目）は、復元の直後も最初の 1 周の後も代表にならない（worktreeKey を保存する）
+AssertionError: expected [ undefined, undefined ] to deeply equal [ …(2) ]
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 59 passed (61)
+---- 中身(最初の失敗の差分)
+AssertionError: expected { branch: null, ahead: +0, …(3) } to deeply equal { branch: null, ahead: +0, …(4) }
+- Expected
++ Received
+@@ -2,7 +2,6 @@
+    "ahead": 0,
+    "behind": 0,
+    "branch": null,
+    "isLinkedWorktree": true,
+    "repoKey": "/tmp/soda-persist-SKFnJ8/.git",
+-   "worktreeKey": "/tmp/soda-persist-SKFnJ8/.git/worktrees/soda-persist-SKFnJ8-wt",
+  }
+ ❯ src/git/GitInfoPoller.test.ts:983:43
+    981|     expect(after.snapshot().layout).toEqual(expectedLayout);
+    982|     expect(after.snapshot().workspaces.map((x) => x.id)).toEqual(expec…
+
+#### B10: worktreeKey を復元しない(restoreWorkspace)
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > グループ・worktree グループ・管理外が混ざった並びは、復元の直後も最初の 1 周の後も停止前と同じ
+AssertionError: expected { branch: null, ahead: +0, …(3) } to deeply equal { branch: null, ahead: +0, …(4) }
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 保存 → 復元 → 最初の 1 周（実物の git・実物の session.json） > 同じフォルダの 2 つ目（通常の項目）は、復元の直後も最初の 1 周の後も代表にならない（worktreeKey を保存する）
+AssertionError: expected { top: [ 'u' ], groups: {}, …(1) } to deeply equal { top: [ 'u' ], groups: {}, …(1) }
+ Test Files  1 failed (1)
+      Tests  2 failed | 48 passed (50)
+---- 中身(最初の失敗の差分)
+AssertionError: expected { branch: null, ahead: +0, …(3) } to deeply equal { branch: null, ahead: +0, …(4) }
+- Expected
++ Received
+@@ -2,7 +2,6 @@
+    "ahead": 0,
+    "behind": 0,
+    "branch": null,
+    "isLinkedWorktree": true,
+    "repoKey": "/tmp/soda-persist-HJyJwZ/.git",
+-   "worktreeKey": "/tmp/soda-persist-HJyJwZ/.git/worktrees/soda-persist-HJyJwZ-wt",
+  }
+ ❯ src/git/GitInfoPoller.test.ts:983:43
+    981|     expect(after.snapshot().layout).toEqual(expectedLayout);
+    982|     expect(after.snapshot().workspaces.map((x) => x.id)).toEqual(expec…
+
+#### B11: 所属の書き込みを代表かどうかでなく repoKey の有無で決める(setItemGroup)
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > a second workspace in the same folder moves on its own: it joins a group without the worktree group
+AssertionError: expected 1 to be +0 // Object.is equality
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > the successor keeps the repository item where it is, even if the successor itself was put in another group (the repository's place wins)
+AssertionError: expected 1 to be +0 // Object.is equality
+ FAIL  src/surface/methods/index.test.ts > registerAllMethods — client / workspace / tab / pane flow > 項目単位のグループ操作と一括クローズ > 同じフォルダの 2 つ目は通常の項目で、group.add_member は 2 つ目だけを動かし、一括クローズの対象にならない
+AssertionError: expected [ 'g1', 'g1', null ] to deeply equal [ null, null, 'g1' ]
+ Test Files  2 failed (2)
+      Tests  3 failed | 199 passed (202)
+---- 中身(最初の失敗の差分)
+AssertionError: expected 1 to be +0 // Object.is equality
+- Expected
++ Received
+- 0
++ 1
+ ❯ src/session/SessionModel.test.ts:1726:42
+    1724|       expect(model.getLayout().groups[g.id]).toEqual([`w:${a2}`]);
+    1725|       expect(model.getLayout().ungrouped).toContain(`r:${K}`);
+    1726|       expect(model.getRepoGroups().size).toBe(0);
+       |                                          ^
+    1727|       expect(model.getWorkspace(a2)?.groupId).toBe(g.id);
+    1728|       expect(model.getWorkspace(a)?.groupId).toBeNull();
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > the successor keeps the repository item where it is, even if the successor itself was put in another group (the repository's place wins)
+
+#### B12: 実効の groupId を代表かどうかを見ずに repoGroups から決める(recomputeGroupIds)
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > a second workspace in the same folder moves on its own: it joins a group without the worktree group
+AssertionError: expected null to be 'g1' // Object.is equality
+ FAIL  src/surface/methods/index.test.ts > registerAllMethods — client / workspace / tab / pane flow > 項目単位のグループ操作と一括クローズ > 同じフォルダの 2 つ目は通常の項目で、group.add_member は 2 つ目だけを動かし、一括クローズの対象にならない
+AssertionError: expected [ null, null, null ] to deeply equal [ null, null, 'g1' ]
+ Test Files  2 failed (2)
+      Tests  2 failed | 200 passed (202)
+---- 中身(最初の失敗の差分)
+AssertionError: expected null to be 'g1' // Object.is equality
+- Expected:
+"g1"
++ Received:
+null
+ ❯ src/session/SessionModel.test.ts:1727:47
+    1725|       expect(model.getLayout().ungrouped).toContain(`r:${K}`);
+    1726|       expect(model.getRepoGroups().size).toBe(0);
+    1727|       expect(model.getWorkspace(a2)?.groupId).toBe(g.id);
+       |                                               ^
+    1728|       expect(model.getWorkspace(a)?.groupId).toBeNull();
+    1729|       expect(model.getWorkspace(wt)?.groupId).toBeNull();
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+ FAIL  src/surface/methods/index.test.ts > registerAllMethods — client / workspace / tab / pane flow > 項目単位のグループ操作と一括クローズ > 同じフォルダの 2 つ目は通常の項目で、group.add_member は 2 つ目だけを動かし、一括クローズの対象にならない
+
+#### B13: 判定の変化に worktreeKey を含めない(gitIdentityChanged)
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > a worktreeKey change alone (same repository, both linked) hands the representative over to the next workspace of the old folder
+AssertionError: expected [ 'r:/k/.git', 'w:w3' ] to deeply equal [ 'r:/k/.git' ]
+ FAIL  src/session/SessionService.test.ts > SessionService — runtime updates > judgments (git / unmanaged / unknown) go through the one model entry > a worktreeKey-only change (same repoKey, same isLinkedWorktree) still goes through the layout exit: the next workspace of the old folder becomes the representative
+AssertionError: expected [ 'workspace.updated' ] to deeply equal [ 'workspace.updated', …(1) ]
+ Test Files  2 failed (2)
+      Tests  2 failed | 349 passed (351)
+---- 中身(最初の失敗の差分)
+AssertionError: expected [ 'r:/k/.git', 'w:w3' ] to deeply equal [ 'r:/k/.git' ]
+- Expected
++ Received
+  [
+    "r:/k/.git",
++   "w:w3",
+  ]
+ ❯ src/session/SessionModel.test.ts:1809:43
+    1807|       expect(model.getLayout().ungrouped).toEqual([`r:${K}`, `w:${z.id…
+    1808|       model.updateWorkspaceGit(y.id, judged(true, "/k/.git/worktrees/w…
+    1809|       expect(model.getLayout().ungrouped).toEqual([`r:${K}`]); // z が代…
+       |                                           ^
+    1810|       expect(members(model)).toEqual([x.id, y.id, z.id]);
+    1811|     });
+
+#### B14: sameGit が worktreeKey の違いを無視する(SessionService)
+ FAIL  src/session/SessionService.test.ts > SessionService — runtime updates > judgments (git / unmanaged / unknown) go through the one model entry > a worktreeKey-only change (same repoKey, same isLinkedWorktree) still goes through the layout exit: the next workspace of the old folder becomes the representative
+AssertionError: expected [] to deeply equal [ 'workspace.updated', …(1) ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 183 passed (184)
+---- 中身(最初の失敗の差分)
+AssertionError: expected [] to deeply equal [ 'workspace.updated', …(1) ]
+- Expected
++ Received
+- [
+-   "workspace.updated",
+-   "sidebar.layout_changed",
+- ]
++ []
+ ❯ src/session/SessionService.test.ts:1175:22
+    1173|       persist.touchCount = 0;
+    1174|       service.updateWorkspaceGit(y.id, wt("/repo/.git/worktrees/y2"));
+    1175|       expect(events).toEqual(["workspace.updated", "sidebar.layout_cha…
+       |                      ^
+    1176|       expect(service.snapshot().layout?.ungrouped).toEqual(["r:/repo/.…
+
+#### B15: 代表が管理外になったとき、項目の直後でなく直前へ w:<id> を置く(transition)
+ FAIL  src/git/GitInfoPoller.test.ts > DefaultGitInfoPoller — 判定のレイアウトへの反映（実物の git） > 同じフォルダの workspace（代表） > pane の場所が別のフォルダへ移ると、代表が交代する: 移った workspace は元の項目を離れ、同じフォルダの次が代表になる
+AssertionError: expected [ 'w:w1', …(1) ] to deeply equal [ …(2) ]
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > judgments are reflected in the layout > unmanaged (R1 -> none): w:<id> goes right after r:R1 in the same container, and groupId is that group
+AssertionError: expected { top: [ 'g:g1', 'u' ], …(2) } to deeply equal { top: [ 'g:g1', 'u' ], …(2) }
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > the representative becoming unmanaged leaves the item to the next workspace and becomes a plain item right after it
+AssertionError: expected [ 'w:w1', 'r:/k/.git', 'w:w4' ] to deeply equal [ 'r:/k/.git', 'w:w1', 'w:w4' ]
+ FAIL  src/session/SessionModel.test.ts > SessionModel — sidebar layout > the representative of a worktree (worktreeKey) > an earlier workspace judged later takes over as the representative; the later one becomes a plain item after the item
+AssertionError: expected [ 'w:w2', 'r:/k/.git' ] to deeply equal [ 'r:/k/.git', 'w:w2' ]
+---- 中身(最初の失敗の差分)
+AssertionError: expected [ 'w:w1', …(1) ] to deeply equal [ …(2) ]
+- Expected
++ Received
+  [
+-   "r:/tmp/soda-judge-fP3tFR/.git",
+    "w:w1",
++   "r:/tmp/soda-judge-fP3tFR/.git",
+  ]
+ ❯ src/git/GitInfoPoller.test.ts:884:34
+    882|       await poller.pollNow();
+    883|       expect(service.getWorkspace(a.id)?.git).toBeNull();
+    884|       expect(layout().ungrouped).toEqual([`r:${key}`, `w:${a.id}`]); /…
+       |                                  ^
+    885|       const snap = service.snapshot();
+```
+- T24 [nit] linkedWorktreeGroupMembers が追補 A の代表を見ない旧判定のまま残り、テストだけが参照する → T19（古い関数の撤去）で消す前提のため残す [conv:-]

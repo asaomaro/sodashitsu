@@ -31,6 +31,7 @@ import {
   addItemToGroup,
   deleteGroupFromLayout,
   flattenWorkspaceIds,
+  insertGroup,
   insertItem,
   itemRefOf,
   layoutFromLegacy,
@@ -40,6 +41,7 @@ import {
   removeItemFromGroup,
   repairLayout,
   repoMembers,
+  representativeIds,
 } from "@sodashitsu/client-core";
 import * as Layout from "./LayoutTree.js";
 import type { SessionFileGroup, SessionFileWorkspace } from "../persist/SessionFile.js";
@@ -105,30 +107,45 @@ interface ChangeBaseline {
   groupIds: Map<WorkspaceId, GroupId | null>;
 }
 
-/** 項目が今いる入れ物（`null` は一番上、無ければ undefined）。 */
+/** 「グループなし」のまとまりの参照（`top` に必ず 1 つ入る。client-core の `UNGROUPED_REF` と同じ）。 */
+const UNGROUPED: ItemRef = "u";
+
+/** 項目が今いる入れ物（`null` は「グループなし」、どこにも無ければ undefined）。 */
 function containerOf(layout: SidebarLayout, ref: ItemRef): GroupId | null | undefined {
-  if (layout.top.includes(ref)) return null;
+  if (layout.ungrouped.includes(ref)) return null;
   for (const [groupId, list] of Object.entries(layout.groups)) if (list.includes(ref)) return groupId;
   return undefined;
 }
 
+/** 入れ物の項目の列（`null` は「グループなし」）。 */
+function listOf(layout: SidebarLayout, container: GroupId | null): readonly ItemRef[] {
+  return container === null ? layout.ungrouped : (layout.groups[container] ?? []);
+}
+
 /** 入れ物の `index` 番目へ項目を入れる（範囲外は末尾）。すでにその入れ物にあれば何もしない。 */
 function insertAt(layout: SidebarLayout, ref: ItemRef, container: GroupId | null, index: number): SidebarLayout {
-  const list = container === null ? layout.top : layout.groups[container];
+  const list = container === null ? layout.ungrouped : layout.groups[container];
   if (!list || list.includes(ref)) return layout;
   const next = [...list];
   next.splice(index < 0 || index > next.length ? next.length : index, 0, ref);
   return container === null
-    ? { top: next, groups: layout.groups, ungrouped: layout.ungrouped }
+    ? { top: layout.top, groups: layout.groups, ungrouped: next }
     : { top: layout.top, groups: { ...layout.groups, [container]: next }, ungrouped: layout.ungrouped };
 }
+
+/** 判定の反映の前の、workspace ごとの項目の参照・`repoKey`・実効の所属（`reflectRefs` が前後を比べる）。 */
+type RefSnapshot = ReadonlyMap<WorkspaceId, { ref: ItemRef; repoKey: string | null; groupId: GroupId | null }>;
 
 /** 判定の 3 つの結果（`GitInfoPoller.probe`）。`unknown` は取れなかった（直前の判定を保つ）。 */
 export type GitJudgement = { kind: "git"; git: GitInfo } | { kind: "unmanaged" } | { kind: "unknown" };
 
-/** 項目の判定（`repoKey`・`isLinkedWorktree`）が変わったか。ブランチ・件数だけの変化は含めない。 */
+/** 項目の判定（`repoKey`・`isLinkedWorktree`・`worktreeKey`）が変わったか。ブランチ・件数だけの変化は含めない。 */
 export function gitIdentityChanged(a: GitInfo | null, b: GitInfo | null): boolean {
-  return (a?.repoKey ?? null) !== (b?.repoKey ?? null) || (a?.isLinkedWorktree ?? null) !== (b?.isLinkedWorktree ?? null);
+  return (
+    (a?.repoKey ?? null) !== (b?.repoKey ?? null) ||
+    (a?.isLinkedWorktree ?? null) !== (b?.isLinkedWorktree ?? null) ||
+    (a?.worktreeKey ?? null) !== (b?.worktreeKey ?? null)
+  );
 }
 
 function sameLayout(a: SidebarLayout, b: SidebarLayout): boolean {
@@ -165,7 +182,7 @@ export class SessionModel {
    * 並びは持たず、読むたびに `layoutFromLegacy` で導く（`getLayout`）。最初に書き換える操作の前に `confirmLayout` で確定する。
    * 新しく始めたサーバは空のレイアウトを持つ。
    */
-  private layout: SidebarLayout | null = { top: [], groups: {}, ungrouped: [] };
+  private layout: SidebarLayout | null = { top: [UNGROUPED], groups: {}, ungrouped: [] };
   /** リポジトリの所属（`repoKey` → グループ）。開いていないリポジトリの分も残す。`Workspace.groupId`（実効の所属）はここから計算する。 */
   private readonly repoGroups = new Map<string, GroupId>();
   private baseline: ChangeBaseline | null = null;
@@ -299,7 +316,7 @@ export class SessionModel {
   commitWorkspace(result: CreateWorkspaceResult): void {
     this.beginChange();
     this.workspaces.set(result.workspace.id, result.workspace);
-    // 判定前の workspace は `w:<id>` を一番上の末尾へ（仮の状態なら導くので何もしない）。
+    // 判定前の workspace は `w:<id>` を「グループなし」の末尾へ（仮の状態なら導くので何もしない）。
     if (this.layout) this.layout = insertItem(this.layout, `w:${result.workspace.id}`, null);
     this.tabs.set(result.tab.id, result.tab);
     this.panes.set(result.pane.id, result.pane);
@@ -469,9 +486,8 @@ export class SessionModel {
   // --- groups & workspace ordering (20260923-workspace-grouping) --------------
 
   /**
-   * グループを作る。`target` があればその workspace の**項目**を新しいグループへ入れる（リポジトリなら丸ごと）。位置は design の決まり:
-   * 対象が一番上にあればその位置にグループを置いて項目を中へ／対象がグループ G の中なら G の直後に置いて項目を移す／
-   * 対象が無ければ一番上の末尾。
+   * グループを作る。`target` があればその workspace の**項目**（リポジトリなら代表の項目丸ごと）を新しいグループへ入れる。新しいグループは
+   * `top` の「グループなし」の直前に作る（追補 01 B。入れる項目がどこにあっても同じ。対象が無ければ空のグループ）。
    */
   createGroup(label: string, target?: WorkspaceId): WorkspaceGroup {
     const ws = target !== undefined ? this.requireWorkspace(target) : undefined;
@@ -480,21 +496,8 @@ export class SessionModel {
     const id = this.nextId("g");
     const group: WorkspaceGroup = { id, label, collapsed: false };
     this.groups.set(id, group);
-    const gref: ItemRef = `g:${id}`;
-    const base: SidebarLayout = { top: layout.top, groups: { ...layout.groups, [id]: [] }, ungrouped: layout.ungrouped };
-    const ref = ws ? itemRefOf(ws, this.listWorkspaces()) : null;
-    const container = ref === null ? undefined : containerOf(layout, ref);
-    if (ref !== null && container === null) {
-      this.layout = { top: base.top.map((r) => (r === ref ? gref : r)), groups: { ...base.groups, [id]: [ref] }, ungrouped: layout.ungrouped };
-    } else if (ref !== null && container !== undefined) {
-      const without = removeItem(base, ref);
-      const top = [...without.top];
-      const at = top.indexOf(`g:${container}`);
-      top.splice(at === -1 ? top.length : at + 1, 0, gref);
-      this.layout = { top, groups: { ...without.groups, [id]: [ref] }, ungrouped: layout.ungrouped };
-    } else {
-      this.layout = insertItem(base, gref, null);
-    }
+    const created = insertGroup(layout, id);
+    this.layout = ws ? addItemToGroup(created, itemRefOf(ws, this.listWorkspaces()), id) : created;
     if (ws) this.setItemGroup(ws, id);
     this.settle();
     return group;
@@ -519,7 +522,7 @@ export class SessionModel {
   }
 
   /**
-   * グループを消す。中の項目はグループのあった位置へ順に出し、`repoGroups` のそのグループ行きを全部消す
+   * グループを消す。中の項目は「グループなし」の末尾へ順に出し、`repoGroups` のそのグループ行きを全部消す
    * （メンバーの `groupId` は null に戻る）。`Workspace` は消えない。
    */
   deleteGroup(id: GroupId): void {
@@ -544,7 +547,7 @@ export class SessionModel {
     return this.workspaces.get(workspaceId)!;
   }
 
-  /** 項目をグループから出し、一番上の、そのグループの直後へ置く。既にどのグループにも属していなくても無害（同じ結果を返すだけ）。 */
+  /** 項目をグループから出し、「グループなし」の末尾へ置く。既にどのグループにも属していなくても無害（同じ結果を返すだけ）。 */
   removeFromGroup(workspaceId: WorkspaceId): Workspace {
     const ws = this.requireWorkspace(workspaceId);
     this.beginChange();
@@ -637,7 +640,7 @@ export class SessionModel {
   /**
    * `workspace.move_to`（古い画面の D&D）。`workspaceIds` を `beforeWorkspaceId` の前へ、項目の動きとして読み替える（design「古い画面 × 新しいサーバ」）。
    * (a) ID の集まりが、同じ入れ物の中の 1 つ以上の項目のちょうど全部で、落とし先が同じ入れ物の項目の先頭の workspace（または null）→ その項目を動かす。
-   * (b) ID の集まりが、グループ G の実効のメンバーのちょうど全部で、落とし先が一番上の項目の先頭（グループの先頭メンバーならそのグループ。または null）→ `g:G` を動かす。
+   * (b) ID の集まりが、グループ G の実効のメンバーのちょうど全部で、落とし先が別のまとまり（グループ・「グループなし」）の先頭の workspace（または null）→ `g:G` を `top` の中で動かす（追補 01 B）。
    * (c) それ以外（一部だけ・外と中をまたぐ・落とし先が動かす対象自身）→ 何も変えず false。実在しない ID は NotFoundError。
    */
   moveWorkspacesTo(workspaceIds: WorkspaceId[], beforeWorkspaceId: WorkspaceId | null): boolean {
@@ -654,8 +657,7 @@ export class SessionModel {
       this.requireGroup(target.groupId);
       return `g:${target.groupId}`;
     }
-    // 暫定（T24 で直す）: 「グループなし」のまとまり `"u"` はまだ `top` に入らないので、動かす操作は受け付けない（moved:false）。
-    if (target.kind === "ungrouped") return "u";
+    if (target.kind === "ungrouped") return UNGROUPED;
     return itemRefOf(this.requireWorkspace(target.workspaceId), this.listWorkspaces());
   }
 
@@ -667,54 +669,54 @@ export class SessionModel {
     this.settle();
   }
 
-  /** 項目に属する workspace（`g:` は中の項目の全部）。 */
+  /** 項目に属する workspace（`g:`・「グループなし」は中の項目の全部）。 */
   private itemMembers(layout: SidebarLayout, ref: ItemRef): Workspace[] {
     const all = this.listWorkspaces();
+    if (ref === UNGROUPED) return layout.ungrouped.flatMap((r) => this.itemMembers(layout, r));
     if (ref.startsWith("g:")) return (layout.groups[ref.slice(2)] ?? []).flatMap((r) => this.itemMembers(layout, r));
     if (ref.startsWith("r:")) return repoMembers(all, ref.slice(2));
     return all.filter((w) => itemRefOf(w, all) === ref);
   }
 
-  /** `workspace.move_to` の読み替え。動かせるなら新しいレイアウト、(c) なら null。 */
+  /**
+   * `workspace.move_to` の読み替え（追補 01 B）。動かせるなら新しいレイアウト、(c) なら null。
+   * (a) 同じまとまり（グループの中か「グループなし」）の中の項目の並べ替え。
+   * (b) グループの実効のメンバーのちょうど全部で、落とし先が別のまとまりの先頭の workspace（または null）→ そのグループを `top` の中で動かす。
+   * (c) それ以外は何も変えない。
+   */
   private planLegacyMove(ids: WorkspaceId[], beforeId: WorkspaceId | null): SidebarLayout | null {
     if (ids.length === 0) return null;
     const layout = this.getLayout();
     const idSet = new Set(ids);
     const sameSet = (members: Workspace[]): boolean => members.length === idSet.size && members.every((w) => idSet.has(w.id));
-    const listOf = (container: GroupId | null): readonly ItemRef[] => (container === null ? layout.top : (layout.groups[container] ?? []));
-    const containerOf = (ref: ItemRef): GroupId | null | undefined => {
-      if (layout.top.includes(ref)) return null;
-      for (const [groupId, list] of Object.entries(layout.groups)) if (list.includes(ref)) return groupId;
-      return undefined;
-    };
     /** 入れ物の項目のうち、先頭の workspace が `beforeId` のもの（null は末尾）。無ければ undefined。 */
     const anchorIn = (container: GroupId | null): ItemRef | null | undefined => {
       if (beforeId === null) return null;
-      return listOf(container).find((r) => this.itemMembers(layout, r)[0]?.id === beforeId);
+      return listOf(layout, container).find((r) => this.itemMembers(layout, r)[0]?.id === beforeId);
     };
-    const apply = (refs: ItemRef[], container: GroupId | null, anchor: ItemRef | null): SidebarLayout | null => {
+    const apply = (refs: ItemRef[], list: readonly ItemRef[], anchor: ItemRef | null): SidebarLayout | null => {
       if (anchor !== null && refs.includes(anchor)) return null; // 落とし先が動かす対象自身
       let next = layout;
-      for (const ref of listOf(container).filter((r) => refs.includes(r))) next = moveItem(next, ref, anchor).layout;
+      for (const ref of list.filter((r) => refs.includes(r))) next = moveItem(next, ref, anchor).layout;
       return next;
     };
 
-    // (a) 同じ入れ物の中の項目のちょうど全部。
+    // (a) 同じまとまりの中の項目のちょうど全部。
     const refs = [...new Set(ids.map((id) => itemRefOf(this.requireWorkspace(id), this.listWorkspaces())))];
-    const containers = new Set(refs.map(containerOf));
+    const containers = new Set(refs.map((r) => containerOf(layout, r)));
     const [only] = containers;
-    // グループの全メンバーを null（末尾）へ、は (b)（グループを一番上の末尾へ）に読む（(a) だと、中の項目を全部末尾へ動かす実質無変化になる）。
+    // グループの全メンバーを null（末尾）へ、は (b)（グループを `top` の末尾へ）に読む（(a) だと、中の項目を全部末尾へ動かす実質無変化になる）。
     const wholeGroupToEnd = beforeId === null && typeof only === "string" && sameSet(this.itemMembers(layout, `g:${only}`));
     if (containers.size === 1 && only !== undefined && !wholeGroupToEnd && sameSet(refs.flatMap((r) => this.itemMembers(layout, r)))) {
-      const container = only;
-      const anchor = anchorIn(container);
-      if (anchor !== undefined) return apply(refs, container, anchor);
+      const anchor = anchorIn(only);
+      if (anchor !== undefined) return apply(refs, listOf(layout, only), anchor);
     }
-    // (b) グループ G の実効のメンバーのちょうど全部 → `g:G` を一番上で動かす。
-    const groupId = containerOf(refs[0]!);
+    // (b) グループ G の実効のメンバーのちょうど全部 → `g:G` を `top` の中で動かす。落とし先は別のまとまりの先頭の workspace（または null）。
+    const groupId = containerOf(layout, refs[0]!);
     if (typeof groupId === "string" && sameSet(this.itemMembers(layout, `g:${groupId}`))) {
-      const anchor = anchorIn(null);
-      if (anchor !== undefined) return apply([`g:${groupId}`], null, anchor);
+      const anchor =
+        beforeId === null ? null : layout.top.find((u) => this.itemMembers(layout, u)[0]?.id === beforeId);
+      if (anchor !== undefined) return apply([`g:${groupId}`], layout.top, anchor);
     }
     return null; // (c)
   }
@@ -765,10 +767,14 @@ export class SessionModel {
     return layout;
   }
 
-  /** workspace の項目の所属を書く。リポジトリなら `repoGroups`、そうでなければ workspace の `groupId`。`null` は所属なし。 */
+  /**
+   * workspace の項目の所属を書く。代表のリポジトリの項目（`r:`）なら `repoGroups`、そうでなければ（管理外・代表でない workspace の `w:<id>`）
+   * workspace の `groupId`。`null` は所属なし。
+   */
   private setItemGroup(ws: Workspace, groupId: GroupId | null): void {
-    const repoKey = ws.git?.repoKey;
-    if (repoKey) {
+    const ref = itemRefOf(ws, this.listWorkspaces());
+    if (ref.startsWith("r:")) {
+      const repoKey = ref.slice(2);
       if (groupId === null) this.repoGroups.delete(repoKey);
       else this.repoGroups.set(repoKey, groupId);
     } else {
@@ -776,12 +782,13 @@ export class SessionModel {
     }
   }
 
-  /** 実効の `groupId`（リポジトリなら `repoGroups`、そうでなければ自分の値。無いグループは null）を全 workspace に保つ。 */
+  /** 実効の `groupId`（代表のリポジトリの項目なら `repoGroups`、そうでなければ自分の値。無いグループは null）を全 workspace に保つ。 */
   private recomputeGroupIds(): void {
+    const reps = representativeIds(this.listWorkspaces());
     for (const ws of this.workspaces.values()) {
       const repoKey = ws.git?.repoKey;
       const own = ws.groupId !== null && this.groups.has(ws.groupId) ? ws.groupId : null;
-      const effective = repoKey ? (this.repoGroups.get(repoKey) ?? null) : own;
+      const effective = repoKey && reps.has(ws.id) ? (this.repoGroups.get(repoKey) ?? null) : own;
       if (effective !== ws.groupId) this.workspaces.set(ws.id, { ...ws, groupId: effective });
     }
   }
@@ -870,8 +877,10 @@ export class SessionModel {
       }
     }
     this.beginChange();
+    const before = this.refSnapshot();
     this.workspaces.delete(id);
-    this.removeFromLayout(ws);
+    this.reflectRefs(before, null);
+    this.settle();
     if (this.focus?.workspaceId === id) {
       this.focus = null;
       const first = this.workspaces.values().next();
@@ -882,20 +891,6 @@ export class SessionModel {
       }
     }
     return { removedPaneIds, removedTabIds, closedWorkspaceId: id };
-  }
-
-  /**
-   * 消えた workspace をレイアウトから外す（モデルの削除の 1 か所。`workspace.closed` を出す 5 経路はすべてここを通る）。
-   * リポジトリの項目は、同じリポジトリの workspace が他に残っていれば残す。空になった項目は外す（`repoGroups` は残す）。
-   */
-  private removeFromLayout(ws: Workspace): void {
-    if (!this.layout) return;
-    let layout = removeItem(this.layout, `w:${ws.id}`);
-    const all = this.listWorkspaces();
-    const ref = itemRefOf(ws, all);
-    if (!ref.startsWith("w:") && !all.some((w) => itemRefOf(w, all) === ref)) layout = removeItem(layout, ref);
-    this.layout = layout;
-    this.settle();
   }
 
   /** tab を閉じた結果（a）に、それが引き起こした workspace の閉鎖の結果（b）を重ねる。 */
@@ -1206,8 +1201,9 @@ export class SessionModel {
 
   /**
    * 判定（`GitInfoPoller` の 3 つの結果）を反映する。`unknown` は何も変えない（`git` も書き換えない）。`git`・`unmanaged` は `git` を入れ、
-   * 項目の判定（`repoKey`・`isLinkedWorktree`）が変わったときは design「レイアウトが変わる場面」の表のとおりレイアウトと所属を合わせる
-   * （仮の状態ではレイアウトに触れない。導く結果が変わるだけ）。`workspace` の記録が変わったときだけ、その workspace を返す。
+   * 項目の判定（`repoKey`・`isLinkedWorktree`・`worktreeKey`）が変わったときは design「レイアウトが変わる場面」の表（追補 01 で読み替え）のとおり
+   * レイアウトと所属を合わせる（仮の状態ではレイアウトに触れない。導く結果が変わるだけ）。代表（同じ `worktreeKey` の最初の workspace）が
+   * 入れ替わるときも、項目の参照が変わった workspace ごとに合わせる（`reflectRefs`）。`workspace` の記録が変わったときだけ、その workspace を返す。
    */
   updateWorkspaceGit(workspaceId: WorkspaceId, result: GitJudgement): Workspace | null {
     const ws = this.requireWorkspace(workspaceId);
@@ -1220,44 +1216,76 @@ export class SessionModel {
       return updated;
     }
     this.beginChange();
-    const oldKey = ws.git?.repoKey ?? null;
-    const newKey = git?.repoKey ?? null;
-    const updated = { ...ws, git };
-    this.workspaces.set(workspaceId, updated);
-    if (this.layout) this.layout = this.reflectJudgement(this.layout, updated, ws.groupId, oldKey, newKey);
+    const before = this.refSnapshot();
+    this.workspaces.set(workspaceId, { ...ws, git });
+    this.reflectRefs(before, workspaceId);
     this.settle();
     return this.workspaces.get(workspaceId)!;
   }
 
-  /**
-   * 判定の変わり目のレイアウトと所属（design「レイアウトが変わる場面」の「判定が付く」「判定が変わる」「管理外と確定」）。
-   * `ws` は新しい `git` を入れた後の workspace、`ownGroupId` はそれまでの実効の `groupId`。`repoKey` が変わらないとき（`isLinkedWorktree` だけ）は
-   * レイアウトを変えない（Map の並べ直しは `settle`）。
-   */
-  private reflectJudgement(layout: SidebarLayout, ws: Workspace, ownGroupId: GroupId | null, oldKey: string | null, newKey: string | null): SidebarLayout {
-    if (oldKey === newKey) return layout;
-    const own: ItemRef = `w:${ws.id}`;
-    const hasMembers = (key: string) => [...this.workspaces.values()].some((w) => w.git?.repoKey === key);
-    const liveGroup = (id: GroupId | null | undefined): GroupId | null => (id != null && this.groups.has(id) && id in layout.groups ? id : null);
+  /** いまの全 workspace の項目の参照・`repoKey`・実効の所属（変える前の控え。`reflectRefs` に渡す）。 */
+  private refSnapshot(): RefSnapshot {
+    const all = this.listWorkspaces();
+    return new Map(all.map((w) => [w.id, { ref: itemRefOf(w, all), repoKey: w.git?.repoKey ?? null, groupId: w.groupId }]));
+  }
 
-    // 抜ける側（R1）: 他に居なければ項目を外す（`repoGroups[R1]` は残す）。居る間は「元の項目の位置」だけ控える。
-    const leave = (key: string): { container: GroupId | null; index: number; removed: boolean } | null => {
-      const ref: ItemRef = `r:${key}`;
-      const container = containerOf(layout, ref);
+  /**
+   * workspace が消えた・判定が変わった後に、レイアウトと所属を合わせる（design「レイアウトが変わる場面」の「判定が付く」「判定が変わる」
+   * 「管理外と確定」「workspace が無くなる」と、追補 01 A の代表の交代）。`before` は変える前の控え、`primary` は判定が変わった workspace
+   * （先に処理する。無ければ null）。まず消えた workspace の参照を外し（リポジトリの項目は、代表が誰か残っていれば残す）、次に項目の参照が
+   * 変わった workspace を 1 つずつ `transition` で処理する。仮の状態（`layout` が無い）では何もしない。
+   */
+  private reflectRefs(before: RefSnapshot, primary: WorkspaceId | null): void {
+    if (!this.layout) return;
+    const all = this.listWorkspaces();
+    const now = new Map(all.map((w) => [w.id, itemRefOf(w, all)]));
+    const live = new Set(now.values());
+    let layout = this.layout;
+    for (const [id, was] of before) {
+      if (now.has(id)) continue;
+      if (was.ref.startsWith("w:") || !live.has(was.ref)) layout = removeItem(layout, was.ref);
+    }
+    const changed = [...now.keys()].filter((id) => before.has(id) && before.get(id)!.ref !== now.get(id)).sort((a, b) => (a === primary ? -1 : b === primary ? 1 : 0));
+    for (const id of changed) layout = this.transition(layout, this.workspaces.get(id)!, before.get(id)!, now.get(id)!, live);
+    this.layout = layout;
+  }
+
+  /**
+   * 1 つの workspace の項目の参照が `from.ref` から `to` に変わったときのレイアウトと所属。`live` は変えた後に存在する項目の参照の集まり。
+   * - **`r:R1` → `w:<id>`**（管理外と確定・代表でなくなった）: 抜ける側 R1 から外れ（代表が他に残らなければ `r:R1` も外す。`repoGroups[R1]` は残す）、
+   *   同じ入れ物の `r:R1` の直後（`r:R1` を外したなら同じ場所）へ `w:<id>`。`groupId` はその入れ物のグループ。
+   * - **`r:R1` → `r:R2`**（判定が変わる）: R1 から抜ける。`r:R2` があれば加わる。無く `repoGroups[R2]` があればそのグループの末尾へ `r:R2`。
+   *   どちらも無ければ「グループなし」の、元の項目の直後（元がグループの中なら「グループなし」の末尾）へ。
+   * - **`w:<id>` → `r:R2`**（判定が付く・代表になる）: **先に `repoGroups[R2]` を見る**（届く順に依らない）。あればそれに従い、無く workspace に
+   *   `groupId`（G）があれば `repoGroups[R2] = G` にして G の中へ（`r:R2` が別の場所にあれば丸ごと G の末尾へ移す）。どちらも無ければ `w:<id>` を
+   *   同じ場所で `r:R2` に置き換える。同じリポジトリの代表だった workspace が閉じて代表になったとき（`from.repoKey` が同じ）に `r:R2` が
+   *   あれば、リポジトリの所属に従って `w:<id>` を外すだけ。いずれも最後に `w:<id>` を外す。
+   */
+  private transition(
+    layout: SidebarLayout,
+    ws: Workspace,
+    from: { ref: ItemRef; repoKey: string | null; groupId: GroupId | null },
+    to: ItemRef,
+    live: ReadonlySet<ItemRef>,
+  ): SidebarLayout {
+    const own: ItemRef = `w:${ws.id}`;
+    const liveGroup = (id: GroupId | null | undefined): GroupId | null => (id != null && this.groups.has(id) && id in layout.groups ? id : null);
+    /** 抜ける側（`r:R1`）: 代表が他に残らなければ項目を外す。元の項目の位置（入れ物・番号・外したか）を返す。 */
+    const leave = (): { container: GroupId | null; index: number; removed: boolean } | null => {
+      if (!from.ref.startsWith("r:")) return null;
+      const container = containerOf(layout, from.ref);
       if (container === undefined) return null;
-      const list = container === null ? layout.top : (layout.groups[container] ?? []);
-      const index = list.indexOf(ref);
-      const removed = !hasMembers(key);
-      if (removed) layout = removeItem(layout, ref);
+      const index = listOf(layout, container).indexOf(from.ref);
+      const removed = !live.has(from.ref);
+      if (removed) layout = removeItem(layout, from.ref);
       return { container, index, removed };
     };
 
-    if (newKey === null) {
-      // 管理外と確定（R1 → なし）: 同じ入れ物の `r:R1` の直後（R1 が空なら同じ場所）へ `w:<id>`。`groupId` はその入れ物のグループ。
-      const from = oldKey === null ? null : leave(oldKey);
-      if (from) {
-        layout = insertAt(layout, own, from.container, from.removed ? from.index : from.index + 1);
-        this.workspaces.set(ws.id, { ...ws, groupId: from.container });
+    if (to.startsWith("w:")) {
+      const left = leave();
+      if (left) {
+        layout = insertAt(layout, own, left.container, left.removed ? left.index : left.index + 1);
+        this.workspaces.set(ws.id, { ...ws, groupId: left.container });
       } else {
         if (containerOf(layout, own) === undefined) layout = insertItem(layout, own, null);
         this.workspaces.set(ws.id, { ...ws, groupId: containerOf(layout, own) ?? null });
@@ -1265,40 +1293,38 @@ export class SessionModel {
       return layout;
     }
 
-    const target: ItemRef = `r:${newKey}`;
-    const exists = containerOf(layout, target) !== undefined;
+    const newKey = to.slice(2);
+    const exists = containerOf(layout, to) !== undefined;
     const repoGroup = liveGroup(this.repoGroups.get(newKey));
 
-    if (oldKey !== null) {
+    if (from.ref.startsWith("r:")) {
       // 判定が変わる（R1 → R2）。
-      const from = leave(oldKey);
+      const left = leave();
       if (exists) return layout;
-      if (repoGroup !== null) return addItemToGroup(layout, target, repoGroup);
-      // 一番上の、元の項目の一番上のまとまりの直後（グループの外）。
-      const anchor: ItemRef | null = from === null ? null : from.container === null ? `r:${oldKey}` : `g:${from.container}`;
-      const at = anchor === null ? -1 : layout.top.indexOf(anchor);
-      if (at !== -1) return insertAt(layout, target, null, at + 1);
-      const topIndex = from !== null && from.container === null ? from.index : layout.top.length;
-      return insertAt(layout, target, null, topIndex);
+      if (repoGroup !== null) return addItemToGroup(layout, to, repoGroup);
+      // 「グループなし」の、元の項目の直後。元がグループの中（や無い）なら「グループなし」の末尾。
+      if (left && left.container === null) return insertAt(layout, to, null, left.removed ? left.index : left.index + 1);
+      return insertItem(layout, to, null);
     }
 
-    // 判定が付く（`w:<id>` → R2）。`repoGroups[R2]` を先に見る（届く順に依らない）。
+    // `w:<id>` → R2（判定が付く・代表になる）。`repoGroups[R2]` を先に見る（届く順に依らない）。
     const replaceOwn = (base: SidebarLayout): SidebarLayout => {
       const container = containerOf(base, own);
-      if (container === undefined) return insertItem(base, target, null);
-      const list = container === null ? base.top : (base.groups[container] ?? []);
-      return insertAt(removeItem(base, own), target, container, list.indexOf(own));
+      if (container === undefined) return insertItem(base, to, null);
+      return insertAt(removeItem(base, own), to, container, listOf(base, container).indexOf(own));
     };
     if (repoGroup !== null) {
       const without = removeItem(layout, own);
-      return exists ? without : addItemToGroup(without, target, repoGroup);
+      return exists ? without : addItemToGroup(without, to, repoGroup);
     }
-    const ownGroup = liveGroup(ownGroupId);
+    // 同じリポジトリの代表を引き継いだだけ（代表の交代）なら、リポジトリの項目の所属に従う。
+    if (from.repoKey === newKey && exists) return removeItem(layout, own);
+    const ownGroup = liveGroup(from.groupId);
     if (ownGroup !== null) {
       this.repoGroups.set(newKey, ownGroup);
       if (exists) {
         const without = removeItem(layout, own);
-        return containerOf(without, target) === ownGroup ? without : addItemToGroup(without, target, ownGroup);
+        return containerOf(without, to) === ownGroup ? without : addItemToGroup(without, to, ownGroup);
       }
       return replaceOwn(layout);
     }
@@ -1352,7 +1378,14 @@ export class SessionModel {
       // 保存した直前の判定を戻す（ブランチ名・件数は最初の確認で入る。20261004-group-worktree-items）。
       git:
         typeof data.repoKey === "string"
-          ? { branch: null, ahead: 0, behind: 0, repoKey: data.repoKey, isLinkedWorktree: data.isLinkedWorktree ?? false }
+          ? {
+              branch: null,
+              ahead: 0,
+              behind: 0,
+              repoKey: data.repoKey,
+              isLinkedWorktree: data.isLinkedWorktree ?? false,
+              ...(typeof data.worktreeKey === "string" ? { worktreeKey: data.worktreeKey } : {}),
+            }
           : null,
       autoLabel, // 呼ぶ側（`SessionService.restore`）が決める
     };
@@ -1401,11 +1434,27 @@ export class SessionModel {
    */
   restoreLayout(layout: SidebarLayout, repoGroups: Readonly<Record<string, GroupId>>): ItemRef[] {
     const repaired = repairLayout(layout, this.listWorkspaces(), this.listGroups());
-    this.layout = repaired.layout;
+    let next = repaired.layout;
     this.repoGroups.clear();
     for (const [repoKey, groupId] of Object.entries(repoGroups)) {
       if (this.groups.has(groupId)) this.repoGroups.set(repoKey, groupId);
     }
+    // 所属の 2 つの記録（レイアウトの入れ物と、`repoGroups`・workspace の `groupId`）の食い違いを直す。リポジトリの項目（`r:`）は
+    // `repoGroups` が正（レイアウトに無くて `repairLayout` が足した項目も、覚えているグループへ入れる）。`repoGroups` に無いのにグループの中に
+    // あれば、その入れ物を覚える。管理外・代表でない workspace（`w:<id>`）はレイアウトの入れ物が正で、`groupId` を合わせる。
+    for (const ref of [...next.ungrouped, ...Object.values(next.groups).flat()]) {
+      if (!ref.startsWith("r:")) continue;
+      const want = this.repoGroups.get(ref.slice(2));
+      const have = containerOf(next, ref);
+      if (want !== undefined && have !== want) next = addItemToGroup(next, ref, want);
+      else if (want === undefined && typeof have === "string") this.repoGroups.set(ref.slice(2), have);
+    }
+    for (const ws of this.listWorkspaces()) {
+      const ref: ItemRef = `w:${ws.id}`;
+      const container = containerOf(next, ref);
+      if (container !== undefined && ws.groupId !== container) this.workspaces.set(ws.id, { ...ws, groupId: container });
+    }
+    this.layout = next;
     this.settle();
     return repaired.dropped;
   }

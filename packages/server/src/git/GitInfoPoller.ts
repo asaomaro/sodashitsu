@@ -156,9 +156,11 @@ export class DefaultGitInfoPoller implements GitInfoPoller {
       if (dirResult.code !== 0) return { kind: "unknown" };
       // 本体は `--git-dir` と `--git-common-dir` が同じパスを指す。linked worktree は異なる
       // （`--git-dir` が `<common-dir>/worktrees/<name>` を指す標準的な Git の仕組み）。
-      const isLinkedWorktree = resolveCommonDir(cwd, dirResult.stdout) !== repoKey;
+      // `worktreeKey` は `--git-dir` の絶対パスそのもの（その worktree〔フォルダ〕を一意に示す。同じフォルダの workspace は同じ値。追補 01 A）。
+      const worktreeKey = resolveCommonDir(cwd, dirResult.stdout);
+      const isLinkedWorktree = worktreeKey !== repoKey;
 
-      return { kind: "git", git: { branch, ahead, behind, repoKey, isLinkedWorktree } };
+      return { kind: "git", git: { branch, ahead, behind, repoKey, isLinkedWorktree, worktreeKey } };
     } catch {
       return { kind: "unknown" }; // 時間切れ・git が無い等
     }

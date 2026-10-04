@@ -230,3 +230,34 @@ F13 は「本体の判定がまだ取れていない間は決めず、取れた�
   - server `SessionModel`（T24）: `itemRefOf` に `this.listWorkspaces()` を渡しただけ。旧構造（`top` に項目が直接並ぶ・`containerOf`/`listOf` のローカル関数が `layout.top` を見る・`createGroup` が `top` へ `g:` を置く・代表の交代・`worktreeKey` を持たない）のままなので、server の単体テスト 77 件（`SessionModel.test.ts` 46・`SessionService.test.ts` 19・`surface/methods/index.test.ts` 6・`GitInfoPoller.test.ts` 6）は T24 まで落ちる（T22 の時点では通っていた。レイアウトの形が変わったため）。`removeFromLayout` は閉じた workspace が一覧に無い状態で `itemRefOf` を呼ぶので、代表だった `r:` の項目の外し方が正しくない（T24 で代表の交代と一緒に直す）。
   - web `Sidebar.vue`（T25）・tui `render/chrome/sidebar.ts`（T27）: 「グループなし」の `items` を、今までの一番上の行として depth 0 で描く（見出し・畳み・状態のまとめは無い）。web `store/sidebarTree.ts` の `currentNavigableRows` は、見出しをまだ描かないので `ungrouped` の行を選べる行から外す（T26）。`itemGroupIdOf` は `itemRefOf(ws, 全 workspace)` に直しただけ。
   - 下流のテストは、落ちたものだけ新しい構造の入力に直した（web: `StoreAdapter.test`・`Sidebar.test` の layout が変わる 1 件・`ActionDispatcher.test` の古いサーバの 1 件・`Sidebar.defaultLayout` の golden 2 枚〔古いサーバの既定の描画が「グループが先・グループなしが後」の順に変わった。見出しは T25 で足す〕、tui: `SessionModel.test`・`TuiDispatcher.test`・`sidebar.test`）。落ちなかった旧形のレイアウト（`top` に `w:`／`r:` を直接並べる入力）のテストは、「どこにも無い workspace は `ungrouped` の末尾へ」で偶然通っているだけなので、T25〜T27 で新しい入力へ書き直す。
+
+## D28: 旧形の `layout` を持つ保存は `layout` だけ捨てる（T24。D26 補足の宿題）
+
+- `SessionFileDataSchema` の `layout` を `SidebarLayoutSchema.optional().catch(undefined)` にした。`ungrouped` の無い（追補 01 より前の途中の形）・壊れた形の `layout` は、保存全体を「壊れたファイル」にせず `layout` だけ捨て、`layout` の無い保存と同じ**仮の状態**（workspace の `groupId`・`repoKey` から `layoutFromLegacy` で導く）から始める。`repoGroups` は `layout` と対で使うので、`layout` が無ければ復元は読まない（D17 のとおり）。
+- 理由: 壊れた扱いにすると、バックアップへ退避してフレッシュ起動になり、**全部の workspace・タブ・pane の復元が失われる**。並びの情報だけ失うほうが穏当。この work の変更は未配布なので移行の必要は無いが、途中の形で動かしたことのある開発者の環境を壊さないために入れた。`SessionFile.test.ts` に 3 つの形（`ungrouped` 無し・`top` が配列でない・object でない）で固定した。
+
+## D29: 判定の反映と代表の交代を「項目の参照が変わった workspace ごとの遷移」にまとめた（T24）
+
+- 判定が付く・変わる・管理外・workspace が消える・代表の交代は、すべて `SessionModel.reflectRefs(before, primary)` に通す。変える前に全 workspace の `{ref, repoKey, groupId}`（`refSnapshot`）を控え、変えた後に `itemRefOf(ws, 全 workspace)` と比べる。
+  1. 消えた workspace: `w:<id>` は外す。`r:<repoKey>` は、変えた後に同じ参照を持つ workspace（代表）が誰も居ないときだけ外す（`repoGroups` は残す）。
+  2. 参照が変わった workspace を 1 つずつ `transition` で処理する（判定が変わった workspace を先に）。
+- `transition` の置き場（追補 01 B の読み替え）:
+  - `r:R1` → `w:<id>`（管理外と確定・代表でなくなった）: 同じ入れ物の `r:R1` の直後（R1 の代表が他に残らなければ同じ場所）。`groupId` はその入れ物のグループ。
+  - `r:R1` → `r:R2`（判定が変わる）: `r:R2` があれば加わる／無く `repoGroups[R2]` があればそのグループの末尾／どちらも無ければ**「グループなし」の、元の項目の直後**（元がグループの中なら「グループなし」の末尾）。design の「グループの外の、元の項目の一番上のまとまりの直後」は、「グループなし」が 1 つのまとまりになったので読み替えた。
+  - `w:<id>` → `r:R2`（判定が付く・代表になる）: design の表のとおり `repoGroups[R2]` を先に見る。**代表の交代**（`w:<id>` の workspace が同じ `repoKey` のまま代表になる）で `r:R2` が既にあれば、`repoGroups` が無くても、**リポジトリの項目の位置・所属に従って `w:<id>` を外すだけ**（追補 01 A「リポジトリの所属に従う」。その workspace が自分でグループに入れていても、項目をそのグループへ動かさない）。`r:R2` が無い（代表が唯一の workspace だった）ときは今までの「判定が付く」と同じ（覚えているグループの末尾／自分のグループを `repoGroups` に覚える／同じ場所で置き換え）。
+- 代表が閉じても、同じ worktree の次の workspace が代表になる限り `r:<repoKey>` は位置を保つ（外して付け直さない）。
+- 代表を決める「平らな順」は Map の順で、`settle()` が `flattenWorkspaceIds`（同じ worktree の workspace が占める位置のうち一番前に代表を置く。T23・D27）で並べ直すので、レイアウトの操作で代表が入れ替わり続けない。
+- 判定の変化（`gitIdentityChanged`）と `sameGit` に `worktreeKey` を含めた。含めないと、`repoKey`・`isLinkedWorktree` が同じで `worktreeKey` だけが変わる（二つの linked worktree 間の移動）とき、代表の交代がレイアウトに反映されない。
+
+## D30: 所属の書き込み・実効の `groupId`・復元の整合（T24）
+
+- 所属は**参照の種類**で書く: 代表の `r:<repoKey>` は `repoGroups`、`w:<id>`（管理外・代表でない workspace）は workspace の `groupId`（`setItemGroup`・`recomputeGroupIds` は `representativeIds` を使う）。同じフォルダの 2 つ目をグループへ入れても worktree グループは動かない。
+- 復元（`SessionModel.restoreLayout`）で、レイアウトの入れ物と所属の記録の食い違いを直す: `r:` は `repoGroups` が正（レイアウトに無くて `repairLayout` が足した項目も、覚えているグループの末尾へ入れる）。`repoGroups` に無いのにグループの中にあれば、その入れ物を覚える。`w:<id>` はレイアウトの入れ物が正で `groupId` を合わせる。`repairLayout`（client-core）は所属の記録を見ないので、復元側で直した。
+- 新しく始めたモデルのレイアウトは `{ top: ["u"], groups: {}, ungrouped: [] }`（「グループなし」は `top` に必ず 1 つ）。新しいグループ（`createGroup`）は `insertGroup` で「グループなし」の直前、`target` の項目は `addItemToGroup`（元の入れ物から外して末尾へ）。
+
+## D31: 古い `workspace.move_to` の読み替え（追補 B (a)(b)(c)）の実装（T24）
+
+- (a) 同じまとまり（グループの中か「グループなし」）の中の項目のちょうど全部で、落とし先が同じまとまりの項目の先頭の workspace（または null）。
+- (b) グループの実効のメンバーのちょうど全部で、落とし先が**別のまとまりの先頭の workspace**（`top` のグループ `g:<id>` か「グループなし」`"u"`。まとまりの先頭の workspace は、その中の最初の項目の先頭）または null → そのグループを `top` の中で動かす。null は D16 と同じく (a)（実質無変化）ではなく (b) に読み、`top` の末尾（「グループなし」の後ろ）へ動かす。
+- (c) それ以外（一部だけ・まとまりをまたぐ項目・落とし先が動かす対象自身）は何も変えない。「グループなし」そのものは古い画面から動かせない（グループの実効のメンバーではないため）。
+- 意味が変わった既存のテストは新しい決まりで書き直した（`SessionModel.test.ts` の sidebar layout・item moves、`SessionService.test.ts`、`surface/methods/index.test.ts`、`GitInfoPoller.test.ts`、`SessionFile.test.ts`）。`worktreeKey` を持たない判定（古いサーバ・テストの `GitInfo`）は、今までどおり同じ `repoKey` を全部メンバーにするので、`worktreeKey` を指定したテストだけが代表の決まりを見る。

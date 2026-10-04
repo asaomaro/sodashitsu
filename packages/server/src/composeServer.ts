@@ -870,6 +870,8 @@ export function toSessionFileData(session: SessionService): SessionFileData {
       // 直前の判定。`git` が無いとき（管理外・判定前）は null（復元で `git: null` に戻り、並びは変わらない）。
       repoKey: ws.git?.repoKey ?? null,
       isLinkedWorktree: ws.git?.isLinkedWorktree ?? false,
+      // その worktree（フォルダ）を示す値。代表の決まり（追補 01 A）に使うので、起動直後から同じ代表になるよう保存する。
+      ...(typeof ws.git?.worktreeKey === "string" ? { worktreeKey: ws.git.worktreeKey } : {}),
       cwd: ws.cwd,
       activeTabId: ws.activeTabId,
       // tab は並べ替えた順（`ws.tabIds`）で保存する——復元の tab の並びと、最初の tab（名前と git を決める場所。20260926-workspace-label-follow-cwd）が保たれる。

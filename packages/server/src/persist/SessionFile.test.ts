@@ -118,10 +118,10 @@ describe("FsSessionFile", () => {
     const withLayout: SessionFileData = {
       ...data,
       groups: [{ id: "g1", label: "backend", collapsed: false }],
-      layout: { top: ["g:g1", "w:w2"], groups: { g1: ["r:/r/.git"] }, ungrouped: [] },
+      layout: { top: ["g:g1", "u"], groups: { g1: ["r:/r/.git"] }, ungrouped: ["w:w2"] },
       repoGroups: { "/r/.git": "g1", "/closed/.git": "g1" },
       workspaces: [
-        { ...ws, groupId: "g1", repoKey: "/r/.git", isLinkedWorktree: true },
+        { ...ws, groupId: "g1", repoKey: "/r/.git", isLinkedWorktree: true, worktreeKey: "/r/.git/worktrees/wt" },
         { ...ws, id: "w2", repoKey: null },
         { ...ws, id: "w3" },
       ],
@@ -131,6 +131,7 @@ describe("FsSessionFile", () => {
     expect(result).toEqual({ kind: "ok", data: withLayout });
     if (result.kind !== "ok") throw new Error("unreachable");
     expect(result.data.workspaces.map((w) => w.repoKey)).toEqual(["/r/.git", null, undefined]);
+    expect(result.data.workspaces.map((w) => w.worktreeKey)).toEqual(["/r/.git/worktrees/wt", undefined, undefined]);
   });
 
   it("古い版が読める形: 新しい項目を落としても、残りは以前のスキーマで読める（版は 1 のまま・追加は optional だけ）", async () => {
@@ -140,9 +141,9 @@ describe("FsSessionFile", () => {
     const data = sample();
     await file.save({
       ...data,
-      layout: { top: ["w:w1"], groups: {}, ungrouped: [] },
+      layout: { top: ["u"], groups: {}, ungrouped: ["w:w1"] },
       repoGroups: { "/r/.git": "g1" },
-      workspaces: [{ ...data.workspaces[0]!, repoKey: "/r/.git", isLinkedWorktree: false }],
+      workspaces: [{ ...data.workspaces[0]!, repoKey: "/r/.git", isLinkedWorktree: false, worktreeKey: "/r/.git" }],
     });
     // 以前の版（z.object の既定＝知らない項目を落とす）と同じ読み方で、新しい項目を落とした形が元の形と一致する。
     const raw = JSON.parse(await readFile(join(dir, "session.json"), "utf8")) as Record<string, unknown>;
@@ -154,18 +155,30 @@ describe("FsSessionFile", () => {
       const copy = { ...w };
       delete copy["repoKey"];
       delete copy["isLinkedWorktree"];
+      delete copy["worktreeKey"];
       return copy;
     });
     await writeFileAtomic(join(dir, "session.json"), JSON.stringify({ ...rest, workspaces: ws }));
     expect(await file.load()).toEqual({ kind: "ok", data });
   });
 
-  it("layout が壊れた形（配列でない）なら壊れたファイルとして扱う", async () => {
+  // 追補 01（D28）: 形が合わない `layout`（`ungrouped` が無い追補の前の途中の形・壊れた形）は、保存全体を壊れた扱いにせず `layout` だけ捨てる。
+  // 復元は `layout` が無い保存と同じ仮の状態（`groupId`・`repoKey` から導く）から始まり、`repoGroups` は読まない。
+  it.each([
+    ["ungrouped が無い途中の形", { top: ["w:w1", "g:g1"], groups: { g1: [] } }],
+    ["top が配列でない", { top: "x", groups: {}, ungrouped: [] }],
+    ["配列でも object でもない", 5],
+  ])("layout が壊れた形・旧形（%s）なら layout だけ捨て、残りは読める", async (_name, layout) => {
     const { writeFileAtomic } = await import("./atomicFile.js");
     const { join } = await import("node:path");
     const file = new FsSessionFile(dir);
-    await writeFileAtomic(join(dir, "session.json"), JSON.stringify({ ...sample(), layout: { top: "x", groups: {} } }));
-    expect((await file.load()).kind).toBe("corrupt");
+    const data = sample();
+    await writeFileAtomic(join(dir, "session.json"), JSON.stringify({ ...data, layout, repoGroups: { "/r/.git": "g1" } }));
+    const result = await file.load();
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error("unreachable");
+    expect(result.data.layout).toBeUndefined();
+    expect(result.data.workspaces).toEqual(data.workspaces);
   });
 
   it("reports corrupt for an unsupported schema version", async () => {
