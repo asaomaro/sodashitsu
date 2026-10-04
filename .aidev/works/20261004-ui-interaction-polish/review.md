@@ -301,3 +301,12 @@ AssertionError: expected { spaces: true, agents: true } to deeply equal { spaces
     Error: expect(locator).toBeFocused() failed   Expected: focused   Received: inactive
   （単体 ✘ 区画の境目にフォーカスがあるまま片方を畳むと…: expected <body> to be <button …>）
 ```
+
+## ラウンド 2（ラウンド 1 の修正の差分だけ・独立）
+
+must 0・should 1・nit 3。ラウンド 1 の 6 件の修正はいずれも指摘を解消し、新しい不具合は無いと判断した。
+
+- [should] `useResizeDrag.ts`: `moved` が pointermove 1 回で立つので、実機の数 px のぶれでクリックがドラッグに数えられ、ダブルクリックの reset が効かない → 押した位置から 3px 以上動いたときだけ動かしたことにした。単体テストを 2 件足し、しきい値の判定を外すと落ちることを確かめた（9c2957a）。`Sidebar.test.ts` のドラッグの件は始点を動かして合わせた。
+- [nit] AC17 の E2E「素早く 2 回目のドラッグ」は間に待ちが挟まり 350ms を超えうる → 本命は単体（動かしたドラッグの直後のテストが決定的に捕まえる）。許容。
+- [nit] Tab のテストの題が順序を保証するように読める → 許容（Tab で 2 つの境目に止まることを見る。順序は `keys-mouse-dialogs.spec.ts`）。
+- [nit] AC20 の `> 100` が CSS の最小とは別の決め打ち → 許容（変異で落ちることを確認済み）。
