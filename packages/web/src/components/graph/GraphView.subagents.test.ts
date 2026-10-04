@@ -283,6 +283,30 @@ describe("別のマシンのノード・モバイル・古いサーバ", () => {
     wrapper.unmount();
   });
 
+  it("別のマシンのノードのエージェントが古いサーバのもの（subagents の項目が無い）なら、ボタンを出さず、ノードの DOM はボタンの有無だけが違う", async () => {
+    const M = "d".repeat(32);
+    const { wrapper } = await open({ nodes: ["local:p1", `${M}:p1`] });
+    const machines = useMachinesStore(pinia);
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }] as never);
+    const withSubs = (extra: Partial<AgentInfo>) => {
+      const snap = remoteSnap(agentOf("idle", { instanceId: "r1", ...extra }));
+      (snap as unknown as { panes: unknown[] }).panes = [paneOf("p1", "t9", { label: "remote-p1", agent: agentOf("idle", { instanceId: "r1", ...extra }) })];
+      machines.applySummarySnapshot(M, snap);
+    };
+    withSubs({});
+    await flush();
+    expect(wrapper.find(`[data-node-key="${M}:p1"] [data-subagents-button]`).exists()).toBe(false);
+    const oldHtml = wrapper.get(`[data-node-key="${M}:p1"]`).html();
+    withSubs({ subagents: subs(3) });
+    await flush();
+    const newHtml = wrapper.get(`[data-node-key="${M}:p1"]`).html();
+    const stripButton = (h: string) => h.replace(/<button[^>]*data-subagents-button[\s\S]*?<\/button>/, "").replace("・サブエージェント 3 件", "");
+    // Vue の注釈（`<!--v-if-->`・テンプレートの注釈）は描かれ方に効かないので除く。
+    const norm = (h: string) => h.replace(/<!--[\s\S]*?-->/g, "").replace(/>\s+</g, "><");
+    expect(norm(stripButton(newHtml))).toBe(norm(oldHtml));
+    wrapper.unmount();
+  });
+
   it("モバイルの読み取り専用のグラフ: 数だけを出し（ボタンではない）、押しても s でも開かない", async () => {
     vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList);
     const { wrapper } = await open({ p1: subs(4) });

@@ -5,6 +5,7 @@ import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
 import type { ConnectionPort } from "@sodashitsu/client-core";
+import { useMachinesStore } from "../store/machines.js";
 import { useSessionStore } from "../store/session.js";
 import { readPrefs, useViewStore, writePrefs } from "../store/view.js";
 import { useSettingsStore } from "../store/settings.js";
@@ -621,6 +622,34 @@ describe("Sidebar — サブエージェントの件数のボタン", () => {
     expect(rowPointerdown).not.toHaveBeenCalled();
     expect(conn.requests).toEqual([]); // pane.focus を送らない（pane へ移らない）
     expect(view.focusedPaneId).not.toBe("p1");
+  });
+
+  it("別のマシンを選んでいるときは、そのマシンの対象として開く（machineId は選んでいるマシンの ID）", async () => {
+    const M2 = "c".repeat(32);
+    setup(makeAgent({ subagents: subs(2) }));
+    const machines = useMachinesStore(pinia);
+    machines.setMachines([{ id: M2, label: "box", state: "online", message: null }] as never);
+    machines.select(M2);
+    const w = mountSidebar(makeConnection());
+    await btn(w).trigger("click");
+    expect(useViewStore(pinia).dialogContext).toEqual({ kind: "subagents", machineId: M2, paneId: "p1", opener: "button" });
+  });
+
+  it("古いサーバ（subagents の項目が無い）のエージェントの行は、ボタンが無いだけで、ほかは変わらない", () => {
+    setup(makeAgent());
+    const w = mountSidebar(makeConnection());
+    const row = w.get(".sidebar-agents .sidebar-row");
+    expect(w.find(".sidebar-subagent-btn").exists()).toBe(false);
+    expect(row.text()).toContain("Claude Code");
+    expect(row.findAll(".sidebar-row-line1")).toHaveLength(1);
+    // 行の DOM は、subagents のある行からボタンを除いたものと同じ（ほかの表示は変わらない）。
+    const strip = (html: string) => html.replace(/<button[^>]*sidebar-subagent-btn[\s\S]*?<\/button>/g, "").replace(/<!--[\s\S]*?-->/g, "").replace(/ data-v-[0-9a-f]+=""/g, "").replace(/>\s+</g, "><");
+    const oldHtml = strip(row.html());
+    pinia = createPinia();
+    setup(makeAgent({ subagents: subs(2) }));
+    const withButton = mountSidebar(makeConnection()).get(".sidebar-agents .sidebar-row");
+    expect(withButton.find(".sidebar-subagent-btn").exists()).toBe(true);
+    expect(strip(withButton.html())).toBe(oldHtml);
   });
 
   it("畳んだサイドバーでは出さない", () => {

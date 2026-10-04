@@ -2,6 +2,7 @@ import type { AgentInfo, Pane, SubagentInfo, Tab, Workspace } from "@sodashitsu/
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useMachinesStore } from "../store/machines.js";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
 import SubagentListDialog from "./SubagentListDialog.vue";
@@ -253,5 +254,90 @@ describe("SubagentListDialog — 閉じる", () => {
     view.openDialogWithContext({ kind: "renamePane", paneId: "p1", currentLabel: "x" });
     await wrapper.vm.$nextTick();
     expect(dialogOf(wrapper).open).toBe(false);
+  });
+});
+
+// 20261004-subagent-display の T12。pane の ID が衝突する 2 つのマシンで、件数と一覧を取り違えない。
+describe("SubagentListDialog — 2 つのマシン（pane の ID が衝突）", () => {
+  const M2 = "b".repeat(32);
+
+  /** 選んでいるのは M2（session のストアは M2 の p1: 2 件）。手元（local）の p1 は要約にあり 5 件。 */
+  async function setupTwoMachines() {
+    const machines = useMachinesStore(pinia);
+    machines.setMachines([{ id: M2, label: "box", state: "online", message: null }] as never);
+    machines.applySummarySnapshot("local", {
+      protocol: 1,
+      serverVersion: "t",
+      host: { os: "linux", windowsBuild: null, hostname: "h" },
+      workspaces: [ws],
+      tabs: [tab],
+      panes: [paneOf(agentOf({ count: 5, items: Array.from({ length: 5 }, (_, i) => sub(`l${i}`, { type: "LOCAL" })) }, { instanceId: "local-a" }), { label: "ローカルの p1" })],
+    } as never);
+    machines.select(M2);
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted(ws);
+    session.tabUpserted(tab);
+    session.paneUpserted(paneOf(agentOf({ count: 2, items: [sub("r0", { type: "REMOTE" }), sub("r1", { type: "REMOTE" })] }, { instanceId: "m2-a" }), { label: "M2 の p1" }));
+    const view = useViewStore(pinia);
+    const wrapper = mount(SubagentListDialog, { global: { plugins: [pinia] }, attachTo: document.body });
+    return { wrapper, view };
+  }
+
+  it("選んでいるマシン（M2）の対象は session の p1（2 件）、選んでいない手元の対象は要約の p1（5 件）", async () => {
+    const { wrapper, view } = await setupTwoMachines();
+    view.openDialogWithContext({ kind: "subagents", machineId: M2, paneId: "p1" });
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get("h2").text()).toBe("サブエージェント — M2 の p1");
+    expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual(["REMOTE", "REMOTE"]);
+    view.closeDialog();
+    await wrapper.vm.$nextTick();
+    view.openDialogWithContext({ kind: "subagents", machineId: "local", paneId: "p1" });
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get("h2").text()).toBe("サブエージェント — ローカルの p1");
+    expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual(["LOCAL", "LOCAL", "LOCAL", "LOCAL", "LOCAL"]);
+    wrapper.unmount();
+  });
+
+  it("選んでいないマシンの要約が更新されると、開いている一覧も更新される。そのマシンのエージェントが入れ替わると閉じる", async () => {
+    const { wrapper, view } = await setupTwoMachines();
+    const machines = useMachinesStore(pinia);
+    view.openDialogWithContext({ kind: "subagents", machineId: "local", paneId: "p1" });
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    machines.applySummaryEvent("local", { event: "pane.agent_status_changed", data: { paneId: "p1", agent: agentOf({ count: 1, items: [sub("x", { type: "NEW" })] }, { instanceId: "local-a" }) } });
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll(".subagent-list-type").map((e) => e.text())).toEqual(["NEW"]);
+    machines.applySummaryEvent("local", { event: "pane.agent_status_changed", data: { paneId: "p1", agent: agentOf(undefined, { instanceId: "replaced" }) } });
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(view.dialogContext).toBeNull();
+    expect(dialogOf(wrapper).open).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("新しい画面 × 古いサーバ（subagents の項目が無いエージェント）: 一覧は開いて、0 件の文言を出す（エラーにしない）。件数のボタン・show_subagents は項目が無ければ開かない", async () => {
+    const machines = useMachinesStore(pinia);
+    machines.applySummarySnapshot("local", {
+      protocol: 1,
+      serverVersion: "old",
+      host: { os: "linux", windowsBuild: null, hostname: "h" },
+      workspaces: [ws],
+      tabs: [tab],
+      panes: [paneOf(agentOf(undefined, { instanceId: "old-a" }))],
+    } as never);
+    machines.select(M2);
+    const view = useViewStore(pinia);
+    const wrapper = mount(SubagentListDialog, { global: { plugins: [pinia] }, attachTo: document.body });
+    view.openDialogWithContext({ kind: "subagents", machineId: "local", paneId: "p1" });
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    // 項目が無い（分からない）エージェントでも、エージェント自身は居るので開く（0 件の文言）。
+    expect(dialogOf(wrapper).open).toBe(true);
+    expect(wrapper.findAll(".subagent-list-item")).toHaveLength(0);
+    expect(wrapper.get(".subagent-list-empty").text()).toBe("実行中のサブエージェントはありません");
+    wrapper.unmount();
   });
 });

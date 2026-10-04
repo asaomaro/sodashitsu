@@ -40,6 +40,10 @@
 - [should][conv:-] SubagentPanel.vue:22 パネルを開いたまま別のノードのボタンを押すと、`openedInstanceId` が古いままで閉じてしまう / 対応: 修正済（`GraphView` が `:key` で作り直す。テスト付き。T11・ラウンド1）
 - [should][conv:-] SubagentPanel.vue:6 ノードがグラフから外れても、pane と agent が残っていれば閉じない / 対応: 修正済（ノードが載っているかも見る。テスト付き。T11・ラウンド1）
 
+- [should][conv:-] SubagentListDialog.test.ts 古いサーバのテストの題名と中身が食い違い、何も確かめていなかった / 対応: 修正済（題名を実際の挙動に。0 件の文言と `open` を assert。T12・ラウンド1）
+- [should][conv:-] T12 の差分にグラフの古いサーバの確認が無く、サイドバーの「変わらない」も弱い / 対応: 修正済（グラフのノードの DOM がボタンの有無だけの差であること・サイドバーの行の DOM がボタンを除けば同じことを比べる。T12・ラウンド1）
+- [nit][conv:-] SubagentListDialog.test.ts 要約の更新のテストの待ちが 1 回で、`open` を見ていない / 対応: 修正済（T12・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -361,4 +365,31 @@ AssertionError: expected [] to have a length of 1 but got +0
 === MUT(SubagentPanel.vue): ノードが載っているか（onGraph）の判定を外す
  FAIL  … > 対象のノードがグラフから外れたら（pane とエージェントが残っていても）閉じる
 AssertionError: expected true to be false // Object.is equality
+```
+
+#### T12 別のマシンの引き方（`Sidebar.test.ts`・`SubagentListDialog.test.ts`・`store/subagents.test.ts`。製品コードの変更なし。壊した後に元へ戻した）
+
+```
+=== MUT(Sidebar.vue): 一覧の対象の machineId を選んでいるマシンから "local" に固定
+ FAIL  src/components/Sidebar.test.ts > … > 別のマシンを選んでいるときは、そのマシンの対象として開く（machineId は選んでいるマシンの ID）
+AssertionError: expected { kind: 'subagents', …(3) } to deeply equal { kind: 'subagents', …(3) }
+=== MUT(store/subagents.ts): 選んでいるマシンの判定を true に（要約を見ない）
+ FAIL  src/components/SubagentListDialog.test.ts > … > 2 つのマシン（pane の ID が衝突） > 選んでいるマシン（M2）の対象は session の p1（2 件）、選んでいない手元の対象は要約の p1（5 件）
+AssertionError: expected 'サブエージェント — M2 の p1' to be 'サブエージェント — ローカルの p1' // Object.is equality
+=== MUT(store/subagents.ts): 要約の引き先を target.machineId から "local" に固定
+ FAIL  src/store/subagents.test.ts > … > 選んでいないマシンの pane は、そのマシンの要約から引く
+AssertionError: expected undefined to deeply equal { instanceId: 'a1', …(8) }
+ FAIL  … > pane の ID が衝突する 2 つのマシンで取り違えない（選んでいるのは local。m2 の p1 は m2 のもの）
+```
+
+（T12・ラウンド1 の修正の分）
+```
+=== MUT(Sidebar.vue): v-if="i === 0 && subagentCount(agent) > 0" -> v-if="i === 0"
+ FAIL  src/components/Sidebar.test.ts > … > 1 件以上のときだけ出る（分からない・0 件では出さない）
+ FAIL  … > 古いサーバ（subagents の項目が無い）のエージェントの行は、ボタンが無いだけで、ほかは変わらない
+=== MUT(GraphNode.vue): <template v-if="subagentCount > 0"> -> v-if="true"
+ FAIL  src/components/graph/GraphView.subagents.test.ts > … > 別のマシンのノードのエージェントが古いサーバのもの（subagents の項目が無い）なら、ボタンを出さず、ノードの DOM はボタンの有無だけが違う
+AssertionError: expected true to be false // Object.is equality
+=== MUT(SubagentListDialog.vue): SubagentList を subagents がある間だけ描く
+ FAIL  src/components/SubagentListDialog.test.ts > … > 新しい画面 × 古いサーバ（subagents の項目が無いエージェント）: 一覧は開いて、0 件の文言を出す（エラーにしない）。…
 ```

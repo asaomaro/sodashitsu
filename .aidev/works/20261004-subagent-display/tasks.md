@@ -61,7 +61,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/web/src/components/graph/GraphNode.vue:83-130`、`packages/web/src/components/graph/GraphView.vue:1120-1163, :1376-1408`（キーと `escape()`）、`packages/web/src/components/graph/HistoryPanel.vue`（手本）、`packages/web/src/store/graph.ts:54-70, :319-360`（`GraphNodeInfo`）、`packages/web/src/store/machines.ts:36-45`（要約）、`packages/client-core/src/graph/geometry.ts:10-11`（大きさは変えない）
       依存: T20
       AC: AC3, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
-- [ ] T12: 別のマシンのエージェントの引き方の確認——選んでいるマシンのエージェントの行（サイドバー）と、選んでいないマシンのノード（グラフ）で、件数と一覧が `{machineId, paneId}` から正しく引けること（pane の ID が衝突する 2 つのマシンで取り違えない）。新しい画面×古いサーバ（`subagents` が無い）で何も出ず、ほかの表示が変わらないこと。単体テスト（ストアの 2 つのマシン）と壊して落ちる確認
+- [x] T12: 別のマシンのエージェントの引き方の確認——選んでいるマシンのエージェントの行（サイドバー）と、選んでいないマシンのノード（グラフ）で、件数と一覧が `{machineId, paneId}` から正しく引けること（pane の ID が衝突する 2 つのマシンで取り違えない）。新しい画面×古いサーバ（`subagents` が無い）で何も出ず、ほかの表示が変わらないこと。単体テスト（ストアの 2 つのマシン）と壊して落ちる確認
       対象: `packages/web/src/store/machines.ts:36-45, :161-173`、`packages/web/src/store/graph.ts:319-360`、`packages/web/src/store/session.ts`、手本は `packages/server/src/machine/machines.integration.test.ts`（2 つの `soda serve` の統合テスト）
       依存: T11
       AC: AC3, AC6, AC13
