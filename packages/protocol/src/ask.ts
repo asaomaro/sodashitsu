@@ -67,6 +67,8 @@ export interface AskQuestion {
   filter?: boolean;
   /** 表示名と値が違う選択肢に、値を出すか（無ければ部品の既定: 出す）。`text` には無い。 */
   showValue?: boolean;
+  /** `false` のときだけ持つ（この質問に自由記述を付けない）。`true`・無指定・真偽でない値は項目なし。 */
+  comment?: false;
 }
 
 /** 質問の目次の出し方: `"auto"`（高さに収まらないときだけ出す）／`true`（必ず出す）／`false`（出さない）。1 以上の整数も通す（`true` と同じ扱い。`ask.py` の検査と共通の試験データに合わせる）。 */
@@ -82,6 +84,8 @@ export interface AskSpec {
   notePlaceholder?: string;
   /** 無ければ無いまま（既定は埋めない。部品の既定は `"auto"`）。質問に `page` があれば、`false` でなければ目次を出す。 */
   paging?: AskPaging;
+  /** `false` のときだけ持つ（どの質問にも自由記述を付けない）。`true`・無指定・真偽でない値は項目なし。 */
+  comments?: false;
   questions: AskQuestion[];
 }
 
@@ -278,6 +282,8 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
     const mw = q["minWidth"];
     if (typeof mw === "number" && Number.isInteger(mw) && mw >= 60 && mw <= 600) out.minWidth = mw;
     if (page !== undefined) out.page = page;
+    // `comment` は `false` のときだけ残す（`ask.py` と同じ。`true`・無い・真偽でない値は項目なし。誤りにしない）。
+    if (q["comment"] === false) out.comment = false;
 
     if (type !== "text") {
       // 真偽のときだけ写す（それ以外は落とす。誤りにしない）。`text` には選択肢が無いので写さない。
@@ -346,6 +352,7 @@ export function normalizeAskSpec(raw: unknown): Ok | Fail {
   if (top.intro !== undefined) spec.intro = top.intro;
   if (notePlaceholder !== undefined) spec.notePlaceholder = notePlaceholder;
   if (paging !== undefined) spec.paging = paging;
+  if (raw["comments"] === false) spec.comments = false;
   return { ok: true, spec };
 }
 
@@ -376,6 +383,15 @@ export function initialAskState(spec: AskSpec): AskFormState {
     state.otherText[q.id] = "";
   }
   return state;
+}
+
+/**
+ * その質問に自由記述を付けられるか（部品 `<ask-form>` の `commentable` と同じ 4 条件）。
+ * 定義の `comments` が `false` でない・質問の `comment` が `false` でない・`text` でない・即確定のフォーム（質問が 1 つ・`single`・補足なし）でない。
+ */
+export function askCommentable(spec: AskSpec, q: AskQuestion): boolean {
+  if (spec.comments === false || q.comment === false || q.type === "text") return false;
+  return !(spec.questions.length === 1 && spec.questions[0]?.type === "single" && !spec.note);
 }
 
 /** その質問が、いまの回答（上の質問の答え）で表示されるか（`showIf` の判定）。 */

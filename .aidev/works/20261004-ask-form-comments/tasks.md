@@ -17,7 +17,7 @@ design.md のとおり、下から積む。(1) 部品と試験データを写す
       対象: `scripts/sync-ask-form.mjs`、`third_party/ask-form/{ask-form.js,fixtures/normalize.json,fixtures/collect.json,SOURCE.json}`、`packages/protocol/src/ask.fixtures.test.ts:74-92, :141`（実行だけ）
       依存: なし
       AC: AC1
-- [ ] T2: 定義の検査——`AskSpec.comments?: false`・`AskQuestion.comment?: false`（`normalizeAskSpec` が `false` のときだけ残す。`true`・無い・真偽でない値は項目なし。誤りにしない）、`askCommentable(spec, q)`（定義の `comments !== false`・質問の `comment !== false`・`type !== "text"`・即確定のフォーム〔質問が 1 つ・`single`・`note === false`〕でない）。T1 で落ちた normalize の例が通る。単体テスト（`false` 以外は落ちる・`askCommentable` の 4 条件）と壊して落ちる確認
+- [x] T2: 定義の検査——`AskSpec.comments?: false`・`AskQuestion.comment?: false`（`normalizeAskSpec` が `false` のときだけ残す。`true`・無い・真偽でない値は項目なし。誤りにしない）、`askCommentable(spec, q)`（定義の `comments !== false`・質問の `comment !== false`・`type !== "text"`・即確定のフォーム〔質問が 1 つ・`single`・`note === false`〕でない）。T1 で落ちた normalize の例が通る。単体テスト（`false` 以外は落ちる・`askCommentable` の 4 条件）と壊して落ちる確認
       対象: `packages/protocol/src/ask.ts:60-85`（`AskQuestion`・`AskSpec` の型）・`:205-216`（`note` の検査の近く）・`:280-286`（`filter`・`showValue` を通す箇所）・`:345`（`spec` の組み立て）、`packages/protocol/src/ask.test.ts`、`packages/protocol/src/ask.fixtures.test.ts`（実行だけ）
       依存: T1
       AC: AC3, AC5

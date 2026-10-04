@@ -4,6 +4,7 @@ import {
   ASK_OPTIONS_MAX,
   ASK_QUESTIONS_MAX,
   ASK_SPEC_MAX_BYTES,
+  askCommentable,
   checkAskAnswer,
   collectAsk,
   initialAskState,
@@ -271,6 +272,46 @@ describe("normalizeAskSpec — 既定と丸め", () => {
     expect(s.questions[0]!.options).toHaveLength(13);
     expect(s.questions[0]!.options[0]!.colors).toEqual(["#1a56db", "#0ea5e9", "#6366f1", "#0d9488"]);
     expect(s.questions[4]!.showIf).toEqual({ layout: ["plain", "cards", "timeline", "accordion"] });
+  });
+});
+
+describe("自由記述の指定（comments・comment）", () => {
+  it("comments・comment は false のときだけ残す。true・無い・真偽でない値は項目なし（誤りにしない）", () => {
+    const s = spec({ comments: false, questions: [q({ comment: false })] });
+    expect(s.comments).toBe(false);
+    expect(s.questions[0]!.comment).toBe(false);
+    for (const v of [true, undefined, null, "false", 0, "", [], {}]) {
+      const t = spec({ comments: v, questions: [q({ comment: v })] });
+      expect(t).not.toHaveProperty("comments");
+      expect(t.questions[0]).not.toHaveProperty("comment");
+    }
+  });
+  it("comment の値が真偽でなくても誤りにならない", () => {
+    expect(normalizeAskSpec({ questions: [q({ id: "a", comment: "x" })] }).ok).toBe(true);
+  });
+  it("askCommentable: 定義の comments: false・質問の comment: false・text・即確定のフォームでは付けない（4 条件）", () => {
+    const two = (extra: Record<string, unknown> = {}, top: Record<string, unknown> = {}) => spec({ ...top, questions: [q({ id: "a", ...extra }), q({ id: "b" })] });
+    const base = two();
+    expect(askCommentable(base, base.questions[0]!)).toBe(true);
+    const multi = two({ type: "multi" });
+    expect(askCommentable(multi, multi.questions[0]!)).toBe(true);
+    const off = two({}, { comments: false });
+    expect(askCommentable(off, off.questions[0]!)).toBe(false);
+    const qoff = two({ comment: false });
+    expect(askCommentable(qoff, qoff.questions[0]!)).toBe(false);
+    expect(askCommentable(qoff, qoff.questions[1]!)).toBe(true);
+    const text = spec({ questions: [{ id: "t", label: "T", type: "text" }, q({ id: "b" })] });
+    expect(askCommentable(text, text.questions[0]!)).toBe(false);
+    // 即確定: 質問が 1 つ・single・補足なし
+    const instant = spec({ note: false, questions: [q()] });
+    expect(askCommentable(instant, instant.questions[0]!)).toBe(false);
+    // 補足あり・multi・質問が 2 つなら即確定ではない
+    const withNote = spec({ questions: [q()] });
+    expect(askCommentable(withNote, withNote.questions[0]!)).toBe(true);
+    const oneMulti = spec({ note: false, questions: [q({ type: "multi" })] });
+    expect(askCommentable(oneMulti, oneMulti.questions[0]!)).toBe(true);
+    const twoNoNote = spec({ note: false, questions: [q({ id: "a" }), q({ id: "b" })] });
+    expect(askCommentable(twoNoNote, twoNoNote.questions[0]!)).toBe(true);
   });
 });
 
