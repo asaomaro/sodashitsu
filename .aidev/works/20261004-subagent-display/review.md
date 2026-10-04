@@ -44,6 +44,15 @@
 - [should][conv:-] T12 の差分にグラフの古いサーバの確認が無く、サイドバーの「変わらない」も弱い / 対応: 修正済（グラフのノードの DOM がボタンの有無だけの差であること・サイドバーの行の DOM がボタンを除けば同じことを比べる。T12・ラウンド1）
 - [nit][conv:-] SubagentListDialog.test.ts 要約の更新のテストの待ちが 1 回で、`open` を見ていない / 対応: 修正済（T12・ラウンド1）
 
+- [must][conv:-] SubagentList.ts:92 制御文字の正規表現が eslint の no-control-regex でエラー / 対応: 修正済（正規表現をやめ `plainText` の文字ごとの判定に。T13・ラウンド1）
+- [must][conv:-] SubagentList.ts・sidebar.ts・TuiApp.subagents.test.ts が prettier を通らない（sidebar.ts は HEAD で整形済み） / 対応: 修正済（HEAD で整形済みだったファイルと新規ファイルだけに prettier を当てた。T13・ラウンド1）
+- [should][conv:-] mouse.ts:290 ⤷n の桁を右クリックすると全体のメニューが開く / 対応: 修正済（pane のメニュー。テスト付き。T13・ラウンド1）
+- [should][conv:-] SubagentList.ts:91 説明の制御文字の除去が C0・DEL だけで、C1・行区切り・双方向制御・種類が素通り / 対応: 修正済（`plainText`。種類にも適用。テスト付き。T13・ラウンド1）
+- [should][conv:-] SubagentList.ts:96 ↑↓ の印が経過時間・「ほか n 件」の最後の文字を上書きする / 対応: 修正済（右端の 1 桁を空ける。テスト付き。T13・ラウンド1）
+- [should][conv:-] TuiApp.subagents.test.ts キーボードだけの道筋（設定で割り当てたキー）の試験が無く、空の確認があった / 対応: 修正済（`prefs.keys` で割り当てて `prefix+u` で開く試験を足し、空の確認を消した。T13・ラウンド1）
+- [nit][conv:-] 全角・2 桁の件数・狭い幅の確認が足りない / 対応: 修正済（試験を足した。T13・ラウンド1）
+- [nit][conv:-] decisions D11 の文言と実装の食い違い / 対応: 修正済（D11 を実装に合わせ、条件の理由をコメントに。T13・ラウンド1）
+
 ### 壊して落ちる確認（生の出力）
 
 #### T3 フックのスクリプト（`packages/server/assets/agent-hook-report.cjs`。壊した後に元へ戻し `cmp` で一致を確認済み）
@@ -392,4 +401,55 @@ AssertionError: expected undefined to deeply equal { instanceId: 'a1', …(8) }
 AssertionError: expected true to be false // Object.is equality
 === MUT(SubagentListDialog.vue): SubagentList を subagents がある間だけ描く
  FAIL  src/components/SubagentListDialog.test.ts > … > 新しい画面 × 古いサーバ（subagents の項目が無いエージェント）: 一覧は開いて、0 件の文言を出す（エラーにしない）。…
+```
+
+#### T13 端末版（`render/chrome/sidebar.ts`・`input/mouse.ts`・`modes/SubagentList.ts`・`modes/ContextMenu.ts`・`actions/TuiDispatcher.ts`・`app/TuiApp.ts`。壊した後に元へ戻した）
+
+```
+=== MUT(sidebar.ts): 件数の印を 0 件・項目なしでも出す（(count ?? 0) > 0 を true に）
+ FAIL  src/app/TuiApp.subagents.test.ts > … > 1 件以上のとき、エージェントの行の 1 行目の末尾に ⤷n が出る。0 件・項目なしでは出ない
+AssertionError: expected { y: 5, section: 'agents', …(4) } to be undefined
+=== MUT(mouse.ts): 印の桁範囲の当たり（h.kind === "subagents"）を外す
+ FAIL  … > ⤷n の桁範囲のクリックで一覧が開く（pane へは移らない）。行のほかの場所のクリックは今までどおり pane へ
+AssertionError: expected null to match object { kind: 'subagents', paneId: 'p3' }
+=== MUT(mouse.ts): 印のクリックで一覧を開く行（showSubagentsOf）を外す
+ FAIL  … > ⤷n の桁範囲のクリックで…
+AssertionError: expected null to match object { kind: 'subagents', paneId: 'p3' }
+=== MUT(TuiDispatcher.ts): 件数の確認（< 1）を外す
+ FAIL  … > 開いている間に、エージェントが居なくなる・入れ替わる・pane が閉じると閉じる。…
+AssertionError: expected { kind: 'subagents', …(2) } to be null
+=== MUT(ContextMenu.ts): メニューの項目を常に出す
+ FAIL  … > pane のメニューに「サブエージェントの一覧」が出る（1 件以上のときだけ）。選ぶと一覧が開く
+AssertionError: expected [ '名前の変更', '右へ分割', '下へ分割', …(5) ] to not include 'サブエージェントの一覧'
+=== MUT(TuiApp.ts): 入れ替わりの判定（instanceId）を外す
+ FAIL  … > 開いている間に、エージェントが居なくなる・入れ替わる・pane が閉じると閉じる。…
+AssertionError: expected { kind: 'subagents', …(2) } to be null
+=== MUT(TuiApp.ts): onModelChange の closeSubagentsIfGone を外す
+ FAIL  … > 開いている間に、…閉じる。…
+AssertionError: expected { kind: 'subagents', …(2) } to be null
+=== MUT(SubagentList.ts): 制御文字を空白にする置き換えを外す
+ FAIL  … > 説明の中の制御文字は空白にして出す（画面を壊さない）
+AssertionError: expected ' Spaces       開いた順 + │ 1:t1   +      …' to contain '行1 [2J 行2'
+=== MUT(SubagentList.ts): End キーを外す
+ FAIL  … > 上下で読み（ホイールも）、Esc で閉じる。…
+AssertionError: expected ' Spaces       開いた順 + │ 1:t1   +      …' to contain 'ほか 6 件'
+=== MUT(SubagentList.ts): ホイールの読みを外す
+ FAIL  … > 上下で読み（ホイールも）、Esc で閉じる。…
+AssertionError: expected ' Spaces       開いた順 + │ 1:t1   +      …' to contain 'ほか 6 件'
+```
+
+（T13・ラウンド1 の修正の分）
+```
+=== MUT(SubagentList.ts): plainText の C1 の範囲を 0x7f だけに
+ FAIL  src/app/TuiApp.subagents.test.ts > … > plainText: C0・DEL・C1（0x9b）・行区切り・双方向の制御を空白にし、…
+AssertionError: expected 'a [2Jb c d\u009b31me f g h i j' to be 'a [2Jb c d 31me f g h i j' // Object.is equality
+=== MUT(SubagentList.ts): 双方向の制御（U+202A-202E）の除去を外す
+ FAIL  … > plainText: …
+AssertionError: expected 'a [2Jb c d 31me f g\u202eh i j' to be 'a [2Jb c d 31me f g h i j' // Object.is equality
+=== MUT(mouse.ts): 右クリックで subagents も pane のメニューにする条件を外す
+ FAIL  … > ⤷n の桁を右クリックすると、その pane のメニュー（サブエージェントの一覧つき）が開く
+AssertionError: expected { kind: 'global' } to deeply equal { kind: 'pane', paneId: 'p3' }
+=== MUT(SubagentList.ts): 中身の幅の右端 1 桁の空け（cw = inner.w - 1）を inner.w に
+ FAIL  … > 一覧が長いとき、↑↓ の印は右端の桁に出て、経過時間の最後の文字を上書きしない
+AssertionError: expected ' ◐ w2     │ T3                       …' to match /1分\s*[↑↓]?\s*│/
 ```

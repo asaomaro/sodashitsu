@@ -238,9 +238,12 @@ export class TuiDispatcher {
         // 連携のグラフ画面はブラウザにだけある（20260927-agent-graph の decisions D1-8。操作表は共有のまま、端末版は知らせる）。
         this.ui.toast("グラフの画面はブラウザで開けます。");
         return;
-      case "showSubagents":
-        // 一覧の overlay を開く動きは T13 で足す（型の網羅のため、ここに受け口だけ置く）。
+      // 20261004-subagent-display。フォーカスしている pane のエージェントの一覧を開く（件数が 0・分からない・エージェントが居ないときは何もしない）。
+      case "showSubagents": {
+        const paneId = this.model.focusedPaneId;
+        if (paneId) this.showSubagentsOf(paneId);
         return;
+      }
       default:
         // 網羅の検査：`Action` に種類が増えたらここで型が落ちる（web は `switch` に網羅の検査が無く、足し忘れが黙って無反応になっていた）。
         action satisfies never;
@@ -757,6 +760,16 @@ export class TuiDispatcher {
     const paneId = this.model.focusedPaneId;
     if (!paneId) return;
     void this.conn.request("pane.swap", { paneId, direction: dir }).catch(() => undefined);
+  }
+
+  /**
+   * その pane のエージェントのサブエージェントの一覧（overlay）を開く（20261004-subagent-display。`show_subagents`・サイドバーの件数のクリック・pane のメニュー）。
+   * 件数が 1 以上のときだけ（0・報告を受けていない・エージェントが居ないときは何もしない。web の `showSubagents` と同じ）。
+   */
+  showSubagentsOf(paneId: string): void {
+    const agent = this.model.panes.get(paneId)?.agent;
+    if (!agent || (agent.subagents?.count ?? 0) < 1) return;
+    this.ui.openDialogWithContext({ kind: "subagents", paneId, instanceId: agent.instanceId });
   }
 
   /**

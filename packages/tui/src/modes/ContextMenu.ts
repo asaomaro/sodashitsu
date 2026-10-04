@@ -63,6 +63,10 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
             pane?.rightClick === "pane" ? "herdr" : "pane",
           ),
       },
+      // エージェントが 1 件以上のサブエージェントを動かしているとき（20261004-subagent-display。キーボードだけの道筋の 1 つ）。
+      ...((pane?.agent?.subagents?.count ?? 0) > 0
+        ? [{ label: "サブエージェントの一覧", run: () => actions.showSubagentsOf(target.paneId) }]
+        : []),
       { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
       { label: "閉じる", run: () => actions.closePaneById(target.paneId) },
     ];

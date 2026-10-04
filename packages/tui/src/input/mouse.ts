@@ -248,8 +248,15 @@ export class MouseController {
       row.find(
         (h) =>
           ((h.kind === "newWorkspace" || h.kind === "collapse") && h.x === x) ||
-          (h.kind === "sort" && x >= h.x && x < h.x + h.w),
-      ) ?? row.find((h) => h.kind !== "newWorkspace" && h.kind !== "collapse" && h.kind !== "sort")
+          ((h.kind === "sort" || h.kind === "subagents") && x >= h.x && x < h.x + h.w),
+      ) ??
+      row.find(
+        (h) =>
+          h.kind !== "newWorkspace" &&
+          h.kind !== "collapse" &&
+          h.kind !== "sort" &&
+          h.kind !== "subagents",
+      )
     );
   }
 
@@ -283,7 +290,7 @@ export class MouseController {
           ui.openContextMenu({ kind: "workspace", workspaceId: hit.workspaceId }, { x, y });
         else if (hit?.kind === "group")
           ui.openContextMenu({ kind: "group", groupId: hit.groupId }, { x, y });
-        else if (hit?.kind === "agent")
+        else if (hit?.kind === "agent" || hit?.kind === "subagents")
           ui.openContextMenu({ kind: "pane", paneId: hit.paneId }, { x, y });
         else ui.openContextMenu({ kind: "global" }, { x, y });
         return;
@@ -295,6 +302,7 @@ export class MouseController {
       } else if (hit.kind === "group") actions.toggleGroupCollapsed(hit.groupId);
       else if (hit.kind === "autoGroup") actions.toggleAutoGroupCollapsed(hit.repoKey);
       else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
+      else if (hit.kind === "subagents") actions.showSubagentsOf(hit.paneId);
       else if (hit.kind === "newWorkspace") actions.run({ type: "newWorkspace" });
       else if (hit.kind === "sort") {
         if (hit.section === "spaces") actions.toggleWorkspaceSort();

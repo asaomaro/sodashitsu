@@ -65,7 +65,7 @@ design.md のとおり、下から積む。実物の確認（T1）→ 型（T2�
       対象: `packages/web/src/store/machines.ts:36-45, :161-173`、`packages/web/src/store/graph.ts:319-360`、`packages/web/src/store/session.ts`、手本は `packages/server/src/machine/machines.integration.test.ts`（2 つの `soda serve` の統合テスト）
       依存: T11
       AC: AC3, AC6, AC13
-- [ ] T13: 端末版——エージェントの行の末尾に `⤷n`（1 件以上。記号の幅が崩れるなら別の記号にして `decisions.md` に残す）と、その桁範囲のクリックの当たり判定。一覧の overlay（`NotificationList` と同じ形。上下で読む・`Esc` で閉じる・対象が居なくなったら閉じる）。操作 `show_subagents` の動き（既定のキーは無い。キーボードだけの道筋は、pane のメニューをキーで開いて項目を選ぶ、または利用者が設定でキーを割り当てる。この道筋を単体テストで通す）と、pane のメニューの項目「サブエージェントの一覧」（1 件以上のとき）。単体テストと壊して落ちる確認
+- [x] T13: 端末版——エージェントの行の末尾に `⤷n`（1 件以上。記号の幅が崩れるなら別の記号にして `decisions.md` に残す）と、その桁範囲のクリックの当たり判定。一覧の overlay（`NotificationList` と同じ形。上下で読む・`Esc` で閉じる・対象が居なくなったら閉じる）。操作 `show_subagents` の動き（既定のキーは無い。キーボードだけの道筋は、pane のメニューをキーで開いて項目を選ぶ、または利用者が設定でキーを割り当てる。この道筋を単体テストで通す）と、pane のメニューの項目「サブエージェントの一覧」（1 件以上のとき）。単体テストと壊して落ちる確認
       対象: `packages/tui/src/render/chrome/sidebar.ts:177-212`（エージェントの行。桁範囲の当たり判定の手本は `sort`・`toggleX`）、`packages/tui/src/modes/NotificationList.ts`・`modes/overlay.ts`・`OverlayHost.ts`、`packages/tui/src/model/UiState.ts`、`packages/tui/src/modes/ContextMenu.ts`、`packages/tui/src/app/TuiApp.ts`、`packages/tui/src/actions/TuiDispatcher.ts`、`packages/tui/src/input/mouse.ts`
       依存: T6, T9
       AC: AC6, AC-I1, AC-I3, AC-I4, AC-I5

@@ -634,8 +634,20 @@ export class TuiApp {
     const back = this.ui.preDialogFocusPaneId;
     if (back !== null && !this.model.panes.has(back))
       this.ui.retargetPreDialogFocus(this.model.focusedPaneId);
+    this.closeSubagentsIfGone();
     this.commitView();
     this.scheduleRender();
+  }
+
+  /**
+   * サブエージェントの一覧を開いている間に、対象のエージェントが居なくなった・入れ替わった（`instanceId` が変わった）・pane が閉じたら閉じる
+   * （20261004-subagent-display。web の `SubagentListDialog` の監視と同じ）。
+   */
+  private closeSubagentsIfGone(): void {
+    const ctx = this.ui.dialogContext;
+    if (ctx?.kind !== "subagents") return;
+    const agent = this.model.panes.get(ctx.paneId)?.agent;
+    if (!agent || agent.instanceId !== ctx.instanceId) this.ui.closeDialog();
   }
 
   protected onPrefsChange(): void {
