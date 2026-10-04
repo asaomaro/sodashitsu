@@ -74,6 +74,14 @@ function close(): void {
   view.closeDialog();
   void nextTick(() => {
     if (wasButton && paneId !== undefined) {
+      // agents を畳んでいる（行は `display: none`）ときは、見出しのボタンへ戻す（20261004-ui-interaction-polish）。
+      if (view.sectionsCollapsed.agents && !view.sidebarCollapsed) {
+        const toggle = document.querySelector<HTMLElement>(".sidebar-agents .sidebar-section-toggle");
+        if (toggle) {
+          toggle.focus();
+          return;
+        }
+      }
       const css = CSS.escape(paneId);
       const el =
         document.querySelector<HTMLElement>(`.sidebar-agents [data-subagent-pane="${css}"]`) ??

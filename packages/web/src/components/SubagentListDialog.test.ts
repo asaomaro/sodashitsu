@@ -241,6 +241,15 @@ describe("SubagentListDialog — 閉じたときのフォーカスの戻り先",
     expect(active()).toBe(document.querySelector(".sidebar-subagent-btn"));
   });
 
+  it("agents を畳んでいる（行が display: none）: 見出しのボタンへ戻る（20261004-ui-interaction-polish）", async () => {
+    const { wrapper, view } = await setupWithSidebarDom("button", true);
+    document.querySelector(".sidebar-agents")!.insertAdjacentHTML("afterbegin", '<button class="sidebar-section-toggle">agents</button>');
+    view.toggleSectionCollapsed("agents");
+    await wrapper.get(".subagent-dialog-actions button").trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(active()).toBe(document.querySelector(".sidebar-section-toggle"));
+  });
+
   it("ボタンから開いたが、ボタンがもう無い（0 件になった等）: 行へ戻る", async () => {
     const { wrapper } = await setupWithSidebarDom("button", false);
     await wrapper.get("dialog").trigger("cancel");

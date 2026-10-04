@@ -18,3 +18,8 @@ D&D の表現とタブの並べ替えは別の作業（`split-dnd.md`）。`AGEN
 - T7（サイドバーの幅の境目）は nav の内側のまま・`overflow` も今のままにし、外へ出す（`right: -4px`・`overflow: visible`）のは区画のスクロールが入る T8 で行う。
 - golden は `.sidebar-row` の outerHTML だけなので更新しない。
 - 区画の見出しは T9 から T15 に分けた。独立点検は T3・T4・T6・T8・T10・T11・T15。
+
+## D4: coding で決めたこと
+- 畳んだ区画の中にあったフォーカスを見出しのボタンへ移す処理は、`spacesFolded`／`agentsFolded` の watch（`flush: "pre"`）に置いた。クリックでも操作 `toggleSidebarSection`（キー）でも同じに働く（design は操作はフォーカスを動かさないとしているが、それは端末の pane へフォーカスを動かさない、の意味に読み、区画の中のフォーカスが宙に浮くのは防ぐ）。区画の外のフォーカスは動かさない。
+- 区画の最小の高さ（区画の境目の `box.minTop`／`minBottom`）は、定数を二重に持たず、CSS の `min-height` を `getComputedStyle` で実測する。
+- 区画の境目を出すのは、サイドバーを開いていて両方の区画を開いているときだけ。出ている間は agents の `border-top` を外し、境目の 1px がその代わりをする。

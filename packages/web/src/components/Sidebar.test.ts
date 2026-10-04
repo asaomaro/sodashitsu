@@ -1228,6 +1228,113 @@ describe("Sidebar — 区画の境目", () => {
   });
 });
 
+// 20261004-ui-interaction-polish（区画の見出し。畳むボタン・件数・状態の印・フォーカス・navigate）。
+describe("Sidebar — 区画の見出し", () => {
+  function setup(opts: { attach?: boolean } = {}) {
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1"));
+    session.workspaceUpserted(makeWorkspace("w2", { tabIds: ["t2"], activeTabId: "t2" }));
+    session.tabUpserted(makeTab("t1", "w1", "p1"));
+    session.tabUpserted(makeTab("t2", "w2", "p2"));
+    session.paneUpserted(makePane("p1", "t1", makeAgent({ instanceId: "a1", state: "working" })));
+    session.paneUpserted(makePane("p2", "t2", makeAgent({ instanceId: "a2", state: "idle" })));
+    const wrapper = mountSidebar(makeConnection(), undefined, { attachTo: opts.attach === true });
+    return { wrapper, session, view: useViewStore(pinia) };
+  }
+  const toggle = (w: ReturnType<typeof mountSidebar>, which: "spaces" | "agents") => w.get(`.sidebar-${which} .sidebar-section-toggle`);
+
+  it("見出しは button で、aria-expanded・aria-controls（body の id）・印と題を持つ", () => {
+    const { wrapper } = setup();
+    for (const which of ["spaces", "agents"] as const) {
+      const b = toggle(wrapper, which);
+      expect(b.element.tagName).toBe("BUTTON");
+      expect(b.attributes("aria-expanded")).toBe("true");
+      expect(b.attributes("aria-controls")).toBe(`sidebar-${which}-body`);
+      expect(wrapper.find(`#sidebar-${which}-body`).exists()).toBe(true);
+      expect(b.text()).toContain("▾");
+      expect(b.text()).toContain(which);
+      expect(b.find(".sidebar-section-count").exists()).toBe(false);
+    }
+  });
+
+  it("押すと畳み（aria-expanded=false・印 ▸・件数）、もう一度で開く。並び順のボタンは畳んでいる間は出ない", async () => {
+    const { wrapper, view } = setup();
+    expect(wrapper.find(".sidebar-spaces .sidebar-sort-btn").exists()).toBe(true);
+    await toggle(wrapper, "spaces").trigger("click");
+    expect(view.sectionsCollapsed.spaces).toBe(true);
+    expect(toggle(wrapper, "spaces").attributes("aria-expanded")).toBe("false");
+    expect(toggle(wrapper, "spaces").text()).toContain("▸");
+    expect(toggle(wrapper, "spaces").get(".sidebar-section-count").text()).toBe("2");
+    expect(wrapper.find(".sidebar-spaces .sidebar-sort-btn").exists()).toBe(false);
+    await toggle(wrapper, "spaces").trigger("click");
+    expect(toggle(wrapper, "spaces").attributes("aria-expanded")).toBe("true");
+    expect(wrapper.find(".sidebar-spaces .sidebar-sort-btn").exists()).toBe(true);
+  });
+
+  it("並び順のボタンのクリックは畳まない・見出しのボタンのクリックは並び順を変えない", async () => {
+    const { wrapper, view } = setup();
+    const sort = view.agentSort;
+    await wrapper.get(".sidebar-agents .sidebar-sort-btn").trigger("click");
+    expect(view.sectionsCollapsed.agents).toBe(false);
+    expect(view.agentSort).not.toBe(sort);
+    const after = view.agentSort;
+    await toggle(wrapper, "agents").trigger("click");
+    expect(view.agentSort).toBe(after);
+  });
+
+  it("agents の件数は一覧の数。入力待ちが無ければ状態の印は出ない・あれば出る（畳んでいる間だけ）", async () => {
+    const { wrapper, session } = setup();
+    expect(wrapper.find(".sidebar-agents .sidebar-section-toggle .sidebar-state-icon").exists()).toBe(false);
+    await toggle(wrapper, "agents").trigger("click");
+    expect(toggle(wrapper, "agents").get(".sidebar-section-count").text()).toBe("2");
+    expect(toggle(wrapper, "agents").find(".sidebar-state-icon").exists()).toBe(false);
+    session.paneUpserted(makePane("p2", "t2", makeAgent({ instanceId: "a2", state: "blocked" })));
+    await wrapper.vm.$nextTick();
+    expect(toggle(wrapper, "agents").find(".sidebar-state-icon").exists()).toBe(true);
+    await toggle(wrapper, "agents").trigger("click"); // 開くと件数も印も消える
+    expect(toggle(wrapper, "agents").find(".sidebar-section-count").exists()).toBe(false);
+    expect(toggle(wrapper, "agents").find(".sidebar-state-icon").exists()).toBe(false);
+  });
+
+  it("畳んだ区画の中にフォーカスがあれば、見出しのボタンへ移る（操作で畳んでも）", async () => {
+    const { wrapper, view } = setup({ attach: true });
+    const row = wrapper.get(".sidebar-agents .sidebar-row").element as HTMLElement;
+    row.focus();
+    expect(document.activeElement).toBe(row);
+    view.toggleSectionCollapsed("agents");
+    await wrapper.vm.$nextTick();
+    expect(document.activeElement).toBe(toggle(wrapper, "agents").element);
+    wrapper.unmount();
+  });
+
+  it("畳んだ区画の外のフォーカスは動かさない", async () => {
+    const { wrapper, view } = setup({ attach: true });
+    const other = wrapper.get(".sidebar-spaces .sidebar-row").element as HTMLElement;
+    other.setAttribute("tabindex", "-1");
+    other.focus();
+    view.toggleSectionCollapsed("agents");
+    await wrapper.vm.$nextTick();
+    expect(document.activeElement).toBe(other);
+    wrapper.unmount();
+  });
+
+  it("navigate に入ると、畳んだ spaces を開く（agents は開かない）", async () => {
+    const { wrapper, view } = setup();
+    view.toggleSectionCollapsed("spaces");
+    view.toggleSectionCollapsed("agents");
+    view.onModeChange("navigate");
+    await wrapper.vm.$nextTick();
+    expect(view.sectionsCollapsed).toEqual({ spaces: false, agents: true });
+  });
+
+  it("サイドバーを畳んだ状態では見出しは出ない（今のまま）", async () => {
+    const { wrapper, view } = setup();
+    view.toggleSidebar();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(".sidebar-section-toggle").exists()).toBe(false);
+  });
+});
+
 // 20260923-workspace-grouping（herdr に前例が無い独自拡張・worktree 自動グループ）。
 describe("Sidebar — グループの表示", () => {
   function rowLabels(wrapper: ReturnType<typeof mountSidebar>): string[] {

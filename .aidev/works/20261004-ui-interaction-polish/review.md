@@ -167,3 +167,22 @@ AssertionError: expected undefined to be close to 0.25, received difference is N
      × ドラッグ: 入れ物の上端からの位置が比になり、最小を割らない。離すと保存する 15ms
 AssertionError: expected 0.025 to be close to 0.25, received difference is 0.225, but expected 0.000005
 ```
+
+#### T15 `Sidebar.vue` 区画の見出し・`SubagentListDialog.vue`（生の出力。変異ごと）
+```
+変異: agents を畳んだとき見出しへフォーカスを移す処理を外す
+     × 畳んだ区画の中にフォーカスがあれば、見出しのボタンへ移る（操作で畳んでも） 52ms
+AssertionError: expected <div data-v-6dec5f19 …(3)>…(2)</div> to be <button data-v-6dec5f19 …(4)>…(3)</button>
+変異: navigate で畳んだ spaces を開く 1 行を消す
+     × navigate に入ると、畳んだ spaces を開く（agents は開かない） 19ms
+AssertionError: expected { spaces: true, agents: true } to deeply equal { spaces: false, agents: true }
+変異: agentsBlocked を `agents.length > 0` に
+     × agents の件数は一覧の数。入力待ちが無ければ状態の印は出ない・あれば出る（畳んでいる間だけ） 27ms
+AssertionError: expected true to be false // Object.is equality
+変異: SubagentListDialog の戻り先（畳んだ agents なら見出し）を `if (false)` に
+     × agents を畳んでいる（行が display: none）: 見出しのボタンへ戻る 15ms
+AssertionError: expected <button …(2)></button> to be <button …(1)></button>
+変異: spaces の並び順のボタンの `v-if="!spacesFolded"` を外す
+     × 押すと畳み（aria-expanded=false・印 ▸・件数）、もう一度で開く。並び順のボタンは畳んでいる間は出ない 20ms
+AssertionError: expected true to be false // Object.is equality
+```

@@ -48,6 +48,8 @@ watch(
   () => view.mode,
   (mode) => {
     if (mode === "navigate" && machines.collapsed[machines.selectedId]) machines.toggleCollapsed(machines.selectedId);
+    // 畳んだ spaces も開く（行の選択の枠が見えない）。agents は navigate の対象外。
+    if (mode === "navigate" && view.sectionsCollapsed.spaces) view.toggleSectionCollapsed("spaces");
   },
 );
 const conn = inject(ConnectionKey);
@@ -581,6 +583,30 @@ function onRowPointerCancel(ev: PointerEvent): void {
  */
 const spacesFolded = computed(() => !view.sidebarCollapsed && view.sectionsCollapsed.spaces);
 const agentsFolded = computed(() => !view.sidebarCollapsed && view.sectionsCollapsed.agents);
+const spacesToggleEl = ref<HTMLElement | null>(null);
+const agentsToggleEl = ref<HTMLElement | null>(null);
+/** 畳んだ見出しの件数。spaces は選んでいるマシンの workspace の数、agents は一覧に出ているエージェントの数。 */
+const spacesCount = computed(() =>
+  machines.selectedId === LOCAL_MACHINE_ID ? session.workspaces.size : (machines.summaries[machines.selectedId]?.workspaces.length ?? 0),
+);
+/** 入力待ち・承認待ち（どちらも `blocked`）のエージェントが 1 つでもあるか。畳んだ agents の見出しに印を出す。 */
+const agentsBlocked = computed(() => agents.value.some((a) => a.state === "blocked"));
+
+/**
+ * 畳むとき、その区画の中（body・フッタ）にフォーカスがあれば、見出しのボタンへ移す（`display: none` になるとフォーカスが宙に浮く）。
+ * 描画の前（`flush: "pre"`）に動かす——隠れた後では要素に `focus()` できない。クリックでも操作（キー）でも同じ。
+ */
+function moveFocusOutOfFolded(section: HTMLElement | null, toggle: HTMLElement | null): void {
+  const active = document.activeElement;
+  if (section && toggle && active instanceof HTMLElement && section.contains(active) && !toggle.contains(active)) toggle.focus();
+}
+watch(spacesFolded, (folded) => {
+  if (folded) moveFocusOutOfFolded(spacesEl.value, spacesToggleEl.value);
+});
+watch(agentsFolded, (folded) => {
+  if (folded) moveFocusOutOfFolded(agentsEl.value, agentsToggleEl.value);
+});
+
 /** 比があって両方を開いているときだけ、比で配る（そうでなければ CSS の自動の配分）。 */
 const sectionFlex = computed(() => {
   const r = view.sidebarSectionRatio;
@@ -770,12 +796,16 @@ watch(
       aria-label="spaces"
     >
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-header">
-        <span class="sidebar-section-title">spaces</span>
-        <button type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${WORKSPACE_SORT_LABEL[view.workspaceSort]}（押すと切り替え）`" @click="view.toggleWorkspaceSort()" @keydown="onButtonKeydown">
+        <button type="button" ref="spacesToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!spacesFolded" aria-controls="sidebar-spaces-body" @click="view.toggleSectionCollapsed('spaces')" @keydown="onButtonKeydown">
+          <span class="sidebar-section-mark" aria-hidden="true">{{ spacesFolded ? "▸" : "▾" }}</span>
+          <span class="sidebar-section-title">spaces</span>
+          <span v-if="spacesFolded" class="sidebar-section-count">{{ spacesCount }}</span>
+        </button>
+        <button v-if="!spacesFolded" type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${WORKSPACE_SORT_LABEL[view.workspaceSort]}（押すと切り替え）`" @click="view.toggleWorkspaceSort()" @keydown="onButtonKeydown">
           {{ WORKSPACE_SORT_LABEL[view.workspaceSort] }}
         </button>
       </div>
-      <div class="sidebar-section-body">
+      <div id="sidebar-spaces-body" class="sidebar-section-body">
       <template v-for="section in machineSections" :key="section.id">
         <MachineHeader v-if="machines.hasMachines" :machine-id="section.id" :label="section.label" :compact="view.sidebarCollapsed" />
         <template v-if="!machines.hasMachines || !machines.collapsed[section.id]">
@@ -899,12 +929,19 @@ watch(
       aria-label="agents"
     >
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-header">
-        <span class="sidebar-section-title">agents</span>
-        <button type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${AGENT_SORT_LABEL[view.agentSort]}（押すと切り替え）`" @click="view.toggleAgentSort()" @keydown="onButtonKeydown">
+        <button type="button" ref="agentsToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!agentsFolded" aria-controls="sidebar-agents-body" @click="view.toggleSectionCollapsed('agents')" @keydown="onButtonKeydown">
+          <span class="sidebar-section-mark" aria-hidden="true">{{ agentsFolded ? "▸" : "▾" }}</span>
+          <span class="sidebar-section-title">agents</span>
+          <template v-if="agentsFolded">
+            <span class="sidebar-section-count">{{ agents.length }}</span>
+            <StateIcon v-if="agentsBlocked" class="sidebar-state-icon" state="blocked" />
+          </template>
+        </button>
+        <button v-if="!agentsFolded" type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${AGENT_SORT_LABEL[view.agentSort]}（押すと切り替え）`" @click="view.toggleAgentSort()" @keydown="onButtonKeydown">
           {{ AGENT_SORT_LABEL[view.agentSort] }}
         </button>
       </div>
-      <div class="sidebar-section-body">
+      <div id="sidebar-agents-body" class="sidebar-section-body">
       <!-- `tabindex="-1"` と `data-agent-pane` は、一覧のダイアログを閉じたときのフォーカスの戻り先（ボタンが無ければ行。20261004-subagent-display）。Tab の順には入れない。 -->
       <div v-for="{ pane, workspace, state, lines, agent } in agents" :key="pane.id" class="sidebar-row" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
         <!-- 畳んだサイドバーは今までどおり状態の印だけ（20260927-sidebar-row-tokens）。 -->
@@ -1316,6 +1353,23 @@ watch(
   font-size: 0.85em;
   opacity: 0.75;
 }
+/* 見出しのボタン（押すと畳む・開く）。印・題・（畳んでいるとき）件数と状態を並べる。並び順のボタンは兄弟の要素。 */
+.sidebar-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding-left: 0;
+}
+.sidebar-section-mark {
+  font-size: 0.85em;
+  opacity: 0.75;
+  width: 1em;
+}
+.sidebar-section-count {
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
 .sidebar-btn {
   font: inherit;
   font-size: 0.85em;

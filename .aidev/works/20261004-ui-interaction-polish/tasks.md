@@ -71,7 +71,7 @@ design.md のとおり、下から積む。純関数（T1）→ 色の変数（T
       対象: `docs/herdr-parity.md`・`docs/tui-parity.md`・`docs/tui.md`・`docs/verification.md`
       依存: T13, T11
       AC: AC16
-- [ ] T15: 区画の見出し（ブラウザ版）——見出しを `<button class="sidebar-section-toggle" aria-expanded aria-controls>`（印 ▾／▸・題）にし、畳んだときの件数（spaces は選んでいるマシンの workspace の数・agents は一覧の数）と、agents の `StateIcon`（`blocked` があるとき）。並び順のボタンは兄弟のまま（畳んでいる間は出さない・互いのクリックは伝わらない）。畳むとき中にあったフォーカスは見出しのボタンへ。操作 `toggleSidebarSection` の動き（フォーカスは動かさない）。navigate に入ると畳んだ spaces を開く。サブエージェントの一覧を閉じたときの戻り先（`data-agent-pane` の行）が畳んだ agents なら見出しのボタン。単体テスト（`aria-expanded`・件数・状態のアイコンの出入り・フォーカスの移動・並び順のボタンと混ざらない・navigate・戻り先）と壊して落ちる確認
+- [x] T15: 区画の見出し（ブラウザ版）——見出しを `<button class="sidebar-section-toggle" aria-expanded aria-controls>`（印 ▾／▸・題）にし、畳んだときの件数（spaces は選んでいるマシンの workspace の数・agents は一覧の数）と、agents の `StateIcon`（`blocked` があるとき）。並び順のボタンは兄弟のまま（畳んでいる間は出さない・互いのクリックは伝わらない）。畳むとき中にあったフォーカスは見出しのボタンへ。操作 `toggleSidebarSection` の動き（フォーカスは動かさない）。navigate に入ると畳んだ spaces を開く。サブエージェントの一覧を閉じたときの戻り先（`data-agent-pane` の行）が畳んだ agents なら見出しのボタン。単体テスト（`aria-expanded`・件数・状態のアイコンの出入り・フォーカスの移動・並び順のボタンと混ざらない・navigate・戻り先）と壊して落ちる確認
       対象: `packages/web/src/components/Sidebar.vue`、`Sidebar.test.ts`、`packages/web/src/components/SubagentListDialog.vue`（戻り先だけ）
       依存: T8
       AC: AC11, AC12, AC-I1, AC-I3, AC-I4, AC-I5
