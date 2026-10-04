@@ -14,7 +14,8 @@ import { UiState } from "../model/UiState.js";
 import { ThemeColors } from "../render/color.js";
 import { Grid } from "../render/Screen.js";
 import { stringWidth } from "../render/width.js";
-import { pane, snapshot, workspace } from "../testing/fixtures.js";
+import { leaf, pane, snapshot, tab, workspace } from "../testing/fixtures.js";
+import { menuItems } from "./ContextMenu.js";
 import { filterHelp, helpGroups } from "./HelpDialog.js";
 import { OverlayHost } from "./OverlayHost.js";
 import { TextInput } from "./TextInput.js";
@@ -256,6 +257,167 @@ describe("右クリックのメニュー（M3）", () => {
     expect(s.screen()).toContain("グループを削除");
     s.ui.openContextMenu({ kind: "global" }, { x: 0, y: 0 });
     expect(s.screen()).toContain("切り離し");
+  });
+});
+
+describe("右クリックのメニュー：グループ・「グループなし」の項目（T17。web の ContextMenu.vue と同じ並び）", () => {
+  const gitOf = (linked: boolean) =>
+    ({ branch: "b", ahead: 0, behind: 0, repoKey: "/r", isLinkedWorktree: linked }) as never;
+  const snap = (layout: boolean) =>
+    snapshot({
+      workspaces: [
+        workspace("w1", ["t1"], { git: gitOf(false) }),
+        workspace("w2", ["t2"], { git: gitOf(true) }),
+        workspace("w3", ["t3"]),
+      ],
+      tabs: [tab("t1", "w1", leaf("p1")), tab("t2", "w2", leaf("p2")), tab("t3", "w3", leaf("p3"))],
+      panes: [pane("p1", "t1"), pane("p2", "t2"), pane("p3", "t3")],
+      groups: [
+        { id: "g1", label: "G1", collapsed: false },
+        { id: "g2", label: "G2", collapsed: false },
+      ],
+      ...(layout
+        ? {
+            layout: {
+              top: ["g:g1", "g:g2", "u"],
+              groups: { g1: ["r:/r"], g2: [] },
+              ungrouped: ["w:w3"],
+            },
+          }
+        : {}),
+    });
+  const labels = (
+    s: ReturnType<typeof setup>,
+    target: Parameters<UiState["openContextMenu"]>[0],
+  ) => {
+    s.ui.openContextMenu(target, { x: 0, y: 0 });
+    return menuItems(s.ui.contextMenu!, { ui: s.ui, model: s.model, actions: s.actions }).map(
+      (i) => i.label,
+    );
+  };
+
+  it("所属なし:「グループへ追加…」「新しいグループを作る…」。所属あり:「別のグループへ移す…」「グループから外す」「新しいグループを作る…」。子の行でも項目全体の所属で出る", () => {
+    const s = setup(snap(true));
+    expect(labels(s, { kind: "workspace", workspaceId: "w3" })).toEqual([
+      "名前の変更",
+      "閉じる",
+      "グループへ追加…",
+      "新しいグループを作る…",
+    ]);
+    const inGroup = [
+      "名前の変更",
+      "閉じる",
+      "新しい worktree",
+      "worktree を開く…",
+      "別のグループへ移す…",
+      "グループから外す",
+      "新しいグループを作る…",
+    ];
+    expect(labels(s, { kind: "workspace", workspaceId: "w1" })).toEqual(inGroup);
+    expect(labels(s, { kind: "workspace", workspaceId: "w2" })).toEqual(inGroup); // 子の行
+  });
+
+  it("所属ありで移し先が無い（今のグループしか無い）ときは「別のグループへ移す…」を出さない", () => {
+    const s = setup(
+      snapshot({
+        workspaces: [workspace("w1", ["t1"])],
+        groups: [{ id: "g1", label: "G1", collapsed: false }],
+        layout: { top: ["g:g1", "u"], groups: { g1: ["w:w1"] }, ungrouped: [] },
+      }),
+    );
+    expect(labels(s, { kind: "workspace", workspaceId: "w1" })).toEqual([
+      "名前の変更",
+      "閉じる",
+      "グループから外す",
+      "新しいグループを作る…",
+    ]);
+  });
+
+  it("グループの見出し:「名前の変更」「上へ移動」「下へ移動」「グループを削除」。layout の無い古いサーバでは上へ／下へは出さない", () => {
+    expect(labels(setup(snap(true)), { kind: "group", groupId: "g1" })).toEqual([
+      "名前の変更",
+      "上へ移動",
+      "下へ移動",
+      "グループを削除",
+    ]);
+    expect(labels(setup(snap(false)), { kind: "group", groupId: "g1" })).toEqual([
+      "名前の変更",
+      "グループを削除",
+    ]);
+  });
+
+  it("「グループなし」の見出し:「上へ移動」「下へ移動」だけ（名前の変更・削除は無い）。古いサーバでは項目が無い", () => {
+    expect(labels(setup(snap(true)), { kind: "ungrouped" })).toEqual(["上へ移動", "下へ移動"]);
+    expect(labels(setup(snap(false)), { kind: "ungrouped" })).toEqual([]);
+  });
+
+  it("項目を押すと閉じてから item.move_by を送る（見出し 2 種）", () => {
+    const s = setup(snap(true));
+    s.ui.openContextMenu({ kind: "ungrouped" }, { x: 0, y: 0 });
+    s.screen();
+    s.overlays.handleKey(key("down"));
+    s.overlays.handleKey(key("enter"));
+    expect(s.ui.contextMenu).toBeNull();
+    s.ui.openContextMenu({ kind: "group", groupId: "g1" }, { x: 0, y: 0 });
+    s.screen();
+    s.overlays.handleKey(key("down"));
+    s.overlays.handleKey(key("enter"));
+    expect(s.calls).toEqual([
+      ["item.move_by", { item: { kind: "ungrouped" }, direction: "next" }],
+      ["item.move_by", { item: { kind: "group", groupId: "g1" }, direction: "previous" }],
+    ]);
+  });
+
+  it("「別のグループへ移す…」の一覧は題が「別のグループへ移す」で、今のグループを除く。「グループへ追加」の題は変えない", () => {
+    const s = setup(snap(true));
+    s.actions.openGroupPicker("w2");
+    expect(s.screen()).toContain("別のグループへ移す");
+    expect(s.screen()).toContain("G2");
+    expect(s.screen()).not.toContain("G1");
+    s.overlays.handleKey(key("enter"));
+    expect(s.calls).toEqual([["group.add_member", { groupId: "g2", workspaceId: "w2" }]]);
+    s.actions.openGroupPicker("w3");
+    expect(s.screen()).toContain("グループへ追加");
+    expect(s.screen()).not.toContain("別のグループへ移す");
+  });
+});
+
+describe("確認：一括クローズの件数は repoMembers（代表だけ。T17）", () => {
+  const gitOf = (linked: boolean, key: string) =>
+    ({
+      branch: "b",
+      ahead: 0,
+      behind: 0,
+      repoKey: "/r",
+      isLinkedWorktree: linked,
+      worktreeKey: key,
+    }) as never;
+
+  it("同じフォルダの 2 つ目（代表でない workspace）は数えない。グループに入っていても数える。先頭でなければ出ない", () => {
+    const s = setup(
+      snapshot({
+        workspaces: [
+          workspace("w1", ["t1"], { git: gitOf(false, "k-main") }),
+          workspace("w2", ["t2"], { git: gitOf(true, "k-a") }),
+          workspace("w3", ["t3"], { git: gitOf(true, "k-a") }), // w2 と同じフォルダの 2 つ目
+        ],
+        tabs: [
+          tab("t1", "w1", leaf("p1")),
+          tab("t2", "w2", leaf("p2")),
+          tab("t3", "w3", leaf("p3")),
+        ],
+        panes: [pane("p1", "t1"), pane("p2", "t2"), pane("p3", "t3")],
+        groups: [{ id: "g1", label: "G1", collapsed: false }],
+        layout: { top: ["g:g1", "u"], groups: { g1: ["r:/r"] }, ungrouped: ["w:w3"] },
+      }),
+    );
+    s.actions.run({ type: "closeWorkspace" });
+    expect(s.screen()).toContain("[ ] 束ねた worktree も一緒に閉じる（1 件）");
+    s.overlays.handleKey(key("esc"));
+    // 子（w2）を閉じるときはチェックを出さない。
+    s.model.setView("w2", "t2", "p2");
+    s.actions.run({ type: "closeWorkspace" });
+    expect(s.screen()).not.toContain("束ねた worktree");
   });
 });
 

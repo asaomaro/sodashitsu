@@ -8,7 +8,7 @@ import {
 } from "./navigateKeys.js";
 
 /**
- * navigate の6操作の解決した表（20260923-navigate-mode-keys。design「インターフェース / データ構造 >
+ * navigate の操作の解決した表（20260923-navigate-mode-keys。design「インターフェース / データ構造 >
  * 解決した表」）。`keymap.ts` の `resolveKeymap` と同じ設計（カタログ＋上書きから解決・上書きが既定に
  * 勝つ・予約キーは登録時に落とす）を、prefix 概念と `isDirectChord` の modifier 必須規則を除いて踏襲する。
  */

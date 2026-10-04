@@ -22,7 +22,7 @@ import {
   loadStatusSymbols,
   useSettingsStore,
 } from "./settings.js";
-import { loadAgentSort, loadCollapsedAutoGroups, loadWorkspaceSort, useViewStore } from "./view.js";
+import { loadAgentSort, loadCollapsedAutoGroups, loadUngroupedCollapsed, loadWorkspaceSort, useViewStore } from "./view.js";
 import { loadNotifyPrefs, useNotificationsStore } from "./notifications.js";
 import { useOnboardingStore } from "./onboarding.js";
 
@@ -71,6 +71,8 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
     JSON.stringify([...collapsed].sort()) !== JSON.stringify([...view.collapsedAutoGroups].sort())
   )
     view.collapsedAutoGroups = collapsed;
+  const ungroupedCollapsed = loadUngroupedCollapsed(raw["ungroupedCollapsed"]);
+  if (view.ungroupedCollapsed !== ungroupedCollapsed) view.ungroupedCollapsed = ungroupedCollapsed;
 
   const notifications = useNotificationsStore(pinia);
   const notify = loadNotifyPrefs(raw["notify"]);

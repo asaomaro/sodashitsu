@@ -73,7 +73,7 @@ function mountSidebar() {
       plugins: [pinia],
       provide: {
         [ConnectionKey as symbol]: makeConnection(),
-        [ActionDispatcherKey as symbol]: { openContextMenu: vi.fn(), run: vi.fn(), toggleGroupCollapsed: vi.fn(), moveWorkspacesByDrag: vi.fn(), openSessionSwitcher: vi.fn() },
+        [ActionDispatcherKey as symbol]: { openContextMenu: vi.fn(), run: vi.fn(), toggleGroupCollapsed: vi.fn(), moveItemByDrag: vi.fn(), openSessionSwitcher: vi.fn() },
       },
     },
   });

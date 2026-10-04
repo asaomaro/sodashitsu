@@ -1,5 +1,5 @@
 import { defaultCheckoutPath } from "@sodashitsu/protocol";
-import { linkedWorktreeChildrenOf, type KeyInput } from "@sodashitsu/client-core";
+import { repoMembers, type KeyInput } from "@sodashitsu/client-core";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { DialogContext, UiState } from "../model/UiState.js";
@@ -231,7 +231,12 @@ export class ConfirmDialog implements Overlay {
     if (ctx.kind !== "confirmClose" || ctx.targets.length !== 1) return 0;
     const t = ctx.targets[0]!;
     if (t.type !== "workspace") return 0;
-    return linkedWorktreeChildrenOf(t.id, [...this.deps.model.workspaces.values()]).length;
+    // 一括クローズの対象は、リポジトリの代表の先頭（本体）のときの残り全部（サーバの `repoCloseTargets` と同じ。グループへ入っているかは見ない）。
+    const all = [...this.deps.model.workspaces.values()];
+    const repoKey = this.deps.model.workspaces.get(t.id)?.git?.repoKey;
+    if (!repoKey) return 0;
+    const members = repoMembers(all, repoKey);
+    return members.length > 1 && members[0]!.id === t.id ? members.length - 1 : 0;
   }
 
   handleKey(k: KeyInput): void {
@@ -406,7 +411,12 @@ export class ListDialog implements Overlay {
   render({ grid, theme }: OverlayRenderContext): CursorState {
     const c = dialogColors(theme);
     const rows = this.rows();
-    const title = this.ctx.kind === "worktreeOpen" ? "worktree を開く" : "グループへ追加";
+    const title =
+      this.ctx.kind === "worktreeOpen"
+        ? "worktree を開く"
+        : this.ctx.moving
+          ? "別のグループへ移す"
+          : "グループへ追加";
     const width = Math.min(80, grid.w - 2);
     const r = centeredRect(grid, width, Math.min(rows.length, grid.h - 6) + 4);
     this.rect = r;

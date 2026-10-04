@@ -8,14 +8,15 @@ import { createFileLinkProvider } from "./fileLinks.js";
  * M3：pane（`MouseBridge` が右クリックから作る。`PaneFrame` の枠も同じ）・tab・workspace（T22・T21 が直接 `UiPort` を呼ぶ）。
  * `global` はサイドバーの「メニュー」ボタンから開く、どこにも属さない全体の操作（20260920-sidebar-tabbar-controls）。
  * `group` は手動グループのヘッダー行専用のメニュー（20260923-workspace-grouping。design「振る舞いの詳細
- * （グループの作成・追加・削除）」）——worktree 自動グループのヘッダー行は無い（本体の workspace 行自体が
- * それを兼ねる。design「worktree 自動グループの表示」）ので `kind: "group"` は手動グループにしか出ない。
+ * （グループの作成・追加・削除）」）——worktree グループのヘッダー行は無い（本体の workspace 行自体が
+ * それを兼ねる。design「worktree グループの表示」）ので `kind: "group"` は手動グループにしか出ない。
  */
 export type MenuTarget =
   | { kind: "pane"; paneId: string }
   | { kind: "tab"; tabId: string }
   | { kind: "workspace"; workspaceId: string }
   | { kind: "group"; groupId: string }
+  | { kind: "ungrouped" }
   | { kind: "global" };
 
 export interface UiPort {

@@ -191,6 +191,15 @@ function saveCollapsedAutoGroups(v: ReadonlySet<string>): void {
   writePrefs({ collapsedAutoGroups: [...v] });
 }
 
+/** 「グループなし」を畳んでいるか（共有の設定 `ungroupedCollapsed`。追補 01 B）。`true` のときだけ畳む（壊れた値は展開）。 */
+export function loadUngroupedCollapsed(raw: unknown): boolean {
+  return raw === true;
+}
+
+function saveUngroupedCollapsed(v: boolean): void {
+  writePrefs({ ungroupedCollapsed: v });
+}
+
 let nextToastId = 1;
 
 /** トーストの行動ボタン（`sticky` のときだけ置く。20260920-agent-notifications）。 */
@@ -275,7 +284,8 @@ export type DialogContext =
   | { kind: "createGroup"; workspaceId: string }
   | { kind: "renameGroup"; groupId: string; currentLabel: string }
   // `worktreeOpen` と同じ「一覧から選ぶ」形。`groups` は開く時点のグループ一覧（GroupPickerDialog）。
-  | { kind: "addToGroup"; workspaceId: string; groups: WorkspaceGroup[] }
+  // `moving` は「別のグループへ移す…」（今のグループがあるとき。`groups` は今のグループを除く）。
+  | { kind: "addToGroup"; workspaceId: string; groups: WorkspaceGroup[]; moving?: true }
   // サーバを止める確認（`stop_server`。20260927-cli-mode）。押し間違えると全ての pane が止まる。
   /**
    * `target` は止まるサーバの名前（ローカルならホスト名、保存したマシンを選んでいればそのマシンの名前）、`remote` は保存したマシンか（02 の review。
@@ -347,7 +357,7 @@ export const useViewStore = defineStore("view", () => {
    * ダイアログ・グラフ画面・質問のフォームのどれかが開いている（キーを端末へ送らない dialog モード・window の keydown の抑止・ドラッグの取り消しの判定。research-web §1.5）。
    */
   const modalOpen = computed(() => openDialog.value !== null || graphOpen.value || askOpen.value);
-  /** navigate モード中に選択中の workspace（`↑/↓` で動かす。Enter で確定）。 */
+  /** navigate モード中に選択中の行（workspace の id、グループの見出しなら `group:<id>`。`↑/↓` で動かす。Enter で確定）。 */
   const navigateSelection = ref<string | null>(null);
   /**
    * navigate モード中に「選択中の workspace のメニューを開いてほしい」という一度きりの要求
@@ -386,7 +396,7 @@ export const useViewStore = defineStore("view", () => {
    * 先頭メンバー行は同じ `dropAnchorId`〔drop 先として使う workspace id〕を持ちうるので、ホバー中の
    * 行を一意に特定するには行固有の `key` を使う必要がある）。
    */
-  const workspaceDrag = ref<{ sourceIds: string[]; overRowKey: string | null } | null>(null);
+  const workspaceDrag = ref<{ sourceIds: string[]; overRowKey: string | null; overInvalid: boolean } | null>(null);
   const connectionState = ref<ConnectionState>("connecting");
   const authRequired = ref(false);
   /**
@@ -414,6 +424,8 @@ export const useViewStore = defineStore("view", () => {
   const agentSort = ref(loadAgentSort());
   const workspaceSort = ref(loadWorkspaceSort(initialPrefs["workspaceSort"]));
   const collapsedAutoGroups = ref(loadCollapsedAutoGroups(initialPrefs["collapsedAutoGroups"]));
+  /** 「グループなし」の見出しを畳んでいるか（共有。本物のグループが無いときは見出し自体が出ないので効かない）。 */
+  const ungroupedCollapsed = ref(loadUngroupedCollapsed(initialPrefs["ungroupedCollapsed"]));
   const toasts = ref<Toast[]>([]);
 
   /**
@@ -608,13 +620,14 @@ export const useViewStore = defineStore("view", () => {
   /** workspace の D&D 開始（20260923-workspace-grouping。`startPaneDrag` と同じ形。閾値を超えて初めて呼ぶ）。
    *  `sourceIds` は通常の行なら1件、グループのヘッダー行ならそのグループの全メンバー id（AC9）。 */
   function startWorkspaceDrag(sourceIds: string[]): void {
-    workspaceDrag.value = { sourceIds, overRowKey: null };
+    workspaceDrag.value = { sourceIds, overRowKey: null, overInvalid: false };
   }
 
-  /** `rowKey` は `SpaceRow.key`（`Sidebar.vue`）——workspace id そのものではない。上の注記参照。 */
-  function setWorkspaceDragOver(rowKey: string | null): void {
-    if (!workspaceDrag.value || workspaceDrag.value.overRowKey === rowKey) return;
-    workspaceDrag.value = { ...workspaceDrag.value, overRowKey: rowKey };
+  /** `rowKey` は `SpaceRow.key`（`Sidebar.vue`）——workspace id そのものではない。上の注記参照。
+   *  `invalid` は「その行の上には落とせない」印（別の入れ物の上・名前順の一番上。20261004-group-worktree-items）。 */
+  function setWorkspaceDragOver(rowKey: string | null, invalid = false): void {
+    if (!workspaceDrag.value || (workspaceDrag.value.overRowKey === rowKey && workspaceDrag.value.overInvalid === invalid)) return;
+    workspaceDrag.value = { ...workspaceDrag.value, overRowKey: rowKey, overInvalid: invalid };
   }
 
   function endWorkspaceDrag(): void {
@@ -629,6 +642,12 @@ export const useViewStore = defineStore("view", () => {
     else next.add(repoKey);
     collapsedAutoGroups.value = next;
     saveCollapsedAutoGroups(next);
+  }
+
+  /** 「グループなし」の折りたたみを切り替える（`toggleAutoGroupCollapsed` と同じく切り替えるたびに保存する）。 */
+  function toggleUngroupedCollapsed(): void {
+    ungroupedCollapsed.value = !ungroupedCollapsed.value;
+    saveUngroupedCollapsed(ungroupedCollapsed.value);
   }
 
   function onConnectionState(s: ConnectionState): void {
@@ -709,6 +728,7 @@ export const useViewStore = defineStore("view", () => {
     paneDrag,
     workspaceDrag,
     collapsedAutoGroups,
+    ungroupedCollapsed,
     connectionState,
     authRequired,
     authRequiredCount,
@@ -750,6 +770,7 @@ export const useViewStore = defineStore("view", () => {
     setWorkspaceDragOver,
     endWorkspaceDrag,
     toggleAutoGroupCollapsed,
+    toggleUngroupedCollapsed,
     onConnectionState,
     onAuthRequired,
     setOriginRejectSuspected,

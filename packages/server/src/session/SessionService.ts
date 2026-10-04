@@ -5,12 +5,14 @@ import type {
   GitInfo,
   GroupId,
   HostInfo,
+  ItemTarget,
   NewCwd,
   Pane,
   PaneId,
   RightClickTarget,
   SessionSnapshot,
   SplitDirection,
+  SidebarLayout,
   SplitId,
   Tab,
   TabId,
@@ -26,7 +28,7 @@ import type { HandoffScrollbackEditor } from "../handoff/HandoffManifest.js";
 import type { TerminalManager } from "../terminal/TerminalManager.js";
 import { removeScrollbackDir, scrollbackEditorArgv, writeScrollbackFile } from "../terminal/scrollbackEditor.js";
 import type { EventBus } from "../bus/EventBus.js";
-import { NotFoundError, SessionModel } from "./SessionModel.js";
+import { gitIdentityChanged, NotFoundError, SessionModel, type GitJudgement } from "./SessionModel.js";
 import * as Layout from "./LayoutTree.js";
 import { resumeCommandFor } from "../agent/resumeCommand.js";
 import { resolveNewCwd, type NewCwdDeps } from "./newCwd.js";
@@ -251,6 +253,27 @@ export class SessionService {
     return this.model.buildSnapshot(this.serverVersion, this.host, { scrollbackLines: this.scrollbackLines });
   }
 
+  /**
+   * サイドバーまわりの共通の出口（20261004-group-worktree-items）。モデルが控えた「前回からの変わったもの」を、
+   * (1) 実効の `groupId` が変わった workspace の `workspace.updated`、(2) レイアウトが変わっていれば `sidebar.layout_changed`、
+   * (3) 平らな順が変わっていれば `workspace.order_changed`（古い画面向け）の順に配り、最後に `persist.touch()` する（変わらなくても呼ぶ。
+   * 呼ぶ側は保存の予約を重ねて書かない）。
+   * レイアウト・所属・workspace の有無を変える経路（作る・閉じる 5 経路・グループの操作・並べ替え）は、モデルを書き換えたらここを通す。
+   */
+  private publishSidebarChanges(alsoUpdated: Workspace[] = []): void {
+    const changes = this.model.takeChanges();
+    // `alsoUpdated`（呼び出し側が変えた workspace。判定の反映）も `workspace.updated` で配る。`groupId` も変わって `changes.updated` に居るものは 1 回だけ。
+    const updated = new Map<WorkspaceId, Workspace>();
+    for (const workspace of alsoUpdated) updated.set(workspace.id, workspace);
+    for (const workspace of changes?.updated ?? []) updated.set(workspace.id, workspace);
+    for (const workspace of updated.values()) this.bus.publish({ event: "workspace.updated", data: { workspace } });
+    if (changes) {
+      if (changes.layout) this.bus.publish({ event: "sidebar.layout_changed", data: { layout: changes.layout } });
+      if (changes.order) this.bus.publish({ event: "workspace.order_changed", data: { workspaceIds: changes.order } });
+    }
+    this.persist.touch();
+  }
+
   // --- 読み取り専用のアクセサ（`SizeAuthority`・`AgentMonitor` 等、読むだけの相手向け） -------
 
   getWorkspace(id: WorkspaceId): Workspace | undefined {
@@ -272,6 +295,26 @@ export class SessionService {
   /** `session.json` の保存に使う（`nextId` の引き継ぎ。design「永続化の形式」）。 */
   getNextIdCounters(): ReturnType<SessionModel["getNextIdCounters"]> {
     return this.model.getNextIdCounters();
+  }
+
+  /**
+   * `session.json` に書くサイドバーの並びと所属。仮の状態（`layout` を持たない保存から始めて未確定）なら null（書かない。
+   * 途中で止まっても次の起動が同じ移行をやり直せる。20261004-group-worktree-items）。
+   */
+  persistedLayout(): { layout: SidebarLayout; repoGroups: Record<string, GroupId> } | null {
+    if (!this.model.hasLayout()) return null;
+    return { layout: this.model.getLayout(), repoGroups: Object.fromEntries(this.model.getRepoGroups()) };
+  }
+
+  /**
+   * 移行の確定（起動後の最初の 1 周の確認が終わったとき。20261004-group-worktree-items D2・D18）。仮の状態でなければ何もしない
+   * （合図は 2 回以上来うるので 1 回だけ働く）。確定したら共通の出口で配り、保存を予約する（`layout`・`repoGroups` が書かれる）。
+   * 利用者の操作が先に確定していれば（design「確定のきっかけ (b)」。モデルの書き換え操作が受け付けたときに確定する）何もしない。
+   */
+  confirmLayout(): void {
+    if (this.model.hasLayout()) return;
+    this.model.confirmLayout();
+    this.publishSidebarChanges();
   }
 
   /** 検出したエージェントのインスタンス id を払い出す（`"a1"` 等。02-agent-detection の `AgentTracker` が使う。T8）。
@@ -320,8 +363,8 @@ export class SessionService {
     // E2E で発見。D88）。
     this.bus.publish({ event: "tab.created", data: { tab: reserved.tab } });
     this.bus.publish({ event: "pane.created", data: { pane: reserved.pane } });
+    this.publishSidebarChanges();
     if (naming.autoLabel && !naming.degraded) this.labelCwd.set(reserved.workspace.id, resolvedCwd); // 最初の pane の場所＝開いた場所
-    this.persist.touch();
     if (spawn.alreadyExited) await this.closePaneAfterExit(reserved.pane.id, 0); // D37：猶予中に code 0 で即終了していた
     return { workspace: reserved.workspace, tab: reserved.tab, pane: reserved.pane, ...(place.fellBack ? { cwdFallback: true as const } : {}) };
   }
@@ -375,20 +418,42 @@ export class SessionService {
    * 追従の見直しの結果を、**同じ場所の結果として**まとめて入れる（design D2。herdr の `apply_workspace_git_statuses`）。いまの場所が `cwd` と違えば
    * 名前も git も捨てる（新しい場所の見直しが別に走る）。名前は自動のままで世代が同じときだけ入れる。変わったら `workspace.updated` を 1 回。
    */
-  applyWorkspaceIdentity(id: WorkspaceId, cwd: string, git: GitInfo | null, label: FollowedLabel | null): void {
+  applyWorkspaceIdentity(id: WorkspaceId, cwd: string, git: GitJudgement, label: FollowedLabel | null): void {
     const ws = this.model.getWorkspace(id);
     if (!ws || this.identityCwdOf(id) !== cwd) return;
     let updated: Workspace | null = null;
+    let renamed = false;
     if (label && ws.autoLabel && (this.labelGen.get(id) ?? 0) === label.gen) {
       if (label.degraded) this.labelCwd.delete(id);
       else this.labelCwd.set(id, cwd);
       if (label.label !== ws.label) {
         updated = this.model.renameWorkspace(id, label.label, true);
-        this.persist.touch();
+        renamed = true;
       }
     }
-    if (!sameGit(ws.git, git)) updated = this.model.updateWorkspaceGit(id, git);
+    const applied = this.applyGitJudgement(id, git);
+    if (applied.identityChanged) {
+      // 判定の反映後の workspace が最新（名前の変更も含む）。出口が `workspace.updated` も配る。
+      this.publishSidebarChanges(applied.updated ? [applied.updated] : []); // 保存の予約も（名前の変更の分を含めて 1 回）
+      return;
+    }
+    if (renamed) this.persist.touch();
+    updated = applied.updated ?? updated;
     if (updated) this.bus.publish({ event: "workspace.updated", data: { workspace: updated } });
+  }
+
+  /**
+   * 判定（3 つの結果）をモデルの同じ入口へ通す（`applyWorkspaceIdentity` と `updateWorkspaceGit` の共通）。取れない結果・今と同じ判定は何もしない。
+   * `identityChanged`（`repoKey`・`isLinkedWorktree`・`worktreeKey` が変わった）ときは、レイアウトと所属も変わりうるので、呼び出し側が共通の出口
+   * （`publishSidebarChanges`。`persist.touch()` を含む）で配る。
+   */
+  private applyGitJudgement(id: WorkspaceId, result: GitJudgement): { updated: Workspace | null; identityChanged: boolean } {
+    const ws = this.model.getWorkspace(id);
+    if (!ws || result.kind === "unknown") return { updated: null, identityChanged: false };
+    const git = result.kind === "git" ? result.git : null;
+    if (sameGit(ws.git, git)) return { updated: null, identityChanged: false };
+    const updated = this.model.updateWorkspaceGit(id, result);
+    return { updated, identityChanged: gitIdentityChanged(ws.git, git) };
   }
 
   /**
@@ -454,14 +519,14 @@ export class SessionService {
 
   /**
    * `closeLinkedWorktrees`（20260923-workspace-grouping。herdr の `close_group` 相当）：true かつ
-   * `id` が worktree 自動グループの本体なら、束ねられた worktree も連鎖して閉じる。対象を
-   * **モデルを書き換える前に**問い合わせる（`linkedWorktreeGroupMembers` は副作用なし）——
+   * `id` が worktree グループの先頭なら、同じリポジトリの workspace を全部（手動グループに入っていても）連鎖して閉じる。対象を
+   * **モデルを書き換える前に**問い合わせる（`repoCloseTargets` は副作用なし）——
    * 本体を先に閉じてから子を探すと git 情報の手掛かりが失われる。それぞれの workspace は
    * 既存の1件ずつのクローズ処理をそのまま繰り返す（design には無いエッジケース。
    * 複数 workspace の確認は client 側の `confirmClose` が既に同じ形でループしている）。
    */
   async closeWorkspace(id: WorkspaceId, closeLinkedWorktrees = false): Promise<void> {
-    const targets = closeLinkedWorktrees ? [id, ...this.model.linkedWorktreeGroupMembers(id)] : [id];
+    const targets = closeLinkedWorktrees ? [id, ...this.model.repoCloseTargets(id)] : [id];
     for (const targetId of targets) await this.closeWorkspaceOne(targetId);
     await this.recreateIfEmpty(); // D24
   }
@@ -494,35 +559,40 @@ export class SessionService {
     for (const tabId of result.removedTabIds) this.bus.publish({ event: "tab.closed", data: { tabId } });
     this.bus.publish({ event: "workspace.closed", data: { workspaceId: id } });
     this.forgetWorkspace(id);
-    this.persist.touch();
+    this.publishSidebarChanges();
   }
 
   // --- workspace の並べ替えとグループ（20260923-workspace-grouping） ----------------------
 
-  /** `workspace.move`。無変化（`model.moveWorkspace` が null）なら何も配布しない
-   *  （`moveTab` と同じ形。design「エラー処理 / 異常系」）。動いた全順序を
-   *  `workspace.order_changed` で配る（decisions.md D5：個々の Workspace は変わらないため）。 */
+  /** `workspace.move`（古い入口）。その workspace の項目の `item.move_by`。動かなければ何も配らない（`moveTab` と同じ形）。 */
   moveWorkspace(id: WorkspaceId, direction: "previous" | "next"): void {
-    const updated = this.model.moveWorkspace(id, direction);
-    if (updated) {
-      this.bus.publish({ event: "workspace.order_changed", data: { workspaceIds: updated.map((w) => w.id) } });
-      this.persist.touch();
-    }
+    if (this.model.moveWorkspace(id, direction)) this.publishSidebarChanges();
   }
 
-  /** `workspace.move_to`（D&D。単一・グループ一括の両方を同じ経路で扱う）。 */
+  /** `workspace.move_to`（古い画面の D&D）。項目の動きに読み替える（`SessionModel.moveWorkspacesTo`）。動かなければ何も配らない。 */
   moveWorkspacesTo(workspaceIds: WorkspaceId[], beforeWorkspaceId: WorkspaceId | null): void {
-    const updated = this.model.moveWorkspacesTo(workspaceIds, beforeWorkspaceId);
-    if (updated) {
-      this.bus.publish({ event: "workspace.order_changed", data: { workspaceIds: updated.map((w) => w.id) } });
-      this.persist.touch();
-    }
+    if (this.model.moveWorkspacesTo(workspaceIds, beforeWorkspaceId)) this.publishSidebarChanges();
   }
 
-  createGroup(label: string): WorkspaceGroup {
-    const group = this.model.createGroup(label);
+  /** `item.move`。受け付けなければ `{moved: false}` で何も配らない。 */
+  moveItem(item: ItemTarget, before: ItemTarget | null): { moved: boolean } {
+    const moved = this.model.moveItem(item, before);
+    if (moved) this.publishSidebarChanges();
+    return { moved };
+  }
+
+  /** `item.move_by`。端では `{moved: false}` で何も配らない。 */
+  moveItemBy(item: ItemTarget, direction: "previous" | "next"): { moved: boolean } {
+    const moved = this.model.moveItemBy(item, direction);
+    if (moved) this.publishSidebarChanges();
+    return { moved };
+  }
+
+  /** `workspaceId` があれば、その workspace の項目を新しいグループへ入れる（リポジトリなら丸ごと）。 */
+  createGroup(label: string, workspaceId?: WorkspaceId): WorkspaceGroup {
+    const group = this.model.createGroup(label, workspaceId);
     this.bus.publish({ event: "group.created", data: { group } });
-    this.persist.touch();
+    this.publishSidebarChanges();
     return group;
   }
 
@@ -538,30 +608,24 @@ export class SessionService {
     this.persist.touch();
   }
 
-  /** メンバーの `groupId` が null に戻る（`SessionModel.deleteGroup`）ので、それぞれ
-   *  `workspace.updated` で知らせる——**削除する前に**対象を控える（削除後は `groupId` が
-   *  既に外れていて探せない）。 */
+  /** 中の項目は「グループなし」の末尾へ出て、メンバーの `groupId` が null に戻る。それぞれの `workspace.updated`・`sidebar.layout_changed`・
+   *  `workspace.order_changed` は共通の出口が配る（`group.deleted` の後）。 */
   deleteGroup(id: GroupId): void {
-    const members = this.model.listWorkspaces().filter((w) => w.groupId === id);
     this.model.deleteGroup(id);
     this.bus.publish({ event: "group.deleted", data: { groupId: id } });
-    for (const ws of members) {
-      const updated = this.model.getWorkspace(ws.id);
-      if (updated) this.bus.publish({ event: "workspace.updated", data: { workspace: updated } });
-    }
-    this.persist.touch();
+    this.publishSidebarChanges();
   }
 
+  /** workspace の項目（リポジトリなら丸ごと）をグループの末尾へ入れる。 */
   addToGroup(workspaceId: WorkspaceId, groupId: GroupId): void {
-    const updated = this.model.addToGroup(workspaceId, groupId);
-    this.bus.publish({ event: "workspace.updated", data: { workspace: updated } });
-    this.persist.touch();
+    this.model.addToGroup(workspaceId, groupId);
+    this.publishSidebarChanges();
   }
 
+  /** 項目をグループから出し、「グループなし」の末尾へ置く。 */
   removeFromGroup(workspaceId: WorkspaceId): void {
-    const updated = this.model.removeFromGroup(workspaceId);
-    this.bus.publish({ event: "workspace.updated", data: { workspace: updated } });
-    this.persist.touch();
+    this.model.removeFromGroup(workspaceId);
+    this.publishSidebarChanges();
   }
 
   // --- tab --------------------------------------------------------------------
@@ -634,6 +698,7 @@ export class SessionService {
     if (result.closedWorkspaceId) {
       this.bus.publish({ event: "workspace.closed", data: { workspaceId: result.closedWorkspaceId } });
       this.forgetWorkspace(result.closedWorkspaceId);
+      this.publishSidebarChanges();
     } else {
       // workspace 自体は生き残った＝`model.closeTab` が `tabIds`/`activeTabId` を更新している
       // （`SessionModel.closeTabInternal`）。その変化を知らせる（D88。上の createTab と対）。
@@ -811,6 +876,7 @@ export class SessionService {
     if (result.closedWorkspaceId) {
       this.bus.publish({ event: "workspace.closed", data: { workspaceId: result.closedWorkspaceId } });
       this.forgetWorkspace(result.closedWorkspaceId);
+      this.publishSidebarChanges();
     } else if (result.removedTabIds.length > 0 && workspaceId) {
       // pane を閉じた結果、tab ごと連鎖して閉じたが workspace は生き残った（D18 の連鎖・closeTab と同じ形。D88）。
       const updatedWs = this.model.getWorkspace(workspaceId);
@@ -949,6 +1015,7 @@ export class SessionService {
       } else {
         this.bus.publish({ event: "workspace.closed", data: { workspaceId: sourceWorkspaceId } });
         this.forgetWorkspace(sourceWorkspaceId);
+        this.publishSidebarChanges();
       }
     }
     this.bus.publish({ event: "layout.updated", data: { tab: this.requireTab(targetTabId) } });
@@ -984,6 +1051,7 @@ export class SessionService {
       } else {
         this.bus.publish({ event: "workspace.closed", data: { workspaceId: sourceWorkspaceId } });
         this.forgetWorkspace(sourceWorkspaceId);
+        this.publishSidebarChanges();
       }
     }
     this.persist.touch();
@@ -1146,12 +1214,10 @@ export class SessionService {
     return this.agentLaunches.has(paneId);
   }
 
-  updateWorkspaceGit(workspaceId: WorkspaceId, git: GitInfo | null): void {
-    const ws = this.model.getWorkspace(workspaceId);
-    if (!ws) return;
-    if (sameGit(ws.git, git)) return;
-    const updated = this.model.updateWorkspaceGit(workspaceId, git);
-    this.bus.publish({ event: "workspace.updated", data: { workspace: updated } });
+  updateWorkspaceGit(workspaceId: WorkspaceId, result: GitJudgement): void {
+    const applied = this.applyGitJudgement(workspaceId, result);
+    if (applied.identityChanged) this.publishSidebarChanges(applied.updated ? [applied.updated] : []);
+    else if (applied.updated) this.bus.publish({ event: "workspace.updated", data: { workspace: applied.updated } });
   }
 
   // --- lifecycle: シェルの終了（D18） ----------------------------------------
@@ -1302,6 +1368,8 @@ export class SessionService {
       this.restoreWorkspace(wsData, wsData.autoLabel);
       if (wsData.labelCwd !== null) this.labelCwd.set(wsData.id, wsData.labelCwd);
     }
+    this.model.settleRepresentatives(); // 保存した代表を尊重し、無ければ作った順で決める（T29）
+    this.restoreLayout(data);
     for (const wsData of data.workspaces) {
       for (const tabData of wsData.tabs) {
         for (const paneData of tabData.panes) {
@@ -1393,6 +1461,16 @@ export class SessionService {
     if (overBudget()) return { label: folderLabelOf(cwd, this.workspaceLabelDeps), autoLabel: true, labelCwd: null };
     const named = await this.autoLabelFor(cwd);
     return { label: named.label, autoLabel: true, labelCwd: named.degraded ? null : cwd };
+  }
+
+  /**
+   * 保存した `layout`・`repoGroups` を戻す（20261004-group-worktree-items）。`layout` が無い保存は仮の状態のまま（移行は最初の 1 周／操作で確定）。
+   * `repairLayout` が実在しない参照を捨て、無い workspace を「グループなし」の末尾へ足す（壊れた保存でも起動する）。`repoKey` は workspace の復元で戻っている。
+   */
+  private restoreLayout(data: SessionFileData): void {
+    if (data.layout === undefined) return;
+    const dropped = this.model.restoreLayout(data.layout as SidebarLayout, data.repoGroups ?? {});
+    if (dropped.length > 0) this.logger.warn("dropped invalid sidebar layout entries on restore", { dropped });
   }
 
   private restoreWorkspace(wsData: SessionFileWorkspace, autoLabel: boolean): void {
@@ -1498,10 +1576,10 @@ function sameGit(a: GitInfo | null, b: GitInfo | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   // repoKey/isLinkedWorktree も比較する（20260923-workspace-grouping。タスク点検の指摘）——
-  // branch/ahead/behind が変わらず repoKey/isLinkedWorktree だけ変わる場合（worktree 自動グループの
+  // branch/ahead/behind が変わらず repoKey/isLinkedWorktree だけ変わる場合（worktree グループの
   // 判定に使う中心的なフィールド）を早期リターンで握りつぶすと、サーバの状態更新・
   // `workspace.updated` の配布ごと止まってしまう。
-  return a.branch === b.branch && a.ahead === b.ahead && a.behind === b.behind && a.repoKey === b.repoKey && a.isLinkedWorktree === b.isLinkedWorktree;
+  return a.branch === b.branch && a.ahead === b.ahead && a.behind === b.behind && a.repoKey === b.repoKey && a.isLinkedWorktree === b.isLinkedWorktree && (a.worktreeKey ?? null) === (b.worktreeKey ?? null);
 }
 
 /** `AgentInfo`（公開している側の全フィールド）が実際に変わったかを見る（`updatePaneRuntime` のレビュー指摘）。 */

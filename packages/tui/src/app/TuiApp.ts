@@ -14,6 +14,8 @@ import {
   type Mode,
   type ResolvedKeymap,
   type ResolvedNavigateKeymap,
+  groupIdOfNavigateKey,
+  isUngroupedNavigateKey,
 } from "@sodashitsu/client-core";
 import { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import { GotoDialog } from "../modes/GotoDialog.js";
@@ -57,6 +59,7 @@ import { spawn } from "node:child_process";
 import { readTuiState, tuiStateExists, writeTuiState, type TuiState } from "../local/tuiState.js";
 import { PrefsModel } from "../model/PrefsModel.js";
 import { SessionModel } from "../model/SessionModel.js";
+import { currentNavigableRows } from "../model/sidebarTree.js";
 import { TuiNet, type TuiNetDeps } from "../net/TuiNet.js";
 import type { ChromeContext } from "../render/chrome/context.js";
 import type { SidebarHit, SidebarScroll } from "../render/chrome/sidebar.js";
@@ -751,6 +754,12 @@ export class TuiApp {
     }
     switch (ev.kind) {
       case "key":
+        if (ev.key.key === "Escape" && this.mouse.itemDragging) {
+          // サイドバーの項目の掴みの途中の Esc は取り消し（離しても何も送らない）。
+          this.mouse.cancel();
+          this.scheduleRender();
+          return;
+        }
         if (this.mouse.selection) {
           this.mouse.selection = null; // 打鍵で選択の表示を消す（コピーは済んでいる）
           this.scheduleRender();
@@ -1330,19 +1339,40 @@ export class TuiApp {
     this.io.write(want ? "\x1b[?1003h" : `\x1b[?1003l${capture ? ENABLE_MOUSE : ""}`);
   }
 
-  /** navigate モードの Space（`navigate_open_menu`）：選んでいる workspace の行の横にメニューを開く（web の Sidebar と同じ役）。 */
+  /**
+   * navigate モードの Space（`navigate_open_menu`）：選んでいる行の横にメニューを開く（web の Sidebar と同じ役）。workspace の行なら
+   * workspace のメニュー、グループの見出しならグループのメニュー、「グループなし」の見出しならそのメニュー（`layout` の無い古いサーバでは
+   * 出す項目が無いので開かない）。見出しが消えているのに選択が残っていたら、何も開かず選択を外す。
+   */
   private openRequestedNavigateMenu(layout: LayoutResult): void {
     if (!this.ui.navigateMenuRequested) return;
     this.ui.clearNavigateMenuRequest();
-    const workspaceId = this.ui.navigateSelection;
-    if (!workspaceId) return;
-    const hit = this.sidebarHits.find(
-      (h) => h.kind === "workspace" && h.workspaceId === workspaceId,
+    const key = this.ui.navigateSelection;
+    if (!key) return;
+    const groupId = groupIdOfNavigateKey(key);
+    const ungrouped = isUngroupedNavigateKey(key);
+    const hit = this.sidebarHits.find((h) =>
+      ungrouped
+        ? h.kind === "ungrouped"
+        : groupId !== null
+          ? h.kind === "group" && h.groupId === groupId
+          : (h.kind === "workspace" || h.kind === "autoGroup") && h.workspaceId === key,
     );
     const at = hit
       ? { x: layout.sidebar ? layout.sidebar.x + 2 : 0, y: hit.y + 1 }
       : { x: 2, y: 2 };
-    this.ui.openContextMenu({ kind: "workspace", workspaceId }, at);
+    if (ungrouped) {
+      if (!currentNavigableRows(this.model, this.prefs).some((r) => r.kind === "ungrouped"))
+        this.ui.setNavigateSelection(null);
+      else if (this.model.hasServerLayout) this.ui.openContextMenu({ kind: "ungrouped" }, at);
+      return;
+    }
+    if (groupId !== null) {
+      if (!this.model.groups.has(groupId)) this.ui.setNavigateSelection(null);
+      else this.ui.openContextMenu({ kind: "group", groupId }, at);
+      return;
+    }
+    this.ui.openContextMenu({ kind: "workspace", workspaceId: key }, at);
   }
 
   /** 切り離し（`prefix+q`・SIGHUP・SIGTERM・SIGINT）。`client.detach` を送れるなら送る。サーバとエージェントは動き続ける。 */

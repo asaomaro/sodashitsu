@@ -3,13 +3,13 @@ import { computed, inject, nextTick, ref, watch } from "vue";
 import { ActionDispatcherKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { type DialogContext, useViewStore } from "../store/view.js";
-import { linkedWorktreeChildrenOf } from "@sodashitsu/client-core";
+import { repoMembers } from "@sodashitsu/client-core";
 
 /**
  * 閉じる確認ダイアログ（T23。design「ダイアログ」）。`view.dialogContext.kind === "confirmClose"` を扱う。
  * `role=alertdialog`・最初のフォーカスは「キャンセル」・`y`/`n` でも確定/取り消しできる。
  * 「束ねた worktree も一緒に閉じる」チェックボックス（20260923-workspace-grouping。herdr の
- * `close_group` 相当）は、対象が worktree 自動グループの本体（親）1件のときだけ出す。
+ * `close_group` 相当）は、対象が worktree グループの本体（親）1件のときだけ出す。
  *
  * `kind === "confirmReplacePane"`（20260924-pane-dnd-split-move。review 指摘 must）も同じ
  * ダイアログで扱う——D&D での分割解除（`pane.replace`）のドロップ先が busy なときの確認。
@@ -70,13 +70,18 @@ const confirmLabel = computed(() => {
   return kind === "confirmWorktreeRemove" || kind === "confirmWorktreeRemoveForce" ? "削除" : "閉じる";
 });
 
-/** 対象が worktree 自動グループの本体（親）1件のときだけ、束ねられた linked worktree を返す（無ければ空）。 */
+/** 対象が worktree グループの本体（親）1件のときだけ、束ねられた linked worktree を返す（無ければ空）。 */
 const linkedWorktrees = computed(() => {
   const ctx = view.dialogContext;
   if (ctx?.kind !== "confirmClose" || ctx.targets.length !== 1) return [];
   const target = ctx.targets[0]!;
   if (target.type !== "workspace") return [];
-  return linkedWorktreeChildrenOf(target.id, [...session.workspaces.values()]);
+  // 一括クローズの対象は、リポジトリの本体（`repoMembers` の先頭）のときの残り全部（サーバの `repoCloseTargets` と同じ。
+  // グループへ入っているかは見ない）。
+  const repoKey = session.workspaces.get(target.id)?.git?.repoKey;
+  if (!repoKey) return [];
+  const members = repoMembers([...session.workspaces.values()], repoKey);
+  return members.length > 1 && members[0]!.id === target.id ? members.slice(1) : [];
 });
 
 const CONFIRM_DIALOG_KINDS: DialogContext["kind"][] = ["confirmClose", "confirmReplacePane", "confirmWorktreeRemove", "confirmWorktreeRemoveForce", "confirmStopServer"];

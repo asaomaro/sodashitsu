@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeTempDir } from "./atomicFile.js";
 import { FsSessionFile, type SessionFileData } from "./SessionFile.js";
@@ -108,6 +108,98 @@ describe("FsSessionFile", () => {
     expect(result.data.nextId.g).toBe(1);
     expect(result.data.groups).toEqual([]);
     expect(result.data.workspaces[0]!.groupId).toBeUndefined();
+  });
+
+  // 20261004-group-worktree-items（T9）：layout・repoGroups・repoKey・isLinkedWorktree は optional（版は 1 のまま）。
+  it("layout・repoGroups・workspace の repoKey／isLinkedWorktree が往復し、repoKey の null（管理外）と無い（未確定）が区別される", async () => {
+    const file = new FsSessionFile(dir);
+    const data = sample();
+    const ws = data.workspaces[0]!;
+    const withLayout: SessionFileData = {
+      ...data,
+      groups: [{ id: "g1", label: "backend", collapsed: false }],
+      layout: { top: ["g:g1", "u"], groups: { g1: ["r:/r/.git"] }, ungrouped: ["w:w2"] },
+      repoGroups: { "/r/.git": "g1", "/closed/.git": "g1" },
+      workspaces: [
+        { ...ws, groupId: "g1", repoKey: "/r/.git", isLinkedWorktree: true, worktreeKey: "/r/.git/worktrees/wt", representative: true },
+        { ...ws, id: "w2", repoKey: null },
+        { ...ws, id: "w3" },
+      ],
+    };
+    await file.save(withLayout);
+    const result = await file.load();
+    expect(result).toEqual({ kind: "ok", data: withLayout });
+    if (result.kind !== "ok") throw new Error("unreachable");
+    expect(result.data.workspaces.map((w) => w.repoKey)).toEqual(["/r/.git", null, undefined]);
+    expect(result.data.workspaces.map((w) => w.worktreeKey)).toEqual(["/r/.git/worktrees/wt", undefined, undefined]);
+    expect(result.data.workspaces.map((w) => w.representative)).toEqual([true, undefined, undefined]);
+  });
+
+  it("古い版が読める形: 新しい項目を落としても、残りは以前のスキーマで読める（版は 1 のまま・追加は optional だけ）", async () => {
+    const { writeFileAtomic } = await import("./atomicFile.js");
+    const { join } = await import("node:path");
+    const file = new FsSessionFile(dir);
+    const data = sample();
+    await file.save({
+      ...data,
+      layout: { top: ["u"], groups: {}, ungrouped: ["w:w1"] },
+      repoGroups: { "/r/.git": "g1" },
+      workspaces: [{ ...data.workspaces[0]!, repoKey: "/r/.git", isLinkedWorktree: false, worktreeKey: "/r/.git" }],
+    });
+    // 以前の版（z.object の既定＝知らない項目を落とす）と同じ読み方で、新しい項目を落とした形が元の形と一致する。
+    const raw = JSON.parse(await readFile(join(dir, "session.json"), "utf8")) as Record<string, unknown>;
+    expect(raw["schema"]).toBe(1);
+    const rest = { ...raw };
+    delete rest["layout"];
+    delete rest["repoGroups"];
+    const ws = (rest["workspaces"] as Record<string, unknown>[]).map((w) => {
+      const copy = { ...w };
+      delete copy["repoKey"];
+      delete copy["isLinkedWorktree"];
+      delete copy["worktreeKey"];
+      delete copy["representative"];
+      return copy;
+    });
+    await writeFileAtomic(join(dir, "session.json"), JSON.stringify({ ...rest, workspaces: ws }));
+    expect(await file.load()).toEqual({ kind: "ok", data });
+  });
+
+  // 追補 01（D28）: 形が合わない `layout`（`ungrouped` が無い追補の前の途中の形・壊れた形）は、保存全体を壊れた扱いにせず `layout` だけ捨てる。
+  // 復元は `layout` が無い保存と同じ仮の状態（`groupId`・`repoKey` から導く）から始まり、`repoGroups` は読まない。
+  it.each([
+    ["ungrouped が無い途中の形", { top: ["w:w1", "g:g1"], groups: { g1: [] } }],
+    ["top が配列でない", { top: "x", groups: {}, ungrouped: [] }],
+    ["配列でも object でもない", 5],
+  ])("layout が壊れた形・旧形（%s）なら layout だけ捨て、残りは読める", async (_name, layout) => {
+    const { writeFileAtomic } = await import("./atomicFile.js");
+    const { join } = await import("node:path");
+    const file = new FsSessionFile(dir);
+    const data = sample();
+    await writeFileAtomic(join(dir, "session.json"), JSON.stringify({ ...data, layout, repoGroups: { "/r/.git": "g1" } }));
+    const result = await file.load();
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error("unreachable");
+    expect(result.data.layout).toBeUndefined();
+    expect(result.data.workspaces).toEqual(data.workspaces);
+  });
+
+  // review-findings-01 の 5: `repoGroups` の形が合わなくても、`layout` と同じく捨てるだけ（保存全体は壊れた扱いにしない）。
+  it.each([
+    ["配列", ["a"]],
+    ["値が文字列でない", { "/r/.git": 5 }],
+    ["文字列", "x"],
+  ])("repoGroups が壊れた形（%s）なら repoGroups だけ捨て、残りは読める", async (_name, repoGroups) => {
+    const { writeFileAtomic } = await import("./atomicFile.js");
+    const { join } = await import("node:path");
+    const file = new FsSessionFile(dir);
+    const data = sample();
+    await writeFileAtomic(join(dir, "session.json"), JSON.stringify({ ...data, layout: { top: ["u"], groups: {}, ungrouped: ["w:w1"] }, repoGroups }));
+    const result = await file.load();
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error("unreachable");
+    expect(result.data.repoGroups).toBeUndefined();
+    expect(result.data.layout).toEqual({ top: ["u"], groups: {}, ungrouped: ["w:w1"] });
+    expect(result.data.workspaces).toEqual(data.workspaces);
   });
 
   it("reports corrupt for an unsupported schema version", async () => {

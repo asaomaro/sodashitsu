@@ -43,6 +43,18 @@ describe("GroupPickerDialog", () => {
     expect(items.map((li) => li.text())).toEqual(["backend", "frontend", "infra"]);
   });
 
+  it("「別のグループへ移す…」から開いたときは見出しを変える", async () => {
+    const view = useViewStore(pinia);
+    const wrapper = mountDialog(makeActions());
+    view.openDialogWithContext({ kind: "addToGroup", workspaceId: "w1", groups: GROUPS, moving: true });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get(".group-picker-dialog-title").text()).toBe("別のグループへ移す");
+    expect(wrapper.get("dialog").attributes("aria-label")).toBe("別のグループへ移す");
+    view.openDialogWithContext({ kind: "addToGroup", workspaceId: "w1", groups: GROUPS });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get(".group-picker-dialog-title").text()).toBe("グループへ追加");
+  });
+
   it("↑↓ で選べて、Enter で選んだものを渡す（AC-I3）", async () => {
     const view = useViewStore(pinia);
     const actions = makeActions();

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GotoDialog } from "../modes/GotoDialog.js";
 import { startedApp } from "../testing/appHarness.js";
+import { snapshot } from "../testing/fixtures.js";
 
 describe("TuiApp：モード（navigate・copy・resize・goto。AC5・AC7・AC-I1・AC-I3）", () => {
   const closers: (() => Promise<void>)[] = [];
@@ -35,6 +36,35 @@ describe("TuiApp：モード（navigate・copy・resize・goto。AC5・AC7・AC-
       expect(h.app.ui.contextMenu?.target).toEqual({ kind: "workspace", workspaceId: "w1" }),
     );
     await vi.waitFor(async () => expect(await h.screen()).toContain("新しいグループを作る…"));
+  });
+
+  it("navigate の Space で、選んだ見出しのメニューを開く（グループ・「グループなし」）。見出しが消えていれば何も開かず選択を外す（T17）", async () => {
+    const h = await start({
+      snapshot: snapshot({
+        groups: [{ id: "g1", label: "G", collapsed: false }],
+        layout: { top: ["g:g1", "u"], groups: { g1: ["w:w1"] }, ungrouped: ["w:w2"] },
+      }),
+    });
+    h.io.type("\x02w");
+    await vi.waitFor(async () => expect(await h.screen()).toContain("NAVIGATE"));
+    h.app.ui.setNavigateSelection("group:g1");
+    h.io.type(" ");
+    await vi.waitFor(() =>
+      expect(h.app.ui.contextMenu?.target).toEqual({ kind: "group", groupId: "g1" }),
+    );
+    await vi.waitFor(async () => expect(await h.screen()).toContain("グループを削除"));
+    h.app.ui.closeContextMenu();
+    h.app.ui.setNavigateSelection("ungrouped:");
+    h.io.type(" ");
+    await vi.waitFor(() => expect(h.app.ui.contextMenu?.target).toEqual({ kind: "ungrouped" }));
+    await vi.waitFor(async () => expect(await h.screen()).toContain("上へ移動"));
+    h.app.ui.closeContextMenu();
+    // 別の画面で消されたグループが選択に残っている。
+    h.ws.event("group.deleted", { groupId: "g1" });
+    h.app.ui.setNavigateSelection("group:g1");
+    h.io.type(" ");
+    await vi.waitFor(() => expect(h.app.ui.navigateSelection).toBeNull());
+    expect(h.app.ui.contextMenu).toBeNull();
   });
 
   it("resize（prefix+r）：l で pane.resize、Esc で抜ける", async () => {

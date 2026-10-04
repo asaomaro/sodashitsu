@@ -168,7 +168,7 @@ export const WorkspaceFocusParams = z.object({ workspaceId });
 export type WorkspaceFocusParams = z.infer<typeof WorkspaceFocusParams>;
 
 // `closeLinkedWorktrees`（20260923-workspace-grouping。herdr の `close_group` 相当）：true かつ
-// 対象が worktree 自動グループの本体なら、束ねられた worktree も連鎖して閉じる。**省略可**——
+// 対象が worktree グループの本体なら、束ねられた worktree も連鎖して閉じる。**省略可**——
 // `z.boolean().default(false)` にすると `z.infer` の TS 型で必須フィールドになり、既存の呼び出し元
 // （例: `packages/cli/src/commands/workspace.ts`）が型エラーになる（タスク点検の指摘）。既定は
 // `SessionService.closeWorkspace(id, closeLinkedWorktrees = false)` 側の JS 既定引数が担う。
@@ -192,7 +192,9 @@ export const WorkspaceMoveToParams = z.object({
 });
 export type WorkspaceMoveToParams = z.infer<typeof WorkspaceMoveToParams>;
 
-export const GroupCreateParams = z.object({ label: z.string().min(1) });
+// `workspaceId`（20261004-group-worktree-items）: その workspace の項目を新しいグループへ入れる。**省略可**
+// （古い呼び出し元の `{label}` だけが通る。古いサーバはこのキーを黙って落とす）。
+export const GroupCreateParams = z.object({ label: z.string().min(1), workspaceId: workspaceId.optional() });
 export type GroupCreateParams = z.infer<typeof GroupCreateParams>;
 export interface GroupCreateResult {
   group: WorkspaceGroup;
@@ -217,6 +219,30 @@ export type GroupRemoveMemberParams = z.infer<typeof GroupRemoveMemberParams>;
 // 効かなくなる。`pane.zoom` の `mode: "toggle"` と同じ「サーバに決めさせる」考え方に揃えた）。
 export const GroupToggleCollapsedParams = z.object({ groupId });
 export type GroupToggleCollapsedParams = z.infer<typeof GroupToggleCollapsedParams>;
+
+// --- 項目単位の並べ替え（20261004-group-worktree-items） ---------------------------------------
+
+export const ItemTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("group"), groupId }),
+  z.object({ kind: z.literal("workspace"), workspaceId }),
+  z.object({ kind: z.literal("ungrouped") }),
+]);
+// 同じ入れ物の中で `before` の前へ。null は末尾。入れ物が違う・自分自身などは `{moved:false}`（エラーにしない）。
+export const ItemMoveParams = z.object({ item: ItemTargetSchema, before: ItemTargetSchema.nullable() });
+export type ItemMoveParams = z.infer<typeof ItemMoveParams>;
+// 同じ入れ物の中で 1 つ動かす。端では動かない（`{moved:false}`）。
+export const ItemMoveByParams = z.object({ item: ItemTargetSchema, direction: z.enum(["previous", "next"]) });
+export type ItemMoveByParams = z.infer<typeof ItemMoveByParams>;
+export interface ItemMoveResult {
+  moved: boolean;
+}
+
+// 保存・配信で受ける `SidebarLayout` の形（未知のキーは落とす。項目の参照の中身は問わない）。
+export const SidebarLayoutSchema = z.object({
+  top: z.array(z.string()),
+  groups: z.record(z.string(), z.array(z.string())),
+  ungrouped: z.array(z.string()),
+});
 
 // --- tab ------------------------------------------------------------------
 
@@ -613,6 +639,8 @@ export interface SharedPrefs {
   agentSort?: "grouped" | "priority";
   workspaceSort?: "opened" | "name";
   collapsedAutoGroups?: string[];
+  /** 「グループなし」の見出しを畳んでいるか（共有。端末ごとの設定ではない。追補 01 B）。 */
+  ungroupedCollapsed?: boolean;
   onboarding?: boolean;
   tui?: SharedTuiPrefs;
   /** 知らない項目（新しい版のクライアントが書いたもの）も捨てずに持つ。 */
@@ -829,6 +857,8 @@ export const METHOD_SCHEMAS = {
   "group.add_member": GroupAddMemberParams,
   "group.remove_member": GroupRemoveMemberParams,
   "group.toggle_collapsed": GroupToggleCollapsedParams,
+  "item.move": ItemMoveParams,
+  "item.move_by": ItemMoveByParams,
   "tab.create": TabCreateParams,
   "tab.rename": TabRenameParams,
   "tab.focus": TabFocusParams,
@@ -922,6 +952,8 @@ export interface MethodResultMap {
   "group.add_member": Record<string, never>;
   "group.remove_member": Record<string, never>;
   "group.toggle_collapsed": Record<string, never>;
+  "item.move": ItemMoveResult;
+  "item.move_by": ItemMoveResult;
   "tab.create": TabCreateResult;
   "tab.rename": Record<string, never>;
   "tab.focus": Record<string, never>;

@@ -3,9 +3,9 @@ import { formatChord, parseChord } from "./chord.js";
 import { isNavigateKeyId, NAVIGATE_KEYS, NAVIGATE_RESERVED_CHORDS, navigateKeyDef } from "./navigateKeys.js";
 
 describe("NAVIGATE_KEYS — カタログ（AC3）", () => {
-  it("7操作、id は重複しない・表示名は空でない", () => {
-    expect(NAVIGATE_KEYS).toHaveLength(7);
-    expect(new Set(NAVIGATE_KEYS.map((d) => d.id)).size).toBe(7);
+  it("8操作、id は重複しない・表示名は空でない", () => {
+    expect(NAVIGATE_KEYS).toHaveLength(8);
+    expect(new Set(NAVIGATE_KEYS.map((d) => d.id)).size).toBe(8);
     for (const d of NAVIGATE_KEYS) expect(d.label.length, d.id).toBeGreaterThan(0);
   });
 
@@ -24,6 +24,7 @@ describe("NAVIGATE_KEYS — カタログ（AC3）", () => {
       "navigate_pane_up",
       "navigate_pane_right",
       "navigate_open_menu",
+      "navigate_toggle_collapse",
     ]);
     expect(navigateKeyDef("navigate_workspace_up")?.defaults).toEqual(["up"]);
     expect(navigateKeyDef("navigate_workspace_down")?.defaults).toEqual(["down"]);
@@ -32,6 +33,13 @@ describe("NAVIGATE_KEYS — カタログ（AC3）", () => {
     expect(navigateKeyDef("navigate_pane_up")?.defaults).toEqual(["k"]);
     expect(navigateKeyDef("navigate_pane_right")?.defaults).toEqual(["l"]);
     expect(navigateKeyDef("navigate_open_menu")?.defaults).toEqual(["space"]);
+    expect(navigateKeyDef("navigate_toggle_collapse")?.defaults).toEqual(["z"]);
+  });
+
+  it("既定の chord は操作どうしで重ならず、予約 chord にも当たらない（z の追加。group-worktree-items T11）", () => {
+    const all = NAVIGATE_KEYS.flatMap((d) => d.defaults);
+    expect(new Set(all).size).toBe(all.length);
+    for (const chord of all) expect(NAVIGATE_RESERVED_CHORDS.has(chord), chord).toBe(false);
   });
 
   it("各操作の action は navigate 系の固定 Action", () => {
@@ -58,6 +66,7 @@ describe("NAVIGATE_KEYS — カタログ（AC3）", () => {
       dir: "right",
     });
     expect(navigateKeyDef("navigate_open_menu")?.action).toEqual({ type: "navigate", op: "openMenu" });
+    expect(navigateKeyDef("navigate_toggle_collapse")?.action).toEqual({ type: "navigate", op: "toggleCollapse" });
   });
 
   it("既定の chord はどれも予約キーではない・互いに重ならない（自己整合性）", () => {

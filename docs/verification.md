@@ -1229,6 +1229,107 @@ pnpm --filter @sodashitsu/web exec vitest run src/components/graph/GraphView.per
 `docs/machines.md` の手順で 2 台を登録し、手元の pane と別のマシンの pane を線で結んで上の 2〜6 を行う。そのマシンの `soda serve` を止めて、止めている間の完了が
 `machine_unavailable` で見送られ、繋がり直しても後から送られないこと、監督役への知らせが繋がったときに届くことを見る。
 
+## グループ・worktree グループ・「グループなし」（20261004-group-worktree-items）
+
+サイドバーの workspace のまとまり（利用者が作る「グループ」・git の「worktree グループ」・グループに入っていない項目の「グループなし」）を確かめる。
+決まりの本文は `docs/herdr-parity.md` の H04・H37b（herdr との違い）、`docs/tui.md`「サイドバーのグループ」（端末版の見た目と操作）、`docs/tui-parity.md` の H04w・H37b・W04。
+**自動のテストが見ている範囲と、実機・実物の端末でしか確かめられない範囲を分けて書く。**
+
+### 自動で確かめた範囲
+
+```sh
+pnpm -s build
+pnpm --filter @sodashitsu/e2e exec playwright test src/specs/workspace-groups.spec.ts   # E2E（ブラウザ版。26 件・数分）
+pnpm --filter @sodashitsu/client-core exec vitest run src/workspace                      # 純関数（木・レイアウトの操作）
+pnpm --filter @sodashitsu/server exec vitest run src/git/GitInfoPoller.test.ts src/session src/persist/SessionFile.test.ts src/ws/WsGateway.integration.test.ts
+pnpm --filter @sodashitsu/web exec vitest run src/components/Sidebar.test.ts src/components/ContextMenu.test.ts src/actions/ActionDispatcher.test.ts
+pnpm --filter @sodashitsu/tui exec vitest run src/render/chrome/sidebar.test.ts src/input/mouse.sidebarDrag.test.ts src/actions/TuiDispatcher.test.ts
+```
+
+**E2E**（`packages/e2e/src/specs/workspace-groups.spec.ts`。実物のサーバと実物の git〔worktree は spec が `git worktree add` で作る〕・実物の Chromium。合否はブラウザの DOM と、ブラウザが送った／受けたフレームで見る）:
+
+| 場面（`test.describe`） | 確かめていること（AC） |
+|---|---|
+| グループの作成と出入り | メニューで作る・入れる・外す・別のグループへ移す（AC2・AC4）。見出しは本物のグループができたときだけ出る。削除すると中身は「グループなし」の末尾へ出て、グループが無くなると見出しが消える（AC10・AC20）。見出し・行を右クリックしてもメニューが開くだけで折りたたみは変わらない（AC-I1） |
+| worktree グループ | グループの中でまとまって並び、子の行のメニューでも全体が動く（AC1〜AC4）。種類の印と読み上げ用の文言・畳んだサイドバーでは印が名前を持つ（AC12）。グループと worktree グループの折りたたみ・今いる workspace の行は畳んでも残る（AC6）。本体を閉じるとき、グループの中でも「worktree も一緒に閉じる」が出て全部閉じる／子の行には出ない（AC7） |
+| 後から開く・開き直す・再起動 | 後から worktree を開くと同じ worktree グループ・同じグループに入る（AC8）。全部閉じて開き直す・サーバを再起動しても同じ並び・同じグループ・同じ折りたたみ（AC10） |
+| ドラッグ | グループの中で並べ替え、外と中をまたぐと落とせない（AC5）。子の行をつかんでも worktree グループ全体が動く・まとまりどうしの並べ替え（AC5・AC20）。Esc・行の外で取り消し、何も送らない（AC-I2）。グループの見出しをつかんでグループを並べ替える（AC5）。下へは落とした項目の次の前・最後の項目の上は末尾へ（端末版と同じ。T30） |
+| 同じフォルダの 2 つ目の workspace | worktree グループには入らず通常の行（worktree の印なし）。代表を閉じると次が worktree グループに入る。2 つ目をグループへ入れても worktree グループは動かない。「グループなし」をグループより上に並べ替えてから worktree の workspace を選んで「＋ 新規」しても、新しい workspace は通常の行のまま worktree グループは崩れない（代表は先にそのフォルダを持った workspace で、奪われない）（AC19） |
+| 「グループなし」 | 畳める・グループと並べ替えられる・名前の変更と削除は無い・外すと末尾へ（AC20） |
+| 状態のまとめと `+n` | グループの見出しは中の状態をまとめて常に出す。畳んだ worktree グループの先頭の行は全体をまとめ、`+n` を添える（AC21） |
+| 別の接続からの操作 | 別の接続（テストのクライアント）の操作に、ブラウザの DOM が読み込み直しなしで追従する（AC15 のブラウザ側） |
+| キーだけの操作 | navigate の選択・メニュー・折りたたみ（`z`）・並べ替え（`move_workspace_previous`／`next`。端で止まる）・メニューとダイアログをキーだけで操作・Esc で取り消し（AC-I2・AC-I3・AC5・AC6） |
+| 先頭の pane の移動 | pane に `cd` を打って別のリポジトリへ移ると、移った先の項目に従う（所属が無ければグループの外へ）。git 管理外へ移ると、移る前のグループに通常の行として残り、その後リポジトリへ移ってもグループに残って所属が引き継がれる（AC11） |
+
+**単体・結合**（vitest）:
+
+- 純関数（`packages/client-core/src/workspace/workspaceGrouping.test.ts`・`sidebarLayout.test.ts`）: 項目・代表・木・「グループなし」・畳んだ worktree グループの隠れている数・キー操作の順・`layoutFromLegacy`・レイアウトの操作。
+- サーバ（`packages/server/src/session/SessionModel.test.ts`・`SessionService.test.ts`・`surface/methods/index.test.ts`・`persist/SessionFile.test.ts`）: 判定の反映の表（判定が付く・変わる・管理外・取れない）・代表の交代・グループと一括クローズの RPC・`item.move`／`item.move_by`・古い `workspace.move_to` の読み替え・保存と復元・移行の確定。
+  実物の git の結合テスト（`packages/server/src/git/GitInfoPoller.test.ts`）: 管理外・消えたフォルダ・linked worktree・symlink・bare・サブモジュール・コミットの無いリポジトリの判定、worktree を作って同じ項目に入る・別のリポジトリ／管理外へ移る・同じフォルダの 2 つ目が通常の行・代表を閉じると次が入る、保存 → 復元 → 最初の 1 周で並びが変わらない。
+- サーバと画面が同じ木になること（`packages/server/src/session/SessionModel.clientAgreement.test.ts`。仮の状態・配信の途中の状態を含む）と、**2 つの接続**（`packages/server/src/ws/WsGateway.integration.test.ts`。実物の ws。一方の操作がもう一方と新しい接続に同じ木で届く）。
+- ブラウザ版（`packages/web/src/components/Sidebar.test.ts`・`ContextMenu.test.ts`・`ConfirmDialog.test.ts`・`GroupPickerDialog.test.ts`・`actions/ActionDispatcher.test.ts`）と、**端末版**（`packages/tui/src/render/chrome/sidebar.test.ts`・`input/mouse.sidebarDrag.test.ts`・`actions/TuiDispatcher.test.ts`・`model/SessionModel.test.ts`・`modes/overlays.test.ts`）:
+  描画の行・メニュー・クリックの当たり判定・ドラッグの落とし先・navigate・古いサーバ〔`layout` が無い〕での RPC の分け方。端末版は偽の外側の端末の文字で確かめる。
+
+**自動では確かめていない範囲**（下の手作業で見る）:
+
+- **端末版（引数なしの `soda`）の実物の端末での見え方と操作**。E2E はブラウザ版だけで、`scripts/tui-pty-verify.mjs`（疑似端末での一巡）もグループを見ない。端末のフォントでの `⎇`・`├└`・`─` の見え方、端末のマウス（クリック・ドラッグ）は実機でだけ確かめられる。
+- 端末版とブラウザ版を**同じサーバで並べて**見たときの一致（サーバと画面の一致・2 つの接続は自動で見たが、実物の端末版の画面とブラウザの画面を並べてはいない）。
+- 実物のエージェント（Claude Code 等）の状態が、グループの見出し・畳んだ worktree グループに反映されること（E2E は状態をサーバの中から偽って出している）。
+- 実際の利用者のリポジトリ・シェルでの `cd`（E2E は pane に `cd` を打つが、5 秒周期の判定を使う短い構成で、利用者の `PROMPT_COMMAND` 等は通らない）。
+- 読み込み済みの古いブラウザのタブ（古い画面）と新しいサーバの組み合わせ。単体で `workspace.move_to` の読み替え・知らないイベントの無視を見たが、実物の古い版の画面では確かめていない。
+- Windows ネイティブ・macOS（git の判定とパスの扱い。symlink・bare 等は Linux の git 2.43.0 で確かめた）。
+
+### 実機の手順
+
+新しい状態ディレクトリか名前付き session（上の「端末版」と同じ。利用者の本物の並びを汚さない）で始める。リポジトリは使い捨てのものを作る（コミットが 1 つも無いと管理外として扱われる）:
+
+```sh
+r=$(mktemp -d); cd "$r"
+git init -q app && git -C app commit -q --allow-empty -m init
+git -C app worktree add -q ../app-feat -b feat
+git -C app worktree add -q ../app-fix -b fix
+git -C app worktree add -q ../app-hot -b hot      # 手順の cd 用（まだ workspace を開かない）
+git init -q other && git -C other commit -q --allow-empty -m init
+git init -q third && git -C third commit -q --allow-empty -m init   # 手順の cd 用（所属の無いリポジトリ）
+mkdir memo
+```
+
+「＋ 新規」や `workspace.create` で、`app`・`app-feat`・`app-fix`・`other`・`memo` をそれぞれの場所で開く（pane で `cd` してもよいが、判定は最初の pane の今の場所に追従し、5 秒周期なので数秒待つ）。
+
+- [ ] **まとまり方（AC1・AC4・AC19〜AC21）**: `app`・`app-feat`・`app-fix` は 1 つの worktree グループ（`app` が先頭）になる。`app-feat` の workspace を選んだまま「＋新規」で 2 つ目を開くと、worktree グループには入らず通常の行（`⎇` なし）になる。
+      `app-feat` の最初の workspace（代表）を閉じると、2 つ目が worktree グループに入る。グループが 1 つも無い間は「グループなし」の見出しが出ない。
+- [ ] **グループ（AC2・AC3・AC10）**: `app` の行の右クリック（キーなら navigate〔`prefix+w`〕で選んで Space）→「新しいグループを作る…」で名前を付ける。worktree グループ全体が入り、見出しが出て「グループなし」の見出しも出る。
+      `other`・`memo` を「グループへ追加…」で入れる。`app-feat`〔子の行〕から「グループから外す」を選ぶと worktree グループ全体が「グループなし」の末尾へ出る（子だけは動かない）。グループを削除すると中身は「グループなし」の末尾へ出る。
+- [ ] **再起動で戻る（AC10）**: グループに入れた状態で `soda session stop <名前>` → 同じ引数で起動。同じ並び・同じグループ・同じ折りたたみで戻る。`app` の workspace を全部閉じて開き直しても、同じグループに戻る。
+- [ ] **状態のまとめ（AC21）**: `app-feat` の pane で Claude Code 等を動かし、動作中の間、グループの見出しと「グループなし」の見出しに作業中の状態の記号が出る（広げていても畳んでいても）。worktree グループを畳むと、先頭の行が全体をまとめた状態になり、隠れている worktree の数が `+2` のように出る。
+- [ ] **`cd` で別のリポジトリへ移る（AC11）**: 最初の pane の今の場所に追従する（判定は 5 秒周期なので、`cd` の後は数秒待つ）。`app` の worktree グループ・`other`・`memo` がグループ G に入っている状態で行う（前の項目でグループを削除したなら作り直す）。
+      (1) G に入れた `memo` の workspace の pane で `cd "$r/app-hot"`（`app` の、まだ workspace を開いていない worktree）。`memo` の workspace が `app` の worktree グループの子に加わる（G の中・`app` の項目の中）。
+      (2) その workspace の pane で `cd "$r/third"`（所属の無い別のリポジトリ）。worktree グループから外れ、グループの外（「グループなし」）へ出る。
+      (3) G に入れた `other` の workspace の pane で `cd "$r/memo"`（git 管理外）。移る前の G に通常の行として残る（名前・並びは変わらない）。
+      (4) **消えたフォルダ**: workspace の pane のあるフォルダを消す（`rmdir`）。想定は、直前の並び・所属のまま変わらないこと（削除済みの cwd への追従の挙動は推測で、実機では未確認。結果を記録する）。
+- [ ] **端末版とブラウザ版を同じサーバで並べる（AC15・AC16）**: 同じ状態ディレクトリで、ブラウザ（`http://127.0.0.1:<ポート>`。`docs/tui.md`「起動と終了」の token）と端末版（`soda --state-dir <同じ場所>`）を並べて開く。
+      (1) ブラウザでグループを作る・入れる・外す・並べ替える・畳むと、端末版がそのつど読み込み直しなしで同じ並びになる。逆に端末版で行って、ブラウザが追従する。
+      (2) 端末版で、見出しのクリックと worktree グループの先頭の行の左端 `▸`/`▾` のクリックで畳み・広げ。navigate〔`prefix+w`〕で見出し・行を上下で選び、`z` で畳み、Space でメニュー。
+      (3) 端末版のマウスで、worktree グループの子の行・先頭の行をつかんで同じグループの中の項目の間へ落とすと worktree グループ全体が動く。グループの見出しをつかんで別のグループの上へ落とすとグループが並べ替わる。
+      グループの外へ落とす・別のまとまりの項目の上に落とすと何も起きず、理由が知らせで出る。Esc か行の外で離すと取り消し。名前順（サイドバーの並び順のボタン）では一番上の並べ替えが「名前順では並べ替えできません」になる。
+      (4) 見出しの数・`◐`・`+n`・ブランチ名がブラウザ版と同じ。
+- [ ] **端末のフォントでの見え方（実機でしか確かめられない）**: Windows Terminal・VS Code の統合端末・tmux の中・SSH 越し等、使う端末で `⎇`（U+2387）・`├`／`└`・`─`・`▸`／`▾` が崩れず、幅 1 桁で縦がそろう。
+- [ ] **Windows ネイティブでの `repoKey` の形（実機でしか確かめられない）**: git for Windows が `C:/x/.git` の形で出す値を、サーバは `path.resolve` を通して `C:\x\.git` にそろえて `repoKey`・`worktreeKey` にする（以前の判定と同じ形。共有の設定 `collapsedAutoGroups` の `repoKey` を孤児にしないため）。本体と linked worktree が同じ worktree グループに束ねられ、畳んだ状態が再起動後も残ることを確かめる（20261004-group-worktree-items D44 補足）。
+      崩れるときは `packages/tui/src/render/chrome/sidebar.ts` の `WORKTREE_GLYPH` を別の記号に替え、どの端末・フォントで崩れたかを記録する（幅の規則〔unicode11〕では 1 桁として単体テストで固定している。フォントは実機次第）。
+- [ ] **古い保存からの移行（AC13。任意）**: この work より前の版（`main`）で、同じリポジトリの本体と worktree を別々のグループに入れた状態を作って停止し、この版で同じ状態ディレクトリを起動する。
+      起動直後から、本体の所属に合わせた worktree グループが 1 つのまとまりとして並び、何度起動し直しても同じになる。
+
+#### `repoKey` の既知の制約
+
+所属を覚えるキー（`repoKey`）は、`git rev-parse --path-format=absolute --git-common-dir` の値で、worktree グループの束ねと同じ値を使う（decisions D9・D10。実物の git 2.43.0 で確かめた）。
+
+- **古い git（2.31 未満）では main と同じ決め方に落ちる**（`--path-format` は 2.31 で導入された）。古い git は知らないオプションを**エラーにせず、そのまま出力して終了コード 0 を返す**（`--path-format=absolute\n.git`。実物の git 2.43.0 で `git rev-parse --bogus-option --git-common-dir` が同じ動きになることを確かめた）。サーバは 1 行目がそのまま `--path-format=absolute` のとき、残りの行（相対のこともある）を cwd から解決して使う。**symlink 経由の cwd では、本体と worktree が別の項目になりうる**（相対の `.git` が論理パスの `…/link/.git` になり、worktree の実体のパスとずれる。decisions D9・D48）。それ以外の壊れた出力（別の `--` のオプション・行数の違い・空）は判定が「取れない」になる（直前の判定を保つ。新しい workspace は判定が付かないままで、worktree グループにもグループの自動の所属にもならない）。
+- symlink を通った場所からでも、git 2.31 以上では、本体・worktree のどちらも実体のパスで一致する（`--path-format=absolute` が実体を返す）。同じリポジトリが別のパス（別の clone・bind mount・パスの付け替え）で見える場合や、リポジトリのフォルダを移動・改名した場合は、絶対パスのキーからの推論では別のリポジトリとして扱われる（実機では未確認）。
+- **bare リポジトリ**: bare とその worktree は同じ `repoKey` で束ねられるが、bare 自身を workspace として開いていなければ本体の行は無く、worktree だけの worktree グループ（2 つ以上のとき）になる（先頭は最初に開いたもの）。
+- **サブモジュール**: 親とは別のリポジトリとして扱う（`<親>/.git/modules/<名前>`。親の worktree グループには入らない）。
+- **コミットが 1 つも無いリポジトリ**は、今までどおり git 管理外として扱う（`rev-parse --abbrev-ref HEAD` が失敗するため）。最初のコミットの後の判定（5 秒周期）で git に変わる。
+- **消えたフォルダ・確認の時間切れ**は「取れない」で、直前の判定・並び・所属を保つ。起動直後は、保存した判定で停止前と同じに束ねて並び、最初の確認の結果に合わせる。
+
 ## 性能の計測（AC17）
 
 requirements.md の非機能要件（目安）：**応答性**——同一 LAN での接続で、キー入力から画面へ反映されるまでの追加の遅延が
@@ -1415,6 +1516,11 @@ pnpm --filter @sodashitsu/e2e exec playwright test performance agent-detection -
 - **色の個別の上書き：上書きした値に自動のコントラスト調整はしない**（20260922-theme-custom-overrides の design「ドメイン固有の考慮」・AC2）。herdr の
   `[theme.custom]` と同じで、読みにくい・見えにくい色を入れても止められない（利用者の責任）。herdr の `.light`/`.dark` と違い、
   「常に当たる」層は無く「明るいとき」「暗いとき」の 2 層だけ（同 work の research F2）。
+
+- **グループ・worktree グループの所属を覚えるキー（`repoKey`）の制約**（20261004-group-worktree-items の decisions D9・D10）。古い git（2.31 未満）では `--path-format=absolute` が使えず main と同じ決め方（cwd から解決）に落ちる。symlink 経由の cwd では本体と worktree が別の項目になりうる。それ以外の壊れた出力は `unknown` で判定が付かない。
+  同じリポジトリが別のパス（別の clone・bind mount）で見える場合・リポジトリのフォルダを移動・改名した場合は、絶対パスのキーからの推論では別のリポジトリとして扱われる（未確認）。bare は worktree だけの worktree グループになり、サブモジュールは親と別のリポジトリ、
+  コミットが無いリポジトリは最初のコミットまで git 管理外として扱う。詳しくは「グループ・worktree グループ・「グループなし」」の「`repoKey` の既知の制約」。
+- **端末版のサイドバーの `⎇`（worktree の印）・`├└`・`─` は、外側の端末のフォントによっては崩れる**（幅 1 桁の字形だが、字形の確認は端末次第。`docs/tui-parity.md` H23b と同じ）。崩れるときは `WORKTREE_GLYPH`（`packages/tui/src/render/chrome/sidebar.ts`）を別の記号に替える。
 
 ほかに、各節に書いた制約：xterm.js のモバイルの未解決課題（「実機（iOS Safari・Android Chrome。AC12）」の「既知の未解決課題」）・
 リバースプロキシの無通信のタイムアウト（`docs/tls-setup.md`「リバースプロキシの後ろに置く」）。

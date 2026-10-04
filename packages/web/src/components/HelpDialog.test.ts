@@ -203,6 +203,7 @@ describe("HelpDialog — 現在の割り当て（AC11）", () => {
       "up",
       "down",
       "space",
+      "z",
       "h ・ ←",
       "j",
       "k",
@@ -310,6 +311,7 @@ describe("HelpDialog — 現在の割り当て（AC11）", () => {
       "up",
       "down",
       "space",
+      "z",
       "ctrl+h ・ ←",
       "j",
       "k",
@@ -330,9 +332,9 @@ describe("HelpDialog — 現在の割り当て（AC11）", () => {
     expect(rows.map((el) => el.text())).toContain("なし ・ ←"); // 素の割り当ては無いが矢印は常に効く
     expect(rows.map((el) => el.text())).toContain("なし"); // workspace 上は矢印の固定フォールバックが無い
     expect(rows[1]!.classes()).toContain("help-dialog-grayed"); // navigate_workspace_up の行（未設定なので灰色）
-    // pane 左（rows[4]。rows[3] は 20260925-sidebar-keyboard-menu で加わった navigate_open_menu の行）は
+    // pane 左（rows[5]。rows[3]・rows[4] は navigate_open_menu・navigate_toggle_collapse の行）は
     // 素の割り当てが無くても矢印が常に効くので、灰色にしない（design のスケッチどおり）。
-    expect(rows[4]!.text()).toBe("なし ・ ←");
-    expect(rows[4]!.classes()).not.toContain("help-dialog-grayed");
+    expect(rows[5]!.text()).toBe("なし ・ ←");
+    expect(rows[5]!.classes()).not.toContain("help-dialog-grayed");
   });
 });
