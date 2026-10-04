@@ -292,6 +292,8 @@ function onKeydown(ev: KeyboardEvent): void {
     <template v-if="ask">
       <header ref="headerEl" class="ask-header">
         <h2 id="ask-origin" ref="titleEl" class="ask-origin" tabindex="-1" data-ask-origin>{{ origin }}</h2>
+        <!-- 外部 URL の画像の取得に失敗して外した件数（アプリが描く固定の文。定義の文字は使わない）。 -->
+        <p v-if="(ask.warnings ?? 0) > 0" class="ask-warn" data-ask-warnings>画像 {{ ask.warnings }} 件を取得できませんでした（プレビューなしで出しています）</p>
       </header>
       <ask-form ref="formEl" class="ask-form" @ask-submit="onSubmit" @ask-cancel="cancel" @ask-unsupported="onUnsupported" @click="onFormClick" />
     </template>
@@ -329,6 +331,11 @@ function onKeydown(ev: KeyboardEvent): void {
   font-size: 0.95em;
   font-weight: bold;
   overflow-wrap: anywhere;
+}
+.ask-warn {
+  margin: 0.3em 0 0;
+  font-size: 0.85em;
+  opacity: 0.95;
 }
 .ask-origin:focus-visible {
   outline: 2px solid currentColor;

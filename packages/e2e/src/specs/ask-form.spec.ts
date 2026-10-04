@@ -161,11 +161,10 @@ test("対応していない型（edit・rank・table）の質問がある定義�
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
-  // 部品はこの 3 つの型も描けるが、sodactl ask は扱わない（回答の形が決まっていない）。
+  // 部品も描けない（知らない）型。
   const unsupported = [
-    { id: "e", label: "E", type: "edit", text: "文面" },
-    { id: "r", label: "R", type: "rank", options: ["p", "q"] },
-    { id: "t", label: "T", type: "table", rows: ["row1"], options: ["p", "q"] },
+    { id: "e", label: "E", type: "slider", text: "文面" },
+    { id: "r", label: "R", type: "matrix", options: ["p", "q"] },
   ];
   for (const q of unsupported) {
     const r = await (await runAsk(appServer, p1, { questions: [{ id: "a", label: "A", options: ["x"] }, q] })).done;
