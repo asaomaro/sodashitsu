@@ -55,7 +55,7 @@ design.md のとおり、下から積む。純関数（T1）→ 色の変数（T
       対象: `packages/tui/src/local/tuiState.ts`・`model/PrefsModel.ts`・`render/chrome/sidebar.ts`、`sidebar.test.ts`・`PrefsModel.test.ts`・`render/Renderer.test.ts:111-123`
       依存: T4
       AC: AC13
-- [ ] T11: 端末版の操作——`mouse.ts`: `Drag` の `{ kind: "section" }` に `startY`・`moved` を足し、**動かしたときだけ**高さを変える・動かさずに離したら agents の切り替え（どちらかを畳んでいる間は動かしても高さを変えない）。見出しの行のクリックで spaces の切り替え。`TuiApp`/`TuiDispatcher` の host に `toggleSidebarSection`（`setLocalState`）。操作 `toggleSidebarSection` の case（T5 の受け口を埋める。`TuiDispatcher.test.ts` の `EFFECTS` 表を `{ host: "toggleSidebarSection" }` に直し、`harness().host` の模擬にも足す）。navigate に入ると畳んだ spaces を開く。単体テスト（クリックとドラッグの区別・保存・操作）と壊して落ちる確認。既存の `mouse.test.ts:417-423` が通ること
+- [x] T11: 端末版の操作——`mouse.ts`: `Drag` の `{ kind: "section" }` に `startY`・`moved` を足し、**動かしたときだけ**高さを変える・動かさずに離したら agents の切り替え（どちらかを畳んでいる間は動かしても高さを変えない）。見出しの行のクリックで spaces の切り替え。`TuiApp`/`TuiDispatcher` の host に `toggleSidebarSection`（`setLocalState`）。操作 `toggleSidebarSection` の case（T5 の受け口を埋める。`TuiDispatcher.test.ts` の `EFFECTS` 表を `{ host: "toggleSidebarSection" }` に直し、`harness().host` の模擬にも足す）。navigate に入ると畳んだ spaces を開く。単体テスト（クリックとドラッグの区別・保存・操作）と壊して落ちる確認。既存の `mouse.test.ts:417-423` が通ること
       対象: `packages/tui/src/input/mouse.ts`・`mouse.test.ts`、`app/TuiApp.ts:411-413, :1030-1034`、`actions/TuiDispatcher.ts`・`TuiDispatcher.test.ts`
       依存: T5, T10
       AC: AC13, AC-I3

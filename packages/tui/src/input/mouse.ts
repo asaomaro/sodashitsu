@@ -87,6 +87,10 @@ export interface MouseHost {
   switchMachine?(id: string, target?: { workspaceId: string; tabId: string }): void;
   /** マシンの見出しの畳み・広げ（M10）。 */
   toggleMachine?(id: string): void;
+  /** サイドバーの区画（spaces・agents）の折りたたみの切り替え（見出し・区切りのクリック）。 */
+  toggleSidebarSection?(section: "spaces" | "agents"): void;
+  /** 今畳んでいる区画（畳んでいる間は区切りのドラッグで高さを変えない）。 */
+  sectionsCollapsed?(): { spaces: boolean; agents: boolean };
   /** 知らせ（トースト）の当たり（押すと `ui.clickToast`）。 */
   toastHits?(): readonly { id: number; x: number; y: number; w: number }[];
   /** マウスで選んだら離した時点でコピーするか（`tui.copyOnSelect`。省略は入）。 */
@@ -124,8 +128,8 @@ type Drag =
   /** pane のスクロールバーのつまみ（M9）。`grab` はつまみの上端から掴んだ位置までの行数。 */
   | { kind: "scrollbar"; paneId: string; grab: number }
   | { kind: "sidebar" }
-  /** サイドバーの spaces と agents の区切り（herdr の H19b）。 */
-  | { kind: "section"; top: number }
+  /** サイドバーの spaces と agents の区切り（herdr の H19b）。`moved` は動かしたとき（動かさずに離せば agents の折りたたみ）。 */
+  | { kind: "section"; top: number; startY: number; moved: boolean }
   | { kind: "tab"; tabId: string; startX: number; moved: boolean }
   /**
    * サイドバーの行（項目・グループの見出し・「グループなし」の見出し）の掴み。`source` は掴んだ行の情報（押した時点のもの）。
@@ -354,7 +358,8 @@ export class MouseController {
           tabId: hit.tabId,
         });
       else if (hit.kind === "sectionDivider")
-        this.drag = { kind: "section", top: layout.sidebar.y };
+        this.drag = { kind: "section", top: layout.sidebar.y, startY: y, moved: false };
+      else if (hit.kind === "sectionHeader") this.host.toggleSidebarSection?.(hit.section);
       return;
     }
 
@@ -633,7 +638,12 @@ export class MouseController {
         this.host.setSidebarCols(Math.max(10, ev.x + 1), done);
         break;
       case "section":
-        this.host.setSidebarSpacesRows?.(Math.max(2, ev.y - drag.top), done);
+        // 動かしたときだけ高さを変える（動かさずに離しただけでは保存しない）。どちらかを畳んでいる間は動かしても高さを変えない。
+        if (ev.y !== drag.startY) drag.moved = true;
+        const folded = this.host.sectionsCollapsed?.();
+        if (drag.moved && !folded?.spaces && !folded?.agents)
+          this.host.setSidebarSpacesRows?.(Math.max(2, ev.y - drag.top), done);
+        if (done && !drag.moved) this.host.toggleSidebarSection?.("agents");
         break;
       case "tab": {
         if (Math.abs(ev.x - drag.startX) > 1) drag.moved = true;

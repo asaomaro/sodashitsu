@@ -205,3 +205,18 @@ AssertionError: expected '─ ▸ Agents 2 ────…' not to be '─ ▸ A
      × agents を畳む: 区切りはいちばん下… 5ms
 AssertionError: expected '─ ▸ Agents 2 ───────────────グループ順─' not to contain 'グループ順'
 ```
+
+#### T11 `tui/input/mouse.ts`・`TuiApp.ts`（生の出力。変異ごと）
+```
+変異: 区切りの `moved` を常に true に
+     × 区切りの行を動かさずに離すと agents を畳む。高さは変えない・保存しない 62ms
+AssertionError: expected { spaces: false, agents: false } to deeply equal { spaces: false, agents: true }
+変異: 畳んでいる間も高さを変える
+     × どちらかを畳んでいる間は、区切りを動かしても高さを変えず、畳み直しもしない 62ms
+AssertionError: expected 4 to be undefined
+変異: 動かさずに離したときの agents の切り替えを消す
+     × 区切りの行を動かさずに離すと agents を畳む。高さは変えない・保存しない 61ms
+変異: navigate に入ったとき spaces を開く 1 行を消す
+     × navigate に入ると、畳んだ spaces を開く（agents は開かない） 67ms
+AssertionError: expected { spaces: true, agents: true } to deeply equal { spaces: false, agents: true }
+```
