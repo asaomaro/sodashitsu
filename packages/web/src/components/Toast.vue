@@ -105,6 +105,11 @@ function dismiss(id: number): void {
 .toast-list > * {
   pointer-events: auto;
 }
+/* 4 秒で消える短い知らせは操作の対象ではないので、クリックを通す——右上に出るぶん、端末の上端（モバイルでは入力位置の近く）を押そうとして知らせに阻まれない。
+   消えない知らせ（［移動］・［×］を持つ）は今までどおり押せる。 */
+.toast-list > .toast:not(.toast-sticky) {
+  pointer-events: none;
+}
 /* モバイル（1 列のレイアウト。`mobile/detect.ts` の 768px 未満と同じ幅）は上部バー（`MobileShell`）の**下**に出す——バーの右端の［設定］［連携］を隠さない。 */
 @media (max-width: 767px) {
   .toast-list {
