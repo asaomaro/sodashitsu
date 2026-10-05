@@ -10,6 +10,7 @@ import GroupPickerDialog from "./components/GroupPickerDialog.vue";
 import HelpDialog from "./components/HelpDialog.vue";
 import LoginView from "./components/LoginView.vue";
 import NameDialog from "./components/NameDialog.vue";
+import NotificationHistoryDialog from "./components/NotificationHistoryDialog.vue";
 import OnboardingDialog from "./components/OnboardingDialog.vue";
 import SessionSwitchDialog from "./components/SessionSwitchDialog.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
@@ -92,6 +93,7 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
     <SessionSwitchDialog />
     <ConfirmDialog />
     <SubagentListDialog />
+    <NotificationHistoryDialog />
     <SettingsDialog />
     <HelpDialog />
     <OnboardingDialog />
