@@ -232,7 +232,7 @@ describe("isLocalOnlyServer（ask のメディアの上限を外してよいロ�
     for (const h of ["127.0.0.1", "localhost", "::1", "[::1]"]) expect(isLocalOnlyServer(h, false, [])).toBe(true);
   });
   it("外向き（全インタフェース・LAN の IP）・TLS・--origin（プロキシ・ポート転送）は偽", () => {
-    for (const h of ["0.0.0.0", "::", "192.168.1.5", "example.com"]) expect(isLocalOnlyServer(h, false, [])).toBe(false);
+    for (const h of ["0.0.0.0", "::", "192.168.1.5", "example.com", "app.localhost", "127.0.0.2"]) expect(isLocalOnlyServer(h, false, [])).toBe(false);
     expect(isLocalOnlyServer("127.0.0.1", true, [])).toBe(false);
     expect(isLocalOnlyServer("127.0.0.1", false, ["https://soda.example.test"])).toBe(false);
   });

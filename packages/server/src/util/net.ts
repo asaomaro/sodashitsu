@@ -157,5 +157,7 @@ function tryUrl(s: string): URL | undefined {
  * 別のマシンの `soda serve` の中継越しの画面は、これとは別に実行時に除く（`AskService`）。
  */
 export function isLocalOnlyServer(host: string, secure: boolean, extraOrigins: readonly string[]): boolean {
-  return isLoopbackHost(unbracketHost(host)) && !secure && extraOrigins.length === 0;
+  const h = unbracketHost(host).toLowerCase();
+  // `isLoopbackHost` が通す `*.localhost` は含めない（名前の解決先が手元だと確かめられるのは localhost・127.0.0.1・::1 だけ）。
+  return (h === "localhost" || h === "127.0.0.1" || h === "::1") && !secure && extraOrigins.length === 0;
 }

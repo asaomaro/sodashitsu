@@ -62,6 +62,9 @@ interface Loaded {
   bytes: Buffer;
 }
 
+/** 読む前に、確保するバイト数をサーバ全体へ予約する（超えるなら `ask_busy` を投げる）。予約は `prepare` が、数え終えた後か終わりに戻す。 */
+type Reserve = (n: number, where: string) => void;
+
 const VIEW_HTML = new Set([".html", ".htm"]);
 const VIEW_MARKDOWN = new Set([".md", ".markdown"]);
 
@@ -85,8 +88,15 @@ const invalid = (where: string, why: string): RpcError =>
 export class AskMedia {
   /** `prepare` の最中に溜めているバイトの合計（全部の質問。取得中の分を含む）。サーバ全体の上限の判定に使う。 */
   private inflight = 0;
+  /** `prepare` がこれから確保する分の予約（読み込みの前に足し、読み終えて `inflight` へ数えた後に戻す）。複数の `prepare` が同時に大きなファイルを確保して、サーバ全体の安全弁を超えないため。 */
+  private reservedTotal = 0;
 
   constructor(private readonly opts: AskMediaOptions) {}
+
+  /** 読み込みの前に予約している分（テスト・診断用。終わればゼロに戻る）。 */
+  get reservedBytes(): number {
+    return this.reservedTotal;
+  }
 
   /** いま `prepare` が読み込み・取得で溜めているバイト数（テスト・診断用）。 */
   get inflightBytes(): number {
@@ -144,7 +154,7 @@ export class AskMedia {
           const slot = claim(`${kind}:${ref}`, where, type === "https", () =>
             type === "https"
               ? this.loadRemote(ref, fetchSignal, charge, refund)
-              : this.loadLocalOrData(type, ref, kind, where, remaining, lim),
+              : this.loadLocalOrData(type, ref, kind, where, remaining, lim, reserve),
           );
           bindings.push({
             slot,
@@ -176,7 +186,7 @@ export class AskMedia {
         viewSlots.push({
           title: v.title,
           slot: claim(`view:${raw ? 1 : 0}:${file}`, where, false, () =>
-            this.loadView(file, raw, where, remaining, lim),
+            this.loadView(file, raw, where, remaining, lim, reserve),
           ),
         });
       }
@@ -206,6 +216,18 @@ export class AskMedia {
         throw fatal;
       }
     };
+    let reserved = 0; // この `prepare` が `this.reservedTotal` へ足している分
+    const reserve: Reserve = (n, where) => {
+      if (done) throw new Error("aborted");
+      if (serverHeld() + this.inflight + this.reservedTotal + n > lim.server)
+        throw new RpcError("ask_busy", `too much media is waiting for an answer (${where})`);
+      this.reservedTotal += n;
+      reserved += n;
+    };
+    const releaseReserved = (): void => {
+      this.reservedTotal -= reserved;
+      reserved = 0;
+    };
     const refund = (n: number): void => {
       if (done) return;
       total -= n;
@@ -220,8 +242,18 @@ export class AskMedia {
         if (fatal !== undefined) throw fatal;
         if (slot.remote) continue;
         slot.result = slot.load();
-        const loaded = await slot.result;
-        if (loaded) charge(loaded.bytes.length, slot.where);
+        let loaded: Loaded | null;
+        try {
+          loaded = await slot.result;
+        } catch (e) {
+          releaseReserved();
+          throw e;
+        }
+        try {
+          if (loaded) charge(loaded.bytes.length, slot.where);
+        } finally {
+          releaseReserved(); // 読み終えて実際の分を数えたので、予約は戻す
+        }
       }
       for (const slot of slots.values()) {
         if (!slot.remote) continue;
@@ -232,6 +264,7 @@ export class AskMedia {
       abortFetches.abort(); // 終わったもの以外の取得を止める（先に投げられた誤りで、残りが溜め続けない）
       for (const slot of slots.values()) slot.result?.catch(() => undefined); // 先に投げられた誤りで、残りの reject を未処理にしない
       done = true;
+      releaseReserved();
       this.inflight -= mine; // 保持は `AskService` が `totalBytes` で数え直す
     }
     if (signal.aborted) throw new Error("aborted");
@@ -280,12 +313,13 @@ export class AskMedia {
     where: string,
     remaining: () => number,
     lim: AskByteLimits,
+    reserve: Reserve,
   ): Promise<Loaded> {
     if (type === "data") return this.loadData(ref, kind, where, lim);
     const ext = extname(ref).toLowerCase();
     const allowed = EXTENSION_KINDS[ext];
     if (allowed === undefined) throw invalid(where, "unsupported file extension");
-    const bytes = await readRegularFile(ref, lim.file, where, remaining(), lim.total);
+    const bytes = await readRegularFile(ref, lim.file, where, remaining(), lim.total, reserve);
     const sniffed = sniffMedia(bytes);
     if (sniffed === null || !allowed.includes(sniffed.kind))
       throw invalid(where, "the file content does not match its extension");
@@ -341,21 +375,22 @@ export class AskMedia {
     where: string,
     remaining: () => number,
     lim: AskByteLimits,
+    reserve: Reserve,
   ): Promise<Loaded> {
     const ext = extname(file).toLowerCase();
     if (EXTENSION_KINDS[ext] !== undefined && sniffKindsAreImage(ext)) {
-      const bytes = await readRegularFile(file, lim.file, where, remaining(), lim.total);
+      const bytes = await readRegularFile(file, lim.file, where, remaining(), lim.total, reserve);
       const sniffed = sniffMedia(bytes);
       if (sniffed === null || !EXTENSION_KINDS[ext]!.includes(sniffed.kind))
         throw invalid(where, "the file content does not match its extension");
       return { kind: "image", mime: sniffed.mime, bytes };
     }
     if (VIEW_HTML.has(ext)) {
-      const bytes = await readRegularFile(file, lim.file, where, remaining(), lim.total);
+      const bytes = await readRegularFile(file, lim.file, where, remaining(), lim.total, reserve);
       if (!isUtf8Text(bytes)) throw invalid(where, "the file is not UTF-8 text");
       return { kind: "html", mime: "text/html; charset=utf-8", bytes };
     }
-    const bytes = await readRegularFile(file, lim.text, where, remaining(), lim.total);
+    const bytes = await readRegularFile(file, lim.text, where, remaining(), lim.total, reserve);
     if (!isUtf8Text(bytes))
       throw invalid(
         where,
@@ -381,6 +416,7 @@ async function readRegularFile(
   where: string,
   remaining: number,
   totalMax: number,
+  reserve: Reserve,
 ): Promise<Buffer> {
   let fh;
   try {
@@ -409,6 +445,7 @@ async function readRegularFile(
     const limit = Math.min(max, remaining);
     // `st.size` が 0 のファイル（`/proc` 配下など）は大きさが当てにならないので、上限 +1 まで読んで確かめる。
     const cap = st.size === 0 ? limit + 1 : Math.min(st.size, limit) + 1;
+    reserve(cap, where); // 確保する前に、サーバ全体の安全弁を超えないか見て予約する（超えるなら読まずに `ask_busy`）
     // 大きさが分かるファイルは 1 つの Buffer へ直に読む（ローカル起動の大きなファイルで、片の配列と連結の二重のメモリを使わない）。
     // 大きさが 0 と出るもの（`/proc` 配下など）は、上限を超えない範囲で片に分けて読む。
     let n = 0;
