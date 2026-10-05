@@ -64,7 +64,7 @@ import { AgentMonitor } from "./agent/AgentMonitor.js";
 import { AgentStarter } from "./agent/AgentStarter.js";
 import { DefaultManifestStore, type ManifestStore } from "./agent/ManifestStore.js";
 import { FsManifestSource } from "./infra/FsManifestSource.js";
-import { isLoopbackHost, paneServerUrl } from "./util/net.js";
+import { isLocalOnlyServer, paneServerUrl } from "./util/net.js";
 import { HANDOFF_NONCE_ENV, closeOrphanPtyMasters, takeHandoff } from "./handoff/HandoffManifest.js";
 import { HandoffController, type PreflightResult } from "./handoff/HandoffController.js";
 import { type HandoffSocket, handoffSocketPathFor, startHandoffSocket } from "./handoff/HandoffSocket.js";
@@ -341,7 +341,7 @@ export async function composeServer(
     logger,
     media: new AskMedia({ fetcher: internal.askImageFetcher ?? new RemoteImageFetcher(), logger }),
     // ローカル起動: loopback だけで待ち受け、TLS・`--origin`（ポート転送・プロキシ・LAN への公開）が無い。ほかのマシンの `soda serve` の中継越しの画面は、これとは別に除く。
-    localOnly: isLoopbackHost(options.host) && !secure && options.extraOrigins.length === 0,
+    localOnly: isLocalOnlyServer(options.host, secure, options.extraOrigins),
     isRemoteClient: (clientId) => clients.get(clientId)?.viaBridge === true,
   });
   // ログイン不要の受け口（20261003-sodactl-ask-socket）。受けるのはここに登録した操作だけ（`/ws` の RPC は通さない）。いま載せるのは `ask.open` だけ。

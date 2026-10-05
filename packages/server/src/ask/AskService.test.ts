@@ -33,7 +33,7 @@ const SPEC = {
   ],
 };
 
-function setup(o: { browsers?: string[]; panes?: string[]; media?: AskServiceOptions["media"] } = {}) {
+function setup(o: { browsers?: string[]; panes?: string[]; media?: AskServiceOptions["media"]; localOnly?: boolean; remote?: string[] } = {}) {
   const bus = new EventBus();
   const events: ServerEvent[] = [];
   bus.subscribe((e) => events.push(e));
@@ -50,6 +50,8 @@ function setup(o: { browsers?: string[]; panes?: string[]; media?: AskServiceOpt
     random: () => `ask${++n}`,
     logger: { info: (msg, fields) => void logs.push({ msg, fields }) },
     media: o.media ?? { prepare: () => Promise.reject(new Error("prepare is not expected here")) },
+    ...(o.localOnly !== undefined ? { localOnly: o.localOnly } : {}),
+    isRemoteClient: (id) => (o.remote ?? []).includes(id),
   });
   const askEvents = (): string[] => events.filter((e) => e.event.startsWith("ask.")).map((e) => `${e.event}:${(e.data as { askId: string }).askId}`);
   return { asks, bus, timers, panes, browsers, events, askEvents, logs };
@@ -507,6 +509,65 @@ describe("AskService — メディア（20261004-ask-media-popup）", () => {
     const f = s.asks.features();
     expect(f.features).toEqual(expect.arrayContaining(["media", "view", "types:edit", "types:rank", "types:table", "remote-image"]));
     expect(f.limits).toMatchObject({ fileBytes: 8 * 1024 * 1024, totalBytes: 24 * 1024 * 1024, files: 32, serverBytes: 128 * 1024 * 1024 });
+  });
+});
+
+describe("AskService — ローカル起動の無制限（20261005-ask-local-no-limit）", () => {
+  const MIB = 1024 * 1024;
+  const IMG = { title: "T", questions: [{ id: "a", label: "A", options: [{ value: "x", image: "/tmp/a.png" }] }] };
+  const big = (bytes: number) => ({ spec: IMG, media: [{ info: { id: 0, kind: "html", mime: "text/html", bytes }, bytes: Buffer.alloc(1) }], view: [{ title: "t", kind: "html", media: 0 }], warnings: 0, totalBytes: bytes });
+  const flags: boolean[] = [];
+  const media = (bytes: number) => ({ prepare: (_s: unknown, _sig: unknown, _held: unknown, unlimited?: boolean) => (flags.push(unlimited === true), Promise.resolve(big(bytes))) }) as never;
+
+  it("features: localOnly で中継越しの画面が無ければ unlimited。外向き（既定）・中継越しの画面が居れば従来の数だけ", () => {
+    const local = setup({ localOnly: true });
+    expect(local.asks.features().limits).toMatchObject({ unlimited: true, fileBytes: 8 * MIB, safety: { fileBytes: 256 * MIB } });
+    expect(setup().asks.features().limits).not.toHaveProperty("unlimited");
+    expect(setup({ localOnly: false }).asks.features().limits).not.toHaveProperty("unlimited");
+    const withRemote = setup({ localOnly: true, remote: ["r1"], browsers: ["b1", "r1"] });
+    withRemote.asks.subscribe("b1");
+    expect(withRemote.asks.features().limits).toMatchObject({ unlimited: true });
+    withRemote.asks.subscribe("r1");
+    expect(withRemote.asks.features().limits).not.toHaveProperty("unlimited");
+  });
+
+  it("open: prepare へ unlimited を渡す（localOnly のときだけ。中継越しの画面が居れば渡さない）", async () => {
+    flags.length = 0;
+    const a = setup({ localOnly: true, media: media(1) });
+    a.asks.subscribe("b1");
+    void a.asks.open("cli", { paneId: "p1", spec: IMG, timeoutMs: 1000 });
+    const b = setup({ localOnly: false, media: media(1) });
+    b.asks.subscribe("b1");
+    void b.asks.open("cli", { paneId: "p1", spec: IMG, timeoutMs: 1000 });
+    const c = setup({ localOnly: true, remote: ["r1"], browsers: ["b1", "r1"], media: media(1) });
+    c.asks.subscribe("b1");
+    c.asks.subscribe("r1");
+    void c.asks.open("cli", { paneId: "p1", spec: IMG, timeoutMs: 1000 });
+    expect(flags).toEqual([true, false, false]);
+  });
+
+  it("従来の上限を超えた質問は、中継越しの画面へは見せず（subscribe・get・media）、手元の画面には見せる", async () => {
+    const s = setup({ localOnly: true, remote: ["r1"], browsers: ["b1", "r1"], media: media(9 * MIB) });
+    s.asks.subscribe("b1");
+    const t = track(s.asks.open("cli", { paneId: "p1", spec: IMG, timeoutMs: 1000 }));
+    await settle();
+    expect(s.asks.subscribe("r1")).toEqual([]);
+    expect(() => s.asks.get("r1", "ask1")).toThrow(/unknown or closed/);
+    expect(() => s.asks.media("r1", "ask1", 0, 0)).toThrow(/unknown or closed/);
+    expect(s.asks.get("b1", "ask1").askId).toBe("ask1");
+    expect(s.asks.media("b1", "ask1", 0, 0).size).toBe(1);
+    s.asks.cancel("b1", "ask1");
+    await t.done;
+  });
+
+  it("従来の上限以内なら、中継越しの画面にも見せる", async () => {
+    const s = setup({ localOnly: true, remote: ["r1"], browsers: ["b1", "r1"], media: media(1 * MIB) });
+    s.asks.subscribe("b1");
+    const t = track(s.asks.open("cli", { paneId: "p1", spec: IMG, timeoutMs: 1000 }));
+    await settle();
+    expect(s.asks.subscribe("r1")).toHaveLength(1);
+    s.asks.cancel("b1", "ask1");
+    await t.done;
   });
 });
 

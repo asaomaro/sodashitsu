@@ -7,6 +7,7 @@ import {
   ASK_QUESTIONS_MAX,
   ASK_SPEC_MAX_BYTES,
   ASK_VIEW_MAX,
+  askLimits,
   classifyMediaRef,
   askCommentable,
   checkAskAnswer,
@@ -732,5 +733,20 @@ describe("edit・rank・table（20261004-ask-media-popup）", () => {
   it("showIf は single・multi の質問だけが条件になる（辞書の回答は満たさない）", () => {
     const s = spec({ questions: [table({ id: "t" }), q({ id: "b", showIf: { t: "ok" } })] });
     expect(collectAsk(s, initialAskState(s)).visible).toEqual(["t"]);
+  });
+});
+
+describe("askLimits（ローカル起動の無制限）", () => {
+  it("外向き: 従来の数だけ（unlimited・safety は無い）", () => {
+    const l = askLimits();
+    expect(l).toEqual({ fileBytes: 8 * 1024 * 1024, textBytes: 2 * 1024 * 1024, totalBytes: 24 * 1024 * 1024, files: 32, serverBytes: 128 * 1024 * 1024, views: 8 });
+    expect(l).not.toHaveProperty("unlimited");
+  });
+  it("ローカル: 従来の数を残したまま（古い読み手が壊れない）unlimited と安全弁を足す", () => {
+    expect(askLimits(true)).toEqual({
+      ...askLimits(),
+      unlimited: true,
+      safety: { fileBytes: 256 * 1024 * 1024, totalBytes: 512 * 1024 * 1024, serverBytes: 1024 * 1024 * 1024 },
+    });
   });
 });

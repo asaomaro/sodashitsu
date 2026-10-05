@@ -9,6 +9,7 @@ import {
   ASK_MEDIA_SERVER_MAX,
   ASK_MEDIA_TEXT_MAX,
   ASK_MEDIA_TOTAL_MAX,
+  askByteLimits,
   normalizeAskSpec,
   type AskSpec,
 } from "@sodashitsu/protocol";
@@ -384,5 +385,44 @@ describe("AskMedia.prepare — view", () => {
       view: { text: "a".repeat(300_000) },
     });
     expect(r).toMatchObject({ ok: false, reason: "too_large" });
+  });
+
+  describe("ローカル起動（unlimited）: 大きさの上限が外れる（20261005-ask-local-no-limit）", () => {
+    const MIB = 1024 * 1024;
+    const v = (file: string) => spec([{ value: "x" }], { view: { file } });
+    const prep = (s: AskSpec, unlimited: boolean) => media().prepare(s, signal(), () => 0, unlimited);
+    it("9 MiB の html: 従来（外向き）は誤り、ローカルでは通る（統合: 実ファイルを読む）", async () => {
+      await writeFile(p("nine.html"), Buffer.alloc(9 * MIB, "a"));
+      expect(await rejects(v(p("nine.html")))).toMatch(/larger than 8388608/);
+      const r = await prep(v(p("nine.html")), true);
+      expect(r.view![0]!.kind).toBe("html");
+      expect(r.media[0]!.info.bytes).toBe(9 * MIB);
+    });
+    it("3 MiB の Markdown・9 MiB の画像・合計 30 MiB も、ローカルでは通り、従来では誤り", async () => {
+      await writeFile(p("three.md"), Buffer.alloc(3 * MIB, "a"));
+      expect(await rejects(v(p("three.md")))).toMatch(/larger than 2097152/);
+      expect((await prep(v(p("three.md")), true)).media).toHaveLength(1);
+      await writeFile(p("nine.png"), Buffer.concat([PNG, Buffer.alloc(9 * MIB - PNG.length)]));
+      expect(await rejects(spec([{ value: "x", image: p("nine.png") }]))).toMatch(/larger than 8388608/);
+      expect((await prep(spec([{ value: "x", image: p("nine.png") }]), true)).media[0]!.info.bytes).toBe(9 * MIB);
+      for (const n of ["u1", "u2", "u3", "u4"]) await writeFile(p(`${n}.html`), Buffer.alloc(8 * MIB, "a"));
+      const four = spec([{ value: "x" }], { view: ["u1", "u2", "u3", "u4"].map((n) => ({ file: p(`${n}.html`) })) });
+      await expect(media().prepare(four, signal())).rejects.toThrow(/in total/);
+      expect((await prep(four, true)).totalBytes).toBe(32 * MIB);
+    });
+    it("個数（32）と view の件数は、ローカルでも変わらない", async () => {
+      // 同じファイルは 1 つに数えるので、33 個の別のファイルを作る
+      const files: string[] = [];
+      for (let i = 0; i < 33; i++) {
+        await writeFile(p(`many${i}.png`), Buffer.concat([PNG, Buffer.alloc(i)]));
+        files.push(p(`many${i}.png`));
+      }
+      const s33 = spec(files.map((f, i) => ({ value: String(i), image: f })));
+      await expect(prep(s33, true)).rejects.toThrow(/more than 32/);
+    });
+    it("安全弁: ローカルの実効の上限は 256 MiB（1 ファイル）・512 MiB（質問）・1 GiB（サーバ）", () => {
+      expect(askByteLimits(true)).toEqual({ file: 256 * MIB, text: 256 * MIB, total: 512 * MIB, server: 1024 * MIB });
+      expect(askByteLimits(false)).toEqual({ file: 8 * MIB, text: 2 * MIB, total: 24 * MIB, server: 128 * MIB });
+    });
   });
 });

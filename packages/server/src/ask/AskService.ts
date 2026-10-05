@@ -229,7 +229,7 @@ export class AskService {
     entry.oversize =
       entry.unlimited &&
       (prepared.totalBytes > ASK_MEDIA_TOTAL_MAX ||
-        prepared.media.some((m) => m.bytes.length > (m.info.kind === "markdown" || m.info.kind === "text" ? ASK_MEDIA_TEXT_MAX : ASK_MEDIA_FILE_MAX)));
+        prepared.media.some((m) => m.info.bytes > (m.info.kind === "markdown" || m.info.kind === "text" ? ASK_MEDIA_TEXT_MAX : ASK_MEDIA_FILE_MAX)));
     entry.ready = true;
     entry.heldBytes = prepared.totalBytes;
     this.mediaTotal += entry.heldBytes;
