@@ -48,13 +48,14 @@ export const ASK_MEDIA_SERVER_MAX = 128 * 1024 * 1024;
 /** 成果物（`view`）の数。 */
 export const ASK_VIEW_MAX = 8;
 /**
- * 「ローカル起動」（`soda serve` が loopback だけで待ち受け、手元の画面だけが見るとき）の安全弁。上の大きさの上限は外れるが、ブラウザへ渡す方式
- * （`ask.media` の base64 を 1 つの文字列に連結する・`atob`）が、V8 の文字列の長さの限界〔約 5.4 億文字〕に当たらず、メモリを食い尽くさない範囲に止める。
- * 1 ファイル（base64 で約 3.6 億文字）・1 つの質問の合計・サーバ全体。
+ * 「ローカル起動」（`soda serve` が loopback だけで待ち受け、手元の画面だけが見るとき）の安全弁。上の大きさの上限は外れるが、ブラウザのメモリを使い切らない範囲に止める。
+ * 根拠は実測（Chromium。`docs/sodactl.md`「ローカル起動では大きさの上限が無い」）: 200 MiB の HTML で、ブラウザ全体のメモリは、節の多い HTML（DOM）で約 3.3 GB（開く前から約 2.7 GB 増。元の約 13 倍）、
+ * 節の少ない HTML（コメントに詰めたもの）で約 2.0 GB（約 7 倍）。タブが落ちると JS で捕まえられず、質問は時間切れまで待つので、DOM の重い最悪の場合でも約 2 GB に収まる 100 MiB を 1 ファイルの上限にした。
+ * 1 つの質問の合計は 2 ファイル分・サーバ全体は 4 ファイル分。V8 の文字列の長さの限界（約 5.4 億文字）はこれよりずっと先。
  */
-export const ASK_MEDIA_LOCAL_FILE_MAX = 256 * 1024 * 1024;
-export const ASK_MEDIA_LOCAL_TOTAL_MAX = 512 * 1024 * 1024;
-export const ASK_MEDIA_LOCAL_SERVER_MAX = 1024 * 1024 * 1024;
+export const ASK_MEDIA_LOCAL_FILE_MAX = 100 * 1024 * 1024;
+export const ASK_MEDIA_LOCAL_TOTAL_MAX = 200 * 1024 * 1024;
+export const ASK_MEDIA_LOCAL_SERVER_MAX = 400 * 1024 * 1024;
 /** 選択肢の `code` の文字数。 */
 export const ASK_CODE_MAX = 50_000;
 /** 選択肢の `lang` の文字数。 */

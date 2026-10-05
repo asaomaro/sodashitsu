@@ -443,11 +443,11 @@ describe("メディア・成果物（20261004-ask-media-popup）", () => {
     expect(calls.filter((c) => c.method === "ask.open")).toEqual([]); // 何も送らない（上限を超えたときの機能確認の問い合わせは送る）
   });
 
-  it("ローカル起動（サーバが unlimited）: 従来の上限を超えるファイルも通り、安全弁（256 MiB・合計 512 MiB）までは送る。聞くのは超えたときだけ", async () => {
+  it("ローカル起動（サーバが unlimited）: 従来の上限を超えるファイルも通り、安全弁（100 MiB・合計 200 MiB）までは送る。聞くのは超えたときだけ", async () => {
     const LOCAL = { ...FEATURES, limits: { fileBytes: 8 * 1024 * 1024, unlimited: true } };
     const calls = twoMethods(LOCAL);
     const MIB = 1024 * 1024;
-    const d = deps(IMG("a.png"), { stat: async () => ({ isFile: true, size: 200 * MIB }) });
+    const d = deps(IMG("a.png"), { stat: async () => ({ isFile: true, size: 80 * MIB }) });
     await runAsk(cmd(), store, d);
     expect(calls.map((c) => c.method)).toEqual(["ask.features", "ask.features", "ask.open"]); // 超えたので上限を 1 回聞いた（あとの 1 回は media の機能確認）
     const small = twoMethods(LOCAL);
@@ -455,9 +455,9 @@ describe("メディア・成果物（20261004-ask-media-popup）", () => {
     expect(small.map((c) => c.method)).toEqual(["ask.features", "ask.open"]); // 超えなければ聞かない（media の機能確認の 1 回だけ）
     // 安全弁は超えられない
     twoMethods(LOCAL);
-    await expect(runAsk(cmd(), store, deps(IMG("a.png"), { stat: async () => ({ isFile: true, size: 256 * MIB + 1 }) }))).rejects.toThrowError(/larger than 268435456/);
+    await expect(runAsk(cmd(), store, deps(IMG("a.png"), { stat: async () => ({ isFile: true, size: 100 * MIB + 1 }) }))).rejects.toThrowError(/larger than 104857600/);
     twoMethods(LOCAL);
-    await expect(runAsk(cmd(), store, deps({ questions: [{ id: "a", label: "A", options: ["1", "2", "3"].map((v) => ({ value: v, image: `/${v}.png` })) }] }, { stat: async () => ({ isFile: true, size: 200 * MIB }) }))).rejects.toThrowError(/larger than 536870912 bytes in total/);
+    await expect(runAsk(cmd(), store, deps({ questions: [{ id: "a", label: "A", options: ["1", "2", "3"].map((v) => ({ value: v, image: `/${v}.png` })) }] }, { stat: async () => ({ isFile: true, size: 80 * MIB }) }))).rejects.toThrowError(/larger than 209715200 bytes in total/);
   });
 
   it("聞けない・外向き（unlimited でない）・古いサーバなら、従来の上限のまま誤りにする", async () => {

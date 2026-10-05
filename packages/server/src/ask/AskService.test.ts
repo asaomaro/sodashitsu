@@ -521,7 +521,7 @@ describe("AskService — ローカル起動の無制限（20261005-ask-local-no-
 
   it("features: localOnly で中継越しの画面が無ければ unlimited。外向き（既定）・中継越しの画面が居れば従来の数だけ", () => {
     const local = setup({ localOnly: true });
-    expect(local.asks.features().limits).toMatchObject({ unlimited: true, fileBytes: 8 * MIB, safety: { fileBytes: 256 * MIB } });
+    expect(local.asks.features().limits).toMatchObject({ unlimited: true, fileBytes: 8 * MIB, safety: { fileBytes: 100 * MIB } });
     expect(setup().asks.features().limits).not.toHaveProperty("unlimited");
     expect(setup({ localOnly: false }).asks.features().limits).not.toHaveProperty("unlimited");
     const withRemote = setup({ localOnly: true, remote: ["r1"], browsers: ["b1", "r1"] });

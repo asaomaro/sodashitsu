@@ -34,7 +34,7 @@ vi.mock("node:fs/promises", () => ({
 import { AskMedia } from "./AskMedia.js";
 
 const MIB = 1024 * 1024;
-const SERVER = 1024 * MIB;
+const SERVER = 400 * MIB;
 const view = (file: string): AskSpec => {
   const r = normalizeAskSpec({ questions: [{ id: "a", label: "A", options: ["x"] }], view: { file } });
   if (!r.ok) throw new Error(r.message);
@@ -52,16 +52,16 @@ describe("AskMedia: サーバ全体の安全弁は、読む前に予約して見
   });
 
   it("同時の prepare が空きを超えるぶんは、確保せずに ask_busy。通ったものは終われば予約が戻る", async () => {
-    state.size = 100 * MIB;
+    state.size = 40 * MIB;
     const m = media();
-    const held = SERVER - 450 * MIB; // 空きは 450 MiB（100 MiB のファイルは 4 つまで）
+    const held = SERVER - 180 * MIB; // 空きは 180 MiB（40 MiB のファイルは 4 つまで）
     const runs = Array.from({ length: 6 }, (_, i) => m.prepare(view(`/f${i}.html`), sig(), () => held, true).then(
       (r) => ({ ok: true as const, bytes: r.totalBytes }),
       (e: { code?: string }) => ({ ok: false as const, code: e.code }),
     ));
     await new Promise((r) => setTimeout(r, 50)); // 全部が予約まで進んだ（4 つは読みの門で待ち、残りは断られている）
     expect(m.reservedBytes).toBeGreaterThan(0);
-    expect(m.reservedBytes).toBeLessThanOrEqual(450 * MIB);
+    expect(m.reservedBytes).toBeLessThanOrEqual(180 * MIB);
     release();
     const res = await Promise.all(runs);
     expect(res.filter((r) => r.ok)).toHaveLength(4);

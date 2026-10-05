@@ -746,7 +746,7 @@ describe("askLimits（ローカル起動の無制限）", () => {
     expect(askLimits(true)).toEqual({
       ...askLimits(),
       unlimited: true,
-      safety: { fileBytes: 256 * 1024 * 1024, totalBytes: 512 * 1024 * 1024, serverBytes: 1024 * 1024 * 1024 },
+      safety: { fileBytes: 100 * 1024 * 1024, totalBytes: 200 * 1024 * 1024, serverBytes: 400 * 1024 * 1024 },
     });
   });
 });

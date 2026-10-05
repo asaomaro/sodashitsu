@@ -420,8 +420,8 @@ describe("AskMedia.prepare — view", () => {
       const s33 = spec(files.map((f, i) => ({ value: String(i), image: f })));
       await expect(prep(s33, true)).rejects.toThrow(/more than 32/);
     });
-    it("安全弁: ローカルの実効の上限は 256 MiB（1 ファイル）・512 MiB（質問）・1 GiB（サーバ）", () => {
-      expect(askByteLimits(true)).toEqual({ file: 256 * MIB, text: 256 * MIB, total: 512 * MIB, server: 1024 * MIB });
+    it("安全弁: ローカルの実効の上限は 100 MiB（1 ファイル）・200 MiB（質問）・400 MiB（サーバ）", () => {
+      expect(askByteLimits(true)).toEqual({ file: 100 * MIB, text: 100 * MIB, total: 200 * MIB, server: 400 * MIB });
       expect(askByteLimits(false)).toEqual({ file: 8 * MIB, text: 2 * MIB, total: 24 * MIB, server: 128 * MIB });
     });
   });
