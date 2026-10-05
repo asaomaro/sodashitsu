@@ -1353,6 +1353,19 @@ describe("NotificationController — 履歴（AC5・AC13〜AC15・AC18）", () =
       h.c.syncToasts();
       expect(history()).toHaveLength(0);
     });
+
+    // 上の件はトーストが「入」なので、見ている pane でも配送が進んだ場合の履歴は「トーストを閉じたとき」にしか入らず、見落とす。
+    // トースト「切」だと履歴へは**知らせの時点**で入るので、見ている pane の判定が外れると直ちに入る（AC8・負の対照）。
+    it("見ている pane は、トーストを「切」にしていても履歴に入らない（AC8）", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      useNotificationsStore(pinia).setPrefs({ toast: false, desktop: false, sound: false });
+      h.setFocused(true);
+      h.visible.add("p1");
+      await fireBlocked(h, "p1");
+      expect(history()).toHaveLength(0);
+      expect(useNotificationsStore(pinia).queue).toHaveLength(0);
+    });
   });
 
   describe("出口（AC18）", () => {

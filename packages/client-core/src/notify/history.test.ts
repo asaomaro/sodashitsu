@@ -33,6 +33,14 @@ function nowOf(o: Partial<PaneNow> = {}): PaneNow {
   return { exists: true, agent: makeAgent(), seenSeq: 0, ...o };
 }
 
+describe("上限の値（AC6）", () => {
+  // 他のテストは定数を import して使うので、値そのものを固定しないと「50 件・7 日」が別の値になっても気づけない（負の対照で見つけた穴）。
+  it("50 件・7 日", () => {
+    expect(MAX_HISTORY).toBe(50);
+    expect(HISTORY_RETENTION_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+});
+
 describe("parseNotifyKey / historyEntryOf", () => {
   it("blocked と done の鍵を読む", () => {
     expect(parseNotifyKey("blocked:a1:100")).toEqual({ kind: "blocked", instanceId: "a1", seq: 100 });

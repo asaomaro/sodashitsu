@@ -523,8 +523,8 @@ test("全体のメニュー：キーボードだけで開いて閉じ、開い�
   // 20260922-appearance-settings-rest で spaces 区画にも並び順ボタンが増えた）。
   // 先頭にはクラス名を持たない要素が挟まることがあるので、見たい要素だけを抜き出して順序を見る。
   // 20261004-ui-interaction-polish: 区画の見出しのボタン（`sidebar-section-toggle`）と 2 つの境目（`resize-handle`）も Tab で止まる。この順で挟まる:
-  // spaces の見出し → spaces の並び順 → ＋ → メニュー → 区画の境目 → agents の見出し → agents の並び順 → 折りたたみ → サイドバーの幅の境目。
-  expect(reached.filter((c) => c !== "").slice(0, 9).map((c) => (c.includes("section-toggle") ? "toggle" : c.includes("resize-handle") ? "divider" : c.includes("sort-btn") ? "sort" : c.includes("sidebar-btn-right") ? "menu" : c.includes("collapse") ? "collapse" : "plus")), trail).toEqual(["toggle", "sort", "plus", "menu", "divider", "toggle", "sort", "collapse", "divider"]);
+  // spaces の見出し → spaces の並び順 → ＋ → メニュー → 区画の境目 → agents の見出し → agents の並び順 → 通知のベル（20261005-notify-bell。サイドバーの下端）→ 折りたたみ → サイドバーの幅の境目。
+  expect(reached.filter((c) => c !== "").slice(0, 10).map((c) => (c.includes("section-toggle") ? "toggle" : c.includes("resize-handle") ? "divider" : c.includes("notify-bell") ? "bell" : c.includes("sort-btn") ? "sort" : c.includes("sidebar-btn-right") ? "menu" : c.includes("collapse") ? "collapse" : "plus")), trail).toEqual(["toggle", "sort", "plus", "menu", "divider", "toggle", "sort", "bell", "collapse", "divider"]);
   const btns = reached.filter((c) => (c.includes("sidebar-btn") && !c.includes("section-toggle")) || c.includes("tab-bar-item"));
   expect(btns[0], trail).toContain("sidebar-sort-btn"); // spaces の並び順
   expect(btns[1], trail).toBe("sidebar-btn"); // ＋ 新規
