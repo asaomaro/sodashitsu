@@ -757,3 +757,53 @@ test("HTML の成果物の枠は新しいページを開けない（sandbox に 
     await media.cleanup();
   }
 });
+
+/**
+ * 下の行（フッター）: 成果物を横に出すと質問のフォームが狭く（430px）なる。［キャンセル］と［決定］は、どの幅・どの文言でも同じ行に並ぶ
+ * （部品 1.3.1 から。1.3.0 までは［決定］だけが 2 行目へ落ちた）。実測は `getBoundingClientRect()`（`e2e-observe-browser`）。
+ */
+const footerRow = (page: Page) =>
+  page.evaluate(() => {
+    const f = document.querySelector("ask-form")!;
+    const r = f.shadowRoot!;
+    const a = r.querySelector("[data-ask-cancel]")!.getBoundingClientRect();
+    const b = r.querySelector("[data-ask-submit]")!.getBoundingClientRect();
+    const ft = r.querySelector("footer")!;
+    return {
+      cancelTop: a.top,
+      submitTop: b.top,
+      cancelRight: a.right,
+      submitLeft: b.left,
+      formWidth: f.getBoundingClientRect().width,
+      overflow: ft.scrollWidth - ft.clientWidth,
+    };
+  });
+
+for (const [name, submit, viewport] of [
+  ["成果物つき（フォームが狭い）・既定の文言", undefined, { width: 1280, height: 800 }],
+  ["成果物つき・長い文言「この内容で進める」", "この内容で進める", { width: 1280, height: 800 }],
+  ["成果物つき・長い文言「この内容で確定して次へ進む」", "この内容で確定して次へ進む", { width: 1280, height: 800 }],
+  ["モバイル幅（390）・長い文言", "この内容で確定して次へ進む", { width: 390, height: 800 }],
+] as const) {
+  test(`フッター: ${name}でも［キャンセル］と［決定］は同じ行に並び、はみ出さない`, async ({ page, appServer }) => {
+    const media = await makeMediaDir();
+    try {
+      await page.setViewportSize(viewport);
+      const p1 = await setup(page, appServer);
+      const file = await media.write("a.md", "# x\n");
+      const run = await runAsk(appServer, p1, SPEC({ file }, submit ? { submit } : {}));
+      await expect(dialog(page)).toBeVisible();
+      await expect(page.locator("[data-ask-submit]")).toBeVisible();
+      await expect.poll(() => footerRow(page).then((m) => m.cancelTop === m.submitTop)).toBe(true);
+      const m = await footerRow(page);
+      console.log(`footer ${name}`, JSON.stringify(m));
+      expect(m.cancelTop).toBe(m.submitTop);
+      expect(m.cancelRight).toBeLessThan(m.submitLeft);
+      expect(m.overflow).toBeLessThanOrEqual(0);
+      await page.keyboard.press("Escape");
+      await run.done;
+    } finally {
+      await media.cleanup();
+    }
+  });
+}
