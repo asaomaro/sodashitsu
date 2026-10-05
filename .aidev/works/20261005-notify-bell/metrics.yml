@@ -20,3 +20,6 @@ events:
   - { ts: 2026-10-05T03:52:49Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T1, findings: 0 } }
   - { ts: 2026-10-05T03:52:49Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T3, findings: 0 } }
   - { ts: 2026-10-05T03:53:46Z, phase: coding, event: taskcheck, metrics: { stage: report, task: T4, findings: 2 } }
+  - { ts: 2026-10-05T04:08:13Z, phase: coding, event: taskcheck, metrics: { stage: start, task: cross, mode: same_session } }
+  - { ts: 2026-10-05T04:08:17Z, phase: coding, event: taskcheck, metrics: { stage: report, task: cross, findings: 0 } }
+  - { ts: 2026-10-05T04:10:31Z, phase: coding, event: approved, metrics: { tasks_done: 10, unplanned_lookups: 0, task_checks: 3, task_check_findings: 2, task_check_mode: delegated } }
