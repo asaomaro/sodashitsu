@@ -29,29 +29,37 @@ export interface AskResolved {
 /** 同時に取るメディアの数。 */
 const PARALLEL = 3;
 
-/** メディア 1 つの base64（片を文字列のまま連結する。片は 3 の倍数のバイト数なので連結できる）。 */
-async function fetchBase64(
+/**
+ * メディア 1 つの base64 の片（取った順）。片は 3 の倍数のバイト数なので、片ごとに復号できる（1 つの巨大な文字列に連結しない。
+ * 20261005-ask-local-no-limit: 大きな成果物で、連結した文字列・`atob` の全体・コピーが重なってメモリが元の約 25 倍になっていた）。
+ */
+async function fetchParts(
   request: Pick<ConnectionPort, "request">["request"],
   askId: string,
   info: AskMediaInfo,
-): Promise<string> {
-  let b64 = "";
+): Promise<string[]> {
+  const parts: string[] = [];
   let offset = 0;
   for (;;) {
     const r = await request("ask.media", { askId, id: info.id, offset });
-    b64 += r.base64;
+    if (r.base64 !== "") parts.push(r.base64);
     if (r.eof || r.base64 === "") break;
     // 片の大きさは、返ってきた分から数える（サーバの定数との食い違いで読み落とさない）。
     offset += Math.floor((r.base64.length / 4) * 3);
   }
-  return b64;
+  return parts;
 }
 
-function decodeUtf8(b64: string): string {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder("utf-8").decode(bytes);
+/** 片を復号して、`Blob`（ブラウザが持つ。JS のヒープの文字列にしない）にする。 */
+function toBlob(parts: string[], mime: string): Blob {
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  for (const part of parts) {
+    const bin = atob(part);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    chunks.push(bytes);
+  }
+  return new Blob(chunks, { type: mime });
 }
 
 /**
@@ -67,7 +75,7 @@ export async function loadMedia(
   const resolved: AskResolved = { urls: {}, views: [] };
   if (infos.length === 0) return resolved;
   const viewMedia = new Set((ask.view ?? []).map((v) => v.media));
-  const data = new Map<number, string>();
+  const data = new Map<number, string[]>();
   let closed = false;
   let viewFailed = false;
   let next = 0;
@@ -75,7 +83,7 @@ export async function loadMedia(
     while (next < infos.length && !closed) {
       const info = infos[next++]!;
       try {
-        data.set(info.id, await fetchBase64(request, ask.askId, info));
+        data.set(info.id, await fetchParts(request, ask.askId, info));
       } catch (err) {
         if (errorCodeOf(err) === "ask_closed") closed = true;
         else if (viewMedia.has(info.id)) viewFailed = true;
@@ -88,18 +96,18 @@ export async function loadMedia(
   if (viewFailed) return "view_failed";
   const byId = new Map(infos.map((i) => [i.id, i]));
   for (const info of infos) {
-    const b64 = data.get(info.id);
-    if (b64 !== undefined && (info.kind === "image" || info.kind === "audio"))
-      resolved.urls[`${ASK_MEDIA_REF_PREFIX}${info.id}`] = `data:${info.mime};base64,${b64}`;
+    const parts = data.get(info.id);
+    if (parts !== undefined && (info.kind === "image" || info.kind === "audio"))
+      resolved.urls[`${ASK_MEDIA_REF_PREFIX}${info.id}`] = `data:${info.mime};base64,${parts.join("")}`;
   }
   for (const v of ask.view ?? []) {
-    const b64 = data.get(v.media);
+    const parts = data.get(v.media);
     const info = byId.get(v.media);
-    if (b64 === undefined || info === undefined) return "view_failed";
+    if (parts === undefined || info === undefined) return "view_failed";
     resolved.views.push(
       v.kind === "image"
-        ? { title: v.title, kind: v.kind, url: `data:${info.mime};base64,${b64}` }
-        : { title: v.title, kind: v.kind, text: decodeUtf8(b64) },
+        ? { title: v.title, kind: v.kind, url: `data:${info.mime};base64,${parts.join("")}` }
+        : { title: v.title, kind: v.kind, text: await toBlob(parts, info.mime).text() },
     );
   }
   return resolved;
