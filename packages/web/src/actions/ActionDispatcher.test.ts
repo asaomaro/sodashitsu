@@ -1968,6 +1968,15 @@ describe("ActionDispatcher — 通知", () => {
     expect(focusNext).toHaveBeenCalledOnce();
   });
 
+  // 20261005-notify-bell（open_notification_history）。
+  it("openNotificationHistory で応答せずに閉じた知らせの一覧が開く", () => {
+    const { dispatcher } = makeDispatcher(makeConnection());
+    const view = useViewStore(pinia);
+    dispatcher.run({ type: "openNotificationHistory" });
+    expect(view.dialogContext).toEqual({ kind: "notificationHistory" });
+    expect(view.openDialog, "ダイアログのモードに入る（端末へキーを流さない）").toBe("notificationHistory");
+  });
+
   it("通知を繋いでいなくても落ちない（テスト・古い呼び出し元）", () => {
     const { dispatcher } = makeDispatcher(makeConnection());
     expect(() => dispatcher.run({ type: "nextNotification" })).not.toThrow();

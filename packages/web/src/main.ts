@@ -41,6 +41,7 @@ import { FileTransfer, isFileDrag } from "./term/FileTransfer.js";
 import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
 import { documentTitle } from "./serverSession/documentTitle.js";
 import { StoreAdapter } from "./store/StoreAdapter.js";
+import { useNotificationsStore } from "./store/notifications.js";
 import { sweepMarkSeen, useSeenStore } from "./store/seen.js";
 import { useSessionStore } from "./store/session.js";
 import { useOnboardingStore } from "./store/onboarding.js";
@@ -376,7 +377,11 @@ const machineSwitcher = new MachineSwitcher({
   selectMachine: (id) => machines.select(id),
   isSelectable: (id) => machines.isSelectable(id),
   setViewScope: (id) => view.setMachineScope(id),
-  setSeenScope: (id) => seen.setScope(id),
+  // 応答せずに閉じた知らせの履歴もマシンごと（20261005-notify-bell。pane・エージェントの id がマシンをまたいで衝突するため）。
+  setSeenScope: (id) => {
+    seen.setScope(id);
+    useNotificationsStore(pinia).setHistoryScope(id);
+  },
   rememberView: (workspaceId, tabId) => view.rememberView(workspaceId, tabId),
   forgetStoredView: () => view.forgetStoredView(),
   focusWorkspaceHere,
