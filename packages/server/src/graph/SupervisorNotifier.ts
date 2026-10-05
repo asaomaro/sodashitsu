@@ -30,11 +30,16 @@ export class SupervisorNotifier {
     supervisor: AgentInfo | null;
     paused: boolean;
     at: number;
+    /**
+     * 知らせが要る状態で始めるか（既定は true＝今できた線）。サーバを起動し直した（`soda handoff` を含む）ときに、起動の前からあった線は false:
+     * 線は保存されたまま残るので、起動のたびに同じ知らせを送り直さない。後から配下の顔ぶれが変われば、通常どおり知らせる。
+     */
+    pending?: boolean;
   }) {
     this.signature = initial.signature;
     this.supervisor = initial.supervisor;
     this.paused = initial.paused;
-    this.dirtyAt = initial.at;
+    this.dirtyAt = initial.pending === false ? null : initial.at;
   }
 
   /** 知らせを待っているか（試験用）。 */

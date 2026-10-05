@@ -152,14 +152,21 @@ function graphOf(
 
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 
-function setup(links: GraphLink[], over: Partial<Graph> = {}, init?: (port: FakePort) => void) {
+function setup(
+  links: GraphLink[],
+  over: Partial<Graph> = {},
+  init?: (port: FakePort) => void,
+  /** 監督の線を、起動の前からあったものにする（既定は起動の後に結ぶ。起動の前からある線は、起動のたびに知らせを送り直さない）。 */
+  existing = false,
+) {
   let now = 1000;
   const port = new FakePort();
   port.agents.set("p1", agent("a1", 0));
   port.agents.set("p2", agent("b1", 0));
   port.agents.set("p3", agent("s1", 0));
   init?.(port);
-  const store = new FakeStore(graphOf(links, over));
+  const initialLinks = existing ? links : links.filter((l) => l.kind !== "supervise");
+  const store = new FakeStore(graphOf(initialLinks, over));
   const events: ServerEvent[] = [];
   const timers: (() => void)[] = [];
   /** 承認待ちの 1 秒の期限のタイマー（張られた順。clear されたものは消える）。 */
@@ -180,6 +187,7 @@ function setup(links: GraphLink[], over: Partial<Graph> = {}, init?: (port: Fake
     },
   });
   engine.start();
+  if (initialLinks.length !== links.length) store.set(graphOf(links, over)); // 監督の線を結ぶ
   const runs = () =>
     events.filter((e) => e.event === "graph.fired").map((e) => (e.data as { run: LinkRun }).run);
   return {
@@ -856,15 +864,27 @@ describe("GraphEngine — 変異の網羅で見つけた抜け", () => {
     expect(t.port.prompts).toHaveLength(2);
   });
 
-  it("止めて始め直したら、監督役へ知らせ直す（状態を捨てて作り直す）", async () => {
+  it("止めて始め直しても（サーバの再起動・`soda handoff`）、起動の前からあった線の知らせは送り直さない。配下が増えれば知らせる", async () => {
     const t = setup([supervise("l1", A)]);
     t.advance(SUPERVISOR_DEBOUNCE_MS);
     await flush();
+    expect(t.port.prompts).toHaveLength(1);
     t.engine.stop();
     t.engine.start();
+    t.advance(SUPERVISOR_DEBOUNCE_MS * 3);
+    await flush();
+    expect(t.port.prompts).toHaveLength(1); // 起動のたびに同じ知らせを送り直さない
+    t.store.set(graphOf([supervise("l1", A), supervise("l2", B)]));
     t.advance(SUPERVISOR_DEBOUNCE_MS);
     await flush();
-    expect(t.port.prompts).toHaveLength(2);
+    expect(t.port.prompts).toHaveLength(2); // 配下の顔ぶれが変われば知らせる
+  });
+
+  it("起動の前からあった線だけの監督役には、起動しても知らせない（最初の知らせの後に再起動した場合）", async () => {
+    const t = setup([supervise("l1", A)], {}, undefined, true);
+    t.advance(SUPERVISOR_DEBOUNCE_MS * 3);
+    await flush();
+    expect(t.port.prompts).toEqual([]);
   });
 
   it("見回りのタイマーを渡さなければ setInterval で 1 秒ごとに見回り、stop で止める", async () => {
@@ -873,7 +893,7 @@ describe("GraphEngine — 変異の網羅で見つけた抜け", () => {
       const port = new FakePort();
       port.agents.set("p1", agent("a1", 0));
       port.agents.set("p3", agent("s1", 0));
-      const store = new FakeStore(graphOf([supervise("l1", A)]));
+      const store = new FakeStore(graphOf([]));
       let now = 0;
       const engine = new GraphEngine({
         store,
@@ -882,6 +902,7 @@ describe("GraphEngine — 変異の網羅で見つけた抜け", () => {
         now: () => now,
       });
       engine.start();
+      store.set(graphOf([supervise("l1", A)])); // 起動の後に結ぶ
       now = SUPERVISOR_DEBOUNCE_MS;
       await vi.advanceTimersByTimeAsync(1000);
       expect(port.prompts).toHaveLength(1);

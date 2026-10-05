@@ -148,7 +148,9 @@ function setup(links: GraphLink[], init?: (local: Port, remote: Port) => void) {
   remote.agents.set("p1", agent("ra", 0));
   remote.agents.set("p2", agent("rb", 0));
   init?.(local, remote);
-  const store = new Store(graphOf(links));
+  // 監督の線は起動の後に結ぶ（起動の前からある線は、起動のたびに知らせを送り直さない）。
+  const initialLinks = links.filter((l) => l.kind !== "supervise");
+  const store = new Store(graphOf(initialLinks));
   const events: ServerEvent[] = [];
   const ensured: string[][] = [];
   const engine = new GraphEngine({
@@ -164,6 +166,7 @@ function setup(links: GraphLink[], init?: (local: Port, remote: Port) => void) {
     setInterval: () => ({ clear: () => undefined }),
   });
   engine.start();
+  if (initialLinks.length !== links.length) store.set(graphOf(links));
   const runs = () =>
     events.filter((e) => e.event === "graph.fired").map((e) => (e.data as { run: LinkRun }).run);
   const reasons = () =>

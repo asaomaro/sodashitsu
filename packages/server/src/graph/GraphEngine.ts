@@ -126,12 +126,18 @@ export class GraphEngine {
   /** stop ごとに増やす。送っている途中の結果は、止めた後なら捨てる。 */
   private generation = 0;
   private running = false;
+  /** 起動の前からあった監督役（鍵）と、その配下の署名。最初に見つけたときに、同じ署名なら「知らせが要る」にしない。 */
+  private readonly baselineSupervisors = new Map<string, string>();
 
   constructor(private readonly deps: GraphEngineDeps) {}
 
   start(): void {
     if (this.running) return;
     this.running = true;
+    // 起動の前からあった監督の線（保存されたまま残っている）の配下の顔ぶれ。同じ顔ぶれなら、起動のたびに知らせを送り直さない。
+    this.baselineSupervisors.clear();
+    for (const [key, signature] of supervisorSignatures(this.deps.store.get()))
+      this.baselineSupervisors.set(key, signature);
     this.subs = [
       this.deps.store.onChange((g) => this.guard(() => this.reconcile(g))),
       this.deps.local.onStatus((e) => this.guard(() => this.onStatus(this.deps.local, e))),
@@ -352,6 +358,8 @@ export class GraphEngine {
       const existing = this.supervisors.get(key);
       if (existing !== undefined && existing.end.port !== end.port) this.supervisors.delete(key);
       if (existing === undefined || existing.end.port !== end.port) {
+        const known = this.baselineSupervisors.get(key);
+        this.baselineSupervisors.delete(key);
         this.supervisors.set(key, {
           end,
           sending: false,
@@ -361,6 +369,7 @@ export class GraphEngine {
             supervisor: end.port.status(end.paneId),
             paused,
             at,
+            pending: known !== signature,
           }),
         });
         continue;
@@ -724,4 +733,16 @@ function defaultInterval(fn: () => void, ms: number): { clear(): void } {
   const t = setInterval(fn, ms);
   t.unref?.();
   return { clear: () => clearInterval(t) };
+}
+
+/** 監督役（鍵）ごとの、配下の顔ぶれの署名。 */
+function supervisorSignatures(graph: Graph): Map<string, string> {
+  const by = new Map<string, string[]>();
+  for (const link of graph.links) {
+    if (link.kind !== "supervise") continue;
+    const list = by.get(link.to) ?? [];
+    list.push(link.from);
+    by.set(link.to, list);
+  }
+  return new Map([...by].map(([key, froms]) => [key, subordinatesSignature(froms)]));
 }
