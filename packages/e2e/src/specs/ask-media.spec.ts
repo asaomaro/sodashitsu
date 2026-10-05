@@ -258,54 +258,58 @@ test("負の対照: 存在しない・.png の名のテキスト・/etc/passwd �
   }
 });
 
-test("負の対照: 上限を超える定義は、窓へ落ちず理由つきのエラー（終了コード 2）になり、ダイアログは出ない。上限ちょうどは通る（AC4）", async ({
-  page,
-  appServer,
-}) => {
-  const media = await makeMediaDir();
-  try {
-    const p1 = await setup(page, appServer);
-    // 大きいファイルは sparse（truncate）で作る。種類の確認の前に、大きさで断られる。
-    const big = media.path("big.png");
-    await media.write("big.png", makePng(2, 2));
-    await truncate(big, 8 * 1024 * 1024 + 1);
-    const r1 = await (
-      await runAsk(appServer, p1, {
-        questions: [{ id: "q", label: "Q", options: [{ value: "a", image: big }] }],
-      })
-    ).done;
-    expect([r1.code, r1.stderr]).toEqual([2, expect.stringMatching(/larger than 8388608/)]);
-    // 合計 24 MiB 超（8 MiB を 4 つ）
-    const files: string[] = [];
-    for (const n of ["1", "2", "3", "4"]) {
-      const f = media.path(`m${n}.png`);
-      await media.write(`m${n}.png`, makePng(2, 2));
-      await truncate(f, 8 * 1024 * 1024);
-      files.push(f);
+// 上限が効くのは外向きに公開した構成（`--origin` つき）。手元だけのローカル起動では外れる（`ask-local-limit.spec.ts`）。
+test.describe("外向きに公開した構成（上限が効く）", () => {
+  test.use({ askExposed: true });
+  test("負の対照: 上限を超える定義は、窓へ落ちず理由つきのエラー（終了コード 2）になり、ダイアログは出ない。上限ちょうどは通る（AC4）", async ({
+    page,
+    appServer,
+  }) => {
+    const media = await makeMediaDir();
+    try {
+      const p1 = await setup(page, appServer);
+      // 大きいファイルは sparse（truncate）で作る。種類の確認の前に、大きさで断られる。
+      const big = media.path("big.png");
+      await media.write("big.png", makePng(2, 2));
+      await truncate(big, 8 * 1024 * 1024 + 1);
+      const r1 = await (
+        await runAsk(appServer, p1, {
+          questions: [{ id: "q", label: "Q", options: [{ value: "a", image: big }] }],
+        })
+      ).done;
+      expect([r1.code, r1.stderr]).toEqual([2, expect.stringMatching(/larger than 8388608/)]);
+      // 合計 24 MiB 超（8 MiB を 4 つ）
+      const files: string[] = [];
+      for (const n of ["1", "2", "3", "4"]) {
+        const f = media.path(`m${n}.png`);
+        await media.write(`m${n}.png`, makePng(2, 2));
+        await truncate(f, 8 * 1024 * 1024);
+        files.push(f);
+      }
+      const r2 = await (
+        await runAsk(appServer, p1, {
+          questions: [
+            { id: "q", label: "Q", options: files.map((f, i) => ({ value: String(i), image: f })) },
+          ],
+        })
+      ).done;
+      expect([r2.code, r2.stderr]).toEqual([2, expect.stringMatching(/in total/)]);
+      // 33 個（サーバが上限ちょうどの 32 個を通すことは AskMedia の単体テストが見ている）
+      const many: string[] = [];
+      for (let i = 0; i < 33; i++) many.push(await media.write(`n${i}.png`, makePng(1 + i, 1)));
+      const r3 = await (
+        await runAsk(appServer, p1, {
+          questions: [
+            { id: "q", label: "Q", options: many.map((f, i) => ({ value: String(i), image: f })) },
+          ],
+        })
+      ).done;
+      expect([r3.code, r3.stderr]).toEqual([2, expect.stringMatching(/more than 32/)]);
+      await expect(dialog(page)).toHaveCount(0);
+    } finally {
+      await media.cleanup();
     }
-    const r2 = await (
-      await runAsk(appServer, p1, {
-        questions: [
-          { id: "q", label: "Q", options: files.map((f, i) => ({ value: String(i), image: f })) },
-        ],
-      })
-    ).done;
-    expect([r2.code, r2.stderr]).toEqual([2, expect.stringMatching(/in total/)]);
-    // 33 個（サーバが上限ちょうどの 32 個を通すことは AskMedia の単体テストが見ている）
-    const many: string[] = [];
-    for (let i = 0; i < 33; i++) many.push(await media.write(`n${i}.png`, makePng(1 + i, 1)));
-    const r3 = await (
-      await runAsk(appServer, p1, {
-        questions: [
-          { id: "q", label: "Q", options: many.map((f, i) => ({ value: String(i), image: f })) },
-        ],
-      })
-    ).done;
-    expect([r3.code, r3.stderr]).toEqual([2, expect.stringMatching(/more than 32/)]);
-    await expect(dialog(page)).toHaveCount(0);
-  } finally {
-    await media.cleanup();
-  }
+  });
 });
 
 test.describe("外部 URL の画像（偽の取得を差し替え）", () => {
