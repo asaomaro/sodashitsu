@@ -34,6 +34,8 @@ export interface ClientRecord {
    * 色の問い合わせへの答えにだけ使う（`answerPalette.ts`）。
    */
   theme: ThemeName | null;
+  /** ほかのマシンの `soda serve` の中継（bridge）越しの接続（手元の画面ではない）。`WsGateway` が接続の入口で立てる。 */
+  viaBridge?: boolean;
 }
 
 /** 接続中のクライアント（architecture.md「ClientRegistry」）。 */

@@ -47,6 +47,14 @@ export const ASK_MEDIA_FILES_MAX = 32;
 export const ASK_MEDIA_SERVER_MAX = 128 * 1024 * 1024;
 /** 成果物（`view`）の数。 */
 export const ASK_VIEW_MAX = 8;
+/**
+ * 「ローカル起動」（`soda serve` が loopback だけで待ち受け、手元の画面だけが見るとき）の安全弁。上の大きさの上限は外れるが、ブラウザへ渡す方式
+ * （`ask.media` の base64 を 1 つの文字列に連結する・`atob`）が、V8 の文字列の長さの限界〔約 5.4 億文字〕に当たらず、メモリを食い尽くさない範囲に止める。
+ * 1 ファイル（base64 で約 3.6 億文字）・1 つの質問の合計・サーバ全体。
+ */
+export const ASK_MEDIA_LOCAL_FILE_MAX = 256 * 1024 * 1024;
+export const ASK_MEDIA_LOCAL_TOTAL_MAX = 512 * 1024 * 1024;
+export const ASK_MEDIA_LOCAL_SERVER_MAX = 1024 * 1024 * 1024;
 /** 選択肢の `code` の文字数。 */
 export const ASK_CODE_MAX = 50_000;
 /** 選択肢の `lang` の文字数。 */
@@ -222,19 +230,45 @@ export interface AskLimits {
   files: number;
   serverBytes: number;
   views: number;
+  /**
+   * 真なら（ローカル起動。`fileBytes`・`textBytes`・`totalBytes`・`serverBytes` の上限は無い）、上の 4 つの数は**古い読み手のための従来の値**で、実際の安全弁は `safety`。
+   * `files`・`views` は変わらず効く。新しい読み手（ask.py）は `unlimited` を見て大きさの確認を飛ばす。古い読み手は数をそのまま使う（従来どおり上限が効く）。
+   */
+  unlimited?: boolean;
+  safety?: { fileBytes: number; totalBytes: number; serverBytes: number };
+}
+
+/** 検査に使う実効の上限（`unlimited` のときは安全弁。テキストの成果物も 1 ファイルの安全弁と同じ）。 */
+export interface AskByteLimits {
+  file: number;
+  text: number;
+  total: number;
+  server: number;
+}
+
+export function askByteLimits(unlimited: boolean): AskByteLimits {
+  return unlimited
+    ? { file: ASK_MEDIA_LOCAL_FILE_MAX, text: ASK_MEDIA_LOCAL_FILE_MAX, total: ASK_MEDIA_LOCAL_TOTAL_MAX, server: ASK_MEDIA_LOCAL_SERVER_MAX }
+    : { file: ASK_MEDIA_FILE_MAX, text: ASK_MEDIA_TEXT_MAX, total: ASK_MEDIA_TOTAL_MAX, server: ASK_MEDIA_SERVER_MAX };
 }
 
 /** このサーバ・sodactl が受けられる機能（`sodactl ask --features`・`ask.features`）。 */
 export const ASK_FEATURES = ["media", "view", "types:edit", "types:rank", "types:table", "remote-image"] as const;
 
-export function askLimits(): AskLimits {
-  return {
+export function askLimits(unlimited = false): AskLimits {
+  const base: AskLimits = {
     fileBytes: ASK_MEDIA_FILE_MAX,
     textBytes: ASK_MEDIA_TEXT_MAX,
     totalBytes: ASK_MEDIA_TOTAL_MAX,
     files: ASK_MEDIA_FILES_MAX,
     serverBytes: ASK_MEDIA_SERVER_MAX,
     views: ASK_VIEW_MAX,
+  };
+  if (!unlimited) return base;
+  return {
+    ...base,
+    unlimited: true,
+    safety: { fileBytes: ASK_MEDIA_LOCAL_FILE_MAX, totalBytes: ASK_MEDIA_LOCAL_TOTAL_MAX, serverBytes: ASK_MEDIA_LOCAL_SERVER_MAX },
   };
 }
 

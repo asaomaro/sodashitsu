@@ -3,10 +3,9 @@ import { homedir } from "node:os";
 import { extname, isAbsolute, resolve as resolvePath } from "node:path";
 import {
   ASK_FEATURES,
-  ASK_MEDIA_FILE_MAX,
   ASK_MEDIA_FILES_MAX,
-  ASK_MEDIA_TEXT_MAX,
-  ASK_MEDIA_TOTAL_MAX,
+  askByteLimits,
+  type AskByteLimits,
   PANE_OP_ASK_FEATURES,
   PANE_OP_ASK_OPEN,
   askLimits,
@@ -152,21 +151,39 @@ export function absolutizePaths(
   return { spec, refs };
 }
 
-/** ファイルの存在・通常ファイル・大きさ・個数・合計を、送る前に確かめる（サーバが同じ検査を持つ。早く・理由つきで終わらせるため）。 */
-async function precheckFiles(refs: { where: string; path: string; kind: string }[], stat: NonNullable<AskDeps["stat"]>): Promise<void> {
+/**
+ * ファイルの存在・通常ファイル・大きさ・個数・合計を、送る前に確かめる（サーバが同じ検査を持つ。早く・理由つきで終わらせるため）。
+ * 大きさは、まず従来の上限で見て、超えたときだけサーバへ上限を聞く（`unlimited`＝ローカル起動なら安全弁まで通す。聞けない・古いサーバは従来の上限のまま）。
+ */
+async function precheckFiles(
+  refs: { where: string; path: string; kind: string }[],
+  stat: NonNullable<AskDeps["stat"]>,
+  probeLimits?: () => Promise<boolean>,
+): Promise<void> {
   const seen = new Map<string, number>();
   let total = 0;
+  let lim: AskByteLimits = askByteLimits(false);
+  let probed = false;
+  const relax = async (): Promise<boolean> => {
+    if (probed) return false;
+    probed = true;
+    if (probeLimits === undefined || !(await probeLimits())) return false;
+    lim = askByteLimits(true);
+    return true;
+  };
   for (const r of refs) {
     if (seen.has(r.path)) continue;
     const st = await stat(r.path);
     if (st === null) throw new CliUsageError(`invalid ask spec: ${r.where}: file not found`, ASK_USAGE);
     if (!st.isFile) throw new CliUsageError(`invalid ask spec: ${r.where}: not a regular file`, ASK_USAGE);
-    const max = r.kind === "view-text" ? ASK_MEDIA_TEXT_MAX : ASK_MEDIA_FILE_MAX;
-    if (st.size > max) throw new CliUsageError(`invalid ask spec: ${r.where}: the file is larger than ${max} bytes`, ASK_USAGE);
+    const max = (): number => (r.kind === "view-text" ? lim.text : lim.file);
+    if (st.size > max()) await relax();
+    if (st.size > max()) throw new CliUsageError(`invalid ask spec: ${r.where}: the file is larger than ${max()} bytes`, ASK_USAGE);
     seen.set(r.path, st.size);
     total += st.size;
     if (seen.size > ASK_MEDIA_FILES_MAX) throw new CliUsageError(`invalid ask spec: ${r.where}: more than ${ASK_MEDIA_FILES_MAX} media files in one question`, ASK_USAGE);
-    if (total > ASK_MEDIA_TOTAL_MAX) throw new CliUsageError(`invalid ask spec: ${r.where}: the media in one question are larger than ${ASK_MEDIA_TOTAL_MAX} bytes in total`, ASK_USAGE);
+    if (total > lim.total) await relax();
+    if (total > lim.total) throw new CliUsageError(`invalid ask spec: ${r.where}: the media in one question are larger than ${lim.total} bytes in total`, ASK_USAGE);
   }
 }
 
@@ -177,6 +194,8 @@ async function precheckFiles(refs: { where: string; path: string; kind: string }
  */
 export async function readAskSpec(
   deps: AskDeps,
+  /** サーバが大きさの上限を外している（ローカル起動）か聞く。従来の上限を超えるファイルがあったときだけ呼ばれる。 */
+  probeUnlimited?: () => Promise<boolean>,
 ): Promise<{ kind: "send"; spec: Record<string, unknown>; need: string[] } | { kind: "unsupported"; reason: string }> {
   const raw = await deps.readStdin();
   let parsed: unknown;
@@ -191,7 +210,7 @@ export async function readAskSpec(
   if (!checked.ok && checked.unsupportedType !== undefined) return { kind: "unsupported", reason: unsupportedTypeReason(checked.unsupportedType) };
   if (!checked.ok) throw new CliUsageError(`invalid ask spec: ${checked.message}`, ASK_USAGE);
   const abs = absolutizePaths(parsed as Record<string, unknown>, (deps.cwd ?? (() => process.cwd()))(), (deps.home ?? homedir)());
-  await precheckFiles(abs.refs, deps.stat ?? realStat);
+  await precheckFiles(abs.refs, deps.stat ?? realStat, probeUnlimited);
   return { kind: "send", spec: abs.spec, need: requiredFeatures(checked.spec) };
 }
 
@@ -234,7 +253,9 @@ async function runFeatures(cmd: AskCmd, store: SessionStore, deps: AskDeps): Pro
       server = null;
     }
   }
-  deps.print({ sodactl: [...ASK_FEATURES], limits: askLimits(), server });
+  // 上限は、サーバがローカル起動で外していればその形（`unlimited: true`）を返す。繋げない・古い・外向きのサーバは、従来の上限。
+  const limits = server?.limits?.unlimited === true ? server.limits : askLimits();
+  deps.print({ sodactl: [...ASK_FEATURES], limits, server });
 }
 
 /**
@@ -252,7 +273,13 @@ export async function runAsk(cmd: AskCmd, store: SessionStore, deps: AskDeps = R
     throw new RpcFailure("caller_pane_unknown", "sodactl ask must run inside a pane (SODA_PANE_ID and SODA_SERVER_URL are not set)");
   }
   const paneId = resolveCallerPane(cmd.opts, { kind: "caller", paneId: caller.paneId, explicit: false }); // 接続する前に断る
-  const read = await readAskSpec(deps);
+  const read = await readAskSpec(deps, async () => {
+    try {
+      return (await probeServer(cmd, paneId, store, deps))?.limits?.unlimited === true;
+    } catch {
+      return false; // 聞けなければ従来の上限（サーバが同じ検査をする）
+    }
+  });
   if (read.kind === "unsupported") {
     deps.print({ status: "unavailable", reason: read.reason } satisfies AskResult); // サーバへは送らない（接続もしない）
     return;

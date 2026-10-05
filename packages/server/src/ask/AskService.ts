@@ -2,7 +2,10 @@ import { randomBytes } from "node:crypto";
 import {
   ASK_FEATURES,
   ASK_MEDIA_CHUNK_BYTES,
-  ASK_MEDIA_SERVER_MAX,
+  ASK_MEDIA_FILE_MAX,
+  ASK_MEDIA_TEXT_MAX,
+  ASK_MEDIA_TOTAL_MAX,
+  askByteLimits,
   askLimits,
   checkAskAnswer,
   normalizeAskSpec,
@@ -53,6 +56,13 @@ export interface AskServiceOptions {
   logger?: Pick<Logger, "info">;
   /** 定義の参照（画像・音・成果物）を読んで保持する形にする（20261004-ask-media-popup）。 */
   media: Pick<AskMedia, "prepare">;
+  /**
+   * ローカル起動か（`soda serve` が loopback だけで待ち受け、TLS も `--origin` も無い）。真のとき、手元の画面だけが見るなら、メディアの大きさの上限を外す
+   * （安全弁だけ。`askByteLimits(true)`）。既定は偽（従来の上限）。
+   */
+  localOnly?: boolean;
+  /** その接続が、ほかのマシンの `soda serve` の中継（bridge）越しか（手元の画面ではない）。 */
+  isRemoteClient?(clientId: string): boolean;
 }
 
 interface Entry {
@@ -74,6 +84,10 @@ interface Entry {
   warnings: number;
   /** 全体の合計に足した分（引くときも同じ値）。 */
   heldBytes: number;
+  /** この質問をローカル起動の扱い（大きさの上限なし）で読んだか。 */
+  unlimited: boolean;
+  /** 従来の上限を超えている（ローカルの画面にだけ出せる。ほかのマシンの画面へは出さない・配らない）。 */
+  oversize: boolean;
 }
 
 /**
@@ -103,14 +117,29 @@ export class AskService {
     });
   }
 
-  /** 保持しているメディアの合計バイト数（サーバ全体の上限 `ASK_MEDIA_SERVER_MAX` の判定・テスト用）。 */
+  /**
+   * いま質問のメディアの大きさの上限を外してよいか: ローカル起動で、いま質問を見られる画面にほかのマシン越しのものが無い。
+   * 外すと、ネットワークの先のマシンの画面へ大きなファイルを送ってしまうため、1 つでも居れば従来の上限を保つ。
+   */
+  private unlimitedNow(): boolean {
+    if (this.opts.localOnly !== true) return false;
+    for (const id of this.subscribers) if (this.opts.isRemoteClient?.(id) === true) return false;
+    return true;
+  }
+
+  /** 従来の上限を超えた質問は、ほかのマシン越しの画面には見せない（ローカル起動の画面だけ）。 */
+  private visible(entry: Entry, clientId: string): boolean {
+    return !entry.oversize || this.opts.isRemoteClient?.(clientId) !== true;
+  }
+
+  /** 保持しているメディアの合計バイト数（サーバ全体の上限の判定・テスト用）。 */
   get mediaBytes(): number {
     return this.mediaTotal;
   }
 
   /** 機能確認（`ask.features`）。 */
   features(): AskFeatures {
-    return { features: [...ASK_FEATURES], limits: askLimits() };
+    return { features: [...ASK_FEATURES], limits: askLimits(this.unlimitedNow()) };
   }
 
   /** 待っている質問の数（テスト・診断用）。 */
@@ -127,7 +156,7 @@ export class AskService {
   subscribe(clientId: string): AskPending[] {
     if (!this.opts.isBrowserKind(clientId)) throw new RpcError("invalid_params", "only a browser can show a form");
     this.subscribers.add(clientId);
-    return [...this.byId.values()].filter((e) => e.ready).map(pending);
+    return [...this.byId.values()].filter((e) => e.ready && this.visible(e, clientId)).map(pending);
   }
 
   /** 質問を出して、結果が決まるまで待つ（`ask.open`）。 */
@@ -162,6 +191,8 @@ export class AskService {
         view: undefined,
         warnings: 0,
         heldBytes: 0,
+        unlimited: this.unlimitedNow(),
+        oversize: false,
       };
       // 時間切れは `prepare`（読む・取る）の時間も含める（呼び出し側が待つ時間は `timeoutMs` の範囲）。占有（pane・数）は読む前に取る。
       entry.timer = this.timers.setTimeout(() => this.close(entry, { status: "timeout" }), p.timeoutMs);
@@ -172,7 +203,7 @@ export class AskService {
         this.onPrepared(entry, { spec: checked.spec, media: [], warnings: 0, totalBytes: 0 });
         return;
       }
-      this.opts.media.prepare(checked.spec, entry.abort.signal, () => this.mediaTotal).then(
+      this.opts.media.prepare(checked.spec, entry.abort.signal, () => this.mediaTotal, entry.unlimited).then(
         (prepared) => this.onPrepared(entry, prepared),
         (err: unknown) => this.onPrepareFailed(entry, err),
       );
@@ -182,7 +213,7 @@ export class AskService {
   /** メディアが揃った。まだ生きていて、全体の上限に収まれば、画面へ出す。 */
   private onPrepared(entry: Entry, prepared: Awaited<ReturnType<AskMedia["prepare"]>>): void {
     if (this.byId.get(entry.askId) !== entry) return; // 読んでいる間に閉じた（保持していないので何も戻さない）
-    if (this.mediaTotal + prepared.totalBytes > ASK_MEDIA_SERVER_MAX) {
+    if (this.mediaTotal + prepared.totalBytes > askByteLimits(entry.unlimited).server) {
       this.fail(entry, new RpcError("ask_busy", "too much media is waiting for an answer"));
       return;
     }
@@ -195,6 +226,10 @@ export class AskService {
     entry.mediaInfo = prepared.media.map((m) => m.info);
     entry.view = prepared.view;
     entry.warnings = prepared.warnings;
+    entry.oversize =
+      entry.unlimited &&
+      (prepared.totalBytes > ASK_MEDIA_TOTAL_MAX ||
+        prepared.media.some((m) => m.bytes.length > (m.info.kind === "markdown" || m.info.kind === "text" ? ASK_MEDIA_TEXT_MAX : ASK_MEDIA_FILE_MAX)));
     entry.ready = true;
     entry.heldBytes = prepared.totalBytes;
     this.mediaTotal += entry.heldBytes;
@@ -279,7 +314,7 @@ export class AskService {
 
   private require(clientId: string, askId: string): Entry {
     const entry = this.byId.get(askId);
-    if (!this.isSubscriber(clientId) || !entry || !entry.ready) throw new RpcError("ask_closed", "unknown or closed question");
+    if (!this.isSubscriber(clientId) || !entry || !entry.ready || !this.visible(entry, clientId)) throw new RpcError("ask_closed", "unknown or closed question");
     return entry;
   }
 
