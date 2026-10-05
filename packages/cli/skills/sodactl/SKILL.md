@@ -135,7 +135,7 @@ JSON
   `table`（`rows` の行ごとに `options` から 1 つ選ぶ。回答は `{行の value: 選んだ value}`）。
 - 画像・音・コード・成果物（画面案の見比べ・差分の確認・成果物の承認に使う）: 選択肢の `image`（**絶対パスか、相対パス〔この sodactl の cwd から解く〕・`https://` の URL・`data:`**。png・jpg・gif・webp・avif・svg）・`audio`（試聴）・`code`・`lang`（`diff` なら色分け）・`group`、質問の `preview`・`thumb`。
   全体の `view`（`{"file": "doc.md", "title": "設計"}` か `{"text": "…"}`。8 件まで。Markdown〔mermaid の図つき。本文の http(s) のリンクは新しいタブで開ける。図のリンクは開けない〕・HTML〔スクリプトは動くが外へ通信しない。リンクやポップアップは開けない〕・画像・テキストを、質問の横〔モバイルは上〕に隔離して見せる）。
-  ファイルを読むのは `soda` の動くマシン（pane の中なら普通は同じマシン）。1 ファイル 8 MiB（Markdown・テキストは 2 MiB）・1 質問の合計 24 MiB・32 ファイルまで。**上限・存在しない・種類が合わない場合は窓へ落ちず終了コード 2**（stderr に理由）。
+  ファイルを読むのは `soda` の動くマシン（pane の中なら普通は同じマシン）。1 ファイル 8 MiB（Markdown・テキストは 2 MiB）・1 質問の合計 24 MiB・32 ファイルまで（**`soda` が手元だけで動くローカル起動〔loopback のみ・`--origin`/TLS なし〕では、大きさの上限は無く**〔安全弁は 1 ファイル 256 MiB・合計 512 MiB〕、大きな HTML も画面内に出る。`sodactl ask --features` の `limits.unlimited` が真のとき。外向きに公開したサーバ・別のマシンの pane は従来の上限）。**上限・存在しない・種類が合わない場合は窓へ落ちず終了コード 2**（stderr に理由）。
   外部 URL の画像は `soda` が取得する（失敗した画像は画像なしで出る）。**古い `soda` は新しい項目を黙って捨てることがある**ので、新しい項目を使う前に `sodactl ask --features` で確かめる（JSON の `server` が `null` なら使えない。使える機能と上限が入っている）。
   新しい項目を使った定義を古いサーバへ送ると `unavailable`（理由つき）になる。
 - 結果の `status`（どれも終了コード 0）: `answered`（`answers` に id → 値。`multi`・`rank` は配列、`table` は `{行: 値}`。`showIf` で隠れた質問は入らない。`custom` は自由入力した質問の id、`note` は補足の欄、`comments` は質問ごとの自由記述〔id → 文。書いた質問だけ。無ければ項目ごと無い。**選択肢より優先して読む条件・希望**が書かれていることがある〕）・
