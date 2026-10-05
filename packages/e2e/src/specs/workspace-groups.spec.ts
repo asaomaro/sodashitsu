@@ -998,8 +998,9 @@ test.describe("ドラッグ", () => {
 
     // まとまり（グループの見出し）の上にも項目は落とせない。前の知らせを消してから離し、**同じ理由の知らせが出るのを待って**
     // （ブラウザが離したことを処理した印）から、送っていないことを数える（何も待たずに数えると、送る前でも通ってしまう）。
-    await page.locator(".toast").first().click();
-    await expect(page.locator(".toast")).toHaveCount(0);
+    // 4 秒で消える短い知らせはクリックを通す（20261005-notify-bell。右上に出るぶん端末を押せるように）ので、押して消すのではなく消えるのを待つ。
+    // （別の短い知らせ──初回のキー一覧の案内など──が出ていても、前の理由の知らせだけが無くなるのを待つ。）
+    await expect(page.locator(".toast").filter({ hasText: "同じグループの中、または同じ「グループなし」の中の項目の間でだけ並べ替えできます" })).toHaveCount(0, { timeout: 10_000 });
     await dragOver(page, rowOf(page, "delta"), rowOf(page, "g1"));
     await expect(rowOf(page, "g1")).toHaveClass(/sidebar-row-drop-invalid/);
     await page.mouse.up();

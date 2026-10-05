@@ -9,6 +9,7 @@ import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../sto
 import { orderedAgentPaneIds } from "@sodashitsu/client-core";
 import { type DropAnchor, type ItemRow, dropBefore, nextAnchorOf, sameItemTarget, groupIdOfNavigateKey, isUngroupedNavigateKey, navigateKeyOfUngrouped, hiddenWorktreeCount, visibleGroupMembers } from "@sodashitsu/client-core";
 import { currentSidebarTree } from "../store/sidebarTree.js";
+import NotificationBell from "./NotificationBell.vue";
 import SidebarKindIcon from "./SidebarKindIcon.vue";
 import { type AgentSort, SIDEBAR_WIDTH, type WorkspaceSort, useViewStore } from "../store/view.js";
 import { useSettingsStore } from "../store/settings.js";
@@ -993,6 +994,8 @@ watch(
     </div>
 
     <div class="sidebar-footer">
+      <!-- 通知のベル（20261005-notify-bell）。畳んでも見える帯なので、先送りした件数のバッヂがいつでも見える。 -->
+      <NotificationBell variant="sidebar" />
       <button
         type="button"
         class="sidebar-btn sidebar-collapse-btn"
@@ -1423,6 +1426,12 @@ watch(
 }
 .sidebar-collapse-btn {
   padding: 0.2em 0.5em;
+}
+/* 畳んだ幅（3em）にはベルと畳むボタンが横に並ばないので、縦に積んで中央に寄せる（20261005-notify-bell）。 */
+.sidebar-collapsed .sidebar-footer {
+  flex-direction: column;
+  align-items: center;
+  padding-inline: 0.2em;
 }
 .sidebar-divider {
   position: absolute;

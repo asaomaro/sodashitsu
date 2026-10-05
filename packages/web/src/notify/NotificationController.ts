@@ -2,11 +2,25 @@ import type { AgentInfo } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import { nextTick, watch } from "vue";
 import { useNotificationsStore } from "../store/notifications.js";
+import { useSeenStore } from "../store/seen.js";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import { describeParts, describeTarget } from "@sodashitsu/client-core";
-import { notifyKeyOf, routesFor, shouldQueue, snapshotKeys, type Audience, type NotifyKey, type NotifyKind } from "@sodashitsu/client-core";
+import {
+  historyEntryOf,
+  isResolved,
+  notifyKeyOf,
+  routesFor,
+  shouldQueue,
+  snapshotKeys,
+  type Audience,
+  type HistoryReason,
+  type NotifyKey,
+  type NotifyKind,
+  type PaneNow,
+  type QueuedNotification,
+} from "@sodashitsu/client-core";
 import type { DesktopNotifierPort, DesktopPermission, SoundPort } from "./ports.js";
 
 /** `blocked` を知らせるまでの待ち（AC4）。この間に元へ戻ったら知らせない。 */
@@ -52,6 +66,12 @@ export class NotificationController {
   readonly #opts: NotificationControllerOptions;
   /** 遅延中の鍵（`blocked` の 1 秒待ち）。同じ鍵で 2 本目を立てない。 */
   readonly #pending = new Map<NotifyKey, ReturnType<typeof setTimeout>>();
+  /**
+   * **このマシンのスナップショットを 1 回適用したか**。下りている間は `session.panes` が空（読み込み直後・マシン切替の最中）で、
+   * 照合すると全件が「pane が無い＝解消」になって履歴が消え、空が共有の localStorage へ書かれる。**照合による掃除はこの旗が立ってから**
+   * （`onSnapshotApplied` で立て、`resetForMachineSwitch` で下ろす。スナップショット適用時の掃除が後で追いつく）。
+   */
+  #snapshotApplied = false;
 
   constructor(opts: NotificationControllerOptions) {
     this.#opts = opts;
@@ -59,6 +79,16 @@ export class NotificationController {
     watch(
       () => this.#settings.keymap.hintFor("settings"),
       () => this.#refreshHintMessage(),
+    );
+    // 完了を**見た**（既読が進んだ）ら、その知らせは解消（20261005-notify-bell の design「解消の判定」）。既読の変化は `StoreAdapter` のフックに乗らないので、ここで見る。
+    watch(
+      () => this.#seen.seen,
+      () => this.#reconcileHistory(),
+    );
+    // 同じマシンの別タブが履歴を書き換えた（`storage` イベント）→ 読み直した履歴を、いまの状態に照らして掃除する。
+    watch(
+      () => this.#store.externalChangeSeq,
+      () => this.#reconcileHistory(),
     );
   }
 
@@ -74,9 +104,14 @@ export class NotificationController {
   get #settings() {
     return useSettingsStore(this.#opts.pinia);
   }
+  get #seen() {
+    return useSeenStore(this.#opts.pinia);
+  }
 
   /** エージェントの状態が変わった（`StoreAdapter.onAgentChanged`）。 */
   onAgentChanged(paneId: string, prev: AgentInfo | null, next: AgentInfo | null): void {
+    // **`next === null`（エージェントが居なくなった）でも掃除する**ので、下の `if (!next) return` より前に置く（履歴の解消。20261005-notify-bell）。
+    this.#reconcileHistory({ paneId, agent: next });
     if (!next) return;
     // 入力待ちへ**変わった**とき（続いている間は繰り返さない）。
     if (next.state === "blocked" && prev?.state !== "blocked") this.#consider("blocked", paneId, next);
@@ -87,7 +122,12 @@ export class NotificationController {
   /** スナップショットを適用した（`StoreAdapter.onSnapshotApplied`）。 */
   onSnapshotApplied(panes: { paneId: string; agent: AgentInfo | null }[], first: boolean): void {
     const store = this.#store;
+    this.#snapshotApplied = true;
     this.#pruneMissingPanes(new Set(panes.map((p) => p.paneId)));
+    // **履歴の掃除は基準線の `return` より前**（最初のスナップショットでも掃除する）。再読み込みで localStorage から戻した履歴・切断中に解消した出来事を、
+    // 現在の状態に照らして落とす（AC14）。
+    const byPane = new Map(panes.map((p) => [p.paneId, p.agent] as const));
+    store.reconcileHistory((paneId) => this.#paneNowOf(byPane.has(paneId), byPane.get(paneId) ?? null));
     if (first) {
       // **基準線**：何も知らせずに鍵だけ入れる（ページを開いた瞬間に何件も出さない。AC14 前半）。
       store.baseline(panes.filter((p) => p.agent).map((p) => ({ paneId: p.paneId, keys: snapshotKeys(p.agent!).map((k) => k.key) })));
@@ -123,6 +163,7 @@ export class NotificationController {
     const clearT = this.#opts.clearTimeoutFn ?? clearTimeout;
     for (const h of this.#pending.values()) clearT(h);
     this.#pending.clear();
+    this.#snapshotApplied = false;
     this.#pruneMissingPanes(new Set());
   }
 
@@ -133,6 +174,7 @@ export class NotificationController {
    */
   onPaneClosed(paneId: string): void {
     this.#store.forgetPane(paneId);
+    this.#store.removeHistoryPane(paneId); // pane が閉じたら、その pane の知らせは解消（履歴からも消える）
     for (const e of this.#store.removePane(paneId)) this.#cleanup(e.toastId, e.paneId);
   }
 
@@ -192,6 +234,9 @@ export class NotificationController {
 
     // **［移動］を添える**（US4）。既定では OS 通知が「切」なので、これが無いと
     // **マウス／タッチの利用者には移動する手段が無い**（トースト本体のクリックは「消す」＝行き先ごと捨てる）。
+    // **置き換え**：同じ pane の新しい出来事は、その pane の古い履歴を置き換える（最新の 1 件。待ち行列の `enqueue` と同じ規則）。
+    store.removeHistoryPane(paneId);
+
     const toastId = routes.toast
       ? this.#view.toast(`${label}${TOAST_SUFFIX[kind]}`, {
           kind: "sticky",
@@ -205,7 +250,14 @@ export class NotificationController {
     //
     // **押し出された件は「新しい通知を出す前」に片付ける**——OS 通知の `tag` は pane id なので、
     // 置き換えのときに後から片付けると**新しい通知まで閉じてしまう**。
-    for (const e of store.push({ key, kind, paneId, label, at: Date.now(), toastId })) this.#cleanup(e.toastId, e.paneId);
+    const entry: QueuedNotification = { key, kind, paneId, label, at: Date.now(), toastId };
+    for (const e of store.push(entry)) {
+      this.#cleanup(e.toastId, e.paneId);
+      // 上限で押し出された件（**別の pane**のもの。同じ pane は置き換えで、履歴にも入らない）は「判断を先送りした通知」として残す。
+      if (e.paneId !== paneId) this.#toHistory(e, "evicted");
+    }
+    // トーストを「切」にしていると、閉じる操作が無いので**知らせの時点**で履歴に入る（ベルが唯一の見返し口になる）。
+    if (toastId === null) this.#toHistory(entry, "no-toast");
 
     // **許可を確かめてから出す**。確かめずに呼ぶと、`denied`／`default` のときに `show()` が
     // `false` を返し、**「この環境では使えません」を恒久的に立ててしまう**（一度立てたら下ろさない）。
@@ -243,6 +295,8 @@ export class NotificationController {
    */
   #drop(key: NotifyKey): void {
     for (const e of this.#store.removeKey(key)) this.#cleanup(e.toastId, e.paneId);
+    // 行き先へ移った（`prefix+o`・［移動］・OS 通知のクリック・ポップアップの行）知らせは履歴からも消える（二重に数えない。AC18）。
+    this.#store.removeHistory(key);
   }
 
   /**
@@ -252,8 +306,56 @@ export class NotificationController {
    */
   syncToasts(): void {
     const alive = new Set(this.#view.toasts.map((t) => t.id));
-    for (const e of this.#store.dropMissingToasts(alive)) this.#opts.desktop.closeByTag(e.paneId);
+    for (const e of this.#store.dropMissingToasts(alive)) {
+      this.#opts.desktop.closeByTag(e.paneId);
+      this.#toHistory(e, "dismissed"); // 応答せずに閉じた＝判断の先送り（解消済みなら入らない）
+    }
     this.#syncHint();
+  }
+
+  /**
+   * 履歴の 1 件を、現在の状態で入れる。**入れる直前に解消を確かめる**（AC15）——閉じた時点で入力待ちから復帰していたり完了を見ていたりすれば、先送りではない。
+   * 鍵が読めなければ入れない。
+   */
+  #toHistory(q: QueuedNotification, reason: HistoryReason): void {
+    const entry = historyEntryOf(q, reason);
+    if (!entry) return;
+    if (isResolved(entry, this.#paneNow(entry.paneId))) return;
+    this.#store.addHistory(entry);
+  }
+
+  /** その pane の**いま**の状態（`session`・既読から）。 */
+  #paneNow(paneId: string): PaneNow {
+    const pane = this.#session.panes.get(paneId);
+    return this.#paneNowOf(pane !== undefined, pane?.agent ?? null);
+  }
+
+  #paneNowOf(exists: boolean, agent: AgentInfo | null): PaneNow {
+    return { exists, agent, seenSeq: agent ? this.#seen.getSeenSeq(agent.instanceId, agent.serverSeenSeq) : 0 };
+  }
+
+  /** 解消した履歴を落とす。`override` は「いま届いた変化」（`session` への反映より先に呼ばれても、その pane は届いた値で判定する）。 */
+  #reconcileHistory(override?: { paneId: string; agent: AgentInfo | null }): void {
+    if (!this.#snapshotApplied) return; // 状態が空の間は照合しない（`#snapshotApplied` の注記）
+    this.#store.reconcileHistory((paneId) => (override && override.paneId === paneId ? this.#paneNowOf(true, override.agent) : this.#paneNow(paneId)));
+  }
+
+  /** ポップアップの行の［移動］（AC11）。`prefix+o` と同じ動きで、その行を履歴から消す。対象が無ければ旨を知らせる。 */
+  focusHistoryEntry(key: NotifyKey): void {
+    const entry = this.#store.history.find((h) => h.key === key);
+    if (!entry) return; // 既に消えている（解消・ほかの操作）
+    if (!this.#focusEntry(entry.paneId)) this.#view.toast(CLOSED_TARGET_MESSAGE);
+    this.#drop(key); // 待ち行列に同じ鍵があれば（トースト「切」の知らせ）それも外し、履歴から消す
+  }
+
+  /** ポップアップの行の［×］。履歴から消すだけ（待ち行列は触らない）。 */
+  dismissHistoryEntry(key: NotifyKey): void {
+    this.#store.removeHistory(key);
+  }
+
+  /** ポップアップの［すべて削除］。履歴だけを空にする（待ち行列＝`prefix+o` の行き先は触らない）。 */
+  clearHistory(): void {
+    this.#store.clearHistory();
   }
 
   /**

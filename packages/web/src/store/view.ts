@@ -219,6 +219,9 @@ function saveUngroupedCollapsed(v: boolean): void {
 
 let nextToastId = 1;
 
+/** 4 秒で消える短い知らせを同時に出す上限（20261005-notify-bell の AC2）。 */
+export const MAX_TRANSIENT_TOASTS = 3;
+
 /** トーストの行動ボタン（`sticky` のときだけ置く。20260920-agent-notifications）。 */
 export interface ToastAction {
   label: string;
@@ -320,7 +323,10 @@ export type DialogContext =
   // エージェントが動かしているサブエージェントの一覧（20261004-subagent-display）。対象は `{machineId, paneId}`（pane の ID はマシンをまたいで衝突する。手元は `local`）。
   // 中身は開いている間も画面のストアから引く（`store/subagents.ts`）ので、文脈に持たない。
   // `opener: "button"` は、サイドバーの件数のボタンから開いたとき。閉じたときのフォーカスを、そのボタン（無ければ行）へ戻す。無ければ（`show_subagents`）端末へ。
-  | { kind: "subagents"; machineId: string; paneId: string; opener?: "button" };
+  | { kind: "subagents"; machineId: string; paneId: string; opener?: "button" }
+  // 応答せずに閉じた知らせの一覧（20261005-notify-bell）。中身は開いている間も通知のストアの履歴から引くので、文脈に持たない。
+  // `opener: "bell"` は、ベルのボタンから開いたとき。閉じたときのフォーカスをそのボタンへ戻す。無ければ（`open_notification_history`）端末へ。
+  | { kind: "notificationHistory"; opener?: "bell" };
 
 /**
  * このクライアントの表示・モード・接続状態（architecture.md「store/view」）。
@@ -741,10 +747,19 @@ export const useViewStore = defineStore("view", () => {
     writePrefs({ sidebarSectionsCollapsed: Object.keys(saved).length > 0 ? saved : undefined });
   }
 
-  /** `opts` を省けば今までどおり（4 秒で消える 1 行）。`kind: "sticky"` は消えない（20260920-agent-notifications）。 */
+  /**
+   * `opts` を省けば今までどおり（4 秒で消える 1 行）。`kind: "sticky"` は消えない（20260920-agent-notifications）。
+   * **4 秒で消える短い知らせは、同時に 3 件まで**（20261005-notify-bell の AC2。右上の積みが短い知らせで埋まらないように）。超えたら短い知らせのうち古いものから外す
+   * （`sticky` は触らない）。
+   */
   function toast(message: string, opts?: ToastOptions): number {
     const id = nextToastId++;
-    toasts.value = [...toasts.value, { id, message, ...opts }];
+    let next = [...toasts.value, { id, message, ...opts }];
+    if (opts?.kind !== "sticky") {
+      let transient = next.filter((t) => t.kind !== "sticky").length;
+      next = next.filter((t) => t.kind === "sticky" || transient-- <= MAX_TRANSIENT_TOASTS);
+    }
+    toasts.value = next;
     return id;
   }
 

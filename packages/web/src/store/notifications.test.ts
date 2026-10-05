@@ -1,7 +1,7 @@
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { MAX_QUEUED, type QueuedNotification } from "@sodashitsu/client-core";
-import { useNotificationsStore } from "./notifications.js";
+import { MAX_HISTORY, MAX_QUEUED, type HistoryEntry, type QueuedNotification } from "@sodashitsu/client-core";
+import { NOTIFY_HISTORY_STORAGE_KEY, useNotificationsStore } from "./notifications.js";
 import { readPrefs, writePrefs } from "./view.js";
 
 let pinia: Pinia;
@@ -173,5 +173,158 @@ describe("useNotificationsStore — 環境の可否", () => {
     const s2 = useNotificationsStore(createPinia());
     expect(s2.desktopUsable).toBe(true);
     expect(s2.soundBlocked).toBe(false);
+  });
+});
+
+// 応答せずに閉じた知らせの履歴（20261005-notify-bell。AC6・AC7）。規則そのものは `client-core/notify/history.test.ts`——ここは保存・scope・件数。
+function hist(n: number, o: Partial<HistoryEntry> = {}): HistoryEntry {
+  return { key: `blocked:a${n}:1`, kind: "blocked", paneId: `p${n}`, instanceId: `a${n}`, seq: 1, label: `L${n}`, at: Date.now(), reason: "dismissed", ...o };
+}
+
+describe("useNotificationsStore — 履歴", () => {
+  it("足すと件数に数えられ、同じ pane は最新の 1 件に置き換わる（AC6）", () => {
+    const s = useNotificationsStore(pinia);
+    expect(s.historyCount).toBe(0);
+    s.addHistory(hist(1));
+    s.addHistory(hist(2));
+    expect(s.historyCount).toBe(2);
+    s.addHistory(hist(1, { key: "done:a1:2", kind: "done", seq: 2 }));
+    expect(s.history.map((e) => e.key)).toEqual(["blocked:a2:1", "done:a1:2"]);
+  });
+
+  it("50 件を超えたら古いものから落ちる（AC6）", () => {
+    const s = useNotificationsStore(pinia);
+    for (let i = 0; i < MAX_HISTORY + 3; i++) s.addHistory(hist(i));
+    expect(s.historyCount).toBe(MAX_HISTORY);
+    expect(s.history[0]!.paneId).toBe("p3");
+  });
+
+  it("localStorage に残り、新しいストア（再読み込み）が読み戻す（AC7）", () => {
+    useNotificationsStore(pinia).addHistory(hist(1));
+    expect(useNotificationsStore(createPinia()).history.map((e) => e.key)).toEqual(["blocked:a1:1"]);
+  });
+
+  it("1 件消す・全部消す。空になったら保存の項目も残さない", () => {
+    const s = useNotificationsStore(pinia);
+    s.addHistory(hist(1));
+    s.addHistory(hist(2));
+    expect(s.removeHistory("blocked:a1:1")).toBe(true);
+    expect(s.removeHistory("blocked:a1:1")).toBe(false);
+    expect(s.history.map((e) => e.paneId)).toEqual(["p2"]);
+    s.clearHistory();
+    expect(s.historyCount).toBe(0);
+    expect(JSON.parse(localStorage.getItem(NOTIFY_HISTORY_STORAGE_KEY) ?? "{}")).toEqual({});
+    expect(useNotificationsStore(createPinia()).historyCount).toBe(0);
+  });
+
+  it("pane ごと消す", () => {
+    const s = useNotificationsStore(pinia);
+    s.addHistory(hist(1));
+    s.addHistory(hist(2));
+    s.removeHistoryPane("p1");
+    expect(s.history.map((e) => e.paneId)).toEqual(["p2"]);
+  });
+
+  it("解消した件だけを落として、落とした件を返す。何も落ちなければ保存し直さない", () => {
+    const s = useNotificationsStore(pinia);
+    s.addHistory(hist(1));
+    s.addHistory(hist(2));
+    const removed = s.reconcileHistory((paneId) => ({ exists: paneId === "p1", agent: null, seenSeq: 0 }));
+    // どちらもエージェントが居ないので両方解消。
+    expect(removed.map((e) => e.paneId)).toEqual(["p1", "p2"]);
+    expect(s.historyCount).toBe(0);
+    expect(s.reconcileHistory(() => ({ exists: true, agent: null, seenSeq: 0 }))).toEqual([]);
+  });
+
+  // 同じマシンの別タブの書き込み（`storage` イベント）。自分の書き込みでは発火しないので、テストでは別タブの代わりに localStorage を直に書いて偽装する。
+  describe("別タブの変更の取り込み（storage イベント）", () => {
+    const fire = (key: string | null = NOTIFY_HISTORY_STORAGE_KEY) => window.dispatchEvent(new StorageEvent("storage", { key }));
+
+    it("別タブが全件削除すると、こちらのメモリからも消え、次に書いても戻らない", () => {
+      const s = useNotificationsStore(pinia);
+      s.addHistory(hist(1));
+      s.addHistory(hist(2));
+      localStorage.setItem(NOTIFY_HISTORY_STORAGE_KEY, JSON.stringify({})); // 別タブで［すべて削除］
+      fire();
+      expect(s.history).toEqual([]);
+      s.addHistory(hist(3));
+      expect(JSON.parse(localStorage.getItem(NOTIFY_HISTORY_STORAGE_KEY)!)["local"].map((e: HistoryEntry) => e.paneId)).toEqual(["p3"]);
+    });
+
+    it("別タブが足した件が見え、取り込みで外側の掃除の合図（externalChangeSeq）が進む", () => {
+      const s = useNotificationsStore(pinia);
+      s.addHistory(hist(1));
+      const before = s.externalChangeSeq;
+      localStorage.setItem(NOTIFY_HISTORY_STORAGE_KEY, JSON.stringify({ local: [hist(1), hist(5)] }));
+      fire();
+      expect(s.history.map((e) => e.paneId)).toEqual(["p1", "p5"]);
+      expect(s.externalChangeSeq).toBe(before + 1);
+    });
+
+    it("ほかのマシンの履歴だけが変わったときは反映しない（合図も進めない）", () => {
+      const s = useNotificationsStore(pinia);
+      s.addHistory(hist(1));
+      const before = s.externalChangeSeq;
+      localStorage.setItem(NOTIFY_HISTORY_STORAGE_KEY, JSON.stringify({ local: [hist(1)], m9: [hist(8)] }));
+      fire();
+      expect(s.history.map((e) => e.paneId)).toEqual(["p1"]);
+      expect(s.externalChangeSeq).toBe(before);
+    });
+
+    it("無関係なキーの storage イベントは無視する", () => {
+      const s = useNotificationsStore(pinia);
+      s.addHistory(hist(1));
+      localStorage.setItem(NOTIFY_HISTORY_STORAGE_KEY, JSON.stringify({}));
+      fire("soda.prefs.v1");
+      expect(s.historyCount).toBe(1);
+    });
+  });
+
+  it("7 日を過ぎた件は、解消の掃除（reconcileHistory）と期限の掃除（pruneExpiredHistory）で、ページを開いたままでも落ちる", () => {
+    const day = 24 * 60 * 60 * 1000;
+    const s = useNotificationsStore(pinia);
+    const t0 = Date.now();
+    s.addHistory(hist(1, { at: t0 }));
+    s.addHistory(hist(2, { at: t0 + day }));
+    const alive = (paneId: string) => ({ exists: true, agent: { instanceId: `a${paneId.slice(1)}`, kind: "claude", label: "Claude", state: "blocked", completionSeq: 0, serverSeenSeq: 0, verified: true, since: 1 } as never, seenSeq: 0 });
+    s.reconcileHistory(alive, t0 + 7 * day + 1000); // p1 は期限切れ。p2 は 6 日。どちらの agent も入力待ちのまま（解消でなく期限だけで落ちる）
+    expect(s.history.map((e) => e.paneId)).toEqual(["p2"]);
+    s.pruneExpiredHistory(t0 + 9 * day);
+    expect(s.history).toEqual([]);
+    expect(JSON.parse(localStorage.getItem(NOTIFY_HISTORY_STORAGE_KEY) ?? "{}")).toEqual({});
+  });
+
+  it("マシンごとに分かれる。切り替えると切り替え先の履歴が出て、戻せば元の履歴が残っている（AC7）", () => {
+    const s = useNotificationsStore(pinia);
+    s.addHistory(hist(1));
+    s.setHistoryScope("m1");
+    expect(s.historyCount).toBe(0);
+    s.addHistory(hist(7));
+    s.setHistoryScope("local");
+    expect(s.history.map((e) => e.paneId)).toEqual(["p1"]);
+    s.setHistoryScope("m1");
+    expect(s.history.map((e) => e.paneId)).toEqual(["p7"]);
+    expect(Object.keys(JSON.parse(localStorage.getItem(NOTIFY_HISTORY_STORAGE_KEY)!)).sort()).toEqual(["local", "m1"]);
+  });
+
+  it("壊れた保存値・読めない保存先でも空の履歴で動く（異常系）", () => {
+    localStorage.setItem(NOTIFY_HISTORY_STORAGE_KEY, "{not json");
+    expect(useNotificationsStore(createPinia()).historyCount).toBe(0);
+    localStorage.setItem(NOTIFY_HISTORY_STORAGE_KEY, JSON.stringify({ local: [{ junk: true }, hist(1)] }));
+    expect(useNotificationsStore(createPinia()).history.map((e) => e.paneId)).toEqual(["p1"]);
+  });
+
+  it("保存できなくても、メモリの上では動く（異常系）", () => {
+    const s = useNotificationsStore(pinia);
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new Error("quota");
+    };
+    try {
+      s.addHistory(hist(1));
+      expect(s.historyCount).toBe(1);
+    } finally {
+      Storage.prototype.setItem = original;
+    }
   });
 });

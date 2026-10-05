@@ -174,3 +174,41 @@ describe("Toast — sticky（消えない知らせ）", () => {
     expect(toasts[1]!.classes()).toContain("toast-wrap");
   });
 });
+
+// 20261005-notify-bell（AC2・AC4）。置き場所（右上・重ならない）は CSS なので実ブラウザの E2E（`notification-history.spec.ts`）で測る。
+describe("Toast — 積み方と読み上げ", () => {
+  it("状況メッセージの領域（role=status・aria-live=polite）で、消えない知らせの閉じるボタンに名前が付く", async () => {
+    const view = useViewStore(pinia);
+    const wrapper = mount(Toast, { global: { plugins: [pinia] } });
+    view.toast("実装が入力待ちです", { kind: "sticky", actions: [{ label: "移動", run: () => undefined }] });
+    await wrapper.vm.$nextTick();
+    const list = wrapper.get(".toast-list");
+    expect(list.attributes("role")).toBe("status");
+    expect(list.attributes("aria-live")).toBe("polite");
+    expect(wrapper.get(".toast-close").attributes("aria-label")).toBe("閉じる");
+  });
+
+  it("古いものが上・新しいものが下（表示順は view.toasts の順のまま）", async () => {
+    const view = useViewStore(pinia);
+    const wrapper = mount(Toast, { global: { plugins: [pinia] } });
+    view.toast("1つ目", { kind: "sticky" });
+    view.toast("短い");
+    view.toast("3つ目", { kind: "sticky" });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll(".toast-message").map((m) => m.text())).toEqual(["1つ目", "短い", "3つ目"]);
+  });
+
+  it("消えない知らせは見分けられる（クラス）・全文が title に入る。短い知らせには付かない", async () => {
+    const view = useViewStore(pinia);
+    const wrapper = mount(Toast, { global: { plugins: [pinia] } });
+    view.toast("とても長い呼び名の pane が入力待ちです", { kind: "sticky" });
+    view.toast("短い");
+    await wrapper.vm.$nextTick();
+    const [sticky, plain] = wrapper.findAll(".toast");
+    expect(sticky!.classes()).toContain("toast-sticky");
+    expect(sticky!.get(".toast-message").attributes("title")).toBe("とても長い呼び名の pane が入力待ちです");
+    expect(plain!.classes()).not.toContain("toast-sticky");
+    expect(plain!.get(".toast-message").attributes("title")).toBeUndefined();
+  });
+
+});

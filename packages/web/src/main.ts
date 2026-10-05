@@ -41,6 +41,7 @@ import { FileTransfer, isFileDrag } from "./term/FileTransfer.js";
 import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
 import { documentTitle } from "./serverSession/documentTitle.js";
 import { StoreAdapter } from "./store/StoreAdapter.js";
+import { useNotificationsStore } from "./store/notifications.js";
 import { sweepMarkSeen, useSeenStore } from "./store/seen.js";
 import { useSessionStore } from "./store/session.js";
 import { useOnboardingStore } from "./store/onboarding.js";
@@ -357,6 +358,8 @@ for (const type of ["pointerdown", "pointerup", "keydown"] as const) {
 }
 
 notificationsBox.current = notifications;
+// 履歴の 7 日の期限は、ページを開いたままでも落とす（掃除の契機は出来事の変化だけでは足りない）。
+setInterval(() => useNotificationsStore(pinia).pruneExpiredHistory(), 30_000);
 
 const actionDispatcher = new ActionDispatcher({ conn, pinia, registry, keys, input: inputGate, notifications, imagePaste: imagePaster });
 actionDispatcherBox.current = actionDispatcher;
@@ -376,7 +379,11 @@ const machineSwitcher = new MachineSwitcher({
   selectMachine: (id) => machines.select(id),
   isSelectable: (id) => machines.isSelectable(id),
   setViewScope: (id) => view.setMachineScope(id),
-  setSeenScope: (id) => seen.setScope(id),
+  // 応答せずに閉じた知らせの履歴もマシンごと（20261005-notify-bell。pane・エージェントの id がマシンをまたいで衝突するため）。
+  setSeenScope: (id) => {
+    seen.setScope(id);
+    useNotificationsStore(pinia).setHistoryScope(id);
+  },
   rememberView: (workspaceId, tabId) => view.rememberView(workspaceId, tabId),
   forgetStoredView: () => view.forgetStoredView(),
   focusWorkspaceHere,

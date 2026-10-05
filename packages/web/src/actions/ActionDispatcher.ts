@@ -184,6 +184,10 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       case "nextNotification":
         this.notifications.focusNext();
         return;
+      // 20261005-notify-bell。応答せずに閉じた知らせの一覧（画面のベルのボタンからも開ける）。
+      case "openNotificationHistory":
+        this.view.openDialogWithContext({ kind: "notificationHistory" });
+        return;
       case "editScrollback":
         this.editScrollback();
         return;

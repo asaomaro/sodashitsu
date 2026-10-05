@@ -5,6 +5,7 @@ import TerminalPane from "../components/TerminalPane.vue";
 import { ConnectionKey, TerminalRegistryKey, ViewSyncKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
+import NotificationBell from "../components/NotificationBell.vue";
 import ExtraKeys from "./ExtraKeys.vue";
 import PanePicker from "./PanePicker.vue";
 import { TouchScroll } from "./TouchScroll.js";
@@ -85,6 +86,8 @@ onBeforeUnmount(() => touchScroll?.dispose());
            ここが唯一の入口になる。**文字のボタンにする**——以前の 🔔 は絵文字で環境により見た目が変わり、
            設定全体を開くのに通知の絵を出すと中身と食い違う（⚙ も絵文字の属性を持つので避ける）。 -->
       <!-- 連携のグラフ（20260927-agent-graph の AC20。モバイルは閲覧と一時停止・再開だけ）。文字のボタン（設定と同じ理由）。 -->
+      <!-- 通知のベル（20261005-notify-bell）。応答せずに閉じた知らせの件数。モバイルにはサイドバーが無いので、ここが入口。 -->
+      <NotificationBell variant="mobile" />
       <button type="button" class="mobile-shell-graph-btn" @click="view.openGraph()">連携</button>
       <button type="button" class="mobile-shell-settings-btn" @click="view.openDialogWithContext({ kind: 'settings' })">設定</button>
     </header>

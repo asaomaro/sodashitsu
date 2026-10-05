@@ -558,4 +558,19 @@ describe("useViewStore — toast", () => {
     store.toast("2つ目");
     expect(store.toasts.map((t) => t.message)).toEqual(["1つ目", "2つ目"]);
   });
+
+  // 20261005-notify-bell の AC2。右上の積みが 4 秒で消える短い知らせで埋まらない。
+  it("短い知らせは同時に 3 件まで。超えたら短い知らせのうち古いものから外れる", () => {
+    const store = useViewStore(pinia);
+    for (const m of ["1", "2", "3", "4", "5"]) store.toast(m);
+    expect(store.toasts.map((t) => t.message)).toEqual(["3", "4", "5"]);
+  });
+
+  it("消えない知らせ（sticky）は上限に数えず、短い知らせの追加で外れない。sticky の追加も短い知らせを外さない", () => {
+    const store = useViewStore(pinia);
+    store.toast("S1", { kind: "sticky" });
+    for (const m of ["a", "b", "c", "d"]) store.toast(m);
+    store.toast("S2", { kind: "sticky" });
+    expect(store.toasts.map((t) => t.message)).toEqual(["S1", "b", "c", "d", "S2"]);
+  });
 });

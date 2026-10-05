@@ -34,6 +34,7 @@ export * from "./graph/ops.js";
 export * from "./graph/validate.js";
 export * from "./layout/layoutOrder.js";
 export * from "./notify/describe.js";
+export * from "./notify/history.js";
 export * from "./notify/policy.js";
 export * from "./theme/themes.js";
 export * from "./theme/uiTokens.js";

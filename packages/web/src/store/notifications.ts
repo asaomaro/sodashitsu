@@ -1,7 +1,15 @@
 import { defineStore } from "pinia";
-import { computed, ref } from "vue";
+import { computed, onScopeDispose, ref } from "vue";
 import {
+  addHistory as addHistoryPure,
   enqueue as enqueuePure,
+  parseHistory,
+  pruneExpired,
+  reconcileHistory as reconcileHistoryPure,
+  removeHistoryByKey,
+  removeHistoryByPane,
+  type HistoryEntry,
+  type PaneNow,
   loadNotifyPrefs as loadNotifyPrefsValue,
   removeByKey as removeByKeyPure,
   removeByPane as removeByPanePure,
@@ -20,6 +28,38 @@ import { readPrefs, writePrefs } from "./view.js";
 /** 保存された通知の設定を読む（値ごとに既定へ落とす）。`raw` は `soda.prefs.v1` の `notify`（省略時は読む。サーバから受けた値の反映は渡す。20260927-cli-mode）。 */
 export function loadNotifyPrefs(raw: unknown = readPrefs()["notify"]): NotifyPrefs {
   return loadNotifyPrefsValue(raw); // 正規化は client-core（端末版と同じ規則）
+}
+
+/**
+ * 応答せずに閉じた知らせの履歴の保存先（20261005-notify-bell の design・decisions D2）。**このブラウザの localStorage だけ**（サーバの共有の設定へは載せない）——
+ * pane・エージェントの id はマシンごとに衝突し、「閉じた」はこのブラウザでの操作だから。値は `{ [マシンの scope]: HistoryEntry[] }`（`seen.ts` の `seenKeyFor` と同じ scope）。
+ */
+export const NOTIFY_HISTORY_STORAGE_KEY = "soda.notifyHistory.v1";
+
+function readHistoryMap(): Record<string, unknown> {
+  try {
+    const raw = localStorage.getItem(NOTIFY_HISTORY_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {}; // 読めない・壊れている環境でも空の履歴で動く
+  }
+}
+
+function loadHistory(scope: string): HistoryEntry[] {
+  return parseHistory(readHistoryMap()[scope], Date.now());
+}
+
+function saveHistory(scope: string, list: readonly HistoryEntry[]): void {
+  try {
+    const map = readHistoryMap();
+    if (list.length === 0) delete map[scope];
+    else map[scope] = list;
+    localStorage.setItem(NOTIFY_HISTORY_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // 保存できなくても致命的ではない（この画面の間だけ残る＝メモリだけで動く）。
+  }
 }
 
 function loadFlag(key: string): boolean {
@@ -61,6 +101,79 @@ export const useNotificationsStore = defineStore("notifications", () => {
   const soundUsable = ref(true);
 
   const queueLength = computed(() => queue.value.length);
+
+  /**
+   * **応答せずに閉じた知らせの履歴**（追加順＝古い→新しい。**いまのマシンの scope の分だけ**）。待ち行列（`queue`）とは別の置き場で、ベルの件数はこちらだけを数える。
+   * 規則（同じ pane につき最新の 1 件・50 件・7 日・解消の判定）は `client-core/notify/history.ts`。
+   */
+  const historyScope = ref("local");
+  const history = ref<HistoryEntry[]>(loadHistory("local"));
+  const historyCount = computed(() => history.value.length);
+
+  function setHistory(next: HistoryEntry[]): void {
+    history.value = next;
+    saveHistory(historyScope.value, next);
+  }
+
+  /** 1 件足す（同じ pane の古いものは置き換わる）。 */
+  function addHistory(entry: HistoryEntry): void {
+    setHistory(addHistoryPure(history.value, entry, Date.now()));
+  }
+
+  /** 鍵で外す。外した件があれば `true`。 */
+  function removeHistory(key: string): boolean {
+    const next = removeHistoryByKey(history.value, key);
+    if (next.length === history.value.length) return false;
+    setHistory(next);
+    return true;
+  }
+
+  function removeHistoryPane(paneId: string): void {
+    const next = removeHistoryByPane(history.value, paneId);
+    if (next.length !== history.value.length) setHistory(next);
+  }
+
+  function clearHistory(): void {
+    if (history.value.length > 0) setHistory([]);
+  }
+
+  /** 解消した件と、**7 日の期限を過ぎた件**を落とす（`lookup` はその pane のいまの状態）。解消で落とした件を返す。 */
+  function reconcileHistory(lookup: (paneId: string) => PaneNow, now: number = Date.now()): HistoryEntry[] {
+    const r = reconcileHistoryPure(history.value, lookup);
+    const live = pruneExpired(r.list, now);
+    if (r.removed.length > 0 || live.length !== r.list.length) setHistory(live);
+    return r.removed;
+  }
+
+  /** 期限（7 日）だけを見て落とす（ページを開いたままでも落ちるように、定期に呼ぶ）。 */
+  function pruneExpiredHistory(now: number = Date.now()): void {
+    const live = pruneExpired(history.value, now);
+    if (live.length !== history.value.length) setHistory(live);
+  }
+
+  /**
+   * **同じマシンの別タブ（ウィンドウ）が履歴を書き換えた**印。`storage` イベントはほかのタブの書き込みにだけ発火する（自分の書き込みでは発火しない＝自己ループしない）。
+   * 変わったのが**いまのマシンの scope の分**のときだけ読み直し、この値を進める——`NotificationController` が見て、いまの状態（pane・エージェント）と突き合わせて解消済みを掃除する。
+   */
+  const externalChangeSeq = ref(0);
+  function onStorage(e: StorageEvent): void {
+    if (e.key !== null && e.key !== NOTIFY_HISTORY_STORAGE_KEY) return;
+    const next = loadHistory(historyScope.value);
+    if (JSON.stringify(next) === JSON.stringify(history.value)) return; // 他のマシンの分だけが変わった（反映しない）
+    history.value = next;
+    externalChangeSeq.value++;
+  }
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", onStorage);
+    onScopeDispose(() => window.removeEventListener("storage", onStorage)); // pinia を止めた（テスト）ときに購読を外す
+  }
+
+  /** マシンの切り替え（`main.ts` の `setSeenScope` と同じ契機）。切り替え先の履歴を読み込む。**掃除は切り替え先の最初のスナップショット**で行う。 */
+  function setHistoryScope(scope: string): void {
+    if (scope === historyScope.value) return;
+    historyScope.value = scope;
+    history.value = loadHistory(scope);
+  }
 
   function setPrefs(patch: Partial<NotifyPrefs>): void {
     prefs.value = { ...prefs.value, ...patch };
@@ -128,6 +241,17 @@ export const useNotificationsStore = defineStore("notifications", () => {
     judged,
     queue,
     queueLength,
+    history,
+    historyScope,
+    historyCount,
+    addHistory,
+    removeHistory,
+    removeHistoryPane,
+    clearHistory,
+    reconcileHistory,
+    pruneExpiredHistory,
+    externalChangeSeq,
+    setHistoryScope,
     hintPending,
     hintDone,
     hintToastId,
