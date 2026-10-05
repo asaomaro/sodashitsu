@@ -79,6 +79,11 @@ export class NotificationController {
       () => this.#seen.seen,
       () => this.#reconcileHistory(),
     );
+    // 同じマシンの別タブが履歴を書き換えた（`storage` イベント）→ 読み直した履歴を、いまの状態に照らして掃除する。
+    watch(
+      () => this.#store.externalChangeSeq,
+      () => this.#reconcileHistory(),
+    );
   }
 
   get #store() {

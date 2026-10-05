@@ -204,6 +204,53 @@ test("履歴：画面を開いている間にエージェントが居なくな�
   await expect(badge).toHaveCount(0, { timeout: 20_000 });
 });
 
+test("履歴：入力待ちの知らせは、画面を開いたままエージェントが動き出すと履歴から自動で消える（AC13。onAgentChanged の掃除）", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  const p1 = client.helloSnapshot()!.panes[0]!.id;
+  await client.request("pane.subscribe", { paneId: p1, scrollbackLines: 4000 });
+  await seedNotifyPrefs(page);
+  await openApp(page, appServer);
+  await blurWindow(page);
+  const agent = await launchFakeAgent(page, client, p1);
+  await openNewTab(page);
+  await agent.block();
+  const toast = page.locator(".toast", { hasText: "入力待ちです" });
+  await expect(toast).toBeVisible({ timeout: 15_000 });
+  await toast.locator(".toast-close").click();
+  const bell = page.locator("[data-notification-bell]");
+  const badge = bell.locator(".notify-bell-badge");
+  await expect(badge).toHaveText("1"); // 肯定の合図：履歴に入った
+  await bell.click();
+  await expect(page.locator(".nh-row")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+
+  await agent.work(); // pane は生きたまま、入力待ちから復帰する（pane の閉鎖ではない）
+  await expect(badge, "復帰した入力待ちは履歴から消える").toHaveCount(0, { timeout: 15_000 });
+  await bell.click();
+  await expect(page.locator(".nh-row")).toHaveCount(0);
+});
+
+test("履歴：完了の知らせは、画面を開いたままエージェントがまた動き出すと履歴から自動で消える（AC13。onAgentChanged の掃除）", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  const p1 = client.helloSnapshot()!.panes[0]!.id;
+  await client.request("pane.subscribe", { paneId: p1, scrollbackLines: 4000 });
+  await seedNotifyPrefs(page);
+  await openApp(page, appServer);
+  await blurWindow(page);
+  const agent = await launchFakeAgent(page, client, p1);
+  await openNewTab(page);
+  await agent.work();
+  await agent.idle(); // working → idle ＝ 完了
+  const toast = page.locator(".toast", { hasText: "完了しました" });
+  await expect(toast).toBeVisible({ timeout: 20_000 });
+  await toast.locator(".toast-close").click();
+  const badge = page.locator("[data-notification-bell] .notify-bell-badge");
+  await expect(badge).toHaveText("1");
+
+  await agent.work(); // また動き出す
+  await expect(badge, "また動き出した完了は履歴から消える").toHaveCount(0, { timeout: 15_000 });
+});
+
 const IPHONE_13 = { ...devices["iPhone 13"] };
 delete (IPHONE_13 as { defaultBrowserType?: string }).defaultBrowserType;
 

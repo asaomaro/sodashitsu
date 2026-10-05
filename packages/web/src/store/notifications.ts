@@ -4,6 +4,7 @@ import {
   addHistory as addHistoryPure,
   enqueue as enqueuePure,
   parseHistory,
+  pruneExpired,
   reconcileHistory as reconcileHistoryPure,
   removeHistoryByKey,
   removeHistoryByPane,
@@ -136,12 +137,33 @@ export const useNotificationsStore = defineStore("notifications", () => {
     if (history.value.length > 0) setHistory([]);
   }
 
-  /** 解消した件を落とす（`lookup` はその pane のいまの状態）。落とした件を返す。 */
-  function reconcileHistory(lookup: (paneId: string) => PaneNow): HistoryEntry[] {
+  /** 解消した件と、**7 日の期限を過ぎた件**を落とす（`lookup` はその pane のいまの状態）。解消で落とした件を返す。 */
+  function reconcileHistory(lookup: (paneId: string) => PaneNow, now: number = Date.now()): HistoryEntry[] {
     const r = reconcileHistoryPure(history.value, lookup);
-    if (r.removed.length > 0) setHistory(r.list);
+    const live = pruneExpired(r.list, now);
+    if (r.removed.length > 0 || live.length !== r.list.length) setHistory(live);
     return r.removed;
   }
+
+  /** 期限（7 日）だけを見て落とす（ページを開いたままでも落ちるように、定期に呼ぶ）。 */
+  function pruneExpiredHistory(now: number = Date.now()): void {
+    const live = pruneExpired(history.value, now);
+    if (live.length !== history.value.length) setHistory(live);
+  }
+
+  /**
+   * **同じマシンの別タブ（ウィンドウ）が履歴を書き換えた**印。`storage` イベントはほかのタブの書き込みにだけ発火する（自分の書き込みでは発火しない＝自己ループしない）。
+   * 変わったのが**いまのマシンの scope の分**のときだけ読み直し、この値を進める——`NotificationController` が見て、いまの状態（pane・エージェント）と突き合わせて解消済みを掃除する。
+   */
+  const externalChangeSeq = ref(0);
+  function onStorage(e: StorageEvent): void {
+    if (e.key !== null && e.key !== NOTIFY_HISTORY_STORAGE_KEY) return;
+    const next = loadHistory(historyScope.value);
+    if (JSON.stringify(next) === JSON.stringify(history.value)) return; // 他のマシンの分だけが変わった（反映しない）
+    history.value = next;
+    externalChangeSeq.value++;
+  }
+  if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
 
   /** マシンの切り替え（`main.ts` の `setSeenScope` と同じ契機）。切り替え先の履歴を読み込む。**掃除は切り替え先の最初のスナップショット**で行う。 */
   function setHistoryScope(scope: string): void {
@@ -224,6 +246,8 @@ export const useNotificationsStore = defineStore("notifications", () => {
     removeHistoryPane,
     clearHistory,
     reconcileHistory,
+    pruneExpiredHistory,
+    externalChangeSeq,
     setHistoryScope,
     hintPending,
     hintDone,

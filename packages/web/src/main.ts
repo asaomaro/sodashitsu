@@ -358,6 +358,8 @@ for (const type of ["pointerdown", "pointerup", "keydown"] as const) {
 }
 
 notificationsBox.current = notifications;
+// 履歴の 7 日の期限は、ページを開いたままでも落とす（掃除の契機は出来事の変化だけでは足りない）。
+setInterval(() => useNotificationsStore(pinia).pruneExpiredHistory(), 30_000);
 
 const actionDispatcher = new ActionDispatcher({ conn, pinia, registry, keys, input: inputGate, notifications, imagePaste: imagePaster });
 actionDispatcherBox.current = actionDispatcher;

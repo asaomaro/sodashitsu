@@ -1368,6 +1368,22 @@ describe("NotificationController — 履歴（AC5・AC13〜AC15・AC18）", () =
     });
   });
 
+  describe("別タブの変更（storage イベント）", () => {
+    it("別タブが書いた履歴を取り込み、いまの状態で解消済みの件は落とす。まだ入力待ちの件は残る", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      useNotificationsStore(pinia).setPrefs({ toast: false, desktop: false, sound: false });
+      const blocked = await fireBlocked(h, "p1"); // p1 は入力待ちのまま（履歴に 1 件）
+      expect(history()).toHaveLength(1);
+      // 別タブで、p1（まだ有効）と p9（pane が無い＝解消済み）の履歴になった。
+      const mk = (paneId: string, instanceId: string, seq: number) => ({ key: `blocked:${instanceId}:${seq}`, kind: "blocked", paneId, instanceId, seq, label: paneId, at: Date.now(), reason: "dismissed" });
+      localStorage.setItem("soda.notifyHistory.v1", JSON.stringify({ local: [mk("p1", "a-p1", blocked.since), mk("p9", "a-p9", 3)] }));
+      window.dispatchEvent(new StorageEvent("storage", { key: "soda.notifyHistory.v1" }));
+      await settle();
+      expect(history().map((e) => e.paneId), "p9 は解消済みなので落ちる").toEqual(["p1"]);
+    });
+  });
+
   describe("出口（AC18）", () => {
     it("prefix+o で移った知らせは、履歴にあれば（トースト「切」）そこからも消える", async () => {
       vi.useFakeTimers();

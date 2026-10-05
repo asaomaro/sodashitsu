@@ -35,23 +35,58 @@ const BLOCKED_SCREEN = [
   " Esc to cancel · Tab to amend · ctrl+e to explain",
 ];
 
+/** 空で静かな入力ボックス（`ManifestEngine.test.ts`「live_prompt_box」と同じ形。静的なタイトルと合わせて idle）。 */
+const IDLE_SCREEN = [
+  "some earlier conversation turn",
+  "────────────────────────────────────────",
+  "unrelated older content",
+  "────────────────────────────────────────",
+  "❯ hello",
+  "────────────────────────────────────────",
+  "  ? for shortcuts",
+];
+
 export interface FakeAgent {
   block(): Promise<void>;
+  /** 入力待ちから（または完了から）動き出す。OSC タイトルの braille 接頭辞＝working。 */
+  work(): Promise<void>;
+  /** 作業中から完了（idle）へ戻る。working → idle なので `completionSeq` が進む。 */
+  idle(): Promise<void>;
 }
 
 export async function launchFakeAgent(page: Page, client: SodaTestClient, paneId: string, opts: { via?: "keyboard" | "client" } = {}): Promise<FakeAgent> {
   const dir = await mkdtemp(join(tmpdir(), "soda-e2e-notify-"));
   tempDirs.push(dir);
   const scriptPath = join(dir, "fake-claude.sh");
-  const triggerPath = join(dir, "block-now");
+  const nextPath = join(dir, "next");
+  let seq = 0;
+  const step = async (cmd: "block" | "work" | "idle"): Promise<void> => {
+    const tag = `${cmd}${++seq}`;
+    // サーバが判定して配信するまで待つ（起動直後の猶予 3 秒の間は判定されないので、その分も待つ）。
+    const want = cmd === "block" ? "blocked" : cmd === "work" ? "working" : "idle";
+    const published = client.waitForEvent("pane.agent_status_changed", (e) => e.data.paneId === paneId && e.data.agent?.state === want, 30_000);
+    await writeFile(nextPath, tag);
+    await client.waitForOutput(paneId, `soda-e2e-state-${tag}`); // 画面を替える直前の合図（連番で、前の指示の出力と取り違えない）
+    await published;
+  };
   const readyMarker = `soda-e2e-ready-${paneId}`;
   const script = [
     "clear",
     `echo ${readyMarker}`,
-    `while [ ! -f ${JSON.stringify(triggerPath)} ]; do sleep 0.2; done`,
-    "clear",
-    ...BLOCKED_SCREEN.map((line) => `printf '%s\\n' ${JSON.stringify(line)}`),
-    "sleep 60",
+    // テストからの指示（`next` ファイルの中身）で画面を替える。
+    "while true; do",
+    `  if [ -f ${JSON.stringify(nextPath)} ]; then`,
+    `    cmd=$(cat ${JSON.stringify(nextPath)}); rm -f ${JSON.stringify(nextPath)}`,
+    '    echo "soda-e2e-state-$cmd"',
+    "    clear",
+    '    case "$cmd" in',
+    "      block*) " + BLOCKED_SCREEN.map((line) => `printf '%s\\n' ${JSON.stringify(line)}`).join("; ") + " ;;",
+    "      work*) printf '\\033]0;⠂ project\\007'; printf '%s\\n' 'Working... (esc to interrupt)' ;;",
+    "      idle*) printf '\\033]0;project\\007'; " + IDLE_SCREEN.map((line) => `printf '%s\\n' ${JSON.stringify(line)}`).join("; ") + " ;;",
+    "    esac",
+    "  fi",
+    "  sleep 0.2",
+    "done",
   ].join("\n");
   await writeFile(scriptPath, script);
   const firstJudged = client.waitForEvent("pane.agent_status_changed", (e) => e.data.paneId === paneId);
@@ -61,10 +96,9 @@ export async function launchFakeAgent(page: Page, client: SodaTestClient, paneId
   await client.waitForOutput(paneId, readyMarker);
   await firstJudged;
   return {
-    block: async () => {
-      await writeFile(triggerPath, "go");
-      await client.waitForOutput(paneId, "Esc to cancel");
-    },
+    block: () => step("block"),
+    work: () => step("work"),
+    idle: () => step("idle"),
   };
 }
 

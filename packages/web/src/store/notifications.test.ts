@@ -236,6 +236,64 @@ describe("useNotificationsStore — 履歴", () => {
     expect(s.reconcileHistory(() => ({ exists: true, agent: null, seenSeq: 0 }))).toEqual([]);
   });
 
+  // 同じマシンの別タブの書き込み（`storage` イベント）。自分の書き込みでは発火しないので、テストでは別タブの代わりに localStorage を直に書いて偽装する。
+  describe("別タブの変更の取り込み（storage イベント）", () => {
+    const fire = (key: string | null = NOTIFY_HISTORY_STORAGE_KEY) => window.dispatchEvent(new StorageEvent("storage", { key }));
+
+    it("別タブが全件削除すると、こちらのメモリからも消え、次に書いても戻らない", () => {
+      const s = useNotificationsStore(pinia);
+      s.addHistory(hist(1));
+      s.addHistory(hist(2));
+      localStorage.setItem(NOTIFY_HISTORY_STORAGE_KEY, JSON.stringify({})); // 別タブで［すべて削除］
+      fire();
+      expect(s.history).toEqual([]);
+      s.addHistory(hist(3));
+      expect(JSON.parse(localStorage.getItem(NOTIFY_HISTORY_STORAGE_KEY)!)["local"].map((e: HistoryEntry) => e.paneId)).toEqual(["p3"]);
+    });
+
+    it("別タブが足した件が見え、取り込みで外側の掃除の合図（externalChangeSeq）が進む", () => {
+      const s = useNotificationsStore(pinia);
+      s.addHistory(hist(1));
+      const before = s.externalChangeSeq;
+      localStorage.setItem(NOTIFY_HISTORY_STORAGE_KEY, JSON.stringify({ local: [hist(1), hist(5)] }));
+      fire();
+      expect(s.history.map((e) => e.paneId)).toEqual(["p1", "p5"]);
+      expect(s.externalChangeSeq).toBe(before + 1);
+    });
+
+    it("ほかのマシンの履歴だけが変わったときは反映しない（合図も進めない）", () => {
+      const s = useNotificationsStore(pinia);
+      s.addHistory(hist(1));
+      const before = s.externalChangeSeq;
+      localStorage.setItem(NOTIFY_HISTORY_STORAGE_KEY, JSON.stringify({ local: [hist(1)], m9: [hist(8)] }));
+      fire();
+      expect(s.history.map((e) => e.paneId)).toEqual(["p1"]);
+      expect(s.externalChangeSeq).toBe(before);
+    });
+
+    it("無関係なキーの storage イベントは無視する", () => {
+      const s = useNotificationsStore(pinia);
+      s.addHistory(hist(1));
+      localStorage.setItem(NOTIFY_HISTORY_STORAGE_KEY, JSON.stringify({}));
+      fire("soda.prefs.v1");
+      expect(s.historyCount).toBe(1);
+    });
+  });
+
+  it("7 日を過ぎた件は、解消の掃除（reconcileHistory）と期限の掃除（pruneExpiredHistory）で、ページを開いたままでも落ちる", () => {
+    const day = 24 * 60 * 60 * 1000;
+    const s = useNotificationsStore(pinia);
+    const t0 = Date.now();
+    s.addHistory(hist(1, { at: t0 }));
+    s.addHistory(hist(2, { at: t0 + day }));
+    const alive = (paneId: string) => ({ exists: true, agent: { instanceId: `a${paneId.slice(1)}`, kind: "claude", label: "Claude", state: "blocked", completionSeq: 0, serverSeenSeq: 0, verified: true, since: 1 } as never, seenSeq: 0 });
+    s.reconcileHistory(alive, t0 + 7 * day + 1000); // p1 は期限切れ。p2 は 6 日。どちらの agent も入力待ちのまま（解消でなく期限だけで落ちる）
+    expect(s.history.map((e) => e.paneId)).toEqual(["p2"]);
+    s.pruneExpiredHistory(t0 + 9 * day);
+    expect(s.history).toEqual([]);
+    expect(JSON.parse(localStorage.getItem(NOTIFY_HISTORY_STORAGE_KEY) ?? "{}")).toEqual({});
+  });
+
   it("マシンごとに分かれる。切り替えると切り替え先の履歴が出て、戻せば元の履歴が残っている（AC7）", () => {
     const s = useNotificationsStore(pinia);
     s.addHistory(hist(1));
