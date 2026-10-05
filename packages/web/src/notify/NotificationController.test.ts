@@ -1324,7 +1324,10 @@ describe("NotificationController — 履歴（AC5・AC13〜AC15・AC18）", () =
       expect(store.queue.map((q) => q.paneId)).toEqual(["p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9"]);
       expect(history().map((e) => [e.paneId, e.reason])).toEqual([["p1", "evicted"]]);
       // 同じ pane の出し直しは置き換え（押し出しではない）。履歴は増えない。
-      await fireBlocked(h, "p9", 99);
+      // **置き換えられる古い件が「まだ解消していない」状態で確かめる**（解消済みなら `isResolved` に弾かれて、条件の有無を区別できない）——
+      // session の agent は入力待ちのまま（since 5）で、同じ pane へ別の鍵（完了）を直に配送する。
+      h.c.deliver("done", "p9", "done:a-p9:1");
+      expect(store.queue.filter((q) => q.paneId === "p9").map((q) => q.key)).toEqual(["done:a-p9:1"]);
       expect(history().map((e) => e.paneId)).toEqual(["p1"]);
     });
 
@@ -1334,10 +1337,10 @@ describe("NotificationController — 履歴（AC5・AC13〜AC15・AC18）", () =
       await fireBlocked(h, "p1", 5);
       closeToast(h);
       expect(history()).toHaveLength(1);
-      await fireBlocked(h, "p1", 9);
+      // 古い履歴（入力待ち since 5）は**解消していない**まま（session の agent は入力待ちのまま）、同じ pane へ別の鍵を直に配送する。
+      // 履歴の置き換え（`removeHistoryPane`）が無ければ、古い履歴が残る。
+      h.c.deliver("done", "p1", "done:a-p1:1");
       expect(history(), "新しい知らせはトースト中なので、古い履歴は置き換わって 0 件").toHaveLength(0);
-      closeToast(h);
-      expect(history().map((e) => e.key)).toEqual(["blocked:a-p1:9"]);
     });
 
     it("見ている pane・案内・短い知らせは入らない（AC8）", async () => {
