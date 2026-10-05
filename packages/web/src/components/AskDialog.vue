@@ -381,7 +381,9 @@ function onViewKey(key: AskViewKey): void {
   flex: 1 1 0;
 }
 .ask-body.has-view .ask-form {
-  flex: 0 0 430px;
+  /* 質問の幅。下の行の［キャンセル］と［決定］（長い文言・幅の広いフォントでは 400px を超える）が、ボタンの中で折り返さず 1 行に収まるよう、430px より広げる（Windows の幅の広いフォントを想定）。
+     成果物の枠が狭くなりすぎないよう、ダイアログの幅の 44% を 430〜560px の範囲にする。 */
+  flex: 0 0 clamp(430px, 44%, 560px);
   min-width: 0;
 }
 .ask-dialog::backdrop {
