@@ -71,8 +71,9 @@ export async function startHandoffSocket(
       void handleLine(buf.slice(0, nl), sock, handler, logger);
     });
   });
-  server.on("error", (err) => logger.warn("handoff socket error", { path, error: String(err) }));
   await listenUnixSocketReplacingStale(server, path);
+  // 待ち受けを始めた後の誤りだけを記録する（最初の `EADDRINUSE` は、残っている socket のファイルを消して作り直すので警告にしない。AgentReportSocket と同じ）。
+  server.on("error", (err) => logger.warn("handoff socket error", { path, error: String(err) }));
   // listen から chmod までの間は umask の権限で見えるが、状態ディレクトリの中なので、そのディレクトリを読める人に限られる（AgentReportSocket と同じ）。
   try {
     await chmod(path, 0o600);

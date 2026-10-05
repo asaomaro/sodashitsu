@@ -68,6 +68,12 @@ describe("AgentReportSocket", () => {
     expect(reports).toEqual([{ type: "session", paneId: "p2", kind: "codex", sessionId: "xyz" }]);
   });
 
+  it("残っている socket のファイルを作り直せたときは、警告を出さない（`soda handoff` のたびに EADDRINUSE の警告が出ていた）", async () => {
+    await writeFile(socketPath, "stale");
+    socket = await startAgentReportSocket(socketPath, () => undefined, logger);
+    expect(logger.lines.filter((e) => e.level === "warn")).toEqual([]);
+  });
+
   describe("type つきの報告（20261004-subagent-display）", () => {
     const base = { paneId: "p1", kind: "claude", sessionId: "s1" };
 

@@ -58,11 +58,12 @@ export async function startAgentReportSocket(path: string, onReport: AgentReport
       // 接続元（hook スクリプト）が異常終了しても report 1件を諦めるだけ。
     });
   });
+  await listenUnixSocketReplacingStale(server, path);
+  // 待ち受けを始めた後の誤りだけを記録する。最初の `listen` の `EADDRINUSE`（前の版・前回の不正終了の socket のファイルが残っている）は、
+  // `listenUnixSocketReplacingStale` が消して作り直すので、先に付けておくと、作り直せたのに毎回警告が出る（`soda handoff` のたび）。
   server.on("error", (err) => {
     logger.warn("agent report socket error", { path, error: String(err) });
   });
-
-  await listenUnixSocketReplacingStale(server, path);
   if (platform() !== "win32") {
     // 同一利用者限定にする（非機能要件「報告経路の安全性」。design D5）。Windows の named pipe の
     // 権限限定は別途（既知の制約。docs/verification.md の手動確認へ回す）。
