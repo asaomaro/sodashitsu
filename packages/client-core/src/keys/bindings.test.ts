@@ -39,15 +39,16 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
   // 20260927-agent-graph で open_graph（全体）を追加し 57 個になった。
   // 20261004-subagent-display で show_subagents（pane。既定は prefix+shift+s）を追加し 58 個になった。
   // 20261004-ui-interaction-polish で toggle_spaces_section・toggle_agents_section（pane。既定は prefix+shift+b・prefix+shift+a）を追加し 60 個になった。
-  it("60 個あり、id は重複しない・表示名は空でない", () => {
-    expect(ACTIONS).toHaveLength(60);
-    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(60);
+  // 20261005-notify-bell で open_notification_history（全体。既定は prefix+shift+o）を追加し 61 個になった。
+  it("61 個あり、id は重複しない・表示名は空でない", () => {
+    expect(ACTIONS).toHaveLength(61);
+    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(61);
     for (const a of ACTIONS) expect(a.label.length, a.id).toBeGreaterThan(0);
   });
 
-  it("群は 全体 7・workspace / tab 24・pane 29（この順に並ぶ）", () => {
+  it("群は 全体 8・workspace / tab 24・pane 29（この順に並ぶ）", () => {
     const groups = ACTIONS.map((a) => a.group);
-    expect(groups.filter((g) => g === "全体")).toHaveLength(7);
+    expect(groups.filter((g) => g === "全体")).toHaveLength(8);
     expect(groups.filter((g) => g === "workspace / tab")).toHaveLength(24);
     expect(groups.filter((g) => g === "pane")).toHaveLength(29);
     // 群ごとにまとまっている（全体 → workspace / tab → pane）
@@ -141,6 +142,7 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
     expect(actionFor(actionDef("edit_scrollback")!)).toEqual({ type: "editScrollback" });
     expect(actionDef("edit_scrollback")).toMatchObject({ group: "pane", defaults: ["prefix+e"] });
     expect(actionFor(actionDef("open_notification_target")!)).toEqual({ type: "nextNotification" });
+    expect(actionFor(actionDef("open_notification_history")!)).toEqual({ type: "openNotificationHistory" });
     expect(actionFor(actionDef("previous_tab")!)).toEqual({ type: "tabDelta", delta: -1 });
   });
 

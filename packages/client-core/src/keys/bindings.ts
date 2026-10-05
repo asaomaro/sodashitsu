@@ -59,6 +59,14 @@ export const ACTIONS = [
     defaults: ["prefix+o"],
     action: { type: "nextNotification" },
   },
+  // 20261005-notify-bell（本製品の追加）。prefix+o（次の知らせへ）の対。画面のベルのボタンからも開ける。
+  {
+    id: "open_notification_history",
+    label: "通知の一覧（先送りした知らせ）",
+    group: "全体",
+    defaults: ["prefix+shift+o"],
+    action: { type: "openNotificationHistory" },
+  },
   {
     id: "reload_config",
     label: "設定を読み直す",

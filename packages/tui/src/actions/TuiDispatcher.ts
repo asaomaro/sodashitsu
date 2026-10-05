@@ -179,6 +179,10 @@ export class TuiDispatcher {
       case "nextNotification":
         this.host.focusNextNotification();
         return;
+      // 20261005-notify-bell。web は応答せずに閉じた知らせの一覧（ベル）。端末版は既存の「知らせの一覧」（未処理の知らせ。全体のメニューと同じ）を開く読み替え。
+      case "openNotificationHistory":
+        this.ui.openDialogWithContext({ kind: "notifications" });
+        return;
       case "editScrollback":
         this.editScrollback();
         return;
