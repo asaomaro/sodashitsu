@@ -775,6 +775,11 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
 - [ ] `edit`・`rank`・`table` を実機のブラウザで操作し、結果の JSON の形（`edited`・並べた配列・`{行: 値}`）を確かめる。
 - [ ] 別のマシン（保存した SSH のマシン）の pane から、そのマシンにある画像・Markdown を渡して、手元のブラウザに出る。
 - [ ] `sodactl ask --features` の出力（`server` が null でない）。古いサーバでは、新しい項目のある定義が `unavailable` になる。
+- [ ] 巨大な HTML（ローカル起動。`docs/sodactl.md`「ローカル起動では大きさの上限が無い」）: `soda serve`（既定の `127.0.0.1`）の pane で、50 MiB・200 MiB の HTML を `view` に付けて `sodactl ask`。期待：画面内のダイアログに出て、末尾まで描かれ、枠の中のスクリプトが動く。
+      自動の実測（Chromium・`SODA_E2E_HUGE=20,50,100 pnpm exec playwright test ask-local-limit -g 実測`。節の多い `dom` と節の少ない `light` の 2 種）。チャンクごとの復号に替えた後、200 MiB（安全弁を決める前に測った値）は
+      dom で表示まで 24.9 秒・ブラウザ全体 3280 MiB（開く前 608 MiB）、light で 8.3 秒・1976 MiB。20 MiB は dom 2.2 秒・920 MiB、light 1.4 秒・766 MiB。50 MiB は dom 5.9 秒・1282 MiB、light 2.3 秒・842 MiB。
+      ブラウザ側のメモリは元の大きさの 7〜13 倍で、メモリの少ない端末では遅い・タブが落ちうる。
+      実機のブラウザ（Firefox・Safari・スマートフォン）・101 MiB（安全弁を超える。終了コード 2。E2E で確認済み）・`--origin` つきで起動した同じ構成（8 MiB 超が終了コード 2）・保存した SSH のマシンの pane（従来の上限）は未確認。
 
 ### 共通：質問のフォームの目次と部品（20261003-ask-form-component・`docs/sodactl.md`「目次」「画面の操作」「画面の部品と同期」）
 

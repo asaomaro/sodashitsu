@@ -5,10 +5,9 @@ import {
   ASK_MEDIA_FILE_MAX,
   ASK_MEDIA_FILES_MAX,
   ASK_MEDIA_REF_PREFIX,
-  ASK_MEDIA_SERVER_MAX,
-  ASK_MEDIA_TEXT_MAX,
-  ASK_MEDIA_TOTAL_MAX,
   RpcError,
+  askByteLimits,
+  type AskByteLimits,
   classifyMediaRef,
   type AskMediaFileKind,
   type AskMediaInfo,
@@ -63,6 +62,9 @@ interface Loaded {
   bytes: Buffer;
 }
 
+/** 読む前に、確保するバイト数をサーバ全体へ予約する（超えるなら `ask_busy` を投げる）。予約は `prepare` が、数え終えた後か終わりに戻す。 */
+type Reserve = (n: number, where: string) => void;
+
 const VIEW_HTML = new Set([".html", ".htm"]);
 const VIEW_MARKDOWN = new Set([".md", ".markdown"]);
 
@@ -86,8 +88,15 @@ const invalid = (where: string, why: string): RpcError =>
 export class AskMedia {
   /** `prepare` の最中に溜めているバイトの合計（全部の質問。取得中の分を含む）。サーバ全体の上限の判定に使う。 */
   private inflight = 0;
+  /** `prepare` がこれから確保する分の予約（読み込みの前に足し、読み終えて `inflight` へ数えた後に戻す）。複数の `prepare` が同時に大きなファイルを確保して、サーバ全体の安全弁を超えないため。 */
+  private reservedTotal = 0;
 
   constructor(private readonly opts: AskMediaOptions) {}
+
+  /** 読み込みの前に予約している分（テスト・診断用。終わればゼロに戻る）。 */
+  get reservedBytes(): number {
+    return this.reservedTotal;
+  }
 
   /** いま `prepare` が読み込み・取得で溜めているバイト数（テスト・診断用）。 */
   get inflightBytes(): number {
@@ -96,13 +105,16 @@ export class AskMedia {
 
   /**
    * `serverHeld` は、画面へ出して保持している質問のメディアの合計（サーバ全体の上限 `ASK_MEDIA_SERVER_MAX` の判定に、取得中の分と足す）。
+   * `unlimited`（ローカル起動。`AskService` が決める）のとき、大きさの上限は外れて安全弁（`askByteLimits(true)`）だけになる。個数は変わらない。外部 URL の画像は常に `ASK_MEDIA_FILE_MAX`。
    * 外部 URL は受け取るたびに質問の合計とサーバ全体へ足し、超えたら残りの取得を中止して失敗にする（合計を、全部取り終えてから判定しない）。
    */
   async prepare(
     spec: AskSpec,
     signal: AbortSignal,
     serverHeld: () => number = () => 0,
+    unlimited = false,
   ): Promise<Prepared> {
+    const lim = askByteLimits(unlimited);
     interface Slot {
       where: string;
       remote: boolean;
@@ -142,7 +154,7 @@ export class AskMedia {
           const slot = claim(`${kind}:${ref}`, where, type === "https", () =>
             type === "https"
               ? this.loadRemote(ref, fetchSignal, charge, refund)
-              : this.loadLocalOrData(type, ref, kind, where, remaining),
+              : this.loadLocalOrData(type, ref, kind, where, remaining, lim, reserve),
           );
           bindings.push({
             slot,
@@ -159,8 +171,7 @@ export class AskMedia {
       const where = `view[${i}]`;
       if (v.text !== undefined) {
         const bytes = Buffer.from(v.text, "utf8");
-        if (bytes.length > ASK_MEDIA_TEXT_MAX)
-          throw invalid(where, `text is larger than ${ASK_MEDIA_TEXT_MAX} bytes`);
+        if (bytes.length > lim.text) throw invalid(where, `text is larger than ${lim.text} bytes`);
         viewSlots.push({
           title: v.title,
           slot: claim(`viewtext:${i}`, where, false, async () => ({
@@ -175,7 +186,7 @@ export class AskMedia {
         viewSlots.push({
           title: v.title,
           slot: claim(`view:${raw ? 1 : 0}:${file}`, where, false, () =>
-            this.loadView(file, raw, where, remaining),
+            this.loadView(file, raw, where, remaining, lim, reserve),
           ),
         });
       }
@@ -187,7 +198,7 @@ export class AskMedia {
     let mine = 0; // この `prepare` が `this.inflight` へ足した分（終わりに戻す）
     let fatal: RpcError | undefined;
     let done = false; // `prepare` が終わった後に、中止された取得が遅れて知らせてきても、数に足さない・戻さない
-    const remaining = (): number => ASK_MEDIA_TOTAL_MAX - total;
+    const remaining = (): number => lim.total - total;
     const abortFetches = new AbortController();
     const fetchSignal = AbortSignal.any([signal, abortFetches.signal]);
     const charge = (n: number, where: string): void => {
@@ -196,17 +207,26 @@ export class AskMedia {
       mine += n;
       this.inflight += n;
       if (fatal !== undefined) throw fatal;
-      if (total > ASK_MEDIA_TOTAL_MAX)
-        fatal = invalid(
-          where,
-          `the media in one question are larger than ${ASK_MEDIA_TOTAL_MAX} bytes in total`,
-        );
-      else if (serverHeld() + this.inflight > ASK_MEDIA_SERVER_MAX)
+      if (total > lim.total)
+        fatal = invalid(where, `the media in one question are larger than ${lim.total} bytes in total`);
+      else if (serverHeld() + this.inflight > lim.server)
         fatal = new RpcError("ask_busy", "too much media is waiting for an answer");
       if (fatal !== undefined) {
         abortFetches.abort();
         throw fatal;
       }
+    };
+    let reserved = 0; // この `prepare` が `this.reservedTotal` へ足している分
+    const reserve: Reserve = (n, where) => {
+      if (done) throw new Error("aborted");
+      if (serverHeld() + this.inflight + this.reservedTotal + n > lim.server)
+        throw new RpcError("ask_busy", `too much media is waiting for an answer (${where})`);
+      this.reservedTotal += n;
+      reserved += n;
+    };
+    const releaseReserved = (): void => {
+      this.reservedTotal -= reserved;
+      reserved = 0;
     };
     const refund = (n: number): void => {
       if (done) return;
@@ -222,8 +242,18 @@ export class AskMedia {
         if (fatal !== undefined) throw fatal;
         if (slot.remote) continue;
         slot.result = slot.load();
-        const loaded = await slot.result;
-        if (loaded) charge(loaded.bytes.length, slot.where);
+        let loaded: Loaded | null;
+        try {
+          loaded = await slot.result;
+        } catch (e) {
+          releaseReserved();
+          throw e;
+        }
+        try {
+          if (loaded) charge(loaded.bytes.length, slot.where);
+        } finally {
+          releaseReserved(); // 読み終えて実際の分を数えたので、予約は戻す
+        }
       }
       for (const slot of slots.values()) {
         if (!slot.remote) continue;
@@ -234,6 +264,7 @@ export class AskMedia {
       abortFetches.abort(); // 終わったもの以外の取得を止める（先に投げられた誤りで、残りが溜め続けない）
       for (const slot of slots.values()) slot.result?.catch(() => undefined); // 先に投げられた誤りで、残りの reject を未処理にしない
       done = true;
+      releaseReserved();
       this.inflight -= mine; // 保持は `AskService` が `totalBytes` で数え直す
     }
     if (signal.aborted) throw new Error("aborted");
@@ -281,12 +312,14 @@ export class AskMedia {
     kind: "image" | "audio",
     where: string,
     remaining: () => number,
+    lim: AskByteLimits,
+    reserve: Reserve,
   ): Promise<Loaded> {
-    if (type === "data") return this.loadData(ref, kind, where);
+    if (type === "data") return this.loadData(ref, kind, where, lim);
     const ext = extname(ref).toLowerCase();
     const allowed = EXTENSION_KINDS[ext];
     if (allowed === undefined) throw invalid(where, "unsupported file extension");
-    const bytes = await readRegularFile(ref, ASK_MEDIA_FILE_MAX, where, remaining());
+    const bytes = await readRegularFile(ref, lim.file, where, remaining(), lim.total, reserve);
     const sniffed = sniffMedia(bytes);
     if (sniffed === null || !allowed.includes(sniffed.kind))
       throw invalid(where, "the file content does not match its extension");
@@ -295,14 +328,13 @@ export class AskMedia {
     return { kind: sniffed.media, mime: sniffed.mime, bytes };
   }
 
-  private loadData(ref: string, kind: "image" | "audio", where: string): Loaded {
+  private loadData(ref: string, kind: "image" | "audio", where: string, lim: AskByteLimits): Loaded {
     const m = /^data:([a-z0-9.+/-]+);base64,(.*)$/s.exec(ref);
     if (!m) throw invalid(where, "malformed data: URI");
     const allowed: SniffKind[] | undefined = MIME_KINDS[m[1]!];
     if (allowed === undefined) throw invalid(where, "unsupported data: MIME type");
     const bytes = Buffer.from(m[2]!, "base64");
-    if (bytes.length > ASK_MEDIA_FILE_MAX)
-      throw invalid(where, `the data: URI is larger than ${ASK_MEDIA_FILE_MAX} bytes`);
+    if (bytes.length > lim.file) throw invalid(where, `the data: URI is larger than ${lim.file} bytes`);
     const sniffed = sniffMedia(bytes);
     if (sniffed === null || !allowed.includes(sniffed.kind) || sniffed.media !== kind)
       throw invalid(where, "the data: URI content does not match its MIME type");
@@ -342,21 +374,23 @@ export class AskMedia {
     raw: boolean,
     where: string,
     remaining: () => number,
+    lim: AskByteLimits,
+    reserve: Reserve,
   ): Promise<Loaded> {
     const ext = extname(file).toLowerCase();
     if (EXTENSION_KINDS[ext] !== undefined && sniffKindsAreImage(ext)) {
-      const bytes = await readRegularFile(file, ASK_MEDIA_FILE_MAX, where, remaining());
+      const bytes = await readRegularFile(file, lim.file, where, remaining(), lim.total, reserve);
       const sniffed = sniffMedia(bytes);
       if (sniffed === null || !EXTENSION_KINDS[ext]!.includes(sniffed.kind))
         throw invalid(where, "the file content does not match its extension");
       return { kind: "image", mime: sniffed.mime, bytes };
     }
     if (VIEW_HTML.has(ext)) {
-      const bytes = await readRegularFile(file, ASK_MEDIA_FILE_MAX, where, remaining());
+      const bytes = await readRegularFile(file, lim.file, where, remaining(), lim.total, reserve);
       if (!isUtf8Text(bytes)) throw invalid(where, "the file is not UTF-8 text");
       return { kind: "html", mime: "text/html; charset=utf-8", bytes };
     }
-    const bytes = await readRegularFile(file, ASK_MEDIA_TEXT_MAX, where, remaining());
+    const bytes = await readRegularFile(file, lim.text, where, remaining(), lim.total, reserve);
     if (!isUtf8Text(bytes))
       throw invalid(
         where,
@@ -381,6 +415,8 @@ async function readRegularFile(
   max: number,
   where: string,
   remaining: number,
+  totalMax: number,
+  reserve: Reserve,
 ): Promise<Buffer> {
   let fh;
   try {
@@ -404,28 +440,43 @@ async function readRegularFile(
     if (st.size > remaining)
       throw invalid(
         where,
-        `the media in one question are larger than ${ASK_MEDIA_TOTAL_MAX} bytes in total`,
+        `the media in one question are larger than ${totalMax} bytes in total`,
       ); // 読む前に断つ
     const limit = Math.min(max, remaining);
     // `st.size` が 0 のファイル（`/proc` 配下など）は大きさが当てにならないので、上限 +1 まで読んで確かめる。
     const cap = st.size === 0 ? limit + 1 : Math.min(st.size, limit) + 1;
-    const chunks: Buffer[] = [];
+    reserve(cap, where); // 確保する前に、サーバ全体の安全弁を超えないか見て予約する（超えるなら読まずに `ask_busy`）
+    // 大きさが分かるファイルは 1 つの Buffer へ直に読む（ローカル起動の大きなファイルで、片の配列と連結の二重のメモリを使わない）。
+    // 大きさが 0 と出るもの（`/proc` 配下など）は、上限を超えない範囲で片に分けて読む。
     let n = 0;
-    while (n < cap) {
-      const buf = Buffer.allocUnsafe(Math.min(cap - n, 1024 * 1024));
-      const { bytesRead } = await fh.read(buf, 0, buf.length, null);
-      if (bytesRead === 0) break;
-      chunks.push(buf.subarray(0, bytesRead));
-      n += bytesRead;
+    let out: Buffer;
+    if (st.size > 0) {
+      const buf = Buffer.allocUnsafe(cap);
+      while (n < cap) {
+        const { bytesRead } = await fh.read(buf, n, Math.min(cap - n, 8 * 1024 * 1024), null);
+        if (bytesRead === 0) break;
+        n += bytesRead;
+      }
+      out = buf.subarray(0, n);
+    } else {
+      const chunks: Buffer[] = [];
+      while (n < cap) {
+        const buf = Buffer.allocUnsafe(Math.min(cap - n, 1024 * 1024));
+        const { bytesRead } = await fh.read(buf, 0, buf.length, null);
+        if (bytesRead === 0) break;
+        chunks.push(buf.subarray(0, bytesRead));
+        n += bytesRead;
+      }
+      out = Buffer.concat(chunks, n);
     }
     if (n > limit)
       throw invalid(
         where,
         n > max
           ? `the file is larger than ${max} bytes`
-          : `the media in one question are larger than ${ASK_MEDIA_TOTAL_MAX} bytes in total`,
+          : `the media in one question are larger than ${totalMax} bytes in total`,
       );
-    return Buffer.concat(chunks, n);
+    return out;
   } finally {
     await fh.close();
   }

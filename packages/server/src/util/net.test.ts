@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accessUrls, formatUrlHost, isLoopbackHost, isWildcardHost, lanIpv4Addresses, paneServerUrl, requestPathname, unbracketHost } from "./net.js";
+import { accessUrls, isLocalOnlyServer, formatUrlHost, isLoopbackHost, isWildcardHost, lanIpv4Addresses, paneServerUrl, requestPathname, unbracketHost } from "./net.js";
 
 describe("isLoopbackHost", () => {
   it("recognizes loopback forms", () => {
@@ -224,5 +224,16 @@ describe("paneServerUrl（pane の環境の SODA_SERVER_URL。20260926-agent-ski
   });
   it("URL にできないホスト（ゾーン付きの IPv6）は undefined", () => {
     expect(paneServerUrl("https", "fe80::1%eth0", 8443)).toBeUndefined();
+  });
+});
+
+describe("isLocalOnlyServer（ask のメディアの上限を外してよいローカル起動）", () => {
+  it("loopback だけで、TLS も --origin も無いときだけ真", () => {
+    for (const h of ["127.0.0.1", "localhost", "::1", "[::1]"]) expect(isLocalOnlyServer(h, false, [])).toBe(true);
+  });
+  it("外向き（全インタフェース・LAN の IP）・TLS・--origin（プロキシ・ポート転送）は偽", () => {
+    for (const h of ["0.0.0.0", "::", "192.168.1.5", "example.com", "app.localhost", "127.0.0.2"]) expect(isLocalOnlyServer(h, false, [])).toBe(false);
+    expect(isLocalOnlyServer("127.0.0.1", true, [])).toBe(false);
+    expect(isLocalOnlyServer("127.0.0.1", false, ["https://soda.example.test"])).toBe(false);
   });
 });

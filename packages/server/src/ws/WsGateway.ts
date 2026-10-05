@@ -9,6 +9,7 @@ import type { AuthService } from "../auth/AuthService.js";
 import type { Logger } from "../log/Logger.js";
 import { LogThrottle, monotonicNow } from "../log/LogThrottle.js";
 import type { WsConnection, WsServer } from "./WsServer.js";
+import { BRIDGE_SESSION_ID } from "../machine/BridgeEndpoint.js";
 
 const INVALID_FRAME_WINDOW_MS = 10_000;
 const INVALID_FRAME_LIMIT = 10;
@@ -81,6 +82,10 @@ export class WsGateway {
 
   private handleConnection(conn: WsConnection, sessionId: string): void {
     const clientId = this.clients.register();
+    if (sessionId === BRIDGE_SESSION_ID) {
+      const rec = this.clients.get(clientId);
+      if (rec) rec.viaBridge = true;
+    }
     // 窓の始まりは「まだ無い」（-∞）にする：単調な時計はプロセスの起動からの経過なので、0 から始めると起動の直後の
     // 最初の窓が短くなる（D106）。
     this.states.set(clientId, {

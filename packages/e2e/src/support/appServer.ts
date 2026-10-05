@@ -46,12 +46,13 @@ async function login(origin: string, token: string): Promise<string> {
   return setCookie.split(";")[0]!;
 }
 
-async function bootServer(stateDir: string, port: number, opts: { scrollback?: number; askImageFetcher?: ImageFetcher }, previousToken?: string): Promise<{ composed: ComposedServer; origin: string; token: string; cookie: string }> {
+async function bootServer(stateDir: string, port: number, opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean }, previousToken?: string): Promise<{ composed: ComposedServer; origin: string; token: string; cookie: string }> {
   const composed: ComposedServer = await composeServer({
     host: "127.0.0.1",
     port: String(port),
     stateDir,
-    origin: [],
+    // `exposed`: 外向きに公開した構成の対照（`--origin` つき＝リバースプロキシ・ポート転送の先。ask のメディアの上限を外さない）。
+    origin: opts.exposed === true ? ["https://soda.example.test"] : [],
     ...(opts.scrollback !== undefined ? { scrollback: String(opts.scrollback) } : {}),
   }, opts.askImageFetcher !== undefined ? { askImageFetcher: opts.askImageFetcher } : {});
   await composed.listen();
@@ -66,7 +67,7 @@ async function bootServer(stateDir: string, port: number, opts: { scrollback?: n
 }
 
 /** `askImageFetcher`: 質問のフォームの外部 URL の画像の取得の差し替え（20261004-ask-media-popup。省くと実物の取得＝SSRF 対策つき）。 */
-export async function startAppServer(opts: { scrollback?: number; askImageFetcher?: ImageFetcher } = {}): Promise<AppServer> {
+export async function startAppServer(opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean } = {}): Promise<AppServer> {
   const stateDir = await mkdtemp(join(tmpdir(), "soda-e2e-"));
   const port = await getFreePort();
   let booted = await bootServer(stateDir, port, opts);

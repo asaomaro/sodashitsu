@@ -150,3 +150,14 @@ function tryUrl(s: string): URL | undefined {
     return undefined;
   }
 }
+
+/**
+ * ローカル起動か（質問のフォームのメディアの大きさの上限を外してよいか。20261005-ask-local-no-limit）: loopback だけで待ち受け（`0.0.0.0`・LAN の IP は外向き）、
+ * TLS（証明書つき＝LAN・外へ公開する構成）も `--origin`（リバースプロキシ・ポート転送・Tailscale の名前）も無い。
+ * 別のマシンの `soda serve` の中継越しの画面は、これとは別に実行時に除く（`AskService`）。
+ */
+export function isLocalOnlyServer(host: string, secure: boolean, extraOrigins: readonly string[]): boolean {
+  const h = unbracketHost(host).toLowerCase();
+  // `isLoopbackHost` が通す `*.localhost` は含めない（名前の解決先が手元だと確かめられるのは localhost・127.0.0.1・::1 だけ）。
+  return (h === "localhost" || h === "127.0.0.1" || h === "::1") && !secure && extraOrigins.length === 0;
+}
