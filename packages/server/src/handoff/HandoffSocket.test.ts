@@ -28,6 +28,15 @@ describe.skipIf(process.platform === "win32")("startHandoffSocket", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it("残っている socket のファイルを作り直せたときは、警告を出さない（`soda handoff` のたびに EADDRINUSE の警告が出ていた）", async () => {
+    dir = await makeTempDir("soda-handoff-sock-warn-");
+    const path = handoffSocketPathFor(dir);
+    await writeFile(path, "stale"); // 前の版・前回の不正終了の残骸（ソケットではない普通のファイル）を模す
+    const logger = new MemoryLogger();
+    socket = await startHandoffSocket(path, { request: async () => undefined, stop: async () => undefined, status: () => ({}) } as never, logger);
+    expect(logger.lines.filter((e) => e.level === "warn")).toEqual([]);
+  });
+
   async function start(reply: HandoffReply) {
     dir = await makeTempDir("soda-handoff-sock-");
     const requests: number[] = [];
