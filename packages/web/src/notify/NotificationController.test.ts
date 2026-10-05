@@ -2,6 +2,7 @@ import type { AgentInfo, Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useNotificationsStore } from "../store/notifications.js";
+import { useSeenStore } from "../store/seen.js";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
@@ -1238,5 +1239,298 @@ describe("NotificationController.resetForMachineSwitch", () => {
     expect(useNotificationsStore(pinia).queue).toHaveLength(0);
     await settle();
     expect(view.toasts).toHaveLength(0); // 遅延中だった知らせも出ない
+  });
+});
+
+// 応答せずに閉じた知らせの履歴（20261005-notify-bell）。規則そのものは `client-core/notify/history.test.ts`——ここは入口・出口・解消の結線。
+describe("NotificationController — 履歴（AC5・AC13〜AC15・AC18）", () => {
+  /** pane を用意して入力待ちにする（待ち行列とトーストが 1 件ずつ増える）。 */
+  async function fireBlocked(h: ReturnType<typeof makeController>, paneId: string, since = 5) {
+    const instanceId = `a-${paneId}`;
+    const blocked = makeAgent({ state: "blocked", since, instanceId });
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted(makeWorkspace());
+    session.tabUpserted(makeTab());
+    session.paneUpserted(makePane(paneId, { label: paneId, agent: blocked }));
+    h.c.onAgentChanged(paneId, makeAgent({ state: "working", instanceId }), blocked);
+    await settle();
+    return blocked;
+  }
+  /** 完了を知らせる（`completionSeq` が前進）。 */
+  async function fireDone(h: ReturnType<typeof makeController>, paneId: string, seq = 1) {
+    const instanceId = `a-${paneId}`;
+    const prev = makeAgent({ state: "working", instanceId, completionSeq: seq - 1 });
+    const next = makeAgent({ state: "idle", instanceId, completionSeq: seq, serverSeenSeq: 0 });
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted(makeWorkspace());
+    session.tabUpserted(makeTab());
+    session.paneUpserted(makePane(paneId, { label: paneId, agent: next }));
+    h.c.onAgentChanged(paneId, prev, next);
+    await settle();
+    return next;
+  }
+  function closeToast(h: ReturnType<typeof makeController>, index = 0): void {
+    const view = useViewStore(pinia);
+    view.dismissToast(view.toasts[index]!.id);
+    h.c.syncToasts();
+  }
+  const history = () => useNotificationsStore(pinia).history;
+
+  describe("入口", () => {
+    it("トーストを閉じると履歴に入り、待ち行列からは外れる（入 1・AC5）", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      await fireBlocked(h, "p1");
+      expect(history(), "閉じるまでは数えない（二重に数えない）").toHaveLength(0);
+      closeToast(h);
+      expect(history().map((e) => [e.paneId, e.kind, e.reason, e.label])).toEqual([["p1", "blocked", "dismissed", "p1（ws-A / tab-A）"]]);
+      expect(useNotificationsStore(pinia).queue).toHaveLength(0);
+    });
+
+    it("完了の知らせも入る", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      await fireDone(h, "p1", 2);
+      closeToast(h);
+      expect(history().map((e) => [e.key, e.kind])).toEqual([["done:a-p1:2", "done"]]);
+    });
+
+    it("閉じた時点で解消済みなら入らない（AC15）", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      await fireBlocked(h, "p1");
+      // 入力待ちから復帰した（トーストは残っている）。
+      const working = makeAgent({ state: "working", instanceId: "a-p1", since: 9 });
+      useSessionStore(pinia).paneUpserted(makePane("p1", { label: "p1", agent: working }));
+      h.c.onAgentChanged("p1", makeAgent({ state: "blocked", since: 5, instanceId: "a-p1" }), working);
+      closeToast(h);
+      expect(history()).toHaveLength(0);
+    });
+
+    it("トーストを「切」にしていると、知らせの時点で履歴に入り、待ち行列にも入る（入 3）", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      useNotificationsStore(pinia).setPrefs({ toast: false, desktop: false, sound: false });
+      await fireBlocked(h, "p1");
+      expect(history().map((e) => [e.paneId, e.reason])).toEqual([["p1", "no-toast"]]);
+      expect(useNotificationsStore(pinia).queue).toHaveLength(1);
+    });
+
+    it("待ち行列の上限で押し出された件は履歴に入る。同じ pane の置き換えは入らない（入 2）", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      for (let i = 1; i <= 9; i++) await fireBlocked(h, `p${i}`);
+      const store = useNotificationsStore(pinia);
+      expect(store.queue.map((q) => q.paneId)).toEqual(["p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9"]);
+      expect(history().map((e) => [e.paneId, e.reason])).toEqual([["p1", "evicted"]]);
+      // 同じ pane の出し直しは置き換え（押し出しではない）。履歴は増えない。
+      await fireBlocked(h, "p9", 99);
+      expect(history().map((e) => e.paneId)).toEqual(["p1"]);
+    });
+
+    it("同じ pane の新しい出来事は、その pane の古い履歴を置き換える（最新の 1 件）", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      await fireBlocked(h, "p1", 5);
+      closeToast(h);
+      expect(history()).toHaveLength(1);
+      await fireBlocked(h, "p1", 9);
+      expect(history(), "新しい知らせはトースト中なので、古い履歴は置き換わって 0 件").toHaveLength(0);
+      closeToast(h);
+      expect(history().map((e) => e.key)).toEqual(["blocked:a-p1:9"]);
+    });
+
+    it("見ている pane・案内・短い知らせは入らない（AC8）", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      h.setFocused(true);
+      h.visible.add("p1");
+      await fireBlocked(h, "p1");
+      useViewStore(pinia).toast("短い知らせ");
+      h.c.syncToasts();
+      expect(history()).toHaveLength(0);
+    });
+  });
+
+  describe("出口（AC18）", () => {
+    it("prefix+o で移った知らせは、履歴にあれば（トースト「切」）そこからも消える", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      useNotificationsStore(pinia).setPrefs({ toast: false, desktop: false, sound: false });
+      await fireBlocked(h, "p1");
+      expect(history()).toHaveLength(1);
+      h.c.focusNext();
+      expect(history()).toHaveLength(0);
+      expect(useNotificationsStore(pinia).queue).toHaveLength(0);
+    });
+
+    it("履歴の行の［移動］で pane の tab へ移り、その行が消える。待ち行列に同じ鍵があればそれも外れる", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      useNotificationsStore(pinia).setPrefs({ toast: false, desktop: false, sound: false });
+      await fireBlocked(h, "p1");
+      const view = useViewStore(pinia);
+      view.setView("w1", "t-other");
+      h.c.focusHistoryEntry(history()[0]!.key);
+      expect(view.tabId, "pane の tab へ移った").toBe("t1");
+      expect(view.focusedPaneId).toBe("p1");
+      expect(history()).toHaveLength(0);
+      expect(useNotificationsStore(pinia).queue).toHaveLength(0);
+    });
+
+    it("対象がもう無ければ、その旨を出して行を消す", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      await fireBlocked(h, "p1");
+      closeToast(h);
+      // pane だけ session から消す（`onPaneClosed` を通さない＝切断中に閉じた場合に近い）。
+      useSessionStore(pinia).paneClosed("p1");
+      h.c.focusHistoryEntry("blocked:a-p1:5");
+      expect(useViewStore(pinia).toasts.map((t) => t.message)).toContain("知らせの対象はすでに閉じられていました。");
+      expect(history()).toHaveLength(0);
+    });
+
+    it("存在しない鍵は何もしない・［×］は 1 件だけ・［すべて削除］は履歴だけを空にする", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      await fireBlocked(h, "p1");
+      await fireBlocked(h, "p2");
+      closeToast(h, 0);
+      closeToast(h, 0);
+      expect(history()).toHaveLength(2);
+      h.c.focusHistoryEntry("nope");
+      expect(history()).toHaveLength(2);
+      h.c.dismissHistoryEntry("blocked:a-p1:5");
+      expect(history().map((e) => e.paneId)).toEqual(["p2"]);
+      await fireBlocked(h, "p3"); // 待ち行列に 1 件（トースト中）
+      h.c.clearHistory();
+      expect(history()).toHaveLength(0);
+      expect(useNotificationsStore(pinia).queue.map((q) => q.paneId), "待ち行列は触らない").toEqual(["p3"]);
+    });
+  });
+
+  describe("解消（AC13）", () => {
+    async function dismissedBlocked(h: ReturnType<typeof makeController>) {
+      const blocked = await fireBlocked(h, "p1");
+      closeToast(h);
+      expect(history()).toHaveLength(1);
+      return blocked;
+    }
+
+    it("入力待ちから復帰したら消える", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      const blocked = await dismissedBlocked(h);
+      h.c.onAgentChanged("p1", blocked, makeAgent({ state: "working", instanceId: "a-p1", since: 9 }));
+      expect(history()).toHaveLength(0);
+    });
+
+    it("入力待ちのまま（状態の更新が来ても同じ since）なら残る", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      const blocked = await dismissedBlocked(h);
+      h.c.onAgentChanged("p1", blocked, { ...blocked, label: "Claude Code (renamed)" });
+      expect(history()).toHaveLength(1);
+    });
+
+    it("エージェントが居なくなったら消える（next が null）", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      const blocked = await dismissedBlocked(h);
+      h.c.onAgentChanged("p1", blocked, null);
+      expect(history()).toHaveLength(0);
+    });
+
+    it("別のエージェントに入れ替わったら消える", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      const blocked = await dismissedBlocked(h);
+      h.c.onAgentChanged("p1", blocked, makeAgent({ state: "blocked", instanceId: "a-new", since: 5 }));
+      expect(history()).toHaveLength(0);
+    });
+
+    it("pane が閉じたら消える", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      await dismissedBlocked(h);
+      h.c.onPaneClosed("p1");
+      expect(history()).toHaveLength(0);
+    });
+
+    it("完了: また動き出したら消える／idle のままなら残る", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      const done = await fireDone(h, "p1", 1);
+      closeToast(h);
+      h.c.onAgentChanged("p1", done, { ...done, state: "idle", since: 50 });
+      expect(history(), "idle のまま").toHaveLength(1);
+      h.c.onAgentChanged("p1", done, { ...done, state: "working", since: 60 });
+      expect(history()).toHaveLength(0);
+    });
+
+    it("完了: 見たら（既読が追いついたら）消える", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      await fireDone(h, "p1", 1);
+      closeToast(h);
+      expect(history()).toHaveLength(1);
+      useSeenStore(pinia).markSeen("a-p1", 1);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(history()).toHaveLength(0);
+    });
+
+    it("完了を見たあとにトーストを閉じても履歴に入らない（AC15）", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      await fireDone(h, "p1", 1);
+      useSeenStore(pinia).markSeen("a-p1", 1);
+      closeToast(h);
+      expect(history()).toHaveLength(0);
+    });
+  });
+
+  describe("再接続・再読み込み（AC14）", () => {
+    function restored(entryKey: string) {
+      // 再読み込み: localStorage から戻した履歴（pinia を作り直す）。
+      const store = useNotificationsStore(pinia);
+      store.addHistory({ key: entryKey, kind: "blocked", paneId: "p1", instanceId: "a-p1", seq: 5, label: "p1", at: Date.now(), reason: "dismissed" });
+      pinia = createPinia();
+      expect(useNotificationsStore(pinia).history).toHaveLength(1);
+    }
+
+    it("最初のスナップショットで、解消済みの履歴を掃除する（基準線の前）", async () => {
+      vi.useFakeTimers();
+      restored("blocked:a-p1:5");
+      const h = makeController();
+      h.c.onSnapshotApplied([{ paneId: "p1", agent: makeAgent({ state: "working", instanceId: "a-p1", since: 9 }) }], true);
+      expect(useNotificationsStore(pinia).history).toHaveLength(0);
+    });
+
+    it("最初のスナップショットで、まだ入力待ちのままの履歴は残る", async () => {
+      vi.useFakeTimers();
+      restored("blocked:a-p1:5");
+      const h = makeController();
+      h.c.onSnapshotApplied([{ paneId: "p1", agent: makeAgent({ state: "blocked", instanceId: "a-p1", since: 5 }) }], true);
+      expect(useNotificationsStore(pinia).history).toHaveLength(1);
+    });
+
+    it("pane が無い（切断中に閉じた）履歴は、再接続のスナップショットで消える", async () => {
+      vi.useFakeTimers();
+      const h = makeController();
+      await fireBlocked(h, "p1");
+      closeToast(h);
+      expect(history()).toHaveLength(1);
+      h.c.onSnapshotApplied([], false);
+      expect(history()).toHaveLength(0);
+    });
+
+    it("サーバ再起動（instanceId が変わった）後の履歴は消える", async () => {
+      vi.useFakeTimers();
+      restored("blocked:a-p1:5");
+      const h = makeController();
+      h.c.onSnapshotApplied([{ paneId: "p1", agent: makeAgent({ state: "blocked", instanceId: "a-restarted", since: 5 }) }], true);
+      expect(useNotificationsStore(pinia).history).toHaveLength(0);
+    });
   });
 });
