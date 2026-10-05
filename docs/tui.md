@@ -121,6 +121,7 @@ herdr と同じ prefix 方式。`Ctrl+B` の後に 1 キー。prefix を押す�
 |---|---|---|---|
 | `prefix+?` | キー一覧（`/` で絞り込み） | `prefix+q` | 切り離し（端末版を終える） |
 | `prefix+s` | 設定 | `prefix+o` | 次の知らせの対象へ移る |
+| `prefix+shift+o` | 知らせの一覧（未処理の知らせ。Web 版では先送りした通知の一覧＝ベル） | | |
 | `prefix+w` | navigate（サイドバーをキーで選ぶ。Space でメニュー・`z` で畳む／開く） | `prefix+g` | goto（workspace・tab・pane を探す） |
 | `prefix+shift+n` | 新規 workspace | `prefix+shift+w` / `shift+d` | workspace の名前を変更 / 閉じる |
 | `prefix+shift+g` | 新しい worktree | `prefix+c` | 新規 tab |
