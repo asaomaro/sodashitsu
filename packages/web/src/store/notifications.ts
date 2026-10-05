@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { computed, ref } from "vue";
+import { computed, onScopeDispose, ref } from "vue";
 import {
   addHistory as addHistoryPure,
   enqueue as enqueuePure,
@@ -163,7 +163,10 @@ export const useNotificationsStore = defineStore("notifications", () => {
     history.value = next;
     externalChangeSeq.value++;
   }
-  if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", onStorage);
+    onScopeDispose(() => window.removeEventListener("storage", onStorage)); // pinia を止めた（テスト）ときに購読を外す
+  }
 
   /** マシンの切り替え（`main.ts` の `setSeenScope` と同じ契機）。切り替え先の履歴を読み込む。**掃除は切り替え先の最初のスナップショット**で行う。 */
   function setHistoryScope(scope: string): void {

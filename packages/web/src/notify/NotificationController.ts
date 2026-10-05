@@ -66,6 +66,12 @@ export class NotificationController {
   readonly #opts: NotificationControllerOptions;
   /** 遅延中の鍵（`blocked` の 1 秒待ち）。同じ鍵で 2 本目を立てない。 */
   readonly #pending = new Map<NotifyKey, ReturnType<typeof setTimeout>>();
+  /**
+   * **このマシンのスナップショットを 1 回適用したか**。下りている間は `session.panes` が空（読み込み直後・マシン切替の最中）で、
+   * 照合すると全件が「pane が無い＝解消」になって履歴が消え、空が共有の localStorage へ書かれる。**照合による掃除はこの旗が立ってから**
+   * （`onSnapshotApplied` で立て、`resetForMachineSwitch` で下ろす。スナップショット適用時の掃除が後で追いつく）。
+   */
+  #snapshotApplied = false;
 
   constructor(opts: NotificationControllerOptions) {
     this.#opts = opts;
@@ -116,6 +122,7 @@ export class NotificationController {
   /** スナップショットを適用した（`StoreAdapter.onSnapshotApplied`）。 */
   onSnapshotApplied(panes: { paneId: string; agent: AgentInfo | null }[], first: boolean): void {
     const store = this.#store;
+    this.#snapshotApplied = true;
     this.#pruneMissingPanes(new Set(panes.map((p) => p.paneId)));
     // **履歴の掃除は基準線の `return` より前**（最初のスナップショットでも掃除する）。再読み込みで localStorage から戻した履歴・切断中に解消した出来事を、
     // 現在の状態に照らして落とす（AC14）。
@@ -156,6 +163,7 @@ export class NotificationController {
     const clearT = this.#opts.clearTimeoutFn ?? clearTimeout;
     for (const h of this.#pending.values()) clearT(h);
     this.#pending.clear();
+    this.#snapshotApplied = false;
     this.#pruneMissingPanes(new Set());
   }
 
@@ -328,6 +336,7 @@ export class NotificationController {
 
   /** 解消した履歴を落とす。`override` は「いま届いた変化」（`session` への反映より先に呼ばれても、その pane は届いた値で判定する）。 */
   #reconcileHistory(override?: { paneId: string; agent: AgentInfo | null }): void {
+    if (!this.#snapshotApplied) return; // 状態が空の間は照合しない（`#snapshotApplied` の注記）
     this.#store.reconcileHistory((paneId) => (override && override.paneId === paneId ? this.#paneNowOf(true, override.agent) : this.#paneNow(paneId)));
   }
 

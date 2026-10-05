@@ -17,3 +17,14 @@
 - E2E（`web` を再ビルドして実行）: `NotificationController.onAgentChanged` の `this.#reconcileHistory({ paneId, agent: next })` を外す →
   `✘ notification-history.spec.ts:207 履歴：入力待ちの知らせは、…動き出すと履歴から自動で消える (21.7s)` ／ `✘ …:233 履歴：完了の知らせは、…また動き出すと…消える (21.5s)`（どちらも `expect(locator).toHaveCount(expected) failed  Expected: 0  Received: 1`）。戻して再ビルド → 2 本とも通る。`git diff` はこの修正の差分のみ（外した行は戻っている）。
 - 単体: `storage` のリスナ登録を外す → `× 別タブが全件削除すると、こちらのメモリからも消え、次に書いても戻らない`・`× 別タブが足した件が見え、…合図が進む`（2 failed）。コントローラの `externalChangeSeq` の watch を外す → `× 別タブが書いた履歴を取り込み、いまの状態で解消済みの件は落とす…`（1 failed）。`reconcileHistory` の期限掃除（`pruneExpired`）を外す・`pruneExpiredHistory` を空にする → `× 7 日を過ぎた件は、…ページを開いたままでも落ちる`（各 1 failed）。いずれも戻すと 135 件が通る（`git diff` で戻りを確認）。
+
+## ラウンド 2（再レビュー 34c1ae4）
+
+- [must][conv:regression-negative-control] packages/web/src/notify/NotificationController.ts 最初のスナップショット前（読み込み直後・マシン切替の最中）に `storage` イベントが来ると、`session.panes` が空のため全件が「pane が無い＝解消」で落ち、空が共有の localStorage へ書かれて他タブも空になる — 根拠: `externalChangeSeq` の watch → `#reconcileHistory` → `#paneNow` / 対応: 修正済（コントローラに `#snapshotApplied` の旗。`onSnapshotApplied` で立て `resetForMachineSwitch` で下ろし、下りている間は `#reconcileHistory`〔storage・既読の watch・`onAgentChanged` の経路すべて〕で照合しない。スナップショット適用時の掃除が後で追いつく。期限掃除は時刻だけなので旗なし）
+- 副産物: テストで前のテストのストアが `storage` を聞き続けて localStorage を汚したので、ストアの購読を `onScopeDispose` で外し、テストの afterEach で pinia を止める。
+
+### 壊して落ちる確認
+
+- 旗の判定（`if (!this.#snapshotApplied) return;`）を外す → `× スナップショット前の storage イベントでは件が残り、localStorage にも空を書かない`・`× マシン切替の途中（旗を下ろした後）でも同じ。…`（2 failed | 103 passed）。
+- `resetForMachineSwitch` の旗を下ろす行を外す → `× マシン切替の途中（旗を下ろした後）でも同じ。…`（1 failed | 104 passed）。
+- 戻すと 105 件が通る（`git diff` は修正の差分のみ）。「スナップショット適用後に別タブの変更を取り込んで掃除する」は既存のテスト（`別タブが書いた履歴を取り込み、いまの状態で解消済みの件は落とす…`）が守る。
