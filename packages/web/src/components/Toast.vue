@@ -64,9 +64,9 @@ function dismiss(id: number): void {
 </script>
 
 <template>
-  <div class="toast-list" aria-live="polite">
+  <div class="toast-list" role="status" aria-live="polite">
     <div v-for="t in view.toasts" :key="t.id" class="toast" :class="{ 'toast-sticky': t.kind === 'sticky', 'toast-wrap': t.wrap }" @click="dismiss(t.id)">
-      <span class="toast-message">{{ t.message }}</span>
+      <span class="toast-message" :title="t.kind === 'sticky' ? t.message : undefined">{{ t.message }}</span>
       <!-- 行動ボタンと閉じるボタンは `<button>`。既存のトーストは `<div>` で Tab の順に入らず、
            4 秒で消えるので実害が無かったが、**消えないトーストはキーボードで片付けられる必要がある**。
            本体のクリックは「消す」なので、ボタン側は `.stop` で食い止める。 -->
@@ -77,23 +77,55 @@ function dismiss(id: number): void {
 </template>
 
 <style scoped>
+/*
+ * 置き場所は**画面の右上**（20261005-notify-bell。以前は下・中央で、端末の入力欄に被さっていた）。古いものが上・新しいものが下に積む——
+ * 新しいものを上に差し込むと、押そうとしている［移動］・［×］が下へずれる。下に足せば、既にある行は動かない。
+ * 上の安全領域（ノッチ）・右の安全領域を避ける。`z-index` は今までどおり（ダイアログ・グラフ・質問のフォームは `App.vue` の Teleport で、開いている間はその中へ出る）。
+ */
 .toast-list {
   position: fixed;
-  left: 50%;
-  bottom: 3.5em;
-  transform: translateX(-50%);
+  top: calc(env(safe-area-inset-top, 0px) + 0.5em);
+  right: calc(env(safe-area-inset-right, 0px) + 0.5em);
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 0.4em;
   z-index: 950;
-  /* 消えないトーストは最大 8 枚まで溜まる（待ち行列の上限）。**畳まないと画面を覆う**ので、
+  /* 消えない知らせは最大 8 枚まで溜まる（待ち行列の上限）。**畳まないと画面を覆う**ので、
      高さを切って中で送れるようにする。 */
-  max-height: 40vh;
+  max-height: 60vh;
   overflow-y: auto;
   /* **幅も縛る**。縛らないと下の `text-overflow: ellipsis` が効かない——flex の子は
      min-content（`nowrap` の全文幅）より縮まないので、長い呼び名でトーストが横へ伸び、
      後ろに並ぶ［移動］と［×］が視界の外へ出る。**知らせから移る手段が届かなくなる**。 */
-  max-width: min(90vw, 36em);
+  width: min(26em, calc(100vw - 1em));
+  /* 中身が無いときは場所を取らない（クリックも通す）。 */
+  pointer-events: none;
+}
+.toast-list > * {
+  pointer-events: auto;
+}
+/* モバイル（1 列のレイアウト。`mobile/detect.ts` の 768px 未満と同じ幅）は上部バー（`MobileShell`）の**下**に出す——バーの右端の［設定］［連携］を隠さない。 */
+@media (max-width: 767px) {
+  .toast-list {
+    top: calc(env(safe-area-inset-top, 0px) + 3.6rem);
+  }
+}
+/* 出る動き。「動きを減らす」の設定では付けない（20261005-notify-bell の AC4）。 */
+@media (prefers-reduced-motion: no-preference) {
+  .toast {
+    animation: toast-in 0.15s ease-out;
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(1em);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .toast {
   display: flex;
@@ -105,6 +137,10 @@ function dismiss(id: number): void {
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
   cursor: pointer;
+}
+/* 消えない知らせは、左の細い帯で 4 秒で消える短い知らせと見分ける（20261005-notify-bell）。 */
+.toast-sticky {
+  border-left: 3px solid var(--soda-state-blocked, #ff6e6e);
 }
 /* 消えないトーストは 1 行に畳む（8 枚 × 2em では画面を覆うため）。
    **`min-width: 0` が要る**——flex の子は既定で min-content より縮まないので、
