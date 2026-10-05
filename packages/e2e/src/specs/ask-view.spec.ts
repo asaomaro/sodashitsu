@@ -783,6 +783,7 @@ for (const [name, submit, viewport] of [
   ["成果物つき（フォームが狭い）・既定の文言", undefined, { width: 1280, height: 800 }],
   ["成果物つき・長い文言「この内容で進める」", "この内容で進める", { width: 1280, height: 800 }],
   ["成果物つき・長い文言「この内容で確定して次へ進む」", "この内容で確定して次へ進む", { width: 1280, height: 800 }],
+  ["成果物つき・やや長い文言「この内容で確定して次へ進める」（ボタンの中で折り返さない）", "この内容で確定して次へ進める", { width: 1280, height: 800 }],
   ["モバイル幅（390）・長い文言", "この内容で確定して次へ進む", { width: 390, height: 800 }],
 ] as const) {
   test(`フッター: ${name}でも［キャンセル］と［決定］は同じ行に並び、はみ出さない`, async ({ page, appServer }) => {
@@ -800,6 +801,11 @@ for (const [name, submit, viewport] of [
       expect(m.cancelTop).toBe(m.submitTop);
       expect(m.cancelRight).toBeLessThan(m.submitLeft);
       expect(m.overflow).toBeLessThanOrEqual(0);
+      if (viewport.width >= 768) {
+        // ボタンの文言が 2 行に折り返さない（1 行の高さ。ボタンの余白を含めて 44px 未満）。
+        const h = await page.evaluate(() => document.querySelector("ask-form")!.shadowRoot!.querySelector("[data-ask-submit]")!.getBoundingClientRect().height);
+        expect(h, "［決定］の文言が 1 行").toBeLessThan(44);
+      }
       await page.keyboard.press("Escape");
       await run.done;
     } finally {
