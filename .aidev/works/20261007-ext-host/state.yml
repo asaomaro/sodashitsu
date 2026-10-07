@@ -1,7 +1,7 @@
 schema: 11
 slug: ext-host
-current: requirements
-approved: []
+current: research
+approved: [requirements, research]
 mode: autonomous
 profile: full
 humanGates: []

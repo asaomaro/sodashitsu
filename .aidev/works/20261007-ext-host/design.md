@@ -13,21 +13,21 @@
 
 ## 設計方針
 
-1. **起動の入口を 1 つにする**（S1・S2）。`spawn` を呼ぶのは `ExtensionHost.startOne(key)` だけで、そこが、設定の読み直し・鍵の計算・承認の記録との照合・無効の確かめ・上限の確かめをする。
+1. **起動の入口を 1 つにする**（S1・S2）。拡張のコマンドを `spawn` するのは `ExtensionHost.startOne(key)` だけで（ほかに子プロセスを起動するのは、Windows の `taskkill` の絶対パスだけ。S25）、そこが、設定の読み直し・鍵の計算・承認の記録との照合・無効の確かめ・上限の確かめをする。
    起動のきっかけ（サーバの起動・workspace の増減・読み直し・承認・有効化・起動し直し・落ちた後の時間切れ・入れ替えの失敗からの再開）は、どれも「差を埋める」（`reconcile`）か `startOne` を呼ぶだけで、自分では起動しない。
    代替案（きっかけごとに検査を書く）は、漏れた 1 か所が「承認なしで動く」になるので採らない。
 2. **読んだものを、そのまま動かす**（S5）。設定ファイルは、開いた fd から 1 回読み、そのバイト列を解釈した 1 件から、鍵と、起動するコマンドの両方を作る。起動の途中で読み直さない。
-3. **承認の画面に出るものは、すべて鍵に入れる**。1 件の全項目（`id`・`command`・`description`・`enabled`・`allow`・`onUnresponsive`）と、根の実体のパス。鍵に入らないもので、動きを変えられる項目を作らない。
-4. **子プロセスは、グループごと止めて、終わりを待つ**（S13）。ssh の型（research E5）は、グループを分けず・`close` を待つので、シェル経由の孫が残る・孫が stdio を握ると待ちが延びる。ここでは、グループを分け・`exit` を待ち・待ちに上限を付ける。
-5. **拡張の入力で、サーバを止めない**（S12・S15）。行の大きさ・頻度・溜める量に上限。頻度の超過は「読むのを待つ」（パイプの詰まりが、そのまま拡張の側の待ちになる）。要求の処理は同期で、1 行ずつ。例外は、その拡張だけの誤りにする。
+3. **承認の画面に出るものは、すべて鍵に入れる**。1 件の全項目（`id`・`command`・`description`・`enabled`・`allow`・`onUnresponsive`・`cwd`〔プロジェクトでは、いつも無し〕）と、根の実体のパス。鍵に入らないもので、動きを変えられる項目を作らない。
+4. **子プロセスは、グループごと止めて、終わりを待つ**（S14）。ssh の型（research E5）は、グループを分けず・`close` を待つので、シェル経由の孫が残る・孫が stdio を握ると待ちが延びる。ここでは、グループを分け・`exit` を待ち・待ちに上限を付ける。
+5. **拡張の入力で、サーバを止めない**（S13・S21）。行の大きさ・頻度・溜める量に上限。頻度の超過は「読むのを待つ」（パイプの詰まりが、そのまま拡張の側の待ちになる）。要求の処理は同期で、1 行ずつ（決まった行数ごとに、イベントループへ返す）。例外は、その拡張だけの誤りにする（1 行ぶんの処理の全体を包む）。
 6. **表示の面の台帳は、足すだけ**。持ち主の札と、出来事の受け取り口と、持ち主を指定した閉じ方。札を付けない呼び出し（`/ws`・`pane.sock`）の動きは変えない。
-7. **画面へは「変わった」だけを配る**（S14）。bus に流したものは、全接続（`sodactl`・中継越し）へ届く（research E3）。一覧・コマンド・ログは、要求への返事でだけ返す。
+7. **画面へは「変わった」だけを配る**（S17）。bus に流したものは、全接続（`sodactl`・中継越し）へ届く（research E3）。一覧・コマンド・ログは、要求への返事でだけ返す。
 8. **後の層を、同じ口に足せる形**（D1）。操作は表（名前 → 検査と処理）、出来事は `type`。後の作業は、表と `type` を足し、挨拶の一覧に載せる。決まりの版（`v`）は上げない。許可（`allow`）は一覧なので、強い機能を足すときに値を足す。
 
 退けた案:
 
 - **サーバの中で拡張の JS を動かす** → D3（利用者の決定）で退けた。
-- **拡張に `sodactl display` を呼ばせる（標準入出力を使わない）** → 拡張に `pane.sock` のパスを渡すことになり、pane を名乗れる（表示の面の H9）。範囲（S9）も許可（S10）も縛れない。
+- **拡張に `sodactl display` を呼ばせる（標準入出力を使わない）** → 拡張に `pane.sock` のパスを渡すことになり、pane を名乗れる（表示の面の H9）。範囲（S10）も許可（S11）も縛れない。
 - **`display.wait`（長く待つ要求）を拡張にも使わせる** → 待ちの数（pane 4・全体 32）を拡張が使い切る。行で届けるほうが、短いスクリプトにも書きやすい。
 - **拡張ごとの名前空間で、面の名前を分ける** → K10 の (b)。台帳の鍵が変わり、表示の面の作業への変更が大きい。
 - **プロジェクトの根を `git rev-parse` で決める** → 承認の前に、リポジトリの中で git を動かすことになる（git の設定からプログラムが動く道がある）。`.git` をたどるだけにする（S1）。
@@ -75,15 +75,22 @@ PR は 3 つに分ける（`tasks.md`）。**新** は新しいファイル。
 - 設定画面の節・別の `<dialog>`・トースト・読み直しの操作: `SettingsDialog.vue`・`AskDialog.vue`・`store/view.ts` `toast`・`ActionDispatcher.ts:1471` `reloadConfig`（E9・X15〜X17）。
 - E2E は、サーバと同じプロセスから子プロセスを起動できる（`composeServer` をプロセスの中で立てる）: `packages/e2e/src/support/appServer.ts`（E9・X19）。
 
+- そのほか、本文が名指しで使う既存のもの（**サブエージェントの読み取りの報告で確かめた。research に行が無いものは、その旨**。実装の前に開いて確かめる）:
+  `packages/server/src/display/rateLimit.ts` の `TokenBucket` と、通らなかった要求の `refund`（報告: `DisplayService.ts:143-144`。research に行なし）／`DisplayService.features()` が `renderers` を返す（報告: 273 行。型は `20261007-soda-extensions/design.md`「定数と型」）／
+  `SessionService.hasPane`（報告: `SessionService.ts:907-913`。research に行なし）／受け口の `paneOps.register` と、載っていない操作の `unknown_op`（`20261007-soda-extensions/research.md` R1）／`ClientRecord.viaBridge`（E3・E4）／`machine.changed` を、同じ JSON なら配らない比べ方（E5）／
+  `AskDialog.vue` の `restoreFocus`（報告: 129 行）と `view.ts` の `modalOpen`（報告: 382 行）・`setAskOpen`（E9・X16）／表示の面の待ちの上限（pane 4・全体 32。報告: `display.ts` の `DISPLAY_WAITERS_MAX`。research に行なし）／受け口の 1 行 4 MiB（E5）／`AUTO_LABEL_TIMEOUT_MS` = 200（E3）／`issueText`・`safeKeyName`（E1）／
+  `composeServer` の `internal.machineSpawn`（報告: `composeServer.ts:174`。research に行なし）／`machines.json` の、`stat` の署名での見張り（E2）。
+
 **未確認**（実装の最初に確かめ、結果を `decisions.md` に 1 行残す。だめなときの代えは `tasks.md`「不確かな点」）:
 
 - u1: `detached: true` で起動した子（`setsid`）へ、`process.kill(-pid, sig)` でグループごと合図を送れること。サーバが `node-pty` を使っていること・`soda` が端末から起動されていることと、干渉しないこと。
 - u2: Node が作る子の stdio のパイプが close-on-exec で、`execve` の後に、止め損ねた子の標準入力が閉じること（止めて待つので、通常は通らない道）。
 - u3: Windows で、`taskkill /pid <pid> /T /F` が、`%ComSpec% /c` の下の木を終わらせること（実機では確かめない。組み立てだけ単体テスト）。
-- u4: pane が tab・workspace を移ったときに、bus に出るイベントの種類（research X23）。範囲の検査は、イベントに頼らず、要求のたびに引くので、安全には響かない（一覧の行が遅れるだけ）。
+- u4: pane が tab・workspace を移ったときに、bus に出るイベントの種類（research X23）。範囲の検査は、イベントに頼らず、要求のたびと、**出来事を渡す直前**に引くので、該当のイベントが無くても、範囲の外の pane への要求は通らず、操作の値は届かない（面が画面に残るのは、次に出来事か一覧の作り直しが来るまで）。
 - u5: 表示の面の PR2 の、パネル・帯の見出しの部品の名前と、固定のラベルの作り（research X22）。
 - u6: `findGitRoot` の `deps`（`WorkspaceLabelDeps`）を、自動の名前の外で組み立てる方法。
 - u7: `/bin/sh -c '<1 行>'` が、単純なコマンドを `exec` で置き換えるか（シェルに依る）。置き換えなくても、グループごと止めるので動きは同じ。
+- u8: 「グループに残りがいる間、その番号は、新しい pid・新しいグループの番号にならない」（`sweepGroup` の前提。一般の知識で、この環境では確かめていない）。
 
 ## インターフェース / データ構造
 
@@ -110,7 +117,7 @@ PR は 3 つに分ける（`tasks.md`）。**新** は新しいファイル。
 | 項目 | 規則 | 既定 |
 |---|---|---|
 | `id` | `COMMAND_ID_RE`（`/^[a-z0-9][a-z0-9_-]{0,63}$/`）。ファイルの中で重複しない | 必須 |
-| `command` | 1〜1024 文字（`EXTENSION_COMMAND_MAX`）。**禁止する文字**（`hasForbiddenChars`）: C0・C1 の制御文字（改行・タブを含む）・DEL・U+2028・U+2029・書字方向の制御（U+061C・U+200E・U+200F・U+202A〜U+202E・U+2066〜U+2069）・幅の無い文字（U+200B〜U+200D・U+2060・U+FEFF）・U+00AD。前後の空白は誤り | 必須 |
+| `command` | 1〜1024 文字（`EXTENSION_COMMAND_MAX`）。**禁止する文字**（`hasForbiddenChars`）: Unicode の種別で決める——制御（Cc。改行・タブを含む）・書式（Cf。書字方向の制御・幅の無い文字・タグ文字・U+00AD を含む）・私用（Co）・未割り当て（Cn）・サロゲート（Cs）・行と段落の区切り（Zl・Zp）・**U+0020 以外の空白（Zs。U+00A0・U+3000 など）**と、見えない埋め草（U+115F・U+1160・U+3164・U+FFA0・U+034F）・異体字セレクタ（U+FE00〜U+FE0F・U+E0100〜U+E01EF）。正規表現は `/[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}\u115F\u1160\u3164\uFFA0\u034F\uFE00-\uFE0F\u{E0100}-\u{E01EF}]|(?! )\p{Zs}/u`。前後の空白は誤り | 必須 |
 | `description` | 0〜200 文字。禁止する文字は `command` と同じ | 無し |
 | `enabled` | 真偽 | `true` |
 | `allow` | `EXTENSION_ALLOW_VALUES`（いまは `"script-html"` だけ）の配列。重複は誤り。**知らない値は誤り** | `[]` |
@@ -139,6 +146,8 @@ export interface ExtensionFileLoad { entries: ExtensionEntry[]; problem: string 
     3. 開いた fd の `stat` で、通常ファイル・64 KiB。
     3'. **持ち主と権限**（Unix だけ。Windows は見ない）: `root`（`stat`）・`dir`（1 の `lstat`）・ファイル（3 の fd の `stat`）の 3 つについて、`uid` が自分であること・`mode & 0o002`（だれでも書ける）が 0 であること。だめなら誤り（「ほかの利用者が書ける場所の設定は、読みません」）。
        3 つのどれかが `mode & 0o020`（グループが書ける）なら、読むが、結果に `groupWritable: true` を付ける（一覧とダイアログが、注意を出す。S24）。
+    3''. **根より上**（Unix だけ）: `root` の親から `/` まで、各ディレクトリを `stat` して、持ち主が自分か root（uid 0）で、`mode & 0o002` が 0 か、スティッキービット（`0o1000`）が立っていること。だめなら誤り（ほかの利用者が、根ごと別の木に差し替えられる場所。「ほかの利用者が差し替えられる場所のリポジトリの設定は、読みません」）。
+       グループが書ける祖先（スティッキーなし）があれば、`groupWritable: true`。
     4. `realpath(path)` が `join(root, ".soda", "extensions.json")` と等しいこと（途中のリンクで外へ出ていない）。違えば誤り。
     5. 同じ fd から読み、`parseExtensionsJson(text, "project")`。
     - 4 と 5 の間に差し替える競合は、守らない（その場所に書ける者は、既に利用者の権限を持つ。S6）。
@@ -166,7 +175,7 @@ export async function resolveProjectRoot(cwd: string, deps: ProjectRootDeps): Pr
 /** 拡張 1 件の指紋。利用者の拡張では root に ""（空）を渡す（変更の検知にだけ使う）。 */
 export function entryDigest(root: string, entry: ExtensionEntry): string; // SHA-256 の 16 進 64 文字
 export function instanceKey(scope: ExtensionScope, root: string | null, id: string): string;
-// "user:<id>" ／ "project:<SHA-256(root) の先頭 16 文字>:<id>"
+// "user:<id>" ／ "project:<SHA-256(root) の 16 進 64 文字>:<id>"（先頭だけに切らない。別の根が、同じ key にならないように）
 ```
 
 - `entryDigest` の入力は、項目の順を固定した JSON:
@@ -177,24 +186,33 @@ export function instanceKey(scope: ExtensionScope, root: string | null, id: stri
 
 ```json
 { "version": 1, "records": [
-  { "root": "/home/me/repo", "id": "hello", "digest": "<64 桁>", "status": "approved",
-    "entry": { "id": "hello", "command": "node .soda/hello.mjs", "description": null, "enabled": true, "allow": [], "onUnresponsive": "pass", "cwd": null },
-    "at": "2026-10-08T00:00:00.000Z" }
+  { "root": "/home/me/repo", "id": "hello",
+    "approved": { "digest": "<64 桁>", "at": "2026-10-08T00:00:00.000Z",
+      "entry": { "id": "hello", "command": "node .soda/hello.mjs", "description": null, "enabled": true, "allow": [], "onUnresponsive": "pass", "cwd": null } },
+    "denied": { "digest": "<64 桁>", "at": "2026-10-09T00:00:00.000Z" } }
 ] }
 ```
 
-- **(根, id) ごとに 1 件**。`status` は `"approved"`｜`"denied"`。`entry` は、そのとき決めた中身（次に変わったときの差分に使う）。記録は、次に `decide`・`revoke` するまで残る——登録が別の中身に変わっても消さない（**承認した中身へ戻せば、`digest` が合って、承認は生きている**。`enabled` を `false` にして `true` へ戻す、も同じ）。
-- `lookup(root, id, digest)`: 記録があり `digest` が同じ → その `status`。記録があり `digest` が違う → `{ status: "none", previous: 記録が approved ならその entry }`。無い → `{ status: "none" }`。
-- `decide(root, id, digest, status, entry)`・`revoke(root, id)`: **読み直してから**、その (根, id) の 1 件を置き換え（または消し）、`writeFileAtomic` で書く（`machines.json` の CLI と同じ。排他は無い。同時に書いた 2 つの session の片方が失われうる——失われた側は、承認待ちに戻るだけ）。
-  256 件（`EXTENSION_APPROVALS_MAX`）を超えたら、`at` の古いものから捨てる。
-- 読むとき（`load()`。`reconcile` と `startOne` のたびに読む。メモリに長く持たない）: `O_RDONLY|O_NOFOLLOW`・開いた fd の `stat`（通常ファイル・Unix は持ち主が自分・`mode & 0o022` が 0・256 KiB）・厳しい形の検査。
-  **読めない・壊れている・規則の外 → 記録なしとして扱う**（全部が承認待ちに戻る。動く側には倒れない）。一覧の `problems` に 1 行出す。壊れたファイルは、書くときに上書きされる（退避はしない——`entry` にコマンドが入るので、写しを増やさない）。
-- 同じ OS の利用者のプロセスは、このファイルを直接書ける。**これは境界ではない**（S8。そのプロセスは、既に利用者の権限で何でも実行できる）。
+- **(根, id) ごとに 1 件**で、**最後に承認した中身**（`approved`。鍵と、そのときの 1 件）と、**最後に「承認しない」とした鍵**（`denied`）を、別々に持つ（どちらも無ければ、その 1 件は置かない）。
+- `lookup(root, id, digest)`: `approved.digest` と同じ → `approved`。`denied.digest` と同じ → `denied`。どちらでもない → `{ status: "none", previous: approved?.entry, deniedBefore: denied !== undefined }`。
+  **承認した中身へ戻せば、承認は生きている**（`enabled` を `false` にして `true` へ戻す、も同じ）。途中で、別の中身を「承認しない」としていても、`approved` は消えない。
+- `decide(root, id, digest, "approved", entry)`: `approved` を置き換え、`denied` を消す。`decide(…, "denied")`: `denied` を置き換える（`approved` は残す）。`revoke(root, id)`: その 1 件を消す。
+- **書く手順**（別の session のサーバと、同時に書きうる）: 鍵のファイル `<sessionRoot>/extension-approvals.json.lock` を `open(…, "wx", 0o600)` で作る（あれば、50 ミリ秒おきに 2 秒まで待つ。10 秒より古い鍵のファイルは、置き去りとみなして消す）→ **読み直す** → その (根, id) の 1 件だけを変える → `writeFileAtomic` → 鍵のファイルを消す。
+  2 秒で取れなければ、方式は `internal` を返し、何も変えない（承認・取り消しのどちらも、**書けなかったことが利用者に見える**。取り消しが、黙って失われない）。
+  256 件（`EXTENSION_APPROVALS_MAX`）を超えたら、`at` の新しいほう（`approved.at`・`denied.at` の大きいほう）が古いものから捨てる。
+- 読むとき（`load()`。`reconcile` と `startOne` のたびに読む。メモリに長く持たない）: `O_RDONLY|O_NOFOLLOW`・開いた fd の `stat`（通常ファイル・Unix は持ち主が自分・`mode & 0o022` が 0・512 KiB）・厳しい形の検査。
+  **読めない・壊れている・規則の外 → 記録なしとして扱う**（全部が承認待ちに戻る。動く側には倒れない）。一覧の `problems` に 1 行出す。壊れたファイルは、次に書くときに上書きされる（退避はしない——`entry` にコマンドが入るので、写しを増やさない）。
+  **`version` が 1 より大きい**（新しい版が書いた）ときは、記録なしとして扱い、**書くことも断る**（`internal`。新しい版の記録を壊さない）。
+- 同じ OS の利用者のプロセスは、このファイルを直接書ける。**これは境界ではない**（S9。そのプロセスは、既に利用者の権限で何でも実行できる）。
 
 ### 無効の記録（PR1）
 
-`packages/server/src/extensions/ExtensionStateStore.ts`。ファイルは `<stateDir>/extension-state.json`（session ごと。K14）: `{ "version": 1, "disabled": ["user:hello", …] }`（鍵の一覧。256 件まで。古いものから捨てる）。
-`load()`・`setDisabled(key, disabled)`（`writeFileAtomic`）。読めない・壊れている → 空（全部が有効）として扱い、一覧の `problems` に 1 行。session のロックの中なので、書くのはこのサーバだけ。
+`packages/server/src/extensions/ExtensionStateStore.ts`。ファイルは `<stateDir>/extension-state.json`（session ごと。K14）: `{ "version": 1, "disabled": ["user:hello", …] }`（拡張の `key` の一覧）。
+`load(): { ok: true; disabled: Set<string> } | { ok: false; problem: string }`・`setDisabled(key, disabled, known: Set<string>)`（`writeFileAtomic`）。session のロックの中なので、書くのはこのサーバだけ。
+
+- **読めない・壊れている → 動く側に倒さない**: `ok: false` のとき、`reconcile` は、全部の拡張を `disabled` にする（利用者が切った拡張が、ファイルの破損で勝手に動き出さない）。`problems` に「無効の記録を読めません。設定画面で入切を 1 つ変えると、作り直します（ほかの拡張は、有効に戻ります）」。
+  `setDisabled` は、壊れたファイルを、空から作り直して書く。
+- 書くときに、いまの `desired` に無い `key` を捨てる（`known`）。それでも 256 件を超えるなら、`setDisabled` は誤り（`invalid_params`。古い無効を、黙って捨てない）。
 
 ### 型と定数（`packages/protocol/src/extension.ts`）
 
@@ -214,7 +232,12 @@ export const EXTENSION_ALLOW_VALUES = ["script-html"] as const;
 export const EXTENSION_UNRESPONSIVE_VALUES = ["pass", "block"] as const;
 export const EXTENSION_LINE_MAX_BYTES = 4 * 1024 * 1024;                     // 拡張 → サーバの 1 行（受け口の 1 行と同じ）
 export const EXTENSION_REQUEST_RATE = { perSec: 50, burst: 100 } as const;   // 超えたら読むのを待つ
-export const EXTENSION_INPUT_BYTES_RATE = { perSec: 4 * 1024 * 1024, burst: 16 * 1024 * 1024 } as const;
+export const EXTENSION_INPUT_BYTES_RATE = { perSec: 2 * 1024 * 1024, burst: 8 * 1024 * 1024 } as const;   // 拡張ごと
+export const EXTENSION_TOTAL_INPUT_BYTES_RATE = { perSec: 8 * 1024 * 1024, burst: 16 * 1024 * 1024 } as const; // 全部の拡張の合計
+export const EXTENSION_PUMP_BATCH = { lines: 16, ms: 8 } as const;      // これだけ処理したら、イベントループへ返す
+export const EXTENSION_STDERR_BYTES_RATE = { perSec: 256 * 1024, burst: 1024 * 1024 } as const;
+export const EXTENSION_FILE_TIMEOUT_MS = 2_000;     // 設定・記録・根を読む 1 回の上限
+export const EXTENSION_APPROVALS_POLL_MS = 5_000;   // 承認の記録の見張り
 export const EXTENSION_BAD_LINES_MAX = 20;          // 続けて
 export const EXTENSION_OUT_QUEUE_MAX_LINES = 512;
 export const EXTENSION_OUT_QUEUE_MAX_BYTES = 8 * 1024 * 1024;
@@ -265,7 +288,8 @@ export interface ExtensionApprovalView {
   command: string; cwd: string;                       // 承認の画面に出す（プロジェクトの分だけ、画面へ送る）
   groupWritable: boolean;                             // 根・.soda・設定ファイルのどれかを、グループが書ける
   decidedAt?: string;
-  previous?: { command: string; description: string | null; enabled: boolean; allow: string[]; onUnresponsive: string }; // 前に承認した中身（あれば）
+  previous?: { command: string; description: string | null; enabled: boolean; allow: string[]; onUnresponsive: string }; // 最後に承認した中身（あれば。「承認しない」とした中身は、ここに入らない）
+  deniedBefore: boolean;                              // この (根, id) で、前に別の中身を「承認しない」とした
 }
 export interface ExtensionFileProblem { scope: ExtensionScope | "state"; root?: string; path: string; problem: string }
 export interface ExtensionListResult { extensions: ExtensionInfo[]; problems: ExtensionFileProblem[]; userConfigPath: string }
@@ -282,7 +306,7 @@ export type ExtLine =
       display: { features: string[]; limits: DisplayLimits }; limits: ExtLimits }
   | { type: "ext.result"; id: string | number; ok: true; result: unknown }
   | { type: "ext.result"; id: string | number; ok: false; error: { code: string; message: string } }
-  | { type: "ext.error"; code: "bad_line" | "line_too_long" | "bad_request"; message: string } // どの要求にも結び付かない誤り
+  | { type: "ext.error"; code: "bad_line" | "line_too_long" | "bad_request"; message: string } // どの要求にも結び付かない誤り（3 つとも、「続けて壊れた行」に数える）
   | { type: "ext.dropped"; count: number }
   | { type: "ext.panes"; panes: ExtPane[] }
   | ExtDisplayEvent;
@@ -323,11 +347,12 @@ export function extLimits(): ExtLimits;
 
 処理の順（1 行ごと。同期）:
 
+0. 1〜8 の全体を `try/catch` で包む（`ExtensionProcess` の `pump()` の囲いと二重。漏れた例外は `internal`）。
 1. `parseExtRequest`。だめなら `ext.error`（`bad_line`｜`bad_request`）を書き、「続けて壊れた行」を 1 増やす。20 で、拡張を止める（理由 `bad_lines`）。読めたら、0 に戻す。
 2. `method` を表で引く。無ければ `unsupported`（文は「この操作は使えません: <名前>」。名前は 64 文字以下で、`/^[A-Za-z0-9_.:-]+$/` に合うときだけ文に入れる）。
 3. 引数を、その操作の zod の schema で検査。だめなら `invalid_params`。
 4. `paneId` を持つ操作は、**範囲**を確かめる（`inScope(ext, paneId)`。下）。外なら `not_found`（無い pane と同じ code・同じ文）。
-5. **許可**を確かめる: `display.set` で `params.format === "script-html"`（文字列の比較。表示の面の PR3 の有無に依らない）・`display.send` は、`allow` に `script-html` が無ければ `unsupported`。
+5. **許可**を確かめる: `allow` に `script-html` が無い拡張が、(i) `display.set` を `params.format === "script-html"`（文字列の比較。表示の面の PR3 の有無に依らない）で呼んだ (ii) `display.send` を呼んだ、のどちらも、誤りの code は `unsupported`。`allow` にあれば、次へ進む。
 6. 1 つの拡張の面の数: `display.set` が新しい面を作るとき（`displays.ownerOf(paneId, name) !== tag`）、`displays.countOwned(tag) >= 16` なら `display_limit`。
 7. `DisplayService` を呼ぶ。`RpcError` は、その `code` と `message` を返す。ほかの例外は `internal`（文は固定。ログに、拡張の id と操作の名前）。
 8. `id` があれば `ext.result` を書く（捨てない行）。`id` が無ければ、何も書かない（誤りのときも）。
@@ -358,7 +383,7 @@ export interface DisplaySource { type: "extension"; id: string; scope: "user" | 
 export interface DisplayInfo { /* 既存 */ source?: DisplaySource } // pane のプログラムの面には無い。readDisplayInfo は、形の合う source を通す
 
 // packages/server/src/display/DisplayService.ts（足す）
-export interface DisplayOwner { tag: string; source: DisplaySource }   // tag は "ext:<instanceKey>"
+export interface DisplayOwner { tag: string; source: DisplaySource }   // tag は "ext:<key>:<runId>"（起動 1 回ごと）
 export type DisplayOwnedEvent = ExtDisplayEvent;                        // seq なし。閉じた理由に pane_closed を含む
 set(paneId: string, body: unknown, opts?: { owner?: DisplayOwner }): DisplaySetResult;
 close(paneId: string, sel: {...}, reason?: DisplayClosedReason, opts?: { owner?: string }): { closed: string[] };
@@ -397,8 +422,8 @@ onOwnedEvent(fn: (tag: string, ev: DisplayOwnedEvent) => void): { dispose(): voi
 ```ts
 export function extensionArgv(command: string, platform: NodeJS.Platform, env: NodeJS.ProcessEnv): string[];
 // POSIX: ["/bin/sh", "-c", command]（ログインシェルにしない）。Windows: commandArgv と同じ形（[ComSpec, "/d", "/s", "/c", `"${command}"`]）
-export function killTreeCommand(pid: number, platform: NodeJS.Platform): { file: string; args: string[] } | null;
-// Windows: { file: "taskkill", args: ["/pid", String(pid), "/T", "/F"] }。POSIX: null（グループへの合図を使う）
+export function killTreeCommand(pid: number, platform: NodeJS.Platform, env: NodeJS.ProcessEnv): { file: string; args: string[]; cwd: string } | null;
+// Windows: { file: <SystemRoot>\System32\taskkill.exe の絶対パス, args: ["/pid", String(pid), "/T", "/F"], cwd: <SystemRoot>\System32 }。POSIX: null（グループへの合図を使う）
 export const EXTENSION_ENV_DROPPED: readonly string[]; // PANE_ENV_DROPPED + "SODA_EXTENSION_ID" + "SODA_EXTENSION_SCOPE" + "SODA_PROJECT_ROOT" + "SODA_EXTENSION_RUN_ID"
 export function buildExtensionEnv(base: NodeJS.ProcessEnv, ext: { id: string; scope: ExtensionScope; root: string | null; runId: string }, platform?: NodeJS.Platform): Record<string, string>;
 // base から EXTENSION_ENV_DROPPED を落とし（Windows は大文字小文字を区別せず）、SODA_EXTENSION_ID・SODA_EXTENSION_SCOPE・SODA_EXTENSION_RUN_ID と、プロジェクトなら SODA_PROJECT_ROOT を足す。
@@ -417,7 +442,7 @@ export interface ExtChild {
   on(ev: "error", fn: (err: Error) => void): void;
 }
 export type ExtSpawn = (file: string, args: string[], opts: { cwd: string; env: Record<string, string>; detached: boolean; windowsVerbatimArguments: boolean }) => ExtChild;
-export interface ExtProcessDeps { spawn?: ExtSpawn; killGroup?: (pid: number, signal: "SIGTERM" | "SIGKILL") => void; runFile?: (file: string, args: string[]) => void; clock?: Clock; platform?: NodeJS.Platform; logger: Logger }
+export interface ExtProcessDeps { spawn?: ExtSpawn; killGroup?: (pid: number, signal: "SIGTERM" | "SIGKILL" | 0) => void /* グループが無ければ ESRCH を投げる */; runFile?: (file: string, args: string[], opts: { cwd: string }) => void; totalBytes?: TokenBucket; clock?: Clock; platform?: NodeJS.Platform; logger: Logger }
 export interface ExtExit { code: number | null; signal: string | null; reason: ExtensionExitReason; uptimeMs: number }
 
 export class ExtensionProcess {
@@ -436,22 +461,34 @@ export class ExtensionProcess {
   POSIX の `detached: true` は、子を**新しいプロセスのグループ**（グループの id ＝ 子の pid）にする。`unref()` は呼ばない。
   `stdin`・`stdout`・`stderr` の `error` に、何もしない受け手を付ける（`EPIPE` でサーバを落とさない）。
 - **読む**（`lineReader.ts`）: `stdout` の `data` を `LineReader.push(chunk)` に入れ、`pump()` が `next()` で 1 行ずつ取り出して `onRequest`・`onBadLine` を呼ぶ。
-  - `LineReader`: バイト列の入れ物。`next(): { kind: "line"; text: string; bytes: number } | { kind: "too_long"; bytes: number } | null`。改行が無いまま 4 MiB を超えたら、「捨てている」状態になり、次の改行までを捨てて、`too_long` を 1 回返す。UTF-8 として壊れた行は、`bad_line` になる（`TextDecoder` を厳しく）。空の行（空白だけ）は飛ばす。入れ物が持つのは、切り出していない残りだけ（最大で 4 MiB ＋ 1 片）。
-  - **頻度**: 行の桶（毎秒 50・続けて 100）と、量の桶（毎秒 4 MiB・続けて 16 MiB。`display/rateLimit.ts` の `TokenBucket` を使う）。1 行を処理する前に両方から取る。足りなければ、`stdout.pause()` して、足りる時刻にタイマーで `pump()` をやり直す（`resume()`）。**捨てない・誤りにしない**。`too_long` の行も、量の桶から 4 MiB を取る。
+  - `LineReader`: バイト列の入れ物。`next(): { kind: "line"; text: string; bytes: number } | { kind: "too_long"; bytes: number } | { kind: "bad_utf8"; bytes: number } | null`。改行が無いまま 4 MiB を超えたら、「捨てている」状態になり、次の改行までを捨てて、`too_long` を 1 回返す。UTF-8 として壊れた行は `bad_utf8`（`TextDecoder` を厳しく）。空の行（空白だけ）は飛ばす。入れ物が持つのは、切り出していない残りだけ（最大で 4 MiB ＋ 1 片）。
+    `too_long` は `onBadLine("line_too_long")`、`bad_utf8` は `onBadLine("bad_line")`。**どちらも「続けて壊れた行」に数える**。
+  - **頻度**: 拡張ごとの、行の桶（毎秒 50・続けて 100）と量の桶（毎秒 2 MiB・続けて 8 MiB。`display/rateLimit.ts` の `TokenBucket` を使う）に加えて、**全部の拡張で共有する量の桶**（毎秒 8 MiB・続けて 16 MiB。`ExtensionHost` が 1 つ持って、各 `ExtensionProcess` に渡す）。1 行を処理する前に 3 つから取る。
+    どれかが足りなければ、`stdout.pause()` して、足りる時刻にタイマーで `pump()` をやり直す（`resume()`）。**捨てない・誤りにしない**。`too_long` の行も、量の桶から 4 MiB を取る。
+  - **イベントループへ返す**: `pump()` は、続けて 16 行か 8 ミリ秒を処理したら、`stdout.pause()` して `setImmediate` で続きをやる（1 つの拡張が、pane の入出力を待たせない）。
   - `pump()` は再入しない（処理の中から `send` が呼ばれても、行の順を保つ）。止めた後・終わった後は、何も呼ばない。
+  - **`pump()` の 1 行ぶんの処理の全体（切り出し・解釈・`onRequest`・`onBadLine`）を `try/catch` で包む**。漏れた例外は、ログ（拡張の `key` と、例外の種類だけ）に残して、その行を「壊れた行」に数える（サーバを落とさない）。
 - **書く**: `send` は、行を JSON にして列に入れ、`stdin.write` する。`write` が `false` を返したら、`drain` まで待つ（列に溜める）。
   - 列の上限は 512 行・8 MiB。入れる前に超えるなら、**捨ててよい行**（`droppable`。出来事と `ext.panes`）を古いものから捨て、捨てた数を持つ。空きが出来たら、`{"type":"ext.dropped","count":N}` を 1 行入れる（これも捨ててよい行。捨てるときは、数を足し合わせる）。
   - `coalesce: "ext.panes"` の行は、列にまだ書かれていない `ext.panes` があれば、それと置き換える（古い一覧を溜めない）。
   - **捨てられない行**（`ext.hello`・`ext.result`・`ext.error`）が、捨てても入らないとき → 止める（理由 `not_reading`）。
   - 列が空でないまま、`drain` が 30 秒来ない → 止める（理由 `not_reading`）。
 - **標準エラー**: `StringDecoder` で行に切り、1 行 4 KiB で切り詰め、制御文字（改行以外）を `?` に替えて、輪の記録（200 行）に入れる。あふれた行数を数える。改行の無い出力は、4 KiB ごとに 1 行にする。**ロガーには、中身を書かない**。
-- **止める**（`stop`）:
+  量の桶（毎秒 256 KiB・続けて 1 MiB）を持ち、足りなければ `stderr.pause()` して待つ（大量に書く拡張に、行に切る処理で CPU を使わせない）。
+- **グループを掃く**（`sweepGroup(deadline)`。POSIX。止めるとき・子が自分で終わったとき・落ちたとき、の全部で使う、ただ 1 つの手順）:
+  1. `killGroup(pid, 0)`（既定は `process.kill(-pid, 0)`）で、グループに残りがあるかを見る。`ESRCH` なら、終わり（何も送らない）。
+  2. 残っていれば `killGroup(pid, "SIGTERM")`。50 ミリ秒ごとに 1 を繰り返す。
+  3. `deadline`（合図から 2 秒＝`EXTENSION_STOP_GRACE_MS`）を過ぎても残っていれば、`killGroup(pid, "SIGKILL")` を送り、もう 1 回だけ 1 を見て終わる。
+  - **合図を送るのは、直前の 1 で「残っている」と分かったときだけ**（1 と送る処理の間に、待ちを挟まない）。グループに残りがいる間、その番号は、新しいプロセスの pid にも、新しいグループの番号にもならない（一般の知識。Linux・macOS）。残りが居なくなれば `ESRCH` で、もう送らない——**無関係のグループへ合図を送る窓を作らない**。
+  - 限界: 孫が、自分でグループ・セッションを抜けていれば（`setsid`・`setpgid`）、届かない（S14 の限界）。
+- **止める**（`stop(reason)`。返る Promise は、合図から 3 秒〔`EXTENSION_STOP_WAIT_MS`〕以内に必ず決まる）:
   1. 「止めている」印を立てる（以後の行は処理しない・`send` は捨てる）。`stdin.end()`。
-  2. POSIX: すぐ `killGroup(pid, "SIGTERM")`（既定は `process.kill(-pid, sig)`。`ESRCH` は無視）。Windows: 何もしない（標準入力が閉じたことが、穏やかな合図）。
-  3. 2 秒（`EXTENSION_STOP_GRACE_MS`）後に、まだ `exit` していなければ: POSIX は `killGroup(pid, "SIGKILL")`、Windows は `runFile("taskkill", ["/pid", pid, "/T", "/F"])`。
-  4. `exit` を待つ。合図から 3 秒（`EXTENSION_STOP_WAIT_MS`）で `exit` が来なくても返る（ログに warn。`exited` は、後で来たら決まる）。
-- **子が `exit` したとき**（止めたとき・自分で終わったとき・落ちたときのどれでも）: POSIX は、**残った孫を掃く**——`killGroup(pid, "SIGTERM")` を 1 回、2 秒後に `killGroup(pid, "SIGKILL")` を 1 回（どちらも `ESRCH` を無視。グループが空なら何も起きない）。Windows は、`exit` の時点で `runFile("taskkill", …/T /F)` を 1 回。
-  `exited` を決める: 止めた印があれば、その理由。無ければ、`code === 0 && signal === null` なら `exited`、ほかは `crashed`。
+  2. POSIX: `sweepGroup(合図から 2 秒)` を始める（最初の 1 で、子そのものがグループに居るので、すぐ `SIGTERM` が飛ぶ）。**子が `exit` しても、掃き終わる（グループが空になる・`SIGKILL` を送った）まで、`stop` は返らない**（行儀のよい親と、合図を無視する孫の組でも、孫が残らない）。
+     Windows: 2 秒待ち、子が `exit` していなければ（していても、木の残りのために）`runFile(taskkill の絶対パス, ["/pid", pid, "/T", "/F"])` を 1 回。
+  3. 掃き終わり、かつ子が `exit` したら返る。3 秒で、どちらかが済んでいなくても返る（ログに warn。`exited` は、後で来たら決まる）。
+- **子が、止めていないのに `exit` したとき**（自分で終わった・落ちた）: POSIX は `sweepGroup(exit から 2 秒)` を、裏で 1 回（残った孫を掃く）。Windows は `runFile(taskkill …)` を 1 回。
+- `exited` を決める: 止めた印があれば、その理由。無ければ、`code === 0 && signal === null` なら `exited`、ほかは `crashed`。
+- **Windows の `taskkill` は、絶対パスで起動する**（`killTreeCommand` が `join(env.SystemRoot ?? env.windir ?? "C:\\Windows", "System32", "taskkill.exe")` を返す。`cwd` も、その `System32`。名前だけで起動すると、サーバを起動した場所に置かれた同じ名前のプログラムが動く——承認を通らない、もう 1 つの起動の道になる。S25）。`/bin/sh` も絶対パス。Windows のシェルは、`ComSpec`（利用者の環境変数）か、無ければ `join(SystemRoot, "System32", "cmd.exe")`。
 - `stop` を呼ぶ前に `pid` が無い（`spawn` の失敗）なら、すぐ返る。
 
 ### `ExtensionHost`
@@ -467,8 +504,8 @@ export interface ExtensionHostOptions {
   deps?: { spawn?: ExtSpawn; killGroup?; runFile?; file?: Partial<ExtensionFileDeps>; projectRoot?: ProjectRootDeps; platform?: NodeJS.Platform };
 }
 export class ExtensionHost {
-  start(): Promise<void>;                       // 何度呼んでもよい（動いていれば、差を埋めるだけ）。ロックの後に呼ぶ
-  stop(): Promise<void>;                        // 全部を並行に止めて待つ（上限 3 秒）。後で start() できる
+  start(): Promise<void>;                       // 何度呼んでもよい（動いていれば、差を埋めるだけ）。ロックの後に呼ぶ。投げない
+  stop(): Promise<void>;                        // chain を待たずに、全部を並行に止めて待つ（上限 3 秒）。返った後に、子が起動することは無い。後で start() できる
   dispose(): void;                              // bus の購読とタイマーを外す
   list(): ExtensionListResult;                  // メモリの状態から作る（読み直さない）
   reload(): Promise<ExtensionListResult>;       // 根の覚えを捨て、failed・exited を戻して、差を埋める
@@ -481,43 +518,57 @@ export class ExtensionHost {
 }
 ```
 
-持つもの: `desired: Map<key, DesiredExtension>`（最後に読んだ設定から作った、あるべき拡張。`entry`・`digest`・`scope`・`root`・`configPath`・`decision`）、`runs: Map<key, { proc: ExtensionProcess; digest: string; startedAt: number }>`、
-`status: Map<key, { state; failures; nextRetryAt?; timer?; lastExit?; lastLog? }>`、`workspaceRoots: Map<workspaceId, string | null>`、`problems`、直列化のための `chain: Promise<void>`。
+持つもの: `desired: Map<key, DesiredExtension>`（最後に読んだ設定から作った、あるべき拡張。`entry`・`digest`・`scope`・`root`・`configPath`・`decision`）、`runs: Map<key, { proc: ExtensionProcess; runId: string; tag: string; digest: string; startedAt: number }>`、
+`status: Map<key, { state; failures; nextRetryAt?; timer?; lastExit?; lastLog? }>`、`workspaceRoots: Map<workspaceId, string | null>`、`problems`、直列化のための `chain: Promise<void>`、`stopped: boolean`（初めは真。`start()` で偽・`stop()` で真）、`epoch: number`（`stop()` のたびに 1 増える）、全部の拡張で共有する量の桶。
 
-**差を埋める**（`reconcile()`。`chain` につないで、1 つずつ実行する。途中で例外が出ても、次は走る）:
+**面の札は、起動 1 回ごと**: `tag = "ext:" + key + ":" + runId`。前の起動の後始末が、次の起動の面を消すことが無い。
 
+**直列化**: `reconcile`・`startOne`・`restart`・`reload`・`setEnabled`・`approve`・`deny`・`revoke` は、**どれも `chain` につないで**、1 つずつ実行する（途中で例外が出ても、次は走る。例外はログ）。`stop()` だけは、`chain` を待たない（下）。
+`chain` の中の、ファイルを読む手順（`loadUserExtensionsFile`・`loadProjectExtensionsFile`・`resolveProjectRoot`・`ApprovalStore.load`・`ExtensionStateStore.load`）は、**1 回ごとに 2 秒の上限**を付ける（応答しないマウントで、`chain` を止めない）。時間切れは、その 1 つを「読めなかった」として扱い（`problems` に 1 行。拡張は動く側に倒さない）、**根の時間切れは覚えない**（次の `reconcile` で引き直す）。
+根を引く処理（workspace ごと）は、並行に行い、合わせて 5 秒で打ち切る（引けなかった workspace は、今回は根なし）。
+
+**差を埋める**（`reconcile()`）:
+
+0. `stopped` なら、何もしない。以下、`await` の後ごとに `stopped` と `epoch` を見て、変わっていたら、そこでやめる。
 1. 利用者の設定を読む（`loadUserExtensionsFile(join(stateDir, "extensions.json"))`）。
-2. （PR3）`session.snapshot().workspaces` の各 workspace について、根を引く（覚えが無ければ `resolveProjectRoot(ws.cwd)`）。根の集合（重複を除き、辞書順で先頭 32）ごとに `loadProjectExtensionsFile(root)`。33 個目以降は `problems` に 1 行。
+2. （PR3）`session.snapshot().workspaces` の各 workspace について、根を引く（覚えが無ければ `resolveProjectRoot(ws.cwd)`。`reload` の後は、全部を引き直す）。**新しい対応表（workspace の id → 根）を作り終えてから、`workspaceRoots` を差し替える**（引いている途中の、空の表を、範囲の検査に見せない）。
+   根の集合（重複を除き、辞書順で先頭 32）ごとに `loadProjectExtensionsFile(root)`。33 個目以降は、読まずに `problems` に 1 行。
 3. 無効の記録（`ExtensionStateStore.load()`）と、（PR3）承認の記録（`ApprovalStore.load()`）を読む。
 4. `desired` を作り直す。1 件ごとの `decision`:
-   - `entry.enabled === false` か、無効の記録にある → `disabled`
-   - プロジェクトで、`lookup(root, id, digest)` が `approved` でない → `denied`（記録が `denied`）か `pending`（ほか）
+   - `entry.enabled === false` か、無効の記録にある（**無効の記録が読めない・壊れているときは、全部**）→ `disabled`
+   - プロジェクトで、`lookup(root, id, digest)` が `approved` でない → `denied`（`denied` の鍵と合う）か `pending`（ほか）
    - ほか → `eligible`
-5. 上限（`EXTENSIONS_RUNNING_MAX` = 32）: **既に動いているもの（6 で止めないもの）は、そのまま数える**。残りの枠を、動いていない `eligible` に、利用者（ファイルの順）→ プロジェクト（根の辞書順・ファイルの順）の順で割り当て、入らなかった分は `over_limit`（動いているものを、順が前のものに譲らせない）。
-6. （5 より先に決める）いま動いているもの（`runs`）のうち、`desired` に無い・`eligible` でない・**`digest` が違う**ものを止める（並行に `stop("stopped")`。終わりを待つ）。`backoff` のタイマーも、同じ条件で外す。
-7. `eligible` で、動いておらず、状態が `backoff`・`failed`・`exited` でないものを、`startOne(key)`。`digest` が変わった `failed`・`exited` は、状態を捨てて `startOne`。
-8. 一覧が変わっていれば、bus に `{ event: "extension.changed", data: {} }` を出す（同じ中身なら出さない。`machine.changed` と同じ比べ方）。pane の一覧の行を、送り直す。
+5. いま動いているもの（`runs`）のうち、`desired` に無い・`eligible` でない・**`digest` が違う**ものを止める（並行に `stopRun(key)`。終わりを待つ）。`backoff` のタイマーも、同じ条件で外し、**その状態（`backoff`）も捨てる**。
+6. 上限（`EXTENSIONS_RUNNING_MAX` = 32）: **5 で止めなかった、動いているものは、そのまま数える**。残りの枠を、動いていない `eligible`（状態が `backoff`・`failed`・`exited` のものを除く）に、利用者（ファイルの順）→ プロジェクト（根の辞書順・ファイルの順）の順で割り当てて `startOne(key)`。入らなかった分は `over_limit`（動いているものを、順が前のものに譲らせない）。
+   `digest` が変わった `failed`・`exited` は、状態を捨てて、同じ扱い。
+7. 一覧が変わっていれば、bus に `{ event: "extension.changed", data: {} }` を出す（同じ中身なら出さない。前に出したときの一覧の JSON と比べる）。pane の一覧の行を、送り直す。
 
-**起動**（`startOne(key)`。**`spawn` へ至る、ただ 1 つの道**。`chain` の中でだけ呼ぶ）:
+**起動**（`startOne(key)`。**拡張のコマンドを `spawn` する、ただ 1 つの道**。`chain` の中でだけ呼ぶ）:
 
-1. `desired.get(key)` が無い・`eligible` でない → 何もしない。
-2. 既に動いている → 何もしない。動いている数が 32 → `over_limit`。
+1. `stopped` なら、何もしない。`epoch` を覚える。`desired.get(key)` が無い・`eligible` でない → 何もしない。
+2. 既に動いている（`runs.has(key)`）→ 何もしない。動いている数が 32 → `over_limit`。
 3. **設定を読み直す**: 利用者なら `loadUserExtensionsFile`、プロジェクトなら `loadProjectExtensionsFile(root)`。その `id` の 1 件を探し、`entryDigest` を計算する。
-   無い・`problem` がある・**`digest` が `desired` のものと違う** → 起動しない。`reconcile()` を予約する（次の番で、承認待ち・停止に落ち着く）。
+   無い・`problem` がある・時間切れ・**`digest` が `desired` のものと違う** → 起動しない。`reconcile()` を予約する（次の番で、承認待ち・停止に落ち着く）。
 4. （PR3）プロジェクトなら、`ApprovalStore.load()` を読み直し、`lookup(root, id, digest)` が `approved` であること。違えば、起動しない（同上）。
-5. 無効の記録を読み直し、無効でないこと。
-6. 作業ディレクトリ（プロジェクト: `root`。利用者: `entry.cwd ?? homeDir`）と環境変数（`buildExtensionEnv`）を作り、**3 で読んだ 1 件の `command`** で `ExtensionProcess` を作って `start()`。
-7. `ext.hello` を送り、続けて `ext.panes`（範囲の中の一覧）を送る。状態を `running` にする。
-8. `proc.exited.then(onExit)`。
+5. 無効の記録を読み直し、無効でないこと（読めなければ、起動しない）。
+6. **ここから 8 まで、`await` を挟まない**。`stopped` が真・`epoch` が 1 と違う・`runs.has(key)` が真（待っている間に、止められた・別の起動が入った）なら、起動しない。
+7. 作業ディレクトリ（プロジェクト: `root`。利用者: `entry.cwd ?? homeDir`）と環境変数（`buildExtensionEnv`）を作り、**3 で読んだ 1 件の `command`** で `ExtensionProcess` を作って `start()`。`runs.set(key, { proc, runId, tag, … })`。
+8. `ext.hello` を送り、続けて `ext.panes`（範囲の中の一覧）を送る。状態を `running` にする。`proc.exited.then((exit) => this.onExit(key, runId, exit))`。
 
-**終わったとき**（`onExit(key, exit)`）:
+**止める**（`stopRun(key)`）: `runs.get(key)` を取り、**先に** `finishRun(key, runId, "stopped")`（下）を呼んでから、`await proc.stop("stopped")`。
 
-- `displays.closeOwned(tag)`（その拡張の面を、全部消す。K9）。最後の記録（`lastExit`・ログ）を残す。
-- 止めた（理由 `stopped`）→ 状態は、次の `reconcile` が決める（ここでは変えない）。
-- `exited`（終了コード 0）→ 状態 `exited`。起動し直さない。
-- ほか（`crashed`・`spawn_failed`・`bad_lines`・`not_reading`）→ `uptimeMs >= 60_000` なら `failures = 1`、そうでなければ `failures += 1`。
-  `failures >= 5` → `failed`。ほかは `backoff`: `min(60_000, 1_000 * 2 ** (failures - 1))` ミリ秒後に、`chain` へ `startOne(key)` を入れる（＝起動の直前に、設定と承認を確かめ直す。AC21）。
+**起動 1 回の後始末**（`finishRun(key, runId, reason)`。同じ `runId` について、1 回だけ効く）: `runs.get(key)?.runId !== runId` なら、何もしない。`runs.delete(key)`。`displays.closeOwned(tag)`（その起動の面を、全部消す。K9。`dispose()` の後なら呼ばない）。ログの記録を `lastLog` へ移す。
+
+**終わったとき**（`onExit(key, runId, exit)`。**全体を `try/catch` で包む**——`then` の中の例外を、捕まらない拒否にしない）:
+
+- `runs.get(key)?.runId !== runId`（＝止めた後・別の起動に替わった後に、遅れて来た `exit`）→ `lastExit` を書くだけ（その `runId` のものとして）。**状態・`runs`・面には触れない**。
+- 一致する（止めていないのに終わった）→ `finishRun(key, runId, exit.reason)`。そのうえで:
+  - `exited`（終了コード 0）→ 状態 `exited`。起動し直さない。
+  - ほか（`crashed`・`spawn_failed`・`bad_lines`・`not_reading`）→ `uptimeMs >= 60_000` なら `failures = 1`、そうでなければ `failures += 1`。
+    `failures >= 5` → `failed`。ほかは `backoff`: `min(60_000, 1_000 * 2 ** (failures - 1))` ミリ秒後に、`chain` へ `startOne(key)` を入れる（＝起動の直前に、設定と承認を確かめ直す。AC21。そのとき枠が無ければ `over_limit`）。
 - `extension.changed` を出す。
+- `bad_lines`・`not_reading` は、`ExtensionProcess` が自分で `stop(reason)` を始めた場合で、`exit` が来たときに、上の「一致する」の道を通る。
+
 
 ```mermaid
 stateDiagram-v2
@@ -543,25 +594,33 @@ stateDiagram-v2
 
 | きっかけ | すること |
 |---|---|
-| `start()`（`listen` の中・`resumePollers`） | bus を購読（まだなら）→ `reconcile()` |
-| bus の `workspace.created`・`workspace.closed` | 200ms まとめて `reconcile()`（`workspace.closed` は、その id の根の覚えを捨てる） |
-| bus の `pane.created`・`pane.closed`・`tab.created`・`tab.closed`・`layout.updated`・`workspace.updated`・`pane.updated` | 100ms まとめて、pane の一覧を作り直す（前と同じなら、何も送らない。範囲の外へ出た pane の面を消す）。**設定は読まない** |
-| `reload()` | 根の覚えを全部捨てる → `failed`・`exited` の状態を捨てる → `reconcile()` |
-| `restart(key)` | 動いていれば止める → 状態を捨てる（`failures = 0`）→ `startOne(key)` |
+| `start()`（`listen` の中・`resumePollers`） | `stopped = false` → bus を購読（まだなら）・承認の記録の見張りを始める（まだなら）→ `chain` に `reconcile()`。**投げない**（中の例外は、ログ） |
+| bus の `workspace.created`・`workspace.closed` | 200ms まとめて（最初のイベントから、長くても 1 秒で）`chain` に `reconcile()`（`workspace.closed` は、その id の根の覚えを捨てる） |
+| bus の `pane.created`・`pane.closed`・`tab.created`・`tab.closed`・`layout.updated`・`workspace.updated`・`pane.updated` | 100ms まとめて（**最初のイベントから、長くても 500ms で**。イベントが続いても、先送りし続けない）、pane の一覧を作り直す（前と同じなら、何も送らない。範囲の外へ出た pane の面を消す）。**設定は読まない** |
+| 承認の記録の見張り（PR3。5 秒ごとに `stat` の署名〔`mtimeMs:size:ino`〕を見る。`machines.json` と同じ流儀） | 変わっていれば、`chain` に `reconcile()`（別の session のサーバでの承認・取り消しを、5 秒ほどで拾う） |
+| `reload()` | 「根を引き直す」印を立てる → `failed`・`exited` の状態を捨てる → `reconcile()`（根の覚えは、`reconcile` の 2 が、作り終えてから差し替える） |
+| `restart(key)` | 動いていれば `stopRun(key)` → 状態を捨てる（`failures = 0`・タイマーを外す）→ `startOne(key)` |
 | `setEnabled`・`approve`・`deny`・`revoke` | 記録を書く → `reconcile()` |
-| `stop()` | タイマーを全部外す → 全部の `proc.stop("stopped")` を並行に待つ → `runs` を空に。`desired` と状態は残す |
+| `stop()` | **`chain` を待たずに、すぐ**: `stopped = true`・`epoch += 1` → タイマーを全部外し、`backoff` の状態を捨てる（`failures` は残す。次の `start()` の `reconcile` が、起動し直す）→ `runs` の全部について `finishRun` してから、`proc.stop("stopped")` を並行に待つ（合わせて 3 秒まで）。`desired` と、`failed`・`exited` の状態は残す |
+| `dispose()` | bus の購読・見張り・タイマーを外す。以後、`finishRun`・受け手は、台帳に触れない |
 
+- **`stopped` の間**: `reconcile`・`startOne` は何もしない（`chain` に残っていたものも）。bus の受け手は、タイマーを掛けない。`/ws` の `reload`・`restart` は、何もせずに今の一覧を返す。`setEnabled`・`approve`・`deny`・`revoke` は、記録だけを書く（起動は、次の `start()`）。
+  進行中の `startOne` は、6 で `stopped`・`epoch` を見るので、**`stop()` が返った後に、子が起動することは無い**（6〜8 は `await` を挟まない）。
 - **bus の受け手は、必ず `try/catch` で包む**（例外は、pane の処理へ伝わる。research E3）。受け手の中では、タイマーを掛けるだけ（重い処理をしない）。
-- `stop()` の後に来た `backoff` のタイマー・`chain` の残りは、「止まっている」印を見て、何もしない。
+- **出来事を拡張へ渡す直前に、範囲を確かめる**: `onOwnedEvent` の受け手は、札から起動を引き、`inScope(ext, ev.paneId)` が偽なら、**その出来事を渡さずに**、`displays.closeOwned(tag, { paneId })` して、`display.closed`（`out_of_scope`）だけを書く（pane が範囲の外へ出た後の操作の値が、拡張へ届かない。pane の移動で bus に何も出なくても、効く。S10）。理由が `pane_closed` の `display.closed` は、そのまま渡す。
 - ログ（`server.log`）に書くのは、拡張の `key`・`runId`・状態・終了コード・理由・行数だけ。**コマンド・標準エラーの中身・面の中身・設定の値は書かない**。項目の名前は `extension`・`run`（`ts`・`level`・`msg` を使わない）。
 
-**承認の操作**（PR3）:
+
+**承認の操作**（PR3。どれも `chain` の中で実行する）:
 
 - `approve(clientId, key, digest)`: `isScreenKind(clientId)` でなければ `RpcError("invalid_params", "only a screen can approve an extension")`。`desired.get(key)` がプロジェクトで、`decision` が `pending`・`denied` であること（ほかは `not_found`）。
   **`digest === desired.digest`** であること（違えば `RpcError("extension_stale", …)` を返し、`reconcile()` を予約）。`ApprovalStore.decide(root, id, digest, "approved", entry)` → `reconcile()`（`startOne` が、もう一度ファイルと記録を読んで確かめる）。
-- `deny`: 同じ検査で `"denied"` を書く。`revoke(clientId, key)`: 画面だけ。記録を消す → `reconcile()`（動いていれば止まり、`pending` へ）。
+- `deny`: 同じ検査で `"denied"` を書く（前に承認した中身の記録は、消さない）。`revoke(clientId, key)`: 画面だけ。`desired.get(key)` がプロジェクトなら、状態に依らず（`disabled`・`over_limit` でも）、その (根, id) の記録を全部消す → `reconcile()`（動いていれば止まり、有効なら `pending` へ）。
+- 承認した直後に、動いている数が 32 なら、`startOne` の 2 で `over_limit`（`backoff` の拡張は、`runs` に無いので、枠を持たない）。
 - `setEnabled`: 画面だけ。`ExtensionStateStore.setDisabled(key, !enabled)` → `reconcile()`。
 - 別のマシン（K4）: 中継越しの接続（`viaBridge`）も、画面の種類なら受ける（検査を足さない）。
+- **取り消し・承認しないが、ほかの session のサーバに届くまで**: そのサーバは、見張り（5 秒ごと）で記録の変化に気づいて `reconcile` する。それまでの数秒は、動き続ける（docs に書く）。
+
 
 ### `/ws` の方式とイベント
 
@@ -587,8 +646,8 @@ stateDiagram-v2
 
 - 生成: `displays` の後で `const extensions = new ExtensionHost({ stateDir: options.stateDir, sessionRoot: options.sessionRoot, session, displays, bus, isScreenKind, baseEnv: process.env, homeDir: os.homedir(), logger, deps: internal?.extensions })`。
   `registerAllMethods` の依存に `extensions`。`internal.extensions` は、テストが `spawn` などを差し替える口（`internal.machineSpawn` と同じ流儀）。
-- `listen()`: `void machines.start()`（773 行）の**前**に `await extensions.start()`（ロックの後・復元の後・`setReady(true)` の後でよい）。`start()` は、設定を読んで `spawn` を呼ぶところまでで返る（拡張の挨拶への返事は待たない）。
-  `start()` は投げない作りにする（設定の誤りは `problems`、`spawn` の失敗は状態）。それでも、`listen()` の `catch` に `await extensions.stop().catch(() => {})` を足す。
+- `listen()`: `void machines.start()`（773 行）の隣に `void extensions.start()`（**待たない**。ロックの後・復元の後。設定を読む処理が遅くても、`listen()` を止めない）。`start()` は投げない作りにする（設定の誤りは `problems`、`spawn` の失敗は状態）。
+  `listen()` の最後の文なので、その後に `listen()` が失敗する道は無いが、`catch` に `await extensions.stop().catch(() => {})` を足しておく（後で、文が足されても残らないように）。
 - `close()`: `await machines.stop()`（813 行）の隣に `await extensions.stop()`。`finally` の `displays.dispose()` の**前**に `extensions.dispose()`（面を消す処理が、捨てた台帳を触らないように）。
 - 入れ替え: `pausePollers` の `await machines.stop()`（524 行）の隣に `await extensions.stop()`、`resumePollers` の `void machines.start()`（530 行）の隣に `void extensions.start()`（**止めていなくても呼べる**。`start()` は、動いているものを二重に起動しない）。
 - 止める処理は、並行で、合わせて 3 秒まで（S16）。
@@ -619,7 +678,7 @@ stateDiagram-v2
   - `supported === false`: 「このサーバは拡張に対応していません」だけ。
   - `problems`: ファイルごとに 1 行（パスと理由。`role="alert"` にしない——開くたびに読み上げない）。
   - 一覧（`ul.settings-list`）の 1 行: id・種類の印（「利用者」／「プロジェクト」＋根のパス）・作者の説明（文字として）・許可（`allow`。あれば）・応答しないときの扱い（`block` のときだけ印）・状態の文（`disabled` は「設定で無効」か「画面で無効にした」を分ける）・入切（`role="switch"`）・［起動し直す］・［ログ］。
-    プロジェクトの行は、状態に応じて［確認］（`pending`・`denied`）・［承認を取り消す］（承認済み）。
+    プロジェクトの行は、状態に応じて［確認］（`pending`・`denied`）・［承認を取り消す］（`approval.status === "approved"`。`disabled`・`over_limit` の行でも）。`disabled` の行にも、承認の有無（「承認済み」「未承認」「承認しない」）を出す。`approval.groupWritable` なら、注意の印。
   - ［ログ］は、行の下に `<pre>`（`textContent`。新しい 200 行・末尾が見える）を開く。開いている間は、［更新］で取り直す（流し続けない）。
   - **利用者の拡張のコマンドは、`ExtensionInfo` に無い**（サーバが送らない）。画面は、id と説明だけを出す。
 - `ActionDispatcher.reloadConfig()`: `command.reload` に続けて `extension.reload` を呼ぶ（`not_found` は黙って無視）。トーストの文は、今までのまま。
@@ -635,18 +694,20 @@ stateDiagram-v2
     1. 見出し「プロジェクトの拡張の確認」。別のマシンを表示中なら「マシン: <名前>」（`store/machines.ts` の、いま選んでいるマシン）。
     2. 「リポジトリ: <根>」「設定ファイル: <パス>」「拡張の id: <id>」。
     3. 「実行されるコマンド」と `<pre class="ext-approval-command">`（`white-space: pre-wrap; overflow-wrap: anywhere;`。**高さの上限・内側のスクロールを付けない**）。その下に「作業ディレクトリ: <cwd>」。
-       コマンドに ASCII でない文字（`/[^\x20-\x7E]/`）があれば、「ASCII でない文字を含みます（見た目の似た別の文字に注意）」。
+       コマンドに ASCII でない文字（`/[^\x20-\x7E]/`）があれば、「ASCII でない文字を含みます（見た目の似た別の文字に注意）」と、その文字と符号位置の一覧（`а (U+0430)` の形。重複を除いて 16 個まで。残りは「ほか N 個」）。id は ASCII だけ（`COMMAND_ID_RE`）。説明と根のパスは、禁止する文字をサーバが断っている。
     4. 固定の文言（枠つき）: 「このプログラムは、あなたの OS の利用者の権限で動き、隔離されません。ファイルの読み書き・通信・ほかのプログラムの起動が出来ます。」「コマンドが指すファイルの中身が後で変わっても、確認は出ません。」
     5. 「求めている許可」: `allow` が空なら「なし（文字・Markdown・スクリプトの動かない HTML の表示だけ）」。`script-html` があれば「スクリプトが動く表示: ブラウザの中で、この拡張のスクリプトが動きます。操作中に打ったキーは、スクリプトが読めます。」（表示の面の docs の「残る限界」への案内）。
        続けて、**いつも**（初回から。鍵に入る項目は、全部見せる）: 「応答しないとき: 素通し」か「応答しないとき: 止める（この版では、まだ効きません）」（`onUnresponsive`）。`enabled` は出さない（`disabled` の拡張には、ダイアログを開けない。`approve` は `pending`・`denied` だけを受けるので、ダイアログが出る登録の `enabled` は、いつも `true`）。
        `groupWritable` なら「この設定ファイル（か、その場所）は、同じグループのほかの利用者が書き換えられます」。
     6. 「作者が書いた説明（Sodashitsu は、中身を確かめていません）」と `description`（あれば）。
-    7. `previous` があれば「前に承認した登録からの変更」: 変わった項目ごとに、前と後（`approvalView.ts` の `diffEntry`）。
+    7. `previous` があれば「前に承認した登録からの変更」: 変わった項目ごとに、前と後（`approvalView.ts` の `diffEntry`）。`deniedBefore` なら「この拡張は、前に、別の中身を『承認しない』としています。登録が、その後に変えられました」。
     8. ボタン（この順。**中身の後ろ**に置く）: ［承認しない］（開いたときのフォーカス）・［後で］・［承認して動かす］。
        ［承認して動かす］は、開いてから・中身が替わってから 1 秒（`EXTENSION_APPROVE_DELAY_MS`）は `disabled`。
   - 送るのは `extension.approve { key, digest }`（**ダイアログが描いた `approval.digest`**）。`extension_stale` が返ったら、「登録が変わりました」と出して、取り直した中身で描き直す（1 秒の待ちも、やり直す）。
-    開いている間に `extension.changed` で `digest` が変わったときも、同じ。
-  - 1 件を決めたら、ほかに `pending` があれば、次の 1 件に替わる（フォーカスは［承認しない］へ戻す・1 秒の待ちをやり直す）。無ければ閉じる。
+    開いている間に `extension.changed` で `digest` が変わったときも、同じ。その拡張が、一覧から消えた・`pending` でも `denied` でもなくなったときは、次の `pending` へ替わるか、無ければ閉じる。
+  - **次の 1 件**: 開いたときに、**その拡張と同じ根**の `pending` の `key` の一覧（一覧の順）を覚え、見出しに「N 件中 M 件目」を出す。1 件を決めたら、覚えた一覧の次の、まだ `pending` のものに替わる（フォーカスは［承認しない］へ戻す・1 秒の待ちをやり直す）。無ければ閉じる。
+    開いた後に増えた登録・別の根の登録へは、替わらない（利用者が、もう一度、自分で開く）。
+  - **ほかのモーダルとの重なり**: 開いている間に、ほかのモーダル（質問のフォーム・設定・確認）が開いた・閉じたら（`view` の、モーダルの開閉の状態を見る）、［承認して動かす］の 1 秒の待ちをやり直す（上に重なったものが閉じた瞬間に、下のボタンを押させない）。
   - 閉じたら、フォーカスを戻す（ほかのモーダルがあれば、開く前の要素。無ければ、フォーカスのあった pane の端末。`AskDialog.vue` の `restoreFocus` と同じ）。
 - `extensions/approvalView.ts`（純粋。PR3）: `diffEntry(previous, current): { field: string; before: string; after: string }[]`、`hasNonAscii(s)`、`showPath(s)`（`hasForbiddenChars` に当たる文字を `\u{…}` に替える。サーバが既に断っているが、画面でも二重に）。
 - **出どころの表示**（PR3。表示の面の PR2 の部品に足す）: `DisplayInfo.source` があれば、固定のラベルを「拡張『<id>』の表示（利用者｜プロジェクト）」にする。無ければ、今までのラベル。`source` は、サーバが付ける（面の中身・題からは変えられない）。
@@ -706,26 +767,27 @@ lines.on("close", () => process.exit(0)); // 標準入力が閉じたら終わ�
 | S4 | 承認した登録が指すスクリプトの**中身だけ**が変わる。同じ場所に、同じ登録の別のリポジトリが置かれる | **防げない**（K1）。ダイアログの固定の文言と docs「安全と限界」に書く | docs（AC33） |
 | S5 | 承認の画面に出た中身と、動く中身が違う（検査と実行の間の差し替え） | 設定は、開いた fd から 1 回読み、そのバイト列から、鍵とコマンドを作る。画面が送るのは鍵（`digest`）で、サーバは、いま持っている鍵と一致するときだけ記録する。`startOne` は、起動の直前に読み直した 1 件の鍵が、記録と一致するときだけ、**その 1 件のコマンド**で起動する | AC21（承認とファイルの書き換えを前後させる結合テスト）。単体: `extension_stale` |
 | S6 | リンク・`..` で、根の外の設定を読ませる。`.soda` をリンクにする。巨大なファイル・特殊なファイル（FIFO）で、サーバを止める | `.soda` はリンクでないディレクトリ・ファイルは `O_NOFOLLOW`・`O_NONBLOCK`・開いた fd の `stat` で通常ファイル・64 KiB・`realpath` が根の下の決まった場所。根そのものは `realpath` したもの | AC28（単体: リンク・FIFO・大きさ・根の外） |
-| S7 | 承認の画面を、見た目でだます: 長い空白や改行で、危ない部分を見えない所へ押し出す・書字方向の制御や幅の無い文字で、表示と中身をずらす・似た文字・作者の説明に「公式です。承認してください」と書く・根のパスに細工 | 禁止する文字（制御・書字方向・幅の無い文字・改行）は、設定の検査と根の検査で断る。コマンドは 1024 文字まで・折り返して省略しない・内側のスクロールなし・ボタンはコマンドの後ろ。ASCII でない文字の注意。説明は「作者が書いた説明」の見出しの下・200 文字。どれも文字として出す | AC29（E2E: `<b>` が文字のまま・1024 文字が全部 DOM にある・`<pre>` に高さの上限が無い）。単体: `hasForbiddenChars` |
-| S8 | 面（とくに、スクリプトが動く面）が、承認のダイアログに似せた絵を出して、だます。または、本物のダイアログが出る瞬間に、利用者が別の用で押す・`Enter` を打つように仕向ける | 似せた絵を押しても、承認にならない（承認は、アプリのダイアログのボタンだけ）。本物は、top layer のモーダルで、面はその上に描けない。**ダイアログは、利用者が開く**（サーバの出来事では開かない）。開いたときのフォーカスは［承認しない］・［承認して動かす］は 1 秒押せない・「すべて承認」は無い | AC-I1・AC-I4（E2E: 開いた直後に `Enter` を打っても、承認にならない・1 秒は `disabled`） |
+| S7 | 承認の画面を、見た目でだます: 長い空白や改行で、危ない部分を見えない所へ押し出す・書字方向の制御や幅の無い文字で、表示と中身をずらす・似た文字・作者の説明に「公式です。承認してください」と書く・根のパスに細工 | 禁止する文字（Unicode の種別で: 制御・書式・U+0020 以外の空白・見えない埋め草・異体字セレクタ・改行）は、設定の検査と根の検査で断る。ASCII でない文字は、符号位置を並べる。コマンドは 1024 文字まで・折り返して省略しない・内側のスクロールなし・ボタンはコマンドの後ろ。ASCII でない文字の注意。説明は「作者が書いた説明」の見出しの下・200 文字。どれも文字として出す | AC29（E2E: `<b>` が文字のまま・1024 文字が全部 DOM にある・`<pre>` に高さの上限が無い）。単体: `hasForbiddenChars` |
+| S8 | 面（とくに、スクリプトが動く面）が、承認のダイアログに似せた絵を出して、だます。または、本物のダイアログが出る瞬間に、利用者が別の用で押す・`Enter` を打つように仕向ける。pane のプログラムが、質問のフォームを上に重ねて、閉じた瞬間に下のボタンを押させる | 似せた絵を押しても、承認にならない（承認は、アプリのダイアログのボタンだけ）。本物は、top layer のモーダルで、面はその上に描けない。ほかのモーダルが開いた・閉じたら、1 秒の待ちをやり直す。**ダイアログは、利用者が開く**（サーバの出来事では開かない）。開いたときのフォーカスは［承認しない］・［承認して動かす］は 1 秒押せない・「すべて承認」は無い | AC-I1・AC-I4（E2E: 開いた直後に `Enter` を打っても、承認にならない・1 秒は `disabled`） |
 | S9 | pane の中のプログラム・拡張が、自分で承認する | `pane.sock`（ログイン不要）に、拡張の操作を 1 つも載せない。`sodactl` に承認のコマンドを作らない。`/ws` の承認は、画面の種類だけ。**ただし、種類は自己申告で、ログイン済みのプログラムは画面を名乗れる。記録のファイルも、同じ OS の利用者は書ける。これは境界ではない**（前提）。docs に書く | AC23（結合: `pane.sock` は `unknown_op`・`external` は断られる）。負の対照 AC35 (f)。docs |
-| S10 | プロジェクトの拡張が、ほかのリポジトリの pane に面を出す・一覧で、ほかの作業の場所を知る | 要求のたびに、pane → workspace → 根を引き、拡張の根と等しいときだけ通す。外は `not_found`。`ext.panes` は、範囲の中だけ。pane が外へ出たら、面を消す。根は `Workspace.cwd`（変わらない）から決める | AC24。負の対照 AC35 (c) |
+| S10 | プロジェクトの拡張が、ほかのリポジトリの pane に面を出す・一覧で、ほかの作業の場所を知る・pane が範囲の外へ出た後も、面を残して、操作の値を受け取る | 要求のたびに、pane → workspace → 根を引き、拡張の根と等しいときだけ通す。外は `not_found`。`ext.panes` は、範囲の中だけ。pane が外へ出たら、面を消す（一覧の作り直しは、長くても 500ms。**出来事を渡す直前にも範囲を確かめ、外なら渡さずに閉じる**）。根の対応表は、作り終えてから差し替える。根は `Workspace.cwd`（変わらない）から決める | AC24。負の対照 AC35 (c) |
 | S11 | 拡張が、承認の画面に出ていないのに、スクリプトが動く面を出す | `allow` に `script-html` が無ければ `unsupported`。`allow` は鍵に入り、ダイアログに意味が出る。足すと再承認 | AC25・AC20 |
 | S12 | 拡張が、pane のプログラム（エージェント）やほかの拡張の面への操作（利用者が欄に打った値）を読む。ほかの面を閉じて、似せた面を出す | 面に持ち主の札。札つきの出来事は、持ち主にだけ届く（pane の列に入れない）。拡張の `list`・`close`・`set`・`send` は、自分の札の面だけ。固定のラベルに、拡張の id と種類 | AC9・AC31。負の対照 AC35 (d) |
-| S13 | 拡張が暴走して、サーバ・pane・ブラウザを止める: 巨大な行・大量の行・壊れた行・読まない・落ち続ける・大量の標準エラー・大量の面 | 1 行 4 MiB（越えたら、その行を捨てる）・頻度と量は「読むのを待つ」・続けて壊れた行 20 で止める・書く列 512 行／8 MiB と 30 秒・起動し直しの間隔と 5 回・標準エラーは輪の記録だけ・1 つの拡張の面 16・面の上限と頻度は、表示の面の台帳のまま。要求の処理は同期で、例外は、その拡張だけの誤り | AC11・AC12・AC15・AC34 |
-| S14 | 止めた・落ちた拡張の、孫プロセスが残る。入れ替え・停止で、子が置き去りになる | グループを分けて起動し、グループへ合図。`exit` の後にも掃く。`stop()` は終わりを待つ。入れ替えの前・`close()`・`listen()` の `catch` で止める | AC13・AC14（起動確認: 孫の pid が残っていない）。負の対照 AC35 (e) |
+| S13 | 拡張が暴走して、サーバ・pane・ブラウザを止める: 巨大な行・大量の行・壊れた行・読まない・落ち続ける・大量の標準エラー・大量の面・応答しない場所の設定で、処理の列を止める | 1 行 4 MiB（越えたら、その行を捨てる）・頻度と量は「読むのを待つ」（拡張ごとと、全部の合計）・16 行か 8 ミリ秒ごとにイベントループへ返す・標準エラーにも量の桶・設定と記録を読む 1 回は 2 秒まで・`listen()` は拡張の起動を待たない・続けて壊れた行 20 で止める・書く列 512 行／8 MiB と 30 秒・起動し直しの間隔と 5 回・標準エラーは輪の記録だけ・1 つの拡張の面 16・面の上限と頻度は、表示の面の台帳のまま。要求の処理は同期で、例外は、その拡張だけの誤り | AC11・AC12・AC15・AC34 |
+| S14 | 止めた・落ちた拡張の、孫プロセスが残る。入れ替え・停止で、子が置き去りになる。止める処理と、起動の処理が競って、止めた後に起動する。遅れて来た終わりの知らせが、次の起動を壊す | グループを分けて起動し、`sweepGroup`（残りを確かめてから合図・2 秒で強制終了）。`stop` は、子の `exit` と、グループが空になることの両方を待つ。`stop()` は、印と `epoch` を立て、`startOne` は `spawn` の直前に（`await` を挟まずに）見直す。後始末は `runId` が一致するときだけ・面の札は起動ごと。入れ替えの前・`close()` で止める。**限界: 自分でグループを抜けた孫（`setsid`）には届かない** | AC13・AC14（起動確認: 孫の pid が残っていない）。負の対照 AC35 (e) |
 | S15 | サーバが異常終了（SIGKILL・クラッシュ・2 回目の Ctrl+C）して、拡張が残る。次の起動で、同じ拡張が 2 つ動く | **残りうる**（K8）。拡張の標準入力は閉じるので、「標準入力が閉じたら終わる」を決まりにする（見本は、そうしている）。docs に書く | docs（AC33）。見本のテスト（AC32: 標準入力を閉じると終わる） |
 | S16 | 拡張が、止まらないことで、サーバの停止・入れ替えを遅らせる・止める | 止める処理は、全部を並行に、合わせて 3 秒まで。2 秒で強制終了。`exit` が来なくても返る | AC13（単体: 合図を無視する偽の子で、3 秒以内に返る） |
-| S17 | 秘密が漏れる: 設定のコマンドに書いた token・標準エラーの中身・面の中身が、ログやほかの画面・`sodactl` へ出る。サーバの秘密が、拡張へ渡る | `server.log` には、`key`・`runId`・状態・数だけ。利用者の拡張のコマンドは、`/ws` へ送らない。`extension.changed` は中身なし。標準エラーの記録は、ログイン済みの接続の要求への返事だけ。環境変数は、落とす一覧を通す（token は、もともと環境変数に無い）。`SODA_PANE_SOCKET`・`SODA_SERVER_URL` を渡さない。**落とす一覧に無い環境変数（利用者の API の鍵など）は、拡張に見える**——「利用者の権限で動く」の一部として、docs に書く | AC1・AC15・AC27（E2E: ブラウザが受けたフレームに、利用者の拡張のコマンドの文字列が無い）。単体: `buildExtensionEnv` |
-| S18 | 承認の記録が壊れる・ほかの利用者に書かれる | 読むときに、リンクでない・持ち主が自分・ほかの利用者が書けない・形が正しい、を確かめる。**だめなら、記録なしとして扱う**（全部が承認待ち。動く側に倒れない）。書くのは `writeFileAtomic`（0600） | 単体（AC19・AC34: 壊れた記録 → `pending`） |
-| S19 | 承認待ちを大量に出して、読まずに押させる（承認の疲れ） | 知らせは 1 つ（件数だけ）。1 件ずつ・「すべて承認」なし。根ごとに 16 件・根は 32。［承認しない］は覚えて、聞き直さない | AC22・AC30・AC34 |
-| S20 | プロジェクトの拡張が、利用者の拡張と同じ id を使って、なりすます | 鍵は種類と根で分かれる。一覧・固定のラベル・ダイアログに、種類（利用者／プロジェクト）と根を出す | AC27・AC31 |
+| S17 | 秘密が漏れる: 設定のコマンドに書いた token・標準エラーの中身・面の中身が、ログやほかの画面・`sodactl` へ出る。サーバの秘密が、拡張へ渡る | `server.log` には、`key`・`runId`・状態・数だけ。利用者の拡張のコマンドは、`/ws` へ送らない。`extension.changed` は中身なし。標準エラーの記録は、ログイン済みの接続の要求への返事だけ（**シェルの誤りの文として、コマンドの断片が、記録に出うる**——コマンドに秘密を書かない、と docs に書く）。環境変数は、落とす一覧を通す（token は、もともと環境変数に無い）。`SODA_PANE_SOCKET`・`SODA_SERVER_URL` を渡さない。**落とす一覧に無い環境変数（利用者の API の鍵など）は、拡張に見える**——「利用者の権限で動く」の一部として、docs に書く | AC1・AC15・AC27（E2E: ブラウザが受けたフレームに、利用者の拡張のコマンドの文字列が無い）。単体: `buildExtensionEnv` |
+| S18 | 承認の記録・無効の記録が壊れる・ほかの利用者に書かれる・2 つの session が同時に書いて、取り消しが失われる | 読むときに、リンクでない・持ち主が自分・ほかの利用者が書けない・形が正しい、を確かめる。**だめなら、承認は「記録なし」、無効は「全部無効」として扱う**（動く側に倒れない）。承認の記録を書くときは、鍵のファイルを取り、読み直してから、`writeFileAtomic`（0600）。取れなければ、誤りを返す。ほかの session のサーバは、見張り（5 秒）で拾う | 単体（AC19・AC34: 壊れた記録 → `pending`） |
+| S19 | 承認待ちを大量に出して、読まずに押させる（承認の疲れ）。無害な登録を先に並べて、同じ位置のボタンを続けて押させる。「承認しない」とされた後、1 文字変えて聞き直す | 知らせは 1 つ（件数だけ）。1 件ずつ・「すべて承認」なし・「N 件中 M 件目」・替わるたびに 1 秒・替わるのは、開いたときの、同じ根の分だけ。根ごとに 16 件・根は 32。［承認しない］は覚えて、同じ中身では聞き直さない。**変えた中身では、聞き直される**（鍵が変わる。止められない）が、ダイアログに「前に『承認しない』とした」と出す | AC22・AC30・AC34 |
+| S20 | プロジェクトの拡張が、利用者の拡張と同じ id を使って、なりすます | `key` は、種類と根（ハッシュの全体）で分かれる。一覧とダイアログに、種類（利用者／プロジェクト）と根を出す。固定のラベルには、id と種類（根は出さない） | AC27・AC31 |
 | S21 | 拡張が、要求の `id`・`method`・`params` の細工で、サーバを壊す（巨大な id・深い入れ子・`__proto__`） | `parseExtRequest` が、型と長さを確かめる。引数は zod。1 行 4 MiB の `JSON.parse` は、量の頻度の内側。返事に入れる `method` の名前は、決まった文字のときだけ | 単体（AC7・AC12） |
 | S22 | 別のマシンのサーバが、嘘のダイアログの中身を送る | 動くのは、そのマシンの中だけ（手元では、何も実行されない）。ダイアログに、マシンの名前を出す | AC29（マシンの名前）。K4 |
-| S24 | 共有の場所（ほかの OS の利用者が書けるディレクトリ）に置かれた `.git` と `.soda/` が、根として拾われる。承認の後、鍵に入らないスクリプトを、ほかの利用者が差し替える | 根・`.soda`・設定ファイルの持ち主が自分で、だれでも書ける（other）でないときだけ読む。グループが書けるときは、一覧とダイアログに注意。**スクリプトの置き場所の権限までは見ない**（S4 と同じ限界。docs に書く） | AC28（単体: 持ち主・other の書き込み・グループの注意） |
 | S23 | 入れ替えの後・再起動の後に、承認なしで動く | 新しいプロセスの `listen()` も、同じ `start()` → `reconcile` → `startOne`（S2）。承認と無効は、ファイルから読む | AC18（起動確認: 入れ替えの後も、実行の印が無い） |
+| S24 | 共有の場所（ほかの OS の利用者が書けるディレクトリ）に置かれた `.git` と `.soda/` が、根として拾われる。承認の後、鍵に入らないスクリプトを、ほかの利用者が差し替える | 根・`.soda`・設定ファイルの持ち主が自分で、だれでも書ける（other）でないときだけ読む。**根より上のディレクトリ**も、`/` まで、ほかの利用者が差し替えられない（持ち主が自分か root・other が書けないか、スティッキー）ときだけ。グループが書けるときは、一覧とダイアログに注意。**スクリプトの置き場所の権限までは見ない**（S4 と同じ限界。docs に書く） | AC28（単体: 持ち主・other の書き込み・グループの注意） |
+| S25 | サーバが、名前だけでプログラムを起動して、サーバを起動した場所（悪意のあるリポジトリの中）に置かれた、同じ名前のプログラムが動く（Windows の `taskkill`） | 止めるための `taskkill` は、`%SystemRoot%\System32` の絶対パスで起動し、`cwd` もそこにする。POSIX は `/bin/sh` の絶対パスと、`process.kill`（プログラムを起動しない） | AC36（単体: 組み立てた絶対パスと `cwd`） |
 
-残る限界（docs「安全と限界」に書く）: S4（スクリプトの中身・同じ場所の差し替え）／S9（種類は自己申告・記録は同じ利用者が書ける）／S15（異常終了で残りうる）／S17（環境変数は見える）／拡張のプロセスは隔離しない（D3）——承認した拡張は、利用者の権限で、ファイル・通信・`sodactl`（ログイン済みなら）を使える／
+残る限界（docs「安全と限界」に書く）: S4（スクリプトの中身・同じ場所の差し替え）／S9（種類は自己申告・記録は同じ利用者が書ける）／S14（自分でグループを抜けた孫は、止められない）／S15（異常終了で残りうる）／S17（環境変数は見える・標準エラーの記録に、コマンドの断片が出うる）／S18（取り消しが、ほかの session のサーバに届くまで、数秒）／S19（中身を変えれば、聞き直せる）／拡張のプロセスは隔離しない（D3）——承認した拡張は、利用者の権限で、ファイル・通信・`sodactl`（ログイン済みなら）を使える／
 pane のプログラムは、拡張の面と同じ名前で出し直せる・閉じられる（K10）／同じ pane の面の数・頻度は、拡張と pane のプログラムで合わせて数えるので、片方が上限を使い切れる。
 
 ### そのほか
@@ -745,8 +807,10 @@ pane のプログラムは、拡張の面と同じ名前で出し直せる・閉
 | 設定ファイルが規則の外・読めない | そのファイルの拡張は 0 件。`problems` に 1 行。動いていたものは止まる |
 | `spawn` が失敗（`cwd` が無い・`/bin/sh` が無い） | `exited`（`spawn_failed`）→ 落ちたのと同じ（`backoff` → 5 回で `failed`） |
 | コマンドが見つからない（シェルが 127 で終わる） | 落ちたのと同じ。標準エラーの記録に、シェルの文が残る |
-| 承認の記録・無効の記録が壊れている | 記録なしとして扱う（承認待ち／全部有効）。`problems` に 1 行。次に書くときに、上書き |
-| 記録の書き込みが失敗（権限・容量） | 方式は `internal` を返す。状態は変えない |
+| 承認の記録が壊れている | 記録なしとして扱う（全部が承認待ち）。`problems` に 1 行。次に書くときに、上書き（`version` が新しいときは、書かない） |
+| 無効の記録が壊れている | 全部を無効として扱う。`problems` に 1 行。入切を 1 つ変えると、作り直す |
+| 設定・記録・根を読む処理が、2 秒で返らない | その 1 つを、読めなかったとして扱う（動く側に倒さない）。`problems` に 1 行。次の `reconcile` で、やり直す |
+| 記録の書き込みが失敗（権限・容量・鍵のファイルを 2 秒で取れない） | 方式は `internal` を返す。状態は変えない |
 | `extension.approve` の `digest` が古い | `extension_stale`。画面は、取り直して描き直す |
 | 画面でない接続からの承認・有効と無効 | `invalid_params` |
 | 知らない `key` | `not_found` |
@@ -754,12 +818,12 @@ pane のプログラムは、拡張の面と同じ名前で出し直せる・閉
 | 拡張へ書けない（`EPIPE`） | `error` の受け手が握りつぶす。続けて `exit` が来る |
 | bus の受け手・台帳の受け手の中の例外 | `try/catch` でログ。pane の処理へ伝えない |
 | `reconcile` の中の例外 | ログ。`chain` は続く。次のきっかけで、やり直す |
-| 入れ替えの途中で `extensions.stop()` が 3 秒で返らない | 返る作り（上限）。残った子は、`execve` の後、標準入力が閉じる（u2） |
+| 入れ替えの途中で、拡張が 3 秒で終わらない | `extensions.stop()` は、3 秒で返る（上限）。残った子は、`execve` の後、標準入力が閉じる（u2） |
 | 同時に動かす合計が 32 を超える | 超えた分は `over_limit`（一覧に理由）。空きが出来たら、次の `reconcile` で動く |
 
 ## 受け入れ基準との対応
 
-- AC1: `extensions.start()` は `listen()` の中の、ロックの後（ロックを取れなかったサーバは、そこまで来ない）。利用者の設定（`<stateDir>/extensions.json`）を `loadUserExtensionsFile` が読み、`reconcile` → `startOne` が起動して `ext.hello` を送る。環境変数は `buildExtensionEnv`（入力は `process.env` と拡張の id・種類）。作業ディレクトリは `entry.cwd ?? homeDir`。テストは、環境変数と作業ディレクトリをファイルへ書き出す拡張を起動して読む。
+- AC1: `extensions.start()` は `listen()` の最後（ロックの後。ロックを取れなかったサーバは、そこまで来ない）。利用者の設定（`<stateDir>/extensions.json`）を `loadUserExtensionsFile` が読み、`reconcile` → `startOne` が起動して `ext.hello` を送る。環境変数は `buildExtensionEnv`（入力は `process.env` と拡張の id・種類）。作業ディレクトリは `entry.cwd ?? homeDir`。テストは、環境変数と作業ディレクトリをファイルへ書き出す拡張を起動して読む。
 - AC2: `parseExtensionsJson`（禁止する文字・重複・知らない項目）と `loadUserExtensionsFile`（fd の `stat`）。誤りの文は、場所と種類だけ。入力は、テストが書く設定ファイル。
 - AC3: `reconcile` の 6・7（`digest` の比較）。同じプロセスかは、一覧の `runId` で見る。入力は、設定ファイルの書き換えと `extension.reload`。
 - AC4: `decision` の `disabled`（`entry.enabled`・`ExtensionStateStore`）。再起動をまたぐのは、`extension-state.json`。［起動し直す］は `restart(key)`（`runId` が替わる）。
@@ -768,11 +832,11 @@ pane のプログラムは、拡張の面と同じ名前で出し直せる・閉
 - AC7: 表に無い `method` → `unsupported`。`id` が無ければ書かない。見本は、知らない `type` を無視する。
 - AC8: `ext.hello` の `methods`・`events`・`display`・`limits` と、`ext.features`（`DisplayService.features()` の `renderers`）。
 - AC9: 台帳の持ち主の決まり（表）。入力は、同じ pane への、拡張の `display.set` と、`pane.sock` の `display.set`・`display.wait`。
-- AC10: `onExit` の `displays.closeOwned(tag)`。札の無い面は、対象でない。
+- AC10: `finishRun` の `displays.closeOwned(tag)`（札は、起動ごと）。札の無い面は、対象でない。
 - AC11: `onExit` の回数と間隔（`ManualClock` で進める）。`failed` で `extension.changed`。pane の入出力は、結合テストで、落ち続ける拡張を動かしながら echo を見る。
 - AC12: `LineReader`（`too_long`）・`parseExtRequest`・続けて 20・書く列の上限と 30 秒・頻度の桶（`pause`）。入力は、偽の子の標準出力。
-- AC13: `ExtensionProcess.stop`（グループへの合図・2 秒・3 秒）と、`exit` の後の掃き。結合テストは、孫（`sleep`）を起動して合図を無視する拡張で、pid が消えることを見る。
-- AC14: `pausePollers`・`resumePollers`・`close()` の `extensions.stop()`。再開は `start()`（単体: 止めずに 2 回呼んでも、`spawn` は 1 回）。`handoffSmoke.ts`・`stopSmoke.ts` に段（拡張と孫の pid が、入れ替え・停止の後に無い。入れ替えの後、新しい pid で動いている）。
+- AC13: `ExtensionProcess.stop` と `sweepGroup`（残りを確かめてから合図・2 秒で強制終了・3 秒で返る）。結合テストは、(i) 合図を無視する拡張 (ii) **すぐ終わる親と、合図を無視する孫**、の 2 つで、`stop` が返った時点で、どの pid も消えていることを見る。
+- AC14: `pausePollers`・`resumePollers`・`close()` の `extensions.stop()`。再開は `start()`（単体: 止めずに 2 回呼んでも、`spawn` は 1 回。`backoff` だった拡張も、`stop` → `start` で起動し直される。進行中の `startOne` の途中で `stop()` しても、後から `spawn` されない）。`handoffSmoke.ts`・`stopSmoke.ts` に段（拡張と孫の pid が、入れ替え・停止の後に無い。入れ替えの後、新しい pid で動いている）。
 - AC15: 標準エラーの輪の記録と `extension.log`。`server.log` を読んで、標準エラーの目印の文字列と、コマンドの文字列が無いことを見る。
 - AC16: `packages/cli/src/commands/ext.ts`。古いサーバは、`extension.list` の `not_found` を「未対応」に読み替える。`USAGE_LINES` に、承認のサブコマンドが無い。
 - AC17: `reconcile` の 2（`resolveProjectRoot(Workspace.cwd)` → `loadProjectExtensionsFile`）→ `decision` が `pending`。入力は、テストが作る一時のリポジトリ（`.git/HEAD` と `.soda/extensions.json`）。
@@ -794,7 +858,7 @@ pane のプログラムは、拡張の面と同じ名前で出し直せる・閉
 - AC33: `docs/extensions.md` の節（上の一覧）・`AGENTS.md`・`docs/sodactl.md`・`docs/tui-parity.md`。
 - AC34: 定数（16・16・32・16・256）の、ちょうどと超過のテスト（`over_limit`・`problems`・古い記録から捨てる）。
 - AC35: `tasks.md` の最後のタスク（6 つの守りを 1 つずつ外して、対応するテストが落ちることを確かめ、戻す）。
-- AC36: `extensionArgv`・`killTreeCommand`・`buildExtensionEnv` の、`platform: "win32"` の単体テスト。
+- AC36: `extensionArgv`・`killTreeCommand`（`taskkill` の絶対パスと `cwd`）・`buildExtensionEnv` の、`platform: "win32"` の単体テスト。
 - AC-I1: ダイアログは `store.dialogKey` でだけ開く。`@cancel` は［後で］。背景では閉じない。次の 1 件へ替わる。ログは、行の下の開閉。
 - AC-I2: 3 つのボタンの処理。`extension_stale`・`digest` の変化で、描き直す。
 - AC-I3: ネイティブの `<dialog>` と `button`・`role="switch"`（`Tab`・`Enter`・`Space`・`Esc`）。E2E を、キーボードだけで通す。
