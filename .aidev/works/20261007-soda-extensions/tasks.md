@@ -246,7 +246,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/e2e/src/support/display.ts`（新規。手本は `packages/e2e/src/support/ask.ts:54`・`askSent.ts`）、`packages/e2e/src/specs/display.spec.ts`（新規）/ 根拠: research A15
       依存: T5, T9, T13
       AC: AC1
-- [ ] T15: パネルの幅のつまみ（design「パネルの幅のつまみ」）: `PanePanel.vue` の左の縁に `div.pane-panel-resize.resize-handle.resize-handle-x`（`role="separator"`・`aria-orientation`・`aria-label`・`aria-valuenow/min/max`・`tabindex="0"`。たたんでいる間は出さない）、`useResizeDrag`（`begin`・`move` は案内の線だけ・`commit` で確定・`cancel`・`reset`）、
+- [x] T15: パネルの幅のつまみ（design「パネルの幅のつまみ」）: `PanePanel.vue` の左の縁に `div.pane-panel-resize.resize-handle.resize-handle-x`（`role="separator"`・`aria-orientation`・`aria-label`・`aria-valuenow/min/max`・`tabindex="0"`。たたんでいる間は出さない）、`useResizeDrag`（`begin`・`move` は案内の線だけ・`commit` で確定・`cancel`・`reset`）、
       案内の線（`.pane-frame-row` の中。`PaneFrame.vue` に置き場）、ドラッグ中の `iframe.display-frame` の `pointer-events: none`、キーボード（`←`/`→`・`Shift`・`Home`・`End`・`Enter`。`keydown` を端末へ流さない）、
       `useDisplayStore` の `panelWidths`・`setPanelWidth`・`clearPanelWidth`（`soda.prefs.v1` の `displayPanelWidths`。64 件まで・無い pane の分を捨てる・壊れた値を捨てる）、`DEVICE_LOCAL_PREF_KEYS` に `displayPanelWidths`。
       単体テスト（ドラッグ中は幅が変わらない・確定で 1 回変わる・`Esc`・ダブルクリック・キー・範囲の丸め・保存と読み込み・64 件）と、E2E `display-resize.spec.ts`: つまみをドラッグしている間、`watchClientView` の記録が増えず、離した後に 1 回だけ増えて列数が変わる・`aria-valuenow` とパネルの箱の幅が合う・

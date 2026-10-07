@@ -202,7 +202,7 @@ const getScrollbackLines = (): number => effectiveScrollback(settings.scrollback
 const askController = new AskController({ conn: inputGate, store: useAskStore(pinia), toast: (message) => view.toast(message) });
 
 // 表示の面（20261007-soda-extensions）。接続のたびに `display.subscribe` して名乗り、全 pane の面の見出しを受け取る（下の `onOpened`）。
-const displayController = new DisplayController({ conn: inputGate, store: useDisplayStore(pinia), toast: (message) => view.toast(message) });
+const displayController = new DisplayController({ conn: inputGate, store: useDisplayStore(pinia), toast: (message) => view.toast(message), livePaneIds: () => new Set(session.panes.keys()) });
 
 // クリップボードの画像の貼り付け（20260927-clipboard-image-paste。herdr の remote_image_paste）。入力は関所を通し、送っている間のキーを溜める。
 // `registry` は下で作る（呼ばれるのは pane を acquire した後）。

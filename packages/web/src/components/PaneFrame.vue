@@ -61,6 +61,8 @@ const displayEngaged = computed(() => {
   return !!displays && id != null && displays.infos.get(id)?.paneId === props.paneId;
 });
 const bodyEl = ref<HTMLElement | null>(null);
+/** パネルの幅のつまみをドラッグしている間の、案内の線の位置（パネルの幅 px。無ければ null）。 */
+const guideWidth = ref<number | null>(null);
 const bodySize = ref({ w: 0, h: 0 });
 let bodyObserver: ResizeObserver | null = null;
 onMounted(() => {
@@ -339,7 +341,8 @@ function onKeydown(ev: KeyboardEvent): void {
       <PaneBands v-if="hasBand" :pane-id="paneId" :pane-height-px="bodySize.h" />
       <div class="pane-frame-row">
         <div class="pane-frame-main" :class="{ 'pane-frame-main-dimmed': displayEngaged }" data-pane-frame-main><slot /></div>
-        <PanePanel v-if="hasPanel" :pane-id="paneId" :pane-width-px="bodySize.w" :cell-width-px="cellWidthPx" />
+        <PanePanel v-if="hasPanel" :pane-id="paneId" :pane-width-px="bodySize.w" :cell-width-px="cellWidthPx" @guide="guideWidth = $event" />
+        <div v-if="guideWidth !== null" class="pane-frame-guide" :style="{ right: `${guideWidth}px` }" aria-hidden="true" data-pane-frame-guide></div>
       </div>
     </div>
     <div v-else class="pane-frame-body">
@@ -526,6 +529,7 @@ function onKeydown(ev: KeyboardEvent): void {
   flex-direction: column;
 }
 .pane-frame-row {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -535,6 +539,17 @@ function onKeydown(ev: KeyboardEvent): void {
   min-width: 0;
   min-height: 0;
   position: relative;
+}
+/* パネルの幅のつまみをドラッグしている間の案内の線（幅は離すまで変えない）。 */
+.pane-frame-guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-right: -1.5px;
+  background: var(--soda-resize-line, #f8f8f2);
+  pointer-events: none;
+  z-index: 3;
 }
 /* 枠（表示）に入力が届いている間は、端末を薄くする（カーソルも薄くなる）。 */
 .pane-frame-main-dimmed {

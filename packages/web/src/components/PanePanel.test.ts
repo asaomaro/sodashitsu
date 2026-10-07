@@ -89,6 +89,84 @@ describe("PanePanel", () => {
   });
 });
 
+describe("PanePanel — 幅のつまみ", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    setActivePinia(createPinia());
+  });
+  const widthOf = (w: ReturnType<typeof mountPanel>["w"]): string => (w.element as HTMLElement).style.width;
+
+  it("separator の aria（valuenow・min・max）が出る。たたんでいる間は出ない", async () => {
+    const s = mountPanel([info("a")]);
+    const h = s.w.find("[data-pane-panel-resize]");
+    expect(h.attributes("role")).toBe("separator");
+    expect(h.attributes("aria-orientation")).toBe("vertical");
+    expect(h.attributes("aria-label")).toBe("パネルの幅");
+    expect(h.attributes("tabindex")).toBe("0");
+    expect(h.attributes("aria-valuenow")).toBe("320");
+    expect(h.attributes("aria-valuemin")).toBe("160");
+    expect(h.attributes("aria-valuemax")).toBe("500");
+    await s.w.find("[data-pane-panel-fold]").trigger("click");
+    expect(s.w.find("[data-pane-panel-resize]").exists()).toBe(false);
+  });
+
+  it("キー: ← で 16 広く・→ で 16 狭く・Shift で 64・Home＝最小・End＝最大・Enter＝指定の幅。1 回ごとに確定して保存する", async () => {
+    const s = mountPanel([info("a")]);
+    const h = s.w.find("[data-pane-panel-resize]");
+    await h.trigger("keydown", { key: "ArrowLeft" });
+    expect(widthOf(s.w)).toBe("336px");
+    await h.trigger("keydown", { key: "ArrowRight", shiftKey: true });
+    expect(widthOf(s.w)).toBe("272px");
+    await h.trigger("keydown", { key: "Home" });
+    expect(widthOf(s.w)).toBe("160px");
+    await h.trigger("keydown", { key: "ArrowRight" });
+    expect(widthOf(s.w)).toBe("160px"); // 最小で止まる
+    await h.trigger("keydown", { key: "End" });
+    expect(widthOf(s.w)).toBe("500px");
+    expect(s.store.panelWidths.get("p1")).toBe(500);
+    await h.trigger("keydown", { key: "Enter" });
+    expect(widthOf(s.w)).toBe("320px");
+    expect(s.store.panelWidths.has("p1")).toBe(false);
+  });
+
+  it("利用者の幅は --size の更新でも変わらない", async () => {
+    const s = mountPanel([info("a")]);
+    s.store.setPanelWidth("p1", 400);
+    s.store.upsert(info("a", { size: 700, rev: 2 }));
+    await s.w.vm.$nextTick();
+    expect(widthOf(s.w)).toBe("400px");
+  });
+
+  it("ドラッグ中は幅を変えず案内の線だけを動かし、離したときに 1 回確定する。Esc で元のまま", async () => {
+    const s = mountPanel([info("a")]);
+    const h = s.w.find("[data-pane-panel-resize]");
+    const ev = (type: string, x: number) => new PointerEvent(type, { clientX: x, clientY: 0, button: 0, pointerId: 1, bubbles: true });
+    const raf = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 1;
+    });
+    h.element.dispatchEvent(ev("pointerdown", 600));
+    h.element.dispatchEvent(ev("pointermove", 500)); // 左へ 100 → 広がる
+    await s.w.vm.$nextTick();
+    expect(widthOf(s.w)).toBe("320px"); // 幅はそのまま
+    expect(s.w.emitted("guide")?.at(-1)).toEqual([420]);
+    expect(h.attributes("aria-valuenow")).toBe("420");
+    h.element.dispatchEvent(ev("pointerup", 500));
+    await s.w.vm.$nextTick();
+    expect(widthOf(s.w)).toBe("420px");
+    expect(s.w.emitted("guide")?.at(-1)).toEqual([null]);
+    expect(s.store.panelWidths.get("p1")).toBe(420);
+    // Esc で取り消し
+    h.element.dispatchEvent(ev("pointerdown", 600));
+    h.element.dispatchEvent(ev("pointermove", 400));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await s.w.vm.$nextTick();
+    expect(widthOf(s.w)).toBe("420px");
+    expect(s.w.emitted("guide")?.at(-1)).toEqual([null]);
+    raf.mockRestore();
+  });
+});
+
 describe("PaneBands", () => {
   it("固定の印・［×］・あふれは「ほか N 件」", async () => {
     const pinia = createPinia();

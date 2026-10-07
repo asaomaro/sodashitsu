@@ -15,6 +15,8 @@ export interface DisplayControllerOptions {
   conn: Pick<ConnectionPort, "request">;
   store: ReturnType<typeof useDisplayStore>;
   toast(message: string): void;
+  /** いま実在する pane の id（スナップショットを受けた後に、もう無い pane の覚えた幅を捨てるため）。 */
+  livePaneIds?: () => ReadonlySet<string>;
   /** 時計（テスト用に差し替える）。 */
   now?: () => number;
 }
@@ -62,6 +64,8 @@ export class DisplayController {
         if (generation !== this.generation) return;
         const infos = r.displays.map((d) => readDisplayInfo(d)).filter((d): d is DisplayInfo => d !== null);
         this.opts.store.replaceAll(infos);
+        const live = this.opts.livePaneIds?.();
+        if (live && live.size > 0) this.opts.store.pruneWidths(live); // pane が 1 つも分からない間（スナップショット前）は捨てない
       },
       () => undefined, // 古いサーバ（not_found）・中継先: 面は出ない
     );

@@ -794,6 +794,8 @@ export const DEVICE_LOCAL_PREF_KEYS = [
   "fileLocality",
   "sidebarSectionRatio",
   "sidebarSectionsCollapsed",
+  // 表示の面（パネル）の幅（pane の id → px）。pane の id はマシンごとに違うので共有しない（20261007-soda-extensions）。
+  "displayPanelWidths",
 ] as const;
 
 /** 共有の設定を読む。`rev` は保存のたびに +1（0 = サーバが一度も保存していない。web の初回の移行の目印）。 */

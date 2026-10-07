@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, ref } from "vue";
-import { panelWidth } from "../display/displayLayout.js";
+import { useResizeDrag } from "../composables/useResizeDrag.js";
+import { panelWidth, panelWidthRange } from "../display/displayLayout.js";
 import { frameKey } from "../display/framePage.js";
 import { DisplayControllerKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -13,6 +14,8 @@ import DisplayFrame from "./DisplayFrame.vue";
  * - 枠にフォーカスがある間は「操作中」を縁と文言で示す（備え (a)）。
  */
 const props = defineProps<{ paneId: string; paneWidthPx: number; cellWidthPx: number }>();
+/** ドラッグ中の案内の線の幅（px。`null` で消す）。幅そのものはドラッグの間は変えない（端末の大きさを送り続けないため）。 */
+const emit = defineEmits<{ guide: [width: number | null] }>();
 
 const store = useDisplayStore();
 const controller = inject(DisplayControllerKey, null);
@@ -20,7 +23,12 @@ const controller = inject(DisplayControllerKey, null);
 const panels = computed(() => store.panelsOf(props.paneId));
 const active = computed(() => store.activePanelOf(props.paneId));
 const collapsedByUser = computed(() => store.collapsed.has(props.paneId));
-const sized = computed(() => panelWidth(props.paneWidthPx, active.value?.size ?? 320, props.cellWidthPx));
+const userWidth = computed(() => store.panelWidths.get(props.paneId));
+const sized = computed(() => panelWidth(props.paneWidthPx, active.value?.size ?? 320, props.cellWidthPx, userWidth.value));
+const range = computed(() => panelWidthRange(props.paneWidthPx, props.cellWidthPx));
+/** ドラッグ中に案内の線が指している幅（無ければ null）。 */
+const dragWidth = ref<number | null>(null);
+const shownWidth = computed(() => dragWidth.value ?? sized.value.width);
 /** たたむ（利用者がたたんだ・pane が狭くて出せない）。 */
 const folded = computed(() => collapsedByUser.value || sized.value.autoCollapsed);
 const engaged = computed(() => store.focusedDisplayId !== null && panels.value.some((p) => p.id === store.focusedDisplayId));
@@ -29,6 +37,58 @@ const rootStyle = computed(() => {
   const w = folded.value ? 24 : sized.value.width;
   return { flex: `0 0 ${w}px`, width: `${w}px` };
 });
+
+const clampToRange = (w: number): number => {
+  const r = range.value;
+  return r ? Math.min(r.max, Math.max(r.min, Math.round(w))) : w;
+};
+const drag = useResizeDrag<{ width: number; x: number }>({
+  axis: "x",
+  enabled: () => !folded.value,
+  begin: (ev) => ({ width: sized.value.width, x: ev.clientX }),
+  // 幅は変えない。案内の線だけを動かす（葉の箱が変わらないので、ドラッグの間は端末の大きさ〔client.view〕が送られない）。
+  move: (ev, start) => {
+    dragWidth.value = clampToRange(start.width - (ev.clientX - start.x));
+    emit("guide", dragWidth.value);
+  },
+  // 離したとき、1 回だけ確定する（ここで葉の箱が 1 回変わる）。
+  commit: () => {
+    const w = dragWidth.value;
+    dragWidth.value = null;
+    emit("guide", null);
+    if (w !== null) store.setPanelWidth(props.paneId, w);
+  },
+  cancel: () => {
+    dragWidth.value = null;
+    emit("guide", null);
+  },
+  // ダブルクリック: プログラムの指定の幅へ戻る。
+  reset: () => store.clearPanelWidth(props.paneId),
+});
+const KEY_STEP = 16;
+const KEY_STEP_LARGE = 64;
+/** つまみのキー（← で広く・→ で狭く〔つまみが左の縁にあるため〕。Shift で 64px。Home＝最小・End＝最大・Enter＝指定の幅へ）。 */
+function onHandleKey(ev: KeyboardEvent): void {
+  const r = range.value;
+  if (!r) return;
+  const step = ev.shiftKey ? KEY_STEP_LARGE : KEY_STEP;
+  const cur = sized.value.width;
+  let next: number | null = null;
+  if (ev.key === "ArrowLeft") next = cur + step;
+  else if (ev.key === "ArrowRight") next = cur - step;
+  else if (ev.key === "Home") next = r.min;
+  else if (ev.key === "End") next = r.max;
+  else if (ev.key === "Enter") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    store.clearPanelWidth(props.paneId);
+    return;
+  }
+  if (next === null) return;
+  ev.preventDefault();
+  ev.stopPropagation(); // 端末へ流さない
+  store.setPanelWidth(props.paneId, clampToRange(next));
+}
 
 function select(id: string): void {
   store.setActivePanel(props.paneId, id);
@@ -64,6 +124,25 @@ function onTabKey(ev: KeyboardEvent): void {
     data-pane-panel
     :data-display-engaged="engaged ? '1' : '0'"
   >
+    <div
+      v-if="!folded && range"
+      class="pane-panel-resize resize-handle resize-handle-x"
+      :class="{ 'resize-handle-active': drag.dragging.value }"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="パネルの幅"
+      :aria-valuenow="shownWidth"
+      :aria-valuemin="range.min"
+      :aria-valuemax="range.max"
+      tabindex="0"
+      data-pane-panel-resize
+      @pointerdown="drag.onPointerDown"
+      @pointermove="drag.onPointerMove"
+      @pointerup="drag.onPointerEnd"
+      @pointercancel="drag.onPointerEnd"
+      @lostpointercapture="drag.onPointerEnd"
+      @keydown="onHandleKey"
+    ></div>
     <button
       v-if="folded"
       type="button"
@@ -121,6 +200,16 @@ function onTabKey(ev: KeyboardEvent): void {
   background: var(--soda-bg, #1e1f29);
   color: var(--soda-fg, #f8f8f2);
   border-left: 1px solid var(--soda-menu-border, #44475a);
+}
+/* 左の縁のつまみ（細い線。当たり判定と強調の線は `resize-handle` が作る）。 */
+.pane-panel-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  cursor: col-resize;
+  z-index: 2;
 }
 .pane-panel-head {
   flex: none;

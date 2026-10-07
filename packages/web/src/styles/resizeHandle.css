@@ -85,6 +85,11 @@ html.soda-resizing .resize-handle:not(.resize-handle-active)::after {
   opacity: 0;
 }
 
+/* ドラッグ中、表示の面の枠（iframe）がポインタを奪わない（20261007-soda-extensions）。 */
+html.soda-resizing iframe.display-frame {
+  pointer-events: none;
+}
+
 /* OS の「動きを減らす」: 動く時間を 0 にする（待ち `transition-delay` は残す）。詳細度の高い規則も覆うため、出る条件を全部並べる。 */
 @media (prefers-reduced-motion: reduce) {
   .resize-handle::after,

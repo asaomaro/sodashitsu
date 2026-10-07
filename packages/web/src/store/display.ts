@@ -1,6 +1,23 @@
 import type { DisplayContent, DisplayInfo } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
+import { readPrefs, writePrefs } from "./view.js";
+
+/** 覚えるパネルの幅の件数の上限（超えたら古い順に捨てる）。 */
+export const PANEL_WIDTHS_MAX = 64;
+const PANEL_WIDTH_STORED_MIN = 160;
+const PANEL_WIDTH_STORED_MAX = 8192;
+
+/** `soda.prefs.v1` の `displayPanelWidths` を読む。壊れた値（数でない・範囲の外）は捨てる。 */
+export function loadPanelWidths(raw: unknown): Map<string, number> {
+  const out = new Map<string, number>();
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "number" && Number.isFinite(v) && v >= PANEL_WIDTH_STORED_MIN && v <= PANEL_WIDTH_STORED_MAX && k !== "") out.set(k, Math.round(v));
+    if (out.size >= PANEL_WIDTHS_MAX) break;
+  }
+  return out;
+}
 
 /**
  * 表示の面（`sodactl display`。20261007-soda-extensions）の、画面が持つ写し。**サーバが持つ台帳の写し**で、接続のたびに `display.subscribe` の応答で丸ごと置き換える。
@@ -16,6 +33,8 @@ export const useDisplayStore = defineStore("display", () => {
   const activePanel = ref(new Map<string, string>());
   /** いまフォーカスが枠にある面の id（`DisplayFrame` が `window` の `blur`/`focus`/`focusin` で更新する）。 */
   const focusedDisplayId = ref<string | null>(null);
+  /** 利用者が変えたパネルの幅（pane の id → px）。この画面が覚える（`soda.prefs.v1` の `displayPanelWidths`。共有の設定へ送らない）。 */
+  const panelWidths = ref(loadPanelWidths(readPrefs()["displayPanelWidths"]));
 
   const all = computed<DisplayInfo[]>(() => [...infos.value.values()]);
 
@@ -79,6 +98,33 @@ export const useDisplayStore = defineStore("display", () => {
     if (focusedDisplayId.value !== id) focusedDisplayId.value = id;
   }
 
+  function savePanelWidths(): void {
+    writePrefs({ displayPanelWidths: Object.fromEntries(panelWidths.value) });
+  }
+  /** 利用者が変えた幅を覚える（確定のたびに 1 回）。64 件を超えたら古い順に捨てる。 */
+  function setPanelWidth(paneId: string, px: number): void {
+    const next = new Map(panelWidths.value);
+    next.delete(paneId); // 最近使ったものを末尾へ
+    next.set(paneId, Math.round(px));
+    while (next.size > PANEL_WIDTHS_MAX) next.delete(next.keys().next().value as string);
+    panelWidths.value = next;
+    savePanelWidths();
+  }
+  /** 覚えた幅を消す（プログラムの指定の幅へ戻る）。 */
+  function clearPanelWidth(paneId: string): void {
+    if (!panelWidths.value.has(paneId)) return;
+    const next = new Map(panelWidths.value);
+    next.delete(paneId);
+    panelWidths.value = next;
+    savePanelWidths();
+  }
+  /** もう無い pane の分を捨てる（スナップショットを受けたとき）。 */
+  function pruneWidths(live: ReadonlySet<string>): void {
+    if (![...panelWidths.value.keys()].some((id) => !live.has(id))) return;
+    panelWidths.value = new Map([...panelWidths.value].filter(([id]) => live.has(id)));
+    savePanelWidths();
+  }
+
   /** 台帳に無くなった面に紐づくものを捨てる。 */
   function prune(): void {
     if ([...contents.value.keys()].some((id) => !infos.value.has(id))) {
@@ -109,6 +155,10 @@ export const useDisplayStore = defineStore("display", () => {
     collapsed,
     activePanel,
     focusedDisplayId,
+    panelWidths,
+    setPanelWidth,
+    clearPanelWidth,
+    pruneWidths,
     all,
     panelsOf,
     bandsOf,
