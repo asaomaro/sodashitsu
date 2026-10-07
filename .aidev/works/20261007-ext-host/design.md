@@ -133,10 +133,12 @@ export interface ExtensionFileLoad { entries: ExtensionEntry[]; problem: string 
 - `packages/server/src/extensions/extensionConfig.ts`:
   - `parseExtensionsJson(text: string, scope: ExtensionScope): ExtensionFileLoad`（純粋）。誤りの文は `extensions.json: <場所>: <種類>` の形（値を入れない。`issueText`・`safeKeyName` と同じ作り）。
   - `loadUserExtensionsFile(path: string, deps?: Partial<ExtensionFileDeps>): Promise<ExtensionFileLoad>`: `loadCommandsFile` と同じ手順（`O_RDONLY|O_NOFOLLOW|O_NONBLOCK`・**開いた fd の `stat`** で通常ファイル・Unix は持ち主が自分・`mode & 0o022` が 0・64 KiB〔`EXTENSIONS_FILE_MAX_BYTES`〕・同じ fd から読む・UTF-8 を厳しく）。`ENOENT` は空（誤りではない）。
-  - `loadProjectExtensionsFile(root: string, deps?): Promise<ExtensionFileLoad & { path: string }>`（PR3）: `root` は**実体のパス**（`resolveProjectRoot` の結果）。
+  - `loadProjectExtensionsFile(root: string, deps?): Promise<ExtensionFileLoad & { path: string; groupWritable: boolean }>`（PR3）: `root` は**実体のパス**（`resolveProjectRoot` の結果）。
     1. `dir = join(root, ".soda")` を `lstat`。無ければ空。**ディレクトリでない・シンボリックリンクなら誤り**（「`.soda` がリンクです」）。
     2. `path = join(dir, "extensions.json")` を `O_RDONLY|O_NOFOLLOW|O_NONBLOCK` で開く。`ENOENT` は空、`ELOOP` は誤り。
-    3. 開いた fd の `stat` で、通常ファイル・64 KiB。**持ち主と権限は見ない**（clone したファイル。守りは承認）。
+    3. 開いた fd の `stat` で、通常ファイル・64 KiB。
+    3'. **持ち主と権限**（Unix だけ。Windows は見ない）: `root`（`stat`）・`dir`（1 の `lstat`）・ファイル（3 の fd の `stat`）の 3 つについて、`uid` が自分であること・`mode & 0o002`（だれでも書ける）が 0 であること。だめなら誤り（「ほかの利用者が書ける場所の設定は、読みません」）。
+       3 つのどれかが `mode & 0o020`（グループが書ける）なら、読むが、結果に `groupWritable: true` を付ける（一覧とダイアログが、注意を出す。S24）。
     4. `realpath(path)` が `join(root, ".soda", "extensions.json")` と等しいこと（途中のリンクで外へ出ていない）。違えば誤り。
     5. 同じ fd から読み、`parseExtensionsJson(text, "project")`。
     - 4 と 5 の間に差し替える競合は、守らない（その場所に書ける者は、既に利用者の権限を持つ。S6）。
@@ -181,7 +183,7 @@ export function instanceKey(scope: ExtensionScope, root: string | null, id: stri
 ] }
 ```
 
-- **(根, id) ごとに 1 件**。`status` は `"approved"`｜`"denied"`。`entry` は、そのとき決めた中身（次に変わったときの差分に使う）。
+- **(根, id) ごとに 1 件**。`status` は `"approved"`｜`"denied"`。`entry` は、そのとき決めた中身（次に変わったときの差分に使う）。記録は、次に `decide`・`revoke` するまで残る——登録が別の中身に変わっても消さない（**承認した中身へ戻せば、`digest` が合って、承認は生きている**。`enabled` を `false` にして `true` へ戻す、も同じ）。
 - `lookup(root, id, digest)`: 記録があり `digest` が同じ → その `status`。記録があり `digest` が違う → `{ status: "none", previous: 記録が approved ならその entry }`。無い → `{ status: "none" }`。
 - `decide(root, id, digest, status, entry)`・`revoke(root, id)`: **読み直してから**、その (根, id) の 1 件を置き換え（または消し）、`writeFileAtomic` で書く（`machines.json` の CLI と同じ。排他は無い。同時に書いた 2 つの session の片方が失われうる——失われた側は、承認待ちに戻るだけ）。
   256 件（`EXTENSION_APPROVALS_MAX`）を超えたら、`at` の古いものから捨てる。
@@ -261,6 +263,7 @@ export type ExtensionExitReason = "exited" | "crashed" | "spawn_failed" | "bad_l
 export interface ExtensionApprovalView {
   digest: string; status: "approved" | "denied" | "none";
   command: string; cwd: string;                       // 承認の画面に出す（プロジェクトの分だけ、画面へ送る）
+  groupWritable: boolean;                             // 根・.soda・設定ファイルのどれかを、グループが書ける
   decidedAt?: string;
   previous?: { command: string; description: string | null; enabled: boolean; allow: string[]; onUnresponsive: string }; // 前に承認した中身（あれば）
 }
@@ -377,13 +380,15 @@ onOwnedEvent(fn: (tag: string, ev: DisplayOwnedEvent) => void): { dispose(): voi
 | 札なしの `set`（`/ws`・`pane.sock`）、札つきの面がある | 今までどおり置き換える。その前に、元の持ち主へ `display.closed`（理由 `closed`）を知らせ、`Entry.owner` と `info.source` を外す |
 | 札つきの `close`・`list`（`opts.owner`） | その札の面だけが対象。ほかは、無いものとして扱う（`closed: []`・一覧に出ない） |
 | 札なしの `close`・`dismiss`・`report`・`ttl` の経過 | 今までどおり、どの面も閉じる |
+| 札なしの `list` | 今までどおり、その pane の全部の見出し（札つきの面は `source` つき）。中身は返さない（もともと返さない） |
+| 札なしの `send`（表示の面の PR3）、札つきの面 | `display_closed`（pane のプログラムは、拡張の面のスクリプトへ、データを送れない） |
 | **出来事**（`display.action`・`display.closed`）、面に札がある | **pane の列に入れず**、`onOwnedEvent` の受け手へ（`seq` なし）。札が無い面は、今までどおり列へ |
 | pane が閉じた（`onPaneClosed`） | 今までの処理に加えて、札つきの面ごとに、受け手へ `display.closed`（理由 `pane_closed`） |
 | `closeOwned` | 台帳から外し、`display.removed`（理由 `closed`）を bus に配る。受け手へは知らせない |
 
 - 受け手は同期で呼ぶ。受け手の例外は、台帳の処理へ伝えない（`try/catch` で包み、ログ）。
 - 面の数・合計のバイト数・`set` の頻度（pane ごと）は、札に依らず、今までどおり合わせて数える（AC5・機能要件 27）。
-- 表示の面の PR3 が `send` を足すときは、`send(paneId, p, opts?: { owner?: string })` にして、札の違う面には `display_closed` を返す（**表示の面の作業への申し送り**）。PR3 が先に入っていれば、この作業の PR1 で足す。
+- 表示の面の PR3 が `send` を足すときは、`send(paneId, p, opts?: { owner?: string })` にして、**面の札と `opts.owner` が違えば**（札なしの呼び出しが札つきの面を指す・札つきの呼び出しが別の札や札なしの面を指す）`display_closed` を返す（**表示の面の作業への申し送り**）。PR3 が先に入っていれば、この作業の PR1 で足す。
 
 ### `ExtensionProcess`（1 回ぶんの起動）
 
@@ -488,8 +493,8 @@ export class ExtensionHost {
    - `entry.enabled === false` か、無効の記録にある → `disabled`
    - プロジェクトで、`lookup(root, id, digest)` が `approved` でない → `denied`（記録が `denied`）か `pending`（ほか）
    - ほか → `eligible`
-5. `eligible` を、利用者（ファイルの順）→ プロジェクト（根の辞書順・ファイルの順）に並べ、先頭 32（`EXTENSIONS_RUNNING_MAX`）を超えた分は `over_limit`。
-6. いま動いているもの（`runs`）のうち、`desired` に無い・`eligible` でない・**`digest` が違う**ものを止める（並行に `stop("stopped")`。終わりを待つ）。`backoff` のタイマーも、同じ条件で外す。
+5. 上限（`EXTENSIONS_RUNNING_MAX` = 32）: **既に動いているもの（6 で止めないもの）は、そのまま数える**。残りの枠を、動いていない `eligible` に、利用者（ファイルの順）→ プロジェクト（根の辞書順・ファイルの順）の順で割り当て、入らなかった分は `over_limit`（動いているものを、順が前のものに譲らせない）。
+6. （5 より先に決める）いま動いているもの（`runs`）のうち、`desired` に無い・`eligible` でない・**`digest` が違う**ものを止める（並行に `stop("stopped")`。終わりを待つ）。`backoff` のタイマーも、同じ条件で外す。
 7. `eligible` で、動いておらず、状態が `backoff`・`failed`・`exited` でないものを、`startOne(key)`。`digest` が変わった `failed`・`exited` は、状態を捨てて `startOne`。
 8. 一覧が変わっていれば、bus に `{ event: "extension.changed", data: {} }` を出す（同じ中身なら出さない。`machine.changed` と同じ比べ方）。pane の一覧の行を、送り直す。
 
@@ -599,7 +604,7 @@ stateDiagram-v2
 | `sodactl ext reload` | `list` と同じ | 0 |
 | `sodactl ext restart <id\|key>` | `{"status":"ok","key":"…"}` | 0 |
 
-- `<id|key>`: `key` と完全に一致するもの。無ければ、`id` が一致するものが 1 つのとき、それ。2 つ以上なら、使い方の誤り（終了コード 2。候補の `key` を並べる）。無ければ `not_found`（終了コード 1）。
+- `<id|key>`: `key`（`sodactl ext list` の `extensions[].key`）と完全に一致するもの。無ければ、`id` が一致するものが 1 つのとき、それ。2 つ以上なら、使い方の誤り（終了コード 2。候補の `key` を並べる）。無ければ `not_found`（終了コード 1）。
 - 古いサーバ（`extension.list` が `not_found`〔知らない方式〕）: `{"status":"unsupported","reason":"このサーバは拡張に対応していません"}` を出して終了コード 0（`sodactl display` と同じ読み替え）。`log`・`restart` の「その拡張が無い」の `not_found` と見分けるため、先に `extension.list` を呼ぶ。
 - **`approve`・`deny`・`revoke`・`enable`・`disable` は作らない**（K11）。`--machine` は、ほかのコマンドと同じ。
 
@@ -633,7 +638,8 @@ stateDiagram-v2
        コマンドに ASCII でない文字（`/[^\x20-\x7E]/`）があれば、「ASCII でない文字を含みます（見た目の似た別の文字に注意）」。
     4. 固定の文言（枠つき）: 「このプログラムは、あなたの OS の利用者の権限で動き、隔離されません。ファイルの読み書き・通信・ほかのプログラムの起動が出来ます。」「コマンドが指すファイルの中身が後で変わっても、確認は出ません。」
     5. 「求めている許可」: `allow` が空なら「なし（文字・Markdown・スクリプトの動かない HTML の表示だけ）」。`script-html` があれば「スクリプトが動く表示: ブラウザの中で、この拡張のスクリプトが動きます。操作中に打ったキーは、スクリプトが読めます。」（表示の面の docs の「残る限界」への案内）。
-       続けて、**いつも**（初回から。鍵に入る項目は、全部見せる）: 「応答しないとき: 素通し」か「応答しないとき: 止める（この版では、まだ効きません）」（`onUnresponsive`）・「登録: 有効」か「登録: 無効（承認しても、有効にするまで動きません）」（`enabled`）。
+       続けて、**いつも**（初回から。鍵に入る項目は、全部見せる）: 「応答しないとき: 素通し」か「応答しないとき: 止める（この版では、まだ効きません）」（`onUnresponsive`）。`enabled` は出さない（`disabled` の拡張には、ダイアログを開けない。`approve` は `pending`・`denied` だけを受けるので、ダイアログが出る登録の `enabled` は、いつも `true`）。
+       `groupWritable` なら「この設定ファイル（か、その場所）は、同じグループのほかの利用者が書き換えられます」。
     6. 「作者が書いた説明（Sodashitsu は、中身を確かめていません）」と `description`（あれば）。
     7. `previous` があれば「前に承認した登録からの変更」: 変わった項目ごとに、前と後（`approvalView.ts` の `diffEntry`）。
     8. ボタン（この順。**中身の後ろ**に置く）: ［承認しない］（開いたときのフォーカス）・［後で］・［承認して動かす］。
@@ -716,6 +722,7 @@ lines.on("close", () => process.exit(0)); // 標準入力が閉じたら終わ�
 | S20 | プロジェクトの拡張が、利用者の拡張と同じ id を使って、なりすます | 鍵は種類と根で分かれる。一覧・固定のラベル・ダイアログに、種類（利用者／プロジェクト）と根を出す | AC27・AC31 |
 | S21 | 拡張が、要求の `id`・`method`・`params` の細工で、サーバを壊す（巨大な id・深い入れ子・`__proto__`） | `parseExtRequest` が、型と長さを確かめる。引数は zod。1 行 4 MiB の `JSON.parse` は、量の頻度の内側。返事に入れる `method` の名前は、決まった文字のときだけ | 単体（AC7・AC12） |
 | S22 | 別のマシンのサーバが、嘘のダイアログの中身を送る | 動くのは、そのマシンの中だけ（手元では、何も実行されない）。ダイアログに、マシンの名前を出す | AC29（マシンの名前）。K4 |
+| S24 | 共有の場所（ほかの OS の利用者が書けるディレクトリ）に置かれた `.git` と `.soda/` が、根として拾われる。承認の後、鍵に入らないスクリプトを、ほかの利用者が差し替える | 根・`.soda`・設定ファイルの持ち主が自分で、だれでも書ける（other）でないときだけ読む。グループが書けるときは、一覧とダイアログに注意。**スクリプトの置き場所の権限までは見ない**（S4 と同じ限界。docs に書く） | AC28（単体: 持ち主・other の書き込み・グループの注意） |
 | S23 | 入れ替えの後・再起動の後に、承認なしで動く | 新しいプロセスの `listen()` も、同じ `start()` → `reconcile` → `startOne`（S2）。承認と無効は、ファイルから読む | AC18（起動確認: 入れ替えの後も、実行の印が無い） |
 
 残る限界（docs「安全と限界」に書く）: S4（スクリプトの中身・同じ場所の差し替え）／S9（種類は自己申告・記録は同じ利用者が書ける）／S15（異常終了で残りうる）／S17（環境変数は見える）／拡張のプロセスは隔離しない（D3）——承認した拡張は、利用者の権限で、ファイル・通信・`sodactl`（ログイン済みなら）を使える／
@@ -779,7 +786,7 @@ pane のプログラムは、拡張の面と同じ名前で出し直せる・閉
 - AC25: 「処理の順」の 5（`format === "script-html"`）と、`features` の絞り込み。許可があれば、表示の面の検査（`checkDisplaySet`）へ進む（PR3 が無ければ `invalid_display`）。
 - AC26: あるべき集合が、workspace の根から作られる（`reconcile` の 2）。作業ディレクトリは `root`。
 - AC27: `ExtensionSettings.vue`。`extension.changed` → 取り直し。E2E は、DOM と、ブラウザが受けたフレーム（利用者の拡張のコマンドが無い）。
-- AC28: `loadProjectExtensionsFile` の 1〜5 と、`parseExtensionsJson(text, "project")`（`cwd` は誤り）。git の偽物を `PATH` の先頭に置いて、呼ばれないことを見る。
+- AC28: `loadProjectExtensionsFile` の 1〜5 と 3'（持ち主と権限）と、`parseExtensionsJson(text, "project")`（`cwd` は誤り）。git の偽物を `PATH` の先頭に置いて、呼ばれないことを見る。
 - AC29: `ExtensionApprovalDialog.vue`（`textContent`・内側のスクロールなし・固定の文言・`diffEntry`・`hasNonAscii`）。入力は、`ExtensionInfo.approval`。
 - AC30: `ExtensionController` の知らせ（`sticky` のトースト・`failed` への変化）。E2E は、トーストの DOM と、`document.activeElement` が変わらないこと。
 - AC31: `DisplayInfo.source`（サーバが `owner.source` から付ける）と、パネル・帯の見出しの部品。表示の面の PR2 が main に入ってから。
