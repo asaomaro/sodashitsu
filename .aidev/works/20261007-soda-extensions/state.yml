@@ -1,7 +1,7 @@
 schema: 11
 slug: soda-extensions
-current: design
-approved: [requirements, research, design]
+current: tasks
+approved: [requirements, research, design, tasks]
 mode: autonomous
 profile: full
 humanGates: []

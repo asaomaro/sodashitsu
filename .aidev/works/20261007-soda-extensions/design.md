@@ -30,7 +30,7 @@ sequenceDiagram
 ## 設計方針
 
 1. **ask と同じ型に乗せる**（research R1・R2・R5・R7）: 受け口の操作は `PaneOpRegistry` に登録し、引数から `paneId` を除く。`/ws` の方式は別に登録する。画面は購読して一覧を取り、中身は別の要求で取る。
-   枠は、同じ origin の静的ページを専用のヘッダで開き、中身を `postMessage` で渡す。sodactl は `viaPaneSocketOrSession` で経路を選ぶ。
+   枠は、同じ origin の静的ページを専用のヘッダで開き、中身を `postMessage` で渡す。sodactl は、`viaPaneSocketOrSession` と同じ条件で経路を選ぶ（`unknown_op` の扱いだけが違う。下の「sodactl」）。
 2. **作者のスクリプトを動かさない**（decisions D13）: 枠の CSP は `script-src 'self'`。動くのは静的ページ自身のスクリプトだけで、それが中身を取り除いて差し込み、宣言された操作を拾う。
    これで、枠からキー入力のフォーカスを奪う・外へ通信する・枠を別のページへ移す、の 3 つの道を、ブラウザの仕組み（CSP）と取り除きの二重で塞ぐ。
 3. **サーバにファイルを読ませない・外へ通信させない**: 中身は sodactl が読み、要求の 1 行に載せる（256 KiB まで。受け口の 1 行の上限 1 MiB の内側）。ask の `image`・`view.file` で受け口に足された権限
@@ -56,7 +56,7 @@ sequenceDiagram
   - `packages/server/src/display/DisplayService.ts`・`rateLimit.ts` と各 `.test.ts`、`display.integration.test.ts`
   - `packages/server/src/panesocket/displayOps.ts`、`packages/server/src/surface/methods/display.ts`
   - `packages/cli/src/commands/display.ts` と `display.test.ts`、`packages/cli/src/display.integration.test.ts`
-  - `packages/web/src/display/DisplayController.ts`・`frameMessages.ts`・`displayLayout.ts`・`themeVars.ts` と各 `.test.ts`、`packages/web/src/store/display.ts` と `.test.ts`
+  - `packages/web/src/display/DisplayController.ts`・`frameMessages.ts`・`frameRegistry.ts`・`displayLayout.ts`・`themeVars.ts` と各 `.test.ts`、`packages/web/src/store/display.ts` と `.test.ts`
   - `packages/web/src/components/DisplayFrame.vue`・`PanePanel.vue`・`PaneBands.vue`、`packages/web/src/mobile/MobileDisplaySheet.vue` と各 `.test.ts`
   - `packages/web/public/display-view/frame.html`・`frame.js`・`sanitize.js`、`packages/web/src/display/displayViewSanitize.test.ts`
   - `packages/e2e/src/specs/display.spec.ts`・`display-isolation.spec.ts`・`display-mobile.spec.ts`、`packages/e2e/src/support/display.ts`
@@ -92,8 +92,8 @@ sequenceDiagram
   prefix を外から入れる口は `KeyInputController.injectPrefix()`（`packages/web/src/keys/KeyInputController.ts:190`）。pane の端末へフォーカスを戻す関数は `packages/web/src/actions/paneFocus.ts` の `focusPaneIfShown`（`AskDialog.vue:6`・`133` が使っている）。
 - 枠の中で動く `.js` を vitest で試す型は、`?raw` で読み込む（`packages/web/src/ask/askViewLinks.test.ts:1`）。
 - handoff で引き継ぐのは pane の PTY だけ（R6。`packages/server/src/handoff/HandoffManifest.ts`）。
-- 未確認: クロスオリジンの枠の中の `autofocus` をブラウザが無視するか（無視しても、取り除きで消すので設計は依らない）／`MessagePort` を sandbox の不透明 origin の枠へ渡せること（仕様上は渡せる。`tasks.md` の T14 の最初の E2E で確かめ、だめなら下の「代替」に切り替える）／sandbox に `allow-forms` があれば、枠の中の `form` の `submit` のイベントが起きること（`allow-forms` が無いと、ブラウザは `submit` のイベントを起こす前に送信を止める、という仕様の理解。実測していない。`tasks.md` の T14 (8) で確かめる）／
-  marked が、Markdown の中の HTML（`<button data-soda-action>`）をそのまま通すこと（同じく T14 (8)）／Playwright の `frame.evaluate` が、`script-src 'self'` の枠の文書の中で式を評価できること（`tasks.md` の T15 (1)。だめなときの代えも、そこに書いた）／`ControlSurface` が handler の想定外の例外を `internal` にすること（`PaneOpRegistry.invoke` は R1 で確認）。
+- 未確認: クロスオリジンの枠の中の `autofocus` をブラウザが無視するか（無視しても、取り除きで消すので設計は依らない）／`MessagePort` を sandbox の不透明 origin の枠へ渡せること（仕様上は渡せる。`tasks.md` の T13 の最初の E2E で確かめ、だめなら下の「代替」に切り替える）／sandbox に `allow-forms` があれば、枠の中の `form` の `submit` のイベントが起きること（`allow-forms` が無いと、ブラウザは `submit` のイベントを起こす前に送信を止める、という仕様の理解。実測していない。`tasks.md` の T16 (8) で確かめる。だめなときの代えは `decisions.md` D18 の 4）／
+  marked が、Markdown の中の HTML（`<button data-soda-action>`）をそのまま通すこと（同じく T16 (8)）／Playwright の `frame.evaluate` が、`script-src 'self'` の枠の文書の中で式を評価できること（`tasks.md` の T13 で試す。だめなときの代えは、`tasks.md`「作業順序と依存関係」の 2）／`ControlSurface` が handler の想定外の例外を `internal` にすること（`PaneOpRegistry.invoke` は R1 で確認）。
 
 ## インターフェース / データ構造
 
@@ -273,7 +273,7 @@ sodactl display events [<名前>…] [--since <seq> --epoch <印>] [--pane <id>]
 sodactl display --features
 ```
 
-- 対象の pane: `--pane` を省くと呼び出し元の pane（`resolveCallerPane`。確かめられなければ `caller_pane_unknown`）。経路は `viaPaneSocketOrSession`。`--pane` で**呼び出し元と違う pane** を指したときは、受け口を使わず `/ws`（受け口は名乗った pane しか扱えないため）。
+- 対象の pane: `--pane` を省くと呼び出し元の pane（`resolveCallerPane`。確かめられなければ `caller_pane_unknown`）。経路は、`viaPaneSocketOrSession` と同じ条件（受け口のパスがある・呼び出し元が分かる・接続先の明示が無い・`--machine` が無い）で受け口、そうでなければ `/ws`（包みは下の「古いサーバ」の判定）。`--pane` で**呼び出し元と違う pane** を指したときは、受け口を使わず `/ws`（受け口は名乗った pane しか扱えないため）。
   `--machine <名前|id>` は `/ws` の中継で、`--pane` が必須（省いたら使い方の誤り）。
 - 中身: `--markdown-file`・`--html-file` は sodactl が読む（通常のファイルだけ・256 KiB まで・UTF-8）。`--text`・2 つの `--…-file` のどれも無ければ、標準入力を読む（1 MiB まで読んで、256 KiB を超えたら使い方の誤り）。そのときの形は `--format`（**省いたら `text`**）。
   `--format` は標準入力のときだけ付けられる。指定が 2 つ以上・どれも無くて標準入力が端末（何も流し込まれていない）は、使い方の誤り。
@@ -320,7 +320,8 @@ sodactl display --features
 - `packages/web/src/display/DisplayController.ts`（`AskController` に当たる通信の係）: `onOpened()`（`display.subscribe {features: ["panel","band","actions"]}` → 一覧で置き換え）・`onClosed()`（消す）・`resetForMachineSwitch()`・
   `onEvent(e)`（`display.updated`／`display.removed`）・`ensureContent(id)`（表示中の面の中身が無い・版が古ければ `display.get`。同じ id の取得は 1 本にまとめる。古い世代の応答は捨てる）・
   `sendAction(id, rev, action, data)`（ブラウザ側でも毎秒 20 回で捨てる）・`dismiss(sel)`。古いサーバ（`display.subscribe` が `not_found`）では、何もしない（面は出ない。トーストも出さない）。
-- `packages/web/src/components/DisplayFrame.vue`: 枠 1 つ。props `info: DisplayInfo`・`content: DisplayContent | undefined`。下の「枠とのやりとり」を担う。`defineExpose({ focusInside() })`。
+- `packages/web/src/components/DisplayFrame.vue`: 枠 1 つ。props `info: DisplayInfo`・`content: DisplayContent | undefined`。下の「枠とのやりとり」を担う。載っている間、`packages/web/src/display/frameRegistry.ts`（面の id → `{ focusInside() }` の登録簿。
+  `registerFrame`・`unregisterFrame`・`focusFrame(id): boolean`）に自分を登録する（キーの操作が、部品の木をたどらずに枠へ届くため）。iframe には、テストが読む `data-display-loads`（`load` の回数）を出す。
 - `packages/web/src/components/PanePanel.vue`: パネルの領域（`role="complementary"`・`aria-label="pane『…』のパネル"`）。見出しに、固定のラベル（下）・タブ（複数のとき。`role="tablist"`。矢印・`Home`・`End` で移って切り替える）・たたむ・閉じる。本体に、選ばれた面の `DisplayFrame`。
   たたんだときは、縦書きの細い見出し（幅 24px。押すと戻る）だけ。
 - `packages/web/src/components/PaneBands.vue`: 帯の領域。帯 1 本ごとに、左端に固定の印、`DisplayFrame`（高さ `size`）、右端に閉じる。
@@ -338,13 +339,14 @@ div.pane-frame-body（display:flex; flex-direction:column）
 ```
 
   葉（`.pane-layout-leaf`）と `TerminalPane` には手を入れない。葉の箱が縮むので、既存の `ResizeObserver` が大きさを申告し直す（R3）。
+  丸めに使う pane の幅・高さは、`PaneFrame` が `.pane-frame-body` に張る `ResizeObserver` で測って `PanePanel`・`PaneBands` へ渡す。セルの幅は、その pane の端末から `getCellSize`（`packages/web/src/term/measure.ts:30`）で取り、取れなければ 9（px）。
 - 大きさの丸め（`packages/web/src/display/displayLayout.ts`。純粋）: `panelWidth(paneWidthPx, sizePx, cellWidthPx): { width: number; autoCollapsed: boolean }`（幅は `min(size, floor(pane 幅 / 2))`。残りが `40 × セルの幅` を下回るなら `autoCollapsed`）、
   `visibleBands(sizes: number[], paneHeightPx): { shown: number; hidden: number }`（高さの合計が pane の高さの 3 分の 1 以下に収まる先頭の本数。残りは「ほか N 件」の 1 行〔高さ 20px。押すとその pane の帯の名前の一覧をトーストで出す〕）。幅はアニメーションさせない。
 - モバイル（`mobile/MobileShell.vue`）: `.mobile-shell-bar` と `.mobile-shell-pane` の間に `PaneBands`（フォーカス中の pane の分）。バーに、パネルがあるときだけボタン（「表示」と件数）。押すと `MobileDisplaySheet.vue`
   （`<dialog>`。上に固定のラベル・タブ・閉じる、下に `DisplayFrame`。`Esc`・［閉じる］でシートだけ閉じる〔面は残る〕。［この表示を消す］で `dismiss`）。パネルは端末の幅に関わらない。
 - 右クリックのメニュー（`ContextMenu.vue` の pane の項目。面があるときだけ）: 「表示をすべて閉じる」→ `actions.dismissDisplays(paneId)` → `display.dismiss {paneId}`。
 - キーの操作: `ACTIONS` に `{ id: "focus_display", label: "pane の表示（パネル・帯）へ移る", group: "pane", defaults: ["prefix+i"], action: { type: "focusDisplay" } }`（`group: "pane"` は既存の値。`bindings.ts:277`）。
-  `ActionDispatcher`: フォーカス中の pane の、選ばれているパネル（たたんであれば戻す。無ければ最初の帯）の `DisplayFrame.focusInside()`。面が無ければトースト「この pane に表示はありません」。端末版は「ブラウザで使えます」と知らせる（`open_graph` と同じ）。
+  `ActionDispatcher`: フォーカス中の pane の、選ばれているパネル（たたんであれば戻す。無ければ最初の帯）の面の id で `frameRegistry.focusFrame(id)`。面が無ければトースト「この pane に表示はありません」。端末版は「ブラウザで使えます」と知らせる（`open_graph` と同じ）。
 - テーマ: `packages/web/src/display/themeVars.ts` の `readThemeVars(): { dark: boolean; vars: Record<string,string> }`（`document.documentElement` の計算済みのスタイルから、`CSS_VARS`〔`packages/client-core/src/theme/uiTokens.ts`〕の値を読む）。枠へ `render` と一緒に渡す。開いている間のテーマの変更には、次の `render`（中身の更新）で追従する（ask と同じ割り切り）。
 
 ### 枠とのやりとり（`DisplayFrame.vue` ↔ `/display-view/frame.html`）
@@ -362,7 +364,7 @@ div.pane-frame-body（display:flex; flex-direction:column）
 2. 親は `window` の `message` で、**`ev.source === iframe.contentWindow`・状態が「待ち」・その iframe の `load` のイベントがまだ 1 回以下**（0 回＝`load` より先に届いた、も受ける）のときだけ受ける。`MessageChannel` を作り、`contentWindow.postMessage({ type: "display-init", v: 1 }, "*", [port2])`。状態を「つながった」にする。
    **これ以後、その枠からの `window` の `message` は一切受けない**（受けるのは `port1` だけ）。
 3. 親 → 枠（`port1.postMessage`）: `{ type: "render", rev, format, source, theme: { dark, vars }, relayKeys: [{ key, ctrl, alt, shift, meta }] }`（`relayKeys` は prefix のキー 1 つ）／`{ type: "focus" }`。
-   `render` は、`content` が届いたとき・`rev` が変わったときに送る（枠は作り直さない）。
+   `render` は、`content` が届いたとき・`rev` が変わったときに送る（枠は作り直さない）。`relayKeys` の prefix は、設定のストアの解決済みのキーの表の prefix（chord の文字列）を `chordToKeyInput`（`packages/client-core/src/keys/chord.ts:388`）で変えたもの。
 4. 枠 → 親（`port.postMessage`）: `{ type: "rendered", rev }`／`{ type: "action", rev, action, data? }`／`{ type: "key", key: "escape" | "prefix" }`。
 5. 親の検査（`packages/web/src/display/frameMessages.ts` の `readFrameMessage(data): FrameMessage | null`。純粋。
    `type FrameMessage = { type: "rendered"; rev: number } | { type: "action"; rev: number; action: string; data?: Record<string,string> } | { type: "key"; key: "escape" | "prefix" }`）: オブジェクトで、`type` が上の 3 つのどれか。
@@ -371,13 +373,13 @@ div.pane-frame-body（display:flex; flex-direction:column）
 6. **移ったことの検知**: その iframe の `load` が 2 回目に起きたら（＝枠の文書が入れ替わった）、`port1` を閉じ、iframe を捨てて作り直す（`:key` を変える）。1 分に 3 回を超えたら作り直さず、枠の場所に固定の文言「表示を読み込めませんでした」を出す。
 7. 片づけ: 面が消えた・部品が外れたら、`port1.close()`。フォーカスがその枠にあったら、その pane の端末へ戻す。
 
-代替（`MessagePort` を不透明 origin の枠へ渡せなかった場合だけ。`tasks.md` の T14 で確かめる）: `display-init` で 128 ビットの乱数（`crypto.getRandomValues`）を渡し、以後の枠 → 親の知らせにその値を添えさせ、親は「送り主の窓・値の一致・`load` が 1 回」で受ける。採ったら `decisions.md` に書く。
+代替（`MessagePort` を不透明 origin の枠へ渡せなかった場合だけ。`tasks.md` の T13 で確かめる）: `display-init` で 128 ビットの乱数（`crypto.getRandomValues`）を渡し、以後の枠 → 親の知らせにその値を添えさせ、親は「送り主の窓・値の一致・`load` が 1 回」で受ける。採ったら `decisions.md` に書く。
 
 ### 静的ページ（`packages/web/public/display-view/`）と配信
 
 - `frame.html`: `<meta charset>`・既定のスタイル（インラインの `<style>`。文字・見出し・表・コード・`button`・`input` を、渡された変数 `--soda-bg`・`--soda-fg`・`--soda-accent`・`--soda-menu-border` などで描く。`html, body { margin: 0 }`・帯で 1 行が縦の中央に来る余白）・
   `<script src="/ask-view/vendor/marked.umd.js">`・`<script src="/ask-view/links.js">`・`<script src="/display-view/sanitize.js">`・`<script src="/display-view/frame.js">`。
-- `sanitize.js`（`window.__sodaDisplaySanitize(root)`。`<template>` の中身＝文書に入れる前の断片に掛ける）:
+- `sanitize.js`（`self.__sodaDisplaySanitize(root)`。`<template>` の中身＝文書に入れる前の断片に掛ける）:
   - 消す要素: `script, meta, link, base, iframe, frame, frameset, object, embed, applet, portal, map, area, math, audio, video, source, track, noscript, set, animate, animateTransform, animateMotion, animateColor, foreignObject`。SVG の中の `a` は、中身を残して `a` だけ外す。
   - 消す属性: `on` で始まるもの全部・`autofocus`・`srcdoc`・`action`・`formaction`・`target`・`ping`・`background`・`http-equiv`・`xlink:href`（`a` 以外）。
   - `a[href]`: `#` で始まるものは残す。`self.askViewLinks.openableHref`（`packages/web/public/ask-view/links.js` が枠の中に置く関数）を通るものは `target="_blank" rel="noopener noreferrer"`。ほかは `href` を外し、行き先を `title` に出す。
@@ -439,7 +441,7 @@ sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; d
 | H1 | 中身のスクリプトが、アプリの DOM・Cookie・`localStorage`・`/ws` に触れる | 枠は `allow-same-origin` なしの sandbox（属性と応答ヘッダの二重）で不透明 origin。中身は `postMessage` で渡し、URL に載せない | AC15（E2E。負の対照: `allow-same-origin` を足す） |
 | H2 | 中身のスクリプトが動く（キー入力を読む・フォーカスを奪う・親へ偽の知らせを送る） | CSP `script-src 'self'`（インライン・イベント属性・`javascript:` は動かない）。取り除きで `script`・`on*` も消す（二重） | AC16・AC19（E2E: 実行の印が付かない。負の対照は**層ごと**: 取り除きだけ外す → まだ動かず、CSP の違反が記録される／CSP だけゆるめる → まだ動かない／両方外す → 動いてテストが落ちる） |
 | H3 | 中身が外へ通信する（画像・CSS の `url()`・フォント・`fetch`・フォームの送信）。pane のプログラムが、利用者のブラウザを使って外へ持ち出す | CSP `default-src 'none'`・`img-src data:`・`font-src data:`・`form-action 'none'`。取り除きで `link`・`img` の外の `src`・`action` を消す | AC17（E2E。ブラウザの要求の観測が 0） |
-| H4 | 枠が別のページへ移り（`meta refresh`・リンク・フォーム）、移った先のページが、同じ枠の窓として親へ知らせを送る・中身を受け取る | 移る手段を取り除く（`meta`・`base`・`area`・`form` の `action`・`a` は新しいタブだけ・SVG の `a` と SMIL）。スクリプトが無いので `location=` は呼べない。**それでも移ったら**: 親は `load` の 2 回目で枠を捨てる。操作は `MessagePort` だけで受け、移った先の文書は port を持たない。`display-ready` は 1 回しか受けない | AC17・AC18（E2E。負の対照: `meta` の取り除きを外すと枠が移り、親が作り直す・操作は届かない、を別々に見る） |
+| H4 | 枠が別のページへ移り（`meta refresh`・リンク・フォーム）、移った先のページが、同じ枠の窓として親へ知らせを送る・中身を受け取る | 移る手段を取り除く（`meta`・`base`・`area`・`form` の `action`・`a` は新しいタブだけ・SVG の `a` と SMIL）。スクリプトが無いので `location=` は呼べない。**それでも移ったら**: 親は `load` の 2 回目で枠を捨てる。操作は `MessagePort` だけで受け、移った先の文書は port を持たない。`display-ready` は 1 回しか受けない | AC17・AC18（E2E: 通常の版では枠が移らない〔`load` が 1 回のまま〕。Playwright で枠を移すと、親が作り直し、移った先からの操作は届かない。「移っても `contentWindow` は同じ」は、この筋で、移った先の `parent.postMessage` が親の `message` に届くことから分かる。負の対照: `meta` の取り除きを外すと枠が移る） |
 | H5 | 別の窓・別の枠・拡張機能が、同じ形の `message` を親へ送る | `display-ready` は送り主の窓の一致・状態・`load` の回数で受ける。それ以後は port だけ。`readFrameMessage` で形と上限を確かめる | AC18（単体と E2E。負の対照: 送り主の検査を外す） |
 | H6 | 中身が Sodashitsu 自身の確認画面を装う（承認のボタンに見せかける） | 枠の外に、アプリが描く固定のラベル（パネルの見出し・帯の印）。題は文字として出す。枠は自分の箱の外へ描けない。面はモーダルにならない（画面全体を覆えない） | AC7（E2E） |
 | H7 | 面がフォーカスを奪い、端末に打つはずのキー（パスワードなど）が枠に入る | H2（スクリプトなし）。取り除きで `autofocus` を消す。アプリは面の出現・更新で `focus()` を呼ばない。枠のスクリプトが `focus()` を呼ぶのは、親の `focus` の知らせのときと、枠が既にフォーカスを持つときの持ち越しだけ（`document.hasFocus()` が偽なら呼ばない） | AC19（E2E: 更新を挟んで打った文字が pane に届く。負の対照: H2 と同じ） |
@@ -498,9 +500,9 @@ sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; d
 - AC11: `frame.js` の `submit`（`preventDefault`・`FormData`）。CSP の `form-action 'none'` が二重の守り。
 - AC12: sodactl の `runWaitLoop`（`display.ready` → 出来事 → `display.dropped`／`display.end`）。入力は `display.wait` の結果の `events`・`dropped`・`reset` と、接続の失敗。
 - AC13: どの画面の `display.action` も同じ列に入る。`rev` は画面が持つ中身の版（`DisplayContent.rev`）。
-- AC14: `displayOps.ts` の 5 つが `ctx.paneId` だけを使う（引数の schema に `paneId` が無い）。結合テストは、受け口へ pane A を名乗って、pane B の面の名前で `close`・`list`・`wait` しても B の面に届かないことを見る。
-- AC15: `DISPLAY_VIEW_SANDBOX` と `DISPLAY_VIEW_CSP`（どちらにも `allow-same-origin` が無い）。E2E は、枠の中で探りを動かす必要があるが、作者のスクリプトは動かないので、Playwright の `frame.evaluate` で枠の文書の中で式を評価して `parent.document`・`localStorage`・`fetch`・`WebSocket` を試す（配るものを変えない。`frame.evaluate` が CSP で使えないときの代えは `tasks.md` の T15 (1)）。
-- AC16: CSP `script-src 'self'` と取り除きの二重。E2E は、中身に書いた `<script>`・`onerror`・`onclick`・`javascript:` の印（枠の文書の `document.title` の書き換え・`data-ran` の属性）が付かないことを見る（取り除きが先に消すので、普段は CSP の違反は起きない）。
+- AC14: `displayOps.ts` の 5 つが `ctx.paneId` だけを使う（引数の schema に `paneId` が無い）。結合テストは、受け口へ pane A を名乗って、pane B の面の名前で `close`・`list`・`wait` しても、さらに引数に `paneId: <B>` を載せても、B の面に届かないことを見る（後者が、負の対照の対になる）。
+- AC15: `DISPLAY_VIEW_SANDBOX` と `DISPLAY_VIEW_CSP`（どちらにも `allow-same-origin` が無い）。E2E は、枠の中で探りを動かす必要があるが、作者のスクリプトは動かないので、Playwright の `frame.evaluate` で枠の文書の中で式を評価して `parent.document`・`localStorage`・`fetch`・`WebSocket` を試す（配るものを変えない。`frame.evaluate` が CSP で使えないときの代えと、未検証の穴の記録は、`tasks.md`「作業順序と依存関係」の 2）。
+- AC16: CSP `script-src 'self'` と取り除きの二重。E2E は、中身に書いた `<script>`・`onerror`（壊れた `data:` の `img`。操作なしで起きる）・`onclick`・`javascript:` の印（枠の文書の `document.title` の書き換え・`data-ran` の属性）が付かないことを見る（取り除きが先に消すので、普段は CSP の違反は起きない）。
   CSP の層が単独で効くことは、負の対照（AC28）の「取り除きだけ外した版でも動かず、違反が記録される」で確かめる。
 - AC17: CSP の `default-src 'none'` ほかと取り除き。E2E は、ブラウザの要求の記録（`page.on("request")`）に外への要求が無いこと、枠の URL が `/display-view/frame.html` のままであることを見る。
 - AC18: `DisplayFrame.vue` の受け方（送り主・状態・`load` の回数・port）と `readFrameMessage`。単体は `frameMessages.test.ts` と `DisplayFrame.test.ts`（別の窓からの `message`・形の違うもの・上限の超過・2 回目の `display-ready`）。E2E は、親のページから別の iframe を作って同じ形を送っても `display.action` が送られないことを見る。
@@ -509,11 +511,11 @@ sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; d
 - AC21: sodactl の「古いサーバ」の判定（`not_found` → `display.features` の再確認）。テストは、`display.*` を登録しない偽のサーバ（受け口は `unknown_op`・`/ws` は `not_found`）で見る。名乗らない画面は `subscribers` に入らない。
 - AC22: `set` は画面の数に依らず台帳に入る。後からの `display.subscribe` の結果に入る。
 - AC23: `packages/protocol/src/display.ts` の型と、`parseDisplayLine` のテスト（知らない `type`・知らない項目を落とさない）。docs の「行の決まり」。
-- AC24: `handoffSmoke.ts` の段（`tasks.md` の T17）。入れ替えで `epoch` が変わり、`runWaitLoop` が `display.reset` を出す。停止では 5 秒の繋ぎ直しが尽きて `display.end`（`connection_closed`）・終了コード 1。
+- AC24: `handoffSmoke.ts` の段（`tasks.md` の T19）。入れ替えの後の出来事は、出し直した面を `close` して出る `display.closed` で見る（起動確認には画面が無いので、操作は起こせない。操作が届くことは T6 の結合テストと T16）。入れ替えで `epoch` が変わり、`runWaitLoop` が `display.reset` を出す。停止では 5 秒の繋ぎ直しが尽きて `display.end`（`connection_closed`）・終了コード 1。
 - AC25: `checkDisplaySet`・`DisplayService` の上限（単体: ちょうどと超過）、`TokenBucket`（偽の時計）、`displayLayout.ts`（単体）と E2E（幅の丸め・自動でたたむ・「ほか N 件」）。
 - AC26: sodactl の経路の選択（`--pane` が呼び出し元と違う・`--machine`・`SODA_PANE_SOCKET` なし → `/ws`）と、`/ws` の方式。結合テストは `packages/cli/src/display.integration.test.ts`（実サーバ・ログイン済み）と、`machines.integration.test.ts` の方式の中継越し。
-- AC27: `docs/display.md` ほか（`tasks.md` の T18）。
-- AC28: 上の表の「負の対照」（H1・H2・H5・H8）。test 工程で、対策を外して落ちること（二重の守りは、片方ずつ外しても落ちず、両方外すと落ちること）を確かめ、生の出力を `test-result.md` に残す（`tasks.md` の T19）。
+- AC27: `docs/display.md` ほか（`tasks.md` の T20）。
+- AC28: 上の表の「負の対照」（H1・H2・H4・H5・H8）。test 工程で、対策を外して落ちること（二重の守りは、片方ずつ外しても落ちず、両方外すと落ちること）を確かめ、生の出力を `test-result.md` に残す（`tasks.md` の T21）。
 - AC-I1: 面は `set` でだけ出る。`PanePanel`・`PaneBands` は出現で `focus()` を呼ばない。［×］は `button`（`Tab` で届く）。
 - AC-I2: 枠の中の `button`・`form` はブラウザの既定のまま確定する。［×］は確認なし。
 - AC-I3: `focus_display`（`prefix+i`）→ `DisplayFrame.focusInside()` → 枠の中の `Tab`・`Enter`・`Space` → `Esc` で `focusPaneIfShown`。タブは `role="tablist"` の矢印。
