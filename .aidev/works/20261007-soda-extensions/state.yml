@@ -1,0 +1,10 @@
+schema: 11
+slug: soda-extensions
+current: requirements
+approved: []
+mode: interactive
+profile: full
+humanGates: []
+maxSendBacks: 3
+dependsOn: []
+harnessRev: unknown
