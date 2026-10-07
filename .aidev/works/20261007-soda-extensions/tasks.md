@@ -150,7 +150,7 @@
       依存: T5
       AC: AC10, AC12, AC21, AC24, AC26, AC34
       点検: あり
-- [ ] T7: 起動確認: `handoffSmoke.ts` に 1 段。入れ替えの前に、ビルドした `sodactl display set` で面を出し、`sodactl display events` を子プロセスで待たせる → 実物の `soda handoff` → `events` が終わらずに `display.reset` の行を出す → `display list` が空 → `set` で出し直すと `list` に出る →
+- [x] T7: 起動確認: `handoffSmoke.ts` に 1 段。入れ替えの前に、ビルドした `sodactl display set` で面を出し、`sodactl display events` を子プロセスで待たせる → 実物の `soda handoff` → `events` が終わらずに `display.reset` の行を出す → `display list` が空 → `set` で出し直すと `list` に出る →
       出し直した面を `display close` すると、待ち続けている `events` に `display.closed`（`closed`）の行が出る → サーバを止めると、`events` が `display.end`（`connection_closed`）を出して終了コード 1。ログインなし（受け口の経路）で行う。Windows では何もしない
       対象: `packages/server/src/handoffSmoke.ts:145-170`（`runSodactlAsk` の近くに `display` 用の起動）・`299` の段の後 / 根拠: research A16
       依存: T6

@@ -9,6 +9,8 @@
  * - `handoff.json` が残らない（AC8）・シェルが終わると pane が閉じる（AC7）
  * - 入れ替えの後、handoff より前からある pane の環境（`SODA_PANE_SOCKET` が無く `SODA_AGENT_REPORT_SOCKET` だけ）でも、ビルドした `sodactl ask` が
  *   ログインなしで通る（20261003-sodactl-ask-socket の AC11。新しい版が置き直した `pane.sock` を、同じ状態ディレクトリから導く）
+ * - 表示の面（20261007-soda-extensions の AC24）: 入れ替えの前に出した面は消え、待っていた `sodactl display events` は終わらずに `display.reset` を出す。
+ *   `display list` は空で、出し直すと見え、`display close` すると待ち続けている `events` に `display.closed` が届く。サーバを止めると `display.end`（connection_closed）・終了コード 1
  * pane のシェルは `/bin/sh`（`--shell`）——印に `$$`・`$((…))` を使うため。
  * vitest の中では確かめられない（execve の先の新しい版がビルドした成果物であるため。tasks.md「実装方針」）。
  */
@@ -161,6 +163,37 @@ function runSodactlAsk(env: NodeJS.ProcessEnv): {
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 
+/** ビルドした `sodactl <args>`（標準入力なし）を同期で呼ぶ。 */
+function runSodactl(env: NodeJS.ProcessEnv, args: string[]): { status: number | null; stdout: string; stderr: string } {
+  const r = spawnSync(process.execPath, [SODACTL_MAIN, ...args], { env, encoding: "utf8", timeout: 30_000, stdio: ["ignore", "pipe", "pipe"] });
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+}
+
+/** 出し続ける `sodactl display events` を子プロセスで動かす（stdout の行を溜め、終わったら終了コードを返す）。 */
+function spawnDisplayEvents(env: NodeJS.ProcessEnv): { lines: Record<string, unknown>[]; exited: Promise<number | null>; child: ChildProcess; stderr: () => string } {
+  const child = spawn(process.execPath, [SODACTL_MAIN, "display", "events"], { env, stdio: ["ignore", "pipe", "pipe"] });
+  const lines: Record<string, unknown>[] = [];
+  let err = "";
+  let buf = "";
+  child.stdout!.setEncoding("utf8");
+  child.stderr!.setEncoding("utf8");
+  child.stdout!.on("data", (c: string) => {
+    buf += c;
+    for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
+      const line = buf.slice(0, i);
+      buf = buf.slice(i + 1);
+      try {
+        lines.push(JSON.parse(line) as Record<string, unknown>);
+      } catch {
+        // 行でないものは数えない。
+      }
+    }
+  });
+  child.stderr!.on("data", (c: string) => (err += c));
+  const exited = new Promise<number | null>((resolve) => child.once("exit", (code) => resolve(code)));
+  return { lines, exited, child, stderr: () => err };
+}
+
 async function main(): Promise<void> {
   if (process.platform === "win32") {
     log("skipped (live handoff is not supported on Windows)");
@@ -240,6 +273,16 @@ async function main(): Promise<void> {
     );
     log(`before: server pid ${serverPid}, pane ${paneId}, shell pid ${shellPid}`);
 
+    // 3b. 表示の面（20261007-soda-extensions の AC24）。ログインなし（受け口の経路）で面を出し、`sodactl display events` を待たせておく。
+    const displayEnv: NodeJS.ProcessEnv = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, SODA_PANE_ID: paneId, SODA_SERVER_URL: origin, SODA_PANE_SOCKET: join(stateDir, "pane.sock") };
+    for (const name of ["SODA_AGENT_REPORT_SOCKET", "SODACTL_TOKEN", "SODACTL_URL"]) delete displayEnv[name];
+    const setBefore = runSodactl(displayEnv, ["display", "set", "before", "--kind", "panel", "--text", "hello"]);
+    if (setBefore.status !== 0 || (JSON.parse(setBefore.stdout.trim()) as { status?: unknown }).status !== "ok")
+      throw new Error(`sodactl display set (before the handoff) failed (exit ${setBefore.status}): ${setBefore.stdout} ${setBefore.stderr}`);
+    const events = spawnDisplayEvents(displayEnv);
+    await until("display events ready", () => (events.lines.some((l) => l["type"] === "display.ready") ? true : undefined), 10_000);
+    log("sodactl display set / events without a login (pane socket) ok");
+
     // 4. 入れ替え
     const handoff = runSoda(["handoff", "--state-dir", stateDir]);
     if (
@@ -295,6 +338,22 @@ async function main(): Promise<void> {
     );
     await after.c.request("pane.detach", { paneId });
     log("resize reaches the adopted pty ok");
+
+    // 5b. 表示の面は入れ替えで消え、待っていた `sodactl display events` は終わらずに `display.reset` を出す（AC24）。
+    await until("display.reset after the handoff", () => (events.lines.some((l) => l["type"] === "display.reset") ? true : undefined), 15_000);
+    if (events.child.exitCode !== null) throw new Error(`sodactl display events ended across the handoff: ${events.stderr()}`);
+    const listAfter = runSodactl(displayEnv, ["display", "list"]);
+    const listed = JSON.parse(listAfter.stdout.trim()) as { status?: unknown; displays?: unknown[] };
+    if (listAfter.status !== 0 || listed.status !== "ok" || (listed.displays ?? []).length !== 0)
+      throw new Error(`display list after the handoff should be empty (exit ${listAfter.status}): ${listAfter.stdout} ${listAfter.stderr}`);
+    const setAfter = runSodactl(displayEnv, ["display", "set", "after", "--kind", "band", "--text", "again"]);
+    if (setAfter.status !== 0) throw new Error(`display set after the handoff failed: ${setAfter.stdout} ${setAfter.stderr}`);
+    const listAfter2 = JSON.parse(runSodactl(displayEnv, ["display", "list"]).stdout.trim()) as { displays?: { name: string }[] };
+    if (listAfter2.displays?.length !== 1 || listAfter2.displays[0]!.name !== "after") throw new Error(`display list should show the re-set display: ${JSON.stringify(listAfter2)}`);
+    const closeAfter = runSodactl(displayEnv, ["display", "close", "after"]);
+    if (closeAfter.status !== 0) throw new Error(`display close failed: ${closeAfter.stdout} ${closeAfter.stderr}`);
+    await until("display.closed on the waiting events", () => (events.lines.some((l) => l["type"] === "display.closed" && l["reason"] === "closed" && l["name"] === "after") ? true : undefined), 10_000);
+    log("display events survived the handoff (display.reset), list was empty, re-set and close reach the waiting events ok");
 
     // 6b. handoff より前からある pane の環境で、ログインなしの `sodactl ask`（20261003-sodactl-ask-socket の AC11）。
     // 古い版が起動した pane には `SODA_PANE_SOCKET` が無く、`SODA_AGENT_REPORT_SOCKET` だけがある。sodactl は同じ状態ディレクトリの `pane.sock` を導く。
@@ -354,7 +413,19 @@ async function main(): Promise<void> {
     );
     shellPid = undefined; // 終わった（pid が再利用されうるので後始末で送らない）
     log("pane closes when the adopted shell exits ok");
+    // 8. サーバを止めると、待っていた `sodactl display events` は繋ぎ直しが尽きて `display.end`（connection_closed）を出し、終了コード 1 で終わる（AC24）。
+    // 最初の pane は閉じたので、新しい workspace の pane で試す。
+    const created = (await after.c.request("workspace.create", {})) as { pane: { id: string } };
+    const stopEnv = { ...displayEnv, SODA_PANE_ID: created.pane.id };
+    const stopEvents = spawnDisplayEvents(stopEnv);
+    await until("display events ready (second pane)", () => (stopEvents.lines.some((l) => l["type"] === "display.ready") ? true : undefined), 10_000);
     after.ws.close();
+    server.kill("SIGTERM");
+    const stopCode = await Promise.race([stopEvents.exited, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("display events did not end after the server stopped")), 20_000))]);
+    const last = stopEvents.lines.at(-1);
+    if (stopCode !== 1 || last?.["type"] !== "display.end" || last["reason"] !== "connection_closed")
+      throw new Error(`display events after the server stopped: exit ${stopCode}, last line ${JSON.stringify(last)}, stderr ${stopEvents.stderr()}`);
+    log("display events after the server stopped → display.end (connection_closed), exit 1 ok");
   } finally {
     if (server !== undefined && server.exitCode === null) {
       const exited = new Promise<void>((resolve) => server!.once("exit", () => resolve()));
