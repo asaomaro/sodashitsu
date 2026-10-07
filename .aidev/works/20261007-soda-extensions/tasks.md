@@ -240,7 +240,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/web/src/components/PaneFrame.vue:305`・`478`、`packages/web/src/components/PaneFrame.test.ts`、`packages/web/src/components/ContextMenu.vue:61-70`、`packages/web/src/actions/ActionDispatcher.ts` / 根拠: research A9・A12、R3
       依存: T12
       AC: AC4, AC8, AC33
-- [ ] T14: 最初の E2E と helper（不確かな点 1・2）: helper `support/display.ts`（`runDisplay(appServer, paneId, args, { stdin?, login? })`: ビルドした sodactl を `["display", …]` で子プロセスに。ログインなしはテストのサーバの `SODA_PANE_SOCKET` を渡す。走らせた人の環境の値を消す。出し続けるコマンド用に `nextLine()`。
+- [x] T14: 最初の E2E と helper（不確かな点 1・2）: helper `support/display.ts`（`runDisplay(appServer, paneId, args, { stdin?, login? })`: ビルドした sodactl を `["display", …]` で子プロセスに。ログインなしはテストのサーバの `SODA_PANE_SOCKET` を渡す。走らせた人の環境の値を消す。出し続けるコマンド用に `nextLine()`。
       CDP でブラウザが送った `display.action`・`display.report` を数える `watchSentDisplay(page)`。別の origin の待ち受けを立てる `startSink()`〔`127.0.0.1` の空きポート。届いた要求を記録する〕）。spec の最初の筋: ログインなしの `set --kind panel` と `--kind band` で、枠の中に中身が出る・パネルの箱が端末の箱の右・帯の箱が端末の箱の上・
       枠の `sandbox` 属性が `DISPLAY_VIEW_SANDBOX`。あわせて、(a) 中身が port 経由で届いている、(b) `frame.evaluate(() => 1 + 1)` が枠の文書の中で動くか、を確かめ、結果を `decisions.md` に 1 行残す
       対象: `packages/e2e/src/support/display.ts`（新規。手本は `packages/e2e/src/support/ask.ts:54`・`askSent.ts`）、`packages/e2e/src/specs/display.spec.ts`（新規）/ 根拠: research A15
