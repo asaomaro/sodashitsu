@@ -6,6 +6,9 @@ import { ConnectionKey, TerminalRegistryKey, ViewSyncKey } from "../injection.js
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
 import NotificationBell from "../components/NotificationBell.vue";
+import PaneBands from "../components/PaneBands.vue";
+import { useDisplayStore } from "../store/display.js";
+import MobileDisplaySheet from "./MobileDisplaySheet.vue";
 import ExtraKeys from "./ExtraKeys.vue";
 import PanePicker from "./PanePicker.vue";
 import { TouchScroll } from "./TouchScroll.js";
@@ -33,6 +36,12 @@ const view = useViewStore();
 const registry = inject(TerminalRegistryKey);
 const conn = inject(ConnectionKey);
 const viewSync = inject(ViewSyncKey);
+
+// 表示の面（20261007-soda-extensions）。帯はバーと pane の間に出し、パネルはバーのボタンから重ね表示（端末の横には出さない）。
+const displays = useDisplayStore();
+const showDisplaySheet = ref(false);
+const panelCount = computed(() => (currentPaneId.value ? displays.panelsOf(currentPaneId.value).length : 0));
+const bandCount = computed(() => (currentPaneId.value ? displays.bandsOf(currentPaneId.value).length : 0));
 
 const showPicker = ref(false);
 const showKeyboard = ref(false);
@@ -88,9 +97,11 @@ onBeforeUnmount(() => touchScroll?.dispose());
       <!-- 連携のグラフ（20260927-agent-graph の AC20。モバイルは閲覧と一時停止・再開だけ）。文字のボタン（設定と同じ理由）。 -->
       <!-- 通知のベル（20261005-notify-bell）。応答せずに閉じた知らせの件数。モバイルにはサイドバーが無いので、ここが入口。 -->
       <NotificationBell variant="mobile" />
+      <button v-if="panelCount > 0" type="button" class="mobile-shell-display-btn" data-mobile-display-btn @click="showDisplaySheet = true">表示 {{ panelCount }}</button>
       <button type="button" class="mobile-shell-graph-btn" @click="view.openGraph()">連携</button>
       <button type="button" class="mobile-shell-settings-btn" @click="view.openDialogWithContext({ kind: 'settings' })">設定</button>
     </header>
+    <PaneBands v-if="currentPaneId && bandCount > 0" :pane-id="currentPaneId" :pane-height-px="viewportHeight" />
     <main ref="paneContainer" class="mobile-shell-pane">
       <div
         class="mobile-shell-pane-scale"
@@ -112,6 +123,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
     </main>
     <ExtraKeys v-if="showKeyboard" />
     <PanePicker v-if="showPicker" @close="showPicker = false" />
+    <MobileDisplaySheet v-if="showDisplaySheet && currentPaneId" :pane-id="currentPaneId" @close="showDisplaySheet = false" />
   </div>
 </template>
 
@@ -145,6 +157,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
 /* 設定のボタンも文字なので、同じく文字の［この端末に合わせる］と同じ見た目にそろえる。設定はモバイルで唯一の入口なので、
    押せる高さ（⌨ と同じ程度）を持たせる（review ラウンド1 の指摘）。 */
 .mobile-shell-fit-btn,
+.mobile-shell-display-btn,
 .mobile-shell-graph-btn,
 .mobile-shell-settings-btn {
   flex: none;

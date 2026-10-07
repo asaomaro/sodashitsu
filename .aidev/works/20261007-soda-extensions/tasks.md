@@ -260,7 +260,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/client-core/src/keys/bindings.ts:79-86` の近く、`packages/client-core/src/keys/actions.ts:94` の近く、`packages/web/src/actions/ActionDispatcher.ts:264` の近く、`packages/tui/src/actions/TuiDispatcher.ts:257` の近く、各テスト / 根拠: research A13
       依存: T13
       AC: AC-I3, AC-I4
-- [ ] T17: モバイル: `MobileShell.vue` に、`.mobile-shell-bar` と `.mobile-shell-pane` の間の `PaneBands`（フォーカス中の pane の分）と、バーのボタン（パネルがあるときだけ。「表示」と件数）。`MobileDisplaySheet.vue`（`<dialog>`。固定のラベル・タブ・［閉じる］でシートだけ閉じる・［この表示を消す］で `dismiss`・`DisplayFrame`〔`:key` は `frameKey(info)`〕。幅のつまみは出さない）。
+- [x] T17: モバイル: `MobileShell.vue` に、`.mobile-shell-bar` と `.mobile-shell-pane` の間の `PaneBands`（フォーカス中の pane の分）と、バーのボタン（パネルがあるときだけ。「表示」と件数）。`MobileDisplaySheet.vue`（`<dialog>`。固定のラベル・タブ・［閉じる］でシートだけ閉じる・［この表示を消す］で `dismiss`・`DisplayFrame`〔`:key` は `frameKey(info)`〕。幅のつまみは出さない）。
       パネルを出しても `.mobile-shell-pane` の箱が変わらないこと。単体テスト
       対象: `packages/web/src/mobile/MobileShell.vue:81`・`94`、`packages/web/src/mobile/MobileDisplaySheet.vue`（新規）と `.test.ts` / 根拠: research A10、R3
       依存: T13
