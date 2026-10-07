@@ -1,4 +1,14 @@
-import { access, copyFile, mkdir, readFile, rm, constants as fsConstants } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  copyFile,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  constants as fsConstants,
+} from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type { AgentIntegrationKind } from "@sodashitsu/protocol";
@@ -173,6 +183,15 @@ function nestedAsyncAnyEntry(scriptPath: string, kind: AgentIntegrationKind): Js
   };
 }
 
+function devinLegacy(dir: (env: NodeJS.ProcessEnv, home: string) => string): LegacyHookSpec {
+  return {
+    configFile: (env, home) => join(dir(env, home), "hooks.json"),
+    hooksDir: (env, home) => join(dir(env, home), "hooks"),
+    entriesPath: ["SessionStart"],
+    isOurs: isOursNested,
+  };
+}
+
 /** Devin CLI の利用者の設定の場所（research D1・D6）。`XDG_CONFIG_HOME`・`DEVIN_CONFIG_DIR` は見ない（decisions D2）。 */
 export function devinUserConfigDir(
   env: NodeJS.ProcessEnv,
@@ -238,15 +257,12 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
     buildEntry: nestedTimeoutEntry,
     isOurs: isOursNested,
     unparsableHint:
-      "Devin CLI の設定はコメントつきの JSON を許しますが、本製品はコメントの入ったファイルを書き換えられません",
-    // 以前の版が書いた `hooks.json`（推測した場所。decisions D2）。
+      "コメントなどがあって JSON として解釈できないファイルは、本製品は書き換えられません（Devin CLI の設定はコメントつきの JSON を許します）",
+    // 以前の版が書いた `hooks.json`（推測した場所。decisions D2）。`DEVIN_CONFIG_DIR` の場所と `~/.devin` の両方を探す
+    // （同じパスなら 1 つにまとめる。`legacyHits`）。
     legacy: [
-      {
-        configFile: (env, home) => join(env.DEVIN_CONFIG_DIR || join(home, ".devin"), "hooks.json"),
-        hooksDir: (env, home) => join(env.DEVIN_CONFIG_DIR || join(home, ".devin"), "hooks"),
-        entriesPath: ["SessionStart"],
-        isOurs: isOursNested,
-      },
+      devinLegacy((env, home) => env.DEVIN_CONFIG_DIR || join(home, ".devin")),
+      devinLegacy((_env, home) => join(home, ".devin")),
     ],
   },
   droid: {
@@ -313,6 +329,23 @@ export function isAgentIntegrationKind(kind: string): kind is AgentIntegrationKi
   return Object.hasOwn(HOOK_SPECS, kind);
 }
 
+/**
+ * 設定ファイルを書く。既存のファイルがあれば、シンボリックリンクは解決した先へ書き（リンクを通常のファイルに替えない）、
+ * 元の権限を引き継ぐ。無ければ新しく作る（権限は `writeFileAtomic` の既定）。
+ */
+async function writeConfigFile(path: string, contents: string): Promise<void> {
+  let target = path;
+  let mode: number | undefined;
+  try {
+    target = await realpath(path);
+    mode = (await stat(target)).mode & 0o777;
+  } catch {
+    // 無い（または解決できない）ときは、そのパスへ新しく作る。
+  }
+  await writeFileAtomic(target, contents);
+  if (mode !== undefined && process.platform !== "win32") await chmod(target, mode);
+}
+
 async function readJsonObject(
   path: string,
 ): Promise<{ ok: true; data: JsonObject } | { ok: false }> {
@@ -323,6 +356,9 @@ async function readJsonObject(
     if (isEnoent(err)) return { ok: true, data: {} };
     return { ok: false };
   }
+  // 先頭の BOM は除いて読む（書き戻しでは足さない）。空・空白だけのファイルは `{}` として扱う。
+  raw = raw.replace(/^\uFEFF/, "");
+  if (raw.trim() === "") return { ok: true, data: {} };
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
@@ -432,8 +468,11 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
   /** 以前の版のエントリがあるファイル。読めない・無いファイルは「無い」扱い。 */
   private async legacyHits(spec: HookSpec): Promise<LegacyHit[]> {
     const hits: LegacyHit[] = [];
+    const seen = new Set<string>();
     for (const legacy of spec.legacy ?? []) {
       const file = legacy.configFile(this.env, this.home);
+      if (seen.has(file)) continue;
+      seen.add(file);
       const read = await readJsonObject(file);
       if (read.ok && getPath(read.data, legacy.entriesPath).some(legacy.isOurs))
         hits.push({ legacy, file, root: read.data });
@@ -445,7 +484,7 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
   private async removeLegacyFile(spec: HookSpec, hit: LegacyHit): Promise<void> {
     const { root } = removeOurs(hit.root, hit.legacy.entriesPath, hit.legacy.isOurs);
     if (Object.keys(root).length === 0) await rm(hit.file, { force: true });
-    else await writeFileAtomic(hit.file, JSON.stringify(root, null, 2));
+    else await writeConfigFile(hit.file, JSON.stringify(root, null, 2));
     const oldDir = hit.legacy.hooksDir(this.env, this.home);
     if (oldDir !== spec.hooksDir(this.env, this.home))
       await rm(hookScriptPathFor(oldDir), { force: true });
@@ -511,7 +550,7 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
       updated = setPath(updated, t.path, [...entries, t.build(scriptPath, kind)]);
     }
     await mkdir(dirname(configFile), { recursive: true });
-    await writeFileAtomic(configFile, JSON.stringify(updated, null, 2));
+    await writeConfigFile(configFile, JSON.stringify(updated, null, 2));
     // 別のファイルの古いものは、新しいほうを書いた後に片づける（途中で失敗しても導入済みの状態が失われない）。
     for (const hit of hits) {
       if (hit.file !== configFile) await this.removeLegacyFile(spec, hit);
@@ -554,7 +593,7 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     if (!found)
       return otherRemoved ? { ok: true, message: null } : { ok: true, message: "未導入でした" };
 
-    await writeFileAtomic(configFile, JSON.stringify(updated, null, 2));
+    await writeConfigFile(configFile, JSON.stringify(updated, null, 2));
     const scriptPath = hookScriptPathFor(hooksDir);
     if (spec.extraEntries) {
       // 動いている Claude Code は、起動した時点のフックの設定のまま、同期のフックでこのスクリプトを呼び続ける。消すと失敗（exit 1）が続くので、
