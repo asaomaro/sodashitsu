@@ -348,3 +348,29 @@ D28 の直しの後、別のコンテキストに design・tasks を 1 回見せ
 5. 「作られた直後の枠を移す」の E2E は、時機で 2 通り（固定の文言／`navigated` で閉じる）を、どちらも正しいとした。
 6. 合い札の使い回し（`location.reload()`）の筋と、「正しい合い札でも 2 回目は受けない」の単体・負の対照を足した。
 7. 既に入っている PR1 だけのサーバが、添えた項目を拒んだら、画面が `{id, problem}` だけで送り直す。新旧の表に行を足した。
+
+
+## D30: PR2（画面・静的な形式）の実装で、設計から外れた点と、実測の結果（実装者の記録。2026-10-08）
+
+実装は `feature/ext-display-web`（`6ea9570` から。上流の `ebcbdc0`・`origin/main` を取り込み済み）。設計・要件・タスクの文書は、`tasks.md` の `[x]` 以外は変えていない。
+
+1. **実測した前提（不確かな点 1・2・3・4・7）は、全部、設計どおりだった**（代えに切り替えた項目は無い）: `MessagePort` は不透明 origin の枠へ transfer で渡せる／`frame.evaluate` は `script-src 'self'` の枠で動く（枠の `self.origin` は `"null"`。`location.origin` は URL から出るので証拠にならない）／`allow-forms` で `submit` は起き、送信は起きない／marked は Markdown の中の `<button data-soda-action>` を通す／枠が移ると 2 回目の `load` が起きる（詳細は `test-result.md`）。
+2. **`display.report` の schema**: `paneId`（任意）・`format`（任意・64 文字まで）を `DisplayReportParams` に足した（zod の `object` は知らない項目を黙って捨てるが、型の上で送れるようにするため）。サーバの `report` はこの版では使わない。**古いサーバが `invalid_params` で拒んだら、画面は `{id, problem}` だけで 1 回送り直す**（`DisplayController.report`。上流の ebcbdc0 の指示）。
+3. **`display.action` の出来事の `source`** は PR2 では足していない（PR1 のサーバは付けない。PR3 の T23・T24 が足す）。
+4. **`DISPLAY_PONG_TIMEOUT_MS` を protocol から消した**（T11）。
+5. **`DEVICE_LOCAL_PREF_KEYS` に `displayPanelWidths` を足した**（T15。pane の id はマシンごとに違う。`messages.ts`）。サーバの `PrefsStore` が「端末ごとの項目」を落とす文言の例に出る名前は直していない（挙動は `DEVICE_LOCAL_PREF_KEYS` から決まる）。
+6. **E2E の置き場所**: T18 の筋は `display.spec.ts` でなく `display-flows.spec.ts` に置いた（`display.spec.ts` は T14 の最初の筋だけ）。共通の補助は `support/displayBrowser.ts`（`display.ts` は子プロセス・CDP・待ち受け）。
+7. **T19 の筋の組み替え**（負の対照 (c1) の「二重の守りの片方だけ外すと落ちない」を実際に成り立たせるため）: (2) は「実行されない」だけを見る。取り除きそのもの（`script` の要素・`on*` の属性が文書に入っていない）は (2b) に分け、`sanitize.js` の単体テストと合わせて、取り除きを外した版を見分ける役にした。
+   (4) は html の head（断片に届かない）・html の body・markdown の 3 通りにした（`meta` の取り除きが効くのは body と markdown）。(5) は、別の iframe の `srcdoc` のインラインのスクリプトがアプリ本体の CSP に止められて**空振りしていた**ので、Playwright が別の iframe の中から式を動かして `postMessage` する形に直した（直した後に (d) で落ちることを確かめた）。
+   (10) に「`frameattached` が 0」（枠を作ってから外すのではなく、作らない）を足した（(g0) で落ちるように）。
+8. **面が消えるときのフォーカス**: `useDisplayStore.remove` は `focusedDisplayId` を下ろさない（部品が外れるとき `DisplayFrame` が下ろして端末へ戻す）。以前はストアが先に下ろしていて、枠にフォーカスがある面を `close` で消すと端末へ戻らず、続けて打ったキーが pane に届かなかった（E2E (7) で発見）。
+9. **枠の頁の `frame.js` が読み込みの最後に `display-ready` を送るのは、`window` の `load` のとき**（文書が `complete` なら即）。親は、合図と iframe の最初の `load` の両方を見るので、順序はどちらでもよい（単体で両方を確かめた）。
+10. **既存の試験の更新**: 操作のカタログの数・`uiTokens.test.ts` の薄めた文字の下限（`.pane-frame-main-dimmed` を対象外に）・`mobile.spec.ts:77` の時機の競合（上の 3 を参照。`test-result.md`）。
+11. **キーの衝突**: `prefix+i`（利用者の決定 D23）は、既存の既定と衝突しなかった（`bindings.test.ts`・`keymap.test.ts` が通る）。
+
+### PR2 で迷った点（勧める解釈で進めたもの）
+
+- PR3 の直し（`ebcbdc0` まで）で、PR2 に関わる記述が食い違う箇所は無かった。`PanePanel` のラベルの `aria-label` は design に具体の文言が無いので、見出しの固定のラベルと同じ文言を使った。
+- `DisplayFrame` が中身を取る（`ensureContent`）のを、tasks は `PanePanel`・`PaneBands` の役にしていたが、`DisplayFrame` 自身が「載ったとき・版と形式が替わったとき」に呼ぶ形にした（たたんだパネルは `DisplayFrame` が載らないので取らない、という決まりは同じ）。
+- 枠の鍵（`frameKey`）に加えて、`DisplayFrame` 自身も `info.format` の変化で iframe を作り直す（tasks の指示どおり）。
+- モバイルの［表示N］のボタンは、狭い画面でバーがあふれるので、余白を詰めた（`.mobile-shell-pane` の箱を変えないため、バーの外に行を足す案は採らなかった）。

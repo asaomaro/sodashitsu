@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject } from "vue";
 import { visibleBands, BANDS_MORE_ROW_PX } from "../display/displayLayout.js";
+import { displayBandLabel } from "../display/displayLabel.js";
 import { frameKey } from "../display/framePage.js";
 import { DisplayControllerKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -23,9 +24,7 @@ const shown = computed(() => bands.value.slice(0, split.value.shown));
 const hidden = computed(() => bands.value.slice(split.value.shown));
 const engaged = computed(() => store.focusedDisplayId !== null && bands.value.some((b) => b.id === store.focusedDisplayId));
 
-function markLabel(name: string, title: string): string {
-  return `pane のプログラムの表示（隔離）· ${name}: ${title}`;
-}
+const markLabel = displayBandLabel;
 function showHidden(): void {
   view.toast(`ほかの帯 ${hidden.value.length} 件: ${hidden.value.map((b) => b.name).join("、")}`);
 }
@@ -42,7 +41,7 @@ function showHidden(): void {
       data-pane-band
       :data-display-name="b.name"
     >
-      <span class="pane-band-mark" :title="markLabel(b.name, b.title)" :aria-label="markLabel(b.name, b.title)" role="img" data-pane-band-mark>▍表示</span>
+      <span class="pane-band-mark" :title="markLabel(b)" :aria-label="markLabel(b)" role="img" data-pane-band-mark>▍表示</span>
       <span v-if="store.focusedDisplayId === b.id" class="pane-band-engaged-note" aria-live="polite" title="入力はこの表示に届きます（Esc で端末へ）" data-pane-band-engaged-note>
         入力はこの表示に届きます（Esc で端末へ）
       </span>

@@ -26,7 +26,7 @@ test("パネルは端末の横に出ず、バーのボタンから重ね表示�
   // パネル: 端末の横には出ない。バーのボタンだけが出る。
   const r = await runDisplay(appServer, paneId, ["set", "side", "--kind", "panel", "--title", "横", "--html-file", await writeTmp("<h1 id=h>モバイルのパネル</h1>")]);
   expect((await r.done).code).toBe(0);
-  await expect(page.locator("[data-mobile-display-btn]")).toHaveText("表示 1");
+  await expect(page.locator("[data-mobile-display-btn]")).toHaveText("表示1");
   await expect(page.locator("[data-pane-panel]")).toHaveCount(0); // 端末の横のパネルは出ない
   const paneAfter = (await page.locator(".mobile-shell-pane").boundingBox())!;
   expect(paneAfter).toEqual(paneBefore); // 端末の箱は変わらない
@@ -39,7 +39,7 @@ test("パネルは端末の横に出ず、バーのボタンから重ね表示�
   // ［閉じる］でシートだけ閉じる（面は残る）。
   await page.locator("[data-mobile-display-close]").click();
   await expect(page.locator("[data-mobile-display-sheet]")).toHaveCount(0);
-  await expect(page.locator("[data-mobile-display-btn]")).toHaveText("表示 1");
+  await expect(page.locator("[data-mobile-display-btn]")).toHaveText("表示1");
   expect(views.latest()!.visible[0]!.cols).toBe(colsBefore);
 
   // 帯: 端末（.mobile-shell-pane）の上に出る。

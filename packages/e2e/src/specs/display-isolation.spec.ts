@@ -82,7 +82,17 @@ for (const fmt of ["html", "markdown"] as const) {
     await f.locator("#j").click().catch(() => undefined);
     await page.waitForTimeout(400);
     expect(await ran(page).getAttribute("data-ran")).toBeNull();
-    // 取り除きで、危険な要素・属性は文書に入っていない。
+  });
+}
+
+// 取り除きそのもの（二重の守りの片方）。実行の筋 (2) は CSP だけでも通るので、取り除きを外した版を見分けるのはこちらと sanitize.js の単体テスト。
+for (const fmt of ["html", "markdown"] as const) {
+  test(`(2b) 取り除き: 危険な要素・属性が文書に入っていない（${fmt}）`, async ({ page, appServer }) => {
+    const { paneId } = await openDisplayBrowser(page, appServer);
+    const file = await writeTmp(EVIL, fmt === "html" ? "c.html" : "c.md");
+    await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", fmt === "html" ? "--html-file" : "--markdown-file", file]));
+    const f = panelFrameLoc(page);
+    await expect(f.locator("#done")).toBeAttached();
     expect(await f.locator("#soda-display-root script").count()).toBe(0);
     expect(await f.locator("#soda-display-root [onerror], #soda-display-root [onclick], #soda-display-root [onload]").count()).toBe(0);
   });
@@ -108,36 +118,49 @@ test("(3) 外の画像・stylesheet・@import・背景・フォントへの要�
   }
 });
 
-test("(4) meta refresh・form の送信・base・iframe・object・embed で枠が移らず、外を読まない", async ({ page, appServer }) => {
-  const sink = await startSink();
-  try {
-    const { paneId, sent } = await openDisplayBrowser(page, appServer);
-    const html = `<meta http-equiv="refresh" content="0;url=/display-view/frame.html?moved"><base href="${sink.origin}/"><iframe src="${sink.origin}/if"></iframe><object data="${sink.origin}/ob"></object><embed src="${sink.origin}/em"><form id="f" action="${sink.origin}/post" method="post"><input name="a" value="1"><button id="s">go</button></form><p id="done">done</p>`;
-    await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(html)]));
-    await expect(panelFrameLoc(page).locator("#done")).toBeAttached();
-    await panelFrameLoc(page).locator("#s").click();
-    await page.waitForTimeout(800);
-    await expect(frameEl(page)).toHaveAttribute("data-display-loads", "1");
-    expect(sent.reports()).toEqual([]);
-    expect(sink.requests()).toEqual([]);
-    expect(await panelFrameLoc(page).locator("#soda-display-root").locator("iframe, object, embed, meta, base").count()).toBe(0);
-    // 面は閉じられていない。
-    const list = await ok(await runDisplay(appServer, paneId, ["list"]));
-    expect((list.json as { displays: unknown[] }).displays).toHaveLength(1);
-  } finally {
-    await sink.close();
-  }
-});
+// meta は、html では head に書かれると文書に入れる前の断片に届かない（取り除き以前に捨てられる）ので、body の中に書いた場合と markdown の中に書いた場合も見る。
+const META = (origin: string) => `<meta http-equiv="refresh" content="0;url=/display-view/frame.html?moved"><base href="${origin}/">`;
+for (const variant of ["html-head", "html-body", "markdown"] as const) {
+  test(`(4) meta refresh・form の送信・base・iframe・object・embed で枠が移らず、外を読まない（${variant}）`, async ({ page, appServer }) => {
+    const sink = await startSink();
+    try {
+      const { paneId, sent } = await openDisplayBrowser(page, appServer);
+      const rest = `<iframe src="${sink.origin}/if"></iframe><object data="${sink.origin}/ob"></object><embed src="${sink.origin}/em"><form id="f" action="${sink.origin}/post" method="post"><input name="a" value="1"><button id="s">go</button></form><p id="done">done</p>`;
+      const html = variant === "html-head" ? META(sink.origin) + rest : `<p>先頭</p>${META(sink.origin)}${rest}`;
+      const file = await writeTmp(html, variant === "markdown" ? "c.md" : "c.html");
+      await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", variant === "markdown" ? "--markdown-file" : "--html-file", file]));
+      await expect(panelFrameLoc(page).locator("#done")).toBeAttached();
+      await panelFrameLoc(page).locator("#s").click();
+      await page.waitForTimeout(800);
+      await expect(frameEl(page)).toHaveAttribute("data-display-loads", "1");
+      expect(sent.reports()).toEqual([]);
+      expect(sink.requests()).toEqual([]);
+      expect(await panelFrameLoc(page).locator("#soda-display-root").locator("iframe, object, embed, meta, base").count()).toBe(0);
+      // 面は閉じられていない。
+      const list = await ok(await runDisplay(appServer, paneId, ["list"]));
+      expect((list.json as { displays: unknown[] }).displays).toHaveLength(1);
+    } finally {
+      await sink.close();
+    }
+  });
+}
 
 test("(5) 親のページの別の iframe から同じ形の message（display-ready・action）を送っても、ブラウザは display.action を送らない", async ({ page, appServer }) => {
   const { paneId, sent } = await openDisplayBrowser(page, appServer);
   await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(`<button data-soda-action="x">x</button>`)]));
   await expect(panelFrameLoc(page).locator("button")).toBeVisible();
+  // 別の iframe（アプリ本体の CSP がインラインのスクリプトを止めるので、Playwright が枠の中から式を動かす）から、同じ形の message を送る。
   await page.evaluate(() => {
     const ifr = document.createElement("iframe");
+    ifr.id = "foreign";
     ifr.setAttribute("sandbox", "allow-scripts");
-    ifr.srcdoc = `<script>for (const m of [{type:'display-ready',t:'0'},{type:'action',rev:1,action:'evil'},{type:'key',key:'escape'}]) parent.postMessage(m,'*')</script>`;
+    ifr.srcdoc = "<p>foreign</p>";
     document.body.appendChild(ifr);
+  });
+  const foreign = (await (await page.locator("#foreign").elementHandle())!.contentFrame())!;
+  await expect.poll(() => foreign.evaluate(() => document.body?.textContent)).toBe("foreign");
+  await foreign.evaluate(() => {
+    for (const m of [{ type: "display-ready", t: "0" }, { type: "action", rev: 1, action: "evil" }, { type: "key", key: "escape" }, { type: "pong", n: 1 }]) parent.postMessage(m, "*");
   });
   await page.waitForTimeout(600);
   expect(sent.actions()).toEqual([]);
@@ -201,15 +224,20 @@ test("(10) 知らない形式（script-html・未知）: 枠が作られず固�
   await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(`<p id="a">a</p>`)]));
   await expect(panelFrameLoc(page).locator("#a")).toBeAttached();
   const first = await frameEl(page).elementHandle();
+  // 知らない形式の間は、枠（iframe）が一度も作られない（作ってから外すのではなく、作らない）。
+  let attached = 0;
+  page.on("frameattached", () => attached++);
   // 形式を書き換える（テストの接続は台帳に形式の違う面を作れないので、ブラウザが受ける display.updated を差し替える）。
   format = "script-html";
   await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(`<p id="b">b</p>`)]));
   await expect(page.locator("[data-pane-panel] [data-display-note]")).toHaveText("この画面では、この形式の表示を出せません");
   await expect(frameEl(page)).toHaveCount(0);
+  expect(attached).toBe(0);
   format = "future-x";
   await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(`<p id="c">c</p>`)]));
   await expect(page.locator("[data-pane-panel] [data-display-note]")).toBeVisible();
   await expect(frameEl(page)).toHaveCount(0);
+  expect(attached).toBe(0);
   format = "html";
   await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(`<p id="d">d</p>`)]));
   await expect(panelFrameLoc(page).locator("#d")).toBeAttached();

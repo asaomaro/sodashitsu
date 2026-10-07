@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onMounted, ref } from "vue";
 import DisplayFrame from "../components/DisplayFrame.vue";
+import { displayLabel, DISPLAY_LABEL_PREFIX } from "../display/displayLabel.js";
 import { frameKey } from "../display/framePage.js";
 import { DisplayControllerKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -48,10 +49,10 @@ function dismissActive(): void {
 </script>
 
 <template>
-  <dialog ref="dlg" class="mobile-display-sheet" aria-label="pane のプログラムの表示（隔離）" data-mobile-display-sheet @close="emit('close')" @cancel.prevent="emit('close')">
+  <dialog ref="dlg" class="mobile-display-sheet" :aria-label="DISPLAY_LABEL_PREFIX" data-mobile-display-sheet @close="emit('close')" @cancel.prevent="emit('close')">
     <div v-if="active" class="mobile-display-box" :class="{ 'mobile-display-engaged': engaged }">
       <div class="mobile-display-head">
-        <div class="mobile-display-label" data-mobile-display-label>pane のプログラムの表示（隔離）· {{ active.name }}</div>
+        <div class="mobile-display-label" data-mobile-display-label>{{ displayLabel(active) }}</div>
         <button type="button" class="mobile-display-btn" data-mobile-display-dismiss @click="dismissActive">この表示を消す</button>
         <button type="button" class="mobile-display-btn" data-mobile-display-close @click="emit('close')">閉じる</button>
       </div>
@@ -110,18 +111,18 @@ function dismissActive(): void {
   flex: none;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 4px 6px;
   background: var(--soda-menu-border, #44475a);
   font-size: 0.8em;
 }
+/* 固定のラベルは切らずに全部見せる（狭い画面では 1 行を占めて、ボタンは次の行）。 */
 .mobile-display-label {
-  flex: 1 1 auto;
+  flex: 1 1 100%;
   min-width: 0;
   font-weight: bold;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .mobile-display-btn {
   flex: none;

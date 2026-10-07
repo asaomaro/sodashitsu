@@ -97,7 +97,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
       <!-- 連携のグラフ（20260927-agent-graph の AC20。モバイルは閲覧と一時停止・再開だけ）。文字のボタン（設定と同じ理由）。 -->
       <!-- 通知のベル（20261005-notify-bell）。応答せずに閉じた知らせの件数。モバイルにはサイドバーが無いので、ここが入口。 -->
       <NotificationBell variant="mobile" />
-      <button v-if="panelCount > 0" type="button" class="mobile-shell-display-btn" data-mobile-display-btn @click="showDisplaySheet = true">表示 {{ panelCount }}</button>
+      <button v-if="panelCount > 0" type="button" class="mobile-shell-display-btn" data-mobile-display-btn @click="showDisplaySheet = true">表示{{ panelCount }}</button>
       <button type="button" class="mobile-shell-graph-btn" @click="view.openGraph()">連携</button>
       <button type="button" class="mobile-shell-settings-btn" @click="view.openDialogWithContext({ kind: 'settings' })">設定</button>
     </header>
@@ -168,6 +168,10 @@ onBeforeUnmount(() => touchScroll?.dispose());
   background: none;
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 4px;
+}
+/* 上部のバーは狭い画面でいっぱいなので、表示のボタンだけ余白を詰める（パネルがあるときだけ出る）。 */
+.mobile-shell-display-btn {
+  padding: 0.3em 0.35em;
 }
 .mobile-shell-fit-btn[aria-pressed="true"] {
   color: var(--soda-accent-fg, #f8f8f2);

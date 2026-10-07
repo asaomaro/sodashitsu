@@ -303,7 +303,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `docs/display.md`（新規）、`docs/sodactl.md:21`・`213`・`718`、`docs/verification.md`、`docs/tui-parity.md`、`docs/tui.md:137` の近く、`packages/cli/skills/sodactl/SKILL.md`、`AGENTS.md`
       依存: T15, T18, T19
       AC: AC27
-- [ ] T22: 負の対照（静的な形式。test 工程で消化する）: 次の版（9 つ）で、対応するテストが落ちる（または、二重の守りの片方だけ外した版では**落ちない**）ことを確かめ、戻して通ることも確かめ、生の出力を `test-result.md` に残す。
+- [x] T22: 負の対照（静的な形式。test 工程で消化する）: 次の版（9 つ）で、対応するテストが落ちる（または、二重の守りの片方だけ外した版では**落ちない**）ことを確かめ、戻して通ることも確かめ、生の出力を `test-result.md` に残す。
       (a) 受け口の `displayCloseOp`・`displayListOp`・`displayWaitOp` が、引数の `paneId`（schema にも足す）を対象にする版 → T4 の「引数に `paneId: <B>` を載せて送っても B に届かない」が落ちる、
       (b) `DISPLAY_VIEW_SANDBOX` と `DISPLAY_VIEW_CSP` の両方に `allow-same-origin` を足した版 → T19 (1) が落ちる、
       (c1) `sanitize.js` の `script`・`on*` の取り除きだけを外した版（`autofocus` の取り除きは残す）→ T19 (2)・(8) は**落ちない**（CSP が止める）。このとき、枠のコンソールに CSP の違反が記録されることを確かめる、

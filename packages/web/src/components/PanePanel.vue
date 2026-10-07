@@ -2,6 +2,7 @@
 import { computed, inject, nextTick, ref } from "vue";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { panelWidth, panelWidthRange } from "../display/displayLayout.js";
+import { displayLabel } from "../display/displayLabel.js";
 import { frameKey } from "../display/framePage.js";
 import { DisplayControllerKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -120,7 +121,7 @@ function onTabKey(ev: KeyboardEvent): void {
     :class="{ 'pane-panel-folded': folded, 'pane-panel-engaged': engaged }"
     :style="rootStyle"
     role="complementary"
-    :aria-label="`pane のプログラムの表示（隔離）· ${active.name}`"
+    :aria-label="displayLabel(active)"
     data-pane-panel
     :data-display-engaged="engaged ? '1' : '0'"
   >
@@ -157,7 +158,7 @@ function onTabKey(ev: KeyboardEvent): void {
     </button>
     <template v-else>
       <div class="pane-panel-head">
-        <div class="pane-panel-label" data-pane-panel-label>pane のプログラムの表示（隔離）· {{ active.name }}</div>
+        <div class="pane-panel-label" data-pane-panel-label>{{ displayLabel(active) }}</div>
         <div class="pane-panel-actions">
           <button type="button" class="pane-panel-btn" aria-label="パネルをたたむ" title="たたむ" data-pane-panel-fold @click="store.setCollapsed(paneId, true)">▸</button>
           <button type="button" class="pane-panel-btn" aria-label="この表示を閉じる" title="この表示を閉じる" data-pane-panel-close @click="dismiss(active.id)">×</button>
