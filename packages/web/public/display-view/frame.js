@@ -46,7 +46,8 @@
   var contains = N.contains;
   var appendChild = N.appendChild;
   var childNodesOf = getterOf(N, 'childNodes');
-  var focusEl = HTMLElement.prototype.focus;
+  var htmlFocus = HTMLElement.prototype.focus;
+  var svgFocus = typeof SVGElement !== 'undefined' ? SVGElement.prototype.focus : undefined;
   var forEach = Array.prototype.forEach;
   var sanitize = self.__sodaDisplaySanitize;
   var marked = self.marked;
@@ -56,6 +57,13 @@
   var rev = 0;
   var relayKeys = [];
   var root = null;
+
+  // 要素の種類に合う `focus` を使う（`HTMLElement.prototype.focus` を SVG の要素に `call` すると `Illegal invocation`）。失敗は呼び出し側が次の候補へ進む。
+  function focusEl(el, opts) {
+    if (el instanceof HTMLElement) htmlFocus.call(el, opts);
+    else if (svgFocus && el instanceof SVGElement) svgFocus.call(el, opts);
+    else if (typeof el.focus === 'function') el.focus(opts);
+  }
 
   function post(msg) {
     if (port) port.postMessage(msg);
@@ -137,7 +145,7 @@
         target = docBody.call(document);
         setAttribute.call(target, 'tabindex', '-1');
       }
-      try { focusEl.call(target, { preventScroll: true }); } catch (e) { /* 何もしない */ }
+      try { focusEl(target, { preventScroll: true }); } catch (e) { /* 何もしない */ }
     }
   }
 
@@ -263,11 +271,13 @@
     var sel = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
     var list = qsa.call(root, sel);
     for (var i = 0; i < list.length; i++) {
-      if (!hasAttribute.call(list[i], 'disabled')) { focusEl.call(list[i]); return; }
+      if (hasAttribute.call(list[i], 'disabled')) continue;
+      try { focusEl(list[i]); } catch (e) { continue; } // 1 つの要素で失敗しても次の候補へ
+      if (docActive.call(document) === list[i]) return; // フォーカスを受けない要素（`<use>` など）は飛ばし、実際に移った要素で止める
     }
     var body = docBody.call(document);
     setAttribute.call(body, 'tabindex', '-1');
-    focusEl.call(body);
+    focusEl(body);
   }
 
   function onPort(ev) {

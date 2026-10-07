@@ -388,3 +388,10 @@ D28 の直しの後、別のコンテキストに design・tasks を 1 回見せ
 7. **固定のラベルを 1 つの関数に**（`display/displayLabel.ts` の `displayLabel(info)`・`displayBandLabel(info)`）。知らない項目があっても壊れない。後の作業が「どの拡張が出したか」の文を足す場所。
 8. **初回の案内のトースト**は、既存の置き場所の決まり（右上・4 秒・クリックを通す）のまま。帯・パネルの操作を妨げない。
 9. **ask の側の取り除き**に、同じ種類の穴（`name=remove` で `el.remove()` が失敗→ソースの文字表示へ落ちる。閉じる側）がある。この PR では直さない（別の作業の候補・低）。
+
+### D31 の追記: 再レビューの指摘（退行）の直し
+
+- `frame.js` の `focus`（`prefix+i` で枠の中へ）: 控えた `HTMLElement.prototype.focus` を SVG の要素（`use href`・`image href`・`tabindex` つき）に `call` して `Illegal invocation` になり、`activeElement` が `BODY` のままだった。**要素の種類に合う `focus`**（`HTMLElement`／`SVGElement` のプロトタイプの両方を控えて使い分け）にし、**要素ごとに `try/catch`** で次の候補へ進み、`activeElement` が実際にその要素になった最初のもので止める（フォーカスを受けない `<use>` などは飛ばす）。
+  `frame.js`・`sanitize.js` の控えたメソッドのうち、`HTMLElement.prototype` にあって `Element.prototype` に無いものは `focus` だけ（`click`・`blur`・`dataset`・`hidden`・`innerText` は使っていない。`style` は `documentElement` だけ）。`sanitize.js` は `Element`・`Node` のものだけ。
+  E2E (16)（SVG を含む面で `prefix+i` がボタンへ移る・SVG の中の `data-soda-action` の押下・tabindex つきの SVG の要素）を足した。直す前の版では `activeElement` が `BODY` で落ちる（`Expected: "btn" / Received: "BODY"`）。単体テストの DOM は `use` にもフォーカスを渡すので、飛ばす動きの確かめは E2E。
+- `display-mobile.spec.ts` の［表示1］の文言とシートを閉じた後の列数の確認は、`prefix+i` の確認を足したときの編集でうっかり消していた。戻した。

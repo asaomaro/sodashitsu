@@ -328,3 +328,36 @@ test("(15) 2 MiB ちょうどの html（末尾に印の要素）が出て、末�
   expect(done.code, done.stderr).toBe(0);
   await expect(panelFrameLoc(page).locator("#tail")).toHaveText("END", { timeout: 20_000 });
 });
+
+test("(16) インライン SVG（use href・image href・tabindex つきの要素）を含む面でも、prefix+i が実際にフォーカスを受ける要素（ボタン）へ移る。SVG の中の data-soda-action を押しても例外にならない", async ({ page, appServer }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const { paneId } = await openDisplayBrowser(page, appServer);
+  const svg = `<svg width="40" height="20" id="s"><defs><g id="q"></g></defs><use href="#q"/><image href="data:image/png;base64,AAAA" width="1" height="1"/><circle id="c" cx="10" cy="10" r="6" data-soda-action="svgclick"/></svg>`;
+  await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(`${svg}<button id="btn" data-soda-action="b">btn</button>`)]));
+  await expect(panelFrameLoc(page).locator("#btn")).toBeVisible();
+  await page.locator(".xterm-helper-textarea").focus();
+  await page.keyboard.press("Control+b");
+  await page.keyboard.press("i");
+  await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "1");
+  const f = (await (await page.locator("[data-pane-panel] iframe").elementHandle())!.contentFrame())!;
+  await expect.poll(() => f.evaluate(() => (document.activeElement as Element | null)?.getAttribute("id") ?? document.activeElement?.tagName)).toBe("btn");
+  // SVG の中の data-soda-action の押下（例外にならず、操作が届く）。
+  const w = await runDisplay(appServer, paneId, ["wait", "m"]);
+  const deadline = Date.now() + 15_000;
+  while (!w.finished() && Date.now() < deadline) {
+    await panelFrameLoc(page).locator("#c").click({ force: true });
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  expect((await w.done).lines[0]).toMatchObject({ action: "svgclick" });
+  // フォーカスを受ける SVG の要素（tabindex つき）が先にあっても、例外にならない。
+  await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(`<svg width="20" height="20"><circle tabindex="0" id="t" cx="5" cy="5" r="4"/></svg><button id="btn2">b</button>`)]));
+  await expect(panelFrameLoc(page).locator("#btn2")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.locator(".xterm-helper-textarea").focus();
+  await page.keyboard.press("Control+b");
+  await page.keyboard.press("i");
+  await expect.poll(() => f.evaluate(() => (document.activeElement as Element | null)?.getAttribute("id"))).toMatch(/^(t|btn2)$/);
+  // この環境の端末の描画が WebAssembly を CSP に拒まれる例外（元からのもの。key-bindings:699 も同じ）は除く。
+  expect(errors.filter((m) => !/WebAssembly/.test(m))).toEqual([]);
+});

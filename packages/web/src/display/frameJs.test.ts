@@ -172,4 +172,12 @@ describe("frame.js", () => {
     expect(f.root().querySelector("pre")?.textContent).toBe("after");
     expect(f.port.postMessage).toHaveBeenLastCalledWith({ type: "rendered", rev: 3 });
   });
+
+  it("focus: SVG の要素（use href・image href）が先にあっても例外にならない（実ブラウザで「フォーカスを受けない要素を飛ばしてボタンで止まる」は E2E (16)。ここの DOM は use にもフォーカスを渡す）", () => {
+    const f = boot();
+    f.init();
+    f.render({ rev: 1, format: "html", source: '<svg xmlns="http://www.w3.org/2000/svg"><use href="#q"></use><image href="data:image/png;base64,AA"></image></svg><button id="btn">b</button>' });
+    expect(() => f.port.onmessage!({ data: { type: "focus" } })).not.toThrow();
+    expect(document.activeElement).not.toBeNull();
+  });
 });
