@@ -82,3 +82,17 @@ AssertionError: expected { kind: '__proto__', …(2) } to be null
 + Received:
       Tests  1 failed | 1 passed | 11 skipped (13)
 ```
+
+### 読めない原因の案内・行き先の無いリンク・解除の知らせの負の確かめ（再レビューの側で実施）
+
+実装の側では取っていなかったので、再レビュー（実装とは別のコンテキスト）が、worktree の写しで 1 か所ずつ壊して確かめた。元の状態では `AgentIntegrationInstaller.test.ts` の 60 件がすべて通る。
+
+| 壊した箇所 | 落ちたテスト |
+|---|---|
+| `target = await followDanglingLink(path)` を `target = path` に | 「行き先の無いシンボリックリンクは、リンクを保って行き先に作る」 |
+| 読み込みの失敗の `kind: "read"` を `"syntax"` に | 「読めない設定（ディレクトリ）…」「循環するシンボリックリンクは、何も書かずに断る」 |
+| 解除の知らせの文を `null` に | 「新しい設定が解釈できず古いものだけ片づけたとき…」 |
+
+## 起動確認
+
+`aidev smoke`（この worktree。84dfe3e の後）: pass（10 本）。b4112b2 の後は、関係するテストと全体の `pnpm test`（8261 件通過・既知の 3 件だけ失敗）で確かめた。
