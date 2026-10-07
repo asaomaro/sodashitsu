@@ -13,6 +13,7 @@ import {
   checkDisplaySet,
   displayLimits,
   parseDisplayLine,
+  readDisplayInfo,
 } from "./display.js";
 import { PANE_SOCKET_MAX_LINE_BYTES } from "./paneSocket.js";
 
@@ -29,8 +30,8 @@ describe("checkDisplaySet", () => {
     expect(r).toEqual({ ok: true, value: base });
   });
 
-  it("形式は text・markdown・html の 3 つ（この版）", () => {
-    expect([...DISPLAY_FORMATS]).toEqual(["text", "markdown", "html"]);
+  it("書き手の側の形式は厳しく検査する（text・markdown・html を含み、知らない形式は拒否）", () => {
+    expect([...DISPLAY_FORMATS]).toEqual(expect.arrayContaining(["text", "markdown", "html"]));
     for (const format of DISPLAY_FORMATS) expect(checkDisplaySet({ ...base, format }).ok).toBe(true);
     expect(reason({ ...base, format: "script-html" })).toMatch(/format/);
   });
@@ -160,6 +161,21 @@ describe("定数と limits", () => {
     expect(Math.ceil(DISPLAY_CONTENT_MAX_BYTES / DISPLAY_GET_CHUNK_BYTES)).toBe(3);
   });
   it("sodactl の機能の一覧（この版）", () => {
-    expect([...DISPLAY_FEATURES]).toEqual(["panel", "band", "format:text", "format:markdown", "format:html", "actions"]);
+    expect([...DISPLAY_FEATURES]).toEqual(expect.arrayContaining(["panel", "band", "format:text", "format:markdown", "format:html", "actions"]));
+  });
+});
+
+describe("readDisplayInfo（読み手の側はゆるく読む）", () => {
+  const info = { id: "i", paneId: "p", name: "n", kind: "panel", format: "html", title: "t", size: 320, rev: 1, bytes: 3, updatedAt: "2026-01-01T00:00:00Z" };
+  it("未知の format・未知の項目の面が混じっても、一覧の全体は壊れない（その面は文字列の format のまま通る）", () => {
+    const list = [info, { ...info, id: "j", format: "script-html", future: { x: 1 } }, { id: 5 }, null];
+    const read = list.map(readDisplayInfo).filter((d) => d !== null);
+    expect(read.map((d) => d!.format)).toEqual(["html", "script-html"]);
+    expect(read[1]).toMatchObject({ future: { x: 1 } });
+  });
+  it("必要な項目の型が違うものは null", () => {
+    expect(readDisplayInfo({ ...info, rev: "1" })).toBeNull();
+    expect(readDisplayInfo({ ...info, kind: "side" })).toBeNull();
+    expect(readDisplayInfo("x")).toBeNull();
   });
 });

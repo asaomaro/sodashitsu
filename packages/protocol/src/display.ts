@@ -76,6 +76,11 @@ export const DISPLAY_OLD_REQUEST_LINE_BYTES = 1024 * 1024;
 
 export type DisplayKind = (typeof DISPLAY_KINDS)[number];
 export type DisplayFormat = (typeof DISPLAY_FORMATS)[number];
+/**
+ * 読み手の側（サーバ → 画面・sodactl が受け取る値）の型は、後の版が足す値・項目を受けても落ちないようにする:
+ * 未知の `format` は文字列として通し、表示する側が「出せない」と扱う。書き手の側（`display.set` の要求）は `DisplayFormat` の厳しい検査のまま。
+ */
+export type DisplayFormatValue = DisplayFormat | (string & {});
 
 /** 面の見出し（中身は含まない）。 */
 export interface DisplayInfo {
@@ -84,7 +89,7 @@ export interface DisplayInfo {
   paneId: string;
   name: string;
   kind: DisplayKind;
-  format: DisplayFormat;
+  format: DisplayFormatValue;
   /** 省いたら name。 */
   title: string;
   /** px（panel は幅・band は高さ）。 */
@@ -100,7 +105,7 @@ export interface DisplayInfo {
 export interface DisplayChunk {
   id: string;
   rev: number;
-  format: DisplayFormat;
+  format: DisplayFormatValue;
   totalBytes: number;
   offset: number;
   base64: string;
@@ -110,7 +115,7 @@ export interface DisplayChunk {
 export interface DisplayContent {
   id: string;
   rev: number;
-  format: DisplayFormat;
+  format: DisplayFormatValue;
   content: string;
 }
 /** その種類を出せると名乗った画面の数（後の版が `scriptHtml` を足す）。 */
@@ -118,6 +123,8 @@ export interface DisplayRenderers {
   panel: number;
   band: number;
   actions: number;
+  /** 後の版が足す種類（読み手は知らない項目を無視する）。 */
+  [kind: string]: number;
 }
 export interface DisplayLimits {
   contentBytes: number;
@@ -137,6 +144,8 @@ export interface DisplayLimits {
   waitMaxMs: number;
   /** このサーバの受け口が受ける 1 行の上限（4 MiB）。sodactl が、送る前に見る。 */
   requestLineBytes: number;
+  /** 後の版が足す項目（読み手は知らない項目を無視する）。 */
+  [key: string]: unknown;
 }
 export interface DisplayFeatures {
   features: string[];
@@ -175,11 +184,13 @@ export interface DisplayWaitResult {
  * - `navigated`: 枠が別のページへ移ったので、アプリが止めた／`unresponsive`: 枠が 10 秒返事をしないので、アプリが止めた
  */
 export type DisplayClosedReason = "closed" | "dismissed" | "expired" | "navigated" | "unresponsive";
+/** 読み手の側の理由（後の版が足す理由を受けても落ちない。知らない理由は「閉じた」として扱う）。 */
+export type DisplayClosedReasonValue = DisplayClosedReason | (string & {});
 
 /** サーバが溜めて `display.wait` で返す出来事。sodactl はそのまま 1 行にする。 */
 export type DisplayEvent =
   | { type: "display.action"; seq: number; paneId: string; name: string; rev: number; action: string; data?: Record<string, string>; at: string }
-  | { type: "display.closed"; seq: number; paneId: string; name: string; reason: DisplayClosedReason; at: string };
+  | { type: "display.closed"; seq: number; paneId: string; name: string; reason: DisplayClosedReasonValue; at: string };
 
 /** sodactl が stdout に書く行（`display wait`・`display events`・`set --wait`）。上の `DisplayEvent` に、sodactl が作る行を足したもの。 */
 export type DisplayLine =
@@ -315,4 +326,29 @@ export function parseDisplayLine(line: string): DisplayLine | null {
   }
   if (!isRecord(v) || typeof v.type !== "string") return null;
   return v as unknown as DisplayLine;
+}
+
+/**
+ * 面の見出しを、読み手の側のゆるさで読む（`display.subscribe` の一覧・`display.updated` の 1 件）。必要な項目の型だけを見て、
+ * **未知の `format`・未知の項目では落とさず**そのまま通す（表示する側が、知らない `format` を「出せない」と扱う）。読めなければ `null`
+ * （一覧の 1 件が壊れていても、ほかの面は読める）。
+ */
+export function readDisplayInfo(raw: unknown): DisplayInfo | null {
+  if (!isRecord(raw)) return null;
+  const r = raw;
+  if (
+    typeof r.id !== "string" ||
+    typeof r.paneId !== "string" ||
+    typeof r.name !== "string" ||
+    !isOneOf(DISPLAY_KINDS, r.kind) ||
+    typeof r.format !== "string" ||
+    typeof r.title !== "string" ||
+    typeof r.size !== "number" ||
+    typeof r.rev !== "number" ||
+    typeof r.bytes !== "number" ||
+    typeof r.updatedAt !== "string"
+  ) {
+    return null;
+  }
+  return r as unknown as DisplayInfo;
 }

@@ -11,7 +11,7 @@ import type {
 import type { AgentIntegrationStatusResult, SharedPrefs } from "./messages.js";
 import type { Graph, LinkRun } from "./graph.js";
 import type { CommandListResult } from "./commands.js";
-import type { DisplayClosedReason, DisplayInfo } from "./display.js";
+import type { DisplayClosedReasonValue, DisplayInfo } from "./display.js";
 
 /**
  * イベント（design.md「WebSocket の通信」のイベント表。architecture.md の独立点検で data の形を確定）。
@@ -197,7 +197,7 @@ export interface DisplayUpdatedEvent {
 /** 面が消えた（閉じた・利用者が閉じた・時間切れ・pane が閉じた・画面の報告）。全クライアントへ配るが、知らない id は無視する。 */
 export interface DisplayRemovedEvent {
   event: "display.removed";
-  data: { id: string; paneId: string; name: string; reason: DisplayClosedReason | "pane_closed" };
+  data: { id: string; paneId: string; name: string; reason: DisplayClosedReasonValue };
 }
 
 export type ServerEvent =

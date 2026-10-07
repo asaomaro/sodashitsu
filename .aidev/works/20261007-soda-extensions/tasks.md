@@ -113,7 +113,7 @@
       依存: T1
       AC: AC14, AC23, AC36
       点検: あり
-- [ ] T3: server の台帳: `TokenBucket`（`take(now, n = 1): boolean`。回数にも量にも使う）と `DisplayService`（design「サーバ: `DisplayService`」のうち、`send` と `focus_steal` を除く全部。中身は `Buffer` で持つ・`get` は小分け〔`DisplayChunk.totalBytes`〕・`report`（`navigated`・`unresponsive`）・回数と量の桶・
+- [x] T3: server の台帳: `TokenBucket`（`take(now, n = 1): boolean`。回数にも量にも使う）と `DisplayService`（design「サーバ: `DisplayService`」のうち、`send` と `focus_steal` を除く全部。中身は `Buffer` で持つ・`get` は小分け〔`DisplayChunk.totalBytes`〕・`report`（`navigated`・`unresponsive`）・回数と量の桶・
       bus の `pane.closed` の購読〔処理の中を `try` で囲む〕・`ttl` のタイマー・pane ごとの列と `seq`・`epoch`）。時計・id の生成は差し替えられる形にする。サーバはファイルを読まない・外へ通信しない（`node:fs`・`node:http`・`node:https`・`node:net` を import しない）。
       ログに中身・題・値を書かない。規則の外は `RpcError` で投げる。単体テスト（「テスト方針」の server の項目）
       対象: `packages/server/src/display/DisplayService.ts`（新規）、`packages/server/src/display/rateLimit.ts`（新規）、各 `.test.ts`（新規） / 根拠: research A5（手本は `packages/server/src/ask/AskService.ts`）
