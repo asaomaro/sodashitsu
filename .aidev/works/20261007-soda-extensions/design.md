@@ -146,7 +146,6 @@ export const DISPLAY_SET_BYTES_RATE = { perSec: 2 * 1024 * 1024, burst: 8 * 1024
 export const DISPLAY_SEND_MAX_BYTES = 64 * 1024;        // display.send のデータ（JSON の UTF-8）
 export const DISPLAY_SEND_RATE = { perSec: 20, burst: 20 } as const;      // pane ごと
 export const DISPLAY_FOCUS_STEAL_MAX = 3;                // **サーバの側で、pane ごとに**数える。これだけ取ったら、その pane のスクリプトが動く面を全部止めて、冷却に入る
-export const DISPLAY_RECENT_CLOSED = { ms: 60_000, max: 256 } as const; // サーバ。閉じた・形式が替わった直後の面の id の控え（遅れて着く知らせを、その pane に数えるため）
 export const DISPLAY_SCRIPT_COOLDOWN_MS = 300_000;       // 冷却の長さ。この間、その pane は script-html を出せない。入る条件は「サーバ」の「冷却」の 1 か所
 export const DISPLAY_PING_INTERVAL_MS = 2_000;           // 画面 → 枠の見回り（画面が見えている間だけ）
 export const DISPLAY_UNRESPONSIVE_MS = 10_000;           // 見回りの返事が、見えている間に、これだけ続けて無ければ止める
@@ -245,7 +244,7 @@ export type DisplayLine =
 | `display.subscribe` | `{features: string[]}`（`DISPLAY_RENDER_FEATURES` のうち出せるもの。知らない値は捨てる。8 個まで） | `{ displays: DisplayInfo[] }`（全 pane の分） | 載せない | 種類が `desktop`・`mobile` の接続だけ（ほかは `invalid_params`） |
 | `display.send` | `{paneId, name, data}`（`data` は JSON の値。直列化して 64 KiB まで。`script-html` の面だけ） | `{ delivered: number }`（スクリプトが動く形式を出せると名乗った画面の数。0 でも成功） | 載せる | どれでも |
 | `display.get` | `{id, offset}`（`offset` は 0 か `DISPLAY_GET_CHUNK_BYTES` の倍数） | `DisplayChunk` | 載せない | 名乗った接続だけ（ほかは `display_closed`） |
-| `display.report` | `{id, problem}`（`problem` は `"navigated"`・`"unresponsive"`・`"focus_steal"`） | `{ closed: string[]; steals?: number }`。`navigated`・`unresponsive` は、その面を閉じる。**`focus_steal` は「1 回取られた」の知らせ**で、サーバが pane ごとに数え、3 回目で、その pane のスクリプトが動く面を全部閉じる（下の「冷却」） | 載せない | 名乗った接続だけ |
+| `display.report` | `{id, problem, paneId?, format?}`（`problem` は `"navigated"`・`"unresponsive"`・`"focus_steal"`。`paneId`・`format` は、画面が描いていた枠のもの。PR1 の版は `{id, problem}` だけ。PR2 の画面から添え、PR3 のサーバが使う） | `{ closed: string[]; steals?: number }`。`navigated`・`unresponsive` は、その面を閉じる。**`focus_steal` は「1 回取られた」の知らせ**で、サーバが pane ごとに数え、3 回目で、その pane のスクリプトが動く面を全部閉じる（下の「冷却」） | 載せない | 名乗った接続だけ |
 | `display.action` | `{id, rev, action, data?}` | `{}` | 載せない | 名乗った接続だけ |
 | `display.dismiss` | `{id}` か `{paneId}`（その pane の全部）のどちらか 1 つ | `{ closed: string[] }` | 載せない | 名乗った接続だけ |
 
@@ -284,7 +283,7 @@ export class DisplayService {
   subscribe(clientId: string, features: string[]): { displays: DisplayInfo[] };
   get(clientId: string, id: string, offset: number): DisplayChunk;
   send(paneId: string, p: { name: string; data: unknown }): { delivered: number };   // 投げる: display_closed / invalid_params / display_busy
-  report(clientId: string, p: { id: string; problem: "navigated" | "focus_steal" | "unresponsive" }): { closed: string[]; steals?: number };
+  report(clientId: string, p: { id: string; problem: "navigated" | "focus_steal" | "unresponsive"; paneId?: string; format?: string }): { closed: string[]; steals?: number };
   action(clientId: string, p: { id: string; rev: number; action: string; data?: unknown }): void;
   dismiss(clientId: string, sel: { id?: string; paneId?: string }): { closed: string[] };
   onClientGone(clientId: string): void;
@@ -299,16 +298,17 @@ export class DisplayService {
 - `close`・`dismiss`・`report`・`ttl` の経過: 台帳から外す → `totalBytes` を戻す → その pane の列に `display.closed`（理由つき）を足す → bus に `display.removed`（理由つき）。無い名前は何もせず `closed: []`。
   `report` は、名乗った接続からだけ受ける。**頻度で捨てない**（操作の桶と分ける。中身のスクリプトが `soda.action` を流して桶を空にしても、知らせは落ちない。知らせは、面を閉じる方向にしか働かず、閉じた後は `display_closed` を返すだけなので、量の害が無い）。
   画面の側も、知らせを操作の頻度の制限（毎秒 20 回）に入れない。ログに、面の名前・pane・理由を残す。
-  **閉じた直後の知らせも数える**: サーバは、閉じた（または `script-html` から別の形式に替わった）面の id → pane と「スクリプトが動く面だった」ことを、60 秒・256 件まで控える。その id への `focus_steal`・`navigated` は、面がもう無くても、その pane の回数・冷却に数える
-  （スクリプトが合図して、プログラムが `close`・形式の置き換えをしてから知らせが着く、という順で逃れられないように）。控えに無い id は `display_closed`。
+  **閉じた直後の知らせも数える**: 知らせには、画面が、その枠の **pane の id と形式**を添える（`{ id, paneId, format, problem }`。画面〔アプリのコード〕は、自分が描いていた枠の pane と形式を知っている。枠の中身は、これを書けない）。
+  サーバは、面がもう無い・形式が替わっている場合でも、pane が実在すれば、添えられた pane と形式で数える（スクリプトが合図して、プログラムが `close`・形式の置き換えをしてから知らせが着く、という順で逃れられないように。**サーバの側に、閉じた面の控えは持たない**——控えは、数や時間であふれさせられる）。
+  面が残っていて、その pane が、添えられた pane と違うときは `invalid_params`。pane が無ければ `not_found`。
   - `navigated`・`unresponsive`: その面を閉じる（理由は `problem` のまま）。
-  - `focus_steal`: `script-html` の面（上の控えにある、直前までそうだった面を含む）だけ。ほかの形式なら `invalid_params`。**面は閉じず、その pane の「取られた回数」を 1 増やす**。3（`DISPLAY_FOCUS_STEAL_MAX`）に達したら、冷却に入る。結果の `steals` は、今の回数。
+  - `focus_steal`: 知らせに添えられた形式が `script-html` のときだけ（ほかの形式なら `invalid_params`）。**面は閉じず、その pane の「取られた回数」を 1 増やす**。3（`DISPLAY_FOCUS_STEAL_MAX`）に達したら、冷却に入る。結果の `steals` は、今の回数。
 - **取られた回数と冷却**（スクリプトが動く形式の、サーバの側の番。**入る条件・戻る条件は、ここだけに書く**）:
   - 回数は **pane ごと**（面の id・名前・画面・接続に依らない）。`close` → `set` のやり直し・別の名前の面・枠の作り直し・画面の再読み込み・利用者が操作を始めたこと、のどれでも 0 に戻らない。
   - 複数の画面が知らせたら、その数だけ増える（同じスクリプトが 2 つの画面で 1 回ずつ取れば 2。**早く閉じる側に倒す**。重複を除く仕組みは持たない——除くと、除いている間に取れる回数が増える）。
-  - **冷却に入るのは 2 つだけ**: (i) 回数が 3 に達した、(ii) `script-html` の面（控えにある面を含む）に `navigated` の知らせが来た。`unresponsive`（重いだけの正当なスクリプトがありうる）と、静的な形式の面の `navigated`・`unresponsive` は、冷却に入らない。
+  - **冷却に入るのは 2 つだけ**: (i) 回数が 3 に達した、(ii) 形式が `script-html` の枠について、`navigated` の知らせが来た（面が、もう無くても）。`unresponsive`（重いだけの正当なスクリプトがありうる）と、静的な形式の面の `navigated`・`unresponsive` は、冷却に入らない。
   - **冷却に入るとき、その pane の `script-html` の面を全部閉じる**（(i) は理由 `focus_steal`、(ii) は、知らせの面が `navigated`、ほかは `focus_steal` ではなく `navigated` と同じ理由）。冷却の間、その pane にスクリプトが動く面は 1 つも無い（だから、冷却の間に取られることは無く、明けた直後に数え直しても「5 分に 3 回」を超えない）。
-  - 冷却の間（5 分）、その pane の `script-html` の `set` は `display_busy`（理由の文に「アプリが止めたので、しばらく出せない」。同じ名前の静的な面を `script-html` に置き換える `set` も断り、既にある面は変えない）。静的な形式の `set` は通る。冷却の間に遅れて届いた知らせは、何も変えない（冷却は延びない）。
+  - 冷却の間（5 分）、その pane の `script-html` の `set` は `display_busy`（理由の文に「アプリが止めたので、しばらく出せない」。同じ名前の静的な面を `script-html` に置き換える `set` も断り、既にある面は変えない）。静的な形式の `set` は通る。冷却の間に届いた知らせは、**回数と冷却を変えない**（延びない）。面を閉じる知らせ（その pane の静的な面への `navigated`・`unresponsive`）は、いつもどおり、その面を閉じる。
   - 回数が 0 に戻るのは、**冷却が明けたとき**と、pane が閉じたとき・サーバの再起動だけ。
   - 受け口へ繋げるプロセスは pane を名乗れる（H9）ので、名乗る pane を替えれば、pane ごとに 3 回ずつ取れる。これは、同じ OS の利用者を信頼する境界の限界（限界 1 に書く）。
 - `get`: 名乗った接続か → 面があるか → 中身の `Buffer` の `offset` から 768 KiB 以下を base64 にして返す（`rev`・`totalBytes`・`eof` つき）。途中で `rev` が変わったら、画面が最初から取り直す。
@@ -440,15 +440,18 @@ div.pane-frame-body（display:flex; flex-direction:column）
 
 ```html
 <iframe class="display-frame" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-        referrerpolicy="no-referrer" src="/display-view/frame.html" title="pane のプログラムの表示（隔離）" data-display-frame></iframe>
+        referrerpolicy="no-referrer" src="/display-view/frame.html?t=<合い札>" title="pane のプログラムの表示（隔離）" data-display-frame></iframe>
 ```
 
 定数 `DISPLAY_VIEW_SANDBOX = "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"`・`DISPLAY_VIEW_PAGE = "/display-view/frame.html"`（`DisplayFrame.vue` から export。負の対照が書き換える）。
 `allow-forms` は、枠の中の `form` の `submit` のイベントを起こすためだけに付ける（`frame.js` が必ず `preventDefault()` する。実際の送信は、CSP の `form-action 'none'` と、取り除きで `action` を消すことの三重で起きない）。
 `allow-scripts` は静的ページ自身のスクリプトのため、`allow-popups`・`allow-popups-to-escape-sandbox` は `http(s)` のリンクを新しいタブで開くため（Markdown の枠と同じ。作者のスクリプトが無いので、`window.open` は呼ばれない）。`allow-same-origin`・`allow-top-navigation`・`allow-modals`・`allow-downloads` は付けない。
 
-1. 枠のページが読み込みの最後に `parent.postMessage({ type: "display-ready" }, "*")`。
-2. 親は `window` の `message` で、**`ev.source === iframe.contentWindow`・状態が「待ち」・その iframe の `load` のイベントがまだ 1 回以下**（0 回＝`load` より先に届いた、も受ける）のときだけ受ける。`MessageChannel` を作り、`contentWindow.postMessage({ type: "display-init", v: 1 }, "*", [port2])`。状態を「つながった」にする。
+1. 親は、iframe を作るたびに、128 ビットの乱数（`crypto.getRandomValues`。**枠の合い札**）を作り、`src` の問い合わせに付ける（`/display-view/frame.html?t=<合い札>`）。枠のページ（アプリの静的ページ）は、読み込みの最後に、自分の URL から合い札を読んで `parent.postMessage({ type: "display-ready", t }, "*")`。
+   合い札は、ほかの枠からは読めない（別の origin の枠の URL は読めない）。**兄弟の枠のスクリプトが、作られた直後のこの枠を別の文書へ移しても、その文書は合い札を知らない**。
+2. 親が `display-ready` を受けるのは、**`ev.source === iframe.contentWindow`・状態が「待ち」・`t` が合い札と一致**のとき、1 回だけ。**通り道を渡すのは、その iframe の最初の `load` を見た後**（`display-ready` が `load` より先に届いたら、最初の `load` まで待つ。`load` が 1 回・合図が 1 回、の両方がそろってから）:
+   `MessageChannel` を作り、`contentWindow.postMessage({ type: "display-init", v: 1 }, "*", [port2])`。状態を「つながった」にする。**`render` も、必ずこの後**（中身がストアに既にあっても、最初の `load` より前には送らない）。
+   こうすると、中身のスクリプトが動くのは、親が最初の `load` を数えた後だけになり、**中身が起こす移動は、必ず 2 回目の `load`** になる。合い札の合わない `display-ready`・10 秒待っても合図が来ない場合は、通り道も中身も渡さず、固定の文言にする（スクリプトが動く形式の枠なら、`report(id, "navigated")` も送る）。
    **これ以後、その枠からの `window` の `message` は一切受けない**（受けるのは `port1` だけ）。
 3. 親 → 枠（`port1.postMessage`）: `{ type: "render", rev, format, source, theme: { dark, vars }, relayKeys: [{ key, ctrl, alt, shift, meta }] }`（`relayKeys` は prefix のキー 1 つ。**静的な形式の枠にだけ渡す**。スクリプトが動く形式の土台は prefix を取り次がないので、渡さない＝信頼しない中身に、利用者のキーの設定を教えない）／`{ type: "focus" }`／`{ type: "ping", n }`。
    **`render` を送ってよいのは、手元の中身が、いまの見出しと同じ面・同じ版・同じ形式のときだけ**（`content.id === info.id && content.rev === info.rev && content.format === info.format`）。`render` の `format` は `content.format`。
@@ -462,7 +465,7 @@ div.pane-frame-body（display:flex; flex-direction:column）
    **`key` は、フォーカスがその枠にあるとき（`focused`）だけ受ける**（無いときは捨てる）。**スクリプトが動く形式では、さらに「操作中（`engaged`）」のときだけ受け、`prefix` は受けない**（`escape` だけ。中身のスクリプトは、土台と同じ `window` にいて、キーの知らせを自分で作れる。
    操作中でないのに端末へフォーカスを移す・利用者の次のキーをアプリの操作にする、を起こせないようにする。スクリプトが動く面では、`Esc` で端末へ戻ってから prefix を押す）。
 6. **移ったことの検知**（備え (c)。どの形式でも同じ）。**判定は、その iframe の `load` の回数だけ**（枠の言うこと〔`rendered`・`pong`〕には依らない。枠 A が自分の port を別の面の枠 B へ渡せば、A が移った後も B が返事できるので）:
-   - **期待する `load` は、どの形式でも、最初の 1 回だけ**。スクリプトが動く形式の土台は、中身を `document.write` で入れず、DOM に差し込む（下の「枠と静的ページ」）ので、土台の側から 2 回目の `load` を起こさない。
+   - **期待する `load` は、どの形式でも、最初の 1 回だけ**（その 1 回が、アプリの静的ページのものであることは、上の 1・2 の合い札で確かめる。通り道と中身は、その後にしか渡さない）。スクリプトが動く形式の土台は、中身を `document.write` で入れず、DOM に差し込む（下の「枠と静的ページ」）ので、土台の側から 2 回目の `load` を起こさない。
      「どの `load` が土台のものか」を、枠に言わせる必要が無い（言わせると、中身のスクリプトがそれを握って、移動を見逃させられる）。
    - **2 回目以降の `load` は、必ず「移った」とする**。画面が見えているかどうかに依らず、すぐ決める。中身のスクリプトが、後から自分で `document.open()`/`document.write()` して `load` が起きた場合も、同じく閉じる（docs に「書き直さない」と書く）。
    - 「移った」と決めたら: `port1` を閉じ、iframe を DOM から外し（作り直さない）、`DisplayController.report(id, "navigated")` を送る。利用者への知らせはトースト「表示『〈面の名前〉』は、別のページへ移ろうとしたので閉じました」
@@ -530,7 +533,7 @@ sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; d
 
 ```html
 <iframe class="display-frame display-frame-script" sandbox="allow-scripts" referrerpolicy="no-referrer" tabindex="-1"
-        src="/display-view/script.html" title="pane のプログラムの表示（隔離・スクリプト）" data-display-frame data-display-script></iframe>
+        src="/display-view/script.html?t=<合い札>" title="pane のプログラムの表示（隔離・スクリプト）" data-display-frame data-display-script></iframe>
 ```
 
 - 定数（`framePage.ts` から export）: `DISPLAY_SCRIPT_VIEW_SANDBOX = "allow-scripts"`・`DISPLAY_SCRIPT_VIEW_PAGE = "/display-view/script.html"`。頁と sandbox を選ぶのは `framePage()` だけ（上の「枠の鍵と、頁の選択」）。
@@ -546,7 +549,7 @@ X-Frame-Options: SAMEORIGIN
 - `script.html`: `<meta charset>` と、**頁の中に直に書いた土台のスクリプト（`<script>` 1 つ。別のファイルにしない）** だけ。土台を別の `.js` にすると、CSP の `script-src` に `'self'` が要り、中身のスクリプトも同じ origin の URL を `<script src="/…">` で読める（アプリのサーバへの GET）。
   頁の中に書けば、`'self'` を外せる。単体テストは、`script.html` を `?raw` で読み、`<script>` の中身を取り出して評価する。
 - 土台のスクリプト（アプリが書いた、小さなもの。中身のスクリプトより先に動く）:
-  1. `display-init` を、`ev.source === parent` のとき 1 回だけ受け、`ev.ports[0]` を通り道にする（静的な形式と同じ）。`ping` には `pong` を返す。
+  1. 読み込みの最後に、自分の URL の合い札 `t` を添えて `display-ready` を送る（静的な形式と同じ）。`display-init` を、`ev.source === parent` のとき 1 回だけ受け、`ev.ports[0]` を通り道にする。`ping` には `pong` を返す。
   2. 最初の `render` で（**1 つの枠につき 1 回だけ**）: `format` が `script-html` でなければ、何も描かずに `{ type: "rejected", rev }` を返す。`script-html` なら:
      (i) `window.soda` を置く（下の API）。(ii) `window` のキャプチャに `keydown` の取り次ぎ（`Escape` だけ。prefix は取り次がない）を付ける（**中身のスクリプトより先**。あとから付けた受け手に先を越されない）。(iii) テーマの変数を `documentElement` に当てる。
      (iv) **中身を DOM に差し込む**（`document.open()`/`document.write()` は使わない）: `DOMParser` で `source` を解釈し、`head` の子と `body` の子（と `body`・`html` の属性）を、いまの文書へ順に移す。`<script>` は、そのまま移すと動かないので、同じ属性と中身の新しい `<script>` を作って、元の位置に、**文書の順に 1 つずつ**入れる（インラインのスクリプトは、入れた時点で同期に動く）。
@@ -693,7 +696,7 @@ interface Soda {
 - **フォーカス**: 面が出る・更新される・消えるとき、アプリは `focus()` を呼ばない。枠の中へ入るのは、利用者が枠を押す・`Tab` で入る・キーの操作（`focus_display`）のどれか（スクリプトが動く面は、枠の外の［操作する］ボタンと `focus_display` だけ。枠・覆いを押しても入らない）。枠にフォーカスのある面が消えたら、その pane の端末へ戻す。
   幅のつまみのドラッグは、フォーカスを動かさない（`useResizeDrag` の決まり）。
 - **枠の中のキー**: 端末へは流れない（別の文書なので、親の `keydown` に届かない）。`Esc` と prefix だけ、通り道で親へ渡る。枠の上のホイールは、枠の中をスクロールする（別の文書なので、端末へ届かない。スクリプトが動く面で操作中でないときは、覆いが受けて枠へ伝える）。
-  スクリプトが動く面は、`Esc` だけを取り次ぐ（prefix は取り次がない）。取り次ぎの受け手は、土台が `document.close()` の後に付けるので、中身のスクリプトが先に `Esc` を止められる（限界 10。`Esc` が効かなくなったら、端末を押せば戻る）。
+  スクリプトが動く面は、`Esc` だけを取り次ぐ（prefix は取り次がない）。取り次ぎの受け手は、土台が、中身を差し込む前に付ける（中身のスクリプトより先）。それでも、悪意のある中身が `Esc` を効かなくできる見込みはある（限界 10。効かなくなったら、端末を押せば戻る）。
 - **`ttl`**: `set` のたびに張り直す。`--ttl-ms` なしの `set` で外れる（`report-metadata` と同じ）。
 - **サーバの停止・入れ替え**: `dispose()` で待ちを空の結果で返し（返事が書ければ）、面を捨てる。入れ替えでは接続が先に切れるので、sodactl は繋ぎ直しに入る（上の `runWaitLoop`）。
 - **別のマシン**: 先のマシンのサーバが台帳を持つ。手元のブラウザは、そのマシンを表示中の接続で `display.subscribe` する（既存の中継。`DisplayController.resetForMachineSwitch` で、前のマシンの面を捨てる）。
@@ -724,7 +727,7 @@ H1〜H16 は、どの形式にも当てはまるもの（H2・H3・H7・H15 は�
 | H2 | （静的な形式）中身のスクリプトが動く（キー入力を読む・フォーカスを奪う・親へ偽の知らせを送る） | CSP `script-src 'self'`（インライン・イベント属性・`javascript:` は動かない）。取り除きで `script`・`on*` も消す（二重） | AC16・AC19（E2E: 実行の印が付かない。負の対照は**層ごと**: 取り除きだけ外す → まだ動かず、CSP の違反が記録される／CSP だけゆるめる → まだ動かない／両方外す → 動いてテストが落ちる） |
 | H3 | （静的な形式）中身が外へ通信する（画像・CSS の `url()`・フォント・`fetch`・フォームの送信）。pane のプログラムが、利用者のブラウザを使って外へ持ち出す | CSP `default-src 'none'`・`img-src data:`・`font-src data:`・`form-action 'none'`。取り除きで `link`・`img` の外の `src`・`action` を消す | AC17（E2E。ブラウザの要求の観測が 0） |
 | H4 | 枠が別のページへ移り（`meta refresh`・リンク・フォーム）、移った先のページが、同じ枠の窓として親へ知らせを送る・中身を受け取る | 移る手段を取り除く（`meta`・`base`・`area`・`form` の `action`・`a` は新しいタブだけ・SVG の `a` と SMIL）。静的な形式はスクリプトが無いので `location=` は呼べない。**それでも移ったら**（どの形式でも）: 親は `load` の回数で気づき、枠を外して、面を閉じ（`navigated`）、利用者と拡張に知らせる。操作は `MessagePort` だけで受け、移った先の文書は port を持たない。`display-ready` は 1 回しか受けない | AC17・AC18・AC34（E2E: 通常の版では、静的な形式の枠は移らない〔`load` が 1 回のまま〕。Playwright で枠を移すと、親が面を閉じ、移った先は中身を受け取れず、操作も送れない。負の対照: `meta` の取り除きを外すと枠が移る／`load` の回数の検知を外すと閉じない） |
-| H5 | 別の窓・別の枠・拡張機能が、同じ形の `message` を親へ送る | `display-ready` は送り主の窓の一致・状態・`load` の回数で受ける。それ以後は port だけ。`readFrameMessage` で形と上限を確かめる | AC18（単体と E2E。負の対照: 送り主の検査を外す） |
+| H5 | 別の窓・別の枠・拡張機能が、同じ形の `message` を親へ送る | `display-ready` は、送り主の窓の一致・状態・枠ごとの合い札の一致で、1 回だけ受ける。通り道を渡すのは、最初の `load` の後。それ以後は port だけ。`readFrameMessage` で形と上限を確かめる | AC18（単体と E2E。負の対照: 送り主の検査を外す） |
 | H6 | 中身が Sodashitsu 自身の確認画面を装う（承認のボタンに見せかける） | 枠の外に、アプリが描く固定のラベル（パネルの見出し・帯の印）。題は文字として出す。枠は自分の箱の外へ描けない。面はモーダルにならない（画面全体を覆えない） | AC7（E2E） |
 | H7 | （静的な形式）面がフォーカスを奪い、端末に打つはずのキー（パスワードなど）が枠に入る | H2（スクリプトなし）。取り除きで `autofocus` を消す。アプリは面の出現・更新で `focus()` を呼ばない。枠のスクリプトが `focus()` を呼ぶのは、親の `focus` の知らせのときと、枠が既にフォーカスを持つときの持ち越しだけ（`document.hasFocus()` が偽なら呼ばない） | AC19（E2E: 更新を挟んで打った文字が pane に届く。負の対照: H2 と同じ） |
 | H8 | 受け口から、ほかの pane の面を出す・閉じる・読む・待つ | 受け口の操作は引数に `paneId` を持たず、`ctx.paneId` だけを対象にする。名前は pane ごとの名前空間。面の `id` を引数に取る操作（`get`・`action`・`dismiss`・`report`）は受け口に載せない | AC14（結合テスト。負の対照: handler が引数の `paneId` を使うように変える） |
@@ -745,7 +748,7 @@ H1〜H16 は、どの形式にも当てはまるもの（H2・H3・H7・H15 は�
 | H23 | （スクリプト）利用者が押していないのに、操作を拡張へ送る。`rev` を偽る。キーの知らせ（`Esc`・prefix）を作って、アプリを動かす。別の面から `postMessage` で、操作を引き出す | 操作は、その面を出したプログラムへ返るだけ（ほかへは行かない）。頻度と大きさの上限。**出来事に `source: "script"`**（サーバが付ける）。プログラムは、操作を「利用者の承認」として扱わない、と docs に書く。キーの知らせは、操作中の `escape` だけ受ける（prefix は受けない） | AC29・AC32。**限界 7・10** |
 | H24 | （スクリプト）自分の枠の中に、端末・Sodashitsu の画面・偽の入力欄を描いて、利用者をだます | 枠の外の固定のラベルと、固定の印「スクリプト」。枠は自分の箱の外へ描けない。全画面・ポップアップ・`alert` は使えない | AC31。**限界 6** |
 | H25 | （スクリプト）重い処理・無限ループ・メモリで、パネルやアプリの画面を固める。固めずに、CPU・電力・メモリを使い続ける | 枠だけが固まる場合は、見回り（見えている画面）が 10 秒で閉じる（`unresponsive`）。アプリの画面ごと固まる場合・応答しながら使い続ける場合は**止められない**。利用者が閉じる。画面全体が固まったときの消し方（別の端末から `sodactl display close`・端末版・再起動）を docs に書く | docs。**限界 5・8・11** |
-| H27 | 同じ名前の `set` で `html` ↔ `script-html` を行き来して、静的な形式の枠・印のままスクリプトを動かす（または、スクリプトの頁に静的な中身として入り込む） | 枠の鍵を `<id>:<形式>` にして、形式が変わったら iframe ごと作り直す。頁と sandbox を選ぶのは `framePage()` の 1 つだけ。知らない形式は固定の文言（どちらの頁にも落とさない）。`frame.js` は静的な 3 つ以外の `render` を拒み、スクリプトの頁の土台は `script-html` 以外を拒む。印は `info.format` から決める。冷却の間の `script-html` への置き換えは、サーバが断る | AC37（E2E: 両方向の切り替えで、iframe が別の要素・`src` と `sandbox` が変わる・印が実際の形式と一致。単体: `frame.js`・土台が、相手の形式を拒む）。負の対照: 鍵から形式を外す |
+| H27 | 兄弟の枠のスクリプトが、作られた直後の枠（静的な面を含む）を別の文書へ移して、その文書に通り道と中身を渡させる。同じ名前の `set` で `html` ↔ `script-html` を行き来して、静的な形式の枠・印のままスクリプトを動かす（または、スクリプトの頁に静的な中身として入り込む） | 枠の鍵を `<id>:<形式>` にして、形式が変わったら iframe ごと作り直す。頁と sandbox を選ぶのは `framePage()` の 1 つだけ。知らない形式は固定の文言（どちらの頁にも落とさない）。通り道と中身を渡すのは、合い札の合う合図と、最初の `load` の後だけ。`render` は、中身の id・版・形式が見出しと一致するときだけ。`frame.js` は静的な 3 つ以外の `render` を拒み、スクリプトの頁の土台は `script-html` 以外を拒む。印は `info.format` から決める。冷却の間の `script-html` への置き換えは、サーバが断る | AC37（E2E: 両方向の切り替えで、iframe が別の要素・`src` と `sandbox` が変わる・印が実際の形式と一致。単体: `frame.js`・土台が、相手の形式を拒む）。負の対照: 鍵から形式を外す |
 | H26 | 2 MiB の中身・`send`・幅の保存で、サーバ・画面・設定を膨らませる | 中身 2 MiB・全体 32 MiB・`set` の回数と量の頻度・`send` 64 KiB と頻度・画面は描いている面だけを小分けで取る・sodactl は 1 行の大きさを送る前に確かめる・幅の保存は 64 件まで | AC36・AC25・AC35 |
 
 残る限界（docs に書く）。**どの形式でも**: H9・H13（同じ OS の利用者の別のプロセスは、pane を名乗って面を出せ、操作を待てる）／H15（利用者が確かめずにリンクを押す危険）／
@@ -774,7 +777,7 @@ H1〜H16 は、どの形式にも当てはまるもの（H2・H3・H7・H15 は�
 
 - `set` の引数が規則の外 → `invalid_display`（sodactl は送る前に同じ検査をして終了コード 2）。数・合計の上限 → `display_limit`。頻度 → `display_busy`。pane が無い → `not_found`。どれも、既にある面は変えない。
 - `get`・`action`・`dismiss` で面が無い・名乗っていない → `display_closed`。画面は、`get` の `display_closed` を「消えた」として扱う（イベントとの前後。トーストは出さない）。
-- 枠が読み込めない（静的ページが 404・古いサーバ）: 枠の場所に固定の文言「表示を読み込めませんでした」。10 秒待っても `display-ready` が来ないときも同じ。
+- 枠が読み込めない（静的ページが 404・古いサーバ）: 枠の場所に固定の文言「表示を読み込めませんでした」。10 秒待っても、合い札の合う `display-ready` が来ないときも同じ（通り道も中身も渡さない）。
 - 中身の取得（`display.get` の繰り返し）が途中で失敗した: 取りかけを捨て、枠の場所に固定の文言と［もう一度］。`rev` が変わっていたら、黙って最初から取り直す。
 - スクリプトが動く面で、中身のスクリプトが例外を投げた・`window.soda` を壊した: 何もしない（枠の中のこと）。土台のスクリプトの中の `soda.onMessage` の呼び出しは `try` で囲む。
 - `report` を送る前に、面がもう無い（ほかの画面が先に閉じた）: `display_closed` を黙って捨てる。`focus_steal` の知らせを送れない（切断中）ときは、その画面の中で数える（3 回で、その画面の枠を外す）。
