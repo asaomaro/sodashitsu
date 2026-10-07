@@ -200,7 +200,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       依存: T1
       AC: AC6, AC11, AC16, AC17, AC19
       点検: あり
-- [ ] T9: 静的な形式のページの配信: `HttpServer.handle` に `/display-view/` の経路（許可リスト `frame.html`・`frame.js`・`sanitize.js`。GET・HEAD だけ。`frame.html` は design の `DISPLAY_VIEW_CSP` と `X-Frame-Options: SAMEORIGIN`、`.js` は CSP と `X-Frame-Options` を外す）。`DISPLAY_VIEW_CSP` を export。
+- [x] T9: 静的な形式のページの配信: `HttpServer.handle` に `/display-view/` の経路（許可リスト `frame.html`・`frame.js`・`sanitize.js`。GET・HEAD だけ。`frame.html` は design の `DISPLAY_VIEW_CSP` と `X-Frame-Options: SAMEORIGIN`、`.js` は CSP と `X-Frame-Options` を外す）。`DISPLAY_VIEW_CSP` を export。
       統合テスト（ヘッダが design の文字列と一致・**全体に `allow-same-origin` が無い・`script-src` の指定が `'self'` だけ**・許可リストの外と `/display-view/` は 404・POST は 405・**アプリ本体と `/ask-view/*` のヘッダが変わっていない**）。テストは、一時の配布フォルダにファイルを自分で書いて用意する（`HttpServer.integration.test.ts:154-156` と同じ）
       対象: `packages/server/src/http/HttpServer.ts:49-52`・`132`・`137-160`、`packages/server/src/http/HttpServer.integration.test.ts:149` の後 / 根拠: research A7
       依存: なし
