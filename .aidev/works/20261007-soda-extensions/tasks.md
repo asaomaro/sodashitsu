@@ -293,7 +293,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/e2e/src/specs/display-isolation.spec.ts`（新規。手本は `packages/e2e/src/specs/ask-view.spec.ts`）、`packages/e2e/src/support/frames.ts`（`routeRecordingWebSocket` を使う）
       依存: T18
       AC: AC15, AC16, AC17, AC18, AC19, AC34, AC37
-- [ ] T20: E2E（モバイル）: 幅 767px 以下の画面で、パネルを `set` しても端末の横に出ず、バーのボタンから重ね表示が開いて枠の中身が出る。帯は端末の上に出る。パネルの前後で、ブラウザが送る `client.view` の列数が変わらない
+- [x] T20: E2E（モバイル）: 幅 767px 以下の画面で、パネルを `set` しても端末の横に出ず、バーのボタンから重ね表示が開いて枠の中身が出る。帯は端末の上に出る。パネルの前後で、ブラウザが送る `client.view` の列数が変わらない
       対象: `packages/e2e/src/specs/display-mobile.spec.ts`（新規）
       依存: T14, T17
       AC: AC9
