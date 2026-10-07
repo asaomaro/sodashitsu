@@ -32,6 +32,19 @@ export const KeyInputControllerKey: InjectionKey<KeyInputController> = Symbol("k
 export const MachineSwitcherKey: InjectionKey<MachineSwitcher> = Symbol("machineSwitcher");
 /** 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）の通信の係。`AskDialog` が回答・取り消しを送る。 */
 export const AskControllerKey: InjectionKey<AskController> = Symbol("askController");
+/**
+ * 表示の面の枠（`DisplayFrame`）が、アプリの端末・キーの操作に触るための窓口（`main.ts` が組み立てる）。枠の `Esc`・prefix を端末へ戻す／prefix を注入する。
+ * 提供されない環境（単体テスト・端末版でない配線）では、何もしない。
+ */
+export interface DisplayHost {
+  /** その pane の端末へフォーカスを戻す（pane が表示中のときだけ）。 */
+  focusTerminal(paneId: string): void;
+  /** いまの prefix のキーを、利用者の次のキーの前に注入する。 */
+  injectPrefix(): void;
+  /** いまの prefix のキー（枠へ `relayKeys` として渡す）。 */
+  prefixKey(): { key: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean };
+}
+export const DisplayHostKey: InjectionKey<DisplayHost> = Symbol("displayHost");
 /** 表示の面（`sodactl display`。20261007-soda-extensions）の通信の係。`DisplayFrame` が操作・知らせを送る。 */
 export const DisplayControllerKey: InjectionKey<DisplayController> = Symbol("displayController");
 /** 端末のファイルのリンクとドロップ。`TerminalPane` がドロップを渡す。無ければドロップを受けない（テスト等）。 */

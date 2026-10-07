@@ -20,7 +20,7 @@ const info = (id: string, over: Partial<DisplayInfo> = {}): DisplayInfo => ({
 });
 const code = (c: string): Error => Object.assign(new Error(`${c}: x`), { code: c });
 const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
-const b64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
+const b64 = (bytes: Uint8Array): string => btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(""));
 
 function setup(handlers: Partial<Record<MethodName, (params: any) => unknown>> = {}, now?: () => number) {
   setActivePinia(createPinia());

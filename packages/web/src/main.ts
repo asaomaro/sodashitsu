@@ -9,7 +9,7 @@ import { createPinia } from "pinia";
 import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
-import { ActionDispatcherKey, AskControllerKey, ConnectionKey, DisplayControllerKey, DeviceKindKey, FileTransferKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import { ActionDispatcherKey, AskControllerKey, ConnectionKey, DisplayControllerKey, DisplayHostKey, DeviceKindKey, FileTransferKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
 import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
@@ -528,6 +528,25 @@ app.provide(MachineSwitcherKey, machineSwitcher);
 app.provide(TerminalRegistryKey, registry);
 app.provide(AskControllerKey, askController);
 app.provide(DisplayControllerKey, displayController);
+app.provide(DisplayHostKey, {
+  focusTerminal: (paneId) =>
+    void focusPaneIfShown(
+      {
+        paneTab: (id) => session.panes.get(id)?.tabId,
+        shownTab: () => view.tabId,
+        focus: (id) => {
+          view.focusPane(id);
+          registry.focus(id);
+        },
+      },
+      paneId,
+    ),
+  injectPrefix: () => keys.injectPrefix(),
+  prefixKey: () => {
+    const k = router.prefixKeyInput();
+    return { key: k.key, ctrl: k.ctrl, alt: k.alt, shift: k.shift, meta: k.meta };
+  },
+});
 app.provide(FileTransferKey, fileTransfer);
 app.provide(ViewSyncKey, viewSync);
 app.provide(DeviceKindKey, kind);

@@ -213,7 +213,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/web/src/store/display.ts`（新規）、`packages/web/src/display/DisplayController.ts`（新規）、各 `.test.ts`、`packages/web/src/store/StoreAdapter.ts:51`・`200-202`、`packages/web/src/main.ts:133`・`198`・`298-299`・`398`・`519`、`packages/web/src/injection.ts` / 根拠: research A11（手本は `packages/web/src/ask/AskController.ts`・`ask/mediaUrl.ts` の小分けの取得）
       依存: T2
       AC: AC1, AC3, AC22, AC34, AC36
-- [ ] T11: web の枠の部品（静的な形式）: `frameMessages.ts`（`readFrameMessage`・型 `FrameMessage`。`rendered`・`rejected`・`action`・`key`・`pong` の 5 つ）、`themeVars.ts`（`readThemeVars`）、`frameRegistry.ts`（面の id → `{ focusInside(): void }`）、
+- [x] T11: web の枠の部品（静的な形式）: `frameMessages.ts`（`readFrameMessage`・型 `FrameMessage`。`rendered`・`rejected`・`action`・`key`・`pong` の 5 つ）、`themeVars.ts`（`readThemeVars`）、`frameRegistry.ts`（面の id → `{ focusInside(): void }`）、
       `DisplayFrame.vue`（iframe〔定数 `DISPLAY_VIEW_SANDBOX`・`DISPLAY_VIEW_PAGE` を export。`data-display-frame` と `data-display-loads`。**`src` に、枠ごとの乱数の合い札 `?t=…` を付ける**〕・`display-ready` を、送り主・状態・**合い札の一致**で 1 回だけ受ける・
       **`MessageChannel` と `render` を渡すのは、最初の `load` を見た後**（合図が先なら `load` を待つ。中身がストアにあっても、先に送らない）・**その iframe の窓から届いた**合い札の合わない合図・10 秒の時間切れは、通り道も中身も渡さずに固定の文言（**`report` は送らない**）・**送り主の窓が違う合図は、丸ごと無視**（待ちを打ち切らない）・合い札の合う合図も 2 回目は受けない・以後は port だけ・`render` を中身と `rev` の変化で送る〔`relayKeys` は prefix を `chordToKeyInput` で変えたもの〕・
       `action` を `DisplayController.sendAction` へ・`key` は**フォーカスがその枠にあるときだけ受ける**（`escape` は `focusPaneIfShown`、`prefix` は端末へ戻して `keyInput.injectPrefix()`）・**移ったことは `load` の回数で決める**（静的な形式は、2 回目の `load` で、iframe を外して `report(id, "navigated")`。`ping` の返事は待たない。どの形式でも同じ決まりで、スクリプトが動く形式の分は T27）・
