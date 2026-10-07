@@ -49,7 +49,7 @@ import { FileOpener } from "./file/FileOpener.js";
 import { DROP_DIR_NAME, FileStore } from "./file/FileStore.js";
 import { FileUploads } from "./file/FileUploads.js";
 import { FsIntegrationFile } from "./persist/IntegrationFile.js";
-import { FsAgentIntegrationInstaller } from "./agent/AgentIntegrationInstaller.js";
+import { FsAgentIntegrationInstaller, isAgentIntegrationKind } from "./agent/AgentIntegrationInstaller.js";
 import { DefaultAgentIntegrationService } from "./agent/AgentIntegrationService.js";
 import { startAgentReportSocket, type AgentReportSocket } from "./agent/AgentReportSocket.js";
 import { HttpServer } from "./http/HttpServer.js";
@@ -674,7 +674,7 @@ export async function composeServer(
           agentReportSocketPath,
           (report) => {
             if (report.type === "session") {
-              if (report.kind === "claude" || report.kind === "codex") session.reportAgentSession(report.paneId, report.kind, report.sessionId);
+              if (isAgentIntegrationKind(report.kind)) session.reportAgentSession(report.paneId, report.kind, report.sessionId); // 連携の kind の全部（20261007-agent-hook-drift research X1）
             } else if (report.kind === "claude") {
               subagents.report(report); // サブエージェントの報告は claude だけ
             }

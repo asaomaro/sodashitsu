@@ -81,7 +81,7 @@ AGENTS.md「点検とテストの掛け方」に従い、壊れやすいタス�
       対象: `packages/protocol/src/model.ts`・`messages.ts`・`messages.test.ts`、`packages/server/src/agent/AgentIntegrationInstaller.ts`・`AgentIntegrationService.ts`・`resumeCommand.ts` と各テスト、`packages/server/src/session/SessionService.test.ts`、`packages/web/src/components/SettingsDialog.vue` と web の各テスト、`packages/tui/src/settings/sections.ts` と tui のテスト / 根拠: research Q-1〜Q-9、decisions D4
       依存: T2
       AC: AC6, AC8, AC-I1
-- [ ] T4: 受け口が連携の kind の全部の報告を pane に記録する。
+- [x] T4: 受け口が連携の kind の全部の報告を pane に記録する。
       対象: `packages/server/src/composeServer.ts`・`composeServer.subagents.integration.test.ts` / 根拠: research X1、decisions D5
       依存: T3
       AC: AC7

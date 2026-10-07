@@ -483,6 +483,32 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       expect(subsOf(server, paneId)?.items.map((i) => i.id)).toEqual(["marker"]); // codex の分は数えられていない
     });
 
+    // 20261007-agent-hook-drift の research X1。受け口は連携の kind の全部のセッション ID の報告を pane に記録する。
+    it("連携の kind（grok・qodercli・devin）のセッション ID の報告が pane に記録される（claude・codex 以外も）", async () => {
+      const { server, stateDir, paneId } = await boot();
+      for (const kind of ["grok", "qodercli", "devin"] as const) {
+        await sendRaw(stateDir, { paneId, kind, sessionId: `${kind}-1` });
+        await vi.waitFor(() =>
+          expect(server.session.getPane(paneId)?.agentSession).toMatchObject({
+            kind,
+            sessionId: `${kind}-1`,
+          }),
+        );
+      }
+    });
+
+    it("連携の kind でない名乗り（gemini・__proto__）は記録されない", async () => {
+      const { server, stateDir, paneId } = await boot();
+      await sendRaw(stateDir, { paneId, kind: "gemini", sessionId: "g-1" });
+      await sendRaw(stateDir, { paneId, kind: "__proto__", sessionId: "p-1" });
+      // 続けて有効な報告を送り、それが記録されるまで待つ（その時点で、先の 2 つは処理済みのはず）。
+      await sendRaw(stateDir, { paneId, kind: "codex", sessionId: "after" });
+      await vi.waitFor(() =>
+        expect(server.session.getPane(paneId)?.agentSession?.sessionId).toBe("after"),
+      );
+      expect(server.session.getPane(paneId)?.agentSession?.kind).toBe("codex");
+    });
+
     it("Agent 以外の PreToolUse は何も送らない（検出済みでも件数は出ない）", async () => {
       const { server, stateDir, paneId } = await bootWithAgent();
       await hook(stateDir, paneId, {
