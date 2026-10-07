@@ -228,7 +228,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       依存: T8, T10
       AC: AC2, AC10, AC18, AC19, AC34, AC37, AC-I4, AC-I5
       点検: あり
-- [ ] T12: パネル・帯の部品（まだ pane には差し込まない。幅のつまみは T15）: `displayLayout.ts`（`panelWidthRange`・`panelWidth`〔`userPx` の引数つき〕・`visibleBands`。純粋）、`PanePanel.vue`（props: `paneId`・`paneWidthPx`・`cellWidthPx`。`role="complementary"`・固定のラベル「pane のプログラムの表示（隔離）· 〈面の名前〉」・題は `textContent`・
+- [x] T12: パネル・帯の部品（まだ pane には差し込まない。幅のつまみは T15）: `displayLayout.ts`（`panelWidthRange`・`panelWidth`〔`userPx` の引数つき〕・`visibleBands`。純粋）、`PanePanel.vue`（props: `paneId`・`paneWidthPx`・`cellWidthPx`。`role="complementary"`・固定のラベル「pane のプログラムの表示（隔離）· 〈面の名前〉」・題は `textContent`・
       タブ〔`role="tablist"`。矢印・`Home`・`End`〕・たたむ〔`button`。幅 24px の見出しだけ〕・［×］〔`button`。`dismiss {id}`〕・選ばれた面の `DisplayFrame`（**`:key` は `frameKey(info)`**）・載ったときと戻したときに `ensureContent`・**操作中の表示**〔`focusedDisplayId` がその面のとき、縁を 2px の `--soda-accent`・見出しに固定の文言「入力はこの表示に届きます（Esc で端末へ）」〕）、
       `PaneBands.vue`（props: `paneId`・`paneHeightPx`。1 本ごとに固定の印・`DisplayFrame`〔`:key` は `frameKey(info)`〕・［×］・操作中の表示。あふれは「ほか N 件」）。単体テスト（`displayLayout` の境目・タブのキー・ラベルが題で変わらない・［×］とたたむが `button`・操作中の表示の出し入れ）
       対象: `packages/web/src/display/displayLayout.ts`（新規）、`packages/web/src/components/PanePanel.vue`・`PaneBands.vue`（新規）、各 `.test.ts` / 根拠: research R3・R8、design「ブラウザ」
