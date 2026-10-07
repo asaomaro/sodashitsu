@@ -90,7 +90,7 @@ describe("messages", () => {
   // 20260923-other-agents-session-resume（decisions D5。model.ts の AgentIntegrationKind と
   // 値を揃える必要がある別スキーマだったため、追加漏れを検知するテストを足す）。
   it("validates agent_integration.install params for all 8 kinds", () => {
-    for (const kind of ["claude", "codex", "cursor", "copilot", "devin", "droid", "grok", "qwen"]) {
+    for (const kind of ["claude", "codex", "cursor", "copilot", "devin", "droid", "grok", "qwen", "qodercli"]) {
       expect(AgentIntegrationInstallParams.parse({ kind })).toEqual({ kind });
     }
     expect(() => AgentIntegrationInstallParams.parse({ kind: "gemini" })).toThrow();

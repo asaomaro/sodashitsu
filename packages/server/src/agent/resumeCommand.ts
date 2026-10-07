@@ -37,6 +37,9 @@ export function resumeCommandFor(kind: string, sessionId: string): string | unde
       return `grok --resume ${sessionId}`;
     case "qwen":
       return `qwen --resume ${sessionId}`;
+    // 20261007-agent-hook-drift（research Q-1。実行ファイル名は qoder）。
+    case "qodercli":
+      return `qoder --resume ${sessionId}`;
     default:
       return undefined;
   }

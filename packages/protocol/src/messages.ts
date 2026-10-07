@@ -584,7 +584,7 @@ export type WorktreeRemoveParams = z.infer<typeof WorktreeRemoveParams>;
 // --- agent integration（20260923-agent-session-resume。6つ追加: 20260923-other-agents-session-resume）---
 
 /** `model.ts` の `AgentIntegrationKind` と値を揃える（別の型なので同期がずれないよう並びも揃える）。 */
-const agentIntegrationKind = z.enum(["claude", "codex", "cursor", "copilot", "devin", "droid", "grok", "qwen"]);
+const agentIntegrationKind = z.enum(["claude", "codex", "cursor", "copilot", "devin", "droid", "grok", "qwen", "qodercli"]);
 
 // --- session の一覧（20260926-named-session-ui。herdr の `session list` を画面から）------------------
 

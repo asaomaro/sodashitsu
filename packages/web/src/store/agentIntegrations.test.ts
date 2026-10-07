@@ -27,6 +27,7 @@ describe("useAgentIntegrationsStore", () => {
         droid: notInstalled,
         grok: notInstalled,
         qwen: notInstalled,
+        qodercli: notInstalled,
       },
     };
     const store = useAgentIntegrationsStore(pinia);

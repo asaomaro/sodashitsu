@@ -77,7 +77,7 @@ AGENTS.md「点検とテストの掛け方」に従い、壊れやすいタス�
       対象: `packages/server/src/agent/AgentIntegrationInstaller.ts`・`AgentIntegrationInstaller.test.ts` / 根拠: research D1・D2・D5・D6、decisions D2・D3
       依存: T1
       AC: AC3, AC4, AC5, AC8, AC-I2
-- [ ] T3: 連携の kind に `qodercli` を足す（protocol・installer・service・再開のコマンド・web・tui・kind を数え上げるテスト）。
+- [x] T3: 連携の kind に `qodercli` を足す（protocol・installer・service・再開のコマンド・web・tui・kind を数え上げるテスト）。
       対象: `packages/protocol/src/model.ts`・`messages.ts`・`messages.test.ts`、`packages/server/src/agent/AgentIntegrationInstaller.ts`・`AgentIntegrationService.ts`・`resumeCommand.ts` と各テスト、`packages/server/src/session/SessionService.test.ts`、`packages/web/src/components/SettingsDialog.vue` と web の各テスト、`packages/tui/src/settings/sections.ts` と tui のテスト / 根拠: research Q-1〜Q-9、decisions D4
       依存: T2
       AC: AC6, AC8, AC-I1

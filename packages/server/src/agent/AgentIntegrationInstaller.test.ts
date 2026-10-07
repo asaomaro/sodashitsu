@@ -1,8 +1,13 @@
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeTempDir } from "../persist/atomicFile.js";
-import { FsAgentIntegrationInstaller, devinUserConfigDir } from "./AgentIntegrationInstaller.js";
+import {
+  AGENT_INTEGRATION_KINDS,
+  FsAgentIntegrationInstaller,
+  devinUserConfigDir,
+  isAgentIntegrationKind,
+} from "./AgentIntegrationInstaller.js";
 
 // テストは常に `CLAUDE_CONFIG_DIR`/`CODEX_HOME` を一時ディレクトリへ向け、実際の
 // `~/.claude`/`~/.codex` には一切触れない（このテストが誤って利用者の環境を書き換えないため）。
@@ -776,5 +781,107 @@ describe("FsAgentIntegrationInstaller — 古い形・場所の移行（agent-ho
     expect(await readFile(join(dir, "hooks.json"), "utf8")).toBe(legacyBefore);
     expect(await exists(join(dir, "hooks", "soda-agent-report.cjs"))).toBe(true);
     expect(await exists(join(home, ".config", "devin", "hooks"))).toBe(false);
+  });
+});
+
+// 20261007-agent-hook-drift: Qoder CLI（qodercli）。
+describe("FsAgentIntegrationInstaller — qodercli", () => {
+  let workDir: string;
+  let hookScriptSource: string;
+  let home: string;
+
+  beforeEach(async () => {
+    workDir = await makeTempDir("soda-integration-installer-qoder-");
+    hookScriptSource = join(workDir, "agent-hook-report.cjs");
+    await writeFile(hookScriptSource, "// fake hook script\n");
+    home = join(workDir, "home");
+  });
+
+  afterEach(async () => {
+    await rm(workDir, { recursive: true, force: true });
+  });
+
+  function makeInstaller(env: Partial<NodeJS.ProcessEnv> = {}) {
+    return new FsAgentIntegrationInstaller(
+      hookScriptSource,
+      { PATH: "", ...env } as NodeJS.ProcessEnv,
+      home,
+    );
+  }
+
+  it("settings.json の hooks.SessionStart に matcher なし・async:true の入れ子で入る。2 回目は導入済み、解除でスクリプトも消える", async () => {
+    const installer = makeInstaller();
+    expect(await installer.install("qodercli")).toEqual({ ok: true, message: null });
+    const file = join(home, ".qoder", "settings.json");
+    const root = JSON.parse(await readFile(file, "utf8"));
+    expect(root.hooks.SessionStart).toHaveLength(1);
+    const entry = root.hooks.SessionStart[0];
+    expect(entry.matcher).toBeUndefined();
+    expect(entry.hooks).toEqual([
+      {
+        type: "command",
+        command: expect.stringMatching(/soda-agent-report\.cjs.* qodercli$/),
+        async: true,
+      },
+    ]);
+    expect(await installer.install("qodercli")).toEqual({ ok: true, message: "既に導入済みです" });
+    expect(await installer.status("qodercli")).toMatchObject({
+      installed: true,
+      needsUpdate: false,
+    });
+    expect(await installer.uninstall("qodercli")).toEqual({ ok: true, message: null });
+    expect((await installer.status("qodercli")).installed).toBe(false);
+    await expect(stat(join(home, ".qoder", "hooks", "soda-agent-report.cjs"))).rejects.toThrow();
+  });
+
+  it("既存の settings.json のほかのキー・ほかのフックを保つ", async () => {
+    const original = {
+      model: "x",
+      hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "./p.sh" }] }] },
+    };
+    await mkdir(join(home, ".qoder"), { recursive: true });
+    await writeFile(join(home, ".qoder", "settings.json"), JSON.stringify(original));
+    const installer = makeInstaller();
+    await installer.install("qodercli");
+    const after = JSON.parse(await readFile(join(home, ".qoder", "settings.json"), "utf8"));
+    expect(after.model).toBe("x");
+    expect(after.hooks.PreToolUse).toEqual(original.hooks.PreToolUse);
+    expect(after.hooks.SessionStart).toHaveLength(1);
+    await installer.uninstall("qodercli");
+    expect(JSON.parse(await readFile(join(home, ".qoder", "settings.json"), "utf8"))).toEqual(
+      original,
+    );
+  });
+
+  it("QODER_CONFIG_DIR があればそこへ書く", async () => {
+    const dir = join(workDir, "qoder-dir");
+    await makeInstaller({ QODER_CONFIG_DIR: dir }).install("qodercli");
+    expect(
+      JSON.parse(await readFile(join(dir, "settings.json"), "utf8")).hooks.SessionStart,
+    ).toHaveLength(1);
+    await expect(stat(join(home, ".qoder"))).rejects.toThrow();
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "cliDetected: qoder だけ・qodercli だけのどちらでも true、無ければ false",
+    async () => {
+      for (const name of ["qoder", "qodercli"]) {
+        const bin = join(workDir, `bin-${name}`);
+        await mkdir(bin, { recursive: true });
+        await writeFile(join(bin, name), "#!/bin/sh\n");
+        await chmod(join(bin, name), 0o755);
+        const s = await makeInstaller({ PATH: bin }).status("qodercli");
+        expect(s.cliDetected).toBe(true);
+      }
+      expect((await makeInstaller({ PATH: workDir }).status("qodercli")).cliDetected).toBe(false);
+    },
+  );
+
+  it("isAgentIntegrationKind・AGENT_INTEGRATION_KINDS", () => {
+    expect(AGENT_INTEGRATION_KINDS).toHaveLength(9);
+    expect(AGENT_INTEGRATION_KINDS).toContain("qodercli");
+    for (const kind of AGENT_INTEGRATION_KINDS) expect(isAgentIntegrationKind(kind)).toBe(true);
+    for (const bad of ["gemini", "__proto__", "constructor", "toString", ""])
+      expect(isAgentIntegrationKind(bad)).toBe(false);
   });
 });

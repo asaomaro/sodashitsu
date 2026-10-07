@@ -384,6 +384,7 @@ const AGENT_INTEGRATION_KINDS: readonly { value: AgentIntegrationKind; label: st
   { value: "droid", label: "Droid" },
   { value: "grok", label: "Grok CLI" },
   { value: "qwen", label: "Qwen Code" },
+  { value: "qodercli", label: "Qoder CLI" },
 ];
 /** 導入/解除の操作中は二重押しを防ぐ（対象の kind を持つ。どちらも同時には押せない設計で足りる）。 */
 const agentIntegrationBusy = ref<AgentIntegrationKind | null>(null);
@@ -406,7 +407,7 @@ async function updateAgentIntegration(kind: AgentIntegrationKind): Promise<void>
   agentIntegrationBusy.value = kind;
   try {
     const result = await actions.installAgentIntegration(kind);
-    agentIntegrationMessage.value = result.ok ? (result.message ?? "更新しました。すでに動いている Claude Code は、起動し直すと新しいフックが効きます。") : (result.message ?? "更新に失敗しました");
+    agentIntegrationMessage.value = result.ok ? (result.message ?? (kind === "claude" ? "更新しました。すでに動いている Claude Code は、起動し直すと新しいフックが効きます。" : "更新しました。")) : (result.message ?? "更新に失敗しました");
   } finally {
     agentIntegrationBusy.value = null;
   }

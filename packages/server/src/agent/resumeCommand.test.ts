@@ -35,6 +35,11 @@ describe("resumeCommandFor", () => {
     expect(resumeCommandFor("qwen", "sess_123")).toBe("qwen --resume sess_123");
   });
 
+  it("builds the Qoder CLI resume command (kind qodercli, executable qoder)", () => {
+    expect(resumeCommandFor("qodercli", "abc-123")).toBe("qoder --resume abc-123");
+    expect(resumeCommandFor("qodercli", "a; rm -rf /")).toBeUndefined();
+  });
+
   it("rejects an unsafe sessionId for all 6 new kinds too", () => {
     for (const kind of ["cursor", "copilot", "devin", "droid", "grok", "qwen"] as const) {
       expect(resumeCommandFor(kind, "abc; rm -rf ~")).toBeUndefined();

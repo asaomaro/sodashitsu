@@ -283,7 +283,7 @@ describe("SettingsDialog — 6 つの節（AC12）", () => {
 /** claude/codex 以外の6 kind は「未検出・未導入」の既定値で埋める（20260923-other-agents-session-resume）。 */
 function defaultOtherAgentStatuses(): Omit<AgentIntegrationStatusResult["agents"], "claude" | "codex"> {
   const notInstalled = { cliDetected: false, installed: false } as const;
-  return { cursor: notInstalled, copilot: notInstalled, devin: notInstalled, droid: notInstalled, grok: notInstalled, qwen: notInstalled };
+  return { cursor: notInstalled, copilot: notInstalled, devin: notInstalled, droid: notInstalled, grok: notInstalled, qwen: notInstalled, qodercli: notInstalled };
 }
 
 function makeAgentIntegrationActions(status: AgentIntegrationStatusResult) {
@@ -377,6 +377,24 @@ describe("SettingsDialog — 節「エージェント連携」（20260923-agent-
     expect(agentIntegrationSection(wrapper).text()).toContain("起動し直すと新しいフックが効きます");
   });
 
+  // 20261007-agent-hook-drift（AC-I2）。message が null のときの既定の知らせは、claude 以外では Claude Code の文にしない。
+  it("claude 以外の［更新］で message が null のとき、知らせに Claude Code の文が出ない", async () => {
+    const status: AgentIntegrationStatusResult = {
+      autoResumeEnabled: true,
+      agents: { claude: { cliDetected: true, installed: true }, codex: { cliDetected: true, installed: true }, ...defaultOtherAgentStatuses(), grok: { cliDetected: true, installed: true, needsUpdate: true } },
+    };
+    const { actions, installAgentIntegration } = makeAgentIntegrationActions(status);
+    const { wrapper } = await openDialog(makeController(), undefined, actions);
+    const rows = agentIntegrationSection(wrapper).findAll("li.agent-integration-row");
+    await rows[6]!.get(".agent-integration-update").trigger("click");
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect(installAgentIntegration).toHaveBeenCalledWith("grok");
+    const text = agentIntegrationSection(wrapper).text();
+    expect(text).toContain("更新しました。");
+    expect(text).not.toContain("すでに動いている Claude Code");
+  });
+
   it("needsUpdate が false・項目なしなら［更新］は出ない。更新の失敗はそのまま伝える", async () => {
     const status: AgentIntegrationStatusResult = {
       autoResumeEnabled: true,
@@ -457,18 +475,19 @@ describe("SettingsDialog — 節「エージェント連携」の6エージェ�
         droid: { cliDetected: true, installed: false },
         grok: { cliDetected: true, installed: false },
         qwen: { cliDetected: true, installed: false },
+        qodercli: { cliDetected: true, installed: false },
       },
     };
     const { actions, installAgentIntegration, uninstallAgentIntegration } = makeAgentIntegrationActions(status);
     const { wrapper } = await openDialog(makeController(), undefined, actions);
 
     const section = agentIntegrationSection(wrapper);
-    for (const label of ["Cursor Agent CLI", "GitHub Copilot CLI", "Devin CLI", "Droid", "Grok CLI", "Qwen Code"]) {
+    for (const label of ["Cursor Agent CLI", "GitHub Copilot CLI", "Devin CLI", "Droid", "Grok CLI", "Qwen Code", "Qoder CLI"]) {
       expect(section.text()).toContain(label);
     }
 
     const rows = section.findAll("li.agent-integration-row");
-    expect(rows).toHaveLength(8); // claude・codex + 6
+    expect(rows).toHaveLength(9); // claude・codex + 7
 
     // Copilot（3行目。claude・codex に続く）は導入済みなので「解除」ボタン
     const copilotButton = rows[3]!.find("button.settings-btn");

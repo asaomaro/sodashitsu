@@ -291,7 +291,27 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
     }),
     isOurs: isOursField("command"),
   },
+  // 20261007-agent-hook-drift（research Q-1〜Q-9。文書だけで確認、実機は未確認）。
+  qodercli: {
+    configFile: (env, home) => join(env.QODER_CONFIG_DIR || join(home, ".qoder"), "settings.json"),
+    hooksDir: (env, home) => join(env.QODER_CONFIG_DIR || join(home, ".qoder"), "hooks"),
+    binName: "qoder",
+    altBinNames: ["qodercli"],
+    entriesPath: ["hooks", "SessionStart"],
+    // `matcher` は省く（clear・new・compact でも報告する。decisions D4）。
+    buildEntry: (scriptPath, kind) => ({
+      hooks: [{ type: "command", command: hookCommand(scriptPath, kind), async: true }],
+    }),
+    isOurs: isOursNested,
+  },
 };
+
+/** 連携の kind の一覧（`HOOK_SPECS` のキー）。 */
+export const AGENT_INTEGRATION_KINDS = Object.keys(HOOK_SPECS) as readonly AgentIntegrationKind[];
+
+export function isAgentIntegrationKind(kind: string): kind is AgentIntegrationKind {
+  return Object.hasOwn(HOOK_SPECS, kind);
+}
 
 async function readJsonObject(
   path: string,

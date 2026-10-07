@@ -281,6 +281,30 @@ describe("設定画面", () => {
     await vi.waitFor(async () => expect(await h.text()).toContain("Claude Code：更新しました"));
   });
 
+  // 20261007-agent-hook-drift（AC-I2）。更新の説明は Claude Code 専用の文にしない。
+  it("エージェント連携：claude 以外の更新の項目の説明に Claude Code が出ない", async () => {
+    const h = await open({
+      respond: {
+        "agent_integration.status": {
+          autoResumeEnabled: true,
+          agents: {
+            claude: { cliDetected: true, installed: true },
+            codex: { cliDetected: true, installed: true },
+            grok: { cliDetected: true, installed: true, needsUpdate: true },
+          },
+        },
+      },
+    });
+    await vi.waitFor(() => expect(h.ws.requests("agent_integration.status")).toHaveLength(1));
+    await h.section(4);
+    await vi.waitFor(async () => expect(await h.text()).toContain("Grok CLIのフックを更新"));
+    for (let i = 0; i < 7; i++) h.io.type("j"); // claude・codex・cursor・copilot・devin・droid・grok の次（grok の更新）
+    await vi.waitFor(async () =>
+      expect(await h.text()).toContain("本製品のフックを、現行の形に入れ直します。"),
+    );
+    expect(await h.text()).not.toContain("すでに動いている Claude Code");
+  });
+
   it("エージェント連携：Claude Code は 6 つのフックを入れる説明（サブエージェントの表示に使う）。ほかは 1 つ", async () => {
     const h = await open();
     await vi.waitFor(() => expect(h.ws.requests("agent_integration.status")).toHaveLength(1));
