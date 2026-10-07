@@ -6,6 +6,7 @@ import {
   DISPLAY_OLD_REQUEST_LINE_BYTES,
   DISPLAY_REQUEST_LINE_BYTES,
   DISPLAY_WAIT_DEFAULT_MS,
+  DISPLAY_WAIT_MIN_MS,
   checkDisplaySet,
   displayLimits,
   displayUtf8Bytes,
@@ -49,6 +50,8 @@ export const DISPLAY_REQUEST_SLACK_MS = 15_000;
 /** 切れてから繋ぎ直しを続ける上限と間隔。 */
 export const DISPLAY_RECONNECT_MS = 5_000;
 export const DISPLAY_RECONNECT_INTERVAL_MS = 150;
+/** 要求の 1 行の上限に対する余裕（受け口の 1 行と `/ws` の 1 通の枠の違い・id などの分）。 */
+export const DISPLAY_LINE_MARGIN_BYTES = 512;
 
 /** 1 つの経路で `op` を呼ぶ。`params` に `paneId` は入れない（transport が足す）。 */
 export interface DisplayTransport {
@@ -232,6 +235,10 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 async function readContent(a: Extract<DisplayAction, { kind: "set" }>, deps: DisplayDeps): Promise<{ format: "text" | "markdown" | "html" | string; content: string }> {
   if (a.source.kind === "text") return { format: "text", content: a.source.text };
   const buf = a.source.kind === "file" ? await deps.readFile(a.source.path, DISPLAY_CONTENT_MAX_BYTES) : await deps.readStdin(DISPLAY_CONTENT_MAX_BYTES);
+  // 中身の指定が無く、標準入力も空（`/dev/null`・空のパイプ）なら、空の面を出さずに誤りにする。空を出したいときは `--text ""`。
+  if (a.source.kind === "stdin" && buf.length === 0) {
+    throw new CliUsageError("no content on stdin", `標準入力が空です。中身を渡すか、--text・--markdown-file・--html-file を付けてください（空の面は --text "" で出せます）。\n${DISPLAY_USAGE}`);
+  }
   let content: string;
   try {
     content = decoder.decode(buf);
@@ -314,14 +321,15 @@ async function runSet(cmd: DisplayCmd, a: Extract<DisplayAction, { kind: "set" }
 
   // 組み立てた要求の 1 行が上限を超えないか（中身は JSON の文字列として載るので、エスケープの要る文字が多いと 2 MiB 以内でも 1 行が膨らむ）。
   const line = displayUtf8Bytes(JSON.stringify({ v: 1, op: "display.set", paneId, params: body })) + 1;
-  if (line > DISPLAY_REQUEST_LINE_BYTES) {
+  // `/ws` の 1 通（`{id,method,params:{paneId,…}}`）も同じ上限に収まるよう、余裕（`DISPLAY_LINE_MARGIN_BYTES`）を持たせる。超える通信は切れてしまうので、送らずに誤りにする。
+  if (line + DISPLAY_LINE_MARGIN_BYTES > DISPLAY_REQUEST_LINE_BYTES) {
     throw new CliUsageError("the request is too large: the content has too many characters that need escaping (\", \\, newlines, control characters)", DISPLAY_USAGE);
   }
   // 古いサーバの受け口は 1 行 1 MiB で、超えると `bad_request` を返して `/ws` へ落ちてしまう。先に機能確認をして、古いサーバは「未対応」と分かるようにする。
   if (line > DISPLAY_OLD_REQUEST_LINE_BYTES) {
     const f = (await tr.call("display.features", {}, 10_000)) as DisplayFeatures;
     const lim = f.limits as { requestLineBytes?: unknown; contentBytes?: unknown } | undefined;
-    if (typeof lim?.requestLineBytes === "number" && line > lim.requestLineBytes) {
+    if (typeof lim?.requestLineBytes === "number" && line + DISPLAY_LINE_MARGIN_BYTES > lim.requestLineBytes) {
       throw new CliUsageError(`the request (${line} bytes) is larger than this server accepts (${lim.requestLineBytes} bytes)`, DISPLAY_USAGE);
     }
     if (typeof lim?.contentBytes === "number" && displayUtf8Bytes(content) > lim.contentBytes) {
@@ -350,17 +358,28 @@ async function runEvents(cmd: DisplayCmd, a: Extract<DisplayAction, { kind: "wai
   const { paneId, tr } = await openTransport(cmd, store, deps, a.pane);
   // まず機能確認で `epoch` を得る（ここで古いサーバも分かる）。
   const f = (await tr.call("display.features", {}, 10_000)) as DisplayFeatures;
+  // `display.ready` の後の出来事を落とさないよう、ready を出す前に、その pane の今の通し番号（と、それを数えたサーバの印）を得て、最初の待ちから `since` を付ける。
+  const l = (await tr.call("display.list", {}, 10_000)) as { seq?: unknown; epoch?: unknown };
+  const serverEpoch = typeof l.epoch === "string" ? l.epoch : f.epoch;
+  const startSince = a.since ?? (typeof l.seq === "number" ? l.seq : undefined);
   const io = makeLoopIo(tr, deps);
   const stream = a.kind === "events";
-  if (stream) io.emit({ type: "display.ready", v: 1, paneId, epoch: f.epoch, features: f.features, renderers: f.renderers });
+  if (stream) io.emit({ type: "display.ready", v: 1, paneId, epoch: serverEpoch, features: f.features, renderers: f.renderers });
   const names = a.kind === "wait" ? (a.name === undefined ? [] : [a.name]) : a.names;
-  const out = await runWaitLoop(io, {
-    names,
-    since: a.since,
-    epoch: a.epoch ?? f.epoch,
-    mode: stream ? "stream" : "once",
-    totalTimeoutMs: a.kind === "wait" ? a.timeoutMs : undefined,
-  });
+  let out: LoopOutcome;
+  try {
+    out = await runWaitLoop(io, {
+      names,
+      since: startSince,
+      epoch: a.epoch ?? serverEpoch,
+      mode: stream ? "stream" : "once",
+      totalTimeoutMs: a.kind === "wait" ? a.timeoutMs : undefined,
+    });
+  } catch (err) {
+    // 待ちの上限（pane 4・全体）。黙って終わらず、終わりの行に理由を出し、エラー（標準エラー）はそのまま投げる。
+    if (stream && err instanceof RpcFailure && err.code === "display_busy") deps.print({ type: "display.end", reason: "busy" } satisfies DisplayLine);
+    throw err;
+  }
   if (!stream) return finishOnce(out, deps);
   if (out.end === "done") return 0;
   deps.print({ type: "display.end", reason: out.end } satisfies DisplayLine);
@@ -435,7 +454,13 @@ export async function runWaitLoop(
         io.emit({ type: "display.timeout" });
         return { end: "done" };
       }
-      callMs = Math.min(DISPLAY_WAIT_CALL_MS, Math.max(1_000, left));
+      // サーバの 1 回の待ちは 1 秒以上。残りが 1 秒に満たないときは、サーバに聞かず、残りの時間だけ待って時間切れにする（全体の待ち時間を超えない）。
+      if (left < DISPLAY_WAIT_MIN_MS) {
+        await io.sleep(left);
+        io.emit({ type: "display.timeout" });
+        return { end: "done" };
+      }
+      callMs = Math.min(DISPLAY_WAIT_CALL_MS, left);
     }
     let res: DisplayWaitResult;
     try {

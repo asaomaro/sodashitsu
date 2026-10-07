@@ -244,6 +244,15 @@ describe("DisplayService.close / list", () => {
     expect(s.names().filter((n) => n.startsWith("display.removed"))).toEqual(["display.removed:a", "display.removed:b"]);
   });
 
+  it("list は pane の出来事の今の seq と epoch を返す（events が ready の後の出来事を落とさないため）", () => {
+    const s = setup();
+    expect(s.displays.list("p1")).toMatchObject({ seq: 0, epoch: s.displays.epoch });
+    s.displays.set("p1", body("a"));
+    s.displays.close("p1", { all: true }); // display.closed が 1 件
+    expect(s.displays.list("p1").seq).toBe(1);
+    expect(s.displays.list("p2").seq).toBe(0);
+  });
+
   it("pane が無ければ close も list も not_found", () => {
     const s = setup();
     expect(errCode(() => s.displays.close("nope", { all: true }))).toBe("not_found");
@@ -561,19 +570,19 @@ describe("DisplayService.wait", () => {
     expect((await w).events).toMatchObject([{ name: "other", seq: 2 }]);
   });
 
-  it("待ちの上限: pane 4・全体 16 を超えると display_busy。外れると空きが戻る", async () => {
-    const panes = Array.from({ length: 6 }, (_, i) => `q${i}`);
+  it("待ちの上限: pane 4・全体 64（pane の上限 × 16 pane）を超えると display_busy。外れると空きが戻る。1 つの pane の待ちで、ほかの pane は断られない", async () => {
+    const panes = Array.from({ length: 18 }, (_, i) => `q${i}`);
     const s = setup({ panes });
     const ws: Promise<unknown>[] = [];
     for (let i = 0; i < DISPLAY_WAITERS_PER_PANE_MAX; i++) ws.push(s.displays.wait("q0", { timeoutMs: 5000 }, {}));
     expect(errCode(() => s.displays.wait("q0", { timeoutMs: 5000 }, {}))).toBe("display_busy");
-    // 全体: q1..q3 に 4 つずつで合計 16
-    for (const p of ["q1", "q2", "q3"]) for (let i = 0; i < 4; i++) ws.push(s.displays.wait(p, { timeoutMs: 5000 }, {}));
-    expect(DISPLAY_WAITERS_MAX).toBe(16);
-    expect(errCode(() => s.displays.wait("q4", { timeoutMs: 5000 }, {}))).toBe("display_busy");
+    // q0 が満杯でも、ほかの pane は待てる。16 pane × 4 = 64 で全体が満杯
+    for (let p = 1; p < 16; p++) for (let i = 0; i < 4; i++) ws.push(s.displays.wait(`q${p}`, { timeoutMs: 5000 }, {}));
+    expect(DISPLAY_WAITERS_MAX).toBe(64);
+    expect(errCode(() => s.displays.wait("q16", { timeoutMs: 5000 }, {}))).toBe("display_busy");
     s.clock.advance(5000); // 全部時間切れ
     await Promise.all(ws);
-    expect(() => s.displays.wait("q4", { timeoutMs: 5000 }, {})).not.toThrow();
+    expect(() => s.displays.wait("q16", { timeoutMs: 5000 }, {})).not.toThrow();
   });
 
   it("signal の abort で待ちが外れる（返事は決まらない）。空きが戻る", async () => {

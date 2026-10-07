@@ -213,7 +213,7 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
     }
     // B の面は無傷で、A には何も出ていない
     expect(await cli.request("display.list", { paneId: paneB })).toMatchObject({ displays: [{ name: "secret", rev: 1 }] });
-    expect(await cli.request("display.list", { paneId: paneA })).toEqual({ displays: [] });
+    expect(await cli.request("display.list", { paneId: paneA })).toMatchObject({ displays: [] });
     // A の wait は、B の面への操作を受け取らない
     const bId = (await cli.request<{ displays: DisplayInfo[] }>("display.list", { paneId: paneB })).displays[0]!.id;
     const w = await send(sockPath, { op: PANE_OP_DISPLAY_WAIT, paneId: paneA, params: { timeoutMs: 1000 } });
@@ -311,7 +311,7 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
     for (const p of panes) for (let i = 0; i < 4; i++) await cli.request("display.set", { paneId: p, ...SET(`p${i}`, { content: big }) });
     const extra = await newPane(cli);
     await expect(cli.request("display.set", { paneId: extra, ...SET("one", { content: "x" }) })).rejects.toMatchObject({ code: "display_limit" });
-    expect(await cli.request("display.list", { paneId: extra })).toEqual({ displays: [] });
+    expect(await cli.request("display.list", { paneId: extra })).toMatchObject({ displays: [] });
     // 閉じると空く
     await cli.request("display.close", { paneId: panes[0]!, all: true });
     await expect(cli.request("display.set", { paneId: extra, ...SET("one", { content: "x" }) })).resolves.toBeDefined();

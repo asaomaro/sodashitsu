@@ -216,9 +216,13 @@ export class DisplayService {
   }
 
   /** その pane の面の見出し（出た順）。 */
-  list(paneId: string): { displays: DisplayInfo[] } {
+  list(paneId: string): { displays: DisplayInfo[]; seq: number; epoch: string } {
     this.requirePane(paneId);
-    return { displays: [...(this.byPane.get(paneId)?.values() ?? [])].map((e) => ({ ...e.info })) };
+    return {
+      displays: [...(this.byPane.get(paneId)?.values() ?? [])].map((e) => ({ ...e.info })),
+      seq: this.queues.get(paneId)?.seq ?? 0,
+      epoch: this.epoch,
+    };
   }
 
   /**

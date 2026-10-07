@@ -53,7 +53,7 @@ export const DISPLAY_ACTION_RATE = { perSec: 20, burst: 20 } as const;
 /** pane ごとに溜める出来事の数。 */
 export const DISPLAY_EVENT_QUEUE_MAX = 64;
 export const DISPLAY_WAITERS_PER_PANE_MAX = 4;
-export const DISPLAY_WAITERS_MAX = 16;
+export const DISPLAY_WAITERS_MAX = 64; // pane ごとの上限 × 16 pane。受け口の同時接続（64）と同じ。ほかの pane の待ちで無関係な pane が断られにくくする
 export const DISPLAY_WAIT_MIN_MS = 1_000;
 export const DISPLAY_WAIT_MAX_MS = 60_000;
 export const DISPLAY_WAIT_DEFAULT_MS = 30_000;
@@ -199,7 +199,7 @@ export type DisplayLine =
   | { type: "display.dropped"; count: number }
   | { type: "display.reset"; reason: "server_restarted"; epoch: string }
   | { type: "display.timeout" }
-  | { type: "display.end"; reason: "pane_closed" | "connection_closed" | "unsupported" };
+  | { type: "display.end"; reason: "pane_closed" | "connection_closed" | "unsupported" | "busy" };
 
 /** `display.report` の `problem`（画面が、枠の異常を知らせる）。後の版が `focus_steal` を足す。 */
 export const DISPLAY_REPORT_PROBLEMS = ["navigated", "unresponsive"] as const;

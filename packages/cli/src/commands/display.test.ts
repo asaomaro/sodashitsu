@@ -62,6 +62,7 @@ const FEATURES = {
   epoch: "E1",
 };
 const INFO = { id: "d1", paneId: PANE, name: "main", kind: "panel", format: "html", title: "main", size: 320, rev: 1, bytes: 3, updatedAt: "2026-01-01T00:00:00.000Z" };
+const LIST = { displays: [], seq: 7, epoch: "E1" };
 const SET_RESULT = { display: INFO, renderers: FEATURES.renderers, epoch: "E1", next: 4 };
 
 describe("runDisplay set", () => {
@@ -131,6 +132,33 @@ describe("runDisplay set", () => {
     const out2 = new Out();
     expect(await runDisplay(parse(["set", "a", "--kind", "band", "--text", big]), store, out2.deps({ transport: old }))).toBe(0);
     expect(out2.lines).toEqual([{ status: "unsupported", reason: "this server does not support display surfaces (update soda)" }]);
+  });
+
+  it("中身の指定が無く標準入力が空（/dev/null・空のパイプ）なら使い方の誤り。--text \"\" なら空の面を出せる", async () => {
+    const tr = stub({ "display.set": SET_RESULT });
+    await expect(runDisplay(parse(["set", "a", "--kind", "band"]), store, new Out().deps({ transport: tr, readStdin: async () => Buffer.alloc(0) }))).rejects.toBeInstanceOf(CliUsageError);
+    await expect(runDisplay(parse(["set", "a", "--kind", "band"]), store, new Out().deps({ transport: tr, readStdin: async () => Buffer.alloc(0) }))).rejects.toThrow(/stdin/);
+    expect(tr.calls).toEqual([]);
+    await runDisplay(parse(["set", "a", "--kind", "band", "--text", ""]), store, new Out().deps({ transport: tr }));
+    expect(tr.calls[0]).toMatchObject({ op: "display.set", params: { content: "" } });
+  });
+
+  it("要求の 1 行が上限の近く（余裕の内側）なら、送らずに使い方の誤り。余裕の外側なら送る", async () => {
+    const tr = stub({ "display.set": SET_RESULT, "display.features": FEATURES });
+    const lineOf = (n: number): number => Buffer.byteLength(JSON.stringify({ v: 1, op: "display.set", paneId: PANE, params: { name: "a", kind: "band", format: "text", content: '"'.repeat(n) } })) + 1;
+    const LIMIT = 4 * 1024 * 1024;
+    // 引用符は 1 文字が 2 バイトになる。1 行が LIMIT − 100 になる長さ（余裕 512 の内側）と、LIMIT − 1000 になる長さ（外側）
+    const n = (target: number): number => Math.floor((target - lineOf(0)) / 2);
+    const inside = n(LIMIT - 100);
+    const outside = n(LIMIT - 1000);
+    expect(LIMIT - lineOf(inside)).toBeLessThan(512);
+    expect(LIMIT - lineOf(outside)).toBeGreaterThan(512);
+    // 中身は 2 MiB 以内であること（引用符 inside 個 ≒ 2 MiB − 50）
+    expect(inside).toBeLessThanOrEqual(DISPLAY_CONTENT_MAX_BYTES);
+    await expect(runDisplay(parse(["set", "a", "--kind", "band", "--text", '"'.repeat(inside)]), store, new Out().deps({ transport: tr }))).rejects.toThrow(/too large|escaping/);
+    expect(tr.calls).toEqual([]);
+    await runDisplay(parse(["set", "a", "--kind", "band", "--text", '"'.repeat(outside)]), store, new Out().deps({ transport: tr }));
+    expect(tr.calls.at(-1)).toMatchObject({ op: "display.set" });
   });
 
   it("サーバの invalid_display は使い方の誤り（終了コード 2）に読み替える。ほかのエラーはそのまま", async () => {
@@ -283,6 +311,25 @@ describe("runWaitLoop", () => {
     expect(h.lines).toEqual([{ type: "display.timeout" }]);
   });
 
+  it("全体の時間切れは残りの時間で数える: 残りが 1 秒に満たないときは、サーバに聞かず残りだけ待って display.timeout（約 1 秒長引かない）", async () => {
+    const h = io(async (_p, ms) => {
+      h.advance(ms);
+      return res();
+    });
+    const out = await runWaitLoop(h.impl, { names: [], since: undefined, epoch: "E1", mode: "once", totalTimeoutMs: 30_500 });
+    expect(out).toEqual({ end: "done" });
+    expect(h.calls.map((c) => c.timeoutMs)).toEqual([30_000]);
+    expect(h.slept).toEqual([500]);
+    expect(h.lines).toEqual([{ type: "display.timeout" }]);
+    // 1 回の待ちは残りを超えない
+    const h2 = io(async (_p, ms) => {
+      h2.advance(ms);
+      return res();
+    });
+    await runWaitLoop(h2.impl, { names: [], since: undefined, epoch: "E1", mode: "once", totalTimeoutMs: 1_500 });
+    expect(h2.calls.map((c) => c.timeoutMs)).toEqual([1_500]);
+  });
+
   it("切れたら 150ms おきに 5 秒まで繋ぎ直し、戻ればそのまま続ける。戻らなければ connection_closed", async () => {
     let n = 0;
     const h = io(async () => {
@@ -344,6 +391,7 @@ describe("runDisplay events / wait", () => {
     let n = 0;
     const tr = stub({
       "display.features": FEATURES,
+      "display.list": LIST,
       "display.wait": () => {
         if (++n === 1) return { epoch: "E1", next: 1, events: [{ type: "display.closed", seq: 1, paneId: PANE, name: "main", reason: "dismissed", at: "t" }], dropped: 0, reset: false };
         throw new RpcFailure("not_found", "pane not found");
@@ -361,19 +409,45 @@ describe("runDisplay events / wait", () => {
 
   it("events は繋ぎ直しが尽きたら display.end(connection_closed) を出して終了コード 1", async () => {
     const out = new Out();
-    const tr = stub({ "display.features": FEATURES, "display.wait": () => Promise.reject(new RpcFailure("connection_closed", "x")) });
+    const tr = stub({ "display.features": FEATURES, "display.list": LIST, "display.wait": () => Promise.reject(new RpcFailure("connection_closed", "x")) });
     const code = await runDisplay(parse(["events"]), store, out.deps({ transport: tr, sleep: async () => undefined, now: (() => { let t = 0; return () => (t += 1000); })() }));
     expect(code).toBe(1);
     expect(out.lines.at(-1)).toEqual({ type: "display.end", reason: "connection_closed" });
   });
 
+  it("events: ready の前に pane の今の seq を得て、最初の待ちから since を付ける（ready と登録の間の出来事を落とさない）", async () => {
+    const out = new Out();
+    const order: string[] = [];
+    const tr = stub({
+      "display.features": () => (order.push("features"), FEATURES),
+      "display.list": () => (order.push("list"), { displays: [], seq: 7, epoch: "E9" }),
+      "display.wait": () => Promise.reject(new RpcFailure("not_found", "pane not found")),
+    });
+    const deps = out.deps({ transport: tr, print: (v) => void (order.push((v as { type: string }).type), out.lines.push(v)) });
+    await runDisplay(parse(["events"]), store, deps);
+    expect(order.slice(0, 3)).toEqual(["features", "list", "display.ready"]);
+    expect(out.lines[0]).toMatchObject({ type: "display.ready", epoch: "E9" });
+    expect(tr.calls.find((c) => c.op === "display.wait")!.params).toMatchObject({ since: 7, epoch: "E9" });
+    // --since / --epoch を渡せば、それを使う
+    const tr2 = stub({ "display.features": FEATURES, "display.list": LIST, "display.wait": () => Promise.reject(new RpcFailure("not_found", "x")) });
+    await runDisplay(parse(["events", "--since", "2", "--epoch", "EE"]), store, new Out().deps({ transport: tr2 }));
+    expect(tr2.calls.find((c) => c.op === "display.wait")!.params).toMatchObject({ since: 2, epoch: "EE" });
+  });
+
+  it("events: 待ちの上限（display_busy）では、display.end(busy) の行を出し、エラーはそのまま投げる（黙って終わらない）", async () => {
+    const out = new Out();
+    const tr = stub({ "display.features": FEATURES, "display.list": LIST, "display.wait": () => Promise.reject(new RpcFailure("display_busy", "too many waits on display events")) });
+    await expect(runDisplay(parse(["events"]), store, out.deps({ transport: tr }))).rejects.toMatchObject({ code: "display_busy" });
+    expect(out.lines.at(-1)).toEqual({ type: "display.end", reason: "busy" });
+  });
+
   it("wait は features の後、出来事を 1 行出して終わる。pane が無ければ not_found を投げる", async () => {
     const out = new Out();
-    const tr = stub({ "display.features": FEATURES, "display.wait": { epoch: "E1", next: 2, events: [{ type: "display.action", seq: 2, paneId: PANE, name: "main", rev: 1, action: "go", at: "t" }], dropped: 0, reset: false } });
+    const tr = stub({ "display.features": FEATURES, "display.list": LIST, "display.wait": { epoch: "E1", next: 2, events: [{ type: "display.action", seq: 2, paneId: PANE, name: "main", rev: 1, action: "go", at: "t" }], dropped: 0, reset: false } });
     expect(await runDisplay(parse(["wait", "main"]), store, out.deps({ transport: tr }))).toBe(0);
     expect(out.lines).toEqual([{ type: "display.action", seq: 2, paneId: PANE, name: "main", rev: 1, action: "go", at: "t" }]);
     expect(tr.calls.find((c) => c.op === "display.wait")!.params).toMatchObject({ epoch: "E1", names: ["main"] });
-    const gone = stub({ "display.features": FEATURES, "display.wait": () => Promise.reject(new RpcFailure("not_found", "pane not found")) });
+    const gone = stub({ "display.features": FEATURES, "display.list": LIST, "display.wait": () => Promise.reject(new RpcFailure("not_found", "pane not found")) });
     await expect(runDisplay(parse(["wait"]), store, new Out().deps({ transport: gone }))).rejects.toMatchObject({ code: "not_found" });
   });
 

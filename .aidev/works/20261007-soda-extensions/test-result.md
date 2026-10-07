@@ -69,3 +69,45 @@ handoff-smoke: ok
 - 点検が掛かっていない T5（sodactl の引数・`set`/`close`/`list`/`--features`）は、PR1 の `cross` に含まれる。
 - Windows の経路（受け口なし）は実機で確かめていない。`/ws` の経路の結合テスト（`--pane`・`SODA_PANE_SOCKET` なし）で代える。
 - `tui.integration.test.ts` の 3 件は worktree のパスが長いための既知の失敗。main での切り分けは、この work では実施していない（指示の「既知」を採用）。
+
+---
+
+## PR1 独立レビュー後の修正（should 3・nit 3・テスト 1）
+
+1. **`events` が ready の直後の出来事を落とす**: `display.list` の結果に `seq`（その pane の出来事の今の通し番号）と `epoch` を足し（読み手はゆるく読む）、`runEvents` は ready の前に `display.features` → `display.list` を呼んで、最初の `display.wait` から必ず `since` を付ける（`--since/--epoch` があればそれ）。`wait` コマンドも同じ。
+   テスト: `cli/src/display.integration.test.ts` の「ready の後・最初の display.wait が登録される前に起きた出来事も届く」。`callPaneOp` を差し替えて `display.wait` の送信を門で止め、ready を受けた後に画面から操作を送り、門を開ける（時間に頼らない）。
+   **直す前（`startSince` を `a.since` だけにした版）で落ちることを確認**:
+   ```
+        × events: display.ready の後・最初の display.wait が登録される前に起きた出来事も届く（順序は時間でなく門で決める） 10468ms
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    FAIL  src/display.integration.test.ts > sodactl display（実サーバ） > events: display.ready の後・最初の display.wait が登録される前に起きた出来事も届く（順序は時間でなく門で決める）
+   Error: waiting for a line; have ["display.ready"]
+        91|         if (!l) throw new Error(`waiting for a line; have ${JSON.strin…
+   ```
+   単体（`commands/display.test.ts`）: ready の前に features → list が呼ばれ、最初の `wait` に `since: 7, epoch` が付く。
+2. **空の標準入力**: 中身の指定が無く標準入力が 0 バイトなら使い方の誤り（終了コード 2）。空の面は `--text ""`。単体・結合テストあり。
+3. **docs**: `docs/sodactl.md`「ログイン不要の受け口」の「安全の境界」と「載せてよい操作の条件」に、`display` が他の pane の操作の値を読める点・守っているのは OS の利用者の境界で pane 同士ではない点・パネルのフォームに秘密を入れさせないことを書いた。
+4. **送る前の大きさの検査に余裕（512 バイト）**: `line + 512 > 4 MiB` なら送らずに使い方の誤り（サーバの `requestLineBytes` の比較も同じ）。単体テストで、余裕の内側（上限 − 100）は誤り・外側（上限 − 1000）は送る。
+5. **`wait --timeout`・`set --wait --timeout`**: 残りの時間で数える。残りが 1 秒に満たないときはサーバに聞かず、残りだけ待って `display.timeout`（サーバの 1 回の待ちの最小は 1 秒）。その端の区間に起きた出来事は拾わない（終わる直前の 1 秒未満）。単体テストあり。
+6. **`display_busy`（待ちの上限）の `events`**: 以前は標準エラーの JSON だけで、stdout には何も出なかった。**直した**: `display.end`（reason `busy`）の行を出してから、エラー（標準エラー。終了コード 1）を投げる。`DisplayLine` の `display.end` の reason に `busy` を足した。
+   全体の待ちの上限は **16 → 64 に見直した**（pane 4 × 16 pane。受け口の同時接続 64 と同じ）。ほかの pane の待ちで無関係な pane が `display_busy` になりにくくなる。`design.md` の 16 とは違う（`design.md` には触れていない。上流の側で直してほしい）。
+7. **AC14 の負の対照（PR1 の時点）**: `panesocket/displayOps.ts` の `displaySetOp`・`displayListOp`・`displayWaitOp` を、引数の schema を `paneId` を許すものに替え、対象を `p.paneId ?? ctx.paneId` にした版で `display.integration.test.ts`「pane A を名乗っても…」を流すと落ちる（`paneId: B` を載せた要求が `invalid_params` にならず成功する）:
+   ```
+        × pane A を名乗っても、pane B の面は見えず・閉じられず・待てない。引数に paneId: B を載せても B に届かない（AC14） 948ms
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    FAIL  src/display/display.integration.test.ts > 表示の面（実物のサーバ。pane.sock と /ws） > pane A を名乗っても、pane B の面は見えず・閉じられず・待てない。引数に paneId: B を載せても B に届かない（AC14）
+   AssertionError: expected { ok: true, result: { …(3) } } to match object { ok: false, …(1) }
+   + Received
+   +   "ok": true,
+       210|       [PANE_OP_DISPLAY_WAIT, { paneId: paneB, timeoutMs: 1000 }],
+       211|     ] as const) {
+       212|       expect(await call(sockPath, op, paneA, params)).toMatchObject({ …
+       213|     }
+       214|     // B の面は無傷で、A には何も出ていない
+         Tests  1 failed | 9 skipped (10)
+   ```
+   確かめた後は戻し、`git diff -- packages/server/src/panesocket/displayOps.ts` が空であることを確認した。
+
+### 残った点（直さない）
+- 認証の前に受け口が溜める量が、64 接続 × 4 MiB（256 MiB）に増えた（10 秒の期限・同じ OS の利用者だけが繋げる）。
+- 接続元の pid から pane を逆引きして、受け口の名乗りを検証する案は、別の作業の候補（上の docs の限界の解消）。

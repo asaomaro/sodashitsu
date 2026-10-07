@@ -555,6 +555,10 @@ export interface DisplayClosedResult {
 }
 export interface DisplayListResult {
   displays: DisplayInfo[];
+  /** その pane の出来事の今の通し番号。`events` が、`display.ready` の後の出来事を落とさないよう、ここから待つ。 */
+  seq: number;
+  /** サーバの起動ごとの印（`seq` と同じサーバのもの）。 */
+  epoch: string;
 }
 
 /** 受け口（`pane.sock`）の引数: 対象の pane は要求の外側の `paneId` で、引数には持たない。`paneId` を載せたら `invalid_params`（strict）。 */

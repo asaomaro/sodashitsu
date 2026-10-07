@@ -8,6 +8,7 @@ import { DISPLAY_CONTENT_MAX_BYTES } from "@sodashitsu/protocol";
 import { CliUsageError, parseArgs } from "./cliArgs.js";
 import { REAL_DISPLAY_DEPS, runDisplay, type DisplayDeps } from "./commands/display.js";
 import { login } from "./httpAuth.js";
+import { callPaneOp } from "./paneSocket.js";
 import { FsSessionStore } from "./session.js";
 import { connect, type SodaClient } from "./wsClient.js";
 
@@ -76,6 +77,13 @@ describe.skipIf(process.platform === "win32")("sodactl display（実サーバ）
     const done = runDisplay(cmd, session, { ...REAL_DISPLAY_DEPS, print: (v) => void lines.push(v as Record<string, unknown>), outputClosed: () => false });
     return { lines, done };
   }
+  function runBgWith(argv: string[], env: NodeJS.ProcessEnv, over: Partial<DisplayDeps>): { lines: Record<string, unknown>[]; done: Promise<number> } {
+    const lines: Record<string, unknown>[] = [];
+    const cmd = parseArgs(["display", ...argv], env, "linux");
+    if (cmd.kind !== "display") throw new Error("not display");
+    const done = runDisplay(cmd, anonymous, { ...REAL_DISPLAY_DEPS, print: (v) => void lines.push(v as Record<string, unknown>), outputClosed: () => false, ...over });
+    return { lines, done };
+  }
   const waitLine = (lines: Record<string, unknown>[], pred: (l: Record<string, unknown>) => boolean): Promise<Record<string, unknown>> =>
     vi.waitFor(
       () => {
@@ -133,8 +141,8 @@ describe.skipIf(process.platform === "win32")("sodactl display（実サーバ）
     const file = join(tmp, "over.html");
     await writeFile(file, "a".repeat(DISPLAY_CONTENT_MAX_BYTES + 1));
     await expect(run(["set", "over", "--kind", "panel", "--html-file", file], env)).rejects.toBeInstanceOf(CliUsageError);
-    await expect(run(["set", "over", "--kind", "panel"], env, anonymous, { readStdin: async () => Buffer.alloc(0) , readFile: REAL_DISPLAY_DEPS.readFile })).resolves.toMatchObject({ code: 0 });
-    await run(["close", "over"], env);
+    // 中身の指定が無く標準入力が空なら、空の面を出さずに使い方の誤り
+    await expect(run(["set", "over", "--kind", "panel"], env, anonymous, { readStdin: async () => Buffer.alloc(0) })).rejects.toBeInstanceOf(CliUsageError);
     expect((await run(["list"], env)).lines[0]).toEqual({ status: "ok", displays: [] });
   });
 
@@ -195,6 +203,28 @@ describe.skipIf(process.platform === "win32")("sodactl display（実サーバ）
     await closeWorkspace(workspaceId);
     expect(await ev.done).toBe(0);
     expect(ev.lines.at(-1)).toEqual({ type: "display.end", reason: "pane_closed" });
+  });
+
+  it("events: display.ready の後・最初の display.wait が登録される前に起きた出来事も届く（順序は時間でなく門で決める）", async () => {
+    const { paneId, workspaceId } = await newPane();
+    const env = inPane(paneId);
+    const b = await screen();
+    const set = await run(["set", "m", "--kind", "panel", "--html-file", await mk("gate.html", "<button data-soda-action=go>go</button>")], env);
+    const id = (set.lines[0] as { display: { id: string } }).display.id;
+    // display.wait の送信を、門が開くまで止める（ready は出た・wait はまだ登録されていない、という状態を作る）
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    const gated = (async (path, req, opts) => {
+      if (req.op === "display.wait") await gate;
+      return callPaneOp(path, req, opts);
+    }) as typeof callPaneOp;
+    const ev = runBgWith(["events"], env, { callPaneOp: gated });
+    await waitLine(ev.lines, (l) => l["type"] === "display.ready");
+    await b.request("display.action", { id, rev: 1, action: "between" }); // ready の後・wait の登録の前
+    open();
+    expect(await waitLine(ev.lines, (l) => l["type"] === "display.action")).toMatchObject({ action: "between", seq: 1 });
+    await closeWorkspace(workspaceId);
+    expect(await ev.done).toBe(0);
   });
 
   it("events（/ws の経路・--pane）でも同じ行が出る。wait <名前> は 1 行出して終わり、set --wait は set の行を出さずに最初の出来事を出す", async () => {
