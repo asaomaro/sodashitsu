@@ -265,7 +265,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/web/src/mobile/MobileShell.vue:81`・`94`、`packages/web/src/mobile/MobileDisplaySheet.vue`（新規）と `.test.ts` / 根拠: research A10、R3
       依存: T13
       AC: AC9
-- [ ] T18: E2E（出す・更新する・閉じる・操作）。`display.spec.ts` に足す:
+- [x] T18: E2E（出す・更新する・閉じる・操作）。`display.spec.ts` に足す:
       (2) 同じ名前の `set` で中身が替わり、枠の要素が同じ（`data-display-loads` が 1 のまま）・スクロールと入力途中の欄の値が残る・`rev` が増える。2 回目の `set` は、標準入力と `--format html` で渡す、
       (3) パネルを出すとブラウザが送る `client.view` の列数が減り、サーバの PTY の列数も減る。たたむ・閉じると戻る。端末の箱とパネルの箱が重ならない、(4) パネル 2 つでタブ・帯 2 本で縦積み、
       (5) `text` の `<b>` が文字のまま・`markdown` が整形され mermaid はコードのまま・`html` の CSS が効く・`http(s)` のリンクは `target=_blank` で、ほかのリンクは `href` が無い、(6) 固定のラベルが、題に HTML や似た文言を書いても変わらない、

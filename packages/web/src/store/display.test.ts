@@ -49,7 +49,7 @@ describe("useDisplayStore", () => {
     expect(s.activePanelOf("p1")?.id).toBe("a");
   });
 
-  it("消えた面の中身・フォーカス・たたみの印を捨てる", () => {
+  it("消えた面の中身・選択・たたみの印を捨てる（フォーカスの印は、その枠の部品が外れるときに自分で下ろす）", () => {
     const s = useDisplayStore();
     s.upsert(info("a"));
     s.setContent({ id: "a", rev: 1, format: "text", content: "x" });
@@ -57,7 +57,7 @@ describe("useDisplayStore", () => {
     s.setCollapsed("p1", true);
     s.remove("a");
     expect(s.contents.size).toBe(0);
-    expect(s.focusedDisplayId).toBeNull();
+    expect(s.focusedDisplayId).toBe("a");
     expect(s.collapsed.size).toBe(0);
   });
 

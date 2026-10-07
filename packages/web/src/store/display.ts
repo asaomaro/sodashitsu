@@ -70,6 +70,7 @@ export const useDisplayStore = defineStore("display", () => {
     infos.value = next;
   }
   /** 消えた面（`display.removed`）。知らない id は何もしない。 */
+  // フォーカスの印（`focusedDisplayId`）は、面が消えても、その枠の部品が外れるときに自分で下ろす（端末へ戻すため）。ここでは触らない。
   function remove(id: string): void {
     if (!infos.value.has(id)) return;
     const next = new Map(infos.value);
@@ -137,7 +138,6 @@ export const useDisplayStore = defineStore("display", () => {
     if ([...collapsed.value].some((p) => !paneIds.has(p))) {
       collapsed.value = new Set([...collapsed.value].filter((p) => paneIds.has(p)));
     }
-    if (focusedDisplayId.value !== null && !infos.value.has(focusedDisplayId.value)) focusedDisplayId.value = null;
   }
 
   /** 切断・マシンの切り替えで空にする。 */

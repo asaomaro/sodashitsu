@@ -1,43 +1,19 @@
-import type { Frame, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures.js";
-import type { AppServer } from "../support/appServer.js";
-import { runDisplay, watchDisplaySubscriptions, watchSentDisplay } from "../support/display.js";
-import { watchClientViews } from "../support/panes.js";
+import { runDisplay } from "../support/display.js";
+import { contentFrame, frameEl, frameLoc, openDisplayBrowser, writeTmp } from "../support/displayBrowser.js";
 
 /**
- * 表示の面（`sodactl display`。20261007-soda-extensions）の E2E。ビルドした `sodactl` を子プロセスで起動し、合否はブラウザの側の実測で見る
+ * 表示の面（`sodactl display`。20261007-soda-extensions）の E2E の最初の筋（T14）。ビルドした `sodactl` を子プロセスで起動し、合否はブラウザの側の実測で見る
  * （`e2e-observe-browser`）: 枠の中の DOM（`frameLocator`）・要素の箱・計算済みのスタイル・ブラウザが送った要求（CDP）。
- * テスト自身の接続は、pane の用意にだけ使う。
+ * テスト自身の接続は、pane の用意にだけ使う。出す・更新する・閉じる・操作の筋は `display-flows.spec.ts`。
  */
-
-export const frameLoc = (page: Page) => page.frameLocator("iframe[data-display-frame]");
-export const frameEl = (page: Page) => page.locator("iframe[data-display-frame]");
-
-/** ブラウザを開き、「表示を出せる画面」として登録されるまで待つ。pane の id と、ブラウザの観測を返す。 */
-export async function openDisplayBrowser(page: Page, appServer: AppServer) {
-  const client = await appServer.openClient();
-  const paneId = client.helloSnapshot()!.panes[0]!.id;
-  const subs = await watchDisplaySubscriptions(page);
-  const sent = await watchSentDisplay(page);
-  const views = await watchClientViews(page);
-  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
-  await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
-  await subs.waitFor(1);
-  return { client, paneId, sent, views };
-}
-
-export async function contentFrame(page: Page): Promise<Frame> {
-  const h = await frameEl(page).elementHandle();
-  const f = await h!.contentFrame();
-  if (!f) throw new Error("no content frame");
-  return f;
-}
 
 const box = async (loc: ReturnType<Page["locator"]>) => (await loc.boundingBox())!;
 
 test("ログインなしの set --kind panel / band で、枠の中に中身が出る・パネルは端末の右・帯は端末の上（AC1）", async ({ page, appServer }) => {
   const { paneId } = await openDisplayBrowser(page, appServer);
-  const panel = await runDisplay(appServer, paneId, ["set", "side", "--kind", "panel", "--title", "横", "--html-file", await tmpFile("<h1 id=h>パネルの見出し</h1><p>本文</p>")]);
+  const panel = await runDisplay(appServer, paneId, ["set", "side", "--kind", "panel", "--title", "横", "--html-file", await writeTmp("<h1 id=h>パネルの見出し</h1><p>本文</p>")]);
   expect((await panel.done).code).toBe(0);
   const panelFrame = page.locator("[data-pane-panel] iframe[data-display-frame]");
   await expect(panelFrame).toHaveCount(1);
@@ -75,13 +51,3 @@ test("実測 (a) 中身が port 経由で届く／(b) frame.evaluate が script-
   // `location.origin` は URL から出る値なので不透明 origin の証拠にならない。`self.origin` が "null"・保存領域と親の文書が SecurityError。
   expect(probe).toMatchObject({ selfOrigin: "null", ls: "SecurityError", parent: "SecurityError" });
 });
-
-async function tmpFile(content: string): Promise<string> {
-  const { mkdtemp, writeFile } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
-  const dir = await mkdtemp(join(tmpdir(), "soda-e2e-display-file-"));
-  const p = join(dir, "c.html");
-  await writeFile(p, content);
-  return p;
-}
