@@ -1033,6 +1033,11 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     if (paneId) this.closePaneById(paneId);
   }
 
+  /** 右クリックのメニュー「表示をすべて閉じる」: その pane の表示の面（パネル・帯）を全部閉じる（20261007-soda-extensions）。 */
+  dismissDisplays(paneId: string): void {
+    void this.conn.request("display.dismiss", { paneId }).catch(() => undefined);
+  }
+
   /** T22（`ContextMenu`）から任意の pane を対象に呼ぶ（フォーカス中とは限らない）。 */
   closePaneById(paneId: string): void {
     const pane = this.session.panes.get(paneId);

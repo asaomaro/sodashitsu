@@ -234,7 +234,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/web/src/display/displayLayout.ts`（新規）、`packages/web/src/components/PanePanel.vue`・`PaneBands.vue`（新規）、各 `.test.ts` / 根拠: research R3・R8、design「ブラウザ」
       依存: T11
       AC: AC5, AC7, AC8, AC25, AC33, AC-I1, AC-I2
-- [ ] T13: pane への差し込みと、まとめて閉じる: `PaneFrame.vue`（`enabled` のときだけ: `.pane-frame-body` を縦の flex にし、`PaneBands` と、`.pane-frame-row` の中の `.pane-frame-main`〔この中に `<slot />`〕・`PanePanel`。葉の CSS には触らない。
+- [x] T13: pane への差し込みと、まとめて閉じる: `PaneFrame.vue`（`enabled` のときだけ: `.pane-frame-body` を縦の flex にし、`PaneBands` と、`.pane-frame-row` の中の `.pane-frame-main`〔この中に `<slot />`〕・`PanePanel`。葉の CSS には触らない。
       pane の幅・高さは、`.pane-frame-body` に張った `ResizeObserver` で測って部品へ渡す。セルの幅は、その pane の端末から `getCellSize`〔`packages/web/src/term/measure.ts:30`〕で取り、取れなければ 9。**その pane のどれかの面にフォーカスがある間、`.pane-frame-main` を `opacity: 0.55` にする**）、
       右クリックのメニュー「表示をすべて閉じる」（面があるときだけ）と `ActionDispatcher.dismissDisplays(paneId)`。単体テスト（`enabled=false` で何も描かない・面が無ければ DOM が今までと同じ・既存の `PaneFrame.test.ts`・`PaneLayout.test.ts` が通る）
       対象: `packages/web/src/components/PaneFrame.vue:305`・`478`、`packages/web/src/components/PaneFrame.test.ts`、`packages/web/src/components/ContextMenu.vue:61-70`、`packages/web/src/actions/ActionDispatcher.ts` / 根拠: research A9・A12、R3
