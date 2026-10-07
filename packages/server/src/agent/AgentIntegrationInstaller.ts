@@ -23,6 +23,14 @@ const NOOP_HOOK_SCRIPT =
 
 type JsonObject = Record<string, unknown>;
 
+/** 以前の版が入れた形・場所（20261007-agent-hook-drift）。見つけたら「更新が必要」にし、install が入れ直して除く。 */
+interface LegacyHookSpec {
+  configFile(env: NodeJS.ProcessEnv, home: string): string;
+  hooksDir(env: NodeJS.ProcessEnv, home: string): string;
+  entriesPath: string[];
+  isOurs(entry: unknown): boolean;
+}
+
 /**
  * kind ごとの hook 設定の違い（20260923-other-agents-session-resume design「HookSpec」）。research.md F4
  * で判明したとおり、設定ファイルのトップレベル構造（3パターン）・hook エントリの形（5パターン以上）は
@@ -33,6 +41,12 @@ interface HookSpec {
   configFile(env: NodeJS.ProcessEnv, home: string): string;
   hooksDir(env: NodeJS.ProcessEnv, home: string): string;
   binName: string;
+  /** `binName` のほかに、CLI の検出に使う名前。 */
+  altBinNames?: string[];
+  /** 以前の版が入れた形・場所。status は「更新が必要」、install は入れ直して除く、uninstall は一緒に除く。 */
+  legacy?: LegacyHookSpec[];
+  /** 設定ファイルを解釈できなかったときに、知らせに足す一言。 */
+  unparsableHint?: string;
   /** SessionStart 相当の配列が、設定ファイルのオブジェクト内のどこにあるか（ネストしたキーの経路）。 */
   entriesPath: string[];
   /** 1エントリを組み立てる。 */
@@ -159,6 +173,16 @@ function nestedAsyncAnyEntry(scriptPath: string, kind: AgentIntegrationKind): Js
   };
 }
 
+/** Devin CLI の利用者の設定の場所（research D1・D6）。`XDG_CONFIG_HOME`・`DEVIN_CONFIG_DIR` は見ない（decisions D2）。 */
+export function devinUserConfigDir(
+  env: NodeJS.ProcessEnv,
+  home: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  if (platform === "win32" && env.APPDATA) return join(env.APPDATA, "devin");
+  return join(home, ".config", "devin");
+}
+
 const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
   claude: {
     configFile: (env, home) =>
@@ -206,13 +230,24 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
     isOurs: isOursField("bash"),
   },
   devin: {
-    // 設定ファイルパスは公式ドキュメントに記載が無く推測値（decisions D4）。他5エージェントとは確度が異なる。
-    configFile: (env, home) => join(env.DEVIN_CONFIG_DIR || join(home, ".devin"), "hooks.json"),
-    hooksDir: (env, home) => join(env.DEVIN_CONFIG_DIR || join(home, ".devin"), "hooks"),
+    // 公式文書（research D1・D2。2026-10-07。文書だけで確認、実機は未確認）: 利用者の設定 `config.json` の `hooks` キー。
+    configFile: (env, home) => join(devinUserConfigDir(env, home), "config.json"),
+    hooksDir: (env, home) => join(devinUserConfigDir(env, home), "hooks"),
     binName: "devin",
-    entriesPath: ["SessionStart"], // `hooks` ラップ無し（research F4）
+    entriesPath: ["hooks", "SessionStart"],
     buildEntry: nestedTimeoutEntry,
     isOurs: isOursNested,
+    unparsableHint:
+      "Devin CLI の設定はコメントつきの JSON を許しますが、本製品はコメントの入ったファイルを書き換えられません",
+    // 以前の版が書いた `hooks.json`（推測した場所。decisions D2）。
+    legacy: [
+      {
+        configFile: (env, home) => join(env.DEVIN_CONFIG_DIR || join(home, ".devin"), "hooks.json"),
+        hooksDir: (env, home) => join(env.DEVIN_CONFIG_DIR || join(home, ".devin"), "hooks"),
+        entriesPath: ["SessionStart"],
+        isOurs: isOursNested,
+      },
+    ],
   },
   droid: {
     configFile: (_env, home) => join(home, ".factory", "hooks.json"),
@@ -228,13 +263,20 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
     hooksDir: (_env, home) => join(home, ".grok", "hooks"),
     binName: "grok",
     entriesPath: ["hooks", "SessionStart"],
+    // 現行の公式文書の形（入れ子。`matcher` は省く）。20261007-agent-hook-drift の research G2・G3、decisions D1。
     buildEntry: (scriptPath, kind) => ({
-      matcher: "",
-      type: "command",
-      command: hookCommand(scriptPath, kind),
-      timeout: 10,
+      hooks: [{ type: "command", command: hookCommand(scriptPath, kind), timeout: 10 }],
     }),
-    isOurs: isOursField("command"),
+    isOurs: isOursNested,
+    // 以前の版が書いた平らな形（同じファイル・同じ経路）。
+    legacy: [
+      {
+        configFile: (_env, home) => join(home, ".grok", "hooks", "soda-agent-report.json"),
+        hooksDir: (_env, home) => join(home, ".grok", "hooks"),
+        entriesPath: ["hooks", "SessionStart"],
+        isOurs: isOursField("command"),
+      },
+    ],
   },
   qwen: {
     configFile: (_env, home) => join(home, ".qwen", "settings.json"),
@@ -284,12 +326,13 @@ function hookScriptPathFor(hooksDir: string): string {
   return join(hooksDir, HOOK_SCRIPT_NAME);
 }
 
-async function isOnPath(binName: string, env: NodeJS.ProcessEnv): Promise<boolean> {
+async function isOnPath(binNames: readonly string[], env: NodeJS.ProcessEnv): Promise<boolean> {
   const dirs = (env.PATH ?? "").split(delimiter).filter(Boolean);
-  const candidates =
+  const candidates = binNames.flatMap((binName) =>
     process.platform === "win32"
       ? [binName, `${binName}.cmd`, `${binName}.exe`, `${binName}.bat`]
-      : [binName];
+      : [binName],
+  );
   for (const dir of dirs) {
     for (const name of candidates) {
       try {
@@ -301,6 +344,36 @@ async function isOnPath(binName: string, env: NodeJS.ProcessEnv): Promise<boolea
     }
   }
   return false;
+}
+
+/** 経路から `isOurs` のエントリを除く。除いて空ならキーごと消す。自分のエントリが無ければそのまま返す。 */
+function removeOurs(
+  root: JsonObject,
+  path: readonly string[],
+  isOurs: (entry: unknown) => boolean,
+): { root: JsonObject; found: boolean } {
+  const entries = getPath(root, path);
+  if (!entries.some(isOurs)) return { root, found: false };
+  const remaining = entries.filter((e) => !isOurs(e));
+  return {
+    root: remaining.length === 0 ? deletePath(root, path) : setPath(root, path, remaining),
+    found: true,
+  };
+}
+
+interface LegacyHit {
+  legacy: LegacyHookSpec;
+  file: string;
+  root: JsonObject;
+}
+
+function unparsable(spec: HookSpec, configFile: string): { ok: false; message: string } {
+  return {
+    ok: false,
+    message:
+      `設定ファイルを解釈できませんでした（${configFile}）` +
+      (spec.unparsableHint ? `。${spec.unparsableHint}` : ""),
+  };
 }
 
 export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
@@ -316,13 +389,46 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
   ): Promise<{ cliDetected: boolean; installed: boolean; needsUpdate: boolean }> {
     const spec = HOOK_SPECS[kind];
     const configFile = spec.configFile(this.env, this.home);
-    const [cliDetected, read] = await Promise.all([
-      isOnPath(spec.binName, this.env),
+    const [cliDetected, read, hits] = await Promise.all([
+      isOnPath([spec.binName, ...(spec.altBinNames ?? [])], this.env),
       readJsonObject(configFile),
+      this.legacyHits(spec),
     ]);
-    const installed = read.ok && getPath(read.data, spec.entriesPath).some(spec.isOurs);
-    const needsUpdate = installed && read.ok && (await this.needsUpdate(spec, read.data));
+    const current = read.ok && getPath(read.data, spec.entriesPath).some(spec.isOurs);
+    const installed = current || hits.length > 0;
+    // 今の設定ファイルが読めない・書く先の形が違うときは、押しても直らないので「更新が必要」を出さない。
+    const fixable =
+      read.ok &&
+      [spec.entriesPath, ...(spec.extraEntries ?? []).map((e) => e.path)].every(
+        (p) => pathShape(read.data, p) !== "invalid",
+      );
+    const needsUpdate =
+      fixable &&
+      read.ok &&
+      (hits.length > 0 || (current && (await this.needsUpdate(spec, read.data))));
     return { cliDetected, installed, needsUpdate };
+  }
+
+  /** 以前の版のエントリがあるファイル。読めない・無いファイルは「無い」扱い。 */
+  private async legacyHits(spec: HookSpec): Promise<LegacyHit[]> {
+    const hits: LegacyHit[] = [];
+    for (const legacy of spec.legacy ?? []) {
+      const file = legacy.configFile(this.env, this.home);
+      const read = await readJsonObject(file);
+      if (read.ok && getPath(read.data, legacy.entriesPath).some(legacy.isOurs))
+        hits.push({ legacy, file, root: read.data });
+    }
+    return hits;
+  }
+
+  /** 別のファイルにある古いエントリを除く。空になったファイルは消す。古い場所のスクリプトも消す。 */
+  private async removeLegacyFile(spec: HookSpec, hit: LegacyHit): Promise<void> {
+    const { root } = removeOurs(hit.root, hit.legacy.entriesPath, hit.legacy.isOurs);
+    if (Object.keys(root).length === 0) await rm(hit.file, { force: true });
+    else await writeFileAtomic(hit.file, JSON.stringify(root, null, 2));
+    const oldDir = hit.legacy.hooksDir(this.env, this.home);
+    if (oldDir !== spec.hooksDir(this.env, this.home))
+      await rm(hookScriptPathFor(oldDir), { force: true });
   }
 
   /**
@@ -352,8 +458,7 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     const configFile = spec.configFile(this.env, this.home);
     const hooksDir = spec.hooksDir(this.env, this.home);
     const read = await readJsonObject(configFile);
-    if (!read.ok)
-      return { ok: false, message: `設定ファイルを解釈できませんでした（${configFile}）` };
+    if (!read.ok) return unparsable(spec, configFile);
     const root = read.data;
     const targets = [
       { path: spec.entriesPath, build: spec.buildEntry },
@@ -365,8 +470,9 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
         message: `設定ファイルの形が想定と違うため、何も変えませんでした（${configFile}）`,
       };
     }
+    const hits = await this.legacyHits(spec);
     const installed = getPath(root, spec.entriesPath).some(spec.isOurs);
-    if (installed && !(await this.needsUpdate(spec, root)))
+    if (installed && hits.length === 0 && !(await this.needsUpdate(spec, root)))
       return { ok: true, message: "既に導入済みです" };
 
     await mkdir(hooksDir, { recursive: true });
@@ -374,6 +480,11 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
 
     const scriptPath = hookScriptPathFor(hooksDir);
     let updated = root;
+    // 同じファイルにある古いエントリは、足す前に除く。
+    for (const hit of hits) {
+      if (hit.file === configFile)
+        updated = removeOurs(updated, hit.legacy.entriesPath, hit.legacy.isOurs).root;
+    }
     for (const t of targets) {
       const entries = getPath(updated, t.path);
       if (entries.some(spec.isOurs)) continue; // 足りない経路にだけ足す（重ねない。利用者のほかのフックは保つ）
@@ -381,29 +492,47 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     }
     await mkdir(dirname(configFile), { recursive: true });
     await writeFileAtomic(configFile, JSON.stringify(updated, null, 2));
-    return { ok: true, message: null };
+    // 別のファイルの古いものは、新しいほうを書いた後に片づける（途中で失敗しても導入済みの状態が失われない）。
+    for (const hit of hits) {
+      if (hit.file !== configFile) await this.removeLegacyFile(spec, hit);
+    }
+    return {
+      ok: true,
+      message: hits.length > 0 ? "古い形のフックを、現行の形に入れ直しました" : null,
+    };
   }
 
   async uninstall(kind: AgentIntegrationKind): Promise<{ ok: boolean; message: string | null }> {
     const spec = HOOK_SPECS[kind];
     const configFile = spec.configFile(this.env, this.home);
     const hooksDir = spec.hooksDir(this.env, this.home);
+    // 1. 別のファイルにある古いものを片づける。
+    const hits = await this.legacyHits(spec);
+    let otherRemoved = false;
+    for (const hit of hits) {
+      if (hit.file === configFile) continue;
+      await this.removeLegacyFile(spec, hit);
+      otherRemoved = true;
+    }
+    // 2. 今の設定ファイル。
     const read = await readJsonObject(configFile);
-    if (!read.ok)
-      return { ok: false, message: `設定ファイルを解釈できませんでした（${configFile}）` };
-    // 全経路から自分のエントリを除く。どの経路にも無いときだけ「未導入でした」（`SessionStart` だけ手で消した状態からも外せる）。
+    if (!read.ok) return otherRemoved ? { ok: true, message: null } : unparsable(spec, configFile);
+    // 3. 全経路から自分のエントリと、同じファイルにある古いエントリを除く。どこにも無いときだけ「未導入でした」。
     let updated = read.data;
     let found = false;
     for (const path of [spec.entriesPath, ...(spec.extraEntries ?? []).map((e) => e.path)]) {
-      const entries = getPath(updated, path);
-      if (!entries.some(spec.isOurs)) continue;
-      found = true;
-      const remaining = entries.filter((e) => !spec.isOurs(e));
-      // 自分のエントリを除いて空になった経路は、キーごと消す（元から空だった経路・自分のエントリが無かった経路は触らない）。
-      updated =
-        remaining.length === 0 ? deletePath(updated, path) : setPath(updated, path, remaining);
+      const r = removeOurs(updated, path, spec.isOurs);
+      updated = r.root;
+      found ||= r.found;
     }
-    if (!found) return { ok: true, message: "未導入でした" };
+    for (const legacy of spec.legacy ?? []) {
+      if (legacy.configFile(this.env, this.home) !== configFile) continue;
+      const r = removeOurs(updated, legacy.entriesPath, legacy.isOurs);
+      updated = r.root;
+      found ||= r.found;
+    }
+    if (!found)
+      return otherRemoved ? { ok: true, message: null } : { ok: true, message: "未導入でした" };
 
     await writeFileAtomic(configFile, JSON.stringify(updated, null, 2));
     const scriptPath = hookScriptPathFor(hooksDir);

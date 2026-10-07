@@ -69,11 +69,11 @@ AGENTS.md「点検とテストの掛け方」に従い、壊れやすいタス�
 
 ## タスク
 
-- [ ] T1: `HookSpec` に `legacy` を足し、status / install / uninstall が古いものを見るようにする。grok を入れ子に変える。**タスク点検あり（T2 とまとめて）**。
+- [x] T1: `HookSpec` に `legacy` を足し、status / install / uninstall が古いものを見るようにする。grok を入れ子に変える。**タスク点検あり（T2 とまとめて）**。
       対象: `packages/server/src/agent/AgentIntegrationInstaller.ts`・`AgentIntegrationInstaller.test.ts` / 根拠: research G2・G3、design「`HookSpec` に足す項目」「振る舞いの詳細」、decisions D1
       依存: なし
       AC: AC1, AC2, AC8, AC-I2
-- [ ] T2: devin の書き先を `~/.config/devin/config.json`（Windows は `%APPDATA%\devin\config.json`）の `hooks` キーに変え、古い `hooks.json` を片づける。コメントつきは断る。**タスク点検あり**。
+- [x] T2: devin の書き先を `~/.config/devin/config.json`（Windows は `%APPDATA%\devin\config.json`）の `hooks` キーに変え、古い `hooks.json` を片づける。コメントつきは断る。**タスク点検あり**。
       対象: `packages/server/src/agent/AgentIntegrationInstaller.ts`・`AgentIntegrationInstaller.test.ts` / 根拠: research D1・D2・D5・D6、decisions D2・D3
       依存: T1
       AC: AC3, AC4, AC5, AC8, AC-I2
