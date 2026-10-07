@@ -1,0 +1,10 @@
+schema: 11
+slug: ext-host
+current: requirements
+approved: []
+mode: autonomous
+profile: full
+humanGates: []
+maxSendBacks: 3
+dependsOn: [20261007-soda-extensions]
+harnessRev: unknown

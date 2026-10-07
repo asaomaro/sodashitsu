@@ -1,8 +1,8 @@
 schema: 11
 slug: soda-extensions
-current: requirements
-approved: []
-mode: interactive
+current: tasks
+approved: [requirements, research, design, tasks]
+mode: autonomous
 profile: full
 humanGates: []
 maxSendBacks: 3

@@ -11,6 +11,7 @@ export * from "./image.js";
 export * from "./file.js";
 export * from "./graph.js";
 export * from "./ask.js";
+export * from "./display.js";
 export * from "./messages.js";
 export * from "./paneSocket.js";
 export * from "./events.js";

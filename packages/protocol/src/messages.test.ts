@@ -472,3 +472,71 @@ describe("ask.media・ask.features・ask.answer の新しい形（20261004-ask-m
     expect(AskAnswerParams.safeParse({ ...base, answers: { t: rows } }).success).toBe(false);
   });
 });
+
+describe("表示の面（display.*。20261007-soda-extensions）", () => {
+  const P = "p1";
+  it("METHOD_SCHEMAS に 10 の方式を、それぞれの schema そのもので載せる", async () => {
+    const m = await import("./messages.js");
+    expect(m.METHOD_SCHEMAS["display.set"]).toBe(m.DisplaySetParams);
+    expect(m.METHOD_SCHEMAS["display.close"]).toBe(m.DisplayCloseParams);
+    expect(m.METHOD_SCHEMAS["display.list"]).toBe(m.DisplayListParams);
+    expect(m.METHOD_SCHEMAS["display.wait"]).toBe(m.DisplayWaitParams);
+    expect(m.METHOD_SCHEMAS["display.features"]).toBe(m.DisplayFeaturesParams);
+    expect(m.METHOD_SCHEMAS["display.subscribe"]).toBe(m.DisplaySubscribeParams);
+    expect(m.METHOD_SCHEMAS["display.get"]).toBe(m.DisplayGetParams);
+    expect(m.METHOD_SCHEMAS["display.action"]).toBe(m.DisplayActionParams);
+    expect(m.METHOD_SCHEMAS["display.dismiss"]).toBe(m.DisplayDismissParams);
+    expect(m.METHOD_SCHEMAS["display.report"]).toBe(m.DisplayReportParams);
+  });
+
+  it("display.set: 中身の型はここでは問わない（規則の外は invalid_display にするため）が、paneId は要る", async () => {
+    const { DisplaySetParams } = await import("./messages.js");
+    expect(DisplaySetParams.safeParse({ paneId: P, name: "x", kind: "panel", format: "text", content: "c" }).success).toBe(true);
+    expect(DisplaySetParams.safeParse({ paneId: P, name: 5, kind: {}, content: [] }).success).toBe(true);
+    expect(DisplaySetParams.safeParse({ name: "x" }).success).toBe(false);
+  });
+
+  it("display.close / dismiss: どちらか 1 つ", async () => {
+    const { DisplayCloseParams, DisplayDismissParams } = await import("./messages.js");
+    expect(DisplayCloseParams.safeParse({ paneId: P, name: "a" }).success).toBe(true);
+    expect(DisplayCloseParams.safeParse({ paneId: P, all: true }).success).toBe(true);
+    expect(DisplayCloseParams.safeParse({ paneId: P }).success).toBe(false);
+    expect(DisplayCloseParams.safeParse({ paneId: P, all: false }).success).toBe(false);
+    expect(DisplayCloseParams.safeParse({ paneId: P, name: "a", all: true }).success).toBe(false);
+    expect(DisplayCloseParams.safeParse({ paneId: P, name: "a b" }).success).toBe(false);
+    expect(DisplayDismissParams.safeParse({ id: "x" }).success).toBe(true);
+    expect(DisplayDismissParams.safeParse({ paneId: P }).success).toBe(true);
+    expect(DisplayDismissParams.safeParse({}).success).toBe(false);
+    expect(DisplayDismissParams.safeParse({ id: "x", paneId: P }).success).toBe(false);
+  });
+
+  it("display.wait: timeoutMs は 1,000〜60,000・names は 8 個まで", async () => {
+    const { DisplayWaitParams } = await import("./messages.js");
+    const ok = { paneId: P, timeoutMs: 30_000 };
+    expect(DisplayWaitParams.safeParse(ok).success).toBe(true);
+    expect(DisplayWaitParams.safeParse({ ...ok, since: 0, epoch: "e", names: ["a", "b"] }).success).toBe(true);
+    for (const timeoutMs of [999, 60_001, 1.5, "1000"]) expect(DisplayWaitParams.safeParse({ ...ok, timeoutMs }).success).toBe(false);
+    expect(DisplayWaitParams.safeParse({ paneId: P }).success).toBe(false);
+    expect(DisplayWaitParams.safeParse({ ...ok, names: Array.from({ length: 9 }, (_, i) => `n${i}`) }).success).toBe(false);
+    expect(DisplayWaitParams.safeParse({ ...ok, since: -1 }).success).toBe(false);
+  });
+
+  it("display.subscribe: features は 8 個まで", async () => {
+    const { DisplaySubscribeParams } = await import("./messages.js");
+    expect(DisplaySubscribeParams.safeParse({ features: ["panel", "band", "actions"] }).success).toBe(true);
+    expect(DisplaySubscribeParams.safeParse({ features: Array.from({ length: 9 }, () => "x") }).success).toBe(false);
+    expect(DisplaySubscribeParams.safeParse({}).success).toBe(false);
+  });
+
+  it("display.get / action / report", async () => {
+    const { DisplayGetParams, DisplayActionParams, DisplayReportParams } = await import("./messages.js");
+    expect(DisplayGetParams.safeParse({ id: "x", offset: 0 }).success).toBe(true);
+    expect(DisplayGetParams.safeParse({ id: "x", offset: -1 }).success).toBe(false);
+    expect(DisplayGetParams.safeParse({ id: "x", offset: 1.5 }).success).toBe(false);
+    expect(DisplayActionParams.safeParse({ id: "x", rev: 1, action: "go", data: { a: "b" } }).success).toBe(true);
+    expect(DisplayActionParams.safeParse({ id: "x", rev: 0, action: "go" }).success).toBe(false);
+    expect(DisplayReportParams.safeParse({ id: "x", problem: "navigated" }).success).toBe(true);
+    expect(DisplayReportParams.safeParse({ id: "x", problem: "unresponsive" }).success).toBe(true);
+    expect(DisplayReportParams.safeParse({ id: "x", problem: "focus_steal" }).success).toBe(false); // この版には無い
+  });
+});

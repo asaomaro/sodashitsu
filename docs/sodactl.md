@@ -226,7 +226,7 @@ sodactl pane control 3f2a9c10 --takeover                       # 既に所有者
 - **質問のフォーム**（`ask`）: 定義全体 256 KiB（JSON の UTF-8）・質問 100・1 つの質問の選択肢 200・`id`／`value` 200 文字・`title`／`label`／`page` 等の短い文字列 500 文字・
   `intro`／`help`／`desc` 4,000 文字・1 つの選択肢の `colors` 16 個（超えた分は捨てる）。回答の自由入力・`text` の答え・補足・質問ごとの自由記述（`comments`）の 1 つは 10,000 文字まで。自由記述の長さの合計は 100,000 文字まで（超える回答は断られる）。`--timeout` は 1,000〜86,400,000 ミリ秒。
   定義の上限の超過は使い方の誤り（終了コード 2）。標準入力は 1 MiB までしか読まない。サーバが同時に待てる質問は総数 32・1 つの接続あたり 8 まで（超えると `ask_busy`。終了コード 1）。
-- **ログイン不要の受け口**（`pane.sock`。下の「ログイン不要の受け口（pane.sock）」）: 同時に開いている接続 64（超えた接続と `soda handoff` の途中の接続は、要求を読まずに `pane_socket_busy`。sodactl は 5 秒まで繋ぎ直す）・要求の 1 行 1 MiB（超えると `bad_request`）・
+- **ログイン不要の受け口**（`pane.sock`。下の「ログイン不要の受け口（pane.sock）」）: 同時に開いている接続 64（超えた接続と `soda handoff` の途中の接続は、要求を読まずに `pane_socket_busy`。sodactl は 5 秒まで繋ぎ直す）・要求の 1 行 4 MiB（超えると `bad_request`。1 MiB から上げた。表示の面の中身 2 MiB を載せるため）・
   接続してから要求の 1 行が揃うまで 10 秒（過ぎたら何も返さずに切る）。受け口から出した質問も、上の総数 32 と「1 つの pane に同時に 1 つ」に数える。
 - 複数ホストの中継（`--machine`・`/ws?machine=`）では、判定するのは**先のマシンの `soda serve`**（`docs/machines.md`）。
 
@@ -758,6 +758,11 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
   （画像・音・成果物の形に合うものだけ。中身は質問の画面にだけ届き、プロセスへは返らない）、`https://` の画像 URL を**サーバから外へ取りに行かせられる**（公開アドレスの 443 だけ。クエリにデータを載せれば、外へ持ち出す経路になりうる。
   サーバのログには、取得の宛先の**ホスト名だけ**を残す〔URL の全文・パス・クエリは残さない〕）。「同じ OS の利用者を信頼する」前提には沿うが、読み取り・外部通信を制限したサンドボックスの中のエージェントも、受け口を通じて**サーバの権限を借りられる**。
   そうした環境では、`SODA_PANE_SOCKET` の socket へ繋げられないようにする（サンドボックスの設定で socket を許可しない）。
+- **`display`（表示の面）の操作は、`ask` と違い、ほかの pane の操作の値を読める**（20261007-soda-extensions）。受け口に載せた `display.set`・`close`・`list`・`wait`・`features` は、対象が要求の `paneId`（名乗った pane）だけで、
+  引数に `paneId` は持たない（載せると `invalid_params`）。だが**名乗る pane の id を受け口は検証しない**（実在だけ）ので、同じ OS の利用者の別のプロセスが、ほかの pane の id を知っていれば、その pane の面を出す・閉じる・
+  一覧する、そして **`display wait`/`events`（`events` の終わりの行 `display.end` の `reason` は `pane_closed`・`connection_closed`・`unsupported`・`busy`。`--timeout` の時間切れの直前の 1 秒未満に起きた操作は受け取れないことがある）でその pane の面への操作の値（パネルのフォームに利用者が入れた値）を読める**。`ask` で出来たのは偽の質問を出すことまでだった。
+  守っているのは「同じ OS の利用者」の境界で、**pane 同士の境界ではない**。パネルのフォームに、秘密（パスワード・token など）を入れさせない。pane の id は `SODA_PANE_ID`・`sodactl snapshot`（ログイン済み）などで分かる。
+  （接続元の pid から pane を逆引きして名乗りを検証する案は、別の作業の候補。）
 - 受け口から出来るのは登録した操作だけなので、pane の入出力・ほかの pane の操作・設定・認証には届かない（`agent.send_keys`・`workspace.create` 等の `/ws` の RPC は、今までどおりログインした接続だけ）。
 - 名前付き session（`soda serve --session <名前>`）は状態ディレクトリが別なので、受け口も session ごとに別。ある session の受け口からは、別の session の pane を名乗れない（同じ OS の利用者なら、その session の受け口へ繋げば名乗れる）。
 
@@ -765,7 +770,7 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
 
 載せてよいのは、次の 4 つを全部満たす操作だけ（受け口には認証が無いため）。**`/ws` の handler をそのまま登録しない**。
 
-1. 対象が呼び出し元の pane に限られる。
+1. 対象が呼び出し元の pane に限られる（引数に対象の pane を持たない schema で受け、handler は `ctx.paneId` だけを使う。**ただし名乗る pane の id は検証されない**ので、「呼び出し元の pane」はプロセスの自己申告。pane 同士の境界にはならない——上の「安全の境界」の `display`）。
 2. pane のプログラムがもともと出来ることを超えない（pane の入出力・ほかの pane・設定・認証に触れない）。
 3. 秘密を返さない。
 4. 量の上限がある。
@@ -774,7 +779,7 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
 - サーバ: `packages/server/src/panesocket/PaneOpRegistry.ts` の `PaneOpDef`（名前・引数の schema・handler）を作り、`packages/server/src/composeServer.ts` で `register` する（例は `panesocket/askOp.ts`）。
 - 結果を待つ操作（返事までに時間がかかる）は、handler に渡る `ctx.signal` の abort で自分の待ちを取り消す（接続が終わると abort する。取り消しの配線を登録の外に持たない。例は `panesocket/askOp.ts`）。
 - sodactl: `packages/cli/src/paneSocket.ts` の `viaPaneSocketOrSession` を使う（受け口を使うか・`/ws` へ落ちるかの判断をコマンドごとに持たない）。
-- やりとりの形は `packages/protocol/src/paneSocket.ts`: **1 接続 1 要求**。要求は 1 行の JSON（`{"v":1,"op":"<名前>","paneId":"<id>","params":{…}}`。上限 1 MiB）、返事も 1 行の JSON
+- やりとりの形は `packages/protocol/src/paneSocket.ts`: **1 接続 1 要求**。要求は 1 行の JSON（`{"v":1,"op":"<名前>","paneId":"<id>","params":{…}}`。上限 4 MiB）、返事も 1 行の JSON
   （`{"ok":true,"result":…}` か `{"ok":false,"error":{"code","message"}}`。sodactl が読む上限は 8 MiB）で、受け口は返事を書いたら閉じる
   （要求を読まずに断るとき〔`pane_socket_busy`・行の上限の超過〕は、返事が相手に届くよう、相手が閉じるか 1 秒たつまで待ってから閉じる）。検査の順は「行の形（`bad_request`）→ 操作（`unknown_op`）→ pane の実在（`not_found`）→ 引数（`invalid_params`）」。
   受け口だけの code は `unknown_op`・`bad_request`・`pane_socket_busy` の 3 つ。呼び出し側は要求を書いた後、返事の行を読むまで接続を閉じない（受け口は相手が閉じたら、呼び出し元が終わったものとして操作を取り消す）。

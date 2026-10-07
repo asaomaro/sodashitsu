@@ -11,6 +11,15 @@ import {
   ASK_TIMEOUT_DEFAULT_MS,
   ASK_TIMEOUT_MAX_MS,
   ASK_TIMEOUT_MIN_MS,
+  DISPLAY_FORMATS,
+  DISPLAY_KINDS,
+  DISPLAY_NAME_RE,
+  DISPLAY_SIZE,
+  DISPLAY_TTL_MAX_MS,
+  DISPLAY_TTL_MIN_MS,
+  DISPLAY_WAIT_NAMES_MAX,
+  type DisplayFormat,
+  type DisplayKind,
   AGENT_REPORT_SOCKET_BASENAME,
   PANE_SOCKET_BASENAME,
 } from "@sodashitsu/protocol";
@@ -70,6 +79,12 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl graph node rekey <pane> <newPane> [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl graph history [<linkId>] [--limit <N>] [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl ask [--timeout <ms>] [--url <URL>] [--token <TOKEN>] < spec.json",
+  "sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] (--text <text> | --markdown-file <path> | --html-file <path> | [--format text|markdown|html] < stdin) [--wait [--timeout <ms>]] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl display close (<name> | --all) [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl display list [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl display wait [<name>] [--since <seq> --epoch <epoch>] [--timeout <ms>] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl display events [<name>...] [--since <seq> --epoch <epoch>] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl display --features [--url <URL>] [--token <TOKEN>]",
   "sodactl skill",
 ];
 
@@ -207,6 +222,34 @@ export type GraphAction =
   | { kind: "node-rekey"; pane: string; newPane: string }
   | { kind: "history"; linkId: string | undefined; limit: number | undefined };
 
+/** `sodactl display set` の中身の出どころ（ファイルと標準入力の読み込みは `commands/display.ts`）。 */
+export type DisplaySource =
+  | { kind: "text"; text: string }
+  | { kind: "file"; format: "markdown" | "html"; path: string }
+  /** 標準入力。`--format` を省くと `text`。 */
+  | { kind: "stdin"; format: DisplayFormat };
+
+/** `sodactl display` の動作。`pane` は `--pane`（省くと呼び出し元の pane。完全な id か一意に決まる先頭の部分）。 */
+export type DisplayAction =
+  | {
+      kind: "set";
+      name: string;
+      displayKind: DisplayKind;
+      title: string | undefined;
+      size: number | undefined;
+      ttlMs: number | undefined;
+      source: DisplaySource;
+      wait: boolean;
+      /** `--wait` の全体の待ち時間（省くと待ち続ける）。 */
+      timeoutMs: number | undefined;
+      pane: string | undefined;
+    }
+  | { kind: "close"; name: string | undefined; all: boolean; pane: string | undefined }
+  | { kind: "list"; pane: string | undefined }
+  | { kind: "wait"; name: string | undefined; since: number | undefined; epoch: string | undefined; timeoutMs: number | undefined; pane: string | undefined }
+  | { kind: "events"; names: string[]; since: number | undefined; epoch: string | undefined; pane: string | undefined }
+  | { kind: "features" };
+
 export type Command =
   | { kind: "help" }
   | { kind: "skill" }
@@ -215,6 +258,8 @@ export type Command =
   | { kind: "workspace-close"; opts: GlobalOpts; workspaceId: string }
   | { kind: "workspace-rename"; opts: GlobalOpts; workspaceId: string; label: string }
   // 20261002-sodactl-ask。呼び出し元の pane の質問のフォームを、その pane を見ているブラウザに出す（定義は標準入力）。
+  // 20261007-soda-extensions。pane のプログラムの表示の面（パネル・帯）を出す・閉じる・操作を待つ。
+  | { kind: "display"; opts: GlobalOpts; action: DisplayAction }
   | { kind: "ask"; opts: GlobalOpts; timeoutMs: number; /** `--features`: 定義を読まず、機能と上限を返す（20261004-ask-media-popup）。 */ features: boolean }
   // 20260927-sidebar-row-tokens（herdr の workspace/pane report-metadata のトークンの部分）。
   | { kind: "workspace-report-metadata"; opts: GlobalOpts; workspaceId: string; report: MetadataReportArgs }
@@ -433,6 +478,8 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
       const timeoutMs = raw === undefined ? ASK_TIMEOUT_DEFAULT_MS : parseAskTimeout(raw);
       return { kind: "ask", opts: globalOptsFrom(values, env), timeoutMs, features: bools.has("--features") };
     }
+    case "display":
+      return parseDisplay(word1, rest0, env);
     case "workspace":
       return parseWorkspace(word1, rest0, env);
     case "tab":
@@ -674,6 +721,136 @@ function parseStreamDimension(raw: string, flag: string): number {
 }
 
 const ASK_USAGE = "sodactl ask [--timeout <ms>] < spec.json   |   sodactl ask --features";
+
+/** `sodactl display` の使い方の案内（誤りに添える）。 */
+export const DISPLAY_USAGE = USAGE_LINES.filter((l) => l.startsWith("sodactl display")).join("\n");
+/** `display wait` / `set --wait` の `--timeout` の範囲（全体の待ち時間）。 */
+const DISPLAY_TOTAL_TIMEOUT_MIN_MS = 1_000;
+const DISPLAY_TOTAL_TIMEOUT_MAX_MS = 86_400_000;
+
+function displayName(raw: string): string {
+  if (!DISPLAY_NAME_RE.test(raw)) {
+    throw new CliUsageError(`invalid display name: ${raw}`, `名前は 1〜32 文字の英数字と _ - にしてください。\n${DISPLAY_USAGE}`);
+  }
+  return raw;
+}
+
+function displayInt(raw: string, flag: string, min: number, max: number): number {
+  const n = Number(raw);
+  if (raw.trim() === "" || !Number.isInteger(n) || n < min || n > max) {
+    throw new CliUsageError(`invalid value for ${flag}: ${raw}`, `${flag} は ${min}〜${max} の整数にしてください。`);
+  }
+  return n;
+}
+
+/** `--since` と `--epoch` は組（片方だけは誤り）。 */
+function displaySinceEpoch(values: Map<string, string>): { since: number | undefined; epoch: string | undefined } {
+  const since = values.get("--since");
+  const epoch = values.get("--epoch");
+  if ((since === undefined) !== (epoch === undefined)) {
+    throw new CliUsageError("--since and --epoch must be given together", `--since と --epoch は組で指定してください（display.ready の epoch と、出来事の seq）。\n${DISPLAY_USAGE}`);
+  }
+  return { since: since === undefined ? undefined : displayInt(since, "--since", 0, Number.MAX_SAFE_INTEGER), epoch };
+}
+
+/** 20261007-soda-extensions。`display` の引数。対象は呼び出し元の pane（省略時）か `--pane`。`--machine` のときは `--pane` が要る（`parseMachinePrefixed`）。 */
+function parseDisplay(sub: string | undefined, rest: readonly string[], env: NodeJS.ProcessEnv): Command {
+  const base = ["--url", "--token", "--pane"];
+  if (sub === "--features") {
+    const { positionals, values } = parseFlags(rest, { values: ["--url", "--token"] });
+    rejectExtra(positionals, 0, DISPLAY_USAGE);
+    return { kind: "display", opts: globalOptsFrom(values, env), action: { kind: "features" } };
+  }
+  if (sub === "set") {
+    // `--title`・`--text` は `--` で始まる値も `--title=<値>` の形で渡せる（inline）。
+    const withValues = parseFlags(rest, {
+      values: [...base, "--kind", "--size", "--ttl-ms", "--markdown-file", "--html-file", "--format", "--timeout", "--title", "--text"],
+      inline: ["--title", "--text"],
+      bools: ["--wait"],
+    });
+    const v = withValues.values;
+    const pos = withValues.positionals;
+    const name = displayName(requirePositional(pos, 0, "name", DISPLAY_USAGE));
+    rejectExtra(pos, 1, DISPLAY_USAGE);
+    const kindRaw = v.get("--kind");
+    if (kindRaw === undefined) throw new CliUsageError("missing --kind", `--kind panel|band が要ります。\n${DISPLAY_USAGE}`);
+    if (!(DISPLAY_KINDS as readonly string[]).includes(kindRaw)) {
+      throw new CliUsageError(`invalid value for --kind: ${kindRaw}`, `--kind は ${DISPLAY_KINDS.join("|")} にしてください。`);
+    }
+    const displayKind = kindRaw as DisplayKind;
+    const sizeRaw = v.get("--size");
+    const range = DISPLAY_SIZE[displayKind];
+    const size = sizeRaw === undefined ? undefined : displayInt(sizeRaw, "--size", range.min, range.max);
+    const ttlRaw = v.get("--ttl-ms");
+    const ttlMs = ttlRaw === undefined ? undefined : displayInt(ttlRaw, "--ttl-ms", DISPLAY_TTL_MIN_MS, DISPLAY_TTL_MAX_MS);
+    // 中身の指定は 1 つだけ。どれも無ければ標準入力（形は --format。省くと text）。
+    const given = (["--text", "--markdown-file", "--html-file"] as const).filter((f) => v.has(f));
+    if (given.length > 1) {
+      throw new CliUsageError(`only one of ${given.join(", ")} can be given`, `中身の指定は --text・--markdown-file・--html-file のどれか 1 つです。標準入力で渡すときは、どれも付けません。\n${DISPLAY_USAGE}`);
+    }
+    const formatRaw = v.get("--format");
+    let source: DisplaySource;
+    if (given.length === 1) {
+      if (formatRaw !== undefined) {
+        throw new CliUsageError("--format can only be used with stdin", `--format は標準入力で渡すときだけ付けられます。\n${DISPLAY_USAGE}`);
+      }
+      const f = given[0]!;
+      source = f === "--text" ? { kind: "text", text: v.get("--text")! } : { kind: "file", format: f === "--markdown-file" ? "markdown" : "html", path: v.get(f)! };
+    } else {
+      if (formatRaw !== undefined && !(DISPLAY_FORMATS as readonly string[]).includes(formatRaw)) {
+        throw new CliUsageError(`invalid value for --format: ${formatRaw}`, `--format は ${DISPLAY_FORMATS.join("|")} にしてください。`);
+      }
+      source = { kind: "stdin", format: (formatRaw ?? "text") as DisplayFormat };
+    }
+    const wait = withValues.bools.has("--wait");
+    const timeoutRaw = v.get("--timeout");
+    if (timeoutRaw !== undefined && !wait) throw new CliUsageError("--timeout can only be used with --wait", `set の --timeout は --wait と一緒に使います。\n${DISPLAY_USAGE}`);
+    const timeoutMs = timeoutRaw === undefined ? undefined : displayInt(timeoutRaw, "--timeout", DISPLAY_TOTAL_TIMEOUT_MIN_MS, DISPLAY_TOTAL_TIMEOUT_MAX_MS);
+    return {
+      kind: "display",
+      opts: globalOptsFrom(v, env),
+      action: { kind: "set", name, displayKind, title: v.get("--title"), size, ttlMs, source, wait, timeoutMs, pane: v.get("--pane") },
+    };
+  }
+  if (sub === "close") {
+    const { positionals, values, bools } = parseFlags(rest, { values: base, bools: ["--all"] });
+    const all = bools.has("--all");
+    if (all && positionals.length > 0) throw new CliUsageError("a name and --all cannot be given together", `名前か --all のどちらか 1 つです。\n${DISPLAY_USAGE}`);
+    if (!all && positionals.length === 0) throw new CliUsageError("missing name (or --all)", `名前か --all が要ります。\n${DISPLAY_USAGE}`);
+    rejectExtra(positionals, all ? 0 : 1, DISPLAY_USAGE);
+    return { kind: "display", opts: globalOptsFrom(values, env), action: { kind: "close", name: all ? undefined : displayName(positionals[0]!), all, pane: values.get("--pane") } };
+  }
+  if (sub === "list") {
+    const { positionals, values } = parseFlags(rest, { values: base });
+    rejectExtra(positionals, 0, DISPLAY_USAGE);
+    return { kind: "display", opts: globalOptsFrom(values, env), action: { kind: "list", pane: values.get("--pane") } };
+  }
+  if (sub === "wait") {
+    const { positionals, values } = parseFlags(rest, { values: [...base, "--since", "--epoch", "--timeout"] });
+    rejectExtra(positionals, 1, DISPLAY_USAGE);
+    const { since, epoch } = displaySinceEpoch(values);
+    const t = values.get("--timeout");
+    return {
+      kind: "display",
+      opts: globalOptsFrom(values, env),
+      action: {
+        kind: "wait",
+        name: positionals[0] === undefined ? undefined : displayName(positionals[0]),
+        since,
+        epoch,
+        timeoutMs: t === undefined ? undefined : displayInt(t, "--timeout", DISPLAY_TOTAL_TIMEOUT_MIN_MS, DISPLAY_TOTAL_TIMEOUT_MAX_MS),
+        pane: values.get("--pane"),
+      },
+    };
+  }
+  if (sub === "events") {
+    const { positionals, values } = parseFlags(rest, { values: [...base, "--since", "--epoch"] });
+    if (positionals.length > DISPLAY_WAIT_NAMES_MAX) throw new CliUsageError(`too many names (max ${DISPLAY_WAIT_NAMES_MAX})`, DISPLAY_USAGE);
+    const { since, epoch } = displaySinceEpoch(values);
+    return { kind: "display", opts: globalOptsFrom(values, env), action: { kind: "events", names: positionals.map(displayName), since, epoch, pane: values.get("--pane") } };
+  }
+  throw new CliUsageError(`unknown subcommand: sodactl display ${sub ?? ""}`.trimEnd(), DISPLAY_USAGE);
+}
 
 function parseAskTimeout(raw: string): number {
   const n = Number(raw);
@@ -1016,6 +1193,10 @@ function parseMachinePrefixed(argv: readonly string[], env: NodeJS.ProcessEnv): 
   // `ask` の対象は呼び出し元の pane（手元の SODA_PANE_ID）で、別のマシンの pane ではない。
   if (cmd.kind === "ask" && selector !== "local")
     throw new CliUsageError("--machine cannot be used with ask (the question is shown for the calling pane of this machine)", MACHINE_USAGE_LINE);
+  // `display` は、別のマシンの pane を指す `--pane` が要る（呼び出し元の pane は手元のもの）。`--features` は pane を取らない。
+  if (cmd.kind === "display" && selector !== "local" && cmd.action.kind !== "features" && cmd.action.pane === undefined) {
+    throw new CliUsageError("--machine needs --pane with display (the calling pane belongs to this machine)", `${MACHINE_USAGE_LINE}\n${DISPLAY_USAGE}`);
+  }
   // `local` は手元のサーバそのもの（サーバは `?machine=local` を行き先なしと同じに扱う）——自分の pane の歯止めを外さない。
   if (selector === "local") return cmd;
   const { caller: _caller, ...opts } = cmd.opts;

@@ -11,6 +11,7 @@ import type { MachineStatus, ServerSessionEntry } from "@sodashitsu/protocol";
 import type { CommandService } from "../../commands/CommandService.js";
 import type { ImageUploads } from "../../image/ImageUploads.js";
 import type { AskService } from "../../ask/AskService.js";
+import type { DisplayService } from "../../display/DisplayService.js";
 import type { FileAccess } from "../../file/FileAccess.js";
 import type { FileOpener } from "../../file/FileOpener.js";
 import type { FileUploads } from "../../file/FileUploads.js";
@@ -46,6 +47,8 @@ export interface MethodDeps {
   images?: ImageUploads;
   /** 質問のフォーム（20261002-sodactl-ask）。無ければ `ask.*` を登録しない。 */
   asks?: AskService;
+  /** 表示の面（20261007-soda-extensions）。無ければ `display.*` を登録しない。 */
+  displays?: DisplayService;
   /** 端末のファイルのリンクとドロップ。無ければ `file.*` を登録しない。 */
   files?: { access: FileAccess; opener: FileOpener; uploads: FileUploads };
   /** 共有の設定（20260927-cli-mode）。無ければ `prefs.*` を登録しない。 */

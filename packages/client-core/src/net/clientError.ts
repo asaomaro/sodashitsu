@@ -95,6 +95,11 @@ const MESSAGES: Record<ErrorCode, string> = {
   invalid_ask_spec: "質問の定義が受け付けられませんでした。",
   ask_busy: "この pane から出した質問が、まだ答えを待っています。",
   ask_closed: "この質問は既に閉じられています。",
+  // 表示の面（`sodactl display`。20261007-soda-extensions）。通常は `DisplayController` が自分の文言で知らせる——表の網羅のため。
+  invalid_display: "表示の内容が受け付けられませんでした。",
+  display_limit: "表示の数か大きさの合計が上限に達しています。",
+  display_busy: "表示の更新が多すぎます。少し待ってからやり直してください。",
+  display_closed: "この表示は既に閉じられています。",
   rev_conflict: "グラフがほかの画面・sodactl で先に変わったため、保存しませんでした。最新の内容でやり直してください。",
 };
 

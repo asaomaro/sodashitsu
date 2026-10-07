@@ -83,7 +83,12 @@ export type ErrorCode =
   // 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）。
   | "invalid_ask_spec" // 定義の誤り・上限の超過
   | "ask_busy" // 同じ pane に待っている質問がある
-  | "ask_closed"; // その質問はもう無い（回答済み・取り消し・時間切れ）。`ask.subscribe` していない接続への要求も同じ
+  | "ask_closed" // その質問はもう無い（回答済み・取り消し・時間切れ）。`ask.subscribe` していない接続への要求も同じ
+  // 表示の面（`sodactl display`。20261007-soda-extensions）。
+  | "invalid_display" // `display.set` の引数が規則の外（名前・種類・形・題・大きさ・中身の上限・ttlMs）
+  | "display_limit" // 数・合計の上限（pane のパネル 4・帯 2、サーバ全体 64・32 MiB）
+  | "display_busy" // 頻度の上限（set の回数・量）・待ちの上限（pane 4・全体 16）
+  | "display_closed"; // その面はもう無い。`display.subscribe` していない接続からの get・action・dismiss・report も同じ
 
 export interface ProtocolError {
   code: ErrorCode;

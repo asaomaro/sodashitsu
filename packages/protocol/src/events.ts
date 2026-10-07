@@ -11,6 +11,7 @@ import type {
 import type { AgentIntegrationStatusResult, SharedPrefs } from "./messages.js";
 import type { Graph, LinkRun } from "./graph.js";
 import type { CommandListResult } from "./commands.js";
+import type { DisplayClosedReasonValue, DisplayInfo } from "./display.js";
 
 /**
  * イベント（design.md「WebSocket の通信」のイベント表。architecture.md の独立点検で data の形を確定）。
@@ -185,6 +186,20 @@ export interface AskClosedEvent {
   data: { askId: string; paneId: string };
 }
 
+/**
+ * 面が出た・更新された（`sodactl display set`。20261007-soda-extensions）。**中身は載せない**（見出しだけ）——全クライアントへ配るので、軽い接続にも届く。
+ * 面を出せる画面（`display.subscribe` 済み）は `display.get` で中身を取る。
+ */
+export interface DisplayUpdatedEvent {
+  event: "display.updated";
+  data: { display: DisplayInfo };
+}
+/** 面が消えた（閉じた・利用者が閉じた・時間切れ・pane が閉じた・画面の報告）。全クライアントへ配るが、知らない id は無視する。 */
+export interface DisplayRemovedEvent {
+  event: "display.removed";
+  data: { id: string; paneId: string; name: string; reason: DisplayClosedReasonValue };
+}
+
 export type ServerEvent =
   | WorkspaceCreatedEvent
   | WorkspaceUpdatedEvent
@@ -215,6 +230,8 @@ export type ServerEvent =
   | GraphChangedEvent
   | GraphFiredEvent
   | AskOpenedEvent
-  | AskClosedEvent;
+  | AskClosedEvent
+  | DisplayUpdatedEvent
+  | DisplayRemovedEvent;
 
 export type ServerEventName = ServerEvent["event"];

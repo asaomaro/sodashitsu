@@ -21,8 +21,12 @@ export const AGENT_REPORT_SOCKET_BASENAME = "agent-report.sock";
 
 /** やりとりの版（要求の `v`）。 */
 export const PANE_SOCKET_VERSION = 1;
-/** 要求 1 行の上限（改行を除く UTF-8 のバイト数）。質問の定義の上限（`ASK_SPEC_MAX_BYTES`）より大きい。 */
-export const PANE_SOCKET_MAX_LINE_BYTES = 1024 * 1024;
+/**
+ * 要求 1 行の上限（改行を除く UTF-8 のバイト数）。質問の定義の上限（`ASK_SPEC_MAX_BYTES`）より大きい。
+ * 4 MiB（20261007-soda-extensions の D25。1 MiB から上げた）: 表示の面の中身（2 MiB まで）は JSON の文字列として 1 行に載る。`/ws` の 1 通の上限（4 MiB）と同じ値。
+ * 受け口の全部の操作に効く（質問の定義は 256 KiB までなので、`ask.open` の動きは変わらない）。`display.ts` の `DISPLAY_REQUEST_LINE_BYTES` と同じ値。
+ */
+export const PANE_SOCKET_MAX_LINE_BYTES = 4 * 1024 * 1024;
 /**
  * 返事 1 行の上限（改行を除く UTF-8 のバイト数。呼び出し側が超えた返事を読まずに切る）。要求の上限より大きくする——
  * `ask.open` の結果は回答の自由入力（1 つ `ASK_ANSWER_TEXT_MAX` 文字まで × 質問 `ASK_QUESTIONS_MAX`）と自由記述（合計 `ASK_COMMENTS_TOTAL_MAX` 文字まで）を含み、多バイト文字なら 3.3MB に届く。
@@ -64,3 +68,12 @@ export const PANE_OP_ASK_FEATURES = "ask.features";
 /** `ask.open` の引数（`{ spec, timeoutMs }`）。`paneId` は要求の外側の `paneId` を使うので引数には無い。 */
 export const PaneAskOpenParams = AskOpenParams.omit({ paneId: true });
 export type PaneAskOpenParams = z.infer<typeof PaneAskOpenParams>;
+
+/** 表示の面（`sodactl display`。20261007-soda-extensions）。引数の schema（`PaneDisplay*Params`）は `messages.ts` にある: `/ws` の schema から `paneId` を除いたもの（strict——`paneId` を載せたら `invalid_params`）。 */
+export const PANE_OP_DISPLAY_SET = "display.set";
+export const PANE_OP_DISPLAY_CLOSE = "display.close";
+export const PANE_OP_DISPLAY_LIST = "display.list";
+/** 次の出来事か `timeoutMs` まで応答しない長い要求（接続が終わると待ちを外す）。 */
+export const PANE_OP_DISPLAY_WAIT = "display.wait";
+/** 機能確認（引数なし。古い受け口は `unknown_op`）。 */
+export const PANE_OP_DISPLAY_FEATURES = "display.features";

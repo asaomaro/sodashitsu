@@ -435,6 +435,56 @@ describe.skipIf(process.platform === "win32")(
       expect(await result).toEqual({ status: "answered", answers: { a: "y" }, comments: { a: "金曜は避けたい" } });
     });
 
+    it("表示の面（20261007-soda-extensions の T4・不確かな点 9）: 中継の接続から 2 MiB の中身と、1 通が 4 MiB 近い set を送れ、手元の画面（中継越し）が display.subscribe・get で小分けに取れる", async () => {
+      const { local, remoteServer } = await startPair({ withMachine: true });
+      const { cookie, port } = await login(local);
+      const localWs = new Client((await openWs(port, "", cookie)) as WebSocket);
+      cleanups.push(() => localWs.ws.close());
+      await localWs.request("client.hello", { protocol: 1, kind: "external" });
+      await until("online", async () => {
+        const r = await localWs.request<{ machines: MachineStatus[] }>("machine.list", {});
+        return r.machines[0]?.state === "online" ? true : undefined;
+      });
+      const remote = remoteServer()!;
+      const paneId = remote.session.snapshot().panes[0]!.id;
+      // 中継の接続（external）: `sodactl display --machine` に当たる
+      const viaRelay = new Client((await openWs(port, "?machine=Remote", cookie)) as WebSocket);
+      cleanups.push(() => viaRelay.ws.close());
+      await viaRelay.request("client.hello", { protocol: 1, kind: "external" });
+      // そのマシンを表示中の画面（desktop）
+      const browser = new Client((await openWs(port, "?machine=Remote", cookie)) as WebSocket);
+      cleanups.push(() => browser.ws.close());
+      await browser.request("client.hello", { protocol: 1, kind: "desktop" });
+      expect(await browser.request("display.subscribe", { features: ["panel", "band", "actions"] })).toEqual({ displays: [] });
+
+      const fetchAll = async (id: string): Promise<Buffer> => {
+        const parts: Buffer[] = [];
+        for (let offset = 0; ; offset += 768 * 1024) {
+          const c = await browser.request<{ base64: string; eof: boolean }>("display.get", { id, offset });
+          parts.push(Buffer.from(c.base64, "base64"));
+          if (c.eof) break;
+        }
+        return Buffer.concat(parts);
+      };
+      // 2 MiB ちょうど
+      const two = "a".repeat(2 * 1024 * 1024);
+      const r1 = await viaRelay.request<{ display: { id: string; bytes: number } }>("display.set", { paneId, name: "two", kind: "panel", format: "html", content: two });
+      expect(r1.display.bytes).toBe(two.length);
+      const got1 = await until("display.updated over the relay", async () => browser.events.find((e) => e.event === "display.updated")?.data);
+      expect(got1).toMatchObject({ display: { id: r1.display.id } });
+      expect((await fetchAll(r1.display.id)).toString("utf8")).toBe(two);
+      // 引用符だけの 2 MiB 弱: JSON のエスケープで、要求の 1 通が 4 MiB に近づく
+      const quotes = '"'.repeat(2 * 1024 * 1024 - 1024);
+      const r2 = await viaRelay.request<{ display: { id: string } }>("display.set", { paneId, name: "quotes", kind: "panel", format: "html", content: quotes });
+      expect((await fetchAll(r2.display.id)).toString("utf8")).toBe(quotes);
+      // 画面の操作が、中継越しの wait に届く
+      expect(await viaRelay.request("display.features", {})).toMatchObject({ renderers: { panel: 1 } });
+      const waiting = viaRelay.request<{ events: unknown[] }>("display.wait", { paneId, timeoutMs: 20_000 });
+      await new Promise((r) => setTimeout(r, 100));
+      await browser.request("display.action", { id: r1.display.id, rev: 1, action: "go" });
+      expect((await waiting).events).toMatchObject([{ type: "display.action", action: "go" }]);
+    });
+
     it("質問のフォームの画像・成果物（20261004-ask-media-popup の AC20）: ファイルを読むのはリモートのサーバで、手元の画面は中継越しに ask.media で受け取れる。機能確認も中継を通る", async () => {
       const { local, remoteServer } = await startPair({ withMachine: true });
       const { cookie, port } = await login(local);

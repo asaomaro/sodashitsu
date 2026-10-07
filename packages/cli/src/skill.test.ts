@@ -19,7 +19,7 @@ const SKILL_PATH = join(
 );
 const skill = readFileSync(SKILL_PATH, "utf8");
 
-const GROUPS = new Set(["workspace", "tab", "pane", "agent", "graph"]);
+const GROUPS = new Set(["workspace", "tab", "pane", "agent", "graph", "display"]);
 /** 3 語のコマンドの 2 語目（`graph link add`・`graph node rm` 等。20260927-agent-graph）。 */
 const SUBGROUPS = new Set(["graph link", "graph node"]);
 
@@ -37,7 +37,8 @@ function commandOf(words: readonly string[]): string {
 
 /** `USAGE_LINES` のコマンド（例 `pane split`・`snapshot`）と `help`。 */
 const KNOWN = new Set([
-  ...USAGE_LINES.map((line) => commandOf(line.split(/\s+/).slice(1))),
+  // `sodactl display --features` のように `--` で始まる語は、本文の `mentionedCommands`（英小文字の語だけ拾う）に合わせて落とす。
+  ...USAGE_LINES.map((line) => commandOf(line.split(/\s+/).slice(1).filter((w) => !/^[-\[<(]/.test(w)))),
   "help",
 ]);
 
