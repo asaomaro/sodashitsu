@@ -23,3 +23,5 @@ events:
   - { ts: 2026-10-07T20:58:27Z, phase: design, event: approved, metrics: { doc_check_rounds: 2, doc_check_findings: 35, doc_check_mode: delegated } }
   - { ts: 2026-10-07T20:58:27Z, phase: tasks, event: start }
   - { ts: 2026-10-07T20:58:40Z, phase: tasks, event: approved, metrics: { tasks_planned: 30, tasks_anchored: 30, doc_check_rounds: 2, doc_check_findings: 28, doc_check_mode: delegated, ac_total: 41, ac_covered: 41, tasks_no_ac: 0, tasks_ac_none: 0 } }
+  - { ts: 2026-10-07T21:00:46Z, phase: coding, event: start }
+  - { ts: 2026-10-07T21:03:19Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T1, mode: delegated } }

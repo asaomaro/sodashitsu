@@ -99,7 +99,7 @@
 
 ### PR1: サーバと sodactl（静的な形式）
 
-- [ ] T1: protocol の型・定数・検査を新しいファイルに作る（静的な形式の分）: design「定数と型」のうち、`script-html`・`send`・`focus_steal` に関わるもの（T23）を除く全部。`DISPLAY_FORMATS` は、この時点では `text`・`markdown`・`html` の 3 つ。中身の上限は 2 MiB・サーバ全体 32 MiB・`DISPLAY_GET_CHUNK_BYTES`・回数と量の頻度の定数・
+- [x] T1: protocol の型・定数・検査を新しいファイルに作る（静的な形式の分）: design「定数と型」のうち、`script-html`・`send`・`focus_steal` に関わるもの（T23）を除く全部。`DISPLAY_FORMATS` は、この時点では `text`・`markdown`・`html` の 3 つ。中身の上限は 2 MiB・サーバ全体 32 MiB・`DISPLAY_GET_CHUNK_BYTES`・回数と量の頻度の定数・
       `DisplayInfo`・`DisplayChunk`・`DisplayRenderers`（`scriptHtml` は T23）・`DisplayLimits`（`requestLineBytes` つき）・`DisplayFeatures`（`epoch` つき）・`DisplaySetBody`・`DisplaySetResult`・`DisplayWaitResult`・`DisplayEvent`・`DisplayClosedReason`（`closed`・`dismissed`・`expired`・`navigated`・`unresponsive`）・`DisplayLine`・`DISPLAY_PING_INTERVAL_MS`・`DISPLAY_PONG_TIMEOUT_MS`・`DISPLAY_UNRESPONSIVE_MS`、
       `checkDisplaySet`・`checkDisplayAction`・`displayLimits`・`parseDisplayLine`。題は制御文字を拒否し、前後の空白を除く。中身のバイト数は UTF-8 で数える。`index.ts` から export。単体テスト
       対象: `packages/protocol/src/display.ts`（新規）、`packages/protocol/src/display.test.ts`（新規）、`packages/protocol/src/index.ts` / 根拠: design「定数と型」、手本は `packages/protocol/src/ask.ts`
