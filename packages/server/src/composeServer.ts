@@ -42,6 +42,8 @@ import { AskService } from "./ask/AskService.js";
 import { PaneOpRegistry } from "./panesocket/PaneOpRegistry.js";
 import { PaneSocket } from "./panesocket/PaneSocket.js";
 import { askFeaturesOp, askOpenOp } from "./panesocket/askOp.js";
+import { displayCloseOp, displayFeaturesOp, displayListOp, displaySetOp, displayWaitOp } from "./panesocket/displayOps.js";
+import { DisplayService } from "./display/DisplayService.js";
 import { AskMedia, type ImageFetcher } from "./ask/AskMedia.js";
 import { RemoteImageFetcher } from "./ask/RemoteImageFetcher.js";
 import { FileAccess } from "./file/FileAccess.js";
@@ -344,12 +346,28 @@ export async function composeServer(
     localOnly: isLocalOnlyServer(options.host, secure, options.extraOrigins),
     isRemoteClient: (clientId) => clients.get(clientId)?.viaBridge === true,
   });
+  // 表示の面（20261007-soda-extensions）。pane ごとのパネル・帯。メモリだけ（再起動・引き継ぎで消える）。画面の見分けは ask と同じ（desktop / mobile）。
+  const displays = new DisplayService({
+    bus,
+    paneExists,
+    isScreenKind: (clientId) => {
+      const kind = clients.get(clientId)?.kind;
+      return kind === "desktop" || kind === "mobile";
+    },
+    logger,
+  });
   // ログイン不要の受け口（20261003-sodactl-ask-socket）。受けるのはここに登録した操作だけ（`/ws` の RPC は通さない）。いま載せるのは `ask.open` だけ。
   // pane の実在は `AskService` と同じ判定。接続が終わったら、その接続が持ち主の質問を閉じるのは操作の中（`askOpenOp` が `ctx.signal` の abort で取り消す）。
   // 待ち受けは `listen()` の 4.7、閉じるのは `close()`。引き継ぎの間は `pause()`（`HandoffController` の `closeClients`）。
   const paneOps = new PaneOpRegistry(logger);
   paneOps.register(askOpenOp(asks));
   paneOps.register(askFeaturesOp(asks));
+  // 表示の面: どの操作も対象は要求が名乗った pane だけ（`displayOps.ts`）。待ちは接続が終わると外れる（`ctx.signal`）。
+  paneOps.register(displaySetOp(displays));
+  paneOps.register(displayCloseOp(displays));
+  paneOps.register(displayListOp(displays));
+  paneOps.register(displayWaitOp(displays));
+  paneOps.register(displayFeaturesOp(displays));
   const paneSocket = new PaneSocket({
     registry: paneOps,
     paneExists,
@@ -423,6 +441,7 @@ export async function composeServer(
     metadata,
     images,
     asks,
+    displays,
     files,
     prefs,
     graph,
@@ -461,6 +480,7 @@ export async function composeServer(
       commands.onClientGone(clientId); // その接続の popup を止める（20260927-custom-command-keys）
       images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
       asks.onClientGone(clientId); // 質問を出した接続・質問を出せる画面の切断（20261002-sodactl-ask）
+      displays.onClientGone(clientId); // 面を出せる画面の名乗り・この接続の display.wait（20261007-soda-extensions）
       fileUploads.onClientGone(clientId); // 受け取り中のファイルの書きかけを消す
     },
   });
@@ -472,6 +492,7 @@ export async function composeServer(
       commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
       images.onClientGone(clientId);
       asks.onClientGone(clientId);
+      displays.onClientGone(clientId);
       fileUploads.onClientGone(clientId);
     },
   });
@@ -823,6 +844,7 @@ export async function composeServer(
         // 受け口は質問を閉じる前に閉じる——`try` が上の `paneSocket.close()` より前で投げた経路でも、待っていた接続へ `cancelled` の返事を
         // 書かずに捨てる（2 回目は何もしない。`pane.sock` も残さない）。
         await paneSocket.close().catch(() => undefined);
+        displays.dispose(); // 待っている display.wait を空の結果で返し、面を捨てる
         asks.dispose(); // 待っている質問を閉じる（受け口と `/ws` の接続を閉じた後。応答は誰にも届かない）
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
         // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。

@@ -226,7 +226,7 @@ sodactl pane control 3f2a9c10 --takeover                       # 既に所有者
 - **質問のフォーム**（`ask`）: 定義全体 256 KiB（JSON の UTF-8）・質問 100・1 つの質問の選択肢 200・`id`／`value` 200 文字・`title`／`label`／`page` 等の短い文字列 500 文字・
   `intro`／`help`／`desc` 4,000 文字・1 つの選択肢の `colors` 16 個（超えた分は捨てる）。回答の自由入力・`text` の答え・補足・質問ごとの自由記述（`comments`）の 1 つは 10,000 文字まで。自由記述の長さの合計は 100,000 文字まで（超える回答は断られる）。`--timeout` は 1,000〜86,400,000 ミリ秒。
   定義の上限の超過は使い方の誤り（終了コード 2）。標準入力は 1 MiB までしか読まない。サーバが同時に待てる質問は総数 32・1 つの接続あたり 8 まで（超えると `ask_busy`。終了コード 1）。
-- **ログイン不要の受け口**（`pane.sock`。下の「ログイン不要の受け口（pane.sock）」）: 同時に開いている接続 64（超えた接続と `soda handoff` の途中の接続は、要求を読まずに `pane_socket_busy`。sodactl は 5 秒まで繋ぎ直す）・要求の 1 行 1 MiB（超えると `bad_request`）・
+- **ログイン不要の受け口**（`pane.sock`。下の「ログイン不要の受け口（pane.sock）」）: 同時に開いている接続 64（超えた接続と `soda handoff` の途中の接続は、要求を読まずに `pane_socket_busy`。sodactl は 5 秒まで繋ぎ直す）・要求の 1 行 4 MiB（超えると `bad_request`。1 MiB から上げた。表示の面の中身 2 MiB を載せるため）・
   接続してから要求の 1 行が揃うまで 10 秒（過ぎたら何も返さずに切る）。受け口から出した質問も、上の総数 32 と「1 つの pane に同時に 1 つ」に数える。
 - 複数ホストの中継（`--machine`・`/ws?machine=`）では、判定するのは**先のマシンの `soda serve`**（`docs/machines.md`）。
 
@@ -774,7 +774,7 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
 - サーバ: `packages/server/src/panesocket/PaneOpRegistry.ts` の `PaneOpDef`（名前・引数の schema・handler）を作り、`packages/server/src/composeServer.ts` で `register` する（例は `panesocket/askOp.ts`）。
 - 結果を待つ操作（返事までに時間がかかる）は、handler に渡る `ctx.signal` の abort で自分の待ちを取り消す（接続が終わると abort する。取り消しの配線を登録の外に持たない。例は `panesocket/askOp.ts`）。
 - sodactl: `packages/cli/src/paneSocket.ts` の `viaPaneSocketOrSession` を使う（受け口を使うか・`/ws` へ落ちるかの判断をコマンドごとに持たない）。
-- やりとりの形は `packages/protocol/src/paneSocket.ts`: **1 接続 1 要求**。要求は 1 行の JSON（`{"v":1,"op":"<名前>","paneId":"<id>","params":{…}}`。上限 1 MiB）、返事も 1 行の JSON
+- やりとりの形は `packages/protocol/src/paneSocket.ts`: **1 接続 1 要求**。要求は 1 行の JSON（`{"v":1,"op":"<名前>","paneId":"<id>","params":{…}}`。上限 4 MiB）、返事も 1 行の JSON
   （`{"ok":true,"result":…}` か `{"ok":false,"error":{"code","message"}}`。sodactl が読む上限は 8 MiB）で、受け口は返事を書いたら閉じる
   （要求を読まずに断るとき〔`pane_socket_busy`・行の上限の超過〕は、返事が相手に届くよう、相手が閉じるか 1 秒たつまで待ってから閉じる）。検査の順は「行の形（`bad_request`）→ 操作（`unknown_op`）→ pane の実在（`not_found`）→ 引数（`invalid_params`）」。
   受け口だけの code は `unknown_op`・`bad_request`・`pane_socket_busy` の 3 つ。呼び出し側は要求を書いた後、返事の行を読むまで接続を閉じない（受け口は相手が閉じたら、呼び出し元が終わったものとして操作を取り消す）。

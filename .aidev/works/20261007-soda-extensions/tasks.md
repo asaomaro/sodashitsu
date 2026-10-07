@@ -120,7 +120,7 @@
       依存: T2
       AC: AC2, AC3, AC8, AC12, AC13, AC20, AC22, AC25, AC34, AC36
       点検: あり
-- [ ] T4: server の登録と配線: 受け口の操作 5 つ（`ctx.paneId` だけを対象に。`displayWaitOp` は `{ signal: ctx.signal }`）、`/ws` の方式 10（`display.wait` は `{ clientId: ctx.clientId }`。handler は `RpcError` 以外を投げない）、
+- [x] T4: server の登録と配線: 受け口の操作 5 つ（`ctx.paneId` だけを対象に。`displayWaitOp` は `{ signal: ctx.signal }`）、`/ws` の方式 10（`display.wait` は `{ clientId: ctx.clientId }`。handler は `RpcError` 以外を投げない）、
       `composeServer.ts`（`DisplayService` の組み立て〔`isScreenKind` は `AskService` に渡している `isBrowserKind` と同じ関数〕・`paneOps.register` × 5・`registerAllMethods` の依存・2 つの `onClientGone`・`close()` の `finally` で `dispose`）、`MethodDeps`、`testkit.ts` の export。
       受け口の 1 行の上限の変更に合わせて、既存の受け口のテスト（上限の超過）と、`docs/sodactl.md` の「サーバ側の上限」「ログイン不要の受け口」に書かれた「1 MiB」を直す（PR1 で値が変わるので、文書の値も PR1 で直す）。結合テスト: 受け口（ログインなしで `set` → `list` → `wait`・**2 MiB ちょうどの中身の `set` が通る**・
       **pane A を名乗って、pane B の面の名前で `close`/`list`/`wait` しても B に届かない。引数に `paneId: <B>` を載せて送っても B に届かない**〔通常の版では `invalid_params`。T22 (a) の対〕・待ちの上限・接続を切ると待ちが外れる）、
