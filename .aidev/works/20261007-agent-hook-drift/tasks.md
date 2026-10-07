@@ -89,7 +89,7 @@ AGENTS.md「点検とテストの掛け方」に従い、壊れやすいタス�
       対象: `docs/verification.md`・`docs/herdr-parity.md`・`docs/migrate-from-wtm.md`・`.aidev/backlog/product-roadmap.md` / 根拠: research 全体
       依存: T4
       AC: AC9
-- [ ] T6: 全体の確認（`pnpm build`・`pnpm typecheck`・`pnpm test`）と test-result.md。
+- [x] T6: 全体の確認（`pnpm build`・`pnpm typecheck`・`pnpm test`）と test-result.md。
       対象: `.aidev/works/20261007-agent-hook-drift/test-result.md`
       依存: T5
       AC: AC10
