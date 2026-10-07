@@ -3,6 +3,19 @@ import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessio
 import { THEME_NAMES, type ThemeName } from "./theme.js";
 import { IMAGE_CHUNK_BASE64_MAX, IMAGE_MIME_TYPES } from "./image.js";
 import { ASK_ANSWER_TEXT_MAX, ASK_MEDIA_FILES_MAX, type AskFeatures, ASK_ASKID_MAX, ASK_ID_MAX, ASK_OPTIONS_MAX, ASK_QUESTIONS_MAX, ASK_TIMEOUT_MAX_MS, ASK_TIMEOUT_MIN_MS, jsonBytes, type AskPending, type AskResult } from "./ask.js";
+import {
+  DISPLAY_NAME_RE,
+  DISPLAY_REPORT_PROBLEMS,
+  DISPLAY_RENDER_FEATURES_MAX,
+  DISPLAY_WAIT_MAX_MS,
+  DISPLAY_WAIT_MIN_MS,
+  DISPLAY_WAIT_NAMES_MAX,
+  type DisplayChunk,
+  type DisplayFeatures,
+  type DisplayInfo,
+  type DisplaySetResult,
+  type DisplayWaitResult,
+} from "./display.js";
 import { FILE_CHUNK_BASE64_MAX, FILE_NAME_INPUT_MAX, FILE_PATH_MAX, FILE_RESOLVE_MAX_PATHS, type ResolvedFile } from "./file.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 import { GraphGetParams, GraphHistoryParams, GraphPauseParams, GraphResumeParams, GraphUpdateParams, type Graph, type GraphHistoryResult } from "./graph.js";
@@ -475,6 +488,87 @@ export interface AskMediaResult {
 /** 機能確認（引数なし）。古いサーバは `not_found`（知らない方式）を返す。 */
 export const AskFeaturesParams = z.object({});
 export type AskFeaturesParams = z.infer<typeof AskFeaturesParams>;
+// --- 表示の面（`sodactl display`。display.ts）---------------------------------------------------
+// 検査の本体は display.ts の `checkDisplaySet`・`checkDisplayAction`（サーバ・sodactl・ブラウザが同じものを使う）。zod は形の粗い検査だけ。
+// `display.set` の中身は、規則の外を `invalid_display`（`display.set` 以外の形の誤りは `invalid_params`）にするため、ここでは型を問わない。
+const displayId = z.string().min(1).max(64);
+const displayName = z.string().regex(DISPLAY_NAME_RE);
+/** `set` の中身（`paneId` を除く）の欄。型の検査は `checkDisplaySet`。 */
+const displaySetFields = {
+  name: z.unknown().optional(),
+  kind: z.unknown().optional(),
+  format: z.unknown().optional(),
+  content: z.unknown().optional(),
+  title: z.unknown().optional(),
+  size: z.unknown().optional(),
+  ttlMs: z.unknown().optional(),
+};
+const displayCloseFields = { name: displayName.optional(), all: z.boolean().optional() };
+const displayCloseOneOf = (v: { name?: string | undefined; all?: boolean | undefined }): boolean => (v.name !== undefined) !== (v.all === true);
+const displayCloseMessage = "exactly one of name or all:true is required";
+const displayWaitFields = {
+  since: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  epoch: z.string().min(1).max(64).optional(),
+  names: z.array(displayName).max(DISPLAY_WAIT_NAMES_MAX).optional(),
+  timeoutMs: z.number().int().min(DISPLAY_WAIT_MIN_MS).max(DISPLAY_WAIT_MAX_MS),
+};
+/** 面を出す・更新する。 */
+export const DisplaySetParams = z.object({ paneId, ...displaySetFields });
+export type DisplaySetParams = z.infer<typeof DisplaySetParams>;
+/** 面を閉じる（`name` か `all: true` のどちらか 1 つ）。 */
+export const DisplayCloseParams = z.object({ paneId, ...displayCloseFields }).refine(displayCloseOneOf, displayCloseMessage);
+export type DisplayCloseParams = z.infer<typeof DisplayCloseParams>;
+export const DisplayListParams = z.object({ paneId });
+export type DisplayListParams = z.infer<typeof DisplayListParams>;
+/** 出来事を待つ（長い要求。次の出来事か `timeoutMs` まで応答しない）。 */
+export const DisplayWaitParams = z.object({ paneId, ...displayWaitFields });
+export type DisplayWaitParams = z.infer<typeof DisplayWaitParams>;
+/** 機能確認（引数なし）。古いサーバは `not_found`（知らない方式）を返す。 */
+export const DisplayFeaturesParams = z.object({});
+export type DisplayFeaturesParams = z.infer<typeof DisplayFeaturesParams>;
+/** この接続を「面を出せる画面」として登録し、全 pane の面の見出しを受け取る（接続のたびに呼ぶ）。`features` の知らない値はサーバが捨てる。 */
+export const DisplaySubscribeParams = z.object({ features: z.array(z.string().max(64)).max(DISPLAY_RENDER_FEATURES_MAX) });
+export type DisplaySubscribeParams = z.infer<typeof DisplaySubscribeParams>;
+export interface DisplaySubscribeResult {
+  displays: DisplayInfo[];
+}
+/** 中身の 1 片を取る（名乗った接続だけ）。`offset` は 0 か `DISPLAY_GET_CHUNK_BYTES` の倍数（倍数の検査はサーバ）。 */
+export const DisplayGetParams = z.object({ id: displayId, offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) });
+export type DisplayGetParams = z.infer<typeof DisplayGetParams>;
+/** 利用者の操作を、待っているプログラムへ届ける（名乗った接続だけ）。操作の名前・値の規則と `rev` の範囲はサーバが `checkDisplayAction` などで見る。 */
+export const DisplayActionParams = z.object({
+  id: displayId,
+  rev: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  action: z.string().max(256),
+  data: z.record(z.string().max(256), z.unknown()).optional(),
+});
+export type DisplayActionParams = z.infer<typeof DisplayActionParams>;
+/** 利用者が面を閉じる（`id` の 1 つか、`paneId` の pane の全部のどちらか 1 つ）。 */
+export const DisplayDismissParams = z.object({ id: displayId.optional(), paneId: paneId.optional() }).refine((v) => (v.id !== undefined) !== (v.paneId !== undefined), "exactly one of id or paneId is required");
+export type DisplayDismissParams = z.infer<typeof DisplayDismissParams>;
+/** 画面が、枠の異常（別のページへ移った・応答しない）を知らせる。その面を閉じる。 */
+export const DisplayReportParams = z.object({ id: displayId, problem: z.enum(DISPLAY_REPORT_PROBLEMS) });
+export type DisplayReportParams = z.infer<typeof DisplayReportParams>;
+export interface DisplayClosedResult {
+  /** 閉じた面の名前（無ければ空）。 */
+  closed: string[];
+}
+export interface DisplayListResult {
+  displays: DisplayInfo[];
+}
+
+/** 受け口（`pane.sock`）の引数: 対象の pane は要求の外側の `paneId` で、引数には持たない。`paneId` を載せたら `invalid_params`（strict）。 */
+export const PaneDisplaySetParams = z.strictObject(displaySetFields);
+export type PaneDisplaySetParams = z.infer<typeof PaneDisplaySetParams>;
+export const PaneDisplayCloseParams = z.strictObject(displayCloseFields).refine(displayCloseOneOf, displayCloseMessage);
+export type PaneDisplayCloseParams = z.infer<typeof PaneDisplayCloseParams>;
+export const PaneDisplayListParams = z.strictObject({});
+export type PaneDisplayListParams = z.infer<typeof PaneDisplayListParams>;
+export const PaneDisplayWaitParams = z.strictObject(displayWaitFields);
+export type PaneDisplayWaitParams = z.infer<typeof PaneDisplayWaitParams>;
+export const PaneDisplayFeaturesParams = z.strictObject({});
+export type PaneDisplayFeaturesParams = z.infer<typeof PaneDisplayFeaturesParams>;
+
 // 端末のファイルのリンクとドロップ（`file.ts`）。ブラウザ版はローカルのファイルに触れないので、サーバ越しに確かめる・開く・受け取る・送る。
 const filePath = z.string().min(1).max(FILE_PATH_MAX);
 /** この接続から見たサーバ（リンクを開く方法・ドロップの扱いを「自動」で決める材料）。 */
@@ -924,6 +1018,16 @@ export const METHOD_SCHEMAS = {
   "ask.cancel": AskCancelParams,
   "ask.media": AskMediaParams,
   "ask.features": AskFeaturesParams,
+  "display.set": DisplaySetParams,
+  "display.close": DisplayCloseParams,
+  "display.list": DisplayListParams,
+  "display.wait": DisplayWaitParams,
+  "display.features": DisplayFeaturesParams,
+  "display.subscribe": DisplaySubscribeParams,
+  "display.get": DisplayGetParams,
+  "display.action": DisplayActionParams,
+  "display.dismiss": DisplayDismissParams,
+  "display.report": DisplayReportParams,
   "file.info": FileInfoParams,
   "file.resolve": FileResolveParams,
   "file.open": FileOpenParams,
@@ -1021,6 +1125,16 @@ export interface MethodResultMap {
   "ask.cancel": Record<string, never>;
   "ask.media": AskMediaResult;
   "ask.features": AskFeatures;
+  "display.set": DisplaySetResult;
+  "display.close": DisplayClosedResult;
+  "display.list": DisplayListResult;
+  "display.wait": DisplayWaitResult;
+  "display.features": DisplayFeatures;
+  "display.subscribe": DisplaySubscribeResult;
+  "display.get": DisplayChunk;
+  "display.action": Record<string, never>;
+  "display.dismiss": DisplayClosedResult;
+  "display.report": DisplayClosedResult;
   "file.info": FileInfoResult;
   "file.resolve": FileResolveResult;
   "file.open": Record<string, never>;

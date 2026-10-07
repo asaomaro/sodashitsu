@@ -106,7 +106,7 @@
       依存: なし
       AC: AC23, AC25, AC36
       点検: あり
-- [ ] T2: protocol の通信（静的な形式の分）: `/ws` の 10 の方式の引数の zod schema と結果（`display.set`・`close`・`list`・`wait`・`features`・`subscribe`・`get`〔`{id, offset}`〕・`action`・`dismiss`・`report`〔`problem` は、この時点では `navigated`・`unresponsive`〕）を `METHOD_SCHEMAS`・`MethodResultMap` に足す。
+- [x] T2: protocol の通信（静的な形式の分）: `/ws` の 10 の方式の引数の zod schema と結果（`display.set`・`close`・`list`・`wait`・`features`・`subscribe`・`get`〔`{id, offset}`〕・`action`・`dismiss`・`report`〔`problem` は、この時点では `navigated`・`unresponsive`〕）を `METHOD_SCHEMAS`・`MethodResultMap` に足す。
       `display.close` と `display.dismiss` は「どちらか 1 つ」を `superRefine` で検査。受け口の操作の名前の定数 5 つと、`paneId` を除いた schema。**`PANE_SOCKET_MAX_LINE_BYTES` を 4 MiB に上げる**。イベント `display.updated`・`display.removed`（理由つき）を `ServerEvent` に。
       エラーの code `invalid_display`・`display_limit`・`display_busy`・`display_closed`。`clientError.ts` に 4 つの code の日本語。テスト（表に載っていること・受け口の schema が `paneId` を `strict` で拒否すること・1 行の上限の値）
       対象: `packages/protocol/src/messages.ts:920` 付近・`1017` 付近、`packages/protocol/src/paneSocket.ts`、`packages/protocol/src/events.ts`、`packages/protocol/src/errors.ts:84-86` の後、`packages/client-core/src/net/clientError.ts:96` 付近、`packages/protocol/src/messages.test.ts`・`paneSocket.test.ts` / 根拠: research A6、design「操作」
