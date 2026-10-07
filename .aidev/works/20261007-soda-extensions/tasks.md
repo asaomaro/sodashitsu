@@ -278,7 +278,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/e2e/src/specs/display.spec.ts`（T14 のファイル）、`packages/e2e/src/support/display.ts`、`packages/e2e/src/support/panes.ts` / 根拠: research A15
       依存: T6, T14, T16
       AC: AC2, AC3, AC4, AC5, AC6, AC7, AC8, AC10, AC11, AC12, AC13, AC20, AC22, AC25, AC33, AC36, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
-- [ ] T19: E2E（静的な形式の隔離）: (1) 枠の `sandbox` 属性と応答ヘッダに `allow-same-origin` が無い。`frame.evaluate` で、`parent.document`・`document.cookie`・`localStorage` が SecurityError、`fetch`・`new WebSocket(アプリの /ws)` が拒否される（使えないと T14 で分かった場合は、不確かな点 2 の代えと、未検証の穴の記録）、
+- [x] T19: E2E（静的な形式の隔離）: (1) 枠の `sandbox` 属性と応答ヘッダに `allow-same-origin` が無い。`frame.evaluate` で、`parent.document`・`document.cookie`・`localStorage` が SecurityError、`fetch`・`new WebSocket(アプリの /ws)` が拒否される（使えないと T14 で分かった場合は、不確かな点 2 の代えと、未検証の穴の記録）、
       (2) 中身の `<script>`・`<img src="data:image/png;base64,（壊れた値）" onerror=…>`（操作なしで起きる形）・`<button onclick>`（押す）・`<a href="javascript:…">`（押す）が動かない（枠の文書に実行の印が付かない。`markdown` でも同じ）。通常の版では、CSP の違反が出ることは合否にしない。
       `<script>` の要素は、中身を `DOMParser`・`<template>` を通して差し込むので、守りを外しても実行されない見込み（仕様の理解。実測していない）。負の対照で落ちるのは、イベント属性の筋、
       (3) 外の画像・`<link rel=stylesheet>`・`@import`・`url()` の背景・フォントへの要求が 0（`page.on("request")` と、`startSink()` の待ち受け）、(4) `<meta http-equiv=refresh>`（**宛先は、同じ origin の `/display-view/frame.html?moved`**。必ず移れる宛先にして、T22 (e) の対にする）・`<form action=…>` の送信・`<base>`・`<iframe>`・`<object>`・`<embed>` で枠が移らない（`data-display-loads` が 1 のまま・面が閉じられない）・外を読まない（外の宛先のものは、`startSink()` に届かないこと）、
