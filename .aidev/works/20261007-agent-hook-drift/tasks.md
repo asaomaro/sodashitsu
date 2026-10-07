@@ -85,7 +85,7 @@ AGENTS.md「点検とテストの掛け方」に従い、壊れやすいタス�
       対象: `packages/server/src/composeServer.ts`・`composeServer.subagents.integration.test.ts` / 根拠: research X1、decisions D5
       依存: T3
       AC: AC7
-- [ ] T5: docs を合わせる。
+- [x] T5: docs を合わせる。
       対象: `docs/verification.md`・`docs/herdr-parity.md`・`docs/migrate-from-wtm.md`・`.aidev/backlog/product-roadmap.md` / 根拠: research 全体
       依存: T4
       AC: AC9

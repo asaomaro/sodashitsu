@@ -242,13 +242,11 @@ parent: 20260918-web-terminal-multiplexer
       独立点検（cross）2件（対応済み）。review 指摘 0 件。**6エージェントとも実機未検証**
       （`docs/verification.md` に明記。test-result.md 参照）。`docs/herdr-parity.md` H32b に
       対応表を追加済み。
-- [ ] （非対応・参考）Antigravity CLI・Qoder CLI・Letta Code・Hermes Agent は resume 統合ができない
+- [ ] （非対応・参考）Antigravity CLI・Letta Code・Hermes Agent は resume 統合ができない
       （20260923-other-agents-session-resume の requirements〜design 直前に公式ドキュメントを直接
       確認した結果）: Antigravity CLI は `PreToolUse`/`PostToolUse`/`PreInvocation`/`PostInvocation`/`Stop`
       の5イベントのみでセッション開始時に一度だけ発火するイベントが無い
-      （https://antigravity.google/docs/hooks/）。Qoder CLI は
-      `UserPromptSubmit`/`PreToolUse`/`PostToolUse`/`PostToolUseFailure`/`Stop` の5イベントのみで
-      同様に `SessionStart` が無い（https://docs.qoder.com/en/cli/hooks）。Letta Code は `SessionStart`
+      （https://antigravity.google/docs/hooks/）。（Qoder CLI は当時 `SessionStart` が無いと記録したが、現行の文書にはあり、20261007-agent-hook-drift で対応した。）Letta Code は `SessionStart`
       hook 自体は文書化されているが、セッション/会話IDの stdin JSON でのフィールド名がどこにも
       明記されていない（https://docs.letta.com/letta-code/hooks/）。Hermes Agent（NousResearch）は
       `~/.hermes/config.yaml` の shell hook でのID受け渡し方法が未文書化なうえ、公式ドキュメントの
