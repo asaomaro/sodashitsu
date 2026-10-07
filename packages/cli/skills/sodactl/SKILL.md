@@ -37,7 +37,7 @@ test -n "${SODA_PANE_ID:-}"
   `<URL>` は今の接続先を展開した値（`SODACTL_URL` があればそれ、無ければ `SODA_SERVER_URL` の値。例 `http://127.0.0.1:7780`）を伝える——利用者の端末には
   `SODA_SERVER_URL` が無く、ログインは URL（origin）ごとに保存されるため。
   token をコマンド行・ファイル・会話に書かない。token を探しに行かない（設定ファイル・状態ディレクトリを読まない）。
-- `sodactl ask` だけは、pane の中ではログインなしで動く（下の「利用者に質問する」。Windows を除く）。ほかのコマンドはログインが要る。
+- `sodactl ask` と `sodactl display` は、pane の中ではログインなしで動く（下の「利用者に質問する」「表示を出す」。Windows を除く）。ほかのコマンドはログインが要る。
 
 ## ID と自分の位置
 
@@ -148,6 +148,24 @@ JSON
   `connection_closed`・`timeout` のときは、質問が利用者に出たかもしれない。確かめずに打ち直さない。
 - pane の外・別のマシンへ送る `--machine`（`local` 以外）では使えない。利用者の画面に出るので、質問の文字に秘密を入れない。
 
+## 表示を出す（`sodactl display`）
+
+この pane を見ているブラウザの画面に、**パネル（端末の右）か帯（端末の上）**を出して、進捗や結果を見せ続ける。pane の中ではログインなしで動く。面は名前（`[A-Za-z0-9_-]` の 1〜32 文字）で区別し、同じ名前の `set` は置き換える。
+
+```sh
+sodactl display set progress --kind panel --title 進捗 --html-file ./progress.html
+printf '# 結果\n- 緑' | sodactl display set result --kind band --format markdown
+sodactl display close progress          # --all で全部
+sodactl display list
+```
+
+- 中身は `--text`・`--markdown-file`・`--html-file` のどれか 1 つ、または標準入力（`--format text|markdown|html`。省くと `text`）。**2 MiB まで**（超えると終了コード 2）。`--size`（px）・`--ttl-ms` で大きさと寿命を決める。
+- `html` の中のスクリプトは動かない（取り除かれる）。ボタンは `<button data-soda-action="名前">` で宣言し、利用者が押すと、待っている側に操作が届く。`text` は操作を持たない。
+- 操作を受け取る: `sodactl display wait <名前>` が、操作か閉じられた理由を 1 行の JSON で出して終わる（`--timeout <ms>` で締め切り）。`set --wait` は出したあとすぐ待つ。続けて受け取るなら `sodactl display events`（最初の行が `display.ready`。以後 1 行 1 つ。知らない `type`・項目は無視する）。
+- 利用者が［×］で閉じた面は `display.closed`（`reason` が `dismissed`）が届く。ブラウザが開いていない・画面が無いときも `set` は成功する（結果の `renderers` が 0）。
+- 古い `soda` では `{"status":"unsupported",…}`（終了コード 0）。使えるかは `sodactl display --features`（`server` が `null` なら使えない）。
+- 面の中身・題・操作の値は、他人が読む前提で書く（秘密を入れない）。
+
 ## サイドバーの行に状態を出す（独自トークン）
 
 `sodactl pane report-metadata "$SODA_PANE_ID" --source my-hook --token summary="テストを直している"` のように、pane（エージェントの行）・workspace（spaces の行）へ
@@ -235,6 +253,7 @@ pane の中の sodactl は、次の操作の対象が**自分の pane**（`$SODA
   `sodactl pane observe`・`sodactl pane control`・`sodactl pane report-metadata`
 - 状態: `sodactl snapshot`・`sodactl watch`
 - 利用者への質問: `sodactl ask`
+- 表示の面: `sodactl display set`・`sodactl display close`・`sodactl display list`・`sodactl display wait`・`sodactl display events`・`sodactl display --features`
 - エージェント: `sodactl agent list`・`sodactl agent get`・`sodactl agent wait`・`sodactl agent read`・`sodactl agent prompt`・`sodactl agent send-keys`・
   `sodactl agent rename`・`sodactl agent start`
 - 連携のグラフ: `sodactl graph show`・`sodactl graph link add`・`sodactl graph link set`・`sodactl graph link rm`・`sodactl graph link pause`・

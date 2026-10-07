@@ -132,7 +132,7 @@
       依存: T3
       AC: AC1, AC3, AC14, AC26, AC36
       点検: あり
-- [ ] T5: sodactl の `display` の引数（静的な形式の全部）と、`set`・`close`・`list`・`--features` の実行: `USAGE_LINES`（design「sodactl」の行のうち、`--script-html-file`・`script-html`・`send` を除いたもの）・`Command` の union・`parseCommand`（中身の指定は 1 つだけ・`--format` は標準入力のときだけで省くと `text`・`--size` の範囲・`--all` と名前は排他・`--machine` には `--pane` が要る・`--since` と `--epoch` は組）、
+- [x] T5: sodactl の `display` の引数（静的な形式の全部）と、`set`・`close`・`list`・`--features` の実行: `USAGE_LINES`（design「sodactl」の行のうち、`--script-html-file`・`script-html`・`send` を除いたもの）・`Command` の union・`parseCommand`（中身の指定は 1 つだけ・`--format` は標準入力のときだけで省くと `text`・`--size` の範囲・`--all` と名前は排他・`--machine` には `--pane` が要る・`--since` と `--epoch` は組）、
       `main.ts` の switch と `printHelp`（`wait`・`events`・`set --wait` の実行は T6。T5 の時点では「未実装」の誤りで終わってよい）、
       `commands/display.ts`（ファイルと標準入力の読み込み〔通常ファイル・2 MiB・UTF-8〕・送る前の `checkDisplaySet` と「要求の 1 行が 4 MiB を超えない」の確かめ・**1 行が 1 MiB を超えるときは先に `display.features`**・
       経路の包み〔受け口の `unknown_op` は `/ws` へ落とさずに古いサーバとする。繋げない・`bad_request` は `/ws` へ落ちる。`callPaneOp` の結果を見る〕・呼び出し元と違う `--pane` は受け口を使わない・`invalid_display` は使い方の誤りに読み替える・
@@ -143,7 +143,7 @@
       / 根拠: research A14（手本は `commands/ask.ts`、`packages/cli/src/paneSocket.ts` の `callPaneOp`・`paneSocketFor`）
       依存: T4
       AC: AC1, AC2, AC3, AC20, AC21, AC22, AC26, AC36
-- [ ] T6: sodactl の `display wait`・`display events`・`set --wait` の実行: `runWaitLoop`（design「sodactl」の「`wait`・`events` の繰り返し」のとおり。まず `display.features` で `epoch` を得る・`events` は最初の行 `display.ready`・**`display.wait` には必ず `epoch` を渡す**・1 回の待ちは 30 秒で、空なら次を呼ぶ・`dropped`・`reset`・
+- [x] T6: sodactl の `display wait`・`display events`・`set --wait` の実行: `runWaitLoop`（design「sodactl」の「`wait`・`events` の繰り返し」のとおり。まず `display.features` で `epoch` を得る・`events` は最初の行 `display.ready`・**`display.wait` には必ず `epoch` を渡す**・1 回の待ちは 30 秒で、空なら次を呼ぶ・`dropped`・`reset`・
       5 秒の繋ぎ直し〔受け口の `connection_closed`・`ECONNREFUSED`・`pane_socket_busy`、`/ws` の切断〕・途中の `not_found` は `pane_closed`・stdout が閉じたら終了コード 1・`--timeout` は全体の待ち時間で、省くと待ち続ける）。`set --wait` は `set` の結果の `epoch`・`next` から待つ。`main.ts` の「未実装」を実行につなぐ。
       単体テスト（時計と受け口を差し替える）と、結合テスト（実サーバ: 受け口の経路で `events` を起動 → `/ws` から `action` → 行が出る・`/ws` の経路でも同じ・`wait <名前>` が 1 行出して終わる・`report("navigated")` で `display.closed`〔`navigated`〕の行・pane を閉じると `display.end`〔`pane_closed`〕で終了コード 0）
       対象: `packages/cli/src/commands/display.ts`（T5 のファイル）、`packages/cli/src/commands/display.test.ts`、`packages/cli/src/display.integration.test.ts`、`packages/cli/src/main.ts`、`packages/cli/src/paneSocket.ts`（変えるなら `connection_closed` を呼び出し側で扱えるようにするだけ）/ 根拠: research R7

@@ -687,3 +687,125 @@ describe("parseArgs — report-metadata（20260927-sidebar-row-tokens の AC8）
     });
   });
 });
+
+describe("parseArgs — display（20261007-soda-extensions）", () => {
+  const action = (argv: string[], env: NodeJS.ProcessEnv = noEnv): unknown => {
+    const cmd = parseArgs(["display", ...argv], env);
+    if (cmd.kind !== "display") throw new Error(`unexpected: ${cmd.kind}`);
+    return cmd.action;
+  };
+  const usage = (argv: string[], env: NodeJS.ProcessEnv = noEnv): string => {
+    try {
+      parseArgs(["display", ...argv], env);
+    } catch (e) {
+      expect(e).toBeInstanceOf(CliUsageError);
+      return (e as Error).message;
+    }
+    throw new Error("expected a usage error");
+  };
+
+  it("set: 名前・--kind・中身の指定。--format を省いた標準入力は text", () => {
+    expect(action(["set", "main", "--kind", "panel", "--html-file", "a.html"])).toMatchObject({
+      kind: "set",
+      name: "main",
+      displayKind: "panel",
+      source: { kind: "file", format: "html", path: "a.html" },
+      wait: false,
+    });
+    expect(action(["set", "m", "--kind", "band", "--text", "hi"])).toMatchObject({ source: { kind: "text", text: "hi" } });
+    expect(action(["set", "m", "--kind", "band", "--markdown-file", "a.md"])).toMatchObject({ source: { kind: "file", format: "markdown", path: "a.md" } });
+    expect(action(["set", "m", "--kind", "band"])).toMatchObject({ source: { kind: "stdin", format: "text" } });
+    expect(action(["set", "m", "--kind", "band", "--format", "html"])).toMatchObject({ source: { kind: "stdin", format: "html" } });
+  });
+
+  it("set: 中身の指定が 2 つ以上は誤り。--format は標準入力のときだけ。知らない形式は誤り", () => {
+    expect(usage(["set", "m", "--kind", "panel", "--text", "a", "--html-file", "a.html"])).toMatch(/only one/);
+    expect(usage(["set", "m", "--kind", "panel", "--markdown-file", "a", "--html-file", "a.html"])).toMatch(/only one/);
+    expect(usage(["set", "m", "--kind", "panel", "--text", "a", "--format", "html"])).toMatch(/--format can only/);
+    expect(usage(["set", "m", "--kind", "panel", "--format", "pdf"])).toMatch(/--format/);
+    expect(usage(["set", "m", "--kind", "panel", "--format", "script-html"])).toMatch(/--format/); // この版には無い
+  });
+
+  it("set: 名前・--kind の誤り", () => {
+    expect(usage(["set", "--kind", "panel", "--text", "a"])).toMatch(/missing name/);
+    expect(usage(["set", "a b", "--kind", "panel", "--text", "a"])).toMatch(/invalid display name/);
+    expect(usage(["set", "m", "--text", "a"])).toMatch(/missing --kind/);
+    expect(usage(["set", "m", "--kind", "side", "--text", "a"])).toMatch(/--kind/);
+    expect(usage(["set", "m", "n", "--kind", "panel", "--text", "a"])).toMatch(/unexpected argument/);
+  });
+
+  it("set: --size は種類ごとの範囲、--ttl-ms は 1,000〜86,400,000", () => {
+    expect(action(["set", "m", "--kind", "panel", "--text", "a", "--size", "160"])).toMatchObject({ size: 160 });
+    expect(action(["set", "m", "--kind", "panel", "--text", "a", "--size", "800"])).toMatchObject({ size: 800 });
+    expect(usage(["set", "m", "--kind", "panel", "--text", "a", "--size", "159"])).toMatch(/--size/);
+    expect(usage(["set", "m", "--kind", "panel", "--text", "a", "--size", "801"])).toMatch(/--size/);
+    expect(action(["set", "m", "--kind", "band", "--text", "a", "--size", "96"])).toMatchObject({ size: 96 });
+    expect(usage(["set", "m", "--kind", "band", "--text", "a", "--size", "97"])).toMatch(/--size/);
+    expect(usage(["set", "m", "--kind", "band", "--text", "a", "--size", "x"])).toMatch(/--size/);
+    expect(usage(["set", "m", "--kind", "band", "--text", "a", "--size", "32.5"])).toMatch(/--size/);
+    expect(action(["set", "m", "--kind", "band", "--text", "a", "--ttl-ms", "1000"])).toMatchObject({ ttlMs: 1000 });
+    expect(usage(["set", "m", "--kind", "band", "--text", "a", "--ttl-ms", "999"])).toMatch(/--ttl-ms/);
+  });
+
+  it("set: --timeout は --wait と一緒のときだけ。--title / --text は = の形なら -- で始まる値も渡せる", () => {
+    expect(action(["set", "m", "--kind", "band", "--text", "a", "--wait", "--timeout", "5000"])).toMatchObject({ wait: true, timeoutMs: 5000 });
+    expect(usage(["set", "m", "--kind", "band", "--text", "a", "--timeout", "5000"])).toMatch(/--timeout can only/);
+    expect(action(["set", "m", "--kind", "band", "--text=--x", "--title=--y"])).toMatchObject({ source: { kind: "text", text: "--x" }, title: "--y" });
+  });
+
+  it("close: 名前か --all のどちらか 1 つ", () => {
+    expect(action(["close", "a"])).toMatchObject({ kind: "close", name: "a", all: false });
+    expect(action(["close", "--all"])).toMatchObject({ kind: "close", name: undefined, all: true });
+    expect(usage(["close"])).toMatch(/missing name/);
+    expect(usage(["close", "a", "--all"])).toMatch(/--all/);
+    expect(usage(["close", "a", "b"])).toMatch(/unexpected/);
+  });
+
+  it("list・wait・events", () => {
+    expect(action(["list"])).toEqual({ kind: "list", pane: undefined });
+    expect(action(["wait"])).toMatchObject({ kind: "wait", name: undefined, since: undefined });
+    expect(action(["wait", "a", "--timeout", "2000"])).toMatchObject({ name: "a", timeoutMs: 2000 });
+    expect(action(["events", "a", "b"])).toMatchObject({ kind: "events", names: ["a", "b"] });
+    expect(action(["events"])).toMatchObject({ names: [] });
+    expect(usage(["wait", "a", "b"])).toMatch(/unexpected/);
+    expect(usage(["events", ...Array.from({ length: 9 }, (_, i) => `n${i}`)])).toMatch(/too many/);
+  });
+
+  it("--since と --epoch は組", () => {
+    expect(action(["wait", "--since", "3", "--epoch", "e"])).toMatchObject({ since: 3, epoch: "e" });
+    expect(action(["events", "--since", "0", "--epoch", "e"])).toMatchObject({ since: 0, epoch: "e" });
+    expect(usage(["wait", "--since", "3"])).toMatch(/together/);
+    expect(usage(["events", "--epoch", "e"])).toMatch(/together/);
+    expect(usage(["wait", "--since", "-1", "--epoch", "e"])).toMatch(/--since/);
+  });
+
+  it("--features、知らない下位コマンド、--pane", () => {
+    expect(action(["--features"])).toEqual({ kind: "features" });
+    expect(usage(["--features", "x"])).toMatch(/unexpected/);
+    expect(usage(["bogus"])).toMatch(/unknown subcommand/);
+    expect(usage([])).toMatch(/unknown subcommand/);
+    expect(action(["list", "--pane", "abcd"])).toEqual({ kind: "list", pane: "abcd" });
+  });
+
+  it("--machine には --pane が要る（--features と local は除く）", () => {
+    const m = (argv: string[]): string => {
+      try {
+        parseArgs(["--machine", ...argv], noEnv);
+      } catch (e) {
+        return (e as Error).message;
+      }
+      return "ok";
+    };
+    expect(m(["Remote", "display", "list"])).toMatch(/needs --pane/);
+    expect(m(["Remote", "display", "events"])).toMatch(/needs --pane/);
+    expect(m(["Remote", "display", "list", "--pane", "abcd"])).toBe("ok");
+    expect(m(["Remote", "display", "--features"])).toBe("ok");
+    expect(m(["local", "display", "list"])).toBe("ok");
+  });
+
+  it("受け口のパスが pane の環境から入る", () => {
+    const env = { SODA_PANE_ID: "p1", SODA_SERVER_URL: "http://127.0.0.1:1", SODA_PANE_SOCKET: "/s/pane.sock" } as NodeJS.ProcessEnv;
+    const cmd = parseArgs(["display", "list"], env, "linux");
+    expect(cmd.kind === "display" && cmd.opts.paneSocket).toBe("/s/pane.sock");
+  });
+});
