@@ -208,20 +208,21 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       点検: あり
 - [ ] T10: web の状態と通信: `useDisplayStore`（`infos`・`contents`・`collapsed`・`activePanel`・`focusedDisplayId`・`panelsOf`・`bandsOf`。幅の保存は T15）、`DisplayController`（`onOpened` で `display.subscribe {features:["panel","band","actions"]}`・`onClosed`・`resetForMachineSwitch`・`onEvent`・
       `ensureContent`〔`display.get` を `offset` を進めて繰り返し、片を積んで最後に 1 回だけ文字列にする・同じ id は 1 本・途中で `rev` が変わったら最初から・古い世代を捨てる・`display_closed` は消えた扱い〕・`sendAction`〔毎秒 20 回で捨てる〕・`dismiss`・`report`。古いサーバ〔`not_found`〕では何もしない）、
-      `display.removed` の理由が `navigated`・`unresponsive` のときのトースト（design の 2 つの文言。自分が `report` した画面でも、ほかの画面でも 1 回だけ）、**`report` は、`sendAction` の頻度の制限と別にして、捨てない。引数に、描いていた枠の `paneId` と `format` を添える**（PR1 のサーバが知らない項目を拒むなら、`/ws` の `display.report` の schema に、任意の `paneId`・`format` を足す。受け口には無い操作）、`StoreAdapter` の case とコールバック `onDisplayEvent`、`main.ts` の配線、`injection.ts` のキー `DisplayControllerKey`。単体テスト
+      `display.removed` の理由が `navigated`・`unresponsive` のときのトースト（design の 2 つの文言。自分が `report` した画面でも、ほかの画面でも 1 回だけ）、**`report` は、`sendAction` の頻度の制限と別にして、捨てない。引数に、描いていた枠の `paneId` と `format` を添える**（PR1 のサーバが知らない項目を拒むかを確かめ、拒むなら、`/ws` の `display.report` の schema に、任意の `paneId`・`format` を足す。
+      あわせて、**返事が `invalid_params` なら `{id, problem}` だけで 1 回送り直す**＝既に入っている古いサーバを、新しい画面で見る組み合わせのため。受け口には無い操作）、`StoreAdapter` の case とコールバック `onDisplayEvent`、`main.ts` の配線、`injection.ts` のキー `DisplayControllerKey`。単体テスト
       対象: `packages/web/src/store/display.ts`（新規）、`packages/web/src/display/DisplayController.ts`（新規）、各 `.test.ts`、`packages/web/src/store/StoreAdapter.ts:51`・`200-202`、`packages/web/src/main.ts:133`・`198`・`298-299`・`398`・`519`、`packages/web/src/injection.ts` / 根拠: research A11（手本は `packages/web/src/ask/AskController.ts`・`ask/mediaUrl.ts` の小分けの取得）
       依存: T2
       AC: AC1, AC3, AC22, AC34, AC36
 - [ ] T11: web の枠の部品（静的な形式）: `frameMessages.ts`（`readFrameMessage`・型 `FrameMessage`。`rendered`・`rejected`・`action`・`key`・`pong` の 5 つ）、`themeVars.ts`（`readThemeVars`）、`frameRegistry.ts`（面の id → `{ focusInside(): void }`）、
       `DisplayFrame.vue`（iframe〔定数 `DISPLAY_VIEW_SANDBOX`・`DISPLAY_VIEW_PAGE` を export。`data-display-frame` と `data-display-loads`。**`src` に、枠ごとの乱数の合い札 `?t=…` を付ける**〕・`display-ready` を、送り主・状態・**合い札の一致**で 1 回だけ受ける・
-      **`MessageChannel` と `render` を渡すのは、最初の `load` を見た後**（合図が先なら `load` を待つ。中身がストアにあっても、先に送らない）・合い札の合わない合図・10 秒の時間切れは、通り道も中身も渡さずに固定の文言・以後は port だけ・`render` を中身と `rev` の変化で送る〔`relayKeys` は prefix を `chordToKeyInput` で変えたもの〕・
+      **`MessageChannel` と `render` を渡すのは、最初の `load` を見た後**（合図が先なら `load` を待つ。中身がストアにあっても、先に送らない）・**その iframe の窓から届いた**合い札の合わない合図・10 秒の時間切れは、通り道も中身も渡さずに固定の文言（**`report` は送らない**）・**送り主の窓が違う合図は、丸ごと無視**（待ちを打ち切らない）・合い札の合う合図も 2 回目は受けない・以後は port だけ・`render` を中身と `rev` の変化で送る〔`relayKeys` は prefix を `chordToKeyInput` で変えたもの〕・
       `action` を `DisplayController.sendAction` へ・`key` は**フォーカスがその枠にあるときだけ受ける**（`escape` は `focusPaneIfShown`、`prefix` は端末へ戻して `keyInput.injectPrefix()`）・**移ったことは `load` の回数で決める**（静的な形式は、2 回目の `load` で、iframe を外して `report(id, "navigated")`。`ping` の返事は待たない。どの形式でも同じ決まりで、スクリプトが動く形式の分は T27）・
       **見回り**（2 秒ごとの `ping`。`document.visibilityState === "visible"` の間だけ数え、見えなくなったら止めて、見えたら数え直す。見えている間に 10 秒続けて返事が無ければ、iframe を外して `report(id, "unresponsive")`。見えていない画面は送らない）・10 秒で `display-ready` が来なければ固定の文言・**頁の選択と枠の鍵**（design「枠の鍵と、頁の選択」。H27）: `framePage.ts` の `framePage(format)`（`text`・`markdown`・`html` → `{ page: DISPLAY_VIEW_PAGE, sandbox: DISPLAY_VIEW_SANDBOX, kind: "static" }`、**それ以外は `null`**。PR2 の時点では `script-html` も `null`）を作り、`DisplayFrame` はこれだけで `src` と `sandbox` を決める。
       **`render` を送るのは、`content.id`・`content.rev`・`content.format` が `info` と一致するときだけ**（`render` の `format` は `content.format`。形式・版が替わった直後の、前の中身を送らない）。鍵は `framePage.ts` の `frameKey(info)`（静的な形式は `<id>:<形式>`。**置く側の部品は、必ずこの関数で `:key` を作る**。PR3 で、スクリプトが動く形式の鍵に版が入る）。`relayKeys` は静的な形式の枠にだけ渡す。
       `null` の形式の面は、**枠を作らず**、固定の文言「この画面では、この形式の表示を出せません」（後の版のサーバが `script-html` を配っても、静的な頁に入れない）。`DisplayFrame` を置く側が `:key` を `<id>:<形式>` にする前提で、`DisplayFrame` 自身も、`info.format` が変わったら iframe を作り直す。
       枠が `{ type: "rejected" }` を返したら固定の文言。`DISPLAY_PONG_TIMEOUT_MS` を使わない（protocol から消す）・
       `window` の `blur`/`focus`/`focusin` で「フォーカスがこの枠にあるか」を見て `store.focusedDisplayId` を更新（備え (a) の元）・載っている間は `frameRegistry` に登録・片づけで port を閉じ、フォーカスがその枠にあれば pane の端末へ戻す）。単体テスト（「テスト方針」の `DisplayFrame.vue` の項目に加えて: `load` の 2 回目で `report("navigated")`・見えていない間は見回りを数えない・
-      `framePage` の表〔知らない形式と `script-html` は `null`〕・`info.format` が変わると iframe が別の要素になる・`rejected` で固定の文言・**`display-ready` が `load` より先でも、`load` の前には `display-init`・`render` を送らない**・合い札の違う `display-ready` を受けない・
+      `framePage` の表〔知らない形式と `script-html` は `null`〕・`info.format` が変わると iframe が別の要素になる・`rejected` で固定の文言・**`display-ready` が `load` より先でも、`load` の前には `display-init`・`render` を送らない**・合い札の違う `display-ready` を受けない（その iframe の窓からなら固定の文言・**別の窓からなら何も起きず、後から来た正しい合図で描ける**）・**正しい合い札の 2 回目の `display-ready` を受けない**・
       中身がストアにある状態で載せても、最初の `load` の後にしか `render` しない・`report` に `paneId` と `format` が付く）
       対象: `packages/web/src/display/frameMessages.ts`・`themeVars.ts`・`frameRegistry.ts`・`framePage.ts`（新規）、`packages/web/src/components/DisplayFrame.vue`（新規）、各 `.test.ts`、`packages/protocol/src/display.ts`（`DISPLAY_PONG_TIMEOUT_MS` を消すだけ）/ 根拠: research A8（手本は `packages/web/src/components/AskViewer.vue` の `onMessage`）、A13、`packages/web/src/actions/paneFocus.ts` の `focusPaneIfShown`、`packages/client-core/src/keys/chord.ts:388`
       依存: T8, T10
@@ -307,7 +308,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       (b) `DISPLAY_VIEW_SANDBOX` と `DISPLAY_VIEW_CSP` の両方に `allow-same-origin` を足した版 → T19 (1) が落ちる、
       (c1) `sanitize.js` の `script`・`on*` の取り除きだけを外した版（`autofocus` の取り除きは残す）→ T19 (2)・(8) は**落ちない**（CSP が止める）。このとき、枠のコンソールに CSP の違反が記録されることを確かめる、
       (c2) `DISPLAY_VIEW_CSP` の `script-src` に `'unsafe-inline'` を足しただけの版 → T19 (2)・(8) は**落ちない**、(c3) c1 と c2 の両方 → T19 (2) のイベント属性の筋と (8) が落ちる、
-      (d) `DisplayFrame.vue` の送り主の検査（`ev.source`）・「`display-ready` は 1 回だけ」・port を外し、`window` の `message` をそのまま受ける版 → T19 (5) の「送られない」と、T11 の単体（別の窓からの `message`・2 回目の `display-ready` を受けない）が落ちる、
+      (d) `DisplayFrame.vue` の送り主の検査（`ev.source`）・「`display-ready` は 1 回だけ」・port を外し、`window` の `message` をそのまま受ける版 → T19 (5) の「送られない」と、T11 の単体（別の窓からの `message`・正しい合い札の 2 回目の `display-ready` を受けない）が落ちる、
       (e) `sanitize.js` の `meta` の取り除きを外した版 → T19 (4) の「枠が移らない」が落ちる（同じ origin の宛先へ移り、面が `navigated` で閉じる）、
       (f) `DisplayFrame.vue` の、`load` の回数の検知を外した版 → T19 (6) の「すぐ閉じて、理由が `navigated`」が落ちる（移った先は見回りに返事をしないので、10 秒後に `unresponsive` で閉じる。落ちるのは、閉じるまでの時間と理由の検査）、
       (g0) `framePage()` が、知らない形式を静的な頁へ落とす版（`null` を返さない）→ T19 (10) の「枠が作られない」が落ちる。このとき、`frame.js` が `rejected` を返して中身が描かれないこと（二重の守り）も確かめる
@@ -330,7 +331,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       冷却に入るのは「3 回に達した」と「形式が `script-html` の枠について `navigated` が来た」の 2 つだけ・**冷却に入るとき、その pane の `script-html` の面を全部閉じる**・冷却の間は、その pane の `script-html` の `set`〔同じ名前の置き換えを含む〕を `display_busy` で断り、既にある面は変えない・静的な形式は出せる・回数は、冷却が明けたとき・pane が閉じたときだけ 0 に戻る・
       回数は、面の id・名前・接続・`close`→`set` に依らない・冷却中の知らせで延びない。時計は差し替えられる）。受け口の `displaySendOp`（`ctx.paneId` だけ）と `/ws` の `display.send`、`composeServer.ts` の `register`。ログに `send` のデータを書かない。
       単体テスト（「テスト方針」の server の PR3 の項目の全部。**冷却が 5 分の 1 ミリ秒前は断り、5 分ちょうどで通る**・静的な形式の `set`・`report` で冷却が延びない／入らない・冷却中の同じ名前の置き換え・
-      **操作の桶を空にした直後の `report` が数えられる**・**`close` した直後／`html` に置き換えた直後の id への `focus_steal`・`navigated` が、添えられた `paneId`・`format` で数えられる**（何分後でも・その間に `set`→`close` を何百回はさんでも同じ。`paneId` の無い古い形の知らせで面が無ければ `display_closed`）・冷却中の pane の静的な面への `navigated` は、その面を閉じる（回数と冷却は変えない）・
+      **操作の桶を空にした直後の `report` が数えられる**・**`close` した直後／`html` に置き換えた直後の id への `focus_steal`・`navigated` が、添えられた `paneId`・`format` で数えられる**（何分後でも・その間に `set`→`close` を何百回はさんでも同じ。`paneId` の無い古い形の知らせで面が無ければ `display_closed`）・冷却中の pane の静的な面への `navigated` は、その面を閉じる（回数と冷却は変えない）・`paneId`・`format` を省いた知らせは、面があれば面の値を使う・同じ id が `html` に置き換わった後の、`format: script-html` つきの `navigated` は、いまの面を閉じずに冷却に入る・数えるものの無い知らせは `{closed: []}`・
       `navigated` で冷却に入ると、同じ pane のほかの `script-html` の面も閉じる・冷却が明けた直後に数え直しても、明ける前の 5 分に取れた回数は 3 を超えない）と、
       結合テスト（受け口からログインなしで `script-html` を `set` → `send` → 名乗った `/ws` の接続に `display.message` が届く・**pane A を名乗って pane B の面へ `send` できない（引数に `paneId` を載せても）**・静的な形式の面への `send` は `invalid_params`・64 KiB 超は誤り・
       **`report("focus_steal")` を 2 回 → 受け口から `close` → `set`（面の id が変わる）→ もう 1 回の `report` で、面が閉じ、`display.closed`〔`focus_steal`〕が `wait` に出て、直後の `script-html` の `set` は `display_busy`、`html` の `set` は通る**・2 つの接続から 1 回ずつ＋もう 1 回でも同じ・
@@ -363,12 +364,13 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       `DisplayFrame.vue` の `script-html` の分岐（`data-display-script`。`tabindex="-1"`。`render` は 1 回だけで、`rev` が変わったら枠を作り直す。**覆い** `div.display-frame-cover`・覆いの上の `wheel` を port の `scroll` へ・枠でない要素への `focusin` で操作中を解いて覆いを戻す・
       **`load` の 2 回目は、必ず `report(id, "navigated")`**（T11 の静的な形式と同じ決まり。「初めの窓」のような、枠の知らせで決まる例外を置かない）・`frameKey(info)` に、スクリプトが動く形式の鍵 `<id>:script-html:<rev>` を足す（置く側の 3 つの部品は、T12・T17 で `frameKey(info)` を使っているので、版が替わったら部品ごと——覆い・操作中の状態も——作り直される）・`render` は、その版の中身が届いたときに 1 回だけ（T11 の条件のまま）・`relayKeys` は渡さない・
       操作を終える判定は、枠でない要素への `focusin` と、「`document.activeElement` がその iframe でなくなった」（`focusout` と 250ms の見回り）の両方・`report` は捨てない・
+      **片づけのとき（面が閉じた・版や形式が替わって部品が外れる）、操作中でないのにフォーカスが枠にあれば、`report(id, "focus_steal")` を 1 回送ってから外す**・合い札の合わない合図・10 秒の時間切れでは `report` を送らない（T11 のまま）・
       横取りを見つけたら、戻して、画面が見えていれば `report(id, "focus_steal")` を 1 回・枠からの `key` は操作中の `escape` だけ受ける・`display.message` を port の `message` へ）、
       **静的な枠へ、よそからフォーカスが来たとき**（design の同じ題の項。`frame.js` に足す: 自分の `window` の `focus` で、直前 500ms に枠の中の `isTrusted` の `pointerdown` も、親からの `focus` の知らせも無ければ、port で `{ type: "foreign-focus" }`。`frameMessages.ts` に、この型を足す。
       `DisplayFrame.vue` は、直前に親の文書で `Tab` を受けていなければ、元の場所へ戻す。回数には数えない。**`frame.js` に足すのは、この知らせだけ**で、静的な形式のほかの動き・CSP・sandbox は変えない）、
       ［操作する］ボタン（`button.display-engage`。`PanePanel.vue` の見出し・`PaneBands.vue` の［×］の左・`MobileDisplaySheet.vue` の見出し。スクリプトが動く面で、操作中でないときだけ出す）と、固定の印「スクリプト」（`--soda-warn-fg`・`title`。`info.format` から決める）、
       `DisplayController`（`subscribe` の `features` に `script-html`・`onMessage`・`display.removed` の理由が `focus_steal` のときのトースト〔design の文言〕）、`frameRegistry` の `focusInside()`（`prefix+i` から。`engageEntry` を通る）。
-      単体テスト（`focusGuard` の全部の遷移・追跡が枠を覚えない〔面 2 つが続けて取っても、戻る先は枠でない要素〕・戻せないときの枠の取り外し・`engageEntry`〔`keyup` の前には始まらない〕・覆いの出し入れ・`rev` の変化で作り直す・
+      単体テスト（片づけのときの横取りの知らせ・`focusGuard` の全部の遷移・追跡が枠を覚えない〔面 2 つが続けて取っても、戻る先は枠でない要素〕・戻せないときの枠の取り外し・`engageEntry`〔`keyup` の前には始まらない〕・覆いの出し入れ・`rev` の変化で作り直す・
       **版の置き換えで、覆いが戻る**〔操作中に同じ形式で `rev` が替わると、部品が作り直され、操作中が解けて、新しい枠は覆いの下〕・**形式の切り替え**〔`html` → `script-html` → `html` で、iframe が毎回別の要素・`src` と `sandbox` が `framePage()` の値・印と覆いと［操作する］が、形式に合わせて付く・外れる〕・`load` が 1 回のままなら閉じない・2 回目は必ず `report`・`render` は id・版・形式が一致したときだけ〔前の形式・前の版の中身を、新しい枠へ送らない〕・`report` が `sendAction` の制限に掛からない・印が題で消えない・静的な形式の面には覆いも印も［操作する］も出ない）
       対象: `packages/web/src/display/framePage.ts`・`.test.ts`、`packages/web/public/display-view/frame.js`（`foreign-focus` の知らせだけ）、`packages/web/src/display/frameMessages.ts`、`packages/web/src/display/focusGuard.ts`・`engageEntry.ts`（新規）と各 `.test.ts`、`packages/web/src/components/DisplayFrame.vue`・`.test.ts`、`packages/web/src/display/DisplayController.ts`・`.test.ts`、`packages/web/src/display/frameRegistry.ts`、`packages/web/src/components/PanePanel.vue`・`PaneBands.vue`、`packages/web/src/mobile/MobileDisplaySheet.vue`
       依存: T13, T16, T17, T26
@@ -407,7 +409,8 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       (vii) 面 A のスクリプトが、自分が拾った port（土台の `soda` を覗く・`message` の受け手で拾う、など出来る手で）を兄弟の面 B へ渡してから A を移しても、A は閉じる（渡せなかった場合は、その旨を記録して、この筋は「移したら閉じる」だけを見る）、(viii) **差し込みの最中に移る**: 中身の最初のインラインのスクリプトが `location.href = "/display-view/frame.html?moved"` を呼ぶ → すぐ（10 秒待たずに）閉じて、理由は `navigated`、その pane は冷却（`unresponsive` にならない）。
       **中身がストアに既にある状態**（パネルをたたんで戻す・タブを切り替えて戻す・別の tab へ行って戻る、で枠が作り直される）でも同じ（`render` が最初の `load` の後なので、移動は 2 回目の `load` になる）。後から `document.open(); document.write(…)` し直す中身も、`load` が起きれば閉じる（起きなければ、その旨を記録）、
       (xi) **兄弟の `location` の書き換え**（出来る場合。出来なければ記録して飛ばす）: 面 A のスクリプトが `parent.frames[i].location = "/display-view/frame.html?moved"` で面 B を移す → B が `navigated` で閉じる（B がスクリプトの面なら、B の pane が冷却）。
-      **作られた直後の枠を移す**: A が 10ms ごとに `parent.frames` を見回して、新しく出来た枠（テストが、その間に静的な面 C を `set` する）の `location` を、合い札の無い `/display-view/script.html`・`/display-view/frame.html` に書き換える → C の枠に、通り道も中身も渡らない（C の中身が、移った先に出ない。固定の文言になる）、
+      **作られた直後の枠を移す**: A が 10ms ごとに `parent.frames` を見回して、新しく出来た枠（テストが、その間に静的な面 C を `set` する）の `location` を、合い札の無い `/display-view/script.html`・`/display-view/frame.html` に書き換える → **C の中身が、移った先に出ない**（結果は、時機で 2 通りあって、どちらも正しい: 最初の `load` より前に移されたら、通り道も中身も渡らず、固定の文言。後に移されたら、2 回目の `load` で C が `navigated` で閉じる）。
+      **合い札の使い回し**: スクリプトの面の中身が `location.reload()`（同じ合い札つきの URL を読み直す）を呼ぶ → 読み直した文書に、通り道も中身も渡らず（スクリプトがもう 1 回動かない）、`navigated` で閉じる、
       (ix) **合否にしない実測**: 応答が 204 の宛先（テストの待ち受けと、同じ origin の 204 を返す口があれば）へ `location.href` を書き換える・書き換えた直後に `window.stop()` する → 要求が届くか・`load` が起きるか・面が閉じるかを記録する（気づけない道の実測。限界 3）。
       `location.href = 待ち受けの URL + "?d=secret"`（外の origin）。面が閉じたか・そのままか（枠の文書が生きていて、操作できるか）と、**待ち受けに要求が届いたか**、届いた場合に、枠が外れるまでの間、外のページのスクリプトが動いたか（待ち受けが返すページが、もう 1 回要求を出す）を記録する。
       `location.href = "http://127.0.0.1:<別の待ち受け>/"`（`localhost` の別のサービスに見立てる）でも同じ（限界 3 の「LAN・`localhost` への GET」の実測）、
@@ -436,7 +439,8 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       (h3) 土台が `document.open(); document.write()` で中身を入れる版 → `load` が 2 回になるブラウザでは、T28 (1) の「`data-display-loads` が 1 のまま」が落ち、正当な中身が全部閉じる（起きないブラウザでは落ちない。その旨を記録。差し込みにした理由の確かめ）、
       (h4) `render` を、形式・版の一致を見ずに送る版 → T28 (3b) の「`html` → `script-html` に替えた直後、前の `html` の中身がスクリプトの頁で動かない」が落ちる、(h5) `report` を `sendAction` の頻度の制限に入れる版（画面）・操作の桶で捨てる版（サーバ）→ T28 (5) (xii) が落ちる、
       (h6) サーバが、面の無い知らせを（添えられた `paneId`・`format` を見ずに）`display_closed` で捨てる版 → T28 (5) (xiii) と T24 の同じ筋が落ちる、
-      (h7) 通り道と `render` を、最初の `load` を待たずに渡す版 → T28 (6) (viii) の「中身がストアにある状態で、差し込みの最中に移っても、すぐ `navigated`」が落ちる、(h8) `display-ready` の合い札を確かめない版 → T28 (6) (xi) の「作られた直後の枠を移されても、通り道も中身も渡らない」が落ちる（兄弟の `location` を書き換えられないブラウザでは、T11 の単体〔合い札の違う合図〕で見る）、
+      (h7) 通り道と `render` を、最初の `load` を待たずに渡す版 → T28 (6) (viii) の「中身がストアにある状態で、差し込みの最中に移っても、すぐ `navigated`」が落ちる、(h8) `display-ready` の合い札を確かめない版 → T11 の単体（合い札の違う合図に、通り道を渡さない）が落ちる。E2E の T28 (6) (xi) の「作られた直後の枠を移す」は、時機によって `load` の回数の検知が先に閉じるので、落ちないことがある（その旨を記録）、
+      (h9) 「合い札の合う合図も 2 回目は受けない」を外した版 → T28 (6) (xi) の「`location.reload()` で読み直した文書に、中身が渡らない」と T11 の単体が落ちる、(h10) 片づけのときの横取りの知らせを外した版 → T27 の単体（片づけのときの知らせ）が落ちる、
       (i) `script.html` の CSP の `default-src 'none'` を `default-src *` にした版 → T28 (4) の「外への要求が 0」が落ちる、(i2) `script-src` に `'self'` を足した版 → T28 (4) の「同じ origin の `<script src>` が読めない」が落ちる、
       (j) 受け口の `displaySendOp` が引数の `paneId` を対象にする版 → T24 の「pane B の面へ `send` できない」が落ちる、
       (k) 枠からの `key` の知らせを、操作中でなくても受け、`prefix` も受ける版 → T28 (5) (viii) が落ちる、(l) 戻す先を、常に面の pane の端末にする版 → T28 (5) (vi) が落ちる、(l2) 元の場所の追跡が、表示の枠も覚える版 → T28 (5) (vii) が落ちる、
