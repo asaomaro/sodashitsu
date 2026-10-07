@@ -39,7 +39,6 @@ export const DISPLAY_SET_RATE = { perSec: 10, burst: 10 } as const;
 /** pane ごとの `set` の量（続けて 8 MiB まで・毎秒 2 MiB 戻る）。 */
 export const DISPLAY_SET_BYTES_RATE = { perSec: 2 * 1024 * 1024, burst: 8 * 1024 * 1024 } as const;
 export const DISPLAY_PING_INTERVAL_MS = 2_000;
-export const DISPLAY_PONG_TIMEOUT_MS = 1_000;
 export const DISPLAY_UNRESPONSIVE_MS = 10_000;
 export const DISPLAY_ACTION_NAME_RE = /^[A-Za-z0-9_.:-]{1,64}$/;
 /** 操作に添える値の組の数。 */

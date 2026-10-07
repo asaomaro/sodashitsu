@@ -206,7 +206,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       依存: なし
       AC: AC15, AC16, AC17
       点検: あり
-- [ ] T10: web の状態と通信: `useDisplayStore`（`infos`・`contents`・`collapsed`・`activePanel`・`focusedDisplayId`・`panelsOf`・`bandsOf`。幅の保存は T15）、`DisplayController`（`onOpened` で `display.subscribe {features:["panel","band","actions"]}`・`onClosed`・`resetForMachineSwitch`・`onEvent`・
+- [x] T10: web の状態と通信: `useDisplayStore`（`infos`・`contents`・`collapsed`・`activePanel`・`focusedDisplayId`・`panelsOf`・`bandsOf`。幅の保存は T15）、`DisplayController`（`onOpened` で `display.subscribe {features:["panel","band","actions"]}`・`onClosed`・`resetForMachineSwitch`・`onEvent`・
       `ensureContent`〔`display.get` を `offset` を進めて繰り返し、片を積んで最後に 1 回だけ文字列にする・同じ id は 1 本・途中で `rev` が変わったら最初から・古い世代を捨てる・`display_closed` は消えた扱い〕・`sendAction`〔毎秒 20 回で捨てる〕・`dismiss`・`report`。古いサーバ〔`not_found`〕では何もしない）、
       `display.removed` の理由が `navigated`・`unresponsive` のときのトースト（design の 2 つの文言。自分が `report` した画面でも、ほかの画面でも 1 回だけ）、**`report` は、`sendAction` の頻度の制限と別にして、捨てない。引数に、描いていた枠の `paneId` と `format` を添える**（PR1 のサーバが知らない項目を拒むかを確かめ、拒むなら、`/ws` の `display.report` の schema に、任意の `paneId`・`format` を足す。
       あわせて、**返事が `invalid_params` なら `{id, problem}` だけで 1 回送り直す**＝既に入っている古いサーバを、新しい画面で見る組み合わせのため。受け口には無い操作）、`StoreAdapter` の case とコールバック `onDisplayEvent`、`main.ts` の配線、`injection.ts` のキー `DisplayControllerKey`。単体テスト

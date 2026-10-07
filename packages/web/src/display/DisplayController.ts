@@ -186,6 +186,9 @@ export class DisplayController {
    * `paneId`・`format` は、描いていた枠のものを添える（後の版のサーバが、面がもう無くても数えられるように）。
    */
   report(id: string, problem: DisplayReportProblem, ctx: { paneId: string; format: string }): void {
-    this.opts.conn.request("display.report", { id, problem, paneId: ctx.paneId, format: ctx.format }).catch(() => undefined);
+    this.opts.conn.request("display.report", { id, problem, paneId: ctx.paneId, format: ctx.format }).catch((err: unknown) => {
+      // 添えた項目を知らない古いサーバ（`invalid_params`）には、`{id, problem}` だけで 1 回送り直す。`display_closed` などは黙って捨てる。
+      if (errorCodeOf(err) === "invalid_params") this.opts.conn.request("display.report", { id, problem }).catch(() => undefined);
+    });
   }
 }

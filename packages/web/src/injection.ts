@@ -8,6 +8,7 @@ import type { TerminalRegistry } from "./term/TerminalRegistry.js";
 import type { FileTransfer } from "./term/FileTransfer.js";
 import type { ViewSync } from "./term/ViewSync.js";
 import type { AskController } from "./ask/AskController.js";
+import type { DisplayController } from "./display/DisplayController.js";
 
 /**
  * コンポーネントへ渡す部品の provide/inject キー（`main.ts` が組み立てて provide する。T26）。
@@ -31,5 +32,7 @@ export const KeyInputControllerKey: InjectionKey<KeyInputController> = Symbol("k
 export const MachineSwitcherKey: InjectionKey<MachineSwitcher> = Symbol("machineSwitcher");
 /** 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）の通信の係。`AskDialog` が回答・取り消しを送る。 */
 export const AskControllerKey: InjectionKey<AskController> = Symbol("askController");
+/** 表示の面（`sodactl display`。20261007-soda-extensions）の通信の係。`DisplayFrame` が操作・知らせを送る。 */
+export const DisplayControllerKey: InjectionKey<DisplayController> = Symbol("displayController");
 /** 端末のファイルのリンクとドロップ。`TerminalPane` がドロップを渡す。無ければドロップを受けない（テスト等）。 */
 export const FileTransferKey: InjectionKey<FileTransfer> = Symbol("fileTransfer");
