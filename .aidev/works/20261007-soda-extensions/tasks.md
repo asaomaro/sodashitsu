@@ -255,7 +255,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       / 根拠: `packages/web/src/composables/useResizeDrag.ts`、`packages/web/src/styles/resizeHandle.css`、`packages/web/src/components/Sidebar.vue:635-682`・`1011-1020`（手本）、`packages/e2e/src/specs/resize-handles.spec.ts`
       依存: T14
       AC: AC35, AC25, AC-I3, AC-I4
-- [ ] T16: キーの操作とフォーカス: `ACTIONS` に `focus_display`（既定 `prefix+i`。`group: "pane"`・`action: { type: "focusDisplay" }`）、`keys/actions.ts` の種類、web の `ActionDispatcher`（フォーカス中の pane の、選ばれているパネル〔たたんであれば戻して、描かれるのを待つ〕。パネルが無ければ最初の帯。その面の id で `frameRegistry.focusFrame(id)`。面が無ければトースト「この pane に表示はありません」）、
+- [x] T16: キーの操作とフォーカス: `ACTIONS` に `focus_display`（既定 `prefix+i`。`group: "pane"`・`action: { type: "focusDisplay" }`）、`keys/actions.ts` の種類、web の `ActionDispatcher`（フォーカス中の pane の、選ばれているパネル〔たたんであれば戻して、描かれるのを待つ〕。パネルが無ければ最初の帯。その面の id で `frameRegistry.focusFrame(id)`。面が無ければトースト「この pane に表示はありません」）、
       端末版は「ブラウザで使えます」の知らせ（`openGraph` と同じ形）。既存のキーの検査（`bindings.test.ts`・`presets.test.ts`・`keymap.test.ts`）が通ること。`prefix+i` は利用者が決めた値（D23）なので、衝突が見つかったら、変えずに `decisions.md` に書いて報告する
       対象: `packages/client-core/src/keys/bindings.ts:79-86` の近く、`packages/client-core/src/keys/actions.ts:94` の近く、`packages/web/src/actions/ActionDispatcher.ts:264` の近く、`packages/tui/src/actions/TuiDispatcher.ts:257` の近く、各テスト / 根拠: research A13
       依存: T13

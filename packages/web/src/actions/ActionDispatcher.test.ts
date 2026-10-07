@@ -13,6 +13,8 @@ import { TerminalRegistry } from "../term/TerminalRegistry.js";
 import { MouseBridge } from "../term/MouseBridge.js";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
+import { useDisplayStore } from "../store/display.js";
+import { registerFrame, unregisterFrame } from "../display/frameRegistry.js";
 import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
 import { useSettingsStore } from "../store/settings.js";
@@ -2873,6 +2875,48 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
       const { dispatcher } = makeDispatcher(makeConnection());
       dispatcher.run({ type: "showSubagents" });
       expect(view.dialogContext).toMatchObject({ kind: "subagents", machineId: "gpu", paneId: "p1" });
+    });
+  });
+
+  describe("focusDisplay（focus_display。20261007-soda-extensions）", () => {
+    const disp = (id: string, kind: "panel" | "band") => ({ id, paneId: "p1", name: id, kind, format: "text", title: id, size: 320, rev: 1, bytes: 1, updatedAt: "x" });
+    it("パネルがあれば選ばれているパネルの枠へ、パネルが無ければ最初の帯へ移る。面が無ければトースト", async () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      const displays = useDisplayStore(pinia);
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const toastSpy = vi.spyOn(view, "toast");
+      await dispatcher.focusDisplay();
+      expect(toastSpy).toHaveBeenCalledWith("この pane に表示はありません");
+      const focused: string[] = [];
+      const mk = (id: string) => ({ focusInside: () => void focused.push(id) });
+      const bandFrame = mk("b1");
+      const panelFrame = mk("a1");
+      registerFrame("b1", bandFrame);
+      displays.upsert(disp("b1", "band"));
+      await dispatcher.focusDisplay();
+      expect(focused).toEqual(["b1"]);
+      registerFrame("a1", panelFrame);
+      displays.upsert(disp("a1", "panel"));
+      await dispatcher.focusDisplay();
+      expect(focused).toEqual(["b1", "a1"]);
+      unregisterFrame("a1", panelFrame);
+      unregisterFrame("b1", bandFrame);
+    });
+    it("たたんであるパネルは戻してから移る", async () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      const displays = useDisplayStore(pinia);
+      displays.upsert(disp("a1", "panel"));
+      displays.setCollapsed("p1", true);
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const focused: string[] = [];
+      const f = { focusInside: () => void focused.push("a1") };
+      registerFrame("a1", f);
+      await dispatcher.focusDisplay();
+      expect(displays.collapsed.has("p1")).toBe(false);
+      expect(focused).toEqual(["a1"]);
+      unregisterFrame("a1", f);
     });
   });
 
