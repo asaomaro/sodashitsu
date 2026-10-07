@@ -726,3 +726,212 @@ Bob Shell は Sodashitsu の検知の対象（22 種類）に入っていない�
 - 対象にしないもの（D9）: エージェント自身の画面の描き替え・結果の書き換え・プロンプト本文の書き換え・
   ACP での駆動。
 - F6 の食い違いの修正と Bob Shell の追加は、別の work で先に行う（D10）。この work には入れない。
+
+---
+
+# 追補（2026-10-08）: 表示の面（ブラウザ版）のための、既存の作りの調査
+
+> **調べ方と断り**: `requirements.md`（表示の面・ブラウザ版）を書いた後、design の前に、このリポジトリの既存のコードと文書を読んだ（main の `165f88b`）。
+> 読み取りは 3 つのサブエージェントに分け、下の「実装アンカー」に載せた場所のうち、行番号を書いたものは、監督のセッションが `grep` で開き直して確かめた。
+> **ビルド・テスト・実機の操作はしていない**（読んだだけ）。上の F1〜F6（エージェントの側の調査）とは別の話で、ここは「変更前の Sodashitsu」の事実。
+> パスはリポジトリの根からの相対。
+
+## 調査の問い（追補）
+
+- RQ1: `pane.sock` に操作を足す手順と、呼び出し元の pane の確かめ方は、実際にはどうなっているか。
+- RQ2: ask の `view` の隔離した枠は、どう作られているか（iframe の属性・CSP・中身の渡し方・親子の知らせの検査）。枠から親への知らせは、どこまで信用されているか。
+- RQ3: pane の画面のどこに、横のパネルと上の帯を差し込めるか。端末の大きさ（列・行）は、どう決まるか。
+- RQ4: サーバは、つながっている画面の種類と、どの画面がどの pane を表示しているかを、どこまで知っているか。
+- RQ5: 面の状態を画面へ配る既存の型は、どれか（スナップショットに載せる／購読して取る）。
+- RQ6: `soda handoff`・サーバの停止・別のマシンの中継・Windows で、メモリだけの状態と `pane.sock` はどう扱われるか。
+- RQ7: `sodactl` にサブコマンドを足す場所・終了コード・古い版との組み合わせの型は、どうなっているか。
+- RQ8: 利用者が操作する部品として、確立した型は何か（横のパネル・タブ・枠へのフォーカスの出入り）。
+- RQ9: 作業 B（拡張の登録と起動）が手本にできる既存の作りは、どれか。
+
+## 判明した事実（追補）
+
+### R1: `pane.sock` は「1 接続 1 要求」。呼び出し元の pane は自己申告で、確かめるのは実在だけ（RQ1）
+
+- 受け口は `packages/server/src/panesocket/PaneSocket.ts`（`class PaneSocket`）。操作の登録表は `PaneOpRegistry.ts`（`PaneOpDef<P> { name; params: z.ZodType<P>; handler(ctx, params) }`、
+  `PaneOpContext { paneId; connId /* "pane-socket:<連番>" */; signal: AbortSignal }`）。いま載っている操作は `askOp.ts` の `askOpenOp`・`askFeaturesOp` の 2 つだけで、
+  登録は `packages/server/src/composeServer.ts:350-352`（`paneOps.register(...)`）。
+- やりとりは 1 行の JSON（要求 `{"v":1,"op","paneId","params"}`・返事 `{"ok":true,"result"}` か `{"ok":false,"error":{"code","message"}}`）。書いたらサーバが閉じる。**返事は 1 行だけ**
+  （続けて行を流す形は無い）。検査の順は、行の形 `bad_request` → 操作 `unknown_op` → pane の実在 `not_found` → 引数 `invalid_params` → handler。相手が切れると `ctx.signal` が abort する。
+- 定数（`packages/protocol/src/paneSocket.ts`）: `PANE_SOCKET_MAX_LINE_BYTES = 1 MiB`（要求）・`PANE_SOCKET_MAX_REPLY_BYTES = 8 MiB`（返事。sodactl が見る）・`PANE_SOCKET_MAX_CONNECTIONS = 64`・
+  `PANE_SOCKET_REQUEST_WAIT_MS = 10_000`。操作の名前の定数は `PANE_OP_ASK_OPEN = "ask.open"`・`PANE_OP_ASK_FEATURES = "ask.features"`。
+- **呼び出し元の pane は、要求の外側の `paneId` を sodactl が `SODA_PANE_ID` から入れるだけ**。受け口が確かめるのは実在（`deps.paneExists`）で、トークンも相手のプロセスの確認も無い。
+  守りは socket ファイルの権限 0600（同じ OS の利用者）だけ。「自分の pane の分だけ」は、**handler が `ctx.paneId` 以外を対象に取らない**ことで作る
+  （`askOp.ts` は `PaneAskOpenParams = AskOpenParams.omit({ paneId: true })` で、引数から `paneId` を除いている）。`docs/sodactl.md`「ログイン不要の受け口」も「`paneId` を自由に名乗れる」と明記している。
+- 載せてよい操作の 4 条件（対象が呼び出し元の pane に限られる・pane のプログラムが出来ることを超えない・秘密を返さない・量の上限がある）は、`PaneOpRegistry.ts` のクラスのコメントと `docs/sodactl.md` にある。
+- Windows（ネイティブ）は受け口を出さない（`packages/server/src/config.ts` の `paneSocketPathFor` が `undefined`）。sodactl は `/ws`（ログインが要る）へ落ちる。
+
+### R2: ask の `view` の枠は、同じ origin の静的ページを sandbox で開き、中身を `postMessage` で渡す。枠からの知らせは「送り主の窓」だけで見分ける（RQ2）
+
+- 枠を描くのは `packages/web/src/components/AskViewer.vue`。`<iframe sandbox=… referrerpolicy="no-referrer" :src="/ask-view/…html">`（`srcdoc` は使わない）。
+  定数は `ASK_VIEW_SANDBOX = "allow-scripts"`（html）・`ASK_VIEW_MARKDOWN_SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox"`（markdown）。`allow-same-origin` は付けない（不透明 origin）。
+- 静的ページは `packages/web/public/ask-view/`（`html.html`・`html.js`・`markdown.html`・`markdown.js`・`keys.js`・`links.js`・`vendor/marked.umd.js`・`vendor/mermaid.min.js`）。
+  配るのは `packages/server/src/http/HttpServer.ts:132` の `handleAskView`（許可リスト `ASK_VIEW_FILES`〔52 行〕の名前だけ・GET/HEAD だけ・認証なし）。
+- **CSP は HTTP の応答ヘッダ**（meta ではない）。アプリ本体は `SECURITY_HEADERS`（23 行）:
+  `default-src 'self'; connect-src 'self'; img-src 'self' data:; media-src data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'`（`frame-src` は無く、`default-src 'self'` が効くので、同じ origin の枠だけ開ける）。
+  - `markdown.html`: `sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`
+  - `html.html`: `sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`
+  - 2 つの HTML は `X-Frame-Options: SAMEORIGIN` に付け直す（`ASK_VIEW_PAGE_HEADERS`、49 行）。`.js` は CSP と `X-Frame-Options` を外して配る。sandbox は、iframe の属性と応答ヘッダの二重。
+- 中身の渡し方: 枠のページが `parent.postMessage({type:'ready'}, '*')` → 親が `win.postMessage({type:'ask-view', source, dark}, '*')`。
+  親は `ev.source === frame.contentWindow` のときだけ、子は `ev.source === parent` のとき 1 回だけ受ける。**`event.origin` は見ていない**（枠が不透明 origin なので `"null"`）。
+- **枠の中の文書が別のページへ移っても、`contentWindow` は同じ**なので、送り主の窓の一致だけでは、移った先のページからの知らせも通る（ブラウザの仕様。この調査では実測していない）。
+  ask は、枠から受ける知らせを取り消し・前後の質問・決定の「知らせ」だけに絞り、決定そのものは取り次がないことで害を抑えている（`AskDialog.vue` の `onViewKey`、`20261004-ask-media-popup/decisions.md` D9）。
+- Markdown の枠の取り除きは `markdown.js:37` の `sanitize(root, whole)`: `meta, link, base, form, iframe, frame, object, embed, map, area, script` と SMIL（`set, animate, animateTransform, animateMotion, animateColor`）、
+  本文ではさらに `svg, math` を消す。`<a>` は `links.js` の `openableHref`（`http:`・`https:` だけ）を通ったものに `target="_blank" rel="noopener noreferrer"` を付け、ほかは `href` を外す。
+- 枠の中のキーは `keys.js` が `window` のキャプチャで拾い、`Esc`・`Ctrl/Cmd+Enter`・`Alt+PageUp/PageDown` だけを親へ渡す。
+- **枠の高さを親へ知らせる仕組みは無い**（枠は flex で親の箱を埋めるだけ）。
+- 枠へテーマは CSS 変数では届かない（別の文書）。いまは `dark` の真偽だけを渡している。テーマの変数の一覧は `packages/client-core/src/theme/uiTokens.ts` の `CSS_VARS`（20 個）。
+- 既知の限界（`docs/sodactl.md`「成果物（view）」）: html の枠のスクリプトは、フォーカスを奪ってキー入力を読め、`location=` で外へ出せる。`inert` などでは防げない（実測の記録は上の D9・D10）。
+
+### R3: pane の画面は `PaneFrame` の中の `.pane-frame-body`。端末の大きさは、葉の箱を測ってサーバへ申告し、サーバの値に従う（RQ3）
+
+- 階層: `App.vue` → `PaneLayout.vue`（分割の再帰）→ `PaneFrame.vue`（枠・右クリック・名前の表示）→ `.pane-frame-body`（`PaneFrame.vue:305`）→ `<slot />` → `.pane-layout-leaf` → `TerminalPane.vue`。
+  **pane に独立した見出しの行は無い**（名前は枠線に重ねた表示）。
+- 大きさ: `PaneLayout.vue` が葉（`.pane-layout-leaf`）ごとに `ResizeObserver` を張り、100ms にまとめて（`term/resizeThrottle.ts` の `RESIZE_COMMIT_INTERVAL_MS`）、`term/ViewSync.ts` が葉の箱をセルの寸法で割って
+  `client.view {workspaceId, tabId, visible: [{paneId, cols, rows}]}` を送る。`@xterm/addon-fit` は使っていない。xterm の大きさは、サーバから戻る値に従う。
+- **葉の外で、葉の箱を縮める場所に置けば、追加のコードなしで大きさが追従する。葉の中・`TerminalPane` の中に置くと、測った大きさより置き場が狭くなり、端が切れる**（`PaneLayout.vue` のコメントに同じ失敗の記録）。
+- PTY の大きさを決められるのは、tab ごとに 1 つの画面（`session.hasSizeAuthority(tabId)`＝`tab.sizeOwnerClientId === clientId`）。権限の無い画面は、申告する大きさが変わるだけで、端末は中央寄せで出る。
+- zoom（拡大）は、`PaneLayout` の根がその pane だけを `PaneFrame` と葉で描く（同じ `PaneFrame` を通る）。
+- **モバイルは別の作り**: `packages/web/src/mobile/MobileShell.vue`（`header.mobile-shell-bar`〔81 行〕と `main.mobile-shell-pane`〔94 行〕）。フォーカス中の pane を 1 つだけ出し、`PaneFrame` は `enabled=false`（枠を描かず、ストアにも触れない）。
+  大きさは `.mobile-shell-pane` を測る（`mobile/usePaneArea.ts`）。葉は縮小の箱の中にある。切り替えは `mobile/detect.ts`（768px 未満）。
+- pane の右クリックのメニューは `packages/web/src/components/ContextMenu.vue:61-70`（項目は `{ label, run: () => actions.… }`。操作は `actions/ActionDispatcher.ts`）。
+- キーの操作の一覧は `packages/client-core/src/keys/bindings.ts` の `ACTIONS`（`ActionId` はそこから導く。494 行）。既定の prefix は `ctrl+b`。**`prefix+i` は既定の割り当てに無い**（`defaults:` を一覧して確認）。
+  キーの入口は `packages/web/src/keys/KeyInputController.ts`（`injectPrefix()` が 190 行にある）。
+
+### R4: 接続の種類は 3 つで、端末版も `desktop`。表示中の pane は接続ごとに分かるが、フォーカスは分からない（RQ4）
+
+- `client.hello.kind` は `z.enum(["desktop","mobile","external"])`（`packages/protocol/src/messages.ts` の `clientKind`）。ブラウザは `desktop` か `mobile`、**端末版（`packages/tui/src/net/TuiNet.ts`）も `desktop`**、
+  sodactl とブラウザの軽い接続は `external`。種類では、ブラウザと端末版を見分けられない。
+- 「質問を出せる画面」は、`ask.subscribe` を送った接続（`packages/server/src/ask/AskService.ts:102` の `subscribers`、157 行の `isBrowserKind` の検査）。端末版は送らない。
+- 接続の id は、接続のたびにサーバが振る（再接続で変わる）。`ClientRecord.view`（`client.view` の値）で、**その接続が表示中の pane**は分かる。フォーカス中の pane は、session 全体で 1 つ（最後に誰かがフォーカスしたもの）しか持たない。
+- 別のマシンの中継越しの接続は `ClientRecord.viaBridge`（`packages/server/src/clients/ClientRegistry.ts:38`）。
+
+### R5: 画面へ状態を配る型は 2 つ。ask は「id だけのイベント＋購読して取る」、独自トークンは「`Pane` に載せてスナップショットで配る」（RQ5）
+
+- ask: イベントは `ask.opened`・`ask.closed`（id だけ。`packages/protocol/src/events.ts`）。画面は接続のたびに `ask.subscribe` を送り、応答の一覧で出し直す。定義は `ask.get`、大きな中身は `ask.media`（片に分けて取る）。
+  スナップショット（`SessionSnapshot`）に ask は入らない。web 側は `store/StoreAdapter.ts:200-202`（イベントの振り分け）→ `main.ts:133`（`onAskEvent`）→ `ask/AskController.ts` → `store/ask.ts`。
+  接続ごとの処理は `main.ts:298-299`（`onOpened`・`onClosed`）、マシンの切り替えは `main.ts:398`（`resetForMachineSwitch`）。
+- 独自トークン: `Pane.tokens?: Record<string,string>`（`packages/protocol/src/model.ts`）に載り、`pane.updated` とスナップショットで全員に届く。サーバは `packages/server/src/metadata/MetadataService.ts`（メモリだけ・`ttl` つき）。
+- `/ws` の 1 通の上限は 4 MiB（`packages/server/src/ws/WsServerWs.ts` の `MAX_WS_PAYLOAD_BYTES`）。
+- RPC の引数は zod（`packages/protocol/src/messages.ts` の `METHOD_SCHEMAS`〔920 行付近〕と `MethodResultMap`〔1017 行付近〕）。エラーの code は `packages/protocol/src/errors.ts`（84〜86 行に ask の 3 つ）。
+  サーバの登録は `packages/server/src/surface/methods/*.ts`（`index.ts` の `registerAllMethods`、依存は `deps.ts` の `MethodDeps`。`composeServer.ts:411`）。
+
+### R6: `soda handoff` が引き継ぐのは pane の PTY だけ。メモリだけの状態は消える。別のマシンの pane の処理は、先のマシンのサーバが行う（RQ6）
+
+- 引き継ぎの記録は `packages/server/src/handoff/HandoffManifest.ts` の `HandoffManifest { format: 1, …, panes: HandoffPane[], scrollbackEditors }`。**ask の待ち・独自トークン・サブエージェントの一覧などメモリだけの状態は、引き継がれない**。
+- 入れ替えの間、`closeClients`（`composeServer.ts:516`）が `/ws` と中継を閉じ、`paneSocket.pause()` する。待っていた `pane.sock` の接続は何も書かずに捨てられ（sodactl は `connection_closed`）、
+  新しい接続は `pane_socket_busy`、新しい版が受け口を置き直すまでは `ECONNREFUSED`。sodactl はこの 2 つを 5 秒まで繋ぎ直す（`packages/cli/src/paneSocket.ts` の `PANE_SOCKET_RETRY_MS`）。
+- 接続が切れたときの後始末は、2 つの `WsGateway` の `onClientGone`（`composeServer.ts:460-464`・`471-475`）に 1 行ずつ足す形。pane が閉じたときは、bus の `pane.closed` を購読する（`AskService` のコンストラクタ）。
+- 別のマシン（`docs/machines.md`）: 手元のサーバは `/ws?machine=` を中継するだけで、中身を解釈しない。先のサーバにとっては `/ws` の 1 接続と同じ。**リモートの pane の `pane.sock`・状態は、リモートのサーバのもの**で、
+  そのマシンを表示中の手元のブラウザへ、中継の接続経由で届く。
+- handoff をまたぐ確かめは vitest では出来ず、`packages/server/src/handoffSmoke.ts`（ビルドした成果物を子プロセスで起動）で行う。
+
+### R7: `sodactl` のサブコマンドは 4 か所に足す。`pane.sock` か `/ws` かの判断は 1 つの関数にある（RQ7）
+
+- 足す場所: `packages/cli/src/cliArgs.ts` の `USAGE_LINES`・`Command` の union・`parseCommand` の `case`、`packages/cli/src/main.ts` の switch と `printHelp`。
+  `packages/cli/src/skill.test.ts` が `USAGE_LINES` と `packages/cli/skills/sodactl/SKILL.md` の食い違いを検査する。
+- 受け口を使うか `/ws` へ落ちるかは `packages/cli/src/paneSocket.ts` の `viaPaneSocketOrSession(opts, paneId, op: {name, params?, timeoutMs}, viaSession, call?)` が決める
+  （受け口を使う条件: `opts.paneSocket`・`opts.caller` があり、`--url`/`SODACTL_URL` の明示が無く、`--machine` が無い。`unknown_op`・`bad_request`・接続前の失敗は `/ws` へ落ちる）。
+- 終了コードは `packages/cli/src/output.ts` の `reportAndExit`: 0＝成功、1＝サーバ・接続・認証のエラー（stderr に `{"error":{"code","message"}}`）、2＝`CliUsageError`。
+- 古い版との組み合わせの型（ask）: `probeServer`（`packages/cli/src/commands/ask.ts`）が、`/ws` の `not_found`（知らない方式）と受け口の `unknown_op` を「古いサーバ」と読み、
+  `{"status":"unavailable","reason":…}` を stdout に出して終了コード 0。
+- NDJSON を出し続けるコマンドの先例は `pane observe`（`packages/cli/src/commands/sessionStream.ts`・`packages/cli/src/sessionStream.ts` の `FrameWriter`・`LineSplitter`）。行は `{"type":"terminal.frame",…}`・`{"type":"terminal.closed","reason":…}`。
+  **NDJSON にするのは sodactl の側**で、サーバは `/ws` のフレームを送るだけ。
+- E2E で sodactl を動かす型は `packages/e2e/src/support/ask.ts` の `runAsk`・`runAskWithoutLogin`（ビルドした `packages/cli/dist/main.js` を、`SODA_PANE_ID`・`SODA_SERVER_URL`・`SODA_PANE_SOCKET` を渡して子プロセスで起動。
+  `spawnAsk` は引数が `["ask", …]` に固定で、ほかのサブコマンド用の helper は無い）。サーバは `support/appServer.ts` が `composeServer` をテストごとに立てる。ブラウザが送った `client.view` の列・行は `support/panes.ts` の `watchClientView` で読める。
+
+### R8: 利用者が操作する部品の、確立した型（RQ8）
+
+> **断り**: この節の外部の型（WAI-ARIA Authoring Practices・エディタの例）は、**原文を取得せず、書き手の記憶で書いた**。細部は、実装の前に原文で確かめる。リポジトリの中の先例は、コードを読んで確かめた。
+
+| 論点 | WAI-ARIA APG（記憶） | VS Code の横のパネル・Webview（記憶） | このリポジトリの先例（確認済み） | 採る案 |
+|---|---|---|---|---|
+| 横の補助的な領域 | `role="complementary"`（または名前つきの `region`）に、見える名前を付ける | サイドバー・パネルは名前つきの領域 | pane は `role="group"` と `aria-label`（`PaneFrame.vue:281-282`） | `role="complementary"` と `aria-label`（「pane『…』のパネル」） |
+| 複数の中身の切り替え | Tabs: `role="tablist"`/`tab`/`tabpanel`。左右の矢印で移り、`Home`/`End`。タブの並びには `Tab` で 1 回だけ止まる | 同じ | `AskViewer.vue` の成果物のタブ（矢印・`Home`・`End`。`docs/sodactl.md`「成果物（view）」） | APG の Tabs。矢印で移ったら、そのまま切り替える（自動で有効化） |
+| 開く・閉じる | 補助的な領域は、開いてもフォーカスを奪わない（ダイアログと違う） | パネルは開いてもエディタのフォーカスを保つ。閉じるのは見出しのボタン | トースト・通知はフォーカスを奪わない。ask のダイアログは奪う（モーダル） | 面はフォーカスを奪わない。閉じるのは見出しのボタン |
+| 枠（iframe）へのキーボードの出入り | iframe には `title` を付ける。`Tab` で入れる | Webview へは `F6` などの「領域を移る」操作で入り、`Esc` や同じ操作で戻る。Webview の中のキーは、取り次ぐものだけがエディタへ届く | ask の枠は `Esc` などを `postMessage` で親へ取り次ぐ（`keys.js`） | キーの操作（`prefix+i`）で枠へ入り、`Esc` で端末へ戻る。prefix のキーも取り次ぐ |
+| 確定 | ボタンは `Enter`・`Space` | 同じ | — | 枠の中の `button`・`a`・フォームは、ブラウザの既定のまま |
+
+食い違い: APG のタブは「`Tab` でタブの並びから tabpanel へ進む」。ここでは tabpanel が iframe なので、`Tab` で枠の中へ入る。枠の中の最後の要素から先へ `Tab` で出られる（ブラウザの既定）ことを E2E で確かめる。
+端末（xterm）は `Tab` を自分で使うので、**端末から面へは `Tab` では移れない**。そのために、キーの操作（`focus_display`）を足す。これは、このアプリに固有の事情。
+
+### R9: 作業 B（拡張の登録と起動）が手本にできる既存の作り（RQ9。B の design への申し送り）
+
+- 設定ファイルの読み込みの手本は `packages/server/src/commands/commandConfig.ts`（`loadCommandsFile`: `O_NOFOLLOW|O_NONBLOCK` で開き、**開いた fd の fstat で**通常ファイル・持ち主・ほかの利用者が書けないこと・64 KiB を確かめて、同じ fd から読む。
+  zod の `strictObject`。1 つでも規則外なら全体を採らず、理由にコマンドの文字列を入れない）。読むのは起動時と、読み直しの操作（`command.reload`）のとき。Windows は持ち主と権限を検査しない。
+- **独自コマンドの `shell` 種は、子プロセスを切り離して管理しない**（`detached: true`・`stdio: "ignore"`・`unref()`。終了も出力も見ない）。長く生きる子プロセスの手本は、ssh を持つ
+  `packages/server/src/machine/MachineLink.ts`（`stdio: ["pipe","pipe","pipe"]`・stderr の上限・`SIGTERM` → 2 秒 → `SIGKILL`・終了を待つ）と `MachineManager.ts`（唯一の持ち主・バックオフ・`start()`/`stop()`）。
+- handoff をまたぐ子プロセスの前例は ssh だけで、**止めて終了を待ち、新しい版で起動し直す**（`composeServer.ts:496` の `pausePollers` の中の `await machines.stop()`。理由は「execve で置き換わった後は、子が回収されずに残る」）。
+- 子プロセスの起動は、状態ディレクトリのロックを取った後（`listen()` の中）でないと、二重起動のときに 2 つ動く（`commands.reload()` は読むだけなので、組み立ての時点で呼んでいる）。
+- workspace に「プロジェクトの根」の項目は無い。`Pane.cwd` は動く。git の根を求める既存の関数は `packages/server/src/session/workspaceLabel.ts` の `findGitRoot(cwd, deps)`（git を呼ばずに `.git` を親へたどる。worktree ごとの根を返す）。
+  リポジトリ単位の鍵は `Workspace.git.repoKey`（`--git-common-dir`）。
+- JSON を安全に書く共通の関数は `packages/server/src/persist/atomicFile.ts` の `writeFileAtomic`（0600・rename）と `readFileWithBackup`。
+- 設定画面の節の足し方: `packages/web/src/components/SettingsDialog.vue` の `.settings-body` の直下に `<section class="settings-section" aria-labelledby=…>` を足す（左のメニューは自動で拾う）。
+  サーバから届く確認を、開いている設定を潰さずに出す先例は `AskDialog.vue`（1 枠とは別の `<dialog>`）。
+
+## 影響範囲（追補）
+
+- protocol: 新しい `display.ts`、`messages.ts`（方式の表）、`events.ts`、`errors.ts`、`paneSocket.ts`、`index.ts`。
+- server: 新しい `display/`（台帳）、`panesocket/`（操作）、`surface/methods/`（`/ws` の方式）、`composeServer.ts`（組み立て・`onClientGone`・`close()`）、`http/HttpServer.ts`（静的ページの許可リストとヘッダ）、`testkit.ts`。
+- cli: `cliArgs.ts`・`main.ts`・新しい `commands/display.ts`・`skills/sodactl/SKILL.md`。
+- web: 新しい部品（パネル・帯・枠）とストア・通信の係、`PaneFrame.vue`・`PaneLayout.vue`（葉の CSS）・`mobile/MobileShell.vue`・`main.ts`・`injection.ts`・`store/StoreAdapter.ts`・`ContextMenu.vue`・`actions/ActionDispatcher.ts`、
+  新しい静的ページ `public/display-view/`。
+- client-core: `keys/bindings.ts`（キーの操作 1 つ）。
+- e2e: 新しい spec と `support/` の helper。`handoffSmoke.ts` に 1 段。
+- 触らない: `packages/tui`（名乗らないので、出ない）・`third_party/ask-form/`・`/ask-view/*` のヘッダ・`handoff/`。
+
+## 実現性 / リスク（追補）
+
+- **実現できる**: 受け口・隔離した枠・画面への配り方・sodactl の足し方のどれも、ask に先例があり、同じ型で足せる。
+- **「返事は 1 行」の受け口で、操作の出来事を流し続ける**には、長く待つ要求（次の出来事が来るまで待って返す）を繰り返す形になる。受け口の同時接続 64 を、待ちが使い切らない上限が要る。
+- **枠が別のページへ移ると、送り主の窓の検査だけでは見分けられない**（R2）。作者のスクリプトを動かさず、移る手段を取り除いたうえで、移ったことを検知して枠を作り直す・専用の通り道だけで操作を受ける、の重ねがけにする。
+- **パネルの開閉で端末の大きさが変わる**（R3）。中のプログラムに大きさの変更の知らせが飛ぶ。幅を動かしながら変えると 100ms ごとに飛ぶので、幅の変化はアニメーションさせない。
+- **モバイルは別の置き場が要る**（R3）。`PaneFrame` の中に足しても出ない。
+- **Vite の開発サーバ（`vite dev`）では、静的ページに専用のヘッダが付かない見込み**（`/ask-view/*` と同じ。確かめていない）。隔離の確かめは、ビルドしたものを `HttpServer` から配って行う（E2E はそうなっている）。
+- 追補は読んだだけ。行番号は main の `165f88b` の時点。
+
+## 実装アンカー
+
+- A1: 受け口の操作を足す（`packages/server/src/panesocket/askOp.ts` `askOpenOp`）— `PaneOpDef` の作り方・`ctx.paneId` を対象に・`ctx.signal` で待ちを取り消す手本。
+- A2: 受け口の操作の登録（`packages/server/src/composeServer.ts:350-352`）— `paneOps.register(...)`。台帳の組み立ては 334 行の `AskService` の近く。
+- A3: `/ws` の方式の登録（`packages/server/src/surface/methods/ask.ts` `registerAskMethods`、`index.ts`、`deps.ts` `MethodDeps`、`composeServer.ts:411`）。
+- A4: 接続が切れたときの後始末（`packages/server/src/composeServer.ts:460-464`・`471-475`）— 2 つの `WsGateway` の `onClientGone`。
+- A5: 台帳の手本（`packages/server/src/ask/AskService.ts`）— `subscribers`（102 行）・bus の `pane.closed` の購読・`onClientGone`・`dispose`。
+- A6: 方式の引数と結果の表（`packages/protocol/src/messages.ts:920` 付近 `METHOD_SCHEMAS`・`1017` 付近 `MethodResultMap`）、イベント（`events.ts` の `ServerEvent`）、エラー（`errors.ts:84-86`）、受け口の定数（`paneSocket.ts`）。
+- A7: 静的ページの配信（`packages/server/src/http/HttpServer.ts:49-52`・`132-160`）— `ASK_VIEW_PAGE_HEADERS`・`ASK_VIEW_FILES`・`handleAskView`。
+- A8: 枠の部品の手本（`packages/web/src/components/AskViewer.vue` `onMessage`・`ASK_VIEW_MARKDOWN_SANDBOX`）と、枠の側（`packages/web/public/ask-view/markdown.js:37` `sanitize`、`links.js` `openableHref`、`keys.js`）。
+- A9: pane の中の差し込み場所（`packages/web/src/components/PaneFrame.vue:305` `.pane-frame-body`、CSS は 478 行）と、葉の CSS（`PaneLayout.vue` の `.pane-layout-leaf`）。
+- A10: モバイルの置き場（`packages/web/src/mobile/MobileShell.vue:81`・`94`）。
+- A11: イベントの振り分けと配線（`packages/web/src/store/StoreAdapter.ts:51`・`200-202`、`main.ts:133`・`198`・`298-299`・`398`・`519`、`injection.ts`）。通信の係の手本は `packages/web/src/ask/AskController.ts`。
+- A12: pane の右クリックのメニュー（`packages/web/src/components/ContextMenu.vue:61-70`）。
+- A13: キーの操作（`packages/client-core/src/keys/bindings.ts` `ACTIONS`）と入口（`packages/web/src/keys/KeyInputController.ts:190` `injectPrefix`）。操作の実行は `packages/web/src/actions/ActionDispatcher.ts`。
+- A14: sodactl のコマンド（`packages/cli/src/cliArgs.ts` `USAGE_LINES`・`Command`・`parseCommand`、`main.ts`、手本は `commands/ask.ts` の `runAsk`・`runFeatures`・`probeServer`）と、経路の選択（`packages/cli/src/paneSocket.ts` `viaPaneSocketOrSession`）。
+- A15: E2E の helper（`packages/e2e/src/support/ask.ts:54` `spawnAsk`、`support/panes.ts` `watchClientView`、`support/appServer.ts`、枠の中は `page.frameLocator(...)`。手本の spec は `specs/ask-view.spec.ts`）。
+- A16: handoff をまたぐ確かめ（`packages/server/src/handoffSmoke.ts`）。
+- A17: フォーカスを端末へ戻す口（未特定 — `TerminalRegistry`・`view.focusedPaneId` のまわり。coding 側で、ask のダイアログを閉じたときに端末へ戻している処理〔`AskDialog.vue`〕を手本に探す）。
+- A18: テーマの色を枠へ渡すための、いまの色の読み方（未特定 — `packages/web/src/theme/ThemeController.ts` が `documentElement.style` に当てている。`getComputedStyle` で読むか、ThemeController から取るかは coding 側で決める）。
+
+## 実装時の注意
+
+- `.pane-layout-leaf` の中・`TerminalPane.vue` の中には、何も足さない（端が切れる。R3）。足すのは `.pane-frame-body` の中の、葉の兄弟。
+- `PaneLayout.vue` はストアを読まない方針（Pinia の無い呼び出しを壊さない）。面の状態は `PaneFrame.vue`（`enabled` のときだけ）か、その子の部品が読む。
+- `PaneFrame` は `enabled=false`（モバイル・単体テスト）のとき、ストアに触れない。面の部品も同じ条件で描かない。
+- `/ask-view/*` の応答ヘッダと `ASK_VIEW_SANDBOX` などの定数は変えない（E2E の負の対照が見ている）。新しいページは別のパス・別の許可リストにする。
+- `/ws` の handler を、受け口にそのまま登録しない（`paneId` を引数に取る handler を載せると、ほかの pane を指せる）。受け口の引数の schema からは `paneId` を除く。
+- 新しいテーマの変数は足さない（17 テーマ分の値決めが要る）。既存の変数を `color-mix` で薄めて使う（`PaneFrame.vue` の先例）。
+- 文言は日本語の直書き（i18n は無い）。サーバのエラーは、code から日本語を引く（`packages/client-core/src/net/clientError.ts`）ので、code を足したらそこにも足す。
+- E2E は `pnpm build` の後に動く（ビルドした sodactl と web を使う）。
+- `skill.test.ts` があるので、`USAGE_LINES` を変えたら SKILL.md も同じコミットで直す。
+
+## design への申し送り（追補）
+
+- 面の状態は、ask と同じ「購読して取る」型にする（名乗りが要る〔R4・D16〕・中身が大きいのでスナップショットに載せない〔R5〕）。
+- 受け口に載せる操作は、引数から `paneId` を除き、handler が `ctx.paneId` だけを対象にする（R1）。出来事は「長く待つ要求」の繰り返しで受ける。
+- 枠は、Markdown の枠（スクリプトは静的ページ自身のものだけ）を手本に、新しい静的ページを別のパスで作る（R2・D13）。枠が移ったことの検知と、専用の通り道を足す。
+- 差し込み場所は `.pane-frame-body` の中（R3）。モバイルは `MobileShell.vue` に別の置き場。
+- `soda handoff` では面を引き継がない（R6・D15）。
+- 作業 B は、R9 を出発点にする。
