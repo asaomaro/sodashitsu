@@ -1058,6 +1058,11 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       if (focusFrame(target.id)) return;
       await nextTick();
     }
+    // モバイルにはパネルを置く場所が無い（枠が載っていない）。重ね表示を開く（トーストは出さない）。
+    if (this.displays.sheetAvailable && target.kind === "panel") {
+      this.displays.sheetRequest++;
+      return;
+    }
     this.view.toast("表示を出せません（pane が狭い、または読み込み中です）");
   }
 

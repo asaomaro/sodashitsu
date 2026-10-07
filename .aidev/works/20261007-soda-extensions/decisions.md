@@ -374,3 +374,17 @@ D28 の直しの後、別のコンテキストに design・tasks を 1 回見せ
 - `DisplayFrame` が中身を取る（`ensureContent`）のを、tasks は `PanePanel`・`PaneBands` の役にしていたが、`DisplayFrame` 自身が「載ったとき・版と形式が替わったとき」に呼ぶ形にした（たたんだパネルは `DisplayFrame` が載らないので取らない、という決まりは同じ）。
 - 枠の鍵（`frameKey`）に加えて、`DisplayFrame` 自身も `info.format` の変化で iframe を作り直す（tasks の指示どおり）。
 - モバイルの［表示N］のボタンは、狭い画面でバーがあふれるので、余白を詰めた（`.mobile-shell-pane` の箱を変えないため、バーの外に行を足す案は採らなかった）。
+
+
+## D31: PR2 の独立レビューを受けた直し（実装者の記録。2026-10-08）
+
+1. **要素の名前の上書き（DOM clobbering）**（should）: `sanitize.js` と `frame.js` は、中身の要素・`document` のプロパティを直接読まず、読み込み時に控えた `Element.prototype`・`Node.prototype`・`Document.prototype` のメソッドと getter を `call` で使う（getter は、プロトタイプの連鎖をたどって探す。ブラウザは直に持つが、単体テストの DOM は持たないため）。
+   `frame.js` は描画の全体を `try` で囲み、失敗したら親へ `{type:"failed", rev}` を送って次の `render` を受ける。親は枠を残したまま固定の文言を出し、次の `rendered` で消す。単体テストの DOM は名前の上書きを再現しない（内部が公開の名前を読む）ので、**落ちる確かめは E2E**（`display-isolation` (11)・(12)）。
+2. **E2E の組み替え**: 旧 (7)(8) を「アプリが面の出現・更新でフォーカスを動かさない」の実測にした。奪取そのものは PR3。「ブラウザが別 origin の枠の `autofocus` を止める」は観測した事実で、守りに数えない。
+3. **中身の取得**: 受け取った大きさが `totalBytes` と合わなければ取り直し、続けば固定の文言（`contentFailed`）。
+4. **フォーカスの印**: `store.remove`・`store.clear` は `focusedDisplayId` を下ろさず、枠の部品が外れるときに下ろして端末へ戻す。
+5. **題の書字方向を変える文字**（U+202A〜202E・U+2066〜2069）を `checkDisplaySet` の制御文字の検査に足した（PR1 の protocol。サーバ・sodactl 共通）。
+6. **モバイルの `prefix+i`**: `MobileShell` が載っている間は `displays.sheetAvailable`。パネルの枠が載っていなければ `sheetRequest` を増やし、`MobileShell` が重ね表示を開く（トーストは出さない）。
+7. **固定のラベルを 1 つの関数に**（`display/displayLabel.ts` の `displayLabel(info)`・`displayBandLabel(info)`）。知らない項目があっても壊れない。後の作業が「どの拡張が出したか」の文を足す場所。
+8. **初回の案内のトースト**は、既存の置き場所の決まり（右上・4 秒・クリックを通す）のまま。帯・パネルの操作を妨げない。
+9. **ask の側の取り除き**に、同じ種類の穴（`name=remove` で `el.remove()` が失敗→ソースの文字表示へ落ちる。閉じる側）がある。この PR では直さない（別の作業の候補・低）。

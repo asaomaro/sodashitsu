@@ -4,6 +4,7 @@ import { checkDisplayAction } from "@sodashitsu/protocol";
 export type FrameMessage =
   | { type: "rendered"; rev: number }
   | { type: "rejected"; rev: number }
+  | { type: "failed"; rev: number }
   | { type: "action"; rev: number; action: string; data?: Record<string, string> }
   | { type: "key"; key: "escape" | "prefix" }
   | { type: "pong"; n: number };
@@ -19,6 +20,7 @@ export function readFrameMessage(data: unknown): FrameMessage | null {
   switch (data.type) {
     case "rendered":
     case "rejected":
+    case "failed":
       return isRev(data.rev) ? { type: data.type, rev: data.rev } : null;
     case "action": {
       if (!isRev(data.rev)) return null;

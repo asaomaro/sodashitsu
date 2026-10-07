@@ -344,3 +344,101 @@ PR3（スクリプトが動く形式）の前提 5・6・8・10・11 は、こ�
          Tests  2 failed | 20 passed (22)
 ```
 どの版も、戻した後に `git diff` が空であること、再ビルドして該当の spec が全部通ることを確かめた。
+
+
+## PR2 の独立レビューを受けた直し（2026-10-08）
+
+レビュー: must 0・should 3・nit。判断は「直してから」。直した内容は `decisions.md` D31。
+
+### 1・2. 名前の上書き（DOM clobbering）: 直す前で落ちることと、直した後
+
+`sanitize.js`・`frame.js` が、中身の要素・`document` のプロパティを直接読んでいた。`display-isolation` の (11)（`<form onclick onsubmit formaction srcdoc autofocus><input name=…>` で、form の属性が全部消える）と (12)（`<img name=createElement>` などの後の `render`）を足した。
+**直す前の版（直前のコミット `fd8cfb8` の `sanitize.js`・`frame.js`）で流した出力**（(11) の 12 通りのうち、実ブラウザで差し替えが効いて落ちたのは 4 通り。ほかは差し替えられても属性の取り除きが通った）:
+```
+     ✘   1 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=attributes でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘   2 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=getAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘   3 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=removeAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓   4 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=setAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘   5 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=hasAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓   6 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=tagName でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓   7 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=localName でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓   8 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=children でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓   9 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=parentNode でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓  10 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=firstChild でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓  11 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=remove でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓  12 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=querySelectorAll でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  13 src/specs/display-isolation.spec.ts:245:1 › (12) 生きた document が中身の name・id で上書きされても、次の render が描かれる（createElement・importNode・body・querySelecto
+       - Expected  - 1
+       + Received  + 7
+       - Array []
+       + Array [
+       +   "onclick",
+       +   "onsubmit",
+       +   "formaction",
+       +   "srcdoc",
+       +   "autofocus",
+       + ]
+       Error: expect(locator).toBeAttached() failed
+```
+直した後（同じ spec 全体）:
+```
+     ✓   1 src/specs/display-isolation.spec.ts:21:1 › (1) 枠の sandbox 属性と応答ヘッダに allow-same-origin が無く、枠の中から親・cookie・保存領域・アプリへの通信に触れない
+     ✓   2 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（html）
+     ✓   3 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（markdown）
+     ✓   4 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（html）
+     ✓   5 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（markdown）
+     ✓   6 src/specs/display-isolation.spec.ts:101:1 › (3) 外の画像・stylesheet・@import・背景・フォントへの要求が 0（ブラウザの要求の記録と、待ち受けに届いた要求）
+```
+（`26 passed`。(11) 12 件・(12) 1 件を含む。）
+
+### 3. E2E の空振りと、負の対照
+
+(a) 旧 (7)(8) は、中身が `onerror` と `autofocus` で、取り除きと CSP で動かず、奪取の実装が壊れても通る空振りだった。作り直した: 端末にフォーカスがある状態で、`autofocus`・`tabindex`・`input`・`textarea` を含む中身を `set`・更新・形式替え・帯の追加して、毎回 `document.activeElement` が端末のままで、打った文字が pane に届くこと。
+**観測した事実（守りには数えない）**: 別 origin の枠の `autofocus` は、ブラウザが親の文書のフォーカスを動かさない（枠の `document.hasFocus()` は `false`。Chromium）。奪取そのものへの備え（`focus()` を呼び続ける中身）は、作者のスクリプトが動く形式（PR3）の範囲で、静的な形式では作れない。
+
+(b) 取り除きと CSP の**両方**を外した版（`script` と `on*` の取り除きを外し、`script-src` に `'unsafe-inline'` を足す）→ スクリプトが動いて (2) が落ちる（html・markdown）。ほかに (1)（ヘッダの値）・(2b)・(11) も落ちる:
+```
+     ✘   1 src/specs/display-isolation.spec.ts:21:1 › (1) 枠の sandbox 属性と応答ヘッダに allow-same-origin が無く、枠の中から親・cookie・保存領域・アプリへの通信に触れない
+     ✘   2 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（html）
+     ✘   3 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（markdown）
+     ✘   4 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（html）
+     ✘   5 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（markdown）
+     ✘  13 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=attributes でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  14 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=getAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  15 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=removeAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  16 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=setAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  17 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=hasAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  18 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=tagName でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  19 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=localName でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  20 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=children でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  21 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=parentNode でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  22 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=firstChild でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  23 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=remove でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  24 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=querySelectorAll でも、form の on*・formaction・srcdoc・autofocus が消える
+     17 failed
+     9 passed (1.1m)
+```
+(c) 外への要求の筋 (3) の、CSP を緩めた対照（`default-src *`・`style-src * 'unsafe-inline'`・`img-src *`・`font-src *`。取り除きは残す）→ (3) だけが落ち、待ち受けに **`@import`（`/b.css`）・`<style>` の `url()` の背景（`/bg.png`）・インラインの `style` の背景（`/d.png`）・フォント（`/f.woff2`）の 4 件**が届く。CSP が外への要求を止めている証拠:
+```
+     ✘   6 src/specs/display-isolation.spec.ts:101:1 › (3) 外の画像・stylesheet・@import・背景・フォントへの要求が 0（ブラウザの要求の記録と、待ち受けに届いた要求）
+     1 failed
+     25 passed
+   - Array []
+   + Array [ "/b.css", "/bg.png", "/d.png", "/f.woff2" ]      （`expect(sink.requests()).toEqual([])` の差分）
+```
+（`<link rel=stylesheet>`・`<img src>`・`background` 属性は、取り除きが先に消すので、CSP を緩めても届かない。二重の守りの片方。）
+
+(d) 対照 (b)（`allow-same-origin` を足した版）で落ちるのは、`display-isolation` の中では (1) だけ（9 件中 1 件。上の「負の対照」の (b)）。つまり (1) が `allow-same-origin` の単独の守りで、ほかの筋はそれを見張っていない。
+
+### 4〜7（nit）の確かめ
+- `DisplayController` の中身の取得: 受け取った大きさが `totalBytes` と合わない・空の片が `eof` でないときは取り直し、`REFETCH_MAX` 回やっても合わなければ固定の文言「表示の中身を取得できませんでした」（`store.contentFailed`）。単体テストあり。
+- 接続が切れて台帳を空にしたとき（`store.clear`）、枠にフォーカスがあれば端末へ戻す（`clear` がフォーカスの印を下ろさず、枠の部品が外れるときに下ろして端末へ戻す）。単体テストあり。
+- 題の書字方向を変える文字（U+202A〜202E・U+2066〜2069）: `checkDisplaySet`（サーバ・sodactl 共通）の制御文字の検査に足した。protocol・cli の単体テストあり。
+- モバイルの `prefix+i`: パネルの枠が載っていなければ重ね表示を開く（トーストなし）。単体・E2E（`display-mobile`）あり。
+
+### 9. 初回の案内のトーストと、帯・パネルの見出し（見た目）
+右上の「ctrl+b ? でキー一覧」は、既存の `Toast.vue` の置き場所（右上の固定。20261005-notify-bell）。**一度だけ出て、4 秒で消え、クリックを通す**（`.toast:not(.toast-sticky) { pointer-events: none }`）ので、帯・パネルの［×］・たたむを押すのを妨げない。消えない知らせ（`sticky`。［移動］・［×］つき）は、消すまで右上に残り、パネルの見出しに重なる——これも既存の置き場所の決まりで、モバイル以外は動かさない。**理由を付けて「そのまま」**。
+
+### ask の側の取り除き（`packages/web/public/ask-view/markdown.js`）に同じ穴があるか
+実ブラウザで確かめた（`/ask-view/markdown.html` を直に開き、自分宛てに `ask-view` の知らせを送った）。`<form><input name="remove"></form>` を含む Markdown で、`sanitize` の `el.remove()` が `TypeError`（`remove` が子の入力に差し替わる）→ 枠は**ソースの文字表示（`plain()`）へ落ちる**。**閉じる側に倒れる（実行・移動には至らない）が、取り除きの途中で止まり、整形されない**。`attributes` などは読まないので、属性が残る形の穴は見つからなかった。
+`html.html`（スクリプトが動く枠）は、もともと取り除きを掛けない。この PR では直さない。別の作業の候補（低）: `ask-view/markdown.js` の `sanitize` が、要素のメソッドを直接呼ばず、プロトタイプのメソッドを `call` で使う。

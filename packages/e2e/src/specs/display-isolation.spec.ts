@@ -189,23 +189,81 @@ test("(6) 枠が移った場合: 面が閉じ、トーストが出て、display.
   await expect(panelFrameLoc(page).locator("#again")).toBeAttached();
 });
 
-test("(7)(8) 端末にフォーカスがあるとき、autofocus つきの中身・フォーカスを奪い続ける中身が来ても、打った文字は全部 pane に届き、activeElement は iframe にならない", async ({ page, appServer }) => {
+test("(7)(8) 端末にフォーカスがあるとき、面の出現・更新・置き換えで、アプリはフォーカスを動かさない（autofocus・tabindex・input を含む中身でも）。打った文字は全部 pane に届き、activeElement は iframe にならない", async ({ page, appServer }) => {
+  // 静的な形式では作者のスクリプトが動かないので、「フォーカスを奪い続ける中身」は作れない（奪取そのものへの備えは、スクリプトが動く形式〔PR3〕の範囲）。
+  // ここで測るのは、アプリ自身が、面の出現・更新で `focus()` を呼ばないこと。ブラウザ自身が別 origin の枠の autofocus を止めることは観測した事実で、守りには数えない（test-result.md）。
   const { paneId } = await openDisplayBrowser(page, appServer);
   const input = await watchSentInput(page);
   await page.locator(".xterm-helper-textarea").focus();
-  const steal = `<img src="data:image/png;base64,broken" onerror="setInterval(()=>{window.focus();document.getElementById('i').focus()},50)"><input id="i" autofocus><p id="v1">v1</p>`;
-  await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(steal)]));
-  await expect(panelFrameLoc(page).locator("#v1")).toBeAttached();
+  const activeBefore = await page.evaluate(() => document.activeElement?.className);
+  expect(activeBefore).toContain("xterm-helper-textarea");
+  const content = (n: string) => `<input id="i" autofocus><button id="b" tabindex="1" autofocus>b</button><div tabindex="0" id="t">t</div><textarea autofocus></textarea><p id="${n}">${n}</p>`;
+  const f = panelFrameLoc(page);
+  const active = () => page.evaluate(() => document.activeElement?.className ?? document.activeElement?.tagName);
+  await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(content("v1"))]));
+  await expect(f.locator("#v1")).toBeAttached();
+  expect(await active()).toContain("xterm-helper-textarea");
   await page.keyboard.type("aaa");
-  await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(steal.replace("v1", "v2"))]));
-  await expect(panelFrameLoc(page).locator("#v2")).toBeAttached();
+  // 更新（同じ名前の置き換え）・形式を替える置き換え・帯の追加。
+  await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(content("v2"))]));
+  await expect(f.locator("#v2")).toBeAttached();
+  expect(await active()).toContain("xterm-helper-textarea");
   await page.keyboard.type("bbb");
-  await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(steal.replace("v1", "v3"))]));
-  await expect(panelFrameLoc(page).locator("#v3")).toBeAttached();
+  await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--format", "markdown"], { stdin: "# md\n\n<input autofocus id=\"j\">" }));
+  await expect(f.locator("#j")).toBeAttached();
+  expect(await active()).toContain("xterm-helper-textarea");
   await page.keyboard.type("ccc");
-  await expect.poll(() => input().map((i) => i.text).join("")).toContain("aaabbbccc");
-  expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe("IFRAME");
+  await ok(await runDisplay(appServer, paneId, ["set", "band", "--kind", "band", "--html-file", await writeTmp(content("b1"))]));
+  await expect(page.frameLocator("[data-pane-bands] iframe").locator("#b1")).toBeAttached();
+  expect(await active()).toContain("xterm-helper-textarea");
+  await page.keyboard.type("ddd");
+  await expect.poll(() => input().map((i) => i.text).join("")).toContain("aaabbbcccddd");
+  expect(await active()).not.toBe("IFRAME");
   await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "0");
+  // 観測した事実（守りには数えない）: 別 origin の枠の autofocus は、ブラウザが親の文書のフォーカスを動かさない。
+  const frame = (await (await page.locator("[data-pane-panel] iframe").elementHandle())!.contentFrame())!;
+  console.log("OBSERVED frame.hasFocus=", await frame.evaluate(() => document.hasFocus()));
+});
+
+// 名前の上書き（DOM clobbering）。form の子の `name` が `form.attributes` などを差し替えても、取り除きが form の属性を全部消す（実ブラウザで）。
+for (const name of ["attributes", "getAttribute", "removeAttribute", "setAttribute", "hasAttribute", "tagName", "localName", "children", "parentNode", "firstChild", "remove", "querySelectorAll"]) {
+  test(`(11) 取り除き: form の子が name=${name} でも、form の on*・formaction・srcdoc・autofocus が消える`, async ({ page, appServer }) => {
+    const { paneId } = await openDisplayBrowser(page, appServer);
+    const html = `<form id="f" onclick="x()" onsubmit="y()" formaction="/x" srcdoc="x" autofocus><input name="${name}"><button>b</button></form><p id="done">done</p>`;
+    await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(html)]));
+    await expect(panelFrameLoc(page).locator("#done")).toBeAttached();
+    const f = await contentFrame(page);
+    const names = await f.evaluate(() => {
+      const form = Element.prototype.querySelector.call(document.body, "#f")!;
+      return Element.prototype.getAttributeNames.call(form) as string[];
+    });
+    expect(names.filter((n) => /^on|^formaction$|^srcdoc$|^autofocus$/.test(n))).toEqual([]);
+    expect(names).toContain("id");
+  });
+}
+
+test("(12) 生きた document が中身の name・id で上書きされても、次の render が描かれる（createElement・importNode・body・querySelector など）", async ({ page, appServer }) => {
+  const { paneId } = await openDisplayBrowser(page, appServer);
+  const clob = ["createElement", "createTextNode", "importNode", "body", "documentElement", "getElementById", "querySelector", "querySelectorAll", "activeElement", "hasFocus", "addEventListener", "scrollingElement", "head", "readyState"]
+    .map((n) => `<img name="${n}" id="${n}">`)
+    .join("");
+  await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(`${clob}<p id="first">1</p>`)]));
+  await expect(panelFrameLoc(page).locator("#first")).toBeAttached();
+  for (const [i, fmt] of [["second", "html"], ["third", "markdown"], ["fourth", "text"]] as const) {
+    const body = fmt === "html" ? `<p id="${i}">x</p>` : fmt === "markdown" ? `# ${i}` : i;
+    await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--format", fmt], { stdin: body }));
+    await expect(panelFrameLoc(page).locator(fmt === "html" ? `#${i}` : fmt === "markdown" ? "h1" : "pre")).toContainText(fmt === "html" ? "x" : i);
+  }
+  await expect(page.locator("[data-display-render-failed]")).toHaveCount(0);
+  // 上書きしたまま、操作も届く。
+  await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(`${clob}<button id="b" data-soda-action="go">go</button>`)]));
+  const w = await runDisplay(appServer, paneId, ["wait", "m"]);
+  const deadline = Date.now() + 15_000;
+  while (!w.finished() && Date.now() < deadline) {
+    await panelFrameLoc(page).locator("#b").click();
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  expect((await w.done).lines[0]).toMatchObject({ action: "go" });
 });
 
 test("(10) 知らない形式（script-html・未知）: 枠が作られず固定の文言。形式が替わると iframe が別の要素になる", async ({ page, appServer }) => {

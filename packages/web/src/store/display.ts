@@ -33,6 +33,12 @@ export const useDisplayStore = defineStore("display", () => {
   const activePanel = ref(new Map<string, string>());
   /** いまフォーカスが枠にある面の id（`DisplayFrame` が `window` の `blur`/`focus`/`focusin` で更新する）。 */
   const focusedDisplayId = ref<string | null>(null);
+  /** 中身を取れなかった面（大きさが合わないなど）。固定の文言を出す。取れたら外す。 */
+  const contentFailed = ref(new Set<string>());
+  /** モバイルの重ね表示（`MobileDisplaySheet`）を開ける画面か（`MobileShell` が載っている間だけ真）。 */
+  const sheetAvailable = ref(false);
+  /** 重ね表示を開く要求（`prefix+i` がパネルの枠へ移れないモバイルで増える。`MobileShell` が見て開く）。 */
+  const sheetRequest = ref(0);
   /** 利用者が変えたパネルの幅（pane の id → px）。この画面が覚える（`soda.prefs.v1` の `displayPanelWidths`。共有の設定へ送らない）。 */
   const panelWidths = ref(loadPanelWidths(readPrefs()["displayPanelWidths"]));
 
@@ -82,6 +88,13 @@ export const useDisplayStore = defineStore("display", () => {
     const next = new Map(contents.value);
     next.set(c.id, c);
     contents.value = next;
+  }
+  function setContentFailed(id: string, on: boolean): void {
+    if (contentFailed.value.has(id) === on) return;
+    const next = new Set(contentFailed.value);
+    if (on) next.add(id);
+    else next.delete(id);
+    contentFailed.value = next;
   }
   function setActivePanel(paneId: string, id: string): void {
     const next = new Map(activePanel.value);
@@ -134,6 +147,7 @@ export const useDisplayStore = defineStore("display", () => {
     if ([...activePanel.value].some(([, id]) => !infos.value.has(id))) {
       activePanel.value = new Map([...activePanel.value].filter(([, id]) => infos.value.has(id)));
     }
+    if ([...contentFailed.value].some((id) => !infos.value.has(id))) contentFailed.value = new Set([...contentFailed.value].filter((id) => infos.value.has(id)));
     const paneIds = new Set(all.value.map((d) => d.paneId));
     if ([...collapsed.value].some((p) => !paneIds.has(p))) {
       collapsed.value = new Set([...collapsed.value].filter((p) => paneIds.has(p)));
@@ -146,7 +160,8 @@ export const useDisplayStore = defineStore("display", () => {
     contents.value = new Map();
     collapsed.value = new Set();
     activePanel.value = new Map();
-    focusedDisplayId.value = null;
+    // フォーカスの印は下ろさない（枠の部品が外れるときに自分で下ろして端末へ戻す。ここで下ろすと戻せない）。
+    contentFailed.value = new Set();
   }
 
   return {
@@ -155,6 +170,10 @@ export const useDisplayStore = defineStore("display", () => {
     collapsed,
     activePanel,
     focusedDisplayId,
+    contentFailed,
+    setContentFailed,
+    sheetAvailable,
+    sheetRequest,
     panelWidths,
     setPanelWidth,
     clearPanelWidth,

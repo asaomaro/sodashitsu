@@ -78,4 +78,15 @@ describe("sanitize.js", () => {
     expect(f.querySelector("button")?.getAttribute("data-soda-action")).toBe("go");
     expect(f.querySelector("button")?.getAttribute("data-soda-value")).toBe("1");
   });
+
+  // 要素の名前の上書き（DOM clobbering）。ブラウザでは、`form` の子の `name` が `form.attributes` などを差し替える（E2E `display-isolation` で実測）。
+  // ここは「取り除きがその入力でも属性を全部消す」ことを見る（happy-dom は名前の上書きを再現しないので、落ちる確かめは E2E）。
+  it.each(["attributes", "getAttribute", "removeAttribute", "setAttribute", "hasAttribute", "tagName", "localName", "children", "parentNode", "firstChild", "remove", "querySelectorAll", "namespaceURI"])(
+    "form の子の name=%s があっても、form の on*・formaction・srcdoc・autofocus が消える",
+    (name) => {
+      const f = run(`<form id="f" onclick="x()" onsubmit="y()" formaction="/x" srcdoc="x" autofocus><input name="${name}"><button>b</button></form>`);
+      const form = f.querySelector("#f") as Element;
+      for (const a of ["onclick", "onsubmit", "formaction", "srcdoc", "autofocus"]) expect(Element.prototype.hasAttribute.call(form, a), a).toBe(false);
+    },
+  );
 });

@@ -19,16 +19,13 @@ function boot(search = "?t=ticket123") {
   const self: Record<string, unknown> = { askViewLinks: links.exports, marked: { parse: (s: string) => `<h1>${s}</h1>` } };
   new Function("self", sanitizeSource)(self);
   const parent = { postMessage: vi.fn() };
-  const winListeners = new Map<string, ((ev: unknown) => void)[]>();
-  const fakeWindow = {
-    addEventListener: (t: string, f: (ev: unknown) => void) => winListeners.set(t, [...(winListeners.get(t) ?? []), f]),
-  };
+  const fakeWindow = new EventTarget();
   new Function("self", "parent", "window", "location", frameSource)(self, parent, fakeWindow, { search });
   const port: FakePort = { onmessage: null, postMessage: vi.fn() };
-  const fire = (type: string, ev: unknown): void => (winListeners.get(type) ?? []).forEach((f) => f(ev));
+  const fire = (type: string, ev: Record<string, unknown>): void => void fakeWindow.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), ev));
   const init = (source: unknown = parent): void => fire("message", { source, data: { type: "display-init", v: 1 }, ports: [port] });
   const render = (msg: Record<string, unknown>): void => port.onmessage?.({ data: { type: "render", theme: { dark: true, vars: {} }, relayKeys: [], ...msg } });
-  const root = (): HTMLElement => document.getElementById("soda-display-root") as HTMLElement;
+  const root = (): HTMLElement => document.body.querySelector("#soda-display-root") as HTMLElement;
   return { parent, port, fire, init, render, root };
 }
 
@@ -140,5 +137,39 @@ describe("frame.js", () => {
     key({ key: "Escape", isComposing: true });
     key({ key: "a" });
     expect(f.port.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("document のメソッド・プロパティが中身の name で上書きされても、次の render が描かれる（DOM clobbering）", () => {
+    const f = boot();
+    f.init();
+    f.render({ rev: 1, format: "html", source: '<img name="createElement"><img name="body"><img name="importNode"><img id="documentElement"><p id="first">1</p>' });
+    expect(f.root().querySelector("#first")).not.toBeNull();
+    // 生きた document が上書きされた状態を作る（ブラウザでは名前つきの `img` が `document.X` を差し替える。`createElement`・`importNode`・`body` などは、ここの DOM の内部が公開の名前を読むので差し替えられない——その入力での落ち方は E2E〔display-isolation (11)〕で見る）。
+    for (const n of ["hasFocus", "getElementById", "querySelector"]) Object.defineProperty(document, n, { value: {}, configurable: true });
+    try {
+      f.port.postMessage.mockClear();
+      f.render({ rev: 2, format: "html", source: '<p id="second">2</p>' });
+      expect(f.root().querySelector("#second")).not.toBeNull();
+      expect(f.port.postMessage).toHaveBeenLastCalledWith({ type: "rendered", rev: 2 });
+      f.render({ rev: 3, format: "markdown", source: "m" });
+      expect(f.root().querySelector("h1")?.textContent).toBe("m");
+      f.render({ rev: 4, format: "text", source: "t" });
+      expect(f.root().querySelector("pre")?.textContent).toBe("t");
+    } finally {
+      for (const n of ["hasFocus", "getElementById", "querySelector"]) delete (document as unknown as Record<string, unknown>)[n];
+    }
+  });
+
+  it("描画が失敗しても例外を外へ出さず、親へ failed を知らせ、次の render を受ける", () => {
+    const f = boot();
+    f.init();
+    f.render({ rev: 1, format: "text", source: "ok" });
+    f.port.postMessage.mockClear();
+    const bad = { rev: 2, format: "text", source: "x", get theme(): never { throw new Error("boom"); } };
+    expect(() => f.port.onmessage!({ data: { type: "render", ...Object.getOwnPropertyDescriptors(bad) && { rev: 2, format: "text", source: "x" }, theme: new Proxy({}, { get() { throw new Error("boom"); } }) } })).not.toThrow();
+    expect(f.port.postMessage).toHaveBeenCalledWith({ type: "failed", rev: 2 });
+    f.render({ rev: 3, format: "text", source: "after" });
+    expect(f.root().querySelector("pre")?.textContent).toBe("after");
+    expect(f.port.postMessage).toHaveBeenLastCalledWith({ type: "rendered", rev: 3 });
   });
 });

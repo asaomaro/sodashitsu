@@ -2,6 +2,11 @@
 // アプリ本体の iframe（sandbox に `allow-same-origin` なし＝不透明 origin）が開く。親とのやりとりは `MessageChannel` の port だけ。
 // 中身は取り除き（sanitize.js）を通して文書に入れる。作者のスクリプトは動かない（CSP の script-src 'self'）。
 // **この枠は、静的な形式（text・markdown・html）以外の `render` を描かない**（`rejected` を返す）。
+//
+// **名前の上書き（DOM clobbering）に備える**: 中身の `<img name="createElement">`・`<form><input name="getAttribute"></form>` などは、
+// `document`・`form` 要素のメソッド・プロパティを差し替える。このファイルは、読み込み時（中身を入れる前）に控えた
+// `Document.prototype`・`Element.prototype`・`Node.prototype` のメソッドと getter を `call` で使い、`document.X`・中身の要素の `el.X` を直接読まない。
+// 描画の全体を `try` で囲み、失敗しても次の `render` を受け、親へ `failed` を知らせる。
 (function () {
   'use strict';
   var STATIC = { text: 1, markdown: 1, html: 1 };
@@ -9,6 +14,40 @@
   var FIELDS_MAX = 64;
   var KEY_MAX = 64;
   var DATA_MAX_BYTES = 8 * 1024;
+
+  // --- 読み込み時に控える（中身を入れる前）-------------------------------------------------------------------
+  // プロトタイプの連鎖をたどって getter を探す（ブラウザは `Document.prototype` などに直に持つ。連鎖をたどるのは、そうでない実装〔単体テストの DOM〕のため）。
+  function getterOf(proto, name) {
+    for (var o = proto; o; o = Object.getPrototypeOf(o)) {
+      var d = Object.getOwnPropertyDescriptor(o, name);
+      if (d && d.get) return d.get;
+    }
+    return undefined;
+  }
+  var D = Document.prototype;
+  var E = Element.prototype;
+  var N = Node.prototype;
+  var docCreateElement = D.createElement;
+  var docImportNode = D.importNode;
+  var docHasFocus = D.hasFocus;
+  var docBody = getterOf(D, 'body');
+  var docHead = getterOf(D, 'head');
+  var docElement = getterOf(D, 'documentElement');
+  var docScrolling = getterOf(D, 'scrollingElement');
+  var docActive = getterOf(D, 'activeElement');
+  var docReady = getterOf(D, 'readyState');
+  var addListener = EventTarget.prototype.addEventListener;
+  var getAttribute = E.getAttribute;
+  var setAttribute = E.setAttribute;
+  var hasAttribute = E.hasAttribute;
+  var closest = E.closest;
+  var qsa = E.querySelectorAll;
+  var localNameOf = getterOf(E, 'localName');
+  var contains = N.contains;
+  var appendChild = N.appendChild;
+  var childNodesOf = getterOf(N, 'childNodes');
+  var focusEl = HTMLElement.prototype.focus;
+  var forEach = Array.prototype.forEach;
   var sanitize = self.__sodaDisplaySanitize;
   var marked = self.marked;
   var ticket = new URLSearchParams(location.search).get('t') || '';
@@ -24,16 +63,16 @@
 
   function ensureRoot() {
     if (root) return root;
-    root = document.createElement('div');
+    root = docCreateElement.call(document, 'div');
     root.id = 'soda-display-root';
-    document.body.appendChild(root);
+    appendChild.call(docBody.call(document), root);
     return root;
   }
 
   function applyTheme(theme) {
     if (!theme || typeof theme !== 'object') return;
-    var de = document.documentElement;
-    de.setAttribute('data-dark', theme.dark ? '1' : '0');
+    var de = docElement.call(document);
+    setAttribute.call(de, 'data-dark', theme.dark ? '1' : '0');
     var vars = theme.vars;
     if (vars && typeof vars === 'object') {
       Object.keys(vars).forEach(function (k) {
@@ -50,11 +89,11 @@
   function captureState() {
     var fields = {};
     if (root) {
-      Array.prototype.forEach.call(root.querySelectorAll('input[name], textarea[name], select[name]'), function (el) {
+      forEach.call(qsa.call(root, 'input[name], textarea[name], select[name]'), function (el) {
         var t = (el.type || '').toLowerCase();
         if (t === 'checkbox' || t === 'radio') {
           if (el.checked !== el.defaultChecked) fields[fieldKey(el)] = { checked: el.checked };
-        } else if (el.tagName === 'SELECT') {
+        } else if (localNameOf.call(el) === 'select') {
           var vals = Array.prototype.map.call(el.selectedOptions, function (o) { return o.value; });
           var def = Array.prototype.filter.call(el.options, function (o) { return o.defaultSelected; }).map(function (o) { return o.value; });
           if (vals.join('\u0001') !== def.join('\u0001')) fields[fieldKey(el)] = { values: vals };
@@ -63,63 +102,65 @@
         }
       });
     }
-    var active = document.activeElement;
+    var active = docActive.call(document);
     var focus = null;
     // 枠の文書が既にフォーカスを持つ（利用者が枠の中にいる）ときだけ、同じ name／id の要素へ持ち越す。端末から奪わない。
-    if (document.hasFocus() && active && active !== document.body && root && root.contains(active)) {
-      if (active.getAttribute('name')) focus = { by: 'name', v: active.getAttribute('name'), type: active.getAttribute('type') || '', value: active.value };
-      else if (active.id) focus = { by: 'id', v: active.id };
+    if (docHasFocus.call(document) && active && active !== docBody.call(document) && root && contains.call(root, active)) {
+      var an = getAttribute.call(active, 'name');
+      var aid = getAttribute.call(active, 'id');
+      if (an) focus = { by: 'name', v: an, type: getAttribute.call(active, 'type') || '' };
+      else if (aid) focus = { by: 'id', v: aid };
       else focus = { by: 'body' };
     }
-    var se = document.scrollingElement || document.documentElement;
+    var se = docScrolling.call(document) || docElement.call(document);
     return { fields: fields, focus: focus, top: se.scrollTop, left: se.scrollLeft };
   }
   function restoreState(s) {
-    Array.prototype.forEach.call(root.querySelectorAll('input[name], textarea[name], select[name]'), function (el) {
+    forEach.call(qsa.call(root, 'input[name], textarea[name], select[name]'), function (el) {
       var f = s.fields[fieldKey(el)];
       if (!f) return;
       if ('checked' in f) el.checked = f.checked;
       else if ('values' in f) Array.prototype.forEach.call(el.options, function (o) { o.selected = f.values.indexOf(o.value) >= 0; });
       else el.value = f.value;
     });
-    var se = document.scrollingElement || document.documentElement;
+    var se = docScrolling.call(document) || docElement.call(document);
     se.scrollTop = s.top;
     se.scrollLeft = s.left;
     if (s.focus) {
       var target = null;
-      if (s.focus.by === 'name') {
-        var cands = root.querySelectorAll('[name]');
-        for (var i = 0; i < cands.length; i++) {
-          if (cands[i].getAttribute('name') === s.focus.v && (cands[i].getAttribute('type') || '') === s.focus.type) { target = cands[i]; break; }
-        }
-      } else if (s.focus.by === 'id') {
-        var c2 = root.querySelectorAll('[id]');
-        for (var j = 0; j < c2.length; j++) if (c2[j].id === s.focus.v) { target = c2[j]; break; }
+      var cands = qsa.call(root, '[name], [id]');
+      for (var i = 0; i < cands.length && !target; i++) {
+        if (s.focus.by === 'name' && getAttribute.call(cands[i], 'name') === s.focus.v && (getAttribute.call(cands[i], 'type') || '') === s.focus.type) target = cands[i];
+        else if (s.focus.by === 'id' && getAttribute.call(cands[i], 'id') === s.focus.v) target = cands[i];
       }
       if (!target) {
-        document.body.setAttribute('tabindex', '-1');
-        target = document.body;
+        target = docBody.call(document);
+        setAttribute.call(target, 'tabindex', '-1');
       }
-      try { target.focus({ preventScroll: true }); } catch (e) { /* 何もしない */ }
+      try { focusEl.call(target, { preventScroll: true }); } catch (e) { /* 何もしない */ }
     }
   }
 
   // --- 描く -------------------------------------------------------------------------------------------------
+  function textFragment(source) {
+    var tpl = docCreateElement.call(document, 'template');
+    var pre = docCreateElement.call(document, 'pre');
+    pre.className = 'soda-text';
+    pre.textContent = source;
+    tpl.content.appendChild(pre);
+    return tpl.content;
+  }
   function buildFragment(format, source) {
-    var tpl = document.createElement('template');
-    if (format === 'text') {
-      var pre = document.createElement('pre');
-      pre.className = 'soda-text';
-      pre.textContent = source;
-      tpl.content.appendChild(pre);
-      return tpl.content; // 文字として入れるだけなので、取り除きは要らない
-    }
+    if (format === 'text') return textFragment(source); // 文字として入れるだけなので、取り除きは要らない
+    var tpl = docCreateElement.call(document, 'template');
     if (format === 'markdown') {
       tpl.innerHTML = marked.parse(source, { gfm: true });
     } else {
+      // 読んだ文書（`doc`）も、中身の `name` で `head`・`body` などを上書きされうるので、getter を `call` で使う。
       var doc = new DOMParser().parseFromString(source, 'text/html');
-      Array.prototype.forEach.call(doc.head.querySelectorAll('style'), function (st) { tpl.content.appendChild(document.importNode(st, true)); });
-      Array.prototype.forEach.call(doc.body.childNodes, function (n) { tpl.content.appendChild(document.importNode(n, true)); });
+      forEach.call(qsa.call(docHead.call(doc), 'style'), function (st) { appendChild.call(tpl.content, docImportNode.call(document, st, true)); });
+      var kids = childNodesOf.call(docBody.call(doc));
+      forEach.call(Array.prototype.slice.call(kids), function (n) { appendChild.call(tpl.content, docImportNode.call(document, n, true)); });
     }
     return sanitize(tpl.content);
   }
@@ -129,26 +170,25 @@
       post({ type: 'rejected', rev: msg.rev });
       return;
     }
-    var state = captureState();
-    var frag;
     try {
-      frag = buildFragment(msg.format, msg.source);
+      var state = captureState();
+      var frag;
+      try {
+        frag = buildFragment(msg.format, msg.source);
+      } catch (e) {
+        frag = textFragment(msg.source); // 壊れた中身は `<pre>`
+      }
+      applyTheme(msg.theme);
+      relayKeys = Array.isArray(msg.relayKeys) ? msg.relayKeys : [];
+      rev = msg.rev;
+      var r = ensureRoot();
+      r.textContent = '';
+      appendChild.call(r, frag);
+      restoreState(state);
+      post({ type: 'rendered', rev: msg.rev });
     } catch (e) {
-      var tpl = document.createElement('template');
-      var pre = document.createElement('pre');
-      pre.className = 'soda-text';
-      pre.textContent = msg.source;
-      tpl.content.appendChild(pre);
-      frag = tpl.content;
+      post({ type: 'failed', rev: msg.rev }); // 次の render は受けられる（状態は壊れていない）
     }
-    applyTheme(msg.theme);
-    relayKeys = Array.isArray(msg.relayKeys) ? msg.relayKeys : [];
-    rev = msg.rev;
-    var r = ensureRoot();
-    r.textContent = '';
-    r.appendChild(frag);
-    restoreState(state);
-    post({ type: 'rendered', rev: msg.rev });
   }
 
   // --- 操作 -------------------------------------------------------------------------------------------------
@@ -168,21 +208,21 @@
     if (data) m.data = data;
     post(m);
   }
-  document.addEventListener('click', function (e) {
+  addListener.call(document, 'click', function (e) {
     var t = e.target;
-    if (!t || typeof t.closest !== 'function') return;
-    var el = t.closest('[data-soda-action]');
-    if (!el || el.localName === 'form') return;
-    if (el.disabled || el.getAttribute('aria-disabled') === 'true') return;
-    var value = el.getAttribute('data-soda-value');
-    if (value === null) value = el.getAttribute('value');
-    sendAction(el.getAttribute('data-soda-action'), value === null ? undefined : { value: value });
+    if (!(t instanceof Element)) return;
+    var el = closest.call(t, '[data-soda-action]');
+    if (!el || localNameOf.call(el) === 'form') return;
+    if (hasAttribute.call(el, 'disabled') || getAttribute.call(el, 'aria-disabled') === 'true') return;
+    var value = getAttribute.call(el, 'data-soda-value');
+    if (value === null) value = getAttribute.call(el, 'value');
+    sendAction(getAttribute.call(el, 'data-soda-action'), value === null ? undefined : { value: value });
   });
-  document.addEventListener('submit', function (e) {
+  addListener.call(document, 'submit', function (e) {
     e.preventDefault(); // 実際の送信は起こさない（CSP の form-action 'none'・取り除きの action と、三重）
     var form = e.target;
-    if (!form || form.localName !== 'form') return;
-    var action = form.getAttribute('data-soda-action');
+    if (!(form instanceof Element) || localNameOf.call(form) !== 'form') return;
+    var action = getAttribute.call(form, 'data-soda-action');
     if (action === null) return;
     var data = {};
     var fd = new FormData(form);
@@ -202,7 +242,8 @@
     }
     return false;
   }
-  window.addEventListener(
+  addListener.call(
+    window,
     'keydown',
     function (e) {
       if (e.isComposing || e.keyCode === 229) return;
@@ -218,14 +259,15 @@
   );
 
   function focusFirst() {
-    if (!root) ensureRoot();
+    ensureRoot();
     var sel = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-    var list = root.querySelectorAll(sel);
+    var list = qsa.call(root, sel);
     for (var i = 0; i < list.length; i++) {
-      if (!list[i].disabled) { list[i].focus(); return; }
+      if (!hasAttribute.call(list[i], 'disabled')) { focusEl.call(list[i]); return; }
     }
-    document.body.setAttribute('tabindex', '-1');
-    document.body.focus();
+    var body = docBody.call(document);
+    setAttribute.call(body, 'tabindex', '-1');
+    focusEl.call(body);
   }
 
   function onPort(ev) {
@@ -236,7 +278,7 @@
     else if (m.type === 'focus') focusFirst();
   }
 
-  window.addEventListener('message', function (ev) {
+  addListener.call(window, 'message', function (ev) {
     if (inited || ev.source !== parent) return;
     var m = ev.data;
     if (!m || typeof m !== 'object' || m.type !== 'display-init' || !ev.ports || ev.ports.length < 1) return;
@@ -250,6 +292,6 @@
     ensureRoot();
     parent.postMessage({ type: 'display-ready', t: ticket }, '*');
   }
-  if (document.readyState === 'complete') ready();
-  else window.addEventListener('load', ready);
+  if (docReady.call(document) === 'complete') ready();
+  else addListener.call(window, 'load', ready);
 })();

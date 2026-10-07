@@ -2903,6 +2903,22 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
       unregisterFrame("a1", panelFrame);
       unregisterFrame("b1", bandFrame);
     });
+    it("モバイル（重ね表示を開ける画面）では、パネルの枠が載っていなければ重ね表示を開く要求を出し、トーストは出さない", async () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      const displays = useDisplayStore(pinia);
+      displays.upsert(disp("a1", "panel"));
+      displays.sheetAvailable = true;
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const toastSpy = vi.spyOn(view, "toast");
+      const before = displays.sheetRequest;
+      await dispatcher.focusDisplay();
+      expect(displays.sheetRequest).toBe(before + 1);
+      expect(toastSpy).not.toHaveBeenCalled();
+      displays.sheetAvailable = false;
+      await dispatcher.focusDisplay();
+      expect(toastSpy).toHaveBeenCalledWith("表示を出せません（pane が狭い、または読み込み中です）");
+    });
     it("たたんであるパネルは戻してから移る", async () => {
       const view = useViewStore(pinia);
       view.focusPane("p1");

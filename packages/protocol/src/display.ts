@@ -232,9 +232,9 @@ export function displayUtf8Bytes(s: string): number {
 
 export type DisplayCheck<T> = { ok: true; value: T } | { ok: false; reason: string };
 
-// 制御文字（C0・DEL・C1）と、行・段落の区切り。題に入れない。
+// 制御文字（C0・DEL・C1）と、行・段落の区切りと、書字方向を変える文字（U+202A〜202E・U+2066〜2069。題の見た目で固定のラベルなどを偽装させない）。題に入れない。
 // eslint-disable-next-line no-control-regex
-const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);

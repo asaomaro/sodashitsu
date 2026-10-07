@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, ref, watch } from "vue";
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import PaneLayout from "../components/PaneLayout.vue";
 import TerminalPane from "../components/TerminalPane.vue";
 import { ConnectionKey, TerminalRegistryKey, ViewSyncKey } from "../injection.js";
@@ -40,6 +40,19 @@ const viewSync = inject(ViewSyncKey);
 // 表示の面（20261007-soda-extensions）。帯はバーと pane の間に出し、パネルはバーのボタンから重ね表示（端末の横には出さない）。
 const displays = useDisplayStore();
 const showDisplaySheet = ref(false);
+// `prefix+i`（focus_display）は、モバイルでは重ね表示を開く（パネルの枠が端末の横に無いため）。
+onMounted(() => {
+  displays.sheetAvailable = true;
+});
+onBeforeUnmount(() => {
+  displays.sheetAvailable = false;
+});
+watch(
+  () => displays.sheetRequest,
+  () => {
+    if (currentPaneId.value && displays.panelsOf(currentPaneId.value).length > 0) showDisplaySheet.value = true;
+  },
+);
 const panelCount = computed(() => (currentPaneId.value ? displays.panelsOf(currentPaneId.value).length : 0));
 const bandCount = computed(() => (currentPaneId.value ? displays.bandsOf(currentPaneId.value).length : 0));
 

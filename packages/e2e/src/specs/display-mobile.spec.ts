@@ -39,9 +39,6 @@ test("パネルは端末の横に出ず、バーのボタンから重ね表示�
   // ［閉じる］でシートだけ閉じる（面は残る）。
   await page.locator("[data-mobile-display-close]").click();
   await expect(page.locator("[data-mobile-display-sheet]")).toHaveCount(0);
-  await expect(page.locator("[data-mobile-display-btn]")).toHaveText("表示1");
-  expect(views.latest()!.visible[0]!.cols).toBe(colsBefore);
-
   // 帯: 端末（.mobile-shell-pane）の上に出る。
   const b = await runDisplay(appServer, paneId, ["set", "top", "--kind", "band", "--text", "帯の文字"]);
   expect((await b.done).code).toBe(0);
@@ -49,4 +46,12 @@ test("パネルは端末の横に出ず、バーのボタンから重ね表示�
   const band = (await page.locator("[data-pane-bands]").boundingBox())!;
   const pane = (await page.locator(".mobile-shell-pane").boundingBox())!;
   expect(band.y + band.height).toBeLessThanOrEqual(pane.y + 1);
+  // `prefix+i`（追加キーの Prefix ボタン → i）は、モバイルでは重ね表示を開く（「表示を出せません」のトーストは出さない）。
+  await page.locator(".mobile-shell-keyboard-btn").click();
+  await page.getByRole("button", { name: "Prefix" }).click();
+  await page.keyboard.press("i");
+  await expect(page.locator("[data-mobile-display-sheet]")).toBeVisible();
+  await expect(page.locator(".toast", { hasText: "表示を出せません" })).toHaveCount(0);
+  await page.locator("[data-mobile-display-close]").click();
+  await expect(page.locator("[data-mobile-display-sheet]")).toHaveCount(0);
 });

@@ -55,6 +55,8 @@ sodactl display set confirm --kind panel --html-file ask.html --wait --timeout 6
 - 要素: `script`・`meta`・`link`・`base`・`iframe`/`frame`/`frameset`・`object`/`embed`/`applet`/`portal`・`map`/`area`・`math`・`audio`/`video`/`source`/`track`・`noscript`・SVG の SMIL（`set`・`animate` ほか）と `foreignObject`・`input type=file`/`image`。SVG の中の `a` は中身を残して外す。
 - 属性: `on` で始まるもの全部・`autofocus`・`srcdoc`・`action`/`formaction`・`target`・`ping`・`background`・`http-equiv`・`srcset`。
 - リンク: `#` で始まるものは残る。`http://`・`https://`（小文字）は新しいタブで開く（`rel="noopener noreferrer"`）。`javascript:`・`data:`・相対・`//host` は `href` が外れ、行き先が `title` に出る。
+- **要素の名前の上書き（DOM clobbering）に備えている**: 中身の `<form><input name="attributes">`・`<img name="createElement">` は、`form.attributes`・`document.createElement` などを差し替える。取り除きと枠のスクリプトは、中身の要素・`document` のプロパティを直接読まず、読み込み時に控えたプロトタイプのメソッド・getter を使う。
+  描画が例外で失敗しても、枠は次の `render` を受け、親へ知らせる（枠の場所に「この表示を描けませんでした」。次の更新で消える）。取り除きだけが破れても、枠の CSP が実行を止める（二重の守り）。
 - 画像: `data:image/`（png・jpeg・gif・webp・svg+xml）だけ。外の URL の `src` は外れる。外の stylesheet・`@import`・`url()` の背景・フォントは、枠の CSP が止める（要求が出ない）。
 
 ## 操作（`data-soda-action`）
@@ -128,7 +130,7 @@ sodactl display set confirm --kind panel --html-file ask.html --wait --timeout 6
 
 ### キーの操作
 
-`prefix+i`（`focus_display`。設定で変えられる）で、フォーカス中の pane のパネル（たたんであれば戻す）、無ければ最初の帯の枠へ移る。面が無ければ「この pane に表示はありません」。端末版では「ブラウザで使えます」と知らせる。
+`prefix+i`（`focus_display`。設定で変えられる）で、フォーカス中の pane のパネル（たたんであれば戻す）、無ければ最初の帯の枠へ移る。面が無ければ「この pane に表示はありません」。モバイルでは、パネルの枠が端末の横に無いので、重ね表示を開く（トーストは出さない。帯は枠へ移る）。端末版では「ブラウザで使えます」と知らせる。
 枠にフォーカスがある面が消えたら、その pane の端末へ戻る。面の出現・更新・消滅では、アプリは `focus()` を呼ばない（打っている最中のフォーカスを奪わない）。
 
 ### モバイル
@@ -148,6 +150,10 @@ sodactl display set confirm --kind panel --html-file ask.html --wait --timeout 6
 
 - **見る人への表示だけを制御する**: 面の中身・題・操作の値は、サーバのメモリに平文で載り、`sodactl display wait`/`events` でその pane の名前を名乗るプロセスが読める。名乗る pane の id は検証されない（`docs/sodactl.md`「ログイン不要の受け口」）。**秘密（パスワード・token）を面の欄に打たせない**。
 - **静的な形式ではスクリプトは動かない**。グラフや動く表示を作りたくても、この版ではできない（`html` の `<style>` と CSS の動きは使える）。
+- **入れ子の `<template>` の中身は取り除かれない**（断片の中の `template.content` は、取り除きが辿らない）。ただし不活性（文書に入らず、描かれず、スクリプトも動かない）。
+- **`<use href="…">`（SVG）は、取得を始める**が、枠の CSP（`default-src 'none'`）と不透明 origin で止まる（Chromium で確認）。
+- **実測は Chromium だけ**。Firefox・Safari で、枠が移ったときの `load` の回数・`allow-forms` の `submit`・不透明 origin の扱いが同じかは確かめていない（`docs/verification.md` の手順）。
+- 題・タブの文字から、書字方向を変える文字（U+202A〜202E・U+2066〜2069）は、制御文字と同じく受け付けない（`sodactl` が断る）。
 - 枠の中の `html` は、外へ繋がない（画像・stylesheet・フォントの要求は出ない）。リンクを押すと新しいタブで開く（`http(s)` だけ）。その先は信頼されない外のページ。
 - 中身の絵・色・文言で、利用者を誤解させることはできる（見出しの固定の文言と、操作中の表示で、アプリ自身の画面と見分けられるようにしている）。
 - 枠の中の入力（`<input>`）は、枠にフォーカスが入っている間の入力が、そのまま中身のフォームの欄に入る。パネルに「パスワードを入力してください」と書かれていても、入れない。

@@ -5,6 +5,8 @@ export { DISPLAY_VIEW_SANDBOX, DISPLAY_VIEW_PAGE } from "../display/framePage.js
 export const DISPLAY_NOTE_UNSUPPORTED = "この画面では、この形式の表示を出せません";
 export const DISPLAY_NOTE_LOAD_FAILED = "表示を読み込めませんでした";
 export const DISPLAY_NOTE_CLOSED = "この表示は閉じられました";
+export const DISPLAY_NOTE_CONTENT_FAILED = "表示の中身を取得できませんでした";
+export const DISPLAY_NOTE_RENDER_FAILED = "この表示を描けませんでした（次の更新で直ることがあります）";
 </script>
 
 <script setup lang="ts">
@@ -34,6 +36,8 @@ const page = computed(() => framePage(props.info.format));
 const iframeEl = ref<HTMLIFrameElement | null>(null);
 const phase = ref<"waiting" | "connected" | "closed">("waiting");
 const note = ref<string | null>(null);
+/** 枠が「描けなかった」と知らせた（次の `rendered` で消す。枠は残る）。 */
+const renderFailed = ref(false);
 const loads = ref(0);
 const ticket = ref("");
 /** iframe の作り直しの印（形式が替わったときなど）。 */
@@ -77,6 +81,7 @@ function start(): void {
   clearTimers();
   closePort();
   readySeen = false;
+  renderFailed.value = false;
   loads.value = 0;
   note.value = null;
   phase.value = "waiting";
@@ -171,6 +176,9 @@ function onPortMessage(ev: MessageEvent): void {
     case "rejected":
       fail(DISPLAY_NOTE_UNSUPPORTED);
       return;
+    case "failed":
+      renderFailed.value = true;
+      return;
     case "action":
       controller?.sendAction(props.info.id, m.rev, m.action, m.data);
       return;
@@ -182,6 +190,7 @@ function onPortMessage(ev: MessageEvent): void {
       if (m.key === "prefix") host?.injectPrefix();
       return;
     case "rendered":
+      renderFailed.value = false;
       return;
   }
 }
@@ -283,6 +292,8 @@ defineExpose({ key: () => frameKey(props.info) });
       :data-display-loads="loads"
       @load="onLoad"
     ></iframe>
+    <p v-if="renderFailed && phase === 'connected'" class="display-frame-note" data-display-render-failed>{{ DISPLAY_NOTE_RENDER_FAILED }}</p>
+    <p v-if="store.contentFailed.has(info.id)" class="display-frame-note" data-display-content-failed>{{ DISPLAY_NOTE_CONTENT_FAILED }}</p>
     <p v-if="visibleNote" class="display-frame-note" data-display-note>{{ visibleNote }}</p>
   </div>
 </template>

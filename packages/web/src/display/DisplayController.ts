@@ -124,12 +124,18 @@ export class DisplayController {
       const got = await this.fetchOnce(id, generation);
       if (got === "stop" || generation !== this.generation) return;
       if (got === "restart") continue;
+      if (got === "bad") {
+        // 受け取った大きさが `totalBytes` と合わない・空の片が eof でない: 取り直す。何度やっても合わなければ、固定の文言にする。
+        if (attempt === REFETCH_MAX - 1) store.setContentFailed(id, true);
+        continue;
+      }
+      store.setContentFailed(id, false);
       store.setContent({ id, rev: got.rev, format: got.format, content: got.content });
       // 取っている間に版が進んでいたら、もう一度（ループの先頭で判定する）。
     }
   }
 
-  private async fetchOnce(id: string, generation: number): Promise<{ rev: number; format: string; content: string } | "restart" | "stop"> {
+  private async fetchOnce(id: string, generation: number): Promise<{ rev: number; format: string; content: string } | "restart" | "stop" | "bad"> {
     const parts: Uint8Array[] = [];
     let offset = 0;
     let rev = -1;
@@ -157,15 +163,16 @@ export class DisplayController {
         parts.push(bytes);
         offset += bytes.length;
       }
-      if (chunk.eof || chunk.base64 === "") break;
+      if (chunk.base64 === "" && !chunk.eof) return "bad"; // 空の片で終わらせない
+      if (chunk.eof) break;
     }
+    if (offset !== total) return "bad";
     const all = new Uint8Array(offset);
     let at = 0;
     for (const part of parts) {
       all.set(part, at);
       at += part.length;
     }
-    void total;
     return { rev, format, content: new TextDecoder("utf-8").decode(all) };
   }
 

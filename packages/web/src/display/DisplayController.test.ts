@@ -170,4 +170,29 @@ describe("DisplayController", () => {
     await settle();
     expect(s.store.all).toEqual([]);
   });
+
+  it("ensureContent: 受け取った大きさが totalBytes と合わない・空の片が eof でないときは取り直し、何度やっても合わなければ固定の文言の印を立てる。合えば外す", async () => {
+    const bytes = new Uint8Array([0x61, 0x62, 0x63]);
+    let mode: "short" | "empty" | "ok" = "short";
+    const s = setup({
+      "display.get": (p) => {
+        if (mode === "empty") return { id: p.id, rev: 1, format: "html", totalBytes: 3, offset: 0, base64: "", eof: false };
+        const part = mode === "short" ? bytes.subarray(0, 2) : bytes;
+        return { id: p.id, rev: 1, format: "html", totalBytes: 3, offset: 0, base64: b64(part), eof: true };
+      },
+    });
+    s.store.upsert(info("a"));
+    await s.ctl.ensureContent("a");
+    expect(s.store.contents.has("a")).toBe(false);
+    expect(s.store.contentFailed.has("a")).toBe(true);
+    expect(s.calls.filter(([m]) => m === "display.get").length).toBeGreaterThan(1); // 取り直した
+    mode = "empty";
+    await s.ctl.ensureContent("a");
+    expect(s.store.contents.has("a")).toBe(false);
+    expect(s.store.contentFailed.has("a")).toBe(true);
+    mode = "ok";
+    await s.ctl.ensureContent("a");
+    expect(s.store.contents.get("a")?.content).toBe("abc");
+    expect(s.store.contentFailed.has("a")).toBe(false);
+  });
 });

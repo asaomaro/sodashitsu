@@ -55,6 +55,8 @@ describe("framePage / frameKey / readFrameMessage", () => {
     expect(readFrameMessage({ type: "key", key: "x" })).toBeNull();
     expect(readFrameMessage({ type: "key", key: "prefix" })).toEqual({ type: "key", key: "prefix" });
     expect(readFrameMessage({ type: "pong", n: 1.5 })).toBeNull();
+    expect(readFrameMessage({ type: "failed", rev: 2 })).toEqual({ type: "failed", rev: 2 });
+    expect(readFrameMessage({ type: "failed", rev: 0 })).toBeNull();
     expect(readFrameMessage(null)).toBeNull();
   });
 });
@@ -167,6 +169,35 @@ describe("DisplayFrame", () => {
     }
   });
 
+  it("枠が failed を知らせたら固定の文言を出し（枠は残る）、次の rendered で消す", async () => {
+    const ports: { onmessage: ((e: { data: unknown }) => void) | null }[] = [];
+    const Real = globalThis.MessageChannel;
+    vi.stubGlobal(
+      "MessageChannel",
+      class {
+        port1 = { postMessage: () => undefined, close: () => undefined, onmessage: null as ((e: { data: unknown }) => void) | null };
+        port2 = {};
+        constructor() {
+          ports.push(this.port1);
+        }
+      },
+    );
+    try {
+      const s = setup({ content: content() });
+      s.load();
+      s.ready();
+      ports[0]!.onmessage!({ data: { type: "failed", rev: 1 } });
+      await nextTick();
+      expect(s.w.find("[data-display-render-failed]").exists()).toBe(true);
+      expect(s.w.find("iframe").exists()).toBe(true);
+      ports[0]!.onmessage!({ data: { type: "rendered", rev: 2 } });
+      await nextTick();
+      expect(s.w.find("[data-display-render-failed]").exists()).toBe(false);
+    } finally {
+      vi.stubGlobal("MessageChannel", Real);
+    }
+  });
+
   it("見回り: 見えている間に 10 秒返事が無ければ report(unresponsive)。見えていない間は数えない", async () => {
     const s = setup();
     s.load();
@@ -196,6 +227,16 @@ describe("DisplayFrame", () => {
     expect(t.w.find("iframe").element).not.toBe(before);
     await t.w.setProps({ info: info({ format: "future-x" }) });
     expect(t.w.find("iframe").exists()).toBe(false);
+  });
+
+  it("接続が切れて台帳を空にしたとき（store.clear）も、フォーカスのある枠は端末へ戻す", async () => {
+    const s = setup();
+    s.store.upsert(info());
+    s.store.setFocused("d1");
+    s.store.clear();
+    s.w.unmount();
+    expect(s.host.focusTerminal).toHaveBeenCalledWith("p1");
+    expect(s.store.focusedDisplayId).toBeNull();
   });
 
   it("フォーカスのある枠が外れたら端末へ戻す", async () => {
