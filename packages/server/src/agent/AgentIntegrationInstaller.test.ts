@@ -950,6 +950,63 @@ describe("FsAgentIntegrationInstaller — 点検の指摘（リンク・権限�
     expect((await installer.status("devin")).needsUpdate).toBe(false);
   });
 
+  it("読めない設定（ディレクトリ）は、コメントの案内ではなく読めない理由を伝え、何も書かない", async () => {
+    await mkdir(cfg(), { recursive: true });
+    const installer = makeInstaller();
+    const r = await installer.install("devin");
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain("設定ファイルを読めません");
+    expect(r.message).not.toContain("コメント");
+    expect((await stat(cfg())).isDirectory()).toBe(true);
+    expect(await exists(join(home, ".config", "devin", "hooks"))).toBe(false);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "行き先の無いシンボリックリンクは、リンクを保って行き先に作る",
+    async () => {
+      const real = join(workDir, "dotfiles", "later.json");
+      await mkdir(join(home, ".config", "devin"), { recursive: true });
+      await symlink(real, cfg());
+      expect((await makeInstaller().install("devin")).ok).toBe(true);
+      expect((await lstat(cfg())).isSymbolicLink()).toBe(true);
+      expect(JSON.parse(await readFile(real, "utf8")).hooks.SessionStart).toHaveLength(1);
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "循環するシンボリックリンクは、何も書かずに断る",
+    async () => {
+      await mkdir(join(home, ".config", "devin"), { recursive: true });
+      await symlink(cfg(), cfg());
+      const r = await makeInstaller().install("devin");
+      expect(r.ok).toBe(false);
+      expect(r.message).toContain("設定ファイルを読めません");
+    },
+  );
+
+  it("新しい設定が解釈できず古いものだけ片づけたとき、ok:true で触っていないことを知らせる", async () => {
+    const dir = join(home, ".devin");
+    await mkdir(join(dir, "hooks"), { recursive: true });
+    await writeFile(
+      join(dir, "hooks.json"),
+      JSON.stringify({
+        SessionStart: [
+          {
+            matcher: "",
+            hooks: [{ type: "command", command: "node soda-agent-report.cjs devin" }],
+          },
+        ],
+      }),
+    );
+    await mkdir(join(home, ".config", "devin"), { recursive: true });
+    await writeFile(cfg(), "{ // c\n}");
+    const r = await makeInstaller().uninstall("devin");
+    expect(r.ok).toBe(true);
+    expect(r.message).toContain("解釈できないので触っていません");
+    expect(r.message).toContain(cfg());
+    expect(await readFile(cfg(), "utf8")).toBe("{ // c\n}");
+  });
+
   it("uninstall の後、空になった hooks のキーは残る（既存の kind と同じ決まりを固定する）", async () => {
     const installer = makeInstaller();
     await installer.install("devin");

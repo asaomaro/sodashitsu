@@ -4,7 +4,6 @@ import type { IntegrationFile } from "../persist/IntegrationFile.js";
 import { defaultIntegrationFileData } from "../persist/IntegrationFile.js";
 import { AGENT_INTEGRATION_KINDS, type AgentIntegrationInstaller } from "./AgentIntegrationInstaller.js";
 
-
 /**
  * `agent_integration.*` RPC の実体（20260923-agent-session-resume）。導入・解除・自動再開設定の
  * とりまとめと、変わったときの `agent_integration.changed` の配布を担う。

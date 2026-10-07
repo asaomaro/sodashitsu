@@ -67,3 +67,18 @@ AssertionError: expected true to be false // Object.is equality
 - Grok CLI が入れ子の形（`matcher` なし）を読むか、古い版が入れ子を受けるか、現行版が平らな形を受けるか。`GROK_HOME` の扱い。
 - Qoder CLI が `~/.qoder/settings.json` を読むか、`async:true`・`matcher` なしの動き、`qoder --resume` の実在。
 - Windows の `%APPDATA%\devin`（関数の単体テストのみ）。
+
+## 差分全体の独立レビューへの対応
+
+### T4 の否定側のテストの負の確かめ
+
+テストを「無効な報告は pane A へ、目印の有効な報告は pane B へ送り、B に届いた後に A の `agentSession` が null のまま」に直した。`composeServer.ts` の `isAgentIntegrationKind(report.kind)` を `true` に替えた出力（確かめた後に戻し、`git diff -- packages/server/src/composeServer.ts` は空）:
+
+```
+     × 連携の kind でない名乗り（gemini・__proto__）は、その pane に記録されない 775ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected { kind: '__proto__', …(2) } to be null
+- Expected:
++ Received:
+      Tests  1 failed | 1 passed | 11 skipped (13)
+```

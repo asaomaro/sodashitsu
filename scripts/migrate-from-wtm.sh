@@ -356,7 +356,7 @@ one_agent() {
 }
 
 item_hooks() {
-  # packages/server/src/agent/AgentIntegrationInstaller.ts の HOOK_SPECS と同じ場所。copilot・grok は設定ファイル自体が hooks/wtm-agent-report.json。
+  # packages/server/src/agent/AgentIntegrationInstaller.ts の HOOK_SPECS と同じ場所（ただし devin・grok は、元の版が入れた古い場所・形。今の installer は devin を ~/.config/devin/config.json に、grok を入れ子の形で書く）。copilot・grok は設定ファイル自体が hooks/wtm-agent-report.json。
   one_agent claude "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/hooks"
   one_agent codex "$CODEX_DIR/hooks.json" "$CODEX_DIR/hooks"
   one_agent cursor "$H/.cursor/hooks.json" "$H/.cursor/hooks"

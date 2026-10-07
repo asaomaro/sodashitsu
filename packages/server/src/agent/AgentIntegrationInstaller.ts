@@ -4,12 +4,13 @@ import {
   copyFile,
   mkdir,
   readFile,
+  readlink,
   realpath,
   rm,
   stat,
   constants as fsConstants,
 } from "node:fs/promises";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
 import type { AgentIntegrationKind } from "@sodashitsu/protocol";
 import { writeFileAtomic } from "../persist/atomicFile.js";
@@ -333,6 +334,20 @@ export function isAgentIntegrationKind(kind: string): kind is AgentIntegrationKi
  * 設定ファイルを書く。既存のファイルがあれば、シンボリックリンクは解決した先へ書き（リンクを通常のファイルに替えない）、
  * 元の権限を引き継ぐ。無ければ新しく作る（権限は `writeFileAtomic` の既定）。
  */
+async function followDanglingLink(path: string): Promise<string> {
+  let cur = path;
+  for (let hop = 0; hop < 40; hop++) {
+    let link: string;
+    try {
+      link = await readlink(cur);
+    } catch {
+      return cur; // リンクではない（無いだけ）
+    }
+    cur = isAbsolute(link) ? link : join(dirname(cur), link);
+  }
+  throw new Error("シンボリックリンクが深すぎます");
+}
+
 async function writeConfigFile(path: string, contents: string): Promise<void> {
   let target = path;
   let mode: number | undefined;
@@ -340,21 +355,27 @@ async function writeConfigFile(path: string, contents: string): Promise<void> {
     target = await realpath(path);
     mode = (await stat(target)).mode & 0o777;
   } catch {
-    // 無い（または解決できない）ときは、そのパスへ新しく作る。
+    // 無い。行き先の無いシンボリックリンクなら、リンクを保って行き先に作る（循環は読む段で断っている）。
+    target = await followDanglingLink(path);
   }
   await writeFileAtomic(target, contents);
   if (mode !== undefined && process.platform !== "win32") await chmod(target, mode);
 }
 
-async function readJsonObject(
-  path: string,
-): Promise<{ ok: true; data: JsonObject } | { ok: false }> {
+type ReadFail = { ok: false; kind: "read"; reason: string } | { ok: false; kind: "syntax" };
+
+async function readJsonObject(path: string): Promise<{ ok: true; data: JsonObject } | ReadFail> {
   let raw: string;
   try {
     raw = await readFile(path, "utf8");
   } catch (err) {
     if (isEnoent(err)) return { ok: true, data: {} };
-    return { ok: false };
+    const code = (err as { code?: string } | null)?.code;
+    return {
+      ok: false,
+      kind: "read",
+      reason: code ?? (err instanceof Error ? err.message : "不明"),
+    };
   }
   // 先頭の BOM は除いて読む（書き戻しでは足さない）。空・空白だけのファイルは `{}` として扱う。
   raw = raw.replace(/^\uFEFF/, "");
@@ -362,10 +383,10 @@ async function readJsonObject(
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
-      return { ok: false };
+      return { ok: false, kind: "syntax" };
     return { ok: true, data: parsed as JsonObject };
   } catch {
-    return { ok: false };
+    return { ok: false, kind: "syntax" };
   }
 }
 
@@ -423,7 +444,14 @@ interface LegacyHit {
   root: JsonObject;
 }
 
-function unparsable(spec: HookSpec, configFile: string): { ok: false; message: string } {
+function unparsable(
+  spec: HookSpec,
+  configFile: string,
+  read: ReadFail,
+): { ok: false; message: string } {
+  // 読み込みの失敗（権限・循環するリンクなど）と、JSON の構文の失敗を分ける。コメントの案内は後者だけ。
+  if (read.kind === "read")
+    return { ok: false, message: `設定ファイルを読めません（${configFile}）: ${read.reason}` };
   return {
     ok: false,
     message:
@@ -517,7 +545,7 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     const configFile = spec.configFile(this.env, this.home);
     const hooksDir = spec.hooksDir(this.env, this.home);
     const read = await readJsonObject(configFile);
-    if (!read.ok) return unparsable(spec, configFile);
+    if (!read.ok) return unparsable(spec, configFile, read);
     const root = read.data;
     const targets = [
       { path: spec.entriesPath, build: spec.buildEntry },
@@ -575,7 +603,13 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     }
     // 2. 今の設定ファイル。
     const read = await readJsonObject(configFile);
-    if (!read.ok) return otherRemoved ? { ok: true, message: null } : unparsable(spec, configFile);
+    if (!read.ok) {
+      if (!otherRemoved) return unparsable(spec, configFile, read);
+      return {
+        ok: true,
+        message: `新しい設定（${configFile}）は解釈できないので触っていません`,
+      };
+    }
     // 3. 全経路から自分のエントリと、同じファイルにある古いエントリを除く。どこにも無いときだけ「未導入でした」。
     let updated = read.data;
     let found = false;

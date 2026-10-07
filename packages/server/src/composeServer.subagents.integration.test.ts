@@ -497,16 +497,18 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       }
     });
 
-    it("連携の kind でない名乗り（gemini・__proto__）は記録されない", async () => {
+    it("連携の kind でない名乗り（gemini・__proto__）は、その pane に記録されない", async () => {
       const { server, stateDir, paneId } = await boot();
+      // 無効な報告は pane A へ。順序の目印になる有効な報告は別の pane B へ送る。
+      const other = await server.session.createWorkspace("/tmp", "claude");
       await sendRaw(stateDir, { paneId, kind: "gemini", sessionId: "g-1" });
       await sendRaw(stateDir, { paneId, kind: "__proto__", sessionId: "p-1" });
-      // 続けて有効な報告を送り、それが記録されるまで待つ（その時点で、先の 2 つは処理済みのはず）。
-      await sendRaw(stateDir, { paneId, kind: "codex", sessionId: "after" });
+      await sendRaw(stateDir, { paneId: other.pane.id, kind: "codex", sessionId: "marker-b" });
       await vi.waitFor(() =>
-        expect(server.session.getPane(paneId)?.agentSession?.sessionId).toBe("after"),
+        expect(server.session.getPane(other.pane.id)?.agentSession?.sessionId).toBe("marker-b"),
       );
-      expect(server.session.getPane(paneId)?.agentSession?.kind).toBe("codex");
+      // B に届いた時点で、先に送った A への 2 つは処理済み。A は何も記録されていない。
+      expect(server.session.getPane(paneId)?.agentSession).toBeNull();
     });
 
     it("Agent 以外の PreToolUse は何も送らない（検出済みでも件数は出ない）", async () => {
