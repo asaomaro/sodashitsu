@@ -31,7 +31,7 @@
 |---|---|---|
 | `script-html` の許可の検査（T8。形式の名前の文字列だけを見る） | 入れる。許可なし → `unsupported`、許可あり → 表示の面の検査が `invalid_display` を返す（この 2 つを、別のテストで見る） | 入れる。許可あり → 通る（AC25 の後半） |
 | `display.send` を、拡張の操作の表に載せる | **載せない**（`unsupported`） | T31 |
-| `DisplayService.send` の、持ち主の検査 | 何もしない（`send` が無い） | T31 |
+| `DisplayService.send` の、持ち主の検査 | 何もしない（`send` が無い） | **T7 を実装する時点で「ある」なら、T7 で必ず入れる**。T7 が先に main に入り、後から表示の面の PR3 が入ったなら、T31（`send` と札が main にそろった、最初の PR に入れる。後回しにしない） |
 | AC9 の「pane のプログラムは、拡張の面へデータを送れない」 | 確かめない | T31 |
 
 ## 実装方針
@@ -45,7 +45,7 @@
 純粋な検査（設定の 1 件・要求の行・禁止する文字・鍵）は、純粋な関数に置いて単体テストする。子プロセス・時計・ファイルは、差し替えられる口（`deps`）から受け取る（`machine/testing.ts` の `FakeChild`・`ManualClock` と同じ流儀。拡張用の偽の子は `extensions/testing.ts` に作る。`pid` と `exit` を持つ）。
 **拡張のコマンドを `spawn` するのは `ExtensionHost.startOne` の 1 か所だけ**（`ExtensionProcess.start` は、そこからだけ呼ばれる）。きっかけの処理に、起動を直接書かない（design「設計方針」1）。
 
-独立点検（`aidev taskcheck`）は、壊れやすいタスク（サーバの状態・保存と復元・プロトコル・安全に関わるもの）だけに掛ける: **T1・T2・T3・T4・T5・T6・T7・T8・T9・T9-2・T9-3・T9-4・T10・T20・T21・T22・T22-2・T22-3・T23・T26**（各タスクの末尾に `点検: あり`）。
+独立点検（`aidev taskcheck`）は、壊れやすいタスク（サーバの状態・保存と復元・プロトコル・安全に関わるもの）だけに掛ける: **T1・T2・T3・T4・T5・T6・T7・T8・T9・T9-2・T9-3・T9-4・T10・T20・T21・T22・T22-2・T22-3・T23・T26・T31**（各タスクの末尾に `点検: あり`）。
 見た目・配線・テストの追加・E2E・文書のタスクには掛けず、PR ごとに、その PR のタスクが終わった後で `cross` を 1 回掛ける（AGENTS.md「点検とテストの掛け方」）。
 PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所であること」「`stop()` が返った後に、子が起動しないこと（`stopped`・`epoch`・`closing`）」「bus と台帳の受け手が、例外を外へ出さないこと」を、PR3 の `cross` は、「承認の記録・無効の記録・設定を、`startOne` が読み直していること」「`pane.sock` に何も載っていないこと」を、名指しで見させる。
 
@@ -63,7 +63,8 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
   7. （u7）`/bin/sh -c` が `exec` で置き換えるか → 確かめなくてよい（グループごと止めるので、動きは同じ）。
   8. （u8）「グループに残りがいる間、その番号は、新しい pid・新しいグループの番号にならない」（`sweepGroup` の前提）→ テストでは確かめない（OS の決まり）。**T6 の実装者が、Linux と macOS の文書（`kill(2)`・`setpgid(2)`・pid の割り当て）で確かめ、出典を `decisions.md` に 1 行残す**。確かめられなければ、止めて、監督のセッションに報告する（`sweepGroup` の 2 秒の間の `SIGKILL` をやめて、`exit` の直後の 1 回だけにする、という代えを相談する）。
 - **PR1 の T7 は、表示の面のファイルを触る**。T7 だけを先に小さい PR にして出してもよい（表示の面の PR3 と衝突する前に）。その判断は、監督のセッションがする。
-- T30（負の対照）は、**test 工程で消化する**（coding の承認の時点では、未チェックで残る。`decisions.md` D5）。PR ごとに、その PR の守りの分を行う（PR1: (d)(e)(g)(h)(i)・PR3: (a)(b)(c)(f)）。
+- T30（負の対照）は、**test 工程で消化する**（coding の承認の時点では、未チェックで残る。`decisions.md` D5）。PR ごとに、その PR の守りの分を行う（PR1: (d)(e)(f1)(g)(h)(i)・PR3: (a)(b)(c)(f)）。T30 は、どの PR の差分にも入らない（外して、戻す）ので、「PR の分け方」の表には無い。`依存:` は、全部の分が済む条件（T11 と T24）で、PR1 の分は、T11 が済めば行える。
+- **`依存:` は、同じファイルを先に作るタスクを、全部は並べていない**（PR の順で満たされる）: T22・T22-2・T22-3 は T9-2〜T9-4 の `ExtensionHost` を、T29 は T13 の起動確認の段を、T27 は T28 の spec を、土台にする。
 
 ## リスク / 留意点
 
@@ -94,7 +95,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
 
 ## タスク
 
-独立点検（`taskcheck`）を掛けるのは T1・T2・T3・T4・T5・T6・T7・T8・T9・T9-2・T9-3・T9-4・T10・T20・T21・T22・T22-2・T22-3・T23・T26。
+独立点検（`taskcheck`）を掛けるのは T1・T2・T3・T4・T5・T6・T7・T8・T9・T9-2・T9-3・T9-4・T10・T20・T21・T22・T22-2・T22-3・T23・T26・T31。
 
 ### PR1: サーバと、利用者の設定の拡張
 
@@ -146,7 +147,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       AC: AC12, AC13, AC15, AC36
       点検: あり
 - [ ] T7: 表示の面の台帳に、持ち主を足す（design「表示の面への追加」の、型と、決まりの表。札 `tag` は、呼ぶ側が決める文字列——拡張は、起動 1 回ごとに別の札を使う）: `DisplayInfo.source?`・`DisplaySource`（protocol。`readDisplayInfo` が、形の合う `source` を通し、形の合わないものは落とす）、`Entry.owner?`、`set(…, opts?)`・`close(…, opts?)`・`list(…, opts?)`・`ownerOf`・`countOwned`・`ownedPanes`・`closeOwned`・`onOwnedEvent`。
-      札つきの面の出来事は、pane の列に入れず、受け手へ（`seq` なし）。`onPaneClosed` で、札つきの面ごとに、受け手へ `display.closed`（`pane_closed`）。受け手の例外は、包んでログ。**`send` には触れない**（表示の面の PR3 が無ければ、口が無い。あれば T31）。
+      札つきの面の出来事は、pane の列に入れず、受け手へ（`seq` なし）。`onPaneClosed` で、札つきの面ごとに、受け手へ `display.closed`（`pane_closed`）。受け手の例外は、包んでログ。**`send`**: 表示の面の PR3 が main に無ければ、口が無いので、何もしない。**あれば、この T7 で、`send(paneId, p, opts?: { owner?: string })` の持ち主の検査（面の札と `opts.owner` が違えば `display_closed`。札なしの呼び出しが、札つきの面を指す場合を含む）を入れ、テストを書く**（T31 を待たない）。
       **札を付けない呼び出しの動きを変えない**: 既存の `DisplayService.test.ts`・`display.integration.test.ts` が、1 行も変えずに通ること。足すテストは、**決まりの表の 11 行のうち、`send` の 1 行（T31）を除く 10 行を、1 行ごとに 1 つ**（とくに: 札つきの `set` が、札の無い面・別の札の面の名前に当たると `invalid_display` で、面が変わらず、頻度の桶が減っていない／札なしの `set` が札つきの面を置き換えると、元の持ち主に `closed` が届き、`source` が外れる／
       札つきの面の `display.action` が、pane の `wait` に返らない／札つきの `close`・`list` は、その札の面だけ／札なしの `list` に、札つきの面が `source` つきで出る／`closeOwned` は、`display.removed` を bus に配り、受け手へは知らせず、閉じた面を返す／受け手が投げても、`set`・`close` が成功する）
       対象: `packages/server/src/display/DisplayService.ts`（`Entry` 65 行・`set` 135 行・`close` 210 行・`list` 219 行付近・`pushEvent` 441 行・`remove` 481 行・`onPaneClosed` 499 行）、`packages/server/src/display/DisplayService.test.ts`、`packages/protocol/src/display.ts` `DisplayInfo`・`readDisplayInfo`、`packages/protocol/src/display.test.ts` / 根拠: research E8・X13、design「表示の面への追加」、脅威 S12
@@ -169,12 +170,12 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T3
       AC: AC4, AC20, AC34
       点検: あり
-- [ ] T9-2: ホストの芯（利用者の設定の分）: `ExtensionHost` の、持つもの・**直列化**（外向きの入口だけが `chain` へつなぐ。中は直接呼ぶ。「予約」の意味）・ファイルを読む 1 回 2 秒の上限と「前の読み取りが返っていなければ、出さない」・`reconcile` の 0・1・3〔無効の記録〕・4〜7・`startOne` の 1〜3・5〜8・`stopRun`・`finishRun`・`closing`・`stopped` と `epoch`・`start`・`stop`・`dispose`・`list`・`reload`・`restart`・`log`・`setEnabled`・全体の量の桶・`deps.timings`。
+- [ ] T9-2: ホストの芯（利用者の設定の分）: `ExtensionHost` の、持つもの・**直列化**（外向きの入口だけが `chain` へつなぐ。中は直接呼ぶ。「予約」の意味）・ファイルを読む 1 回 2 秒の上限と「前の読み取りが返っていなければ、出さない」・`reconcile` の 0・1・3〔無効の記録〕・4〜7・`startOne` の 1〜3・5〜8・`stopRun`・`finishRun`・`closing`・`stopped` と `epoch`・`start`・`stop`・`dispose`・`list`・`reload`・`restart`・`log`・`setEnabled`・全体の量の桶・`deps.timings`・`deps.limits`。
       **プロジェクトの設定を読む処理・承認の検査は、入れない**（PR3 の T22。入れる場所に `// PR3（T22）` と書くだけ）。この時点の `inScope` は「pane が実在すれば真」。終わったとき（`onExit`）は、T9-3（ここでは、`runId` が一致したら `finishRun` するだけの仮の形でよい）。
       単体テスト（偽の子・時計）: 起動で `ext.hello` → `ext.panes` の順／読み直しの 4 通り（足す・消す・変える・変えない＝`runId` が同じ）／設定が規則の外 → そのファイルの拡張は 0・動いていたものが止まり・`problems` に出る（AC2）／`enabled: false`・無効の記録 → `disabled`／無効の記録が壊れている → 全部 `disabled`（`spawn` なし）／
       **`startOne` が、起動の直前に設定を読み直し、`digest` が違えば起動しない**／`start()` を、止めずに 2 回呼んでも `spawn` は 1 回／**`startOne` が設定を読んでいる途中（偽の `open` を止めておく）で `stop()` → 読み終わっても `spawn` されない**／`stop()` は、`chain` が詰まっていても（偽の `open` が返らない）3 秒以内に返る／
       `stop()` は、`runs` と、**`closing`（止めている途中の起動）の両方**を待つ（`reconcile` の 5 が `proc.stop` を待っている間に `stop()` → その子の `settled` まで待つ）／`stopped` の間の `reload`・`restart` は、`spawn` せずに今の一覧を返す／`restart` と `reconcile` が重なっても、`spawn` は 1 回／
-      33 個目は `over_limit` で、動いているものは止まらない。空きが出来て `reload` すると動く／設定を読む処理が 2 秒で返らない → `problems` に出て、次の操作（`setEnabled`）が待たされない。**同じファイルへの読み取りが、返らないまま 2 つ目を出さない**（偽の `open` の呼ばれた回数）。5 秒後に、差を埋める仕事が 1 回予約される／
+      同時に動かす合計の上限（`deps.limits.runningMax` を 2 にして）: 3 つ目は `over_limit` で、動いているものは止まらない。順が前の拡張を足しても、動いているものは譲らない。空きが出来て `reload` すると動く／時間切れの後の予約は、続けて 3 回までで、時間切れの無い `reconcile` で 0 に戻る／`stopped` の間の `setEnabled` は、記録だけを書き、`spawn` しない／設定を読む処理が 2 秒で返らない → `problems` に出て、次の操作（`setEnabled`）が待たされない。**同じファイルへの読み取りが、返らないまま 2 つ目を出さない**（偽の `open` の呼ばれた回数）。5 秒後に、差を埋める仕事が 1 回予約される／
       `extension.changed` は、同じ一覧なら出ない／`setEnabled` は、画面の種類でない接続から `invalid_params`／`list()` の結果に、利用者の拡張の `command` の文字列が無い
       対象: `packages/server/src/extensions/ExtensionHost.ts`（新規）、`ExtensionHost.test.ts`（新規）、手本 `packages/server/src/machine/MachineManager.ts`（唯一の持ち主・`start`/`stop`）/ 根拠: research E5・X10、design「`ExtensionHost`」（持つもの・直列化・差を埋める・起動・止める・後始末・きっかけの表の `start`・`reload`・`restart`・`setEnabled`・`stop`・`dispose`）、脅威 S2・S13・S14
       依存: T3, T6, T8, T9
@@ -183,15 +184,15 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
 - [ ] T9-3: 終わったときと、起動し直し: `onExit(key, runId, exit)`（design「終わったとき」。全体を `try/catch`・`runId` が一致するときだけ状態を変える・`exited`／`backoff`／`failed`・`failures` の数え方・`backoff` の時間切れは `chain` へ `startOne`）と、`stop()` で `backoff` を捨てること、`reload`・`restart` で `failed`・`exited` から戻ること、`lastExit`・`lastLog`。
       単体テスト: 落ちた後の間隔 1・2・4・8 秒、5 回目で `failed`、60 秒動いた後は 1 秒へ戻る／`bad_lines`・`not_reading` で止まった回も、落ちた回に数える／終了コード 0 → `exited`（起動し直さない）／`reload`・`restart` で `failed`・`exited` から戻る／**落ちた後・時間が来る前に、設定ファイルを書き換える → 時間が来ても `spawn` されない**／
       `backoff` の拡張がある状態で `stop()` → `start()` → 起動し直される／`stop()` の後に来た `backoff` のタイマーは、何もしない／**`stop` が 3 秒で返った後（子は、まだ `exit` していない）に、新しい起動 → 古い子の `exit` が遅れて届く → 新しい起動の面・状態・`runs` が変わらない**／終わったら、その起動の札の面だけが `closeOwned` される（次の起動の面は残る）／
-      `backoff` の時間が来たときに枠が無ければ `over_limit`／`onExit` の中で例外が出ても、捕まらない拒否にならない（`process.on("unhandledRejection")` を、テストで見張る）
+      `backoff` の時間が来たときに枠が無ければ（`runningMax: 1` で、別の拡張が動いている）`over_limit`／`onExit` の中で例外が出ても、捕まらない拒否にならない（`process.on("unhandledRejection")` を、テストで見張る）
       対象: `packages/server/src/extensions/ExtensionHost.ts`、`ExtensionHost.test.ts` / 根拠: design「`ExtensionHost`」の「終わったとき」と、状態遷移の図、脅威 S13・S14
       依存: T9-2
       AC: AC10, AC11
       点検: あり
-- [ ] T9-4: pane の一覧と、出来事の渡し方: bus の購読（design「きっかけ」の表の、pane・tab・workspace のイベント。**受け手は `try/catch`・中ではタイマーを掛けるだけ**・100ms まとめて、長くても 500ms）で、pane の一覧（`ExtPane`）を作り直し、前と同じなら送らない。`onOwnedEvent` の受け手（**出来事を渡す直前に範囲を確かめる**・外なら `display.action` は渡さず、`display.closed` は理由を `out_of_scope` に替える・
+- [ ] T9-4: pane の一覧と、出来事の渡し方: bus の購読（design「きっかけ」の表の、pane・tab・workspace のイベント。**受け手は `try/catch`・中ではタイマーを掛けるだけ**・100ms まとめて、長くても 500ms）で、pane の一覧（`ExtPane`）を作り直し、前と同じなら送らない。`onOwnedEvent` の受け手（**出来事を渡す直前に範囲を確かめる**・外なら `display.action` は渡さず、`display.closed` は理由を `out_of_scope` に替える〔**理由が `pane_closed` のものは、替えずに、そのまま渡す**〕・
       **受け手の中では台帳を呼ばず、`queueMicrotask` で `closeOwned`**・札から起動を引けなければ捨てる）。**面を持つ pane の見直し**（2 秒ごと）。不確かな点 4（pane の移動で出るイベント）を、ここで読んで確かめる。
       単体テスト（`inScope` は、テストが差し替える）: pane を足す・消すと、新しい一覧の行が届く。中身が同じなら、届かない／`pane.updated` が 50ms おきに続いても、500ms 以内に作り直される／bus の受け手の中で例外が出ても、`bus.publish` の呼び出し元へ伝わらない／
-      範囲の外の pane の面への `display.action` は、拡張へ渡らず、面が閉じて `out_of_scope` が届く／範囲の外の pane の `display.closed`（利用者が閉じた）は、理由が `out_of_scope` に替わって届く／台帳が `close` の処理の途中で受け手を呼んでも、台帳への再入が起きない（`closeOwned` が、受け手の呼び出しの中で呼ばれていないこと）／
+      範囲の外の pane の面への `display.action` は、拡張へ渡らず、面が閉じて `out_of_scope` が届く／範囲の外の pane の `display.closed`（利用者が閉じた）は、理由が `out_of_scope` に替わって届く／pane が閉じたときの `display.closed` は、理由が `pane_closed` のまま届く／台帳が `close` の処理の途中で受け手を呼んでも、台帳への再入が起きない（`closeOwned` が、受け手の呼び出しの中で呼ばれていないこと）／
       **bus のイベントが 1 つも出なくても、2 秒（`scopeReviewMs`）で、範囲の外の pane の面が消える**／`stopped` の間は、bus の受け手がタイマーを掛けない
       対象: `packages/server/src/extensions/ExtensionHost.ts`、`ExtensionHost.test.ts`、`packages/server/src/session/SessionService.ts:252` `snapshot`・`828` `commandContext`・`moveToTab`／`moveToNewTab`（読むだけ）、手本 `packages/server/src/ask/AskService.ts:112` 付近（bus の購読）/ 根拠: research E3・X7・X8・X23、design「範囲と許可」「きっかけ」の表と、その下の「出来事を拡張へ渡す直前に、範囲を確かめる」、脅威 S10
       依存: T9-2
@@ -210,7 +211,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       (4) pane を足す・消すと `ext.panes` の行が届く（AC6）(5) 知らない操作に `unsupported` が返り、拡張は動き続ける。`id` なしには返事が来ない（AC7）。`ext.hello` と `ext.features` の中身（AC8）(6) 拡張の面を、`pane.sock` の `display.list` は見える・`display.wait` に操作が返らない／拡張の `display.list` に、`pane.sock` で出した面が無い・`display.close` で閉じられない・同じ名前の `set` が誤り／`pane.sock` が、拡張の面を閉じる・同じ名前で出し直すと、拡張に `display.closed` が届く（AC9）
       (7) 拡張を落とすと、その面だけが消え、`pane.sock` で出した面は残る（AC10）(8) 落ち続ける拡張（5 回で `failed` になるまで）を動かしながら、pane の echo が通る（AC11）(9) 合図を無視して孫を作る拡張を、無効にすると、`extension.setEnabled` が返った時点で、子と孫の pid が消えている。終了コード 0 で終わって、合図を無視する孫を残す拡張 → 状態が `exited` になった後、3 秒以内に、孫の pid が消える。`close()` の後、どの拡張の pid も残っていない（AC13）
       (10) 標準エラーに目印の文字列を書く拡張 → `extension.log` で読め、**`server.log` に、目印の文字列と、設定に書いたコマンドの文字列が無い**（AC15）(11) 同じ状態ディレクトリで 2 つ目の `composeServer` の `listen()` は、ロックで失敗し、拡張の印のファイルを作らない（AC1）(12) 面の数は、`pane.sock` の分と合わせて数えられる（拡張 2 ＋ `pane.sock` 2 で、次のパネルが `display_limit`）（AC5）
-      (13) JSON でない行を 20 行書く拡張 → `ext.error` が返り、20 行で止められて、起動し直しの回数に入る。標準入力を読まずに、要求を出し続ける拡張 → サーバは動き続け（pane の echo が通る）、拡張は止められる（AC12）
+      (13) JSON でない行を 20 行書く拡張 → `ext.error` が返り、20 行で止められて、起動し直しの回数に入る。4 MiB を超える 1 行を書く拡張 → サーバは動き続け（pane の echo が通る）、その行だけが捨てられて、続く要求が通る（AC12。「標準入力を読まない」拡張を止めることは、30 秒の実時間が要るので、ここでは見ない——T6 の単体で見る）
       対象: `packages/server/src/extensions/extensions.integration.test.ts`（新規）、手本 `packages/server/src/display/display.integration.test.ts`・`packages/server/src/machine/machines.integration.test.ts`（`describe.skipIf(win32)`・`internal` の差し替え）/ 根拠: design「受け入れ基準との対応」
       依存: T10
       AC: AC1, AC2, AC3, AC5, AC6, AC7, AC8, AC9, AC10, AC11, AC12, AC13, AC15
@@ -260,7 +261,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
 
 ### PR3: プロジェクトの設定と承認
 
-- [ ] T20: プロジェクトの根と、設定の読み方: `resolveProjectRoot(cwd, deps)`（`findGitRoot` → `realpath` → 絶対パス・1024 文字以下・禁止する文字なし。2 秒の上限。**git のコマンドを呼ばない**）と、`loadProjectExtensionsFile(root, deps?)`（design「設定ファイル」の 1〜5 と 3'・3'': `.soda` がリンクでないディレクトリ・`O_NOFOLLOW`・fd の `stat` で通常ファイルと大きさ・
+- [ ] T20: プロジェクトの根と、設定の読み方: `resolveProjectRoot(cwd, deps)`（`findGitRoot` → `realpath` → 絶対パス・1024 文字以下・禁止する文字なし。**時間の上限は、この関数に置かない**〔`null` は「git の外」だけ。上限と、時間切れの扱いは、呼ぶ側の T22〕。**git のコマンドを呼ばない**）と、`loadProjectExtensionsFile(root, deps?)`（design「設定ファイル」の 1〜5 と 3'・3'': `.soda` がリンクでないディレクトリ・`O_NOFOLLOW`・fd の `stat` で通常ファイルと大きさ・
       Unix は、根・`.soda`・ファイルの持ち主が自分で、other が書けない・**根より上のディレクトリが、`/` まで、持ち主が自分か root で、other が書けないか、スティッキー**・グループが書けるなら `groupWritable`・`realpath` が決まった場所・同じ fd から読む）。不確かな点 6。
       単体テスト（一時ディレクトリに本物のファイルを作る。持ち主と、根より上は、偽の `stat` で）: ふつうのリポジトリ／linked worktree（`.git` がファイル）→ worktree の根／git の外 → `null`／根がリンク越し → 実体のパス／`.soda` がリンク → 誤り／`extensions.json` がリンク → 誤り／FIFO → 止まらずに誤り／64 KiB 超 → 誤り／`cwd` を書いた 1 件 → 誤り／17 件 → 誤り／
       ファイル・`.soda`・根のどれかが other から書ける（`chmod o+w`）→ 誤り／グループが書ける → 読めて `groupWritable: true`／持ち主が自分でない（偽の `getuid`）→ 誤り／根の親が other から書けてスティッキーなし → 誤り、スティッキーあり（`/tmp` の形）→ 読める／根より上の持ち主が root → 読める／根のパスに改行・書字方向の制御 → `null`／
@@ -270,16 +271,16 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       AC: AC17, AC28
       点検: あり
 - [ ] T21: 承認の記録: `ApprovalStore`（design「鍵と、承認の記録」: `load`・`lookup`・`decide`・`revoke`・`list`〔記録の全部。`root`・`id`・時刻だけ〕・`signature()`〔見張り用の `stat` の署名〕。根の `extension-approvals.json`。(根, id) ごとに 1 件で、`approved`〔鍵と中身〕と `denied`〔鍵〕を別に持つ・読むときの検査・**だめなら記録なし**・
-      **書く手順**〔鍵のファイルに持ち主の印・2 秒まで待つ・読み直す・読み直せなければ書かない・自分の印のときだけ消す・30 秒より古い置き去りの鍵は、中身と時刻を確かめ直してから消す〕・256 件・`version` が新しければ、読まず・書かない）。
+      **書く手順**〔鍵のファイルに持ち主の印・**鍵を取る待ちを含めた全体で 2 秒**・読み直す・読み直せなければ書かない・**打ち切った後の続きは、書かない**（各段の前に、打ち切り済みでないこと・鍵が自分の印のままであることを確かめる）・前の書く手順が返っていなければ、次は始めずに誤り・自分の印のときだけ消す・30 秒より古い置き去りの鍵は、中身と時刻を確かめ直してから消す〕・256 件・`version` が新しければ、読まず・書かない）。
       単体テスト: `lookup`（`approved` の鍵と同じ → `approved`・`denied` の鍵と同じ → `denied`・どちらでもない → `none` と `previous`〔`approved` の中身〕と `deniedBefore`・無い → `none`）／A を承認 → B を `denied` → A の鍵は `approved` のまま／`decide(approved)` は `denied` を消す／`revoke` は、その (根, id) の 1 件を全部消す／
       壊れた JSON・知らない項目・リンク・ほかの利用者が書ける → 記録なし／**読み直しが読めない（偽の `open` が `EACCES`・時間切れ）とき、`decide` は誤りで、ファイルが変わらない**／257 件目で、古いものから捨てる／
-      鍵のファイルが残っている（新しい）→ 2 秒待って誤り・記録は変わらない／30 秒より古い鍵のファイル → 消して書ける／消そうとした鍵のファイルの中身が、確かめ直したら変わっていた → 消さない／`version: 2` のファイル → 記録なし・`decide` は誤りで、ファイルが変わらない／
+      鍵のファイルが残っている（新しい）→ 2 秒待って誤り・記録は変わらない／**読み直しが 2 秒で返らず、`decide` が誤りを返した後に、読み直しが返っても、ファイルが書かれない**（偽の `open` を、後から返す）／30 秒より古い鍵のファイル → 消して書ける／消そうとした鍵のファイルの中身が、確かめ直したら変わっていた → 消さない／`version: 2` のファイル → 記録なし・`decide` は誤りで、ファイルが変わらない／
       2 つの `ApprovalStore`（別の session のつもり）が、**同時に**（`Promise.all`）`decide` と `revoke` をしても、どちらも失われない（片方が誤りで返ることは、あってよい。黙って失われない）／書いたファイルの権限が 0600・終わった後に、鍵のファイルが残っていない
       対象: `packages/server/src/extensions/ApprovalStore.ts`（新規）、`ApprovalStore.test.ts`（新規）、`packages/server/src/extensions/approval.ts`（T9 の `entryDigest` を使う）、`packages/server/src/persist/atomicFile.ts` `writeFileAtomic`、手本 `packages/server/src/machine/MachineCatalog.ts`（根に置く・`loadCatalog`・`saveCatalog`）/ 根拠: research E2・X4・X5、design「鍵と、承認の記録」、脅威 S3・S18
       依存: T9
       AC: AC19, AC20, AC34
       点検: あり
-- [ ] T22: ホストに、プロジェクトの分を足す（その 1: 根・あるべき集合・起動の確かめ直し）: `reconcile` の 2（workspace → 根を引く〔2 つずつ並行・合わせて 5 秒・時間切れは覚えない・時間切れがあれば 5 秒後に 1 回予約〕→ **対応表を作り終えてから差し替える** → 根ごとに `loadProjectExtensionsFile`。辞書順で 33 個目からは、読まずに `problems`）・3（承認の記録）・4 の `pending`・`denied`、
+- [ ] T22: ホストに、プロジェクトの分を足す（その 1: 根・あるべき集合・起動の確かめ直し）: bus の `workspace.created`・`workspace.closed` の購読（**200ms まとめて、長くても 1 秒で、差を埋める**——T9-4 の、設定を読まない「pane の一覧の作り直し」とは別の道。`workspace.closed` は、受け手の中で、その id の根の覚えを 1 つ消す）・`reload` の「根を引き直す」印・`reconcile` の 2（workspace → 根を引く〔1 つ 2 秒の上限は、ここで付ける・2 つずつ並行・合わせて 5 秒・**時間切れは「根なし」として覚えない**・時間切れがあれば 5 秒後に 1 回予約（続けて 3 回まで）〕→ **対応表を作り終えてから差し替える** → 根ごとに `loadProjectExtensionsFile`。辞書順で 33 個目からは、読まずに `problems`）・3（承認の記録）・4 の `pending`・`denied`、
       **`startOne` の 3（プロジェクトの読み直し）と 4（承認の記録の読み直し）**、承認の記録の見張り（5 秒ごとに `signature()`。変わったら、差を埋める）、作業ディレクトリ（根）と `SODA_PROJECT_ROOT`、`ExtensionInfo.approval`（`digest`・`status`・`command`・`cwd`・`groupWritable`・`decidedAt`・`previous`・`deniedBefore`・`approvedAlive`）と `list().approvals`。起動のときの workspace は `snapshot()` から読む（復元は bus に出ない）。
       **この時点では、`approve` などの操作は無い**（T22-2）。テストは、`ApprovalStore` へ直接書いて、前提を作る。単体テスト（偽の子・時計・一時ディレクトリ）: 記録なし → `pending` で `spawn` が呼ばれない／`approved` の記録あり → 動く／`denied` の記録あり → `denied`・`spawn` なし／`enabled: false` で未承認 → `disabled`（`pending` ではない）／
       **`spawn` へ至るきっかけを 1 つずつ**（`start`・`workspace.created`・`reload`・`restart`・`setEnabled(true)`・`stop` → `start`〔入れ替えの失敗からの再開〕・上限の空き・`backoff` の時間切れ）で、承認が無ければ `spawn` が呼ばれないこと（AC18）／
@@ -291,7 +292,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T20, T21
       AC: AC17, AC18, AC19, AC20, AC21, AC22, AC26, AC34
       点検: あり
-- [ ] T22-2: ホストに、プロジェクトの分を足す（その 2: 承認の操作）: `approve`・`deny`（`isScreenKind`・`desired` にあって `pending`／`denied`・**`digest` の一致**・`extension_stale`）・`revoke(clientId, root, id)`（画面だけ。**`desired` に無い (根, id) でもよい**）。どれも `chain` の中で、記録を書いてから、差を埋める。承認した直後に枠が無ければ `over_limit`。
+- [ ] T22-2: ホストに、プロジェクトの分を足す（その 2: 承認の操作）: `approve`・`deny`（`isScreenKind`・`desired` にあって `pending`／`denied`・**`digest` の一致**・`extension_stale`）・`revoke(clientId, root, id)`（画面だけ。**`desired` に無い (根, id) でもよい**）。どれも `chain` の中で、記録を書いてから、差を埋める。承認した直後に枠が無ければ `over_limit`。`stopped` の間は、記録だけを書く（起動は、次の `start()`）。記録が無い (根, id) の `revoke` は、何もせずに成功。
       単体テスト: `approve` → 動く／`deny` → `denied`・`spawn` なし／`deny` の後の `restart` でも `spawn` なし／`revoke` → 止まって `pending`（`disabled` の拡張でも、記録が消える）。`revoke` の後の `restart` でも `spawn` なし／いま workspace が無い根の記録を `revoke` → 消える（開き直すと `pending`）／古い `digest` の `approve` → `extension_stale`・記録は書かれない／
       `disabled` の拡張への `approve` → `not_found`／画面の種類でない接続の `approve`・`deny`・`revoke` → `invalid_params`／記録の書き込みが誤り（鍵のファイルを取れない）→ 方式が誤りを返し、状態が変わらない／動いている数が 32 のときの `approve` → `over_limit`（動いているものは止まらない）
       対象: `packages/server/src/extensions/ExtensionHost.ts`、`ExtensionHost.test.ts` / 根拠: design「承認の操作」、脅威 S5・S9・S18
@@ -314,7 +315,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
 - [ ] T24: 安全の結合テスト（実際の子プロセス・一時のリポジトリ。`win32` はスキップ。`timings` で、`backoffMinMs: 20`・`approvalsPollMs: 100`・`scopeReviewMs: 100`）: helper（一時ディレクトリに `.git/HEAD` と `.soda/extensions.json` を作る・コマンドは「印のファイルを作る」拡張・workspace を、その場所で作る）。
       見ること: (1) workspace を作る → 一覧に `pending`。**印のファイルが無い**。サーバを立て直す・`extension.reload`・`extension.restart`・`setEnabled` の後も、無い（AC17・AC18）(2) 画面の接続から `approve` → 印が出来る。サーバを立て直しても動く（聞き直されない）。**同じ `sessionRoot` で別の `stateDir`（別の名前付き session）のサーバでも、動く**（AC19）
       (3) 登録の項目を 1 つずつ変えて `reload` → 止まって `pending`。同じファイルの別の拡張は、同じ pid のまま。承認した中身へ戻して `reload` → 聞き直されずに動く。リポジトリを別の場所へ写して workspace を作る → `pending`（AC20）(4) 承認 → ファイルを書き換え（読み直さない）→ 拡張を落とす → 起動し直されず `pending`（AC21）
-      (5) `deny` → 印が出来ない・`pending` でない。後で `approve` → 動く。`revoke` → pid が消えて `pending`。**別の session のサーバで `revoke` → こちらの pid が、見張りのうちに消える**。承認して動かす → **承認の記録のファイルから、その 1 件を直接消し、すぐ拡張を落とす → 起動し直されない**。workspace を全部消した後、記録が `approvals` に出て、`revoke` で消え、開き直すと `pending`（AC18・AC22）
+      (5) `deny` → 印が出来ない・`pending` でない。後で `approve` → 動く。`revoke` → pid が消えて `pending`。**別の session のサーバで `revoke` → こちらの pid が、見張りのうちに消える**。承認して動かす → **承認の記録のファイルから、その 1 件を直接消し、すぐ拡張を落とす → 起動し直されない**（この項だけ、`approvalsPollMs` を長く〔60 秒〕したサーバで。**見るのは、起動の回数**——拡張が、起動のたびに pid を追記するファイルの行数が、増えないこと。最後の状態だけを見ない: 見張りが後から止めても、通ってしまう）。workspace を全部消した後、記録が `approvals` に出て、`revoke` で消え、開き直すと `pending`（AC18・AC22）
       (6) 2 つのリポジトリの workspace で、片方の拡張が、他方の pane へ `display.set` → `not_found`。`ext.panes` に、他方の pane が無い。pane を、他方の workspace へ移すと、面が消え、拡張に `display.closed`（`out_of_scope`）（AC24）(7) `allow` なしの `script-html` → `unsupported`（利用者・プロジェクトの両方）。`allow` を足すと `pending` に戻る（AC25・AC20）
       (8) 最後の workspace を消すと、pid が消え、一覧から消える。作業ディレクトリが根で、環境変数に `SODA_PROJECT_ROOT`（AC26）(9) `.soda` がリンク・`extensions.json` がリンク・`cwd` つき・`chmod o+w` したファイル → 一覧に理由が出て、印が出来ない（AC28）(10) 承認の記録を壊す → 全部が `pending`（動く側に倒れない）。無効の記録を壊す → 全部が「無効」
       対象: `packages/server/src/extensions/extensions.integration.test.ts` / 根拠: design「受け入れ基準との対応」、脅威 S1〜S6・S10・S11・S18・S24
@@ -326,9 +327,10 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T15
       AC: AC29, AC30
 - [ ] T26: 承認のダイアログと、知らせ（design「ブラウザ」の `ExtensionApprovalDialog.vue` と「知らせ」の全部）: 別の `<dialog>`・`showModal()`・`view.setExtensionApprovalOpen`（`modalOpen` に入れる）・背景で閉じない・`Esc` は［後で］・中身 1〜8（**全部 `textContent`。`v-html` を使わない**。コマンドの `<pre>` に、高さの上限・内側のスクロールを付けない。ボタンは中身の後ろ）・
-      開いたら［承認しない］へフォーカス・［承認して動かす］は 1 秒 `disabled`・**中身が替わったとき（`extension_stale`・`digest` の変化・次の 1 件）と、ほかのモーダルが開いた／閉じたときは、1 秒をやり直し、フォーカスを［承認しない］へ置き直す**・その拡張が `pending`・`denied` でなくなったら、次へ替わるか閉じる・
-      「N 件中 M 件目」・1 件を決めたら、**開いたときの同じ根の一覧の**次へ・`deniedBefore` の注意・「前に承認した中身の記録は、残っています」・ASCII でない文字の符号位置・`groupWritable` の注意・閉じたら `restoreFocus`。**開くのは `store.dialogKey` が入ったときだけ**（`extension.changed` では開かない）。
-      節「拡張」: 置き場所の案内に「リポジトリの `.soda/extensions.json`」を足す。プロジェクトの行に［確認］（`pending`・`denied`）と［承認を取り消す］（**`approval.approvedAlive` なら、どの状態でも**。`extension.revoke { root, id }`）。節の末尾に「承認の記録」（`list.approvals`。いま開いていないリポジトリの分も。［記録を消す］）。
+      開いたら［承認しない］へフォーカス・［承認して動かす］は 1 秒 `disabled`・**1 秒をやり直すのは、中身が替わったとき（`extension_stale`・`digest` の変化・次の 1 件）と、ほかのモーダルが開いた／閉じたとき。フォーカスを［承認しない］へ置き直すのは、中身が替わったときと、ほかのモーダルが「閉じた」ときだけ**（開いたときは、上のモーダルからフォーカスを奪わない。閉じたときの置き直しは、閉じたモーダル自身のフォーカスの戻しの後——`nextTick` と `requestAnimationFrame` の後）・その拡張が `pending`・`denied` でなくなったら、次へ替わるか閉じる・
+      「N 件中 M 件目」・1 件を決めたら、**開いたときの同じ根の一覧の**次へ・`deniedBefore` の注意・「前に承認した中身の記録は、残っています」・ASCII でない文字の符号位置・`groupWritable` の注意・マシンの名前・閉じたら `restoreFocus`。**開くのは `store.dialogKey` が入ったときだけ**（`extension.changed` では開かない）。
+      節「拡張」: 置き場所の案内に「リポジトリの `.soda/extensions.json`」を足す。プロジェクトの行に［確認］（`pending`・`denied`）と［承認を取り消す］（**`approval.approvedAlive` なら、どの状態でも**。`extension.revoke { root, id }`。いまの登録と鍵が違う行には「前に承認した中身の記録が残っています」を添える）。
+      **`disabled` の行にも、承認の有無（承認済み・未承認・承認しない）を出す。`approval.groupWritable` の行に、注意の印**。ダイアログには、別のマシンを表示中なら、マシンの名前。節の末尾に「承認の記録」（`list.approvals`。いま開いていないリポジトリの分も。［記録を消す］）。
       承認待ちの、消えないトースト（1 つ・件数・［確認する］・0 件で消す・閉じたものは出し直さない）。`App.vue` に置く
       対象: `packages/web/src/components/ExtensionApprovalDialog.vue`（新規）、`packages/web/src/components/ExtensionSettings.vue`（T16）、`packages/web/src/extensions/ExtensionController.ts`（T15・T17）、`packages/web/src/store/extensions.ts`、`packages/web/src/store/view.ts`（`modalOpen` 382 行付近・`setAskOpen` の隣）、`packages/web/src/App.vue:109` 付近、手本 `packages/web/src/components/AskDialog.vue`（`showModal`・`onNativeCancel`・`restoreFocus` 129 行付近）/ 根拠: research E9・X16、design「ブラウザ」、脅威 S7・S8・S19
       依存: T16, T17, T23, T25
@@ -337,10 +339,10 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
 - [ ] T28: E2E（承認）: spec — 一時のリポジトリ（`.git/HEAD`・`.soda/extensions.json`。コマンドは、印のファイルを作って動き続ける `.mjs`）で workspace を作る。
       (1) 消えないトースト（件数 1・［確認する］）が出る。**`document.activeElement` は、出る前と同じ**。ダイアログは、開いていない（AC30・AC-I1）(2) ［確認する］で開く。根・設定ファイルのパス・id・コマンドの全文（`<b>x</b>` を含む 1024 文字のコマンドが、`<pre>` の `textContent` に全部あり、`<b>` の要素が無い・`<pre>` の `scrollHeight` が `clientHeight` と等しい）・作業ディレクトリ・固定の文言 2 つ・`allow`（なし）・`onUnresponsive`・「作者が書いた説明」の見出し・ASCII でない文字の注意と符号位置が出る（AC29）
       (3) 開いた直後のフォーカスは［承認しない］。［承認して動かす］は `disabled` で、`disabled` が外れるのを待つと押せる。**開いた直後に `Enter` を 2 回打っても、承認にならない**（印が無い。状態は `denied`）（AC-I4・S8）(4) 設定の節から［確認］で開き直し、［承認して動かす］→ 行が「動作中」になり、印が出来る。**ブラウザが送ったフレームの `extension.approve` の `digest` が、受けた `extension.list` の `approval.digest` と同じ**（AC29・AC-I2）
-      (5) 登録を書き換えて［読み直す］→ トーストが出て、ダイアログに「前に承認した登録からの変更」（前と後）と、「前に承認した中身の記録は、残っています」（AC29）(6) ダイアログを開いたまま、登録を書き換えて読み直す → 「登録が変わりました」と出て、中身が替わり、［承認して動かす］が、また `disabled`・フォーカスが［承認しない］（AC-I2）(7) `Esc` で閉じると、`pending` のまま・印が無い・フォーカスが、開く前の場所へ戻る（AC-I1・AC-I4）
-      (8) キーボードだけで: トーストの［確認する］へ `Tab` → `Enter` → `Tab` でボタンを巡る → `Enter`（AC-I3）(9) 設定の画面を開いたまま、ダイアログを開いて閉じると、設定が残っている。開いている間に打ったキーが、端末へ届かない（ブラウザが送った入力のフレームが無い）（AC-I5）
+      (5) 登録を書き換えて［読み直す］→ トーストが出て、ダイアログに「前に承認した登録からの変更」（前と後）と、「前に承認した中身の記録は、残っています」（AC29）(6) ダイアログを開いたまま、登録を書き換えて読み直す → 「登録が変わりました」と出て、中身が替わり、［承認して動かす］が、また `disabled`・フォーカスが［承認しない］（AC-I2）(7) `Esc` で閉じると、`pending` のまま・印が無い・フォーカスが、開く前の場所へ戻る。同じ登録では、トーストは出し直されない（AC-I1・AC-I4）
+      (8) （別のテストで。ページを新しく開く）キーボードだけで: トーストの［確認する］へ `Tab` → `Enter` → `Tab` でボタンを巡る → `Enter`（AC-I3）(9) 設定の画面を開いたまま、ダイアログを開いて閉じると、設定が残っている。開いている間に打ったキーが、端末へ届かない（ブラウザが送った入力のフレームが無い）（AC-I5）
       (10) 同じリポジトリに承認待ちが 2 件のとき、「2 件中 1 件目」と出て、1 件を決めると、次の 1 件に替わる。別のリポジトリの承認待ちへは、替わらずに閉じる。「すべて承認」のボタンが無い（AC-I1・AC29）(11) ダイアログを開いて、［承認して動かす］へ `Tab` で移ったまま、pane から `sodactl ask` の質問を出して閉じると、その直後、［承認して動かす］が `disabled` に戻り、フォーカスが［承認しない］にある（S8）
-      (12) workspace を全部消す → 設定の「承認の記録」に、そのリポジトリの行が出て、［記録を消す］で消える（AC22）
+      (12) workspace を全部消す → 設定の「承認の記録」に、そのリポジトリの行が出て、［記録を消す］で消える（AC22）(13) `chmod g+w` した設定ファイルのリポジトリ → 一覧の行とダイアログに、グループの注意。B を［承認しない］にしてから C に書き換える → ダイアログに「前に『承認しない』とした」。画面の入切で切ったプロジェクトの行に、承認の有無が出る（AC29・S19・S24）
       対象: `packages/e2e/src/specs/extensions-approval.spec.ts`（新規）、`packages/e2e/src/support/extensions.ts` / 根拠: `.aidev/conventions/e2e-observe-browser.md`、design「ブラウザ」、脅威 S7・S8・S19
       依存: T26
       AC: AC22, AC29, AC30, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
@@ -351,10 +353,11 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       AC: AC18, AC33
 - [ ] T30: 負の対照（**test 工程で消化する**。PR ごとに、その PR の守りの分。PR1 の分は、PR1 の test 工程で）: 守りだけを外して、対応するテストが落ちることを確かめ、戻す。落ちたときの生の出力を `test-result.md` に貼る。**落ちなければ、テストを書き直す**（`regression-negative-control.md`）。
       **PR1** — (d) T7 の持ち主の検査（札つきの出来事を、pane の列にも入れる／札つきの `close` が、札を見ない）を外す → T7・T11 (6) が落ちる。(e) T6 の、グループへの合図（子の pid へだけ送る）を外す／`stop` が、子の `exit` だけで返るようにする → T6 の実際の子のテスト (i)(iii)・T11 (9) が落ちる。
-      (g) `startOne` の 6（`spawn` の直前に `stopped`・`epoch` を見直す）を外す → T9-2 の「読んでいる途中で `stop()`」が落ちる。(h) `onExit` の `runId` の一致の検査を外す → T9-3 の「遅れて届いた `exit`」が落ちる。(i) 出来事を渡す直前の範囲の確かめを外す → T9-4 の「範囲の外の pane の `display.action`」が落ちる。
+      (f1) `setEnabled` の `isScreenKind` を外す → T9-2・T10 の「`external` の接続から `invalid_params`」が落ちる。(g) `startOne` の 6（`spawn` の直前に `stopped`・`epoch` を見直す）を外す → T9-2 の「読んでいる途中で `stop()`」が落ちる。(h) `onExit` の `runId` の一致の検査を外す → T9-3 の「遅れて届いた `exit`」が落ちる。(i) 出来事を渡す直前の範囲の確かめを外す → T9-4 の「範囲の外の pane の `display.action`」が落ちる。
       **PR3** — (a) 承認の検査を、**層ごとに**: (a1) `reconcile` の 4 の、承認の判定だけを外す（プロジェクトの拡張を、記録を見ずに `eligible` にする）→ 状態が `pending` であることを見るテスト（T22）は落ちるが、`startOne` の 4 が止めるので、印のファイルは出来ない（T24 (1) は通る＝二重の守りが効いている、と記録する）。
       (a2) `startOne` の 4 だけを外す → T22・T24 (5) の「記録を直接消して、すぐ落とす」が落ちる。(a3) 両方を外す → T22 のきっかけごとのテスト・T24 (1) が落ちる。
-      (b) `startOne` の 3（読み直して `digest` を比べる）を外す → T22・T24 (4) が落ちる。(c) `inScope` を、いつも真にする → T22-3・T24 (6) が落ちる。(f) `approve` の `isScreenKind` を外す → T22-2・T23 が落ちる
+      (b) `startOne` の 3（読み直して `digest` を比べる）を外す → T22・T24 (4) が落ちる。(c) `inScope` を、いつも真にする → T22-3・T24 (6) が落ちる。(f) `approve` の `isScreenKind` を外す → T22-2・T23 が落ちる。
+      (a1) の注意: 外した状態では、`startOne` の 4 が断るたびに、差を埋める仕事が予約され続ける。T22 の単体は、時計を決まった分だけ進めて、`spawn` の回数（0）と状態を見る形にする（落ちずに回り続けるテストにしない）
       対象: `packages/server/src/extensions/ExtensionHost.ts`・`ExtensionProcess.ts`・`packages/server/src/display/DisplayService.ts`（外して、戻す）、`.aidev/works/20261007-ext-host/test-result.md`（新規）/ 根拠: `.aidev/conventions/regression-negative-control.md`、requirements AC35
       依存: T11, T24
       AC: AC35
@@ -365,8 +368,9 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       対象: 未特定（表示の面の PR2 が作る、パネル・帯の見出しの部品。`20261007-soda-extensions/tasks.md` の T12 の `対象` を見る）、`packages/e2e/src/specs/extensions-approval.spec.ts` / 根拠: research X22、design「ブラウザ」の「出どころの表示」、脅威 S12・S20
       依存: T7, T26
       AC: AC31
-- [ ] T31: `display.send`（**表示の面の PR3 が main に入ってから**）: `ExtensionApi` の表に `display.send` を足す（`allow` に `script-html` がある拡張だけ。無ければ `unsupported`。`ext.hello.methods` にも、許可があるときだけ）。`DisplayService.send` に `opts?: { owner?: string }` を足し、**面の札と `opts.owner` が違えば `display_closed`**（札なしの呼び出しが、札つきの面を指す場合を含む）。
+- [ ] T31: `display.send`（**表示の面の PR3 が main に入ってから**。T7 が先に main にあるなら、**PR3 が入った直後の、最初の PR で**——台帳の持ち主の検査が無い間、pane のプログラムが、拡張の面のスクリプトへデータを送れる）: `ExtensionApi` の表に `display.send` を足す（`allow` に `script-html` がある拡張だけ。無ければ `unsupported`。`ext.hello.methods` にも、許可があるときだけ）。`DisplayService.send` に `opts?: { owner?: string }` を足し、**面の札と `opts.owner` が違えば `display_closed`**（札なしの呼び出しが、札つきの面を指す場合を含む）。
       テスト: 拡張の `display.send` が、自分の面へ届く／pane のプログラム（`pane.sock`）の `display.send` は、拡張の面へ届かず `display_closed`（AC9）／拡張は、pane のプログラムの面へ送れない／許可つきの拡張の `script-html` の `set` が通る（AC25 の後半）。T7 の「決まりの表」の、`send` の 1 行のテスト
       対象: `packages/server/src/extensions/ExtensionApi.ts`、`packages/server/src/display/DisplayService.ts`（表示の面の PR3 が足した `send`）、それぞれのテスト / 根拠: design「表示の面への追加」の末尾・「拡張が呼べる操作」の表、脅威 S11・S12
       依存: T8
       AC: AC9, AC25
+      点検: あり
