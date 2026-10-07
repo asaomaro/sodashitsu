@@ -27,6 +27,10 @@ AssertionError: expected null to match object { kind: 'grok', sessionId: 'grok-1
 直した後に、条件だけ `report.kind === "claude" || report.kind === "codex"` に戻した出力:
 
 ```
+ × 連携の kind（grok・qodercli・devin）のセッション ID の報告が pane に記録される（claude・codex 以外も）
+AssertionError: expected null to match object { kind: 'grok', sessionId: 'grok-1' }
+ ❯ src/composeServer.subagents.integration.test.ts:492:64
+ Tests  1 failed | 1 passed | 11 skipped (13)
 ```
 
 戻した後、`git diff -- packages/server/src/composeServer.ts` は T4 の差分だけ（2 行）。
