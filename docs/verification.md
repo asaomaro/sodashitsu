@@ -743,6 +743,29 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
       形式で断られることは通常無い。Cmd+V 等の貼り付けでは PNG・JPEG・GIF・WebP 以外の画像は画像として扱わず、今までどおりの空の貼り付けになる）。
 - [ ] 画像を送っている間（大きな画像で 1 秒ほど）に打ったキーは、パスが貼られた後に届く（送り終わるまで表示されない。最長 20 秒で先に流れる）。
 
+### 共通：表示の面（`sodactl display`。20261007-soda-extensions・`docs/display.md`）
+
+自動のテストは、プロトコルの検査・サーバの台帳・受け口と `/ws`・`sodactl`（PR1）と、画面（PR2）の取り除き（`sanitize.js`）・`/display-view/*` のヘッダ・枠の部品（合い札・`load` の回数・見回り）・パネルと帯・幅のつまみ・キーの操作・モバイル。
+実ブラウザの E2E（Chromium。`packages/e2e/src/specs/display*.spec.ts`）で、出す・更新する・閉じる・操作（`display-flows`）・隔離（`display-isolation`）・幅のつまみ（`display-resize`）・モバイル（`display-mobile`）を確かめた。
+実機の iOS Safari・Android Chrome・Firefox・Safari・別のマシンのブラウザ・保存した SSH のマシンは確かめていない（下の手順）。
+
+実測した前提（Chromium・Playwright）:
+
+- `MessagePort` は、sandbox（`allow-same-origin` なし）の不透明 origin の枠へ、`postMessage` の transfer で渡せる。
+- Playwright の `frame.evaluate` は、`script-src 'self'` の枠の文書の中でも式を評価できる（枠の `self.origin` は `"null"`・`localStorage`/`parent.document` は `SecurityError`。`location.origin` は URL から出る値なので不透明 origin の証拠にならない）。
+- sandbox に `allow-forms` があると、枠の中の `form` の `submit` のイベントが起き、`preventDefault()` により実際の送信は起きない（外への要求 0・枠は移らない）。
+- marked は Markdown の中の HTML（`<button data-soda-action>`）をそのまま通す。
+- 枠が同じ origin の別の文書へ移ると、親から見た iframe の `load` が 2 回目として起きる（`frame.goto`。移った瞬間に親が iframe を外すので、Playwright の `goto` の待ちは `Frame was detached` で終わる）。
+
+手順（実機・実ブラウザで）:
+
+- [ ] pane の中で `sodactl display set p --kind panel --html-file x.html` と `--kind band --text hi`。期待：パネルが端末の右、帯が端末の上に出て、端末の列数が減る。
+- [ ] パネルの左の縁をドラッグ。期待：離すまで幅は変わらず（案内の線だけ動く）、離すと 1 回だけ端末が縮む。再読み込みの後も幅が残る。ダブルクリックで元の幅。
+- [ ] `<button data-soda-action="go">` を押す。期待：待っている `sodactl display wait` に 1 行届く。
+- [ ] `prefix+i` で枠へ移る。期待：縁が強調色・「入力はこの表示に届きます（Esc で端末へ）」・端末が薄くなる。`Esc` で戻り、続けて打ったキーが pane に届く。
+- [ ] iPhone・Android（幅 767px 以下）：パネルは端末の横に出ず、バーの［表示 N］から重ね表示が開く。帯は端末の上。
+- [ ] `soda handoff`／再起動の後、面が消える（`events` は `display.reset`／`display.end`）。出し直すと出る。
+
 ### 共通：質問のフォーム（`sodactl ask`。20261002-sodactl-ask・`docs/sodactl.md`「質問のフォーム」）
 
 自動のテストは、プロトコルの検査・回答の集め方（ask-form と共通の規則。20261003-ask-form-component からは、共通の試験データ `third_party/ask-form/fixtures/` で ask-form の側と同じ結果になることを見る）・サーバの台帳・実物の `/ws` と中継越しの結合・ダイアログの部品・実物の Chromium での一巡（ビルドした `sodactl` を子プロセスで起動。

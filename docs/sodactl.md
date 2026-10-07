@@ -2,7 +2,7 @@
 
 `sodactl` は、動いている `soda serve` をブラウザを介さずに操作する CLI（`packages/cli`）。
 ブラウザと同じ認証（token でのログイン → session cookie）と同じ接続（`/ws`。Origin/Host の検査つき）を使う。
-例外は pane の中の `sodactl ask` だけで、Linux・macOS ではログイン不要のローカルの受け口（状態ディレクトリの `pane.sock`）を使う（下の「ログイン不要の受け口（pane.sock）」）。
+例外は pane の中の `sodactl ask` と `sodactl display` だけで、Linux・macOS ではログイン不要のローカルの受け口（状態ディレクトリの `pane.sock`）を使う（下の「ログイン不要の受け口（pane.sock）」）。
 ほかのコマンドは、新しいソケットや認証の入口を持たない。
 
 ## 接続とログイン
@@ -57,6 +57,8 @@ sodactl graph node rm <pane> [--json]
 sodactl graph node rekey <pane> <newPane> [--json]
 sodactl graph history [<linkId>] [--limit <N>] [--json]
 sodactl ask [--timeout <ms>] < spec.json    # pane の中のプログラムの質問のフォームを、その pane を見ているブラウザの画面に出す（下の「質問のフォーム」）
+sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] (--text <text> | --markdown-file <path> | --html-file <path> | [--format text|markdown|html] < stdin) [--wait [--timeout <ms>]]   # この pane を見ているブラウザの画面に、パネル（端末の右）か帯（端末の上）を出す（`docs/display.md`）
+sodactl display close (<name> | --all) / list / wait [<name>] / events [<name>...] / --features   # 面の閉じる・一覧・操作を待つ・続けて受け取る・機能確認（pane の中ではログイン不要）
 sodactl skill                               # エージェントに sodactl の使い方を教える Markdown（skill ファイル）を出す
 ```
 
@@ -226,6 +228,8 @@ sodactl pane control 3f2a9c10 --takeover                       # 既に所有者
 - **質問のフォーム**（`ask`）: 定義全体 256 KiB（JSON の UTF-8）・質問 100・1 つの質問の選択肢 200・`id`／`value` 200 文字・`title`／`label`／`page` 等の短い文字列 500 文字・
   `intro`／`help`／`desc` 4,000 文字・1 つの選択肢の `colors` 16 個（超えた分は捨てる）。回答の自由入力・`text` の答え・補足・質問ごとの自由記述（`comments`）の 1 つは 10,000 文字まで。自由記述の長さの合計は 100,000 文字まで（超える回答は断られる）。`--timeout` は 1,000〜86,400,000 ミリ秒。
   定義の上限の超過は使い方の誤り（終了コード 2）。標準入力は 1 MiB までしか読まない。サーバが同時に待てる質問は総数 32・1 つの接続あたり 8 まで（超えると `ask_busy`。終了コード 1）。
+- **表示の面**（`display`。`docs/display.md`）: 中身 1 つ 2 MiB（UTF-8）・サーバ全体で合計 32 MiB・面は pane ごとにパネル 4・帯 2、全体で 64・`set` の頻度は pane ごとに続けて 10 回まで（1 秒に 10 回ぶん戻る）と量で続けて 8 MiB まで（毎秒 2 MiB 戻る）・`wait` の待ちは pane ごとに 4、全体で 32・題は 80 文字・操作の値は JSON で 8 KiB。
+  受け口の要求の 1 行の上限は 4 MiB（中身 2 MiB の JSON 文字列でも収まる。`ask` の要求にも同じ上限がかかる）。外れた `set` は使い方の誤り（終了コード 2）か `display_limit`・`display_busy`。
 - **ログイン不要の受け口**（`pane.sock`。下の「ログイン不要の受け口（pane.sock）」）: 同時に開いている接続 64（超えた接続と `soda handoff` の途中の接続は、要求を読まずに `pane_socket_busy`。sodactl は 5 秒まで繋ぎ直す）・要求の 1 行 4 MiB（超えると `bad_request`。1 MiB から上げた。表示の面の中身 2 MiB を載せるため）・
   接続してから要求の 1 行が揃うまで 10 秒（過ぎたら何も返さずに切る）。受け口から出した質問も、上の総数 32 と「1 つの pane に同時に 1 つ」に数える。
 - 複数ホストの中継（`--machine`・`/ws?machine=`）では、判定するのは**先のマシンの `soda serve`**（`docs/machines.md`）。
@@ -719,7 +723,7 @@ workspace・tab の ID は環境変数に**入れない**（herdr の `HERDR_WOR
 
 サーバ（Linux・macOS。macOS は未検証）は、状態ディレクトリに Unix ドメイン socket **`pane.sock`**（権限 0600。0700 の一時ディレクトリの中で待ち受けて 0600 にしてから、rename で置く）を立て、
 pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中のプログラム向けの、ログイン不要のローカルの受け口**で、`/ws` の RPC は通さず、**受け口に登録した操作だけ**を受ける。
-今載っている操作は `ask.open`（`sodactl ask`）と `ask.features`（`sodactl ask --features` の、サーバの機能確認）の 2 つだけ。**`sodactl` のほかのコマンドは何も変わらない**（今までどおり `sodactl login` が要る）。新しいネットワーク（TCP）の待ち受けは作らない。
+今載っている操作は `ask.open`（`sodactl ask`）・`ask.features`（`sodactl ask --features` の、サーバの機能確認）と、表示の面（`sodactl display`。`docs/display.md`）の `display.set`・`display.close`・`display.list`・`display.wait`・`display.features` の 5 つ。**`sodactl` のほかのコマンドは何も変わらない**（今までどおり `sodactl login` が要る）。新しいネットワーク（TCP）の待ち受けは作らない。
 
 - **使われる条件**（全部を満たすとき。`sodactl ask` が自分で選ぶので、利用者が指定するものは無い）:
   - Windows（ネイティブ）でない。

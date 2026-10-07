@@ -297,7 +297,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/e2e/src/specs/display-mobile.spec.ts`（新規）
       依存: T14, T17
       AC: AC9
-- [ ] T21: 文書（静的な形式と、幅のつまみ）: `docs/display.md`（新規: 使い方と例・中身の 3 つの静的な形式・`data-soda-action` と `data-soda-value` とフォーム・枠の中で使える CSS の変数・行の決まりと行の一覧〔`display.closed` の理由 `navigated` を含む〕・終了コード・どの画面に出るか・モバイル・キーの操作・**幅のつまみ**〔ドラッグ・キーボード・範囲・その画面が覚える・戻し方〕・
+- [x] T21: 文書（静的な形式と、幅のつまみ）: `docs/display.md`（新規: 使い方と例・中身の 3 つの静的な形式・`data-soda-action` と `data-soda-value` とフォーム・枠の中で使える CSS の変数・行の決まりと行の一覧〔`display.closed` の理由 `navigated` を含む〕・終了コード・どの画面に出るか・モバイル・キーの操作・**幅のつまみ**〔ドラッグ・キーボード・範囲・その画面が覚える・戻し方〕・
       **操作中の表示**・隔離の仕組み・**限界**〔design の「残る限界（どの形式でも）」と、「秘密を面の欄に打たせない」「静的な形式ではスクリプトは動かない」「`soda handoff`・再起動で消える」〕・上限の一覧〔2 MiB・32 MiB・回数と量〕・新旧の表・別のマシン・Windows）、
       `docs/sodactl.md`（コマンド一覧・「サーバ側の上限」〔受け口の 1 行を 4 MiB に〕・「ログイン不要の受け口」の「今載っている操作」と 4 条件の表）、`docs/verification.md`、`docs/tui-parity.md` と `docs/tui.md`、`packages/cli/skills/sodactl/SKILL.md`（例と「機能の問い合わせをしてから使う」）、`AGENTS.md` の案内の 1 行。不確かな点 3・4・9 の結果を、決まった形で書く
       対象: `docs/display.md`（新規）、`docs/sodactl.md:21`・`213`・`718`、`docs/verification.md`、`docs/tui-parity.md`、`docs/tui.md:137` の近く、`packages/cli/skills/sodactl/SKILL.md`、`AGENTS.md`
