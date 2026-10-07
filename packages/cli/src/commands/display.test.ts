@@ -330,6 +330,36 @@ describe("runWaitLoop", () => {
     expect(h2.calls.map((c) => c.timeoutMs)).toEqual([1_500]);
   });
 
+  it("まだ一度も聞いていないときは、残りが 1 秒未満（時計が進んで 0 以下でも）でも 1 回は聞く。2 回目以降の残りが短いときは聞かずに待って display.timeout", async () => {
+    // 開始から 1ms 進んだ状態で呼ばれる（--timeout 1000 ぴったり）
+    const h = io(async () => res({ next: 1, events: [ev(1) as never] }));
+    let first = true;
+    const realNow = h.impl.now;
+    h.impl.now = () => {
+      const t = realNow();
+      if (first) return t;
+      return t + 1;
+    };
+    const origCall = h.impl.call;
+    h.impl.call = (p, ms) => {
+      first = false;
+      return origCall(p, ms);
+    };
+    const out = await runWaitLoop(h.impl, { names: [], since: undefined, epoch: "E1", mode: "once", totalTimeoutMs: 1_000 });
+    expect(out).toEqual({ end: "done" });
+    expect(h.calls.map((c) => c.timeoutMs)).toEqual([1_000]);
+    expect(h.lines).toEqual([ev(1)]);
+    // 開始の時点で期限を過ぎていても、1 回は聞く
+    const h2 = io(async () => res());
+    h2.advance(5_000);
+    let t0 = true;
+    const n0 = h2.impl.now;
+    h2.impl.now = () => (t0 ? (t0 = false, n0() - 5_000) : n0());
+    await runWaitLoop(h2.impl, { names: [], since: undefined, epoch: "E1", mode: "once", totalTimeoutMs: 1_000 });
+    expect(h2.calls.length).toBe(1);
+    expect(h2.lines).toEqual([{ type: "display.timeout" }]);
+  });
+
   it("切れたら 150ms おきに 5 秒まで繋ぎ直し、戻ればそのまま続ける。戻らなければ connection_closed", async () => {
     let n = 0;
     const h = io(async () => {

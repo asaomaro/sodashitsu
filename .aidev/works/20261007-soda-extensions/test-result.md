@@ -90,7 +90,7 @@ handoff-smoke: ok
 4. **送る前の大きさの検査に余裕（512 バイト）**: `line + 512 > 4 MiB` なら送らずに使い方の誤り（サーバの `requestLineBytes` の比較も同じ）。単体テストで、余裕の内側（上限 − 100）は誤り・外側（上限 − 1000）は送る。
 5. **`wait --timeout`・`set --wait --timeout`**: 残りの時間で数える。残りが 1 秒に満たないときはサーバに聞かず、残りだけ待って `display.timeout`（サーバの 1 回の待ちの最小は 1 秒）。その端の区間に起きた出来事は拾わない（終わる直前の 1 秒未満）。単体テストあり。
 6. **`display_busy`（待ちの上限）の `events`**: 以前は標準エラーの JSON だけで、stdout には何も出なかった。**直した**: `display.end`（reason `busy`）の行を出してから、エラー（標準エラー。終了コード 1）を投げる。`DisplayLine` の `display.end` の reason に `busy` を足した。
-   全体の待ちの上限は **16 → 64 に見直した**（pane 4 × 16 pane。受け口の同時接続 64 と同じ）。ほかの pane の待ちで無関係な pane が `display_busy` になりにくくなる。`design.md` の 16 とは違う（`design.md` には触れていない。上流の側で直してほしい）。
+   全体の待ちの上限は **16 → 32 に見直した**（pane あたり 4 × 8 pane。受け口の接続（64）の半分までに抑え、`set`・`close`・`ask` の分を残す。再レビューの指摘で 64 から下げた）。`design.md` の 16 とは違う（`design.md` には触れていない。上流の側で直してほしい）。
 7. **AC14 の負の対照（PR1 の時点）**: `panesocket/displayOps.ts` の `displaySetOp`・`displayListOp`・`displayWaitOp` を、引数の schema を `paneId` を許すものに替え、対象を `p.paneId ?? ctx.paneId` にした版で `display.integration.test.ts`「pane A を名乗っても…」を流すと落ちる（`paneId: B` を載せた要求が `invalid_params` にならず成功する）:
    ```
         × pane A を名乗っても、pane B の面は見えず・閉じられず・待てない。引数に paneId: B を載せても B に届かない（AC14） 948ms
@@ -111,3 +111,8 @@ handoff-smoke: ok
 ### 残った点（直さない）
 - 認証の前に受け口が溜める量が、64 接続 × 4 MiB（256 MiB）に増えた（10 秒の期限・同じ OS の利用者だけが繋げる）。
 - 接続元の pid から pane を逆引きして、受け口の名乗りを検証する案は、別の作業の候補（上の docs の限界の解消）。
+
+### 再レビュー後の修正
+- 待ちの全体の上限 `DISPLAY_WAITERS_MAX` を 32 に（上記）。テスト・SKILL.md の記述も合わせた。
+- `runWaitLoop`: まだ一度も聞いていないときは、残りが 1 秒未満でも（期限を過ぎていても）1 回は聞く。2 回目以降で残りが 1 秒未満なら、残りだけ待って `display.timeout`。docs と SKILL.md に「時間切れの直前の 1 秒未満に起きた操作は受け取れないことがある」を足した。
+- `display.end` の `reason` に `busy` を足したことを、SKILL.md の `events` の説明と `docs/sodactl.md` に書いた。

@@ -161,7 +161,7 @@ sodactl display list
 
 - 中身は `--text`・`--markdown-file`・`--html-file` のどれか 1 つ、または標準入力（`--format text|markdown|html`。省くと `text`）。**2 MiB まで**（超えると終了コード 2）。`--size`（px）・`--ttl-ms` で大きさと寿命を決める。
 - `html` の中のスクリプトは動かない（取り除かれる）。ボタンは `<button data-soda-action="名前">` で宣言し、利用者が押すと、待っている側に操作が届く。`text` は操作を持たない。
-- 操作を受け取る: `sodactl display wait <名前>` が、操作か閉じられた理由を 1 行の JSON で出して終わる（`--timeout <ms>` で締め切り）。`set --wait` は出したあとすぐ待つ。続けて受け取るなら `sodactl display events`（最初の行が `display.ready`。以後 1 行 1 つ。知らない `type`・項目は無視する）。
+- 操作を受け取る: `sodactl display wait <名前>` が、操作か閉じられた理由を 1 行の JSON で出して終わる（`--timeout <ms>` で締め切り）。`set --wait` は出したあとすぐ待つ。続けて受け取るなら `sodactl display events`（最初の行が `display.ready`。以後 1 行 1 つ。終わるときは `display.end` で、`reason` は `pane_closed`・`connection_closed`・`unsupported`・`busy`〔待ちの上限。標準エラーにも理由が出て終了コード 1〕。知らない `type`・項目は無視する）。`--timeout` の時間切れの直前の 1 秒未満に起きた操作は、受け取れないことがある。
 - 利用者が［×］で閉じた面は `display.closed`（`reason` が `dismissed`）が届く。ブラウザが開いていない・画面が無いときも `set` は成功する（結果の `renderers` が 0）。
 - 古い `soda` では `{"status":"unsupported",…}`（終了コード 0）。使えるかは `sodactl display --features`（`server` が `null` なら使えない）。
 - 面の中身・題・操作の値は、他人が読む前提で書く（秘密を入れない）。

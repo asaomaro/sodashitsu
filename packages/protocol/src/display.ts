@@ -53,7 +53,7 @@ export const DISPLAY_ACTION_RATE = { perSec: 20, burst: 20 } as const;
 /** pane ごとに溜める出来事の数。 */
 export const DISPLAY_EVENT_QUEUE_MAX = 64;
 export const DISPLAY_WAITERS_PER_PANE_MAX = 4;
-export const DISPLAY_WAITERS_MAX = 64; // pane ごとの上限 × 16 pane。受け口の同時接続（64）と同じ。ほかの pane の待ちで無関係な pane が断られにくくする
+export const DISPLAY_WAITERS_MAX = 32; // pane ごとの上限 4 × 8 pane。受け口の同時接続（64）の半分までに抑え、set・close・ask の分を残す
 export const DISPLAY_WAIT_MIN_MS = 1_000;
 export const DISPLAY_WAIT_MAX_MS = 60_000;
 export const DISPLAY_WAIT_DEFAULT_MS = 30_000;

@@ -570,19 +570,19 @@ describe("DisplayService.wait", () => {
     expect((await w).events).toMatchObject([{ name: "other", seq: 2 }]);
   });
 
-  it("待ちの上限: pane 4・全体 64（pane の上限 × 16 pane）を超えると display_busy。外れると空きが戻る。1 つの pane の待ちで、ほかの pane は断られない", async () => {
+  it("待ちの上限: pane 4・全体 32（pane の上限 × 8 pane。受け口の接続の半分）を超えると display_busy。外れると空きが戻る。1 つの pane の待ちで、ほかの pane は断られない", async () => {
     const panes = Array.from({ length: 18 }, (_, i) => `q${i}`);
     const s = setup({ panes });
     const ws: Promise<unknown>[] = [];
     for (let i = 0; i < DISPLAY_WAITERS_PER_PANE_MAX; i++) ws.push(s.displays.wait("q0", { timeoutMs: 5000 }, {}));
     expect(errCode(() => s.displays.wait("q0", { timeoutMs: 5000 }, {}))).toBe("display_busy");
-    // q0 が満杯でも、ほかの pane は待てる。16 pane × 4 = 64 で全体が満杯
-    for (let p = 1; p < 16; p++) for (let i = 0; i < 4; i++) ws.push(s.displays.wait(`q${p}`, { timeoutMs: 5000 }, {}));
-    expect(DISPLAY_WAITERS_MAX).toBe(64);
-    expect(errCode(() => s.displays.wait("q16", { timeoutMs: 5000 }, {}))).toBe("display_busy");
+    // q0 が満杯でも、ほかの pane は待てる。8 pane × 4 = 32 で全体が満杯
+    for (let p = 1; p < 8; p++) for (let i = 0; i < 4; i++) ws.push(s.displays.wait(`q${p}`, { timeoutMs: 5000 }, {}));
+    expect(DISPLAY_WAITERS_MAX).toBe(32);
+    expect(errCode(() => s.displays.wait("q8", { timeoutMs: 5000 }, {}))).toBe("display_busy");
     s.clock.advance(5000); // 全部時間切れ
     await Promise.all(ws);
-    expect(() => s.displays.wait("q16", { timeoutMs: 5000 }, {})).not.toThrow();
+    expect(() => s.displays.wait("q8", { timeoutMs: 5000 }, {})).not.toThrow();
   });
 
   it("signal の abort で待ちが外れる（返事は決まらない）。空きが戻る", async () => {

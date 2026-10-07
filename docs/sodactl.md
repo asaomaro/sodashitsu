@@ -760,7 +760,7 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
   そうした環境では、`SODA_PANE_SOCKET` の socket へ繋げられないようにする（サンドボックスの設定で socket を許可しない）。
 - **`display`（表示の面）の操作は、`ask` と違い、ほかの pane の操作の値を読める**（20261007-soda-extensions）。受け口に載せた `display.set`・`close`・`list`・`wait`・`features` は、対象が要求の `paneId`（名乗った pane）だけで、
   引数に `paneId` は持たない（載せると `invalid_params`）。だが**名乗る pane の id を受け口は検証しない**（実在だけ）ので、同じ OS の利用者の別のプロセスが、ほかの pane の id を知っていれば、その pane の面を出す・閉じる・
-  一覧する、そして **`display wait`/`events` でその pane の面への操作の値（パネルのフォームに利用者が入れた値）を読める**。`ask` で出来たのは偽の質問を出すことまでだった。
+  一覧する、そして **`display wait`/`events`（`events` の終わりの行 `display.end` の `reason` は `pane_closed`・`connection_closed`・`unsupported`・`busy`。`--timeout` の時間切れの直前の 1 秒未満に起きた操作は受け取れないことがある）でその pane の面への操作の値（パネルのフォームに利用者が入れた値）を読める**。`ask` で出来たのは偽の質問を出すことまでだった。
   守っているのは「同じ OS の利用者」の境界で、**pane 同士の境界ではない**。パネルのフォームに、秘密（パスワード・token など）を入れさせない。pane の id は `SODA_PANE_ID`・`sodactl snapshot`（ログイン済み）などで分かる。
   （接続元の pid から pane を逆引きして名乗りを検証する案は、別の作業の候補。）
 - 受け口から出来るのは登録した操作だけなので、pane の入出力・ほかの pane の操作・設定・認証には届かない（`agent.send_keys`・`workspace.create` 等の `/ws` の RPC は、今までどおりログインした接続だけ）。

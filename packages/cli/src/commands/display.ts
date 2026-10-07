@@ -446,24 +446,27 @@ export async function runWaitLoop(
   let epoch = o.epoch;
   let since = o.since;
   let firstFail: number | undefined;
+  let asked = false;
   for (;;) {
     let callMs = DISPLAY_WAIT_CALL_MS;
     if (o.totalTimeoutMs !== undefined) {
       const left = o.totalTimeoutMs - (io.now() - started);
-      if (left <= 0) {
+      if (left <= 0 && asked) {
         io.emit({ type: "display.timeout" });
         return { end: "done" };
       }
       // サーバの 1 回の待ちは 1 秒以上。残りが 1 秒に満たないときは、サーバに聞かず、残りの時間だけ待って時間切れにする（全体の待ち時間を超えない）。
-      if (left < DISPLAY_WAIT_MIN_MS) {
+      // ただし、まだ一度も聞いていないときは、残りが短くても 1 回は聞く（サーバの最小の 1 秒で）。
+      if (left < DISPLAY_WAIT_MIN_MS && asked) {
         await io.sleep(left);
         io.emit({ type: "display.timeout" });
         return { end: "done" };
       }
-      callMs = Math.min(DISPLAY_WAIT_CALL_MS, left);
+      callMs = Math.min(DISPLAY_WAIT_CALL_MS, Math.max(DISPLAY_WAIT_MIN_MS, left));
     }
     let res: DisplayWaitResult;
     try {
+      asked = true;
       res = await io.call({ ...(since !== undefined ? { since } : {}), epoch, ...(o.names.length > 0 ? { names: o.names } : {}) }, callMs);
     } catch (err) {
       if (err instanceof DisplayUnsupported) return { end: "unsupported" };
