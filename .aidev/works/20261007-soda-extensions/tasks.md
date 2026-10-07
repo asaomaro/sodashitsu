@@ -193,7 +193,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
 
 ### PR2: 画面（静的な形式）
 
-- [ ] T8: 静的な形式の枠のページ: `frame.html`（既定のスタイル・4 つの `<script src>`）・`sanitize.js`（`self.__sodaDisplaySanitize(root)`。design「静的ページ」の消す要素・消す属性・`a`・`img`・`form` の決まり）・
+- [x] T8: 静的な形式の枠のページ: `frame.html`（既定のスタイル・4 つの `<script src>`）・`sanitize.js`（`self.__sodaDisplaySanitize(root)`。design「静的ページ」の消す要素・消す属性・`a`・`img`・`form` の決まり）・
       `frame.js`（読み込みの最後に、自分の URL の `t`（合い札）を読んで `display-ready` に添える・`display-init` を親から 1 回だけ・port・`ping` に `pong`・`render` の 3 つの形〔**`format` が `text`・`markdown`・`html` でなければ、描かずに `{ type: "rejected", rev }` を返す**。`script-html` を、静的な頁で描かない〕・差し替えの前後でスクロールと欄の値を保つ・フォーカスの持ち越しは `document.hasFocus()` のときだけ・`click` と `submit` の拾い方〔`submit` は必ず `preventDefault()`〕・`Esc` と `relayKeys` のキーの取り次ぎ・`focus`・壊れた中身は `<pre>`）。
       `sanitize.js` の単体テスト（`?raw` で読み込んで評価。消える要素と属性・`javascript:` と `data:` のリンクが外れる・`http(s)` は `_blank`・`data:image/png` の `img` は残り外の `src` は外れる・`form` の `action` が消える・`autofocus` が消える・SVG の `a` と SMIL が消える）
       対象: `packages/web/public/display-view/frame.html`・`frame.js`・`sanitize.js`（新規）、`packages/web/src/display/displayViewSanitize.test.ts`（新規） / 根拠: research A8（手本は `packages/web/public/ask-view/markdown.js:37`・`keys.js`・`links.js`。読み込むだけ）、テストの型は `packages/web/src/ask/askViewLinks.test.ts:1`
