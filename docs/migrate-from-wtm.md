@@ -81,6 +81,7 @@ scripts\migrate-from-wtm.bat
 - エージェント連携の hook（claude・codex・cursor・copilot・devin・droid〔`~/.factory`〕・grok・qwen。`CLAUDE_CONFIG_DIR`・`CODEX_HOME`・`DEVIN_CONFIG_DIR` を
   アプリと同じく尊重）の設定の `wtm-agent-report` を `soda-agent-report` に書き換え、hook のスクリプトを同梱の新しい版
   （`SODA_PANE_ID` を読む。古い版は `WTM_PANE_ID` を読むので名前を変えるだけでは効かない）に置き換える。本製品以外の hook のエントリには触れない。
+  移行は古い場所（`~/.devin/hooks.json`・Grok の平らな形）の名前を替えるだけなので、移行の後に Devin・Grok でも「更新が必要」と出たら、［更新］で現行の場所・形に入れ直す（20261007-agent-hook-drift）。
   移行で書き換えるのは、元の版が入れていた会話の再開のフック（`SessionStart` の 1 つ）の名前とスクリプトだけ。Claude Code のサブエージェントの表示（20261004-subagent-display）のためのフック
   （`PreToolUse`・`SubagentStart`・`SubagentStop`・`Stop`・`SessionEnd` の 5 つ）は入らないので、移行の後に設定画面の「エージェント連携」で「更新が必要」と出たら、［更新］で足す。
 - **書き換える・名前を変えるファイルは、先に `<ファイル>.bak-wtm-migration` に写す**（例 `~/.claude/settings.json.bak-wtm-migration`）。

@@ -266,7 +266,34 @@ async function makeOldHooks(): Promise<Map<Kind, { oldConfig: string; oldConfigB
         }),
       );
     }
-    expect(await installer.install(kind)).toEqual({ ok: true, message: null });
+    if (kind === "devin" || kind === "grok") {
+      // devin・grok は、以前の版の installer が書いた古い場所・古い形をそのまま作る（今の installer は新しい場所・形に書くため。
+      // 20261007-agent-hook-drift。移行の後は status が「更新が必要」になり、［更新］で入れ直す）。
+      const command = `node "${join(hooks, "soda-agent-report.cjs")}" ${kind}`;
+      if (kind === "devin") {
+        await write(
+          config,
+          JSON.stringify({
+            other: { keep: true },
+            hooks: { SessionStart: [{ command: "other-tool" }] },
+            SessionStart: [
+              { command: "other-tool" },
+              { matcher: "", hooks: [{ type: "command", command, timeout: 10 }] },
+            ],
+          }),
+        );
+      } else {
+        await write(
+          config,
+          JSON.stringify({
+            hooks: { SessionStart: [{ matcher: "", type: "command", command, timeout: 10 }] },
+          }),
+        );
+      }
+      await write(join(hooks, "soda-agent-report.cjs"), OLD_SCRIPT);
+    } else {
+      expect(await installer.install(kind)).toEqual({ ok: true, message: null });
+    }
     const content = (await readFile(config, "utf8")).replaceAll(
       "soda-agent-report",
       "wtm-agent-report",

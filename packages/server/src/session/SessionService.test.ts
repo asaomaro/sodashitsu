@@ -2163,7 +2163,7 @@ describe("SessionService — workspace の自動の名前", () => {
     // `reportAgentSession`/`agentSession` の仕組みがそのまま8 kind 分に対応することの確認テスト。
     it("8 kind すべてで agentSession へ正しく反映される", async () => {
       const { service } = setup();
-      const kinds = ["claude", "codex", "cursor", "copilot", "devin", "droid", "grok", "qwen"] as const;
+      const kinds = ["claude", "codex", "cursor", "copilot", "devin", "droid", "grok", "qwen", "qodercli"] as const;
       for (const kind of kinds) {
         const { pane } = await service.createWorkspace("/r", kind);
         service.reportAgentSession(pane.id, kind, `${kind}-session`);

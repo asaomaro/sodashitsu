@@ -599,6 +599,7 @@ const AGENT_KINDS: readonly { value: AgentIntegrationKind; label: string }[] = [
   { value: "droid", label: "Droid" },
   { value: "grok", label: "Grok CLI" },
   { value: "qwen", label: "Qwen Code" },
+  { value: "qodercli", label: "Qoder CLI" },
 ];
 
 function agentSection(env: SettingsEnv): SettingsSection {
@@ -660,7 +661,10 @@ function agentSection(env: SettingsEnv): SettingsSection {
           {
             label: `${k.label}のフックを更新`,
             value: "更新が必要",
-            note: "足りないフックを足します。すでに動いている Claude Code は、起動し直すと新しいフックが効きます。",
+            note:
+              k.value === "claude"
+                ? "足りないフックを足します。すでに動いている Claude Code は、起動し直すと新しいフックが効きます。"
+                : "本製品のフックを、現行の形に入れ直します。",
             disabled: busy !== null,
             activate: () => (busy ? undefined : run("update")),
           },

@@ -338,7 +338,7 @@ pnpm --filter @sodashitsu/e2e test` が通ることを基準とする（`package
         こと（design D9）。
       - 設定の「エージェント連携」で解除すると、書き込んだフックのエントリだけが消え、
         手動で足した他の hook（あれば）が残ること。
-- [ ] エージェントの会話の再開・Claude Code・Codex 以外の6エージェント（20260923-other-agents-session-resume。
+- [ ] エージェントの会話の再開・Claude Code・Codex 以外の7エージェント（20260923-other-agents-session-resume。6エージェント＋20261007-agent-hook-drift で Qoder CLI。
       AC1〜AC8。**この6エージェントとも本開発環境には実機が存在せず、この work のコーディング中は
       一度も実機確認できていない**——単体テストは各エージェントの公式ドキュメントの記述どおりに
       設定ファイル・hook エントリが書き込まれることだけを検証しており、実物の CLI との結線は完全に
@@ -347,9 +347,21 @@ pnpm --filter @sodashitsu/e2e test` が通ることを基準とする（`package
       書き込み確認→会話を進める→サーバ再起動→自動再開の確認→複数 pane での独立性→解除）で確認する。
       各エージェントの exact な設定ファイルパス・hook エントリの形は `.aidev/works/
       20260923-other-agents-session-resume/research.md` F4 の表を参照。
-      - **Devin CLI だけ設定ファイルのパス（`~/.devin/hooks.json`）が推測値**（公式ドキュメントに
-        記載が無かったため、同業他社 Droid の命名慣習から類推した。decisions.md D4）。実機で
-        確認できる環境があれば、まずこのパスが正しいかどうかを優先して確かめる。
+      - **Devin CLI**（20261007-agent-hook-drift で直した）: `~/.config/devin/config.json`
+        （Windows は `%APPDATA%\devin\config.json`）の `hooks.SessionStart` に書く。2026-10-07 に公式文書
+        （`docs.devin.ai/cli/extensibility/hooks/overview`）で確認。**文書だけで確認。実機は未確認**。
+        コメントつきの `config.json` には導入できない（断る）。`XDG_CONFIG_HOME` は見ない。以前の版が書いた
+        `~/.devin/hooks.json`（`DEVIN_CONFIG_DIR` も）は推測だったので、「導入済み（更新が必要）」と出て、
+        ［更新］で新しい場所へ入れ直される（古いファイル・スクリプトは除かれる）。
+      - **Grok CLI**: 入れ子の形（`{hooks:[{type,command,timeout}]}`、`matcher` なし）に替えた。以前の版の
+        平らな形は、「導入済み（更新が必要）」と出て、［更新］で入れ子に入れ直される。平らな形を現行版が
+        受けるか、古い版が入れ子を受けるかは未確認。実機は未確認。
+      - **Qoder CLI**（`qodercli`）: `~/.qoder/settings.json`（`QODER_CONFIG_DIR` に従う）の
+        `hooks.SessionStart`、`matcher` なし・`async:true`。再開は `qoder --resume <id>`。文書だけで確認。
+        実機は未確認。
+      - 手で確かめる: 以前の版で導入した Grok・Devin が「導入済み（更新が必要）」と出ること、［更新］の後に
+        消えること。claude・codex 以外の報告も pane の会話 ID に記録されること（受け口の修正）。
+      - 形の一覧の出どころ: `.aidev/works/20261007-agent-hook-drift/research.md`。
       - GitHub Copilot CLI・Grok CLI は本製品専用のファイル（`soda-agent-report.json`）を
         hooks ディレクトリへ新規作成する方式（他のエージェントは既存の設定ファイルへ追記する方式）。
         既存の他の hook 設定（あれば）が変更されないことも確認する。

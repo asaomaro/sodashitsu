@@ -344,6 +344,7 @@ describe("StoreAdapter", () => {
         droid: notInstalled,
         grok: notInstalled,
         qwen: notInstalled,
+        qodercli: notInstalled,
       },
     } as const;
     adapter.applyEvent({ event: "agent_integration.changed", data: status });

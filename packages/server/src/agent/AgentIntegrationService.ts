@@ -2,9 +2,7 @@ import type { AgentIntegrationKind, AgentIntegrationInstallResult, AgentIntegrat
 import type { EventBus } from "../bus/EventBus.js";
 import type { IntegrationFile } from "../persist/IntegrationFile.js";
 import { defaultIntegrationFileData } from "../persist/IntegrationFile.js";
-import type { AgentIntegrationInstaller } from "./AgentIntegrationInstaller.js";
-
-const KINDS: readonly AgentIntegrationKind[] = ["claude", "codex", "cursor", "copilot", "devin", "droid", "grok", "qwen"];
+import { AGENT_INTEGRATION_KINDS, type AgentIntegrationInstaller } from "./AgentIntegrationInstaller.js";
 
 /**
  * `agent_integration.*` RPC の実体（20260923-agent-session-resume）。導入・解除・自動再開設定の
@@ -45,7 +43,7 @@ export class DefaultAgentIntegrationService implements AgentIntegrationService {
   getAutoResumeEnabled = (): boolean => this.autoResumeEnabled;
 
   async status(): Promise<AgentIntegrationStatusResult> {
-    const entries = await Promise.all(KINDS.map(async (kind) => [kind, await this.installer.status(kind)] as const));
+    const entries = await Promise.all(AGENT_INTEGRATION_KINDS.map(async (kind) => [kind, await this.installer.status(kind)] as const));
     return {
       autoResumeEnabled: this.autoResumeEnabled,
       agents: Object.fromEntries(entries) as AgentIntegrationStatusResult["agents"],
