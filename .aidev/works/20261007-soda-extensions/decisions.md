@@ -555,3 +555,18 @@ D36 の「pane の中のプログラムは自分で有効にできない」は�
 - **原因（実験で確かめた）**: 戻し先の記憶 `rememberedOrigin` は親の `focusin` の `ev.target` を覚える。`<ask-form>` の入力は Shadow DOM の中で、親の文書から見える `target` は host（`ASK-FORM`）。host はフォーカスを受けないので、`focus()` しても何も起きない。ダイアログは modal で、文書のほかの要素（端末）は inert なので、端末への戻しも効かない。
 - **試した直し（コミットしていない）**: `onFocusIn` で `ev.composedPath()[0]`（Shadow DOM の中の実際の要素）を覚えると、フォーカスは戻るようになった（`holds` の確認は通る）。ただし、そのあとの入力は 5 文字のうち 1〜2 文字しか入らなかった（`he`・`h`。戻すまでの間のキーが失われる限界か、別の原因かは未確認）。
 - **扱い**: 免除の作りに関わるものではないが、新しい穴なので、直さずに止めて報告した。drop300 の ask の筋は `test.fixme`。
+
+
+## D39（直した）: 戻し先の記憶に Shadow DOM の中の実際の要素を覚え、modal のダイアログの外へは移さない（2026-10-08）
+
+**原因は 2 つだった**: (1) 戻し先が host（`ASK-FORM`。フォーカスを受けない）だった。(2) それだけでなく、**`<ask-form>` の中の text の入力は、`focusin` が親の文書に届かないまま `activeElement` になる**（実測: 入力にフォーカスがあるのに、文書の `focusin` のリスナには一度も届かない。radio は届く）ので、`composedPath()[0]` を使っても、text の欄を覚えられず、最後に覚えた radio へ戻していた（打っていた欄から radio へ飛び、5 文字中 1〜2 文字しか入らなかった理由）。
+**直し**:
+- `onFocusIn` は `composedPath()[0]`（取れなければ `target`）を覚える。枠・覆い・［操作する］を覚えない決めは、経路のどれかが当てはまれば掛ける。
+- `noteActiveElement`: 最も深い `activeElement`（`shadowRoot.activeElement` を辿る）を、見回りのたび（`restoreFromBody` の頭）・キーのたびにも覚える。`focusin` が届かない移り方を補う。
+- `restoreFromDrop`: 戻し先 → その host → （modal のダイアログが開いていれば）ダイアログの中でフォーカスを受けられる最初の要素 → 選んでいる pane の端末、の順。**戻した後に最も深い `activeElement` がその要素になったかを確かめて**、ならなければ次へ倒す。
+- **決めた倒し方**: modal のダイアログが開いているあいだは、フォーカスを**ダイアログの外（端末）へ移さない**。戻し先の記憶がダイアログの外にあれば使わず、ダイアログの中の最初のフォーカスを受けられる要素（Shadow DOM の中も探す）へ戻す。その要素も無ければ**何もしない**（ダイアログの中へ移す方を選んだ理由: 何もしないと、キーが失われたまま次の操作まで戻らない。ダイアログの外へは出ないので害は無い）。
+- `isShownElement`: Shadow DOM の中の要素も `isConnected`・`getClientRects` で判定する。closed の shadow root の要素は、親から見える `target` が host になるので、host を戻し先にして、効かなければ次へ倒す。
+- アプリの中で Shadow DOM を使っているのは、`third_party/ask-form/ask-form.js`（`attachShadow({mode:'open'})`）だけ（`git grep attachShadow`）。
+**実測**（`--workers=1`、drop300 の面）: ask の欄に 25ms 間隔で 40 文字 → 39〜40、50ms 間隔 → 38〜40（無害な面は 40/40）。radio に矢印キーを 50ms 間隔で 8 回 → 7〜8（無害な面は 8/8）。端末（300ms ごとの落とし）の 78〜80/80 と同じ程度。
+**直す前（`02000da`）**: drop300 の ask は、radio にフォーカスして矢印を押すと `BODY` のまま 800ms 以上戻らず（fixme にしていた）、直す試し（`composedPath` だけ）では欄に 1〜2 文字しか入らなかった。
+**テスト**: 単体（`focusOrigin.test.ts`: Shadow DOM の中の実際の要素を覚える・枠の決まりが経路に掛かる・戻した後の最も深い activeElement・隠れた／外れたときの端末への倒し・modal のダイアログの中の最初の要素／何もしない）。E2E（`display-script-noreturn.spec.ts`: fixme を外した ask、欄の 25ms／50ms、radio）。

@@ -672,3 +672,8 @@ MEASURE drop-first interval300 #0..#4: reached=79,80,79,79,79 frames-after=1   (
 - **足した E2E**（`display-script-noreturn.spec.ts` 18 件〔面 2 通り × 9 場面〕、`display-script-noreturn-mobile.spec.ts` 2 件。面は、何もしない無害な面〔benign〕と、300ms ごとに `window.focus(); parent.focus()` する面〔drop300〕）: ask のダイアログ（キーで選ぶ・欄に打つ・端末へ漏れない）、tab のドラッグ、pane の名前のドラッグ（別の pane の縁・サイドバーの行）、つまみ（パネルの幅・pane の間・サイドバーの幅）、名前の変更（入力欄）、右クリックのメニューのキー操作、キー一覧、copy モードの検索、モバイルの重ね表示。
 - 結果: **引き戻し（端末へ戻される）は、どの場面でも起きなかった**。ただし **1 件の別の穴**を見つけた（D39）: drop300 の面が載っていると、ask のダイアログの中の入力（`<ask-form>` の Shadow DOM の中）のフォーカスが body へ落ちたまま戻らない。この筋だけ `test.fixme` にした。
 - 全体: `pnpm build`・`pnpm typecheck` 誤りなし。`pnpm test` は 8744 件が通り、失敗は既知の `tui.integration.test.ts` の 3 件のみ。display・tab-dnd・pane-move-scope の E2E を `--workers=1` で 184 件中 182 件が通り、1 件が fixme、1 件が失敗: `display-flows` の `(13) prefix+i`（30 秒の時間切れ。単独で 3 回流すと 3 回とも通る。長く流した後に揺れる〔前の並列実行でも同じ件が落ち、単独で通った〕）。
+
+## D39 の直し（Shadow DOM の戻し先。2026-10-08）
+
+- 実測（`--workers=1`、drop300）: ask の欄に 40 文字 — 25ms 間隔で 39〜40（2 回: 40, 39）、50ms 間隔で 38〜40（38, 40）。radio に矢印キー 8 回 — 7〜8（7）。無害な面は 40/40・8/8。端末の 300ms ごとの落としは 78〜80/80。
+- E2E（`--workers=1`）: `display-script-noreturn`・`display-script-drop`・`display-script-review`・`ask-*` の 179 件が通った（fixme なし）。`pnpm build`・`pnpm typecheck` 誤りなし。`pnpm test` は 8749 件が通り、失敗は既知の `tui.integration.test.ts` の 3 件のみ。

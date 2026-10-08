@@ -21,6 +21,7 @@ let docUnfocused = false;
 
 function onKeyDown(ev: Event): void {
   if ((ev as KeyboardEvent).key === "Tab") lastTabAt = lastNow();
+  if (target) noteActiveElement(target);
 }
 function onWindowBlur(): void {
   // 枠（iframe）へフォーカスが移っても親の window の `blur` は起きる。文書がフォーカスを持たなくなった（別のウィンドウ・タブへ移った）ときだけ数える。1 拍置いて見る。
@@ -44,10 +45,36 @@ export function tabPressedWithin(ms: number): boolean {
   return lastNow() - lastTabAt < ms;
 }
 
+/** Shadow DOM を辿った、最も深い `activeElement`。 */
+export function deepActiveElement(doc: Document): Element | null {
+  let a: Element | null = doc.activeElement;
+  while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement;
+  return a;
+}
+
+/**
+ * いま実際にフォーカスのある要素（Shadow DOM の中も）を、戻し先として覚える（枠・覆い・［操作する］・`body` は除く）。
+ * `focusin` が親の文書に届かないフォーカスの移り方がある（実測: `<ask-form>` の中の text の入力。`focusin` の通知が無いまま入力が `activeElement` になる）ので、
+ * 見回り・キー・押下のたびにも呼んで補う。
+ */
+export function noteActiveElement(doc: Document = document): void {
+  const a = deepActiveElement(doc);
+  if (!a || a === doc.body || a === doc.documentElement) return;
+  // 枠（iframe）が activeElement のときは、その host の経路を見る
+  if (a.matches(EXCLUDED) || a.closest(EXCLUDED)) return;
+  for (let n: Node | null = a.getRootNode(); n instanceof ShadowRoot; n = n.host.getRootNode()) {
+    if (n.host.matches(EXCLUDED) || n.host.closest(EXCLUDED)) return;
+  }
+  origin = a;
+}
+
 function onFocusIn(ev: Event): void {
-  const t = ev.target;
-  if (!(t instanceof Element)) return;
-  if (t.matches(EXCLUDED) || t.closest(EXCLUDED)) return;
+  // Shadow DOM の中の入力は、親の文書では host に付け替えられた `target` で見える（host はフォーカスを受けない）。実際の要素（`composedPath()[0]`）を覚える。
+  const path = typeof ev.composedPath === "function" ? ev.composedPath().filter((e): e is Element => e instanceof Element) : [];
+  const t = path[0] ?? (ev.target instanceof Element ? ev.target : null);
+  if (!t) return;
+  // 枠・覆い・［操作する］は覚えない（Shadow DOM の外の祖先にあっても、経路のどれかが当てはまれば除く）。
+  if (t.matches(EXCLUDED) || t.closest(EXCLUDED) || path.some((e) => e.matches(EXCLUDED))) return;
   if (t === t.ownerDocument.body || t === t.ownerDocument.documentElement) return;
   origin = t;
 }
@@ -88,6 +115,70 @@ export function resetFocusOriginTracking(): void {
 /** 覚えている元の場所（まだ文書の中にあるときだけ）。 */
 export function rememberedOrigin(): Element | null {
   return origin !== null && origin.isConnected && !origin.matches(EXCLUDED) ? origin : null;
+}
+
+/** 文書にあって、見えている（描かれている）要素か。Shadow DOM の中の要素も同じに働く（`isConnected` は shadow tree が文書につながっていれば真）。 */
+export function isShownElement(el: Element): boolean {
+  return el.isConnected && (el as HTMLElement).getClientRects().length > 0;
+}
+
+/** 開いている modal のダイアログ（文書のほかの部分は inert）。 */
+function openModalDialog(doc: Document): HTMLDialogElement | null {
+  for (const d of Array.from(doc.querySelectorAll("dialog[open]"))) {
+    try {
+      if (d.matches(":modal")) return d as HTMLDialogElement;
+    } catch {
+      /* :modal を知らない環境 */
+    }
+  }
+  return null;
+}
+
+const FOCUSABLE = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
+/** `root`（Shadow DOM の中も）でフォーカスを受けられる最初の、見えている要素。 */
+function firstFocusableDeep(root: ParentNode): HTMLElement | null {
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE))) {
+    if ((el as HTMLInputElement).disabled || el.hidden || !isShownElement(el)) continue;
+    return el;
+  }
+  for (const host of Array.from(root.querySelectorAll<HTMLElement>("*"))) {
+    if (host.shadowRoot) {
+      const inner = firstFocusableDeep(host.shadowRoot);
+      if (inner) return inner;
+    }
+  }
+  return null;
+}
+
+/**
+ * 脱落（フォーカスが `body`）からの戻し。戻し先の記憶 → その host（Shadow DOM の中の要素のとき）→ modal のダイアログが開いていればその中でフォーカスを受けられる最初の要素
+ * → 選んでいる pane の端末、の順。**戻った後に、最も深い `activeElement` が期待どおりになったか**を確かめて、ならなければ次へ倒す。
+ * **modal のダイアログが開いているあいだは、フォーカスをダイアログの外へ移さない**（端末は inert で戻せない）。どこにも戻せなければ何もしない。
+ * 実際に `body` から動かせたとき `true`。
+ */
+export function restoreFromDrop(doc: Document, focusTerminal: () => void): boolean {
+  const onBody = (): boolean => doc.activeElement === null || doc.activeElement === doc.body || doc.activeElement === doc.documentElement;
+  const tryFocus = (el: HTMLElement): boolean => {
+    try {
+      el.focus({ preventScroll: true });
+    } catch {
+      return false;
+    }
+    return !onBody();
+  };
+  const modal = openModalDialog(doc);
+  const el = rememberedOrigin();
+  if (el !== null && isShownElement(el) && (modal === null || modal.contains(el) || modal.contains(el.getRootNode() instanceof ShadowRoot ? (el.getRootNode() as ShadowRoot).host : el))) {
+    if (tryFocus(el as HTMLElement) && deepActiveElement(doc) === el) return true;
+    const root = el.getRootNode();
+    if (root instanceof ShadowRoot && tryFocus(root.host as HTMLElement)) return true;
+  }
+  if (modal !== null) {
+    const first = firstFocusableDeep(modal);
+    return first !== null && tryFocus(first);
+  }
+  focusTerminal();
+  return !onBody();
 }
 
 function isFocusable(el: Element): el is HTMLElement {

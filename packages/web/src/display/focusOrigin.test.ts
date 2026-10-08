@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { installFocusOriginTracking, rememberedOrigin, resetFocusOriginTracking, restoreFocus, tabPressedWithin } from "./focusOrigin.js";
+import { deepActiveElement, installFocusOriginTracking, isShownElement, rememberedOrigin, resetFocusOriginTracking, restoreFocus, restoreFromDrop, tabPressedWithin } from "./focusOrigin.js";
 
 function focusIn(el: Element): void {
   el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
@@ -94,5 +94,88 @@ describe("focusOrigin（元の場所の追跡と戻し方）", () => {
     expect(tabPressedWithin(-1)).toBe(false);
     resetFocusOriginTracking();
     expect(tabPressedWithin(500)).toBe(false);
+  });
+
+  describe("Shadow DOM の中の要素（<ask-form> の入力）", () => {
+    function withShadow(): { host: HTMLElement; inner: HTMLInputElement; second: HTMLInputElement } {
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      const sr = host.attachShadow({ mode: "open" });
+      const inner = document.createElement("input");
+      const second = document.createElement("input");
+      sr.append(inner, second);
+      for (const e of [inner, second]) e.getClientRects = () => [{}] as unknown as DOMRectList;
+      return { host, inner, second };
+    }
+
+    it("focusin の経路の先頭（Shadow DOM の中の実際の要素）を覚える。host ではなく", () => {
+      const { inner } = withShadow();
+      inner.focus();
+      expect(deepActiveElement(document)).toBe(inner);
+      expect(rememberedOrigin()).toBe(inner);
+    });
+
+    it("枠・覆い・［操作する］を覚えない決めは、経路のどれかが当てはまれば掛かる（Shadow DOM の外の祖先にあっても）", () => {
+      const cover = document.createElement("div");
+      cover.className = "display-frame-cover";
+      document.body.appendChild(cover);
+      const sr = cover.attachShadow({ mode: "open" });
+      const x = document.createElement("input");
+      sr.appendChild(x);
+      x.focus();
+      expect(rememberedOrigin()).toBeNull();
+    });
+
+    it("戻す: body に落ちたあと、記憶した内側の要素へ戻り、最も深い activeElement がその要素になる", () => {
+      const { inner } = withShadow();
+      inner.focus();
+      (document.activeElement as HTMLElement).blur();
+      inner.blur();
+      expect(document.activeElement).toBe(document.body);
+      const terminal = vi.fn();
+      expect(restoreFromDrop(document, terminal)).toBe(true);
+      expect(deepActiveElement(document)).toBe(inner);
+      expect(terminal).not.toHaveBeenCalled();
+    });
+
+    it("内側の要素が隠れた・外れたときは、端末へ倒す（modal のダイアログが無ければ）", () => {
+      const { inner, host } = withShadow();
+      inner.focus();
+      inner.blur();
+      inner.getClientRects = () => [] as unknown as DOMRectList; // 隠れた
+      const term = document.createElement("input");
+      document.body.appendChild(term);
+      expect(isShownElement(inner)).toBe(false);
+      expect(restoreFromDrop(document, () => term.focus())).toBe(true);
+      expect(document.activeElement).toBe(term);
+      host.remove(); // 外れた
+      term.blur();
+      expect(isShownElement(inner)).toBe(false);
+      expect(restoreFromDrop(document, () => term.focus())).toBe(true);
+    });
+
+    it("modal のダイアログが開いているあいだは、端末へ移さない（ダイアログの中の最初のフォーカスを受ける要素へ。無ければ何もしない）", () => {
+      const dlg = document.createElement("dialog");
+      document.body.appendChild(dlg);
+      Object.defineProperty(dlg, "open", { value: true });
+      dlg.setAttribute("open", "");
+      dlg.matches = ((sel: string) => sel === ":modal" || Element.prototype.matches.call(dlg, sel)) as typeof dlg.matches;
+      const sr = document.createElement("div");
+      dlg.appendChild(sr);
+      const root = sr.attachShadow({ mode: "open" });
+      const btn = document.createElement("button");
+      btn.getClientRects = () => [{}] as unknown as DOMRectList;
+      root.appendChild(btn);
+      const terminal = vi.fn();
+      // 戻し先の記憶が無い → ダイアログの中の最初の要素
+      expect(restoreFromDrop(document, terminal)).toBe(true);
+      expect(deepActiveElement(document)).toBe(btn);
+      expect(terminal).not.toHaveBeenCalled();
+      // ダイアログの中に何も無い → 何もしない（端末へも移さない）
+      btn.remove();
+      (document.activeElement as HTMLElement | null)?.blur();
+      expect(restoreFromDrop(document, terminal)).toBe(false);
+      expect(terminal).not.toHaveBeenCalled();
+    });
   });
 });

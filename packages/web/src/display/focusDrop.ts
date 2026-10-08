@@ -17,7 +17,7 @@
  * **サーバへ知らせない・面を閉じない**（決めたこと）: どの面が落としたかを、親は確かめられない。戻した回数は、遮断器（この画面だけ）と知らせ（トースト）にだけ使う。
  * 枠ごとの番が戻した分（`noteFocusRestored`）も同じ数に入る。実際に動かせたときだけ数える（戻し先が無くて動かせない見回りは数えない）。
  */
-import { rememberedOrigin } from "./focusOrigin.js";
+import { noteActiveElement, restoreFromDrop } from "./focusOrigin.js";
 import { anyFrameEngaged, scriptFramesSnapshot } from "./frameRegistry.js";
 
 /** 見回りの間隔（スクリプトの枠が載っているあいだだけ回る軽い検査）。短いほど、戻すまでに失われるキーが少ない。 */
@@ -48,11 +48,6 @@ let deps: FocusDropDeps | null = null;
 let doc: Document | null = null;
 const restoredAt: number[] = [];
 let lastNoticeAt = -Infinity;
-
-/** 文書にあって、見えている（描かれている）要素か。 */
-function isShown(el: Element): boolean {
-  return el.isConnected && (el as HTMLElement).getClientRects().length > 0;
-}
 
 function onFocusOut(ev: Event): void {
   if ((ev as FocusEvent).relatedTarget === null) setTimeout(check, 0);
@@ -93,19 +88,11 @@ function restoreFromBody(count: boolean): boolean {
   const d = doc;
   const dd = deps;
   if (!d || !dd) return false;
+  noteActiveElement(d); // 戻し先の記憶を、いまのフォーカスで補う（focusin が届かないフォーカスの移り方がある）
   if (!(d.activeElement === d.body || d.activeElement === null || d.activeElement === d.documentElement)) return false; // 脱落ではない
   if (!d.hasFocus()) return false; // 別のウィンドウ・タブ・ブラウザの UI
   if (anyFrameEngaged()) return false; // 利用者が［操作する］で始めた（枠のフォーカスが外れれば、枠ごとの番が操作中を終え、次の見回りで戻す）
-  const el = rememberedOrigin();
-  if (el !== null && isShown(el)) {
-    try {
-      (el as HTMLElement).focus({ preventScroll: true });
-    } catch {
-      /* 次の戻し先へ */
-    }
-  }
-  if (d.activeElement === d.body || d.activeElement === null) dd.focusSelectedTerminal();
-  const moved = !(d.activeElement === d.body || d.activeElement === null);
+  const moved = restoreFromDrop(d, () => dd.focusSelectedTerminal());
   if (moved && count) noteRestore(Date.now());
   return moved;
 }
