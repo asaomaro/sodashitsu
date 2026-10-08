@@ -665,3 +665,10 @@ MEASURE drop-first interval300 #0..#4: reached=79,80,79,79,79 frames-after=1   (
 24 件すべて通った。面が既に落としている状態（300ms ごと）での、覆いを押す／余白を押す／別の pane の端末を押す／設定を開いて閉じる、の 4 件も通った（30 キー中 26 以上が届き、余白を押したあとの `activeElement` は端末）。クリックが先・面が後の順（既存）: 300ms・500ms で 60/60、900ms で 59/60、覆いを押した直後（400ms ごと）で 59/60、4ms で 66/67。遮断器の後の 20 キーは rAF・MC とも 20/20。
 **単体**（`focusDrop.test.ts`）: 見回りの状態（`activeElement` body／アプリの要素／枠、文書のフォーカスの真偽、操作中の枠の有無、戻し先の 生きている／外れた／隠れた／無い）の表 9 行と、戻さない結果のあとに状態が変われば次の見回りで戻すこと、位相に依らない交互、押下の直後でも戻すこと、遮断器（ゆっくり・1 秒に 1 回の余白・交互・`noteFocusRestored`・遅れた戻し）。
 **全体**: display の E2E 全部を `--workers=1` で 143 件 / 143 件が通った（10.6 分）。`pnpm build`・`pnpm typecheck` 誤りなし。`pnpm test` は 8662 件が通り、失敗は既知の `tui.integration.test.ts` の 3 件と、並列実行の負荷で揺れた `notifications.test.ts` の 1 件（単独で 2 回流すと 32/32 通る。この変更と無関係）。
+
+## main の取り込みと戻しすぎの確認（2026-10-08。6 回目の再レビューの後）
+
+- `git merge origin/main`（tab の D&D・pane の移動の制限）は衝突なしで取り込めた（`bbc5b60`）。
+- **足した E2E**（`display-script-noreturn.spec.ts` 18 件〔面 2 通り × 9 場面〕、`display-script-noreturn-mobile.spec.ts` 2 件。面は、何もしない無害な面〔benign〕と、300ms ごとに `window.focus(); parent.focus()` する面〔drop300〕）: ask のダイアログ（キーで選ぶ・欄に打つ・端末へ漏れない）、tab のドラッグ、pane の名前のドラッグ（別の pane の縁・サイドバーの行）、つまみ（パネルの幅・pane の間・サイドバーの幅）、名前の変更（入力欄）、右クリックのメニューのキー操作、キー一覧、copy モードの検索、モバイルの重ね表示。
+- 結果: **引き戻し（端末へ戻される）は、どの場面でも起きなかった**。ただし **1 件の別の穴**を見つけた（D39）: drop300 の面が載っていると、ask のダイアログの中の入力（`<ask-form>` の Shadow DOM の中）のフォーカスが body へ落ちたまま戻らない。この筋だけ `test.fixme` にした。
+- 全体: `pnpm build`・`pnpm typecheck` 誤りなし。`pnpm test` は 8744 件が通り、失敗は既知の `tui.integration.test.ts` の 3 件のみ。display・tab-dnd・pane-move-scope の E2E を `--workers=1` で 184 件中 182 件が通り、1 件が fixme、1 件が失敗: `display-flows` の `(13) prefix+i`（30 秒の時間切れ。単独で 3 回流すと 3 回とも通る。長く流した後に揺れる〔前の並列実行でも同じ件が落ち、単独で通った〕）。
