@@ -124,7 +124,7 @@
       依存: なし
       AC: AC11, AC13, AC14, AC15, AC17
 
-- [ ] T7: `SessionModel` で断る（**独立点検あり**）。新しい状態は持たない。
+- [x] T7: `SessionModel` で断る（**独立点検あり**）。新しい状態は持たない。
       - `paneMoveBlockFor(paneId, targetWorkspaceId): PaneMoveBlock | null`（pane・移動元・移動先が実在しなければ null。投げない。client-core の `paneMoveBlock` を `lenient` なしで呼ぶ）。
       - `moveToTab`: `targetTab` の確認の後・書き換えの前に、`this.paneMoveBlockFor(paneId, targetTab.workspaceId) !== null` なら `false`。`moveToNewTab`: `ws` の確認の後、同じく `null`。戻り値の型は変えない。
       単体テスト（`SessionModel.test.ts` に `describe("pane の移動の範囲（20261008-web-tab-dnd）")` を足す。`moveToTab`・`moveToNewTab` の両方で。判定は `updateWorkspaceGit(id, { kind: "git", git: {…} })` で入れる）:
