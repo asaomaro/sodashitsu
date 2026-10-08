@@ -18,3 +18,16 @@ events:
   - { ts: 2026-10-08T04:42:24Z, phase: requirements, event: doccheck, metrics: { stage: report, phase: requirements, findings: 4 } }
   - { ts: 2026-10-08T04:42:24Z, phase: design, event: doccheck, metrics: { stage: report, phase: design, findings: 11 } }
   - { ts: 2026-10-08T04:42:24Z, phase: tasks, event: doccheck, metrics: { stage: report, phase: tasks, findings: 11 } }
+  - { ts: 2026-10-08T04:44:15Z, phase: requirements, event: doccheck, metrics: { stage: start, phase: requirements, mode: delegated, size: 40526 } }
+  - { ts: 2026-10-08T04:44:15Z, phase: design, event: doccheck, metrics: { stage: start, phase: design, mode: delegated, size: 92706 } }
+  - { ts: 2026-10-08T04:44:15Z, phase: tasks, event: doccheck, metrics: { stage: start, phase: tasks, mode: delegated, size: 69037 } }
+  - { ts: 2026-10-08T04:50:49Z, phase: requirements, event: doccheck, metrics: { stage: report, phase: requirements, findings: 2 } }
+  - { ts: 2026-10-08T04:50:49Z, phase: design, event: doccheck, metrics: { stage: report, phase: design, findings: 7 } }
+  - { ts: 2026-10-08T04:50:49Z, phase: tasks, event: doccheck, metrics: { stage: report, phase: tasks, findings: 5 } }
+  - { ts: 2026-10-08T04:50:58Z, phase: requirements, event: approved, metrics: { doc_check_rounds: 4, doc_check_findings: 18, doc_check_mode: delegated, ac_total: 33, ac_covered: 33, tasks_no_ac: 0, tasks_ac_none: 0 } }
+  - { ts: 2026-10-08T04:50:58Z, phase: research, event: start }
+  - { ts: 2026-10-08T04:50:58Z, phase: research, event: approved }
+  - { ts: 2026-10-08T04:50:58Z, phase: design, event: start }
+  - { ts: 2026-10-08T04:50:58Z, phase: design, event: approved, metrics: { doc_check_rounds: 4, doc_check_findings: 50, doc_check_mode: delegated } }
+  - { ts: 2026-10-08T04:50:58Z, phase: tasks, event: start }
+  - { ts: 2026-10-08T04:50:59Z, phase: tasks, event: approved, metrics: { tasks_planned: 27, tasks_anchored: 27, doc_check_rounds: 4, doc_check_findings: 58, doc_check_mode: delegated, ac_total: 33, ac_covered: 33, tasks_no_ac: 0, tasks_ac_none: 0 } }
