@@ -91,6 +91,12 @@ function displayItems(id: string): MenuItem[] {
     if (f.edge !== "top") list.push({ label: "上に置く", run: () => void withDisplayChange(d, () => displays.setFaceEdge(d, "top"), focusToHead, displayHost) });
     if (f.edge !== "bottom") list.push({ label: "下に置く", run: () => void withDisplayChange(d, () => displays.setFaceEdge(d, "bottom"), focusToHead, displayHost) });
   }
+  if (d.kind === "panel") {
+    // 今と違う側だけ。移った先で開いて出る（`setFaceDock` が `collapsed: false` も書く）。枠は作り直し。
+    for (const side of ["right", "left", "top", "bottom"] as const) {
+      if (f.dock !== side) list.push({ label: `${DOCK_LABEL[side]}に置く`, run: () => void withDisplayChange(d, () => displays.setFaceDock(d, side), focusToHead, displayHost) });
+    }
+  }
   if (displays.hasPref(d)) list.push({ label: "プログラムの指定に戻す", run: () => void withDisplayChange(d, () => displays.resetFace(d), focusToHead, displayHost) });
   list.push({ label: "この表示を閉じる", run: () => dismissWithFocus(d, () => displayController?.dismiss({ id: d.id }), displayHost) });
   return list;

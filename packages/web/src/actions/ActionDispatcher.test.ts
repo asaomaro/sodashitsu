@@ -3012,6 +3012,32 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
       await dispatcher.focusDisplay();
       expect(toastSpy).toHaveBeenCalledWith("表示を出せません（pane が狭い、または読み込み中です）");
     });
+    it("どの側（左・上・下）のパネルにも移れる。たたんだ左のパネルは、開いて左の選んでいるタブになってから移る", async () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      const displays = useDisplayStore(pinia);
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const focused: string[] = [];
+      const frames = (["l1", "t1", "b1"] as const).map((id) => {
+        const f = { focusInside: () => void focused.push(id) };
+        registerFrame(id, f);
+        return [id, f] as const;
+      });
+      for (const [id, dock] of [["l1", "left"], ["t1", "top"], ["b1", "bottom"]] as const) {
+        const info = { ...disp(id, "panel"), dock };
+        displays.upsert(info);
+        displays.setFaceCollapsed(info, true);
+        focused.length = 0;
+        displays.lastFace.clear();
+        displays.lastFace.set("p1", id);
+        await dispatcher.focusDisplay();
+        expect(displays.effectiveOf(info), id).toMatchObject({ dock, collapsed: false });
+        expect(displays.activeBySide.get(`p1|${dock}`), id).toBe(id);
+        expect(focused, id).toEqual([id]);
+        displays.remove(id); // 次の側は、この面が無い状態で
+      }
+      for (const [id, f] of frames) unregisterFrame(id, f);
+    });
     it("たたんであるパネルは戻してから移る", async () => {
       const view = useViewStore(pinia);
       view.focusPane("p1");

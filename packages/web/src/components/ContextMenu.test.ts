@@ -592,14 +592,33 @@ describe("ContextMenu — 表示の面（20261008-display-layout）", () => {
     d.upsert(a);
     view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
     let w = mountMenu(makeActions());
-    expect(labels(w)).toEqual(["たたむ", "この表示を閉じる"]);
+    expect(labels(w)).toEqual(["たたむ", "左に置く", "上に置く", "下に置く", "この表示を閉じる"]); // 右にある面: 今と違う側だけ
     await w.findAll("li")[0]!.trigger("click");
     await Promise.resolve();
     expect(d.effectiveOf(a).collapsed).toBe(true);
     document.body.innerHTML = "";
     view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
     w = mountMenu(makeActions());
-    expect(labels(w)).toEqual(["開く", "プログラムの指定に戻す", "この表示を閉じる"]);
+    expect(labels(w)).toEqual(["開く", "左に置く", "上に置く", "下に置く", "プログラムの指定に戻す", "この表示を閉じる"]);
+  });
+
+  it("面のメニュー（パネル）: 「左に置く」を選ぶと、移った先で開いて出る（たたんでいた面も）。同じ名前の記憶にも書く。その側に出た面は「左に置く」が消える", async () => {
+    const d = useDisplayStore(pinia);
+    const view = useViewStore(pinia);
+    const a = face("a");
+    d.upsert(a);
+    d.setFaceCollapsed(a, true);
+    view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
+    let w = mountMenu(makeActions());
+    await w.findAll("li").find((li) => li.text() === "左に置く")!.trigger("click");
+    await Promise.resolve();
+    expect(d.effectiveOf(a)).toMatchObject({ dock: "left", collapsed: false });
+    expect(d.activeBySide.get("p1|left")).toBe("a");
+    expect(d.layoutPrefs.names["panel|a"]).toEqual({ dock: "left" });
+    document.body.innerHTML = "";
+    view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
+    w = mountMenu(makeActions());
+    expect(labels(w)).toEqual(["たたむ", "右に置く", "上に置く", "下に置く", "プログラムの指定に戻す", "この表示を閉じる"]);
   });
 
   it("面のメニュー（帯）: 今と違う側だけ「上に置く／下に置く」。選ぶと移った先で開き、同じ名前の記憶にも書く。指定に戻すで消える", async () => {

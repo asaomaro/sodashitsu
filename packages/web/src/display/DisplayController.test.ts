@@ -49,7 +49,7 @@ describe("DisplayController", () => {
     s.store.upsert(info("old"));
     s.ctl.onOpened();
     await settle();
-    expect(s.calls[0]).toEqual(["display.subscribe", { features: ["panel", "band", "actions", "script-html", "collapse"] }]);
+    expect(s.calls[0]).toEqual(["display.subscribe", { features: ["panel", "band", "actions", "script-html", "collapse", "dock"] }]);
     expect([...s.store.infos.keys()]).toEqual(["a", "b"]);
     expect(s.store.infos.get("b")?.format).toBe("future-x");
   });

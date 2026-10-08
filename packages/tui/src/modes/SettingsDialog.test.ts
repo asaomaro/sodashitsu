@@ -138,8 +138,8 @@ describe("設定画面", () => {
     expect(h.patches()[1]).toEqual({ shellCwdTracking: true });
   });
 
-  // 20261008-display-layout：表示の面の配置の設定 2 つは、端末の節の末尾に「ブラウザ版だけ」の注記つきで出る。
-  it("端末の節に表示の面の配置の設定 2 つが出て（パネルの既定の置き場所は PR-B から）、既定の値を示し、変えると共有の設定へ送る", async () => {
+  // 20261008-display-layout：表示の面の配置の設定 3 つは、端末の節の末尾に「ブラウザ版だけ」の注記つきで出る。
+  it("端末の節に表示の面の配置の設定 3 つが出て（パネルの既定の置き場所は、右・左・上・下）、既定の値を示し、変えると共有の設定へ送る", async () => {
     const h = await open();
     await h.section(3);
     for (let i = 0; i < 4; i++) h.io.type(DOWN); // scrollback・新しく開く場所・パス・シェルの場所の次
@@ -147,7 +147,8 @@ describe("設定画面", () => {
     expect(t).toContain("表示のパネルの初めの状態");
     expect(t).toContain("ブラウザの画面の設定です");
     expect(h.app.prefs.displayPanelInitial).toBe("open");
-    expect(t).not.toContain("表示のパネルの既定の置き場所");
+    expect(t).toContain("表示のパネルの既定の置き場所");
+    expect(h.app.prefs.displayPanelDock).toBe("right");
     expect(h.app.prefs.displayBandEdge).toBe("top");
     h.io.type(ENTER + DOWN + ENTER); // たたむ
     expect(h.patches()).toEqual([{ displayPanelInitial: "collapsed" }]);
