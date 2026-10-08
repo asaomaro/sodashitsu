@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 連携のグラフ画面（20260927-agent-graph の design D-6・「web」・「振る舞いの詳細」）。`view.graphOpen` の間だけ全画面に重ねる（下の pane は mount されたまま。
+ * 連携のグラフ画面（20260927-agent-graph の design D-6・「web」・「振る舞いの詳細」）。`view.graphVisible` の間だけ全画面に重ねる（下の pane は mount されたまま。
  * research-web §1.2）。ネイティブの `<dialog>` を `showModal()` で開く——背面が inert になり、Tab・ポインタ・ホイールが背面の端末へ届かない（AC-I5）。
  *
  * 描画は DOM のノード＋背面の SVG 1 枚（外部ライブラリなし。D-6）。表示の変換（パン・ズーム）は世界の層 1 つの `transform` だけ。
@@ -1238,7 +1238,7 @@ function focusInitial(): void {
 }
 
 watch(
-  () => view.graphOpen,
+  () => view.graphVisible,
   (open) => {
     void nextTick(() => {
       const el = dialogEl.value;
@@ -1291,7 +1291,7 @@ watch(
 watch(
   () => graph.graph,
   (g) => {
-    if (!g || !view.graphOpen) return;
+    if (!g || !view.graphVisible) return;
     if (needsFit && g.nodes.length > 0) {
       fitAll();
       needsFit = false;
@@ -1477,7 +1477,7 @@ function chipAria(e: EdgeView): string {
     @keydown="onKeydown"
     @cancel="onCancel"
   >
-    <template v-if="view.graphOpen">
+    <template v-if="view.graphVisible">
       <header class="graph-toolbar">
         <h2 class="graph-title">連携（グラフ）</h2>
         <span v-if="graph.graph?.paused" class="graph-paused-badge">⏸ 全体が一時停止中</span>

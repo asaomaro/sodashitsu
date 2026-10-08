@@ -80,10 +80,10 @@
 - [x] T10a: いまの動きを固定する E2E を、先に書く（`packages/e2e/src/specs/graph-screen.spec.ts`。**変更の前の main で通ること**を確かめてから、次へ進む）。開く（`prefix+a`・メニュー）・ノードの選択・ノードのドラッグで位置が変わり保存される・線を結ぶ・閉じる（`Esc`・×・`prefix+a`）・閉じた後に開く前の pane へフォーカスが戻る・開いている間のキーが端末へ届かない・`sodactl ask` のダイアログが上に出て、閉じるとグラフへ戻る・スクリプトの面（`script-html`）を載せた pane がある状態で開閉を 10 回くり返しても、フォーカスの脱落が数えられない。
       依存: なし
       AC: AC-S3
-- [ ] T10b: `view.screen` と画面の一覧（**独立点検あり**）。`view.graphOpen`（真偽）を、`view.screen`（`"base" | "graph"`）に置き換える。画面の定義は 1 か所の一覧（`screens.ts`: id・名前・部品）。`view.openGraph()`・`closeGraph()` は残し、デスクトップでは `screen` を書く薄い別名、モバイルでは今の動き（D13）。窓を狭めてモバイルの画面に切り替わったら、`screen` を `base` に戻す。`graphOpen` を見ている 8 ファイル・19 か所（点検の一覧）を、1 つずつ置き換える。
+- [x] T10b: `view.screen` と画面の一覧（**独立点検あり**）。`view.graphOpen`（真偽）を、`view.screen`（`"base" | "graph"`）に置き換える。画面の定義は 1 か所の一覧（`screens.ts`: id・名前・部品）。`view.openGraph()`・`closeGraph()` は残し、デスクトップでは `screen` を書く薄い別名、モバイルでは今の動き（D13）。窓を狭めてモバイルの画面に切り替わったら、`screen` を `base` に戻す。`graphOpen` を見ている 8 ファイル・19 か所（点検の一覧）を、1 つずつ置き換える。
       依存: T10a
       AC: AC-S3, AC-S6
-- [ ] T10c: `modalOpen` の仕分け（**独立点検あり**）。`view.keysCaptured` と `view.modalOpen` に割り、design 追補 01 の表のとおりに、9 か所を仕分ける。デスクトップのグラフの画面は、どちらにも入れない。ドラッグの取り消しは、`modalOpen` に加えて、`view.screen` が変わったときにも。「グラフを開く前の pane」の持ち方（`StoreAdapter`・`NotificationController`・`AskDialog`）。
+- [x] T10c: `modalOpen` の仕分け（**独立点検あり**）。`view.keysCaptured` と `view.modalOpen` に割り、design 追補 01 の表のとおりに、9 か所を仕分ける。デスクトップのグラフの画面は、どちらにも入れない。ドラッグの取り消しは、`modalOpen` に加えて、`view.screen` が変わったときにも。「グラフを開く前の pane」の持ち方（`StoreAdapter`・`NotificationController`・`AskDialog`）。
       依存: T10b
       AC: AC-S3
 - [ ] T10d: 基本画面の隠し方（**独立点検あり**）。グラフの画面の間、基本画面（tab バーと pane）は、大きさを保ったまま見えなくする（`visibility: hidden` と `inert`。`display: none`・`v-show`・`v-if` は使わない。D11）。**画面を切り替えても、`client.view` が送られない・PTY の大きさが変わらない**ことを、E2E で確かめる（サーバが受けた `client.view` の回数と、pane の桁・行）。表示の面のフォーカスの見回り（`focusDrop.ts`。変えられない）が、基本画面が `inert` の間に、戻し先の端末へ戻そうとして数え続けないか——**最初に、いまの外側の口（`withDisplayChange` と同じ入口）で見回りを止められるかを確かめる。止められない場合は、実装を止めて報告する**（守りのファイルの変更は、利用者の判断）。

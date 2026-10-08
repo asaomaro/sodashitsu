@@ -153,7 +153,7 @@ describe("グラフのノードの件数のボタン", () => {
     );
     expect(wrapper.find(".graph-connect-banner").exists()).toBe(false);
     expect(fake.calls).toEqual([]); // move_node・add_link を送らない
-    expect(view.graphOpen).toBe(true); // pane へ移ってグラフを閉じない
+    expect(view.graphVisible).toBe(true); // pane へ移ってグラフを閉じない
     expect(registry.focus).not.toHaveBeenCalled();
     wrapper.unmount();
   });
@@ -210,7 +210,7 @@ describe("グラフの中の一覧（SubagentPanel）", () => {
     wrapper.get(".subagent-panel").element.dispatchEvent(key("Escape"));
     await flush();
     expect(wrapper.find(".subagent-panel").exists()).toBe(false);
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     expect(document.activeElement).toBe(n1);
     // 画面全体の Esc でも、パネルが先に閉じる
     n1.dispatchEvent(key("s"));
@@ -218,7 +218,7 @@ describe("グラフの中の一覧（SubagentPanel）", () => {
     wrapper.get(".graph-view").element.dispatchEvent(key("Escape"));
     await flush();
     expect(wrapper.find(".subagent-panel").exists()).toBe(false);
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     wrapper.unmount();
   });
 

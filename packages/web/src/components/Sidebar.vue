@@ -18,6 +18,7 @@ import StateIcon from "./StateIcon.vue";
 import MachineHeader from "./MachineHeader.vue";
 import MachineRows from "./MachineRows.vue";
 import { useMachinesStore } from "../store/machines.js";
+import { watchDragInterrupt } from "../store/dragInterrupt.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 
 /**
@@ -798,16 +799,11 @@ function onSectionDividerKeydown(ev: KeyboardEvent): void {
  * ポインタの捕捉が外れるのか・捕捉先へ `pointerup` が届き続けるのかは確かめた出所が無い。分からない挙動に頼らない。
  * workspace の D&D も同じ理由で同じタイミングに取り消す（20260923-workspace-grouping）。
  */
-watch(
-  () => view.modalOpen, // グラフ画面（20260927-agent-graph）も同じ
-  (open) => {
-    if (open) {
-      widthDrag.finish();
-      sectionDrag.finish();
-      if (view.workspaceDrag) cancelWorkspaceDrag();
-    }
-  },
-);
+watchDragInterrupt(view, () => {
+  widthDrag.finish();
+  sectionDrag.finish();
+  if (view.workspaceDrag) cancelWorkspaceDrag();
+});
 </script>
 
 <template>

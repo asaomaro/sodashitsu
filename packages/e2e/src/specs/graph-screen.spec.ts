@@ -206,5 +206,7 @@ test("スクリプトの面（script-html）を載せた pane がある状態で
   await page.waitForTimeout(3500);
   await expect(scriptFrameEl(page)).toHaveCount(1);
   await expect(page.getByText(/キー入力を取ろうとし続けたので閉じました/)).toHaveCount(0);
+  // 戻しが 10 秒に 5 回数えられると出る知らせ（`focusDrop.ts` の `FOCUS_DROP_NOTICE_COUNT`）が出ていない＝切り替えのたびにフォーカスが脱落して数えられた、ということが無い
+  await expect(page.getByText(/入力のフォーカスを繰り返し外しています/)).toHaveCount(0);
   ev.kill();
 });

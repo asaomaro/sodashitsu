@@ -5,6 +5,7 @@ import { ActionDispatcherKey, ConnectionKey, TerminalRegistryKey } from "../inje
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
+import { watchDragInterrupt } from "../store/dragInterrupt.js";
 import { formatDatetime, type TabBarRightEntry } from "@sodashitsu/client-core";
 
 /**
@@ -302,12 +303,7 @@ watch(
   () => view.workspaceId,
   () => cancelTabDrag(),
 );
-watch(
-  () => view.modalOpen,
-  (open) => {
-    if (open) cancelTabDrag(false);
-  },
-);
+watchDragInterrupt(view, () => cancelTabDrag(false));
 onUnmounted(() => {
   endTabDrag();
   clearTimeout(suppressTimer);

@@ -416,7 +416,7 @@ export class NotificationController {
     // グラフ画面（20260927-agent-graph）もダイアログと同じく、開いている間は「閉じたときに戻す先」だけを差し替える。
     if (view.modalOpen) {
       if (view.openDialog !== null) view.retargetPreDialogFocus(paneId);
-      if (view.graphOpen) view.retargetPreGraphFocus(paneId);
+      if (view.graphDialogOpen) view.retargetPreGraphFocus(paneId);
       if (view.askOpen) view.retargetPreAskFocus(paneId); // 質問のフォーム（20261002-sodactl-ask）も同じ
       if (view.extensionApprovalOpen) view.retargetPreExtensionApprovalFocus(paneId); // 拡張の承認のダイアログ（20261007-ext-host）も同じ
     } else view.focusPane(paneId);

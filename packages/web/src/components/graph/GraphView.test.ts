@@ -53,7 +53,7 @@ describe("GraphView（枠）", () => {
     const cancel = new Event("cancel", { cancelable: true });
     root.element.dispatchEvent(cancel);
     expect(cancel.defaultPrevented).toBe(true);
-    expect(view.graphOpen).toBe(false);
+    expect(view.graphVisible).toBe(false);
     await nextTick();
     await nextTick();
     expect((root.element as HTMLDialogElement).open).toBe(false);
@@ -82,7 +82,7 @@ describe("GraphView（枠）", () => {
     view.openGraph();
     await nextTick();
     await wrapper.find(".graph-view").trigger("keydown", { key: "Escape" });
-    expect(view.graphOpen).toBe(false);
+    expect(view.graphVisible).toBe(false);
     await nextTick();
     await nextTick();
     expect(registry.focus).toHaveBeenCalledWith("p1");
@@ -95,9 +95,9 @@ describe("GraphView（枠）", () => {
     view.openGraph();
     await nextTick();
     await wrapper.find(".graph-view").trigger("keydown", { key: "a" });
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     await wrapper.find(".graph-close").trigger("click");
-    expect(view.graphOpen).toBe(false);
+    expect(view.graphVisible).toBe(false);
     wrapper.unmount();
   });
 });
@@ -304,7 +304,7 @@ describe("GraphView（ノードと線。03 T2）", () => {
     window.dispatchEvent(pointer("pointerup", { clientX: 60, clientY: 60 }));
     await flush();
     expect(fake.calls).toHaveLength(0);
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     wrapper.unmount();
   });
 
@@ -405,10 +405,10 @@ describe("GraphView（ノードと線。03 T2）", () => {
     expect(wrapper.find(".link-panel").exists()).toBe(false);
     expect(wrapper.find(".graph-chip-selected").exists()).toBe(true);
     await root.trigger("keydown", { key: "Escape" });
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     expect(wrapper.find(".graph-chip-selected").exists()).toBe(false);
     await root.trigger("keydown", { key: "Escape" });
-    expect(view.graphOpen).toBe(false);
+    expect(view.graphVisible).toBe(false);
     wrapper.unmount();
   });
 });
@@ -472,7 +472,7 @@ describe("GraphView（線の作成と設定・一時停止。03 T3）", () => {
     await flush();
     expect(wrapper.find(".graph-connecting").exists()).toBe(false);
     expect(wrapper.find(".link-panel").exists()).toBe(false);
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     wrapper.unmount();
   });
 
@@ -493,7 +493,7 @@ describe("GraphView（線の作成と設定・一時停止。03 T3）", () => {
     await flush();
     expect(wrapper.find(".graph-connect-banner").exists()).toBe(false);
     expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p1");
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     await n1.trigger("keydown", { key: "c" });
     await flush();
     await wrapper.find('[data-node-key="local:p2"]').trigger("keydown", { key: "Enter" });
@@ -643,7 +643,7 @@ describe("GraphView（線の作成と設定・一時停止。03 T3）", () => {
     await flush();
     expect(wrapper.find(".link-panel").exists()).toBe(false);
     expect(document.activeElement?.getAttribute("data-link-chip")).toBe("l1");
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     wrapper.unmount();
   });
 
@@ -853,7 +853,7 @@ describe("GraphView（pane を載せる/外す・履歴・pane へ移動。03 T4
     t.view.focusPane("p1");
     await t.wrapper.find('[data-node-key="local:p2"]').trigger("keydown", { key: "Enter" });
     await flush();
-    expect(t.view.graphOpen).toBe(false);
+    expect(t.view.graphVisible).toBe(false);
     expect(t.view.focusedPaneId).toBe("p2");
     expect(t.view.tabId).toBe("t1");
     expect(t.conn.request).toHaveBeenCalledWith("pane.focus", { paneId: "p2" });
@@ -901,7 +901,7 @@ describe("GraphView（pane を載せる/外す・履歴・pane へ移動。03 T4
     useSessionStore(pinia).panes.delete("p1");
     await flush();
     await t.wrapper.find('[data-node-key="local:p1"]').trigger("keydown", { key: "Enter" });
-    expect(t.view.graphOpen).toBe(true);
+    expect(t.view.graphVisible).toBe(true);
     expect(t.view.toasts.at(-1)!.message).toBe("pane p1 の pane が見つかりません。");
     t.wrapper.unmount();
   });
@@ -939,7 +939,7 @@ describe("GraphView（pane を載せる/外す・履歴・pane へ移動。03 T4
     expect(node.find(".graph-node-machine").text()).toBe("box");
     await node.trigger("keydown", { key: "Enter" });
     expect(t.switcher.switchTo).not.toHaveBeenCalled();
-    expect(t.view.graphOpen).toBe(true);
+    expect(t.view.graphVisible).toBe(true);
     expect(t.view.toasts.at(-1)!.message).toContain("1 列の画面では別のマシンの pane へ移れません");
     t.wrapper.unmount();
     media.mockRestore(); // 後の試験へ 1 列の画面を持ち越さない
@@ -990,7 +990,7 @@ describe("GraphView（キーボード・フォーカス・モバイル。03 T5�
     const a = key("a");
     node.dispatchEvent(a);
     expect(a.defaultPrevented).toBe(true);
-    expect(view.graphOpen).toBe(false);
+    expect(view.graphVisible).toBe(false);
     view.openGraph();
     await flush();
     await wrapper.find('[data-link-chip="l1"]').trigger("click");
@@ -998,7 +998,7 @@ describe("GraphView（キーボード・フォーカス・モバイル。03 T5�
     const prompt = wrapper.find(".link-panel-prompt").element;
     prompt.dispatchEvent(key("b", { ctrlKey: true }));
     prompt.dispatchEvent(key("a"));
-    expect(view.graphOpen).toBe(false);
+    expect(view.graphVisible).toBe(false);
     wrapper.unmount();
   });
 
@@ -1011,9 +1011,9 @@ describe("GraphView（キーボード・フォーカス・モバイル。03 T5�
     root.dispatchEvent(key("+"));
     await flush();
     expect(zoom()).toBe("100%");
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     root.dispatchEvent(key("a"));
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     wrapper.unmount();
   });
 
@@ -1106,7 +1106,7 @@ describe("GraphView（キーボード・フォーカス・モバイル。03 T5�
     );
     expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p2");
     await wrapper.find(".graph-view").trigger("keydown", { key: "Escape" });
-    expect(view.graphOpen).toBe(true); // 1 段目は選択を外すだけ
+    expect(view.graphVisible).toBe(true); // 1 段目は選択を外すだけ
     wrapper.unmount();
   });
 
@@ -1276,11 +1276,11 @@ describe("GraphView（書きかけのパネルと線の押し方。g03 点検）
     const n1 = wrapper.find('[data-node-key="local:p1"]');
     await n1.trigger("keydown", { key: "Enter" });
     await flush();
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     expect(wrapper.find(".graph-confirm").exists()).toBe(true);
     await wrapper.find(".graph-confirm-ok").trigger("click");
     await flush();
-    expect(view.graphOpen).toBe(false);
+    expect(view.graphVisible).toBe(false);
     expect(view.focusedPaneId).toBe("p1");
     wrapper.unmount();
   });
@@ -1510,9 +1510,9 @@ describe("GraphView（Esc の段階・割り当て・履歴の戻り先。g03 �
     expect(wrapper.find(".graph-chip-selected").exists()).toBe(true);
     await esc();
     expect(wrapper.find(".graph-chip-selected").exists()).toBe(false);
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     await esc();
-    expect(view.graphOpen).toBe(false);
+    expect(view.graphVisible).toBe(false);
     wrapper.unmount();
   });
 
@@ -1523,15 +1523,15 @@ describe("GraphView（Esc の段階・割り当て・履歴の戻り先。g03 �
     const root = wrapper.find(".graph-view").element;
     root.dispatchEvent(key("b", { ctrlKey: true }));
     root.dispatchEvent(key("a"));
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     root.dispatchEvent(key("b", { ctrlKey: true }));
     root.dispatchEvent(key("g"));
-    expect(view.graphOpen).toBe(false);
+    expect(view.graphVisible).toBe(false);
     settings.setKeyBindings("open_graph", ["ctrl+alt+g"]);
     view.openGraph();
     await flush();
     root.dispatchEvent(key("g", { ctrlKey: true, altKey: true }));
-    expect(view.graphOpen).toBe(false);
+    expect(view.graphVisible).toBe(false);
     wrapper.unmount();
   });
 });
@@ -1698,7 +1698,7 @@ describe("GraphView（閉じたときの一時的な状態。レビュー R1）"
     view.openGraph();
     await flush();
     root.dispatchEvent(key("a"));
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     wrapper.unmount();
   });
 });
@@ -2100,7 +2100,7 @@ describe("GraphView（繋がっていないマシンのノード。g04 点検）
     await n.trigger("keydown", { key: "Enter" });
     await flush();
     expect(t.switcher.switchTo).not.toHaveBeenCalled();
-    expect(t.view.graphOpen).toBe(true);
+    expect(t.view.graphVisible).toBe(true);
     expect(t.view.toasts.at(-1)!.message).toBe("box に繋がっていません（繋がってから移れます）。");
     t.wrapper.unmount();
   });

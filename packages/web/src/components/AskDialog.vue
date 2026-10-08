@@ -128,7 +128,7 @@ function closeDialog(): void {
  * どちらでもなければ開く前の要素。表示（workspace・tab）は切り替えない。
  */
 function restoreFocus(paneId: string | null, back: Element | null): void {
-  const otherModal = view.openDialog !== null || view.graphOpen;
+  const otherModal = view.openDialog !== null || view.graphDialogOpen;
   if (!otherModal && paneId !== null && registry) {
     const done = focusPaneIfShown(
       {

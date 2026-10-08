@@ -403,7 +403,7 @@ describe("App — グラフ画面を開いている間のトースト・再接�
     expect(document.querySelector("dialog.graph-view")).toBeNull();
     view.onConnectionState("open");
     await flushTicks(wrapper);
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     expect((document.querySelector("dialog.graph-view") as HTMLDialogElement).open).toBe(true);
     wrapper.unmount();
   });
