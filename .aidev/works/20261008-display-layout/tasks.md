@@ -255,7 +255,7 @@
 
 ### PR-C: 浮いた窓
 
-- [ ] T21: 窓の矩形と重なりの関数、割り付けの手順 6: `display/floatGeometry.ts`（`clampFloatRect`・`defaultFloatRect`・`moveFloatRect`・`resizeFloatRect`・`FloatHandle`・`raiseFloat`・`insertFloat`。純粋）。`resolvePaneDisplays` に手順 6（窓の動ける領域＝端末の領域の 4px 内側・それが最小より小さければ自動でたたむ・渡された矩形を丸める）と、トレイの `kind: "float"`（**開いている窓もボタンに入れ、`open` を立てる**）。
+- [x] T21: 窓の矩形と重なりの関数、割り付けの手順 6: `display/floatGeometry.ts`（`clampFloatRect`・`defaultFloatRect`・`moveFloatRect`・`resizeFloatRect`・`FloatHandle`・`raiseFloat`・`insertFloat`。純粋）。`resolvePaneDisplays` に手順 6（窓の動ける領域＝端末の領域の 4px 内側・それが最小より小さければ自動でたたむ・渡された矩形を丸める）と、トレイの `kind: "float"`（**開いている窓もボタンに入れ、`open` を立てる**）。
       単体テスト（領域より大きい・負の位置・最小・8 つのつかむ場所で動かない側の縁が動かない・領域が縮んだ後・`NaN` と無限大を受けても有限の矩形を返す・ずらしが領域を出ない・**重なりの決まり 1〜3**〔操作中になった窓は最前面へ・押した窓は末尾へ（操作中の id を見ない）・新しく開いた窓は、操作中の窓があればその後ろ〕・矩形が渡されない窓は `defaultFloatRect(0, …)`・窓の開閉で、トレイの行の有無が変わらない）
       対象: `packages/web/src/display/floatGeometry.ts`（新規）・`.test.ts`（新規）、`packages/web/src/display/paneDisplayLayout.ts`・`.test.ts` / 根拠: design「割り付け」の決まり 6、「浮いた窓の矩形」「浮いた窓」の重なり
       依存: T13
