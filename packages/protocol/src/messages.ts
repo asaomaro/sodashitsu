@@ -11,6 +11,8 @@ import {
   DISPLAY_WAIT_MIN_MS,
   DISPLAY_WAIT_NAMES_MAX,
   type DisplayChunk,
+  type DisplayDock,
+  type DisplayEdge,
   type DisplayFeatures,
   type DisplayInfo,
   type DisplaySetResult,
@@ -510,6 +512,9 @@ const displaySetFields = {
   title: z.unknown().optional(),
   size: z.unknown().optional(),
   ttlMs: z.unknown().optional(),
+  dock: z.unknown().optional(),
+  edge: z.unknown().optional(),
+  collapsed: z.unknown().optional(),
 };
 const displayCloseFields = { name: displayName.optional(), all: z.boolean().optional() };
 const displayCloseOneOf = (v: { name?: string | undefined; all?: boolean | undefined }): boolean => (v.name !== undefined) !== (v.all === true);
@@ -795,6 +800,12 @@ export interface SharedPrefs {
    * （不注意やふつうのプログラムを防ぐ設定で、悪意のあるプログラムへの防御ではない）。無効 → 有効に変わると、全画面に知らせ、サーバのログに残す。
    */
   displayScriptEnabled?: boolean;
+  /** 表示のパネルの初めの状態（記憶の無い面に効く。知らない値は `open`）。 */
+  displayPanelInitial?: "open" | "collapsed";
+  /** 表示のパネルの既定の置き場所（知らない値は `right`）。 */
+  displayPanelDock?: DisplayDock;
+  /** 表示の帯の既定の場所（知らない値は `top`）。 */
+  displayBandEdge?: DisplayEdge;
   notify?: { toast?: boolean; desktop?: boolean; sound?: boolean };
   notifyHintPending?: boolean;
   notifyHintDone?: boolean;
@@ -825,6 +836,8 @@ export const DEVICE_LOCAL_PREF_KEYS = [
   "sidebarSectionsCollapsed",
   // 表示の面（パネル）の幅（pane の id → px）。pane の id はマシンごとに違うので共有しない（20261007-soda-extensions）。
   "displayPanelWidths",
+  // 表示の面の置き場所・たたみ・窓の位置の記憶（pane の id を鍵に持つので共有しない。20261008-display-layout）。
+  "displayLayout",
 ] as const;
 
 /** 共有の設定を読む。`rev` は保存のたびに +1（0 = サーバが一度も保存していない。web の初回の移行の目印）。 */

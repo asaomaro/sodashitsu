@@ -9,7 +9,8 @@ import { createPinia } from "pinia";
 import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
-import { ActionDispatcherKey, AskControllerKey, ConnectionKey, ExtensionControllerKey, DisplayControllerKey, DisplayHostKey, DeviceKindKey, FileTransferKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import { installKeepFocusRelease } from "./display/displayOps.js";
+import { ActionDispatcherKey, AskControllerKey, ConnectionKey, ExtensionControllerKey, DisplayControllerKey, DisplayHostKey, type DisplayHost, DeviceKindKey, FileTransferKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
 import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
@@ -550,7 +551,7 @@ app.provide(TerminalRegistryKey, registry);
 app.provide(AskControllerKey, askController);
 app.provide(ExtensionControllerKey, extensionController);
 app.provide(DisplayControllerKey, displayController);
-app.provide(DisplayHostKey, {
+const displayHost: DisplayHost = {
   focusTerminal: (paneId) =>
     void focusPaneIfShown(
       {
@@ -573,7 +574,11 @@ app.provide(DisplayHostKey, {
     const k = router.prefixKeyInput();
     return { key: k.key, ctrl: k.ctrl, alt: k.alt, shift: k.shift, meta: k.meta };
   },
-});
+};
+app.provide(DisplayHostKey, displayHost);
+actionDispatcher.setDisplayHost(displayHost);
+// 押してもフォーカスを取らない部品・覆いを押したとき、操作中の枠から端末へフォーカスを移す（`DisplayFrame` の『枠の外を押した』より先に走る。モバイルでは働かない）。
+installKeepFocusRelease(displayHost, () => useDisplayStore(pinia).sheetAvailable);
 app.provide(FileTransferKey, fileTransfer);
 app.provide(ViewSyncKey, viewSync);
 app.provide(DeviceKindKey, kind);

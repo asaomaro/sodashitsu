@@ -73,11 +73,19 @@ test("(3)(4) パネルを出すと端末の列数が減る（ブラウザの cli
   await expect(panelFrameLoc(page).locator("pre")).toHaveText("a");
   await page.locator("[data-pane-panel-tab]", { hasText: "二つ目" }).click();
   await expect(panelFrameLoc(page).locator("pre")).toHaveText("b");
-  // たたむと列数が戻り、広げると減る。
+  // たたみは面ごと（20261008-display-layout）。選んでいる 1 枚（二つ目）をたたんでも、もう 1 枚が残るので列数は変わらない（群れから外れて、帯の行のボタンになる）。
+  // 2 枚ともたたむと列数が戻り、トレイにボタンが 2 つ。ボタンから開くと、また減る。
   const withPanel = views.latest()!.visible[0]!.cols;
   await page.locator("[data-pane-panel-fold]").click();
+  await expect(page.locator("[data-pane-panel-tab]")).toHaveCount(0);
+  await expect(page.locator("[data-display-tray-button]")).toHaveCount(1);
+  expect(views.latest()!.visible[0]!.cols).toBe(withPanel);
+  await page.locator("[data-pane-panel-fold]").click();
+  await expect(page.locator("[data-pane-panel]")).toHaveCount(0);
+  await expect(page.locator("[data-display-tray-button]")).toHaveCount(2);
   await expect.poll(() => views.latest()!.visible[0]!.cols).toBeGreaterThan(withPanel);
-  await page.locator("[data-pane-panel-unfold]").click();
+  await page.locator("[data-display-tray-button]").first().click();
+  await expect(page.locator("[data-pane-panel]")).toHaveCount(1);
   await expect.poll(() => views.latest()!.visible[0]!.cols).toBeLessThan(before);
   // 閉じると戻る。
   await ok(await runDisplay(appServer, paneId, ["close", "--all"]));
@@ -259,13 +267,13 @@ test("(12) 幅の丸め: 狭い pane では半分まで・40 列を下回ると�
   const paneW = (await page.locator(".pane-frame-body").first().boundingBox())!.width;
   const w = (await page.locator("[data-pane-panel]").boundingBox())!.width;
   expect(w).toBeLessThanOrEqual(Math.floor(paneW / 2));
-  // 狭い pane（分割を重ねる）: 端末を 40 列残すと 160px を取れないので、自動でたたむ（広げるボタンは無効）。
+  // 狭い pane（分割を重ねる）: 端末を 40 列残すと 160px を取れないので、自動でたたむ（帯の行のボタンは押せない）。
   const { client } = await openedClient(appServer, paneId);
   await client.request("pane.split", { paneId, direction: "right" });
   await client.request("pane.split", { paneId, direction: "right" });
   await expect.poll(async () => (await page.locator(".pane-frame-body").first().boundingBox())!.width).toBeLessThan(300);
-  await expect(page.locator("[data-pane-panel-unfold]")).toBeDisabled();
-  await expect.poll(async () => (await page.locator("[data-pane-panel]").boundingBox())!.width).toBe(24);
+  await expect(page.locator("[data-display-tray-button]")).toBeDisabled();
+  await expect(page.locator("[data-pane-panel]")).toHaveCount(0);
   await ok(await runDisplay(appServer, paneId, ["close", "w"]));
   // 帯: 高さの合計が pane の 3 分の 1 を超える分は「ほか N 件」。
   await page.setViewportSize({ width: 900, height: 300 });

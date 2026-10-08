@@ -105,6 +105,25 @@ describe("SettingsDialog — 通知の節 — 切り替え（AC6・AC-I2）", ()
 });
 
 // **AC8 と AC12 を取り違えない**——許可が無いだけなのか、環境が対応していないのか。
+describe("SettingsDialog — 表示の面の配置の設定（20261008-display-layout）", () => {
+  it("パネルの初めの状態と帯の既定の場所を radio で出し、選ぶと反映・保存する。パネルの既定の置き場所は PR-A では出さない", async () => {
+    const { wrapper } = await openDialog();
+    const initial = wrapper.findAll('input[name="settings-display-panel-initial"]');
+    const edge = wrapper.findAll('input[name="settings-display-band-edge"]');
+    expect(initial.map((i) => i.attributes("value"))).toEqual(["open", "collapsed"]);
+    expect(edge.map((i) => i.attributes("value"))).toEqual(["top", "bottom"]);
+    expect(wrapper.find('input[name="settings-display-panel-dock"]').exists()).toBe(false);
+    expect((initial[0]!.element as HTMLInputElement).checked).toBe(true);
+    await initial[1]!.setValue(true);
+    await edge[1]!.setValue(true);
+    const settings = useSettingsStore(pinia);
+    expect(settings.displayPanelInitial).toBe("collapsed");
+    expect(settings.displayBandEdge).toBe("bottom");
+    expect(readPrefs()["displayPanelInitial"]).toBe("collapsed");
+    expect(readPrefs()["displayBandEdge"]).toBe("bottom");
+  });
+});
+
 describe("SettingsDialog — 通知の節 — OS 通知の 4 状態（AC8・AC12）", () => {
   it("granted：普通に切り替えられる", async () => {
     const { wrapper } = await openDialog(makeController({ permission: "granted" }));

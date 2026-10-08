@@ -180,6 +180,45 @@ describe("runDisplay set", () => {
 
 const SCRIPT_FEATURES = { ...FEATURES, features: [...FEATURES.features, "format:script-html", "send"], renderers: { ...FEATURES.renderers, scriptHtml: 1 } };
 
+describe("runDisplay set（配置の指定 --dock・--edge・--collapsed）", () => {
+  const LAYOUT_FEATURES = { ...FEATURES, features: [...FEATURES.features, "layout"] };
+  it("引数の検査: --dock は panel だけ・--edge は band だけ・値は定数のもの（使い方の誤り）", () => {
+    const bad = (argv: string[]) => expect(() => parse(["set", "a", "--text", "x", ...argv])).toThrow(CliUsageError);
+    bad(["--kind", "band", "--dock", "bottom"]);
+    bad(["--kind", "panel", "--edge", "bottom"]);
+    bad(["--kind", "panel", "--dock", "middle"]);
+    bad(["--kind", "band", "--edge", "left"]);
+    expect(() => parse(["set", "a", "--text", "x", "--kind", "panel", "--dock", "float", "--collapsed"])).not.toThrow();
+    expect(() => parse(["set", "a", "--text", "x", "--kind", "band", "--edge", "bottom", "--collapsed"])).not.toThrow();
+  });
+  it("layout を知るサーバへは 3 項目を送り、ignored は付かない", async () => {
+    const out = new Out();
+    const tr = stub({ "display.features": LAYOUT_FEATURES, "display.set": SET_RESULT });
+    const code = await runDisplay(parse(["set", "a", "--kind", "panel", "--text", "x", "--dock", "bottom", "--collapsed"]), store, out.deps({ transport: tr }));
+    expect(code).toBe(0);
+    expect(tr.calls.map((c) => c.op)).toEqual(["display.features", "display.set"]);
+    expect(tr.calls[1]!.params).toMatchObject({ dock: "bottom", collapsed: true });
+    expect(out.lines).toEqual([{ status: "ok", display: INFO, renderers: FEATURES.renderers, epoch: "E1", next: 4 }]);
+  });
+  it("layout を知らない古いサーバへは 3 項目を外して送り、ignored と stderr の 1 行を出す（終了コード 0）", async () => {
+    const out = new Out();
+    const warn = vi.fn();
+    const tr = stub({ "display.features": FEATURES, "display.set": SET_RESULT });
+    const code = await runDisplay(parse(["set", "a", "--kind", "panel", "--text", "x", "--dock", "bottom", "--collapsed"]), store, out.deps({ transport: tr, warn }));
+    expect(code).toBe(0);
+    expect(tr.calls[1]!.params).not.toHaveProperty("dock");
+    expect(tr.calls[1]!.params).not.toHaveProperty("collapsed");
+    expect(out.lines).toEqual([{ status: "ok", display: INFO, renderers: FEATURES.renderers, epoch: "E1", next: 4, ignored: ["dock", "collapsed"] }]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+  it("3 項目が無い set は機能確認を足さない", async () => {
+    const out = new Out();
+    const tr = stub({ "display.set": SET_RESULT });
+    await runDisplay(parse(["set", "a", "--kind", "panel", "--text", "x"]), store, out.deps({ transport: tr }));
+    expect(tr.calls.map((c) => c.op)).toEqual(["display.set"]);
+  });
+});
+
 describe("runDisplay set（script-html）と send", () => {
   it("--script-html-file は、送る前に display.features を見て、format:script-html・send があれば display.set を送る", async () => {
     const out = new Out();

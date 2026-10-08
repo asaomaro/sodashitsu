@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { pickToastSlot } from "../display/toastSlot.js";
 import { useDisplayStore } from "../store/display.js";
 import { useSettingsStore } from "../store/settings.js";
 import { PREFIX_HELP_HINT_KEY, useViewStore } from "../store/view.js";
@@ -22,6 +23,56 @@ const settings = useSettingsStore();
  */
 const displays = useDisplayStore();
 const low = computed(() => displays.all.length > 0);
+
+/**
+ * デスクトップで面があるとき（20261008-display-layout の D14）は、固定の部品（`[data-display-chrome]`）を測って、重ならない縦の空きに出す。
+ * CSS の既定は今の右下（`toast-list-low`）のまま残し、測った結果は inline の `bottom`・`max-height` で上書きする（`top` は `auto`）。
+ * 最初の 1 回は、描き直しの後に同期で測る（知らせが、測る前の位置で 1 フレーム見えない）。知らせが出ている間だけ、知らせの数・面の割り付け・操作中の面・ウィンドウの大きさが変わったときに測り直す。
+ */
+const listEl = ref<HTMLElement | null>(null);
+const MARGIN_PX = 8;
+function clearSlot(): void {
+  const el = listEl.value;
+  if (!el) return;
+  el.style.removeProperty("top");
+  el.style.removeProperty("bottom");
+  el.style.removeProperty("max-height");
+}
+function measureSlot(): void {
+  const el = listEl.value;
+  if (!el) return;
+  if (displays.all.length === 0 || displays.sheetAvailable || view.toasts.length === 0) {
+    clearSlot();
+    return;
+  }
+  const strip = el.getBoundingClientRect();
+  const chrome = [...document.querySelectorAll<HTMLElement>("[data-display-chrome]")].map((c) => {
+    const b = c.getBoundingClientRect();
+    return { x: b.left, y: b.top, w: b.width, h: b.height };
+  });
+  const viewportH = window.innerHeight;
+  const need = Math.min(el.scrollHeight, viewportH);
+  const slot = pickToastSlot({ viewportH, stripLeft: strip.left, stripRight: strip.right, chrome, need, margin: MARGIN_PX });
+  el.style.setProperty("top", "auto");
+  el.style.setProperty("bottom", `${Math.max(MARGIN_PX, viewportH - (slot.top + slot.maxHeight))}px`);
+  el.style.setProperty("max-height", `${Math.max(0, slot.maxHeight)}px`);
+}
+let pending = false;
+function scheduleMeasure(): void {
+  if (pending) return;
+  pending = true;
+  void nextTick(() => {
+    pending = false;
+    measureSlot();
+  });
+}
+watch(
+  () => [view.toasts.length, displays.layoutRev, displays.focusedDisplayId, displays.all.length, displays.sheetAvailable],
+  () => measureSlot(),
+  { flush: "post", immediate: false },
+);
+onMounted(() => window.addEventListener("resize", scheduleMeasure));
+onBeforeUnmount(() => window.removeEventListener("resize", scheduleMeasure));
 
 function hasShownHint(): boolean {
   try {
@@ -71,7 +122,7 @@ function dismiss(id: number): void {
 </script>
 
 <template>
-  <div class="toast-list" :class="{ 'toast-list-low': low }" role="status" aria-live="polite">
+  <div ref="listEl" class="toast-list" :class="{ 'toast-list-low': low }" role="status" aria-live="polite">
     <div v-for="t in view.toasts" :key="t.id" class="toast" :class="{ 'toast-sticky': t.kind === 'sticky', 'toast-wrap': t.wrap }" @click="dismiss(t.id)">
       <span class="toast-message" :title="t.kind === 'sticky' ? t.message : undefined">{{ t.message }}</span>
       <!-- 行動ボタンと閉じるボタンは `<button>`。既存のトーストは `<div>` で Tab の順に入らず、

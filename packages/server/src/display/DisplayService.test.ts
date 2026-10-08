@@ -293,7 +293,26 @@ describe("DisplayService.subscribe / renderers / features", () => {
     s.displays.set("p2", body("b"));
     const r = s.displays.subscribe("b1", ["panel", "band", "actions", "script-html", "x"]);
     expect(r.displays.map((d) => d.name)).toEqual(["a", "b"]);
-    expect(s.displays.features().renderers).toMatchObject({ panel: 1, band: 1, actions: 1, scriptHtml: 1 });
+    expect(s.displays.features().renderers).toMatchObject({ panel: 1, band: 1, actions: 1, scriptHtml: 1, collapse: 0, dock: 0, float: 0 });
+  });
+
+  it("配置の指定: set が 3 項目を見出しに載せ、省いた set で消える。list・display.updated に出る。renderers は 3 種類を数える", () => {
+    const s = setup();
+    const r = s.displays.set("p1", body("a", { dock: "bottom", collapsed: true }));
+    expect(r.display).toMatchObject({ dock: "bottom", collapsed: true });
+    expect(s.displays.list("p1").displays[0]).toMatchObject({ dock: "bottom", collapsed: true });
+    const b = s.displays.set("p1", { name: "e", kind: "band", format: "text", content: "x", edge: "bottom" });
+    expect(b.display).toMatchObject({ edge: "bottom" });
+    expect(b.display).not.toHaveProperty("dock");
+    expect(s.displays.set("p1", body("a", { collapsed: false })).display).not.toHaveProperty("collapsed");
+    const again = s.displays.set("p1", body("a"));
+    expect(again.display).not.toHaveProperty("dock");
+    expect(again.display).not.toHaveProperty("collapsed");
+    expect(errCode(() => s.displays.set("p1", body("a", { dock: "nowhere" })))).toBe("invalid_display");
+    expect(errCode(() => s.displays.set("p1", { name: "e", kind: "band", format: "text", content: "x", dock: "top" }))).toBe("invalid_display");
+    s.displays.subscribe("b1", ["panel", "collapse", "dock", "float"]);
+    expect(s.displays.features().renderers).toMatchObject({ collapse: 1, dock: 1, float: 1 });
+    expect(s.displays.features().features).toContain("layout");
   });
 
   it("renderers は名乗った種類ごとに数える。再度の subscribe は置き換え。切断・種類の変更で外れる", () => {

@@ -234,6 +234,10 @@ export class DisplayService {
       rev: (kept?.info.rev ?? 0) + 1,
       bytes: content.length,
       updatedAt: new Date(now).toISOString(),
+      // プログラムの指定（初めの値）。検査を通ったものだけ。set のたびに置き換わる（省けば消える）。
+      ...(b.dock !== undefined ? { dock: b.dock } : {}),
+      ...(b.edge !== undefined ? { edge: b.edge } : {}),
+      ...(b.collapsed === true ? { collapsed: true } : {}),
       ...(opts?.owner !== undefined ? { source: opts.owner.source } : {}),
     };
     // 検査は全部通った。ここで付け替える（古い面を外してから、新しい面を**新規の枝**で足す。置き換えの枝は通さない: 合計を二重に引かない）。
@@ -570,13 +574,16 @@ export class DisplayService {
 
   /** 名乗った画面のうち、まだ画面として繋がっているものを種類ごとに数える。 */
   private renderers(): DisplayRenderers {
-    const r: DisplayRenderers = { panel: 0, band: 0, actions: 0, scriptHtml: 0 };
+    const r: DisplayRenderers = { panel: 0, band: 0, actions: 0, scriptHtml: 0, collapse: 0, dock: 0, float: 0 };
     for (const [id, f] of this.subscribers) {
       if (!this.opts.isScreenKind(id)) continue;
       if (f.has("panel")) r.panel++;
       if (f.has("band")) r.band++;
       if (f.has("actions")) r.actions++;
       if (f.has("script-html")) r.scriptHtml++;
+      if (f.has("collapse")) r.collapse++;
+      if (f.has("dock")) r.dock++;
+      if (f.has("float")) r.float++;
     }
     return r;
   }

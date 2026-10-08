@@ -1,102 +1,85 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, ref } from "vue";
+import type { DisplayInfo } from "@sodashitsu/protocol";
+import { computed, nextTick, ref } from "vue";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
-import { panelWidth, panelWidthRange } from "../display/displayLayout.js";
 import { displayLabel, engagedNote } from "../display/displayLabel.js";
-import { frameKey } from "../display/framePage.js";
-import { DisplayControllerKey } from "../injection.js";
+import { placedFrameKey } from "../display/framePage.js";
+import type { DockGroup, Side } from "../display/paneDisplayLayout.js";
 import { useDisplayStore } from "../store/display.js";
 import DisplayFrame from "./DisplayFrame.vue";
-import DisplayScriptMark from "./DisplayScriptMark.vue";
+import DisplayPanelHead from "./DisplayPanelHead.vue";
 
 /**
- * pane の右に出すパネル（表示の面 `--kind panel`。20261007-soda-extensions の design「ブラウザ」）。
- * - 見出しの固定のラベルは**アプリが描く**（面の名前は `[A-Za-z0-9_-]` だけ。題は `textContent`）。題・中身からラベルの文言・位置・色は変えられない。
- * - 複数あればタブ（`role="tablist"`。矢印・`Home`・`End`）。たたむと幅 24px の見出しだけ。［×］で利用者が閉じる。
+ * pane の側（PR-A は右）に出すパネルの群れ（表示の面 `--kind panel`。20261007-soda-extensions の design「ブラウザ」・20261008-display-layout の design「部品」）。
+ * - 見出しの固定のラベルは**アプリが描く**（`DisplayPanelHead`）。題・中身からラベルの文言・位置・色は変えられない。
+ * - 複数あればタブ（`role="tablist"`。矢印・`Home`・`End`）。たたむとこの群れから外れて、帯の行のボタン（トレイ）になる。［×］で利用者が閉じる。
  * - 枠にフォーカスがある間は「操作中」を縁と文言で示す（備え (a)）。
+ * - 大きさは割り付けの結果 `dock`（範囲に丸めた値）。つまみのドラッグの間は大きさを変えず、案内の線だけを動かす（端末の大きさを送り続けない）。
  */
-const props = defineProps<{ paneId: string; paneWidthPx: number; cellWidthPx: number }>();
-/** ドラッグ中の案内の線の幅（px。`null` で消す）。幅そのものはドラッグの間は変えない（端末の大きさを送り続けないため）。 */
+const props = defineProps<{ paneId: string; side: Side; dock: DockGroup }>();
+/** ドラッグ中の案内の線の大きさ（px。`null` で消す）。 */
 const emit = defineEmits<{ guide: [width: number | null] }>();
 
 const store = useDisplayStore();
-const controller = inject(DisplayControllerKey, null);
 
-const panels = computed(() => store.panelsOf(props.paneId));
-const active = computed(() => store.activePanelOf(props.paneId));
-const collapsedByUser = computed(() => store.collapsed.has(props.paneId));
-const userWidth = computed(() => store.panelWidths.get(props.paneId));
-const sized = computed(() => panelWidth(props.paneWidthPx, active.value?.size ?? 320, props.cellWidthPx, userWidth.value));
-const range = computed(() => panelWidthRange(props.paneWidthPx, props.cellWidthPx));
-/** ドラッグ中に案内の線が指している幅（無ければ null）。 */
-const dragWidth = ref<number | null>(null);
-const shownWidth = computed(() => dragWidth.value ?? sized.value.width);
-/** たたむ（利用者がたたんだ・pane が狭くて出せない）。 */
-const folded = computed(() => collapsedByUser.value || sized.value.autoCollapsed);
+const panels = computed(() => props.dock.ids.flatMap((id) => store.infos.get(id) ?? []) as DisplayInfo[]);
+const active = computed(() => panels.value.find((p) => p.id === props.dock.activeId) ?? panels.value[0] ?? null);
 const engaged = computed(() => store.focusedDisplayId !== null && panels.value.some((p) => p.id === store.focusedDisplayId));
 const content = computed(() => (active.value ? store.contents.get(active.value.id) : undefined));
-const rootStyle = computed(() => {
-  const w = folded.value ? 24 : sized.value.width;
-  return { flex: `0 0 ${w}px`, width: `${w}px` };
-});
+/** ドラッグ中に案内の線が指している大きさ（無ければ null）。 */
+const dragSize = ref<number | null>(null);
+const shownSize = computed(() => dragSize.value ?? props.dock.size);
+const rootStyle = computed(() => ({ flex: `0 0 ${props.dock.size}px`, width: `${props.dock.size}px` }));
 
-const clampToRange = (w: number): number => {
-  const r = range.value;
-  return r ? Math.min(r.max, Math.max(r.min, Math.round(w))) : w;
-};
-const drag = useResizeDrag<{ width: number; x: number }>({
+const clampToRange = (w: number): number => Math.min(props.dock.max, Math.max(props.dock.min, Math.round(w)));
+const drag = useResizeDrag<{ size: number; x: number }>({
   axis: "x",
-  enabled: () => !folded.value,
-  begin: (ev) => ({ width: sized.value.width, x: ev.clientX }),
-  // 幅は変えない。案内の線だけを動かす（葉の箱が変わらないので、ドラッグの間は端末の大きさ〔client.view〕が送られない）。
+  enabled: () => true,
+  begin: (ev) => ({ size: props.dock.size, x: ev.clientX }),
+  // 大きさは変えない。案内の線だけを動かす（葉の箱が変わらないので、ドラッグの間は端末の大きさ〔client.view〕が送られない）。
   move: (ev, start) => {
-    dragWidth.value = clampToRange(start.width - (ev.clientX - start.x));
-    emit("guide", dragWidth.value);
+    dragSize.value = clampToRange(start.size - (ev.clientX - start.x));
+    emit("guide", dragSize.value);
   },
   // 離したとき、1 回だけ確定する（ここで葉の箱が 1 回変わる）。
   commit: () => {
-    const w = dragWidth.value;
-    dragWidth.value = null;
+    const w = dragSize.value;
+    dragSize.value = null;
     emit("guide", null);
-    if (w !== null) store.setPanelWidth(props.paneId, w);
+    if (w !== null) store.setSideSize(props.paneId, props.side, w);
   },
   cancel: () => {
-    dragWidth.value = null;
+    dragSize.value = null;
     emit("guide", null);
   },
-  // ダブルクリック: プログラムの指定の幅へ戻る。
-  reset: () => store.clearPanelWidth(props.paneId),
+  // ダブルクリック: プログラムの指定の大きさへ戻る。
+  reset: () => store.clearSideSize(props.paneId, props.side),
 });
 const KEY_STEP = 16;
 const KEY_STEP_LARGE = 64;
-/** つまみのキー（← で広く・→ で狭く〔つまみが左の縁にあるため〕。Shift で 64px。Home＝最小・End＝最大・Enter＝指定の幅へ）。 */
+/** つまみのキー（← で広く・→ で狭く〔つまみが左の縁にあるため〕。Shift で 64px。Home＝最小・End＝最大・Enter＝指定の大きさへ）。 */
 function onHandleKey(ev: KeyboardEvent): void {
-  const r = range.value;
-  if (!r) return;
   const step = ev.shiftKey ? KEY_STEP_LARGE : KEY_STEP;
-  const cur = sized.value.width;
+  const cur = props.dock.size;
   let next: number | null = null;
   if (ev.key === "ArrowLeft") next = cur + step;
   else if (ev.key === "ArrowRight") next = cur - step;
-  else if (ev.key === "Home") next = r.min;
-  else if (ev.key === "End") next = r.max;
+  else if (ev.key === "Home") next = props.dock.min;
+  else if (ev.key === "End") next = props.dock.max;
   else if (ev.key === "Enter") {
     ev.preventDefault();
     ev.stopPropagation();
-    store.clearPanelWidth(props.paneId);
+    store.clearSideSize(props.paneId, props.side);
     return;
   }
   if (next === null) return;
   ev.preventDefault();
   ev.stopPropagation(); // 端末へ流さない
-  store.setPanelWidth(props.paneId, clampToRange(next));
+  store.setSideSize(props.paneId, props.side, clampToRange(next));
 }
 
 function select(id: string): void {
-  store.setActivePanel(props.paneId, id);
-}
-function dismiss(id: string): void {
-  controller?.dismiss({ id });
+  store.setActiveBySide(props.paneId, props.side, id);
 }
 
 /** タブの矢印キー（← →・Home・End）。移って切り替える。 */
@@ -117,27 +100,29 @@ function onTabKey(ev: KeyboardEvent): void {
 
 <template>
   <aside
-    v-if="panels.length > 0 && active"
+    v-if="active"
     class="pane-panel"
-    :class="{ 'pane-panel-folded': folded, 'pane-panel-engaged': engaged }"
+    :class="{ 'pane-panel-engaged': engaged }"
     :style="rootStyle"
     role="complementary"
     :aria-label="displayLabel(active)"
     data-pane-panel
+    :data-display-dock="side"
+    :data-display-root="active.id"
     :data-display-engaged="engaged ? '1' : '0'"
   >
     <div
-      v-if="!folded && range"
       class="pane-panel-resize resize-handle resize-handle-x"
       :class="{ 'resize-handle-active': drag.dragging.value }"
       role="separator"
       aria-orientation="vertical"
       aria-label="パネルの幅"
-      :aria-valuenow="shownWidth"
-      :aria-valuemin="range.min"
-      :aria-valuemax="range.max"
+      :aria-valuenow="shownSize"
+      :aria-valuemin="dock.min"
+      :aria-valuemax="dock.max"
       tabindex="0"
       data-pane-panel-resize
+      data-display-keepfocus
       @pointerdown="drag.onPointerDown"
       @pointermove="drag.onPointerMove"
       @pointerup="drag.onPointerEnd"
@@ -145,50 +130,28 @@ function onTabKey(ev: KeyboardEvent): void {
       @lostpointercapture="drag.onPointerEnd"
       @keydown="onHandleKey"
     ></div>
-    <button
-      v-if="folded"
-      type="button"
-      class="pane-panel-unfold"
-      :aria-label="`表示パネルを広げる（${active.name}）`"
-      :disabled="sized.autoCollapsed"
-      :title="sized.autoCollapsed ? 'pane が狭いので、パネルを出せません' : 'パネルを広げる'"
-      data-pane-panel-unfold
-      @click="store.setCollapsed(paneId, false)"
-    >
-      表示 ({{ panels.length }})
-    </button>
-    <template v-else>
-      <div class="pane-panel-head">
-        <div class="pane-panel-label" data-pane-panel-label><DisplayScriptMark :info="active" part="mark" />{{ displayLabel(active) }}</div>
-        <div class="pane-panel-actions">
-          <DisplayScriptMark :info="active" part="button" />
-          <DisplayScriptMark :info="active" part="end" />
-          <button type="button" class="pane-panel-btn" aria-label="パネルをたたむ" title="たたむ" data-pane-panel-fold @click="store.setCollapsed(paneId, true)">▸</button>
-          <button type="button" class="pane-panel-btn" aria-label="この表示を閉じる" title="この表示を閉じる" data-pane-panel-close @click="dismiss(active.id)">×</button>
-        </div>
-      </div>
-      <div v-if="panels.length > 1" class="pane-panel-tabs" role="tablist" aria-label="パネルの一覧" @keydown="onTabKey">
-        <button
-          v-for="p in panels"
-          :id="`pane-panel-tab-${paneId}-${p.id}`"
-          :key="p.id"
-          type="button"
-          role="tab"
-          class="pane-panel-tab"
-          :aria-selected="p.id === active.id ? 'true' : 'false'"
-          :tabindex="p.id === active.id ? 0 : -1"
-          data-pane-panel-tab
-          @click="select(p.id)"
-        >
-          {{ p.title }}
-        </button>
-      </div>
-      <div v-else class="pane-panel-title" data-pane-panel-title>{{ active.title }}</div>
-      <div v-if="engaged" class="pane-panel-engaged-note" aria-live="polite" data-pane-panel-engaged-note>{{ engagedNote(active) }}</div>
-      <div class="pane-panel-body">
-        <DisplayFrame :key="frameKey(active)" :info="active" :content="content" />
-      </div>
-    </template>
+    <DisplayPanelHead :info="active" collapsible />
+    <div v-if="panels.length > 1" class="pane-panel-tabs" role="tablist" aria-label="パネルの一覧" data-display-chrome @keydown="onTabKey">
+      <button
+        v-for="p in panels"
+        :id="`pane-panel-tab-${paneId}-${p.id}`"
+        :key="p.id"
+        type="button"
+        role="tab"
+        class="pane-panel-tab"
+        :aria-selected="p.id === active.id ? 'true' : 'false'"
+        :tabindex="p.id === active.id ? 0 : -1"
+        data-pane-panel-tab
+        @click="select(p.id)"
+      >
+        {{ p.title }}
+      </button>
+    </div>
+    <div v-else class="pane-panel-title" data-pane-panel-title>{{ active.title }}</div>
+    <div v-if="engaged" class="pane-panel-engaged-note" aria-live="polite" data-display-chrome data-pane-panel-engaged-note>{{ engagedNote(active) }}</div>
+    <div class="pane-panel-body">
+      <DisplayFrame :key="placedFrameKey(active, `dock:${side}`)" :info="active" :content="content" />
+    </div>
     <div class="pane-panel-ring" aria-hidden="true" data-pane-panel-ring></div>
   </aside>
 </template>
@@ -213,47 +176,9 @@ function onTabKey(ev: KeyboardEvent): void {
   left: -1px;
   width: 2px;
   cursor: col-resize;
-  z-index: 2;
+  z-index: 22;
 }
-.pane-panel-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 4px 2px 8px;
-  background: var(--soda-menu-border, #44475a);
-  font-size: 0.75em;
-}
-.pane-panel-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-weight: bold;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.pane-panel-actions {
-  flex: none;
-  display: flex;
-  gap: 2px;
-}
-.pane-panel-btn {
-  font: inherit;
-  min-width: 24px;
-  min-height: 24px;
-  padding: 0 6px;
-  color: var(--soda-fg, #f8f8f2);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.pane-panel-btn:hover {
-  background: var(--soda-menu-hover-bg, #343746);
-}
-.pane-panel-btn:focus-visible,
-.pane-panel-tab:focus-visible,
-.pane-panel-unfold:focus-visible {
+.pane-panel-tab:focus-visible {
   outline: 2px solid var(--soda-accent, #6070a1);
   outline-offset: -2px;
 }
@@ -301,22 +226,7 @@ function onTabKey(ev: KeyboardEvent): void {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
-}
-.pane-panel-unfold {
-  flex: 1 1 auto;
-  width: 100%;
-  padding: 8px 0;
-  font: inherit;
-  font-size: 0.75em;
-  writing-mode: vertical-rl;
-  color: var(--soda-fg, #f8f8f2);
-  background: var(--soda-menu-border, #44475a);
-  border: 0;
-  cursor: pointer;
-}
-.pane-panel-unfold:disabled {
-  cursor: default;
-  opacity: 0.6;
+  overflow: auto;
 }
 /* 操作中の縁。枠を覆う細い輪（レイアウトを動かさず、iframe の上に描く）。 */
 .pane-panel-ring {
