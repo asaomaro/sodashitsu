@@ -617,6 +617,22 @@ setInterval(() => { const f = LOG + ".cmds"; if (!existsSync(f) || !pane) return
     noStart(e.log);
   });
 
+  it("(P1b) 承認していなければ、状態の表示に関わらず、印のファイルが出来ない（2 重の守りの、片方だけを外しても、実行されない）", async () => {
+    const e = await script("p1b", projBody);
+    const root = await mkRepo("p1brepo", [{ id: "p1b", command: e.command }]);
+    const s = await startServer([], { timings: { approvalsPollMs: 100 } });
+    await openWorkspace(s, root);
+    await vi.waitFor(async () => { if (!(await projInfo(s, "p1b", root))) throw new Error("not listed"); }, { timeout: 10_000, interval: 30 });
+    const ws = await s.open("external");
+    for (let i = 0; i < 3; i++) {
+      await ws.request("extension.reload", {});
+      await settle(400);
+    }
+    await ws.request("extension.restart", { key: (await projInfo(s, "p1b", root))!.key }).catch(() => undefined);
+    await settle(700);
+    noStart(e.log);
+  });
+
   it("(P2) 画面の接続から approve → 動く。サーバを立て直しても聞き直されずに動く。同じ sessionRoot の別の名前付き session でも動く。sodactl 相当（external）・pane.sock からは承認できない", async () => {
     const e = await script("p2", projBody);
     const root = await mkRepo("p2repo", [{ id: "p2", command: e.command }]);
