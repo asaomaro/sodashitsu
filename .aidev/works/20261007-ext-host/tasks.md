@@ -110,7 +110,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
 
 ### PR1: サーバと、利用者の設定の拡張
 
-- [ ] T1: protocol の型・定数・純粋な関数を、新しいファイルに作る: design「型と定数」の全部（定数・`ExtensionScope`・`ExtensionRunState`・`ExtensionInfo`〔`approval?` の型 `ExtensionApprovalView` と、`ExtensionListResult.approvals?` の `ExtensionApprovalRecordView` も、この時点で定義する。使うのは PR3〕・`ExtensionExitReason`・`ExtensionFileProblem`・`ExtensionListResult`・`ExtensionLogResult`・`ExtPane`・`ExtLimits`・`ExtLine`・`ExtDisplayEvent`・`ExtRequest`・`ExtRequestParse`・`EXT_EVENT_TYPES`）と、
+- [x] T1: protocol の型・定数・純粋な関数を、新しいファイルに作る: design「型と定数」の全部（定数・`ExtensionScope`・`ExtensionRunState`・`ExtensionInfo`〔`approval?` の型 `ExtensionApprovalView` と、`ExtensionListResult.approvals?` の `ExtensionApprovalRecordView` も、この時点で定義する。使うのは PR3〕・`ExtensionExitReason`・`ExtensionFileProblem`・`ExtensionListResult`・`ExtensionLogResult`・`ExtPane`・`ExtLimits`・`ExtLine`・`ExtDisplayEvent`・`ExtRequest`・`ExtRequestParse`・`EXT_EVENT_TYPES`）と、
       `parseExtRequest`（JSON でない → `bad_line`／オブジェクトでない・`method` が 1〜64 文字の文字列でない・`id` が有限の数でも 1〜64 文字の文字列でもない・`params` が配列でないオブジェクトでない → `bad_request`／知らない項目は無視）・`hasForbiddenChars`（design「設定ファイル」の表: Unicode の種別の正規表現）・`extLimits`。
       `EXTENSION_ID_RE` は `COMMAND_ID_RE` をそのまま使う。`index.ts` から export。単体テスト（`parseExtRequest` の境界・`__proto__` を項目に持つ行で、何も壊れないこと・`hasForbiddenChars` の、種別ごとの代表の文字〔U+0000・U+000A・U+202E・U+200B・U+00AD・U+00A0・U+3000・U+2028・U+3164・U+FE0F・U+E0001〕が真で、U+0020・ASCII・ふつうの日本語が偽）
       対象: `packages/protocol/src/extension.ts`（新規）、`packages/protocol/src/extension.test.ts`（新規）、`packages/protocol/src/index.ts`、`packages/protocol/src/commands.ts:13` `COMMAND_ID_RE`（参照）/ 根拠: design「型と定数」、research X3、手本は `packages/protocol/src/display.ts`
