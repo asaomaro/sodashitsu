@@ -43,3 +43,9 @@
 - CSP に関わる既存の E2E（`ask*` 9 ファイル・`display*` 全部）: **280 件通過・1 件スキップ（Chart.js の UMD を渡したときだけ動く `display-script.spec`。環境変数が無いため）・失敗 0**。
 - `tui.integration.test.ts`: 作業フォルダ名が 47 文字の worktree で 3 回とも 5 件通過。直す前のテストを同じ場所で流すと 1 件落ちた。
 - `HttpServer.ts` の差分は、アプリ本体の CSP の 1 行（`script-src 'self' 'wasm-unsafe-eval'` を足した）とコメントだけ。`/ask-view/*`・`/display-view/*` の CSP は変えていない（`HttpServer.integration.test.ts` の該当の検査が変わらず通る）。
+
+## レビュー後の直し（S1・S2・N1・N4）
+- S1: `key-bindings.spec` の Tab の上限を 80 にし、超えたら「操作が増えたので、上限を見直す」と失敗させる（回数 66 の注記は残す）。
+- N1: `csp-wasm-images.spec` の Sixel は、赤の帯 5 本（幅 100 画素）にして、ページのスクリーンショットの赤の画素が 1000 超であることも判定にした（出す前は 0 を確認）。最初の幅 40 では 840 個で足りなかったので 100 にした。
+- 別の不具合の候補（直さない）: **高さが 1 行（セルの高さ）以下の小さな Sixel は、画像の層はできるのに、画素が画面に見えない**（レビューの実測。帯 1 本・3 本）。
+- S2・N4: `docs/herdr-parity.md`（H13 と未検証の項）・`docs/sodactl.md`（アプリ本体の CSP）・`docs/tui-parity.md`（共有の設定の同期の限界）を更新。
