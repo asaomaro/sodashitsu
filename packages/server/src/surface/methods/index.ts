@@ -18,6 +18,7 @@ import { registerCommandMethods } from "./command.js";
 import { registerImageMethods } from "./image.js";
 import { registerAskMethods } from "./ask.js";
 import { registerDisplayMethods } from "./display.js";
+import { registerExtensionMethods } from "./extension.js";
 import { registerFileMethods } from "./file.js";
 import { registerPrefsMethods } from "./prefs.js";
 import { registerServerMethods } from "./server.js";
@@ -47,6 +48,7 @@ export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): v
   registerImageMethods(surface, deps); // 20260927-clipboard-image-paste
   registerAskMethods(surface, deps); // 20261002-sodactl-ask
   registerDisplayMethods(surface, deps); // 20261007-soda-extensions
+  registerExtensionMethods(surface, deps); // 20261007-ext-host
   registerFileMethods(surface, deps); // 端末のファイルのリンクとドロップ
   registerPrefsMethods(surface, deps); // 20260927-cli-mode
   registerServerMethods(surface, deps); // 20260927-cli-mode（server.stop）

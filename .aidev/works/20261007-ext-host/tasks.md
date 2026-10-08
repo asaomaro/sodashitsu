@@ -223,7 +223,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T9-2
       AC: AC6, AC24
       点検: あり
-- [ ] T10: `/ws` の方式と、組み立て: `registerExtensionMethods(surface, deps)`（T2 の 5 つ。`deps.extensions` が無ければ登録しない）、`MethodDeps.extensions?`、`registerAllMethods` から呼ぶ。`composeServer.ts` に、生成（`displays` の後。`internal.extensions` で `deps`〔`timings` を含む〕を差し替えられる）・
+- [x] T10: `/ws` の方式と、組み立て: `registerExtensionMethods(surface, deps)`（T2 の 5 つ。`deps.extensions` が無ければ登録しない）、`MethodDeps.extensions?`、`registerAllMethods` から呼ぶ。`composeServer.ts` に、生成（`displays` の後。`internal.extensions` で `deps`〔`timings` を含む〕を差し替えられる）・
       `listen()` の `void extensions.start()`（`void machines.start()` の隣。**ロックの後**。待たない）と `catch` の `extensions.stop()`・`close()` の `await extensions.stop()`（`machines.stop()` の隣）と、**`finally` の `await extensions.stop().catch(() => undefined)` → `extensions.dispose()`**（`displays.dispose()` の前。`try` の途中で投げても、子を止める）・`pausePollers` の `await extensions.stop()`・`resumePollers` の `void extensions.start()`。
       **`paneOps.register` は足さない**。テスト（`composeServer` を、偽の `spawn` で立てる）: 5 つの方式が通る／`extension.setEnabled` は `external` の接続から `invalid_params`／`pane.sock` へ `extension.list`・`extension.setEnabled` を送ると `unknown_op`／
       `extension.changed` のフレームに、`data` の項目が無い／`extension.list` の結果の JSON に、利用者の拡張の `command` の文字列が無い／**設定の読み込みが止まっていても（偽の `open` が返らない）、`listen()` が返る**／`close()` を、`start()` の直後（設定を読んでいる途中）に呼んでも、拡張の子が残らない／`close()` の `try` の、`extensions.stop()` より前（`machines.stop` の偽物が投げる。`extensions.stop()` は、その後ろに置く）で例外が出ても、`finally` で、`extensions.stop()` → `extensions.dispose()` が、`displays.dispose()` より前に呼ばれている
@@ -231,7 +231,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T2, T9-3, T9-4
       AC: AC1, AC4, AC14, AC15, AC23
       点検: あり
-- [ ] T11: 結合テスト（実際の子プロセス。`win32` はスキップ）: `composeServer` を立て（`internal.extensions.timings` で、`backoffMinMs: 20`・`scopeReviewMs: 100`）、状態ディレクトリに `extensions.json` を書いて、テストが一時ディレクトリに書いた `.mjs` を `process.execPath` で起動する。helper（設定を書く・拡張の `.mjs` を書く・一覧が、ある状態になるまで、上限つきで待つ）を、このファイルの中に置く。
+- [x] T11: 結合テスト（実際の子プロセス。`win32` はスキップ）: `composeServer` を立て（`internal.extensions.timings` で、`backoffMinMs: 20`・`scopeReviewMs: 100`）、状態ディレクトリに `extensions.json` を書いて、テストが一時ディレクトリに書いた `.mjs` を `process.execPath` で起動する。helper（設定を書く・拡張の `.mjs` を書く・一覧が、ある状態になるまで、上限つきで待つ）を、このファイルの中に置く。
       見ること: (1) 環境変数と作業ディレクトリを書き出す拡張 → id・種類があり、token・`SODA_PANE_ID`・受け口のパスが無い（AC1）(2) 読み直しの 4 通りを、実際の pid で。設定を規則の外に書き換えて読み直すと、動いていた拡張が止まり、一覧に理由が出る（AC2・AC3）(3) `display.set` が台帳に載り、`pane.sock` の `display.list` に見え、結果が `/ws` の `display.set` と同じ項目を持つ。面への `display.action`（テストの画面の接続から）が、拡張に行で届く（AC5）
       (4) pane を足す・消すと `ext.panes` の行が届く（AC6）(5) 知らない操作に `unsupported` が返り、拡張は動き続ける。`id` なしには返事が来ない（AC7）。`ext.hello` と `ext.features` の中身（AC8）(6) 拡張の面を、`pane.sock` の `display.list` は見える・`display.wait` に操作が返らない／拡張の `display.list` に、`pane.sock` で出した面が無い・`display.close` で閉じられない・同じ名前の `set` が誤り／`pane.sock` が、拡張の面を閉じる・同じ名前で出し直すと、拡張に `display.closed` が届く（AC9）
       (7) 拡張を落とすと、その面だけが消え、`pane.sock` で出した面は残る（AC10）(8) 落ち続ける拡張（5 回で `failed` になるまで）を動かしながら、pane の echo が通る（AC11）(9) 合図を無視して孫を作る拡張を、無効にすると、`extension.setEnabled` が返った時点で、子と孫の pid が消えている。終了コード 0 で終わって、合図を無視する孫を残す拡張 → 状態が `exited` になった後、3 秒以内に、孫の pid が消える。`close()` の後、どの拡張の pid も残っていない（AC13）
