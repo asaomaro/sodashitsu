@@ -41,9 +41,9 @@ export function endEngageFrame(id: string): boolean {
 }
 
 /** いま画面に載っている、スクリプトが動く面の枠（面の id → pane・形式）。静的な枠への `foreign-focus` と、フォーカスの脱落の検知は、これが 1 つ以上あるときだけ働く。 */
-const scriptFrames = new Map<string, { paneId: string; format: string }>();
-export function registerScriptFrame(id: string, info: { paneId: string; format: string }): void {
-  scriptFrames.set(id, info);
+const scriptFrames = new Map<string, { paneId: string; format: string; name: string }>();
+export function registerScriptFrame(id: string, info: { paneId: string; format: string; name?: string }): void {
+  scriptFrames.set(id, { ...info, name: info.name ?? id });
 }
 export function unregisterScriptFrame(id: string): void {
   scriptFrames.delete(id);
@@ -51,6 +51,6 @@ export function unregisterScriptFrame(id: string): void {
 export function scriptFrameCount(): number {
   return scriptFrames.size;
 }
-export function scriptFramesSnapshot(): { id: string; paneId: string; format: string }[] {
+export function scriptFramesSnapshot(): { id: string; paneId: string; format: string; name: string }[] {
   return [...scriptFrames].map(([id, v]) => ({ id, ...v }));
 }

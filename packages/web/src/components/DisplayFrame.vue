@@ -361,11 +361,10 @@ function syncFocusPatrol(): void {
 /** 画面に載っているスクリプトが動く枠として登録する（静的な枠の `foreign-focus` の戻しと、フォーカスの脱落の見回りは、これが 1 つ以上あるときだけ働く）。 */
 function syncScriptRegistration(): void {
   if (isScript.value && page.value !== null && phase.value !== "closed") {
-    registerScriptFrame(props.info.id, { paneId: props.info.paneId, format: props.info.format });
+    registerScriptFrame(props.info.id, { paneId: props.info.paneId, format: props.info.format, name: props.info.name });
     startFocusDropWatch({
-      focusedPaneId: () => host?.focusedPaneId?.() ?? null,
       focusSelectedTerminal: () => host?.focusSelectedTerminal(),
-      reportSteal: (id, paneId, format) => void controller?.report(id, "focus_steal", { paneId, format }),
+      notify: (message) => controller?.toast?.(message),
     });
   } else {
     unregisterScriptFrame(props.info.id);

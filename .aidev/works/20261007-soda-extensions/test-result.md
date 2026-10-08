@@ -555,3 +555,36 @@ MEASURE focus-drop-loop: typed=91 reached-pane=0 steal-reports=0            ← 
 - `display-flows (2)` は、`click()` を先に入れた直しを取り消し、元の `fill()` だけで通ることを確かめた（スクリプトの面が載っていない状態）。
 - 実測の言い直し（docs と突き合わせた）: `dns-prefetch` は「TCP の接続が届かなかった。DNS の問い合わせが外へ出るかは測れていない」。兄弟の枠への `focus()` は「呼べるが、Chromium 153 では移らなかった」。そのほかの行（WebRTC・クリップボード・音・`window.name`・`postMessage`/`MessagePort`・`location`・全画面・PiP・外への移動・隔離の探り）は、docs の「止まった」「止まらなかった」と測定の出力が同じ向きであることを 1 項目ずつ確かめた。
 - 結果: `pnpm build`・`pnpm typecheck` 通過。`pnpm test` は 8640 件中 8637 件が通り、落ちたのは既知の `tui.integration.test.ts` の 3 件だけ。display の E2E は全部（PR2 の分を含む）通った（レビューの 6 件を足して 106 件。［操作を終える］の文言変更で落ちた 2 件の期待を直して通った）。
+
+
+### 再レビュー（指摘 2 の直し残り）を受けた、フォーカスの脱落の作り直し（D34）
+
+**直す前（D33 の版。クリックの直後 1 秒は戻しも数えも止め、数え先は選択中の pane の最初の面）に、新しい E2E を流した生の出力**（8 件中 6 件が落ちた。落ちなかった 2 件は、利用者が余白を押した・ダイアログ／pane を閉じた、の対照）:
+
+```
+  ✘ 単発: window.focus(); parent.focus() … 数えず、面は閉じず、冷却に入らない        Expected: 0   Received: 1   ← 数えて、サーバへ知らせた
+MEASURE focus-drop-loop-4ms: typed=70 reached-pane=70
+  ✘ 4ms ごとの繰り返し … 面は自動では閉じず・冷却に入らず、利用者への知らせが出る  Expected: 0   Received: 3   ← 面が閉じ、冷却に入った
+MEASURE focus-drop-rounds: interval=300ms cumulative-reached=[3,5,6,11,14,15]
+MEASURE focus-drop-after-click: interval=300ms typed=60 reached-pane=15 lost=45
+MEASURE focus-drop-rounds: interval=500ms cumulative-reached=[7,12,17,22,26,30]
+MEASURE focus-drop-after-click: interval=500ms typed=60 reached-pane=30 lost=30
+MEASURE focus-drop-rounds: interval=900ms cumulative-reached=[10,16,20,22,23,33]
+MEASURE focus-drop-after-click: interval=900ms typed=60 reached-pane=33 lost=27
+  ✘ 実測（300・500・900ms）: 失われるキーは少数 … Expected: > 48   Received: 15 / 30 / 33
+  ✘ 無関係な pane を冷却に入れない（p1 に無害な面・p2 に落とす面） … Expected: 0   Received: 11   ← 11 件の focus_steal が送られ、p1 の面が閉じた
+  ✓ 不要な戻しが起きない: 余白 / キー一覧・分割して閉じる
+```
+
+**直した後の実測**（`MEASURE`。**失われた数**）: 本物のクリックの後に 10 キーずつ 6 回（60 キー。準備の 1 回は数えない）。
+
+| 落とす間隔 | 打った | 端末に届いた | 失われた |
+|---|---|---|---|
+| 300ms | 60 | 60 | **0** |
+| 500ms | 60 | 60 | **0** |
+| 900ms | 60 | 60 | **0** |
+| 4ms（繰り返し。4 秒間） | 50〜54 | 46〜49 | 4〜7 |
+
+（見回り 25ms・キー間隔 25ms の軽い負荷。0 を保証するものではない。再レビューの手順で、直す前は 51・46・40 が失われたのと対応する。）合否の線は、届いた割合が 80% を超えること（上の実測の 0 から余裕を見た。イベントの時機で数キーは失われうる）。
+一緒に、フォーカスの脱落が**数えられず・サーバへ知らせず**、p1 の無害な面・p2 の落とす面のどちらも**冷却に入らず、p1 の面が閉じない**こと、4ms ごとの繰り返しで**利用者への知らせが出る**こと、余白を押して外したフォーカスが**端末へ引き戻されない**こと（`BODY` のまま）、キー一覧のダイアログを開いて閉じる・pane を分割して閉じる、のあとに不要な戻しが起きず（知らせも出ない）フォーカスは利用者の側（`TEXTAREA`）にあることを確かめた。
+単体: `focusDrop.test.ts`（9 件）。ask のダイアログ・モバイルの重ね表示を閉じる筋は E2E にしていない——どちらも「フォーカスのあった要素が文書から外れた」で同じ判定（`isShown`）に入るので、単体で見る（外れた・隠れた要素は戻さない）。

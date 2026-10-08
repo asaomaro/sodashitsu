@@ -23,9 +23,15 @@ let docUnfocused = false;
 function onKeyDown(ev: Event): void {
   if ((ev as KeyboardEvent).key === "Tab") lastTabAt = lastNow();
 }
-/** 本物の（isTrusted の）ポインタ・タッチの操作（フォーカスが、利用者の操作でアプリの要素から離れたのか、を見分ける）。 */
+/** 押した先が、押すとフォーカスを受ける要素（か端末）か。 */
+const FOCUSABLE = 'a[href], button, input, select, textarea, summary, iframe, [tabindex], [contenteditable="true"], .xterm';
+let lastPointerFocusable = false;
+/** 本物の（isTrusted の）ポインタ・タッチの操作と、押した先がフォーカスを受ける要素だったか（フォーカスが body へ落ちたのが、利用者の意図か、を見分ける）。 */
 function onPointer(ev: Event): void {
-  if (ev.isTrusted) lastUserInputAt = lastNow();
+  if (!ev.isTrusted) return;
+  lastUserInputAt = lastNow();
+  const t = ev.target;
+  lastPointerFocusable = t instanceof Element && t.closest(FOCUSABLE) !== null;
 }
 function onWindowBlur(): void {
   // 枠（iframe）へフォーカスが移っても親の window の `blur` は起きる。文書がフォーカスを持たなくなった（別のウィンドウ・タブへ移った）ときだけ数える。1 拍置いて見る。
@@ -45,9 +51,15 @@ export function documentRegainedFocusWithin(ms: number): boolean {
   return lastNow() - regainedAt < ms;
 }
 /**
- * 直前（`ms` 以内）に、本物のポインタ・タッチの操作が親の文書にあったか（余白を押して、フォーカスが body へ落ちた、を見分ける）。
+ * 直前（`ms` 以内）の本物のポインタ・タッチの操作の種類: 押した先が**フォーカスを受けない要素**（余白）だったなら `"blank"`（利用者が自分でフォーカスを外した）、
+ * **フォーカスを受ける要素・端末**だったなら `"focusable"`（その直後に body へ落ちたのは、利用者の意図ではない）、無ければ `null`。
  * **キーは数えない**: 打っている最中にフォーカスを落とされるのが、まさに止めたい被害で、キーはフォーカスを body へ落とさない。
  */
+export function recentPointer(ms: number): "blank" | "focusable" | null {
+  if (lastNow() - lastUserInputAt >= ms) return null;
+  return lastPointerFocusable ? "focusable" : "blank";
+}
+/** 後方互換: 直前に本物のポインタ・タッチの操作があったか。 */
 export function userInputWithin(ms: number): boolean {
   return lastNow() - lastUserInputAt < ms;
 }
@@ -98,6 +110,7 @@ export function resetFocusOriginTracking(): void {
   origin = null;
   lastTabAt = -Infinity;
   lastUserInputAt = -Infinity;
+  lastPointerFocusable = false;
   regainedAt = -Infinity;
   docUnfocused = false;
 }

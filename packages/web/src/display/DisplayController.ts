@@ -97,6 +97,11 @@ export class DisplayController {
     this.opts.store.clear();
   }
 
+  /** 利用者への知らせ（トースト）。 */
+  toast(message: string): void {
+    this.opts.toast(message);
+  }
+
   /** `display.message` を、その面の枠を描いている部品へ渡すための登録。戻り値は登録を外す関数。 */
   onMessage(id: string, fn: (data: unknown) => void): () => void {
     let set = this.messageHandlers.get(id);
