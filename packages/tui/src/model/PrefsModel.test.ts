@@ -34,6 +34,15 @@ describe("PrefsModel（共有の設定と手元の状態）", () => {
     expect(p.colorMode).toBe("256");
   });
 
+  it("背景の透過は手元の tui-state.json の transparentBg（端末ごと）。既定は無効で、共有の設定は見ない", () => {
+    const p = new PrefsModel();
+    expect(p.transparentBg).toBe(false);
+    p.apply({ tui: { transparentBg: true } } as never, 1);
+    expect(p.transparentBg).toBe(false);
+    p.setLocal({ transparentBg: true });
+    expect(p.transparentBg).toBe(true);
+  });
+
   it("古い rev は捨てる。テーマ・並び・スクロールバックを正規化する", () => {
     const p = new PrefsModel();
     p.apply({ theme: "nord", workspaceSort: "name", agentSort: "priority", scrollback: 200 }, 5);
@@ -74,6 +83,22 @@ describe("tui-state.json", () => {
         JSON.stringify({ sidebarCols: -3, sidebarCollapsed: "yes" }),
       );
       expect(readTuiState(dir)).toEqual({});
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("tui-state.json の transparentBg（20261008-tui-transparent-bg）", () => {
+  it("true だけを採り、書いて読める。壊れた値は無効（既定）", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "tui-state-"));
+    try {
+      await writeTuiState(dir, { transparentBg: true });
+      expect(readTuiState(dir)).toEqual({ transparentBg: true });
+      for (const bad of [false, "true", 1, null]) {
+        await writeFile(join(dir, TUI_STATE_FILE), JSON.stringify({ transparentBg: bad }));
+        expect(readTuiState(dir)).toEqual({});
+      }
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

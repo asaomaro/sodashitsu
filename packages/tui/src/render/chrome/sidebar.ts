@@ -184,7 +184,7 @@ function segsOf(lines: ResolvedLine[], state: DisplayState | null, ctx: ChromeCo
  */
 export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): SidebarHit[] {
   const { theme, model, prefs } = ctx;
-  const bg = theme.ui("--soda-menu-bg");
+  const bg = theme.ground("--soda-menu-bg");
   const fg = theme.ui("--soda-menu-fg");
   const activeBg = theme.ui("--soda-menu-active-bg");
   const border = theme.ui("--soda-menu-border");
@@ -707,7 +707,7 @@ function paintSection(
   hits: SidebarHit[],
 ): void {
   const { theme } = ctx;
-  const bg = theme.ui("--soda-menu-bg");
+  const bg = theme.ground("--soda-menu-bg");
   const fg = theme.ui("--soda-menu-fg");
   const activeBg = theme.ui("--soda-menu-active-bg");
   for (let i = 0; i < height; i++) {

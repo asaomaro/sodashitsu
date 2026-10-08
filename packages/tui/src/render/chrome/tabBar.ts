@@ -99,7 +99,7 @@ export function paintHiddenBarBadge(grid: Grid, area: Rect, ctx: ChromeContext):
         ctx.connection === "open" && !ctx.alert
           ? theme.ui("--soda-fg")
           : theme.ui("--soda-warn-fg"),
-      bg: theme.ui("--soda-bg"),
+      bg: theme.ground("--soda-bg"),
       attrs: 0,
     });
   if (parts.length === 0 || area.h <= 0) return false;
@@ -117,7 +117,7 @@ export function paintHiddenBarBadge(grid: Grid, area: Rect, ctx: ChromeContext):
  */
 export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarHits {
   const { theme, model } = ctx;
-  const bg = theme.ui("--soda-bg");
+  const bg = theme.ground("--soda-bg");
   const fg = theme.ui("--soda-fg");
   const activeBg = theme.ui("--soda-menu-active-bg");
   grid.fill(rect, fg, bg);
