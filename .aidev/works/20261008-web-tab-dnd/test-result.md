@@ -27,3 +27,16 @@
 ## 目で確かめる項目（AC10）
 
 `docs/tui-parity.md`・`docs/herdr-parity.md`・`docs/verification.md` を直した（verification.md に手で確かめる項目を足した）。実機の手での確認は未実施。
+
+## レビュー指摘の修正（旗 `suppressClick` の取りこぼし）の負の対照
+
+`onBarPointerDownCapture`（根の pointerdown の capture で旗を下ろす）と、`pointercancel`・`lostpointercapture` での旗下ろしを外すと、
+回帰テスト「旗の取りこぼし: pointercancel・lostpointercapture・つかんだ tab が閉じた後に「＋」を押すと…」が落ちる。戻すと 44 件すべて通る。
+
+```
+## 旗を下ろす処理を全部外したとき
+     × 旗の取りこぼし: pointercancel・lostpointercapture・つかんだ tab が閉じた後に「＋」を押すと、新しい tab の操作が呼ばれる 11ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: cancel: expected "vi.fn()" to be called with arguments: [ 'w1' ]
+      Tests  1 failed | 43 passed (44)
+```

@@ -87,3 +87,8 @@ tab バー上のホイールは tab を切り替える（`TabBar.vue` の `onWhe
 
 - つかんだ tab の薄さは `opacity: 0.4`（design「見た目」）ではなく **`0.7`**（`MUTED_TEXT_ALPHA`）にした。`theme/uiTokens.test.ts` の「部品の CSS の透明度」の検査が、`:disabled` などの例外を除く全部品の `opacity` を 0.7 以上に求めていて、0.4 だと落ちる（文字を薄めて読めなくしない決まり）。例外を足す（テストを緩める）のではなく、決まりに合わせた。薄さだけでなく、`cursor: grabbing` と入る位置の線でも、つかんでいることは分かる。E2E・単体テストは薄さの値を見ていない（クラスだけ）。
 - 自動スクロール（T3）の本体は、T2 と同じファイル `TabBar.vue` の中で一緒に書いた（`edgeScrollDelta` を使う rAF の繰り返しと CSS）。コミットは T2（本体と CSS ごと）と T3（単体テスト）に分けた。
+
+## D17: 独立レビュー（PR1）への対応
+
+- 旗 `suppressClick` は、根の `pointerdown` の capture でどの pointerdown でも下ろす（click は必ず自分の pointerdown の後に来るので、ドラッグを離したときの click だけが旗の影響を受ける）。`pointercancel`・`lostpointercapture` の取り消しでも下ろす（その後に click は来ない）。`Esc`・`watch` での取り消しは、離したときの click を捨てるため旗を残す。
+- ペン（`pointerType: "pen"`）で横になぞると、ブラウザのパンが `pointercancel` を出してドラッグが取り消される（仕様の範囲内）。直さない。`docs/verification.md` に「ペンは未確認」と書いた。
