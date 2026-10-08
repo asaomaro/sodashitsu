@@ -268,10 +268,10 @@ const checkedRadio = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) =>
   radios(w).filter((r) => (r.element as HTMLInputElement).checked);
 const radioLabel = (r: ReturnType<typeof radios>[number]) => r.element.parentElement!.textContent!.trim();
 
-describe("SettingsDialog — 6 つの節（AC12）", () => {
-  it("見出し「通知」「テーマ」「表示」「端末」「エージェント連携」「キー」の 6 節が、この順で 1 枚に並ぶ（テーマは 20260921-theme-settings、キーは 20260921-keybinding-customization、エージェント連携は 20260923-agent-session-resume で足した）", async () => {
+describe("SettingsDialog — 7 つの節（AC12）", () => {
+  it("見出し「通知」「テーマ」「表示」「端末」「エージェント連携」「拡張」「キー」の 7 節が、この順で 1 枚に並ぶ（テーマは 20260921-theme-settings、キーは 20260921-keybinding-customization、エージェント連携は 20260923-agent-session-resume、拡張は 20261007-ext-host で足した）", async () => {
     const { wrapper } = await openDialog();
-    expect(wrapper.findAll("section h3").map((h) => h.text())).toEqual(["通知", "テーマ", "表示", "端末", "エージェント連携", "キー"]);
+    expect(wrapper.findAll("section h3").map((h) => h.text())).toEqual(["通知", "テーマ", "表示", "端末", "エージェント連携", "拡張", "キー"]);
     // 節は見出しで名前が付いている（読み上げで節の名前が分かる）。
     for (const sec of wrapper.findAll("section")) {
       const id = sec.attributes("aria-labelledby")!;
@@ -1436,7 +1436,8 @@ const HEADING_TOPS = {
   "settings-theme": 400,
   "settings-display": 800,
   "settings-terminal": 1200,
-  "settings-agent-integration": 1600,
+  "settings-agent-integration": 1550,
+  "settings-extensions": 1775,
   "settings-keys": 2000,
 };
 
@@ -1446,12 +1447,12 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
     vi.restoreAllMocks();
   });
 
-  it("<nav> に名前があり、項目は画面の節の見出しから作られる（6 つ・同じ順・同じ文言。見出しを書き換えるとメニューも変わる）", async () => {
+  it("<nav> に名前があり、項目は画面の節の見出しから作られる（7 つ・同じ順・同じ文言。見出しを書き換えるとメニューも変わる）", async () => {
     const { wrapper } = await openWithMenu(() => {
       document.getElementById("settings-theme")!.textContent = "色合い";
     });
     expect(wrapper.get("nav.settings-menu").attributes("aria-label")).toBe("設定の節");
-    expect(menuButtons(wrapper).map((b) => b.text())).toEqual(["通知", "色合い", "表示", "端末", "エージェント連携", "キー"]);
+    expect(menuButtons(wrapper).map((b) => b.text())).toEqual(["通知", "色合い", "表示", "端末", "エージェント連携", "拡張", "キー"]);
     expect(wrapper.find("nav.settings-menu").element.parentElement!.classList.contains("settings-menu-col")).toBe(true);
   });
 
@@ -1475,8 +1476,8 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
   it("今の節の項目だけ aria-current=true と tabindex=0（開いた直後は先頭）", async () => {
     const { wrapper } = await openWithMenu();
     expect(currentLabels(wrapper)).toEqual(["通知"]);
-    expect(menuButtons(wrapper).map((b) => b.attributes("tabindex"))).toEqual(["0", "-1", "-1", "-1", "-1", "-1"]);
-    expect(menuButtons(wrapper).filter((b) => b.attributes("aria-current") === undefined)).toHaveLength(5);
+    expect(menuButtons(wrapper).map((b) => b.attributes("tabindex"))).toEqual(["0", "-1", "-1", "-1", "-1", "-1", "-1"]);
+    expect(menuButtons(wrapper).filter((b) => b.attributes("aria-current") === undefined)).toHaveLength(6);
   });
 
   it("開いた直後のフォーカスは 1 つ目の switch のまま", async () => {
@@ -1586,7 +1587,7 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
     const { wrapper } = await openWithMenu(() => {
       document.getElementById("settings-terminal")!.remove();
     });
-    expect(menuButtons(wrapper).map((b) => b.text())).toEqual(["通知", "テーマ", "表示", "エージェント連携", "キー"]);
+    expect(menuButtons(wrapper).map((b) => b.text())).toEqual(["通知", "テーマ", "表示", "エージェント連携", "拡張", "キー"]);
   });
 
   it("節が 1 つも拾えなければメニューを出さない", async () => {
@@ -1633,7 +1634,7 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
 
     it("最初の節は 0、最後の節は 1992（2000 − 余白 8）へ", async () => {
       const { wrapper } = await stubbed();
-      await menuButtons(wrapper)[5]!.trigger("click");
+      await menuButtons(wrapper)[6]!.trigger("click");
       expect((wrapper.get("dialog").element as HTMLElement).scrollTop).toBe(1992);
       await menuButtons(wrapper)[0]!.trigger("click");
       expect((wrapper.get("dialog").element as HTMLElement).scrollTop).toBe(0);
@@ -1669,9 +1670,9 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
       await key(wrapper, "ArrowDown");
       expect(document.activeElement).toBe(menuButtons(wrapper)[2]!.element);
       await key(wrapper, "End");
-      expect(document.activeElement).toBe(menuButtons(wrapper)[5]!.element);
+      expect(document.activeElement).toBe(menuButtons(wrapper)[6]!.element);
       await key(wrapper, "ArrowDown");
-      expect(document.activeElement, "端で止まる").toBe(menuButtons(wrapper)[5]!.element);
+      expect(document.activeElement, "端で止まる").toBe(menuButtons(wrapper)[6]!.element);
       await key(wrapper, "Home");
       expect(document.activeElement).toBe(menuButtons(wrapper)[0]!.element);
     });
@@ -1688,16 +1689,16 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
 
     it("Tab の停止位置: フォーカスが無い間は今の節の項目だけ。メニューにフォーカスがある間は、フォーカスのある項目だけ。出たら今の節へ戻る", async () => {
       const { wrapper } = await stubbed();
-      expect(stops(wrapper)).toEqual(["0", "-1", "-1", "-1", "-1", "-1"]);
+      expect(stops(wrapper)).toEqual(["0", "-1", "-1", "-1", "-1", "-1", "-1"]);
       await focusItem(wrapper, 0);
       await key(wrapper, "ArrowDown");
       await key(wrapper, "ArrowDown");
       await key(wrapper, "ArrowDown");
-      expect(stops(wrapper)).toEqual(["-1", "-1", "-1", "0", "-1", "-1"]);
+      expect(stops(wrapper)).toEqual(["-1", "-1", "-1", "0", "-1", "-1", "-1"]);
       const out = switches(wrapper)[0]!.element as HTMLElement;
       menuButtons(wrapper)[3]!.element.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: out }));
       await wrapper.vm.$nextTick();
-      expect(stops(wrapper), "メニューの外へ出たら、今の節（通知）へ戻る").toEqual(["0", "-1", "-1", "-1", "-1", "-1"]);
+      expect(stops(wrapper), "メニューの外へ出たら、今の節（通知）へ戻る").toEqual(["0", "-1", "-1", "-1", "-1", "-1", "-1"]);
     });
 
     it("メニューにフォーカスがある間に閉じても、開き直したときの停止位置は今の節へ戻っている", async () => {
@@ -1708,7 +1709,7 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
       expect(stops(wrapper)[2]).toBe("0");
       view.closeDialog(); // focusout を伴わない閉じ方
       await wrapper.vm.$nextTick();
-      expect(stops(wrapper)).toEqual(["0", "-1", "-1", "-1", "-1", "-1"]);
+      expect(stops(wrapper)).toEqual(["0", "-1", "-1", "-1", "-1", "-1", "-1"]);
     });
 
     it("メニューの項目の間の移動では、停止位置は戻らない", async () => {
@@ -1757,15 +1758,15 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
       expect(currentLabels(wrapper)).toEqual(["表示"]);
     });
 
-    it("5 回で 6 節（末尾の節が 1 画面に収まっていても 1 つずつ進む）。端では何もしないが preventDefault はする", async () => {
+    it("6 回で 7 節（末尾の節が 1 画面に収まっていても 1 つずつ進む）。端では何もしないが preventDefault はする", async () => {
       const { wrapper } = await openWithMenu();
       stubLayout(wrapper, HEADING_TOPS, { clientHeight: 500, scrollHeight: 2000 });
-      for (let n = 0; n < 5; n++) await altKey(wrapper, "PageDown");
+      for (let n = 0; n < 6; n++) await altKey(wrapper, "PageDown");
       expect(currentLabels(wrapper)).toEqual(["キー"]);
       const ev = await altKey(wrapper, "PageDown");
       expect(ev.defaultPrevented).toBe(true);
       expect(currentLabels(wrapper)).toEqual(["キー"]);
-      for (let n = 0; n < 5; n++) await altKey(wrapper, "PageUp");
+      for (let n = 0; n < 6; n++) await altKey(wrapper, "PageUp");
       expect(currentLabels(wrapper)).toEqual(["通知"]);
       expect((await altKey(wrapper, "PageUp")).defaultPrevented).toBe(true);
       expect(currentLabels(wrapper)).toEqual(["通知"]);
