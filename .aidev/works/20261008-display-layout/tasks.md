@@ -243,7 +243,7 @@
       対象: `packages/e2e/src/specs/display-layout-dock.spec.ts`（新規）、`packages/e2e/src/support/displayLayout.ts` / 根拠: 規約 `e2e-observe-browser`
       依存: T15, T16, T17
       AC: AC7, AC10, AC11, AC12, AC13, AC14, AC15, AC16, AC21, AC22, AC24, AC25, AC-I2, AC-I3, AC-I5
-- [ ] T19: 文書（PR-B）: `docs/display.md`（置き場所・並びの図・タブ・最小と自動のたたみ・各側のつまみ・D&D とメニュー・設定）・「置き場所を変えると、移った先で開いて出る」・`docs/sodactl.md`（`--dock` の 4 つの値が効く）・`docs/verification.md`
+- [x] T19: 文書（PR-B）: `docs/display.md`（置き場所・並びの図・タブ・最小と自動のたたみ・各側のつまみ・D&D とメニュー・設定）・「置き場所を変えると、移った先で開いて出る」・`docs/sodactl.md`（`--dock` の 4 つの値が効く）・`docs/verification.md`
       対象: 上のファイル
       依存: T18
       AC: AC27
