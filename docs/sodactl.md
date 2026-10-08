@@ -702,7 +702,7 @@ skill は、最初に pane の中にいるか（`SODA_PANE_ID` があるか）�
 | `SODA_PANE_SOCKET` | ログイン不要の受け口（状態ディレクトリの `pane.sock`）のパス（Linux・macOS。Windows では入れない）。値は socket のパスだけで、秘密は含まない。下の「ログイン不要の受け口（pane.sock）」 |
 
 workspace・tab の ID は環境変数に**入れない**（herdr の `HERDR_WORKSPACE_ID`・`HERDR_TAB_ID` に当たるものは無い）。pane は別の tab・workspace へ移せ
-（pane の ID は変わらない）、環境変数は起動した時の値のまま変わらないので、移された後に古い workspace を操作させてしまうため。今の値は
+（pane の ID は変わらない。別の workspace へは、同じ worktree の workspace の間だけ。20261008-web-tab-dnd）、環境変数は起動した時の値のまま変わらないので、移された後に古い workspace を操作させてしまうため。今の値は
 `sodactl pane current`（下）で聞く。
 
 サーバを起動した環境の `SODACTL_URL`・`SODACTL_TOKEN` は pane に**渡さない**（別のサーバを指していることがあり、token は秘密なので pane の全プロセスと
@@ -935,5 +935,6 @@ herdr の agent skill（`skills/herdr/SKILL.md`・`herdr --skill`）と pane の
   - 出力は camelCase の `{"pane": {...}}`（herdr の `.result.pane` の snake_case の `PaneInfo`）。
   - workspace・tab の ID の環境変数（`HERDR_WORKSPACE_ID`・`HERDR_TAB_ID`）は無い。`pane current` で今の値を聞く（herdr の値は起動時のまま `pane move` で古くなる）。
     pane を移しても pane の ID は変わらないので、`SODA_PANE_ID` は古くならない（herdr は別の workspace への移動で pane の ID が変わり、古い ID を別名として残す）。
+    pane を別の workspace へ移す RPC（`pane.move_to_tab`・`pane.move_to_new_tab`）は、移動元と移動先が同じ worktree（`worktreeKey` が同じ）のときだけ通り、別の worktree へは何も動かさず `{ok: false, reason: "different_worktree"}` を返す（管理外・判定前の workspace どうしは、開いた場所が同じときだけ。同じ workspace の中は今までどおり）。作った直後で判定が入る前に断られることがあるので、続けて移すスクリプトは `reason` がある間、待って試し直す。
 - 自分の pane への操作を断る `self_target` は本製品だけ（herdr は断らない）。
 - サーバを起動した環境の `SODACTL_URL`・`SODACTL_TOKEN` を pane に渡さない（herdr は管理する変数を上書きするが、token に当たるものは無い）。

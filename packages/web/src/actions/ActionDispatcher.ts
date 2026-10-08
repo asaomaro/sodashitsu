@@ -9,7 +9,7 @@ import type { InputHold } from "@sodashitsu/client-core";
 import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
-import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, isRepresentative, isUngroupedNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
+import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, paneMoveBlock, paneMoveBlockMessage, isRepresentative, isUngroupedNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
@@ -946,7 +946,11 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     void this.conn
       .request("pane.move_to_tab", { paneId, targetTabId })
       .then((r) => {
-        if (!r.ok) return;
+        if (!r.ok) {
+          // サーバが断った（別の worktree の workspace。20261008-web-tab-dnd）。理由の無い ok:false は今までどおり黙る。
+          if (r.reason) this.view.toast(paneMoveBlockMessage(r.reason));
+          return;
+        }
         if (this.view.workspaceId !== originWorkspaceId || this.view.tabId !== originTabId) return;
         const targetTab = this.session.tabs.get(targetTabId);
         // 移動先 tab がまだ同期されていなければ何もしない（`movePaneToNewTab` の `!r.tab` と対称。
@@ -966,12 +970,29 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
    * （応答を待つ間に view が動いていたら追わないことも含めて同じ。review round1 の should 指摘）。
    */
   movePaneToNewTab(paneId: string, targetWorkspaceId: string): void {
+    // 別の worktree の workspace へは送らずに知らせる（20261008-web-tab-dnd）。移動元・移動先がストアに無ければ確認を飛ばして送る
+    // （古いサーバの workspace〔worktreeKey 無し〕は lenient で断らず、サーバに任せる）。
+    const pane = this.session.panes.get(paneId);
+    const sourceTab = pane ? this.session.tabs.get(pane.tabId) : undefined;
+    const source = sourceTab ? this.session.workspaces.get(sourceTab.workspaceId) : undefined;
+    const target = this.session.workspaces.get(targetWorkspaceId);
+    if (source && target) {
+      const block = paneMoveBlock(source, target, { lenient: true });
+      if (block) {
+        this.view.toast(paneMoveBlockMessage(block));
+        return;
+      }
+    }
     const originWorkspaceId = this.view.workspaceId;
     const originTabId = this.view.tabId;
     void this.conn
       .request("pane.move_to_new_tab", { paneId, targetWorkspaceId })
       .then((r) => {
-        if (!r.ok || !r.tab) return;
+        if (!r.ok) {
+          if (r.reason) this.view.toast(paneMoveBlockMessage(r.reason));
+          return;
+        }
+        if (!r.tab) return;
         if (this.view.workspaceId !== originWorkspaceId || this.view.tabId !== originTabId) return;
         this.view.setView(targetWorkspaceId, r.tab.id);
         this.view.focusPane(paneId);

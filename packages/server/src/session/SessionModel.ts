@@ -9,6 +9,7 @@ import type {
   ItemRef,
   ItemTarget,
   Pane,
+  PaneMoveBlock,
   PaneId,
   PaneStatus,
   RightClickTarget,
@@ -35,6 +36,7 @@ import {
   layoutFromLegacy,
   moveItem,
   moveItemBy,
+  paneMoveBlock,
   removeItem,
   removeItemFromGroup,
   repairLayout,
@@ -911,6 +913,20 @@ export class SessionModel {
   }
 
   /**
+   * pane を targetWorkspaceId の workspace へ移すのを断る理由（20261008-web-tab-dnd）。移せるなら null。
+   * pane・移動元・移動先が実在しなければ null（投げない。実在しないときの扱いは呼び出し側の今の `ok: false` に任せる）。
+   * client-core の `paneMoveBlock` を `lenient` なしで呼ぶので、画面と同じ情報（`git.worktreeKey`・`cwd`）で決まる。
+   */
+  paneMoveBlockFor(paneId: PaneId, targetWorkspaceId: WorkspaceId): PaneMoveBlock | null {
+    const pane = this.panes.get(paneId);
+    const sourceTab = pane ? this.tabs.get(pane.tabId) : undefined;
+    const source = sourceTab ? this.workspaces.get(sourceTab.workspaceId) : undefined;
+    const target = this.workspaces.get(targetWorkspaceId);
+    if (!source || !target) return null;
+    return paneMoveBlock(source, target);
+  }
+
+  /**
    * 既存の pane（`paneId`）を、別の tab（`targetTabId`）へ移す（20260924-pane-move-cross-tab。
    * design「振る舞いの詳細」）。対象 tab の focus 中の pane の右へ split で加わる。新しい pane は
    * 作らない。移動元の tab が空になったら `closeEmptyTabShell` で自動的に閉じる。
@@ -920,6 +936,8 @@ export class SessionModel {
     if (pane.tabId === targetTabId) return false; // 自分自身の tab（AC9）
     const targetTab = this.tabs.get(targetTabId); // 未検証のドロップ先。requireTab ではなく .get()
     if (!targetTab) return false;
+    // 別の worktree の workspace へは移さない（20261008-web-tab-dnd）。書き換えの前に断る。
+    if (this.paneMoveBlockFor(paneId, targetTab.workspaceId) !== null) return false;
     const sourceTab = this.requireTab(pane.tabId);
 
     const withoutPane = Layout.remove(sourceTab.layout, paneId);
@@ -950,6 +968,8 @@ export class SessionModel {
     const pane = this.requirePane(paneId);
     const ws = this.workspaces.get(targetWorkspaceId); // 未検証のドロップ先
     if (!ws) return null;
+    // 別の worktree の workspace へは移さない（20261008-web-tab-dnd）。書き換えの前に断る。
+    if (this.paneMoveBlockFor(paneId, targetWorkspaceId) !== null) return null;
     const sourceTab = this.requireTab(pane.tabId);
 
     const withoutPane = Layout.remove(sourceTab.layout, paneId);

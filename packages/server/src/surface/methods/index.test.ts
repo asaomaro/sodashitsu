@@ -737,3 +737,59 @@ function stubAgentIntegrations(): AgentIntegrationService {
     setAutoResume: () => Promise.reject(new Error("not used in this test")),
   };
 }
+
+// 20261008-web-tab-dnd（別の worktree の workspace への pane の移動を断る。T8）。
+describe("registerAllMethods — pane.move_to_tab / pane.move_to_new_tab の範囲", () => {
+  let ctx: ReturnType<typeof makeContext>;
+  let c: { clientId: string; sink: ClientSink };
+
+  const judged = (worktreeKey: string, isLinkedWorktree = false) =>
+    ({ kind: "git", git: { branch: "b", ahead: 0, behind: 0, repoKey: "/r/.git", isLinkedWorktree, worktreeKey } }) as const;
+
+  beforeEach(() => {
+    ctx = makeContext();
+    const clientId = ctx.clients.register();
+    c = { clientId, sink: fakeSink(clientId) };
+  });
+
+  async function twoWorkspaces(keyB: string, linkedB = false) {
+    const a = await ctx.session.createWorkspace("/r", "a");
+    await ctx.session.splitPane(a.pane.id, "right", undefined); // 移動元の tab を空にしない
+    const b = await ctx.session.createWorkspace("/r", "b");
+    ctx.session.updateWorkspaceGit(a.workspace.id, judged("/r/.git"));
+    ctx.session.updateWorkspaceGit(b.workspace.id, judged(keyB, linkedB));
+    return { a, b };
+  }
+
+  it("別の worktree: どちらも { ok: false, reason: 'different_worktree' } で、何も動かない", async () => {
+    const { a, b } = await twoWorkspaces("/r/.git/worktrees/wt", true);
+    const before = JSON.stringify(ctx.session.snapshot());
+    expect(await ctx.surface.invoke(c, "pane.move_to_tab", { paneId: a.pane.id, targetTabId: b.tab.id })).toEqual({
+      ok: true,
+      result: { ok: false, reason: "different_worktree" },
+    });
+    expect(await ctx.surface.invoke(c, "pane.move_to_new_tab", { paneId: a.pane.id, targetWorkspaceId: b.workspace.id })).toEqual({
+      ok: true,
+      result: { ok: false, reason: "different_worktree" },
+    });
+    expect(JSON.stringify(ctx.session.snapshot())).toBe(before);
+  });
+
+  it("同じ worktree: { ok: true }（move_to_new_tab は tab 付き）", async () => {
+    const { a, b } = await twoWorkspaces("/r/.git");
+    const r1 = await ctx.surface.invoke(c, "pane.move_to_tab", { paneId: a.pane.id, targetTabId: b.tab.id });
+    expect(r1).toEqual({ ok: true, result: { ok: true } });
+    const { a: a2, b: b2 } = await twoWorkspaces("/r/.git");
+    const r2 = await ctx.surface.invoke(c, "pane.move_to_new_tab", { paneId: a2.pane.id, targetWorkspaceId: b2.workspace.id });
+    if (!r2.ok) throw new Error("unreachable");
+    expect(r2.result).toMatchObject({ ok: true, tab: { workspaceId: b2.workspace.id } });
+    expect((r2.result as { reason?: string }).reason).toBeUndefined();
+  });
+
+  it("自分自身の tab・存在しない tab・存在しない workspace は reason の無い { ok: false }（今までどおり）", async () => {
+    const { a } = await twoWorkspaces("/r/.git");
+    expect(await ctx.surface.invoke(c, "pane.move_to_tab", { paneId: a.pane.id, targetTabId: a.tab.id })).toEqual({ ok: true, result: { ok: false } });
+    expect(await ctx.surface.invoke(c, "pane.move_to_tab", { paneId: a.pane.id, targetTabId: "nope" })).toEqual({ ok: true, result: { ok: false } });
+    expect(await ctx.surface.invoke(c, "pane.move_to_new_tab", { paneId: a.pane.id, targetWorkspaceId: "nope" })).toEqual({ ok: true, result: { ok: false } });
+  });
+});
