@@ -133,7 +133,7 @@
 
 ## D18: 4 回目の点検で残った点（実装の前に、該当のタスクで取り込む。must ではない）
 
-実装のセッションは、下を、該当のタスクの指示の一部として扱う。監督のセッションが `tasks.md`・`design.md` の本文へ書き写すなら、その差分に、もう 1 回の独立点検を掛ける。
+**（2026-10-08 追記: 下の 1〜7 は、main に合わせ直したときに、`design.md`・`tasks.md`・`requirements.md` の本文へ取り込んだ。D20 の 7。以後は、本文が正で、この節は経緯の記録。）**
 
 1. **`setFaceDock(info, dock, rect?)` に揃える**（T14・T16・T22・T24・メニュー）: 中身は「`writeFace(info, { dock, collapsed: false, rect })` と、`names` への書き込み」。メニューの「浮いた窓にする」・D&D の中央も、これを 1 回呼ぶ（`setFaceDock` と `setFaceRect` を 2 回に分けない。`writeFace` を直に呼ぶと、`names` を書き忘れる）。
 2. **帯の「上に置く／下に置く」も、移った先で開く**（T5・T8）: `setFaceEdge` は「`writeFace(info, { edge, collapsed: false })` と、`names` への書き込み」。たたんだ帯を、面の一覧のメニューから移すと、開いて出る（要件の機能要件 10 の最後の項「置き場所を変えると、開いて出る」は、パネルと帯の全般の決まり）。

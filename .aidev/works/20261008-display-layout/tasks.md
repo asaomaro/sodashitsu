@@ -1,10 +1,9 @@
 # タスク: 表示の面の配置と状態（ブラウザ版）— たたみの記憶・帯の上下・帯の行のボタン・パネルの上下左右と D&D・浮いた窓
 
 実装するのは、この文書を読む別のエージェント。**読む順**: この `tasks.md` → `design.md`（型・割り付けの決まり・部品の木・フォーカスの行き先の表・重なりの値・「PR3 の守りとの関係」の表は、そこが正）→ `requirements.md`（AC の本文）→ `research.md`（今の作りの F・守りの G・未確認の U）。
-`decisions.md` の D1 が利用者の決定、D3 が「枠を動かさない」の理由、D15 が「押してもフォーカスを取らない部品」の理由、D5〜D13 が、勧める案で書いた点（実装の前に、利用者の答えで変わりうる。変わったら、監督のセッションがこの文書を直す）。
-**D18 は、最後の独立点検（4 回目。must なし）で残った細かい点**。該当のタスク（T5・T7・T8・T14・T16・T19・T22・T24〜T27）の指示の一部として、取り込むこと。
+`decisions.md` の D1・D19 が利用者の決定（**D5〜D13 は、すべて確定**。D7 の「残る道」は、受け入れて docs に書く）、D3 が「枠を動かさない」の理由、D15 が「押してもフォーカスを取らない部品」の理由、**D20 が、PR3 がマージされた main に合わせ直した点**（フォーカスを `body` に落とさない、が、いちばん大事）。D18 は、本文へ取り込み済み（経緯の記録）。
 
-**前提**: PR3（`feature/ext-display-script`。スクリプトが動く形式）が main にマージされていること。マージ前に始めない（同じ部品 `PanePanel.vue`・`PaneBands.vue`・`PaneFrame.vue` を変えるため）。行番号は、PR3 の後の木のもの（`research.md` の冒頭）。
+**前提**: PR3（スクリプトが動く形式。#99）が入った main（`1ff0418`）。行番号は、その main のもの。
 **範囲の外（差分を出さない）**: 端末版の面の描画（`20261008-display-tui`）・`mobile/MobileShell.vue`・`DisplayFrame.vue`・`DisplayScriptMark.vue`・`display/engageEntry.ts`・`focusGuard.ts`・`focusOrigin.ts`・`focusDrop.ts`・`frameMessages.ts`・`frameRegistry.ts`・`packages/web/public/display-view/*`・`20261007-soda-extensions`／`20261007-ext-host` の文書。
 `mobile/MobileDisplaySheet.vue` は、枠の `:key` の行と、その import の行だけ。
 
@@ -43,7 +42,7 @@
    負の対照（T12 c・T20 a・T27 c）は、「1 つの入れ物・1 つの `v-for` で、順を入れ替える」版で、**変えていない面の枠が動く**ことを起こす。そのブラウザで `load` が増えなければ（読み込み直さない）、「`load` が 1」の項目は落ちないので、その事実を `test-result.md` に書き、「同じ要素のまま」の項目で判定する。
 2. **U3・U4（iframe の上の `elementFromPoint`・ポインタの捕捉）** → T18（D&D）・T25（窓の移動）。だめなら、ドラッグの間、面の枠の上に透明な覆いを置く（`soda-display-dragging` のときだけ）。
 3. **`div.pane-frame-center` を足すと、既存の E2E・単体が、端末の祖先の形に依っていないか** → T7 の最初に、`.pane-frame-row > .pane-frame-main` を見ているセレクタ（`grep -rn "pane-frame-main\\|pane-frame-row" packages`）を確かめる。依っていれば、セレクタを直す（端末の作り直しは起こさない）。
-4. **メニューを閉じた後のフォーカス** → T8。`ContextMenu` は、開く前の `activeElement` を覚えて、閉じるときに `focus()` する（`ContextMenu.vue:41-46`・`:216-217`）。端末・見出しの［⋮］・トレイから開いたときは、それで足りる。
+4. **メニューを閉じた後のフォーカス** → T8。`ContextMenu` は、開く前の `activeElement` を覚えて、閉じるときに `focus()` する（`ContextMenu.vue:42-47`・`:216-217`）。端末・見出しの［⋮］・トレイから開いたときは、それで足りる。
    **枠（iframe）にフォーカスがあるときに開く場合は、開く前に端末へ移す**（design「たたむ・開く」）。項目の処理は、`ContextMenu` がフォーカスを戻した後に `withDisplayChange` を呼ぶ。
 5. **押してもフォーカスを取らない部品・覆いと、PR3 のフォーカスの番**（`decisions.md` D15）→ T7 の `installKeepFocusRelease`。**`window` の `pointerdown` の capture で登録する**（`DisplayFrame` の `document` の capture の聞き手より、必ず先に走らせる。後に走ると、`DisplayFrame` が先に操作を終えて、包みの属性が `"0"` になり、働かない。design「押してもフォーカスを取らない部品と、操作中の枠」）。
    単体テスト（`dispatchEvent`）は、聞き手の間で描き直しが流れないので、順の違いを見分けられない。**T10 (7)(e) の E2E（本物の押下）で、`focus_steal` が送られないことを見る**。3 回目の独立点検が、イベントの順を追って「先に走れば成り立つ」と確かめた（動かしては、まだ確かめていない）。
@@ -57,11 +56,15 @@
 - **端末の大きさ（`client.view`）を送りすぎない**。つまみのドラッグの間・浮いた窓の操作では、葉（端末）の箱を変えない。
 - **たたみは、pane 単位から面単位に変わる**（今は、pane のパネルを全部まとめてたたむ。新しい作りは、選んでいる 1 枚だけ）。たたんだときの幅 24px の見出し（`data-pane-panel-unfold`）は無くなる。これに依る既存のテストは、**弱めない形で**直す（T10 (9) と T7 の「対象:」に一覧）:
   `display-flows.spec.ts:63-81`（2 枚出して 1 枚をたたみ、列数が増えるのを待っている → 2 枚ともたたんで列数が戻る・トレイにボタン 2 つ）・`:267-268`（自動のたたみで `[data-pane-panel-unfold]` が無効・幅 24 → トレイの押せないボタン・`[data-pane-panel]` が 0 件）・
-  `display-script-nav.spec.ts:76-78`（fold → unfold → ［たたむ］→ トレイのボタン）・`PanePanel.test.ts:44-49`・`:82`・`:109`・`ActionDispatcher.test.ts:2927-2933`。
-- **見出しの余白を押す既存の E2E**: `display-script-engage.spec.ts:94-112` は、`.pane-panel-head` の箱の右端から 70px を押して、操作が解けることを見ている。見出しは `DisplayPanelHead` へ移り、［⋮］が増えるので、同じ座標がボタンに当たりうる。**`.pane-panel-head` のクラスは、見出しの根に残す**。この箇所は、押す先を `[data-display-grip]` に替える（操作が解けて、端末にフォーカス、を見る。弱めない）。
+  `display-script-nav.spec.ts:76-78`（fold → unfold → ［たたむ］→ トレイのボタン）・`PanePanel.test.ts:44-50`・`:82-83`・`:109-110`（たたみ）と `:126-158`（`panelWidths`・`setPanelWidth`）・`store/display.test.ts:57`・`:83-102`（古い名前のテスト。新しい名前へ移す）・`ActionDispatcher.test.ts:3012-3018`。
+- **見出しの余白を押す既存の E2E**: `display-script-engage.spec.ts:94-111` は、`.pane-panel-head` の箱の右端から 70px を押して、操作が解けることを見ている。見出しは `DisplayPanelHead` へ移り、［⋮］が増えるので、同じ座標がボタンに当たりうる。**`.pane-panel-head` のクラスは、見出しの根に残す**。この箇所は、押す先を `[data-display-grip]` に替える（操作が解けて、端末にフォーカス、を見る。弱めない）。
   PR3 の元の道（フォーカスを受けず、`data-display-keepfocus` でもない場所を押すと、操作が解ける）を見る項目も 1 つ残す（例: pane の枠の余白・隣の pane の端末でない余白）。
+- `display-script-review.spec.ts:358` は、`"[data-pane-panel] .pane-panel-head"` の箱と、知らせの箱が重ならないことを見ている（PR3 の「知らせが見出しに重ならない」）。`.pane-panel-head` を見出しの根に残し、`[data-pane-panel]` の子孫のままにすれば通る。**`pickToastSlot` は、右のパネルと上の帯だけのとき、今の右下と同じ場所を返すこと**（この E2E が、そのまま通る）。
+- **PR3 のフォーカスの E2E を、各 PR の退行の確認に入れる**（T10 (9)・T18 (10)・T25 (9)）: `display-script-noreturn.spec.ts`（戻しすぎの確認。既存の操作のフォーカスが、端末へ引き戻されない）・`display-script-drop.spec.ts`（フォーカスの脱落の戻しと遮断器）・`display-script-noreturn-mobile.spec.ts`。**この 3 本は `--workers=1` で、単独で流す**。
+  この作業で足す操作（トレイ・面のメニュー・`prefix+shift+i`・見出しのボタン・つまみ・D&D・浮いた窓の移動）も、「落とす面を載せたまま、操作のフォーカスが、端末へ引き戻されない」を、新しい spec に 1 項目ずつ足す（`display-script-noreturn.spec.ts` の作り〔面 2 通り: 無害な面と、300ms ごとに落とす面〕に倣う）。
+- **フォーカスを `body` に落とさない**（`decisions.md` D20 の 1）。main の PR3 は、スクリプトの枠が載っている間、`body` に落ちたフォーカスを、**理由を問わず**戻して数える（3 秒に 15 回で、その画面のスクリプトの枠を全部止める。「消えた要素からの脱落は数えない」という免除は、もう無い）。フォーカスのある部品を消す・移す前に、必ず、同期で端末へ移す（`withDisplayChange`）。
 - 既定（設定を変えない・指定なし）では、今までと同じ場所・同じ印で出ること。**今の印は、同じ名前・同じ意味で残す**: `data-pane-panel`（根）とその `data-display-engaged`・`data-pane-panel-label`・`-fold`・`-close`・`-tab`・`-title`・`-engaged-note`・`-ring`・`-resize`・`data-pane-bands`・`data-pane-band`・`data-pane-band-mark`・`-close`・`data-pane-bands-more`・`data-pane-frame-main`・`data-pane-frame-guide`（helper `support/displayScript.ts:9-12`・`displayBrowser.ts:13-14` が使う）。
-- 件数を固定したテストは、操作 `display_menu` で 1 増える: `bindings.test.ts:45`（62）・`:54`（`pane` の群れ 30）・`keymap.test.ts:78`・`:83`（50）・`KeySettings.test.ts:77`・`:822`・`:846`（70）・`TuiDispatcher.test.ts:207`・`:213`（62）。
+- 件数を固定したテストは、操作 `display_menu` で 1 増える: `bindings.test.ts:45`・`:46`（62）・`:54`（`pane` の群れ 30）・`keymap.test.ts:78`・`:83`（50）・`:390`（50）・`KeySettings.test.ts:77`・`:822`・`:846`（70）・`TuiDispatcher.test.ts:207`・`:213`（62）。
 - ログ・`console` に、面の中身・題を書かない（今の決まり）。
 
 ## テスト方針
@@ -76,7 +79,7 @@
 - **E2E（Playwright。実ブラウザ）**: 判定はブラウザの側（DOM・箱・`document.elementFromPoint`・`document.activeElement`・ブラウザが送った `client.view`〔`watchClientViews`〕・`display.*`〔`watchSentDisplay`〕）。`.aidev/conventions/e2e-observe-browser.md`。
   面を出すのは `support/display.ts` の `runDisplay`（pane の中の `sodactl` を模す）。固定時間の待ちだけを根拠にしない。
 - **負の対照**（`.aidev/conventions/regression-negative-control.md`。test 工程。T12・T20・T27）: 対策を外した版をビルドし直して、該当の E2E・単体が落ちることを確かめ、生の出力を `test-result.md` に貼る。落ちなければ、テストを書き直すか、理由を記録して別の確かめ方に替える。確かめた後、戻して `diff` で一致を見る。
-- **既存のテスト**: `display-*.spec.ts` の 15 本（PR-B・PR-C では、先の PR の `display-layout-*.spec.ts` も）と、`PanePanel.test.ts`・`PaneFrame.test.ts`・`DisplayScriptMark.test.ts`・`DisplayController.test.ts`・`store/display.test.ts`・`displayLayout.test.ts` が通ること（「リスク」に挙げた箇所だけ直す。弱めない）。
+- **既存のテスト**: `display-*.spec.ts` の 18 本（PR-B・PR-C では、先の PR の `display-layout-*.spec.ts` も）と、`PanePanel.test.ts`・`PaneFrame.test.ts`・`DisplayScriptMark.test.ts`・`DisplayController.test.ts`・`store/display.test.ts`・`displayLayout.test.ts` が通ること（「リスク」に挙げた箇所だけ直す。弱めない）。
 
 ## タスク
 
@@ -88,7 +91,7 @@
       `messages.ts` の `displaySetFields` に 3 項目（`/ws` と受け口の両方に効く。受け口は `strictObject` のまま）。`DISPLAY_FEATURES` に `layout`（サーバの `features()` は、この定数を返すので、ここで入る）、`DISPLAY_RENDER_FEATURES` に `collapse`・`dock`・`float`、`DisplayRenderers` に同じ 3 つ
       （**型に必須の項目を足すので、サーバの `renderers()` の初めの値〔`DisplayService.ts:489`〕に `collapse: 0, dock: 0, float: 0` を、このタスクで足す**。数える処理は T2）。
       `SharedPrefs` に `displayPanelInitial`・`displayPanelDock`・`displayBandEdge`。`DEVICE_LOCAL_PREF_KEYS` に `displayLayout`。**位置・大きさの項目は足さない**。単体テスト（「テスト方針」の protocol）。既存のテストがそのまま通る
-      対象: `packages/protocol/src/display.ts`・`display.test.ts`、`packages/protocol/src/messages.ts:497-505`（`displaySetFields`）・`:753-801`（`SharedPrefs`）・`:810-819`、`packages/protocol/src/messages.test.ts`・`paneSocket.test.ts`、`packages/server/src/display/DisplayService.ts:489`、`packages/server/src/persist/PrefsStore.ts:49`（注釈の列挙） / 根拠: design「プロトコル」、research F12〜F14
+      対象: `packages/protocol/src/display.ts`・`display.test.ts`、`packages/protocol/src/messages.ts:504-512`（`displaySetFields`）・`:760-809`（`SharedPrefs`）・`:819-827`（`DEVICE_LOCAL_PREF_KEYS`）、`packages/protocol/src/messages.test.ts`・`paneSocket.test.ts`、`packages/server/src/display/DisplayService.ts:489`、`packages/server/src/persist/PrefsStore.ts:49`（注釈の列挙） / 根拠: design「プロトコル」、research F12〜F14
       依存: なし
       AC: AC7, AC8, AC23
       点検: あり
@@ -108,11 +111,12 @@
 - [ ] T4: 設定 3 つ（共有の設定）: `loadDisplayPanelInitial`・`loadDisplayPanelDock`・`loadDisplayBandEdge`（知らない値は既定）。`store/settings.ts` に ref と setter（`writePrefs`）と `storage` の追従、`store/prefsApply.ts`、`ActionDispatcher.reloadConfig`。設定の画面の節「端末」（`displayScriptEnabled` の上）に、
       「表示のパネルの初めの状態」（開く／たたむ）と「表示の帯の既定の場所」（上／下）を `fieldset` ＋ radio で（**「既定の置き場所」は、PR-A では画面に出さない**。値の読みと ref は入れておく。T17 で出す）。
       端末版の設定の画面の節「表示」（`displaySection`。`sections.ts:368`）に、**3 項目とも**、`BROWSER_ONLY` の注記つきで出す（端末版は、値を表示・変更できるだけ。効くのはブラウザ版）。単体テスト
-      対象: `packages/client-core/src/prefs/load.ts:89` 付近、`packages/web/src/store/settings.ts:163`・`:313-314` 付近、`store/prefsApply.ts:56` 付近、`actions/ActionDispatcher.ts:1518` 付近、`components/SettingsDialog.vue:1242` の前、`packages/tui/src/settings/sections.ts:368` の節（`BROWSER_ONLY` の先例は :404・:413）・`packages/tui/src/model/PrefsModel.ts`（読み）、各テスト / 根拠: design「設定」、research F11
+      対象: `packages/client-core/src/prefs/load.ts:89` 付近、`packages/web/src/store/settings.ts:163`・`:312-315`、`store/prefsApply.ts:56` 付近、`actions/ActionDispatcher.ts:1539`（`reloadConfig` の中）、`components/SettingsDialog.vue:1242` の前、`packages/tui/src/settings/sections.ts:368` の節（`BROWSER_ONLY` の先例は :404・:413）・`packages/tui/src/model/PrefsModel.ts`（3 項目を読む getter を足す。いまは `display` の項目が 1 つも無い。端末版の設定の画面には `displayScriptEnabled` の行も無いので、3 項目は節「表示」の末尾に足す）、各テスト / 根拠: design「設定」、research F11
       依存: T1
       AC: AC2, AC4, AC16
 - [ ] T5: 記憶と導出: `display/displayPrefs.ts`（`FacePref`・`DisplayLayoutPrefs`・`loadDisplayLayout`〔項目の欠けた記憶は鍵ごと捨てる〕・鍵を作る関数・上限と「末尾へ移す」・pane の掃除・`DISPLAY_DOCK_CAPS`〔PR-A は `["right"]`〕・`effectiveDock`〔`caps` つき〕・`effectiveEdge`・`effectiveCollapsed(info, prefs, settings, dock)`〔`dock` は `caps` で丸めた後の置き場所。記憶が無く、それが `float` なら、たたむ〕・`hasFacePref`・右の大きさの `displayPanelWidths` からの引き継ぎ）。
       `store/display.ts` に `layoutPrefs`・`writeFace`（**その時点の導出した値に重ねて、全項目を書く。置き場所は、`caps` で丸める前の値。ただし、それが `float` で、画面が `float` を出せないときは、丸めた後の値**。開いた浮いた窓に `rect` が無ければ、初めの矩形を一緒に書く〔PR-C。T22〕）・`setFaceCollapsed`・`setFaceDock`・`setFaceEdge`・`setFaceRect`・`setSideSize`・`clearSideSize`・`resetFace`・`pruneLayout`・`activeBySide`・`lastFace`・`layoutRev`・`layoutByPane`（割り付けの結果の写し。書くのは T7 の `PaneFrame`）。
+      **`setFaceDock(info, dock, rect?)` は「`writeFace(info, { dock, collapsed: false, rect })` と `names` への書き込み」、`setFaceEdge(info, edge)` は「`writeFace(info, { edge, collapsed: false })` と `names` への書き込み」**（置き場所を変えると、移った先で開く）。部品・メニュー・D&D は、`writeFace` を直に呼ばない。
       **今の `collapsed`・`setCollapsed`・`panelWidths`・`setPanelWidth`・`clearPanelWidth`・`pruneWidths` は、このタスクでは触らずに残す**（pane 単位の古い意味のまま。T7・T8 で呼び出しを新しいものへ替えた時点で、消す）。`activePanel`・`activePanelOf`・`setActivePanel` は、モバイルのために残す（消さない）。
       `DisplayController.onOpened` の掃除に `pruneLayout` を足す。単体テスト（「テスト方針」の `displayPrefs.ts`。**design「プログラムの指定と、利用者の記憶」の表の全行**と、「帯を移しただけの面は、後から `collapsed` の指定でたたまれない」「`caps` が `["right"]` の画面で、`dock: "bottom"` の指定の面をたたむと、記憶の `dock` は `bottom`」「記憶が無く、丸めた後の置き場所が `float` の面は、たたんで始まる（`caps` に `float` が無い画面では、設定と指定どおり）」「`caps` に `float` が無い画面で、`dock: "float"` の指定の面をたたむと、記憶の `dock` は `right`」）
       対象: `packages/web/src/display/displayPrefs.ts`（新規）・`.test.ts`（新規）、`packages/web/src/store/display.ts`・`display.test.ts`、`packages/web/src/display/DisplayController.ts:79-80` / 根拠: design「記憶」、research F9・F10
@@ -121,7 +125,7 @@
       点検: あり
 - [ ] T6: 割り付けの関数（帯・トレイ・右のパネル）: `display/paneDisplayLayout.ts` に `LayoutInput`・`LayoutResult`・`TrayButton`・定数・`resolvePaneDisplays`。**入出力の形は design の最後の形**で、中の計算は、手順 1（帯）・2（トレイ。やり直しを含む）・4（横。この時点では右だけ）・5（端末の領域）。手順 3・6 は、該当の面が無いものとして空を返す（T13・T21 で足す）。
       **`displayLayout.ts` は残し**、その `panelWidthRange`・`panelWidth`・`visibleBands` と定数を import して使う（`displayLayout.test.ts` と、モバイルの `PaneBands` の道が、今のまま）。**右のパネルだけ・帯が上だけ・たたみ無しのとき、今と同じ大きさになる**ことを単体テストで見る。`display/framePage.ts` に `placedFrameKey`。単体テスト（「テスト方針」の `paneDisplayLayout.ts` のうち、この範囲）
-      対象: `packages/web/src/display/paneDisplayLayout.ts`（新規）・`.test.ts`（新規）、`packages/web/src/display/framePage.ts:45-49` の後・`framePage` のテスト / 根拠: design「割り付け」
+      対象: `packages/web/src/display/paneDisplayLayout.ts`（新規）・`.test.ts`（新規）、`packages/web/src/display/framePage.ts:49-51`（`frameKey`）の後・`framePage` のテスト / 根拠: design「割り付け」
       依存: T5
       AC: AC3, AC4, AC5, AC13
       点検: あり
@@ -133,23 +137,23 @@
       (3) `PanePanel.vue`: props を `paneId`・`side`・`dock`（割り付けの結果）にし、**たたんだときの幅 24px の見出しを消す**（古い `store.collapsed`・`setCollapsed`・`panelWidths` の呼び出しを、`setFaceCollapsed`・`setSideSize`・`clearSideSize` に替える）。枠の `:key` を `placedFrameKey(active, "dock:right")`。根に `data-pane-panel`（今のまま）・`data-display-dock`・`data-display-root`。操作中の文言の行とタブの行に `data-display-chrome`。つまみに `data-display-keepfocus`（`z-index` は 22）。
       (4) `PaneBands.vue`: `edge?`・`layout?` の props。`edge` なしは今の動き（モバイル。枠の鍵は `placedFrameKey(b, "band:plain")`・「ほか N 件」は今の知らせ）。`edge` ありは、その側の帯・トレイ・「ほか N 件」（押すと面の一覧）・帯ごとの［⋮］。`edge` ありのときは、帯の行の［⋮］［×］も `@mousedown.prevent`・`data-display-keepfocus`。`paneHeightPx` の prop は残す（モバイルが渡す）。枠の `:key` を `placedFrameKey(b, "band:" + edge)`。帯の 1 行に `data-display-root`、アプリの部分に `data-display-chrome`。**上の帯と下の帯は、別の `PaneBands`（別の入れ物）**。
       (5) `DisplayTray.vue`（ボタン〔`data-display-tray-button`・`data-display-id`・`data-display-name`〕・印・`max-width: 40%`・自分の箱を測って「ほか N」・押せないボタンの `title`・`@mousedown.prevent`・`data-display-keepfocus`・`repeat` を止める）。
-      (6) `display/displayOps.ts`: `withDisplayChange(info, change, focusAfter, host)`（design「たたむ・開く」の手順 1〜4 と、行き先の表）と `installKeepFocusRelease(host)`（`main.ts` で 1 回呼ぶ。**`window` の `pointerdown` の capture**。モバイル〔`store.sheetAvailable`〕では何もしない。`DisplayHost` は、いま `app.provide` の引数の中で作っているので、変数へ出して両方に渡す。
+      (6) `display/displayOps.ts`: `withDisplayChange(info, change, focusAfter, host)`（design「たたむ・開く」の手順 1〜4 と、行き先の表。**フォーカスが、その面の枠・見出し・トレイのボタンにあるときは、状態を変える前に、同期で端末へ移す**＝フォーカスを `body` に落とさない。浮いた窓のトレイのボタンは、開閉の後も残るので、移さない）と `installKeepFocusRelease(host)`（`main.ts` で 1 回呼ぶ。**`window` の `pointerdown` の capture**。モバイルでは何もしない〔**押下のたびに** `store.sheetAvailable` を見る。登録の時点で 1 回だけ見ない〕。`DisplayHost` は、いま `app.provide` の引数の中で作っているので、変数へ出して両方に渡す。
       **対象は、押した先が `[data-display-keepfocus]` か `[data-display-cover]` の中で、`activeElement` が「操作中のスクリプトの枠」か「静的な形式の枠」のとき**。スクリプトの枠かは iframe の `data-display-script`、操作中かは **iframe の親要素**の `data-display-engaged === "1"` で見る（`closest` で探さない）。操作中でないスクリプトの枠には、何もしない）。たたむ・開く・帯の上下は、すべて `withDisplayChange` を通す。
       (7) `MobileDisplaySheet.vue` の枠の `:key` を `placedFrameKey(active, "sheet")`（と import）。 (8) `DISPLAY_SUBSCRIBE_FEATURES` に `collapse`。
-      (9) メニューの対象の型 `MenuTarget` に `{kind: "displays", paneId}`・`{kind: "display", id}` を足す（`ContextMenu` は、この時点では、その 2 つに空の一覧を返す。項目は T8）。`ContextMenu` の外側の押下の処理（`ContextMenu.vue:202-208`）に、「押した先が `[data-display-keepfocus]` か `[data-display-cover]` の中なら、`restoreFocus()` してから閉じる」を足す。古い `collapsed`・`setCollapsed`・`panelWidths`・`setPanelWidth`・`clearPanelWidth`・`pruneWidths` を、呼び出しが無くなった時点で消す（`ActionDispatcher.focusDisplay` の呼び出しは、`setFaceCollapsed` に替える。行き先の順の作り直しは T8）。
-      単体テスト（属性・`placedFrameKey`・たたむとボタンになる・`withDisplayChange` の表の全行・`installKeepFocusRelease`〔操作中のスクリプトの枠・静的な枠にフォーカスがあるとき、`[data-display-keepfocus]`・`[data-display-cover]` の `pointerdown` で端末へ移る。枠に無い・操作中でないスクリプトの枠なら、何もしない〕・メニューを開いたまま、フォーカスを取らない部品を押すと、開く前の場所へ戻る・`repeat`・0×0 では載らない・モバイルの `PaneBands` が今のまま）。
-      既存の単体を直す: `PaneFrame.test.ts:776-787`（「面が出ても `<slot />` の位置が変わらない」。**箱の大きさを与える形**〔`ResizeObserver` の差し替え〕に直す。見ている中身は弱めない）・`PanePanel.test.ts`（props・`:44-49`・`:82`・`:109`）・`DisplayScriptMark.test.ts:38,49,56,72`（`PanePanel` の props）・`DisplayController.test.ts:52`（名乗りの一覧）・`store/display.test.ts`
-      対象: `packages/web/src/components/DisplayPanelHead.vue`（新規）・`DisplayTray.vue`（新規）・`PanePanel.vue`・`PaneBands.vue`・`PaneFrame.vue:339-347`・`:476`・`:552`・各 `.test.ts`・`DisplayScriptMark.test.ts`、`packages/web/src/display/displayOps.ts`（新規）・`.test.ts`（新規）、`packages/web/src/main.ts`（`DisplayHost` を組み立てている :531-560 付近）、`packages/web/src/display/DisplayController.ts:28`・`DisplayController.test.ts:52`、
-      `packages/web/src/term/MouseBridge.ts:14`（`MenuTarget`）・`components/ContextMenu.vue`、`packages/web/src/store/display.ts`・`actions/ActionDispatcher.ts:1057`、`packages/web/src/mobile/MobileDisplaySheet.vue:6`・`:80` / 根拠: design「部品」「たたむ・開く」「押してもフォーカスを取らない部品と、操作中の枠」「PR3 の守りとの関係」G1・G2・G4・G5
+      (9) メニューの対象の型 `MenuTarget` に `{kind: "displays", paneId}`・`{kind: "display", id}` を足す（`ContextMenu` は、この時点では、その 2 つに空の一覧を返す。項目は T8）。`ContextMenu` の外側の押下の処理（`ContextMenu.vue:203-209` の `onOutsideClick`）に、「押した先が `[data-display-keepfocus]` か `[data-display-cover]` の中なら、`restoreFocus()` してから閉じる」を足す。古い `collapsed`・`setCollapsed`・`panelWidths`・`setPanelWidth`・`clearPanelWidth`・`pruneWidths` を、呼び出しが無くなった時点で消す（`ActionDispatcher.focusDisplay` の呼び出しは、`setFaceCollapsed` に替える。行き先の順の作り直しは T8）。
+      単体テスト（属性・`placedFrameKey`・たたむとボタンになる・`withDisplayChange` の表の全行・`installKeepFocusRelease`〔操作中のスクリプトの枠・静的な枠にフォーカスがあるとき、`[data-display-keepfocus]`・`[data-display-cover]` の `pointerdown` で端末へ移る。枠に無い・操作中でないスクリプトの枠なら、何もしない〕・メニューを開いたまま、フォーカスを取らない部品を押すと、開く前の場所へ戻る・`withDisplayChange` の間、`document.activeElement` が 1 度も `body` にならない（`focusout` の `relatedTarget` が `null` にならない）・`installKeepFocusRelease` を登録した後で `sheetAvailable` を真にすると、何もしない・`repeat`・0×0 では載らない・モバイルの `PaneBands` が今のまま）。
+      既存の単体を直す: `PaneFrame.test.ts:776-787`（「面が出ても `<slot />` の位置が変わらない」。**箱の大きさを与える形**〔`ResizeObserver` の差し替え〕に直す。見ている中身は弱めない）・`PanePanel.test.ts`（props・`:44-49`・`:82`・`:109`）・`DisplayScriptMark.test.ts:38,49,56,72`（`PanePanel` の props）・`DisplayController.test.ts:52`・`:259`（名乗りの一覧）・`store/display.test.ts`
+      対象: `packages/web/src/components/DisplayPanelHead.vue`（新規）・`DisplayTray.vue`（新規）・`PanePanel.vue`・`PaneBands.vue`・`PaneFrame.vue:339-347`・`:476`・`:552`・各 `.test.ts`・`DisplayScriptMark.test.ts`、`packages/web/src/display/displayOps.ts`（新規）・`.test.ts`（新規）、`packages/web/src/main.ts:542-565`（`app.provide(DisplayHostKey, {…})`。引数の中で作っているので、変数へ出す。`app.mount` は :571）、`packages/web/src/display/DisplayController.ts:28`・`DisplayController.test.ts:52`、
+      `packages/web/src/term/MouseBridge.ts:14`（`MenuTarget`）・`components/ContextMenu.vue`、`packages/web/src/store/display.ts`・`actions/ActionDispatcher.ts:1078`、`packages/web/src/mobile/MobileDisplaySheet.vue:6`・`:80` / 根拠: design「部品」「たたむ・開く」「押してもフォーカスを取らない部品と、操作中の枠」「PR3 の守りとの関係」G1・G2・G4・G5
       依存: T5, T6
       AC: AC1, AC3, AC4, AC5, AC6, AC8, AC21, AC22, AC24, AC25, AC26, AC-I1, AC-I4
       点検: あり
-- [ ] T8: メニューとキー: `ContextMenu.vue` の対象 `{kind: "displays", paneId}`（面の一覧。選ぶと、同じ位置に面のメニュー）と `{kind: "display", id}`（面のメニュー。PR-A の項目: 開く／たたむ・帯の 上に置く／下に置く・プログラムの指定に戻す・この表示を閉じる）。pane のメニューに「表示のメニュー…」。項目の処理は `withDisplayChange` を通す。
+- [ ] T8: メニューとキー: `ContextMenu.vue` の対象 `{kind: "displays", paneId}`（面の一覧。選ぶと、同じ位置に面のメニュー）と `{kind: "display", id}`（面のメニュー。PR-A の項目: 開く／たたむ・帯の 上に置く／下に置く〔`setFaceEdge`。たたんだ帯も、移った先で開く〕・プログラムの指定に戻す・この表示を閉じる）。pane のメニューに「表示のメニュー…」。項目の処理は `withDisplayChange` を通す。
       **表示のメニューを開く前に、フォーカスが面の枠（操作中のスクリプトの枠か、静的な形式の枠。見分けは T7 (6) と同じ）にあれば、`endEngageFrame` と `host.focusTerminal` で端末へ移す**（開く関数を 1 つにして、［⋮］・「ほか N」・「ほか N 件」・キー・pane のメニューが、全部それを通る）。
       `ACTIONS` に `display_menu`（`group: "pane"`・既定 `prefix+shift+i`・`action: {type: "displayMenu"}`）、`Action` の型、`ActionDispatcher`（`displayMenu()` と、`focusDisplay()` の行き先の選び直し＝design「キー」の ①〜④。「最後に操作した面」は `store.lastFace`〔面が操作中になった・利用者が開いた／移した、で更新する処理も、ここで入れる〕。自動でたたまれた面は、`store.layoutByPane` の `auto` で見分けて飛ばす（面の一覧のメニューの「出せない」も、これを読む）。たたんだ面を開くときは `withDisplayChange`。
       **モバイル〔`store.sheetAvailable`〕では、`focusDisplay` は今の動きのまま・`displayMenu` は `sheetRequest++`・記憶を見ない／書かない**）、端末版の `TuiDispatcher.run` の case（`focusDisplay` と同じ知らせ）。見出しのボタンの上の `Esc` で端末へ。件数を固定したテスト（「リスク」の一覧）を直す。
       単体テスト（2 つの対象の項目・枠にフォーカスがあるときに開くと端末へ移ってから開く・`focusDisplay` の ①〜④ と自動でたたまれた面を飛ばす・モバイルの枝・`resetFace`）
-      対象: `packages/web/src/components/ContextMenu.vue:57-159`・`ContextMenu.test.ts`、`components/DisplayPanelHead.vue`・`PaneBands.vue`・`DisplayTray.vue`（開く関数の呼び出し・`Esc`）、`packages/client-core/src/keys/bindings.ts:492-500` の後・`actions.ts:96` の後・`bindings.test.ts:45,54`・`keymap.test.ts:78,83`、`packages/web/src/actions/ActionDispatcher.ts:273-275`・`:1045-1068`・`.test.ts`（`:2881` の describe・`:2927-2933`）、`packages/web/src/components/KeySettings.test.ts:77,822,846`、`packages/web/src/store/display.ts`（`lastFace`）、`packages/tui/src/actions/TuiDispatcher.ts:261-264`・`.test.ts:207,213` / 根拠: design「メニュー」「キー」「たたむ・開く」、research F16・F17
+      対象: `packages/web/src/components/ContextMenu.vue:57-159`・`ContextMenu.test.ts`、`components/DisplayPanelHead.vue`・`PaneBands.vue`・`DisplayTray.vue`（開く関数の呼び出し・`Esc`）、`packages/client-core/src/keys/bindings.ts:494-500`（`focus_display`）の後・`actions.ts:96` の後・`bindings.test.ts:45,46,54`・`keymap.test.ts:78,83,390`、`packages/web/src/actions/ActionDispatcher.ts:273-275`・`:1066-1089`（`focusDisplay`）・`.test.ts`（`:2966` の describe・`:3012-3018`）、`packages/web/src/components/KeySettings.test.ts:77,822,846`、`packages/web/src/store/display.ts`（`lastFace`）、`packages/tui/src/actions/TuiDispatcher.ts:263-266`・`.test.ts:207,213` / 根拠: design「メニュー」「キー」「たたむ・開く」、research F16・F17
       依存: T7
       AC: AC3, AC4, AC7, AC24, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
       点検: あり
@@ -168,13 +172,15 @@
       (6) **`load` と枠の要素**: 帯を 2 本上に出し、パネルを 2 枚出す。(a) 帯の最初の 1 本を下へ移す → 移した帯の枠は別の要素・**もう 1 本の帯の枠と、パネルの枠は、同じ要素のまま**。(b) パネルの 1 枚をたたむ／開く・タブの切り替え・帯をたたむ／開く、でも同じ見方。どの後でも、出ている枠の `data-display-loads` が `1`・`sodactl display list` に面が残る・ブラウザが `display.report`（`navigated`）を送っていない。
       `script-html` の面でも同じで、開いた直後は覆いがあって操作中でなく、直後の `script-html` の `set` が通る（冷却に入っていない）。
       (7) フォーカス: (a) 端末にフォーカスを置いて、次を 1 つずつマウスで押す: トレイのボタン／見出しの［たたむ］／見出しのつかむ場所／帯の行の［⋮］（開いたメニューは `Esc` で閉じる）→ どの後も、`activeElement` は端末・打った文字が pane に届く。メニューを開いたまま、見出しのつかむ場所を押して閉じる → `activeElement` は端末（`body` でない）。(b) `prefix+shift+i` → 矢印 → `Enter` → 「たたむ」→ マウス無しでたためて、端末にフォーカス。
-      (c) `Tab` で見出しの［たたむ］へ → `Enter` → `activeElement` が、その面のトレイのボタン → `Enter` → `activeElement` が［たたむ］。これを 20 回 → `body` に落ちない・遮断器の知らせが出ない・スクリプトの面が止まらない。(d) 静的な面の枠の中をクリックしてから、メニューでたたむ → `activeElement` が端末。
+      (c) `Tab` で見出しの［たたむ］へ → `Enter` → `activeElement` が、その面のトレイのボタン → `Enter` → `activeElement` が［たたむ］。**`script-html` の面を 1 つ載せたまま、これを 3 秒のうちに 16 回以上（キーを 150ms おきに）→ `activeElement` が 1 度も `body` にならない（ページの中で `focusout` の `relatedTarget === null` と、25ms おきの `activeElement` を記録して見る）・スクリプトの枠が止まらない（［再開］が出ない・`[data-display-note]` が無い）・「繰り返し外しています」の知らせが出ない**。(d) 静的な面の枠の中をクリックしてから、メニューでたたむ → `activeElement` が端末。
       (e) **`script-html` のパネルで［操作する］→ ［たたむ］でない場所（見出しの［⋮］・つかむ場所・トレイの別の面のボタン・幅のつまみ・帯の行の［⋮］・**別の `script-html` の帯の覆い**）を、マウスで 1 回ずつ押す（そのたびに［操作する］で操作中に戻す。合わせて 5 回以上）→ ブラウザが `display.report`（`focus_steal`）を 1 回も送っていない（`watchSentDisplay`）・面が残る・`activeElement` が端末**。
       既存の `display-script-focus`・`display-script-engage`（操作中でない枠が取ったら、数えられる）が、そのまま通る。
       (8) 知らせ: 帯を下に置き、知らせを出す → 知らせの箱が、`[data-display-chrome]` のどの箱とも重ならない。
-      (9) 既存の `display-*.spec.ts`（15 本）が通る（「リスク」に挙げた箇所〔たたみと、`display-script-engage.spec.ts:94-112` の見出しの押下〕を直す。弱めない）。
+      (9) 既存の `display-*.spec.ts`（18 本）が通る（「リスク」に挙げた箇所〔たたみと、`display-script-engage.spec.ts:94-111` の見出しの押下〕を直す。弱めない）。`display-script-noreturn`・`display-script-drop`・`display-script-noreturn-mobile` は `--workers=1` で単独。
+      (11) 戻しすぎの確認（`display-script-noreturn.spec.ts` の作りに倣う。無害な面と、300ms ごとに落とす面の 2 通り）: 面を載せたまま、トレイのボタンに `Tab` で届いて `Enter`・`prefix+shift+i` のメニューを矢印で動かして `Enter`・見出しの［⋮］のメニュー、の操作が通り、操作の途中のフォーカス（メニューの項目・ボタン）が、端末へ引き戻されない。
+      (12) 固定の文言: `script-html` のパネルと帯を出し、設定で無効にする → 各面の枠の箱の中に「設定で無効になっています」が見える。有効に戻し、毎フレーム落とす面で遮断器を働かせる → 各面の枠の箱の中に、文言と［再開］が見えて、押すと戻る（PR-A では、右のパネルと、上・下の帯で）。
       (10) 右のパネルを最小の幅（160px）にして、`script-html` の面の印「スクリプト」・［操作する］・［⋮］・［たたむ］・［×］の箱が、パネルの箱の中・中心の `elementFromPoint` が自身
-      対象: `packages/e2e/src/specs/display-layout-state.spec.ts`（新規）、`packages/e2e/src/support/displayLayout.ts`（新規）、`packages/e2e/src/specs/display-flows.spec.ts:63-81`・`:267-268`・`display-script-nav.spec.ts:76-78`・`display-script-engage.spec.ts:94-112` / 根拠: 規約 `e2e-observe-browser`、helper は `support/display.ts`・`displayBrowser.ts`・`displayScript.ts`
+      対象: `packages/e2e/src/specs/display-layout-state.spec.ts`（新規）、`packages/e2e/src/support/displayLayout.ts`（新規）、`packages/e2e/src/specs/display-flows.spec.ts:63-81`・`:267-268`・`display-script-nav.spec.ts:76-78`・`display-script-engage.spec.ts:94-111` / 根拠: 規約 `e2e-observe-browser`、helper は `support/display.ts`・`displayBrowser.ts`・`displayScript.ts`
       依存: T3, T8, T9
       AC: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC10, AC21, AC22, AC23, AC24, AC25, AC26, AC-I1, AC-I3, AC-I4
 - [ ] T11: 文書（PR-A）: `docs/display.md`（たたみの記憶・優先の表・設定・帯のたたみと上下・帯の行のボタン・表示のメニューと `prefix+shift+i`・`prefix+i` の行き先・「たたむ／置き場所の変更で、スクリプトの状態と入力の途中の値は消える」・たたみは面ごと・限界〔帯の中身は、ボタンに似た絵を描ける。押しても開かない／同じ名前の面は置き場所を引き継ぐ。「プログラムの指定に戻す」は、同じ名前のほかの pane の面にも効く〕・新旧の表）・
@@ -184,7 +190,7 @@
       AC: AC27
 - [ ] T12: 負の対照（PR-A。test 工程）: (a) トレイを、帯の枠の上に重ねて置く版（`position: absolute` で、枠の箱の中）→ T10 (4) の「箱が交わらない」が落ちる。(b) `pickToastSlot` を通さず、今の「右下へ寄せる」に落とす版 → T10 (8) が落ちる。
       (c) 上と下の帯を、1 つの入れ物・1 つの `v-for`（鍵は面の id。配列は 上の帯 → 下の帯 の順）で描く版 → T10 (6)(a) の「もう 1 本の帯の枠は、同じ要素のまま」か「`load` が 1」が落ちる（「作業順序」の 1）。
-      (d) `effectiveCollapsed` が記憶より指定を先に見る版 → T10 (5) が落ちる。`writeFace` が変えた項目だけを書く版（`loadDisplayLayout` の「項目の欠けた記憶は捨てる」も外し、欠けた項目は指定へ落とす）→ T10 (5) の「帯を下へ移しただけの後、`--collapsed` でたたまれない」が落ちる。(e) `withDisplayChange` の行き先へ移す処理（手順 3・4）を外す版 → T10 (7)(c) が落ちる。(f) `installKeepFocusRelease` を呼ばない版 → T10 (7)(e) が落ちる。生の出力を `test-result.md` に
+      (d) `effectiveCollapsed` が記憶より指定を先に見る版 → T10 (5) が落ちる。`writeFace` が変えた項目だけを書く版（`loadDisplayLayout` の「項目の欠けた記憶は捨てる」も外し、欠けた項目は指定へ落とす）→ T10 (5) の「帯を下へ移しただけの後、`--collapsed` でたたまれない」が落ちる。(e) `withDisplayChange` の「変更の前に、同期で端末へ移す」（手順 2・3 の前半）を外す版 → T10 (7)(c) の「`activeElement` が 1 度も `body` にならない」「スクリプトの枠が止まらない」が落ちる（3 秒に 16 回以上、`body` に落ちれば、遮断器が働く）。(f) `installKeepFocusRelease` を呼ばない版 → T10 (7)(e) が落ちる。生の出力を `test-result.md` に
       対象: `.aidev/works/20261008-display-layout/test-result.md` / 根拠: 規約 `regression-negative-control`
       依存: T10
       AC: AC28
@@ -197,7 +203,7 @@
       依存: T6
       AC: AC11, AC12, AC13, AC15
       点検: あり
-- [ ] T14: 部品の側: `PanePanel.vue` を `side`（right・left・top・bottom）で描き分ける（境の線・つまみの縁・上下は横に長い見出し）。`PaneFrame.vue` に、上・左・下の `PanePanel` を置く（design「部品」の木の位置。**4 つは、テンプレートの別の位置の `v-if`**。1 つの `v-for` にしない）。置き場所を変える操作は、`writeFace(info, { dock, collapsed: false })`（移った先で、開いて出る）。枠の `:key` は `placedFrameKey(active, "dock:" + side)`。タブは側ごと（`activeBySide`）。
+- [ ] T14: 部品の側: `PanePanel.vue` を `side`（right・left・top・bottom）で描き分ける（境の線・つまみの縁・上下は横に長い見出し）。`PaneFrame.vue` に、上・左・下の `PanePanel` を置く（design「部品」の木の位置。**4 つは、テンプレートの別の位置の `v-if`**。1 つの `v-for` にしない）。置き場所を変える操作は、`setFaceDock(info, dock)`（`collapsed: false` と `names` も書く＝移った先で、開いて出る）。枠の `:key` は `placedFrameKey(active, "dock:" + side)`。タブは側ごと（`activeBySide`）。
       `DISPLAY_DOCK_CAPS` を `["right","left","top","bottom"]` に。`setFaceDock` で移った面が、移った先で選ばれる。`withDisplayChange` を通す（フォーカスの行き先は、design の表）。単体テスト（4 つの側の属性・鍵・置き場所を変えると前の側から消える）
       対象: `packages/web/src/components/PanePanel.vue`・`PaneFrame.vue`・各 `.test.ts`、`packages/web/src/display/displayPrefs.ts`（`DISPLAY_DOCK_CAPS`）・`.test.ts`、`packages/web/src/store/display.ts` / 根拠: design「部品」「置き場所の変更」「PR3 の守りとの関係」G1・G2
       依存: T13, T7
@@ -230,11 +236,13 @@
       (7) 固定の部品: 4 つの側 × 最小の大きさで、固定のラベル・印「スクリプト」・［操作する］・［⋮］・［たたむ］・［×］の箱が、パネルの箱の中・中心の `elementFromPoint` が自身。
       (8) 知らせ: パネルが下と右にあるとき、知らせの箱が `[data-display-chrome]` と重ならない。
       (9) `--dock bottom`・設定の既定の置き場所。
-      (10) 既存の `display-*.spec.ts`（15 本）と `display-layout-state.spec.ts` が通る
+      (10) 既存の `display-*.spec.ts`（18 本。`display-script-noreturn`・`-drop`・`-noreturn-mobile` は `--workers=1` で単独）と `display-layout-state.spec.ts` が通る。
+      (11) 戻しすぎと遮断器: `script-html` の面を載せたまま、キーボードで、置き場所の変更（右 → 下 → 左 → 上）を、3 秒に 16 回以上 → `activeElement` が 1 度も `body` にならない・スクリプトの枠が止まらない（枠は作り直されるが、戻しの数に入らない）。300ms ごとに落とす面を載せたまま、D&D・つまみ・メニューの操作が通る。
+      (12) 固定の文言: 4 つの側（最小の大きさ）で、設定で無効のときの文言・遮断器の後の文言と［再開］が、パネルの箱の中に見えて、［再開］を押せる
       対象: `packages/e2e/src/specs/display-layout-dock.spec.ts`（新規）、`packages/e2e/src/support/displayLayout.ts` / 根拠: 規約 `e2e-observe-browser`
       依存: T15, T16, T17
       AC: AC7, AC10, AC11, AC12, AC13, AC14, AC15, AC16, AC21, AC22, AC24, AC25, AC-I2, AC-I3, AC-I5
-- [ ] T19: 文書（PR-B）: `docs/display.md`（置き場所・並びの図・タブ・最小と自動のたたみ・各側のつまみ・D&D とメニュー・設定）・`docs/sodactl.md`（`--dock` の 4 つの値が効く）・`docs/verification.md`
+- [ ] T19: 文書（PR-B）: `docs/display.md`（置き場所・並びの図・タブ・最小と自動のたたみ・各側のつまみ・D&D とメニュー・設定）・「置き場所を変えると、移った先で開いて出る」・`docs/sodactl.md`（`--dock` の 4 つの値が効く）・`docs/verification.md`
       対象: 上のファイル
       依存: T18
       AC: AC27
@@ -256,26 +264,26 @@
       窓の根に `tabindex` を付けない（キーのモードの間だけ。T23）。枠（`DisplayFrame`）以外の部分（題・操作中の文言・縁）は `@mousedown.prevent`・`data-display-keepfocus`。
       **`v-for` は出た順・`:key` は面の id。重なりは `z-index: 20 + floatOrder の位置`**（`floatOrder` は pane ごと。更新は `raiseFloat`・`insertFloat`: 窓の `pointerdown` の capture・`focusedDisplayId` の変化・窓が開いた）。**窓を開く操作（トレイのボタン・メニュー・`prefix+i`・D&D）は、記憶に `rect` が無ければ、初めの矩形（`defaultFloatRect`。領域は `store.layoutByPane` の `floatArea`。`null` なら書かない）を、記憶の `rect` に書く**（`writeFace` の中。保存しない別の置き場は持たない）。書いた後は、`set --size` の変更・ほかの窓の開閉で動かない。
       **記憶の無い浮いた窓は、閉じて始まる**（T5 の `effectiveCollapsed`）。
-      `DISPLAY_DOCK_CAPS` に `float`。`DISPLAY_SUBSCRIBE_FEATURES` に `float`。面のメニューに「浮いた窓にする」（`writeFace(info, { dock: "float", collapsed: false, rect: 初めの矩形 })`＝開いて出る。たたんでいた面でも）。T14 の、置き場所を変える操作も、`collapsed: false` を一緒に書く形に揃える。設定の「既定の置き場所」に「浮いた窓」。トレイの ❐ のボタン（`aria-pressed`。押すと開閉）。`focusDisplay` が窓にも移れる。
+      `DISPLAY_DOCK_CAPS` に `float`。`DISPLAY_SUBSCRIBE_FEATURES` に `float`。面のメニューに「浮いた窓にする」（`setFaceDock(info, "float", 初めの矩形)`＝開いて出る。たたんでいた面でも）。**窓の動ける領域が無い（`store.layoutByPane` の `floatArea` が `null`）間は、浮いた窓を開く操作を受けない**（トレイの窓のボタンは `disabled`・面の一覧は「出せない」・「浮いた窓にする」「開く」を出さない・`prefix+i` は飛ばす）。設定の「既定の置き場所」に「浮いた窓（閉じて始まり、帯の行のボタンで開く）」。トレイの ❐ のボタン（`aria-pressed`。押すと開閉）。`focusDisplay` が窓にも移れる。
       窓の出現・前へ出す操作で、アプリは枠へフォーカスを移さない。E2E の helper に、窓の枠を取る選び方（`[data-display-float] iframe[data-display-frame]`）。単体テスト（層の属性・`z-index` だけが変わり、DOM の順が変わらない・［たたむ］とトレイのボタンで開閉・`withDisplayChange`・トレイのボタンで開いただけの窓が、記憶に `rect` を持つ）
       対象: `packages/web/src/components/DisplayFloat.vue`（新規）・`.test.ts`（新規）、`PaneFrame.vue`・`.test.ts`、`DisplayTray.vue`、`ContextMenu.vue`、`SettingsDialog.vue`、`packages/web/src/display/displayPrefs.ts`（`DISPLAY_DOCK_CAPS`）、`packages/web/src/display/DisplayController.ts:28`・`DisplayController.test.ts:52`、`store/display.ts`（`floatOrder`・`writeFace`）、`actions/ActionDispatcher.ts`、`packages/e2e/src/support/displayLayout.ts` / 根拠: design「部品」「浮いた窓」「PR3 の守りとの関係」
       依存: T21, T14, T8, T17
       AC: AC8, AC17, AC19, AC20, AC21, AC22, AC24, AC25, AC-I1, AC-I4
       点検: あり
-- [ ] T23: 移動・大きさ・キーボード: 縁と角の 8 つのつかむ場所（`data-display-keepfocus`。`useResizeDrag` と同じ決まりで、その場でスタイルを変え、`store.layoutRev++`、離したとき `setFaceRect`。`Esc` で戻す・ダイアログで確定）。面のメニューの「キーで動かす」「キーで大きさを変える」（`floatKeyMode`。窓の根に `tabindex="-1"` を付けてフォーカス〔終えたら外す〕・矢印 16px・`Shift` 64px・`Enter`・`Esc`・フォーカスが出たら確定・`aria-live` の案内・キーを外へ流さない・**終えたら、始める前の場所へフォーカスを戻す**）。
+- [ ] T23: 移動・大きさ・キーボード: 縁と角の 8 つのつかむ場所（`data-display-keepfocus`。`useResizeDrag` と同じ決まりで、その場でスタイルを変え、`store.layoutRev++`、離したとき `setFaceRect`。`Esc` で戻す・ダイアログで確定）。面のメニューの「キーで動かす」「キーで大きさを変える」（`floatKeyMode`。窓の根に `tabindex="-1"` を付けてフォーカス〔終えるときは、**先にフォーカスを移してから** `tabindex` を外す＝`body` に落とさない〕・矢印 16px・`Shift` 64px・`Enter`・`Esc`・フォーカスが出たら確定・`aria-live` の案内・キーを外へ流さない・**終えたら、始める前の場所へフォーカスを戻す**）。
       見出しのボタンの上の `Esc` で、窓を閉じずに端末へ。窓の上のホイールが、端末のスクロールバックを動かさない。単体テスト
       対象: `packages/web/src/components/DisplayFloat.vue`・`.test.ts`、`ContextMenu.vue`・`ContextMenu.test.ts`、`store/display.ts`（`floatKeyMode`） / 根拠: design「浮いた窓」「キー」
       依存: T22
       AC: AC18, AC-I2, AC-I3, AC-I4, AC-I5
       点検: あり
-- [ ] T24: D&D の中央と、窓のつかみ: `dockZoneAt` の `float` を有効に（中央で離すと `setFaceDock(info, "float")` と、離した位置の矩形を `setFaceRect`）。浮いた窓の見出しをつかむと、その場で動き（`moveFloatRect`）、本体の箱の縁から 16px 以内でだけ側が強調される。離すと、側なら `setFaceDock`・そうでなければ `setFaceRect`。`Esc` で、始める前の矩形へ。単体テスト
+- [ ] T24: D&D の中央と、窓のつかみ: `dockZoneAt` の `float` を有効に（中央で離すと `setFaceDock(info, "float", 離した位置の矩形)`。1 回の呼び出し。窓の動ける領域が無ければ「ここには置けません」）。浮いた窓の見出しをつかむと、その場で動き（`moveFloatRect`）、本体の箱の縁から 16px 以内でだけ側が強調される。離すと、側なら `setFaceDock(info, 側)`・そうでなければ `setFaceRect`。`Esc` で、始める前の矩形へ。単体テスト
       対象: `packages/web/src/display/dockDrag.ts`・`.test.ts`、`components/DisplayDropZones.vue`、`DisplayFloat.vue` / 根拠: design「D&D」
       依存: T22, T16
       AC: AC15, AC17, AC18, AC-I2
 - [ ] T25: E2E（PR-C）`display-layout-float.spec.ts`:
       (1) メニュー・D&D の中央で、窓になって開く。**`--dock float`・設定で浮いた窓になった、記憶の無い面は、閉じて始まる**（トレイの ❐ のボタンだけ・窓の要素が無い）→ ボタンを押すと開く。窓を開く・［たたむ］で閉じる・トレイの ❐ で開く・動かす・大きさを変える・前へ出す、のどれでも、ブラウザが `client.view` を送らない（ドックから移したときと、その pane で最初にトレイの行が出るときの 1 回を除く）。**帯が 1 本も無い pane で、窓を開く・閉じるを 3 回繰り返しても、`client.view` を送らず、トレイの行が出たまま**（開いている窓のボタンは `aria-pressed="true"`）。
       (2) 窓を、4 隅と 4 辺の外へ大きく動かす・大きくする → 窓の箱が、いつも端末の箱（`[data-pane-frame-main]`）の中。240×120px より小さくならない。pane を狭めた後も中。領域が最小より小さいと、トレイの押せないボタン。再読み込みの後、同じ位置と大きさ。移動の途中の `Esc` で戻る。
-      まだ動かしていない窓（`--dock float` で出て、ボタンで開いた）は、プログラムが `--size` を変えて `set` し直しても・ほかの窓を開閉しても、箱が動かない。**その窓は、再読み込みの後も・`close` → 同じ名前で `set` の後も、同じ箱で開いて出て、ほかの面も残っている**。
+      まだ動かしていない窓（`--dock float` で出て、ボタンで開いた）は、プログラムが `--size` を変えて `set` し直しても・ほかの窓を開閉しても、箱が動かない。**その窓は、再読み込みの後も・`close` → 同じ名前で、別の `--size` で `set` し直した後も、同じ箱で開いて出て、ほかの面も残っている**。
       (3) **重ならない**: 窓を各隅へ寄せて、帯の行（印・トレイのボタン・［×］）・ドックのパネルの見出しとつまみ・隣の pane（分割して）の端末と面・分割の境目・サイドバーの境目・tab バー・サイドバーの上の点の `elementFromPoint` が、窓の中の要素でない。pane のメニュー・設定のダイアログ・知らせ・pane を落とす場所の表示・つまみのドラッグ中の案内の線は、窓の上（その箱の中心の `elementFromPoint` が、その部品）。
       (4) 窓が開いているだけで、端末に打った文字が pane に届く（窓の出現・移動・前へ出す操作・**窓の題や余白を押した**後も、`activeElement` は端末）。窓の外の端末を押せる・選べる。窓の上のホイールで、端末のスクロールバックが動かない。
       (5) 2 つの窓: 押した窓の `z-index` が上。**前へ出しても、どちらの枠も `data-display-loads` が `1`・枠の要素が同じ（`isConnected` のまま）**。tab を切り替えて戻る・workspace を切り替えて戻る・拡大・分割の後も、同じ pane に、覚えた位置で出る。pane を閉じると消える。
@@ -286,16 +294,18 @@
       スクリプトが `window.resizeTo`・`moveTo`・`soda.action` を呼んでも、窓の箱が変わらない。利用者が動かした後、プログラムが `--dock right` で `set` しても、窓のまま。
       (7) 固定の部品: 最小の窓（240×120px）で、印「スクリプト」・［操作する］・［⋮］・［たたむ］・［×］が、窓の箱の中・`elementFromPoint` が自身。知らせ: 窓が右下にあるとき、知らせの箱が窓の見出しと重ならない（窓を動かした後も）。
       (8) キーボードだけ: `prefix+shift+i` → 面 → 「浮いた窓にする」→「キーで動かす」→ 矢印 → `Enter` → `activeElement` が端末（打った文字が pane に届く）。開く／たたむを 20 回 → 遮断器が落ちない。
-      (9) 既存の `display-*.spec.ts`（15 本）と `display-layout-state`・`display-layout-dock` が通る
+      (9) 既存の `display-*.spec.ts`（18 本。`display-script-noreturn`・`-drop`・`-noreturn-mobile` は `--workers=1` で単独）と `display-layout-state`・`display-layout-dock` が通る。
+      (10) 戻しすぎと遮断器: `script-html` の面を載せたまま、キーボードで、窓の開閉・「浮いた窓にする」↔「右に置く」・「キーで動かす」の開始と終了を、3 秒に 16 回以上 → `activeElement` が 1 度も `body` にならない・スクリプトの枠が止まらない。300ms ごとに落とす面を載せたまま、窓の移動・大きさの変更・メニューの操作が通り、操作の途中のフォーカスが端末へ引き戻されない。
+      (11) 固定の文言: 浮いた窓（最小の大きさ）で、設定で無効のときの文言・遮断器の後の文言と［再開］が、窓の箱の中に見えて、［再開］を押せる
       対象: `packages/e2e/src/specs/display-layout-float.spec.ts`（新規）、`packages/e2e/src/support/displayLayout.ts` / 根拠: 規約 `e2e-observe-browser`
       依存: T23, T24
       AC: AC10, AC17, AC18, AC19, AC20, AC21, AC22, AC23, AC24, AC25, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
-- [ ] T26: 文書（PR-C）: `docs/display.md`（浮いた窓: 出し方・動かし方・キーボード・端末の領域の中だけ・重なり〔操作中の窓が最前面〕・覚え方・限界〔窓は pane の中だけ・小さい pane では出せない・置き場所の変更でスクリプトの状態は消える〕）・`docs/sodactl.md`（`--dock float`・`renderers.float`）・`docs/verification.md`
+- [ ] T26: 文書（PR-C）: `docs/display.md`（浮いた窓: 出し方・動かし方・キーボード・端末の領域の中だけ・重なり〔操作中の窓が最前面〕・覚え方・「記憶の無い浮いた窓は、閉じて始まる」・限界〔窓は pane の中だけ・小さい pane では出せない・置き場所の変更でスクリプトの状態は消える・**利用者が開いたままにした窓は、同じ名前で出し直すと、利用者が決めた位置に開いて出る（プログラムが時機を選べる）**・遮断器で止めた面は、移す・たたんで開く・プログラムの出し直しで、また動く〕）・`docs/sodactl.md`（`--dock float`・`renderers.float`）・`docs/verification.md`
       対象: 上のファイル
       依存: T25
       AC: AC27
 - [ ] T27: 負の対照（PR-C。test 工程）: (a) `clampFloatRect` を通さない版 → T25 (2) が落ちる。(b) 窓の層を `PaneFrame` の外（`body` への `Teleport`・`position: fixed`）に置く版 → T25 (3) が落ちる。(c) 重なりを、`v-for` の配列の並べ替えで替える版 → T25 (5) の「枠の要素が同じ」か「`load` が 1」が落ちる（「作業順序」の 1）。
-      (d) 窓を開くときに枠へ `focus()` する版 → T25 (4) が落ちる。(e) `insertFloat` が、新しい窓をいつも最前面に入れる版 → T25 (5) の「操作中の窓の見出しが覆われない」が落ちる。(f) 開いている窓のボタンをトレイから外す版 → T25 (1) の「帯の無い pane で `client.view` を送らない」が落ちる。(g) `effectiveCollapsed` から「置き場所が浮いた窓なら、たたむ」を外す版 → T25 (1) の「閉じて始まる（窓の要素が無い）」が落ちる。(h) 窓を開く操作が、記憶に `rect` を書かない版 → T25 (2) の「再読み込みの後も、同じ箱」が落ちる。生の出力を `test-result.md` に
+      (d) 窓を開くときに枠へ `focus()` する版 → T25 (4) が落ちる。(e) `insertFloat` が、新しい窓をいつも最前面に入れる版 → T25 (5) の「操作中の窓の見出しが覆われない」が落ちる。(f) 開いている窓のボタンをトレイから外す版 → T25 (1) の「帯の無い pane で `client.view` を送らない」が落ちる。(g) `effectiveCollapsed` から「置き場所が浮いた窓なら、たたむ」を外す版 → T25 (1) の「閉じて始まる（窓の要素が無い）」が落ちる。(h) 窓を開く操作が、記憶に `rect` を書かない版 → T25 (2) の「別の `--size` で `set` し直した後も、同じ箱」が落ちる。生の出力を `test-result.md` に
       対象: `.aidev/works/20261008-display-layout/test-result.md`
       依存: T25
       AC: AC28

@@ -13,12 +13,12 @@
 - F2: パネルは `PanePanel.vue`。pane ごとに 1 つで、右に固定。見出し（固定のラベル `displayLabel`・印「スクリプト」・［操作する］・［操作を終える］・［たたむ］・［×］）、複数ならタブ（選んでいる 1 枚だけ `DisplayFrame` を載せる。:189）、
   左の縁に幅のつまみ（`useResizeDrag`。ドラッグの間は案内の線だけ・離したとき 1 回確定。:47-69）。たたむと **幅 24px の縦の見出し**（`v-if="folded"`。:148-159）になり、`DisplayFrame` は外れる。
 - F3: 帯は `PaneBands.vue`。端末の上に縦に積む。1 本の行は左から、印「▍表示」・印「スクリプト」・枠・［操作する］／［操作を終える］・［×］（:36-57）。高さの合計が pane の 3 分の 1 を超える分は「ほか N 件」の 1 行（`visibleBands`）。**たためない・下に置けない**。
-- F4: 枠は `DisplayFrame.vue`。iframe は `:key="gen"`、合い札・待ちの時計は setup で用意する（:481-482）。**`onLoad` は、2 回目の `load` で必ず `closeAndReport("navigated")`**（:164-173。面はサーバごと閉じ、
+- F4: 枠は `DisplayFrame.vue`。iframe は `:key="gen"`、合い札・待ちの時計は setup で用意する（:483-484）。**`onLoad` は、2 回目の `load` で必ず `closeAndReport("navigated")`**（:164-173。面はサーバごと閉じ、
   `script-html` の面なら、その pane は 5 分の冷却に入る。`DisplayService` の決まり）。
-- F5: 置く側は、`:key="frameKey(info)"`（`display/framePage.ts:45-49`。`<id>:<形式>`、スクリプトは `<id>:script-html:<rev>`）で `DisplayFrame` を載せる。**たたむ・タブの切り替え・tab と workspace の切り替え・分割・拡大（zoom）は、
+- F5: 置く側は、`:key="frameKey(info)"`（`display/framePage.ts:44-51`。`<id>:<形式>`、スクリプトは `<id>:script-html:<rev>`）で `DisplayFrame` を載せる。**たたむ・タブの切り替え・tab と workspace の切り替え・分割・拡大（zoom）は、
   どれも iframe を動かさず、部品を外して作り直す**（`PaneLayout.vue:194-206` が葉を `v-if`・`:key` で作り直す。`KeepAlive`・`v-show` は無い）。スクリプトの面の状態は、そのたびに消える（中身はストアに残っているので、描き直される）。
 - F6: **「iframe の親を替える・兄弟の中で順を替えると、読み込み直しになって `load` がもう 1 回起きる」ことを確かめた記録は、この木に無い**（`moveBefore`・付け替え・reparent の記述 0 件）。今の実装は動かさない作りなので、問題になっていない。
-  一般に、ブラウザは iframe を文書から外して入れ直すと読み込み直す。この作業は「動かさない」を決まりにして、E2E で `data-display-loads`（:564）が 1 のままであることを見る。
+  一般に、ブラウザは iframe を文書から外して入れ直すと読み込み直す。この作業は「動かさない」を決まりにして、E2E で `data-display-loads`（:566）が 1 のままであることを見る。
 - F7: 知らせ（`Toast.vue`）は、表示の面が 1 つでも出ていると右下へ寄る（PR3 の直し。右上だと、面の見出し〔固定のラベル・印・［操作する］〕に重なるため）。`position: fixed`・`z-index: 950`。
 - F8: モバイル（幅 767px 以下。`mobile/detect.ts:4`）は、`MobileShell.vue` が帯を自分で描き（:117。`PaneBands` を上部バーの下に置く）、パネルは `MobileDisplaySheet.vue`（`<dialog>` の `showModal()`）。`PaneFrame` は `enabled=false`。
 
@@ -26,16 +26,16 @@
 
 - F9: `store/display.ts`。`collapsed`（pane の id の `Set`。**保存しない**。:30-31）、`activePanel`（pane → 面の id。保存しない）、`panelWidths`（pane → px。`soda.prefs.v1` の `displayPanelWidths`。64 件・古い順に捨てる・
   もう無い pane の分は `pruneWidths` が接続のたびに捨てる〔`DisplayController.ts:79-80`〕）。
-- F10: `soda.prefs.v1`（`localStorage`）の読み書きは `store/view.ts` の `readPrefs`・`writePrefs` だけ。`writePrefs` は共有の設定（サーバ）へも送るが、**`DEVICE_LOCAL_PREF_KEYS`（`packages/protocol/src/messages.ts:810-819`）の項目は送らない**
+- F10: `soda.prefs.v1`（`localStorage`）の読み書きは `store/view.ts` の `readPrefs`・`writePrefs` だけ。`writePrefs` は共有の設定（サーバ）へも送るが、**`DEVICE_LOCAL_PREF_KEYS`（`packages/protocol/src/messages.ts:819-827`）の項目は送らない**
   （web の `isDeviceLocalPref`・サーバの `PrefsStore.ts:45-57` の両方で落とす）。`displayPanelWidths` はここに入っている。
-- F11: 共有の設定（`SharedPrefs`。`messages.ts:753-801`）に `displayScriptEnabled` がある。設定の画面では、節「端末」の最後の行（`SettingsDialog.vue:1242-1259`）。3 択以上の書き方は `fieldset` ＋ radio（`paneBorders`。:1033-1045）か `<select>`（`tabBarPosition`。:1091-1096）。
-  設定を 1 つ足すときに触るのは: `protocol` の `SharedPrefs`・`client-core/src/prefs/load.ts`（読みと正規化）・`web/src/store/settings.ts`・`store/prefsApply.ts`・`actions/ActionDispatcher.ts` の `reloadConfig`（:1510-1547）・`SettingsDialog.vue`・各テスト。端末版は `tui/src/settings/sections.ts`（ブラウザだけの項目は `BROWSER_ONLY` の注記）。
+- F11: 共有の設定（`SharedPrefs`。`messages.ts:760-809`）に `displayScriptEnabled` がある。設定の画面では、節「端末」の最後の行（`SettingsDialog.vue:1242-1260`。節「端末」の最後の項目）。3 択以上の書き方は `fieldset` ＋ radio（`paneBorders`。:1033-1045）か `<select>`（`tabBarPosition`。:1091-1096）。
+  設定を 1 つ足すときに触るのは: `protocol` の `SharedPrefs`・`client-core/src/prefs/load.ts`（読みと正規化）・`web/src/store/settings.ts`・`store/prefsApply.ts`・`actions/ActionDispatcher.ts` の `reloadConfig`（:1531-1577）・`SettingsDialog.vue`・各テスト。端末版は `tui/src/settings/sections.ts`（ブラウザだけの項目は `BROWSER_ONLY` の注記）。
 
 ### プロトコルと sodactl
 
 - F12: `packages/protocol/src/display.ts`。`DisplaySetBody`（`name`・`kind`・`format`・`content`・`title?`・`size?`・`ttlMs?`）、`DisplayInfo`（`id`・`paneId`・`name`・`kind`・`format`・`title`・`size`・`rev`・`bytes`・`updatedAt`）。
   `checkDisplaySet` は**知らない項目を落とす**。`readDisplayInfo`（:390-408）は、知っている項目の型だけを見て、**知らない項目を持つ値をそのまま通す**。
-- F13: `/ws` の `display.set` の schema は `z.object({ paneId, ...displaySetFields })`（知らない項目は落ちる）。**受け口（`pane.sock`）の schema は `z.strictObject(displaySetFields)`**（`messages.ts:585`。知らない項目があると断る）。
+- F13: `/ws` の `display.set` の schema は `z.object({ paneId, ...displaySetFields })`（知らない項目は落ちる）。**受け口（`pane.sock`）の schema は `z.strictObject(displaySetFields)`**（`messages.ts:592`。知らない項目があると断る）。
   → 古いサーバへ新しい項目を送ると、`/ws` では黙って落ち、受け口では誤りになる。sodactl は、`script-html` と同じく、**送る前に `display.features` を見る**必要がある（`commands/display.ts:330-331`）。
 - F14: 機能の名乗り。`DISPLAY_FEATURES`（sodactl とサーバ）、`DISPLAY_RENDER_FEATURES = ["panel","band","actions","script-html"]`（画面が `display.subscribe` で名乗る）、`DISPLAY_RENDER_FEATURES_MAX = 8`。
   `DisplayService.subscribe` は知らない種類を黙って捨て、`renderers()`（`DisplayService.ts:487-498`）が種類ごとに数える。`DisplayRenderers` は知らない項目を通す。
@@ -43,7 +43,7 @@
 
 ### キー・メニュー・ドラッグ
 
-- F16: `focus_display`（`prefix+i`）。`client-core/src/keys/bindings.ts:492-500`、web は `ActionDispatcher.ts:1045-1068`（選んでいるパネル → 無ければ最初の帯。たたんであれば戻す。届かなければモバイルの重ね表示）。
+- F16: `focus_display`（`prefix+i`）。`client-core/src/keys/bindings.ts:492-500`、web は `ActionDispatcher.ts:1066-1089`（選んでいるパネル → 無ければ最初の帯。たたんであれば戻す。届かなければモバイルの重ね表示）。
   既定のキーで、`prefix+shift+i` は空いている（`bindings.ts` の既定の一覧に無い）。操作を 1 つ足すと、件数を固定したテスト（`bindings.test.ts:45`・`KeySettings.test.ts`・`TuiDispatcher.test.ts:213`）と、端末版の `TuiDispatcher.run` の case が要る。
 - F17: メニューは `ContextMenu.vue`（`position: fixed`・`z-index: 1000`。項目は `{label, run}` だけで、**入れ子・区切り・チェックの印は無い**。`:key="item.label"` なのでラベルは一意）。pane のメニューに「表示をすべて閉じる」（:73）。
   開くのは `actions.openContextMenu(target, at)`。
@@ -56,7 +56,7 @@
 
 ### 重なりの順
 
-- F21: `z-index` の値。メニュー 1000・知らせ 950・`CommandPopup`／再接続 900・xterm のスクロールバー 11（`xterm.css:245`）・`.pane-frame-edge-flush` のフォーカスの線 12・案内の線 3・パネルのつまみ 2・覆い 1。
+- F21: `z-index` の値。メニュー 1000・知らせ 950・`CommandPopup`／再接続 900・xterm のスクロールバー 11（`node_modules` の中の xterm の CSS。`PaneFrame.vue:475` の注釈が、同じ値に触れている）・`.pane-frame-edge-flush` のフォーカスの線 12・案内の線 3・パネルのつまみ 2・覆い 1。
   ダイアログ（設定・ask・確認など）は `<dialog>` の `showModal()`（top layer）。`.pane-layout-side` は `isolation: isolate`（分割の子ごとに重なりの文脈が閉じる。`PaneLayout.vue:267`）。単一 pane の葉には掛からない。
   `.pane-frame-zone`・`.pane-frame-name` は `z-index` を持たず、DOM の順で端末の上に出る。
 
@@ -65,7 +65,7 @@
 - G1: **`load` は 1 回だけ**（F4）。2 回目は、理由を問わず「移った」。
 - G2: **固定のラベルと印**。`displayLabel`（`display/displayLabel.ts`）と `DisplayScriptMark.vue`（印「スクリプト」・［操作する］・［操作を終える］）は、枠の外の、アプリの DOM。`info.format` から決める。
 - G3: **覆いと、操作を始める入口**。スクリプトの面は、［操作する］と `prefix+i` で始めるまで、覆い（`.display-frame-cover`）の下（`engageEntry.ts`。枠・覆いを押しても始まらない）。
-- G4: **フォーカスの番**。操作中でないのに枠がフォーカスを取ったら、元の場所へ戻して、サーバへ知らせる（pane ごとに 3 回で、その pane のスクリプトの面を全部閉じて 5 分の冷却）。部品が外れるときにも見る（`DisplayFrame.vue:497-503`）。
+- G4: **フォーカスの番**。操作中でないのに枠がフォーカスを取ったら、元の場所へ戻して、サーバへ知らせる（pane ごとに 3 回で、その pane のスクリプトの面を全部閉じて 5 分の冷却）。部品が外れるときにも見る（`DisplayFrame.vue:499-505`）。
 - G5: **フォーカスの脱落の戻しと、その画面だけの遮断器**（`display/focusDrop.ts`・`focusOrigin.ts`。`20261007-soda-extensions/decisions.md` D38・D39）。スクリプトの枠が 1 つ以上載っているあいだ、25ms の見回り・`focusout`（`relatedTarget` なし）・窓の `blur`／`focus` のたびに、**状態を持たずに**見る:
   `activeElement` が `body`（か無し）・文書がフォーカスを持つ・操作中の枠が無い → **理由を問わず**、最後にフォーカスのあったアプリの要素（枠・覆い・［操作する］でない要素。Shadow DOM の中も。無い・外れた・隠れているなら、選んでいる pane の端末。modal のダイアログが開いていれば、その外へは出さない）へ戻す。
   **「利用者が自分で外した」「直前の要素が消えた」の免除は無い**。実際に `body` から動かせた戻しは、**すべて数える**（枠ごとの番が戻した分も同じ数に入る）。**3 秒に 15 回**で、その画面のスクリプトの枠をすべて DOM から外し、固定の文言と［再開］を出す（サーバへは知らせない）。10 秒に 5 回で、知らせ（トースト）。

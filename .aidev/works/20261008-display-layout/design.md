@@ -225,6 +225,7 @@ export const DISPLAY_DOCK_CAPS: readonly DisplayDock[];
 - ストア（`store/display.ts`）の操作（どれも記憶を書く）:
   `setFaceCollapsed(info, on)`・`setFaceDock(info, dock)`（`faces` と `names` の両方へ）・`setFaceEdge(info, edge)`（同じ）・`setFaceRect(info, rect)`・`setSideSize(paneId, side, px)`・`clearSideSize(paneId, side)`・`resetFace(info)`（`faces` のその鍵と、`names` のその鍵を消す）。
   面に関わる 4 つ（`setFaceCollapsed`・`setFaceDock`・`setFaceEdge`・`setFaceRect`）は、中で 1 つの関数 `writeFace(info, patch)` を通り、**いまの導出した値に `patch` を重ねた全項目**を書く。
+  **`setFaceDock(info, dock, rect?)` は、`writeFace(info, { dock, collapsed: false, rect })` と、`names` への書き込み。`setFaceEdge(info, edge)` は、`writeFace(info, { edge, collapsed: false })` と、`names` への書き込み**（置き場所を変えると、移った先で開く。パネルも帯も）。部品・メニュー・D&D は、`writeFace` を直に呼ばず、必ず、この 4 つを呼ぶ（`names` の書き忘れを作らない）。
   **置き場所は、`caps` で丸める前の値を書く**（`effectiveDock` に、5 つ全部を `caps` として渡した値）。PR-A の画面で、`--dock bottom` の面を 1 回たたんでも、記憶は `bottom` で、PR-B の画面に上げると下に出る（画面が出せない値は、描くときに `caps` で落ちるだけ）。
   **ただし、丸める前が `float` で、その画面が `float` を出せないとき（PR-A・PR-B の画面）は、丸めた後の値を書く**（利用者が窓として見たことの無い面が、PR-C の画面に上げたとたんに、端末の上に開いて出ないように）。
   「記憶の無い浮いた窓は、たたんで始まる」の「置き場所」は、**`caps` で丸めた後**の `effectiveDock`（PR-A・PR-B の画面では、`--dock float` の面は、右に、設定と指定どおりの開閉で出る）。
@@ -280,7 +281,9 @@ export function resolvePaneDisplays(input: LayoutInput): LayoutResult;
 6. **浮いた窓**: 窓の動ける領域 `area` は、端末の領域を各辺 `FLOAT_AREA_INSET_PX` ずつ縮めた箱（窓の矩形は、`area` の左上から）。`area` が `FLOAT_MIN_W_PX × FLOAT_MIN_H_PX` より小さければ、窓は全部が自動でたたまれる。そうでなければ、たたんでいない窓ごとに `clampFloatRect(floatRects[id], area)`（`display/floatGeometry.ts`。PR-C）。
    `floatRects[id]` は、**記憶の矩形（`faces` の `rect`）**。呼ぶ側（`PaneFrame`）が渡す。**無ければ、割り付けが、その場で `defaultFloatRect(0, size, area)` を使う**（例外にしない）。
    **窓を開く操作（トレイのボタン・メニュー・`prefix+i`・D&D で中央へ）は、記憶に `rect` が無ければ、初めの矩形を記憶の `rect` に書く**（利用者の操作なので、「記憶を書くのは利用者の操作だけ」に合う。`writeFace` の中で行う）。だから、開いた窓は、いつも記憶に矩形を持ち、再読み込み・面の出し直し（`close` → 同じ名前で `set`）の後も、同じ箱で出る。
-   初めの矩形は `defaultFloatRect(i, size, area)`（`i` は、その時点で開いている窓の数。`area` は `store.layoutByPane` の `floatArea`。`floatArea` が `null`〔その pane の割り付けが、まだ無い・窓の動ける領域が最小より小さい〕なら、`rect` は書かず、上の「その場で使う」に任せる）。**書いた後は、`set --size` の変更・ほかの窓の開閉で動かない**。
+   初めの矩形は `defaultFloatRect(i, size, area)`（`i` は、その時点で開いている窓の数〔自動でたたまれた窓は数えない〕。`area` は `store.layoutByPane` の `floatArea`）。
+   **`floatArea` が `null`（その pane の割り付けが、まだ無い・窓の動ける領域が最小より小さい）の間は、浮いた窓を開く操作を受けない**: トレイの窓のボタンは押せない（`disabled`）・面の一覧は「出せない」・メニューの「浮いた窓にする」「開く」は出さない・`prefix+i` は飛ばす・D&D の中央は「ここには置けません」。→ 開いた窓は、いつも記憶に矩形を持つ。
+   ドックから浮かせるときの `area` は、移す前（ドックが場所を取っている）の領域なので、「右上」が、広がった後の右上から少しずれる（受け入れる。記憶に残る）。**書いた後は、`set --size` の変更・ほかの窓の開閉で動かない**。
 
 - 自動でたたんだ面は `auto` に入り、トレイの押せないボタンになる。**記憶には書かない**（pane が広がれば、次の計算で戻る）。
 - 群れの `activeId` は、`active[side]` がその群れにあればそれ、無ければ群れの最初の面。
@@ -322,7 +325,7 @@ DisplayDropZones             v-if この pane の面を D&D している        
 ```
 
 - `PaneFrame` が `resolvePaneDisplays` を 1 回呼び（computed）、結果を子へ props で渡す。子は、自分で割り付けを計算しない。
-- `div.pane-frame-center` を足すので、この版に上げたとき、`enabled` な pane の端末の祖先が 1 段増える（**面の有無では変わらない**。`PaneFrame.test.ts:776` の「面が出ても `<slot />` の位置が変わらない」は、そのまま通る）。
+- `div.pane-frame-center` を足すので、この版に上げたとき、`enabled` な pane の端末の祖先が 1 段増える（**面の有無では変わらない**。`PaneFrame.test.ts:776` の「面が出ても、葉（スロットの中身）は作り直されない」は、箱の大きさを与える形に直せば通る（T7））。
 - 浮いた窓の層は、`.pane-frame-main` の兄弟（操作中に端末を薄くする `opacity` が、窓に掛からない）。層の箱＝端末の領域で、`overflow: hidden`。
 - **測る前**: 本体の箱の大きさが、まだ 0×0 の間（載った直後。`ResizeObserver` の最初の知らせの前）は、**面の部品を 1 つも載せない**（全部が自動でたたまれた形を、いったん描かない。葉の箱が、余計に 1 回変わらない）。
 - **重なりの値**（同じ pane の中。単一 pane の葉は、重なりの文脈が閉じていないので、pane の外の部品とも比べられる。`research.md` F21）:
@@ -371,9 +374,9 @@ export function placedFrameKey(info, slot: string): string { return `${frameKey(
 | 項目 | 出る条件 | すること | PR |
 |---|---|---|---|
 | 開く／たたむ | いつも（どちらか 1 つ） | `setFaceCollapsed` | A |
-| 上に置く／下に置く | 帯（今と違う側だけ） | `setFaceEdge` | A |
+| 上に置く／下に置く | 帯（今と違う側だけ） | `setFaceEdge`（移った先で開く） | A |
 | 右に置く／左に置く／上に置く／下に置く | パネル（今と違う側だけ） | `setFaceDock`（`collapsed: false` も一緒に書く＝移った先で開く） | B |
-| 浮いた窓にする | パネル（今が窓でない） | `writeFace(info, { dock: "float", collapsed: false, rect: 初めの矩形 })`（開いて出る） | C |
+| 浮いた窓にする | パネル（今が窓でない。窓の動ける領域があるときだけ出す） | `setFaceDock(info, "float", 初めの矩形)`（開いて出る） | C |
 | キーで動かす／キーで大きさを変える | 開いている浮いた窓 | `floatKeyMode` を始める | C |
 | プログラムの指定に戻す | 記憶がある（`hasFacePref`） | `resetFace` | A |
 | この表示を閉じる | いつも | `controller.dismiss({id})`（今の［×］と同じ） | A |
@@ -411,11 +414,11 @@ export function placedFrameKey(info, slot: string): string { return `${frameKey(
 |---|---|
 | その面の枠（iframe）の中（操作中） | その pane の端末（先に `endEngageFrame`） |
 | その面の見出しのボタン（`Tab` で届いて押した・そこから開いたメニューを閉じて戻った） | たたんだ → その面のトレイのボタン／置き場所を変えた → 移った先の見出しの［⋮］ |
-| その面のトレイのボタン（`Tab` で届いて押した） | 開いた → その面の見出しの［たたむ］。浮いた窓のボタンは、開閉の後もトレイにあるので、そのまま |
+| その面のトレイのボタン（`Tab` で届いて押した） | 開いた → その面の見出しの［たたむ］。置き場所を変えた（＝開く）→ 移った先の見出しの［⋮］。浮いた窓のボタンは、開閉の後もトレイにあるので、そのまま（変更の前に端末へ移さない） |
 | 端末・ほかの場所（マウスで押した・端末から開いたメニュー・`display_menu`） | 動かさない |
 | 行き先の部品が無い（自動でたたまれた等）・変更の後に `body` | その pane の端末 |
 
-- **メニューから実行するとき**: `ContextMenu` は、項目を選ぶと「閉じる → 開く前の場所へフォーカスを戻す → 項目の処理」の順で動く（`ContextMenu.vue:161-166`）。項目の処理は、その後で `withDisplayChange` を呼ぶので、上の表が、そのまま当たる（［⋮］から開いたなら 2 行目、端末から開いたなら 4 行目）。
+- **メニューから実行するとき**: `ContextMenu` は、項目を選ぶと「閉じる → 開く前の場所へフォーカスを戻す → 項目の処理」の順で動く（`ContextMenu.vue:161-167`）。項目の処理は、その後で `withDisplayChange` を呼ぶので、上の表が、そのまま当たる（［⋮］から開いたなら 2 行目、端末から開いたなら 4 行目）。
 - **メニューを開いたまま、フォーカスを取らない部品を押す**: `ContextMenu` は、外の `mousedown` で、戻し先を捨てて閉じる（「フォーカスは、押した先へ移る」が前提）。押した先がフォーカスを取らない部品だと、フォーカスは、消えたメニューから `body` へ落ちる（スクリプトの枠が載っていれば、見回りが端末へ戻して、1 回数える。載っていなければ、落ちたまま）。
   `ContextMenu` の外側の押下の処理に、「押した先が `[data-display-keepfocus]` か `[data-display-cover]` の中なら、開く前の場所へフォーカスを戻してから閉じる（`restoreFocus()`）」を足す。
 - **枠にフォーカスがあるときにメニューを開く**: 表示のメニュー（一覧・面のメニュー）を開く側は、開く前に、`document.activeElement` が面の枠（`iframe[data-display-frame]`）なら、`endEngageFrame` と `host.focusTerminal` で端末へ移してから開く。
@@ -438,14 +441,15 @@ export function placedFrameKey(info, slot: string): string { return `${frameKey(
   見分け: スクリプトの枠かは、iframe の `data-display-script`（`DisplayFrame.vue:565`）。操作中かは、**iframe の親要素（`.display-frame-wrap`）**の `data-display-engaged` が `"1"`（`:552`。`closest` で探さない＝`PanePanel` の根にも、意味の違う同じ名前の属性がある）。「表示のメニューを開く前に端末へ移す」も、同じ見分けを使う。
 - **先に走らなければならない理由**: `DisplayFrame` の聞き手（`onDocPointerDown`）は、押下で操作を終えて、包みの `data-display-engaged` を `"0"` にする。本物の入力では、聞き手 1 つごとに描き直し（マイクロタスク）が流れるので、後から走ると、「操作中でないスクリプトの枠」に見えて、何もできない。
   先に走れば、端末へフォーカスを移した時点で、`DisplayFrame` の `onDocFocusIn` が操作を終え、続く `onDocPointerDown` は何もせず、1 拍後の確認では枠にフォーカスが無い。単体テストの `dispatchEvent` は、聞き手の間で描き直しが流れないので、順の違いを見分けられない（E2E で見る）。
-- **モバイル（`store.sheetAvailable` が真）では、働かせない**（モバイルは変えない。端末へフォーカスを移すと、ソフトキーボードが出る）。
+- **モバイル（`store.sheetAvailable` が真）では、働かせない**（モバイルは変えない。端末へフォーカスを移すと、ソフトキーボードが出る）。**聞き手の中で、押下のたびに `store.sheetAvailable` を見る**（登録の時点で 1 回だけ見ない。初めは偽で、`MobileShell` が載ってから真になる）。
+- **残る 1 拍**: 操作を終えた直後の 1 拍、包みの `data-display-engaged` は `"1"` のまま残る。その間に、スクリプトがフォーカスを取り返し、かつ利用者が部品を押すと、「取られた」が 1 回数えられずに、端末へ戻る（守りは弱まらない。限界）。
 - 今のパネルの幅のつまみ（`useResizeDrag` が `preventDefault` する）でも、同じことが起きうる（PR3 の木での疑い。確かめていない）。パネルのつまみは、この作業で `data-display-keepfocus` を付けるので、直る。
   分割の境目・サイドバーの境目（表示の面の部品ではない）は、この作業では触らない（`decisions.md` D15 に、PR3 の側へ知らせる点として残す）。
 
 ### 置き場所の変更
 
 - `setFaceDock`（パネル）・`setFaceEdge`（帯）。`faces` と `names` の両方に書く。枠の鍵（`placedFrameKey`）が替わるので、枠は作り直しになる。
-- **置き場所を変える操作（メニュー・D&D）は、面を開いた状態にする**: `writeFace(info, { dock, collapsed: false })`（浮かせるときは、`rect` も一緒に。メニューなら初めの矩形・D&D なら離した位置）。たたんでいる面を、面の一覧のメニューから移しても、移った先で開いて出る。
+- **置き場所を変える操作（メニュー・D&D）は、面を開いた状態にする**: `setFaceDock(info, dock, rect?)`・`setFaceEdge(info, edge)` が、`collapsed: false` を一緒に書く（浮かせるときは、`rect` も 1 回の呼び出しで。メニューなら初めの矩形・D&D なら離した位置）。たたんでいる面（パネルも帯も）を、面の一覧のメニューから移しても、移った先で開いて出る。
 - 移った面は、移った先の側の「選んでいるタブ」になる（`activeBySide`）。
 - 浮いた窓 → ドック、ドック → 浮いた窓でも同じ。窓の矩形の記憶（`rect`）は消さない（もう一度浮かせると、前の位置）。
 - 端末の大きさは、`ResizeObserver` → 既存の道で、1 回だけ変わる（葉の箱が変わったときだけ `client.view`）。浮いた窓どうし・窓の移動では、葉の箱は変わらない。
@@ -457,7 +461,7 @@ export function placedFrameKey(info, slot: string): string { return `${frameKey(
   箱の外 → `null`。箱の中では、4 つの縁までの距離（幅・高さで割った比）のうち最小のものが 0.22 以下なら、その縁の側。そうでなければ `float`（`float` が偽なら `null`）。
   `DisplayDropZones` が、5 つの場所と文言（「上に置く」ほか）を描き、いまの場所を強調する。いまの置き場所と同じ場所は「ここにあります」。
 - **浮いた窓をつかんだとき**（PR-C）: 窓は、ポインタに付いて、その場で動く（`moveFloatRect`。スタイルだけ）。ポインタが、本体の箱の縁から 16px 以内に入ったときだけ、その側が落とせる場所として強調される（窓を縁の近くへ寄せるだけで、ドックに吸われないように、ドックのときより狭い）。
-- 離す: `zone` が側なら `setFaceDock`、`float` なら `setFaceDock(info, "float")` と、離した位置を左上にした矩形（丸める）を `setFaceRect`。`null`・今と同じ場所なら、何もしない（浮いた窓の移動だけは、位置を `setFaceRect`）。
+- 離す: `zone` が側なら `setFaceDock(info, 側)`、`float` なら `setFaceDock(info, "float", 離した位置を左上にした矩形〔丸める〕)`（1 回の呼び出し）。`null`・今と同じ場所なら、何もしない（浮いた窓の移動だけは、位置を `setFaceRect`）。
 - 取り消し: `Esc`（`keydown` を capture で受け、`preventDefault`・`stopPropagation`）・`pointercancel`・`lostpointercapture`・`view.modalOpen` が真になった（`PaneFrame` の名前の D&D と同じ watch）・部品が外れた。浮いた窓は、始める前の矩形へ戻す。
 - ドラッグの間、`<html>` に `soda-display-dragging` を付け、`iframe[data-display-frame] { pointer-events: none }`（枠の上でもポインタを取りこぼさない。U4 の備え）。ドラッグ中のキーは、端末へ流さない。
 - **tab の D&D・pane の移動の制限（main に入ったもの。`research.md` F22）との見分け**: tab の D&D は tab バーの tab をつかみ、サイドバーの「落とせる行の強調」は、pane の名前のドラッグ（`view.paneDrag`）の間だけ出る。面の D&D は、見出しをつかみ、`store.dockDrag` だけを使う（`view.paneDrag`・tab のドラッグの状態を立てない）ので、サイドバーの行・tab バーは、面の D&D の間、何も強調しない。面は、tab バー・サイドバーへは落とせない（pane の外で離すと取り消し）。
@@ -590,9 +594,9 @@ export function pickToastSlot(a: { viewportH: number; stripLeft: number; stripRi
 - AC15: `dockDrag.ts`（つかむ・`dockZoneAt`・離す・取り消し）と `DisplayDropZones`。pane の D&D とは状態が別（`store.dockDrag`）。単体（T13・T16）・E2E（T18・T25）。
 - AC16: 設定 `displayPanelDock`（T4・T17）と `effectiveDock` の順（記憶 ＞ 同じ名前 ＞ 指定 ＞ 設定）。単体（T5）・E2E（T18）。
 - AC17: 窓は `.pane-frame-floats`（端末の箱に重なる層）にあり、葉の箱を変えない。窓のボタンは、開いていてもトレイに出る（開閉で、トレイの行が出入りしない）。記憶の無い窓は、閉じて始まる（`effectiveCollapsed`）。開いた窓は、記憶に矩形を持つ。単体（T5・T21・T22）・E2E（T25。`client.view` が出ない）・負の対照（T27 f・g）。
-- AC18: `clampFloatRect`・`moveFloatRect`・`resizeFloatRect` と、`setFaceRect`。単体（T21・T23）・E2E（T25）・負の対照（T27 a）。
+- AC18: `clampFloatRect`・`moveFloatRect`・`resizeFloatRect` と、`setFaceRect`。窓を開く操作が、記憶に矩形を書く。単体（T21・T22・T23）・E2E（T25）・負の対照（T27 a・h）。
 - AC19: 層の箱＝端末の領域・`overflow: hidden`・`z-index: 20`（メニュー 1000・知らせ 950・ダイアログの top layer・落とす場所の表示 30 より下）。出現でフォーカスを取らない。単体（T22）・E2E（T25。`elementFromPoint`）・負の対照（T27 b・d）。
-- AC20: `floatOrder` と `z-index`（`v-for` は出た順のまま）。操作中の窓は最前面・新しい窓はその後ろ（`raiseFloat`・`insertFloat`）。窓は pane の DOM の中（pane と一緒に外れて、記憶から作り直される）。単体（T22）・E2E（T25）・負の対照（T27 c）。
+- AC20: `floatOrder` と `z-index`（`v-for` は出た順のまま）。操作中の窓は最前面・新しい窓はその後ろ（`raiseFloat`・`insertFloat`）。負の対照（T27 c・e）。窓は pane の DOM の中（pane と一緒に外れて、記憶から作り直される）。単体（T22）・E2E（T25）・負の対照（T27 c）。
 - AC21: `placedFrameKey` と、置き場所ごとにテンプレートの別の位置へ置く作り（「PR3 の守りとの関係」G1）。E2E（T10・T18・T25）・負の対照（T12 c・T20 a・T27 c）。
 - AC22: `DisplayPanelHead`（どの置き場所でも同じ部品・印とボタンは縮まない・狭いときは 2 行）。枠の箱の中の固定の文言（「設定で無効になっています」・遮断器の後の文言と［再開］・［もう一度出す］）は、`DisplayFrame` が描くまま、どの置き場所でも枠の箱の中に出る（枠の入れ物は `overflow: auto`）。操作中の窓は最前面（`insertFloat`）。単体（T7・T21）・E2E（T10・T18・T25）・負の対照（T27 e）。
 - AC23: protocol に位置・大きさの項目が無い（T1）・`frameMessages.ts` を変えない・`effective*` が記憶を先に見る（T5）。単体（T1・T5 と、既存の `frameMessages` のテスト）・E2E（T10・T25）・負の対照（T12 d）。
