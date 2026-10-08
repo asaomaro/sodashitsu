@@ -154,6 +154,11 @@ export class ThemeColors {
   constructor(
     readonly name: ThemeName,
     overrides?: ThemeOverrides,
+    /**
+     * 背景を透かす（端末版の設定「背景を透過する」）。pane の既定の背景と、画面の地（`ground`）を既定の背景（SGR 49）で送る。
+     * それ以外（プログラムが指定した背景・選択・強調・メニュー・ダイアログ）は塗ったまま。
+     */
+    readonly transparent = false,
   ) {
     const pal = TERMINAL_PALETTES[name];
     this.paneFg = hexColor(pal.foreground);
@@ -170,7 +175,7 @@ export class ThemeColors {
     for (const [k, v] of Object.entries(layer) as [CssVar, string][])
       if (parseCssColor(v)) usable[k] = v;
     this.vars = mergeVars(base.vars, usable);
-    this.key = `${name}:${JSON.stringify(usable)}`;
+    this.key = `${name}:${JSON.stringify(usable)}${transparent ? ":transparent" : ""}`;
   }
 
   /** テーマと効いている上書きを表す鍵（同じなら描き直しの必要が無い）。 */
@@ -187,9 +192,22 @@ export class ThemeColors {
     return c;
   }
 
+  /**
+   * 画面の地の色（`--soda-bg`＝空いた場所・tab バー・pane の枠の地、`--soda-menu-bg`＝サイドバーと狭い幅の上辺の地）。透かすときは既定の背景。
+   * メニュー・ダイアログ・トーストの地は重なる部品なので、ここではなく `ui` を使う。
+   */
+  ground(v: "--soda-bg" | "--soda-menu-bg"): PackedColor {
+    return this.transparent ? DEFAULT_COLOR : this.ui(v);
+  }
+
+  /** pane の既定の背景（セルが背景を指定していないところ。透かすときは既定の背景）。 */
+  get paneGround(): PackedColor {
+    return this.transparent ? DEFAULT_COLOR : this.paneBg;
+  }
+
   /** pane のセルの前景（`kind`: 0 既定・1 パレット・2 RGB）。 */
   paneColor(kind: 0 | 1 | 2, value: number, background: boolean): PackedColor {
-    if (kind === 0) return background ? this.paneBg : this.paneFg;
+    if (kind === 0) return background ? this.paneGround : this.paneFg;
     if (kind === 1) return value < 16 ? this.ansi[value]! : paletteColor(value);
     return RGB | (value & 0xffffff);
   }

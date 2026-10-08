@@ -72,9 +72,9 @@ export class Renderer {
     extras: RenderExtras = {},
   ): RenderResult {
     const { theme, model } = ctx;
-    const grid = new Grid(layout.cols, layout.rows, theme.ui("--soda-bg"));
+    const grid = new Grid(layout.cols, layout.rows, theme.ground("--soda-bg"));
     if (layout.tooSmall) {
-      centerText(grid, "端末が小さすぎます", theme.ui("--soda-fg"), theme.ui("--soda-bg"));
+      centerText(grid, "端末が小さすぎます", theme.ui("--soda-fg"), theme.ground("--soda-bg"));
       this.lastGrid = null;
       this.lastPaint.clear();
       return {
@@ -123,11 +123,11 @@ export class Renderer {
         box.sides,
       );
       if (!term) {
-        grid.fill(box.content, theme.paneFg, theme.paneBg);
+        grid.fill(box.content, theme.paneFg, theme.paneGround);
         continue;
       }
       paintScrollbar(grid, box, term, focused, theme);
-      const key = `${box.content.x},${box.content.y},${box.content.w},${box.content.h},${theme.name}`;
+      const key = `${box.content.x},${box.content.y},${box.content.w},${box.content.h},${theme.key}`;
       if (prev && !term.dirty && !focused && this.lastPaint.get(box.paneId) === key) {
         grid.copyFrom(prev, box.content);
       } else {
@@ -139,7 +139,7 @@ export class Renderer {
     }
     if (layout.panes.length === 0) {
       const msg = ctx.connection === "open" ? "workspace がありません" : "接続中…";
-      centerText(grid, msg, theme.ui("--soda-fg"), theme.ui("--soda-bg"), layout.paneArea);
+      centerText(grid, msg, theme.ui("--soda-fg"), theme.ground("--soda-bg"), layout.paneArea);
     }
     // 重ねて描いたものがあれば、次のフレームは pane の中身を前の格子から写さない（重ねた絵まで写してしまう）。
     let covered = false;
@@ -241,7 +241,7 @@ function paintScrollbar(
   const color = focused ? theme.ui("--soda-pane-current") : theme.ui("--soda-state-idle");
   const x = box.frame.x + box.frame.w - 1;
   for (let y = thumb.top; y < thumb.top + thumb.len; y++)
-    grid.set(x, y, "┃", 1, color, theme.ui("--soda-bg"));
+    grid.set(x, y, "┃", 1, color, theme.ground("--soda-bg"));
 }
 
 /** 枠の名前：付けた名前、無ければ（設定が入なら）エージェントの名前、無ければ端末のタイトル。 */

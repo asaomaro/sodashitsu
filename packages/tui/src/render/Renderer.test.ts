@@ -42,10 +42,11 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
         tab: model.currentTab() ? { layout: model.currentTab()!.layout, zoomedPaneId: null } : null,
         focusedPaneId: model.focusedPaneId,
       });
+    let transparent = false;
     const ctx = (): ChromeContext => ({
       model,
       prefs,
-      theme: new ThemeColors("dracula"),
+      theme: new ThemeColors("dracula", undefined, transparent),
       mode: "terminal",
       connection: "open",
       notice: null,
@@ -70,7 +71,11 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
       await outer.write(r.output);
       return r;
     };
-    return { model, prefs, panes, outer, draw, commit, layout, renderer };
+    // 差分の描画を確かめるため、描き直しはさせない（アプリは theme.key の変化で `invalidate` するが、ここでは Renderer の差分だけを見る）。
+    const setTransparent = (v: boolean) => {
+      transparent = v;
+    };
+    return { model, prefs, panes, outer, draw, commit, layout, renderer, setTransparent };
   }
 
   it("サイドバーに workspace とエージェント、tab バーに tab、枠に pane の名前、中身に pane の出力", async () => {
@@ -127,6 +132,71 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     // 本物のカーソルは焦点の pane（p1）のカーソルの位置（中身の左上 + カーソル）。
     const p1Box = layout().panes.find((b) => b.paneId === "p1")!.content;
     expect(outer.cursor).toEqual({ x: p1Box.x + stringWidth("日本語 ok"), y: p1Box.y + 1 });
+  });
+
+  describe("背景の透過（20261008-tui-transparent-bg。AC1・AC2・AC3・AC5）", () => {
+    const THEME_BG = (() => {
+      const bg = new ThemeColors("dracula").paneBg;
+      return `48;2;${(bg >> 16) & 0xff};${(bg >> 8) & 0xff};${bg & 0xff}`;
+    })();
+    const ui = (v: Parameters<ThemeColors["ui"]>[0]) => {
+      const c = new ThemeColors("dracula").ui(v);
+      return `48;2;${(c >> 16) & 0xff};${(c >> 8) & 0xff};${c & 0xff}`;
+    };
+
+    it("無効（既定）のときはテーマの背景を RGB で塗る", async () => {
+      const { draw, commit } = await setup();
+      commit();
+      const out = (await draw()).output;
+      expect(out).toContain(THEME_BG);
+      expect(out).toContain(ui("--soda-bg"));
+      expect(out).toContain(ui("--soda-menu-bg"));
+    });
+
+    it("有効のとき、pane の既定の背景・画面の地（空き・tab バー・枠・サイドバー）は RGB で塗らない。塗る所は塗ったまま", async () => {
+      const { draw, commit, setTransparent, panes } = await setup();
+      commit();
+      const p1 = panes.get("p1")!;
+      // プログラムが背景を指定したセル（赤の ANSI・256 色の 100 番・RGB）。
+      p1.snapshot(
+        28,
+        17,
+        "\x1b[41m A \x1b[0m\x1b[48;5;100m B \x1b[0m\x1b[48;2;1;2;3m C \x1b[0m plain",
+      );
+      await p1.flush();
+      setTransparent(true);
+      const out = (await draw()).output;
+      expect(out).not.toContain(THEME_BG); // pane の既定の背景（dracula の pane 背景）
+      expect(out).not.toContain(ui("--soda-bg"));
+      expect(out).not.toContain(ui("--soda-menu-bg")); // サイドバー・上辺の地
+      // AC3: プログラムが指定した背景は塗る。
+      expect(out).toContain("48;2;1;2;3");
+      expect(out).toContain("48;5;100");
+      expect(out).toMatch(/48;2;\d+;\d+;\d+m A /); // ANSI 16 色の背景はテーマの RGB へ置き換わって塗る
+      // AC3: 強調（いまの tab・選ばれた workspace の行・枠の色の前景など）は塗る。
+      expect(out).toContain(ui("--soda-menu-active-bg"));
+    });
+
+    it("差分の描画: RGB の背景 ⇄ 既定の背景で前の色が残らない（AC5）", async () => {
+      const { outer, draw, commit, setTransparent, panes } = await setup();
+      commit();
+      const p1 = panes.get("p1")!;
+      p1.snapshot(28, 17, "text");
+      await p1.flush();
+      // 外側の端末のモデル（xterm）の背景を見る。空きのセル（pane の右の余白ではなく pane の既定の背景のセル）。
+      const bgAt = (x: number, y: number) => outer.cellBg(x, y);
+      await draw();
+      const solid = bgAt(40, 10);
+      expect(solid).not.toBeNull(); // 塗っている
+      // 有効にして描き直さずに、差分だけで再描画（Renderer の前の格子を残したまま作り直す＝テーマだけ変える）。
+      setTransparent(true);
+      await draw();
+      expect(bgAt(40, 10)).toBeNull(); // 既定の背景（透過）
+      expect(bgAt(2, 10)).toBeNull(); // サイドバー
+      setTransparent(false);
+      await draw();
+      expect(bgAt(40, 10)).toBe(solid);
+    });
   });
 
   it("prefix 待ちは tab バーの左端に PREFIX", async () => {
