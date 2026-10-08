@@ -2,6 +2,8 @@
 
 要件は `requirements.md`。この設計は、5 つの PR のうち **PR1（構造）を詳しく**、PR2〜PR5 を骨子まで書く。PR2 以降は、PR1 の着地の後に、この文書へ追補する。
 
+> **追補 01（2026-10-09。独立点検の反映）**: この文書の「データ（PR1）」「画面（PR1）」のうち、下の「追補 01」の節と食い違う所は、**追補 01 が優先する**。点検の全文は、監督役の控え `graph-doccheck-result.md`（A1〜A5・B1〜B8・C1・C2）。
+
 ## いまの作り（調べた事実）
 
 - グラフの画面は、`App.vue` が `<GraphView />` を、基本画面に重ねるダイアログとして出す（`view.graphOpen`。`#soda-graph-dialog` へ Teleport）。開いている間、サイドバーは隠れる。
@@ -153,3 +155,81 @@
 | D5 | グラフは、主な領域の画面にする | 採る | サイドバーを共有する（AC-S1） |
 | D6 | 上限 512・512・1024 | 採る | pane の数の実用の上と、1 回の更新の大きさ |
 | D7 | PR1 では、ノードを押すと基本画面へ | 採る | 端末の窓は PR2。PR1 だけでも、今より後退しない |
+
+## 追補 01: 独立点検の反映（PR1 を 4 つに分ける）
+
+### 事実の訂正（C1）
+
+- `GraphView` 自身は Teleport されない。自分の `<dialog id="soda-graph-dialog">` を `showModal()` で出す（top layer が全画面を覆うので、サイドバーが隠れる）。`#soda-graph-dialog` へ Teleport されるのは、`Toast` と `ReconnectOverlay`（`App.vue:108`）。
+- グラフを扱う E2E は、いま 1 本も無い（happy-dom の単体テスト 8 ファイルだけ）。
+- ノードの寸法の定数は `GRAPH_GRID = 20`・`GRAPH_NODE_WIDTH = 200`・`GRAPH_NODE_HEIGHT = 80`（`client-core/src/graph/geometry.ts`）。
+
+### 決め直し
+
+| # | 事項 | 決定 | 元の指摘 |
+| :- | :- | :- | :- |
+| D8 | **座標は、全体で 1 枚の面のまま。空間は、表示の絞り込み**（その空間のノードと囲いだけを出し、その範囲へ全体表示する） | D1 の「空間ごとの座標」を取り消す。グループの移動で座標は変わらない（平行移動が要らない）。古い画面も、そのまま正しく出る。重ならない規則は、全体で 1 つ | B2・A4 |
+| D9 | サーバの維持は、**「不変条件の検査と修復」1 つの関数**（`reconcileGraph`）にする。できごとごとの変換は書かない | 下の「維持」 | A4 |
+| D10 | 重なり・`node_required` の検査は、`graph.update` の方式の層（`surface/methods/graph.ts`）に置く。`applyGraphOps`・`validateGraph`（保存の読み込みにも使う純粋な関数）には入れない。**断るのは、その更新が、新しい重なりを作る・重なりを広げるときだけ** | すでに重なっている状態から、動けなくならない。サーバの内部の更新（`GraphPaneCleanup`・`reconcileGraph`）は、素通し | A5 |
+| D11 | 基本画面は、**大きさを保ったまま見えなくする**（`visibility: hidden` と `inert`。`display: none`・`v-show` は使わない） | `display: none` だと、pane の箱が 0×0 になり、`client.view` が 1×1 を申告して、全部の PTY が縮む | A1 |
+| D12 | `view.modalOpen` を 2 つに割る: `view.keysCaptured`（キーを端末・サイドバーの navigate へ流さない）と `view.modalOpen`（ダイアログが開いている）。デスクトップのグラフの画面は、**どちらにも入れない**——グラフの面にフォーカスがある間だけ、グラフのキーが働く（ふつうの部品と同じ）。サイドバーは、今までどおり使える | 下の「仕分け」 | A2 |
+| D13 | モバイルは、今の重ねるダイアログのまま。`view.openGraph()`・`closeGraph()` は残し、デスクトップでは `view.screen` を書く薄い別名、モバイルでは今の動き。`GraphView` は、中身（`GraphCanvas`）と、2 つの入れ物（`GraphDialog`＝モバイル、`GraphScreen`＝デスクトップ）に分ける。窓を狭めてモバイルの画面に切り替わったら、`screen` を `base` に戻す | | A3 |
+| D14 | 寸法は、既存の定数から導く。升 = 幅 240（200 + 40）・高さ 120（80 + 40）。囲いの余白 = 見出し 40・周り 20（すべて 20 の倍数） | | B3 |
+| D15 | 保存の `schema` を 2 に上げる。古いサーバは、今の動き（読めないファイルを `graph-backups/` へ退避し、空のグラフで起動）になる。移行の直前に、`graph-backups/` へ必ず 1 つ控えを書く（別の仕組みを増やさない）。移行は、1 回の保存で行う | | B4 |
+| D16 | **一時的な pane（独自コマンドの pane・スクロールバックのエディタ）には、ノードを足さない** | 作っては閉じるたびに `rev` が進み、ドラッグの確定が空振りする | B5 |
+| D17 | 上限: 手元のノード 512・別のマシンのノード 64（別枠）・線 512・1 回の更新 1024。`graph.history` の 1 回の応答は、今の 6,400 件のまま（線の数に比例させない） | | B5 |
+| D18 | 性能の基準は、実ブラウザ（Playwright）で測る。200 ノード・200 線で、ノードを 60 回動かす間の `requestAnimationFrame` の間隔: 中央値 20ms・最悪 100ms 以内（CI の揺れを見込む）。happy-dom のテストは、今の用途のまま | | B5 |
+| D19 | PR1 を 4 つに分ける（下） | | 切り方 |
+
+### 囲いの定義（B1 の 6 点）
+
+1. **最上位の囲い** = worktree グループの囲いと、どの worktree グループにも入らない workspace の囲い。別のマシンのノードは、マシンごとに 1 つの最上位の囲い（「グループなし」の空間に出す）。**重ならない規則は、(a) 最上位の囲いどうし (b) 同じ worktree グループの中の workspace の囲いどうし**。`placeNode`・`resolveDrop`・検査は、ノードを足した・動かした結果の、外側の囲いの広がりまで含めて見る。
+2. **代表でない workspace**（同じ worktree の 2 つ目以降）は、サイドバーと同じに、単独の項目として扱う（worktree グループの囲いに入れない）。囲いの導き方は、サイドバーの項目（`r:`・`w:`）に合わせる。
+3. **ノードが 0 個の workspace**: 囲いを出すために、`reconcileGraph` が、workspace ごとに少なくとも 1 つのノードを保証する（上限に達していても、workspace の最初の 1 つは足す。上限は、その分を見込んで 512 の手前で止める）。ブラウザは、ノードの無い workspace を、サーバが足すまでの間、見出しだけの囲い（仮の位置）で出す。
+4. **囲いの最小の幅**: 320px（見出しは、収まらない分を省略の記号で切る。文字は測らない）。
+5. **`placeNode` が詰むとき**（右・下の 8 升の中に、重ならない升が無い）: その workspace の囲いごと、`placeFrame` の場所へ移す（中の相対の位置は保つ）。AC-V5 の「既存のノードの位置は動かない」の、ただ 1 つの例外として、要件に書く。
+6. **別のマシンのノード**: `addMissingNodeOps`（`sodactl graph link add` が端のノードを足す道）の置き場所を、`placeNode`（マシンの囲い）に寄せる。
+
+### 維持（`reconcileGraph`。A4）
+
+不変条件:
+- (I1) 手元の、一時的でない pane のすべてに、ノードがある（上限の中で）。
+- (I2) 手元のノードの pane は、開いている（閉じた pane のノードは、今の `GraphPaneCleanup` が消す）。
+- (I3) 囲いは、上の規則のとおり重ならない。
+
+`reconcileGraph(session, graph)` は、破れている所だけを直す更新（`GraphOp` の列）を返す純粋な関数。足りないノードは `placeNode` で足す。重なりは、**後から来た側**（pane の移動・グループの構成の変化で、囲いの構成が変わった workspace）を `placeFrame` で動かす。どちらが後かが分からないとき（再起動の後）は、workspace の id の順で、後ろの側を動かす。
+
+呼ぶ時:
+- 起動: 復元と `paneCleanup.pruneMissing()` の後・`graphEngine.start()` の前（`composeServer.ts`）。**毎回**呼ぶ（移行の印とは別。強制終了で pane だけが残った場合を拾う）。
+- 構造のできごと（`pane.created`・`pane.updated`・`pane.closed`・`layout.updated`・`workspace.updated`・`sidebar.layout_changed`・`group.deleted`）の後に、50ms まとめて 1 回。
+- `soda handoff`: 引き継ぎの停止の間は呼ばない。新しい版の起動の経路で、上の「起動」と同じ位置で呼ぶ。
+
+移行（`schema` 1 → 2）は、「控えを書く → `reconcileGraph` → 外接が大きすぎる workspace（ノードの数から見込む大きさの 4 倍を超える）を詰め直す → `schema: 2` で保存」を、1 回の保存で行う。線は触らない。
+
+### `modalOpen` の仕分け（A2）
+
+| 所 | いま頼るもの | 置き換えの後 |
+| :- | :- | :- |
+| キーの `dialog` モード（`main.ts:494-497`）・`window` の `keydown` の抑止（`:507`） | `modalOpen` | `keysCaptured`（`openDialog`・`askOpen`・モバイルのグラフ）。デスクトップのグラフの画面では、基本画面の pane が `inert` なので、キーは pane に届かない。prefix のキー（画面の切り替え・設定を開く）は働く |
+| ドラッグの取り消し（`Sidebar.vue:802`・`TabBar.vue:306`・`Splitter.vue:105`・`PaneFrame.vue:333`） | `modalOpen` | `modalOpen`。加えて、`view.screen` が変わったときにも取り消す |
+| 焦点の戻し先の差し替え（`StoreAdapter.ts:109-117`・`NotificationController.ts:417-419`）・`AskDialog.vue:131` の `otherModal` | `graphOpen` | 「グラフを開く前の pane」を、`view.screen` が `graph` の間の「基本画面へ戻ったときの pane」として持ち続ける（名前は変えてよい）。`AskDialog` は、戻し先を、グラフの画面ならグラフの面にする |
+| `PaneFrame.vue:155` のフォーカスの備え | `modalOpen` | `modalOpen` または `view.screen !== "base"` |
+| `Toast`・`ReconnectOverlay` の Teleport（`App.vue:108`） | `graphOpen` | デスクトップでは要らない（グラフは top layer でない）。モバイルのグラフと `ask` では、今のまま |
+| `MachineWiring.ts:49・59` | `graphOpen` | 「グラフが見えている」（デスクトップの `screen === "graph"` またはモバイルのグラフ） |
+
+表示の面のフォーカスの守り（`focusDrop.ts` の見回り）: 基本画面が `inert` の間、戻し先の端末はフォーカスを受けられない。**グラフの画面の間は、見回りの「戻す」を止める必要がある**——守りのファイルは変えられないので、`withDisplayChange` と同じ入口（外側から、見回りを一時止める既存の口）が使えるかを、PR1b の最初のタスクで確かめる。使えない場合は、止めて報告する（守りのファイルの変更は、利用者の判断）。
+
+### 受け入れ基準の読み替え（要件を直した）
+
+AC-V3・AC-V4・AC-V5・AC-V8・AC-X1・AC-X3 の文言と、AC-S7（画面を切り替えても、PTY の大きさが変わらない）・AC-V9（別のマシンのノードの出方）を、`requirements.md` に反映した。
+
+### PR1 の分け方
+
+| PR | 中身 | 見た目 | 独立点検 |
+| :- | :- | :- | :- |
+| **1a** データとサーバ | 上限・`graphLayout.ts`（`frames`・`placeNode`・`placeFrame`・`resolveDrop`）・`reconcileGraph`・移行（`schema` 2）・方式の層の検査（`node_required`・`frame_overlap`）・一時的な pane の除外・`sodactl graph show` の項目・「グラフから外す」を手元の pane では出さない | 今のグラフの画面のまま。すべての pane が、workspace ごとにまとまって、重ならずに出る | ★ ほぼ全部（保存・移行・位置の計算・サーバの状態） |
+| **1b** 画面の並び | 現在の動きを固定する E2E（先に書く）・`view.screen`・`modalOpen` の仕分け・基本画面の隠し方・`GraphView` を中身と入れ物に分ける・サイドバーの共有と切り替えの部品・モバイルの扱い | グラフが主な領域に出て、サイドバーが残る。ノードは今までどおり | フォーカスとキーの所だけ ★ |
+| **1c** 空間と囲い | 空間の見出し・囲いの描画・tab のタグ・サイドバーの行からの移動・囲いのドラッグ・別の空間との線の印 | 案の 5 枚目の形になる | 全体の点検だけ |
+| **1d** 地図と探す | 小さな地図・探す・キー（`[`・`]`・`/`）・文書 | | 全体の点検だけ |
+
+1a と 1b は、互いに独立に着地できる。1c は両方の後。1d は 1c の後。
