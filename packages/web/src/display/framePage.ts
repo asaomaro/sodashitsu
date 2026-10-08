@@ -49,3 +49,11 @@ export function isScriptFormat(format: string): boolean {
 export function frameKey(info: Pick<DisplayInfo, "id" | "format"> & { rev?: number }): string {
   return isScriptFormat(info.format) ? `${info.id}:${info.format}:${info.rev ?? 0}` : `${info.id}:${info.format}`;
 }
+
+/**
+ * 置き場所つきの枠の鍵。置く側は、`:key` を必ずこれで作る（置き場所が替わったら枠を作り直す。枠〔iframe〕は DOM の中で動かさない）。
+ * `slot`: `dock:right`・`dock:left`・`dock:top`・`dock:bottom`・`float`・`band:top`・`band:bottom`・`band:plain`（モバイルの帯）・`sheet`（モバイルの重ね表示）。
+ */
+export function placedFrameKey(info: Pick<DisplayInfo, "id" | "format"> & { rev?: number }, slot: string): string {
+  return `${frameKey(info)}@${slot}`;
+}

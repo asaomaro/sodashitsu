@@ -109,13 +109,13 @@
       依存: T1, T2
       AC: AC7, AC8
       点検: あり
-- [ ] T4: 設定 3 つ（共有の設定）: `loadDisplayPanelInitial`・`loadDisplayPanelDock`・`loadDisplayBandEdge`（知らない値は既定）。`store/settings.ts` に ref と setter（`writePrefs`）と `storage` の追従、`store/prefsApply.ts`、`ActionDispatcher.reloadConfig`。設定の画面の節「端末」（`displayScriptEnabled` の上）に、
+- [x] T4: 設定 3 つ（共有の設定）: `loadDisplayPanelInitial`・`loadDisplayPanelDock`・`loadDisplayBandEdge`（知らない値は既定）。`store/settings.ts` に ref と setter（`writePrefs`）と `storage` の追従、`store/prefsApply.ts`、`ActionDispatcher.reloadConfig`。設定の画面の節「端末」（`displayScriptEnabled` の上）に、
       「表示のパネルの初めの状態」（開く／たたむ）と「表示の帯の既定の場所」（上／下）を `fieldset` ＋ radio で（**「既定の置き場所」は、PR-A では画面に出さない**。値の読みと ref は入れておく。T17 で出す）。
       端末版の設定の画面の節「表示」（`displaySection`。`sections.ts:368`）に、**3 項目とも**、`BROWSER_ONLY` の注記つきで出す（端末版は、値を表示・変更できるだけ。効くのはブラウザ版）。単体テスト
       対象: `packages/client-core/src/prefs/load.ts:89` 付近、`packages/web/src/store/settings.ts:163`・`:312-315`、`store/prefsApply.ts:56` 付近、`actions/ActionDispatcher.ts:1539`（`reloadConfig` の中）、`components/SettingsDialog.vue:1242` の前、`packages/tui/src/settings/sections.ts:368` の節（`BROWSER_ONLY` の先例は :404・:413）・`packages/tui/src/model/PrefsModel.ts`（3 項目を読む getter を足す。いまは `display` の項目が 1 つも無い。端末版の設定の画面には `displayScriptEnabled` の行も無いので、3 項目は節「表示」の末尾に足す）、各テスト / 根拠: design「設定」、research F11
       依存: T1
       AC: AC2, AC4, AC16
-- [ ] T5: 記憶と導出: `display/displayPrefs.ts`（`FacePref`・`DisplayLayoutPrefs`・`loadDisplayLayout`〔項目の欠けた記憶は鍵ごと捨てる〕・鍵を作る関数・上限と「末尾へ移す」・pane の掃除・`DISPLAY_DOCK_CAPS`〔PR-A は `["right"]`〕・`effectiveDock`〔`caps` つき〕・`effectiveEdge`・`effectiveCollapsed(info, prefs, settings, dock)`〔`dock` は `caps` で丸めた後の置き場所。記憶が無く、それが `float` なら、たたむ〕・`hasFacePref`・右の大きさの `displayPanelWidths` からの引き継ぎ）。
+- [x] T5: 記憶と導出: `display/displayPrefs.ts`（`FacePref`・`DisplayLayoutPrefs`・`loadDisplayLayout`〔項目の欠けた記憶は鍵ごと捨てる〕・鍵を作る関数・上限と「末尾へ移す」・pane の掃除・`DISPLAY_DOCK_CAPS`〔PR-A は `["right"]`〕・`effectiveDock`〔`caps` つき〕・`effectiveEdge`・`effectiveCollapsed(info, prefs, settings, dock)`〔`dock` は `caps` で丸めた後の置き場所。記憶が無く、それが `float` なら、たたむ〕・`hasFacePref`・右の大きさの `displayPanelWidths` からの引き継ぎ）。
       `store/display.ts` に `layoutPrefs`・`writeFace`（**その時点の導出した値に重ねて、全項目を書く。置き場所は、`caps` で丸める前の値。ただし、それが `float` で、画面が `float` を出せないときは、丸めた後の値**。開いた浮いた窓に `rect` が無ければ、初めの矩形を一緒に書く〔PR-C。T22〕）・`setFaceCollapsed`・`setFaceDock`・`setFaceEdge`・`setFaceRect`・`setSideSize`・`clearSideSize`・`resetFace`・`pruneLayout`・`activeBySide`・`lastFace`・`layoutRev`・`layoutByPane`（割り付けの結果の写し。書くのは T7 の `PaneFrame`）。
       **`setFaceDock(info, dock, rect?)` は「`writeFace(info, { dock, collapsed: false, rect })` と `names` への書き込み」、`setFaceEdge(info, edge)` は「`writeFace(info, { edge, collapsed: false })` と `names` への書き込み」**（置き場所を変えると、移った先で開く）。部品・メニュー・D&D は、`writeFace` を直に呼ばない。
       **今の `collapsed`・`setCollapsed`・`panelWidths`・`setPanelWidth`・`clearPanelWidth`・`pruneWidths` は、このタスクでは触らずに残す**（pane 単位の古い意味のまま。T7・T8 で呼び出しを新しいものへ替えた時点で、消す）。`activePanel`・`activePanelOf`・`setActivePanel` は、モバイルのために残す（消さない）。
