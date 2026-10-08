@@ -2,7 +2,7 @@
 import type { DisplayInfo } from "@sodashitsu/protocol";
 import { computed, inject } from "vue";
 import { displayLabel } from "../display/displayLabel.js";
-import { dismissWithFocus, menuPositionBelow, openDisplayMenu, withDisplayChange } from "../display/displayOps.js";
+import { dismissWithFocus, menuPositionBelow, openDisplayMenu, trayFocusTarget, withDisplayChange } from "../display/displayOps.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useViewStore } from "../store/view.js";
@@ -25,7 +25,7 @@ function onFold(): void {
   void withDisplayChange(
     props.info,
     () => store.setFaceCollapsed(props.info, true),
-    () => document.querySelector<HTMLElement>(`[data-display-tray-button][data-display-id="${props.info.id}"]`),
+    () => trayFocusTarget(props.info.id),
     host,
   );
 }

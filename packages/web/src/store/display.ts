@@ -216,7 +216,12 @@ export const useDisplayStore = defineStore("display", () => {
   /** たたむ／開く。開いたら「最後に操作した面」にする。 */
   function setFaceCollapsed(info: DisplayInfo, on: boolean): void {
     writeFace(info, { collapsed: on });
-    if (!on) setLastFace(info.paneId, info.id);
+    if (!on) {
+      setLastFace(info.paneId, info.id);
+      // 開いた面は、その側の「選んでいるタブ」になる（開いたのに別のタブが出たままにならない）。
+      const dock = info.kind === "panel" ? effectiveOf(info).dock : null;
+      if (dock !== null && dock !== "float") setActiveBySide(info.paneId, dock, info.id);
+    }
   }
   /** パネルの置き場所を変える。移った先で開く（`collapsed: false`）。同じ名前の面も、この置き場所を引き継ぐ。 */
   function setFaceDock(info: DisplayInfo, dock: DisplayDock, rect?: FaceRect): void {

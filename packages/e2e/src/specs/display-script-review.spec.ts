@@ -1,6 +1,7 @@
 import { expect, test } from "../support/fixtures.js";
 import { runDisplay } from "../support/display.js";
 import { writeTmp } from "../support/displayBrowser.js";
+import { clickBlankAppSpace } from "../support/displayLayout.js";
 import { activeTag, engageBtn, focusTerminal, ok, openScriptBrowser, scriptFrame, scriptFrameEl, scriptFrameLoc, setScript, setScriptOk } from "../support/displayScript.js";
 
 /**
@@ -269,7 +270,7 @@ window.__drop = function () { window.focus(); parent.focus(); };
     await expect(scriptFrameLoc(page).locator("p")).toBeAttached();
     await focusTerminal(page);
     await page.waitForTimeout(300);
-    await page.locator("[data-pane-panel-label]").click({ position: { x: 2, y: 2 } }); // フォーカスを受けない見出しの余白
+    await clickBlankAppSpace(page); // フォーカスを受けないサイドバーの空き（見出しのつかむ場所は、いまは押してもフォーカスを取らない部品）
     await page.waitForTimeout(500);
     expect(await activeTag(page)).toBe("TEXTAREA");
     expect(stealReports(sent)).toBe(0);

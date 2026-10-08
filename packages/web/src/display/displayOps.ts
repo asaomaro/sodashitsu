@@ -49,6 +49,16 @@ export function focusPlaceOf(info: Pick<DisplayInfo, "id">, doc: Document = docu
   return "other";
 }
 
+/** 面の見出し（帯は行の右端）のフォーカスの行き先: ［たたむ］があればそれ、無ければ［⋮］。 */
+export function headFocusTarget(id: string): HTMLElement | null {
+  const root = `[data-display-root="${esc(id)}"]`;
+  return document.querySelector<HTMLElement>(`${root} [data-pane-panel-fold]`) ?? document.querySelector<HTMLElement>(`${root} [data-display-menu-button]`);
+}
+/** 面のトレイのボタン。 */
+export function trayFocusTarget(id: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-display-tray-button][data-display-id="${esc(id)}"]`);
+}
+
 export interface DisplayChangeOptions {
   /** 変更の後に残る部品（浮いた窓のトレイのボタン）にフォーカスがあるときは、変更の前に端末へ移さない。 */
   keepTrayFocus?: boolean;

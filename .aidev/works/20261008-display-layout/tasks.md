@@ -130,7 +130,7 @@
       依存: T5
       AC: AC3, AC4, AC5, AC13
       点検: あり
-- [ ] T7: 部品（PR-A の分）:
+- [x] T7: 部品（PR-A の分）:
       (1) `DisplayPanelHead.vue`（props は `info`・`collapsible`。design「部品」の表）を作り、`PanePanel.vue` の見出しを移す。印「スクリプト」は、ラベルの箱の外の `flex: none` の兄弟に。`flex-wrap` で、狭いときは折る。［⋮］［たたむ］［×］とつかむ場所（印とラベルの入れ物に `data-display-grip`）は `@mousedown.prevent`・`data-display-keepfocus`。`keydown` の `repeat` を止める。
       根に `data-display-chrome`・`data-display-head`・今のクラス `.pane-panel-head`。**今の印（`data-pane-panel-label`・`-fold`・`-close`）は残す**。［⋮］は、`actions.openContextMenu({kind: "display", id}, 位置)` を呼ぶ（項目は T8）。
       (2) `PaneFrame.vue`: `resolvePaneDisplays` を computed で 1 回呼び、design「部品」の木にする（`div.pane-frame-center` を足す・`PaneBands` を上と下に・`PanePanel side="right"`。上・下・左のパネルと窓の層は、まだ置かない）。**本体の箱が 0×0 の間は、面の部品を 1 つも載せない**。割り付けが例外なら、面なしへ落とす。
@@ -149,7 +149,7 @@
       依存: T5, T6
       AC: AC1, AC3, AC4, AC5, AC6, AC8, AC21, AC22, AC24, AC25, AC26, AC-I1, AC-I4
       点検: あり
-- [ ] T8: メニューとキー: `ContextMenu.vue` の対象 `{kind: "displays", paneId}`（面の一覧。選ぶと、同じ位置に面のメニュー）と `{kind: "display", id}`（面のメニュー。PR-A の項目: 開く／たたむ・帯の 上に置く／下に置く〔`setFaceEdge`。たたんだ帯も、移った先で開く〕・プログラムの指定に戻す・この表示を閉じる）。pane のメニューに「表示のメニュー…」。項目の処理は `withDisplayChange` を通す。
+- [x] T8: メニューとキー: `ContextMenu.vue` の対象 `{kind: "displays", paneId}`（面の一覧。選ぶと、同じ位置に面のメニュー）と `{kind: "display", id}`（面のメニュー。PR-A の項目: 開く／たたむ・帯の 上に置く／下に置く〔`setFaceEdge`。たたんだ帯も、移った先で開く〕・プログラムの指定に戻す・この表示を閉じる）。pane のメニューに「表示のメニュー…」。項目の処理は `withDisplayChange` を通す。
       **表示のメニューを開く前に、フォーカスが面の枠（操作中のスクリプトの枠か、静的な形式の枠。見分けは T7 (6) と同じ）にあれば、`endEngageFrame` と `host.focusTerminal` で端末へ移す**（開く関数を 1 つにして、［⋮］・「ほか N」・「ほか N 件」・キー・pane のメニューが、全部それを通る）。
       `ACTIONS` に `display_menu`（`group: "pane"`・既定 `prefix+shift+i`・`action: {type: "displayMenu"}`）、`Action` の型、`ActionDispatcher`（`displayMenu()` と、`focusDisplay()` の行き先の選び直し＝design「キー」の ①〜④。「最後に操作した面」は `store.lastFace`〔面が操作中になった・利用者が開いた／移した、で更新する処理も、ここで入れる〕。自動でたたまれた面は、`store.layoutByPane` の `auto` で見分けて飛ばす（面の一覧のメニューの「出せない」も、これを読む）。たたんだ面を開くときは `withDisplayChange`。
       **モバイル〔`store.sheetAvailable`〕では、`focusDisplay` は今の動きのまま・`displayMenu` は `sheetRequest++`・記憶を見ない／書かない**）、端末版の `TuiDispatcher.run` の case（`focusDisplay` と同じ知らせ）。見出しのボタンの上の `Esc` で端末へ。件数を固定したテスト（「リスク」の一覧）を直す。
@@ -158,7 +158,7 @@
       依存: T7
       AC: AC3, AC4, AC7, AC24, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
       点検: あり
-- [ ] T9: 知らせの位置: `display/toastSlot.ts` の `pickToastSlot`（純粋）と、`Toast.vue`（デスクトップで面があるとき、`[data-display-chrome]` を測って、空きに出す。知らせが出ている間だけ、design「知らせの位置」の時機で測り直す〔`MutationObserver`・`ResizeObserver`・`layoutRev`・知らせの数・ウィンドウの大きさ〕。`overflow-y: auto` は今のまま。モバイルは今の「右下へ寄せる」のまま）。単体テスト（空きの選び方・空きが足りない・`chrome` が無い）
+- [x] T9: 知らせの位置: `display/toastSlot.ts` の `pickToastSlot`（純粋）と、`Toast.vue`（デスクトップで面があるとき、`[data-display-chrome]` を測って、空きに出す。知らせが出ている間だけ、design「知らせの位置」の時機で測り直す〔`MutationObserver`・`ResizeObserver`・`layoutRev`・知らせの数・ウィンドウの大きさ〕。`overflow-y: auto` は今のまま。モバイルは今の「右下へ寄せる」のまま）。単体テスト（空きの選び方・空きが足りない・`chrome` が無い）
       対象: `packages/web/src/display/toastSlot.ts`（新規）・`.test.ts`（新規）、`packages/web/src/components/Toast.vue` / 根拠: design「知らせの位置」、decisions D14、research F7・G6
       依存: T7
       AC: AC10

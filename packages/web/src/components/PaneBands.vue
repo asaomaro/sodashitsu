@@ -98,10 +98,8 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
       :data-display-name="b.name"
       :data-display-root="edged ? b.id : undefined"
     >
-      <span :class="edged ? 'pane-band-appmark' : undefined" :data-display-chrome="edged ? '' : undefined" class="pane-band-lead">
-        <span class="pane-band-mark" :title="markLabel(b)" :aria-label="markLabel(b)" role="img" data-pane-band-mark>▍表示</span>
-        <DisplayTray v-if="tray && tray.row === 'band' && tray.hostBandId === b.id" :pane-id="paneId" :buttons="tray.buttons" />
-      </span>
+      <span class="pane-band-mark" :title="markLabel(b)" :aria-label="markLabel(b)" role="img" :data-display-chrome="edged ? '' : undefined" data-pane-band-mark>▍表示</span>
+      <DisplayTray v-if="tray && tray.row === 'band' && tray.hostBandId === b.id" :pane-id="paneId" :buttons="tray.buttons" />
       <DisplayScriptMark v-if="!edged" :info="b" part="mark" class="pane-band-script-mark" />
       <span v-if="store.focusedDisplayId === b.id" class="pane-band-engaged-note" aria-live="polite" :title="engagedNote(b)" data-pane-band-engaged-note>
         {{ engagedNote(b) }}
@@ -177,6 +175,19 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
 .pane-tray-row .pane-band-mark {
   align-self: stretch;
 }
+/* 帯の枠は、トレイと右端のボタンの残りを使い、いちばん先に縮む（枠 → トレイ）。 */
+.pane-band {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  background: var(--soda-bg, #1e1f29);
+  border-bottom: 1px solid var(--soda-menu-border, #44475a);
+}
+.pane-band-mark {
+  align-self: stretch;
+}
 .pane-band {
   position: relative;
   box-sizing: border-box;
@@ -221,7 +232,7 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
   clip-path: inset(50%);
 }
 .pane-band-frame {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
   overflow: auto;

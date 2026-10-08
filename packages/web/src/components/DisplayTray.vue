@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { withDisplayChange, menuPositionBelow, openDisplayMenu } from "../display/displayOps.js";
+import { headFocusTarget, withDisplayChange, menuPositionBelow, openDisplayMenu } from "../display/displayOps.js";
 import type { TrayButton } from "../display/paneDisplayLayout.js";
 import { DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -95,7 +95,7 @@ function onPress(b: TrayButton): void {
   void withDisplayChange(
     info,
     () => store.setFaceCollapsed(info, toggleOpen),
-    () => (toggleOpen ? null : document.querySelector<HTMLElement>(`[data-display-root="${info.id}"] [data-pane-panel-fold], [data-display-root="${info.id}"] [data-display-menu-button]`)),
+    () => (toggleOpen ? null : headFocusTarget(info.id)),
     host,
     { keepTrayFocus: b.kind === "float" },
   );
@@ -150,6 +150,7 @@ function onKeydown(ev: KeyboardEvent): void {
 <style scoped>
 .display-tray {
   flex: 0 1 auto;
+  align-self: center;
   min-width: 0;
   max-width: 40%;
   display: flex;

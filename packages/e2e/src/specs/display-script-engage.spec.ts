@@ -1,6 +1,7 @@
 import type { Frame, Page } from "@playwright/test";
 import { expect, test } from "../support/fixtures.js";
 import { runDisplay } from "../support/display.js";
+import { clickBlankAppSpace } from "../support/displayLayout.js";
 import { activeTag, engageBtn, focusTerminal, ok, openScriptBrowser, scriptFrame, scriptFrameEl, scriptFrameLoc, setScript, setScriptOk } from "../support/displayScript.js";
 
 /**
@@ -91,7 +92,7 @@ test.describe("(7) 操作を始める・操作中", () => {
     await expect.poll(() => input().slice(before).map((i) => i.text).join("")).toContain("zz");
   });
 
-  test("フォーカスを受けない場所（パネルの見出しの余白）を押して離れた後に、スクリプトが focus() で取り返すと、横取りとして数えられる（操作中に呼ばれた focus() は数えない）", async ({ page, appServer }) => {
+  test("見出しのつかむ場所（押してもフォーカスを取らない）を押すと、操作が解けて端末にフォーカスが移る。その後にスクリプトが focus() で取り返すと、横取りとして数えられる（操作中に呼ばれた focus() は数えない）", async ({ page, appServer }) => {
     const { paneId, sent } = await openScriptBrowser(page, appServer);
     await setScriptOk(appServer, paneId, "g", PAGE);
     await expect(scriptFrameLoc(page).locator("#i")).toBeAttached();
@@ -101,13 +102,26 @@ test.describe("(7) 操作を始める・操作中", () => {
     await steal(f); // 操作中に呼ばれた focus() は数えない
     await page.waitForTimeout(600);
     expect(stealReports(sent)).toBe(0);
-    // 見出しの余白を押す（フォーカスを受けない）→ 操作中が解ける
-    const head = (await page.locator(".pane-panel-head").boundingBox())!;
-    await page.mouse.click(head.x + head.width - 70, head.y + head.height / 2);
+    // 見出しのつかむ場所を押す（フォーカスを取らない）→ 操作中が解け、`installKeepFocusRelease` が端末へフォーカスを移す（押下が横取りに数えられない）
+    await page.locator("[data-display-grip]").click();
     await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "0");
+    expect(await activeTag(page)).toBe("TEXTAREA");
     await steal(f); // 取り返す
     await waitReports(sent, 1);
     await expect.poll(() => activeTag(page)).not.toContain("IFRAME");
+  });
+
+  test("PR3 の元の道: フォーカスを受けず keepfocus でもない場所（サイドバーの空き）を押すと操作が解け、その後に取り返すと横取りとして数えられる", async ({ page, appServer }) => {
+    const { paneId, sent } = await openScriptBrowser(page, appServer);
+    await setScriptOk(appServer, paneId, "g", PAGE);
+    await expect(scriptFrameLoc(page).locator("#i")).toBeAttached();
+    const f = await scriptFrame(page);
+    await engageBtn(page).click();
+    await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "1");
+    await clickBlankAppSpace(page); // サイドバーの空き
+    await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "0");
+    await steal(f);
+    await waitReports(sent, 1);
   });
 
   test("覆いの上のホイールで、枠の文書がスクロールする", async ({ page, appServer }) => {

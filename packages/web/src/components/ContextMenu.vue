@@ -5,7 +5,7 @@ import { useDisplayStore } from "../store/display.js";
 import { useSessionStore } from "../store/session.js";
 import { itemGroupIdOf } from "../store/sidebarTree.js";
 import { useViewStore } from "../store/view.js";
-import { dismissWithFocus, openDisplayMenu, withDisplayChange } from "../display/displayOps.js";
+import { dismissWithFocus, headFocusTarget, openDisplayMenu, trayFocusTarget, withDisplayChange } from "../display/displayOps.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 
 /**
@@ -81,9 +81,8 @@ function displayItems(id: string): MenuItem[] {
   const d = displays.infos.get(id);
   if (!d) return [];
   const f = displays.effectiveOf(d);
-  const focusToHead = (): HTMLElement | null =>
-    document.querySelector<HTMLElement>(`[data-display-root="${d.id}"] [data-pane-panel-fold], [data-display-root="${d.id}"] [data-display-menu-button]`);
-  const focusToTray = (): HTMLElement | null => document.querySelector<HTMLElement>(`[data-display-tray-button][data-display-id="${d.id}"]`);
+  const focusToHead = (): HTMLElement | null => headFocusTarget(d.id);
+  const focusToTray = (): HTMLElement | null => trayFocusTarget(d.id);
   const list: MenuItem[] = [];
   if (f.collapsed) list.push({ label: "開く", run: () => void withDisplayChange(d, () => displays.setFaceCollapsed(d, false), focusToHead, displayHost) });
   else list.push({ label: "たたむ", run: () => void withDisplayChange(d, () => displays.setFaceCollapsed(d, true), focusToTray, displayHost) });
@@ -265,10 +264,24 @@ function onOutsideClick(ev: Event): void {
   }
 }
 
+/** 画面の下・右にはみ出すとき、中に収まる位置へずらす（下の帯の［⋮］から開いても、項目が画面の外に出ない）。 */
+const shift = ref({ x: 0, y: 0 });
+function clampIntoViewport(): void {
+  const el = menuEl.value;
+  const menu = view.contextMenu;
+  if (!el || !menu) return;
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 && r.height === 0) return;
+  const dx = Math.min(0, window.innerWidth - 4 - (menu.at.x + r.width));
+  const dy = Math.min(0, window.innerHeight - 4 - (menu.at.y + r.height));
+  shift.value = { x: Math.max(dx, -menu.at.x), y: Math.max(dy, -menu.at.y) };
+}
 watch(
   () => view.contextMenu,
   (menu) => {
+    shift.value = { x: 0, y: 0 };
     if (menu) {
+      void nextTick(clampIntoViewport);
       // 開いたままほかの対象で開き直したとき（フォーカスはメニューの中）は、最初に開く前の要素を戻す先のままにする。
       const active = document.activeElement;
       if (active instanceof HTMLElement && active !== document.body && !menuEl.value?.contains(active)) returnFocusTo = active;
@@ -295,7 +308,7 @@ onBeforeUnmount(() => {
     role="menu"
     tabindex="-1"
     class="context-menu"
-    :style="{ left: `${view.contextMenu.at.x}px`, top: `${view.contextMenu.at.y}px` }"
+    :style="{ left: `${view.contextMenu.at.x + shift.x}px`, top: `${view.contextMenu.at.y + shift.y}px` }"
     @keydown="onKeydown"
   >
     <li
