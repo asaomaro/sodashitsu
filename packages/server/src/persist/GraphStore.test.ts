@@ -166,9 +166,9 @@ describe("GraphStore", () => {
   it.each([
     ["JSON でない", "{not json"],
     [
-      "schema が違う",
+      "schema が違う（知らない版。2 は新しい版の形）",
       JSON.stringify({
-        schema: 2,
+        schema: 3,
         rev: 1,
         graph: { paused: false, nodes: [], links: [] },
       }),
@@ -311,5 +311,117 @@ describe("GraphStore", () => {
     await store.flush();
     const raw = JSON.parse(await readFile(join(dir, GRAPH_FILE_NAME), "utf8")) as { rev: number };
     expect(raw.rev).toBe(1);
+  });
+
+  // --- 保存の schema 1 → 2（20261008-graph-first の T6） ---------------------------------
+
+  const v1File = (schema: number): string =>
+    `${JSON.stringify(
+      {
+        schema,
+        rev: 7,
+        graph: {
+          paused: false,
+          nodes: [
+            { key: A, x: 0, y: 0 },
+            { key: B, x: 240, y: 0 },
+          ],
+          links: [
+            {
+              id: "l1",
+              kind: "supervise",
+              from: B,
+              to: A,
+              limit: 10,
+              count: 4,
+              paused: null,
+            },
+          ],
+        },
+        savedAt: "2026-10-01T00:00:00.000Z",
+      },
+      null,
+      2,
+    )}\n`;
+
+  it("schema 1 のファイルは読める。移行の前に必ず控えを graph-backups/ に書き、元のファイルは変えない", async () => {
+    const dir = await tempDir();
+    const original = v1File(1);
+    await writeFile(join(dir, GRAPH_FILE_NAME), original);
+    const store = new GraphStore(dir);
+    expect(await store.load()).toBe("ok");
+    expect(store.migrationPending).toBe(true);
+    expect(store.get().rev).toBe(7);
+    // 控え: 元のファイルと同じ中身が 1 つ。元のファイルは読み込みだけでは変わらない（途中で落ちても元のファイルが残る）。
+    const backups = await readdir(join(dir, "graph-backups"));
+    expect(backups).toHaveLength(1);
+    expect(await readFile(join(dir, "graph-backups", backups[0]!), "utf8")).toBe(original);
+    expect(await readFile(join(dir, GRAPH_FILE_NAME), "utf8")).toBe(original);
+  });
+
+  it("移行の間の保存は schema 1 のまま（落ちても古い版で読める形が残る）。completeMigration で schema 2 になり、rev は進まない", async () => {
+    const dir = await tempDir();
+    await writeFile(join(dir, GRAPH_FILE_NAME), v1File(1));
+    const store = new GraphStore(dir);
+    await store.load();
+    await store.update(7, [{ op: "move_node", key: B, x: 480, y: 0 }], "graph");
+    const mid = JSON.parse(await readFile(join(dir, GRAPH_FILE_NAME), "utf8")) as {
+      schema: number;
+      rev: number;
+    };
+    expect(mid).toMatchObject({ schema: 1, rev: 8 });
+    expect(store.migrationPending).toBe(true);
+    await store.completeMigration();
+    expect(store.migrationPending).toBe(false);
+    const done = JSON.parse(await readFile(join(dir, GRAPH_FILE_NAME), "utf8")) as {
+      schema: number;
+      rev: number;
+      graph: { links: { count: number }[] };
+    };
+    expect(done).toMatchObject({ schema: 2, rev: 8 });
+    expect(done.graph.links[0]!.count).toBe(4); // 線は触らない
+    // 以後の保存は schema 2
+    await store.update(8, [{ op: "move_node", key: B, x: 240, y: 0 }], "c1");
+    expect(JSON.parse(await readFile(join(dir, GRAPH_FILE_NAME), "utf8"))).toMatchObject({
+      schema: 2,
+      rev: 9,
+    });
+  });
+
+  it("schema 2 のファイルは移行しない（控えも書かない）。2 回目の起動で何も変わらない", async () => {
+    const dir = await tempDir();
+    await writeFile(join(dir, GRAPH_FILE_NAME), v1File(1));
+    const first = new GraphStore(dir);
+    await first.load();
+    await first.completeMigration();
+    const written = await readFile(join(dir, GRAPH_FILE_NAME), "utf8");
+    const second = new GraphStore(dir);
+    expect(await second.load()).toBe("ok");
+    expect(second.migrationPending).toBe(false);
+    await second.completeMigration(); // 何もしない
+    expect(await readFile(join(dir, GRAPH_FILE_NAME), "utf8")).toBe(written);
+    expect(await readdir(join(dir, "graph-backups"))).toHaveLength(1); // 最初の移行の控えだけ
+  });
+
+  it("古い版（schema 1 しか読まない）は、schema 2 のファイルを壊れたファイルとして退避して空で起動する——その形を固定する", async () => {
+    const dir = await tempDir();
+    await writeFile(join(dir, GRAPH_FILE_NAME), v1File(1));
+    const store = new GraphStore(dir);
+    await store.load();
+    await store.completeMigration();
+    const file = JSON.parse(await readFile(join(dir, GRAPH_FILE_NAME), "utf8")) as {
+      schema: unknown;
+    };
+    // 古い版の読み込みの条件は `schema === 1`（それ以外は "unknown schema" で退避）。新しい版が書くファイルはそれに当てはまらない。
+    expect(file.schema).toBe(2);
+    expect(file.schema === 1).toBe(false);
+    // 否定の対照: 新しい版でも、知らない schema は退避して空から始める（同じ仕組み）。
+    const dir2 = await tempDir();
+    await writeFile(join(dir2, GRAPH_FILE_NAME), v1File(3));
+    const other = new GraphStore(dir2);
+    const r = await other.load();
+    expect(typeof r === "object" && "corrupt" in r).toBe(true);
+    expect(other.get()).toEqual({ rev: 0, paused: false, nodes: [], links: [] });
+    expect(other.migrationPending).toBe(false);
   });
 });

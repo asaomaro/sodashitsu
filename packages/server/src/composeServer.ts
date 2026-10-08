@@ -782,7 +782,16 @@ export async function composeServer(
         dropSweeper = dropStore.startSweeping(); // ドロップされたファイルも同じ間隔で片付ける
         // 3.4. 連携のグラフの維持（20261008-graph-first）。復元と `pruneMissing` の後・`graphEngine.start()` の前に、毎回呼ぶ（強制終了で pane だけが残った場合も
         //      拾う）。ノードの無い pane にノードを足し、囲いの重なりを直す。
-        await graphMaintainer.reconcileNow({ force: true });
+        //      `schema: 1` のファイルを読んだ起動（移行）では、外接が大きすぎる workspace の詰め直しも行い、終わったら `schema: 2` で保存し直す。
+        //      失敗しても起動は止めない（`schema: 1` のファイルが残り、次の起動でもう一度移行する）。
+        try {
+          const migrating = graph.migrationPending;
+          await graphMaintainer.reconcileNow({ force: true, repack: migrating });
+          await graph.completeMigration();
+          if (migrating) logger.info("graph.json was migrated to schema 2 (a copy of the old file is in graph-backups/)");
+        } catch (err) {
+          logger.warn("graph.maintain: the startup reconcile failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) });
+        }
         // 3.5. 連携の実行（20260927-agent-graph）。状態の変化を購読するので agentMonitor より前に始める（最初の判定の変化から拾う）。
         graphEngine.start();
         // 4. poller。最初の 1 周の確認が終わったら、layout の無い保存から始めた移行を確定する（一時停止中の合図は捨てる。D18）。

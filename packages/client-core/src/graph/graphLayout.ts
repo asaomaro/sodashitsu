@@ -131,6 +131,23 @@ function rectAround(rects: readonly GraphRect[]): GraphRect | null {
   };
 }
 
+/** 点（ノードの左上）の並びから、メンバーの囲いの四角を求める（ノードが無ければ null）。 */
+export function frameRectOf(points: readonly GraphPoint[]): GraphRect | null {
+  return rectOfPoints(points);
+}
+
+/** ノード `n` 個を、ほぼ正方形のグリッド（升）に詰めたときの列数・行数と、その囲いの大きさ。 */
+export function compactFrameSize(n: number): { cols: number; rows: number; w: number; h: number } {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const w = Math.max(
+    FRAME_MIN_WIDTH,
+    (cols - 1) * GRAPH_CELL_WIDTH + GRAPH_NODE_WIDTH + FRAME_PADDING * 2,
+  );
+  const h = (rows - 1) * GRAPH_CELL_HEIGHT + GRAPH_NODE_HEIGHT + FRAME_PADDING + FRAME_HEADING;
+  return { cols, rows, w, h };
+}
+
 /** 四角の並びの外接（余白は足さない）。 */
 function unionRect(rects: readonly GraphRect[]): GraphRect | null {
   if (rects.length === 0) return null;

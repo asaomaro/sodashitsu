@@ -51,7 +51,7 @@ export async function readFileWithBackup<T>(
   }
 }
 
-async function backupCorruptFile(filePath: string, backupsDir: string, raw: string): Promise<string> {
+export async function backupCorruptFile(filePath: string, backupsDir: string, raw: string): Promise<string> {
   await mkdir(backupsDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const backupPath = join(backupsDir, `${stamp}.json`);

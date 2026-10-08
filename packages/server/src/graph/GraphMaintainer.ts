@@ -141,10 +141,11 @@ export class GraphMaintainer {
 
   /**
    * 今すぐ確認して、破れている所を直す。直した操作の数を返す。前の確認が終わるのを待って 1 つずつ行う。
-   * `force` なら、構造が前回から変わっていなくても確認する（起動のとき）。
+   * `force` なら、構造が前回から変わっていなくても確認する（起動のとき）。`repack` は移行（`schema` 1 → 2）のとき: 外接が大きすぎる workspace を
+   * 詰め直す（`ReconcileHints.repack`）。
    */
-  reconcileNow(opts: { force?: boolean } = {}): Promise<number> {
-    const run = (): Promise<number> => this.run(opts.force === true);
+  reconcileNow(opts: { force?: boolean; repack?: boolean } = {}): Promise<number> {
+    const run = (): Promise<number> => this.run(opts.force === true, opts.repack === true);
     const result = this.chain.then(run, run);
     this.chain = result.catch(() => undefined);
     return result;
@@ -175,7 +176,7 @@ export class GraphMaintainer {
     this.timer = null;
   }
 
-  private async run(force: boolean): Promise<number> {
+  private async run(force: boolean, repack: boolean): Promise<number> {
     const { store, session, logger } = this.deps;
     const retries = this.deps.retries ?? RETRIES_DEFAULT;
     for (let attempt = 0; attempt < retries; attempt++) {
@@ -184,7 +185,10 @@ export class GraphMaintainer {
       const structure = graphStructure(session, g);
       const fp = fingerprint(structure, g.rev);
       if (!force && fp === this.lastFingerprint) return 0;
-      const ops = reconcileGraph(structure, g, hintsFrom(this.memory, structure));
+      const ops = reconcileGraph(structure, g, {
+        ...hintsFrom(this.memory, structure),
+        ...(repack ? { repack } : {}),
+      });
       if (ops.length === 0) {
         this.lastFingerprint = fp;
         this.memory = remember(structure);

@@ -4,8 +4,12 @@ import {
   type GraphOp,
   type NodeKey,
 } from "@sodashitsu/protocol";
-import type { GraphPoint } from "./geometry.js";
+import { snapToGrid, type GraphPoint } from "./geometry.js";
 import {
+  GRAPH_CELL_HEIGHT,
+  GRAPH_CELL_WIDTH,
+  compactFrameSize,
+  frameRectOf,
   layoutOverlaps,
   nodePositions,
   placeMemberBeside,
@@ -37,7 +41,16 @@ export interface ReconcileHints {
   arrived?: ReadonlySet<string>;
   /** 構成（含むノードの鍵・属する囲い）が変わった囲いの id。重なりを直すとき、この側を先に動かす（どちらが後かの手がかり）。 */
   changed?: ReadonlySet<string>;
+  /**
+   * 移行（`schema` 1 → 2）のとき: 外接が大きすぎる workspace（ノードの数から見込む大きさの 4 倍を超える）を、ほぼ正方形のグリッドに詰め直してから
+   * 重なりを直す。以前の画面は、全体で 1 枚の面に好きなように置いていたので、1 つの workspace のノードが遠くに散らばり、別の workspace の
+   * ノードを挟んでいることがある——そのままだと囲いが巨大になって重なる。
+   */
+  repack?: boolean;
 }
+
+/** 外接が大きすぎる、とみなす倍率（面積）。 */
+export const GRAPH_OVERSIZE_FACTOR = 4;
 
 /** 「workspace ごとに少なくとも 1 つ」のために空けておく手元のノードの枠の数。2 つ目以降のノードは、ここまでしか足さない。 */
 export const GRAPH_FIRST_NODE_RESERVE = 8;
@@ -101,6 +114,35 @@ export function reconcileGraph(
     }
     pos.set(key, { x: r.x, y: r.y });
   };
+
+  // 0. 移行: 外接が大きすぎる workspace を詰め直す。ノードは (y, x) の順に、いまの外接の左上から升に並べる。
+  if (hints.repack === true) {
+    for (const top of tops) {
+      if (top.kind === "machine") continue;
+      for (const m of top.members) {
+        const keys = m.nodes.filter((k) => pos.has(k));
+        if (keys.length < 2) continue;
+        const pts = keys.map((k) => pos.get(k)!);
+        const rect = frameRectOf(pts);
+        if (rect === null) continue;
+        const compact = compactFrameSize(keys.length);
+        if (rect.w * rect.h <= compact.w * compact.h * GRAPH_OVERSIZE_FACTOR) continue;
+        const ordered = [...keys].sort((a, b) => {
+          const pa = pos.get(a)!;
+          const pb = pos.get(b)!;
+          return pa.y - pb.y || pa.x - pb.x || (a < b ? -1 : a > b ? 1 : 0);
+        });
+        const ox = snapToGrid(Math.min(...pts.map((p) => p.x)));
+        const oy = snapToGrid(Math.min(...pts.map((p) => p.y)));
+        ordered.forEach((k, i) => {
+          pos.set(k, {
+            x: ox + (i % compact.cols) * GRAPH_CELL_WIDTH,
+            y: oy + Math.floor(i / compact.cols) * GRAPH_CELL_HEIGHT,
+          });
+        });
+      }
+    }
+  }
 
   // 1. 別の workspace から移ってきたノードを、移った先の囲いへ置き直す。
   for (const key of [...(hints.arrived ?? [])].sort()) {

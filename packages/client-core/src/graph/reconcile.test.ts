@@ -193,6 +193,37 @@ describe("reconcileGraph", () => {
     expect(ops[0]).toMatchObject({ op: "add_node", key: k("w1p0") });
   });
 
+  it("移行（repack）: 外接が大きすぎる workspace は詰め直し、そうでない workspace は相対の位置を保ったまま動かす", async () => {
+    // w1: 2 ノードが遠くに散らばっている（外接が見込みの 4 倍を超える）。w2: 近い 2 ノードだが、w1 の外接の中にある。
+    const st = structureOf([single("w1", 2), single("w2", 2)]);
+    const base = withLinks([
+      { key: k("w1p0"), x: 0, y: 0 },
+      { key: k("w1p1"), x: 3000, y: 2000 },
+      { key: k("w2p0"), x: 1000, y: 800 },
+      { key: k("w2p1"), x: 1240, y: 800 },
+    ]);
+    const plain = reconcileGraph(st, base);
+    const ops = reconcileGraph(st, base, { repack: true });
+    const g = apply(base, ops);
+    expect(g.links).toEqual(base.links); // 線は触らない
+    expect(layoutOverlaps(st, nodePositions(g.nodes)).size).toBe(0);
+    // w1 は詰め直されて小さくなる
+    const p0 = g.nodes.find((n) => n.key === k("w1p0"))!;
+    const p1 = g.nodes.find((n) => n.key === k("w1p1"))!;
+    expect(Math.abs(p1.x - p0.x) + Math.abs(p1.y - p0.y)).toBeLessThanOrEqual(240);
+    // w2（詰め直しの対象でない）は、相対の位置を保つ
+    const q0 = g.nodes.find((n) => n.key === k("w2p0"))!;
+    const q1 = g.nodes.find((n) => n.key === k("w2p1"))!;
+    expect([q1.x - q0.x, q1.y - q0.y]).toEqual([240, 0]);
+    // 2 回目は何もしない（repack を付けても）
+    expect(reconcileGraph(st, g, { repack: true })).toEqual([]);
+    // 否定の対照: repack しなければ、w1 の巨大な外接のまま（詰め直さず、重なりを直すだけ）
+    const gPlain = apply(base, plain);
+    const a0 = gPlain.nodes.find((n) => n.key === k("w1p0"))!;
+    const a1 = gPlain.nodes.find((n) => n.key === k("w1p1"))!;
+    expect(Math.abs(a1.x - a0.x) + Math.abs(a1.y - a0.y)).toBeGreaterThan(2000);
+  });
+
   it("性質: 乱数の構成と、重なりを含む乱数の位置から直しても、結果は重ならず、2 回目は何もしない", () => {
     for (let seed = 1; seed <= 200; seed++) {
       const rand = rng(seed * 31);
