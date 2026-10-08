@@ -53,11 +53,35 @@ test("ページを開いても WebAssembly の例外（CSP 違反）が出ない
   expect(pageErrors).toEqual([]);
 });
 
-test("Sixel を端末に出すと、画像の層ができる（復号の WebAssembly が CSP に拒まれない）", async ({ page, appServer }) => {
+/** ページのスクリーンショットの中の、純粋な赤（255, 0, 0）の画素の数。画像の層の canvas は 2D コンテキストから読めない（全画素 0）ので、見えている画面で数える。 */
+async function redPixels(page: Page): Promise<number> {
+  const shot = await page.screenshot();
+  return page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] === 255 && d[i + 1] === 0 && d[i + 2] === 0) n++;
+    return n;
+  }, shot.toString("base64"));
+}
+
+test("Sixel を端末に出すと、画像の層ができ、赤の画素が画面に見える（復号の WebAssembly が CSP に拒まれない）", async ({ page, appServer }) => {
   const pageErrors = await open(page, appServer);
   expect(await imageLayers(page), "前提: 出す前は画像の層が無い").toBe(0);
-  await emit(page, String.raw`\033Pq#0;2;100;0;0#0!20~-\033\\`);
+  expect(await redPixels(page), "前提: 出す前は赤の画素が無い").toBe(0);
+  // 赤の帯を 5 本（1 本は縦 6 画素。計 30 画素。幅 100 画素）。1 行（セルの高さ）以下の小さな Sixel は、層はできても画素が見えない
+  // （test-result.md「見つけたほかの不具合の候補」）ので、1 行より高い画像にする。
+  const bands = Array.from({ length: 5 }, () => "#0!100~").join("-");
+  await emit(page, String.raw`\033Pq#0;2;100;0;0${bands}\033\\`);
   await expect.poll(() => imageLayers(page), { message: "Sixel の画像の層ができる" }).toBe(1);
+  await expect.poll(() => redPixels(page), { message: "赤の画素が画面に見える（1000 超）" }).toBeGreaterThan(1000);
   expect(pageErrors).toEqual([]);
 });
 
