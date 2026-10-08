@@ -39,6 +39,22 @@ describe("PrefsStore", () => {
     });
   });
 
+  it("null の項目は「消す」: 保存した値が消え（prefs.get に無い・ファイルに無い）、rev は +1。再起動後も戻らない", async () => {
+    const dir = await tempDir();
+    const store = new PrefsStore(dir);
+    await store.load();
+    await store.set({ theme: "dracula", themeOverrides: { dark: { "--soda-accent": "#222222" } } }, "c1");
+    expect(await store.set({ themeOverrides: null } as never, "c1")).toEqual({ prefs: { theme: "dracula" }, rev: 2 });
+    expect(Object.hasOwn(store.get().prefs, "themeOverrides")).toBe(false);
+    const file = JSON.parse(await readFile(join(dir, PREFS_FILE_NAME), "utf8")) as { prefs: Record<string, unknown> };
+    expect(file.prefs).toEqual({ theme: "dracula" });
+    const again = new PrefsStore(dir);
+    await again.load();
+    expect(again.get().prefs).toEqual({ theme: "dracula" });
+    // 無い項目を消しても壊れない。入れ子の中の null（`tui` 節の項目）は触らない。
+    expect(await store.set({ nothing: null, tui: { sidebarCols: null } } as never, "c1")).toEqual({ prefs: { theme: "dracula", tui: { sidebarCols: null } }, rev: 3 });
+  });
+
   it("保存した値と rev は作り直しても読める（再起動後の復元）。ファイルは 0600", async () => {
     const dir = await tempDir();
     const a = new PrefsStore(dir);

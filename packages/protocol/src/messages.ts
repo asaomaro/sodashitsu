@@ -849,7 +849,7 @@ export interface PrefsResult {
 }
 
 /**
- * 共有の設定を項目ごとに上書きする（浅いマージ。`keys` 等は項目ごとに丸ごと置き換え）。`baseRev` は送った側が見ていた rev（今は記録だけで拒まない。
+ * 共有の設定を項目ごとに上書きする（浅いマージ。`keys` 等は項目ごとに丸ごと置き換え。**最上位の項目が `null` ならその項目を消す**＝既定へ戻す。JSON では `undefined` のキーが落ちるので、消すときは `null` を送る）。`baseRev` は送った側が見ていた rev（今は記録だけで拒まない。
  * 最後の書き込みが勝つ）。保存した後の全体が `PREFS_MAX_BYTES` を超えるならサーバが `invalid_params` で断る。
  */
 export const PrefsSetParams = z.object({

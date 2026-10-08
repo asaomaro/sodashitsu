@@ -110,15 +110,22 @@ test("tab バー：tab が1個のときは無く、2個以上で現れる。非�
   await client.waitForOutput(p1, marker);
 });
 
-test("tab バー：表示されている間だけ現在時刻（HH:mm）が出る（AC7）", async ({ page, appServer }) => {
+test("tab バー：右端に日時を足すと、表示されている間だけ現在時刻（HH:mm）が出る（AC7）", async ({ page, appServer }) => {
+  // 右端は既定では空（設定で足す。`TabBar.vue`）。設定はサーバの共有の設定なので、ブラウザを開く前に `prefs.set` で足す
+  // （画面の設定の部品を通る経路は、設定の画面の E2E が見る）。
+  const client = await appServer.openClient();
+  await client.request("prefs.set", { patch: { tabBarRight: [{ kind: "datetime", format: "time" }] } });
+  client.close();
   await openApp(page, appServer);
   await focusTerminal(page);
+  await expect(page.locator(".tab-bar"), "前提: tab が 1 つの間は tab バーが無い（日時も出ない）").toHaveCount(0);
+  await expect(page.locator(".tab-bar-right")).toHaveCount(0);
   await prefixKey(page, "c");
   await expect(nameDialog(page)).toBeVisible();
   await nameDialog(page).locator(".name-dialog-input").fill("second-tab");
   await nameDialog(page).getByRole("button", { name: "OK" }).click();
 
-  const clock = page.locator(".tab-bar-clock");
+  const clock = page.locator(".tab-bar-right");
   await expect(clock).toBeVisible();
   await expect(clock).toHaveText(/^\d{2}:\d{2}$/);
   // 定期更新自体（AC8）は実時間を待つ検証が不安定になりやすいので、`setInterval` の呼び出しは

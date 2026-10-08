@@ -317,8 +317,10 @@ test("新しい pane を作る操作の直後に打った文字は、応答を�
   await typeLine(page, `echo ${afterSplit}`);
   const p2 = (await splitCreated).data.pane.id;
   await client.request("pane.subscribe", { paneId: p2, scrollbackLines: 200 });
-  // 新しい pane の readline が、打った行を先頭から丸ごとエコーしている（先頭の数文字が元の pane に取られていない）。
-  await client.waitForOutput(p2, `echo ${afterSplit}`);
+  // 新しい pane のシェルが、打った行を先頭から丸ごと受け取って実行した（先頭の数文字が元の pane に取られていない）。
+  // 行のエコー（`echo <印>`）は、プロンプトが長いと readline が折り返して途中に `\r` を入れる（作業フォルダ名・ホスト名の長さで変わる）ので、見ない。
+  // 実行の結果の行（行頭の `\r` の後に印だけが出る）を見る。先頭が欠けた行は `bash: cho: command not found` などになり、この形にならない。
+  await client.waitForOutput(p2, `\r${afterSplit}\r\n`);
   expect(client.rawOutput(p1)).not.toContain("echo soda-e2e-aftersplit");
 
   // 新しい workspace：prefix+N の直後に打つ。
@@ -328,7 +330,7 @@ test("新しい pane を作る操作の直後に打った文字は、応答を�
   await typeLine(page, `echo ${afterNewWs}`);
   const p3 = (await wsPaneCreated).data.pane.id;
   await client.request("pane.subscribe", { paneId: p3, scrollbackLines: 200 });
-  await client.waitForOutput(p3, `echo ${afterNewWs}`);
+  await client.waitForOutput(p3, `\r${afterNewWs}\r\n`); // 上と同じ。実行の結果の行を見る
   expect(client.rawOutput(p2)).not.toContain("echo soda-e2e-afternewws");
 });
 

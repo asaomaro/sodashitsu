@@ -151,29 +151,43 @@ test("設定：選んだ scrollback はその後に開く pane から効き、�
   await context.close();
 });
 
-/** `soda.prefs.v1` を 1 回だけ仕込んだ context（`addInitScript` は再読み込みのたびに走り直すので使わない。research F35）。 */
+/**
+ * `soda.prefs.v1` を 1 回だけ仕込んだ context（`addInitScript` は再読み込みのたびに走り直すので、仕込みには使わない。research F35）。
+ * 設定の大半はサーバの共有の設定（20260927-cli-mode）なので、**このテストごとに別の `appServer`（新しいサーバ）**で開く——同じサーバで続けて
+ * 別の値を仕込むと、前の context が移した値がサーバに残り、次の context の localStorage を上書きする。
+ */
 async function contextWithPrefs(browser: Browser, appServer: AppServer, value: string): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({
     storageState: { cookies: [], origins: [{ origin: appServer.origin, localStorage: [{ name: "soda.prefs.v1", value }] }] },
   });
+  // 本体のスクリプトが走る前の値を控える。本体は起動するとサーバの共有の設定で localStorage を書き直すので、開いた後の値では確かめられない。
+  await context.addInitScript(() => {
+    const w = window as unknown as { __seedAtStart?: string | null };
+    if (w.__seedAtStart === undefined) w.__seedAtStart = localStorage.getItem("soda.prefs.v1");
+  });
   const page = await context.newPage();
   await openApp(page, appServer);
-  // **前提の確認**（判定ではない）：仕込んだ値がページに届いている。`origin` がずれると保存域は空になり、既定の判定が
+  // **前提の確認**（判定ではない）：仕込んだ値が、本体が走る前のページに届いていた。`origin` がずれると保存域は空になり、既定の判定が
   // 仕込みと無関係に通ってしまう。
-  expect(await page.evaluate(() => localStorage.getItem("soda.prefs.v1")), "仕込みがページに届いている").toBe(value);
+  expect(await page.evaluate(() => (window as unknown as { __seedAtStart?: string | null }).__seedAtStart), "仕込みがページに届いている").toBe(value);
   return { context, page };
 }
 
-test("設定：保存された値が壊れていても、既定で起動する（AC3）", async ({ appServer, browser }) => {
-  // 対照：同じ経路で**正しい**値を仕込むと、その値で開く（仕込みの経路そのものが効いている証拠）。
+test("設定：仕込んだ値（対照）は、その値で開く。サイドバーの幅も記号の表示も", async ({ appServer, browser }) => {
+  // 下の「壊れた値」のテストの対照：同じ経路で**正しい**値を仕込むと、その値で開く（仕込みの経路そのものが効いている証拠）。
   const control = await contextWithPrefs(browser, appServer, JSON.stringify({ sidebarWidth: 300, statusSymbols: false }));
   expect(await sidebarWidth(control.page)).toBe("300px");
   await expect(control.page.locator(".sidebar-spaces .sidebar-state-icon").first()).toHaveAttribute("data-symbols", "off");
   await control.context.close();
+});
 
-  // 範囲外の `statusSymbols` は**偽とみなされる非 boolean**（0）——`"off"` のような真の文字列だと、検証を通さない退行
-  // （`?? true` 等）でも「入」になって見逃す。
-  for (const value of ["{壊れた JSON", JSON.stringify({ sidebarWidth: 9999, sidebarCollapsed: "yes", statusSymbols: 0, scrollback: -5 })]) {
+// 範囲外の `statusSymbols` は**偽とみなされる非 boolean**（0）——`"off"` のような真の文字列だと、検証を通さない退行
+// （`?? true` 等）でも「入」になって見逃す。
+for (const [name, value] of [
+  ["壊れた JSON", "{壊れた JSON"],
+  ["範囲外の値", JSON.stringify({ sidebarWidth: 9999, sidebarCollapsed: "yes", statusSymbols: 0, scrollback: -5 })],
+] as const) {
+  test(`設定：保存された値が壊れていても、既定で起動する（AC3。${name}）`, async ({ appServer, browser }) => {
     const { context, page } = await contextWithPrefs(browser, appServer, value);
     expect(await sidebarWidth(page), value).toBe("240px");
     await expect(page.locator(".sidebar")).not.toHaveClass(/sidebar-collapsed/);
@@ -181,10 +195,10 @@ test("設定：保存された値が壊れていても、既定で起動する�
     await openSettingsByKey(page);
     await expect(checkedRadioLabel(page)).toHaveText("自動（この端末では 5,000 行）");
     await context.close();
-  }
-});
+  });
+}
 
-test("設定：別のブラウザ（別のプロファイル）では、設定は既定のまま（AC15）", async ({ page, appServer, browser }) => {
+test("設定：別のブラウザ（別のプロファイル）では、サイドバーの幅は端末ごとで既定のまま、設定の大半はサーバの共有で同じ値が届く（AC15。20260927-cli-mode で共有へ）", async ({ page, appServer, browser }) => {
   await openApp(page, appServer);
   await dragDivider(page, 60);
   await openSettingsByKey(page);
@@ -202,11 +216,13 @@ test("設定：別のブラウザ（別のプロファイル）では、設定�
   const other = await browser.newContext();
   const otherPage = await other.newPage();
   await openApp(otherPage, appServer);
+  // 端末ごとの項目（サイドバーの幅・折りたたみ）は、別のブラウザには届かない。
   expect(await sidebarWidth(otherPage)).toBe("240px");
   await expect(otherPage.locator(".sidebar")).not.toHaveClass(/sidebar-collapsed/);
-  await expect(otherPage.locator(".sidebar-spaces .sidebar-state-icon").first()).toHaveAttribute("data-symbols", "on");
+  // 共有の項目（記号の表示・履歴の行数）は、サーバを通して別のブラウザにも同じ値が届く。
+  await expect(otherPage.locator(".sidebar-spaces .sidebar-state-icon").first()).toHaveAttribute("data-symbols", "off");
   await openSettingsByKey(otherPage);
-  await expect(checkedRadioLabel(otherPage)).toHaveText("自動（この端末では 5,000 行）");
+  await expect(checkedRadioLabel(otherPage)).toHaveText("1,000 行");
   await other.close();
 });
 
