@@ -124,11 +124,11 @@ function closeDialog(): void {
 }
 
 /**
- * フォーカスの戻し先: ほかのモーダルが開いていればその中（開く前の要素）、そうでなく質問の pane が表示中ならその pane の端末、
- * どちらでもなければ開く前の要素。表示（workspace・tab）は切り替えない。
+ * フォーカスの戻し先: ほかのモーダルが開いていればその中（開く前の要素）、グラフの画面が出ていればグラフの面（開く前の要素。基本画面の端末は inert で受けられない）、
+ * そうでなく質問の pane が表示中ならその pane の端末、どちらでもなければ開く前の要素。表示（workspace・tab）は切り替えない。
  */
 function restoreFocus(paneId: string | null, back: Element | null): void {
-  const otherModal = view.openDialog !== null || view.graphDialogOpen;
+  const otherModal = view.openDialog !== null || view.graphDialogOpen || view.screen !== "base";
   if (!otherModal && paneId !== null && registry) {
     const done = focusPaneIfShown(
       {

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /**
- * 連携のグラフ画面（20260927-agent-graph の design D-6・「web」・「振る舞いの詳細」）。`view.graphVisible` の間だけ全画面に重ねる（下の pane は mount されたまま。
- * research-web §1.2）。ネイティブの `<dialog>` を `showModal()` で開く——背面が inert になり、Tab・ポインタ・ホイールが背面の端末へ届かない（AC-I5）。
+ * 連携のグラフの中身（20260927-agent-graph の design D-6・「web」・「振る舞いの詳細」。20261008-graph-first の PR1b で `GraphView` から分けた）。**入れ物は 2 つ**:
+ * - `GraphDialog`（1 列の画面。`kind="dialog"`）: ネイティブの `<dialog>` を `showModal()` で開き、全画面に重ねる。背面が inert になり、Tab・ポインタ・ホイールが背面の端末へ届かない（AC-I5）。
+ * - `GraphScreen`（デスクトップ。`kind="screen"`）: 主な領域の画面。`<dialog>` を使わない。サイドバーが残り、グラフの面にフォーカスがある間だけグラフのキーが働く（D12）。
+ * `active` の間だけ中身を出す（`active` が偽の間も、この部品自身は mount されたまま——表示の変換・読み込み済みのグラフを保つ）。
  *
  * 描画は DOM のノード＋背面の SVG 1 枚（外部ライブラリなし。D-6）。表示の変換（パン・ズーム）は世界の層 1 つの `transform` だけ。
  * 座標・線の経路・当たり判定は client-core/graph の純関数（geometry）。サーバとのやりとりは `store/graph`。
@@ -31,7 +33,7 @@ import {
   type GraphRect,
   type GraphViewport,
 } from "@sodashitsu/client-core";
-import { ConnectionKey, MachineSwitcherKey, TerminalRegistryKey } from "../../injection.js";
+import { ActionDispatcherKey, ConnectionKey, MachineSwitcherKey, TerminalRegistryKey } from "../../injection.js";
 import { isMobileViewport } from "../../mobile/detect.js";
 import {
   GRAPH_UNCHANGED,
@@ -63,15 +65,24 @@ import {
   type LinkPanelSave,
 } from "./linkText.js";
 
+const props = defineProps<{
+  /** 入れ物の種類（`dialog` = 1 列の重ねるダイアログ、`screen` = デスクトップの画面）。 */
+  kind: "dialog" | "screen";
+  /** 見えている（中身を出す）間だけ真。 */
+  active: boolean;
+}>();
+
 const view = useViewStore();
 const graph = useGraphStore();
 const machines = useMachinesStore();
 const settings = useSettingsStore();
 const registry = inject(TerminalRegistryKey, null);
 const conn = inject(ConnectionKey, null);
+const actions = inject(ActionDispatcherKey, null);
 const switcher = inject(MachineSwitcherKey, null);
 const isMobile = isMobileViewport();
-const dialogEl = ref<HTMLDialogElement | null>(null);
+/** 根の要素（入れ物の中の `div`）。フォーカスを受け、キーを受ける。 */
+const dialogEl = ref<HTMLElement | null>(null);
 const canvasEl = ref<HTMLElement | null>(null);
 
 // --- 表示（パン・ズーム）。このブラウザだけのもの（サーバへは保存しない。research-ui §2.4）-------------------------------
@@ -1226,7 +1237,8 @@ onBeforeUnmount(() => canvasEl.value?.removeEventListener("wheel", onWheel));
 /** 開いたら直前の pane のノード（載っていなければ先頭のノード）へ。まだグラフが無ければ届いてから。 */
 let focusOnLoad = false;
 function focusInitial(): void {
-  const pre = view.preGraphFocusPaneId;
+  // 開く前に焦点のあった pane（1 列は覚えておいた値、デスクトップは焦点の pane そのもの——画面のあいだにサイドバーで選び直した pane もそのまま使う）
+  const pre = props.kind === "screen" ? view.focusedPaneId : view.preGraphFocusPaneId;
   const key = pre ? `${machines.selectedId}:${pre}` : null;
   if (key && graph.nodes.some((n) => n.key === key)) {
     focusNode(key);
@@ -1238,12 +1250,11 @@ function focusInitial(): void {
 }
 
 watch(
-  () => view.graphVisible,
+  () => props.active,
   (open) => {
     void nextTick(() => {
       const el = dialogEl.value;
       if (open) {
-        if (el && !el.open) el.showModal();
         selection.value = null;
         if (!graph.graph) {
           focusOnLoad = true;
@@ -1278,20 +1289,21 @@ watch(
       history.value = null;
       subagentsKey.value = null;
       liveMessage.value = "";
-      if (el?.open) el.close();
-      // `closeGraph` は焦点の pane を同じ値に戻すだけで、`TerminalPane` の watch が動かない——端末へ明示的に戻す（`CommandPopup` と同じ）。
+      // ダイアログを閉じるのは入れ物（`GraphDialog`）。ここでは、焦点を端末へ戻す。
+      // `closeGraph` は焦点の pane を同じ値に戻すだけで（デスクトップは動かしもしない）、`TerminalPane` の watch が動かない——端末へ明示的に戻す（`CommandPopup` と同じ）。
+      // 同じ作業の中で行う（フォーカスが `body` に落ちた状態を、見回り〔`focusDrop`〕に見せない。D45）。
       const back = view.focusedPaneId;
-      if (back && !view.modalOpen) registry?.focus(back);
+      if (back && !view.modalOpen && view.screen === "base") registry?.focus(back);
     });
   },
-  // 開いたまま本体が作り直された（ログインし直し・切り離しからの復帰）ときも開き直す——`graphOpen` とキーの dialog モードが残ったまま
+  // 開いたまま本体が作り直された（ログインし直し・切り離しからの復帰）ときも開き直す——グラフが見えている状態とキーの dialog モードが残ったまま
   // 画面が見えない状態にしない。
   { immediate: true },
 );
 watch(
   () => graph.graph,
   (g) => {
-    if (!g || !view.graphVisible) return;
+    if (!g || !props.active) return;
     if (needsFit && g.nodes.length > 0) {
       fitAll();
       needsFit = false;
@@ -1345,7 +1357,10 @@ function onKeydownCapture(ev: KeyboardEvent): void {
     disarmPrefix();
     ev.preventDefault();
     ev.stopPropagation();
-    if (isClose(km.prefixMap.get(chord))) view.closeGraph();
+    const next = km.prefixMap.get(chord);
+    if (isClose(next)) view.closeGraph();
+    // デスクトップの画面では、設定を開くキーも働く（グラフの面の中でだけ、ほかの prefix のキーは食う。20261008-graph-first の D12）。
+    else if (props.kind === "screen" && next?.type === "settings") actions?.run(next);
     return;
   }
   if (chord === km.prefix) {
@@ -1443,12 +1458,6 @@ function escape(): void {
   view.closeGraph();
 }
 
-/** ブラウザの Esc（`cancel`）。既定の閉じ方は止めて、段階の Esc と同じに扱う（HelpDialog と同じ）。 */
-function onCancel(ev: Event): void {
-  ev.preventDefault();
-  view.closeGraph();
-}
-
 function chipLabel(e: EdgeView): string {
   return linkChipText(e.link, {
     invalid: e.invalid,
@@ -1466,18 +1475,19 @@ function chipAria(e: EdgeView): string {
 
 <template>
   <!-- `id` は App.vue の Teleport の行き先（開いている間はトースト・再接続の表示をこの中へ出す。decisions D4）。 -->
-  <dialog
-    id="soda-graph-dialog"
+  <div
     ref="dialogEl"
     class="graph-view"
+    :class="{ 'graph-view-screen': kind === 'screen' }"
+    :role="kind === 'screen' ? 'region' : undefined"
     aria-label="連携（グラフ）"
     tabindex="-1"
+    data-graph-view
     @keydown.capture="onKeydownCapture"
     @focusin="onFocusin"
     @keydown="onKeydown"
-    @cancel="onCancel"
   >
-    <template v-if="view.graphVisible">
+    <template v-if="props.active">
       <header class="graph-toolbar">
         <h2 class="graph-title">連携（グラフ）</h2>
         <span v-if="graph.graph?.paused" class="graph-paused-badge">⏸ 全体が一時停止中</span>
@@ -1674,27 +1684,20 @@ function chipAria(e: EdgeView): string {
       />
       <div class="graph-live" aria-live="polite">{{ liveMessage }}</div>
     </template>
-  </dialog>
+  </div>
 </template>
 
 <style scoped>
 .graph-view {
-  /* 全画面（`<dialog>` の既定の大きさ・余白・枠を外す）。`100vh` でなく `100%`（iOS Safari。SettingsDialog と同じ）。 */
+  /* 入れ物（`GraphDialog`・`GraphScreen`）いっぱいに広げる。 */
   width: 100%;
   height: 100%;
-  max-width: none;
-  max-height: none;
-  margin: 0;
-  padding: 0;
-  border: none;
+  display: flex;
   flex-direction: column;
   background: var(--soda-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
   outline: none;
   overflow: hidden;
-}
-.graph-view[open] {
-  display: flex;
 }
 .graph-toolbar {
   display: flex;

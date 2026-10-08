@@ -419,7 +419,11 @@ export class NotificationController {
       if (view.graphDialogOpen) view.retargetPreGraphFocus(paneId);
       if (view.askOpen) view.retargetPreAskFocus(paneId); // 質問のフォーム（20261002-sodactl-ask）も同じ
       if (view.extensionApprovalOpen) view.retargetPreExtensionApprovalFocus(paneId); // 拡張の承認のダイアログ（20261007-ext-host）も同じ
-    } else view.focusPane(paneId);
+    } else {
+      view.focusPane(paneId);
+      // デスクトップのグラフの画面が出ているときは、知らせの pane が見えるよう基本画面へ戻す（基本画面の pane は inert で、フォーカスを受けられない。20261008-graph-first）。
+      if (view.screen !== "base") view.setScreen("base");
+    }
     this.#opts.onFocusPane?.(paneId);
     return true;
   }

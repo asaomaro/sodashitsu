@@ -17,6 +17,7 @@ import { type ResolvedLine, resolveAgentLines, resolveSpaceLines, tokenStyleAttr
 import StateIcon from "./StateIcon.vue";
 import MachineHeader from "./MachineHeader.vue";
 import MachineRows from "./MachineRows.vue";
+import ScreenSwitcher from "./ScreenSwitcher.vue";
 import { useMachinesStore } from "../store/machines.js";
 import { watchDragInterrupt } from "../store/dragInterrupt.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
@@ -822,6 +823,8 @@ watchDragInterrupt(view, () => {
         <template v-else>session: {{ sessionLabel }} ⇄</template>
       </button>
     </div>
+    <!-- 画面の切り替え（基本画面・グラフ。20261008-graph-first）。session の下・workspace の一覧の上 -->
+    <ScreenSwitcher />
     <div ref="sectionsEl" class="sidebar-sections" :class="{ 'sidebar-sections-split': showSectionDivider }">
     <section
       ref="spacesEl"

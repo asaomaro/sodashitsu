@@ -7,7 +7,7 @@ import { useGraphStore } from "../../store/graph.js";
 import { useSessionStore } from "../../store/session.js";
 import { useSettingsStore } from "../../store/settings.js";
 import { useViewStore } from "../../store/view.js";
-import GraphView from "./GraphView.vue";
+import GraphView from "./GraphDialog.vue"; // 1 列の画面の入れ物（デスクトップの画面は GraphScreen.test.ts）
 import { layoutOverlaps, nodePositions } from "@sodashitsu/client-core";
 import { agentOf, fakeGraphPort, graphOf, paneOf, triggerLink } from "./graphTestKit.js";
 
@@ -21,6 +21,7 @@ beforeEach(() => {
 });
 
 function mountView() {
+  useViewStore(pinia).setMobileViewport(true); // 重ねるダイアログ（1 列の画面）。デスクトップの画面は GraphScreen.test.ts
   const registry = { focus: vi.fn() };
   const conn = { request: vi.fn(async () => ({})) };
   const switcher = { switchTo: vi.fn(async () => true) };
@@ -45,7 +46,7 @@ describe("GraphView（枠）", () => {
     view.openGraph();
     await nextTick();
     await nextTick();
-    const root = wrapper.find(".graph-view");
+    const root = wrapper.find("dialog.graph-dialog");
     expect(root.element.tagName).toBe("DIALOG");
     expect(showModal).toHaveBeenCalledTimes(1);
     expect((root.element as HTMLDialogElement).open).toBe(true);
@@ -61,17 +62,18 @@ describe("GraphView（枠）", () => {
     wrapper.unmount();
   });
 
-  it("graphOpen の間だけ全画面の dialog を開いて中身を出し、ノードが無ければ自身へフォーカスする", async () => {
+  it("graphDialogOpen の間だけ全画面の dialog を開いて中身を出し、ノードが無ければ中身の根へフォーカスする", async () => {
     const { wrapper, view } = mountView();
-    expect((wrapper.find(".graph-view").element as HTMLDialogElement).open).toBe(false);
+    expect((wrapper.find("dialog.graph-dialog").element as HTMLDialogElement).open).toBe(false);
     expect(wrapper.find(".graph-toolbar").exists()).toBe(false);
     view.openGraph();
     await nextTick();
     await nextTick();
+    const dlg = wrapper.find("dialog.graph-dialog");
     const root = wrapper.find(".graph-view");
-    expect((root.element as HTMLDialogElement).open).toBe(true);
+    expect((dlg.element as HTMLDialogElement).open).toBe(true);
     expect(wrapper.find(".graph-toolbar").exists()).toBe(true);
-    expect(root.attributes("aria-label")).toBe("連携（グラフ）");
+    expect(dlg.attributes("aria-label")).toBe("連携（グラフ）");
     expect(document.activeElement).toBe(root.element);
     wrapper.unmount();
   });
@@ -86,7 +88,7 @@ describe("GraphView（枠）", () => {
     await nextTick();
     await nextTick();
     expect(registry.focus).toHaveBeenCalledWith("p1");
-    expect((wrapper.find(".graph-view").element as HTMLDialogElement).open).toBe(false);
+    expect((wrapper.find("dialog.graph-dialog").element as HTMLDialogElement).open).toBe(false);
     wrapper.unmount();
   });
 

@@ -7,7 +7,7 @@ import { ConnectionKey, MachineSwitcherKey, TerminalRegistryKey } from "../../in
 import { useGraphStore } from "../../store/graph.js";
 import { useSessionStore } from "../../store/session.js";
 import { useViewStore } from "../../store/view.js";
-import GraphView from "./GraphView.vue";
+import GraphView from "./GraphDialog.vue"; // 1 列の画面の入れ物（デスクトップの画面は GraphScreen.test.ts）
 import { agentOf, fakeGraphPort, paneOf, triggerLink } from "./graphTestKit.js";
 
 /**
@@ -77,6 +77,7 @@ describe("GraphView の描画の時間（pane 16・線 32。AC17）", () => {
     store.applyGraph(bigGraph(1), "fresh");
 
     const t0 = performance.now();
+    useViewStore(pinia).setMobileViewport(true);
     useViewStore(pinia).openGraph();
     await settle();
     const openMs = performance.now() - t0;

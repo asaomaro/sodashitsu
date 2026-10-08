@@ -9,7 +9,7 @@ import { useGraphStore } from "../../store/graph.js";
 import { useMachinesStore } from "../../store/machines.js";
 import { useSessionStore } from "../../store/session.js";
 import { useViewStore } from "../../store/view.js";
-import GraphView from "./GraphView.vue";
+import GraphView from "./GraphDialog.vue"; // 1 列の画面の入れ物（デスクトップの画面は GraphScreen.test.ts）
 import { agentOf, fakeGraphPort, graphOf, paneOf } from "./graphTestKit.js";
 
 // 20261004-subagent-display。グラフのノードの件数のボタンと、グラフの中の一覧（SubagentPanel）。
@@ -65,6 +65,7 @@ async function open(
     },
   });
   const view = useViewStore(pinia);
+  view.setMobileViewport(true); // 重ねるダイアログ（1 列の画面）
   const session = useSessionStore(pinia);
   session.tabs.set("t1", { id: "t1", workspaceId: "w1" } as never);
   session.panes.set(

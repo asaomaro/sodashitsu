@@ -1063,6 +1063,21 @@ describe("NotificationController — 他の仕組みとの噛み合わせ", () =
     expect(view.focusedPaneId).toBe("p1");
   });
 
+  it("デスクトップのグラフの画面が出ているときは、知らせの pane へ移ると基本画面へ戻す（基本画面の pane は inert で、フォーカスを受けられない）", async () => {
+    vi.useFakeTimers();
+    const h = makeController();
+    await queueOne(h);
+    const view = useViewStore(pinia);
+    view.focusPane("p-other");
+    view.openGraph();
+    expect(view.screen).toBe("graph");
+
+    h.c.focusNext();
+
+    expect(view.focusedPaneId).toBe("p1");
+    expect(view.screen).toBe("base");
+  });
+
   // **`pane.closed` は接続中にしか届かない**。切断中に閉じられた pane はスナップショットから
   // 黙って消えるので、掃除しないと鍵が永久に残り、待ち行列の枠を占め、OS 通知も閉じられない。
   it("再接続のスナップショットから消えた pane を掃除する", async () => {
