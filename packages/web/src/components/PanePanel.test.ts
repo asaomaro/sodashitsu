@@ -279,7 +279,7 @@ describe("PanePanel — 4 つの側", () => {
     }
   });
 
-  it("ドラッグ: 端末から遠ざかる向きに動かすと広がる（右は左へ・左は右へ・上は下へ・下は上へ）。ドラッグの間は大きさを変えず、離して 1 回", async () => {
+  it("ドラッグ: 端末の側へ向けて動かすと広がる（右は左へ・左は右へ・上は下へ・下は上へ）。ドラッグの間は大きさを変えず、離して 1 回", async () => {
     const raf = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb) => {
       cb(0);
       return 1;

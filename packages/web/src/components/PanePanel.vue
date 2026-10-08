@@ -39,7 +39,7 @@ const rootStyle = computed(() =>
 const handleLabel = computed(() => (horizontal.value ? "パネルの幅" : "パネルの高さ"));
 
 const clampToRange = (w: number): number => Math.min(props.dock.max, Math.max(props.dock.min, Math.round(w)));
-/** ポインタの動き（端末から遠ざかる向きが広がる）から、大きさを決める。右は左へ・下は上へ動かすと広がる。 */
+/** ポインタの動きから、大きさを決める。端末の側へ向けて動かすと広がる（右は左へ・左は右へ・上は下へ・下は上へ）。 */
 function sizeFromDelta(startSize: number, dx: number, dy: number): number {
   if (props.side === "right") return startSize - dx;
   if (props.side === "left") return startSize + dx;

@@ -1,4 +1,8 @@
 import type { ElementHandle, Locator, Page } from "@playwright/test";
+import type { AppServer } from "./appServer.js";
+import { runDisplay } from "./display.js";
+import { ok } from "./displayScript.js";
+import { expect } from "./fixtures.js";
 
 /**
  * 表示の面の配置（20261008-display-layout）の E2E の道具。判定は、利用者が見る場所（DOM・箱・`elementFromPoint`・`activeElement`）で行う（規約 `e2e-observe-browser`）。
@@ -60,3 +64,71 @@ export async function frameHandle(page: Page, faceId: string): Promise<ElementHa
   if (!h) throw new Error(`no frame for ${faceId}`);
   return h as ElementHandle<HTMLElement>;
 }
+
+// --- 配置の E2E の共通の道具（display-layout-state・display-layout-dock） -------------------------------------------------------------
+export const set = (appServer: AppServer, paneId: string, name: string, kind: "panel" | "band", extra: string[] = [], text = name) =>
+  runDisplay(appServer, paneId, ["set", name, "--kind", kind, "--text", text, ...extra]).then(ok);
+/** 面の名前 → 面の id（`data-display-root` は id）。 */
+export const idsOf = async (appServer: AppServer, paneId: string): Promise<Record<string, string>> => {
+  const r = await ok(await runDisplay(appServer, paneId, ["list"]));
+  return Object.fromEntries((r.json as { displays: { id: string; name: string }[] }).displays.map((d) => [d.name, d.id]));
+};
+export const openFaceMenu = async (page: Page, appServer: AppServer, paneId: string, name: string): Promise<void> => {
+  const id = (await idsOf(appServer, paneId))[name]!;
+  await page.locator(`[data-display-root="${id}"] [data-display-menu-button]`).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+};
+export const menuItem = (page: Page, label: string) => page.getByRole("menuitem", { name: label, exact: true });
+export const stealReports = (sent: { reports(): { problem: string }[] }): number => sent.reports().filter((r) => r.problem === "focus_steal").length;
+export const termFocused = (page: Page): Promise<boolean> => page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea") === true);
+
+/**
+ * 枠（iframe）の出入りを記録する。Chromium は、iframe を DOM の中で動かすと（同じ要素のまま）`load` が 1 増える（`isConnected` は常に真）ので、
+ * 動かしたことは `data-display-loads` の比較と、この記録（`removedNodes`・`addedNodes`）でしか見つからない。記録の `id` は面の id。
+ */
+export const watchFrames = (page: Page): Promise<void> =>
+  page.evaluate(() => {
+    const w = window as unknown as { __frameLog: { kind: string; id: string }[] };
+    w.__frameLog = [];
+    const ids = new WeakMap<Element, string>();
+    const idOf = (f: Element): string => {
+      let v = ids.get(f);
+      if (!v) {
+        v = f.closest("[data-display-root]")?.getAttribute("data-display-root") ?? "?";
+        ids.set(f, v);
+      }
+      return v;
+    };
+    const frames = (n: Node): Element[] => (n instanceof Element ? (n.matches("iframe[data-display-frame]") ? [n] : Array.from(n.querySelectorAll("iframe[data-display-frame]"))) : []);
+    document.querySelectorAll("iframe[data-display-frame]").forEach(idOf);
+    new MutationObserver((ms) => {
+      for (const m of ms) {
+        for (const n of Array.from(m.removedNodes)) for (const f of frames(n)) w.__frameLog.push({ kind: "removed", id: idOf(f) });
+        for (const n of Array.from(m.addedNodes)) for (const f of frames(n)) w.__frameLog.push({ kind: "added", id: idOf(f) });
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+/** 記録を取り出して空にする（面の id の重複を除く）。 */
+export const takeFrameLog = async (page: Page): Promise<string[]> => {
+  await page.waitForTimeout(150);
+  const log = await page.evaluate(() => {
+    const w = window as unknown as { __frameLog: { kind: string; id: string }[] };
+    return w.__frameLog.splice(0);
+  });
+  return [...new Set(log.map((l) => l.id))];
+};
+export const frameLoads = (page: Page): Promise<string[]> => page.locator("iframe[data-display-frame]").evaluateAll((els) => els.map((e) => e.getAttribute("data-display-loads") ?? ""));
+
+
+/**
+ * `activeElement` が `body` になった回数を数え始める（25ms ごとの標本。`focusout` の瞬間も数えるのは `transient` が真のとき）。
+ * フォーカスのある要素が DOM から消える瞬間は、ブラウザが一瞬 `body` にする（描き直しの後の備えが同じ周期のうちに端末へ移すので、利用者には見えない）ので、消える操作では標本だけで数える。
+ */
+export const trackBodyHits = (page: Page, transient = true): Promise<void> =>
+  page.evaluate((withFocusout) => {
+    const w = window as unknown as { __bodyHits: number };
+    w.__bodyHits = 0;
+    if (withFocusout) document.addEventListener("focusout", (e) => { if ((e as FocusEvent).relatedTarget === null && document.activeElement === document.body) w.__bodyHits++; }, true);
+    setInterval(() => { if (document.activeElement === document.body) w.__bodyHits++; }, 25);
+  }, transient);
+export const bodyHits = (page: Page): Promise<number> => page.evaluate(() => (window as unknown as { __bodyHits: number }).__bodyHits);

@@ -226,7 +226,7 @@
       対象: `packages/web/src/components/ContextMenu.vue`・`SettingsDialog.vue`・`packages/web/src/display/DisplayController.ts:28`・`DisplayController.test.ts:52`・`actions/ActionDispatcher.ts`・各テスト / 根拠: design「メニュー」「設定」「画面の名乗り」
       依存: T14, T8
       AC: AC12, AC16, AC8, AC-I3
-- [ ] T18: E2E（PR-B）`display-layout-dock.spec.ts`:
+- [x] T18: E2E（PR-B）`display-layout-dock.spec.ts`:
       (1) メニューで 右 → 下 → 左 → 上 → 右 と移す。そのたびに、箱の並び（上の帯 → 上のパネル → 左｜端末｜右 → 下のパネル → 下の帯）・上下のパネルの幅＝本体の幅・`client.view` が 1 回で、列数と行数が端末の箱に合う・端末の箱がはみ出さない。
       (2) 右と下に同時に置く・同じ側に 2 枚でタブ。再読み込みの後も同じ。別の pane で同じ名前の面を出すと、最後に決めた置き場所から始まる（たたみは引き継がない）。
       (3) pane を狭める・低くする（分割・ウィンドウの大きさ）: 端末が 40 列・10 行を下回らない。両側の合計が超えると縮む。それでも入らないと、上（左）が先にトレイの押せないボタンになる。広げると戻る。記憶は変わらない（再読み込みで確かめる）。
