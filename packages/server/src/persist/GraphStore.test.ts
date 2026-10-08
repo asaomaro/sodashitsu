@@ -424,4 +424,74 @@ describe("GraphStore", () => {
     expect(other.get()).toEqual({ rev: 0, paused: false, nodes: [], links: [] });
     expect(other.migrationPending).toBe(false);
   });
+
+  // --- PR1a レビュー指摘 1・3（座標の範囲・移行の控え） ---------------------------------
+
+  it("保存の形を満たさない（座標が範囲の外）グラフは書かない。ファイルも状態も変わらない（読めないファイルを作らない）", async () => {
+    const dir = await tempDir();
+    const store = await loaded(dir);
+    await store.update(0, build, "c1");
+    const before = await readFile(join(dir, GRAPH_FILE_NAME), "utf8");
+    await expect(
+      store.update(1, [{ op: "move_node", key: A, x: 2_080_540, y: 0 }], "graph"),
+    ).rejects.toBeInstanceOf(GraphInvalidError);
+    expect(await readFile(join(dir, GRAPH_FILE_NAME), "utf8")).toBe(before);
+    expect(store.get().nodes[0]).toEqual({ key: A, x: 0, y: 0 });
+    expect(store.get().rev).toBe(1);
+  });
+
+  it("読み込み: 座標が範囲の外でも壊れたファイルにせず、範囲の中へ寄せて読む（線を失わせない）", async () => {
+    const dir = await tempDir();
+    const raw = JSON.stringify({
+      schema: 2,
+      rev: 4,
+      graph: {
+        paused: false,
+        nodes: [
+          { key: A, x: 2_080_540, y: -3_000_000 },
+          { key: B, x: 240, y: 0 },
+        ],
+        links: [{ id: "l1", kind: "supervise", from: A, to: B, limit: 10, count: 2, paused: null }],
+      },
+      savedAt: "2026-10-01T00:00:00.000Z",
+    });
+    await writeFile(join(dir, GRAPH_FILE_NAME), raw);
+    const store = new GraphStore(dir);
+    expect(await store.load()).toBe("ok");
+    expect(store.get().nodes[0]).toEqual({ key: A, x: 1_000_000, y: -1_000_000 });
+    expect(store.get().links).toHaveLength(1);
+    expect(store.get().rev).toBe(4);
+    // 否定の対照: 座標が数でない（形が違う）ファイルは、これまでどおり壊れたファイル
+    const dir2 = await tempDir();
+    await writeFile(join(dir2, GRAPH_FILE_NAME), raw.replace("2080540", '"far"'));
+    expect(typeof (await new GraphStore(dir2).load())).toBe("object");
+  });
+
+  it("移行の前の控えは pre-migration- の別の名前で書き、最新 3 件の入れ替えで消えない。同じ中身は増やさない", async () => {
+    const dir = await tempDir();
+    const original = v1FileForBackup();
+    await writeFile(join(dir, GRAPH_FILE_NAME), original);
+    // 移行が終わらない起動を 5 回くり返す（同じ元のファイル）。
+    for (let i = 0; i < 5; i++) {
+      const s = new GraphStore(dir);
+      await s.load();
+    }
+    let names = await readdir(join(dir, "graph-backups"));
+    expect(names.filter((n) => n.startsWith("pre-migration-"))).toHaveLength(1);
+    // 壊れたファイルの退避（最新 3 件）が何度あっても、移行の前の控えは残る。
+    for (let i = 0; i < 6; i++) {
+      await writeFile(join(dir, GRAPH_FILE_NAME), `{broken ${i}`);
+      await new GraphStore(dir).load();
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    names = await readdir(join(dir, "graph-backups"));
+    const pre = names.filter((n) => n.startsWith("pre-migration-"));
+    expect(pre).toHaveLength(1);
+    expect(await readFile(join(dir, "graph-backups", pre[0]!), "utf8")).toBe(original);
+    expect(names.filter((n) => !n.startsWith("pre-migration-")).length).toBeLessThanOrEqual(3);
+  });
 });
+
+function v1FileForBackup(): string {
+  return `${JSON.stringify({ schema: 1, rev: 7, graph: { paused: false, nodes: [{ key: "local:p1", x: 0, y: 0 }], links: [] }, savedAt: "2026-10-01T00:00:00.000Z" }, null, 2)}\n`;
+}

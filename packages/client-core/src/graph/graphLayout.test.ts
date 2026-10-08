@@ -257,6 +257,23 @@ describe("placeNode / placeFrame", () => {
   });
 });
 
+describe("placeNode（極端に離れたノード）", () => {
+  it("数十万 px 離れたノードがある workspace でも、升を数千万個作らず（メモリを使い切らず）すぐ空きを返す", () => {
+    const m = ws("big", 3);
+    const st = structureOf([{ id: "big", kind: "workspace", members: [m] }]);
+    const pos = new Map<string, GraphPoint>([
+      [m.nodes[0]!, { x: -900_000, y: -900_000 }],
+      [m.nodes[1]!, { x: 900_000, y: 900_000 }],
+    ]);
+    const t0 = Date.now();
+    const r = placeNode(st, pos, "big");
+    expect(Date.now() - t0).toBeLessThan(2000);
+    expect(Math.abs(r.x)).toBeLessThanOrEqual(GRAPH_COORD_MAX);
+    expect(Math.abs(r.y)).toBeLessThanOrEqual(GRAPH_COORD_MAX);
+    expect(r.shift).toBeNull();
+  });
+});
+
 describe("resolveDrop", () => {
   const a = ws("a", 1);
   const b = ws("b", 1);

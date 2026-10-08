@@ -3,7 +3,7 @@ import type { Graph, GraphOp, Pane, ServerEvent, Tab, Workspace } from "@sodashi
 import { applyGraphOps, emptyGraph, layoutOverlaps, nodePositions } from "@sodashitsu/client-core";
 import { EventBus } from "../bus/EventBus.js";
 import type { Logger } from "../log/Logger.js";
-import { GraphRevConflictError } from "../persist/GraphStore.js";
+import { GraphInvalidError, GraphRevConflictError } from "../persist/GraphStore.js";
 import { GraphMaintainer } from "./GraphMaintainer.js";
 import { graphStructure, type GraphStructureSession } from "./graphStructure.js";
 
@@ -270,6 +270,64 @@ describe("GraphMaintainer", () => {
     // 次の（force でない）確認で、増えた pane のノードが足される。
     expect(await s.m.reconcileNow()).toBe(1);
     expect(s.state.graph.nodes.map((n) => n.key).sort()).toEqual([k("p1"), k("p2")]);
+    s.m.close();
+  });
+
+  it("足している間に閉じた pane のノードは、足した直後に外す（閉じた pane のノードが残らない）", async () => {
+    const w = new World();
+    w.addWorkspace("w1", ["p1"]);
+    w.addWorkspace("w2", ["p2"]);
+    const s = setup(w);
+    const original = s.store.update.getMockImplementation()!;
+    let injected = false;
+    s.store.update.mockImplementation(async (baseRev: number, ops: readonly GraphOp[]) => {
+      const result = await original(baseRev, ops);
+      if (!injected) {
+        injected = true;
+        // 書き込みの間に p2 の pane が閉じた（GraphPaneCleanup はノードがまだ無いグラフを見て何もしない）
+        w.panes = w.panes.filter((p) => p.id !== "p2");
+        w.workspaces = w.workspaces.filter((x) => x.id !== "w2");
+        w.tabs = w.tabs.filter((t) => t.workspaceId !== "w2");
+      }
+      return result;
+    });
+    await s.m.reconcileNow({ force: true });
+    expect(s.state.graph.nodes.map((n) => n.key)).toEqual([k("p1")]);
+    s.m.close();
+  });
+
+  it("1 回の確認で足すノードは 50 まで。続きは次の確認が足す。起動の一括（force）は上限なし", async () => {
+    const w = new World();
+    for (let i = 0; i < 120; i++) w.addWorkspace(`w${i + 1}`, [`p${i + 1}`]);
+    const s = setup(w);
+    s.emit("pane.created");
+    await s.wait(500);
+    // 50 + 50 + 20 と続けて足される（それぞれ 1 回の更新）
+    expect(s.state.graph.nodes).toHaveLength(120);
+    expect(s.updates.map((o) => o.length)).toEqual([50, 50, 20]);
+    // 否定の対照: 起動の一括は上限なし
+    const w2 = new World();
+    for (let i = 0; i < 120; i++) w2.addWorkspace(`w${i + 1}`, [`p${i + 1}`]);
+    const s2 = setup(w2);
+    await s2.m.reconcileNow({ force: true });
+    expect(s2.updates.map((o) => o.length)).toEqual([120]);
+    s.m.close();
+    s2.m.close();
+  });
+
+  it("保存の検査に落ちた確認は lastRunOk=false（起動の移行を終えない）。直せたら true", async () => {
+    const w = new World();
+    w.addWorkspace("w1", ["p1"]);
+    const s = setup(w);
+    const original = s.store.update.getMockImplementation()!;
+    s.store.update.mockImplementationOnce(async () => {
+      throw new GraphInvalidError([{ code: "unwritable", message: "x" }]);
+    });
+    expect(await s.m.reconcileNow({ force: true })).toBe(0);
+    expect(s.m.lastRunOk).toBe(false);
+    s.store.update.mockImplementation(original);
+    expect(await s.m.reconcileNow({ force: true })).toBe(1);
+    expect(s.m.lastRunOk).toBe(true);
     s.m.close();
   });
 

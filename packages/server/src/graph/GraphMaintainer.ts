@@ -1,5 +1,9 @@
-import type { Graph } from "@sodashitsu/protocol";
-import { reconcileGraph, type LayoutStructure, type ReconcileHints } from "@sodashitsu/client-core";
+import type { Graph, GraphOp } from "@sodashitsu/protocol";
+import {
+  reconcileGraphDetailed,
+  type LayoutStructure,
+  type ReconcileHints,
+} from "@sodashitsu/client-core";
 import type { Disposable } from "../util/Disposable.js";
 import type { EventBus } from "../bus/EventBus.js";
 import {
@@ -45,6 +49,8 @@ const STRUCTURAL_EVENTS: ReadonlySet<string> = new Set([
 ]);
 
 const DEBOUNCE_DEFAULT_MS = 50;
+/** 構造のできごとの 1 回の確認で足すノードの数の上限（続きは次の確認）。 */
+export const MAX_ADDS_PER_RUN = 50;
 const RETRIES_DEFAULT = 3;
 
 /** 構造と rev の指紋（前回の確認から変わっていなければ、導き直しを飛ばす）。 */
@@ -114,6 +120,8 @@ export class GraphMaintainer {
   private closed = false;
   private lastFingerprint: string | null = null;
   private memory: Memory | null = null;
+  /** 直近の確認が、直すべきものを直し切った（または直すものが無かった）か。起動の移行を終えてよいかの判断に使う。 */
+  lastRunOk = true;
 
   constructor(private readonly deps: GraphMaintainerDeps) {
     this.sub = deps.bus.subscribe((e) => {
@@ -179,6 +187,7 @@ export class GraphMaintainer {
   }
 
   private async run(force: boolean, repack: boolean): Promise<number> {
+    this.lastRunOk = false;
     const { store, session, logger } = this.deps;
     const retries = this.deps.retries ?? RETRIES_DEFAULT;
     for (let attempt = 0; attempt < retries; attempt++) {
@@ -186,23 +195,41 @@ export class GraphMaintainer {
       const g: Graph = store.get();
       const structure = graphStructure(session, g);
       const fp = fingerprint(structure, g.rev);
-      if (!force && fp === this.lastFingerprint) return 0;
-      const ops = reconcileGraph(structure, g, {
+      if (!force && fp === this.lastFingerprint) {
+        this.lastRunOk = true;
+        return 0;
+      }
+      // 起動の一括（`force`）は上限なし。構造のできごとの確認は、1 回で足す数に上限を設け、続きを次の確認へ回す（主スレッドを長く止めない）。
+      const result = reconcileGraphDetailed(structure, g, {
         ...hintsFrom(this.memory, structure),
         ...(repack ? { repack } : {}),
+        ...(force ? {} : { maxAdds: MAX_ADDS_PER_RUN }),
       });
+      const ops = result.ops;
+      if (result.unresolved > 0 || result.clamped > 0) {
+        // 座標の範囲の外へしか動かせない重なりは、そのまま残す（読めない保存を作らない）。
+        logger.warn("graph.maintain: some overlapping frames could not be fixed", {
+          overlaps: result.unresolved,
+          clamped: result.clamped,
+        });
+      }
       if (ops.length === 0) {
         this.lastFingerprint = fp;
         this.memory = remember(structure);
+        this.lastRunOk = true;
         return 0;
       }
       try {
         const next = await store.update(g.rev, ops, "graph");
         // 確認した構成（`structure`）と、直した後の rev を基準にする。**直した後の構成を導き直して基準にしない**——更新を待つ間に pane が増えていると、
         // 確認していない構成を「確認済み」にして、次の確認が飛ばされ、その pane のノードが足されないままになる。
-        this.lastFingerprint = fingerprint(structure, next.rev);
+        // 足し切れなかった分があれば基準にせず（null）、続きを次の確認で足す。
+        this.lastFingerprint = result.truncated ? null : fingerprint(structure, next.rev);
         this.memory = remember(structure);
         logger.debug("graph.maintain: reconciled", { ops: ops.length });
+        await this.removeClosedAdds(ops);
+        this.lastRunOk = true;
+        if (result.truncated) this.schedule();
         return ops.length;
       } catch (err) {
         if (err instanceof GraphRevConflictError) continue;
@@ -216,5 +243,39 @@ export class GraphMaintainer {
     }
     logger.warn("graph.maintain: skipped (conflict)", {});
     return 0;
+  }
+
+  /**
+   * いま足したノードの pane が、足している間に閉じていたら外す。`GraphPaneCleanup` は、ノードがまだ無いグラフを見て何もしないので、閉じた pane の
+   * ノードが残ってしまう競合を、ここで塞ぐ（足したものだけを見る）。
+   */
+  private async removeClosedAdds(ops: readonly GraphOp[]): Promise<void> {
+    const { store, session, logger } = this.deps;
+    const open = new Set(session.snapshot().panes.map((p) => p.id));
+    const stale = ops.flatMap((o) =>
+      o.op === "add_node" && o.key.startsWith("local:") && !open.has(o.key.slice("local:".length))
+        ? [o.key]
+        : [],
+    );
+    if (stale.length === 0) return;
+    for (let attempt = 0; attempt < (this.deps.retries ?? RETRIES_DEFAULT); attempt++) {
+      try {
+        const g = store.get();
+        const present = stale.filter((k) => g.nodes.some((n) => n.key === k));
+        if (present.length === 0) return;
+        await store.update(
+          g.rev,
+          present.map((key) => ({ op: "remove_node" as const, key })),
+          "graph",
+        );
+        return;
+      } catch (err) {
+        if (err instanceof GraphRevConflictError) continue;
+        logger.warn("graph.maintain: failed to remove the nodes of closed panes", {
+          error: String(err),
+        });
+        return;
+      }
+    }
   }
 }

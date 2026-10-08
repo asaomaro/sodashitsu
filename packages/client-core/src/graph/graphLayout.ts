@@ -32,6 +32,8 @@ export const FRAME_GAP = GRAPH_GRID;
 export const FRAME_ORIGIN = GRAPH_GRID;
 /** 新しいノードを探す升の、いまの外接の外側への広げ幅（右・下に、それぞれこの数まで）。これでも空きが無ければ、囲いごと動かす。 */
 const CELL_EXPAND_MAX = 2;
+/** 新しいノードを探す升の、外接の左上から見る範囲（升の数。縦横それぞれ）。 */
+const CELL_SCAN_MAX = 32;
 /** 置き場所の候補の数の上限（辺の座標の候補を近い順にこれだけ見る。無ければ最後の手段の場所へ）。 */
 const EDGE_CANDIDATES_MAX = 64;
 /** 計算で使ってよい座標の範囲（`GRAPH_COORD_MAX` に、ノードの大きさと余白の分の余裕を持たせる）。 */
@@ -521,16 +523,20 @@ export function placeNode(
   const maxY = Math.max(...pts.map((p) => p.y)) + GRAPH_NODE_HEIGHT;
   const ox = snapToGrid(minX);
   const oy = snapToGrid(minY);
-  const cols = Math.max(1, Math.ceil((maxX - ox) / GRAPH_CELL_WIDTH));
-  const rows = Math.max(1, Math.ceil((maxY - oy) / GRAPH_CELL_HEIGHT));
+  // 外接が極端に大きい（数十万 px 離れたノードがある）とき、升をすべて並べると数千万になる。外接の左上から `CELL_SCAN_MAX` 升四方だけを見る。
+  const cols = Math.min(CELL_SCAN_MAX, Math.max(1, Math.ceil((maxX - ox) / GRAPH_CELL_WIDTH)));
+  const rows = Math.min(CELL_SCAN_MAX, Math.max(1, Math.ceil((maxY - oy) / GRAPH_CELL_HEIGHT)));
 
-  // 升の候補: いまの外接の中 → 右へ広げる → 下へ広げる（広げる量が小さい順）。
+  // 升の候補: いまの外接の中 → 右へ広げる → 下へ広げる（広げる量が小さい順）。ただし、ほぼ正方形になる列数（`wrapCols`）を超えて右へ伸ばすより、
+  // 下の行へ折り返す（pane が多い workspace が横一列に伸びて、囲いが画面に収まらなくなるのを避ける）。
+  const wrapCols = Math.max(1, Math.ceil(Math.sqrt(pts.length + 1)));
   const cells: { i: number; j: number; cost: number; down: number }[] = [];
   for (let j = 0; j < rows + CELL_EXPAND_MAX; j++) {
     for (let i = 0; i < cols + CELL_EXPAND_MAX; i++) {
       const right = Math.max(0, i - cols + 1);
       const down = Math.max(0, j - rows + 1);
-      cells.push({ i, j, cost: right + down, down });
+      const wrapPenalty = i >= Math.max(cols, wrapCols) ? 100 : 0;
+      cells.push({ i, j, cost: right + down + wrapPenalty, down });
     }
   }
   cells.sort((a, b) => a.cost - b.cost || a.down - b.down || a.j - b.j || a.i - b.i);

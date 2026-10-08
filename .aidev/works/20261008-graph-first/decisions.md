@@ -20,6 +20,12 @@
 | D33 | `rekey_node` の検査の順 | 別のマシンへの付け替え（`rekey_other_machine`）は、これまでどおり `applyGraphOps` が断る。方式の層の `node_required` は、同じマシンの手元のノードの選び直しだけ | 既存の試験・`sodactl` の文言を保つ |
 | D34 | ログ | `graph.maintain: reconciled` は `debug`。`sodactl` の統合試験が stdout を取って JSON を読むので、`info` だと混ざる | 起動と同じ stdout を共有する試験の都合。ログに残す必要があれば `GraphMaintainer` に `info` を出させる |
 | D35 | `graph.update` の検査の順 | `baseRev` が今の rev と違うときは、検査より先に `rev_conflict`（取り直してやり直せる）。同じときだけ `node_required`・`frame_overlap` を見る | 古い rev のままの更新を、検査の失敗で止めると、画面が取り直せない |
+| D36 | 範囲の外の座標（レビュー指摘 1） | `reconcileGraphDetailed` が、動かし先が `±GRAPH_COORD_MAX` の外になる最上位の囲いを元の位置のまま残し（足したノードは範囲の中へ寄せ）、`unresolved`・`clamped` を返す。`GraphMaintainer` は残った重なりを warn。`GraphStore` は保存の前に `GraphSchema` を通し（`unwritable`）、読み込みは座標を範囲の中へ寄せて読む | 内部の更新は zod を通らないので、読めないファイルを書いて次の起動で線ごと失う道があった |
+| D37 | 極端に離れたノードの升の走査 | `placeNode` の升の数を外接の左上から縦横 32 升に制限 | 数十万 px 離れたノードで升を数千万個作り、メモリを使い切っていた（レビューの再現を回帰テストにする途中で見つけた） |
+| D38 | 新しいノードの置き方 | 右へ伸ばすより、ほぼ正方形の列数（`ceil(√(n+1))`）を超えたら下の行へ折り返す | 200 pane の workspace が横一列になるのを避ける |
+| D39 | 1 回の確認で足す数 | 構造のできごとの確認は 50 個まで（`MAX_ADDS_PER_RUN`）。足し切れなければ指紋を基準にせず、続きを次の確認へ。起動の一括は上限なし | 主スレッドを長く止めない |
+| D40 | 移行の控え・完了 | 控えは `graph-backups/pre-migration-<時刻>.json`（最新 3 件の入れ替えの対象外・同じ中身は増やさない）。起動の維持が直し切れなかった（`lastRunOk=false`）ときは `completeMigration` を呼ばず、次の起動でやり直す | 失敗した起動をくり返しても元のファイルの控えを残す／詰め直しの機会を失わない |
+| D41 | 足している間に閉じた pane・引き継ぎの間の自動載せ | 維持は足した直後に、閉じた pane のノードを外す。`AgentLineage` は、上限でないのにノードが無いとき `nodes_pending`（機会を使い切らない） | 競合で閉じた pane のノードが残る／`too_many_nodes` の取り違え |
 
 ## 見つけた穴・残る課題
 

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { GraphSchema, type Graph, type GraphOp } from "@sodashitsu/protocol";
+import { GRAPH_COORD_MAX, GraphSchema, type Graph, type GraphOp } from "@sodashitsu/protocol";
 import {
   applyGraphOps,
   emptyGraph,
@@ -7,7 +7,8 @@ import {
   type GraphDraftState,
   type GraphIssue,
 } from "@sodashitsu/client-core";
-import { backupCorruptFile, readFileWithBackup, writeFileAtomic } from "./atomicFile.js";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { PRE_MIGRATION_PREFIX, readFileWithBackup, writeFileAtomic } from "./atomicFile.js";
 
 /**
  * 連携のグラフ（20260927-agent-graph の design「server」・research F4.1）。session ごとに 1 枚を状態ディレクトリの `graph.json`（0600・原子的な書き込み）に置く。
@@ -71,6 +72,25 @@ interface ParsedGraphFile {
   raw: string;
 }
 
+const clampCoord = (v: unknown): unknown =>
+  typeof v === "number" && Number.isFinite(v)
+    ? Math.max(-GRAPH_COORD_MAX, Math.min(GRAPH_COORD_MAX, v))
+    : v;
+
+/** ノードの座標を範囲の中へ寄せる（配列でなければそのまま。形の検査は `GraphSchema` に任せる）。 */
+function clampNodes(nodes: unknown): unknown {
+  if (!Array.isArray(nodes)) return nodes;
+  return nodes.map((n: unknown) =>
+    typeof n === "object" && n !== null
+      ? {
+          ...n,
+          x: clampCoord((n as Record<string, unknown>)["x"]),
+          y: clampCoord((n as Record<string, unknown>)["y"]),
+        }
+      : n,
+  );
+}
+
 function parseGraphFile(raw: string): ParsedGraphFile {
   const v: unknown = JSON.parse(raw);
   if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("not an object");
@@ -81,7 +101,12 @@ function parseGraphFile(raw: string): ParsedGraphFile {
   if (typeof inner !== "object" || inner === null || Array.isArray(inner))
     throw new Error("bad graph");
   // zod は無い省略可能な項目を作らない（`stale: undefined` にならない）ので、`exactOptionalPropertyTypes` の型へそのまま渡せる。
-  const graph = GraphSchema.parse({ ...inner, rev: r["rev"] }) as Graph;
+  // 座標が範囲の外でも「壊れたファイル」にしない（線を失わせない）。範囲の中へ寄せて読む。
+  const graph = GraphSchema.parse({
+    ...inner,
+    nodes: clampNodes((inner as Record<string, unknown>)["nodes"]),
+    rev: r["rev"],
+  }) as Graph;
   // 意味の検証にも落ちるなら壊れているとみなす（手で書き換えたファイル等。起動は止めない）。
   if (validateGraph(graph).length > 0) throw new Error("invalid graph");
   return { state: { graph }, schema, raw };
@@ -127,13 +152,27 @@ export class GraphStore {
     if (result.kind === "ok") {
       this.state = result.data.state;
       if (result.data.schema === GRAPH_SCHEMA_V1) {
-        await backupCorruptFile(this.filePath, this.backupsDir, result.data.raw);
+        await this.backupBeforeMigration(result.data.raw);
         this.pendingMigration = true;
       }
       return "ok";
     }
     this.state = { graph: emptyGraph() };
     return result.kind === "missing" ? "missing" : { corrupt: result.backupPath };
+  }
+
+  /**
+   * 移行の前の元のファイルの控え。`graph-backups/pre-migration-<時刻>.json`——最新 3 件の入れ替えの対象にしない別の名前で、消さずに残す。
+   * 同じ中身の控えが既にあれば書かない（移行が失敗し続ける起動をくり返しても増えない）。
+   */
+  private async backupBeforeMigration(raw: string): Promise<void> {
+    await mkdir(this.backupsDir, { recursive: true });
+    for (const name of await readdir(this.backupsDir)) {
+      if (!name.startsWith(PRE_MIGRATION_PREFIX)) continue;
+      if ((await readFile(join(this.backupsDir, name), "utf8").catch(() => null)) === raw) return;
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    await writeFile(join(this.backupsDir, `${PRE_MIGRATION_PREFIX}${stamp}.json`), raw, "utf8");
   }
 
   get(): Graph {
@@ -252,6 +291,16 @@ export class GraphStore {
   }
 
   private async writeFile(full: Graph, schema: 1 | 2): Promise<void> {
+    // 読み込みと同じ検査（保存の形）を通してから書く——読めないファイルを書かない（座標の範囲など）。
+    const check = GraphSchema.safeParse(full);
+    if (!check.success) {
+      throw new GraphInvalidError([
+        {
+          code: "unwritable",
+          message: `the graph does not fit the saved format: ${check.error.issues[0]?.path.join(".") ?? ""}`,
+        },
+      ]);
+    }
     const { rev, ...graph } = full;
     const data: GraphFileData = { schema, rev, graph, savedAt: new Date().toISOString() };
     await writeFileAtomic(this.filePath, `${JSON.stringify(data, null, 2)}\n`);

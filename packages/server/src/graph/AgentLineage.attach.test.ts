@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   GRAPH_LINKS_MAX,
+  GRAPH_LOCAL_NODES_MAX,
   type AgentInfo,
   type Graph,
   type GraphLink,
@@ -175,7 +176,7 @@ describe("AgentLineage.attach", () => {
     const t = setup({ nodes: [] });
     await t.run();
     expect(t.store.graph.links).toEqual([]);
-    expect(t.reasons()).toEqual(["too_many_nodes"]);
+    expect(t.reasons()).toEqual(["nodes_pending"]);
   });
 
   it("同じ線がある（duplicate_link）とその線だけ外し、ほかは足す。既存の線は変えない", async () => {
@@ -237,8 +238,24 @@ describe("AgentLineage.attach", () => {
     expect(addedLog(s.log)).toEqual([]);
   });
 
-  it("親か子のノードが無い（手元のノードの上限で維持が足せなかった）なら、線を足さず warn で出す（too_many_nodes）", async () => {
+  it("親か子のノードが無く、上限でもないとき（維持がまだ足していない・引き継ぎの停止の間）は nodes_pending。この pane の機会を使い切らず、次の検出でやり直せる", async () => {
     const s = setup({ nodes: [{ key: P, x: 0, y: 0 }] });
+    await s.run();
+    expect(s.reasons()).toEqual(["nodes_pending"]);
+    expect(s.store.updates).toEqual([]);
+    // 維持がノードを足した後の、次の検出で線が足される
+    s.store.graph.nodes.push({ key: C, x: 300, y: 0 });
+    await s.run();
+    expect(s.store.graph.links.map((l) => l.kind)).toEqual(["supervise", "approval"]);
+  });
+
+  it("手元のノードが上限の手前に達していて、親か子のノードが無いなら、線を足さず warn で出す（too_many_nodes）。機会は使い切る", async () => {
+    const nodes = Array.from({ length: GRAPH_LOCAL_NODES_MAX - 7 }, (_, i) => ({
+      key: `local:q${i}` as NodeKey,
+      x: i * 10,
+      y: 0,
+    }));
+    const s = setup({ nodes });
     await s.run();
     expect(s.reasons()).toEqual(["too_many_nodes"]);
     expect(s.store.updates).toEqual([]);
@@ -247,6 +264,10 @@ describe("AgentLineage.attach", () => {
       "graph.auto: skipped",
       expect.objectContaining({ reason: "too_many_nodes" }),
     );
+    // 上限のときは、同じ pane の再検出でやり直さない
+    s.store.graph.nodes.push({ key: P, x: 0, y: 0 }, { key: C, x: 300, y: 0 });
+    await s.run();
+    expect(s.store.graph.links).toEqual([]);
   });
 
   // 親子と無関係の 34 ノード間の trigger 線（向きは添字の昇順だけで輪にならない。上限の境界用の詰め物）。

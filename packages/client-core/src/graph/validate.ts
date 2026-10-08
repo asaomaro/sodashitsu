@@ -27,7 +27,9 @@ export type GraphIssueCode =
   | "prompt_too_long"
   | "empty_prompt"
   | "config_mismatch"
-  | "duplicate_link_id";
+  | "duplicate_link_id"
+  /** 保存の形（座標の範囲など）を満たさないので、書かない（読めないファイルを作らない）。 */
+  | "unwritable";
 
 export interface GraphIssue {
   code: GraphIssueCode;

@@ -787,8 +787,13 @@ export async function composeServer(
         try {
           const migrating = graph.migrationPending;
           await graphMaintainer.reconcileNow({ force: true, repack: migrating });
-          await graph.completeMigration();
-          if (migrating) logger.info("graph.json was migrated to schema 2 (a copy of the old file is in graph-backups/)");
+          if (!graphMaintainer.lastRunOk) {
+            // 維持が直し切れなかった（検査に落ちた・競合が続いた）。移行を終えず、`schema: 1` のまま残して、次の起動でもう一度挑戦する。
+            logger.warn("graph.json migration is postponed: the startup reconcile could not finish; it will be retried at the next start");
+          } else {
+            await graph.completeMigration();
+            if (migrating) logger.info("graph.json was migrated to schema 2 (a copy of the old file is in graph-backups/)");
+          }
         } catch (err) {
           logger.warn("graph.maintain: the startup reconcile failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) });
         }

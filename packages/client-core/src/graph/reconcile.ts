@@ -1,4 +1,5 @@
 import {
+  GRAPH_COORD_MAX,
   GRAPH_LOCAL_NODES_MAX,
   type Graph,
   type GraphOp,
@@ -47,6 +48,21 @@ export interface ReconcileHints {
    * ノードを挟んでいることがある——そのままだと囲いが巨大になって重なる。
    */
   repack?: boolean;
+  /**
+   * 1 回で足すノードの数の上限（既定は無限）。超えた分は足さず、`truncated` を返す——呼び出し側が続きを次の確認へ回す（構造のできごとの嵐で、
+   * 1 回の確認が長く止まらないように。起動の一括は上限なし）。
+   */
+  maxAdds?: number;
+}
+
+export interface ReconcileResult {
+  ops: GraphOp[];
+  /** `maxAdds` のために足し切れなかった。 */
+  truncated: boolean;
+  /** 直した後も残る囲いの重なりの組の数（動かし先が座標の範囲の外になる・同じ囲いを何度動かしても直らない）。 */
+  unresolved: number;
+  /** 座標が範囲の外になったので、元の位置のまま残した・範囲の中へ寄せた囲いの数。 */
+  clamped: number;
 }
 
 /** 外接が大きすぎる、とみなす倍率（面積）。 */
@@ -84,6 +100,21 @@ export function reconcileGraph(
   graph: Pick<Graph, "nodes">,
   hints: ReconcileHints = {},
 ): GraphOp[] {
+  return reconcileGraphDetailed(structure, graph, hints).ops;
+}
+
+const inCoordRange = (p: GraphPoint): boolean =>
+  Math.abs(p.x) <= GRAPH_COORD_MAX && Math.abs(p.y) <= GRAPH_COORD_MAX;
+
+/** `reconcileGraph` の本体。出力の座標は必ず `±GRAPH_COORD_MAX` の中（保存したものを必ず読めるように）。 */
+export function reconcileGraphDetailed(
+  structure: LayoutStructure,
+  graph: Pick<Graph, "nodes">,
+  hints: ReconcileHints = {},
+): ReconcileResult {
+  let truncated = false;
+  let addsDone = 0;
+  const maxAdds = hints.maxAdds ?? Infinity;
   const tops = structure.spaces.flatMap((s) => [...s.tops]);
   const topOfMember = new Map<string, LayoutTop>();
   const memberOfKey = new Map<string, LayoutMember>();
@@ -160,16 +191,26 @@ export function reconcileGraph(
     applyPlacement(m.id, key, placeNode(structure, pos, m.id));
     addedOrder.push(key);
     localCount++;
+    addsDone++;
   };
   const members = tops.flatMap((t) => [...t.members]);
   for (const m of members) {
     if (hasAnyNode(m) || localCount >= GRAPH_LOCAL_NODES_MAX) continue;
     const first = missingOf(m)[0];
-    if (first !== undefined) addNode(m, first);
+    if (first === undefined) continue;
+    if (addsDone >= maxAdds) {
+      truncated = true;
+      continue;
+    }
+    addNode(m, first);
   }
   for (const m of members) {
     for (const key of missingOf(m)) {
       if (localCount >= GRAPH_LOCAL_NODES_MAX - GRAPH_FIRST_NODE_RESERVE) break;
+      if (addsDone >= maxAdds) {
+        truncated = true;
+        break;
+      }
       addNode(m, key);
     }
   }
@@ -229,6 +270,26 @@ export function reconcileGraph(
     }
   }
 
+  // 座標の範囲: 動かした先が範囲の外になる最上位の囲いは、元の位置のまま残す（直せない重なりは残る）。足したノードは範囲の中へ寄せる。
+  let clamped = 0;
+  const added = new Set(addedOrder);
+  for (const top of tops) {
+    const keys = top.members.flatMap((m) => m.nodes).filter((k) => pos.has(k));
+    if (keys.every((k) => inCoordRange(pos.get(k)!))) continue;
+    clamped++;
+    for (const k of keys) {
+      const was = original.get(k);
+      if (was !== undefined) pos.set(k, was);
+    }
+    for (const k of keys) {
+      if (!added.has(k)) continue;
+      const p = pos.get(k)!;
+      const c = (v: number): number =>
+        Math.max(-GRAPH_COORD_MAX, Math.min(GRAPH_COORD_MAX, snapToGrid(v)));
+      pos.set(k, { x: c(p.x), y: c(p.y) });
+    }
+  }
+
   // 結果: 足したノード → 動かしたノード。
   const ops: GraphOp[] = [];
   for (const key of addedOrder) {
@@ -241,5 +302,5 @@ export function reconcileGraph(
       ops.push({ op: "move_node", key: key as NodeKey, x: p.x, y: p.y });
     }
   }
-  return ops;
+  return { ops, truncated, unresolved: layoutOverlaps(structure, pos, 0).size, clamped };
 }

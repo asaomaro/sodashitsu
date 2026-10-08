@@ -1,12 +1,17 @@
 import {
   GRAPH_LINKS_MAX,
+  GRAPH_LOCAL_NODES_MAX,
   type Graph,
   type GraphLink,
   type GraphOp,
   type LinkKind,
   type NodeKey,
 } from "@sodashitsu/protocol";
-import { defaultApprovalConfig, LINK_LIMIT_DEFAULT } from "@sodashitsu/client-core";
+import {
+  defaultApprovalConfig,
+  GRAPH_FIRST_NODE_RESERVE,
+  LINK_LIMIT_DEFAULT,
+} from "@sodashitsu/client-core";
 import type { Disposable } from "../util/Disposable.js";
 import type { EventBus } from "../bus/EventBus.js";
 import {
@@ -48,6 +53,8 @@ export type LineageSkipReason =
   | "supervisor_taken"
   /** 親か子のノードが無い（手元のノードの上限に達していて、維持が足せなかった）。 */
   | "too_many_nodes"
+  /** 親か子のノードが（まだ）無い。上限ではない（引き継ぎの停止の間など、維持が足せていない）。次の検出でやり直せるよう、「1 回」の機会を使い切らない。 */
+  | "nodes_pending"
   | "too_many_links"
   | "conflict"
   | "invalid";
@@ -174,6 +181,8 @@ export class AgentLineage {
       const plan = this.plan(g, parent, child, (r) => reasons.push(r));
       if (plan === null || plan.ops.length === 0) {
         reasons.forEach((r) => skip(r));
+        // ノードがまだ無いだけ（上限ではない）なら、この pane の機会を使い切らない（次の検出でやり直す）。
+        if (reasons.includes("nodes_pending")) this.attempted.delete(childId);
         return;
       }
       try {
@@ -204,7 +213,12 @@ export class AgentLineage {
   ): { ops: GraphOp[]; links: number } | null {
     // 手元のノードの上限で維持が足せなかったときだけ、ノードが無い（線の端のノードが無いと線は足せない）。
     if (!g.nodes.some((n) => n.key === parent) || !g.nodes.some((n) => n.key === child)) {
-      skip("too_many_nodes");
+      const local = g.nodes.filter((n) => n.key.startsWith("local:")).length;
+      skip(
+        local >= GRAPH_LOCAL_NODES_MAX - GRAPH_FIRST_NODE_RESERVE
+          ? "too_many_nodes"
+          : "nodes_pending",
+      );
       return null;
     }
     const ops: GraphOp[] = [];
