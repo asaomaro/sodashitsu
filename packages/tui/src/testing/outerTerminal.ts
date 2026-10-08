@@ -28,6 +28,13 @@ export class OuterTerminal {
     return lines.join("\n");
   }
 
+  /** (x, y) のセルの背景。既定の背景（透過される色）なら null、それ以外は `rrggbb`（RGB）か `p<n>`（パレット）。 */
+  cellBg(x: number, y: number): string | null {
+    const c = this.term.buffer.active.getLine(y)?.getCell(x);
+    if (!c || c.isBgDefault()) return null;
+    return c.isBgPalette() ? `p${c.getBgColor()}` : c.getBgColor().toString(16).padStart(6, "0");
+  }
+
   get cursor(): { x: number; y: number } {
     return { x: this.term.buffer.active.cursorX, y: this.term.buffer.active.cursorY };
   }

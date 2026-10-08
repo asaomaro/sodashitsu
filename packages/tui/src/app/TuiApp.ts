@@ -265,7 +265,11 @@ export class TuiApp {
     this.onboardingEligible =
       io.isTTY && io.env["SODA_NO_ONBOARDING"] !== "1" && !tuiStateExists(target.stateDir);
     this.prefs.setSystemDark(systemDarkFromEnv(io.env));
-    this.theme = new ThemeColors(this.prefs.theme, this.prefs.themeOverrides);
+    this.theme = new ThemeColors(
+      this.prefs.theme,
+      this.prefs.themeOverrides,
+      this.prefs.transparentBg,
+    );
     this.renderer = new Renderer(
       colorModeOf(io.env, this.prefs.colorMode),
       io.platform !== "win32",
@@ -680,7 +684,7 @@ export class TuiApp {
     this.renderer.setColorMode(colorModeOf(this.io.env, this.prefs.colorMode));
     this.refreshKeymap();
     const theme = this.prefs.theme;
-    const next = new ThemeColors(theme, this.prefs.themeOverrides);
+    const next = new ThemeColors(theme, this.prefs.themeOverrides, this.prefs.transparentBg);
     if (next.key !== this.theme.key) {
       const nameChanged = theme !== this.theme.name;
       this.theme = next;

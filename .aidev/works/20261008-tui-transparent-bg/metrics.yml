@@ -1,0 +1,10 @@
+events:
+  - { ts: 2026-10-08T15:21:58Z, phase: coding, event: start }
+  - { ts: 2026-10-08T15:25:24Z, phase: test, event: smoke, metrics: { result: fail, exit_code: 1, commands: 10, failed_index: 1 } }
+  - { ts: 2026-10-08T15:25:55Z, phase: test, event: smoke, metrics: { result: fail, exit_code: 1, commands: 10, failed_index: 1 } }
+  - { ts: 2026-10-08T15:35:07Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-10-08T22:21:14Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-10-08T22:21:43Z, phase: requirements, event: approved }
+  - { ts: 2026-10-08T22:21:43Z, phase: coding, event: approved }
+  - { ts: 2026-10-08T22:21:43Z, phase: test, event: approved }
+  - { ts: 2026-10-08T22:21:43Z, phase: review, event: approved }

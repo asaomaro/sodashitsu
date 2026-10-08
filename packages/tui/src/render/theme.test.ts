@@ -198,3 +198,34 @@ describe("サイドバーの行の並び（sidebarRows。web と同じ client-co
     expect(text).toContain("Claude 作業中");
   });
 });
+
+describe("背景の透過（20261008-tui-transparent-bg。AC1・AC2・AC3）", () => {
+  const off = new ThemeColors("dracula");
+  const on = new ThemeColors("dracula", undefined, true);
+
+  it("既定は透かさない。有効のとき、pane の既定の背景と画面の地だけが既定の背景（0）になり、ほかは変わらない", () => {
+    expect(off.paneColor(0, 0, true)).toBe(off.paneBg);
+    expect(off.ground("--soda-bg")).toBe(off.ui("--soda-bg"));
+    expect(off.ground("--soda-menu-bg")).toBe(off.ui("--soda-menu-bg"));
+    expect(on.paneColor(0, 0, true)).toBe(0);
+    expect(on.paneGround).toBe(0);
+    expect(on.ground("--soda-bg")).toBe(0);
+    expect(on.ground("--soda-menu-bg")).toBe(0);
+    // 透かさない所: 前景の既定色・プログラムが指定した背景・メニューやダイアログの地・強調。
+    expect(on.paneColor(0, 0, false)).toBe(off.paneFg);
+    expect(on.paneColor(1, 3, true)).toBe(off.paneColor(1, 3, true));
+    expect(on.paneColor(1, 100, true)).toBe(off.paneColor(1, 100, true));
+    expect(on.paneColor(2, 0x010203, true)).toBe(off.paneColor(2, 0x010203, true));
+    for (const v of [
+      "--soda-menu-bg",
+      "--soda-menu-active-bg",
+      "--soda-accent",
+      "--soda-bg",
+    ] as const)
+      expect(on.ui(v)).toBe(off.ui(v));
+  });
+
+  it("透過の有無は key に出る（変わったら描き直す）", () => {
+    expect(on.key).not.toBe(off.key);
+  });
+});
