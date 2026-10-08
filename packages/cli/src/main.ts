@@ -16,6 +16,7 @@ import {
 import { runAgentStart } from "./commands/agentStart.js";
 import { runAsk } from "./commands/ask.js";
 import { runDisplay } from "./commands/display.js";
+import { runExt } from "./commands/ext.js";
 import { runGraph } from "./commands/graph.js";
 import { runPaneAttach } from "./commands/attach.js";
 import { runPaneControl, runPaneObserve } from "./commands/sessionStream.js";
@@ -64,6 +65,8 @@ function printHelp(): void {
       "display は pane のプログラムの表示の面（パネル・帯）を、その pane を見ているブラウザの画面に出します（中身は 2 MiB まで。html のスクリプトは動きません。スクリプトを動かすなら --script-html-file と send。外から取ってきた HTML は script-html で出さない）。",
       "set は同じ名前なら置き換え、wait・events・set --wait は利用者の操作・閉じた理由を 1 行の JSON で返します。pane の中ではログインなしで動きます（Windows を除く）。",
       "古いサーバでは {\"status\":\"unsupported\"}（終了コード 0）。--features で使えるかと上限を確かめられます。--machine には --pane が要ります。",
+      "ext は拡張（設定に登録して soda が動かすプログラム）の状態を見る・読み直す・起動し直します（list・log・reload・restart）。承認・有効と無効は画面でします。",
+      "古いサーバでは {\"status\":\"unsupported\"}（終了コード 0）。<id|key> は一覧の key か、1 つに決まる id です。",
       "sodactl skill はエージェントに sodactl の使い方を教える Markdown（skill ファイル）を出します。",
       "workspace/pane report-metadata はサイドバーの行の $名前 に出す独自トークンを設定（--token NAME=VALUE）・消去（--clear-token NAME）します。",
       "--token は値が = を含めば独自トークン、含まなければ接続の token です。値は前後の空白と制御文字を除いて 80 文字まで、空なら消去。",
@@ -89,6 +92,8 @@ async function main(): Promise<void> {
       // 終了コードは 0 か 1（`events` の `connection_closed` は終わりの行を出して 1）。使い方の誤り・サーバのエラーは投げて `reportAndExit` へ。
       process.exitCode = await runDisplay(cmd, store);
       return;
+    case "ext":
+      return runExt(cmd, store);
     case "workspace-create":
       return runWorkspaceCreate(cmd, store);
     case "workspace-close":

@@ -241,7 +241,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       対象: `packages/server/src/extensions/extensions.integration.test.ts`（新規）、手本 `packages/server/src/display/display.integration.test.ts`・`packages/server/src/machine/machines.integration.test.ts`（`describe.skipIf(win32)`・`internal` の差し替え）/ 根拠: design「受け入れ基準との対応」
       依存: T10
       AC: AC1, AC2, AC3, AC5, AC6, AC7, AC8, AC9, AC10, AC11, AC12, AC13, AC15, AC25
-- [ ] T12: `sodactl ext`（design「`sodactl ext`」の表）: `list`・`log <id|key>`・`reload`・`restart <id|key>`。`/ws` の経路だけ。先に `extension.list` を呼び、`not_found`（知らない方式）なら `{"status":"unsupported","reason":…}` で終了コード 0。`<id|key>` は、`key` の完全一致 → `id` が 1 つに決まるもの → 2 つ以上は使い方の誤り（終了コード 2・候補の `key`）→ 無ければ `not_found`（終了コード 1）。
+- [x] T12: `sodactl ext`（design「`sodactl ext`」の表）: `list`・`log <id|key>`・`reload`・`restart <id|key>`。`/ws` の経路だけ。先に `extension.list` を呼び、`not_found`（知らない方式）なら `{"status":"unsupported","reason":…}` で終了コード 0。`<id|key>` は、`key` の完全一致 → `id` が 1 つに決まるもの → 2 つ以上は使い方の誤り（終了コード 2・候補の `key`）→ 無ければ `not_found`（終了コード 1）。
       `USAGE_LINES`・`Command`・`parseCommand`・`main.ts` の switch と `printHelp`・`SKILL.md`（同じコミットで）。**承認・取り消し・有効と無効のサブコマンドは作らない**。テスト（引数の解釈・古いサーバ・同じ id が 2 つのとき、id は誤りで `key` は通る・`USAGE_LINES` に `approve`・`deny`・`revoke`・`enable`・`disable` が無いこと）
       対象: `packages/cli/src/commands/ext.ts`（新規）、`packages/cli/src/cliArgs.ts` `USAGE_LINES`・`Command`・`parseCommand`、`packages/cli/src/main.ts`、`packages/cli/skills/sodactl/SKILL.md`、`packages/cli/src/skill.test.ts`（通ること）、手本 `packages/cli/src/commands/display.ts`（`unsupported` の出し方）/ 根拠: research X18、`20261007-soda-extensions/research.md` R7、design「`sodactl ext`」
       依存: T10

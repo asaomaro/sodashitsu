@@ -19,7 +19,7 @@ const SKILL_PATH = join(
 );
 const skill = readFileSync(SKILL_PATH, "utf8");
 
-const GROUPS = new Set(["workspace", "tab", "pane", "agent", "graph", "display"]);
+const GROUPS = new Set(["workspace", "tab", "pane", "agent", "graph", "display", "ext"]);
 /** 3 語のコマンドの 2 語目（`graph link add`・`graph node rm` 等。20260927-agent-graph）。 */
 const SUBGROUPS = new Set(["graph link", "graph node"]);
 
