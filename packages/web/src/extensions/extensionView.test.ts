@@ -1,6 +1,6 @@
 import type { ExtensionInfo } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
-import { failedToastText, lastExitText, newlyFailed, sanitizeLogLine, scopeText, scriptDisabledNote, sortExtensions, stateText } from "./extensionView.js";
+import { failedToastText, lastExitText, newlyFailed, sanitizeLogLine, scopeText, scriptDisabledNote, problemView, sanitizeText, stateMark, stateText, stateTone } from "./extensionView.js";
 
 const info = (key: string, state: ExtensionInfo["state"], extra: Partial<ExtensionInfo> = {}): ExtensionInfo => ({
   key, id: key, scope: "user", configPath: "/x/extensions.json", allow: [], onUnresponsive: "pass", state, enabledInConfig: true, disabledByUser: false, failures: 0, displays: 0, ...extra,
@@ -19,9 +19,25 @@ describe("extensionView", () => {
     expect(lastExitText({ code: 1, signal: null, at: "x", reason: "crashed" })).toBe("前回: 異常終了しました（終了コード 1）");
     expect(lastExitText({ code: null, signal: "SIGKILL", at: "x", reason: "not_reading" })).toContain("合図 SIGKILL");
   });
-  it("並べ方: 承認待ち → 動作中 → ほか。同じ状態はサーバの順", () => {
-    const out = sortExtensions([info("d", "disabled"), info("r2", "running"), info("p", "pending"), info("r1", "running"), info("f", "failed")]);
-    expect(out.map((e) => e.key)).toEqual(["p", "r2", "r1", "f", "d"]);
+  it("状態の調子と印: 失敗は error・待ちは warn・ほかは無し。印は色に頼らない", () => {
+    expect(stateTone("failed")).toBe("error");
+    expect(stateTone("backoff")).toBe("warn");
+    expect(stateTone("waiting")).toBe("warn");
+    for (const st of ["running", "disabled", "pending", "denied", "exited", "over_limit"] as const) expect(stateTone(st)).toBeNull();
+    expect(stateMark("failed")).not.toBe("");
+    expect(stateMark("backoff")).not.toBe("");
+    expect(stateMark("waiting")).not.toBe("");
+    expect(new Set([stateMark("failed"), stateMark("backoff"), stateMark("waiting")]).size).toBe(3);
+    expect(stateMark("running")).toBe("");
+  });
+  it("設定の問題: 文の頭のファイル名がパスの末尾と同じなら重ねない。パス・文を無害化する", () => {
+    expect(problemView({ path: "/home/u/.config/sodashitsu/extensions.json", problem: "extensions.json: JSON として読めません" })).toEqual({
+      path: "/home/u/.config/sodashitsu/extensions.json",
+      text: "JSON として読めません",
+    });
+    expect(problemView({ path: "/p/extensions.json", problem: "別の文: x" }).text).toBe("別の文: x");
+    expect(problemView({ path: "C:\\x\\extensions.json", problem: "extensions.json: y" }).text).toBe("y");
+    expect(problemView({ path: "/a\u202eb\u200bc", problem: "p\u2028q\u2029r\ufeffs" })).toEqual({ path: "/a?b?c", text: "p?q?r?s" });
   });
   it("newlyFailed: 前が無ければ出さない／前に failed でなかったものだけ／すでに failed は出し直さない", () => {
     const next = [info("a", "failed"), info("b", "failed"), info("c", "running")];
@@ -43,5 +59,8 @@ describe("extensionView", () => {
   it("ログの無害化: 制御文字・書字方向の文字を ? に替える（タブは残す）", () => {
     expect(sanitizeLogLine("a\u001b[31mb\u202ec\u2066d\te")).toBe("a?[31mb?c?d\te");
     expect(sanitizeLogLine("<b>x</b>")).toBe("<b>x</b>");
+    // ゼロ幅の文字・BOM・行区切りも
+    expect(sanitizeText("a\u200bb\u200cc\u200dd\u2060e\ufefff\u2028g\u2029h")).toBe("a?b?c?d?e?f?g?h");
+    expect(sanitizeText("日本語 ok\t")).toBe("日本語 ok\t");
   });
 });

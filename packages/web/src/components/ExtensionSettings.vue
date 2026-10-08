@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, reactive } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, reactive, ref } from "vue";
 import { ExtensionControllerKey } from "../injection.js";
-import { lastExitText, scopeText, scriptDisabledNote, sanitizeLogLine, sortExtensions, stateText } from "../extensions/extensionView.js";
+import { lastExitText, problemView, scopeText, scriptDisabledNote, sanitizeLogLine, stateMark, stateText, stateTone } from "../extensions/extensionView.js";
 import { useExtensionsStore } from "../store/extensions.js";
 import { useSettingsStore } from "../store/settings.js";
 
@@ -18,19 +18,66 @@ const store = useExtensionsStore();
 const settings = useSettingsStore();
 const controller = inject(ExtensionControllerKey, null);
 
-const rows = computed(() => sortExtensions(store.list?.extensions ?? []));
-const problems = computed(() => store.list?.problems ?? []);
+/** 並びは、サーバの返す順（設定に書いた順）のまま。状態で並べ替えると、操作した行が動いて、フォーカスと開いているログが失われる。状態は行の中で見せる。 */
+const rows = computed(() => store.list?.extensions ?? []);
+const problems = computed(() => (store.list?.problems ?? []).map(problemView));
 
 /** key → 開いているログ（行・捨てた行数）。 */
 const logs = reactive<Record<string, { lines: string[]; dropped: number } | undefined>>({});
 const logEls = new Map<string, HTMLElement>();
-const message = reactive({ text: "" });
+const message = reactive<{ text: string; warn: boolean }>({ text: "", warn: false });
+const reloading = ref(false);
+/** key → 済んだ操作の知らせ（数秒で消える）。 */
+const doneNotes = reactive<Record<string, string | undefined>>({});
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const DONE_NOTE_MS = 4000;
+
+onBeforeUnmount(() => {
+  for (const t of timers.values()) clearTimeout(t);
+  timers.clear();
+});
+
+function noteDone(key: string, text: string): void {
+  doneNotes[key] = text;
+  const old = timers.get(key);
+  if (old) clearTimeout(old);
+  timers.set(
+    key,
+    setTimeout(() => {
+      doneNotes[key] = undefined;
+      timers.delete(key);
+    }, DONE_NOTE_MS),
+  );
+}
 
 async function reload(): Promise<void> {
-  if (!controller) return;
+  if (!controller || reloading.value) return;
   message.text = "";
-  await controller.reload();
-  message.text = "設定を読み直しました。";
+  message.warn = false;
+  reloading.value = true;
+  try {
+    const r = await controller.reload();
+    if (r === "ok") {
+      const n = store.list?.problems.length ?? 0;
+      message.warn = n > 0;
+      message.text = n > 0 ? `設定を読み直しましたが、問題が ${n} 件あります（下を見てください）。` : "設定を読み直しました。";
+    } else if (r === "failed") {
+      message.warn = true;
+      message.text = "設定を読み直せませんでした。";
+    }
+  } finally {
+    reloading.value = false;
+  }
+}
+
+async function setEnabled(e: { key: string; id: string }, enabled: boolean): Promise<void> {
+  const r = await controller?.setEnabled(e.key, enabled);
+  if (r === "done") noteDone(e.key, enabled ? "有効にしました。" : "無効にしました。");
+}
+
+async function restart(e: { key: string }): Promise<void> {
+  const r = await controller?.restart(e.key);
+  if (r === "done") noteDone(e.key, "起動し直しました。");
 }
 
 async function loadLog(key: string): Promise<void> {
@@ -72,20 +119,41 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
       利用者の設定の場所: <code class="ext-path">{{ store.list.userConfigPath }}</code>
     </p>
     <p class="ext-actions">
-      <button type="button" class="settings-btn" data-ext-reload :disabled="!controller || store.supported === false" @click="reload">読み直す</button>
-      <span v-if="message.text" class="settings-note" role="status" aria-live="polite">{{ message.text }}</span>
+      <button
+        type="button"
+        class="settings-btn"
+        data-ext-reload
+        :disabled="!controller || store.supported === false"
+        :aria-disabled="reloading ? 'true' : undefined"
+        :aria-busy="reloading ? 'true' : undefined"
+        @click="reload"
+      >
+        {{ reloading ? "読み直し中…" : "読み直す" }}
+      </button>
+      <span class="settings-note ext-message" :class="{ 'ext-warn': message.warn }" role="status" aria-live="polite" data-ext-message>{{ message.text }}</span>
     </p>
     <p v-if="store.supported === false" class="settings-note" data-ext-unsupported>このサーバは拡張に対応していません。</p>
+    <p v-else-if="store.supported === null && store.loadFailed" class="settings-note ext-warn" role="alert" data-ext-load-failed>
+      拡張の一覧を取れませんでした。［読み直す］で取り直せます。
+    </p>
     <p v-else-if="store.supported === null" class="settings-note">確認中…</p>
     <template v-else>
       <ul v-if="problems.length > 0" class="settings-list ext-problems" data-ext-problems>
-        <li v-for="(p, i) in problems" :key="i" class="settings-note ext-problem">
-          <code class="ext-path">{{ p.path }}</code>: {{ p.problem }}
+        <li v-for="(p, i) in problems" :key="i" class="settings-note ext-warn ext-problem">
+          <span class="ext-mark" aria-hidden="true">⚠</span> 設定の問題: <code class="ext-path">{{ p.path }}</code>: {{ p.text }}
         </li>
       </ul>
       <p v-if="rows.length === 0" class="settings-note" data-ext-empty>登録された拡張はありません。</p>
       <ul v-else class="settings-list ext-list">
-        <li v-for="e in rows" :key="e.key" class="ext-row" :data-ext-id="e.id" :data-ext-state="e.state">
+        <li
+          v-for="e in rows"
+          :key="e.key"
+          class="ext-row"
+          :class="[stateTone(e.state) ? `ext-row-${stateTone(e.state)}` : '', { 'ext-row-busy': store.busy.has(e.key) }]"
+          :aria-busy="store.busy.has(e.key) ? 'true' : undefined"
+          :data-ext-id="e.id"
+          :data-ext-state="e.state"
+        >
           <div class="ext-head">
             <span class="ext-id">{{ e.id }}</span>
             <span class="ext-scope">{{ scopeText(e) }}</span>
@@ -96,8 +164,9 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
           <p v-if="scriptDisabledNote(e, settings.displayScriptEnabled)" class="settings-note ext-warn" data-ext-script-off>
             {{ scriptDisabledNote(e, settings.displayScriptEnabled) }}
           </p>
-          <p class="ext-state" data-ext-state-text>
-            {{ stateText(e) }}<template v-if="e.displays > 0">（面 {{ e.displays }} 件）</template>
+          <p class="ext-state" :class="stateTone(e.state) ? `ext-state-${stateTone(e.state)}` : ''" data-ext-state-text>
+            <span v-if="stateMark(e.state)" class="ext-mark" aria-hidden="true">{{ stateMark(e.state) }}</span>
+            {{ stateText(e) }}<template v-if="e.displays > 0">（面 {{ e.displays }} 件）</template><template v-if="store.busy.has(e.key)">（処理中…）</template>
           </p>
           <p v-if="lastExitText(e.lastExit)" class="settings-note">{{ lastExitText(e.lastExit) }}</p>
           <div class="ext-ops">
@@ -110,19 +179,20 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
               :disabled="!e.enabledInConfig"
               :aria-disabled="store.busy.has(e.key) ? 'true' : undefined"
               data-ext-switch
-              @click="controller?.setEnabled(e.key, !isOn(e))"
+              @click="setEnabled(e, !isOn(e))"
             >
               <span class="settings-mark">{{ isOn(e) ? "入" : "切" }}</span>
               <span>有効</span>
             </button>
-            <button type="button" class="settings-btn" :disabled="!isOn(e)" :aria-disabled="store.busy.has(e.key) ? 'true' : undefined" data-ext-restart :aria-label="`拡張 ${e.id} を起動し直す`" @click="controller?.restart(e.key)">
-              起動し直す
+            <button type="button" class="settings-btn" :disabled="!isOn(e)" :aria-disabled="store.busy.has(e.key) ? 'true' : undefined" data-ext-restart :aria-label="`拡張 ${e.id} を起動し直す`" @click="restart(e)">
+              {{ store.busy.has(e.key) ? "処理中…" : "起動し直す" }}
             </button>
             <button type="button" class="settings-btn" data-ext-log-toggle :aria-expanded="logs[e.key] !== undefined" :aria-label="`拡張 ${e.id} のログ`" @click="toggleLog(e.key)">
               ログ
             </button>
             <button v-if="logs[e.key] !== undefined" type="button" class="settings-btn" data-ext-log-refresh :aria-label="`拡張 ${e.id} のログを更新する`" @click="loadLog(e.key)">更新</button>
           </div>
+          <p class="settings-note ext-done" role="status" aria-live="polite" data-ext-done>{{ doneNotes[e.key] ?? "" }}</p>
           <template v-if="logs[e.key] !== undefined">
             <p v-if="(logs[e.key]?.dropped ?? 0) > 0" class="settings-note">あふれて捨てた行: {{ logs[e.key]?.dropped }}</p>
             <pre :ref="(el) => setLogEl(e.key, el)" class="ext-log" data-ext-log tabindex="0" :aria-label="`拡張 ${e.id} の標準エラーの記録`">{{ (logs[e.key]?.lines ?? []).length > 0 ? logs[e.key]?.lines.join("\n") : "（記録はありません）" }}</pre>
@@ -195,6 +265,10 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
 .settings-switch[aria-checked="true"] .settings-mark {
   background: var(--soda-menu-active-bg, #44475a);
 }
+.ext-actions .settings-btn {
+  flex: none;
+  white-space: nowrap;
+}
 .ext-actions {
   display: flex;
   align-items: center;
@@ -232,11 +306,47 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
 }
 .ext-warn {
   opacity: 1;
-  border-left: 3px solid var(--soda-warn, #e0a030);
+  border-left: 3px solid var(--soda-warn-fg, #e0a030);
   padding-left: 0.5em;
+  color: var(--soda-warn-fg, inherit);
 }
 .ext-state {
   margin: 0.4em 0 0;
+}
+.ext-mark {
+  display: inline-block;
+  min-width: 1.2em;
+  text-align: center;
+  font-weight: bold;
+}
+/* 失敗・待ちは、色（既存のトークン）に加えて、印と文言でも見分ける。 */
+.ext-state-error {
+  color: var(--soda-error-fg, #ff5555);
+  font-weight: bold;
+}
+.ext-state-warn {
+  color: var(--soda-warn-fg, #e0a030);
+}
+.ext-row-error {
+  border-left: 3px solid var(--soda-error-fg, #ff5555);
+}
+.ext-row-warn {
+  border-left: 3px solid var(--soda-warn-fg, #e0a030);
+}
+.ext-row-busy {
+  border-style: dashed;
+}
+.ext-row-busy .settings-btn,
+.ext-row-busy .settings-switch {
+  opacity: 0.6;
+  cursor: progress;
+}
+.ext-done {
+  min-height: 1.2em;
+  margin: 0.2em 0 0;
+}
+.ext-problem {
+  opacity: 1;
 }
 .ext-ops {
   display: flex;

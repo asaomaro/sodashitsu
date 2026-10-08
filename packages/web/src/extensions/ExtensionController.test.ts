@@ -3,7 +3,7 @@ import type { ExtensionInfo, ExtensionListResult, MethodName } from "@sodashitsu
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useExtensionsStore } from "../store/extensions.js";
-import { ExtensionController } from "./ExtensionController.js";
+import { ExtensionController, RETRY_DELAYS_MS } from "./ExtensionController.js";
 
 const info = (key: string, state: ExtensionInfo["state"]): ExtensionInfo => ({
   key, id: key, scope: "user", configPath: "/x", allow: [], onUnresponsive: "pass", state, enabledInConfig: true, disabledByUser: false, failures: 0, displays: 0,
@@ -95,14 +95,74 @@ describe("ExtensionController", () => {
   });
   it("reload: not_found は黙る／それ以外の失敗は知らせる（quiet なら知らせない）", async () => {
     const s = setup({ "extension.reload": () => code("not_found") });
-    await s.ctl.reload();
+    expect(await s.ctl.reload()).toBe("skipped");
     expect(s.toasts).toEqual([]);
     const t = setup({ "extension.reload": () => code("internal") });
-    await t.ctl.reload();
+    expect(await t.ctl.reload()).toBe("failed");
     expect(t.toasts).toHaveLength(1);
     const q = setup({ "extension.reload": () => code("internal") });
-    await q.ctl.reload(true);
+    expect(await q.ctl.reload(true)).toBe("failed");
     expect(q.toasts).toEqual([]);
+    const ok = setup({ "extension.reload": () => list(info("a", "running")) });
+    expect(await ok.ctl.reload()).toBe("ok");
+    expect(ok.store.list?.extensions).toHaveLength(1);
+  });
+  it("reload: 応答の前に接続が替わったら skipped（古い応答を置かない）", async () => {
+    const s = setup({ "extension.reload": () => list(info("a", "running")) });
+    const p = s.ctl.reload();
+    s.ctl.resetForMachineSwitch();
+    expect(await p).toBe("skipped");
+    expect(s.store.list).toBeNull();
+  });
+  it("最初の一覧が not_found 以外で失敗: 間隔を空けて取り直し、取れたら一覧を置く。尽きたら失敗を見せ、reload で取り直せる", async () => {
+    vi.useFakeTimers();
+    try {
+      let fail = true;
+      const s = setup({ "extension.list": () => (fail ? code("internal") : list(info("a", "running"))), "extension.reload": () => list(info("a", "running")) });
+      s.ctl.onOpened();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(s.store.supported).toBeNull();
+      expect(s.store.loadFailed).toBe(false);
+      const listCalls = (): number => s.calls.filter(([m]) => m === "extension.list").length;
+      expect(listCalls()).toBe(1);
+      for (let i = 0; i < RETRY_DELAYS_MS.length; i++) {
+        await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[i]!);
+        expect(listCalls()).toBe(i + 2);
+      }
+      expect(s.store.loadFailed).toBe(true); // 尽きた
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(listCalls()).toBe(RETRY_DELAYS_MS.length + 1);
+      fail = false;
+      expect(await s.ctl.reload()).toBe("ok");
+      expect(s.store.supported).toBe(true);
+      expect(s.store.loadFailed).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("取り直しの途中で取れたら、以後は取り直さない。切断すると、待っている取り直しを捨てる", async () => {
+    vi.useFakeTimers();
+    try {
+      let fail = true;
+      const s = setup({ "extension.list": () => (fail ? code("internal") : list(info("a", "running"))) });
+      s.ctl.onOpened();
+      await vi.advanceTimersByTimeAsync(0);
+      fail = false;
+      await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]!);
+      expect(s.store.supported).toBe(true);
+      const n = s.calls.filter(([m]) => m === "extension.list").length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(s.calls.filter(([m]) => m === "extension.list").length).toBe(n);
+      fail = true;
+      const t = setup({ "extension.list": () => code("internal") });
+      t.ctl.onOpened();
+      await vi.advanceTimersByTimeAsync(0);
+      t.ctl.onClosed();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(t.calls.filter(([m]) => m === "extension.list")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("log: 失敗は null と知らせ", async () => {
     const s = setup({ "extension.log": () => code("not_found") });

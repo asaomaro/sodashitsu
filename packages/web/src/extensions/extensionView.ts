@@ -45,24 +45,30 @@ export function lastExitText(exit: ExtensionInfo["lastExit"]): string {
   return `前回: ${EXIT_REASON[exit.reason]}${detail.length > 0 ? `（${detail.join("、")}）` : ""}`;
 }
 
-const STATE_ORDER: Record<ExtensionRunState, number> = {
-  pending: 0,
-  running: 1,
-  backoff: 2,
-  waiting: 3,
-  failed: 4,
-  over_limit: 5,
-  exited: 6,
-  denied: 7,
-  disabled: 8,
-};
+/** 状態の見た目の調子。失敗は `error`、待ち（起動し直しを待つ・設定を読めず見送る）は `warn`。ほかは `null`（ふつう）。色だけに頼らず、`stateMark` の印と文言も付ける。 */
+export function stateTone(state: ExtensionRunState): "error" | "warn" | null {
+  if (state === "failed") return "error";
+  if (state === "backoff" || state === "waiting") return "warn";
+  return null;
+}
 
-/** 並べ方: 承認待ち → 動作中 → ほか（状態の順、同じならサーバの順。安定に並べる）。 */
-export function sortExtensions(list: readonly ExtensionInfo[]): ExtensionInfo[] {
-  return list
-    .map((e, i) => ({ e, i }))
-    .sort((a, b) => STATE_ORDER[a.e.state] - STATE_ORDER[b.e.state] || a.i - b.i)
-    .map((x) => x.e);
+/** 状態の印（読み上げには出さない。文言が同じことを言う）。 */
+export function stateMark(state: ExtensionRunState): string {
+  if (state === "failed") return "✕";
+  if (state === "backoff") return "↻";
+  if (state === "waiting") return "…";
+  return "";
+}
+
+/**
+ * 設定の問題の表示。パスと文を画面側でも無害化し、文の頭に、パスの末尾と同じファイル名があれば（`extensions.json: …`）重ねて出さない。
+ */
+export function problemView(p: { path: string; problem: string }): { path: string; text: string } {
+  const path = sanitizeText(p.path);
+  let text = sanitizeText(p.problem);
+  const base = path.split(/[\\/]/).pop() ?? "";
+  if (base !== "" && text.startsWith(`${base}: `)) text = text.slice(base.length + 2);
+  return { path, text };
 }
 
 /** 前の一覧で `failed` でなかった（無かった）拡張が、今回 `failed` になったもの。`prev` が無い（最初の一覧）ときは空（出さない）。 */
@@ -89,10 +95,13 @@ export function scriptDisabledNote(info: Pick<ExtensionInfo, "allow">, displaySc
 }
 
 /**
- * ログの 1 行の二重の無害化（サーバが既に置き換えているが、画面でも）。制御文字（タブ以外）・書字方向を変える文字を `?` に替える。
- * 見た目の並びを入れ替えられないように、また端末の制御列が画面の文字として効かないようにする。
+ * 画面に出す文字の二重の無害化（サーバが既に置き換えているが、画面でも。ログの行・設定の問題の文とパス）。制御文字（タブ以外）・書字方向を変える文字・
+ * ゼロ幅の文字・BOM・行区切り（U+2028・U+2029）を `?` に替える。見た目の並びを入れ替えられないように、また端末の制御列が画面の文字として効かないようにする。
  */
-export function sanitizeLogLine(s: string): string {
+export function sanitizeText(s: string): string {
   // eslint-disable-next-line no-control-regex
-  return s.replace(/[\u0000-\u0008\u000a-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "?");
+  return s.replace(/[\u0000-\u0008\u000a-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g, "?");
 }
+
+/** ログの 1 行（`sanitizeText` と同じ）。 */
+export const sanitizeLogLine = sanitizeText;
