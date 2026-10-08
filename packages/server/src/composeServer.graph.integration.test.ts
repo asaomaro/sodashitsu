@@ -202,7 +202,7 @@ describe("composeServer: graph.*（20260927-agent-graph）", () => {
     const L = `local:${server.session.snapshot().panes[0]!.id}`;
     await a.request("graph.update", {
       baseRev: 1,
-      ops: [{ op: "add_node", key: REMOTE, x: 0, y: 0 }],
+      ops: [{ op: "add_node", key: REMOTE, x: 4000, y: 0 }],
     });
     expect(
       (

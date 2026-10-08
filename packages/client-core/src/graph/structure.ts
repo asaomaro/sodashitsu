@@ -63,8 +63,9 @@ export function graphStructureFrom(
     const ids: string[] = [];
     for (const tabId of ws.tabIds) {
       const tab = tabById.get(tabId);
-      if (tab === undefined) continue;
-      leafPaneIds(tab.layout, ids);
+      // 分割の並び順（layout）で。配信の途中などで layout が無い・一部の pane が layout に無いときは、pane の並びで補う。
+      if (tab?.layout !== undefined) leafPaneIds(tab.layout, ids);
+      for (const p of src.panes) if (p.tabId === tabId) ids.push(p.id);
     }
     const keys: NodeKey[] = [];
     const seen = new Set<string>();
@@ -124,4 +125,30 @@ export function localNodeKeys(structure: LayoutStructure): NodeKey[] {
       t.members.flatMap((m) => m.nodes.filter((k) => k.startsWith(`${LOCAL_MACHINE}:`))),
     ),
   );
+}
+
+/** `sodactl graph show --json` の空間（グループの id・名前・含む workspace の id）。`id`・`name` が null のものは「グループなし」。 */
+export interface GraphSpaceInfo {
+  id: string | null;
+  name: string | null;
+  workspaces: string[];
+}
+
+/**
+ * 空間の一覧（20261008-graph-first。`sodactl graph show` の `spaces`）。グループの並び（サイドバーと同じ）で、含む workspace は項目の並びの順。
+ * 別のマシンの囲いは workspace ではないので含めない。ノードを持たない空間・workspace も出す（空間は、グループ・「グループなし」ごとにある）。
+ */
+export function describeGraphSpaces(
+  structure: LayoutStructure,
+  groups: readonly WorkspaceGroup[],
+): GraphSpaceInfo[] {
+  const labelOf = new Map(groups.map((g) => [g.id, g.label]));
+  return structure.spaces.map((sp) => {
+    const groupId = sp.id.startsWith("g:") ? sp.id.slice(2) : null;
+    return {
+      id: groupId,
+      name: groupId === null ? null : (labelOf.get(groupId) ?? null),
+      workspaces: sp.tops.flatMap((t) => (t.kind === "machine" ? [] : t.members.map((m) => m.id))),
+    };
+  });
 }

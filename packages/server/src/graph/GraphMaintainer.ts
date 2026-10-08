@@ -196,10 +196,11 @@ export class GraphMaintainer {
       }
       try {
         const next = await store.update(g.rev, ops, "graph");
-        // 直した後の状態を基準にする（次の確認は、この後の変化だけを見る）。
-        this.lastFingerprint = fingerprint(graphStructure(session, next), next.rev);
+        // 確認した構成（`structure`）と、直した後の rev を基準にする。**直した後の構成を導き直して基準にしない**——更新を待つ間に pane が増えていると、
+        // 確認していない構成を「確認済み」にして、次の確認が飛ばされ、その pane のノードが足されないままになる。
+        this.lastFingerprint = fingerprint(structure, next.rev);
         this.memory = remember(structure);
-        logger.info("graph.maintain: reconciled", { ops: ops.length });
+        logger.debug("graph.maintain: reconciled", { ops: ops.length });
         return ops.length;
       } catch (err) {
         if (err instanceof GraphRevConflictError) continue;

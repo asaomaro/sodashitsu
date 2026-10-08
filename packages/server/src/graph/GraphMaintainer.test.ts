@@ -247,6 +247,29 @@ describe("GraphMaintainer", () => {
     s.m.close();
   });
 
+  it("更新を待つ間に pane が増えても、その pane のノードが後の確認で足される（確認していない構成を確認済みにしない）", async () => {
+    const w = new World();
+    w.addWorkspace("w1", ["p1"]);
+    const s = setup(w);
+    // 保存の最中に pane が増えたことにする。
+    const original = s.store.update.getMockImplementation()!;
+    let injected = false;
+    s.store.update.mockImplementation(async (baseRev: number, ops: readonly GraphOp[]) => {
+      const result = await original(baseRev, ops);
+      if (!injected) {
+        injected = true;
+        w.addWorkspace("w2", ["p2"]);
+      }
+      return result;
+    });
+    await s.m.reconcileNow({ force: true });
+    expect(s.state.graph.nodes.map((n) => n.key)).toEqual([k("p1")]);
+    // 次の（force でない）確認で、増えた pane のノードが足される。
+    expect(await s.m.reconcileNow()).toBe(1);
+    expect(s.state.graph.nodes.map((n) => n.key).sort()).toEqual([k("p1"), k("p2")]);
+    s.m.close();
+  });
+
   it("構造が前回の確認から変わっていなければ、確認を飛ばす（force 以外）", async () => {
     const w = new World();
     w.addWorkspace("w1", ["p1"]);

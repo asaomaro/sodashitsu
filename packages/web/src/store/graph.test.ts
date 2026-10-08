@@ -482,3 +482,87 @@ describe("store/graph（切り替えの途中。04 レビュー R1）", () => {
     expect(g.nodeInfo(`${M}:p1`).exists).toBeNull();
   });
 });
+
+describe("store/graph（囲い。20261008-graph-first）", () => {
+  function seedTwoWorkspaces() {
+    const session = useSessionStore();
+    session.workspaceUpserted({ id: "w1", label: "api", tabIds: ["t1"] } as never);
+    session.workspaceUpserted({ id: "w2", label: "web", tabIds: ["t2"] } as never);
+    session.tabs.set("t1", { id: "t1", workspaceId: "w1" } as never);
+    session.tabs.set("t2", { id: "t2", workspaceId: "w2" } as never);
+    session.panes.set("p1", paneOf("p1", "t1"));
+    session.panes.set("p2", paneOf("p2", "t2"));
+  }
+
+  it("moveNodes: 別の workspace の囲いの上に落とすと、重ならない最も近い位置へ寄せてから送る（断られない）。重ならない落とし方はそのまま", async () => {
+    seedTwoWorkspaces();
+    const g = useGraphStore();
+    const { port, calls } = fakeGraphPort({
+      "graph.update": (p) => ({ ...g.graph!, rev: (p as { baseRev: number }).baseRev + 1 }),
+    });
+    g.bind(port);
+    g.applyGraph(
+      graphOf({
+        nodes: [
+          { key: "local:p1", x: 40, y: 60 },
+          { key: "local:p2", x: 40, y: 400 },
+        ],
+      }),
+      "fresh",
+    );
+    // p1 を p2 の囲いの上に落とす
+    await g.moveNodes([{ key: "local:p1", x: 40, y: 400 }]);
+    const op = (calls[0]!.params as { ops: { key: string; x: number; y: number }[] }).ops[0]!;
+    expect(op.key).toBe("local:p1");
+    expect([op.x, op.y]).not.toEqual([40, 400]);
+    expect(Math.abs(op.x % 20)).toBe(0);
+    expect(Math.abs(op.y % 20)).toBe(0);
+    // 否定の対照: 重ならない落とし方は、そのまま送る
+    calls.length = 0;
+    await g.moveNodes([{ key: "local:p1", x: 800, y: 60 }]);
+    expect((calls[0]!.params as { ops: { x: number; y: number }[] }).ops[0]).toMatchObject({
+      x: 800,
+      y: 60,
+    });
+  });
+
+  it("画面の接続が別のマシンを向いているとき（手元の構成を導けない）は、寄せずにそのまま送る", async () => {
+    seedTwoWorkspaces();
+    const machines = useMachinesStore();
+    const M = "c".repeat(32);
+    machines.setMachines([{ id: M, label: "box", state: "online", message: null }]);
+    machines.select(M);
+    const g = useGraphStore();
+    const { port, calls } = fakeGraphPort({
+      "graph.update": (p) => ({ ...g.graph!, rev: (p as { baseRev: number }).baseRev + 1 }),
+    });
+    g.bind(port);
+    g.applyGraph(
+      graphOf({
+        nodes: [
+          { key: "local:p1", x: 40, y: 60 },
+          { key: "local:p2", x: 40, y: 400 },
+        ],
+      }),
+      "fresh",
+    );
+    await g.moveNodes([{ key: "local:p1", x: 40, y: 400 }]);
+    expect((calls[0]!.params as { ops: { x: number; y: number }[] }).ops[0]).toMatchObject({
+      x: 40,
+      y: 400,
+    });
+  });
+
+  it("hiddenLocalPaneCount: 手元のノードが上限の手前に達してから、ノードの無い手元の pane を数える。上限の手前では 0", () => {
+    const session = useSessionStore();
+    session.workspaceUpserted({ id: "w1", label: "api", tabIds: ["t1"] } as never);
+    session.panes.set("extra", paneOf("extra", "t1"));
+    const g = useGraphStore();
+    const many = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ key: `local:q${i}` as never, x: i, y: 0 }));
+    g.applyGraph(graphOf({ nodes: many(10) }), "fresh");
+    expect(g.hiddenLocalPaneCount).toBe(0); // 上限の手前。ノードの無い pane は足される途中か一時的な pane
+    g.applyGraph(graphOf({ rev: 2, nodes: many(504) }), "fresh");
+    expect(g.hiddenLocalPaneCount).toBe(1);
+  });
+});

@@ -13,6 +13,7 @@ import {
   emptyGraph,
   LINK_LIMIT_DEFAULT,
 } from "./defaults.js";
+import { layoutOverlaps, nodePositions } from "./graphLayout.js";
 import { addMissingNodeOps, applyGraphOps, checkGraphOps, type GraphDraftState } from "./ops.js";
 
 // 20260927-agent-graph の T2（ops）：graph.update の操作をまとめて当てる。
@@ -333,5 +334,78 @@ describe("applyGraphOps のノードの上限（手元と別のマシンは別�
     ]);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.issues.map((i) => i.code)).toEqual(["too_many_remote_nodes"]);
+  });
+});
+
+describe("addMissingNodeOps（構成つき。20261008-graph-first）", () => {
+  const M1 = "1".repeat(32);
+  const M2 = "2".repeat(32);
+  const machine = (m: string, keys: NodeKey[]) => ({
+    id: `m:${m}`,
+    kind: "machine" as const,
+    members: [{ id: `m:${m}`, nodes: keys }],
+  });
+
+  it("別のマシンのノードを、マシンごとの囲いの空きへ足す。2 つのマシンのノードを一度に足しても囲いは重ならない", () => {
+    const k1: NodeKey = `${M1}:a`;
+    const k2: NodeKey = `${M2}:b`;
+    const structure = {
+      spaces: [
+        {
+          id: "u",
+          tops: [
+            {
+              id: "w1",
+              kind: "workspace" as const,
+              members: [{ id: "w1", nodes: [A as NodeKey, "local:p2" as NodeKey] }],
+            },
+            machine(M1, [k1]),
+            machine(M2, [k2]),
+          ],
+        },
+      ],
+    };
+    const graph = {
+      nodes: [
+        { key: A as NodeKey, x: 40, y: 60 },
+        { key: "local:p2" as NodeKey, x: 280, y: 60 },
+      ],
+    };
+    const ops = addMissingNodeOps(graph, [k1, k2], structure);
+    expect(ops.filter((o) => o.op === "add_node").map((o) => o.key)).toEqual([k1, k2]);
+    const nodes = [
+      ...graph.nodes,
+      ...ops.flatMap((o) => (o.op === "add_node" ? [{ key: o.key, x: o.x, y: o.y }] : [])),
+    ];
+    expect(layoutOverlaps(structure, nodePositions(nodes)).size).toBe(0);
+    // 否定の対照: 以前の置き方（構成なし）は、同じ列に縦に並べるので、別のマシンの囲いどうしが重なりうる。
+    const legacy = addMissingNodeOps(graph, [k1, k2]);
+    const legacyNodes = [
+      ...graph.nodes,
+      ...legacy.flatMap((o) => (o.op === "add_node" ? [{ key: o.key, x: o.x, y: o.y }] : [])),
+    ];
+    expect(layoutOverlaps(structure, nodePositions(legacyNodes)).size).toBeGreaterThan(0);
+  });
+
+  it("載っている鍵は足さない（手元のノードはすでにある）。構成に無い鍵は以前の置き方", () => {
+    const structure = {
+      spaces: [
+        {
+          id: "u",
+          tops: [
+            {
+              id: "w1",
+              kind: "workspace" as const,
+              members: [{ id: "w1", nodes: [A as NodeKey] }],
+            },
+          ],
+        },
+      ],
+    };
+    const graph = { nodes: [{ key: A as NodeKey, x: 40, y: 60 }] };
+    expect(addMissingNodeOps(graph, [A as NodeKey], structure)).toEqual([]);
+    const ops = addMissingNodeOps(graph, [R], structure);
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({ op: "add_node", key: R });
   });
 });

@@ -1,15 +1,15 @@
 <script setup lang="ts">
 /**
- * pane をグラフに載せる/外すチェックリスト（20260927-agent-graph の design「ノードを載せる」・F2〔すべての pane を自動で載せない〕）。
- * ツールバーの「pane を載せる」から開くポップオーバー。チェックを変えて「適用」で確定し、`Esc`・取り消し・外側のクリックは何も変えずに閉じる（AC-I1）。
+ * 別のマシンの pane をグラフに載せる/外すチェックリスト（20260927-agent-graph の design「ノードを載せる」）。
+ * **手元の pane は出さない**——手元のすべての pane のノードはサーバが持つ（20261008-graph-first）。ツールバーの「別のマシンの pane を載せる」から開くポップオーバー。チェックを変えて「適用」で確定し、`Esc`・取り消し・外側のクリックは何も変えずに閉じる（AC-I1）。
  * 外すときの確認（消える線の本数）は親（`GraphView`）が出す。
  *
- * 手元と登録したマシンの pane を workspace ごとに選べる（別のマシンの節は 04）。上の一覧に無いノード（無効・閉じた pane・繋がっていない
- * マシンのノード）は「そのほか」に出し、外せる。
+ * 登録したマシンの pane を workspace ごとに選べる。上の一覧に無いノード（閉じた手元の pane・繋がっていないマシンのノード）は「そのほか」に出し、
+ * 外せる（開いている手元の pane のノードは出さない）。
  */
 import { computed, nextTick, onMounted, ref } from "vue";
 import type { NodeKey } from "@sodashitsu/protocol";
-import { LOCAL_MACHINE_ID, nodeKey, paneNameOf } from "@sodashitsu/client-core";
+import { isLocalNodeKey, LOCAL_MACHINE_ID, nodeKey, paneNameOf } from "@sodashitsu/client-core";
 import { useGraphStore } from "../../store/graph.js";
 import { summaryPaneName, useMachinesStore } from "../../store/machines.js";
 import { useSessionStore } from "../../store/session.js";
@@ -83,17 +83,19 @@ function sectionsOf(machine: string, machineLabel: string | null): Section[] {
   return out;
 }
 
-const machineSections = computed<Section[]>(() => [
-  ...sectionsOf(LOCAL_MACHINE_ID, null),
-  ...machines.machines.flatMap((m) => sectionsOf(m.id, m.label)),
-]);
+// 手元の pane は載せる操作の対象でない（サーバがすべてのノードを持つ）。登録したマシンの pane だけ。
+const machineSections = computed<Section[]>(() =>
+  machines.machines
+    .filter((m) => m.id !== LOCAL_MACHINE_ID)
+    .flatMap((m) => sectionsOf(m.id, m.label)),
+);
 
 /**
  * pane を出せないマシン（一度も繋がっていない。画面の接続が向いているマシンは session が空で繋がっていない＝切り替えの途中・切れた）。
- * 手元も含める（手元の軽い接続がまだ繋がっていないと、手元の節が黙って消える。g04 点検）。
  */
 const unreachable = computed(() =>
-  [{ id: LOCAL_MACHINE_ID, label: "ローカル" }, ...machines.machines]
+  machines.machines
+    .filter((m) => m.id !== LOCAL_MACHINE_ID)
     .filter((m) =>
       m.id === machines.selectedId
         ? session.workspaces.size === 0 && !graph.machineConnected(m.id)
@@ -102,11 +104,12 @@ const unreachable = computed(() =>
     .map((m) => m.label),
 );
 
-/** グラフに載っているが上の一覧に無いノード（別のマシン・無効・閉じた pane）。 */
+/** グラフに載っているが上の一覧に無いノード（別のマシン・閉じた手元の pane）。開いている手元の pane のノードは出さない（外せない）。 */
 const otherRows = computed<Row[]>(() => {
   const listed = new Set(machineSections.value.flatMap((s) => s.rows.map((r) => r.key)));
   return graph.nodes
     .filter((n) => !listed.has(n.key))
+    .filter((n) => !(isLocalNodeKey(n.key) && graph.nodeInfo(n.key).exists !== false))
     .map((n) => {
       const info = graph.nodeInfo(n.key);
       const note =
@@ -187,11 +190,11 @@ onMounted(() => {
     class="pane-checklist"
     role="dialog"
     aria-modal="true"
-    aria-label="pane を載せる"
+    aria-label="別のマシンの pane を載せる"
     @keydown="onKeydown"
     @pointerdown.stop
   >
-    <h3 class="pane-checklist-heading">グラフに載せる pane</h3>
+    <h3 class="pane-checklist-heading">グラフに載せる別のマシンの pane</h3>
     <input
       v-model="filter"
       type="search"
@@ -201,7 +204,7 @@ onMounted(() => {
     />
     <div class="pane-checklist-list">
       <p v-if="machineSections.length === 0 && otherRows.length === 0" class="pane-checklist-empty">
-        pane がありません。
+        別のマシンの pane がありません。
       </p>
       <fieldset v-for="sec in machineSections" :key="sec.id" class="pane-checklist-section">
         <legend>{{ sec.label }}</legend>

@@ -296,20 +296,41 @@ describe.skipIf(
       );
       return quiet(() => runAgentStart(cmd, store));
     };
+    // 手元のすべての pane のノードは維持（GraphMaintainer。20261008-graph-first）が足す。足し終えて rev が落ち着くまで待つ。
+    const settled = async (): Promise<number> => {
+      await vi.waitFor(
+        () => {
+          const have = new Set(server.graph.get().nodes.map((n) => n.key));
+          expect(server.session.snapshot().panes.every((p) => have.has(`local:${p.id}`))).toBe(
+            true,
+          );
+        },
+        { timeout: 10_000, interval: 25 },
+      );
+      for (;;) {
+        const rev = server.graph.get().rev;
+        await new Promise((r) => setTimeout(r, 150));
+        if (server.graph.get().rev === rev) return rev;
+      }
+    };
     const outside = await newPane();
-    const rev0 = server.graph.get().rev;
+    const rev0 = await settled();
     await startFrom(undefined, outside, "outsider");
     await new Promise((r) => setTimeout(r, 300));
     expect(server.graph.get().rev).toBe(rev0); // 呼び出し元が無ければ何も載らない
 
     const child = await newPane();
+    const rev1 = await settled();
     await startFrom(parent, child, "lineage-kid");
-    await vi.waitFor(() => expect(server.graph.get().rev).toBe(rev0 + 1), {
+    await vi.waitFor(() => expect(server.graph.get().rev).toBe(rev1 + 1), {
       timeout: 10_000,
       interval: 50,
     });
     const g = server.graph.get();
-    expect(g.nodes.map((n) => n.key).sort()).toEqual([`local:${child}`, `local:${parent}`].sort());
+    // ノードは維持が足し済み。自動載せが足したのは監督・承認の線だけ。
+    expect(g.nodes.map((n) => n.key)).toEqual(
+      expect.arrayContaining([`local:${child}`, `local:${parent}`]),
+    );
     expect(g.links.map((l) => [l.kind, l.from, l.to]).sort()).toEqual([
       ["approval", `local:${child}`, `local:${parent}`],
       ["supervise", `local:${child}`, `local:${parent}`],
