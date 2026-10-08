@@ -338,7 +338,6 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
 }
 .ext-row-busy .settings-btn,
 .ext-row-busy .settings-switch {
-  opacity: 0.6;
   cursor: progress;
 }
 .ext-done {
