@@ -1,9 +1,44 @@
-import type { DisplayContent, DisplayInfo } from "@sodashitsu/protocol";
+import type { DisplayContent, DisplayDock, DisplayEdge, DisplayInfo } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
+import {
+  DISPLAY_DOCK_CAPS,
+  FACE_PREFS_MAX,
+  NAME_PREFS_MAX,
+  SIDE_PREFS_MAX,
+  SIDE_SIZE_STORED_MAX,
+  SIDE_SIZE_STORED_MIN,
+  composeFacePref,
+  effectiveFace,
+  faceKey,
+  hasFacePref,
+  loadDisplayLayout,
+  nameKey,
+  pruneLayoutPanes,
+  putLast,
+  sideKey,
+  storedSideSize,
+  type DisplayLayoutPrefs,
+  type DockSide,
+  type EffectiveFace,
+  type FacePref,
+  type FaceRect,
+  type LayoutSettings,
+} from "../display/displayPrefs.js";
+import { useSettingsStore } from "./settings.js";
 import { readPrefs, writePrefs } from "./view.js";
 
-/** 覚えるパネルの幅の件数の上限（超えたら古い順に捨てる）。 */
+/** 割り付けの結果の写し（部品の外が読む。書くのは `PaneFrame`）。 */
+export interface PaneLayoutSnapshot {
+  /** 自動でたたんだ面（記憶は変えない）。 */
+  auto: string[];
+  /** 窓の動ける領域の大きさ（無ければ null）。 */
+  floatArea: { w: number; h: number } | null;
+  /** 帯の上下・トレイの行・「ほか N 件」の署名。変わると知らせなどが測り直す（固定の部品の位置が動くため）。 */
+  placement?: string;
+}
+
+/** 今までのパネルの幅の記憶の、読む件数の上限。 */
 export const PANEL_WIDTHS_MAX = 64;
 const PANEL_WIDTH_STORED_MIN = 160;
 const PANEL_WIDTH_STORED_MAX = 8192;
@@ -27,8 +62,6 @@ export function loadPanelWidths(raw: unknown): Map<string, number> {
 export const useDisplayStore = defineStore("display", () => {
   const infos = ref(new Map<string, DisplayInfo>());
   const contents = ref(new Map<string, DisplayContent>());
-  /** たたんでいるパネルの pane（その画面だけ。保存しない）。 */
-  const collapsed = ref(new Set<string>());
   /** pane ごとに選んでいるパネル（面の id）。 */
   const activePanel = ref(new Map<string, string>());
   /** いまフォーカスが枠にある面の id（`DisplayFrame` が `window` の `blur`/`focus`/`focusin` で更新する）。 */
@@ -44,8 +77,22 @@ export const useDisplayStore = defineStore("display", () => {
   /** ［操作する］ボタンを強調している面の id（覆いや枠を押したとき、1 秒だけ。押しても操作は始まらないので、場所を教える）。 */
   const engageHint = ref<string | null>(null);
   let engageHintTimer: ReturnType<typeof setTimeout> | null = null;
-  /** 利用者が変えたパネルの幅（pane の id → px）。この画面が覚える（`soda.prefs.v1` の `displayPanelWidths`。共有の設定へ送らない）。 */
+  /**
+   * 今までの、利用者が変えた右のパネルの幅（pane の id → px。`soda.prefs.v1` の `displayPanelWidths`）。**読むだけ**（新しい値は `layoutPrefs.sides` に書く。消さない・書かない）。
+   * 側の大きさの記憶が無いとき、右の側だけがこれを引き継いで読む。
+   */
   const panelWidths = ref(loadPanelWidths(readPrefs()["displayPanelWidths"]));
+
+  /** 面の置き場所・たたみ・窓の位置の記憶（その画面だけ。`soda.prefs.v1` の `displayLayout`。書くのは利用者の操作だけ）。 */
+  const layoutPrefs = ref<DisplayLayoutPrefs>(loadDisplayLayout(readPrefs()["displayLayout"]));
+  /** 側ごとに選んでいるタブ（`${paneId}|${side}` → 面の id）。デスクトップ用（モバイルは `activePanel`）。 */
+  const activeBySide = ref(new Map<string, string>());
+  /** pane ごとに最後に操作した面（`prefix+i` の行き先）。 */
+  const lastFace = ref(new Map<string, string>());
+  /** 割り付けの結果の写し（pane の id → 結果）。 */
+  const layoutByPane = ref(new Map<string, PaneLayoutSnapshot>());
+  /** 割り付けが変わるたびに 1 増える数（知らせの位置の測り直しの合図）。 */
+  const layoutRev = ref(0);
 
   const all = computed<DisplayInfo[]>(() => [...infos.value.values()]);
 
@@ -106,13 +153,6 @@ export const useDisplayStore = defineStore("display", () => {
     next.set(paneId, id);
     activePanel.value = next;
   }
-  function setCollapsed(paneId: string, on: boolean): void {
-    if (collapsed.value.has(paneId) === on) return;
-    const next = new Set(collapsed.value);
-    if (on) next.add(paneId);
-    else next.delete(paneId);
-    collapsed.value = next;
-  }
   function setScriptCapable(on: boolean): void {
     scriptCapable.value = on;
   }
@@ -127,33 +167,124 @@ export const useDisplayStore = defineStore("display", () => {
   }
   function setFocused(id: string | null): void {
     if (focusedDisplayId.value !== id) focusedDisplayId.value = id;
+    // 面が操作中になったら、その pane の「最後に操作した面」にする（`prefix+i` の行き先）。
+    if (id !== null) {
+      const info = infos.value.get(id);
+      if (info) setLastFace(info.paneId, id);
+    }
   }
 
-  function savePanelWidths(): void {
-    writePrefs({ displayPanelWidths: Object.fromEntries(panelWidths.value) });
+  // --- 置き場所・たたみの記憶（20261008-display-layout）。書くのは利用者の操作（部品・メニュー・キー）だけ ------------------------------------------------
+
+  function layoutSettings(): LayoutSettings {
+    const st = useSettingsStore();
+    return { initial: st.displayPanelInitial, dock: st.displayPanelDock, edge: st.displayBandEdge };
   }
-  /** 利用者が変えた幅を覚える（確定のたびに 1 回）。64 件を超えたら古い順に捨てる。 */
-  function setPanelWidth(paneId: string, px: number): void {
-    const next = new Map(panelWidths.value);
-    next.delete(paneId); // 最近使ったものを末尾へ
-    next.set(paneId, Math.round(px));
-    while (next.size > PANEL_WIDTHS_MAX) next.delete(next.keys().next().value as string);
-    panelWidths.value = next;
-    savePanelWidths();
+  function saveLayout(next: DisplayLayoutPrefs): void {
+    layoutPrefs.value = next;
+    writePrefs({ displayLayout: next });
   }
-  /** 覚えた幅を消す（プログラムの指定の幅へ戻る）。 */
-  function clearPanelWidth(paneId: string): void {
-    if (!panelWidths.value.has(paneId)) return;
-    const next = new Map(panelWidths.value);
-    next.delete(paneId);
-    panelWidths.value = next;
-    savePanelWidths();
+  /** 面のいまの状態（`caps` で丸めた値）。描画が読む。 */
+  function effectiveOf(info: DisplayInfo): EffectiveFace {
+    return effectiveFace(info, layoutPrefs.value, layoutSettings(), DISPLAY_DOCK_CAPS);
+  }
+  function hasPref(info: DisplayInfo): boolean {
+    return hasFacePref(info, layoutPrefs.value);
+  }
+  /**
+   * 記憶を書く唯一の口。**その時点の導出した値に `patch` を重ねた全項目を書く**（変えた項目だけを書かない。置き場所は `caps` で丸める前の値。`composeFacePref`）。
+   * 部品・メニュー・キーは、これを直に呼ばず、下の `setFace*` を呼ぶ。
+   */
+  function writeFace(info: DisplayInfo, patch: { dock?: DisplayDock; edge?: DisplayEdge; collapsed?: boolean; rect?: FaceRect }): void {
+    const face: FacePref = composeFacePref(info, layoutPrefs.value, layoutSettings(), DISPLAY_DOCK_CAPS, patch);
+    saveLayout({ ...layoutPrefs.value, faces: putLast(layoutPrefs.value.faces, faceKey(info), face, FACE_PREFS_MAX) });
+  }
+  function writeName(info: DisplayInfo, entry: { dock?: DisplayDock; edge?: DisplayEdge }): void {
+    saveLayout({ ...layoutPrefs.value, names: putLast(layoutPrefs.value.names, nameKey(info), entry, NAME_PREFS_MAX) });
+  }
+  function setLastFace(paneId: string, id: string): void {
+    if (lastFace.value.get(paneId) === id) return;
+    const next = new Map(lastFace.value);
+    next.set(paneId, id);
+    lastFace.value = next;
+  }
+  function setActiveBySide(paneId: string, side: DockSide, id: string): void {
+    const k = sideKey(paneId, side);
+    if (activeBySide.value.get(k) === id) return;
+    const next = new Map(activeBySide.value);
+    next.set(k, id);
+    activeBySide.value = next;
+  }
+  /** たたむ／開く。開いたら「最後に操作した面」にする。 */
+  function setFaceCollapsed(info: DisplayInfo, on: boolean): void {
+    writeFace(info, { collapsed: on });
+    if (!on) {
+      setLastFace(info.paneId, info.id);
+      // 開いた面は、その側の「選んでいるタブ」になる（開いたのに別のタブが出たままにならない）。
+      const dock = info.kind === "panel" ? effectiveOf(info).dock : null;
+      if (dock !== null && dock !== "float") setActiveBySide(info.paneId, dock, info.id);
+    }
+  }
+  /** パネルの置き場所を変える。移った先で開く（`collapsed: false`）。同じ名前の面も、この置き場所を引き継ぐ。 */
+  function setFaceDock(info: DisplayInfo, dock: DisplayDock, rect?: FaceRect): void {
+    writeFace(info, { dock, collapsed: false, ...(rect ? { rect } : {}) });
+    writeName(info, { dock });
+    setLastFace(info.paneId, info.id);
+    if (dock !== "float") setActiveBySide(info.paneId, dock, info.id);
+  }
+  /** 帯の場所を変える。移った先で開く。 */
+  function setFaceEdge(info: DisplayInfo, edge: DisplayEdge): void {
+    writeFace(info, { edge, collapsed: false });
+    writeName(info, { edge });
+    setLastFace(info.paneId, info.id);
+  }
+  function setFaceRect(info: DisplayInfo, rect: FaceRect): void {
+    writeFace(info, { rect });
+  }
+  /** 利用者が決めた側の大きさを覚える（確定のたびに 1 回）。 */
+  function setSideSize(paneId: string, side: DockSide, px: number): void {
+    const v = Math.min(SIDE_SIZE_STORED_MAX, Math.max(SIDE_SIZE_STORED_MIN, Math.round(px)));
+    saveLayout({ ...layoutPrefs.value, sides: putLast(layoutPrefs.value.sides, sideKey(paneId, side), v, SIDE_PREFS_MAX) });
+  }
+  function clearSideSize(paneId: string, side: DockSide): void {
+    const k = sideKey(paneId, side);
+    if (layoutPrefs.value.sides[k] === undefined) return;
+    const { [k]: _gone, ...rest } = layoutPrefs.value.sides;
+    void _gone;
+    saveLayout({ ...layoutPrefs.value, sides: rest });
+  }
+  /** 側の大きさの記憶（右は、無ければ今までの `displayPanelWidths` を読む）。 */
+  function sideSizeOf(paneId: string, side: DockSide): number | undefined {
+    return storedSideSize(layoutPrefs.value, paneId, side, panelWidths.value);
+  }
+  /** 「プログラムの指定に戻す」: 面の記憶と、同じ名前の記憶を消す。 */
+  function resetFace(info: DisplayInfo): void {
+    const { [faceKey(info)]: _f, ...faces } = layoutPrefs.value.faces;
+    const { [nameKey(info)]: _n, ...names } = layoutPrefs.value.names;
+    void _f;
+    void _n;
+    saveLayout({ ...layoutPrefs.value, faces, names });
   }
   /** もう無い pane の分を捨てる（スナップショットを受けたとき）。 */
-  function pruneWidths(live: ReadonlySet<string>): void {
-    if (![...panelWidths.value.keys()].some((id) => !live.has(id))) return;
-    panelWidths.value = new Map([...panelWidths.value].filter(([id]) => live.has(id)));
-    savePanelWidths();
+  function pruneLayout(live: ReadonlySet<string>): void {
+    const next = pruneLayoutPanes(layoutPrefs.value, live);
+    if (next !== layoutPrefs.value) saveLayout(next);
+  }
+  /** 割り付けの結果の写しを書く（`PaneFrame`）。変わったら `layoutRev` を 1 増やす。 */
+  function setLayoutSnapshot(paneId: string, snap: PaneLayoutSnapshot | null): void {
+    const cur = layoutByPane.value.get(paneId);
+    if (snap === null) {
+      if (cur === undefined) return;
+      const next = new Map(layoutByPane.value);
+      next.delete(paneId);
+      layoutByPane.value = next;
+    } else {
+      if (cur && JSON.stringify(cur) === JSON.stringify(snap)) return;
+      const next = new Map(layoutByPane.value);
+      next.set(paneId, snap);
+      layoutByPane.value = next;
+    }
+    layoutRev.value++;
   }
 
   /** 台帳に無くなった面に紐づくものを捨てる。 */
@@ -165,9 +296,11 @@ export const useDisplayStore = defineStore("display", () => {
       activePanel.value = new Map([...activePanel.value].filter(([, id]) => infos.value.has(id)));
     }
     if ([...contentFailed.value].some((id) => !infos.value.has(id))) contentFailed.value = new Set([...contentFailed.value].filter((id) => infos.value.has(id)));
-    const paneIds = new Set(all.value.map((d) => d.paneId));
-    if ([...collapsed.value].some((p) => !paneIds.has(p))) {
-      collapsed.value = new Set([...collapsed.value].filter((p) => paneIds.has(p)));
+    if ([...activeBySide.value].some(([, id]) => !infos.value.has(id))) {
+      activeBySide.value = new Map([...activeBySide.value].filter(([, id]) => infos.value.has(id)));
+    }
+    if ([...lastFace.value].some(([, id]) => !infos.value.has(id))) {
+      lastFace.value = new Map([...lastFace.value].filter(([, id]) => infos.value.has(id)));
     }
   }
 
@@ -175,8 +308,10 @@ export const useDisplayStore = defineStore("display", () => {
   function clear(): void {
     infos.value = new Map();
     contents.value = new Map();
-    collapsed.value = new Set();
     activePanel.value = new Map();
+    activeBySide.value = new Map();
+    lastFace.value = new Map();
+    layoutByPane.value = new Map();
     // フォーカスの印は下ろさない（枠の部品が外れるときに自分で下ろして端末へ戻す。ここで下ろすと戻せない）。
     contentFailed.value = new Set();
   }
@@ -184,7 +319,6 @@ export const useDisplayStore = defineStore("display", () => {
   return {
     infos,
     contents,
-    collapsed,
     activePanel,
     focusedDisplayId,
     contentFailed,
@@ -195,10 +329,27 @@ export const useDisplayStore = defineStore("display", () => {
     nudgeEngage,
     sheetAvailable,
     sheetRequest,
+    layoutPrefs,
+    activeBySide,
+    lastFace,
+    layoutByPane,
+    layoutRev,
+    effectiveOf,
+    hasPref,
+    writeFace,
+    setFaceCollapsed,
+    setFaceDock,
+    setFaceEdge,
+    setFaceRect,
+    setSideSize,
+    clearSideSize,
+    sideSizeOf,
+    resetFace,
+    pruneLayout,
+    setLayoutSnapshot,
+    setActiveBySide,
+    setLastFace,
     panelWidths,
-    setPanelWidth,
-    clearPanelWidth,
-    pruneWidths,
     all,
     panelsOf,
     bandsOf,
@@ -209,7 +360,6 @@ export const useDisplayStore = defineStore("display", () => {
     remove,
     setContent,
     setActivePanel,
-    setCollapsed,
     setFocused,
     clear,
   };

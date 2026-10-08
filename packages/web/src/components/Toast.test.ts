@@ -1,6 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useDisplayStore } from "../store/display.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import Toast from "./Toast.vue";
@@ -211,4 +212,35 @@ describe("Toast — 積み方と読み上げ", () => {
     expect(plain!.get(".toast-message").attributes("title")).toBeUndefined();
   });
 
+});
+
+describe("Toast — 面があるときの位置（20261008-display-layout の D14）", () => {
+  const face = { id: "a", paneId: "p1", name: "a", kind: "panel", format: "text", title: "a", size: 320, rev: 1, bytes: 1, updatedAt: "x" } as const;
+  it("デスクトップで面があり知らせが出ているとき、測った空きに出す（inline の bottom・max-height。top は auto）。面が無ければ inline は付かない", async () => {
+    const view = useViewStore(pinia);
+    const wrapper = mount(Toast, { global: { plugins: [pinia] } });
+    view.toast("面なし");
+    await wrapper.vm.$nextTick();
+    expect((wrapper.get(".toast-list").element as HTMLElement).style.bottom).toBe("");
+    useDisplayStore(pinia).upsert(face);
+    view.toast("面あり");
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    const el = wrapper.get(".toast-list").element as HTMLElement;
+    expect(el.style.top).toBe("auto");
+    expect(el.style.bottom).not.toBe("");
+    expect(el.style.maxHeight).not.toBe("");
+  });
+  it("モバイル（重ね表示）では測らない（今の右下のまま）", async () => {
+    const view = useViewStore(pinia);
+    const d = useDisplayStore(pinia);
+    d.upsert(face);
+    d.sheetAvailable = true;
+    const wrapper = mount(Toast, { global: { plugins: [pinia] } });
+    view.toast("モバイル");
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    expect((wrapper.get(".toast-list").element as HTMLElement).style.bottom).toBe("");
+    expect(wrapper.get(".toast-list").classes()).toContain("toast-list-low");
+  });
 });

@@ -32,6 +32,9 @@ const raw = {
   newCwdPolicy: "path",
   newCwdPath: "/tmp",
   shellCwdTracking: false,
+  displayPanelInitial: "collapsed",
+  displayPanelDock: "bottom",
+  displayBandEdge: "bottom",
   theme: "nord",
   themeAuto: false,
   keys: { prefix: "ctrl+a" },
@@ -68,6 +71,9 @@ describe("applyPrefsToStores", () => {
     expect(settings.newCwdPolicy).toBe("path");
     expect(settings.newCwdPath).toBe("/tmp");
     expect(settings.shellCwdTracking).toBe(false);
+    expect(settings.displayPanelInitial).toBe("collapsed");
+    expect(settings.displayPanelDock).toBe("bottom");
+    expect(settings.displayBandEdge).toBe("bottom");
     expect(settings.theme).toBe("nord");
     expect(settings.keymap.prefix).toBe("ctrl+a");
     expect(view.agentSort).toBe("priority");
@@ -90,6 +96,9 @@ describe("applyPrefsToStores", () => {
     applyPrefsToStores(pinia, { statusSymbols: "yes", paneBorders: 3 });
     expect(settings.statusSymbols).toBe(true);
     expect(settings.shellCwdTracking).toBe(true);
+    expect(settings.displayPanelInitial).toBe("open");
+    expect(settings.displayPanelDock).toBe("right");
+    expect(settings.displayBandEdge).toBe("top");
     expect(settings.paneBorders).toBe("always");
     expect(settings.theme).not.toBe("nord");
   });

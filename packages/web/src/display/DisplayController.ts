@@ -25,7 +25,7 @@ export interface DisplayControllerOptions {
 }
 
 /** 画面が名乗る機能（パネル・帯・操作・スクリプトが動く形式）。 */
-export const DISPLAY_SUBSCRIBE_FEATURES = ["panel", "band", "actions", "script-html"];
+export const DISPLAY_SUBSCRIBE_FEATURES = ["panel", "band", "actions", "script-html", "collapse"];
 
 /** 理由 `focus_steal` で閉じたときの利用者への知らせ（面の名前を入れる）。 */
 export function focusStealToast(name: string): string {
@@ -77,7 +77,10 @@ export class DisplayController {
         const infos = r.displays.map((d) => readDisplayInfo(d)).filter((d): d is DisplayInfo => d !== null);
         this.opts.store.replaceAll(infos);
         const live = this.opts.livePaneIds?.();
-        if (live && live.size > 0) this.opts.store.pruneWidths(live); // pane が 1 つも分からない間（スナップショット前）は捨てない
+        if (live && live.size > 0) {
+          // pane が 1 つも分からない間（スナップショット前）は捨てない
+          this.opts.store.pruneLayout(live);
+        }
       },
       () => undefined, // 古いサーバ（not_found）・中継先: 面は出ない
     );

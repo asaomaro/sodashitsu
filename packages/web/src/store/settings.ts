@@ -1,4 +1,4 @@
-import type { ThemeName } from "@sodashitsu/protocol";
+import type { DisplayDock, DisplayEdge, ThemeName } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { commandKeyDefs, type KeyTargetId } from "@sodashitsu/client-core";
@@ -52,9 +52,13 @@ import {
   loadPaneAgentNameVisible,
   loadPaneBorders,
   loadPaneGaps,
+  loadDisplayBandEdge,
+  loadDisplayPanelDock,
+  loadDisplayPanelInitial,
   loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
+  type DisplayPanelInitial,
   type NewCwdPolicy,
   type PaneBorders,
 } from "@sodashitsu/client-core";
@@ -69,6 +73,9 @@ export {
   loadPaneAgentNameVisible,
   loadPaneBorders,
   loadPaneGaps,
+  loadDisplayBandEdge,
+  loadDisplayPanelDock,
+  loadDisplayPanelInitial,
   loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
@@ -161,6 +168,13 @@ export const useSettingsStore = defineStore("settings", () => {
    * 共有の設定（`prefs.set`）で、サーバと全画面に配られる。
    */
   const displayScriptEnabled = ref(loadDisplayScriptEnabled(initial["displayScriptEnabled"]));
+  /**
+   * 表示の面の初めの状態・置き場所の既定（20261008-display-layout）。記憶の無い面にだけ効く（プログラムの指定の次）。共有の設定。
+   * `displayPanelDock` の選択肢は PR-A の画面には出さない（値の読みと ref は入れておく）。
+   */
+  const displayPanelInitial = ref<DisplayPanelInitial>(loadDisplayPanelInitial(initial["displayPanelInitial"]));
+  const displayPanelDock = ref<DisplayDock>(loadDisplayPanelDock(initial["displayPanelDock"]));
+  const displayBandEdge = ref<DisplayEdge>(loadDisplayBandEdge(initial["displayBandEdge"]));
   /**
    * テーマ（20260921-theme-settings）。1 つのテーマ・自動の切替・明るいとき・暗いとき（null＝まだ選んでいない＝1 つのテーマの対）。
    * 読み込みは値ごとに落とす（`loadThemePrefs`。AC4）。
@@ -312,6 +326,19 @@ export const useSettingsStore = defineStore("settings", () => {
   function setDisplayScriptEnabled(v: boolean): void {
     displayScriptEnabled.value = v;
     writePrefs({ displayScriptEnabled: v });
+  }
+
+  function setDisplayPanelInitial(v: DisplayPanelInitial): void {
+    displayPanelInitial.value = v;
+    writePrefs({ displayPanelInitial: v });
+  }
+  function setDisplayPanelDock(v: DisplayDock): void {
+    displayPanelDock.value = v;
+    writePrefs({ displayPanelDock: v });
+  }
+  function setDisplayBandEdge(v: DisplayEdge): void {
+    displayBandEdge.value = v;
+    writePrefs({ displayBandEdge: v });
   }
 
   /** 反映と保存を同時に行う。**効くのは次に開く workspace・tab・分割から**（既に開いている pane は変えない。AC10）。 */
@@ -466,6 +493,12 @@ export const useSettingsStore = defineStore("settings", () => {
     if (nextBorders !== paneBorders.value) paneBorders.value = nextBorders;
     const nextGaps = loadPaneGaps(prefs["paneGaps"]);
     if (nextGaps !== paneGaps.value) paneGaps.value = nextGaps;
+    const nextInitial = loadDisplayPanelInitial(prefs["displayPanelInitial"]);
+    if (nextInitial !== displayPanelInitial.value) displayPanelInitial.value = nextInitial;
+    const nextDock = loadDisplayPanelDock(prefs["displayPanelDock"]);
+    if (nextDock !== displayPanelDock.value) displayPanelDock.value = nextDock;
+    const nextEdge = loadDisplayBandEdge(prefs["displayBandEdge"]);
+    if (nextEdge !== displayBandEdge.value) displayBandEdge.value = nextEdge;
   });
 
   /**
@@ -558,6 +591,12 @@ export const useSettingsStore = defineStore("settings", () => {
     shellCwdTracking,
     displayScriptEnabled,
     setDisplayScriptEnabled,
+    displayPanelInitial,
+    displayPanelDock,
+    displayBandEdge,
+    setDisplayPanelInitial,
+    setDisplayPanelDock,
+    setDisplayBandEdge,
     theme,
     themeAuto,
     themeLight,

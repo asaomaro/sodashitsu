@@ -81,6 +81,8 @@ export interface DisplayDeps {
   readFile(path: string, max: number): Promise<Buffer>;
   /** stdout に 1 行の JSON を書く。 */
   print(value: unknown): void;
+  /** stderr に 1 行書く（古いサーバで配置の指定を外したときの知らせ）。省くと実物。 */
+  warn?: (line: string) => void;
   /** stdout が閉じたか（読み手が閉じた）。 */
   outputClosed(): boolean;
   callPaneOp?: typeof callPaneOp;
@@ -373,10 +375,28 @@ async function runSet(cmd: DisplayCmd, a: Extract<DisplayAction, { kind: "set" }
     ...(a.title !== undefined ? { title: a.title } : {}),
     ...(a.size !== undefined ? { size: a.size } : {}),
     ...(a.ttlMs !== undefined ? { ttlMs: a.ttlMs } : {}),
+    ...(a.dock !== undefined ? { dock: a.dock } : {}),
+    ...(a.edge !== undefined ? { edge: a.edge } : {}),
+    ...(a.collapsed === true ? { collapsed: true } : {}),
   });
   if (!checked.ok) throw new CliUsageError(`invalid display: ${checked.reason}`, DISPLAY_USAGE);
   const { paneId, tr } = await openTransport(cmd, store, deps, a.pane);
   const body = checked.value as unknown as Record<string, unknown>;
+  // 配置の指定（dock・edge・collapsed）が付いていたら、送る前に機能確認。`layout` を知らない（古い）サーバには、外して送る。
+  const ignored: string[] = [];
+  const layoutKeys = (["dock", "edge", "collapsed"] as const).filter((k) => body[k] !== undefined);
+  if (layoutKeys.length > 0) {
+    const f = (await tr.call("display.features", {}, 10_000)) as DisplayFeatures;
+    if (!(Array.isArray(f.features) && f.features.includes("layout"))) {
+      for (const k of layoutKeys) {
+        delete body[k];
+        ignored.push(k);
+      }
+      (deps.warn ?? ((line: string) => void process.stderr.write(`${line}\n`)))(
+        `sodactl: このサーバは配置の指定（${ignored.join("・")}）を知らないので、指定なしで出しました (this server does not know the layout options; they were ignored)`,
+      );
+    }
+  }
   // `script-html` は、出す前に必ず機能確認（`format:script-html`・`send` が無い版は「未対応」。古い受け口の `unknown_op` は `DisplayUnsupported`）。
   if (format === DISPLAY_SCRIPT_FORMAT) await requireScriptFeatures(tr, ["format:script-html", "send"]);
 
@@ -406,7 +426,7 @@ async function runSet(cmd: DisplayCmd, a: Extract<DisplayAction, { kind: "set" }
     throw err;
   }
   if (!a.wait) {
-    deps.print({ status: "ok", display: result.display, renderers: result.renderers, epoch: result.epoch, next: result.next });
+    deps.print({ status: "ok", display: result.display, renderers: result.renderers, epoch: result.epoch, next: result.next, ...(ignored.length > 0 ? { ignored } : {}) });
     return 0;
   }
   // `set` と `wait` の間の出来事を落とさないよう、`set` の結果の `epoch`・`next` から待つ。

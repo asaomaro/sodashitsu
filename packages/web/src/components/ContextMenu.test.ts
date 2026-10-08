@@ -3,6 +3,7 @@ import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionDispatcherKey, TerminalRegistryKey } from "../injection.js";
+import { useDisplayStore } from "../store/display.js";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
 import ContextMenu from "./ContextMenu.vue";
@@ -546,5 +547,110 @@ describe("ContextMenu — 閉じたときのフォーカスの戻し先（APG �
     expect(focus).not.toHaveBeenCalled();
     expect(registry.focus).toHaveBeenCalledWith("p7");
     wrapper.unmount();
+  });
+});
+
+describe("ContextMenu — 表示の面（20261008-display-layout）", () => {
+  const face = (id: string, over: Record<string, unknown> = {}) => ({ id, paneId: "p1", name: id, kind: "panel", format: "text", title: id, size: 320, rev: 1, bytes: 1, updatedAt: "x", ...over }) as never;
+  const labels = (w: ReturnType<typeof mountMenu>): string[] => w.findAll("li").map((li) => li.text());
+
+  it("pane のメニューに、面があるときだけ「表示のメニュー…」が出て、選ぶと面の一覧のメニューが同じ位置に開く", async () => {
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.paneUpserted(makePane("p1"));
+    view.openContextMenu({ kind: "pane", paneId: "p1" }, { x: 5, y: 6 });
+    expect(labels(mountMenu(makeActions()))).not.toContain("表示のメニュー…");
+    document.body.innerHTML = "";
+    useDisplayStore(pinia).upsert(face("a"));
+    const w = mountMenu(makeActions());
+    const item = w.findAll("li").find((li) => li.text() === "表示のメニュー…");
+    expect(item).toBeDefined();
+    await item!.trigger("click");
+    expect(view.contextMenu).toEqual({ target: { kind: "displays", paneId: "p1" }, at: { x: 5, y: 6 } });
+  });
+
+  it("面の一覧: 面ごとに「<種類> <名前> — <置き場所>・<状態>」。選ぶとその面のメニュー。自動でたたまれた面は「出せない」", async () => {
+    const d = useDisplayStore(pinia);
+    const view = useViewStore(pinia);
+    d.upsert(face("a"));
+    d.upsert(face("b", { kind: "band", edge: "bottom" }));
+    d.upsert(face("c"));
+    d.setFaceCollapsed(face("a"), true);
+    d.setLayoutSnapshot("p1", { auto: ["c"], floatArea: null });
+    view.openContextMenu({ kind: "displays", paneId: "p1" }, { x: 1, y: 2 });
+    const w = mountMenu(makeActions());
+    expect(labels(w)).toEqual(["パネル a — 右・たたんでいる", "帯 b — 下・開いている", "パネル c — 右・出せない"]);
+    await w.findAll("li")[1]!.trigger("click");
+    expect(view.contextMenu?.target).toEqual({ kind: "display", id: "b" });
+    expect(view.contextMenu?.at).toEqual({ x: 1, y: 2 });
+  });
+
+  it("面のメニュー（パネル）: たたむ／開く・閉じる。記憶が無ければ「指定に戻す」は出ない。たたむと記憶が書かれる", async () => {
+    const d = useDisplayStore(pinia);
+    const view = useViewStore(pinia);
+    const a = face("a");
+    d.upsert(a);
+    view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
+    let w = mountMenu(makeActions());
+    expect(labels(w)).toEqual(["たたむ", "この表示を閉じる"]);
+    await w.findAll("li")[0]!.trigger("click");
+    await Promise.resolve();
+    expect(d.effectiveOf(a).collapsed).toBe(true);
+    document.body.innerHTML = "";
+    view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
+    w = mountMenu(makeActions());
+    expect(labels(w)).toEqual(["開く", "プログラムの指定に戻す", "この表示を閉じる"]);
+  });
+
+  it("面のメニュー（帯）: 今と違う側だけ「上に置く／下に置く」。選ぶと移った先で開き、同じ名前の記憶にも書く。指定に戻すで消える", async () => {
+    const d = useDisplayStore(pinia);
+    const view = useViewStore(pinia);
+    const b = face("bar", { kind: "band", collapsed: true });
+    d.upsert(b);
+    view.openContextMenu({ kind: "display", id: "bar" }, { x: 0, y: 0 });
+    let w = mountMenu(makeActions());
+    expect(labels(w)).toEqual(["開く", "下に置く", "この表示を閉じる"]);
+    await w.findAll("li").find((li) => li.text() === "下に置く")!.trigger("click");
+    await Promise.resolve();
+    expect(d.effectiveOf(b)).toEqual({ dock: null, edge: "bottom", collapsed: false });
+    expect(d.layoutPrefs.names["band|bar"]).toEqual({ edge: "bottom" });
+    document.body.innerHTML = "";
+    view.openContextMenu({ kind: "display", id: "bar" }, { x: 0, y: 0 });
+    w = mountMenu(makeActions());
+    expect(labels(w)).toEqual(["たたむ", "上に置く", "プログラムの指定に戻す", "この表示を閉じる"]);
+    await w.findAll("li").find((li) => li.text() === "プログラムの指定に戻す")!.trigger("click");
+    await Promise.resolve();
+    expect(d.effectiveOf(b)).toEqual({ dock: null, edge: "top", collapsed: true });
+  });
+
+  it("「この表示を閉じる」は dismiss。Enter・Space の繰り返しは実行しない。フォーカスを取らない部品の押下は、開く前の場所へ戻してから閉じる", async () => {
+    const d = useDisplayStore(pinia);
+    const view = useViewStore(pinia);
+    d.upsert(face("a"));
+    const registry = { focus: vi.fn() };
+    view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
+    const w = mountMenu(makeActions(), registry);
+    const ev = new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true });
+    w.get('[role="menu"]').element.dispatchEvent(ev);
+    expect(d.layoutPrefs.faces["p1|panel|a"]).toBeUndefined(); // 先頭の「たたむ」が実行されない
+    const keep = document.createElement("button");
+    keep.setAttribute("data-display-keepfocus", "");
+    document.body.appendChild(keep);
+    view.focusPane("p9");
+    keep.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(view.contextMenu).toBeNull();
+    expect(registry.focus).toHaveBeenCalledWith("p9"); // 戻し先が無い → 選ばれている pane の端末
+  });
+
+  it("画面の下からはみ出さない位置へずらす", async () => {
+    const d = useDisplayStore(pinia);
+    const view = useViewStore(pinia);
+    d.upsert(face("a"));
+    view.openContextMenu({ kind: "display", id: "a" }, { x: 10, y: window.innerHeight - 2 });
+    const w = mountMenu(makeActions());
+    await Promise.resolve();
+    await w.vm.$nextTick();
+    // happy-dom は箱を測らない（0）。測れない環境では位置を変えない
+    expect((w.get("ul").element as HTMLElement).style.top).toBe(`${window.innerHeight - 2}px`);
   });
 });

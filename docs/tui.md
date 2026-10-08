@@ -136,7 +136,7 @@ herdr と同じ prefix 方式。`Ctrl+B` の後に 1 キー。prefix を押す�
 
 - 連携のグラフ（`prefix+a`。操作名 `open_graph`）は端末版では開けない。押すと「グラフの画面はブラウザで開けます。」と知らせる（`docs/agent-graph.md`。
   連携そのものはサーバが動かすので、端末版を使っていても動き続ける。端末から見る・変えるなら `sodactl graph`）。
-- 表示の面（パネル・帯。`sodactl display`。`prefix+i`＝`focus_display`）は端末版では出ない。押すと「表示のパネル・帯はブラウザで使えます。」と知らせる（`docs/display.md`・`docs/tui-parity.md` W34）。
+- 表示の面（パネル・帯。`sodactl display`。`prefix+i`＝`focus_display`・`prefix+shift+i`＝`display_menu`）は端末版では出ない。押すと「表示のパネル・帯はブラウザで使えます。」と知らせる（`docs/display.md`・`docs/tui-parity.md` W34）。
   端末版は面を出せる画面として名乗らないので、`sodactl display set` は成功する（結果の `renderers` が 0）が、ブラウザが開いていなければ誰にも見えない。
 - navigate は workspace の行のほか、**グループ・「グループなし」の見出しも上下で選べる**（畳んだ見出し・空のグループにも届く）。選んだ行に対して、Space（`navigate_open_menu`）は workspace の行ならその行の、見出しならグループ・「グループなし」のメニューを開く。
   `z`（`navigate_toggle_collapse`）は、見出しならそのグループ・「グループなし」を、worktree グループの先頭の行・子の行ならその worktree グループを畳む・開く（代表でない通常の行・別のマシンの行では何も起きない）。Enter は見出しでは選択をやめるだけ。

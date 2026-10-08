@@ -93,6 +93,12 @@ describe("ExtensionApi: 処理の順 2〜8", () => {
     expect(s.real.list("p1").displays.map((d) => d.name)).toEqual(["plain"]);
     expect(ok(call(s.api, e, "display.list", { paneId: "p1" }))).toEqual({ displays: [] });
   });
+  it("拡張が出した面にも dock・edge・collapsed の指定が効き（source と両立）、display.features に layout が載る", () => {
+    const s = setup();
+    const r = ok(call(s.api, ext(), "display.set", panel("m", { dock: "bottom", collapsed: true }))) as { display: { dock?: string; collapsed?: boolean; source: unknown } };
+    expect(r.display).toMatchObject({ dock: "bottom", collapsed: true, source: { type: "extension", id: "a" } });
+    expect((ok(call(s.api, ext(), "display.features", {})) as { features: string[] }).features).toContain("layout");
+  });
   it("同じ名前の set（pane のプログラムの面に当たる）は台帳の invalid_display がそのまま返る", () => {
     const s = setup();
     s.real.set("p1", { name: "m", kind: "panel", format: "text", content: "z" });

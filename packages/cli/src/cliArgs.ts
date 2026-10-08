@@ -11,7 +11,13 @@ import {
   ASK_TIMEOUT_DEFAULT_MS,
   ASK_TIMEOUT_MAX_MS,
   ASK_TIMEOUT_MIN_MS,
+  DISPLAY_DOCKS,
+  DISPLAY_EDGES,
   DISPLAY_FORMATS,
+  isDisplayDock,
+  isDisplayEdge,
+  type DisplayDock,
+  type DisplayEdge,
   DISPLAY_KINDS,
   DISPLAY_NAME_RE,
   DISPLAY_SIZE,
@@ -79,7 +85,7 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl graph node rekey <pane> <newPane> [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl graph history [<linkId>] [--limit <N>] [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl ask [--timeout <ms>] [--url <URL>] [--token <TOKEN>] < spec.json",
-  "sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] (--text <text> | --markdown-file <path> | --html-file <path> | --script-html-file <path> | [--format text|markdown|html|script-html] < stdin) [--wait [--timeout <ms>]] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] [--dock right|left|top|bottom|float] [--edge top|bottom] [--collapsed] (--text <text> | --markdown-file <path> | --html-file <path> | --script-html-file <path> | [--format text|markdown|html|script-html] < stdin) [--wait [--timeout <ms>]] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display send <name> (--json <JSON> | < stdin) [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display close (<name> | --all) [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display list [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
@@ -251,6 +257,10 @@ export type DisplayAction =
       /** `--wait` の全体の待ち時間（省くと待ち続ける）。 */
       timeoutMs: number | undefined;
       pane: string | undefined;
+      /** プログラムの指定（初めの値。20261008-display-layout）。`dock` は panel だけ・`edge` は band だけ。 */
+      dock?: DisplayDock | undefined;
+      edge?: DisplayEdge | undefined;
+      collapsed?: boolean | undefined;
     }
   /** スクリプトが動く面へデータを送る。`json` は `--json` の文字（省くと標準入力）。JSON として読めるかは parse 時に確かめる（標準入力は実行時）。 */
   | { kind: "send"; name: string; json: string | undefined; pane: string | undefined }
@@ -798,9 +808,9 @@ function parseDisplay(sub: string | undefined, rest: readonly string[], env: Nod
   if (sub === "set") {
     // `--title`・`--text` は `--` で始まる値も `--title=<値>` の形で渡せる（inline）。
     const withValues = parseFlags(rest, {
-      values: [...base, "--kind", "--size", "--ttl-ms", "--markdown-file", "--html-file", "--script-html-file", "--format", "--timeout", "--title", "--text"],
+      values: [...base, "--kind", "--size", "--ttl-ms", "--markdown-file", "--html-file", "--script-html-file", "--format", "--timeout", "--title", "--text", "--dock", "--edge"],
       inline: ["--title", "--text"],
-      bools: ["--wait"],
+      bools: ["--wait", "--collapsed"],
     });
     const v = withValues.values;
     const pos = withValues.positionals;
@@ -817,6 +827,17 @@ function parseDisplay(sub: string | undefined, rest: readonly string[], env: Nod
     const size = sizeRaw === undefined ? undefined : displayInt(sizeRaw, "--size", range.min, range.max);
     const ttlRaw = v.get("--ttl-ms");
     const ttlMs = ttlRaw === undefined ? undefined : displayInt(ttlRaw, "--ttl-ms", DISPLAY_TTL_MIN_MS, DISPLAY_TTL_MAX_MS);
+    const dockRaw = v.get("--dock");
+    if (dockRaw !== undefined) {
+      if (displayKind !== "panel") throw new CliUsageError("--dock can only be used with --kind panel", `--dock は --kind panel のときだけ付けられます。\n${DISPLAY_USAGE}`);
+      if (!isDisplayDock(dockRaw)) throw new CliUsageError(`invalid value for --dock: ${dockRaw}`, `--dock は ${DISPLAY_DOCKS.join("|")} にしてください。`);
+    }
+    const edgeRaw = v.get("--edge");
+    if (edgeRaw !== undefined) {
+      if (displayKind !== "band") throw new CliUsageError("--edge can only be used with --kind band", `--edge は --kind band のときだけ付けられます。\n${DISPLAY_USAGE}`);
+      if (!isDisplayEdge(edgeRaw)) throw new CliUsageError(`invalid value for --edge: ${edgeRaw}`, `--edge は ${DISPLAY_EDGES.join("|")} にしてください。`);
+    }
+    const collapsed = withValues.bools.has("--collapsed");
     // 中身の指定は 1 つだけ。どれも無ければ標準入力（形は --format。省くと text）。
     const given = (["--text", "--markdown-file", "--html-file", "--script-html-file"] as const).filter((f) => v.has(f));
     if (given.length > 1) {
@@ -846,7 +867,7 @@ function parseDisplay(sub: string | undefined, rest: readonly string[], env: Nod
     return {
       kind: "display",
       opts: globalOptsFrom(v, env),
-      action: { kind: "set", name, displayKind, title: v.get("--title"), size, ttlMs, source, wait, timeoutMs, pane: v.get("--pane") },
+      action: { kind: "set", name, displayKind, title: v.get("--title"), size, ttlMs, source, wait, timeoutMs, pane: v.get("--pane"), dock: dockRaw as DisplayDock | undefined, edge: edgeRaw as DisplayEdge | undefined, collapsed: collapsed ? true : undefined },
     };
   }
   if (sub === "send") {
