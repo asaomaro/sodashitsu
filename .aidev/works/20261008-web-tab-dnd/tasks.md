@@ -108,7 +108,7 @@
 
 ### PR2: pane の移動の制限
 
-- [ ] T6: protocol の結果に `reason` を足し、判定の純関数を client-core に足す（**独立点検あり**）。design 第 2 部「インターフェース / データ構造」のとおり。
+- [x] T6: protocol の結果に `reason` を足し、判定の純関数を client-core に足す（**独立点検あり**）。design 第 2 部「インターフェース / データ構造」のとおり。
       - `messages.ts`: `PaneMoveBlock`（`"different_worktree"`）の型を足し、`PaneMoveToTabResult`・`PaneMoveToNewTabResult` に `reason?: PaneMoveBlock`。要求のスキーマ（zod）は変えない。
       - `paneMoveScope.ts`: `paneMoveBlock(source, target, opts?)` と `paneMoveBlockMessage(reason)`。`index.ts` から出す。
       単体テスト `paneMoveScope.test.ts`（design の表の全部の行を、`lenient` あり・なしの両方で）:
