@@ -339,7 +339,7 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
     expect(await b.waitForEvent("display.removed")).toMatchObject({ paneId: paneB, name: "x", reason: "pane_closed" });
     await expect(cli.request("display.list", { paneId: paneB })).rejects.toMatchObject({ code: "not_found" });
     b.ws.close();
-    await vi.waitFor(async () => expect(await cli.request("display.features", {})).toMatchObject({ renderers: { panel: 0, band: 0, actions: 0, scriptHtml: 0 } }));
+    await vi.waitFor(async () => expect(await cli.request("display.features", {})).toMatchObject({ renderers: { panel: 0, band: 0, actions: 0, scriptHtml: 0, collapse: 0, dock: 0, float: 0 } }));
   });
 
   it("サーバの停止で待っている受け口の wait が終わり、timer を残さない", async () => {
@@ -378,6 +378,24 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
       { type: "display.action", name: "g", action: "pick", source: "script" },
       { type: "display.action", name: "st", action: "static-go", source: "static" },
     ]);
+  });
+
+  it("配置の指定: ログインなしで dock・collapsed つきの set → 名乗った接続の display.updated に 3 項目。collapse を名乗った接続は数えられる。ほかの項目は断る", async () => {
+    const { paneA, sockPath, browser, open } = await start();
+    const b = await browser();
+    await b.request("display.subscribe", { features: ["panel", "band", "collapse"] });
+    const set = okResult<{ display: DisplayInfo; renderers: { collapse: number; dock: number } }>(
+      await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SET("lay", { dock: "bottom", collapsed: true })),
+    );
+    expect(set.display).toMatchObject({ dock: "bottom", collapsed: true });
+    expect(set.renderers).toMatchObject({ collapse: 1, dock: 0 });
+    expect(await b.waitForEvent("display.updated")).toMatchObject({ display: { name: "lay", dock: "bottom", collapsed: true } });
+    const band = okResult<{ display: DisplayInfo }>(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, { name: "bd", kind: "band", format: "text", content: "x", edge: "bottom" }));
+    expect(band.display.edge).toBe("bottom");
+    expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SET("lay", { dock: "nowhere" }))).toMatchObject({ ok: false, error: { code: "invalid_display" } });
+    expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SET("lay", { paneId: "other" }))).toMatchObject({ ok: false });
+    const cli = await open("external");
+    expect(await cli.request<{ displays: DisplayInfo[] }>("display.list", { paneId: paneA })).toMatchObject({ displays: expect.arrayContaining([expect.objectContaining({ name: "lay", dock: "bottom", collapsed: true })]) });
   });
 
   it("/ws の経路でも同じ: display.send と features（format:script-html・send）。script-html を名乗らない接続だけなら delivered 0", async () => {
