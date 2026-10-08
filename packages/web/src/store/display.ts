@@ -25,6 +25,7 @@ import {
   type FaceRect,
   type LayoutSettings,
 } from "../display/displayPrefs.js";
+import type { DockDragState } from "../display/dockDrag.js";
 import { useSettingsStore } from "./settings.js";
 import { readPrefs, writePrefs } from "./view.js";
 
@@ -91,6 +92,14 @@ export const useDisplayStore = defineStore("display", () => {
   const lastFace = ref(new Map<string, string>());
   /** 割り付けの結果の写し（pane の id → 結果）。 */
   const layoutByPane = ref(new Map<string, PaneLayoutSnapshot>());
+  /** 面（パネル）の D&D の最中の状態（つかんだ面・pane・いまポインタのある場所）。無ければ null。`view.paneDrag`（pane の名前の D&D）とは別。 */
+  const dockDrag = ref<DockDragState | null>(null);
+  function setDockDrag(next: DockDragState | null): void {
+    const cur = dockDrag.value;
+    if (cur === null && next === null) return;
+    if (cur && next && cur.id === next.id && cur.paneId === next.paneId && cur.zone === next.zone) return;
+    dockDrag.value = next;
+  }
   /** 割り付けが変わるたびに 1 増える数（知らせの位置の測り直しの合図）。 */
   const layoutRev = ref(0);
 
@@ -334,6 +343,8 @@ export const useDisplayStore = defineStore("display", () => {
     lastFace,
     layoutByPane,
     layoutRev,
+    dockDrag,
+    setDockDrag,
     effectiveOf,
     hasPref,
     writeFace,

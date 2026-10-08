@@ -9,6 +9,7 @@ import { paneNameOf } from "@sodashitsu/client-core";
 import { getCellSize } from "../term/measure.js";
 import { useDisplayStore } from "../store/display.js";
 import { useSessionStore } from "../store/session.js";
+import DisplayDropZones from "./DisplayDropZones.vue";
 import PaneBands from "./PaneBands.vue";
 import PanePanel from "./PanePanel.vue";
 import { useSettingsStore } from "../store/settings.js";
@@ -139,6 +140,13 @@ const showEdge = (edge: "top" | "bottom"): boolean => {
   return here.length > 0 || (l.tray.edge === edge && (l.tray.row === "own" || l.bands.more.length > 0));
 };
 const docks = computed(() => layout.value?.docks ?? null);
+/** この pane の面を D&D している間の、落とせる場所の表示（`DisplayDropZones`）。いまの置き場所は、つかんでいる面の側。 */
+const dropZones = computed(() => {
+  const d = displays?.dockDrag;
+  if (!d || d.paneId !== props.paneId) return null;
+  const cur = displays.infos.get(d.id);
+  return { zone: d.zone, current: cur ? (displays.effectiveOf(cur).dock ?? null) : null };
+});
 
 /**
  * つまみのドラッグの間の案内の線の位置（本体の箱を基準。`.pane-frame-guide`）。左右の側は、端末の領域の高さに沿った縦線（`left`/`right` が側の縁から `px`）、
@@ -452,6 +460,7 @@ function onKeydown(ev: KeyboardEvent): void {
       </div>
       <PanePanel v-if="layout && docks?.bottom" side="bottom" :pane-id="paneId" :dock="docks.bottom" @guide="guide = $event" />
       <PaneBands v-if="layout && showEdge('bottom')" edge="bottom" :pane-id="paneId" :layout="layout" />
+      <DisplayDropZones v-if="dropZones" :zone="dropZones.zone" :current="dropZones.current" :float="false" />
       <div v-if="guideStyle" class="pane-frame-guide" :style="guideStyle" aria-hidden="true" data-pane-frame-guide></div>
     </div>
     <div v-else class="pane-frame-body">

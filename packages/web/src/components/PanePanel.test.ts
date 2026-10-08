@@ -328,4 +328,50 @@ describe("PanePanel — 4 つの側", () => {
     expect(placedFrameKey(a, "dock:left")).not.toBe(placedFrameKey(a, "dock:right"));
     expect(placedFrameKey(a, "dock:top")).not.toBe(placedFrameKey(a, "dock:bottom"));
   });
+
+  it("見出しのつかむ場所をつかんで別の側へ落とすと、その側へ移る（開いて出る）。同じ側・外・6px 未満は何も変えない。view.paneDrag は立たない", async () => {
+    const raf = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 1;
+    });
+    const host = document.createElement("div");
+    host.setAttribute("data-pane-id", "p1");
+    const body = document.createElement("div");
+    body.className = "pane-frame-body-displays";
+    body.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 600, right: 1000, bottom: 600, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    host.append(body);
+    document.body.append(host);
+    const { useViewStore } = await import("../store/view.js");
+    const s = mountPanel([info("a", { size: 200 })], 1000, "right");
+    const grip = s.w.find("[data-display-grip]").element;
+    const e = (type: string, x: number, y: number) => {
+      const p = new PointerEvent(type, { clientX: x, clientY: y, button: 0, pointerId: 1, bubbles: true, cancelable: true });
+      return p;
+    };
+    const dockOf = () => s.store.effectiveOf(s.store.infos.get("a")!).dock;
+    // 6px 未満・外・今と同じ右 → 変わらない
+    grip.dispatchEvent(e("pointerdown", 900, 300));
+    grip.dispatchEvent(e("pointermove", 903, 300));
+    grip.dispatchEvent(e("pointerup", 903, 300));
+    expect(dockOf()).toBe("right");
+    grip.dispatchEvent(e("pointerdown", 900, 300));
+    grip.dispatchEvent(e("pointermove", 1500, 300));
+    grip.dispatchEvent(e("pointerup", 1500, 300));
+    expect(dockOf()).toBe("right");
+    grip.dispatchEvent(e("pointerdown", 900, 300));
+    grip.dispatchEvent(e("pointermove", 980, 300));
+    expect(s.store.dockDrag).toMatchObject({ id: "a", paneId: "p1", zone: "right" });
+    expect(useViewStore().paneDrag).toBeNull();
+    grip.dispatchEvent(e("pointerup", 980, 300));
+    expect(dockOf()).toBe("right");
+    // 左へ
+    grip.dispatchEvent(e("pointerdown", 900, 300));
+    grip.dispatchEvent(e("pointermove", 20, 300));
+    grip.dispatchEvent(e("pointerup", 20, 300));
+    expect(dockOf()).toBe("left");
+    expect(s.store.effectiveOf(s.store.infos.get("a")!).collapsed).toBe(false);
+    expect(s.store.dockDrag).toBeNull();
+    host.remove();
+    raf.mockRestore();
+  });
 });

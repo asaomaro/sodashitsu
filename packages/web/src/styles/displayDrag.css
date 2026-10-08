@@ -1,0 +1,13 @@
+/*
+ * 表示の面（パネル）の D&D の間（20261008-display-layout の design「D&D」）。`<html>` に `soda-display-dragging` が付く間、面の枠（iframe）がポインタを奪わない
+ * （枠の上でも `pointermove`・`pointerup` を取りこぼさない）。カーソルは掴んだまま・文字の選択はしない。
+ */
+html.soda-display-dragging iframe.display-frame,
+html.soda-display-dragging iframe[data-display-frame] {
+  pointer-events: none;
+}
+html.soda-display-dragging,
+html.soda-display-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}

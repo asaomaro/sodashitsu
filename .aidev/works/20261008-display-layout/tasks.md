@@ -215,7 +215,7 @@
       対象: `packages/web/src/components/PanePanel.vue:47-93`・`PaneFrame.vue:345`・`:544-553`（案内の線）・各 `.test.ts` / 根拠: design「つまみ」、research F19
       依存: T14
       AC: AC14, AC-I2
-- [ ] T16: D&D: `display/dockDrag.ts` に、つかむ・動かす・離す・取り消すの処理（`[data-display-grip]` の `pointerdown`・6px・捕捉・`store.dockDrag`・`Esc` を capture で止める・`pointercancel`・`lostpointercapture`・`view.modalOpen`・部品が外れた）。`DisplayDropZones.vue`（5 つの場所と文言・いまの場所の強調・「ここにあります」・`pointer-events: none`・`z-index: 30`）。
+- [x] T16: D&D: `display/dockDrag.ts` に、つかむ・動かす・離す・取り消すの処理（`[data-display-grip]` の `pointerdown`・6px・捕捉・`store.dockDrag`・`Esc` を capture で止める・`pointercancel`・`lostpointercapture`・`view.modalOpen`・部品が外れた）。`DisplayDropZones.vue`（5 つの場所と文言・いまの場所の強調・「ここにあります」・`pointer-events: none`・`z-index: 30`）。
       ドラッグの間 `<html>` に `soda-display-dragging`（枠に `pointer-events: none`）。`.pane-frame-zone` に `z-index: 30`。離したら `withDisplayChange` で `setFaceDock`。PR-B では中央は「ここには置けません」（何も変わらない）。
       単体テスト（6px 未満は何もしない・各場所で離す・取り消しの 5 通り・ボタンの上からは始まらない・ドラッグ中のキーが外へ流れない・`view.paneDrag` が立たない）
       対象: `packages/web/src/display/dockDrag.ts`・`.test.ts`、`packages/web/src/components/DisplayDropZones.vue`（新規）・`.test.ts`（新規）、`DisplayPanelHead.vue`、`PaneFrame.vue:439-446`（`.pane-frame-zone`）、`packages/web/src/store/display.ts`（`dockDrag`）、`packages/web/src/styles/`（`soda-display-dragging` の規則。`resizeHandle.css` と同じ置き方） / 根拠: design「D&D」、research F18

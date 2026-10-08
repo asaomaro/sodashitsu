@@ -834,6 +834,26 @@ describe("PaneFrame — 表示の面（パネル・帯。20261007-soda-extension
     expect(leftBefore).not.toBeNull();
   });
 
+  it("面の D&D の間（store.dockDrag）は、その pane にだけ落とせる場所が出る。pane の D&D の落とす場所（.pane-frame-zone）とは別。view.paneDrag は立たない", async () => {
+    const d = useDisplayStore(pinia);
+    d.upsert(disp("a", "panel", { dock: "left" }));
+    const { wrapper } = mountFrame();
+    await settle(wrapper);
+    expect(wrapper.find("[data-display-drop-zones]").exists()).toBe(false);
+    d.setDockDrag({ id: "a", paneId: "other", zone: "top" });
+    await settle(wrapper);
+    expect(wrapper.find("[data-display-drop-zones]").exists()).toBe(false); // 別の pane の D&D
+    d.setDockDrag({ id: "a", paneId: "p1", zone: "top" });
+    await settle(wrapper);
+    expect(wrapper.find("[data-display-drop-zones]").exists()).toBe(true);
+    expect(wrapper.get('[data-display-drop-zone="left"]').text()).toContain("ここにあります");
+    expect(wrapper.get('[data-active="1"]').attributes("data-display-drop-zone")).toBe("top");
+    expect(wrapper.find(".pane-frame-zone").exists()).toBe(false);
+    d.setDockDrag(null);
+    await settle(wrapper);
+    expect(wrapper.find("[data-display-drop-zones]").exists()).toBe(false);
+  });
+
   it("本体の箱が 0×0 の間は、面の部品を 1 つも載せない（測れたら載せる）", async () => {
     box = { width: 0, height: 0 };
     const d = useDisplayStore(pinia);
