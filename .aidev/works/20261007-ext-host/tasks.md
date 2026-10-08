@@ -195,7 +195,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T3
       AC: AC4, AC20, AC34
       点検: あり
-- [ ] T9-2: ホストの芯（利用者の設定の分）: `ExtensionHost` の、持つもの・**直列化**（外向きの入口だけが `chain` へつなぐ。中は直接呼ぶ。「予約」の意味）・ファイルを読む 1 回 2 秒の上限と「前の読み取りが返っていなければ、出さない」・`reconcile` の 0・1・3〔無効の記録〕・4〜7・`startOne` の 1〜3・5〜8・`stopRun`・`finishRun`・`closing`・`stopped` と `epoch`・`start`・`stop`・`dispose`・`list`・`reload`・`restart`・`log`・`setEnabled`・全体の量の桶・`deps.timings`・`deps.limits`。
+- [x] T9-2: ホストの芯（利用者の設定の分）: `ExtensionHost` の、持つもの・**直列化**（外向きの入口だけが `chain` へつなぐ。中は直接呼ぶ。「予約」の意味）・ファイルを読む 1 回 2 秒の上限と「前の読み取りが返っていなければ、出さない」・`reconcile` の 0・1・3〔無効の記録〕・4〜7・`startOne` の 1〜3・5〜8・`stopRun`・`finishRun`・`closing`・`stopped` と `epoch`・`start`・`stop`・`dispose`・`list`・`reload`・`restart`・`log`・`setEnabled`・全体の量の桶・`deps.timings`・`deps.limits`。
       **プロジェクトの設定を読む処理・承認の検査は、入れない**（PR3 の T22。入れる場所に `// PR3（T22）` と書くだけ）。この時点の `inScope` は「pane が実在すれば真」。終わったとき（`onExit`）は、T9-3（ここでは、`runId` が一致したら `finishRun` するだけの仮の形でよい）。
       単体テスト（偽の子・時計）: 起動で `ext.hello` → `ext.panes` の順／読み直しの 4 通り（足す・消す・変える・変えない＝`runId` が同じ）／設定が規則の外 → そのファイルの拡張は 0・動いていたものが止まり・`problems` に出る（AC2）／`enabled: false`・無効の記録 → `disabled`／無効の記録が壊れている → 全部 `disabled`（`spawn` なし）／
       **`startOne` が、起動の直前に設定を読み直し、`digest` が違えば起動しない**／`start()` を、止めずに 2 回呼んでも `spawn` は 1 回／**`startOne` が設定を読んでいる途中（偽の `open` を止めておく）で `stop()` → 読み終わっても `spawn` されない**／`stop()` は、`chain` が詰まっていても（偽の `open` が返らない）3 秒以内に返る／
@@ -206,7 +206,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T3, T6, T8, T9
       AC: AC1, AC2, AC3, AC4, AC14, AC34
       点検: あり
-- [ ] T9-3: 終わったときと、起動し直し: `onExit(key, runId, exit)`（design「終わったとき」。全体を `try/catch`・`runId` が一致するときだけ状態を変える・`exited`／`backoff`／`failed`・`failures` の数え方・`backoff` の時間切れは `chain` へ `startOne`）と、`stop()` で `backoff` を捨てること、`reload`・`restart` で `failed`・`exited` から戻ること、`lastExit`・`lastLog`。
+- [x] T9-3: 終わったときと、起動し直し: `onExit(key, runId, exit)`（design「終わったとき」。全体を `try/catch`・`runId` が一致するときだけ状態を変える・`exited`／`backoff`／`failed`・`failures` の数え方・`backoff` の時間切れは `chain` へ `startOne`）と、`stop()` で `backoff` を捨てること、`reload`・`restart` で `failed`・`exited` から戻ること、`lastExit`・`lastLog`。
       単体テスト: 落ちた後の間隔 1・2・4・8 秒、5 回目で `failed`、60 秒動いた後は 1 秒へ戻る／`bad_lines`・`not_reading` で止まった回も、落ちた回に数える／終了コード 0 → `exited`（起動し直さない）／`reload`・`restart` で `failed`・`exited` から戻る／**落ちた後・時間が来る前に、設定ファイルを書き換える → 時間が来ても `spawn` されない**／
       `backoff` の拡張がある状態で `stop()` → `start()` → 起動し直される／`stop()` の後に来た `backoff` のタイマーは、何もしない／**`stop` が 3 秒で返った後（子は、まだ `exit` していない）に、新しい起動 → 古い子の `exit` が遅れて届く → 新しい起動の面・状態・`runs` が変わらない**／**`finishRun` の後に、その起動の `onRequest`（`display.set`）が遅れて呼ばれても、台帳が呼ばれない**（面が出来ない）／`backoff` の時間切れで起動した・`over_limit` になった・`restart` した後に、`extension.changed` が出る／`display.set` で面の数（`displays`）だけが変わっても、`extension.changed` は出ない／終わったら、その起動の札の面だけが `closeOwned` される（次の起動の面は残る）／
       `backoff` の時間が来たときに枠が無ければ（`runningMax: 1` で、別の拡張が動いている）`over_limit`／`onExit` の中で例外が出ても、捕まらない拒否にならない（`process.on("unhandledRejection")` を、テストで見張る）
@@ -214,7 +214,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T9-2
       AC: AC10, AC11
       点検: あり
-- [ ] T9-4: pane の一覧と、出来事の渡し方: bus の購読（design「きっかけ」の表の、pane・tab・workspace のイベント。**受け手は `try/catch`・中ではタイマーを掛けるだけ**・100ms まとめて、長くても 500ms）で、pane の一覧（`ExtPane`）を作り直し、前と同じなら送らない。`onOwnedEvent` の受け手（**出来事を渡す直前に範囲を確かめる**・外なら `display.action` は渡さず、`display.closed` は理由を `out_of_scope` に替える〔**理由が `pane_closed` のものは、替えずに、そのまま渡す**〕・
+- [x] T9-4: pane の一覧と、出来事の渡し方: bus の購読（design「きっかけ」の表の、pane・tab・workspace のイベント。**受け手は `try/catch`・中ではタイマーを掛けるだけ**・100ms まとめて、長くても 500ms）で、pane の一覧（`ExtPane`）を作り直し、前と同じなら送らない。`onOwnedEvent` の受け手（**出来事を渡す直前に範囲を確かめる**・外なら `display.action` は渡さず、`display.closed` は理由を `out_of_scope` に替える〔**理由が `pane_closed` のものは、替えずに、そのまま渡す**〕・
       **受け手の中では台帳を呼ばず、`queueMicrotask` で `closeOwned`**・札から起動を引けなければ捨てる）。**面を持つ pane の見直し**（2 秒ごと）。不確かな点 4（pane の移動で出るイベント）を、ここで読んで確かめる。
       単体テスト（`inScope` は、テストが差し替える）: pane を足す・消すと、新しい一覧の行が届く。中身が同じなら、届かない／`pane.updated` が 50ms おきに続いても、500ms 以内に作り直される／bus の受け手の中で例外が出ても、`bus.publish` の呼び出し元へ伝わらない／
       範囲の外の pane の面への `display.action` は、拡張へ渡らず、面が閉じて `out_of_scope` が届く／範囲の外の pane の `display.closed`（利用者が閉じた）は、理由が `out_of_scope` に替わって届く／pane が閉じたときの `display.closed` は、理由が `pane_closed` のまま届く／台帳が `close` の処理の途中で受け手を呼んでも、台帳への再入が起きない（`closeOwned` が、受け手の呼び出しの中で呼ばれていないこと）／
