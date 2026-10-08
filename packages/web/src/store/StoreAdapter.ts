@@ -51,6 +51,8 @@ export interface StoreAdapterOptions {
   onAskEvent?: (e: AskOpenedEvent | AskClosedEvent) => void;
   /** 表示の面のイベント（`display.updated`・`display.removed`。20261007-soda-extensions）。**見出しだけ**——`DisplayController` が中身を `display.get` で取る。省略可。 */
   onDisplayEvent?: (e: DisplayUpdatedEvent | DisplayRemovedEvent | DisplayMessageEvent) => void;
+  /** 拡張の一覧・状態が変わった（`extension.changed`。20261007-ext-host）。**中身は載っていない**——`ExtensionController` が `extension.list` で取り直す。省略可。 */
+  onExtensionChanged?: () => void;
 }
 
 /**
@@ -202,6 +204,9 @@ export class StoreAdapter implements StorePort {
       case "ask.opened":
       case "ask.closed":
         this.opts.onAskEvent?.(e);
+        return;
+      case "extension.changed":
+        this.opts.onExtensionChanged?.();
         return;
       case "display.updated":
       case "display.removed":

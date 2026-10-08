@@ -76,11 +76,13 @@ const LEGACY_DEFAULT_PREFIX_MAP: ReadonlyArray<readonly [string, Action]> = [
   ["shift+a", { type: "toggleSidebarSection", section: "agents" }],
   // 20261007-soda-extensions で focus_display（本製品の追加。利用者の決定 D23）を足した（意図した既定の変更）。
   ["i", { type: "focusDisplay" }],
+  // 20261008-display-layout で display_menu（本製品の追加）を足した（意図した既定の変更）。
+  ["shift+i", { type: "displayMenu" }],
 ];
 
 describe("既定の表は旧 DEFAULT_KEYMAP と 1:1（AC1・AC2）", () => {
-  it("prefix の後のキーが 50 個、旧表を固定した値と完全に一致する", () => {
-    expect(LEGACY_DEFAULT_PREFIX_MAP).toHaveLength(50);
+  it("prefix の後のキーが 51 個、旧表を固定した値と完全に一致する", () => {
+    expect(LEGACY_DEFAULT_PREFIX_MAP).toHaveLength(51);
     expect([...DEFAULT_KEYMAP.prefixMap.entries()].sort(([a], [b]) => a.localeCompare(b))).toEqual(
       [...LEGACY_DEFAULT_PREFIX_MAP]
         .map(([k, v]) => [k, v])
@@ -387,6 +389,6 @@ describe("resolveKeymap — edit_scrollback（20260926-edit-scrollback。「後�
   it("prefix が alt+e でも、e（修飾が違う別の chord）は edit_scrollback のまま", () => {
     const { keymap } = resolveKeymap(prefs({ prefix: "alt+e" }));
     expect(keymap.prefixMap.get("e")).toEqual({ type: "editScrollback" });
-    expect(keymap.prefixMap.size).toBe(50);
+    expect(keymap.prefixMap.size).toBe(51);
   });
 });

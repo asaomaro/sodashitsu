@@ -75,7 +75,7 @@ test.describe("枠の移動（合否: 同じ origin の宛先）", () => {
     const first = await scriptFrameEl(page).elementHandle();
     await page.locator("[data-pane-panel-fold]").click();
     await expect(scriptFrameEl(page)).toHaveCount(0);
-    await page.locator("[data-pane-panel-unfold]").click();
+    await page.locator(`[data-display-tray-button]`).click(); // たたんだ面は帯の行のボタンから開く（20261008-display-layout）
     await expect(scriptFrameEl(page)).toHaveCount(1);
     expect(await first!.evaluate((e) => e.isConnected)).toBe(false); // 別の枠
     await expectNavigatedAndCooling(page, appServer, paneId, ev, sent);

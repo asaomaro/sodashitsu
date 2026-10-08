@@ -1,4 +1,4 @@
-import type { NewCwd } from "@sodashitsu/protocol";
+import { isDisplayDock, isDisplayEdge, type DisplayDock, type DisplayEdge, type NewCwd } from "@sodashitsu/protocol";
 import { DEFAULT_NOTIFY_PREFS, type NotifyPrefs } from "../notify/policy.js";
 import type { AgentSort, WorkspaceSort } from "./types.js";
 
@@ -88,6 +88,22 @@ export function loadShellCwdTracking(raw: unknown): boolean {
  */
 export function loadDisplayScriptEnabled(raw: unknown): boolean {
   return raw === true;
+}
+
+/** 表示のパネルの初めの状態（記憶の無い面に効く。20261008-display-layout）。知らない値・型の違う値は `open`。 */
+export type DisplayPanelInitial = "open" | "collapsed";
+export function loadDisplayPanelInitial(raw: unknown): DisplayPanelInitial {
+  return raw === "collapsed" ? "collapsed" : "open";
+}
+
+/** 表示のパネルの既定の置き場所（20261008-display-layout）。知らない値・型の違う値は `right`。 */
+export function loadDisplayPanelDock(raw: unknown): DisplayDock {
+  return isDisplayDock(raw) ? raw : "right";
+}
+
+/** 表示の帯の既定の場所（20261008-display-layout）。知らない値・型の違う値は `top`。 */
+export function loadDisplayBandEdge(raw: unknown): DisplayEdge {
+  return isDisplayEdge(raw) ? raw : "top";
 }
 
 /** 保存された「指定した場所」を読む。文字列でなければ空（検証はサーバ。空なら使えない場所として知らされる）。 */

@@ -297,6 +297,13 @@ describe("StoreAdapter", () => {
     expect(view.focusedPaneId).toBe("p1"); // 閉じたら、残りの pane へ戻る
   });
 
+  it("extension.changed はコールバックへ渡す（中身なし。画面が extension.list で取り直す）", () => {
+    let n = 0;
+    const { adapter } = makeAdapter({ onExtensionChanged: () => void n++ });
+    adapter.applyEvent({ event: "extension.changed", data: {} });
+    expect(n).toBe(1);
+  });
+
   it("質問のフォーム（20261002-sodactl-ask）を開いている間も同じく、焦点は動かさず閉じたときの戻り先だけを差し替える。ask イベントはコールバックへ渡す", () => {
     const asks: string[] = [];
     const { adapter } = makeAdapter({ onAskEvent: (e) => void asks.push(e.event) });

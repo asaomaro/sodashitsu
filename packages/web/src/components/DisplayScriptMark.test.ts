@@ -17,6 +17,9 @@ const info = (id: string, over: Partial<DisplayInfo> = {}): DisplayInfo => ({
 });
 const controller = () => ({ dismiss: vi.fn(), report: vi.fn(), sendAction: vi.fn(), ensureContent: vi.fn(async () => undefined), onMessage: vi.fn(() => () => undefined) });
 
+/** 割り付けの結果（右の群れ）の代わりに渡す `PanePanel` の props。 */
+const panelProps = (ids: string[]) => ({ paneId: "p1", side: "right", dock: { ids, activeId: ids[0]!, size: 320, min: 160, max: 500 } });
+
 function mountWith(comp: unknown, props: Record<string, unknown>, infos: DisplayInfo[]) {
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -35,7 +38,7 @@ describe("固定の印「スクリプト」と［操作する］", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("パネル: スクリプトの面には、ラベルの先頭に印と、見出しに［操作する］が出る。題に何を書いても消えない／偽の印は増えない", () => {
-    const s = mountWith(PanePanel, { paneId: "p1", paneWidthPx: 1000, cellWidthPx: 9 }, [info("a", { title: "<b>スクリプト</b> 偽" })]);
+    const s = mountWith(PanePanel, panelProps(["a"]), [info("a", { title: "<b>スクリプト</b> 偽" })]);
     const label = s.w.find("[data-pane-panel-label]");
     expect(label.find("[data-display-script-mark]").text()).toBe("スクリプト");
     expect(label.find("[data-display-script-mark]").attributes("title")).toBe("この表示は、pane のプログラムのスクリプトを動かしています");
@@ -46,14 +49,14 @@ describe("固定の印「スクリプト」と［操作する］", () => {
 
   it("静的な形式の面には、印も［操作する］も出ない", () => {
     for (const format of ["text", "markdown", "html"]) {
-      const s = mountWith(PanePanel, { paneId: "p1", paneWidthPx: 1000, cellWidthPx: 9 }, [info("a", { format })]);
+      const s = mountWith(PanePanel, panelProps(["a"]), [info("a", { format })]);
       expect(s.w.find("[data-display-script-mark]").exists()).toBe(false);
       expect(s.w.find("[data-display-engage]").exists()).toBe(false);
     }
   });
 
   it("操作中は［操作する］が消え、操作が終われば戻る。この画面がスクリプトを出せないときは、印もボタンも出さない", async () => {
-    const s = mountWith(PanePanel, { paneId: "p1", paneWidthPx: 1000, cellWidthPx: 9 }, [info("a")]);
+    const s = mountWith(PanePanel, panelProps(["a"]), [info("a")]);
     expect(s.w.find("[data-display-engage]").exists()).toBe(true);
     s.store.setFocused("a");
     await nextTick();
@@ -69,7 +72,7 @@ describe("固定の印「スクリプト」と［操作する］", () => {
   });
 
   it("［操作する］を押すと、その面の枠へ click が渡る（枠・覆いを押しても始まらない）。強調は 1 秒", async () => {
-    const s = mountWith(PanePanel, { paneId: "p1", paneWidthPx: 1000, cellWidthPx: 9 }, [info("a")]);
+    const s = mountWith(PanePanel, panelProps(["a"]), [info("a")]);
     const engageFromButton = vi.fn();
     const handle = { focusInside: vi.fn(), engageFromButton };
     registerFrame("a", handle);

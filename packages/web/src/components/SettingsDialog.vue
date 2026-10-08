@@ -23,6 +23,7 @@ import { CSS_VAR_LABELS, isValidCssColor, type ThemeOverrideBucket } from "../th
 import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
 import { mobileViewportQuery } from "../mobile/detect.js";
 import { keepChosen, scrollTopFor, sectionAtScroll, stepSection, type SpyInput } from "../settings/sectionSpy.js";
+import ExtensionSettings from "./ExtensionSettings.vue";
 import KeySettings from "./KeySettings.vue";
 import SidebarRowsSettings from "./SidebarRowsSettings.vue";
 
@@ -360,6 +361,15 @@ function commitNewCwdPath(): void {
  * シェルの場所を追う（Windows。20260928-windows-pane-cwd の D-6）。押した時点で保存し、効くのは次に開く pane から（既に開いている pane は変えない）。
  * 読むのはサーバ（pane を開くたびに共有の設定を読む）。
  */
+/** 表示の面の初めの状態・帯の既定の場所（20261008-display-layout）。選んだ時点で反映・保存。パネルの既定の置き場所は PR-B から出す。 */
+const displayPanelInitialChoices: readonly { value: "open" | "collapsed"; label: string }[] = [
+  { value: "open", label: "開く" },
+  { value: "collapsed", label: "たたむ（帯の行のボタンから開く）" },
+];
+const displayBandEdgeChoices: readonly { value: "top" | "bottom"; label: string }[] = [
+  { value: "top", label: "上" },
+  { value: "bottom", label: "下" },
+];
 function toggleDisplayScript(): void {
   settings.setDisplayScriptEnabled(!settings.displayScriptEnabled);
 }
@@ -1222,6 +1232,33 @@ function onNativeCancel(ev: Event): void {
         />
         <p id="settings-path-note" class="settings-note">絶対パスか ~/ で始まるパス（~ だけならホーム）。使えない場所なら、代わりの場所で開いて知らせます。</p>
       </fieldset>
+      <fieldset class="settings-fieldset" data-settings-display-panel-initial>
+        <legend class="settings-legend">表示のパネルの初めの状態</legend>
+        <label v-for="c in displayPanelInitialChoices" :key="c.value" class="settings-radio">
+          <input
+            type="radio"
+            name="settings-display-panel-initial"
+            :value="c.value"
+            :checked="settings.displayPanelInitial === c.value"
+            @change="settings.setDisplayPanelInitial(c.value)"
+          />
+          <span>{{ c.label }}</span>
+        </label>
+        <p class="settings-note">利用者がまだ開閉していない表示のパネルだけに効きます（プログラムが「たたんで始める」と指定した面はたたまれます）。</p>
+      </fieldset>
+      <fieldset class="settings-fieldset" data-settings-display-band-edge>
+        <legend class="settings-legend">表示の帯の既定の場所</legend>
+        <label v-for="c in displayBandEdgeChoices" :key="c.value" class="settings-radio">
+          <input
+            type="radio"
+            name="settings-display-band-edge"
+            :value="c.value"
+            :checked="settings.displayBandEdge === c.value"
+            @change="settings.setDisplayBandEdge(c.value)"
+          />
+          <span>{{ c.label }}</span>
+        </label>
+      </fieldset>
       <ul class="settings-list">
         <li class="settings-row">
           <button
@@ -1317,6 +1354,7 @@ function onNativeCancel(ev: Event): void {
       </ul>
       <p v-if="agentIntegrationMessage" class="settings-note" role="status" aria-live="polite">{{ agentIntegrationMessage }}</p>
     </section>
+    <ExtensionSettings />
     <KeySettings v-model:capturing="keysCapturing" :kind="kind" />
     <!-- はじめの案内を開き直す（20260926-settings-onboarding の AC6）。設定画面は自分の watch で閉じる（kind が変わるので）。 -->
     <p class="settings-reopen-onboarding">

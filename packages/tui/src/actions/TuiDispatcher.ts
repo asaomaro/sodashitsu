@@ -260,6 +260,7 @@ export class TuiDispatcher {
         // 連携のグラフ画面はブラウザにだけある（20260927-agent-graph の decisions D1-8。操作表は共有のまま、端末版は知らせる）。
         this.ui.toast("グラフの画面はブラウザで開けます。");
         return;
+      case "displayMenu":
       case "focusDisplay":
         // 表示の面（パネル・帯）はブラウザにだけある（20261007-soda-extensions）。
         this.ui.toast("表示のパネル・帯はブラウザで使えます。");

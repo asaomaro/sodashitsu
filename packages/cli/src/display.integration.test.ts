@@ -312,6 +312,21 @@ describe.skipIf(process.platform === "win32")("sodactl display（実サーバ）
     await waitLine(ev.lines, (l) => l["type"] === "display.closed" && l["name"] === "sg");
   });
 
+  it("配置の指定: ログインなしの経路と /ws の経路で、--dock・--edge・--collapsed が list に出る。--features に layout", async () => {
+    const env = inPane(paneA);
+    const set = await run(["set", "lay", "--kind", "panel", "--text", "x", "--dock", "bottom", "--collapsed"], env);
+    expect(set.code).toBe(0);
+    expect(set.lines[0]).toMatchObject({ status: "ok", display: { name: "lay", dock: "bottom", collapsed: true } });
+    expect(set.lines[0]).not.toHaveProperty("ignored");
+    const viaWs = await run(["set", "lay2", "--kind", "band", "--text", "x", "--edge", "bottom", "--pane", paneA], outsideEnv(), loggedIn);
+    expect(viaWs.lines[0]).toMatchObject({ status: "ok", display: { name: "lay2", edge: "bottom" } });
+    const list = await run(["list"], env);
+    expect(list.lines[0]).toMatchObject({ displays: expect.arrayContaining([expect.objectContaining({ name: "lay", dock: "bottom", collapsed: true }), expect.objectContaining({ name: "lay2", edge: "bottom" })]) });
+    const f = await run(["--features"], env);
+    expect(f.lines[0]).toMatchObject({ sodactl: expect.arrayContaining(["layout"]), server: { features: expect.arrayContaining(["layout"]) } });
+    await run(["close", "--all"], env);
+  });
+
   it("script-html: 冷却中の set（display_busy）は理由つきで失敗し、静的な形式は出せる", async () => {
     const { paneId } = await newPane();
     const env = inPane(paneId);

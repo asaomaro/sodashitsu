@@ -760,11 +760,33 @@ describe("PaneFrame — 枠の描画モードと隙間（AC1・AC6・AC-I5）", 
   });
 });
 
-describe("PaneFrame — 表示の面（パネル・帯。20261007-soda-extensions）", () => {
-  const disp = (id: string, kind: "panel" | "band") => ({ id, paneId: "p1", name: id, kind, format: "text", title: id, size: 320, rev: 1, bytes: 1, updatedAt: "x" });
+describe("PaneFrame — 表示の面（パネル・帯。20261007-soda-extensions・20261008-display-layout）", () => {
+  const disp = (id: string, kind: "panel" | "band", over: Record<string, unknown> = {}) => ({ id, paneId: "p1", name: id, kind, format: "text", title: id, size: kind === "band" ? 32 : 320, rev: 1, bytes: 1, updatedAt: "x", ...over });
 
-  it("面が無ければ、葉は .pane-frame-main の中にあるだけで、帯もパネルも描かない。enabled でなければ何も増えない", () => {
+  /** 本体の箱の大きさを与える `ResizeObserver`（`observe` の直後に通知する。happy-dom は箱を測らない）。 */
+  const realRO = globalThis.ResizeObserver;
+  let box = { width: 1000, height: 600 };
+  beforeEach(() => {
+    box = { width: 1000, height: 600 };
+    globalThis.ResizeObserver = class {
+      constructor(private readonly cb: ResizeObserverCallback) {}
+      observe(): void {
+        void Promise.resolve().then(() => this.cb([{ contentRect: box } as ResizeObserverEntry], this as unknown as ResizeObserver));
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    } as unknown as typeof ResizeObserver;
+  });
+  afterEach(() => {
+    globalThis.ResizeObserver = realRO;
+  });
+  const settle = async (w: { vm: { $nextTick(): Promise<void> } }): Promise<void> => {
+    for (let i = 0; i < 4; i++) await w.vm.$nextTick();
+  };
+
+  it("面が無ければ、葉は .pane-frame-main の中にあるだけで、帯もパネルも描かない。enabled でなければ何も増えない", async () => {
     const { wrapper } = mountFrame();
+    await settle(wrapper);
     expect(wrapper.find(".pane-frame-main .fake-leaf").exists()).toBe(true);
     expect(wrapper.find("[data-pane-bands]").exists()).toBe(false);
     expect(wrapper.find("[data-pane-panel]").exists()).toBe(false);
@@ -773,29 +795,76 @@ describe("PaneFrame — 表示の面（パネル・帯。20261007-soda-extension
     expect(off.wrapper.find("[data-pane-bands]").exists()).toBe(false);
   });
 
-  it("面が出ても、葉（スロットの中身）は作り直されない（同じ要素のまま）", async () => {
+  it("面が出ても、葉（スロットの中身）は作り直されない（同じ要素のまま）。葉は row > center > main の中", async () => {
     const { wrapper } = mountFrame();
+    await settle(wrapper);
     const leaf = wrapper.get(".fake-leaf").element;
     const d = useDisplayStore(pinia);
     d.upsert(disp("a", "panel"));
     d.upsert(disp("b", "band"));
-    await wrapper.vm.$nextTick();
+    await settle(wrapper);
     expect(wrapper.find("[data-pane-panel]").exists()).toBe(true);
     expect(wrapper.find("[data-pane-bands]").exists()).toBe(true);
     expect(wrapper.get(".fake-leaf").element).toBe(leaf);
     expect(wrapper.get(".pane-frame-main").element.contains(leaf)).toBe(true);
+    expect(wrapper.get(".pane-frame-row > .pane-frame-center > .pane-frame-main").element.contains(leaf)).toBe(true);
     expect(wrapper.get("[data-pane-panel]").element.contains(leaf)).toBe(false);
+  });
+
+  it("本体の箱が 0×0 の間は、面の部品を 1 つも載せない（測れたら載せる）", async () => {
+    box = { width: 0, height: 0 };
+    const d = useDisplayStore(pinia);
+    d.upsert(disp("a", "panel"));
+    d.upsert(disp("b", "band"));
+    const { wrapper } = mountFrame();
+    await settle(wrapper);
+    expect(wrapper.find("[data-pane-panel]").exists()).toBe(false);
+    expect(wrapper.find("[data-pane-bands]").exists()).toBe(false);
+    expect(wrapper.find(".fake-leaf").exists()).toBe(true);
   });
 
   it("その pane のいずれかの面にフォーカスがある間、端末の側（.pane-frame-main）を薄くする", async () => {
     const { wrapper } = mountFrame();
     const d = useDisplayStore(pinia);
     d.upsert(disp("a", "panel"));
-    await wrapper.vm.$nextTick();
+    await settle(wrapper);
     expect(wrapper.get(".pane-frame-main").classes()).not.toContain("pane-frame-main-dimmed");
     d.setFocused("a");
-    await wrapper.vm.$nextTick();
+    await settle(wrapper);
     expect(wrapper.get(".pane-frame-main").classes()).toContain("pane-frame-main-dimmed");
   });
-});
 
+  it("たたむとパネルは外れてトレイのボタンになる。帯は、上と下が別の入れ物（別の PaneBands）", async () => {
+    const d = useDisplayStore(pinia);
+    d.upsert(disp("a", "panel"));
+    d.upsert(disp("t", "band"));
+    d.upsert(disp("u", "band"));
+    d.setFaceEdge(disp("u", "band") as never, "bottom");
+    const { wrapper } = mountFrame();
+    await settle(wrapper);
+    const tops = wrapper.findAll('[data-pane-bands-edge="top"]');
+    const bottoms = wrapper.findAll('[data-pane-bands-edge="bottom"]');
+    expect(tops).toHaveLength(1);
+    expect(bottoms).toHaveLength(1);
+    expect(tops[0]!.element.contains(bottoms[0]!.element)).toBe(false);
+    expect(tops[0]!.find('[data-display-name="t"]').exists()).toBe(true);
+    expect(bottoms[0]!.find('[data-display-name="u"]').exists()).toBe(true);
+    // 帯 t の行（トレイの側）にトレイが載る。パネルをたたむと、パネルが外れてボタンになる
+    d.setFaceCollapsed(disp("a", "panel") as never, true);
+    await settle(wrapper);
+    expect(wrapper.find("[data-pane-panel]").exists()).toBe(false);
+    expect(wrapper.find('[data-display-tray-button][data-display-id="a"]').exists()).toBe(true);
+    expect(wrapper.get(".pane-frame-main").element.parentElement?.className).toContain("pane-frame-center");
+  });
+
+  it("帯が無く、たたんだ面だけなら 24px のトレイの行。面が無ければ行は無い", async () => {
+    const d = useDisplayStore(pinia);
+    d.upsert(disp("a", "panel"));
+    d.setFaceCollapsed(disp("a", "panel") as never, true);
+    const { wrapper } = mountFrame();
+    await settle(wrapper);
+    const row = wrapper.find("[data-display-tray-row]");
+    expect(row.exists()).toBe(true);
+    expect((row.element as HTMLElement).style.height).toBe("24px");
+  });
+});

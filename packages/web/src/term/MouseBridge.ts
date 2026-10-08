@@ -17,6 +17,10 @@ export type MenuTarget =
   | { kind: "workspace"; workspaceId: string }
   | { kind: "group"; groupId: string }
   | { kind: "ungrouped" }
+  /** 表示の面の一覧（20261008-display-layout。選ぶと、その面のメニューが同じ位置に開く）。 */
+  | { kind: "displays"; paneId: string }
+  /** 表示の面 1 つのメニュー（開く／たたむ・帯の上下・指定に戻す・閉じる）。 */
+  | { kind: "display"; id: string }
   | { kind: "global" };
 
 export interface UiPort {
