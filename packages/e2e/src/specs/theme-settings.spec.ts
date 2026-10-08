@@ -178,7 +178,8 @@ async function expectTerminals(page: Page, name: ThemeName, count: number): Prom
 async function expectBordersReadable(page: Page, name: ThemeName): Promise<void> {
   const bg = rgbToHex(await dialogBg(page));
   expect(bg, `${name}：ダイアログの背景`).toBe(MENU_BG[name]);
-  const input = dialog(page).locator("input.settings-path");
+  // 「指定した場所のパス」の入力欄（`input.settings-path` は「区切り文字」の入力欄にも付いている）。
+  const input = dialog(page).getByRole("textbox", { name: "指定した場所のパス" });
   await expect(input).toBeEnabled();
   const border = rgbToHex(await input.evaluate((el) => getComputedStyle(el).borderTopColor));
   expect(contrastRatio(border, bg), `${name}：入力欄の枠 ${border}`).toBeGreaterThanOrEqual(3);
@@ -268,7 +269,7 @@ test("キーだけでテーマを選ぶと、画面の枠と開いている全�
   await o.context.close();
 });
 
-test("選んだテーマはこのブラウザに残り、開き直すと本体が走る前から出る。開き直した後に作る端末もそのテーマ。別のブラウザは既定のまま（AC3・AC4）", async ({
+test("選んだテーマはこのブラウザに残り、開き直すと本体が走る前から出る。開き直した後に作る端末もそのテーマ。別のブラウザにも同じテーマが届く（共有の設定。AC3・AC4）", async ({
   browser,
   appServer,
 }) => {
@@ -285,10 +286,13 @@ test("選んだテーマはこのブラウザに残り、開き直すと本体�
   await expect(o.page.locator(".xterm-scrollable-element")).toHaveCount(2);
   await expectTerminals(o.page, "catppuccin-latte", 2);
 
+  // 別のブラウザ：テーマはサーバの共有の設定（20260927-cli-mode）なので、何も設定していないブラウザにも同じテーマが届く。
+  // OS は明るい（`openBrowser` の既定）が、固定のテーマなので OS には従わない。控え（本体が走る前の最初の描画）は、そのブラウザの localStorage に
+  // 本体が起動の後に書くので、開き直した後から効く。
   const other = await openBrowser(browser, appServer);
-  expect(await sidebarBg(other.page)).toBe(hexToRgb(MENU_BG.dracula!));
+  await expect.poll(() => sidebarBg(other.page), { message: "別のブラウザにも選んだテーマが届く" }).toBe(hexToRgb(MENU_BG["catppuccin-latte"]!));
   await reloadAndWait(other);
-  expect(await firstPaint(other.page), "設定していないブラウザの控えは dracula").toEqual({ menuBg: MENU_BG.dracula, colorScheme: "dark" });
+  expect(await firstPaint(other.page), "別のブラウザの控えも、届いたテーマ").toEqual({ menuBg: MENU_BG["catppuccin-latte"], colorScheme: "light" });
   await other.context.close();
   await o.context.close();
 });
@@ -357,16 +361,19 @@ test("色の問い合わせには、その tab の大きさを決めている—
 }) => {
   test.setTimeout(90_000);
   const script = await writeAskScript();
+  // テーマはサーバの共有の設定（20260927-cli-mode）なので、2 つのブラウザに別の固定のテーマは持てない。OS の明暗に合わせる設定（共有）で、
+  // OS が明るい a と暗い b の、**ブラウザごとに違う解決後のテーマ**（`client.theme`。接続のたびに送る）で見分ける。
   // 開いた直後、設定に触れる前に問い合わせる：接続のたびにテーマをサーバへ送り直していなければ dracula で答える。
-  const a = await openBrowser(browser, appServer, { prefs: { theme: "gruvbox-light" } });
+  const a = await openBrowser(browser, appServer, { prefs: { theme: "catppuccin", themeAuto: true }, colorScheme: "light" });
   const paneId = a.shown()[0]!;
-  expect(await askBackground(a, paneId, script, "1")).toBe(xtermRgb(TERMINAL_PALETTES["gruvbox-light"].background));
+  expect(await askBackground(a, paneId, script, "1")).toBe(xtermRgb(TERMINAL_PALETTES["catppuccin-latte"].background));
 
-  // もう 1 つのブラウザ（vesper）が同じ pane を見ているだけなら、答えは操作している a のまま。
-  const b = await openBrowser(browser, appServer, { prefs: { theme: "vesper" } });
-  expect(await askBackground(a, paneId, script, "2")).toBe(xtermRgb(TERMINAL_PALETTES["gruvbox-light"].background));
+  // もう 1 つのブラウザ（OS が暗い。同じ共有の設定で mocha になる）が同じ pane を見ているだけなら、答えは操作している a のまま。
+  const b = await openBrowser(browser, appServer, { colorScheme: "dark" });
+  await expect.poll(() => dataTheme(b.page), { message: "b にも共有の設定が届き、暗い OS では mocha" }).toBe("catppuccin");
+  expect(await askBackground(a, paneId, script, "2")).toBe(xtermRgb(TERMINAL_PALETTES["catppuccin-latte"].background));
   // b が操作する（入力する）と、b の配色で答える。
-  expect(await askBackground(b, paneId, script, "3")).toBe(xtermRgb(TERMINAL_PALETTES.vesper.background));
+  expect(await askBackground(b, paneId, script, "3")).toBe(xtermRgb(TERMINAL_PALETTES.catppuccin.background));
 
   // a が操作してテーマを替えると、以後の答えも替わる。
   await openSettingsByKey(a.page);
