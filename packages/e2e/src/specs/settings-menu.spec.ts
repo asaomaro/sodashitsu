@@ -255,8 +255,8 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     await dialog(page).locator("[data-open-onboarding]").focus();
     await expect.poll(() => currentLabel(page)).toEqual(["キー"]);
     await page.keyboard.press("Alt+PageUp");
-    await expect.poll(() => currentLabel(page)).toEqual(["エージェント連携"]);
-    expect(await activeId(page)).toBe("settings-agent-integration");
+    await expect.poll(() => currentLabel(page)).toEqual(["拡張"]);
+    expect(await activeId(page)).toBe("settings-extensions");
   });
 
   test("AC4・AC-I5：<select> にフォーカスがあっても節は移り（印と見出しのフォーカスが次の節へ）、<select> の値は変わらない。端末へ漏れない", async ({ page, appServer }) => {
@@ -268,7 +268,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     // <select> の入っている節（フォーカスしたので、その節が今の節）。
     const idx = await select.evaluate((el, ids) => ids.indexOf(el.closest("section")!.getAttribute("aria-labelledby")!), HEADING_IDS);
     expect(idx, "<select> は最後の節以外にある").toBeGreaterThanOrEqual(0);
-    expect(idx).toBeLessThan(5);
+    expect(idx).toBeLessThan(6);
     await expect.poll(() => currentLabel(page)).toEqual([SECTIONS[idx]!]);
     const n = sent().length;
     // ダイアログ自身の listener（Vue の後に登録）で、既定の動作が止められているかを見る（Chromium は元から値を変えないので、値だけでは見えない）。
@@ -348,9 +348,9 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     await expect(items(page).nth(2)).toBeFocused();
     expect(await currentLabel(page), "矢印だけでは節は移らない").toEqual(["通知"]);
     await page.keyboard.press("End");
-    await expect(items(page).nth(5)).toBeFocused();
+    await expect(items(page).nth(6)).toBeFocused();
     await page.keyboard.press("ArrowDown");
-    await expect(items(page).nth(5)).toBeFocused();
+    await expect(items(page).nth(6)).toBeFocused();
     await page.keyboard.press("Home");
     await expect(items(page).nth(0)).toBeFocused();
     await page.keyboard.press("ArrowDown");
@@ -389,7 +389,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
   test("AC8：キーの取り込み待ちの間の Alt+PageUp（最後の節に居るので、取り込まれなければ前の節へ移る）は、節を移さず取り込まれる。メニューの項目を押すと取り込みは元のまま終わり、節へ移る", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
-    await items(page).nth(5).click();
+    await items(page).nth(6).click();
     await dialog(page).locator("[data-prefix-change]").click();
     const capture = dialog(page).locator(".keys-capture");
     await expect(capture).toBeVisible();
@@ -401,7 +401,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     await settle(page);
     expect(await currentLabel(page), "節は移らない（キーのまま）").toEqual(["キー"]);
     expect(await scrollTop(page)).toBe(top);
-    expect(await activeId(page), "フォーカスは見出しへ移っていない").not.toBe("settings-agent-integration");
+    expect(await activeId(page), "フォーカスは見出しへ移っていない").not.toBe("settings-extensions");
     await expect(dialog(page)).toHaveAttribute("open", "");
     // 取り込みの部品が候補として受けた（prefix に使えないキーなので、その理由の文が帯に出る）。取り込まれなければ、前の節へ移っているはず。
     await expect(dialog(page).locator('[role="status"]', { hasText: "prefix には" })).toBeVisible();
@@ -423,7 +423,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
   test("AC8：「すべて既定に戻す」の確認の表示中にメニューの項目を押すと、節へ移り、確認は今までの決まりのまま（壊れた状態で残らない）", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
-    await items(page).nth(5).click();
+    await items(page).nth(6).click();
     await dialog(page).locator("[data-reset-all]").click();
     const confirm = dialog(page).locator('[role="group"][aria-label="すべて既定に戻す確認"]');
     await expect(confirm).toBeVisible();
@@ -433,7 +433,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     expect(await prefsJson(page), "確認の表示中に移っても、設定は変わらない").toBe(before);
     await expect(dialog(page)).toHaveAttribute("open", "");
     // 確認はそのまま操作できる（［やめる］で閉じる）。
-    await items(page).nth(5).click();
+    await items(page).nth(6).click();
     await dialog(page).locator("[data-confirm-no]").click();
     await expect(confirm).toHaveCount(0);
   });
@@ -441,7 +441,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
   test("AC8：キーの節の下の帯（結果の文）は、メニューが付いても見える範囲の中に固定される", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
-    await items(page).nth(5).click();
+    await items(page).nth(6).click();
     await dialog(page).locator("[data-prefix-change]").click();
     await page.keyboard.press("Escape"); // 取り込みを取り消す → 帯に結果の文
     const band = dialog(page).locator(".keys-status-band");
