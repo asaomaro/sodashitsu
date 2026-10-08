@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { connect as netConnect } from "node:net";
@@ -468,6 +470,36 @@ setInterval(() => { const f = LOG + ".cmds"; if (!existsSync(f) || !pane) return
     // 有効 → 無効で、拡張へ display.closed（script_disabled）
     await setPrefs(false);
     await vi.waitFor(() => { if (!lines(allowed.log).some((l) => l["type"] === "display.closed" && l["reason"] === "script_disabled")) throw new Error("no script_disabled"); });
+  });
+
+  it("(AC32) 文書の見本（docs/examples/extension-hello.mjs）をそのまま起動して、pane に帯 hello が載る。無効にする（標準入力が閉じる）と、強制終了の 2 秒を待たずに 0.5 秒以内に終わる", async () => {
+    const example = join(import.meta.dirname, "..", "..", "..", "..", "docs", "examples", "extension-hello.mjs");
+    expect(existsSync(example)).toBe(true);
+    const marker = `--marker=${randomUUID()}`;
+    const s = await startServer([{ id: "hello", command: `"${process.execPath}" "${example}" ${marker}` }]);
+    await s.waitState("hello", "running");
+    const mine = (): number[] =>
+      spawnSync("pgrep", ["-f", "--", marker], { encoding: "utf8" })
+        .stdout.split("\n")
+        .filter(Boolean)
+        .map(Number)
+        .filter((p) => p !== process.pid);
+    await vi.waitFor(() => { if (mine().length === 0) throw new Error("not started"); });
+    for (const p of mine()) pids.add(p);
+    await vi.waitFor(async () => {
+      const r = await paneCall(s.sockPath, PANE_OP_DISPLAY_LIST, s.paneA, {});
+      const d = r.ok ? (r.result as { displays: DisplayInfo[] }).displays : [];
+      if (!d.some((x) => x.name === "hello" && x.kind === "band" && x.source?.id === "hello")) throw new Error("no band yet");
+    });
+    const screen = await s.open("desktop");
+    const t0 = Date.now();
+    await screen.request("extension.setEnabled", { key: "user:hello", enabled: false });
+    const elapsed = Date.now() - t0;
+    expect(elapsed).toBeLessThan(500);
+    await waitDead(...mine(), ...pids);
+    // 面も消えている
+    const after = await paneCall(s.sockPath, PANE_OP_DISPLAY_LIST, s.paneA, {});
+    expect(after.ok && (after.result as { displays: DisplayInfo[] }).displays).toEqual([]);
   });
 
   it("T10: extension.* の 5 つの方式が通る。setEnabled は external から invalid_params。pane.sock の extension.* は unknown_op。extension.changed に data の項目が無い", async () => {
