@@ -90,9 +90,9 @@ PR は 3 つに分ける（`tasks.md`）。**新** は新しいファイル。**
   - `docs/display.md` がある（「スクリプトが動く形式」140 行・「残る限界」244 行の 12 項目）。`docs/tui-parity.md` の表の末尾は W34（次は W35）。`AGENTS.md` の頭の案内は 7〜18 行で、表示の面の行がある（14 行）。
 
 - そのほか、本文が名指しで使う既存のもの（**サブエージェントの読み取りの報告で確かめた。research に行が無いものは、その旨**。実装の前に開いて確かめる）:
-  `packages/server/src/display/rateLimit.ts` の `TokenBucket` と、通らなかった要求の `refund`（報告: `DisplayService.ts:143-144`。research に行なし）／`DisplayService.features()` が `renderers` を返す（報告: 273 行。型は `20261007-soda-extensions/design.md`「定数と型」）／
+  `packages/server/src/display/rateLimit.ts` の `TokenBucket` と、通らなかった要求の `refund`（報告: `DisplayService.ts:177`・`181-182`。research に行なし）／`DisplayService.features()` が `renderers`・`scriptEnabled` を返す（報告: 323 行。型は `20261007-soda-extensions/design.md`「定数と型」）／
   `SessionService.hasPane`（報告: `SessionService.ts:907-913`。research に行なし）／受け口の `paneOps.register` と、載っていない操作の `unknown_op`（`20261007-soda-extensions/research.md` R1）／`ClientRecord.viaBridge`（E3・E4）／`machine.changed` を、同じ JSON なら配らない比べ方（E5）／
-  `AskDialog.vue` の `restoreFocus`（報告: 129 行）と `view.ts` の `modalOpen`（報告: 382 行）・`setAskOpen`（E9・X16）／表示の面の待ちの上限（pane 4・全体 32。報告: `display.ts` の `DISPLAY_WAITERS_MAX`。research に行なし）／受け口の 1 行 4 MiB（E5）／`AUTO_LABEL_TIMEOUT_MS` = 200（E3）／`issueText`・`safeKeyName`（E1）／
+  `AskDialog.vue` の `restoreFocus`（報告: 130 行）と `view.ts` の `modalOpen`（報告: 382 行）・`setAskOpen`（E9・X16）／表示の面の待ちの上限（pane 4・全体 32。報告: `display.ts` の `DISPLAY_WAITERS_MAX`。research に行なし）／受け口の 1 行 4 MiB（E5）／`AUTO_LABEL_TIMEOUT_MS` = 200（E3）／`issueText`・`safeKeyName`（E1）／
   `composeServer` の `internal.machineSpawn`（報告: `composeServer.ts:174`。research に行なし）／`machines.json` の、`stat` の署名での見張り（E2）。
 
 **未確認**（実装の最初に確かめ、結果を `decisions.md` に 1 行残す。だめなときの代えは `tasks.md`「不確かな点」）:
@@ -216,6 +216,8 @@ export function instanceKey(scope: ExtensionScope, root: string | null, id: stri
   **置き去りの鍵**（持ち主が、書いている途中で終わった）: 書く処理は、全体で 2 秒までなので、**30 秒**より古い鍵のファイルは、置き去りとみなす。消す前に、もう一度、中身（印）と更新の時刻を読み、最初に見たものと同じときだけ消す（別のサーバが、いま作り直した新しい鍵を、消さない）。この確かめと消す処理の間の、ごく短い窓は残る（2 つのサーバが、同時に、同じ置き去りの鍵を片づけるときだけ）。
   **2 秒の上限は、鍵を取る待ちを含めた、書く手順の全体**。打ち切ったら `internal` を返し、**裏に残った続きは、書かない**: 各段の前（鍵を取った後・読み直した後・`writeFileAtomic` の直前）に、「打ち切り済みでないこと」と「鍵のファイルの中身が、自分の印のままであること」を確かめ、どちらかが違えば、何も書かずにやめる（自分の印の鍵が残っていれば、消す）。
   同じ `ApprovalStore` の、前の書く手順が、まだ返っていなければ（裏に残っている）、次の書く手順は、始めずに `internal`。
+  **打ち切っても、鍵のファイルは、裏の続きが返るまで消さない**（消すと、別の session がすぐ鍵を取って書いた後に、裏の `rename` が、古い中身で上書きしうる）。裏の続きは、`writeFileAtomic` を呼ぶ直前に、もう一度「打ち切り済みでないこと・鍵が自分の印のままであること」を確かめる（`writeFileAtomic` の中で止まった場合は、確かめようが無い）。
+  残る窓（限界）: `writeFileAtomic` の中で 30 秒を越えて止まり、鍵が置き去りとして片づけられ、別の session が書いた後に、止まっていた `rename` が通る——このとき、後から書いた決定（取り消しを含む）が、古い中身で上書きされる。応答しないファイルシステムの上でだけ起きる。docs に書く。
   **読み直しが、読めなかったとき**（時間切れ・権限・`ENOENT` 以外の誤り）は、書かずに `internal`（読めないまま 1 件を書くと、ほかの (根, id) の記録を、全部消してしまう）。空から作り直すのは、ファイルが無いときと、形の検査で落ちたとき（壊れている）だけ。
   256 件（`EXTENSION_APPROVALS_MAX`）を超えたら、`at` の新しいほう（`approved.at`・`denied.at` の大きいほう）が古いものから捨てる。
 - 読むとき（`load()`。`reconcile` と `startOne` のたびに読む。メモリに長く持たない）: `O_RDONLY|O_NOFOLLOW`・開いた fd の `stat`（通常ファイル・Unix は持ち主が自分・`mode & 0o022` が 0・512 KiB）・厳しい形の検査。
@@ -273,6 +275,7 @@ export const EXTENSION_STABLE_MS = 60_000;          // これだけ動いたら�
 export const EXTENSION_LOG_LINES_MAX = 200;
 export const EXTENSION_LOG_LINE_MAX_BYTES = 4_096;
 export const EXTENSION_DISPLAYS_MAX = 16;           // 1 つの拡張が出せる面
+export const EXTENSION_DISPLAY_BYTES_MAX = 8 * 1024 * 1024; // 1 つの拡張が出せる面の、中身の合計（サーバ全体 32 MiB を、1 つの拡張が使い切らないように）
 export const EXTENSION_APPROVALS_MAX = 256;
 export const EXTENSION_REQUEST_ID_MAX = 64;         // id が文字列のときの長さ
 export const EXTENSION_METHOD_NAME_MAX = 64;
@@ -317,7 +320,6 @@ export interface ExtensionApprovalView {
 }
 export interface ExtensionFileProblem { scope: ExtensionScope | "state"; root?: string; path: string; problem: string }
 export interface ExtensionListResult { extensions: ExtensionInfo[]; problems: ExtensionFileProblem[]; userConfigPath: string;
-  scriptEnabled: boolean;                      // サーバの設定 displayScriptEnabled のいまの値（DisplayService.features().scriptEnabled === true）。画面が、allow に script-html を持つ拡張の行とダイアログに出す
   approvals?: ExtensionApprovalRecordView[] }  // PR3。承認の記録の全部（いま一覧に無い根・id のものを含む）
 export interface ExtensionApprovalRecordView { root: string; id: string; approvedAt?: string; deniedAt?: string; active: boolean } // active＝いまの一覧に、その (根, id) の拡張がある
 export interface ExtensionLogResult { lines: string[]; dropped: number } // dropped＝あふれて捨てた行数
@@ -381,7 +383,8 @@ export function extLimits(): ExtLimits;
 4. `paneId` を持つ操作は、**範囲**を確かめる（`inScope(ext, paneId)`。下）。外なら `not_found`（無い pane と同じ code・同じ文）。
 5. **許可**を確かめる（**`script-html` を拡張が出せるのは、「登録の `allow`」かつ「サーバの設定 `displayScriptEnabled`」の両方が満たされるときだけ**。`allow` はここで、設定は台帳が見る）: `allow` に `script-html` が無い拡張が、(i) `display.set` を `params.format === "script-html"`（文字列の比較）で呼んだ (ii) `display.send` を呼んだ、のどちらも、**台帳を呼ばずに**、誤りの code は `unsupported`。
    `allow` にあれば、次へ進み、台帳が、設定（無効なら `display_script_disabled`）・冷却（`display_busy`）を、pane のプログラムと同じ順で検査する（7 で、その code がそのまま返る）。**`allow` があっても、設定の検査を飛ばす道は無い**（拡張は、台帳の `set`・`send` を、ほかの呼び手と同じ入口から呼ぶ。`ExtensionHost` は、設定を読まない・変えない）。
-6. 1 つの拡張の面の数: `display.set` が新しい面を作るとき（`displays.ownerOf(paneId, name) !== tag`）、`displays.countOwned(tag) >= 16` なら `display_limit`。
+6. 1 つの拡張の面の数と量: `display.set` が新しい面を作るとき（`displays.ownerOf(paneId, name) !== tag`）、`displays.countOwned(tag) >= 16` なら `display_limit`。
+   `display.set` の後の、その拡張の中身の合計（`displays.bytesOwned(tag)` − 置き換える面のいまのバイト数 ＋ 新しい中身のバイト数）が 8 MiB（`EXTENSION_DISPLAY_BYTES_MAX`）を超えるなら `display_limit`（1 つの拡張が、サーバ全体の 64 面・32 MiB を使い切って、範囲の外の pane の `set` まで止めることが無いように。pane のプログラムは、1 pane で 12 MiB まで）。
 7. `DisplayService` を呼ぶ。`RpcError` は、その `code` と `message` を返す。ほかの例外は `internal`（文は固定。ログに、拡張の id と操作の名前）。
 8. `id` があれば `ext.result` を書く（捨てない行）。`id` が無ければ、何も書かない（誤りのときも）。
 
@@ -410,7 +413,7 @@ inScope(ext: RunningExtension, paneId: string): boolean
 ```ts
 // packages/protocol/src/display.ts（足す）
 export interface DisplaySource { type: "extension"; id: string; scope: "user" | "project" }
-export interface DisplayInfo { /* 既存 */ source?: DisplaySource } // pane のプログラムの面には無い。readDisplayInfo は、形の合う source を通す
+export interface DisplayInfo { /* 既存 */ source?: DisplaySource } // pane のプログラムの面には無い。**readDisplayInfo は、変えない**（いまのまま、同じオブジェクトを返すので、source は通る。形を確かめるのは、使う側の displayLabel）
 
 // packages/server/src/display/DisplayService.ts（足す）
 export interface DisplayOwner { tag: string; source: DisplaySource }   // tag は "ext:<key>:<runId>"（起動 1 回ごと）
@@ -421,6 +424,7 @@ list(paneId: string, opts?: { owner?: string }): { displays: DisplayInfo[]; seq:
 send(paneId: string, p: { name: string; data: unknown }, opts?: { owner?: string }): { delivered: number };
 ownerOf(paneId: string, name: string): string | undefined;             // 面が無い・持ち主が無いなら undefined
 countOwned(tag: string): number;
+bytesOwned(tag: string): number;                                      // その札の面の、中身のバイト数の合計
 ownedPanes(tag: string): string[];
 closeOwned(tag: string, sel?: { paneId?: string }): { paneId: string; name: string }[]; // 閉じた面。理由 "closed"。受け手（onOwnedEvent）へは知らせない（呼んだ側が、必要なら自分で知らせる）
 onOwnedEvent(fn: (tag: string, ev: DisplayOwnedEvent) => void): { dispose(): void };
@@ -433,7 +437,7 @@ onOwnedEvent(fn: (tag: string, ev: DisplayOwnedEvent) => void): { dispose(): voi
 | 札つきの `set`、その名前の面が無い | 作る。`Entry.owner = opts.owner`、`info.source = owner.source` |
 | 札つきの `set`、同じ札の面がある | 置き換え（今までどおり `rev + 1`） |
 | 札つきの `set`、**札の違う面・札の無い面がある** | 誤り `invalid_display`（文「その名前は、ほかのプログラムが使っています」）。面は変えない。頻度の桶は戻す（`refund`） |
-| 札なしの `set`（`/ws`・`pane.sock`）、札つきの面がある | 今までどおり置き換える。その前に、元の持ち主へ `display.closed`（理由 `closed`）を知らせ、`Entry.owner` と `info.source` を外す |
+| 札なしの `set`（`/ws`・`pane.sock`）、札つきの面がある | **「閉じて、新しい面を作る」扱い**（持ち主が替わる置き換えは、同じ面の更新にしない）。手順: いまの検査（設定・冷却・頻度・数・合計。数と合計は、置き換えとして数える）を、**全部、今までどおり通す。どれかが投げたら、何も変えない**（札・`source`・中身は残り、持ち主へは何も届かない）。全部通った確定の所（いまの `entry.info = info` に当たる所）で、古い面を `remove(古い entry, "closed")`（持ち主へ `display.closed`〔`closed`〕・bus に `display.removed`）してから、**新しい `id`・`rev: 1`・札なし・`source` なし**の面を作る（`display.updated`）。古い枠（前の `id`）から遅れて来た `action` は `display_closed` になり、拡張あての操作の値が、pane の列へ入らない |
 | 札つきの `close`・`list`（`opts.owner`） | その札の面だけが対象。ほかは、無いものとして扱う（`closed: []`・一覧に出ない） |
 | 札なしの `close`・`dismiss`・`report`・`ttl` の経過 | 今までどおり、どの面も閉じる |
 | 札なしの `list` | 今までどおり、その pane の全部の見出し（札つきの面は `source` つき）。中身は返さない（もともと返さない） |
@@ -528,6 +532,7 @@ export class ExtensionProcess {
      Windows: 2 秒待ち、**子がまだ `exit` していなければ** `runFile(taskkill の絶対パス, ["/pid", pid, "/T", "/F"])` を 1 回。子が `exit` した後は、`taskkill` を動かさない（pid は、すぐ再利用されうる。無関係の木を止めない）——親が先に終わった後に残る孫は、Windows では止められない（限界。docs に書く）。
   3. 掃き終わり、かつ子が `exit` したら返る。3 秒で、どちらかが済んでいなくても返る（ログに warn。`exited` は、後で来たら決まる）。
 - **子が、止めていないのに `exit` したとき**（自分で終わった・落ちた）: POSIX は `sweepGroup(exit から 2 秒)` を、裏で 1 回（残った孫を掃く）。Windows は、何もしない（上の限界）。
+- **子が `exit` したら（止めた・自分で終わった・落ちた、のどれでも）、サーバの側の stdio を閉じる**: `stdin.end()`（まだなら）・`stdout.destroy()`・`stderr.destroy()`。`stop` が 3 秒で打ち切ったときも、同じ（`exit` を待たずに閉じる）。自分でグループを抜けた孫がパイプを握っていても、孫の標準入力に EOF が届き（S15 の決まりが効く）、サーバに fd と受け手が残らない。
 - `readonly settled: Promise<void>`: 子が `exit` し、かつ `sweepGroup` が終わった（または、合図・`exit` から 3 秒たった）ときに決まる。`ExtensionHost` は、これが決まるまで、その起動を「片づけ中」として持つ（下）。`stop()` を、`exit` の後・掃いている途中に呼ばれたら、進行中の `sweepGroup` を待って返る。**掃き終わった後（`settled` が決まった後）に呼ばれたら、何もせずに、すぐ返る**。
   `spawn` の失敗（`pid` が無い）では、`exited` と同時に `settled`。Windows（`sweepGroup` が無い）は、子の `exit` で `settled`（`stop` の途中なら、`taskkill` を動かした後の `exit`。3 秒で打ち切り）。
 - `exited` を決める: 止めた印があれば、その理由。無ければ、`code === 0 && signal === null` なら `exited`、ほかは `crashed`。
@@ -593,7 +598,7 @@ export class ExtensionHost {
 5. いま動いているもの（`runs`）のうち、`desired` に無い・`eligible` でない・**`digest` が違う**ものを止める（並行に `stopRun(key)`。終わりを待つ）。`backoff` のタイマーも、同じ条件で外し、**その状態（`backoff`）も捨てる**。
 6. 上限（`EXTENSIONS_RUNNING_MAX` = 32）: **5 で止めなかった、動いているものは、そのまま数える**。残りの枠を、動いていない `eligible`（状態が `backoff`・`failed`・`exited` のものを除く）に、利用者（ファイルの順）→ プロジェクト（根の辞書順・ファイルの順）の順で割り当てて `startOne(key)`。入らなかった分は `over_limit`（動いているものを、順が前のものに譲らせない）。
    `digest` が変わった `failed`・`exited` は、状態を捨てて、同じ扱い。
-7. 一覧が変わっていれば、bus に `{ event: "extension.changed", data: {} }` を出す（同じ中身なら出さない。**`ExtensionListResult` の全体**〔`extensions`・`problems`・`approvals`〕の JSON を、前に出したときのものと比べる——いま一覧に無い根の記録を消したとき・別の session での承認と取り消しでも、画面が取り直す）。pane の一覧の行を、送り直す。
+7. `emitChanged()` を呼ぶ: 一覧が変わっていれば、bus に `{ event: "extension.changed", data: {} }` を出す（**この関数は 1 つ**で、`reconcile` の終わり・`startOne` の終わり〔起動した・`over_limit` になった・起動しなかった〕・`restart` の終わり・`onExit` の終わり、で呼ぶ。比べる JSON から、`ExtensionInfo.displays`〔面の数。`set` のたびに変わる〕は除く——`displays` は、一覧を取ったときの値で、変わっても知らせない。同じ中身なら出さない。**`ExtensionListResult` の全体**〔`extensions`・`problems`・`approvals`〕の JSON を、前に出したときのものと比べる——いま一覧に無い根の記録を消したとき・別の session での承認と取り消しでも、画面が取り直す）。pane の一覧の行を、送り直す。
 
 **起動**（`startOne(key)`。**拡張のコマンドを `spawn` する、ただ 1 つの道**。`chain` の中でだけ呼ぶ）:
 
@@ -606,6 +611,7 @@ export class ExtensionHost {
 6. **ここから 8 まで、`await` を挟まない**。`stopped` が真・`epoch` が 1 と違う・`runs.has(key)` が真（待っている間に、止められた・別の起動が入った）なら、起動しない。
 7. 作業ディレクトリ（プロジェクト: `root`。利用者: `entry.cwd ?? homeDir`）と環境変数（`buildExtensionEnv`）を作り、**3 で読んだ 1 件の `command`** で `ExtensionProcess` を作って `start()`。`runs.set(key, { proc, runId, tag, … })`。
 8. `ext.hello` を送り、続けて `ext.panes`（範囲の中の一覧）を送る。状態を `running` にする。`proc.exited.then((exit) => this.onExit(key, runId, exit))`。
+   `ExtensionProcess` へ渡す `onRequest` は、**`runs.get(key)?.runId === runId` のときだけ** `ExtensionApi.handle` を呼ぶ（`finishRun` の後に、遅れて処理された 1 行が、だれも消さない面を作らないように。出来事の側〔`onOwnedEvent` の受け手〕と、同じ確かめ）。
 
 **止める**（`stopRun(key)`）: `runs.get(key)` を取り、**先に** `finishRun(key, runId, "stopped")`（下）を呼んでから、`await proc.stop("stopped")`。
 
@@ -619,7 +625,7 @@ export class ExtensionHost {
   - `exited`（終了コード 0）→ 状態 `exited`。起動し直さない。
   - ほか（`crashed`・`spawn_failed`・`bad_lines`・`not_reading`）→ `uptimeMs >= 60_000` なら `failures = 1`、そうでなければ `failures += 1`。
     `failures >= 5` → `failed`。ほかは `backoff`: `min(60_000, 1_000 * 2 ** (failures - 1))` ミリ秒後に、`chain` へ `startOne(key)` を入れる（＝起動の直前に、設定と承認を確かめ直す。AC21。そのとき枠が無ければ `over_limit`）。
-- `extension.changed` を出す。
+- `emitChanged()`。
 - `bad_lines`・`not_reading` は、`ExtensionProcess` が自分で `stop(reason)` を始めた場合で、`exit` が来たときに、上の「一致する」の道を通る。
 
 
@@ -710,7 +716,7 @@ stateDiagram-v2
   `registerAllMethods` の依存に `extensions`。`internal.extensions` は、テストが `spawn` などを差し替える口（`internal.machineSpawn` と同じ流儀）。
 - `listen()`: `void machines.start()`（787 行）の隣に `void extensions.start()`（**待たない**。ロック〔633 行〕の後・復元の後。設定を読む処理が遅くても、`listen()` を止めない）。`start()` は投げない作りにする（設定の誤りは `problems`、`spawn` の失敗は状態）。
   `listen()` の最後の文なので、その後に `listen()` が失敗する道は無いが、`catch` に `await extensions.stop().catch(() => {})` を足しておく（後で、文が足されても残らないように）。
-- `close()`: `await machines.stop()`（827 行）の隣に `await extensions.stop()`。`finally` の `displays.dispose()`（861 行）の**前**に `extensions.dispose()`（面を消す処理が、捨てた台帳を触らないように）。
+- `close()`: `await machines.stop()`（827 行）の隣に `await extensions.stop()`。**`finally` にも**、`displays.dispose()`（861 行）の前に、`await extensions.stop().catch(() => undefined)` → `extensions.dispose()` を置く（`try` の途中で投げても、子を止めてから、台帳への後始末を外す。`stop()` は、何度呼んでもよい）。
 - 入れ替え: `pausePollers` の `await machines.stop()`（537 行）の隣に `await extensions.stop()`、`resumePollers` の `void machines.start()`（543 行）の隣に `void extensions.start()`（**止めていなくても呼べる**。`start()` は、動いているものを二重に起動しない）。
 - 止める処理は、並行で、合わせて 3 秒まで（S16）。
 
@@ -739,7 +745,7 @@ stateDiagram-v2
   - 頭に、説明 1 行（「サーバ全体の設定です（ブラウザごとではありません）」）・置き場所（`userConfigPath` と「リポジトリの `.soda/extensions.json`」）・［読み直す］・`docs/extensions.md` への案内。
   - `supported === false`: 「このサーバは拡張に対応していません」だけ。
   - `problems`: ファイルごとに 1 行（パスと理由。`role="alert"` にしない——開くたびに読み上げない）。
-  - 一覧（`ul.settings-list`）の 1 行: id・種類の印（「利用者」／「プロジェクト」＋根のパス）・作者の説明（文字として）・許可（`allow`。あれば。`script-html` を持つ行には、`list.scriptEnabled` が偽のとき「サーバの設定『スクリプトが動く表示』が無効なので、スクリプトの面は出ません」）・応答しないときの扱い（`block` のときだけ印）・状態の文（`disabled` は「設定で無効」か「画面で無効にした」を分ける）・入切（`role="switch"`）・［起動し直す］・［ログ］。
+  - 一覧（`ul.settings-list`）の 1 行: id・種類の印（「利用者」／「プロジェクト」＋根のパス）・作者の説明（文字として）・許可（`allow`。あれば。`script-html` を持つ行には、画面の設定のストア（`settings.displayScriptEnabled`）が偽のとき「サーバの設定『スクリプトが動く表示』が無効なので、スクリプトの面は出ません」）・応答しないときの扱い（`block` のときだけ印）・状態の文（`disabled` は「設定で無効」か「画面で無効にした」を分ける）・入切（`role="switch"`）・［起動し直す］・［ログ］。
     プロジェクトの行は、状態に応じて［確認］（`pending`・`denied`）・［承認を取り消す］（**`approval.approvedAlive` なら、どの状態の行でも**。いまの登録と鍵が違うときは「前に承認した中身の記録が残っています」と添える）。`disabled` の行にも、承認の有無（「承認済み」「未承認」「承認しない」）を出す。`approval.groupWritable` なら、注意の印。
   - 節の末尾に「承認の記録」（PR3。`list.approvals`。たたんである）: 根・id・承認した／承認しないとした時刻・「いま開いていない」の印（`active` が偽）・［記録を消す］（`extension.revoke { root, id }`）。**いま workspace が無いリポジトリの承認も、ここで消せる**。
   - ［ログ］は、行の下に `<pre>`（`textContent`。新しい 200 行・末尾が見える）を開く。開いている間は、［更新］で取り直す（流し続けない）。
@@ -761,7 +767,7 @@ stateDiagram-v2
     4. 固定の文言（枠つき）: 「このプログラムは、あなたの OS の利用者の権限で動き、隔離されません。ファイルの読み書き・通信・ほかのプログラムの起動が出来ます。」「コマンドが指すファイルの中身が後で変わっても、確認は出ません。」
     5. 「求めている許可」: `allow` が空なら「なし（文字・Markdown・スクリプトの動かない HTML の表示だけ）」。`script-html` があれば、次の固定の文:
        「スクリプトが動く表示: ブラウザの中で、この拡張のスクリプトが動きます。操作中に打ったキーは、スクリプトが読めます（残る限界は `docs/display.md`）。」
-       「サーバの設定『スクリプトが動く表示』が有効のときだけ動きます。**いまは、<有効｜無効>です。**」（`ExtensionListResult.scriptEnabled`）
+       「サーバの設定『スクリプトが動く表示』が有効のときだけ動きます。**いまは、<有効｜無効>です。**」（画面が、自分の設定のストア `settings.displayScriptEnabled` から出す。`prefs.changed` で、開いたままでも替わる。`ExtensionListResult` には載せない——`extension.changed` は、設定の変化では出ないので、古い値が残る）
        「この設定は、不注意を防ぐためのもので、拡張からの守りではありません。拡張は、あなたの権限で動くので、この設定を、自分で有効に出来ます（有効になると、すべての画面に知らせが出ます）。」
        続けて、**いつも**（初回から。鍵に入る項目は、全部見せる）: 「応答しないとき: 素通し」か「応答しないとき: 止める（この版では、まだ効きません）」（`onUnresponsive`）。`enabled` は出さない（`disabled` の拡張には、ダイアログを開けない。`approve` は `pending`・`denied` だけを受けるので、ダイアログが出る登録の `enabled` は、いつも `true`）。
        `groupWritable` なら「この設定ファイル（か、その場所）は、同じグループのほかの利用者が書き換えられます」。
@@ -779,7 +785,7 @@ stateDiagram-v2
   - 閉じたら、フォーカスを戻す（ほかのモーダルがあれば、開く前の要素。無ければ、フォーカスのあった pane の端末。`AskDialog.vue` の `restoreFocus` と同じ）。
 - `extensions/approvalView.ts`（純粋。PR3）: `diffEntry(previous, current): { field: string; before: string; after: string }[]`、`hasNonAscii(s)`、`showPath(s)`（`hasForbiddenChars` に当たる文字を `\u{…}` に替える。サーバが既に断っているが、画面でも二重に）。
 - **出どころの表示**（PR1 の T27。`packages/web/src/display/displayLabel.ts`）: `displayLabel(info)` を `Pick<DisplayInfo, "name"> & { source?: unknown }` に広げ、`source` が **`{ type: "extension", id: <EXTENSION_ID_RE に合う文字列>, scope: "user" | "project" }` の形のときだけ**、接頭の文を「拡張『<id>』の表示（利用者｜プロジェクト・隔離）」に替える（ほかの形・文字列・無いときは、今までの「pane のプログラムの表示（隔離）」。`displayLabel.test.ts:7` の `source: "ext-a"` は、今までどおり）。
-  `displayBandLabel` は `displayLabel` を呼んでいるので、帯も替わる。`PanePanel.vue`（125・162 行）・`PaneBands.vue` は、変えない。`source` は、サーバが付ける（面の中身・題からは変えられない。`checkDisplaySet` は、知らない項目を落とすので、`set` の引数に `source` を書いても、載らない）。
+  `displayBandLabel` は `displayLabel` を呼んでいるので、帯も替わる。`PanePanel.vue`（125・162 行）・`PaneBands.vue` は、変えない。**モバイルの `packages/web/src/mobile/MobileDisplaySheet.vue`** は、56 行が `displayLabel(active)`（替わる）だが、53 行の `<dialog>` の `aria-label` が `DISPLAY_LABEL_PREFIX` を直に使っている——接頭の文を返す関数 `displayLabelPrefix(info)` を `displayLabel.ts` に切り出し、53 行は、それを使う（拡張の面が、「pane のプログラムの表示」と読み上げられないように）。`source` は、サーバが付ける（面の中身・題からは変えられない。`checkDisplaySet` は、知らない項目を落とすので、`set` の引数に `source` を書いても、載らない）。
 
 ### 文書と見本
 
