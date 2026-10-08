@@ -345,7 +345,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/cli/src/cliArgs.ts`、`packages/cli/src/main.ts`、`packages/cli/src/commands/display.ts`・`display.test.ts`、`packages/cli/src/display.integration.test.ts`、`packages/cli/src/cliArgs.test.ts`、`packages/cli/skills/sodactl/SKILL.md`
       依存: T6, T24
       AC: AC29, AC36
-- [ ] T26: 土台のページと配信: `script.html`（`<meta charset>` と、**頁の中に直に書いた土台のスクリプト 1 つ**。別の `.js` にしない＝CSP の `script-src` に `'self'` を付けないため）。土台は、design「スクリプトが動く形式」の「枠と静的ページ」1〜6 と `window.soda`:
+- [x] T26: 土台のページと配信: `script.html`（`<meta charset>` と、**頁の中に直に書いた土台のスクリプト 1 つ**。別の `.js` にしない＝CSP の `script-src` に `'self'` を付けないため）。土台は、design「スクリプトが動く形式」の「枠と静的ページ」1〜6 と `window.soda`:
       読み込みの最後に、自分の URL の合い札 `t` を添えて `display-ready`・`display-init` は親から 1 回だけ・`ping` に `pong`・最初の `render` で、**`format` が `script-html` でなければ描かずに `rejected`**・`script-html` なら、`soda` を置き、`keydown` の取り次ぎ〔`Escape` だけ〕を**先に**付けてから、**中身を DOM に差し込む**（`document.open()`/`document.write()` は使わない。`DOMParser` で解釈して `head`・`body` の子を順に移し、`<script>` は同じ属性と中身で作り直して、文書の順に入れる）・
       差し込み終えたら `DOMContentLoaded` と `load` を 1 回ずつ起こす・`rendered`・2 回目以降の `render` は無視・`message`・`scroll`・`focus`。単体テストに、差し込みの順（インラインのスクリプトが文書の順に動く・`head` の `<style>` が効く・`DOMContentLoaded`/`load` の受け手が呼ばれる）を足す。
       `HttpServer` の許可リストに `script.html`（`DISPLAY_SCRIPT_VIEW_CSP`〔`script-src 'unsafe-inline' 'unsafe-eval'`。`'self'` なし。`webrtc 'block'`〕・`DISPLAY_SCRIPT_VIEW_PERMISSIONS`〔`picture-in-picture=()`・`focus-without-user-activation=()` を含む〕・`X-Frame-Options: SAMEORIGIN`）。定数を export。
