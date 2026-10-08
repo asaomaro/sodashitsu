@@ -194,6 +194,43 @@ test("(5) --collapsed・--edge は記憶の無い面に効く。--dock bottom �
   await expect(trayButton(page, "bb")).toBeVisible();
 });
 
+/**
+ * 枠（iframe）の出入りを記録する。Chromium は、iframe を DOM の中で動かすと（同じ要素のまま）`load` が 1 増える（`isConnected` は常に真）ので、
+ * 動かしたことは `data-display-loads` の比較と、この記録（`removedNodes`・`addedNodes`）でしか見つからない。記録の `id` は面の id。
+ */
+const watchFrames = (page: Page): Promise<void> =>
+  page.evaluate(() => {
+    const w = window as unknown as { __frameLog: { kind: string; id: string }[] };
+    w.__frameLog = [];
+    const ids = new WeakMap<Element, string>();
+    const idOf = (f: Element): string => {
+      let v = ids.get(f);
+      if (!v) {
+        v = f.closest("[data-display-root]")?.getAttribute("data-display-root") ?? "?";
+        ids.set(f, v);
+      }
+      return v;
+    };
+    const frames = (n: Node): Element[] => (n instanceof Element ? (n.matches("iframe[data-display-frame]") ? [n] : Array.from(n.querySelectorAll("iframe[data-display-frame]"))) : []);
+    document.querySelectorAll("iframe[data-display-frame]").forEach(idOf);
+    new MutationObserver((ms) => {
+      for (const m of ms) {
+        for (const n of Array.from(m.removedNodes)) for (const f of frames(n)) w.__frameLog.push({ kind: "removed", id: idOf(f) });
+        for (const n of Array.from(m.addedNodes)) for (const f of frames(n)) w.__frameLog.push({ kind: "added", id: idOf(f) });
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+/** 記録を取り出して空にする（面の id の重複を除く）。 */
+const takeFrameLog = async (page: Page): Promise<string[]> => {
+  await page.waitForTimeout(150);
+  const log = await page.evaluate(() => {
+    const w = window as unknown as { __frameLog: { kind: string; id: string }[] };
+    return w.__frameLog.splice(0);
+  });
+  return [...new Set(log.map((l) => l.id))];
+};
+const frameLoads = (page: Page): Promise<string[]> => page.locator("iframe[data-display-frame]").evaluateAll((els) => els.map((e) => e.getAttribute("data-display-loads") ?? ""));
+
 test("(6) load と枠の要素: 変えた面の枠は別の要素・変えていない面の枠は同じ要素のまま。どの後も data-display-loads が 1 で、面が残り、navigated を送らない。script-html でも同じ", async ({ page, appServer }) => {
   await enableScript(appServer);
   const { paneId, sent } = await openDisplayBrowser(page, appServer);
@@ -210,9 +247,11 @@ test("(6) load と枠の要素: 変えた面の枠は別の要素・変えてい
   const t1 = await frameHandle(page, ids["t1"]!);
   const t2 = await frameHandle(page, ids["t2"]!);
   const pa = await frameHandle(page, ids["pa"]!);
+  await watchFrames(page);
   await openFaceMenu(page, appServer, paneId, "t1");
   await menuItem(page, "下に置く").click();
   await expect(page.locator('[data-pane-bands-edge="bottom"] [data-pane-band]')).toHaveCount(1);
+  expect(await takeFrameLog(page)).toEqual([ids["t1"]!]); // 動かした帯の枠だけが出入りする（変えていない面の枠は現れない）
   expect(await t1.evaluate((e) => e.isConnected)).toBe(false); // 移した帯の枠は別の要素
   expect(await t2.evaluate((e) => e.isConnected)).toBe(true); // もう 1 本の帯の枠は同じ要素
   expect(await pa.evaluate((e) => e.isConnected)).toBe(true); // パネルの枠も同じ要素
@@ -223,14 +262,17 @@ test("(6) load と枠の要素: 変えた面の枠は別の要素・変えてい
   await page.locator("[data-pane-panel-tab]", { hasText: "pb" }).click();
   expect(await t1b.evaluate((e) => e.isConnected)).toBe(true);
   expect(await t2b.evaluate((e) => e.isConnected)).toBe(true);
+  expect(await takeFrameLog(page)).toEqual(expect.not.arrayContaining([ids["t1"]!, ids["t2"]!])); // パネルの切り替えで、帯の枠は動かない
   await page.locator("[data-pane-panel-fold]").click(); // pb をたたむ
   await trayButton(page, "pb").click();
   expect(await t1b.evaluate((e) => e.isConnected)).toBe(true);
   expect(await t2b.evaluate((e) => e.isConnected)).toBe(true);
+  expect(await takeFrameLog(page)).toEqual(expect.not.arrayContaining([ids["t1"]!, ids["t2"]!]));
   await openFaceMenu(page, appServer, paneId, "t2");
   await menuItem(page, "たたむ").click();
   await trayButton(page, "t2").click();
   expect(await t1b.evaluate((e) => e.isConnected)).toBe(true);
+  expect(await takeFrameLog(page)).toEqual([ids["t2"]!]); // たたんで開いた帯の枠だけが出入りする
   await expect.poll(async () => (await loads()).every((x) => x === "1")).toBe(true);
   const list = await ok(await runDisplay(appServer, paneId, ["list"]));
   expect((list.json as { displays: unknown[] }).displays).toHaveLength(4);
@@ -241,11 +283,75 @@ test("(6) load と枠の要素: 変えた面の枠は別の要素・変えてい
   await setScriptOk(appServer, paneId, "pa", script("pa2"));
 });
 
+for (const kind of ["script-html", "html"] as const) {
+test(`(6b-${kind}) 帯 2 本（上限）とパネル 1 枚で、上下の移動・たたむ・開く → 動かした面の枠だけが出入りし、生き残る面の枠は DOM の中でも動かない（記録に現れない）。どの後も data-display-loads は 1`, async ({ page, appServer }) => {
+  await enableScript(appServer);
+  const { paneId } = await openDisplayBrowser(page, appServer);
+  const script = (n: string) => `<!doctype html><body><p>${n}</p><script>document.title='${n}'</script></body>`;
+  const put = async (name: string, k: "band" | "panel", extra: string[] = []): Promise<void> => {
+    if (kind === "script-html") await setScriptOk(appServer, paneId, name, script(name), { kind: k, extra });
+    else await runDisplay(appServer, paneId, ["set", name, "--kind", k, "--html-file", await writeTmp(`<!doctype html><body><p>${name}</p></body>`, `${name}.html`), ...extra]).then(ok);
+  };
+  await put("t1", "band", ["--edge", "top"]);
+  await put("t2", "band", ["--edge", "top"]);
+  await put("pa", "panel");
+  await expect(page.locator("iframe[data-display-frame]")).toHaveCount(3);
+  const ids = await idsOf(appServer, paneId);
+  expect(await frameLoads(page)).toEqual(["1", "1", "1"]);
+  await watchFrames(page);
+  const only = async (name: string, label: string): Promise<void> => {
+    await page.waitForTimeout(300); // 動かされた枠の load は、少し遅れて数が増える
+    expect(await frameLoads(page), `${label}: data-display-loads`).toEqual(["1", "1", "1"]);
+    expect(await takeFrameLog(page), `${label}: 出入りした枠`).toEqual([ids[name]!]);
+  };
+  const edge = (name: string, where: "上に置く" | "下に置く") => async (): Promise<void> => {
+    await openFaceMenu(page, appServer, paneId, name);
+    await menuItem(page, where).click();
+  };
+  // 上の 1 本目を下へ（上は t2 だけ・下は t1。1 本の並びなら、生き残る t2 の相対の順が変わる）
+  await edge("t1", "下に置く")();
+  await expect(page.locator('[data-pane-bands-edge="bottom"] [data-pane-band]')).toHaveCount(1);
+  await only("t1", "t1 を下へ");
+  // 上の残りも下へ（下は t1,t2 の順。生き残る t1 の相対の順が変わる）
+  await edge("t2", "下に置く")();
+  await expect(page.locator('[data-pane-bands-edge="bottom"] [data-pane-band]')).toHaveCount(2);
+  await only("t2", "t2 を下へ");
+  // 下の 1 本目を上へ
+  await edge("t1", "上に置く")();
+  await expect(page.locator('[data-pane-bands-edge="top"] [data-pane-band]')).toHaveCount(1);
+  await only("t1", "t1 を上へ");
+  // 下の残りを上へ（上は t1,t2）
+  await edge("t2", "上に置く")();
+  await expect(page.locator('[data-pane-bands-edge="top"] [data-pane-band]')).toHaveCount(2);
+  await only("t2", "t2 を上へ");
+  // 上の 1 本目をたたむ・開く（残りの帯とパネルの枠は動かない）
+  await openFaceMenu(page, appServer, paneId, "t1");
+  await menuItem(page, "たたむ").click();
+  await expect(page.locator("iframe[data-display-frame]")).toHaveCount(2);
+  expect(await takeFrameLog(page)).toEqual([ids["t1"]!]);
+  await trayButton(page, "t1").click();
+  await expect(page.locator("iframe[data-display-frame]")).toHaveCount(3);
+  await only("t1", "t1 を開く");
+});
+}
+
 // --- (7) フォーカス --------------------------------------------------------------------------------------------------------
 
 const BENIGN = `<!doctype html><body><p>benign</p><script>setInterval(function(){}, 1000);</script></body>`;
 const stealReports = (sent: { reports(): { problem: string }[] }): number => sent.reports().filter((r) => r.problem === "focus_steal").length;
 const termFocused = (page: Page): Promise<boolean> => page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea") === true);
+/**
+ * `activeElement` が `body` になった回数を数え始める（25ms ごとの標本。`focusout` の瞬間も数えるのは `transient` が真のとき）。
+ * フォーカスのある要素が DOM から消える瞬間は、ブラウザが一瞬 `body` にする（描き直しの後の備えが同じ周期のうちに端末へ移すので、利用者には見えない）ので、消える操作では標本だけで数える。
+ */
+const trackBodyHits = (page: Page, transient = true): Promise<void> =>
+  page.evaluate((withFocusout) => {
+    const w = window as unknown as { __bodyHits: number };
+    w.__bodyHits = 0;
+    if (withFocusout) document.addEventListener("focusout", (e) => { if ((e as FocusEvent).relatedTarget === null && document.activeElement === document.body) w.__bodyHits++; }, true);
+    setInterval(() => { if (document.activeElement === document.body) w.__bodyHits++; }, 25);
+  }, transient);
+const bodyHits = (page: Page): Promise<number> => page.evaluate(() => (window as unknown as { __bodyHits: number }).__bodyHits);
 
 test("(7)(a)(b)(d) マウスで押しても activeElement は端末のまま（body にならない）。メニューを開いたまま見出しのつかむ場所を押すと端末。キーだけでたためる。静的な枠の中をクリックしてからメニューでたたむと端末", async ({ page, appServer }) => {
   const { paneId, sent } = await openDisplayBrowser(page, appServer);
@@ -365,6 +471,85 @@ test("(7)(c') Tab で届いた［×］を Enter で閉じる → 面が消え、
   await expect.poll(() => termFocused(page)).toBe(true);
   expect(stealReports(sent)).toBe(0);
 });
+
+test("(7)(c2) 本物の押しっぱなし（keyboard.down を続ける）: トレイのボタン・見出しの［たたむ］・帯の行のボタンで、たたむ・開くが往復せず、activeElement が body にならず、スクリプトの枠が止まらず、知らせも出ない", async ({ page, appServer }) => {
+  await enableScript(appServer);
+  const { paneId, sent } = await openDisplayBrowser(page, appServer);
+  await setScriptOk(appServer, paneId, "g", BENIGN, { kind: "panel" });
+  await setScriptOk(appServer, paneId, "sb", BENIGN, { kind: "band" });
+  await expect(page.locator("iframe[data-display-script]")).toHaveCount(2);
+  await trackBodyHits(page);
+  // パネルの出入りを数える（押しっぱなしで往復すると、パネルが何度も出入りする）
+  await page.evaluate(() => {
+    const w = window as unknown as { __panelFlips: number };
+    w.__panelFlips = 0;
+    new MutationObserver((ms) => {
+      for (const m of ms) for (const n of [...Array.from(m.addedNodes), ...Array.from(m.removedNodes)]) if (n instanceof Element && (n.matches("[data-pane-panel]") || n.querySelector("[data-pane-panel]"))) w.__panelFlips++;
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  const flips = (): Promise<number> => page.evaluate(() => (window as unknown as { __panelFlips: number }).__panelFlips);
+  const hold = async (key: string, n = 40): Promise<void> => {
+    for (let i = 0; i < n; i++) {
+      await page.keyboard.down(key); // 2 回目からは repeat が真
+      await page.waitForTimeout(30);
+    }
+    await page.keyboard.up(key);
+  };
+  // 見出しの［たたむ］で Enter を押しっぱなし → たたんだ後、フォーカスは移った先（トレイのボタン）にあり、そこでも押しっぱなしが続くが、開き直しはしない
+  await page.locator("[data-pane-panel-fold]").focus();
+  await hold("Enter");
+  expect(await flips(), "Enter の押しっぱなしでパネルが出入りした回数（1 回たたんだ分だけ）").toBeLessThanOrEqual(1);
+  expect(await bodyHits(page)).toBe(0);
+  // Space も同じ
+  if ((await panelCount(page).count()) === 0) await trayButton(page, "g").click();
+  await expect(panelCount(page)).toHaveCount(1);
+  const before = await flips();
+  await page.locator("[data-pane-panel-fold]").focus();
+  await hold(" ");
+  expect((await flips()) - before, "Space の押しっぱなしでパネルが出入りした回数").toBeLessThanOrEqual(1);
+  expect(await bodyHits(page)).toBe(0);
+  // 帯の行の［×］で Enter を押しっぱなし → 1 回だけ閉じる（連続で押したことにならず、残りの面が止まらない）
+  await page.locator("[data-pane-band] [data-pane-band-close]").focus();
+  await hold("Enter", 20);
+  await expect(page.locator("[data-pane-band]")).toHaveCount(0);
+  expect(await bodyHits(page)).toBe(0);
+  await expect(page.locator("[data-display-note]")).toHaveCount(0);
+  await expect(page.locator(".toast", { hasText: "繰り返し外しています" })).toHaveCount(0);
+  expect(stealReports(sent)).toBe(0);
+});
+
+for (const withScript of [true, false]) {
+test(`(14${withScript ? "a" : "b"}) 割り付けの変化でフォーカスのあった部品が消える（プログラムの close・pane が狭くなって自動でたたまれる）→ activeElement は body を通らず、端末に移る。${withScript ? "script-html の帯が載っている" : "枠が静的な面だけ（備えだけが頼り）"}`, async ({ page, appServer }) => {
+  await enableScript(appServer);
+  await page.setViewportSize({ width: 1800, height: 800 });
+  const { paneId } = await openDisplayBrowser(page, appServer);
+  if (withScript) await setScriptOk(appServer, paneId, "sb", BENIGN, { kind: "band" });
+  await set(appServer, paneId, "pn", "panel");
+  await expect(panelCount(page)).toHaveCount(1);
+  await trackBodyHits(page, false);
+  // (a) 見出しの［たたむ］にフォーカスがあるまま、プログラムが閉じる
+  await page.locator("[data-pane-panel-fold]").focus();
+  expect(await page.evaluate(() => document.activeElement?.hasAttribute("data-pane-panel-fold"))).toBe(true);
+  await ok(await runDisplay(appServer, paneId, ["close", "pn"]));
+  await expect(panelCount(page)).toHaveCount(0);
+  await expect.poll(() => termFocused(page)).toBe(true);
+  expect(await bodyHits(page)).toBe(0);
+  await expect(page.locator("iframe[data-display-script]")).toHaveCount(withScript ? 1 : 0);
+  // (b) pane を 2 つに分け、見出しの［たたむ］にフォーカスがあるまま、ウィンドウを狭めて自動でたたませる
+  const c = await appServer.openClient();
+  await c.request("pane.split", { paneId, direction: "right" });
+  c.close();
+  await set(appServer, paneId, "pn2", "panel");
+  const first = page.locator(`[data-pane-id="${paneId}"]`);
+  await expect(first.locator("[data-pane-panel]")).toHaveCount(1);
+  await first.locator("[data-pane-panel-fold]").focus();
+  expect(await page.evaluate(() => document.activeElement?.hasAttribute("data-pane-panel-fold"))).toBe(true);
+  await page.setViewportSize({ width: 900, height: 800 });
+  await expect(first.locator("[data-pane-panel]")).toHaveCount(0);
+  await expect.poll(() => termFocused(page)).toBe(true);
+  expect(await bodyHits(page)).toBe(0);
+});
+}
 
 test("(7)(e) 操作中の script-html のパネルで、フォーカスを取らない部品（［⋮］・つかむ場所・別の面のトレイのボタン・幅のつまみ・帯の行の［⋮］・別の script-html の帯の覆い）を本物の押下で押しても、focus_steal を 1 回も送らない", async ({ page, appServer }) => {
   await enableScript(appServer);
@@ -532,7 +717,17 @@ test("(12) 固定の文言: 設定で無効のとき各面の枠の箱の中に�
         const wb = await boxOf(wraps.nth(i));
         expect(nb.x).toBeGreaterThanOrEqual(wb.x - 1);
         expect(nb.y).toBeGreaterThanOrEqual(wb.y - 1);
-        expect(nb.x).toBeLessThanOrEqual(wb.x + wb.width);
+        // 文言の箱の下端と右端。箱の内側の余白（padding）は、帯の最小の高さでは枠の入れ物からはみ出しうる（入れ物は `overflow: auto`）ので、文字そのものの箱で見る
+        const tb = await note.evaluate((el) => {
+          const r = document.createRange();
+          r.selectNodeContents(el);
+          const b = r.getBoundingClientRect();
+          return { x: b.left, y: b.top, right: b.right, bottom: b.bottom };
+        });
+        expect(tb.x, `${root} #${i}: 文字の左`).toBeGreaterThanOrEqual(wb.x - 1);
+        expect(tb.y, `${root} #${i}: 文字の上`).toBeGreaterThanOrEqual(wb.y - 1);
+        expect(tb.right, `${root} #${i}: 文字の右`).toBeLessThanOrEqual(wb.x + wb.width + 1);
+        expect(tb.bottom, `${root} #${i}: 文字の下`).toBeLessThanOrEqual(wb.y + wb.height + 1);
       }
     }
   };
