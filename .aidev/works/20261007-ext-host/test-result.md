@@ -129,3 +129,46 @@ $ sodactl ext restart nope → {"error":{"code":"not_found","message":"extension
 
 ## 残った点
 - 深い入れ子の JSON（約 3.8 MiB・190 万段）は、`JSON.parse` に 284 ms かかり、RSS が約 140 MiB 増える（レビューの実測）。1 行 4 MiB の上限と量の桶で守られるので、直していない。
+
+## PR2: 設定の画面の節「拡張」（T15〜T19）の結果（2026-10-08）
+
+### 実施
+- 未コミットだった `settings.spec.ts`・`settings-menu.spec.ts` の直し（節が 6 → 7）は内容が正しく、既存の検査は弱めずに件数と順を直しているだけだったので、そのままコミット（`2089fab`）。
+- 続けて、`settings-menu.spec.ts` の直し残しを足した（`c029403`）: メニュー末尾の項目が `nth(5)`（キー）→ `nth(6)`、`End`/`ArrowDown` の行き先、`Alt+PageUp` で「キー」から戻る先が「拡張」（`settings-extensions`）、`<select>` を持つ節の添字の上限。
+- `pnpm build`・`pnpm typecheck`: 通った。
+
+### `pnpm test`（全体）
+- 459 ファイル中 1 ファイルが失敗、9019 件中 3 件が失敗（9016 件通過）。失敗は `packages/server/src/tui.integration.test.ts` の 3 件（実サーバ・偽の外側の端末）だけ。
+- 失敗の出力: `expected ' ▾ Spaces …' to contain 'agent-a2d108671c3567190'`。サイドバー（幅 26）が workspace 名（作業フォルダ名）を `agent-a2d108671c35…` と切るので、テストが探す全文が画面に無い。
+- 切り分け: このブランチは `packages/tui`・この試験を触っていない。main（長い名前の別の worktree）でも同じ試験が同じ形で落ちた（5 件中 1 件。どれが落ちるかは打鍵の時機で揺れる）。**作業フォルダ名の長さに依存する試験の前提の問題で、このブランチの退行ではない**。短い名前の場所なら通ると見られるが、短い場所での確認はしていない。
+
+### E2E（`--workers=1`）
+対象: `extensions-settings`・`settings-menu`・`settings.spec`・`theme-settings`・`appearance-settings`・`display.spec`・`display-flows`・`display-mobile`。
+
+1 回目: 77 件中 67 件通過・10 件失敗。`settings-menu` の 2 件（上の直し残し）を直して、`settings-menu` は 23 件すべて通過（`c029403` の後）。
+
+残る失敗（このブランチ。`settings-menu` 以外）と main（`origin/main` の別の一時 worktree。`settings.spec`・`theme-settings`・`appearance-settings` の 3 ファイルを 1 回）:
+
+| 試験 | このブランチ | main |
+|---|---|---|
+| appearance-settings:113 tab バーの現在時刻 | 失敗 | 失敗 |
+| appearance-settings:130 pane の枠の太さ | 失敗 | 失敗 |
+| settings:167 保存された値が壊れていても既定 | 失敗 | 失敗 |
+| settings:187 別のブラウザでは既定のまま | 失敗 | 失敗 |
+| theme-settings:193 | 失敗 | 失敗 |
+| theme-settings:271 | 失敗 | 失敗 |
+| theme-settings:354 | 失敗 | 失敗 |
+| theme-settings:528 すべての上書きを既定に戻す | 失敗 | 失敗 |
+| theme-settings:385 | 通過 | 失敗 |
+
+main の失敗は 9 件（上の 9 行）で、このブランチの 8 件はすべて main でも落ちる。**このブランチで増えた失敗は無い。** `extensions-settings`・`display*` は、失敗なし。
+
+失敗の出力と、わかった範囲の原因（いつから・なぜは**確定していない**）:
+- appearance:113: `.tab-bar-clock` が見つからない（`expect(clock).toBeVisible()` ）。現在の `packages/web/src` に `tab-bar-clock` が無い → 試験が古い（時計の部品が無くなったか名前が変わった）。
+- appearance:130: ページのエラー `CompileError: WebAssembly.instantiate(): … violates … Content Security policy … 'unsafe-eval' … "default-src 'self'"`。配信の CSP（`HttpServer.ts:30`）が WebAssembly の組み立てを許さない。製品側の設定か、使っている Chromium の挙動の変化かは未確認。
+- settings:167・187: 仕込んだ `soda.prefs.v1`（壊れた JSON）が、ページの読み込み後に `{"statusSymbols":false}` になっている。別のブラウザでも `data-symbols="off"`（期待は `on`）。新しいプロファイルで `statusSymbols` が `false` になる経路がある（誰が書くかは未特定。サーバの `prefs.json` は試験ごとの一時の場所で、利用者の状態ではない）。
+- theme-settings:193: `locator('input.settings-path')` が 2 つに当たる（`aria-label="区切り文字"` と `"指定した場所のパス"`）。設定の画面に `settings-path` の入力が増えたのに、試験の探し方が 1 つ前提のまま → **試験の前提が崩れている**。
+- theme-settings:271・354・528: 色・上書きの値の比較の失敗（528 は `--soda-accent` の暗い色の入力が `""` のはずが `"#222222"`）。193 と同じく、設定の画面の変更に対する前提のずれと見られるが、個別の確認はしていない。
+
+### スクリーンショット
+`/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/ext-host-ui/` に、明るい・暗いの両方（`*-light.png`・`*-dark.png`）: `mixed`（動作中・無効・続けて落ちて止まった・設定で無効・script-html の注意）・`waiting`・`problems`（設定の問題）・`empty`（拡張なし）・`panel-label`（パネルの見出しの出どころ）。前の実装のものが揃っていたので、撮り直していない。
