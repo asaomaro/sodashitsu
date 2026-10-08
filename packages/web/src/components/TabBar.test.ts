@@ -762,3 +762,101 @@ describe("TabBar — tab のドラッグでの並べ替え", () => {
     ]);
   });
 });
+
+describe("TabBar — ドラッグ中の端での自動スクロール（20261008-web-tab-dnd T3）", () => {
+  let frames: FrameRequestCallback[] = [];
+  let cancelled = 0;
+  beforeEach(() => {
+    frames = [];
+    cancelled = 0;
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
+    vi.stubGlobal("cancelAnimationFrame", () => {
+      cancelled++;
+      frames = [];
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+  const step = () => {
+    const f = frames;
+    frames = [];
+    f.forEach((cb) => cb(0));
+  };
+
+  function setup(overflow: boolean) {
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", ["t1", "t2", "t3"]));
+    ["t1", "t2", "t3"].forEach((id) => session.tabUpserted(makeTab(id, "w1")));
+    view.setView("w1", "t1");
+    const wrapper = mountTabBar(makeConnection());
+    const rootEl = wrapper.get(".tab-bar").element as HTMLElement;
+    const rowEl = wrapper.get(".tab-bar-tabs").element as HTMLElement;
+    const rect = (l: number, r: number): DOMRect => ({ left: l, right: r, top: 0, bottom: 30, width: r - l, height: 30, x: l, y: 0, toJSON: () => ({}) });
+    vi.spyOn(rootEl, "getBoundingClientRect").mockReturnValue(rect(0, 600));
+    vi.spyOn(rowEl, "getBoundingClientRect").mockReturnValue(rect(0, 500));
+    Object.defineProperty(rowEl, "scrollWidth", { configurable: true, value: overflow ? 900 : 500 });
+    Object.defineProperty(rowEl, "clientWidth", { configurable: true, value: 500 });
+    let left = 0;
+    Object.defineProperty(rowEl, "scrollLeft", { configurable: true, get: () => left, set: (v: number) => (left = v) });
+    const btn = wrapper.findAll(".tab-bar-item")[0]!.element as HTMLElement;
+    btn.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1, clientX: 50, clientY: 15, button: 0 }));
+    const moveTo = (x: number) => btn.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: x, clientY: 15 }));
+    return { btn, moveTo, rowEl, wrapper };
+  }
+
+  it("右端から 24px 未満にいると、フレームごとに scrollLeft が増える", () => {
+    const { moveTo, rowEl } = setup(true);
+    moveTo(490);
+    step();
+    expect(rowEl.scrollLeft).toBe(8);
+    step();
+    expect(rowEl.scrollLeft).toBe(16);
+  });
+  it("左端でも同様に減る（0 を下回らない扱いはブラウザ任せ）", () => {
+    const { moveTo, rowEl } = setup(true);
+    moveTo(300);
+    rowEl.scrollLeft = 40;
+    moveTo(5);
+    step();
+    expect(rowEl.scrollLeft).toBe(32);
+  });
+  it("中ほどでは変わらない", () => {
+    const { moveTo, rowEl } = setup(true);
+    moveTo(250);
+    step();
+    step();
+    expect(rowEl.scrollLeft).toBe(0);
+  });
+  it("あふれていないときは変わらない", () => {
+    const { moveTo, rowEl } = setup(false);
+    moveTo(490);
+    step();
+    expect(rowEl.scrollLeft).toBe(0);
+  });
+  it("離した後・Escape の後は、フレームを進めても変わらない（rAF が止まる）", () => {
+    for (const how of ["up", "esc"] as const) {
+      const { btn, moveTo, rowEl, wrapper } = setup(true);
+      moveTo(490);
+      step();
+      expect(rowEl.scrollLeft).toBe(8);
+      const before = cancelled;
+      if (how === "up") btn.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: 490, clientY: 15 }));
+      else document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      expect(cancelled).toBeGreaterThan(before);
+      step();
+      step();
+      expect(rowEl.scrollLeft).toBe(8);
+      wrapper.unmount();
+    }
+  });
+  it("アンマウントでも rAF を止める", () => {
+    const { moveTo, wrapper } = setup(true);
+    moveTo(490);
+    const before = cancelled;
+    wrapper.unmount();
+    expect(cancelled).toBeGreaterThan(before);
+  });
+});
