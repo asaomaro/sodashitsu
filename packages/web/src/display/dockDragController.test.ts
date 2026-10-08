@@ -112,6 +112,36 @@ describe("createDockDrag", () => {
     expect(seen).not.toHaveBeenCalled(); // capture で止まる
     document.removeEventListener("keydown", seen);
   });
+  it("つかんだ面が途中で替わったら（見出しの部品が別の面の見出しになった）、動かす・離すとき取り消す。別の面を動かさない", () => {
+    let id = "f1";
+    const h = createDockDrag({ get id() { return id; }, paneId: "p1", box: () => box, float: () => false, setState: (s) => states.push(s), drop: (z) => drops.push(z) });
+    // 動かす途中で替わる → 取り消し（状態・クラスを戻し、離しても落とさない）
+    h.onPointerDown(ev("pointerdown", 400, 300));
+    h.onPointerMove(ev("pointermove", 30, 300));
+    expect(html()).toBe(true);
+    id = "f2";
+    h.onPointerMove(ev("pointermove", 40, 300));
+    expect(html()).toBe(false);
+    expect(states.at(-1)).toBeNull();
+    expect(h.dragging()).toBe(false);
+    h.onPointerUp(ev("pointerup", 40, 300));
+    expect(drops).toEqual([]);
+    // 離す瞬間に替わっていても、落とさない
+    id = "f1";
+    h.onPointerDown(ev("pointerdown", 400, 300));
+    h.onPointerMove(ev("pointermove", 30, 300));
+    id = "f2";
+    h.onPointerUp(ev("pointerup", 30, 300));
+    expect(drops).toEqual([]);
+    expect(html()).toBe(false);
+    expect(states.at(-1)).toBeNull();
+    // 替わらなければ、いつもどおり落とす
+    id = "f1";
+    h.onPointerDown(ev("pointerdown", 400, 300));
+    h.onPointerMove(ev("pointermove", 30, 300));
+    h.onPointerUp(ev("pointerup", 30, 300));
+    expect(drops).toEqual(["left"]);
+  });
   it("箱が取れなければ、何も落とせない", () => {
     const h = createDockDrag({ id: "f1", paneId: "p1", box: () => null, float: () => false, setState: (s) => states.push(s), drop: (z) => drops.push(z) });
     h.onPointerDown(ev("pointerdown", 400, 300));

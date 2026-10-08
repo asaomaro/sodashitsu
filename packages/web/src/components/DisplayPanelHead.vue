@@ -54,6 +54,11 @@ watch(
     if (open) dockDrag.cancel();
   },
 );
+// つかんでいる面が閉じられて、同じ側の別の面の見出しになった（部品は使い回される）ら、その場で取り消す（別の面を動かさない。`createDockDrag` も、動かす・離すときに面の違いを見て取り消す）。
+watch(
+  () => props.info.id,
+  () => dockDrag.cancel(),
+);
 onBeforeUnmount(() => dockDrag.cancel());
 
 function onFold(): void {

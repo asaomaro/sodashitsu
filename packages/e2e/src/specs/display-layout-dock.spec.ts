@@ -623,3 +623,38 @@ test("(12b) 遮断器の後の文言と［再開］: 4 つの側（最小の大�
     await expect(page.locator("iframe[data-display-script]")).not.toHaveCount(0);
   }
 });
+
+test("(5b) D&D の途中で、つかんだ面が閉じられて同じ側の別の面の見出しになっても、その別の面は動かない（取り消され、ドラッグの状態が残らない）", async ({ page, appServer }) => {
+  test.setTimeout(60_000);
+  const { paneId } = await openDisplayBrowser(page, appServer);
+  await set(appServer, paneId, "pa", "panel");
+  await set(appServer, paneId, "pb", "panel");
+  const ids = await idsOf(appServer, paneId);
+  await expect(dock(page, "right")).toHaveAttribute("data-display-root", ids["pa"]!); // 見出しは pa（選んでいる 1 枚）
+  const g = await boxOf(dock(page, "right").locator("[data-display-grip]"));
+  const body = await bodyBox(page);
+  await page.mouse.move(g.x + 10, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(body.x + 30, body.y + body.height / 2, { steps: 8 });
+  await expect(page.locator('[data-display-drop-zone="left"][data-active="1"]')).toBeVisible();
+  // 途中で pa を閉じる → 同じ側の pb の見出しになる（同じ見出しの部品が使い回される）
+  await ok(await runDisplay(appServer, paneId, ["close", "pa"]));
+  await expect(dock(page, "right")).toHaveAttribute("data-display-root", ids["pb"]!);
+  // 取り消されて、落とせる場所の表示・<html> のクラスが残らない
+  await expect(page.locator("[data-display-drop-zones]")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains("soda-display-dragging"))).toBe(false);
+  // 左の落とせる場所の上で離しても、pb は動かない
+  await page.mouse.move(body.x + 40, body.y + body.height / 2, { steps: 3 });
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  await expect(dock(page, "right")).toHaveAttribute("data-display-root", ids["pb"]!);
+  await expect(dock(page, "left")).toHaveCount(0);
+  await expect(page.locator("[data-display-drop-zones]")).toHaveCount(0);
+  // ドラッグの状態は残らない: 次のドラッグは、ふつうに始まって落とせる
+  const g2 = await boxOf(dock(page, "right").locator("[data-display-grip]"));
+  await page.mouse.move(g2.x + 10, g2.y + g2.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(body.x + 30, body.y + body.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(dock(page, "left")).toHaveAttribute("data-display-root", ids["pb"]!);
+});

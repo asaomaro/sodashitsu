@@ -82,7 +82,7 @@ export interface DockDragHandle {
  */
 export function createDockDrag(o: DockDragOptions, win: Window = window): DockDragHandle {
   const root = (): HTMLElement => win.document.documentElement;
-  let start: { x: number; y: number; pointerId: number; target: HTMLElement | null } | null = null;
+  let start: { x: number; y: number; pointerId: number; target: HTMLElement | null; id: string; paneId: string } | null = null;
   let active = false;
   let zone: DockZone | null = null;
 
@@ -118,6 +118,14 @@ export function createDockDrag(o: DockDragOptions, win: Window = window): DockDr
     }
   }
 
+  /**
+   * つかんだ面と、いま見出しが指している面が違うか。見出しの部品は、同じ側のタブを替えても使い回されるので、つかんでいる面が閉じられて
+   * 同じ側の別の面の見出しになったとき、その別の面を動かさない（取り消す）。
+   */
+  function swapped(): boolean {
+    return start !== null && (o.id !== start.id || o.paneId !== start.paneId);
+  }
+
   function zoneAt(x: number, y: number): DockZone | null {
     const box = o.box();
     return box ? dockZoneAt(box, x, y, { float: o.float() }) : null;
@@ -129,12 +137,16 @@ export function createDockDrag(o: DockDragOptions, win: Window = window): DockDr
       if (ev.button !== 0 || start !== null) return;
       ev.preventDefault(); // フォーカスを移さない
       const target = (ev.currentTarget as HTMLElement | null) ?? null;
-      start = { x: ev.clientX, y: ev.clientY, pointerId: ev.pointerId, target };
+      start = { x: ev.clientX, y: ev.clientY, pointerId: ev.pointerId, target, id: o.id, paneId: o.paneId }; // つかんだ面を覚える
       target?.setPointerCapture?.(ev.pointerId);
       win.addEventListener("keydown", onKeydown, true);
     },
     onPointerMove(ev) {
       if (!start || ev.pointerId !== start.pointerId) return;
+      if (swapped()) {
+        end();
+        return;
+      }
       if (!active) {
         if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < DOCK_DRAG_THRESHOLD_PX) return;
         if (o.modalOpen?.()) {
@@ -150,7 +162,7 @@ export function createDockDrag(o: DockDragOptions, win: Window = window): DockDr
     onPointerUp(ev) {
       if (!start || ev.pointerId !== start.pointerId) return;
       const wasActive = active;
-      const at = wasActive ? zoneAt(ev.clientX, ev.clientY) : null;
+      const at = wasActive && !swapped() ? zoneAt(ev.clientX, ev.clientY) : null;
       end();
       if (wasActive && at !== null) o.drop(at);
     },
