@@ -1330,7 +1330,7 @@ pnpm --filter @sodashitsu/web exec vitest run src/components/graph/GraphView.per
 
 1. pane を 3 つ用意し、`sodactl agent start impl --kind claude --pane <p1>`・`reviewer`（`<p2>`）・`lead`（`<p3>`）でエージェントを起動する（Windows ネイティブのサーバでは
    `agent start` が使えないので、pane の中で手で起動して `sodactl agent rename` で名前を付ける）。
-2. ブラウザで `prefix+a` → 「pane を載せる」で 3 つを載せ、impl → reviewer にトリガ（完了した・受け渡し 40 行）を結ぶ。
+2. ブラウザで `prefix+a`（手元の pane は自動でノードになっている）。impl → reviewer にトリガ（完了した・受け渡し 40 行）を結ぶ。
    impl に短い作業（「README の 1 行目を読んで要約して」）を頼み、終わると reviewer に文面が 1 回だけ届き、線が光り、チップが `1/10`、履歴に「送った」が出る。
 3. reviewer に長い作業を頼んでいる間に impl をもう一度完了させ、reviewer の手が空いてから 1 通だけ届く（履歴は「待っている」→「送った」）。「見送る」に変えると `busy` で見送る。
 4. impl → lead に監督の線を結ぶ。lead の手が空いていれば、配下（impl の pane・種類・手元）と sodactl の使い方の短い文面が届く。lead に「impl に 〜 を頼んで結果を教えて」と頼み、

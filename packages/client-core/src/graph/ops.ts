@@ -1,6 +1,12 @@
 import type { Graph, GraphLink, GraphNode, GraphOp, NodeKey } from "@sodashitsu/protocol";
 import { defaultApprovalConfig, LINK_LIMIT_DEFAULT } from "./defaults.js";
-import { graphNodeRect, nextFreeGraphPosition } from "./geometry.js";
+import { graphNodeRect, nextFreeGraphPosition, type GraphPoint } from "./geometry.js";
+import {
+  placeNode,
+  type LayoutMember,
+  type LayoutStructure,
+  type LayoutTop,
+} from "./graphLayout.js";
 import { sameNodeMachine } from "./nodeKey.js";
 import { validateGraph, type GraphIssue } from "./validate.js";
 
@@ -143,20 +149,69 @@ export function applyGraphOps(
 }
 
 /**
- * 載っていない鍵を載せる `add_node`（画面の「pane を載せる」と同じ置き方: 今のノードの右隣に縦に並べる）。載っている鍵・同じ鍵の 2 回目は飛ばす。
- * sodactl の `graph node add`・`graph link add`（端のノードを一緒に載せる）が使う。
+ * 載っていない鍵を載せる `add_node`（画面の「別のマシンの pane を載せる」・`sodactl graph node add`・`graph link add`〔端のノードを一緒に載せる〕）。
+ * 載っている鍵・同じ鍵の 2 回目は飛ばす。
+ *
+ * `structure`（`graphStructureFrom` の結果。足す鍵を含めた別のマシンの囲いを持つもの）があれば、置き場所は `placeNode`——その鍵の囲い
+ * （マシンごと）の中の空いた升で、ほかの囲いに重ならない（20261008-graph-first）。空きが無くて囲いごと動かすときは、既存のノードの `move_node` も返す。
+ * `structure` が無い・その鍵が構成に無いときは、今のノードの右隣に縦に並べる（以前の置き方）。
  */
 export function addMissingNodeOps(
   graph: Pick<Graph, "nodes">,
   keys: readonly NodeKey[],
+  structure?: LayoutStructure,
 ): GraphOp[] {
   const present = new Set<string>(graph.nodes.map((n) => n.key));
+  const positions = new Map<string, GraphPoint>(
+    graph.nodes.map((n) => [n.key, { x: n.x, y: n.y }]),
+  );
+  const original = new Map(positions);
   const rects = graph.nodes.map(graphNodeRect);
-  const ops: GraphOp[] = [];
+  const memberOfKey = new Map<string, LayoutMember>();
+  const topOfMember = new Map<string, LayoutTop>();
+  for (const sp of structure?.spaces ?? []) {
+    for (const t of sp.tops) {
+      for (const m of t.members) {
+        topOfMember.set(m.id, t);
+        for (const k of m.nodes) memberOfKey.set(k, m);
+      }
+    }
+  }
+  const added: { key: NodeKey; x: number; y: number }[] = [];
+  let fallback = 0;
   for (const key of keys) {
     if (present.has(key)) continue;
     present.add(key);
-    ops.push({ op: "add_node", key, ...nextFreeGraphPosition(rects, ops.length) });
+    const member = structure === undefined ? undefined : memberOfKey.get(key);
+    if (structure !== undefined && member !== undefined) {
+      const r = placeNode(structure, positions, member.id);
+      if (r.shift !== null) {
+        const top = topOfMember.get(member.id)!;
+        for (const m of r.scope === "top" ? top.members : [member]) {
+          for (const k of m.nodes) {
+            const p = positions.get(k);
+            if (p !== undefined) positions.set(k, { x: p.x + r.shift.x, y: p.y + r.shift.y });
+          }
+        }
+      }
+      positions.set(key, { x: r.x, y: r.y });
+      added.push({ key, x: r.x, y: r.y });
+      continue;
+    }
+    const p = nextFreeGraphPosition(rects, fallback++);
+    positions.set(key, p);
+    added.push({ key, ...p });
+  }
+  const ops: GraphOp[] = [];
+  // 囲いごと動かした既存のノード（足した鍵は、足す位置が最終なので add_node に入っている）
+  for (const [key, was] of original) {
+    const p = positions.get(key)!;
+    if (p.x !== was.x || p.y !== was.y)
+      ops.push({ op: "move_node", key: key as NodeKey, x: p.x, y: p.y });
+  }
+  for (const a of added) {
+    const p = positions.get(a.key)!;
+    ops.push({ op: "add_node", key: a.key, x: p.x, y: p.y });
   }
   return ops;
 }

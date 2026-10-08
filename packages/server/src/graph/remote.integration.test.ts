@@ -217,12 +217,22 @@ describe.skipIf(process.platform === "win32")(
 
     /** 操作を当て、できた線の id（UUID。作った順）を返す。 */
     async function update(t: Pair, ops: unknown[]): Promise<string[]> {
+      // 手元の pane のノードは維持（GraphMaintainer。20261008-graph-first）が足す。足す操作は外し、そろうのを待つ。
+      const isLocalAdd = (o: unknown): o is { op: "add_node"; key: string } =>
+        (o as { op?: string; key?: string }).op === "add_node" &&
+        (o as { key: string }).key.startsWith("local:");
+      const localKeys = ops.filter(isLocalAdd).map((o) => o.key);
+      ops = ops.filter((o) => !isLocalAdd(o));
+      await waitFor("the nodes of local panes", () =>
+        localKeys.every((k) => t.local.graph.get().nodes.some((n) => n.key === k)),
+      );
       const g = (await t.client.request("graph.get", {})).result as { rev: number };
       const r = await t.client.request("graph.update", { baseRev: g.rev, ops });
       expect(r.error).toBeUndefined();
       return (r.result as { links: { id: string }[] }).links.map((l) => l.id);
     }
-    const node = (key: string, i: number) => ({ op: "add_node", key, x: i * 240, y: 0 });
+    // 別のマシンのノードは、手元の囲いに重ならない遠くへ置く（囲いは重ならない。20261008-graph-first）。
+    const node = (key: string, i: number) => ({ op: "add_node", key, x: 4000 + i * 240, y: 0 });
     const sentOf = (t: Pair, linkId: string) =>
       t.local.graphHistory(linkId).filter((r) => r.result === "sent").length;
 

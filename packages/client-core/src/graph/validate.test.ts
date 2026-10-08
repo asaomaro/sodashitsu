@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   GRAPH_LINKS_MAX,
-  GRAPH_NODES_MAX,
+  GRAPH_LOCAL_NODES_MAX,
+  GRAPH_REMOTE_NODES_MAX,
   GRAPH_PROMPT_MAX_BYTES,
   type Graph,
   type GraphLink,
@@ -106,19 +107,34 @@ describe("validateGraph", () => {
     expect(codes(validateGraph(graph([], [A, A])))).toEqual(["duplicate_node"]);
   });
 
-  it("ノード 64・線 128 まで", () => {
-    const keys = Array.from({ length: GRAPH_NODES_MAX + 1 }, (_, i): NodeKey => `local:p${i + 1}`);
-    expect(codes(validateGraph(graph([], keys)))).toEqual(["too_many_nodes"]);
-    expect(validateGraph(graph([], keys.slice(0, GRAPH_NODES_MAX)))).toEqual([]);
-    const many = Array.from({ length: GRAPH_LINKS_MAX + 1 }, (_, i) =>
-      link({ id: `l${i + 1}`, from: keys[i % 60]!, to: keys[(i % 60) + 1 + Math.floor(i / 60)]! }),
+  it("手元のノード 512・別のマシンのノード 64（別枠）・線 512 まで", () => {
+    const keys = Array.from(
+      { length: GRAPH_LOCAL_NODES_MAX + 1 },
+      (_, i): NodeKey => `local:p${i + 1}`,
     );
-    expect(codes(validateGraph(graph(many, keys.slice(0, GRAPH_NODES_MAX))))).toEqual([
-      "too_many_links",
-    ]);
+    expect(codes(validateGraph(graph([], keys)))).toEqual(["too_many_nodes"]);
+    expect(validateGraph(graph([], keys.slice(0, GRAPH_LOCAL_NODES_MAX)))).toEqual([]);
+    // 別のマシンのノードは別枠: 手元が上限いっぱいでも、別のマシンのノードを 64 個まで足せる。
+    const M = "0123456789abcdef0123456789abcdef";
+    const remote = Array.from(
+      { length: GRAPH_REMOTE_NODES_MAX + 1 },
+      (_, i): NodeKey => `${M}:r${i + 1}`,
+    );
     expect(
-      validateGraph(graph(many.slice(0, GRAPH_LINKS_MAX), keys.slice(0, GRAPH_NODES_MAX))),
+      validateGraph(
+        graph(
+          [],
+          [...keys.slice(0, GRAPH_LOCAL_NODES_MAX), ...remote.slice(0, GRAPH_REMOTE_NODES_MAX)],
+        ),
+      ),
     ).toEqual([]);
+    expect(codes(validateGraph(graph([], remote)))).toEqual(["too_many_remote_nodes"]);
+    const many = Array.from({ length: GRAPH_LINKS_MAX + 1 }, (_, i) =>
+      link({ id: `l${i + 1}`, from: keys[i % 100]!, to: keys[100 + Math.floor(i / 100)]! }),
+    );
+    const base = keys.slice(0, GRAPH_LOCAL_NODES_MAX);
+    expect(codes(validateGraph(graph(many, base)))).toEqual(["too_many_links"]);
+    expect(validateGraph(graph(many.slice(0, GRAPH_LINKS_MAX), base))).toEqual([]);
   });
 
   it("prompt は 8KB まで", () => {

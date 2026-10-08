@@ -11,8 +11,13 @@ import { ENTITY_ID_RE } from "./ids.js";
 export type NodeKey = `${"local" | (string & {})}:${string}`;
 export const NODE_KEY_RE = /^(local|[0-9a-f]{32}):[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 
-export const GRAPH_NODES_MAX = 64;
-export const GRAPH_LINKS_MAX = 128;
+/** 手元の pane のノード（`local:`）の上限。手元のすべての pane が載るので、pane の数の実用の上（20261008-graph-first D17）。 */
+export const GRAPH_LOCAL_NODES_MAX = 512;
+/** 別のマシンの pane のノードの上限。手元のノードとは別枠で数える。 */
+export const GRAPH_REMOTE_NODES_MAX = 64;
+/** ノードの総数の上限（保存したファイルの形の検査に使う。手元と別のマシンの上限の和）。 */
+export const GRAPH_NODES_MAX = GRAPH_LOCAL_NODES_MAX + GRAPH_REMOTE_NODES_MAX;
+export const GRAPH_LINKS_MAX = 512;
 /** トリガの prompt の上限（UTF-8 のバイト数）。 */
 export const GRAPH_PROMPT_MAX_BYTES = 8 * 1024;
 /** 線ごとの実行回数の上限の範囲（D1-4）。 */
@@ -21,12 +26,17 @@ export const LINK_LIMIT_MAX = 100;
 /** 受け渡す画面の末尾の行数の範囲。 */
 export const LINK_LINES_MIN = 1;
 export const LINK_LINES_MAX = 500;
-/** 1 回の `graph.update` の操作の数の上限（全ノード・全線を作り直しても収まる数）。 */
-export const GRAPH_OPS_MAX = 256;
+/** 1 回の `graph.update` の操作の数の上限（囲いごとの移動で、ノードの数だけ `move_node` を送っても収まる数）。 */
+export const GRAPH_OPS_MAX = 1024;
 /** 座標の絶対値の上限（ズーム前の画面の px）。 */
 export const GRAPH_COORD_MAX = 1_000_000;
 /** 履歴は線ごとに直近この件数（サーバのメモリだけ。`graph.json` には保存しない）。 */
 export const GRAPH_HISTORY_PER_LINK = 50;
+/**
+ * `graph.history` の 1 回の応答の件数の上限。線の数の上限を上げても増やさない（線の数に比例させない。20261008-graph-first D17）。
+ * 線ごとの履歴は `GRAPH_HISTORY_PER_LINK` 件までなので、これを超える分は新しい順の古い側が切れる。
+ */
+export const GRAPH_HISTORY_RESPONSE_MAX = 6400;
 
 export type LinkKind = "trigger" | "supervise" | "approval";
 
@@ -207,7 +217,7 @@ export const GraphHistoryParams = z.object({
     .number()
     .int()
     .min(1)
-    .max(GRAPH_HISTORY_PER_LINK * GRAPH_LINKS_MAX)
+    .max(GRAPH_HISTORY_RESPONSE_MAX)
     .optional(),
 });
 export type GraphHistoryParams = z.infer<typeof GraphHistoryParams>;

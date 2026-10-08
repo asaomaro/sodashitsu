@@ -230,16 +230,37 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
     const settle = () => sleep(300);
     const waitRev = (server: ComposedServer, rev: number) =>
       vi.waitFor(() => expect(graphOf(server).rev).toBe(rev), { timeout: 10_000, interval: 25 });
+    /**
+     * 手元のすべての pane のノードは維持（GraphMaintainer。20261008-graph-first）が足す。足し終えて rev が落ち着くまで待ち、その rev を返す
+     * （以後の自動載せは、この rev からの差で確かめる）。
+     */
+    async function settled(server: ComposedServer): Promise<number> {
+      await vi.waitFor(
+        () => {
+          const have = new Set<string>(graphOf(server).nodes.map((n) => n.key));
+          expect(server.session.snapshot().panes.every((p) => have.has(key(p.id)))).toBe(true);
+        },
+        { timeout: 10_000, interval: 25 },
+      );
+      for (;;) {
+        const rev = graphOf(server).rev;
+        await sleep(150);
+        if (graphOf(server).rev === rev) return rev;
+      }
+    }
+    /** この rev より後に届いた graph.changed の rev。 */
+    const changedAfter = (client: Client, rev: number): number[] =>
+      client.changedRevs.filter((r) => r > rev);
 
-    it("callerPaneId つきの pane.split → 打ち込みで検出 → 子と親のノード・監督・承認（notify・40・limit 10）の線が 1 回の更新で載り、graph.changed が届く（AC1・AC2・AC5・AC6・AC12）", async () => {
+    it("callerPaneId つきの pane.split → 打ち込みで検出 → 監督・承認（notify・40・limit 10）の線が 1 回の更新で足され（ノードは維持が先に足し済み）、graph.changed が届く（AC1・AC2・AC5・AC6・AC12）", async () => {
       const { server, clients } = await boot();
       const [c] = clients as [Client, Client];
       const parent = server.session.snapshot().panes[0]!.id;
       const child = await split(c, parent, parent);
       await shellReady(server, child);
-      expect(graphOf(server).rev).toBe(0);
+      const base = await settled(server);
       await typeClaude(server, child);
-      await waitRev(server, 1);
+      await waitRev(server, base + 1);
 
       const g = graphOf(server);
       expect(g.nodes.map((n) => n.key).sort()).toEqual([key(child), key(parent)].sort());
@@ -255,30 +276,34 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
         limit: 10,
       });
       expect(g.links).toHaveLength(2);
-      // 2 つのブラウザ相当の接続の両方に、rev 1 の graph.changed が 1 回だけ届く（まとめて 1 回の更新）。
-      await vi.waitFor(() => expect(clients.every((x) => x.changedRevs.includes(1))).toBe(true));
-      for (const x of clients) expect(x.changedRevs).toEqual([1]);
+      // 2 つのブラウザ相当の接続の両方に、足した後の rev の graph.changed が 1 回だけ届く（線は、まとめて 1 回の更新）。
+      await vi.waitFor(() =>
+        expect(clients.every((x) => x.changedRevs.includes(base + 1))).toBe(true),
+      );
+      for (const x of clients) expect(changedAfter(x, base)).toEqual([base + 1]);
       expect(await ok<Graph>(c.request("graph.get", {}))).toEqual(g);
       expect((await logLines(server.options.stateDir)).map((l) => l.msg)).toContain(
         "graph.auto: added",
       );
 
-      // 1 pane につき 1 回だけ：利用者が子のノード（線も一緒に消える）を外したあと、エージェントが入れ替わって再検出されても重ねて載せない。
-      // （「載せ済み」の記録が無ければ、子のノードが無いので再び載ってしまう。重複する線で何も足されないだけの状態では確かめられない。）
+      // 1 pane につき 1 回だけ：利用者が線を外したあと、エージェントが入れ替わって再検出されても重ねて足さない。
+      // （「足し済み」の記録が無ければ、線が無いので再び足されてしまう。重複する線で何も足されないだけの状態では確かめられない。）
       await ok(
-        c.request("graph.update", { baseRev: 1, ops: [{ op: "remove_node", key: key(child) }] }),
+        c.request("graph.update", {
+          baseRev: base + 1,
+          ops: g.links.map((l) => ({ op: "remove_link", id: l.id })),
+        }),
       );
       expect(graphOf(server).links).toEqual([]);
       await quitAgent(server, child);
       await typeClaude(server, child);
       await settle();
-      expect(graphOf(server).rev).toBe(2);
-      expect(graphOf(server).nodes.map((n) => n.key)).toEqual([key(parent)]);
+      expect(graphOf(server).rev).toBe(base + 2);
       expect(graphOf(server).links).toEqual([]);
-      expect(clients[0]!.changedRevs).toEqual([1, 2]);
+      expect(changedAfter(clients[0]!, base)).toEqual([base + 1, base + 2]);
     });
 
-    it("親もエージェントなら、子が載って約 2 秒後に、親へ配下（子の pane ID）を知らせる監督の知らせが実際に届く。承認の代理の知らせは出ない（AC5）", async () => {
+    it("親もエージェントなら、子の線が足されて約 2 秒後に、親へ配下（子の pane ID）を知らせる監督の知らせが実際に届く。承認の代理の知らせは出ない（AC5）", async () => {
       const { server, clients } = await boot();
       const [c] = clients as [Client, Client];
       const parent = server.session.snapshot().panes[0]!.id;
@@ -287,8 +312,9 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       await shellReady(server, child);
       await typeClaude(server, parent); // 親もエージェント（監督役になれる）
       expect(inputOf(server, parent)).toBe("");
+      const base = await settled(server);
       await typeClaude(server, child);
-      await waitRev(server, 1);
+      await waitRev(server, base + 1);
       // 約 2 秒のまとめ待ちのあと、監督役（親のエージェント）の入力として知らせが届く。固定の待ちは置かず、届くまで待つ。
       await vi.waitFor(() => expect(inputOf(server, parent)).toContain(child), {
         timeout: 15_000,
@@ -306,6 +332,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       const starter = await split(c, p0);
       const child = await split(c, p0, creator); // 作った人は creator
       await shellReady(server, child);
+      const base = await settled(server);
       await ok(
         c.request("agent.start", {
           callerPaneId: starter,
@@ -316,9 +343,9 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
         }),
       );
       await vi.waitFor(() => expect(agentOf(server, child)).not.toBeNull(), { timeout: 15_000 });
-      await waitRev(server, 1);
+      await waitRev(server, base + 1);
       const g = graphOf(server);
-      expect(g.nodes.map((n) => n.key).sort()).toEqual([key(child), key(starter)].sort());
+      expect(linksOf(g, "supervise")).toHaveLength(1);
       expect(linksOf(g, "supervise")[0]).toMatchObject({ from: key(child), to: key(starter) });
       expect(linksOf(g, "approval")[0]).toMatchObject({ from: key(child), to: key(starter) });
     });
@@ -331,14 +358,15 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       const other = await split(c, p0);
       await shellReady(server, manual);
       await shellReady(server, other);
+      const base = await settled(server);
       await ok(
         c.request("agent.start", { name: "legacy", kind: "claude", paneId: other, args: [] }),
       );
       await vi.waitFor(() => expect(agentOf(server, other)).not.toBeNull(), { timeout: 15_000 });
       await typeClaude(server, manual);
       await settle();
-      expect(graphOf(server).rev).toBe(0);
-      expect(graphOf(server).nodes).toEqual([]);
+      expect(graphOf(server).rev).toBe(base);
+      expect(graphOf(server).links).toEqual([]);
       expect(await logLines(server.options.stateDir)).toEqual([]);
       // 手で作った pane（manual）に agent start を打った pane が親になる。
       await quitAgent(server, manual);
@@ -351,7 +379,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
           args: [],
         }),
       );
-      await waitRev(server, 1);
+      await waitRev(server, base + 1);
       expect(linksOf(graphOf(server), "supervise")[0]).toMatchObject({
         from: key(manual),
         to: key(p0),
@@ -366,14 +394,15 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       const ghost = await split(c, p0, "p9999");
       await shellReady(server, legacy);
       await shellReady(server, ghost);
+      const base = await settled(server);
       await typeClaude(server, legacy);
       await typeClaude(server, ghost);
       await settle();
-      expect(graphOf(server).rev).toBe(0);
-      expect(clients[0]!.changedRevs).toEqual([]);
+      expect(graphOf(server).rev).toBe(base);
+      expect(changedAfter(clients[0]!, base)).toEqual([]);
     });
 
-    it("workspace.create で作った pane でも同じように載る（AC1）。tab.create も同じ", async () => {
+    it("workspace.create で作った pane でも同じように線が足される（AC1）。tab.create も同じ", async () => {
       const { server, clients } = await boot();
       const [c] = clients as [Client, Client];
       const parent = server.session.snapshot().panes[0]!.id;
@@ -381,8 +410,9 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
         c.request("workspace.create", { callerPaneId: parent, label: "w2" }),
       );
       await shellReady(server, ws.pane.id);
+      const base = await settled(server);
       await typeClaude(server, ws.pane.id);
-      await waitRev(server, 1);
+      await waitRev(server, base + 1);
       expect(linksOf(graphOf(server), "supervise")[0]).toMatchObject({
         from: key(ws.pane.id),
         to: key(parent),
@@ -392,8 +422,9 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
         c.request("tab.create", { callerPaneId: parent }),
       );
       await shellReady(server, tab.pane.id);
+      const base2 = await settled(server);
       await typeClaude(server, tab.pane.id);
-      await waitRev(server, 2);
+      await waitRev(server, base2 + 1);
       const g = graphOf(server);
       expect(g.nodes).toHaveLength(3); // 親は 1 つのまま
       expect(
@@ -409,13 +440,14 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       const parent = server.session.snapshot().panes[0]!.id;
       const child = await split(c, parent, parent);
       await shellReady(server, child);
-      // 手で置く：親のノードを離れた場所に、同じ向きの承認の線を別の設定で（一時停止にして）。
+      const base = await settled(server);
+      // 手で置く：ノードを離れた場所へ動かし、同じ向きの承認の線を別の設定で（一時停止にして）。
       await ok(
         c.request("graph.update", {
-          baseRev: 0,
+          baseRev: base,
           ops: [
-            { op: "add_node", key: key(parent), x: 777, y: 555 },
-            { op: "add_node", key: key(child), x: 12, y: 34 },
+            { op: "move_node", key: key(parent), x: 777, y: 555 },
+            { op: "move_node", key: key(child), x: 12, y: 34 },
             {
               op: "add_link",
               kind: "approval",
@@ -430,11 +462,11 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       const linkId = linksOf(graphOf(server), "approval")[0]!.id;
       await ok(c.request("graph.pause", { linkId }));
       const before = graphOf(server);
-      expect(before.rev).toBe(2);
+      expect(before.rev).toBe(base + 2);
       expect(linksOf(before, "approval")[0]!.paused).not.toBeNull();
 
       await typeClaude(server, child);
-      await waitRev(server, 3);
+      await waitRev(server, base + 3);
       const after = graphOf(server);
       // 既存のノードは動かない・既存の線は設定も一時停止も変わらず重複しない・足されたのは監督の線だけ。
       expect(after.nodes).toEqual(before.nodes);
@@ -446,36 +478,32 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       );
     });
 
-    it("同じ配下に別の監督役の線があるときは監督の線を引かず、ノードと承認の線は足す。理由をログに残す（AC8）", async () => {
+    it("同じ配下に別の監督役の線があるときは監督の線を引かず、承認の線は足す。理由をログに残す（AC8）", async () => {
       const { server, clients } = await boot();
       const [c] = clients as [Client, Client];
       const parent = server.session.snapshot().panes[0]!.id;
       const boss = await split(c, parent);
       const child = await split(c, parent, parent);
       await shellReady(server, child);
+      const base = await settled(server);
       await ok(
         c.request("graph.update", {
-          baseRev: 0,
-          ops: [
-            { op: "add_node", key: key(boss), x: 0, y: 0 },
-            { op: "add_node", key: key(child), x: 240, y: 0 },
-            { op: "add_link", kind: "supervise", from: key(child), to: key(boss) },
-          ],
+          baseRev: base,
+          ops: [{ op: "add_link", kind: "supervise", from: key(child), to: key(boss) }],
         }),
       );
       await typeClaude(server, child);
-      await waitRev(server, 2);
+      await waitRev(server, base + 2);
       const g = graphOf(server);
       expect(linksOf(g, "supervise")).toHaveLength(1);
       expect(linksOf(g, "supervise")[0]).toMatchObject({ from: key(child), to: key(boss) });
       expect(linksOf(g, "approval")[0]).toMatchObject({ from: key(child), to: key(parent) });
-      expect(g.nodes.map((n) => n.key)).toContain(key(parent));
       expect((await logLines(server.options.stateDir)).map((l) => l.reason)).toContain(
         "supervisor_taken",
       );
     });
 
-    it("外した子は戻らず、外した親は別の子が新しく検出されたときに戻る（AC7）", async () => {
+    it("外した線は同じ子では戻らず、別の子が新しく検出されたときは、その子の線が足される（AC7）", async () => {
       const { server, clients } = await boot();
       const [c] = clients as [Client, Client];
       const parent = server.session.snapshot().panes[0]!.id;
@@ -483,37 +511,31 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       const c2 = await split(c, parent, parent);
       await shellReady(server, c1);
       await shellReady(server, c2);
+      const base = await settled(server);
       await typeClaude(server, c1);
-      await waitRev(server, 1);
+      await waitRev(server, base + 1);
 
-      // 利用者が子のノードを外す（線も一緒に消える）。同じ子でエージェントが入れ替わっても戻らない。
+      // 利用者が線を外す。同じ子でエージェントが入れ替わっても戻らない。
       await ok(
-        c.request("graph.update", { baseRev: 1, ops: [{ op: "remove_node", key: key(c1) }] }),
+        c.request("graph.update", {
+          baseRev: base + 1,
+          ops: graphOf(server).links.map((l) => ({ op: "remove_link", id: l.id })),
+        }),
       );
-      expect(graphOf(server).nodes.map((n) => n.key)).toEqual([key(parent)]);
+      expect(graphOf(server).links).toEqual([]);
       await quitAgent(server, c1);
       await typeClaude(server, c1);
       await settle();
-      expect(graphOf(server).rev).toBe(2);
-      expect(graphOf(server).nodes.map((n) => n.key)).toEqual([key(parent)]);
+      expect(graphOf(server).rev).toBe(base + 2);
+      expect(graphOf(server).links).toEqual([]);
 
-      // 親も外す。同じ子ではやはり戻らない。
-      await ok(
-        c.request("graph.update", { baseRev: 2, ops: [{ op: "remove_node", key: key(parent) }] }),
-      );
-      await quitAgent(server, c1);
-      await typeClaude(server, c1);
-      await settle();
-      expect(graphOf(server).rev).toBe(3);
-      expect(graphOf(server).nodes).toEqual([]);
-
-      // 別の子が新しく検出されると、親も一緒に戻る。外した子は戻らない。
+      // 別の子が新しく検出されると、その子の線が足される。外した子の線は戻らない。
       await typeClaude(server, c2);
-      await waitRev(server, 4);
+      await waitRev(server, base + 3);
       const g = graphOf(server);
-      expect(g.nodes.map((n) => n.key).sort()).toEqual([key(c2), key(parent)].sort());
       expect(linksOf(g, "supervise")).toHaveLength(1);
-      expect(g.nodes.map((n) => n.key)).not.toContain(key(c1));
+      expect(linksOf(g, "supervise")[0]).toMatchObject({ from: key(c2), to: key(parent) });
+      expect(g.links.some((l) => l.from === key(c1))).toBe(false);
     });
 
     it("親の pane を閉じてから子を検出すると、何も足さずログに残す（AC10）", async () => {
@@ -525,6 +547,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       await shellReady(server, child);
       await ok(c.request("pane.close", { paneId: parent }));
       expect(server.session.getPane(parent)).toBeUndefined();
+      const base = await settled(server);
       await typeClaude(server, child);
       await vi.waitFor(
         async () => {
@@ -535,41 +558,13 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
         },
         { timeout: 10_000, interval: 50 },
       );
-      expect(graphOf(server).rev).toBe(0);
-      expect(graphOf(server).nodes).toEqual([]);
-      expect(clients[0]!.changedRevs).toEqual([]);
+      expect(graphOf(server).rev).toBe(base);
+      expect(graphOf(server).nodes.map((n) => n.key)).not.toContain(key(parent));
+      expect(graphOf(server).links).toEqual([]);
+      expect(changedAfter(clients[0]!, base)).toEqual([]);
     });
 
-    it("ノードが上限（64）に達していれば、何も足さず（部分的にも）、理由をログに残す。pane.split は成功している（AC9）", async () => {
-      const { server, stateDir, clients } = await boot();
-      const [c] = clients as [Client, Client];
-      const parent = server.session.snapshot().panes[0]!.id;
-      const child = await split(c, parent, parent);
-      await shellReady(server, child);
-      const machine = "d".repeat(32);
-      await ok(
-        c.request("graph.update", {
-          baseRev: 0,
-          ops: Array.from({ length: 64 }, (_, i) => ({
-            op: "add_node",
-            key: `${machine}:p${i + 1}`,
-            x: i * 10,
-            y: 0,
-          })),
-        }),
-      );
-      expect(graphOf(server).nodes).toHaveLength(64);
-      await typeClaude(server, child);
-      await vi.waitFor(
-        async () => {
-          expect((await logLines(stateDir)).some((l) => l.reason === "too_many_nodes")).toBe(true);
-        },
-        { timeout: 10_000, interval: 50 },
-      );
-      const g = graphOf(server);
-      expect(g.rev).toBe(1);
-      expect(g.nodes).toHaveLength(64);
-      expect(g.links).toEqual([]);
-    });
+    // 手元のノードの上限（512）で維持が足せなかったときに線を足さない動き（too_many_nodes）は、512 個の実 PTY を立てられないので、
+    // AgentLineage.attach.test.ts の単体試験で確かめる（20261008-graph-first）。
   },
 );

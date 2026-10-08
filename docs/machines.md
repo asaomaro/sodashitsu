@@ -79,7 +79,7 @@ sodactl --machine <id> pane read 3f2a9c10          # pane の id は先頭 4 文
 
 ## 連携のグラフで使う
 
-グラフ画面（`docs/agent-graph.md`）の「pane を載せる」に登録したマシンの pane が出て、手元の pane と線で結べます（`sodactl graph link add 3f2a9c10 GPU:<pane の完全な id>` のように
+グラフ画面（`docs/agent-graph.md`）の「別のマシンの pane を載せる」に登録したマシンの pane が出て（手元の pane は自動でノードになっています）、手元の pane と線で結べます（`sodactl graph link add 3f2a9c10 GPU:<pane の完全な id>` のように
 `<名前>:<pane の完全な id>` でも。別のマシンの pane は部分指定できません）。
 
 - 手元の `soda serve` が、グラフに載っているマシンにだけ接続を張って線を動かします（ブラウザを閉じても動きます）。

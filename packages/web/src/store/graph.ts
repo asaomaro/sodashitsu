@@ -12,15 +12,21 @@ import type {
   ResultOf,
   ServerEvent,
 } from "@sodashitsu/protocol";
-import { shortId } from "@sodashitsu/protocol";
+import { GRAPH_LOCAL_NODES_MAX, shortId } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import {
   clientErrorMessage,
   errorCodeOf,
+  graphStructureFrom,
+  isLocalNodeKey,
   LOCAL_MACHINE_ID,
+  nodePositions,
   paneNameOf,
   parseNodeKey,
+  resolveDrop,
+  GRAPH_FIRST_NODE_RESERVE,
+  type LayoutStructure,
 } from "@sodashitsu/client-core";
 import { summaryPaneName, useMachinesStore } from "./machines.js";
 import { displayStateFor, useSeenStore } from "./seen.js";
@@ -276,10 +282,49 @@ export const useGraphStore = defineStore("graph", () => {
     dragPositions.value = m;
   }
 
+  /**
+   * 動かした結果が、囲い（workspace・worktree グループ）の重なりを新しく作る・広げるなら、重ならない最も近い位置へ寄せる（`resolveDrop`。
+   * 離す前に寄せるので、サーバに `frame_overlap` で断られない。20261008-graph-first）。手元のセッションの構成を導けるとき（画面の接続が手元を向いている）だけ。
+   */
+  /**
+   * いまのセッションから導いた空間の構成（`graphStructureFrom`）。別のマシンの囲いは `remoteKeys` の鍵から作る。手元のセッションが無い
+   * （画面の接続が別のマシンを向いている）ときは null——構成を導けない。
+   */
+  function layoutStructure(remoteKeys: readonly string[]): LayoutStructure | null {
+    if (useMachinesStore().selectedId !== LOCAL_MACHINE_ID) return null;
+    const session = useSessionStore();
+    return graphStructureFrom(
+      {
+        workspaces: [...session.workspaces.values()],
+        tabs: [...session.tabs.values()],
+        panes: [...session.panes.values()],
+        groups: [...session.groups.values()],
+        layout: session.effectiveLayout,
+      },
+      { remoteKeys },
+    );
+  }
+
+  function resolveMoves(
+    moves: readonly { key: string; x: number; y: number }[],
+  ): { key: string; x: number; y: number }[] {
+    const g = graph.value;
+    if (!g || moves.length === 0) return [...moves];
+    const structure = layoutStructure(g.nodes.map((n) => n.key));
+    if (structure === null) return [...moves];
+    const out = resolveDrop(
+      structure,
+      nodePositions(g.nodes),
+      new Map(moves.map((m) => [m.key, { x: m.x, y: m.y }])),
+    );
+    return moves.map((m) => ({ key: m.key, ...(out.get(m.key) ?? { x: m.x, y: m.y }) }));
+  }
+
   /** ノードを動かし終えた（ドラッグを離した・矢印キーの連打が止まった）。楽観的に置いてから送る。 */
   async function moveNodes(
-    moves: readonly { key: string; x: number; y: number }[],
+    requested: readonly { key: string; x: number; y: number }[],
   ): Promise<GraphUpdateResult> {
+    const moves = resolveMoves(requested);
     const pend = new Map(pendingPositions.value);
     for (const m of moves) pend.set(m.key, { x: m.x, y: m.y });
     pendingPositions.value = pend;
@@ -313,6 +358,20 @@ export const useGraphStore = defineStore("graph", () => {
     });
   });
   const links = computed<GraphLink[]>(() => graph.value?.links ?? []);
+
+  /**
+   * 手元の pane のうち、上限（手元のノード 512。2 つ目以降は予備を残して手前まで）のためにノードが付かず、グラフに出ていない pane の数
+   * （20261008-graph-first AC-V3）。上限の手前では 0（ノードの無い pane は、足される途中か、一時的な pane）。画面の接続が手元を向いているときだけ分かる。
+   */
+  const hiddenLocalPaneCount = computed<number>(() => {
+    const g = graph.value;
+    if (!g || useMachinesStore().selectedId !== LOCAL_MACHINE_ID) return 0;
+    const local = new Set(g.nodes.filter((n) => isLocalNodeKey(n.key)).map((n) => n.key));
+    if (local.size < GRAPH_LOCAL_NODES_MAX - GRAPH_FIRST_NODE_RESERVE) return 0;
+    let hidden = 0;
+    for (const id of useSessionStore().panes.keys()) if (!local.has(`local:${id}`)) hidden++;
+    return hidden;
+  });
 
   // --- ノードの中身（pane の要約）--------------------------------------------------
 
@@ -432,6 +491,9 @@ export const useGraphStore = defineStore("graph", () => {
     setPaused,
     setDragPosition,
     moveNodes,
+    resolveMoves,
+    layoutStructure,
+    hiddenLocalPaneCount,
     nodeInfo,
     linkTitle,
     machineConnected,
