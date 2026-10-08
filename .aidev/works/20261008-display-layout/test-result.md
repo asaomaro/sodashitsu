@@ -36,3 +36,16 @@
 
 ### スクリーンショット
 `/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/display-layout-a/`（`light-*`・`dark-*`。1 ボタンだけの細い行・帯の行のトレイ・スクリプトの面のボタンの印・帯のメニュー・たたんだ帯・帯を下・設定の画面）。
+
+## PR-A レビューの指摘の修正後（2026-10-08）
+- `pnpm build`・`pnpm typecheck`: 通る。`pnpm test`: 9130 件通り・4 件失敗 = 既知の `tui.integration.test.ts` 3 件＋ `web/src/store/notifications.test.ts` の 1 件（全体の実行中だけ落ちる揺れ。単独で 3 回流すと全部通る。差分に関係しない）。
+- E2E（`--workers=1`）: display 系（`display-layout-state` を含む。noreturn・drop の 3 本を除く）190 件通り・1 件スキップ。`display-script-noreturn` 26・`display-script-drop` 24・`display-script-noreturn-mobile` 2 件、単独でそれぞれ全部通る。
+- 負の対照（外してビルド → 落ちることを確認 → 戻す）:
+  - S1: スナップショットから `placement` を外す → (8b) が落ちる（知らせと chrome #2 が重なる）。
+  - S2: 帯の下限を 0 にする → (13) が落ちる（幅 257px で `[data-pane-band-close]` の右端が帯の箱の外）。
+  - S3: 備えの watch を外す → (14a)(14b) が落ちる（`activeElement` が端末にならない）。
+  - S4: 3 つの部品の `ev.repeat` の分岐を外す → (7)(c2) が落ちる（パネルの出入り 40 回 / 上限 1）。
+  - S5: 割り付けが変わるたびに帯の枠を DOM で動かす版（実際に 1 つの `v-for` にした版は、スクリプトの枠が「移動した」と数えられて面が閉じ、枠の比較の前に落ちた。静的な枠の (6b-html) で、動かす版は `data-display-loads` の比較で落ちる）。
+  - N1: `isTrusted` の確認を外す → 単体 1 件が落ちる。
+- U1 の実測: iframe を DOM で動かすと同じ要素のまま `load` が 1 増える（decisions D23）。
+- スクリーンショット: `/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/display-layout-a/fix-*.png`。
