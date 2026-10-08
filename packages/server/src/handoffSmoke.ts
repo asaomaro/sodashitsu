@@ -11,12 +11,14 @@
  *   ログインなしで通る（20261003-sodactl-ask-socket の AC11。新しい版が置き直した `pane.sock` を、同じ状態ディレクトリから導く）
  * - 表示の面（20261007-soda-extensions の AC24）: 入れ替えの前に出した面は消え、待っていた `sodactl display events` は終わらずに `display.reset` を出す。
  *   `display list` は空で、出し直すと見え、`display close` すると待ち続けている `events` に `display.closed` が届く。サーバを止めると `display.end`（connection_closed）・終了コード 1
+ * - 拡張（20261007-ext-host の AC14・不確かな点 2）: 状態ディレクトリの `extensions.json` に登録した拡張（起動のたびに、自分の pid と孫の `sleep` の pid を記録する）が、
+ *   入れ替えの前に動いていて、入れ替えの後は**前の拡張と孫の pid が消えていて、新しい pid で動いている**。サーバを止めると、その拡張と孫も消える
  * pane のシェルは `/bin/sh`（`--shell`）——印に `$$`・`$((…))` を使うため。
  * vitest の中では確かめられない（execve の先の新しい版がビルドした成果物であるため。tasks.md「実装方針」）。
  */
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,6 +62,29 @@ function isAlive(pid: number): boolean {
   } catch {
     return false;
   }
+}
+
+/** 「生きていない」: `kill(pid, 0)` が失敗するか、Linux でゾンビ（PID 1 が孤児を回収しない環境で起きる）。 */
+function isGone(pid: number): boolean {
+  if (!isAlive(pid)) return true;
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3) === "Z";
+  } catch {
+    return false;
+  }
+}
+
+/** 拡張の起動の記録（1 行 = `<拡張の pid> <孫の pid>`）。 */
+function extStarts(file: string): { ext: number; grand: number }[] {
+  if (!existsSync(file)) return [];
+  return readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => {
+      const [e, g] = l.split(" ").map(Number);
+      return { ext: e!, grand: g! };
+    });
 }
 
 /** 1 本の持続的な message ハンドラで、応答・イベント・pane の出力（SNAPSHOT と OUTPUT）を溜める。 */
@@ -202,9 +227,13 @@ async function main(): Promise<void> {
   const stateDir = await mkdtemp(join(tmpdir(), "soda-handoff-smoke-"));
   /** セッションのキャッシュの無い HOME（`sodactl ask` をログインなしで呼ぶ）。 */
   const homeDir = await mkdtemp(join(tmpdir(), "soda-handoff-smoke-home-"));
+  /** 拡張のスクリプトと、起動の記録を置く場所。 */
+  const extDir = await mkdtemp(join(tmpdir(), "soda-handoff-smoke-ext-"));
+  const extMarks = join(extDir, "starts.txt");
   let server: ChildProcess | undefined;
   let shellPid: number | undefined;
   let serverOut = "";
+  const extPidsSeen: number[] = [];
   try {
     // 1. 動いていないとき（AC12）
     const idle = runSoda(["handoff", "--state-dir", stateDir]);
@@ -215,6 +244,24 @@ async function main(): Promise<void> {
         `soda handoff created files while no server ran: ${readdirSync(stateDir).join(",")}`,
       );
     log("not running → exit 3, nothing created ok");
+
+    // 1b. 拡張を登録する（20261007-ext-host）。起動のたびに、自分の pid と孫の `sleep` の pid を記録し、標準入力が閉じたら終わる。
+    const extScript = join(extDir, "ext.mjs");
+    await writeFile(
+      extScript,
+      `import { spawn } from "node:child_process";
+import { appendFileSync } from "node:fs";
+const g = spawn("sleep", ["300"], { stdio: "ignore" });
+appendFileSync(process.argv[2], process.pid + " " + g.pid + "\\n");
+process.stdin.on("end", () => process.exit(0));
+process.stdin.resume();
+`,
+    );
+    await writeFile(
+      join(stateDir, "extensions.json"),
+      JSON.stringify({ extensions: [{ id: "smoke", command: `"${process.execPath}" "${extScript}" "${extMarks}"` }] }),
+      { mode: 0o600 },
+    );
 
     // 2. サーバを起動し、token 付きの URL から token を取る
     const port = await freePort();
@@ -282,6 +329,12 @@ async function main(): Promise<void> {
     const events = spawnDisplayEvents(displayEnv);
     await until("display events ready", () => (events.lines.some((l) => l["type"] === "display.ready") ? true : undefined), 10_000);
     log("sodactl display set / events without a login (pane socket) ok");
+
+    // 3c. 拡張が動いている（記録が 1 行）。
+    const extBefore = await until("extension started before the handoff", () => (extStarts(extMarks).length >= 1 ? extStarts(extMarks)[0] : undefined), 15_000);
+    extPidsSeen.push(extBefore.ext, extBefore.grand);
+    if (!isAlive(extBefore.ext) || !isAlive(extBefore.grand)) throw new Error(`the extension or its child is not alive before the handoff: ${JSON.stringify(extBefore)}`);
+    log(`extension running before the handoff: pid ${extBefore.ext}, child ${extBefore.grand}`);
 
     // 4. 入れ替え
     const handoff = runSoda(["handoff", "--state-dir", stateDir]);
@@ -355,6 +408,15 @@ async function main(): Promise<void> {
     await until("display.closed on the waiting events", () => (events.lines.some((l) => l["type"] === "display.closed" && l["reason"] === "closed" && l["name"] === "after") ? true : undefined), 10_000);
     log("display events survived the handoff (display.reset), list was empty, re-set and close reach the waiting events ok");
 
+    // 5c. 拡張（AC14・u2）: 前の拡張と孫は消えていて、新しい pid で動いている。
+    const extAfter = await until("extension restarted after the handoff", () => (extStarts(extMarks).length >= 2 ? extStarts(extMarks)[1] : undefined), 15_000);
+    extPidsSeen.push(extAfter.ext, extAfter.grand);
+    await until("the previous extension and its child are gone", () => (isGone(extBefore.ext) && isGone(extBefore.grand) ? true : undefined), 10_000);
+    if (extAfter.ext === extBefore.ext || extAfter.grand === extBefore.grand) throw new Error(`the extension was not restarted with new pids: ${JSON.stringify({ extBefore, extAfter })}`);
+    if (isGone(extAfter.ext) || isGone(extAfter.grand)) throw new Error(`the new extension or its child is not alive: ${JSON.stringify(extAfter)}`);
+    if (extStarts(extMarks).length !== 2) throw new Error(`the extension was started ${extStarts(extMarks).length} times (expected 2)`);
+    log(`extension replaced across the handoff: ${extBefore.ext}/${extBefore.grand} gone, new ${extAfter.ext}/${extAfter.grand} running ok`);
+
     // 6b. handoff より前からある pane の環境で、ログインなしの `sodactl ask`（20261003-sodactl-ask-socket の AC11）。
     // 古い版が起動した pane には `SODA_PANE_SOCKET` が無く、`SODA_AGENT_REPORT_SOCKET` だけがある。sodactl は同じ状態ディレクトリの `pane.sock` を導く。
     // 画面（`ask.subscribe` したクライアント）は居ないので、受け口を通れば `unavailable`・終了コード 0。
@@ -426,6 +488,10 @@ async function main(): Promise<void> {
     if (stopCode !== 1 || last?.["type"] !== "display.end" || last["reason"] !== "connection_closed")
       throw new Error(`display events after the server stopped: exit ${stopCode}, last line ${JSON.stringify(last)}, stderr ${stopEvents.stderr()}`);
     log("display events after the server stopped → display.end (connection_closed), exit 1 ok");
+    // 9. サーバが止まると、拡張と孫も消える（AC13・AC14）。
+    await until("the server exits", () => (server!.exitCode !== null || serverExited ? true : undefined), 20_000);
+    await until("the extension and its child are gone after the server stopped", () => (isGone(extAfter.ext) && isGone(extAfter.grand) ? true : undefined), 10_000);
+    log("extension and its child gone after the server stopped ok");
   } finally {
     if (server !== undefined && server.exitCode === null) {
       const exited = new Promise<void>((resolve) => server!.once("exit", () => resolve()));
@@ -440,8 +506,19 @@ async function main(): Promise<void> {
         // 既に終わっている。
       }
     }
+    // 拡張と孫を、残さない（失敗した場合の後始末。生きていれば止める）。
+    for (const pid of extPidsSeen) {
+      if (!isGone(pid)) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          // 既に終わっている。
+        }
+      }
+    }
     await rm(stateDir, { recursive: true, force: true });
     await rm(homeDir, { recursive: true, force: true });
+    await rm(extDir, { recursive: true, force: true });
   }
   log("ok");
 }

@@ -246,7 +246,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       対象: `packages/cli/src/commands/ext.ts`（新規）、`packages/cli/src/cliArgs.ts` `USAGE_LINES`・`Command`・`parseCommand`、`packages/cli/src/main.ts`、`packages/cli/skills/sodactl/SKILL.md`、`packages/cli/src/skill.test.ts`（通ること）、手本 `packages/cli/src/commands/display.ts`（`unsupported` の出し方）/ 根拠: research X18、`20261007-soda-extensions/research.md` R7、design「`sodactl ext`」
       依存: T10
       AC: AC16
-- [ ] T13: 起動確認に段を足す: `handoffSmoke.ts` — 状態ディレクトリに `extensions.json`（起動のたびに、自分の pid と、起動した孫〔`sleep`〕の pid を、決まったファイルへ追記する拡張）を置いて起動 → 拡張が動いている → `soda handoff` → **前の拡張と孫の pid が消えていて、新しい pid で動いている**。
+- [x] T13: 起動確認に段を足す: `handoffSmoke.ts` — 状態ディレクトリに `extensions.json`（起動のたびに、自分の pid と、起動した孫〔`sleep`〕の pid を、決まったファイルへ追記する拡張）を置いて起動 → 拡張が動いている → `soda handoff` → **前の拡張と孫の pid が消えていて、新しい pid で動いている**。
       `stopSmoke.ts` — 同じ拡張を動かして `soda session stop` → 拡張と孫の pid が消えている。pid の再利用を避けるため、確かめは、止めた直後に行う（既存の `isAlive`・`until` を使う）。不確かな点 2 の結果を `decisions.md` に 1 行
       対象: `packages/server/src/handoffSmoke.ts`（`main()` の段・`isAlive` 56 行付近）、`packages/server/src/stopSmoke.ts` / 根拠: research E6・E9・X20、design「受け入れ基準との対応」AC14
       依存: T10

@@ -7,11 +7,13 @@
  *   `soda session list` が stopped、`soda.lock` が無く、`session.json`・`session-history.json` がある（AC1）
  * - 止まった後の `soda session stop` は 3（AC16）
  * - 同じ引数で起動し直すと同じ pane があり、前回の画面（`--pane-history`）が戻る（AC1）
+ * - 拡張（20261007-ext-host の AC13・AC14）: session の状態ディレクトリの `extensions.json` に登録した拡張（起動のたびに、自分の pid と孫の `sleep` の pid を記録する）が、
+ *   `soda session stop` でサーバが止まった時点で、拡張と孫の pid が消えている（止めた直後に確かめる）。起動し直すと、新しい pid で動く
  * `main.ts` は単体テストできない（読み込むと起動する）ので、止める指示と停止の手順の配線はここで見る。pane のシェルは `/bin/sh`（印に `$((…))`）。
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,6 +46,39 @@ async function until<T>(
     if (Date.now() > deadline) throw new Error(`timed out: ${what}`);
     await new Promise((r) => setTimeout(r, 50));
   }
+}
+
+/** `process.kill(pid, 0)` が通るか（このファイルには、これまで `isAlive` に当たる関数が無かった）。 */
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 「生きていない」: `kill(pid, 0)` が失敗するか、Linux でゾンビ（PID 1 が孤児を回収しない環境で起きる）。 */
+function isGone(pid: number): boolean {
+  if (!isAlive(pid)) return true;
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3) === "Z";
+  } catch {
+    return false;
+  }
+}
+
+/** 拡張の起動の記録（1 行 = `<拡張の pid> <孫の pid>`）。 */
+function extStarts(file: string): { ext: number; grand: number }[] {
+  if (!existsSync(file)) return [];
+  return readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => {
+      const [e, g] = l.split(" ").map(Number);
+      return { ext: e!, grand: g! };
+    });
 }
 
 /**
@@ -183,6 +218,9 @@ async function main(): Promise<void> {
   }
   const stateDir = await mkdtemp(join(tmpdir(), "soda-stop-smoke-"));
   const sessionDir = join(stateDir, "sessions", "smoke");
+  const extDir = await mkdtemp(join(tmpdir(), "soda-stop-smoke-ext-"));
+  const extMarks = join(extDir, "starts.txt");
+  const extPidsSeen: number[] = [];
   let first: Serve | undefined;
   let second: Serve | undefined;
   /** 印を打った pane のシェル（後始末でサーバが止めきれなかったときに残さない）。 */
@@ -196,6 +234,24 @@ async function main(): Promise<void> {
     if (readdirSync(sessionDir).length !== 0)
       throw new Error(`soda session stop created files: ${readdirSync(sessionDir).join(",")}`);
     log("not running → exit 3, nothing created ok");
+
+    // 1b. 拡張を登録する（session の状態ディレクトリ）。起動のたびに、自分の pid と孫の `sleep` の pid を記録し、標準入力が閉じたら終わる。
+    const extScript = join(extDir, "ext.mjs");
+    await writeFile(
+      extScript,
+      `import { spawn } from "node:child_process";
+import { appendFileSync } from "node:fs";
+const g = spawn("sleep", ["300"], { stdio: "ignore" });
+appendFileSync(process.argv[2], process.pid + " " + g.pid + "\\n");
+process.stdin.on("end", () => process.exit(0));
+process.stdin.resume();
+`,
+    );
+    await writeFile(
+      join(sessionDir, "extensions.json"),
+      JSON.stringify({ extensions: [{ id: "smoke", command: `"${process.execPath}" "${extScript}" "${extMarks}"` }] }),
+      { mode: 0o600 },
+    );
 
     // 2. 起動し、pane に印を打つ
     const port = await freePort();
@@ -228,6 +284,9 @@ async function main(): Promise<void> {
     );
     shellPid = Number(/SHELL-PID-(\d+)/.exec(c1.screen(paneId))?.[1]);
     log(`started: pid ${first.child.pid}, pane ${paneId}, marker shown`);
+    const ext1 = await until("extension started", () => (extStarts(extMarks).length >= 1 ? extStarts(extMarks)[0] : undefined), 15_000);
+    extPidsSeen.push(ext1.ext, ext1.grand);
+    if (isGone(ext1.ext) || isGone(ext1.grand)) throw new Error(`the extension or its child is not alive: ${JSON.stringify(ext1)}`);
 
     // 3. 止める（AC1）
     const stop = await runSoda(["session", "stop", "smoke", "--state-dir", stateDir]);
@@ -250,6 +309,9 @@ async function main(): Promise<void> {
       if (!existsSync(join(sessionDir, file))) throw new Error(`${file} was not written`);
     c1.ws.close();
     log("stopped: CLI exit 0, server exit 0, list shows stopped, lock released, state saved ok");
+    // 拡張と孫は、サーバが止まった時点で消えている（pid の再利用を避けるため、止めた直後に確かめる）。
+    if (!isGone(ext1.ext) || !isGone(ext1.grand)) throw new Error(`the extension or its child outlived the server: ${JSON.stringify(ext1)}`);
+    log(`extension ${ext1.ext} and its child ${ext1.grand} are gone after the stop ok`);
 
     // 4. 止まった後（AC16）
     const again = await runSoda(["session", "stop", "smoke", "--state-dir", stateDir]);
@@ -288,6 +350,13 @@ async function main(): Promise<void> {
     );
     c2.ws.close();
     log("restarted: same pane, previous screen restored ok");
+    // 起動し直すと、拡張は新しい pid で動く。止めると、また消える。
+    const ext2 = await until("extension restarted", () => (extStarts(extMarks).length >= 2 ? extStarts(extMarks)[1] : undefined), 15_000);
+    extPidsSeen.push(ext2.ext, ext2.grand);
+    if (ext2.ext === ext1.ext || ext2.grand === ext1.grand) throw new Error(`the extension was not restarted with new pids: ${JSON.stringify({ ext1, ext2 })}`);
+    await stopChild(second);
+    if (!isGone(ext2.ext) || !isGone(ext2.grand)) throw new Error(`the restarted extension or its child outlived the server: ${JSON.stringify(ext2)}`);
+    log("extension restarted with new pids and gone after the second stop ok");
   } finally {
     const forced = [await stopChild(first), await stopChild(second)].includes(true);
     // サーバを SIGKILL で止めたときだけ（シェルが残りうる）。普段はサーバが止まった時点でシェルも終わっていて、その pid は別のプロセスに
@@ -300,7 +369,18 @@ async function main(): Promise<void> {
         // 終わっている。
       }
     }
+    // 拡張と孫を、残さない（失敗した場合の後始末）。
+    for (const pid of extPidsSeen) {
+      if (!isGone(pid)) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          // 既に終わっている。
+        }
+      }
+    }
     await rm(stateDir, { recursive: true, force: true });
+    await rm(extDir, { recursive: true, force: true });
   }
   log("ok");
 }

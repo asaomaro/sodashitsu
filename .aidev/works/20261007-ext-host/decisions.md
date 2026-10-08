@@ -290,3 +290,7 @@ K6（`script-html` の許可）は、その後に main に入った設定 `displ
 
 - 量の桶は、`display/rateLimit.ts` の `TokenBucket`（借りない）ではなく、`ExtensionProcess.ts` の `DebtBucket`（借りられる）を使う。理由: 片は既に届いているので捨てられず、足りない分を「読むのを待つ時間」にして返す必要がある（design「頻度」の「借りた形にして」）。行の桶（1 行ずつ処理の前に取る）は `TokenBucket` のまま。`ExtProcessDeps.totalBytes` の型は `DebtBucket`。
 - `ExtChild.pid` は、実際の `ChildProcess` に合わせて `pid?: number | undefined`。
+- **u2（通常の道では通らない。未確認）**: 起動確認（`handoffSmoke.ts`）は、`pausePollers` が `extensions.stop()` で子と孫を止めてから `execve` する道を通す。入れ替えの後、前の拡張と孫の pid が消えていて、新しい pid で動くことは確かめた。「止め損ねた子の標準入力が、`execve` の後に閉じる」道（Node のパイプが close-on-exec であること）は、止めて待つので、この確認では通らない。docs「安全と限界」に「未確認」と書く。
+- **u4（済み）**: pane が tab・workspace を移ったとき（`SessionService.moveToTab`／`moveToNewTab`）、bus には `pane.updated`（移った pane。`tabId` が替わる）・`tab.created`（新しい tab）・`workspace.updated`・`layout.updated`・`tab.closed`・`workspace.closed` が出る（`pane.created`・`pane.closed` は出ない）。いずれも `ExtensionHost` が pane の一覧を作り直すきっかけの集合（`pane.updated`・`tab.created`・`tab.closed`・`layout.updated`・`workspace.updated`・`workspace.closed`）に入っている。main の「pane の移動の制限」（PR #98。同じ worktree の間だけ）は、設計に当てはめていない。範囲の確かめは、要求のたび・出来事を渡す直前・2 秒ごとの見直しで、イベントに頼らない。
+- **`skill.test.ts` の `GROUPS` に `"ext"` を足した**（tasks.md は「変えない」としていたが、`USAGE_LINES` が `ext list`・`ext log`・`ext reload`・`ext restart` の 4 行になり、`ext` が `GROUPS` に無いと 4 行が 1 つの語 `ext` に畳まれて「全コマンドが本文に出てくる」の件数の検査〔`commands.length === USAGE_LINES.length`〕が合わない。`display` が `GROUPS` にあるのと同じ扱いで、検査の規則は変えていない）。
+- **T12 は点検対象（★）ではないが、`aidev taskcheck start T12` を誤って記録した**（metrics に出る。報告は要らない）。
