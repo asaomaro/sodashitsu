@@ -7,6 +7,7 @@ import { DisplayControllerKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useViewStore } from "../store/view.js";
 import DisplayFrame from "./DisplayFrame.vue";
+import DisplayScriptMark from "./DisplayScriptMark.vue";
 
 /**
  * pane の上に出す帯（表示の面 `--kind band`。20261007-soda-extensions の design「ブラウザ」）。1 本ごとに左端に固定の印「▍表示」（アプリが描く）・枠・［×］。
@@ -42,12 +43,14 @@ function showHidden(): void {
       :data-display-name="b.name"
     >
       <span class="pane-band-mark" :title="markLabel(b)" :aria-label="markLabel(b)" role="img" data-pane-band-mark>▍表示</span>
+      <DisplayScriptMark :info="b" part="mark" class="pane-band-script-mark" />
       <span v-if="store.focusedDisplayId === b.id" class="pane-band-engaged-note" aria-live="polite" title="入力はこの表示に届きます（Esc で端末へ）" data-pane-band-engaged-note>
         入力はこの表示に届きます（Esc で端末へ）
       </span>
       <div class="pane-band-frame">
         <DisplayFrame :key="frameKey(b)" :info="b" :content="store.contents.get(b.id)" />
       </div>
+      <DisplayScriptMark :info="b" part="button" />
       <button type="button" class="pane-band-close" aria-label="この表示を閉じる" title="この表示を閉じる" data-pane-band-close @click="controller?.dismiss({ id: b.id })">×</button>
       <div class="pane-band-ring" aria-hidden="true"></div>
     </div>

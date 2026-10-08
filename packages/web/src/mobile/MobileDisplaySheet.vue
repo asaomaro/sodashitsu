@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onMounted, ref } from "vue";
 import DisplayFrame from "../components/DisplayFrame.vue";
+import DisplayScriptMark from "../components/DisplayScriptMark.vue";
 import { displayLabel, DISPLAY_LABEL_PREFIX } from "../display/displayLabel.js";
 import { frameKey } from "../display/framePage.js";
 import { DisplayControllerKey } from "../injection.js";
@@ -52,7 +53,8 @@ function dismissActive(): void {
   <dialog ref="dlg" class="mobile-display-sheet" :aria-label="DISPLAY_LABEL_PREFIX" data-mobile-display-sheet @close="emit('close')" @cancel.prevent="emit('close')">
     <div v-if="active" class="mobile-display-box" :class="{ 'mobile-display-engaged': engaged }">
       <div class="mobile-display-head">
-        <div class="mobile-display-label" data-mobile-display-label>{{ displayLabel(active) }}</div>
+        <div class="mobile-display-label" data-mobile-display-label><DisplayScriptMark :info="active" part="mark" />{{ displayLabel(active) }}</div>
+        <DisplayScriptMark :info="active" part="button" />
         <button type="button" class="mobile-display-btn" data-mobile-display-dismiss @click="dismissActive">この表示を消す</button>
         <button type="button" class="mobile-display-btn" data-mobile-display-close @click="emit('close')">閉じる</button>
       </div>

@@ -280,12 +280,30 @@
     focusEl(body);
   }
 
+  // --- よそからフォーカスが来たこと（スクリプトが動く面が `parent.frames[i].focus()` で、この枠へフォーカスを移す場合に備える）---------------
+  // 自分の window が `focus` を受けたとき、直前（500ms 以内）に、枠の中の本物の（isTrusted の）`pointerdown` も、親からの `focus` の知らせも無ければ、
+  // 親へ `foreign-focus` を知らせる（親は、利用者が `Tab` で入ったのでなければ、元の場所へ戻す。回数には数えない）。この知らせ以外に、枠のスクリプトは `focus()` を呼ばない。
+  var lastPointerAt = -Infinity;
+  var lastParentFocusAt = -Infinity;
+  var FOREIGN_WINDOW_MS = 500;
+  addListener.call(window, 'pointerdown', function (e) {
+    if (e.isTrusted) lastPointerAt = Date.now();
+  }, true);
+  addListener.call(window, 'focus', function () {
+    var now = Date.now();
+    if (now - lastPointerAt < FOREIGN_WINDOW_MS || now - lastParentFocusAt < FOREIGN_WINDOW_MS) return;
+    post({ type: 'foreign-focus' });
+  });
+
   function onPort(ev) {
     var m = ev.data;
     if (!m || typeof m !== 'object') return;
     if (m.type === 'ping') post({ type: 'pong', n: m.n });
     else if (m.type === 'render') render(m);
-    else if (m.type === 'focus') focusFirst();
+    else if (m.type === 'focus') {
+      lastParentFocusAt = Date.now();
+      focusFirst();
+    }
   }
 
   addListener.call(window, 'message', function (ev) {

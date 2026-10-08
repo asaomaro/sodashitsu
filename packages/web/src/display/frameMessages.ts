@@ -7,7 +7,9 @@ export type FrameMessage =
   | { type: "failed"; rev: number }
   | { type: "action"; rev: number; action: string; data?: Record<string, string> }
   | { type: "key"; key: "escape" | "prefix" }
-  | { type: "pong"; n: number };
+  | { type: "pong"; n: number }
+  /** 静的な枠だけ: よその窓（兄弟の枠のスクリプトなど）からフォーカスが来た（利用者が入ったのではない）。親が元の場所へ戻す。 */
+  | { type: "foreign-focus" };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -30,6 +32,8 @@ export function readFrameMessage(data: unknown): FrameMessage | null {
     }
     case "key":
       return data.key === "escape" || data.key === "prefix" ? { type: "key", key: data.key } : null;
+    case "foreign-focus":
+      return { type: "foreign-focus" };
     case "pong":
       return typeof data.n === "number" && Number.isInteger(data.n) ? { type: "pong", n: data.n } : null;
     default:

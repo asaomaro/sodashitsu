@@ -541,6 +541,10 @@ app.provide(DisplayHostKey, {
       },
       paneId,
     ),
+  focusSelectedTerminal: () => {
+    const id = view.focusedPaneId;
+    if (id) registry.focus(id);
+  },
   injectPrefix: () => keys.injectPrefix(),
   prefixKey: () => {
     const k = router.prefixKeyInput();

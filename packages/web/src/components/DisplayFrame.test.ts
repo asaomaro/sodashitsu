@@ -22,8 +22,8 @@ function fakeWin() {
 function setup(props: { info?: DisplayInfo; content?: DisplayContent } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
-  const controller = { report: vi.fn(), sendAction: vi.fn(), ensureContent: vi.fn(async () => undefined) };
-  const host = { focusTerminal: vi.fn(), injectPrefix: vi.fn(), prefixKey: () => ({ key: "b", ctrl: true, alt: false, shift: false, meta: false }) };
+  const controller = { report: vi.fn(async () => true), sendAction: vi.fn(), ensureContent: vi.fn(async () => undefined), onMessage: vi.fn(() => () => undefined) };
+  const host = { focusTerminal: vi.fn(), focusSelectedTerminal: vi.fn(), injectPrefix: vi.fn(), prefixKey: () => ({ key: "b", ctrl: true, alt: false, shift: false, meta: false }) };
   const w = mount(DisplayFrame, {
     props: { info: props.info ?? info(), content: props.content },
     global: { plugins: [pinia], provide: { [DisplayControllerKey as symbol]: controller, [DisplayHostKey as symbol]: host } },
@@ -41,12 +41,19 @@ function setup(props: { info?: DisplayInfo; content?: DisplayContent } = {}) {
 }
 
 describe("framePage / frameKey / readFrameMessage", () => {
-  it("静的な形式だけ頁を持つ。未知の形式（script-html を含む）は null", () => {
-    for (const f of ["text", "markdown", "html"]) expect(framePage(f)?.sandbox).toBe(DISPLAY_VIEW_SANDBOX);
-    expect(framePage("script-html")).toBeNull();
+  it("静的な形式は静的な頁、script-html は専用の頁と sandbox。未知の形式は null", () => {
+    for (const f of ["text", "markdown", "html"]) expect(framePage(f)).toEqual({ page: "/display-view/frame.html", sandbox: DISPLAY_VIEW_SANDBOX, kind: "static" });
+    // スクリプトが動く形式は、別の頁・別の sandbox（allow-scripts だけ）。知らない形式は null
+    expect(framePage("script-html")).toEqual({ page: "/display-view/script.html", sandbox: "allow-scripts", kind: "script" });
     expect(framePage("future-x")).toBeNull();
+    expect(framePage("")).toBeNull();
+    expect(framePage("script-html")!.sandbox).not.toContain("allow-same-origin");
     expect(DISPLAY_VIEW_SANDBOX).not.toContain("allow-same-origin");
     expect(frameKey({ id: "a", format: "html" })).toBe("a:html");
+    // スクリプトが動く形式は版も入る（版が替わったら枠ごと作り直す）
+    expect(frameKey({ id: "a", format: "script-html", rev: 3 })).toBe("a:script-html:3");
+    expect(frameKey({ id: "a", format: "script-html", rev: 4 })).not.toBe(frameKey({ id: "a", format: "script-html", rev: 3 }));
+    expect(frameKey({ id: "a", format: "html", rev: 4 })).toBe("a:html");
   });
   it("枠の知らせの検査", () => {
     expect(readFrameMessage({ type: "action", rev: 1, action: "go", data: { value: "1" } })).toEqual({ type: "action", rev: 1, action: "go", data: { value: "1" } });
@@ -217,7 +224,7 @@ describe("DisplayFrame", () => {
   });
 
   it("未知の形式は枠を作らず固定の文言。形式が替わると iframe が別の要素になる", async () => {
-    const s = setup({ info: info({ format: "script-html" }) });
+    const s = setup({ info: info({ format: "future-x" }) });
     expect(s.w.find("iframe").exists()).toBe(false);
     expect(s.w.find("[data-display-note]").text()).toBe(DISPLAY_NOTE_UNSUPPORTED);
     expect(s.controller.ensureContent).not.toHaveBeenCalled();

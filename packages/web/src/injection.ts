@@ -41,6 +41,8 @@ export interface DisplayHost {
   focusTerminal(paneId: string): void;
   /** いまの prefix のキーを、利用者の次のキーの前に注入する。 */
   injectPrefix(): void;
+  /** 利用者が選んでいる pane（`view.focusedPaneId`）の端末へフォーカスを戻す（スクリプトの面がフォーカスを取ったときの、元の場所が使えないときの戻し先）。 */
+  focusSelectedTerminal(): void;
   /** いまの prefix のキー（枠へ `relayKeys` として渡す）。 */
   prefixKey(): { key: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean };
 }

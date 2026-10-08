@@ -7,6 +7,7 @@ import { frameKey } from "../display/framePage.js";
 import { DisplayControllerKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import DisplayFrame from "./DisplayFrame.vue";
+import DisplayScriptMark from "./DisplayScriptMark.vue";
 
 /**
  * pane の右に出すパネル（表示の面 `--kind panel`。20261007-soda-extensions の design「ブラウザ」）。
@@ -158,8 +159,9 @@ function onTabKey(ev: KeyboardEvent): void {
     </button>
     <template v-else>
       <div class="pane-panel-head">
-        <div class="pane-panel-label" data-pane-panel-label>{{ displayLabel(active) }}</div>
+        <div class="pane-panel-label" data-pane-panel-label><DisplayScriptMark :info="active" part="mark" />{{ displayLabel(active) }}</div>
         <div class="pane-panel-actions">
+          <DisplayScriptMark :info="active" part="button" />
           <button type="button" class="pane-panel-btn" aria-label="パネルをたたむ" title="たたむ" data-pane-panel-fold @click="store.setCollapsed(paneId, true)">▸</button>
           <button type="button" class="pane-panel-btn" aria-label="この表示を閉じる" title="この表示を閉じる" data-pane-panel-close @click="dismiss(active.id)">×</button>
         </div>

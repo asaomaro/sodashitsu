@@ -355,7 +355,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       依存: T9, T23
       AC: AC29, AC30, AC37
       点検: あり
-- [ ] T27: web の追加（頁の選択・覆い・［操作する］・フォーカスの番・印）:
+- [x] T27: web の追加（頁の選択・覆い・［操作する］・フォーカスの番・印）:
       `framePage.ts` に `script-html` → `{ page: DISPLAY_SCRIPT_VIEW_PAGE, sandbox: DISPLAY_SCRIPT_VIEW_SANDBOX, kind: "script" }` を足す（定数もここから export。**頁と sandbox を決める場所を増やさない**）。
       `focusGuard.ts`（純粋な状態機械: `engaged`・`focused`。「操作中でないのに枠がフォーカスを持つ」に**変わった**ときだけ、「戻す・知らせる」を返す〔取られたままを見回りのたびに数えない〕。`acceptKey(key)` は、操作中の `escape` だけ真。回数で閉じる判断は持たない〔サーバが数える〕。知らせを送れない間だけ、画面の中で数えて 3 回で「この画面の枠を外す」）、
       元の場所の追跡（親の文書の `focusin`。**表示の枠〔どの面のものでも〕・覆い・［操作する］ボタンは覚えない**）、戻し方（覚えた要素へ `focus()`。無い・`body` なら `view.focusedPaneId` の端末。**戻ったかを確かめ**、だめなら `iframe.blur()` してもう 1 回、それでもだめなら、この画面の枠を外して固定の文言と［もう一度出す］）、

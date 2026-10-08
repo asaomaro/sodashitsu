@@ -2,6 +2,8 @@
 export interface RegisteredFrame {
   /** 枠の中へフォーカスを移す。 */
   focusInside(): void;
+  /** ［操作する］ボタンの `click`（スクリプトが動く面だけ。`engageEntry` の決まりで、始める時機を遅らせる）。 */
+  engageFromButton?(ev: Pick<MouseEvent, "detail">): void;
 }
 
 const frames = new Map<string, RegisteredFrame>();
@@ -17,5 +19,13 @@ export function focusFrame(id: string): boolean {
   const f = frames.get(id);
   if (!f) return false;
   f.focusInside();
+  return true;
+}
+
+/** ［操作する］ボタンの `click` を、その面の枠へ渡す。その面の枠が載っていなければ `false`。 */
+export function engageFrame(id: string, ev: Pick<MouseEvent, "detail">): boolean {
+  const f = frames.get(id);
+  if (!f?.engageFromButton) return false;
+  f.engageFromButton(ev);
   return true;
 }

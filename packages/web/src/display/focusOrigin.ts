@@ -1,0 +1,99 @@
+/**
+ * 「元の場所」の追跡と、戻し方（スクリプトが動く面のフォーカスの番の一部。20261007-soda-extensions の design「元の場所を覚える」「横取りの検知」）。
+ *
+ * - 親の文書の `focusin` で、「最後にフォーカスのあった、**表示の枠（どの面のものでも）・覆い・［操作する］ボタンでない**要素」を覚える。
+ *   面が続けて取り合っても、枠を覚えない（戻る先が枠どうしで回らない）。
+ * - 戻し方: 覚えた要素へ `focus()`。覚えた要素が無い・もう DOM に無い・`body` のときは、`fallback`（利用者が選んでいる pane の端末）へ。
+ *   戻ったかを確かめ（`document.activeElement` がその iframe でない）、だめなら `iframe.blur()` してもう 1 回。それでもだめなら `false`（呼び側が、この画面の枠を外す）。
+ */
+
+/** 追跡に入れない要素（表示の枠・覆い・［操作する］ボタン）。 */
+const EXCLUDED = "[data-display-frame], .display-frame-cover, .display-engage";
+
+let origin: Element | null = null;
+let installed = false;
+let target: Document | null = null;
+let lastTabAt = -Infinity;
+const lastNow = (): number => Date.now();
+
+function onKeyDown(ev: Event): void {
+  if ((ev as KeyboardEvent).key === "Tab") lastTabAt = lastNow();
+}
+
+/** 直前（`ms` 以内）に、親の文書で `Tab` のキーを受けたか（利用者が `Tab` で枠へ入ったのかを見分ける）。 */
+export function tabPressedWithin(ms: number): boolean {
+  return lastNow() - lastTabAt < ms;
+}
+
+function onFocusIn(ev: Event): void {
+  const t = ev.target;
+  if (!(t instanceof Element)) return;
+  if (t.matches(EXCLUDED) || t.closest(EXCLUDED)) return;
+  if (t === t.ownerDocument.body || t === t.ownerDocument.documentElement) return;
+  origin = t;
+}
+
+/** 追跡を始める（何度呼んでもよい）。 */
+export function installFocusOriginTracking(doc: Document = document): void {
+  if (installed && target === doc) return;
+  if (installed && target) {
+    target.removeEventListener("focusin", onFocusIn, true);
+    target.removeEventListener("keydown", onKeyDown, true);
+  }
+  doc.addEventListener("focusin", onFocusIn, true);
+  doc.addEventListener("keydown", onKeyDown, true);
+  installed = true;
+  target = doc;
+}
+
+/** テスト用: 追跡を外して覚えた要素を捨てる。 */
+export function resetFocusOriginTracking(): void {
+  if (installed && target) {
+    target.removeEventListener("focusin", onFocusIn, true);
+    target.removeEventListener("keydown", onKeyDown, true);
+  }
+  installed = false;
+  target = null;
+  origin = null;
+  lastTabAt = -Infinity;
+}
+
+/** 覚えている元の場所（まだ文書の中にあるときだけ）。 */
+export function rememberedOrigin(): Element | null {
+  return origin !== null && origin.isConnected && !origin.matches(EXCLUDED) ? origin : null;
+}
+
+function isFocusable(el: Element): el is HTMLElement {
+  return typeof (el as HTMLElement).focus === "function";
+}
+
+/**
+ * 元の場所へ戻す。`iframe` は、取られた枠（戻ったかの確かめに使う）。`fallback` は、覚えた要素が使えないときの戻し先
+ * （利用者が選んでいる pane の端末へフォーカスを移す関数）。戻せたら `true`。
+ */
+export function restoreFocus(iframe: HTMLIFrameElement, fallback: () => void, doc: Document = document): boolean {
+  const back = (): void => {
+    const el = rememberedOrigin();
+    if (el !== null && isFocusable(el)) {
+      try {
+        el.focus({ preventScroll: true });
+      } catch {
+        /* 次の戻し先へ */
+      }
+    }
+    if (doc.activeElement === iframe || el === null) {
+      // 覚えた要素へ戻せなかった・無かった: 利用者が選んでいる pane の端末へ。
+      fallback();
+    }
+  };
+  back();
+  if (doc.activeElement !== iframe) return true;
+  // 戻っていない: 枠を blur してもう 1 回。
+  try {
+    iframe.blur();
+  } catch {
+    /* 続ける */
+  }
+  back();
+  return doc.activeElement !== iframe;
+}
