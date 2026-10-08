@@ -60,6 +60,8 @@ export interface ActionDispatcherOptions {
   notifications: { focusNext(): void };
   /** クリップボードの画像の貼り付け（20260927-clipboard-image-paste。`term/ImagePaster`）。省略時はメニューの「貼り付け」はテキストだけ（今までの経路）。 */
   imagePaste?: { pasteClipboard(paneId: string): void };
+  /** 設定を読み直す（`reloadConfig`）のとき、拡張の設定も読み直す（20261007-ext-host。古いサーバ〔`not_found`〕は黙って無視。省略時は何もしない）。 */
+  extensionReload?: () => void;
 }
 
 /**
@@ -82,12 +84,14 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   private readonly input: ActionDispatcherOptions["input"];
   private readonly notifications: ActionDispatcherOptions["notifications"];
   private readonly imagePaste: ActionDispatcherOptions["imagePaste"];
+  private readonly extensionReload: ActionDispatcherOptions["extensionReload"];
 
   constructor(opts: ActionDispatcherOptions) {
     this.conn = opts.conn;
     this.input = opts.input;
     this.notifications = opts.notifications;
     this.imagePaste = opts.imagePaste;
+    this.extensionReload = opts.extensionReload;
     this.session = useSessionStore(opts.pinia);
     this.agentIntegrations = useAgentIntegrationsStore(opts.pinia);
     this.seen = useSeenStore(opts.pinia);
@@ -1633,6 +1637,8 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         if (r.problem !== null) this.view.toast(`独自コマンドの設定を読めませんでした：${r.problem}`);
       })
       .catch(() => this.view.toast("独自コマンドの設定を読み直せませんでした。"));
+    // 拡張（20261007-ext-host）：サーバに extensions.json を読み直させる（トーストは出さない。結果は節「拡張」の一覧に出る）。
+    this.extensionReload?.();
   }
 }
 

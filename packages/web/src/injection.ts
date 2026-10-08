@@ -8,6 +8,7 @@ import type { TerminalRegistry } from "./term/TerminalRegistry.js";
 import type { FileTransfer } from "./term/FileTransfer.js";
 import type { ViewSync } from "./term/ViewSync.js";
 import type { AskController } from "./ask/AskController.js";
+import type { ExtensionController } from "./extensions/ExtensionController.js";
 import type { DisplayController } from "./display/DisplayController.js";
 
 /**
@@ -32,6 +33,8 @@ export const KeyInputControllerKey: InjectionKey<KeyInputController> = Symbol("k
 export const MachineSwitcherKey: InjectionKey<MachineSwitcher> = Symbol("machineSwitcher");
 /** 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）の通信の係。`AskDialog` が回答・取り消しを送る。 */
 export const AskControllerKey: InjectionKey<AskController> = Symbol("askController");
+/** 拡張（20261007-ext-host）の通信の係。節「拡張」（`ExtensionSettings`）が読み直し・入切・起動し直し・ログに使う。 */
+export const ExtensionControllerKey: InjectionKey<ExtensionController> = Symbol("extensionController");
 /**
  * 表示の面の枠（`DisplayFrame`）が、アプリの端末・キーの操作に触るための窓口（`main.ts` が組み立てる）。枠の `Esc`・prefix を端末へ戻す／prefix を注入する。
  * 提供されない環境（単体テスト・端末版でない配線）では、何もしない。

@@ -46,7 +46,10 @@ async function login(origin: string, token: string): Promise<string> {
   return setCookie.split(";")[0]!;
 }
 
-async function bootServer(stateDir: string, port: number, opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean }, previousToken?: string): Promise<{ composed: ComposedServer; origin: string; token: string; cookie: string }> {
+/** 拡張（20261007-ext-host）の差し替えの口。`composeServer` の `internal.extensions` と同じ型（`timings` で起動し直しの間隔を縮める、など）。 */
+export type ExtensionsInternal = NonNullable<NonNullable<Parameters<typeof composeServer>[1]>["extensions"]>;
+
+async function bootServer(stateDir: string, port: number, opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean; extensions?: ExtensionsInternal }, previousToken?: string): Promise<{ composed: ComposedServer; origin: string; token: string; cookie: string }> {
   const composed: ComposedServer = await composeServer({
     host: "127.0.0.1",
     port: String(port),
@@ -54,7 +57,10 @@ async function bootServer(stateDir: string, port: number, opts: { scrollback?: n
     // `exposed`: 外向きに公開した構成の対照（`--origin` つき＝リバースプロキシ・ポート転送の先。ask のメディアの上限を外さない）。
     origin: opts.exposed === true ? ["https://soda.example.test"] : [],
     ...(opts.scrollback !== undefined ? { scrollback: String(opts.scrollback) } : {}),
-  }, opts.askImageFetcher !== undefined ? { askImageFetcher: opts.askImageFetcher } : {});
+  }, {
+    ...(opts.askImageFetcher !== undefined ? { askImageFetcher: opts.askImageFetcher } : {}),
+    ...(opts.extensions !== undefined ? { extensions: opts.extensions } : {}),
+  });
   await composed.listen();
   const origin = `http://127.0.0.1:${port}`;
   // `freshToken` は「今回新しく作った」ときだけ立つ（既存の state dir から起動し直した場合、トークンは
@@ -67,7 +73,8 @@ async function bootServer(stateDir: string, port: number, opts: { scrollback?: n
 }
 
 /** `askImageFetcher`: 質問のフォームの外部 URL の画像の取得の差し替え（20261004-ask-media-popup。省くと実物の取得＝SSRF 対策つき）。 */
-export async function startAppServer(opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean } = {}): Promise<AppServer> {
+/** `extensions`: 拡張の起動し直しの間隔などの差し替え（20261007-ext-host。`timings: { backoffMinMs: 20 }` で落ちた拡張の起動し直しを速くする）。 */
+export async function startAppServer(opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean; extensions?: ExtensionsInternal } = {}): Promise<AppServer> {
   const stateDir = await mkdtemp(join(tmpdir(), "soda-e2e-"));
   const port = await getFreePort();
   let booted = await bootServer(stateDir, port, opts);
