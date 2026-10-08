@@ -897,7 +897,7 @@ setInterval(() => { const f = LOG + ".cmds"; if (!existsSync(f) || !pane) return
     const { chmodSync, writeFileSync } = await import("node:fs");
     const root = await mkRepo("p10brepo", [{ id: "p10b", command: "hijackbin" }]);
     const mark = join(toolDir, "p10b-mark");
-    writeFileSync(join(root, "hijackbin"), `#!/bin/sh\ntouch "$HIJACK_MARK"\nsleep 5\n`);
+    writeFileSync(join(root, "hijackbin"), `#!/bin/sh\n: > "$HIJACK_MARK"\n`);
     chmodSync(join(root, "hijackbin"), 0o755);
     const savedPath = process.env["PATH"];
     const s = await startServer([], { timings: { approvalsPollMs: 100 } });

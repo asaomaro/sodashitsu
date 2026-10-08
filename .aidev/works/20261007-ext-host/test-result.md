@@ -328,3 +328,38 @@ main の失敗は 9 件（上の 9 行）で、このブランチの 8 件はす
 - Tests  1 failed | 24 passed (25)
   - ApprovalStore.test.ts > ApprovalStore > signature: 権限だけ・持ち主だけの変更（chmod）でも変わる（D13 の 4）
 
+## D13 の再レビューへの直し（D14。2026-10-09）の否定の対照
+直した箇所だけを外して落ちることを確かめ、`cp` で戻した（コミットしてから。`git checkout` は使わない）。
+
+#### ①「承認しない」も消す（`revoke` に戻す）
+- Tests  1 failed | 48 passed (49)
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > 「承認しない」（denied）の記録は、消さない。承認と両方ある記録は、承認だけを消して、denied を残す
+
+#### ②親のディレクトリの確かめを外す
+- Tests  1 failed | 48 passed (49)
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > 根の親のディレクトリも無い（もっと上が外れている）なら、消さない
+
+#### ②`.soda/extensions.json` が無いだけでも消す（旧）
+- Tests  2 failed | 47 passed (49)
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > R3 根のディレクトリは有り、.soda/extensions.json だけが無くなっている（ブランチの切り替え）は、消さない
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > 根の親のディレクトリも無い（もっと上が外れている）なら、消さない
+
+#### ③開いた場所が根の下にある根も候補にする
+- Tests  3 failed | 46 passed (49)
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > R1 workspace は開いたまま、根のディレクトリが無くなった（ディスクが外れた）→ 消さない（承認も「承認しない」も）。戻れば、そのまま
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > R2 起動のとき、根のディレクトリが無い（ディスクがまだ繋がっていない）が、workspace は残っている → 消さない
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > workspace の開いた場所が根の下（サブフォルダ）にあれば、根を引けなくても候補にしない
+
+#### 指摘 2: PATH が空になるときの固定値を外す（単体）
+- Tests  2 failed | 15 passed (17)
+  - extensionLaunch.test.ts > PATH が全部落ちたとき（D14） > Windows は SystemRoot から（効くかは実機で確かめていない）
+  - extensionLaunch.test.ts > PATH が全部落ちたとき（D14） > 空の文字列では渡さず、固定の安全な値にする（POSIX）。PATH が無ければ作らない
+
+#### 指摘 2: 同（結合 P10b。実際の子プロセスで、根の hijackbin が呼ばれる）
+- Tests  1 failed | 1 passed | 24 skipped (26)
+  - extensions.integration.test.ts > 拡張（実物のサーバと、実際の子プロセス） > (P10b) サーバの PATH が、落とす要素だけ（.）でも、プロジェクトの拡張に空の PATH は渡らず、リポジトリの中のファイルに解決されない
+
+#### `ApprovalStore` の「変わらなければ書かない」を件数の比較に戻す
+- Tests  1 failed | 26 passed (27)
+  - ApprovalStore.test.ts > ApprovalStore > revokeApprovedOnly: 承認だけを消し、「承認しない」は残す。denied だけの記録・無い記録は何も書かない。承認だけの記録は、その 1 件ごと消える
+
