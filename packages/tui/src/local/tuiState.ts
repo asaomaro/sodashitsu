@@ -14,6 +14,11 @@ export interface TuiState {
    * （03 の review）。環境変数 `SODA_TRUECOLOR` がこれより優先する。
    */
   colorMode?: "truecolor" | "256";
+  /**
+   * 背景を透過する（端末のエミュレータの背景の透過を活かす。20261008-tui-transparent-bg）。**端末ごとの項目**なので共有の設定に置かない
+   * （透過は端末のエミュレータの設定で、ブラウザ版には無い）。無ければ（既定）透かさない。
+   */
+  transparentBg?: true;
   /** サイドバーの spaces の区画の行数（区切りのドラッグで変えた値）。 */
   sidebarSpacesRows?: number;
   /** サイドバーの畳んでいる区画（畳んでいる区画だけを持つ。20261004-ui-interaction-polish）。 */
@@ -37,6 +42,7 @@ export function readTuiState(stateDir: string): TuiState {
       out.sidebarCols = r["sidebarCols"];
     if (typeof r["sidebarCollapsed"] === "boolean") out.sidebarCollapsed = r["sidebarCollapsed"];
     if (r["colorMode"] === "truecolor" || r["colorMode"] === "256") out.colorMode = r["colorMode"];
+    if (r["transparentBg"] === true) out.transparentBg = true;
     const spaces = r["sidebarSpacesRows"];
     if (typeof spaces === "number" && Number.isInteger(spaces) && spaces > 0)
       out.sidebarSpacesRows = spaces;

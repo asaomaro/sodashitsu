@@ -27,7 +27,7 @@ export function paintFrame(
   sides: PaneSides = ALL_SIDES,
 ): void {
   if (frame.w < 2 || frame.h < 2) return;
-  const bg = theme.ui("--soda-bg");
+  const bg = theme.ground("--soda-bg");
   const color = info.focused ? theme.ui("--soda-pane-current") : theme.ui("--soda-menu-border");
   const attrs = info.focused ? ATTR.bold : 0;
   const { x, y, w, h } = frame;
