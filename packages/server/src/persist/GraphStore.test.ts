@@ -467,31 +467,77 @@ describe("GraphStore", () => {
     expect(typeof (await new GraphStore(dir2).load())).toBe("object");
   });
 
-  it("移行の前の控えは pre-migration- の別の名前で書き、最新 3 件の入れ替えで消えない。同じ中身は増やさない", async () => {
+  it("読み込みで寄せたノードが同じ座標に重なるときは、内側へ 1 升ずつずらす（線は変えない）。寄せなかったノードは動かさない", async () => {
     const dir = await tempDir();
-    const original = v1FileForBackup();
+    const mk = (key: string, x: number, y: number) => ({ key, x, y });
+    const raw = JSON.stringify({
+      schema: 2,
+      rev: 2,
+      graph: {
+        paused: false,
+        nodes: [
+          mk("local:q1", 1_500_000, 0),
+          mk("local:q2", 2_000_000, 0),
+          mk("local:q3", 3_000_000, 0),
+          mk("local:q4", 1_000_000 - 240, 0),
+        ],
+        links: [
+          {
+            id: "l1",
+            kind: "supervise",
+            from: "local:q1",
+            to: "local:q2",
+            limit: 10,
+            count: 0,
+            paused: null,
+          },
+        ],
+      },
+      savedAt: "2026-10-01T00:00:00.000Z",
+    });
+    await writeFile(join(dir, GRAPH_FILE_NAME), raw);
+    const store = new GraphStore(dir);
+    expect(await store.load()).toBe("ok");
+    const nodes = store.get().nodes;
+    const keys = new Set(nodes.map((n) => `${n.x},${n.y}`));
+    expect(keys.size).toBe(4); // 同じ座標が無い
+    expect(nodes.find((n) => n.key === "local:q4")).toEqual({ key: "local:q4", x: 999_760, y: 0 }); // 寄せていないものは動かない
+    expect(nodes.every((n) => Math.abs(n.x) <= 1_000_000)).toBe(true);
+    expect(store.get().links).toHaveLength(1);
+  });
+
+  it("移行の前の控えは pre-migration- の別の名前で書き、最新 3 件の入れ替えで消えない（4 件以上あっても）。同じ中身は増やさない", async () => {
+    const dir = await tempDir();
+    const original = v1FileForBackup(7);
     await writeFile(join(dir, GRAPH_FILE_NAME), original);
-    // 移行が終わらない起動を 5 回くり返す（同じ元のファイル）。
-    for (let i = 0; i < 5; i++) {
-      const s = new GraphStore(dir);
-      await s.load();
+    // 移行が終わらない起動を 5 回くり返す（同じ元のファイル）→ 増えない。
+    for (let i = 0; i < 5; i++) await new GraphStore(dir).load();
+    expect(
+      (await readdir(join(dir, "graph-backups"))).filter((n) => n.startsWith("pre-migration-")),
+    ).toHaveLength(1);
+    // 中身の違う移行前の控えを 3 件足して、合計 4 件にする（最新 3 件の入れ替えの上限を超える）。
+    for (const rev of [8, 9, 10]) {
+      await writeFile(join(dir, GRAPH_FILE_NAME), v1FileForBackup(rev));
+      await new GraphStore(dir).load();
+      await new Promise((r) => setTimeout(r, 5));
     }
-    let names = await readdir(join(dir, "graph-backups"));
-    expect(names.filter((n) => n.startsWith("pre-migration-"))).toHaveLength(1);
-    // 壊れたファイルの退避（最新 3 件）が何度あっても、移行の前の控えは残る。
+    // 壊れたファイルの退避（最新 3 件だけ残す）が何度あっても、移行の前の控えは 4 件とも残る。
     for (let i = 0; i < 6; i++) {
       await writeFile(join(dir, GRAPH_FILE_NAME), `{broken ${i}`);
       await new GraphStore(dir).load();
       await new Promise((r) => setTimeout(r, 5));
     }
-    names = await readdir(join(dir, "graph-backups"));
+    const names = await readdir(join(dir, "graph-backups"));
     const pre = names.filter((n) => n.startsWith("pre-migration-"));
-    expect(pre).toHaveLength(1);
-    expect(await readFile(join(dir, "graph-backups", pre[0]!), "utf8")).toBe(original);
+    expect(pre).toHaveLength(4);
+    const contents = await Promise.all(
+      pre.map((n) => readFile(join(dir, "graph-backups", n), "utf8")),
+    );
+    expect(contents).toContain(original);
     expect(names.filter((n) => !n.startsWith("pre-migration-")).length).toBeLessThanOrEqual(3);
   });
 });
 
-function v1FileForBackup(): string {
-  return `${JSON.stringify({ schema: 1, rev: 7, graph: { paused: false, nodes: [{ key: "local:p1", x: 0, y: 0 }], links: [] }, savedAt: "2026-10-01T00:00:00.000Z" }, null, 2)}\n`;
+function v1FileForBackup(rev = 7): string {
+  return `${JSON.stringify({ schema: 1, rev, graph: { paused: false, nodes: [{ key: "local:p1", x: 0, y: 0 }], links: [] }, savedAt: "2026-10-01T00:00:00.000Z" }, null, 2)}\n`;
 }

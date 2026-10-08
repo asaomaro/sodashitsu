@@ -510,6 +510,37 @@ export function placeNode(
   positions: NodePositions,
   memberId: string,
 ): PlaceNodeResult {
+  const r = placeNodeCore(structure, positions, memberId);
+  // 出口の保証: どの経路でも、新しいノードを同じ workspace の既存のノード（囲いごと動かすなら動かした後の位置）と重ねて置かない。
+  // 重なるなら、空くまで右へ 1 升ずつずらす。
+  const member = structure.spaces
+    .flatMap((sp) => sp.tops.flatMap((t) => t.members))
+    .find((m) => m.id === memberId);
+  if (member === undefined) return r;
+  const existing: GraphPoint[] = [];
+  for (const key of member.nodes) {
+    const q = positions.get(key);
+    if (q !== undefined)
+      existing.push(r.shift === null ? q : { x: q.x + r.shift.x, y: q.y + r.shift.y });
+  }
+  const clash = (x: number): boolean =>
+    existing.some(
+      (q) =>
+        overlaps(
+          { x, y: r.y, w: GRAPH_NODE_WIDTH, h: GRAPH_NODE_HEIGHT },
+          { x: q.x, y: q.y, w: GRAPH_NODE_WIDTH, h: GRAPH_NODE_HEIGHT },
+        ) > 0,
+    );
+  let x = r.x;
+  for (let guard = 0; guard < 10_000 && clash(x); guard++) x += GRAPH_CELL_WIDTH;
+  return x === r.x ? r : { ...r, x };
+}
+
+function placeNodeCore(
+  structure: LayoutStructure,
+  positions: NodePositions,
+  memberId: string,
+): PlaceNodeResult {
   const ctx = buildCtx(structure, positions);
   const found = findMember(ctx, memberId);
   if (found === null) return placeFrame(structure, positions, memberId);
@@ -580,7 +611,11 @@ export function placeNode(
   }
 
   // 詰んだ: 囲いごと動かす。新しいノードは、いまの外接の右隣（広げる最小）に置いたものとして、全体の置き場所を探す。
-  const rel: GraphPoint = { x: ox + cols * GRAPH_CELL_WIDTH, y: oy };
+  // 升の走査は `CELL_SCAN_MAX` で頭打ちにしているので、ここでは頭打ちにしていない実際の列数を使う（頭打ちの列数だと、既存のノードの真上になる）。
+  // そのうえで、その升が空いていることを確かめ、ふさがっていれば空くまで右へずらす——どの経路でも、既存のノードと重ねて置かない。
+  const realCols = Math.max(1, Math.ceil((maxX - ox) / GRAPH_CELL_WIDTH));
+  const rel: GraphPoint = { x: ox + realCols * GRAPH_CELL_WIDTH, y: oy };
+  for (let guard = 0; guard < 10_000 && !free(rel, 0); guard++) rel.x += GRAPH_CELL_WIDTH;
   const r = relocate(ctx, top, memberId, [...pts, rel]);
   return { x: rel.x + r.shift.x, y: rel.y + r.shift.y, shift: r.shift, scope: r.scope };
 }

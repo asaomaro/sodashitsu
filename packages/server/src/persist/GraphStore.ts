@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { GRAPH_CELL_WIDTH } from "@sodashitsu/client-core";
 import { GRAPH_COORD_MAX, GraphSchema, type Graph, type GraphOp } from "@sodashitsu/protocol";
 import {
   applyGraphOps,
@@ -77,18 +78,42 @@ const clampCoord = (v: unknown): unknown =>
     ? Math.max(-GRAPH_COORD_MAX, Math.min(GRAPH_COORD_MAX, v))
     : v;
 
-/** ノードの座標を範囲の中へ寄せる（配列でなければそのまま。形の検査は `GraphSchema` に任せる）。 */
+/**
+ * ノードの座標を範囲の中へ寄せる（配列でなければそのまま。形の検査は `GraphSchema` に任せる）。寄せた結果、別のノードと同じ座標に重なるときは、
+ * 内側へ 1 升（`GRAPH_CELL_WIDTH`）ずつずらす（ノードが見えなくならないように。線は変えない）。
+ */
 function clampNodes(nodes: unknown): unknown {
   if (!Array.isArray(nodes)) return nodes;
-  return nodes.map((n: unknown) =>
-    typeof n === "object" && n !== null
-      ? {
-          ...n,
-          x: clampCoord((n as Record<string, unknown>)["x"]),
-          y: clampCoord((n as Record<string, unknown>)["y"]),
-        }
-      : n,
-  );
+  const taken = new Set<string>();
+  for (const n of nodes) {
+    if (typeof n !== "object" || n === null) continue;
+    const { x, y } = n as Record<string, unknown>;
+    if (
+      typeof x === "number" &&
+      typeof y === "number" &&
+      clampCoord(x) === x &&
+      clampCoord(y) === y
+    )
+      taken.add(`${x},${y}`);
+  }
+  return nodes.map((n: unknown) => {
+    if (typeof n !== "object" || n === null) return n;
+    const r = n as Record<string, unknown>;
+    const x = clampCoord(r["x"]);
+    const y = clampCoord(r["y"]);
+    if (typeof x !== "number" || typeof y !== "number" || (x === r["x"] && y === r["y"]))
+      return { ...r, x, y };
+    // 寄せたノード: 同じ座標が既にあれば、内側へ 1 升ずつずらす（x が範囲の端なら x を、y だけが端なら y を）。
+    let nx = x;
+    let ny = y;
+    const moveX = x !== r["x"];
+    for (let i = 0; i < 8192 && taken.has(`${nx},${ny}`); i++) {
+      if (moveX) nx -= Math.sign(nx) * GRAPH_CELL_WIDTH;
+      else ny -= Math.sign(ny) * GRAPH_CELL_WIDTH;
+    }
+    taken.add(`${nx},${ny}`);
+    return { ...r, x: nx, y: ny };
+  });
 }
 
 function parseGraphFile(raw: string): ParsedGraphFile {

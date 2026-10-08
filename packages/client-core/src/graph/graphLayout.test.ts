@@ -274,6 +274,62 @@ describe("placeNode（極端に離れたノード）", () => {
   });
 });
 
+describe("placeNode（隣がいる長い増加。PR1a 再レビュー指摘 1）", () => {
+  /** ノードどうし（同じ座標・重なる）が無いこと。 */
+  function nodesApart(pos: Map<string, GraphPoint>): boolean {
+    const pts = [...pos.values()];
+    for (let i = 0; i < pts.length; i++)
+      for (let j = i + 1; j < pts.length; j++) {
+        const a = pts[i]!;
+        const b = pts[j]!;
+        if (Math.abs(a.x - b.x) < GRAPH_NODE_WIDTH && Math.abs(a.y - b.y) < GRAPH_NODE_HEIGHT)
+          return false;
+      }
+    return true;
+  }
+
+  it("隣が 2 つある workspace に 1 つずつ 80 個足しても、ノードどうしが重ならず、囲いも重ならない", () => {
+    const a = ws("a", 0);
+    const b = ws("b", 3);
+    const c = ws("c", 3);
+    const st = structureOf([
+      { id: "a", kind: "workspace", members: [a] },
+      { id: "b", kind: "workspace", members: [b] },
+      { id: "c", kind: "workspace", members: [c] },
+    ]);
+    const pos = new Map<string, GraphPoint>();
+    // 隣: a の右と下に置く
+    b.nodes.forEach((key, i) => pos.set(key, { x: 300 + i * 240, y: 60 }));
+    c.nodes.forEach((key, i) => pos.set(key, { x: 60 + i * 240, y: 400 }));
+    for (let i = 0; i < 80; i++) {
+      const key = k(`a${i}`);
+      a.nodes.push(key);
+      const r = i === 0 ? placeFrame(st, pos, "a") : placeNode(st, pos, "a");
+      applyPlacement(st, pos, "a", key, r);
+      expect(nodesApart(pos), `i=${i}`).toBe(true);
+    }
+    expect([...layoutOverlaps(st, pos).keys()]).toEqual([]);
+  });
+
+  it("否定の対照: 出口の保証と実際の列数を外すと（頭打ちの列数の位置に置くと）既存のノードの真上になる", () => {
+    // 頭打ちの列数（32）の位置 = 33 列目。32 列分、横一列に並んだ workspace の、33 列目より先を既存のノードがふさぐ状況を直接作る。
+    const a = ws("a", 40);
+    const st = structureOf([{ id: "a", kind: "workspace", members: [a] }]);
+    const pos = new Map<string, GraphPoint>();
+    a.nodes.forEach((key, i) => pos.set(key, { x: 40 + i * GRAPH_CELL_WIDTH, y: 60 }));
+    // 新しいノード用の鍵
+    const nk = k("anew");
+    a.nodes.push(nk);
+    const r = placeNode(st, pos, "a");
+    const placed = { x: r.x, y: r.y };
+    for (const [key, p] of pos) {
+      if (key === nk) continue;
+      const q = r.shift === null ? p : { x: p.x + r.shift.x, y: p.y + r.shift.y };
+      expect(q.x === placed.x && q.y === placed.y, key).toBe(false);
+    }
+  });
+});
+
 describe("resolveDrop", () => {
   const a = ws("a", 1);
   const b = ws("b", 1);
@@ -395,6 +451,46 @@ describe("性質（乱数の構成 200 通り）", () => {
       }
     }
   });
+
+  it("隣がいる長い増加でも、ノードどうしが同じ座標・重なりにならず、囲いも重ならない（乱数 40 通り × 70 個）", () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const rand = rng(seed * 2654435761);
+      const grow = ws("g", 0);
+      const tops: LayoutTop[] = [{ id: "g", kind: "workspace", members: [grow] }];
+      const pos = new Map<string, GraphPoint>();
+      const nNeighbors = 1 + Math.floor(rand() * 3);
+      const st = structureOf(tops);
+      for (let i = 0; i < nNeighbors; i++) {
+        const nb = ws(`n${i}`, 1 + Math.floor(rand() * 3));
+        tops.push({ id: nb.id, kind: "workspace", members: [nb] });
+      }
+      // 隣を先に置く（placeFrame）
+      for (const t of tops.slice(1)) {
+        for (const key of t.members[0]!.nodes) {
+          const r =
+            t.members[0]!.nodes.indexOf(key) === 0
+              ? placeFrame(st, pos, t.id)
+              : placeNode(st, pos, t.id);
+          applyPlacement(st, pos, t.id, key, r);
+        }
+      }
+      for (let i = 0; i < 70; i++) {
+        const key = k(`g${seed}_${i}`);
+        grow.nodes.push(key);
+        const r = i === 0 ? placeFrame(st, pos, "g") : placeNode(st, pos, "g");
+        applyPlacement(st, pos, "g", key, r);
+        const pts = [...pos.values()];
+        for (let a = 0; a < pts.length; a++)
+          for (let b = a + 1; b < pts.length; b++)
+            expect(
+              Math.abs(pts[a]!.x - pts[b]!.x) < GRAPH_NODE_WIDTH &&
+                Math.abs(pts[a]!.y - pts[b]!.y) < GRAPH_NODE_HEIGHT,
+              `seed ${seed} i ${i}`,
+            ).toBe(false);
+      }
+      expect([...layoutOverlaps(st, pos).keys()], `seed ${seed}`).toEqual([]);
+    }
+  }, 60_000);
 
   it("placeFrame: 新しい囲いは、ほかの囲いに重ならない", () => {
     for (let seed = 1; seed <= 200; seed++) {
