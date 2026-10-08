@@ -24,6 +24,9 @@ import {
   loadPaneFrameThickness,
   loadPaneGaps,
   loadPaneOuterBorders,
+  loadDisplayBandEdge,
+  loadDisplayPanelDock,
+  loadDisplayPanelInitial,
   loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
@@ -1537,6 +1540,9 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.settings.newCwdPath = loadNewCwdPath(raw["newCwdPath"]);
     this.settings.shellCwdTracking = loadShellCwdTracking(raw["shellCwdTracking"]); // 20260928-windows-pane-cwd
     this.settings.displayScriptEnabled = loadDisplayScriptEnabled(raw["displayScriptEnabled"]); // 20261007-soda-extensions
+    this.settings.displayPanelInitial = loadDisplayPanelInitial(raw["displayPanelInitial"]); // 20261008-display-layout
+    this.settings.displayPanelDock = loadDisplayPanelDock(raw["displayPanelDock"]);
+    this.settings.displayBandEdge = loadDisplayBandEdge(raw["displayBandEdge"]);
     const themePrefs = loadThemePrefs(raw);
     this.settings.theme = themePrefs.theme;
     this.settings.themeAuto = themePrefs.auto;

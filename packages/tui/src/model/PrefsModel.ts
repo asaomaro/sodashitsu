@@ -1,5 +1,7 @@
 import {
   DEFAULT_THEME_NAME,
+  type DisplayDock,
+  type DisplayEdge,
   type NewCwd,
   type SharedPrefs,
   type ThemeName,
@@ -16,6 +18,9 @@ import {
   loadPaneBorders,
   loadPaneGaps,
   loadScrollbackPref,
+  loadDisplayBandEdge,
+  loadDisplayPanelDock,
+  loadDisplayPanelInitial,
   loadShellCwdTracking,
   loadStatusSymbols,
   loadWorkspaceSort,
@@ -297,6 +302,21 @@ export class PrefsModel {
   /** Windows で pane のシェルに場所の知らせを差し込むか（web の `loadShellCwdTracking`。既定は入。読むのはサーバ）。 */
   get shellCwdTracking(): boolean {
     return loadShellCwdTracking(this.raw.shellCwdTracking);
+  }
+
+  /** 表示のパネルの初めの状態（web の `loadDisplayPanelInitial`。既定は開く。効くのはブラウザ版。20261008-display-layout）。 */
+  get displayPanelInitial(): "open" | "collapsed" {
+    return loadDisplayPanelInitial(this.raw.displayPanelInitial);
+  }
+
+  /** 表示のパネルの既定の置き場所（web の `loadDisplayPanelDock`。既定は右）。 */
+  get displayPanelDock(): DisplayDock {
+    return loadDisplayPanelDock(this.raw.displayPanelDock);
+  }
+
+  /** 表示の帯の既定の場所（web の `loadDisplayBandEdge`。既定は上）。 */
+  get displayBandEdge(): DisplayEdge {
+    return loadDisplayBandEdge(this.raw.displayBandEdge);
   }
 
   /** 通知の種類（web の `loadNotifyPrefs` と同じ正規化）。 */

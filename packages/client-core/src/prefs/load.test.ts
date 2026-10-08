@@ -9,6 +9,9 @@ import {
   loadPaneAgentNameVisible,
   loadPaneBorders,
   loadPaneGaps,
+  loadDisplayBandEdge,
+  loadDisplayPanelDock,
+  loadDisplayPanelInitial,
   loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
@@ -129,6 +132,21 @@ describe("loadAgentSort・loadCollapsedAutoGroups", () => {
     for (const raw of [undefined, "Priority", 1]) expect(loadAgentSort(raw)).toBe("grouped");
     expect([...loadCollapsedAutoGroups(["a", 1, "b", null])]).toEqual(["a", "b"]);
     expect(loadCollapsedAutoGroups("a").size).toBe(0);
+  });
+});
+
+describe("表示の面の配置の設定 3 つ（20261008-display-layout）", () => {
+  it("初めの状態は collapsed のときだけ collapsed。知らない値は open", () => {
+    expect(loadDisplayPanelInitial("collapsed")).toBe("collapsed");
+    for (const v of ["open", "x", undefined, null, 1, true, {}]) expect(loadDisplayPanelInitial(v)).toBe("open");
+  });
+  it("パネルの既定の置き場所は 5 つの値。知らない値は right", () => {
+    for (const v of ["right", "left", "top", "bottom", "float"]) expect(loadDisplayPanelDock(v)).toBe(v);
+    for (const v of ["middle", undefined, null, 1, {}]) expect(loadDisplayPanelDock(v)).toBe("right");
+  });
+  it("帯の既定の場所は top・bottom。知らない値は top", () => {
+    expect(loadDisplayBandEdge("bottom")).toBe("bottom");
+    for (const v of ["left", "right", undefined, null, 1]) expect(loadDisplayBandEdge(v)).toBe("top");
   });
 });
 
