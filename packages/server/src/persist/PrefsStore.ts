@@ -96,12 +96,14 @@ export class PrefsStore {
   }
 
   /**
-   * 項目ごとに上書きして保存する（浅いマージ。design「`prefs.set`」）。`baseRev` は今は拒む理由にしない（最後の書き込みが勝つ。衝突は同じ項目だけ）。
+   * 項目ごとに上書きして保存する（浅いマージ。design「`prefs.set`」。最上位の項目が `null` ならその項目を消す）。`baseRev` は今は拒む理由にしない（最後の書き込みが勝つ。衝突は同じ項目だけ）。
    * 全体が上限を超えるなら `PrefsTooLargeError`（保存しない）。保存できてから `onChange` を呼ぶ。
    */
   set(patch: SharedPrefs, byClientId: string): Promise<PrefsState> {
     const run = async (): Promise<PrefsState> => {
       const merged: SharedPrefs = { ...this.state.prefs, ...withoutProto(patch) };
+      // 最上位の項目の `null` は「消す」（既定へ戻す。JSON merge patch と同じ）。入れ子の中の `null` は触らない。
+      for (const [k, v] of Object.entries(patch)) if (v === null && k !== "__proto__") delete (merged as Record<string, unknown>)[k];
       const bytes = byteLength(merged);
       if (bytes > PREFS_MAX_BYTES) throw new PrefsTooLargeError(bytes);
       const next: PrefsState = { prefs: merged, rev: this.state.rev + 1 };

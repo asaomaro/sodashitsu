@@ -131,7 +131,9 @@ export class PrefsSync {
     if (keys.length === 0) return;
     for (const k of keys) {
       this.localOnly.delete(k); // 書き直した（大きすぎた値ではなくなったかもしれない）。もう一度送ってみる
-      this.pending.set(k, { value: shared[k], seed: false });
+      // 「消す」（既定へ戻す）は `undefined` で来る。`prefs.set` は JSON で運ぶのでキーごと落ち、サーバに古い値が残って再読み込みで戻る。
+      // `null` にして送る（サーバは `null` の項目を消す。古いサーバは `null` のまま保存するが、どの読み込みも `null` を既定へ落とす）。
+      this.pending.set(k, { value: shared[k] ?? null, seed: false });
     }
     this.tooLargeShown = false;
     this.flush();

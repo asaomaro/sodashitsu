@@ -15,7 +15,7 @@ import {
 import { useSettingsStore } from "../store/settings.js";
 import { useNotificationsStore } from "../store/notifications.js";
 import { applyPrefsToStores } from "../store/prefsApply.js";
-import { ACTIONS } from "@sodashitsu/client-core";
+import { ACTIONS, loadSidebarRows } from "@sodashitsu/client-core";
 import { PrefsSync } from "./PrefsSync.js";
 
 /**
@@ -699,5 +699,60 @@ describe("PrefsSync（移行・失敗・大きすぎるの競合）", () => {
     useSettingsStore(pinia).setPaneGaps(false);
     await flush();
     expect(toasts).toHaveLength(2);
+  });
+});
+
+// 「消す」（上書き・割り当て・行の並びを既定へ戻す）が、サーバの共有の設定にも伝わる（20261008-main-e2e-failures A2）。
+// ストアは消すとき `writePrefs({ key: undefined })` を呼ぶ。そのまま `prefs.set` へ載せると JSON 化でキーが落ち、サーバに古い値が残って再読み込みで戻る。
+describe("PrefsSync（既定へ戻す = 消す）", () => {
+  /** 通信で運ばれた形（JSON の往復。`undefined` のキーはここで落ちる）。 */
+  const onWire = (patch: Record<string, unknown>): Record<string, unknown> => JSON.parse(JSON.stringify(patch)) as Record<string, unknown>;
+
+  async function openSynced(prefs: SharedPrefs) {
+    localStorage.setItem(PREFS_MIGRATED_KEY, "1");
+    const server = { prefs, rev: 3 };
+    const ctx = setup(server);
+    ctx.sync.onOpened();
+    await flush();
+    ctx.sets.length = 0;
+    return { ...ctx, server };
+  }
+
+  it("テーマの色の上書きを「すべて既定に戻す」と、prefs.set の patch にキーが残り（null）、サーバの値が消える", async () => {
+    const { sets } = await openSynced({ themeOverrides: { dark: { "--soda-accent": "#222222" } } });
+    const settings = useSettingsStore(pinia);
+    expect(settings.themeOverrides.dark["--soda-accent"]).toBe("#222222");
+    settings.resetAllThemeOverrides();
+    await flush();
+    expect(sets).toHaveLength(1);
+    const wire = onWire(sets[0]!.patch);
+    expect(Object.hasOwn(wire, "themeOverrides"), "キーが通信で落ちていない").toBe(true);
+    expect(wire["themeOverrides"]).toBeNull();
+  });
+
+  it("キーの割り当てを「すべて既定に戻す」・サイドバーの行の並びを既定へ戻すときも、キーが落ちない", async () => {
+    const { sets } = await openSynced({ keys: { prefix: "ctrl+a" }, sidebarRows: { spaces: { hidden: ["branch"] } } });
+    const settings = useSettingsStore(pinia);
+    expect(settings.keymap.prefix).toBe("ctrl+a");
+    settings.resetAllKeys();
+    await flush();
+    expect(Object.hasOwn(onWire(sets.at(-1)!.patch), "keys")).toBe(true);
+    expect(onWire(sets.at(-1)!.patch)["keys"]).toBeNull();
+    settings.replaceSidebarRows(loadSidebarRows(undefined));
+    await flush();
+    const wire = onWire(sets.at(-1)!.patch);
+    expect(Object.hasOwn(wire, "sidebarRows")).toBe(true);
+    expect(wire["sidebarRows"]).toBeNull();
+  });
+
+  it("値を持つ項目はそのまま送る（null に変えない）。まだ送っていない間に消されても、最後の値（null）を送る", async () => {
+    const { sets } = await openSynced({});
+    const settings = useSettingsStore(pinia);
+    settings.setThemeOverride("dark", "--soda-accent", "#333333");
+    await flush();
+    expect(onWire(sets.at(-1)!.patch)["themeOverrides"]).toEqual({ dark: { "--soda-accent": "#333333" } });
+    settings.resetAllThemeOverrides();
+    await flush();
+    expect(onWire(sets.at(-1)!.patch)["themeOverrides"]).toBeNull();
   });
 });
