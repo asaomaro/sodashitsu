@@ -5,7 +5,7 @@ import type { ExtensionEntry } from "./extensionConfig.js";
 /**
  * 拡張の鍵（20261007-ext-host。純粋）。**承認の画面に出るものは、すべて鍵に入れる**: 1 件の全項目と、根の実体のパス。
  * 鍵に入らないもの: ファイルの中のほかの 1 件・ファイルの体裁（空白・項目の順）・コマンドが指すファイルの中身。
- * PR1 では、利用者の拡張の「設定が変わったか」の検知にだけ使う（承認の記録は PR3）。
+ * 利用者の拡張では「設定が変わったか」の検知にだけ使い、プロジェクトの拡張では承認の鍵になる（承認の記録は `ApprovalStore`。PR3）。
  */
 
 const sha256 = (s: string): string => createHash("sha256").update(s, "utf8").digest("hex");
