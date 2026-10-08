@@ -445,7 +445,7 @@ function onWheel(ev: WheelEvent): void {
   cursor: grabbing;
 }
 .tab-bar-item-dragging {
-  opacity: 0.4;
+  opacity: 0.7; /* MUTED_TEXT_ALPHA。0.7 未満は uiTokens.test.ts の検査が許さない（decisions D16） */
 }
 .tab-bar-item-insert-before {
   box-shadow: inset 3px 0 0 var(--soda-resize-line, #f8f8f2);

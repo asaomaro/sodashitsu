@@ -35,7 +35,7 @@
 
 ### PR1: tab の D&D
 
-- [ ] T1: 順の計算の純関数を足す（**独立点検あり**）。`slotAt`・`reorderSteps`・`edgeScrollDelta` と定数 `TAB_DRAG_THRESHOLD_PX = 6`・`TAB_EDGE_SCROLL_PX = 24`・`TAB_EDGE_SCROLL_STEP = 8`。形と決まりは design「インターフェース / データ構造」のとおり。DOM に触らない。
+- [x] T1: 順の計算の純関数を足す（**独立点検あり**）。`slotAt`・`reorderSteps`・`edgeScrollDelta` と定数 `TAB_DRAG_THRESHOLD_PX = 6`・`TAB_EDGE_SCROLL_PX = 24`・`TAB_EDGE_SCROLL_STEP = 8`。形と決まりは design「インターフェース / データ構造」のとおり。DOM に触らない。
       単体テスト `tabReorder.test.ts`:
       (1) `slotAt`: tab の左半分はその tab の前、右半分は次の tab の前、最後の tab の右半分と、どの tab よりも右は n、最初の tab より左は 0、空の配列は 0、あふれて矩形が負の座標にある tab が混ざっても同じ決まり。
       (2) `reorderSteps`: 5 個の tab で、`from`（0〜4）と `slot`（0〜5）の全部の組を回し、`slot === from` と `slot === from + 1` は null、ほかは、`ids` に「`direction` の向きへ隣と入れ替える」を `count` 回当てた結果が「つかんだ tab を抜いて `slot` の位置へ入れた順」と一致する。どの組でも `from ± count` が 0〜4 の中にある（端を越えて回らない）。`draggedId` が無い・`slot` が負・n より大きいは null。tab が 1 個は常に null。
@@ -44,7 +44,7 @@
       依存: なし
       AC: AC1, AC2, AC3
 
-- [ ] T2: `TabBar.vue` に、ドラッグの開始・確定・取り消しを足す（**独立点検あり**）。design 第 1 部「振る舞いの詳細」の「開始」「線の位置の計算」「確定 / 取り消し」「クリックの抑止」「外からの変化」「pane のドラッグとの関係」のとおり。
+- [x] T2: `TabBar.vue` に、ドラッグの開始・確定・取り消しを足す（**独立点検あり**）。design 第 1 部「振る舞いの詳細」の「開始」「線の位置の計算」「確定 / 取り消し」「クリックの抑止」「外からの変化」「pane のドラッグとの関係」のとおり。
       - tab のボタンに `@pointerdown`・`@pointermove`・`@pointerup`・`@pointercancel`・`@lostpointercapture` を付ける。`@click="selectTab(tab.id)"`・`@contextmenu`・「＋」の `@click` はそのまま。根 `.tab-bar` に `@click.capture="onBarClickCapture"` を付ける。
       - `pointerdown` は、最初に `suppressClick = false`・`clearTimeout(suppressTimer)`、その後で `button !== 0`・`pointerType === "touch"` を弾く。`setPointerCapture?.(...)`。
       - 状態は `press`・`tabDrag`（`ref`）・`suppressClick`・`suppressTimer`・`lastPoint`。`view` ストアに足さない。`view.paneDrag` を読み書きしない（今ある `tab-bar-item-drop-target` の束縛はそのまま）。
@@ -71,7 +71,7 @@
       依存: T1
       AC: AC1, AC6, AC7, AC8, AC9, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
 
-- [ ] T3: 見た目と、端での自動スクロールを足す。design 第 1 部「自動スクロール」「見た目」のとおり。
+- [x] T3: 見た目と、端での自動スクロールを足す。design 第 1 部「自動スクロール」「見た目」のとおり。
       - `<style scoped>`: `.tab-bar-dragging` とその中の `.tab-bar-item` に `cursor: grabbing`、`.tab-bar-item-dragging` に `opacity: 0.4`、線は `box-shadow: inset 3px 0 0 var(--soda-resize-line, #f8f8f2)`（before）と `inset -3px 0 0 …`（after）。transition は足さない。`tab-bar-item-drop-target`（pane の落とし先）の決まりは変えない。
       - ドラッグ中だけ `requestAnimationFrame` を回し、`lastPoint` が根の矩形の中で `.tab-bar-tabs` があふれているとき、`edgeScrollDelta` を `scrollLeft` に足す。`scrollLeft` が変わったら線の位置を計算し直す。終わり・取り消し・`onUnmounted` で止める。
       単体テスト（`TabBar.test.ts`）: rAF を差し替え、`.tab-bar-tabs` の `scrollWidth`・`clientWidth`・矩形を差し替えて、(1) 右端から 24px 未満にいるとフレームごとに `scrollLeft` が増える、(2) 中ほどでは変わらない、(3) あふれていないときは変わらない、(4) 離した後・`Escape` の後はフレームを進めても変わらない（rAF が止まっている）。
@@ -79,7 +79,7 @@
       依存: T2
       AC: AC2, AC3
 
-- [ ] T4: E2E `tab-dnd.spec.ts` を足す。
+- [x] T4: E2E `tab-dnd.spec.ts` を足す。
       共通の前提: `appServer.openClient()` で `tab.create {workspaceId, label}` を呼んで tab を増やし（ラベルは `t1`〜。最初の tab は `tab.rename` で名前をそろえる）、ブラウザ側で `.tab-bar` が見えること・`.tab-bar-item` の数・ラベルの順（`.tab-bar-label` の `allTextContents()`）を待つ。どの tab が選ばれているかは決め打ちにせず、**選びたい tab をクリックして `tab-bar-item-active` を待つ**。`routeRecordingWebSocket(page)` は `page.goto` の前に呼ぶ。送った要求は `sent(接続の番号)`（最初の接続は 0。`page.reload()` の後は 1）で読み、**ドラッグの直前の数との差**で数える（前提のクリックの `tab.focus` を混ぜない）。記録の読み方（`tab.move`・`tab.focus` の差を返す）は 1 つの関数にまとめる。サーバの順は、**新しく `appServer.openClient()` した**クライアントの snapshot の `tabIds` で読む（`helloSnapshot()` は接続した時点のもの）。
       ドラッグ: つかむ tab の中央で `mouse.down` → 12px 動かす（`steps: 3`）→ 目的の座標へ（`steps: 8`）→（確かめ）→ `mouse.up`。座標は `boundingBox()` から作る（左半分＝`x + width * 0.25`、右半分＝`x + width * 0.75`）。先例: `packages/e2e/src/specs/workspace-groups.spec.ts:376` の `dragOver`、2 つのブラウザは `multi-client.spec.ts:39`。
       (1) 4 個の tab。選ばれていない先頭の tab を、3 番目の右半分へ。離す前: 先頭に `tab-bar-item-dragging`、4 番目に `tab-bar-item-insert-before` があり、線のクラスは全体で 1 つ。離した後: ラベルの順が `t2,t3,t1,t4`、`t1` に `tab-bar-item-active`、線・薄さのクラスが 0、フォーカスが端末（`document.activeElement` が `.xterm-helper-textarea`）、ブラウザが送った `tab.move` がちょうど 2 つ（どちらも `direction: "next"`）、その後に `tab.focus` が 1 つ。サーバの順も同じ。`page.reload()` の後も同じ順（AC1・AC2・AC8・AC-I4）。
@@ -97,7 +97,7 @@
       依存: T3
       AC: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC8, AC9, AC-I1, AC-I2, AC-I4, AC-I5
 
-- [ ] T5: docs を合わせる（PR1 の分）。
+- [x] T5: docs を合わせる（PR1 の分）。
       - `docs/tui-parity.md`: H04m（34 行目あたり）と M12（120 行目あたり）の「Web版」の列を「無し」から「あり」に。端末版の扱いの列は、今の内容を保って「Web 版も `tab.move` を動かす数だけ送る」を一言足す。
       - `docs/herdr-parity.md`: H04 の行（30 行目あたり）の tab の並べ替えの説明に、20261008-web-tab-dnd で、ブラウザ版でも tab バーの tab をドラッグで並べ替えられるようになったこと（同じ workspace の中だけ・入る位置に線・`Esc` で取り消し・RPC は既存の `tab.move` を動かす数だけ・タッチとモバイルの 1 列の画面は対象外・キー `move_tab_previous`/`move_tab_next` は今までどおり）を足す。「対応 AC」の列にこの作業の AC を足す。
       - `docs/verification.md`: pane の名前のドラッグの項目（376 行目あたり）の近くに、手で確かめる項目を足す: tab を 3 つ以上作り、tab をつかんで別の位置で離す（線の位置に入る・つかんだ tab が選ばれる）／`Esc`・tab バーの外で離すと変わらない／クリック・右クリック・ホイールは今までどおり／あふれるときに端で自動スクロール／別のブラウザに反映／tab バーを「下」にしても同じ／pane の名前を tab へ落とす移動は今までどおり。

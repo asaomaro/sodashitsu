@@ -82,3 +82,8 @@ tab バー上のホイールは tab を切り替える（`TabBar.vue` の `onWhe
 - 1 回目（tab の D&D。16 件: must 3・should 8・nit 5）: E2E の案の直し（画面の幅は 768px 以上・`routeRecordingWebSocket` の下では端末への入力を観測できない・tab バーの位置の先例は無い）、`lostpointercapture` での取り消し、入る位置の x を列の見えている範囲へ丸める、クリックの抑止を根の capture の `click` に移す（「＋」も守る）、旗をタッチの `pointerdown` でも下ろす、ダイアログでの取り消しではフォーカスを戻さない。
 - 2 回目（pane の移動の制限。19 件: must 3・should 9・nit 7）: E2E の案の直し（JSON のイベントは `watchReceivedEvents` で別のテストに・判定の待ちはサイドバーの行に `branch` を出して待つ）、端末版には workspace の行の強調がもともと無い（`blocked` と `TuiApp.ts` の直しを外した）、端末版の tab バーも表示中の workspace だけ・中継は中身を解釈しない（どちらも確定）、`cwd` の比べ方（末尾の `/`）、直す既存のテストの一覧、AC14・AC17 の例外の明記。
 - aidev の `doccheck` は、light の間は使えず（1 回目の時点）、full に上げた後に件数を記録した。点検は文書の中の一貫性だけでなく、コードとの照らし合わせまで頼んだ（依頼の指定）。
+
+## D16: 実装中に設計から外れた点（PR1）
+
+- つかんだ tab の薄さは `opacity: 0.4`（design「見た目」）ではなく **`0.7`**（`MUTED_TEXT_ALPHA`）にした。`theme/uiTokens.test.ts` の「部品の CSS の透明度」の検査が、`:disabled` などの例外を除く全部品の `opacity` を 0.7 以上に求めていて、0.4 だと落ちる（文字を薄めて読めなくしない決まり）。例外を足す（テストを緩める）のではなく、決まりに合わせた。薄さだけでなく、`cursor: grabbing` と入る位置の線でも、つかんでいることは分かる。E2E・単体テストは薄さの値を見ていない（クラスだけ）。
+- 自動スクロール（T3）の本体は、T2 と同じファイル `TabBar.vue` の中で一緒に書いた（`edgeScrollDelta` を使う rAF の繰り返しと CSS）。コミットは T2（本体と CSS ごと）と T3（単体テスト）に分けた。
