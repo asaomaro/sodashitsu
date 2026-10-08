@@ -88,3 +88,12 @@ AssertionError: cancel: expected "vi.fn()" to be called with arguments: [ 'w1' ]
 ## 目で確かめる項目（AC19）
 
 `docs/herdr-parity.md`（H41）・`docs/tui-parity.md`（H41・W03）・`docs/tui.md`（「マウス」）・`docs/sodactl.md`・`docs/verification.md` を直した。実機の手での確認（端末版を含む）は未実施。
+
+## レビュー指摘（PR2）の修正
+
+2026-10-08。独立レビュー（should 2・nit 2）への対応。decisions D19。
+- 落とせる行に弱い強調 `sidebar-row-pane-drop-allowed`（左の縁の線と淡い背景）、落とせない行の上では枠を出さず薄いまま（`sidebar-row-drop-invalid` は pane のドラッグでは付けない）。
+- `normalizeCwd` が Windows の区切り（末尾の `\`）も落とす（`paneMoveScope.test.ts` に 3 つ足した）。
+- main（PR1 のレビュー修正）を取り込んだ。衝突は `decisions.md`（PR1 の D17 を残し、PR2 を D18 に）・`test-result.md`・`docs/verification.md` で、PR1 の内容を保って両方を残した。
+- 取り込んだ後: `pnpm build`・`pnpm typecheck` 成功。`pnpm test` は 8597 件中 8594 件が通り、失敗 3 件は既知の `tui.integration.test.ts`。E2E `pane-move-scope`（8 件）・`tab-dnd`・`workspace-groups`・`sidebar-sections` を `--workers=1` で流し 63 件すべて通る。
+- スクリーンショット（scratchpad の `pane-move-scope/`）: `{light,dark}-drag-over-allowed.png`（落とせる行 2 つ・A2 の上）・`{light,dark}-drag-over-blocked.png`（落とせない B の上）・`{light,dark}-drag-none-allowed.png`（自分の行しか落とせない場面）・`{light,dark}-declined-toast.png`（トーストは不透明度 1 になるのを待ってから撮った。前のスクリーンショットの薄さはフェードの途中だった）。

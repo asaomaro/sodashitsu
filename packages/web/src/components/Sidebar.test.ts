@@ -2061,18 +2061,30 @@ describe("Sidebar — pane D&D のドロップ先（サイドバーの workspace
       for (const h of headers) expect(h.classes()).not.toContain("sidebar-row-pane-drop-disabled");
     });
 
-    it("上に来た行: 断る行は sidebar-row-drop-invalid（pane-drop-target は付かない）、断らない行は逆", async () => {
+    it("落とせる行（同じ worktree の行・自分の行）に弱い強調 allowed が付き、落とせない行には付かない。終わると消える", async () => {
+      const { wrapper, rowOf, view } = setupRows();
+      view.startPaneDrag("p9");
+      await wrapper.vm.$nextTick();
+      for (const id of ["w1", "w1b"]) expect(rowOf(id).classes(), id).toContain("sidebar-row-pane-drop-allowed");
+      for (const id of ["w2", "w3", "u2"]) expect(rowOf(id).classes(), id).not.toContain("sidebar-row-pane-drop-allowed");
+      view.endPaneDrag();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.findAll(".sidebar-row-pane-drop-allowed")).toHaveLength(0);
+    });
+
+    it("上に来た行: 落とせる行は破線の落とし先（allowed のまま）、落とせない行は枠を出さず薄いまま（drop-target も drop-invalid も付かない）", async () => {
       const { wrapper, rowOf, view } = setupRows();
       view.startPaneDrag("p9");
       view.setPaneDragOverWorkspace("w2");
       await wrapper.vm.$nextTick();
-      expect(rowOf("w2").classes()).toContain("sidebar-row-drop-invalid");
+      expect(rowOf("w2").classes()).toContain("sidebar-row-pane-drop-disabled");
       expect(rowOf("w2").classes()).not.toContain("sidebar-row-pane-drop-target");
+      expect(rowOf("w2").classes()).not.toContain("sidebar-row-drop-invalid");
       view.setPaneDragOverWorkspace("w1b");
       await wrapper.vm.$nextTick();
       expect(rowOf("w1b").classes()).toContain("sidebar-row-pane-drop-target");
-      expect(rowOf("w1b").classes()).not.toContain("sidebar-row-drop-invalid");
-      expect(rowOf("w2").classes()).not.toContain("sidebar-row-drop-invalid");
+      expect(rowOf("w1b").classes()).toContain("sidebar-row-pane-drop-allowed");
+      expect(rowOf("w2").classes()).not.toContain("sidebar-row-pane-drop-target");
       view.setPaneDragOverWorkspace("w1"); // 自分の workspace（新しい tab へ切り出す）は落とせる
       await wrapper.vm.$nextTick();
       expect(rowOf("w1").classes()).toContain("sidebar-row-pane-drop-target");
@@ -2088,6 +2100,7 @@ describe("Sidebar — pane D&D のドロップ先（サイドバーの workspace
       const classes = rowOf("old").classes();
       expect(classes).not.toContain("sidebar-row-pane-drop-disabled");
       expect(classes).not.toContain("sidebar-row-drop-invalid");
+      expect(classes).toContain("sidebar-row-pane-drop-allowed");
       expect(classes).toContain("sidebar-row-pane-drop-target");
     });
   });

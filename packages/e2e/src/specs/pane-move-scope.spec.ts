@@ -66,7 +66,7 @@ const row = (page: Page, workspaceId: string): Locator => page.locator(`.sidebar
  * 前提を作ってブラウザで開く。最初から居る workspace は閉じる。`mover` と名付けた pane を A1 と U1 に持たせる（どちらも tab に 2 pane）。
  * サイドバーの行の並びに `branch` を足し、判定が入った workspace（A1・A2・AW・B）の行にブランチ名が出るのを待つ。
  */
-async function boot(page: Page, appServer: AppServer, opts: { record: boolean }): Promise<World> {
+async function boot(page: Page, appServer: AppServer, opts: { record: boolean; prefs?: Record<string, unknown>; nameB?: boolean }): Promise<World> {
   const client = await appServer.openClient();
   const initialId = client.helloSnapshot()!.workspaces[0]!.id;
   const repoA = await makeRepo();
@@ -88,12 +88,13 @@ async function boot(page: Page, appServer: AppServer, opts: { record: boolean })
     return { mover: paneId, other: r.pane.id };
   };
   const panes = { A1: await split(a1.pane.id), U1: await split(u1.pane.id) };
+  if (opts.nameB) await client.request("pane.rename", { paneId: b.pane.id, label: "mover" });
   await client.request("workspace.close", { workspaceId: initialId });
 
   const rec = opts.record ? await routeRecordingWebSocket(page) : null;
   await page.addInitScript(
     (prefs) => localStorage.setItem("soda.prefs.v1", prefs),
-    JSON.stringify({ paneAgentNameVisible: true, sidebarRows: { spaces: [[{ token: "workspace" }], [{ token: "branch" }]] } }),
+    JSON.stringify({ ...opts.prefs, paneAgentNameVisible: true, sidebarRows: { spaces: [[{ token: "workspace" }], [{ token: "branch" }]] } }),
   );
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
@@ -154,16 +155,21 @@ test("(1) 見せ方：ドラッグが始まると、落とせない行が薄く�
     expect(Number(await row(page, w.ws[k]).evaluate((el) => getComputedStyle(el).opacity)), `${k} の opacity`).toBe(1);
   }
   await expect(c.disabled).toHaveCount(4);
+  // 落とせる行（同じ worktree の行と自分の行）には弱い強調が付き、落とせない行には付かない。
+  await expect(page.locator(".sidebar-row-pane-drop-allowed")).toHaveCount(2);
+  for (const k of ["A1", "A2"] as const) await expect(row(page, w.ws[k]), k).toHaveClass(/sidebar-row-pane-drop-allowed/);
 
   await page.mouse.move(...(await center(row(page, w.ws.B))), { steps: 8 });
-  await expect(row(page, w.ws.B)).toHaveClass(/sidebar-row-drop-invalid/);
-  await expect(row(page, w.ws.B)).not.toHaveClass(/sidebar-row-pane-drop-target/);
-  await shot(page, "dragging-blocked-row.png");
+  // 落とせない行の上: 枠は出さず、薄いまま（落とせるようには見えない）。
+  await expect(row(page, w.ws.B)).toHaveClass(/sidebar-row-pane-drop-disabled/);
+  await expect(row(page, w.ws.B)).not.toHaveClass(/sidebar-row-drop-invalid|sidebar-row-pane-drop-target/);
+  await expect(c.invalid).toHaveCount(0);
+  await expect(c.target).toHaveCount(0);
 
   await page.mouse.move(...(await center(row(page, w.ws.A2))), { steps: 8 });
   await expect(row(page, w.ws.A2)).toHaveClass(/sidebar-row-pane-drop-target/);
-  await expect(row(page, w.ws.A2)).not.toHaveClass(/sidebar-row-drop-invalid/);
-  await expect(row(page, w.ws.B)).not.toHaveClass(/sidebar-row-drop-invalid/);
+  await expect(row(page, w.ws.A2)).toHaveClass(/sidebar-row-pane-drop-allowed/);
+  await expect(c.target).toHaveCount(1);
 
   await page.keyboard.press("Escape");
   await expect(c.disabled).toHaveCount(0);
@@ -186,11 +192,11 @@ test("(2) 断る：別のリポジトリ・同じリポジトリの別の worktr
 
   for (const k of ["B", "AW"] as const) {
     await grabAndMoveTo(page, row(page, w.ws[k]));
-    await expect(row(page, w.ws[k])).toHaveClass(/sidebar-row-drop-invalid/);
+    await expect(row(page, w.ws[k])).toHaveClass(/sidebar-row-pane-drop-disabled/);
+    await expect(row(page, w.ws[k])).not.toHaveClass(/sidebar-row-pane-drop-target/);
     await page.mouse.up();
     const toasts = page.locator(".toast", { hasText: MESSAGE });
     await expect(toasts.last()).toBeVisible();
-    if (k === "B") await shot(page, "declined-toast.png");
     await expect(dropClasses(page).disabled).toHaveCount(0); // ドラッグが終わった
     expect(sentCount(w.rec!, "pane.move_to_new_tab"), `${k} へは送らない`).toBe(0);
     await expect(row(page, w.ws.A1)).toHaveAttribute("aria-current", "true");
@@ -221,7 +227,8 @@ test("(4) 管理外：同じフォルダの管理外の workspace へは移り�
   await show(page, w, "U1");
 
   await grabAndMoveTo(page, row(page, w.ws.A1));
-  await expect(row(page, w.ws.A1)).toHaveClass(/sidebar-row-drop-invalid/);
+  await expect(row(page, w.ws.A1)).toHaveClass(/sidebar-row-pane-drop-disabled/);
+  await expect(row(page, w.ws.A1)).not.toHaveClass(/sidebar-row-pane-drop-target/);
   await page.mouse.up();
   await expect(page.locator(".toast", { hasText: MESSAGE }).last()).toBeVisible();
   expect(sentCount(w.rec!, "pane.move_to_new_tab")).toBe(0);
@@ -298,3 +305,42 @@ test("(6) 同じ workspace の中：別の tab へ移り、自分の workspace �
   await expect(mover(page)).toBeVisible();
   await expect(page.locator(".toast", { hasText: MESSAGE })).toHaveCount(0);
 });
+
+// 見た目の確認（明るい配色・暗い配色。落とせる行が 2 つの場面と、自分の行しか無い場面）。クラスの有無・opacity は、`getComputedStyle` で見る。
+for (const scheme of ["light", "dark"] as const) {
+  test(`(7) ${scheme}：落とせる行・落とせない行・上に来た行が見分けられる。断られたトーストは通常の明るさで出る`, async ({ page, appServer }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    const prefs = scheme === "light" ? { theme: "catppuccin-latte", themeAuto: false } : {};
+    const w = await boot(page, appServer, { record: true, prefs, nameB: true });
+    // 落とせる行が 2 つある場面（A1 の pane。A1・A2 が落とせる）。
+    await row(page, w.ws.A1).click();
+    await expect(row(page, w.ws.A1)).toHaveAttribute("aria-current", "true");
+    await expect(mover(page)).toBeVisible();
+    await grabAndMoveTo(page, row(page, w.ws.A2));
+    const bg = (k: keyof World["ws"]) => row(page, w.ws[k]).evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(await bg("A1")).not.toBe(await bg("B")); // 落とせる行は背景が違う
+    expect(await bg("A2")).not.toBe(await bg("B"));
+    await shot(page, `${scheme}-drag-over-allowed.png`);
+    await page.mouse.move(...(await center(row(page, w.ws.B))), { steps: 8 });
+    await expect(row(page, w.ws.B)).toHaveClass(/sidebar-row-pane-drop-disabled/);
+    await expect(dropClasses(page).target).toHaveCount(0);
+    await shot(page, `${scheme}-drag-over-blocked.png`);
+    await page.mouse.up();
+    const toast = page.locator(".toast", { hasText: MESSAGE }).last();
+    await expect(toast).toBeVisible();
+    // 出た直後の見え方（フェードインが終わるのを、不透明度が 1 になるので待つ）。
+    await expect.poll(() => toast.evaluate((el) => Number(getComputedStyle(el).opacity))).toBe(1);
+    await shot(page, `${scheme}-declined-toast.png`);
+    // 落とせる行が自分の行しか無い場面（B の pane。ほかは全部薄い）。
+    await row(page, w.ws.B).click();
+    await expect(row(page, w.ws.B)).toHaveAttribute("aria-current", "true");
+    await expect(mover(page)).toBeVisible();
+    await grabAndMoveTo(page, null);
+    await expect(page.locator(".sidebar-row-pane-drop-allowed")).toHaveCount(1);
+    await expect(row(page, w.ws.B)).toHaveClass(/sidebar-row-pane-drop-allowed/);
+    await expect(dropClasses(page).disabled).toHaveCount(5);
+    await shot(page, `${scheme}-drag-none-allowed.png`);
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+  });
+}

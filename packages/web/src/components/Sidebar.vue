@@ -282,19 +282,23 @@ const spaces = computed<SpaceRow[]>(() => {
  * pane の名前をドラッグしている間、落とせない workspace の id（20261008-web-tab-dnd。移動元と同じ worktree でない行）。
  * ドラッグ元がストアに無ければ空（どの行も断らない）。古いサーバの workspace（git はあるが worktreeKey が無い）は断らない（lenient）。
  */
-const paneDropBlockedIds = computed<ReadonlySet<string>>(() => {
+const paneDropScope = computed<{ blocked: ReadonlySet<string>; allowed: ReadonlySet<string> }>(() => {
+  const blocked = new Set<string>();
+  const allowed = new Set<string>();
   const drag = view.paneDrag;
-  if (!drag) return new Set();
+  if (!drag) return { blocked, allowed };
   const pane = session.panes.get(drag.sourcePaneId);
   const tab = pane ? session.tabs.get(pane.tabId) : undefined;
   const source = tab ? session.workspaces.get(tab.workspaceId) : undefined;
-  if (!source) return new Set();
-  const blocked = new Set<string>();
+  if (!source) return { blocked, allowed };
   for (const ws of session.workspaces.values()) {
     if (paneMoveBlock(source, ws, { lenient: true }) !== null) blocked.add(ws.id);
+    else allowed.add(ws.id);
   }
-  return blocked;
+  return { blocked, allowed };
 });
+const paneDropBlockedIds = computed(() => paneDropScope.value.blocked);
+const paneDropAllowedIds = computed(() => paneDropScope.value.allowed);
 
 /** 全体のメニューが開いているか（`PaneFrame` の枠のボタンと同じく `aria-expanded` で伝える）。 */
 const globalMenuOpen = computed(() => view.contextMenu?.target.kind === "global");
@@ -858,9 +862,10 @@ watch(
                 'sidebar-row-tree': row.kind === 'worktreeChild',
                 'sidebar-row-tree-last': row.treeLast,
                 'sidebar-row-drop-target': view.workspaceDrag?.overRowKey === row.key && !view.workspaceDrag.overInvalid,
-                'sidebar-row-drop-invalid': (view.workspaceDrag?.overRowKey === row.key && view.workspaceDrag.overInvalid) || (!!row.workspace && view.paneDrag?.overWorkspaceId === row.workspace.id && paneDropBlockedIds.has(row.workspace.id)),
+                'sidebar-row-drop-invalid': view.workspaceDrag?.overRowKey === row.key && view.workspaceDrag.overInvalid,
                 'sidebar-row-pane-drop-target': !!row.workspace && view.paneDrag?.overWorkspaceId === row.workspace.id && !paneDropBlockedIds.has(row.workspace.id),
                 'sidebar-row-pane-drop-disabled': !!row.workspace && paneDropBlockedIds.has(row.workspace.id),
+                'sidebar-row-pane-drop-allowed': !!row.workspace && paneDropAllowedIds.has(row.workspace.id),
               }"
               :data-workspace-row-key="row.key"
               :data-drop-workspace-id="row.workspace?.id"
@@ -1201,6 +1206,12 @@ watch(
 .sidebar-row.sidebar-row-pane-drop-target {
   outline: 2px dashed var(--soda-accent, #8be9fd);
   outline-offset: -2px;
+}
+/* pane を D&D している間、落とせる workspace の行の弱い強調（20261008-web-tab-dnd。左の縁の線と淡い背景。ポインタを乗せると
+ * 下の `sidebar-row-pane-drop-target`（破線の枠）に変わる）。落とせない行は枠を出さず、薄いまま。 */
+.sidebar-row.sidebar-row-pane-drop-allowed {
+  box-shadow: inset 3px 0 0 var(--soda-accent, #8be9fd);
+  background: color-mix(in srgb, var(--soda-accent, #8be9fd) 10%, transparent);
 }
 /* pane を D&D している間、移せない workspace の行（20261008-web-tab-dnd。別の worktree）。ドラッグ中だけ薄くする。 */
 .sidebar-row.sidebar-row-pane-drop-disabled {

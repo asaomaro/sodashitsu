@@ -12,9 +12,10 @@ function keyOf(ws: Ws): string | null {
   return typeof k === "string" && k !== "" ? k : null;
 }
 
-/** 末尾の `/` だけ落とす（根の `/` はそのまま）。 */
+/** 末尾の `/`・`\`（Windows の区切り）だけ落とす。根（`/`・`\`）はそのまま。大文字小文字・シンボリックリンクは比べない（断る側に倒れる）。 */
 function normalizeCwd(cwd: string): string {
-  return cwd.replace(/\/+$/, "") || "/";
+  const trimmed = cwd.replace(/[\\/]+$/, "");
+  return trimmed === "" ? cwd.slice(0, 1) || "/" : trimmed;
 }
 
 /**

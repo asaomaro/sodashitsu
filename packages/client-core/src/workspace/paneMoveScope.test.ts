@@ -40,6 +40,10 @@ describe.each(both)("paneMoveBlock (lenient=%s)", (lenient) => {
     expect(paneMoveBlock(ws("a", "/a", null), ws("b", "/b", null), o)).toBe("different_worktree");
     expect(paneMoveBlock(ws("a", "/a", null), ws("b", "/a/", null), o)).toBeNull();
     expect(paneMoveBlock(ws("a", "/", null), ws("b", "/", null), o)).toBeNull();
+    // Windows の区切り（末尾だけ落とす。大文字小文字は比べない）。
+    expect(paneMoveBlock(ws("a", "C:\\a\\", null), ws("b", "C:\\a", null), o)).toBeNull();
+    expect(paneMoveBlock(ws("a", "C:\\a", null), ws("b", "C:\\b", null), o)).toBe("different_worktree");
+    expect(paneMoveBlock(ws("a", "C:\\a", null), ws("b", "c:\\a", null), o)).toBe("different_worktree");
   });
 
   it("(5) 片方に worktreeKey、片方が git: null → different_worktree（cwd が同じでも・両方の向き）", () => {
