@@ -341,6 +341,31 @@ test("(7)(c) Tab で届いたボタンを Enter で押し続ける（3 秒に 16
   expect(stealReports(sent)).toBe(0);
 });
 
+test("(7)(c') Tab で届いた［×］を Enter で閉じる → 面が消え、activeElement は端末（body にならない）。script-html の面が別に載っていても止まらない", async ({ page, appServer }) => {
+  await enableScript(appServer);
+  const { paneId, sent } = await openDisplayBrowser(page, appServer);
+  await setScriptOk(appServer, paneId, "keep", BENIGN, { kind: "band" });
+  await set(appServer, paneId, "gone", "panel");
+  await expect(page.locator("[data-pane-panel]")).toHaveCount(1);
+  await page.evaluate(() => {
+    const w = window as unknown as { __bodyHits: number };
+    w.__bodyHits = 0;
+    setInterval(() => { if (document.activeElement === document.body) w.__bodyHits++; }, 20);
+  });
+  await page.locator("[data-pane-panel-close]").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("[data-pane-panel]")).toHaveCount(0);
+  await expect.poll(() => termFocused(page)).toBe(true);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => (window as unknown as { __bodyHits: number }).__bodyHits)).toBe(0);
+  // 帯の行の［×］も同じ
+  await page.locator("[data-pane-band] [data-pane-band-close]").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("[data-pane-band]")).toHaveCount(0);
+  await expect.poll(() => termFocused(page)).toBe(true);
+  expect(stealReports(sent)).toBe(0);
+});
+
 test("(7)(e) 操作中の script-html のパネルで、フォーカスを取らない部品（［⋮］・つかむ場所・別の面のトレイのボタン・幅のつまみ・帯の行の［⋮］・別の script-html の帯の覆い）を本物の押下で押しても、focus_steal を 1 回も送らない", async ({ page, appServer }) => {
   await enableScript(appServer);
   const { paneId, sent } = await openDisplayBrowser(page, appServer);
