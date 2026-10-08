@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BANDS_MORE_ROW_PX, panelWidth, visibleBands } from "./displayLayout.js";
-import { TRAY_ROW_PX, resolvePaneDisplays, type LayoutInput } from "./paneDisplayLayout.js";
+import { BAND_MIN_W_PX, BAND_SCRIPT_MIN_W_PX, TRAY_ROW_PX, resolvePaneDisplays, type LayoutInput } from "./paneDisplayLayout.js";
 
 const input = (over: Partial<LayoutInput> = {}): LayoutInput => ({
   paneW: 1000,
@@ -147,5 +147,30 @@ describe("resolvePaneDisplays — 右の群れ", () => {
     const r = resolvePaneDisplays(input({ panels: [panel("a", 1, { dock: "bottom" })] }));
     expect(r.docks.right).toBeNull();
     expect(r.terminal.w).toBe(1000);
+  });
+});
+
+describe("resolvePaneDisplays — pane が狭くて帯の固定の部品が入らないとき", () => {
+  it("スクリプトの帯は BAND_SCRIPT_MIN_W_PX 未満で自動でたたむ（トレイに押せないボタンで残り、帯の高さの代わりにトレイの行）", () => {
+    const wide = resolvePaneDisplays(input({ paneW: BAND_SCRIPT_MIN_W_PX, bands: [band("s", 1, { script: true })] }));
+    expect(wide.bands.top).toEqual(["s"]);
+    expect(wide.auto).toEqual([]);
+    const narrow = resolvePaneDisplays(input({ paneW: BAND_SCRIPT_MIN_W_PX - 1, bands: [band("s", 1, { script: true })] }));
+    expect(narrow.bands.top).toEqual([]);
+    expect(narrow.auto).toEqual(["s"]);
+    expect(narrow.tray.buttons).toEqual([{ id: "s", kind: "band", open: false, disabled: true }]);
+    expect(narrow.terminal.y).toBe(TRAY_ROW_PX); // 帯の高さではなく、トレイの専用の行の分
+  });
+  it("スクリプトでない帯は、もっと狭くなるまで出す。利用者がたたんだ帯は自動の扱いにならない（押せる）", () => {
+    expect(resolvePaneDisplays(input({ paneW: BAND_MIN_W_PX, bands: [band("p", 1)] })).bands.top).toEqual(["p"]);
+    expect(resolvePaneDisplays(input({ paneW: BAND_MIN_W_PX - 1, bands: [band("p", 1)] })).auto).toEqual(["p"]);
+    const r = resolvePaneDisplays(input({ paneW: 50, bands: [band("c", 1, { collapsed: true, script: true })] }));
+    expect(r.auto).toEqual([]);
+    expect(r.tray.buttons).toEqual([{ id: "c", kind: "band", open: false, disabled: false }]);
+  });
+  it("狭い帯の分は「ほか N 件」の数え方にも入らない", () => {
+    const r = resolvePaneDisplays(input({ paneW: 200, bands: [band("s", 1, { script: true }), band("p", 2)] }));
+    expect(r.bands).toEqual({ top: ["p"], bottom: [], more: [] });
+    expect(r.auto).toEqual(["s"]);
   });
 });

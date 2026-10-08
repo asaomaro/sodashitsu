@@ -191,6 +191,11 @@ describe("面の記憶（置き場所・たたみ。20261008-display-layout）",
     expect(s.layoutRev).toBe(1);
     s.setLayoutSnapshot("p1", { auto: ["a"], floatArea: null });
     expect(s.layoutRev).toBe(2);
+    // 帯の上下・トレイの行などの署名（placement）が変わっても増える（知らせが測り直す）
+    s.setLayoutSnapshot("p1", { auto: ["a"], floatArea: null, placement: "x" });
+    expect(s.layoutRev).toBe(3);
+    s.setLayoutSnapshot("p1", { auto: ["a"], floatArea: null, placement: "x" });
+    expect(s.layoutRev).toBe(3);
     s.setLayoutSnapshot("p1", null);
     expect(s.layoutByPane.has("p1")).toBe(false);
   });

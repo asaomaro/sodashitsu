@@ -34,6 +34,8 @@ export interface PaneLayoutSnapshot {
   auto: string[];
   /** 窓の動ける領域の大きさ（無ければ null）。 */
   floatArea: { w: number; h: number } | null;
+  /** 帯の上下・トレイの行・「ほか N 件」の署名。変わると知らせなどが測り直す（固定の部品の位置が動くため）。 */
+  placement?: string;
 }
 
 /** 今までのパネルの幅の記憶の、読む件数の上限。 */

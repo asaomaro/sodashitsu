@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ActionDispatcherKey, DisplayHostKey, TerminalRegistryKey } from "../injection.js";
+import { isScriptFormat } from "../display/framePage.js";
 import { resolvePaneDisplays, type LayoutResult } from "../display/paneDisplayLayout.js";
 import { NO_NEIGHBORS, resolvePaneChrome, type PaneSide, type PaneSides } from "../layout/paneChrome.js";
 import { paneNameOf } from "@sodashitsu/client-core";
@@ -99,7 +100,7 @@ const layout = computed<LayoutResult | null>(() => {
     const panels: Parameters<typeof resolvePaneDisplays>[0]["panels"] = [];
     all.forEach((d, seq) => {
       const f = displays.effectiveOf(d);
-      if (d.kind === "band") bands.push({ id: d.id, seq, size: d.size, edge: f.edge ?? "top", collapsed: f.collapsed });
+      if (d.kind === "band") bands.push({ id: d.id, seq, size: d.size, edge: f.edge ?? "top", collapsed: f.collapsed, script: isScriptFormat(d.format) && displays.scriptCapable && settings?.displayScriptEnabled === true });
       else panels.push({ id: d.id, seq, size: d.size, dock: f.dock ?? "right", collapsed: f.collapsed });
     });
     const right = displays.sideSizeOf(props.paneId, "right");
@@ -121,6 +122,8 @@ const layout = computed<LayoutResult | null>(() => {
     return null;
   }
 });
+/** 固定の部品の位置が変わる割り付け（帯の上下・たたみ・トレイの行・「ほか N 件」）の署名。 */
+const placementOf = (l: LayoutResult): string => JSON.stringify([l.bands, l.tray.edge, l.tray.row, l.tray.hostBandId, l.tray.buttons.length]);
 const showEdge = (edge: "top" | "bottom"): boolean => {
   const l = layout.value;
   if (!l) return false;
@@ -146,7 +149,7 @@ watch(
   layout,
   (l) => {
     if (displays) {
-      displays.setLayoutSnapshot(props.paneId, l ? { auto: l.auto, floatArea: null } : null);
+      displays.setLayoutSnapshot(props.paneId, l ? { auto: l.auto, floatArea: null, placement: placementOf(l) } : null);
     }
     const a = document.activeElement;
     if (focusWasInChrome && (a === null || a === document.body || !a.isConnected) && !view?.modalOpen) displayHost?.focusTerminal(props.paneId);

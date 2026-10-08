@@ -172,9 +172,6 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
   background: var(--soda-bg, #1e1f29);
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
-.pane-tray-row .pane-band-mark {
-  align-self: stretch;
-}
 /* 帯の枠は、トレイと右端のボタンの残りを使い、いちばん先に縮む（枠 → トレイ）。 */
 .pane-band {
   position: relative;
@@ -186,30 +183,8 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
 .pane-band-mark {
-  align-self: stretch;
-}
-.pane-band {
-  position: relative;
-  box-sizing: border-box;
-  display: flex;
-  align-items: stretch;
-  min-width: 0;
-  background: var(--soda-bg, #1e1f29);
-  border-bottom: 1px solid var(--soda-menu-border, #44475a);
-}
-/* 左端のアプリの部分（印とトレイ）。縮まない印と、行の 4 割までのトレイ。 */
-.pane-band-lead {
-  flex: 0 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  max-width: 60%;
-}
-.pane-band-lead > .pane-band-mark {
-  align-self: stretch;
-}
-.pane-band-mark {
   flex: none;
+  align-self: stretch;
   display: flex;
   align-items: center;
   padding: 0 6px;
@@ -239,7 +214,11 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
 }
 .pane-band-close {
   flex: none;
+  align-self: stretch;
+  box-sizing: border-box;
   min-width: 24px;
+  padding-top: 0;
+  padding-bottom: 0;
   font: inherit;
   color: var(--soda-fg, #f8f8f2);
   background: transparent;

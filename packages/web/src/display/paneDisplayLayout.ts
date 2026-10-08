@@ -11,6 +11,12 @@ export const TERMINAL_MIN_ROWS = 10;
 export const DOCK_H_MIN_PX = 96;
 /** 帯が無いときの、トレイだけの行の高さ。 */
 export const TRAY_ROW_PX = 24;
+/**
+ * 帯の行の固定の部品（印・［⋮］・［×］。スクリプトが動く帯は、印「スクリプト」・［操作する］〔操作中は［操作を終える］〕も）が全部入る、pane の幅の下限（px）。
+ * 実測の合計は、スクリプトの帯 約 265〔操作中 約 285〕・それ以外 約 105。余裕をみた値。これより狭い pane では、帯を自動でたたむ（記憶は変えない。トレイに押せないボタンで残る）。
+ */
+export const BAND_MIN_W_PX = 140;
+export const BAND_SCRIPT_MIN_W_PX = 320;
 export const FLOAT_MIN_W_PX = 240;
 export const FLOAT_MIN_H_PX = 120;
 export const FLOAT_AREA_INSET_PX = 4;
@@ -31,7 +37,7 @@ export interface LayoutInput {
   cellW: number;
   cellH: number;
   /** 出た順。`seq` は、その pane の面の全体（パネルと帯）での出た順の番号。 */
-  bands: { id: string; seq: number; size: number; edge: DisplayEdge; collapsed: boolean }[];
+  bands: { id: string; seq: number; size: number; edge: DisplayEdge; collapsed: boolean; script?: boolean }[];
   panels: { id: string; seq: number; size: number; dock: DisplayDock; collapsed: boolean }[];
   /** 側ごとの、選んでいる面。 */
   active: Partial<Record<Side, string>>;
@@ -91,7 +97,10 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
   const cellW = input.cellW > 0 ? input.cellW : DEFAULT_CELL_WIDTH_PX;
 
   // 1. 帯: たたんでいない帯を出た順に足し、高さの合計が paneH / 3 以下に収まる分だけ出す（上と下を合わせて数える）。
-  const open = input.bands.filter((b) => !b.collapsed);
+  // pane が狭くて固定の部品が入らない帯は、自動でたたむ（出す帯の数え方・トレイの側にも入れない）。
+  const tooNarrow = (b: LayoutInput["bands"][number]): boolean => paneW < (b.script ? BAND_SCRIPT_MIN_W_PX : BAND_MIN_W_PX);
+  const open = input.bands.filter((b) => !b.collapsed && !tooNarrow(b));
+  const autoBands = input.bands.filter((b) => !b.collapsed && tooNarrow(b));
   const split = visibleBands(open.map((b) => b.size), paneH);
   const shown = open.slice(0, split.shown);
   const more = open.slice(split.shown).map((b) => b.id);
@@ -104,7 +113,7 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
 
   // 4. 横（PR-A は右だけ）。置き場所が right のたたんでいないパネルを出た順に。
   const rightPanels = input.panels.filter((p) => p.dock === "right" && !p.collapsed).sort((a, b) => a.seq - b.seq);
-  const auto: string[] = [];
+  const auto: string[] = autoBands.map((b) => b.id);
   const docks = EMPTY_DOCKS();
   let rightW = 0;
   if (rightPanels.length > 0) {
@@ -129,7 +138,7 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
     if (p.dock === "float") tagged.push({ seq: p.seq, b: { id: p.id, kind: "float", open: !p.collapsed && !isAuto, disabled: isAuto } });
     else if (p.collapsed || isAuto) tagged.push({ seq: p.seq, b: { id: p.id, kind: "panel", open: false, disabled: isAuto } });
   }
-  for (const b of input.bands) if (b.collapsed) tagged.push({ seq: b.seq, b: { id: b.id, kind: "band", open: false, disabled: false } });
+  for (const b of input.bands) if (b.collapsed || autoSet.has(b.id)) tagged.push({ seq: b.seq, b: { id: b.id, kind: "band", open: false, disabled: autoSet.has(b.id) && !b.collapsed } });
   tagged.sort((a, b) => a.seq - b.seq);
   const buttons = tagged.map((t) => t.b);
   const hostBandId = (trayEdge === "top" ? top : bottom)[0]?.id ?? null;

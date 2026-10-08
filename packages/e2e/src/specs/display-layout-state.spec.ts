@@ -425,6 +425,31 @@ test("(8) 知らせ: 帯を下に置き、知らせを出す → 知らせの箱
   }
 });
 
+test("(8b) 知らせが出ている最中に、帯を下に置く・たたむ・開く → 測り直されて、知らせの箱が [data-display-chrome] のどの箱とも重ならない", async ({ page, appServer }) => {
+  const c = await appServer.openClient();
+  const paneId = c.helloSnapshot()!.panes[0]!.id;
+  await set(appServer, paneId, "bu", "band", ["--edge", "top"]);
+  const ids = await idsOf(appServer, paneId);
+  // 知らせ（キー一覧の案内。一度だけ・4 秒で消える）が出ている最中に、割り付けを変える
+  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+  const toastBox = page.locator(".toast-list");
+  const noOverlap = async (label: string): Promise<void> => {
+    await expect(page.locator(".toast").first(), `${label}: 知らせが見えている`).toBeVisible();
+    const toast = await boxOf(toastBox);
+    const chrome = page.locator("[data-display-chrome]");
+    for (let i = 0; i < (await chrome.count()); i++) {
+      const b = await chrome.nth(i).boundingBox();
+      if (b && b.width > 0 && b.height > 0) expect(intersects(toast, b), `${label}: chrome #${i}`).toBe(false);
+    }
+  };
+  await page.locator(`[data-display-root="${ids["bu"]}"] [data-display-menu-button]`).click();
+  await menuItem(page, "下に置く").click();
+  await expect(page.locator('[data-pane-bands-edge="bottom"] [data-pane-band]')).toHaveCount(1);
+  await noOverlap("下に置いた直後");
+  await expect(page.locator(".toast-list").first()).toBeVisible();
+});
+
 test("(10) 右のパネルを最小の幅（160px）にしても、印「スクリプト」・［操作する］・［⋮］・［たたむ］・［×］の箱がパネルの箱の中に収まり、中心の elementFromPoint が自身", async ({ page, appServer }) => {
   await enableScript(appServer);
   const { paneId } = await openDisplayBrowser(page, appServer);
@@ -530,4 +555,52 @@ test("(12) 固定の文言: 設定で無効のとき各面の枠の箱の中に�
   await expect(redisplay.first()).toBeVisible();
   await redisplay.first().click();
   await expect(page.locator("iframe[data-display-script]")).not.toHaveCount(0); // 押すと戻る
+});
+
+// --- (13) 帯の行の固定の部品は、どの幅でも欠けない・押せる --------------------------------------------------------------------
+
+test("(13) 帯・最小の幅・script-html・トレイあり: pane をどれだけ細くしても、出ている帯の印「スクリプト」・［操作する］・［⋮］・［×］が帯の箱の中に収まり、中心の elementFromPoint が自身。出さない幅では、帯はたたまれてトレイのボタンが押せない理由つきで残る", async ({ page, appServer }) => {
+  await enableScript(appServer);
+  const { paneId } = await openDisplayBrowser(page, appServer);
+  await setScriptOk(appServer, paneId, "sb", BENIGN, { kind: "band", extra: ["--size", "24"] });
+  for (const n of ["x1", "x2", "x3"]) await set(appServer, paneId, n, "panel", ["--collapsed"]);
+  const c = await appServer.openClient();
+  await c.request("pane.split", { paneId, direction: "right" });
+  await c.request("pane.split", { paneId, direction: "right" });
+  c.close();
+  const first = page.locator(`[data-pane-id="${paneId}"]`);
+  let shownWide = 0;
+  let collapsedNarrow = 0;
+  for (const w of [1800, 1600, 1440, 1280, 1100, 1000, 900, 800, 768]) {  // 768 未満はモバイルの画面
+    await page.setViewportSize({ width: w, height: 800 });
+    await page.waitForTimeout(250);
+    const paneW = (await boxOf(first)).width;
+    const band = first.locator("[data-pane-band]");
+    const n = await band.count();
+    if (n > 0) {
+      shownWide++;
+      const bb = await boxOf(band.first());
+      for (const sel of ["[data-display-script-mark]", "[data-display-engage]", "[data-display-menu-button]", "[data-pane-band-close]"]) {
+        const loc = band.first().locator(sel).first();
+        const b = await boxOf(loc);
+        expect(b.x, `${w}/${paneW} ${sel} 左`).toBeGreaterThanOrEqual(bb.x - 1);
+        expect(b.x + b.width, `${w}/${paneW} ${sel} 右`).toBeLessThanOrEqual(bb.x + bb.width + 1);
+        expect(b.y, `${w}/${paneW} ${sel} 上`).toBeGreaterThanOrEqual(bb.y - 0.5);
+        expect(b.y + b.height, `${w}/${paneW} ${sel} 下`).toBeLessThanOrEqual(bb.y + bb.height + 0.5);
+        expect(await centerHitsSelf(loc), `${w}/${paneW} ${sel} 中心`).toBe(true);
+      }
+    } else {
+      collapsedNarrow++;
+      const btn = first.locator('[data-display-tray-button][data-display-name="sb"]');
+      // 帯のボタンは、トレイに収まれば押せない理由（title）つきで、収まらなければ「ほか N」の中に残る
+      if ((await btn.count()) > 0) {
+        await expect(btn, `${w}/${paneW} 帯のトレイのボタン`).toBeDisabled();
+        await expect(btn).toHaveAttribute("title", /狭い/);
+      } else {
+        await expect(first.locator("[data-display-tray-more]"), `${w}/${paneW} ほか N`).toBeVisible();
+      }
+    }
+  }
+  expect(shownWide, "広い幅では帯が出る").toBeGreaterThan(0);
+  expect(collapsedNarrow, "細い幅では帯をたたむ").toBeGreaterThan(0);
 });
