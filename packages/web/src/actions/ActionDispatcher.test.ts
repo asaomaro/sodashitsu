@@ -72,7 +72,7 @@ class FakeWebglAddon implements WebglAddonLike {
 /** T17/T18 共通のテスト用の組み立て（実物の KeyRouter・TerminalRegistry を使う。軽量な部品なので実害は無い）。 */
 function makeDispatcher(
   conn: ConnectionPort,
-  extra: { notifications?: { focusNext(): void }; imagePaste?: { pasteClipboard(paneId: string): void } } = {},
+  extra: { notifications?: { focusNext(): void }; imagePaste?: { pasteClipboard(paneId: string): void }; extensionReload?: () => void } = {},
 ): { dispatcher: ActionDispatcher; registry: TerminalRegistry; keys: KeyInputController } {
   const router = new KeyRouter(DEFAULT_KEYMAP, realClock());
   const keys = new KeyInputController(router, conn);
@@ -1073,6 +1073,14 @@ describe("ActionDispatcher — スクロールバックをエディタで開く�
 });
 
 describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-appearance-settings-rest。AC13〜AC15）", () => {
+  it("拡張の設定も読み直させる（20261007-ext-host）。extensionReload が無くても落ちない", () => {
+    const conn = makeConnection();
+    let n = 0;
+    makeDispatcher(conn, { extensionReload: () => void n++ }).dispatcher.run({ type: "reloadConfig" });
+    expect(n).toBe(1);
+    makeDispatcher(conn).dispatcher.run({ type: "reloadConfig" }); // 省略時: 何もしない
+  });
+
   it("localStorage（soda.prefs.v1）の今の値を settings・view ストアへ読み直し、トーストを出す（AC13・AC14）", () => {
     const conn = makeConnection();
     const settings = useSettingsStore(pinia);

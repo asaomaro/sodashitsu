@@ -9,7 +9,7 @@ import { createPinia } from "pinia";
 import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
-import { ActionDispatcherKey, AskControllerKey, ConnectionKey, DisplayControllerKey, DisplayHostKey, DeviceKindKey, FileTransferKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import { ActionDispatcherKey, AskControllerKey, ConnectionKey, ExtensionControllerKey, DisplayControllerKey, DisplayHostKey, DeviceKindKey, FileTransferKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
 import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
@@ -36,6 +36,8 @@ import { Connection } from "@sodashitsu/client-core";
 import { InputGate } from "@sodashitsu/client-core";
 import { ImagePaster } from "./term/ImagePaster.js";
 import { AskController } from "./ask/AskController.js";
+import { ExtensionController } from "./extensions/ExtensionController.js";
+import { useExtensionsStore } from "./store/extensions.js";
 import { useAskStore } from "./store/ask.js";
 import { DisplayController } from "./display/DisplayController.js";
 import { scriptEnabledNoticeFor } from "./display/displayLabel.js";
@@ -144,6 +146,8 @@ const storeAdapter = new StoreAdapter({
   },
   // 質問のフォーム（20261002-sodactl-ask）。`askController` はこの後で作るので、遅延で参照する。
   onAskEvent: (e) => askController.onEvent(e),
+  // 拡張（20261007-ext-host）。`extensionController` はこの後で作るので、遅延で参照する。
+  onExtensionChanged: () => extensionController.onChanged(),
   // 表示の面（20261007-soda-extensions）。`displayController` はこの後で作るので、遅延で参照する。
   onDisplayEvent: (e) => displayController.onEvent(e),
 });
@@ -211,6 +215,9 @@ const getScrollbackLines = (): number => effectiveScrollback(settings.scrollback
 
 // 質問のフォーム（20261002-sodactl-ask）。`inputGate` は素通しの接続（要求だけを使う）。接続のたびに `ask.subscribe` して待っている質問を受け取る（下の `onOpened`）。
 const askController = new AskController({ conn: inputGate, store: useAskStore(pinia), toast: (message) => view.toast(message) });
+
+// 拡張（20261007-ext-host）。接続のたびに `extension.list` で一覧を取り、`extension.changed` で取り直す。
+const extensionController = new ExtensionController({ conn: inputGate, store: useExtensionsStore(pinia), toast: (message) => view.toast(message) });
 
 // 表示の面（20261007-soda-extensions）。接続のたびに `display.subscribe` して名乗り、全 pane の面の見出しを受け取る（下の `onOpened`）。
 const displayController = new DisplayController({ conn: inputGate, store: useDisplayStore(pinia), toast: (message) => view.toast(message), livePaneIds: () => new Set(session.panes.keys()) });
@@ -315,8 +322,10 @@ connection.onOpened(() => themeController.resend());
 // 質問を出せる画面として名乗り、待っている質問を受け取る（接続ごと。再読み込み・再接続・マシンの切り替えの出し直し）。
 connection.onOpened(() => askController.onOpened());
 connection.onOpened(() => displayController.onOpened());
+connection.onOpened(() => extensionController.onOpened());
 connection.onClosed(() => askController.onClosed());
 connection.onClosed(() => displayController.onClosed());
+connection.onClosed(() => extensionController.onClosed());
 // この接続から見たサーバ（同じマシンか・ファイルを開く手段があるか）は接続ごとに聞き直す（マシンを切り替えた後の接続も同じ）。
 connection.onOpened(() => fileTransfer.onOpened());
 // 名前付き session の数（サイドバーの session の入口。20260926-named-session-ui）。`actionDispatcher` は下で作るので、呼ぶ時点で読む。
@@ -381,7 +390,7 @@ notificationsBox.current = notifications;
 // 履歴の 7 日の期限は、ページを開いたままでも落とす（掃除の契機は出来事の変化だけでは足りない）。
 setInterval(() => useNotificationsStore(pinia).pruneExpiredHistory(), 30_000);
 
-const actionDispatcher = new ActionDispatcher({ conn, pinia, registry, keys, input: inputGate, notifications, imagePaste: imagePaster });
+const actionDispatcher = new ActionDispatcher({ conn, pinia, registry, keys, input: inputGate, notifications, imagePaste: imagePaster, extensionReload: () => void extensionController.reload(true) });
 actionDispatcherBox.current = actionDispatcher;
 
 /** サイドバーの workspace の選択と同じ（同じマシンのとき。`Sidebar.vue` の `focusWorkspace`）。 */
@@ -417,6 +426,7 @@ const machineSwitcher = new MachineSwitcher({
     imagePaster.resetForMachineSwitch(); // 前のマシンの pane へ始めた画像の貼り付けを、次のマシンの同じ id の pane へ届けない
     askController.resetForMachineSwitch(); // 前のマシンの質問を捨てる（pane の id が重なる）。次の接続の ask.subscribe が取り直す
     fileTransfer.resetForMachineSwitch(); // ファイルのドロップ・ダウンロードも同じ
+    extensionController.resetForMachineSwitch(); // 前のマシンの拡張の一覧を捨てる。次の接続の extension.list が取り直す
     displayController.resetForMachineSwitch(); // 前のマシンの表示の面を捨てる（pane の id が重なる）。次の接続の display.subscribe が取り直す
   },
   nextTick: () => nextTick(),
@@ -538,6 +548,7 @@ app.provide(ActionDispatcherKey, actionDispatcher);
 app.provide(MachineSwitcherKey, machineSwitcher);
 app.provide(TerminalRegistryKey, registry);
 app.provide(AskControllerKey, askController);
+app.provide(ExtensionControllerKey, extensionController);
 app.provide(DisplayControllerKey, displayController);
 app.provide(DisplayHostKey, {
   focusTerminal: (paneId) =>
