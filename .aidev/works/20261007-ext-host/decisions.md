@@ -277,3 +277,16 @@ K6（`script-html` の許可）は、その後に main に入った設定 `displ
 
 - 二重の条件（設定と `allow`）については、**抜けは見つからなかった**（`allow` の検査は台帳の前・設定の検査は台帳の中・札は、どちらの検査も飛ばさない）。行番号は、開いて確かめたものが、3 か所（`refund`・`features()`・`restoreFocus`）を除いて合っていた（その 3 か所は直した）。
 - **2 回目の should・nit（7 件）への直しは、別のコンテキストが見ていない**（design「表示の面への追加」の「コードの上の手順」・`stdout`／`stderr` を閉じる前の 200 ミリ秒・`ExtLimits.displayBytes`・`close()` の中の順）。T7 の独立点検（`taskcheck`）と、PR1 の独立レビューで見てほしい。
+
+## D10: 実装中の記録（PR1。実装のセッションが書く。設計は変えていない）
+
+### 前提の実測（未確認 u1〜u8）
+
+- **u1（済み・通った）**: Linux（WSL2・カーネル 6.6）で、`detached: true` で起動した `/bin/sh -c 'sleep 300 & exec sleep 300'` の子へ `process.kill(-pid, "SIGTERM")` を送ると、子と孫の両方が消え、その後 `process.kill(-pid, 0)` は `ESRCH`。`ExtensionProcess.real.test.ts` の (i)〜(iv)（合図を無視する孫・親が先に終わる・掃いている途中の `stop()`・標準エラーの最後の行）が通る。macOS・Windows は実機で確かめていない。
+- **u8（済み・出典あり）**: 「グループに残りがいる間、その番号は新しい pid・グループの番号にならない」は、POSIX.1-2017 XBD 4.14「Process ID Reuse」の原文（「A process ID shall not be reused by the system until the process lifetime ends. In addition, if there exists a process group whose process group ID is equal to that process ID, the process ID shall not be reused by the system until the process group lifetime ends.」。pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap04.html で確認）。Linux・macOS はこの規則に従う。`kill(2)`（Linux の man）で、`ESRCH`＝グループが無い（ゾンビだけが残る場合も「居る」とみなされる）・`EPERM`＝合図を送れる権限が、グループの全員には無い、も確認した。
+- **u3（組み立てのみ）**: `extensionLaunch.test.ts` と `ExtensionProcess.test.ts` の win32 の段（偽の `runFile`）だけ。実機では確かめていない。
+
+### 設計との違い（小さいもの）
+
+- 量の桶は、`display/rateLimit.ts` の `TokenBucket`（借りない）ではなく、`ExtensionProcess.ts` の `DebtBucket`（借りられる）を使う。理由: 片は既に届いているので捨てられず、足りない分を「読むのを待つ時間」にして返す必要がある（design「頻度」の「借りた形にして」）。行の桶（1 行ずつ処理の前に取る）は `TokenBucket` のまま。`ExtProcessDeps.totalBytes` の型は `DebtBucket`。
+- `ExtChild.pid` は、実際の `ChildProcess` に合わせて `pid?: number | undefined`。

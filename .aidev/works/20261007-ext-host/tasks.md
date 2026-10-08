@@ -143,7 +143,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T1
       AC: AC1, AC36
       点検: あり
-- [ ] T6: `ExtensionProcess`（design「`ExtensionProcess`」の全部: 起動・読む〔`LineReader`・**`parseExtRequest` と、壊れた行の数え方と `ext.error`**・量は片を受けた時点で 2 つの量の桶から・行の桶・`pause`・16 行か 8 ミリ秒でイベントループへ返す・1 行ぶんを `try/catch`〕・書く〔列・捨てる・まとめる・30 秒〕・標準エラーの輪の記録と量の桶・`sweepGroup`・止める・止めていない `exit` の後の掃き・**`exit`／打ち切りで、サーバの側の stdio を閉じる**・`exited`・`settled`）。
+- [x] T6: `ExtensionProcess`（design「`ExtensionProcess`」の全部: 起動・読む〔`LineReader`・**`parseExtRequest` と、壊れた行の数え方と `ext.error`**・量は片を受けた時点で 2 つの量の桶から・行の桶・`pause`・16 行か 8 ミリ秒でイベントループへ返す・1 行ぶんを `try/catch`〕・書く〔列・捨てる・まとめる・30 秒〕・標準エラーの輪の記録と量の桶・`sweepGroup`・止める・止めていない `exit` の後の掃き・**`exit`／打ち切りで、サーバの側の stdio を閉じる**・`exited`・`settled`）。
       偽の子 `FakeExtChild`（`pid`・`PassThrough` 3 本・`exit` を出す）と、合図を記録する偽の `killGroup`、`ManualClock` の使い回しを `extensions/testing.ts` に。不確かな点 8（`sweepGroup` の前提）の出典を確かめる。
       **最初に、実際の子プロセスのテストを書いて、不確かな点 1 を確かめる**（`win32` はスキップ）: (i) `/bin/sh -c 'sleep 300 & exec sleep 300'` の形で孫を作り、`stop()` が**返った時点で**、子と孫の pid が、どちらも消えている（`process.kill(pid, 0)` が `ESRCH`）
       (ii) **合図を無視する孫を残して、親がすぐ終了コード 0 で終わる**拡張（孫の pid を、ファイルへ書き出す）: `stop()` を呼ばずに、`settled` が決まるのを待つと（3 秒以内）、孫が消えている（止めていない `exit` の後の、裏の `sweepGroup`）(iii) (ii) と同じ拡張で、親の `exit` の直後（掃いている途中）に `stop()` を呼ぶと、返った時点で、孫が消えている。(iv) 標準エラーへ 1 行書いて、すぐ終了コード 1 で終わる拡張 → その行が `log()` にある。
