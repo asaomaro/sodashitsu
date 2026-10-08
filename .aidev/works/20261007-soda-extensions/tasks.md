@@ -376,7 +376,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       依存: T13, T16, T17, T26
       AC: AC31, AC32, AC33, AC34, AC37, AC-I3, AC-I4
       点検: あり
-- [ ] T28: E2E（スクリプトが動く形式）。`display-script.spec.ts`:
+- [x] T28: E2E（スクリプトが動く形式）。`display-script.spec.ts`:
       (1) `--script-html-file` の中身のインラインのスクリプトが DOM を書き換え、`eval` が動く。`window.soda` がある（不確かな点 8）。**土台が中身を差し込んだ後も、`data-display-loads` が 1 のまま**（不確かな点 7。合否）。インラインのスクリプトが文書の順に動く・`DOMContentLoaded`/`load` を待つ部品が動く・`<body onload>` が動く（不確かな点 8）。
       操作を始めてからボタンを押すと、`soda.action("pick", {id:"3"})` が `wait` に `display.action`（`source: "script"`）の 1 行で届く。静的な `html` の面の操作は `source: "static"`。`soda.action` に規則の外の名前を渡すと `false` で、何も届かない、
       (2) `sodactl display send` のデータが `soda.onMessage` に届いて DOM に出る。**枠が作り直されていない**（iframe が同じ要素・スクリプトが持つカウンタが続いている）。同じ名前の `set` では作り直される。2 つのブラウザの両方に届く、

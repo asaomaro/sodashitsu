@@ -24,8 +24,11 @@ describe("engageEntry（操作を始める入口の決まり）", () => {
     startFromButton({ detail: 0 }, start);
     expect(start).not.toHaveBeenCalled();
     document.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter" }));
+    expect(start).not.toHaveBeenCalled(); // keyup の処理が済むまで待つ
+    vi.advanceTimersByTime(0);
     expect(start).toHaveBeenCalledTimes(1);
     document.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter" })); // 2 回目では始めない
+    vi.advanceTimersByTime(10);
     expect(start).toHaveBeenCalledTimes(1);
   });
 
@@ -46,10 +49,13 @@ describe("engageEntry（操作を始める入口の決まり）", () => {
     const seen: string[] = [];
     const el = document.createElement("input");
     document.body.appendChild(el);
+    // 端末（xterm.js）のように、keyup の中で自分へフォーカスを戻す受け手がいる。始めるのは、その処理が済んだあと。
     el.addEventListener("keyup", () => seen.push(start.mock.calls.length ? "after-start" : "before-start"));
     el.dispatchEvent(new KeyboardEvent("keyup", { key: "i", bubbles: true }));
-    expect(start).toHaveBeenCalledTimes(1);
-    expect(seen).toEqual(["after-start"]); // 親が先に受けて始めた＝その keyup は、始める前に済んでいる
+    expect(seen).toEqual(["before-start"]); // 受け手の処理が先に済む
+    expect(start).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(0);
+    expect(start).toHaveBeenCalledTimes(1); // そのあとで始まる
     el.remove();
   });
 });

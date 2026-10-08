@@ -284,7 +284,7 @@ function syncGuardState(): void {
 
 /** スクリプトが動く形式: いまのフォーカスを見て、「操作中でないのに枠が取った」に変わったときだけ、戻して知らせる。 */
 function checkScriptFocus(): void {
-  if (!isScript.value || iframeEl.value === null) return;
+  if (!isScript.value || iframeEl.value === null || phase.value === "closed") return;
   const verdict = guard.observe(frameHasFocus());
   syncGuardState();
   if (verdict === "steal") onSteal();
@@ -355,13 +355,20 @@ function onFocusSignal(): void {
   if (isScript.value) checkScriptFocus();
   else updateFocusStatic();
 }
+/**
+ * フォーカスが動いている最中のイベント（`blur`・`focus`・`focusout`）では、`document.activeElement` がまだ前の要素（枠）のままのことがある
+ * （枠から親の端末へ戻すとき、`focus` が来た時点でも iframe を指している〔実測〕）。そのまま見ると、戻したばかりの枠を「取った」と誤って数えるので、1 拍置いて見る。
+ */
 function onWindowBlur(): void {
-  // `blur` の時点では `activeElement` がまだ iframe に替わっていないことがあるので、1 拍置いて見る。
   setTimeout(onFocusSignal, 0);
 }
 function onDocFocusIn(ev: Event): void {
-  // 枠でない要素にフォーカスが移った: 操作を終える。そのあとで枠が取り返したら、新しい「取った」。
-  if (isScript.value && ev.target !== iframeEl.value) guard.leave();
+  if (isScript.value && ev.target !== iframeEl.value) {
+    // 枠でない要素にフォーカスが移った: 操作を終える。そのあとで枠が取り返したら、新しい「取った」（1 拍置いて見る）。
+    guard.leave();
+    setTimeout(onFocusSignal, 0);
+    return;
+  }
   onFocusSignal();
 }
 /** 操作中に、枠でない場所を押した（フォーカスを受けない余白を含む）: 操作を終える。枠が自分の `blur` で取り返しても、次の見回りで「取った」と分かる。 */
@@ -415,7 +422,7 @@ onMounted(() => {
   installFocusOriginTracking();
   window.addEventListener("message", onWindowMessage);
   window.addEventListener("blur", onWindowBlur);
-  window.addEventListener("focus", onFocusSignal);
+  window.addEventListener("focus", onWindowBlur);
   window.addEventListener("focusin", onDocFocusIn);
   window.addEventListener("focusout", onWindowBlur);
   document.addEventListener("pointerdown", onDocPointerDown, true);
@@ -433,7 +440,7 @@ start();
 onBeforeUnmount(() => {
   window.removeEventListener("message", onWindowMessage);
   window.removeEventListener("blur", onWindowBlur);
-  window.removeEventListener("focus", onFocusSignal);
+  window.removeEventListener("focus", onWindowBlur);
   window.removeEventListener("focusin", onDocFocusIn);
   window.removeEventListener("focusout", onWindowBlur);
   document.removeEventListener("pointerdown", onDocPointerDown, true);

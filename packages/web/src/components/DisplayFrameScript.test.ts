@@ -211,6 +211,7 @@ describe("DisplayFrame（スクリプトが動く形式）", () => {
     engageFrame("d1", { detail: 0 });
     expect(s.iframe.focus).not.toHaveBeenCalled();
     document.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter" }));
+    vi.advanceTimersByTime(0);
     expect(s.iframe.focus).toHaveBeenCalledTimes(1);
     s.fromFrame(port, { type: "key", key: "escape" });
     // prefix+i
@@ -218,6 +219,7 @@ describe("DisplayFrame（スクリプトが動く形式）", () => {
     expect(focusFrame("d1")).toBe(true);
     expect(s.iframe.focus).not.toHaveBeenCalled();
     document.dispatchEvent(new KeyboardEvent("keyup", { key: "i" }));
+    vi.advanceTimersByTime(0);
     expect(s.iframe.focus).toHaveBeenCalledTimes(1);
   });
 
