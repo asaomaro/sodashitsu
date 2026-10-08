@@ -145,6 +145,7 @@ export function menuPositionBelow(el: Element | null): { x: number; y: number } 
  */
 export function installKeepFocusRelease(host: DisplayHost | undefined, isMobileSheet: () => boolean, win: Window = window): () => void {
   const onDown = (ev: Event): void => {
+    if (!ev.isTrusted) return; // 本物の押下だけ（スクリプトが作った合成の押下で、操作中を解かせない）
     if (isMobileSheet()) return;
     const t = ev.target;
     if (!(t instanceof Element) || t.closest("[data-display-keepfocus], [data-display-cover]") === null) return;

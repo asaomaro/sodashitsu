@@ -176,7 +176,11 @@ describe("dismissWithFocus・openDisplayMenu", () => {
 });
 
 describe("installKeepFocusRelease", () => {
-  const press = (el: Element): void => void el.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+  const press = (el: Element, trusted = true): void => {
+    const ev = new Event("pointerdown", { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, "isTrusted", { value: trusted }); // jsdom の合成イベントは isTrusted が偽
+    el.dispatchEvent(ev);
+  };
   let off: () => void = () => undefined;
   afterEach(() => off());
 
@@ -209,6 +213,16 @@ describe("installKeepFocusRelease", () => {
     w2.el("frame").focus();
     press(w2.el("blank"));
     expect(w2.host.focusTerminal).not.toHaveBeenCalled(); // 押した先が keepfocus でない
+  });
+  it("合成の（isTrusted でない）押下では何もしない", () => {
+    const w = world({ engaged: true });
+    off = installKeepFocusRelease(w.host, () => false);
+    w.el("frame").focus();
+    press(w.el("fold"), false);
+    expect(w.host.focusTerminal).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(w.el("frame"));
+    press(w.el("fold"), true);
+    expect(w.host.focusTerminal).toHaveBeenCalledTimes(1);
   });
   it("モバイルでは、押下のたびに見て、働かせない（登録した後で真になっても）", () => {
     const w = world({ engaged: true });
