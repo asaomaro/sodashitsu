@@ -553,3 +553,28 @@ describe("表示の面（display.*。20261007-soda-extensions）", () => {
     expect(DisplayReportParams.safeParse({ id: "x", problem: "other" }).success).toBe(false);
   });
 });
+
+describe("拡張（extension.*。20261007-ext-host）", () => {
+  it("METHOD_SCHEMAS に 5 つの方式を、それぞれの schema そのもので載せる", async () => {
+    const m = await import("./messages.js");
+    expect(m.METHOD_SCHEMAS["extension.list"]).toBe(m.ExtensionListParams);
+    expect(m.METHOD_SCHEMAS["extension.reload"]).toBe(m.ExtensionReloadParams);
+    expect(m.METHOD_SCHEMAS["extension.restart"]).toBe(m.ExtensionRestartParams);
+    expect(m.METHOD_SCHEMAS["extension.log"]).toBe(m.ExtensionLogParams);
+    expect(m.METHOD_SCHEMAS["extension.setEnabled"]).toBe(m.ExtensionSetEnabledParams);
+  });
+  it("key は 1〜160 文字・enabled は真偽", async () => {
+    const m = await import("./messages.js");
+    expect(m.ExtensionRestartParams.safeParse({ key: "user:a" }).success).toBe(true);
+    expect(m.ExtensionRestartParams.safeParse({ key: "" }).success).toBe(false);
+    expect(m.ExtensionLogParams.safeParse({ key: "k".repeat(160) }).success).toBe(true);
+    expect(m.ExtensionLogParams.safeParse({ key: "k".repeat(161) }).success).toBe(false);
+    expect(m.ExtensionSetEnabledParams.safeParse({ key: "user:a", enabled: true }).success).toBe(true);
+    expect(m.ExtensionSetEnabledParams.safeParse({ key: "user:a", enabled: "yes" }).success).toBe(false);
+    expect(m.ExtensionListParams.safeParse({}).success).toBe(true);
+  });
+  it("extension.changed のイベントは、data に項目を持たない型", () => {
+    const ev: import("./events.js").ServerEvent = { event: "extension.changed", data: {} };
+    expect(Object.keys(ev.data)).toEqual([]);
+  });
+});

@@ -1055,3 +1055,383 @@ describe("DisplayService: 設定（displayScriptEnabled）", () => {
     expect(errCode(() => s.displays.set("p1", sbody("a")))).toBe("no-throw"); // 冷却に入っていない
   });
 });
+
+// --- 持ち主（札。20261007-ext-host の T7）。上の既存のテストは、札なしの動きが変わっていない証拠として、1 行も変えていない ---------------------
+
+describe("DisplayService: 持ち主（札）", () => {
+  const own = (tag: string, id = "a", scope: "user" | "project" = "user") => ({ owner: { tag, source: { type: "extension" as const, id, scope } } });
+  const A = own("ext:user:a:r1", "a");
+  const B = own("ext:user:b:r1", "b");
+  const TA = A.owner.tag;
+  const TB = B.owner.tag;
+  function withOwned(o: Parameters<typeof setup>[0] = {}) {
+    const s = setup(o);
+    const got: { tag: string; ev: unknown }[] = [];
+    s.displays.onOwnedEvent((tag, ev) => void got.push({ tag, ev }));
+    return { ...s, got };
+  }
+  const removedEvents = (events: ServerEvent[]) => events.filter((e) => e.event === "display.removed").map((e) => e.data as { id: string; name: string; reason: string });
+
+  // 決まりの表 1: 札つきの set、その名前の面が無い
+  it("表 1: 札つきの set は面を作り、Entry の持ち主と info.source が付く。札なしの list にも source つきで出る", () => {
+    const s = withOwned();
+    const r = s.displays.set("p1", body("m"), A);
+    expect(r.display.source).toEqual({ type: "extension", id: "a", scope: "user" });
+    expect(s.displays.ownerOf("p1", "m")).toBe(TA);
+    expect(s.displays.list("p1").displays[0]!.source).toEqual({ type: "extension", id: "a", scope: "user" });
+  });
+
+  // 表 2: 同じ札の面がある
+  it("表 2: 同じ札の面への set は置き換え（rev + 1・id は同じ・source は残る）", () => {
+    const s = withOwned();
+    const first = s.displays.set("p1", body("m"), A).display;
+    const second = s.displays.set("p1", body("m", { content: "v2" }), A).display;
+    expect(second.id).toBe(first.id);
+    expect(second.rev).toBe(2);
+    expect(second.source).toEqual(first.source);
+  });
+
+  // 表 3: 札の違う面・札の無い面
+  it("表 3: 札つきの set が、札の無い面・別の札の面の名前に当たると invalid_display で、面が変わらず、頻度の桶が減っていない", () => {
+    const s = withOwned();
+    s.displays.set("p1", body("plain"));
+    s.displays.set("p1", body("theirs"), B);
+    for (let i = 0; i < 40; i++) {
+      expect(errCode(() => s.displays.set("p1", body("plain", { content: "x" }), A))).toBe("invalid_display");
+      expect(errCode(() => s.displays.set("p1", body("theirs", { content: "x" }), A))).toBe("invalid_display");
+    }
+    // 桶（10 回/秒）が減っていれば、ここで display_busy になる。
+    expect(errCode(() => s.displays.set("p1", body("mine"), A))).toBe("no-throw");
+    const list = s.displays.list("p1").displays;
+    expect(list.find((d) => d.name === "plain")).toMatchObject({ rev: 1, bytes: 8 });
+    expect(list.find((d) => d.name === "plain")!.source).toBeUndefined();
+    expect(s.displays.ownerOf("p1", "theirs")).toBe(TB);
+  });
+  it("表 3: invalid_display は設定・冷却の検査の後（設定が無効なら display_script_disabled が先）", () => {
+    let on = true;
+    const s = withOwned({ scriptEnabled: () => on });
+    s.displays.set("p1", sbody("g"));
+    on = false;
+    expect(errCode(() => s.displays.set("p1", sbody("g"), A))).toBe("display_script_disabled");
+    on = true;
+    expect(errCode(() => s.displays.set("p1", sbody("g"), A))).toBe("invalid_display");
+  });
+
+  // 表 4: 札なしの set、札つきの面
+  it("表 4: 札なしの set が札つきの面に当たると「閉じて、新しい面を作る」: 持ち主へ closed、removed（古い id）と updated（新しい id・rev 1・source なし）。古い id への action は display_closed", async () => {
+    const s = withOwned();
+    s.displays.subscribe("b1", ["panel", "actions"]);
+    const old = s.displays.set("p1", body("m"), A).display;
+    s.events.length = 0;
+    const neu = s.displays.set("p1", body("m", { content: "new" })).display;
+    expect(neu.id).not.toBe(old.id);
+    expect(neu.rev).toBe(1);
+    expect(neu.source).toBeUndefined();
+    expect(s.got).toEqual([{ tag: TA, ev: expect.objectContaining({ type: "display.closed", paneId: "p1", name: "m", reason: "closed" }) }]);
+    expect(s.events.map((e) => e.event)).toEqual(["display.removed", "display.updated"]);
+    expect(removedEvents(s.events)[0]).toMatchObject({ id: old.id, reason: "closed" });
+    expect((s.events[1]!.data as { display: { id: string } }).display.id).toBe(neu.id);
+    expect(s.displays.ownerOf("p1", "m")).toBeUndefined();
+    // 古い枠からの action は断られ、pane の列にも持ち主にも入らない。
+    expect(errCode(() => s.displays.action("b1", { id: old.id, rev: 1, action: "x" }))).toBe("display_closed");
+    expect(s.got).toHaveLength(1);
+    expect(s.displays.list("p1").seq).toBe(0);
+  });
+  it("表 4: 失敗した置き換え（display_limit）では、札・source・id・中身が残り、持ち主に closed が届かない（決定的な版）", () => {
+    const s = withOwned();
+    s.displays.set("p1", body("b1", { kind: "band" }));
+    s.displays.set("p1", body("b2", { kind: "band" }));
+    const old = s.displays.set("p1", body("m"), A).display;
+    expect(errCode(() => s.displays.set("p1", body("m", { kind: "band" })))).toBe("display_limit");
+    const now = s.displays.list("p1").displays.find((d) => d.name === "m")!;
+    expect(now).toMatchObject({ id: old.id, rev: 1, kind: "panel" });
+    expect(now.source).toEqual(old.source);
+    expect(s.displays.ownerOf("p1", "m")).toBe(TA);
+    expect(s.got).toEqual([]);
+    expect(s.displays.closeOwned(TA)).toEqual([{ paneId: "p1", name: "m" }]);
+  });
+  it("表 4: 頻度（display_busy）で失敗した置き換えも、何も変えない", () => {
+    const s = withOwned();
+    const old = s.displays.set("p1", body("m"), A).display;
+    let code = "no-throw";
+    for (let i = 0; i < 30 && code !== "display_busy"; i++) {
+      code = errCode(() => s.displays.set("p1", body("m", { content: "y" }), A)); // 同じ札の置き換えで桶を使い切る
+    }
+    expect(code).toBe("display_busy");
+    const before = s.displays.list("p1").displays[0]!;
+    expect(errCode(() => s.displays.set("p1", body("m", { content: "z" })))).toBe("display_busy");
+    expect(s.displays.list("p1").displays[0]).toEqual(before);
+    expect(before.id).toBe(old.id);
+    expect(s.displays.ownerOf("p1", "m")).toBe(TA);
+    expect(s.got).toEqual([]);
+  });
+  it("表 4: display_script_disabled で失敗した置き換えも、何も変えない", () => {
+    let on = true;
+    const s = withOwned({ scriptEnabled: () => on });
+    const old = s.displays.set("p1", body("m"), A).display;
+    on = false;
+    expect(errCode(() => s.displays.set("p1", sbody("m")))).toBe("display_script_disabled");
+    expect(s.displays.list("p1").displays[0]).toMatchObject({ id: old.id, format: "html" });
+    expect(s.displays.ownerOf("p1", "m")).toBe(TA);
+    expect(s.got).toEqual([]);
+  });
+
+  // 表 5: 出来事
+  it("表 5: 札つきの面の display.action は、pane の wait に返らず、受け手に source つきで届く", async () => {
+    const s = withOwned();
+    s.displays.subscribe("b1", ["panel", "actions", "script-html"]);
+    const d = s.displays.set("p1", body("m"), A).display;
+    const w = s.displays.wait("p1", { timeoutMs: 1000 }, {});
+    s.displays.action("b1", { id: d.id, rev: 1, action: "go", data: { k: "v" } });
+    expect(s.got).toEqual([{ tag: TA, ev: expect.objectContaining({ type: "display.action", name: "m", action: "go", data: { k: "v" }, source: "static" }) }]);
+    expect((s.got[0]!.ev as { seq?: number }).seq).toBeUndefined();
+    s.clock.advance(1001);
+    expect((await w).events).toEqual([]);
+    expect(s.displays.list("p1").seq).toBe(0);
+  });
+  it("表 5: 札つきの面を利用者が閉じる（dismiss）と、持ち主へ closed 以外の理由（dismissed）で届く", () => {
+    const s = withOwned();
+    s.displays.subscribe("b1", ["panel"]);
+    const d = s.displays.set("p1", body("m"), A).display;
+    s.displays.dismiss("b1", { id: d.id });
+    expect(s.got).toEqual([{ tag: TA, ev: expect.objectContaining({ type: "display.closed", reason: "dismissed" }) }]);
+    expect(s.displays.list("p1").seq).toBe(0);
+  });
+
+  // 表 6: 札つきの close・list
+  it("表 6: 札つきの close・list は、その札の面だけ", () => {
+    const s = withOwned();
+    s.displays.set("p1", body("plain"));
+    s.displays.set("p1", body("mine"), A);
+    s.displays.set("p1", body("theirs"), B);
+    expect(s.displays.list("p1", { owner: TA }).displays.map((d) => d.name)).toEqual(["mine"]);
+    expect(s.displays.close("p1", { name: "plain" }, "closed", { owner: TA })).toEqual({ closed: [] });
+    expect(s.displays.close("p1", { name: "theirs" }, "closed", { owner: TA })).toEqual({ closed: [] });
+    expect(s.displays.close("p1", { all: true }, "closed", { owner: TA })).toEqual({ closed: ["mine"] });
+    expect(s.displays.list("p1").displays.map((d) => d.name).sort()).toEqual(["plain", "theirs"]);
+  });
+
+  // 表 7: 札なしの close など
+  it("表 7: 札なしの close・dismiss・report・ttl は、札つきの面も閉じる", () => {
+    const s = withOwned();
+    s.displays.subscribe("b1", ["panel", "script-html", "actions"]);
+    s.displays.set("p1", body("c"), A);
+    expect(s.displays.close("p1", { name: "c" })).toEqual({ closed: ["c"] });
+    const d = s.displays.set("p1", body("d"), A).display;
+    expect(s.displays.dismiss("b1", { id: d.id }).closed).toEqual(["d"]);
+    const e = s.displays.set("p1", body("e"), A).display;
+    s.displays.report("b1", { id: e.id, problem: "unresponsive", paneId: "p1", format: "html" });
+    expect(s.displays.ownerOf("p1", "e")).toBeUndefined();
+    s.displays.set("p1", body("t", { ttlMs: 1000 }), A);
+    s.clock.advance(1000);
+    expect(s.displays.list("p1").displays).toEqual([]);
+    expect(s.got.map((g) => (g.ev as { reason: string }).reason)).toEqual(["closed", "dismissed", "unresponsive", "expired"]);
+  });
+
+  // 表 8: 札なしの list
+  it("表 8: 札なしの list は、その pane の全部の見出し（札つきは source つき）。中身は返さない", () => {
+    const s = withOwned();
+    s.displays.set("p1", body("a"));
+    s.displays.set("p1", body("b"), A);
+    const list = s.displays.list("p1").displays;
+    expect(list.map((d) => d.name)).toEqual(["a", "b"]);
+    expect(list[0]!.source).toBeUndefined();
+    expect(list[1]!.source).toBeDefined();
+    expect(JSON.stringify(list)).not.toContain("<p>x</p>");
+  });
+
+  // 表 9: 札なしの send
+  it("表 9: 札なしの send が札つきの script-html の面を指すと display_closed で、display.message が bus に出ない", () => {
+    const s = withOwned();
+    s.displays.set("p1", sbody("g"), A);
+    s.displays.subscribe("b1", ["script-html"]);
+    expect(errCode(() => s.displays.send("p1", { name: "g", data: 1 }))).toBe("display_closed");
+    expect(s.events.filter((e) => e.event === "display.message")).toEqual([]);
+  });
+  // 表 10: 札つきの send
+  it("表 10: 札つきの send が、札の無い面・別の札の面を指すと display_closed。自分の面へは届く", () => {
+    const s = withOwned();
+    s.displays.set("p1", sbody("plain"));
+    s.displays.set("p1", sbody("theirs"), B);
+    s.displays.set("p1", sbody("mine"), A);
+    s.displays.subscribe("b1", ["script-html"]);
+    expect(errCode(() => s.displays.send("p1", { name: "plain", data: 1 }, { owner: TA }))).toBe("display_closed");
+    expect(errCode(() => s.displays.send("p1", { name: "theirs", data: 1 }, { owner: TA }))).toBe("display_closed");
+    expect(s.events.filter((e) => e.event === "display.message")).toEqual([]);
+    expect(s.displays.send("p1", { name: "mine", data: { n: 1 } }, { owner: TA })).toEqual({ delivered: 1 });
+    expect(s.events.filter((e) => e.event === "display.message")).toHaveLength(1);
+    // 札なしの send は、札なしの面へ今までどおり届く
+    expect(s.displays.send("p1", { name: "plain", data: 1 })).toEqual({ delivered: 1 });
+  });
+
+  // 表 11: pane が閉じた
+  it("表 11: pane が閉じると、札つきの面ごとに受け手へ display.closed（pane_closed）", () => {
+    const s = withOwned();
+    s.displays.set("p1", body("a"), A);
+    s.displays.set("p1", body("b"), B);
+    s.displays.set("p1", body("c"));
+    s.panes.delete("p1");
+    s.bus.publish({ event: "pane.closed", data: { paneId: "p1" } } as ServerEvent);
+    expect(s.got.map((g) => [g.tag, (g.ev as { reason: string }).reason])).toEqual([
+      [TA, "pane_closed"],
+      [TB, "pane_closed"],
+    ]);
+    expect(s.displays.countOwned(TA)).toBe(0);
+  });
+
+  // 表 12: closeOwned
+  it("表 12: closeOwned は display.removed（closed）を bus に配り、受け手へは知らせず、閉じた面を返す", () => {
+    const s = withOwned({ panes: ["p1", "p2"] });
+    s.displays.set("p1", body("a"), A);
+    s.displays.set("p2", body("b"), A);
+    s.displays.set("p1", body("c"), B);
+    s.events.length = 0;
+    expect(s.displays.closeOwned(TA, { paneId: "p1" })).toEqual([{ paneId: "p1", name: "a" }]);
+    expect(s.displays.ownedPanes(TA)).toEqual(["p2"]);
+    expect(s.displays.closeOwned(TA)).toEqual([{ paneId: "p2", name: "b" }]);
+    expect(removedEvents(s.events).map((r) => r.reason)).toEqual(["closed", "closed"]);
+    expect(s.got).toEqual([]);
+    expect(s.displays.countOwned(TB)).toBe(1);
+  });
+
+  it("受け手が投げても、set・close が成功する", () => {
+    const s = withOwned();
+    s.displays.onOwnedEvent(() => {
+      throw new Error("listener");
+    });
+    s.displays.set("p1", body("m"), A);
+    expect(errCode(() => s.displays.set("p1", body("m", { content: "z" })))).toBe("no-throw");
+    s.displays.set("p1", body("n"), A);
+    expect(errCode(() => s.displays.close("p1", { name: "n" }))).toBe("no-throw");
+    expect(s.logs.some((l) => l.msg.includes("owned event listener failed"))).toBe(true);
+  });
+
+  it("set の引数に source を書いても、面の source に載らない", () => {
+    const s = withOwned();
+    const r = s.displays.set("p1", body("m", { source: { type: "extension", id: "evil", scope: "user" } }));
+    expect(r.display.source).toBeUndefined();
+    const r2 = s.displays.set("p1", body("n", { source: { type: "extension", id: "evil", scope: "user" } }), A);
+    expect(r2.display.source).toEqual({ type: "extension", id: "a", scope: "user" });
+  });
+
+  it("countOwned・bytesOwned", () => {
+    const s = withOwned();
+    s.displays.set("p1", body("a", { content: "12345" }), A);
+    s.displays.set("p1", body("b", { content: "123" }), A);
+    s.displays.set("p1", body("c", { content: "1" }), B);
+    expect(s.displays.countOwned(TA)).toBe(2);
+    expect(s.displays.bytesOwned(TA)).toBe(8);
+    expect(s.displays.bytesOwned("ext:none")).toBe(0);
+  });
+
+  describe("設定・冷却は、持ち主を見ない", () => {
+    it("設定が無効のとき、札つきの set（script-html）・send も display_script_disabled", () => {
+      let on = true;
+      const s = withOwned({ scriptEnabled: () => on });
+      s.displays.set("p1", sbody("g"), A);
+      on = false;
+      expect(errCode(() => s.displays.set("p1", sbody("h"), A))).toBe("display_script_disabled");
+      expect(errCode(() => s.displays.send("p1", { name: "g", data: 1 }, { owner: TA }))).toBe("display_script_disabled");
+    });
+    it("設定を有効 → 無効にすると、札つきの script-html の面も閉じ、持ち主へ display.closed（script_disabled）", () => {
+      let on = true;
+      const s = withOwned({ scriptEnabled: () => on });
+      s.displays.set("p1", sbody("g"), A);
+      s.displays.set("p1", body("st"), A);
+      on = false;
+      s.displays.onScriptSettingChanged();
+      expect(s.got).toEqual([{ tag: TA, ev: expect.objectContaining({ type: "display.closed", name: "g", reason: "script_disabled" }) }]);
+      expect(s.displays.ownerOf("p1", "st")).toBe(TA);
+    });
+    it("札なしの面の focus_steal が 3 回 → 同じ pane の札つきの script-html の面も閉じ、持ち主へ focus_steal。冷却の間、札つきの set（script-html）は display_busy", () => {
+      const s = withOwned();
+      s.displays.subscribe("b1", ["panel", "script-html", "actions"]);
+      const plain = s.displays.set("p1", sbody("plain")).display;
+      s.displays.set("p1", sbody("mine"), A);
+      for (let i = 0; i < 3; i++) s.displays.report("b1", { id: plain.id, problem: "focus_steal", paneId: "p1", format: "script-html" });
+      expect(s.got).toEqual([{ tag: TA, ev: expect.objectContaining({ type: "display.closed", name: "mine", reason: "focus_steal" }) }]);
+      expect(errCode(() => s.displays.set("p1", sbody("again"), A))).toBe("display_busy");
+      expect(errCode(() => s.displays.set("p1", body("static"), A))).toBe("no-throw");
+    });
+    it("逆（札つきの面が原因）: 札つきの面の focus_steal で、札なしの script-html の面も閉じる", () => {
+      const s = withOwned();
+      s.displays.subscribe("b1", ["panel", "script-html", "actions"]);
+      const mine = s.displays.set("p1", sbody("mine"), A).display;
+      s.displays.set("p1", sbody("plain"));
+      for (let i = 0; i < 3; i++) s.displays.report("b1", { id: mine.id, problem: "focus_steal", paneId: "p1", format: "script-html" });
+      expect(s.displays.list("p1").displays).toEqual([]);
+      expect(errCode(() => s.displays.set("p1", sbody("again")))).toBe("display_busy");
+    });
+  });
+
+  describe("持ち主が替わる置き換えの、数え方（design「コードの上の手順」）", () => {
+    const MIB = 1024 * 1024;
+    const big = (name: string, bytes: number, extra: Record<string, unknown> = {}) => body(name, { content: "x".repeat(bytes), ...extra });
+    it("大きい札つきの面を、札なしの set で置き換えることを繰り返しても、サーバ全体の合計が正しく、上限ちょうどまで入り、1 バイト超で display_limit", () => {
+      const panes = Array.from({ length: 10 }, (_, i) => `q${i}`);
+      const s = withOwned({ panes });
+      // 2 MiB の面を 14 個 = 28 MiB（q0..q3 に 4+4+4+2）
+      let n = 0;
+      for (const p of panes.slice(0, 4)) {
+        for (let i = 0; i < 4 && n < 14; i++, n++) {
+          s.displays.set(p, big(`f${i}`, 2 * MIB));
+        }
+        s.clock.advance(10_000);
+      }
+      // q5 で、札つき → 札なしの置き換えを繰り返す（合計を二重に引くと、ここで減っていく）
+      for (let i = 0; i < 6; i++) {
+        s.displays.set("q5", big("x", 2 * MIB), A);
+        s.displays.set("q5", big("x", 2 * MIB));
+        s.displays.close("q5", { name: "x" });
+        s.clock.advance(10_000);
+      }
+      s.displays.set("q5", big("x", 2 * MIB), A);
+      s.displays.set("q5", big("x", 2 * MIB)); // 28 + 2 = 30 MiB
+      s.clock.advance(10_000);
+      s.displays.set("q6", big("y", 2 * MIB)); // 32 MiB ちょうど
+      expect(errCode(() => s.displays.set("q7", body("z", { content: "1" })))).toBe("display_limit"); // 1 バイト超
+    });
+    it("その pane で唯一の面を置き換えた後、札なしの close(name)・list・pane を閉じる、で、新しい面が消える（byId にだけ残らない）", () => {
+      const s = withOwned();
+      s.displays.set("p1", body("m"), A);
+      const neu = s.displays.set("p1", body("m", { content: "new" })).display;
+      expect(s.displays.list("p1").displays.map((d) => d.id)).toEqual([neu.id]);
+      expect(s.displays.close("p1", { name: "m" })).toEqual({ closed: ["m"] });
+      expect(s.displays.list("p1").displays).toEqual([]);
+      // pane を閉じる
+      s.displays.set("p2", body("m"), A);
+      s.displays.set("p2", body("m", { content: "new" }));
+      s.displays.subscribe("b1", ["panel"]);
+      s.panes.delete("p2");
+      s.bus.publish({ event: "pane.closed", data: { paneId: "p2" } } as ServerEvent);
+      expect(s.displays.subscribe("b1", ["panel"]).displays).toEqual([]);
+    });
+    it("古い面の ttl が、新しい面を消さない", () => {
+      const s = withOwned();
+      s.displays.set("p1", body("m", { ttlMs: 1000 }), A);
+      s.displays.set("p1", body("m", { content: "new" }));
+      s.clock.advance(5000);
+      expect(s.displays.list("p1").displays.map((d) => d.name)).toEqual(["m"]);
+    });
+    it("受け手の中から、同期で台帳の list を呼んでも、同じ名前の面が 1 つ", () => {
+      const s = withOwned();
+      s.displays.set("p1", body("m"), A);
+      let seen: string[] = [];
+      s.displays.onOwnedEvent(() => {
+        seen = s.displays.list("p1").displays.map((d) => `${d.name}:${d.rev}`);
+      });
+      s.displays.set("p1", body("m", { content: "new" }));
+      expect(seen).toEqual(["m:1"]);
+    });
+    it("bus の購読者の中から、同期で台帳の list を呼んでも、同じ名前の面が 1 つ", () => {
+      const s = withOwned();
+      s.displays.set("p1", body("m"), A);
+      const seen: string[][] = [];
+      s.bus.subscribe((e) => {
+        if (e.event === "display.removed") seen.push(s.displays.list("p1").displays.map((d) => `${d.name}:${d.rev}`));
+      });
+      s.displays.set("p1", body("m", { content: "new" }));
+      expect(seen).toEqual([["m:1"]]);
+    });
+  });
+});

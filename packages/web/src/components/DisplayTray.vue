@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { displayLabelPrefix } from "../display/displayLabel.js";
 import { headFocusTarget, withDisplayChange, menuPositionBelow, openDisplayMenu } from "../display/displayOps.js";
 import type { TrayButton } from "../display/paneDisplayLayout.js";
 import { DisplayHostKey } from "../injection.js";
@@ -26,6 +27,7 @@ interface Item {
   b: TrayButton;
   name: string;
   short: string;
+  prefix: string;
   glyph: string;
   pressed: boolean | undefined;
 }
@@ -38,6 +40,7 @@ const items = computed<Item[]>(() =>
       {
         b,
         name: info.name,
+        prefix: displayLabelPrefix(info),
         short: chars.length > NAME_MAX_CHARS ? `${chars.slice(0, NAME_MAX_CHARS).join("")}…` : info.name,
         glyph: b.kind === "band" ? "▭" : b.kind === "float" ? "❐" : "▣",
         pressed: b.kind === "float" ? b.open : undefined,
@@ -120,7 +123,7 @@ function onKeydown(ev: KeyboardEvent): void {
       :aria-disabled="it.b.disabled ? 'true' : undefined"
       :aria-pressed="it.pressed === undefined ? undefined : it.pressed ? 'true' : 'false'"
       :aria-label="it.pressed ? `表示を閉じる（${it.name}）` : `表示を開く（${it.name}）`"
-      :title="it.b.disabled ? 'pane が狭いので、この表示を出せません' : it.name"
+      :title="it.b.disabled ? 'pane が狭いので、この表示を出せません' : `${it.prefix}· ${it.name}`"
       data-display-tray-button
       data-display-keepfocus
       :data-display-id="it.b.id"

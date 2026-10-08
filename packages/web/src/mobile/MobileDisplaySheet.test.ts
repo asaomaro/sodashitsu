@@ -31,6 +31,15 @@ describe("MobileDisplaySheet", () => {
     expect(s.w.find("dialog").exists()).toBe(true);
   });
 
+  it("拡張が出した面は、ラベルも dialog の aria-label も「拡張『id』の表示」になる（pane のプログラムの表示と読み上げられない）", () => {
+    const s = mountSheet(["a"]);
+    s.store.upsert({ ...info("a"), source: { type: "extension", id: "hello", scope: "project" } });
+    return s.w.vm.$nextTick().then(() => {
+      expect(s.w.find("[data-mobile-display-label]").text()).toBe("拡張『hello』の表示（プロジェクト・隔離）· a");
+      expect(s.w.find("dialog").attributes("aria-label")).toBe("拡張『hello』の表示（プロジェクト・隔離）");
+    });
+  });
+
   it("［閉じる］はシートだけ閉じる（dismiss しない）。［この表示を消す］は dismiss", async () => {
     const s = mountSheet(["a", "b"]);
     await s.w.find("[data-mobile-display-close]").trigger("click");

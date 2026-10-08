@@ -2,7 +2,7 @@
 import { computed, inject, nextTick, onMounted, ref } from "vue";
 import DisplayFrame from "../components/DisplayFrame.vue";
 import DisplayScriptMark from "../components/DisplayScriptMark.vue";
-import { displayLabel, engagedNote, DISPLAY_LABEL_PREFIX } from "../display/displayLabel.js";
+import { displayLabel, displayLabelPrefix, engagedNote, DISPLAY_LABEL_PREFIX } from "../display/displayLabel.js";
 import { placedFrameKey } from "../display/framePage.js";
 import { DisplayControllerKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -50,7 +50,7 @@ function dismissActive(): void {
 </script>
 
 <template>
-  <dialog ref="dlg" class="mobile-display-sheet" :aria-label="DISPLAY_LABEL_PREFIX" data-mobile-display-sheet @close="emit('close')" @cancel.prevent="emit('close')">
+  <dialog ref="dlg" class="mobile-display-sheet" :aria-label="active ? displayLabelPrefix(active) : DISPLAY_LABEL_PREFIX" data-mobile-display-sheet @close="emit('close')" @cancel.prevent="emit('close')">
     <div v-if="active" class="mobile-display-box" :class="{ 'mobile-display-engaged': engaged }">
       <div class="mobile-display-head">
         <div class="mobile-display-label" data-mobile-display-label><DisplayScriptMark :info="active" part="mark" />{{ displayLabel(active) }}</div>

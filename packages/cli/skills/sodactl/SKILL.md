@@ -176,6 +176,17 @@ sodactl display list
 - 詳しくは `docs/display.md`。
 - 面の中身・題・操作の値は、他人が読む前提で書く（秘密を入れない）。
 
+## 拡張の状態を見る（`sodactl ext list` など）
+
+拡張は、利用者が設定（`extensions.json`）に登録して `soda` が起動するプログラムで、pane の中のプログラムとは別物。`soda` が起動・停止し、標準入出力でやり取りする。
+pane の中のあなたが動かすものではないが、状態は見られる:
+
+- `sodactl ext list`: 拡張の一覧（`state`・`failures`・`lastExit`・面の数）と `problems`（設定の誤り）。コマンドの文字列は出ない。
+- `sodactl ext log <id|key>`: その拡張の標準エラーの記録（新しい 200 行まで）。`<id|key>` は一覧の `key`（`user:hello` の形）か、1 つに決まる `id`。
+- `sodactl ext reload`: 設定を読み直して、差を埋める。`sodactl ext restart <id|key>`: 止めて起動し直す。
+- 承認・有効と無効の切り替えは画面でする（コマンドは無い）。古い `soda` では `{"status":"unsupported",…}`（終了コード 0）。詳しくは `docs/extensions.md`。
+- 拡張が出した面は、`sodactl display list` に `source`（`{type:"extension",id,scope}`）つきで見え、閉じられる・同じ名前で出し直せるが、データ（`display send`）は送れない。
+
 ## サイドバーの行に状態を出す（独自トークン）
 
 `sodactl pane report-metadata "$SODA_PANE_ID" --source my-hook --token summary="テストを直している"` のように、pane（エージェントの行）・workspace（spaces の行）へ
@@ -263,6 +274,7 @@ pane の中の sodactl は、次の操作の対象が**自分の pane**（`$SODA
   `sodactl pane observe`・`sodactl pane control`・`sodactl pane report-metadata`
 - 状態: `sodactl snapshot`・`sodactl watch`
 - 利用者への質問: `sodactl ask`
+- 拡張: `sodactl ext list`・`sodactl ext log`・`sodactl ext reload`・`sodactl ext restart`
 - 表示の面: `sodactl display set`・`sodactl display close`・`sodactl display list`・`sodactl display wait`・`sodactl display events`・`sodactl display send`・`sodactl display --features`
 - エージェント: `sodactl agent list`・`sodactl agent get`・`sodactl agent wait`・`sodactl agent read`・`sodactl agent prompt`・`sodactl agent send-keys`・
   `sodactl agent rename`・`sodactl agent start`

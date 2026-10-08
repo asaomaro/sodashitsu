@@ -12,6 +12,7 @@ import type { CommandService } from "../../commands/CommandService.js";
 import type { ImageUploads } from "../../image/ImageUploads.js";
 import type { AskService } from "../../ask/AskService.js";
 import type { DisplayService } from "../../display/DisplayService.js";
+import type { ExtensionHost } from "../../extensions/ExtensionHost.js";
 import type { FileAccess } from "../../file/FileAccess.js";
 import type { FileOpener } from "../../file/FileOpener.js";
 import type { FileUploads } from "../../file/FileUploads.js";
@@ -49,6 +50,8 @@ export interface MethodDeps {
   asks?: AskService;
   /** 表示の面（20261007-soda-extensions）。無ければ `display.*` を登録しない。 */
   displays?: DisplayService;
+  /** 拡張の登録と起動（20261007-ext-host）。無ければ `extension.*` を登録しない（古い組み立てでは `not_found`）。 */
+  extensions?: ExtensionHost;
   /** 端末のファイルのリンクとドロップ。無ければ `file.*` を登録しない。 */
   files?: { access: FileAccess; opener: FileOpener; uploads: FileUploads };
   /** 共有の設定（20260927-cli-mode）。無ければ `prefs.*` を登録しない。 */

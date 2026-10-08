@@ -1,7 +1,7 @@
 import { X509Certificate } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { hostname as osHostname, platform } from "node:os";
+import { homedir as osHomedir, hostname as osHostname, platform } from "node:os";
 import { type HostInfo, type LinkRun } from "@sodashitsu/protocol";
 import { ConfigError, type RawServeArgs, type ServeOptions, agentReportSocketPathFor, paneSocketPathFor, resolveServeOptions, stateDirInUseError } from "./config.js";
 import { FileLogger, type Logger } from "./log/Logger.js";
@@ -44,6 +44,7 @@ import { PaneSocket } from "./panesocket/PaneSocket.js";
 import { askFeaturesOp, askOpenOp } from "./panesocket/askOp.js";
 import { displayCloseOp, displayFeaturesOp, displayListOp, displaySendOp, displaySetOp, displayWaitOp } from "./panesocket/displayOps.js";
 import { DisplayService } from "./display/DisplayService.js";
+import { ExtensionHost, type ExtensionHostOptions } from "./extensions/ExtensionHost.js";
 import { AskMedia, type ImageFetcher } from "./ask/AskMedia.js";
 import { RemoteImageFetcher } from "./ask/RemoteImageFetcher.js";
 import { FileAccess } from "./file/FileAccess.js";
@@ -176,6 +177,8 @@ export async function composeServer(
     fileOpener?: FileOpener;
     /** 外部 URL の画像の取得の差し替え（結合テスト・E2E が偽の取得を渡す。20261004-ask-media-popup）。 */
     askImageFetcher?: ImageFetcher;
+    /** 拡張の持ち主の差し替え（結合テスト・E2E が起動し直しの間隔などを縮める。20261007-ext-host）。本番は渡さない。 */
+    extensions?: ExtensionHostOptions["deps"];
   } = {},
 ): Promise<ComposedServer> {
   const options = await withRememberedPort(resolveServeOptions(rawArgs), rawArgs);
@@ -358,6 +361,23 @@ export async function composeServer(
     },
     logger,
   });
+  // 拡張の登録と起動（20261007-ext-host）。利用者の設定（`<stateDir>/extensions.json`）に登録したプログラムを起動・停止し、標準入出力の NDJSON でやり取りする。
+  // 起動は `listen()` の最後（ロックの後。待たない）、止めるのは `close()`・引き継ぎの前。`pane.sock` には何も載せない。
+  const extensions = new ExtensionHost({
+    stateDir: options.stateDir,
+    sessionRoot: options.sessionRoot,
+    session,
+    displays,
+    bus,
+    isScreenKind: (clientId) => {
+      const kind = clients.get(clientId)?.kind;
+      return kind === "desktop" || kind === "mobile";
+    },
+    baseEnv: process.env,
+    homeDir: osHomedir(),
+    logger,
+    ...(internal.extensions ? { deps: internal.extensions } : {}),
+  });
   // ログイン不要の受け口（20261003-sodactl-ask-socket）。受けるのはここに登録した操作だけ（`/ws` の RPC は通さない）。いま載せるのは `ask.open` だけ。
   // pane の実在は `AskService` と同じ判定。接続が終わったら、その接続が持ち主の質問を閉じるのは操作の中（`askOpenOp` が `ctx.signal` の abort で取り消す）。
   // 待ち受けは `listen()` の 4.7、閉じるのは `close()`。引き継ぎの間は `pause()`（`HandoffController` の `closeClients`）。
@@ -455,6 +475,7 @@ export async function composeServer(
     images,
     asks,
     displays,
+    extensions,
     files,
     prefs,
     graph,
@@ -535,12 +556,15 @@ export async function composeServer(
       await agentMonitor.stop();
       // マシンへの ssh を閉じ、子が終わるのを待つ（execve で置き換わった後は回収されずに残るため。引き継いだ先の起動がまた繋ぐ。20260927-multi-host-machines）。
       await machines.stop();
+      // 拡張の子と孫を止める（execve で置き換わった後は回収されずに残るため。引き継いだ先の起動がまた起動する。20261007-ext-host）。
+      await extensions.stop();
     },
     resumePollers: () => {
       graphEngine.start();
       gitPoller.start();
       agentMonitor.start();
       void machines.start();
+      void extensions.start(); // 止めていなくても呼べる（動いているものを二重に起動しない）
       paneHistory?.start(internal.paneHistorySaveIntervalMs);
     },
     flushSession: async () => {
@@ -785,6 +809,8 @@ export async function composeServer(
         wsServer.setReady(true);
         // 6. 保存した SSH のマシンへ繋ぎ始める（20260927-multi-host-machines）。登録簿が無ければ何もしない（ssh を起こさない）。待たない。
         void machines.start();
+        // 7. 拡張を起動する（20261007-ext-host）。ロックの後・復元の後。待たない（設定を読む処理が遅くても、`listen()` を止めない）。投げない。
+        void extensions.start();
       } catch (err) {
         // 失敗した起動はロックを放す（`main` は close() を呼ばずに終わる）。放す前に、復元を済ませていない状態の保存の
         // 予約を取り消す（ロックを放した後に session.json を書かない）。
@@ -797,6 +823,7 @@ export async function composeServer(
         paneHistory?.stop();
         imageSweeper?.stop();
         dropSweeper?.stop();
+        await extensions.stop().catch(() => undefined);
         await agentReportSocket?.close();
         await paneSocket.close(); // 立てていなければ何もしない
         await handoffSocket?.close();
@@ -825,6 +852,8 @@ export async function composeServer(
         subagents.close();
         remoteLinks.closeAll();
         await machines.stop();
+        // 拡張の子と孫を止める（`machines.stop()` の後ろ。上限 3 秒）。`finally` でも止める。
+        await extensions.stop();
         // 閉じ始めたら新しい `/ws` を受け付けない（closeAll の後に届いた upgrade を通さない。D102）。
         wsServer.setReady(false);
         bridgeEndpoint.setReady(false);
@@ -858,6 +887,9 @@ export async function composeServer(
         // 受け口は質問を閉じる前に閉じる——`try` が上の `paneSocket.close()` より前で投げた経路でも、待っていた接続へ `cancelled` の返事を
         // 書かずに捨てる（2 回目は何もしない。`pane.sock` も残さない）。
         await paneSocket.close().catch(() => undefined);
+        // 拡張を止めてから、台帳への後始末を外す（`try` の途中で投げても、子を止める。`stop()` は何度呼んでもよい）。
+        await extensions.stop().catch(() => undefined);
+        extensions.dispose();
         displays.dispose(); // 待っている display.wait を空の結果で返し、面を捨てる
         asks.dispose(); // 待っている質問を閉じる（受け口と `/ws` の接続を閉じた後。応答は誰にも届かない）
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、

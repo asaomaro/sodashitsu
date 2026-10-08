@@ -92,6 +92,10 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl display wait [<name>] [--since <seq> --epoch <epoch>] [--timeout <ms>] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display events [<name>...] [--since <seq> --epoch <epoch>] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display --features [--url <URL>] [--token <TOKEN>]",
+  "sodactl ext list [--url <URL>] [--token <TOKEN>]",
+  "sodactl ext log <id|key> [--url <URL>] [--token <TOKEN>]",
+  "sodactl ext reload [--url <URL>] [--token <TOKEN>]",
+  "sodactl ext restart <id|key> [--url <URL>] [--token <TOKEN>]",
   "sodactl skill",
 ];
 
@@ -236,6 +240,9 @@ export type DisplaySource =
   /** 標準入力。`--format` を省くと `text`。 */
   | { kind: "stdin"; format: DisplayFormat };
 
+/** `sodactl ext` の動作（`ref` は拡張の `key` か `id`）。 */
+export type ExtAction = { kind: "list" } | { kind: "reload" } | { kind: "log"; ref: string } | { kind: "restart"; ref: string };
+
 /** `sodactl display` の動作。`pane` は `--pane`（省くと呼び出し元の pane。完全な id か一意に決まる先頭の部分）。 */
 export type DisplayAction =
   | {
@@ -273,6 +280,8 @@ export type Command =
   // 20261002-sodactl-ask。呼び出し元の pane の質問のフォームを、その pane を見ているブラウザに出す（定義は標準入力）。
   // 20261007-soda-extensions。pane のプログラムの表示の面（パネル・帯）を出す・閉じる・操作を待つ。
   | { kind: "display"; opts: GlobalOpts; action: DisplayAction }
+  // 20261007-ext-host。拡張（設定に登録したプログラム）の状態の一覧・ログ・読み直し・起動し直し。承認・取り消し・入切のサブコマンドは作らない。
+  | { kind: "ext"; opts: GlobalOpts; action: ExtAction }
   | { kind: "ask"; opts: GlobalOpts; timeoutMs: number; /** `--features`: 定義を読まず、機能と上限を返す（20261004-ask-media-popup）。 */ features: boolean }
   // 20260927-sidebar-row-tokens（herdr の workspace/pane report-metadata のトークンの部分）。
   | { kind: "workspace-report-metadata"; opts: GlobalOpts; workspaceId: string; report: MetadataReportArgs }
@@ -493,6 +502,8 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
     }
     case "display":
       return parseDisplay(word1, rest0, env);
+    case "ext":
+      return parseExt(word1, rest0, env);
     case "workspace":
       return parseWorkspace(word1, rest0, env);
     case "tab":
@@ -734,6 +745,26 @@ function parseStreamDimension(raw: string, flag: string): number {
 }
 
 const ASK_USAGE = "sodactl ask [--timeout <ms>] < spec.json   |   sodactl ask --features";
+
+/** `sodactl ext` の使い方の案内（誤りに添える）。 */
+export const EXT_USAGE = USAGE_LINES.filter((l) => l.startsWith("sodactl ext")).join("\n");
+
+/** 20261007-ext-host。`ext list|log|reload|restart`（`/ws` の経路だけ）。承認・取り消し・有効と無効は作らない（画面でする）。 */
+function parseExt(sub: string | undefined, rest: readonly string[], env: NodeJS.ProcessEnv): Command {
+  const URL_TOKEN: FlagSpec = { values: ["--url", "--token"] };
+  if (sub === "list" || sub === "reload") {
+    const { positionals, values } = parseFlags(rest, URL_TOKEN);
+    rejectExtra(positionals, 0, EXT_USAGE);
+    return { kind: "ext", opts: globalOptsFrom(values, env), action: { kind: sub } };
+  }
+  if (sub === "log" || sub === "restart") {
+    const { positionals, values } = parseFlags(rest, URL_TOKEN);
+    const ref = requirePositional(positionals, 0, "id|key", EXT_USAGE);
+    rejectExtra(positionals, 1, EXT_USAGE);
+    return { kind: "ext", opts: globalOptsFrom(values, env), action: { kind: sub, ref } };
+  }
+  throw new CliUsageError(`unknown subcommand: sodactl ext ${sub ?? ""}`.trimEnd(), EXT_USAGE);
+}
 
 /** `sodactl display` の使い方の案内（誤りに添える）。 */
 export const DISPLAY_USAGE = USAGE_LINES.filter((l) => l.startsWith("sodactl display")).join("\n");
