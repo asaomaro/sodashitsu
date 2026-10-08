@@ -2,7 +2,7 @@ import { chmod, mkdtemp, open, readFile, readdir, rm, stat, symlink, utimes, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ApprovalStore, APPROVALS_FILE_NAME } from "./ApprovalStore.js";
+import { ApprovalStore, APPROVALS_FILE_NAME, type ApprovalFileDeps } from "./ApprovalStore.js";
 import type { ExtensionEntry } from "./extensionConfig.js";
 import { entryDigest } from "./approval.js";
 
@@ -30,7 +30,7 @@ describe.skipIf(process.platform === "win32")("ApprovalStore", () => {
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
   });
-  const store = (deps = {}) => new ApprovalStore(dir, { timeoutMs: 400, lockRetryMs: 10, ...deps });
+  const store = (deps: Partial<ApprovalFileDeps> = {}) => new ApprovalStore(dir, { timeoutMs: 400, lockRetryMs: 10, ...deps });
 
   it("lookup: 承認と同じ鍵 → approved、承認しないと同じ鍵 → denied、どちらでもない → none（前に承認した中身・denied の有無）、無い → none", async () => {
     const s = store();
