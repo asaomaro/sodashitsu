@@ -98,7 +98,7 @@ export class ExtensionStateStore {
   /**
    * `key` の入切を書く。`known`（いまの「あるべき拡張」の key の集合）に無い key は捨てる。**形の検査で落ちた（壊れている）ファイルと、無いファイルだけ**を、
    * 空から作り直す。時間切れ・権限などで読めなかったときは、書かずに `internal`（読めないまま書くと、切っていたほかの拡張が動き出す）。
-   * 256 件を超えるなら `invalid_params`（古い無効を、黙って捨てない）。
+   * `project:` の key は `known` に無くても残す。256 件を超えたら、いま一覧に無いプロジェクトの key を古いものから捨て、それでも超えるなら `invalid_params`。
    */
   async setDisabled(key: string, disabled: boolean, known: Set<string>): Promise<void> {
     const r = await this.read();
@@ -106,8 +106,16 @@ export class ExtensionStateStore {
     const set = r.kind === "ok" ? new Set(r.disabled) : new Set<string>();
     if (disabled) set.add(key);
     else set.delete(key);
-    for (const k of [...set]) if (!known.has(k)) set.delete(k);
+    // 利用者の拡張（`user:`）の key は、いまの `known` に無ければ捨てる。**プロジェクトの拡張（`project:`）の key は、`known` に無くても残す**——その根の workspace を閉じている間
+    // （一覧に無い間）に、ほかの拡張を入切しても、利用者が画面で切ったという意図を消さない。
+    for (const k of [...set]) if (!known.has(k) && !k.startsWith("project:")) set.delete(k);
+    // 256 件を超えたら、古いものから捨てる（承認の記録と同じ）。捨てるのは、いま一覧に無いプロジェクトの key だけ。ほかで超えるなら、黙って捨てずに誤り。
+    // 並びは、足した順（古いものが先）で書く。
+    for (const k of [...set]) {
+      if (set.size <= EXTENSION_STATE_MAX) break;
+      if (k.startsWith("project:") && !known.has(k)) set.delete(k);
+    }
     if (set.size > EXTENSION_STATE_MAX) throw new RpcError("invalid_params", `画面で無効にできる拡張は ${EXTENSION_STATE_MAX} 件までです`);
-    await writeFileAtomic(this.path, JSON.stringify({ version: 1, disabled: [...set].sort() }) + "\n");
+    await writeFileAtomic(this.path, JSON.stringify({ version: 1, disabled: [...set] }) + "\n");
   }
 }

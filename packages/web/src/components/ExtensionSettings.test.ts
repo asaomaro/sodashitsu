@@ -233,3 +233,72 @@ describe("ExtensionSettings", () => {
     expect(q('[data-ext-id="b"] [data-ext-script-off]')).toBeNull();
   });
 });
+
+describe("ExtensionSettings: プロジェクトの拡張と承認（PR3）", () => {
+  const approvalOf = (extra: Partial<NonNullable<ExtensionInfo["approval"]>> = {}): NonNullable<ExtensionInfo["approval"]> => ({
+    digest: "a".repeat(64), status: "none", command: "node a.mjs", cwd: "/r", groupWritable: false, deniedBefore: false, approvedAlive: false, ...extra,
+  });
+  const p = (id: string, state: ExtensionInfo["state"], approval = approvalOf()): ExtensionInfo => info(`project:r:${id}`, state, { id, scope: "project", root: "/r", configPath: "/r/.soda/extensions.json", approval });
+
+  it("承認待ちは、並べ替えずに、見出しの下の件数と印・行の目立つ表示で気づける。［確認］は承認のダイアログを開く", async () => {
+    const store = useExtensionsStore();
+    mountIt();
+    store.setList(list([p("a", "pending"), info("user:u", "running", { id: "u" }), p("b", "pending")]));
+    await settle();
+    expect(all("[data-ext-id]").map((e) => e.getAttribute("data-ext-id"))).toEqual(["a", "u", "b"]); // 設定の順のまま
+    expect(q("[data-ext-pending-summary]")?.textContent).toContain("2 件");
+    expect(all(".ext-row-pending")).toHaveLength(2);
+    expect(all("[data-ext-review]")).toHaveLength(2);
+    all("[data-ext-review]")[1]!.click();
+    await settle();
+    expect(store.dialogKey).toBe("project:r:b");
+  });
+  it("［確認］は pending と denied の行だけ。disabled の行にも承認の有無を出す。グループの注意の印", async () => {
+    const store = useExtensionsStore();
+    mountIt();
+    store.setList(
+      list([p("a", "denied", approvalOf({ status: "denied" })), p("b", "running", approvalOf({ status: "approved", approvedAlive: true })), p("c", "disabled", approvalOf({ groupWritable: true })), p("d", "disabled", approvalOf({ approvedAlive: true }))]),
+    );
+    await settle();
+    const rowOf = (id: string) => q(`[data-ext-id="${id}"]`)!;
+    expect(rowOf("a").querySelector("[data-ext-review]")).not.toBeNull();
+    expect(rowOf("b").querySelector("[data-ext-review]")).toBeNull();
+    expect(rowOf("c").querySelector("[data-ext-approval-status]")?.textContent).toContain("未承認");
+    expect(rowOf("c").querySelector("[data-ext-group-writable]")).not.toBeNull();
+    expect(rowOf("a").querySelector("[data-ext-approval-status]")?.textContent).toContain("承認しない");
+    expect(rowOf("b").querySelector("[data-ext-approval-status]")?.textContent).toContain("承認済み");
+  });
+  it("［承認を取り消す］は、承認の記録が残っていれば、どの状態の行でも。いまの登録と鍵が違う行には記録が残っている旨", async () => {
+    const store = useExtensionsStore();
+    const revoke = vi.fn(async () => "done" as const);
+    mountIt({ revoke });
+    store.setList(list([p("a", "pending", approvalOf({ approvedAlive: true })), p("b", "running", approvalOf({ status: "approved", approvedAlive: true })), p("c", "pending")]));
+    await settle();
+    expect(all("[data-ext-revoke]")).toHaveLength(2);
+    expect(q('[data-ext-id="a"] [data-ext-approval-alive]')?.textContent).toContain("記録が残っています");
+    expect(q('[data-ext-id="b"] [data-ext-approval-alive]')).toBeNull();
+    (q('[data-ext-id="a"] [data-ext-revoke]') as HTMLElement).click();
+    await settle();
+    expect(revoke).toHaveBeenCalledWith("/r", "a");
+  });
+  it("承認の記録: いま開いていないリポジトリの分も出て、［記録を消す］で revoke（root, id）", async () => {
+    const store = useExtensionsStore();
+    const revoke = vi.fn(async () => "done" as const);
+    mountIt({ revoke });
+    store.setList({ ...list([]), approvals: [{ root: "/gone", id: "x", approvedAt: "2026-10-08T00:00:00.000Z", active: false }] });
+    await settle();
+    expect(q("[data-ext-record]")?.textContent).toContain("/gone");
+    expect(q("[data-ext-record]")?.textContent).toContain("いま開いていません");
+    (q("[data-ext-record-delete]") as HTMLElement).click();
+    await settle();
+    expect(revoke).toHaveBeenCalledWith("/gone", "x");
+  });
+  it("コマンドは設定の画面には出さない（承認のダイアログだけ）。禁止する文字は \\u{…} に替えて出す", async () => {
+    const store = useExtensionsStore();
+    mountIt();
+    store.setList(list([{ ...p("a", "pending", approvalOf({ command: "node SECRET-CMD.mjs" })), configPath: "/r/.soda/\u202Eevil.json" }]));
+    await settle();
+    expect(document.body.textContent).not.toContain("SECRET-CMD");
+    expect(q("[data-ext-config-path]")?.textContent).toContain("\\u{202e}");
+  });
+});

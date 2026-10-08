@@ -377,9 +377,29 @@ export const useViewStore = defineStore("view", () => {
     preAskFocusPaneId.value = paneId;
   }
   /**
+   * 拡張の承認のダイアログ（20261007-ext-host PR3）が出ている。質問のフォームと同じく、**ダイアログの 1 枠（`openDialog`）とは別の状態**——開いている設定の上に重ねて出す。
+   * 書くのは `ExtensionApprovalDialog.vue` だけ（開閉に合わせる）。`modalOpen` に入り、キーは端末へ流れない。
+   */
+  const extensionApprovalOpen = ref(false);
+  /** 承認のダイアログを開く前にフォーカスしていた pane（`preAskFocusPaneId` と同じ理由）。 */
+  const preExtensionApprovalFocusPaneId = ref<string | null>(null);
+  function setExtensionApprovalOpen(open: boolean): void {
+    if (open === extensionApprovalOpen.value) return;
+    extensionApprovalOpen.value = open;
+    if (open) {
+      preExtensionApprovalFocusPaneId.value = focusedPaneId.value;
+      return;
+    }
+    if (preExtensionApprovalFocusPaneId.value !== null && preExtensionApprovalFocusPaneId.value !== focusedPaneId.value) focusedPaneId.value = preExtensionApprovalFocusPaneId.value;
+    preExtensionApprovalFocusPaneId.value = null;
+  }
+  function retargetPreExtensionApprovalFocus(paneId: string | null): void {
+    preExtensionApprovalFocusPaneId.value = paneId;
+  }
+  /**
    * ダイアログ・グラフ画面・質問のフォームのどれかが開いている（キーを端末へ送らない dialog モード・window の keydown の抑止・ドラッグの取り消しの判定。research-web §1.5）。
    */
-  const modalOpen = computed(() => openDialog.value !== null || graphOpen.value || askOpen.value);
+  const modalOpen = computed(() => openDialog.value !== null || graphOpen.value || askOpen.value || extensionApprovalOpen.value);
   /** navigate モード中に選択中の行（workspace の id、グループの見出しなら `group:<id>`。`↑/↓` で動かす。Enter で確定）。 */
   const navigateSelection = ref<string | null>(null);
   /**
@@ -782,6 +802,10 @@ export const useViewStore = defineStore("view", () => {
     preGraphFocusPaneId,
     modalOpen,
     askOpen,
+    extensionApprovalOpen,
+    preExtensionApprovalFocusPaneId,
+    setExtensionApprovalOpen,
+    retargetPreExtensionApprovalFocus,
     preAskFocusPaneId,
     setAskOpen,
     retargetPreAskFocus,

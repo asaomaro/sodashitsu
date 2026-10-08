@@ -90,4 +90,30 @@ describe.skipIf(process.platform === "win32")("ExtensionStateStore", () => {
     await expect(s.setDisabled(all[EXTENSION_STATE_MAX]!, true, new Set(all))).rejects.toMatchObject({ code: "invalid_params" });
     expect((await s.load()).ok && (await s.load() as { disabled: Set<string> }).disabled.size).toBe(EXTENSION_STATE_MAX);
   });
+  describe("プロジェクトの key（D13 の 2）", () => {
+    const pk = (n: number) => `project:${String(n).padStart(64, "0")}:e`;
+    it("known に無くても、project: の key は残す。user: の key は、known に無ければ捨てる", async () => {
+      const s = new ExtensionStateStore(dir);
+      await put(JSON.stringify({ version: 1, disabled: [pk(1), "user:gone", "user:a"] }));
+      await s.setDisabled("user:b", true, keys("user:a", "user:b"));
+      expect(await s.load()).toEqual({ ok: true, disabled: keys(pk(1), "user:a", "user:b") });
+    });
+    it("256 件を超えたら、いま一覧に無いプロジェクトの key を古いもの（先に足した順）から捨てる", async () => {
+      const s = new ExtensionStateStore(dir);
+      const all = Array.from({ length: EXTENSION_STATE_MAX }, (_, i) => pk(i));
+      await put(JSON.stringify({ version: 1, disabled: all }));
+      await s.setDisabled("user:new", true, keys("user:new"));
+      const after = await s.load();
+      expect(after.ok && after.disabled.size).toBe(EXTENSION_STATE_MAX);
+      expect(after.ok && after.disabled.has("user:new")).toBe(true);
+      expect(after.ok && after.disabled.has(pk(0))).toBe(false); // 一番古い
+      expect(after.ok && after.disabled.has(pk(1))).toBe(true);
+    });
+    it("いま一覧にあるプロジェクトの key は、256 件の押し出しで捨てない（足りなければ誤り）", async () => {
+      const s = new ExtensionStateStore(dir);
+      const all = Array.from({ length: EXTENSION_STATE_MAX }, (_, i) => pk(i));
+      await put(JSON.stringify({ version: 1, disabled: all }));
+      await expect(s.setDisabled("user:new", true, new Set([...all, "user:new"]))).rejects.toMatchObject({ code: "invalid_params" });
+    });
+  });
 });

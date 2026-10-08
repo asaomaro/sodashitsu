@@ -101,6 +101,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   display_busy: "表示の更新が多すぎます。少し待ってからやり直してください。",
   display_script_disabled: "スクリプトが動く表示は、設定で無効になっています。",
   display_closed: "この表示は既に閉じられています。",
+  extension_stale: "登録が変わりました。中身を確かめ直してください。",
   rev_conflict: "グラフがほかの画面・sodactl で先に変わったため、保存しませんでした。最新の内容でやり直してください。",
   // 連携のグラフの検査（20261008-graph-first）。
   node_required: "開いている pane のノードは外せません（pane を閉じると、ノードも消えます）。",

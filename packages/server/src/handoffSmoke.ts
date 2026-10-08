@@ -18,7 +18,7 @@
  */
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -282,6 +282,20 @@ process.stdin.resume();
       { mode: 0o600 },
     );
 
+    // 1c. プロジェクトの拡張（20261007-ext-host PR3。AC18）。一時のリポジトリに登録して、**承認していないので、`soda handoff` の前も後も、実行されない**ことを見る。
+    const projRepo = join(extDir, "projrepo");
+    const projMark = join(extDir, "project-extension-ran");
+    await mkdir(join(projRepo, ".git"), { recursive: true });
+    await mkdir(join(projRepo, ".soda"), { recursive: true });
+    await writeFile(join(projRepo, ".git", "HEAD"), "ref: refs/heads/main\n");
+    const projScript = join(extDir, "proj.mjs");
+    await writeFile(projScript, `import { writeFileSync } from "node:fs";\nwriteFileSync(process.argv[2], "ran");\nprocess.stdin.resume();\n`);
+    await writeFile(
+      join(projRepo, ".soda", "extensions.json"),
+      JSON.stringify({ extensions: [{ id: "proj", command: `"${process.execPath}" "${projScript}" "${projMark}"` }] }),
+      { mode: 0o600 },
+    );
+
     // 2. サーバを起動し、token 付きの URL から token を取る
     const port = await freePort();
     server = spawn(
@@ -339,6 +353,16 @@ process.stdin.resume();
     );
     log(`before: server pid ${serverPid}, pane ${paneId}, shell pid ${shellPid}`);
 
+    // 3a. プロジェクトの拡張の workspace を開く。承認していないので `pending` で、実行の印は出来ない。
+    await before.c.request("workspace.create", { cwd: projRepo, label: "proj" });
+    await until("project extension pending before the handoff", async () => {
+      const l = (await before.c.request("extension.list", {})) as { extensions: { scope: string; state: string }[] };
+      return l.extensions.some((e) => e.scope === "project" && e.state === "pending") ? true : undefined;
+    }, 15_000);
+    await new Promise((r) => setTimeout(r, 1000));
+    if (existsSync(projMark)) throw new Error("an unapproved project extension ran before the handoff");
+    log("unapproved project extension is pending, not run, before the handoff ok");
+
     // 3b. 表示の面（20261007-soda-extensions の AC24）。ログインなし（受け口の経路）で面を出し、`sodactl display events` を待たせておく。
     const displayEnv: NodeJS.ProcessEnv = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, SODA_PANE_ID: paneId, SODA_SERVER_URL: origin, SODA_PANE_SOCKET: join(stateDir, "pane.sock") };
     for (const name of ["SODA_AGENT_REPORT_SOCKET", "SODACTL_TOKEN", "SODACTL_URL"]) delete displayEnv[name];
@@ -355,11 +379,11 @@ process.stdin.resume();
     if (!isAlive(extBefore.ext) || !isAlive(extBefore.grand)) throw new Error(`the extension or its child is not alive before the handoff: ${JSON.stringify(extBefore)}`);
     log(`extension running before the handoff: pid ${extBefore.ext}, child ${extBefore.grand}`);
 
-    // 4. 入れ替え
+    // 4. 入れ替え（pane は、最初の workspace の 1 つと、プロジェクトの拡張の workspace の 1 つで、2 つ）
     const handoff = runSoda(["handoff", "--state-dir", stateDir]);
     if (
       handoff.status !== 0 ||
-      !handoff.stdout.includes("handoff complete: 1 pane(s) kept running")
+      !handoff.stdout.includes("handoff complete: 2 pane(s) kept running")
     ) {
       throw new Error(
         `soda handoff failed (exit ${handoff.status}): ${handoff.stdout} ${handoff.stderr}\n--- server ---\n${serverOut}`,
@@ -435,6 +459,15 @@ process.stdin.resume();
     if (isGone(extAfter.ext) || isGone(extAfter.grand)) throw new Error(`the new extension or its child is not alive: ${JSON.stringify(extAfter)}`);
     if (extStarts(extMarks).length !== 2) throw new Error(`the extension was started ${extStarts(extMarks).length} times (expected 2)`);
     log(`extension replaced across the handoff: ${extBefore.ext}/${extBefore.grand} gone, new ${extAfter.ext}/${extAfter.grand} running ok`);
+
+    // 5d. プロジェクトの拡張（AC18）: 入れ替えの後も、承認していないので、`pending` のままで、実行の印は無い。
+    await until("project extension pending after the handoff", async () => {
+      const l = (await after.c.request("extension.list", {})) as { extensions: { scope: string; state: string }[] };
+      return l.extensions.some((e) => e.scope === "project" && e.state === "pending") ? true : undefined;
+    }, 15_000);
+    await new Promise((r) => setTimeout(r, 1500));
+    if (existsSync(projMark)) throw new Error("an unapproved project extension ran after the handoff");
+    log("unapproved project extension still pending and never run after the handoff ok");
 
     // 6b. handoff より前からある pane の環境で、ログインなしの `sodactl ask`（20261003-sodactl-ask-socket の AC11）。
     // 古い版が起動した pane には `SODA_PANE_SOCKET` が無く、`SODA_AGENT_REPORT_SOCKET` だけがある。sodactl は同じ状態ディレクトリの `pane.sock` を導く。

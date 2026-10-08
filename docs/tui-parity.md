@@ -161,6 +161,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は�
 | W32 | pane のプログラムからの質問のフォーム（`sodactl ask`。20261002-sodactl-ask。`docs/sodactl.md`「質問のフォーム」） | 無し | あり | 対象外（端末版はフォームを出せる画面として名乗らないので、端末版しかつながっていない session では `sodactl ask` は待たずに `unavailable` を返し、呼び出し側が `AskUserQuestion` へ切り替える） | 試験: `ask.integration.test.ts` |
 | W34 | pane のプログラムが出す表示の面（パネル・帯。`sodactl display`・`focus_display`・`display_menu`。20261007-soda-extensions・20261008-display-layout。`docs/display.md`） | 無し | あり | 無し（面を描かない。スクリプトが動く形式〔`script-html`〕も同じ。名乗らないので、`set` の結果の `renderers` に数えない。`sodactl display` 自体はサーバの機能なので動く。`prefix+i`〔`focus_display`〕と `prefix+shift+i`〔`display_menu`〕は「表示のパネル・帯はブラウザで使えます。」と知らせる。置き場所・たたみの設定 3 つは、設定の画面の「端末」の節に「ブラウザの画面の設定です」の注記つきで出る。端末版の面は `20261008-display-tui`） | 試験: `TuiDispatcher.test.ts`（全操作の表） |
 | W35 | 拡張の一覧と操作（設定の節「拡張」。入切・起動し直す・ログ・読み直す。続けて落ちたときのトースト。20261007-ext-host。`docs/extensions.md`「設定の画面」） | 無し | あり | 対象外（端末版は面を出せないので、一覧の画面を持たない。利用者の設定〔`extensions.json`〕に登録した拡張は、端末版だけでもサーバが起動して動く。状態とログは `sodactl ext list`／`ext log`、読み直しは `sodactl ext reload`） | 試験: `extensions-settings.spec.ts`（E2E） |
+| W36 | プロジェクトの拡張の承認（リポジトリの `.soda/extensions.json`。承認待ちのトースト・承認のダイアログ・設定の節の［確認］［承認を取り消す］・承認の記録。20261007-ext-host PR3。`docs/extensions.md`「プロジェクトの拡張と承認」） | 無し | あり | 対象外（端末版は承認の画面を持たない。**承認していないプロジェクトの拡張は、端末版だけでも動かない**〔承認待ちのまま〕。承認は、ブラウザの画面だけ。`sodactl` にも承認は無い） | 試験: `extensions-approval.spec.ts`（E2E）・`ExtensionHost.project.test.ts` |
 
 ## 4. 外側の端末との取り決め（端末版で新たに要るもの）
 

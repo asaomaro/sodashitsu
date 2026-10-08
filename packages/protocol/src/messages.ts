@@ -1002,6 +1002,17 @@ export type ExtensionLogParams = z.infer<typeof ExtensionLogParams>;
 /** 画面（`desktop`・`mobile`）だけが呼べる。 */
 export const ExtensionSetEnabledParams = z.object({ key: extensionKey, enabled: z.boolean() });
 export type ExtensionSetEnabledParams = z.infer<typeof ExtensionSetEnabledParams>;
+/**
+ * プロジェクトの拡張の承認（画面だけ。20261007-ext-host PR3）。`digest` は、画面が見ている登録の鍵（`ExtensionApprovalView.digest`。16 進 64 文字）で、
+ * いまの登録と違えば `extension_stale`。`sodactl` からは承認できない・`pane.sock` にも無い。
+ */
+export const ExtensionApproveParams = z.object({ key: extensionKey, digest: z.string().regex(/^[0-9a-f]{64}$/) });
+export type ExtensionApproveParams = z.infer<typeof ExtensionApproveParams>;
+export const ExtensionDenyParams = ExtensionApproveParams;
+export type ExtensionDenyParams = ExtensionApproveParams;
+/** (根, id) の承認の記録を消す。いま一覧に無い根・id でもよい。`root` は絶対パスの実体（1〜1024 文字）、`id` は拡張の id。 */
+export const ExtensionRevokeParams = z.object({ root: z.string().min(1).max(1024), id: z.string().regex(COMMAND_ID_RE) });
+export type ExtensionRevokeParams = z.infer<typeof ExtensionRevokeParams>;
 
 // --- 独自トークン（20260927-sidebar-row-tokens。herdr の workspace.report_metadata / pane.report_metadata） ----------------
 
@@ -1133,6 +1144,9 @@ export const METHOD_SCHEMAS = {
   "extension.restart": ExtensionRestartParams,
   "extension.log": ExtensionLogParams,
   "extension.setEnabled": ExtensionSetEnabledParams,
+  "extension.approve": ExtensionApproveParams,
+  "extension.deny": ExtensionDenyParams,
+  "extension.revoke": ExtensionRevokeParams,
   "prefs.get": PrefsGetParams,
   "prefs.set": PrefsSetParams,
   // エージェントの連携のグラフ（20260927-agent-graph）。
@@ -1247,6 +1261,9 @@ export interface MethodResultMap {
   "extension.restart": Record<string, never>;
   "extension.log": ExtensionLogResult;
   "extension.setEnabled": Record<string, never>;
+  "extension.approve": Record<string, never>;
+  "extension.deny": Record<string, never>;
+  "extension.revoke": Record<string, never>;
   "prefs.get": PrefsResult;
   "prefs.set": PrefsResult;
   "graph.get": Graph;

@@ -170,3 +170,43 @@ describe("ExtensionController", () => {
     expect(s.toasts).toHaveLength(1);
   });
 });
+
+describe("ExtensionController: 承認の操作（PR3）", () => {
+  it("approve・deny は key と digest（ダイアログが描いたもの）を送る。revoke は root と id", async () => {
+    const s = setup();
+    const d = "a".repeat(64);
+    expect(await s.ctl.approve("project:x:a", d)).toBe("done");
+    expect(await s.ctl.deny("project:x:b", d)).toBe("done");
+    expect(await s.ctl.revoke("/r", "a")).toBe("done");
+    expect(s.calls.filter(([m]) => m !== "extension.list")).toEqual([
+      ["extension.approve", { key: "project:x:a", digest: d }],
+      ["extension.deny", { key: "project:x:b", digest: d }],
+      ["extension.revoke", { root: "/r", id: "a" }],
+    ]);
+  });
+  it("extension_stale は stale を返し、トーストは出さない（呼び手が描き直す）。一覧は取り直す", async () => {
+    const s = setup({ "extension.approve": () => code("extension_stale"), "extension.list": () => list(info("a", "pending")) });
+    expect(await s.ctl.approve("project:x:a", "b".repeat(64))).toBe("stale");
+    expect(s.toasts).toEqual([]);
+    await settle();
+    expect(s.calls.some(([m]) => m === "extension.list")).toBe(true);
+  });
+  it("ほかの失敗はトーストと failed。操作中の二重押しは skipped", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const s = setup({ "extension.deny": () => gate as never });
+    const first = s.ctl.deny("project:x:a", "c".repeat(64));
+    expect(await s.ctl.deny("project:x:a", "c".repeat(64))).toBe("skipped");
+    release();
+    expect(await first).toBe("done");
+    const f = setup({ "extension.approve": () => code("internal") });
+    expect(await f.ctl.approve("project:x:a", "c".repeat(64))).toBe("failed");
+    expect(f.toasts).toEqual(["拡張を承認できませんでした"]);
+  });
+  it("マシンの切り替え・切断で、開いている承認のダイアログの key も捨てる", () => {
+    const s = setup();
+    s.store.openApproval("project:x:a");
+    s.ctl.resetForMachineSwitch();
+    expect(s.store.dialogKey).toBeNull();
+  });
+});
