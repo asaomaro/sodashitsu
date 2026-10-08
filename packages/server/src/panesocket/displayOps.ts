@@ -3,11 +3,13 @@ import {
   PANE_OP_DISPLAY_CLOSE,
   PANE_OP_DISPLAY_FEATURES,
   PANE_OP_DISPLAY_LIST,
+  PANE_OP_DISPLAY_SEND,
   PANE_OP_DISPLAY_SET,
   PANE_OP_DISPLAY_WAIT,
   PaneDisplayCloseParams,
   PaneDisplayFeaturesParams,
   PaneDisplayListParams,
+  PaneDisplaySendParams,
   PaneDisplaySetParams,
   PaneDisplayWaitParams,
 } from "@sodashitsu/protocol";
@@ -39,4 +41,9 @@ export function displayWaitOp(displays: Pick<DisplayService, "wait">): PaneOpDef
 /** 機能確認（引数なし）。ログイン不要の受け口でも読める（面の中身を含まない）。 */
 export function displayFeaturesOp(displays: Pick<DisplayService, "features">): PaneOpDef<z.infer<typeof PaneDisplayFeaturesParams>> {
   return { name: PANE_OP_DISPLAY_FEATURES, params: PaneDisplayFeaturesParams, handler: () => displays.features() };
+}
+
+/** スクリプトが動く面へデータを送る。対象は `ctx.paneId` の面だけ（引数に `paneId` を載せたら schema が断る）。 */
+export function displaySendOp(displays: Pick<DisplayService, "send">): PaneOpDef<z.infer<typeof PaneDisplaySendParams>> {
+  return { name: PANE_OP_DISPLAY_SEND, params: PaneDisplaySendParams, handler: (ctx, p) => displays.send(ctx.paneId, p) };
 }

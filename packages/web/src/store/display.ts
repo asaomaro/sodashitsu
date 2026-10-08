@@ -39,6 +39,11 @@ export const useDisplayStore = defineStore("display", () => {
   const sheetAvailable = ref(false);
   /** 重ね表示を開く要求（`prefix+i` がパネルの枠へ移れないモバイルで増える。`MobileShell` が見て開く）。 */
   const sheetRequest = ref(0);
+  /** この画面が、スクリプトが動く形式（`script-html`）を出せると名乗ったか（`display.subscribe` の `features`。名乗らなければ、固定の文言を出して動かさない）。 */
+  const scriptCapable = ref(true);
+  /** ［操作する］ボタンを強調している面の id（覆いや枠を押したとき、1 秒だけ。押しても操作は始まらないので、場所を教える）。 */
+  const engageHint = ref<string | null>(null);
+  let engageHintTimer: ReturnType<typeof setTimeout> | null = null;
   /** 利用者が変えたパネルの幅（pane の id → px）。この画面が覚える（`soda.prefs.v1` の `displayPanelWidths`。共有の設定へ送らない）。 */
   const panelWidths = ref(loadPanelWidths(readPrefs()["displayPanelWidths"]));
 
@@ -108,6 +113,18 @@ export const useDisplayStore = defineStore("display", () => {
     else next.delete(paneId);
     collapsed.value = next;
   }
+  function setScriptCapable(on: boolean): void {
+    scriptCapable.value = on;
+  }
+  /** ［操作する］ボタンを 1 秒だけ強調する。 */
+  function nudgeEngage(id: string, ms = 1000): void {
+    engageHint.value = id;
+    if (engageHintTimer !== null) clearTimeout(engageHintTimer);
+    engageHintTimer = setTimeout(() => {
+      engageHintTimer = null;
+      if (engageHint.value === id) engageHint.value = null;
+    }, ms);
+  }
   function setFocused(id: string | null): void {
     if (focusedDisplayId.value !== id) focusedDisplayId.value = id;
   }
@@ -172,6 +189,10 @@ export const useDisplayStore = defineStore("display", () => {
     focusedDisplayId,
     contentFailed,
     setContentFailed,
+    scriptCapable,
+    setScriptCapable,
+    engageHint,
+    nudgeEngage,
     sheetAvailable,
     sheetRequest,
     panelWidths,

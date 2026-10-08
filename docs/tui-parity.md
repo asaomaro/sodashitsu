@@ -158,7 +158,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は�
 | W31 | 出力の中のファイルのパスのリンク・ファイルのドロップ（`docs/file-links.md`） | —（外側の端末） | あり | 対象外（端末版では外側の端末がリンクとドロップを扱う。ブラウザ版だけが、サーバ越しに開く・ダウンロード・送る） | AC なし |
 | W33 | エージェントが動かしているサブエージェントの件数と一覧（`show_subagents`・サイドバーの行の件数・グラフ。20261004-subagent-display。`docs/agent-graph.md`） | 無し | あり | 読み替え（エージェントの行の末尾の `⤷n` と、その桁範囲のクリックで開く一覧の overlay〔`modes/SubagentList.ts`〕。pane の右クリックのメニューにも項目がある。キーボードだけなら設定で割り当てる `show_subagents`〔既定のキーは無い〕。連携のグラフの画面は W30 のとおりブラウザだけ） | 試験: `TuiApp.subagents.test.ts` |
 | W32 | pane のプログラムからの質問のフォーム（`sodactl ask`。20261002-sodactl-ask。`docs/sodactl.md`「質問のフォーム」） | 無し | あり | 対象外（端末版はフォームを出せる画面として名乗らないので、端末版しかつながっていない session では `sodactl ask` は待たずに `unavailable` を返し、呼び出し側が `AskUserQuestion` へ切り替える） | 試験: `ask.integration.test.ts` |
-| W34 | pane のプログラムが出す表示の面（パネル・帯。`sodactl display`・`focus_display`。20261007-soda-extensions。`docs/display.md`） | 無し | あり | 無し（面を描かない。名乗らないので、`set` の結果の `renderers` に数えない。`sodactl display` 自体はサーバの機能なので動く。`prefix+i`〔`focus_display`〕は「表示のパネル・帯はブラウザで使えます。」と知らせる） | 試験: `TuiDispatcher.test.ts`（全操作の表） |
+| W34 | pane のプログラムが出す表示の面（パネル・帯。`sodactl display`・`focus_display`。20261007-soda-extensions。`docs/display.md`） | 無し | あり | 無し（面を描かない。スクリプトが動く形式〔`script-html`〕も同じ。名乗らないので、`set` の結果の `renderers` に数えない。`sodactl display` 自体はサーバの機能なので動く。`prefix+i`〔`focus_display`〕は「表示のパネル・帯はブラウザで使えます。」と知らせる） | 試験: `TuiDispatcher.test.ts`（全操作の表） |
 
 ## 4. 外側の端末との取り決め（端末版で新たに要るもの）
 

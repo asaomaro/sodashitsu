@@ -57,7 +57,8 @@ sodactl graph node rm <pane> [--json]
 sodactl graph node rekey <pane> <newPane> [--json]
 sodactl graph history [<linkId>] [--limit <N>] [--json]
 sodactl ask [--timeout <ms>] < spec.json    # pane の中のプログラムの質問のフォームを、その pane を見ているブラウザの画面に出す（下の「質問のフォーム」）
-sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] (--text <text> | --markdown-file <path> | --html-file <path> | [--format text|markdown|html] < stdin) [--wait [--timeout <ms>]]   # この pane を見ているブラウザの画面に、パネル（端末の右）か帯（端末の上）を出す（`docs/display.md`）
+sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] (--text <text> | --markdown-file <path> | --html-file <path> | --script-html-file <path> | [--format text|markdown|html|script-html] < stdin) [--wait [--timeout <ms>]]   # この pane を見ているブラウザの画面に、パネル（端末の右）か帯（端末の上）を出す（`docs/display.md`）。`script-html` は中身のスクリプトが枠の中で動く形式（信頼できない中身には使わない）
+sodactl display send <name> (--json <JSON> | < stdin)   # スクリプトが動く面（`script-html`）へデータを送る（64 KiB まで・保存されない。結果は {"status":"ok","delivered":n}）
 sodactl display close (<name> | --all) / list / wait [<name>] / events [<name>...] / --features   # 面の閉じる・一覧・操作を待つ・続けて受け取る・機能確認（pane の中ではログイン不要）
 sodactl skill                               # エージェントに sodactl の使い方を教える Markdown（skill ファイル）を出す
 ```
@@ -230,6 +231,8 @@ sodactl pane control 3f2a9c10 --takeover                       # 既に所有者
   定義の上限の超過は使い方の誤り（終了コード 2）。標準入力は 1 MiB までしか読まない。サーバが同時に待てる質問は総数 32・1 つの接続あたり 8 まで（超えると `ask_busy`。終了コード 1）。
 - **表示の面**（`display`。`docs/display.md`）: 中身 1 つ 2 MiB（UTF-8）・サーバ全体で合計 32 MiB・面は pane ごとにパネル 4・帯 2、全体で 64・`set` の頻度は pane ごとに続けて 10 回まで（1 秒に 10 回ぶん戻る）と量で続けて 8 MiB まで（毎秒 2 MiB 戻る）・`wait` の待ちは pane ごとに 4、全体で 32・題は 80 文字・操作の値は JSON で 8 KiB。
   受け口の要求の 1 行の上限は 4 MiB（中身 2 MiB の JSON 文字列でも収まる。`ask` の要求にも同じ上限がかかる）。外れた `set` は使い方の誤り（終了コード 2）か `display_limit`・`display_busy`。
+  スクリプトが動く形式（`script-html`）は**設定で有効にしたときだけ**出せる（既定は無効。設定の画面の「スクリプトが動く表示を許可する」。`pane.sock` からは変えられない。ただし同じ OS の利用者で動くプログラムは、状態ディレクトリの認証の情報を読めば自分で有効にできる——悪意のあるプログラムへの防御ではなく、不注意やふつうのプログラムが出すのを防ぐもの。詳しくは docs/display.md）。無効のとき `set`・`send` は `display_script_disabled`（終了コード 1。stderr に理由。**未対応の `unsupported`〔終了コード 0〕とは別**。`--features` の `server.scriptEnabled` が `false`）。有効 → 無効にすると、出ている面は閉じて `display.closed` の理由が `script_disabled`。
+  スクリプトが動く形式（`script-html`）: `send` のデータは JSON で 64 KiB・pane ごとに毎秒 20 回。**その pane でフォーカスを 3 回取った／枠が別のページへ移った（`navigated`）ら、5 分間、その pane の `script-html` の `set` は `display_busy`（終了コード 1。理由の文をそのまま出す）**。静的な形式は出せる。`script-html` の `set`・`send` は、送る前に `display.features` を見て、`format:script-html`・`send` が無い `soda` には `{"status":"unsupported",…}`（終了コード 0）。`events`/`wait` の `display.action` の行に `source`（`static`＝静的な面、`script`＝スクリプトが動く面。`script` は利用者が押したとは限らない）が付く。
 - **ログイン不要の受け口**（`pane.sock`。下の「ログイン不要の受け口（pane.sock）」）: 同時に開いている接続 64（超えた接続と `soda handoff` の途中の接続は、要求を読まずに `pane_socket_busy`。sodactl は 5 秒まで繋ぎ直す）・要求の 1 行 4 MiB（超えると `bad_request`。1 MiB から上げた。表示の面の中身 2 MiB を載せるため）・
   接続してから要求の 1 行が揃うまで 10 秒（過ぎたら何も返さずに切る）。受け口から出した質問も、上の総数 32 と「1 つの pane に同時に 1 つ」に数える。
 - 複数ホストの中継（`--machine`・`/ws?machine=`）では、判定するのは**先のマシンの `soda serve`**（`docs/machines.md`）。
@@ -723,7 +726,7 @@ workspace・tab の ID は環境変数に**入れない**（herdr の `HERDR_WOR
 
 サーバ（Linux・macOS。macOS は未検証）は、状態ディレクトリに Unix ドメイン socket **`pane.sock`**（権限 0600。0700 の一時ディレクトリの中で待ち受けて 0600 にしてから、rename で置く）を立て、
 pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中のプログラム向けの、ログイン不要のローカルの受け口**で、`/ws` の RPC は通さず、**受け口に登録した操作だけ**を受ける。
-今載っている操作は `ask.open`（`sodactl ask`）・`ask.features`（`sodactl ask --features` の、サーバの機能確認）と、表示の面（`sodactl display`。`docs/display.md`）の `display.set`・`display.close`・`display.list`・`display.wait`・`display.features` の 5 つ。**`sodactl` のほかのコマンドは何も変わらない**（今までどおり `sodactl login` が要る）。新しいネットワーク（TCP）の待ち受けは作らない。
+今載っている操作は `ask.open`（`sodactl ask`）・`ask.features`（`sodactl ask --features` の、サーバの機能確認）と、表示の面（`sodactl display`。`docs/display.md`）の `display.set`・`display.close`・`display.list`・`display.wait`・`display.features`・`display.send` の 6 つ。**`sodactl` のほかのコマンドは何も変わらない**（今までどおり `sodactl login` が要る）。新しいネットワーク（TCP）の待ち受けは作らない。
 
 - **使われる条件**（全部を満たすとき。`sodactl ask` が自分で選ぶので、利用者が指定するものは無い）:
   - Windows（ネイティブ）でない。
@@ -762,7 +765,7 @@ pane の環境の `SODA_PANE_SOCKET` にそのパスを入れる。**pane の中
   （画像・音・成果物の形に合うものだけ。中身は質問の画面にだけ届き、プロセスへは返らない）、`https://` の画像 URL を**サーバから外へ取りに行かせられる**（公開アドレスの 443 だけ。クエリにデータを載せれば、外へ持ち出す経路になりうる。
   サーバのログには、取得の宛先の**ホスト名だけ**を残す〔URL の全文・パス・クエリは残さない〕）。「同じ OS の利用者を信頼する」前提には沿うが、読み取り・外部通信を制限したサンドボックスの中のエージェントも、受け口を通じて**サーバの権限を借りられる**。
   そうした環境では、`SODA_PANE_SOCKET` の socket へ繋げられないようにする（サンドボックスの設定で socket を許可しない）。
-- **`display`（表示の面）の操作は、`ask` と違い、ほかの pane の操作の値を読める**（20261007-soda-extensions）。受け口に載せた `display.set`・`close`・`list`・`wait`・`features` は、対象が要求の `paneId`（名乗った pane）だけで、
+- **`display`（表示の面）の操作は、`ask` と違い、ほかの pane の操作の値を読める**（20261007-soda-extensions）。受け口に載せた `display.set`・`close`・`list`・`wait`・`features`・`send` は、対象が要求の `paneId`（名乗った pane）だけで、
   引数に `paneId` は持たない（載せると `invalid_params`）。だが**名乗る pane の id を受け口は検証しない**（実在だけ）ので、同じ OS の利用者の別のプロセスが、ほかの pane の id を知っていれば、その pane の面を出す・閉じる・
   一覧する、そして **`display wait`/`events`（`events` の終わりの行 `display.end` の `reason` は `pane_closed`・`connection_closed`・`unsupported`・`busy`。`--timeout` の時間切れの直前の 1 秒未満に起きた操作は受け取れないことがある）でその pane の面への操作の値（パネルのフォームに利用者が入れた値）を読める**。`ask` で出来たのは偽の質問を出すことまでだった。
   守っているのは「同じ OS の利用者」の境界で、**pane 同士の境界ではない**。パネルのフォームに、秘密（パスワード・token など）を入れさせない。pane の id は `SODA_PANE_ID`・`sodactl snapshot`（ログイン済み）などで分かる。

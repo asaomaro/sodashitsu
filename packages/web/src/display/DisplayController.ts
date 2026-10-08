@@ -3,6 +3,7 @@ import {
   readDisplayInfo,
   type DisplayChunk,
   type DisplayInfo,
+  type DisplayMessageEvent,
   type DisplayRemovedEvent,
   type DisplayReportProblem,
   type DisplayUpdatedEvent,
@@ -19,10 +20,17 @@ export interface DisplayControllerOptions {
   livePaneIds?: () => ReadonlySet<string>;
   /** 時計（テスト用に差し替える）。 */
   now?: () => number;
+  /** 名乗る機能（テスト用に差し替える。既定は `DISPLAY_SUBSCRIBE_FEATURES`）。`script-html` を外すと、スクリプトが動く形式は固定の文言になる。 */
+  subscribeFeatures?: string[];
 }
 
-/** 画面が名乗る機能（パネル・帯・操作。スクリプトが動く形式は PR3 で足す）。 */
-export const DISPLAY_SUBSCRIBE_FEATURES = ["panel", "band", "actions"];
+/** 画面が名乗る機能（パネル・帯・操作・スクリプトが動く形式）。 */
+export const DISPLAY_SUBSCRIBE_FEATURES = ["panel", "band", "actions", "script-html"];
+
+/** 理由 `focus_steal` で閉じたときの利用者への知らせ（面の名前を入れる）。 */
+export function focusStealToast(name: string): string {
+  return `表示『${name}』は、キー入力を取ろうとし続けたので閉じました。この pane は、しばらくスクリプトが動く表示を出せません`;
+}
 
 /** 同じ面の中身を取り直す回数の上限（速く更新され続けても、いつかは諦めて今ある分を出す）。 */
 const REFETCH_MAX = 8;
@@ -48,6 +56,8 @@ export class DisplayController {
   /** 操作の頻度の制限（毎秒 20 回で捨てる。サーバと同じ値）。 */
   private actionTokens: number = DISPLAY_ACTION_RATE.burst;
   private actionAt = 0;
+  /** `display.message`（`sodactl display send` のデータ）を、その面の枠へ渡す登録（面の id → 受け手）。 */
+  private readonly messageHandlers = new Map<string, Set<(data: unknown) => void>>();
 
   constructor(private readonly opts: DisplayControllerOptions) {}
 
@@ -59,7 +69,9 @@ export class DisplayController {
   onOpened(): void {
     const generation = ++this.generation;
     this.inflight.clear();
-    this.opts.conn.request("display.subscribe", { features: DISPLAY_SUBSCRIBE_FEATURES }).then(
+    const features = this.opts.subscribeFeatures ?? DISPLAY_SUBSCRIBE_FEATURES;
+    this.opts.store.setScriptCapable(features.includes("script-html"));
+    this.opts.conn.request("display.subscribe", { features }).then(
       (r) => {
         if (generation !== this.generation) return;
         const infos = r.displays.map((d) => readDisplayInfo(d)).filter((d): d is DisplayInfo => d !== null);
@@ -85,7 +97,36 @@ export class DisplayController {
     this.opts.store.clear();
   }
 
-  onEvent(e: DisplayUpdatedEvent | DisplayRemovedEvent): void {
+  /** 利用者への知らせ（トースト）。 */
+  toast(message: string): void {
+    this.opts.toast(message);
+  }
+
+  /** `display.message` を、その面の枠を描いている部品へ渡すための登録。戻り値は登録を外す関数。 */
+  onMessage(id: string, fn: (data: unknown) => void): () => void {
+    let set = this.messageHandlers.get(id);
+    if (set === undefined) this.messageHandlers.set(id, (set = new Set()));
+    set.add(fn);
+    return () => {
+      const s = this.messageHandlers.get(id);
+      if (!s) return;
+      s.delete(fn);
+      if (s.size === 0) this.messageHandlers.delete(id);
+    };
+  }
+
+  onEvent(e: DisplayUpdatedEvent | DisplayRemovedEvent | DisplayMessageEvent): void {
+    if (e.event === "display.message") {
+      // 保存しない: いま、その面の枠を描いている部品があるときだけ渡す。ほかは捨てる。
+      for (const fn of [...(this.messageHandlers.get(e.data.id) ?? [])]) {
+        try {
+          fn(e.data.data);
+        } catch {
+          /* 1 つの受け手の失敗で、ほかを止めない */
+        }
+      }
+      return;
+    }
     if (e.event === "display.updated") {
       const info = readDisplayInfo(e.data.display);
       if (info) this.opts.store.upsert(info);
@@ -97,6 +138,8 @@ export class DisplayController {
     // 枠の異常で閉じたときは、利用者に知らせる（自分が `report` した画面でも、ほかの画面でも 1 回だけ）。
     if (reason === "navigated") this.opts.toast(`表示『${name}』は、別のページへ移ろうとしたので閉じました`);
     else if (reason === "unresponsive") this.opts.toast(`表示『${name}』は、応答しなくなったので閉じました`);
+    else if (reason === "focus_steal") this.opts.toast(focusStealToast(name));
+    else if (reason === "script_disabled") this.opts.toast(`スクリプトが動く表示『${name}』は、設定で無効にされたので閉じました`);
   }
 
   /**
@@ -193,13 +236,24 @@ export class DisplayController {
   }
 
   /**
-   * 枠の異常を知らせる（`navigated`・`unresponsive`）。**頻度の制限に入れない・捨てない**（`sendAction` とは別）。
-   * `paneId`・`format` は、描いていた枠のものを添える（後の版のサーバが、面がもう無くても数えられるように）。
+   * 枠の異常を知らせる（`navigated`・`unresponsive`・`focus_steal`）。**頻度の制限に入れない・捨てない**（`sendAction` とは別）。
+   * `paneId`・`format` は、描いていた枠のものを添える（サーバが、面がもう無くても、その pane に数えられるように）。
+   * 戻り値は「サーバへ届いたか」（サーバが答えた＝真。繋がっていない・応答が無い＝偽）。`focus_steal` を送れなかった画面は、その画面の中で数える。
    */
-  report(id: string, problem: DisplayReportProblem, ctx: { paneId: string; format: string }): void {
-    this.opts.conn.request("display.report", { id, problem, paneId: ctx.paneId, format: ctx.format }).catch((err: unknown) => {
-      // 添えた項目を知らない古いサーバ（`invalid_params`）には、`{id, problem}` だけで 1 回送り直す。`display_closed` などは黙って捨てる。
-      if (errorCodeOf(err) === "invalid_params") this.opts.conn.request("display.report", { id, problem }).catch(() => undefined);
-    });
+  report(id: string, problem: DisplayReportProblem, ctx: { paneId: string; format: string }): Promise<boolean> {
+    const answered = (err: unknown): boolean => errorCodeOf(err) !== null;
+    return this.opts.conn.request("display.report", { id, problem, paneId: ctx.paneId, format: ctx.format }).then(
+      () => true,
+      (err: unknown) => {
+        // 添えた項目を知らない古いサーバ（`invalid_params`）には、`{id, problem}` だけで 1 回送り直す。`display_closed` などは黙って捨てる。
+        if (errorCodeOf(err) === "invalid_params") {
+          return this.opts.conn.request("display.report", { id, problem }).then(
+            () => true,
+            (e2: unknown) => answered(e2),
+          );
+        }
+        return answered(err);
+      },
+    );
   }
 }

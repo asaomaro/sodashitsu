@@ -5,15 +5,16 @@ import { IMAGE_CHUNK_BYTES } from "./image.js";
  * 操作・出来事の型は、この 1 か所にある（`pane.sock`・`/ws`・`sodactl`・ブラウザが同じものを読む）。
  * 検査の関数は純粋で、サーバ・sodactl・ブラウザが同じものを使う。
  *
- * 静的な形式（`text`・`markdown`・`html`）の分だけ。スクリプトが動く形式（`script-html`）・`display.send`・`focus_steal` は、後の版が
- * ここに足す（`DISPLAY_FORMATS`・`DISPLAY_FEATURES`・`DISPLAY_RENDER_FEATURES`・`DisplayRenderers`・`DisplayLimits`・`DisplayClosedReason` に 1 項目ずつ）。
+ * 静的な形式（`text`・`markdown`・`html`。作者のスクリプトは動かない）と、スクリプトが動く形式（`script-html`）、`display.send`・`focus_steal`。
  */
 
 export const DISPLAY_KINDS = ["panel", "band"] as const;
 /** 作者のスクリプトは動かない形式。 */
 export const DISPLAY_STATIC_FORMATS = ["text", "markdown", "html"] as const;
-/** 出せる形式（後の版が `script-html` を足す）。 */
-export const DISPLAY_FORMATS = [...DISPLAY_STATIC_FORMATS] as const;
+/** 作者のスクリプトが動く形式（枠は専用の頁・覆い・フォーカスの番つき）。 */
+export const DISPLAY_SCRIPT_FORMAT = "script-html" as const;
+/** 出せる形式。 */
+export const DISPLAY_FORMATS = [...DISPLAY_STATIC_FORMATS, DISPLAY_SCRIPT_FORMAT] as const;
 export const DISPLAY_NAME_RE = /^[A-Za-z0-9_-]{1,32}$/;
 /** 題の長さの上限（文字＝コードポイント）。制御文字は不可。 */
 export const DISPLAY_TITLE_MAX = 80;
@@ -38,6 +39,14 @@ export const DISPLAY_TTL_MAX_MS = 86_400_000;
 export const DISPLAY_SET_RATE = { perSec: 10, burst: 10 } as const;
 /** pane ごとの `set` の量（続けて 8 MiB まで・毎秒 2 MiB 戻る）。 */
 export const DISPLAY_SET_BYTES_RATE = { perSec: 2 * 1024 * 1024, burst: 8 * 1024 * 1024 } as const;
+/** `display.send` のデータ（JSON の UTF-8）。 */
+export const DISPLAY_SEND_MAX_BYTES = 64 * 1024;
+/** pane ごとの `send` の頻度。 */
+export const DISPLAY_SEND_RATE = { perSec: 20, burst: 20 } as const;
+/** **サーバの側で、pane ごとに**数える。これだけ取ったら、その pane のスクリプトが動く面を全部止めて、冷却に入る。 */
+export const DISPLAY_FOCUS_STEAL_MAX = 3;
+/** 冷却の長さ。この間、その pane は `script-html` を出せない。入る条件は `DisplayService` の 1 か所。 */
+export const DISPLAY_SCRIPT_COOLDOWN_MS = 300_000;
 export const DISPLAY_PING_INTERVAL_MS = 2_000;
 export const DISPLAY_UNRESPONSIVE_MS = 10_000;
 export const DISPLAY_ACTION_NAME_RE = /^[A-Za-z0-9_.:-]{1,64}$/;
@@ -58,9 +67,9 @@ export const DISPLAY_WAIT_MAX_MS = 60_000;
 export const DISPLAY_WAIT_DEFAULT_MS = 30_000;
 export const DISPLAY_WAIT_NAMES_MAX = 8;
 /** sodactl が名乗る機能（`--features` の `sodactl`）。 */
-export const DISPLAY_FEATURES = ["panel", "band", "format:text", "format:markdown", "format:html", "actions"] as const;
+export const DISPLAY_FEATURES = ["panel", "band", "format:text", "format:markdown", "format:html", "format:script-html", "actions", "send"] as const;
 /** 画面が `display.subscribe` で名乗れる種類。 */
-export const DISPLAY_RENDER_FEATURES = ["panel", "band", "actions"] as const;
+export const DISPLAY_RENDER_FEATURES = ["panel", "band", "actions", "script-html"] as const;
 /** `display.subscribe` の `features` の個数の上限。 */
 export const DISPLAY_RENDER_FEATURES_MAX = 8;
 /** stdout の行の決まりの版（`display.ready` の `v`）。この決まりそのものを変えるときだけ上げる。 */
@@ -117,11 +126,13 @@ export interface DisplayContent {
   format: DisplayFormatValue;
   content: string;
 }
-/** その種類を出せると名乗った画面の数（後の版が `scriptHtml` を足す）。 */
+/** その種類を出せると名乗った画面の数。 */
 export interface DisplayRenderers {
   panel: number;
   band: number;
   actions: number;
+  /** スクリプトが動く形式（`script-html`）を出せると名乗った画面の数。 */
+  scriptHtml: number;
   /** 後の版が足す種類（読み手は知らない項目を無視する）。 */
   [kind: string]: number;
 }
@@ -137,6 +148,8 @@ export interface DisplayLimits {
   setPerSec: number;
   setBytesBurst: number;
   setBytesPerSec: number;
+  /** `display.send` のデータの上限（JSON の UTF-8 のバイト数）。 */
+  sendBytes: number;
   actionDataBytes: number;
   waitersPerPane: number;
   eventQueue: number;
@@ -152,6 +165,11 @@ export interface DisplayFeatures {
   renderers: DisplayRenderers;
   /** サーバの起動ごとの印。`display.wait` に渡すと、入れ替え・再起動を見分けられる。 */
   epoch: string;
+  /**
+   * スクリプトが動く表示（`script-html`）が、設定で有効か。**無効（既定）のとき、`script-html` の `set`・`send` は `display_script_disabled` で断られる**。
+   * `features` に `format:script-html` があっても無効でありうる（「この版が知らない」＝未対応 と「設定で無効」を区別する）。古いサーバには無い項目（読み手は未定義を「分からない」として扱う）。
+   */
+  scriptEnabled?: boolean;
 }
 /** `set` の中身（`paneId` を除いたもの）。`checkDisplaySet` が返す形で、受け口の `PaneDisplaySetParams` と同じ項目。 */
 export interface DisplaySetBody {
@@ -181,14 +199,29 @@ export interface DisplayWaitResult {
  * 閉じた理由。
  * - `closed`: プログラムの close（自分の close も届く）／`dismissed`: 利用者が閉じた／`expired`: `--ttl-ms`
  * - `navigated`: 枠が別のページへ移ったので、アプリが止めた／`unresponsive`: 枠が 10 秒返事をしないので、アプリが止めた
+ * - `focus_steal`: スクリプトがフォーカスを取り続けたので、アプリが止めた（pane ごとに数えて 3 回）
+ * - `script_disabled`: スクリプトが動く表示が、設定で無効にされたので、閉じた
  */
-export type DisplayClosedReason = "closed" | "dismissed" | "expired" | "navigated" | "unresponsive";
+export type DisplayClosedReason = "closed" | "dismissed" | "expired" | "navigated" | "focus_steal" | "unresponsive" | "script_disabled";
 /** 読み手の側の理由（後の版が足す理由を受けても落ちない。知らない理由は「閉じた」として扱う）。 */
 export type DisplayClosedReasonValue = DisplayClosedReason | (string & {});
 
+export type DisplayActionSource = "static" | "script";
+
 /** サーバが溜めて `display.wait` で返す出来事。sodactl はそのまま 1 行にする。 */
 export type DisplayEvent =
-  | { type: "display.action"; seq: number; paneId: string; name: string; rev: number; action: string; data?: Record<string, string>; at: string }
+  | {
+      type: "display.action";
+      seq: number;
+      paneId: string;
+      name: string;
+      rev: number;
+      action: string;
+      data?: Record<string, string>;
+      at: string;
+      /** サーバが、その面の形式から付ける（枠は偽れない）。`script`＝スクリプトが動く面から（利用者が押したとは限らない。`rev` もスクリプトが決められる）。 */
+      source?: DisplayActionSource;
+    }
   | { type: "display.closed"; seq: number; paneId: string; name: string; reason: DisplayClosedReasonValue; at: string };
 
 /** sodactl が stdout に書く行（`display wait`・`display events`・`set --wait`）。上の `DisplayEvent` に、sodactl が作る行を足したもの。 */
@@ -200,8 +233,11 @@ export type DisplayLine =
   | { type: "display.timeout" }
   | { type: "display.end"; reason: "pane_closed" | "connection_closed" | "unsupported" | "busy" };
 
-/** `display.report` の `problem`（画面が、枠の異常を知らせる）。後の版が `focus_steal` を足す。 */
-export const DISPLAY_REPORT_PROBLEMS = ["navigated", "unresponsive"] as const;
+/**
+ * `display.report` の `problem`（画面が、枠の異常を知らせる）。`navigated`・`unresponsive` はその面を閉じる。
+ * `focus_steal` は閉じる知らせではなく「1 回取られた」の知らせ（サーバが pane ごとに数える）。
+ */
+export const DISPLAY_REPORT_PROBLEMS = ["navigated", "unresponsive", "focus_steal"] as const;
 export type DisplayReportProblem = (typeof DISPLAY_REPORT_PROBLEMS)[number];
 
 export function displayLimits(): DisplayLimits {
@@ -217,6 +253,7 @@ export function displayLimits(): DisplayLimits {
     setPerSec: DISPLAY_SET_RATE.perSec,
     setBytesBurst: DISPLAY_SET_BYTES_RATE.burst,
     setBytesPerSec: DISPLAY_SET_BYTES_RATE.perSec,
+    sendBytes: DISPLAY_SEND_MAX_BYTES,
     actionDataBytes: DISPLAY_ACTION_DATA_MAX_BYTES,
     waitersPerPane: DISPLAY_WAITERS_PER_PANE_MAX,
     eventQueue: DISPLAY_EVENT_QUEUE_MAX,
@@ -309,6 +346,24 @@ export function checkDisplayAction(raw: unknown): DisplayCheck<{ action: string;
     return { ok: false, reason: `action data is too large (max ${DISPLAY_ACTION_DATA_MAX_BYTES} bytes as JSON)` };
   }
   return { ok: true, value: { action, data: out } };
+}
+
+/**
+ * `display.send` のデータを検査する（JSON にできる値で、直列化して 64 KiB 以下）。サーバと sodactl が使う。
+ * 返す `json` は直列化した文字列（サーバは bus に載せる値の大きさの確認に使える）。
+ */
+export function checkDisplaySend(data: unknown): { ok: true; json: string } | { ok: false; reason: string } {
+  let json: string | undefined;
+  try {
+    json = JSON.stringify(data);
+  } catch {
+    return { ok: false, reason: "data must be JSON-serializable" };
+  }
+  if (json === undefined) return { ok: false, reason: "data must be a JSON value" };
+  if (displayUtf8Bytes(json) > DISPLAY_SEND_MAX_BYTES) {
+    return { ok: false, reason: `data is too large (max ${DISPLAY_SEND_MAX_BYTES} bytes as JSON)` };
+  }
+  return { ok: true, json };
 }
 
 /**

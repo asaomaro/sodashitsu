@@ -5,8 +5,11 @@ import {
   DISPLAY_FEATURES,
   DISPLAY_OLD_REQUEST_LINE_BYTES,
   DISPLAY_REQUEST_LINE_BYTES,
+  DISPLAY_SEND_MAX_BYTES,
+  DISPLAY_SCRIPT_FORMAT,
   DISPLAY_WAIT_DEFAULT_MS,
   DISPLAY_WAIT_MIN_MS,
+  checkDisplaySend,
   checkDisplaySet,
   displayLimits,
   displayUtf8Bytes,
@@ -42,6 +45,19 @@ export class DisplayUnsupported extends Error {
   }
 }
 export const DISPLAY_UNSUPPORTED_REASON = "this server does not support display surfaces (update soda)";
+/** 表示の面は知っているが `script-html`・`send` を知らない（静的な形式だけの版）。 */
+/** `script-html` が設定で無効のときの理由（`display_script_disabled`）。 */
+export const DISPLAY_SCRIPT_DISABLED_REASON = "script-html displays are disabled in the settings (スクリプトが動く表示は、設定で無効になっています。設定の画面で「スクリプトが動く表示を許可する」を有効にしてください)";
+export const DISPLAY_SCRIPT_UNSUPPORTED_REASON = "this server does not support script-html displays (update soda)";
+
+/** `script-html`・`send` を知らないサーバ（静的な形式だけの版）。`script-html` を出す前に、`display.features` で確かめる。 */
+export class DisplayScriptUnsupported extends Error {
+  constructor() {
+    super(DISPLAY_SCRIPT_UNSUPPORTED_REASON_TEXT);
+    this.name = "DisplayScriptUnsupported";
+  }
+}
+const DISPLAY_SCRIPT_UNSUPPORTED_REASON_TEXT = "this server does not support script-html displays (update soda)";
 
 /** `wait` の 1 回の待ち。空で返ったら次を呼ぶ。 */
 export const DISPLAY_WAIT_CALL_MS = DISPLAY_WAIT_DEFAULT_MS;
@@ -232,7 +248,7 @@ async function openTransport(cmd: DisplayCmd, store: SessionStore, deps: Display
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
-async function readContent(a: Extract<DisplayAction, { kind: "set" }>, deps: DisplayDeps): Promise<{ format: "text" | "markdown" | "html" | string; content: string }> {
+async function readContent(a: Extract<DisplayAction, { kind: "set" }>, deps: DisplayDeps): Promise<{ format: string; content: string }> {
   if (a.source.kind === "text") return { format: "text", content: a.source.text };
   const buf = a.source.kind === "file" ? await deps.readFile(a.source.path, DISPLAY_CONTENT_MAX_BYTES) : await deps.readStdin(DISPLAY_CONTENT_MAX_BYTES);
   // 中身の指定が無く、標準入力も空（`/dev/null`・空のパイプ）なら、空の面を出さずに誤りにする。空を出したいときは `--text ""`。
@@ -263,6 +279,8 @@ export async function runDisplay(cmd: DisplayCmd, store: SessionStore, deps: Dis
         return await runFeatures(cmd, store, deps);
       case "set":
         return await runSet(cmd, a, store, deps);
+      case "send":
+        return await runSend(cmd, a, store, deps);
       case "close": {
         const { tr } = await openTransport(cmd, store, deps, a.pane);
         const res = (await tr.call("display.close", a.all ? { all: true } : { name: a.name }, 30_000)) as { closed: string[] };
@@ -280,6 +298,10 @@ export async function runDisplay(cmd: DisplayCmd, store: SessionStore, deps: Dis
         return await runEvents(cmd, a, store, deps);
     }
   } catch (err) {
+    if (err instanceof DisplayScriptUnsupported) {
+      deps.print({ status: "unsupported", reason: DISPLAY_SCRIPT_UNSUPPORTED_REASON });
+      return 0;
+    }
     if (err instanceof DisplayUnsupported) {
       if (a.kind === "events") deps.print({ type: "display.end", reason: "unsupported" } satisfies DisplayLine);
       else deps.print({ status: "unsupported", reason: DISPLAY_UNSUPPORTED_REASON });
@@ -304,6 +326,43 @@ async function runFeatures(cmd: DisplayCmd, store: SessionStore, deps: DisplayDe
   return 0;
 }
 
+async function requireScriptFeatures(tr: DisplayTransport, need: string[]): Promise<DisplayFeatures> {
+  const f = (await tr.call("display.features", {}, 10_000)) as DisplayFeatures;
+  const have = Array.isArray(f.features) ? f.features : [];
+  if (!need.every((x) => have.includes(x))) throw new DisplayScriptUnsupported();
+  // この版は知っているが、設定で無効（既定）。「未対応」（終了コード 0）とは別に、エラー（終了コード 1。`display_script_disabled`）にする。
+  if (f.scriptEnabled === false) throw new RpcFailure("display_script_disabled", DISPLAY_SCRIPT_DISABLED_REASON);
+  return f;
+}
+
+/** `send`: スクリプトが動く面へデータを送る（保存されない）。データは `--json` か標準入力。 */
+async function runSend(cmd: DisplayCmd, a: Extract<DisplayAction, { kind: "send" }>, store: SessionStore, deps: DisplayDeps): Promise<number> {
+  let text = a.json;
+  if (text === undefined) {
+    // 64 KiB を超えるものは、読み切る前に使い方の誤り。
+    const buf = await deps.readStdin(DISPLAY_SEND_MAX_BYTES + 1);
+    if (buf.length === 0) throw new CliUsageError("no data on stdin", `送るデータを --json か標準入力で渡してください。\n${DISPLAY_USAGE}`);
+    try {
+      text = decoder.decode(buf);
+    } catch {
+      throw new CliUsageError("stdin is not valid UTF-8", DISPLAY_USAGE);
+    }
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new CliUsageError("the data is not valid JSON", `送るデータは JSON として読める必要があります。\n${DISPLAY_USAGE}`);
+  }
+  const checked = checkDisplaySend(data);
+  if (!checked.ok) throw new CliUsageError(`invalid data: ${checked.reason}`, DISPLAY_USAGE);
+  const { tr } = await openTransport(cmd, store, deps, a.pane);
+  await requireScriptFeatures(tr, ["format:script-html", "send"]);
+  const res = (await tr.call("display.send", { name: a.name, data }, 30_000)) as { delivered: number };
+  deps.print({ status: "ok", delivered: res.delivered });
+  return 0;
+}
+
 async function runSet(cmd: DisplayCmd, a: Extract<DisplayAction, { kind: "set" }>, store: SessionStore, deps: DisplayDeps): Promise<number> {
   const { format, content } = await readContent(a, deps);
   const checked = checkDisplaySet({
@@ -318,6 +377,8 @@ async function runSet(cmd: DisplayCmd, a: Extract<DisplayAction, { kind: "set" }
   if (!checked.ok) throw new CliUsageError(`invalid display: ${checked.reason}`, DISPLAY_USAGE);
   const { paneId, tr } = await openTransport(cmd, store, deps, a.pane);
   const body = checked.value as unknown as Record<string, unknown>;
+  // `script-html` は、出す前に必ず機能確認（`format:script-html`・`send` が無い版は「未対応」。古い受け口の `unknown_op` は `DisplayUnsupported`）。
+  if (format === DISPLAY_SCRIPT_FORMAT) await requireScriptFeatures(tr, ["format:script-html", "send"]);
 
   // 組み立てた要求の 1 行が上限を超えないか（中身は JSON の文字列として載るので、エスケープの要る文字が多いと 2 MiB 以内でも 1 行が膨らむ）。
   const line = displayUtf8Bytes(JSON.stringify({ v: 1, op: "display.set", paneId, params: body })) + 1;

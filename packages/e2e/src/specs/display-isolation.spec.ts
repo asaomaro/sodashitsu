@@ -266,7 +266,7 @@ test("(12) 生きた document が中身の name・id で上書きされても、
   expect((await w.done).lines[0]).toMatchObject({ action: "go" });
 });
 
-test("(10) 知らない形式（script-html・未知）: 枠が作られず固定の文言。形式が替わると iframe が別の要素になる", async ({ page, appServer }) => {
+test("(10) 知らない形式（未知の 2 つ。script-html は PR3 から知っている形式）: 枠が作られず固定の文言。形式が替わると iframe が別の要素になる", async ({ page, appServer }) => {
   let format = "html";
   await page.routeWebSocket(/\/ws$/, (ws) => {
     const server = ws.connectToServer();
@@ -286,7 +286,7 @@ test("(10) 知らない形式（script-html・未知）: 枠が作られず固�
   let attached = 0;
   page.on("frameattached", () => attached++);
   // 形式を書き換える（テストの接続は台帳に形式の違う面を作れないので、ブラウザが受ける display.updated を差し替える）。
-  format = "script-html";
+  format = "future-y";
   await ok(await runDisplay(appServer, paneId, ["set", "m", "--kind", "panel", "--html-file", await writeTmp(`<p id="b">b</p>`)]));
   await expect(page.locator("[data-pane-panel] [data-display-note]")).toHaveText("この画面では、この形式の表示を出せません");
   await expect(frameEl(page)).toHaveCount(0);

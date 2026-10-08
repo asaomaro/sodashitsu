@@ -723,7 +723,25 @@ describe("parseArgs — display（20261007-soda-extensions）", () => {
     expect(usage(["set", "m", "--kind", "panel", "--markdown-file", "a", "--html-file", "a.html"])).toMatch(/only one/);
     expect(usage(["set", "m", "--kind", "panel", "--text", "a", "--format", "html"])).toMatch(/--format can only/);
     expect(usage(["set", "m", "--kind", "panel", "--format", "pdf"])).toMatch(/--format/);
-    expect(usage(["set", "m", "--kind", "panel", "--format", "script-html"])).toMatch(/--format/); // この版には無い
+    expect(usage(["set", "m", "--kind", "panel", "--text", "a", "--script-html-file", "a.html"])).toMatch(/only one/);
+    expect(usage(["set", "m", "--kind", "panel", "--script-html-file", "a.html", "--format", "html"])).toMatch(/--format can only/);
+  });
+
+  it("set: --script-html-file と --format script-html（標準入力）", () => {
+    expect(action(["set", "g", "--kind", "panel", "--script-html-file", "g.html"])).toMatchObject({ source: { kind: "file", format: "script-html", path: "g.html" } });
+    expect(action(["set", "g", "--kind", "panel", "--format", "script-html"])).toMatchObject({ source: { kind: "stdin", format: "script-html" } });
+  });
+
+  it("send: 名前と --json か標準入力。JSON として読めない --json は誤り。名前・余分な引数の誤り", () => {
+    expect(action(["send", "g", "--json", '{"a":1}'])).toEqual({ kind: "send", name: "g", json: '{"a":1}', pane: undefined });
+    expect(action(["send", "g"])).toEqual({ kind: "send", name: "g", json: undefined, pane: undefined });
+    expect(action(["send", "g", "--json", "[1]", "--pane", "abcd"])).toMatchObject({ json: "[1]", pane: "abcd" });
+  });
+  it("send: 誤り", () => {
+    expect(usage(["send", "g", "--json", "{oops"])).toMatch(/not valid JSON/);
+    expect(usage(["send", "--json", "1"])).toMatch(/missing name/);
+    expect(usage(["send", "a b", "--json", "1"])).toMatch(/invalid display name/);
+    expect(usage(["send", "g", "h", "--json", "1"])).toMatch(/unexpected argument/);
   });
 
   it("set: 名前・--kind の誤り", () => {

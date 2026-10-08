@@ -782,6 +782,16 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
 - [ ] iPhone・Android（幅 767px 以下）：パネルは端末の横に出ず、バーの［表示N］から重ね表示が開く。帯は端末の上。
 - [ ] `soda handoff`／再起動の後、面が消える（`events` は `display.reset`／`display.end`）。出し直すと出る。
 
+スクリプトが動く形式（`script-html`。`docs/display.md`「スクリプトが動く形式」）。自動の確かめは、`packages/e2e/src/specs/display-script*.spec.ts`（Chromium 153。結果は `.aidev/works/20261007-soda-extensions/test-result.md`）。実測した前提:
+差し込みで親から見た枠の `load` が 1 回のまま／ふつうの HTML・埋め込んだ marked・Chart.js が動く／スクリプトが枠のフォーカスを取っても、アプリが元の場所へ戻せる（`document.activeElement` を親が見る）／枠が外の origin・`localhost` の別のポート・204 の宛先へ移ろうとするのを、アプリの CSP が止める／
+WebRTC（UDP）は止まらない・利用者の操作の後の `execCommand("copy")` と音は止まらない・`window.name` は移った先へ運べる・兄弟の枠への `postMessage`/`MessagePort` は届く・兄弟の枠の `location` は書き換えられない（`SecurityError`）。
+
+- [ ] `sodactl display set g --kind panel --script-html-file g.html`（スクリプトで DOM を書き換える中身）。期待：見出しに印「スクリプト」と［操作する］が出て、枠は覆いの下にある。覆い・枠を押しても操作中にならず、［操作する］が 1 秒強調される。
+- [ ] ［操作する］（または `Tab` で届いて `Enter`、または `prefix+i`）。期待：縁の強調色・「入力はこの表示に届きます（Esc で端末へ）」・端末が薄くなり、枠の中の欄に打てる。`Esc` で端末へ戻り、覆いと［操作する］が戻る。
+- [ ] 端末にフォーカスを置いて、中身が `setInterval(() => { window.focus(); input.focus() }, 50)` で取り続ける。期待：フォーカスは端末へ戻され、3 回で面が閉じ、トースト「…キー入力を取ろうとし続けたので閉じました…」。5 分は `script-html` の `set` が `display_busy`、静的な形式は出せる。
+- [ ] `sodactl display send g --json '{"n":1}'`。期待：`soda.onMessage` に届く（枠は作り直されない）。ブラウザを再読み込みすると、あとからは届かない（保存されない）。
+- [ ] 中身が `location.href = '/display-view/frame.html?moved'`。期待：すぐ面が閉じて「別のページへ移ろうとしたので閉じました」。その pane は 5 分、`script-html` を出せない。
+
 ### 共通：質問のフォーム（`sodactl ask`。20261002-sodactl-ask・`docs/sodactl.md`「質問のフォーム」）
 
 自動のテストは、プロトコルの検査・回答の集め方（ask-form と共通の規則。20261003-ask-form-component からは、共通の試験データ `third_party/ask-form/fixtures/` で ask-form の側と同じ結果になることを見る）・サーバの台帳・実物の `/ws` と中継越しの結合・ダイアログの部品・実物の Chromium での一巡（ビルドした `sodactl` を子プロセスで起動。

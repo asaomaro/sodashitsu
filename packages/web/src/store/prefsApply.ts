@@ -18,6 +18,7 @@ import {
   loadPaneFrameThickness,
   loadPaneGaps,
   loadPaneOuterBorders,
+  loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
   useSettingsStore,
@@ -52,6 +53,7 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
   set("newCwdPolicy", loadNewCwdPolicy(raw["newCwdPolicy"]));
   set("newCwdPath", loadNewCwdPath(raw["newCwdPath"]));
   set("shellCwdTracking", loadShellCwdTracking(raw["shellCwdTracking"]));
+  set("displayScriptEnabled", loadDisplayScriptEnabled(raw["displayScriptEnabled"]));
   const theme = loadThemePrefs(raw);
   set("theme", theme.theme);
   set("themeAuto", theme.auto);

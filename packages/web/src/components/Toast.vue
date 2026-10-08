@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { watch } from "vue";
+import { computed, watch } from "vue";
+import { useDisplayStore } from "../store/display.js";
 import { useSettingsStore } from "../store/settings.js";
 import { PREFIX_HELP_HINT_KEY, useViewStore } from "../store/view.js";
 
@@ -15,6 +16,12 @@ const AUTO_DISMISS_MS = 4000;
 
 const view = useViewStore();
 const settings = useSettingsStore();
+/**
+ * 表示の面（パネル・帯）が 1 つでも出ているとき、知らせは**右下**へ寄せる。右上に置くと、面の見出し（固定のラベル・印「スクリプト」・［操作する］・［操作を終える］・［×］）に重なる。
+ * スクリプトが動く面では、印が見えることが守りの一部なので、知らせが見出しを覆ってはならない（消えない知らせでも同じ）。
+ */
+const displays = useDisplayStore();
+const low = computed(() => displays.all.length > 0);
 
 function hasShownHint(): boolean {
   try {
@@ -64,7 +71,7 @@ function dismiss(id: number): void {
 </script>
 
 <template>
-  <div class="toast-list" role="status" aria-live="polite">
+  <div class="toast-list" :class="{ 'toast-list-low': low }" role="status" aria-live="polite">
     <div v-for="t in view.toasts" :key="t.id" class="toast" :class="{ 'toast-sticky': t.kind === 'sticky', 'toast-wrap': t.wrap }" @click="dismiss(t.id)">
       <span class="toast-message" :title="t.kind === 'sticky' ? t.message : undefined">{{ t.message }}</span>
       <!-- 行動ボタンと閉じるボタンは `<button>`。既存のトーストは `<div>` で Tab の順に入らず、
@@ -115,6 +122,14 @@ function dismiss(id: number): void {
   .toast-list {
     top: calc(env(safe-area-inset-top, 0px) + 3.6rem);
   }
+  .toast-list.toast-list-low {
+    top: auto;
+  }
+}
+/* 表示の面が出ているときは右下（見出しを覆わない）。モバイルの上部バー用の下げ幅の指定も打ち消す。 */
+.toast-list.toast-list-low {
+  top: auto;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5em);
 }
 /* 出る動き。「動きを減らす」の設定では付けない（20261005-notify-bell の AC4）。 */
 @media (prefers-reduced-motion: no-preference) {

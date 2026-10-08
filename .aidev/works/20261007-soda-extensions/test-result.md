@@ -442,3 +442,238 @@ PR3（スクリプトが動く形式）の前提 5・6・8・10・11 は、こ�
 ### ask の側の取り除き（`packages/web/public/ask-view/markdown.js`）に同じ穴があるか
 実ブラウザで確かめた（`/ask-view/markdown.html` を直に開き、自分宛てに `ask-view` の知らせを送った）。`<form><input name="remove"></form>` を含む Markdown で、`sanitize` の `el.remove()` が `TypeError`（`remove` が子の入力に差し替わる）→ 枠は**ソースの文字表示（`plain()`）へ落ちる**。**閉じる側に倒れる（実行・移動には至らない）が、取り除きの途中で止まり、整形されない**。`attributes` などは読まないので、属性が残る形の穴は見つからなかった。
 `html.html`（スクリプトが動く枠）は、もともと取り除きを掛けない。この PR では直さない。別の作業の候補（低）: `ask-view/markdown.js` の `sanitize` が、要素のメソッドを直接呼ばず、プロトタイプのメソッドを `call` で使う。
+
+
+# PR3（スクリプトが動く形式 `script-html`。T23〜T30）のテスト結果（2026-10-08。ブラウザ: **Chromium 153.0.8010.12**、Playwright 同梱）
+
+ブランチ `feature/ext-display-script`（`3c15e4d` から）。設計から外れた点は `decisions.md` D32。
+
+## 自動テスト
+
+- `pnpm build`・`pnpm typecheck`: 通った。
+- `pnpm test`: 8629 件中 8626 件が通り、**3 件が落ちた**——すべて既知の `packages/server/src/tui.integration.test.ts`（worktree のパスが長いと main でも落ちる）。それ以外の失敗は無い。
+- 追加した単体・結合: protocol（`checkDisplaySend`・`script-html`・定数・schema）／server（`DisplayService` の `send`・pane ごとの回数と冷却〔5 分の 1 ミリ秒前は断り、ちょうどで通る〕・`source`・閉じた面／形式の替わった面への知らせ・結合 5 件）／sodactl（`--script-html-file`・`send`・unsupported）／web（`scriptHost.test.ts`＝土台、`focusGuard`・`focusOrigin`・`engageEntry`、`DisplayFrameScript.test.ts` 21 件、`DisplayScriptMark.test.ts`、`DisplayController`、`frame.js` の `foreign-focus`）／HttpServer（`script.html` のヘッダが設計の文字列と一致・`script-src` に `'self'` が無い・`frame.html` は不変）。
+
+## 実測した前提（tasks.md の「不確かな点」）
+
+| 前提 | 結果 |
+|---|---|
+| 差し込みで親から見た枠の `load` が 1 回のまま（点 7・u9。合否） | **1 回のまま**（1.5 秒見た）。インラインのスクリプトは文書の順・`DOMContentLoaded`/`load`/`<body onload>` が 1 回ずつ・`eval`・`new Function`・`<script type=module>` が動く |
+| 差し込みで、ふつうの HTML と大きなライブラリ（点 8・u5） | marked の UMD・Canvas のグラフ・**Chart.js 4.4.7**（205 KB）が動く（`display-script.spec.ts`。Chart.js は `SODA_E2E_CHARTJS` を渡したときだけ） |
+| 枠のスクリプトの `focus()` で親が気づいて戻せる（点 5・u1・u2） | **気づけて、戻せた**。親の `document.activeElement` が iframe になり、親が覚えた要素へ `focus()` し直すと戻った。**ただし**、枠から親の端末へ戻る途中（`focus`/`blur`/`focusout`）では `activeElement` がまだ iframe を指す（→ D32 の 3）。戻し先が `body` のとき: 利用者が選んでいる pane の端末へ戻り、打ったキーが届いた |
+| ［操作する］・`prefix+i` の後の `pointerup`/`mouseup`/`touchend`/`keyup` が枠へ届かない（点 10・u10） | **届かない**（3 つの入口で確認）。ただし `prefix+i` は xterm.js が `keyup` の中で自分へフォーカスを戻すので、始めるのを `keyup` の処理のあとにした（D32 の 4） |
+| アプリの CSP が、外の origin・`localhost` への枠の移動を止めるか（点 6・u3） | **止めた**（下の実測） |
+
+## 「確かでない」の項目の実測（合否にしない）
+
+出力の `MEASURE …` から。**ほかのブラウザは未確認**。
+
+| 項目 | 結果 |
+|---|---|
+| WebRTC（`RTCPeerConnection`、STUN の宛先を待ち受けの UDP に） | **止まらなかった**: `offer` が作れ、UDP が **5 パケット**届いた。CSP の `webrtc 'block'` は「Unrecognized Content-Security-Policy directive 'webrtc'」で解釈されない |
+| `history.back()`・`go(-1)`・`go(-2)`・`pushState` | アプリのページの URL は変わらない（`#b` → `#b`）。枠自身の履歴が動いて枠が移り、面は `navigated` で閉じた（`history.length` は 4 → 5） |
+| `<link rel=dns-prefetch\|preconnect\|prefetch\|prerender\|modulepreload>` | 待ち受けへの **TCP 接続は届かなかった**（0・1.5 秒見た）。**`dns-prefetch` は DNS の問い合わせだけが外へ出るので、ループバックの待ち受けでは測れていない（出る前提で考える）** |
+| クリップボード | 操作を始めて枠の中をクリックする前: `execCommand("copy")` は `false`。クリックした後: **`true` で、クリップボードが書き換わった**（`readText` が `copy-me`）。`navigator.clipboard.writeText` は前後とも `NotAllowedError` |
+| 音 | 前: `AudioContext` が `suspended`・`audio.play()` が `NotAllowedError`。クリックの後: `AudioContext` が `running`・`play()` が成功（**止まらなかった**） |
+| 全画面・Picture-in-Picture | `requestFullscreen` は拒否（`TypeError`）。`document.pictureInPictureEnabled` は偽（**止まった**） |
+| `window.name` | 同じ origin の移った先で `carried-secret` が**読めた**（運べる） |
+| 兄弟の枠（ほかの面）への `postMessage`・`MessagePort` の受け渡し | **届く**（兄弟が `hello-from-a`・port を受け、port 越しの `over-port` も受けた）。`display.action` にはならなかった（`display-script-isolation`） |
+| 兄弟の枠の `location` の読み書き | **止まった**（どちらも `SecurityError`。書き換えられた側の面が閉じる筋は、書き換えられないので空振り） |
+| 兄弟の枠への `focus()` | 呼べる（例外なし）が、**フォーカスは兄弟へ移らなかった**（親の `activeElement` を 5ms ごとに記録: `TEXTAREA` のみ）。利用者が操作を始めて枠の中をクリックした直後（ユーザー操作の後）に呼んでも、移らなかった（`IFRAME[script]` のまま）。→ 限界 12 のフォーカスの部分は「止まった」。静的な枠の `foreign-focus` の戻し処理は、このブラウザでは E2E で通らない（単体で確かめた） |
+| `focus-without-user-activation=()` | **効かない**（コンソール「Origin trial controlled feature not enabled」） |
+| 枠が外の origin（待ち受け）・`localhost` の別のポート・応答が 204 の宛先へ `location.href` | 5 試行とも**待ち受けに要求が届かなかった**（アプリの CSP が止める）。外・localhost・204 は面が閉じた（`navigated`）。`window.stop()` を直後に呼んだ 2 試行（204・応答しない口）は、面が**閉じずに残った**（枠の文書は生きていた）。文書を置き換えない移動で `load` が起きるかは、CSP が先に止めるので測れなかった |
+| 隔離の探り（`display-script-isolation`） | `parent.document`・`top.document`・`cookie`・`localStorage`・`sessionStorage`・`indexedDB`・兄弟の `document`・`top.location`/`parent.location` の読み書き・Service Worker は `SecurityError`。外への `fetch`/XHR/`WebSocket`/`EventSource`/画像/`link`/`script src`/フォント/フォーム/`window.open`/`a target=_blank`/`alert`/`confirm`/`prompt`/ダウンロードは、待ち受けに 0。試みた 6 件の要求は `csp` で失敗。**同じ origin の `<script src="/display-view/frame.js">` も読めなかった**。`Worker(blob)` は作れたが、外への要求は 0 |
+| 閉じるまでに枠へ入ったキーの数（限界 1） | 15ms おきにキーを打ち、20ms おきにフォーカスを取る中身: 打った 21 キーのうち**枠に入ったのは 1 つ**、20 は pane に届いた（軽い負荷。下限） |
+| 重いスクリプト（15 秒の同期ループ） | 約 10 秒で `unresponsive` で閉じた（冷却に入らない）。アプリのページへの問い合わせは遅れなかった（最大 27ms。サンプルは粗い） |
+| 裏に回しても閉じないか（(vi)） | ヘッドレスでは別のタブを前に出しても `visibilityState` は `hidden` にならなかった（`visible` のまま）。見えない状態を `visibilityState` の上書きで再現して 30 秒置いたところ、閉じず、`display.report` も送られなかった |
+| 端末を押して操作を終えるとき、枠が `blur` の中で `focus()` を呼び返す中身（(x)） | このブラウザでは、フォーカスは端末へ移り、横取りとしては数えられなかった（報告 0）。`pointerdown` の備えは、移らないブラウザ向け（単体で確かめた） |
+| 変換中（IME）の文字の行方 | **測れなかった**（ヘッドレスの Chromium に IME が無い） |
+
+
+## E2E の件数
+
+`display*.spec.ts` の全部（PR2 の分を含む）＋スクリーンショットの spec を 1 回流した結果: **98 件が通り、2 件が落ちた**。2 件とも PR3 の変更で古くなった PR2 の筋で、直して通った:
+- `display-isolation (10)`: 「未知の形式」に `script-html` を使っていたが、PR3 から既知の形式。未知の形式を 2 つ（`future-x`・`future-y`）にした。
+- `display-flows (2)`: 入力途中の欄の値の保持。`fill()` はポインタ無しでフォーカスを入れるので、静的な枠は「よそからフォーカスが来た」（`foreign-focus`）と見て親が戻し、間欠的に落ちた。利用者は押すか `Tab` で入るので、`click()` してから `fill()` に直した（5 回続けて通った）。
+  **補足**: ポインタもキーも使わずにスクリプトでフォーカスを入れる自動操作（Playwright の `fill`・`focus()`）は、静的な枠でも、利用者の入力ではないものとして元の場所へ戻される。
+既存の E2E の `key-bindings`・`workspace-tab-pane`・`mobile` は流していない（触っていないため。既知の失敗の対象）。スクリーンショットは `/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/display-pr3/`（01 覆いのあるグラフのパネル・02 操作中・03 フォーカスを取り続ける面・04 閉じたあとのトースト）。
+
+## 負の対照（T30。生の結果）
+
+対策を外した版を作り、対応するテストが落ちること・戻して通ることを確かめた（`mutate.py`/`neg.py` の記録。落ちたテストの名前は先頭の部分）。
+
+| 版 | 外した結果 | 戻した結果 |
+|---|---|---|
+| (m) サーバが回数を面の id ごとに数える | server 単体・結合 5 件が落ちた（「3 回目で全部閉じる」「close→set の後の 1 回で閉じる」「2 つの接続から」ほか） | 通った |
+| (h5) `report` を操作の桶で捨てる | 「操作の桶を空にした直後の report が数えられる」が落ちた | 通った |
+| (h6) 面の無い知らせを paneId・format を見ずに `display_closed` で捨てる | server 単体・結合 7 件が落ちた | 通った |
+| (j) 受け口の `displaySendOp` が引数の `paneId` を対象にする | 「pane A を名乗って pane B の面へ send できない」が落ちた | 通った |
+| (f) 枠の sandbox 属性と応答ヘッダの**両方**に `allow-same-origin` | `display-script-isolation` の隔離の筋が落ちた | 通った |
+| (f) 属性だけ／(f2) 応答ヘッダだけ | **落ちなかった**（sandbox は累積で、もう片方が止める。二重の守り） | 通った |
+| (i) CSP の `default-src` を `*` | 隔離の筋が落ちた | 通った |
+| (i2) `script-src` に `'self'` を足す | 「同じ origin の `<script src>` が読めない」で隔離の筋が落ちた | 通った |
+| (h) `load` の回数の検知を外す | `display-script-nav` の (i)(ii)(viii)×2・reload の 5 件が落ちた | 通った |
+| (g1) 横取りの検知（戻す・知らせる）だけを外す（覆いは残す） | (5)(i) が落ちた（面が閉じない） | 通った |
+| (g2) 覆いだけを外す（検知は残す） | (7)「覆いがある間、枠の中のボタン・覆いを押しても始まらない」が落ちた | 通った |
+| (g3) 操作の開始を押した時点で行う | (7)「始めた押下の残りが枠に届かない」が落ちた | 通った |
+| (k) 枠からの `key` を操作中でなくても受け、prefix も受ける | `focusGuard`・`DisplayFrameScript` の単体が落ちた | 通った |
+| (l) 戻す先を、覚えた元の場所でなく面の pane の端末にする | (vi)（フォーカスが 2 つ目の pane の端末に戻る）が落ちた（`Expected: 1 / Received: 0`）。最初は typing だけを見ていて**落ちなかった**ので、DOM の `activeElement` を見る筋に強めた | 通った |
+| (l2) 元の場所の追跡が、枠・覆い・［操作する］も覚える | `focusOrigin` の単体が落ちた | 通った |
+| (n) 枠の鍵から形式と版を外す／(n2) `DisplayFrame` が形式の変化で作り直さない | **どちらか片方だけでは落ちなかった**（(n) は E2E、(n2) は単体で、もう片方が止める。n2 の単体は落ちた）／**両方外すと** (3b) が落ちた | 通った |
+| (o) 静的な枠の `foreign-focus` の戻し | 単体が落ちた。**E2E は落ちない**（このブラウザは、兄弟へのフォーカスが移らない） | 通った |
+| (p) 操作を終える判定から「`activeElement` が枠でなくなった」を外す | `focusGuard` の単体が落ちた | 通った |
+| (p2) 操作中に枠でない場所を押したら操作を終える処理（`pointerdown`）を外す | 単体が落ちた。**E2E は落ちない**（このブラウザは、端末を押すとフォーカスが端末へ移る） | 通った |
+| (h4) `render` を形式・版の一致を見ずに送る | `DisplayFrame`・`DisplayFrameScript` の単体 2 件が落ちた | 通った |
+| (h7) 通り道と `render` を最初の `load` を待たずに渡す | 「display-ready が load より先でも、load の前には送らない」が落ちた | 通った |
+| (h8) `display-ready` の合い札を確かめない | 合い札の単体 2 件が落ちた | 通った |
+| (h10) 片づけのときの横取りの知らせを外す | 単体が落ちた | 通った |
+
+**実行していない版**: (h3)（土台が `document.open(); document.write()` で入れる）——設計は「`load` が 2 回になるブラウザでだけ落ちる」としていて、土台を書き換える手間が大きいので、実行していない。(h9)（合い札の合う 2 回目の合図を受ける）——`phase` の検査と `readySeen` の二重で、片方だけ外しても落ちない作り。(h5) の画面側（`report` を `sendAction` の頻度の制限に入れる）は、`DisplayController.test.ts`「100 回続けても全部送る」が見る。
+
+
+## PR3 の独立レビューを受けた直し（D33）
+
+レビュー: must 0・should 4・nit。直した内容は `decisions.md` D33。**直す前（レビュー前の版）に新しい E2E を流した生の出力**（`display-script-review.spec.ts`。6 件中 4 件が落ちた。落ちなかった 2 件は、直す前から成り立つ対照）:
+
+```
+  ✘  1 (レビュー 1) スクリプトの面が載っていないとき: 静的な面の欄へプログラムでフォーカスを入れても、端末へ戻されない
+       Expected substring: "IFRAME"   Received string: "TEXTAREA"          ← 利用者の入力中の欄から追い出された
+  ✓  2 (レビュー 1) スクリプトの面が載っているとき: 静的な面へプログラムでフォーカスが入ると、元の場所へ戻される
+  ✘  3 (レビュー 2) 単発: window.focus(); parent.focus() … 元の場所へ戻り、打った文字が端末に届く。取られた回数が進む
+       Expected: >= 1   Received: 0                                         ← 検知されず、数えられない
+MEASURE focus-drop-loop: typed=91 reached-pane=0 steal-reports=0            ← 91 キー打って pane に 0
+  ✘  4 (レビュー 2) 4ms ごとの繰り返し … 3 回で面が閉じ、その pane は冷却に入る
+       Expected: >= 3   Received: 0
+  ✓  5 (レビュー 2) 利用者が余白を押して端末からフォーカスが外れても、数えない
+  ✘  6 (レビュー 3) isComposing・Function.prototype.call を差し替えた中身でも、土台の Esc が効き、port は拾われず、［操作を終える］でも端末へ戻れる
+       Expected: visible（［操作を終える］が無い）
+```
+
+直した後: 6 件とも通り（`MEASURE focus-drop-loop: typed=75 reached-pane=75 steal-reports=9`）、レビュー 5 の E2E「知らせが見出しに重ならない」も通る。知らせを右下へ寄せる直しを外した版では、「`.pane-panel-head` と知らせが重ならない」で落ちる。
+
+- 追加した単体: `scriptHost.test.ts`（実行時に `.call`/`.apply`/`.bind`/配列メソッド/`for...of`/スプレッドを使わない静的な検査・`Function.prototype.call`/`apply`・`KeyboardEvent.prototype.isComposing`・`Object.prototype` の setter を差し替えても `Esc`・`ping`・`soda.action`・`onMessage` が動く・合成の `Esc` は取り次がない）、`focusDrop.test.ts`（6 件）、`DisplayFrameScript.test.ts`（スクリプトの枠が載っていないと `foreign-focus` で戻さない・ウィンドウから戻った直後は戻さない・載っているときは戻す）。
+- `display-flows (2)` は、`click()` を先に入れた直しを取り消し、元の `fill()` だけで通ることを確かめた（スクリプトの面が載っていない状態）。
+- 実測の言い直し（docs と突き合わせた）: `dns-prefetch` は「TCP の接続が届かなかった。DNS の問い合わせが外へ出るかは測れていない」。兄弟の枠への `focus()` は「呼べるが、Chromium 153 では移らなかった」。そのほかの行（WebRTC・クリップボード・音・`window.name`・`postMessage`/`MessagePort`・`location`・全画面・PiP・外への移動・隔離の探り）は、docs の「止まった」「止まらなかった」と測定の出力が同じ向きであることを 1 項目ずつ確かめた。
+- 結果: `pnpm build`・`pnpm typecheck` 通過。`pnpm test` は 8640 件中 8637 件が通り、落ちたのは既知の `tui.integration.test.ts` の 3 件だけ。display の E2E は全部（PR2 の分を含む）通った（レビューの 6 件を足して 106 件。［操作を終える］の文言変更で落ちた 2 件の期待を直して通った）。
+
+
+### 再レビュー（指摘 2 の直し残り）を受けた、フォーカスの脱落の作り直し（D34）
+
+**直す前（D33 の版。クリックの直後 1 秒は戻しも数えも止め、数え先は選択中の pane の最初の面）に、新しい E2E を流した生の出力**（8 件中 6 件が落ちた。落ちなかった 2 件は、利用者が余白を押した・ダイアログ／pane を閉じた、の対照）:
+
+```
+  ✘ 単発: window.focus(); parent.focus() … 数えず、面は閉じず、冷却に入らない        Expected: 0   Received: 1   ← 数えて、サーバへ知らせた
+MEASURE focus-drop-loop-4ms: typed=70 reached-pane=70
+  ✘ 4ms ごとの繰り返し … 面は自動では閉じず・冷却に入らず、利用者への知らせが出る  Expected: 0   Received: 3   ← 面が閉じ、冷却に入った
+MEASURE focus-drop-rounds: interval=300ms cumulative-reached=[3,5,6,11,14,15]
+MEASURE focus-drop-after-click: interval=300ms typed=60 reached-pane=15 lost=45
+MEASURE focus-drop-rounds: interval=500ms cumulative-reached=[7,12,17,22,26,30]
+MEASURE focus-drop-after-click: interval=500ms typed=60 reached-pane=30 lost=30
+MEASURE focus-drop-rounds: interval=900ms cumulative-reached=[10,16,20,22,23,33]
+MEASURE focus-drop-after-click: interval=900ms typed=60 reached-pane=33 lost=27
+  ✘ 実測（300・500・900ms）: 失われるキーは少数 … Expected: > 48   Received: 15 / 30 / 33
+  ✘ 無関係な pane を冷却に入れない（p1 に無害な面・p2 に落とす面） … Expected: 0   Received: 11   ← 11 件の focus_steal が送られ、p1 の面が閉じた
+  ✓ 不要な戻しが起きない: 余白 / キー一覧・分割して閉じる
+```
+
+**直した後の実測**（`MEASURE`。**失われた数**）: 本物のクリックの後に 10 キーずつ 6 回（60 キー。準備の 1 回は数えない）。
+
+| 落とす間隔 | 打った | 端末に届いた | 失われた |
+|---|---|---|---|
+| 300ms | 60 | 60 | **0** |
+| 500ms | 60 | 60 | **0** |
+| 900ms | 60 | 60 | **0** |
+| 4ms（繰り返し。4 秒間） | 50〜54 | 46〜49 | 4〜7 |
+
+（見回り 25ms・キー間隔 25ms の軽い負荷。0 を保証するものではない。再レビューの手順で、直す前は 51・46・40 が失われたのと対応する。）合否の線は、届いた割合が 80% を超えること（上の実測の 0 から余裕を見た。イベントの時機で数キーは失われうる）。
+一緒に、フォーカスの脱落が**数えられず・サーバへ知らせず**、p1 の無害な面・p2 の落とす面のどちらも**冷却に入らず、p1 の面が閉じない**こと、4ms ごとの繰り返しで**利用者への知らせが出る**こと、余白を押して外したフォーカスが**端末へ引き戻されない**こと（`BODY` のまま）、キー一覧のダイアログを開いて閉じる・pane を分割して閉じる、のあとに不要な戻しが起きず（知らせも出ない）フォーカスは利用者の側（`TEXTAREA`）にあることを確かめた。
+単体: `focusDrop.test.ts`（9 件）。ask のダイアログ・モバイルの重ね表示を閉じる筋は E2E にしていない——どちらも「フォーカスのあった要素が文書から外れた」で同じ判定（`isShown`）に入るので、単体で見る（外れた・隠れた要素は戻さない）。
+
+
+## 第 3 回の再レビューの直し（遮断器・覆いの判定）と、設定による有効化（D35・D36。2026-10-08）
+
+### 直す前（96ed5fb）に新しい E2E を流した結果（8 件中 5 件が落ちた）
+
+- 4ms の遮断器: 遮断器が無く、落とし続けて入力が妨げられた。
+- 覆いをクリックした直後（400ms ごとに落とす面）: 60 キー中 **39 が失われた**（届いたのは 21）。
+- `requestAnimationFrame` の毎フレーム・`MessageChannel` の連鎖: 遮断器が無いので打ったキーの大半が届かない（reviewer の実測: MC 80 中 42、rAF は 21 に 1 つ）。
+
+### 直した後の実測（Chromium 153.0.8010.12）
+
+| 筋 | 打った | 届いた | 失われた |
+|---|---|---|---|
+| 300ms ごとの落とし | 60 | 60 | 0 |
+| 500ms | 60 | 60 | 0 |
+| 900ms | 60 | 60 | 0 |
+| 覆いをクリックした直後（400ms ごと） | 60 | 60 | 0 |
+| `requestAnimationFrame`（遮断器の後） | 20 | 20 | 0 |
+| `MessageChannel`（遮断器の後） | 20 | 20 | 0 |
+| 4ms ごと | 約 70 | 約 70 | 1 未満 |
+
+遮断器の線（3 秒に 15 回）の根拠: ふつうの操作は戻し 0 回、300ms ごとの落としは 3 秒に約 10 回（止めない・知らせだけ）、100ms ごとで約 30 回、rAF・MC は 100 回超（止める）。遮断器の作動後の画面は `scratchpad/display-pr3/05-breaker-*.png`。
+
+### 設定（`displayScriptEnabled`。既定は無効）
+
+- 単体: server 182・cli 317・client-core 835・web（components・display・mobile・store）1656 のうち、設定に関わる筋（無効の `set`・`send`、`--features` の `scriptEnabled`、有効 → 無効で `script_disabled` で閉じる、`pane.sock` から `prefs.*` が断られる、画面の二重の守り、スイッチ）が通る。
+- E2E: `display-script-setting.spec.ts`（既定は無効で `set` が終了コード 1・`display_script_disabled`、静的な形式は出る／設定の画面の切り替えで出る・消える）。既存のスクリプトの E2E は `enableScript` で有効にして開始。
+
+### 全体
+
+- `pnpm build`・`pnpm typecheck`: 誤りなし。
+- `pnpm test`: 8653 件が通り、失敗は既知の `packages/server/src/tui.integration.test.ts` の 3 件のみ（main でも落ちる）。
+- E2E（display と settings を含む指定）: 161 件が通り、8 件が落ちた（`appearance-settings` 2・`settings.spec` 2・`theme-settings` 4）。**この作業の変更を戻した状態（96ed5fb）でも同じ 8 件が落ちる**（Chromium 153 の CSP 〔`unsafe-eval`〕と時計・設定の保存まわりで、この作業とは別）ので、退行ではない。display 系の E2E は全部通った。
+
+## 第 4 回の再レビューの直し（D37。2026-10-08）
+
+- **脱落の検知の印**: 枠が `activeElement` になっただけでは印を捨てない（利用者が操作を始めた枠のときだけ捨てる）。枠ごとの番の戻しも遮断器の数に入れる。状態の遷移の表（12 行）は D37。
+- 単体（`focusDrop.test.ts` 18 件）: 見回りの位相（枠を先に見る／`body` を先に見る）、交互に来る面で遮断器が働く、枠ごとの番の戻しを数える（二重に数えない）、操作中の枠、別のウィンドウから戻った直後、遮断器の後の遅れた戻し。**直す前の挙動に戻すと 3 件が落ちる**（枠 → body で戻さない、位相、交互）。
+- E2E（再レビューの手順＝端末をクリック → 面を出して**すぐ** 80 キー、を 3 回）:
+
+| 面 | 回 | 打った | 直後に届いた | 遮断器 | 止めた後の 20 キー |
+|---|---|---|---|---|---|
+| requestAnimationFrame | 0/1/2 | 80 | 78/78/77 | 毎回働いた | 20/20/20 |
+| MessageChannel | 0/1/2 | 80 | 79/79/78 | 毎回働いた | 20/20/20 |
+
+  **E2E は直す前でも通った**（直す前の dist で rAF 79/76/76、MC 79/80/79 が届き、遮断器も働いた）。この環境では、見回りの位相が毎回この穴に入るとは限らない（レビューの 0/80 は位相しだい）。時機に頼らず直す前に落ちるのは単体テスト側。枠が取る・body へ落とすを別のフレームに交互にする変形は、枠ごとの番が戻すので入力は失われず（80/80）、サーバの focus_steal の数え・面の閉じで終わるため、遮断器の通知の期待は置かなかった。
+- 有効になったことの知らせ: 結合（`composeServer.climode.integration.test.ts`: `byKind: "external"`・ログ 1 行・有効のままの別の変更では増えない）、単体（`displayLabel.test.ts`）。
+- 全体: `pnpm build`・`pnpm typecheck` 誤りなし。`pnpm test` は 8663 件が通り、失敗は既知の `tui.integration.test.ts` の 3 件のみ。display の E2E は 119 件中 117 件が通った。落ちた 2 件（`display-flows` の prefix+i、`display-isolation` の form 取り除き〔49.8s の時間切れ〕）は、単独で流し直すと 14 件とも通った（全体を並列で流したときの負荷による揺れ。この変更とは関係しない）。
+
+## 第 5 回の再レビューの直し（D38。状態を持たない作り。2026-10-08）
+
+**手順（再レビューと同じ）**: 面を先に出す → 端末を本物のクリック（`.xterm-screen`）→ すぐ 80 キー（25ms 間隔）。`display-script-drop.spec.ts`、各 5 回、`--workers=1`、Chromium 153。
+
+**直す前（`f403edf`）で落ちた出力**（15 回の高頻度の面のうち 10 回が 0/80）:
+
+```
+MEASURE drop-first raf #0..#4: typed=80 reached=0 frames-after=1 active=BODY      (5/5 が 0/80)
+MEASURE drop-first mc  #0: reached=80  #1: reached=80  #2: reached=0 frames-after=1 active=BODY  #3: 80  #4: 80   (1/5 が 0/80)
+MEASURE drop-first interval4 #0: 0  #1: 0  #2: 80  #3: 0  #4: 0   (4/5 が 0/80。activeElement=BODY・枠は残り・遮断器は働かない)
+MEASURE drop-first interval300 #0..#4: reached=79,80,79,79,79 frames-after=1   (遮断しない。届く)
+  ✘ 余白（タブバー・サイドバーの空き）を押す: 端末へ戻る …  （直す前は BODY のまま）
+13 passed, 11 failed
+```
+
+**直した後**（同じ手順・同じ回数）:
+
+| 面 | 届いた（5 回） | 遮断器 |
+|---|---|---|
+| requestAnimationFrame | 80, 79, 79, 79, 80 | 毎回働いた（枠 0） |
+| MessageChannel | 80 ×5 | 毎回働いた |
+| setInterval 4ms | 80 ×5 | 毎回働いた |
+| setInterval 300ms | 80, 80, 79, 80, 79 | 働かない（枠 1。戻すだけ） |
+
+24 件すべて通った。面が既に落としている状態（300ms ごと）での、覆いを押す／余白を押す／別の pane の端末を押す／設定を開いて閉じる、の 4 件も通った（30 キー中 26 以上が届き、余白を押したあとの `activeElement` は端末）。クリックが先・面が後の順（既存）: 300ms・500ms で 60/60、900ms で 59/60、覆いを押した直後（400ms ごと）で 59/60、4ms で 66/67。遮断器の後の 20 キーは rAF・MC とも 20/20。
+**単体**（`focusDrop.test.ts`）: 見回りの状態（`activeElement` body／アプリの要素／枠、文書のフォーカスの真偽、操作中の枠の有無、戻し先の 生きている／外れた／隠れた／無い）の表 9 行と、戻さない結果のあとに状態が変われば次の見回りで戻すこと、位相に依らない交互、押下の直後でも戻すこと、遮断器（ゆっくり・1 秒に 1 回の余白・交互・`noteFocusRestored`・遅れた戻し）。
+**全体**: display の E2E 全部を `--workers=1` で 143 件 / 143 件が通った（10.6 分）。`pnpm build`・`pnpm typecheck` 誤りなし。`pnpm test` は 8662 件が通り、失敗は既知の `tui.integration.test.ts` の 3 件と、並列実行の負荷で揺れた `notifications.test.ts` の 1 件（単独で 2 回流すと 32/32 通る。この変更と無関係）。
+
+## main の取り込みと戻しすぎの確認（2026-10-08。6 回目の再レビューの後）
+
+- `git merge origin/main`（tab の D&D・pane の移動の制限）は衝突なしで取り込めた（`bbc5b60`）。
+- **足した E2E**（`display-script-noreturn.spec.ts` 18 件〔面 2 通り × 9 場面〕、`display-script-noreturn-mobile.spec.ts` 2 件。面は、何もしない無害な面〔benign〕と、300ms ごとに `window.focus(); parent.focus()` する面〔drop300〕）: ask のダイアログ（キーで選ぶ・欄に打つ・端末へ漏れない）、tab のドラッグ、pane の名前のドラッグ（別の pane の縁・サイドバーの行）、つまみ（パネルの幅・pane の間・サイドバーの幅）、名前の変更（入力欄）、右クリックのメニューのキー操作、キー一覧、copy モードの検索、モバイルの重ね表示。
+- 結果: **引き戻し（端末へ戻される）は、どの場面でも起きなかった**。ただし **1 件の別の穴**を見つけた（D39）: drop300 の面が載っていると、ask のダイアログの中の入力（`<ask-form>` の Shadow DOM の中）のフォーカスが body へ落ちたまま戻らない。この筋だけ `test.fixme` にした。
+- 全体: `pnpm build`・`pnpm typecheck` 誤りなし。`pnpm test` は 8744 件が通り、失敗は既知の `tui.integration.test.ts` の 3 件のみ。display・tab-dnd・pane-move-scope の E2E を `--workers=1` で 184 件中 182 件が通り、1 件が fixme、1 件が失敗: `display-flows` の `(13) prefix+i`（30 秒の時間切れ。単独で 3 回流すと 3 回とも通る。長く流した後に揺れる〔前の並列実行でも同じ件が落ち、単独で通った〕）。
+
+## D39 の直し（Shadow DOM の戻し先。2026-10-08）
+
+- 実測（`--workers=1`、drop300）: ask の欄に 40 文字 — 25ms 間隔で 39〜40（2 回: 40, 39）、50ms 間隔で 38〜40（38, 40）。radio に矢印キー 8 回 — 7〜8（7）。無害な面は 40/40・8/8。端末の 300ms ごとの落としは 78〜80/80。
+- E2E（`--workers=1`）: `display-script-noreturn`・`display-script-drop`・`display-script-review`・`ask-*` の 179 件が通った（fixme なし）。`pnpm build`・`pnpm typecheck` 誤りなし。`pnpm test` は 8749 件が通り、失敗は既知の `tui.integration.test.ts` の 3 件のみ。

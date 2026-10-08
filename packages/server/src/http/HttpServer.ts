@@ -74,8 +74,20 @@ const ASK_VIEW_FILES: Record<string, { type: string; csp?: string }> = {
  */
 export const DISPLAY_VIEW_CSP =
   "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'";
-const DISPLAY_VIEW_FILES: Record<string, { type: string; csp?: string }> = {
+/**
+ * スクリプトが動く形式（`script-html`）の枠の頁 `script.html` の CSP。静的な形式の `DISPLAY_VIEW_CSP` とは**別の定数**（ヘッダ・ページを共有しない）。
+ * - `script-src 'unsafe-inline' 'unsafe-eval'`（**`'self'` は付けない**。土台のスクリプトは頁の中に書く。同じ origin の URL を `<script src>` で読めなくする）。
+ * - `sandbox allow-scripts` だけ（`allow-same-origin`・`allow-forms`・`allow-popups`・`allow-modals`・`allow-downloads`・`allow-top-navigation` は付けない）。
+ * - `default-src 'none'`（外へ繋がない）・`webrtc 'block'`（解釈するブラウザだけ止まる）。
+ */
+export const DISPLAY_SCRIPT_VIEW_CSP =
+  "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; webrtc 'block'";
+/** スクリプトの枠に付ける `Permissions-Policy`（解釈するブラウザだけ効く）。`focus-without-user-activation=()` は、利用者の操作なしの `focus()` そのものを止める（効くかは実測）。 */
+export const DISPLAY_SCRIPT_VIEW_PERMISSIONS =
+  "camera=(), microphone=(), geolocation=(), display-capture=(), clipboard-read=(), clipboard-write=(), fullscreen=(), picture-in-picture=(), focus-without-user-activation=()";
+const DISPLAY_VIEW_FILES: Record<string, { type: string; csp?: string; headers?: Record<string, string> }> = {
   "frame.html": { type: "text/html; charset=utf-8", csp: DISPLAY_VIEW_CSP },
+  "script.html": { type: "text/html; charset=utf-8", csp: DISPLAY_SCRIPT_VIEW_CSP, headers: { "Permissions-Policy": DISPLAY_SCRIPT_VIEW_PERMISSIONS } },
   "frame.js": { type: "text/javascript; charset=utf-8" },
   "sanitize.js": { type: "text/javascript; charset=utf-8" },
 };
@@ -158,7 +170,7 @@ export class HttpServer {
     pathname: string,
     prefix: string,
     dir: string,
-    files: Record<string, { type: string; csp?: string }>,
+    files: Record<string, { type: string; csp?: string; headers?: Record<string, string> }>,
   ): Promise<void> {
     const name = pathname.slice(prefix.length);
     const entry = Object.hasOwn(files, name) ? files[name] : undefined;
@@ -182,6 +194,7 @@ export class HttpServer {
       // 隔離表示のページ: 本体の CSP・X-Frame-Options を置き換える（枠を同じ origin の iframe に入れられるように）。
       res.setHeader("Content-Security-Policy", entry.csp);
       for (const [k, v] of Object.entries(ASK_VIEW_PAGE_HEADERS)) res.setHeader(k, v);
+      for (const [k, v] of Object.entries(entry.headers ?? {})) res.setHeader(k, v);
     } else {
       // スクリプトの読み込みだけ（本体の CSP・枠の禁止は文書にだけ意味がある）。
       res.removeHeader("Content-Security-Policy");

@@ -38,6 +38,7 @@ import { ImagePaster } from "./term/ImagePaster.js";
 import { AskController } from "./ask/AskController.js";
 import { useAskStore } from "./store/ask.js";
 import { DisplayController } from "./display/DisplayController.js";
+import { scriptEnabledNoticeFor } from "./display/displayLabel.js";
 import { useDisplayStore } from "./store/display.js";
 import { FileTransfer, isFileDrag } from "./term/FileTransfer.js";
 import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
@@ -81,6 +82,7 @@ const session = useSessionStore(pinia);
 const view = useViewStore(pinia);
 const seen = useSeenStore(pinia);
 const settings = useSettingsStore(pinia);
+let lastScriptNoticeAt = -Infinity;
 // 保存した SSH のマシン（20260927-multi-host-machines）。モバイルの 1 列の画面では使わない（手元のマシンだけ。今までどおり）。
 // 1 列かは窓の幅で変わる（`App.vue` と同じ media query）ので、変化を購読する。
 const machines = useMachinesStore(pinia);
@@ -126,7 +128,16 @@ const storeAdapter = new StoreAdapter({
   // 画面の接続がローカルを向いているときだけ、手元の `soda serve` の一覧（リモートを向いていればそのマシンの登録簿なので捨てる）。
   onMachinesChanged: (list) => machineWiringBox.current?.onMainMachinesChanged(list),
   // 共有の設定（20260927-cli-mode）。`prefsSync` はこの後で作るので、遅延で参照する。
-  onPrefsChanged: (data) => prefsSyncBox.current?.onChanged(data),
+  onPrefsChanged: (data) => {
+    // 「スクリプトが動く表示」が無効 → 有効に変わったら、つながっている画面に知らせる。自分の画面で変えたときは、手元の値がもう真なので出ない。
+    const notice = scriptEnabledNoticeFor(data, settings.displayScriptEnabled);
+    // 有効 ⇄ 無効の繰り返しで連発しない（1 分に 1 回まで）。
+    if (notice !== null && Date.now() - lastScriptNoticeAt >= 60_000) {
+      lastScriptNoticeAt = Date.now();
+      view.toast(notice);
+    }
+    prefsSyncBox.current?.onChanged(data);
+  },
   // 連携のグラフ（20260927-agent-graph）は手元の `soda serve` のもの。画面の接続が別のマシンを向いている間の（そのマシンの）グラフは捨てる。
   onGraphEvent: (e) => {
     if (acceptsMainGraphEvent(machines.selectedId)) graph.applyEvent(e);
@@ -541,6 +552,11 @@ app.provide(DisplayHostKey, {
       },
       paneId,
     ),
+  focusedPaneId: () => view.focusedPaneId ?? null,
+  focusSelectedTerminal: () => {
+    const id = view.focusedPaneId;
+    if (id) registry.focus(id);
+  },
   injectPrefix: () => keys.injectPrefix(),
   prefixKey: () => {
     const k = router.prefixKeyInput();

@@ -318,14 +318,14 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
 
 ### PR3: スクリプトが動く形式（`script-html`）
 
-- [ ] T23: protocol の追加（上の「PR3 で変わる型・定数」の表の全部）: `DISPLAY_SCRIPT_FORMAT = "script-html"` を `DISPLAY_FORMATS` に足す（`DISPLAY_STATIC_FORMATS` と分ける）。`DISPLAY_SEND_MAX_BYTES`・`DISPLAY_SEND_RATE`・`DISPLAY_FOCUS_STEAL_MAX`・`DISPLAY_SCRIPT_COOLDOWN_MS`。`DISPLAY_FEATURES` に `format:script-html`・`send`、`DISPLAY_RENDER_FEATURES` に `script-html`、`DisplayRenderers.scriptHtml`、`DisplayLimits.sendBytes`、
+- [x] T23: protocol の追加（上の「PR3 で変わる型・定数」の表の全部）: `DISPLAY_SCRIPT_FORMAT = "script-html"` を `DISPLAY_FORMATS` に足す（`DISPLAY_STATIC_FORMATS` と分ける）。`DISPLAY_SEND_MAX_BYTES`・`DISPLAY_SEND_RATE`・`DISPLAY_FOCUS_STEAL_MAX`・`DISPLAY_SCRIPT_COOLDOWN_MS`。`DISPLAY_FEATURES` に `format:script-html`・`send`、`DISPLAY_RENDER_FEATURES` に `script-html`、`DisplayRenderers.scriptHtml`、`DisplayLimits.sendBytes`、
       閉じた理由に `focus_steal`、`display.action` の出来事に `source`。`/ws` の方式 `display.send`（`{paneId, name, data}`）と、受け口の `PANE_OP_DISPLAY_SEND`・`PaneDisplaySendParams`。`display.report` の `problem` に `focus_steal`（結果に `steals?`。引数の任意の `paneId`・`format` が、T10 でまだ入っていなければ、ここで足す）。イベント `display.message`。`checkDisplaySend(data)`（JSON にして 64 KiB 以下）。
       単体テスト（`script-html` が `checkDisplaySet` を通る・`send` のデータの上限のちょうどと超過・受け口の schema が `paneId` を拒否・`parseDisplayLine` が `source` つきの行を通す）。**静的な形式の定数・検査の動きを変えない**（既存のテストがそのまま通る）
       対象: `packages/protocol/src/display.ts`・`display.test.ts`、`packages/protocol/src/messages.ts`、`packages/protocol/src/paneSocket.ts`、`packages/protocol/src/events.ts`、各テスト
       依存: T2
       AC: AC23, AC29, AC31
       点検: あり
-- [ ] T24: server の追加: `DisplayService.send`（面があるか・`script-html` か・64 KiB・pane の `send` の桶・bus に `display.message`・保存しない・`delivered`）、出来事の `source`（面の形式から。静的な面の操作にも付ける）、`renderers().scriptHtml`、`features()` の値、
+- [x] T24: server の追加: `DisplayService.send`（面があるか・`script-html` か・64 KiB・pane の `send` の桶・bus に `display.message`・保存しない・`delivered`）、出来事の `source`（面の形式から。静的な面の操作にも付ける）、`renderers().scriptHtml`、`features()` の値、
       **pane ごとの取られた回数と冷却**（design「取られた回数と冷却」のとおり。`report` の `focus_steal` は、面を閉じずに pane の回数を 1 増やす〔`script-html` の面だけ。ほかは `invalid_params`〕・
       **`report` は頻度で捨てない**（操作の桶と分ける）・**面がもう無い・形式が替わっている場合も、知らせに添えられた `paneId`・`format` で、その pane に数える**（pane が無ければ `not_found`。面が残っていて pane が違えば `invalid_params`。サーバの側に、閉じた面の控えは持たない）・
       冷却に入るのは「3 回に達した」と「形式が `script-html` の枠について `navigated` が来た」の 2 つだけ・**冷却に入るとき、その pane の `script-html` の面を全部閉じる**・冷却の間は、その pane の `script-html` の `set`〔同じ名前の置き換えを含む〕を `display_busy` で断り、既にある面は変えない・静的な形式は出せる・回数は、冷却が明けたとき・pane が閉じたときだけ 0 に戻る・
@@ -340,12 +340,12 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       依存: T4, T23
       AC: AC14, AC29, AC31, AC32, AC34
       点検: あり
-- [ ] T25: sodactl の追加: `--script-html-file <パス>` と `--format script-html`、`display send <名前> (--json <JSON> | < 標準入力)`（どちらか 1 つ・JSON として読めない・64 KiB 超は使い方の誤り。結果は `{"status":"ok","delivered":n}`）。`script-html` の `set` と `send` は、送る前に `display.features` を見て、`format:script-html`・`send` が無ければ `unsupported`（終了コード 0）。
+- [x] T25: sodactl の追加: `--script-html-file <パス>` と `--format script-html`、`display send <名前> (--json <JSON> | < 標準入力)`（どちらか 1 つ・JSON として読めない・64 KiB 超は使い方の誤り。結果は `{"status":"ok","delivered":n}`）。`script-html` の `set` と `send` は、送る前に `display.features` を見て、`format:script-html`・`send` が無ければ `unsupported`（終了コード 0）。
       冷却で断られた `set`（`display_busy`）は、終了コード 1 で、理由の文をそのまま出す。`USAGE_LINES`・`Command`・`parseCommand`・`main.ts`・SKILL.md。単体テストと、結合テスト（実サーバ: ログインなしで `--script-html-file` の `set` → `send` → `/ws` の接続に `display.message`・`/ws` の経路でも同じ・`events` の `display.action` の行に `source`）
       対象: `packages/cli/src/cliArgs.ts`、`packages/cli/src/main.ts`、`packages/cli/src/commands/display.ts`・`display.test.ts`、`packages/cli/src/display.integration.test.ts`、`packages/cli/src/cliArgs.test.ts`、`packages/cli/skills/sodactl/SKILL.md`
       依存: T6, T24
       AC: AC29, AC36
-- [ ] T26: 土台のページと配信: `script.html`（`<meta charset>` と、**頁の中に直に書いた土台のスクリプト 1 つ**。別の `.js` にしない＝CSP の `script-src` に `'self'` を付けないため）。土台は、design「スクリプトが動く形式」の「枠と静的ページ」1〜6 と `window.soda`:
+- [x] T26: 土台のページと配信: `script.html`（`<meta charset>` と、**頁の中に直に書いた土台のスクリプト 1 つ**。別の `.js` にしない＝CSP の `script-src` に `'self'` を付けないため）。土台は、design「スクリプトが動く形式」の「枠と静的ページ」1〜6 と `window.soda`:
       読み込みの最後に、自分の URL の合い札 `t` を添えて `display-ready`・`display-init` は親から 1 回だけ・`ping` に `pong`・最初の `render` で、**`format` が `script-html` でなければ描かずに `rejected`**・`script-html` なら、`soda` を置き、`keydown` の取り次ぎ〔`Escape` だけ〕を**先に**付けてから、**中身を DOM に差し込む**（`document.open()`/`document.write()` は使わない。`DOMParser` で解釈して `head`・`body` の子を順に移し、`<script>` は同じ属性と中身で作り直して、文書の順に入れる）・
       差し込み終えたら `DOMContentLoaded` と `load` を 1 回ずつ起こす・`rendered`・2 回目以降の `render` は無視・`message`・`scroll`・`focus`。単体テストに、差し込みの順（インラインのスクリプトが文書の順に動く・`head` の `<style>` が効く・`DOMContentLoaded`/`load` の受け手が呼ばれる）を足す。
       `HttpServer` の許可リストに `script.html`（`DISPLAY_SCRIPT_VIEW_CSP`〔`script-src 'unsafe-inline' 'unsafe-eval'`。`'self'` なし。`webrtc 'block'`〕・`DISPLAY_SCRIPT_VIEW_PERMISSIONS`〔`picture-in-picture=()`・`focus-without-user-activation=()` を含む〕・`X-Frame-Options: SAMEORIGIN`）。定数を export。
@@ -355,7 +355,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       依存: T9, T23
       AC: AC29, AC30, AC37
       点検: あり
-- [ ] T27: web の追加（頁の選択・覆い・［操作する］・フォーカスの番・印）:
+- [x] T27: web の追加（頁の選択・覆い・［操作する］・フォーカスの番・印）:
       `framePage.ts` に `script-html` → `{ page: DISPLAY_SCRIPT_VIEW_PAGE, sandbox: DISPLAY_SCRIPT_VIEW_SANDBOX, kind: "script" }` を足す（定数もここから export。**頁と sandbox を決める場所を増やさない**）。
       `focusGuard.ts`（純粋な状態機械: `engaged`・`focused`。「操作中でないのに枠がフォーカスを持つ」に**変わった**ときだけ、「戻す・知らせる」を返す〔取られたままを見回りのたびに数えない〕。`acceptKey(key)` は、操作中の `escape` だけ真。回数で閉じる判断は持たない〔サーバが数える〕。知らせを送れない間だけ、画面の中で数えて 3 回で「この画面の枠を外す」）、
       元の場所の追跡（親の文書の `focusin`。**表示の枠〔どの面のものでも〕・覆い・［操作する］ボタンは覚えない**）、戻し方（覚えた要素へ `focus()`。無い・`body` なら `view.focusedPaneId` の端末。**戻ったかを確かめ**、だめなら `iframe.blur()` してもう 1 回、それでもだめなら、この画面の枠を外して固定の文言と［もう一度出す］）、
@@ -376,7 +376,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       依存: T13, T16, T17, T26
       AC: AC31, AC32, AC33, AC34, AC37, AC-I3, AC-I4
       点検: あり
-- [ ] T28: E2E（スクリプトが動く形式）。`display-script.spec.ts`:
+- [x] T28: E2E（スクリプトが動く形式）。`display-script.spec.ts`:
       (1) `--script-html-file` の中身のインラインのスクリプトが DOM を書き換え、`eval` が動く。`window.soda` がある（不確かな点 8）。**土台が中身を差し込んだ後も、`data-display-loads` が 1 のまま**（不確かな点 7。合否）。インラインのスクリプトが文書の順に動く・`DOMContentLoaded`/`load` を待つ部品が動く・`<body onload>` が動く（不確かな点 8）。
       操作を始めてからボタンを押すと、`soda.action("pick", {id:"3"})` が `wait` に `display.action`（`source: "script"`）の 1 行で届く。静的な `html` の面の操作は `source: "static"`。`soda.action` に規則の外の名前を渡すと `false` で、何も届かない、
       (2) `sodactl display send` のデータが `soda.onMessage` に届いて DOM に出る。**枠が作り直されていない**（iframe が同じ要素・スクリプトが持つカウンタが続いている）。同じ名前の `set` では作り直される。2 つのブラウザの両方に届く、
@@ -424,14 +424,14 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/e2e/src/specs/display-script.spec.ts`（新規）、`packages/e2e/src/support/display.ts`
       依存: T19, T25, T27
       AC: AC29, AC30, AC31, AC32, AC33, AC34, AC36, AC37
-- [ ] T29: 文書（スクリプトが動く形式）: `docs/display.md` に節を足す: 使い方（`--script-html-file`・`send`・`soda.action`・`soda.onMessage`・`soda.theme`・ライブラリは中身に埋める・`set` し直すと作り直される・後から `document.write` し直さない・`message` を受けるなら送り主を確かめる）・**静的な形式との使い分け**（信頼できない中身は `html` で出す）・固定の印・
+- [x] T29: 文書（スクリプトが動く形式）: `docs/display.md` に節を足す: 使い方（`--script-html-file`・`send`・`soda.action`・`soda.onMessage`・`soda.theme`・ライブラリは中身に埋める・`set` し直すと作り直される・後から `document.write` し直さない・`message` を受けるなら送り主を確かめる）・**静的な形式との使い分け**（信頼できない中身は `html` で出す）・固定の印・
       **操作の始め方**（枠の外の［操作する］か `prefix+i`。枠を押しても始まらない）と操作中の表示・出来事の `source`・**できること・できないこと**（design の表の形で。**「止まる」と書くのは、T28 (4) で確かめた項目だけ**。確かめたブラウザの名前と版を添え、「確かでない」の行は実測の結果で書く。確かめていないブラウザは「未確認」）・
       **3 つの備え**（回数は pane ごとにサーバが数える・3 回で、その pane のスクリプトが動く面を全部閉じて 5 分出せない・入る条件の表）と、**残る限界 1〜12**（design の文面を、利用者向けの言葉で、全部。T28 の実測〔枠へ入ったキーの数・外の origin と `localhost` への移動の要求が届いたか・`focus-without-user-activation` が効いたか〕を添える）・
       誤って閉じられる場合（限界 11）・画面が固まったときの消し方・上限（`send` 64 KiB）・新旧の表の行。`docs/sodactl.md`（コマンド一覧と、受け口の操作に `display.send`）、`docs/verification.md`、SKILL.md（エージェント向け: **外から取ってきた HTML を `script-html` で出さない**・`source: "script"` の操作を利用者の承認として扱わない）
       対象: `docs/display.md`、`docs/sodactl.md`、`docs/verification.md`、`packages/cli/skills/sodactl/SKILL.md`
       依存: T21, T28
       AC: AC27, AC32, AC34
-- [ ] T30: 負の対照（スクリプトが動く形式。test 工程で消化する）: 次の版で、対応するテストが落ちることを確かめ、戻して通ることも確かめ、生の出力を `test-result.md` に残す。
+- [x] T30: 負の対照（スクリプトが動く形式。test 工程で消化する）: 次の版で、対応するテストが落ちることを確かめ、戻して通ることも確かめ、生の出力を `test-result.md` に残す。
       (f) `DISPLAY_SCRIPT_VIEW_SANDBOX` と `DISPLAY_SCRIPT_VIEW_CSP` の両方に `allow-same-origin` を足した版 → T28 (4) の「`parent.document`・Cookie・`localStorage` が例外」が落ちる、
       (g) 覆いを出さず、横取りの検知（「戻す・知らせる」）も外した版 → T28 (5) が落ちる（面が閉じない・キーが枠に入り続ける）、(g1) **横取りの検知だけを外した版**（覆いと［操作する］は残す）→ T28 (5) が落ちる（覆いはポインタを止めるだけで、スクリプトの `focus()` は止めないことの確かめ）、
       (g2) 覆いだけを外した版（検知は残す）→ T28 (7) の「覆いがある間、枠の中のボタンを押しても始まらない」が落ちる、(g3) `engageEntry` が、押した時点（`pointerdown`・`keydown`）で始める版 → T28 (7) の「`pointerup`・`keyup` の受け手が呼ばれない」が落ちる、

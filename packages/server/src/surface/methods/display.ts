@@ -5,6 +5,7 @@ import {
   DisplayFeaturesParams,
   DisplayGetParams,
   DisplayListParams,
+  DisplaySendParams,
   DisplaySetParams,
   DisplaySubscribeParams,
   DisplayWaitParams,
@@ -41,6 +42,10 @@ export function registerDisplayMethods(surface: ControlSurface, deps: MethodDeps
   surface.register("display.features", {
     schema: DisplayFeaturesParams,
     handler: () => displays.features(),
+  });
+  surface.register("display.send", {
+    schema: DisplaySendParams,
+    handler: (_ctx, p) => displays.send(p.paneId, { name: p.name, data: p.data }),
   });
   surface.register("display.subscribe", {
     schema: DisplaySubscribeParams,

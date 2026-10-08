@@ -13,6 +13,15 @@ import {
   checkDisplaySet,
   displayLimits,
   parseDisplayLine,
+  checkDisplaySend,
+  DISPLAY_SCRIPT_FORMAT,
+  DISPLAY_STATIC_FORMATS,
+  DISPLAY_SEND_MAX_BYTES,
+  DISPLAY_SEND_RATE,
+  DISPLAY_FOCUS_STEAL_MAX,
+  DISPLAY_SCRIPT_COOLDOWN_MS,
+  DISPLAY_RENDER_FEATURES,
+  DISPLAY_REPORT_PROBLEMS,
   readDisplayInfo,
 } from "./display.js";
 import { PANE_SOCKET_MAX_LINE_BYTES } from "./paneSocket.js";
@@ -30,10 +39,17 @@ describe("checkDisplaySet", () => {
     expect(r).toEqual({ ok: true, value: base });
   });
 
-  it("書き手の側の形式は厳しく検査する（text・markdown・html を含み、知らない形式は拒否）", () => {
-    expect([...DISPLAY_FORMATS]).toEqual(expect.arrayContaining(["text", "markdown", "html"]));
+  it("書き手の側の形式は厳しく検査する（静的な 3 つと script-html を含み、知らない形式は拒否）", () => {
+    expect([...DISPLAY_FORMATS]).toEqual(["text", "markdown", "html", "script-html"]);
+    expect([...DISPLAY_STATIC_FORMATS]).toEqual(["text", "markdown", "html"]);
+    expect(DISPLAY_SCRIPT_FORMAT).toBe("script-html");
     for (const format of DISPLAY_FORMATS) expect(checkDisplaySet({ ...base, format }).ok).toBe(true);
-    expect(reason({ ...base, format: "script-html" })).toMatch(/format/);
+    expect(reason({ ...base, format: "script" })).toMatch(/format/);
+    expect(reason({ ...base, format: "script-html " })).toMatch(/format/);
+  });
+  it("script-html の中身も 2 MiB まで（ちょうどは通り、1 バイト超は拒否）", () => {
+    expect(checkDisplaySet({ ...base, format: "script-html", content: "a".repeat(DISPLAY_CONTENT_MAX_BYTES) }).ok).toBe(true);
+    expect(reason({ ...base, format: "script-html", content: "a".repeat(DISPLAY_CONTENT_MAX_BYTES + 1) })).toMatch(/too large/);
   });
 
   it("名前: 1〜32 文字の英数字と _ -", () => {
@@ -139,12 +155,35 @@ describe("checkDisplayAction", () => {
 });
 
 describe("parseDisplayLine", () => {
+  it("source つきの display.action の行を通す", () => {
+    expect(parseDisplayLine('{"type":"display.action","seq":1,"source":"script","action":"a"}')).toMatchObject({ source: "script" });
+  });
   it("知らない type・知らない項目を落とさず返す", () => {
     expect(parseDisplayLine('{"type":"display.action","seq":1,"extra":[1]}')).toEqual({ type: "display.action", seq: 1, extra: [1] });
     expect(parseDisplayLine('{"type":"future.thing","x":1}')).toEqual({ type: "future.thing", x: 1 });
   });
   it("JSON でない・type が無い・文字列でない・object でないものは null", () => {
     for (const line of ["", "x", "{", '{"a":1}', '{"type":1}', "[]", "null", '"display.timeout"', "1"]) expect(parseDisplayLine(line)).toBeNull();
+  });
+});
+
+describe("checkDisplaySend", () => {
+  it("JSON にして 64 KiB ちょうどは通り、1 バイト超は拒否", () => {
+    // JSON.stringify("…") は両端の引用符で 2 バイト
+    expect(checkDisplaySend("a".repeat(DISPLAY_SEND_MAX_BYTES - 2))).toMatchObject({ ok: true });
+    const over = checkDisplaySend("a".repeat(DISPLAY_SEND_MAX_BYTES - 1));
+    expect(over.ok).toBe(false);
+    if (!over.ok) expect(over.reason).toMatch(/too large/);
+  });
+  it("UTF-8 のバイト数で数える（日本語は 1 文字 3 バイト）", () => {
+    expect(checkDisplaySend("あ".repeat(Math.floor((DISPLAY_SEND_MAX_BYTES - 2) / 3))).ok).toBe(true);
+    expect(checkDisplaySend("あ".repeat(Math.floor((DISPLAY_SEND_MAX_BYTES - 2) / 3) + 1)).ok).toBe(false);
+  });
+  it("JSON にできない値（undefined・循環・BigInt）は拒否、null・数・配列・オブジェクトは通る", () => {
+    const cyc: Record<string, unknown> = {};
+    cyc.self = cyc;
+    for (const v of [undefined, cyc, 10n, () => 1]) expect(checkDisplaySend(v).ok).toBe(false);
+    for (const v of [null, 0, "s", [1, { a: 2 }], { a: [] }]) expect(checkDisplaySend(v)).toMatchObject({ ok: true });
   });
 });
 
@@ -161,7 +200,18 @@ describe("定数と limits", () => {
     expect(Math.ceil(DISPLAY_CONTENT_MAX_BYTES / DISPLAY_GET_CHUNK_BYTES)).toBe(3);
   });
   it("sodactl の機能の一覧（この版）", () => {
-    expect([...DISPLAY_FEATURES]).toEqual(expect.arrayContaining(["panel", "band", "format:text", "format:markdown", "format:html", "actions"]));
+    expect([...DISPLAY_FEATURES]).toEqual(
+      expect.arrayContaining(["panel", "band", "format:text", "format:markdown", "format:html", "format:script-html", "actions", "send"]),
+    );
+    expect([...DISPLAY_RENDER_FEATURES]).toEqual(["panel", "band", "actions", "script-html"]);
+  });
+  it("send・取られた回数・冷却の定数", () => {
+    expect(DISPLAY_SEND_MAX_BYTES).toBe(64 * 1024);
+    expect(DISPLAY_SEND_RATE).toEqual({ perSec: 20, burst: 20 });
+    expect(DISPLAY_FOCUS_STEAL_MAX).toBe(3);
+    expect(DISPLAY_SCRIPT_COOLDOWN_MS).toBe(300_000);
+    expect(displayLimits().sendBytes).toBe(DISPLAY_SEND_MAX_BYTES);
+    expect([...DISPLAY_REPORT_PROBLEMS]).toEqual(["navigated", "unresponsive", "focus_steal"]);
   });
 });
 

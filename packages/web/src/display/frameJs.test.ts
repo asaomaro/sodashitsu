@@ -180,4 +180,39 @@ describe("frame.js", () => {
     expect(() => f.port.onmessage!({ data: { type: "focus" } })).not.toThrow();
     expect(document.activeElement).not.toBeNull();
   });
+
+  it("よそからフォーカスが来たら foreign-focus を知らせる。直前の本物の pointerdown・親からの focus の知らせがあれば知らせない（isTrusted でない pointerdown は数えない）", () => {
+    vi.useFakeTimers();
+    try {
+      const f = boot();
+      f.init();
+      f.port.postMessage.mockClear();
+      // 1. 何も無し（兄弟のスクリプトが parent.frames[i].focus() で移した）
+      f.fire("focus", {});
+      expect(f.port.postMessage).toHaveBeenCalledWith({ type: "foreign-focus" });
+      // 2. 本物の pointerdown の直後
+      f.port.postMessage.mockClear();
+      vi.advanceTimersByTime(1000);
+      f.fire("pointerdown", { isTrusted: true });
+      f.fire("focus", {});
+      expect(f.port.postMessage).not.toHaveBeenCalled();
+      // 3. 本物でない pointerdown（中身が作ったもの）は数えない
+      vi.advanceTimersByTime(1000);
+      f.fire("pointerdown", {});
+      f.fire("focus", {});
+      expect(f.port.postMessage).toHaveBeenCalledWith({ type: "foreign-focus" });
+      // 4. 親からの focus の知らせの直後
+      f.port.postMessage.mockClear();
+      vi.advanceTimersByTime(1000);
+      f.port.onmessage!({ data: { type: "focus" } });
+      f.fire("focus", {});
+      expect(f.port.postMessage).not.toHaveBeenCalledWith({ type: "foreign-focus" });
+      // 5. 500ms 過ぎたら、また知らせる
+      vi.advanceTimersByTime(600);
+      f.fire("focus", {});
+      expect(f.port.postMessage).toHaveBeenCalledWith({ type: "foreign-focus" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

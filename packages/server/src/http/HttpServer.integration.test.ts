@@ -10,7 +10,7 @@ import { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import { DefaultLoginRateLimiter } from "../auth/LoginRateLimiter.js";
 import { MemoryLogger } from "../log/Logger.js";
 import { LOG_THROTTLE_MAX_LINES } from "../log/LogThrottle.js";
-import { DISPLAY_VIEW_CSP, HttpServer } from "./HttpServer.js";
+import { DISPLAY_SCRIPT_VIEW_CSP, DISPLAY_SCRIPT_VIEW_PERMISSIONS, DISPLAY_VIEW_CSP, HttpServer } from "./HttpServer.js";
 import { listenOnFreePort } from "../composeServerOnFreePort.js";
 
 /** 本物のサーバを 0 番で待ち受けさせ、割り当てられたポートを OriginPolicy に渡す。 */
@@ -254,7 +254,7 @@ describe("HttpServer — 表示の面の枠のページ（/display-view/*。2026
     webDistDir = await makeTempDir("soda-http-dist-display-");
     await writeFile(join(webDistDir, "index.html"), "<!doctype html><title>app</title>");
     await mkdir(join(webDistDir, "display-view"), { recursive: true });
-    for (const f of ["frame.html", "frame.js", "sanitize.js", "secret.txt"]) await writeFile(join(webDistDir, "display-view", f), `// ${f}\n`);
+    for (const f of ["frame.html", "script.html", "frame.js", "sanitize.js", "secret.txt"]) await writeFile(join(webDistDir, "display-view", f), `// ${f}\n`);
     await mkdir(join(webDistDir, "ask-view", "vendor"), { recursive: true });
     for (const f of ["markdown.html", "html.html", "keys.js", "links.js", "vendor/marked.umd.js"]) await writeFile(join(webDistDir, "ask-view", f), `// ${f}\n`);
   });
@@ -280,6 +280,39 @@ describe("HttpServer — 表示の面の枠のページ（/display-view/*。2026
       expect(csp.match(/script-src ([^;]*)/)?.[1]).toBe("'self'");
       expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
       expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("script.html のヘッダが design の文字列と一致する（script-src に 'self' が無い・sandbox は allow-scripts だけ・Permissions-Policy・X-Frame-Options）。frame.html は変わらない", async () => {
+    const s = await startServer(webDistDir);
+    try {
+      const res = await get(s, "/display-view/script.html");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      const csp = res.headers.get("content-security-policy")!;
+      expect(csp).toBe(
+        "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; webrtc 'block'",
+      );
+      expect(csp).toBe(DISPLAY_SCRIPT_VIEW_CSP);
+      expect(csp.match(/script-src ([^;]*)/)?.[1]).toBe("'unsafe-inline' 'unsafe-eval'");
+      expect(csp.match(/script-src ([^;]*)/)?.[1]).not.toContain("'self'");
+      expect(csp.match(/sandbox ([^;]*)/)?.[1]).toBe("allow-scripts");
+      expect(csp).not.toMatch(/allow-same-origin|allow-forms|allow-popups|allow-modals|allow-downloads|allow-top-navigation/);
+      expect(csp).toContain("webrtc 'block'");
+      expect(res.headers.get("permissions-policy")).toBe(
+        "camera=(), microphone=(), geolocation=(), display-capture=(), clipboard-read=(), clipboard-write=(), fullscreen=(), picture-in-picture=(), focus-without-user-activation=()",
+      );
+      expect(res.headers.get("permissions-policy")).toBe(DISPLAY_SCRIPT_VIEW_PERMISSIONS);
+      expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+      // 静的な形式の frame.html は T9 のまま（Permissions-Policy も付かない）
+      const frame = await get(s, "/display-view/frame.html");
+      expect(frame.headers.get("content-security-policy")).toBe(DISPLAY_VIEW_CSP);
+      expect(frame.headers.get("content-security-policy")).toContain("script-src 'self';");
+      expect(frame.headers.get("permissions-policy")).toBeNull();
+      expect(DISPLAY_VIEW_CSP).not.toBe(DISPLAY_SCRIPT_VIEW_CSP);
     } finally {
       await s.close();
     }
