@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BANDS_MORE_ROW_PX, panelWidth, visibleBands } from "./displayLayout.js";
-import { DOCK_H_MIN_PX, BAND_MIN_W_PX, BAND_SCRIPT_MIN_W_PX, TRAY_ROW_PX, resolvePaneDisplays, type LayoutInput } from "./paneDisplayLayout.js";
+import { PANEL_TB_MIN_W_PX, DOCK_H_MIN_PX, BAND_MIN_W_PX, BAND_SCRIPT_MIN_W_PX, TRAY_ROW_PX, resolvePaneDisplays, type LayoutInput } from "./paneDisplayLayout.js";
 
 const input = (over: Partial<LayoutInput> = {}): LayoutInput => ({
   paneW: 1000,
@@ -276,5 +276,15 @@ describe("resolvePaneDisplays — 4 つの側", () => {
     const r = resolvePaneDisplays(input({ panels: [side("f", 1, "right"), { ...panel("w", 2), dock: "float" }] }));
     expect(r.docks.right!.ids).toEqual(["f"]);
     expect(r.tray.buttons.map((b) => b.id)).toEqual(["w"]);
+  });
+  it("細い pane（PANEL_TB_MIN_W_PX 未満）では、上・下のパネルは自動でたたむ（見出しの固定の部品が最小の高さに収まらない）。左右には効かない", () => {
+    const ok = resolvePaneDisplays(input({ paneW: PANEL_TB_MIN_W_PX, panels: [side("t", 1, "top"), side("b", 2, "bottom")] }));
+    expect(ok.auto).toEqual([]);
+    expect(ok.docks.top).not.toBeNull();
+    const narrow = resolvePaneDisplays(input({ paneW: PANEL_TB_MIN_W_PX - 1, panels: [side("t", 1, "top"), side("b", 2, "bottom"), side("r", 3, "right")] }));
+    expect(narrow.auto.sort()).toEqual(["b", "r", "t"]); // 右も、この幅では端末の 40 列が入らず自動でたたまれる
+    expect(narrow.docks.top).toBeNull();
+    expect(narrow.docks.bottom).toBeNull();
+    expect(narrow.tray.buttons.filter((b) => b.disabled).map((b) => b.id).sort()).toEqual(["b", "r", "t"]);
   });
 });

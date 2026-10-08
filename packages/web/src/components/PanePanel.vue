@@ -17,6 +17,8 @@ import DisplayPanelHead from "./DisplayPanelHead.vue";
  * - 枠にフォーカスがある間は「操作中」を縁と文言で示す（備え (a)）。
  * - 大きさは割り付けの結果 `dock`（範囲に丸めた値）。つまみのドラッグの間は大きさを変えず、案内の線だけを動かす（端末の大きさを送り続けない）。
  */
+/** この高さ（px）より低い上下のパネルでは、操作中の説明文を見せない。 */
+const COMPACT_NOTE_BELOW_PX = 150;
 const props = defineProps<{ paneId: string; side: Side; dock: DockGroup }>();
 /** ドラッグ中の案内の線（側と、いま指している大きさ px。`null` で消す）。 */
 const emit = defineEmits<{ guide: [g: { side: Side; px: number } | null] }>();
@@ -36,6 +38,8 @@ const shownSize = computed(() => dragSize.value ?? props.dock.size);
 const rootStyle = computed(() =>
   horizontal.value ? { flex: `0 0 ${props.dock.size}px`, width: `${props.dock.size}px` } : { flex: `0 0 ${props.dock.size}px`, height: `${props.dock.size}px` },
 );
+/** 上下の低いパネルでは、操作中の説明文を見せない（`title` と読み上げには残す）。端末の上へはみ出させない。 */
+const compactNote = computed(() => !horizontal.value && props.dock.size < COMPACT_NOTE_BELOW_PX);
 const handleLabel = computed(() => (horizontal.value ? "パネルの幅" : "パネルの高さ"));
 
 const clampToRange = (w: number): number => Math.min(props.dock.max, Math.max(props.dock.min, Math.round(w)));
@@ -172,7 +176,17 @@ function onTabKey(ev: KeyboardEvent): void {
       </button>
     </div>
     <div v-else class="pane-panel-title" data-pane-panel-title>{{ active.title }}</div>
-    <div v-if="engaged" class="pane-panel-engaged-note" aria-live="polite" data-display-chrome data-pane-panel-engaged-note>{{ engagedNote(active) }}</div>
+    <div
+      v-if="engaged"
+      class="pane-panel-engaged-note"
+      :class="{ 'pane-panel-engaged-note-compact': compactNote }"
+      :title="engagedNote(active)"
+      aria-live="polite"
+      data-display-chrome
+      data-pane-panel-engaged-note
+    >
+      {{ engagedNote(active) }}
+    </div>
     <div class="pane-panel-body">
       <DisplayFrame :key="placedFrameKey(active, `dock:${side}`)" :info="active" :content="content" />
     </div>
@@ -274,10 +288,21 @@ function onTabKey(ev: KeyboardEvent): void {
 }
 .pane-panel-engaged-note {
   flex: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 2px 8px;
   font-size: 0.75em;
   background: var(--soda-accent, #6070a1);
   color: var(--soda-accent-fg, #f8f8f2);
+}
+.pane-panel-engaged-note-compact {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .pane-panel-body {
   flex: 1 1 auto;

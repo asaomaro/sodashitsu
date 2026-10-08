@@ -11,6 +11,7 @@ import {
   frameHandle,
   frameLoads,
   idsOf,
+  intersects,
   menuItem,
   openFaceMenu,
   set,
@@ -657,4 +658,81 @@ test("(5b) D&D の途中で、つかんだ面が閉じられて同じ側の別�
   await page.mouse.move(body.x + 30, body.y + body.height / 2, { steps: 8 });
   await page.mouse.up();
   await expect(dock(page, "left")).toHaveAttribute("data-display-root", ids["pb"]!);
+});
+
+test("(7b) 操作中（［操作を終える］が出ている間）も、最小の大きさ × 4 つの側 × 広い pane・3 分割の pane で、固定の部品がパネルの箱の中に全部あり、中心がその部品自身で、端末の箱と重ならない（切って隠していない）。細すぎる pane の上下は自動でたたまれる", async ({ page, appServer }) => {
+  test.setTimeout(120_000);
+  await enableScript(appServer);
+  const { paneId } = await openDisplayBrowser(page, appServer);
+  await setScriptOk(appServer, paneId, "sp", BENIGN, { kind: "panel", extra: ["--size", "160"] });
+  const c = await appServer.openClient();
+  const split = async (): Promise<void> => {
+    await c.request("pane.split", { paneId, direction: "right" });
+  };
+  const pane = page.locator(`[data-pane-id="${paneId}"]`);
+  const checkSide = async (side: Side, label: string): Promise<void> => {
+    const panel = pane.locator(`[data-display-dock="${side}"]`);
+    await panel.locator("[data-pane-panel-resize]").focus();
+    await page.keyboard.press("Home");
+    const min = side === "left" || side === "right" ? 160 : 96;
+    await expect.poll(async () => Math.round(side === "left" || side === "right" ? (await boxOf(panel)).width : (await boxOf(panel)).height), `${label}: 最小`).toBe(min);
+    // 操作中にする（［操作する］ → ［操作を終える］）
+    await panel.locator("[data-display-engage]").click();
+    await expect(panel).toHaveAttribute("data-display-engaged", "1");
+    const end = panel.locator("[data-display-end]");
+    await expect(end, `${label}: ［操作を終える］`).toBeVisible();
+    await page.waitForTimeout(200);
+    const pb = await boxOf(panel);
+    const mb = await boxOf(pane.locator("[data-pane-frame-main]"));
+    for (const sel of ["[data-display-script-mark]", "[data-display-end]", "[data-display-menu-button]", "[data-pane-panel-fold]", "[data-pane-panel-close]"]) {
+      const loc = panel.locator(sel).first();
+      const b = await boxOf(loc);
+      expect(b.x, `${label} ${sel} 左`).toBeGreaterThanOrEqual(pb.x - 1);
+      expect(b.x + b.width, `${label} ${sel} 右`).toBeLessThanOrEqual(pb.x + pb.width + 1);
+      expect(b.y, `${label} ${sel} 上`).toBeGreaterThanOrEqual(pb.y - 1);
+      expect(b.y + b.height, `${label} ${sel} 下`).toBeLessThanOrEqual(pb.y + pb.height + 1);
+      expect(await centerHitsSelf(loc), `${label} ${sel} 中心`).toBe(true);
+      expect(intersects(b, mb), `${label} ${sel} は端末の箱と重ならない`).toBe(false);
+    }
+    // 切って隠していない: 見出しと操作中の説明文が、自分の箱からはみ出さない（つまみの見えない当たり判定の分は、中身ではないので見ない）
+    const noteShown = side === "left" || side === "right";
+    for (const sel of noteShown ? ["[data-display-head]", "[data-pane-panel-engaged-note]"] : ["[data-display-head]"]) {
+      const over = await panel.locator(sel).first().evaluate((el) => ({ w: el.scrollWidth - el.clientWidth, h: el.scrollHeight - el.clientHeight }));
+      expect(over.w, `${label} ${sel}: 横の溢れ`).toBeLessThanOrEqual(1);
+      expect(over.h, `${label} ${sel}: 縦の溢れ`).toBeLessThanOrEqual(1);
+    }
+    // 説明文が見えているときは、パネルの箱の中に収まり、端末の箱と重ならない（低い上下では見せない）
+    const note = panel.locator("[data-pane-panel-engaged-note]");
+    if (noteShown) {
+      const nb = await boxOf(note);
+      expect(nb.x + nb.width, `${label}: 説明文の右`).toBeLessThanOrEqual(pb.x + pb.width + 1);
+      expect(intersects(nb, mb), `${label}: 説明文は端末の箱と重ならない`).toBe(false);
+    }
+    // 操作を終えて戻す（次の側へ）
+    await end.click();
+    await expect(panel).toHaveAttribute("data-display-engaged", "0");
+  };
+  for (const side of SIDES) {
+    if (side !== "right") await moveByMenu(page, appServer, paneId, "sp", side);
+    await checkSide(side, `広い ${side}`);
+  }
+  // 3 分割（pane の幅 約 350px）: 上下は 2 行に折れて収まる。左右は幅が足りず自動でたたまれる
+  await split();
+  await split();
+  await expect.poll(async () => (await boxOf(pane)).width).toBeLessThan(420);
+  for (const side of ["top", "bottom"] as const) {
+    await moveByMenu(page, appServer, paneId, "sp", side).catch(async () => {
+      await trayButton(page, "sp").click();
+    });
+    await expect(pane.locator(`[data-display-dock="${side}"]`)).toHaveCount(1);
+    await checkSide(side, `3 分割 ${side}`);
+  }
+  // 上下のパネルにある面を左へ（3 分割の幅では 40 列が入らないので、自動でたたまれる。トレイの押せないボタン）
+  await openFaceMenu(page, appServer, paneId, "sp");
+  await menuItem(page, "左に置く").click();
+  await expect(pane.locator('[data-display-dock="left"]')).toHaveCount(0);
+  const btn = pane.locator('[data-display-tray-button][data-display-name="sp"]');
+  if ((await btn.count()) > 0) await expect(btn).toBeDisabled();
+  else await expect(pane.locator("[data-display-tray-more]")).toBeVisible();
+  c.close();
 });

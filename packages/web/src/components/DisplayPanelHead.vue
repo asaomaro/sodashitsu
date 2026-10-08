@@ -143,6 +143,7 @@ function onKeydown(ev: KeyboardEvent): void {
 <style scoped>
 .display-head {
   flex: none;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -168,9 +169,13 @@ function onKeydown(ev: KeyboardEvent): void {
   text-overflow: ellipsis;
 }
 .display-head-actions {
-  flex: none;
+  /* 縮められる（親の幅に収まらなければ、ボタンの並びが折り返す）。縮まないと、操作中の［操作を終える］が加わったとき、パネルの箱の外へはみ出す。 */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 2px;
   margin-left: auto;
 }

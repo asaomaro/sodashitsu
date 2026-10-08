@@ -9,6 +9,11 @@ import { BANDS_MORE_ROW_PX, DEFAULT_CELL_WIDTH_PX, PANEL_MIN_PX, TERMINAL_MIN_CO
 export { TERMINAL_MIN_COLS, PANEL_MIN_PX as DOCK_W_MIN_PX };
 export const TERMINAL_MIN_ROWS = 10;
 export const DOCK_H_MIN_PX = 96;
+/**
+ * 上・下のパネルを出せる、pane の幅の下限（px）。見出しの固定の部品（印・［操作する］／［操作を終える］・［⋮］・［▸］・［×］）が、最小の高さ（96px）の箱に 2 行で収まる幅。
+ * これより細い pane では、上・下のパネルは自動でたたむ（トレイの押せないボタン。記憶は変えない）。左右は、最小の幅 160px で 2 行に折れて収まる。
+ */
+export const PANEL_TB_MIN_W_PX = 200;
 /** セルの高さが取れないときの値（px）。 */
 const DEFAULT_CELL_HEIGHT_PX = 18;
 /** 帯が無いときの、トレイだけの行の高さ。 */
@@ -179,6 +184,14 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
   };
   const plans: Record<Side, SidePlan["group"]> = { top: planOf("top"), bottom: planOf("bottom"), left: planOf("left"), right: planOf("right") };
   const auto: string[] = autoBands.map((b) => b.id);
+  // pane が細くて、上・下のパネルの見出しの固定の部品が最小の高さに収まらないときは、自動でたたむ。
+  if (paneW < PANEL_TB_MIN_W_PX) {
+    for (const side of ["top", "bottom"] as const) {
+      const g = plans[side];
+      if (g) auto.push(...g.ids);
+      plans[side] = null;
+    }
+  }
   const docks = EMPTY_DOCKS();
   const place = (side: Side, plan: NonNullable<SidePlan["group"]>, size: number, min: number, max: number): void => {
     docks[side] = { ids: plan.ids, activeId: plan.activeId, size, min, max };
