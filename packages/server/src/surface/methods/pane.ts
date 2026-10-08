@@ -126,6 +126,9 @@ export function registerPaneMethods(surface: ControlSurface, deps: MethodDeps): 
   surface.register("pane.move_to_tab", {
     schema: PaneMoveToTabParams,
     handler: (ctx, params) => {
+      // 別の worktree の workspace へは移さない（20261008-web-tab-dnd）。何もせず理由を返す。
+      const reason = deps.session.paneMoveBlockToTab(params.paneId, params.targetTabId);
+      if (reason) return { ok: false as const, reason };
       const ok = deps.session.moveToTab(params.paneId, params.targetTabId);
       deps.sizeAuthority.noteInteraction(ctx.clientId, params.paneId);
       return { ok };
@@ -136,6 +139,8 @@ export function registerPaneMethods(surface: ControlSurface, deps: MethodDeps): 
   surface.register("pane.move_to_new_tab", {
     schema: PaneMoveToNewTabParams,
     handler: (ctx, params) => {
+      const reason = deps.session.paneMoveBlockToWorkspace(params.paneId, params.targetWorkspaceId);
+      if (reason) return { ok: false as const, reason };
       const tab = deps.session.moveToNewTab(params.paneId, params.targetWorkspaceId);
       deps.sizeAuthority.noteInteraction(ctx.clientId, params.paneId);
       return tab ? { ok: true as const, tab } : { ok: false as const };

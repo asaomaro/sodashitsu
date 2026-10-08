@@ -141,7 +141,7 @@
       依存: T6
       AC: AC11, AC12, AC13, AC14, AC15, AC16
 
-- [ ] T8: `SessionService` とハンドラで理由を返す（**独立点検あり**）。
+- [x] T8: `SessionService` とハンドラで理由を返す（**独立点検あり**）。
       - `SessionService.paneMoveBlockToTab(paneId, targetTabId)`・`paneMoveBlockToWorkspace(paneId, targetWorkspaceId)`（pane・tab・workspace が無ければ null。投げない）。
       - `pane.ts` の `pane.move_to_tab`・`pane.move_to_new_tab`: 先に理由を問い合わせ、あれば `{ ok: false, reason }` を返して終わり（`sizeAuthority.noteInteraction` を呼ばない）。無ければ今までどおり（実在しない pane への今のエラーも変えない）。
       単体テスト:
