@@ -47,3 +47,48 @@ ca3a257 は定数 1 つ・条件 2 行・docs の小さな差分で、監督の�
 
 - 画面（ブラウザ）での表示。PR1 に画面は無い（PR2）。
 - Windows の実機（受け口の無い `/ws` の経路は、結合テストで代えた）。
+
+## PR2: 画面（T8〜T22。静的な形式）
+
+タスクごとの独立点検（★ T8・T9・T11）と、PR2 の全体の点検を、1 回のレビューにまとめた。レビューの側が、実ブラウザ（Chromium）で、`packages/web/public` を配る小さなサーバと、本物と同じ sandbox・CSP・MessageChannel の手順の親ページを自作し、悪意のある入力を約 20 種通して観測した（CSP を外した対照つき）。
+
+### 1 回目（origin/main...fd8cfb8）
+
+must 0・should 3・nit。判断は「直してから」。枠の隔離は破れなかった。
+
+| 重さ | 指摘 | 対応 |
+|---|---|---|
+| should | 取り除きの DOM clobbering: `<form on…><input name=attributes>` で、form の属性が 1 つも消えない（CSP だけが止めていて、二重の守りが一重） | 直した（3ef8501。要素のメソッド・getter をプロトタイプ経由に。E2E (11) の 12 種。直す前で 4 種が落ちる） |
+| should | `<img name=createElement>` の後、次の `render` が失敗して古い中身で固まる | 直した（3ef8501。`document` の側もプロトタイプ経由に。描画の全体を try で囲み、失敗を親へ知らせる。E2E (12)） |
+| should | E2E の (7)(8)（フォーカスを奪い続ける中身）が、中身が取り除かれて一度も動かず、空振り。「取り除きと CSP の両方を外すと落ちる」対照が無い | 直した（3ef8501。面の出現・更新でアプリがフォーカスを動かさないことを測る形に作り直し。対照 (b)(c)(d) を記録。奪取への備えは PR3 の範囲と明記） |
+| nit | `fetchOnce` が大きさを確かめない／接続が切れたときフォーカスが body に落ちる／題に書字方向を変える文字／モバイルの `prefix+i` がトーストになる／docs | 直した（3ef8501） |
+| 見た目 | 右上の初回の案内が、帯・パネルの見出しに重なる | 直さない（既存の知らせの置き場所。4 秒で消え、クリックを通す。消すまで残る知らせは見出しに重なる） |
+
+範囲の外で分かったこと: ask の `packages/web/public/ask-view/markdown.js` の取り除きにも、同じ種類の穴がある（`<form><input name="remove"></form>` で `el.remove()` が TypeError）。閉じる側に倒れ（ソースの文字の表示へ落ちる）、実行・移動には至らない。別の作業の候補（低）。
+
+### 2 回目（3ef8501 の差分だけ）
+
+前回の指摘は直っている（観測の道具を直した版に流し直し、CSP を外した版でも漏れ 0）。window の側の clobbering への対策が要らないことも、入力を通して確かめた。新しい should 1 件。
+
+| 重さ | 指摘 | 対応 |
+|---|---|---|
+| should | 退行: `focusFirst` が、控えた `HTMLElement.prototype.focus` を SVG の要素（`<use href>` など）に `call` して `Illegal invocation`。インライン SVG のある面で `prefix+i` が効かない | 直した（e085172。HTML と SVG の `focus` を使い分け、要素ごとに try して、実際に移った要素で止める。E2E `display-flows` (16)。直す前で落ちる） |
+| 確認 | `display-mobile.spec.ts` の確認が 2 行消えていた | 戻した（e085172。うっかり） |
+
+作り直した (7)(8) は、レビューの側は読んで判断しただけで、実装を壊して落ちることまでは試していない。
+
+e085172 は 18 行の差分で、監督のセッションが差分を読んで確かめた（別のコンテキストの再レビューは掛けていない）。
+
+### 確かめたこと
+
+- `pnpm build`・`pnpm typecheck`: エラー 0
+- `pnpm test`（3ef8501）: 8515 件中 8512 件通過。失敗 3 件は `tui.integration.test.ts`（worktree のパスが長いと main でも落ちる）
+- E2E（e085172。監督のセッションが流した）: display の 5 つの spec で 46 件すべて通過
+- 既存の E2E（fd8cfb8）: 93 件通過・5 件失敗。4 件は main でも落ちる（`key-bindings:632`・`:699`・`workspace-tab-pane:305`・`mobile:189`）。1 件（`mobile:77`）は、起動時の通信が 1 本増えて時機がずれたことで落ち、テストの待ち方を直した（弱めていないことをレビューで確認）
+- `aidev smoke`（e085172）: pass（10 本）
+- 実測した前提: `MessagePort` を不透明 origin の枠へ渡せる／`frame.evaluate` が `script-src 'self'` の枠で動く／`allow-forms` で `submit` のイベントだけが起き送信は起きない／marked が Markdown の中の HTML を通す／枠が移ると 2 回目の `load` が起きる
+
+### PR2 では確かめていないこと
+
+- 実機（iOS Safari・Android Chrome）と、Firefox・Safari。実測は Chromium だけ（`docs/display.md`・`docs/verification.md` に明記）。
+- スクリプトが動く形式（PR3）。PR2 では「この画面では出せません」と出る。
