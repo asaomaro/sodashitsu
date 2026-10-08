@@ -1,7 +1,7 @@
 schema: 11
 slug: main-e2e-failures
-current: requirements
-approved: []
+current: review
+approved: [coding, test, review]
 mode: autonomous
 profile: light
 humanGates: []

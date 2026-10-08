@@ -1,1 +1,8 @@
 events:
+  - { ts: 2026-10-08T13:34:41Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-10-08T13:34:41Z, phase: coding, event: start }
+  - { ts: 2026-10-08T13:34:41Z, phase: coding, event: approved }
+  - { ts: 2026-10-08T13:34:41Z, phase: test, event: start, metrics: { marks: 4 } }
+  - { ts: 2026-10-08T13:34:41Z, phase: test, event: approved }
+  - { ts: 2026-10-08T13:34:41Z, phase: review, event: start, metrics: { marks: 0 } }
+  - { ts: 2026-10-08T13:34:41Z, phase: review, event: approved }
