@@ -80,8 +80,11 @@ export async function withDisplayChange(
 ): Promise<void> {
   const place = focusPlaceOf(info);
   if (place === "frame") {
-    endEngageFrame(info.id);
-    host?.focusTerminal(info.paneId);
+    // 操作中のスクリプトの枠か、静的な形式の枠だけ。操作中でないスクリプトの枠（スクリプトが取った直後）は動かさない（`DisplayFrame` の片づけの数え方に任せる）。
+    if (isReleasableFrame(document.activeElement)) {
+      endEngageFrame(info.id);
+      host?.focusTerminal(info.paneId);
+    }
   } else if ((place === "head" || place === "tray") && !(place === "tray" && opts.keepTrayFocus)) {
     host?.focusTerminal(info.paneId);
   }
@@ -98,8 +101,12 @@ export async function withDisplayChange(
 /** 面を閉じる（［×］・メニュー）。面が消えるのはサーバの応答の後なので、フォーカスのあるボタンごと消えて `body` に落ちないよう、先に端末へ移す。 */
 export function dismissWithFocus(info: Pick<DisplayInfo, "id" | "paneId">, dismiss: () => void, host: DisplayHost | undefined): void {
   const place = focusPlaceOf(info);
-  if (place === "frame") endEngageFrame(info.id);
-  if (place !== "other") host?.focusTerminal(info.paneId);
+  if (place === "frame") {
+    if (isReleasableFrame(document.activeElement)) {
+      endEngageFrame(info.id);
+      host?.focusTerminal(info.paneId);
+    }
+  } else if (place !== "other") host?.focusTerminal(info.paneId);
   dismiss();
 }
 

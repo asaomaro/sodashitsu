@@ -60,10 +60,11 @@ function swappableWithFocused(paneId: string): boolean {
 
 /** 表示のメニューは 2 段（面の一覧 → 面のメニュー）。選んだ項目の処理が、同じ位置に次のメニューを開く。 */
 function openDisplaysMenu(paneId: string, _from?: unknown): void {
-  const at = view.contextMenu?.at ?? { x: 8, y: 8 };
   void _from;
-  openDisplayMenu((t, p) => view.openContextMenu(t, p), { kind: "displays", paneId }, at, displayHost, paneId);
+  openDisplayMenu((t, p) => view.openContextMenu(t, p), { kind: "displays", paneId }, menuAt, displayHost, paneId);
 }
+/** 項目を選んで閉じる直前の、メニューの位置（次のメニューを同じ位置に開く）。 */
+let menuAt: { x: number; y: number } = { x: 8, y: 8 };
 const KIND_LABEL = { panel: "パネル", band: "帯" } as const;
 const DOCK_LABEL: Record<string, string> = { right: "右", left: "左", top: "上", bottom: "下", float: "浮いた窓" };
 function displaysItems(paneId: string): MenuItem[] {
@@ -74,7 +75,7 @@ function displaysItems(paneId: string): MenuItem[] {
       const f = displays.effectiveOf(d);
       const where = d.kind === "band" ? (f.edge === "bottom" ? "下" : "上") : (DOCK_LABEL[f.dock ?? "right"] ?? "右");
       const state = auto.has(d.id) ? "出せない" : f.collapsed ? "たたんでいる" : "開いている";
-      return { label: `${KIND_LABEL[d.kind]} ${d.name} — ${where}・${state}`, run: () => openDisplayMenu((t, at) => view.openContextMenu(t, at), { kind: "display", id: d.id }, view.contextMenu?.at ?? { x: 8, y: 8 }, displayHost, paneId) };
+      return { label: `${KIND_LABEL[d.kind]} ${d.name} — ${where}・${state}`, run: () => openDisplayMenu((t, at) => view.openContextMenu(t, at), { kind: "display", id: d.id }, menuAt, displayHost, paneId) };
     });
 }
 function displayItems(id: string): MenuItem[] {
@@ -209,6 +210,7 @@ const items = computed<MenuItem[]>(() => {
 function activate(index: number): void {
   const item = items.value[index];
   if (!item) return;
+  menuAt = view.contextMenu?.at ?? menuAt;
   close();
   restoreFocus();
   item.run();

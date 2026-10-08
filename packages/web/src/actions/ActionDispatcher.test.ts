@@ -3019,6 +3019,104 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
       expect(focused).toEqual(["a1"]);
       unregisterFrame("a1", f);
     });
+    it("行き先の順: ① 開いているパネル（最後に操作した面）→ ② たたんだパネル（開いてから）→ ③ 開いている帯 → ④ たたんだ帯（開いてから）。自動でたたまれた面は飛ばす", async () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      const displays = useDisplayStore(pinia);
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const focused: string[] = [];
+      const reg = (id: string) => {
+        const f = { focusInside: () => void focused.push(id) };
+        registerFrame(id, f);
+        return () => unregisterFrame(id, f);
+      };
+      const off = ["pa", "pb", "ba", "bb"].map(reg);
+      const [pa, pb, ba, bb] = [disp("pa", "panel"), disp("pb", "panel"), disp("ba", "band"), disp("bb", "band")];
+      for (const d of [pa, pb, ba, bb]) displays.upsert(d);
+      // ① 最後に操作した面（pb）
+      displays.setFocused("pb");
+      displays.setFocused(null);
+      await dispatcher.focusDisplay();
+      expect(focused.at(-1)).toBe("pb");
+      // 自動でたたまれた面は飛ばす
+      displays.setLayoutSnapshot("p1", { auto: ["pb"], floatArea: null });
+      await dispatcher.focusDisplay();
+      expect(focused.at(-1)).toBe("pa");
+      // ② パネルが全部たたまれている → 開いてから移る（記憶に「開く」を書く）
+      displays.setLayoutSnapshot("p1", { auto: [], floatArea: null });
+      displays.setFaceCollapsed(pa, true);
+      displays.setFaceCollapsed(pb, true);
+      await dispatcher.focusDisplay();
+      expect(displays.effectiveOf(pa).collapsed).toBe(false);
+      expect(focused.at(-1)).toBe("pa");
+      // ③ パネルが無ければ開いている帯 ④ 帯がたたまれていれば開いてから
+      displays.remove("pa");
+      displays.remove("pb");
+      await dispatcher.focusDisplay();
+      expect(focused.at(-1)).toBe("ba");
+      displays.setFaceCollapsed(ba, true);
+      displays.setFaceCollapsed(bb, true);
+      await dispatcher.focusDisplay();
+      expect(displays.effectiveOf(ba).collapsed).toBe(false);
+      expect(focused.at(-1)).toBe("ba");
+      off.forEach((f) => f());
+    });
+    it("モバイルの枝: 記憶を見ない・書かない。パネルの枠が載っていなければ重ね表示を開く", async () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      const displays = useDisplayStore(pinia);
+      displays.upsert(disp("a1", "panel"));
+      displays.setFaceCollapsed(disp("a1", "panel"), true);
+      localStorage.removeItem("soda.prefs.v1");
+      displays.sheetAvailable = true;
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const before = displays.sheetRequest;
+      await dispatcher.focusDisplay();
+      expect(displays.sheetRequest).toBe(before + 1);
+      expect(localStorage.getItem("soda.prefs.v1")).toBeNull();
+    });
+  });
+
+  describe("displayMenu（display_menu。20261008-display-layout）", () => {
+    const disp = (id: string, kind: "panel" | "band") => ({ id, paneId: "p1", name: id, kind, format: "text", title: id, size: 320, rev: 1, bytes: 1, updatedAt: "x" });
+    it("面があれば、その pane の面の一覧のメニューを開く。面が無ければトースト。端末版の型 displayMenu を run で受ける", () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const toastSpy = vi.spyOn(view, "toast");
+      dispatcher.run({ type: "displayMenu" });
+      expect(toastSpy).toHaveBeenCalledWith("この pane に表示はありません");
+      expect(view.contextMenu).toBeNull();
+      useDisplayStore(pinia).upsert(disp("a1", "panel"));
+      dispatcher.run({ type: "displayMenu" });
+      expect(view.contextMenu?.target).toEqual({ kind: "displays", paneId: "p1" });
+    });
+    it("モバイルでは重ね表示を開く（メニューは開かない）", () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      const displays = useDisplayStore(pinia);
+      displays.upsert(disp("a1", "panel"));
+      displays.sheetAvailable = true;
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const before = displays.sheetRequest;
+      dispatcher.run({ type: "displayMenu" });
+      expect(displays.sheetRequest).toBe(before + 1);
+      expect(view.contextMenu).toBeNull();
+    });
+    it("メニューを開く前に、フォーカスが静的な面の枠にあれば端末へ移す", () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      useDisplayStore(pinia).upsert(disp("a1", "panel"));
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const focusTerminal = vi.fn();
+      dispatcher.setDisplayHost({ focusTerminal, focusSelectedTerminal: vi.fn(), injectPrefix: vi.fn(), prefixKey: () => ({ key: "b", ctrl: true, alt: false, shift: false, meta: false }) });
+      document.body.innerHTML = `<div data-pane-id="p1"><div data-display-root="a1"><iframe tabindex="0" data-display-frame></iframe></div></div>`;
+      (document.querySelector("iframe") as HTMLElement).focus();
+      dispatcher.run({ type: "displayMenu" });
+      expect(focusTerminal).toHaveBeenCalledWith("p1");
+      expect(view.contextMenu?.target).toEqual({ kind: "displays", paneId: "p1" });
+      document.body.innerHTML = "";
+    });
   });
 
   it("openGraph（open_graph。20260927-agent-graph）: グラフ画面を開く（ダイアログの枠は使わない・何も送らない）", () => {
