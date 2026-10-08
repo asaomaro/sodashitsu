@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BANDS_MORE_ROW_PX, panelWidth, visibleBands } from "./displayLayout.js";
-import { BAND_MIN_W_PX, BAND_SCRIPT_MIN_W_PX, TRAY_ROW_PX, resolvePaneDisplays, type LayoutInput } from "./paneDisplayLayout.js";
+import { DOCK_H_MIN_PX, BAND_MIN_W_PX, BAND_SCRIPT_MIN_W_PX, TRAY_ROW_PX, resolvePaneDisplays, type LayoutInput } from "./paneDisplayLayout.js";
 
 const input = (over: Partial<LayoutInput> = {}): LayoutInput => ({
   paneW: 1000,
@@ -172,5 +172,109 @@ describe("resolvePaneDisplays — pane が狭くて帯の固定の部品が入�
     const r = resolvePaneDisplays(input({ paneW: 200, bands: [band("s", 1, { script: true }), band("p", 2)] }));
     expect(r.bands).toEqual({ top: ["p"], bottom: [], more: [] });
     expect(r.auto).toEqual(["s"]);
+  });
+});
+
+describe("resolvePaneDisplays — 4 つの側", () => {
+  // paneW 1000・paneH 600・セル 9×18: 横の avail = 1000 − 360 = 640、max = 500。縦の avail = 600 − 180 = 420、max = 300。
+  const side = (id: string, seq: number, dock: "right" | "left" | "top" | "bottom", over: Partial<LayoutInput["panels"][number]> = {}) => panel(id, seq, { dock, ...over });
+  it("片方だけ: 左・上・下の 1 つだけでも、右のときと同じ決まり（望む大きさ・範囲の丸め）。端末の領域がずれる", () => {
+    const l = resolvePaneDisplays(input({ panels: [side("a", 1, "left", { size: 300 })] }));
+    expect(l.docks.left).toMatchObject({ ids: ["a"], size: 300, min: 160, max: 500 });
+    expect(l.terminal).toEqual({ x: 300, y: 0, w: 700, h: 600 });
+    const t = resolvePaneDisplays(input({ panels: [side("a", 1, "top", { size: 200 })] }));
+    expect(t.docks.top).toMatchObject({ size: 200, min: DOCK_H_MIN_PX, max: 300 });
+    expect(t.terminal).toEqual({ x: 0, y: 200, w: 1000, h: 400 });
+    const b = resolvePaneDisplays(input({ panels: [side("a", 1, "bottom", { size: 1000 })] }));
+    expect(b.docks.bottom!.size).toBe(300); // 最大に丸める
+    expect(b.terminal).toEqual({ x: 0, y: 0, w: 1000, h: 300 });
+    const small = resolvePaneDisplays(input({ panels: [side("a", 1, "top", { size: 10 })] }));
+    expect(small.docks.top!.size).toBe(DOCK_H_MIN_PX);
+  });
+  it("4 つの側が同時: 上下は pane の幅いっぱい・左右はその間の高さ。端末の領域は残り", () => {
+    const r = resolvePaneDisplays(
+      input({ panels: [side("t", 1, "top", { size: 100 }), side("b", 2, "bottom", { size: 120 }), side("l", 3, "left", { size: 200 }), side("r", 4, "right", { size: 250 })] }),
+    );
+    expect(r.docks.top!.size).toBe(100);
+    expect(r.docks.bottom!.size).toBe(120);
+    expect(r.docks.left!.size).toBe(200);
+    expect(r.docks.right!.size).toBe(250);
+    expect(r.terminal).toEqual({ x: 200, y: 100, w: 550, h: 380 });
+    expect(r.auto).toEqual([]);
+  });
+  it("利用者の大きさ（sideSizes）が選んでいる面の size に勝つ。側ごと", () => {
+    const r = resolvePaneDisplays(input({ panels: [side("l", 1, "left", { size: 200 }), side("t", 2, "top", { size: 100 })], sideSizes: { left: 400, top: 150 } }));
+    expect(r.docks.left!.size).toBe(400);
+    expect(r.docks.top!.size).toBe(150);
+  });
+  it("同じ側の 2 枚は 1 つの群れ（タブ）。選んでいる面の size を使い、active が群れに無ければ最初の面", () => {
+    const ps = [side("a", 1, "left", { size: 200 }), side("b", 2, "left", { size: 300 })];
+    const r = resolvePaneDisplays(input({ panels: ps, active: { left: "b" } }));
+    expect(r.docks.left).toMatchObject({ ids: ["a", "b"], activeId: "b", size: 300 });
+    expect(resolvePaneDisplays(input({ panels: ps, active: { left: "zz" } })).docks.left).toMatchObject({ activeId: "a", size: 200 });
+  });
+  it("端末は 40 列・10 行を下回らない: 横はちょうど 40 列、縦はちょうど 10 行", () => {
+    const r = resolvePaneDisplays(input({ panels: [side("l", 1, "left", { size: 500 }), side("r", 2, "right", { size: 500 })] }));
+    // avail = 640。500 + 500 = 1000 > 640 → 大きいほう（同じなら左）を max(160, 640−500=140→160) へ。160 + 500 = 660 > 640 → 右を 640 − 160 = 480 へ
+    expect(r.docks.left!.size).toBe(160);
+    expect(r.docks.right!.size).toBe(480);
+    expect(r.terminal.w).toBe(1000 - 640);
+    expect(r.terminal.w / 9).toBe(40);
+    const v = resolvePaneDisplays(input({ panels: [side("t", 1, "top", { size: 300 }), side("b", 2, "bottom", { size: 300 })] }));
+    // avail = 420。300 + 300 > 420 → 上を max(96, 420−300=120)=120。120 + 300 = 420 ちょうど
+    expect(v.docks.top!.size).toBe(120);
+    expect(v.docks.bottom!.size).toBe(300);
+    expect(v.terminal.h).toBe(600 - 420);
+    expect(v.terminal.h / 18).toBe(10);
+  });
+  it("縮め方の段: 大きいほうが下なら、下を先に縮める。最小どうしでも入らなければ、上（左）が先に自動でたたまれる", () => {
+    const r = resolvePaneDisplays(input({ panels: [side("t", 1, "top", { size: 100 }), side("b", 2, "bottom", { size: 300 })] }));
+    expect(r.docks.top!.size).toBe(100);
+    expect(r.docks.bottom!.size).toBe(300); // 400 <= 420: 縮めない
+    const r2 = resolvePaneDisplays(input({ panels: [side("t", 1, "top", { size: 200 }), side("b", 2, "bottom", { size: 300 })] }));
+    expect(r2.docks.bottom!.size).toBe(220); // 大きい下を 420−200 へ
+    expect(r2.docks.top!.size).toBe(200);
+    // paneH 300: H = 300、avail = 120、max = min(150, 120) = 120。最小 96 を 2 つで 192 > 120 → 上が自動でたたまれ、下だけ
+    const tight = resolvePaneDisplays(input({ paneH: 300, panels: [side("t", 1, "top", { size: 100 }), side("b", 2, "bottom", { size: 100 })] }));
+    expect(tight.auto).toEqual(["t"]);
+    expect(tight.docks.top).toBeNull();
+    expect(tight.docks.bottom!.size).toBe(96); // 上がボタンになって専用の行（24px）が出るので、空きは 96 に減ってやり直す
+    expect(tight.tray.row).toBe("own");
+    expect(tight.tray.buttons).toEqual([{ id: "t", kind: "panel", open: false, disabled: true }]);
+    // 横: paneW 600 → avail 240、max 240。左右 160 + 160 = 320 > 240 → 左が自動でたたまれる
+    const wide = resolvePaneDisplays(input({ paneW: 600, panels: [side("l", 1, "left", { size: 160 }), side("r", 2, "right", { size: 160 })] }));
+    expect(wide.auto).toEqual(["l"]);
+    expect(wide.docks.right!.size).toBe(160);
+    expect(wide.terminal).toMatchObject({ x: 0, w: 440 });
+  });
+  it("入らない側は全部自動でたたむ。pane が端末の最小より小さければ、パネルは全部たたまれ、端末は残り全部", () => {
+    const r = resolvePaneDisplays(input({ paneW: 300, paneH: 150, panels: [side("l", 1, "left"), side("r", 2, "right"), side("t", 3, "top"), side("b", 4, "bottom")] }));
+    expect(r.auto.sort()).toEqual(["b", "l", "r", "t"]);
+    expect(r.terminal).toMatchObject({ x: 0, w: 300 });
+    expect(r.docks).toEqual({ right: null, left: null, top: null, bottom: null });
+  });
+  it("帯・トレイの行の分は、縦の空きから引く（上の帯 100px があると上のパネルの上限が下がる）", () => {
+    const r = resolvePaneDisplays(input({ bands: [band("bd", 1, { size: 100 })], panels: [side("t", 1, "top", { size: 400 })] }));
+    // H = 500、avail = 320、max = 250
+    expect(r.docks.top).toMatchObject({ size: 250, max: 250 });
+    expect(r.terminal.y).toBe(350);
+    expect(r.terminal.h).toBe(250);
+  });
+  it("専用のトレイの行（24px）は、縦の空きから引く。自動でたたんだ面だけで行が出るときは、引き直す", () => {
+    // 利用者がたたんだ面（トレイのボタン）がある: 24px 引く。H = 576、avail = 396、max = 288
+    const withBtn = resolvePaneDisplays(input({ panels: [side("t", 1, "top", { size: 1000 }), side("c", 2, "right", { collapsed: true })] }));
+    expect(withBtn.tray.row).toBe("own");
+    expect(withBtn.docks.top!.max).toBe(288);
+    expect(withBtn.terminal.y).toBe(TRAY_ROW_PX + 288);
+    // 自動でたたんだ面だけ: 左が入らず自動でたたまれ、行が none → own に変わる → 24px を引いて 1 回だけやり直す
+    const autoOnly = resolvePaneDisplays(input({ paneW: 600, panels: [side("l", 1, "left", { size: 160 }), side("r", 2, "right", { size: 160 }), side("t", 3, "top", { size: 1000 })] }));
+    expect(autoOnly.auto).toEqual(["l"]);
+    expect(autoOnly.tray.row).toBe("own");
+    expect(autoOnly.docks.top!.max).toBe(288);
+  });
+  it("置き場所が float の面は、PR-B ではトレイのボタン（窓は PR-C）。側の群れに入らない", () => {
+    const r = resolvePaneDisplays(input({ panels: [side("f", 1, "right"), { ...panel("w", 2), dock: "float" }] }));
+    expect(r.docks.right!.ids).toEqual(["f"]);
+    expect(r.tray.buttons.map((b) => b.id)).toEqual(["w"]);
   });
 });

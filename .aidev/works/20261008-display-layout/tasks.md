@@ -198,7 +198,7 @@
 
 ### PR-B: パネルの上下左右と D&D
 
-- [ ] T13: 割り付けの 4 つの側と、落とせる場所の関数: `resolvePaneDisplays` に、手順 3（縦。上・下）と、手順 4 の左を足す（両側の縮め方〔同じ大きさなら、上・左を先に縮める〕・自動でたたむ順・`TERMINAL_MIN_ROWS`）。上下の高さの望む値は、`sideSizes` → 選んでいる面の `size`（`decisions.md` D8）。`display/dockDrag.ts` に `dockZoneAt(rect, x, y, opts)`（純粋。箱の外は `null`・0.22・いちばん近い縁・中央は `opts.float` が真のときだけ `float`）。
+- [x] T13: 割り付けの 4 つの側と、落とせる場所の関数: `resolvePaneDisplays` に、手順 3（縦。上・下）と、手順 4 の左を足す（両側の縮め方〔同じ大きさなら、上・左を先に縮める〕・自動でたたむ順・`TERMINAL_MIN_ROWS`）。上下の高さの望む値は、`sideSizes` → 選んでいる面の `size`（`decisions.md` D8）。`display/dockDrag.ts` に `dockZoneAt(rect, x, y, opts)`（純粋。箱の外は `null`・0.22・いちばん近い縁・中央は `opts.float` が真のときだけ `float`）。
       単体テスト（4 つの側が同時・片方だけ・40 列と 10 行のちょうど・合計が超えるときの縮め方の各段・上が先にたたまれる・左が先にたたまれる・トレイの行のやり直し・`dockZoneAt` の境界）。**PR-A のテスト（右だけ）が、変更なしで通る**
       対象: `packages/web/src/display/paneDisplayLayout.ts`・`.test.ts`、`packages/web/src/display/dockDrag.ts`（新規）・`.test.ts`（新規） / 根拠: design「割り付け」の決まり 3・4、「D&D」
       依存: T6
