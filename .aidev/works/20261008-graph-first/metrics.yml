@@ -11,3 +11,4 @@ events:
   - { ts: 2026-10-08T15:39:57Z, phase: coding, event: start }
   - { ts: 2026-10-08T15:42:38Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T1, mode: delegated } }
   - { ts: 2026-10-08T15:52:15Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T2, mode: delegated } }
+  - { ts: 2026-10-08T15:54:48Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T3, mode: delegated } }

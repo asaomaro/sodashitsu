@@ -1,4 +1,11 @@
-import type { GitInfo, LayoutNode, Pane, Tab, Workspace, WorkspaceGroup } from "@sodashitsu/protocol";
+import type {
+  GitInfo,
+  LayoutNode,
+  Pane,
+  Tab,
+  Workspace,
+  WorkspaceGroup,
+} from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import { graphStructureFrom, localNodeKeys, machineMemberId } from "./structure.js";
 

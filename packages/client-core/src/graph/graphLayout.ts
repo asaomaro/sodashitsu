@@ -584,6 +584,28 @@ export function placeTopFrame(
 }
 
 /**
+ * worktree グループの中のメンバーの囲いを、ほかのメンバー（兄弟）の囲いの右隣へ動かす平行移動の量。兄弟どうしの重なりを直す最後の手段
+ * （グループの外側の囲いが広がって、ほかの囲いに重なれば、その次の直しでグループごと動く）。兄弟が無い・囲いが無いなら null。
+ */
+export function placeMemberBeside(
+  structure: LayoutStructure,
+  positions: NodePositions,
+  memberId: string,
+): GraphPoint | null {
+  const ctx = buildCtx(structure, positions);
+  const found = findMember(ctx, memberId);
+  if (found === null) return null;
+  const mine = rectOfPoints(ctx.points.get(memberId) ?? []);
+  const siblings = found.top.members
+    .filter((m) => m.id !== memberId)
+    .map((m) => rectOfPoints(ctx.points.get(m.id) ?? []))
+    .filter((r): r is GraphRect => r !== null);
+  const u = unionRect(siblings);
+  if (mine === null || u === null) return null;
+  return snapPoint({ x: u.x + u.w + FRAME_GAP - mine.x, y: u.y - mine.y });
+}
+
+/**
  * ドラッグの結果（`moves`: ノードの鍵 → 落とした位置）が、囲いの重なりを新しく作る・広げるなら、重ならない最も近い位置へ寄せる
  * （動かしたノードをまとめて同じ量だけずらす。相対の位置は保つ）。作らないなら、落とした位置のまま返す。
  * 返すのは、動かしたノードすべての最終の位置。重ならない場所が見つからないとき（座標の範囲の端）は、落とした位置のまま返す。

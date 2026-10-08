@@ -1,0 +1,235 @@
+import { describe, expect, it } from "vitest";
+import {
+  GRAPH_LOCAL_NODES_MAX,
+  type Graph,
+  type GraphNode,
+  type GraphOp,
+  type NodeKey,
+} from "@sodashitsu/protocol";
+import { applyGraphOps } from "./ops.js";
+import { emptyGraph } from "./defaults.js";
+import {
+  layoutOverlaps,
+  nodePositions,
+  type LayoutStructure,
+  type LayoutTop,
+} from "./graphLayout.js";
+import { GRAPH_FIRST_NODE_RESERVE, reconcileGraph } from "./reconcile.js";
+
+// 20261008-graph-first の T4：不変条件の検査と修復。
+
+const k = (id: string): NodeKey => `local:${id}`;
+
+function ws(id: string, n: number) {
+  return { id, nodes: Array.from({ length: n }, (_, i) => k(`${id}p${i}`)) };
+}
+function structureOf(tops: LayoutTop[]): LayoutStructure {
+  return { spaces: [{ id: "u", tops }] };
+}
+function single(id: string, n: number): LayoutTop {
+  return { id, kind: "workspace", members: [ws(id, n)] };
+}
+
+/** ops を当てる。当てられない（検証に落ちる）ならテストを落とす。 */
+function apply(graph: Graph, ops: GraphOp[]): Graph {
+  if (ops.length === 0) return graph;
+  const r = applyGraphOps({ graph }, ops);
+  if (!r.ok) throw new Error(JSON.stringify(r.issues));
+  return r.graph;
+}
+
+function rng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const withLinks = (nodes: GraphNode[]): Graph => ({
+  ...emptyGraph(),
+  nodes,
+  links: [
+    {
+      id: "l1",
+      kind: "supervise",
+      from: nodes[0]!.key,
+      to: nodes[1]!.key,
+      limit: 10,
+      count: 3,
+      paused: null,
+    },
+  ],
+});
+
+describe("reconcileGraph", () => {
+  it("ノードの無い pane にノードを足す。重ならず、2 回目は何もしない（冪等）", () => {
+    const st = structureOf([single("w1", 3), single("w2", 2), single("w3", 1)]);
+    const ops = reconcileGraph(st, emptyGraph());
+    expect(ops.every((o) => o.op === "add_node")).toBe(true);
+    expect(ops).toHaveLength(6);
+    const g = apply(emptyGraph(), ops);
+    expect(layoutOverlaps(st, nodePositions(g.nodes)).size).toBe(0);
+    expect(reconcileGraph(st, g)).toEqual([]);
+  });
+
+  it("全部そろって重なりも無ければ、空（既存のノードを動かさない）", () => {
+    const st = structureOf([single("w1", 2), single("w2", 1)]);
+    const g0 = apply(emptyGraph(), reconcileGraph(st, emptyGraph()));
+    expect(reconcileGraph(st, g0)).toEqual([]);
+  });
+
+  it("線を変えない（ops に線の操作が無く、当てた後の線が同じ）", () => {
+    const st = structureOf([single("w1", 2), single("w2", 2)]);
+    const base = withLinks([
+      { key: k("w1p0"), x: 40, y: 60 },
+      { key: k("w2p0"), x: 40, y: 60 }, // w1 と同じ場所: 囲いが重なる
+    ]);
+    const ops = reconcileGraph(st, base);
+    expect(ops.length).toBeGreaterThan(0);
+    expect(ops.every((o) => o.op === "add_node" || o.op === "move_node")).toBe(true);
+    const g = apply(base, ops);
+    expect(g.links).toEqual(base.links);
+    expect(reconcileGraph(st, g)).toEqual([]);
+  });
+
+  it("囲いが重なっていたら、後ろの id の側だけを動かす（前の側は動かさない）", () => {
+    const st = structureOf([single("w1", 1), single("w2", 1)]);
+    const base: Graph = {
+      ...emptyGraph(),
+      nodes: [
+        { key: k("w1p0"), x: 100, y: 100 },
+        { key: k("w2p0"), x: 120, y: 100 },
+      ],
+    };
+    const ops = reconcileGraph(st, base);
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({ op: "move_node", key: k("w2p0") });
+    // 否定の対照: 構成が変わった側の手がかり（changed）があれば、そちらを動かす。
+    const ops2 = reconcileGraph(st, base, { changed: new Set(["w1"]) });
+    expect(ops2).toHaveLength(1);
+    expect(ops2[0]).toMatchObject({ op: "move_node", key: k("w1p0") });
+  });
+
+  it("「移ってきた」ノードは、移った先の囲いの空きへ置き直し、ほかのノードは動かさない", () => {
+    const st = structureOf([single("w1", 2), single("w2", 1)]);
+    const base: Graph = {
+      ...emptyGraph(),
+      nodes: [
+        { key: k("w1p0"), x: 40, y: 60 },
+        { key: k("w2p0"), x: 1000, y: 60 },
+        // w1 へ移ってきたが、座標は w2 の囲いの中
+        { key: k("w1p1"), x: 1000, y: 200 },
+      ],
+    };
+    const ops = reconcileGraph(st, base, { arrived: new Set([k("w1p1")]) });
+    const g = apply(base, ops);
+    expect(ops.every((o) => o.op === "move_node" && o.key === k("w1p1"))).toBe(true);
+    const p = g.nodes.find((n) => n.key === k("w1p1"))!;
+    expect(p.x).toBeLessThan(600); // w1 の囲いの近く
+    expect(layoutOverlaps(st, nodePositions(g.nodes)).size).toBe(0);
+    expect(reconcileGraph(st, g)).toEqual([]);
+  });
+
+  it("worktree グループ: メンバーの囲いが重なれば、後ろのメンバーだけ動く。グループが他の囲いに重なれば、グループごと動く", () => {
+    const st = structureOf([
+      { id: "r:1", kind: "worktree", members: [ws("w1", 1), ws("w2", 1)] },
+      single("w3", 1),
+    ]);
+    const base: Graph = {
+      ...emptyGraph(),
+      nodes: [
+        { key: k("w1p0"), x: 100, y: 100 },
+        { key: k("w2p0"), x: 120, y: 100 }, // w1 と重なる
+        { key: k("w3p0"), x: 100, y: 100 }, // グループとも重なる
+      ],
+    };
+    const g = apply(base, reconcileGraph(st, base));
+    expect(layoutOverlaps(st, nodePositions(g.nodes)).size).toBe(0);
+    expect(reconcileGraph(st, g)).toEqual([]);
+  });
+
+  it("手元のノードの上限: 2 つ目以降は上限の手前（予備を残す）まで、workspace の最初の 1 つは上限まで", () => {
+    const filler = Array.from(
+      { length: GRAPH_LOCAL_NODES_MAX - GRAPH_FIRST_NODE_RESERVE - 1 },
+      (_, i) => ({
+        key: k(`f${i}`),
+        x: (i % 40) * 240,
+        y: Math.floor(i / 40) * 140 * 1,
+      }),
+    );
+    // filler は 1 つの workspace（w0）が持つことにする。
+    const w0 = { id: "w0", nodes: filler.map((n) => n.key) };
+    const st = structureOf([
+      { id: "w0", kind: "workspace", members: [w0] },
+      single("w1", 3),
+      single("w2", 3),
+    ]);
+    const base: Graph = { ...emptyGraph(), nodes: filler };
+    const g = apply(base, reconcileGraph(st, base));
+    const local = g.nodes.filter((n) => n.key.startsWith("local:")).length;
+    // 最初のノードは全 workspace に付く
+    expect(g.nodes.some((n) => n.key.startsWith("local:w1p"))).toBe(true);
+    expect(g.nodes.some((n) => n.key.startsWith("local:w2p"))).toBe(true);
+    expect(local).toBeLessThanOrEqual(GRAPH_LOCAL_NODES_MAX);
+    expect(local).toBeLessThanOrEqual(GRAPH_LOCAL_NODES_MAX - GRAPH_FIRST_NODE_RESERVE + 2);
+    // 否定の対照: 余裕があれば全部の pane にノードが付く。
+    const small = structureOf([single("w1", 3), single("w2", 3)]);
+    expect(apply(emptyGraph(), reconcileGraph(small, emptyGraph())).nodes).toHaveLength(6);
+  });
+
+  it("別のマシンのノードは足さない・消さない・上限の対象に数えない", () => {
+    const m = "d".repeat(32);
+    const st = structureOf([
+      single("w1", 1),
+      { id: `m:${m}`, kind: "machine", members: [{ id: `m:${m}`, nodes: [`${m}:x1` as NodeKey] }] },
+    ]);
+    const base: Graph = { ...emptyGraph(), nodes: [{ key: `${m}:x1` as NodeKey, x: 400, y: 400 }] };
+    const ops = reconcileGraph(st, base);
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({ op: "add_node", key: k("w1p0") });
+  });
+
+  it("性質: 乱数の構成と、重なりを含む乱数の位置から直しても、結果は重ならず、2 回目は何もしない", () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const rand = rng(seed * 31);
+      const tops: LayoutTop[] = [];
+      let id = 0;
+      const nTops = 1 + Math.floor(rand() * 6);
+      for (let i = 0; i < nTops; i++) {
+        const worktree = rand() < 0.35;
+        const nm = worktree ? 2 + Math.floor(rand() * 3) : 1;
+        const members = Array.from({ length: nm }, () => ws(`w${++id}`, Math.floor(rand() * 5)));
+        tops.push(
+          worktree
+            ? { id: `r:${i}`, kind: "worktree", members }
+            : { id: members[0]!.id, kind: "workspace", members },
+        );
+      }
+      const st = structureOf(tops);
+      // 一部のノードだけ、ばらばら（重なる）位置で既にある。
+      const nodes: GraphNode[] = [];
+      for (const t of tops)
+        for (const m of t.members)
+          for (const key of m.nodes)
+            if (rand() < 0.5)
+              nodes.push({
+                key,
+                x: Math.round((rand() * 600) / 20) * 20,
+                y: Math.round((rand() * 400) / 20) * 20,
+              });
+      const base: Graph = { ...emptyGraph(), nodes };
+      const ops = reconcileGraph(st, base);
+      const g = apply(base, ops);
+      expect([...layoutOverlaps(st, nodePositions(g.nodes)).keys()], `seed ${seed}`).toEqual([]);
+      expect(reconcileGraph(st, g), `seed ${seed}`).toEqual([]);
+      // どの pane にも（workspace ごとに少なくとも 1 つ。ここは上限の中）ノードがある。
+      const have = new Set(g.nodes.map((n) => n.key));
+      for (const t of tops)
+        for (const m of t.members) for (const key of m.nodes) expect(have.has(key)).toBe(true);
+    }
+  });
+});
