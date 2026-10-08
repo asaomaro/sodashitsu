@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
 import { runDisplay } from "../support/display.js";
-import { openDisplayBrowser } from "../support/displayBrowser.js";
+import { openDisplayBrowser, writeTmp } from "../support/displayBrowser.js";
 import {
   activeTagName,
   bodyHits,
@@ -320,15 +320,20 @@ test("(5) D&D: 見出しをつかんで各場所へ。落とせる場所の文�
   await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains("soda-display-dragging"))).toBe(false);
 });
 
-test("(6) load と枠の要素: 右 2 枚・下 1 枚・帯 1 本（script-html）。右の 1 枚を左へ移す（メニューと D&D）と、移した面の枠だけが作り直され、ほかの面の枠は同じ要素のまま。どの後も data-display-loads が 1", async ({ page, appServer }) => {
+for (const kind of ["script-html", "html"] as const) {
+test(`(6-${kind}) load と枠の要素: 右 2 枚・下 1 枚・帯 1 本（script-html）。右の 1 枚を左へ移す（メニューと D&D）と、移した面の枠だけが作り直され、ほかの面の枠は同じ要素のまま。どの後も data-display-loads が 1`, async ({ page, appServer }) => {
   test.setTimeout(120_000);
   await enableScript(appServer);
   const { paneId, sent } = await openDisplayBrowser(page, appServer);
   const script = (n: string) => `<!doctype html><body><p>${n}</p><script>document.title='${n}'</script></body>`;
-  await setScriptOk(appServer, paneId, "ra", script("ra"), { kind: "panel" });
-  await setScriptOk(appServer, paneId, "rb", script("rb"), { kind: "panel" });
-  await setScriptOk(appServer, paneId, "bt", script("bt"), { kind: "panel", extra: ["--dock", "bottom"] });
-  await setScriptOk(appServer, paneId, "bd", script("bd"), { kind: "band" });
+  const put = async (name: string, k: "band" | "panel", extra: string[] = []): Promise<void> => {
+    if (kind === "script-html") await setScriptOk(appServer, paneId, name, script(name), { kind: k, extra });
+    else await runDisplay(appServer, paneId, ["set", name, "--kind", k, "--html-file", await writeTmp(`<!doctype html><body><p>${name}</p></body>`, `${name}.html`), ...extra]).then(ok);
+  };
+  await put("ra", "panel");
+  await put("rb", "panel");
+  await put("bt", "panel", ["--dock", "bottom"]);
+  await put("bd", "band");
   await expect(page.locator("iframe[data-display-frame]")).toHaveCount(3); // 右は、選んでいる 1 枚だけ
   const ids = await idsOf(appServer, paneId);
   await expect.poll(() => frameLoads(page)).toEqual(["1", "1", "1"]);
@@ -373,6 +378,7 @@ test("(6) load と枠の要素: 右 2 枚・下 1 枚・帯 1 本（script-html�
   const list = await ok(await runDisplay(appServer, paneId, ["list"]));
   expect((list.json as { displays: unknown[] }).displays).toHaveLength(4);
   expect(sent.reports().filter((r) => r.problem === "navigated")).toHaveLength(0);
+  if (kind !== "script-html") return;
   // 移した後も覆いがあり、［操作する］で始まり、冷却に入っていない（直後の set が通る）
   await expect(page.locator("[data-display-dock=\"top\"] [data-display-cover]")).toHaveCount(1);
   await page.locator('[data-display-dock="top"] [data-display-engage]').click();
@@ -383,6 +389,7 @@ test("(6) load と枠の要素: 右 2 枚・下 1 枚・帯 1 本（script-html�
   await expect.poll(() => termFocused(page)).toBe(true);
   expect(stealReports(sent)).toBe(0);
 });
+}
 
 test("(6c) 操作中の script-html のパネルで、見出しのつかむ場所・各側のつまみ・［⋮］をマウスで 5 回ずつ押しても、focus_steal を 1 回も送らない。activeElement は枠にならない", async ({ page, appServer }) => {
   test.setTimeout(120_000);
@@ -579,5 +586,40 @@ test("(12) 固定の文言: 4 つの側（最小の大きさ）で、設定で�
     expect(tb.bottom).toBeLessThanOrEqual(wb.y + wb.height + 1);
     await setLocal(true);
     await expect(note).toHaveCount(0);
+  }
+});
+
+test("(12b) 遮断器の後の文言と［再開］: 4 つの側（最小の大きさ）で、パネルの枠の箱の中に見えて、［再開］を押すと戻る", async ({ page, appServer }) => {
+  test.setTimeout(150_000);
+  await enableScript(appServer);
+  const { paneId } = await openDisplayBrowser(page, appServer);
+  await setScriptOk(appServer, paneId, "sp", BENIGN, { kind: "panel" });
+  for (const side of SIDES) {
+    if (side !== "right") await moveByMenu(page, appServer, paneId, "sp", side);
+    const panel = dock(page, side);
+    await panel.locator("[data-pane-panel-resize]").focus();
+    await page.keyboard.press("Home");
+    // 毎フレームフォーカスを落とす面（帯）を足して、利用者が端末を触る → 遮断器
+    await setScriptOk(appServer, paneId, "drop", `<!doctype html><body><script>(function f(){window.focus();parent.focus();requestAnimationFrame(f);})();</script></body>`, { kind: "band" });
+    await expect(page.locator("iframe[data-display-script]")).toHaveCount(2);
+    await page.locator(".xterm-screen").first().click();
+    for (let i = 0; i < 60; i++) {
+      await page.keyboard.press("a");
+      await page.waitForTimeout(25);
+    }
+    const wrap = panel.locator(".display-frame-wrap");
+    const note = wrap.locator(".display-frame-note", { hasText: "入力のフォーカスが繰り返し外されたので" });
+    await expect(note, `${side}: 遮断器の文言`).toBeVisible({ timeout: 10_000 });
+    const wb = await boxOf(wrap);
+    const nb = await boxOf(note);
+    expect(nb.x, side).toBeGreaterThanOrEqual(wb.x - 1);
+    expect(nb.x + nb.width, side).toBeLessThanOrEqual(wb.x + wb.width + 1);
+    const again = wrap.locator("[data-display-redisplay]");
+    await expect(again).toBeVisible();
+    expect(await centerHitsSelf(again), `${side}: ［再開］の中心`).toBe(true);
+    await again.click();
+    await expect(note).toHaveCount(0);
+    await ok(await runDisplay(appServer, paneId, ["close", "drop"]));
+    await expect(page.locator("iframe[data-display-script]")).not.toHaveCount(0);
   }
 });
