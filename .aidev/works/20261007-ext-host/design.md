@@ -326,7 +326,7 @@ export interface ExtensionLogResult { lines: string[]; dropped: number } // drop
 
 /** 拡張に見せる pane。 */
 export interface ExtPane { id: string; label: string | null; workspaceId: string; workspaceLabel: string; workspaceCwd: string; agent: string | null }
-export interface ExtLimits { lineBytes: number; requestsPerSec: number; inputBytesPerSec: number; outQueueLines: number; displays: number }
+export interface ExtLimits { lineBytes: number; requestsPerSec: number; inputBytesPerSec: number; outQueueLines: number; displays: number; displayBytes: number }
 
 /** サーバ → 拡張の行。 */
 export type ExtLine =
@@ -384,7 +384,7 @@ export function extLimits(): ExtLimits;
 5. **許可**を確かめる（**`script-html` を拡張が出せるのは、「登録の `allow`」かつ「サーバの設定 `displayScriptEnabled`」の両方が満たされるときだけ**。`allow` はここで、設定は台帳が見る）: `allow` に `script-html` が無い拡張が、(i) `display.set` を `params.format === "script-html"`（文字列の比較）で呼んだ (ii) `display.send` を呼んだ、のどちらも、**台帳を呼ばずに**、誤りの code は `unsupported`。
    `allow` にあれば、次へ進み、台帳が、設定（無効なら `display_script_disabled`）・冷却（`display_busy`）を、pane のプログラムと同じ順で検査する（7 で、その code がそのまま返る）。**`allow` があっても、設定の検査を飛ばす道は無い**（拡張は、台帳の `set`・`send` を、ほかの呼び手と同じ入口から呼ぶ。`ExtensionHost` は、設定を読まない・変えない）。
 6. 1 つの拡張の面の数と量: `display.set` が新しい面を作るとき（`displays.ownerOf(paneId, name) !== tag`）、`displays.countOwned(tag) >= 16` なら `display_limit`。
-   `display.set` の後の、その拡張の中身の合計（`displays.bytesOwned(tag)` − 置き換える面のいまのバイト数 ＋ 新しい中身のバイト数）が 8 MiB（`EXTENSION_DISPLAY_BYTES_MAX`）を超えるなら `display_limit`（1 つの拡張が、サーバ全体の 64 面・32 MiB を使い切って、範囲の外の pane の `set` まで止めることが無いように。pane のプログラムは、1 pane で 12 MiB まで）。
+   `display.set` の後の、その拡張の中身の合計（`displays.bytesOwned(tag)` − 置き換える面のいまのバイト数〔**`ownerOf(paneId, name) === tag` のときだけ**、`displays.list(paneId, { owner: tag })` の、その名前の `bytes`。ほかの持ち主の面のバイト数は、引かない〕＋ 新しい中身のバイト数）が 8 MiB（`EXTENSION_DISPLAY_BYTES_MAX`）を超えるなら `display_limit`（1 つの拡張が、サーバ全体の 64 面・32 MiB を使い切って、範囲の外の pane の `set` まで止めることが無いように。pane のプログラムは、1 pane で 12 MiB まで）。
 7. `DisplayService` を呼ぶ。`RpcError` は、その `code` と `message` を返す。ほかの例外は `internal`（文は固定。ログに、拡張の id と操作の名前）。
 8. `id` があれば `ext.result` を書く（捨てない行）。`id` が無ければ、何も書かない（誤りのときも）。
 
@@ -448,6 +448,12 @@ onOwnedEvent(fn: (tag: string, ev: DisplayOwnedEvent) => void): { dispose(): voi
 | `closeOwned` | 台帳から外し、`display.removed`（理由 `closed`）を bus に配る。受け手へは知らせない |
 
 - 受け手は同期で呼ぶ。受け手の例外は、台帳の処理へ伝えない（`try/catch` で包み、ログ）。
+- **持ち主が替わる置き換え（表の 4 行目）の、コードの上の手順**（`DisplayService.ts` の `set`。行番号は `1ff0418`）:
+  1. 検査は、いまのまま（186〜198 行。`existing` があるので、数と合計は「置き換え」として数える）。投げたら、何も変えない。
+  2. 確定の所で、**台帳の付け替えを先に済ませる**: 古い面を、台帳から外す（`remove` と同じ後始末——`byId`・`byPane`・`totalBytes`・古い `ttl` のタイマー）→ 新しい面を、**新規の枝**（213〜218 行に当たる所）で足す。**いまの置き換えの枝（220 行の、古い中身を `totalBytes` から引く所）は、通さない**（`remove` が、もう引いている。二重に引くと、合計が実際より小さくなり、32 MiB の上限をすり抜ける）。
+     `remove` は、その pane の最後の面なら `byPane` の Map ごと消す（613 行）ので、**`byPane` は、外した後に取り直す**（186 行で取った Map を、使い回さない）。
+  3. **配るのは、付け替えの後**: 持ち主へ `display.closed`（`closed`）→ bus に `display.removed`（古い `id`）→ `display.updated`（新しい `id`）。付け替えの途中で、受け手・bus の購読者を呼ばない（同期で台帳を呼ばれても、同じ名前の面が二重に出来ない）。
+- **札つきの `set` が、札の無い面・別の札の面に当たったとき**（表の 3 行目）の `invalid_display` の位置: `existing` を引いた直後（187 行の後・189 行の、数の検査の前）。2 つの桶を `refund` してから投げる。設定（164 行）・冷却（166 行）の検査の**後**なので、設定が無効なら `display_script_disabled`、冷却の間なら `display_busy` が先に返る（札は、どちらの検査も飛ばさない）。
 - 面の数・合計のバイト数・`set` の頻度（pane ごと）は、札に依らず、今までどおり合わせて数える（AC5・機能要件 27）。
 - `send(paneId, p, opts?: { owner?: string })`: **面の札と `opts.owner` が違えば**（札なしの呼び出しが札つきの面を指す・札つきの呼び出しが別の札や札なしの面を指す）`display_closed`。`send` は main にあるので、**T7 で、札と一緒に必ず入れる**（札だけ入って、この検査が無いと、pane のプログラムが、拡張の面のスクリプトへデータを送れる）。
 - **設定・冷却・無効化は、持ち主を見ない**（main の作りのまま。変えない）: (i) 設定を無効にすると、拡張の `script-html` の面も閉じる（持ち主へ `display.closed`〔`script_disabled`〕）。(ii) **冷却は pane ごと**なので、拡張の面のスクリプトがフォーカスを取り続ける・枠を移すと、その pane の、**pane のプログラムやほかの拡張の `script-html` の面も閉じ**、5 分のあいだ、その pane は、だれも `script-html` を出せない。逆も同じ（pane のプログラムの面が原因で、拡張の面が閉じる。持ち主へ `display.closed`〔`focus_steal`｜`navigated`〕）。
@@ -532,7 +538,7 @@ export class ExtensionProcess {
      Windows: 2 秒待ち、**子がまだ `exit` していなければ** `runFile(taskkill の絶対パス, ["/pid", pid, "/T", "/F"])` を 1 回。子が `exit` した後は、`taskkill` を動かさない（pid は、すぐ再利用されうる。無関係の木を止めない）——親が先に終わった後に残る孫は、Windows では止められない（限界。docs に書く）。
   3. 掃き終わり、かつ子が `exit` したら返る。3 秒で、どちらかが済んでいなくても返る（ログに warn。`exited` は、後で来たら決まる）。
 - **子が、止めていないのに `exit` したとき**（自分で終わった・落ちた）: POSIX は `sweepGroup(exit から 2 秒)` を、裏で 1 回（残った孫を掃く）。Windows は、何もしない（上の限界）。
-- **子が `exit` したら（止めた・自分で終わった・落ちた、のどれでも）、サーバの側の stdio を閉じる**: `stdin.end()`（まだなら）・`stdout.destroy()`・`stderr.destroy()`。`stop` が 3 秒で打ち切ったときも、同じ（`exit` を待たずに閉じる）。自分でグループを抜けた孫がパイプを握っていても、孫の標準入力に EOF が届き（S15 の決まりが効く）、サーバに fd と受け手が残らない。
+- **子が `exit` したら（止めた・自分で終わった・落ちた、のどれでも）、サーバの側の stdio を閉じる**: `stdin.end()`（まだなら）は、すぐ。`stdout`・`stderr` は、**読み残しを待ってから**——それぞれの `end`／`close` を、200 ミリ秒まで待ち（`exit` は、パイプの読み残しより先に来うる。落ちた拡張の、標準エラーの最後の行が、いちばん見たい）、来なければ `destroy()`。標準エラーの量の桶で `pause` していたら、`exit` の時点で `resume` する（残りは、輪の記録の上限の中で読む）。`stop` が 3 秒で打ち切ったときも、同じ（`exit` を待たずに閉じる）。自分でグループを抜けた孫がパイプを握っていても、孫の標準入力に EOF が届き（S15 の決まりが効く）、サーバに fd と受け手が残らない。
 - `readonly settled: Promise<void>`: 子が `exit` し、かつ `sweepGroup` が終わった（または、合図・`exit` から 3 秒たった）ときに決まる。`ExtensionHost` は、これが決まるまで、その起動を「片づけ中」として持つ（下）。`stop()` を、`exit` の後・掃いている途中に呼ばれたら、進行中の `sweepGroup` を待って返る。**掃き終わった後（`settled` が決まった後）に呼ばれたら、何もせずに、すぐ返る**。
   `spawn` の失敗（`pid` が無い）では、`exited` と同時に `settled`。Windows（`sweepGroup` が無い）は、子の `exit` で `settled`（`stop` の途中なら、`taskkill` を動かした後の `exit`。3 秒で打ち切り）。
 - `exited` を決める: 止めた印があれば、その理由。無ければ、`code === 0 && signal === null` なら `exited`、ほかは `crashed`。
@@ -598,7 +604,7 @@ export class ExtensionHost {
 5. いま動いているもの（`runs`）のうち、`desired` に無い・`eligible` でない・**`digest` が違う**ものを止める（並行に `stopRun(key)`。終わりを待つ）。`backoff` のタイマーも、同じ条件で外し、**その状態（`backoff`）も捨てる**。
 6. 上限（`EXTENSIONS_RUNNING_MAX` = 32）: **5 で止めなかった、動いているものは、そのまま数える**。残りの枠を、動いていない `eligible`（状態が `backoff`・`failed`・`exited` のものを除く）に、利用者（ファイルの順）→ プロジェクト（根の辞書順・ファイルの順）の順で割り当てて `startOne(key)`。入らなかった分は `over_limit`（動いているものを、順が前のものに譲らせない）。
    `digest` が変わった `failed`・`exited` は、状態を捨てて、同じ扱い。
-7. `emitChanged()` を呼ぶ: 一覧が変わっていれば、bus に `{ event: "extension.changed", data: {} }` を出す（**この関数は 1 つ**で、`reconcile` の終わり・`startOne` の終わり〔起動した・`over_limit` になった・起動しなかった〕・`restart` の終わり・`onExit` の終わり、で呼ぶ。比べる JSON から、`ExtensionInfo.displays`〔面の数。`set` のたびに変わる〕は除く——`displays` は、一覧を取ったときの値で、変わっても知らせない。同じ中身なら出さない。**`ExtensionListResult` の全体**〔`extensions`・`problems`・`approvals`〕の JSON を、前に出したときのものと比べる——いま一覧に無い根の記録を消したとき・別の session での承認と取り消しでも、画面が取り直す）。pane の一覧の行を、送り直す。
+7. `emitChanged()` を呼ぶ: 一覧が変わっていれば、bus に `{ event: "extension.changed", data: {} }` を出す（**この関数は 1 つ**で、PR3 で `approvals` が入った後は、`approvals` も比べる対象に入る——いま一覧に無い (根, id) の `revoke`・見張りが拾った記録の変化でも、出る。`reconcile` の終わり・`startOne` の終わり〔起動した・`over_limit` になった・起動しなかった〕・`restart` の終わり・`onExit` の終わり、で呼ぶ。比べる JSON から、`ExtensionInfo.displays`〔面の数。`set` のたびに変わる〕は除く——`displays` は、一覧を取ったときの値で、変わっても知らせない。同じ中身なら出さない。**`ExtensionListResult` の全体**〔`extensions`・`problems`・`approvals`〕の JSON を、前に出したときのものと比べる——いま一覧に無い根の記録を消したとき・別の session での承認と取り消しでも、画面が取り直す）。pane の一覧の行を、送り直す。
 
 **起動**（`startOne(key)`。**拡張のコマンドを `spawn` する、ただ 1 つの道**。`chain` の中でだけ呼ぶ）:
 
@@ -716,7 +722,7 @@ stateDiagram-v2
   `registerAllMethods` の依存に `extensions`。`internal.extensions` は、テストが `spawn` などを差し替える口（`internal.machineSpawn` と同じ流儀）。
 - `listen()`: `void machines.start()`（787 行）の隣に `void extensions.start()`（**待たない**。ロック〔633 行〕の後・復元の後。設定を読む処理が遅くても、`listen()` を止めない）。`start()` は投げない作りにする（設定の誤りは `problems`、`spawn` の失敗は状態）。
   `listen()` の最後の文なので、その後に `listen()` が失敗する道は無いが、`catch` に `await extensions.stop().catch(() => {})` を足しておく（後で、文が足されても残らないように）。
-- `close()`: `await machines.stop()`（827 行）の隣に `await extensions.stop()`。**`finally` にも**、`displays.dispose()`（861 行）の前に、`await extensions.stop().catch(() => undefined)` → `extensions.dispose()` を置く（`try` の途中で投げても、子を止めてから、台帳への後始末を外す。`stop()` は、何度呼んでもよい）。
+- `close()`: `await machines.stop()`（827 行）の隣に `await extensions.stop()`。`try` の中の `extensions.stop()` は、`machines.stop()` の**後ろ**に置く。**`finally` にも**、`displays.dispose()`（861 行）の前に、`await extensions.stop().catch(() => undefined)` → `extensions.dispose()` を置く（`try` の途中で投げても、子を止めてから、台帳への後始末を外す。`stop()` は、何度呼んでもよい）。
 - 入れ替え: `pausePollers` の `await machines.stop()`（537 行）の隣に `await extensions.stop()`、`resumePollers` の `void machines.start()`（543 行）の隣に `void extensions.start()`（**止めていなくても呼べる**。`start()` は、動いているものを二重に起動しない）。
 - 止める処理は、並行で、合わせて 3 秒まで（S16）。
 
