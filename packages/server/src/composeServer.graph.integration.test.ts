@@ -1,4 +1,5 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
@@ -23,8 +24,6 @@ interface Client {
   waitEvent(name: string, pred?: (data: unknown) => boolean, timeoutMs?: number): Promise<unknown>;
 }
 
-const A = "local:p1";
-const B = "local:p2";
 const REMOTE = `${"d".repeat(32)}:p1`;
 const trigger = { on: "done", prompt: "見て", output: { lines: 80 }, whenBusy: "wait" };
 
@@ -146,101 +145,172 @@ describe("composeServer: graph.*（20260927-agent-graph）", () => {
     return { server, token, clients };
   }
 
-  it("graph.get は最初 rev 0。graph.update は 1 rev で当て、変えた本人を含む全クライアントへ graph.changed を配る", async () => {
-    const { clients } = await startWithClients(await tempStateDir(), 2);
+  type GraphShape = {
+    rev: number;
+    paused: boolean;
+    nodes: { key: string; x: number; y: number }[];
+    links: { id: string; paused: string | null; count: number }[];
+  };
+  const getGraph = async (c: Client): Promise<GraphShape> =>
+    (await c.request("graph.get", {})).result as GraphShape;
+  /** 維持（GraphMaintainer）が pane のノードを足し終えるのを待つ（20261008-graph-first）。 */
+  async function waitForNodes(c: Client, keys: string[]): Promise<GraphShape> {
+    const deadline = Date.now() + 8000;
+    for (;;) {
+      const g = await getGraph(c);
+      if (keys.every((k) => g.nodes.some((n) => n.key === k))) return g;
+      if (Date.now() > deadline) throw new Error(`timed out waiting for nodes ${keys.join(",")}`);
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+
+  it("graph.get は最初、起動の維持が足した手元の pane のノードだけ（rev 1・線なし）。graph.update は 1 rev で当て、変えた本人を含む全クライアントへ graph.changed を配る", async () => {
+    const { server, clients } = await startWithClients(await tempStateDir(), 2);
     const [a, b] = clients as [Client, Client];
+    const pane = server.session.snapshot().panes[0]!.id;
+    const L = `local:${pane}`;
     expect((await a.request("graph.get", {})).result).toEqual({
-      rev: 0,
+      rev: 1,
       paused: false,
-      nodes: [],
+      nodes: [{ key: L, x: expect.any(Number), y: expect.any(Number) }],
       links: [],
     });
     const reply = await a.request("graph.update", {
-      baseRev: 0,
+      baseRev: 1,
       ops: [
-        { op: "add_node", key: A, x: 0, y: 0 },
-        { op: "add_node", key: B, x: 240, y: 0 },
-        { op: "add_link", kind: "trigger", from: A, to: B, trigger },
+        { op: "add_node", key: REMOTE, x: 1000, y: 0 },
+        { op: "add_link", kind: "trigger", from: L, to: REMOTE, trigger },
       ],
     });
     const graph = reply.result as { rev: number; links: { id: string }[] };
-    expect(graph.rev).toBe(1);
+    expect(graph.rev).toBe(2);
     expect(graph.links).toHaveLength(1);
     expect(graph.links[0]!.id).toMatch(UUID_RE); // 線の id は UUID
     const changed = { graph, byClientId: a.clientId };
-    expect(await b.waitEvent("graph.changed")).toEqual(changed);
-    expect(await a.waitEvent("graph.changed")).toEqual(changed);
+    expect(
+      await b.waitEvent("graph.changed", (d) => (d as { graph: { rev: number } }).graph.rev === 2),
+    ).toEqual(changed);
+    expect(
+      await a.waitEvent("graph.changed", (d) => (d as { graph: { rev: number } }).graph.rev === 2),
+    ).toEqual(changed);
     expect((await b.request("graph.get", {})).result).toEqual(graph);
   });
 
   it("baseRev の不一致は rev_conflict、当てられない操作は invalid_params（どちらも保存しない）", async () => {
-    const { clients } = await startWithClients(await tempStateDir(), 2);
+    const { server, clients } = await startWithClients(await tempStateDir(), 2);
     const [a, b] = clients as [Client, Client];
-    await a.request("graph.update", { baseRev: 0, ops: [{ op: "add_node", key: A, x: 0, y: 0 }] });
+    const L = `local:${server.session.snapshot().panes[0]!.id}`;
+    await a.request("graph.update", {
+      baseRev: 1,
+      ops: [{ op: "add_node", key: REMOTE, x: 4000, y: 0 }],
+    });
     expect(
       (
         await b.request("graph.update", {
-          baseRev: 0,
-          ops: [{ op: "move_node", key: A, x: 20, y: 20 }],
+          baseRev: 1,
+          ops: [{ op: "move_node", key: REMOTE, x: 20, y: 20 }],
         })
       ).error?.code,
     ).toBe("rev_conflict");
     expect(
       (
         await b.request("graph.update", {
-          baseRev: 1,
-          ops: [{ op: "add_link", kind: "supervise", from: A, to: A }],
+          baseRev: 2,
+          ops: [{ op: "add_link", kind: "supervise", from: L, to: L }],
         })
       ).error?.code,
     ).toBe("invalid_params");
     expect(
       (
         await b.request("graph.update", {
-          baseRev: 1,
+          baseRev: 2,
           ops: [{ op: "add_node", key: "local:bad id", x: 0, y: 0 }],
         })
       ).error?.code,
     ).toBe("invalid_params");
     // 別のマシンの pane への選び直し（マシンが変わる付け替え）は、web・sodactl だけでなくサーバも断る（統合レビュー R1）。
     const rekey = await b.request("graph.update", {
-      baseRev: 1,
-      ops: [{ op: "rekey_node", key: A, newKey: `${"f".repeat(32)}:p1` }],
+      baseRev: 2,
+      ops: [{ op: "rekey_node", key: REMOTE, newKey: `${"f".repeat(32)}:p1` }],
     });
     expect(rekey.error?.code).toBe("invalid_params");
-    expect((rekey.error as { message?: string } | undefined)?.message).toContain(
-      "rekey_other_machine",
+    expect((await getGraph(b)).rev).toBe(2);
+  });
+
+  it("開いている pane のノードは外せず（node_required）、囲いが重なる位置へは動かせない（frame_overlap）。閉じた pane・別のマシンのノードは外せる", async () => {
+    const { server, clients } = await startWithClients(await tempStateDir());
+    const a = clients[0]!;
+    const p1 = server.session.snapshot().panes[0]!.id;
+    const other = await server.session.createWorkspace(tmpdir(), "other");
+    const p2 = other.pane.id;
+    const g0 = await waitForNodes(a, [`local:${p1}`, `local:${p2}`]);
+    const err = async (ops: unknown[], baseRev?: number) =>
+      (await a.request("graph.update", { baseRev: baseRev ?? (await getGraph(a)).rev, ops })).error
+        ?.code;
+    // node_required
+    expect(await err([{ op: "remove_node", key: `local:${p1}` }])).toBe("node_required");
+    expect(await err([{ op: "rekey_node", key: `local:${p1}`, newKey: `local:${p2}` }])).toBe(
+      "node_required",
     );
-    expect(((await b.request("graph.get", {})).result as { rev: number }).rev).toBe(1);
+    // frame_overlap: p1 を p2 の囲いの上へ
+    const at2 = g0.nodes.find((n) => n.key === `local:${p2}`)!;
+    expect(await err([{ op: "move_node", key: `local:${p1}`, x: at2.x, y: at2.y }])).toBe(
+      "frame_overlap",
+    );
+    // 断られたものは保存していない（rev も位置も同じ）
+    expect(await getGraph(a)).toEqual(g0);
+    // rev が違うときは、検査より先に rev_conflict（取り直してやり直せる）
+    expect(await err([{ op: "remove_node", key: `local:${p1}` }], g0.rev - 1)).toBe("rev_conflict");
+    // 否定の対照: 別のマシンのノードは足して外せる。重ならない位置への移動は通る。
+    const added = await a.request("graph.update", {
+      baseRev: g0.rev,
+      ops: [{ op: "add_node", key: REMOTE, x: 4000, y: 0 }],
+    });
+    expect(added.error).toBeUndefined();
+    const removed = await a.request("graph.update", {
+      baseRev: g0.rev + 1,
+      ops: [{ op: "remove_node", key: REMOTE }],
+    });
+    expect(removed.error).toBeUndefined();
+    const moved = await a.request("graph.update", {
+      baseRev: g0.rev + 2,
+      ops: [{ op: "move_node", key: `local:${p1}`, x: at2.x + 4000, y: at2.y }],
+    });
+    expect(moved.error).toBeUndefined();
+    // pane を閉じると、ノードは維持の側（GraphPaneCleanup）が消す
+    await a.request("pane.close", { paneId: p2 });
+    await vi.waitFor(async () => {
+      expect((await getGraph(a)).nodes.some((n) => n.key === `local:${p2}`)).toBe(false);
+    });
   });
 
   it("一時停止・再開（全体・線）。知らない線は not_found。履歴は（実行が入るまで）空", async () => {
-    const { clients } = await startWithClients(await tempStateDir());
+    const { server, clients } = await startWithClients(await tempStateDir());
     const a = clients[0]!;
+    const p1 = server.session.snapshot().panes[0]!.id;
+    const p2 = (await server.session.splitPane(p1, "right", undefined)).pane.id;
+    await waitForNodes(a, [`local:${p1}`, `local:${p2}`]);
+    const base = (await getGraph(a)).rev;
     await a.request("graph.update", {
-      baseRev: 0,
-      ops: [
-        { op: "add_node", key: A, x: 0, y: 0 },
-        { op: "add_node", key: B, x: 0, y: 0 },
-        { op: "add_link", kind: "supervise", from: A, to: B },
-      ],
+      baseRev: base,
+      ops: [{ op: "add_link", kind: "supervise", from: `local:${p1}`, to: `local:${p2}` }],
     });
-    const l1 = (
-      ((await a.request("graph.get", {})).result as { links: { id: string }[] }).links[0] as {
-        id: string;
-      }
-    ).id;
-    expect((await a.request("graph.pause", {})).result).toMatchObject({ rev: 2, paused: true });
+    const l1 = (await getGraph(a)).links[0]!.id;
+    expect((await a.request("graph.pause", {})).result).toMatchObject({
+      rev: base + 2,
+      paused: true,
+    });
     expect((await a.request("graph.pause", { linkId: l1 })).result).toMatchObject({
-      rev: 3,
+      rev: base + 3,
       links: [{ paused: "user" }],
     });
     expect((await a.request("graph.resume", {})).result).toMatchObject({
-      rev: 4,
+      rev: base + 4,
       paused: false,
       links: [{ paused: "user" }],
     });
     expect((await a.request("graph.resume", { linkId: l1 })).result).toMatchObject({
-      rev: 5,
+      rev: base + 5,
       links: [{ paused: null, count: 0 }],
     });
     expect((await a.request("graph.pause", { linkId: "l9" })).error?.code).toBe("not_found");
@@ -250,49 +320,38 @@ describe("composeServer: graph.*（20260927-agent-graph）", () => {
     });
   });
 
-  it("保存したグラフは再起動の後も読める（pane の id は session.json で引き継がれるので、手元のノードは同じ pane を指したまま）", async () => {
+  it("保存したグラフは再起動の後も読める。再起動の維持は何も変えない（rev も位置も同じ）", async () => {
     const stateDir = await tempStateDir();
     const first = await startWithClients(stateDir);
-    // 手元のノードは実在する pane の id で結ぶ（居ない pane のノードは起動の復元の後に外れる）。
+    // 手元のノードは実在する pane の id（起動の維持が足した）。居ない pane のノードは起動の復元の後に外れる。
     const pane = first.server.session.snapshot().panes[0]!.id;
     expect(pane).toMatch(UUID_RE);
     const L = `local:${pane}`;
     await first.clients[0]!.request("graph.update", {
-      baseRev: 0,
-      ops: [
-        { op: "add_node", key: L, x: 0, y: 0 },
-        { op: "add_node", key: REMOTE, x: 240, y: 0 },
-      ],
+      baseRev: 1,
+      ops: [{ op: "add_node", key: REMOTE, x: 1000, y: 0 }],
     });
+    const before = await getGraph(first.clients[0]!);
+    expect(before.rev).toBe(2);
     // session.json は間を置いて書くので、書き終えてから止める（止めるときに最後の保存が走る）。
     first.clients[0]!.ws.close();
     await first.server.close();
 
     const second = await start(stateDir);
     const b = await connect(second, await tokenLogin(second, first.token));
-    expect((await b.request("graph.get", {})).result).toEqual({
-      rev: 1,
-      paused: false,
-      nodes: [
-        { key: L, x: 0, y: 0 },
-        { key: REMOTE, x: 240, y: 0 },
-      ],
-      links: [],
-    });
+    expect((await b.request("graph.get", {})).result).toEqual(before);
+    expect(before.nodes.map((n) => n.key)).toEqual([L, REMOTE]);
     // 復元した pane は同じ id（保存した session.json から）
     expect(second.session.snapshot().panes.map((p) => p.id)).toEqual([pane]);
   });
 
-  it("session.json が読めなかった起動では pane の id が別の UUID になり、前の pane のノード（と線）は起動の後に外れる（別のマシンのノードは残る）。同じ id が別の pane を指すことはない", async () => {
+  it("session.json が読めなかった起動では pane の id が別の UUID になり、前の pane のノード（と線）は起動の後に外れ、新しい pane のノードが足される（別のマシンのノードは残る）。同じ id が別の pane を指すことはない", async () => {
     const stateDir = await tempStateDir();
     const first = await startWithClients(stateDir);
     const pane = first.server.session.snapshot().panes[0]!.id;
     await first.clients[0]!.request("graph.update", {
-      baseRev: 0,
-      ops: [
-        { op: "add_node", key: `local:${pane}`, x: 0, y: 0 },
-        { op: "add_node", key: REMOTE, x: 240, y: 0 },
-      ],
+      baseRev: 1,
+      ops: [{ op: "add_node", key: REMOTE, x: 1000, y: 0 }],
     });
     first.clients[0]!.ws.close();
     await first.server.close();
@@ -303,12 +362,12 @@ describe("composeServer: graph.*（20260927-agent-graph）", () => {
     expect(newPane).toMatch(UUID_RE);
     expect(newPane).not.toBe(pane);
     const c = await connect(second, await tokenLogin(second, first.token));
-    expect((await c.request("graph.get", {})).result).toEqual({
-      rev: 2,
-      paused: false,
-      nodes: [{ key: REMOTE, x: 240, y: 0 }],
-      links: [],
-    });
+    const g = await getGraph(c);
+    // 前の pane のノードの除去（+1）と新しい pane のノードの追加（+1）
+    expect(g.rev).toBe(4);
+    expect(g.nodes.map((n) => n.key).sort()).toEqual([`local:${newPane}`, REMOTE].sort());
+    expect(g.nodes.find((n) => n.key === REMOTE)).toEqual({ key: REMOTE, x: 1000, y: 0 });
+    expect(g.links).toEqual([]);
   });
 
   it("ログインしていない接続は WebSocket を開けない（graph.* に届かない）", async () => {
@@ -479,6 +538,11 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
     await waitFor("cat in the receiving panes", () =>
       panes.slice(1).every((p) => server.session.getPane(p)?.busy === true),
     );
+    // 手元のすべての pane のノードは維持（GraphMaintainer。20261008-graph-first）が足す。そろうまで待つ。
+    await waitFor("the nodes of all panes", async () => {
+      const g = (await request("graph.get", {})).result as { nodes: { key: string }[] };
+      return panes.every((p) => g.nodes.some((n) => n.key === `local:${p}`));
+    });
     return { server, stateDir: dir, token, client: { request, fired, runs }, panes };
   }
 
@@ -496,8 +560,9 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
   }> {
     return (await ctx.client.request("graph.get", {})).result as never;
   }
-  function nodes(ctx: Ctx): unknown[] {
-    return ctx.panes.map((p, i) => ({ op: "add_node", key: key(p), x: i * 240, y: 0 }));
+  /** 手元の pane のノードは維持が足し済み（`boot` が待つ）。線の操作の前置きとして並べるだけで、何も足さない。 */
+  function nodes(_ctx: Ctx): unknown[] {
+    return [];
   }
   const setAgent = (ctx: Ctx, paneId: string, a: ReturnType<typeof agentInfo> | null) =>
     ctx.server.session.updatePaneRuntime(paneId, { agent: a as never });
@@ -650,7 +715,10 @@ describe("composeServer: 連携の実行（20260927-agent-graph の 02）", () =
     // 振り直した id は前とは別の UUID（連番なら同じ p1・p2 になり、別の pane に線が付いていた）
     expect(second.panes).toHaveLength(2);
     for (const p of second.panes) expect([p1, p2]).not.toContain(p);
-    expect((await graphOf(second)).nodes).toEqual([]);
+    // 前の pane のノードは外れ、新しい pane のノードだけが維持で足される（20261008-graph-first）。
+    expect((await graphOf(second)).nodes.map((n) => n.key).sort()).toEqual(
+      second.panes.map(key).sort(),
+    );
     expect(((await graphOf(second)) as unknown as { links: unknown[] }).links).toEqual([]);
     setAgent(second, second.panes[0]!, agentInfo("ga9", 0));
     setAgent(second, second.panes[1]!, agentInfo("gb9", 0));

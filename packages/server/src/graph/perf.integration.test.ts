@@ -110,19 +110,26 @@ async function boot(mode: Mode = "done"): Promise<Ctx> {
     50,
   );
   const key = (i: number) => `local:${panes[i]}` as const;
-  await server.graph.update(
-    0,
-    [
-      ...panes.map((_, i) => ({
-        op: "add_node" as const,
-        key: key(i),
-        x: (i % 4) * 240,
-        y: Math.floor(i / 4) * 120,
-      })),
-      ...linkPairs().map(([from, to]) => linkOp(mode, key, from, to)),
-    ],
-    "perf",
+  // 手元のすべての pane のノードは維持（GraphMaintainer。20261008-graph-first）が足す。そろってから線を結ぶ。
+  await waitFor(
+    "the nodes of all panes",
+    () => panes.every((_, i) => server.graph.get().nodes.some((n) => n.key === key(i))),
+    20_000,
+    50,
   );
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await server.graph.update(
+        server.graph.get().rev,
+        linkPairs().map(([from, to]) => linkOp(mode, key, from, to)),
+        "perf",
+      );
+      break;
+    } catch (err) {
+      // 維持の更新と重なったら、取り直してやり直す。
+      if (attempt >= 3) throw err;
+    }
+  }
   expect(server.graph.get().nodes).toHaveLength(PANES);
   expect(server.graph.get().links).toHaveLength(LINKS);
   panes.forEach((p, i) =>

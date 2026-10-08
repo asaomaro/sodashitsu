@@ -107,6 +107,10 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     panes = [first];
     for (let i = 0; i < 3; i++)
       panes.push((await server.session.splitPane(first, "right", undefined)).pane.id);
+    // 手元のすべての pane のノードは、サーバの維持（GraphMaintainer。20261008-graph-first）が足す。そろうまで待つ。
+    await waitFor("the nodes of all panes", () =>
+      panes.every((p) => server.graph.get().nodes.some((n) => n.key === `local:${p}`)),
+    );
 
     // 画面の代わり（ブラウザの接続）。
     const port = server.options.port;
@@ -230,7 +234,8 @@ describe("sodactl graph integration（実物のサーバ）", () => {
       to: local(p2),
       trigger: { output: { lines: 40 } },
     });
-    expect(r.graph.nodes.map((n) => n.key)).toEqual([local(p1), local(p2)]);
+    // 手元の pane のノードは維持が足し済み（link add は線だけを足す）。
+    expect(r.graph.nodes.map((n) => n.key).sort()).toEqual(panes.map(local).sort());
     expect(server.graph.get().links).toHaveLength(1);
     await waitFor("graph.changed on the viewer", () => changed.length > before);
     expect(changed.at(-1)!.graph.links.map((l) => l.id)).toEqual([l1]);
@@ -295,25 +300,49 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     expect(JSON.parse(f.stderr)).toMatchObject({
       error: { code: "invalid_params", message: expect.stringContaining("supervisor_taken") },
     });
-    expect(server.graph.get().nodes.map((n) => n.key)).not.toContain(local(p4)); // 断った操作の中のノードも載らない
+    expect(server.graph.get().links.filter((l) => l.kind === "supervise")).toHaveLength(1); // 断った操作の線は足されない
   });
 
-  it("node add・node rekey（線ごと付け替える）・node rm（線も消える）", async () => {
+  it("node add は手元の pane ではすでにあるので何も変えず成功。node rm・node rekey は開いている手元の pane のノードを断る（node_required。終了コード 1）", async () => {
     const [p1, p2, p3, p4] = panes as [string, string, string, string];
-    let r = await graph({ kind: "node-add", panes: [p4, p1] });
-    expect(r.graph.nodes.map((n) => n.key)).toEqual([local(p1), local(p2), local(p3), local(p4)]);
-    r = await graph({ kind: "node-rm", pane: p4 });
-    r = await graph({ kind: "node-rekey", pane: p3, newPane: p4 });
-    expect(r.graph.nodes.map((n) => n.key)).toEqual([local(p1), local(p2), local(p4)]);
-    expect(r.graph.links.filter((l) => l.kind !== "trigger").map((l) => l.to)).toEqual([
-      local(p4),
-      local(p4),
-    ]);
-    r = await graph({ kind: "node-rm", pane: p4 });
-    expect(r.graph.links.map((l) => l.id)).toEqual([l1]);
+    const revBefore = server.graph.get().rev;
+    const r = await graph({ kind: "node-add", panes: [p4, p1] });
+    expect(r.graph.nodes.map((n) => n.key).sort()).toEqual(panes.map(local).sort());
+    expect(r.graph.rev).toBe(revBefore); // 何も送っていない
+    const rm = await failure({ kind: "node-rm", pane: p4 });
+    expect(rm.exit).toBe(1);
+    expect(JSON.parse(rm.stderr)).toMatchObject({ error: { code: "node_required" } });
+    const rekey = await failure({ kind: "node-rekey", pane: p3, newPane: p4 });
+    expect(rekey.exit).toBe(1);
+    expect(JSON.parse(rekey.stderr)).toMatchObject({ error: { code: "node_required" } });
+    // 線は触られない
+    expect(server.graph.get().links.map((l) => l.id)).toContain(l1);
+    void p2;
     const f = await failure({ kind: "node-add", panes: ["p999"] });
     expect(f.exit).toBe(1);
     expect(JSON.parse(f.stderr)).toMatchObject({ error: { code: "not_found" } });
+  });
+
+  it("show --json は spaces と、ノードごとの workspaceId・tabId を持つ（今の項目はそのまま）", async () => {
+    const r = await graph<{
+      graph: {
+        rev: number;
+        nodes: { key: string; workspaceId: string | null; tabId: string | null }[];
+      };
+      spaces: { id: string | null; name: string | null; workspaces: string[] }[];
+    }>({ kind: "show" });
+    const snap = server.session.snapshot();
+    const ws = snap.workspaces[0]!;
+    expect(r.graph.nodes).toHaveLength(panes.length);
+    for (const n of r.graph.nodes) {
+      const pane = snap.panes.find((p) => `local:${p.id}` === n.key)!;
+      expect(n.workspaceId).toBe(ws.id);
+      expect(n.tabId).toBe(pane.tabId);
+    }
+    expect(r.spaces).toEqual([{ id: null, name: null, workspaces: [ws.id] }]);
+    // 表にも空間の列が出る
+    const text = await graph<string>({ kind: "show" }, false);
+    expect(text).toMatch(/^node +key +status +space +workspace$/m);
   });
 
   it("pane・線の指定は、完全な id か一意に決まる先頭の部分（4 文字以上）。曖昧・無い指定は断る", async () => {
@@ -323,12 +352,12 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     expect(r.graph.links[0]).toMatchObject({ id: l1, limit: 3 });
     const added = await graph<{ link: GraphLink }>({
       kind: "link-add",
-      from: p1.slice(0, 8),
-      to: p2.slice(0, 8),
-      linkKind: "approval",
+      from: p2.slice(0, 8),
+      to: p1.slice(0, 8),
+      linkKind: "trigger",
       config: {},
     });
-    expect(added.link).toMatchObject({ from: local(p1), to: local(p2) });
+    expect(added.link).toMatchObject({ from: local(p2), to: local(p1) });
     await graph({ kind: "link-rm", linkId: added.link.id.slice(0, 8) });
     // 無い部分は not_found、4 文字未満は部分として扱わない
     const none = await failure({ kind: "link-pause", linkId: "ffffffff" });
@@ -381,7 +410,7 @@ describe("sodactl graph integration（実物のサーバ）", () => {
       expect(JSON.parse(f.stderr)).toMatchObject({ error: { code: "not_found" } });
     }
     const removed = await graph({ kind: "link-rm", linkId: l1 });
-    expect(removed.graph.links).toEqual([]);
+    expect(removed.graph.links.map((l) => l.id)).not.toContain(l1);
   });
 
   // g05 点検（T2）: 送り直しは、取り直したグラフから操作を組み立て直す（最初の操作をそのまま送り直すと、割り込んだ変更を消す・ぶつかる）。
@@ -413,14 +442,14 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     });
   });
 
-  it("割り込みで端のノードが載った後の link add は、ノードを二重に載せず（duplicate_node にならず）線を作る", async () => {
+  it("割り込みで別のノードが足された後の link add は、取り直して線を作る（ノードは足さない）", async () => {
     const [, p2, , p4] = panes as [string, string, string, string];
-    expect(server.graph.get().nodes.map((n) => n.key)).not.toContain(local(p4));
+    const far = `${"d".repeat(32)}:r1`;
     injectConflict = async () => {
       const g = server.graph.get();
       await server.graph.update(
         g.rev,
-        [{ op: "add_node", key: local(p4) as never, x: 0, y: 400 }],
+        [{ op: "add_node", key: far as never, x: 6000, y: 0 }],
         "other-browser",
       );
     };
@@ -434,8 +463,8 @@ describe("sodactl graph integration（実物のサーバ）", () => {
     });
     expect(conflictsToInject).toBe(0);
     expect(r.link).toMatchObject({ from: local(p2), to: local(p4) });
-    expect(r.graph.nodes.filter((n) => n.key === local(p4))).toEqual([
-      { key: local(p4), x: 0, y: 400 },
-    ]);
+    // 手元の pane のノードは二重にならず、割り込みで足されたノードも残る
+    expect(r.graph.nodes.filter((n) => n.key === local(p4))).toHaveLength(1);
+    expect(r.graph.nodes.map((n) => n.key)).toContain(far);
   });
 });

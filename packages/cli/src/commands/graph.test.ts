@@ -1,4 +1,5 @@
 import type { Graph, GraphLink, MachineStatus, SessionSnapshot } from "@sodashitsu/protocol";
+import { graphStructureFrom, layoutOverlaps, nodePositions } from "@sodashitsu/client-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CliUsageError, type Command, type GraphAction } from "../cliArgs.js";
 import type { SessionStore } from "../session.js";
@@ -40,6 +41,8 @@ const SNAPSHOT = {
     { id: "p3", tabId: "t1" },
   ],
   tabs: [{ id: "t1", workspaceId: "w1" }],
+  workspaces: [{ id: "w1", label: "api", tabIds: ["t1"], groupId: "g1" }],
+  groups: [{ id: "g1", label: "work", collapsed: false }],
 } as unknown as SessionSnapshot;
 
 function link(patch: Partial<GraphLink> = {}): GraphLink {
@@ -313,7 +316,8 @@ describe("runGraph", () => {
       cmd({ kind: "link-add", from: "impl", to: "p3", linkKind: "trigger", config: {} }, true),
     );
     expect(sent).toEqual([
-      { op: "add_node", key: "local:p3", x: 300, y: 40 },
+      // 手元の pane の新しいノードは、その workspace の囲いの空いた升（p1 の右隣）へ（20261008-graph-first）。
+      { op: "add_node", key: "local:p3", x: 280, y: 40 },
       expect.objectContaining({
         op: "add_link",
         kind: "trigger",
@@ -335,19 +339,115 @@ describe("runGraph", () => {
     expect(client.calls.some(([m]) => m === "graph.update")).toBe(false);
   });
 
-  it("node rekey: 別のマシンの pane へは選び直さない", async () => {
+  it("node rekey: 別のマシンの pane へは選び直さない（別のマシンのノードの付け替え先が別のマシン）", async () => {
     const client = fakeClient({
-      "graph.get": () => graph(),
+      "graph.get": () =>
+        graph({ nodes: [...graph().nodes, { key: `${BOX}:${U1}`, x: 900, y: 40 }] }),
       "machine.list": () => ({ machines: MACHINES }),
     });
     await expect(
-      run(client, cmd({ kind: "node-rekey", pane: "p1", newPane: `box:${U2}` })),
+      run(client, cmd({ kind: "node-rekey", pane: `box:${U1}`, newPane: `${OTHER}:${U2}` })),
     ).rejects.toMatchObject({
       code: "invalid_params",
       // 規則はサーバと同じ client-core の applyGraphOps（checkGraphOps）にある（統合レビュー R1）
       message: expect.stringContaining("rekey_other_machine"),
     });
     expect(client.calls.some(([m]) => m === "graph.update")).toBe(false);
+  });
+
+  it("node rekey: 手元のノードは選び直さない（node_required。送らない）", async () => {
+    const client = fakeClient({
+      "graph.get": () => graph(),
+      "machine.list": () => ({ machines: MACHINES }),
+    });
+    await expect(
+      run(client, cmd({ kind: "node-rekey", pane: "p1", newPane: "p3" })),
+    ).rejects.toMatchObject({ code: "node_required" });
+    expect(client.calls.some(([m]) => m === "graph.update")).toBe(false);
+  });
+
+  it("node rm: 開いている手元の pane のノードは外さない（node_required。送らない）。閉じた pane のノード・別のマシンのノードは外す", async () => {
+    const client = fakeClient({
+      "graph.get": () =>
+        graph({
+          nodes: [
+            { key: "local:p1", x: 40, y: 40 },
+            { key: `local:${U9}`, x: 400, y: 40 },
+            { key: `${BOX}:${U1}`, x: 900, y: 40 },
+          ],
+        }),
+      "graph.update": () => graph({ rev: 2 }),
+      "machine.list": () => ({ machines: MACHINES }),
+    });
+    await expect(run(client, cmd({ kind: "node-rm", pane: "p1" }))).rejects.toMatchObject({
+      code: "node_required",
+    });
+    expect(client.calls.some(([m]) => m === "graph.update")).toBe(false);
+    // 否定の対照: 閉じた pane（p8。snapshot に無い）・別のマシンのノードは外せる
+    await run(client, cmd({ kind: "node-rm", pane: U9 }));
+    await run(client, cmd({ kind: "node-rm", pane: `box:${U1}` }));
+    const updates = client.calls.filter(([m]) => m === "graph.update").map(([, p]) => p);
+    expect(updates).toEqual([
+      { baseRev: 1, ops: [{ op: "remove_node", key: `local:${U9}` }] },
+      { baseRev: 1, ops: [{ op: "remove_node", key: `${BOX}:${U1}` }] },
+    ]);
+  });
+
+  it("node add: 手元の pane はすでにあるので何も送らず成功。別のマシンの pane は、手元の囲いに重ならない空きへ足す", async () => {
+    const client = fakeClient({
+      "graph.get": () => graph(),
+      "graph.update": () => graph({ rev: 2 }),
+      "machine.list": () => ({ machines: MACHINES }),
+    });
+    await run(client, cmd({ kind: "node-add", panes: ["p1"] }, true));
+    expect(client.calls.some(([m]) => m === "graph.update")).toBe(false);
+    expect(printJson).toHaveBeenCalledWith({ graph: expect.objectContaining({ rev: 1 }) });
+    await run(client, cmd({ kind: "node-add", panes: [`box:${U1}`] }, true));
+    const sent = client.calls.find(([m]) => m === "graph.update")![1] as {
+      ops: { op: string; key: string; x: number; y: number }[];
+    };
+    expect(sent.ops).toHaveLength(1);
+    expect(sent.ops[0]).toMatchObject({ op: "add_node", key: `${BOX}:${U1}` });
+    // 手元の workspace の囲い（p1・p2 を含む）に重ならない場所
+    const after = [...graph().nodes, { key: `${BOX}:${U1}`, x: sent.ops[0]!.x, y: sent.ops[0]!.y }];
+    const structure = graphStructureFrom(SNAPSHOT, { remoteKeys: [`${BOX}:${U1}`] });
+    expect(layoutOverlaps(structure, nodePositions(after)).size).toBe(0);
+  });
+
+  it("show --json: graph の形は変えず、ノードに workspaceId・tabId を足し、spaces（グループの id・名前・含む workspace）を足す", async () => {
+    const client = fakeClient({
+      "graph.get": () =>
+        graph({
+          nodes: [
+            ...graph().nodes,
+            { key: "local:p8", x: 600, y: 40 },
+            { key: `${BOX}:${U1}`, x: 900, y: 40 },
+          ],
+        }),
+    });
+    await run(client, cmd({ kind: "show" }, true));
+    const out = vi.mocked(printJson).mock.calls[0]![0] as {
+      graph: { rev: number; nodes: Record<string, unknown>[] };
+      spaces: unknown[];
+    };
+    expect(out.graph.rev).toBe(1);
+    expect(out.graph.nodes).toEqual([
+      { key: "local:p1", x: 40, y: 40, workspaceId: "w1", tabId: "t1" },
+      { key: "local:p2", x: 300, y: 40, workspaceId: "w1", tabId: "t1" },
+      { key: "local:p8", x: 600, y: 40, workspaceId: null, tabId: null }, // 閉じた pane
+      { key: `${BOX}:${U1}`, x: 900, y: 40, workspaceId: null, tabId: null }, // 別のマシン
+    ]);
+    expect(out.spaces).toEqual([
+      { id: "g1", name: "work", workspaces: ["w1"] },
+      { id: null, name: null, workspaces: [] },
+    ]);
+    // 否定の対照: show 以外の graph の出力は、これまでの形（spaces を足さない）。
+    vi.mocked(printJson).mockReset();
+    const c2 = fakeClient({ "graph.pause": () => graph({ paused: true }) });
+    await run(c2, cmd({ kind: "pause" }, true));
+    expect(vi.mocked(printJson).mock.calls[0]![0]).toEqual({
+      graph: expect.objectContaining({ paused: true }),
+    });
   });
 
   it("pause・link resume・history はそのまま方式を呼ぶ", async () => {
@@ -401,11 +501,11 @@ describe("runGraph", () => {
       [
         "graph: paused (rev 7)",
         "",
-        `node          ${"key".padEnd(69)}  status`,
-        `p1            ${"local:p1".padEnd(69)}  ok`,
-        `p8            ${"local:p8".padEnd(69)}  closed`,
-        `p9            ${"local:p9".padEnd(69)}  closed`, // 手元に居ない pane のノードは closed（id は再利用されないので「別の pane を指す」ことはない）
-        `box:22222222  ${BOX}:${U2}  -`,
+        `node          ${"key".padEnd(69)}  status  space  workspace`,
+        `p1            ${"local:p1".padEnd(69)}  ok      work   api`,
+        `p8            ${"local:p8".padEnd(69)}  closed  -      -`,
+        `p9            ${"local:p9".padEnd(69)}  closed  -      -`, // 手元に居ない pane のノードは closed（id は再利用されないので「別の pane を指す」ことはない）
+        `box:22222222  ${BOX}:${U2}  -       -      -`,
         "",
         "link  kind       from          to  count  state          settings",
         'l1    trigger    p1            p2  10/10  paused(limit)  on=done output=80 busy=wait prompt="見て {output}"',

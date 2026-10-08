@@ -17,7 +17,8 @@ import {
   GRAPH_NODE_WIDTH,
   graphNodeAt,
   graphNodeRect,
-  nextFreeGraphPosition,
+  isLocalNodeKey,
+  addMissingNodeOps,
   chordOf,
   keyInputOf,
   parallelOffsets,
@@ -867,14 +868,12 @@ function applyChecklist(change: { add: NodeKey[]; remove: NodeKey[] }): void {
       .update((g): GraphOp[] | null => {
         const present = new Set(g.nodes.map((n) => n.key));
         const add = change.add.filter((k) => !present.has(k));
-        const kept = g.nodes.filter((n) => !change.remove.includes(n.key)).map(graphNodeRect);
+        const kept = g.nodes.filter((n) => !change.remove.includes(n.key));
+        // 置き場所は、その鍵の囲い（マシンごと）の中の空いた升（手元の囲いに重ならない）。構成を導けないときは右隣に並べる。
+        const structure = graph.layoutStructure([...kept.map((n) => n.key), ...add]);
         return [
           ...removeOps(g, change.remove),
-          ...add.map((key, i) => ({
-            op: "add_node" as const,
-            key,
-            ...nextFreeGraphPosition(kept, i),
-          })),
+          ...addMissingNodeOps({ nodes: kept }, add, structure ?? undefined),
         ];
       })
       .then((r) => {
@@ -894,8 +893,20 @@ function applyChecklist(change: { add: NodeKey[]; remove: NodeKey[] }): void {
   else run();
 }
 
+/**
+ * 外せないノードか（開いている手元の pane のノード。手元のすべての pane のノードはサーバが持ち、pane が閉じたときだけ消える。
+ * 20261008-graph-first）。pane が無い（閉じた）ノードと、別のマシンのノードは外せる。
+ */
+function isRequiredNode(key: string): boolean {
+  return isLocalNodeKey(key) && infos.value.get(key)?.exists !== false;
+}
+
 function requestRemoveNode(key: string): void {
   if (isMobile.value) return; // モバイルは編集しない（AC20）
+  if (isRequiredNode(key)) {
+    view.toast("開いている pane のノードは外せません（pane を閉じると、ノードも消えます）。");
+    return;
+  }
   confirmRemove(
     [key],
     () => {
@@ -921,7 +932,8 @@ const rekeyKey = ref<NodeKey | null>(null);
  * 手元の pane に付け替えない。04 で別のマシンのノードにも広げた）。モバイルは編集しない。
  */
 function canRekey(key: string): boolean {
-  return !isMobile.value && nodeInvalid(key);
+  // 手元のノードは選び直せない（手元のすべての pane のノードはサーバが持つ。20261008-graph-first）。
+  return !isMobile.value && nodeInvalid(key) && !isLocalNodeKey(key);
 }
 function openRekey(key: string): void {
   if (!canRekey(key)) return;
@@ -1487,8 +1499,16 @@ function chipAria(e: EdgeView): string {
           :disabled="!graph.graph"
           @click="openChecklist"
         >
-          pane を載せる
+          別のマシンの pane を載せる
         </button>
+        <span
+          v-if="graph.hiddenLocalPaneCount > 0"
+          class="graph-hidden-panes"
+          role="status"
+          data-testid="graph-hidden-panes"
+        >
+          上限のため、出ていない pane が {{ graph.hiddenLocalPaneCount }} 個あります
+        </span>
         <button
           type="button"
           class="graph-tool graph-history"
@@ -1597,7 +1617,7 @@ function chipAria(e: EdgeView): string {
             </button>
           </div>
           <p v-if="graph.graph && graph.nodes.length === 0" class="graph-empty">
-            まだ pane を載せていません。ツールバーの「pane を載せる」から選んでください。
+            表示する pane がありません。
           </p>
           <p v-else-if="!graph.graph" class="graph-empty">
             {{ graph.loadError ?? "読み込んでいます…" }}
@@ -1701,6 +1721,10 @@ function chipAria(e: EdgeView): string {
 }
 .graph-tool[aria-pressed="true"] {
   background: var(--soda-menu-active-bg, #44475a);
+}
+.graph-hidden-panes {
+  font-size: 12px;
+  opacity: 0.85;
 }
 .graph-zoom {
   min-width: 3.5em;

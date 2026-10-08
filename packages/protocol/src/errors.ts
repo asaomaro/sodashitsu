@@ -80,6 +80,9 @@ export type ErrorCode =
   | "server_stop_unsupported"
   // 連携のグラフ（20260927-agent-graph）。`graph.update` の `baseRev` が今の rev と違う（他のブラウザ・sodactl が先に変えた）。最新を取り直して作り直す。
   | "rev_conflict"
+  // 連携のグラフの検査（20261008-graph-first）。`graph.update` の方式の層が断る（保存の読み込みには使わない）。
+  | "node_required" // 開いている手元の pane のノードを外す・選び直す（手元のすべての pane のノードはサーバが持つ）
+  | "frame_overlap" // その更新が、workspace・worktree グループの囲いの重なりを新しく作る・広げる
   // 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）。
   | "invalid_ask_spec" // 定義の誤り・上限の超過
   | "ask_busy" // 同じ pane に待っている質問がある

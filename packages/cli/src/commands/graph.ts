@@ -13,9 +13,14 @@ import {
   checkGraphOps,
   defaultApprovalConfig,
   defaultTriggerConfig,
+  describeGraphSpaces,
+  graphStructureFrom,
+  isLocalNodeKey,
   LOCAL_MACHINE,
   nodeKey,
   parseNodeKey,
+  type GraphSpaceInfo,
+  type LayoutStructure,
 } from "@sodashitsu/client-core";
 import {
   assertLinkConfigFits,
@@ -112,6 +117,33 @@ export class GraphContext {
       return spec;
     }
     throw new RpcFailure("not_found", `pane or agent not found: ${spec}`);
+  }
+
+  /**
+   * 空間の構成（`hello` のセッションから導く。20261008-graph-first）。別のマシンの囲いは、グラフのノードと足す鍵から作る。
+   * 一時的な pane（独自コマンドの pane・スクロールバックのエディタ）はここからは分からない（ノードの無い pane として数える）。
+   */
+  structure(graph: Pick<Graph, "nodes">, extraKeys: readonly string[] = []): LayoutStructure {
+    return graphStructureFrom(this.snapshot, {
+      remoteKeys: [...graph.nodes.map((n) => n.key), ...extraKeys],
+    });
+  }
+
+  /** 手元の pane が今あるか（開いている pane のノードは外せない・選び直せない）。 */
+  hasLocalPane(key: string): boolean {
+    const parsed = parseNodeKey(key);
+    return (
+      parsed?.machine === LOCAL_MACHINE && this.snapshot.panes.some((p) => p.id === parsed.paneId)
+    );
+  }
+
+  /** ノードの場所（手元の pane の workspace・tab。別のマシンの pane・閉じた pane は null）。 */
+  locationOf(key: string): { workspaceId: string; tabId: string } | null {
+    const parsed = parseNodeKey(key);
+    if (parsed?.machine !== LOCAL_MACHINE) return null;
+    const pane = this.snapshot.panes.find((p) => p.id === parsed.paneId);
+    const tab = pane && this.snapshot.tabs.find((t) => t.id === pane.tabId);
+    return pane && tab ? { workspaceId: tab.workspaceId, tabId: pane.tabId } : null;
   }
 
   /** 表に出すノードの呼び方（手元は id の先頭 8 文字、別のマシンは `<名前>:<先頭 8 文字>`。名前が引けない・重なるなら id。完全な id は `key` の列・`--json`）。 */
@@ -261,7 +293,7 @@ export function setLinkOp(link: GraphLink, c: GraphLinkConfigArgs): GraphOp {
 
 /** 実行の結果（表か JSON で出すもの）。 */
 type Outcome =
-  | { kind: "graph"; graph: Graph }
+  | { kind: "graph"; graph: Graph; showSpaces?: boolean }
   | { kind: "link"; link: GraphLink; graph: Graph }
   | { kind: "history"; runs: LinkRun[] };
 
@@ -272,7 +304,7 @@ async function perform(
 ): Promise<Outcome> {
   switch (action.kind) {
     case "show":
-      return { kind: "graph", graph: await client.request("graph.get", {}) };
+      return { kind: "graph", graph: await client.request("graph.get", {}), showSpaces: true };
     case "pause":
       return { kind: "graph", graph: await client.request("graph.pause", {}) };
     case "resume":
@@ -308,7 +340,7 @@ async function perform(
       const to = await ctx.resolve(action.to, true);
       const { before, after } = await updateGraph(client, (g) => [
         // 端のノードが載っていなければ一緒に載せる（画面では先に載せてから結ぶ）。
-        ...addMissingNodeOps(g, [from, to]),
+        ...addMissingNodeOps(g, [from, to], ctx.structure(g, [from, to])),
         addLinkOp(action.linkKind, from, to, action.config),
       ]);
       const known = new Set(before.links.map((l) => l.id));
@@ -334,17 +366,34 @@ async function perform(
     case "node-add": {
       const keys: NodeKey[] = [];
       for (const p of action.panes) keys.push(await ctx.resolve(p, true));
-      const { after } = await updateGraph(client, (g) => addMissingNodeOps(g, keys));
+      // 手元の pane のノードはサーバが持つ（すでにある、で成功）。載っていない鍵だけを、囲いの空いた場所へ足す。
+      const { after } = await updateGraph(client, (g) =>
+        addMissingNodeOps(g, keys, ctx.structure(g, keys)),
+      );
       return { kind: "graph", graph: after };
     }
     case "node-rm": {
       const key = await ctx.resolve(action.pane, false);
+      // 開いている手元の pane のノードは外せない（手元のすべての pane のノードはサーバが持つ。pane を閉じると消える）。
+      if (ctx.hasLocalPane(key)) {
+        throw new RpcFailure(
+          "node_required",
+          `the node of an open pane cannot be removed (close the pane instead): ${key}`,
+        );
+      }
       const { after } = await updateGraph(client, () => [{ op: "remove_node", key }]);
       return { kind: "graph", graph: after };
     }
     case "node-rekey": {
       const key = await ctx.resolve(action.pane, false);
       const newKey = await ctx.resolve(action.newPane, true);
+      // 手元のノードは選び直せない（別のマシンのノードだけ）。
+      if (isLocalNodeKey(key)) {
+        throw new RpcFailure(
+          "node_required",
+          `the node of a local pane cannot be re-keyed (only nodes of other machines): ${key}`,
+        );
+      }
       // 画面と同じく同じマシンの pane にだけ選び直す（別のマシンの pane へ付け替えると、線の意味〔どこで動くか〕が変わる。decisions D7-10）。
       // 規則は client-core の `applyGraphOps`（サーバと同じ）にあり、`updateGraph` の `checkGraphOps` が送る前に `rekey_other_machine` で断る。
       const { after } = await updateGraph(client, () => [{ op: "rekey_node", key, newKey }]);
@@ -369,12 +418,39 @@ export async function runGraph(cmd: GraphCmd, store: SessionStore): Promise<void
   if (cmd.json) {
     if (outcome.kind === "history") printJson({ runs: outcome.runs });
     else if (outcome.kind === "link") printJson({ link: outcome.link, graph: outcome.graph });
+    else if (outcome.showSpaces) printJson(showJson(outcome.graph, ctx));
     else printJson({ graph: outcome.graph });
     return;
   }
   if (outcome.kind === "history") printLine(formatHistory(outcome.runs));
   else if (outcome.kind === "link") printLine(formatLinks([outcome.link], ctx));
   else printLine(formatGraph(outcome.graph, ctx));
+}
+
+/**
+ * `graph show --json`。`graph` の形は変えず（ノードに `workspaceId`・`tabId` を足すだけ。手元の開いている pane のノードは場所、
+ * 別のマシンの pane・閉じた pane は null）、`spaces`（グループの id・名前・含む workspace。20261008-graph-first AC-X1）を足す。
+ * 囲いの四角は出さない。
+ */
+export function showJson(
+  graph: Graph,
+  ctx: Pick<GraphContext, "snapshot" | "structure" | "locationOf">,
+): {
+  graph: Omit<Graph, "nodes"> & {
+    nodes: (Graph["nodes"][number] & { workspaceId: string | null; tabId: string | null })[];
+  };
+  spaces: GraphSpaceInfo[];
+} {
+  return {
+    graph: {
+      ...graph,
+      nodes: graph.nodes.map((n) => {
+        const loc = ctx.locationOf(n.key);
+        return { ...n, workspaceId: loc?.workspaceId ?? null, tabId: loc?.tabId ?? null };
+      }),
+    },
+    spaces: describeGraphSpaces(ctx.structure(graph), ctx.snapshot.groups),
+  };
 }
 
 function hasRemote(graph: Graph): boolean {
@@ -403,7 +479,10 @@ function linkSettings(link: GraphLink): string {
   return "";
 }
 
-type Display = Pick<GraphContext, "displayOf"> & { snapshot: Pick<SessionSnapshot, "panes"> };
+type Display = Pick<GraphContext, "displayOf"> & {
+  snapshot: Pick<SessionSnapshot, "panes"> &
+    Partial<Pick<SessionSnapshot, "workspaces" | "tabs" | "groups">>;
+};
 
 export function formatLinks(links: readonly GraphLink[], ctx: Display): string {
   if (links.length === 0) return "(no links)";
@@ -428,14 +507,36 @@ function nodeStatus(node: Graph["nodes"][number], ctx: Display): string {
   return ctx.snapshot.panes.some((p) => p.id === parsed.paneId) ? "ok" : "closed";
 }
 
+/**
+ * ノードの空間（グループの名前。「グループなし」は `-`）と workspace の名前（手元の開いている pane だけ。それ以外は `-`）。
+ * 20261008-graph-first：手元のすべての pane のノードがあるので、どの空間・workspace のノードかを表にも出す。
+ */
+function nodePlace(
+  node: Graph["nodes"][number],
+  ctx: Display,
+): { space: string; workspace: string } {
+  const parsed = parseNodeKey(node.key);
+  if (parsed?.machine !== LOCAL_MACHINE) return { space: "-", workspace: "-" };
+  const pane = ctx.snapshot.panes.find((p) => p.id === parsed.paneId);
+  const tab = pane && ctx.snapshot.tabs?.find((t) => t.id === pane.tabId);
+  const ws = tab && ctx.snapshot.workspaces?.find((w) => w.id === tab.workspaceId);
+  if (!ws) return { space: "-", workspace: "-" };
+  const group =
+    ws.groupId === null ? undefined : ctx.snapshot.groups?.find((g) => g.id === ws.groupId);
+  return { space: group?.label ?? "-", workspace: ws.label };
+}
+
 export function formatGraph(graph: Graph, ctx: Display): string {
   const head = `graph: ${graph.paused ? "paused" : "running"} (rev ${graph.rev})`;
   const nodes =
     graph.nodes.length === 0
       ? "(no nodes)"
       : formatTable(
-          ["node", "key", "status"],
-          graph.nodes.map((n) => [ctx.displayOf(n.key), n.key, nodeStatus(n, ctx)]),
+          ["node", "key", "status", "space", "workspace"],
+          graph.nodes.map((n) => {
+            const place = nodePlace(n, ctx);
+            return [ctx.displayOf(n.key), n.key, nodeStatus(n, ctx), place.space, place.workspace];
+          }),
         );
   return [head, "", nodes, "", formatLinks(graph.links, ctx)].join("\n");
 }
