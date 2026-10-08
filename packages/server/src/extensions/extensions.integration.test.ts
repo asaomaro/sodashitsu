@@ -306,7 +306,7 @@ rl.on("close", () => process.exit(0));
     await waitFile(e.log);
     const pid = pidOf(e.log);
     await vi.waitFor(() => { if (!lines(e.log).some((l) => l["id"] === "set1")) throw new Error("no set1"); });
-    expect(okResult(await paneCall(s.sockPath, PANE_OP_DISPLAY_SET, s.paneA, sockFace("theirs"))).display).toBeDefined();
+    expect(okResult<{ display: unknown }>(await paneCall(s.sockPath, PANE_OP_DISPLAY_SET, s.paneA, sockFace("theirs"))).display).toBeDefined();
     await vi.waitFor(() => { if (!lines(e.log).some((l) => l["id"] === "setTheirs")) throw new Error("no setTheirs"); }, { timeout: 8000 });
     const res = (id: string) => lines(e.log).find((l) => l["id"] === id) as { ok: boolean; result?: { displays?: { name: string }[]; closed?: string[] }; error?: { code: string } };
     expect(res("list").result!.displays!.map((d) => d.name)).toEqual(["mine"]);
