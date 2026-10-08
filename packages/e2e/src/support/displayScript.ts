@@ -11,8 +11,19 @@ export const scriptFrameLoc = (page: Page) => page.frameLocator(SCRIPT_FRAME);
 export const scriptFrameEl = (page: Page) => page.locator(SCRIPT_FRAME);
 export const engageBtn = (page: Page) => page.locator("[data-pane-panel] [data-display-engage]");
 
-/** ブラウザを開き、ブラウザが pane へ送った入力のフレームの記録つきで返す。 */
-export async function openScriptBrowser(page: Page, appServer: AppServer) {
+/**
+ * スクリプトが動く表示を、設定（共有の設定 `displayScriptEnabled`）で有効にする。**既定は無効**なので、スクリプトが動く表示を出す筋は、最初にこれを通す。
+ * 設定を変えられるのは、ログイン済みの接続（`prefs.set`）だけ（`pane.sock` からは変えられない）。ブラウザを開く前なら、開いたときに設定が届く。
+ */
+export async function enableScript(appServer: AppServer, enabled = true): Promise<void> {
+  const c = await appServer.openClient();
+  await c.request("prefs.set", { patch: { displayScriptEnabled: enabled } });
+  c.close();
+}
+
+/** ブラウザを開き、ブラウザが pane へ送った入力のフレームの記録つきで返す。設定で有効にしてから開く（`opts.disabled` で、既定のままの無効で開く）。 */
+export async function openScriptBrowser(page: Page, appServer: AppServer, opts: { disabled?: boolean } = {}) {
+  if (opts.disabled !== true) await enableScript(appServer);
   const input = await watchSentInput(page);
   const b = await openDisplayBrowser(page, appServer);
   return { ...b, input };

@@ -139,6 +139,7 @@ export class DisplayController {
     if (reason === "navigated") this.opts.toast(`表示『${name}』は、別のページへ移ろうとしたので閉じました`);
     else if (reason === "unresponsive") this.opts.toast(`表示『${name}』は、応答しなくなったので閉じました`);
     else if (reason === "focus_steal") this.opts.toast(focusStealToast(name));
+    else if (reason === "script_disabled") this.opts.toast(`スクリプトが動く表示『${name}』は、設定で無効にされたので閉じました`);
   }
 
   /**

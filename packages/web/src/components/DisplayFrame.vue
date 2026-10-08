@@ -8,6 +8,8 @@ export const DISPLAY_NOTE_CLOSED = "この表示は閉じられました";
 export const DISPLAY_NOTE_CONTENT_FAILED = "表示の中身を取得できませんでした";
 export const DISPLAY_NOTE_RENDER_FAILED = "この表示を描けませんでした（次の更新で直ることがあります）";
 export const DISPLAY_NOTE_FOCUS_DETACHED = "この表示は、キー入力を取ろうとしたので、この画面では止めました";
+export const DISPLAY_NOTE_SCRIPT_DISABLED = "スクリプトが動く表示は、設定で無効になっています";
+export const DISPLAY_NOTE_BREAKER = "入力のフォーカスが繰り返し外されたので、この画面ではスクリプトの表示を止めました";
 </script>
 
 <script setup lang="ts">
@@ -19,10 +21,11 @@ import { documentRegainedFocusWithin, installFocusOriginTracking, restoreFocus, 
 import { frameKey, framePage } from "../display/framePage.js";
 import { readFrameMessage } from "../display/frameMessages.js";
 import { startFocusDropWatch, stopFocusDropWatch } from "../display/focusDrop.js";
-import { registerFrame, registerScriptFrame, scriptFrameCount, unregisterFrame, unregisterScriptFrame, type RegisteredFrame } from "../display/frameRegistry.js";
+import { registerFrame, registerScriptFrame, scriptFrameCount, stopAllScriptFrames, unregisterFrame, unregisterScriptFrame, type RegisteredFrame } from "../display/frameRegistry.js";
 import { readThemeVars } from "../display/themeVars.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
+import { useSettingsStore } from "../store/settings.js";
 
 /**
  * 表示の面の枠 1 つ（静的な形式 `text`・`markdown`・`html` と、スクリプトが動く形式 `script-html`。20261007-soda-extensions の design「枠とのやりとり」「スクリプトが動く形式」）。
@@ -39,11 +42,12 @@ const props = defineProps<{ info: DisplayInfo; content?: DisplayContent | undefi
 const controller = inject(DisplayControllerKey, null);
 const host = inject(DisplayHostKey, null);
 const store = useDisplayStore();
+const settings = useSettingsStore();
 
 /** この画面が出せる枠の頁（スクリプトが動く形式は、この画面が出せると名乗っているときだけ）。 */
 const page = computed(() => {
   const p = framePage(props.info.format);
-  if (p?.kind === "script" && !store.scriptCapable) return null;
+  if (p?.kind === "script" && (!store.scriptCapable || !settings.displayScriptEnabled)) return null; // 名乗っていない画面・設定で無効（二重の守り。検査の本物はサーバ）
   return p;
 });
 const isScript = computed(() => page.value?.kind === "script");
@@ -83,7 +87,7 @@ const FOCUS_PATROL_MS = 250;
 
 const src = computed(() => (page.value ? `${page.value.page}?t=${ticket.value}` : ""));
 const visibleNote = computed<string | null>(() => {
-  if (page.value === null) return DISPLAY_NOTE_UNSUPPORTED;
+  if (page.value === null) return framePage(props.info.format)?.kind === "script" && store.scriptCapable ? DISPLAY_NOTE_SCRIPT_DISABLED : DISPLAY_NOTE_UNSUPPORTED;
   return phase.value === "closed" ? (note.value ?? DISPLAY_NOTE_CLOSED) : null;
 });
 const showCover = computed(() => isScript.value && phase.value !== "closed" && !engagedRef.value);
@@ -323,9 +327,9 @@ function reportSteal(): void {
   });
 }
 /** フォーカスを取り続けるので、この画面では枠を外す（固定の文言と［もう一度出す］）。 */
-function detach(): void {
+function detach(note: string = DISPLAY_NOTE_FOCUS_DETACHED): void {
   if (phase.value === "closed") return;
-  fail(DISPLAY_NOTE_FOCUS_DETACHED);
+  fail(note);
   detached.value = true;
 }
 function redisplay(): void {
@@ -361,10 +365,15 @@ function syncFocusPatrol(): void {
 /** 画面に載っているスクリプトが動く枠として登録する（静的な枠の `foreign-focus` の戻しと、フォーカスの脱落の見回りは、これが 1 つ以上あるときだけ働く）。 */
 function syncScriptRegistration(): void {
   if (isScript.value && page.value !== null && phase.value !== "closed") {
-    registerScriptFrame(props.info.id, { paneId: props.info.paneId, format: props.info.format, name: props.info.name });
+    registerScriptFrame(props.info.id, { paneId: props.info.paneId, format: props.info.format, name: props.info.name, stop: () => detach(DISPLAY_NOTE_BREAKER) });
     startFocusDropWatch({
       focusSelectedTerminal: () => host?.focusSelectedTerminal(),
       notify: (message) => controller?.toast?.(message),
+      trip: () => {
+        stopAllScriptFrames();
+        host?.focusSelectedTerminal();
+        controller?.toast?.(`${DISPLAY_NOTE_BREAKER}（各表示の［再開］で戻せます）`);
+      },
     });
   } else {
     unregisterScriptFrame(props.info.id);
@@ -514,6 +523,14 @@ watch(
     }
   },
 );
+// 設定・名乗りで、枠を出してよいかが変わった（頁が決まる／決まらなくなる）: 枠を最初の状態から作り直す。
+watch(
+  () => page.value === null,
+  () => {
+    releaseFocus();
+    start();
+  },
+);
 // 中身が無い・版が古いときは取る。
 watch(
   () => [props.info.id, props.info.rev, props.info.format] as const,
@@ -561,7 +578,7 @@ defineExpose({ key: () => frameKey(props.info) });
     <p v-if="store.contentFailed.has(info.id)" class="display-frame-note" data-display-content-failed>{{ DISPLAY_NOTE_CONTENT_FAILED }}</p>
     <p v-if="visibleNote" class="display-frame-note" data-display-note>
       {{ visibleNote }}
-      <button v-if="detached" type="button" class="display-frame-redisplay" data-display-redisplay @click="redisplay">もう一度出す</button>
+      <button v-if="detached" type="button" class="display-frame-redisplay" data-display-redisplay @click="redisplay">{{ note === DISPLAY_NOTE_BREAKER ? "再開" : "もう一度出す" }}</button>
     </p>
   </div>
 </template>

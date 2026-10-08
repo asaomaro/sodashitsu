@@ -6,10 +6,11 @@ import { nextTick } from "vue";
 import { ENGAGE_KEYUP_WAIT_MS } from "../display/engageEntry.js";
 import { resetFocusOriginTracking } from "../display/focusOrigin.js";
 import { stopFocusDropWatch } from "../display/focusDrop.js";
-import { engageFrame, focusFrame, scriptFramesSnapshot, unregisterScriptFrame } from "../display/frameRegistry.js";
+import { engageFrame, focusFrame, scriptFramesSnapshot, stopAllScriptFrames, unregisterScriptFrame } from "../display/frameRegistry.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
-import DisplayFrame, { DISPLAY_NOTE_FOCUS_DETACHED, DISPLAY_NOTE_UNSUPPORTED } from "./DisplayFrame.vue";
+import { useSettingsStore } from "../store/settings.js";
+import DisplayFrame, { DISPLAY_NOTE_BREAKER, DISPLAY_NOTE_FOCUS_DETACHED, DISPLAY_NOTE_SCRIPT_DISABLED, DISPLAY_NOTE_UNSUPPORTED } from "./DisplayFrame.vue";
 
 /**
  * スクリプトが動く形式（`script-html`）の枠（`DisplayFrame`）の、覆い・操作の始め方・フォーカスの番・片づけ・版と形式の入れ替え。
@@ -28,10 +29,11 @@ let ports: FakePort[] = [];
 const RealChannel = globalThis.MessageChannel;
 let active: Element | null = null;
 
-function setup(props: { info?: DisplayInfo; content?: DisplayContent | null; scriptCapable?: boolean } = {}) {
+function setup(props: { info?: DisplayInfo; content?: DisplayContent | null; scriptCapable?: boolean; scriptEnabled?: boolean } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const store = useDisplayStore();
+  useSettingsStore().displayScriptEnabled = props.scriptEnabled !== false; // スクリプトが動く表示を許可する設定（既定は無効。この試験は、有効にして始める）
   if (props.scriptCapable === false) store.setScriptCapable(false);
   const messageHandlers: ((d: unknown) => void)[] = [];
   const controller = {
@@ -477,5 +479,54 @@ describe("DisplayFrame（スクリプトが動く形式）", () => {
     const before = (s.iframe.blur as ReturnType<typeof vi.fn>).mock.calls.length;
     s.fromFrame(port, { type: "foreign-focus" });
     expect((s.iframe.blur as ReturnType<typeof vi.fn>).mock.calls.length).toBe(before);
+  });
+
+  it("遮断器: この画面のスクリプトの枠を全部止め（DOM から外し）、固定の文言と［再開］を出す。サーバへは知らせない。［再開］で枠が作り直される。静的な枠は止めない", async () => {
+    const a = setup();
+    const b = setup({ info: info({ id: "d2", name: "h" }), content: content({ id: "d2" }) });
+    const st = setup({ info: info({ id: "d3", format: "html" }), content: content({ id: "d3", format: "html" }) });
+    a.connect();
+    b.connect();
+    st.connect();
+    stopAllScriptFrames();
+    await nextTick();
+    for (const x of [a, b]) {
+      expect(x.w.find("iframe").exists()).toBe(false);
+      expect(x.w.find("[data-display-note]").text()).toContain(DISPLAY_NOTE_BREAKER);
+      expect(x.controller.report).not.toHaveBeenCalled();
+    }
+    expect(st.w.find("iframe").exists()).toBe(true); // 静的な面は止めない
+    const btn = a.w.find("[data-display-redisplay]");
+    expect(btn.text()).toBe("再開");
+    await btn.trigger("click");
+    await nextTick();
+    expect(a.w.find("iframe").exists()).toBe(true);
+    expect(b.w.find("iframe").exists()).toBe(false); // 面ごとに戻す
+  });
+
+  it("設定で無効（既定）のときは、枠を作らず「設定で無効になっています」の固定の文言。スクリプトは動かない（サーバの検査に加えた、画面の側の二重の守り）。静的な形式は影響しない", () => {
+    const s = setup({ scriptEnabled: false });
+    expect(s.w.find("iframe").exists()).toBe(false);
+    expect(s.w.find("[data-display-note]").text()).toBe(DISPLAY_NOTE_SCRIPT_DISABLED);
+    expect(s.w.find("[data-display-cover]").exists()).toBe(false);
+    expect(s.controller.ensureContent).not.toHaveBeenCalled();
+    const t = setup({ scriptEnabled: false, info: info({ format: "html" }), content: content({ format: "html" }) });
+    expect(t.w.find("iframe").exists()).toBe(true);
+    // 名乗っていない画面は、従来どおり「この形式を出せません」
+    const u = setup({ scriptCapable: false });
+    expect(u.w.find("[data-display-note]").text()).toBe(DISPLAY_NOTE_UNSUPPORTED);
+  });
+
+  it("設定が無効 → 有効に変わると、枠が作られる。有効 → 無効に変わると、枠が外れて固定の文言になる", async () => {
+    const s = setup({ scriptEnabled: false });
+    expect(s.w.find("iframe").exists()).toBe(false);
+    useSettingsStore().displayScriptEnabled = true;
+    await nextTick();
+    expect(s.w.find("iframe").exists()).toBe(true);
+    expect(s.w.find("iframe").attributes("src")).toMatch(/script\.html\?t=[0-9a-f]{32}/);
+    useSettingsStore().displayScriptEnabled = false;
+    await nextTick();
+    expect(s.w.find("iframe").exists()).toBe(false);
+    expect(s.w.find("[data-display-note]").text()).toBe(DISPLAY_NOTE_SCRIPT_DISABLED);
   });
 });

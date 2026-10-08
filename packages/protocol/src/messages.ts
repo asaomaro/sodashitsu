@@ -780,6 +780,12 @@ export interface SharedPrefs {
    * 既定は入（boolean でなければ入）。サーバが pane を開くたびに読む（次に開く pane から効く）。
    */
   shellCwdTracking?: boolean;
+  /**
+   * スクリプトが動く表示（`script-html`。`sodactl display`）を出せるか（20261007-soda-extensions。利用者の決定）。**既定は無効**（`true` のときだけ有効。サーバも web も同じ規則で読む）。
+   * サーバが `DisplayService` の `set`・`send` で見る。有効 → 無効にすると、出ている `script-html` の面は全部閉じる（理由 `script_disabled`）。
+   * `prefs.set`（ログイン済みの接続）でだけ変えられ、`pane.sock` からは変えられない。
+   */
+  displayScriptEnabled?: boolean;
   notify?: { toast?: boolean; desktop?: boolean; sound?: boolean };
   notifyHintPending?: boolean;
   notifyHintDone?: boolean;

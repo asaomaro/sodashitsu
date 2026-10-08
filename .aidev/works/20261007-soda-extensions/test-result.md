@@ -588,3 +588,37 @@ MEASURE focus-drop-after-click: interval=900ms typed=60 reached-pane=33 lost=27
 （見回り 25ms・キー間隔 25ms の軽い負荷。0 を保証するものではない。再レビューの手順で、直す前は 51・46・40 が失われたのと対応する。）合否の線は、届いた割合が 80% を超えること（上の実測の 0 から余裕を見た。イベントの時機で数キーは失われうる）。
 一緒に、フォーカスの脱落が**数えられず・サーバへ知らせず**、p1 の無害な面・p2 の落とす面のどちらも**冷却に入らず、p1 の面が閉じない**こと、4ms ごとの繰り返しで**利用者への知らせが出る**こと、余白を押して外したフォーカスが**端末へ引き戻されない**こと（`BODY` のまま）、キー一覧のダイアログを開いて閉じる・pane を分割して閉じる、のあとに不要な戻しが起きず（知らせも出ない）フォーカスは利用者の側（`TEXTAREA`）にあることを確かめた。
 単体: `focusDrop.test.ts`（9 件）。ask のダイアログ・モバイルの重ね表示を閉じる筋は E2E にしていない——どちらも「フォーカスのあった要素が文書から外れた」で同じ判定（`isShown`）に入るので、単体で見る（外れた・隠れた要素は戻さない）。
+
+
+## 第 3 回の再レビューの直し（遮断器・覆いの判定）と、設定による有効化（D35・D36。2026-10-08）
+
+### 直す前（96ed5fb）に新しい E2E を流した結果（8 件中 5 件が落ちた）
+
+- 4ms の遮断器: 遮断器が無く、落とし続けて入力が妨げられた。
+- 覆いをクリックした直後（400ms ごとに落とす面）: 60 キー中 **39 が失われた**（届いたのは 21）。
+- `requestAnimationFrame` の毎フレーム・`MessageChannel` の連鎖: 遮断器が無いので打ったキーの大半が届かない（reviewer の実測: MC 80 中 42、rAF は 21 に 1 つ）。
+
+### 直した後の実測（Chromium 153.0.8010.12）
+
+| 筋 | 打った | 届いた | 失われた |
+|---|---|---|---|
+| 300ms ごとの落とし | 60 | 60 | 0 |
+| 500ms | 60 | 60 | 0 |
+| 900ms | 60 | 60 | 0 |
+| 覆いをクリックした直後（400ms ごと） | 60 | 60 | 0 |
+| `requestAnimationFrame`（遮断器の後） | 20 | 20 | 0 |
+| `MessageChannel`（遮断器の後） | 20 | 20 | 0 |
+| 4ms ごと | 約 70 | 約 70 | 1 未満 |
+
+遮断器の線（3 秒に 15 回）の根拠: ふつうの操作は戻し 0 回、300ms ごとの落としは 3 秒に約 10 回（止めない・知らせだけ）、100ms ごとで約 30 回、rAF・MC は 100 回超（止める）。遮断器の作動後の画面は `scratchpad/display-pr3/05-breaker-*.png`。
+
+### 設定（`displayScriptEnabled`。既定は無効）
+
+- 単体: server 182・cli 317・client-core 835・web（components・display・mobile・store）1656 のうち、設定に関わる筋（無効の `set`・`send`、`--features` の `scriptEnabled`、有効 → 無効で `script_disabled` で閉じる、`pane.sock` から `prefs.*` が断られる、画面の二重の守り、スイッチ）が通る。
+- E2E: `display-script-setting.spec.ts`（既定は無効で `set` が終了コード 1・`display_script_disabled`、静的な形式は出る／設定の画面の切り替えで出る・消える）。既存のスクリプトの E2E は `enableScript` で有効にして開始。
+
+### 全体
+
+- `pnpm build`・`pnpm typecheck`: 誤りなし。
+- `pnpm test`: 8653 件が通り、失敗は既知の `packages/server/src/tui.integration.test.ts` の 3 件のみ（main でも落ちる）。
+- E2E（display と settings を含む指定）: 161 件が通り、8 件が落ちた（`appearance-settings` 2・`settings.spec` 2・`theme-settings` 4）。**この作業の変更を戻した状態（96ed5fb）でも同じ 8 件が落ちる**（Chromium 153 の CSP 〔`unsafe-eval`〕と時計・設定の保存まわりで、この作業とは別）ので、退行ではない。display 系の E2E は全部通った。

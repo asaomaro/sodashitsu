@@ -348,6 +348,8 @@ export async function composeServer(
   });
   // 表示の面（20261007-soda-extensions）。pane ごとのパネル・帯。メモリだけ（再起動・引き継ぎで消える）。画面の見分けは ask と同じ（desktop / mobile）。
   const displays = new DisplayService({
+    // 設定 `displayScriptEnabled`（既定は無効。`true` のときだけ有効）。`prefs` は下で作る——読むのは `set`・`send` のとき（`listen()` で読み込んだ後）。
+    scriptEnabled: () => prefs.get().prefs.displayScriptEnabled === true,
     bus,
     paneExists,
     isScreenKind: (clientId) => {
@@ -388,6 +390,8 @@ export async function composeServer(
     logger.error("prefs.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),
   );
   prefs.onChange((state, byClientId) => bus.publish({ event: "prefs.changed", data: { prefs: state.prefs, rev: state.rev, byClientId } }));
+  // スクリプトが動く表示が設定で無効になったら、出ている面を全部閉じる（20261007-soda-extensions）。
+  prefs.onChange(() => displays.onScriptSettingChanged());
   // 連携のグラフ（20260927-agent-graph）。読むのは `listen()` のロックの後（prefs と同じ）。保存できた変更は全クライアントへ配る。
   const graph = new GraphStore(options.stateDir, (err) =>
     logger.error("graph.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),

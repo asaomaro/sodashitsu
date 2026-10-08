@@ -120,12 +120,18 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
     for (const fn of cleanups.splice(0).reverse()) await fn();
   });
 
-  async function start() {
+  /** `script`: スクリプトが動く表示を設定で有効にして始めるか（既定は無効なので、PR3 の筋は有効にして始める）。 */
+  async function start(o: { script?: boolean } = {}) {
     const stateDir = await makeTempDir("soda-display-");
     cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
     const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
     cleanups.push(() => server.close());
     const paneA = server.session.snapshot().panes[0]!.id;
+    if (o.script !== false) {
+      const admin = await connectWs(server, "external");
+      await admin.request("prefs.set", { patch: { displayScriptEnabled: true } });
+      admin.ws.close();
+    }
     const sockPath = join(stateDir, "pane.sock");
     const open = async (kind: "desktop" | "mobile" | "external") => {
       const c = await connectWs(server, kind);
@@ -437,5 +443,45 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
     okResult(await call(sockPath, PANE_OP_DISPLAY_CLOSE, paneA, { name: "g" }));
     expect(await rep()).toMatchObject({ closed: [], steals: 3 });
     expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g"))).toMatchObject({ ok: false, error: { code: "display_busy" } });
+  });
+
+  // --- 設定（displayScriptEnabled。既定は無効）-------------------------------------------------------
+  it("既定は無効: 受け口から script-html を set すると display_script_disabled。静的な形式は出せる。features が「無効」を示す（未対応とは別）", async () => {
+    const { paneA, sockPath } = await start({ script: false });
+    const r = await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g"));
+    expect(r).toMatchObject({ ok: false, error: { code: "display_script_disabled" } });
+    expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SET("st"))).toMatchObject({ ok: true });
+    expect(await call(sockPath, PANE_OP_DISPLAY_SEND, paneA, { name: "st", data: 1 })).toMatchObject({ ok: false, error: { code: "display_script_disabled" } });
+    const f = okResult<{ features: string[]; scriptEnabled: boolean }>(await call(sockPath, PANE_OP_DISPLAY_FEATURES, paneA, {}));
+    expect(f.scriptEnabled).toBe(false);
+    expect(f.features).toContain("format:script-html");
+  });
+
+  it("設定を有効にすると set できる。無効に戻すと、出ている script-html の面だけ閉じる（display.closed の理由 script_disabled。待っている側に届く）。静的な面は残る", async () => {
+    const { paneA, sockPath, open, browser } = await start({ script: false });
+    const admin = await open("external");
+    const b = await browser();
+    expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g"))).toMatchObject({ ok: false });
+    await admin.request("prefs.set", { patch: { displayScriptEnabled: true } });
+    const set = okResult<{ display: DisplayInfo; epoch: string; next: number }>(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g")));
+    okResult(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SET("st")));
+    const w = await send(sockPath, { op: PANE_OP_DISPLAY_WAIT, paneId: paneA, params: { epoch: set.epoch, since: set.next + 0, timeoutMs: 20_000 } });
+    await new Promise((r) => setTimeout(r, 100));
+    await admin.request("prefs.set", { patch: { displayScriptEnabled: false } });
+    const reply = okResult<{ events: DisplayEvent[] }>(JSON.parse(await w.closed) as PaneSocketResponse);
+    expect(reply.events.filter((e) => e.type === "display.closed")).toMatchObject([{ name: "g", reason: "script_disabled" }]);
+    expect(await b.waitForEvent("display.removed", 1)).toMatchObject({ reason: "script_disabled" });
+    expect(okResult<{ displays: DisplayInfo[] }>(await call(sockPath, PANE_OP_DISPLAY_LIST, paneA, {})).displays.map((d) => d.name)).toEqual(["st"]);
+    expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g"))).toMatchObject({ ok: false, error: { code: "display_script_disabled" } });
+  });
+
+  it("pane.sock からは設定を変えられない（prefs.set は載っていない操作）。pane の中のプログラムが、自分で有効にできない", async () => {
+    const { paneA, sockPath } = await start({ script: false });
+    for (const op of ["prefs.set", "prefs.get", "client.hello"]) {
+      expect(await call(sockPath, op, paneA, { patch: { displayScriptEnabled: true } })).toMatchObject({ ok: false });
+    }
+    expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g"))).toMatchObject({ ok: false, error: { code: "display_script_disabled" } });
+    // 引数に設定を載せても display.set の schema が断る（strict）
+    expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, { ...SCRIPT("g"), displayScriptEnabled: true })).toMatchObject({ ok: false });
   });
 });

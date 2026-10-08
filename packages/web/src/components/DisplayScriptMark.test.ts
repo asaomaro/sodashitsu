@@ -6,6 +6,7 @@ import { nextTick } from "vue";
 import { registerFrame, unregisterFrame } from "../display/frameRegistry.js";
 import { DisplayControllerKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
+import { useSettingsStore } from "../store/settings.js";
 import MobileDisplaySheet from "../mobile/MobileDisplaySheet.vue";
 import PaneBands from "./PaneBands.vue";
 import PanePanel from "./PanePanel.vue";
@@ -20,6 +21,7 @@ function mountWith(comp: unknown, props: Record<string, unknown>, infos: Display
   const pinia = createPinia();
   setActivePinia(pinia);
   const store = useDisplayStore();
+  useSettingsStore().displayScriptEnabled = true;
   infos.forEach((i) => store.upsert(i));
   const w = mount(comp as never, {
     props: props as never,

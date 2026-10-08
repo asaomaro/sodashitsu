@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { startFocusDropWatch, stopFocusDropWatch, FOCUS_DROP_NOTICE_COUNT, FOCUS_DROP_NOTICE_EVERY_MS, FOCUS_DROP_PATROL_MS } from "./focusDrop.js";
+import { startFocusDropWatch, stopFocusDropWatch, FOCUS_DROP_BREAKER_COUNT, FOCUS_DROP_NOTICE_COUNT, FOCUS_DROP_NOTICE_EVERY_MS, FOCUS_DROP_PATROL_MS } from "./focusDrop.js";
 import { installFocusOriginTracking, resetFocusOriginTracking } from "./focusOrigin.js";
 import { registerScriptFrame, scriptFramesSnapshot, unregisterScriptFrame } from "./frameRegistry.js";
 
@@ -9,7 +9,7 @@ import { registerScriptFrame, scriptFramesSnapshot, unregisterScriptFrame } from
  */
 describe("focusDrop", () => {
   let active: Element | null;
-  const deps = { focusSelectedTerminal: vi.fn(), notify: vi.fn() };
+  const deps = { focusSelectedTerminal: vi.fn(), notify: vi.fn(), trip: vi.fn() };
   let term: HTMLInputElement;
   beforeEach(() => {
     vi.useFakeTimers();
@@ -22,6 +22,7 @@ describe("focusDrop", () => {
     vi.spyOn(document, "hasFocus").mockReturnValue(true);
     deps.focusSelectedTerminal.mockReset();
     deps.notify.mockReset();
+    deps.trip.mockReset();
     resetFocusOriginTracking();
     installFocusOriginTracking();
     term.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
@@ -40,8 +41,10 @@ describe("focusDrop", () => {
   };
   const drop = (): void => {
     active = document.body;
+    term.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null })); // フォーカスがどこへも移らず外れた
     vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS);
   };
+  const PRESS_GAP_MS = 120;
   const pointer = (target: Element, trusted = true): void => {
     const e = new Event("pointerdown", { bubbles: true });
     if (trusted) Object.defineProperty(e, "isTrusted", { value: true });
@@ -66,23 +69,36 @@ describe("focusDrop", () => {
     expect(term.focus).toHaveBeenCalledTimes(5);
   });
 
-  it("利用者が端末（フォーカスを受ける要素）を押した直後の脱落も、戻す（クリックの直後 1 秒を免除にしない）。免除のあとも次の脱落を見る", () => {
+  it("利用者が端末を押した後（フォーカスは端末へ移った）の脱落は、押下の直後でも戻す。免除のあとも次の脱落を見る", () => {
     start();
     term.focus = vi.fn(() => void (active = term));
-    pointer(term); // フォーカスを受ける要素を押した
+    pointer(term); // 押した（フォーカスは端末のまま）
+    vi.advanceTimersByTime(PRESS_GAP_MS); // 押下から 50ms より後に落とされた
     drop();
     expect(term.focus).toHaveBeenCalledTimes(1);
     drop();
     expect(term.focus).toHaveBeenCalledTimes(2);
   });
 
-  it("余白（フォーカスを受けない要素）を押して外した脱落は、戻さない。そのあとの次の脱落は戻す", () => {
+  it("覆いなど、押してもフォーカスが動かない場所を押した後の脱落は、戻す（押した先の種類では決めない）", () => {
+    start();
+    term.focus = vi.fn(() => void (active = term));
+    const cover = document.createElement("div");
+    cover.className = "display-frame-cover";
+    document.body.appendChild(cover);
+    pointer(cover); // フォーカスは動かない（focusout が起きない）
+    vi.advanceTimersByTime(PRESS_GAP_MS);
+    drop();
+    expect(term.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("余白を押して、その直後にフォーカスが body へ移った（利用者が自分で外した）脱落は、戻さない。そのあとの次の脱落は戻す", () => {
     start();
     term.focus = vi.fn(() => void (active = term));
     const margin = document.createElement("div");
     document.body.appendChild(margin);
     pointer(margin);
-    drop();
+    drop(); // 押下の処理の最中（同じタスク）に、フォーカスが body へ移る
     expect(term.focus).not.toHaveBeenCalled();
     expect(deps.focusSelectedTerminal).not.toHaveBeenCalled();
     // 利用者が端末へ戻り、そのあとスクリプトが落とした
@@ -161,5 +177,23 @@ describe("focusDrop", () => {
     drop();
     vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS * 5);
     expect(deps.focusSelectedTerminal).toHaveBeenCalledTimes(1);
+  });
+
+  it("遮断器: 3 秒に 15 回戻したら、この画面のスクリプトの枠を全部止める（trip）。ゆっくりした落とし（300ms ごと）・知らせの線（5 回）だけでは止めない", () => {
+    start();
+    term.focus = vi.fn(() => void (active = term));
+    // 300ms ごと: 3 秒に約 10 回 → 止めない
+    for (let i = 0; i < 12; i++) {
+      drop();
+      vi.advanceTimersByTime(300);
+    }
+    expect(deps.trip).not.toHaveBeenCalled();
+    expect(deps.notify).toHaveBeenCalled(); // 知らせは出ている
+    // 毎フレーム相当: 25ms ごと → 15 回で止める
+    for (let i = 0; i < FOCUS_DROP_BREAKER_COUNT + 2; i++) {
+      drop();
+      vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS);
+    }
+    expect(deps.trip).toHaveBeenCalledTimes(1);
   });
 });

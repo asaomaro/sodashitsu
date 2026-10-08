@@ -82,6 +82,14 @@ export function loadShellCwdTracking(raw: unknown): boolean {
   return typeof raw === "boolean" ? raw : true;
 }
 
+/**
+ * スクリプトが動く表示（`script-html`）を許可するか（`displayScriptEnabled`。20261007-soda-extensions の利用者の決定）。**`true` のときだけ有効。既定は無効**
+ * （サーバも同じ規則で読む）。
+ */
+export function loadDisplayScriptEnabled(raw: unknown): boolean {
+  return raw === true;
+}
+
 /** 保存された「指定した場所」を読む。文字列でなければ空（検証はサーバ。空なら使えない場所として知らされる）。 */
 export function loadNewCwdPath(raw: unknown): string {
   return typeof raw === "string" ? raw : "";

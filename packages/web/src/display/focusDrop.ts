@@ -16,7 +16,7 @@
  * **利用者が端末（フォーカスを受ける要素）を押した直後の脱落は、利用者の意図ではないので戻す**（クリックの直後 1 秒を免除にしない）。
  * 戻したあとも検知を続ける（免除・戻しの後に、次の脱落を見落とさない）。
  */
-import { documentRegainedFocusWithin, recentPointer, rememberedOrigin } from "./focusOrigin.js";
+import { documentRegainedFocusWithin, rememberedOrigin, userBlurredFocusWithin } from "./focusOrigin.js";
 import { scriptFramesSnapshot } from "./frameRegistry.js";
 
 export const FOCUS_DROP_USER_INPUT_MS = 1000;
@@ -26,12 +26,21 @@ export const FOCUS_DROP_PATROL_MS = 25;
 export const FOCUS_DROP_NOTICE_COUNT = 5;
 export const FOCUS_DROP_NOTICE_WINDOW_MS = 10_000;
 export const FOCUS_DROP_NOTICE_EVERY_MS = 60_000;
+/**
+ * **この画面だけの遮断器**: `FOCUS_DROP_BREAKER_WINDOW_MS` 以内に `FOCUS_DROP_BREAKER_COUNT` 回戻したら、この画面に載っているスクリプトの枠を全部止める（`deps.trip()`）。
+ * 実測（Chromium 153）: ふつうの操作では戻しは 0 回。`setInterval` で 300ms ごとに落とす面は 3 秒に約 10 回（遮断しない・知らせだけ）、
+ * 100ms ごとなら約 30 回・`MessageChannel` の連鎖や毎フレーム（`requestAnimationFrame`）なら 3 秒に 100 回超（遮断する）。知らせの線（10 秒に 5 回）より強い線にした。
+ */
+export const FOCUS_DROP_BREAKER_COUNT = 15;
+export const FOCUS_DROP_BREAKER_WINDOW_MS = 3000;
 
 export interface FocusDropDeps {
   /** 利用者が選んでいる pane の端末へフォーカスを戻す。 */
   focusSelectedTerminal(): void;
   /** 利用者への知らせ（トースト）。 */
   notify(message: string): void;
+  /** 遮断器が働いた: この画面のスクリプトの枠を全部止める（DOM から外し、固定の文言と［再開］を出す。サーバへは知らせない・数えない）。 */
+  trip(): void;
 }
 
 let hadFocus = false;
@@ -61,12 +70,35 @@ function onWindowFocusChange(): void {
 
 function noteRestore(now: number): void {
   restoredAt.push(now);
+  if (restoredAt.filter((t) => now - t <= FOCUS_DROP_BREAKER_WINDOW_MS).length >= FOCUS_DROP_BREAKER_COUNT) {
+    restoredAt.length = 0;
+    const d = deps;
+    d?.trip();
+    // 止めた枠が DOM から外れるまでの間に、もう 1 回落とされることがある。外れたあとに、body のままなら戻す。
+    for (const ms of [0, 60, 200]) setTimeout(() => restoreIfBody(d), ms);
+    return;
+  }
   while (restoredAt.length > 0 && now - restoredAt[0]! > FOCUS_DROP_NOTICE_WINDOW_MS) restoredAt.shift();
   if (restoredAt.length >= FOCUS_DROP_NOTICE_COUNT && now - lastNoticeAt >= FOCUS_DROP_NOTICE_EVERY_MS) {
     lastNoticeAt = now;
     const names = [...new Set(scriptFramesSnapshot().map((f) => f.name))].join("、");
     deps?.notify(`スクリプトの表示（${names}）が、入力のフォーカスを繰り返し外しています。心当たりが無ければ、表示を閉じてください`);
   }
+}
+
+/** フォーカスが body のままなら、元の場所へ戻す（遮断器のあと。利用者が自分で外したときは戻さない）。 */
+function restoreIfBody(d: FocusDropDeps | null): void {
+  const dd = typeof document === "undefined" ? null : document;
+  if (!d || !dd || !(dd.activeElement === dd.body || dd.activeElement === null) || !dd.hasFocus() || userBlurredFocusWithin(FOCUS_DROP_USER_INPUT_MS)) return;
+  const el = rememberedOrigin();
+  if (el) {
+    try {
+      (el as HTMLElement).focus({ preventScroll: true });
+    } catch {
+      /* 次の戻し先へ */
+    }
+  }
+  if (dd.activeElement === dd.body || dd.activeElement === null) d.focusSelectedTerminal();
 }
 
 /** 1 回見る（見回り・`focusout` から）。落ちたことを見つけたら、戻す。 */
@@ -94,7 +126,7 @@ export function check(): void {
   lastAppEl = null;
   if (!d.hasFocus()) return; // ウィンドウ・タブが離れた
   if (documentRegainedFocusWithin(FOCUS_DROP_USER_INPUT_MS)) return; // 別のウィンドウ・ブラウザの UI から戻った
-  if (recentPointer(FOCUS_DROP_USER_INPUT_MS) === "blank") return; // 利用者が余白を押して、自分で外した
+  if (userBlurredFocusWithin(FOCUS_DROP_USER_INPUT_MS)) return; // 利用者が余白を押して、実際にフォーカスが body へ移った（自分で外した）
   if (was !== null && !isShown(was)) return; // アプリが、フォーカスのあった要素を外した・隠した
   // 脱落: 元の場所へ戻す（数えない）。
   const el = rememberedOrigin();
@@ -128,7 +160,7 @@ export function startFocusDropWatch(d: FocusDropDeps, document_: Document = docu
 /** 見回りを止める（スクリプトが動く枠が 1 つも無くなったとき）。 */
 export function stopFocusDropWatch(): void {
   // 最後の面が外れる直前に落とされたフォーカス（繰り返し落とす面が閉じられた直後）を戻す。
-  if (doc && deps && hadFocus && (doc.activeElement === doc.body || doc.activeElement === null) && doc.hasFocus() && recentPointer(FOCUS_DROP_USER_INPUT_MS) !== "blank" && (lastAppEl === null || isShown(lastAppEl))) {
+  if (doc && deps && hadFocus && (doc.activeElement === doc.body || doc.activeElement === null) && doc.hasFocus() && !userBlurredFocusWithin(FOCUS_DROP_USER_INPUT_MS) && (lastAppEl === null || isShown(lastAppEl))) {
     const el = rememberedOrigin();
     if (el) {
       try {

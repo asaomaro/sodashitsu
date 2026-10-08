@@ -13,6 +13,7 @@ import { computed } from "vue";
 import { isScriptFormat } from "../display/framePage.js";
 import { endEngageFrame, engageFrame } from "../display/frameRegistry.js";
 import { useDisplayStore } from "../store/display.js";
+import { useSettingsStore } from "../store/settings.js";
 
 /**
  * スクリプトが動く面の、枠の外の固定の部品（アプリが描く）: 固定の印「スクリプト」と［操作する］ボタン。
@@ -21,8 +22,9 @@ import { useDisplayStore } from "../store/display.js";
  */
 const props = defineProps<{ info: DisplayInfo; part: "mark" | "button" | "end" }>();
 const store = useDisplayStore();
+const settings = useSettingsStore();
 
-const script = computed(() => isScriptFormat(props.info.format) && store.scriptCapable);
+const script = computed(() => isScriptFormat(props.info.format) && store.scriptCapable && settings.displayScriptEnabled);
 const engaged = computed(() => store.focusedDisplayId === props.info.id);
 const hinted = computed(() => store.engageHint === props.info.id);
 

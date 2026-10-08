@@ -42,6 +42,11 @@ describe.skipIf(process.platform === "win32")("sodactl display（実サーバ）
     anonymous = new FsSessionStore(join(sessionDir, "anonymous.json")); // 空（ログインしていない）
     await loggedIn.set(url, await login(url, token));
     paneA = server.session.snapshot().panes[0]!.id;
+    // スクリプトが動く表示は既定で無効。この試験は、設定で有効にしてから始める（無効の筋は下の別の test）。
+    const admin = await connect(url, await login(url, token));
+    await admin.request("client.hello", { protocol: 1, kind: "external" });
+    await admin.request("prefs.set", { patch: { displayScriptEnabled: true } });
+    admin.close();
   }, 30_000);
 
   afterAll(async () => {
@@ -316,5 +321,29 @@ describe.skipIf(process.platform === "win32")("sodactl display（実サーバ）
     for (let i = 0; i < 3; i++) await b.request("display.report", { id, problem: "focus_steal", paneId, format: "script-html" });
     await expect(run(["set", "cg", "--kind", "panel", "--script-html-file", await mk("cg2.html", "<script>2</script>")], env)).rejects.toMatchObject({ code: "display_busy" });
     expect((await run(["set", "cg", "--kind", "panel", "--html-file", await mk("cg3.html", "<p>ok</p>")], env)).code).toBe(0);
+  });
+
+  it("script-html が設定で無効のとき: set・send は display_script_disabled（終了コード 1 のエラー）。--features の server.scriptEnabled が偽。静的な形式は出せる。pane の中（ログインなし）からは有効にできない", async () => {
+    const { paneId } = await newPane();
+    const env = inPane(paneId);
+    const setEnabled = async (v: boolean): Promise<void> => {
+      const admin = await connect(url, await login(url, token));
+      await admin.request("client.hello", { protocol: 1, kind: "external" });
+      await admin.request("prefs.set", { patch: { displayScriptEnabled: v } });
+      admin.close();
+    };
+    await setEnabled(false);
+    try {
+      const f = (await run(["--features"], env)).lines[0] as { server: { scriptEnabled: boolean; features: string[] } };
+      expect(f.server.scriptEnabled).toBe(false);
+      expect(f.server.features).toContain("format:script-html");
+      await expect(run(["set", "dg", "--kind", "panel", "--script-html-file", await mk("dg.html", "<p>x</p>")], env)).rejects.toMatchObject({ code: "display_script_disabled" });
+      await expect(run(["send", "dg", "--json", "1"], env)).rejects.toMatchObject({ code: "display_script_disabled" });
+      expect((await run(["set", "dg", "--kind", "panel", "--html-file", await mk("dg2.html", "<p>x</p>")], env)).code).toBe(0);
+      await setEnabled(true);
+      expect((await run(["set", "dg", "--kind", "panel", "--script-html-file", await mk("dg3.html", "<p>x</p>")], env)).code).toBe(0);
+    } finally {
+      await setEnabled(true);
+    }
   });
 });

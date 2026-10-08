@@ -58,7 +58,7 @@ window.__drop = function () { window.focus(); parent.focus(); };
     await setScriptOk(appServer, paneId, "g2", "<p>ok</p>"); // 冷却に入っていない
   });
 
-  test("4ms ごとの繰り返し: 打った文字が端末に届き、面は自動では閉じず・冷却に入らず、利用者への知らせが 1 回出る", async ({ page, appServer }) => {
+  test("4ms ごとの繰り返し: 遮断器がこの画面のスクリプトの枠を止め（サーバの面は閉じず・冷却に入らず）、打った文字が端末に届く。知らせが出る", async ({ page, appServer }) => {
     const { paneId, input, sent } = await openScriptBrowser(page, appServer);
     await setScriptOk(appServer, paneId, "g", dropEvery(4));
     await focusTerminal(page);
@@ -79,9 +79,12 @@ window.__drop = function () { window.focus(); parent.focus(); };
     }
     const toPane = input().slice(n).filter((i) => i.paneId === paneId).length;
     console.log(`MEASURE focus-drop-loop-4ms: typed=${typed} reached-pane=${toPane}`);
-    expect(toPane).toBeGreaterThan(typed * 0.5);
+    expect(toPane).toBeGreaterThan(typed * 0.8);
     expect(stealReports(sent)).toBe(0);
-    await expect(scriptFrameEl(page)).toHaveCount(1); // 自動では閉じない
+    await expect(scriptFrameEl(page)).toHaveCount(0); // 遮断器が、この画面の枠を DOM から外した
+    await expect(page.locator("[data-pane-panel] [data-display-note]")).toContainText("入力のフォーカスが繰り返し外されたので、この画面ではスクリプトの表示を止めました");
+    const listed = await ok(await runDisplay(appServer, paneId, ["list"]));
+    expect((listed.json as { displays: unknown[] }).displays).toHaveLength(1); // サーバの面は閉じない
     expect(await page.evaluate(() => (window as unknown as { __noticed: boolean }).__noticed)).toBe(true); // 利用者への知らせが出た
     await setScriptOk(appServer, paneId, "g2", "<p>ok</p>"); // 冷却に入っていない
   });
@@ -124,7 +127,78 @@ window.__drop = function () { window.focus(); parent.focus(); };
     });
   }
 
-  test("無関係な pane を冷却に入れない: p1 に無害な面・p2 に落とす面。p1 も p2 も冷却に入らず、p1 の面は閉じない", async ({ page, appServer }) => {
+  test("実測: 端末を実クリック → 覆いを実クリック → 10 キー、を 6 回。400ms ごとに落とす面でも、失われるキーは少数（覆いを押した後の脱落も戻す）", async ({ page, appServer }) => {
+    test.setTimeout(60_000);
+    const { paneId, input } = await openScriptBrowser(page, appServer);
+    await setScriptOk(appServer, paneId, "g", dropEvery(400));
+    await expect(scriptFrameEl(page)).toHaveCount(1);
+    {
+      const b0 = (await page.locator(".xterm-screen").first().boundingBox())!;
+      await page.mouse.click(b0.x + 40, b0.y + 40);
+      for (let k = 0; k < 10; k++) {
+        await page.keyboard.press("w");
+        await page.waitForTimeout(25);
+      }
+      await page.waitForTimeout(400);
+    }
+    const n = input().length;
+    let typed = 0;
+    for (let round = 0; round < 6; round++) {
+      const box = (await page.locator(".xterm-screen").first().boundingBox())!;
+      await page.mouse.click(box.x + 40, box.y + 40); // 端末を実クリック
+      const cover = (await page.locator("[data-pane-panel] [data-display-cover]").boundingBox())!;
+      await page.mouse.click(cover.x + 20, cover.y + 20); // 覆いを実クリック（フォーカスは動かない）
+      for (let k = 0; k < 10; k++) {
+        await page.keyboard.press("k");
+        typed++;
+        await page.waitForTimeout(25);
+      }
+      await page.waitForTimeout(300);
+    }
+    const reached = input().slice(n).filter((i) => i.paneId === paneId).length;
+    console.log(`MEASURE focus-drop-cover-click: interval=400ms typed=${typed} reached-pane=${reached} lost=${typed - reached}`);
+    expect(reached).toBeGreaterThan(typed * 0.8);
+    await expect(scriptFrameEl(page)).toHaveCount(1); // 400ms ごとでは遮断器は働かない（戻すだけ）
+  });
+
+  for (const kind of ["requestAnimationFrame", "MessageChannel"] as const) {
+    test(`遮断器: ${kind} で落とし続ける面は、この画面のスクリプトの枠を全部止める（無害な面も）。打ったキーは全部端末に届く。［再開］で面ごとに戻る。数えず、冷却に入らない`, async ({ page, appServer }) => {
+      test.setTimeout(60_000);
+      const { paneId, input, sent } = await openScriptBrowser(page, appServer);
+      const loop =
+        kind === "requestAnimationFrame"
+          ? "function f() { window.__drop(); requestAnimationFrame(f); } requestAnimationFrame(f);"
+          : "var ch = new MessageChannel(); ch.port1.onmessage = function () { window.__drop(); ch.port2.postMessage(0); }; ch.port2.postMessage(0);";
+      await setScriptOk(appServer, paneId, "benign", "<p id=b>benign</p>");
+      await expect(scriptFrameEl(page)).toHaveCount(1);
+      await focusTerminal(page);
+      await setScriptOk(appServer, paneId, "evil", PAGE.replace("</script>", `${loop}</script>`), { kind: "band" }); // 帯（パネルのタブに隠れず、枠が動く）
+      // 止まるまで（数秒）にも打ち続ける。止まったあとに打つキーは全部届く。
+      await expect(page.locator("[data-display-note]").first()).toContainText("入力のフォーカスが繰り返し外されたので", { timeout: 15_000 });
+      await expect(scriptFrameEl(page)).toHaveCount(0);
+      await page.screenshot({ path: `/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/display-pr3/05-breaker-${kind}.png` });
+      await focusTerminal(page);
+      const n = input().length;
+      for (let k = 0; k < 20; k++) {
+        await page.keyboard.press("q");
+        await page.waitForTimeout(20);
+      }
+      await page.waitForTimeout(300);
+      const reached = input().slice(n).filter((i) => i.paneId === paneId).length;
+      console.log(`MEASURE breaker-${kind}: typed-after-trip=20 reached-pane=${reached}`);
+      expect(reached).toBe(20);
+      expect(stealReports(sent)).toBe(0);
+      await expect(page.locator(".toast", { hasText: "入力のフォーカスが繰り返し外されたので" }).first()).toBeAttached();
+      // サーバの面は閉じず、冷却にも入っていない
+      expect(((await ok(await runDisplay(appServer, paneId, ["list"]))).json as { displays: unknown[] }).displays).toHaveLength(2);
+      expect((await (await setScript(appServer, paneId, "again", "<p>x</p>")).done).code).toBe(0);
+      // 無害な面は［再開］で戻る（表示している面の分）
+      const resume = page.locator("[data-display-redisplay]").first();
+      await expect(resume).toHaveText("再開");
+    });
+  }
+
+  test("無関係な pane を冷却に入れない: p1 に無害な面・p2 に落とす面。p1 も p2 も冷却に入らず、サーバの面はどちらも閉じない（この画面の枠は、遮断器で両方止まる）", async ({ page, appServer }) => {
     test.setTimeout(60_000);
     const { paneId, client, sent, input } = await openScriptBrowser(page, appServer);
     const p2 = (await client.request("pane.split", { paneId, direction: "right" })).pane.id;
@@ -139,7 +213,11 @@ window.__drop = function () { window.focus(); parent.focus(); };
     }
     await page.waitForTimeout(500);
     expect(stealReports(sent)).toBe(0);
-    await expect(page.locator("[data-pane-panel] iframe[data-display-script]")).toHaveCount(2);
+    // サーバの面は、どちらも閉じない（遮断器は、この画面の枠を止めるだけ。無害な面も止まる）
+    const l1 = await ok(await runDisplay(appServer, paneId, ["list"]));
+    const l2 = await ok(await runDisplay(appServer, p2, ["list"]));
+    expect((l1.json as { displays: unknown[] }).displays).toHaveLength(1);
+    expect((l2.json as { displays: unknown[] }).displays).toHaveLength(1);
     expect(input().slice(n).filter((i) => i.paneId === paneId).length).toBeGreaterThan(30);
     // どちらの pane も、script-html を出し直せる（冷却に入っていない）
     expect((await (await setScript(appServer, paneId, "benign2", "<p>x</p>")).done).code).toBe(0);

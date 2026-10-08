@@ -251,6 +251,25 @@ describe("runDisplay set（script-html）と send", () => {
     expect(await bad(Buffer.from(JSON.stringify("x".repeat(64 * 1024 - 2))))).not.toBeInstanceOf(CliUsageError);
   });
 
+  it("script-html が設定で無効（features の scriptEnabled が偽）: set・send は display_script_disabled のエラー（終了コード 1）。未対応（unsupported・終了コード 0）とは別。静的な形式は影響しない", async () => {
+    const disabled = { ...SCRIPT_FEATURES, scriptEnabled: false };
+    const out = new Out();
+    const tr = stub({ "display.features": disabled, "display.set": SET_RESULT, "display.send": { delivered: 1 } });
+    await expect(runDisplay(parse(["set", "g", "--kind", "panel", "--format", "script-html"]), store, out.deps({ transport: tr, readStdin: async () => Buffer.from("<p>") }))).rejects.toMatchObject({
+      code: "display_script_disabled",
+      message: expect.stringContaining("disabled in the settings"),
+    });
+    await expect(runDisplay(parse(["send", "g", "--json", "1"]), store, out.deps({ transport: tr }))).rejects.toMatchObject({ code: "display_script_disabled" });
+    expect(tr.calls.map((c) => c.op)).toEqual(["display.features", "display.features"]); // set・send は送らない
+    expect(out.lines).toEqual([]);
+    // 静的な形式は features を呼ばず、そのまま出せる
+    const tr2 = stub({ "display.set": SET_RESULT });
+    expect(await runDisplay(parse(["set", "a", "--kind", "band", "--text", "x"]), store, out.deps({ transport: tr2 }))).toBe(0);
+    // サーバが断った（古い features を見て送った後に設定が変わった）ときも、そのままエラー
+    const tr3 = stub({ "display.features": SCRIPT_FEATURES, "display.set": () => { throw new RpcFailure("display_script_disabled", "disabled"); } });
+    await expect(runDisplay(parse(["set", "g", "--kind", "panel", "--format", "script-html"]), store, out.deps({ transport: tr3, readStdin: async () => Buffer.from("<p>") }))).rejects.toMatchObject({ code: "display_script_disabled" });
+  });
+
   it("send: script-html・send を知らないサーバは unsupported。古いサーバも unsupported", async () => {
     const out = new Out();
     const tr = stub({ "display.features": FEATURES, "display.send": { delivered: 1 } });

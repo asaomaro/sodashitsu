@@ -38,6 +38,11 @@ import type { Disposable, EventBus } from "../bus/EventBus.js";
 import type { Logger } from "../log/Logger.js";
 import { TokenBucket } from "./rateLimit.js";
 
+/** 設定で無効のとき `script-html` の `set`・`send` を断る誤り。 */
+function scriptDisabledError(): RpcError {
+  return new RpcError("display_script_disabled", "スクリプトが動く表示は、設定で無効になっています（設定の画面で「スクリプトが動く表示を許可する」を有効にする）");
+}
+
 export interface DisplayClock {
   now(): number;
   setTimeout(fn: () => void, ms: number): unknown;
@@ -61,6 +66,11 @@ export interface DisplayServiceOptions {
   isScreenKind(clientId: string): boolean;
   /** テストで差し替える。 */
   clock?: DisplayClock;
+  /**
+   * スクリプトが動く表示（`script-html`）が、設定で有効か（共有の設定 `displayScriptEnabled`。`composeServer` が `PrefsStore` を読む形で渡す）。
+   * **既定は無効**（`true` のときだけ有効）。省略したとき（単体テスト）は有効として扱う。
+   */
+  scriptEnabled?: () => boolean;
   /** 面の id（既定 `crypto.randomUUID`）。 */
   newId?: () => string;
   /** 面の名前・pane・バイト数・理由だけを書く。**中身・題・操作に添えた値は書かない**。 */
@@ -151,6 +161,7 @@ export class DisplayService {
     const b = checked.value;
     this.requirePane(paneId);
     const now = this.clock.now();
+    if (b.format === DISPLAY_SCRIPT_FORMAT && !this.scriptEnabled()) throw scriptDisabledError();
     // 冷却の間、その pane の script-html は出せない（同じ名前の静的な面を置き換える set も。既にある面は変えない）。静的な形式は出せる。
     if (b.format === DISPLAY_SCRIPT_FORMAT && this.isCooling(paneId, now)) {
       throw new RpcError(
@@ -296,6 +307,7 @@ export class DisplayService {
    */
   send(paneId: string, p: { name: string; data: unknown }): { delivered: number } {
     this.requirePane(paneId);
+    if (!this.scriptEnabled()) throw scriptDisabledError();
     const entry = this.byPane.get(paneId)?.get(p.name);
     if (entry === undefined) throw new RpcError("display_closed", `no display named ${p.name} on this pane`);
     if (entry.info.format !== DISPLAY_SCRIPT_FORMAT) throw new RpcError("invalid_params", "only a script-html display can receive data");
@@ -309,7 +321,7 @@ export class DisplayService {
   }
 
   features(): DisplayFeatures {
-    return { features: [...DISPLAY_FEATURES], limits: displayLimits(), renderers: this.renderers(), epoch: this.epoch };
+    return { features: [...DISPLAY_FEATURES], limits: displayLimits(), renderers: this.renderers(), epoch: this.epoch, scriptEnabled: this.scriptEnabled() };
   }
 
   // --- 画面側（ブラウザ）------------------------------------------------------------------------
@@ -424,6 +436,19 @@ export class DisplayService {
     }
     if (same === undefined) return { closed: [] };
     return { closed: [this.remove(same, p.problem)] };
+  }
+
+  /**
+   * 設定が変わった（`composeServer` が `PrefsStore.onChange` から呼ぶ）。**無効になっていたら、出ている `script-html` の面を全部閉じる**（理由 `script_disabled`。`display.closed` で、待っているプログラムに届く）。
+   * 無効 → 有効は、何もしない（次の `set` から出せる）。回数・冷却には数えない。
+   */
+  onScriptSettingChanged(): void {
+    if (this.scriptEnabled()) return;
+    for (const e of [...this.byId.values()]) if (e.info.format === DISPLAY_SCRIPT_FORMAT) this.remove(e, "script_disabled");
+  }
+
+  private scriptEnabled(): boolean {
+    return this.opts.scriptEnabled === undefined ? true : this.opts.scriptEnabled();
   }
 
   // --- 後始末 ----------------------------------------------------------------------------------

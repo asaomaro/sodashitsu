@@ -165,6 +165,11 @@ export interface DisplayFeatures {
   renderers: DisplayRenderers;
   /** サーバの起動ごとの印。`display.wait` に渡すと、入れ替え・再起動を見分けられる。 */
   epoch: string;
+  /**
+   * スクリプトが動く表示（`script-html`）が、設定で有効か。**無効（既定）のとき、`script-html` の `set`・`send` は `display_script_disabled` で断られる**。
+   * `features` に `format:script-html` があっても無効でありうる（「この版が知らない」＝未対応 と「設定で無効」を区別する）。古いサーバには無い項目（読み手は未定義を「分からない」として扱う）。
+   */
+  scriptEnabled?: boolean;
 }
 /** `set` の中身（`paneId` を除いたもの）。`checkDisplaySet` が返す形で、受け口の `PaneDisplaySetParams` と同じ項目。 */
 export interface DisplaySetBody {
@@ -195,8 +200,9 @@ export interface DisplayWaitResult {
  * - `closed`: プログラムの close（自分の close も届く）／`dismissed`: 利用者が閉じた／`expired`: `--ttl-ms`
  * - `navigated`: 枠が別のページへ移ったので、アプリが止めた／`unresponsive`: 枠が 10 秒返事をしないので、アプリが止めた
  * - `focus_steal`: スクリプトがフォーカスを取り続けたので、アプリが止めた（pane ごとに数えて 3 回）
+ * - `script_disabled`: スクリプトが動く表示が、設定で無効にされたので、閉じた
  */
-export type DisplayClosedReason = "closed" | "dismissed" | "expired" | "navigated" | "focus_steal" | "unresponsive";
+export type DisplayClosedReason = "closed" | "dismissed" | "expired" | "navigated" | "focus_steal" | "unresponsive" | "script_disabled";
 /** 読み手の側の理由（後の版が足す理由を受けても落ちない。知らない理由は「閉じた」として扱う）。 */
 export type DisplayClosedReasonValue = DisplayClosedReason | (string & {});
 

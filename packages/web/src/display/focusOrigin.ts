@@ -23,15 +23,24 @@ let docUnfocused = false;
 function onKeyDown(ev: Event): void {
   if ((ev as KeyboardEvent).key === "Tab") lastTabAt = lastNow();
 }
-/** 押した先が、押すとフォーカスを受ける要素（か端末）か。 */
-const FOCUSABLE = 'a[href], button, input, select, textarea, summary, iframe, [tabindex], [contenteditable="true"], .xterm';
-let lastPointerFocusable = false;
-/** 本物の（isTrusted の）ポインタ・タッチの操作と、押した先がフォーカスを受ける要素だったか（フォーカスが body へ落ちたのが、利用者の意図か、を見分ける）。 */
+let pressOpen = false;
+let lastUserBlurAt = -Infinity;
+/**
+ * 押下の処理の最中（pointerdown から次のタスクまで）に実際にフォーカスが body へ移ったときだけ、「利用者が余白を押して自分で外した」と見る。
+ * 余白を押したときのフォーカスの移動は、押下のイベントと同じタスクの中で起きる。時間（50ms など）で見ると、押下の直後にたまたま来たスクリプトの脱落を、利用者の操作と取り違える。
+ */
+/** 本物の（isTrusted の）ポインタ・タッチの押下の時刻。 */
 function onPointer(ev: Event): void {
   if (!ev.isTrusted) return;
   lastUserInputAt = lastNow();
-  const t = ev.target;
-  lastPointerFocusable = t instanceof Element && t.closest(FOCUSABLE) !== null;
+  pressOpen = true;
+  setTimeout(() => {
+    pressOpen = false;
+  }, 0);
+}
+/** フォーカスがどこへも移らず外れた（`relatedTarget` なし）時刻。余白を押す・スクリプトが `parent.focus()` で落とす、のどちらでも起きる。 */
+function onFocusOutNone(ev: Event): void {
+  if (pressOpen && (ev as FocusEvent).relatedTarget === null) lastUserBlurAt = lastNow();
 }
 function onWindowBlur(): void {
   // 枠（iframe）へフォーカスが移っても親の window の `blur` は起きる。文書がフォーカスを持たなくなった（別のウィンドウ・タブへ移った）ときだけ数える。1 拍置いて見る。
@@ -51,13 +60,12 @@ export function documentRegainedFocusWithin(ms: number): boolean {
   return lastNow() - regainedAt < ms;
 }
 /**
- * 直前（`ms` 以内）の本物のポインタ・タッチの操作の種類: 押した先が**フォーカスを受けない要素**（余白）だったなら `"blank"`（利用者が自分でフォーカスを外した）、
- * **フォーカスを受ける要素・端末**だったなら `"focusable"`（その直後に body へ落ちたのは、利用者の意図ではない）、無ければ `null`。
+ * 直前（`ms` 以内）に、利用者が**押して、その押下の処理の最中に実際にフォーカスが body へ移った**か（＝余白を押して自分で外した）。
+ * 押した先の種類では決めない: 覆い（`mousedown.prevent`）や見出しの飾りなど、押してもフォーカスが動かない場所の後の脱落は、利用者の意図ではないので戻す。
  * **キーは数えない**: 打っている最中にフォーカスを落とされるのが、まさに止めたい被害で、キーはフォーカスを body へ落とさない。
  */
-export function recentPointer(ms: number): "blank" | "focusable" | null {
-  if (lastNow() - lastUserInputAt >= ms) return null;
-  return lastPointerFocusable ? "focusable" : "blank";
+export function userBlurredFocusWithin(ms: number): boolean {
+  return lastNow() - lastUserBlurAt < ms;
 }
 /** 後方互換: 直前に本物のポインタ・タッチの操作があったか。 */
 export function userInputWithin(ms: number): boolean {
@@ -84,12 +92,14 @@ export function installFocusOriginTracking(doc: Document = document): void {
     target.removeEventListener("focusin", onFocusIn, true);
     target.removeEventListener("keydown", onKeyDown, true);
     for (const t of ["pointerdown", "mousedown", "touchstart"]) target.removeEventListener(t, onPointer, true);
+    target.removeEventListener("focusout", onFocusOutNone, true);
     target.defaultView?.removeEventListener("blur", onWindowBlur);
     target.defaultView?.removeEventListener("focus", onWindowFocus);
   }
   doc.addEventListener("focusin", onFocusIn, true);
   doc.addEventListener("keydown", onKeyDown, true);
   for (const t of ["pointerdown", "mousedown", "touchstart"]) doc.addEventListener(t, onPointer, true);
+  doc.addEventListener("focusout", onFocusOutNone, true);
   doc.defaultView?.addEventListener("blur", onWindowBlur);
   doc.defaultView?.addEventListener("focus", onWindowFocus);
   installed = true;
@@ -102,6 +112,7 @@ export function resetFocusOriginTracking(): void {
     target.removeEventListener("focusin", onFocusIn, true);
     target.removeEventListener("keydown", onKeyDown, true);
     for (const t of ["pointerdown", "mousedown", "touchstart"]) target.removeEventListener(t, onPointer, true);
+    target.removeEventListener("focusout", onFocusOutNone, true);
     target.defaultView?.removeEventListener("blur", onWindowBlur);
     target.defaultView?.removeEventListener("focus", onWindowFocus);
   }
@@ -110,7 +121,8 @@ export function resetFocusOriginTracking(): void {
   origin = null;
   lastTabAt = -Infinity;
   lastUserInputAt = -Infinity;
-  lastPointerFocusable = false;
+  pressOpen = false;
+  lastUserBlurAt = -Infinity;
   regainedAt = -Infinity;
   docUnfocused = false;
 }

@@ -2,7 +2,7 @@ import { devices } from "@playwright/test";
 import { expect, test } from "../support/fixtures.js";
 import { runDisplay, watchDisplaySubscriptions } from "../support/display.js";
 import { writeTmp } from "../support/displayBrowser.js";
-import { ok, setScriptOk } from "../support/displayScript.js";
+import { enableScript, ok, setScriptOk } from "../support/displayScript.js";
 
 /**
  * モバイルの重ね表示でも、覆い・［操作する］・固定の印・操作中が同じに動く（T28 の (10)）。
@@ -12,6 +12,7 @@ import { ok, setScriptOk } from "../support/displayScript.js";
 test.use({ ...devices["iPhone 13"], defaultBrowserType: "chromium" });
 
 test("(10) モバイルの重ね表示: 固定の印・覆い・［操作する］。覆いを押しても始まらず、［操作する］で操作中になり、枠の中の欄に打てる", async ({ page, appServer }) => {
+  await enableScript(appServer);
   const client = await appServer.openClient("mobile");
   const paneId = client.helloSnapshot()!.panes[0]!.id;
   const subs = await watchDisplaySubscriptions(page);

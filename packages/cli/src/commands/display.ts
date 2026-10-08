@@ -46,6 +46,8 @@ export class DisplayUnsupported extends Error {
 }
 export const DISPLAY_UNSUPPORTED_REASON = "this server does not support display surfaces (update soda)";
 /** 表示の面は知っているが `script-html`・`send` を知らない（静的な形式だけの版）。 */
+/** `script-html` が設定で無効のときの理由（`display_script_disabled`）。 */
+export const DISPLAY_SCRIPT_DISABLED_REASON = "script-html displays are disabled in the settings (スクリプトが動く表示は、設定で無効になっています。設定の画面で「スクリプトが動く表示を許可する」を有効にしてください)";
 export const DISPLAY_SCRIPT_UNSUPPORTED_REASON = "this server does not support script-html displays (update soda)";
 
 /** `script-html`・`send` を知らないサーバ（静的な形式だけの版）。`script-html` を出す前に、`display.features` で確かめる。 */
@@ -328,6 +330,8 @@ async function requireScriptFeatures(tr: DisplayTransport, need: string[]): Prom
   const f = (await tr.call("display.features", {}, 10_000)) as DisplayFeatures;
   const have = Array.isArray(f.features) ? f.features : [];
   if (!need.every((x) => have.includes(x))) throw new DisplayScriptUnsupported();
+  // この版は知っているが、設定で無効（既定）。「未対応」（終了コード 0）とは別に、エラー（終了コード 1。`display_script_disabled`）にする。
+  if (f.scriptEnabled === false) throw new RpcFailure("display_script_disabled", DISPLAY_SCRIPT_DISABLED_REASON);
   return f;
 }
 

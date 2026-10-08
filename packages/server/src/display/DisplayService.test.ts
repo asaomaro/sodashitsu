@@ -38,7 +38,7 @@ class FakeClock implements DisplayClock {
   }
 }
 
-function setup(o: { screens?: string[]; panes?: string[] } = {}) {
+function setup(o: { screens?: string[]; panes?: string[]; scriptEnabled?: () => boolean } = {}) {
   const bus = new EventBus();
   const events: ServerEvent[] = [];
   bus.subscribe((e) => events.push(e));
@@ -53,6 +53,7 @@ function setup(o: { screens?: string[]; panes?: string[] } = {}) {
     isScreenKind: (id) => screens.has(id),
     clock,
     newId: () => `d${++n}`,
+    ...(o.scriptEnabled ? { scriptEnabled: o.scriptEnabled } : {}),
     logger: { info: (msg, fields) => void logs.push({ msg, fields }), warn: (msg, fields) => void logs.push({ msg, fields }) },
   });
   const names = (): string[] => events.filter((e) => e.event.startsWith("display.")).map((e) => `${e.event}:${(e.data as { name?: string; display?: { name: string } }).name ?? (e.data as { display: { name: string } }).display.name}`);
@@ -1000,5 +1001,38 @@ describe("DisplayService: 取られた回数と冷却（pane ごと）", () => {
     s.displays.set("p1", sbody("a", { title: "SEKRET-TITLE", content: "<script>SEKRET-BODY</script>" }));
     steal(s, "d1");
     expect(JSON.stringify(s.logs)).not.toMatch(/SEKRET/);
+  });
+});
+
+describe("DisplayService: 設定（displayScriptEnabled）", () => {
+  it("無効のとき、script-html の set・send は display_script_disabled で断る。静的な形式は出せる。features に scriptEnabled が出る", () => {
+    let on = false;
+    const s = setup({ scriptEnabled: () => on });
+    expect(errCode(() => s.displays.set("p1", sbody("g")))).toBe("display_script_disabled");
+    expect(errCode(() => s.displays.set("p1", body("st")))).toBe("no-throw");
+    expect(errCode(() => s.displays.send("p1", { name: "st", data: 1 }))).toBe("display_script_disabled");
+    expect(s.displays.features().scriptEnabled).toBe(false);
+    expect(s.displays.features().features).toContain("format:script-html"); // 「未対応」ではなく「設定で無効」
+    on = true;
+    expect(errCode(() => s.displays.set("p1", sbody("g")))).toBe("no-throw");
+    expect(s.displays.features().scriptEnabled).toBe(true);
+  });
+
+  it("有効 → 無効になったら、出ている script-html の面を全部閉じる（理由 script_disabled。静的な面は残る。回数・冷却に数えない）。無効 → 有効は何もしない", async () => {
+    let on = true;
+    const s = setup({ scriptEnabled: () => on });
+    s.displays.set("p1", sbody("a"));
+    s.displays.set("p2", sbody("b"));
+    s.displays.set("p1", body("st"));
+    const w = s.displays.wait("p1", { timeoutMs: 5000 }, {});
+    on = false;
+    s.displays.onScriptSettingChanged();
+    expect((await w).events).toMatchObject([{ type: "display.closed", name: "a", reason: "script_disabled" }]);
+    expect(s.displays.list("p1").displays.map((d) => d.name)).toEqual(["st"]);
+    expect(s.displays.list("p2").displays).toEqual([]);
+    expect(s.events.filter((e) => e.event === "display.removed").map((e) => (e.data as { reason: string }).reason)).toEqual(["script_disabled", "script_disabled"]);
+    on = true;
+    s.displays.onScriptSettingChanged();
+    expect(errCode(() => s.displays.set("p1", sbody("a")))).toBe("no-throw"); // 冷却に入っていない
   });
 });
