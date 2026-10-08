@@ -163,7 +163,7 @@
       依存: T7
       AC: AC10
       点検: あり
-- [ ] T10: E2E（PR-A）`display-layout-state.spec.ts` と helper `support/displayLayout.ts`（トレイのボタン・面のメニュー・箱を取る・枠の要素を控えて後で比べる関数）:
+- [x] T10: E2E（PR-A）`display-layout-state.spec.ts` と helper `support/displayLayout.ts`（トレイのボタン・面のメニュー・箱を取る・枠の要素を控えて後で比べる関数）:
       (1) パネルをたたむ → 再読み込み → たたんだまま（トレイにボタン・`[data-pane-panel]` が無い）。開く → 再読み込み → 開いたまま。別の context（別の `localStorage`）は既定のまま。面を `close` → 同じ名前で `set` → 同じ状態。
       (2) 設定「初めの状態」を「たたむ」→ 新しい名前のパネルはボタンで出る・(1) で開いた面は開いたまま・`--collapsed` なしの `set` で開かない。
       (3) 帯（`--size 96`）をメニューからたたむ → 行が消え・端末の箱が高くなり・`client.view` の行数が増え（1 回）・ボタンが出る → 押すと戻る。帯を下へ → 帯の箱が端末の箱の下・覚える。`--edge bottom`・設定の既定。
@@ -184,12 +184,12 @@
       対象: `packages/e2e/src/specs/display-layout-state.spec.ts`（新規）、`packages/e2e/src/support/displayLayout.ts`（新規）、`packages/e2e/src/specs/display-flows.spec.ts:63-81`・`:267-268`・`display-script-nav.spec.ts:76-78`・`display-script-engage.spec.ts:94-111` / 根拠: 規約 `e2e-observe-browser`、helper は `support/display.ts`・`displayBrowser.ts`・`displayScript.ts`
       依存: T3, T8, T9
       AC: AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC10, AC21, AC22, AC23, AC24, AC25, AC26, AC-I1, AC-I3, AC-I4
-- [ ] T11: 文書（PR-A）: `docs/display.md`（たたみの記憶・優先の表・設定・帯のたたみと上下・帯の行のボタン・表示のメニューと `prefix+shift+i`・`prefix+i` の行き先・「たたむ／置き場所の変更で、スクリプトの状態と入力の途中の値は消える」・たたみは面ごと・限界〔帯の中身は、ボタンに似た絵を描ける。押しても開かない／同じ名前の面は置き場所を引き継ぐ。「プログラムの指定に戻す」は、同じ名前のほかの pane の面にも効く〕・新旧の表）・
+- [x] T11: 文書（PR-A）: `docs/display.md`（たたみの記憶・優先の表・設定・帯のたたみと上下・帯の行のボタン・表示のメニューと `prefix+shift+i`・`prefix+i` の行き先・「たたむ／置き場所の変更で、スクリプトの状態と入力の途中の値は消える」・たたみは面ごと・限界〔帯の中身は、ボタンに似た絵を描ける。押しても開かない／同じ名前の面は置き場所を引き継ぐ。「プログラムの指定に戻す」は、同じ名前のほかの pane の面にも効く〕・新旧の表）・
       `docs/sodactl.md`（`--dock`・`--edge`・`--collapsed`・`ignored`・`--features` の `layout` と 3 つの数）・`docs/verification.md`・`docs/tui.md` と `docs/tui-parity.md`（`display_menu` は端末版では知らせ。端末版の面は `20261008-display-tui`）・`AGENTS.md` の案内の 1 行
       対象: 上のファイル / 根拠: requirements AC27
       依存: T10
       AC: AC27
-- [ ] T12: 負の対照（PR-A。test 工程）: (a) トレイを、帯の枠の上に重ねて置く版（`position: absolute` で、枠の箱の中）→ T10 (4) の「箱が交わらない」が落ちる。(b) `pickToastSlot` を通さず、今の「右下へ寄せる」に落とす版 → T10 (8) が落ちる。
+- [x] T12: 負の対照（PR-A。test 工程）: (a) トレイを、帯の枠の上に重ねて置く版（`position: absolute` で、枠の箱の中）→ T10 (4) の「箱が交わらない」が落ちる。(b) `pickToastSlot` を通さず、今の「右下へ寄せる」に落とす版 → T10 (8) が落ちる。
       (c) 上と下の帯を、1 つの入れ物・1 つの `v-for`（鍵は面の id。配列は 上の帯 → 下の帯 の順）で描く版 → T10 (6)(a) の「もう 1 本の帯の枠は、同じ要素のまま」か「`load` が 1」が落ちる（「作業順序」の 1）。
       (d) `effectiveCollapsed` が記憶より指定を先に見る版 → T10 (5) が落ちる。`writeFace` が変えた項目だけを書く版（`loadDisplayLayout` の「項目の欠けた記憶は捨てる」も外し、欠けた項目は指定へ落とす）→ T10 (5) の「帯を下へ移しただけの後、`--collapsed` でたたまれない」が落ちる。(e) `withDisplayChange` の「変更の前に、同期で端末へ移す」（手順 2・3 の前半）を外す版 → T10 (7)(c) の「`activeElement` が 1 度も `body` にならない」「スクリプトの枠が止まらない」が落ちる（3 秒に 16 回以上、`body` に落ちれば、遮断器が働く）。(f) `installKeepFocusRelease` を呼ばない版 → T10 (7)(e) が落ちる。生の出力を `test-result.md` に
       対象: `.aidev/works/20261008-display-layout/test-result.md` / 根拠: 規約 `regression-negative-control`
