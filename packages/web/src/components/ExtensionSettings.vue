@@ -1,0 +1,256 @@
+<script setup lang="ts">
+import { computed, inject, nextTick, reactive } from "vue";
+import { ExtensionControllerKey } from "../injection.js";
+import { lastExitText, scopeText, scriptDisabledNote, sanitizeLogLine, sortExtensions, stateText } from "../extensions/extensionView.js";
+import { useExtensionsStore } from "../store/extensions.js";
+import { useSettingsStore } from "../store/settings.js";
+
+/**
+ * 設定の節「拡張」（20261007-ext-host。PR2）。設定（`extensions.json`）に登録した拡張の一覧・状態・入切・起動し直し・ログ。
+ * **サーバ全体**の設定（ブラウザごとではない）。`SettingsDialog.vue` の `.settings-body` の直下に置く（左のメニューが見出しから拾う）。
+ *
+ * 作者の説明・id・パスは **`v-html` を使わない**（文字として出す）。利用者の拡張のコマンドの文字列は、サーバが送らない（`ExtensionInfo` に無い）ので、ここには出ない。
+ * プロジェクトの設定と承認（［確認］［承認を取り消す］・承認の記録）は PR3。
+ */
+
+const store = useExtensionsStore();
+const settings = useSettingsStore();
+const controller = inject(ExtensionControllerKey, null);
+
+const rows = computed(() => sortExtensions(store.list?.extensions ?? []));
+const problems = computed(() => store.list?.problems ?? []);
+
+/** key → 開いているログ（行・捨てた行数）。 */
+const logs = reactive<Record<string, { lines: string[]; dropped: number } | undefined>>({});
+const logEls = new Map<string, HTMLElement>();
+const message = reactive({ text: "" });
+
+async function reload(): Promise<void> {
+  if (!controller) return;
+  message.text = "";
+  await controller.reload();
+  message.text = "設定を読み直しました。";
+}
+
+async function loadLog(key: string): Promise<void> {
+  if (!controller) return;
+  const r = await controller.log(key);
+  if (r === null) return;
+  logs[key] = { lines: r.lines.map(sanitizeLogLine), dropped: r.dropped };
+  await nextTick();
+  const el = logEls.get(key);
+  if (el) el.scrollTop = el.scrollHeight; // 末尾が見える
+}
+
+async function toggleLog(key: string): Promise<void> {
+  if (logs[key] !== undefined) {
+    logs[key] = undefined;
+    return;
+  }
+  await loadLog(key);
+}
+
+function setLogEl(key: string, el: unknown): void {
+  if (el instanceof HTMLElement) logEls.set(key, el);
+  else logEls.delete(key);
+}
+
+function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: boolean }): boolean {
+  return e.enabledInConfig && !e.disabledByUser;
+}
+</script>
+
+<template>
+  <section class="settings-section" aria-labelledby="settings-extensions">
+    <h3 id="settings-extensions" class="settings-heading">拡張</h3>
+    <p class="settings-note">
+      設定に登録したプログラム（拡張）を Sodashitsu が起動し、表示の面などを出せるようにします。拡張はあなたの OS の利用者の権限で動き、隔離されません。
+      この設定は<strong>サーバ全体</strong>で共有されます（ブラウザごとではありません）。書き方は docs/extensions.md。
+    </p>
+    <p v-if="store.list" class="settings-note">
+      利用者の設定の場所: <code class="ext-path">{{ store.list.userConfigPath }}</code>
+    </p>
+    <p class="ext-actions">
+      <button type="button" class="settings-btn" data-ext-reload :disabled="!controller || store.supported === false" @click="reload">読み直す</button>
+      <span v-if="message.text" class="settings-note" role="status" aria-live="polite">{{ message.text }}</span>
+    </p>
+    <p v-if="store.supported === false" class="settings-note" data-ext-unsupported>このサーバは拡張に対応していません。</p>
+    <p v-else-if="store.supported === null" class="settings-note">確認中…</p>
+    <template v-else>
+      <ul v-if="problems.length > 0" class="settings-list ext-problems" data-ext-problems>
+        <li v-for="(p, i) in problems" :key="i" class="settings-note ext-problem">
+          <code class="ext-path">{{ p.path }}</code>: {{ p.problem }}
+        </li>
+      </ul>
+      <p v-if="rows.length === 0" class="settings-note" data-ext-empty>登録された拡張はありません。</p>
+      <ul v-else class="settings-list ext-list">
+        <li v-for="e in rows" :key="e.key" class="ext-row" :data-ext-id="e.id" :data-ext-state="e.state">
+          <div class="ext-head">
+            <span class="ext-id">{{ e.id }}</span>
+            <span class="ext-scope">{{ scopeText(e) }}</span>
+            <span v-if="e.onUnresponsive === 'block'" class="ext-scope">応答しないときは止める</span>
+          </div>
+          <p v-if="e.description" class="settings-note ext-desc">{{ e.description }}</p>
+          <p v-if="e.allow.length > 0" class="settings-note">許可: {{ e.allow.join("、") }}</p>
+          <p v-if="scriptDisabledNote(e, settings.displayScriptEnabled)" class="settings-note ext-warn" data-ext-script-off>
+            {{ scriptDisabledNote(e, settings.displayScriptEnabled) }}
+          </p>
+          <p class="ext-state" data-ext-state-text>
+            {{ stateText(e) }}<template v-if="e.displays > 0">（面 {{ e.displays }} 件）</template>
+          </p>
+          <p v-if="lastExitText(e.lastExit)" class="settings-note">{{ lastExitText(e.lastExit) }}</p>
+          <div class="ext-ops">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch ext-switch"
+              :aria-checked="isOn(e)"
+              :aria-label="`拡張 ${e.id} を有効にする`"
+              :disabled="store.busy.has(e.key) || !e.enabledInConfig"
+              data-ext-switch
+              @click="controller?.setEnabled(e.key, !isOn(e))"
+            >
+              <span class="settings-mark">{{ isOn(e) ? "入" : "切" }}</span>
+              <span>有効</span>
+            </button>
+            <button type="button" class="settings-btn" :disabled="store.busy.has(e.key) || !isOn(e)" data-ext-restart :aria-label="`拡張 ${e.id} を起動し直す`" @click="controller?.restart(e.key)">
+              起動し直す
+            </button>
+            <button type="button" class="settings-btn" data-ext-log-toggle :aria-expanded="logs[e.key] !== undefined" :aria-label="`拡張 ${e.id} のログ`" @click="toggleLog(e.key)">
+              ログ
+            </button>
+            <button v-if="logs[e.key] !== undefined" type="button" class="settings-btn" data-ext-log-refresh :aria-label="`拡張 ${e.id} のログを更新する`" @click="loadLog(e.key)">更新</button>
+          </div>
+          <template v-if="logs[e.key] !== undefined">
+            <p v-if="(logs[e.key]?.dropped ?? 0) > 0" class="settings-note">あふれて捨てた行: {{ logs[e.key]?.dropped }}</p>
+            <pre :ref="(el) => setLogEl(e.key, el)" class="ext-log" data-ext-log tabindex="0" :aria-label="`拡張 ${e.id} の標準エラーの記録`">{{ (logs[e.key]?.lines ?? []).length > 0 ? logs[e.key]?.lines.join("\n") : "（記録はありません）" }}</pre>
+          </template>
+        </li>
+      </ul>
+    </template>
+  </section>
+</template>
+
+<style scoped>
+/* `SettingsDialog.vue` の同名のクラスと同じ見た目（`scoped` なので親から効かず、値をそろえるだけ。`KeySettings.vue` と同じ流儀）。 */
+.settings-heading {
+  margin: 0 0 0.5em;
+  font-size: 0.95em;
+}
+.settings-note {
+  margin: 0.3em 0 0;
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+.settings-list {
+  list-style: none;
+  margin: 0.6em 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8em;
+}
+.settings-btn {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 4px;
+  padding: 0.15em 0.7em;
+  min-height: 1.75rem;
+  cursor: pointer;
+}
+.settings-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.settings-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 4px;
+  padding: 0.15em 0.6em;
+  min-height: 1.75rem;
+  cursor: pointer;
+  text-align: left;
+}
+.settings-switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.settings-mark {
+  flex: none;
+  min-width: 2em;
+  text-align: center;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 3px;
+  padding: 0 0.2em;
+}
+.settings-switch[aria-checked="true"] .settings-mark {
+  background: var(--soda-menu-active-bg, #44475a);
+}
+.ext-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  margin: 0.6em 0 0;
+}
+.ext-path {
+  overflow-wrap: anywhere;
+}
+.ext-row {
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 4px;
+  padding: 0.5em 0.7em;
+}
+.ext-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2em 0.8em;
+}
+.ext-id {
+  font-weight: bold;
+  overflow-wrap: anywhere;
+}
+.ext-scope {
+  font-size: 0.8em;
+  opacity: 0.75;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 3px;
+  padding: 0 0.4em;
+  overflow-wrap: anywhere;
+}
+.ext-desc {
+  overflow-wrap: anywhere;
+}
+.ext-warn {
+  opacity: 1;
+  border-left: 3px solid var(--soda-warn, #e0a030);
+  padding-left: 0.5em;
+}
+.ext-state {
+  margin: 0.4em 0 0;
+}
+.ext-ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  margin-top: 0.5em;
+}
+.ext-log {
+  margin: 0.5em 0 0;
+  max-height: 14em;
+  overflow: auto;
+  font-size: 0.8em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 4px;
+  padding: 0.4em 0.6em;
+}
+</style>
