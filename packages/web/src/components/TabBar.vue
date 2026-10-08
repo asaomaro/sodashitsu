@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onUnmounted, ref, watch } from "vue";
+import { edgeScrollDelta, reorderSteps, slotAt, TAB_DRAG_THRESHOLD_PX } from "../layout/tabReorder.js";
 import { ActionDispatcherKey, ConnectionKey, TerminalRegistryKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
@@ -33,6 +34,7 @@ const tabs = computed(() => {
 });
 
 const root = ref<HTMLElement | null>(null);
+const tabsEl = ref<HTMLElement | null>(null);
 /** tab バーが見えているか（`v-if` と同じ条件をここにも持つ）。 */
 const visible = computed(() => tabs.value.length !== 1);
 
@@ -106,6 +108,194 @@ function selectTab(tabId: string): void {
   void conn?.request("tab.focus", { tabId }).catch(() => undefined);
 }
 
+// ---- tab のドラッグでの並べ替え（20261008-web-tab-dnd。design 第 1 部）----
+// 状態はこのコンポーネントの中だけで持つ（`view.paneDrag` は読み書きしない。pane の名前のドラッグと別の入れ物）。
+// 送るのは既存の `tab.move`（隣へ 1 つ）を動かす数だけ。先に画面の順を書き換えない（`workspace.updated` で変わる）。
+
+/** 押している（ドラッグ前を含む）。 */
+let press: { tabId: string; x: number; y: number; pointerId: number } | null = null;
+/** 閾値を超えた後。slot は入る位置の線（無ければ null）。 */
+const tabDrag = ref<{ tabId: string; slot: number | null } | null>(null);
+/** ドラッグの後の click を 1 回捨てる旗。 */
+let suppressClick = false;
+let suppressTimer: ReturnType<typeof setTimeout> | undefined;
+/** 自動スクロールが使う最後の座標。 */
+let lastPoint = { x: 0, y: 0 };
+let rafId: number | undefined;
+
+function tabButtons(): HTMLElement[] {
+  return Array.from(tabsEl.value?.querySelectorAll<HTMLElement>("[data-tab-id]") ?? []);
+}
+
+/** 線の位置。根の外・順が変わらない位置は null。 */
+function currentSlot(x: number, y: number, tabId: string): number | null {
+  const rootEl = root.value;
+  const rowEl = tabsEl.value;
+  if (!rootEl || !rowEl) return null;
+  const r = rootEl.getBoundingClientRect();
+  if (x < r.left || x > r.right || y < r.top || y > r.bottom) return null;
+  const row = rowEl.getBoundingClientRect();
+  // あふれて右へ隠れた tab の矩形は「＋」の下まで伸びる。見えている範囲に丸めてから計算する。
+  const cx = Math.min(Math.max(x, row.left), row.right);
+  const rects = tabButtons().map((el) => {
+    const b = el.getBoundingClientRect();
+    return { id: el.dataset.tabId ?? "", left: b.left, right: b.right };
+  });
+  const slot = slotAt(rects, cx);
+  return reorderSteps(
+    tabs.value.map((t) => t.id),
+    tabId,
+    slot,
+  )
+    ? slot
+    : null;
+}
+
+function refreshSlot(): void {
+  const d = tabDrag.value;
+  if (!d) return;
+  d.slot = currentSlot(lastPoint.x, lastPoint.y, d.tabId);
+}
+
+function onTabKeydown(ev: KeyboardEvent): void {
+  ev.preventDefault();
+  ev.stopPropagation();
+  if (ev.key === "Escape") cancelTabDrag();
+}
+
+function stopAutoScroll(): void {
+  if (rafId !== undefined) cancelAnimationFrame(rafId);
+  rafId = undefined;
+}
+
+function autoScrollTick(): void {
+  rafId = requestAnimationFrame(autoScrollTick);
+  const rootEl = root.value;
+  const rowEl = tabsEl.value;
+  if (!tabDrag.value || !rootEl || !rowEl) return;
+  const r = rootEl.getBoundingClientRect();
+  if (lastPoint.x < r.left || lastPoint.x > r.right || lastPoint.y < r.top || lastPoint.y > r.bottom) return;
+  if (rowEl.scrollWidth <= rowEl.clientWidth) return;
+  const delta = edgeScrollDelta(rowEl.getBoundingClientRect(), lastPoint.x);
+  if (delta === 0) return;
+  const before = rowEl.scrollLeft;
+  rowEl.scrollLeft = before + delta;
+  if (rowEl.scrollLeft !== before) refreshSlot();
+}
+
+/** 片付け（press・状態・keydown・自動スクロール）。ポインタの捕捉は外さない（離せば自然に外れる）。 */
+function endTabDrag(): void {
+  press = null;
+  tabDrag.value = null;
+  window.removeEventListener("keydown", onTabKeydown, true);
+  stopAutoScroll();
+}
+
+function restoreTerminalFocus(): void {
+  if (view.focusedPaneId && root.value?.contains(document.activeElement)) registry?.focus(view.focusedPaneId);
+}
+
+function cancelTabDrag(restoreFocus = true): void {
+  if (!press && !tabDrag.value) return;
+  endTabDrag();
+  if (restoreFocus) restoreTerminalFocus();
+}
+
+function onTabPointerDown(ev: PointerEvent, tabId: string): void {
+  suppressClick = false;
+  clearTimeout(suppressTimer);
+  if (ev.button !== 0 || ev.pointerType === "touch") return;
+  press = { tabId, x: ev.clientX, y: ev.clientY, pointerId: ev.pointerId };
+  (ev.currentTarget as HTMLElement | null)?.setPointerCapture?.(ev.pointerId);
+}
+
+function onTabPointerMove(ev: PointerEvent): void {
+  if (!press || press.pointerId !== ev.pointerId) return;
+  if (!tabDrag.value) {
+    if (Math.hypot(ev.clientX - press.x, ev.clientY - press.y) < TAB_DRAG_THRESHOLD_PX) return;
+    if (!session.tabs.has(press.tabId)) {
+      press = null;
+      return;
+    }
+    tabDrag.value = { tabId: press.tabId, slot: null };
+    suppressClick = true;
+    window.addEventListener("keydown", onTabKeydown, true);
+    rafId = requestAnimationFrame(autoScrollTick);
+  }
+  lastPoint = { x: ev.clientX, y: ev.clientY };
+  refreshSlot();
+}
+
+function onTabPointerUp(ev: PointerEvent): void {
+  // 直後の click を捨てた後、または来なかったときに旗を下ろす。
+  if (suppressClick) {
+    clearTimeout(suppressTimer);
+    suppressTimer = setTimeout(() => (suppressClick = false), 0);
+  }
+  if (!press || press.pointerId !== ev.pointerId) return;
+  const drag = tabDrag.value;
+  const tabId = press.tabId;
+  if (!drag) {
+    press = null;
+    return;
+  }
+  // 離した座標で計算し直す（線を出した時点の値を使わない）。
+  const slot = currentSlot(ev.clientX, ev.clientY, tabId);
+  const steps = slot === null ? null : reorderSteps(tabs.value.map((t) => t.id), tabId, slot);
+  endTabDrag();
+  if (!steps) {
+    restoreTerminalFocus();
+    return;
+  }
+  for (let i = 0; i < steps.count; i++) {
+    void conn?.request("tab.move", { tabId, direction: steps.direction }).catch(() => undefined);
+  }
+  selectTab(tabId);
+  void nextTick(() => {
+    if (view.focusedPaneId) registry?.focus(view.focusedPaneId);
+  });
+}
+
+function onTabPointerCancel(ev: PointerEvent): void {
+  if (press && press.pointerId === ev.pointerId) cancelTabDrag();
+}
+
+function onTabLostCapture(ev: PointerEvent): void {
+  if (press && press.pointerId === ev.pointerId) cancelTabDrag();
+}
+
+/** ドラッグの後の click（離した先が tab・「＋」でも）を捨てる。キーボードの click（detail 0）は通す。 */
+function onBarClickCapture(ev: MouseEvent): void {
+  if (suppressClick && ev.detail > 0) {
+    ev.stopPropagation();
+    ev.preventDefault();
+    suppressClick = false;
+  }
+}
+
+watch(
+  () => tabs.value.map((t) => t.id),
+  (ids) => {
+    const d = tabDrag.value;
+    if (!d) return;
+    if (!ids.includes(d.tabId) || ids.length < 2) cancelTabDrag();
+  },
+);
+watch(
+  () => view.workspaceId,
+  () => cancelTabDrag(),
+);
+watch(
+  () => view.modalOpen,
+  (open) => {
+    if (open) cancelTabDrag(false);
+  },
+);
+onUnmounted(() => {
+  endTabDrag();
+  clearTimeout(suppressTimer);
+});
+
 function onContextMenu(ev: MouseEvent, tabId: string): void {
   ev.preventDefault();
   actions?.openContextMenu({ kind: "tab", tabId }, { x: ev.clientX, y: ev.clientY });
@@ -144,21 +334,33 @@ function onWheel(ev: WheelEvent): void {
     v-if="tabs.length !== 1"
     ref="root"
     class="tab-bar"
-    :class="`tab-bar-${settings.tabBarPosition}`"
+    :class="[`tab-bar-${settings.tabBarPosition}`, { 'tab-bar-dragging': tabDrag }]"
     :style="{ order: settings.tabBarPosition === 'bottom' ? 1 : 0 }"
     @wheel="onWheel"
+    @click.capture="onBarClickCapture"
   >
     <!-- `role="tablist"` が持てるのは `tab` だけなので、＋ と右端の帯はこの入れ子の外に置く。 -->
-    <div class="tab-bar-tabs" role="tablist">
+    <div ref="tabsEl" class="tab-bar-tabs" role="tablist">
       <button
-        v-for="tab in tabs"
+        v-for="(tab, index) in tabs"
         :key="tab.id"
         type="button"
         role="tab"
         class="tab-bar-item"
-        :class="{ 'tab-bar-item-active': tab.id === view.tabId, 'tab-bar-item-drop-target': view.paneDrag?.overTabId === tab.id }"
+        :class="{
+          'tab-bar-item-active': tab.id === view.tabId,
+          'tab-bar-item-drop-target': view.paneDrag?.overTabId === tab.id,
+          'tab-bar-item-dragging': tabDrag?.tabId === tab.id,
+          'tab-bar-item-insert-before': tabDrag?.slot === index,
+          'tab-bar-item-insert-after': tabDrag?.slot === tabs.length && index === tabs.length - 1,
+        }"
         :data-tab-id="tab.id"
         :aria-selected="tab.id === view.tabId"
+        @pointerdown="onTabPointerDown($event, tab.id)"
+        @pointermove="onTabPointerMove"
+        @pointerup="onTabPointerUp"
+        @pointercancel="onTabPointerCancel"
+        @lostpointercapture="onTabLostCapture"
         @click="selectTab(tab.id)"
         @contextmenu="onContextMenu($event, tab.id)"
       >
@@ -236,6 +438,20 @@ function onWheel(ev: WheelEvent): void {
 .tab-bar-item-drop-target {
   outline: 2px dashed var(--soda-accent, #8be9fd);
   outline-offset: -2px;
+}
+/* tab のドラッグ（20261008-web-tab-dnd）。線は box-shadow なので tab の幅は変わらない。動き（transition）は足さない。 */
+.tab-bar-dragging,
+.tab-bar-dragging .tab-bar-item {
+  cursor: grabbing;
+}
+.tab-bar-item-dragging {
+  opacity: 0.4;
+}
+.tab-bar-item-insert-before {
+  box-shadow: inset 3px 0 0 var(--soda-resize-line, #f8f8f2);
+}
+.tab-bar-item-insert-after {
+  box-shadow: inset -3px 0 0 var(--soda-resize-line, #f8f8f2);
 }
 .tab-bar-zoomed {
   opacity: 0.7;
