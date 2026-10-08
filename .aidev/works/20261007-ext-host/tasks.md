@@ -117,7 +117,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: なし
       AC: AC7, AC8, AC12, AC34
       点検: あり
-- [ ] T2: protocol の通信（PR1 の分）: `/ws` の方式 `extension.list`・`extension.reload`（引数 `{}`）・`extension.restart`・`extension.log`（`{ key }`。1〜160 文字）・`extension.setEnabled`（`{ key, enabled }`）の zod の schema と結果を、`METHOD_SCHEMAS`・`MethodResultMap` に足す。
+- [x] T2: protocol の通信（PR1 の分）: `/ws` の方式 `extension.list`・`extension.reload`（引数 `{}`）・`extension.restart`・`extension.log`（`{ key }`。1〜160 文字）・`extension.setEnabled`（`{ key, enabled }`）の zod の schema と結果を、`METHOD_SCHEMAS`・`MethodResultMap` に足す。
       イベント `{ event: "extension.changed"; data: {} }` を `ServerEvent` に足す（**中身を持たない**）。エラーの code は、PR1 では足さない。テスト（表に載っていること・`extension.changed` の `data` に項目が無いこと）
       対象: `packages/protocol/src/messages.ts` `METHOD_SCHEMAS`・`MethodResultMap`（`command.*` の近く）、`packages/protocol/src/events.ts` `ServerEvent`、`packages/protocol/src/messages.test.ts` / 根拠: research X14、design「`/ws` の方式とイベント」
       依存: T1
