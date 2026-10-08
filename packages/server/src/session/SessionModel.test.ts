@@ -629,7 +629,7 @@ describe("SessionModel — focus / navigation", () => {
       const { workspace, tab: sourceTab, pane } = model.createWorkspace("/home/u", "api", init);
       model.createTab(workspace.id, "logs", init); // 移動元 workspace が cascade で消えないようにしておく
       model.focusTab(sourceTab.id); // otherTab の作成で active が移っているので、sourceTab を再び active に戻す
-      const { tab: otherWsTab, workspace: otherWs } = model.createWorkspace("/home/u/other", "other", init);
+      const { tab: otherWsTab, workspace: otherWs } = model.createWorkspace("/home/u", "other", init);
       expect(model.getWorkspace(workspace.id)?.activeTabId).toBe(sourceTab.id);
 
       const ok = model.moveToTab(pane.id, otherWsTab.id);
@@ -753,7 +753,7 @@ describe("SessionModel — focus / navigation", () => {
       const { workspace, tab: sourceTab, pane } = model.createWorkspace("/home/u", "api", init);
       model.createTab(workspace.id, "logs", init); // 移動元 workspace が cascade で消えないようにしておく
       model.focusTab(sourceTab.id); // otherTab の作成で active が移っているので、sourceTab を再び active に戻す
-      const { workspace: otherWs } = model.createWorkspace("/home/u/other", "other", init);
+      const { workspace: otherWs } = model.createWorkspace("/home/u", "other", init);
       expect(model.getWorkspace(workspace.id)?.activeTabId).toBe(sourceTab.id);
 
       const result = model.moveToNewTab(pane.id, otherWs.id);
@@ -1227,7 +1227,7 @@ describe("SessionModel — sidebar layout", () => {
     it("moveToTab that empties the source workspace", () => {
       const model = new SessionModel();
       const { workspace: a, pane } = model.createWorkspace("/a", "a", init);
-      const { workspace: b, tab: bTab } = model.createWorkspace("/b", "b", init);
+      const { workspace: b, tab: bTab } = model.createWorkspace("/a", "b", init);
       model.takeChanges();
       model.moveToTab(pane.id, bTab.id);
       expect(model.getLayout().ungrouped).toEqual([`w:${b.id}`]);
@@ -1237,7 +1237,7 @@ describe("SessionModel — sidebar layout", () => {
     it("moveToNewTab that empties the source workspace", () => {
       const model = new SessionModel();
       const { workspace: a, pane } = model.createWorkspace("/a", "a", init);
-      const { workspace: b } = model.createWorkspace("/b", "b", init);
+      const { workspace: b } = model.createWorkspace("/a", "b", init);
       model.takeChanges();
       model.moveToNewTab(pane.id, b.id);
       expect(model.getLayout().ungrouped).toEqual([`w:${b.id}`]);
@@ -2079,5 +2079,146 @@ describe("SessionModel — cross 点検: commitWorkspace は平らな順へ並�
     model.takeChanges();
     model.createWorkspace("/b", "b", init);
     expect(model.takeChanges()?.order ?? null).toBeNull();
+  });
+});
+
+// 20261008-web-tab-dnd（pane の移動を同じ worktree の中に制限する。T7）。
+describe("SessionModel — pane の移動の範囲（20261008-web-tab-dnd）", () => {
+  const judgedAs = (repoKey: string, worktreeKey: string, isLinkedWorktree = false): GitJudgement => ({
+    kind: "git",
+    git: { branch: "b", ahead: 0, behind: 0, repoKey, isLinkedWorktree, worktreeKey },
+  });
+  /** 全体の状態（断ったあとに 1 つも変わっていないことを見る）。 */
+  const stateOf = (m: SessionModel) =>
+    JSON.stringify({ panes: m.listPanes(), tabs: m.listTabs(), workspaces: m.listWorkspaces(), focus: m.getFocus() });
+
+  /** a は 2 つの tab（動かす pane が tab を空にしない）。b は移動先。 */
+  function setup(cwdA: string, cwdB: string) {
+    const model = new SessionModel();
+    const a = model.createWorkspace(cwdA, "a", init);
+    model.createTab(a.workspace.id, "x", init);
+    const b = model.createWorkspace(cwdB, "b", init);
+    return { model, a, b };
+  }
+
+  type Target = { workspace: { id: string }; tab: { id: string } };
+  const moves = [
+    ["moveToTab", (m: SessionModel, paneId: string, b: Target) => m.moveToTab(paneId, b.tab.id) === true],
+    ["moveToNewTab", (m: SessionModel, paneId: string, b: Target) => m.moveToNewTab(paneId, b.workspace.id) !== null],
+  ] as const;
+
+  describe.each(moves)("%s", (_name, move) => {
+    it("(1) 同じ worktreeKey の workspace の間（代表でない 2 つ目を含む）は、両方の向きで移る", () => {
+      const { model, a, b } = setup("/r", "/r");
+      model.updateWorkspaceGit(a.workspace.id, judgedAs("/r/.git", "/r/.git"));
+      model.updateWorkspaceGit(b.workspace.id, judgedAs("/r/.git", "/r/.git"));
+      expect(model.getWorkspace(b.workspace.id)?.representative).toBe(false);
+      expect(move(model, a.pane.id, b)).toBe(true);
+      const second = setup("/r", "/r");
+      second.model.updateWorkspaceGit(second.a.workspace.id, judgedAs("/r/.git", "/r/.git"));
+      second.model.updateWorkspaceGit(second.b.workspace.id, judgedAs("/r/.git", "/r/.git"));
+      expect(move(second.model, second.b.pane.id, second.a)).toBe(true);
+    });
+
+    it.each([
+      ["同じ repoKey の本体と linked worktree", judgedAs("/r/.git", "/r/.git"), judgedAs("/r/.git", "/r/.git/worktrees/wt", true)],
+      ["別の repoKey", judgedAs("/r/.git", "/r/.git"), judgedAs("/s/.git", "/s/.git")],
+    ])("(2) 違う worktreeKey（%s）は断り、何も変わらない", (_label, ja, jb) => {
+      const { model, a, b } = setup("/r", "/r"); // cwd が同じでも断る
+      model.updateWorkspaceGit(a.workspace.id, ja);
+      model.updateWorkspaceGit(b.workspace.id, jb);
+      const before = stateOf(model);
+      model.takeChanges();
+      expect(model.paneMoveBlockFor(a.pane.id, b.workspace.id)).toBe("different_worktree");
+      expect(move(model, a.pane.id, b)).toBe(false);
+      expect(stateOf(model)).toBe(before);
+      expect(model.takeChanges()).toBeNull();
+    });
+
+    it.each([
+      ["update 無し", undefined],
+      ["unmanaged", { kind: "unmanaged" } as GitJudgement],
+      ["unknown だけ", { kind: "unknown" } as GitJudgement],
+    ])("(3) 判定の無い workspace どうし（%s）: cwd が同じなら移り、違えば断る", (_label, j) => {
+      const same = setup("/p", "/p");
+      if (j) {
+        same.model.updateWorkspaceGit(same.a.workspace.id, j);
+        same.model.updateWorkspaceGit(same.b.workspace.id, j);
+      }
+      expect(move(same.model, same.a.pane.id, same.b)).toBe(true);
+
+      const diff = setup("/p", "/q");
+      if (j) {
+        diff.model.updateWorkspaceGit(diff.a.workspace.id, j);
+        diff.model.updateWorkspaceGit(diff.b.workspace.id, j);
+      }
+      const before = stateOf(diff.model);
+      expect(move(diff.model, diff.a.pane.id, diff.b)).toBe(false);
+      expect(stateOf(diff.model)).toBe(before);
+    });
+
+    it("(4) 片方だけ判定がある間は（cwd が同じでも）断り、無い側に同じ worktreeKey が入ると移る", () => {
+      const { model, a, b } = setup("/r", "/r");
+      model.updateWorkspaceGit(a.workspace.id, judgedAs("/r/.git", "/r/.git"));
+      const before = stateOf(model);
+      expect(move(model, a.pane.id, b)).toBe(false);
+      expect(stateOf(model)).toBe(before);
+      model.updateWorkspaceGit(b.workspace.id, judgedAs("/r/.git", "/r/.git"));
+      expect(move(model, a.pane.id, b)).toBe(true);
+    });
+
+    it("(6) 保存から戻した workspace: worktreeKey つきは同じなら移り、違えば断る。repoKey だけで worktreeKey が無いものは断る", () => {
+      const restoreData = (id: string, extra: Record<string, unknown>) =>
+        ({
+          id,
+          label: id,
+          cwd: "/x",
+          activeTabId: `t-${id}`,
+          ...extra,
+          tabs: [{ id: `t-${id}`, label: "1", layout: { type: "pane" as const, paneId: `p-${id}` }, focusedPaneId: `p-${id}`, zoomedPaneId: null, panes: [{ id: `p-${id}`, label: null, cwd: "/x", shell: "sh" }] }],
+        }) as never;
+      const target = (id: string): Target => ({ workspace: { id }, tab: { id: `t-${id}` } });
+      const build = (a: Record<string, unknown>, b: Record<string, unknown>) => {
+        const m = new SessionModel();
+        m.restoreWorkspace(restoreData("wa", a), false);
+        m.restoreWorkspace(restoreData("wb", b), false);
+        return m;
+      };
+      const k = (wk: string) => ({ repoKey: "/r/.git", isLinkedWorktree: false, worktreeKey: wk });
+      expect(move(build(k("/r/.git"), k("/r/.git")), "p-wa", target("wb"))).toBe(true);
+      const diff = build(k("/r/.git"), k("/r/.git/worktrees/w"));
+      const before = stateOf(diff);
+      expect(move(diff, "p-wa", target("wb"))).toBe(false);
+      expect(stateOf(diff)).toBe(before);
+      const noKey = build({ repoKey: "/r/.git", isLinkedWorktree: false }, { repoKey: "/r/.git", isLinkedWorktree: false });
+      expect(move(noKey, "p-wa", target("wb"))).toBe(false);
+    });
+  });
+
+  it("(5) 同じ workspace の中（別の tab へ・新しい tab へ）は、判定が何でも移る", () => {
+    for (const judged of [undefined, judgedAs("/r/.git", "/r/.git")]) {
+      const model = new SessionModel();
+      const a = model.createWorkspace("/r", "a", init);
+      const t2 = model.createTab(a.workspace.id, "2", init);
+      model.createWorkspace("/other", "other", init);
+      if (judged) model.updateWorkspaceGit(a.workspace.id, judged);
+      expect(model.moveToTab(t2.pane.id, a.tab.id)).toBe(true);
+      expect(model.moveToNewTab(a.pane.id, a.workspace.id)).not.toBeNull();
+    }
+  });
+
+  it("paneMoveBlockFor は、pane・移動先が実在しなくても投げずに null を返す", () => {
+    const { model, a, b } = setup("/p", "/q");
+    expect(model.paneMoveBlockFor("nope", b.workspace.id)).toBeNull();
+    expect(model.paneMoveBlockFor(a.pane.id, "nope")).toBeNull();
+  });
+
+  it("(7) 抜け道が無い: 別の workspace の pane を相手にした swapPaneWith・moveToEdge・replacePane は何も変えない", () => {
+    const { model, a, b } = setup("/p", "/q");
+    const before = stateOf(model);
+    expect(model.swapPaneWith(a.pane.id, b.pane.id)).toBe(false);
+    expect(model.moveToEdge(a.pane.id, b.pane.id, "right")).toBe(false);
+    expect(model.replacePane(a.pane.id, b.pane.id)).toBeNull();
+    expect(stateOf(model)).toBe(before);
   });
 });

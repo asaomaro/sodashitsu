@@ -31,7 +31,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は�
 | H02 | tab の作成・名前変更・切替・閉じる | あり | あり | 対応 | AC5 |
 | H03 | pane の分割・閉じる・フォーカス移動・巡回・入れ替え・拡大・resize モード・名前変更 | あり | あり | 対応 | AC5 |
 | H04 | tab・workspace の並べ替え（キー。`move_tab_*`・`move_workspace_*`） | あり | あり | 対応（`move_workspace_previous`・`next`〔既定のキーなし。設定で割り当てる〕は、20261004-group-worktree-items から今いる workspace の**項目**〔通常の workspace・worktree グループ丸ごと〕を同じまとまりの中で 1 つ動かす。端で止まり〔回り込まない〕、名前順のとき一番上の項目は動かさず「名前順では並べ替えできません」と知らせる〔グループの中は動かせる〕） | AC5, AC8（20261004-group-worktree-items の AC5・AC-I3） |
-| H04m | tab をドラッグで並べ替え | あり | 無し | 対応（herdr と同じ） | AC9 |
+| H04m | tab をドラッグで並べ替え | あり | あり（20261008-web-tab-dnd） | 対応（herdr と同じ）。Web 版も `tab.move` を動かす数だけ送る | AC9・20261008-web-tab-dnd の AC1〜AC10 |
 | H04w | workspace をサイドバーでドラッグして並べ替え | あり | あり | 対応（20261004-group-worktree-items で**項目・まとまり単位**にした。項目〔通常の行・worktree グループの先頭と子の行＝worktree グループ丸ごと〕とまとまりの見出し〔グループ・「グループなし」〕を掴める。落とせるのは同じまとまりの中の項目の間と、まとまりどうし〔グループと「グループなし」は一番上の並びの中〕だけで、まとまりをまたぐ落とし先・自分の項目の上は何も起きない〔またぐときは「同じグループの中、または同じ「グループなし」の中の項目の間でだけ並べ替えできます」と知らせる〕。名前順の一番上は受け付けず「名前順では並べ替えできません」と知らせる。Esc・行の外で離すと取り消し。サーバへは `item.move`〔`layout` を持たない古いサーバでは `workspace.move_to`〕。落とす位置は Web 版と同じ〔下へ動かすなら落とした項目の次の前・上へなら前・最後なら入れ物の末尾。計算は共有の純関数 `dropBefore`〕。**Web 版との違い**：ドロップ先の強調〔印〕は端末版には無く、落とせないときは離したときの知らせだけ） | AC9（20261004-group-worktree-items の AC5・AC16・AC-I2） |
 | H05 | 端末としての pane（全画面 TUI・色・マウス報告・ブラケットペースト） | あり | あり | 対応（pane ごとに端末エミュレータ〔`@xterm/headless`＋unicode11〕を持ち、外側の端末へ描き直す。24 ビット色を扱えない外側の端末では 256 色へ寄せる。判定は `docs/tui.md`「色」） | AC6 |
 | H06 | スクロールバック・ホイール・スクロールバー | あり | あり | 対応（ホイールは 3 行。pane がマウスを求めていればアプリへ。スクロールバーは pane の右端の 1 桁で、ドラッグ・クリックで動く） | AC7, AC9 |
@@ -89,7 +89,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は�
 | H37 | worktree の作成・一覧・開く | あり | あり | 対応（`prefix+shift+g`・workspace のメニューの「新しい worktree」「worktree を開く…」・`open_worktree`） | AC5 |
 | H37b | worktree の削除・グループ化 | あり | あり | 対応（削除は `remove_worktree`〔既定のキーなし。Web にも足した。decisions D4〕。グループ化は 20261004-group-worktree-items で、Web 版と同じ決まりを端末版にも持たせた——worktree グループは worktree ごとに最初に開いた 1 つ〔代表〕だけが束ねられ、同じフォルダの 2 つ目は通常の行〔worktree の印なし〕。利用者が作る「グループ」のメンバーは項目〔通常の workspace か worktree グループ丸ごと〕で、本体をグループへ入れても worktree グループは分かれない。メニューは Web 版と同じ項目〔所属なし:「グループへ追加…」〔グループがあるときだけ〕「新しいグループを作る…」／所属あり:「別のグループへ移す…」〔今のグループ以外があるときだけ〕「グループから外す」「新しいグループを作る…」。グループの見出し:「名前の変更」「上へ移動」「下へ移動」「グループを削除」。「グループなし」の見出し:「上へ移動」「下へ移動」だけ。見出しの「上へ移動」「下へ移動」と「グループなし」のメニューは `layout` を持つサーバのときだけ出る〔古いサーバでは「グループなし」のメニューは開かない〕〕。worktree の子の行でも全体に働き、一括クローズの件数も代表だけ。畳み・並べ替えは W04・H04w） | AC5, AC9（20261004-group-worktree-items の AC1〜AC7・AC15・AC16・AC19〜AC21） |
 | H38-40 | CLI / socket API・自動化・pane 単体の接続 | あり | あり（`sodactl`） | サーバ機能 | AC19 |
-| H41 | pane の移動（別 tab・別 workspace） | API | あり（ドラッグ） | 対応（W03） | AC9 |
+| H41 | pane の移動（別 tab・別 workspace） | API | あり（ドラッグ。別 workspace へは同じ worktree の間だけ。断られたら理由をトーストで知らせる。20261008-web-tab-dnd） | 対応（W03） | AC9、AC11〜AC19（20261008-web-tab-dnd） |
 | H42 | プラグイン | あり | 後続 | 対象外（Web 版と同じ） | — |
 | H43 | 保存したマシンの集約 | あり | あり | 対応（サイドバーのマシンの見出し・畳む/広げる・切り替え。選んだマシンの画面は `/ws?machine=` の接続、ほかは要約の接続。共有の設定は手元のサーバとだけやりとりする） | AC14 |
 | H43b | `--remote <ssh先>`（手元の画面をリモートのサーバへ） | あり | 無し | 読み替え: 手元の端末版と `soda machine` の集約で同じ目的を満たす（SSH で入った先で `soda` を起動してもよい。AC4） | AC14, AC4 |
@@ -117,7 +117,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は�
 | M9 | pane 横のスクロールバー | あり | あり | 対応（H06） | AC9 |
 | M10 | サイドバーのマシンを畳む・広げる | あり | あり | 対応 | AC14 |
 | M11 | 端末アプリへのマウス入力の受け渡し・Shift で選択 | あり | あり | 対応（Shift を押している間は端末版が選択に使う。外側の端末が Shift+マウスを先に取ることがある） | AC6, AC9 |
-| M12 | tab のドラッグで並べ替え | あり | 無し | 対応（H04m） | AC9 |
+| M12 | tab のドラッグで並べ替え | あり | あり（20261008-web-tab-dnd） | 対応（H04m）。Web 版も `tab.move` を動かす数だけ送る | AC9・20261008-web-tab-dnd の AC1〜AC10 |
 | M13 | サイドバーの幅・区画の境界のドラッグ | あり | 幅のみ | 対応（H19・H19b） | AC9 |
 | M14 | 「＋」（workspace・tab）・サイドバーの開閉・並び順の切替のボタン | あり | あり | 対応 | AC9 |
 
@@ -127,7 +127,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は�
 |---|---|---|---|---|---|
 | W01 | pane の名前のドラッグ：縁へ落とすと分割・中央で置き換え | 無し | あり | 対応（落とし先の強調をセルで描く） | AC9 |
 | W02 | pane のドラッグで同じ tab の中の入れ替え | 無し | あり | 対応 | AC9 |
-| W03 | pane を tab・サイドバーの workspace へドラッグで移動 | 無し | あり | 対応 | AC9 |
+| W03 | pane を tab・サイドバーの workspace へドラッグで移動（別 workspace へは同じ worktree の間だけ。違う worktree の行へ落とすと、送らずにトーストで理由を知らせる。ブラウザ版はドラッグ中に落とせない行を薄くするが、端末版は workspace の行の強調がもともと無く、落としたときの知らせだけ） | 無し | あり | 対応 | AC9、AC11〜AC19（20261008-web-tab-dnd） |
 | W04 | グループ・worktree グループ・「グループなし」の折りたたみと見た目 | 自動のみ〔worktree グループ〕 | あり | 対応（20261004-group-worktree-items。見た目は `docs/tui.md`「サイドバーのグループ」。畳み方は 3 通り——① クリック：グループ・「グループなし」の見出し、worktree グループの先頭の行の左端の `▸`/`▾`〔先頭の行のほかの桁は、その workspace へ移る・ドラッグの開始・右クリックのメニュー〕 ② キー：navigate〔`prefix+w`〕で行を選び `navigate_toggle_collapse`〔既定 `z`〕。見出しならそのグループ・「グループなし」、worktree グループの先頭・子の行ならその worktree グループ〔同じフォルダの 2 つ目など代表でない通常の行では何も起きない〕 ③ 見出しの行の名前・線を、動かさずに離してもクリックと同じ。グループは共有のサーバの状態〔`group.toggle_collapsed`〕、worktree グループは共有の設定 `collapsedAutoGroups`、「グループなし」は共有の設定 `ungroupedCollapsed`。畳んでも、今いる workspace の行は見える） | AC5, AC9（20261004-group-worktree-items の AC6・AC16・AC20・AC21・AC-I1・AC-I3） |
 | W05 | workspace・エージェントの並び順の切替 | エージェントのみ | あり | 対応 | AC2, AC9 |
 | W06 | サイドバーの行をキーで選んでメニュー（navigate の Space） | 無し | あり | 対応 | AC8, AC-I3 |
@@ -158,6 +158,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は�
 | W31 | 出力の中のファイルのパスのリンク・ファイルのドロップ（`docs/file-links.md`） | —（外側の端末） | あり | 対象外（端末版では外側の端末がリンクとドロップを扱う。ブラウザ版だけが、サーバ越しに開く・ダウンロード・送る） | AC なし |
 | W33 | エージェントが動かしているサブエージェントの件数と一覧（`show_subagents`・サイドバーの行の件数・グラフ。20261004-subagent-display。`docs/agent-graph.md`） | 無し | あり | 読み替え（エージェントの行の末尾の `⤷n` と、その桁範囲のクリックで開く一覧の overlay〔`modes/SubagentList.ts`〕。pane の右クリックのメニューにも項目がある。キーボードだけなら設定で割り当てる `show_subagents`〔既定のキーは無い〕。連携のグラフの画面は W30 のとおりブラウザだけ） | 試験: `TuiApp.subagents.test.ts` |
 | W32 | pane のプログラムからの質問のフォーム（`sodactl ask`。20261002-sodactl-ask。`docs/sodactl.md`「質問のフォーム」） | 無し | あり | 対象外（端末版はフォームを出せる画面として名乗らないので、端末版しかつながっていない session では `sodactl ask` は待たずに `unavailable` を返し、呼び出し側が `AskUserQuestion` へ切り替える） | 試験: `ask.integration.test.ts` |
+| W34 | pane のプログラムが出す表示の面（パネル・帯。`sodactl display`・`focus_display`。20261007-soda-extensions。`docs/display.md`） | 無し | あり | 無し（面を描かない。スクリプトが動く形式〔`script-html`〕も同じ。名乗らないので、`set` の結果の `renderers` に数えない。`sodactl display` 自体はサーバの機能なので動く。`prefix+i`〔`focus_display`〕は「表示のパネル・帯はブラウザで使えます。」と知らせる） | 試験: `TuiDispatcher.test.ts`（全操作の表） |
 
 ## 4. 外側の端末との取り決め（端末版で新たに要るもの）
 

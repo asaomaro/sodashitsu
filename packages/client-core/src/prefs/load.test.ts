@@ -9,6 +9,7 @@ import {
   loadPaneAgentNameVisible,
   loadPaneBorders,
   loadPaneGaps,
+  loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
   loadWorkspaceSort,
@@ -128,5 +129,12 @@ describe("loadAgentSort・loadCollapsedAutoGroups", () => {
     for (const raw of [undefined, "Priority", 1]) expect(loadAgentSort(raw)).toBe("grouped");
     expect([...loadCollapsedAutoGroups(["a", 1, "b", null])]).toEqual(["a", "b"]);
     expect(loadCollapsedAutoGroups("a").size).toBe(0);
+  });
+});
+
+describe("loadDisplayScriptEnabled（既定は無効）", () => {
+  it("true のときだけ有効。未設定・壊れた値は無効", () => {
+    expect(loadDisplayScriptEnabled(true)).toBe(true);
+    for (const v of [false, undefined, null, "true", 1, {}, []]) expect(loadDisplayScriptEnabled(v)).toBe(false);
   });
 });

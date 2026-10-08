@@ -4,9 +4,13 @@ import {
   DISPLAY_BANDS_PER_PANE_MAX,
   DISPLAY_EVENT_QUEUE_MAX,
   DISPLAY_FEATURES,
+  DISPLAY_FOCUS_STEAL_MAX,
   DISPLAY_GET_CHUNK_BYTES,
   DISPLAY_PANELS_PER_PANE_MAX,
   DISPLAY_RENDER_FEATURES,
+  DISPLAY_SCRIPT_COOLDOWN_MS,
+  DISPLAY_SCRIPT_FORMAT,
+  DISPLAY_SEND_RATE,
   DISPLAY_SERVER_BYTES_MAX,
   DISPLAY_SET_BYTES_RATE,
   DISPLAY_SET_RATE,
@@ -16,6 +20,7 @@ import {
   DISPLAY_WAITERS_PER_PANE_MAX,
   RpcError,
   checkDisplayAction,
+  checkDisplaySend,
   checkDisplaySet,
   displayLimits,
   type DisplayChunk,
@@ -32,6 +37,11 @@ import {
 import type { Disposable, EventBus } from "../bus/EventBus.js";
 import type { Logger } from "../log/Logger.js";
 import { TokenBucket } from "./rateLimit.js";
+
+/** 設定で無効のとき `script-html` の `set`・`send` を断る誤り。 */
+function scriptDisabledError(): RpcError {
+  return new RpcError("display_script_disabled", "スクリプトが動く表示は、設定で無効になっています（設定の画面で「スクリプトが動く表示を許可する」を有効にする）");
+}
 
 export interface DisplayClock {
   now(): number;
@@ -56,6 +66,11 @@ export interface DisplayServiceOptions {
   isScreenKind(clientId: string): boolean;
   /** テストで差し替える。 */
   clock?: DisplayClock;
+  /**
+   * スクリプトが動く表示（`script-html`）が、設定で有効か（共有の設定 `displayScriptEnabled`。`composeServer` が `PrefsStore` を読む形で渡す）。
+   * **既定は無効**（`true` のときだけ有効）。省略したとき（単体テスト）は有効として扱う。
+   */
+  scriptEnabled?: () => boolean;
   /** 面の id（既定 `crypto.randomUUID`）。 */
   newId?: () => string;
   /** 面の名前・pane・バイト数・理由だけを書く。**中身・題・操作に添えた値は書かない**。 */
@@ -107,7 +122,14 @@ export class DisplayService {
   private readonly subscribers = new Map<string, Set<string>>();
   private readonly setCount = new Map<string, TokenBucket>();
   private readonly setBytes = new Map<string, TokenBucket>();
+  private readonly sendBuckets = new Map<string, TokenBucket>();
   private readonly actionBuckets = new Map<string, TokenBucket>();
+  /**
+   * pane ごとの「取られた回数」と「冷却の終わりの時刻」（スクリプトが動く形式の番。入る条件・戻る条件は `report` の 1 か所）。
+   * **面の id・名前・接続・画面に依らない**（`close`→`set` のやり直しでも戻らない）。冷却が明けたとき・pane が閉じたときだけ 0 に戻る。
+   */
+  private readonly steals = new Map<string, number>();
+  private readonly cooldownUntil = new Map<string, number>();
   private readonly actionDrops = new Map<string, { count: number; lastLog: number }>();
   private waiterTotal = 0;
   private totalBytes = 0;
@@ -139,6 +161,14 @@ export class DisplayService {
     const b = checked.value;
     this.requirePane(paneId);
     const now = this.clock.now();
+    if (b.format === DISPLAY_SCRIPT_FORMAT && !this.scriptEnabled()) throw scriptDisabledError();
+    // 冷却の間、その pane の script-html は出せない（同じ名前の静的な面を置き換える set も。既にある面は変えない）。静的な形式は出せる。
+    if (b.format === DISPLAY_SCRIPT_FORMAT && this.isCooling(paneId, now)) {
+      throw new RpcError(
+        "display_busy",
+        "this pane cannot show script-html displays for a while: the app stopped the previous one (it grabbed the keyboard focus or navigated away); try again later or use a static format",
+      );
+    }
     const content = Buffer.from(b.content, "utf8");
     const countBucket = this.bucket(this.setCount, paneId, DISPLAY_SET_RATE);
     const bytesBucket = this.bucket(this.setBytes, paneId, DISPLAY_SET_BYTES_RATE);
@@ -270,8 +300,28 @@ export class DisplayService {
     });
   }
 
+  /**
+   * スクリプトが動く面へデータを送る（`display.message` を bus へ配る）。**保存しない**・ログに書かない。
+   * 投げる: `not_found`（pane が無い）・`display_closed`（その面が無い）・`invalid_params`（`script-html` でない・64 KiB 超）・`display_busy`（頻度）。
+   * `delivered` は、`script-html` を出せると名乗った画面の数（0 でも成功）。
+   */
+  send(paneId: string, p: { name: string; data: unknown }): { delivered: number } {
+    this.requirePane(paneId);
+    if (!this.scriptEnabled()) throw scriptDisabledError();
+    const entry = this.byPane.get(paneId)?.get(p.name);
+    if (entry === undefined) throw new RpcError("display_closed", `no display named ${p.name} on this pane`);
+    if (entry.info.format !== DISPLAY_SCRIPT_FORMAT) throw new RpcError("invalid_params", "only a script-html display can receive data");
+    const checked = checkDisplaySend(p.data);
+    if (!checked.ok) throw new RpcError("invalid_params", checked.reason);
+    if (!this.bucket(this.sendBuckets, paneId, DISPLAY_SEND_RATE).take(this.clock.now())) {
+      throw new RpcError("display_busy", "too many display messages from this pane; wait a moment");
+    }
+    this.publish({ event: "display.message", data: { id: entry.info.id, data: p.data } });
+    return { delivered: this.renderers().scriptHtml };
+  }
+
   features(): DisplayFeatures {
-    return { features: [...DISPLAY_FEATURES], limits: displayLimits(), renderers: this.renderers(), epoch: this.epoch };
+    return { features: [...DISPLAY_FEATURES], limits: displayLimits(), renderers: this.renderers(), epoch: this.epoch, scriptEnabled: this.scriptEnabled() };
   }
 
   // --- 画面側（ブラウザ）------------------------------------------------------------------------
@@ -326,6 +376,8 @@ export class DisplayService {
       action: checked.value.action,
       ...(checked.value.data !== undefined ? { data: checked.value.data } : {}),
       at: new Date(now).toISOString(),
+      // 面の形式から決める（枠は偽れない）。
+      source: entry.info.format === DISPLAY_SCRIPT_FORMAT ? "script" : "static",
     };
     this.pushEvent(entry.info.paneId, ev);
   }
@@ -343,13 +395,60 @@ export class DisplayService {
     return { closed: targets.map((e) => this.remove(e, "dismissed")) };
   }
 
-  /** 画面が、枠の異常を知らせる。その面を閉じる（理由は `problem`）。名乗っていない接続は `display_closed`。無い id は成功。 */
-  report(clientId: string, p: { id: string; problem: DisplayReportProblem }): { closed: string[] } {
+  /**
+   * 画面が、枠の異常を知らせる。名乗っていない接続は `display_closed`。**頻度で捨てない**（中身のスクリプトが `soda.action` を流しても、知らせは落ちない）。
+   *
+   * 知らせには、画面が描いていた枠の `paneId`・`format` が添えられる（省かれたら、面が残っていれば面の値。面が無ければ `display_closed`）。
+   * 面がもう無い・形式が替わっていても、pane が実在すれば、添えられた pane と形式で数える（サーバの側に、閉じた面の控えは持たない）。
+   * - `navigated`・`unresponsive`: 添えられた形式と同じ形式の面が残っていれば、それを閉じる（理由は `problem`）。形式が替わっていれば、いまの面は閉じない。
+   * - `focus_steal`: 添えられた形式が `script-html` のときだけ（ほかは `invalid_params`）。面は閉じず、その pane の「取られた回数」を 1 増やす。
+   *
+   * **冷却に入るのは 2 つだけ**: (i) 取られた回数が `DISPLAY_FOCUS_STEAL_MAX` に達した、(ii) 形式が `script-html` の枠について `navigated` が来た。
+   * 入るとき、その pane の `script-html` の面を全部閉じる。冷却の間の知らせは、回数も冷却も変えない（延びない）。
+   */
+  report(clientId: string, p: { id: string; problem: DisplayReportProblem; paneId?: string | undefined; format?: string | undefined }): { closed: string[]; steals?: number } {
     this.requireSubscriber(clientId);
     const e = this.byId.get(p.id);
-    if (!e) return { closed: [] };
-    this.opts.logger?.info("display reported", { paneId: e.info.paneId, name: e.info.name, problem: p.problem });
-    return { closed: [this.remove(e, p.problem)] };
+    if (e !== undefined && p.paneId !== undefined && p.paneId !== e.info.paneId) {
+      throw new RpcError("invalid_params", "the reported pane does not match the display");
+    }
+    const paneId = p.paneId ?? e?.info.paneId;
+    if (paneId === undefined) throw new RpcError("display_closed", "unknown or closed display");
+    this.requirePane(paneId);
+    const format = p.format ?? e?.info.format;
+    this.opts.logger?.info("display reported", { paneId, name: e?.info.name, problem: p.problem, format });
+    const now = this.clock.now();
+    const same = e !== undefined && format !== undefined && e.info.format === format ? e : undefined;
+
+    if (p.problem === "focus_steal") {
+      if (format !== DISPLAY_SCRIPT_FORMAT) throw new RpcError("invalid_params", "focus_steal applies to script-html displays only");
+      if (this.isCooling(paneId, now)) return { closed: [], steals: this.steals.get(paneId) ?? DISPLAY_FOCUS_STEAL_MAX };
+      const n = (this.steals.get(paneId) ?? 0) + 1;
+      this.steals.set(paneId, n);
+      if (n < DISPLAY_FOCUS_STEAL_MAX) return { closed: [], steals: n };
+      return { closed: this.enterCooldown(paneId, now, "focus_steal"), steals: n };
+    }
+
+    // navigated / unresponsive
+    if (p.problem === "navigated" && format === DISPLAY_SCRIPT_FORMAT && !this.isCooling(paneId, now)) {
+      // 冷却に入る（その pane の script-html の面を全部閉じる）。知らせの面が同じ形式で残っていれば、その中に入っている。
+      return { closed: this.enterCooldown(paneId, now, "navigated") };
+    }
+    if (same === undefined) return { closed: [] };
+    return { closed: [this.remove(same, p.problem)] };
+  }
+
+  /**
+   * 設定が変わった（`composeServer` が `PrefsStore.onChange` から呼ぶ）。**無効になっていたら、出ている `script-html` の面を全部閉じる**（理由 `script_disabled`。`display.closed` で、待っているプログラムに届く）。
+   * 無効 → 有効は、何もしない（次の `set` から出せる）。回数・冷却には数えない。
+   */
+  onScriptSettingChanged(): void {
+    if (this.scriptEnabled()) return;
+    for (const e of [...this.byId.values()]) if (e.info.format === DISPLAY_SCRIPT_FORMAT) this.remove(e, "script_disabled");
+  }
+
+  private scriptEnabled(): boolean {
+    return this.opts.scriptEnabled === undefined ? true : this.opts.scriptEnabled();
   }
 
   // --- 後始末 ----------------------------------------------------------------------------------
@@ -387,14 +486,39 @@ export class DisplayService {
 
   /** 名乗った画面のうち、まだ画面として繋がっているものを種類ごとに数える。 */
   private renderers(): DisplayRenderers {
-    const r: DisplayRenderers = { panel: 0, band: 0, actions: 0 };
+    const r: DisplayRenderers = { panel: 0, band: 0, actions: 0, scriptHtml: 0 };
     for (const [id, f] of this.subscribers) {
       if (!this.opts.isScreenKind(id)) continue;
       if (f.has("panel")) r.panel++;
       if (f.has("band")) r.band++;
       if (f.has("actions")) r.actions++;
+      if (f.has("script-html")) r.scriptHtml++;
     }
     return r;
+  }
+
+  /**
+   * その pane が冷却の中か。**冷却の終わり（入った時刻 + 5 分）ちょうどで明ける**（1 ミリ秒前は冷却中）。明けたら取られた回数も 0 に戻す。
+   */
+  private isCooling(paneId: string, now: number): boolean {
+    const until = this.cooldownUntil.get(paneId);
+    if (until === undefined) return false;
+    if (now < until) return true;
+    this.cooldownUntil.delete(paneId);
+    this.steals.delete(paneId);
+    return false;
+  }
+
+  /** 冷却に入る: その pane の `script-html` の面を全部閉じる（理由 `reason`）。閉じた名前を返す。 */
+  private enterCooldown(paneId: string, now: number, reason: "focus_steal" | "navigated"): string[] {
+    this.cooldownUntil.set(paneId, now + DISPLAY_SCRIPT_COOLDOWN_MS);
+    this.steals.set(paneId, DISPLAY_FOCUS_STEAL_MAX);
+    const closed: string[] = [];
+    for (const e of [...(this.byPane.get(paneId)?.values() ?? [])]) {
+      if (e.info.format === DISPLAY_SCRIPT_FORMAT) closed.push(this.remove(e, reason));
+    }
+    this.opts.logger?.info("display script cooldown", { paneId, reason, closed: closed.length, ms: DISPLAY_SCRIPT_COOLDOWN_MS });
+    return closed;
   }
 
   private requirePane(paneId: string): void {
@@ -519,6 +643,9 @@ export class DisplayService {
     }
     this.setCount.delete(paneId);
     this.setBytes.delete(paneId);
+    this.sendBuckets.delete(paneId);
+    this.steals.delete(paneId);
+    this.cooldownUntil.delete(paneId);
   }
 
   /** bus へ配る。購読者の例外で台帳の後始末を止めない（中身は書かない）。 */

@@ -8,6 +8,7 @@ import type { TerminalRegistry } from "./term/TerminalRegistry.js";
 import type { FileTransfer } from "./term/FileTransfer.js";
 import type { ViewSync } from "./term/ViewSync.js";
 import type { AskController } from "./ask/AskController.js";
+import type { DisplayController } from "./display/DisplayController.js";
 
 /**
  * コンポーネントへ渡す部品の provide/inject キー（`main.ts` が組み立てて provide する。T26）。
@@ -31,5 +32,24 @@ export const KeyInputControllerKey: InjectionKey<KeyInputController> = Symbol("k
 export const MachineSwitcherKey: InjectionKey<MachineSwitcher> = Symbol("machineSwitcher");
 /** 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）の通信の係。`AskDialog` が回答・取り消しを送る。 */
 export const AskControllerKey: InjectionKey<AskController> = Symbol("askController");
+/**
+ * 表示の面の枠（`DisplayFrame`）が、アプリの端末・キーの操作に触るための窓口（`main.ts` が組み立てる）。枠の `Esc`・prefix を端末へ戻す／prefix を注入する。
+ * 提供されない環境（単体テスト・端末版でない配線）では、何もしない。
+ */
+export interface DisplayHost {
+  /** その pane の端末へフォーカスを戻す（pane が表示中のときだけ）。 */
+  focusTerminal(paneId: string): void;
+  /** いまの prefix のキーを、利用者の次のキーの前に注入する。 */
+  injectPrefix(): void;
+  /** 利用者が選んでいる pane（`view.focusedPaneId`）の端末へフォーカスを戻す（スクリプトの面がフォーカスを取ったときの、元の場所が使えないときの戻し先）。 */
+  focusSelectedTerminal(): void;
+  /** 利用者が選んでいる pane（`view.focusedPaneId`。無ければ null）。 */
+  focusedPaneId?(): string | null;
+  /** いまの prefix のキー（枠へ `relayKeys` として渡す）。 */
+  prefixKey(): { key: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean };
+}
+export const DisplayHostKey: InjectionKey<DisplayHost> = Symbol("displayHost");
+/** 表示の面（`sodactl display`。20261007-soda-extensions）の通信の係。`DisplayFrame` が操作・知らせを送る。 */
+export const DisplayControllerKey: InjectionKey<DisplayController> = Symbol("displayController");
 /** 端末のファイルのリンクとドロップ。`TerminalPane` がドロップを渡す。無ければドロップを受けない（テスト等）。 */
 export const FileTransferKey: InjectionKey<FileTransfer> = Symbol("fileTransfer");

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, ref } from "vue";
 import { ActionDispatcherKey, TerminalRegistryKey } from "../injection.js";
 import { NO_NEIGHBORS, type PaneSides } from "../layout/paneChrome.js";
+import { useDisplayStore } from "../store/display.js";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
@@ -25,7 +26,7 @@ function makePane(id: string, overrides: Partial<Pane> = {}): Pane {
 
 function mountFrame(opts: { enabled?: boolean; withPinia?: boolean; multiPane?: boolean; neighbors?: PaneSides } = {}) {
   const actions = { openContextMenu: vi.fn(), movePaneToEdge: vi.fn(), replacePaneWithDrag: vi.fn(), movePaneToTab: vi.fn(), movePaneToNewTab: vi.fn() };
-  const registry = { focus: vi.fn() };
+  const registry = { focus: vi.fn(), get: vi.fn(() => undefined) };
   const wrapper = mount(PaneFrame, {
     attachTo: document.body,
     props: {
@@ -258,7 +259,7 @@ describe("PaneFrame — 枠の中にフォーカスがあるまま消えたら�
   /** `PaneLayout` の描き直しで枠が外れるのと同じく、親の `v-if` で外す。 */
   function mountToggleable() {
     const actions = { openContextMenu: vi.fn() };
-    const registry = { focus: vi.fn() };
+    const registry = { focus: vi.fn(), get: vi.fn(() => undefined) };
     const show = ref(true);
     const Host = defineComponent({
       components: { PaneFrame },
@@ -609,7 +610,7 @@ describe("PaneFrame — 名前ラベルをドラッグしての分割・分割�
     useSessionStore(pinia).paneUpserted(makePane("p2", { label: "two" }));
     useSettingsStore(pinia).setPaneAgentNameVisible(true);
     const actions = { openContextMenu: vi.fn(), movePaneToEdge: vi.fn(), replacePaneWithDrag: vi.fn() };
-    const registry = { focus: vi.fn() };
+    const registry = { focus: vi.fn(), get: vi.fn(() => undefined) };
     const Host = defineComponent({
       components: { PaneFrame },
       template: '<div><PaneFrame pane-id="p1" enabled /><PaneFrame pane-id="p2" enabled /></div>',
@@ -635,7 +636,7 @@ describe("PaneFrame — 名前ラベルをドラッグしての分割・分割�
     useSessionStore(pinia).paneUpserted(makePane("p2", { label: "two" }));
     useSettingsStore(pinia).setPaneAgentNameVisible(true);
     const actions = { openContextMenu: vi.fn(), movePaneToEdge: vi.fn(), replacePaneWithDrag: vi.fn() };
-    const registry = { focus: vi.fn() };
+    const registry = { focus: vi.fn(), get: vi.fn(() => undefined) };
     const Host = defineComponent({
       components: { PaneFrame },
       template: '<div><PaneFrame pane-id="p1" enabled /><PaneFrame pane-id="p2" enabled /></div>',
@@ -758,3 +759,43 @@ describe("PaneFrame — 枠の描画モードと隙間（AC1・AC6・AC-I5）", 
     expect(wrapper.attributes("style")).toBeUndefined();
   });
 });
+
+describe("PaneFrame — 表示の面（パネル・帯。20261007-soda-extensions）", () => {
+  const disp = (id: string, kind: "panel" | "band") => ({ id, paneId: "p1", name: id, kind, format: "text", title: id, size: 320, rev: 1, bytes: 1, updatedAt: "x" });
+
+  it("面が無ければ、葉は .pane-frame-main の中にあるだけで、帯もパネルも描かない。enabled でなければ何も増えない", () => {
+    const { wrapper } = mountFrame();
+    expect(wrapper.find(".pane-frame-main .fake-leaf").exists()).toBe(true);
+    expect(wrapper.find("[data-pane-bands]").exists()).toBe(false);
+    expect(wrapper.find("[data-pane-panel]").exists()).toBe(false);
+    const off = mountFrame({ enabled: false, withPinia: false });
+    expect(off.wrapper.find(".pane-frame-main").exists()).toBe(false);
+    expect(off.wrapper.find("[data-pane-bands]").exists()).toBe(false);
+  });
+
+  it("面が出ても、葉（スロットの中身）は作り直されない（同じ要素のまま）", async () => {
+    const { wrapper } = mountFrame();
+    const leaf = wrapper.get(".fake-leaf").element;
+    const d = useDisplayStore(pinia);
+    d.upsert(disp("a", "panel"));
+    d.upsert(disp("b", "band"));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find("[data-pane-panel]").exists()).toBe(true);
+    expect(wrapper.find("[data-pane-bands]").exists()).toBe(true);
+    expect(wrapper.get(".fake-leaf").element).toBe(leaf);
+    expect(wrapper.get(".pane-frame-main").element.contains(leaf)).toBe(true);
+    expect(wrapper.get("[data-pane-panel]").element.contains(leaf)).toBe(false);
+  });
+
+  it("その pane のいずれかの面にフォーカスがある間、端末の側（.pane-frame-main）を薄くする", async () => {
+    const { wrapper } = mountFrame();
+    const d = useDisplayStore(pinia);
+    d.upsert(disp("a", "panel"));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get(".pane-frame-main").classes()).not.toContain("pane-frame-main-dimmed");
+    d.setFocused("a");
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get(".pane-frame-main").classes()).toContain("pane-frame-main-dimmed");
+  });
+});
+

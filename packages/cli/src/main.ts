@@ -61,7 +61,7 @@ function printHelp(): void {
       "（定義は標準入力。status は answered・cancelled・timeout・unavailable で、どれも終了コード 0。--timeout は 1000〜86400000 ミリ秒、既定 540000）。",
       "同じ pane の質問は同時に 1 つだけ（ask_busy）。pane の外・別のマシン（--machine）からは使えません。",
       "ask は pane の中ではログインなしで動きます（Windows を除く。その pane のサーバのローカルの受け口を使います）。unauthenticated で終わったら受け口を使えていないので、sodactl login してください。",
-      "display は pane のプログラムの表示の面（パネル・帯）を、その pane を見ているブラウザの画面に出します（中身は 2 MiB まで。html のスクリプトは動きません）。",
+      "display は pane のプログラムの表示の面（パネル・帯）を、その pane を見ているブラウザの画面に出します（中身は 2 MiB まで。html のスクリプトは動きません。スクリプトを動かすなら --script-html-file と send。外から取ってきた HTML は script-html で出さない）。",
       "set は同じ名前なら置き換え、wait・events・set --wait は利用者の操作・閉じた理由を 1 行の JSON で返します。pane の中ではログインなしで動きます（Windows を除く）。",
       "古いサーバでは {\"status\":\"unsupported\"}（終了コード 0）。--features で使えるかと上限を確かめられます。--machine には --pane が要ります。",
       "sodactl skill はエージェントに sodactl の使い方を教える Markdown（skill ファイル）を出します。",

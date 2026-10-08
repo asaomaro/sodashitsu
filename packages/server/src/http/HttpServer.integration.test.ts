@@ -10,7 +10,7 @@ import { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import { DefaultLoginRateLimiter } from "../auth/LoginRateLimiter.js";
 import { MemoryLogger } from "../log/Logger.js";
 import { LOG_THROTTLE_MAX_LINES } from "../log/LogThrottle.js";
-import { HttpServer } from "./HttpServer.js";
+import { DISPLAY_SCRIPT_VIEW_CSP, DISPLAY_SCRIPT_VIEW_PERMISSIONS, DISPLAY_VIEW_CSP, HttpServer } from "./HttpServer.js";
 import { listenOnFreePort } from "../composeServerOnFreePort.js";
 
 /** 本物のサーバを 0 番で待ち受けさせ、割り当てられたポートを OriginPolicy に渡す。 */
@@ -242,6 +242,135 @@ describe("HttpServer — アプリ本体の CSP と成果物の隔離表示（/a
       const head = await get(s, "/ask-view/markdown.html", { method: "HEAD" });
       expect(head.status).toBe(200);
       expect(await head.text()).toBe("");
+    } finally {
+      await s.close();
+    }
+  });
+});
+
+describe("HttpServer — 表示の面の枠のページ（/display-view/*。20261007-soda-extensions）", () => {
+  let webDistDir: string;
+  beforeEach(async () => {
+    webDistDir = await makeTempDir("soda-http-dist-display-");
+    await writeFile(join(webDistDir, "index.html"), "<!doctype html><title>app</title>");
+    await mkdir(join(webDistDir, "display-view"), { recursive: true });
+    for (const f of ["frame.html", "script.html", "frame.js", "sanitize.js", "secret.txt"]) await writeFile(join(webDistDir, "display-view", f), `// ${f}\n`);
+    await mkdir(join(webDistDir, "ask-view", "vendor"), { recursive: true });
+    for (const f of ["markdown.html", "html.html", "keys.js", "links.js", "vendor/marked.umd.js"]) await writeFile(join(webDistDir, "ask-view", f), `// ${f}\n`);
+  });
+  afterEach(async () => {
+    await rm(webDistDir, { recursive: true, force: true });
+  });
+  const get = (s: { baseUrl: string }, path: string, init?: RequestInit) => fetch(`${s.baseUrl}${path}`, init);
+
+  it("frame.html のヘッダが design の文字列と一致する（sandbox に allow-same-origin なし・script-src は 'self' だけ・X-Frame-Options は SAMEORIGIN）", async () => {
+    const s = await startServer(webDistDir);
+    try {
+      const res = await get(s, "/display-view/frame.html");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      const csp = res.headers.get("content-security-policy")!;
+      expect(csp).toBe(
+        "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'",
+      );
+      expect(csp).toBe(DISPLAY_VIEW_CSP);
+      expect(csp).not.toContain("allow-same-origin");
+      expect(csp).not.toMatch(/allow-top-navigation|allow-modals|allow-downloads/);
+      // script-src の指定は 'self' だけ（unsafe-inline・unsafe-eval なし）。
+      expect(csp.match(/script-src ([^;]*)/)?.[1]).toBe("'self'");
+      expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("script.html のヘッダが design の文字列と一致する（script-src に 'self' が無い・sandbox は allow-scripts だけ・Permissions-Policy・X-Frame-Options）。frame.html は変わらない", async () => {
+    const s = await startServer(webDistDir);
+    try {
+      const res = await get(s, "/display-view/script.html");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      const csp = res.headers.get("content-security-policy")!;
+      expect(csp).toBe(
+        "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; webrtc 'block'",
+      );
+      expect(csp).toBe(DISPLAY_SCRIPT_VIEW_CSP);
+      expect(csp.match(/script-src ([^;]*)/)?.[1]).toBe("'unsafe-inline' 'unsafe-eval'");
+      expect(csp.match(/script-src ([^;]*)/)?.[1]).not.toContain("'self'");
+      expect(csp.match(/sandbox ([^;]*)/)?.[1]).toBe("allow-scripts");
+      expect(csp).not.toMatch(/allow-same-origin|allow-forms|allow-popups|allow-modals|allow-downloads|allow-top-navigation/);
+      expect(csp).toContain("webrtc 'block'");
+      expect(res.headers.get("permissions-policy")).toBe(
+        "camera=(), microphone=(), geolocation=(), display-capture=(), clipboard-read=(), clipboard-write=(), fullscreen=(), picture-in-picture=(), focus-without-user-activation=()",
+      );
+      expect(res.headers.get("permissions-policy")).toBe(DISPLAY_SCRIPT_VIEW_PERMISSIONS);
+      expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+      // 静的な形式の frame.html は T9 のまま（Permissions-Policy も付かない）
+      const frame = await get(s, "/display-view/frame.html");
+      expect(frame.headers.get("content-security-policy")).toBe(DISPLAY_VIEW_CSP);
+      expect(frame.headers.get("content-security-policy")).toContain("script-src 'self';");
+      expect(frame.headers.get("permissions-policy")).toBeNull();
+      expect(DISPLAY_VIEW_CSP).not.toBe(DISPLAY_SCRIPT_VIEW_CSP);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("frame.js・sanitize.js は CSP・X-Frame-Options を持たない。ログインなしで読める。HEAD は本文なし", async () => {
+    const s = await startServer(webDistDir);
+    try {
+      for (const f of ["frame.js", "sanitize.js"]) {
+        const res = await get(s, `/display-view/${f}`);
+        expect(res.status, f).toBe(200);
+        expect(res.headers.get("content-type"), f).toBe("text/javascript; charset=utf-8");
+        expect(res.headers.get("content-security-policy"), f).toBeNull();
+        expect(res.headers.get("x-frame-options"), f).toBeNull();
+      }
+      const head = await get(s, "/display-view/frame.html", { method: "HEAD" });
+      expect(head.status).toBe(200);
+      expect(await head.text()).toBe("");
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("許可リストの外・ディレクトリ・トラバーサルは 404、POST は 405（index.html へ落とさない）", async () => {
+    const s = await startServer(webDistDir);
+    try {
+      for (const p of ["secret.txt", "nope.js", "", "..%2Fsecret.txt", "__proto__", "constructor", "frame.html/"]) {
+        expect((await get(s, `/display-view/${p}`)).status, p).toBe(404);
+      }
+      expect((await rawRequest(s.port, "GET /display-view/../display-view/secret.txt HTTP/1.1")).split(" ")[1]).not.toBe("200");
+      const post = await get(s, "/display-view/frame.html", { method: "POST" });
+      expect(post.status).toBe(405);
+      expect(post.headers.get("allow")).toBe("GET, HEAD");
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("アプリ本体と /ask-view/* のヘッダは変わらない", async () => {
+    const s = await startServer(webDistDir);
+    try {
+      const app = await get(s, "/");
+      expect(app.headers.get("content-security-policy")).toBe(
+        "default-src 'self'; connect-src 'self'; img-src 'self' data:; media-src data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'",
+      );
+      expect(app.headers.get("x-frame-options")).toBe("DENY");
+      const md = await get(s, "/ask-view/markdown.html");
+      expect(md.headers.get("content-security-policy")).toBe(
+        "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'",
+      );
+      expect(md.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+      const html = await get(s, "/ask-view/html.html");
+      expect(html.headers.get("content-security-policy")).toBe(
+        "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'",
+      );
+      const js = await get(s, "/ask-view/links.js");
+      expect(js.headers.get("content-security-policy")).toBeNull();
+      expect(js.headers.get("x-frame-options")).toBeNull();
     } finally {
       await s.close();
     }

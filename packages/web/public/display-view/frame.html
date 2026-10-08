@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>表示（静的）</title>
+<style>
+/* 表示の面（静的な形式）の枠の既定のスタイル。色は、親が `render` で渡す変数（アプリの `--soda-*`）で決まる。下の値は、渡される前の既定。 */
+:root{color-scheme:light dark;--soda-bg:#1e1f29;--soda-fg:#f8f8f2;--soda-menu-bg:#282a36;--soda-menu-border:#44475a;--soda-accent:#6070a1;--soda-accent-fg:#f8f8f2;--soda-subtle-bg:rgba(255,255,255,.08);--soda-error-fg:#ff5555;--soda-warn-fg:#ffb86c}
+:root[data-dark="0"]{color-scheme:light}
+:root[data-dark="1"]{color-scheme:dark}
+html,body{margin:0}
+body{background:var(--soda-bg);color:var(--soda-fg);font:14px/1.6 system-ui,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",sans-serif;min-height:100vh}
+#soda-display-root{padding:6px 10px;overflow-wrap:anywhere}
+#soda-display-root>:first-child{margin-top:0}
+h1,h2,h3,h4{line-height:1.35;margin:1em 0 .5em}
+h1{font-size:1.5em}h2{font-size:1.25em}h3{font-size:1.1em}
+p,ul,ol,blockquote,table,pre,form{margin:0 0 .8em}
+ul,ol{padding-left:1.5em}
+a{color:var(--soda-accent)}
+blockquote{margin-left:0;padding:.1em 1em;border-left:4px solid var(--soda-menu-border);opacity:.85}
+code{font:.9em ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;background:var(--soda-subtle-bg);padding:.1em .35em;border-radius:4px}
+pre{background:var(--soda-subtle-bg);border:1px solid var(--soda-menu-border);border-radius:6px;padding:8px 10px;overflow:auto;line-height:1.5;font:.9em ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace}
+pre code{background:none;padding:0}
+pre.soda-text{white-space:pre-wrap;word-break:break-word;margin:0;border:0;background:none;padding:0}
+table{border-collapse:collapse;display:block;overflow:auto;max-width:100%}
+th,td{border:1px solid var(--soda-menu-border);padding:4px 10px;text-align:left}
+th{background:var(--soda-subtle-bg)}
+img{max-width:100%}
+hr{border:0;border-top:1px solid var(--soda-menu-border);margin:1.2em 0}
+button{font:inherit;color:var(--soda-fg);background:var(--soda-menu-bg);border:1px solid var(--soda-menu-border);border-radius:6px;padding:3px 12px;cursor:pointer}
+button:hover{border-color:var(--soda-accent)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--soda-accent);outline-offset:1px}
+button:disabled{opacity:.5;cursor:default}
+input,select,textarea{font:inherit;color:var(--soda-fg);background:var(--soda-menu-bg);border:1px solid var(--soda-menu-border);border-radius:6px;padding:3px 8px}
+input[type=checkbox],input[type=radio]{padding:0}
+</style>
+</head>
+<body>
+<script src="/ask-view/vendor/marked.umd.js"></script>
+<script src="/ask-view/links.js"></script>
+<script src="/display-view/sanitize.js"></script>
+<script src="/display-view/frame.js"></script>
+</body>
+</html>

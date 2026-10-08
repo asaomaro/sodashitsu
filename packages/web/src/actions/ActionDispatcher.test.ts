@@ -13,6 +13,8 @@ import { TerminalRegistry } from "../term/TerminalRegistry.js";
 import { MouseBridge } from "../term/MouseBridge.js";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
+import { useDisplayStore } from "../store/display.js";
+import { registerFrame, unregisterFrame } from "../display/frameRegistry.js";
 import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
 import { useSettingsStore } from "../store/settings.js";
@@ -637,6 +639,91 @@ describe("ActionDispatcher — D&D による別 tab・別 workspace への移動
     await flush();
     expect(view.workspaceId).toBe("w1");
     expect(view.tabId).toBe("t1");
+  });
+});
+
+// 20261008-web-tab-dnd（別の worktree の workspace への pane の移動を断る。T9）。
+describe("ActionDispatcher — pane の移動の範囲（別の worktree へは送らずに知らせる）", () => {
+  const MESSAGE = "別の worktree の workspace へは移せません（同じフォルダを開いた workspace へだけ移せます）";
+  const git = (worktreeKey: string | null | undefined) => ({
+    branch: "b",
+    ahead: 0,
+    behind: 0,
+    repoKey: "/r/.git",
+    isLinkedWorktree: false,
+    ...(worktreeKey === undefined ? {} : { worktreeKey }),
+  });
+  /** w1（t1・p1）が移動元、w2 が移動先。 */
+  function setup(gitA: Workspace["git"], gitB: Workspace["git"], cwdB = "/") {
+    const conn = makeConnection();
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", ["t1"], { git: gitA }));
+    session.workspaceUpserted(makeWorkspace("w2", ["t2"], { git: gitB, cwd: cwdB }));
+    session.tabUpserted(makeTab("t1", "w1"));
+    session.tabUpserted(makeTab("t2", "w2", "p2"));
+    session.paneUpserted(makePane("p1", "t1"));
+    view.setView("w1", "t1");
+    return { conn, view, ...makeDispatcher(conn) };
+  }
+
+  it("別の worktree への movePaneToNewTab: 要求を送らず、文言のトースト。表示もフォーカスも動かない", async () => {
+    const { conn, view, dispatcher } = setup(git("/r/.git"), git("/r/.git/worktrees/x"));
+    dispatcher.movePaneToNewTab("p1", "w2");
+    await flush();
+    expect(conn.requests).toEqual([]);
+    expect(view.toasts.map((t) => t.message)).toEqual([MESSAGE]);
+    expect(view.workspaceId).toBe("w1");
+    expect(view.tabId).toBe("t1");
+  });
+
+  it("管理外どうしで開いた場所が違う workspace へも送らずに知らせる", () => {
+    const { conn, view, dispatcher } = setup(null, null, "/elsewhere");
+    dispatcher.movePaneToNewTab("p1", "w2");
+    expect(conn.requests).toEqual([]);
+    expect(view.toasts.map((t) => t.message)).toEqual([MESSAGE]);
+  });
+
+  it("同じ worktree・自分の workspace・管理外で同じ場所へは、今までどおり送る（トーストなし）", () => {
+    for (const [a, b, target] of [
+      [git("/r/.git"), git("/r/.git"), "w2"],
+      [git("/r/.git"), git("/r/.git/worktrees/x"), "w1"],
+      [null, null, "w2"],
+    ] as const) {
+      pinia = createPinia();
+      const { conn, view, dispatcher } = setup(a, b);
+      dispatcher.movePaneToNewTab("p1", target);
+      expect(conn.requests).toEqual([["pane.move_to_new_tab", { paneId: "p1", targetWorkspaceId: target }]]);
+      expect(view.toasts).toEqual([]);
+    }
+  });
+
+  it("worktreeKey の無い git の workspace（古いサーバ）へは、自分では断らず送る", () => {
+    const { conn, view, dispatcher } = setup(git(undefined), git("/r/.git"));
+    dispatcher.movePaneToNewTab("p1", "w2");
+    expect(conn.requests).toEqual([["pane.move_to_new_tab", { paneId: "p1", targetWorkspaceId: "w2" }]]);
+    expect(view.toasts).toEqual([]);
+  });
+
+  it("応答 { ok: false, reason } はトースト（表示は動かない）。reason の無い { ok: false } は今までどおり黙る", async () => {
+    const { conn, view, dispatcher } = setup(git(undefined), git("/r/.git"));
+    conn.resolveWith["pane.move_to_new_tab"] = { ok: false, reason: "different_worktree" };
+    conn.resolveWith["pane.move_to_tab"] = { ok: false, reason: "different_worktree" };
+    dispatcher.movePaneToNewTab("p1", "w2");
+    await flush();
+    expect(view.toasts.map((t) => t.message)).toEqual([MESSAGE]);
+    expect(view.workspaceId).toBe("w1");
+    dispatcher.movePaneToTab("p1", "t2");
+    await flush();
+    expect(view.toasts.map((t) => t.message)).toEqual([MESSAGE, MESSAGE]);
+    expect(view.workspaceId).toBe("w1");
+
+    conn.resolveWith["pane.move_to_new_tab"] = { ok: false };
+    conn.resolveWith["pane.move_to_tab"] = { ok: false };
+    dispatcher.movePaneToNewTab("p1", "w2");
+    dispatcher.movePaneToTab("p1", "t2");
+    await flush();
+    expect(view.toasts).toHaveLength(2);
   });
 });
 
@@ -2873,6 +2960,64 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
       const { dispatcher } = makeDispatcher(makeConnection());
       dispatcher.run({ type: "showSubagents" });
       expect(view.dialogContext).toMatchObject({ kind: "subagents", machineId: "gpu", paneId: "p1" });
+    });
+  });
+
+  describe("focusDisplay（focus_display。20261007-soda-extensions）", () => {
+    const disp = (id: string, kind: "panel" | "band") => ({ id, paneId: "p1", name: id, kind, format: "text", title: id, size: 320, rev: 1, bytes: 1, updatedAt: "x" });
+    it("パネルがあれば選ばれているパネルの枠へ、パネルが無ければ最初の帯へ移る。面が無ければトースト", async () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      const displays = useDisplayStore(pinia);
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const toastSpy = vi.spyOn(view, "toast");
+      await dispatcher.focusDisplay();
+      expect(toastSpy).toHaveBeenCalledWith("この pane に表示はありません");
+      const focused: string[] = [];
+      const mk = (id: string) => ({ focusInside: () => void focused.push(id) });
+      const bandFrame = mk("b1");
+      const panelFrame = mk("a1");
+      registerFrame("b1", bandFrame);
+      displays.upsert(disp("b1", "band"));
+      await dispatcher.focusDisplay();
+      expect(focused).toEqual(["b1"]);
+      registerFrame("a1", panelFrame);
+      displays.upsert(disp("a1", "panel"));
+      await dispatcher.focusDisplay();
+      expect(focused).toEqual(["b1", "a1"]);
+      unregisterFrame("a1", panelFrame);
+      unregisterFrame("b1", bandFrame);
+    });
+    it("モバイル（重ね表示を開ける画面）では、パネルの枠が載っていなければ重ね表示を開く要求を出し、トーストは出さない", async () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      const displays = useDisplayStore(pinia);
+      displays.upsert(disp("a1", "panel"));
+      displays.sheetAvailable = true;
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const toastSpy = vi.spyOn(view, "toast");
+      const before = displays.sheetRequest;
+      await dispatcher.focusDisplay();
+      expect(displays.sheetRequest).toBe(before + 1);
+      expect(toastSpy).not.toHaveBeenCalled();
+      displays.sheetAvailable = false;
+      await dispatcher.focusDisplay();
+      expect(toastSpy).toHaveBeenCalledWith("表示を出せません（pane が狭い、または読み込み中です）");
+    });
+    it("たたんであるパネルは戻してから移る", async () => {
+      const view = useViewStore(pinia);
+      view.focusPane("p1");
+      const displays = useDisplayStore(pinia);
+      displays.upsert(disp("a1", "panel"));
+      displays.setCollapsed("p1", true);
+      const { dispatcher } = makeDispatcher(makeConnection());
+      const focused: string[] = [];
+      const f = { focusInside: () => void focused.push("a1") };
+      registerFrame("a1", f);
+      await dispatcher.focusDisplay();
+      expect(displays.collapsed.has("p1")).toBe(false);
+      expect(focused).toEqual(["a1"]);
+      unregisterFrame("a1", f);
     });
   });
 

@@ -9,6 +9,8 @@ import {
   navigateKeyOfRow,
   neighborPaneId,
   orderedAgentPaneIds,
+  paneMoveBlock,
+  paneMoveBlockMessage,
   isRepresentative,
   repoMembers,
   type Action,
@@ -257,6 +259,10 @@ export class TuiDispatcher {
       case "openGraph":
         // 連携のグラフ画面はブラウザにだけある（20260927-agent-graph の decisions D1-8。操作表は共有のまま、端末版は知らせる）。
         this.ui.toast("グラフの画面はブラウザで開けます。");
+        return;
+      case "focusDisplay":
+        // 表示の面（パネル・帯）はブラウザにだけある（20261007-soda-extensions）。
+        this.ui.toast("表示のパネル・帯はブラウザで使えます。");
         return;
       // 20261004-subagent-display。フォーカスしている pane のエージェントの一覧を開く（件数が 0・分からない・エージェントが居ないときは何もしない）。
       case "showSubagents": {
@@ -941,7 +947,11 @@ export class TuiDispatcher {
     void this.conn
       .request("pane.move_to_tab", { paneId, targetTabId })
       .then((r) => {
-        if (!r.ok) return;
+        if (!r.ok) {
+          // サーバが断った（別の worktree の workspace。20261008-web-tab-dnd）。理由の無い ok:false は今までどおり黙る。
+          if (r.reason) this.ui.toast(paneMoveBlockMessage(r.reason));
+          return;
+        }
         if (this.model.workspaceId !== originWorkspaceId || this.model.tabId !== originTabId)
           return;
         const targetTab = this.model.tabs.get(targetTabId);
@@ -953,12 +963,29 @@ export class TuiDispatcher {
 
   /** 名前のドラッグをサイドバーの workspace の行へ（新しい tab に移す）。 */
   movePaneToNewTab(paneId: string, targetWorkspaceId: string): void {
+    // 別の worktree の workspace へは送らずに知らせる（20261008-web-tab-dnd）。どちらかがモデルに無ければ確認を飛ばして送る
+    // （古いサーバの workspace〔worktreeKey 無し〕は lenient で断らず、サーバに任せる）。
+    const pane = this.model.panes.get(paneId);
+    const sourceTab = pane ? this.model.tabs.get(pane.tabId) : undefined;
+    const source = sourceTab ? this.model.workspaces.get(sourceTab.workspaceId) : undefined;
+    const target = this.model.workspaces.get(targetWorkspaceId);
+    if (source && target) {
+      const block = paneMoveBlock(source, target, { lenient: true });
+      if (block) {
+        this.ui.toast(paneMoveBlockMessage(block));
+        return;
+      }
+    }
     const originWorkspaceId = this.model.workspaceId;
     const originTabId = this.model.tabId;
     void this.conn
       .request("pane.move_to_new_tab", { paneId, targetWorkspaceId })
       .then((r) => {
-        if (!r.ok || !r.tab) return;
+        if (!r.ok) {
+          if (r.reason) this.ui.toast(paneMoveBlockMessage(r.reason));
+          return;
+        }
+        if (!r.tab) return;
         if (this.model.workspaceId !== originWorkspaceId || this.model.tabId !== originTabId)
           return;
         this.model.setView(targetWorkspaceId, r.tab.id, paneId);

@@ -8,6 +8,7 @@ import type {
   ItemTarget,
   NewCwd,
   Pane,
+  PaneMoveBlock,
   PaneId,
   RightClickTarget,
   SessionSnapshot,
@@ -988,6 +989,21 @@ export class SessionService {
     this.bus.publish({ event: "layout.updated", data: { tab: this.requireTab(pane.tabId) } });
     this.persist.touch();
     return true;
+  }
+
+  /**
+   * `moveToTab` が断る理由（20261008-web-tab-dnd）。移せる・pane や tab が無いときは null（投げない。
+   * 実在しないときの扱いは今の `ok: false` に任せる）。
+   */
+  paneMoveBlockToTab(paneId: PaneId, targetTabId: TabId): PaneMoveBlock | null {
+    const targetTab = this.model.getTab(targetTabId);
+    if (!targetTab) return null;
+    return this.model.paneMoveBlockFor(paneId, targetTab.workspaceId);
+  }
+
+  /** `moveToNewTab` が断る理由（20261008-web-tab-dnd）。移せる・pane や workspace が無いときは null（投げない）。 */
+  paneMoveBlockToWorkspace(paneId: PaneId, targetWorkspaceId: WorkspaceId): PaneMoveBlock | null {
+    return this.model.paneMoveBlockFor(paneId, targetWorkspaceId);
   }
 
   /**

@@ -52,6 +52,7 @@ import {
   loadPaneAgentNameVisible,
   loadPaneBorders,
   loadPaneGaps,
+  loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
   type NewCwdPolicy,
@@ -68,6 +69,7 @@ export {
   loadPaneAgentNameVisible,
   loadPaneBorders,
   loadPaneGaps,
+  loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
   type NewCwdPolicy,
@@ -154,6 +156,11 @@ export const useSettingsStore = defineStore("settings", () => {
   const newCwdPath = ref(loadNewCwdPath(initial["newCwdPath"]));
   /** Windows で pane のシェルに場所の知らせを差し込むか（20260928-windows-pane-cwd。読むのはサーバ。次に開く pane から効く）。 */
   const shellCwdTracking = ref(loadShellCwdTracking(initial["shellCwdTracking"]));
+  /**
+   * スクリプトが動く表示（`script-html`）を許可するか（20261007-soda-extensions）。**既定は無効**。検査はサーバ（`DisplayService`）が本物で、ここは画面の側の二重の守り（無効なら枠を作らない）と、設定の画面の表示。
+   * 共有の設定（`prefs.set`）で、サーバと全画面に配られる。
+   */
+  const displayScriptEnabled = ref(loadDisplayScriptEnabled(initial["displayScriptEnabled"]));
   /**
    * テーマ（20260921-theme-settings）。1 つのテーマ・自動の切替・明るいとき・暗いとき（null＝まだ選んでいない＝1 つのテーマの対）。
    * 読み込みは値ごとに落とす（`loadThemePrefs`。AC4）。
@@ -299,6 +306,12 @@ export const useSettingsStore = defineStore("settings", () => {
   function setShellCwdTracking(v: boolean): void {
     shellCwdTracking.value = v;
     writePrefs({ shellCwdTracking: v });
+  }
+
+  /** 反映と保存を同時に行う。無効にすると、サーバが出ている `script-html` の面を全部閉じる。 */
+  function setDisplayScriptEnabled(v: boolean): void {
+    displayScriptEnabled.value = v;
+    writePrefs({ displayScriptEnabled: v });
   }
 
   /** 反映と保存を同時に行う。**効くのは次に開く workspace・tab・分割から**（既に開いている pane は変えない。AC10）。 */
@@ -543,6 +556,8 @@ export const useSettingsStore = defineStore("settings", () => {
     newCwdPolicy,
     newCwdPath,
     shellCwdTracking,
+    displayScriptEnabled,
+    setDisplayScriptEnabled,
     theme,
     themeAuto,
     themeLight,

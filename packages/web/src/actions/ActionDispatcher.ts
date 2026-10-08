@@ -1,12 +1,15 @@
 import type { AgentIntegrationInstallResult, AgentIntegrationKind, ItemTarget, NewCwd, WorkspaceGroup } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
+import { nextTick } from "vue";
+import { focusFrame } from "../display/frameRegistry.js";
+import { useDisplayStore } from "../store/display.js";
 import type { KeyInputController, ActionPort, FocusPort } from "../keys/KeyInputController.js";
 import type { Action, CopyCommand, Dir } from "@sodashitsu/client-core";
 import type { InputHold } from "@sodashitsu/client-core";
 import type { ConnectionPort } from "@sodashitsu/client-core";
 import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
-import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, isRepresentative, isUngroupedNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
+import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, paneMoveBlock, paneMoveBlockMessage, isRepresentative, isUngroupedNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
@@ -21,6 +24,7 @@ import {
   loadPaneFrameThickness,
   loadPaneGaps,
   loadPaneOuterBorders,
+  loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
   useSettingsStore,
@@ -63,6 +67,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   private readonly agentIntegrations: ReturnType<typeof useAgentIntegrationsStore>;
   private readonly seen: ReturnType<typeof useSeenStore>;
   private readonly view: ReturnType<typeof useViewStore>;
+  private readonly displays: ReturnType<typeof useDisplayStore>;
   /** 保存した SSH のマシン（20260927-multi-host-machines）。ローカル以外を選んでいる間は session の一覧を使わない。 */
   private readonly machines: ReturnType<typeof useMachinesStore>;
   private readonly settings: ReturnType<typeof useSettingsStore>;
@@ -82,6 +87,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.agentIntegrations = useAgentIntegrationsStore(opts.pinia);
     this.seen = useSeenStore(opts.pinia);
     this.view = useViewStore(opts.pinia);
+    this.displays = useDisplayStore(opts.pinia);
     this.machines = useMachinesStore(opts.pinia);
     this.settings = useSettingsStore(opts.pinia);
     this.commands = useCommandsStore(opts.pinia);
@@ -263,6 +269,9 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       // 20260927-agent-graph。グラフ画面はダイアログの 1 枠とは別の状態（`view.graphOpen`）。閉じるのは画面自身（今は Esc・閉じるボタン。開いたのと同じキーで閉じるのは 03-web-graph の GraphView で足す）。
       case "openGraph":
         this.view.openGraph();
+        return;
+      case "focusDisplay":
+        void this.focusDisplay();
         return;
       // 20261004-subagent-display。フォーカスしている pane のエージェントの一覧を開く。件数が 0・分からない（報告を受けていない）・
       // エージェントが居ないときは何もしない（開いても見るものが無い。サイドバーの件数のボタンが 1 件以上のときだけ出るのと同じ）。
@@ -937,7 +946,11 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     void this.conn
       .request("pane.move_to_tab", { paneId, targetTabId })
       .then((r) => {
-        if (!r.ok) return;
+        if (!r.ok) {
+          // サーバが断った（別の worktree の workspace。20261008-web-tab-dnd）。理由の無い ok:false は今までどおり黙る。
+          if (r.reason) this.view.toast(paneMoveBlockMessage(r.reason));
+          return;
+        }
         if (this.view.workspaceId !== originWorkspaceId || this.view.tabId !== originTabId) return;
         const targetTab = this.session.tabs.get(targetTabId);
         // 移動先 tab がまだ同期されていなければ何もしない（`movePaneToNewTab` の `!r.tab` と対称。
@@ -957,12 +970,29 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
    * （応答を待つ間に view が動いていたら追わないことも含めて同じ。review round1 の should 指摘）。
    */
   movePaneToNewTab(paneId: string, targetWorkspaceId: string): void {
+    // 別の worktree の workspace へは送らずに知らせる（20261008-web-tab-dnd）。移動元・移動先がストアに無ければ確認を飛ばして送る
+    // （古いサーバの workspace〔worktreeKey 無し〕は lenient で断らず、サーバに任せる）。
+    const pane = this.session.panes.get(paneId);
+    const sourceTab = pane ? this.session.tabs.get(pane.tabId) : undefined;
+    const source = sourceTab ? this.session.workspaces.get(sourceTab.workspaceId) : undefined;
+    const target = this.session.workspaces.get(targetWorkspaceId);
+    if (source && target) {
+      const block = paneMoveBlock(source, target, { lenient: true });
+      if (block) {
+        this.view.toast(paneMoveBlockMessage(block));
+        return;
+      }
+    }
     const originWorkspaceId = this.view.workspaceId;
     const originTabId = this.view.tabId;
     void this.conn
       .request("pane.move_to_new_tab", { paneId, targetWorkspaceId })
       .then((r) => {
-        if (!r.ok || !r.tab) return;
+        if (!r.ok) {
+          if (r.reason) this.view.toast(paneMoveBlockMessage(r.reason));
+          return;
+        }
+        if (!r.tab) return;
         if (this.view.workspaceId !== originWorkspaceId || this.view.tabId !== originTabId) return;
         this.view.setView(targetWorkspaceId, r.tab.id);
         this.view.focusPane(paneId);
@@ -1031,6 +1061,36 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   private closePane(): void {
     const paneId = this.view.focusedPaneId;
     if (paneId) this.closePaneById(paneId);
+  }
+
+  /**
+   * `focus_display`（`prefix+i`）: フォーカス中の pane の、選ばれているパネル（たたんであれば戻す）、無ければ最初の帯の枠へフォーカスを移す。
+   * 面が無ければトースト。パネルを広げた直後は枠がまだ載っていないので、載るのを（数回）待つ。
+   */
+  async focusDisplay(): Promise<void> {
+    const paneId = this.view.focusedPaneId;
+    const store = this.displays;
+    const target = paneId ? (store.activePanelOf(paneId) ?? store.bandsOf(paneId)[0] ?? null) : null;
+    if (!paneId || !target) {
+      this.view.toast("この pane に表示はありません");
+      return;
+    }
+    if (target.kind === "panel" && store.collapsed.has(paneId)) store.setCollapsed(paneId, false);
+    for (let i = 0; i < 5; i++) {
+      if (focusFrame(target.id)) return;
+      await nextTick();
+    }
+    // モバイルにはパネルを置く場所が無い（枠が載っていない）。重ね表示を開く（トーストは出さない）。
+    if (this.displays.sheetAvailable && target.kind === "panel") {
+      this.displays.sheetRequest++;
+      return;
+    }
+    this.view.toast("表示を出せません（pane が狭い、または読み込み中です）");
+  }
+
+  /** 右クリックのメニュー「表示をすべて閉じる」: その pane の表示の面（パネル・帯）を全部閉じる（20261007-soda-extensions）。 */
+  dismissDisplays(paneId: string): void {
+    void this.conn.request("display.dismiss", { paneId }).catch(() => undefined);
   }
 
   /** T22（`ContextMenu`）から任意の pane を対象に呼ぶ（フォーカス中とは限らない）。 */
@@ -1476,6 +1536,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.settings.newCwdPolicy = loadNewCwdPolicy(raw["newCwdPolicy"]);
     this.settings.newCwdPath = loadNewCwdPath(raw["newCwdPath"]);
     this.settings.shellCwdTracking = loadShellCwdTracking(raw["shellCwdTracking"]); // 20260928-windows-pane-cwd
+    this.settings.displayScriptEnabled = loadDisplayScriptEnabled(raw["displayScriptEnabled"]); // 20261007-soda-extensions
     const themePrefs = loadThemePrefs(raw);
     this.settings.theme = themePrefs.theme;
     this.settings.themeAuto = themePrefs.auto;

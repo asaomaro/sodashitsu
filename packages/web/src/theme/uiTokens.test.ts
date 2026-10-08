@@ -286,7 +286,8 @@ describe("部品の CSS の透明度", () => {
     eager: true,
   }) as Record<string, string>;
   // `[aria-disabled="true"]` も無効な部品（Tab で辿れるよう `disabled` の代わりに使う。20260927-multi-host-machines の切れているマシンの行）。
-  const EXEMPT = [/:disabled/, /\[aria-disabled="true"\]/, /\.help-dialog-grayed/, /\.state-icon/];
+  // `.pane-frame-main-dimmed`: 表示の枠に入力が届いている間、端末を薄くする（20261007-soda-extensions。0.55 は設計の指定。文字を読ませる薄め方ではなく、入力先が端末でないことを示す）。
+  const EXEMPT = [/:disabled/, /\[aria-disabled="true"\]/, /\.help-dialog-grayed/, /\.state-icon/, /\.pane-frame-main-dimmed/];
 
   it("無効な部品・未対応の行・状態の丸を除き、opacity は MUTED_TEXT_ALPHA 以上", () => {
     const found: string[] = [];
