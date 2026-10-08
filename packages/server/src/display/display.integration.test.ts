@@ -9,6 +9,7 @@ import {
   PANE_OP_DISPLAY_CLOSE,
   PANE_OP_DISPLAY_FEATURES,
   PANE_OP_DISPLAY_LIST,
+  PANE_OP_DISPLAY_SEND,
   PANE_OP_DISPLAY_SET,
   PANE_OP_DISPLAY_WAIT,
   type DisplayChunk,
@@ -131,7 +132,7 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
       cleanups.push(() => c.ws.close());
       return c;
     };
-    const browser = async (features = ["panel", "band", "actions"]) => {
+    const browser = async (features = ["panel", "band", "actions", "script-html"]) => {
       const b = await open("desktop");
       await b.request("display.subscribe", { features });
       return b;
@@ -273,7 +274,7 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
 
     // 画面の報告 navigated
     const s2 = await cli.request<{ display: DisplayInfo }>("display.set", { paneId: paneA, ...SET("again") });
-    expect(await b.request("display.report", { id: s2.display.id, problem: "navigated" })).toEqual({ closed: ["again"] });
+    expect(await b.request("display.report", { id: s2.display.id, problem: "navigated", paneId: paneA, format: "html" })).toEqual({ closed: ["again"] });
     expect(await b.waitForEvent("display.removed", 2)).toMatchObject({ name: "again", reason: "navigated" });
     expect(await cli.request("display.wait", { paneId: paneA, since: 2, timeoutMs: 1000 })).toMatchObject({ events: [{ type: "display.closed", reason: "navigated" }] });
   });
@@ -332,7 +333,7 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
     expect(await b.waitForEvent("display.removed")).toMatchObject({ paneId: paneB, name: "x", reason: "pane_closed" });
     await expect(cli.request("display.list", { paneId: paneB })).rejects.toMatchObject({ code: "not_found" });
     b.ws.close();
-    await vi.waitFor(async () => expect(await cli.request("display.features", {})).toMatchObject({ renderers: { panel: 0, band: 0, actions: 0 } }));
+    await vi.waitFor(async () => expect(await cli.request("display.features", {})).toMatchObject({ renderers: { panel: 0, band: 0, actions: 0, scriptHtml: 0 } }));
   });
 
   it("サーバの停止で待っている受け口の wait が終わり、timer を残さない", async () => {
@@ -341,5 +342,100 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
     await new Promise((r) => setTimeout(r, 50));
     await server.close();
     await w.closed; // 閉じられる（返事は書かれても書かれなくてもよい）
+  });
+
+  // --- PR3: スクリプトが動く形式 -------------------------------------------------------------------
+  const SCRIPT = (name: string, extra: Record<string, unknown> = {}) => ({ name, kind: "panel", format: "script-html", content: "<script>document.body.append('x')</script>", ...extra });
+
+  it("ログインなしで script-html を set → send → 名乗った /ws の接続に display.message が届く。action の出来事に source が付く", async () => {
+    const { paneA, sockPath, browser, open } = await start();
+    const b = await browser();
+    const other = await open("desktop");
+    await other.request("display.subscribe", { features: ["panel"] }); // script-html を名乗らない
+    const set = okResult<{ display: DisplayInfo; renderers: { scriptHtml: number }; epoch: string; next: number }>(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g")));
+    expect(set.display.format).toBe("script-html");
+    expect(set.renderers.scriptHtml).toBe(1);
+    const sent = okResult<{ delivered: number }>(await call(sockPath, PANE_OP_DISPLAY_SEND, paneA, { name: "g", data: { n: 1, list: [1, 2] } }));
+    expect(sent).toEqual({ delivered: 1 });
+    expect(await b.waitForEvent("display.message")).toEqual({ id: set.display.id, data: { n: 1, list: [1, 2] } });
+    // 静的な形式の面への send は invalid_params・64 KiB 超も
+    okResult(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SET("st")));
+    expect(await call(sockPath, PANE_OP_DISPLAY_SEND, paneA, { name: "st", data: 1 })).toMatchObject({ ok: false, error: { code: "invalid_params" } });
+    expect(await call(sockPath, PANE_OP_DISPLAY_SEND, paneA, { name: "g", data: "x".repeat(64 * 1024) })).toMatchObject({ ok: false, error: { code: "invalid_params" } });
+    expect(await call(sockPath, PANE_OP_DISPLAY_SEND, paneA, { name: "nope", data: 1 })).toMatchObject({ ok: false, error: { code: "display_closed" } });
+    // source
+    await b.request("display.action", { id: set.display.id, rev: 1, action: "pick", data: { id: "3" } });
+    const stId = okResult<{ displays: DisplayInfo[] }>(await call(sockPath, PANE_OP_DISPLAY_LIST, paneA, {})).displays.find((d) => d.name === "st")!.id;
+    await b.request("display.action", { id: stId, rev: 1, action: "static-go" });
+    const w = okResult<{ events: DisplayEvent[] }>(await call(sockPath, PANE_OP_DISPLAY_WAIT, paneA, { since: 0, epoch: set.epoch, timeoutMs: 1000 }));
+    expect(w.events).toMatchObject([
+      { type: "display.action", name: "g", action: "pick", source: "script" },
+      { type: "display.action", name: "st", action: "static-go", source: "static" },
+    ]);
+  });
+
+  it("/ws の経路でも同じ: display.send と features（format:script-html・send）。script-html を名乗らない接続だけなら delivered 0", async () => {
+    const { paneA, open, browser } = await start();
+    const cli = await open("external");
+    const f = await cli.request<{ features: string[]; limits: { sendBytes: number }; renderers: { scriptHtml: number } }>("display.features", {});
+    expect(f.features).toEqual(expect.arrayContaining(["format:script-html", "send"]));
+    expect(f.limits.sendBytes).toBe(64 * 1024);
+    expect(f.renderers.scriptHtml).toBe(0);
+    await cli.request("display.set", { paneId: paneA, ...SCRIPT("g") });
+    expect(await cli.request("display.send", { paneId: paneA, name: "g", data: [1] })).toEqual({ delivered: 0 });
+    const b = await browser();
+    expect(await cli.request("display.send", { paneId: paneA, name: "g", data: [2] })).toEqual({ delivered: 1 });
+    expect((await b.waitForEvent("display.message"))["data"]).toEqual([2]);
+  });
+
+  it("pane A を名乗って pane B の面へ send できない（引数に paneId を載せても）", async () => {
+    const { paneA, sockPath, open, newPane, browser } = await start();
+    const cli = await open("external");
+    const paneB = await newPane(cli);
+    const b = await browser();
+    await cli.request("display.set", { paneId: paneB, ...SCRIPT("secret") });
+    await b.waitForEvent("display.updated");
+    // A からは B の名前の面が見えない
+    expect(await call(sockPath, PANE_OP_DISPLAY_SEND, paneA, { name: "secret", data: 1 })).toMatchObject({ ok: false, error: { code: "display_closed" } });
+    // paneId を載せたら invalid_params（strict）
+    expect(await call(sockPath, PANE_OP_DISPLAY_SEND, paneA, { paneId: paneB, name: "secret", data: 1 })).toMatchObject({ ok: false, error: { code: "invalid_params" } });
+    expect(b.eventsOf("display.message")).toEqual([]);
+  });
+
+  it("report(focus_steal) を 2 回 → 受け口から close → set（面の id が変わる）→ もう 1 回で閉じ、wait に focus_steal が出て、直後の script-html の set は display_busy・html の set は通る", async () => {
+    const { paneA, sockPath, browser, open } = await start();
+    const b = await browser();
+    const b2 = await open("desktop");
+    await b2.request("display.subscribe", { features: ["panel", "script-html"] });
+    const first = okResult<{ display: DisplayInfo; epoch: string; next: number }>(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g")));
+    const rep = (cl: Client, id: string) => cl.request<{ closed: string[]; steals: number }>("display.report", { id, problem: "focus_steal", paneId: paneA, format: "script-html" });
+    expect(await rep(b, first.display.id)).toEqual({ closed: [], steals: 1 });
+    expect(await rep(b2, first.display.id)).toEqual({ closed: [], steals: 2 }); // 2 つの接続から 1 回ずつ
+    expect(okResult(await call(sockPath, PANE_OP_DISPLAY_CLOSE, paneA, { name: "g" }))).toEqual({ closed: ["g"] });
+    const second = okResult<{ display: DisplayInfo }>(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g")));
+    expect(second.display.id).not.toBe(first.display.id);
+    const wait = send(sockPath, { op: PANE_OP_DISPLAY_WAIT, paneId: paneA, params: { epoch: first.epoch, since: 1, timeoutMs: 20_000 } });
+    const w = await wait;
+    await new Promise((r) => setTimeout(r, 50));
+    expect(await rep(b, second.display.id)).toEqual({ closed: ["g"], steals: 3 });
+    const reply = okResult<{ events: DisplayEvent[] }>(JSON.parse(await w.closed) as PaneSocketResponse);
+    expect(reply.events).toMatchObject([{ type: "display.closed", name: "g", reason: "focus_steal" }]);
+    expect(await b.waitForEvent("display.removed", 2)).toMatchObject({ name: "g", reason: "focus_steal" });
+    expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g2"))).toMatchObject({ ok: false, error: { code: "display_busy" } });
+    expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SET("h"))).toMatchObject({ ok: true });
+    // 閉じた後の知らせ（面はもう無い）は数えられず、成功のまま（冷却は延びない）
+    expect(await rep(b, second.display.id)).toMatchObject({ closed: [] });
+  });
+
+  it("閉じた直後の focus_steal も、添えられた paneId・format で数えられる（close の後に 3 回目が着いても冷却に入る）", async () => {
+    const { paneA, sockPath, browser } = await start();
+    const b = await browser();
+    const set = okResult<{ display: DisplayInfo }>(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g")));
+    const rep = () => b.request<{ closed: string[]; steals: number }>("display.report", { id: set.display.id, problem: "focus_steal", paneId: paneA, format: "script-html" });
+    await rep();
+    await rep();
+    okResult(await call(sockPath, PANE_OP_DISPLAY_CLOSE, paneA, { name: "g" }));
+    expect(await rep()).toMatchObject({ closed: [], steals: 3 });
+    expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g"))).toMatchObject({ ok: false, error: { code: "display_busy" } });
   });
 });

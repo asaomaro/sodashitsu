@@ -524,6 +524,9 @@ export type DisplayListParams = z.infer<typeof DisplayListParams>;
 export const DisplayWaitParams = z.object({ paneId, ...displayWaitFields });
 export type DisplayWaitParams = z.infer<typeof DisplayWaitParams>;
 /** 機能確認（引数なし）。古いサーバは `not_found`（知らない方式）を返す。 */
+/** スクリプトが動く面へデータを送る。`data` は JSON の値（64 KiB までの検査は `checkDisplaySend`）。 */
+export const DisplaySendParams = z.object({ paneId, name: displayName, data: z.unknown() });
+export type DisplaySendParams = z.infer<typeof DisplaySendParams>;
 export const DisplayFeaturesParams = z.object({});
 export type DisplayFeaturesParams = z.infer<typeof DisplayFeaturesParams>;
 /** この接続を「面を出せる画面」として登録し、全 pane の面の見出しを受け取る（接続のたびに呼ぶ）。`features` の知らない値はサーバが捨てる。 */
@@ -548,7 +551,7 @@ export const DisplayDismissParams = z.object({ id: displayId.optional(), paneId:
 export type DisplayDismissParams = z.infer<typeof DisplayDismissParams>;
 /**
  * 画面が、枠の異常（別のページへ移った・応答しない）を知らせる。その面を閉じる。
- * `paneId`・`format` は、画面が描いていた枠のもの（任意。この版のサーバは使わず、受け流す。後の版が、面がもう無いときの数え方に使う）。
+ * `paneId`・`format` は、画面が描いていた枠のもの（任意。サーバは、面がもう無い・形式が替わっているときの数え方に使う）。
  */
 export const DisplayReportParams = z.object({
   id: displayId,
@@ -557,6 +560,15 @@ export const DisplayReportParams = z.object({
   format: z.string().max(64).optional(),
 });
 export type DisplayReportParams = z.infer<typeof DisplayReportParams>;
+/** `display.report` の結果。`steals` は `focus_steal` のとき、その pane の今の取られた回数。 */
+export interface DisplayReportResult {
+  closed: string[];
+  steals?: number;
+}
+export interface DisplaySendResult {
+  /** `script-html` を出せると名乗った画面の数（0 でも成功）。 */
+  delivered: number;
+}
 export interface DisplayClosedResult {
   /** 閉じた面の名前（無ければ空）。 */
   closed: string[];
@@ -578,6 +590,8 @@ export const PaneDisplayListParams = z.strictObject({});
 export type PaneDisplayListParams = z.infer<typeof PaneDisplayListParams>;
 export const PaneDisplayWaitParams = z.strictObject(displayWaitFields);
 export type PaneDisplayWaitParams = z.infer<typeof PaneDisplayWaitParams>;
+export const PaneDisplaySendParams = z.strictObject({ name: displayName, data: z.unknown() });
+export type PaneDisplaySendParams = z.infer<typeof PaneDisplaySendParams>;
 export const PaneDisplayFeaturesParams = z.strictObject({});
 export type PaneDisplayFeaturesParams = z.infer<typeof PaneDisplayFeaturesParams>;
 
@@ -1037,6 +1051,7 @@ export const METHOD_SCHEMAS = {
   "display.list": DisplayListParams,
   "display.wait": DisplayWaitParams,
   "display.features": DisplayFeaturesParams,
+  "display.send": DisplaySendParams,
   "display.subscribe": DisplaySubscribeParams,
   "display.get": DisplayGetParams,
   "display.action": DisplayActionParams,
@@ -1148,7 +1163,8 @@ export interface MethodResultMap {
   "display.get": DisplayChunk;
   "display.action": Record<string, never>;
   "display.dismiss": DisplayClosedResult;
-  "display.report": DisplayClosedResult;
+  "display.report": DisplayReportResult;
+  "display.send": DisplaySendResult;
   "file.info": FileInfoResult;
   "file.resolve": FileResolveResult;
   "file.open": Record<string, never>;

@@ -99,14 +99,15 @@ describe("表示の面の受け口の操作（20261007-soda-extensions）", () =
     expect(PANE_SOCKET_MAX_LINE_BYTES).toBe(4 * 1024 * 1024);
   });
 
-  it("操作名の定数 5 つ（ask とは別の名前）", async () => {
+  it("操作名の定数 6 つ（ask とは別の名前）", async () => {
     const m = await import("./paneSocket.js");
-    expect([m.PANE_OP_DISPLAY_SET, m.PANE_OP_DISPLAY_CLOSE, m.PANE_OP_DISPLAY_LIST, m.PANE_OP_DISPLAY_WAIT, m.PANE_OP_DISPLAY_FEATURES]).toEqual([
+    expect([m.PANE_OP_DISPLAY_SET, m.PANE_OP_DISPLAY_CLOSE, m.PANE_OP_DISPLAY_LIST, m.PANE_OP_DISPLAY_WAIT, m.PANE_OP_DISPLAY_FEATURES, m.PANE_OP_DISPLAY_SEND]).toEqual([
       "display.set",
       "display.close",
       "display.list",
       "display.wait",
       "display.features",
+      "display.send",
     ]);
   });
 

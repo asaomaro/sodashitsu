@@ -200,6 +200,14 @@ export interface DisplayRemovedEvent {
   data: { id: string; paneId: string; name: string; reason: DisplayClosedReasonValue };
 }
 
+/**
+ * `display.send` のデータ（スクリプトが動く面へ）。保存しない。その面の枠を描いている画面だけが、枠へ渡す。ほかは捨てる。
+ */
+export interface DisplayMessageEvent {
+  event: "display.message";
+  data: { id: string; data: unknown };
+}
+
 export type ServerEvent =
   | WorkspaceCreatedEvent
   | WorkspaceUpdatedEvent
@@ -232,6 +240,7 @@ export type ServerEvent =
   | AskOpenedEvent
   | AskClosedEvent
   | DisplayUpdatedEvent
-  | DisplayRemovedEvent;
+  | DisplayRemovedEvent
+  | DisplayMessageEvent;
 
 export type ServerEventName = ServerEvent["event"];

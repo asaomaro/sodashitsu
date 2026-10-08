@@ -292,7 +292,7 @@ describe("DisplayService.subscribe / renderers / features", () => {
     s.displays.set("p2", body("b"));
     const r = s.displays.subscribe("b1", ["panel", "band", "actions", "script-html", "x"]);
     expect(r.displays.map((d) => d.name)).toEqual(["a", "b"]);
-    expect(s.displays.features().renderers).toMatchObject({ panel: 1, band: 1, actions: 1 });
+    expect(s.displays.features().renderers).toMatchObject({ panel: 1, band: 1, actions: 1, scriptHtml: 1 });
   });
 
   it("renderers は名乗った種類ごとに数える。再度の subscribe は置き換え。切断・種類の変更で外れる", () => {
@@ -320,8 +320,8 @@ describe("DisplayService.subscribe / renderers / features", () => {
     const s = setup();
     const f = s.displays.features();
     expect(f.epoch).toBe(s.displays.epoch);
-    expect(f.features).toEqual(expect.arrayContaining(["panel", "band", "format:text", "format:markdown", "format:html", "actions"]));
-    expect(f.limits).toMatchObject({ contentBytes: 2 * 1024 * 1024, requestLineBytes: 4 * 1024 * 1024, serverBytes: 32 * 1024 * 1024 });
+    expect(f.features).toEqual(expect.arrayContaining(["panel", "band", "format:text", "format:markdown", "format:html", "format:script-html", "actions", "send"]));
+    expect(f.limits).toMatchObject({ contentBytes: 2 * 1024 * 1024, sendBytes: 64 * 1024, requestLineBytes: 4 * 1024 * 1024, serverBytes: 32 * 1024 * 1024 });
   });
 
   it("epoch は作るたびに違う", () => {
@@ -423,7 +423,7 @@ describe("DisplayService.action / dismiss / report", () => {
     const w = s.displays.wait("p1", { timeoutMs: 5000 }, {});
     s.displays.action("b1", { id: "d1", rev: 1, action: "go", data: { a: "b" } });
     const r = await w;
-    expect(r.events).toEqual([{ type: "display.action", seq: 1, paneId: "p1", name: "main", rev: 1, action: "go", data: { a: "b" }, at: expect.any(String) }]);
+    expect(r.events).toEqual([{ type: "display.action", seq: 1, paneId: "p1", name: "main", rev: 1, action: "go", data: { a: "b" }, at: expect.any(String), source: "static" }]);
     expect(errCode(() => s.displays.action("b2", { id: "d1", rev: 1, action: "go" }))).toBe("display_closed");
     expect(errCode(() => s.displays.action("b1", { id: "zzz", rev: 1, action: "go" }))).toBe("display_closed");
   });
@@ -472,11 +472,13 @@ describe("DisplayService.action / dismiss / report", () => {
     expect(s.events.filter((e) => e.event === "display.removed").map((e) => (e.data as { reason: string }).reason)).toEqual(["dismissed", "dismissed"]);
   });
 
-  it("report: navigated・unresponsive は、その面を閉じて理由を problem のまま列に入れる。名乗っていない接続は display_closed。無い id は成功", async () => {
+  it("report: navigated・unresponsive は、その面を閉じて理由を problem のまま列に入れる。名乗っていない接続は display_closed。paneId の無い古い形で面が無ければ display_closed", async () => {
     const s = ready();
     s.displays.set("p1", body("other"));
     expect(errCode(() => s.displays.report("b2", { id: "d1", problem: "navigated" }))).toBe("display_closed");
-    expect(s.displays.report("b1", { id: "zzz", problem: "navigated" })).toEqual({ closed: [] });
+    expect(errCode(() => s.displays.report("b1", { id: "zzz", problem: "navigated" }))).toBe("display_closed");
+    // 添えられた paneId・format で数える。数えるものの無い知らせ（静的な形式）は成功の空
+    expect(s.displays.report("b1", { id: "zzz", problem: "navigated", paneId: "p1", format: "html" })).toEqual({ closed: [] });
     const w = s.displays.wait("p1", { timeoutMs: 5000 }, {});
     expect(s.displays.report("b1", { id: "d1", problem: "navigated" })).toEqual({ closed: ["main"] });
     expect((await w).events).toMatchObject([{ type: "display.closed", name: "main", reason: "navigated" }]);
@@ -696,5 +698,307 @@ describe("DisplayService: 列の seq", () => {
     expect(s.displays.set("p2", body("x", { content: "y" })).next).toBe(1);
     const ev = (await s.displays.wait("p1", { since: 0, timeoutMs: 1000 }, {})).events as DisplayEvent[];
     expect(ev.map((e) => e.seq)).toEqual([1, 2]);
+  });
+});
+
+
+// --- PR3: スクリプトが動く形式（send・取られた回数と冷却・source）---------------------------------------
+const sbody = (name = "g", extra: Record<string, unknown> = {}) => ({ name, kind: "panel", format: "script-html", content: "<script>1</script>", ...extra });
+const COOL = 300_000;
+
+describe("DisplayService.send", () => {
+  function ready() {
+    const s = setup();
+    s.displays.set("p1", sbody("g"));
+    s.displays.set("p1", body("st"));
+    s.displays.subscribe("b1", ["panel", "script-html"]);
+    return s;
+  }
+
+  it("script-html の面へ送ると、bus に display.message が出て、delivered は script-html を名乗った画面の数", () => {
+    const s = ready();
+    s.displays.subscribe("b2", ["panel"]); // script-html を名乗らない
+    expect(s.displays.send("p1", { name: "g", data: { n: 1 } })).toEqual({ delivered: 1 });
+    expect(s.events.filter((e) => e.event === "display.message")).toEqual([{ event: "display.message", data: { id: "d1", data: { n: 1 } } }]);
+    s.displays.subscribe("b2", ["panel", "script-html"]);
+    expect(s.displays.send("p1", { name: "g", data: [1] }).delivered).toBe(2);
+  });
+
+  it("script-html を名乗る画面が無くても成功（delivered 0）", () => {
+    const s = setup();
+    s.displays.set("p1", sbody("g"));
+    expect(s.displays.send("p1", { name: "g", data: 1 })).toEqual({ delivered: 0 });
+  });
+
+  it("面が無い／静的な形式／64 KiB 超／pane が無い", () => {
+    const s = ready();
+    expect(errCode(() => s.displays.send("p1", { name: "zz", data: 1 }))).toBe("display_closed");
+    expect(errCode(() => s.displays.send("p1", { name: "st", data: 1 }))).toBe("invalid_params");
+    expect(errCode(() => s.displays.send("p1", { name: "g", data: "x".repeat(64 * 1024) }))).toBe("invalid_params");
+    expect(errCode(() => s.displays.send("p1", { name: "g", data: "x".repeat(64 * 1024 - 2) }))).toBe("no-throw");
+    expect(errCode(() => s.displays.send("nope", { name: "g", data: 1 }))).toBe("not_found");
+  });
+
+  it("保存しない（あとから名乗った画面には届かない）・ログに data を書かない", () => {
+    const s = ready();
+    s.displays.send("p1", { name: "g", data: { secret: "SEKRET-DATA" } });
+    expect(JSON.stringify(s.logs)).not.toContain("SEKRET-DATA");
+    expect(s.displays.get("b1", "d1", 0).base64).toBe(Buffer.from("<script>1</script>").toString("base64"));
+  });
+
+  it("pane の send の桶（20 回）を超えたら display_busy。1 秒で戻る。別の pane は別の桶", () => {
+    const s = ready();
+    s.displays.set("p2", sbody("g"));
+    for (let i = 0; i < 20; i++) s.displays.send("p1", { name: "g", data: i });
+    expect(errCode(() => s.displays.send("p1", { name: "g", data: 20 }))).toBe("display_busy");
+    expect(errCode(() => s.displays.send("p2", { name: "g", data: 0 }))).toBe("no-throw");
+    s.clock.advance(1000);
+    expect(errCode(() => s.displays.send("p1", { name: "g", data: 21 }))).toBe("no-throw");
+  });
+});
+
+describe("DisplayService.action の source", () => {
+  it("script-html の面からは script、静的な面からは static（面の形式から決まる）", async () => {
+    const s = setup();
+    s.displays.set("p1", sbody("g"));
+    s.displays.set("p1", body("st"));
+    s.displays.subscribe("b1", ["panel", "actions", "script-html"]);
+    s.displays.action("b1", { id: "d1", rev: 1, action: "a" });
+    s.displays.action("b1", { id: "d2", rev: 1, action: "b" });
+    const r = await s.displays.wait("p1", { since: 0, timeoutMs: 1000 }, {});
+    expect(r.events).toMatchObject([
+      { name: "g", source: "script" },
+      { name: "st", source: "static" },
+    ]);
+  });
+});
+
+describe("DisplayService: 取られた回数と冷却（pane ごと）", () => {
+  function ready() {
+    const s = setup();
+    s.displays.subscribe("b1", ["panel", "actions", "script-html"]);
+    s.displays.subscribe("b2", ["panel", "actions", "script-html"]);
+    return s;
+  }
+  const steal = (s: ReturnType<typeof ready>, id: string, paneId = "p1", client = "b1") =>
+    s.displays.report(client, { id, problem: "focus_steal", paneId, format: "script-html" });
+
+  it("focus_steal は面を閉じず、pane の回数を 1 増やす。3 回目で、その pane の script-html の面を全部閉じる", async () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    s.displays.set("p1", sbody("b"));
+    s.displays.set("p1", body("st"));
+    const w = s.displays.wait("p1", { timeoutMs: 5000 }, {});
+    expect(steal(s, "d1")).toEqual({ closed: [], steals: 1 });
+    expect(steal(s, "d2")).toEqual({ closed: [], steals: 2 });
+    expect(s.displays.list("p1").displays).toHaveLength(3);
+    expect(steal(s, "d1")).toEqual({ closed: ["a", "b"], steals: 3 });
+    // 静的な面は残る
+    expect(s.displays.list("p1").displays.map((d) => d.name)).toEqual(["st"]);
+    const r = await w;
+    expect(r.events.map((e) => (e.type === "display.closed" ? `${e.name}:${e.reason}` : e.type))).toEqual(["a:focus_steal"]);
+    expect((await s.displays.wait("p1", { since: 0, timeoutMs: 1000 }, {})).events.map((e) => (e as { name: string; reason: string }).reason)).toEqual(["focus_steal", "focus_steal"]);
+  });
+
+  it("冷却の間、script-html の set（同じ名前の静的な面の置き換えを含む）は display_busy で、既にある面は変わらない。静的な set は通る", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    s.displays.set("p1", body("st"));
+    steal(s, "d1");
+    steal(s, "d1");
+    steal(s, "d1");
+    expect(errCode(() => s.displays.set("p1", sbody("a")))).toBe("display_busy");
+    expect(errCode(() => s.displays.set("p1", sbody("st")))).toBe("display_busy");
+    expect(s.displays.list("p1").displays.find((d) => d.name === "st")).toMatchObject({ format: "html", rev: 1 });
+    expect(errCode(() => s.displays.set("p1", body("a")))).toBe("no-throw");
+    expect(errCode(() => s.displays.set("p1", body("st")))).toBe("no-throw");
+    // 別の pane は出せる
+    expect(errCode(() => s.displays.set("p2", sbody("a")))).toBe("no-throw");
+  });
+
+  it("冷却は 5 分の 1 ミリ秒前は断り、5 分ちょうどで通る。明けたら回数も 0 に戻る", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    steal(s, "d1");
+    steal(s, "d1");
+    steal(s, "d1");
+    s.clock.advance(COOL - 1);
+    expect(errCode(() => s.displays.set("p1", sbody("a")))).toBe("display_busy");
+    s.clock.advance(1);
+    expect(errCode(() => s.displays.set("p1", sbody("a")))).toBe("no-throw");
+    // 回数は 0 から（明けた直後に 2 回取っても閉じない）
+    expect(steal(s, "d2")).toEqual({ closed: [], steals: 1 });
+    expect(steal(s, "d2")).toEqual({ closed: [], steals: 2 });
+  });
+
+  it("冷却中の知らせは、回数も冷却も延ばさない", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    steal(s, "d1");
+    steal(s, "d1");
+    steal(s, "d1");
+    s.clock.advance(COOL - 10);
+    // 冷却中に何度知らせが来ても延びない
+    for (let i = 0; i < 5; i++) expect(steal(s, "d1").closed).toEqual([]);
+    expect(s.displays.report("b1", { id: "d1", problem: "navigated", paneId: "p1", format: "script-html" })).toEqual({ closed: [] });
+    s.clock.advance(10);
+    expect(errCode(() => s.displays.set("p1", sbody("a")))).toBe("no-throw");
+  });
+
+  it("回数は、面の id・名前・接続・close→set に依らない（2 回取って close して出し直しても、次の 1 回で閉じる）", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    steal(s, "d1");
+    steal(s, "d1");
+    s.displays.close("p1", { name: "a" });
+    s.displays.set("p1", sbody("a")); // id が変わる
+    expect(s.displays.list("p1").displays[0]!.id).toBe("d2");
+    expect(steal(s, "d2", "p1", "b2")).toEqual({ closed: ["a"], steals: 3 });
+    expect(errCode(() => s.displays.set("p1", sbody("a")))).toBe("display_busy");
+  });
+
+  it("2 つの接続から 1 回ずつ＋もう 1 回でも閉じる。別の名前の面の分も合計で数える", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    s.displays.set("p1", sbody("b"));
+    steal(s, "d1", "p1", "b1");
+    steal(s, "d2", "p1", "b2");
+    expect(steal(s, "d1", "p1", "b1")).toMatchObject({ closed: ["a", "b"], steals: 3 });
+  });
+
+  it("操作の桶を空にした直後の report が数えられる（report は頻度で捨てない）", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    for (let i = 0; i < 100; i++) s.displays.action("b1", { id: "d1", rev: 1, action: "flood" }); // 20 回で桶が空。残りは捨てられる
+    expect(steal(s, "d1")).toEqual({ closed: [], steals: 1 });
+    expect(steal(s, "d1")).toEqual({ closed: [], steals: 2 });
+    expect(steal(s, "d1").closed).toEqual(["a"]);
+  });
+
+  it("close した直後／html に置き換えた直後の id への focus_steal・navigated が、添えられた paneId・format で数えられる（何分後でも・set→close を何百回はさんでも）", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    s.displays.close("p1", { name: "a" });
+    for (let i = 0; i < 30; i++) {
+      s.displays.set("p1", sbody("a"));
+      s.displays.close("p1", { name: "a" });
+      s.clock.advance(1000);
+    }
+    expect(steal(s, "d1")).toEqual({ closed: [], steals: 1 }); // 面はもう無い
+    // 同じ名前を html に置き換えた後でも、形式つきの知らせは数える
+    s.displays.set("p1", body("a"));
+    const htmlId = s.displays.list("p1").displays[0]!.id;
+    expect(steal(s, htmlId)).toEqual({ closed: [], steals: 2 });
+    expect(steal(s, "d1")).toMatchObject({ steals: 3 });
+    expect(errCode(() => s.displays.set("p1", sbody("x")))).toBe("display_busy");
+    // いまの html の面は閉じない
+    expect(s.displays.list("p1").displays.map((d) => d.name)).toEqual(["a"]);
+  });
+
+  it("paneId の無い古い形の知らせで面が無ければ display_closed。面があれば面の値を使う", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    expect(s.displays.report("b1", { id: "d1", problem: "focus_steal" })).toEqual({ closed: [], steals: 1 });
+    s.displays.close("p1", { name: "a" });
+    expect(errCode(() => s.displays.report("b1", { id: "d1", problem: "focus_steal" }))).toBe("display_closed");
+  });
+
+  it("focus_steal の検査: 形式が script-html でない・pane が無い・面が残っていて pane が違う", () => {
+    const s = ready();
+    s.displays.set("p1", body("st"));
+    s.displays.set("p2", sbody("g"));
+    expect(errCode(() => s.displays.report("b1", { id: "d1", problem: "focus_steal" }))).toBe("invalid_params");
+    expect(errCode(() => s.displays.report("b1", { id: "zz", problem: "focus_steal", paneId: "p1", format: "html" }))).toBe("invalid_params");
+    expect(errCode(() => s.displays.report("b1", { id: "zz", problem: "focus_steal", paneId: "nope", format: "script-html" }))).toBe("not_found");
+    expect(errCode(() => s.displays.report("b1", { id: "d2", problem: "focus_steal", paneId: "p1", format: "script-html" }))).toBe("invalid_params");
+    // 名乗っていない接続
+    expect(errCode(() => s.displays.report("x", { id: "d2", problem: "focus_steal", paneId: "p2", format: "script-html" }))).toBe("display_closed");
+  });
+
+  it("script-html の navigated で冷却に入り、同じ pane の script-html の面を全部閉じる（理由 navigated）。unresponsive は冷却に入らない", async () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    s.displays.set("p1", sbody("b"));
+    s.displays.set("p1", body("st"));
+    expect(s.displays.report("b1", { id: "d1", problem: "unresponsive", paneId: "p1", format: "script-html" })).toEqual({ closed: ["a"] });
+    expect(errCode(() => s.displays.set("p1", sbody("a")))).toBe("no-throw");
+    expect(s.displays.report("b1", { id: "d2", problem: "navigated", paneId: "p1", format: "script-html" }).closed.sort()).toEqual(["a", "b"]);
+    expect(errCode(() => s.displays.set("p1", sbody("c")))).toBe("display_busy");
+    expect(s.displays.list("p1").displays.map((d) => d.name)).toEqual(["st"]);
+    const r = await s.displays.wait("p1", { since: 0, timeoutMs: 1000 }, {});
+    expect(r.events.map((e) => (e as { reason: string }).reason)).toEqual(["unresponsive", "navigated", "navigated"]);
+  });
+
+  it("面がもう無くても script-html の navigated は冷却に入る。同じ id が html に置き換わった後の script-html つきの navigated は、いまの面を閉じず冷却に入る", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    s.displays.close("p1", { name: "a" });
+    expect(s.displays.report("b1", { id: "d1", problem: "navigated", paneId: "p1", format: "script-html" })).toEqual({ closed: [] });
+    expect(errCode(() => s.displays.set("p1", sbody("a")))).toBe("display_busy");
+    const s2 = ready();
+    s2.displays.set("p1", sbody("a"));
+    s2.displays.set("p1", body("a")); // 同じ id が html に
+    expect(s2.displays.report("b1", { id: "d1", problem: "navigated", paneId: "p1", format: "script-html" })).toEqual({ closed: [] });
+    expect(s2.displays.list("p1").displays).toHaveLength(1);
+    expect(errCode(() => s2.displays.set("p1", sbody("z")))).toBe("display_busy");
+  });
+
+  it("静的な形式の navigated・unresponsive は冷却に入らない。冷却中の pane の静的な面への navigated は、その面を閉じる（回数と冷却は変えない）", () => {
+    const s = ready();
+    s.displays.set("p1", body("st"));
+    expect(s.displays.report("b1", { id: "d1", problem: "navigated", paneId: "p1", format: "html" })).toEqual({ closed: ["st"] });
+    expect(errCode(() => s.displays.set("p1", sbody("g")))).toBe("no-throw");
+    s.displays.set("p1", body("st2"));
+    steal(s, "d2");
+    steal(s, "d2");
+    steal(s, "d2");
+    expect(s.displays.report("b1", { id: "d3", problem: "navigated", paneId: "p1", format: "html" })).toEqual({ closed: ["st2"] });
+    s.clock.advance(COOL);
+    expect(errCode(() => s.displays.set("p1", sbody("g")))).toBe("no-throw");
+  });
+
+  it("navigated で冷却に入ると、取られた回数の途中でも冷却が優先で、明けたら回数は 0", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    steal(s, "d1");
+    s.displays.report("b1", { id: "d1", problem: "navigated", paneId: "p1", format: "script-html" });
+    s.clock.advance(COOL);
+    s.displays.set("p1", sbody("a"));
+    expect(steal(s, "d2")).toEqual({ closed: [], steals: 1 });
+  });
+
+  it("冷却が明けた直後に数え直しても、明ける前の 5 分に取れた回数は 3 を超えない（冷却中は面が無く、取られない）", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    steal(s, "d1");
+    steal(s, "d1");
+    steal(s, "d1");
+    for (let t = 0; t < 4; t++) {
+      s.clock.advance(COOL / 5);
+      expect(errCode(() => s.displays.set("p1", sbody("a")))).toBe("display_busy");
+    }
+    s.clock.advance(COOL / 5);
+    s.displays.set("p1", sbody("a"));
+    expect(steal(s, "d2").steals).toBe(1);
+  });
+
+  it("pane が閉じたら、回数と冷却は消える", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a"));
+    steal(s, "d1");
+    steal(s, "d1");
+    steal(s, "d1");
+    s.panes.delete("p1");
+    s.bus.publish({ event: "pane.closed", data: { paneId: "p1" } } as ServerEvent);
+    s.panes.add("p1");
+    expect(errCode(() => s.displays.set("p1", sbody("a")))).toBe("no-throw");
+    expect(steal(s, "d2").steals).toBe(1);
+  });
+
+  it("知らせはログに面の名前・pane・理由だけ（題・中身を書かない）", () => {
+    const s = ready();
+    s.displays.set("p1", sbody("a", { title: "SEKRET-TITLE", content: "<script>SEKRET-BODY</script>" }));
+    steal(s, "d1");
+    expect(JSON.stringify(s.logs)).not.toMatch(/SEKRET/);
   });
 });

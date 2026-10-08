@@ -475,7 +475,7 @@ describe("ask.media・ask.features・ask.answer の新しい形（20261004-ask-m
 
 describe("表示の面（display.*。20261007-soda-extensions）", () => {
   const P = "p1";
-  it("METHOD_SCHEMAS に 10 の方式を、それぞれの schema そのもので載せる", async () => {
+  it("METHOD_SCHEMAS に 11 の方式を、それぞれの schema そのもので載せる", async () => {
     const m = await import("./messages.js");
     expect(m.METHOD_SCHEMAS["display.set"]).toBe(m.DisplaySetParams);
     expect(m.METHOD_SCHEMAS["display.close"]).toBe(m.DisplayCloseParams);
@@ -487,6 +487,16 @@ describe("表示の面（display.*。20261007-soda-extensions）", () => {
     expect(m.METHOD_SCHEMAS["display.action"]).toBe(m.DisplayActionParams);
     expect(m.METHOD_SCHEMAS["display.dismiss"]).toBe(m.DisplayDismissParams);
     expect(m.METHOD_SCHEMAS["display.report"]).toBe(m.DisplayReportParams);
+    expect(m.METHOD_SCHEMAS["display.send"]).toBe(m.DisplaySendParams);
+  });
+
+  it("display.send: 受け口の schema は paneId を拒み（strict）、/ws の schema は paneId を要る", async () => {
+    const { DisplaySendParams, PaneDisplaySendParams } = await import("./messages.js");
+    expect(PaneDisplaySendParams.safeParse({ name: "g", data: { a: 1 } }).success).toBe(true);
+    expect(PaneDisplaySendParams.safeParse({ name: "g", data: { a: 1 }, paneId: "other" }).success).toBe(false);
+    expect(PaneDisplaySendParams.safeParse({ name: "a b", data: 1 }).success).toBe(false);
+    expect(DisplaySendParams.safeParse({ paneId: P, name: "g", data: [1] }).success).toBe(true);
+    expect(DisplaySendParams.safeParse({ name: "g", data: [1] }).success).toBe(false);
   });
 
   it("display.set: 中身の型はここでは問わない（規則の外は invalid_display にするため）が、paneId は要る", async () => {
@@ -537,6 +547,7 @@ describe("表示の面（display.*。20261007-soda-extensions）", () => {
     expect(DisplayActionParams.safeParse({ id: "x", rev: 0, action: "go" }).success).toBe(false);
     expect(DisplayReportParams.safeParse({ id: "x", problem: "navigated" }).success).toBe(true);
     expect(DisplayReportParams.safeParse({ id: "x", problem: "unresponsive" }).success).toBe(true);
-    expect(DisplayReportParams.safeParse({ id: "x", problem: "focus_steal" }).success).toBe(false); // この版には無い
+    expect(DisplayReportParams.safeParse({ id: "x", problem: "focus_steal", paneId: "p", format: "script-html" }).success).toBe(true);
+    expect(DisplayReportParams.safeParse({ id: "x", problem: "other" }).success).toBe(false);
   });
 });

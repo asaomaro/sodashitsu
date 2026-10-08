@@ -42,7 +42,7 @@ import { AskService } from "./ask/AskService.js";
 import { PaneOpRegistry } from "./panesocket/PaneOpRegistry.js";
 import { PaneSocket } from "./panesocket/PaneSocket.js";
 import { askFeaturesOp, askOpenOp } from "./panesocket/askOp.js";
-import { displayCloseOp, displayFeaturesOp, displayListOp, displaySetOp, displayWaitOp } from "./panesocket/displayOps.js";
+import { displayCloseOp, displayFeaturesOp, displayListOp, displaySendOp, displaySetOp, displayWaitOp } from "./panesocket/displayOps.js";
 import { DisplayService } from "./display/DisplayService.js";
 import { AskMedia, type ImageFetcher } from "./ask/AskMedia.js";
 import { RemoteImageFetcher } from "./ask/RemoteImageFetcher.js";
@@ -368,6 +368,7 @@ export async function composeServer(
   paneOps.register(displayListOp(displays));
   paneOps.register(displayWaitOp(displays));
   paneOps.register(displayFeaturesOp(displays));
+  paneOps.register(displaySendOp(displays));
   const paneSocket = new PaneSocket({
     registry: paneOps,
     paneExists,

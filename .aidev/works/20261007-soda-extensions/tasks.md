@@ -318,14 +318,14 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
 
 ### PR3: スクリプトが動く形式（`script-html`）
 
-- [ ] T23: protocol の追加（上の「PR3 で変わる型・定数」の表の全部）: `DISPLAY_SCRIPT_FORMAT = "script-html"` を `DISPLAY_FORMATS` に足す（`DISPLAY_STATIC_FORMATS` と分ける）。`DISPLAY_SEND_MAX_BYTES`・`DISPLAY_SEND_RATE`・`DISPLAY_FOCUS_STEAL_MAX`・`DISPLAY_SCRIPT_COOLDOWN_MS`。`DISPLAY_FEATURES` に `format:script-html`・`send`、`DISPLAY_RENDER_FEATURES` に `script-html`、`DisplayRenderers.scriptHtml`、`DisplayLimits.sendBytes`、
+- [x] T23: protocol の追加（上の「PR3 で変わる型・定数」の表の全部）: `DISPLAY_SCRIPT_FORMAT = "script-html"` を `DISPLAY_FORMATS` に足す（`DISPLAY_STATIC_FORMATS` と分ける）。`DISPLAY_SEND_MAX_BYTES`・`DISPLAY_SEND_RATE`・`DISPLAY_FOCUS_STEAL_MAX`・`DISPLAY_SCRIPT_COOLDOWN_MS`。`DISPLAY_FEATURES` に `format:script-html`・`send`、`DISPLAY_RENDER_FEATURES` に `script-html`、`DisplayRenderers.scriptHtml`、`DisplayLimits.sendBytes`、
       閉じた理由に `focus_steal`、`display.action` の出来事に `source`。`/ws` の方式 `display.send`（`{paneId, name, data}`）と、受け口の `PANE_OP_DISPLAY_SEND`・`PaneDisplaySendParams`。`display.report` の `problem` に `focus_steal`（結果に `steals?`。引数の任意の `paneId`・`format` が、T10 でまだ入っていなければ、ここで足す）。イベント `display.message`。`checkDisplaySend(data)`（JSON にして 64 KiB 以下）。
       単体テスト（`script-html` が `checkDisplaySet` を通る・`send` のデータの上限のちょうどと超過・受け口の schema が `paneId` を拒否・`parseDisplayLine` が `source` つきの行を通す）。**静的な形式の定数・検査の動きを変えない**（既存のテストがそのまま通る）
       対象: `packages/protocol/src/display.ts`・`display.test.ts`、`packages/protocol/src/messages.ts`、`packages/protocol/src/paneSocket.ts`、`packages/protocol/src/events.ts`、各テスト
       依存: T2
       AC: AC23, AC29, AC31
       点検: あり
-- [ ] T24: server の追加: `DisplayService.send`（面があるか・`script-html` か・64 KiB・pane の `send` の桶・bus に `display.message`・保存しない・`delivered`）、出来事の `source`（面の形式から。静的な面の操作にも付ける）、`renderers().scriptHtml`、`features()` の値、
+- [x] T24: server の追加: `DisplayService.send`（面があるか・`script-html` か・64 KiB・pane の `send` の桶・bus に `display.message`・保存しない・`delivered`）、出来事の `source`（面の形式から。静的な面の操作にも付ける）、`renderers().scriptHtml`、`features()` の値、
       **pane ごとの取られた回数と冷却**（design「取られた回数と冷却」のとおり。`report` の `focus_steal` は、面を閉じずに pane の回数を 1 増やす〔`script-html` の面だけ。ほかは `invalid_params`〕・
       **`report` は頻度で捨てない**（操作の桶と分ける）・**面がもう無い・形式が替わっている場合も、知らせに添えられた `paneId`・`format` で、その pane に数える**（pane が無ければ `not_found`。面が残っていて pane が違えば `invalid_params`。サーバの側に、閉じた面の控えは持たない）・
       冷却に入るのは「3 回に達した」と「形式が `script-html` の枠について `navigated` が来た」の 2 つだけ・**冷却に入るとき、その pane の `script-html` の面を全部閉じる**・冷却の間は、その pane の `script-html` の `set`〔同じ名前の置き換えを含む〕を `display_busy` で断り、既にある面は変えない・静的な形式は出せる・回数は、冷却が明けたとき・pane が閉じたときだけ 0 に戻る・
