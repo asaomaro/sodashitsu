@@ -1,4 +1,5 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
@@ -234,6 +235,53 @@ describe("composeServer: graph.*（20260927-agent-graph）", () => {
     });
     expect(rekey.error?.code).toBe("invalid_params");
     expect((await getGraph(b)).rev).toBe(2);
+  });
+
+  it("開いている pane のノードは外せず（node_required）、囲いが重なる位置へは動かせない（frame_overlap）。閉じた pane・別のマシンのノードは外せる", async () => {
+    const { server, clients } = await startWithClients(await tempStateDir());
+    const a = clients[0]!;
+    const p1 = server.session.snapshot().panes[0]!.id;
+    const other = await server.session.createWorkspace(tmpdir(), "other");
+    const p2 = other.pane.id;
+    const g0 = await waitForNodes(a, [`local:${p1}`, `local:${p2}`]);
+    const err = async (ops: unknown[], baseRev?: number) =>
+      (await a.request("graph.update", { baseRev: baseRev ?? (await getGraph(a)).rev, ops })).error
+        ?.code;
+    // node_required
+    expect(await err([{ op: "remove_node", key: `local:${p1}` }])).toBe("node_required");
+    expect(await err([{ op: "rekey_node", key: `local:${p1}`, newKey: `local:${p2}` }])).toBe(
+      "node_required",
+    );
+    // frame_overlap: p1 を p2 の囲いの上へ
+    const at2 = g0.nodes.find((n) => n.key === `local:${p2}`)!;
+    expect(await err([{ op: "move_node", key: `local:${p1}`, x: at2.x, y: at2.y }])).toBe(
+      "frame_overlap",
+    );
+    // 断られたものは保存していない（rev も位置も同じ）
+    expect(await getGraph(a)).toEqual(g0);
+    // rev が違うときは、検査より先に rev_conflict（取り直してやり直せる）
+    expect(await err([{ op: "remove_node", key: `local:${p1}` }], g0.rev - 1)).toBe("rev_conflict");
+    // 否定の対照: 別のマシンのノードは足して外せる。重ならない位置への移動は通る。
+    const added = await a.request("graph.update", {
+      baseRev: g0.rev,
+      ops: [{ op: "add_node", key: REMOTE, x: 4000, y: 0 }],
+    });
+    expect(added.error).toBeUndefined();
+    const removed = await a.request("graph.update", {
+      baseRev: g0.rev + 1,
+      ops: [{ op: "remove_node", key: REMOTE }],
+    });
+    expect(removed.error).toBeUndefined();
+    const moved = await a.request("graph.update", {
+      baseRev: g0.rev + 2,
+      ops: [{ op: "move_node", key: `local:${p1}`, x: at2.x + 4000, y: at2.y }],
+    });
+    expect(moved.error).toBeUndefined();
+    // pane を閉じると、ノードは維持の側（GraphPaneCleanup）が消す
+    await a.request("pane.close", { paneId: p2 });
+    await vi.waitFor(async () => {
+      expect((await getGraph(a)).nodes.some((n) => n.key === `local:${p2}`)).toBe(false);
+    });
   });
 
   it("一時停止・再開（全体・線）。知らない線は not_found。履歴は（実行が入るまで）空", async () => {

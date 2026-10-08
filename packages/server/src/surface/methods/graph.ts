@@ -9,6 +9,7 @@ import {
 } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
+import { guardGraphUpdate } from "../../graph/updateGuard.js";
 import {
   GraphInvalidError,
   GraphLinkNotFoundError,
@@ -31,7 +32,14 @@ export function registerGraphMethods(surface: ControlSurface, deps: MethodDeps):
   surface.register("graph.update", {
     schema: GraphUpdateParams,
     handler: (ctx, params) =>
-      mapErrors(() => store.update(params.baseRev, params.ops, ctx.clientId)),
+      mapErrors(() => {
+        // 方式の層の検査（20261008-graph-first D10）: `node_required`・`frame_overlap`。rev が違うときは、検査より先に `rev_conflict`（取り直してやり直せる）。
+        if (params.baseRev === store.get().rev) {
+          const failure = guardGraphUpdate(deps.session, store.get(), params.ops);
+          if (failure !== null) throw new RpcError(failure.code, failure.message);
+        }
+        return store.update(params.baseRev, params.ops, ctx.clientId);
+      }),
   });
   surface.register("graph.pause", {
     schema: GraphPauseParams,
