@@ -88,7 +88,7 @@
 
 ### PR-A: 状態の記憶と既定・帯・帯の行のボタン
 
-- [ ] T1: protocol に指定の 3 項目と定数を足す: `DISPLAY_DOCKS`・`DISPLAY_EDGES`・`DisplayDock`・`DisplayEdge`・`DisplayDockValue`・`DisplayEdgeValue`・`isDisplayDock`・`isDisplayEdge`。`DisplaySetBody` と `DisplayInfo` に `dock?`・`edge?`・`collapsed?`。`checkDisplaySet` の検査（`dock` は panel だけ・`edge` は band だけ・`collapsed` は boolean で、`false` は載せない）。
+- [x] T1: protocol に指定の 3 項目と定数を足す: `DISPLAY_DOCKS`・`DISPLAY_EDGES`・`DisplayDock`・`DisplayEdge`・`DisplayDockValue`・`DisplayEdgeValue`・`isDisplayDock`・`isDisplayEdge`。`DisplaySetBody` と `DisplayInfo` に `dock?`・`edge?`・`collapsed?`。`checkDisplaySet` の検査（`dock` は panel だけ・`edge` は band だけ・`collapsed` は boolean で、`false` は載せない）。
       `messages.ts` の `displaySetFields` に 3 項目（`/ws` と受け口の両方に効く。受け口は `strictObject` のまま）。`DISPLAY_FEATURES` に `layout`（サーバの `features()` は、この定数を返すので、ここで入る）、`DISPLAY_RENDER_FEATURES` に `collapse`・`dock`・`float`、`DisplayRenderers` に同じ 3 つ
       （**型に必須の項目を足すので、サーバの `renderers()` の初めの値〔`DisplayService.ts:489`〕に `collapse: 0, dock: 0, float: 0` を、このタスクで足す**。数える処理は T2）。
       `SharedPrefs` に `displayPanelInitial`・`displayPanelDock`・`displayBandEdge`。`DEVICE_LOCAL_PREF_KEYS` に `displayLayout`。**位置・大きさの項目は足さない**。単体テスト（「テスト方針」の protocol）。既存のテストがそのまま通る
@@ -96,13 +96,13 @@
       依存: なし
       AC: AC7, AC8, AC23
       点検: あり
-- [ ] T2: server: `DisplayService.set` が、検査を通った `dock`・`edge`・`collapsed` を `DisplayInfo` に載せる（無ければ項目ごと無い。置き換えの `set` で、省けば消える）。`renderers()` が `collapse`・`dock`・`float` を数える。配置の状態は持たない。
+- [x] T2: server: `DisplayService.set` が、検査を通った `dock`・`edge`・`collapsed` を `DisplayInfo` に載せる（無ければ項目ごと無い。置き換えの `set` で、省けば消える）。`renderers()` が `collapse`・`dock`・`float` を数える。配置の状態は持たない。
       単体テスト（載る・消える・`list` と `display.updated` に出る・数える・`features()` に `layout`）と、結合テスト（受け口からログインなしで `dock: "bottom"`・`collapsed: true` つきの `set` → 名乗った `/ws` の接続の `display.updated` に 3 項目・`collapse` を名乗った接続が `renderers.collapse` に数えられる・**受け口から、ほかの pane の面は今までどおり触れない**）
       対象: `packages/server/src/display/DisplayService.ts:157-237`（`set`）・`:487-498`（`renderers`）、`DisplayService.test.ts`、`display.integration.test.ts` / 根拠: design「サーバ」
       依存: T1
       AC: AC7, AC8
       点検: あり
-- [ ] T3: sodactl: `display set` に `--dock <値>`・`--edge <値>`・`--collapsed`。検査（`--dock` は `--kind panel` だけ・`--edge` は `--kind band` だけ・値は定数のもの。違えば使い方の誤り＝終了コード 2）。
+- [x] T3: sodactl: `display set` に `--dock <値>`・`--edge <値>`・`--collapsed`。検査（`--dock` は `--kind panel` だけ・`--edge` は `--kind band` だけ・値は定数のもの。違えば使い方の誤り＝終了コード 2）。
       3 つのどれかが付いていたら、送る前に `display.features` を見て、`layout` が無ければ 3 項目を外して送り、結果に `"ignored": [外した項目]` を足し、stderr に 1 行（終了コード 0）。`--features` の `sodactl.features` に `layout`。`USAGE_LINES`・SKILL.md。
       単体テストと、結合テスト（実サーバ: ログインなしの経路と `/ws` の経路で、`list` に 3 項目が出る）。古いサーバの模しは、`display.features` の応答から `layout` を抜いた偽のサーバで（`script-html` の未対応のテストと同じ形）
       対象: `packages/cli/src/cliArgs.ts:82`（`USAGE_LINES`）・`:759-820`（`display set` の引数）、`packages/cli/src/commands/display.ts:330-331` 付近（機能の確かめ）・`:374-375`（要求の組み立て）、各テスト、`packages/cli/src/display.integration.test.ts`、`packages/cli/skills/sodactl/SKILL.md` / 根拠: design「sodactl」、research F13

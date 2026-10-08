@@ -35,3 +35,6 @@ events:
   - { ts: 2026-10-08T08:21:47Z, phase: tasks, event: doccheck, metrics: { stage: start, phase: tasks, mode: delegated, size: 76525 } }
   - { ts: 2026-10-08T08:38:01Z, phase: design, event: doccheck, metrics: { stage: report, phase: design, findings: 8 } }
   - { ts: 2026-10-08T08:38:01Z, phase: tasks, event: doccheck, metrics: { stage: report, phase: tasks, findings: 6 } }
+  - { ts: 2026-10-08T08:43:54Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T1, mode: delegated } }
+  - { ts: 2026-10-08T08:43:54Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T2, mode: delegated } }
+  - { ts: 2026-10-08T08:43:54Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T3, mode: delegated } }
