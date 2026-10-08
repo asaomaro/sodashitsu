@@ -280,7 +280,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       対象: `packages/e2e/src/specs/extensions-settings.spec.ts`（新規）、`packages/e2e/src/support/extensions.ts`（新規）、`packages/e2e/src/support/appServer.ts`、手本 `packages/e2e/src/specs/settings.spec.ts`（`openSettingsByKey`）/ 根拠: research E9・X19、`.aidev/conventions/e2e-observe-browser.md`
       依存: T16, T17
       AC: AC27, AC30, AC31, AC-I3
-- [ ] T19: 文書（PR2 の分）: `docs/extensions.md` に節「設定の画面」（一覧・状態の意味・入切は session ごとにサーバが覚える・ログ・読み直し）。`docs/tui-parity.md`「3. Web 版だけの拡張」の表に 1 行（拡張の一覧・承認: 対象外。端末版は面を出せないので。利用者の設定の拡張は、端末版だけでも動く）
+- [x] T19: 文書（PR2 の分）: `docs/extensions.md` に節「設定の画面」（一覧・状態の意味・入切は session ごとにサーバが覚える・ログ・読み直し）。`docs/tui-parity.md`「3. Web 版だけの拡張」の表に 1 行（拡張の一覧・承認: 対象外。端末版は面を出せないので。利用者の設定の拡張は、端末版だけでも動く）
       対象: `docs/extensions.md`、`docs/tui-parity.md`（表の末尾は W34〔表示の面。161 行〕。次は W35。W34 の行が手本）/ 根拠: research E9・X21
       依存: T16
       AC: AC33
