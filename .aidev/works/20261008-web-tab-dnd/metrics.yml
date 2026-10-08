@@ -1,2 +1,4 @@
 events:
   - { ts: 2026-10-08T03:39:49Z, phase: requirements, event: start }
+  - { ts: 2026-10-08T03:58:15Z, phase: requirements, event: doccheck, metrics: { stage: start, phase: requirements, mode: delegated, size: 16171 } }
+  - { ts: 2026-10-08T03:58:23Z, phase: requirements, event: doccheck, metrics: { stage: report, phase: requirements, findings: 3 } }

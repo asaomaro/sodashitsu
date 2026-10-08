@@ -3,7 +3,7 @@ slug: web-tab-dnd
 current: requirements
 approved: []
 mode: autonomous
-profile: light
+profile: full
 humanGates: []
 maxSendBacks: 3
 dependsOn: []
