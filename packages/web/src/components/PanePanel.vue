@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { DisplayInfo } from "@sodashitsu/protocol";
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { displayLabel, engagedNote } from "../display/displayLabel.js";
 import { placedFrameKey } from "../display/framePage.js";
 import type { DockGroup, Side } from "../display/paneDisplayLayout.js";
 import { useDisplayStore } from "../store/display.js";
+import { useViewStore } from "../store/view.js";
 import DisplayFrame from "./DisplayFrame.vue";
 import DisplayPanelHead from "./DisplayPanelHead.vue";
 
@@ -17,29 +18,42 @@ import DisplayPanelHead from "./DisplayPanelHead.vue";
  * - 大きさは割り付けの結果 `dock`（範囲に丸めた値）。つまみのドラッグの間は大きさを変えず、案内の線だけを動かす（端末の大きさを送り続けない）。
  */
 const props = defineProps<{ paneId: string; side: Side; dock: DockGroup }>();
-/** ドラッグ中の案内の線の大きさ（px。`null` で消す）。 */
-const emit = defineEmits<{ guide: [width: number | null] }>();
+/** ドラッグ中の案内の線（側と、いま指している大きさ px。`null` で消す）。 */
+const emit = defineEmits<{ guide: [g: { side: Side; px: number } | null] }>();
 
 const store = useDisplayStore();
+const view = useViewStore();
 
 const panels = computed(() => props.dock.ids.flatMap((id) => store.infos.get(id) ?? []) as DisplayInfo[]);
 const active = computed(() => panels.value.find((p) => p.id === props.dock.activeId) ?? panels.value[0] ?? null);
 const engaged = computed(() => store.focusedDisplayId !== null && panels.value.some((p) => p.id === store.focusedDisplayId));
 const content = computed(() => (active.value ? store.contents.get(active.value.id) : undefined));
+/** 左右の側は幅・上下の側は高さ（つまみの向き）。 */
+const horizontal = computed(() => props.side === "left" || props.side === "right");
 /** ドラッグ中に案内の線が指している大きさ（無ければ null）。 */
 const dragSize = ref<number | null>(null);
 const shownSize = computed(() => dragSize.value ?? props.dock.size);
-const rootStyle = computed(() => ({ flex: `0 0 ${props.dock.size}px`, width: `${props.dock.size}px` }));
+const rootStyle = computed(() =>
+  horizontal.value ? { flex: `0 0 ${props.dock.size}px`, width: `${props.dock.size}px` } : { flex: `0 0 ${props.dock.size}px`, height: `${props.dock.size}px` },
+);
+const handleLabel = computed(() => (horizontal.value ? "パネルの幅" : "パネルの高さ"));
 
 const clampToRange = (w: number): number => Math.min(props.dock.max, Math.max(props.dock.min, Math.round(w)));
-const drag = useResizeDrag<{ size: number; x: number }>({
-  axis: "x",
+/** ポインタの動き（端末から遠ざかる向きが広がる）から、大きさを決める。右は左へ・下は上へ動かすと広がる。 */
+function sizeFromDelta(startSize: number, dx: number, dy: number): number {
+  if (props.side === "right") return startSize - dx;
+  if (props.side === "left") return startSize + dx;
+  if (props.side === "bottom") return startSize - dy;
+  return startSize + dy;
+}
+const drag = useResizeDrag<{ size: number; x: number; y: number }>({
+  axis: horizontal.value ? "x" : "y",
   enabled: () => true,
-  begin: (ev) => ({ size: props.dock.size, x: ev.clientX }),
+  begin: (ev) => ({ size: props.dock.size, x: ev.clientX, y: ev.clientY }),
   // 大きさは変えない。案内の線だけを動かす（葉の箱が変わらないので、ドラッグの間は端末の大きさ〔client.view〕が送られない）。
   move: (ev, start) => {
-    dragSize.value = clampToRange(start.size - (ev.clientX - start.x));
-    emit("guide", dragSize.value);
+    dragSize.value = clampToRange(sizeFromDelta(start.size, ev.clientX - start.x, ev.clientY - start.y));
+    emit("guide", { side: props.side, px: dragSize.value });
   },
   // 離したとき、1 回だけ確定する（ここで葉の箱が 1 回変わる）。
   commit: () => {
@@ -55,15 +69,25 @@ const drag = useResizeDrag<{ size: number; x: number }>({
   // ダブルクリック: プログラムの指定の大きさへ戻る。
   reset: () => store.clearSideSize(props.paneId, props.side),
 });
+// ダイアログ（設定・グラフなど。modal）が開いたら、ドラッグを確定して終える（`Sidebar`・`Splitter` と同じ）。
+watch(
+  () => view.modalOpen,
+  (open) => {
+    if (open) drag.finish();
+  },
+);
 const KEY_STEP = 16;
 const KEY_STEP_LARGE = 64;
-/** つまみのキー（← で広く・→ で狭く〔つまみが左の縁にあるため〕。Shift で 64px。Home＝最小・End＝最大・Enter＝指定の大きさへ）。 */
+/** 端末の側へ向く矢印（右は ←・左は →・上は ↓・下は ↑）で広く、逆で狭く。 */
+const WIDEN_KEY: Record<Side, string> = { right: "ArrowLeft", left: "ArrowRight", top: "ArrowDown", bottom: "ArrowUp" };
+const NARROW_KEY: Record<Side, string> = { right: "ArrowRight", left: "ArrowLeft", top: "ArrowUp", bottom: "ArrowDown" };
+/** つまみのキー（Shift で 64px。Home＝最小・End＝最大・Enter＝指定の大きさへ）。 */
 function onHandleKey(ev: KeyboardEvent): void {
   const step = ev.shiftKey ? KEY_STEP_LARGE : KEY_STEP;
   const cur = props.dock.size;
   let next: number | null = null;
-  if (ev.key === "ArrowLeft") next = cur + step;
-  else if (ev.key === "ArrowRight") next = cur - step;
+  if (ev.key === WIDEN_KEY[props.side]) next = cur + step;
+  else if (ev.key === NARROW_KEY[props.side]) next = cur - step;
   else if (ev.key === "Home") next = props.dock.min;
   else if (ev.key === "End") next = props.dock.max;
   else if (ev.key === "Enter") {
@@ -102,7 +126,7 @@ function onTabKey(ev: KeyboardEvent): void {
   <aside
     v-if="active"
     class="pane-panel"
-    :class="{ 'pane-panel-engaged': engaged }"
+    :class="[`pane-panel-${side}`, { 'pane-panel-engaged': engaged }]"
     :style="rootStyle"
     role="complementary"
     :aria-label="displayLabel(active)"
@@ -112,11 +136,11 @@ function onTabKey(ev: KeyboardEvent): void {
     :data-display-engaged="engaged ? '1' : '0'"
   >
     <div
-      class="pane-panel-resize resize-handle resize-handle-x"
-      :class="{ 'resize-handle-active': drag.dragging.value }"
+      class="pane-panel-resize resize-handle"
+      :class="[horizontal ? 'resize-handle-x' : 'resize-handle-y', { 'resize-handle-active': drag.dragging.value }]"
       role="separator"
-      aria-orientation="vertical"
-      aria-label="パネルの幅"
+      :aria-orientation="horizontal ? 'vertical' : 'horizontal'"
+      :aria-label="handleLabel"
       :aria-valuenow="shownSize"
       :aria-valuemin="dock.min"
       :aria-valuemax="dock.max"
@@ -166,17 +190,50 @@ function onTabKey(ev: KeyboardEvent): void {
   min-height: 0;
   background: var(--soda-bg, #1e1f29);
   color: var(--soda-fg, #f8f8f2);
+}
+/* 端末に面した縁に、境の線とつまみ。 */
+.pane-panel-right {
   border-left: 1px solid var(--soda-menu-border, #44475a);
 }
-/* 左の縁のつまみ（細い線。当たり判定と強調の線は `resize-handle` が作る）。 */
+.pane-panel-left {
+  border-right: 1px solid var(--soda-menu-border, #44475a);
+}
+.pane-panel-top {
+  border-bottom: 1px solid var(--soda-menu-border, #44475a);
+}
+.pane-panel-bottom {
+  border-top: 1px solid var(--soda-menu-border, #44475a);
+}
+/* つまみ（細い線。当たり判定と強調の線は `resize-handle` が作る）。端末に面した縁。 */
 .pane-panel-resize {
   position: absolute;
+  z-index: 22;
+}
+.pane-panel-right > .pane-panel-resize,
+.pane-panel-left > .pane-panel-resize {
   top: 0;
   bottom: 0;
-  left: -1px;
   width: 2px;
   cursor: col-resize;
-  z-index: 22;
+}
+.pane-panel-right > .pane-panel-resize {
+  left: -1px;
+}
+.pane-panel-left > .pane-panel-resize {
+  right: -1px;
+}
+.pane-panel-top > .pane-panel-resize,
+.pane-panel-bottom > .pane-panel-resize {
+  left: 0;
+  right: 0;
+  height: 2px;
+  cursor: row-resize;
+}
+.pane-panel-top > .pane-panel-resize {
+  bottom: -1px;
+}
+.pane-panel-bottom > .pane-panel-resize {
+  top: -1px;
 }
 .pane-panel-tab:focus-visible {
   outline: 2px solid var(--soda-accent, #6070a1);

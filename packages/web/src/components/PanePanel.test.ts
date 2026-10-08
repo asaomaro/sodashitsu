@@ -17,32 +17,32 @@ const info = (id: string, over: Partial<DisplayInfo> = {}): DisplayInfo => ({
  * 割り付け（`resolvePaneDisplays`）の結果を `PanePanel` に渡す、`PaneFrame` の代わりの入れ物。ストアを読む computed なので、たたむ・幅を変える操作が描画に返る。
  * 右のパネルが出なければ（たたんだ・pane が狭い）何も描かない。
  */
-function mountPanel(infos: DisplayInfo[], paneWidthPx = 1000) {
+function mountPanel(infos: DisplayInfo[], paneWidthPx = 1000, side: "right" | "left" | "top" | "bottom" = "right") {
   const pinia = createPinia();
   setActivePinia(pinia);
   const store = useDisplayStore();
   infos.forEach((i) => store.upsert(i));
-  const guides: (number | null)[] = [];
+  const guides: ({ side: string; px: number } | null)[] = [];
   const Host = defineComponent({
     setup() {
       const layout = computed(() => {
         const mine = store.panelsOf("p1");
-        const right = store.sideSizeOf("p1", "right");
-        const act = store.activeBySide.get("p1|right");
+        const sized = store.sideSizeOf("p1", side);
+        const act = store.activeBySide.get(`p1|${side}`);
         return resolvePaneDisplays({
           paneW: paneWidthPx,
           paneH: 600,
           cellW: 9,
           cellH: 18,
           bands: [],
-          panels: mine.map((d, seq) => ({ id: d.id, seq, size: d.size, dock: "right" as const, collapsed: store.effectiveOf(d).collapsed })),
-          active: act ? { right: act } : {},
-          sideSizes: right !== undefined ? { right } : {},
+          panels: mine.map((d, seq) => ({ id: d.id, seq, size: d.size, dock: side, collapsed: store.effectiveOf(d).collapsed })),
+          active: act ? { [side]: act } : {},
+          sideSizes: sized !== undefined ? { [side]: sized } : {},
           floatRects: {},
           trayEdgeDefault: "top",
         });
       });
-      return () => (layout.value.docks.right ? h(PanePanel, { paneId: "p1", side: "right", dock: layout.value.docks.right, onGuide: (g: number | null) => guides.push(g) }) : null);
+      return () => (layout.value.docks[side] ? h(PanePanel, { paneId: "p1", side, dock: layout.value.docks[side]!, onGuide: (g: { side: string; px: number } | null) => guides.push(g) }) : null);
     },
   });
   const controller = { dismiss: vi.fn(), report: vi.fn(), sendAction: vi.fn(), ensureContent: vi.fn(async () => undefined) };
@@ -197,7 +197,7 @@ describe("PanePanel — 幅のつまみ", () => {
     h.element.dispatchEvent(ev("pointermove", 500)); // 左へ 100 → 広がる
     await s.w.vm.$nextTick();
     expect(widthOf(s.w)).toBe("320px"); // 幅はそのまま
-    expect(s.guides.at(-1)).toBe(420);
+    expect(s.guides.at(-1)).toEqual({ side: "right", px: 420 });
     expect(h.attributes("aria-valuenow")).toBe("420");
     h.element.dispatchEvent(ev("pointerup", 500));
     await s.w.vm.$nextTick();
@@ -235,5 +235,97 @@ describe("PaneBands", () => {
     const small = mk(180);
     expect(small.findAll("[data-pane-band]")).toHaveLength(1);
     expect(small.find("[data-pane-bands-more]").text()).toBe("ほか 1 件");
+  });
+});
+
+describe("PanePanel — 4 つの側", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    setActivePinia(createPinia());
+  });
+  const style = (w: ReturnType<typeof mountPanel>["w"]): CSSStyleDeclaration => (w.find("[data-pane-panel]").element as HTMLElement).style;
+  const ev = (type: string, x: number, y: number) => new PointerEvent(type, { clientX: x, clientY: y, button: 0, pointerId: 1, bubbles: true });
+
+  it("側の属性・クラス・大きさの向き（左右は幅・上下は高さ）・つまみの向きと名前", () => {
+    for (const [side, horizontal] of [["right", true], ["left", true], ["top", false], ["bottom", false]] as const) {
+      const s = mountPanel([info("a", { size: 200 })], 1000, side);
+      const root = s.w.find("[data-pane-panel]");
+      expect(root.attributes("data-display-dock")).toBe(side);
+      expect(root.classes()).toContain(`pane-panel-${side}`);
+      expect(horizontal ? style(s.w).width : style(s.w).height).toBe("200px");
+      const h = s.w.find("[data-pane-panel-resize]");
+      expect(h.attributes("aria-orientation")).toBe(horizontal ? "vertical" : "horizontal");
+      expect(h.attributes("aria-label")).toBe(horizontal ? "パネルの幅" : "パネルの高さ");
+      expect(h.classes()).toContain(horizontal ? "resize-handle-x" : "resize-handle-y");
+      expect(h.attributes("data-display-keepfocus")).toBeDefined();
+      s.w.unmount();
+    }
+  });
+
+  it("つまみのキーは、端末の側へ向く矢印で広く・逆で狭く（右 ←・左 →・上 ↓・下 ↑）。Home・End・Enter", async () => {
+    const keys = { right: ["ArrowLeft", "ArrowRight"], left: ["ArrowRight", "ArrowLeft"], top: ["ArrowDown", "ArrowUp"], bottom: ["ArrowUp", "ArrowDown"] } as const;
+    for (const side of ["right", "left", "top", "bottom"] as const) {
+      const s = mountPanel([info("a", { size: 250 })], 1000, side);
+      const h = () => s.w.find("[data-pane-panel-resize]");
+      await h().trigger("keydown", { key: keys[side][0] });
+      expect(s.store.sideSizeOf("p1", side), side).toBe(266);
+      await h().trigger("keydown", { key: keys[side][1], shiftKey: true });
+      expect(s.store.sideSizeOf("p1", side), side).toBe(202);
+      await h().trigger("keydown", { key: "Home" });
+      expect(s.store.sideSizeOf("p1", side), side).toBe(side === "left" || side === "right" ? 160 : 96);
+      await h().trigger("keydown", { key: "Enter" });
+      expect(s.store.sideSizeOf("p1", side), side).toBeUndefined();
+      s.w.unmount();
+    }
+  });
+
+  it("ドラッグ: 端末から遠ざかる向きに動かすと広がる（右は左へ・左は右へ・上は下へ・下は上へ）。ドラッグの間は大きさを変えず、離して 1 回", async () => {
+    const raf = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 1;
+    });
+    const move: Record<string, [number, number]> = { right: [-100, 0], left: [100, 0], top: [0, 50], bottom: [0, -50] };
+    for (const side of ["right", "left", "top", "bottom"] as const) {
+      const s = mountPanel([info("a", { size: 200 })], 1000, side);
+      const h = s.w.find("[data-pane-panel-resize]");
+      const [dx, dy] = move[side]!;
+      h.element.dispatchEvent(ev("pointerdown", 500, 300));
+      h.element.dispatchEvent(ev("pointermove", 500 + dx, 300 + dy));
+      await s.w.vm.$nextTick();
+      const grown = 200 + Math.abs(dx || dy);
+      expect(s.guides.at(-1), side).toEqual({ side, px: grown });
+      expect(s.store.sideSizeOf("p1", side), side).toBeUndefined(); // まだ記憶に書かない
+      h.element.dispatchEvent(ev("pointerup", 500 + dx, 300 + dy));
+      await s.w.vm.$nextTick();
+      expect(s.store.sideSizeOf("p1", side), side).toBe(grown);
+      expect(s.guides.at(-1)).toBeNull();
+      s.w.unmount();
+    }
+    raf.mockRestore();
+  });
+
+  it("ダイアログ（modal）が開いたら、ドラッグを確定して終える", async () => {
+    const raf = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 1;
+    });
+    const s = mountPanel([info("a", { size: 200 })], 1000, "top");
+    const { useViewStore } = await import("../store/view.js");
+    const h = s.w.find("[data-pane-panel-resize]");
+    h.element.dispatchEvent(ev("pointerdown", 500, 300));
+    h.element.dispatchEvent(ev("pointermove", 500, 350));
+    useViewStore().openDialogWithContext({ kind: "settings" });
+    await s.w.vm.$nextTick();
+    await s.w.vm.$nextTick();
+    expect(s.store.sideSizeOf("p1", "top")).toBe(250);
+    expect(s.guides.at(-1)).toBeNull();
+    raf.mockRestore();
+  });
+
+  it("枠の鍵は側を含む（置き場所を変えると、前の側の枠とは別の鍵）", async () => {
+    const { placedFrameKey } = await import("../display/framePage.js");
+    const a = info("a");
+    expect(placedFrameKey(a, "dock:left")).not.toBe(placedFrameKey(a, "dock:right"));
+    expect(placedFrameKey(a, "dock:top")).not.toBe(placedFrameKey(a, "dock:bottom"));
   });
 });

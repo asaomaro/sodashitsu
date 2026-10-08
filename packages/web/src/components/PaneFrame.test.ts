@@ -811,6 +811,29 @@ describe("PaneFrame — 表示の面（パネル・帯。20261007-soda-extension
     expect(wrapper.get("[data-pane-panel]").element.contains(leaf)).toBe(false);
   });
 
+  it("4 つの側: 上 → 〔左｜端末｜右〕 → 下 の別の位置に載り、置き場所を変えると前の側の枠は消えて別の鍵で作り直される。ほかの側の枠は同じ要素のまま", async () => {
+    const d = useDisplayStore(pinia);
+    const infos = ["top", "bottom", "left", "right"].map((side) => disp(`d-${side}`, "panel", { dock: side, size: 150 }));
+    infos.forEach((i) => d.upsert(i));
+    const { wrapper } = mountFrame();
+    await settle(wrapper);
+    const root = wrapper.get(".pane-frame-body-displays").element;
+    const order = [...root.children].map((e) => (e.classList.contains("pane-frame-row") ? "row" : e.getAttribute("data-display-dock")));
+    expect(order).toEqual(["top", "row", "bottom"]);
+    const row = wrapper.get(".pane-frame-row").element;
+    expect([...row.children].map((e) => (e.classList.contains("pane-frame-center") ? "center" : e.getAttribute("data-display-dock")))).toEqual(["left", "center", "right"]);
+    const frameOf = (side: string): Element | null => wrapper.find(`[data-display-dock="${side}"] .display-frame, [data-display-dock="${side}"] iframe`).exists() ? wrapper.get(`[data-display-dock="${side}"] .pane-panel-body`).element.firstElementChild : null;
+    const bottomBefore = frameOf("bottom");
+    const leftBefore = frameOf("left");
+    // 右の面を左へ（利用者の操作）: 左は 2 枚のタブになり、右の側は消える。ほかの側の枠の要素は変わらない
+    d.setFaceDock(infos[3]! as never, "left");
+    await settle(wrapper);
+    expect(wrapper.find('[data-display-dock="right"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-display-dock="left"] [data-pane-panel-tab]')).toHaveLength(2);
+    expect(frameOf("bottom")).toBe(bottomBefore);
+    expect(leftBefore).not.toBeNull();
+  });
+
   it("本体の箱が 0×0 の間は、面の部品を 1 つも載せない（測れたら載せる）", async () => {
     box = { width: 0, height: 0 };
     const d = useDisplayStore(pinia);

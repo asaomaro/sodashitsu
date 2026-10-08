@@ -43,8 +43,8 @@ export interface DisplayLayoutPrefs {
   sides: Record<string, number>;
 }
 
-/** その版の画面が出せる置き場所（PR-A: 右だけ。PR-B で 4 つの側、PR-C で 5 つ）。PR ごとに、この定数だけを変える。 */
-export const DISPLAY_DOCK_CAPS: readonly DisplayDock[] = ["right"];
+/** その版の画面が出せる置き場所（PR-A: 右だけ。PR-B: 4 つの側。PR-C で浮いた窓も）。PR ごとに、この定数だけを変える。 */
+export const DISPLAY_DOCK_CAPS: readonly DisplayDock[] = ["right", "left", "top", "bottom"];
 
 export function emptyLayout(): DisplayLayoutPrefs {
   return { v: 1, faces: {}, names: {}, sides: {} };

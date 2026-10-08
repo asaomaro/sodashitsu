@@ -103,11 +103,11 @@ describe("面の記憶（置き場所・たたみ。20261008-display-layout）",
   const stored = (): { faces: Record<string, unknown>; names: Record<string, unknown>; sides: Record<string, number> } =>
     (JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as { displayLayout?: never }).displayLayout ?? { faces: {}, names: {}, sides: {} };
 
-  it("たたむ → 全項目を書く（置き場所は丸める前の指定のまま）→ 次の store が読み込む。開く → 最後に操作した面", () => {
+  it("たたむ → 全項目を書く（置き場所は指定のまま）→ 次の store が読み込む。開く → 最後に操作した面", () => {
     const s = useDisplayStore();
     const a = info("a", { dock: "bottom" });
     s.upsert(a);
-    expect(s.effectiveOf(a)).toEqual({ dock: "right", edge: null, collapsed: false });
+    expect(s.effectiveOf(a)).toEqual({ dock: "bottom", edge: null, collapsed: false });
     s.setFaceCollapsed(a, true);
     expect(stored().faces).toEqual({ "p1|panel|a": { dock: "bottom", collapsed: true } });
     expect(s.effectiveOf(a).collapsed).toBe(true);

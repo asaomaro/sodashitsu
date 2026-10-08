@@ -204,13 +204,13 @@
       依存: T6
       AC: AC11, AC12, AC13, AC15
       点検: あり
-- [ ] T14: 部品の側: `PanePanel.vue` を `side`（right・left・top・bottom）で描き分ける（境の線・つまみの縁・上下は横に長い見出し）。`PaneFrame.vue` に、上・左・下の `PanePanel` を置く（design「部品」の木の位置。**4 つは、テンプレートの別の位置の `v-if`**。1 つの `v-for` にしない）。置き場所を変える操作は、`setFaceDock(info, dock)`（`collapsed: false` と `names` も書く＝移った先で、開いて出る）。枠の `:key` は `placedFrameKey(active, "dock:" + side)`。タブは側ごと（`activeBySide`）。
+- [x] T14: 部品の側: `PanePanel.vue` を `side`（right・left・top・bottom）で描き分ける（境の線・つまみの縁・上下は横に長い見出し）。`PaneFrame.vue` に、上・左・下の `PanePanel` を置く（design「部品」の木の位置。**4 つは、テンプレートの別の位置の `v-if`**。1 つの `v-for` にしない）。置き場所を変える操作は、`setFaceDock(info, dock)`（`collapsed: false` と `names` も書く＝移った先で、開いて出る）。枠の `:key` は `placedFrameKey(active, "dock:" + side)`。タブは側ごと（`activeBySide`）。
       `DISPLAY_DOCK_CAPS` を `["right","left","top","bottom"]` に。`setFaceDock` で移った面が、移った先で選ばれる。`withDisplayChange` を通す（フォーカスの行き先は、design の表）。単体テスト（4 つの側の属性・鍵・置き場所を変えると前の側から消える）
       対象: `packages/web/src/components/PanePanel.vue`・`PaneFrame.vue`・各 `.test.ts`、`packages/web/src/display/displayPrefs.ts`（`DISPLAY_DOCK_CAPS`）・`.test.ts`、`packages/web/src/store/display.ts` / 根拠: design「部品」「置き場所の変更」「PR3 の守りとの関係」G1・G2
       依存: T13, T7
       AC: AC11, AC12, AC21, AC22, AC24, AC25
       点検: あり
-- [ ] T15: 各側のつまみ: `useResizeDrag` を側ごとに（左右は `x`・上下は `y`）。ドラッグの間は案内の線だけ（`emit("guide", { side, px } | null)`。`PaneFrame` の `.pane-frame-guide` を、本体の直下へ移し、本体の箱を基準に、縦と横の両方を置く。design「つまみ」）・離したとき `setSideSize` を 1 回・`Esc`・ダブルクリックで `clearSideSize`。キー（端末の側へ向く矢印で広く）。
+- [x] T15: 各側のつまみ: `useResizeDrag` を側ごとに（左右は `x`・上下は `y`）。ドラッグの間は案内の線だけ（`emit("guide", { side, px } | null)`。`PaneFrame` の `.pane-frame-guide` を、本体の直下へ移し、本体の箱を基準に、縦と横の両方を置く。design「つまみ」）・離したとき `setSideSize` を 1 回・`Esc`・ダブルクリックで `clearSideSize`。キー（端末の側へ向く矢印で広く）。
       `role="separator"`・`aria-orientation`・値。ダイアログが開いたら `finish()`（`view.modalOpen` の watch）。**右の側の `data-pane-panel-resize`・`data-pane-frame-guide`・`aria-label`「パネルの幅」・見える位置は、今のまま**（`display-resize.spec.ts:56-81,111-113` が見ている）。単体テスト
       対象: `packages/web/src/components/PanePanel.vue:47-93`・`PaneFrame.vue:345`・`:544-553`（案内の線）・各 `.test.ts` / 根拠: design「つまみ」、research F19
       依存: T14
