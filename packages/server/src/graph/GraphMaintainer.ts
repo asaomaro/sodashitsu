@@ -145,6 +145,8 @@ export class GraphMaintainer {
    * 詰め直す（`ReconcileHints.repack`）。
    */
   reconcileNow(opts: { force?: boolean; repack?: boolean } = {}): Promise<number> {
+    // 引き継ぎの停止の間は呼ばない（起動の `force` だけは通す）。
+    if (this.paused && opts.force !== true) return Promise.resolve(0);
     const run = (): Promise<number> => this.run(opts.force === true, opts.repack === true);
     const result = this.chain.then(run, run);
     this.chain = result.catch(() => undefined);

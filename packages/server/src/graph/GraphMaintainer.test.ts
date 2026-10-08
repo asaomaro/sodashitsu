@@ -222,6 +222,9 @@ describe("GraphMaintainer", () => {
     s.emit("pane.created");
     await s.wait();
     expect(s.state.graph.nodes).toHaveLength(1);
+    // 明示の確認も、停止の間は何もしない（AgentLineage の ensureNodes 等）。起動の force だけは通す。
+    expect(await s.m.reconcileNow()).toBe(0);
+    expect(s.state.graph.nodes).toHaveLength(1);
     s.m.resume();
     await s.wait();
     expect(s.state.graph.nodes).toHaveLength(2);

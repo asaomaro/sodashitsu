@@ -1,0 +1,33 @@
+# 決定の記録（PR1a の実装中）
+
+`design.md`（追補 01 が優先）と違えた点・設計に無かったので決めた点・見つけた穴。番号は design の D1〜D19 の続き。
+
+| # | 事項 | 採った形 | 理由 |
+| :- | :- | :- | :- |
+| D20 | 空間の構成の導き方を置く場所 | 本体は `client-core/src/graph/structure.ts` の `graphStructureFrom`（サイドバーの `sidebarTree` を使う）。サーバの `graphStructure(session, graph)` は、一時的な pane の判定（`SessionService.isTransientPane`）と別のマシンの鍵を渡す薄い包み | ブラウザ（ドラッグの寄せ・載せる位置）と `sodactl`（`spaces`・載せる位置）が、サーバと同じ導き方を使う必要がある。サイドバーと同じ関数を使うので、項目（`r:`・`w:`）・グループの実効値の食い違いが起きない |
+| D21 | `reconcileGraph` に渡す手がかり | 純粋な関数のまま、第 3 引数 `hints` を足した。`arrived`（別の workspace から移ってきたノード。移った先の囲いの空きへ `placeNode` で置き直す）・`changed`（構成が変わった囲いの id。重なりを直すときに先に動かす側）・`repack`（移行のとき）。`GraphMaintainer` が、前回確認した構成との差から `arrived`・`changed` を作る（メモリだけ） | 設計は「できごとごとの変換は書かない」。ただ、手がかりが無いと、pane の移動のあと、移った先の囲いが（移ったノードの古い座標まで広がって）巨大になり、重なりを直すために囲いごと動かすことになる。前回の構成が分からない（再起動の後）ときは `hints` が空で、`workspace の id の順で後ろの側を動かす`（設計どおり） |
+| D22 | 「workspace ごとに最初の 1 つ」の枠 | 2 つ目以降のノードは手元 512 個の **8 個手前（504）** で止め、残りは workspace の最初のノードだけが使う（`GRAPH_FIRST_NODE_RESERVE`）。最初のノードは 512 まで足す | 設計の「上限は、その分を見込んで 512 の手前で止める」の具体化。先に全 workspace の最初のノードを足してから、2 つ目以降を足す |
+| D23 | `placeNode` が詰んだとき（worktree グループの中のメンバー） | 結果に `scope`（`member` / `top`）を足した。グループの中のメンバーだけ動かしても、外側の囲いが広がって別の囲いに重なるときは、**グループごと**（含むメンバーすべて）動かす | 設計は「その workspace の囲いごと」。グループの中では、メンバーの囲いが動くとグループの外側の囲いが変わるので、メンバーだけでは重ならない場所が無いことがある。無いままにすると I3 が破れる |
+| D24 | `placeNode` の探す升 | いまの外接の升の中 → 右へ 1・2 升広げる → 下へ 1・2 升広げる（広げる量が小さい順、同じなら右が先）。間 20 を空けた置き方を先に、無ければ間なしで探す。囲いどうしの重なりは、置き場所の計算は間 20・不変条件と `frame_overlap` は間なし（接するだけは重ならない） | 設計の「右 → 下の順に、重ならない最も近い升」「8 升の中に無いとき」の具体化。置き場所に余裕を持たせても、不変条件は緩く保って、置き場所の計算が作った状態を `reconcileGraph` が直さないようにする |
+| D25 | `schema` 1 → 2 の保存 | `load()` が `schema: 1` を読んだら、**その場で**元のファイルの控えを `graph-backups/` に書き、移行が済むまで（`migrationPending`）の保存は `schema: 1` のまま書く。起動の維持（`reconcileGraph` と詰め直し）が済んだら `completeMigration()` が `schema: 2` で書く（rev は進めない） | 設計 D15 の「移行は 1 回の保存で」を、「途中で落ちても元の形のファイルが残る」を満たす形にした。復元の後の `pruneMissing` などの保存が、移行の前に `schema: 2` を書いてしまわないようにするため |
+| D26 | 移行の詰め直し | 外接が大きすぎる（ノードの数から見込む大きさの 4 倍を超える）workspace は、ノードを (y, x) の順に、いまの外接の左上から、ほぼ正方形の升に並べ直す。それ以外の workspace は相対の位置を保つ。線は触らない | 設計の「外接が大きすぎる workspace の詰め直し」の具体化 |
+| D27 | `AgentLineage` の順の保証 | 線を足す前に `ensureNodes`（= `GraphMaintainer.reconcileNow()`）を待つ。それでも親か子のノードが無いとき（手元のノードの上限）は、`too_many_nodes` の理由で何も足さない。`graph.auto: added` の `nodes` 項目は無くした | 設計は「ノードは reconcile が先に足している前提。順が逆でも線が落ちないこと」。構造のできごとの 50ms のまとめより先にエージェントの検出が来ても、線が落ちない |
+| D28 | 構造のできごとの確認 | 設計が挙げた 7 つのできごと（`pane.created`・`pane.updated`・`pane.closed`・`layout.updated`・`workspace.updated`・`sidebar.layout_changed`・`group.deleted`）で足りる。`pane.move_to_tab`（`moveToTab`）は `pane.updated`（`tabId` が変わる）と `layout.updated` を出す——`SessionService.test.ts` に、別の workspace へ移したときの確認を足した | 点検で未確認だった点（T5）。足りるので、できごとを出す所は変えない |
+| D29 | 起動の維持の失敗 | `listen()` の起動の中の `reconcileNow`・`completeMigration` が投げたら、`warn` を出して起動を続ける。移行は `schema: 1` のファイルが残るので、次の起動でやり直す | グラフの維持の失敗（ディスクがいっぱい等）で、`soda` 全体を起動させないのは重すぎる |
+| D30 | 一時的な pane と `soda handoff` | `scrollbackEditors` は引き継ぎに載せるが、独自コマンドの pane（`commandPanes`）は引き継がれない（既存の仕様）。引き継いだ後の独自コマンドの pane は、普通の pane として扱われ、ノードが付く | 設計 D16 は「一時的な pane にはノードを足さない」。引き継いだ後の扱いは、既存の `commandPanes` の仕様に従う（backlog） |
+| D31 | 画面の接続が別のマシンを向いているとき | 手元のセッションが無いので、空間の構成を導けない。ドラッグの寄せ（`resolveDrop`）・載せる位置は、以前の置き方・そのまま送る（サーバが `frame_overlap` で断りうる）。「上限のため出ていない pane」の数も出さない | 軽い接続の要約（`summaries.local`）から導く手もあるが、PR1a は今の画面のまま。サーバが最終の判定をするので壊れない |
+| D32 | 「上限のため出ていない pane が N 個」の数え方 | 手元のノードが 504 個以上のとき、ノードの無い手元の pane の数（画面が知る pane）。一時的な pane の数も含みうる | ブラウザは、どの pane が一時的かを知らない。上限の手前では 0 にして、足される途中の pane・一時的な pane を数えない |
+| D33 | `rekey_node` の検査の順 | 別のマシンへの付け替え（`rekey_other_machine`）は、これまでどおり `applyGraphOps` が断る。方式の層の `node_required` は、同じマシンの手元のノードの選び直しだけ | 既存の試験・`sodactl` の文言を保つ |
+| D34 | ログ | `graph.maintain: reconciled` は `debug`。`sodactl` の統合試験が stdout を取って JSON を読むので、`info` だと混ざる | 起動と同じ stdout を共有する試験の都合。ログに残す必要があれば `GraphMaintainer` に `info` を出させる |
+| D35 | `graph.update` の検査の順 | `baseRev` が今の rev と違うときは、検査より先に `rev_conflict`（取り直してやり直せる）。同じときだけ `node_required`・`frame_overlap` を見る | 古い rev のままの更新を、検査の失敗で止めると、画面が取り直せない |
+
+## 見つけた穴・残る課題
+
+- **穴（直した）**: `GraphMaintainer` が、更新を待つ間に増えた pane の構成を「確認済み」の指紋にしてしまい、次の確認が飛ばされて、その pane のノードが足されないままになる競合があった（全体の試験の負荷の下で見つかった）。指紋は、確認した構成と、直した後の rev で作る。回帰テスト `GraphMaintainer.test.ts`（修正前のコードでは落ちることを確認済み）。
+- **穴（直した）**: `graphStructureFrom` が、`layout` の無い tab（配信の途中）で投げた。`layout` が無い・一部の pane が `layout` に無いときは、pane の並びで補う。
+- 残る課題:
+  - 置き場所の計算の速さ: 300 の workspace・各 1 ノードを順に置くのに約 1.2 秒（起動のときの一括）。実用の範囲だが、PR1c の性能の測定で見る。
+  - `frames`・空間の見出し・囲いの描画・tab のタグは PR1c（画面は今のまま）。
+  - `sodactl graph show --json` の `spaces` は、グループの id が `g:` を除いた値（`Workspace.groupId` と同じ）。「グループなし」は `id: null`。
+  - 一時的な pane かどうかは、`sodactl` からは分からない（`graph node add` の置き場所の計算では、ノードの無い pane として数える）。害は無い（一時的な pane のノードは足されないだけ）。
+  - E2E: `subagents.spec.ts` を、ノードが最初からある前提に直した。ほかの E2E は、グラフの画面を開く・ノードを載せる操作を使っていない。

@@ -396,7 +396,7 @@ describe("runGraph", () => {
   it("node add: 手元の pane はすでにあるので何も送らず成功。別のマシンの pane は、手元の囲いに重ならない空きへ足す", async () => {
     const client = fakeClient({
       "graph.get": () => graph(),
-      "graph.update": (p: { ops: unknown[] }) => graph({ rev: 2, nodes: [] }) && graph({ rev: 2 }),
+      "graph.update": () => graph({ rev: 2 }),
       "machine.list": () => ({ machines: MACHINES }),
     });
     await run(client, cmd({ kind: "node-add", panes: ["p1"] }, true));
