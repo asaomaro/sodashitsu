@@ -124,7 +124,7 @@
       依存: T1, T4
       AC: AC1, AC2, AC4, AC7, AC9, AC12, AC16, AC23
       点検: あり
-- [ ] T6: 割り付けの関数（帯・トレイ・右のパネル）: `display/paneDisplayLayout.ts` に `LayoutInput`・`LayoutResult`・`TrayButton`・定数・`resolvePaneDisplays`。**入出力の形は design の最後の形**で、中の計算は、手順 1（帯）・2（トレイ。やり直しを含む）・4（横。この時点では右だけ）・5（端末の領域）。手順 3・6 は、該当の面が無いものとして空を返す（T13・T21 で足す）。
+- [x] T6: 割り付けの関数（帯・トレイ・右のパネル）: `display/paneDisplayLayout.ts` に `LayoutInput`・`LayoutResult`・`TrayButton`・定数・`resolvePaneDisplays`。**入出力の形は design の最後の形**で、中の計算は、手順 1（帯）・2（トレイ。やり直しを含む）・4（横。この時点では右だけ）・5（端末の領域）。手順 3・6 は、該当の面が無いものとして空を返す（T13・T21 で足す）。
       **`displayLayout.ts` は残し**、その `panelWidthRange`・`panelWidth`・`visibleBands` と定数を import して使う（`displayLayout.test.ts` と、モバイルの `PaneBands` の道が、今のまま）。**右のパネルだけ・帯が上だけ・たたみ無しのとき、今と同じ大きさになる**ことを単体テストで見る。`display/framePage.ts` に `placedFrameKey`。単体テスト（「テスト方針」の `paneDisplayLayout.ts` のうち、この範囲）
       対象: `packages/web/src/display/paneDisplayLayout.ts`（新規）・`.test.ts`（新規）、`packages/web/src/display/framePage.ts:49-51`（`frameKey`）の後・`framePage` のテスト / 根拠: design「割り付け」
       依存: T5

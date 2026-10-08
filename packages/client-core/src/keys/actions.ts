@@ -93,6 +93,7 @@ export type Action =
   // 20260927-agent-graph（本製品の追加）。
   | { type: "openGraph" } // open_graph（連携のグラフ画面を開く・閉じる。端末版は知らせだけ）
   // 20261007-soda-extensions（本製品の追加）。
+  | { type: "displayMenu" } // display_menu（フォーカス中の pane の表示の面の一覧のメニュー。端末版は知らせだけ。モバイルは重ね表示）
   | { type: "focusDisplay" } // focus_display（フォーカス中の pane のパネル・帯の枠へ移る。端末版は知らせだけ）
   // 20261004-subagent-display（本製品の追加）。
   | { type: "toggleSidebarSection"; section: "spaces" | "agents" } // toggle_spaces_section / toggle_agents_section（20261004-ui-interaction-polish。区画の折りたたみ）

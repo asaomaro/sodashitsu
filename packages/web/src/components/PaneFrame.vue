@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { ActionDispatcherKey, TerminalRegistryKey } from "../injection.js";
+import { ActionDispatcherKey, DisplayHostKey, TerminalRegistryKey } from "../injection.js";
+import { resolvePaneDisplays, type LayoutResult } from "../display/paneDisplayLayout.js";
 import { NO_NEIGHBORS, resolvePaneChrome, type PaneSide, type PaneSides } from "../layout/paneChrome.js";
 import { paneNameOf } from "@sodashitsu/client-core";
 import { getCellSize } from "../term/measure.js";
@@ -53,8 +54,7 @@ const edge = ref<HTMLElement | null>(null);
 
 // --- 表示の面（パネル・帯。20261007-soda-extensions）。`enabled` のときだけ（モバイル・単体テストはストアに触れない）。---------------------------
 const displays = props.enabled ? useDisplayStore() : null;
-const hasPanel = computed(() => !!displays && displays.panelsOf(props.paneId).length > 0);
-const hasBand = computed(() => !!displays && displays.bandsOf(props.paneId).length > 0);
+const displayHost = inject(DisplayHostKey, undefined);
 /** その pane のどれかの面にフォーカスがある（操作中。端末を薄くする）。 */
 const displayEngaged = computed(() => {
   const id = displays?.focusedDisplayId;
@@ -73,13 +73,87 @@ onMounted(() => {
   });
   bodyObserver.observe(bodyEl.value);
 });
-onBeforeUnmount(() => bodyObserver?.disconnect());
-/** pane の端末のセルの幅（px）。取れなければ 9。 */
-const cellWidthPx = computed(() => {
+onBeforeUnmount(() => {
+  bodyObserver?.disconnect();
+  displays?.setLayoutSnapshot(props.paneId, null);
+});
+/** pane の端末のセルの大きさ（px）。取れなければ 9×18。 */
+const cellSize = computed(() => {
   void bodySize.value; // 大きさが変わったら読み直す
   const term = registry?.get(props.paneId)?.term;
-  return term ? getCellSize(term).width : 9;
+  if (!term) return { width: 9, height: 18 };
+  const c = getCellSize(term);
+  return { width: c.width > 0 ? c.width : 9, height: c.height > 0 ? c.height : 18 };
 });
+
+/**
+ * 面の割り付け（帯・トレイ・パネル。20261008-display-layout）。**本体の箱が 0×0 の間は、面の部品を 1 つも載せない**（全部が自動でたたまれた形を、いったん描かない）。
+ * 計算が例外を投げたら、面なしへ落とす（面は出ないが pane は生きる）。
+ */
+const layout = computed<LayoutResult | null>(() => {
+  if (!displays || bodySize.value.w <= 0 || bodySize.value.h <= 0) return null;
+  try {
+    const all = displays.all.filter((d) => d.paneId === props.paneId);
+    if (all.length === 0) return null;
+    const bands: Parameters<typeof resolvePaneDisplays>[0]["bands"] = [];
+    const panels: Parameters<typeof resolvePaneDisplays>[0]["panels"] = [];
+    all.forEach((d, seq) => {
+      const f = displays.effectiveOf(d);
+      if (d.kind === "band") bands.push({ id: d.id, seq, size: d.size, edge: f.edge ?? "top", collapsed: f.collapsed });
+      else panels.push({ id: d.id, seq, size: d.size, dock: f.dock ?? "right", collapsed: f.collapsed });
+    });
+    const right = displays.sideSizeOf(props.paneId, "right");
+    const activeRight = displays.activeBySide.get(`${props.paneId}|right`);
+    return resolvePaneDisplays({
+      paneW: bodySize.value.w,
+      paneH: bodySize.value.h,
+      cellW: cellSize.value.width,
+      cellH: cellSize.value.height,
+      bands,
+      panels,
+      active: activeRight ? { right: activeRight } : {},
+      sideSizes: right !== undefined ? { right } : {},
+      floatRects: {},
+      trayEdgeDefault: settings?.displayBandEdge ?? "top",
+    });
+  } catch (e) {
+    console.error("display layout failed", e instanceof Error ? e.name : "error"); // 中身・題は書かない
+    return null;
+  }
+});
+const showEdge = (edge: "top" | "bottom"): boolean => {
+  const l = layout.value;
+  if (!l) return false;
+  const here = edge === "top" ? l.bands.top : l.bands.bottom;
+  return here.length > 0 || (l.tray.edge === edge && (l.tray.row === "own" || l.bands.more.length > 0));
+};
+const rightDock = computed(() => layout.value?.docks.right ?? null);
+
+// --- 割り付けが変わったときの備えと、結果の写し --------------------------------------------------------------------------------
+// フォーカスのあった部品（見出し・トレイ・つまみ）が、自動のたたみ・プログラムの close・指定の変更で消えても、フォーカスを `body` に落とさない。
+// 描き直しの前（pre）にフォーカスの場所を控え、描き直しの後（post）に、控えが真で、いま `body` か文書に無く、modal のダイアログが開いていなければ、端末へ移す
+// （`host.focusTerminal` は pane の選択も変えるので、もともと `body` にあったフォーカスや、modal の下では動かさない）。
+let focusWasInChrome = false;
+watch(
+  layout,
+  () => {
+    const a = document.activeElement;
+    focusWasInChrome = a instanceof Element && bodyEl.value?.contains(a) === true && a.closest("[data-display-chrome], [data-display-tray], [data-pane-panel-resize]") !== null;
+  },
+  { flush: "pre" },
+);
+watch(
+  layout,
+  (l) => {
+    if (displays) {
+      displays.setLayoutSnapshot(props.paneId, l ? { auto: l.auto, floatArea: null } : null);
+    }
+    const a = document.activeElement;
+    if (focusWasInChrome && (a === null || a === document.body || !a.isConnected) && !view?.modalOpen) displayHost?.focusTerminal(props.paneId);
+    focusWasInChrome = false;
+  },
+  { flush: "post" },
+);
 
 /** 利用者が付けた名前 → エージェント名 → 端末のタイトル の順に拾う。どれも無ければ空。 */
 const paneName = computed(() => {
@@ -338,12 +412,15 @@ function onKeydown(ev: KeyboardEvent): void {
     />
     <!-- 表示の面（パネル・帯）の有無で `<slot />` の位置を変えない（葉を作り直さない）: `enabled` のときは常に row > main の中に置く。 -->
     <div v-if="enabled" ref="bodyEl" class="pane-frame-body pane-frame-body-displays">
-      <PaneBands v-if="hasBand" :pane-id="paneId" :pane-height-px="bodySize.h" />
+      <PaneBands v-if="layout && showEdge('top')" edge="top" :pane-id="paneId" :layout="layout" />
       <div class="pane-frame-row">
-        <div class="pane-frame-main" :class="{ 'pane-frame-main-dimmed': displayEngaged }" data-pane-frame-main><slot /></div>
-        <PanePanel v-if="hasPanel" :pane-id="paneId" :pane-width-px="bodySize.w" :cell-width-px="cellWidthPx" @guide="guideWidth = $event" />
+        <div class="pane-frame-center">
+          <div class="pane-frame-main" :class="{ 'pane-frame-main-dimmed': displayEngaged }" data-pane-frame-main><slot /></div>
+        </div>
+        <PanePanel v-if="layout && rightDock" side="right" :pane-id="paneId" :dock="rightDock" @guide="guideWidth = $event" />
         <div v-if="guideWidth !== null" class="pane-frame-guide" :style="{ right: `${guideWidth}px` }" aria-hidden="true" data-pane-frame-guide></div>
       </div>
+      <PaneBands v-if="layout && showEdge('bottom')" edge="bottom" :pane-id="paneId" :layout="layout" />
     </div>
     <div v-else class="pane-frame-body">
       <slot />
@@ -439,6 +516,7 @@ function onKeydown(ev: KeyboardEvent): void {
 .pane-frame-zone {
   position: absolute;
   inset: 0;
+  z-index: 30;
   pointer-events: none;
   background: color-mix(in srgb, var(--soda-accent, #8be9fd) 25%, transparent);
   border: 2px solid var(--soda-accent, #8be9fd);
@@ -472,8 +550,8 @@ function onKeydown(ev: KeyboardEvent): void {
   content: "";
   position: absolute;
   inset: 0;
-  /* xterm のスクロールバー（z-index: 11）より上。 */
-  z-index: 12;
+  /* xterm のスクロールバー（z-index: 11）より上、パネルのつまみ（22）・案内の線（25）より上（design「重なりの値」）。 */
+  z-index: 26;
   outline: 2px solid var(--soda-fg, #f8f8f2);
   outline-offset: -2px;
   pointer-events: none;
@@ -534,6 +612,14 @@ function onKeydown(ev: KeyboardEvent): void {
   min-height: 0;
   display: flex;
 }
+/* 端末の領域（20261008-display-layout）。面の有無・置き場所に依らず、いつもある（葉の DOM の位置を変えない）。 */
+.pane-frame-center {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  display: flex;
+}
 .pane-frame-main {
   flex: 1 1 auto;
   min-width: 0;
@@ -549,7 +635,7 @@ function onKeydown(ev: KeyboardEvent): void {
   margin-right: -1.5px;
   background: var(--soda-resize-line, #f8f8f2);
   pointer-events: none;
-  z-index: 3;
+  z-index: 25;
 }
 /* 枠（表示）に入力が届いている間は、端末を薄くする（カーソルも薄くなる）。 */
 .pane-frame-main-dimmed {

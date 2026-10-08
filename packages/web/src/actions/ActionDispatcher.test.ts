@@ -3009,13 +3009,13 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
       view.focusPane("p1");
       const displays = useDisplayStore(pinia);
       displays.upsert(disp("a1", "panel"));
-      displays.setCollapsed("p1", true);
+      displays.setFaceCollapsed(disp("a1", "panel"), true);
       const { dispatcher } = makeDispatcher(makeConnection());
       const focused: string[] = [];
       const f = { focusInside: () => void focused.push("a1") };
       registerFrame("a1", f);
       await dispatcher.focusDisplay();
-      expect(displays.collapsed.has("p1")).toBe(false);
+      expect(displays.effectiveOf(disp("a1", "panel")).collapsed).toBe(false);
       expect(focused).toEqual(["a1"]);
       unregisterFrame("a1", f);
     });

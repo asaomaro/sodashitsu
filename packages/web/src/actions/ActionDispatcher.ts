@@ -1,7 +1,9 @@
 import type { AgentIntegrationInstallResult, AgentIntegrationKind, ItemTarget, NewCwd, WorkspaceGroup } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import { nextTick } from "vue";
+import { openDisplayMenu, pickFocusTarget, withDisplayChange } from "../display/displayOps.js";
 import { focusFrame } from "../display/frameRegistry.js";
+import type { DisplayHost } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import type { KeyInputController, ActionPort, FocusPort } from "../keys/KeyInputController.js";
 import type { Action, CopyCommand, Dir } from "@sodashitsu/client-core";
@@ -272,6 +274,9 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       // 20260927-agent-graph。グラフ画面はダイアログの 1 枠とは別の状態（`view.graphOpen`）。閉じるのは画面自身（今は Esc・閉じるボタン。開いたのと同じキーで閉じるのは 03-web-graph の GraphView で足す）。
       case "openGraph":
         this.view.openGraph();
+        return;
+      case "displayMenu":
+        this.displayMenu();
         return;
       case "focusDisplay":
         void this.focusDisplay();
@@ -1066,29 +1071,77 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     if (paneId) this.closePaneById(paneId);
   }
 
+  /** 表示の面の枠が、アプリの端末へフォーカスを戻すための窓口（`main.ts` が組み立てる）。無ければ（単体テスト）フォーカスは動かさない。 */
+  private displayHost: DisplayHost | undefined;
+  setDisplayHost(host: DisplayHost | undefined): void {
+    this.displayHost = host;
+  }
+
   /**
-   * `focus_display`（`prefix+i`）: フォーカス中の pane の、選ばれているパネル（たたんであれば戻す）、無ければ最初の帯の枠へフォーカスを移す。
-   * 面が無ければトースト。パネルを広げた直後は枠がまだ載っていないので、載るのを（数回）待つ。
+   * `focus_display`（`prefix+i`）: フォーカス中の pane の面の枠へフォーカスを移す。行き先は、① 開いているパネル（最後に操作した面 → 無ければ出た順。ドック・浮いた窓を問わない）
+   * → ② たたんだパネル（開いてから）→ ③ 出ている帯 → ④ たたんだ帯（開いてから）。自動でたたまれた面（pane が狭くて出せない）は飛ばす。面が無ければトースト。
+   * たたんだ面を開くのは利用者の操作なので、記憶に「開く」を書く（`withDisplayChange`）。開いた直後は枠がまだ載っていないので、載るのを（数回）待つ。
+   * **モバイル（重ね表示）では今の動きのまま**（記憶を見ない・書かない）。
    */
   async focusDisplay(): Promise<void> {
     const paneId = this.view.focusedPaneId;
     const store = this.displays;
-    const target = paneId ? (store.activePanelOf(paneId) ?? store.bandsOf(paneId)[0] ?? null) : null;
-    if (!paneId || !target) {
+    if (!paneId) {
       this.view.toast("この pane に表示はありません");
       return;
     }
-    if (target.kind === "panel" && store.collapsed.has(paneId)) store.setCollapsed(paneId, false);
-    for (let i = 0; i < 5; i++) {
-      if (focusFrame(target.id)) return;
+    if (store.sheetAvailable) {
+      const legacy = store.activePanelOf(paneId) ?? store.bandsOf(paneId)[0] ?? null;
+      if (!legacy) {
+        this.view.toast("この pane に表示はありません");
+        return;
+      }
+      for (let i = 0; i < 5; i++) {
+        if (focusFrame(legacy.id)) return;
+        await nextTick();
+      }
+      if (legacy.kind === "panel") {
+        store.sheetRequest++;
+        return;
+      }
+      this.view.toast("表示を出せません（pane が狭い、または読み込み中です）");
+      return;
+    }
+    const pick = pickFocusTarget(
+      store.all.filter((d) => d.paneId === paneId),
+      (d) => store.effectiveOf(d).collapsed,
+      new Set(store.layoutByPane.get(paneId)?.auto ?? []),
+      store.lastFace.get(paneId) ?? null,
+    );
+    if (!pick) {
+      this.view.toast(store.all.some((d) => d.paneId === paneId) ? "表示を出せません（pane が狭い、または読み込み中です）" : "この pane に表示はありません");
+      return;
+    }
+    if (pick.open) {
+      await withDisplayChange(pick.info, () => store.setFaceCollapsed(pick.info, false), () => null, this.displayHost);
+    }
+    for (let i = 0; i < 10; i++) {
+      if (focusFrame(pick.info.id)) return;
       await nextTick();
     }
-    // モバイルにはパネルを置く場所が無い（枠が載っていない）。重ね表示を開く（トーストは出さない）。
-    if (this.displays.sheetAvailable && target.kind === "panel") {
+    this.view.toast("表示を出せません（pane が狭い、または読み込み中です）");
+  }
+
+  /** `display_menu`（`prefix+shift+i`）: フォーカス中の pane の、表示の面の一覧のメニューを開く。モバイルでは重ね表示を開く。 */
+  displayMenu(): void {
+    const paneId = this.view.focusedPaneId;
+    if (!paneId) return;
+    if (this.displays.sheetAvailable) {
       this.displays.sheetRequest++;
       return;
     }
-    this.view.toast("表示を出せません（pane が狭い、または読み込み中です）");
+    if (!this.displays.hasAny(paneId)) {
+      this.view.toast("この pane に表示はありません");
+      return;
+    }
+    const body = document.querySelector(`[data-pane-id="${paneId}"]`);
+    const r = body?.getBoundingClientRect();
+    openDisplayMenu((t, at) => this.view.openContextMenu(t, at), { kind: "displays", paneId }, r ? { x: Math.round(r.left) + 8, y: Math.round(r.top) + 8 } : { x: 8, y: 8 }, this.displayHost, paneId);
   }
 
   /** 右クリックのメニュー「表示をすべて閉じる」: その pane の表示の面（パネル・帯）を全部閉じる（20261007-soda-extensions）。 */

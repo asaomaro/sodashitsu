@@ -49,16 +49,16 @@ describe("useDisplayStore", () => {
     expect(s.activePanelOf("p1")?.id).toBe("a");
   });
 
-  it("消えた面の中身・選択・たたみの印を捨てる（フォーカスの印は、その枠の部品が外れるときに自分で下ろす）", () => {
+  it("消えた面の中身・選択を捨てる（フォーカスの印は、その枠の部品が外れるときに自分で下ろす）", () => {
     const s = useDisplayStore();
     s.upsert(info("a"));
     s.setContent({ id: "a", rev: 1, format: "text", content: "x" });
+    s.setActivePanel("p1", "a");
     s.setFocused("a");
-    s.setCollapsed("p1", true);
     s.remove("a");
     expect(s.contents.size).toBe(0);
+    expect(s.activePanel.size).toBe(0);
     expect(s.focusedDisplayId).toBe("a");
-    expect(s.collapsed.size).toBe(0);
   });
 
   it("replaceAll は丸ごと置き換え、clear は空にする", () => {
@@ -71,38 +71,27 @@ describe("useDisplayStore", () => {
   });
 });
 
-describe("パネルの幅（利用者が変えた幅。この画面が覚える）", () => {
+describe("今までのパネルの幅（displayPanelWidths。読むだけ）", () => {
   beforeEach(() => {
     localStorage.clear();
     setActivePinia(createPinia());
   });
-  const saved = (): Record<string, number> => (JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as { displayPanelWidths?: Record<string, number> }).displayPanelWidths ?? {};
-
-  it("確定で 1 回保存し、次の store が読み込む。消すと保存からも消える", () => {
-    const s = useDisplayStore();
-    s.setPanelWidth("p1", 400);
-    expect(saved()).toEqual({ p1: 400 });
-    setActivePinia(createPinia());
-    expect(useDisplayStore().panelWidths.get("p1")).toBe(400);
-    useDisplayStore().clearPanelWidth("p1");
-    expect(saved()).toEqual({});
-  });
-  it("64 件まで。超えたら古い順に捨てる", () => {
-    const s = useDisplayStore();
-    for (let i = 0; i < PANEL_WIDTHS_MAX + 3; i++) s.setPanelWidth(`p${i}`, 200);
-    expect(s.panelWidths.size).toBe(PANEL_WIDTHS_MAX);
-    expect(s.panelWidths.has("p0")).toBe(false);
-    expect(s.panelWidths.has(`p${PANEL_WIDTHS_MAX + 2}`)).toBe(true);
-  });
-  it("もう無い pane の分を捨てる。壊れた値（数でない・範囲の外・配列）は読み込みで捨てる", () => {
-    const s = useDisplayStore();
-    s.setPanelWidth("p1", 300);
-    s.setPanelWidth("p2", 300);
-    s.pruneWidths(new Set(["p2"]));
-    expect([...s.panelWidths.keys()]).toEqual(["p2"]);
+  it("壊れた値（数でない・範囲の外・配列）は読み込みで捨てる。最大件数で止まる", () => {
     expect([...loadPanelWidths({ a: 200, b: "x", c: 5, d: 99999, e: NaN, f: null }).keys()]).toEqual(["a"]);
     expect(loadPanelWidths([1, 2]).size).toBe(0);
     expect(loadPanelWidths("x").size).toBe(0);
+    const many: Record<string, number> = {};
+    for (let i = 0; i < PANEL_WIDTHS_MAX + 3; i++) many[`p${i}`] = 200;
+    expect(loadPanelWidths(many).size).toBe(PANEL_WIDTHS_MAX);
+  });
+  it("書かない・消さない: 側の大きさの操作は displayPanelWidths を変えない。右の側は、引き継いで読む", () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ displayPanelWidths: { p1: 333 } }));
+    setActivePinia(createPinia());
+    const s = useDisplayStore();
+    expect(s.sideSizeOf("p1", "right")).toBe(333);
+    s.setSideSize("p1", "right", 420);
+    s.clearSideSize("p1", "right");
+    expect((JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as { displayPanelWidths?: unknown }).displayPanelWidths).toEqual({ p1: 333 });
   });
 });
 
@@ -162,8 +151,9 @@ describe("面の記憶（置き場所・たたみ。20261008-display-layout）",
     expect(s.hasPref(a)).toBe(false);
   });
   it("側の大きさ: 範囲に丸めて覚え、消せる。右は displayPanelWidths を引き継いで読む", () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ displayPanelWidths: { p1: 333 } }));
+    setActivePinia(createPinia());
     const s = useDisplayStore();
-    s.setPanelWidth("p1", 333);
     expect(s.sideSizeOf("p1", "right")).toBe(333);
     s.setSideSize("p1", "right", 420);
     expect(s.sideSizeOf("p1", "right")).toBe(420);

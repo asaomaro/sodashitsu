@@ -498,6 +498,15 @@ export const ACTIONS = [
     defaults: ["prefix+i"],
     action: { type: "focusDisplay" },
   },
+  // 20261008-display-layout。フォーカス中の pane の、表示の面の一覧のメニューを開く（面を選ぶと、その面のメニュー。マウス無しで、たたむ・置き場所を変える・指定に戻す）。
+  // 端末版には表示の面が無く、「ブラウザで使えます」と知らせる。モバイルでは重ね表示を開く。
+  {
+    id: "display_menu",
+    label: "pane の表示のメニューを開く",
+    group: "pane",
+    defaults: ["prefix+shift+i"],
+    action: { type: "displayMenu" },
+  },
 ] as const satisfies readonly ActionDef[];
 
 export type ActionId = (typeof ACTIONS)[number]["id"];

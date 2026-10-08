@@ -79,7 +79,6 @@ export class DisplayController {
         const live = this.opts.livePaneIds?.();
         if (live && live.size > 0) {
           // pane が 1 つも分からない間（スナップショット前）は捨てない
-          this.opts.store.pruneWidths(live);
           this.opts.store.pruneLayout(live);
         }
       },

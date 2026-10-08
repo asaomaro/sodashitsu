@@ -205,12 +205,14 @@ const EFFECTS: Record<
   open_graph: { toast: true },
   // 20261007-soda-extensions。表示の面はブラウザにだけある。
   focus_display: { toast: true },
+  // 20261008-display-layout。
+  display_menu: { toast: true },
 };
 
-describe("TuiDispatcher — 全操作の効果（web の 62 操作と同じ RPC・引数・ダイアログ）", () => {
+describe("TuiDispatcher — 全操作の効果（web の 63 操作と同じ RPC・引数・ダイアログ）", () => {
   it("表はカタログの全操作をちょうど覆う", () => {
     expect(Object.keys(EFFECTS).sort()).toEqual(ACTIONS.map((d) => d.id).sort());
-    expect(ACTIONS).toHaveLength(62);
+    expect(ACTIONS).toHaveLength(63);
   });
 
   it.each(ACTIONS.map((d) => [d.id, d as ActionDef] as const))("%s", (id, def) => {

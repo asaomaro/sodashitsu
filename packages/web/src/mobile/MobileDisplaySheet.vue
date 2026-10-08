@@ -3,7 +3,7 @@ import { computed, inject, nextTick, onMounted, ref } from "vue";
 import DisplayFrame from "../components/DisplayFrame.vue";
 import DisplayScriptMark from "../components/DisplayScriptMark.vue";
 import { displayLabel, engagedNote, DISPLAY_LABEL_PREFIX } from "../display/displayLabel.js";
-import { frameKey } from "../display/framePage.js";
+import { placedFrameKey } from "../display/framePage.js";
 import { DisplayControllerKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 
@@ -77,7 +77,7 @@ function dismissActive(): void {
       <div v-else class="mobile-display-title">{{ active.title }}</div>
       <div v-if="engaged" class="mobile-display-engaged-note" aria-live="polite">{{ engagedNote(active) }}</div>
       <div class="mobile-display-body">
-        <DisplayFrame :key="frameKey(active)" :info="active" :content="content" />
+        <DisplayFrame :key="placedFrameKey(active, 'sheet')" :info="active" :content="content" />
       </div>
     </div>
     <p v-else class="mobile-display-empty">表示はありません。<button type="button" class="mobile-display-btn" @click="emit('close')">閉じる</button></p>

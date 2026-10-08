@@ -5,6 +5,8 @@ import { useDisplayStore } from "../store/display.js";
 import { useSessionStore } from "../store/session.js";
 import { itemGroupIdOf } from "../store/sidebarTree.js";
 import { useViewStore } from "../store/view.js";
+import { dismissWithFocus, openDisplayMenu, withDisplayChange } from "../display/displayOps.js";
+import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 
 /**
  * 右クリックのメニュー（M3。APG の Menu。D56 の訂正 10）。`view.contextMenu` が開閉を持つ
@@ -25,6 +27,8 @@ const view = useViewStore();
 const displays = useDisplayStore();
 const actions = inject(ActionDispatcherKey);
 if (!actions) throw new Error("ContextMenu: ActionDispatcherKey が provide されていません");
+const displayController = inject(DisplayControllerKey, null);
+const displayHost = inject(DisplayHostKey, undefined);
 /** 戻す先が無いときに、選ばれている pane の端末へフォーカスする（無ければ何もしない）。 */
 const registry = inject(TerminalRegistryKey, undefined);
 
@@ -54,6 +58,44 @@ function swappableWithFocused(paneId: string): boolean {
   return tabId !== undefined && tabId === session.panes.get(focused)?.tabId;
 }
 
+/** 表示のメニューは 2 段（面の一覧 → 面のメニュー）。選んだ項目の処理が、同じ位置に次のメニューを開く。 */
+function openDisplaysMenu(paneId: string, _from?: unknown): void {
+  const at = view.contextMenu?.at ?? { x: 8, y: 8 };
+  void _from;
+  openDisplayMenu((t, p) => view.openContextMenu(t, p), { kind: "displays", paneId }, at, displayHost, paneId);
+}
+const KIND_LABEL = { panel: "パネル", band: "帯" } as const;
+const DOCK_LABEL: Record<string, string> = { right: "右", left: "左", top: "上", bottom: "下", float: "浮いた窓" };
+function displaysItems(paneId: string): MenuItem[] {
+  const auto = new Set(displays.layoutByPane.get(paneId)?.auto ?? []);
+  return displays.all
+    .filter((d) => d.paneId === paneId)
+    .map((d) => {
+      const f = displays.effectiveOf(d);
+      const where = d.kind === "band" ? (f.edge === "bottom" ? "下" : "上") : (DOCK_LABEL[f.dock ?? "right"] ?? "右");
+      const state = auto.has(d.id) ? "出せない" : f.collapsed ? "たたんでいる" : "開いている";
+      return { label: `${KIND_LABEL[d.kind]} ${d.name} — ${where}・${state}`, run: () => openDisplayMenu((t, at) => view.openContextMenu(t, at), { kind: "display", id: d.id }, view.contextMenu?.at ?? { x: 8, y: 8 }, displayHost, paneId) };
+    });
+}
+function displayItems(id: string): MenuItem[] {
+  const d = displays.infos.get(id);
+  if (!d) return [];
+  const f = displays.effectiveOf(d);
+  const focusToHead = (): HTMLElement | null =>
+    document.querySelector<HTMLElement>(`[data-display-root="${d.id}"] [data-pane-panel-fold], [data-display-root="${d.id}"] [data-display-menu-button]`);
+  const focusToTray = (): HTMLElement | null => document.querySelector<HTMLElement>(`[data-display-tray-button][data-display-id="${d.id}"]`);
+  const list: MenuItem[] = [];
+  if (f.collapsed) list.push({ label: "開く", run: () => void withDisplayChange(d, () => displays.setFaceCollapsed(d, false), focusToHead, displayHost) });
+  else list.push({ label: "たたむ", run: () => void withDisplayChange(d, () => displays.setFaceCollapsed(d, true), focusToTray, displayHost) });
+  if (d.kind === "band") {
+    if (f.edge !== "top") list.push({ label: "上に置く", run: () => void withDisplayChange(d, () => displays.setFaceEdge(d, "top"), focusToHead, displayHost) });
+    if (f.edge !== "bottom") list.push({ label: "下に置く", run: () => void withDisplayChange(d, () => displays.setFaceEdge(d, "bottom"), focusToHead, displayHost) });
+  }
+  if (displays.hasPref(d)) list.push({ label: "プログラムの指定に戻す", run: () => void withDisplayChange(d, () => displays.resetFace(d), focusToHead, displayHost) });
+  list.push({ label: "この表示を閉じる", run: () => dismissWithFocus(d, () => displayController?.dismiss({ id: d.id }), displayHost) });
+  return list;
+}
+
 const items = computed<MenuItem[]>(() => {
   const target = view.contextMenu?.target;
   if (!target) return [];
@@ -70,11 +112,18 @@ const items = computed<MenuItem[]>(() => {
       { label: pane?.rightClick === "pane" ? "herdr のメニューを使う" : "右クリックを pane に送る", run: () => actions.setRightClickTarget(target.paneId, pane?.rightClick === "pane" ? "herdr" : "pane") },
       { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
       // 表示の面（パネル・帯）があるときだけ（20261007-soda-extensions）。
-      ...(displays.hasAny(target.paneId) ? [{ label: "表示をすべて閉じる", run: () => actions.dismissDisplays(target.paneId) }] : []),
+      ...(displays.hasAny(target.paneId)
+        ? [
+            { label: "表示のメニュー…", run: () => openDisplaysMenu(target.paneId, target) },
+            { label: "表示をすべて閉じる", run: () => actions.dismissDisplays(target.paneId) },
+          ]
+        : []),
       { label: "閉じる", run: () => actions.closePaneById(target.paneId) },
     ];
     return list;
   }
+  if (target.kind === "displays") return displaysItems(target.paneId);
+  if (target.kind === "display") return displayItems(target.id);
   if (target.kind === "tab") {
     const tab = session.tabs.get(target.tabId);
     return [
@@ -196,13 +245,21 @@ function onKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Enter" || ev.key === " ") {
     ev.preventDefault();
     ev.stopPropagation();
+    if (ev.repeat) return; // 押しっぱなしで、2 段のメニューの先頭の項目（開く／たたむ）まで実行しない
     activate(activeIndex.value);
   }
 }
 
-function onOutsideClick(ev: MouseEvent): void {
+function onOutsideClick(ev: Event): void {
   if (menuEl.value && !menuEl.value.contains(ev.target as Node)) {
-    // 外側のクリックでは戻さない（フォーカスはクリックした先へ移る）。
+    // 外側のクリックでは戻さない（フォーカスはクリックした先へ移る）。ただし、押してもフォーカスを取らない部品・覆いを押したときは、フォーカスは動かない（メニューが消えて `body` に落ちる）ので、
+    // 開く前の場所へ戻してから閉じる。`pointerdown` を `preventDefault` する部品（つまみ）は互換の `mousedown` が出ないので、`pointerdown` の capture でも聞く。
+    const t = ev.target;
+    if (t instanceof Element && t.closest("[data-display-keepfocus], [data-display-cover]") !== null) {
+      close();
+      restoreFocus();
+      return;
+    }
     returnFocusTo = null;
     close();
   }
@@ -221,8 +278,14 @@ watch(
   },
 );
 
-onMounted(() => document.addEventListener("mousedown", onOutsideClick, true));
-onBeforeUnmount(() => document.removeEventListener("mousedown", onOutsideClick, true));
+onMounted(() => {
+  document.addEventListener("mousedown", onOutsideClick, true);
+  document.addEventListener("pointerdown", onOutsideClick, true);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("mousedown", onOutsideClick, true);
+  document.removeEventListener("pointerdown", onOutsideClick, true);
+});
 </script>
 
 <template>
