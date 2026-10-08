@@ -2,6 +2,7 @@
 
 実装するのは、この文書を読む別のエージェント。**読む順**: この `tasks.md` → `design.md`（型・割り付けの決まり・部品の木・フォーカスの行き先の表・重なりの値・「PR3 の守りとの関係」の表は、そこが正）→ `requirements.md`（AC の本文）→ `research.md`（今の作りの F・守りの G・未確認の U）。
 `decisions.md` の D1・D19 が利用者の決定（**D5〜D13 は、すべて確定**。D7 の「残る道」は、受け入れて docs に書く）、D3 が「枠を動かさない」の理由、D15 が「押してもフォーカスを取らない部品」の理由、**D20 が、PR3 がマージされた main に合わせ直した点**（フォーカスを `body` に落とさない、が、いちばん大事）。D18 は、本文へ取り込み済み（経緯の記録）。
+**D21 は、main に合わせ直した版の独立点検（must なし）で残った 9 点**。該当のタスク（T4・T7・T8・T9・T10・T12・T14・T16・T22）の指示の一部として、取り込むこと。
 
 **前提**: PR3（スクリプトが動く形式。#99）が入った main（`1ff0418`）。行番号は、その main のもの。
 **範囲の外（差分を出さない）**: 端末版の面の描画（`20261008-display-tui`）・`mobile/MobileShell.vue`・`DisplayFrame.vue`・`DisplayScriptMark.vue`・`display/engageEntry.ts`・`focusGuard.ts`・`focusOrigin.ts`・`focusDrop.ts`・`frameMessages.ts`・`frameRegistry.ts`・`packages/web/public/display-view/*`・`20261007-soda-extensions`／`20261007-ext-host` の文書。
