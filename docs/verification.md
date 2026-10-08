@@ -376,6 +376,22 @@ pnpm --filter @sodashitsu/e2e test` が通ることを基準とする（`package
       **ドラッグの本体は 20260924-pane-dnd-split-move で分割・分割解除に置き換わった（下の項目）
       ——「ドロップすると2つの pane の内容が入れ替わる」という以前の挙動はもう無い（decisions.md
       D4。review 指摘で見つかった記載漏れ）。**
+- [ ] tab バーの tab のドラッグでの並べ替え（20261008-web-tab-dnd。AC1〜AC9・AC-I1〜AC-I5。ブラウザ版のデスクトップの画面）：
+      tab を 3 つ以上作り、tab をつかんで別の位置で離すと、入る位置に線が出て（つかんだ tab は薄くなる）、離すとそこへ入り、
+      つかんだ tab が選ばれて端末にフォーカスが戻ること。`Esc`・tab バーの外（端末の上）・つかんだ tab の上で離すと、順も選択も変わらないこと。
+      クリック・右クリックのメニュー・ホイールでの切り替えは今までどおりであること（6px 未満の動きはクリック扱い）。tab が多くてあふれるときは、
+      列の端へ近づけると自動でスクロールすること。別のブラウザの tab バーにも再読み込みなしで反映されること。tab バーを「下」にしても同じであること。
+      ドラッグ中はキー操作が効かないこと。pane の名前を tab へ落とす移動は今までどおり（落とし先の tab が強調され、tab の順は変わらない）。
+      タッチ（指のなぞり）とモバイルの 1 列の画面では並べ替えが始まらないこと。ペン（`pointerType: "pen"`）は未確認
+      （横になぞるとブラウザのパンで `pointercancel` が出て取り消される見込み）。
+- [ ] pane を別の workspace へ移せるのを同じ worktree の間だけにする（20261008-web-tab-dnd。AC11〜AC19。ブラウザ版・端末版）：
+      同じリポジトリの本体と linked worktree の workspace、別のリポジトリの workspace、管理外のフォルダの workspace を 2 つ、同じフォルダを開いた workspace を 2 つ用意し、
+      tab を 2 pane にして pane に名前を付け（設定で「エージェント名」を出す）、名前をつかんで動かす。ブラウザ版: ドラッグが始まると、別の worktree・別のリポジトリ・
+      場所の違う管理外の行が薄くなり、同じフォルダの行と自分の行は薄くならない。落とせる行（同じフォルダの行と自分の行）には左の縁の線と淡い背景の印が付き、薄い行の上では何の枠も出ない（落とせるようには見えない）、落とせる行の上では破線の枠。離すと、
+      薄い行へは動かず「別の worktree の workspace へは移せません」と出て、表示も変わらない。同じフォルダの 2 つ目の workspace の行へは、その新しい tab へ移る。
+      管理外のフォルダを同じ場所で開いた 2 つの間は移り、git の workspace へは断られる。自分の workspace の行へ落とすと、新しい tab へ切り出される（今までどおり）。
+      `Esc` で薄さが全部消える。端末版: 同じ操作で、別の worktree の行へ落とすと同じ文言が出て何も動かない（行の強調は出ない）。
+      同じ workspace の別の tab へ落とす移動は今までどおり。畳んだグループの中にある行へは落とせない（広げてから落とす）。
 - [ ] pane の D&D 分割・分割解除（20260924-pane-dnd-split-move。AC1〜AC11・AC-I1〜AC-I5）：
       名前ラベルをポインタで掴んで、別の pane の**縁**（上下左右のどれか。中心から見て外側30%）へ
       ドラッグ＆ドロップすると、ドロップ先がその方向に分割され、ドラッグした pane がそこへ移る
@@ -765,6 +781,16 @@ AC16 は AC1〜AC14 と AC18 を 3 環境で確かめる。上の一巡に無い
 - [ ] `prefix+i` で枠へ移る。期待：縁が強調色・「入力はこの表示に届きます（Esc で端末へ）」・端末が薄くなる。`Esc` で戻り、続けて打ったキーが pane に届く。
 - [ ] iPhone・Android（幅 767px 以下）：パネルは端末の横に出ず、バーの［表示N］から重ね表示が開く。帯は端末の上。
 - [ ] `soda handoff`／再起動の後、面が消える（`events` は `display.reset`／`display.end`）。出し直すと出る。
+
+スクリプトが動く形式（`script-html`。`docs/display.md`「スクリプトが動く形式」）。自動の確かめは、`packages/e2e/src/specs/display-script*.spec.ts`（Chromium 153。結果は `.aidev/works/20261007-soda-extensions/test-result.md`）。実測した前提:
+差し込みで親から見た枠の `load` が 1 回のまま／ふつうの HTML・埋め込んだ marked・Chart.js が動く／スクリプトが枠のフォーカスを取っても、アプリが元の場所へ戻せる（`document.activeElement` を親が見る）／枠が外の origin・`localhost` の別のポート・204 の宛先へ移ろうとするのを、アプリの CSP が止める／
+WebRTC（UDP）は止まらない・利用者の操作の後の `execCommand("copy")` と音は止まらない・`window.name` は移った先へ運べる・兄弟の枠への `postMessage`/`MessagePort` は届く・兄弟の枠の `location` は書き換えられない（`SecurityError`）。
+
+- [ ] `sodactl display set g --kind panel --script-html-file g.html`（スクリプトで DOM を書き換える中身）。期待：見出しに印「スクリプト」と［操作する］が出て、枠は覆いの下にある。覆い・枠を押しても操作中にならず、［操作する］が 1 秒強調される。
+- [ ] ［操作する］（または `Tab` で届いて `Enter`、または `prefix+i`）。期待：縁の強調色・「入力はこの表示に届きます（Esc で端末へ）」・端末が薄くなり、枠の中の欄に打てる。`Esc` で端末へ戻り、覆いと［操作する］が戻る。
+- [ ] 端末にフォーカスを置いて、中身が `setInterval(() => { window.focus(); input.focus() }, 50)` で取り続ける。期待：フォーカスは端末へ戻され、3 回で面が閉じ、トースト「…キー入力を取ろうとし続けたので閉じました…」。5 分は `script-html` の `set` が `display_busy`、静的な形式は出せる。
+- [ ] `sodactl display send g --json '{"n":1}'`。期待：`soda.onMessage` に届く（枠は作り直されない）。ブラウザを再読み込みすると、あとからは届かない（保存されない）。
+- [ ] 中身が `location.href = '/display-view/frame.html?moved'`。期待：すぐ面が閉じて「別のページへ移ろうとしたので閉じました」。その pane は 5 分、`script-html` を出せない。
 
 ### 共通：質問のフォーム（`sodactl ask`。20261002-sodactl-ask・`docs/sodactl.md`「質問のフォーム」）
 

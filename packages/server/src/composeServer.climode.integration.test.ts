@@ -74,7 +74,7 @@ describe("composeServer: 02-server の口（20260927-cli-mode）", () => {
     return res.headers.get("set-cookie")!.split(";")[0]!;
   }
 
-  async function connect(server: ComposedServer, cookie: string): Promise<Client> {
+  async function connect(server: ComposedServer, cookie: string, kind: "desktop" | "external" = "desktop"): Promise<Client> {
     const port = server.options.port;
     const origin = `http://127.0.0.1:${port}`;
     const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
@@ -136,7 +136,7 @@ describe("composeServer: 02-server の口（20260927-cli-mode）", () => {
         waiters.add(check);
         check();
       });
-    const hello = (await request("client.hello", { protocol: 1, kind: "desktop" })) as {
+    const hello = (await request("client.hello", { protocol: 1, kind })) as {
       clientId: string;
     };
     return { ws, clientId: hello.clientId, request, events, waitEvent };
@@ -163,6 +163,7 @@ describe("composeServer: 02-server の口（20260927-cli-mode）", () => {
         prefs: { theme: "nord", keys: { prefix: "ctrl+a" } },
         rev: 1,
         byClientId: a.clientId,
+        byKind: "desktop",
       };
       expect(await b.waitEvent("prefs.changed")).toEqual(changed);
       expect(await a.waitEvent("prefs.changed")).toEqual(changed);
@@ -174,6 +175,23 @@ describe("composeServer: 02-server の口（20260927-cli-mode）", () => {
         prefs: { theme: "nord", keys: { prefix: "ctrl+a" }, future: { x: 1 } },
         rev: 2,
       });
+    });
+
+    it("displayScriptEnabled が無効 → 有効に変わると、prefs.changed に変えた接続の種別（byKind）が付き、サーバのログに残る。有効のままの変更ではログに残らない", async () => {
+      const stateDir = await tempStateDir();
+      const server = await start(stateDir);
+      const cookie = await tokenLogin(server, server.freshToken!);
+      const web = await connect(server, cookie, "desktop");
+      const ext = await connect(server, cookie, "external");
+      await ext.request("prefs.set", { patch: { displayScriptEnabled: true } });
+      const seen = (await web.waitEvent("prefs.changed", (d) => (d as { prefs: { displayScriptEnabled?: boolean } }).prefs.displayScriptEnabled === true)) as { byKind?: string; byClientId: string };
+      expect(seen.byKind).toBe("external");
+      expect(seen.byClientId).toBe(ext.clientId);
+      await web.request("prefs.set", { patch: { theme: "nord" } }); // 有効のまま別の項目を変えた
+      const log = await readFile(join(stateDir, "server.log"), "utf8");
+      const lines = log.split("\n").filter((l) => l.includes("display script enabled"));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('"byKind":"external"');
     });
 
     it("上限を超える prefs.set は invalid_params で断り、保存しない", async () => {

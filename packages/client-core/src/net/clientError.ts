@@ -99,6 +99,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   invalid_display: "表示の内容が受け付けられませんでした。",
   display_limit: "表示の数か大きさの合計が上限に達しています。",
   display_busy: "表示の更新が多すぎます。少し待ってからやり直してください。",
+  display_script_disabled: "スクリプトが動く表示は、設定で無効になっています。",
   display_closed: "この表示は既に閉じられています。",
   rev_conflict: "グラフがほかの画面・sodactl で先に変わったため、保存しませんでした。最新の内容でやり直してください。",
 };

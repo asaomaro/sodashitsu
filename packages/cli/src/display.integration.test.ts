@@ -42,6 +42,11 @@ describe.skipIf(process.platform === "win32")("sodactl display（実サーバ）
     anonymous = new FsSessionStore(join(sessionDir, "anonymous.json")); // 空（ログインしていない）
     await loggedIn.set(url, await login(url, token));
     paneA = server.session.snapshot().panes[0]!.id;
+    // スクリプトが動く表示は既定で無効。この試験は、設定で有効にしてから始める（無効の筋は下の別の test）。
+    const admin = await connect(url, await login(url, token));
+    await admin.request("client.hello", { protocol: 1, kind: "external" });
+    await admin.request("prefs.set", { patch: { displayScriptEnabled: true } });
+    admin.close();
   }, 30_000);
 
   afterAll(async () => {
@@ -99,7 +104,7 @@ describe.skipIf(process.platform === "win32")("sodactl display（実サーバ）
     const c = await connect(url, await login(url, token));
     clients.push(c);
     await c.request("client.hello", { protocol: 1, kind: "desktop" });
-    await c.request("display.subscribe", { features: ["panel", "band", "actions"] });
+    await c.request("display.subscribe", { features: ["panel", "band", "actions", "script-html"] });
     return c;
   }
   async function newPane(): Promise<{ paneId: string; workspaceId: string }> {
@@ -279,5 +284,66 @@ describe.skipIf(process.platform === "win32")("sodactl display（実サーバ）
     await expect(run(["set", "b2", "--kind", "band", "--text", "x"], env)).rejects.toMatchObject({ code: "display_limit" });
     expect((await run(["list"], env)).lines[0]).toMatchObject({ displays: [{ name: "b0" }, { name: "b1" }] });
     await run(["close", "--all"], env);
+  });
+
+  it("script-html: ログインなしで --script-html-file を set → send。/ws の経路でも同じ。events の action の行に source", async () => {
+    const env = inPane(paneA);
+    const b = await screen();
+    await b.request("display.subscribe", { features: ["panel", "band", "actions", "script-html"] });
+    const set = await run(["set", "sg", "--kind", "panel", "--script-html-file", await mk("sg.html", "<script>document.body.textContent='ok'</script>")], env);
+    expect(set.code).toBe(0);
+    expect(set.lines[0]).toMatchObject({ status: "ok", display: { name: "sg", format: "script-html" }, renderers: { scriptHtml: expect.any(Number) } });
+    expect((set.lines[0] as { renderers: { scriptHtml: number } }).renderers.scriptHtml).toBeGreaterThanOrEqual(1); // これまでの画面が残っていることもある
+    const id = (set.lines[0] as { display: { id: string } }).display.id;
+    const ev = runBg(["events", "sg"], env);
+    await waitLine(ev.lines, (l) => l["type"] === "display.ready");
+    expect((await run(["send", "sg", "--json", '{"n":1}'], env)).lines[0]).toMatchObject({ status: "ok", delivered: expect.any(Number) });
+    // /ws の経路（ログイン済み・--pane）
+    expect((await run(["send", "sg", "--json", "[2]", "--pane", paneA], outsideEnv(), loggedIn)).lines[0]).toMatchObject({ status: "ok", delivered: expect.any(Number) });
+    const viaWs = await run(["set", "sg2", "--kind", "band", "--format", "script-html", "--pane", paneA], outsideEnv(), loggedIn, { readStdin: async () => Buffer.from("<script>1</script>") });
+    expect(viaWs.lines[0]).toMatchObject({ status: "ok", display: { name: "sg2", format: "script-html" } });
+    // 静的な面への send は誤り
+    await run(["set", "st", "--kind", "panel", "--text", "t"], env);
+    await expect(run(["send", "st", "--json", "1"], env)).rejects.toMatchObject({ code: "invalid_params" });
+    // action の出来事に source
+    await b.request("display.action", { id, rev: 1, action: "pick", data: { id: "3" } });
+    expect(await waitLine(ev.lines, (l) => l["type"] === "display.action")).toMatchObject({ name: "sg", action: "pick", source: "script" });
+    await run(["close", "--all"], env);
+    await waitLine(ev.lines, (l) => l["type"] === "display.closed" && l["name"] === "sg");
+  });
+
+  it("script-html: 冷却中の set（display_busy）は理由つきで失敗し、静的な形式は出せる", async () => {
+    const { paneId } = await newPane();
+    const env = inPane(paneId);
+    const b = await screen();
+    const set = await run(["set", "cg", "--kind", "panel", "--script-html-file", await mk("cg.html", "<script>1</script>")], env);
+    const id = (set.lines[0] as { display: { id: string } }).display.id;
+    for (let i = 0; i < 3; i++) await b.request("display.report", { id, problem: "focus_steal", paneId, format: "script-html" });
+    await expect(run(["set", "cg", "--kind", "panel", "--script-html-file", await mk("cg2.html", "<script>2</script>")], env)).rejects.toMatchObject({ code: "display_busy" });
+    expect((await run(["set", "cg", "--kind", "panel", "--html-file", await mk("cg3.html", "<p>ok</p>")], env)).code).toBe(0);
+  });
+
+  it("script-html が設定で無効のとき: set・send は display_script_disabled（終了コード 1 のエラー）。--features の server.scriptEnabled が偽。静的な形式は出せる。pane の中（ログインなし）からは有効にできない", async () => {
+    const { paneId } = await newPane();
+    const env = inPane(paneId);
+    const setEnabled = async (v: boolean): Promise<void> => {
+      const admin = await connect(url, await login(url, token));
+      await admin.request("client.hello", { protocol: 1, kind: "external" });
+      await admin.request("prefs.set", { patch: { displayScriptEnabled: v } });
+      admin.close();
+    };
+    await setEnabled(false);
+    try {
+      const f = (await run(["--features"], env)).lines[0] as { server: { scriptEnabled: boolean; features: string[] } };
+      expect(f.server.scriptEnabled).toBe(false);
+      expect(f.server.features).toContain("format:script-html");
+      await expect(run(["set", "dg", "--kind", "panel", "--script-html-file", await mk("dg.html", "<p>x</p>")], env)).rejects.toMatchObject({ code: "display_script_disabled" });
+      await expect(run(["send", "dg", "--json", "1"], env)).rejects.toMatchObject({ code: "display_script_disabled" });
+      expect((await run(["set", "dg", "--kind", "panel", "--html-file", await mk("dg2.html", "<p>x</p>")], env)).code).toBe(0);
+      await setEnabled(true);
+      expect((await run(["set", "dg", "--kind", "panel", "--script-html-file", await mk("dg3.html", "<p>x</p>")], env)).code).toBe(0);
+    } finally {
+      await setEnabled(true);
+    }
   });
 });

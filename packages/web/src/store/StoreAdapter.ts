@@ -1,4 +1,4 @@
-import type { AgentInfo, AgentIntegrationStatusResult, AskClosedEvent, AskOpenedEvent, DisplayRemovedEvent, DisplayUpdatedEvent, GraphChangedEvent, GraphFiredEvent, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
+import type { AgentInfo, AgentIntegrationStatusResult, AskClosedEvent, AskOpenedEvent, DisplayMessageEvent, DisplayRemovedEvent, DisplayUpdatedEvent, GraphChangedEvent, GraphFiredEvent, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { ConnectionState, StorePort } from "@sodashitsu/client-core";
 import { useCommandsStore } from "./commands.js";
@@ -50,7 +50,7 @@ export interface StoreAdapterOptions {
    */
   onAskEvent?: (e: AskOpenedEvent | AskClosedEvent) => void;
   /** 表示の面のイベント（`display.updated`・`display.removed`。20261007-soda-extensions）。**見出しだけ**——`DisplayController` が中身を `display.get` で取る。省略可。 */
-  onDisplayEvent?: (e: DisplayUpdatedEvent | DisplayRemovedEvent) => void;
+  onDisplayEvent?: (e: DisplayUpdatedEvent | DisplayRemovedEvent | DisplayMessageEvent) => void;
 }
 
 /**
@@ -205,6 +205,7 @@ export class StoreAdapter implements StorePort {
         return;
       case "display.updated":
       case "display.removed":
+      case "display.message":
         this.opts.onDisplayEvent?.(e);
         return;
     }

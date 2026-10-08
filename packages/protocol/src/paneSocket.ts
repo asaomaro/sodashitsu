@@ -77,3 +77,5 @@ export const PANE_OP_DISPLAY_LIST = "display.list";
 export const PANE_OP_DISPLAY_WAIT = "display.wait";
 /** 機能確認（引数なし。古い受け口は `unknown_op`）。 */
 export const PANE_OP_DISPLAY_FEATURES = "display.features";
+/** スクリプトが動く面へデータを送る（`sodactl display send`）。 */
+export const PANE_OP_DISPLAY_SEND = "display.send";

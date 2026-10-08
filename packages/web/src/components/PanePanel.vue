@@ -2,11 +2,12 @@
 import { computed, inject, nextTick, ref } from "vue";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { panelWidth, panelWidthRange } from "../display/displayLayout.js";
-import { displayLabel } from "../display/displayLabel.js";
+import { displayLabel, engagedNote } from "../display/displayLabel.js";
 import { frameKey } from "../display/framePage.js";
 import { DisplayControllerKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import DisplayFrame from "./DisplayFrame.vue";
+import DisplayScriptMark from "./DisplayScriptMark.vue";
 
 /**
  * pane の右に出すパネル（表示の面 `--kind panel`。20261007-soda-extensions の design「ブラウザ」）。
@@ -158,8 +159,10 @@ function onTabKey(ev: KeyboardEvent): void {
     </button>
     <template v-else>
       <div class="pane-panel-head">
-        <div class="pane-panel-label" data-pane-panel-label>{{ displayLabel(active) }}</div>
+        <div class="pane-panel-label" data-pane-panel-label><DisplayScriptMark :info="active" part="mark" />{{ displayLabel(active) }}</div>
         <div class="pane-panel-actions">
+          <DisplayScriptMark :info="active" part="button" />
+          <DisplayScriptMark :info="active" part="end" />
           <button type="button" class="pane-panel-btn" aria-label="パネルをたたむ" title="たたむ" data-pane-panel-fold @click="store.setCollapsed(paneId, true)">▸</button>
           <button type="button" class="pane-panel-btn" aria-label="この表示を閉じる" title="この表示を閉じる" data-pane-panel-close @click="dismiss(active.id)">×</button>
         </div>
@@ -181,7 +184,7 @@ function onTabKey(ev: KeyboardEvent): void {
         </button>
       </div>
       <div v-else class="pane-panel-title" data-pane-panel-title>{{ active.title }}</div>
-      <div v-if="engaged" class="pane-panel-engaged-note" aria-live="polite" data-pane-panel-engaged-note>入力はこの表示に届きます（Esc で端末へ）</div>
+      <div v-if="engaged" class="pane-panel-engaged-note" aria-live="polite" data-pane-panel-engaged-note>{{ engagedNote(active) }}</div>
       <div class="pane-panel-body">
         <DisplayFrame :key="frameKey(active)" :info="active" :content="content" />
       </div>

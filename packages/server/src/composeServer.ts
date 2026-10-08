@@ -42,7 +42,7 @@ import { AskService } from "./ask/AskService.js";
 import { PaneOpRegistry } from "./panesocket/PaneOpRegistry.js";
 import { PaneSocket } from "./panesocket/PaneSocket.js";
 import { askFeaturesOp, askOpenOp } from "./panesocket/askOp.js";
-import { displayCloseOp, displayFeaturesOp, displayListOp, displaySetOp, displayWaitOp } from "./panesocket/displayOps.js";
+import { displayCloseOp, displayFeaturesOp, displayListOp, displaySendOp, displaySetOp, displayWaitOp } from "./panesocket/displayOps.js";
 import { DisplayService } from "./display/DisplayService.js";
 import { AskMedia, type ImageFetcher } from "./ask/AskMedia.js";
 import { RemoteImageFetcher } from "./ask/RemoteImageFetcher.js";
@@ -348,6 +348,8 @@ export async function composeServer(
   });
   // 表示の面（20261007-soda-extensions）。pane ごとのパネル・帯。メモリだけ（再起動・引き継ぎで消える）。画面の見分けは ask と同じ（desktop / mobile）。
   const displays = new DisplayService({
+    // 設定 `displayScriptEnabled`（既定は無効。`true` のときだけ有効）。`prefs` は下で作る——読むのは `set`・`send` のとき（`listen()` で読み込んだ後）。
+    scriptEnabled: () => prefs.get().prefs.displayScriptEnabled === true,
     bus,
     paneExists,
     isScreenKind: (clientId) => {
@@ -368,6 +370,7 @@ export async function composeServer(
   paneOps.register(displayListOp(displays));
   paneOps.register(displayWaitOp(displays));
   paneOps.register(displayFeaturesOp(displays));
+  paneOps.register(displaySendOp(displays));
   const paneSocket = new PaneSocket({
     registry: paneOps,
     paneExists,
@@ -386,7 +389,17 @@ export async function composeServer(
   const prefs = new PrefsStore(options.stateDir, (err) =>
     logger.error("prefs.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),
   );
-  prefs.onChange((state, byClientId) => bus.publish({ event: "prefs.changed", data: { prefs: state.prefs, rev: state.rev, byClientId } }));
+  let scriptWasEnabled = false; // 起動時は prefs.json の読み込み前なので、最初の変更の前に読み直す（下）
+  prefs.onChange((state, byClientId) => {
+    const byKind = clients.get(byClientId)?.kind;
+    // スクリプトが動く表示が無効 → 有効に変わったら、サーバのログに残す（誰が変えたかの種別つき）。画面には、受け取った側が知らせを出す。
+    const nowEnabled = state.prefs.displayScriptEnabled === true;
+    if (nowEnabled && !scriptWasEnabled) logger.info("display script enabled", { byClientId, byKind: byKind ?? "unknown" });
+    scriptWasEnabled = nowEnabled;
+    bus.publish({ event: "prefs.changed", data: { prefs: state.prefs, rev: state.rev, byClientId, ...(byKind !== undefined ? { byKind } : {}) } });
+  });
+  // スクリプトが動く表示が設定で無効になったら、出ている面を全部閉じる（20261007-soda-extensions）。
+  prefs.onChange(() => displays.onScriptSettingChanged());
   // 連携のグラフ（20260927-agent-graph）。読むのは `listen()` のロックの後（prefs と同じ）。保存できた変更は全クライアントへ配る。
   const graph = new GraphStore(options.stateDir, (err) =>
     logger.error("graph.changed listener failed", { error: err instanceof Error ? (err.stack ?? err.message) : String(err) }),
@@ -654,6 +667,7 @@ export async function composeServer(
         // 0'（続き）. 共有の設定（20260927-cli-mode）。壊れていれば退避して空から始める（起動は止めない）。
         const loadedPrefs = await prefs.load();
         if (typeof loadedPrefs === "object") logger.warn("prefs.json was corrupt; starting with empty prefs", { backupPath: loadedPrefs.corrupt });
+        scriptWasEnabled = prefs.get().prefs.displayScriptEnabled === true;
         // 0'（続き）. 連携のグラフ（20260927-agent-graph）。壊れていれば退避して空から始める（起動は止めない）。
         const loadedGraph = await graph.load();
         if (typeof loadedGraph === "object") logger.warn("graph.json was corrupt; starting with an empty graph", { backupPath: loadedGraph.corrupt });

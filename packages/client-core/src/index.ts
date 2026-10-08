@@ -23,6 +23,7 @@ export * from "./workspace/viewRepair.js";
 export * from "./workspace/sidebarLayout.js";
 export * from "./workspace/workspaceGrouping.js";
 export * from "./workspace/dropTarget.js";
+export * from "./workspace/paneMoveScope.js";
 export * from "./sidebar/resolveRows.js";
 export * from "./sidebar/rowLayout.js";
 export * from "./tabbar/tabBarRight.js";

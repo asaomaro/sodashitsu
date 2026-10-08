@@ -360,6 +360,9 @@ function commitNewCwdPath(): void {
  * シェルの場所を追う（Windows。20260928-windows-pane-cwd の D-6）。押した時点で保存し、効くのは次に開く pane から（既に開いている pane は変えない）。
  * 読むのはサーバ（pane を開くたびに共有の設定を読む）。
  */
+function toggleDisplayScript(): void {
+  settings.setDisplayScriptEnabled(!settings.displayScriptEnabled);
+}
 function toggleShellCwdTracking(): void {
   settings.setShellCwdTracking(!settings.shellCwdTracking);
 }
@@ -1234,6 +1237,25 @@ function onNativeCancel(ev: Event): void {
           </button>
           <p id="settings-shell-cwd-note" class="settings-note">
             Windows のサーバで、pane の PowerShell・cmd がプロンプトのたびに今の場所を知らせるようにします（cd した場所を再起動後も保ちます）。新しく開く pane から効きます。
+          </p>
+        </li>
+        <li class="settings-row">
+          <button
+            type="button"
+            role="switch"
+            class="settings-switch"
+            :aria-checked="settings.displayScriptEnabled"
+            aria-describedby="settings-display-script-note"
+            data-settings-display-script
+            @click="toggleDisplayScript"
+          >
+            <span class="settings-mark">{{ settings.displayScriptEnabled ? "入" : "切" }}</span>
+            <span>スクリプトが動く表示を許可する</span>
+          </button>
+          <p id="settings-display-script-note" class="settings-note">
+            pane のプログラムや拡張が、スクリプトの動く表示（グラフなど）を出せるようになります。表示の中のスクリプトは、アプリや端末の中身には触れませんが、表示に見えているもの・表示に入力したものを外へ送れます。
+            信頼できるプログラムだけを使うときに有効にしてください（既定は無効。無効にすると、出ている表示は閉じます）。
+            この設定は、不注意やふつうのプログラムが出すのを防ぐものです。同じ OS の利用者で動くプログラムは、認証の情報を読めば自分で有効にできます（悪意のあるプログラムへの防御ではありません）。有効になると、つながっている画面に知らせます。詳しくは docs/display.md。
           </p>
         </li>
       </ul>

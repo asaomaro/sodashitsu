@@ -155,7 +155,13 @@ export interface CommandPopupClosedEvent {
  */
 export interface PrefsChangedEvent {
   event: "prefs.changed";
-  data: { prefs: SharedPrefs; rev: number; byClientId: string };
+  data: {
+    prefs: SharedPrefs;
+    rev: number;
+    byClientId: string;
+    /** 保存した接続の種別（20261007-soda-extensions。「スクリプトが動く表示」が有効になったことの知らせに添える）。登録簿に無ければ付かない。古いサーバには無い。 */
+    byKind?: "desktop" | "mobile" | "external";
+  };
 }
 
 /**
@@ -200,6 +206,14 @@ export interface DisplayRemovedEvent {
   data: { id: string; paneId: string; name: string; reason: DisplayClosedReasonValue };
 }
 
+/**
+ * `display.send` のデータ（スクリプトが動く面へ）。保存しない。その面の枠を描いている画面だけが、枠へ渡す。ほかは捨てる。
+ */
+export interface DisplayMessageEvent {
+  event: "display.message";
+  data: { id: string; data: unknown };
+}
+
 export type ServerEvent =
   | WorkspaceCreatedEvent
   | WorkspaceUpdatedEvent
@@ -232,6 +246,7 @@ export type ServerEvent =
   | AskOpenedEvent
   | AskClosedEvent
   | DisplayUpdatedEvent
-  | DisplayRemovedEvent;
+  | DisplayRemovedEvent
+  | DisplayMessageEvent;
 
 export type ServerEventName = ServerEvent["event"];

@@ -79,7 +79,8 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl graph node rekey <pane> <newPane> [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl graph history [<linkId>] [--limit <N>] [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl ask [--timeout <ms>] [--url <URL>] [--token <TOKEN>] < spec.json",
-  "sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] (--text <text> | --markdown-file <path> | --html-file <path> | [--format text|markdown|html] < stdin) [--wait [--timeout <ms>]] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] (--text <text> | --markdown-file <path> | --html-file <path> | --script-html-file <path> | [--format text|markdown|html|script-html] < stdin) [--wait [--timeout <ms>]] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl display send <name> (--json <JSON> | < stdin) [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display close (<name> | --all) [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display list [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display wait [<name>] [--since <seq> --epoch <epoch>] [--timeout <ms>] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
@@ -225,7 +226,7 @@ export type GraphAction =
 /** `sodactl display set` の中身の出どころ（ファイルと標準入力の読み込みは `commands/display.ts`）。 */
 export type DisplaySource =
   | { kind: "text"; text: string }
-  | { kind: "file"; format: "markdown" | "html"; path: string }
+  | { kind: "file"; format: "markdown" | "html" | "script-html"; path: string }
   /** 標準入力。`--format` を省くと `text`。 */
   | { kind: "stdin"; format: DisplayFormat };
 
@@ -244,6 +245,8 @@ export type DisplayAction =
       timeoutMs: number | undefined;
       pane: string | undefined;
     }
+  /** スクリプトが動く面へデータを送る。`json` は `--json` の文字（省くと標準入力）。JSON として読めるかは parse 時に確かめる（標準入力は実行時）。 */
+  | { kind: "send"; name: string; json: string | undefined; pane: string | undefined }
   | { kind: "close"; name: string | undefined; all: boolean; pane: string | undefined }
   | { kind: "list"; pane: string | undefined }
   | { kind: "wait"; name: string | undefined; since: number | undefined; epoch: string | undefined; timeoutMs: number | undefined; pane: string | undefined }
@@ -764,7 +767,7 @@ function parseDisplay(sub: string | undefined, rest: readonly string[], env: Nod
   if (sub === "set") {
     // `--title`・`--text` は `--` で始まる値も `--title=<値>` の形で渡せる（inline）。
     const withValues = parseFlags(rest, {
-      values: [...base, "--kind", "--size", "--ttl-ms", "--markdown-file", "--html-file", "--format", "--timeout", "--title", "--text"],
+      values: [...base, "--kind", "--size", "--ttl-ms", "--markdown-file", "--html-file", "--script-html-file", "--format", "--timeout", "--title", "--text"],
       inline: ["--title", "--text"],
       bools: ["--wait"],
     });
@@ -784,9 +787,9 @@ function parseDisplay(sub: string | undefined, rest: readonly string[], env: Nod
     const ttlRaw = v.get("--ttl-ms");
     const ttlMs = ttlRaw === undefined ? undefined : displayInt(ttlRaw, "--ttl-ms", DISPLAY_TTL_MIN_MS, DISPLAY_TTL_MAX_MS);
     // 中身の指定は 1 つだけ。どれも無ければ標準入力（形は --format。省くと text）。
-    const given = (["--text", "--markdown-file", "--html-file"] as const).filter((f) => v.has(f));
+    const given = (["--text", "--markdown-file", "--html-file", "--script-html-file"] as const).filter((f) => v.has(f));
     if (given.length > 1) {
-      throw new CliUsageError(`only one of ${given.join(", ")} can be given`, `中身の指定は --text・--markdown-file・--html-file のどれか 1 つです。標準入力で渡すときは、どれも付けません。\n${DISPLAY_USAGE}`);
+      throw new CliUsageError(`only one of ${given.join(", ")} can be given`, `中身の指定は --text・--markdown-file・--html-file・--script-html-file のどれか 1 つです。標準入力で渡すときは、どれも付けません。\n${DISPLAY_USAGE}`);
     }
     const formatRaw = v.get("--format");
     let source: DisplaySource;
@@ -795,7 +798,10 @@ function parseDisplay(sub: string | undefined, rest: readonly string[], env: Nod
         throw new CliUsageError("--format can only be used with stdin", `--format は標準入力で渡すときだけ付けられます。\n${DISPLAY_USAGE}`);
       }
       const f = given[0]!;
-      source = f === "--text" ? { kind: "text", text: v.get("--text")! } : { kind: "file", format: f === "--markdown-file" ? "markdown" : "html", path: v.get(f)! };
+      source =
+        f === "--text"
+          ? { kind: "text", text: v.get("--text")! }
+          : { kind: "file", format: f === "--markdown-file" ? "markdown" : f === "--html-file" ? "html" : "script-html", path: v.get(f)! };
     } else {
       if (formatRaw !== undefined && !(DISPLAY_FORMATS as readonly string[]).includes(formatRaw)) {
         throw new CliUsageError(`invalid value for --format: ${formatRaw}`, `--format は ${DISPLAY_FORMATS.join("|")} にしてください。`);
@@ -811,6 +817,20 @@ function parseDisplay(sub: string | undefined, rest: readonly string[], env: Nod
       opts: globalOptsFrom(v, env),
       action: { kind: "set", name, displayKind, title: v.get("--title"), size, ttlMs, source, wait, timeoutMs, pane: v.get("--pane") },
     };
+  }
+  if (sub === "send") {
+    const { positionals: pos, values: v } = parseFlags(rest, { values: [...base, "--json"] });
+    const name = displayName(requirePositional(pos, 0, "name", DISPLAY_USAGE));
+    rejectExtra(pos, 1, DISPLAY_USAGE);
+    const json = v.get("--json");
+    if (json !== undefined) {
+      try {
+        JSON.parse(json);
+      } catch {
+        throw new CliUsageError("--json is not valid JSON", `--json は JSON として読める文字にしてください。\n${DISPLAY_USAGE}`);
+      }
+    }
+    return { kind: "display", opts: globalOptsFrom(v, env), action: { kind: "send", name, json, pane: v.get("--pane") } };
   }
   if (sub === "close") {
     const { positionals, values, bools } = parseFlags(rest, { values: base, bools: ["--all"] });

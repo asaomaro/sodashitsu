@@ -359,6 +359,9 @@ export interface PaneReplaceResult {
   ok: boolean;
 }
 
+/** pane の移動を断った理由（20261008-web-tab-dnd）。古いサーバは返さない。 */
+export type PaneMoveBlock = "different_worktree";
+
 /**
  * 既存の pane（`paneId`）を、別の tab（`targetTabId`）へ移す（20260924-pane-move-cross-tab。
  * ドラッグで tab バーの tab へドロップする用）。対象 tab の focus 中の pane の右へ split で
@@ -369,6 +372,8 @@ export type PaneMoveToTabParams = z.infer<typeof PaneMoveToTabParams>;
 export interface PaneMoveToTabResult {
   /** 自分自身の tab・存在しない tab 等、何も起きなかったときは false（design「エラー処理」）。 */
   ok: boolean;
+  /** 断った理由（20261008-web-tab-dnd）。別の worktree の workspace への移動を断ったときだけ付く。古いサーバは返さない。 */
+  reason?: PaneMoveBlock;
 }
 
 /**
@@ -383,6 +388,8 @@ export interface PaneMoveToNewTabResult {
   ok: boolean;
   /** 作られた新しい tab（ok=false のときは無い）。 */
   tab?: Tab;
+  /** 断った理由（20261008-web-tab-dnd）。別の worktree の workspace への移動を断ったときだけ付く。古いサーバは返さない。 */
+  reason?: PaneMoveBlock;
 }
 
 export const PaneZoomParams = z.object({ paneId, mode: zoomMode });
@@ -524,6 +531,9 @@ export type DisplayListParams = z.infer<typeof DisplayListParams>;
 export const DisplayWaitParams = z.object({ paneId, ...displayWaitFields });
 export type DisplayWaitParams = z.infer<typeof DisplayWaitParams>;
 /** 機能確認（引数なし）。古いサーバは `not_found`（知らない方式）を返す。 */
+/** スクリプトが動く面へデータを送る。`data` は JSON の値（64 KiB までの検査は `checkDisplaySend`）。 */
+export const DisplaySendParams = z.object({ paneId, name: displayName, data: z.unknown() });
+export type DisplaySendParams = z.infer<typeof DisplaySendParams>;
 export const DisplayFeaturesParams = z.object({});
 export type DisplayFeaturesParams = z.infer<typeof DisplayFeaturesParams>;
 /** この接続を「面を出せる画面」として登録し、全 pane の面の見出しを受け取る（接続のたびに呼ぶ）。`features` の知らない値はサーバが捨てる。 */
@@ -548,7 +558,7 @@ export const DisplayDismissParams = z.object({ id: displayId.optional(), paneId:
 export type DisplayDismissParams = z.infer<typeof DisplayDismissParams>;
 /**
  * 画面が、枠の異常（別のページへ移った・応答しない）を知らせる。その面を閉じる。
- * `paneId`・`format` は、画面が描いていた枠のもの（任意。この版のサーバは使わず、受け流す。後の版が、面がもう無いときの数え方に使う）。
+ * `paneId`・`format` は、画面が描いていた枠のもの（任意。サーバは、面がもう無い・形式が替わっているときの数え方に使う）。
  */
 export const DisplayReportParams = z.object({
   id: displayId,
@@ -557,6 +567,15 @@ export const DisplayReportParams = z.object({
   format: z.string().max(64).optional(),
 });
 export type DisplayReportParams = z.infer<typeof DisplayReportParams>;
+/** `display.report` の結果。`steals` は `focus_steal` のとき、その pane の今の取られた回数。 */
+export interface DisplayReportResult {
+  closed: string[];
+  steals?: number;
+}
+export interface DisplaySendResult {
+  /** `script-html` を出せると名乗った画面の数（0 でも成功）。 */
+  delivered: number;
+}
 export interface DisplayClosedResult {
   /** 閉じた面の名前（無ければ空）。 */
   closed: string[];
@@ -578,6 +597,8 @@ export const PaneDisplayListParams = z.strictObject({});
 export type PaneDisplayListParams = z.infer<typeof PaneDisplayListParams>;
 export const PaneDisplayWaitParams = z.strictObject(displayWaitFields);
 export type PaneDisplayWaitParams = z.infer<typeof PaneDisplayWaitParams>;
+export const PaneDisplaySendParams = z.strictObject({ name: displayName, data: z.unknown() });
+export type PaneDisplaySendParams = z.infer<typeof PaneDisplaySendParams>;
 export const PaneDisplayFeaturesParams = z.strictObject({});
 export type PaneDisplayFeaturesParams = z.infer<typeof PaneDisplayFeaturesParams>;
 
@@ -766,6 +787,13 @@ export interface SharedPrefs {
    * 既定は入（boolean でなければ入）。サーバが pane を開くたびに読む（次に開く pane から効く）。
    */
   shellCwdTracking?: boolean;
+  /**
+   * スクリプトが動く表示（`script-html`。`sodactl display`）を出せるか（20261007-soda-extensions。利用者の決定）。**既定は無効**（`true` のときだけ有効。サーバも web も同じ規則で読む）。
+   * サーバが `DisplayService` の `set`・`send` で見る。有効 → 無効にすると、出ている `script-html` の面は全部閉じる（理由 `script_disabled`）。
+   * `prefs.set`（ログイン済みの接続）で変える。`pane.sock` からは変えられない。ただし同じ OS の利用者のプログラムは、状態ディレクトリの認証の情報を読めば自分でログインして変えられる
+   * （不注意やふつうのプログラムを防ぐ設定で、悪意のあるプログラムへの防御ではない）。無効 → 有効に変わると、全画面に知らせ、サーバのログに残す。
+   */
+  displayScriptEnabled?: boolean;
   notify?: { toast?: boolean; desktop?: boolean; sound?: boolean };
   notifyHintPending?: boolean;
   notifyHintDone?: boolean;
@@ -1037,6 +1065,7 @@ export const METHOD_SCHEMAS = {
   "display.list": DisplayListParams,
   "display.wait": DisplayWaitParams,
   "display.features": DisplayFeaturesParams,
+  "display.send": DisplaySendParams,
   "display.subscribe": DisplaySubscribeParams,
   "display.get": DisplayGetParams,
   "display.action": DisplayActionParams,
@@ -1148,7 +1177,8 @@ export interface MethodResultMap {
   "display.get": DisplayChunk;
   "display.action": Record<string, never>;
   "display.dismiss": DisplayClosedResult;
-  "display.report": DisplayClosedResult;
+  "display.report": DisplayReportResult;
+  "display.send": DisplaySendResult;
   "file.info": FileInfoResult;
   "file.resolve": FileResolveResult;
   "file.open": Record<string, never>;

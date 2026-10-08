@@ -3,7 +3,7 @@ import type { ConnectionPort } from "@sodashitsu/client-core";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDisplayStore } from "../store/display.js";
-import { DisplayController } from "./DisplayController.js";
+import { DisplayController, focusStealToast } from "./DisplayController.js";
 
 const info = (id: string, over: Partial<DisplayInfo> = {}): DisplayInfo => ({
   id,
@@ -49,7 +49,7 @@ describe("DisplayController", () => {
     s.store.upsert(info("old"));
     s.ctl.onOpened();
     await settle();
-    expect(s.calls[0]).toEqual(["display.subscribe", { features: ["panel", "band", "actions"] }]);
+    expect(s.calls[0]).toEqual(["display.subscribe", { features: ["panel", "band", "actions", "script-html"] }]);
     expect([...s.store.infos.keys()]).toEqual(["a", "b"]);
     expect(s.store.infos.get("b")?.format).toBe("future-x");
   });
@@ -194,5 +194,68 @@ describe("DisplayController", () => {
     await s.ctl.ensureContent("a");
     expect(s.store.contents.get("a")?.content).toBe("abc");
     expect(s.store.contentFailed.has("a")).toBe(false);
+  });
+
+  it("display.message: その面の枠を描いている部品だけに渡す（保存しない）。登録を外せる。1 つが投げてもほかへ渡す", () => {
+    const s = setup();
+    const got: unknown[] = [];
+    const off = s.ctl.onMessage("a", (d) => got.push(["1", d]));
+    s.ctl.onMessage("a", () => {
+      throw new Error("boom");
+    });
+    s.ctl.onMessage("a", (d) => got.push(["3", d]));
+    s.ctl.onMessage("b", (d) => got.push(["b", d]));
+    s.ctl.onEvent({ event: "display.message", data: { id: "a", data: { n: 1 } } });
+    expect(got).toEqual([["1", { n: 1 }], ["3", { n: 1 }]]);
+    off();
+    s.ctl.onEvent({ event: "display.message", data: { id: "a", data: 2 } });
+    expect(got).toHaveLength(3);
+    s.ctl.onEvent({ event: "display.message", data: { id: "nobody", data: 3 } }); // 描いている部品が無ければ捨てる
+    expect(got).toHaveLength(3);
+  });
+
+  it("display.removed の理由が focus_steal のときのトースト（設計の文言）。navigated・unresponsive は従来どおり", async () => {
+    const s = setup();
+    for (const id of ["a", "b", "c"]) s.store.upsert(info(id));
+    s.ctl.onEvent({ event: "display.removed", data: { id: "a", paneId: "p1", name: "a", reason: "focus_steal" } });
+    s.ctl.onEvent({ event: "display.removed", data: { id: "b", paneId: "p1", name: "b", reason: "navigated" } });
+    s.ctl.onEvent({ event: "display.removed", data: { id: "zz", paneId: "p1", name: "zz", reason: "focus_steal" } }); // 知らない面は出さない
+    expect(s.toasts).toEqual([
+      "表示『a』は、キー入力を取ろうとし続けたので閉じました。この pane は、しばらくスクリプトが動く表示を出せません",
+      "表示『b』は、別のページへ移ろうとしたので閉じました",
+    ]);
+    expect(focusStealToast("x")).toContain("しばらくスクリプトが動く表示を出せません");
+  });
+
+  it("report は、サーバが答えたら true、繋がっていない（コードの無いエラー）なら false。focus_steal の paneId・format を添える", async () => {
+    const ok = setup({ "display.report": () => ({ closed: [], steals: 1 }) });
+    expect(await ok.ctl.report("a", "focus_steal", { paneId: "p1", format: "script-html" })).toBe(true);
+    expect(ok.calls[0]).toEqual(["display.report", { id: "a", problem: "focus_steal", paneId: "p1", format: "script-html" }]);
+    const closed = setup({ "display.report": () => code("display_closed") });
+    expect(await closed.ctl.report("a", "navigated", { paneId: "p1", format: "html" })).toBe(true); // サーバは答えた
+    const down = setup({ "display.report": () => new Error("not connected (method=display.report)") });
+    expect(await down.ctl.report("a", "focus_steal", { paneId: "p1", format: "script-html" })).toBe(false);
+  });
+
+  it("report は頻度の制限に入らない（focus_steal を 100 回続けても全部送る）", async () => {
+    const s = setup({ "display.report": () => ({ closed: [] }) });
+    for (let i = 0; i < 100; i++) void s.ctl.report("a", "focus_steal", { paneId: "p1", format: "script-html" });
+    await settle();
+    expect(s.calls.filter(([m]) => m === "display.report")).toHaveLength(100);
+  });
+
+  it("名乗る機能に script-html が入る。入れない画面は scriptCapable が偽になる", async () => {
+    const a = setup({ "display.subscribe": () => ({ displays: [] }) });
+    a.ctl.onOpened();
+    await settle();
+    expect(a.store.scriptCapable).toBe(true);
+    setActivePinia(createPinia());
+    const store = useDisplayStore();
+    const calls: unknown[] = [];
+    const conn = { request: vi.fn(async (m: string, p: unknown) => (calls.push([m, p]), { displays: [] })) } as unknown as Pick<ConnectionPort, "request">;
+    new DisplayController({ conn, store, toast: () => undefined, subscribeFeatures: ["panel", "band", "actions"] }).onOpened();
+    await settle();
+    expect(store.scriptCapable).toBe(false);
+    expect(calls[0]).toEqual(["display.subscribe", { features: ["panel", "band", "actions"] }]);
   });
 });
