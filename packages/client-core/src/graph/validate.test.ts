@@ -122,7 +122,10 @@ describe("validateGraph", () => {
     );
     expect(
       validateGraph(
-        graph([], [...keys.slice(0, GRAPH_LOCAL_NODES_MAX), ...remote.slice(0, GRAPH_REMOTE_NODES_MAX)]),
+        graph(
+          [],
+          [...keys.slice(0, GRAPH_LOCAL_NODES_MAX), ...remote.slice(0, GRAPH_REMOTE_NODES_MAX)],
+        ),
       ),
     ).toEqual([]);
     expect(codes(validateGraph(graph([], remote)))).toEqual(["too_many_remote_nodes"]);

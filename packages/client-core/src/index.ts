@@ -29,6 +29,7 @@ export * from "./sidebar/rowLayout.js";
 export * from "./tabbar/tabBarRight.js";
 export * from "./graph/defaults.js";
 export * from "./graph/geometry.js";
+export * from "./graph/graphLayout.js";
 export * from "./graph/message.js";
 export * from "./graph/nodeKey.js";
 export * from "./graph/ops.js";

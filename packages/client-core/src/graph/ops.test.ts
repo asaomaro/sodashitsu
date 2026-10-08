@@ -328,7 +328,9 @@ describe("applyGraphOps のノードの上限（手元と別のマシンは別�
       x: 0,
       y: 0,
     }));
-    const r = applyGraphOps(state({ nodes: remote }), [{ op: "add_node", key: `${"e".repeat(32)}:p1`, x: 0, y: 0 }]);
+    const r = applyGraphOps(state({ nodes: remote }), [
+      { op: "add_node", key: `${"e".repeat(32)}:p1`, x: 0, y: 0 },
+    ]);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.issues.map((i) => i.code)).toEqual(["too_many_remote_nodes"]);
   });
