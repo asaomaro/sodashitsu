@@ -129,7 +129,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T1
       AC: AC2, AC34
       点検: あり
-- [ ] T4: 行の切り出し `LineReader`: `push(chunk: Buffer)`・`next(): { kind: "line"; text; bytes } | { kind: "too_long"; bytes } | { kind: "bad_utf8"; bytes } | null`。改行（`\n`。直前の `\r` は除く）で切る。改行が無いまま `EXTENSION_LINE_MAX_BYTES` を超えたら、次の改行までを捨てて `too_long` を 1 回返す。空白だけの行は飛ばす。
+- [x] T4: 行の切り出し `LineReader`: `push(chunk: Buffer)`・`next(): { kind: "line"; text; bytes } | { kind: "too_long"; bytes } | { kind: "bad_utf8"; bytes } | null`。改行（`\n`。直前の `\r` は除く）で切る。改行が無いまま `EXTENSION_LINE_MAX_BYTES` を超えたら、次の改行までを捨てて `too_long` を 1 回返す。空白だけの行は飛ばす。
       持つのは、切り出していない残りだけ（上限＋1 片）。単体テスト（片をまたぐ行・1 片に 1000 行・ちょうど 4 MiB と 1 バイト超・捨てている途中で片が続く〔持っているバイト数が増えないこと〕・壊れた UTF-8・多バイト文字が片をまたぐ）
       対象: `packages/server/src/extensions/lineReader.ts`（新規）、`lineReader.test.ts`（新規）/ 根拠: design「`ExtensionProcess`」の「読む」、research E5（行で読む先例が無い）
       依存: T1
