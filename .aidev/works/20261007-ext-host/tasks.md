@@ -135,7 +135,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T1
       AC: AC12
       点検: あり
-- [ ] T5: 起動の引数・止め方・環境変数（純粋）: `extensionArgv`（POSIX は `["/bin/sh", "-c", command]`。Windows は `[シェル, "/d", "/s", "/c", "\"<command>\""]` で、シェルは `ComSpec`〔大文字小文字を問わず引く〕か、無ければ `<SystemRoot>\System32\cmd.exe`）・
+- [x] T5: 起動の引数・止め方・環境変数（純粋）: `extensionArgv`（POSIX は `["/bin/sh", "-c", command]`。Windows は `[シェル, "/d", "/s", "/c", "\"<command>\""]` で、シェルは `ComSpec`〔大文字小文字を問わず引く〕か、無ければ `<SystemRoot>\System32\cmd.exe`）・
       `killTreeCommand(pid, platform, env)`（Windows だけ。**`<SystemRoot ?? windir ?? "C:\Windows">\System32\taskkill.exe` の絶対パス**と、`cwd` も `System32`。名前だけで起動しない。S25）・`EXTENSION_ENV_DROPPED`・`buildExtensionEnv`（design「`ExtensionProcess`」の頭）。
       `PANE_ENV_DROPPED` に `SODA_EXTENSION_ID`・`SODA_EXTENSION_SCOPE`・`SODA_PROJECT_ROOT`・`SODA_EXTENSION_RUN_ID` を足す。単体テスト（両方の `platform`・`taskkill` の `file` が絶対パスで、`SystemRoot` も `windir` も無いときは `C:\Windows`・`ComSpec` が無いときのシェルが絶対パス・Windows は大文字小文字を区別せずに落とす・
       **結果のどの値にも、`SODACTL_TOKEN`・`SODA_PANE_ID`・`SODA_PANE_SOCKET`・`SODA_SERVER_URL`・`SODA_AGENT_REPORT_SOCKET` の元の値が含まれないこと**・`paneEnv.test.ts` に、足した 4 つが落ちること）

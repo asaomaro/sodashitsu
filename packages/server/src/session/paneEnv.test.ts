@@ -232,3 +232,25 @@ describe("buildPaneEnv の SODA_PANE_SOCKET", () => {
     ).toEqual([]);
   });
 });
+
+/** 20261007-ext-host（T5）: 拡張に渡す 4 つの変数は、pane へは落とす。 */
+describe("buildPaneEnv: 拡張の変数", () => {
+  it("SODA_EXTENSION_ID・SODA_EXTENSION_SCOPE・SODA_PROJECT_ROOT・SODA_EXTENSION_RUN_ID を落とす", () => {
+    const env = buildPaneEnv(
+      {
+        PATH: "/usr/bin",
+        SODA_EXTENSION_ID: "hello",
+        SODA_EXTENSION_SCOPE: "project",
+        SODA_PROJECT_ROOT: "/r",
+        SODA_EXTENSION_RUN_ID: "run-1",
+      },
+      { paneId: "p1" },
+      "linux",
+    );
+    expect(env).toEqual({ PATH: "/usr/bin", SODA_PANE_ID: "p1" });
+  });
+  it("Windows では大文字小文字を区別せずに落とす", () => {
+    const env = buildPaneEnv({ Path: "C:\\x", soda_extension_id: "hello", Soda_Project_Root: "C:\\r" }, {}, "win32");
+    expect(env).toEqual({ Path: "C:\\x" });
+  });
+});
