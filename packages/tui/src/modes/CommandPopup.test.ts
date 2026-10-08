@@ -140,6 +140,29 @@ describe("独自コマンドを走らせる（web の ActionDispatcher.runComman
     expect(h.app.ui.dialogContext).toEqual({ kind: "help" });
   });
 
+  it("背景を透過しているときも、popup の中身の既定の背景は塗る（重なる部品は透かさない。サイドバーなど地は透かす）", async () => {
+    const h = await start({ "command.run": { type: "popup", popupId: "ppt", cols: 40, rows: 8 } });
+    h.app.prefs.setLocal({ transparentBg: true });
+    h.run("fzf");
+    await vi.waitFor(() =>
+      expect(
+        h.ws
+          .requests("pane.subscribe")
+          .some((r) => (r.params as { paneId: string }).paneId === "ppt"),
+      ).toBe(true),
+    );
+    h.ws.onmessage?.({ data: encodeSnapshotFrame("ppt", 40, 8, "> query here") });
+    await new Promise((r) => setTimeout(r, 20));
+    h.app.renderNow();
+    await h.screen();
+    const c = (h.app as unknown as { popup: { content: { x: number; y: number } } }).popup.content;
+    // 文字の無いセル（pane の既定の背景）も、右下の余白も塗られている。
+    expect(h.outer.cellBg(c.x + 20, c.y + 3)).not.toBeNull();
+    expect(h.outer.cellBg(c.x + 30, c.y)).not.toBeNull();
+    // 地は透かしたまま（サイドバーの左上の隅）。
+    expect(h.outer.cellBg(0, 5)).toBeNull();
+  });
+
   it("popup の中のプログラムがマウスを求めていれば渡し、代替画面のホイールは矢印キー", async () => {
     const h = await start({ "command.run": { type: "popup", popupId: "pp5", cols: 40, rows: 8 } });
     h.run("fzf");

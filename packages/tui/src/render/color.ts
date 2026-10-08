@@ -153,7 +153,7 @@ export class ThemeColors {
    */
   constructor(
     readonly name: ThemeName,
-    overrides?: ThemeOverrides,
+    private readonly overrides?: ThemeOverrides,
     /**
      * 背景を透かす（端末版の設定「背景を透過する」）。pane の既定の背景と、画面の地（`ground`）を既定の背景（SGR 49）で送る。
      * それ以外（プログラムが指定した背景・選択・強調・メニュー・ダイアログ）は塗ったまま。
@@ -190,6 +190,14 @@ export class ThemeColors {
       this.cache.set(v, c);
     }
     return c;
+  }
+
+  private solidCache: ThemeColors | undefined;
+
+  /** 透過を外した同じ配色（重なる部品の中に pane の中身を描くとき〔独自コマンドのポップアップ〕。透かさない）。 */
+  get solid(): ThemeColors {
+    if (!this.transparent) return this;
+    return (this.solidCache ??= new ThemeColors(this.name, this.overrides, false));
   }
 
   /**

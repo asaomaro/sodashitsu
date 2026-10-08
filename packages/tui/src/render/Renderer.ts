@@ -127,7 +127,7 @@ export class Renderer {
         continue;
       }
       paintScrollbar(grid, box, term, focused, theme);
-      const key = `${box.content.x},${box.content.y},${box.content.w},${box.content.h},${theme.key}`;
+      const key = `${box.content.x},${box.content.y},${box.content.w},${box.content.h},${theme.name}`;
       if (prev && !term.dirty && !focused && this.lastPaint.get(box.paneId) === key) {
         grid.copyFrom(prev, box.content);
       } else {
