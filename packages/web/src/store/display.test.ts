@@ -105,3 +105,103 @@ describe("パネルの幅（利用者が変えた幅。この画面が覚える�
     expect(loadPanelWidths("x").size).toBe(0);
   });
 });
+
+describe("面の記憶（置き場所・たたみ。20261008-display-layout）", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    setActivePinia(createPinia());
+  });
+  const stored = (): { faces: Record<string, unknown>; names: Record<string, unknown>; sides: Record<string, number> } =>
+    (JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as { displayLayout?: never }).displayLayout ?? { faces: {}, names: {}, sides: {} };
+
+  it("たたむ → 全項目を書く（置き場所は丸める前の指定のまま）→ 次の store が読み込む。開く → 最後に操作した面", () => {
+    const s = useDisplayStore();
+    const a = info("a", { dock: "bottom" });
+    s.upsert(a);
+    expect(s.effectiveOf(a)).toEqual({ dock: "right", edge: null, collapsed: false });
+    s.setFaceCollapsed(a, true);
+    expect(stored().faces).toEqual({ "p1|panel|a": { dock: "bottom", collapsed: true } });
+    expect(s.effectiveOf(a).collapsed).toBe(true);
+    setActivePinia(createPinia());
+    expect(useDisplayStore().effectiveOf(a).collapsed).toBe(true);
+    const s2 = useDisplayStore();
+    s2.setFaceCollapsed(a, false);
+    expect(s2.effectiveOf(a).collapsed).toBe(false);
+    expect(s2.lastFace.get("p1")).toBe("a");
+  });
+  it("設定の「初めの状態: たたむ」は記憶の無い面だけに効く。開いた面は開いたまま", async () => {
+    const { useSettingsStore } = await import("./settings.js");
+    const s = useDisplayStore();
+    const a = info("a");
+    const b = info("b");
+    s.setFaceCollapsed(a, false);
+    useSettingsStore().setDisplayPanelInitial("collapsed");
+    expect(s.effectiveOf(a).collapsed).toBe(false);
+    expect(s.effectiveOf(b).collapsed).toBe(true);
+  });
+  it("帯を移すと collapsed:false と names を書く。移しただけの面は、後から collapsed の指定でたたまれない", () => {
+    const s = useDisplayStore();
+    const b = info("bar", { kind: "band", collapsed: true });
+    expect(s.effectiveOf(b)).toEqual({ dock: null, edge: "top", collapsed: true });
+    s.setFaceEdge(b, "bottom");
+    expect(stored().faces).toEqual({ "p1|band|bar": { edge: "bottom", collapsed: false } });
+    expect(stored().names).toEqual({ "band|bar": { edge: "bottom" } });
+    expect(s.effectiveOf({ ...b, collapsed: true })).toEqual({ dock: null, edge: "bottom", collapsed: false });
+  });
+  it("置き場所の変更は names に書き、同じ名前の別の pane の面が引き継ぐ。resetFace で戻る", () => {
+    const s = useDisplayStore();
+    const a = info("a");
+    const other = info("a2", { paneId: "p2", name: "a" });
+    s.setFaceDock(a, "right");
+    expect(stored().names).toEqual({ "panel|a": { dock: "right" } });
+    expect(s.hasPref(a)).toBe(true);
+    expect(s.hasPref(other)).toBe(true);
+    s.resetFace(a);
+    expect(stored().faces).toEqual({});
+    expect(stored().names).toEqual({});
+    expect(s.hasPref(a)).toBe(false);
+  });
+  it("側の大きさ: 範囲に丸めて覚え、消せる。右は displayPanelWidths を引き継いで読む", () => {
+    const s = useDisplayStore();
+    s.setPanelWidth("p1", 333);
+    expect(s.sideSizeOf("p1", "right")).toBe(333);
+    s.setSideSize("p1", "right", 420);
+    expect(s.sideSizeOf("p1", "right")).toBe(420);
+    expect(stored().sides).toEqual({ "p1|right": 420 });
+    s.setSideSize("p1", "top", 5);
+    expect(stored().sides["p1|top"]).toBe(96);
+    s.clearSideSize("p1", "right");
+    expect(s.sideSizeOf("p1", "right")).toBe(333);
+  });
+  it("pruneLayout はもう無い pane の faces・sides を捨てる。消えた面の activeBySide・lastFace も捨てる", () => {
+    const s = useDisplayStore();
+    const a = info("a");
+    s.upsert(a);
+    s.setFaceCollapsed(a, true);
+    s.setSideSize("p1", "right", 300);
+    s.setActiveBySide("p1", "right", "a");
+    s.pruneLayout(new Set(["p9"]));
+    expect(stored().faces).toEqual({});
+    expect(stored().sides).toEqual({});
+    s.remove("a");
+    expect(s.activeBySide.size).toBe(0);
+    expect(s.lastFace.size).toBe(0);
+  });
+  it("面が操作中になったら、その pane の最後に操作した面になる", () => {
+    const s = useDisplayStore();
+    s.upsert(info("a"));
+    s.upsert(info("b"));
+    s.setFocused("b");
+    expect(s.lastFace.get("p1")).toBe("b");
+  });
+  it("割り付けの写しを書くと layoutRev が増える。同じ値なら増えない", () => {
+    const s = useDisplayStore();
+    s.setLayoutSnapshot("p1", { auto: [], floatArea: null });
+    s.setLayoutSnapshot("p1", { auto: [], floatArea: null });
+    expect(s.layoutRev).toBe(1);
+    s.setLayoutSnapshot("p1", { auto: ["a"], floatArea: null });
+    expect(s.layoutRev).toBe(2);
+    s.setLayoutSnapshot("p1", null);
+    expect(s.layoutByPane.has("p1")).toBe(false);
+  });
+});
