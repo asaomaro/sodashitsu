@@ -9,7 +9,7 @@ import { createPinia } from "pinia";
 import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
-import { ActionDispatcherKey, AskControllerKey, ConnectionKey, DeviceKindKey, FileTransferKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import { ActionDispatcherKey, AskControllerKey, ConnectionKey, DisplayControllerKey, DisplayHostKey, DeviceKindKey, FileTransferKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
 import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
@@ -37,6 +37,8 @@ import { InputGate } from "@sodashitsu/client-core";
 import { ImagePaster } from "./term/ImagePaster.js";
 import { AskController } from "./ask/AskController.js";
 import { useAskStore } from "./store/ask.js";
+import { DisplayController } from "./display/DisplayController.js";
+import { useDisplayStore } from "./store/display.js";
 import { FileTransfer, isFileDrag } from "./term/FileTransfer.js";
 import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
 import { documentTitle } from "./serverSession/documentTitle.js";
@@ -131,6 +133,8 @@ const storeAdapter = new StoreAdapter({
   },
   // 質問のフォーム（20261002-sodactl-ask）。`askController` はこの後で作るので、遅延で参照する。
   onAskEvent: (e) => askController.onEvent(e),
+  // 表示の面（20261007-soda-extensions）。`displayController` はこの後で作るので、遅延で参照する。
+  onDisplayEvent: (e) => displayController.onEvent(e),
 });
 
 const connection = new Connection({ kind, httpOrigin, wsUrl, store: storeAdapter, sink: sinkProxy });
@@ -196,6 +200,9 @@ const getScrollbackLines = (): number => effectiveScrollback(settings.scrollback
 
 // 質問のフォーム（20261002-sodactl-ask）。`inputGate` は素通しの接続（要求だけを使う）。接続のたびに `ask.subscribe` して待っている質問を受け取る（下の `onOpened`）。
 const askController = new AskController({ conn: inputGate, store: useAskStore(pinia), toast: (message) => view.toast(message) });
+
+// 表示の面（20261007-soda-extensions）。接続のたびに `display.subscribe` して名乗り、全 pane の面の見出しを受け取る（下の `onOpened`）。
+const displayController = new DisplayController({ conn: inputGate, store: useDisplayStore(pinia), toast: (message) => view.toast(message), livePaneIds: () => new Set(session.panes.keys()) });
 
 // クリップボードの画像の貼り付け（20260927-clipboard-image-paste。herdr の remote_image_paste）。入力は関所を通し、送っている間のキーを溜める。
 // `registry` は下で作る（呼ばれるのは pane を acquire した後）。
@@ -296,7 +303,9 @@ connection.onOpened(() => viewSync.onConnectionOpened());
 connection.onOpened(() => themeController.resend());
 // 質問を出せる画面として名乗り、待っている質問を受け取る（接続ごと。再読み込み・再接続・マシンの切り替えの出し直し）。
 connection.onOpened(() => askController.onOpened());
+connection.onOpened(() => displayController.onOpened());
 connection.onClosed(() => askController.onClosed());
+connection.onClosed(() => displayController.onClosed());
 // この接続から見たサーバ（同じマシンか・ファイルを開く手段があるか）は接続ごとに聞き直す（マシンを切り替えた後の接続も同じ）。
 connection.onOpened(() => fileTransfer.onOpened());
 // 名前付き session の数（サイドバーの session の入口。20260926-named-session-ui）。`actionDispatcher` は下で作るので、呼ぶ時点で読む。
@@ -397,6 +406,7 @@ const machineSwitcher = new MachineSwitcher({
     imagePaster.resetForMachineSwitch(); // 前のマシンの pane へ始めた画像の貼り付けを、次のマシンの同じ id の pane へ届けない
     askController.resetForMachineSwitch(); // 前のマシンの質問を捨てる（pane の id が重なる）。次の接続の ask.subscribe が取り直す
     fileTransfer.resetForMachineSwitch(); // ファイルのドロップ・ダウンロードも同じ
+    displayController.resetForMachineSwitch(); // 前のマシンの表示の面を捨てる（pane の id が重なる）。次の接続の display.subscribe が取り直す
   },
   nextTick: () => nextTick(),
   disposeTerminals: () => registry.disposeAll(),
@@ -517,6 +527,26 @@ app.provide(ActionDispatcherKey, actionDispatcher);
 app.provide(MachineSwitcherKey, machineSwitcher);
 app.provide(TerminalRegistryKey, registry);
 app.provide(AskControllerKey, askController);
+app.provide(DisplayControllerKey, displayController);
+app.provide(DisplayHostKey, {
+  focusTerminal: (paneId) =>
+    void focusPaneIfShown(
+      {
+        paneTab: (id) => session.panes.get(id)?.tabId,
+        shownTab: () => view.tabId,
+        focus: (id) => {
+          view.focusPane(id);
+          registry.focus(id);
+        },
+      },
+      paneId,
+    ),
+  injectPrefix: () => keys.injectPrefix(),
+  prefixKey: () => {
+    const k = router.prefixKeyInput();
+    return { key: k.key, ctrl: k.ctrl, alt: k.alt, shift: k.shift, meta: k.meta };
+  },
+});
 app.provide(FileTransferKey, fileTransfer);
 app.provide(ViewSyncKey, viewSync);
 app.provide(DeviceKindKey, kind);

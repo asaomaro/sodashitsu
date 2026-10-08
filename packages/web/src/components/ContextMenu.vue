@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ActionDispatcherKey, TerminalRegistryKey } from "../injection.js";
+import { useDisplayStore } from "../store/display.js";
 import { useSessionStore } from "../store/session.js";
 import { itemGroupIdOf } from "../store/sidebarTree.js";
 import { useViewStore } from "../store/view.js";
@@ -21,6 +22,7 @@ interface MenuItem {
 
 const session = useSessionStore();
 const view = useViewStore();
+const displays = useDisplayStore();
 const actions = inject(ActionDispatcherKey);
 if (!actions) throw new Error("ContextMenu: ActionDispatcherKey が provide されていません");
 /** 戻す先が無いときに、選ばれている pane の端末へフォーカスする（無ければ何もしない）。 */
@@ -67,6 +69,8 @@ const items = computed<MenuItem[]>(() => {
       { label: "拡大表示", run: () => actions.zoomPane(target.paneId) },
       { label: pane?.rightClick === "pane" ? "herdr のメニューを使う" : "右クリックを pane に送る", run: () => actions.setRightClickTarget(target.paneId, pane?.rightClick === "pane" ? "herdr" : "pane") },
       { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
+      // 表示の面（パネル・帯）があるときだけ（20261007-soda-extensions）。
+      ...(displays.hasAny(target.paneId) ? [{ label: "表示をすべて閉じる", run: () => actions.dismissDisplays(target.paneId) }] : []),
       { label: "閉じる", run: () => actions.closePaneById(target.paneId) },
     ];
     return list;

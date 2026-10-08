@@ -11,6 +11,7 @@
 - 画像・音・コードのプレビュー・`edit`/`rank`/`table`・成果物 `view`（Markdown・HTML の隔離表示）を画面内のダイアログで出す仕組み（ファイルの読み方・外部 URL の画像の取得と SSRF 対策・上限・隔離の仕組み・機能確認 `sodactl ask --features`・新旧の組み合わせ）は `docs/sodactl.md`「選ぶ以外の質問」「画像・音・コード」「成果物（view）」「機能確認」。
 - pane の中の `sodactl ask` がログインなしで使う、ログイン不要の受け口 `pane.sock`（使われる条件・`/ws` へ落ちる条件・安全の境界・載せてよい操作の条件と登録の仕方）は `docs/sodactl.md`「ログイン不要の受け口（pane.sock）」。
 - `sodactl ask` の画面の部品 `<ask-form>`（ask-form と同じ部品を `third_party/ask-form/` に無改変で写したもの。写し直す手順・替えるたびに確かめること・定義の項目を足すときに直す場所）は `docs/sodactl.md`「画面の部品と同期」と `third_party/ask-form/README.md`。
+- pane の中のプログラムが画面に出し続けるパネル・帯（表示の面。`sodactl display`。中身の形式・操作・幅のつまみ・隔離のしくみ・限界）は `docs/display.md`、コマンドの形は `docs/sodactl.md`。
 - ブラウザ版の端末のファイルのリンクとドロップ（同じマシンかの判定・開き方・送ったファイルの置き場所）は `docs/file-links.md`。
 - エージェントの連携のグラフ（画面・線の種類・上限と一時停止・受け渡しの注意・別のマシン）は `docs/agent-graph.md`、`sodactl graph` は `docs/sodactl.md`。
 - エージェントが動かしているサブエージェントの件数と一覧（フックの導入と更新・仕組み・対象外と制約）は `docs/agent-graph.md`「サブエージェントの件数と一覧」「サブエージェントの表示の仕組みと制約」、`sodactl agent get` の `subagents` は `docs/sodactl.md`。

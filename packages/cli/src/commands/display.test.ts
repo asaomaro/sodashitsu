@@ -99,6 +99,7 @@ describe("runDisplay set", () => {
     await expect(runDisplay(parse(["set", "a", "--kind", "band", "--text", "x".repeat(DISPLAY_CONTENT_MAX_BYTES + 1)]), store, out.deps({ transport: tr }))).rejects.toBeInstanceOf(CliUsageError);
     await expect(runDisplay(parse(["set", "a", "--kind", "band"]), store, out.deps({ transport: tr, readStdin: async () => Buffer.from([0xff, 0xfe, 0x41]) }))).rejects.toThrow(/UTF-8/);
     await expect(runDisplay(parse(["set", "a", "--kind", "band", "--text", "x", "--title", "a\nb"]), store, out.deps({ transport: tr }))).rejects.toBeInstanceOf(CliUsageError);
+    await expect(runDisplay(parse(["set", "a", "--kind", "band", "--text", "x", "--title", "a\u202eb"]), store, out.deps({ transport: tr }))).rejects.toBeInstanceOf(CliUsageError); // 書字方向を変える文字
     expect(tr.calls).toEqual([]);
   });
 

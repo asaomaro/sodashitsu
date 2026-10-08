@@ -489,6 +489,15 @@ export const ACTIONS = [
     defaults: ["prefix+shift+a"],
     action: { type: "toggleSidebarSection", section: "agents" },
   },
+  // 20261007-soda-extensions（本製品の追加。利用者の決定 D23）。pane のパネル・帯（表示の面）の枠へフォーカスを移す。枠の中は別の文書なので、キーはここからしか届かない。
+  // 端末版には表示の面が無く、「ブラウザで使えます」と知らせる。枠の中の `Esc` で端末へ戻る。
+  {
+    id: "focus_display",
+    label: "pane の表示（パネル・帯）へ移る",
+    group: "pane",
+    defaults: ["prefix+i"],
+    action: { type: "focusDisplay" },
+  },
 ] as const satisfies readonly ActionDef[];
 
 export type ActionId = (typeof ACTIONS)[number]["id"];

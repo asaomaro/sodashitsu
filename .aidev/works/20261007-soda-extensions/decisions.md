@@ -306,3 +306,92 @@
     PR1 で入れた `DISPLAY_PONG_TIMEOUT_MS` は使わなくなったので、PR2 の T11 で消す。
 
 タスクの数は 30 のまま（増減なし。T8・T11・T12・T19・T22〜T30 の中身が変わった）。受け入れ基準は 41 → 42（AC37）。
+
+## D29: 直した版への独立点検（1 回。20 件。must 3）と、その直し
+
+D28 の直しの後、別のコンテキストに design・tasks を 1 回見せた（`aidev doccheck` の巡には数えていない。design・tasks とも上限の 2 巡に達していて、プロジェクトの上限は上げなかった）。must は 3 件で、どれも、D28 の直しで出来た／残った穴。
+
+1. **知らせを落とせた**（must）: `display.report` を、操作と同じ頻度の桶に入れて「超えた分は捨てる」としていた。スクリプトが `soda.action` を流せば、`focus_steal`・`navigated` の知らせが落ちた。→ **知らせは、操作の桶と分け、捨てない**（画面もサーバも）。
+   知らせは、面を閉じる方向にしか働かず、閉じた後は `display_closed` を返すだけなので、量の害が無い。
+2. **「初めの窓」を握られた**（must）: 土台の `document.write` で起きる `load` を見分けるために、枠の知らせ（`rendered`・`pong`）で閉じる窓を置いていた。中身のスクリプトは、その知らせを握れる（port を兄弟へ渡す・握りつぶす・書いている最中に移る）ので、移動を見逃させられた。
+   → **土台は `document.write` を使わず、中身を DOM に差し込む**（`<script>` を作り直して順に動かし、`DOMContentLoaded` と `load` を起こす）。期待する `load` は、どの形式でも最初の 1 回だけになり、**2 回目は必ず「移った」**。枠の言うことを、安全の判断に使わない。
+   代償: ふつうに頁を開いたときと、スクリプトの動く順・`load` の時機が少し違う（docs に書く）。この入れ方でグラフのライブラリが動くかは、実測（T28）。代替案（`document.write` のまま、時間で窓を閉じる）は、重い初期化の正当な中身と、悪意のある中身を、時間では見分けられないので採らない。
+   副産物: キーの受け手を、中身より先に付けられる（限界 10 が軽くなる）。
+3. **形式を替えた直後に、前の中身が新しい枠で動いた**（must）: 枠は作り直すが、ストアに残っている前の形式の中身を、新しい枠へ `render` していた（前の `html` の、信頼できない中身が、スクリプトの頁で動く）。
+   → **`render` を送るのは、中身の id・版・形式が、いまの見出しと一致するときだけ**。スクリプトが動く形式は、枠の鍵に版も入れる（版が替わったら枠ごと作り直し、その版の中身を 1 回だけ）。
+4. should（直したもの）: 閉じた・形式が替わった直後の面の id を 60 秒控えて、遅れて着く知らせも数える（合図 → `close` → 知らせ、の順で逃れられない）／冷却に入るとき、その pane のスクリプトが動く面を**全部**閉じる（`navigated` の場合も。冷却の間に取られることが無くなり、「5 分に 3 回」が境目でも保たれる）／
+   兄弟の枠への `focus()`: 静的な面へ移された場合は、静的な枠の `frame.js` が「利用者が入ったのではない」と気づいて、親が戻す（`foreign-focus`）。スクリプトの面へ移された場合は、その pane の回数に数える（巻き添えで閉じさせられる。**限界 12** として足した）／
+   操作を終える判定に「`document.activeElement` が iframe でなくなった」を足した（余白を押した場合）／`load` の起きない移動（204・すぐ止める）は、気づけない道として、実測に回し、限界 3 に書いた／`relayKeys`（利用者の prefix のキー）は、静的な形式の枠にだけ渡す／
+   tasks: T11 の型に `rejected`・T28 (5)(viii) を「port を拾って、直に送る」筋に・兄弟の `location` の書き換えの筋（T28 (6)(xi)）・T27 の依存に T16・参照の番号のずれ・T30 (m) の版の分け方・T22 (d)(f) の落ち方・`unresponsive` のトースト（T10）。
+5. nit（直したもの）: AC28 の対応に H27／`display_busy` の説明に冷却／AC2 を静的な形式に限る・AC29 に「`set` では作り直す」／tasks の読む順（H27・D29）。
+
+**この直し（D29）のうち、must 3 件の箇所は、もう 1 回、別のコンテキストに見せる**（結果は、下に追記する）。
+
+### D29 の追記: must 3 件の直しの再点検（1 回。6 件。must 2）と、その直し
+
+1. **最初の `load` が、土台の頁のものとは限らなかった**（must）: 親は、`load` より前でも合図を受けて、通り道と中身を渡していた。中身がストアにあると、差し込みの中のスクリプトが、親が最初の `load` を数える前に動いて移れた（移動が「1 回目の `load`」になり、気づけない）。
+   兄弟の枠の `location` を書き換えられる場合は、作られた直後の枠を別の文書へ移して、その文書に通り道と中身を渡させられた。
+   → **通り道と `render` を渡すのは、最初の `load` を見た後だけ**。**枠ごとの乱数の合い札**を `src` に付け、枠の頁が `display-ready` に添えて返す（ほかの枠は、この枠の URL を読めない）。合い札の合わない合図には、何も渡さない。
+2. **閉じた面の控えを、あふれさせられた**（must）: 控え（60 秒・256 件）の範囲と、あふれたときの扱いを決めていなかった。→ **控えをやめた**。知らせに、画面（アプリのコード）が、描いていた枠の `paneId` と `format` を添え、サーバは、面が無くても、それで数える。画面は利用者のブラウザで、枠の中身は、この値を書けない。
+3. should・nit（直したもの）: 「`document.close()` の後に受け手を付ける」の取り残し／置く側の `:key` は `frameKey(info)` で作る（T12・T17・T27。版の置き換えで、覆いと操作中の状態も作り直される。その単体テストと E2E）／「冷却の間の知らせ」の書き分け／「PR3 で変わる型」の表に `display.report` の引数。
+
+**この追記の直し（合い札・最初の `load` の後に渡す・控えをやめる）は、もう 1 回、別のコンテキストに見せる**（結果は、下に追記する）。
+
+### D29 の追記 2: 最後の点検（1 回。7 件。**must 0**・should 7）と、その直し
+
+合い札・「最初の `load` の後に渡す」・「知らせに pane と形式を添える」の直しを、別のコンテキストに 1 回見せた。**must は無かった**。should の 7 件は、次のとおり直した（この直しは、もう見せていない。どれも、決まっていなかった細部を 1 つに決めたもの）。
+
+1. 合い札の合わない合図・10 秒の時間切れでは、**知らせを送らない**（固定の文言だけ。冷却に入れない）。design の「スクリプトの枠なら知らせも送る」を消した。
+2. **送り主の窓が違う合図は、丸ごと無視する**（待ちを打ち切らない）。ほかの枠が `postMessage` を流すだけで、作られた直後の枠を止められないように。
+3. 部品を片づけるとき、操作中でないのにフォーカスが枠にあれば、横取りとして 1 回知らせる（取った直後に `close` させて、数えられる前に逃げる、を防ぐ）。
+4. `report` の細部: 添えた値が省かれたら面の値／同じ id で形式だけ違えば、いまの面は閉じずに、添えた形式で数える／数えるものの無い知らせは `{closed: []}`。
+5. 「作られた直後の枠を移す」の E2E は、時機で 2 通り（固定の文言／`navigated` で閉じる）を、どちらも正しいとした。
+6. 合い札の使い回し（`location.reload()`）の筋と、「正しい合い札でも 2 回目は受けない」の単体・負の対照を足した。
+7. 既に入っている PR1 だけのサーバが、添えた項目を拒んだら、画面が `{id, problem}` だけで送り直す。新旧の表に行を足した。
+
+
+## D30: PR2（画面・静的な形式）の実装で、設計から外れた点と、実測の結果（実装者の記録。2026-10-08）
+
+実装は `feature/ext-display-web`（`6ea9570` から。上流の `ebcbdc0`・`origin/main` を取り込み済み）。設計・要件・タスクの文書は、`tasks.md` の `[x]` 以外は変えていない。
+
+1. **実測した前提（不確かな点 1・2・3・4・7）は、全部、設計どおりだった**（代えに切り替えた項目は無い）: `MessagePort` は不透明 origin の枠へ transfer で渡せる／`frame.evaluate` は `script-src 'self'` の枠で動く（枠の `self.origin` は `"null"`。`location.origin` は URL から出るので証拠にならない）／`allow-forms` で `submit` は起き、送信は起きない／marked は Markdown の中の `<button data-soda-action>` を通す／枠が移ると 2 回目の `load` が起きる（詳細は `test-result.md`）。
+2. **`display.report` の schema**: `paneId`（任意）・`format`（任意・64 文字まで）を `DisplayReportParams` に足した（zod の `object` は知らない項目を黙って捨てるが、型の上で送れるようにするため）。サーバの `report` はこの版では使わない。**古いサーバが `invalid_params` で拒んだら、画面は `{id, problem}` だけで 1 回送り直す**（`DisplayController.report`。上流の ebcbdc0 の指示）。
+3. **`display.action` の出来事の `source`** は PR2 では足していない（PR1 のサーバは付けない。PR3 の T23・T24 が足す）。
+4. **`DISPLAY_PONG_TIMEOUT_MS` を protocol から消した**（T11）。
+5. **`DEVICE_LOCAL_PREF_KEYS` に `displayPanelWidths` を足した**（T15。pane の id はマシンごとに違う。`messages.ts`）。サーバの `PrefsStore` が「端末ごとの項目」を落とす文言の例に出る名前は直していない（挙動は `DEVICE_LOCAL_PREF_KEYS` から決まる）。
+6. **E2E の置き場所**: T18 の筋は `display.spec.ts` でなく `display-flows.spec.ts` に置いた（`display.spec.ts` は T14 の最初の筋だけ）。共通の補助は `support/displayBrowser.ts`（`display.ts` は子プロセス・CDP・待ち受け）。
+7. **T19 の筋の組み替え**（負の対照 (c1) の「二重の守りの片方だけ外すと落ちない」を実際に成り立たせるため）: (2) は「実行されない」だけを見る。取り除きそのもの（`script` の要素・`on*` の属性が文書に入っていない）は (2b) に分け、`sanitize.js` の単体テストと合わせて、取り除きを外した版を見分ける役にした。
+   (4) は html の head（断片に届かない）・html の body・markdown の 3 通りにした（`meta` の取り除きが効くのは body と markdown）。(5) は、別の iframe の `srcdoc` のインラインのスクリプトがアプリ本体の CSP に止められて**空振りしていた**ので、Playwright が別の iframe の中から式を動かして `postMessage` する形に直した（直した後に (d) で落ちることを確かめた）。
+   (10) に「`frameattached` が 0」（枠を作ってから外すのではなく、作らない）を足した（(g0) で落ちるように）。
+8. **面が消えるときのフォーカス**: `useDisplayStore.remove` は `focusedDisplayId` を下ろさない（部品が外れるとき `DisplayFrame` が下ろして端末へ戻す）。以前はストアが先に下ろしていて、枠にフォーカスがある面を `close` で消すと端末へ戻らず、続けて打ったキーが pane に届かなかった（E2E (7) で発見）。
+9. **枠の頁の `frame.js` が読み込みの最後に `display-ready` を送るのは、`window` の `load` のとき**（文書が `complete` なら即）。親は、合図と iframe の最初の `load` の両方を見るので、順序はどちらでもよい（単体で両方を確かめた）。
+10. **既存の試験の更新**: 操作のカタログの数・`uiTokens.test.ts` の薄めた文字の下限（`.pane-frame-main-dimmed` を対象外に）・`mobile.spec.ts:77` の時機の競合（上の 3 を参照。`test-result.md`）。
+11. **キーの衝突**: `prefix+i`（利用者の決定 D23）は、既存の既定と衝突しなかった（`bindings.test.ts`・`keymap.test.ts` が通る）。
+
+### PR2 で迷った点（勧める解釈で進めたもの）
+
+- PR3 の直し（`ebcbdc0` まで）で、PR2 に関わる記述が食い違う箇所は無かった。`PanePanel` のラベルの `aria-label` は design に具体の文言が無いので、見出しの固定のラベルと同じ文言を使った。
+- `DisplayFrame` が中身を取る（`ensureContent`）のを、tasks は `PanePanel`・`PaneBands` の役にしていたが、`DisplayFrame` 自身が「載ったとき・版と形式が替わったとき」に呼ぶ形にした（たたんだパネルは `DisplayFrame` が載らないので取らない、という決まりは同じ）。
+- 枠の鍵（`frameKey`）に加えて、`DisplayFrame` 自身も `info.format` の変化で iframe を作り直す（tasks の指示どおり）。
+- モバイルの［表示N］のボタンは、狭い画面でバーがあふれるので、余白を詰めた（`.mobile-shell-pane` の箱を変えないため、バーの外に行を足す案は採らなかった）。
+
+
+## D31: PR2 の独立レビューを受けた直し（実装者の記録。2026-10-08）
+
+1. **要素の名前の上書き（DOM clobbering）**（should）: `sanitize.js` と `frame.js` は、中身の要素・`document` のプロパティを直接読まず、読み込み時に控えた `Element.prototype`・`Node.prototype`・`Document.prototype` のメソッドと getter を `call` で使う（getter は、プロトタイプの連鎖をたどって探す。ブラウザは直に持つが、単体テストの DOM は持たないため）。
+   `frame.js` は描画の全体を `try` で囲み、失敗したら親へ `{type:"failed", rev}` を送って次の `render` を受ける。親は枠を残したまま固定の文言を出し、次の `rendered` で消す。単体テストの DOM は名前の上書きを再現しない（内部が公開の名前を読む）ので、**落ちる確かめは E2E**（`display-isolation` (11)・(12)）。
+2. **E2E の組み替え**: 旧 (7)(8) を「アプリが面の出現・更新でフォーカスを動かさない」の実測にした。奪取そのものは PR3。「ブラウザが別 origin の枠の `autofocus` を止める」は観測した事実で、守りに数えない。
+3. **中身の取得**: 受け取った大きさが `totalBytes` と合わなければ取り直し、続けば固定の文言（`contentFailed`）。
+4. **フォーカスの印**: `store.remove`・`store.clear` は `focusedDisplayId` を下ろさず、枠の部品が外れるときに下ろして端末へ戻す。
+5. **題の書字方向を変える文字**（U+202A〜202E・U+2066〜2069）を `checkDisplaySet` の制御文字の検査に足した（PR1 の protocol。サーバ・sodactl 共通）。
+6. **モバイルの `prefix+i`**: `MobileShell` が載っている間は `displays.sheetAvailable`。パネルの枠が載っていなければ `sheetRequest` を増やし、`MobileShell` が重ね表示を開く（トーストは出さない）。
+7. **固定のラベルを 1 つの関数に**（`display/displayLabel.ts` の `displayLabel(info)`・`displayBandLabel(info)`）。知らない項目があっても壊れない。後の作業が「どの拡張が出したか」の文を足す場所。
+8. **初回の案内のトースト**は、既存の置き場所の決まり（右上・4 秒・クリックを通す）のまま。帯・パネルの操作を妨げない。
+9. **ask の側の取り除き**に、同じ種類の穴（`name=remove` で `el.remove()` が失敗→ソースの文字表示へ落ちる。閉じる側）がある。この PR では直さない（別の作業の候補・低）。
+
+### D31 の追記: 再レビューの指摘（退行）の直し
+
+- `frame.js` の `focus`（`prefix+i` で枠の中へ）: 控えた `HTMLElement.prototype.focus` を SVG の要素（`use href`・`image href`・`tabindex` つき）に `call` して `Illegal invocation` になり、`activeElement` が `BODY` のままだった。**要素の種類に合う `focus`**（`HTMLElement`／`SVGElement` のプロトタイプの両方を控えて使い分け）にし、**要素ごとに `try/catch`** で次の候補へ進み、`activeElement` が実際にその要素になった最初のもので止める（フォーカスを受けない `<use>` などは飛ばす）。
+  `frame.js`・`sanitize.js` の控えたメソッドのうち、`HTMLElement.prototype` にあって `Element.prototype` に無いものは `focus` だけ（`click`・`blur`・`dataset`・`hidden`・`innerText` は使っていない。`style` は `documentElement` だけ）。`sanitize.js` は `Element`・`Node` のものだけ。
+  E2E (16)（SVG を含む面で `prefix+i` がボタンへ移る・SVG の中の `data-soda-action` の押下・tabindex つきの SVG の要素）を足した。直す前の版では `activeElement` が `BODY` で落ちる（`Expected: "btn" / Received: "BODY"`）。単体テストの DOM は `use` にもフォーカスを渡すので、飛ばす動きの確かめは E2E。
+- `display-mobile.spec.ts` の［表示1］の文言とシートを閉じた後の列数の確認は、`prefix+i` の確認を足したときの編集でうっかり消していた。戻した。

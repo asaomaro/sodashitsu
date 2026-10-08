@@ -117,7 +117,7 @@ const flush = async () => {
 };
 
 /**
- * 全操作（カタログの 61 操作。添字つきは 1）の効果の表。**web の `ActionDispatcher` の同じ操作と同じ RPC・引数・ダイアログ**（焦点は p1・w1/t1〔p1|p2〕・w2/t2〔p3〕）。
+ * 全操作（カタログの 62 操作。添字つきは 1）の効果の表。**web の `ActionDispatcher` の同じ操作と同じ RPC・引数・ダイアログ**（焦点は p1・w1/t1〔p1|p2〕・w2/t2〔p3〕）。
  * 表に無い操作があれば落ちる（足し忘れの検出）。
  */
 const EFFECTS: Record<
@@ -203,12 +203,14 @@ const EFFECTS: Record<
   resize_pane_right: { rpc: ["pane.resize", { paneId: "p1", direction: "right", amount: 0.05 }] },
   swap_with_focused: { none: true },
   open_graph: { toast: true },
+  // 20261007-soda-extensions。表示の面はブラウザにだけある。
+  focus_display: { toast: true },
 };
 
-describe("TuiDispatcher — 全操作の効果（web の 61 操作と同じ RPC・引数・ダイアログ）", () => {
+describe("TuiDispatcher — 全操作の効果（web の 62 操作と同じ RPC・引数・ダイアログ）", () => {
   it("表はカタログの全操作をちょうど覆う", () => {
     expect(Object.keys(EFFECTS).sort()).toEqual(ACTIONS.map((d) => d.id).sort());
-    expect(ACTIONS).toHaveLength(61);
+    expect(ACTIONS).toHaveLength(62);
   });
 
   it.each(ACTIONS.map((d) => [d.id, d as ActionDef] as const))("%s", (id, def) => {

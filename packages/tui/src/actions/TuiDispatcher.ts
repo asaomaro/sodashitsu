@@ -258,6 +258,10 @@ export class TuiDispatcher {
         // 連携のグラフ画面はブラウザにだけある（20260927-agent-graph の decisions D1-8。操作表は共有のまま、端末版は知らせる）。
         this.ui.toast("グラフの画面はブラウザで開けます。");
         return;
+      case "focusDisplay":
+        // 表示の面（パネル・帯）はブラウザにだけある（20261007-soda-extensions）。
+        this.ui.toast("表示のパネル・帯はブラウザで使えます。");
+        return;
       // 20261004-subagent-display。フォーカスしている pane のエージェントの一覧を開く（件数が 0・分からない・エージェントが居ないときは何もしない）。
       case "showSubagents": {
         const paneId = this.model.focusedPaneId;

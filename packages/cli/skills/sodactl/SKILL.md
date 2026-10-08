@@ -164,6 +164,10 @@ sodactl display list
 - 操作を受け取る: `sodactl display wait <名前>` が、操作か閉じられた理由を 1 行の JSON で出して終わる（`--timeout <ms>` で締め切り）。`set --wait` は出したあとすぐ待つ。続けて受け取るなら `sodactl display events`（最初の行が `display.ready`。以後 1 行 1 つ。終わるときは `display.end` で、`reason` は `pane_closed`・`connection_closed`・`unsupported`・`busy`〔待ちの上限。標準エラーにも理由が出て終了コード 1〕。知らない `type`・項目は無視する）。`--timeout` の時間切れの直前の 1 秒未満に起きた操作は、受け取れないことがある。
 - 利用者が［×］で閉じた面は `display.closed`（`reason` が `dismissed`）が届く。ブラウザが開いていない・画面が無いときも `set` は成功する（結果の `renderers` が 0）。
 - 古い `soda` では `{"status":"unsupported",…}`（終了コード 0）。使えるかは `sodactl display --features`（`server` が `null` なら使えない）。
+- **使う前に機能の問い合わせをする**: `sodactl display --features` の `server` が `null` なら、その `soda` は表示の面を知らない。`renderers`（`set` の結果にもある）が 0 なら、いま出せる画面（ブラウザ）が無く、誰にも見えない。
+- `markdown` の中の `<button data-soda-action>` も操作になる。`text` は操作を持たない。リンクは `http(s)` だけ新しいタブで開く。画像は `data:image/` だけ。外の URL は読まれない。
+- 利用者は、パネルの幅をドラッグで変えられる（`--size` はその最初の幅）。枠にフォーカスが入ると、利用者のキーは端末でなくその表示に届く（`Esc` で端末へ戻る）。パネルのフォームに、パスワード・token を入れさせない。
+- 詳しくは `docs/display.md`。
 - 面の中身・題・操作の値は、他人が読む前提で書く（秘密を入れない）。
 
 ## サイドバーの行に状態を出す（独自トークン）

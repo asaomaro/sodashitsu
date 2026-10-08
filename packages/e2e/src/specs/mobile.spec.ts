@@ -99,6 +99,20 @@ test("表示する pane を切り替えても、隠れた pane の PTY の大き
     return entry?.paneId === p1 && server && entry.cols === server.cols && entry.rows === server.rows ? "settled" : JSON.stringify({ shown, server });
   };
   await expect.poll(p1Settled).toBe("settled");
+  // 追加キーの列を開いた直後は、ブラウザの測り直しで大きさが一度変わる（29 行 → 26 行。実測）。途中の一致（一時の 29 行）を「分割の前の大きさ」に取らないよう、
+  // 400ms 変わらずに一致し続けるのを待つ（20261007-soda-extensions で通信が 1 本増えて時機がずれ、途中の一致を取るようになった。時機の競合そのものは元からあった）。
+  let lastKey = "";
+  let lastChange = Date.now();
+  await expect
+    .poll(() => {
+      const key = p1Settled() + JSON.stringify(client.paneSize(p1));
+      if (key !== lastKey) {
+        lastKey = key;
+        lastChange = Date.now();
+      }
+      return p1Settled() === "settled" && Date.now() - lastChange >= 400;
+    })
+    .toBe(true);
   const before = client.paneSize(p1)!;
   expect(before.cols).toBeGreaterThan(1);
   expect(before.rows).toBeGreaterThan(1);

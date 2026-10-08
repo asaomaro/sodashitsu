@@ -546,8 +546,16 @@ export type DisplayActionParams = z.infer<typeof DisplayActionParams>;
 /** 利用者が面を閉じる（`id` の 1 つか、`paneId` の pane の全部のどちらか 1 つ）。 */
 export const DisplayDismissParams = z.object({ id: displayId.optional(), paneId: paneId.optional() }).refine((v) => (v.id !== undefined) !== (v.paneId !== undefined), "exactly one of id or paneId is required");
 export type DisplayDismissParams = z.infer<typeof DisplayDismissParams>;
-/** 画面が、枠の異常（別のページへ移った・応答しない）を知らせる。その面を閉じる。 */
-export const DisplayReportParams = z.object({ id: displayId, problem: z.enum(DISPLAY_REPORT_PROBLEMS) });
+/**
+ * 画面が、枠の異常（別のページへ移った・応答しない）を知らせる。その面を閉じる。
+ * `paneId`・`format` は、画面が描いていた枠のもの（任意。この版のサーバは使わず、受け流す。後の版が、面がもう無いときの数え方に使う）。
+ */
+export const DisplayReportParams = z.object({
+  id: displayId,
+  problem: z.enum(DISPLAY_REPORT_PROBLEMS),
+  paneId: paneId.optional(),
+  format: z.string().max(64).optional(),
+});
 export type DisplayReportParams = z.infer<typeof DisplayReportParams>;
 export interface DisplayClosedResult {
   /** 閉じた面の名前（無ければ空）。 */
@@ -786,6 +794,8 @@ export const DEVICE_LOCAL_PREF_KEYS = [
   "fileLocality",
   "sidebarSectionRatio",
   "sidebarSectionsCollapsed",
+  // 表示の面（パネル）の幅（pane の id → px）。pane の id はマシンごとに違うので共有しない（20261007-soda-extensions）。
+  "displayPanelWidths",
 ] as const;
 
 /** 共有の設定を読む。`rev` は保存のたびに +1（0 = サーバが一度も保存していない。web の初回の移行の目印）。 */

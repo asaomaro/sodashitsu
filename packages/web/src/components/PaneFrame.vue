@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ActionDispatcherKey, TerminalRegistryKey } from "../injection.js";
 import { NO_NEIGHBORS, resolvePaneChrome, type PaneSide, type PaneSides } from "../layout/paneChrome.js";
 import { paneNameOf } from "@sodashitsu/client-core";
+import { getCellSize } from "../term/measure.js";
+import { useDisplayStore } from "../store/display.js";
 import { useSessionStore } from "../store/session.js";
+import PaneBands from "./PaneBands.vue";
+import PanePanel from "./PanePanel.vue";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import { zoneAt, type Zone } from "../term/paneDragZone.js";
@@ -46,6 +50,36 @@ const session = props.enabled ? useSessionStore() : null;
 const view = props.enabled ? useViewStore() : null;
 const settings = props.enabled ? useSettingsStore() : null;
 const edge = ref<HTMLElement | null>(null);
+
+// --- 表示の面（パネル・帯。20261007-soda-extensions）。`enabled` のときだけ（モバイル・単体テストはストアに触れない）。---------------------------
+const displays = props.enabled ? useDisplayStore() : null;
+const hasPanel = computed(() => !!displays && displays.panelsOf(props.paneId).length > 0);
+const hasBand = computed(() => !!displays && displays.bandsOf(props.paneId).length > 0);
+/** その pane のどれかの面にフォーカスがある（操作中。端末を薄くする）。 */
+const displayEngaged = computed(() => {
+  const id = displays?.focusedDisplayId;
+  return !!displays && id != null && displays.infos.get(id)?.paneId === props.paneId;
+});
+const bodyEl = ref<HTMLElement | null>(null);
+/** パネルの幅のつまみをドラッグしている間の、案内の線の位置（パネルの幅 px。無ければ null）。 */
+const guideWidth = ref<number | null>(null);
+const bodySize = ref({ w: 0, h: 0 });
+let bodyObserver: ResizeObserver | null = null;
+onMounted(() => {
+  if (!props.enabled || typeof ResizeObserver === "undefined" || !bodyEl.value) return;
+  bodyObserver = new ResizeObserver((entries) => {
+    const r = entries[0]?.contentRect;
+    if (r) bodySize.value = { w: r.width, h: r.height };
+  });
+  bodyObserver.observe(bodyEl.value);
+});
+onBeforeUnmount(() => bodyObserver?.disconnect());
+/** pane の端末のセルの幅（px）。取れなければ 9。 */
+const cellWidthPx = computed(() => {
+  void bodySize.value; // 大きさが変わったら読み直す
+  const term = registry?.get(props.paneId)?.term;
+  return term ? getCellSize(term).width : 9;
+});
 
 /** 利用者が付けた名前 → エージェント名 → 端末のタイトル の順に拾う。どれも無ければ空。 */
 const paneName = computed(() => {
@@ -302,7 +336,16 @@ function onKeydown(ev: KeyboardEvent): void {
       @contextmenu="onContextMenu"
       @keydown="onKeydown"
     />
-    <div class="pane-frame-body">
+    <!-- 表示の面（パネル・帯）の有無で `<slot />` の位置を変えない（葉を作り直さない）: `enabled` のときは常に row > main の中に置く。 -->
+    <div v-if="enabled" ref="bodyEl" class="pane-frame-body pane-frame-body-displays">
+      <PaneBands v-if="hasBand" :pane-id="paneId" :pane-height-px="bodySize.h" />
+      <div class="pane-frame-row">
+        <div class="pane-frame-main" :class="{ 'pane-frame-main-dimmed': displayEngaged }" data-pane-frame-main><slot /></div>
+        <PanePanel v-if="hasPanel" :pane-id="paneId" :pane-width-px="bodySize.w" :cell-width-px="cellWidthPx" @guide="guideWidth = $event" />
+        <div v-if="guideWidth !== null" class="pane-frame-guide" :style="{ right: `${guideWidth}px` }" aria-hidden="true" data-pane-frame-guide></div>
+      </div>
+    </div>
+    <div v-else class="pane-frame-body">
       <slot />
     </div>
     <!-- ドロップ先のゾーン（縁/中央）表示（20260924-pane-dnd-split-move。design「振る舞いの詳細 >
@@ -479,5 +522,37 @@ function onKeydown(ev: KeyboardEvent): void {
   position: relative;
   width: 100%;
   height: 100%;
+}
+/* 表示の面があるとき（20261007-soda-extensions）: 帯（上）と、端末＋パネル（下）の縦の flex。葉（.pane-layout-leaf）の CSS には触らない。 */
+.pane-frame-body-displays {
+  display: flex;
+  flex-direction: column;
+}
+.pane-frame-row {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+.pane-frame-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+/* パネルの幅のつまみをドラッグしている間の案内の線（幅は離すまで変えない）。 */
+.pane-frame-guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-right: -1.5px;
+  background: var(--soda-resize-line, #f8f8f2);
+  pointer-events: none;
+  z-index: 3;
+}
+/* 枠（表示）に入力が届いている間は、端末を薄くする（カーソルも薄くなる）。 */
+.pane-frame-main-dimmed {
+  opacity: 0.55;
 }
 </style>

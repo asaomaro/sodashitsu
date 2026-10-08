@@ -66,6 +66,20 @@ const ASK_VIEW_FILES: Record<string, { type: string; csp?: string }> = {
   "vendor/mermaid.min.js": { type: "text/javascript; charset=utf-8" },
 };
 
+/**
+ * 表示の面（静的な形式。`sodactl display`。20261007-soda-extensions）の枠の静的ページ（`packages/web/public/display-view/`）。アプリ本体の iframe
+ * （`sandbox` に `allow-same-origin` なし）が開く。`frame.html` だけが文書で、`.js` は読み込まれるだけ（CSP・`X-Frame-Options` を外す）。
+ * **スクリプトは `'self'` のものだけ**（インライン・eval なし）。`form-action 'none'`・`default-src 'none'`（外へ繋がない）。
+ * `allow-same-origin`・`allow-top-navigation`・`allow-modals`・`allow-downloads` は付けない。
+ */
+export const DISPLAY_VIEW_CSP =
+  "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'";
+const DISPLAY_VIEW_FILES: Record<string, { type: string; csp?: string }> = {
+  "frame.html": { type: "text/html; charset=utf-8", csp: DISPLAY_VIEW_CSP },
+  "frame.js": { type: "text/javascript; charset=utf-8" },
+  "sanitize.js": { type: "text/javascript; charset=utf-8" },
+};
+
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -129,14 +143,25 @@ export class HttpServer {
     if (req.method === "POST" && pathname === "/api/local-login") return this.handleLocalLogin(req, res);
     if (req.method === "POST" && pathname === "/api/logout") return this.handleLogout(req, res);
     if (req.method === "GET" && pathname === "/api/session") return this.handleSession(req, res);
-    if (pathname.startsWith("/ask-view/")) return this.handleAskView(req, res, pathname);
+    if (pathname.startsWith("/ask-view/")) return this.handleViewFiles(req, res, pathname, "/ask-view/", "ask-view", ASK_VIEW_FILES);
+    if (pathname.startsWith("/display-view/")) return this.handleViewFiles(req, res, pathname, "/display-view/", "display-view", DISPLAY_VIEW_FILES);
     return this.handleStatic(req, res, pathname);
   }
 
-  /** 成果物の隔離表示の静的ページ（`ASK_VIEW_FILES` の許可リストにあるものだけ。専用のヘッダ）。 */
-  private async handleAskView(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
-    const name = pathname.slice("/ask-view/".length);
-    const entry = Object.hasOwn(ASK_VIEW_FILES, name) ? ASK_VIEW_FILES[name] : undefined;
+  /**
+   * 隔離表示の静的ページ（成果物の `/ask-view/`・表示の面の `/display-view/`。許可リストにあるものだけ。専用のヘッダ）。
+   * 2 つの経路は同じ扱いで、許可リスト・ヘッダの値だけが違う（`/ask-view/*` のヘッダの値は変えない）。
+   */
+  private async handleViewFiles(
+    req: IncomingMessage,
+    res: ServerResponse,
+    pathname: string,
+    prefix: string,
+    dir: string,
+    files: Record<string, { type: string; csp?: string }>,
+  ): Promise<void> {
+    const name = pathname.slice(prefix.length);
+    const entry = Object.hasOwn(files, name) ? files[name] : undefined;
     const readOnly = req.method === "GET" || req.method === "HEAD";
     if (!readOnly || entry === undefined) {
       res.statusCode = readOnly ? 404 : 405;
@@ -145,7 +170,7 @@ export class HttpServer {
       return;
     }
     const distRoot = resolve(this.opts.webDistDir);
-    const contents = await readFile(join(distRoot, "ask-view", ...name.split("/"))).catch(() => null);
+    const contents = await readFile(join(distRoot, dir, ...name.split("/"))).catch(() => null);
     if (contents === null) {
       res.statusCode = 404;
       res.end();

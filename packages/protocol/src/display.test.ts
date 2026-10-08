@@ -54,7 +54,7 @@ describe("checkDisplaySet", () => {
   it("題: 前後の空白を除く・制御文字は拒否・80 文字まで（コードポイント）", () => {
     expect(checkDisplaySet({ ...base, title: "  進捗  " })).toEqual({ ok: true, value: { ...base, title: "進捗" } });
     expect(checkDisplaySet({ ...base, title: "   " })).toEqual({ ok: true, value: base });
-    for (const title of ["a\nb", "a\tb", "a\u0000b", "a\u007fb", "a\u0085b", "a\u2028b", "a\n"]) {
+    for (const title of ["a\nb", "a\tb", "a\u0000b", "a\u007fb", "a\u0085b", "a\u2028b", "a\n", "a\u202eb", "a\u202ab", "a\u202cb", "a\u2066b", "a\u2069b"]) {
       expect(reason({ ...base, title })).toMatch(/control/);
     }
     expect(checkDisplaySet({ ...base, title: "あ".repeat(DISPLAY_TITLE_MAX) }).ok).toBe(true);

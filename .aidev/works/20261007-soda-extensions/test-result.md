@@ -116,3 +116,329 @@ handoff-smoke: ok
 - 待ちの全体の上限 `DISPLAY_WAITERS_MAX` を 32 に（上記）。テスト・SKILL.md の記述も合わせた。
 - `runWaitLoop`: まだ一度も聞いていないときは、残りが 1 秒未満でも（期限を過ぎていても）1 回は聞く。2 回目以降で残りが 1 秒未満なら、残りだけ待って `display.timeout`。docs と SKILL.md に「時間切れの直前の 1 秒未満に起きた操作は受け取れないことがある」を足した。
 - `display.end` の `reason` に `busy` を足したことを、SKILL.md の `events` の説明と `docs/sodactl.md` に書いた。
+
+## PR2（画面・静的な形式。T8〜T22）の結果
+
+ブランチ `feature/ext-display-web`（`6ea9570` から。`ebcbdc0` と `origin/main` を取り込み済み）。
+
+### 実測した前提（`tasks.md`「不確かな点」。PR2 で確かめるもの）
+
+| # | 前提 | 結果 | 確かめた筋 |
+|---|---|---|---|
+| 1 | `MessagePort` を、sandbox（`allow-same-origin` なし）の不透明 origin の枠へ、transfer で渡せる | **渡せた**（`render` が枠に届き中身が描かれる）。代替（合言葉）は採らない | `display.spec.ts`「実測 (a)」・`display-flows`（全部） |
+| 2 | Playwright の `frame.evaluate` が `script-src 'self'` の枠で動く | **動いた**（`1 + 1`）。枠の `self.origin` は `"null"`、`localStorage`・`parent.document` は `SecurityError`（`location.origin` は URL から出る値なので証拠にならない） | `display.spec.ts`「実測 (b)」・`display-isolation` (1) |
+| 3 | `allow-forms` で `submit` のイベントが起き、実際の送信は起きない | **起きた／起きなかった**（フォームの値が `display.action` で届き、`data-display-loads` は 1 のまま、待ち受けに届いた要求は 0） | `display-flows` (8) |
+| 4 | marked が Markdown の中の HTML（`<button data-soda-action>`）を通す | **通した**（押すと `display.action`） | `display-flows` (8) |
+| 7 | 枠が同じ origin の別の文書へ移ると、親から見た iframe の `load` が起きる | **起きた**（2 回目の `load` で `navigated`）。移った瞬間に親が iframe を外すので、Playwright の `frame.goto` は `Frame was detached` で終わる（テストは握りつぶす） | `display-isolation` (6) |
+| 移った先の `ping` | 移った先は返事ができない | 移った先の静的ページは `display-ready` を送るが、親はもう `connected`/外した後なので受けない（action も 0）。`load` の回数で先に閉じるので、`unresponsive` の出番は無い | `display-isolation` (6) |
+
+PR3（スクリプトが動く形式）の前提 5・6・8・10・11 は、この PR の範囲外（未実施）。9 は PR1（T4）。
+
+### 自動テスト
+
+`pnpm build`・`pnpm typecheck`（終了コード 0）・`pnpm test`（終了コード 1）:
+
+```
+ Test Files  1 failed | 434 passed (435)
+      Tests  3 failed | 8491 passed (8494)
+ FAIL  |@sodashitsu/server| src/tui.integration.test.ts > runTui（実サーバ・偽の外側の端末） > サイドバーに workspace 名・pane にコマンドの出力が出て、…（AC2・AC3・AC6・AC11）
+ FAIL  |@sodashitsu/server| src/tui.integration.test.ts > … > もう一度開くと同じ画面（スクロールバックの SNAPSHOT）が戻る。SIGHUP でも終わってモードが戻る（AC3）
+ FAIL  |@sodashitsu/server| src/tui.integration.test.ts > … > 端末版 2 つを同時に繋ぐ：どちらも描き・打て、最後に操作した側の大きさになり、もう一方は切り取って ⋯ を出す。…（AC11・AC12）
+```
+
+失敗の 3 件は既知（worktree のパスが長いと main でも落ちる。出力に `agent-ae08f15654bedf052`＝パスが画面の幅で折り返されて、期待する文字列が途切れる）。それ以外は全部通った。
+途中の全体の実行で、`TuiApp.subagents.test.ts`（経過時間の 10 秒ごとの描き直し）が負荷のときに 1 回落ちた（単独では 14 件通る。時間に依る既存の試験）。
+
+新しい単体・結合（このブランチで足した分）: `displayLabel.test.ts`（2）・`displayViewSanitize.test.ts`（8）・`frameJs.test.ts`（8）・`DisplayController.test.ts`（10）・`store/display.test.ts`（7）・`displayLayout.test.ts`（6）・`DisplayFrame.test.ts`（14）・`PanePanel.test.ts`（11）・`MobileDisplaySheet.test.ts`（3）・`PaneFrame.test.ts`（+3）・`ActionDispatcher.test.ts`（+2）・`HttpServer.integration.test.ts`（+4）。
+
+既存の試験で直したもの（意図した変更）: 操作のカタログの数（`bindings.test.ts` 61→62・pane 群 29→30・`keymap.test.ts` の prefix の後のキー 49→50〔`i`〕・`TuiDispatcher.test.ts` の全操作の表・`KeySettings.test.ts` の 69→70）、
+`uiTokens.test.ts` の「薄めた文字の下限」に `.pane-frame-main-dimmed`（操作中に端末を薄くする 0.55。設計の指定）を対象外として足した。
+
+### E2E（実ブラウザ。Chromium。`packages/e2e`）
+
+足した分（`display.spec.ts` 2・`display-flows.spec.ts` 12・`display-isolation.spec.ts` 13・`display-resize.spec.ts` 4・`display-mobile.spec.ts` 1）:
+
+```
+  37 passed, 1 failed (1.5m)   # 新しい 5 つの spec（32）と mobile.spec.ts（5 件中 4 件通る）。落ちた 1 件は mobile.spec.ts の「この端末に合わせる…繋ぎ直す」（main でも落ちる元からの失敗。:189 が足した行で :203 になった）
+```
+
+既存の E2E（`ask-view`・`ask-form`・`resize-handles`・`workspace-tab-pane`・`mobile`・`key-bindings`）:
+
+```
+  5 failed
+  93 passed (4.0m)
+  ✘ key-bindings.spec.ts:632（「こちらへ移す」へ Tab で届く）  ✘ key-bindings.spec.ts:699（Keyboard Lock。WebAssembly が CSP の unsafe-eval で拒否される）
+  ✘ workspace-tab-pane.spec.ts:305（新しい pane の直後に打った文字）  ✘ mobile.spec.ts:77  ✘ mobile.spec.ts:189
+```
+
+切り分け（`origin/main`＝`6fd30bb` の別の worktree を作ってビルドし、同じ 5 件を流した）:
+
+- **key-bindings:632・key-bindings:699・workspace-tab-pane:305・mobile:189 は main でも落ちる**（元から。この環境の問題）。mobile:189 の期待する送信順は、main では `file.info`、このブランチでは `display.subscribe` が混ざる違いだけで、どちらも落ちる。
+- **mobile:77 は、このブランチだけ落ちた**（3 回とも）。main は 2 回とも通る。原因: 追加キーの列を開いた直後に、ブラウザの測り直しで pane の大きさが一度変わる（29 行 → 26 行。main でも同じ経過〔100ms ごとに記録して比べた〕）。
+  テストは「サーバとブラウザの大きさが一致した」途中の状態を「分割の前の大きさ」に取っていた——時機の競合は元からあったが、起動時の通信が 1 本（`display.subscribe`）増えて時機がずれ、途中の一致を取るようになった。
+  通信を外すと通る（実験で確かめた）。**テストを直した**: 「400ms 変わらずに一致し続ける」のを待ってから取る（`mobile.spec.ts`）。直した後は通る。
+- 直した後の `mobile.spec.ts` 全体: 4 件のうち :189 だけが落ちる（main でも落ちる）。
+
+### 画面の見た目（スクリーンショット）
+
+`/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/display-pr2/`（コミットしない）:
+`desktop-dark.png`・`desktop-light.png`・`desktop-dark-engaged.png`・`desktop-light-engaged.png`（パネル＋帯。engaged は `prefix+i` で枠にフォーカスした状態）・`mobile-dark.png`・`mobile-light.png`（バーの［表示1］と重ね表示）。
+撮って見つけた直し: モバイルのバーに［表示 N］を足すと狭い画面でバーの右端（設定）が切れた→余白を詰めて［表示N］にし、はみ出しを 1px（丸め）に収めた。重ね表示の固定のラベルが省略記号で切れた→ラベルを 1 行に出して、ボタンは次の行にした。
+
+### 起動確認・未実施
+
+- `aidev smoke`（`handoffSmoke`）は PR1 の変更だけで、PR2 は触っていない。PR2 の独立点検（`taskcheck`）は T8・T9・T11 が「点検待ち」（記録は `start` だけ）。
+- 実機（iOS Safari・Android Chrome・Firefox・Safari・別のマシンのブラウザ）は未確認（`docs/verification.md` に手順）。
+
+### 負の対照（T22。静的な形式）
+
+対策を外した版で、対応するテストが落ちる（または、二重の守りの片方だけ外した版では**落ちない**）ことを確かめ、戻して通ることも確かめた。生の出力（`ts` のログ行と所要時間を除く）:
+
+**(a) 受け口の `displayCloseOp`・`displayListOp`・`displayWaitOp` が、引数の `paneId` を対象にする版 → T4 の「引数に `paneId: <B>` を載せても B に届かない」が落ちる**
+```
+    ❯ |@sodashitsu/server| src/display/display.integration.test.ts (10 tests | 1 failed) 8028ms
+        × pane A を名乗っても、pane B の面は見えず・閉じられず・待てない。引数に paneId: B を載せても B に届かない（AC14） 830ms
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+   AssertionError: expected { ok: true, result: { …(3) } } to match object { ok: false, …(1) }
+   - Expected
+   + Received
+    Test Files  1 failed (1)
+         Tests  1 failed | 9 passed (10)
+```
+戻して `display.integration.test.ts` は 10 件通る。
+
+**(b) `DISPLAY_VIEW_SANDBOX` と `DISPLAY_VIEW_CSP` の両方に `allow-same-origin` を足した版 → `display-isolation` (1) が落ちる**
+```
+     ✘  1 src/specs/display-isolation.spec.ts:21:1 › (1) 枠の sandbox 属性と応答ヘッダに allow-same-origin が無く、枠の中から親・cookie・保存領域・アプリへの通信に触れない
+     ✓  2 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（html）
+     ✓  3 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（markdown）
+     ✓  4 src/specs/display-isolation.spec.ts:91:1 › (3) 外の画像・stylesheet・@import・背景・フォントへの要求が 0（ブラウザの要求の記録と、待ち受けに届いた要求）
+     ✓  5 src/specs/display-isolation.spec.ts:111:1 › (4) meta refresh・form の送信・base・iframe・object・embed で枠が移らず、外を読まない
+     ✓  6 src/specs/display-isolation.spec.ts:132:1 › (5) 親のページの別の iframe から同じ形の message（display-ready・action）を送っても、ブラウザは display.action を送らない
+     ✓  7 src/specs/display-isolation.spec.ts:147:1 › (6) 枠が移った場合: 面が閉じ、トーストが出て、display.report(navigated) が送られ、events に display.closed(navigated)。直後の html の set は通る
+     ✓  8 src/specs/display-isolation.spec.ts:169:1 › (7)(8) 端末にフォーカスがあるとき、autofocus つきの中身・フォーカスを奪い続ける中身が来ても、打った文字は全部 pane に届き、activeElement は iframe にならない
+     ✓  9 src/specs/display-isolation.spec.ts:188:1 › (10) 知らない形式（script-html・未知）: 枠が作られず固定の文言。形式が替わると iframe が別の要素になる
+       Error: expect(locator).toHaveAttribute(expected) failed
+       Expected: "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+       Received: "allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+           13 × unexpected value "allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+     1 failed
+     8 passed
+```
+
+**(c1) `sanitize.js` の `script`・`on*` の取り除きだけを外した版（`autofocus` の取り除きは残す）→ (2)・(7)(8) は落ちない（CSP が止める）。(2b) と `sanitize.js` の単体テストが落ちる**。枠のコンソールに CSP の違反が記録される:
+```
+     ✓   1 src/specs/display-isolation.spec.ts:21:1 › (1) 枠の sandbox 属性と応答ヘッダに allow-same-origin が無く、枠の中から親・cookie・保存領域・アプリへの通信に触れない
+     ✓   2 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（html）
+     ✓   3 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（markdown）
+     ✘   4 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（html）
+     ✘   5 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（markdown）
+     ✓   6 src/specs/display-isolation.spec.ts:101:1 › (3) 外の画像・stylesheet・@import・背景・フォントへの要求が 0（ブラウザの要求の記録と、待ち受けに届いた要求）
+     ✓   7 src/specs/display-isolation.spec.ts:121:1 › (4) meta refresh・form の送信・base・iframe・object・embed で枠が移らず、外を読まない
+     ✓   8 src/specs/display-isolation.spec.ts:142:1 › (5) 親のページの別の iframe から同じ形の message（display-ready・action）を送っても、ブラウザは display.action を送らない
+     ✓   9 src/specs/display-isolation.spec.ts:157:1 › (6) 枠が移った場合: 面が閉じ、トーストが出て、display.report(navigated) が送られ、events に display.closed(navigated)。直後の html の set は通る
+     ✓  10 src/specs/display-isolation.spec.ts:179:1 › (7)(8) 端末にフォーカスがあるとき、autofocus つきの中身・フォーカスを奪い続ける中身が来ても、打った文字は全部 pane に届き、activeElement は iframe にならない
+     ✓  11 src/specs/display-isolation.spec.ts:198:1 › (10) 知らない形式（script-html・未知）: 枠が作られず固定の文言。形式が替わると iframe が別の要素になる
+       Expected: 0
+       Received: 3
+       Expected: 0
+   [CSP の違反（枠のコンソール）]
+   CSPMSGS ["Executing inline event handler violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256…", …（2 件）]
+   [sanitize.js の単体テスト]
+   × 枠を動かす・外へ繋ぐ要素を消す 11ms
+        × on で始まる属性・autofocus・srcdoc・action・target などを消す 3ms
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+         Tests  2 failed | 6 passed (8)
+```
+**(c2) `DISPLAY_VIEW_CSP` の `script-src` に `'unsafe-inline'` を足しただけの版（取り除きは残す）→ (2)・(2b)・(7)(8) は落ちない**。落ちるのは、ヘッダの値を直接見る (1)（と `HttpServer.integration.test.ts`）:
+```
+     ✘   1 src/specs/display-isolation.spec.ts:21:1 › (1) 枠の sandbox 属性と応答ヘッダに allow-same-origin が無く、枠の中から親・cookie・保存領域・アプリへの通信に触れない
+     ✓   2 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（html）
+     ✓   3 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（markdown）
+     ✓   4 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（html）
+     ✓   5 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（markdown）
+     ✓   6 src/specs/display-isolation.spec.ts:101:1 › (3) 外の画像・stylesheet・@import・背景・フォントへの要求が 0（ブラウザの要求の記録と、待ち受けに届いた要求）
+     ✓   7 src/specs/display-isolation.spec.ts:121:1 › (4) meta refresh・form の送信・base・iframe・object・embed で枠が移らず、外を読まない
+     ✓   8 src/specs/display-isolation.spec.ts:142:1 › (5) 親のページの別の iframe から同じ形の message（display-ready・action）を送っても、ブラウザは display.action を送らない
+     ✓   9 src/specs/display-isolation.spec.ts:157:1 › (6) 枠が移った場合: 面が閉じ、トーストが出て、display.report(navigated) が送られ、events に display.closed(navigated)。直後の html の set は通る
+     ✓  10 src/specs/display-isolation.spec.ts:179:1 › (7)(8) 端末にフォーカスがあるとき、autofocus つきの中身・フォーカスを奪い続ける中身が来ても、打った文字は全部 pane に届き、activeElement は iframe にならない
+     ✓  11 src/specs/display-isolation.spec.ts:198:1 › (10) 知らない形式（script-html・未知）: 枠が作られず固定の文言。形式が替わると iframe が別の要素になる
+       Expected substring: "script-src 'self';"
+       Received string:    "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'self' 'unsafe-inline'; style-src '
+     1 failed
+```
+**(c3) c1 と c2 の両方 → (2) のイベント属性の筋（html・markdown）と (7)(8) が落ちる**:
+```
+     ✘   1 src/specs/display-isolation.spec.ts:21:1 › (1) 枠の sandbox 属性と応答ヘッダに allow-same-origin が無く、枠の中から親・cookie・保存領域・アプリへの通信に触れない
+     ✘   2 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（html）
+     ✘   3 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（markdown）
+     ✘   4 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（html）
+     ✘   5 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（markdown）
+     ✓   6 src/specs/display-isolation.spec.ts:101:1 › (3) 外の画像・stylesheet・@import・背景・フォントへの要求が 0（ブラウザの要求の記録と、待ち受けに届いた要求）
+     ✓   7 src/specs/display-isolation.spec.ts:121:1 › (4) meta refresh・form の送信・base・iframe・object・embed で枠が移らず、外を読まない
+     ✓   8 src/specs/display-isolation.spec.ts:142:1 › (5) 親のページの別の iframe から同じ形の message（display-ready・action）を送っても、ブラウザは display.action を送らない
+     ✓   9 src/specs/display-isolation.spec.ts:157:1 › (6) 枠が移った場合: 面が閉じ、トーストが出て、display.report(navigated) が送られ、events に display.closed(navigated)。直後の html の set は通る
+     ✘  10 src/specs/display-isolation.spec.ts:179:1 › (7)(8) 端末にフォーカスがあるとき、autofocus つきの中身・フォーカスを奪い続ける中身が来ても、打った文字は全部 pane に届き、activeElement は iframe にならない
+     ✓  11 src/specs/display-isolation.spec.ts:198:1 › (10) 知らない形式（script-html・未知）: 枠が作られず固定の文言。形式が替わると iframe が別の要素になる
+       Expected substring: "script-src 'self';"
+       Received string:    "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'self' 'unsafe-inline'; style-src '
+       Received: "onclick"
+```
+**(d) `DisplayFrame.vue` の送り主の検査・`display-ready` の 1 回だけ・状態の検査を外し、`window` の `message` をそのまま受ける版 → (5)「送られない」と、単体（別の窓からの `display-ready`）が落ちる**:
+```
+     ✘  1 src/specs/display-isolation.spec.ts:142:1 › (5) 親のページの別の iframe から同じ形の message（display-ready・action）を送っても、ブラウザは display.action を送らない
+       - Expected  - 1
+       + Received  + 7
+     1 failed
+   [DisplayFrame.test.ts]
+   × 送り主の窓が違う display-ready は丸ごと無視する（待ちを打ち切らない） 10ms
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+         Tests  1 failed | 13 passed (14)
+```
+（(5) は初め、親のページの別の iframe の `srcdoc` のインラインのスクリプトから送っていたが、アプリ本体の CSP がそれを止めるので、**この対照が落ちなかった**（空振り）。Playwright が別の iframe の中から式を動かして `postMessage` する形に直した。上は直した後。）
+
+**(e) `sanitize.js` の `meta` の取り除き（と `http-equiv` の属性の取り除き。同じ守りの 2 層）を外した版 → (4) の「枠が移らない」が落ちる（同じ origin の宛先へ移り、面が閉じる）**:
+```
+     ✓   1 src/specs/display-isolation.spec.ts:21:1 › (1) 枠の sandbox 属性と応答ヘッダに allow-same-origin が無く、枠の中から親・cookie・保存領域・アプリへの通信に触れない
+     ✓   2 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（html）
+     ✓   3 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（markdown）
+     ✓   4 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（html）
+     ✓   5 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（markdown）
+     ✓   6 src/specs/display-isolation.spec.ts:101:1 › (3) 外の画像・stylesheet・@import・背景・フォントへの要求が 0（ブラウザの要求の記録と、待ち受けに届いた要求）
+     ✓   7 src/specs/display-isolation.spec.ts:124:3 › (4) meta refresh・form の送信・base・iframe・object・embed で枠が移らず、外を読まない（html-head）
+     ✘   8 src/specs/display-isolation.spec.ts:124:3 › (4) meta refresh・form の送信・base・iframe・object・embed で枠が移らず、外を読まない（html-body）
+     ✘   9 src/specs/display-isolation.spec.ts:124:3 › (4) meta refresh・form の送信・base・iframe・object・embed で枠が移らず、外を読まない（markdown）
+     ✓  10 src/specs/display-isolation.spec.ts:148:1 › (5) 親のページの別の iframe から同じ形の message（display-ready・action）を送っても、ブラウザは display.action を送らない
+     ✓  11 src/specs/display-isolation.spec.ts:170:1 › (6) 枠が移った場合: 面が閉じ、トーストが出て、display.report(navigated) が送られ、events に display.closed(navigated)。直後の html の set は通る
+     ✓  12 src/specs/display-isolation.spec.ts:192:1 › (7)(8) 端末にフォーカスがあるとき、autofocus つきの中身・フォーカスを奪い続ける中身が来ても、打った文字は全部 pane に届き、activeElement は iframe にならない
+     ✓  13 src/specs/display-isolation.spec.ts:211:1 › (10) 知らない形式（script-html・未知）: 枠が作られず固定の文言。形式が替わると iframe が別の要素になる
+       Error: expect(locator).toBeAttached() failed
+       Expected: attached
+     2 failed
+```
+（html の `<meta>` は head に書くと断片に届かない〔取り除き以前に捨てられる〕ので、(4) は html の head・html の body・markdown の 3 通りにした。落ちたのは body と markdown。）
+
+**(f) `DisplayFrame.vue` の `load` の回数の検知を外した版 → (6)「すぐ閉じて、理由が `navigated`」が落ちる**:
+```
+     ✘  1 src/specs/display-isolation.spec.ts:170:1 › (6) 枠が移った場合: 面が閉じ、トーストが出て、display.report(navigated) が送られ、events に display.closed(navigated)。直後の html の set は通る
+       Error: expect(locator).toHaveCount(expected) failed
+       Expected: 0
+       Received: 1
+           14 × locator resolved to 1 element
+     1 failed
+   [DisplayFrame.test.ts]
+   × load の 2 回目で iframe を外して report(navigated)（paneId と format つき） 8ms
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+         Tests  1 failed | 13 passed (14)
+```
+**(g0) `framePage()` が知らない形式を静的な頁へ落とす版（`null` を返さない）→ (10)「枠が作られない」が落ちる**（`frameattached` が 0 でない）。このとき `frame.js` が `rejected` を返して中身が描かれないこと（二重の守り）は、`frameJs.test.ts` が見ている:
+```
+     ✘  1 src/specs/display-isolation.spec.ts:211:1 › (10) 知らない形式（script-html・未知）: 枠が作られず固定の文言。形式が替わると iframe が別の要素になる
+       Expected: 0
+       Received: 1
+     1 failed
+   [DisplayFrame.test.ts + frameJs.test.ts]
+   × 静的な形式だけ頁を持つ。未知の形式（script-html を含む）は null 4ms
+        × 未知の形式は枠を作らず固定の文言。形式が替わると iframe が別の要素になる 5ms
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+         Tests  2 failed | 20 passed (22)
+```
+どの版も、戻した後に `git diff` が空であること、再ビルドして該当の spec が全部通ることを確かめた。
+
+
+## PR2 の独立レビューを受けた直し（2026-10-08）
+
+レビュー: must 0・should 3・nit。判断は「直してから」。直した内容は `decisions.md` D31。
+
+### 1・2. 名前の上書き（DOM clobbering）: 直す前で落ちることと、直した後
+
+`sanitize.js`・`frame.js` が、中身の要素・`document` のプロパティを直接読んでいた。`display-isolation` の (11)（`<form onclick onsubmit formaction srcdoc autofocus><input name=…>` で、form の属性が全部消える）と (12)（`<img name=createElement>` などの後の `render`）を足した。
+**直す前の版（直前のコミット `fd8cfb8` の `sanitize.js`・`frame.js`）で流した出力**（(11) の 12 通りのうち、実ブラウザで差し替えが効いて落ちたのは 4 通り。ほかは差し替えられても属性の取り除きが通った）:
+```
+     ✘   1 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=attributes でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘   2 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=getAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘   3 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=removeAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓   4 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=setAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘   5 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=hasAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓   6 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=tagName でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓   7 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=localName でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓   8 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=children でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓   9 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=parentNode でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓  10 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=firstChild でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓  11 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=remove でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✓  12 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=querySelectorAll でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  13 src/specs/display-isolation.spec.ts:245:1 › (12) 生きた document が中身の name・id で上書きされても、次の render が描かれる（createElement・importNode・body・querySelecto
+       - Expected  - 1
+       + Received  + 7
+       - Array []
+       + Array [
+       +   "onclick",
+       +   "onsubmit",
+       +   "formaction",
+       +   "srcdoc",
+       +   "autofocus",
+       + ]
+       Error: expect(locator).toBeAttached() failed
+```
+直した後（同じ spec 全体）:
+```
+     ✓   1 src/specs/display-isolation.spec.ts:21:1 › (1) 枠の sandbox 属性と応答ヘッダに allow-same-origin が無く、枠の中から親・cookie・保存領域・アプリへの通信に触れない
+     ✓   2 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（html）
+     ✓   3 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（markdown）
+     ✓   4 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（html）
+     ✓   5 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（markdown）
+     ✓   6 src/specs/display-isolation.spec.ts:101:1 › (3) 外の画像・stylesheet・@import・背景・フォントへの要求が 0（ブラウザの要求の記録と、待ち受けに届いた要求）
+```
+（`26 passed`。(11) 12 件・(12) 1 件を含む。）
+
+### 3. E2E の空振りと、負の対照
+
+(a) 旧 (7)(8) は、中身が `onerror` と `autofocus` で、取り除きと CSP で動かず、奪取の実装が壊れても通る空振りだった。作り直した: 端末にフォーカスがある状態で、`autofocus`・`tabindex`・`input`・`textarea` を含む中身を `set`・更新・形式替え・帯の追加して、毎回 `document.activeElement` が端末のままで、打った文字が pane に届くこと。
+**観測した事実（守りには数えない）**: 別 origin の枠の `autofocus` は、ブラウザが親の文書のフォーカスを動かさない（枠の `document.hasFocus()` は `false`。Chromium）。奪取そのものへの備え（`focus()` を呼び続ける中身）は、作者のスクリプトが動く形式（PR3）の範囲で、静的な形式では作れない。
+
+(b) 取り除きと CSP の**両方**を外した版（`script` と `on*` の取り除きを外し、`script-src` に `'unsafe-inline'` を足す）→ スクリプトが動いて (2) が落ちる（html・markdown）。ほかに (1)（ヘッダの値）・(2b)・(11) も落ちる:
+```
+     ✘   1 src/specs/display-isolation.spec.ts:21:1 › (1) 枠の sandbox 属性と応答ヘッダに allow-same-origin が無く、枠の中から親・cookie・保存領域・アプリへの通信に触れない
+     ✘   2 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（html）
+     ✘   3 src/specs/display-isolation.spec.ts:75:3 › (2) 中身の <script>・onerror・onclick・javascript: が動かない（markdown）
+     ✘   4 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（html）
+     ✘   5 src/specs/display-isolation.spec.ts:90:3 › (2b) 取り除き: 危険な要素・属性が文書に入っていない（markdown）
+     ✘  13 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=attributes でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  14 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=getAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  15 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=removeAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  16 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=setAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  17 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=hasAttribute でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  18 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=tagName でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  19 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=localName でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  20 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=children でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  21 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=parentNode でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  22 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=firstChild でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  23 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=remove でも、form の on*・formaction・srcdoc・autofocus が消える
+     ✘  24 src/specs/display-isolation.spec.ts:230:3 › (11) 取り除き: form の子が name=querySelectorAll でも、form の on*・formaction・srcdoc・autofocus が消える
+     17 failed
+     9 passed (1.1m)
+```
+(c) 外への要求の筋 (3) の、CSP を緩めた対照（`default-src *`・`style-src * 'unsafe-inline'`・`img-src *`・`font-src *`。取り除きは残す）→ (3) だけが落ち、待ち受けに **`@import`（`/b.css`）・`<style>` の `url()` の背景（`/bg.png`）・インラインの `style` の背景（`/d.png`）・フォント（`/f.woff2`）の 4 件**が届く。CSP が外への要求を止めている証拠:
+```
+     ✘   6 src/specs/display-isolation.spec.ts:101:1 › (3) 外の画像・stylesheet・@import・背景・フォントへの要求が 0（ブラウザの要求の記録と、待ち受けに届いた要求）
+     1 failed
+     25 passed
+   - Array []
+   + Array [ "/b.css", "/bg.png", "/d.png", "/f.woff2" ]      （`expect(sink.requests()).toEqual([])` の差分）
+```
+（`<link rel=stylesheet>`・`<img src>`・`background` 属性は、取り除きが先に消すので、CSP を緩めても届かない。二重の守りの片方。）
+
+(d) 対照 (b)（`allow-same-origin` を足した版）で落ちるのは、`display-isolation` の中では (1) だけ（9 件中 1 件。上の「負の対照」の (b)）。つまり (1) が `allow-same-origin` の単独の守りで、ほかの筋はそれを見張っていない。
+
+### 4〜7（nit）の確かめ
+- `DisplayController` の中身の取得: 受け取った大きさが `totalBytes` と合わない・空の片が `eof` でないときは取り直し、`REFETCH_MAX` 回やっても合わなければ固定の文言「表示の中身を取得できませんでした」（`store.contentFailed`）。単体テストあり。
+- 接続が切れて台帳を空にしたとき（`store.clear`）、枠にフォーカスがあれば端末へ戻す（`clear` がフォーカスの印を下ろさず、枠の部品が外れるときに下ろして端末へ戻す）。単体テストあり。
+- 題の書字方向を変える文字（U+202A〜202E・U+2066〜2069）: `checkDisplaySet`（サーバ・sodactl 共通）の制御文字の検査に足した。protocol・cli の単体テストあり。
+- モバイルの `prefix+i`: パネルの枠が載っていなければ重ね表示を開く（トーストなし）。単体・E2E（`display-mobile`）あり。
+
+### 9. 初回の案内のトーストと、帯・パネルの見出し（見た目）
+右上の「ctrl+b ? でキー一覧」は、既存の `Toast.vue` の置き場所（右上の固定。20261005-notify-bell）。**一度だけ出て、4 秒で消え、クリックを通す**（`.toast:not(.toast-sticky) { pointer-events: none }`）ので、帯・パネルの［×］・たたむを押すのを妨げない。消えない知らせ（`sticky`。［移動］・［×］つき）は、消すまで右上に残り、パネルの見出しに重なる——これも既存の置き場所の決まりで、モバイル以外は動かさない。**理由を付けて「そのまま」**。
+
+### ask の側の取り除き（`packages/web/public/ask-view/markdown.js`）に同じ穴があるか
+実ブラウザで確かめた（`/ask-view/markdown.html` を直に開き、自分宛てに `ask-view` の知らせを送った）。`<form><input name="remove"></form>` を含む Markdown で、`sanitize` の `el.remove()` が `TypeError`（`remove` が子の入力に差し替わる）→ 枠は**ソースの文字表示（`plain()`）へ落ちる**。**閉じる側に倒れる（実行・移動には至らない）が、取り除きの途中で止まり、整形されない**。`attributes` などは読まないので、属性が残る形の穴は見つからなかった。
+`html.html`（スクリプトが動く枠）は、もともと取り除きを掛けない。この PR では直さない。別の作業の候補（低）: `ask-view/markdown.js` の `sanitize` が、要素のメソッドを直接呼ばず、プロトタイプのメソッドを `call` で使う。
