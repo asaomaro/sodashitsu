@@ -622,3 +622,18 @@ MEASURE focus-drop-after-click: interval=900ms typed=60 reached-pane=33 lost=27
 - `pnpm build`・`pnpm typecheck`: 誤りなし。
 - `pnpm test`: 8653 件が通り、失敗は既知の `packages/server/src/tui.integration.test.ts` の 3 件のみ（main でも落ちる）。
 - E2E（display と settings を含む指定）: 161 件が通り、8 件が落ちた（`appearance-settings` 2・`settings.spec` 2・`theme-settings` 4）。**この作業の変更を戻した状態（96ed5fb）でも同じ 8 件が落ちる**（Chromium 153 の CSP 〔`unsafe-eval`〕と時計・設定の保存まわりで、この作業とは別）ので、退行ではない。display 系の E2E は全部通った。
+
+## 第 4 回の再レビューの直し（D37。2026-10-08）
+
+- **脱落の検知の印**: 枠が `activeElement` になっただけでは印を捨てない（利用者が操作を始めた枠のときだけ捨てる）。枠ごとの番の戻しも遮断器の数に入れる。状態の遷移の表（12 行）は D37。
+- 単体（`focusDrop.test.ts` 18 件）: 見回りの位相（枠を先に見る／`body` を先に見る）、交互に来る面で遮断器が働く、枠ごとの番の戻しを数える（二重に数えない）、操作中の枠、別のウィンドウから戻った直後、遮断器の後の遅れた戻し。**直す前の挙動に戻すと 3 件が落ちる**（枠 → body で戻さない、位相、交互）。
+- E2E（再レビューの手順＝端末をクリック → 面を出して**すぐ** 80 キー、を 3 回）:
+
+| 面 | 回 | 打った | 直後に届いた | 遮断器 | 止めた後の 20 キー |
+|---|---|---|---|---|---|
+| requestAnimationFrame | 0/1/2 | 80 | 78/78/77 | 毎回働いた | 20/20/20 |
+| MessageChannel | 0/1/2 | 80 | 79/79/78 | 毎回働いた | 20/20/20 |
+
+  **E2E は直す前でも通った**（直す前の dist で rAF 79/76/76、MC 79/80/79 が届き、遮断器も働いた）。この環境では、見回りの位相が毎回この穴に入るとは限らない（レビューの 0/80 は位相しだい）。時機に頼らず直す前に落ちるのは単体テスト側。枠が取る・body へ落とすを別のフレームに交互にする変形は、枠ごとの番が戻すので入力は失われず（80/80）、サーバの focus_steal の数え・面の閉じで終わるため、遮断器の通知の期待は置かなかった。
+- 有効になったことの知らせ: 結合（`composeServer.climode.integration.test.ts`: `byKind: "external"`・ログ 1 行・有効のままの別の変更では増えない）、単体（`displayLabel.test.ts`）。
+- 全体: `pnpm build`・`pnpm typecheck` 誤りなし。`pnpm test` は 8663 件が通り、失敗は既知の `tui.integration.test.ts` の 3 件のみ。display の E2E は 119 件中 117 件が通った。落ちた 2 件（`display-flows` の prefix+i、`display-isolation` の form 取り除き〔49.8s の時間切れ〕）は、単独で流し直すと 14 件とも通った（全体を並列で流したときの負荷による揺れ。この変更とは関係しない）。

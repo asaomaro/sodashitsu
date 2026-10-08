@@ -155,7 +155,13 @@ export interface CommandPopupClosedEvent {
  */
 export interface PrefsChangedEvent {
   event: "prefs.changed";
-  data: { prefs: SharedPrefs; rev: number; byClientId: string };
+  data: {
+    prefs: SharedPrefs;
+    rev: number;
+    byClientId: string;
+    /** 保存した接続の種別（20261007-soda-extensions。「スクリプトが動く表示」が有効になったことの知らせに添える）。登録簿に無ければ付かない。古いサーバには無い。 */
+    byKind?: "desktop" | "mobile" | "external";
+  };
 }
 
 /**

@@ -30,7 +30,7 @@ test("既定は無効: script-html の set は display_script_disabled（終了�
   const f = (await ok(await runDisplay(appServer, paneId, ["--features"]))).json as { server: { scriptEnabled: boolean; features: string[] } };
   expect(f.server.scriptEnabled).toBe(false);
   expect(f.server.features).toContain("format:script-html");
-  // pane の中（ログインなし）からは、設定を変えられない
+  // 設定が無効なままなら、pane の中（ログインなしの受け口）からは出せない（認証の情報を読んでログインすれば変えられる。それは防がない）
   expect((await (await setScript(appServer, paneId, "g", "<p>x</p>")).done).code).toBe(1);
 });
 

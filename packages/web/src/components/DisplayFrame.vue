@@ -20,8 +20,8 @@ import { FocusGuard } from "../display/focusGuard.js";
 import { documentRegainedFocusWithin, installFocusOriginTracking, restoreFocus, tabPressedWithin } from "../display/focusOrigin.js";
 import { frameKey, framePage } from "../display/framePage.js";
 import { readFrameMessage } from "../display/frameMessages.js";
-import { startFocusDropWatch, stopFocusDropWatch } from "../display/focusDrop.js";
-import { registerFrame, registerScriptFrame, scriptFrameCount, stopAllScriptFrames, unregisterFrame, unregisterScriptFrame, type RegisteredFrame } from "../display/frameRegistry.js";
+import { noteFocusRestored, startFocusDropWatch, stopFocusDropWatch } from "../display/focusDrop.js";
+import { registerFrame, registerScriptFrame, scriptFrameCount, setFrameEngaged, stopAllScriptFrames, unregisterFrame, unregisterScriptFrame, type RegisteredFrame } from "../display/frameRegistry.js";
 import { readThemeVars } from "../display/themeVars.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -283,6 +283,7 @@ function updateFocusStatic(): void {
 /** `guard` の状態を、画面の表示（覆い・操作中の縁）へ写す。操作中のときだけ、フォーカスが枠にある面として示す。 */
 function syncGuardState(): void {
   engagedRef.value = guard.engaged;
+  if (isScript.value) setFrameEngaged(props.info.id, guard.engaged);
   if (guard.engaged && guard.focused) store.setFocused(props.info.id);
   else if (store.focusedDisplayId === props.info.id) store.setFocused(null);
 }
@@ -304,6 +305,7 @@ function onSteal(): void {
     if (el === null) return;
     // 1. すぐ戻す（覚えた元の場所。無い・`body` なら、利用者が選んでいる pane の端末）。2. 戻ったかを確かめる（だめなら blur してもう 1 回）。
     const restored = restoreFocus(el, () => host?.focusSelectedTerminal());
+    noteFocusRestored(); // 遮断器の数に入れる（落とし続ける面は、枠が取る回と body へ落とす回が交互に来る）
     guard.observe(frameHasFocus());
     syncGuardState();
     // 3. 画面が見えていれば、サーバへ「1 回取られた」と知らせる（サーバが pane ごとに数える）。送れなかったとき（切断中）は、この画面の中で数える。

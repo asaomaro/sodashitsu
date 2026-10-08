@@ -19,6 +19,20 @@ export function engagedNote(info: Pick<DisplayInfo, "format">): string {
   return info.format === "script-html" ? ENGAGED_NOTE_SCRIPT : ENGAGED_NOTE;
 }
 
+/**
+ * 「スクリプトが動く表示」が、無効 → 有効に変わったことの知らせ（つながっているすべての画面に 1 回。自分の画面で変えたときは出さない）。
+ * 変えた接続の種別が分かれば添える（`desktop`・`mobile`＝ほかの画面、`external`＝`sodactl`・外部の接続）。
+ */
+export function scriptEnabledNotice(byKind: "desktop" | "mobile" | "external" | undefined): string {
+  const by = byKind === "external" ? "（`sodactl`・外部の接続が変えました）" : byKind === undefined ? "" : "（ほかの画面が変えました）";
+  return `スクリプトが動く表示が、有効になりました${by}。設定で変えられます`;
+}
+
+/** `prefs.changed` を受けたとき、知らせを出すか: 手元の値が無効で、サーバの値が有効に変わったときだけ（自分の画面で変えたときは、手元がもう有効なので出ない）。 */
+export function scriptEnabledNoticeFor(data: { prefs: { displayScriptEnabled?: unknown }; byKind?: "desktop" | "mobile" | "external" }, localEnabled: boolean): string | null {
+  return data.prefs.displayScriptEnabled === true && !localEnabled ? scriptEnabledNotice(data.byKind) : null;
+}
+
 /** 帯の印の `title`・`aria-label`（題を添える）。 */
 export function displayBandLabel(info: Pick<DisplayInfo, "name" | "title">): string {
   return `${displayLabel(info)}: ${info.title}`;

@@ -17,7 +17,7 @@
  * 戻したあとも検知を続ける（免除・戻しの後に、次の脱落を見落とさない）。
  */
 import { documentRegainedFocusWithin, rememberedOrigin, userBlurredFocusWithin } from "./focusOrigin.js";
-import { scriptFramesSnapshot } from "./frameRegistry.js";
+import { anyFrameEngaged, scriptFramesSnapshot } from "./frameRegistry.js";
 
 export const FOCUS_DROP_USER_INPUT_MS = 1000;
 /** 見回りの間隔（スクリプトの枠が載っているあいだだけ回る軽い検査）。短いほど、戻すまでに失われるキーが少ない。 */
@@ -68,6 +68,11 @@ function onWindowFocusChange(): void {
   setTimeout(check, 0);
 }
 
+/** 枠ごとの番（操作中でない枠が取った）が戻したとき。遮断器の数に入れる（脱落を戻した分と同じ列。1 回の出来事は、どちらか 1 か所でしか数えない）。 */
+export function noteFocusRestored(): void {
+  if (deps) noteRestore(Date.now());
+}
+
 function noteRestore(now: number): void {
   restoredAt.push(now);
   if (restoredAt.filter((t) => now - t <= FOCUS_DROP_BREAKER_WINDOW_MS).length >= FOCUS_DROP_BREAKER_COUNT) {
@@ -116,7 +121,9 @@ export function check(): void {
     return;
   }
   if (active && active !== d.body && active !== d.documentElement) {
-    hadFocus = false; // 表示の枠にある（枠が取ったことは、枠ごとの番が扱う）
+    // 表示の枠にある。利用者が操作を始めた枠なら、アプリの要素にあったフォーカスは、利用者の意図で枠へ移った（もう「落ちる」先ではない）。
+    // 操作中でない枠が取っただけ（スクリプトの `window.focus()`。枠ごとの番が扱う）なら、**印は動かさない**: 次に `body` へ落ちたとき、戻す（交互に来る面で戻しが 0 回になる穴だった）。
+    if (anyFrameEngaged()) hadFocus = false;
     return;
   }
   // body（か無し）。落ちたのは、直前までアプリの要素にあったときだけ。

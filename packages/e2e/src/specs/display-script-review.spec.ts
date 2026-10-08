@@ -198,6 +198,45 @@ window.__drop = function () { window.focus(); parent.focus(); };
     });
   }
 
+  for (const kind of ["requestAnimationFrame", "MessageChannel"] as const) {
+    test(`第4回の再レビューの手順: 端末をクリック → 面を出して**すぐ**80 キー打つ、を 3 回。${kind} でも毎回、遮断器が働き、その後のキーは全部届く（時機に頼らない順序の確かめは focusDrop.test.ts。ここは、手順の通しで毎回働くことの確認）`, async ({ page, appServer }) => {
+      test.setTimeout(120_000);
+      const { paneId, input } = await openScriptBrowser(page, appServer);
+      const loop =
+        kind === "requestAnimationFrame"
+          ? "function f() { window.__drop(); requestAnimationFrame(f); } requestAnimationFrame(f);"
+          : "var ch = new MessageChannel(); ch.port1.onmessage = function () { window.__drop(); ch.port2.postMessage(0); }; ch.port2.postMessage(0);";
+      for (let round = 0; round < 3; round++) {
+        await focusTerminal(page); // 本物のクリック
+        const name = `evil${round}`;
+        const n = input().length;
+        await setScriptOk(appServer, paneId, name, PAGE.replace("</script>", `${loop}</script>`), { kind: "band" });
+        // すぐ打つ（出す直後から。見回りの位相は、回ごとにずれる）
+        for (let k = 0; k < 80; k++) {
+          await page.keyboard.press("x");
+          await page.waitForTimeout(15);
+        }
+        const during = input().slice(n).filter((i) => i.paneId === paneId).length;
+        console.log(`MEASURE breaker-immediate-${kind}: round=${round} typed=80 reached-pane=${during}`);
+        await expect(page.locator("[data-display-note]").first()).toContainText("入力のフォーカスが繰り返し外されたので", { timeout: 15_000 });
+        await expect(scriptFrameEl(page)).toHaveCount(0);
+        await focusTerminal(page);
+        const m = input().length;
+        for (let k = 0; k < 20; k++) {
+          await page.keyboard.press("q");
+          await page.waitForTimeout(20);
+        }
+        await page.waitForTimeout(300);
+        const after = input().slice(m).filter((i) => i.paneId === paneId).length;
+        console.log(`MEASURE breaker-after-${kind}: round=${round} typed=20 reached-pane=${after}`);
+        expect(after).toBe(20);
+        expect(during).toBeGreaterThan(0); // 直す前は 0/80（戻らないまま、遮断器も数えない）
+        await ok(await runDisplay(appServer, paneId, ["close", name]));
+        await expect(page.locator("[data-display-note]")).toHaveCount(0);
+      }
+    });
+  }
+
   test("無関係な pane を冷却に入れない: p1 に無害な面・p2 に落とす面。p1 も p2 も冷却に入らず、サーバの面はどちらも閉じない（この画面の枠は、遮断器で両方止まる）", async ({ page, appServer }) => {
     test.setTimeout(60_000);
     const { paneId, client, sent, input } = await openScriptBrowser(page, appServer);

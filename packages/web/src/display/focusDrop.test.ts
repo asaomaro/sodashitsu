@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { startFocusDropWatch, stopFocusDropWatch, FOCUS_DROP_BREAKER_COUNT, FOCUS_DROP_NOTICE_COUNT, FOCUS_DROP_NOTICE_EVERY_MS, FOCUS_DROP_PATROL_MS } from "./focusDrop.js";
+import { noteFocusRestored, startFocusDropWatch, stopFocusDropWatch, FOCUS_DROP_BREAKER_COUNT, FOCUS_DROP_NOTICE_COUNT, FOCUS_DROP_NOTICE_EVERY_MS, FOCUS_DROP_PATROL_MS } from "./focusDrop.js";
 import { installFocusOriginTracking, resetFocusOriginTracking } from "./focusOrigin.js";
-import { registerScriptFrame, scriptFramesSnapshot, unregisterScriptFrame } from "./frameRegistry.js";
+import { registerScriptFrame, scriptFramesSnapshot, setFrameEngaged, unregisterScriptFrame } from "./frameRegistry.js";
 
 /**
  * フォーカスの脱落: アプリの要素にあったフォーカスが body へ落ちたら、**戻すだけ**（数えない・サーバへ知らせない）。
@@ -161,19 +161,129 @@ describe("focusDrop", () => {
     expect(deps.notify).toHaveBeenCalledTimes(2);
   });
 
-  it("枠（表示の iframe）にフォーカスがあるのは脱落ではない（枠ごとの番が扱う）。戻せなかった body は数え直さない", () => {
-    start();
+  /** 枠（表示の iframe）を作る。`engaged` は、利用者が［操作する］で操作を始めた枠。 */
+  const makeFrame = (): HTMLIFrameElement => {
     const frame = document.createElement("iframe");
     frame.setAttribute("data-display-frame", "");
     document.body.appendChild(frame);
+    return frame;
+  };
+
+  it("枠が取っただけでは、印（アプリの要素にフォーカスがあった）を捨てない。見回りが枠を先に見て、次に body を見ても、戻す（交互に来る面の穴）", () => {
+    start();
+    term.focus = vi.fn(() => void (active = term));
+    const frame = makeFrame();
+    active = frame; // window.focus(): 枠が取った（見回りが先にこれを見る）
+    vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS);
+    active = document.body; // parent.focus(): body へ落ちた
+    term.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+    vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS);
+    expect(term.focus).toHaveBeenCalledTimes(1);
+    expect(active).toBe(term);
+  });
+
+  it("見回りの位相: 枠 → body、body → 枠 → body のどちらの順で見ても、戻す。戻したぶんは遮断器の数に入る", () => {
+    start();
+    term.focus = vi.fn(() => void (active = term));
+    const frame = makeFrame();
+    // 位相 A: 枠を先に見る
     active = frame;
     vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS);
-    active = document.body;
+    drop();
+    expect(term.focus).toHaveBeenCalledTimes(1);
+    // 位相 B: body を先に見て、戻して、また枠・body
+    drop();
+    expect(term.focus).toHaveBeenCalledTimes(2);
+    active = frame;
     vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS);
-    expect(deps.focusSelectedTerminal).not.toHaveBeenCalled();
-    term.focus = vi.fn();
+    drop();
+    expect(term.focus).toHaveBeenCalledTimes(3);
+  });
+
+  it("枠が取る・body へ落とすが交互に来る面（rAF・MessageChannel）でも、毎回戻し、遮断器が働く", () => {
+    start();
+    term.focus = vi.fn(() => void (active = term));
+    const frame = makeFrame();
+    for (let i = 0; i < FOCUS_DROP_BREAKER_COUNT + 2; i++) {
+      active = frame;
+      vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS);
+      drop();
+    }
+    expect(deps.trip).toHaveBeenCalledTimes(1);
+    expect(active).toBe(term);
+  });
+
+  it("枠ごとの番が戻した分（noteFocusRestored）も、同じ遮断器の数に入る。1 回の出来事は 1 か所でしか数えない", () => {
+    start();
+    for (let i = 0; i < FOCUS_DROP_BREAKER_COUNT - 1; i++) noteFocusRestored();
+    expect(deps.trip).not.toHaveBeenCalled();
+    noteFocusRestored();
+    expect(deps.trip).toHaveBeenCalledTimes(1);
+    // 二重に数えない: 枠が取って（番が戻す）、アプリの要素に戻ったあとの見回りは、戻しに数えない
+    deps.trip.mockReset();
+    term.focus = vi.fn(() => void (active = term));
     active = term;
+    for (let i = 0; i < 10; i++) {
+      noteFocusRestored();
+      vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS);
+    }
+    expect(deps.trip).not.toHaveBeenCalled();
+    expect(term.focus).not.toHaveBeenCalled();
+  });
+
+  it("利用者が操作を始めた枠（engaged）にフォーカスがあるあいだに body へ落ちても、戻さない（利用者の操作。印は捨てる）。操作を終えてアプリの要素に戻れば、また見る", () => {
+    start();
+    term.focus = vi.fn(() => void (active = term));
+    const frame = makeFrame();
+    setFrameEngaged("s1", true);
+    active = frame;
     vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS);
+    drop();
+    expect(term.focus).not.toHaveBeenCalled();
+    setFrameEngaged("s1", false);
+    active = term; // 操作を終えて端末へ
+    vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS);
+    drop();
+    expect(term.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("別のウィンドウ・ブラウザの UI から戻った直後の body は、戻さない（印を捨てる）。そのあと端末に触れれば、また見る", () => {
+    start();
+    term.focus = vi.fn(() => void (active = term));
+    const hasFocus = vi.spyOn(document, "hasFocus");
+    hasFocus.mockReturnValue(false);
+    window.dispatchEvent(new Event("blur"));
+    vi.advanceTimersByTime(1); // 文書がフォーカスを持たない
+    hasFocus.mockReturnValue(true);
+    window.dispatchEvent(new Event("focus")); // 戻った
+    drop();
+    expect(term.focus).not.toHaveBeenCalled();
+    active = term;
+    term.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS);
+    vi.advanceTimersByTime(1100); // 戻った直後ではなくなる
+    drop();
+    expect(term.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("遮断器が働いた直後、枠が外れるまでの間に落とされた body は、遅れて戻す（0・60・200ms 後の見回り）", () => {
+    start();
+    term.focus = vi.fn(() => void (active = term));
+    for (let i = 0; i < FOCUS_DROP_BREAKER_COUNT; i++) {
+      drop();
+      vi.advanceTimersByTime(10);
+    }
+    expect(deps.trip).toHaveBeenCalledTimes(1);
+    const before = term.focus.mock.calls.length;
+    active = document.body; // 止めた枠が外れる前の、最後の脱落
+    vi.advanceTimersByTime(300);
+    expect(term.focus.mock.calls.length).toBeGreaterThan(before);
+    expect(active).toBe(term);
+  });
+
+  it("戻せなかった body は数え直さない（戻し先が無い）", () => {
+    start();
+    term.focus = vi.fn();
     drop();
     vi.advanceTimersByTime(FOCUS_DROP_PATROL_MS * 5);
     expect(deps.focusSelectedTerminal).toHaveBeenCalledTimes(1);

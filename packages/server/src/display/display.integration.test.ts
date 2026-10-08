@@ -475,7 +475,7 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
     expect(await call(sockPath, PANE_OP_DISPLAY_SET, paneA, SCRIPT("g"))).toMatchObject({ ok: false, error: { code: "display_script_disabled" } });
   });
 
-  it("pane.sock からは設定を変えられない（prefs.set は載っていない操作）。pane の中のプログラムが、自分で有効にできない", async () => {
+  it("pane.sock からは設定を変えられない（prefs.set は載っていない操作）。ログインなしの受け口から有効にできない（同じ OS の利用者が認証の情報を読んでログインすれば変えられる。それは防がない）", async () => {
     const { paneA, sockPath } = await start({ script: false });
     for (const op of ["prefs.set", "prefs.get", "client.hello"]) {
       expect(await call(sockPath, op, paneA, { patch: { displayScriptEnabled: true } })).toMatchObject({ ok: false });

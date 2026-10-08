@@ -47,6 +47,16 @@ export function registerScriptFrame(id: string, info: { paneId: string; format: 
 }
 export function unregisterScriptFrame(id: string): void {
   scriptFrames.delete(id);
+  engagedFrames.delete(id);
+}
+/** 利用者が操作を始めた（［操作する］・`prefix+i`）スクリプトの枠。フォーカスの脱落の検知が、「利用者が枠を操作している」と「スクリプトが枠へ取った」を見分けるのに使う。 */
+const engagedFrames = new Set<string>();
+export function setFrameEngaged(id: string, engaged: boolean): void {
+  if (engaged) engagedFrames.add(id);
+  else engagedFrames.delete(id);
+}
+export function anyFrameEngaged(): boolean {
+  return engagedFrames.size > 0;
 }
 /** この画面に載っているスクリプトの枠を全部止める（遮断器）。止める関数は、各枠が登録する。 */
 export function stopAllScriptFrames(): void {
