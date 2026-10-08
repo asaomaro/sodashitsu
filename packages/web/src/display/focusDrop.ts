@@ -2,24 +2,24 @@
  * 「フォーカスの脱落」の検知と戻し（スクリプトが動く面の備え (b) の補い。20261007-soda-extensions の PR3 のレビューの指摘）。
  *
  * スクリプトが動く面が、同じタスクで `window.focus(); parent.focus()` を呼ぶと、親の `document.activeElement` は枠ではなく `body` になる。
- * 枠が取った形跡が親から見えず、端末へ打った文字が届かなくなる。そこで、**画面にスクリプトが動く面の枠が 1 つ以上載っているあいだ**、
- * 「アプリの要素にあったフォーカスが `body` へ落ちた」ことを見て、**元の場所へ戻す**。
+ * 端末へ打った文字が届かなくなる。そこで、**画面にスクリプトが動く面の枠が 1 つ以上載っているあいだ**、見回りのたびに（**状態を持たずに**）次を見る:
  *
- * **数えない・サーバへ知らせない**（決めたこと）: どの面が落としたかを、親は確かめられない（枠の中のことは親から見えず、土台からの知らせは、落とさない面が出さないだけで偽れる）。
- * 誰が落としたか分からないまま回数・冷却に結び付けると、無関係な pane の無害な面を巻き込める。だから**戻すだけ**にする。
- * 落とし続ける面は、自動では閉じない。短い間に何度も戻したときは、**利用者への知らせ（トースト）を 1 回出して**、心当たりの無い表示を閉じてもらう。
+ *   `activeElement` が `body`（か無し）· 文書がフォーカスを持っている · 操作中の枠が無い  →  最後にフォーカスのあったアプリの要素へ戻す（無い・外れた・隠れているなら、選んでいる pane の端末）。
  *
- * 戻さない（利用者が自分でフォーカスを外した）のは次のとき:
- *  - 直前 1 秒の本物のポインタ・タッチの押下の先が**フォーカスを受けない要素（余白）**だった。
- *  - 文書がフォーカスを持たない（別のウィンドウ・タブ）・直前に別のウィンドウ／ブラウザの UI から戻った。
- *  - 直前までフォーカスのあった要素が、もう文書に無い・見えていない（メニュー・ダイアログ・モバイルの重ね表示を閉じた、pane・タブが替わった、など。アプリが外した）。
- * **利用者が端末（フォーカスを受ける要素）を押した直後の脱落は、利用者の意図ではないので戻す**（クリックの直後 1 秒を免除にしない）。
- * 戻したあとも検知を続ける（免除・戻しの後に、次の脱落を見落とさない）。
+ * **「利用者が自分で外した」の免除は無い**（5 回目の再レビュー）。面の落としは、押下の直後・押した先・`focusout` の `relatedTarget` のどれも偽装できる。
+ * 見分けようとした 4 回とも、「戻さないまま検知が止まる」穴になった。代償: スクリプトの面が載っている間は、余白を押してフォーカスを外しても、端末へ戻る。
+ * 「前回の見回りで、アプリの要素がフォーカスを持っていたか」も持たない（一度戻さなかったら、以後も見なくなる、という状態を作りとして持たない）。持つのは戻し先の記憶
+ * （最後にフォーカスのあった、枠・覆い・［操作する］でないアプリの要素。親の `focusin` でだけ更新する。`focusOrigin.ts`）と、遮断器の数だけ。
+ *
+ * 戻さないのは次だけ: 文書がフォーカスを持たない（別のウィンドウ・タブ・ブラウザの UI）/ 操作中の枠がある（利用者が［操作する］で始めた）/
+ * `activeElement` が `body` でない（アプリの別の要素・ダイアログ・メニュー・入力欄・枠。枠が `activeElement` のときは枠ごとの番が戻す）/ 戻し先がどこにも無い。
+ *
+ * **サーバへ知らせない・面を閉じない**（決めたこと）: どの面が落としたかを、親は確かめられない。戻した回数は、遮断器（この画面だけ）と知らせ（トースト）にだけ使う。
+ * 枠ごとの番が戻した分（`noteFocusRestored`）も同じ数に入る。実際に動かせたときだけ数える（戻し先が無くて動かせない見回りは数えない）。
  */
-import { documentRegainedFocusWithin, rememberedOrigin, userBlurredFocusWithin } from "./focusOrigin.js";
+import { rememberedOrigin } from "./focusOrigin.js";
 import { anyFrameEngaged, scriptFramesSnapshot } from "./frameRegistry.js";
 
-export const FOCUS_DROP_USER_INPUT_MS = 1000;
 /** 見回りの間隔（スクリプトの枠が載っているあいだだけ回る軽い検査）。短いほど、戻すまでに失われるキーが少ない。 */
 export const FOCUS_DROP_PATROL_MS = 25;
 /** 短い間に何度も戻したときの知らせ: `FOCUS_DROP_NOTICE_COUNT` 回を `FOCUS_DROP_NOTICE_WINDOW_MS` 以内に。知らせの間隔は `FOCUS_DROP_NOTICE_EVERY_MS` 以上。 */
@@ -43,18 +43,12 @@ export interface FocusDropDeps {
   trip(): void;
 }
 
-let hadFocus = false;
-let lastAppEl: Element | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
 let deps: FocusDropDeps | null = null;
 let doc: Document | null = null;
 const restoredAt: number[] = [];
 let lastNoticeAt = -Infinity;
 
-function isAppElement(el: Element | null, d: Document): boolean {
-  if (!el || el === d.body || el === d.documentElement) return false;
-  return !el.hasAttribute("data-display-frame");
-}
 /** 文書にあって、見えている（描かれている）要素か。 */
 function isShown(el: Element): boolean {
   return el.isConnected && (el as HTMLElement).getClientRects().length > 0;
@@ -79,8 +73,8 @@ function noteRestore(now: number): void {
     restoredAt.length = 0;
     const d = deps;
     d?.trip();
-    // 止めた枠が DOM から外れるまでの間に、もう 1 回落とされることがある。外れたあとに、body のままなら戻す。
-    for (const ms of [0, 60, 200]) setTimeout(() => restoreIfBody(d), ms);
+    // 止めた枠が DOM から外れるまでの間に、もう 1 回落とされることがある。外れたあとに、body のままなら戻す（数えない）。
+    for (const ms of [0, 60, 200]) setTimeout(() => restoreFromBody(false), ms);
     return;
   }
   while (restoredAt.length > 0 && now - restoredAt[0]! > FOCUS_DROP_NOTICE_WINDOW_MS) restoredAt.shift();
@@ -91,64 +85,36 @@ function noteRestore(now: number): void {
   }
 }
 
-/** フォーカスが body のままなら、元の場所へ戻す（遮断器のあと。利用者が自分で外したときは戻さない）。 */
-function restoreIfBody(d: FocusDropDeps | null): void {
-  const dd = typeof document === "undefined" ? null : document;
-  if (!d || !dd || !(dd.activeElement === dd.body || dd.activeElement === null) || !dd.hasFocus() || userBlurredFocusWithin(FOCUS_DROP_USER_INPUT_MS)) return;
+/**
+ * フォーカスが `body` にあれば、戻し先へ戻す。**今の状態だけで決める**（`activeElement`・文書のフォーカス・操作中の枠・戻し先）。
+ * 実際に `body` から動かせたとき `true`。
+ */
+function restoreFromBody(count: boolean): boolean {
+  const d = doc;
+  const dd = deps;
+  if (!d || !dd) return false;
+  if (!(d.activeElement === d.body || d.activeElement === null || d.activeElement === d.documentElement)) return false; // 脱落ではない
+  if (!d.hasFocus()) return false; // 別のウィンドウ・タブ・ブラウザの UI
+  if (anyFrameEngaged()) return false; // 利用者が［操作する］で始めた（枠のフォーカスが外れれば、枠ごとの番が操作中を終え、次の見回りで戻す）
   const el = rememberedOrigin();
-  if (el) {
+  if (el !== null && isShown(el)) {
     try {
       (el as HTMLElement).focus({ preventScroll: true });
     } catch {
       /* 次の戻し先へ */
     }
   }
-  if (dd.activeElement === dd.body || dd.activeElement === null) d.focusSelectedTerminal();
+  if (d.activeElement === d.body || d.activeElement === null) dd.focusSelectedTerminal();
+  const moved = !(d.activeElement === d.body || d.activeElement === null);
+  if (moved && count) noteRestore(Date.now());
+  return moved;
 }
 
-/** 1 回見る（見回り・`focusout` から）。落ちたことを見つけたら、戻す。 */
+/** 1 回見る（見回り・`focusout`・窓の `blur`/`focus` から）。 */
 export function check(): void {
   if (!doc || !deps) return;
-  const d = doc;
-  if (scriptFramesSnapshot().length === 0) {
-    hadFocus = false;
-    return;
-  }
-  const active = d.activeElement;
-  if (isAppElement(active, d)) {
-    hadFocus = true;
-    lastAppEl = active;
-    return;
-  }
-  if (active && active !== d.body && active !== d.documentElement) {
-    // 表示の枠にある。利用者が操作を始めた枠なら、アプリの要素にあったフォーカスは、利用者の意図で枠へ移った（もう「落ちる」先ではない）。
-    // 操作中でない枠が取っただけ（スクリプトの `window.focus()`。枠ごとの番が扱う）なら、**印は動かさない**: 次に `body` へ落ちたとき、戻す（交互に来る面で戻しが 0 回になる穴だった）。
-    if (anyFrameEngaged()) hadFocus = false;
-    return;
-  }
-  // body（か無し）。落ちたのは、直前までアプリの要素にあったときだけ。
-  if (!hadFocus) return;
-  hadFocus = false;
-  const was = lastAppEl;
-  lastAppEl = null;
-  if (!d.hasFocus()) return; // ウィンドウ・タブが離れた
-  if (documentRegainedFocusWithin(FOCUS_DROP_USER_INPUT_MS)) return; // 別のウィンドウ・ブラウザの UI から戻った
-  if (userBlurredFocusWithin(FOCUS_DROP_USER_INPUT_MS)) return; // 利用者が余白を押して、実際にフォーカスが body へ移った（自分で外した）
-  if (was !== null && !isShown(was)) return; // アプリが、フォーカスのあった要素を外した・隠した
-  // 脱落: 元の場所へ戻す（数えない）。
-  const el = rememberedOrigin();
-  if (el) {
-    try {
-      (el as HTMLElement).focus({ preventScroll: true });
-    } catch {
-      /* 次の戻し先へ */
-    }
-  }
-  if (d.activeElement === d.body || d.activeElement === null) deps.focusSelectedTerminal();
-  // 戻した先は、アプリの要素。すぐまた落とされても、次の見回り・focusout で「落ちた」と分かるように、印を立て直す。
-  hadFocus = isAppElement(d.activeElement, d);
-  if (hadFocus) lastAppEl = d.activeElement;
-  noteRestore(Date.now());
+  if (scriptFramesSnapshot().length === 0) return;
+  restoreFromBody(true);
 }
 
 /** 見回りを始める（スクリプトが動く枠が載ったとき。何度呼んでもよい）。 */
@@ -156,8 +122,6 @@ export function startFocusDropWatch(d: FocusDropDeps, document_: Document = docu
   deps = d;
   if (timer !== null) return;
   doc = document_;
-  hadFocus = isAppElement(doc.activeElement, doc);
-  lastAppEl = hadFocus ? doc.activeElement : null;
   doc.addEventListener("focusout", onFocusOut, true);
   doc.defaultView?.addEventListener("blur", onWindowFocusChange);
   doc.defaultView?.addEventListener("focus", onWindowFocusChange);
@@ -166,18 +130,8 @@ export function startFocusDropWatch(d: FocusDropDeps, document_: Document = docu
 
 /** 見回りを止める（スクリプトが動く枠が 1 つも無くなったとき）。 */
 export function stopFocusDropWatch(): void {
-  // 最後の面が外れる直前に落とされたフォーカス（繰り返し落とす面が閉じられた直後）を戻す。
-  if (doc && deps && hadFocus && (doc.activeElement === doc.body || doc.activeElement === null) && doc.hasFocus() && !userBlurredFocusWithin(FOCUS_DROP_USER_INPUT_MS) && (lastAppEl === null || isShown(lastAppEl))) {
-    const el = rememberedOrigin();
-    if (el) {
-      try {
-        (el as HTMLElement).focus({ preventScroll: true });
-      } catch {
-        /* 次の戻し先へ */
-      }
-    }
-    if (doc.activeElement === doc.body || doc.activeElement === null) deps.focusSelectedTerminal();
-  }
+  // 最後の面が外れる直前に落とされたフォーカス（繰り返し落とす面が閉じられた直後）を戻す（数えない）。
+  if (doc && deps) restoreFromBody(false);
   if (timer !== null) clearInterval(timer);
   timer = null;
   doc?.removeEventListener("focusout", onFocusOut, true);
@@ -185,8 +139,6 @@ export function stopFocusDropWatch(): void {
   doc?.defaultView?.removeEventListener("focus", onWindowFocusChange);
   doc = null;
   deps = null;
-  hadFocus = false;
-  lastAppEl = null;
   restoredAt.length = 0;
   lastNoticeAt = -Infinity;
 }

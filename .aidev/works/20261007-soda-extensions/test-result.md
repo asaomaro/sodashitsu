@@ -637,3 +637,31 @@ MEASURE focus-drop-after-click: interval=900ms typed=60 reached-pane=33 lost=27
   **E2E は直す前でも通った**（直す前の dist で rAF 79/76/76、MC 79/80/79 が届き、遮断器も働いた）。この環境では、見回りの位相が毎回この穴に入るとは限らない（レビューの 0/80 は位相しだい）。時機に頼らず直す前に落ちるのは単体テスト側。枠が取る・body へ落とすを別のフレームに交互にする変形は、枠ごとの番が戻すので入力は失われず（80/80）、サーバの focus_steal の数え・面の閉じで終わるため、遮断器の通知の期待は置かなかった。
 - 有効になったことの知らせ: 結合（`composeServer.climode.integration.test.ts`: `byKind: "external"`・ログ 1 行・有効のままの別の変更では増えない）、単体（`displayLabel.test.ts`）。
 - 全体: `pnpm build`・`pnpm typecheck` 誤りなし。`pnpm test` は 8663 件が通り、失敗は既知の `tui.integration.test.ts` の 3 件のみ。display の E2E は 119 件中 117 件が通った。落ちた 2 件（`display-flows` の prefix+i、`display-isolation` の form 取り除き〔49.8s の時間切れ〕）は、単独で流し直すと 14 件とも通った（全体を並列で流したときの負荷による揺れ。この変更とは関係しない）。
+
+## 第 5 回の再レビューの直し（D38。状態を持たない作り。2026-10-08）
+
+**手順（再レビューと同じ）**: 面を先に出す → 端末を本物のクリック（`.xterm-screen`）→ すぐ 80 キー（25ms 間隔）。`display-script-drop.spec.ts`、各 5 回、`--workers=1`、Chromium 153。
+
+**直す前（`f403edf`）で落ちた出力**（15 回の高頻度の面のうち 10 回が 0/80）:
+
+```
+MEASURE drop-first raf #0..#4: typed=80 reached=0 frames-after=1 active=BODY      (5/5 が 0/80)
+MEASURE drop-first mc  #0: reached=80  #1: reached=80  #2: reached=0 frames-after=1 active=BODY  #3: 80  #4: 80   (1/5 が 0/80)
+MEASURE drop-first interval4 #0: 0  #1: 0  #2: 80  #3: 0  #4: 0   (4/5 が 0/80。activeElement=BODY・枠は残り・遮断器は働かない)
+MEASURE drop-first interval300 #0..#4: reached=79,80,79,79,79 frames-after=1   (遮断しない。届く)
+  ✘ 余白（タブバー・サイドバーの空き）を押す: 端末へ戻る …  （直す前は BODY のまま）
+13 passed, 11 failed
+```
+
+**直した後**（同じ手順・同じ回数）:
+
+| 面 | 届いた（5 回） | 遮断器 |
+|---|---|---|
+| requestAnimationFrame | 80, 79, 79, 79, 80 | 毎回働いた（枠 0） |
+| MessageChannel | 80 ×5 | 毎回働いた |
+| setInterval 4ms | 80 ×5 | 毎回働いた |
+| setInterval 300ms | 80, 80, 79, 80, 79 | 働かない（枠 1。戻すだけ） |
+
+24 件すべて通った。面が既に落としている状態（300ms ごと）での、覆いを押す／余白を押す／別の pane の端末を押す／設定を開いて閉じる、の 4 件も通った（30 キー中 26 以上が届き、余白を押したあとの `activeElement` は端末）。クリックが先・面が後の順（既存）: 300ms・500ms で 60/60、900ms で 59/60、覆いを押した直後（400ms ごと）で 59/60、4ms で 66/67。遮断器の後の 20 キーは rAF・MC とも 20/20。
+**単体**（`focusDrop.test.ts`）: 見回りの状態（`activeElement` body／アプリの要素／枠、文書のフォーカスの真偽、操作中の枠の有無、戻し先の 生きている／外れた／隠れた／無い）の表 9 行と、戻さない結果のあとに状態が変われば次の見回りで戻すこと、位相に依らない交互、押下の直後でも戻すこと、遮断器（ゆっくり・1 秒に 1 回の余白・交互・`noteFocusRestored`・遅れた戻し）。
+**全体**: display の E2E 全部を `--workers=1` で 143 件 / 143 件が通った（10.6 分）。`pnpm build`・`pnpm typecheck` 誤りなし。`pnpm test` は 8662 件が通り、失敗は既知の `tui.integration.test.ts` の 3 件と、並列実行の負荷で揺れた `notifications.test.ts` の 1 件（単独で 2 回流すと 32/32 通る。この変更と無関係）。

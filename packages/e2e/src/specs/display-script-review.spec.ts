@@ -263,16 +263,17 @@ window.__drop = function () { window.focus(); parent.focus(); };
     expect((await (await setScript(appServer, p2, "evil2", "<p>x</p>")).done).code).toBe(0);
   });
 
-  test("不要な戻しが起きない: 余白を押して外したフォーカスは、端末へ引き戻されない", async ({ page, appServer }) => {
+  test("余白を押して外したフォーカスは、スクリプトの面が載っている間は端末へ戻る（免除は無い。代償）。知らせは出ず、サーバへも知らせない", async ({ page, appServer }) => {
     const { paneId, sent } = await openScriptBrowser(page, appServer);
     await setScriptOk(appServer, paneId, "g", PAGE);
     await expect(scriptFrameLoc(page).locator("p")).toBeAttached();
     await focusTerminal(page);
     await page.waitForTimeout(300);
     await page.locator("[data-pane-panel-label]").click({ position: { x: 2, y: 2 } }); // フォーカスを受けない見出しの余白
-    await page.waitForTimeout(1500);
-    expect(await activeTag(page)).toBe("BODY");
+    await page.waitForTimeout(500);
+    expect(await activeTag(page)).toBe("TEXTAREA");
     expect(stealReports(sent)).toBe(0);
+    await expect(page.locator(".toast", { hasText: "入力のフォーカスを繰り返し外しています" })).toHaveCount(0);
   });
 
   test("不要な戻しが起きない: キー一覧のダイアログを開いて閉じる・タブを替える・pane を閉じる、のあと、フォーカスは利用者の側（いまの pane の端末）にあり、知らせも出ない", async ({ page, appServer }) => {

@@ -82,6 +82,7 @@ const session = useSessionStore(pinia);
 const view = useViewStore(pinia);
 const seen = useSeenStore(pinia);
 const settings = useSettingsStore(pinia);
+let lastScriptNoticeAt = -Infinity;
 // 保存した SSH のマシン（20260927-multi-host-machines）。モバイルの 1 列の画面では使わない（手元のマシンだけ。今までどおり）。
 // 1 列かは窓の幅で変わる（`App.vue` と同じ media query）ので、変化を購読する。
 const machines = useMachinesStore(pinia);
@@ -130,7 +131,11 @@ const storeAdapter = new StoreAdapter({
   onPrefsChanged: (data) => {
     // 「スクリプトが動く表示」が無効 → 有効に変わったら、つながっている画面に知らせる。自分の画面で変えたときは、手元の値がもう真なので出ない。
     const notice = scriptEnabledNoticeFor(data, settings.displayScriptEnabled);
-    if (notice !== null) view.toast(notice);
+    // 有効 ⇄ 無効の繰り返しで連発しない（1 分に 1 回まで）。
+    if (notice !== null && Date.now() - lastScriptNoticeAt >= 60_000) {
+      lastScriptNoticeAt = Date.now();
+      view.toast(notice);
+    }
     prefsSyncBox.current?.onChanged(data);
   },
   // 連携のグラフ（20260927-agent-graph）は手元の `soda serve` のもの。画面の接続が別のマシンを向いている間の（そのマシンの）グラフは捨てる。
