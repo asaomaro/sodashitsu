@@ -1,2 +1,8 @@
 events:
   - { ts: 2026-10-08T03:34:45Z, phase: requirements, event: start }
+  - { ts: 2026-10-08T03:57:12Z, phase: requirements, event: doccheck, metrics: { stage: start, phase: requirements, mode: delegated, size: 34969 } }
+  - { ts: 2026-10-08T03:57:12Z, phase: design, event: doccheck, metrics: { stage: start, phase: design, mode: delegated, size: 65496 } }
+  - { ts: 2026-10-08T03:57:12Z, phase: tasks, event: doccheck, metrics: { stage: start, phase: tasks, mode: delegated, size: 46455 } }
+  - { ts: 2026-10-08T04:08:02Z, phase: requirements, event: doccheck, metrics: { stage: report, phase: requirements, findings: 9 } }
+  - { ts: 2026-10-08T04:08:02Z, phase: design, event: doccheck, metrics: { stage: report, phase: design, findings: 17 } }
+  - { ts: 2026-10-08T04:10:15Z, phase: tasks, event: doccheck, metrics: { stage: report, phase: tasks, findings: 37 } }

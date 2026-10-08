@@ -12,7 +12,9 @@
 
 ## 描画
 
-- T4: セルの格子と差分描画。`render/Screen.ts` の `Grid`（`set`・`fill`・`text`・`copyFrom`）と `Screen.frame`（前のフレームと違うセルだけを ANSI で出す）。**外側の端末へ出るのは、`Screen.frame` が格子から作る列だけ**（部品が、外側の端末へ直に書く道は無い。画像〔Kitty graphics〕と通知〔OSC〕は別の出口）。
+- T4: セルの格子と差分描画。`render/Screen.ts` の `Grid`（`set`・`fill`・`text`・`copyFrom`）と `Screen.frame`（前のフレームと違うセルだけを ANSI で出す。**セルの文字は、検査せずにそのまま出す**。:250-251）。画面の文字は、`Screen.frame` が格子から作る列として出る。
+  **外側の端末への出口は、ほかにもある**: 窓の題（OSC 2。`app/terminalModes.ts:74`・`app/windowTitle.ts:83`）・クリップボード（OSC 52。`app/TuiApp.ts:878-882`）・通知（OSC 9／99／777。`notify/terminalNotify.ts:89-96`）・BEL（`TuiApp.ts:810`）・Kitty の画像（`TuiApp.ts:1210-1216`）・stderr（`app/processIo.ts:79-81`）。いまは、どれにも面の文字列は入らない。
+  **`Grid.set` は、文字を検査しない**（`Screen.ts:71-101`）。制御文字を落とすのは `Grid.text` だけ。
   `Renderer.render`（`render/Renderer.ts:68`）が毎フレーム、サイドバー → tab バー → pane ごと（`paintFrame`・`paintScrollbar`・`paintPane`）→ 飾り（`extras.decorate`）→ トースト → 重ねるもの（`extras.overlay`）の順で描く。重なりの順は、この描く順で固定。
 - T5: 割り付けは `layout/computeLayout.ts` の純粋な関数。`PaneBox = {paneId, frame, content, sides}`（`content` が「pane の端末の大きさとして申告する」箱。:16-24）。`box()`（:182-192）が `frame` から罫線を引いて `content` を作る。
   PTY の大きさを送るのは 1 か所（`TuiApp.visiblePanes()` → `clampTerminalSize(b.content.w, b.content.h)` → `client.view`。`app/TuiApp.ts:1148-1152`）。**`content` を削れば、PTY の大きさは自動で追従する**。同じ内容の `client.view` は送り直さない。
@@ -22,8 +24,10 @@
 ## 文字列を安全に描く部品
 
 - T7: `Grid.text`（`Screen.ts:132-157`）が、chrome の文字列の出口。**C0・DEL・C1 を描かない**（取り除くだけ。ESC を落とすので、列の残り〔`[2J` など〕は文字として出る）。幅は `charWidth`（xterm の unicode11 と同じ規則）。結合文字は直前のセルへ足す。`maxWidth` で止める。
-  双方向の制御（U+202A〜202E・U+2066〜2069）・U+2028/2029 を落とすかは **未確認**。
-- T8: `plainText`（`modes/SubagentList.ts:31`）: C0・DEL・C1・U+2028/2029・双方向の制御を空白にする。`stripControl`（`client-core/src/graph/message.ts:24`）: OSC・DCS／SOS／PM／APC・CSI・その他の ESC の列・8 ビットの C1 の列を**列ごと**落とし、C0（改行・タブは残す）・DEL・C1・双方向の上書きを落とす。
+  **双方向の制御（U+202A〜202E・U+2066〜2069）は落とさない**（幅 0 なので、直前のセルへ足されて外へ出る。:147-151）。U+2028 は幅 1 のセルになる。
+- T8: `plainText`（`modes/SubagentList.ts:31`）: C0・DEL・C1・U+2028/2029・双方向の制御を空白にする。`stripControl`（`client-core/src/graph/message.ts:24`）: OSC・DCS／SOS／PM／APC・CSI・その他の ESC の列・8 ビットの C1 の列を落とし、C0（改行・タブは残す）・DEL・C1・双方向の上書きを落とす。
+  **面の中身には使えない**（独立点検での実測。node v24.15.0）: 終端を遅延一致で探す正規表現（:12-13・:17）なので、終端の無い `ESC ]`・`ESC P`・U+0090 が並ぶと、長さの 2 乗の時間が掛かる（256 KiB で 6〜18 秒。上限の 2 MiB では、外挿で十数分。同期なので止められない）。
+  落とさないものもある: U+200B・U+200E・U+200F・U+061C・U+2060・U+FEFF・U+00AD・U+2028・U+2029・U+180E・タグ文字（U+E0000 台）・異体字セレクタ。終端の無い OSC は、始まりの 2 文字だけが落ちる。
   幅と切り詰めは `render/width.ts`（`charWidth`・`stringWidth`・`truncate`）。折り返しは `modes/overlay.ts:100` の `wrapText`（文字単位）。
 - T9: **Markdown・HTML を端末向けに描く部品は無い**（`packages/tui`・`client-core` に 0 件。端末版は `sodactl ask` も出さない＝`tui-parity.md:160` の W32）。新しく作る。Markdown の字句解析のライブラリ（`marked`）が、端末版から使える依存にあるかは **未確認**。
 
@@ -52,7 +56,8 @@
 
 ## 実測していない前提
 
-- V1: `Grid.text` が、双方向の制御・U+2028/2029 を落とすか（T7）。落とさない前提で、面の中身は、先に自前の無害化を通す。
-- V2: `marked`（か、ほかの Markdown の字句解析）を、端末版の依存に足せるか・足すとバンドルがどれだけ増えるか（T9）。design で決める。
+- V1: （確かめた）`Grid.text` は、双方向の制御・U+2028/2029 を落とさない（T7）。面の文字は、自前の無害化を通す。
+- V2: Markdown・HTML の字句解析のライブラリは、このリポジトリのどの `package.json` にも無い（`marked`・`markdown-it`・`micromark` は 0 件）。端末版の依存に足すと、どれだけ増えるかは未確認。design で決める。
+- V5: 外側の端末と、端末版の幅の表（unicode11）が食い違う文字（新しい絵文字・曖昧幅・異体字セレクタつきの列）で、面の箱の右隣のセルが壊れるか。試験用の外側の端末は同じ表を使うので、単体では見えない。
 - V3: 面の領域を `content` の外に置いたとき、前の格子から写す最適化（T5）が、面の領域を描き残さないか。
 - V4: 1 つの面の中身（2 MiB まで）を、端末向けに描く前処理（無害化・折り返し）に掛かる時間。
