@@ -1351,6 +1351,74 @@ describe("TuiDispatcher — 移動（ドラッグ）とメニュー専用の操�
     expect(h.model.viewTarget()).toEqual({ workspaceId: "w2", tabId: "t9", focusedPaneId: "p2" });
   });
 
+  // 20261008-web-tab-dnd（別の worktree の workspace への pane の移動を断る。T10）。
+  describe("pane の移動の範囲（別の worktree へは送らずに知らせる）", () => {
+    const MESSAGE = "別の worktree の workspace へは移せません（同じフォルダを開いた workspace へだけ移せます）";
+    const g = (worktreeKey: string | undefined) => ({
+      branch: "b",
+      ahead: 0,
+      behind: 0,
+      repoKey: "/r/.git",
+      isLinkedWorktree: false,
+      ...(worktreeKey === undefined ? {} : { worktreeKey }),
+    });
+    const snap = (gitA: Workspace["git"], gitB: Workspace["git"], cwdB = "/") =>
+      snapshot({ workspaces: [workspace("w1", ["t1"], { git: gitA }), workspace("w2", ["t2"], { git: gitB, cwd: cwdB })] });
+    const messages = (h: ReturnType<typeof harness>) => h.ui.toasts.map((t) => t.message);
+
+    it("別の worktree への movePaneToNewTab: 要求を送らず、文言のトースト。表示が動かない", async () => {
+      const h = harness(snap(g("/r/.git"), g("/r/.git/worktrees/x")));
+      const before = h.model.viewTarget();
+      h.d.movePaneToNewTab("p2", "w2");
+      await flush();
+      expect(h.calls).toEqual([]);
+      expect(messages(h)).toEqual([MESSAGE]);
+      expect(h.model.viewTarget()).toEqual(before);
+    });
+
+    it("管理外どうしで開いた場所が違う workspace へも送らずに知らせる", async () => {
+      const h = harness(snap(null, null, "/elsewhere"));
+      h.d.movePaneToNewTab("p2", "w2");
+      await flush();
+      expect(h.calls).toEqual([]);
+      expect(messages(h)).toEqual([MESSAGE]);
+    });
+
+    it("同じ worktree・自分の workspace・worktreeKey の無い git（古いサーバ）は、今までどおり送る", async () => {
+      for (const [a, b, target] of [
+        [g("/r/.git"), g("/r/.git"), "w2"],
+        [g("/r/.git"), g("/r/.git/worktrees/x"), "w1"],
+        [g(undefined), g("/r/.git"), "w2"],
+      ] as const) {
+        const h = harness(snap(a, b));
+        h.d.movePaneToNewTab("p2", target);
+        await flush();
+        expect(h.calls).toEqual([["pane.move_to_new_tab", { paneId: "p2", targetWorkspaceId: target }]]);
+        expect(messages(h)).toEqual([]);
+      }
+    });
+
+    it("応答 { ok: false, reason } はトースト。reason の無い { ok: false } は黙る（movePaneToTab も）", async () => {
+      const h = harness(snap(g(undefined), g("/r/.git")), {
+        "pane.move_to_new_tab": { ok: false, reason: "different_worktree" },
+        "pane.move_to_tab": { ok: false, reason: "different_worktree" },
+      });
+      h.d.movePaneToNewTab("p2", "w2");
+      h.d.movePaneToTab("p2", "t2");
+      await flush();
+      expect(messages(h)).toEqual([MESSAGE, MESSAGE]);
+
+      const quiet = harness(snap(g(undefined), g("/r/.git")), {
+        "pane.move_to_new_tab": { ok: false },
+        "pane.move_to_tab": { ok: false },
+      });
+      quiet.d.movePaneToNewTab("p2", "w2");
+      quiet.d.movePaneToTab("p2", "t2");
+      await flush();
+      expect(messages(quiet)).toEqual([]);
+    });
+  });
+
   it("movePaneToEdge・clearPaneName・setRightClickTarget・pasteIntoPane", async () => {
     const h = harness();
     h.d.movePaneToEdge("p2", "p1", "top");

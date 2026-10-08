@@ -164,7 +164,7 @@
       依存: T6
       AC: AC17, AC18
 
-- [ ] T10: 端末版: 断るときの知らせ。design 第 2 部「端末版」のとおり。`mouse.ts`・`TuiApp.ts` は変えない（workspace の行・tab の落とし先の強調は、もともと描いていない。tab バーに並ぶのは表示中の workspace の tab だけ）。
+- [x] T10: 端末版: 断るときの知らせ。design 第 2 部「端末版」のとおり。`mouse.ts`・`TuiApp.ts` は変えない（workspace の行・tab の落とし先の強調は、もともと描いていない。tab バーに並ぶのは表示中の workspace の tab だけ）。
       - `TuiDispatcher.movePaneToNewTab`: 送る前に `paneMoveBlock(移動元の workspace, 移動先の workspace, { lenient: true })`（どちらかがモデルに無ければ確認を飛ばす）。断るなら `ui.toast(paneMoveBlockMessage(block))` で終わり（送らない）。応答が `!r.ok && r.reason` ならトースト。
       - `TuiDispatcher.movePaneToTab`: 送る前の確認は足さない。応答の `reason` だけトースト。
       単体テスト（`TuiDispatcher.test.ts`）: 別の `worktreeKey` の workspace への `movePaneToNewTab` → 要求を送らず、文言のトースト、表示が動かない。同じ `worktreeKey`・自分の workspace → 今までどおり送る。`worktreeKey` の無い `git` の workspace（古いサーバ）→ 送る。応答 `{ok: false, reason: "different_worktree"}` → トースト。応答 `{ok: false}` → トースト無し。`movePaneToTab` も、応答の `reason` でトースト。今ある 6 の出現（`:1336`〜`1349`）と `mouse.test.ts:246` は、`testing/fixtures.ts` の workspace が `cwd: "/"`・`git: null` なので直しなしで通ること。
