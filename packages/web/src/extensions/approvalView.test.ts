@@ -92,8 +92,8 @@ describe("pendingQueue・nextInQueue（T25）", () => {
 describe("pendingNotice（T25）", () => {
   it("pending の件数。disabled は入らない。閉じた key:digest は数えない。0 なら null", () => {
     const list = [ext("a", "/r", "pending", "1".repeat(64)), ext("b", "/r", "disabled"), ext("c", "/r", "pending", "2".repeat(64)), ext("d", "/r", "running")];
-    expect(pendingNotice(list, new Set())).toEqual({ count: 2, ids: [`a:${"1".repeat(64)}`, `c:${"2".repeat(64)}`] });
-    expect(pendingNotice(list, new Set([`a:${"1".repeat(64)}`]))).toEqual({ count: 1, ids: [`c:${"2".repeat(64)}`] });
+    expect(pendingNotice(list, new Set())).toEqual({ count: 2, ids: [`a:${"1".repeat(64)}`, `c:${"2".repeat(64)}`], keys: ["a", "c"] });
+    expect(pendingNotice(list, new Set([`a:${"1".repeat(64)}`]))).toEqual({ count: 1, ids: [`c:${"2".repeat(64)}`], keys: ["c"] });
     expect(pendingNotice(list, new Set([`a:${"1".repeat(64)}`, `c:${"2".repeat(64)}`]))).toBeNull();
     expect(pendingNotice([], new Set())).toBeNull();
   });

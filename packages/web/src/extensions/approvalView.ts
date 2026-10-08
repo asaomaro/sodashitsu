@@ -95,9 +95,9 @@ export function nextInQueue(queue: readonly string[], list: readonly ExtensionIn
  * 承認待ちの知らせ（消えないトースト）に出す件数。`pending`（`disabled` は入らない）のうち、利用者が閉じていない（`dismissed` に `key:digest` が無い）もの。
  * 0 なら `null`（知らせを消す）。
  */
-export function pendingNotice(list: readonly ExtensionInfo[], dismissed: ReadonlySet<string>): { count: number; ids: string[] } | null {
+export function pendingNotice(list: readonly ExtensionInfo[], dismissed: ReadonlySet<string>): { count: number; ids: string[]; keys: string[] } | null {
   const fresh = list.filter((e) => e.scope === "project" && e.state === "pending" && e.approval !== undefined && !dismissed.has(`${e.key}:${e.approval.digest}`));
-  return fresh.length === 0 ? null : { count: fresh.length, ids: fresh.map((e) => `${e.key}:${e.approval!.digest}`) };
+  return fresh.length === 0 ? null : { count: fresh.length, ids: fresh.map((e) => `${e.key}:${e.approval!.digest}`), keys: fresh.map((e) => e.key) };
 }
 
 /** 承認の有無の短い文（`disabled` の行にも出す）。 */

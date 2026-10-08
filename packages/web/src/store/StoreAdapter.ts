@@ -107,7 +107,7 @@ export class StoreAdapter implements StorePort {
     const view = useViewStore(this.opts.pinia);
     // グラフ画面（20260927-agent-graph）もダイアログと同じく、開いている間は「閉じたときに戻す先」を差し替える。
     const dialogOpen = view.modalOpen;
-    const focused = dialogOpen ? (view.preDialogFocusPaneId ?? view.preGraphFocusPaneId ?? view.preAskFocusPaneId ?? view.focusedPaneId) : view.focusedPaneId;
+    const focused = dialogOpen ? (view.preDialogFocusPaneId ?? view.preGraphFocusPaneId ?? view.preAskFocusPaneId ?? view.preExtensionApprovalFocusPaneId ?? view.focusedPaneId) : view.focusedPaneId;
     const next = repairView({ workspaceId: view.workspaceId, tabId: view.tabId, focusedPaneId: focused }, session, successorHint);
     if (!next) return;
     if (next.workspaceId && next.tabId && (next.workspaceId !== view.workspaceId || next.tabId !== view.tabId)) view.setView(next.workspaceId, next.tabId);
@@ -116,6 +116,7 @@ export class StoreAdapter implements StorePort {
       if (view.openDialog !== null) view.retargetPreDialogFocus(next.focusedPaneId);
       if (view.graphOpen) view.retargetPreGraphFocus(next.focusedPaneId);
       if (view.askOpen) view.retargetPreAskFocus(next.focusedPaneId); // 質問のフォーム（20261002-sodactl-ask）も同じ
+      if (view.extensionApprovalOpen) view.retargetPreExtensionApprovalFocus(next.focusedPaneId); // 拡張の承認のダイアログ（20261007-ext-host）も同じ
     } else view.focusPane(next.focusedPaneId);
   }
 
