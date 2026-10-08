@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { open as fsOpen } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,7 @@ import { EventBus } from "../bus/EventBus.js";
 import { DisplayService } from "../display/DisplayService.js";
 import { MemoryLogger } from "../log/Logger.js";
 import { ManualClock } from "../machine/testing.js";
+import { ApprovalStore } from "./ApprovalStore.js";
 import { ExtensionHost, type ExtensionHostOptions } from "./ExtensionHost.js";
 import { FakeExtChild, FakeGroups } from "./testing.js";
 
@@ -25,7 +26,19 @@ export interface HostHarness {
   logger: MemoryLogger;
   host: ExtensionHost;
   panes: Map<string, { workspaceId: string; label?: string }>;
+  /** workspace（id → 開いた場所）。`snapshot()` が返す。 */
+  workspaces: Map<string, { cwd: string }>;
   scriptEnabled: { value: boolean };
+  /** 同じ session の承認の記録（直接書く・読む）。 */
+  approvalStore: ApprovalStore;
+  /** リポジトリ（`.git/HEAD` と、あれば `.soda/extensions.json`）を作り、根の実体のパスを返す。 */
+  makeRepo(name: string, entries?: unknown[] | null, mode?: number): Promise<string>;
+  /** プロジェクトの設定を書き換える（0600）。 */
+  writeProjectConfig(root: string, entries: unknown[], mode?: number): Promise<void>;
+  /** workspace と pane を足し、bus に `workspace.created` を出す。 */
+  addWorkspace(id: string, cwd: string, paneId?: string): void;
+  /** workspace を消し（pane も）、bus に `workspace.closed` を出す。 */
+  removeWorkspace(id: string): void;
   /** 設定を書く（0600）。 */
   writeConfig(entries: unknown[], raw?: string): Promise<void>;
   /** 条件が成り立つまで、実時間を少しずつ進めて待つ（`advanceMs` があれば、偽の時計も進める）。 */
@@ -48,9 +61,13 @@ export async function makeHost(
     groupDiesOn?: "SIGTERM" | "SIGKILL" | "never";
     panes?: string[];
     platform?: NodeJS.Platform;
+    approvalOpen?: (path: string, flags: number) => Promise<import("node:fs/promises").FileHandle>;
+    approvalDeps?: Partial<import("./ApprovalStore.js").ApprovalFileDeps>;
+    projectFile?: NonNullable<ExtensionHostOptions["deps"]>["projectFile"];
+    projectRoot?: NonNullable<ExtensionHostOptions["deps"]>["projectRoot"];
   } = {},
 ): Promise<HostHarness> {
-  const dir = await mkdtemp(join(tmpdir(), "ext-host-"));
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "ext-host-")));
   const clock = new ManualClock();
   const groups = new FakeGroups();
   const children: FakeExtChild[] = [];
@@ -61,6 +78,7 @@ export async function makeHost(
   const logger = new MemoryLogger();
   const panes = new Map<string, { workspaceId: string; label?: string }>();
   for (const p of o.panes ?? ["p1", "p2"]) panes.set(p, { workspaceId: "w1" });
+  const workspaces = new Map<string, { cwd: string }>([["w1", { cwd: "/w1" }]]);
   const scriptEnabled = { value: true };
   const displays = new DisplayService({ bus, paneExists: (id) => panes.has(id), isScreenKind: () => true, scriptEnabled: () => scriptEnabled.value });
   groups.onCall = (pid, sig) => {
@@ -74,11 +92,14 @@ export async function makeHost(
   const session = {
     snapshot: () =>
       ({
-        workspaces: [{ id: "w1", label: "W1", cwd: "/w1" }],
-        tabs: [{ id: "t1", workspaceId: "w1" }],
-        panes: [...panes.entries()].map(([id, p]) => ({ id, tabId: "t1", label: p.label ?? null, agent: null })),
+        workspaces: [...workspaces.entries()].map(([id, w]) => ({ id, label: id.toUpperCase(), cwd: w.cwd })),
+        tabs: [...workspaces.keys()].map((id) => ({ id: `t-${id}`, workspaceId: id })),
+        panes: [...panes.entries()].map(([id, p]) => ({ id, tabId: `t-${p.workspaceId}`, label: p.label ?? null, agent: null })),
       }) as never,
-    commandContext: ((id: string) => ({ workspaceId: panes.get(id)?.workspaceId ?? "w1", tabId: "t1", paneId: id, cwd: "/w1", defaultCwd: "/" })) as never,
+    commandContext: ((id: string) => {
+      const ws = panes.get(id)?.workspaceId ?? "w1";
+      return { workspaceId: ws, tabId: `t-${ws}`, paneId: id, cwd: workspaces.get(ws)?.cwd ?? "/w1", defaultCwd: "/" };
+    }) as never,
     hasPane: (id: string) => panes.has(id),
   };
   const host = new ExtensionHost({
@@ -104,6 +125,9 @@ export async function makeHost(
       killGroup: groups.kill,
       file: { open: o.open ?? ((p, f) => fsOpen(p, f)) },
       ...(o.stateOpen ? { stateFile: { open: o.stateOpen } } : {}),
+      ...(o.approvalOpen || o.approvalDeps ? { approvalFile: { ...(o.approvalDeps ?? {}), ...(o.approvalOpen ? { open: o.approvalOpen } : {}) } } : {}),
+      ...(o.projectFile ? { projectFile: o.projectFile } : {}),
+      ...(o.projectRoot ? { projectRoot: o.projectRoot } : {}),
       ...(o.timings ? { timings: o.timings } : {}),
       ...(o.limits ? { limits: o.limits } : {}),
       ...(o.inScope ? { inScope: o.inScope } : {}),
@@ -122,7 +146,32 @@ export async function makeHost(
     logger,
     host,
     panes,
+    workspaces,
     scriptEnabled,
+    approvalStore: new ApprovalStore(dir),
+    async makeRepo(name, entries, mode = 0o600) {
+      const root = join(dir, "repos", name);
+      await mkdir(join(root, ".git"), { recursive: true });
+      await writeFile(join(root, ".git", "HEAD"), "ref: refs/heads/main\n");
+      if (entries) await h.writeProjectConfig(root, entries, mode);
+      return root;
+    },
+    async writeProjectConfig(root, entries, mode = 0o600) {
+      await mkdir(join(root, ".soda"), { recursive: true });
+      const p = join(root, ".soda", "extensions.json");
+      await writeFile(p, JSON.stringify({ extensions: entries }), { mode });
+      await chmod(p, mode);
+    },
+    addWorkspace(id, cwd, paneId) {
+      workspaces.set(id, { cwd });
+      if (paneId) panes.set(paneId, { workspaceId: id });
+      bus.publish({ event: "workspace.created", data: { workspace: { id, label: id, cwd } as never } });
+    },
+    removeWorkspace(id) {
+      workspaces.delete(id);
+      for (const [pid, p] of [...panes]) if (p.workspaceId === id) panes.delete(pid);
+      bus.publish({ event: "workspace.closed", data: { workspaceId: id } });
+    },
     async writeConfig(entries, raw) {
       const p = join(dir, "extensions.json");
       await writeFile(p, raw ?? JSON.stringify({ extensions: entries }), { mode: 0o600 });
