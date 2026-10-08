@@ -216,4 +216,64 @@ test("設定が壊れている → problems が節に出る。拡張が 1 つも
   await writeBrokenExtensionsFile(appServer);
   await dialog(page).locator("[data-ext-reload]").click();
   await expect(dialog(page).locator("[data-ext-problems]")).toContainText("extensions.json", { timeout: 10_000 });
+  // ファイル名を重ねない・警告の見た目・［読み直す］は成功とだけ言わない
+  const problem = dialog(page).locator("[data-ext-problems] li").first();
+  expect((await problem.textContent()) ?? "").not.toContain("extensions.json: extensions.json");
+  await expect(problem).toHaveClass(/ext-warn/);
+  await expect(dialog(page).locator("[data-ext-message]")).toContainText("問題が 1 件あります");
+});
+
+test("拡張が 2 つ以上: 入切・落ちる・復帰で行が並び替わらず、操作中のスイッチのフォーカスと、開いているログのスクロール・要素が保たれる", async ({ page, appServer }) => {
+  const fa = await fixture();
+  const fb = await fixture();
+  await writeExtensionsFile(appServer, [
+    { id: "aaa", command: fa.command() },
+    { id: "bbb", command: fb.command() },
+  ]);
+  await appServer.restart();
+  await openApp(page, appServer);
+  await openSettings(page);
+  await expect(stateText(page, "aaa")).toContainText("動作中", { timeout: 10_000 });
+  await expect(stateText(page, "bbb")).toContainText("動作中", { timeout: 10_000 });
+  const ids = (): Promise<string[]> => dialog(page).locator("[data-ext-id]").evaluateAll((els) => els.map((e) => e.getAttribute("data-ext-id") ?? ""));
+  // 2 行目のログを開き、スクロールして、要素に印を付ける（取り直しで作り直されたら印が消える）
+  await row(page, "bbb").locator("[data-ext-log-toggle]").click();
+  const pre = row(page, "bbb").locator("[data-ext-log]");
+  await expect(pre).toContainText("LOGLINE 39", { timeout: 10_000 });
+  await pre.evaluate((el) => {
+    el.setAttribute("data-mark", "kept");
+    el.scrollTop = 40;
+  });
+  const scrolled = await pre.evaluate((el) => el.scrollTop);
+  expect(scrolled).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    const w = window as unknown as { __bodyHits: number };
+    w.__bodyHits = 0;
+    setInterval(() => { if (document.activeElement === document.body) w.__bodyHits++; }, 20);
+  });
+  const focusedIsSwitch = (id: string): Promise<boolean> => page.evaluate((i) => document.activeElement?.closest(`[data-ext-id="${i}"]`) !== null && document.activeElement?.hasAttribute("data-ext-switch") === true, id);
+  const sw = row(page, "aaa").locator("[data-ext-switch]");
+  await sw.focus();
+  // 切る → 入れ直す（状態の順に並べると、1 行目が下へ動いて戻る）
+  await page.keyboard.press("Space");
+  await expect(stateText(page, "aaa")).toContainText("無効", { timeout: 10_000 });
+  expect(await ids()).toEqual(["aaa", "bbb"]);
+  expect(await focusedIsSwitch("aaa")).toBe(true);
+  await page.keyboard.press("Space");
+  await expect(stateText(page, "aaa")).toContainText("動作中", { timeout: 10_000 });
+  expect(await ids()).toEqual(["aaa", "bbb"]);
+  expect(await focusedIsSwitch("aaa")).toBe(true);
+  // 落ちる → 復帰
+  await writeFile(fa.crashFile, "x");
+  await expect(stateText(page, "aaa")).toContainText("続けて落ちたので止めました", { timeout: 15_000 });
+  expect(await ids()).toEqual(["aaa", "bbb"]);
+  expect(await focusedIsSwitch("aaa")).toBe(true);
+  await rm(fa.crashFile);
+  await row(page, "aaa").locator("[data-ext-restart]").click();
+  await expect(stateText(page, "aaa")).toContainText("動作中", { timeout: 10_000 });
+  expect(await ids()).toEqual(["aaa", "bbb"]);
+  // フォーカスは body に落ちず、ログの要素・スクロール位置は保たれる
+  expect(await page.evaluate(() => (window as unknown as { __bodyHits: number }).__bodyHits)).toBe(0);
+  await expect(pre).toHaveAttribute("data-mark", "kept");
+  expect(await pre.evaluate((el) => el.scrollTop)).toBe(scrolled);
 });

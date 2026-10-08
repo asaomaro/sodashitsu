@@ -39,6 +39,7 @@ import { appendFileSync, existsSync } from "node:fs";
 const [, , crashFile, runsFile, title] = process.argv;
 if (runsFile) appendFileSync(runsFile, "start\\n");
 process.stderr.write("${ERR_MARK} <b>bold</b> \\u202e after-rtl\\n");
+for (let i = 0; i < 40; i++) process.stderr.write("LOGLINE " + i + "\\n");
 const call = (method, params) => process.stdout.write(JSON.stringify({ method, params }) + "\\n");
 const lines = createInterface({ input: process.stdin });
 lines.on("line", (line) => {
