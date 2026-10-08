@@ -261,9 +261,11 @@ test("「この端末に合わせる」を有効にしたまま繋ぎ直すと�
 
   // 新しい接続でページが送った順：hello → client.view → client.fit（有効）→ pane.subscribe（fit で決まった大きさで SNAPSHOT を取る）。
   // `expect.soft`：落ちても、下の PTY の大きさまで見る（送らなかったとき、PTY がどうなるかも 1 回の失敗で分かるように）。
-  // `client.theme`（表示しているテーマ。20260921-theme-settings の design D6）も接続ごとに送り直すが、fit の並びとは関わらないので除いて見る。
+  // `client.theme`（20260921-theme-settings の design D6）・`graph.get`・`ask.subscribe`・`display.subscribe`・`prefs.get` など、接続のたびに送り直す
+  // ほかの要求は、fit の並びとは関わらず、機能が増えるたびに増える。主題の 4 つ（hello・view・fit・subscribe）だけを取り出して、その順を見る。
+  const ORDER = new Set(["client.hello", "client.view", "client.fit", "pane.subscribe"]);
   await expect.soft
-    .poll(() => ws.sent(1).map((r) => r.method).filter((m) => m !== "client.theme").slice(0, 4), {
+    .poll(() => ws.sent(1).map((r) => r.method).filter((m) => ORDER.has(m)).slice(0, 4), {
       message: "新しい接続で client.view → client.fit → pane.subscribe の順に送る",
     })
     .toEqual(["client.hello", "client.view", "client.fit", "pane.subscribe"]);
