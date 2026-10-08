@@ -534,13 +534,6 @@ const DISPLAY_PANEL_INITIAL = [
   { value: "open", label: "開く" },
   { value: "collapsed", label: "たたむ" },
 ] as const;
-const DISPLAY_PANEL_DOCK = [
-  { value: "right", label: "右" },
-  { value: "left", label: "左" },
-  { value: "top", label: "上" },
-  { value: "bottom", label: "下" },
-  { value: "float", label: "浮いた窓" },
-] as const;
 const DISPLAY_BAND_EDGE = [
   { value: "top", label: "上" },
   { value: "bottom", label: "下" },
@@ -600,18 +593,12 @@ function terminalSection(env: SettingsEnv): SettingsSection {
           "Windows のサーバで、pane の PowerShell・cmd がプロンプトのたびに今の場所を知らせます。新しく開く pane から効きます。",
         ),
         // 表示の面の配置（20261008-display-layout）。値を見て変えられるが、効くのはブラウザ版（端末版の描き方は 20261008-display-tui）。
+        // パネルの既定の置き場所は、左・上・下・浮いた窓がまだ効かない間（PR-A）は出さない（ブラウザ版の設定と同じ 2 項目。PR-B から両方に出す）。
         choiceItem(
           "表示のパネルの初めの状態",
           DISPLAY_PANEL_INITIAL,
           env.prefs.displayPanelInitial,
           (v) => env.write.setShared({ displayPanelInitial: v }),
-          BROWSER_ONLY,
-        ),
-        choiceItem(
-          "表示のパネルの既定の置き場所",
-          DISPLAY_PANEL_DOCK,
-          env.prefs.displayPanelDock,
-          (v) => env.write.setShared({ displayPanelDock: v }),
           BROWSER_ONLY,
         ),
         choiceItem(
