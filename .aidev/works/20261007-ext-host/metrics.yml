@@ -45,3 +45,6 @@ events:
   - { ts: 2026-10-08T14:19:43Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T23, mode: delegated } }
   - { ts: 2026-10-08T14:19:43Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T26, mode: delegated } }
   - { ts: 2026-10-08T22:59:54Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
+  - { ts: 2026-10-08T23:01:54Z, phase: coding, event: approved }
+  - { ts: 2026-10-08T23:01:54Z, phase: test, event: approved }
+  - { ts: 2026-10-08T23:01:54Z, phase: review, event: approved, metrics: { ac_total: 41, ac_covered: 41, tasks_no_ac: 0, tasks_ac_none: 0 } }
