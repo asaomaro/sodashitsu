@@ -64,7 +64,7 @@
       - `docs/agent-graph.md`（すべての pane が載る・載せる操作は別のマシンだけ・上限・古い版へ戻す手順）・`docs/sodactl.md`・`docs/tui-parity.md`。
       - 統合テスト（サーバを立てて）: pane を作る → ノードが増える・pane を別の workspace へ移す → 囲いが重ならない・workspace を別のグループへ移す → ノードの座標が変わらない・一時的な pane ではノードが増えず `rev` が進まない・上限。
       - `pnpm build`・`pnpm typecheck`・`pnpm test`。
-      依存: T1〜T8
+      依存: T1, T2, T3, T4, T5, T6, T7, T8
       AC: AC-X3
 
 ## PR1b 以降（骨子。詳しいタスクは、前の PR の着地の後に、ここへ足す）
