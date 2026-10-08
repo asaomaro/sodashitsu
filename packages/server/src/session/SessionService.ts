@@ -909,6 +909,14 @@ export class SessionService {
     return this.model.getWorkspace(id) !== undefined;
   }
 
+  /**
+   * 一時的な pane か（独自コマンドの pane・スクロールバックのエディタ。20261008-graph-first D16）。連携のグラフはこれらにノードを足さない
+   * （作っては閉じるたびに `rev` が進み、ドラッグの確定が空振りするため）。
+   */
+  isTransientPane(id: PaneId): boolean {
+    return this.scrollbackEditors.has(id) || this.commandPanes.has(id);
+  }
+
   hasPane(id: PaneId): boolean {
     return this.model.getPane(id) !== undefined;
   }

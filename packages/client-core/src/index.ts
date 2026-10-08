@@ -32,6 +32,7 @@ export * from "./graph/geometry.js";
 export * from "./graph/graphLayout.js";
 export * from "./graph/message.js";
 export * from "./graph/nodeKey.js";
+export * from "./graph/structure.js";
 export * from "./graph/ops.js";
 export * from "./graph/validate.js";
 export * from "./layout/layoutOrder.js";
