@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { stat as fsStat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   EXTENSIONS_FILE_NAME,
@@ -80,6 +81,8 @@ export interface ExtensionHostOptions {
     projectRoot?: Partial<ProjectRootDeps>;
     /** 承認の記録の読み書きの差し替え（テストだけ）。 */
     approvalFile?: Partial<ApprovalFileDeps>;
+    /** 根のディレクトリ・設定ファイルが残っているかの確かめの差し替え（テストだけ。無ければ `false`、読めない誤りは投げる）。 */
+    pathExists?: (path: string) => Promise<boolean>;
     /** 無効の記録の読み書きの差し替え（テストだけ）。 */
     stateFile?: Partial<StateFileDeps>;
     platform?: NodeJS.Platform;
@@ -134,6 +137,17 @@ interface Status {
   timer?: unknown;
   lastExit?: { code: number | null; signal: string | null; at: string; reason: ExtensionExitReason; runId: string };
   lastLog?: ExtensionLogResult;
+}
+
+async function defaultPathExists(path: string): Promise<boolean> {
+  try {
+    await fsStat(path);
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return false;
+    throw err;
+  }
 }
 
 /** 最初のイベントから `maxMs` を超えて先送りしない、まとめ処理。 */
@@ -676,6 +690,28 @@ export class ExtensionHost {
     }
   }
 
+  /** 根のディレクトリか `.soda/extensions.json` が無く、いま workspace も無い根の承認の記録を消す。消せた分を除いた記録を返す（消せなかった・確かめられなかった分は残す）。 */
+  private async pruneApprovals(set: ApprovalSet, openRoots: ReadonlySet<string>): Promise<ApprovalSet> {
+    const exists = this.opts.deps?.pathExists ?? defaultPathExists;
+    const candidates = [...new Set(set.records.map((r) => r.root))].filter((root) => !openRoots.has(root));
+    let removed = false;
+    for (const root of candidates) {
+      const gone = await this.readTimed(`gone:${root}`, async () => !(await exists(root)) || !(await exists(join(root, ".soda", EXTENSIONS_FILE_NAME))));
+      if (!gone.ok || !gone.value) continue;
+      for (const r of set.records.filter((x) => x.root === root)) {
+        try {
+          await this.approvals.revoke(r.root, r.id);
+          removed = true;
+        } catch (err) {
+          this.note("warn", "extension approval prune failed", { kind: err instanceof Error ? err.constructor.name : typeof err });
+        }
+      }
+    }
+    if (!removed) return set;
+    const reread = await this.readTimed("approvals", () => this.approvals.load());
+    return reread.ok ? reread.value : set;
+  }
+
   private async reconcile(): Promise<void> {
     if (this.stopped) return;
     const epoch = this.epoch;
@@ -733,6 +769,15 @@ export class ExtensionHost {
     } else {
       approvalSet = new ApprovalSet([], null);
       problems.push({ scope: "state", path: this.approvals.filePath, problem: "extension-approvals.json: 読み込みが時間内に終わりませんでした。承認の記録を読めないので、プロジェクトの拡張は承認待ちとして扱います（あとで読み直します）" });
+    }
+    // 承認の記録の掃除: **その根の workspace が 1 つも無く、根のディレクトリか設定ファイルが無くなっている**記録は消す（リポジトリを消して、同じ場所に別のものを
+    // 置いたとき、前の承認が残って聞かれずに動くのを減らす）。根を引けなかった workspace がある間（時間切れ）は、確かめない。
+    if (approvalRead.ok && approvalSet.records.length > 0) {
+      const snapshotIds = this.opts.session.snapshot().workspaces.map((w) => w.id);
+      if (snapshotIds.every((id) => roots.has(id))) {
+        approvalSet = await this.pruneApprovals(approvalSet, new Set([...roots.values()].filter((r): r is string => r !== null)));
+        if (aborted()) return;
+      }
     }
     this.approvalSet = approvalSet;
     this.approvalSig = sigBefore;

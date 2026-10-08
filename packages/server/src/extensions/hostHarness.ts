@@ -63,6 +63,9 @@ export async function makeHost(
     platform?: NodeJS.Platform;
     approvalOpen?: (path: string, flags: number) => Promise<import("node:fs/promises").FileHandle>;
     approvalDeps?: Partial<import("./ApprovalStore.js").ApprovalFileDeps>;
+    /** 拡張の起動に渡る元の環境変数（既定は PATH=/usr/bin と秘密）。 */
+    baseEnv?: NodeJS.ProcessEnv;
+    pathExists?: (path: string) => Promise<boolean>;
     projectFile?: NonNullable<ExtensionHostOptions["deps"]>["projectFile"];
     projectRoot?: NonNullable<ExtensionHostOptions["deps"]>["projectRoot"];
   } = {},
@@ -109,7 +112,7 @@ export async function makeHost(
     displays,
     bus,
     isScreenKind: o.isScreenKind ?? ((id) => id !== "external"),
-    baseEnv: { PATH: "/usr/bin", SODACTL_TOKEN: "TOKEN-SECRET", SODA_PANE_ID: "pane-x" },
+    baseEnv: o.baseEnv ?? { PATH: "/usr/bin", SODACTL_TOKEN: "TOKEN-SECRET", SODA_PANE_ID: "pane-x" },
     homeDir: "/home/test",
     logger,
     clock,
@@ -128,6 +131,7 @@ export async function makeHost(
       ...(o.approvalOpen || o.approvalDeps ? { approvalFile: { ...(o.approvalDeps ?? {}), ...(o.approvalOpen ? { open: o.approvalOpen } : {}) } } : {}),
       ...(o.projectFile ? { projectFile: o.projectFile } : {}),
       ...(o.projectRoot ? { projectRoot: o.projectRoot } : {}),
+      ...(o.pathExists ? { pathExists: o.pathExists } : {}),
       ...(o.timings ? { timings: o.timings } : {}),
       ...(o.limits ? { limits: o.limits } : {}),
       ...(o.inScope ? { inScope: o.inScope } : {}),

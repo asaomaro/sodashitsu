@@ -241,6 +241,20 @@ describe.skipIf(process.platform === "win32")("ApprovalStore", () => {
     }
   });
 
+  it("signature: 権限だけ・持ち主だけの変更（chmod）でも変わる（D13 の 4）", async () => {
+    const s = store();
+    await s.decideApproved(ROOT, "hello", D("a"), entry());
+    const before = await s.signature();
+    await new Promise((r) => setTimeout(r, 15)); // ctime が進む
+    await chmod(file, 0o664);
+    const after = await s.signature();
+    expect(after).not.toBe(before);
+    expect(after.split(":")).toHaveLength(6); // mtimeMs:size:ino:ctimeMs:mode:uid
+    // 中身が同じ（mtime・size・ino が同じ）でも、mode が変われば署名が変わる。
+    await chmod(file, 0o600);
+    expect(await s.signature()).not.toBe(after);
+  });
+
   it("signature: 無い → missing、書くと変わる", async () => {
     const s = store();
     expect(await s.signature()).toBe("missing");

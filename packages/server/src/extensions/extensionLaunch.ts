@@ -1,4 +1,4 @@
-import { win32 } from "node:path";
+import { posix, win32 } from "node:path";
 import type { ExtensionScope } from "@sodashitsu/protocol";
 import { PANE_ENV_DROPPED } from "../session/paneEnv.js";
 
@@ -68,9 +68,25 @@ export function buildExtensionEnv(
     if (dropped.has(ci ? key.toUpperCase() : key)) continue;
     env[key] = value;
   }
+  // プロジェクトの拡張（他人が書いた登録）には、`PATH` の空の要素・`.`・相対の要素を渡さない。コマンドの先頭の名前（`/` を含まない）が、作業ディレクトリである
+  // リポジトリの中のファイルに解決されて、利用者が「システムのコマンド」のつもりで承認したものと別のものが動くのを避ける。利用者の設定の拡張の `PATH` は変えない。
+  if (ext.scope === "project") {
+    const key = Object.keys(env).find((k) => (ci ? k.toUpperCase() === "PATH" : k === "PATH"));
+    if (key !== undefined) env[key] = safePath(env[key]!, platform);
+  }
   env["SODA_EXTENSION_ID"] = ext.id;
   env["SODA_EXTENSION_SCOPE"] = ext.scope;
   env["SODA_EXTENSION_RUN_ID"] = ext.runId;
   if (ext.scope === "project" && ext.root !== null) env["SODA_PROJECT_ROOT"] = ext.root;
   return env;
+}
+
+/** `PATH` から、空の要素・`.`・相対の要素（その時の作業ディレクトリに解決される）を落とす。残りは、順のまま。 */
+export function safePath(value: string, platform: NodeJS.Platform = process.platform): string {
+  const sep = platform === "win32" ? ";" : ":";
+  const isAbs = platform === "win32" ? win32.isAbsolute : posix.isAbsolute;
+  return value
+    .split(sep)
+    .filter((part) => part !== "" && part !== "." && isAbs(part))
+    .join(sep);
 }

@@ -865,6 +865,34 @@ setInterval(() => { const f = LOG + ".cmds"; if (!existsSync(f) || !pane) return
     expect(await res1(e2.log)).toMatchObject({ ok: false, error: { code: "display_script_disabled" } });
   });
 
+  it("(P10) サーバの PATH に空の要素があっても、プロジェクトの拡張のコマンド名は、リポジトリの中のファイルに解決されない（利用者の設定の拡張は今までどおり）", async () => {
+    const { chmodSync, writeFileSync } = await import("node:fs");
+    const root = await mkRepo("p10repo", [{ id: "p10", command: "hijackbin" }]);
+    const markProject = join(toolDir, "p10-project-mark");
+    const markUser = join(toolDir, "p10-user-mark");
+    // リポジトリの根に、呼ばれたら印を作る実行ファイル。
+    writeFileSync(join(root, "hijackbin"), `#!/bin/sh\ntouch "$HIJACK_MARK"\nsleep 5\n`);
+    chmodSync(join(root, "hijackbin"), 0o755);
+    const savedPath = process.env["PATH"];
+    process.env["PATH"] = `:${savedPath}`; // 先頭に空の要素（＝作業ディレクトリ）
+    cleanups.push(() => {
+      process.env["PATH"] = savedPath;
+    });
+    // 対照: 利用者の設定の拡張（作業ディレクトリ＝根）は、空の要素で、根の hijackbin に解決される（今までどおり）。
+    process.env["HIJACK_MARK"] = markUser;
+    const s = await startServer([{ id: "p10u", command: "hijackbin", cwd: root }], { timings: { approvalsPollMs: 100 } });
+    await vi.waitFor(() => { if (!existsSync(markUser)) throw new Error("user ext did not resolve hijackbin"); }, { timeout: 10_000, interval: 50 });
+    // プロジェクトの拡張: 承認しても、空の要素は渡らないので、根の hijackbin は呼ばれない。
+    process.env["HIJACK_MARK"] = markProject;
+    await openWorkspace(s, root);
+    await waitProj(s, "p10", "pending", root);
+    const i = (await projInfo(s, "p10", root))!;
+    await (await s.open("desktop")).request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await settle(1500);
+    expect(existsSync(markProject)).toBe(false);
+    delete process.env["HIJACK_MARK"];
+  });
+
   it("(P9) .soda がリンク・extensions.json がリンク・cwd つき・chmod o+w → 一覧に理由が出て、印が出来ない。承認の記録を壊す → 全部 pending。無効の記録を壊す → 全部 disabled", async () => {
     const e = await script("p9", projBody);
     const entry = { id: "p9", command: e.command };

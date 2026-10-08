@@ -229,11 +229,12 @@ export class ApprovalStore {
     return new ApprovalSet([], `${APPROVALS_FILE_NAME}: ${r.problem}。承認の記録がないものとして扱います（すべて承認待ちです）`);
   }
 
-  /** 見張り用の署名（`mtimeMs:size:ino`）。無ければ `"missing"`、読めなければ `"error"`。 */
+  /** 見張り用の署名（`mtimeMs:size:ino:ctimeMs:mode:uid`）。無ければ `"missing"`、読めなければ `"error"`。 */
   async signature(): Promise<string> {
     try {
       const st = await fsStat(this.path);
-      return `${st.mtimeMs}:${st.size}:${st.ino}`;
+      // 中身（mtime・size）と置き換え（ino）に加えて、権限・持ち主だけの変更（`chmod`・`chown`。ctime・mode・uid）も拾う（読み込みは、他人が書ける・持ち主が違うを記録なしとして扱う）。
+      return `${st.mtimeMs}:${st.size}:${st.ino}:${st.ctimeMs}:${st.mode}:${st.uid}`;
     } catch (err) {
       return (err as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "error";
     }

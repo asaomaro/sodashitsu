@@ -103,6 +103,7 @@ describe("ExtensionApprovalDialog（開く・中身）", () => {
     expect(q("[data-ext-approval-cwd]")?.textContent).toContain(ROOT);
     expect(q("[data-ext-approval-fixed]")?.textContent).toContain("隔離されません");
     expect(q("[data-ext-approval-fixed]")?.textContent).toContain("後で変わっても、確認は出ません");
+    expect(q("[data-ext-approval-fixed]")?.textContent).toContain("承認は、フォルダの場所（パス）に結びつきます。同じ場所に別のリポジトリを置くと、聞き直されないことがあります");
     expect(q("[data-ext-approval-allow]")?.textContent).toContain("なし");
     expect(q("[data-ext-approval-unresponsive]")?.textContent).toContain("素通し");
     expect(q("[data-ext-approval-description]")?.textContent).toBe("あいさつ");

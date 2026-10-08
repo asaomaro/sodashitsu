@@ -1,4 +1,4 @@
-import { open as fsOpen, writeFile } from "node:fs/promises";
+import { open as fsOpen, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { RpcError } from "@sodashitsu/protocol";
@@ -408,11 +408,12 @@ describe("承認の操作（T22-2）", () => {
 
   it("desired に無い (根, id) を revoke → extension.changed が出る（approvals も比べる対象）。記録のファイルを外から書き換える → 見張りが拾って出る", async () => {
     const { x, root } = await withRepo(undefined, { timings: { approvalsPollMs: 100 } });
-    await x.approvalStore.decideApproved("/elsewhere/repo", "z", "a".repeat(64), full("z"));
+    const elsewhere = await x.makeRepo("elsewhere", [ext("z")]); // workspace は無いが、ディレクトリと設定ファイルは有る（掃除の対象にならない）
+    await x.approvalStore.decideApproved(elsewhere, "z", "a".repeat(64), full("z"));
     await x.host.start();
     const count = () => x.events.filter((e) => e.event === "extension.changed").length;
     const before = count();
-    await x.run(x.host.revoke(SCREEN, "/elsewhere/repo", "z"));
+    await x.run(x.host.revoke(SCREEN, elsewhere, "z"));
     expect(count()).toBeGreaterThan(before);
     const b2 = count();
     const { ApprovalStore } = await import("./ApprovalStore.js");
@@ -564,5 +565,121 @@ describe("範囲（T22-3）", () => {
     set(c, 1, "q1");
     await x.until(() => result(c, 1) !== undefined);
     expect((result(c, 1) as { ok: boolean }).ok).toBe(true);
+  });
+});
+
+describe("承認の記録の掃除（D13 の 1）", () => {
+  const records = async (x: HostHarness) => (await x.approvalStore.load()).records.map((r) => `${r.root}:${r.id}`);
+
+  it("workspace が 1 つも無く、根のディレクトリが無くなっていたら、次の reconcile で、その根の承認の記録を消す。同じ場所に置いた別のものは、聞き直される", async () => {
+    const { x, root } = await withRepo();
+    await approve(x, root, full("a"));
+    await x.host.start();
+    expect(info(x, root, "a")!.state).toBe("running");
+    x.removeWorkspace("w1");
+    await rm(root, { recursive: true, force: true });
+    await x.drive(1500);
+    expect(await records(x)).toEqual([]);
+    expect(x.host.list().approvals).toEqual([]);
+    // 同じ場所に、同じ登録の別のリポジトリを置いて開く → 承認の記録が無いので、聞かれる（pending）。
+    await x.makeRepo("repo", [ext("a")]);
+    x.addWorkspace("w1", root, "p1");
+    await x.drive(1500);
+    expect(info(x, root, "a")!.state).toBe("pending");
+    expect(x.spawnCalls).toHaveLength(1);
+  });
+
+  it("根のディレクトリは有るが、.soda/extensions.json が無くなっていても、消す", async () => {
+    const { x, root } = await withRepo();
+    await approve(x, root, full("a"));
+    await x.host.start();
+    x.removeWorkspace("w1");
+    await rm(join(root, ".soda"), { recursive: true, force: true });
+    await x.drive(1500);
+    expect(await records(x)).toEqual([]);
+  });
+
+  it("根のディレクトリも設定ファイルも有る間は、workspace が無くても残す（開き直すと、承認済みでそのまま動く）", async () => {
+    const { x, root } = await withRepo();
+    await approve(x, root, full("a"));
+    await x.host.start();
+    x.removeWorkspace("w1");
+    await x.drive(1500);
+    expect(await records(x)).toEqual([`${root}:a`]);
+    x.addWorkspace("w1", root, "p1");
+    await x.drive(1500);
+    expect(info(x, root, "a")!.state).toBe("running");
+  });
+
+  it("その根の workspace が（別のものでも）開いている間は、ディレクトリが無くなっても消さない", async () => {
+    const { x, root } = await withRepo();
+    await approve(x, root, full("a"));
+    await x.host.start();
+    await rm(join(root, ".soda"), { recursive: true, force: true });
+    x.bus.publish({ event: "workspace.updated", data: { workspace: { id: "w1" } as never } });
+    await x.run(x.host.reload());
+    expect(await records(x)).toEqual([`${root}:a`]);
+  });
+
+  it("根を引けなかった workspace がある間（時間切れ）は、確かめない。確かめが時間切れ・読めないときも、消さない", async () => {
+    let hang = false;
+    const { x, root } = await withRepo(undefined, {
+      projectRoot: { realpath: async (p) => (hang && p.includes("hang") ? new Promise<string>(() => undefined) : (await import("node:fs/promises")).realpath(p)) },
+    });
+    await approve(x, root, full("a"));
+    await x.host.start();
+    x.removeWorkspace("w1");
+    await rm(root, { recursive: true, force: true });
+    hang = true;
+    const stuck = await x.makeRepo("hang", [ext("h")]);
+    x.addWorkspace("w2", stuck, "p9");
+    await x.drive(1500);
+    expect(await records(x)).toEqual([`${root}:a`]); // w2 の根が引けない間は、消さない
+    hang = false;
+    // 確かめが EIO なら、消さない。
+    const { x: y, root: r2 } = await withRepo(undefined, {
+      pathExists: async () => {
+        throw Object.assign(new Error("io"), { code: "EIO" });
+      },
+    });
+    await approve(y, r2, full("a"));
+    await y.host.start();
+    y.removeWorkspace("w1");
+    await y.drive(1500);
+    expect(await records(y)).toEqual([`${r2}:a`]);
+  });
+});
+
+describe("無効の記録: プロジェクトの key を残す（D13 の 2）", () => {
+  it("プロジェクトの拡張を画面で無効にして、その workspace を閉じ、ほかの拡張を入切しても、開き直すと無効のまま（承認が残っていても起動しない）", async () => {
+    const { x, root } = await withRepo();
+    await x.writeConfig([ext("u")]);
+    await approve(x, root, full("a"));
+    await x.host.start();
+    expect(info(x, root, "a")!.state).toBe("running");
+    await x.run(x.host.setEnabled(SCREEN, pkey(root, "a"), false));
+    x.removeWorkspace("w1");
+    await x.drive(1500);
+    expect(info(x, root, "a")).toBeUndefined();
+    // ほかの拡張（利用者の u）を 1 回入切する。
+    await x.run(x.host.setEnabled(SCREEN, "user:u", false));
+    await x.run(x.host.setEnabled(SCREEN, "user:u", true));
+    x.addWorkspace("w1", root, "p1");
+    await x.drive(1500);
+    expect(info(x, root, "a")!.state).toBe("disabled");
+    expect(x.spawnCalls.filter((c) => c.env["SODA_EXTENSION_ID"] === "a")).toHaveLength(1); // 最初の起動だけ
+  });
+});
+
+describe("プロジェクトの拡張に渡す PATH（D13 の 3）", () => {
+  const unsafe = ":/usr/bin:.:rel/bin:/opt/x::";
+  it("プロジェクトの拡張の PATH から、空の要素・.・相対の要素を落とす。利用者の拡張の PATH は変えない", async () => {
+    const { x, root } = await withRepo([ext("a")], { baseEnv: { PATH: unsafe } });
+    await x.writeConfig([ext("u")]);
+    await approve(x, root, full("a"));
+    await x.host.start();
+    const byId = (id: string) => x.spawnCalls.find((c) => c.env["SODA_EXTENSION_ID"] === id)!;
+    expect(byId("a").env["PATH"]).toBe("/usr/bin:/opt/x");
+    expect(byId("u").env["PATH"]).toBe(unsafe);
   });
 });
