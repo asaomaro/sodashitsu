@@ -65,24 +65,19 @@ test.describe("枠の移動（合否: 同じ origin の宛先）", () => {
     ev.kill();
   });
 
-  test("(6)(viii) 中身がストアにある状態（パネルをたたんで戻す）で枠が作り直されても、同じく閉じる（render は最初の load の後）", async ({ page, appServer }) => {
+  test("(6)(viii) 中身がストアにある状態: パネルをたたんで戻す（枠が作り直され、中身はストアにあるので render が最初の load の後に送られる）と、移る中身は 2 回目の load で閉じる", async ({ page, appServer }) => {
     const { paneId, sent } = await openScriptBrowser(page, appServer);
     const ev = await runDisplay(appServer, paneId, ["events", "g"]);
     await ev.nextLine();
-    // 1 回目の読み込みでは、移らない（印を立てるだけ）。作り直されたら移る。
-    await setScriptOk(
-      appServer,
-      paneId,
-      "g",
-      `<!doctype html><body><p id=p>x</p><script>
-var KEY = 'seen';
-document.getElementById('p').textContent = 'first';
-</script></body>`,
-    );
+    // 2.5 秒後に移る中身。最初の枠が移る前にたたんで、広げる＝新しい枠（中身はストアにある）。
+    await setScriptOk(appServer, paneId, "g", `<!doctype html><body><script>setTimeout(function () { location.href = '${MOVED}'; }, 2500);</script></body>`);
     await expect(scriptFrameEl(page)).toHaveCount(1);
-    // 中身は変えずに、枠だけを作り直す（たたむ → 広げる）。新しい枠は、同じ中身（ストアにある）を受ける。
-    // ここでは「移る中身」に差し替えてから、たたんで広げる。
-    await setScriptOk(appServer, paneId, "g", `<!doctype html><body><script>location.href = '${MOVED}';</script></body>`);
+    const first = await scriptFrameEl(page).elementHandle();
+    await page.locator("[data-pane-panel-fold]").click();
+    await expect(scriptFrameEl(page)).toHaveCount(0);
+    await page.locator("[data-pane-panel-unfold]").click();
+    await expect(scriptFrameEl(page)).toHaveCount(1);
+    expect(await first!.evaluate((e) => e.isConnected)).toBe(false); // 別の枠
     await expectNavigatedAndCooling(page, appServer, paneId, ev, sent);
     ev.kill();
   });

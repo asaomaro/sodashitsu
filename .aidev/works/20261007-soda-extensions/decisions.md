@@ -395,3 +395,31 @@ D28 の直しの後、別のコンテキストに design・tasks を 1 回見せ
   `frame.js`・`sanitize.js` の控えたメソッドのうち、`HTMLElement.prototype` にあって `Element.prototype` に無いものは `focus` だけ（`click`・`blur`・`dataset`・`hidden`・`innerText` は使っていない。`style` は `documentElement` だけ）。`sanitize.js` は `Element`・`Node` のものだけ。
   E2E (16)（SVG を含む面で `prefix+i` がボタンへ移る・SVG の中の `data-soda-action` の押下・tabindex つきの SVG の要素）を足した。直す前の版では `activeElement` が `BODY` で落ちる（`Expected: "btn" / Received: "BODY"`）。単体テストの DOM は `use` にもフォーカスを渡すので、飛ばす動きの確かめは E2E。
 - `display-mobile.spec.ts` の［表示1］の文言とシートを閉じた後の列数の確認は、`prefix+i` の確認を足したときの編集でうっかり消していた。戻した。
+
+
+## D32: PR3（スクリプトが動く形式）の実装で、設計から外れた点・設計に足したこと・実測で直したこと（実装者の記録。2026-10-08）
+
+実装は `feature/ext-display-script`（`3c15e4d` から）。`design.md`・`requirements.md` は変えていない（直すべき点は、下の「設計に見つけた穴」と最後の報告に書く）。
+
+### 設計と違う作りにしたところ
+
+1. **`script.html` の頁**は、設計の「`<meta charset>` と土台のスクリプト 1 つだけ」に、`<title>`・既定のスタイル（`:where(...)` で詳細度 0。中身のスタイルが常に勝つ）・空の `<body>` を足した。スクリプトは頁の中の 1 つだけで、`src` を持たず、`link`・`iframe`・`img` も無い（単体テスト `scriptHost.test.ts` が見る）。既定のスタイルは、`frame.html` と同じ変数（`--soda-*`）で背景・文字色を決めるだけ（中身がスタイルを書かなくても、枠が白く浮かない）。
+2. **土台は `MessagePort.prototype.postMessage` も読み込み時に控える**（設計は「中身が port を拾える前提」で作るとした）。控えたメソッドで送るので、中身が `MessagePort.prototype.postMessage` を差し替えても、土台の port は拾われない（拾えるのは、土台が持つ `soda` の閉じた関数だけ）。設計より強い。守りの前提は変えない（port が拾えても、枠の外は守られる）。T28 (5) の (viii)「port を直に使う」は、拾えないので **E2E にしていない**（拾えた場合の備え——操作中でない `key` を親が受けない——は `DisplayFrameScript.test.ts` と `focusGuard.test.ts` が見る）。
+3. **フォーカスのイベント（`blur`・`focus`・`focusout`、枠でない要素への `focusin`）は、1 拍（`setTimeout 0`）置いて見る**。実測（Chromium 153）: 枠から親の端末へ `focus()` で戻すとき、親の `window` の `focus` が来た時点でも `document.activeElement` はまだ iframe を指す。そのまま見ると、戻したばかりの枠を「取った」と誤って数え、`Esc` で端末へ戻るたびに 1 回数えられて、3 回操作を終えると面が閉じた（E2E (iv) で発見・修正済み）。枠が取る側（`focusin` が枠自身のとき）は、その場で見る。限界 1 の「短い間」は、この 1 拍ぶん伸びる。
+4. **操作の開始は、`keyup` の処理が済んでから**（`engageEntry.ts` の `setTimeout 0`）。実測: 端末（xterm.js）は `keyup` の中で自分へ `focus()` を戻すので、設計どおり「`keyup` を親が受けたらすぐ」始めると、`prefix+i` の枠へのフォーカスが端末に取り返され、操作中にならなかった（E2E (7) で発見・修正済み）。
+5. **`DisplayController.report` は `Promise<boolean>` を返す**（サーバが答えたら真、繋がっていないなら偽）。設計の「送れなかったとき（切断中）は、この画面の中で数え、3 回で枠を外す」のため。
+6. **`DisplayHost` に `focusSelectedTerminal()`**（利用者が選んでいる pane〔`view.focusedPaneId`〕の端末へ戻す）を足した（`main.ts` が組み立てる）。戻し先の「覚えた要素が無い・`body`」のとき。
+7. **ストアに `scriptCapable`・`engageHint`**: 前者は「この画面が `script-html` を出せると名乗ったか」（名乗らない画面は枠を作らず固定の文言）、後者は覆いを押したときに［操作する］を 1 秒強調する印。`DisplayControllerOptions.subscribeFeatures`（テスト用の差し替え口）を足した。
+8. **T28 (9)**（`script-html` を名乗らない画面）は、E2E で名乗りを外した接続を用意できないので、`DisplayFrameScript.test.ts`・`DisplayController.test.ts` に任せた（コメントに書いた）。
+9. **`display.report` の古い形**: `paneId` の無い知らせで面が無ければ `display_closed`（設計の細かい決まり (a)）。PR1 の単体テスト 1 件（「無い id は成功」）を、この決まりに合わせて直した。
+
+### 設計に見つけた穴・設計の前提がだめだった項目（勝手に代えず、報告に回したもの）
+
+- **WebRTC は止まらない**（Chromium 153）。設計は `webrtc 'block'` を CSP に入れたが、このブラウザは「Unrecognized Content-Security-Policy directive 'webrtc'」で解釈せず、`RTCPeerConnection` の STUN が待ち受けの UDP に届いた。設計どおり限界 4 として docs に「止まらなかった」と書いた。対策を足すなら別の作業で決める。
+- **`Permissions-Policy: focus-without-user-activation=()` は、このブラウザでは効かない**（「Origin trial controlled feature not enabled」）。害は無く、検知と戻しが働く。docs に書いた。
+- **利用者が操作を始めて枠の中をクリックした後は、`document.execCommand("copy")` でクリップボードが書き換わる**（実測）。設計の「できる見込み」のとおりだが、限界 4 に実測として書いた。
+- **操作の始めを `keyup` の処理のあとにする**（上の 4）ので、tasks T27 の「`keyup` を親が受けてから」の文言より 1 拍遅い。設計の意図（残りのイベントが枠に届かない）は満たしている。
+
+### 実測した前提（`test-result.md` の PR3 の節に出力つき）
+
+不確かな点 5・7・8・10 は、設計どおりだった（代えに切り替えた項目は無い）: 差し込みで `load` は 1 回のまま／ふつうの HTML・marked・Chart.js が動く／枠のスクリプトの `focus()` で、親の `document.activeElement` が iframe になり、親が元の要素へ `focus()` し直すと戻る／［操作する］・`prefix+i` の押下の `pointerup`・`mouseup`・`touchend`・`keyup` は枠へ届かない。不確かな点 6（外の origin への移動）は、**アプリの CSP が止めた**（要求は届かない）。

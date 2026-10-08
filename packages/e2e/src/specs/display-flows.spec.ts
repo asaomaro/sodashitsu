@@ -38,6 +38,7 @@ test("(2) 同じ名前の set で中身が替わり、枠の要素が同じ・�
   const f = panelFrameLoc(page);
   await expect(f.locator("#v1")).toBeAttached();
   const handle = await page.locator("[data-pane-panel] iframe").elementHandle();
+  await f.locator("#memo").click(); // 利用者は押して入る（本物のポインタ。fill だけだと、押さずにフォーカスが来た＝よその窓から、と見える）
   await f.locator("#memo").fill("途中の値");
   const frame = (await handle!.contentFrame())!;
   await frame.evaluate(() => window.scrollTo(0, 500));

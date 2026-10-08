@@ -442,3 +442,90 @@ PR3（スクリプトが動く形式）の前提 5・6・8・10・11 は、こ�
 ### ask の側の取り除き（`packages/web/public/ask-view/markdown.js`）に同じ穴があるか
 実ブラウザで確かめた（`/ask-view/markdown.html` を直に開き、自分宛てに `ask-view` の知らせを送った）。`<form><input name="remove"></form>` を含む Markdown で、`sanitize` の `el.remove()` が `TypeError`（`remove` が子の入力に差し替わる）→ 枠は**ソースの文字表示（`plain()`）へ落ちる**。**閉じる側に倒れる（実行・移動には至らない）が、取り除きの途中で止まり、整形されない**。`attributes` などは読まないので、属性が残る形の穴は見つからなかった。
 `html.html`（スクリプトが動く枠）は、もともと取り除きを掛けない。この PR では直さない。別の作業の候補（低）: `ask-view/markdown.js` の `sanitize` が、要素のメソッドを直接呼ばず、プロトタイプのメソッドを `call` で使う。
+
+
+# PR3（スクリプトが動く形式 `script-html`。T23〜T30）のテスト結果（2026-10-08。ブラウザ: **Chromium 153.0.8010.12**、Playwright 同梱）
+
+ブランチ `feature/ext-display-script`（`3c15e4d` から）。設計から外れた点は `decisions.md` D32。
+
+## 自動テスト
+
+- `pnpm build`・`pnpm typecheck`: 通った。
+- `pnpm test`: 8629 件中 8626 件が通り、**3 件が落ちた**——すべて既知の `packages/server/src/tui.integration.test.ts`（worktree のパスが長いと main でも落ちる）。それ以外の失敗は無い。
+- 追加した単体・結合: protocol（`checkDisplaySend`・`script-html`・定数・schema）／server（`DisplayService` の `send`・pane ごとの回数と冷却〔5 分の 1 ミリ秒前は断り、ちょうどで通る〕・`source`・閉じた面／形式の替わった面への知らせ・結合 5 件）／sodactl（`--script-html-file`・`send`・unsupported）／web（`scriptHost.test.ts`＝土台、`focusGuard`・`focusOrigin`・`engageEntry`、`DisplayFrameScript.test.ts` 21 件、`DisplayScriptMark.test.ts`、`DisplayController`、`frame.js` の `foreign-focus`）／HttpServer（`script.html` のヘッダが設計の文字列と一致・`script-src` に `'self'` が無い・`frame.html` は不変）。
+
+## 実測した前提（tasks.md の「不確かな点」）
+
+| 前提 | 結果 |
+|---|---|
+| 差し込みで親から見た枠の `load` が 1 回のまま（点 7・u9。合否） | **1 回のまま**（1.5 秒見た）。インラインのスクリプトは文書の順・`DOMContentLoaded`/`load`/`<body onload>` が 1 回ずつ・`eval`・`new Function`・`<script type=module>` が動く |
+| 差し込みで、ふつうの HTML と大きなライブラリ（点 8・u5） | marked の UMD・Canvas のグラフ・**Chart.js 4.4.7**（205 KB）が動く（`display-script.spec.ts`。Chart.js は `SODA_E2E_CHARTJS` を渡したときだけ） |
+| 枠のスクリプトの `focus()` で親が気づいて戻せる（点 5・u1・u2） | **気づけて、戻せた**。親の `document.activeElement` が iframe になり、親が覚えた要素へ `focus()` し直すと戻った。**ただし**、枠から親の端末へ戻る途中（`focus`/`blur`/`focusout`）では `activeElement` がまだ iframe を指す（→ D32 の 3）。戻し先が `body` のとき: 利用者が選んでいる pane の端末へ戻り、打ったキーが届いた |
+| ［操作する］・`prefix+i` の後の `pointerup`/`mouseup`/`touchend`/`keyup` が枠へ届かない（点 10・u10） | **届かない**（3 つの入口で確認）。ただし `prefix+i` は xterm.js が `keyup` の中で自分へフォーカスを戻すので、始めるのを `keyup` の処理のあとにした（D32 の 4） |
+| アプリの CSP が、外の origin・`localhost` への枠の移動を止めるか（点 6・u3） | **止めた**（下の実測） |
+
+## 「確かでない」の項目の実測（合否にしない）
+
+出力の `MEASURE …` から。**ほかのブラウザは未確認**。
+
+| 項目 | 結果 |
+|---|---|
+| WebRTC（`RTCPeerConnection`、STUN の宛先を待ち受けの UDP に） | **止まらなかった**: `offer` が作れ、UDP が **5 パケット**届いた。CSP の `webrtc 'block'` は「Unrecognized Content-Security-Policy directive 'webrtc'」で解釈されない |
+| `history.back()`・`go(-1)`・`go(-2)`・`pushState` | アプリのページの URL は変わらない（`#b` → `#b`）。枠自身の履歴が動いて枠が移り、面は `navigated` で閉じた（`history.length` は 4 → 5） |
+| `<link rel=dns-prefetch\|preconnect\|prefetch\|prerender\|modulepreload>` | **止まった**（待ち受けへの TCP 接続 0・1.5 秒見た） |
+| クリップボード | 操作を始めて枠の中をクリックする前: `execCommand("copy")` は `false`。クリックした後: **`true` で、クリップボードが書き換わった**（`readText` が `copy-me`）。`navigator.clipboard.writeText` は前後とも `NotAllowedError` |
+| 音 | 前: `AudioContext` が `suspended`・`audio.play()` が `NotAllowedError`。クリックの後: `AudioContext` が `running`・`play()` が成功（**止まらなかった**） |
+| 全画面・Picture-in-Picture | `requestFullscreen` は拒否（`TypeError`）。`document.pictureInPictureEnabled` は偽（**止まった**） |
+| `window.name` | 同じ origin の移った先で `carried-secret` が**読めた**（運べる） |
+| 兄弟の枠（ほかの面）への `postMessage`・`MessagePort` の受け渡し | **届く**（兄弟が `hello-from-a`・port を受け、port 越しの `over-port` も受けた）。`display.action` にはならなかった（`display-script-isolation`） |
+| 兄弟の枠の `location` の読み書き | **止まった**（どちらも `SecurityError`。書き換えられた側の面が閉じる筋は、書き換えられないので空振り） |
+| 兄弟の枠への `focus()` | 呼べる（例外なし）が、**フォーカスは兄弟へ移らなかった**（親の `activeElement` を 5ms ごとに記録: `TEXTAREA` のみ）。利用者が操作を始めて枠の中をクリックした直後（ユーザー操作の後）に呼んでも、移らなかった（`IFRAME[script]` のまま）。→ 限界 12 のフォーカスの部分は「止まった」。静的な枠の `foreign-focus` の戻し処理は、このブラウザでは E2E で通らない（単体で確かめた） |
+| `focus-without-user-activation=()` | **効かない**（コンソール「Origin trial controlled feature not enabled」） |
+| 枠が外の origin（待ち受け）・`localhost` の別のポート・応答が 204 の宛先へ `location.href` | 5 試行とも**待ち受けに要求が届かなかった**（アプリの CSP が止める）。外・localhost・204 は面が閉じた（`navigated`）。`window.stop()` を直後に呼んだ 2 試行（204・応答しない口）は、面が**閉じずに残った**（枠の文書は生きていた）。文書を置き換えない移動で `load` が起きるかは、CSP が先に止めるので測れなかった |
+| 隔離の探り（`display-script-isolation`） | `parent.document`・`top.document`・`cookie`・`localStorage`・`sessionStorage`・`indexedDB`・兄弟の `document`・`top.location`/`parent.location` の読み書き・Service Worker は `SecurityError`。外への `fetch`/XHR/`WebSocket`/`EventSource`/画像/`link`/`script src`/フォント/フォーム/`window.open`/`a target=_blank`/`alert`/`confirm`/`prompt`/ダウンロードは、待ち受けに 0。試みた 6 件の要求は `csp` で失敗。**同じ origin の `<script src="/display-view/frame.js">` も読めなかった**。`Worker(blob)` は作れたが、外への要求は 0 |
+| 閉じるまでに枠へ入ったキーの数（限界 1） | 15ms おきにキーを打ち、20ms おきにフォーカスを取る中身: 打った 21 キーのうち**枠に入ったのは 1 つ**、20 は pane に届いた（軽い負荷。下限） |
+| 重いスクリプト（15 秒の同期ループ） | 約 10 秒で `unresponsive` で閉じた（冷却に入らない）。アプリのページへの問い合わせは遅れなかった（最大 27ms。サンプルは粗い） |
+| 裏に回しても閉じないか（(vi)） | ヘッドレスでは別のタブを前に出しても `visibilityState` は `hidden` にならなかった（`visible` のまま）。見えない状態を `visibilityState` の上書きで再現して 30 秒置いたところ、閉じず、`display.report` も送られなかった |
+| 端末を押して操作を終えるとき、枠が `blur` の中で `focus()` を呼び返す中身（(x)） | このブラウザでは、フォーカスは端末へ移り、横取りとしては数えられなかった（報告 0）。`pointerdown` の備えは、移らないブラウザ向け（単体で確かめた） |
+| 変換中（IME）の文字の行方 | **測れなかった**（ヘッドレスの Chromium に IME が無い） |
+
+
+## E2E の件数
+
+`display*.spec.ts` の全部（PR2 の分を含む）＋スクリーンショットの spec を 1 回流した結果: **98 件が通り、2 件が落ちた**。2 件とも PR3 の変更で古くなった PR2 の筋で、直して通った:
+- `display-isolation (10)`: 「未知の形式」に `script-html` を使っていたが、PR3 から既知の形式。未知の形式を 2 つ（`future-x`・`future-y`）にした。
+- `display-flows (2)`: 入力途中の欄の値の保持。`fill()` はポインタ無しでフォーカスを入れるので、静的な枠は「よそからフォーカスが来た」（`foreign-focus`）と見て親が戻し、間欠的に落ちた。利用者は押すか `Tab` で入るので、`click()` してから `fill()` に直した（5 回続けて通った）。
+  **補足**: ポインタもキーも使わずにスクリプトでフォーカスを入れる自動操作（Playwright の `fill`・`focus()`）は、静的な枠でも、利用者の入力ではないものとして元の場所へ戻される。
+既存の E2E の `key-bindings`・`workspace-tab-pane`・`mobile` は流していない（触っていないため。既知の失敗の対象）。スクリーンショットは `/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/display-pr3/`（01 覆いのあるグラフのパネル・02 操作中・03 フォーカスを取り続ける面・04 閉じたあとのトースト）。
+
+## 負の対照（T30。生の結果）
+
+対策を外した版を作り、対応するテストが落ちること・戻して通ることを確かめた（`mutate.py`/`neg.py` の記録。落ちたテストの名前は先頭の部分）。
+
+| 版 | 外した結果 | 戻した結果 |
+|---|---|---|
+| (m) サーバが回数を面の id ごとに数える | server 単体・結合 5 件が落ちた（「3 回目で全部閉じる」「close→set の後の 1 回で閉じる」「2 つの接続から」ほか） | 通った |
+| (h5) `report` を操作の桶で捨てる | 「操作の桶を空にした直後の report が数えられる」が落ちた | 通った |
+| (h6) 面の無い知らせを paneId・format を見ずに `display_closed` で捨てる | server 単体・結合 7 件が落ちた | 通った |
+| (j) 受け口の `displaySendOp` が引数の `paneId` を対象にする | 「pane A を名乗って pane B の面へ send できない」が落ちた | 通った |
+| (f) 枠の sandbox 属性と応答ヘッダの**両方**に `allow-same-origin` | `display-script-isolation` の隔離の筋が落ちた | 通った |
+| (f) 属性だけ／(f2) 応答ヘッダだけ | **落ちなかった**（sandbox は累積で、もう片方が止める。二重の守り） | 通った |
+| (i) CSP の `default-src` を `*` | 隔離の筋が落ちた | 通った |
+| (i2) `script-src` に `'self'` を足す | 「同じ origin の `<script src>` が読めない」で隔離の筋が落ちた | 通った |
+| (h) `load` の回数の検知を外す | `display-script-nav` の (i)(ii)(viii)×2・reload の 5 件が落ちた | 通った |
+| (g1) 横取りの検知（戻す・知らせる）だけを外す（覆いは残す） | (5)(i) が落ちた（面が閉じない） | 通った |
+| (g2) 覆いだけを外す（検知は残す） | (7)「覆いがある間、枠の中のボタン・覆いを押しても始まらない」が落ちた | 通った |
+| (g3) 操作の開始を押した時点で行う | (7)「始めた押下の残りが枠に届かない」が落ちた | 通った |
+| (k) 枠からの `key` を操作中でなくても受け、prefix も受ける | `focusGuard`・`DisplayFrameScript` の単体が落ちた | 通った |
+| (l) 戻す先を、覚えた元の場所でなく面の pane の端末にする | (vi)（フォーカスが 2 つ目の pane の端末に戻る）が落ちた（`Expected: 1 / Received: 0`）。最初は typing だけを見ていて**落ちなかった**ので、DOM の `activeElement` を見る筋に強めた | 通った |
+| (l2) 元の場所の追跡が、枠・覆い・［操作する］も覚える | `focusOrigin` の単体が落ちた | 通った |
+| (n) 枠の鍵から形式と版を外す／(n2) `DisplayFrame` が形式の変化で作り直さない | **どちらか片方だけでは落ちなかった**（(n) は E2E、(n2) は単体で、もう片方が止める。n2 の単体は落ちた）／**両方外すと** (3b) が落ちた | 通った |
+| (o) 静的な枠の `foreign-focus` の戻し | 単体が落ちた。**E2E は落ちない**（このブラウザは、兄弟へのフォーカスが移らない） | 通った |
+| (p) 操作を終える判定から「`activeElement` が枠でなくなった」を外す | `focusGuard` の単体が落ちた | 通った |
+| (p2) 操作中に枠でない場所を押したら操作を終える処理（`pointerdown`）を外す | 単体が落ちた。**E2E は落ちない**（このブラウザは、端末を押すとフォーカスが端末へ移る） | 通った |
+| (h4) `render` を形式・版の一致を見ずに送る | `DisplayFrame`・`DisplayFrameScript` の単体 2 件が落ちた | 通った |
+| (h7) 通り道と `render` を最初の `load` を待たずに渡す | 「display-ready が load より先でも、load の前には送らない」が落ちた | 通った |
+| (h8) `display-ready` の合い札を確かめない | 合い札の単体 2 件が落ちた | 通った |
+| (h10) 片づけのときの横取りの知らせを外す | 単体が落ちた | 通った |
+
+**実行していない版**: (h3)（土台が `document.open(); document.write()` で入れる）——設計は「`load` が 2 回になるブラウザでだけ落ちる」としていて、土台を書き換える手間が大きいので、実行していない。(h9)（合い札の合う 2 回目の合図を受ける）——`phase` の検査と `readySeen` の二重で、片方だけ外しても落ちない作り。(h5) の画面側（`report` を `sendAction` の頻度の制限に入れる）は、`DisplayController.test.ts`「100 回続けても全部送る」が見る。

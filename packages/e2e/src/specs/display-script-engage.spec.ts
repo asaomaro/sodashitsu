@@ -247,6 +247,8 @@ test.describe("(5) フォーカスの番（pane ごとにサーバが数える�
     await expect(scriptFrameLoc(page).locator("#i")).toBeAttached(); // 分割で枠が作り直されることがある。取り直す。
     await steal(await scriptFrame(page));
     await waitReports(sent, 1);
+    // 戻った先の DOM の証拠: フォーカスは 2 つ目の pane の端末（xterm）の中にある（面の pane の端末でも body でもない）
+    await expect.poll(() => page.evaluate(() => { const x = document.querySelectorAll(".xterm"); return document.activeElement ? Array.from(x).indexOf(document.activeElement.closest(".xterm") as Element) : -2; })).toBe(1);
     const n = input().length;
     await page.keyboard.type("back");
     await expect.poll(() => input().slice(n).filter((i) => i.paneId === p2).map((i) => i.text).join("")).toContain("back");

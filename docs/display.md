@@ -4,7 +4,7 @@ pane の中で動くプログラムが、その pane を見ているブラウザ
 ブラウザ版だけの機能で、端末版（引数なしの `soda`）には面が出ない（`docs/tui-parity.md`）。
 
 - コマンドの形と終了コードは `docs/sodactl.md`、ここは「何が画面に出るか」「中身の書き方」「隔離のしくみと限界」。
-- **この版で出せるのは静的な形式（`text`・`markdown`・`html`）だけ**。中身の中のスクリプトは動かない（取り除かれる）。スクリプトが動く形式は別の版が足す。
+- 形式は 4 つ。**静的な形式（`text`・`markdown`・`html`）では中身の中のスクリプトは動かない**（取り除かれる）。**スクリプトを動かしたいときだけ `script-html`**（下の「スクリプトが動く形式」。信頼できない中身には使わない）。
 
 ## 使い方
 
@@ -137,7 +137,106 @@ sodactl display set confirm --kind panel --html-file ask.html --wait --timeout 6
 
 幅 767px 以下の画面（1 列のレイアウト）では、パネルは端末の横に出ない。上部のバーに［表示N］のボタンが出て、押すと重ね表示（ダイアログ）が開く。［閉じる］は重ね表示だけを閉じ（面は残る）、［この表示を消す］は面を閉じる。幅のつまみは出ない。帯は端末の上に出る。パネルを出しても端末の箱・列数は変わらない。
 
-## 隔離のしくみ
+## スクリプトが動く形式（`script-html`）
+
+`html` と違い、**中身の中のスクリプトが、枠の中で動く**形式。動くグラフ・絞り込みのできる一覧・自分で更新する表示のために使う。静的な形式（`text`・`markdown`・`html`）の守り（取り除き・`script-src 'self'`）は、この形式では**かからない**——代わりに、別の仕組み（下の「3 つの備え」）で守る。
+
+```sh
+# 中身は 1 つの HTML ファイル。ライブラリ（Chart.js など）は中身に埋め込む（外の URL は読めない。2 MiB まで）
+sodactl display set chart --kind panel --title 件数 --script-html-file ./chart.html
+# 標準入力なら --format script-html
+cat chart.html | sodactl display set chart --kind panel --format script-html
+
+# 拡張からスクリプトへデータを送る（保存されない。--json か標準入力。64 KiB まで）
+sodactl display send chart --json '{"labels":["月","火"],"values":[3,7]}'
+```
+
+中身のスクリプトから使える `window.soda`:
+
+| | |
+|---|---|
+| `soda.action(name, data?)` | 操作を返す。静的な形式の `data-soda-action` と同じ `display.action` になる（名前・値・上限も同じ。値は文字列の組で 8 KiB まで）。規則の外は `false` を返して何も送らない。行には `source: "script"` が付く |
+| `soda.onMessage(fn)` | `sodactl display send` のデータを受ける関数を登録する。戻り値は登録を外す関数。1 つが投げても、ほかの関数は呼ばれる |
+| `soda.theme` | `{ dark, vars }`。アプリの配色（`--soda-bg` など）。同じ値が `:root` の CSS の変数にも当たっている |
+| `soda.version` | `1` |
+
+- `send` は**保存されない**: あとからつないだ画面・たたんでいた画面には届かない。拡張は、状態の全体を送り直せる形にする。
+- `set` し直す（同じ名前でも）と、枠は**作り直される**（スクリプトの状態は消える）。`send` では作り直されない。
+- **`message` を受けるなら、送り主を確かめる**: 同じ pane の別の面は、`postMessage` を送り合える（下の実測）。確かめずに `soda.action` を呼ぶ作りだと、別の面から操作を引き出される。
+- 後から `document.write` し直さない（頁を書き直してしまい、`load` が起きるとアプリが閉じる）。`location` を書き換えない。
+- `<script src>` は読めない（CSP）。インラインにする。`defer`/`async`/`type="module"` は、文書の順に差し込まれる（`module` は非同期で、差し込みの直後）。
+- ふつうの頁と違う点: 中身は、枠の頁に **DOM として差し込んで**動かす（`document.write` は使わない）。インラインのスクリプトは文書の順に動き、`DOMContentLoaded` と `load` は差し込みのあとで 1 回ずつ起こす（`<body onload>` も動く。`document.readyState` は `complete`）。親から見た枠の `load` は 1 回のまま。
+
+### 静的な形式との使い分け
+
+**信頼できない中身（外から取ってきた HTML・他人が書いたもの）を `script-html` で出さない。静的な `html` で出す。** `script-html` のスクリプトは、枠の中でなんでもできる（下の「できること・できないこと」）。pane のプログラム（エージェント）は、どちらの形式を出すかを自分で選べ、利用者が形式を縛る手段は、この版には無い。
+危ない操作の承認には `sodactl ask` を使う。`source: "script"` の操作は、**利用者が押したとは限らない**（スクリプトは `soda.action` を自分で呼べて、`rev` も偽れる）。承認の印として扱わない。
+
+### 固定の印と、操作の始め方
+
+- 見出しの固定のラベルの先頭に、固定の印**「スクリプト」**（警告の色。`title` に「この表示は、pane のプログラムのスクリプトを動かしています」）が付く。帯・モバイルの重ね表示も同じ。題・中身から消せず、静的な形式の面には付かない。
+- **利用者が操作を始めるまで、枠は覆いの下**にあり、キーもポインタも枠に届かない。**操作を始める入口は 2 つだけ**: 見出しの固定の［操作する］ボタン（帯は［×］の左、モバイルは重ね表示の見出し。`Tab` で届く）と、`prefix+i`。**枠の中・覆いを押しても始まらない**（覆いを押すと、［操作する］を 1 秒だけ強調して場所を教える）。覆いの上のホイールは、枠の文書のスクロールになる。
+- 始めた押下・キーの残りは枠に届かない: ポインタは `click`（＝上がった後）で、`Enter`/`Space`/`prefix+i` はそのキーの `keyup` を親が受けて処理が済んでから、始める（`pointerup`・`mouseup`・`touchend`・`keyup` を中身が受けないことを E2E で確かめている）。
+- 操作中は、静的な形式と同じ「操作中の表示」（縁の強調色・「入力はこの表示に届きます（Esc で端末へ）」・端末が薄くなる）。`Esc`（と、端末を押すこと）で端末へ戻り、覆いと［操作する］が戻る。**操作中の枠の中で prefix を押しても、アプリの操作にはならない**（`Esc` で戻ってから押す）。
+- `set` で版が替わる・形式が替わると、操作中は解けて、新しい枠は覆いの下に戻る。
+
+## 3 つの備え（スクリプトが動く形式）
+
+1. **(a) 操作中をはっきり見せる**（上のとおり）。
+2. **(b) 利用者が操作を始めるまでは、フォーカスを元の場所へ戻す**: 操作中でないのに、枠（のスクリプト）が `window.focus()`・要素の `focus()` でフォーカスを取ったら、アプリはすぐ、取られる前にいた場所へ戻す（覚えているのは、最後にフォーカスのあった、表示の枠・覆い・［操作する］でない要素。無い・`body` のときは、利用者が選んでいる pane の端末）。戻ったかを確かめ、だめなら `blur()` してもう 1 回。それでもだめなら、**その画面の枠を外して**「この表示は、キー入力を取ろうとしたので、この画面では止めました」と［もう一度出す］を出す。
+   同時に、画面が見えていれば、サーバへ「1 回取られた」と知らせる。**数えて閉じるのは、サーバ**:
+   - 回数は **pane ごと**（面の id・名前・画面・接続に依らない。`close` → `set` の出し直し・別の名前の面・再読み込み・利用者が操作を始めたこと、のどれでも 0 に戻らない。時間でも数え直さない）。
+   - **3 回**に達したら、その pane の**スクリプトが動く面を全部閉じ**（`display.closed` の理由 `focus_steal`。利用者にはトースト「表示『…』は、キー入力を取ろうとし続けたので閉じました。この pane は、しばらくスクリプトが動く表示を出せません」）、**5 分間**、その pane の `script-html` の `set`（同じ名前の置き換えを含む）は `display_busy`（終了コード 1）で断られる。静的な形式は出せる。5 分ちょうどで明け、回数も 0 に戻る。
+   - 知らせは操作の頻度の制限に入れず、捨てない（中身が `soda.action` を毎秒 200 回流しても、3 回で閉じる）。面を閉じた直後・形式を替えた直後の知らせも、知らせに添えた pane と形式で数える。
+   - 片づけのとき（面が閉じる・版や形式が替わって枠が外れる）に、操作中でないのにフォーカスが枠にあれば、それも 1 回の知らせとして送ってから外す。
+3. **(c) 枠が別のページへ移ったら、捨てて知らせる**（どの形式でも）: 親から見た iframe の `load` が**2 回目**なら、必ず「移った」として枠を外し、面を閉じる（`display.closed` の理由 `navigated`）。スクリプトが動く形式では、さらにその pane は冷却に入る（上と同じ 5 分）。
+   移った先は、通り道も中身も受けず、操作も送れない（枠ごとの合い札を、最初の合図 1 回だけ受ける）。見えている画面で 10 秒返事が無い枠も閉じる（理由 `unresponsive`。冷却には入らない）。
+
+### よそからフォーカスが来たとき（静的な枠）
+
+スクリプトの面が `parent.frames[i].focus()` で、同じ pane の**静的な面**へフォーカスを移せる（実測）。静的な枠は、直前に本物のポインタの押下も親からの知らせも無い `focus` を受けたら親へ知らせ、親は、直前に `Tab` を受けていなければ、元の場所へ戻す（回数には数えない）。戻すまでの短い間のキーは、その面の欄に入りうる（限界 12）。
+
+## できること・できないこと（スクリプトから）
+
+実測したブラウザ: **Chromium 153.0.8010.12**（Playwright 同梱）。**ほかのブラウザ（Firefox・Safari）は未確認**。「止まる」と書くのは、実際に確かめたものだけ。
+
+| | 結果 |
+|---|---|
+| できる | 枠の中の DOM と CSS を自由に書く・`canvas`・SVG・`eval`・`setInterval`・`requestAnimationFrame`・`data:`/`blob:` の画像と音・`soda.action`・`soda.onMessage`。埋め込んだ大きなライブラリ（marked・Chart.js）も動く |
+| **止まった**（実測） | アプリの DOM（`parent.document`・`top.document`）・Cookie・`localStorage`・`sessionStorage`・`indexedDB`（どれも `SecurityError`）／同じ pane の別の面の枠の中（`parent.frames[i].document` は `SecurityError`）／`fetch`・XHR・`WebSocket`（アプリの `/ws` も外も）・`EventSource`・外の画像・スタイルシート・フォント・`<script src>`（**同じ origin の `<script src>` も**）— 試みた要求は CSP が止め、テストの待ち受けには 1 つも届かない／フォームの送信（待ち受けに届かない）／`window.open`（`null`）・`<a target="_blank">`（ポップアップが開かない）／`alert`・`confirm`・`prompt`（ダイアログが出ない）／ダウンロード（始まらない）／Service Worker（`SecurityError`）／`top.location`・`parent.location` の書き換え（`SecurityError`。アプリのページは移らない）／兄弟の枠の `location` の読み書き（`SecurityError`）／全画面（`requestFullscreen` は拒否される）／Picture-in-Picture（`document.pictureInPictureEnabled` が偽）／`<link rel=dns-prefetch\|preconnect\|prefetch\|prerender\|modulepreload>` で待ち受けへ接続が来ること（1.5 秒見て 0）／`history.back()`・`history.go(-1)`・`pushState`（枠自身の履歴だけが動き、枠が戻ると「移った」として閉じる。アプリのページの URL は変わらない）／枠が外の origin・`localhost` の別のサービス・応答が 204 の宛先へ移ること（アプリの CSP が止め、要求は届かず、枠は「移った」として閉じる。直後に `window.stop()` を呼んだ場合は、枠は閉じずに残るが、要求は届かない） |
+| **止まらなかった**（実測） | **WebRTC**: `RTCPeerConnection` を作って STUN の宛先を指定すると、**UDP の要求が待ち受けに届いた**（5 パケット）。CSP の `webrtc 'block'` は、このブラウザは解釈しない（「Unrecognized Content-Security-Policy directive」）。→ 外へ出す道として残る（限界 4）／**クリップボードへの書き込み**: 利用者が操作を始めて枠の中をクリックした**後**は、`document.execCommand("copy")` が通り、クリップボードが書き換わった（操作の前は通らない。`navigator.clipboard.writeText` は前後とも `NotAllowedError`）／**音**: 利用者が操作を始めて枠の中をクリックした**後**は鳴らせる（操作の前は `AudioContext` が `suspended`・`audio.play()` が `NotAllowedError`）／**`window.name`**: 移った先の同じ origin の文書で読めた（持ち出しに使える。限界 3）／**兄弟の枠への `postMessage`**: 届く／**`MessagePort` の受け渡し**: 兄弟の枠に port を渡せ、その port で送れる（限界 7・12）／**兄弟の枠への `focus()`**: 呼べる（静的な面なら上のとおりアプリが戻す。スクリプトの面なら、その pane の回数に数えられる）／`Permissions-Policy` の `focus-without-user-activation=()`: このブラウザでは「Origin trial controlled feature」で、**効かない**（コンソールに警告。検知と戻しはそのまま働く） |
+| 測れなかった | 変換中（IME）の文字の行方（ヘッドレスの Chromium に IME が無い）／ほかのブラウザ |
+| できない（アプリが止める） | 利用者が操作を始める前に、キー入力を取り続ける（pane ごとに 3 回で、その pane のスクリプトの面が全部閉じ、5 分出せない）／別のページへ移った後に、操作を送る・中身を受け取る／操作中でないのに、端末へフォーカスを移す・prefix を押したことにする／静的な形式の枠・印のまま、スクリプトを動かす |
+
+## 残る限界（スクリプトが動く形式。防げていないこと）
+
+1. **戻すまでの短い間のキー**: 利用者が操作を始める前でも、スクリプトがフォーカスを取ってから、アプリが元の場所へ戻すまでの短い間に打ったキーは、枠に入りうる。**0 にはできない**。
+   - 長さ: ふつうはイベント 1 回ぶん（フォーカスのイベントのあと、1 拍置いて確かめるので、その分）。イベントが起きないブラウザでは見回りの 250ms まで。**アプリの画面が重いときは、それより長くなりうる**（保証できる上限は無い）。
+   - 実測（Chromium 153。軽い負荷。**下限**）: 15ms おきにキーを打ち続けながら 20ms おきにフォーカスを取り続ける中身を出したとき、閉じるまでに打った 21 キーのうち、**枠に入ったのは 1 つ**、20 は pane に届いた。
+   - 回数: サーバが pane ごとに数え、3 回で、その pane のスクリプトが動く面を全部閉じて、5 分出せなくする。漏れうるのは、**pane 1 つにつき、5 分に 3 回ぶんまで**。受け口へ繋げるプロセスは pane を名乗れるので、**悪意のあるプロセスは、開いている pane の数 × 3 回まで取れる**。
+   - 変換中（IME）に取られた文字の行方は、測れていない。
+2. **操作中のキー**: 利用者が操作を始めた後に打ったキーは、すべて枠に届く（それが操作）。スクリプトはそれを読める。操作中の表示（縁の色・文言・端末が薄くなる）に気づかずに、端末のつもりで打つと、枠に入る。`Esc` を押す・端末を押すまで続く。
+3. **枠の移動での持ち出しと、居座り**: スクリプトは `location` を書き換えて枠を別の URL へ移せ、URL と `window.name`（実測：読めた）に載せたデータは移るときに送られる。アプリが気づくのは移った後で、面を閉じても、送られたものは戻らない。
+   **実測（Chromium 153）**: 外の origin・`localhost` の別のポート・応答が 204 の宛先へ移ろうとしても、**アプリの CSP が止め、要求は届かなかった**（枠は「移った」として閉じる）。同じ origin への移動（`/display-view/…`・`/`）は止まらないが、アプリの静的ページなので外へは出ない。**ほかのブラウザは未確認**——CSP が止めないブラウザでは、移るときの要求が外へ出て、アプリが枠を外すまでの間（`load` の直後まで）は外のページが枠の中で動きうる。LAN の機器・`localhost` の別のサービスへの GET も、同じ理由（止まらないブラウザで）使える見込み。
+   `window.stop()` を直後に呼ぶと、枠は閉じずに残る（要求は届いていない）。**文書を置き換えない移動**（応答が 204 の宛先など）は、このブラウザではアプリの CSP が先に止めて枠が閉じたので、CSP が止めないブラウザでの `load` の起き方は未確認。アプリが気づけない道が残りうる。
+4. **そのほかの持ち出しの道**: **WebRTC（UDP の要求が外へ出る。実測）**、利用者の操作の後に許されるクリップボードへの書き込み（`execCommand("copy")`。実測）と音（実測）が残る。先読み（`dns-prefetch` など）は止まった（実測）。
+5. **画面を固める・使い続ける**: スクリプトの重い処理・無限ループ・大量のメモリの確保で、パネルが固まる。固まらなくても、**CPU・電力・メモリを使い続けられる**（10 秒応答が無ければ閉じるが、応答しながら使い続けるものは止まらない）。
+   実測（Chromium 153）: 15 秒の同期ループは、枠だけが固まり（アプリの画面への問い合わせの応答は保たれた。サンプルは粗い）、約 10 秒で `unresponsive` で閉じた（冷却には入らない）。枠がアプリと同じプロセスで動くブラウザでは、アプリの画面全体が固まり、［×］も押せない。そのときは、別の端末から `sodactl display close --all --pane <id>`（ログイン済み）か、端末版（`soda`）・サーバの再起動で消す。
+6. **見た目のなりすまし**: スクリプトは、自分の枠の中に、端末や Sodashitsu の画面に似せた絵・偽の入力欄を描ける。見分けるのは、枠の外の固定のラベルと印「スクリプト」。
+7. **操作のなりすまし**: `soda.action` は、利用者が押していなくても呼べ、`rev` も偽れる。出来事の `source: "script"` が、その印。プログラムは、スクリプトが動く面からの操作を「利用者が承認した」印として扱わない。同じ pane の面どうしは `postMessage` と `MessagePort` を送り合える（実測）ので、**`message` を受けるなら送り主を確かめる**。
+8. **同じプロセスの中の読み取り**: 枠がアプリと同じプロセスで動くブラウザでは、理屈の上では、プロセッサの隙を突く読み取り（Spectre の類）の対象になりうる。対策は、ブラウザの側（サイトの隔離）に依る。
+9. **信頼できない中身を出さない／形式は縛れない**: 上の「静的な形式との使い分け」。
+10. **キーボードだけでは、戻れないことがある**: スクリプトが動く面では prefix のキーは効かない（`Esc` で戻ってから押す）。`Esc` の受け手は、土台が中身より先に付けるが、悪意のある中身は、頁を書き直す・フォーカスを別の枠へ移すなどで、`Esc` が効かない状態を作れる見込みがある（未確認）。そのときは、マウスで端末を押すか、別の端末から面を閉じる。
+11. **誤って閉じることがある・ふつうの頁と違う**: 10 秒応答できない重い処理・自分で `document.write` する中身・読み込みのたびに `focus()` を呼ぶ部品（3 回で、その pane の全部が閉じる。2 つの画面を開いていれば、その数だけ早い）は、悪意が無くても閉じられる。
+12. **ほかの面・ほかの pane を巻き込める**: スクリプトは、兄弟の枠にフォーカスを移せる（実測）。宛先がスクリプトの面なら、**その面の pane の回数が増え、3 回で、その pane のスクリプトが動く面が閉じて冷却に入る**（ほかの pane のスクリプトに、巻き添えで止められる）。宛先が静的な面なら、アプリは「利用者が入ったのではない」と気づいて元へ戻すが、戻すまでの短い間のキーは、その面の欄に入りうる。兄弟の枠の `location` は、このブラウザでは書き換えられない（実測：`SecurityError`）。誰がやったかは、アプリには分からない。
+
+## スクリプトが動く形式の上限
+
+- 中身は **2 MiB** まで（静的な形式と同じ）。`send` のデータは JSON で **64 KiB** まで・pane ごとに毎秒 20 回（続けて 20 回）。超えると使い方の誤り（終了コード 2）か `display_busy`（終了コード 1）。
+- 取られた回数は 3 回・冷却は 5 分。面の数の上限・サーバ全体の合計は静的な形式と共通。
+- `sodactl display --features` の `renderers.scriptHtml` は、`script-html` を出せると名乗った画面の数。0 のときは、いま出せる画面が無く、誰にも見えない。
+
+## 隔離のしくみ（静的な形式）
 
 - 枠は、アプリと**別の文書**（`/display-view/frame.html`）の `<iframe>`。`sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"` で、**`allow-same-origin` が無い**ので、枠の origin は不透明（`null`）。枠の中のスクリプトは、アプリの DOM・cookie・`localStorage`・API に触れない。
 - 枠のページの応答ヘッダの CSP は `sandbox …; default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`。**`script-src` は `'self'`（枠のページ自身のスクリプト）だけ**で、インライン・`eval` は止まる。外へ繋ぐ許可は無い。直接開かれても同じ隔離がかかる。`/ask-view/*` のヘッダは変えていない。
@@ -149,7 +248,7 @@ sodactl display set confirm --kind panel --html-file ask.html --wait --timeout 6
 ## 限界（防げていないこと）
 
 - **見る人への表示だけを制御する**: 面の中身・題・操作の値は、サーバのメモリに平文で載り、`sodactl display wait`/`events` でその pane の名前を名乗るプロセスが読める。名乗る pane の id は検証されない（`docs/sodactl.md`「ログイン不要の受け口」）。**秘密（パスワード・token）を面の欄に打たせない**。
-- **静的な形式ではスクリプトは動かない**。グラフや動く表示を作りたくても、この版ではできない（`html` の `<style>` と CSS の動きは使える）。
+- **静的な形式ではスクリプトは動かない**。グラフや動く表示は `script-html`（上）で出す。
 - **入れ子の `<template>` の中身は取り除かれない**（断片の中の `template.content` は、取り除きが辿らない）。ただし不活性（文書に入らず、描かれず、スクリプトも動かない）。
 - **`<use href="…">`（SVG）は、取得を始める**が、枠の CSP（`default-src 'none'`）と不透明 origin で止まる（Chromium で確認）。
 - **実測は Chromium だけ**。Firefox・Safari で、枠が移ったときの `load` の回数・`allow-forms` の `submit`・不透明 origin の扱いが同じかは確かめていない（`docs/verification.md` の手順）。
@@ -169,10 +268,12 @@ sodactl display set confirm --kind panel --html-file ask.html --wait --timeout 6
 | 旧 | 新 | — | `display` を知らない（使い方の誤り＝終了コード 2） |
 | 新 | 新 | 旧（読み込み直していない） | 名乗らないので出ない。`renderers` に数えない。`set` は成功する |
 | 新 | 新 | 端末版だけ | 同上（`renderers` はすべて 0） |
+| 新 | 静的な形式だけの版 | — | `script-html` の `set`・`send` は `{"status":"unsupported","reason":"this server does not support script-html displays (update soda)"}`（終了コード 0。`display.features` に `format:script-html`・`send` が無いとき） |
+| 新 | 新 | `script-html` を名乗らない画面 | その画面では、枠を作らず固定の文言「この画面では、この形式の表示を出せません」（スクリプトは動かない）。`renderers.scriptHtml` に数えない |
 
 ## 確かめ（開発者向け）
 
-- 単体: `packages/web/src/display/*.test.ts`・`packages/web/src/components/{DisplayFrame,PanePanel}.test.ts`・`packages/web/src/store/display.test.ts`。
+- 単体: `packages/web/src/display/*.test.ts`（`scriptHost.test.ts`＝スクリプトの頁の土台、`focusGuard`・`focusOrigin`・`engageEntry`）・`packages/web/src/components/{DisplayFrame,DisplayFrameScript,DisplayScriptMark,PanePanel}.test.ts`・`packages/web/src/store/display.test.ts`。
 - 結合: `packages/server/src/http/HttpServer.integration.test.ts`（`/display-view/*` のヘッダ）。
-- E2E（実ブラウザ。`packages/e2e/src/specs/display*.spec.ts`）: 出す・更新する・閉じる・操作（`display-flows`）／隔離（`display-isolation`）／幅のつまみ（`display-resize`）／モバイル（`display-mobile`）。手順は `docs/verification.md`「表示の面」。
+- E2E（実ブラウザ。`packages/e2e/src/specs/display*.spec.ts`）: 出す・更新する・閉じる・操作（`display-flows`）／隔離（`display-isolation`）／幅のつまみ（`display-resize`）／モバイル（`display-mobile`）／スクリプトが動く形式（`display-script`＝土台への差し込みの前提、`display-script-app`＝部品を通した筋、`display-script-engage`＝操作の始め方とフォーカスの番、`display-script-isolation`＝隔離、`display-script-nav`＝枠の移動、`display-script-measure`＝実測、`display-script-mobile`）。手順は `docs/verification.md`「表示の面」。
 - 実測した前提: `MessagePort` は sandbox の不透明 origin の枠へ transfer で渡せる。Playwright の `frame.evaluate` は `script-src 'self'` の枠でも動く（枠の origin は `self.origin` が `"null"`・`localStorage`/`parent.document` が `SecurityError`）。`allow-forms` があると `submit` のイベントが起き、実際の送信は起きない。marked は Markdown の中の HTML（`<button data-soda-action>`）をそのまま通す。

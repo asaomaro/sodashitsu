@@ -424,14 +424,14 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       対象: `packages/e2e/src/specs/display-script.spec.ts`（新規）、`packages/e2e/src/support/display.ts`
       依存: T19, T25, T27
       AC: AC29, AC30, AC31, AC32, AC33, AC34, AC36, AC37
-- [ ] T29: 文書（スクリプトが動く形式）: `docs/display.md` に節を足す: 使い方（`--script-html-file`・`send`・`soda.action`・`soda.onMessage`・`soda.theme`・ライブラリは中身に埋める・`set` し直すと作り直される・後から `document.write` し直さない・`message` を受けるなら送り主を確かめる）・**静的な形式との使い分け**（信頼できない中身は `html` で出す）・固定の印・
+- [x] T29: 文書（スクリプトが動く形式）: `docs/display.md` に節を足す: 使い方（`--script-html-file`・`send`・`soda.action`・`soda.onMessage`・`soda.theme`・ライブラリは中身に埋める・`set` し直すと作り直される・後から `document.write` し直さない・`message` を受けるなら送り主を確かめる）・**静的な形式との使い分け**（信頼できない中身は `html` で出す）・固定の印・
       **操作の始め方**（枠の外の［操作する］か `prefix+i`。枠を押しても始まらない）と操作中の表示・出来事の `source`・**できること・できないこと**（design の表の形で。**「止まる」と書くのは、T28 (4) で確かめた項目だけ**。確かめたブラウザの名前と版を添え、「確かでない」の行は実測の結果で書く。確かめていないブラウザは「未確認」）・
       **3 つの備え**（回数は pane ごとにサーバが数える・3 回で、その pane のスクリプトが動く面を全部閉じて 5 分出せない・入る条件の表）と、**残る限界 1〜12**（design の文面を、利用者向けの言葉で、全部。T28 の実測〔枠へ入ったキーの数・外の origin と `localhost` への移動の要求が届いたか・`focus-without-user-activation` が効いたか〕を添える）・
       誤って閉じられる場合（限界 11）・画面が固まったときの消し方・上限（`send` 64 KiB）・新旧の表の行。`docs/sodactl.md`（コマンド一覧と、受け口の操作に `display.send`）、`docs/verification.md`、SKILL.md（エージェント向け: **外から取ってきた HTML を `script-html` で出さない**・`source: "script"` の操作を利用者の承認として扱わない）
       対象: `docs/display.md`、`docs/sodactl.md`、`docs/verification.md`、`packages/cli/skills/sodactl/SKILL.md`
       依存: T21, T28
       AC: AC27, AC32, AC34
-- [ ] T30: 負の対照（スクリプトが動く形式。test 工程で消化する）: 次の版で、対応するテストが落ちることを確かめ、戻して通ることも確かめ、生の出力を `test-result.md` に残す。
+- [x] T30: 負の対照（スクリプトが動く形式。test 工程で消化する）: 次の版で、対応するテストが落ちることを確かめ、戻して通ることも確かめ、生の出力を `test-result.md` に残す。
       (f) `DISPLAY_SCRIPT_VIEW_SANDBOX` と `DISPLAY_SCRIPT_VIEW_CSP` の両方に `allow-same-origin` を足した版 → T28 (4) の「`parent.document`・Cookie・`localStorage` が例外」が落ちる、
       (g) 覆いを出さず、横取りの検知（「戻す・知らせる」）も外した版 → T28 (5) が落ちる（面が閉じない・キーが枠に入り続ける）、(g1) **横取りの検知だけを外した版**（覆いと［操作する］は残す）→ T28 (5) が落ちる（覆いはポインタを止めるだけで、スクリプトの `focus()` は止めないことの確かめ）、
       (g2) 覆いだけを外した版（検知は残す）→ T28 (7) の「覆いがある間、枠の中のボタンを押しても始まらない」が落ちる、(g3) `engageEntry` が、押した時点（`pointerdown`・`keydown`）で始める版 → T28 (7) の「`pointerup`・`keyup` の受け手が呼ばれない」が落ちる、

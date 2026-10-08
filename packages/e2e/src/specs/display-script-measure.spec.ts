@@ -208,17 +208,58 @@ window.__go = function () { var r = []; for (var i = 0; i < parent.frames.length
   await expect(page.locator("[data-pane-panel] iframe[data-display-script]")).toHaveCount(1);
   await focusTerminal(page);
   const f = await scriptFrame(page);
+  // 親の activeElement を 5ms ごとに記録しておき、スクリプトが兄弟へ focus() を呼んだあと、フォーカスが本当に兄弟の枠へ移ったか（一瞬でも）を見る。
+  await page.evaluate(() => {
+    const seen = new Set<string>();
+    (window as unknown as { __seen: Set<string> }).__seen = seen;
+    setInterval(() => {
+      const el = document.activeElement as HTMLElement | null;
+      seen.add(`${el?.tagName ?? ""}${el?.hasAttribute?.("data-display-script") ? "[script]" : el?.hasAttribute?.("data-display-frame") ? "[static]" : ""}`);
+    }, 5);
+  });
   await f.evaluate(() => (window as unknown as { __go(): void }).__go());
   const res = await f.evaluate(() => document.title);
   await page.waitForTimeout(1500);
   const active = await activeTag(page);
+  const seen = await page.evaluate(() => [...(window as unknown as { __seen: Set<string> }).__seen]);
   const n = input().length;
   await page.keyboard.type("q");
   await page.waitForTimeout(500);
   const toPane = input().slice(n).map((i) => i.text).join("");
-  console.log(`MEASURE sibling-focus: browser=${browserVersion(page)} script=${res} active-after=${active} typed-reached-pane=${JSON.stringify(toPane)}`);
+  console.log(`MEASURE sibling-focus: browser=${browserVersion(page)} script=${res} active-elements-seen=${JSON.stringify(seen)} active-after=${active} typed-reached-pane=${JSON.stringify(toPane)}`);
   expect(active).not.toContain("IFRAME"); // 戻される（静的な枠の foreign-focus）
   expect(toPane).toContain("q");
+  // フォーカスが本当に兄弟の静的な枠へ移ったなら、親の activeElement に静的な枠が現れる（移らなかったなら、この実測は「止まった」）。
+  if (seen.includes("IFRAME[static]")) console.log("MEASURE sibling-focus-moved: true");
+  else console.log("MEASURE sibling-focus-moved: false");
+});
+
+test("実測 兄弟の枠へ focus()（利用者が操作を始めて枠の中をクリックした後＝ユーザー操作の後）: 静的な面へフォーカスが移るか、移ったらアプリが戻すか", async ({ page, appServer }) => {
+  test.setTimeout(60_000);
+  const { paneId, input } = await openScriptBrowser(page, appServer);
+  await ok(await runDisplay(appServer, paneId, ["set", "victim", "--kind", "band", "--html-file", await writeTmp("<input id=v><button>b</button>")]));
+  await expect(page.locator("[data-pane-bands] iframe[data-display-frame]")).toHaveCount(1);
+  await setScriptOk(appServer, paneId, "a", `<!doctype html><body><button id=go>go</button><script>
+document.getElementById('go').addEventListener('click', function () { for (var i = 0; i < parent.frames.length; i++) { if (parent.frames[i] !== window) { try { parent.frames[i].focus(); } catch (e) {} } } });
+</script></body>`);
+  await expect(scriptFrameLoc(page).locator("#go")).toBeAttached();
+  await page.evaluate(() => {
+    const seen = new Set<string>();
+    (window as unknown as { __seen: Set<string> }).__seen = seen;
+    setInterval(() => {
+      const el = document.activeElement as HTMLElement | null;
+      seen.add(`${el?.tagName ?? ""}${el?.hasAttribute?.("data-display-script") ? "[script]" : el?.hasAttribute?.("data-display-frame") ? "[static]" : ""}`);
+    }, 5);
+  });
+  await engageBtn(page).click();
+  await scriptFrameLoc(page).locator("#go").click(); // 本物のクリック（ユーザー操作）の中で、兄弟へ focus()
+  await page.waitForTimeout(1500);
+  const seen = await page.evaluate(() => [...(window as unknown as { __seen: Set<string> }).__seen]);
+  const active = await activeTag(page);
+  const n = input().length;
+  await page.keyboard.type("q");
+  await page.waitForTimeout(500);
+  console.log(`MEASURE sibling-focus-after-gesture: browser=${browserVersion(page)} active-elements-seen=${JSON.stringify(seen)} active-after=${active} typed-reached-pane=${JSON.stringify(input().slice(n).map((i) => i.text).join(""))} engaged-after=${await page.locator("[data-pane-panel]").getAttribute("data-display-engaged")}`);
 });
 
 test("実測 閉じるまでに枠へ入ったキーの数（限界 1。軽いときの下限）", async ({ page, appServer }) => {
