@@ -106,21 +106,26 @@ describe("SettingsDialog — 通知の節 — 切り替え（AC6・AC-I2）", ()
 
 // **AC8 と AC12 を取り違えない**——許可が無いだけなのか、環境が対応していないのか。
 describe("SettingsDialog — 表示の面の配置の設定（20261008-display-layout）", () => {
-  it("パネルの初めの状態と帯の既定の場所を radio で出し、選ぶと反映・保存する。パネルの既定の置き場所は PR-A では出さない", async () => {
+  it("パネルの初めの状態と帯の既定の場所を radio で出し、選ぶと反映・保存する。パネルの既定の置き場所（右・左・上・下）も", async () => {
     const { wrapper } = await openDialog();
     const initial = wrapper.findAll('input[name="settings-display-panel-initial"]');
     const edge = wrapper.findAll('input[name="settings-display-band-edge"]');
     expect(initial.map((i) => i.attributes("value"))).toEqual(["open", "collapsed"]);
     expect(edge.map((i) => i.attributes("value"))).toEqual(["top", "bottom"]);
-    expect(wrapper.find('input[name="settings-display-panel-dock"]').exists()).toBe(false);
+    const dock = wrapper.findAll('input[name="settings-display-panel-dock"]');
+    expect(dock.map((i) => i.attributes("value"))).toEqual(["right", "left", "top", "bottom"]);
+    expect((dock[0]!.element as HTMLInputElement).checked).toBe(true);
     expect((initial[0]!.element as HTMLInputElement).checked).toBe(true);
     await initial[1]!.setValue(true);
     await edge[1]!.setValue(true);
+    await dock[2]!.setValue(true);
     const settings = useSettingsStore(pinia);
     expect(settings.displayPanelInitial).toBe("collapsed");
     expect(settings.displayBandEdge).toBe("bottom");
     expect(readPrefs()["displayPanelInitial"]).toBe("collapsed");
     expect(readPrefs()["displayBandEdge"]).toBe("bottom");
+    expect(settings.displayPanelDock).toBe("top");
+    expect(readPrefs()["displayPanelDock"]).toBe("top");
   });
 });
 

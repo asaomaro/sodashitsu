@@ -222,7 +222,7 @@
       依存: T14
       AC: AC15, AC-I2, AC-I5
       点検: あり
-- [ ] T17: メニュー・設定・名乗り（PR-B）: 面のメニューに「右に置く／左に置く／上に置く／下に置く」（今と違う側だけ）。設定の画面に「表示のパネルの既定の置き場所」（右／左／上／下）。`DISPLAY_SUBSCRIBE_FEATURES` に `dock`。`focusDisplay` が、どの側のパネルにも移れる。単体テスト
+- [x] T17: メニュー・設定・名乗り（PR-B）: 面のメニューに「右に置く／左に置く／上に置く／下に置く」（今と違う側だけ）。設定の画面に「表示のパネルの既定の置き場所」（右／左／上／下）。`DISPLAY_SUBSCRIBE_FEATURES` に `dock`。`focusDisplay` が、どの側のパネルにも移れる。単体テスト
       対象: `packages/web/src/components/ContextMenu.vue`・`SettingsDialog.vue`・`packages/web/src/display/DisplayController.ts:28`・`DisplayController.test.ts:52`・`actions/ActionDispatcher.ts`・各テスト / 根拠: design「メニュー」「設定」「画面の名乗り」
       依存: T14, T8
       AC: AC12, AC16, AC8, AC-I3

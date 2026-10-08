@@ -25,7 +25,7 @@ export interface DisplayControllerOptions {
 }
 
 /** 画面が名乗る機能（パネル・帯・操作・スクリプトが動く形式）。 */
-export const DISPLAY_SUBSCRIBE_FEATURES = ["panel", "band", "actions", "script-html", "collapse"];
+export const DISPLAY_SUBSCRIBE_FEATURES = ["panel", "band", "actions", "script-html", "collapse", "dock"];
 
 /** 理由 `focus_steal` で閉じたときの利用者への知らせ（面の名前を入れる）。 */
 export function focusStealToast(name: string): string {

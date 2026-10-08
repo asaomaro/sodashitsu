@@ -361,10 +361,16 @@ function commitNewCwdPath(): void {
  * シェルの場所を追う（Windows。20260928-windows-pane-cwd の D-6）。押した時点で保存し、効くのは次に開く pane から（既に開いている pane は変えない）。
  * 読むのはサーバ（pane を開くたびに共有の設定を読む）。
  */
-/** 表示の面の初めの状態・帯の既定の場所（20261008-display-layout）。選んだ時点で反映・保存。パネルの既定の置き場所は PR-B から出す。 */
+/** 表示の面の初めの状態・帯の既定の場所（20261008-display-layout）。選んだ時点で反映・保存。パネルの既定の置き場所（右・左・上・下）も同じ。浮いた窓は PR-C から。 */
 const displayPanelInitialChoices: readonly { value: "open" | "collapsed"; label: string }[] = [
   { value: "open", label: "開く" },
   { value: "collapsed", label: "たたむ（帯の行のボタンから開く）" },
+];
+const displayPanelDockChoices: readonly { value: "right" | "left" | "top" | "bottom"; label: string }[] = [
+  { value: "right", label: "右" },
+  { value: "left", label: "左" },
+  { value: "top", label: "上" },
+  { value: "bottom", label: "下" },
 ];
 const displayBandEdgeChoices: readonly { value: "top" | "bottom"; label: string }[] = [
   { value: "top", label: "上" },
@@ -1245,6 +1251,20 @@ function onNativeCancel(ev: Event): void {
           <span>{{ c.label }}</span>
         </label>
         <p class="settings-note">利用者がまだ開閉していない表示のパネルだけに効きます（プログラムが「たたんで始める」と指定した面はたたまれます）。</p>
+      </fieldset>
+      <fieldset class="settings-fieldset" data-settings-display-panel-dock>
+        <legend class="settings-legend">表示のパネルの既定の置き場所</legend>
+        <label v-for="c in displayPanelDockChoices" :key="c.value" class="settings-radio">
+          <input
+            type="radio"
+            name="settings-display-panel-dock"
+            :value="c.value"
+            :checked="settings.displayPanelDock === c.value"
+            @change="settings.setDisplayPanelDock(c.value)"
+          />
+          <span>{{ c.label }}</span>
+        </label>
+        <p class="settings-note">利用者がまだ置き場所を決めていない面だけに効きます（プログラムの指定が先）。パネルの見出しをつかんで動かす・面のメニューで、面ごとに替えられます。</p>
       </fieldset>
       <fieldset class="settings-fieldset" data-settings-display-band-edge>
         <legend class="settings-legend">表示の帯の既定の場所</legend>
