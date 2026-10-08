@@ -60,6 +60,7 @@ sodactl ask [--timeout <ms>] < spec.json    # pane の中のプログラムの�
 sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] (--text <text> | --markdown-file <path> | --html-file <path> | --script-html-file <path> | [--format text|markdown|html|script-html] < stdin) [--wait [--timeout <ms>]]   # この pane を見ているブラウザの画面に、パネル（端末の右）か帯（端末の上）を出す（`docs/display.md`）。`script-html` は中身のスクリプトが枠の中で動く形式（信頼できない中身には使わない）
 sodactl display send <name> (--json <JSON> | < stdin)   # スクリプトが動く面（`script-html`）へデータを送る（64 KiB まで・保存されない。結果は {"status":"ok","delivered":n}）
 sodactl display close (<name> | --all) / list / wait [<name>] / events [<name>...] / --features   # 面の閉じる・一覧・操作を待つ・続けて受け取る・機能確認（pane の中ではログイン不要）
+sodactl ext list|reload / log <id|key> / restart <id|key>   # 拡張（設定に登録して soda が起動するプログラム）の状態・ログ・読み直し・起動し直し（下の「拡張（`ext`）」）
 sodactl skill                               # エージェントに sodactl の使い方を教える Markdown（skill ファイル）を出す
 ```
 
@@ -616,6 +617,22 @@ sodactl agent wait "$pane" --until blocked --timeout 600000
 sodactl agent read "$pane" --lines 40
 sodactl agent send-keys "$pane" esc                         # 取り消す（答えるなら例えば y や enter）
 ```
+
+## 拡張（`ext`）
+
+設定（`extensions.json`）に登録して `soda` が起動する拡張（`docs/extensions.md`）の状態を見る・読み直す・起動し直す。**`/ws`（ログイン済み）の経路だけ**（`pane.sock` には載せない）。`--machine` で別のマシンへ送れる。
+
+```
+sodactl ext list                       # {"status":"ok","extensions":[…],"problems":[…],"userConfigPath":"…"}
+sodactl ext log <id|key>               # {"status":"ok","key":"user:hello","lines":[…],"dropped":0}
+sodactl ext reload                     # list と同じ形（設定を読み直し、failed・exited を戻す）
+sodactl ext restart <id|key>           # {"status":"ok","key":"user:hello"}
+```
+
+- `extensions[]` の各項目: `key`（`user:<id>`）・`id`・`scope`・`state`（`running`・`backoff`・`failed`・`exited`・`disabled`・`over_limit`・`waiting`〔設定を読めないので起動を見送っている〕）・`failures`・`lastExit`・`displays`（出している面の数）など。**コマンドの文字列は出ない**。
+- `<id|key>` は、`key` の完全一致 → `id` が 1 つに決まるもの。同じ `id` が 2 つ以上あるときは使い方の誤り（終了コード 2。候補の `key` を並べる）。無ければ `not_found`（終了コード 1）。
+- 古いサーバ（拡張を知らない）では `{"status":"unsupported","reason":"このサーバは拡張に対応していません"}`（終了コード 0）。
+- 承認・取り消し・有効と無効の切り替えのコマンドは**無い**。
 
 ## 連携のグラフ（`graph`）
 

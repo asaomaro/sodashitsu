@@ -1,15 +1,37 @@
-import type { DisplayInfo } from "@sodashitsu/protocol";
+import { EXTENSION_ID_RE, type DisplayInfo } from "@sodashitsu/protocol";
 
 /** 固定のラベルの先頭（枠そのものの `title` などにも使う）。 */
 export const DISPLAY_LABEL_PREFIX = "pane のプログラムの表示（隔離）";
 
 /**
- * パネル・帯の見出しの**固定のラベル**（アプリが枠の外に描く文。中身・題からは変えられない）を作る唯一の関数。
- * 面の名前は `[A-Za-z0-9_-]` だけなので、似せた文言を入れられない。`DisplayInfo` の知らない項目（`source` など）は読まないので、載っていても壊れない。
- * 後の作業が「どの拡張が出したか」の文を足すのは、ここ。
+ * 面の出どころ（`DisplayInfo.source`。拡張が出した面に、サーバが付ける）が、形の合うものか。**`{ type: "extension", id: <EXTENSION_ID_RE に合う文字列>, scope: "user" | "project" }`
+ * のときだけ**拡張として扱う（面の中身・題からは変えられず、id は英数字・`_`・`-` だけなので、似せた文言を入れられない）。ほかの形・文字列・無いときは null。
  */
-export function displayLabel(info: Pick<DisplayInfo, "name">): string {
-  return `${DISPLAY_LABEL_PREFIX}· ${info.name}`;
+function extensionSource(info: { source?: unknown }): { id: string; scope: "user" | "project" } | null {
+  const s = info.source;
+  if (typeof s !== "object" || s === null) return null;
+  const r = s as Record<string, unknown>;
+  if (r["type"] !== "extension") return null;
+  const id = r["id"];
+  const scope = r["scope"];
+  if (typeof id !== "string" || !EXTENSION_ID_RE.test(id)) return null;
+  if (scope !== "user" && scope !== "project") return null;
+  return { id, scope };
+}
+
+/** 固定のラベルの先頭の文（出どころで替わる）。拡張が出した面は「拡張『<id>』の表示（利用者｜プロジェクト・隔離）」、ほかは「pane のプログラムの表示（隔離）」。 */
+export function displayLabelPrefix(info: { source?: unknown }): string {
+  const ext = extensionSource(info);
+  if (ext === null) return DISPLAY_LABEL_PREFIX;
+  return `拡張『${ext.id}』の表示（${ext.scope === "user" ? "利用者" : "プロジェクト"}・隔離）`;
+}
+
+/**
+ * パネル・帯の見出しの**固定のラベル**（アプリが枠の外に描く文。中身・題からは変えられない）を作る唯一の関数。
+ * 面の名前は `[A-Za-z0-9_-]` だけなので、似せた文言を入れられない。`source` は、形の合う拡張の出どころのときだけ文を替える（`displayLabelPrefix`）。
+ */
+export function displayLabel(info: Pick<DisplayInfo, "name"> & { source?: unknown }): string {
+  return `${displayLabelPrefix(info)}· ${info.name}`;
 }
 
 /** 操作中の固定の文言。スクリプトが動く面は、中身が `Esc` を無効にできる場合があるので、［操作を終える］も案内する。 */
@@ -34,6 +56,6 @@ export function scriptEnabledNoticeFor(data: { prefs: { displayScriptEnabled?: u
 }
 
 /** 帯の印の `title`・`aria-label`（題を添える）。 */
-export function displayBandLabel(info: Pick<DisplayInfo, "name" | "title">): string {
+export function displayBandLabel(info: Pick<DisplayInfo, "name" | "title"> & { source?: unknown }): string {
   return `${displayLabel(info)}: ${info.title}`;
 }

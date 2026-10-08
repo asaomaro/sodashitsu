@@ -17,6 +17,7 @@ import {
   type DisplayWaitResult,
 } from "./display.js";
 import { FILE_CHUNK_BASE64_MAX, FILE_NAME_INPUT_MAX, FILE_PATH_MAX, FILE_RESOLVE_MAX_PATHS, type ResolvedFile } from "./file.js";
+import type { ExtensionListResult, ExtensionLogResult } from "./extension.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 import { GraphGetParams, GraphHistoryParams, GraphPauseParams, GraphResumeParams, GraphUpdateParams, type Graph, type GraphHistoryResult } from "./graph.js";
 import { CELL_LIMIT_MESSAGE, terminalDimension, VIEW_VISIBLE_PANES_MAX, withinCellLimit } from "./terminalLimits.js";
@@ -972,6 +973,23 @@ export type CommandRunParams = z.infer<typeof CommandRunParams>;
 export const CommandPopupCloseParams = z.object({ popupId: paneId });
 export type CommandPopupCloseParams = z.infer<typeof CommandPopupCloseParams>;
 
+// --- 拡張（20261007-ext-host。設定に登録したプログラムを Sodashitsu が動かす） ----------------------------------------
+
+/** 拡張の一覧（利用者の拡張のコマンドの文字列を含まない）。 */
+export const ExtensionListParams = z.object({});
+export type ExtensionListParams = z.infer<typeof ExtensionListParams>;
+/** 設定を読み直して、差を埋める。 */
+export const ExtensionReloadParams = z.object({});
+export type ExtensionReloadParams = z.infer<typeof ExtensionReloadParams>;
+const extensionKey = z.string().min(1).max(160);
+export const ExtensionRestartParams = z.object({ key: extensionKey });
+export type ExtensionRestartParams = z.infer<typeof ExtensionRestartParams>;
+export const ExtensionLogParams = z.object({ key: extensionKey });
+export type ExtensionLogParams = z.infer<typeof ExtensionLogParams>;
+/** 画面（`desktop`・`mobile`）だけが呼べる。 */
+export const ExtensionSetEnabledParams = z.object({ key: extensionKey, enabled: z.boolean() });
+export type ExtensionSetEnabledParams = z.infer<typeof ExtensionSetEnabledParams>;
+
 // --- 独自トークン（20260927-sidebar-row-tokens。herdr の workspace.report_metadata / pane.report_metadata） ----------------
 
 /** 1 回の要求の組の数の上限（重複を除く前。大きさの抑え。整えた後の上限〔16〕はサーバが見る）。 */
@@ -1097,6 +1115,11 @@ export const METHOD_SCHEMAS = {
   "command.reload": CommandReloadParams,
   "command.run": CommandRunParams,
   "command.popup_close": CommandPopupCloseParams,
+  "extension.list": ExtensionListParams,
+  "extension.reload": ExtensionReloadParams,
+  "extension.restart": ExtensionRestartParams,
+  "extension.log": ExtensionLogParams,
+  "extension.setEnabled": ExtensionSetEnabledParams,
   "prefs.get": PrefsGetParams,
   "prefs.set": PrefsSetParams,
   // エージェントの連携のグラフ（20260927-agent-graph）。
@@ -1206,6 +1229,11 @@ export interface MethodResultMap {
   "command.reload": CommandListResult;
   "command.run": CommandRunResult;
   "command.popup_close": Record<string, never>;
+  "extension.list": ExtensionListResult;
+  "extension.reload": ExtensionListResult;
+  "extension.restart": Record<string, never>;
+  "extension.log": ExtensionLogResult;
+  "extension.setEnabled": Record<string, never>;
   "prefs.get": PrefsResult;
   "prefs.set": PrefsResult;
   "graph.get": Graph;

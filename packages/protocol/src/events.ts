@@ -135,6 +135,14 @@ export interface MachineChangedEvent {
   event: "machine.changed";
   data: { machines: MachineStatus[] };
 }
+/**
+ * 拡張の一覧・状態が変わった（20261007-ext-host）。**中身を持たない**（bus に流したものは全接続へ届くので、コマンドなどを載せない）。
+ * 画面は `extension.list` で取り直す。
+ */
+export interface ExtensionChangedEvent {
+  event: "extension.changed";
+  data: Record<string, never>;
+}
 /** 独自コマンドの一覧が変わった（読み直し。20260927-custom-command-keys）。全クライアントへ配る。 */
 export interface CommandUpdatedEvent {
   event: "command.updated";
@@ -239,6 +247,7 @@ export type ServerEvent =
   | AgentIntegrationChangedEvent
   | MachineChangedEvent
   | CommandUpdatedEvent
+  | ExtensionChangedEvent
   | CommandPopupClosedEvent
   | PrefsChangedEvent
   | GraphChangedEvent

@@ -28,6 +28,11 @@ export const PANE_ENV_DROPPED: readonly string[] = [
   "SODA_ACTIVE_PANE_ID",
   "SODA_ACTIVE_PANE_CWD",
   "SODA_COMMAND_ID",
+  // 拡張に渡す変数（20261007-ext-host）。拡張から起動したサーバ・拡張の中の pane に、古い値を漏らさない。
+  "SODA_EXTENSION_ID",
+  "SODA_EXTENSION_SCOPE",
+  "SODA_PROJECT_ROOT",
+  "SODA_EXTENSION_RUN_ID",
 ];
 
 export interface PaneEnvManaged {
