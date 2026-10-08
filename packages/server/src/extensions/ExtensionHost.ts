@@ -458,6 +458,17 @@ export class ExtensionHost {
     await this.enqueue(async () => {
       if (!this.desired.has(key)) throw new RpcError("not_found", `extension not found: ${key.slice(0, 80)}`);
       await this.stateStore.setDisabled(key, !enabled, new Set(this.desired.keys()));
+      if (!enabled) {
+        // 無効にしたことは、このサーバが書いたので分かっている。設定の読み込みの結果（時間切れかもしれない）を待たずに、必ず止める。
+        const d = this.desired.get(key);
+        if (d) {
+          d.decision = "disabled";
+          d.disabledByUser = true;
+        }
+        await this.stopRun(key);
+        if (d) this.resetStatus(key, d);
+        this.emitChanged();
+      }
       await this.reconcile();
     });
   }
@@ -483,7 +494,7 @@ export class ExtensionHost {
       if (file.problem !== null) problems.push({ scope: "user", path: this.userConfigPath, problem: file.problem });
     } else {
       transient = true;
-      problems.push({ scope: "user", path: this.userConfigPath, problem: `${EXTENSIONS_FILE_NAME}: 読み込みが時間内に終わりませんでした。動いている拡張はそのままで、新しい起動は見送ります（あとで読み直します）` });
+      problems.push({ scope: "user", path: this.userConfigPath, problem: `${EXTENSIONS_FILE_NAME}: 読み込みが時間内に終わりませんでした。設定を読めないので、前の状態のままです（動いている拡張はそのまま、新しい起動は見送ります。あとで読み直します）` });
     }
     // 2. （PR3）プロジェクトの根と設定。// PR3（T22）
 
@@ -493,7 +504,7 @@ export class ExtensionHost {
     const state: ExtensionStateLoad = stateRead.ok ? stateRead.value : { ok: true, disabled: new Set() };
     if (!stateRead.ok) {
       transient = true;
-      problems.push({ scope: "state", path: this.statePath, problem: "extension-state.json: 読み込みが時間内に終わりませんでした。動いている拡張はそのままで、新しい起動は見送ります（あとで読み直します）" });
+      problems.push({ scope: "state", path: this.statePath, problem: "extension-state.json: 読み込みが時間内に終わりませんでした。設定を読めないので、前の状態のままです（動いている拡張はそのまま、新しい起動は見送ります。あとで読み直します）" });
     }
     if (transient) {
       // 現状維持: 前の desired・動いているものはそのまま。起動を待っているものは「待っている」にする。

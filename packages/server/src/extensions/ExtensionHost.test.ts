@@ -645,6 +645,40 @@ describe("ExtensionHost: 設定・無効の記録が読めないとき（時間�
     expect(infoOf(h, "a")!.state).toBe("running");
   });
 
+  it("時間切れの最中の setEnabled(false) で、その拡張が止まる（ほかは止まらない）。list は disabled。true は読めたときだけ起動する", async () => {
+    const { g, open } = gatedOpen();
+    h = await makeHost({ open });
+    await h.writeConfig([ext("a"), ext("b")]);
+    await h.host.start();
+    g.on = true;
+    await h.run(h.host.setEnabled("desktop", keyOf("a"), false));
+    expect(infoOf(h, "a")).toMatchObject({ state: "disabled", disabledByUser: true });
+    expect(h.children[0]!.exited).toBe(true);
+    expect(h.children[1]!.exited).toBe(false);
+    expect(infoOf(h, "b")!.state).toBe("running");
+    // true は、読めないうちは起動しない
+    await h.run(h.host.setEnabled("desktop", keyOf("a"), true));
+    expect(h.spawnCalls).toHaveLength(2);
+    g.on = false;
+    g.release();
+    await h.drive(7000);
+    await h.until(() => h!.spawnCalls.length === 3);
+    expect(infoOf(h, "a")!.state).toBe("running");
+  });
+
+  it("時間切れの最中の reload の結果に、設定を読めなかったことが出る", async () => {
+    const { g, open } = gatedOpen();
+    h = await makeHost({ open });
+    await h.writeConfig([ext("a")]);
+    await h.host.start();
+    g.on = true;
+    const res = await h.run(h.host.reload());
+    expect(res.problems.some((p) => p.scope === "user" && p.problem.includes("設定を読めないので、前の状態のまま"))).toBe(true);
+    expect(res.extensions[0]!.state).toBe("running");
+    g.on = false;
+    g.release();
+  });
+
   it("無効の記録の読み込みが時間切れでも、動いている拡張は止まらない", async () => {
     let blockState = false;
     let release: () => void = () => undefined;

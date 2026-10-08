@@ -307,6 +307,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       AC: AC19, AC20, AC34
       点検: あり
 - [ ] T22: ホストに、プロジェクトの分を足す（その 1: 根・あるべき集合・起動の確かめ直し）: bus の `workspace.created`・`workspace.closed` の購読（**200ms まとめて、長くても 1 秒で、差を埋める**——T9-4 の、設定を読まない「pane の一覧の作り直し」とは別の道。`workspace.closed` は、受け手の中で、その id の根の覚えを 1 つ消す）・`reload` の「根を引き直す」印・`reconcile` の 2（workspace → 根を引く〔1 つ 2 秒の上限は、ここで付ける・2 つずつ並行・合わせて 5 秒・**時間切れは「根なし」として覚えない**・時間切れがあれば 5 秒後に 1 回予約（続けて 3 回まで）〕→ **対応表を作り終えてから差し替える** → 根ごとに `loadProjectExtensionsFile`。辞書順で 33 個目からは、読まずに `problems`）・3（承認の記録）・4 の `pending`・`denied`、
+      注意（PR1 の再レビューより）: `reconcile` の `transient`（設定・無効の記録の時間切れを現状維持にして早期 return）に、承認の記録の時間切れ・読めないを混ぜない。承認の側は「その拡張を止める」側に分ける（混ぜると、承認を取り消したのに動き続ける）。`return` の位置を直す。`decisions.md` D11。
       **`startOne` の 3（プロジェクトの読み直し）と 4（承認の記録の読み直し）**、承認の記録の見張り（5 秒ごとに `signature()`。変わったら、差を埋める）、作業ディレクトリ（根）と `SODA_PROJECT_ROOT`、`ExtensionInfo.approval`（`digest`・`status`・`command`・`cwd`・`groupWritable`・`decidedAt`・`previous`・`deniedBefore`・`approvedAlive`）と `list().approvals`。起動のときの workspace は `snapshot()` から読む（復元は bus に出ない）。
       **この時点では、`approve` などの操作は無い**（T22-2）。テストは、`ApprovalStore` へ直接書いて、前提を作る。単体テスト（偽の子・時計・一時ディレクトリ）: 記録なし → `pending` で `spawn` が呼ばれない／`approved` の記録あり → 動く／`denied` の記録あり → `denied`・`spawn` なし／`enabled: false` で未承認 → `disabled`（`pending` ではない）／
       **`spawn` へ至るきっかけを 1 つずつ**（`start`・`workspace.created`・`reload`・`restart`・`setEnabled(true)`・`stop` → `start`〔入れ替えの失敗からの再開〕・上限の空き・`backoff` の時間切れ）で、承認が無ければ `spawn` が呼ばれないこと（AC18）／
