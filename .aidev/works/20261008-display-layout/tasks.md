@@ -247,7 +247,7 @@
       対象: 上のファイル
       依存: T18
       AC: AC27
-- [ ] T20: 負の対照（PR-B。test 工程）: (a) 4 つの側の `PanePanel` を、1 つの入れ物・1 つの `v-for`（鍵は側）にして、配列の順を替える版か、面を持つ `DisplayFrame` を 1 つの `v-for`（鍵は面の id）で並べて、置き場所で順を替える版 → T18 (6) の「ほかの面の枠は、同じ要素のまま」か「`load` が 1」が落ちる（「作業順序」の 1）。
+- [x] T20: 負の対照（PR-B。test 工程）: (a) 4 つの側の `PanePanel` を、1 つの入れ物・1 つの `v-for`（鍵は側）にして、配列の順を替える版か、面を持つ `DisplayFrame` を 1 つの `v-for`（鍵は面の id）で並べて、置き場所で順を替える版 → T18 (6) の「ほかの面の枠は、同じ要素のまま」か「`load` が 1」が落ちる（「作業順序」の 1）。
       (b) 最小の丸め（`TERMINAL_MIN_ROWS`・`TERMINAL_MIN_COLS`）を外す版 → T18 (3) が落ちる。(c) `installKeepFocusRelease` を呼ばない版 → T18 (6) の「操作中に、つかむ場所・各側のつまみ・［⋮］を押しても、`focus_steal` を送らない」が落ちる（`withDisplayChange` の手順 2 は、マウスでは `installKeepFocusRelease` が先に働くので、E2E では落とせない。単体で見る）。生の出力を `test-result.md` に
       対象: `.aidev/works/20261008-display-layout/test-result.md`
       依存: T18
