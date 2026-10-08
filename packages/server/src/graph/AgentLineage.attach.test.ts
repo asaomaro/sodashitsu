@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   GRAPH_LINKS_MAX,
-  GRAPH_NODES_MAX,
+  GRAPH_LOCAL_NODES_MAX,
   type AgentInfo,
   type Graph,
   type GraphLink,
@@ -205,8 +205,8 @@ describe("AgentLineage.attach", () => {
     expect(addedLog(s.log)).toEqual([]);
   });
 
-  it("追加後のノードが 64 を超えるなら何も足さない（too_many_nodes）", async () => {
-    const nodes = Array.from({ length: GRAPH_NODES_MAX - 1 }, (_, i) => ({
+  it("追加後の手元のノードが上限を超えるなら何も足さない（too_many_nodes）", async () => {
+    const nodes = Array.from({ length: GRAPH_LOCAL_NODES_MAX - 1 }, (_, i) => ({
       key: `local:p${i + 10}` as NodeKey,
       x: i * 10,
       y: 0,
@@ -222,35 +222,35 @@ describe("AgentLineage.attach", () => {
     );
   });
 
-  it("ちょうど 64 になるなら足す（境界）", async () => {
-    const nodes = Array.from({ length: GRAPH_NODES_MAX - 2 }, (_, i) => ({
+  it("ちょうど上限になるなら足す（境界）", async () => {
+    const nodes = Array.from({ length: GRAPH_LOCAL_NODES_MAX - 2 }, (_, i) => ({
       key: `local:p${i + 10}` as NodeKey,
       x: i * 10,
       y: 0,
     }));
     const s = setup({ nodes });
     await s.run();
-    expect(s.store.graph.nodes).toHaveLength(GRAPH_NODES_MAX);
+    expect(s.store.graph.nodes).toHaveLength(GRAPH_LOCAL_NODES_MAX);
   });
 
-  it("ノード 63 本＋子だけ足して 64 になるなら足す（親は既にある）", async () => {
+  it("ノード上限の 1 本手前＋子だけ足して上限になるなら足す（親は既にある）", async () => {
     const nodes = [
       { key: P, x: 0, y: 0 },
-      ...Array.from({ length: GRAPH_NODES_MAX - 2 }, (_, i) => ({
+      ...Array.from({ length: GRAPH_LOCAL_NODES_MAX - 2 }, (_, i) => ({
         key: `local:p${i + 10}` as NodeKey,
         x: i * 10,
         y: 0,
       })),
     ];
-    expect(nodes).toHaveLength(GRAPH_NODES_MAX - 1);
+    expect(nodes).toHaveLength(GRAPH_LOCAL_NODES_MAX - 1);
     const s = setup({ nodes });
     await s.run();
-    expect(s.store.graph.nodes).toHaveLength(GRAPH_NODES_MAX);
+    expect(s.store.graph.nodes).toHaveLength(GRAPH_LOCAL_NODES_MAX);
     expect(s.store.graph.nodes.map((n) => n.key)).toContain(C);
   });
 
-  // 親子と無関係の 17 ノード間の trigger 線（向きは添字の昇順だけで輪にならない。上限の境界用の詰め物）。
-  const fillerNodes = Array.from({ length: 17 }, (_, i) => ({
+  // 親子と無関係の 34 ノード間の trigger 線（向きは添字の昇順だけで輪にならない。上限の境界用の詰め物）。
+  const fillerNodes = Array.from({ length: 34 }, (_, i) => ({
     key: `local:p${i + 10}` as NodeKey,
     x: i * 300,
     y: 300,
@@ -261,7 +261,7 @@ describe("AgentLineage.attach", () => {
       .slice(0, count)
       .map(([from, to], i) => link(firstId + i, "trigger", from, to));
 
-  it("線 127 本＋1 本（片方が外れる）で 128 になるなら足す（境界）", async () => {
+  it("線 511 本＋1 本（片方が外れる）で 512 になるなら足す（境界）", async () => {
     const links = [link(1, "supervise", C, P), ...fillerLinks(GRAPH_LINKS_MAX - 2, 2)];
     expect(links).toHaveLength(GRAPH_LINKS_MAX - 1);
     const s = setup({
@@ -273,7 +273,7 @@ describe("AgentLineage.attach", () => {
     expect(s.store.graph.links).toHaveLength(GRAPH_LINKS_MAX);
   });
 
-  it("線がすでに 128 本なら 1 本足すだけでも何も足さない", async () => {
+  it("線がすでに 512 本なら 1 本足すだけでも何も足さない", async () => {
     const links = [link(1, "supervise", C, P), ...fillerLinks(GRAPH_LINKS_MAX - 1, 2)];
     expect(links).toHaveLength(GRAPH_LINKS_MAX);
     const s = setup({
@@ -285,7 +285,7 @@ describe("AgentLineage.attach", () => {
     expect(s.store.updates).toEqual([]);
   });
 
-  it("追加後の線が 128 を超えるなら何も足さない（too_many_links。ノードも足さない）", async () => {
+  it("追加後の線が 512 を超えるなら何も足さない（too_many_links。ノードも足さない）", async () => {
     const links = Array.from({ length: GRAPH_LINKS_MAX - 1 }, (_, i) =>
       link(i + 1, "trigger", `local:p${i + 10}`, `local:p${i + 500}`),
     );

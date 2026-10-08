@@ -1,6 +1,7 @@
 import {
   GRAPH_LINKS_MAX,
-  GRAPH_NODES_MAX,
+  GRAPH_LOCAL_NODES_MAX,
+  GRAPH_REMOTE_NODES_MAX,
   GRAPH_PROMPT_MAX_BYTES,
   type Graph,
   type GraphLink,
@@ -21,6 +22,7 @@ export type GraphIssueCode =
   | "duplicate_link"
   | "supervisor_taken"
   | "too_many_nodes"
+  | "too_many_remote_nodes"
   | "too_many_links"
   | "prompt_too_long"
   | "empty_prompt"
@@ -118,10 +120,19 @@ function linkRelationIssues(link: LinkDraft, others: readonly LinkDraft[]): Grap
 /** グラフ全体を検証する。問題が無ければ空。 */
 export function validateGraph(graph: Pick<Graph, "nodes" | "links">): GraphIssue[] {
   const issues: GraphIssue[] = [];
-  if (graph.nodes.length > GRAPH_NODES_MAX) {
+  // 手元のノードと別のマシンのノードは別枠で数える（20261008-graph-first D17）。
+  const local = graph.nodes.filter((n) => n.key.startsWith("local:")).length;
+  const remote = graph.nodes.length - local;
+  if (local > GRAPH_LOCAL_NODES_MAX) {
     issues.push({
       code: "too_many_nodes",
-      message: `載せられる pane は ${GRAPH_NODES_MAX} 個までです。`,
+      message: `手元の pane のノードは ${GRAPH_LOCAL_NODES_MAX} 個までです。`,
+    });
+  }
+  if (remote > GRAPH_REMOTE_NODES_MAX) {
+    issues.push({
+      code: "too_many_remote_nodes",
+      message: `別のマシンの pane のノードは ${GRAPH_REMOTE_NODES_MAX} 個までです。`,
     });
   }
   if (graph.links.length > GRAPH_LINKS_MAX) {

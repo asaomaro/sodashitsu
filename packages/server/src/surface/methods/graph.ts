@@ -1,4 +1,5 @@
 import {
+  GRAPH_HISTORY_RESPONSE_MAX,
   GraphGetParams,
   GraphHistoryParams,
   GraphPauseParams,
@@ -42,7 +43,7 @@ export function registerGraphMethods(surface: ControlSurface, deps: MethodDeps):
   });
   surface.register("graph.history", {
     schema: GraphHistoryParams,
-    handler: (_ctx, params) => ({ runs: deps.graphHistory?.(params.linkId, params.limit) ?? [] }),
+    handler: (_ctx, params) => ({ runs: deps.graphHistory?.(params.linkId, params.limit ?? GRAPH_HISTORY_RESPONSE_MAX) ?? [] }),
   });
 }
 

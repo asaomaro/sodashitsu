@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   GRAPH_LINKS_MAX,
   GRAPH_NODES_MAX,
+  GRAPH_LOCAL_NODES_MAX,
+  GRAPH_REMOTE_NODES_MAX,
+  GRAPH_HISTORY_RESPONSE_MAX,
+  GRAPH_HISTORY_PER_LINK,
   GRAPH_OPS_MAX,
   GRAPH_PROMPT_MAX_BYTES,
   GraphGetParams,
@@ -65,6 +69,10 @@ describe("GraphSchema", () => {
       y: 0,
     }));
     expect(GraphSchema.safeParse({ rev: 0, paused: false, nodes, links: [] }).success).toBe(false);
+    expect(
+      GraphSchema.safeParse({ rev: 0, paused: false, nodes: nodes.slice(0, GRAPH_NODES_MAX), links: [] })
+        .success,
+    ).toBe(true);
     const links = Array.from({ length: GRAPH_LINKS_MAX + 1 }, (_, i) => ({
       ...link,
       id: `l${i + 1}`,
@@ -190,5 +198,18 @@ describe("graph.* の方式", () => {
     expect(GraphPauseParams.parse({})).toEqual({});
     expect(GraphPauseParams.safeParse({ linkId: "p 1" }).success).toBe(false);
     expect(GraphHistoryParams.safeParse({ limit: 0 }).success).toBe(false);
+  });
+});
+
+describe("上限の定数（20261008-graph-first D17）", () => {
+  it("手元 512・別のマシン 64（別枠）・線 512・1 回の更新 1024・履歴の応答 6400", () => {
+    expect(GRAPH_LOCAL_NODES_MAX).toBe(512);
+    expect(GRAPH_REMOTE_NODES_MAX).toBe(64);
+    expect(GRAPH_NODES_MAX).toBe(GRAPH_LOCAL_NODES_MAX + GRAPH_REMOTE_NODES_MAX);
+    expect(GRAPH_LINKS_MAX).toBe(512);
+    expect(GRAPH_OPS_MAX).toBe(1024);
+    // 線の数の上限を上げても、履歴の応答の上限は線の数に比例させない。
+    expect(GRAPH_HISTORY_RESPONSE_MAX).toBe(6400);
+    expect(GRAPH_HISTORY_RESPONSE_MAX).not.toBe(GRAPH_HISTORY_PER_LINK * GRAPH_LINKS_MAX);
   });
 });

@@ -1,6 +1,6 @@
 import {
   GRAPH_LINKS_MAX,
-  GRAPH_NODES_MAX,
+  GRAPH_LOCAL_NODES_MAX,
   type Graph,
   type GraphLink,
   type GraphOp,
@@ -200,7 +200,7 @@ export class AgentLineage {
     // 線が 0 本でもノードは足す: 既に別の監督役が居る子も、グラフに見えるようにする（意図）。
     const ops: GraphOp[] = addMissingNodeOps(g, [parent, child]);
     const nodes = ops.length;
-    if (g.nodes.length + nodes > GRAPH_NODES_MAX) {
+    if (g.nodes.length + nodes > GRAPH_LOCAL_NODES_MAX) {
       skip("too_many_nodes");
       return null;
     }

@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { UUID_RE, type Graph, type GraphOp, type NodeKey } from "@sodashitsu/protocol";
+import {
+  GRAPH_LOCAL_NODES_MAX,
+  GRAPH_REMOTE_NODES_MAX,
+  UUID_RE,
+  type Graph,
+  type GraphOp,
+  type NodeKey,
+} from "@sodashitsu/protocol";
 import {
   APPROVAL_LINES_DEFAULT,
   defaultTriggerConfig,
@@ -299,5 +306,30 @@ describe("checkGraphOps", () => {
     expect(checkGraphOps(g, [{ op: "remove_link", id: "l9" }]).map((i) => i.code)).toEqual([
       "unknown_link",
     ]);
+  });
+});
+
+describe("applyGraphOps のノードの上限（手元と別のマシンは別枠。20261008-graph-first）", () => {
+  const localNodes = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ key: `local:p${i + 1}` as NodeKey, x: 0, y: 0 }));
+
+  it("手元のノードが 512 のとき、手元の 513 個目は断り、別のマシンのノードは足せる", () => {
+    const s = state({ nodes: localNodes(GRAPH_LOCAL_NODES_MAX) });
+    const over = applyGraphOps(s, [{ op: "add_node", key: "local:pz", x: 0, y: 0 }]);
+    expect(over.ok).toBe(false);
+    if (!over.ok) expect(over.issues.map((i) => i.code)).toEqual(["too_many_nodes"]);
+    // 否定の対照: 別のマシンのノードは別枠なので、同じ状態でも足せる。
+    expect(applyGraphOps(s, [{ op: "add_node", key: R, x: 0, y: 0 }]).ok).toBe(true);
+  });
+
+  it("別のマシンのノードは 64 まで（65 個目は断る）", () => {
+    const remote = Array.from({ length: GRAPH_REMOTE_NODES_MAX }, (_, i) => ({
+      key: `${"f".repeat(32)}:p${i + 1}` as NodeKey,
+      x: 0,
+      y: 0,
+    }));
+    const r = applyGraphOps(state({ nodes: remote }), [{ op: "add_node", key: `${"e".repeat(32)}:p1`, x: 0, y: 0 }]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.issues.map((i) => i.code)).toEqual(["too_many_remote_nodes"]);
   });
 });
