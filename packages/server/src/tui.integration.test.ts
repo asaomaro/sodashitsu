@@ -170,6 +170,12 @@ function screen(
   };
 }
 
+/**
+ * サイドバー（幅 26）は、長い workspace 名を `…` で切って出す。名前は作業フォルダ名（長いことがある。worktree 名など）なので、
+ * 画面に探すのは名前の先頭だけにする（全文を探すと、作業フォルダ名の長さで通ったり通らなかったりする）。
+ */
+const labelHead = (label: string): string => label.slice(0, 12);
+
 describe("runTui（実サーバ・偽の外側の端末）", () => {
   let local: LocalServer;
   beforeAll(async () => {
@@ -187,7 +193,7 @@ describe("runTui（実サーバ・偽の外側の端末）", () => {
     const s = screen(io);
     const running = runTui(local.target, io);
     try {
-      await vi.waitFor(async () => expect(await s.text()).toContain(ws.label), { timeout: 15_000 });
+      await vi.waitFor(async () => expect(await s.text()).toContain(labelHead(ws.label)), { timeout: 15_000 });
       // 自分の割り付けの大きさ（サイドバー 26・枠の罫線 1）を申告し、サイズ権限を取って PTY がその大きさになる。
       await vi.waitFor(
         () =>
@@ -301,8 +307,8 @@ describe("runTui（実サーバ・偽の外側の端末）", () => {
     const rb = runTui(local.target, b);
     const wsLabel = before.workspaces.find((w) => w.id === before.focus!.workspaceId)!.label;
     try {
-      await vi.waitFor(async () => expect(await sa.text()).toContain(wsLabel), { timeout: 15_000 });
-      await vi.waitFor(async () => expect(await sb.text()).toContain(wsLabel), { timeout: 15_000 });
+      await vi.waitFor(async () => expect(await sa.text()).toContain(labelHead(wsLabel)), { timeout: 15_000 });
+      await vi.waitFor(async () => expect(await sb.text()).toContain(labelHead(wsLabel)), { timeout: 15_000 });
       // A が打つ → A の大きさ（100×30 の割り付けの中身）になり、B（80×24）は切り取る。
       const ma = `TWO_A_${Date.now()}`;
       a.type(`echo ${ma}\r`);
