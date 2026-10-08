@@ -11,6 +11,11 @@ import { useViewStore } from "../store/view.js";
 import TabBar from "./TabBar.vue";
 
 let pinia: Pinia;
+// ドラッグの途中で終わるテストが rAF の繰り返しを残すと、後のテストの rAF の差し替えに混ざる。毎回アンマウントする。
+const mountedWrappers: { unmount(): void }[] = [];
+afterEach(() => {
+  for (const w of mountedWrappers.splice(0)) w.unmount();
+});
 
 beforeEach(() => {
   // view ストアは初期化時に `soda.prefs.v1`（localStorage）を読む。消さないと
@@ -45,7 +50,7 @@ function mountTabBar(
   actions?: { openContextMenu: ReturnType<typeof vi.fn>; run: ReturnType<typeof vi.fn>; newTabInWorkspace?: ReturnType<typeof vi.fn> },
   registry?: { focus: ReturnType<typeof vi.fn> },
 ) {
-  return mount(TabBar, {
+  const wrapper = mount(TabBar, {
     attachTo: document.body,
     global: {
       plugins: [pinia],
@@ -56,6 +61,12 @@ function mountTabBar(
       },
     },
   });
+  mountedWrappers.push(wrapper);
+  // Vue は、同じイベントが 2 つ目の聞き手（根の capture の次のボタン）へ届くとき、マウントと同じ 1ms の中なら捨てる
+  // （`_vts <= invoker.attached`）。実機では起きないが、マウント直後に送るテストが間欠的に落ちるので 2ms 空ける。
+  const t = Date.now();
+  for (let n = 0; Date.now() - t < 2 && n < 5_000_000; n++); // Date が偽物の（時計の）テストでも終わる
+  return wrapper;
 }
 
 describe("TabBar", () => {
@@ -666,13 +677,13 @@ describe("TabBar — tab のドラッグでの並べ替え", () => {
       vi.runAllTimers();
       buttons[2]!.dispatchEvent(clickEv(1));
       expect(view.tabId).toBe("t3");
-      // ドラッグ → watch での取り消し（pointerup 無し）→ touch の pointerdown → click は通る
+      // ドラッグ → watch での取り消し（pointerup 無し）→ 次の操作は自分の pointerdown から始まり、その click は通る
       buttons[0]!.dispatchEvent(pev("pointerdown", 50));
       buttons[0]!.dispatchEvent(pev("pointermove", 450));
       useViewStore(pinia).setOpenDialog("settings");
       await wrapper.vm.$nextTick();
       expect(wrapper.find(".tab-bar-dragging").exists()).toBe(false);
-      buttons[0]!.dispatchEvent(pev("pointerdown", 50, 15, { pointerType: "touch" }));
+      buttons[1]!.dispatchEvent(pev("pointerdown", 150));
       buttons[1]!.dispatchEvent(clickEv(1));
       expect(view.tabId).toBe("t2");
       // ドラッグの直後に「＋」へ来た click
@@ -684,6 +695,46 @@ describe("TabBar — tab のドラッグでの並べ替え", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("旗の取りこぼし: pointercancel・lostpointercapture・つかんだ tab が閉じた後に「＋」を押すと、新しい tab の操作が呼ばれる", async () => {
+    const plusAfter = async (how: "cancel" | "lost" | "closed") => {
+      const newTabInWorkspace = vi.fn();
+      const s = await setup({ actions: { openContextMenu: vi.fn(), run: vi.fn(), newTabInWorkspace } });
+      s.buttons[1]!.dispatchEvent(pev("pointerdown", 150));
+      s.buttons[1]!.dispatchEvent(pev("pointermove", 350));
+      if (how === "cancel") s.buttons[1]!.dispatchEvent(pev("pointercancel", 350));
+      else if (how === "lost") s.buttons[1]!.dispatchEvent(pev("lostpointercapture", 350));
+      else {
+        s.session.workspaceUpserted(makeWorkspace("w1", ["t1", "t3", "t4"]));
+        await s.wrapper.vm.$nextTick();
+      }
+      expect(s.wrapper.find(".tab-bar-dragging").exists()).toBe(false);
+      const plus = s.wrapper.get(".tab-bar-new").element;
+      plus.dispatchEvent(pev("pointerdown", 550));
+      plus.dispatchEvent(pev("pointerup", 550));
+      plus.dispatchEvent(clickEv(1));
+      expect(newTabInWorkspace, how).toHaveBeenCalledWith("w1");
+      s.wrapper.unmount();
+    };
+    await plusAfter("cancel");
+    await plusAfter("lost");
+    await plusAfter("closed");
+  });
+
+  it("Escape の後に離したときの click は捨て、その次のクリックは通る", async () => {
+    const newTabInWorkspace = vi.fn();
+    const { buttons, view, conn } = await setup({ actions: { openContextMenu: vi.fn(), run: vi.fn(), newTabInWorkspace } });
+    buttons[1]!.dispatchEvent(pev("pointerdown", 150));
+    buttons[1]!.dispatchEvent(pev("pointermove", 350));
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    buttons[1]!.dispatchEvent(pev("pointerup", 350));
+    buttons[1]!.dispatchEvent(clickEv(1));
+    expect(view.tabId).toBe("t1");
+    expect(conn.requests).toEqual([]);
+    buttons[2]!.dispatchEvent(pev("pointerdown", 250));
+    buttons[2]!.dispatchEvent(clickEv(1));
+    expect(view.tabId).toBe("t3");
   });
 
   it("ドラッグ中の外からの変化: tab を消す・1 個にする・workspace を変える・ダイアログを開く → 取り消し。tab を足すだけなら続く", async () => {

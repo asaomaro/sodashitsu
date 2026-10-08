@@ -88,7 +88,12 @@ tab バー上のホイールは tab を切り替える（`TabBar.vue` の `onWhe
 - つかんだ tab の薄さは `opacity: 0.4`（design「見た目」）ではなく **`0.7`**（`MUTED_TEXT_ALPHA`）にした。`theme/uiTokens.test.ts` の「部品の CSS の透明度」の検査が、`:disabled` などの例外を除く全部品の `opacity` を 0.7 以上に求めていて、0.4 だと落ちる（文字を薄めて読めなくしない決まり）。例外を足す（テストを緩める）のではなく、決まりに合わせた。薄さだけでなく、`cursor: grabbing` と入る位置の線でも、つかんでいることは分かる。E2E・単体テストは薄さの値を見ていない（クラスだけ）。
 - 自動スクロール（T3）の本体は、T2 と同じファイル `TabBar.vue` の中で一緒に書いた（`edgeScrollDelta` を使う rAF の繰り返しと CSS）。コミットは T2（本体と CSS ごと）と T3（単体テスト）に分けた。
 
-## D17: 実装中に設計から外れた点（PR2）
+## D17: 独立レビュー（PR1）への対応
+
+- 旗 `suppressClick` は、根の `pointerdown` の capture でどの pointerdown でも下ろす（click は必ず自分の pointerdown の後に来るので、ドラッグを離したときの click だけが旗の影響を受ける）。`pointercancel`・`lostpointercapture` の取り消しでも下ろす（その後に click は来ない）。`Esc`・`watch` での取り消しは、離したときの click を捨てるため旗を残す。
+- ペン（`pointerType: "pen"`）で横になぞると、ブラウザのパンが `pointercancel` を出してドラッグが取り消される（仕様の範囲内）。直さない。`docs/verification.md` に「ペンは未確認」と書いた。
+
+## D18: 実装中に設計から外れた点（PR2）
 
 - 落とせない行の薄さは `opacity: 0.45`（design・AC18）ではなく **`0.7`**（`MUTED_TEXT_ALPHA`）にした。`theme/uiTokens.test.ts`「部品の CSS の透明度」が、例外を除く全部品の `opacity` を 0.7 以上に求めていて、0.45 だと落ちる（D16 と同じ理由。テストを緩めず、決まりに合わせた）。薄さだけでなく、上に来たときの点線の枠と、離したときのトーストでも、落とせないことは分かる。E2E は `opacity` が 1 未満であることだけを見る。
 - `paneMoveBlock` の表の 4（`git` はあるのに `worktreeKey` が無い）は、両方が `git: null` でなく片方が `git` を持つ場合も、`key` の無い側が絡めばここで決まる（相手が `git: null` でも `lenient` なら通す）。design の表の順のとおり。

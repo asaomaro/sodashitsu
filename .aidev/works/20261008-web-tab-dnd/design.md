@@ -122,7 +122,7 @@ DOM のクラス（E2E・単体テストが見る）:
 
 **見た目**（AC2）
 - `.tab-bar-dragging`・その中の tab: `cursor: grabbing`。
-- `.tab-bar-item-dragging`: `opacity: 0.4`。
+- `.tab-bar-item-dragging`: `opacity: 0.7`（`MUTED_TEXT_ALPHA`。0.7 未満は `uiTokens.test.ts` の検査が許さない。decisions D16）。
 - 線: `.tab-bar-item-insert-before` は `box-shadow: inset 3px 0 0 var(--soda-resize-line, #f8f8f2)`、`.tab-bar-item-insert-after` は `inset -3px 0 0 …`。`box-shadow` なので tab の幅は変わらない（線の出入りで並びが揺れない）。
 - 動き（transition）は足さない。
 

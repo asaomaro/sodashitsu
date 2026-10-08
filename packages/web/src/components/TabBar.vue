@@ -256,12 +256,29 @@ function onTabPointerUp(ev: PointerEvent): void {
   });
 }
 
+// pointercancel・lostpointercapture の後には click が来ない。旗を残さない。
 function onTabPointerCancel(ev: PointerEvent): void {
-  if (press && press.pointerId === ev.pointerId) cancelTabDrag();
+  if (press && press.pointerId === ev.pointerId) {
+    cancelTabDrag();
+    suppressClick = false;
+  }
 }
 
 function onTabLostCapture(ev: PointerEvent): void {
-  if (press && press.pointerId === ev.pointerId) cancelTabDrag();
+  if (press && press.pointerId === ev.pointerId) {
+    cancelTabDrag();
+    suppressClick = false;
+  }
+}
+
+/**
+ * どの pointerdown でも旗を下ろす（根の capture）。click は必ず自分の pointerdown の後に来るので、
+ * pointerup が tab に届かない取り消しの後に「＋」などを押しても、その click は捨てない。
+ * ドラッグを離したときの click は、旗を立てた後の pointerup の後なので影響を受けない。
+ */
+function onBarPointerDownCapture(): void {
+  suppressClick = false;
+  clearTimeout(suppressTimer);
 }
 
 /** ドラッグの後の click（離した先が tab・「＋」でも）を捨てる。キーボードの click（detail 0）は通す。 */
@@ -337,6 +354,7 @@ function onWheel(ev: WheelEvent): void {
     :class="[`tab-bar-${settings.tabBarPosition}`, { 'tab-bar-dragging': tabDrag }]"
     :style="{ order: settings.tabBarPosition === 'bottom' ? 1 : 0 }"
     @wheel="onWheel"
+    @pointerdown.capture="onBarPointerDownCapture"
     @click.capture="onBarClickCapture"
   >
     <!-- `role="tablist"` が持てるのは `tab` だけなので、＋ と右端の帯はこの入れ子の外に置く。 -->
