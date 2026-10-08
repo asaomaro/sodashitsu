@@ -295,16 +295,15 @@ const graphNode = (page: Page, paneId: string) =>
 const nodeBtn = (page: Page, paneId: string) =>
   graphNode(page, paneId).locator("[data-subagents-button]");
 
-/** 偽のエージェントの pane をグラフに載せて、グラフの画面を開く（`prefix+a`）。 */
+/**
+ * グラフの画面を開く（`prefix+a`）。手元のすべての pane のノードはサーバが持つ（20261008-graph-first）ので、載せる操作は要らない
+ * （偽のエージェントの pane のノードは、起動の維持がすでに足している）。
+ */
 async function openGraphWithNode(
   page: Page,
-  client: SodaTestClient,
+  _client: SodaTestClient,
   paneId: string,
 ): Promise<void> {
-  await client.request("graph.update", {
-    baseRev: 0,
-    ops: [{ op: "add_node", key: `local:${paneId}`, x: 0, y: 0 }],
-  });
   await prefixKey(page, "a");
   await expect(graphView(page)).toBeVisible();
   await expect(graphNode(page, paneId)).toBeVisible();
