@@ -47,7 +47,7 @@ test.describe("(7) 操作を始める・操作中", () => {
       const bad = log.filter((x) => /^(pointerup|mouseup|touchend|keyup|pointerdown|mousedown|click):/.test(x) || x.startsWith("keyup"));
       expect(bad, `${via} の残りのイベントが枠に届いていない`).toEqual([]);
       await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "1");
-      await expect(page.locator("[data-pane-panel-engaged-note]")).toHaveText("入力はこの表示に届きます（Esc で端末へ）");
+      await expect(page.locator("[data-pane-panel-engaged-note]")).toHaveText("入力はこの表示に届きます（Esc か［操作を終える］で端末へ）");
       expect(await page.locator("[data-pane-panel-ring]").evaluate((e) => getComputedStyle(e).borderTopColor)).not.toBe(ringColor0);
       await expect.poll(() => main.evaluate((e) => getComputedStyle(e).opacity)).toBe("0.55");
       await expect(engageBtn(page)).toHaveCount(0);

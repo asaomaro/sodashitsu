@@ -2,6 +2,8 @@
 /** 固定の印「スクリプト」の説明（`title`）。 */
 export const DISPLAY_SCRIPT_MARK_TITLE = "この表示は、pane のプログラムのスクリプトを動かしています";
 export const DISPLAY_ENGAGE_LABEL = "操作する";
+export const DISPLAY_END_LABEL = "操作を終える";
+export const DISPLAY_END_TITLE = "操作を終えて、端末へ戻る（中身が Esc を無効にしても、これは効く）";
 export const DISPLAY_ENGAGE_TITLE = "この表示を操作する（prefix+i）。押すまで、キー入力は端末に届きます";
 </script>
 
@@ -9,7 +11,7 @@ export const DISPLAY_ENGAGE_TITLE = "この表示を操作する（prefix+i）�
 import type { DisplayInfo } from "@sodashitsu/protocol";
 import { computed } from "vue";
 import { isScriptFormat } from "../display/framePage.js";
-import { engageFrame } from "../display/frameRegistry.js";
+import { endEngageFrame, engageFrame } from "../display/frameRegistry.js";
 import { useDisplayStore } from "../store/display.js";
 
 /**
@@ -17,7 +19,7 @@ import { useDisplayStore } from "../store/display.js";
  * どちらも `info.format` から決める（枠の実際の形式と食い違わない）。題・中身には依らない。静的な形式の面には、どちらも出さない。
  * ［操作する］は、操作中でないときだけ出す。押すと `engageEntry` の決まりで、枠が操作を始める（枠・覆いを押しても始まらない）。
  */
-const props = defineProps<{ info: DisplayInfo; part: "mark" | "button" }>();
+const props = defineProps<{ info: DisplayInfo; part: "mark" | "button" | "end" }>();
 const store = useDisplayStore();
 
 const script = computed(() => isScriptFormat(props.info.format) && store.scriptCapable);
@@ -26,6 +28,9 @@ const hinted = computed(() => store.engageHint === props.info.id);
 
 function onClick(ev: MouseEvent): void {
   engageFrame(props.info.id, ev);
+}
+function onEnd(): void {
+  endEngageFrame(props.info.id);
 }
 </script>
 
@@ -42,6 +47,17 @@ function onClick(ev: MouseEvent): void {
     @click="onClick"
   >
     {{ DISPLAY_ENGAGE_LABEL }}
+  </button>
+  <button
+    v-else-if="script && part === 'end' && engaged"
+    type="button"
+    class="display-engage display-engage-end"
+    :title="DISPLAY_END_TITLE"
+    :aria-label="`${DISPLAY_END_LABEL}（${info.name}）`"
+    data-display-end
+    @click="onEnd"
+  >
+    {{ DISPLAY_END_LABEL }}
   </button>
 </template>
 

@@ -36,7 +36,7 @@ window.addEventListener('focus', function () { document.getElementById('i').focu
   await sheet.locator("[data-display-engage]").click();
   await expect(sheet.locator("[data-display-cover]")).toHaveCount(0);
   await expect(sheet.locator("[data-display-engage]")).toHaveCount(0);
-  await expect(sheet.locator(".mobile-display-engaged-note")).toHaveText("入力はこの表示に届きます（Esc で端末へ）");
+  await expect(sheet.locator(".mobile-display-engaged-note")).toHaveText("入力はこの表示に届きます（Esc か［操作を終える］で端末へ）");
   await page.keyboard.type("ab");
   await expect(sheet.frameLocator("iframe[data-display-script]").locator("#i")).toHaveValue("ab");
   // 静的なパネルに切り替えると、印も［操作する］も出ない

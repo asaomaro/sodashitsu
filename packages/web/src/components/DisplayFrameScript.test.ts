@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 import { ENGAGE_KEYUP_WAIT_MS } from "../display/engageEntry.js";
 import { resetFocusOriginTracking } from "../display/focusOrigin.js";
-import { engageFrame, focusFrame } from "../display/frameRegistry.js";
+import { stopFocusDropWatch } from "../display/focusDrop.js";
+import { engageFrame, focusFrame, scriptFramesSnapshot, unregisterScriptFrame } from "../display/frameRegistry.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import DisplayFrame, { DISPLAY_NOTE_FOCUS_DETACHED, DISPLAY_NOTE_UNSUPPORTED } from "./DisplayFrame.vue";
@@ -101,6 +102,8 @@ describe("DisplayFrame（スクリプトが動く形式）", () => {
     vi.stubGlobal("MessageChannel", RealChannel);
     document.body.innerHTML = "";
     resetFocusOriginTracking();
+    for (const f of scriptFramesSnapshot()) unregisterScriptFrame(f.id); // 部品を外さなかった試験の分
+    stopFocusDropWatch();
   });
 
   it("専用の頁と sandbox（allow-scripts だけ）・tabindex=-1・data-display-script。覆いがある。静的な形式には覆いも data-display-script も無い", () => {
@@ -409,8 +412,40 @@ describe("DisplayFrame（スクリプトが動く形式）", () => {
     expect(s.controller.ensureContent).not.toHaveBeenCalled();
   });
 
-  it("静的な枠: よそからフォーカスが来た（foreign-focus）ら元の場所へ戻す。直前に Tab を受けていた・こちらが移した直後は戻さない。回数には数えない", async () => {
+  it("静的な枠の foreign-focus は、画面にスクリプトが動く枠が載っていないときは何も戻さない（支援技術・音声操作・拡張機能のプログラムによるフォーカスを追い出さない）", () => {
     const s = setup({ info: info({ format: "html" }), content: content({ format: "html" }) });
+    const port = s.connect();
+    const term = document.createElement("input");
+    document.body.appendChild(term);
+    term.focus = vi.fn(() => void (active = term));
+    focusOn(term);
+    active = s.iframe;
+    s.fromFrame(port, { type: "foreign-focus" });
+    expect(term.focus).not.toHaveBeenCalled();
+    expect(active).toBe(s.iframe);
+  });
+
+  it("スクリプトが動く枠が載っていても、文書が別のウィンドウ・タブ・ブラウザの UI から戻った直後の foreign-focus は戻さない", () => {
+    setup(); // スクリプトの枠が 1 つ載っている
+    const s = setup({ info: info({ id: "d2", format: "html" }), content: content({ id: "d2", format: "html" }) });
+    const port = s.connect();
+    const term = document.createElement("input");
+    document.body.appendChild(term);
+    term.focus = vi.fn(() => void (active = term));
+    focusOn(term);
+    // 文書がフォーカスを失い（別のウィンドウへ）、戻る
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    window.dispatchEvent(new Event("blur"));
+    vi.advanceTimersByTime(1);
+    window.dispatchEvent(new Event("focus"));
+    active = s.iframe;
+    s.fromFrame(port, { type: "foreign-focus" });
+    expect(term.focus).not.toHaveBeenCalled();
+  });
+
+  it("静的な枠: よそからフォーカスが来た（foreign-focus）ら元の場所へ戻す（スクリプトの枠が載っているとき）。直前に Tab を受けていた・こちらが移した直後は戻さない。回数には数えない", async () => {
+    setup(); // スクリプトの枠が 1 つ載っている
+    const s = setup({ info: info({ id: "d2", format: "html" }), content: content({ id: "d2", format: "html" }) });
     const port = s.connect();
     const term = document.createElement("input");
     document.body.appendChild(term);
@@ -429,7 +464,7 @@ describe("DisplayFrame（スクリプトが動く形式）", () => {
     // 3. prefix+i（自分で移した）
     vi.advanceTimersByTime(1000);
     active = document.body;
-    focusFrame("d1");
+    focusFrame("d2");
     active = s.iframe;
     s.fromFrame(port, { type: "foreign-focus" });
     expect(term.focus).toHaveBeenCalledTimes(1);

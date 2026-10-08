@@ -541,6 +541,7 @@ app.provide(DisplayHostKey, {
       },
       paneId,
     ),
+  focusedPaneId: () => view.focusedPaneId ?? null,
   focusSelectedTerminal: () => {
     const id = view.focusedPaneId;
     if (id) registry.focus(id);

@@ -169,6 +169,7 @@ sodactl display list
 - 利用者は、パネルの幅をドラッグで変えられる（`--size` はその最初の幅）。枠にフォーカスが入ると、利用者のキーは端末でなくその表示に届く（`Esc` で端末へ戻る）。パネルのフォームに、パスワード・token を入れさせない。
 - **スクリプトを動かす面**（`--script-html-file <パス>` か `--format script-html`）: 動くグラフ・絞り込みの一覧など。中身のスクリプトは枠の中（隔離）で動く。ライブラリは中身に埋める（外の URL は読めない。2 MiB まで）。スクリプトから `soda.action("名前", {…})` で操作を返し（`wait`・`events` の行に `source: "script"` が付く）、拡張から `sodactl display send <名前> --json '{…}'`（または標準入力）でデータを送る（64 KiB まで。保存されない。`soda.onMessage` で受ける）。
   **外から取ってきた HTML・スクリプトを `script-html` で出さない**（静的な `html` にする）。**`source: "script"` の操作を、利用者が承認した印として扱わない**（スクリプトは、利用者が押さなくても `soda.action` を呼べる。危ない操作の承認には `sodactl ask` を使う）。
+  **`set` で更新すると枠ごと作り直され、操作中のフォーカスと入力が失われる**。定期的な更新・状態の送り込みには `sodactl display send` を使う。同じ pane で、フォーカスを 3 回取った面があると（回数は冷却が明けるまで戻らない）、5 分は出せない。
   利用者が［操作する］を押す（`prefix+i`）までは、スクリプトの面は覆いの下でキーを受けない。フォーカスを取り続ける・別のページへ移ろうとすると、アプリが止め、その pane は 5 分、スクリプトが動く面を出せない（`set` が `display_busy`。静的な形式は出せる）。`display --features` の `server.features` に `format:script-html`・`send` が無い `soda` は、`{"status":"unsupported",…}`（終了コード 0）。
 - 詳しくは `docs/display.md`。
 - 面の中身・題・操作の値は、他人が読む前提で書く（秘密を入れない）。

@@ -15,10 +15,11 @@ import { DISPLAY_PING_INTERVAL_MS, DISPLAY_UNRESPONSIVE_MS, type DisplayContent,
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { coverStartsEngage, startFromButton, startFromCover, startFromKey } from "../display/engageEntry.js";
 import { FocusGuard } from "../display/focusGuard.js";
-import { installFocusOriginTracking, restoreFocus, tabPressedWithin } from "../display/focusOrigin.js";
+import { documentRegainedFocusWithin, installFocusOriginTracking, restoreFocus, tabPressedWithin } from "../display/focusOrigin.js";
 import { frameKey, framePage } from "../display/framePage.js";
 import { readFrameMessage } from "../display/frameMessages.js";
-import { registerFrame, unregisterFrame, type RegisteredFrame } from "../display/frameRegistry.js";
+import { startFocusDropWatch, stopFocusDropWatch } from "../display/focusDrop.js";
+import { registerFrame, registerScriptFrame, scriptFrameCount, unregisterFrame, unregisterScriptFrame, type RegisteredFrame } from "../display/frameRegistry.js";
 import { readThemeVars } from "../display/themeVars.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -285,6 +286,7 @@ function syncGuardState(): void {
 /** スクリプトが動く形式: いまのフォーカスを見て、「操作中でないのに枠が取った」に変わったときだけ、戻して知らせる。 */
 function checkScriptFocus(): void {
   if (!isScript.value || iframeEl.value === null || phase.value === "closed") return;
+  if (inEndButton(document.activeElement)) return;
   const verdict = guard.observe(frameHasFocus());
   syncGuardState();
   if (verdict === "steal") onSteal();
@@ -333,8 +335,13 @@ function redisplay(): void {
 /** 静的な枠が「よそからフォーカスが来た」と知らせた。利用者が `Tab` で入ったのでも、こちらが移したのでもなければ、元の場所へ戻す（回数には数えない）。 */
 function onForeignFocus(): void {
   if (isScript.value) return;
+  // 脅威は、スクリプトが動く枠が、兄弟の静的な枠へフォーカスを移すことだけ。いま画面にスクリプトが動く枠が載っていなければ、静的な面は何も戻さない（支援技術・音声操作・拡張機能の
+  // プログラムによるフォーカスを、追い出さない）。
+  if (scriptFrameCount() === 0) return;
   const now = Date.now();
-  if (now - lastOwnFocusAt < OWN_FOCUS_IGNORE_MS || tabPressedWithin(TAB_IGNORE_MS)) return;
+  // 利用者が入ったと見られるものは戻さない: 直前の Tab・こちらが移した直後・別のウィンドウ／タブ／ブラウザの UI（アドレスバーからの Tab を含む）から戻った直後。
+  // 見分けられない場合は、戻さない側に倒す（限界。docs に書く）。
+  if (now - lastOwnFocusAt < OWN_FOCUS_IGNORE_MS || tabPressedWithin(TAB_IGNORE_MS) || documentRegainedFocusWithin(TAB_IGNORE_MS * 2)) return;
   const el = iframeEl.value;
   if (el === null || !frameHasFocus()) return;
   restoreFocus(el, () => host?.focusSelectedTerminal());
@@ -351,6 +358,21 @@ function syncFocusPatrol(): void {
   }
 }
 
+/** 画面に載っているスクリプトが動く枠として登録する（静的な枠の `foreign-focus` の戻しと、フォーカスの脱落の見回りは、これが 1 つ以上あるときだけ働く）。 */
+function syncScriptRegistration(): void {
+  if (isScript.value && page.value !== null && phase.value !== "closed") {
+    registerScriptFrame(props.info.id, { paneId: props.info.paneId, format: props.info.format });
+    startFocusDropWatch({
+      focusedPaneId: () => host?.focusedPaneId?.() ?? null,
+      focusSelectedTerminal: () => host?.focusSelectedTerminal(),
+      reportSteal: (id, paneId, format) => void controller?.report(id, "focus_steal", { paneId, format }),
+    });
+  } else {
+    unregisterScriptFrame(props.info.id);
+    if (scriptFrameCount() === 0) stopFocusDropWatch();
+  }
+}
+
 function onFocusSignal(): void {
   if (isScript.value) checkScriptFocus();
   else updateFocusStatic();
@@ -362,7 +384,10 @@ function onFocusSignal(): void {
 function onWindowBlur(): void {
   setTimeout(onFocusSignal, 0);
 }
+const inEndButton = (t: EventTarget | null): boolean => t instanceof Element && t.closest("[data-display-end]") !== null;
 function onDocFocusIn(ev: Event): void {
+  // ［操作を終える］ボタンへ移ったのは、操作を終える途中（その `click` が終える）。ここで終えると、ボタンが消えて `click` が届かない。
+  if (isScript.value && inEndButton(ev.target)) return;
   if (isScript.value && ev.target !== iframeEl.value) {
     // 枠でない要素にフォーカスが移った: 操作を終える。そのあとで枠が取り返したら、新しい「取った」（1 拍置いて見る）。
     guard.leave();
@@ -376,6 +401,8 @@ function onDocPointerDown(ev: Event): void {
   if (!isScript.value || !guard.engaged) return;
   const t = ev.target;
   if (t instanceof Node && (t === iframeEl.value || iframeEl.value?.contains(t))) return;
+  // ［操作を終える］ボタンの押下は、ここで終えない（終えるとボタンが消えて、`click` が届かない）。ボタンの `click` が終える。
+  if (t instanceof Element && t.closest("[data-display-end]")) return;
   guard.leave();
   syncGuardState();
   setTimeout(checkScriptFocus, 0);
@@ -416,6 +443,13 @@ const handle: RegisteredFrame = {
   engageFromButton(ev) {
     if (isScript.value) startFromButton(ev, engageNow);
   },
+  endEngage() {
+    if (!isScript.value || !guard.engaged) return;
+    guard.leave();
+    syncGuardState();
+    host?.focusTerminal(props.info.paneId);
+    if (document.activeElement === iframeEl.value) iframeEl.value?.blur();
+  },
 };
 
 onMounted(() => {
@@ -429,6 +463,7 @@ onMounted(() => {
   document.addEventListener("visibilitychange", onVisibility);
   syncFocusPatrol();
   registerFrame(props.info.id, handle);
+  syncScriptRegistration();
   // `sodactl display send` のデータを、スクリプトが動く枠へ渡す（保存しない。いま描いている枠だけ）。
   offMessage =
     controller?.onMessage(props.info.id, (data) => {
@@ -449,6 +484,8 @@ onBeforeUnmount(() => {
   focusTimer = null;
   offMessage?.();
   unregisterFrame(props.info.id, handle);
+  unregisterScriptFrame(props.info.id);
+  if (scriptFrameCount() === 0) stopFocusDropWatch();
   // 片づけのとき（面が閉じた・版や形式が替わって部品が外れる）、操作中でないのにフォーカスが枠にあれば、元の場所へ戻して「取られた」と 1 回知らせてから外す
   // （取ってから、見回りが気づく前に `close`・版の置き換えで枠を外させる、という逃げ方をさせない）。合い札の合わない合図・時間切れでは送らない。
   const el = iframeEl.value;
@@ -488,6 +525,7 @@ watch(
   { immediate: true },
 );
 watch(() => [props.content, props.info.rev, props.info.format, phase.value], sendRender);
+watch(() => [isScript.value, page.value, phase.value], syncScriptRegistration);
 
 defineExpose({ key: () => frameKey(props.info) });
 </script>

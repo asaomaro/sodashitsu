@@ -472,7 +472,7 @@ PR3（スクリプトが動く形式）の前提 5・6・8・10・11 は、こ�
 |---|---|
 | WebRTC（`RTCPeerConnection`、STUN の宛先を待ち受けの UDP に） | **止まらなかった**: `offer` が作れ、UDP が **5 パケット**届いた。CSP の `webrtc 'block'` は「Unrecognized Content-Security-Policy directive 'webrtc'」で解釈されない |
 | `history.back()`・`go(-1)`・`go(-2)`・`pushState` | アプリのページの URL は変わらない（`#b` → `#b`）。枠自身の履歴が動いて枠が移り、面は `navigated` で閉じた（`history.length` は 4 → 5） |
-| `<link rel=dns-prefetch\|preconnect\|prefetch\|prerender\|modulepreload>` | **止まった**（待ち受けへの TCP 接続 0・1.5 秒見た） |
+| `<link rel=dns-prefetch\|preconnect\|prefetch\|prerender\|modulepreload>` | 待ち受けへの **TCP 接続は届かなかった**（0・1.5 秒見た）。**`dns-prefetch` は DNS の問い合わせだけが外へ出るので、ループバックの待ち受けでは測れていない（出る前提で考える）** |
 | クリップボード | 操作を始めて枠の中をクリックする前: `execCommand("copy")` は `false`。クリックした後: **`true` で、クリップボードが書き換わった**（`readText` が `copy-me`）。`navigator.clipboard.writeText` は前後とも `NotAllowedError` |
 | 音 | 前: `AudioContext` が `suspended`・`audio.play()` が `NotAllowedError`。クリックの後: `AudioContext` が `running`・`play()` が成功（**止まらなかった**） |
 | 全画面・Picture-in-Picture | `requestFullscreen` は拒否（`TypeError`）。`document.pictureInPictureEnabled` は偽（**止まった**） |
@@ -529,3 +529,29 @@ PR3（スクリプトが動く形式）の前提 5・6・8・10・11 は、こ�
 | (h10) 片づけのときの横取りの知らせを外す | 単体が落ちた | 通った |
 
 **実行していない版**: (h3)（土台が `document.open(); document.write()` で入れる）——設計は「`load` が 2 回になるブラウザでだけ落ちる」としていて、土台を書き換える手間が大きいので、実行していない。(h9)（合い札の合う 2 回目の合図を受ける）——`phase` の検査と `readySeen` の二重で、片方だけ外しても落ちない作り。(h5) の画面側（`report` を `sendAction` の頻度の制限に入れる）は、`DisplayController.test.ts`「100 回続けても全部送る」が見る。
+
+
+## PR3 の独立レビューを受けた直し（D33）
+
+レビュー: must 0・should 4・nit。直した内容は `decisions.md` D33。**直す前（レビュー前の版）に新しい E2E を流した生の出力**（`display-script-review.spec.ts`。6 件中 4 件が落ちた。落ちなかった 2 件は、直す前から成り立つ対照）:
+
+```
+  ✘  1 (レビュー 1) スクリプトの面が載っていないとき: 静的な面の欄へプログラムでフォーカスを入れても、端末へ戻されない
+       Expected substring: "IFRAME"   Received string: "TEXTAREA"          ← 利用者の入力中の欄から追い出された
+  ✓  2 (レビュー 1) スクリプトの面が載っているとき: 静的な面へプログラムでフォーカスが入ると、元の場所へ戻される
+  ✘  3 (レビュー 2) 単発: window.focus(); parent.focus() … 元の場所へ戻り、打った文字が端末に届く。取られた回数が進む
+       Expected: >= 1   Received: 0                                         ← 検知されず、数えられない
+MEASURE focus-drop-loop: typed=91 reached-pane=0 steal-reports=0            ← 91 キー打って pane に 0
+  ✘  4 (レビュー 2) 4ms ごとの繰り返し … 3 回で面が閉じ、その pane は冷却に入る
+       Expected: >= 3   Received: 0
+  ✓  5 (レビュー 2) 利用者が余白を押して端末からフォーカスが外れても、数えない
+  ✘  6 (レビュー 3) isComposing・Function.prototype.call を差し替えた中身でも、土台の Esc が効き、port は拾われず、［操作を終える］でも端末へ戻れる
+       Expected: visible（［操作を終える］が無い）
+```
+
+直した後: 6 件とも通り（`MEASURE focus-drop-loop: typed=75 reached-pane=75 steal-reports=9`）、レビュー 5 の E2E「知らせが見出しに重ならない」も通る。知らせを右下へ寄せる直しを外した版では、「`.pane-panel-head` と知らせが重ならない」で落ちる。
+
+- 追加した単体: `scriptHost.test.ts`（実行時に `.call`/`.apply`/`.bind`/配列メソッド/`for...of`/スプレッドを使わない静的な検査・`Function.prototype.call`/`apply`・`KeyboardEvent.prototype.isComposing`・`Object.prototype` の setter を差し替えても `Esc`・`ping`・`soda.action`・`onMessage` が動く・合成の `Esc` は取り次がない）、`focusDrop.test.ts`（6 件）、`DisplayFrameScript.test.ts`（スクリプトの枠が載っていないと `foreign-focus` で戻さない・ウィンドウから戻った直後は戻さない・載っているときは戻す）。
+- `display-flows (2)` は、`click()` を先に入れた直しを取り消し、元の `fill()` だけで通ることを確かめた（スクリプトの面が載っていない状態）。
+- 実測の言い直し（docs と突き合わせた）: `dns-prefetch` は「TCP の接続が届かなかった。DNS の問い合わせが外へ出るかは測れていない」。兄弟の枠への `focus()` は「呼べるが、Chromium 153 では移らなかった」。そのほかの行（WebRTC・クリップボード・音・`window.name`・`postMessage`/`MessagePort`・`location`・全画面・PiP・外への移動・隔離の探り）は、docs の「止まった」「止まらなかった」と測定の出力が同じ向きであることを 1 項目ずつ確かめた。
+- 結果: `pnpm build`・`pnpm typecheck` 通過。`pnpm test` は 8640 件中 8637 件が通り、落ちたのは既知の `tui.integration.test.ts` の 3 件だけ。display の E2E は全部（PR2 の分を含む）通った（レビューの 6 件を足して 106 件。［操作を終える］の文言変更で落ちた 2 件の期待を直して通った）。

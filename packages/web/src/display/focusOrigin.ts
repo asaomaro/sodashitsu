@@ -16,8 +16,40 @@ let target: Document | null = null;
 let lastTabAt = -Infinity;
 const lastNow = (): number => Date.now();
 
+let lastUserInputAt = -Infinity;
+let regainedAt = -Infinity;
+let docUnfocused = false;
+
 function onKeyDown(ev: Event): void {
   if ((ev as KeyboardEvent).key === "Tab") lastTabAt = lastNow();
+}
+/** 本物の（isTrusted の）ポインタ・タッチの操作（フォーカスが、利用者の操作でアプリの要素から離れたのか、を見分ける）。 */
+function onPointer(ev: Event): void {
+  if (ev.isTrusted) lastUserInputAt = lastNow();
+}
+function onWindowBlur(): void {
+  // 枠（iframe）へフォーカスが移っても親の window の `blur` は起きる。文書がフォーカスを持たなくなった（別のウィンドウ・タブへ移った）ときだけ数える。1 拍置いて見る。
+  setTimeout(() => {
+    if (target && !target.hasFocus()) docUnfocused = true;
+  }, 0);
+}
+function onWindowFocus(): void {
+  if (docUnfocused) {
+    docUnfocused = false;
+    regainedAt = lastNow(); // 別のウィンドウ・タブ・ブラウザの UI（アドレスバーから Tab）から戻った
+  }
+}
+
+/** 直前（`ms` 以内）に、親の文書が（別のウィンドウ・タブ・ブラウザの UI から）フォーカスを取り戻したか。 */
+export function documentRegainedFocusWithin(ms: number): boolean {
+  return lastNow() - regainedAt < ms;
+}
+/**
+ * 直前（`ms` 以内）に、本物のポインタ・タッチの操作が親の文書にあったか（余白を押して、フォーカスが body へ落ちた、を見分ける）。
+ * **キーは数えない**: 打っている最中にフォーカスを落とされるのが、まさに止めたい被害で、キーはフォーカスを body へ落とさない。
+ */
+export function userInputWithin(ms: number): boolean {
+  return lastNow() - lastUserInputAt < ms;
 }
 
 /** 直前（`ms` 以内）に、親の文書で `Tab` のキーを受けたか（利用者が `Tab` で枠へ入ったのかを見分ける）。 */
@@ -39,9 +71,15 @@ export function installFocusOriginTracking(doc: Document = document): void {
   if (installed && target) {
     target.removeEventListener("focusin", onFocusIn, true);
     target.removeEventListener("keydown", onKeyDown, true);
+    for (const t of ["pointerdown", "mousedown", "touchstart"]) target.removeEventListener(t, onPointer, true);
+    target.defaultView?.removeEventListener("blur", onWindowBlur);
+    target.defaultView?.removeEventListener("focus", onWindowFocus);
   }
   doc.addEventListener("focusin", onFocusIn, true);
   doc.addEventListener("keydown", onKeyDown, true);
+  for (const t of ["pointerdown", "mousedown", "touchstart"]) doc.addEventListener(t, onPointer, true);
+  doc.defaultView?.addEventListener("blur", onWindowBlur);
+  doc.defaultView?.addEventListener("focus", onWindowFocus);
   installed = true;
   target = doc;
 }
@@ -51,11 +89,17 @@ export function resetFocusOriginTracking(): void {
   if (installed && target) {
     target.removeEventListener("focusin", onFocusIn, true);
     target.removeEventListener("keydown", onKeyDown, true);
+    for (const t of ["pointerdown", "mousedown", "touchstart"]) target.removeEventListener(t, onPointer, true);
+    target.defaultView?.removeEventListener("blur", onWindowBlur);
+    target.defaultView?.removeEventListener("focus", onWindowFocus);
   }
   installed = false;
   target = null;
   origin = null;
   lastTabAt = -Infinity;
+  lastUserInputAt = -Infinity;
+  regainedAt = -Infinity;
+  docUnfocused = false;
 }
 
 /** 覚えている元の場所（まだ文書の中にあるときだけ）。 */

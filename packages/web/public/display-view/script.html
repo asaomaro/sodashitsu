@@ -14,34 +14,75 @@
 <script>
 // 表示の面（スクリプトが動く形式 `script-html`）の枠の土台。20261007-soda-extensions の design「スクリプトが動く形式」。
 // アプリ本体の iframe（sandbox="allow-scripts"。allow-same-origin なし＝不透明 origin）が開く。親とのやりとりは MessageChannel の port だけ。
-// **このスクリプトは頁の中に直に書く**（別ファイルにしない＝CSP の script-src に 'self' を付けない。中身のスクリプトが同じ origin の URL を <script src> で読めないように）。
+// **このスクリプトは頁の中に直に書く**（別ファイルにしない＝CSP の script-src に 'self' を付けない）。
 // 中身（作者のスクリプトを含む）は、この土台の**あとで**、同じ window に **DOM として差し込む**（document.open()/document.write() は使わない）。
 //
-// 守り方: 中身のスクリプトは土台と同じ window で動く。土台が持つもの（port・soda）は、中身から書き換えられる・呼べる・ほかの窓へ渡せる、という前提で作る
-// （守るのは枠の外。枠の中に、守るべきものを置かない。枠の言うことは、親とサーバが確かめる）。ただし、
-//  - 名前の上書き（DOM clobbering）と、プロトタイプの差し替えに備え、読み込み時（中身を入れる前）に控えた Document/Element/Node/EventTarget/MessagePort のメソッドと getter を
-//    `call` で使い、中身の要素・document のプロパティを直接読まない。
-//  - Esc の取り次ぎは、中身より先に付ける。prefix は取り次がない（利用者のキーの設定を、信頼できない中身に教えない）。
+// 守り方: 中身のスクリプトは土台と同じ window で動き、プロトタイプ・グローバルを差し替えられる。土台の仕事（Esc の取り次ぎ・port への送受信・差し込み）を乗っ取られないよう、
+//  - **読み込み時（中身が動く前）に、使う関数・getter・setter・コンストラクタを全部控える**。実行時に、グローバル・プロトタイプ・オブジェクトのメソッドを 1 つも読まない。
+//  - 呼び出しは、控えた `Reflect.apply`（`rApply`）だけで行う（`.call`・`.apply`・`.bind` を使わない＝`Function.prototype.call` を差し替えられても影響を受けない）。
+//  - 土台が作る物（port へ送る物・設定の物・待ち受けの名簿）は、`Object.create(null)` か、控えた `defineProperty` で自前のプロパティとして作る（`Object.prototype` の setter・getter の影響を受けない）。
+//  - 配列の添え字への代入・`for...of`・スプレッドを使わない（`Array.prototype` の添え字の setter・`Symbol.iterator` の差し替えの影響を受ける）。
+//  - `Esc` の受け手は、`window` の capture に、読み込み時（＝中身より先）に登録する。本物の（`isTrusted` の）キーだけを見る。
+// それでも、中身が port 自体を拾う・window を書き換える等は止められない（枠の外を守る。枠の中に、守るべきものを置かない。枠の言うことは、親とサーバが確かめる）。
 (function () {
   'use strict';
+  // --- 読み込み時に控える（これより後、中身が差し替えうるものを読まない）--------------------------------------
+  var rApply = Reflect.apply;
+  var objCreate = Object.create;
+  var defProp = Object.defineProperty;
+  var objKeys = Object.keys;
+  var objFreeze = Object.freeze;
+  var objGetProto = Object.getPrototypeOf;
+  var objGetDesc = Object.getOwnPropertyDescriptor;
+  var jsonStringify = JSON.stringify;
+  var isFiniteF = isFinite;
+  var arrayIsArray = Array.isArray;
+  var u8Length = getterOfEarly(Uint8Array.prototype, 'length');
+  var D = Document.prototype;
+  var E = Element.prototype;
+  var N = Node.prototype;
+  var ET = EventTarget.prototype;
+  var PARENT = parent;
+  var WIN = window;
+  var DOC = document;
+  var LOC = location;
+  var EventCtor = Event;
+  var ParserCtor = DOMParser;
+  var Encoder = TextEncoder;
+  var UrlParams = URLSearchParams;
+  var RegExpTest = RegExp.prototype.test;
   var ACTION_RE = /^[A-Za-z0-9_.:-]{1,64}$/;
+  var THEME_VAR_RE = /^--[A-Za-z0-9-]+$/;
   var FIELDS_MAX = 64;
   var KEY_MAX = 64;
   var DATA_MAX_BYTES = 8 * 1024;
   var SVG_NS = 'http://www.w3.org/2000/svg';
+  var HTML_NS = 'http://www.w3.org/1999/xhtml';
 
-  // --- 読み込み時に控える（中身を入れる前）-------------------------------------------------------------------
-  function getterOf(proto, name) {
-    for (var o = proto; o; o = Object.getPrototypeOf(o)) {
-      var d = Object.getOwnPropertyDescriptor(o, name);
+  function getterOfEarly(proto, name) {
+    for (var o = proto; o; o = objGetProto(o)) {
+      var d = objGetDesc(o, name);
       if (d && d.get) return d.get;
     }
     return undefined;
   }
-  var D = Document.prototype;
-  var E = Element.prototype;
-  var N = Node.prototype;
-  var PARENT = parent;
+  function getterOf(proto, name) {
+    for (var o = proto; o; o = objGetProto(o)) {
+      var d = objGetDesc(o, name);
+      if (d && d.get) return d.get;
+    }
+    return undefined;
+  }
+  function setterOf(proto, name) {
+    for (var o = proto; o; o = objGetProto(o)) {
+      var d = objGetDesc(o, name);
+      if (d && d.set) return d.set;
+    }
+    return undefined;
+  }
+  // ブラウザは getter を prototype に持つ。持たない実装（単体テストの DOM）では、直に読む。
+  function rd(getter, obj, prop) { return getter ? rApply(getter, obj, []) : obj[prop]; }
+
   var docCreateElementNS = D.createElementNS;
   var docCreateTextNode = D.createTextNode;
   var docCreateComment = D.createComment;
@@ -50,225 +91,307 @@
   var docHead = getterOf(D, 'head');
   var docElement = getterOf(D, 'documentElement');
   var docReady = getterOf(D, 'readyState');
-  var addListener = EventTarget.prototype.addEventListener;
-  var dispatch = EventTarget.prototype.dispatchEvent;
+  var addListener = ET.addEventListener;
+  var dispatch = ET.dispatchEvent;
   var setAttribute = E.setAttribute;
   var nodeAppend = N.appendChild;
   var nodeChildren = getterOf(N, 'childNodes');
   var nodeType = getterOf(N, 'nodeType');
-  var charData = typeof CharacterData !== 'undefined' ? getterOf(CharacterData.prototype, 'data') : undefined;
   var elLocalName = getterOf(E, 'localName');
   var elNamespace = getterOf(E, 'namespaceURI');
   var elAttributes = getterOf(E, 'attributes');
+  var nodeListLen = typeof NodeList !== 'undefined' ? getterOf(NodeList.prototype, 'length') : undefined;
+  var attrMapLen = typeof NamedNodeMap !== 'undefined' ? getterOf(NamedNodeMap.prototype, 'length') : undefined;
+  var elStyle = getterOf(typeof HTMLElement !== 'undefined' ? HTMLElement.prototype : E, 'style');
+  var styleSetProperty = typeof CSSStyleDeclaration !== 'undefined' ? CSSStyleDeclaration.prototype.setProperty : undefined;
+  var charData = typeof CharacterData !== 'undefined' ? getterOf(CharacterData.prototype, 'data') : undefined;
   var attrName = typeof Attr !== 'undefined' ? getterOf(Attr.prototype, 'name') : undefined;
   var attrValue = typeof Attr !== 'undefined' ? getterOf(Attr.prototype, 'value') : undefined;
-  // ブラウザは getter を prototype に持つ。持たない実装（単体テストの DOM）では、直に読む。
-  function read(getter, obj, prop) { return getter ? getter.call(obj) : obj[prop]; }
-  var slice = Array.prototype.slice;
-  var objectKeys = Object.keys;
-  var objectFreeze = Object.freeze;
-  var jsonStringify = JSON.stringify;
-  var EventCtor = Event;
-  var ParserCtor = DOMParser;
-  var Encoder = TextEncoder;
-  var portPost = typeof MessagePort === 'function' ? MessagePort.prototype.postMessage : null;
-  var winFocus = window.focus;
-  var winScrollBy = window.scrollBy;
-  var ticket = new URLSearchParams(location.search).get('t') || '';
+  var scriptTextSet = typeof HTMLScriptElement !== 'undefined' ? setterOf(HTMLScriptElement.prototype, 'text') : undefined;
+  var nodeTextSet = setterOf(N, 'textContent');
+  var domParse = ParserCtor.prototype.parseFromString;
+  var encoderEncode = Encoder.prototype.encode;
+  var paramsGet = UrlParams.prototype.get;
+  // イベント・メッセージ・port。本物のブラウザではこれらが prototype の getter・メソッド。
+  var evPreventDefault = Event.prototype.preventDefault;
+  var kbKey = typeof KeyboardEvent !== 'undefined' ? getterOf(KeyboardEvent.prototype, 'key') : undefined;
+  var kbComposing = typeof KeyboardEvent !== 'undefined' ? getterOf(KeyboardEvent.prototype, 'isComposing') : undefined;
+  var kbCode = typeof KeyboardEvent !== 'undefined' ? getterOf(KeyboardEvent.prototype, 'keyCode') : undefined;
+  var msgData = typeof MessageEvent !== 'undefined' ? getterOf(MessageEvent.prototype, 'data') : undefined;
+  var msgPorts = typeof MessageEvent !== 'undefined' ? getterOf(MessageEvent.prototype, 'ports') : undefined;
+  var msgSource = typeof MessageEvent !== 'undefined' ? getterOf(MessageEvent.prototype, 'source') : undefined;
+  var portPost = typeof MessagePort === 'function' ? MessagePort.prototype.postMessage : undefined;
+  var portOnmessageSet = typeof MessagePort === 'function' ? setterOf(MessagePort.prototype, 'onmessage') : undefined;
+  var winFocus = WIN.focus;
+  var winScrollBy = WIN.scrollBy;
+  var parentPostMessage = undefined;
+  try { parentPostMessage = PARENT.postMessage; } catch (e) { /* 親が窓でない（単体テストの偽物）ときは、下で直に呼ぶ */ }
+
+  var ticket = '';
+  try {
+    var search = LOC.search; // 読み込み時（中身が動く前）に 1 回だけ読む
+    var got = rApply(paramsGet, new UrlParams(search), ['t']);
+    ticket = got === null || got === undefined ? '' : got;
+  } catch (e) { ticket = ''; }
+
   var port = null;
   var inited = false;
+  var portReal = false; // 受け取った port が本物の MessagePort か（中身が動く前の、受け取った時点で 1 回だけ決める）
   var rendered = false; // render は 1 つの枠につき 1 回だけ（2 回目以降は無視。中身・形式・版が替わったら、親が枠を作り直す）
   var rev = 0;
-  var listeners = [];
+  // 受け手の名簿: null 原型の物に、数の id で入れる（`Array.prototype` を使わない）。
+  var listeners = objCreate(null);
+  var listenerCount = 0;
+
+  function own(obj, key, value) { defProp(obj, key, { value: value, writable: true, enumerable: true, configurable: true }); }
+  function mk() { return objCreate(null); }
 
   function post(msg) {
     if (!port) return;
-    // 本物の MessagePort には、控えたメソッドで送る（中身が MessagePort.prototype.postMessage を差し替えても、port は拾われない）。
-    if (portPost && typeof MessagePort === 'function' && port instanceof MessagePort) portPost.call(port, msg);
+    // 本物の MessagePort には、控えたメソッドで送る（中身がメソッドを差し替えても、port は拾われない）。
+    // 本物の port では例外にならない。偽物（単体テスト）のときだけ、直に呼ぶ。
+    if (portReal) rApply(portPost, port, [msg]);
     else port.postMessage(msg);
   }
 
   function isPlainStringMap(data) {
-    if (typeof data !== 'object' || data === null || Array.isArray(data)) return false;
-    var keys = objectKeys(data);
+    if (typeof data !== 'object' || data === null) return false;
+    if (rApply(arrayIsArray, undefined, [data])) return false;
+    var keys = objKeys(data);
     if (keys.length > FIELDS_MAX) return false;
+    var out = mk();
     for (var i = 0; i < keys.length; i++) {
-      var n = Array.from(keys[i]).length;
-      if (n < 1 || n > KEY_MAX || typeof data[keys[i]] !== 'string') return false;
+      var k = keys[i];
+      var v = data[k];
+      if (k.length < 1 || k.length > KEY_MAX || typeof v !== 'string') return false;
+      own(out, k, v);
     }
-    return new Encoder().encode(jsonStringify(data)).length <= DATA_MAX_BYTES;
+    return rd(u8Length, rApply(encoderEncode, new Encoder(), [jsonStringify(out)]), 'length') <= DATA_MAX_BYTES;
   }
 
   /** window.soda。action は、規則の外の名前・値なら false を返して送らない（静的な形式の data-soda-action と同じ規則）。 */
   function makeSoda(theme) {
-    var vars = {};
-    if (theme && typeof theme.vars === 'object' && theme.vars) {
-      objectKeys(theme.vars).forEach(function (k) { if (typeof theme.vars[k] === 'string') vars[k] = theme.vars[k]; });
+    var vars = mk();
+    var dark = false;
+    if (theme && typeof theme === 'object') {
+      dark = !!theme.dark;
+      var tv = theme.vars;
+      if (tv && typeof tv === 'object') {
+        var ks = objKeys(tv);
+        for (var i = 0; i < ks.length; i++) if (typeof tv[ks[i]] === 'string') own(vars, ks[i], tv[ks[i]]);
+      }
     }
-    var soda = {
-      version: 1,
-      action: function (name, data) {
-        if (typeof name !== 'string' || !ACTION_RE.test(name)) return false;
-        if (data !== undefined && !isPlainStringMap(data)) return false;
-        var m = { type: 'action', rev: rev, action: name };
-        if (data !== undefined) m.data = data;
-        post(m);
-        return true;
-      },
-      onMessage: function (fn) {
-        if (typeof fn !== 'function') return function () {};
-        listeners.push(fn);
-        return function () {
-          var i = listeners.indexOf(fn);
-          if (i >= 0) listeners.splice(i, 1);
-        };
-      },
-      theme: objectFreeze({ dark: !!(theme && theme.dark), vars: objectFreeze(vars) }),
-    };
-    return objectFreeze(soda);
+    var th = mk();
+    own(th, 'dark', dark);
+    own(th, 'vars', objFreeze(vars));
+    var soda = mk();
+    own(soda, 'version', 1);
+    own(soda, 'action', function (name, data) {
+      if (typeof name !== 'string' || !rApply(RegExpTest, ACTION_RE, [name])) return false;
+      if (data !== undefined && !isPlainStringMap(data)) return false;
+      var m = mk();
+      own(m, 'type', 'action');
+      own(m, 'rev', rev);
+      own(m, 'action', name);
+      if (data !== undefined) {
+        var copy = mk();
+        var dk = objKeys(data);
+        for (var i = 0; i < dk.length; i++) own(copy, dk[i], data[dk[i]]);
+        own(m, 'data', copy);
+      }
+      post(m);
+      return true;
+    });
+    own(soda, 'onMessage', function (fn) {
+      if (typeof fn !== 'function') return function () {};
+      var id = listenerCount++;
+      own(listeners, id, fn);
+      return function () { delete listeners[id]; };
+    });
+    own(soda, 'theme', objFreeze(th));
+    return objFreeze(soda);
   }
 
   function applyTheme(theme) {
     if (!theme || typeof theme !== 'object') return;
-    var de = read(docElement, document, 'documentElement');
-    setAttribute.call(de, 'data-dark', theme.dark ? '1' : '0');
+    var de = rd(docElement, DOC, 'documentElement');
+    rApply(setAttribute, de, ['data-dark', theme.dark ? '1' : '0']);
     var vars = theme.vars;
     if (vars && typeof vars === 'object') {
-      objectKeys(vars).forEach(function (k) {
-        if (/^--[A-Za-z0-9-]+$/.test(k) && typeof vars[k] === 'string') de.style.setProperty(k, vars[k]);
-      });
+      var ks = objKeys(vars);
+      var st = rd(elStyle, de, 'style');
+      for (var i = 0; i < ks.length; i++) {
+        if (rApply(RegExpTest, THEME_VAR_RE, [ks[i]]) && typeof vars[ks[i]] === 'string') {
+          if (styleSetProperty) rApply(styleSetProperty, st, [ks[i], vars[ks[i]]]);
+          else st.setProperty(ks[i], vars[ks[i]]);
+        }
+      }
     }
   }
 
   // --- 中身を DOM に差し込む ---------------------------------------------------------------------------------
   function copyAttributes(from, to) {
-    var attrs = read(elAttributes, from, 'attributes');
-    for (var i = 0; i < attrs.length; i++) {
-      try { setAttribute.call(to, read(attrName, attrs[i], 'name'), read(attrValue, attrs[i], 'value')); } catch (e) { /* 不正な属性名は飛ばす */ }
+    var attrs = rd(elAttributes, from, 'attributes');
+    var n = rd(attrMapLen, attrs, 'length');
+    for (var i = 0; i < n; i++) {
+      try { rApply(setAttribute, to, [rd(attrName, attrs[i], 'name'), rd(attrValue, attrs[i], 'value')]); } catch (e) { /* 不正な属性名は飛ばす */ }
     }
+  }
+  /** <script> の中身（子の文字ノードをつなぐ）。 */
+  function scriptText(el) {
+    var kids = rd(nodeChildren, el, 'childNodes');
+    var out = '';
+    var kn = rd(nodeListLen, kids, 'length');
+    for (var i = 0; i < kn; i++) if (rd(nodeType, kids[i], 'nodeType') === 3) out += rd(charData, kids[i], 'data');
+    return out;
   }
   /**
    * 解釈した木の `src` の子を、`liveParent`（いまの文書の中）へ、文書の順に 1 つずつ入れる。親を先に入れてから子を入れる（パーサーと同じ順）。
    * `<script>` は、そのまま移すと動かない（パーサーが作ったものは「実行済み」）ので、同じ属性と中身の新しい `<script>` を作って、その位置に入れる
-   * （インラインのスクリプトは、入れた時点で同期に動く）。
+   * （インラインのスクリプトは、入れた時点で同期に動く）。`src` の子は live ではないので、添え字で辿ってよい（`src` は変わらない）。
    */
-  /** <script> の中身（子の文字ノードをつなぐ）。 */
-  function scriptText(el) {
-    var kids = slice.call(read(nodeChildren, el, 'childNodes'));
-    var out = '';
-    for (var i = 0; i < kids.length; i++) if (read(nodeType, kids[i], 'nodeType') === 3) out += read(charData, kids[i], 'data');
-    return out;
-  }
   function insertChildren(src, liveParent) {
-    var kids = slice.call(read(nodeChildren, src, 'childNodes'));
-    for (var i = 0; i < kids.length; i++) {
+    var kids = rd(nodeChildren, src, 'childNodes');
+    var kcount = rd(nodeListLen, kids, 'length');
+    for (var i = 0; i < kcount; i++) {
       var n = kids[i];
-      var t = read(nodeType, n, 'nodeType');
+      var t = rd(nodeType, n, 'nodeType');
       if (t === 3) {
-        nodeAppend.call(liveParent, docCreateTextNode.call(document, read(charData, n, 'data')));
+        rApply(nodeAppend, liveParent, [rApply(docCreateTextNode, DOC, [rd(charData, n, 'data')])]);
       } else if (t === 8) {
-        nodeAppend.call(liveParent, docCreateComment.call(document, read(charData, n, 'data')));
+        rApply(nodeAppend, liveParent, [rApply(docCreateComment, DOC, [rd(charData, n, 'data')])]);
       } else if (t === 1) {
-        var name = read(elLocalName, n, 'localName');
+        var name = rd(elLocalName, n, 'localName');
         if (name === 'script') {
-          var ns = read(elNamespace, n, 'namespaceURI');
-          var script = docCreateElementNS.call(document, ns === SVG_NS ? SVG_NS : 'http://www.w3.org/1999/xhtml', 'script');
+          var ns = rd(elNamespace, n, 'namespaceURI');
+          var script = rApply(docCreateElementNS, DOC, [ns === SVG_NS ? SVG_NS : HTML_NS, 'script']);
           copyAttributes(n, script);
           var code = scriptText(n);
-          if (ns === SVG_NS) script.textContent = code;
+          if (ns === SVG_NS && nodeTextSet) rApply(nodeTextSet, script, [code]);
+          else if (scriptTextSet) rApply(scriptTextSet, script, [code]);
           else script.text = code;
-          nodeAppend.call(liveParent, script); // ここで動く
+          rApply(nodeAppend, liveParent, [script]); // ここで動く
         } else if (name === 'template') {
-          nodeAppend.call(liveParent, docImportNode.call(document, n, true)); // template の中身は inert
+          rApply(nodeAppend, liveParent, [rApply(docImportNode, DOC, [n, true])]); // template の中身は inert
         } else {
-          var live = docImportNode.call(document, n, false);
-          nodeAppend.call(liveParent, live);
+          var live = rApply(docImportNode, DOC, [n, false]);
+          rApply(nodeAppend, liveParent, [live]);
           insertChildren(n, live);
         }
       }
     }
   }
   function inject(source) {
-    var liveHtml = read(docElement, document, 'documentElement');
-    var liveHead = read(docHead, document, 'head');
-    var liveBody = read(docBody, document, 'body');
-    var doc = new ParserCtor().parseFromString(source, 'text/html');
-    var parsedHtml = read(docElement, doc, 'documentElement');
-    var parsedHead = read(docHead, doc, 'head');
-    var parsedBody = read(docBody, doc, 'body');
+    var liveHtml = rd(docElement, DOC, 'documentElement');
+    var liveHead = rd(docHead, DOC, 'head');
+    var liveBody = rd(docBody, DOC, 'body');
+    var doc = rApply(domParse, new ParserCtor(), [source, 'text/html']);
+    var parsedHtml = rd(docElement, doc, 'documentElement');
+    var parsedHead = rd(docHead, doc, 'head');
+    var parsedBody = rd(docBody, doc, 'body');
     copyAttributes(parsedHtml, liveHtml);
     if (parsedBody) copyAttributes(parsedBody, liveBody);
     if (parsedHead) insertChildren(parsedHead, liveHead);
     if (parsedBody) insertChildren(parsedBody, liveBody);
   }
 
+  function keyMsg() {
+    var m = mk();
+    own(m, 'type', 'key');
+    own(m, 'key', 'escape');
+    return m;
+  }
+  /**
+   * Esc の取り次ぎ。読み込み時（＝中身より先）に window の capture へ付ける。本物の（isTrusted の）キーだけを見る（中身が作った合成のイベントは無視）。
+   * key・isComposing・keyCode は、控えた getter で読む（中身が KeyboardEvent.prototype を差し替えても効く）。
+   */
+  rApply(addListener, WIN, ['keydown', function (e) {
+    if (!e.isTrusted) return;
+    if (rd(kbComposing, e, 'isComposing') || rd(kbCode, e, 'keyCode') === 229) return;
+    if (rd(kbKey, e, 'key') === 'Escape') {
+      rApply(evPreventDefault, e, []);
+      post(keyMsg());
+    }
+  }, true]);
+
+  function reply(type, extra) {
+    var m = mk();
+    own(m, 'type', type);
+    if (extra) own(m, extra[0], extra[1]);
+    post(m);
+  }
   function onRender(m) {
     if (rendered) return;
     rendered = true;
     if (typeof m.rev !== 'number') return;
     if (m.format !== 'script-html' || typeof m.source !== 'string') {
-      post({ type: 'rejected', rev: m.rev });
+      reply('rejected', ['rev', m.rev]);
       return;
     }
     rev = m.rev;
     try {
-      // (i) soda を置く (ii) Esc の取り次ぎを、中身より先に付ける (iii) テーマ (iv) 中身を差し込む (v) DOMContentLoaded・load を 1 回ずつ起こす (vi) rendered
-      window.soda = makeSoda(m.theme);
-      addListener.call(window, 'keydown', function (e) {
-        if (e.isComposing || e.keyCode === 229) return;
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          post({ type: 'key', key: 'escape' });
-        }
-      }, true);
+      // (i) soda を置く (ii) テーマ (iii) 中身を差し込む (iv) DOMContentLoaded・load を 1 回ずつ起こす (v) rendered。Esc の取り次ぎは、読み込み時に付けてある。
+      defProp(WIN, 'soda', { value: makeSoda(m.theme), writable: true, configurable: true, enumerable: true });
       applyTheme(m.theme);
       inject(m.source);
-      dispatch.call(document, new EventCtor('DOMContentLoaded', { bubbles: true }));
-      dispatch.call(window, new EventCtor('load'));
-      post({ type: 'rendered', rev: m.rev });
+      rApply(dispatch, DOC, [new EventCtor('DOMContentLoaded', { bubbles: true })]);
+      rApply(dispatch, WIN, [new EventCtor('load')]);
+      reply('rendered', ['rev', m.rev]);
     } catch (e) {
-      post({ type: 'failed', rev: m.rev });
+      reply('failed', ['rev', m.rev]);
     }
   }
 
   function onPort(ev) {
-    var m = ev.data;
+    var m = rd(msgData, ev, 'data');
     if (!m || typeof m !== 'object') return;
-    switch (m.type) {
-      case 'ping':
-        post({ type: 'pong', n: m.n });
-        break;
-      case 'render':
-        onRender(m);
-        break;
-      case 'message':
-        // 登録の順に呼ぶ。1 つが投げても、ほかを呼ぶ。
-        slice.call(listeners).forEach(function (fn) { try { fn(m.data); } catch (e) { /* 中身の例外は、中身のもの */ } });
-        break;
-      case 'scroll':
-        if (typeof m.dx === 'number' && typeof m.dy === 'number' && isFinite(m.dx) && isFinite(m.dy) && winScrollBy) winScrollBy.call(window, m.dx, m.dy);
-        break;
-      case 'focus':
-        if (winFocus) winFocus.call(window);
-        break;
+    var type = m.type;
+    if (type === 'ping') {
+      reply('pong', ['n', m.n]);
+    } else if (type === 'render') {
+      onRender(m);
+    } else if (type === 'message') {
+      // 登録の順に呼ぶ。1 つが投げても、ほかを呼ぶ。呼ぶ間に増えた分は呼ばない。
+      var count = listenerCount;
+      for (var id = 0; id < count; id++) {
+        var fn = listeners[id];
+        if (typeof fn !== 'function') continue;
+        try { fn(m.data); } catch (e) { /* 中身の例外は、中身のもの */ }
+      }
+    } else if (type === 'scroll') {
+      if (typeof m.dx === 'number' && typeof m.dy === 'number' && isFiniteF(m.dx) && isFiniteF(m.dy) && winScrollBy) rApply(winScrollBy, WIN, [m.dx, m.dy]);
+    } else if (type === 'focus') {
+      if (winFocus) rApply(winFocus, WIN, []);
     }
   }
 
-  addListener.call(window, 'message', function (ev) {
-    if (inited || ev.source !== PARENT) return;
-    var m = ev.data;
-    if (!m || typeof m !== 'object' || m.type !== 'display-init' || !ev.ports || ev.ports.length < 1) return;
+  rApply(addListener, WIN, ['message', function (ev) {
+    if (inited || rd(msgSource, ev, 'source') !== PARENT) return;
+    var m = rd(msgData, ev, 'data');
+    if (!m || typeof m !== 'object' || m.type !== 'display-init') return;
+    var ports = rd(msgPorts, ev, 'ports');
+    if (!ports || ports.length < 1) return;
     inited = true;
-    port = ev.ports[0];
+    port = ports[0];
+    portReal = !!portPost && typeof MessagePort === 'function' && port instanceof MessagePort;
+    if (portReal && portOnmessageSet) {
+      try { rApply(portOnmessageSet, port, [onPort]); return; } catch (e) { /* 偽物の port（単体テスト）は、下で直に付ける */ }
+    }
     port.onmessage = onPort;
-  });
+  }, false]);
 
   // 読み込みの最後に、合い札を添えて親に知らせる（親は、合い札と最初の load が合ってから通り道を渡す）。
   function ready() {
-    PARENT.postMessage({ type: 'display-ready', t: ticket }, '*');
+    var m = mk();
+    own(m, 'type', 'display-ready');
+    own(m, 't', ticket);
+    if (parentPostMessage) {
+      try { rApply(parentPostMessage, PARENT, [m, '*']); return; } catch (e) { /* 偽物の親は直に呼ぶ */ }
+    }
+    PARENT.postMessage(m, '*');
   }
-  if (read(docReady, document, 'readyState') === 'complete') ready();
-  else addListener.call(window, 'load', ready);
+  if (rd(docReady, DOC, 'readyState') === 'complete') ready();
+  else rApply(addListener, WIN, ['load', ready, false]);
 })();
 </script>
 </head>

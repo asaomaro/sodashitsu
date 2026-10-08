@@ -202,7 +202,7 @@ describe("script.html（土台）", () => {
     f.init();
     f.render({ rev: 1, format: "script-html", source: "<p>x</p>", relayKeys: [{ key: "b", ctrl: true }] });
     f.port.postMessage.mockClear();
-    const key = (k: string, extra: Record<string, unknown> = {}): void => f.fire("keydown", { key: k, ctrlKey: false, ...extra });
+    const key = (k: string, extra: Record<string, unknown> = {}): void => f.fire("keydown", { key: k, ctrlKey: false, isTrusted: true, ...extra });
     key("Escape");
     expect(f.port.postMessage).toHaveBeenLastCalledWith({ type: "key", key: "escape" });
     f.port.postMessage.mockClear();
@@ -228,5 +228,68 @@ describe("script.html（土台）", () => {
     f.init();
     f.render({ rev: "1", format: "script-html", source: "<p id='n'>x</p>" });
     expect(document.body.querySelector("#n")).toBeNull();
+  });
+
+  it("実行時に .call・.apply・.bind・配列のメソッド・for...of を使わない（控えた Reflect.apply だけで呼ぶ）", () => {
+    const code = scriptBody().replace(/^\s*\/\/.*$/gm, "").replace(/\s\/\/ .*$/gm, "");
+    expect(code).not.toMatch(/\.(call|apply|bind|forEach|indexOf|slice|splice|push|map|filter)\(/);
+    expect(code).not.toMatch(/\bfor\s*\(\s*(var|let|const)\s+\w+\s+of\b|\.\.\./);
+    expect(code).toMatch(/Reflect\.apply/);
+  });
+
+  it("中身が Function.prototype.call・KeyboardEvent.prototype.isComposing・Object.prototype の setter・MessagePort の差し替えをしても、Esc・ping・soda.action・onMessage は動く", () => {
+    const f = boot();
+    f.init();
+    f.render({ rev: 2, format: "script-html", source: "<p>x</p>" });
+    f.port.postMessage.mockClear();
+    const origCall = Function.prototype.call;
+    const origApply = Function.prototype.apply;
+    const stolen: unknown[] = [];
+    let actionResult: boolean | undefined;
+    let got: unknown;
+    try {
+      // 中身の側からの乗っ取り
+      Function.prototype.call = function (this: unknown, ...a: unknown[]) {
+        stolen.push(a[0]);
+        return Reflect.apply(origCall, this, a);
+      } as never;
+      Function.prototype.apply = function (this: unknown, ...a: unknown[]) {
+        stolen.push(a[0]);
+        return Reflect.apply(origApply, this, a);
+      } as never;
+      Object.defineProperty(KeyboardEvent.prototype, "isComposing", { configurable: true, get: () => true });
+      Object.defineProperty(Object.prototype, "type", { configurable: true, set: () => { throw new Error("poisoned setter"); } });
+      Object.defineProperty(Object.prototype, "rev", { configurable: true, set: () => { throw new Error("poisoned setter"); } });
+      f.send({ type: "ping", n: 3 });
+      f.fire("keydown", { key: "Escape", isTrusted: true });
+      const soda = f.win.soda as { action(n: string, d?: unknown): boolean; onMessage(fn: unknown): () => void };
+      actionResult = soda.action("pick", { id: "1" });
+      soda.onMessage((d: unknown) => (got = d));
+      f.send({ type: "message", data: 7 });
+    } finally {
+      Function.prototype.call = origCall;
+      Function.prototype.apply = origApply;
+      delete (KeyboardEvent.prototype as unknown as Record<string, unknown>)["isComposing"];
+      delete (Object.prototype as unknown as Record<string, unknown>)["type"];
+      delete (Object.prototype as unknown as Record<string, unknown>)["rev"];
+    }
+    expect(f.port.postMessage.mock.calls.map((c) => c[0])).toEqual([
+      { type: "pong", n: 3 },
+      { type: "key", key: "escape" },
+      { type: "action", rev: 2, action: "pick", data: { id: "1" } },
+    ]);
+    expect(actionResult).toBe(true);
+    expect(got).toBe(7);
+    // （差し替えた call・apply は、テストの道具〔vi.fn〕の内部からも呼ばれるので、呼ばれたかどうかでは見ない。土台が .call を使わないことは、上の静的な検査が見る）
+    void stolen;
+  });
+
+  it("合成の（isTrusted でない）Esc は取り次がない", () => {
+    const f = boot();
+    f.init();
+    f.render({ rev: 1, format: "script-html", source: "<p>x</p>" });
+    f.port.postMessage.mockClear();
+    f.fire("keydown", { key: "Escape", isTrusted: false });
+    expect(f.port.postMessage).not.toHaveBeenCalled();
   });
 });

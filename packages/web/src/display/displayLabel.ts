@@ -12,6 +12,13 @@ export function displayLabel(info: Pick<DisplayInfo, "name">): string {
   return `${DISPLAY_LABEL_PREFIX}· ${info.name}`;
 }
 
+/** 操作中の固定の文言。スクリプトが動く面は、中身が `Esc` を無効にできる場合があるので、［操作を終える］も案内する。 */
+export const ENGAGED_NOTE = "入力はこの表示に届きます（Esc で端末へ）";
+export const ENGAGED_NOTE_SCRIPT = "入力はこの表示に届きます（Esc か［操作を終える］で端末へ）";
+export function engagedNote(info: Pick<DisplayInfo, "format">): string {
+  return info.format === "script-html" ? ENGAGED_NOTE_SCRIPT : ENGAGED_NOTE;
+}
+
 /** 帯の印の `title`・`aria-label`（題を添える）。 */
 export function displayBandLabel(info: Pick<DisplayInfo, "name" | "title">): string {
   return `${displayLabel(info)}: ${info.title}`;
