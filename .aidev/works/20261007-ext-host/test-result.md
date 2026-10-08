@@ -300,3 +300,31 @@ main の失敗は 9 件（上の 9 行）で、このブランチの 8 件はす
 - Windows では、結合テスト・起動確認はスキップ（実機で確かめていない）。
 - 別のマシン（中継越し）のダイアログのマシンの名前は、単体で見ていない（表示の分岐だけ。E2E は 1 マシン）。
 - 独立レビュー（差分全体。攻める側の目で S1〜S26 を 1 行ずつ）は、別のエージェントが掛ける。
+
+## PR3 の独立レビューへの直し（D13。2026-10-09）の否定の対照
+直した箇所だけを外して、対応するテストが落ちることを確かめ、戻した（`cp` で元のファイルへ。`git status` が空であることを確認）。
+
+#### 指摘 1: 承認の記録の掃除（`pruneApprovals` の呼び出しを外す）
+- Tests  2 failed | 42 passed (44)
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > workspace が 1 つも無く、根のディレクトリが無くなっていたら、次の reconcile で、その根の承認の記録を消す。同じ場所に置いた別のものは、聞き直される
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > 根のディレクトリは有るが、.soda/extensions.json が無くなっていても、消す
+
+#### 指摘 2: 無効の記録の掃除で `project:` の key も捨てる（元に戻す）
+- Tests  3 failed | 53 passed (56)
+  - ExtensionHost.project.test.ts > 無効の記録: プロジェクトの key を残す（D13 の 2） > プロジェクトの拡張を画面で無効にして、その workspace を閉じ、ほかの拡張を入切しても、開き直すと無効のまま（承認が残っていても起動しない）
+  - ExtensionStateStore.test.ts > ExtensionStateStore > プロジェクトの key（D13 の 2） > 256 件を超えたら、いま一覧に無いプロジェクトの key を古いもの（先に足した順）から捨てる
+  - ExtensionStateStore.test.ts > ExtensionStateStore > プロジェクトの key（D13 の 2） > known に無くても、project: の key は残す。user: の key は、known に無ければ捨てる
+
+#### 指摘 3: プロジェクトの `PATH` の整理を外す（単体）
+- Tests  2 failed | 57 passed (59)
+  - ExtensionHost.project.test.ts > プロジェクトの拡張に渡す PATH（D13 の 3） > プロジェクトの拡張の PATH から、空の要素・.・相対の要素を落とす。利用者の拡張の PATH は変えない
+  - extensionLaunch.test.ts > safePath・プロジェクトの PATH（D13 の 3） > プロジェクトだけ。利用者の PATH は変えない。Windows は大文字小文字を区別せずに PATH を見る
+
+#### 指摘 3: 同（結合 P10。実際の子プロセス）
+- Tests  1 failed | 24 skipped (25)
+  - extensions.integration.test.ts > 拡張（実物のサーバと、実際の子プロセス） > (P10) サーバの PATH に空の要素があっても、プロジェクトの拡張のコマンド名は、リポジトリの中のファイルに解決されない（利用者の設定の拡張は今までどおり）
+
+#### 指摘 4: 署名を `mtime:size:ino` に戻す
+- Tests  1 failed | 24 passed (25)
+  - ApprovalStore.test.ts > ApprovalStore > signature: 権限だけ・持ち主だけの変更（chmod）でも変わる（D13 の 4）
+
