@@ -123,7 +123,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T1
       AC: AC4, AC15, AC16
       点検: あり
-- [ ] T3: 利用者の設定の読み込み: `parseExtensionsJson(text, scope)`（design「設定ファイル」の表。`strictObject`・既定を埋める・`allow` を並べ替える・`scope === "project"` で `cwd` があれば誤り・1 つでも規則の外なら全体を採らない・誤りの文に値を入れない）と、`loadUserExtensionsFile(path, deps?)`（`loadCommandsFile` と同じ手順を**写す**。`commandConfig.ts` は変えない）。
+- [x] T3: 利用者の設定の読み込み: `parseExtensionsJson(text, scope)`（design「設定ファイル」の表。`strictObject`・既定を埋める・`allow` を並べ替える・`scope === "project"` で `cwd` があれば誤り・1 つでも規則の外なら全体を採らない・誤りの文に値を入れない）と、`loadUserExtensionsFile(path, deps?)`（`loadCommandsFile` と同じ手順を**写す**。`commandConfig.ts` は変えない）。
       `ExtensionEntry`・`ExtensionFileLoad`・`ExtensionFileDeps` を、このファイルで定義する。単体テスト（規則の表・17 件 → 誤り・知らない `allow` の値 → 誤り・リンク・ほかの利用者が書ける・大きすぎる・壊れた UTF-8・`ENOENT` は空・Windows は持ち主と権限を見ない・**誤りの文に、設定に書いた `command` の文字列が入らないこと**）
       対象: `packages/server/src/extensions/extensionConfig.ts`（新規）、`extensionConfig.test.ts`（新規）、手本 `packages/server/src/commands/commandConfig.ts` `loadCommandsFile`・`parseCommandsJson`・`issueText`・`safeKeyName`（参照だけ）/ 根拠: research E1・X1、design「設定ファイル」
       依存: T1
