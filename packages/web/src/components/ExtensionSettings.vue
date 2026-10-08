@@ -9,6 +9,7 @@ import { useSettingsStore } from "../store/settings.js";
  * 設定の節「拡張」（20261007-ext-host。PR2）。設定（`extensions.json`）に登録した拡張の一覧・状態・入切・起動し直し・ログ。
  * **サーバ全体**の設定（ブラウザごとではない）。`SettingsDialog.vue` の `.settings-body` の直下に置く（左のメニューが見出しから拾う）。
  *
+ * 操作中（二重押しの防止）は、`disabled` ではなく `aria-disabled`（押された操作は `ExtensionController` が捨てる）——`disabled` にすると、押した瞬間にフォーカスが失われる。
  * 作者の説明・id・パスは **`v-html` を使わない**（文字として出す）。利用者の拡張のコマンドの文字列は、サーバが送らない（`ExtensionInfo` に無い）ので、ここには出ない。
  * プロジェクトの設定と承認（［確認］［承認を取り消す］・承認の記録）は PR3。
  */
@@ -106,14 +107,15 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
               class="settings-switch ext-switch"
               :aria-checked="isOn(e)"
               :aria-label="`拡張 ${e.id} を有効にする`"
-              :disabled="store.busy.has(e.key) || !e.enabledInConfig"
+              :disabled="!e.enabledInConfig"
+              :aria-disabled="store.busy.has(e.key) ? 'true' : undefined"
               data-ext-switch
               @click="controller?.setEnabled(e.key, !isOn(e))"
             >
               <span class="settings-mark">{{ isOn(e) ? "入" : "切" }}</span>
               <span>有効</span>
             </button>
-            <button type="button" class="settings-btn" :disabled="store.busy.has(e.key) || !isOn(e)" data-ext-restart :aria-label="`拡張 ${e.id} を起動し直す`" @click="controller?.restart(e.key)">
+            <button type="button" class="settings-btn" :disabled="!isOn(e)" :aria-disabled="store.busy.has(e.key) ? 'true' : undefined" data-ext-restart :aria-label="`拡張 ${e.id} を起動し直す`" @click="controller?.restart(e.key)">
               起動し直す
             </button>
             <button type="button" class="settings-btn" data-ext-log-toggle :aria-expanded="logs[e.key] !== undefined" :aria-label="`拡張 ${e.id} のログ`" @click="toggleLog(e.key)">

@@ -260,21 +260,21 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
 
 ### PR2: 設定の画面
 
-- [ ] T15: ブラウザの状態と通信: `store/extensions.ts`（design「ブラウザ」の項目）と `ExtensionController`（接続のたびに `extension.list`。`not_found` なら `supported = false`／`extension.changed` で取り直し、重なったら最後の 1 回／マシンの切り替えで捨てる／操作 `reload`・`restart`・`log`・`setEnabled`）。`StoreAdapter` で `extension.changed` を振り分け、`main.ts`・`injection.ts` に配線。
+- [x] T15: ブラウザの状態と通信: `store/extensions.ts`（design「ブラウザ」の項目）と `ExtensionController`（接続のたびに `extension.list`。`not_found` なら `supported = false`／`extension.changed` で取り直し、重なったら最後の 1 回／マシンの切り替えで捨てる／操作 `reload`・`restart`・`log`・`setEnabled`）。`StoreAdapter` で `extension.changed` を振り分け、`main.ts`・`injection.ts` に配線。
       `ActionDispatcher.reloadConfig()` が、`command.reload` に続けて `extension.reload` を呼ぶ（`not_found` は黙って無視。トーストの文は変えない）。純粋な `extensionView.ts`（状態 → 文・`lastExit` → 文・並べ方）と単体テスト
       対象: `packages/web/src/store/extensions.ts`（新規）、`packages/web/src/extensions/ExtensionController.ts`（新規）、`packages/web/src/extensions/extensionView.ts`（新規）と `extensionView.test.ts`、`packages/web/src/store/StoreAdapter.ts:122` の `switch`（`display.*` は 206〜210 行）、`packages/web/src/main.ts`、`packages/web/src/injection.ts`、`packages/web/src/actions/ActionDispatcher.ts:1531` `reloadConfig`、手本 `packages/web/src/store/agentIntegrations.ts`・`packages/web/src/ask/AskController.ts` / 根拠: research E9・X15・X17、design「ブラウザ」
       依存: T10
       AC: AC27
-- [ ] T16: 節「拡張」の部品（design「ブラウザ」の `ExtensionSettings.vue`）: 説明・置き場所（**PR2 では、利用者の設定の場所だけ**。「リポジトリの `.soda/extensions.json`」の案内は、PR3 の T26 で足す）・［読み直す］・`supported === false` の文・`problems`・一覧（id・種類の印と根・作者の説明・許可〔`script-html` を持つ行に、画面の設定のストア（`settings.displayScriptEnabled`）が偽なら「サーバの設定『スクリプトが動く表示』が無効なので、スクリプトの面は出ません」〕・応答しないとき・状態の文・入切〔`role="switch"`〕・［起動し直す］・［ログ］）・ログの開閉（`<pre>` に `textContent`。［更新］）。
+- [x] T16: 節「拡張」の部品（design「ブラウザ」の `ExtensionSettings.vue`）: 説明・置き場所（**PR2 では、利用者の設定の場所だけ**。「リポジトリの `.soda/extensions.json`」の案内は、PR3 の T26 で足す）・［読み直す］・`supported === false` の文・`problems`・一覧（id・種類の印と根・作者の説明・許可〔`script-html` を持つ行に、画面の設定のストア（`settings.displayScriptEnabled`）が偽なら「サーバの設定『スクリプトが動く表示』が無効なので、スクリプトの面は出ません」〕・応答しないとき・状態の文・入切〔`role="switch"`〕・［起動し直す］・［ログ］）・ログの開閉（`<pre>` に `textContent`。［更新］）。
       `SettingsDialog.vue` の `.settings-body` の直下に置く（左のメニューが拾う）。**作者の説明・id・パスは、`v-html` を使わない**。操作中の行は、ボタンを押せなくする（二重押し）。この時点では、プロジェクトの行のボタン（［確認］［承認を取り消す］）と、「承認の記録」は無い（PR3 の T26）
       対象: `packages/web/src/components/ExtensionSettings.vue`（新規）、`packages/web/src/components/SettingsDialog.vue`（`.settings-body` の直下。「エージェント連携」1263〜1319 行の近く。`displayScriptEnabled` の入切は「端末」の節の 1243〜1254 行——**そこは変えない**。節「拡張」は、設定のストアの値を読んで、文を出すだけ）、手本 `packages/web/src/components/KeySettings.vue`（節を別の部品に分けた先例）/ 根拠: research E9・X15、design「ブラウザ」
       依存: T15
       AC: AC27
-- [ ] T17: 「続けて落ちた」の知らせ: `ExtensionController` が、前の一覧で `failed` でなかった拡張が `failed` になったら、ふつうのトースト（「拡張『<id>』が続けて落ちたので止めました（設定 › 拡張）」）を出す。接続し直した直後の最初の一覧では、出さない（前の一覧が無い）。単体テスト（一覧の前後から、出すべき知らせを返す純粋な関数として）
+- [x] T17: 「続けて落ちた」の知らせ: `ExtensionController` が、前の一覧で `failed` でなかった拡張が `failed` になったら、ふつうのトースト（「拡張『<id>』が続けて落ちたので止めました（設定 › 拡張）」）を出す。接続し直した直後の最初の一覧では、出さない（前の一覧が無い）。単体テスト（一覧の前後から、出すべき知らせを返す純粋な関数として）
       対象: `packages/web/src/extensions/ExtensionController.ts`、`packages/web/src/extensions/extensionView.ts`（`newlyFailed(prev, next)`）、`packages/web/src/store/view.ts:755` 付近 `toast`（呼ぶだけ）/ 根拠: research X16、design「ブラウザ」の「知らせ」
       依存: T15
       AC: AC30
-- [ ] T18: E2E（設定の画面）: `support/appServer.ts` の `startAppServer` に、`internal.extensions`（`timings`）を渡す口を足す（`askImageFetcher` と同じ流儀。起動し直しの間隔を `backoffMinMs: 20` に縮める）。helper `support/extensions.ts`（状態ディレクトリに `extensions.json` を書く・拡張の `.mjs` を一時ディレクトリに書く・`process.execPath` でコマンドを組む・実行の印のファイルを読む）。
+- [x] T18: E2E（設定の画面）: `support/appServer.ts` の `startAppServer` に、`internal.extensions`（`timings`）を渡す口を足す（`askImageFetcher` と同じ流儀。起動し直しの間隔を `backoffMinMs: 20` に縮める）。helper `support/extensions.ts`（状態ディレクトリに `extensions.json` を書く・拡張の `.mjs` を一時ディレクトリに書く・`process.execPath` でコマンドを組む・実行の印のファイルを読む）。
       spec: (1) 利用者の拡張を登録して［読み直す］→ 行が「動作中」になる（DOM）(2) 拡張を落とす（拡張が、決まったファイルが出来たら終了コード 1 で終わる）→ 開いたままの節で、状態が変わり、「続けて落ちたので止めた」と、トーストが出る（DOM を、上限つきで待つ）。**`document.activeElement` が変わらない** (3) 入切を切る → 「無効」。サーバを立て直しても「無効」のまま
       (4) ［ログ］で、標準エラーの目印の文字列が `<pre>` に出る（`<b>` を書いても、文字のまま）(5) **ブラウザが受けたフレーム（`framereceived`）のどれにも、設定に書いたコマンドの目印の文字列が無い** (6) 既存のキーの操作「設定を読み直す」で、足した拡張が一覧に出る (7) 節の入切・ボタンに `Tab` で届き、`Space`・`Enter` で押せる (8) 利用者の拡張が出したパネルが、ブラウザに出て、**枠の外の固定のラベル**が「拡張『<id>』の表示（利用者・隔離）」になっている。面の題・中身に何を書いても、ラベルは変わらない。`pane.sock`（`runDisplay`）で出したパネルのラベルは、今までどおり（AC31） (9) `allow` に `script-html` を持つ拡張の行に、設定が無効の間は「…無効なので、スクリプトの面は出ません」が出て、設定の「端末」の節で有効にすると消える（`enableScript` は、前提を作るのに使ってよい）
       対象: `packages/e2e/src/specs/extensions-settings.spec.ts`（新規）、`packages/e2e/src/support/extensions.ts`（新規）、`packages/e2e/src/support/appServer.ts`、手本 `packages/e2e/src/specs/settings.spec.ts`（`openSettingsByKey`）/ 根拠: research E9・X19、`.aidev/conventions/e2e-observe-browser.md`
