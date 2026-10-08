@@ -89,7 +89,9 @@ export type ErrorCode =
   | "display_limit" // 数・合計の上限（pane のパネル 4・帯 2、サーバ全体 64・32 MiB）
   | "display_script_disabled" // スクリプトが動く表示（script-html）が、設定で無効（既定）
   | "display_busy" // 頻度の上限（set の回数・量）・待ちの上限（pane 4・全体 32）
-  | "display_closed"; // その面はもう無い。`display.subscribe` していない接続からの get・action・dismiss・report も同じ
+  | "display_closed" // その面はもう無い。`display.subscribe` していない接続からの get・action・dismiss・report も同じ
+  // 拡張の承認（20261007-ext-host PR3）。
+  | "extension_stale"; // 承認しようとした登録の鍵が、いまの登録と違う（承認の画面を開いている間に、設定ファイルが変わった）
 
 export interface ProtocolError {
   code: ErrorCode;

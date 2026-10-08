@@ -98,3 +98,104 @@ export async function watchReceivedText(page: Page): Promise<() => string[]> {
   });
   return () => [...received];
 }
+
+// ---- プロジェクトの拡張と承認（PR3。T28） --------------------------------------------------------------------------------------
+
+/** ページの WebSocket（CDP）が送った・受けたテキストのフレーム。**`page.goto()` の前に `await` して呼ぶ。**（`routeWebSocket` とは併用できない） */
+export async function watchTextFrames(page: Page): Promise<{ sent: () => string[]; received: () => string[] }> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Network.enable");
+  const sent: string[] = [];
+  const received: string[] = [];
+  cdp.on("Network.webSocketFrameSent", (e) => {
+    if (e.response.opcode === 1) sent.push(e.response.payloadData);
+  });
+  cdp.on("Network.webSocketFrameReceived", (e) => {
+    if (e.response.opcode === 1) received.push(e.response.payloadData);
+  });
+  return { sent: () => [...sent], received: () => [...received] };
+}
+
+/** プロジェクトの設定に書く 1 件（`cwd` は書けない）。 */
+export interface ProjectEntry {
+  id: string;
+  command: string;
+  description?: string;
+  enabled?: boolean;
+  allow?: string[];
+  onUnresponsive?: "pass" | "block";
+}
+
+const PROJECT_SCRIPT = `
+import { createInterface } from "node:readline";
+import { appendFileSync } from "node:fs";
+const [, , startsFile, id] = process.argv;
+appendFileSync(startsFile, id + ":" + process.pid + "\\n");
+const call = (method, params) => process.stdout.write(JSON.stringify({ method, params }) + "\\n");
+const lines = createInterface({ input: process.stdin });
+lines.on("line", (line) => {
+  let msg;
+  try { msg = JSON.parse(line); } catch { return; }
+  if (msg.type === "ext.panes") {
+    for (const pane of msg.panes) call("display.set", { paneId: pane.id, name: "p", kind: "panel", format: "markdown", title: "プロジェクトの拡張 " + id, content: "# project ext " + id });
+  }
+});
+lines.on("close", () => process.exit(0));
+process.on("SIGTERM", () => process.exit(0));
+setInterval(() => {}, 1000);
+`;
+
+export interface RepoFixture {
+  /** 一時ディレクトリ（掃除の対象）。 */
+  dir: string;
+  /** リポジトリの根（実体のパス）。 */
+  root: string;
+  /** 設定ファイル。 */
+  configPath: string;
+  /** 起動のたびに `<id>:<pid>` が 1 行足されるファイル（実行の印）。 */
+  startsFile: string;
+  /** 拡張を動かす `command`。`pad` は、コマンドの後ろに、シェルのコメントとして足す文字（長いコマンド・`<b>`・ASCII でない文字の確かめ用）。 */
+  command(id: string, pad?: string): string;
+  /** 設定ファイルを書く（0600。`mode` で、グループが書ける等を作る）。 */
+  write(entries: ProjectEntry[], mode?: number): Promise<void>;
+  /** 起動の回数（`id` を省くと全部）。 */
+  starts(id?: string): Promise<number>;
+  /** 起動した pid の一覧。 */
+  pids(id?: string): Promise<number[]>;
+}
+
+/** 一時のリポジトリ（`.git/HEAD` と `.soda/extensions.json`）を作る。**このリポジトリには `.soda/` を作らない。** */
+export async function makeRepoFixture(name = "repo"): Promise<RepoFixture> {
+  const { mkdir, realpath, chmod } = await import("node:fs/promises");
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "soda-e2e-proj-")));
+  const root = join(dir, name);
+  await mkdir(join(root, ".git"), { recursive: true });
+  await writeFile(join(root, ".git", "HEAD"), "ref: refs/heads/main\n");
+  const script = join(dir, "proj-ext.mjs");
+  await writeFile(script, PROJECT_SCRIPT);
+  const startsFile = join(dir, "starts");
+  await writeFile(startsFile, "");
+  const configPath = join(root, ".soda", "extensions.json");
+  const read = async (id?: string): Promise<string[]> => (await readFile(startsFile, "utf8")).split("\n").filter((l) => l !== "" && (id === undefined || l.startsWith(`${id}:`)));
+  return {
+    dir,
+    root,
+    configPath,
+    startsFile,
+    command: (id, pad) => `"${process.execPath}" "${script}" "${startsFile}" ${id}${pad !== undefined ? ` # ${pad}` : ""}`,
+    write: async (entries, mode = 0o600) => {
+      await mkdir(join(root, ".soda"), { recursive: true });
+      await writeFile(configPath, JSON.stringify({ extensions: entries }), { mode });
+      await chmod(configPath, mode);
+    },
+    starts: async (id) => (await read(id)).length,
+    pids: async (id) => (await read(id)).map((l) => Number(l.split(":")[1])),
+  };
+}
+
+/** そのリポジトリで workspace を開く（テスト自身のクライアントで。ブラウザの表示は切り替わらない）。 */
+export async function openRepoWorkspace(appServer: AppServer, root: string, label = "proj"): Promise<{ workspaceId: string; paneId: string }> {
+  const client = await appServer.openClient();
+  const r = await client.request("workspace.create", { cwd: root, label });
+  return { workspaceId: r.workspace.id, paneId: r.pane.id };
+}

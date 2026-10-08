@@ -172,3 +172,194 @@ main の失敗は 9 件（上の 9 行）で、このブランチの 8 件はす
 
 ### スクリーンショット
 `/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/ext-host-ui/` に、明るい・暗いの両方（`*-light.png`・`*-dark.png`）: `mixed`（動作中・無効・続けて落ちて止まった・設定で無効・script-html の注意）・`waiting`・`problems`（設定の問題）・`empty`（拡張なし）・`panel-label`（パネルの見出しの出どころ）。前の実装のものが揃っていたので、撮り直していない。
+
+## PR3: プロジェクトの設定と承認（T20〜T26・T28・T29。T30 の負の対照）の結果（2026-10-09）
+
+### 実施
+- T20 `projectRoot.ts`・`loadProjectExtensionsFile`、T21 `ApprovalStore`、T22・T22-2・T22-3 `ExtensionHost`（根・あるべき集合・起動の確かめ直し・承認の操作・範囲）、T23 方式 `extension.approve`・`deny`・`revoke`、T24 安全の結合テスト、T25 `approvalView.ts`、T26 承認のダイアログ・知らせ・節「拡張」の承認の操作、T28 E2E、T29 起動確認と文書。コミットは `git log origin/main..HEAD`。
+- ★ のタスク（T20・T21・T22・T22-2・T22-3・T23・T26）は `aidev taskcheck start <id> --mode delegated` を記録しただけ（点検は別のエージェントが掛ける）。
+- 設計との違い・補ったものは `decisions.md` の D12。設計の穴は見つからなかった（止めなかった）。
+
+### 新しく足したテストの件数
+| ファイル | 件 |
+|---|---|
+| `projectRoot.test.ts`（根。偽の git が呼ばれない） | 8 |
+| `projectConfig.test.ts`（設定の読み方。リンク・持ち主・other 書き込み・根より上・FIFO・大きさ） | 14 |
+| `ApprovalStore.test.ts`（記録・鍵のファイル・打ち切り・同時書き込み） | 24（it.each を展開） |
+| `ExtensionHost.project.test.ts`（きっかけごと・確かめ直し・承認の操作・範囲・記録を読めない） | 37 |
+| `extensions.integration.test.ts`（実際の子プロセス。P1〜P9・P1b） | 10 |
+| `approvalView.test.ts` | 12 |
+| `ExtensionApprovalDialog.test.ts`・`ExtensionSettings.test.ts`（追加分）・`ExtensionController.test.ts`（追加分） | 19・5・4 |
+| `extensions-approval.spec.ts`（E2E） | 10 |
+
+### 全体
+- `pnpm build`・`pnpm typecheck`: 通過。`pnpm test`: **473 ファイル・9302 件、失敗 0**。
+- `packages/server/src/extensions` のテストを **3 回続けて**: 14 ファイル・287 件が 3 回とも全部通過。
+- E2E（`env -u DISPLAY -u WAYLAND_DISPLAY … --workers=1`）: `extensions-settings`・`extensions-approval`・`settings-menu`・`display.spec`・`display-flows`・`csp-wasm-images` で **63 件通過・2 件スキップ（元からの `test.skip`。`display.spec` の Chart.js の UMD〔環境変数を渡したときだけ〕）・失敗 0**。
+  - 途中、同じ指定で 63 件がすべて落ちた回があった。**環境の事情**（このマシンで `DISPLAY`・`WAYLAND_DISPLAY` が残っていると Chromium が画面のフレームを描かず、`.xterm-helper-textarea` が出ない。監督役の知らせ）で、アプリの不具合ではない。`env -u DISPLAY -u WAYLAND_DISPLAY` を付けて流し直して全部通った。
+- 起動確認: `handoffSmoke`（承認していないプロジェクトの拡張が、入れ替えの前後で `pending` のまま・印のファイルが無い段を足した。pane が 2 つになったので期待を `2 pane(s)` に）・`stopSmoke` ともに ok。
+
+### 負の対照（T30。守りだけを外して、対応するテストが落ちることを確かめ、戻した）
+外した箇所は `ExtensionHost.ts` の 1 か所ずつ（`git checkout` で戻し、差分が無いことを確認）。単体は `ExtensionHost.project.test.ts`（37 件）、結合は `extensions.integration.test.ts -t "(P"`（9 件）。落ちたときの生の出力（抜粋）:
+
+#### (a1) reconcile の承認の判定だけを外す（プロジェクトの拡張を、記録を見ずに eligible にする）
+- 単体: Tests  21 failed | 16 passed (37)
+  - プロジェクトの拡張の状態（T22） > denied の記録 → denied で spawn なし。enabled: false で未承認 → disabled（pending ではない）
+  - プロジェクトの拡張の状態（T22） > 利用者の拡張と同じ id でも、key が違う（利用者 user:a・プロジェクト project:<根の SHA>:a）
+  - プロジェクトの拡張の状態（T22） > 寿命と一覧 > 根を引く処理が返らない workspace があっても、ほかの根の拡張は動き、5 秒後に差を埋める仕事が予約される
+  - プロジェクトの拡張の状態（T22） > 承認が無ければ、どのきっかけでも spawn が呼ばれない（AC18） > start・workspace.created・reload・restart・setEnabled(true)・stop→start
+  - プロジェクトの拡張の状態（T22） > 承認が無ければ、どのきっかけでも spawn が呼ばれない（AC18） > 上限の空きで枠が空いても、承認が無ければ起動しない
+  - プロジェクトの拡張の状態（T22） > 承認の記録の見張りと、読めないとき（止める側に倒す） > 別の ApprovalStore（別の session のつもり）で記録を消す → 見張りの 1 回（approvalsPollMs）で止まる
+  - プロジェクトの拡張の状態（T22） > 承認の記録の見張りと、読めないとき（止める側に倒す） > 承認の記録の読み込みが時間切れ → 承認待ちとして扱い、動いていたものも止める
+  - プロジェクトの拡張の状態（T22） > 承認の記録の見張りと、読めないとき（止める側に倒す） > 承認の記録を壊す → 全部が pending（動く側に倒れない）。動いていたものも止まる
+  - ほか 13 件
+
+- 結合（実際の子プロセス）: Tests  9 failed | 14 skipped (23)
+  - (P1) 承認していない拡張は、どのきっかけでも実行されない（workspace 作成・reload・restart・setEnabled・サーバの立て直し）。pending で、承認の画面に出すものがある
+  - (P2) 画面の接続から approve → 動く。サーバを立て直しても聞き直されずに動く。同じ sessionRoot の別の名前付き session でも動く。sodactl 相当（external）・pane.sock からは承認できない
+  - (P3) 登録の項目を 1 つずつ変えて reload → 止まって pending。同じファイルの別の拡張は同じ pid のまま。承認した中身へ戻すと聞き直されずに動く。リポジトリを別の場所へ写すと pending
+  - (P4) 承認 → ファイルを書き換え（reload しない）→ 拡張を落とす → 起動し直されず pending
+  - (P5) deny → 印が出来ない。後で approve → 動く。revoke → 止まって pending。別の session のサーバでの revoke が、見張りのうちに届く。記録を直接消してすぐ落としても、起動し直されない。workspace を消した後も記録が残り
+  - (P5b) 承認して動かす → 承認の記録のファイルから、その 1 件を直接消し、すぐ拡張を落とす → 起動し直されない（見張りを 60 秒にして、起動の回数で見る）
+  - (P6) 2 つのリポジトリ: 片方の拡張が、他方の pane へ display.set → not_found。ext.panes に他方の pane が無い。pane を他方の workspace へ移す操作は、モデルが断る
+  - (P7) allow なしの script-html → unsupported。allow を足すと pending に戻り、承認すると、設定が有効なら出せ、無効なら display_script_disabled
+  - (P9) .soda がリンク・extensions.json がリンク・cwd つき・chmod o+w → 一覧に理由が出て、印が出来ない。承認の記録を壊す → 全部 pending。無効の記録を壊す → 全部 disabled
+
+#### (a2) startOne の 4（承認の記録の読み直し）だけを外す
+- 単体: Tests  1 failed | 36 passed (37)
+  - プロジェクトの拡張の状態（T22） > 起動の直前の確かめ直し（startOne の 3・4） > 承認して動かす → 承認の記録から、その 1 件を直接消す（見張りの前）→ 拡張を落とす → 時間を進める → spawn されない
+
+- 結合（実際の子プロセス）: Tests  1 failed | 8 passed | 14 skipped (23)
+  - (P5b) 承認して動かす → 承認の記録のファイルから、その 1 件を直接消し、すぐ拡張を落とす → 起動し直されない（見張りを 60 秒にして、起動の回数で見る）
+
+#### (a3) 両方を外す
+- 単体: Tests  26 failed | 11 passed (37)
+  - プロジェクトの拡張の状態（T22） > denied の記録 → denied で spawn なし。enabled: false で未承認 → disabled（pending ではない）
+  - プロジェクトの拡張の状態（T22） > 利用者の拡張と同じ id でも、key が違う（利用者 user:a・プロジェクト project:<根の SHA>:a）
+  - プロジェクトの拡張の状態（T22） > 寿命と一覧 > 根を引く処理が返らない workspace があっても、ほかの根の拡張は動き、5 秒後に差を埋める仕事が予約される
+  - プロジェクトの拡張の状態（T22） > 承認が無ければ、どのきっかけでも spawn が呼ばれない（AC18） > start・workspace.created・reload・restart・setEnabled(true)・stop→start
+  - プロジェクトの拡張の状態（T22） > 承認が無ければ、どのきっかけでも spawn が呼ばれない（AC18） > 上限の空きで枠が空いても、承認が無ければ起動しない
+  - プロジェクトの拡張の状態（T22） > 承認の記録の見張りと、読めないとき（止める側に倒す） > 別の ApprovalStore（別の session のつもり）で記録を消す → 見張りの 1 回（approvalsPollMs）で止まる
+  - プロジェクトの拡張の状態（T22） > 承認の記録の見張りと、読めないとき（止める側に倒す） > 承認の記録の読み込みが時間切れ → 承認待ちとして扱い、動いていたものも止める
+  - プロジェクトの拡張の状態（T22） > 承認の記録の見張りと、読めないとき（止める側に倒す） > 承認の記録を壊す → 全部が pending（動く側に倒れない）。動いていたものも止まる
+  - ほか 18 件
+
+- 結合（実際の子プロセス）: Tests  9 failed | 14 skipped (23)
+  - (P1) 承認していない拡張は、どのきっかけでも実行されない（workspace 作成・reload・restart・setEnabled・サーバの立て直し）。pending で、承認の画面に出すものがある
+  - (P2) 画面の接続から approve → 動く。サーバを立て直しても聞き直されずに動く。同じ sessionRoot の別の名前付き session でも動く。sodactl 相当（external）・pane.sock からは承認できない
+  - (P3) 登録の項目を 1 つずつ変えて reload → 止まって pending。同じファイルの別の拡張は同じ pid のまま。承認した中身へ戻すと聞き直されずに動く。リポジトリを別の場所へ写すと pending
+  - (P4) 承認 → ファイルを書き換え（reload しない）→ 拡張を落とす → 起動し直されず pending
+  - (P5) deny → 印が出来ない。後で approve → 動く。revoke → 止まって pending。別の session のサーバでの revoke が、見張りのうちに届く。記録を直接消してすぐ落としても、起動し直されない。workspace を消した後も記録が残り
+  - (P5b) 承認して動かす → 承認の記録のファイルから、その 1 件を直接消し、すぐ拡張を落とす → 起動し直されない（見張りを 60 秒にして、起動の回数で見る）
+  - (P6) 2 つのリポジトリ: 片方の拡張が、他方の pane へ display.set → not_found。ext.panes に他方の pane が無い。pane を他方の workspace へ移す操作は、モデルが断る
+  - (P7) allow なしの script-html → unsupported。allow を足すと pending に戻り、承認すると、設定が有効なら出せ、無効なら display_script_disabled
+  - (P9) .soda がリンク・extensions.json がリンク・cwd つき・chmod o+w → 一覧に理由が出て、印が出来ない。承認の記録を壊す → 全部 pending。無効の記録を壊す → 全部 disabled
+
+#### (b) startOne の 3 のうち、プロジェクトの digest の比較を外す
+- 単体: Tests  1 failed | 36 passed (37)
+  - プロジェクトの拡張の状態（T22） > 起動の直前の確かめ直し（startOne の 3・4） > 承認 → 設定ファイルを書き換え → 拡張を落とす → 時間を進める → spawn されず pending（AC21）
+
+- 結合（実際の子プロセス）: Tests  1 failed | 8 passed | 14 skipped (23)
+  - (P4) 承認 → ファイルを書き換え（reload しない）→ 拡張を落とす → 起動し直されず pending
+
+#### (c) inScope を、いつも真にする
+- 単体: Tests  4 failed | 33 passed (37)
+  - 範囲（T22-3） > ext.panes に、別の根・根の無い workspace の pane が出ない
+  - 範囲（T22-3） > pane が別の根の workspace へ移る（bus のイベントなし）→ 見直しの 1 回で面が消え、display.closed（out_of_scope）が届き、その後の display.set は not_found
+  - 範囲（T22-3） > 別の根の workspace の pane への display.set は not_found（無い pane と、同じ code・同じ文）
+  - 範囲（T22-3） > 移った後・見直しの前に、その面の display.action が来ても、拡張へ渡らない
+
+- 結合（実際の子プロセス）: Tests  1 failed | 8 passed | 14 skipped (23)
+  - (P6) 2 つのリポジトリ: 片方の拡張が、他方の pane へ display.set → not_found。ext.panes に他方の pane が無い。pane を他方の workspace へ移す操作は、モデルが断る
+
+#### (f) approve・deny の isScreenKind を外す
+- 単体: Tests  1 failed | 36 passed (37)
+  - 承認の操作（T22-2） > 画面の種類でない接続の approve・deny・revoke → invalid_params
+
+#### (f') revoke の isScreenKind を外す
+- 単体: Tests  1 failed | 36 passed (37)
+  - 承認の操作（T22-2） > 画面の種類でない接続の approve・deny・revoke → invalid_params
+
+#### (D11) 設定の時間切れ（現状維持）の道から、承認の側の enforceApprovals を外す（承認の側を混ぜる）
+- 単体: Tests  1 failed | 36 passed (37)
+  - プロジェクトの拡張の状態（T22） > 承認の記録の見張りと、読めないとき（止める側に倒す） > 設定の読み込みが時間切れ（現状維持）の間に承認の記録が消えても、承認の側は止める（混ぜない）
+
+
+**二重の守りの確認（a1・a2・a3）**: (a1) だけを外した状態では、単体は状態が `pending` でなく `backoff` になって落ちる（`expected 'backoff' to be 'pending'`）が、**その直前の `spawn` が 0 回であることの検査は通る**＝`startOne` の 4 が止めている。結合の P1b（状態の表示に関わらず、印のファイルが出来ないこと）も、a1・a2 を片方ずつ外しても通り、**両方（a3）を外すと落ちる**:
+```
+(a1) P1b: Tests 1 passed
+(a2) P1b: Tests 1 passed
+(a3) P1b: AssertionError: expected [ 771710, 771756 ] to deeply equal []   ← 承認していないのに、拡張が 2 回起動された
+```
+(a1) の注意（外した状態では、`startOne` の 4 が断るたびに差を埋める仕事が予約され続ける）は、単体が時計を決まった分だけ進める形（`drive`）なので、落ちずに回り続けるテストにはなっていない。
+
+### スクリーンショット
+`/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/ext-approval/`（明るい `-light`・暗い `-dark`）: `1-toast`（承認待ちのトースト）・`2-settings-pending-rows`（承認待ちの行）・`3-dialog-long-command-script-html`（長いコマンド・script-html の注意・グループの注意）・`4-dialog-next-of-two`（2 件中 2 件目）・`5-after-approve-and-deny`（承認した後・「承認しない」の後）・`6-registration-changed-back-to-pending`（登録が変わって承認待ちへ戻る）・`7-dialog-changed-since-approved`（前に承認した登録からの変更）。撮るのは `SODA_E2E_SHOTS=<dir>` を渡した `extensions-approval-shots.spec.ts`。
+
+### 実施していないこと・限界
+- Windows では、結合テスト・起動確認はスキップ（実機で確かめていない）。
+- 別のマシン（中継越し）のダイアログのマシンの名前は、単体で見ていない（表示の分岐だけ。E2E は 1 マシン）。
+- 独立レビュー（差分全体。攻める側の目で S1〜S26 を 1 行ずつ）は、別のエージェントが掛ける。
+
+## PR3 の独立レビューへの直し（D13。2026-10-09）の否定の対照
+直した箇所だけを外して、対応するテストが落ちることを確かめ、戻した（`cp` で元のファイルへ。`git status` が空であることを確認）。
+
+#### 指摘 1: 承認の記録の掃除（`pruneApprovals` の呼び出しを外す）
+- Tests  2 failed | 42 passed (44)
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > workspace が 1 つも無く、根のディレクトリが無くなっていたら、次の reconcile で、その根の承認の記録を消す。同じ場所に置いた別のものは、聞き直される
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > 根のディレクトリは有るが、.soda/extensions.json が無くなっていても、消す
+
+#### 指摘 2: 無効の記録の掃除で `project:` の key も捨てる（元に戻す）
+- Tests  3 failed | 53 passed (56)
+  - ExtensionHost.project.test.ts > 無効の記録: プロジェクトの key を残す（D13 の 2） > プロジェクトの拡張を画面で無効にして、その workspace を閉じ、ほかの拡張を入切しても、開き直すと無効のまま（承認が残っていても起動しない）
+  - ExtensionStateStore.test.ts > ExtensionStateStore > プロジェクトの key（D13 の 2） > 256 件を超えたら、いま一覧に無いプロジェクトの key を古いもの（先に足した順）から捨てる
+  - ExtensionStateStore.test.ts > ExtensionStateStore > プロジェクトの key（D13 の 2） > known に無くても、project: の key は残す。user: の key は、known に無ければ捨てる
+
+#### 指摘 3: プロジェクトの `PATH` の整理を外す（単体）
+- Tests  2 failed | 57 passed (59)
+  - ExtensionHost.project.test.ts > プロジェクトの拡張に渡す PATH（D13 の 3） > プロジェクトの拡張の PATH から、空の要素・.・相対の要素を落とす。利用者の拡張の PATH は変えない
+  - extensionLaunch.test.ts > safePath・プロジェクトの PATH（D13 の 3） > プロジェクトだけ。利用者の PATH は変えない。Windows は大文字小文字を区別せずに PATH を見る
+
+#### 指摘 3: 同（結合 P10。実際の子プロセス）
+- Tests  1 failed | 24 skipped (25)
+  - extensions.integration.test.ts > 拡張（実物のサーバと、実際の子プロセス） > (P10) サーバの PATH に空の要素があっても、プロジェクトの拡張のコマンド名は、リポジトリの中のファイルに解決されない（利用者の設定の拡張は今までどおり）
+
+#### 指摘 4: 署名を `mtime:size:ino` に戻す
+- Tests  1 failed | 24 passed (25)
+  - ApprovalStore.test.ts > ApprovalStore > signature: 権限だけ・持ち主だけの変更（chmod）でも変わる（D13 の 4）
+
+## D13 の再レビューへの直し（D14。2026-10-09）の否定の対照
+直した箇所だけを外して落ちることを確かめ、`cp` で戻した（コミットしてから。`git checkout` は使わない）。
+
+#### ①「承認しない」も消す（`revoke` に戻す）
+- Tests  1 failed | 48 passed (49)
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > 「承認しない」（denied）の記録は、消さない。承認と両方ある記録は、承認だけを消して、denied を残す
+
+#### ②親のディレクトリの確かめを外す
+- Tests  1 failed | 48 passed (49)
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > 根の親のディレクトリも無い（もっと上が外れている）なら、消さない
+
+#### ②`.soda/extensions.json` が無いだけでも消す（旧）
+- Tests  2 failed | 47 passed (49)
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > R3 根のディレクトリは有り、.soda/extensions.json だけが無くなっている（ブランチの切り替え）は、消さない
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > 根の親のディレクトリも無い（もっと上が外れている）なら、消さない
+
+#### ③開いた場所が根の下にある根も候補にする
+- Tests  3 failed | 46 passed (49)
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > R1 workspace は開いたまま、根のディレクトリが無くなった（ディスクが外れた）→ 消さない（承認も「承認しない」も）。戻れば、そのまま
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > R2 起動のとき、根のディレクトリが無い（ディスクがまだ繋がっていない）が、workspace は残っている → 消さない
+  - ExtensionHost.project.test.ts > 承認の記録の掃除（D13 の 1） > workspace の開いた場所が根の下（サブフォルダ）にあれば、根を引けなくても候補にしない
+
+#### 指摘 2: PATH が空になるときの固定値を外す（単体）
+- Tests  2 failed | 15 passed (17)
+  - extensionLaunch.test.ts > PATH が全部落ちたとき（D14） > Windows は SystemRoot から（効くかは実機で確かめていない）
+  - extensionLaunch.test.ts > PATH が全部落ちたとき（D14） > 空の文字列では渡さず、固定の安全な値にする（POSIX）。PATH が無ければ作らない
+
+#### 指摘 2: 同（結合 P10b。実際の子プロセスで、根の hijackbin が呼ばれる）
+- Tests  1 failed | 1 passed | 24 skipped (26)
+  - extensions.integration.test.ts > 拡張（実物のサーバと、実際の子プロセス） > (P10b) サーバの PATH が、落とす要素だけ（.）でも、プロジェクトの拡張に空の PATH は渡らず、リポジトリの中のファイルに解決されない
+
+#### `ApprovalStore` の「変わらなければ書かない」を件数の比較に戻す
+- Tests  1 failed | 26 passed (27)
+  - ApprovalStore.test.ts > ApprovalStore > revokeApprovedOnly: 承認だけを消し、「承認しない」は残す。denied だけの記録・無い記録は何も書かない。承認だけの記録は、その 1 件ごと消える
+
