@@ -40,3 +40,60 @@
 AssertionError: cancel: expected "vi.fn()" to be called with arguments: [ 'w1' ]
       Tests  1 failed | 43 passed (44)
 ```
+
+---
+
+# テスト結果（PR2: pane の移動の制限。T6〜T12）
+
+2026-10-08。worktree `feature/pane-move-scope`（`feature/web-tab-dnd` の先頭から切った）。
+
+## 全体
+
+- `pnpm build`: 成功。`pnpm typecheck`: 成功。
+- `pnpm test`（全体）: 438 ファイル中 437 通る。8594 件中 8591 件が通り、失敗 3 件は `packages/server/src/tui.integration.test.ts` の 3 件（既知。worktree のパスが長いと main でも落ちる）だけ。
+- 足したテスト: `paneMoveScope.test.ts` 14 件・`SessionModel.test.ts` 19 件（`pane の移動の範囲`）・`SessionService.test.ts` 3 件・`index.test.ts`（ハンドラ）3 件・`Sidebar.test.ts` 4 件・`ActionDispatcher.test.ts` 5 件・`TuiDispatcher.test.ts` 4 件。E2E `pane-move-scope.spec.ts` 6 件。
+
+## 前提を直した既存のテスト（期待は変えていない）
+
+`git: null` どうしで `cwd` が違う workspace の間で移していたものを、移動先を移動元と同じ `cwd` で作るようにした。
+- `SessionModel.test.ts`: 「移動元 tab が移動元 workspace の active tab のまま空になり…（AC4）」（`/home/u/other` → `/home/u`）・同（AC5）・「moveToTab that empties the source workspace」（`/b` → `/a`）・「moveToNewTab that empties the source workspace」（同）。
+- `SessionService.test.ts`: 「移動元 workspace も連鎖して空になるとき（D18）」（moveToTab・moveToNewTab の 2 つ。`/home/u/other` → `/home/u`）・「別 workspace への移動: pane.updated → …」・「moveToTab (the source workspace becomes empty)」・「moveToNewTab (the source workspace becomes empty)」（`/b` → `/a`）。
+- `packages/cli/src/paneCurrent.integration.test.ts`: `pane.move_to_new_tab` を、`reason` がある間は 100ms おきに試し直す形に（上限 10 秒。固定の待ちではない）。
+- `ActionDispatcher.test.ts`・`TuiDispatcher.test.ts`・`mouse.test.ts`・`PaneFrame.test.ts`・`Sidebar.test.ts` の既存の pane の移動のテストは、ストアに移動元が無い・`git: null` で `cwd` が同じ、のため直しなしで通った。
+
+## 負の対照（T7）
+
+`SessionModel.moveToTab`・`moveToNewTab` の確認の 2 行（`if (this.paneMoveBlockFor(...) !== null) return false;`・`return null;`）だけを消して `SessionModel.test.ts` を流した出力（要約）:
+
+```
+ × (2) 違う worktreeKey（同じ repoKey の本体と linked worktree）は断り、何も変わらない   （moveToTab）
+ × (2) 違う worktreeKey（別の repoKey）は断り、何も変わらない
+ × (3) 判定の無い workspace どうし（update 無し）: cwd が同じなら移り、違えば断る
+ × (3) 判定の無い workspace どうし（unmanaged）: ...
+ × (3) 判定の無い workspace どうし（unknown だけ）: ...
+ × (4) 片方だけ判定がある間は（cwd が同じでも）断り、無い側に同じ worktreeKey が入ると移る
+ × (6) 保存から戻した workspace: worktreeKey つきは同じなら移り、違えば断る。repoKey だけで worktreeKey が無いものは断る
+ （moveToNewTab でも同じ 7 件）
+ Test Files  1 failed (1)
+      Tests  14 failed | 171 passed (185)
+```
+
+元に戻して再実行: 185 件すべて通る（差分は意図した変更だけ）。E2E (5)（直接の RPC でも断られ、ブラウザにイベントが届かない）は、サーバの確認が無ければ `{ok: true}` が返るので落ちる。
+
+## E2E
+
+- `pane-move-scope`（6 件）・`workspace-groups`・`multi-client`・`workspace-tab-pane`・`sidebar-sections`・`keys-mouse-dialogs`: 72 件中 71 件が通る。失敗 1 件は `workspace-tab-pane.spec.ts:305`（既知。main でも落ちる）。
+- スクリーンショット（ドラッグ中に落とせない行が薄くなり、B の行が点線の枠になっている状態・断られたときのトースト）: scratchpad の `pane-move-scope/dragging-blocked-row.png`・`declined-toast.png`。
+
+## 目で確かめる項目（AC19）
+
+`docs/herdr-parity.md`（H41）・`docs/tui-parity.md`（H41・W03）・`docs/tui.md`（「マウス」）・`docs/sodactl.md`・`docs/verification.md` を直した。実機の手での確認（端末版を含む）は未実施。
+
+## レビュー指摘（PR2）の修正
+
+2026-10-08。独立レビュー（should 2・nit 2）への対応。decisions D19。
+- 落とせる行に弱い強調 `sidebar-row-pane-drop-allowed`（左の縁の線と淡い背景）、落とせない行の上では枠を出さず薄いまま（`sidebar-row-drop-invalid` は pane のドラッグでは付けない）。
+- `normalizeCwd` が Windows の区切り（末尾の `\`）も落とす（`paneMoveScope.test.ts` に 3 つ足した）。
+- main（PR1 のレビュー修正）を取り込んだ。衝突は `decisions.md`（PR1 の D17 を残し、PR2 を D18 に）・`test-result.md`・`docs/verification.md` で、PR1 の内容を保って両方を残した。
+- 取り込んだ後: `pnpm build`・`pnpm typecheck` 成功。`pnpm test` は 8597 件中 8594 件が通り、失敗 3 件は既知の `tui.integration.test.ts`。E2E `pane-move-scope`（8 件）・`tab-dnd`・`workspace-groups`・`sidebar-sections` を `--workers=1` で流し 63 件すべて通る。
+- スクリーンショット（scratchpad の `pane-move-scope/`）: `{light,dark}-drag-over-allowed.png`（落とせる行 2 つ・A2 の上）・`{light,dark}-drag-over-blocked.png`（落とせない B の上）・`{light,dark}-drag-none-allowed.png`（自分の行しか落とせない場面）・`{light,dark}-declined-toast.png`（トーストは不透明度 1 になるのを待ってから撮った。前のスクリーンショットの薄さはフェードの途中だった）。

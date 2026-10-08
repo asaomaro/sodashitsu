@@ -89,7 +89,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は�
 | H37 | worktree の作成・一覧・開く | あり | あり | 対応（`prefix+shift+g`・workspace のメニューの「新しい worktree」「worktree を開く…」・`open_worktree`） | AC5 |
 | H37b | worktree の削除・グループ化 | あり | あり | 対応（削除は `remove_worktree`〔既定のキーなし。Web にも足した。decisions D4〕。グループ化は 20261004-group-worktree-items で、Web 版と同じ決まりを端末版にも持たせた——worktree グループは worktree ごとに最初に開いた 1 つ〔代表〕だけが束ねられ、同じフォルダの 2 つ目は通常の行〔worktree の印なし〕。利用者が作る「グループ」のメンバーは項目〔通常の workspace か worktree グループ丸ごと〕で、本体をグループへ入れても worktree グループは分かれない。メニューは Web 版と同じ項目〔所属なし:「グループへ追加…」〔グループがあるときだけ〕「新しいグループを作る…」／所属あり:「別のグループへ移す…」〔今のグループ以外があるときだけ〕「グループから外す」「新しいグループを作る…」。グループの見出し:「名前の変更」「上へ移動」「下へ移動」「グループを削除」。「グループなし」の見出し:「上へ移動」「下へ移動」だけ。見出しの「上へ移動」「下へ移動」と「グループなし」のメニューは `layout` を持つサーバのときだけ出る〔古いサーバでは「グループなし」のメニューは開かない〕〕。worktree の子の行でも全体に働き、一括クローズの件数も代表だけ。畳み・並べ替えは W04・H04w） | AC5, AC9（20261004-group-worktree-items の AC1〜AC7・AC15・AC16・AC19〜AC21） |
 | H38-40 | CLI / socket API・自動化・pane 単体の接続 | あり | あり（`sodactl`） | サーバ機能 | AC19 |
-| H41 | pane の移動（別 tab・別 workspace） | API | あり（ドラッグ） | 対応（W03） | AC9 |
+| H41 | pane の移動（別 tab・別 workspace） | API | あり（ドラッグ。別 workspace へは同じ worktree の間だけ。断られたら理由をトーストで知らせる。20261008-web-tab-dnd） | 対応（W03） | AC9、AC11〜AC19（20261008-web-tab-dnd） |
 | H42 | プラグイン | あり | 後続 | 対象外（Web 版と同じ） | — |
 | H43 | 保存したマシンの集約 | あり | あり | 対応（サイドバーのマシンの見出し・畳む/広げる・切り替え。選んだマシンの画面は `/ws?machine=` の接続、ほかは要約の接続。共有の設定は手元のサーバとだけやりとりする） | AC14 |
 | H43b | `--remote <ssh先>`（手元の画面をリモートのサーバへ） | あり | 無し | 読み替え: 手元の端末版と `soda machine` の集約で同じ目的を満たす（SSH で入った先で `soda` を起動してもよい。AC4） | AC14, AC4 |
@@ -127,7 +127,7 @@ herdr と Web 版の対応は `docs/herdr-parity.md` を見る。同じ ID は�
 |---|---|---|---|---|---|
 | W01 | pane の名前のドラッグ：縁へ落とすと分割・中央で置き換え | 無し | あり | 対応（落とし先の強調をセルで描く） | AC9 |
 | W02 | pane のドラッグで同じ tab の中の入れ替え | 無し | あり | 対応 | AC9 |
-| W03 | pane を tab・サイドバーの workspace へドラッグで移動 | 無し | あり | 対応 | AC9 |
+| W03 | pane を tab・サイドバーの workspace へドラッグで移動（別 workspace へは同じ worktree の間だけ。違う worktree の行へ落とすと、送らずにトーストで理由を知らせる。ブラウザ版はドラッグ中に落とせない行を薄くするが、端末版は workspace の行の強調がもともと無く、落としたときの知らせだけ） | 無し | あり | 対応 | AC9、AC11〜AC19（20261008-web-tab-dnd） |
 | W04 | グループ・worktree グループ・「グループなし」の折りたたみと見た目 | 自動のみ〔worktree グループ〕 | あり | 対応（20261004-group-worktree-items。見た目は `docs/tui.md`「サイドバーのグループ」。畳み方は 3 通り——① クリック：グループ・「グループなし」の見出し、worktree グループの先頭の行の左端の `▸`/`▾`〔先頭の行のほかの桁は、その workspace へ移る・ドラッグの開始・右クリックのメニュー〕 ② キー：navigate〔`prefix+w`〕で行を選び `navigate_toggle_collapse`〔既定 `z`〕。見出しならそのグループ・「グループなし」、worktree グループの先頭・子の行ならその worktree グループ〔同じフォルダの 2 つ目など代表でない通常の行では何も起きない〕 ③ 見出しの行の名前・線を、動かさずに離してもクリックと同じ。グループは共有のサーバの状態〔`group.toggle_collapsed`〕、worktree グループは共有の設定 `collapsedAutoGroups`、「グループなし」は共有の設定 `ungroupedCollapsed`。畳んでも、今いる workspace の行は見える） | AC5, AC9（20261004-group-worktree-items の AC6・AC16・AC20・AC21・AC-I1・AC-I3） |
 | W05 | workspace・エージェントの並び順の切替 | エージェントのみ | あり | 対応 | AC2, AC9 |
 | W06 | サイドバーの行をキーで選んでメニュー（navigate の Space） | 無し | あり | 対応 | AC8, AC-I3 |

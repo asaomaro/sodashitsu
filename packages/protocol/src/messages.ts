@@ -359,6 +359,9 @@ export interface PaneReplaceResult {
   ok: boolean;
 }
 
+/** pane の移動を断った理由（20261008-web-tab-dnd）。古いサーバは返さない。 */
+export type PaneMoveBlock = "different_worktree";
+
 /**
  * 既存の pane（`paneId`）を、別の tab（`targetTabId`）へ移す（20260924-pane-move-cross-tab。
  * ドラッグで tab バーの tab へドロップする用）。対象 tab の focus 中の pane の右へ split で
@@ -369,6 +372,8 @@ export type PaneMoveToTabParams = z.infer<typeof PaneMoveToTabParams>;
 export interface PaneMoveToTabResult {
   /** 自分自身の tab・存在しない tab 等、何も起きなかったときは false（design「エラー処理」）。 */
   ok: boolean;
+  /** 断った理由（20261008-web-tab-dnd）。別の worktree の workspace への移動を断ったときだけ付く。古いサーバは返さない。 */
+  reason?: PaneMoveBlock;
 }
 
 /**
@@ -383,6 +388,8 @@ export interface PaneMoveToNewTabResult {
   ok: boolean;
   /** 作られた新しい tab（ok=false のときは無い）。 */
   tab?: Tab;
+  /** 断った理由（20261008-web-tab-dnd）。別の worktree の workspace への移動を断ったときだけ付く。古いサーバは返さない。 */
+  reason?: PaneMoveBlock;
 }
 
 export const PaneZoomParams = z.object({ paneId, mode: zoomMode });

@@ -144,10 +144,17 @@ describe.skipIf(process.platform === "win32")(
 
       const moved = await withSession({ url, token, urlExplicit: false }, store, async (client) => {
         await client.hello();
-        return client.request("pane.move_to_new_tab", {
-          paneId: moving,
-          targetWorkspaceId: b.workspace.id,
-        });
+        // 作った直後は、片方だけ git の判定が入っている間は断られる（reason あり。20261008-web-tab-dnd）。
+        // 判定が入って同じ worktree と分かるまで、上限の時間つきで試し直す。
+        const deadline = Date.now() + 10_000;
+        for (;;) {
+          const r = await client.request("pane.move_to_new_tab", {
+            paneId: moving,
+            targetWorkspaceId: b.workspace.id,
+          });
+          if (r.ok || !r.reason || Date.now() > deadline) return r;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
       });
       expect(moved).toMatchObject({ ok: true });
       const movedTabId = (moved as { tab: { id: string } }).tab.id;
