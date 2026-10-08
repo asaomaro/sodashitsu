@@ -650,10 +650,14 @@ test("衝突を起こして「こちらへ移す」を押すと、衝突相手�
 
   // AC-I8：衝突後、フォーカスの位置（押した［追加：prefix の後］）から Tab で「こちらへ移す」まで
   // 辿り着け、Enter で押せる（数えず、実際に Tab で確かめる）。
-  for (let i = 0; i < 60; i++) {
+  // 押したボタンから「こちらへ移す」（キーの節の末尾の帯）までは、操作の行のボタンが続くので Tab が 66 回かかる（操作が増えるほど増える。
+  // 60 回では足りなくなった）。上限は、止まる所が増えても届くことを見るための余裕。何回で届いたかは注記に残す（使い勝手の課題として見る）。
+  let tabs = 0;
+  for (; tabs < 400; tabs++) {
     if (await moveHereBtn.evaluate((el) => el === document.activeElement)) break;
     await page.keyboard.press("Tab");
   }
+  test.info().annotations.push({ type: "tab-presses-to-move-here", description: String(tabs) });
   await expect(moveHereBtn, "AC-I8：Tab で「こちらへ移す」へ到達できる").toBeFocused();
   await page.keyboard.press("Enter");
   await expect(status(page)).toHaveText(
