@@ -34,21 +34,22 @@
 
 ## 対象範囲
 
-PR は 3 つに分ける（`tasks.md`）。**新** は新しいファイル。出どころの表示（パネル・帯の見出しの部品）と `display.send` は、表示の面の PR2・PR3 が main に入ってからなので、PR3 に間に合わなければ、後から小さい PR で足す（`tasks.md` の T27・T31）。
+PR は 3 つに分ける（`tasks.md`）。**新** は新しいファイル。**表示の面の PR2・PR3 は main に入った**（2026-10-08。main の `1ff0418`）ので、出どころの表示（`displayLabel`）と `display.send` は、この作業の PR1 に入れる（`decisions.md` D8）。行番号は、`1ff0418` を取り込んだ時点のもの。
 
 | PR | パッケージ | ファイル |
 |---|---|---|
 | 1 | protocol | **新** `src/extension.ts`・`src/extension.test.ts`、`src/messages.ts`・`src/events.ts`・`src/display.ts`（`DisplayInfo.source`・`readDisplayInfo`）・`src/index.ts`、`src/messages.test.ts` |
 | 1 | server | **新** `src/extensions/extensionConfig.ts`・`lineReader.ts`・`extensionLaunch.ts`・`ExtensionProcess.ts`・`ExtensionStateStore.ts`・`approval.ts`（`entryDigest`・`instanceKey`）・`ExtensionApi.ts`・`ExtensionHost.ts` と、それぞれの `*.test.ts`・**新** `extensions.integration.test.ts`・**新** `testing.ts`（偽の子）、`src/display/DisplayService.ts`・`DisplayService.test.ts`、`src/session/paneEnv.ts`・`paneEnv.test.ts`、**新** `src/surface/methods/extension.ts`、`src/surface/methods/index.ts`・`deps.ts`、`src/composeServer.ts`、`src/handoffSmoke.ts`・`src/stopSmoke.ts` |
 | 1 | cli | `src/cliArgs.ts`・`src/main.ts`・**新** `src/commands/ext.ts`・`skills/sodactl/SKILL.md`、テスト |
-| 1 | docs | **新** `docs/extensions.md`・**新** `docs/examples/extension-hello.mjs`、`docs/sodactl.md`、`AGENTS.md` |
+| 1 | web | `src/display/displayLabel.ts`・`displayLabel.test.ts`（出どころの表示。`DisplayInfo.source`） |
+| 1 | docs | **新** `docs/extensions.md`・**新** `docs/examples/extension-hello.mjs`、`docs/sodactl.md`、`docs/display.md`（拡張が出した面の、持ち主・ラベル・閉じた理由・`allow` を 1 節）、`AGENTS.md` |
 | 2 | web | **新** `src/store/extensions.ts`・**新** `src/extensions/ExtensionController.ts`・**新** `src/extensions/extensionView.ts`（＋テスト）・**新** `src/components/ExtensionSettings.vue`、`src/components/SettingsDialog.vue`・`src/store/StoreAdapter.ts`・`src/main.ts`・`src/injection.ts`・`src/actions/ActionDispatcher.ts` |
 | 2 | e2e | **新** `src/specs/extensions-settings.spec.ts`・**新** `src/support/extensions.ts`、`src/support/appServer.ts`（`internal.extensions` の `timings` を渡す口） |
 | 2 | docs | `docs/extensions.md`・`docs/tui-parity.md` |
 | 3 | protocol | `src/extension.ts`・`src/messages.ts`・`src/errors.ts`（承認の方式と code） |
 | 3 | server | **新** `src/extensions/projectRoot.ts`・`ApprovalStore.ts` と `*.test.ts`、`src/extensions/approval.ts`、`src/extensions/extensionConfig.ts`（プロジェクトの読み方）・`ExtensionHost.ts`・`ExtensionApi.ts`・`extensions.integration.test.ts`、`src/surface/methods/extension.ts`、`src/composeServer.ts`、`src/handoffSmoke.ts` |
 | 3 | client-core | `src/net/clientError.ts` |
-| 3 | web | **新** `src/components/ExtensionApprovalDialog.vue`・**新** `src/extensions/approvalView.ts`（＋テスト）、`src/components/ExtensionSettings.vue`・`src/extensions/ExtensionController.ts`・`src/store/extensions.ts`・`src/store/view.ts`・`src/App.vue`、表示の面の PR2 が作るパネル・帯の見出しの部品（出どころの表示。research X22） |
+| 3 | web | **新** `src/components/ExtensionApprovalDialog.vue`・**新** `src/extensions/approvalView.ts`（＋テスト）、`src/components/ExtensionSettings.vue`・`src/extensions/ExtensionController.ts`・`src/store/extensions.ts`・`src/store/view.ts`・`src/App.vue` |
 | 3 | e2e | **新** `src/specs/extensions-approval.spec.ts`、`src/support/extensions.ts` |
 | 3 | docs | `docs/extensions.md`（プロジェクトの設定・承認・安全と限界） |
 
@@ -63,16 +64,30 @@ PR は 3 つに分ける（`tasks.md`）。**新** は新しいファイル。�
 - 状態ディレクトリに、根（`sessionRoot`）と session ごと（`stateDir`）がある。根に置いて共有する先例は `machines.json` で、排他は無い: `packages/server/src/config.ts`・`machine/MachineCatalog.ts`（E2・X4）。
 - 安全に書く関数: `packages/server/src/persist/atomicFile.ts` `writeFileAtomic`（0600・rename）（E2・X5）。
 - `Workspace.cwd` は、開いた場所のまま変わらない。git の根は `findGitRoot`（git を呼ばない・worktree ごとの根・`realpath` しない）: `packages/server/src/session/workspaceLabel.ts:55`（E3・X6）。
-- pane → workspace は `SessionService.commandContext(paneId)`（828 行）、全部の一覧は `snapshot()`（252 行）（E3・X7）。
+- pane → workspace は `SessionService.commandContext(paneId)`（829 行）、全部の一覧は `snapshot()`（253 行）、実在は `hasPane`（912 行）（E3・X7。行番号は `1ff0418`）。
 - bus に流れるのは `ServerEvent` で、全接続へ届く。復元は bus に出ない。pane の移動は `pane.created`・`pane.closed` を出さない（E3）。
-- 接続の種類（`kind`）は自己申告。種類の検査は、サービスの側に `isScreenKind` を注入する形: `packages/server/src/composeServer.ts:350` の近く（E4・X9）。
+- 接続の種類（`kind`）は自己申告。種類の検査は、サービスの側に `isScreenKind` を注入する形: `packages/server/src/composeServer.ts:350` の `new DisplayService` の近く（E4・X9）。
 - 子プロセスの持ち主の型と、テストの偽物: `packages/server/src/machine/MachineLink.ts`・`MachineManager.ts`・`machine/testing.ts`（E5・X10）。
-- 組み立てと寿命の場所: `composeServer.ts` の `listen`（ロック 620・`machines.start` 773）・`close`（`machines.stop` 813）・`pausePollers`（524）・`resumePollers`（530）。`rollback` は、止めていなくても `resumePollers` を呼ぶ（E6・X11）。
+- 組み立てと寿命の場所（行番号は `1ff0418`）: `composeServer.ts` の `listen`（628 行。ロック 633・`machines.start` 787）・`close`（812 行。`machines.stop` 827・`displays.dispose` 861）・`pausePollers`（530 行。`machines.stop` 537）・`resumePollers`（539 行。`machines.start` 543）・`registerAllMethods`（442 行）・2 つの `onClientGone`（496・508 行）。`rollback` は、止めていなくても `resumePollers` を呼ぶ（E6・X11）。
 - 環境変数の落とす一覧: `packages/server/src/session/paneEnv.ts:14` `PANE_ENV_DROPPED`（E7・X12）。token は環境変数に無い（ファイル）。
-- 台帳は、面の持ち主を持たず、出来事は pane ごとの列へ入る: `packages/server/src/display/DisplayService.ts`（`Entry` 65・`set` 135・`close` 210・`pushEvent` 441・`remove` 481・`onPaneClosed` 499）（E8・X13）。
-- 表示の層の引数の検査: `packages/protocol/src/messages.ts` の `DisplaySetParams`・`DisplayCloseParams`・`DisplayListParams`・`DisplayFeaturesParams` と、`packages/protocol/src/display.ts` の `checkDisplaySet`（E8）。
-- 設定画面の節・別の `<dialog>`・トースト・読み直しの操作: `SettingsDialog.vue`・`AskDialog.vue`・`store/view.ts` `toast`・`ActionDispatcher.ts:1471` `reloadConfig`（E9・X15〜X17）。
+- 台帳は、面の持ち主を持たず、出来事は pane ごとの列へ入る（**`1ff0418` でも同じ**。`Entry`・`DisplayInfo`・`display.updated`・`display.removed` のどこにも、持ち主・出どころの項目は無い。`set`・`close`・`send`・`list` の引数に、呼び手を表すものは無い）: `packages/server/src/display/DisplayService.ts`（`DisplayServiceOptions` 62 行・`Entry` 80 行・`set` 157・`close` 240・`list` 249〔`{ displays, seq, epoch }`〕・`send` 308・`action` 360〔`source` を付けるのは 380〕・`onScriptSettingChanged` 445・`enterCooldown` 513・`pushEvent` 565・`remove` 605・`onPaneClosed` 623）（E8・X13 と、下の「main の表示の面」）。
+- 表示の層の引数の検査: `packages/protocol/src/messages.ts` の `DisplaySetParams`（523 行）・`DisplayCloseParams`（526）・`DisplayListParams`（528）・`DisplaySendParams`（535）・`DisplayFeaturesParams`（537）と、`packages/protocol/src/display.ts` の `checkDisplaySet`（288 行）・`checkDisplaySend`（355 行）（E8）。
+- 設定画面の節・別の `<dialog>`・トースト・読み直しの操作: `SettingsDialog.vue`（「エージェント連携」は 1263〜1319 行）・`AskDialog.vue`（`App.vue` の 104 行に置かれている。`Toast` は 109 行）・`store/view.ts`（`setAskOpen` 364・`modalOpen` 382・`toast` 755）・`ActionDispatcher.ts:1531` `reloadConfig`・`StoreAdapter.ts`（振り分けの `switch` は 122 行）（E9・X15〜X17。行番号は `1ff0418`）。
 - E2E は、サーバと同じプロセスから子プロセスを起動できる（`composeServer` をプロセスの中で立てる）: `packages/e2e/src/support/appServer.ts`（E9・X19）。
+- **main の表示の面**（`1ff0418`。サブエージェントの読み取りの報告。★ は、監督のセッションが `grep` で開き直した行）:
+  - `script-html` は、**共有の設定 `displayScriptEnabled`（既定は無効。`=== true` のときだけ有効）**で有効にしたときだけ出せる。台帳は、設定を関数 `scriptEnabled`（`DisplayServiceOptions`。73 行 ★。`composeServer.ts:352` ★ が `prefs.get().prefs.displayScriptEnabled === true` を渡す）で、呼ぶたびに読む。
+    `set` の検査の順は、形式（`invalid_display`）→ pane → **設定（`display_script_disabled`）** → 冷却（`display_busy`）→ 頻度 → 数と合計。`send` は、pane → **設定** → 面の有無（`display_closed`）→ 形式（`invalid_params`）→ 大きさ → 頻度（鍵は pane）。
+    有効 → 無効で、`onScriptSettingChanged`（445 行 ★）が、全 pane の `script-html` の面を、理由 `script_disabled` で閉じる（`remove` を通る＝出来事の列に `display.closed` が入る）。
+  - 設定を変える口は `/ws` の `prefs.set`（`packages/server/src/surface/methods/prefs.ts:17`）で、**接続の種類の検査は無い**（ログイン済みなら、`external` でも呼べる）。`pane.sock` には無い。`sodactl` に、設定を変えるコマンドは無い。有効になると、`prefs.changed`（`byKind` つき）が配られ、ほかの画面にトーストが出る（`packages/web/src/main.ts:131` 付近）。
+    表示の面の決定（`20261007-soda-extensions/decisions.md` D36・D37）: この設定は**不注意を防ぐもので、悪意への守りではない**（pane のプログラムは、利用者の権限で、認証の情報を読んで有効に出来る）。
+  - 冷却（`enterCooldown` 513 行 ★）は **pane ごと**で、入ると、その pane の `script-html` の面を**全部**閉じる（理由 `focus_steal` か `navigated`）。**形式だけで選び、誰が出したかは見ない**。冷却の間（5 分）、その pane の `script-html` の `set` は `display_busy`。
+  - `display.action` の出来事に `source: "static" | "script"`（380 行）。閉じた理由は `closed`・`dismissed`・`expired`・`navigated`・`focus_steal`・`unresponsive`・`script_disabled`（`DisplayClosedReason`。`display.ts:205`）。
+  - `DISPLAY_FEATURES` は `panel`・`band`・`format:text`・`format:markdown`・`format:html`・`format:script-html`・`actions`・`send`。`DisplayFeatures` に `scriptEnabled?`。`DisplayRenderers` に `scriptHtml`。待ちの上限は pane 4・全体 32。1 行 4 MiB（`DISPLAY_REQUEST_LINE_BYTES`）・中身 2 MiB。
+  - `readDisplayInfo`（`display.ts:390`）は、必要な 10 項目の型だけを見て、**同じオブジェクトを返す**（未知の項目 `source` を通す）。web のストア（`packages/web/src/store/display.ts` の `replaceAll`・`upsert`）も、受けたオブジェクトをそのまま持つ。
+  - 固定のラベルは `packages/web/src/display/displayLabel.ts` ★ の `displayLabel(info: Pick<DisplayInfo, "name">)`（11 行）と `displayBandLabel`（37 行）の 1 か所（コメントに「どの拡張が出したかの文を足す場所は、ここ」）。`displayLabel.test.ts:7` が、`source: "ext-a"`（文字列）つきでも壊れないことを見ている。
+  - エラーの code は `errors.ts:88-92`（`invalid_display`・`display_limit`・`display_script_disabled`・`display_busy`・`display_closed`）、日本語は `clientError.ts:98-103`。
+  - E2E の helper: `packages/e2e/src/support/display.ts` `runDisplay`、`displayScript.ts` `enableScript(appServer, enabled)`（`prefs.set` を送る）。`startAppServer`（`appServer.ts:70`）が `internal` に渡すのは `askImageFetcher` だけ。`handoffSmoke.ts` に `isAlive`（56 行）。**`stopSmoke.ts` に `isAlive` は無い**（`process.kill(pid, 0)` を直に使っている）。
+  - `docs/display.md` がある（「スクリプトが動く形式」140 行・「残る限界」244 行の 12 項目）。`docs/tui-parity.md` の表の末尾は W34（次は W35）。`AGENTS.md` の頭の案内は 7〜18 行で、表示の面の行がある（14 行）。
 
 - そのほか、本文が名指しで使う既存のもの（**サブエージェントの読み取りの報告で確かめた。research に行が無いものは、その旨**。実装の前に開いて確かめる）:
   `packages/server/src/display/rateLimit.ts` の `TokenBucket` と、通らなかった要求の `refund`（報告: `DisplayService.ts:143-144`。research に行なし）／`DisplayService.features()` が `renderers` を返す（報告: 273 行。型は `20261007-soda-extensions/design.md`「定数と型」）／
@@ -86,7 +101,7 @@ PR は 3 つに分ける（`tasks.md`）。**新** は新しいファイル。�
 - u2: Node が作る子の stdio のパイプが close-on-exec で、`execve` の後に、止め損ねた子の標準入力が閉じること（止めて待つので、通常は通らない道）。
 - u3: Windows で、`taskkill /pid <pid> /T /F` が、`%ComSpec% /c` の下の木を終わらせること（実機では確かめない。組み立てだけ単体テスト）。
 - u4: pane が tab・workspace を移ったときに、bus に出るイベントの種類（research X23）。範囲の検査は、イベントに頼らず、要求のたびと、**出来事を渡す直前**と、**2 秒ごとの、面を持つ pane の見直し**で引くので、該当のイベントが無くても、範囲の外の pane への要求は通らず、操作の値は届かず、面は 2 秒ほどで消える（イベントが無いと遅れるのは、`ext.panes` の行だけ）。
-- u5: 表示の面の PR2 の、パネル・帯の見出しの部品の名前と、固定のラベルの作り（research X22）。
+- u5: （済み）表示の面の PR2 の見出しの部品は、`displayLabel`・`displayBandLabel`（上の「main の表示の面」）。
 - u6: `findGitRoot` の `deps`（`WorkspaceLabelDeps`）を、自動の名前の外で組み立てる方法。
 - u7: `/bin/sh -c '<1 行>'` が、単純なコマンドを `exec` で置き換えるか（シェルに依る）。置き換えなくても、グループごと止めるので動きは同じ。
 - u8: 「グループに残りがいる間、その番号は、新しい pid・新しいグループの番号にならない」（`sweepGroup` の前提。一般の知識で、この環境では確かめていない）。
@@ -302,6 +317,7 @@ export interface ExtensionApprovalView {
 }
 export interface ExtensionFileProblem { scope: ExtensionScope | "state"; root?: string; path: string; problem: string }
 export interface ExtensionListResult { extensions: ExtensionInfo[]; problems: ExtensionFileProblem[]; userConfigPath: string;
+  scriptEnabled: boolean;                      // サーバの設定 displayScriptEnabled のいまの値（DisplayService.features().scriptEnabled === true）。画面が、allow に script-html を持つ拡張の行とダイアログに出す
   approvals?: ExtensionApprovalRecordView[] }  // PR3。承認の記録の全部（いま一覧に無い根・id のものを含む）
 export interface ExtensionApprovalRecordView { root: string; id: string; approvedAt?: string; deniedAt?: string; active: boolean } // active＝いまの一覧に、その (根, id) の拡張がある
 export interface ExtensionLogResult { lines: string[]; dropped: number } // dropped＝あふれて捨てた行数
@@ -314,14 +330,14 @@ export interface ExtLimits { lineBytes: number; requestsPerSec: number; inputByt
 export type ExtLine =
   | { type: "ext.hello"; v: 1; runId: string; extension: { id: string; scope: ExtensionScope; root?: string };
       allow: string[]; onUnresponsive: "pass" | "block"; methods: string[]; events: string[];
-      display: { features: string[]; limits: DisplayLimits }; limits: ExtLimits }
+      display: { features: string[]; scriptEnabled: boolean; limits: DisplayLimits }; limits: ExtLimits }
   | { type: "ext.result"; id: string | number; ok: true; result: unknown }
   | { type: "ext.result"; id: string | number; ok: false; error: { code: string; message: string } }
   | { type: "ext.error"; code: "bad_line" | "line_too_long" | "bad_request"; message: string } // どの要求にも結び付かない誤り（3 つとも、「続けて壊れた行」に数える）
   | { type: "ext.dropped"; count: number }
   | { type: "ext.panes"; panes: ExtPane[] }
   | ExtDisplayEvent;
-/** 表示の面の DisplayEvent から、待ちの印 `seq` を除いたもの。閉じた理由に `pane_closed`（pane が閉じた）と `out_of_scope`（pane が、拡張の範囲の外へ出た）が加わる。 */
+/** 表示の面の DisplayEvent（`source` を含む）から、待ちの印 `seq` を除いたもの。閉じた理由は、表示の面の 7 つ（closed・dismissed・expired・navigated・focus_steal・unresponsive・script_disabled）に、閉じた理由に `pane_closed`（pane が閉じた）と `out_of_scope`（pane が、拡張の範囲の外へ出た）が加わる。 */
 export type ExtDisplayEvent =
   | { type: "display.action"; paneId: string; name: string; rev: number; action: string; data?: Record<string, string>; at: string; source?: "static" | "script" }
   | { type: "display.closed"; paneId: string; name: string; reason: string; at: string };
@@ -349,11 +365,11 @@ export function extLimits(): ExtLimits;
 |---|---|---|---|
 | `ext.features` | `{}` | `{ methods: string[]; events: string[]; display: DisplayFeatures; limits: ExtLimits }` | `display.features` は、許可に合わせて絞る（下）。`renderers`（面を出せる画面の数）を含む |
 | `ext.panes` | `{}` | `{ panes: ExtPane[] }` | 範囲の中だけ |
-| `display.set` | `/ws` の `DisplaySetParams`（`paneId` つき） | `DisplaySetResult` | 持ち主の札を付けて `DisplayService.set`。`next` は意味を持たない（docs に書く） |
+| `display.set` | `/ws` の `DisplaySetParams`（`paneId` つき） | `DisplaySetResult` | 持ち主の札を付けて `DisplayService.set`。`next` は意味を持たない（docs に書く）。`format: "script-html"` は、`allow` と、サーバの設定の両方が要る（下の 5） |
 | `display.close` | `DisplayCloseParams` | `{ closed: string[] }` | 自分の面だけ |
 | `display.list` | `DisplayListParams` | `{ displays: DisplayInfo[] }` | 自分の面だけ（`seq`・`epoch` は返さない） |
 | `display.features` | `{}` | `DisplayFeatures` | `ext.features` の `display` と同じ |
-| `display.send` | 表示の面の PR3 の `DisplaySendParams` | `{ delivered: number }` | **表示の面の PR3 が main に入るまで、表に載せない**（`unsupported`）。入った後、`allow` に `script-html` がある拡張だけ |
+| `display.send` | `/ws` の `DisplaySendParams`（`{ paneId, name, data }`） | `{ delivered: number }` | **`allow` に `script-html` がある拡張だけ**（無ければ `unsupported`）。自分の面だけ（ほかの持ち主の面は `display_closed`）。設定が無効なら、台帳が `display_script_disabled` を返す |
 | ほか（`display.wait`・知らない名前） | — | 誤り `unsupported` | 切らない |
 
 処理の順（1 行ごと。同期）:
@@ -363,13 +379,16 @@ export function extLimits(): ExtLimits;
 2. `method` を表で引く。無ければ `unsupported`（文は「この操作は使えません: <名前>」。名前は 64 文字以下で、`/^[A-Za-z0-9_.:-]+$/` に合うときだけ文に入れる）。
 3. 引数を、その操作の zod の schema で検査。だめなら `invalid_params`。
 4. `paneId` を持つ操作は、**範囲**を確かめる（`inScope(ext, paneId)`。下）。外なら `not_found`（無い pane と同じ code・同じ文）。
-5. **許可**を確かめる: `allow` に `script-html` が無い拡張が、(i) `display.set` を `params.format === "script-html"`（文字列の比較。表示の面の PR3 の有無に依らない）で呼んだ (ii) `display.send` を呼んだ、のどちらも、誤りの code は `unsupported`。`allow` にあれば、次へ進む。
+5. **許可**を確かめる（**`script-html` を拡張が出せるのは、「登録の `allow`」かつ「サーバの設定 `displayScriptEnabled`」の両方が満たされるときだけ**。`allow` はここで、設定は台帳が見る）: `allow` に `script-html` が無い拡張が、(i) `display.set` を `params.format === "script-html"`（文字列の比較）で呼んだ (ii) `display.send` を呼んだ、のどちらも、**台帳を呼ばずに**、誤りの code は `unsupported`。
+   `allow` にあれば、次へ進み、台帳が、設定（無効なら `display_script_disabled`）・冷却（`display_busy`）を、pane のプログラムと同じ順で検査する（7 で、その code がそのまま返る）。**`allow` があっても、設定の検査を飛ばす道は無い**（拡張は、台帳の `set`・`send` を、ほかの呼び手と同じ入口から呼ぶ。`ExtensionHost` は、設定を読まない・変えない）。
 6. 1 つの拡張の面の数: `display.set` が新しい面を作るとき（`displays.ownerOf(paneId, name) !== tag`）、`displays.countOwned(tag) >= 16` なら `display_limit`。
 7. `DisplayService` を呼ぶ。`RpcError` は、その `code` と `message` を返す。ほかの例外は `internal`（文は固定。ログに、拡張の id と操作の名前）。
 8. `id` があれば `ext.result` を書く（捨てない行）。`id` が無ければ、何も書かない（誤りのときも）。
 
-- `display.features`・`ext.features` の `features` は、`DisplayService.features().features` から、`allow` に `script-html` が無ければ `format:script-html` と `send` を除いたもの。
-- `ext.hello.methods` は、表の名前のうち、その拡張が呼べるもの（`display.send` は、許可があるときだけ）。`events` は `EXT_EVENT_TYPES`。
+- `display.features`・`ext.features` の `features` は、`DisplayService.features().features` から、`allow` に `script-html` が無ければ `format:script-html` と `send` を除いたもの（＝**登録の上で使えるもの**。設定には依らない）。
+  **設定のいまの値**は、`DisplayFeatures.scriptEnabled`（台帳が返す値を、そのまま載せる。`allow` が無い拡張には、いつも `false` を載せる）。拡張は、「`features` に `format:script-html` があり、かつ `scriptEnabled` が真」のとき、スクリプトが動く面を出せる。`renderers.scriptHtml`（出せると名乗った画面の数）も、そのまま。
+  挨拶（`ext.hello.display`）には、起動した時点の `scriptEnabled` を載せる。**設定が変わったことの行は、足さない**（無効になれば、出していた面に `display.closed`〔`script_disabled`〕が届く。有効になったかは、`ext.features` で取り直すか、`set` して `display_script_disabled` が返らないことで分かる）。
+- `ext.hello.methods` は、表の名前のうち、その拡張が呼べるもの（`display.send` は、`allow` に `script-html` があるときだけ）。`events` は `EXT_EVENT_TYPES`。
 - 後の層は、表に行を足す（例: 観測の `observe.subscribe`・割り込みの返事 `intercept.reply`）。サーバ → 拡張の、返事の要る行（割り込みの問い合わせ）は、`type` と、サーバが振る id を持つ行にする。この作業では、足さない。
 
 ### 範囲と許可
@@ -399,6 +418,7 @@ export type DisplayOwnedEvent = ExtDisplayEvent;                        // seq �
 set(paneId: string, body: unknown, opts?: { owner?: DisplayOwner }): DisplaySetResult;
 close(paneId: string, sel: {...}, reason?: DisplayClosedReason, opts?: { owner?: string }): { closed: string[] };
 list(paneId: string, opts?: { owner?: string }): { displays: DisplayInfo[]; seq: number; epoch: string };
+send(paneId: string, p: { name: string; data: unknown }, opts?: { owner?: string }): { delivered: number };
 ownerOf(paneId: string, name: string): string | undefined;             // 面が無い・持ち主が無いなら undefined
 countOwned(tag: string): number;
 ownedPanes(tag: string): string[];
@@ -417,14 +437,18 @@ onOwnedEvent(fn: (tag: string, ev: DisplayOwnedEvent) => void): { dispose(): voi
 | 札つきの `close`・`list`（`opts.owner`） | その札の面だけが対象。ほかは、無いものとして扱う（`closed: []`・一覧に出ない） |
 | 札なしの `close`・`dismiss`・`report`・`ttl` の経過 | 今までどおり、どの面も閉じる |
 | 札なしの `list` | 今までどおり、その pane の全部の見出し（札つきの面は `source` つき）。中身は返さない（もともと返さない） |
-| 札なしの `send`（表示の面の PR3）、札つきの面 | `display_closed`（pane のプログラムは、拡張の面のスクリプトへ、データを送れない） |
+| 札なしの `send`（`/ws`・`pane.sock`）、札つきの面 | `display_closed`（pane のプログラムは、拡張の面のスクリプトへ、データを送れない）。検査の場所は、設定の検査（310 行）の後・面の有無（312 行）と同じ所——面が無いのと、同じ答え |
+| 札つきの `send`（`opts.owner`）、札の違う面・札の無い面 | `display_closed`（拡張は、ほかの持ち主の面へ送れない） |
 | **出来事**（`display.action`・`display.closed`）、面に札がある | **pane の列に入れず**、`onOwnedEvent` の受け手へ（`seq` なし）。札が無い面は、今までどおり列へ |
 | pane が閉じた（`onPaneClosed`） | 今までの処理に加えて、札つきの面ごとに、受け手へ `display.closed`（理由 `pane_closed`） |
 | `closeOwned` | 台帳から外し、`display.removed`（理由 `closed`）を bus に配る。受け手へは知らせない |
 
 - 受け手は同期で呼ぶ。受け手の例外は、台帳の処理へ伝えない（`try/catch` で包み、ログ）。
 - 面の数・合計のバイト数・`set` の頻度（pane ごと）は、札に依らず、今までどおり合わせて数える（AC5・機能要件 27）。
-- **札（この作業の T7）と `send`（表示の面の PR3）の両方が main にそろう最初の PR に、この検査を必ず入れる**（どちらが先でも。そろっているのに検査が無いと、pane のプログラムが、拡張の面のスクリプトへデータを送れる）。表示の面の PR3 が `send` を足すときは、`send(paneId, p, opts?: { owner?: string })` にして、**面の札と `opts.owner` が違えば**（札なしの呼び出しが札つきの面を指す・札つきの呼び出しが別の札や札なしの面を指す）`display_closed` を返す（**表示の面の作業への申し送り**）。PR3 が先に入っていれば、この作業の PR1 で足す。
+- `send(paneId, p, opts?: { owner?: string })`: **面の札と `opts.owner` が違えば**（札なしの呼び出しが札つきの面を指す・札つきの呼び出しが別の札や札なしの面を指す）`display_closed`。`send` は main にあるので、**T7 で、札と一緒に必ず入れる**（札だけ入って、この検査が無いと、pane のプログラムが、拡張の面のスクリプトへデータを送れる）。
+- **設定・冷却・無効化は、持ち主を見ない**（main の作りのまま。変えない）: (i) 設定を無効にすると、拡張の `script-html` の面も閉じる（持ち主へ `display.closed`〔`script_disabled`〕）。(ii) **冷却は pane ごと**なので、拡張の面のスクリプトがフォーカスを取り続ける・枠を移すと、その pane の、**pane のプログラムやほかの拡張の `script-html` の面も閉じ**、5 分のあいだ、その pane は、だれも `script-html` を出せない。逆も同じ（pane のプログラムの面が原因で、拡張の面が閉じる。持ち主へ `display.closed`〔`focus_steal`｜`navigated`〕）。
+  持ち主ごとに分けない理由: 回数を分けると、持ち主を替えるたびに 3 回ずつ取れる（表示の面が「早く閉じる側に倒す」と決めた守りが、弱まる）。**巻き添えは、限界として docs に書く**（S26）。
+- `DisplayOwnedEvent` の `display.action` には、台帳が付けた `source`（`static`｜`script`）が、そのまま載る。閉じた理由は、`DisplayClosedReason` の 7 つ（`closed`・`dismissed`・`expired`・`navigated`・`focus_steal`・`unresponsive`・`script_disabled`）と、拡張の行だけの 2 つ（`pane_closed`・`out_of_scope`）。
 
 ### `ExtensionProcess`（1 回ぶんの起動）
 
@@ -684,10 +708,10 @@ stateDiagram-v2
 
 - 生成: `displays` の後で `const extensions = new ExtensionHost({ stateDir: options.stateDir, sessionRoot: options.sessionRoot, session, displays, bus, isScreenKind, baseEnv: process.env, homeDir: os.homedir(), logger, deps: internal?.extensions })`。
   `registerAllMethods` の依存に `extensions`。`internal.extensions` は、テストが `spawn` などを差し替える口（`internal.machineSpawn` と同じ流儀）。
-- `listen()`: `void machines.start()`（773 行）の隣に `void extensions.start()`（**待たない**。ロックの後・復元の後。設定を読む処理が遅くても、`listen()` を止めない）。`start()` は投げない作りにする（設定の誤りは `problems`、`spawn` の失敗は状態）。
+- `listen()`: `void machines.start()`（787 行）の隣に `void extensions.start()`（**待たない**。ロック〔633 行〕の後・復元の後。設定を読む処理が遅くても、`listen()` を止めない）。`start()` は投げない作りにする（設定の誤りは `problems`、`spawn` の失敗は状態）。
   `listen()` の最後の文なので、その後に `listen()` が失敗する道は無いが、`catch` に `await extensions.stop().catch(() => {})` を足しておく（後で、文が足されても残らないように）。
-- `close()`: `await machines.stop()`（813 行）の隣に `await extensions.stop()`。`finally` の `displays.dispose()` の**前**に `extensions.dispose()`（面を消す処理が、捨てた台帳を触らないように）。
-- 入れ替え: `pausePollers` の `await machines.stop()`（524 行）の隣に `await extensions.stop()`、`resumePollers` の `void machines.start()`（530 行）の隣に `void extensions.start()`（**止めていなくても呼べる**。`start()` は、動いているものを二重に起動しない）。
+- `close()`: `await machines.stop()`（827 行）の隣に `await extensions.stop()`。`finally` の `displays.dispose()`（861 行）の**前**に `extensions.dispose()`（面を消す処理が、捨てた台帳を触らないように）。
+- 入れ替え: `pausePollers` の `await machines.stop()`（537 行）の隣に `await extensions.stop()`、`resumePollers` の `void machines.start()`（543 行）の隣に `void extensions.start()`（**止めていなくても呼べる**。`start()` は、動いているものを二重に起動しない）。
 - 止める処理は、並行で、合わせて 3 秒まで（S16）。
 
 ### `sodactl ext`（PR1）
@@ -715,7 +739,7 @@ stateDiagram-v2
   - 頭に、説明 1 行（「サーバ全体の設定です（ブラウザごとではありません）」）・置き場所（`userConfigPath` と「リポジトリの `.soda/extensions.json`」）・［読み直す］・`docs/extensions.md` への案内。
   - `supported === false`: 「このサーバは拡張に対応していません」だけ。
   - `problems`: ファイルごとに 1 行（パスと理由。`role="alert"` にしない——開くたびに読み上げない）。
-  - 一覧（`ul.settings-list`）の 1 行: id・種類の印（「利用者」／「プロジェクト」＋根のパス）・作者の説明（文字として）・許可（`allow`。あれば）・応答しないときの扱い（`block` のときだけ印）・状態の文（`disabled` は「設定で無効」か「画面で無効にした」を分ける）・入切（`role="switch"`）・［起動し直す］・［ログ］。
+  - 一覧（`ul.settings-list`）の 1 行: id・種類の印（「利用者」／「プロジェクト」＋根のパス）・作者の説明（文字として）・許可（`allow`。あれば。`script-html` を持つ行には、`list.scriptEnabled` が偽のとき「サーバの設定『スクリプトが動く表示』が無効なので、スクリプトの面は出ません」）・応答しないときの扱い（`block` のときだけ印）・状態の文（`disabled` は「設定で無効」か「画面で無効にした」を分ける）・入切（`role="switch"`）・［起動し直す］・［ログ］。
     プロジェクトの行は、状態に応じて［確認］（`pending`・`denied`）・［承認を取り消す］（**`approval.approvedAlive` なら、どの状態の行でも**。いまの登録と鍵が違うときは「前に承認した中身の記録が残っています」と添える）。`disabled` の行にも、承認の有無（「承認済み」「未承認」「承認しない」）を出す。`approval.groupWritable` なら、注意の印。
   - 節の末尾に「承認の記録」（PR3。`list.approvals`。たたんである）: 根・id・承認した／承認しないとした時刻・「いま開いていない」の印（`active` が偽）・［記録を消す］（`extension.revoke { root, id }`）。**いま workspace が無いリポジトリの承認も、ここで消せる**。
   - ［ログ］は、行の下に `<pre>`（`textContent`。新しい 200 行・末尾が見える）を開く。開いている間は、［更新］で取り直す（流し続けない）。
@@ -735,7 +759,10 @@ stateDiagram-v2
     3. 「実行されるコマンド」と `<pre class="ext-approval-command">`（`white-space: pre-wrap; overflow-wrap: anywhere;`。**高さの上限・内側のスクロールを付けない**）。その下に「作業ディレクトリ: <cwd>」。
        コマンドに ASCII でない文字（`/[^\x20-\x7E]/`）があれば、「ASCII でない文字を含みます（見た目の似た別の文字に注意）」と、その文字と符号位置の一覧（`а (U+0430)` の形。重複を除いて 16 個まで。残りは「ほか N 個」）。id は ASCII だけ（`COMMAND_ID_RE`）。説明と根のパスは、禁止する文字をサーバが断っている。
     4. 固定の文言（枠つき）: 「このプログラムは、あなたの OS の利用者の権限で動き、隔離されません。ファイルの読み書き・通信・ほかのプログラムの起動が出来ます。」「コマンドが指すファイルの中身が後で変わっても、確認は出ません。」
-    5. 「求めている許可」: `allow` が空なら「なし（文字・Markdown・スクリプトの動かない HTML の表示だけ）」。`script-html` があれば「スクリプトが動く表示: ブラウザの中で、この拡張のスクリプトが動きます。操作中に打ったキーは、スクリプトが読めます。」（表示の面の docs の「残る限界」への案内）。
+    5. 「求めている許可」: `allow` が空なら「なし（文字・Markdown・スクリプトの動かない HTML の表示だけ）」。`script-html` があれば、次の固定の文:
+       「スクリプトが動く表示: ブラウザの中で、この拡張のスクリプトが動きます。操作中に打ったキーは、スクリプトが読めます（残る限界は `docs/display.md`）。」
+       「サーバの設定『スクリプトが動く表示』が有効のときだけ動きます。**いまは、<有効｜無効>です。**」（`ExtensionListResult.scriptEnabled`）
+       「この設定は、不注意を防ぐためのもので、拡張からの守りではありません。拡張は、あなたの権限で動くので、この設定を、自分で有効に出来ます（有効になると、すべての画面に知らせが出ます）。」
        続けて、**いつも**（初回から。鍵に入る項目は、全部見せる）: 「応答しないとき: 素通し」か「応答しないとき: 止める（この版では、まだ効きません）」（`onUnresponsive`）。`enabled` は出さない（`disabled` の拡張には、ダイアログを開けない。`approve` は `pending`・`denied` だけを受けるので、ダイアログが出る登録の `enabled` は、いつも `true`）。
        `groupWritable` なら「この設定ファイル（か、その場所）は、同じグループのほかの利用者が書き換えられます」。
     6. 「作者が書いた説明（Sodashitsu は、中身を確かめていません）」と `description`（あれば）。
@@ -751,7 +778,8 @@ stateDiagram-v2
     中身が替わったとき（登録が変わって取り直した・次の 1 件へ替わった）も、フォーカスを［承認しない］へ置き直す。
   - 閉じたら、フォーカスを戻す（ほかのモーダルがあれば、開く前の要素。無ければ、フォーカスのあった pane の端末。`AskDialog.vue` の `restoreFocus` と同じ）。
 - `extensions/approvalView.ts`（純粋。PR3）: `diffEntry(previous, current): { field: string; before: string; after: string }[]`、`hasNonAscii(s)`、`showPath(s)`（`hasForbiddenChars` に当たる文字を `\u{…}` に替える。サーバが既に断っているが、画面でも二重に）。
-- **出どころの表示**（PR3。表示の面の PR2 の部品に足す）: `DisplayInfo.source` があれば、固定のラベルを「拡張『<id>』の表示（利用者｜プロジェクト）」にする。無ければ、今までのラベル。`source` は、サーバが付ける（面の中身・題からは変えられない）。
+- **出どころの表示**（PR1 の T27。`packages/web/src/display/displayLabel.ts`）: `displayLabel(info)` を `Pick<DisplayInfo, "name"> & { source?: unknown }` に広げ、`source` が **`{ type: "extension", id: <EXTENSION_ID_RE に合う文字列>, scope: "user" | "project" }` の形のときだけ**、接頭の文を「拡張『<id>』の表示（利用者｜プロジェクト・隔離）」に替える（ほかの形・文字列・無いときは、今までの「pane のプログラムの表示（隔離）」。`displayLabel.test.ts:7` の `source: "ext-a"` は、今までどおり）。
+  `displayBandLabel` は `displayLabel` を呼んでいるので、帯も替わる。`PanePanel.vue`（125・162 行）・`PaneBands.vue` は、変えない。`source` は、サーバが付ける（面の中身・題からは変えられない。`checkDisplaySet` は、知らない項目を落とすので、`set` の引数に `source` を書いても、載らない）。
 
 ### 文書と見本
 
@@ -791,7 +819,7 @@ lines.on("close", () => process.exit(0)); // 標準入力が閉じたら終わ�
 - **入れ替え**: `pausePollers` で全部止まる（面は消える）→ `execve` → 新しい版の `listen()` が、同じ手順で起動する（承認の記録・無効の記録は、ファイルにある）。失敗したら `resumePollers` → `start()` → 動かし直す。
 - **同じ拡張を、複数の session のサーバが動かす**: session ごとに 1 つずつ動く（利用者の設定は session ごと。プロジェクトは、その session に、その根の workspace があれば）。承認は共有（K3）。
 - **別のマシン**: 先のマシンのサーバが、自分の設定・自分の承認の記録で動かす。手元のブラウザは、中継越しに、同じ方式を呼ぶ。
-- **表示の面の PR2・PR3 が無い組み合わせ**: PR2 が無い → 面は台帳に載るが、ブラウザに出ない（`renderers` が 0）。PR3 が無い → `script-html` は、許可があっても `invalid_display`（表示の面の検査）で返り、`display.send` は `unsupported`。
+- **設定 `displayScriptEnabled` との組み合わせ**: 無効（既定）→ `allow` があっても、`script-html` の `set`・`send` は `display_script_disabled`。有効 → `allow` がある拡張だけが出せる。有効 → 無効 → 拡張の `script-html` の面も閉じ、`display.closed`（`script_disabled`）が届く。静的な形式（`text`・`markdown`・`html`）は、設定にも `allow` にも依らない。
 
 ## ドメイン固有の考慮
 
@@ -812,7 +840,7 @@ lines.on("close", () => process.exit(0)); // 標準入力が閉じたら終わ�
 | S8 | 面（とくに、スクリプトが動く面）が、承認のダイアログに似せた絵を出して、だます。または、本物のダイアログが出る瞬間に、利用者が別の用で押す・`Enter` を打つように仕向ける。pane のプログラムが、質問のフォームを上に重ねて、閉じた瞬間に下のボタンを押させる | 似せた絵を押しても、承認にならない（承認は、アプリのダイアログのボタンだけ）。本物は、top layer のモーダルで、面はその上に描けない。ほかのモーダルが開いた・閉じたら、1 秒の待ちをやり直す。**ダイアログは、利用者が開く**（サーバの出来事では開かない）。開いたときのフォーカスは［承認しない］・［承認して動かす］は 1 秒押せない・「すべて承認」は無い | AC-I1・AC-I4（E2E: 開いた直後に `Enter` を打っても、承認にならない・1 秒は `disabled`） |
 | S9 | pane の中のプログラム・拡張が、自分で承認する | `pane.sock`（ログイン不要）に、拡張の操作を 1 つも載せない。`sodactl` に承認のコマンドを作らない。`/ws` の承認は、画面の種類だけ。**ただし、種類は自己申告で、ログイン済みのプログラムは画面を名乗れる。記録のファイルも、同じ OS の利用者は書ける。これは境界ではない**（前提）。docs に書く | AC23（結合: `pane.sock` は `unknown_op`・`external` は断られる）。負の対照 AC35 (f)。docs |
 | S10 | プロジェクトの拡張が、ほかのリポジトリの pane に面を出す・一覧で、ほかの作業の場所を知る・pane が範囲の外へ出た後も、面を残して、操作の値を受け取る | 要求のたびに、pane → workspace → 根を引き、拡張の根と等しいときだけ通す。外は `not_found`。`ext.panes` は、範囲の中だけ。pane が外へ出たら、面を消す（bus のイベントが出れば、長くても 500ms。出なくても、2 秒ごとの見直しで。**出来事を渡す直前にも範囲を確かめ、外なら渡さずに閉じる**）。根の対応表は、作り終えてから差し替える。根は `Workspace.cwd`（変わらない）から決める | AC24。負の対照 AC35 (c) |
-| S11 | 拡張が、承認の画面に出ていないのに、スクリプトが動く面を出す | `allow` に `script-html` が無ければ `unsupported`。`allow` は鍵に入り、ダイアログに意味が出る。足すと再承認 | AC25・AC20 |
+| S11 | 拡張が、承認の画面に出ていないのに、スクリプトが動く面を出す。`allow` を持つ拡張が、サーバの設定（`displayScriptEnabled`）が無効なのに出す。拡張が、自分で設定を有効にする | **条件は 2 つとも**: 登録の `allow`（無ければ、台帳を呼ばずに `unsupported`。`allow` は鍵に入り、ダイアログに意味が出る。足すと再承認）と、サーバの設定（台帳が、ほかの呼び手と同じ入口で検査。`ExtensionHost` に、設定を読む・変える・検査を飛ばす道は無い）。拡張に、設定を変える口は渡さない（標準入出力の操作の表に無い・token を渡さない・`pane.sock` に無い）。**ただし、拡張は利用者の権限で動くので、状態ディレクトリの認証の情報を読んで `/ws` につなげば、有効に出来る——止められない**（表示の面の D37 と同じ限界。設定は、不注意を防ぐもの）。有効になると、すべての画面に知らせが出る（main の作り）。ダイアログの固定の文と docs に書く | AC25（単体・結合: `allow` なし → `unsupported` で、台帳が呼ばれない／`allow` あり・設定が無効 → `display_script_disabled`／両方あり → 通る／有効 → 無効で、拡張へ `script_disabled`）。docs |
 | S12 | 拡張が、pane のプログラム（エージェント）やほかの拡張の面への操作（利用者が欄に打った値）を読む。ほかの面を閉じて、似せた面を出す | 面に持ち主の札。札つきの出来事は、持ち主にだけ届く（pane の列に入れない）。拡張の `list`・`close`・`set`・`send` は、自分の札の面だけ。固定のラベルに、拡張の id と種類 | AC9・AC31。負の対照 AC35 (d) |
 | S13 | 拡張が暴走して、サーバ・pane・ブラウザを止める: 巨大な行・大量の行・壊れた行・読まない・落ち続ける・大量の標準エラー・大量の面・応答しない場所の設定で、処理の列を止める | 1 行 4 MiB（越えたら、その行を捨てる）・頻度と量は「読むのを待つ」（拡張ごとと、全部の合計）・16 行か 8 ミリ秒ごとにイベントループへ返す・量は、片を受けた時点で数える（改行の無い出力にも効く）・標準エラーにも量の桶・設定と記録を読む 1 回は 2 秒までで、返らない読み取りを積み上げない・`listen()` は拡張の起動を待たない・続けて壊れた行 20 で止める・書く列 512 行／8 MiB と 30 秒・起動し直しの間隔と 5 回・標準エラーは輪の記録だけ・1 つの拡張の面 16・面の上限と頻度は、表示の面の台帳のまま。要求の処理は同期で、例外は、その拡張だけの誤り | AC11・AC12・AC15・AC34 |
 | S14 | 止めた・落ちた拡張の、孫プロセスが残る。入れ替え・停止で、子が置き去りになる。止める処理と、起動の処理が競って、止めた後に起動する。遅れて来た終わりの知らせが、次の起動を壊す | グループを分けて起動し、`sweepGroup`（残りを確かめてから合図・2 秒で強制終了）。`stop` は、子の `exit` と、グループが空になることの両方を待つ。`stop()` は、印と `epoch` を立て、`startOne` は `spawn` の直前に（`await` を挟まずに）見直す。後始末は `runId` が一致するときだけ・面の札は起動ごと。**`runs` から外した起動も、子と孫が居なくなるまで「片づけ中」に持ち、`stop()` は、それも待つ**。合図を送れない残り（`EPERM`）は、期限で打ち切る。入れ替えの前・`close()` で止める。**限界: 自分でグループを抜けた孫（`setsid`）には届かない。Windows では、親が先に終わった後の孫は止められない** | AC13・AC14（起動確認: 孫の pid が残っていない）。負の対照 AC35 (e) |
@@ -827,6 +855,7 @@ lines.on("close", () => process.exit(0)); // 標準入力が閉じたら終わ�
 | S23 | 入れ替えの後・再起動の後に、承認なしで動く | 新しいプロセスの `listen()` も、同じ `start()` → `reconcile` → `startOne`（S2）。承認と無効は、ファイルから読む | AC18（起動確認: 入れ替えの後も、実行の印が無い） |
 | S24 | 共有の場所（ほかの OS の利用者が書けるディレクトリ）に置かれた `.git` と `.soda/` が、根として拾われる。承認の後、鍵に入らないスクリプトを、ほかの利用者が差し替える | 根・`.soda`・設定ファイルの持ち主が自分で、だれでも書ける（other）でないときだけ読む。**根より上のディレクトリ**も、`/` まで、ほかの利用者が差し替えられない（持ち主が自分か root・other が書けないか、スティッキー）ときだけ。グループが書けるときは、一覧とダイアログに注意。**スクリプトの置き場所の権限までは見ない**（S4 と同じ限界。docs に書く） | AC28（単体: 持ち主・other の書き込み・グループの注意・根の親が other から書けてスティッキーなし） |
 | S25 | サーバが、名前だけでプログラムを起動して、サーバを起動した場所（悪意のあるリポジトリの中）に置かれた、同じ名前のプログラムが動く（Windows の `taskkill`） | 止めるための `taskkill` は、`%SystemRoot%\System32` の絶対パスで起動し、`cwd` もそこにする。POSIX は `/bin/sh` の絶対パスと、`process.kill`（プログラムを起動しない） | AC36（単体: 組み立てた絶対パスと `cwd`） |
+| S26 | 拡張の `script-html` の面が、フォーカスを取り続ける・枠を移して、その pane の冷却を起こし、pane のプログラム（エージェント）やほかの拡張のスクリプトの面を、巻き添えで閉じさせる（5 分、その pane は、だれも出せない）。逆に、pane のプログラムが、拡張の面を巻き添えにする | **止めない**（冷却は pane ごと。持ち主で分けると、持ち主を替えて回数を稼げる——表示の面の守りを弱める）。起こせるのは、`allow` と設定の両方がある拡張だけで、プロジェクトの拡張は、範囲の中の pane だけ。閉じた面の持ち主へは、理由つきの `display.closed` が届く。限界として docs に書く | 単体（T7: 冷却・設定の無効化で、札つきの面も閉じ、持ち主へ理由つきで届く）。docs |
 
 残る限界（docs「安全と限界」に書く）: S4（スクリプトの中身・同じ場所の差し替え）／S9（種類は自己申告・記録は同じ利用者が書ける）／S14（自分でグループを抜けた孫は、止められない。Windows では、親が先に終わった後の孫も）／S15（異常終了で残りうる）／S17（環境変数は見える・標準エラーの記録に、コマンドの断片が出うる）／S18（取り消しが、ほかの session のサーバに届くまで、数秒）／S19（中身を変えれば、聞き直せる）／拡張のプロセスは隔離しない（D3）——承認した拡張は、利用者の権限で、ファイル・通信・`sodactl`（ログイン済みなら）を使える／
 pane のプログラムは、拡張の面と同じ名前で出し直せる・閉じられる（K10）／同じ pane の面の数・頻度は、拡張と pane のプログラムで合わせて数えるので、片方が上限を使い切れる。
@@ -888,13 +917,13 @@ pane のプログラムは、拡張の面と同じ名前で出し直せる・閉
 - AC22: `ApprovalStore.decide(…, "denied")` → `decision` が `denied`。画面は、`pending` だけを知らせる。`revoke`（(根, id) で指す）→ 止まって `pending`。別の session のサーバは、見張りで拾う。
 - AC23: `paneOps` に登録しない（`pane.sock` へ `extension.approve` を送ると `unknown_op`）。`ExtensionHost.approve`・`deny`・`revoke`・`setEnabled` の `isScreenKind`。
 - AC24: `inScope`（`commandContext` → `workspaceRoots`）を、要求のたび・出来事を渡す直前・2 秒ごとの、面を持つ pane の見直し・pane の一覧を作り直すとき、に引く。範囲の外の面は `closeOwned` して、拡張へ `display.closed`（`out_of_scope`）。入力は、2 つの根の workspace と、pane の移動。
-- AC25: 「処理の順」の 5（`format === "script-html"`）と、`features` の絞り込み。許可があれば、表示の面の検査（`checkDisplaySet`）へ進む（PR3 が無ければ `invalid_display`）。
+- AC25: 「処理の順」の 5（`allow`。無ければ、台帳を呼ばずに `unsupported`）と、`features` の絞り込み。`allow` があれば、台帳の検査（設定 → 冷却 → …）へ進み、設定が無効なら `display_script_disabled`、有効なら通る。入力は、拡張の標準出力の行と、テストが `prefs.set` で切り替える設定。
 - AC26: あるべき集合が、workspace の根から作られる（`reconcile` の 2）。作業ディレクトリは `root`。
 - AC27: `ExtensionSettings.vue`。`extension.changed` → 取り直し。E2E は、DOM と、ブラウザが受けたフレーム（利用者の拡張のコマンドが無い）。
 - AC28: `loadProjectExtensionsFile` の 1〜5 と 3'（持ち主と権限）・3''（根より上）と、`parseExtensionsJson(text, "project")`（`cwd` は誤り）。git の偽物を `PATH` の先頭に置いて、呼ばれないことを見る。
 - AC29: `ExtensionApprovalDialog.vue`（`textContent`・内側のスクロールなし・固定の文言・`diffEntry`・`hasNonAscii`）。入力は、`ExtensionInfo.approval`。
 - AC30: `ExtensionController` の知らせ（`sticky` のトースト・`failed` への変化）。E2E は、トーストの DOM と、`document.activeElement` が変わらないこと。
-- AC31: `DisplayInfo.source`（サーバが `owner.source` から付ける）と、パネル・帯の見出しの部品。表示の面の PR2 が main に入ってから。
+- AC31: `DisplayInfo.source`（サーバが `owner.source` から付ける）と、`displayLabel`（`source` の形を確かめてから、文を替える）。E2E は、拡張が出したパネルの、枠の外のラベルを DOM で見る。
 - AC32: `docs/examples/extension-hello.mjs` を、結合テストが `process.execPath` で起動し、台帳に帯が載ること・標準入力を閉じると終わることを見る。
 - AC33: `docs/extensions.md` の節（上の一覧）・`AGENTS.md`・`docs/sodactl.md`・`docs/tui-parity.md`。
 - AC34: 定数（16・16・32・16・256）の、ちょうどと超過のテスト（`over_limit`・`problems`・古い記録から捨てる）。
