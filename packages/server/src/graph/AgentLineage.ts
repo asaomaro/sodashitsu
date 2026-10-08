@@ -1,17 +1,12 @@
 import {
   GRAPH_LINKS_MAX,
-  GRAPH_LOCAL_NODES_MAX,
   type Graph,
   type GraphLink,
   type GraphOp,
   type LinkKind,
   type NodeKey,
 } from "@sodashitsu/protocol";
-import {
-  addMissingNodeOps,
-  defaultApprovalConfig,
-  LINK_LIMIT_DEFAULT,
-} from "@sodashitsu/client-core";
+import { defaultApprovalConfig, LINK_LIMIT_DEFAULT } from "@sodashitsu/client-core";
 import type { Disposable } from "../util/Disposable.js";
 import type { EventBus } from "../bus/EventBus.js";
 import {
@@ -24,7 +19,8 @@ import type { Logger } from "../log/Logger.js";
 /**
  * エージェントが起動したエージェントを連携のグラフに自動で載せる（20261003-graph-auto-nodes の design）。
  * 「誰が pane を作ったか／誰が `agent start` したか」をメモリだけで覚え、その pane でエージェントが最初に検出されたとき、
- * グラフへ足す処理（`attach`）を応答の後（`queueMicrotask`）で 1 回だけ呼ぶ。`bus` と `GraphStore` だけを使い、fs・/proc・pane.sock には依存しない。
+ * グラフへ線を足す処理（`attach`）を応答の後（`queueMicrotask`）で 1 回だけ呼ぶ。ノードは足さない（手元のすべての pane のノードは、維持
+ * `GraphMaintainer` が足す。20261008-graph-first D9）。`bus` と `GraphStore` だけを使い、fs・/proc・pane.sock には依存しない。
  */
 export interface AgentLineageDeps {
   /** `pane.agent_status_changed`・`pane.closed` を購読する。 */
@@ -35,6 +31,11 @@ export interface AgentLineageDeps {
   logger: Logger;
   /** `rev_conflict` のやり直しの最大回数（既定 3）。 */
   retries?: number;
+  /**
+   * 線を足す前に、手元の pane のノードがそろっているようにする（`GraphMaintainer.reconcileNow`）。ノードを足すのは維持の側で、ここは線だけを足す
+   * （20261008-graph-first D9）。構造のできごとの 50ms のまとめより先に検出が来ても、線が落ちないための順の保証。無ければ何もしない。
+   */
+  ensureNodes?: () => Promise<unknown>;
   /** 子を親の下に載せる処理（既定はグラフへ足す実装。テストで差し替える）。 */
   attach?: (childId: string, parentId: string) => Promise<void> | void;
 }
@@ -45,6 +46,7 @@ export type LineageSkipReason =
   | "reverse_link"
   | "duplicate_link"
   | "supervisor_taken"
+  /** 親か子のノードが無い（手元のノードの上限に達していて、維持が足せなかった）。 */
   | "too_many_nodes"
   | "too_many_links"
   | "conflict"
@@ -138,8 +140,8 @@ export class AgentLineage {
   }
 
   /**
-   * 子と親のノード・監督の線・承認の代理の線を、1 回の `store.update` で足す。重複・上限・監督役の取り合いは、ops が全か無かなので組み立て前に自分で外す。
-   * 何も足すものが無ければ `update` を呼ばない（rev は進まない）。
+   * 子から親への監督の線・承認の代理の線を、1 回の `store.update` で足す。重複・上限・監督役の取り合いは、ops が全か無かなので組み立て前に自分で外す。
+   * 何も足すものが無ければ `update` を呼ばない（rev は進まない）。ノードは足さない（先に `ensureNodes` で維持にそろえてもらう）。
    */
   private async attachToGraph(childId: string, parentId: string): Promise<void> {
     const { paneExists, logger, store } = this.deps;
@@ -162,6 +164,10 @@ export class AgentLineage {
       // 競合の間に閉じた pane のノードを載せない。子が閉じていた（F7）は黙る。
       if (this.closed || !paneExists(childId)) return;
       if (!paneExists(parentId)) return skip("parent_gone");
+      // ノードは維持の側が足す。構造のできごとの 50ms のまとめより先に検出が来ても線が落ちないよう、先にそろえてもらう。
+      await this.deps.ensureNodes?.();
+      if (this.closed || !paneExists(childId)) return;
+      if (!paneExists(parentId)) return skip("parent_gone");
       const g = store.get();
       // skip の理由は試行ごとに集め、採用した試行のぶんだけ出す（競合の再試行で重複させない）。
       const reasons: LineageSkipReason[] = [];
@@ -182,7 +188,6 @@ export class AgentLineage {
       logger.info("graph.auto: added", {
         child: childId,
         parent: parentId,
-        nodes: plan.nodes,
         links: plan.links,
       });
       return;
@@ -196,14 +201,13 @@ export class AgentLineage {
     parent: NodeKey,
     child: NodeKey,
     skip: (reason: LineageSkipReason) => void,
-  ): { ops: GraphOp[]; nodes: number; links: number } | null {
-    // 線が 0 本でもノードは足す: 既に別の監督役が居る子も、グラフに見えるようにする（意図）。
-    const ops: GraphOp[] = addMissingNodeOps(g, [parent, child]);
-    const nodes = ops.length;
-    if (g.nodes.length + nodes > GRAPH_LOCAL_NODES_MAX) {
+  ): { ops: GraphOp[]; links: number } | null {
+    // 手元のノードの上限で維持が足せなかったときだけ、ノードが無い（線の端のノードが無いと線は足せない）。
+    if (!g.nodes.some((n) => n.key === parent) || !g.nodes.some((n) => n.key === child)) {
       skip("too_many_nodes");
       return null;
     }
+    const ops: GraphOp[] = [];
 
     let links = 0;
     for (const kind of AUTO_LINK_KINDS) {
@@ -230,7 +234,7 @@ export class AgentLineage {
       skip("too_many_links");
       return null;
     }
-    return { ops, nodes, links };
+    return { ops, links };
   }
 }
 

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   GRAPH_LINKS_MAX,
-  GRAPH_LOCAL_NODES_MAX,
   type AgentInfo,
   type Graph,
   type GraphLink,
@@ -22,6 +21,7 @@ import { GraphInvalidError, GraphRevConflictError } from "../persist/GraphStore.
 import { AgentLineage } from "./AgentLineage.js";
 
 // 20261003-graph-auto-nodes T4：グラフへ足す処理（偽の store。検証は実物の applyGraphOps）。
+// 20261008-graph-first D9：ノードは維持（GraphMaintainer）が足す。ここは線だけを足し、ノードが無ければ足さない。
 const agentInfo: AgentInfo = {
   instanceId: "i1",
   kind: "claude",
@@ -83,10 +83,20 @@ class FakeStore {
   }
 }
 
-function setup(seed: Partial<Graph> = {}, opts: { live?: string[]; retries?: number } = {}) {
+function setup(
+  seed: Partial<Graph> = {},
+  opts: { live?: string[]; retries?: number; ensureNodes?: () => Promise<unknown> } = {},
+) {
   const bus = new EventBus();
   const live = new Set(opts.live ?? ["p1", "p2"]);
-  const store = new FakeStore(seed);
+  // 既定では、親子のノードは維持が足し済み。
+  const store = new FakeStore({
+    nodes: [
+      { key: P, x: 0, y: 0 },
+      { key: C, x: 300, y: 0 },
+    ],
+    ...seed,
+  });
   const log: Logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   const lineage = new AgentLineage({
     bus,
@@ -94,6 +104,7 @@ function setup(seed: Partial<Graph> = {}, opts: { live?: string[]; retries?: num
     paneExists: (id) => live.has(id),
     logger: log,
     ...(opts.retries === undefined ? {} : { retries: opts.retries }),
+    ...(opts.ensureNodes === undefined ? {} : { ensureNodes: opts.ensureNodes }),
   });
   lineage.noteCreated("p2", "p1");
   const run = async () => {
@@ -116,13 +127,22 @@ const addedLog = (log: Logger) =>
   vi.mocked(log.info).mock.calls.filter(([m]) => m === "graph.auto: added");
 
 describe("AgentLineage.attach", () => {
-  it("子と親のノード（親が先）・監督の線・承認の代理の線（notify・40・10）を 1 回の更新で足す", async () => {
-    const s = setup();
+  it("監督の線・承認の代理の線（notify・40・10）だけを 1 回の更新で足す。ノードは足さない・動かさない", async () => {
+    const s = setup({
+      nodes: [
+        { key: P, x: 300, y: 40 },
+        { key: C, x: 600, y: 40 },
+      ],
+    });
     await s.run();
     expect(s.store.updates).toHaveLength(1);
     expect(s.store.updates[0]!.baseRev).toBe(5);
+    expect(s.store.updates[0]!.ops.every((o) => o.op === "add_link")).toBe(true);
     expect(s.store.graph.rev).toBe(6); // 1 つ進む（AC12）
-    expect(s.store.graph.nodes.map((n) => n.key)).toEqual([P, C]);
+    expect(s.store.graph.nodes).toEqual([
+      { key: P, x: 300, y: 40 },
+      { key: C, x: 600, y: 40 },
+    ]);
     const [sup, appr] = s.store.graph.links;
     expect(sup).toMatchObject({ kind: "supervise", from: C, to: P, limit: LINK_LIMIT_DEFAULT });
     expect(appr).toMatchObject({
@@ -133,16 +153,29 @@ describe("AgentLineage.attach", () => {
       approval: { mode: "notify", lines: 40 },
     });
     expect(addedLog(s.log)).toEqual([
-      ["graph.auto: added", { child: "p2", parent: "p1", nodes: 2, links: 2 }],
+      ["graph.auto: added", { child: "p2", parent: "p1", links: 2 }],
     ]);
   });
 
-  it("既にあるノードは動かさず、足りないノードだけ足す（AC8）", async () => {
-    const s = setup({ nodes: [{ key: P, x: 300, y: 40 }] });
+  it("線を足す前に ensureNodes を呼ぶ（維持が先にノードを足す。順が逆でも線が落ちない）", async () => {
+    const order: string[] = [];
+    const s = setup(
+      { nodes: [] },
+      {
+        ensureNodes: async () => {
+          order.push("ensure");
+          s.store.graph.nodes.push({ key: P, x: 0, y: 0 }, { key: C, x: 300, y: 0 });
+        },
+      },
+    );
     await s.run();
-    expect(s.store.graph.nodes[0]).toEqual({ key: P, x: 300, y: 40 });
-    expect(s.store.graph.nodes.map((n) => n.key)).toEqual([P, C]);
-    expect(s.store.updates[0]!.ops.filter((o) => o.op === "add_node")).toHaveLength(1);
+    expect(order).toEqual(["ensure"]);
+    expect(s.store.graph.links.map((l) => l.kind)).toEqual(["supervise", "approval"]);
+    // 否定の対照: ensureNodes が無く、ノードが無ければ、線は足さない。
+    const t = setup({ nodes: [] });
+    await t.run();
+    expect(t.store.graph.links).toEqual([]);
+    expect(t.reasons()).toEqual(["too_many_nodes"]);
   });
 
   it("同じ線がある（duplicate_link）とその線だけ外し、ほかは足す。既存の線は変えない", async () => {
@@ -160,9 +193,9 @@ describe("AgentLineage.attach", () => {
     expect(s.store.graph.links.map((l) => l.kind)).toEqual(["supervise", "approval"]);
   });
 
-  it("同じ配下の別の監督役の線がある（supervisor_taken）とその種類の線は引かず、ノードは足す", async () => {
+  it("同じ配下の別の監督役の線がある（supervisor_taken）とその種類の線は引かない", async () => {
     const s = setup({
-      nodes: [{ key: "local:p9", x: 0, y: 0 }],
+      nodes: [P, C, "local:p9" as NodeKey].map((key, i) => ({ key, x: i * 300, y: 0 })),
       links: [link(1, "supervise", C, "local:p9")],
     });
     await s.run();
@@ -171,7 +204,6 @@ describe("AgentLineage.attach", () => {
       "supervise:local:p9",
       "approval:local:p1",
     ]);
-    expect(s.store.graph.nodes.map((n) => n.key)).toEqual(["local:p9", P, C]);
   });
 
   it("逆向きの線がある（reverse_link）と、その種類の線は引かない", async () => {
@@ -205,13 +237,8 @@ describe("AgentLineage.attach", () => {
     expect(addedLog(s.log)).toEqual([]);
   });
 
-  it("追加後の手元のノードが上限を超えるなら何も足さない（too_many_nodes）", async () => {
-    const nodes = Array.from({ length: GRAPH_LOCAL_NODES_MAX - 1 }, (_, i) => ({
-      key: `local:p${i + 10}` as NodeKey,
-      x: i * 10,
-      y: 0,
-    }));
-    const s = setup({ nodes });
+  it("親か子のノードが無い（手元のノードの上限で維持が足せなかった）なら、線を足さず warn で出す（too_many_nodes）", async () => {
+    const s = setup({ nodes: [{ key: P, x: 0, y: 0 }] });
     await s.run();
     expect(s.reasons()).toEqual(["too_many_nodes"]);
     expect(s.store.updates).toEqual([]);
@@ -220,33 +247,6 @@ describe("AgentLineage.attach", () => {
       "graph.auto: skipped",
       expect.objectContaining({ reason: "too_many_nodes" }),
     );
-  });
-
-  it("ちょうど上限になるなら足す（境界）", async () => {
-    const nodes = Array.from({ length: GRAPH_LOCAL_NODES_MAX - 2 }, (_, i) => ({
-      key: `local:p${i + 10}` as NodeKey,
-      x: i * 10,
-      y: 0,
-    }));
-    const s = setup({ nodes });
-    await s.run();
-    expect(s.store.graph.nodes).toHaveLength(GRAPH_LOCAL_NODES_MAX);
-  });
-
-  it("ノード上限の 1 本手前＋子だけ足して上限になるなら足す（親は既にある）", async () => {
-    const nodes = [
-      { key: P, x: 0, y: 0 },
-      ...Array.from({ length: GRAPH_LOCAL_NODES_MAX - 2 }, (_, i) => ({
-        key: `local:p${i + 10}` as NodeKey,
-        x: i * 10,
-        y: 0,
-      })),
-    ];
-    expect(nodes).toHaveLength(GRAPH_LOCAL_NODES_MAX - 1);
-    const s = setup({ nodes });
-    await s.run();
-    expect(s.store.graph.nodes).toHaveLength(GRAPH_LOCAL_NODES_MAX);
-    expect(s.store.graph.nodes.map((n) => n.key)).toContain(C);
   });
 
   // 親子と無関係の 34 ノード間の trigger 線（向きは添字の昇順だけで輪にならない。上限の境界用の詰め物）。
@@ -285,7 +285,7 @@ describe("AgentLineage.attach", () => {
     expect(s.store.updates).toEqual([]);
   });
 
-  it("追加後の線が 512 を超えるなら何も足さない（too_many_links。ノードも足さない）", async () => {
+  it("追加後の線が 512 を超えるなら何も足さない（too_many_links）", async () => {
     const links = Array.from({ length: GRAPH_LINKS_MAX - 1 }, (_, i) =>
       link(i + 1, "trigger", `local:p${i + 10}`, `local:p${i + 500}`),
     );
@@ -313,17 +313,17 @@ describe("AgentLineage.attach", () => {
     expect(s.log.warn).not.toHaveBeenCalled();
   });
 
-  it("rev_conflict は get から取り直してやり直す（他の編集で親が載っていればそのぶん減る）", async () => {
+  it("rev_conflict は get から取り直してやり直す（他の編集で同じ線が引かれていればそのぶん減る）", async () => {
     const s = setup();
     s.store.conflicts = 1;
     s.store.beforeUpdate = () => {
-      if (s.store.conflicts === 1) s.store.graph.nodes.push({ key: P, x: 0, y: 0 }); // 割り込みで親が載った
+      if (s.store.conflicts === 1) s.store.graph.links.push(link(9, "supervise", C, P)); // 割り込みで同じ線が引かれた
     };
     await s.run();
     expect(s.store.updates).toHaveLength(2);
     expect(s.store.getCalls).toBe(2);
     expect(s.store.updates[1]!.baseRev).toBe(s.store.updates[0]!.baseRev + 1);
-    expect(s.store.updates[1]!.ops.filter((o) => o.op === "add_node")).toHaveLength(1);
+    expect(s.store.updates[1]!.ops.filter((o) => o.op === "add_link")).toHaveLength(1);
     expect(s.store.graph.links).toHaveLength(2);
   });
 
@@ -351,13 +351,13 @@ describe("AgentLineage.attach", () => {
     expect(s.reasons()).toEqual(["supervisor_taken"]);
   });
 
-  it("競合の間に子が閉じたら、死んだ pane のノードを載せない（黙る）", async () => {
+  it("競合の間に子が閉じたら、死んだ pane の線を足さない（黙る）", async () => {
     const s = setup();
     s.store.conflicts = 1;
     s.store.beforeUpdate = () => s.live.delete("p2");
     await s.run();
     expect(s.store.updates).toHaveLength(1);
-    expect(s.store.graph.nodes).toEqual([]);
+    expect(s.store.graph.links).toEqual([]);
     expect(s.log.warn).not.toHaveBeenCalled();
   });
 
@@ -367,7 +367,7 @@ describe("AgentLineage.attach", () => {
     s.store.beforeUpdate = () => s.live.delete("p1");
     await s.run();
     expect(s.store.updates).toHaveLength(1);
-    expect(s.store.graph.nodes).toEqual([]);
+    expect(s.store.graph.links).toEqual([]);
     expect(s.reasons()).toEqual(["parent_gone"]);
   });
 
@@ -405,13 +405,18 @@ describe("AgentLineage.attach", () => {
     );
   });
 
-  it("外した子は同じ子で加え直さない。外した親は別の子の検出で加え直される（AC7）", async () => {
-    const s = setup({}, { live: ["p1", "p2", "p3"] });
+  it("外した線は同じ子で加え直さない。別の子の検出では、その子の線が足される（AC7）", async () => {
+    const s = setup(
+      {
+        nodes: [P, C, "local:p3" as NodeKey].map((key, i) => ({ key, x: i * 300, y: 0 })),
+      },
+      { live: ["p1", "p2", "p3"] },
+    );
     await s.run();
-    // 利用者が子と親を外した。
-    s.store.graph = { ...s.store.graph, nodes: [], links: [] };
+    // 利用者が線を外した。
+    s.store.graph = { ...s.store.graph, links: [] };
     await s.run(); // 同じ子の再検出
-    expect(s.store.graph.nodes).toEqual([]);
+    expect(s.store.graph.links).toEqual([]);
     s.lineage.noteCreated("p3", "p1");
     s.store.updates.length = 0;
     s.bus.publish({
@@ -419,6 +424,9 @@ describe("AgentLineage.attach", () => {
       data: { paneId: "p3", agent: agentInfo },
     } as ServerEvent);
     await new Promise<void>((r) => setTimeout(r, 0));
-    expect(s.store.graph.nodes.map((n) => n.key)).toEqual([P, "local:p3"]);
+    expect(s.store.graph.links.map((l) => `${l.kind}:${l.from}>${l.to}`)).toEqual([
+      "supervise:local:p3>local:p1",
+      "approval:local:p3>local:p1",
+    ]);
   });
 });
