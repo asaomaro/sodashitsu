@@ -63,6 +63,29 @@ describe.skipIf(process.platform === "win32")("ApprovalStore", () => {
     expect(set.list().map((r) => r.id)).toEqual(["keep"]);
   });
 
+  it("revokeApprovedOnly: 承認だけを消し、「承認しない」は残す。denied だけの記録・無い記録は何も書かない。承認だけの記録は、その 1 件ごと消える", async () => {
+    const s = store();
+    await s.decideApproved(ROOT, "both", D("a"), entry({ id: "both" }));
+    await s.decideDenied(ROOT, "both", D("b"));
+    await s.decideDenied(ROOT, "d", D("d"));
+    await s.decideApproved(ROOT, "a", D("x"), entry({ id: "a" }));
+    await s.revokeApprovedOnly(ROOT, "both");
+    await s.revokeApprovedOnly(ROOT, "a");
+    await s.revokeApprovedOnly(ROOT, "d");
+    await s.revokeApprovedOnly(ROOT, "nothing");
+    const set = await s.load();
+    expect(set.find(ROOT, "both")).toMatchObject({ denied: { digest: D("b") } });
+    expect(set.find(ROOT, "both")?.approved).toBeUndefined();
+    expect(set.find(ROOT, "a")).toBeUndefined();
+    expect(set.find(ROOT, "d")?.denied).toBeDefined();
+  });
+
+  it("続けて何度書いても（前の書く手順が返った直後でも）、「書いている途中」の誤りにならない", async () => {
+    const s = store();
+    for (let i = 0; i < 6; i++) await s.decideDenied(ROOT, `e${i}`, D(`d${i}`));
+    expect((await s.load()).records).toHaveLength(6);
+  });
+
   it("記録が無い (根, id) の revoke は、何も書かずに成功（ファイルを作らない）", async () => {
     await store().revoke(ROOT, "nothing");
     await expect(stat(file)).rejects.toThrow();

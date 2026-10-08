@@ -72,13 +72,24 @@ export function buildExtensionEnv(
   // リポジトリの中のファイルに解決されて、利用者が「システムのコマンド」のつもりで承認したものと別のものが動くのを避ける。利用者の設定の拡張の `PATH` は変えない。
   if (ext.scope === "project") {
     const key = Object.keys(env).find((k) => (ci ? k.toUpperCase() === "PATH" : k === "PATH"));
-    if (key !== undefined) env[key] = safePath(env[key]!, platform);
+    if (key !== undefined) {
+      const safe = safePath(env[key]!, platform);
+      // 全部が落ちて空になったら、空の文字列では渡さない（`/bin/sh` が作業ディレクトリから探す）。固定の安全な値にする。
+      env[key] = safe !== "" ? safe : fallbackPath(env, platform);
+    }
   }
   env["SODA_EXTENSION_ID"] = ext.id;
   env["SODA_EXTENSION_SCOPE"] = ext.scope;
   env["SODA_EXTENSION_RUN_ID"] = ext.runId;
   if (ext.scope === "project" && ext.root !== null) env["SODA_PROJECT_ROOT"] = ext.root;
   return env;
+}
+
+/** `PATH` が全部落ちたときの固定の値（POSIX。Windows は `SystemRoot` から）。 */
+function fallbackPath(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string {
+  if (platform !== "win32") return "/usr/local/bin:/usr/bin:/bin";
+  const root = systemRoot(env, platform);
+  return `${win32.join(root, "System32")};${root}`;
 }
 
 /** `PATH` から、空の要素・`.`・相対の要素（その時の作業ディレクトリに解決される）を落とす。残りは、順のまま。 */

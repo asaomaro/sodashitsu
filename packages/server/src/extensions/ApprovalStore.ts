@@ -275,17 +275,30 @@ export class ApprovalStore {
     return this.mutate((records) => records.filter((r) => !(r.root === root && r.id === id)), true);
   }
 
+  /** 承認（`approved`）だけを消す。「承認しない」（`denied`）は残す（`denied` も無ければ、その 1 件ごと消える）。記録が無い・`approved` が無ければ、何も書かずに成功。 */
+  revokeApprovedOnly(root: string, id: string): Promise<void> {
+    return this.mutate(
+      (records) =>
+        records.flatMap((r) => {
+          if (!(r.root === root && r.id === id) || r.approved === undefined) return [r];
+          return r.denied === undefined ? [] : [{ root: r.root, id: r.id, denied: r.denied }];
+        }),
+      true,
+    );
+  }
+
   private async mutate(fn: (records: ApprovalRecord[]) => ApprovalRecord[], skipIfUnchanged = false): Promise<void> {
     if (this.writing !== null) throw new RpcError("internal", "承認の記録を書いている途中です。しばらくしてからもう一度試してください");
     const ctx: WriteCtx = { aborted: false, mark: `${process.pid}:${randomBytes(8).toString("hex")}`, locked: false };
     const work = this.write(ctx, fn, skipIfUnchanged);
     // 裏の続きが返るまで、次の書く手順は始めない（打ち切っても、鍵は裏の続きが返るまで消さない）。
-    this.writing = work.then(
+    const mine: Promise<void> = work.then(
       () => undefined,
       () => undefined,
     );
-    void this.writing.then(() => {
-      this.writing = null;
+    this.writing = mine;
+    void mine.then(() => {
+      if (this.writing === mine) this.writing = null;
     });
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<"timeout">((r) => {
@@ -298,6 +311,12 @@ export class ApprovalStore {
         void work.catch(() => undefined);
         throw new RpcError("internal", "承認の記録を書けませんでした（時間内に終わりませんでした）");
       }
+      // 終わった。続けて次の書く手順を始められるよう、すぐ空ける（上の `then` を待たない）。
+      if (this.writing === mine) this.writing = null;
+    } catch (err) {
+      // 手順そのものが誤りで終わったとき（打ち切りではない）も、すぐ空ける。
+      if (!ctx.aborted && this.writing === mine) this.writing = null;
+      throw err;
     } finally {
       clearTimeout(timer);
     }
@@ -327,7 +346,7 @@ export class ApprovalStore {
       if (cur.kind === "future") throw new RpcError("internal", "新しい版が書いた承認の記録なので、書き換えませんでした");
       const before = cur.kind === "ok" ? cur.records : [];
       const after = fn([...before]);
-      if (skipIfUnchanged && after.length === before.length && cur.kind !== "corrupt") return;
+      if (skipIfUnchanged && cur.kind !== "corrupt" && JSON.stringify(after) === JSON.stringify(before)) return;
       const trimmed = trim(after);
       if (!(await this.lockIsMine(ctx))) throw new RpcError("internal", "承認の記録の鍵を失いました");
       this.checkLive(ctx);

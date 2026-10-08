@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { stat as fsStat } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   EXTENSIONS_FILE_NAME,
   EXTENSIONS_RUNNING_MAX,
@@ -690,17 +690,25 @@ export class ExtensionHost {
     }
   }
 
-  /** 根のディレクトリか `.soda/extensions.json` が無く、いま workspace も無い根の承認の記録を消す。消せた分を除いた記録を返す（消せなかった・確かめられなかった分は残す）。 */
-  private async pruneApprovals(set: ApprovalSet, openRoots: ReadonlySet<string>): Promise<ApprovalSet> {
+  /**
+   * 承認の記録の掃除（狭い）。消すのは、**承認（`approved`）だけ**（「承認しない」は残す）で、次の 3 つがそろう根だけ:
+   * (1) いまの workspace の根でなく、**どの workspace の開いた場所（`cwd`）もその根の下に無い**（根を引けなくても、候補にしない）
+   * (2) **根のディレクトリそのものが無く（`ENOENT`）、その親のディレクトリは有る**（外付けディスク・ネットワークのフォルダが外れているのとは違う。
+   *     `.soda/extensions.json` だけが無い——ブランチの切り替え——は、消さない）
+   * (3) 確かめが時間切れ・読めない誤り（`EIO` など）でないこと。
+   * 消せた分を除いた記録を返す。
+   */
+  private async pruneApprovals(set: ApprovalSet, openRoots: ReadonlySet<string>, cwds: readonly string[]): Promise<ApprovalSet> {
     const exists = this.opts.deps?.pathExists ?? defaultPathExists;
-    const candidates = [...new Set(set.records.map((r) => r.root))].filter((root) => !openRoots.has(root));
+    const under = (root: string): boolean => cwds.some((c) => c === root || c.startsWith(root.endsWith("/") ? root : `${root}/`));
+    const candidates = [...new Set(set.records.filter((r) => r.approved !== undefined).map((r) => r.root))].filter((root) => !openRoots.has(root) && !under(root));
     let removed = false;
     for (const root of candidates) {
-      const gone = await this.readTimed(`gone:${root}`, async () => !(await exists(root)) || !(await exists(join(root, ".soda", EXTENSIONS_FILE_NAME))));
+      const gone = await this.readTimed(`gone:${root}`, async () => !(await exists(root)) && (await exists(dirname(root))));
       if (!gone.ok || !gone.value) continue;
-      for (const r of set.records.filter((x) => x.root === root)) {
+      for (const r of set.records.filter((x) => x.root === root && x.approved !== undefined)) {
         try {
-          await this.approvals.revoke(r.root, r.id);
+          await this.approvals.revokeApprovedOnly(r.root, r.id);
           removed = true;
         } catch (err) {
           this.note("warn", "extension approval prune failed", { kind: err instanceof Error ? err.constructor.name : typeof err });
@@ -773,9 +781,9 @@ export class ExtensionHost {
     // 承認の記録の掃除: **その根の workspace が 1 つも無く、根のディレクトリか設定ファイルが無くなっている**記録は消す（リポジトリを消して、同じ場所に別のものを
     // 置いたとき、前の承認が残って聞かれずに動くのを減らす）。根を引けなかった workspace がある間（時間切れ）は、確かめない。
     if (approvalRead.ok && approvalSet.records.length > 0) {
-      const snapshotIds = this.opts.session.snapshot().workspaces.map((w) => w.id);
-      if (snapshotIds.every((id) => roots.has(id))) {
-        approvalSet = await this.pruneApprovals(approvalSet, new Set([...roots.values()].filter((r): r is string => r !== null)));
+      const workspaces = this.opts.session.snapshot().workspaces;
+      if (workspaces.every((w) => roots.has(w.id))) {
+        approvalSet = await this.pruneApprovals(approvalSet, new Set([...roots.values()].filter((r): r is string => r !== null)), workspaces.map((w) => w.cwd));
         if (aborted()) return;
       }
     }

@@ -893,6 +893,30 @@ setInterval(() => { const f = LOG + ".cmds"; if (!existsSync(f) || !pane) return
     delete process.env["HIJACK_MARK"];
   });
 
+  it("(P10b) サーバの PATH が、落とす要素だけ（.）でも、プロジェクトの拡張に空の PATH は渡らず、リポジトリの中のファイルに解決されない", async () => {
+    const { chmodSync, writeFileSync } = await import("node:fs");
+    const root = await mkRepo("p10brepo", [{ id: "p10b", command: "hijackbin" }]);
+    const mark = join(toolDir, "p10b-mark");
+    writeFileSync(join(root, "hijackbin"), `#!/bin/sh\ntouch "$HIJACK_MARK"\nsleep 5\n`);
+    chmodSync(join(root, "hijackbin"), 0o755);
+    const savedPath = process.env["PATH"];
+    const s = await startServer([], { timings: { approvalsPollMs: 100 } });
+    const w = await openWorkspace(s, root);
+    void w;
+    // サーバを立ててから、これから起動する子に渡る元の環境（`process.env`）の PATH を、落とす要素だけにする。
+    process.env["PATH"] = ".";
+    process.env["HIJACK_MARK"] = mark;
+    cleanups.push(() => {
+      process.env["PATH"] = savedPath;
+      delete process.env["HIJACK_MARK"];
+    });
+    await waitProj(s, "p10b", "pending", root);
+    const i = (await projInfo(s, "p10b", root))!;
+    await (await s.open("desktop")).request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await settle(1500);
+    expect(existsSync(mark)).toBe(false);
+  });
+
   it("(P9) .soda がリンク・extensions.json がリンク・cwd つき・chmod o+w → 一覧に理由が出て、印が出来ない。承認の記録を壊す → 全部 pending。無効の記録を壊す → 全部 disabled", async () => {
     const e = await script("p9", projBody);
     const entry = { id: "p9", command: e.command };

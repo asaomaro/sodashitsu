@@ -113,3 +113,18 @@ describe("safePath・プロジェクトの PATH（D13 の 3）", () => {
     expect(buildExtensionEnv({}, { id: "a", scope: "project", root: "/r", runId: "r" }, "linux")["PATH"]).toBeUndefined();
   });
 });
+
+describe("PATH が全部落ちたとき（D14）", () => {
+  it("空の文字列では渡さず、固定の安全な値にする（POSIX）。PATH が無ければ作らない", () => {
+    for (const dirty of [".", ":", "rel/bin", "", "::.:rel"]) {
+      const env = buildExtensionEnv({ PATH: dirty } as NodeJS.ProcessEnv, { id: "a", scope: "project", root: "/r", runId: "r" }, "linux");
+      expect(env["PATH"], JSON.stringify(dirty)).toBe("/usr/local/bin:/usr/bin:/bin");
+    }
+    expect(buildExtensionEnv({ PATH: "." } as NodeJS.ProcessEnv, { id: "a", scope: "user", root: null, runId: "r" }, "linux")["PATH"]).toBe(".");
+    expect(buildExtensionEnv({}, { id: "a", scope: "project", root: "/r", runId: "r" }, "linux")["PATH"]).toBeUndefined();
+  });
+  it("Windows は SystemRoot から（効くかは実機で確かめていない）", () => {
+    const env = buildExtensionEnv({ Path: ".", SystemRoot: "C:\\Windows" } as NodeJS.ProcessEnv, { id: "a", scope: "project", root: "C:\\r", runId: "r" }, "win32");
+    expect(env["Path"]).toBe("C:\\Windows\\System32;C:\\Windows");
+  });
+});

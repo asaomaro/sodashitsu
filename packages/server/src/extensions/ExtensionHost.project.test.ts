@@ -589,14 +589,74 @@ describe("承認の記録の掃除（D13 の 1）", () => {
     expect(x.spawnCalls).toHaveLength(1);
   });
 
-  it("根のディレクトリは有るが、.soda/extensions.json が無くなっていても、消す", async () => {
+  it("R3 根のディレクトリは有り、.soda/extensions.json だけが無くなっている（ブランチの切り替え）は、消さない", async () => {
     const { x, root } = await withRepo();
     await approve(x, root, full("a"));
     await x.host.start();
     x.removeWorkspace("w1");
     await rm(join(root, ".soda"), { recursive: true, force: true });
     await x.drive(1500);
-    expect(await records(x)).toEqual([]);
+    expect(await records(x)).toEqual([`${root}:a`]);
+  });
+
+  it("「承認しない」（denied）の記録は、消さない。承認と両方ある記録は、承認だけを消して、denied を残す", async () => {
+    const { x, root } = await withRepo([ext("a"), ext("d"), ext("b")]);
+    await x.approvalStore.decideDenied(root, "d", digestOf(root, full("d")));
+    await approve(x, root, full("a"));
+    await approve(x, root, full("b"));
+    await x.approvalStore.decideDenied(root, "b", digestOf(root, full("b", { command: "node other.mjs" })));
+    await x.host.start();
+    x.removeWorkspace("w1");
+    await rm(root, { recursive: true, force: true });
+    await x.drive(1500);
+    const left = (await x.approvalStore.load()).records;
+    expect(left.map((r) => `${r.id}:${r.approved ? "A" : ""}${r.denied ? "D" : ""}`).sort()).toEqual(["b:D", "d:D"]);
+  });
+
+  it("R1 workspace は開いたまま、根のディレクトリが無くなった（ディスクが外れた）→ 消さない（承認も「承認しない」も）。戻れば、そのまま", async () => {
+    const { x, root } = await withRepo([ext("a"), ext("d")]);
+    await approve(x, root, full("a"));
+    await x.approvalStore.decideDenied(root, "d", digestOf(root, full("d")));
+    await x.host.start();
+    await rm(root, { recursive: true, force: true });
+    await x.run(x.host.reload());
+    await x.drive(1500);
+    expect((await records(x)).sort()).toEqual([`${root}:a`, `${root}:d`]);
+    await x.makeRepo("repo", [ext("a"), ext("d")]);
+    await x.run(x.host.reload());
+    expect(info(x, root, "d")!.state).toBe("denied");
+    expect(info(x, root, "a")!.state).toBe("running");
+  });
+
+  it("R2 起動のとき、根のディレクトリが無い（ディスクがまだ繋がっていない）が、workspace は残っている → 消さない", async () => {
+    const { x, root } = await withRepo();
+    await approve(x, root, full("a"));
+    await x.approvalStore.decideDenied(root, "z", digestOf(root, full("z")));
+    await rm(root, { recursive: true, force: true });
+    await x.host.start();
+    await x.drive(1500);
+    expect((await records(x)).sort()).toEqual([`${root}:a`, `${root}:z`]);
+  });
+
+  it("workspace の開いた場所が根の下（サブフォルダ）にあれば、根を引けなくても候補にしない", async () => {
+    const { x, root } = await withRepo();
+    await approve(x, root, full("a"));
+    await x.host.start();
+    x.workspaces.set("w1", { cwd: join(root, "sub", "dir") });
+    await rm(root, { recursive: true, force: true });
+    await x.run(x.host.reload());
+    await x.drive(1500);
+    expect(await records(x)).toEqual([`${root}:a`]);
+  });
+
+  it("根の親のディレクトリも無い（もっと上が外れている）なら、消さない", async () => {
+    const { x, root } = await withRepo();
+    await approve(x, root, full("a"));
+    await x.host.start();
+    x.removeWorkspace("w1");
+    await rm(join(x.dir, "repos"), { recursive: true, force: true }); // 根も、その親も無い
+    await x.drive(1500);
+    expect(await records(x)).toEqual([`${root}:a`]);
   });
 
   it("根のディレクトリも設定ファイルも有る間は、workspace が無くても残す（開き直すと、承認済みでそのまま動く）", async () => {
