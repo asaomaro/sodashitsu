@@ -25,7 +25,7 @@ export function paintPane(
       const gy = content.y + y;
       const c = line?.getCell(x, cell);
       if (!c) {
-        grid.set(gx, gy, " ", 1, theme.paneFg, theme.paneBg);
+        grid.set(gx, gy, " ", 1, theme.paneFg, theme.paneGround);
         continue;
       }
       const width = c.getWidth();
@@ -63,13 +63,13 @@ export function paintPane(
     grid.fill(
       { x: content.x + cols, y: content.y, w: content.w - cols, h: content.h },
       theme.paneFg,
-      theme.paneBg,
+      theme.paneGround,
     );
   if (rows < content.h)
     grid.fill(
       { x: content.x, y: content.y + rows, w: cols, h: content.h - rows },
       theme.paneFg,
-      theme.paneBg,
+      theme.paneGround,
     );
 
   const cy = buffer.baseY + buffer.cursorY - top;

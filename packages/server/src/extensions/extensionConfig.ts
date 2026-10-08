@@ -1,6 +1,6 @@
 import { constants as fsConstants } from "node:fs";
-import { open as fsOpen, type FileHandle } from "node:fs/promises";
-import { isAbsolute } from "node:path";
+import { lstat as fsLstat, open as fsOpen, realpath as fsRealpath, stat as fsStat, type FileHandle } from "node:fs/promises";
+import { dirname, isAbsolute, join } from "node:path";
 import {
   EXTENSIONS_FILE_MAX_BYTES,
   EXTENSIONS_FILE_NAME,
@@ -11,6 +11,7 @@ import {
   EXTENSION_ID_RE,
   EXTENSION_PATH_MAX,
   EXTENSION_UNRESPONSIVE_VALUES,
+  PROJECT_EXTENSIONS_DIR,
   hasForbiddenChars,
   type ExtensionScope,
 } from "@sodashitsu/protocol";
@@ -193,6 +194,134 @@ export async function loadUserExtensionsFile(path: string, deps: Partial<Extensi
     return result;
   } catch (err) {
     return rejected(`読めません（${(err as NodeJS.ErrnoException).code ?? "不明なエラー"}）`);
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+}
+
+// --- プロジェクトの設定（PR3）---------------------------------------------------------------------------------------------------
+
+export interface ProjectFileDeps extends ExtensionFileDeps {
+  lstat: (path: string) => Promise<{ isDirectory(): boolean; isSymbolicLink(): boolean; uid: number; mode: number }>;
+  stat: (path: string) => Promise<{ uid: number; mode: number }>;
+  realpath: (path: string) => Promise<string>;
+}
+
+const defaultProjectDeps: ProjectFileDeps = {
+  ...defaultDeps,
+  lstat: (path) => fsLstat(path),
+  stat: (path) => fsStat(path),
+  realpath: (path) => fsRealpath(path),
+};
+
+export interface ProjectExtensionsLoad extends ExtensionFileLoad {
+  /** 読んだ（読もうとした）設定ファイルのパス。 */
+  path: string;
+  /** 根・`.soda`・設定ファイル・根より上のどれかを、グループが書ける。 */
+  groupWritable: boolean;
+}
+
+/**
+ * プロジェクトの設定（`<根>/.soda/extensions.json`）を読む。`root` は**実体のパス**（`resolveProjectRoot` の結果）。
+ * **他人のリポジトリを開いただけで、その中のプログラムが動く道になりうる**ので、読む前に場所と持ち主を厳しく見る（脅威 S1・S6・S24）:
+ * `.soda` がリンクでないディレクトリ・設定ファイルが `O_NOFOLLOW` で開けた通常のファイル・64 KiB 以下・
+ * （Unix）根・`.soda`・設定ファイルの持ち主が自分で、他人が書けない・根より上が `/` まで、持ち主が自分か root で、他人が書けないかスティッキー・
+ * `realpath` が決まった場所と等しい・同じ fd から読む。グループが書けるなら読むが `groupWritable`。
+ * 4 と 5 の間に差し替える競合は守らない（その場所に書ける者は、既に利用者の権限を持つ）。
+ * 共通の手順は `loadUserExtensionsFile` から括り出さず、写した（`commands.json` の検査と利用者の設定の検査を、この作業で動かさないため）。
+ */
+export async function loadProjectExtensionsFile(root: string, deps: Partial<ProjectFileDeps> = {}): Promise<ProjectExtensionsLoad> {
+  const d = { ...defaultProjectDeps, ...deps };
+  const unix = d.platform !== "win32";
+  const uid = unix ? d.getuid?.() : undefined;
+  const dir = join(root, PROJECT_EXTENSIONS_DIR);
+  const path = join(dir, EXTENSIONS_FILE_NAME);
+  let groupWritable = false;
+  const fail = (problem: string): ProjectExtensionsLoad => ({ ...rejected(problem), path, groupWritable });
+  const empty = (): ProjectExtensionsLoad => ({ entries: [], problem: null, path, groupWritable });
+
+  // 1. `.soda`。
+  let dirStat: Awaited<ReturnType<ProjectFileDeps["lstat"]>>;
+  try {
+    dirStat = await d.lstat(dir);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return empty();
+    return fail(`.soda を調べられません（${code ?? "不明なエラー"}）`);
+  }
+  if (dirStat.isSymbolicLink()) return fail(".soda がリンクです（リンクの先は読みません）");
+  if (!dirStat.isDirectory()) return fail(".soda がディレクトリではありません");
+
+  // 2. 設定ファイルを開く。
+  const flags = fsConstants.O_RDONLY | (unix ? fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK : 0);
+  let handle: FileHandle;
+  try {
+    handle = await d.open(path, flags);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return empty();
+    if (code === "ELOOP") return fail("シンボリックリンクは使えません（ファイルそのものを置いてください）");
+    return fail(`開けません（${code ?? "不明なエラー"}）`);
+  }
+  try {
+    // 3. 開いた fd の stat。
+    const st = await handle.stat();
+    if (!st.isFile()) return fail("通常のファイルではありません");
+    if (st.size > EXTENSIONS_FILE_MAX_BYTES) return fail(`大きすぎます（${EXTENSIONS_FILE_MAX_BYTES} バイトまで）`);
+    // 3'. 持ち主と権限（Unix だけ）。
+    if (unix) {
+      const rootStat = await d.stat(root);
+      const group = (m: number): boolean => (m & 0o020) !== 0;
+      for (const s of [rootStat, dirStat, st]) {
+        if (uid !== undefined && s.uid !== uid) return fail("ほかの利用者が書ける場所の設定は、読みません（持ち主がサーバを動かしているユーザーではありません）");
+        if ((s.mode & 0o002) !== 0) return fail("ほかの利用者が書ける場所の設定は、読みません（だれでも書き込めます）");
+        if (group(s.mode)) groupWritable = true;
+      }
+      // 3''. 根より上。`/` まで、持ち主が自分か root で、だれでも書けないか、スティッキー。
+      let cur = dirname(root);
+      for (;;) {
+        let a: { uid: number; mode: number };
+        try {
+          a = await d.stat(cur);
+        } catch (err) {
+          return fail(`根より上を調べられません（${(err as NodeJS.ErrnoException).code ?? "不明なエラー"}）`);
+        }
+        const sticky = (a.mode & 0o1000) !== 0;
+        if (uid !== undefined && a.uid !== uid && a.uid !== 0) return fail("ほかの利用者が差し替えられる場所のリポジトリの設定は、読みません（根より上の持ち主が自分でも root でもありません）");
+        if ((a.mode & 0o002) !== 0 && !sticky) return fail("ほかの利用者が差し替えられる場所のリポジトリの設定は、読みません（根より上にだれでも書けるディレクトリがあります）");
+        if (group(a.mode) && !sticky) groupWritable = true;
+        const parent = dirname(cur);
+        if (parent === cur) break;
+        cur = parent;
+      }
+    }
+    // 4. realpath が決まった場所と等しい。
+    let real: string;
+    try {
+      real = await d.realpath(path);
+    } catch (err) {
+      return fail(`場所を確かめられません（${(err as NodeJS.ErrnoException).code ?? "不明なエラー"}）`);
+    }
+    if (real !== path) return fail("途中にリンクがあり、リポジトリの外を指しています");
+    // 5. 同じ fd から読む。
+    const buf = Buffer.alloc(EXTENSIONS_FILE_MAX_BYTES + 1);
+    let total = 0;
+    for (;;) {
+      const { bytesRead } = await handle.read(buf, total, buf.length - total, total);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total >= buf.length) break;
+    }
+    if (total > EXTENSIONS_FILE_MAX_BYTES) return fail(`大きすぎます（${EXTENSIONS_FILE_MAX_BYTES} バイトまで）`);
+    let text: string;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(buf.subarray(0, total));
+    } catch {
+      return fail("UTF-8 として読めません");
+    }
+    return { ...parseExtensionsJson(text, "project"), path, groupWritable };
+  } catch (err) {
+    return fail(`読めません（${(err as NodeJS.ErrnoException).code ?? "不明なエラー"}）`);
   } finally {
     await handle.close().catch(() => undefined);
   }

@@ -23,6 +23,7 @@ import TabBar from "./components/TabBar.vue";
 import TerminalPane from "./components/TerminalPane.vue";
 import Toast from "./components/Toast.vue";
 import AskDialog from "./components/AskDialog.vue";
+import ExtensionApprovalDialog from "./components/ExtensionApprovalDialog.vue";
 import WorktreeCreateDialog from "./components/WorktreeCreateDialog.vue";
 import WorktreeOpenDialog from "./components/WorktreeOpenDialog.vue";
 import { isMobileViewport } from "./mobile/detect.js";
@@ -102,6 +103,8 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
     <CommandPopup />
     <!-- 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）。ほかのダイアログとは別の枠で、後から開くので上に重なる。 -->
     <AskDialog />
+    <!-- プロジェクトの拡張の承認（20261007-ext-host PR3）と、承認待ちの知らせ。別の枠（`showModal()`）。サーバのイベントでは開かず、利用者が［確認する］を押したときだけ開く。 -->
+    <ExtensionApprovalDialog />
     <PrefixIndicator />
     <!-- グラフ画面（`showModal()` の top layer）を開いている間は、トーストと再接続の表示をその dialog の中へ出す——外に置くと top layer の下に隠れ、
          inert で押せない（20260927-agent-graph の decisions D4）。`defer` は同じ描画の中で後から mount される行き先を待つため。 -->

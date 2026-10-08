@@ -329,6 +329,11 @@ export class PrefsModel {
     return this.local.colorMode ?? "auto";
   }
 
+  /** 背景を透過するか（手元の `tui-state.json` の `transparentBg`。端末ごと。既定は透かさない）。 */
+  get transparentBg(): boolean {
+    return this.local.transparentBg === true;
+  }
+
   get workspaceSort(): WorkspaceSort {
     return loadWorkspaceSort(this.raw.workspaceSort);
   }

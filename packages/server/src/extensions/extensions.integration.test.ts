@@ -39,13 +39,13 @@ class Client {
   }
 }
 
-async function connectWs(server: ComposedServer, kind: "desktop" | "mobile" | "external"): Promise<Client> {
+async function connectWs(server: ComposedServer, kind: "desktop" | "mobile" | "external", token?: string): Promise<Client> {
   const port = server.options.port;
   const origin = `http://127.0.0.1:${port}`;
   const res = await fetch(`${origin}/api/login`, {
     method: "POST",
     headers: { "content-type": "application/json", origin, host: `127.0.0.1:${port}` },
-    body: JSON.stringify({ token: server.freshToken }),
+    body: JSON.stringify({ token: server.freshToken ?? token }),
   });
   expect(res.status).toBe(204);
   const cookie = (res.headers.get("set-cookie") ?? "").split(";")[0]!;
@@ -93,6 +93,8 @@ describe.skipIf(process.platform === "win32")("拡張（実物のサーバと、
   const pids = new Set<number>();
   let stateDir: string;
   let toolDir: string;
+  /** 立て直したサーバの token（初回の起動だけが新しく作る）。 */
+  let lastToken: string | undefined;
   const savedEnv: Record<string, string | undefined> = {};
 
   beforeEach(async () => {
@@ -162,19 +164,28 @@ rl.on("close", () => process.exit(0));
   };
   const waitFile = (log: string) => vi.waitFor(() => { if (!existsSync(log + ".pid")) throw new Error("not started"); }, { timeout: 8000, interval: 30 });
 
-  async function startServer(extensions: unknown[], o: { timings?: Record<string, number>; file?: { open?: unknown }; configRaw?: string } = {}) {
-    stateDir = await makeTempDir("soda-ext-");
-    cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
-    await writeFile(join(stateDir, "extensions.json"), o.configRaw ?? JSON.stringify({ extensions }), { mode: 0o600 });
+  async function startServer(
+    extensions: unknown[],
+    o: { timings?: Record<string, number>; file?: { open?: unknown }; configRaw?: string; stateRoot?: string; session?: string; token?: string } = {},
+  ) {
+    if (o.stateRoot === undefined) {
+      stateDir = await makeTempDir("soda-ext-");
+      cleanups.push(() => rm(stateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+    } else {
+      stateDir = o.stateRoot; // 同じ状態ディレクトリで立て直す（承認の記録は sessionRoot＝ここに置かれる）
+    }
+    if (o.session === undefined) await writeFile(join(stateDir, "extensions.json"), o.configRaw ?? JSON.stringify({ extensions }), { mode: 0o600 });
     const server = await composeServerOnFreePort(
-      { host: "127.0.0.1", stateDir, origin: [] },
+      { host: "127.0.0.1", stateDir, origin: [], ...(o.session !== undefined ? { session: o.session } : {}) },
       { internal: { extensions: { timings: { backoffMinMs: 20, backoffMaxMs: 80, scopeReviewMs: 100, ...(o.timings ?? {}) }, ...(o.file ? { file: o.file as never } : {}) } } },
     );
     cleanups.push(() => server.close());
     const paneA = server.session.snapshot().panes[0]!.id;
     const sockPath = join(stateDir, "pane.sock");
+    const myToken = server.freshToken ?? o.token ?? lastToken;
+    if (server.freshToken !== undefined) lastToken = server.freshToken;
     const open = async (kind: "desktop" | "mobile" | "external") => {
-      const c = await connectWs(server, kind);
+      const c = await connectWs(server, kind, myToken);
       cleanups.push(() => c.ws.close());
       return c;
     };
@@ -544,6 +555,416 @@ setInterval(() => { const f = LOG + ".cmds"; if (!existsSync(f) || !pane) return
       await waitDead(pid);
     }
   });
+
+  // ---- プロジェクトの拡張と承認（PR3。T24） -------------------------------------------------------------------------------------
+  // 「承認していない拡張は、どのきっかけでも実行されない」は、実行の印（拡張が起動時に書く `<log>.starts`）が無いことで確かめる（AC18）。
+
+  /** 起動のたびに pid を追記する本体。起動の回数・pid・作業ディレクトリ・環境変数が分かる。 */
+  const projBody = `appendFileSync(LOG + ".starts", process.pid + "\\n"); writeFileSync(LOG + ".env", JSON.stringify({ cwd: process.cwd(), root: process.env.SODA_PROJECT_ROOT, scope: process.env.SODA_EXTENSION_SCOPE }));`;
+  const starts = (log: string): number[] => (existsSync(log + ".starts") ? readFileSync(log + ".starts", "utf8").split("\n").filter(Boolean).map(Number) : []);
+  const noStart = (log: string) => expect(starts(log)).toEqual([]);
+
+  /** リポジトリ（`.git/HEAD` と `.soda/extensions.json`）を作り、根の実体のパスを返す。 */
+  async function mkRepo(name: string, entries?: unknown[]): Promise<string> {
+    const root = join(toolDir, name);
+    await mkdir(join(root, ".git"), { recursive: true });
+    await writeFile(join(root, ".git", "HEAD"), "ref: refs/heads/main\n");
+    const real = (await import("node:fs")).realpathSync(root);
+    if (entries) await writeProject(real, entries);
+    return real;
+  }
+  async function writeProject(root: string, entries: unknown[], mode = 0o600): Promise<void> {
+    await mkdir(join(root, ".soda"), { recursive: true });
+    const p = join(root, ".soda", "extensions.json");
+    await writeFile(p, JSON.stringify({ extensions: entries }), { mode });
+    (await import("node:fs")).chmodSync(p, mode);
+  }
+  type Server = Awaited<ReturnType<typeof startServer>>;
+  const openWorkspace = async (s: Server, root: string): Promise<{ workspaceId: string; paneId: string }> => {
+    const r = await s.server.session.createWorkspace(root, "ws");
+    return { workspaceId: r.workspace.id, paneId: r.pane.id };
+  };
+  const projInfo = async (s: Server, id: string, root?: string) =>
+    (await s.list()).extensions.find((e) => e.scope === "project" && e.id === id && (root === undefined || e.root === root));
+  const waitProj = (s: Server, id: string, state: string, root?: string) =>
+    vi.waitFor(async () => { const i = await projInfo(s, id, root); if (i?.state !== state) throw new Error(`${id}: ${i?.state} != ${state}`); }, { timeout: 10_000, interval: 30 });
+  const settle = (ms = 700) => new Promise((r) => setTimeout(r, ms));
+
+  it("(P1) 承認していない拡張は、どのきっかけでも実行されない（workspace 作成・reload・restart・setEnabled・サーバの立て直し）。pending で、承認の画面に出すものがある", async () => {
+    const e = await script("p1", projBody);
+    const root = await mkRepo("p1repo", [{ id: "p1", command: e.command, description: "作者の説明" }]);
+    const s = await startServer([], { timings: { approvalsPollMs: 100 } });
+    await openWorkspace(s, root);
+    await waitProj(s, "p1", "pending", root);
+    const i = (await projInfo(s, "p1", root))!;
+    expect(i.approval).toMatchObject({ status: "none", command: e.command, cwd: root, groupWritable: false });
+    expect(i.approval!.digest).toMatch(/^[0-9a-f]{64}$/);
+    const ws = await s.open("external");
+    await ws.request("extension.reload", {});
+    await ws.request("extension.restart", { key: i.key }).catch(() => undefined);
+    const screen = await s.open("desktop");
+    await screen.request("extension.setEnabled", { key: i.key, enabled: false });
+    await screen.request("extension.setEnabled", { key: i.key, enabled: true });
+    await settle();
+    noStart(e.log);
+    // サーバを立て直しても、承認していなければ実行されない。
+    const root2 = stateDir;
+    await s.server.close();
+    const s2 = await startServer([], { stateRoot: root2 });
+    await openWorkspace(s2, root);
+    await waitProj(s2, "p1", "pending", root);
+    await settle();
+    noStart(e.log);
+  });
+
+  it("(P1b) 承認していなければ、状態の表示に関わらず、印のファイルが出来ない（2 重の守りの、片方だけを外しても、実行されない）", async () => {
+    const e = await script("p1b", projBody);
+    const root = await mkRepo("p1brepo", [{ id: "p1b", command: e.command }]);
+    const s = await startServer([], { timings: { approvalsPollMs: 100 } });
+    await openWorkspace(s, root);
+    await vi.waitFor(async () => { if (!(await projInfo(s, "p1b", root))) throw new Error("not listed"); }, { timeout: 10_000, interval: 30 });
+    const ws = await s.open("external");
+    for (let i = 0; i < 3; i++) {
+      await ws.request("extension.reload", {});
+      await settle(400);
+    }
+    await ws.request("extension.restart", { key: (await projInfo(s, "p1b", root))!.key }).catch(() => undefined);
+    await settle(700);
+    noStart(e.log);
+  });
+
+  it("(P2) 画面の接続から approve → 動く。サーバを立て直しても聞き直されずに動く。同じ sessionRoot の別の名前付き session でも動く。sodactl 相当（external）・pane.sock からは承認できない", async () => {
+    const e = await script("p2", projBody);
+    const root = await mkRepo("p2repo", [{ id: "p2", command: e.command }]);
+    const s = await startServer([], { timings: { approvalsPollMs: 100 } });
+    await openWorkspace(s, root);
+    await waitProj(s, "p2", "pending", root);
+    const info = (await projInfo(s, "p2", root))!;
+    // external・不正な digest・pane.sock では承認できない。
+    const ext = await s.open("external");
+    await expect(ext.request("extension.approve", { key: info.key, digest: info.approval!.digest })).rejects.toMatchObject({ code: "invalid_params" });
+    for (const op of ["extension.approve", "extension.deny", "extension.revoke"]) {
+      expect(await paneCall(s.sockPath, op, s.paneA, { key: info.key, digest: info.approval!.digest })).toMatchObject({ ok: false, error: { code: "unknown_op" } });
+    }
+    await settle(300);
+    noStart(e.log);
+    const screen = await s.open("desktop");
+    await screen.request("extension.approve", { key: info.key, digest: info.approval!.digest });
+    await waitProj(s, "p2", "running", root);
+    await pidOf(e.log);
+    expect(starts(e.log)).toHaveLength(1);
+    const env = JSON.parse(readFileSync(e.log + ".env", "utf8")) as { cwd: string; root: string; scope: string };
+    expect(env).toEqual({ cwd: root, root, scope: "project" }); // 作業ディレクトリは根・SODA_PROJECT_ROOT
+    // サーバを立て直す（同じ状態ディレクトリ）→ 聞き直されずに動く（起動は 2 回目）。
+    const sessionRoot = stateDir;
+    await s.server.close();
+    await vi.waitFor(() => { if (isAlive(starts(e.log)[0]!)) throw new Error("still alive"); }, { timeout: 8000, interval: 30 });
+    const s2 = await startServer([], { stateRoot: sessionRoot });
+    await openWorkspace(s2, root);
+    await waitProj(s2, "p2", "running", root);
+    await vi.waitFor(() => { if (starts(e.log).length < 2) throw new Error("not restarted"); });
+    // 別の名前付き session（同じ sessionRoot）でも、承認は引き継がれる。
+    await s2.server.close();
+    await vi.waitFor(() => { if (isAlive(starts(e.log)[1]!)) throw new Error("still alive"); }, { timeout: 8000, interval: 30 });
+    const s3 = await startServer([], { stateRoot: sessionRoot, session: "other" });
+    await openWorkspace(s3, root);
+    await waitProj(s3, "p2", "running", root);
+    await vi.waitFor(() => { if (starts(e.log).length < 3) throw new Error("not started by the other session"); });
+    expect((await s3.list()).extensions.find((x) => x.id === "p2")!.approval!.status).toBe("approved");
+  });
+
+  it("(P3) 登録の項目を 1 つずつ変えて reload → 止まって pending。同じファイルの別の拡張は同じ pid のまま。承認した中身へ戻すと聞き直されずに動く。リポジトリを別の場所へ写すと pending", async () => {
+    const a = await script("p3a", projBody);
+    const b = await script("p3b", projBody);
+    const base = { id: "a", command: a.command, description: "d", allow: [] as string[], onUnresponsive: "pass", enabled: true };
+    const other = { id: "b", command: b.command };
+    const root = await mkRepo("p3repo", [base, other]);
+    const s = await startServer([], { timings: { approvalsPollMs: 100 } });
+    await openWorkspace(s, root);
+    await waitProj(s, "a", "pending", root);
+    const screen = await s.open("desktop");
+    for (const id of ["a", "b"]) {
+      const i = (await projInfo(s, id, root))!;
+      await screen.request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    }
+    await waitProj(s, "a", "running", root);
+    await waitProj(s, "b", "running", root);
+    const pidB = (await pidOf(b.log));
+    const changes: Record<string, unknown>[] = [
+      { command: `${a.command} --x` },
+      { description: "変えた" },
+      { allow: ["script-html"] },
+      { onUnresponsive: "block" },
+    ];
+    for (const change of changes) {
+      await writeProject(root, [{ ...base, ...change }, other]);
+      await (await s.open("external")).request("extension.reload", {});
+      await waitProj(s, "a", "pending", root);
+      expect(isAlive(starts(a.log).at(-1)!), JSON.stringify(change)).toBe(false);
+      expect((await projInfo(s, "b", root))!.state).toBe("running");
+      expect(isAlive(pidB)).toBe(true); // 同じファイルの別の拡張は、同じ pid のまま
+      // 承認した中身へ戻す → 聞き直されずに動く。
+      const n = starts(a.log).length;
+      await writeProject(root, [base, other]);
+      await (await s.open("external")).request("extension.reload", {});
+      await waitProj(s, "a", "running", root);
+      await vi.waitFor(() => { if (starts(a.log).length <= n) throw new Error("not restarted"); });
+    }
+    // リポジトリを別の場所へ写すと、新しい根として pending。
+    const copy = await mkRepo("p3copy", [base, other]);
+    await openWorkspace(s, copy);
+    await waitProj(s, "a", "pending", copy);
+    expect((await projInfo(s, "a", root))!.state).toBe("running");
+  });
+
+  it("(P4) 承認 → ファイルを書き換え（reload しない）→ 拡張を落とす → 起動し直されず pending", async () => {
+    const e = await script("p4", projBody);
+    const root = await mkRepo("p4repo", [{ id: "p4", command: e.command }]);
+    const s = await startServer([], { timings: { approvalsPollMs: 3_600_000 } });
+    await openWorkspace(s, root);
+    await waitProj(s, "p4", "pending", root);
+    const i = (await projInfo(s, "p4", root))!;
+    await (await s.open("desktop")).request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await waitProj(s, "p4", "running", root);
+    const pid = await pidOf(e.log);
+    await writeProject(root, [{ id: "p4", command: `${e.command} --evil` }]);
+    process.kill(pid, "SIGKILL");
+    await settle(1500); // backoff（20ms）を何度も越える
+    expect(starts(e.log)).toHaveLength(1); // 起動し直されない
+    await waitProj(s, "p4", "pending", root);
+  });
+
+  it("(P5) deny → 印が出来ない。後で approve → 動く。revoke → 止まって pending。別の session のサーバでの revoke が、見張りのうちに届く。記録を直接消してすぐ落としても、起動し直されない。workspace を消した後も記録が残り、revoke で消え、開き直すと pending", async () => {
+    const e = await script("p5", projBody);
+    const root = await mkRepo("p5repo", [{ id: "p5", command: e.command }]);
+    const s = await startServer([], { timings: { approvalsPollMs: 100 } });
+    const ws = await openWorkspace(s, root);
+    await waitProj(s, "p5", "pending", root);
+    const screen = await s.open("desktop");
+    const i = (await projInfo(s, "p5", root))!;
+    await screen.request("extension.deny", { key: i.key, digest: i.approval!.digest });
+    await waitProj(s, "p5", "denied", root);
+    await (await s.open("external")).request("extension.reload", {});
+    await settle(300);
+    noStart(e.log);
+    await screen.request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await waitProj(s, "p5", "running", root);
+    const pid1 = await pidOf(e.log);
+    await screen.request("extension.revoke", { root, id: "p5" });
+    await waitProj(s, "p5", "pending", root);
+    await waitDead(pid1);
+    // 別の session（同じ sessionRoot）のサーバで承認 → こちらに届いて動き、そちらでの revoke が見張りのうちにこちらの pid を消す。
+    await screen.request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await waitProj(s, "p5", "running", root);
+    const pid2 = await pidOf(e.log);
+    const sessionRoot = stateDir;
+    const other = await startServer([], { stateRoot: sessionRoot, session: "other" });
+    await (await other.open("desktop")).request("extension.revoke", { root, id: "p5" });
+    await waitDead(pid2);
+    await waitProj(s, "p5", "pending", root);
+    // workspace を全部消した後、記録が approvals に出て、revoke で消え、開き直すと pending。
+    await screen.request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await waitProj(s, "p5", "running", root);
+    const pid3 = await pidOf(e.log);
+    await s.server.session.closeWorkspace(ws.workspaceId);
+    await waitDead(pid3);
+    await vi.waitFor(async () => { if ((await s.list()).extensions.some((x) => x.id === "p5")) throw new Error("still listed"); });
+    expect((await s.list()).approvals).toEqual([expect.objectContaining({ root, id: "p5", active: false })]);
+    await screen.request("extension.revoke", { root, id: "p5" });
+    expect((await s.list()).approvals).toEqual([]);
+    await openWorkspace(s, root);
+    await waitProj(s, "p5", "pending", root);
+  });
+
+  it("(P5b) 承認して動かす → 承認の記録のファイルから、その 1 件を直接消し、すぐ拡張を落とす → 起動し直されない（見張りを 60 秒にして、起動の回数で見る）", async () => {
+    const e = await script("p5b", projBody);
+    const root = await mkRepo("p5brepo", [{ id: "p5b", command: e.command }]);
+    const s = await startServer([], { timings: { approvalsPollMs: 60_000 } });
+    await openWorkspace(s, root);
+    await waitProj(s, "p5b", "pending", root);
+    const i = (await projInfo(s, "p5b", root))!;
+    await (await s.open("desktop")).request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await waitProj(s, "p5b", "running", root);
+    const pid = await pidOf(e.log);
+    await writeFile(join(stateDir, "extension-approvals.json"), JSON.stringify({ version: 1, records: [] }), { mode: 0o600 });
+    process.kill(pid, "SIGKILL");
+    await settle(1500);
+    expect(starts(e.log)).toHaveLength(1);
+  });
+
+  it("(P6) 2 つのリポジトリ: 片方の拡張が、他方の pane へ display.set → not_found。ext.panes に他方の pane が無い。pane を他方の workspace へ移す操作は、モデルが断る", async () => {
+    const mark = join(toolDir, "p6.out");
+    const a = await mkRepo("p6a");
+    const b = await mkRepo("p6b");
+    const s = await startServer([], { timings: { approvalsPollMs: 100 } });
+    const wa = await openWorkspace(s, a);
+    const wb = await openWorkspace(s, b);
+    const e = await script(
+      "p6",
+      `handle = (m) => { if (m.type === "ext.panes") { writeFileSync(LOG + ".panes", JSON.stringify(m.panes.map((p) => p.id))); } if (m.type === "ext.result") { appendFileSync(LOG + ".res", JSON.stringify(m) + "\\n"); } };
+       onStart = () => { setTimeout(() => { send({ id: 1, method: "display.set", params: { paneId: ${JSON.stringify(wb.paneId)}, name: "m", kind: "panel", format: "html", content: "x" } }); send({ id: 2, method: "display.set", params: { paneId: ${JSON.stringify(wa.paneId)}, name: "m", kind: "panel", format: "html", content: "x" } }); }, 800); };`,
+    );
+    void mark;
+    await writeProject(a, [{ id: "p6", command: e.command }]);
+    await (await s.open("external")).request("extension.reload", {});
+    await waitProj(s, "p6", "pending", a);
+    const i = (await projInfo(s, "p6", a))!;
+    await (await s.open("desktop")).request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await waitProj(s, "p6", "running", a);
+    await pidOf(e.log);
+    await vi.waitFor(() => { if (!existsSync(e.log + ".res") || readFileSync(e.log + ".res", "utf8").split("\n").filter(Boolean).length < 2) throw new Error("no results"); }, { timeout: 10_000, interval: 50 });
+    const res = readFileSync(e.log + ".res", "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { id: number; ok: boolean; error?: { code: string } });
+    expect(res.find((r) => r.id === 1)).toMatchObject({ ok: false, error: { code: "not_found" } });
+    expect(res.find((r) => r.id === 2)).toMatchObject({ ok: true });
+    const panes = JSON.parse(readFileSync(e.log + ".panes", "utf8")) as string[];
+    expect(panes).toContain(wa.paneId);
+    expect(panes).not.toContain(wb.paneId);
+    // 別の根（別の worktree）の workspace への pane の移動は、モデルが断る（#98）。範囲が移動で変わる道は、同じ根の中だけ。
+    const tabB = [...s.server.session.snapshot().tabs].find((t) => t.workspaceId === wb.workspaceId)!;
+    expect(s.server.session.moveToTab(wa.paneId, tabB.id)).toBe(false);
+  });
+
+  it("(P7) allow なしの script-html → unsupported。allow を足すと pending に戻り、承認すると、設定が有効なら出せ、無効なら display_script_disabled", async () => {
+    const root = await mkRepo("p7repo");
+    const s = await startServer([], { timings: { approvalsPollMs: 100 } });
+    const w = await openWorkspace(s, root);
+    const mk = (name: string) =>
+      script(
+        name,
+        `handle = (m) => { if (m.type === "ext.result") appendFileSync(LOG + ".res", JSON.stringify(m) + "\\n"); };
+         onStart = () => { setTimeout(() => send({ id: 1, method: "display.set", params: { paneId: ${JSON.stringify(w.paneId)}, name: "s", kind: "panel", format: "script-html", content: "<p>x</p>" } }), 800); };`,
+      );
+    const e1 = await mk("p7a");
+    await writeProject(root, [{ id: "p7", command: e1.command }]);
+    await (await s.open("external")).request("extension.reload", {});
+    await waitProj(s, "p7", "pending", root);
+    const screen = await s.open("desktop");
+    await screen.request("prefs.set", { patch: { displayScriptEnabled: true } });
+    let i = (await projInfo(s, "p7", root))!;
+    await screen.request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await waitProj(s, "p7", "running", root);
+    await pidOf(e1.log);
+    const res1 = async (log: string) => { await vi.waitFor(() => { if (!existsSync(log + ".res")) throw new Error("no res"); }, { timeout: 10_000, interval: 50 }); return JSON.parse(readFileSync(log + ".res", "utf8").split("\n").filter(Boolean)[0]!) as { ok: boolean; error?: { code: string } }; };
+    // 設定が有効でも、allow なしは unsupported。
+    expect(await res1(e1.log)).toMatchObject({ ok: false, error: { code: "unsupported" } });
+    // allow を足す → pending に戻る。
+    const e2 = await mk("p7b");
+    await writeProject(root, [{ id: "p7", command: e2.command, allow: ["script-html"] }]);
+    await (await s.open("external")).request("extension.reload", {});
+    await waitProj(s, "p7", "pending", root);
+    i = (await projInfo(s, "p7", root))!;
+    expect(i.allow).toEqual(["script-html"]);
+    await screen.request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await waitProj(s, "p7", "running", root);
+    await pidOf(e2.log);
+    expect(await res1(e2.log)).toMatchObject({ ok: true });
+    // 設定を無効にして、もう一度（起動し直す）→ display_script_disabled。
+    await screen.request("prefs.set", { patch: { displayScriptEnabled: false } });
+    await rm(e2.log + ".res", { force: true });
+    await (await s.open("external")).request("extension.restart", { key: i.key });
+    expect(await res1(e2.log)).toMatchObject({ ok: false, error: { code: "display_script_disabled" } });
+  });
+
+  it("(P10) サーバの PATH に空の要素があっても、プロジェクトの拡張のコマンド名は、リポジトリの中のファイルに解決されない（利用者の設定の拡張は今までどおり）", async () => {
+    const { chmodSync, writeFileSync } = await import("node:fs");
+    const root = await mkRepo("p10repo", [{ id: "p10", command: "hijackbin" }]);
+    const markProject = join(toolDir, "p10-project-mark");
+    const markUser = join(toolDir, "p10-user-mark");
+    // リポジトリの根に、呼ばれたら印を作る実行ファイル。
+    writeFileSync(join(root, "hijackbin"), `#!/bin/sh\ntouch "$HIJACK_MARK"\nsleep 5\n`);
+    chmodSync(join(root, "hijackbin"), 0o755);
+    const savedPath = process.env["PATH"];
+    process.env["PATH"] = `:${savedPath}`; // 先頭に空の要素（＝作業ディレクトリ）
+    cleanups.push(() => {
+      process.env["PATH"] = savedPath;
+    });
+    // 対照: 利用者の設定の拡張（作業ディレクトリ＝根）は、空の要素で、根の hijackbin に解決される（今までどおり）。
+    process.env["HIJACK_MARK"] = markUser;
+    const s = await startServer([{ id: "p10u", command: "hijackbin", cwd: root }], { timings: { approvalsPollMs: 100 } });
+    await vi.waitFor(() => { if (!existsSync(markUser)) throw new Error("user ext did not resolve hijackbin"); }, { timeout: 10_000, interval: 50 });
+    // プロジェクトの拡張: 承認しても、空の要素は渡らないので、根の hijackbin は呼ばれない。
+    process.env["HIJACK_MARK"] = markProject;
+    await openWorkspace(s, root);
+    await waitProj(s, "p10", "pending", root);
+    const i = (await projInfo(s, "p10", root))!;
+    await (await s.open("desktop")).request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await settle(1500);
+    expect(existsSync(markProject)).toBe(false);
+    delete process.env["HIJACK_MARK"];
+  });
+
+  it("(P10b) サーバの PATH が、落とす要素だけ（.）でも、プロジェクトの拡張に空の PATH は渡らず、リポジトリの中のファイルに解決されない", async () => {
+    const { chmodSync, writeFileSync } = await import("node:fs");
+    const root = await mkRepo("p10brepo", [{ id: "p10b", command: "hijackbin" }]);
+    const mark = join(toolDir, "p10b-mark");
+    writeFileSync(join(root, "hijackbin"), `#!/bin/sh\n: > "$HIJACK_MARK"\n`);
+    chmodSync(join(root, "hijackbin"), 0o755);
+    const savedPath = process.env["PATH"];
+    const s = await startServer([], { timings: { approvalsPollMs: 100 } });
+    const w = await openWorkspace(s, root);
+    void w;
+    // サーバを立ててから、これから起動する子に渡る元の環境（`process.env`）の PATH を、落とす要素だけにする。
+    process.env["PATH"] = ".";
+    process.env["HIJACK_MARK"] = mark;
+    cleanups.push(() => {
+      process.env["PATH"] = savedPath;
+      delete process.env["HIJACK_MARK"];
+    });
+    await waitProj(s, "p10b", "pending", root);
+    const i = (await projInfo(s, "p10b", root))!;
+    await (await s.open("desktop")).request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await settle(1500);
+    expect(existsSync(mark)).toBe(false);
+  });
+
+  it("(P9) .soda がリンク・extensions.json がリンク・cwd つき・chmod o+w → 一覧に理由が出て、印が出来ない。承認の記録を壊す → 全部 pending。無効の記録を壊す → 全部 disabled", async () => {
+    const e = await script("p9", projBody);
+    const entry = { id: "p9", command: e.command };
+    const s = await startServer([], { timings: { approvalsPollMs: 100 } });
+    // .soda がリンク
+    const r1 = await mkRepo("p9a");
+    const realSoda = join(toolDir, "p9a-soda");
+    await mkdir(realSoda, { recursive: true });
+    await writeFile(join(realSoda, "extensions.json"), JSON.stringify({ extensions: [entry] }), { mode: 0o600 });
+    (await import("node:fs")).symlinkSync(realSoda, join(r1, ".soda"));
+    // extensions.json がリンク
+    const r2 = await mkRepo("p9b");
+    await mkdir(join(r2, ".soda"));
+    await writeFile(join(toolDir, "p9b.json"), JSON.stringify({ extensions: [entry] }), { mode: 0o600 });
+    (await import("node:fs")).symlinkSync(join(toolDir, "p9b.json"), join(r2, ".soda", "extensions.json"));
+    // cwd つき
+    const r3 = await mkRepo("p9c", [{ ...entry, cwd: "/tmp" }]);
+    // other に書ける
+    const r4 = await mkRepo("p9d", [entry]);
+    (await import("node:fs")).chmodSync(join(r4, ".soda", "extensions.json"), 0o602);
+    for (const r of [r1, r2, r3, r4]) await openWorkspace(s, r);
+    await vi.waitFor(async () => {
+      const probs = (await s.list()).problems.filter((p) => p.scope === "project");
+      if (probs.length < 4) throw new Error(`problems ${probs.length}`);
+    }, { timeout: 10_000, interval: 50 });
+    const probs = (await s.list()).problems.filter((p) => p.scope === "project");
+    expect(probs.map((p) => p.root).sort()).toEqual([r1, r2, r3, r4].sort());
+    expect(JSON.stringify(probs)).not.toContain(e.command);
+    expect((await s.list()).extensions.filter((x) => x.scope === "project")).toEqual([]);
+    await settle(300);
+    noStart(e.log);
+    // 承認の記録を壊す → 全部 pending（動く側に倒れない）。
+    (await import("node:fs")).chmodSync(join(r4, ".soda", "extensions.json"), 0o600);
+    const screen = await s.open("desktop");
+    await (await s.open("external")).request("extension.reload", {});
+    await waitProj(s, "p9", "pending", r4);
+    const i = (await projInfo(s, "p9", r4))!;
+    await screen.request("extension.approve", { key: i.key, digest: i.approval!.digest });
+    await waitProj(s, "p9", "running", r4);
+    await writeFile(join(stateDir, "extension-approvals.json"), "{こわれた", { mode: 0o600 });
+    await waitProj(s, "p9", "pending", r4);
+    expect((await s.list()).problems.some((p) => p.path.endsWith("extension-approvals.json"))).toBe(true);
+    // 無効の記録を壊す → 全部が disabled。
+    await writeFile(join(stateDir, "extension-state.json"), "{こわれた", { mode: 0o600 });
+    await (await s.open("external")).request("extension.reload", {});
+    await waitProj(s, "p9", "disabled", r4);
+  });
+
 });
 
 function okResult<T>(r: PaneSocketResponse): T {

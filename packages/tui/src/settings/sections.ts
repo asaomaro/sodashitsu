@@ -882,6 +882,12 @@ function tuiSection(env: SettingsEnv): SettingsSection {
               },
             ]
           : []),
+        toggleItem(
+          "背景を透過する（この端末だけ）",
+          p.transparentBg,
+          (v) => env.write.setLocal({ transparentBg: v ? true : undefined }),
+          "端末のエミュレータで背景の透過を設定しているときに、画面の地と pane の既定の背景を透かします。選択・強調・メニュー・ダイアログは塗ったままです。文字の色はテーマのままなので、端末の背景とテーマの明暗を合わせてください（tui-state.json に残します）。",
+        ),
       ];
     },
   };

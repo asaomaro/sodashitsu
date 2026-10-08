@@ -288,6 +288,7 @@ export class CommandPopup implements Overlay {
       h: Math.min(inner.h, rows),
     };
     this.content = content;
-    return paintPane(grid, term, content, theme);
+    // 重なる部品なので、透過のときも中身の既定の背景は塗る（B2）。
+    return paintPane(grid, term, content, theme.solid);
   }
 }

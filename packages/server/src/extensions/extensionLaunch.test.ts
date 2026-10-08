@@ -1,6 +1,6 @@
 import { win32 } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildExtensionEnv, EXTENSION_ENV_DROPPED, extensionArgv, killTreeCommand } from "./extensionLaunch.js";
+import { buildExtensionEnv, EXTENSION_ENV_DROPPED, extensionArgv, killTreeCommand, safePath } from "./extensionLaunch.js";
 
 describe("extensionArgv", () => {
   it("POSIX は /bin/sh -c（ログインシェルにしない・絶対パス）", () => {
@@ -92,5 +92,39 @@ describe("buildExtensionEnv", () => {
     for (const k of ["SODACTL_TOKEN", "SODA_PANE_ID", "SODA_PANE_SOCKET", "SODA_SERVER_URL", "SODA_AGENT_REPORT_SOCKET", "SODA_EXTENSION_ID", "SODA_PROJECT_ROOT"]) {
       expect(EXTENSION_ENV_DROPPED).toContain(k);
     }
+  });
+});
+
+describe("safePath・プロジェクトの PATH（D13 の 3）", () => {
+  it("空の要素・.・相対の要素を落とし、絶対のものは順のまま残す", () => {
+    expect(safePath(":/usr/bin:.:rel/bin:./x:/opt/x::", "linux")).toBe("/usr/bin:/opt/x");
+    expect(safePath("", "linux")).toBe("");
+    expect(safePath("/a:/b", "linux")).toBe("/a:/b");
+    expect(safePath("C:\\Windows;;.;bin;D:\\tools", "win32")).toBe("C:\\Windows;D:\\tools");
+  });
+  it("プロジェクトだけ。利用者の PATH は変えない。Windows は大文字小文字を区別せずに PATH を見る", () => {
+    const dirty = { PATH: ":/usr/bin:.:rel" } as NodeJS.ProcessEnv;
+    expect(buildExtensionEnv(dirty, { id: "a", scope: "project", root: "/r", runId: "r" }, "linux")["PATH"]).toBe("/usr/bin");
+    expect(buildExtensionEnv(dirty, { id: "a", scope: "user", root: null, runId: "r" }, "linux")["PATH"]).toBe(":/usr/bin:.:rel");
+    const win = buildExtensionEnv({ Path: ";C:\\a;." } as NodeJS.ProcessEnv, { id: "a", scope: "project", root: "C:\\r", runId: "r" }, "win32");
+    expect(win["Path"]).toBe("C:\\a");
+  });
+  it("PATH が無い環境では、PATH を作らない", () => {
+    expect(buildExtensionEnv({}, { id: "a", scope: "project", root: "/r", runId: "r" }, "linux")["PATH"]).toBeUndefined();
+  });
+});
+
+describe("PATH が全部落ちたとき（D14）", () => {
+  it("空の文字列では渡さず、固定の安全な値にする（POSIX）。PATH が無ければ作らない", () => {
+    for (const dirty of [".", ":", "rel/bin", "", "::.:rel"]) {
+      const env = buildExtensionEnv({ PATH: dirty } as NodeJS.ProcessEnv, { id: "a", scope: "project", root: "/r", runId: "r" }, "linux");
+      expect(env["PATH"], JSON.stringify(dirty)).toBe("/usr/local/bin:/usr/bin:/bin");
+    }
+    expect(buildExtensionEnv({ PATH: "." } as NodeJS.ProcessEnv, { id: "a", scope: "user", root: null, runId: "r" }, "linux")["PATH"]).toBe(".");
+    expect(buildExtensionEnv({}, { id: "a", scope: "project", root: "/r", runId: "r" }, "linux")["PATH"]).toBeUndefined();
+  });
+  it("Windows は SystemRoot から（効くかは実機で確かめていない）", () => {
+    const env = buildExtensionEnv({ Path: ".", SystemRoot: "C:\\Windows" } as NodeJS.ProcessEnv, { id: "a", scope: "project", root: "C:\\r", runId: "r" }, "win32");
+    expect(env["Path"]).toBe("C:\\Windows\\System32;C:\\Windows");
   });
 });

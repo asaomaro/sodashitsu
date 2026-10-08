@@ -563,6 +563,23 @@ describe("拡張（extension.*。20261007-ext-host）", () => {
     expect(m.METHOD_SCHEMAS["extension.log"]).toBe(m.ExtensionLogParams);
     expect(m.METHOD_SCHEMAS["extension.setEnabled"]).toBe(m.ExtensionSetEnabledParams);
   });
+  it("承認の 3 つの方式（PR3）: approve・deny は key と 64 桁の digest、revoke は root と id", async () => {
+    const m = await import("./messages.js");
+    expect(m.METHOD_SCHEMAS["extension.approve"]).toBe(m.ExtensionApproveParams);
+    expect(m.METHOD_SCHEMAS["extension.deny"]).toBe(m.ExtensionDenyParams);
+    expect(m.METHOD_SCHEMAS["extension.revoke"]).toBe(m.ExtensionRevokeParams);
+    const digest = "a".repeat(64);
+    expect(m.ExtensionApproveParams.safeParse({ key: "project:x:a", digest }).success).toBe(true);
+    for (const bad of ["", "a".repeat(63), "a".repeat(65), "A".repeat(64), "g".repeat(64)]) {
+      expect(m.ExtensionApproveParams.safeParse({ key: "project:x:a", digest: bad }).success, bad).toBe(false);
+      expect(m.ExtensionDenyParams.safeParse({ key: "project:x:a", digest: bad }).success, bad).toBe(false);
+    }
+    expect(m.ExtensionApproveParams.safeParse({ key: "", digest }).success).toBe(false);
+    expect(m.ExtensionRevokeParams.safeParse({ root: "/r", id: "a" }).success).toBe(true);
+    expect(m.ExtensionRevokeParams.safeParse({ root: "", id: "a" }).success).toBe(false);
+    expect(m.ExtensionRevokeParams.safeParse({ root: "/r".repeat(600), id: "a" }).success).toBe(false);
+    expect(m.ExtensionRevokeParams.safeParse({ root: "/r", id: "BAD ID" }).success).toBe(false);
+  });
   it("key は 1〜160 文字・enabled は真偽", async () => {
     const m = await import("./messages.js");
     expect(m.ExtensionRestartParams.safeParse({ key: "user:a" }).success).toBe(true);

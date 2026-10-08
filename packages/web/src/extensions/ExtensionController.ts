@@ -23,6 +23,8 @@ export const RETRY_DELAYS_MS = [1000, 3000, 8000] as const;
 export type ReloadResult = "ok" | "failed" | "skipped";
 /** 操作（`restart`・`setEnabled`）の結果: `done`＝済んだ／`failed`＝失敗（知らせは出した）／`skipped`＝操作中の二重押しで捨てた。 */
 export type OpResult = "done" | "failed" | "skipped";
+/** 承認の操作の結果: `stale`＝登録が変わっていた（知らせは呼び手が出す。一覧は取り直し済み）。ほかは `OpResult` と同じ。 */
+export type ApprovalResult = OpResult | "stale";
 
 export class ExtensionController {
   /** 切り替え・切断のたびに進める（その前に始めた要求の応答を捨てる印）。 */
@@ -137,6 +139,40 @@ export class ExtensionController {
 
   async setEnabled(key: string, enabled: boolean): Promise<OpResult> {
     return this.guarded(key, () => this.opts.conn.request("extension.setEnabled", { key, enabled }), enabled ? "拡張を有効にできませんでした" : "拡張を無効にできませんでした");
+  }
+
+  /** プロジェクトの拡張を承認する。`digest` は、ダイアログが描いた `approval.digest`。 */
+  async approve(key: string, digest: string): Promise<ApprovalResult> {
+    return this.approval(key, () => this.opts.conn.request("extension.approve", { key, digest }), "拡張を承認できませんでした");
+  }
+
+  /** 「承認しない」を記録する。 */
+  async deny(key: string, digest: string): Promise<ApprovalResult> {
+    return this.approval(key, () => this.opts.conn.request("extension.deny", { key, digest }), "拡張の「承認しない」を記録できませんでした");
+  }
+
+  /** (根, id) の承認の記録を消す（いま一覧に無いものも）。 */
+  async revoke(root: string, id: string): Promise<OpResult> {
+    return this.guarded(`revoke:${root}\0${id}`, () => this.opts.conn.request("extension.revoke", { root, id }), "承認の記録を消せませんでした");
+  }
+
+  private async approval(key: string, run: () => Promise<unknown>, failure: string): Promise<ApprovalResult> {
+    if (this.opts.store.busy.has(key)) return "skipped";
+    this.opts.store.setBusy(key, true);
+    let result: ApprovalResult = "done";
+    try {
+      await run();
+    } catch (err) {
+      if (errorCodeOf(err) === "extension_stale") result = "stale";
+      else {
+        this.opts.toast(failure);
+        result = "failed";
+      }
+    } finally {
+      this.opts.store.setBusy(key, false);
+    }
+    void this.refresh();
+    return result;
   }
 
   /** 標準エラーの記録。失敗は `null`（知らせて返す）。 */

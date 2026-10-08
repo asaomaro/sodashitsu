@@ -164,6 +164,25 @@ describe("設定画面", () => {
     expect(h.patches()).toEqual([]);
   });
 
+  it("背景を透過する（この端末だけ）は tui-state で、共有の設定へは送らず、切り替えると画面を描き直す（AC1・AC4）", async () => {
+    const h = await open();
+    await h.section(6);
+    for (let i = 0; i < 14; i++) h.io.type(DOWN);
+    const screen = await h.text();
+    expect(screen).toContain("背景を透過する（この端末だけ）");
+    expect(h.app.prefs.transparentBg).toBe(false);
+    const mark = h.io.output().length;
+    h.io.type(ENTER); // 入
+    await vi.waitFor(() => expect(h.app.prefs.transparentBg).toBe(true));
+    await vi.waitFor(() => expect(h.io.output().slice(mark)).toContain("\x1b[2J")); // 全体を描き直す
+    expect(h.patches()).toEqual([]);
+    const mid = h.io.output().length;
+    h.io.type(ENTER); // 切
+    await vi.waitFor(() => expect(h.app.prefs.transparentBg).toBe(false));
+    await vi.waitFor(() => expect(h.io.output().slice(mid)).toContain("\x1b[2J"));
+    expect(h.patches()).toEqual([]);
+  });
+
   it("マウスを使うを切にすると外側の端末のマウスの報告を止め、入で出し直す", async () => {
     const h = await open();
     await h.section(6);
