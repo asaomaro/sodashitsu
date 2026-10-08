@@ -5,7 +5,7 @@
 `requirements.md`・`design.md`（第 1 部・第 2 部）・`decisions.md` を先に読む。**PR を 2 つに分ける。**
 
 - **PR1「tab の D&D」= T1〜T5**（AC1〜AC10・AC-I1〜AC-I5）。製品コードは `packages/web/src/layout/tabReorder.ts`（新規）と `packages/web/src/components/TabBar.vue` の 2 ファイルだけ。サーバ・protocol・client-core・端末版・`PaneFrame.vue`・`Sidebar.vue`・`view.ts`・`ActionDispatcher.ts` には触らない（触ることになったら、手を止めて報告する）。
-- **PR2「pane の移動の制限」= T6〜T12**（AC11〜AC19）。protocol → client-core → サーバ → ブラウザ版 → 端末版 → E2E → docs の順。`TabBar.vue`・`PaneFrame.vue`・`view.ts` には触らない。PR1 とファイルは重ならないので、ブランチは PR1 の上に積んでも、main から別に切ってもよい（docs の `herdr-parity.md`・`tui-parity.md`・`verification.md` は両方が触るが、行が違う）。
+- **PR2「pane の移動の制限」= T6〜T12**（AC11〜AC19）。protocol → client-core → サーバ → ブラウザ版 → 端末版 → E2E → docs の順。`TabBar.vue`・`PaneFrame.vue`・`view.ts` には触らない。PR1 と、製品コード・テストのファイルは重ならないので、ブランチは PR1 の上に積んでも、main から別に切ってもよい（docs の `herdr-parity.md`・`tui-parity.md`・`verification.md` は両方が触るが、行が違う）。
 
 環境: `export PATH="/tmp/pnpmbin:$HOME/.local/share/fnm/node-versions/v24.15.0/installation/bin:$PATH"`。動いている 7780 番のサーバには触らない。
 
@@ -115,7 +115,7 @@
       (1) 同じ id は、`git`・`cwd` が何でも null。
       (2) 両方に同じ `worktreeKey` → null（`representative` が違っても・`cwd` が違っても〔サブフォルダで開いた〕同じ）。
       (3) 違う `worktreeKey` → `different_worktree`。`repoKey` が同じ（同じリポジトリの本体と linked worktree）でも断る。`cwd` が同じでも断る（片方の先頭の pane が `cd` した場合）。
-      (4) 両方 `git: null`: `cwd` が同じ → null、違う → `different_worktree`。
+      (4) 両方 `git: null`: `cwd` が同じ → null、違う → `different_worktree`。末尾の `/` だけが違う（`/a` と `/a/`）→ null。根（`/` どうし）→ null。
       (5) 片方に `worktreeKey`、片方が `git: null`（両方の向き・`cwd` が同じでも）→ `different_worktree`。
       (6) `git` はあるが `worktreeKey` が無い（項目が無い・`null`）workspace が絡む: `lenient` → null、なし → `different_worktree`（相手が `git: null` でも・`worktreeKey` ありでも）。
       (7) `groupId` が同じでも違っても結果は変わらない。文言は空でない。
@@ -125,17 +125,17 @@
       AC: AC11, AC13, AC14, AC15, AC17
 
 - [ ] T7: `SessionModel` で断る（**独立点検あり**）。新しい状態は持たない。
-      - `paneMoveBlock(paneId, targetWorkspaceId): PaneMoveBlock | null`（pane・移動元・移動先が実在しなければ null。投げない。`lenient` は渡さない）。
-      - `moveToTab`: `targetTab` の確認の後・書き換えの前に、`this.paneMoveBlock(paneId, targetTab.workspaceId) !== null` なら `false`。`moveToNewTab`: `ws` の確認の後、同じく `null`。戻り値の型は変えない。
+      - `paneMoveBlockFor(paneId, targetWorkspaceId): PaneMoveBlock | null`（pane・移動元・移動先が実在しなければ null。投げない。client-core の `paneMoveBlock` を `lenient` なしで呼ぶ）。
+      - `moveToTab`: `targetTab` の確認の後・書き換えの前に、`this.paneMoveBlockFor(paneId, targetTab.workspaceId) !== null` なら `false`。`moveToNewTab`: `ws` の確認の後、同じく `null`。戻り値の型は変えない。
       単体テスト（`SessionModel.test.ts` に `describe("pane の移動の範囲（20261008-web-tab-dnd）")` を足す。`moveToTab`・`moveToNewTab` の両方で。判定は `updateWorkspaceGit(id, { kind: "git", git: {…} })` で入れる）:
       (1) 同じ `worktreeKey` の 2 つの workspace（代表と、代表でない 2 つ目）の間 → 両方の向きで移る。
-      (2) 違う `worktreeKey`（同じ `repoKey` の本体と linked worktree／別の `repoKey`）→ `false`・`null`。移す前と後で、`panes`・`tabs`・`workspaces`・フォーカス（`getFocus()`）が 1 つも変わっていない。`paneMoveBlock` は `different_worktree`。
+      (2) 違う `worktreeKey`（同じ `repoKey` の本体と linked worktree／別の `repoKey`）→ `false`・`null`。移す前と後で、`panes`・`tabs`・`workspaces`・フォーカス（`getFocus()`）が 1 つも変わっていない。`paneMoveBlockFor` は `different_worktree`。
       (3) 判定の無い workspace どうし（`updateWorkspaceGit` を呼んでいない・`unmanaged` を入れた・`unknown` だけを入れた）: `cwd` が同じ → 移る、違う → 断る。
       (4) 片方に判定・片方に無い（`cwd` が同じでも）→ 断る。無い側に同じ `worktreeKey` の判定を入れると移る。
       (5) 同じ workspace の中（別の tab へ・新しい tab へ）は、判定が何でも移る。
       (6) 保存から戻した workspace（復元の作り方は今ある復元のテストにならう）: `worktreeKey` つきで戻したものどうしは、同じなら移り、違えば断る。`repoKey` だけで `worktreeKey` が無いものは断る。
       (7) 抜け道が無いこと: `swapPaneWith`・`moveToEdge`・`replacePane` に、別の workspace の pane を相手として渡しても、何も変わらない（今ある「同じ tab でなければ何もしない」が効いている）。
-      既存のテストの直し: `SessionModel.test.ts` の `moveToTab`・`moveToNewTab` の 25 の出現を 1 つずつ見る。別の workspace へ移していて、2 つの workspace の `cwd` が違うものは、**期待を変えずに前提を直す**（同じ `cwd` で作る、または両方に同じ `worktreeKey` の判定を入れる）。直したテストの名前と直し方を `test-result.md` に並べる。
+      既存のテストの直し: 落ちるのは `SessionModel.test.ts:635`・`:759`（`/home/u` と `/home/u/other`）・`:1232`・`:1242`（`/a` と `/b`）——`git: null` どうしで `cwd` が違う workspace の間で移している。ほかの出現（25 のうち残り）も 1 つずつ見る。**期待を変えずに前提を直す**（同じ `cwd` で作る、または両方に同じ `worktreeKey` の判定を入れる）。直したテストの名前と直し方を `test-result.md` に並べる。
       負の対照: (2) のテストが、`moveToTab`・`moveToNewTab` の確認の行だけを外すと落ちることを確かめ、出力を `test-result.md` に貼り、元に戻して差分が無いことを確かめる。
       対象: `packages/server/src/session/SessionModel.ts:918` `moveToTab`・`:949` `moveToNewTab`・`packages/server/src/session/SessionModel.test.ts`
       依存: T6
@@ -144,13 +144,12 @@
 - [ ] T8: `SessionService` とハンドラで理由を返す（**独立点検あり**）。
       - `SessionService.paneMoveBlockToTab(paneId, targetTabId)`・`paneMoveBlockToWorkspace(paneId, targetWorkspaceId)`（pane・tab・workspace が無ければ null。投げない）。
       - `pane.ts` の `pane.move_to_tab`・`pane.move_to_new_tab`: 先に理由を問い合わせ、あれば `{ ok: false, reason }` を返して終わり（`sizeAuthority.noteInteraction` を呼ばない）。無ければ今までどおり（実在しない pane への今のエラーも変えない）。
-      - 別のマシンへの中継が、応答の `reason` を落とさずに通すことを、中継のコードを読んで確かめる（落とす作りなら、通るように直し、そのテストを足す。確かめた場所を `decisions.md` に書く）。
       単体テスト:
       (1) `SessionService.test.ts`: 別の worktree への `moveToTab`・`moveToNewTab` で、bus に 1 つもイベントが出ず、保存の予約（`persist.touch`）も呼ばれない。同じ worktree では今までどおりのイベントの並び。
       (2) ハンドラ（`packages/server/src/surface/methods/` の今あるテストの形で。`pane.move_to_*` のハンドラのテストが無ければ `index.test.ts` に足す）: 別の worktree → `{ ok: false, reason: "different_worktree" }`、同じ worktree → `{ ok: true }`（`move_to_new_tab` は `tab` 付き）、自分自身の tab・存在しない tab・存在しない workspace → `reason` の無い `{ ok: false }`（今までどおり）。
       (3) `packages/cli/src/paneCurrent.integration.test.ts:147`: `cwd` を渡さずに作った 2 つの workspace の間で移している（場所は同じ）。片方だけ判定が入った瞬間は断られる（design「作った直後」）ので、`reason` がある間は少し待って試し直す形に直す（上限の時間つき。固定の待ちにしない）。
-      既存のテストの直し: `SessionService.test.ts` の 16 の出現を 1 つずつ見て、T7 と同じく前提を直す。
-      対象: `packages/server/src/session/SessionService.ts:1000` `moveToTab`・`:1029` `moveToNewTab`・`packages/server/src/surface/methods/pane.ts:126`・`:136`・`packages/server/src/session/SessionService.test.ts`・`packages/server/src/surface/methods/index.test.ts`・`packages/cli/src/paneCurrent.integration.test.ts:147` / 中継: 未特定（`packages/server/src` の machine・bridge を検索）
+      既存のテストの直し: 落ちるのは `SessionService.test.ts:506`・`:538`・`:584`（`/home/u` と `/home/u/other`）・`:964`・`:972`（`/a` と `/b`）。ほかの出現（16 のうち残り）も 1 つずつ見て、T7 と同じく前提を直す。
+      対象: `packages/server/src/session/SessionService.ts:1000` `moveToTab`・`:1029` `moveToNewTab`・`packages/server/src/surface/methods/pane.ts:126`・`:136`・`packages/server/src/session/SessionService.test.ts`・`packages/server/src/surface/methods/index.test.ts`・`packages/cli/src/paneCurrent.integration.test.ts:147`
       依存: T7
       AC: AC12, AC14, AC16, AC17
 
@@ -160,39 +159,37 @@
       単体テスト:
       (1) `Sidebar.test.ts`: `view.startPaneDrag(paneId)` の後、別の `worktreeKey` の workspace の行・`git: null` で `cwd` が違う行に `sidebar-row-pane-drop-disabled` が付き、同じ `worktreeKey` の行・自分の workspace の行・グループの見出しには付かない。`view.setPaneDragOverWorkspace(断る行)` で、その行に `sidebar-row-drop-invalid` が付き `sidebar-row-pane-drop-target` が付かない。断らない行では逆。`view.endPaneDrag()` で全部消える。`git` はあるが `worktreeKey` の無い workspace（古いサーバ）には、どのクラスも付かない（今までどおり落とせる先）。workspace の並べ替えの「落とせない行」の今あるテストが通る。
       (2) `ActionDispatcher.test.ts`: 別の worktree への `movePaneToNewTab` → 要求を送らず、文言のトースト、表示もフォーカスも動かない。同じ worktree・自分の workspace → 今までどおり送る。`worktreeKey` の無い `git` の workspace（古いサーバ）→ 送る。応答 `{ok: false, reason: "different_worktree"}` → トースト、表示は動かない。応答 `{ok: false}`（`reason` 無し）→ トースト無し（今までどおり）。`movePaneToTab` も、応答の `reason` でトースト。今ある 21 の出現のうち、別の workspace へ移すものは、ストアの 2 つの workspace が「同じ `cwd` で `git: null`」か「同じ `worktreeKey`」になっているかを確かめ、なっていなければ前提を直す（期待は変えない）。
-      (3) `PaneFrame.test.ts` の今ある 5 の出現が、直しなしで通ること。
+      (3) `PaneFrame.test.ts` の今ある 5 の出現と、`Sidebar.test.ts:1993` 付近の今ある pane の落とし先のテスト（ドラッグ元がストアに無い＝どの行も断らない）が、直しなしで通ること。
       対象: `packages/web/src/components/Sidebar.vue:843`〜`844`（行のクラス）・`:1174`〜`1185`（CSS）・`packages/web/src/actions/ActionDispatcher.ts:942` `movePaneToTab`・`:967` `movePaneToNewTab`・`packages/web/src/components/Sidebar.test.ts`・`packages/web/src/actions/ActionDispatcher.test.ts`
       依存: T6
       AC: AC17, AC18
 
-- [ ] T10: 端末版: 落とせない行の見せ方と、知らせ。design 第 2 部「端末版」のとおり。
-      - `mouse.ts`: `PaneDropTarget` の `workspace` に `blocked?: boolean`。`paneDropTarget` が `host.model` の移動元・移動先の workspace から `paneMoveBlock(…, { lenient: true })` を求めて付ける。落とし先の強調を描く所（`TuiApp.ts:1276` あたりの `this.mouse.dropTarget`。workspace の行の強調がどこで描かれているかを検索して確かめる）は、`blocked` なら描かない。
-      - 端末版の tab バーに、表示中の workspace 以外の tab が並ぶことがあるかを確かめる（並ぶなら、tab の落とし先にも同じ `blocked` を付け、`movePaneToTab` にも送る前の確認を足す。並ばないなら何もしない。結果を `decisions.md` に書く）。
-      - `TuiDispatcher.movePaneToNewTab`・`movePaneToTab`: ブラウザ版と同じ（送る前の確認と `ui.toast`、応答の `reason` の `ui.toast`）。
-      単体テスト: `mouse.test.ts`（別の `worktreeKey` の workspace の行の上で `blocked`、同じ `worktreeKey`・自分の workspace では付かない。離すと `movePaneToNewTab` が呼ばれる）・`TuiDispatcher.test.ts`（T9 (2) と同じ場合。今ある 6 の出現の前提を確かめる）・強調を描かないことは、今ある描画のテストの形で。
-      対象: `packages/tui/src/input/mouse.ts:792` `paneDropTarget`・`:32` 付近 `PaneDropTarget`・`packages/tui/src/app/TuiApp.ts:1276`・`packages/tui/src/actions/TuiDispatcher.ts:942`・`:959`・それぞれの `.test.ts`
+- [ ] T10: 端末版: 断るときの知らせ。design 第 2 部「端末版」のとおり。`mouse.ts`・`TuiApp.ts` は変えない（workspace の行・tab の落とし先の強調は、もともと描いていない。tab バーに並ぶのは表示中の workspace の tab だけ）。
+      - `TuiDispatcher.movePaneToNewTab`: 送る前に `paneMoveBlock(移動元の workspace, 移動先の workspace, { lenient: true })`（どちらかがモデルに無ければ確認を飛ばす）。断るなら `ui.toast(paneMoveBlockMessage(block))` で終わり（送らない）。応答が `!r.ok && r.reason` ならトースト。
+      - `TuiDispatcher.movePaneToTab`: 送る前の確認は足さない。応答の `reason` だけトースト。
+      単体テスト（`TuiDispatcher.test.ts`）: 別の `worktreeKey` の workspace への `movePaneToNewTab` → 要求を送らず、文言のトースト、表示が動かない。同じ `worktreeKey`・自分の workspace → 今までどおり送る。`worktreeKey` の無い `git` の workspace（古いサーバ）→ 送る。応答 `{ok: false, reason: "different_worktree"}` → トースト。応答 `{ok: false}` → トースト無し。`movePaneToTab` も、応答の `reason` でトースト。今ある 6 の出現（`:1336`〜`1349`）と `mouse.test.ts:246` は、`testing/fixtures.ts` の workspace が `cwd: "/"`・`git: null` なので直しなしで通ること。
+      対象: `packages/tui/src/actions/TuiDispatcher.ts:942` `movePaneToTab`・`:959` `movePaneToNewTab`・`packages/tui/src/actions/TuiDispatcher.test.ts`
       依存: T6
       AC: AC17, AC18
 
 - [ ] T11: E2E `pane-move-scope.spec.ts` を足す。
-      前提: 一時のフォルダに、git のリポジトリ A（1 つコミットする。作り方の先例 `packages/e2e/src/specs/workspace-tab-pane.spec.ts:489` `makePlainRepo`）と、A の linked worktree（`git worktree add`。先例 `workspace-groups.spec.ts`）、別のリポジトリ B、管理外のフォルダ U を作る。テスト用クライアントで workspace を作る: A を 2 つ（A1・A2。同じフォルダ）、A の worktree を 1 つ（AW）、B を 1 つ、U を 2 つ（U1・U2）。**判定が入ったことはブラウザで待つ**: git の workspace はサイドバーの行のブランチの表示。A2 は A1 と同じフォルダの 2 つ目なので、worktree グループの外の通常の行になる（その並びを待つ）。pane の名前を出す: `addInitScript` で `soda.prefs.v1` に `paneAgentNameVisible: true`（prefs の入れ方の先例 `workspace-groups.spec.ts:223`〜`237`）、テスト用クライアントで移動元の tab を `pane.split` で 2 pane にし、動かす pane に `pane.rename`（`.pane-frame-name` を待つ。先例 `appearance-settings.spec.ts:211`〜`240`）。`routeRecordingWebSocket(page)` で送った要求を記録し、ドラッグの直前との差で数える。
-      (1) 見せ方（AC18）: A1 の pane の名前をつかんで 12px 動かした時点で、AW・B・U1・U2 の行に `sidebar-row-pane-drop-disabled` があり（`opacity` が 1 未満であることも `getComputedStyle` で見る）、A1・A2 の行には無い。B の行の上へ動かす → `sidebar-row-drop-invalid` があり、`sidebar-row-pane-drop-target` が無い。A2 の行の上へ → `sidebar-row-pane-drop-target`。`Escape` → 全部のクラスが消える。
+      前提: 一時のフォルダに、git のリポジトリ A（1 つコミットする。作り方の先例 `packages/e2e/src/specs/workspace-tab-pane.spec.ts:489` `makePlainRepo`）と、A の linked worktree（`git worktree add`。先例 `workspace-groups.spec.ts`）、別のリポジトリ B、管理外のフォルダ U を作る。起動のときからある最初の workspace は、先に閉じる（先例 `workspace-groups.spec.ts:252` `dropInitial`）。テスト用クライアントで workspace を作る: A を 2 つ（A1・A2。同じフォルダ）、A の worktree を 1 つ（AW）、B を 1 つ、U を 2 つ（U1・U2）。**判定が入ったことはブラウザで待つ**: 既定の行の並びでは、同じフォルダの 2 つ目（A2）や単独のリポジトリ（B）の行にブランチ名が出ず、判定の前後で見た目が変わらない（`packages/web/src/components/Sidebar.vue:162`、`packages/client-core/src/sidebar/rowLayout.ts:85`）。そこで、`addInitScript` の prefs でサイドバーの行の並び（`sidebarRows`）の spaces の 1 行目に `branch` のトークン（`packages/client-core/src/sidebar/resolveRows.ts:92`。判定があれば常に出る）を足し、A1・A2・AW・B の行にブランチ名が出るのを待ってから操作する。U1・U2 は判定の前後で結果が同じ（design の表の 3・5）なので待たない。pane の名前を出す: `addInitScript` で `soda.prefs.v1` に `paneAgentNameVisible: true`（prefs の入れ方の先例 `workspace-groups.spec.ts:223`〜`237`）、テスト用クライアントで移動元の tab を `pane.split` で 2 pane にし、動かす pane に `pane.rename`（`.pane-frame-name` を待つ。先例 `appearance-settings.spec.ts:211`〜`240`）。`routeRecordingWebSocket(page)` で送った要求を記録し、ドラッグの直前との差で数える（(5) だけは使わない）。動かす pane のある workspace を表示していること（サイドバーの行をクリックして、その行が選ばれるのを待つ）を、ドラッグの前に確かめる。
+      (1) 見せ方（AC18）: A1 の pane の名前をつかんで 12px 動かした時点で、AW・B・U1・U2 の行に `sidebar-row-pane-drop-disabled` があり（`opacity` が 1 未満であることも `getComputedStyle` で見る。カーソルの形は見ない）、A1・A2 の行には無い。B の行の上へ動かす → `sidebar-row-drop-invalid` があり、`sidebar-row-pane-drop-target` が無い。A2 の行の上へ → `sidebar-row-pane-drop-target`。`Escape` → 全部のクラスが消える。
       (2) 断る（AC12・AC18）: A1 の pane を B の行で離す → トースト「別の worktree の workspace へは移せません…」が出て、`pane.move_to_new_tab` が 1 つも送られておらず、表示中の workspace・tab・pane の数が変わらない。同じリポジトリの別の worktree（AW）の行で離しても同じ。
       (3) 移せる（AC11）: A1 の pane を A2 の行で離す → `pane.move_to_new_tab` が 1 つ送られ、表示が A2 の新しい tab に移り、動かした pane の名前がそこにある。
-      (4) 管理外（AC13）: U1 の pane を U2 の行で離す → 移る。U1 の pane を A1 の行で離す → 断られる（トースト・要求なし）。
-      (5) サーバで断ること（画面の確認を通らない入口。AC12・AC16・AC17）: テスト用クライアントから直接 `pane.move_to_new_tab`（A1 の pane → B）と `pane.move_to_tab`（A1 の pane → B の tab、A1 の pane → AW の tab）→ どれも `{ok: false, reason: "different_worktree"}`。その間、**ブラウザが受けたイベント**（`routeRecordingWebSocket` の `frames`。`frames.ts:104`〜）に `pane.updated`・`tab.created`・`layout.updated` が増えておらず、ブラウザのサイドバー・tab バーが変わらない。対照として、同じ呼び方で A1 の pane → A2 の tab は `ok: true` で、ブラウザにイベントが届く（「増えていない」が空振りでないことを、同じ数え方で示す）。
+      (4) 管理外（AC13）: U1 を表示し、U1 の tab を 2 pane にして名前を付けておく。U1 の pane を U2 の行で離す → 移る。U1 の pane を A1 の行で離す → 断られる（トースト・要求なし）。
+      (5) サーバで断ること（画面の確認を通らない入口。AC12・AC16・AC17）: **別のテストにし、`routeRecordingWebSocket` を使わず、`watchReceivedEvents(page)`（`frames.ts:82`。CDP。`page.routeWebSocket` の下では使えない）でブラウザが受けたイベントを数える**（`routeRecordingWebSocket` の `frames` はバイナリしか記録しない。`frames.ts:145`）。テスト用クライアントから直接 `pane.move_to_new_tab`（A1 の pane → B）と `pane.move_to_tab`（A1 の pane → B の tab、A1 の pane → AW の tab）→ どれも `{ok: false, reason: "different_worktree"}`。その間、**ブラウザが受けたイベント**に `pane.updated`・`tab.created`・`layout.updated` が増えておらず、ブラウザのサイドバー・tab バーが変わらない。対照として、同じ呼び方で A1 の pane → A2 の tab は `ok: true` で、ブラウザにイベントが届く（「増えていない」が空振りでないことを、同じ数え方で示す）。
       (6) 同じ workspace の中（AC15）: pane の名前を、同じ workspace の別の tab へ → 今までどおり移る（`pane.move_to_tab` が送られ、その tab に pane がある）。自分の workspace の行へ落とす → 新しい tab へ切り出される。
-      対象: `packages/e2e/src/specs/pane-move-scope.spec.ts`（新規作成） / 補助: `packages/e2e/src/support/frames.ts:128` `routeRecordingWebSocket`
+      対象: `packages/e2e/src/specs/pane-move-scope.spec.ts`（新規作成） / 補助: `packages/e2e/src/support/frames.ts:128` `routeRecordingWebSocket`・`:82` `watchReceivedEvents`
       依存: T8, T9
       AC: AC11, AC12, AC13, AC15, AC16, AC17, AC18
 
-- [ ] T12: docs を合わせる（PR2 の分）。書く中身: pane を別の workspace へ移せるのは、同じ worktree（同じフォルダ。worktree グループの代表を決めるのと同じ `worktreeKey`）の workspace の間だけ／同じリポジトリでも別の worktree へは断る（一覧の行と中身がずれるため）／管理外・判定前の workspace どうしは、開いた場所が同じときだけ／同じ workspace の中（tab の間・新しい tab・分割・置き換え）は今までどおり／pane の中で `cd` して別の worktree へ移るのは対象外（今までどおり）／断るときの応答は `{ok: false, reason: "different_worktree"}`（古い画面は黙って何もしない）／作った直後に続けて移すスクリプトは、`reason` がある間、待って試し直す／利用者が作るグループ・worktree グループは単位にしない／ドラッグ中、落とせない行は薄くなり、落とすと理由が出る。**以前（20260924-pane-move-cross-tab）は、どの workspace の行へも落とせた**ことと、変わった点が分かるように書く。
+- [ ] T12: docs を合わせる（PR2 の分）。書く中身: pane を別の workspace へ移せるのは、同じ worktree（同じフォルダ。worktree グループの代表を決めるのと同じ `worktreeKey`）の workspace の間だけ／同じリポジトリでも別の worktree へは断る（一覧の行と中身がずれるため）／管理外・判定前の workspace どうしは、開いた場所が同じときだけ／同じ workspace の中（tab の間・新しい tab・分割・置き換え）は今までどおり／pane の中で `cd` して別の worktree へ移るのは対象外（今までどおり）／断るときの応答は `{ok: false, reason: "different_worktree"}`（古い画面は黙って何もしない）／作った直後に続けて移すスクリプトは、`reason` がある間、待って試し直す／利用者が作るグループ・worktree グループは単位にしない／ブラウザ版はドラッグ中、落とせない行が薄くなり、落とすと理由が出る。端末版は落とすと理由が出る／管理外の workspace の場所は文字列で比べる（リンク経由の別の書き方は別の場所になる）／落とせる相手が畳んだグループの中にあるときは、広げてから落とす。**以前（20260924-pane-move-cross-tab）は、どの workspace の行へも落とせた**ことと、変わった点が分かるように書く。
       - `docs/herdr-parity.md`: H41 の行（78 行目あたり）。herdr との違いとして書き、「対応 AC」にこの作業の AC を足す。
       - `docs/tui-parity.md`: H41（92 行目あたり）・W03（130 行目あたり）。
       - `docs/tui.md`: 「マウス」の pane の名前のドラッグの行（183 行目あたり）。
       - `docs/sodactl.md`: 「pane は別の tab・workspace へ移せ」とある所（701 行目あたり）と 934 行目あたり。
       - `docs/verification.md`: 手で確かめる項目（T11 の (1)〜(4) と同じ操作。端末版でも）。
-      - `packages/cli/skills/sodactl/SKILL.md` に pane の移動の記述があれば合わせる（検索して確かめる。無ければ何もしない。直したら、`sodactl skill` の出力と同じ中身であることを確かめる起動確認の 4 本目が通ること）。
       対象: `docs/herdr-parity.md`（H41）・`docs/tui-parity.md`（H41・W03）・`docs/tui.md`（「マウス」）・`docs/sodactl.md`（701・934 行目あたり）・`docs/verification.md`
       依存: T8, T9, T10
       AC: AC19

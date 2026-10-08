@@ -34,7 +34,7 @@ pane については、どの入口から来ても、pane が別の worktree の
 - モバイルの 1 列の画面（tab バーを持たない）と、タッチでのドラッグ（AC9）。
 - ポインタに付いて動く像・掴める形のカーソル・「落とせない」印など、D&D 全体の表現の作り直し（`20261004-ui-interaction-polish/split-dnd.md` の残り）。
 - tab の並べ替えのための、サーバ・protocol の変更（AC8）。1 回で目的の位置へ動かす RPC（`tab.move_to` のようなもの）は足さない（後の作業の候補）。
-- 端末版の変更。
+- tab の D&D での、端末版の変更（pane の移動の制限では、端末版の知らせ方を直す）。
 
 ## 完了条件 (受け入れ基準)
 
@@ -57,11 +57,11 @@ pane については、どの入口から来ても、pane が別の worktree の
 - [ ] AC11: 移動元と移動先の workspace が同じ worktree（`worktreeKey` が同じ）のとき、pane を別の workspace へ移せる（今までどおり）。同じフォルダを開いた 2 つ目以降の workspace（worktree グループの代表でない、サイドバーでは通常の行）との間が、これに当たる。
 - [ ] AC12: 移動元と移動先の workspace が別の worktree（同じリポジトリの別の worktree・別のリポジトリ）のとき、`pane.move_to_tab`・`pane.move_to_new_tab` は何も動かさず、`{ok: false, reason: "different_worktree"}` を返す。イベントは 1 つも配られない。
 - [ ] AC13: git の判定が無い workspace どうし（管理外のフォルダ・判定がまだ入っていない）は、**開いた場所（`Workspace.cwd`）が同じ**ときだけ移せる。それ以外（場所が違う・片方だけ判定がある）は断る（`different_worktree`）。
-- [ ] AC14: 「同じ worktree」と確かめられないときは断る。判定が入った後は、AC11・AC12 のとおりになる（作った直後に断られた相手でも、同じ worktree と分かれば移せるようになる）。
+- [ ] AC14: AC13 の場合を除き、「同じ worktree」と確かめられないとき（片方だけ判定がある・判定はあるが worktree の鍵が無い）は断る。判定が入った後は、AC11・AC12 のとおりになる（作った直後に断られた相手でも、同じ worktree と分かれば移せるようになる）。
 - [ ] AC15: 同じ workspace の中の移動（別の tab へ・新しい tab へ切り出す・分割・置き換え）は、判定に関わらず今までどおりできる。pane の中で `cd` して別の worktree のフォルダへ移ることは、制限しない（今までどおり）。
 - [ ] AC16: 制限はサーバにあり、入口に関わらず働く: ブラウザ版・端末版の pane の名前のドラッグ、RPC を直接呼ぶクライアント（古い画面・スクリプト）、別のマシンへの中継（そのマシンのサーバが断る）。pane が workspace をまたぐ RPC は `pane.move_to_tab`・`pane.move_to_new_tab` の 2 つだけで、ほかに抜け道が無い。
-- [ ] AC17: 新旧の組み合わせで壊れない。断るときの応答は、今ある「何も起きなかった」の形（`ok: false`）に `reason` を足しただけで、古い画面・古い端末版は今までどおり「何もしない」。新しい画面・端末版が古いサーバ（`worktreeKey` を配らない・断らない）へ送ると、今までどおり通る（画面は、`worktreeKey` が無い相手を自分では断らない）。
-- [ ] AC18: 落とせる相手が少なくなるので、落とす前に分かるようにする。ブラウザ版は、pane の名前のドラッグが始まった時点で、**落とせない workspace の行を全部薄くする**（落とせる行と、自分の workspace の行はそのまま）。落とせない行の上では、落とせる先の強調（破線）を出さず、既存の「落とせない行」の見た目（点線と not-allowed のカーソル）にする。そこで離すと、何も送らず、「別の worktree の workspace へは移せません（同じフォルダを開いた workspace へだけ移せます）」と知らせる。端末版は、落とせない行に強調を出さず、離すと同じ文言で知らせる。サーバが断った（`reason` 付き）ときも、同じ文言で知らせる。
+- [ ] AC17: 新旧の組み合わせで壊れない。断るときの応答は、今ある「何も起きなかった」の形（`ok: false`）に `reason` を足しただけで、古い画面・古い端末版は今までどおり「何もしない」。新しい画面・端末版が古いサーバ（`worktreeKey` を配らない・断らない）へ送ると、git の判定がある workspace どうしは今までどおり通る（画面は、`worktreeKey` が無い相手を自分では断らない）。例外: 判定の無い workspace どうしで開いた場所が違う組は、古いサーバでも画面が断る（AC13 の決まりは、画面からは新旧を見分けられない）。
+- [ ] AC18: 落とせる相手が少なくなるので、落とす前に分かるようにする。ブラウザ版は、pane の名前のドラッグが始まった時点で、**落とせない workspace の行を全部薄くする**（落とせる行と、自分の workspace の行はそのまま）。落とせない行の上では、落とせる先の強調（破線）を出さず、既存の「落とせない行」の見た目（点線の枠）にする。そこで離すと、何も送らず、「別の worktree の workspace へは移せません（同じフォルダを開いた workspace へだけ移せます）」と知らせる。端末版は、workspace の行の落とし先の強調がもともと無い（今のまま）ので、離したときに同じ文言で知らせる。サーバが断った（`reason` 付き）ときも、同じ文言で知らせる。
 - [ ] AC19: 文書が合っている。`docs/herdr-parity.md` の H41・`docs/tui-parity.md` の H41・W03・`docs/tui.md`「マウス」・`docs/sodactl.md` の pane の移動に触れている箇所・`docs/verification.md` に、別の workspace へ移せるのは同じ worktree の間だけ（管理外・判定前は開いた場所が同じときだけ）・pane の中の `cd` は対象外・断るときの応答、が書かれている。以前の作業（20260924-pane-move-cross-tab）の「サイドバーの workspace の行へ落として移す」は、ほとんどの相手で落とせなくなった、と分かる書き方にする。
 
 ## 相互作用の受け入れ基準（UI を伴う work のみ）
@@ -76,7 +76,7 @@ pane の移動の制限（追加）は、既存の pane の名前のドラッグ
 
 ## 非機能要件 / 制約
 
-- 差分を 2 つの PR に分ける: 「tab の D&D」（AC1〜AC10・AC-I1〜AC-I5。`packages/web`・`packages/e2e` の spec・docs だけ）と「pane の移動の制限」（AC11〜AC19。protocol・client-core・サーバ・ブラウザ版・端末版・docs）。触るファイルは重ならない（tab バーに並ぶのは表示中の workspace の tab だけで、pane を tab へ落とす操作は必ず同じ workspace の中なので、制限は `TabBar.vue` に触らない）。
+- 差分を 2 つの PR に分ける: 「tab の D&D」（AC1〜AC10・AC-I1〜AC-I5。`packages/web`・`packages/e2e` の spec・docs だけ）と「pane の移動の制限」（AC11〜AC19。protocol・client-core・サーバ・ブラウザ版・端末版・docs）。製品コードとテストのファイルは重ならない（tab バーに並ぶのは表示中の workspace の tab だけで、pane を tab へ落とす操作は必ず同じ workspace の中なので、制限は `TabBar.vue` に触らない）。docs の `herdr-parity.md`・`tui-parity.md`・`verification.md` は両方が触る（行は違う）。
 - 回帰テストは `.aidev/conventions/regression-negative-control.md`、E2E は `.aidev/conventions/e2e-observe-browser.md` に従う。
 
 ## 未確定事項 / 確認したいこと

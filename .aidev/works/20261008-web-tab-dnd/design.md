@@ -158,16 +158,17 @@ DOM のクラス（E2E・単体テストが見る）:
 
 - **pane が workspace をまたぐ RPC は 2 つだけ**: `pane.move_to_tab`（`packages/server/src/surface/methods/pane.ts:126` → `SessionService.moveToTab` `packages/server/src/session/SessionService.ts:1000` → `SessionModel.moveToTab` `packages/server/src/session/SessionModel.ts:918`）と `pane.move_to_new_tab`（`pane.ts:136` → `SessionService.ts:1029` → `SessionModel.ts:949`）。同じ tab の中の `pane.swap_with`・`pane.move_to_edge`・`pane.replace` は、相手の pane が同じ tab でなければ何もしない（`SessionModel.ts:1030`〜`1076` の `other.tabId !== pane.tabId`・`target.tabId !== pane.tabId`）。tab ごと別の workspace へ移す・workspace を統合する RPC は無い（`packages/protocol/src/messages.ts` の `tab.*`・`workspace.*` の一覧に無い。tab の D&D でも足さない）。
 - **入口は pane の名前のドラッグだけ**: ブラウザ版 `packages/web/src/components/PaneFrame.vue:234`・`:236` → `ActionDispatcher.movePaneToTab`・`movePaneToNewTab`（`packages/web/src/actions/ActionDispatcher.ts:942`・`:967`）。端末版 `packages/tui/src/input/mouse.ts:816`・`:817` → `TuiDispatcher.movePaneToTab`・`movePaneToNewTab`（`packages/tui/src/actions/TuiDispatcher.ts:942`・`:959`）。メニュー（`ContextMenu.vue` の pane の項目）・キー（`packages/client-core/src/keys/bindings.ts`）・モバイル（`packages/web/src/mobile/PanePicker.vue` は pane を選ぶだけ）・`sodactl`（`packages/cli/src/commands/pane.ts` に移動のコマンドが無い）には、pane を別の tab・workspace へ移す入口が無い（`move_to_tab`・`move_to_new_tab`・`movePaneTo` を `packages/*/src` で検索して確かめた）。
-- **tab バーに並ぶのは表示中の workspace の tab だけ**（ブラウザ版 `TabBar.vue` の `tabs`。端末版は未確認で、T10 で確かめる）。ブラウザ版では、pane の名前を tab へ落とす操作は必ず同じ workspace の中。workspace をまたぐのは、サイドバーの workspace の行へ落とす `pane.move_to_new_tab` だけ（自分の workspace の行へ落とすと、同じ workspace の新しい tab へ切り出す）。
+- **tab バーに並ぶのは表示中の workspace の tab だけ**（ブラウザ版 `TabBar.vue` の `tabs`、端末版 `packages/tui/src/render/chrome/tabBar.ts:171` `model.tabsOf(model.workspaceId)`）。どちらも、pane の名前を tab へ落とす操作は必ず同じ workspace の中。workspace をまたぐのは、サイドバーの workspace の行へ落とす `pane.move_to_new_tab` だけ（自分の workspace の行へ落とすと、同じ workspace の新しい tab へ切り出す）。
 - **結果の形**: どちらの RPC も、何も起きなかったときは `{ok: false}` を返す（`packages/protocol/src/messages.ts:369` `PaneMoveToTabResult`・`:380` `PaneMoveToNewTabResult`）。画面は `ok` が false なら何もしない。
 - **worktree の鍵**: `Workspace.git.worktreeKey`（その worktree のフォルダを一意に示す絶対パス。`packages/protocol/src/model.ts` `GitInfo`。型は `worktreeKey?: string | null`）。同じ値の workspace のうち最初の 1 つが代表で、2 つ目以降は代表でない通常の行になる（同じファイルの `Workspace.representative` の説明）。**古いサーバは `worktreeKey` を配らない**。新しいサーバの判定は、`worktreeKey` が取れなければ `unknown`（`packages/server/src/git/GitInfoPoller.ts:202`）なので、判定が入った `git` には必ず文字列がある。**古い保存から戻した直後**は、`git`（`repoKey`）はあるが `worktreeKey` が無いことがある（`packages/server/src/persist/SessionFile.ts:52`〜`55`、`SessionModel.ts:1415`）。
 - **`Workspace.git` は、管理外でも・判定前でも `null`**（`SessionModel.ts:315`。判定の結果は `git`・`unmanaged`・`unknown` の 3 つで、`unknown` は何も変えない。`:140` `GitJudgement`・`:1187` `updateWorkspaceGit`）。
-- **`Workspace.cwd` は開いた場所**で、先頭の pane の `cd` には付いていかない。git の判定と自動の名前は「いまの場所」（最初の tab の先頭の pane のフォルダ。`SessionService.ts:389` の説明・`identityCwdOf`）で決まり、これはサーバだけが持つ。
+- **端末版の落とし先の強調は、pane の上の矩形だけ**（`packages/tui/src/app/TuiApp.ts:1276`〜`1283` の `drop?.kind === "pane"`）。workspace の行・tab の落とし先には、今も何も描かれない。
+- **`Workspace.cwd` は開いた場所**で、作成と復元でしか書かれず、先頭の pane の `cd` には付いていかない。渡された文字列がそのまま入る（実パスにしない。`SessionService.ts:335`、`packages/server/src/session/newCwd.ts:96`）。git の判定と自動の名前は「いまの場所」（最初の tab の先頭の pane のフォルダ。`SessionService.ts:389` の説明・`identityCwdOf`）で決まり、これはサーバだけが持つ。
 - **サーバは client-core の純関数を使っている**（`SessionModel.ts:28` が `@sodashitsu/client-core` から `repoMembers` などを import）。判定の関数を client-core に置けば、サーバ・ブラウザ版・端末版が同じものを使える。
 - **判定はいつ走るか**: `DefaultGitInfoPoller` は `composeServer.ts:295` で作られ、起動で `start()`（最初の 1 周をすぐ走らせる）、以後は周期と、pane・workspace のイベント（`GitInfoPoller.ts` `FOLLOW_EVENTS`）で見直す。
-- **別のマシン**: 中継は RPC をそのマシンのサーバへ渡す。workspace はマシンごとのサーバのもので、マシンをまたぐ pane の移動は無い。制限は、そのマシンのサーバが新しければ働く。**未確認**: 中継が応答の未知の項目（`reason`）を落とさずに通すか（T8 で確かめる）。
+- **別のマシン**: 中継は RPC をそのマシンのサーバへ渡す。workspace はマシンごとのサーバのもので、マシンをまたぐ pane の移動は無い。制限は、そのマシンのサーバが新しければ働く。中継は中身を解釈せずに通す（`packages/server/src/machine/MachineRelay.ts:7`〜`9`）ので、応答の `reason` は落ちない。
 - **サイドバーの「落とせない行」の見た目**: `sidebar-row-drop-invalid`（`packages/web/src/components/Sidebar.vue:1174`。点線と `not-allowed`）。pane の落とし先の強調は `sidebar-row-pane-drop-target`（`:844`・`:1182`。`view.paneDrag.overWorkspaceId`）。ドラッグ元の pane は `view.paneDrag.sourcePaneId`（`packages/web/src/store/view.ts:407`）。
-- **影響する既存のテスト**（`move_to_tab`・`move_to_new_tab`・`moveToTab`・`moveToNewTab`・`movePaneTo` の出現数）: `SessionModel.test.ts` 25・`SessionService.test.ts` 16・`ActionDispatcher.test.ts` 21・`TuiDispatcher.test.ts` 6・`PaneFrame.test.ts` 5・`messages.test.ts` 2・`mouse.test.ts` 1・`packages/cli/src/paneCurrent.integration.test.ts` 1（`:147`。作った直後の別の workspace へ `pane.move_to_new_tab`。どちらの workspace も `cwd` を渡さずに作っている）。E2E（`packages/e2e`）には pane の移動のテストが無い。別の workspace へ移しているテストのうち、2 つの workspace の `cwd` が同じで `git` が `null` のものは、新しい決まりでもそのまま通る（下の表の「判定なしどうし・場所が同じ」）。`cwd` が違うものは、前提を「同じ worktree」に直す。1 つずつ見るのは T7〜T10。
+- **影響する既存のテスト**（`move_to_tab`・`move_to_new_tab`・`moveToTab`・`moveToNewTab`・`movePaneTo` の出現数）: `SessionModel.test.ts` 25・`SessionService.test.ts` 16・`ActionDispatcher.test.ts` 21・`TuiDispatcher.test.ts` 6・`PaneFrame.test.ts` 5・`messages.test.ts` 2・`mouse.test.ts` 1・`packages/cli/src/paneCurrent.integration.test.ts` 1（`:147`。作った直後の別の workspace へ `pane.move_to_new_tab`。どちらの workspace も `cwd` を渡さずに作っている）。E2E（`packages/e2e`）には pane の移動のテストが無い。別の workspace へ移しているテストのうち、2 つの workspace の `cwd` が同じで `git` が `null` のものは、新しい決まりでもそのまま通る（下の表の 3）: `ActionDispatcher.test.ts`（`makeWorkspace` は `cwd: "/"`）・`TuiDispatcher.test.ts`・`mouse.test.ts`（`testing/fixtures.ts` は `cwd: "/"`）・`PaneFrame.test.ts`・`Sidebar.test.ts:1993`（ドラッグ元がストアに無い）。**落ちるのは、`git: null` どうしで `cwd` が違うもの**: `SessionModel.test.ts:635`・`:759`（`/home/u` と `/home/u/other`）・`:1232`・`:1242`（`/a` と `/b`）、`SessionService.test.ts:506`・`:538`・`:584`・`:964`・`:972`。前提を直す（T7・T8）。`packages/e2e`・`scripts/` に pane の移動の呼び出しは無い。
 - **docs の、別の workspace への移動に触れている所**: `docs/herdr-parity.md:78`（H41）、`docs/tui-parity.md:92`（H41）・`:130`（W03）、`docs/tui.md:183`、`docs/sodactl.md:701`・`:934`。
 
 ## 設計方針（第 2 部）
@@ -183,9 +184,9 @@ DOM のクラス（E2E・単体テストが見る）:
 - `packages/client-core/src/workspace/paneMoveScope.ts`（新規）・`packages/client-core/src/index.ts`（出口）
 - `packages/server/src/session/SessionModel.ts`・`SessionService.ts`・`packages/server/src/surface/methods/pane.ts`
 - `packages/web/src/actions/ActionDispatcher.ts`・`packages/web/src/components/Sidebar.vue`
-- `packages/tui/src/actions/TuiDispatcher.ts`・`packages/tui/src/input/mouse.ts`・`packages/tui/src/app/TuiApp.ts`（強調の描画）
+- `packages/tui/src/actions/TuiDispatcher.ts`
 - 上のテスト・`packages/cli/src/paneCurrent.integration.test.ts`・E2E（新規 `pane-move-scope.spec.ts`）・docs
-- 触らない: `TabBar.vue`（第 1 部だけが触る）・`PaneFrame.vue`・`view.ts`・`sodactl` のコマンド・保存の形式（`SessionFile`）・`GitInfoPoller`
+- 触らない: `TabBar.vue`（第 1 部だけが触る）・`PaneFrame.vue`・`view.ts`・端末版の `mouse.ts`・`TuiApp.ts`・`sodactl` のコマンド・保存の形式（`SessionFile`）・`GitInfoPoller`
 
 ## インターフェース / データ構造（第 2 部）
 
@@ -217,7 +218,7 @@ export function paneMoveBlockMessage(reason: PaneMoveBlock): string;
 |---|---|---|
 | 1 | 同じ workspace（`id` が同じ） | null（判定を通さない） |
 | 2 | 両方に `key` がある | 同じなら null、違えば `different_worktree` |
-| 3 | 両方とも `git` が `null`（管理外・判定前） | `cwd` が同じ文字列なら null、違えば `different_worktree` |
+| 3 | 両方とも `git` が `null`（管理外・判定前） | `cwd` が同じ文字列（末尾の `/` を落として比べる。根の `/` はそのまま）なら null、違えば `different_worktree` |
 | 4 | `git` はあるのに `key` が無い workspace が絡む（古いサーバ・古い保存から戻した直後） | `lenient` なら null、そうでなければ `different_worktree` |
 | 5 | それ以外（片方に `key`、片方は `git` が `null`） | `different_worktree` |
 
@@ -225,8 +226,8 @@ export function paneMoveBlockMessage(reason: PaneMoveBlock): string;
 
 サーバ（`lenient` は渡さない）:
 
-- `SessionModel.paneMoveBlock(paneId: PaneId, targetWorkspaceId: WorkspaceId): PaneMoveBlock | null`: pane・移動元の workspace・移動先の workspace が実在しなければ null（実在しないときの扱いは今ある `ok: false` に任せる。投げない）。そうでなければ client-core の `paneMoveBlock(source, target)`。
-- `SessionModel.moveToTab`: 「自分自身の tab」「移動先の tab が無い」の確認の後、状態を書き換える前に、`this.paneMoveBlock(paneId, targetTab.workspaceId) !== null` なら `false`。`moveToNewTab`: 移動先の workspace の確認の後、同じく `null`。
+- `SessionModel.paneMoveBlockFor(paneId: PaneId, targetWorkspaceId: WorkspaceId): PaneMoveBlock | null`: pane・移動元の workspace・移動先の workspace が実在しなければ null（実在しないときの扱いは今ある `ok: false` に任せる。投げない）。そうでなければ client-core の `paneMoveBlock(source, target)`。
+- `SessionModel.moveToTab`: 「自分自身の tab」「移動先の tab が無い」の確認の後、状態を書き換える前に、`this.paneMoveBlockFor(paneId, targetTab.workspaceId) !== null` なら `false`。`moveToNewTab`: 移動先の workspace の確認の後、同じく `null`。
 - `SessionService.paneMoveBlockToTab(paneId, targetTabId)`・`paneMoveBlockToWorkspace(paneId, targetWorkspaceId)`: モデルへの問い合わせ（pane・tab が無ければ null。投げない）。
 - `pane.ts` のハンドラ: 先に理由を問い合わせ、あれば `{ ok: false, reason }` を返して終わり（`sizeAuthority.noteInteraction` も呼ばない＝何もしていない）。無ければ今までどおり（実在しない pane への今のエラーも変えない）。
 
@@ -241,8 +242,8 @@ export function paneMoveBlockMessage(reason: PaneMoveBlock): string;
 
 端末版（`lenient: true`）:
 
-- `mouse.ts` `PaneDropTarget` の `workspace` に `blocked?: boolean` を足す。`paneDropTarget` が、`host.model` の移動元・移動先の workspace から `paneMoveBlock` を求めて付ける。落とし先の強調の描画（`TuiApp.ts:1276` あたりの `this.mouse.dropTarget`）は、`blocked` なら描かない。`dropPane` は今のまま `actions.movePaneToNewTab` を呼ぶ。
-- `TuiDispatcher.movePaneToNewTab`・`movePaneToTab`: ブラウザ版と同じ（送る前の確認と `ui.toast`、応答の `reason` の `ui.toast`）。
+- `TuiDispatcher.movePaneToNewTab`: ブラウザ版と同じ（送る前の `paneMoveBlock` と `ui.toast`、応答の `reason` の `ui.toast`）。`movePaneToTab`: 送る前の確認は足さず、応答の `reason` だけ `ui.toast`。
+- `mouse.ts`・`TuiApp.ts` は変えない（workspace の行の落とし先の強調はもともと無い。離すと今までどおり `actions.movePaneToNewTab` が呼ばれ、そこで断る）。
 
 ## 振る舞いの詳細 / 異常系（第 2 部）
 
@@ -251,8 +252,8 @@ export function paneMoveBlockMessage(reason: PaneMoveBlock): string;
 - **先頭の pane が `cd` した workspace**: 判定は「いまの場所」で決まるので、開いた場所が同じ 2 つの workspace でも、片方の先頭の pane が別の worktree へ `cd` していれば `worktreeKey` が違い、断る（一覧の行が別の worktree を指しているので、利用者の決定のとおり）。pane の `cd` そのものは止めない。
 - **移した結果で判定が変わる**: 先頭の pane を移すと、移動元の workspace の「いまの場所」が変わりうる。同じ worktree の中でしか移せないので、`worktreeKey` は変わらないのがふつう。変わる場合（`cd` 済みの pane が先頭になった）も、今までどおり `GitInfoPoller` が後から直す。
 - **判定が `unknown` しか返らない workspace**（git が時間切れ・起動できない）: 直前の判定のまま。1 度も入っていなければ `git: null` で、表の 3・5 のとおり（開いた場所が同じ、判定の無い相手とだけ移せる）。
-- **古いサーバ**（`worktreeKey` を配らない・断らない）: 画面は `lenient` なので、`git` のある workspace どうしを自分では断らず、薄くもしない。送れば今までどおり通る（AC17）。古いサーバでも `git` が `null` どうしで `cwd` が違う相手は、画面が断る（表の 3 は新旧を見分けられない）。
-- **古い保存から戻した直後**（`git` はあるが `worktreeKey` が無い）: サーバは断り（表の 4）、画面は断らずに送って、サーバの `reason` でトーストが出る。最初の判定が入るまでの短い間だけ。
+- **古いサーバ**（`worktreeKey` を配らない・断らない）: 画面は `lenient` なので、`git` のある workspace どうしを自分では断らず、薄くもしない。送れば今までどおり通る（AC17）。古いサーバでも `git` が `null` どうしで `cwd` が違う相手は、画面が断る（表の 3 は新旧を見分けられない。AC17 の例外）。
+- **古い保存から戻した直後**（`git` はあるが `worktreeKey` が無い）: サーバは断り（表の 4）、画面は断らずに送って、サーバの `reason` でトーストが出る。最初の判定が入るまでの短い間だけ（判定が `unknown` のまま入らなければ続く。まれ）。
 
 ## 受け入れ基準との対応（第 2 部）
 
@@ -263,5 +264,5 @@ export function paneMoveBlockMessage(reason: PaneMoveBlock): string;
 - AC15: 表の 1。同じ tab の中の操作は、この関数を通らない。pane の `cd` は、どこにも確認を足さない。
 - AC16: 確認は `SessionModel.moveToTab`・`moveToNewTab` の中にあり、この 2 つを通らずに pane の `tabId` を別の workspace の tab に書き換える所が無い（「確かめたこと」の 1 つ目。T7 のテストで確かめる）。
 - AC17: 結果の型に `reason` を足すだけ（任意の項目）。画面は `reason` が無い `ok: false` を今までどおり扱い、`lenient` で古いサーバの workspace を断らない。
-- AC18: 入力は画面のストアの `Workspace` と `view.paneDrag`（`sourcePaneId`・`overWorkspaceId`）。ブラウザ版は `Sidebar.vue` のクラス、端末版は `PaneDropTarget.blocked`。離したとき・応答の `reason` はディスパッチャがトーストする。
+- AC18: 入力は画面のストアの `Workspace` と `view.paneDrag`（`sourcePaneId`・`overWorkspaceId`）。ブラウザ版は `Sidebar.vue` のクラス。離したとき・応答の `reason` は、ブラウザ版・端末版のディスパッチャがトーストする。
 - AC19: docs を直す（tasks T12）。
