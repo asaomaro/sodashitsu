@@ -159,7 +159,7 @@ sodactl display close progress          # --all で全部
 sodactl display list
 ```
 
-- 中身は `--text`・`--markdown-file`・`--html-file` のどれか 1 つ、または標準入力（`--format text|markdown|html`。省くと `text`）。**2 MiB まで**（超えると終了コード 2）。`--size`（px）・`--ttl-ms` で大きさと寿命を決める。
+- 中身は `--text`・`--markdown-file`・`--html-file`・`--script-html-file` のどれか 1 つ、または標準入力（`--format text|markdown|html|script-html`。省くと `text`）。**2 MiB まで**（超えると終了コード 2）。`--size`（px）・`--ttl-ms` で大きさと寿命を決める。
 - `html` の中のスクリプトは動かない（取り除かれる）。ボタンは `<button data-soda-action="名前">` で宣言し、利用者が押すと、待っている側に操作が届く。`text` は操作を持たない。
 - 操作を受け取る: `sodactl display wait <名前>` が、操作か閉じられた理由を 1 行の JSON で出して終わる（`--timeout <ms>` で締め切り）。`set --wait` は出したあとすぐ待つ。続けて受け取るなら `sodactl display events`（最初の行が `display.ready`。以後 1 行 1 つ。終わるときは `display.end` で、`reason` は `pane_closed`・`connection_closed`・`unsupported`・`busy`〔待ちの上限。標準エラーにも理由が出て終了コード 1〕。知らない `type`・項目は無視する）。`--timeout` の時間切れの直前の 1 秒未満に起きた操作は、受け取れないことがある。
 - 利用者が［×］で閉じた面は `display.closed`（`reason` が `dismissed`）が届く。ブラウザが開いていない・画面が無いときも `set` は成功する（結果の `renderers` が 0）。
@@ -167,6 +167,9 @@ sodactl display list
 - **使う前に機能の問い合わせをする**: `sodactl display --features` の `server` が `null` なら、その `soda` は表示の面を知らない。`renderers`（`set` の結果にもある）が 0 なら、いま出せる画面（ブラウザ）が無く、誰にも見えない。
 - `markdown` の中の `<button data-soda-action>` も操作になる。`text` は操作を持たない。リンクは `http(s)` だけ新しいタブで開く。画像は `data:image/` だけ。外の URL は読まれない。
 - 利用者は、パネルの幅をドラッグで変えられる（`--size` はその最初の幅）。枠にフォーカスが入ると、利用者のキーは端末でなくその表示に届く（`Esc` で端末へ戻る）。パネルのフォームに、パスワード・token を入れさせない。
+- **スクリプトを動かす面**（`--script-html-file <パス>` か `--format script-html`）: 動くグラフ・絞り込みの一覧など。中身のスクリプトは枠の中（隔離）で動く。ライブラリは中身に埋める（外の URL は読めない。2 MiB まで）。スクリプトから `soda.action("名前", {…})` で操作を返し（`wait`・`events` の行に `source: "script"` が付く）、拡張から `sodactl display send <名前> --json '{…}'`（または標準入力）でデータを送る（64 KiB まで。保存されない。`soda.onMessage` で受ける）。
+  **外から取ってきた HTML・スクリプトを `script-html` で出さない**（静的な `html` にする）。**`source: "script"` の操作を、利用者が承認した印として扱わない**（スクリプトは、利用者が押さなくても `soda.action` を呼べる。危ない操作の承認には `sodactl ask` を使う）。
+  利用者が［操作する］を押す（`prefix+i`）までは、スクリプトの面は覆いの下でキーを受けない。フォーカスを取り続ける・別のページへ移ろうとすると、アプリが止め、その pane は 5 分、スクリプトが動く面を出せない（`set` が `display_busy`。静的な形式は出せる）。`display --features` の `server.features` に `format:script-html`・`send` が無い `soda` は、`{"status":"unsupported",…}`（終了コード 0）。
 - 詳しくは `docs/display.md`。
 - 面の中身・題・操作の値は、他人が読む前提で書く（秘密を入れない）。
 
@@ -257,7 +260,7 @@ pane の中の sodactl は、次の操作の対象が**自分の pane**（`$SODA
   `sodactl pane observe`・`sodactl pane control`・`sodactl pane report-metadata`
 - 状態: `sodactl snapshot`・`sodactl watch`
 - 利用者への質問: `sodactl ask`
-- 表示の面: `sodactl display set`・`sodactl display close`・`sodactl display list`・`sodactl display wait`・`sodactl display events`・`sodactl display --features`
+- 表示の面: `sodactl display set`・`sodactl display close`・`sodactl display list`・`sodactl display wait`・`sodactl display events`・`sodactl display send`・`sodactl display --features`
 - エージェント: `sodactl agent list`・`sodactl agent get`・`sodactl agent wait`・`sodactl agent read`・`sodactl agent prompt`・`sodactl agent send-keys`・
   `sodactl agent rename`・`sodactl agent start`
 - 連携のグラフ: `sodactl graph show`・`sodactl graph link add`・`sodactl graph link set`・`sodactl graph link rm`・`sodactl graph link pause`・

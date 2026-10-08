@@ -340,7 +340,7 @@ PR1 は実装済み（`test-result.md`）。PR1 の実装は、**読み手の側
       依存: T4, T23
       AC: AC14, AC29, AC31, AC32, AC34
       点検: あり
-- [ ] T25: sodactl の追加: `--script-html-file <パス>` と `--format script-html`、`display send <名前> (--json <JSON> | < 標準入力)`（どちらか 1 つ・JSON として読めない・64 KiB 超は使い方の誤り。結果は `{"status":"ok","delivered":n}`）。`script-html` の `set` と `send` は、送る前に `display.features` を見て、`format:script-html`・`send` が無ければ `unsupported`（終了コード 0）。
+- [x] T25: sodactl の追加: `--script-html-file <パス>` と `--format script-html`、`display send <名前> (--json <JSON> | < 標準入力)`（どちらか 1 つ・JSON として読めない・64 KiB 超は使い方の誤り。結果は `{"status":"ok","delivered":n}`）。`script-html` の `set` と `send` は、送る前に `display.features` を見て、`format:script-html`・`send` が無ければ `unsupported`（終了コード 0）。
       冷却で断られた `set`（`display_busy`）は、終了コード 1 で、理由の文をそのまま出す。`USAGE_LINES`・`Command`・`parseCommand`・`main.ts`・SKILL.md。単体テストと、結合テスト（実サーバ: ログインなしで `--script-html-file` の `set` → `send` → `/ws` の接続に `display.message`・`/ws` の経路でも同じ・`events` の `display.action` の行に `source`）
       対象: `packages/cli/src/cliArgs.ts`、`packages/cli/src/main.ts`、`packages/cli/src/commands/display.ts`・`display.test.ts`、`packages/cli/src/display.integration.test.ts`、`packages/cli/src/cliArgs.test.ts`、`packages/cli/skills/sodactl/SKILL.md`
       依存: T6, T24

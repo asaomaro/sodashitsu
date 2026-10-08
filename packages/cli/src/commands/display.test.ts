@@ -178,6 +178,92 @@ describe("runDisplay set", () => {
   });
 });
 
+const SCRIPT_FEATURES = { ...FEATURES, features: [...FEATURES.features, "format:script-html", "send"], renderers: { ...FEATURES.renderers, scriptHtml: 1 } };
+
+describe("runDisplay set（script-html）と send", () => {
+  it("--script-html-file は、送る前に display.features を見て、format:script-html・send があれば display.set を送る", async () => {
+    const out = new Out();
+    const tr = stub({ "display.features": SCRIPT_FEATURES, "display.set": { ...SET_RESULT, display: { ...INFO, format: "script-html" } } });
+    const readFile = vi.fn(async () => Buffer.from("<script>1</script>"));
+    const code = await runDisplay(parse(["set", "g", "--kind", "panel", "--script-html-file", "g.html"]), store, out.deps({ transport: tr, readFile }));
+    expect(code).toBe(0);
+    expect(tr.calls.map((c) => c.op)).toEqual(["display.features", "display.set"]);
+    expect(tr.calls[1]!.params).toMatchObject({ format: "script-html", content: "<script>1</script>" });
+    expect(out.lines).toEqual([{ status: "ok", display: { ...INFO, format: "script-html" }, renderers: FEATURES.renderers, epoch: "E1", next: 4 }]);
+  });
+
+  it("script-html を知らないサーバ（features に format:script-html か send が無い）は unsupported（終了コード 0）で、set を送らない", async () => {
+    for (const features of [FEATURES.features, [...FEATURES.features, "send"], [...FEATURES.features, "format:script-html"]]) {
+      const out = new Out();
+      const tr = stub({ "display.features": { ...FEATURES, features }, "display.set": SET_RESULT });
+      const code = await runDisplay(parse(["set", "g", "--kind", "panel", "--format", "script-html"]), store, out.deps({ transport: tr, readStdin: async () => Buffer.from("<p>") }));
+      expect(code).toBe(0);
+      expect(tr.calls.map((c) => c.op)).toEqual(["display.features"]);
+      expect(out.lines).toEqual([{ status: "unsupported", reason: "this server does not support script-html displays (update soda)" }]);
+    }
+  });
+
+  it("静的な形式の set は features を呼ばない（script-html のときだけ）", async () => {
+    const out = new Out();
+    const tr = stub({ "display.set": SET_RESULT });
+    await runDisplay(parse(["set", "a", "--kind", "band", "--text", "x"]), store, out.deps({ transport: tr }));
+    expect(tr.calls.map((c) => c.op)).toEqual(["display.set"]);
+  });
+
+  it("冷却で断られた set（display_busy）は、理由の文をそのまま投げる（終了コード 1 になる）", async () => {
+    const out = new Out();
+    const tr = stub({
+      "display.features": SCRIPT_FEATURES,
+      "display.set": () => {
+        throw new RpcFailure("display_busy", "this pane cannot show script-html displays for a while");
+      },
+    });
+    await expect(
+      runDisplay(parse(["set", "g", "--kind", "panel", "--format", "script-html"]), store, out.deps({ transport: tr, readStdin: async () => Buffer.from("<p>") })),
+    ).rejects.toMatchObject({ code: "display_busy", message: expect.stringContaining("for a while") });
+  });
+
+  it("send: --json のデータを display.send で送り、delivered を出す。送る前に features を見る", async () => {
+    const out = new Out();
+    const tr = stub({ "display.features": SCRIPT_FEATURES, "display.send": { delivered: 2 } });
+    const code = await runDisplay(parse(["send", "g", "--json", '{"n":1}']), store, out.deps({ transport: tr }));
+    expect(code).toBe(0);
+    expect(tr.calls.map((c) => [c.op, c.params])).toEqual([
+      ["display.features", {}],
+      ["display.send", { name: "g", data: { n: 1 } }],
+    ]);
+    expect(out.lines).toEqual([{ status: "ok", delivered: 2 }]);
+  });
+
+  it("send: 標準入力から読む（64 KiB + 1 バイトまで読んで、超えたら使い方の誤り）。空・JSON でない・64 KiB 超は使い方の誤り", async () => {
+    const out = new Out();
+    const tr = stub({ "display.features": SCRIPT_FEATURES, "display.send": { delivered: 0 } });
+    const readStdin = vi.fn(async () => Buffer.from("[1,2]"));
+    await runDisplay(parse(["send", "g"]), store, out.deps({ transport: tr, readStdin }));
+    expect(readStdin).toHaveBeenCalledWith(64 * 1024 + 1);
+    expect(tr.calls[1]).toMatchObject({ op: "display.send", params: { name: "g", data: [1, 2] } });
+    expect(out.lines).toEqual([{ status: "ok", delivered: 0 }]);
+    const bad = async (buf: Buffer): Promise<unknown> => runDisplay(parse(["send", "g"]), store, new Out().deps({ transport: stub({}), readStdin: async () => buf })).catch((e) => e);
+    expect(await bad(Buffer.alloc(0))).toBeInstanceOf(CliUsageError);
+    expect(await bad(Buffer.from("{oops"))).toBeInstanceOf(CliUsageError);
+    expect(await bad(Buffer.from(JSON.stringify("x".repeat(64 * 1024))))).toBeInstanceOf(CliUsageError);
+    // ちょうどは使い方の誤りにならない（transport が features を知らないので別の誤りになる）
+    expect(await bad(Buffer.from(JSON.stringify("x".repeat(64 * 1024 - 2))))).not.toBeInstanceOf(CliUsageError);
+  });
+
+  it("send: script-html・send を知らないサーバは unsupported。古いサーバも unsupported", async () => {
+    const out = new Out();
+    const tr = stub({ "display.features": FEATURES, "display.send": { delivered: 1 } });
+    expect(await runDisplay(parse(["send", "g", "--json", "1"]), store, out.deps({ transport: tr }))).toBe(0);
+    expect(tr.calls.map((c) => c.op)).toEqual(["display.features"]);
+    expect(out.lines).toEqual([{ status: "unsupported", reason: "this server does not support script-html displays (update soda)" }]);
+    const old: DisplayTransport = { call: () => Promise.reject(new DisplayUnsupported()) };
+    const out2 = new Out();
+    expect(await runDisplay(parse(["send", "g", "--json", "1"]), store, out2.deps({ transport: old }))).toBe(0);
+    expect(out2.lines).toEqual([{ status: "unsupported", reason: "this server does not support display surfaces (update soda)" }]);
+  });
+});
+
 describe("runDisplay close / list / --features", () => {
   it("close は name か all、list は結果の一覧を出す", async () => {
     const out = new Out();
