@@ -150,7 +150,7 @@ describe("ExtensionProcess: 頻度", () => {
     child.stdout.write(Buffer.alloc(500, 0x61));
     await spin(4);
     expect(child.stdout.isPaused()).toBe(true);
-    await advance(clock, 600, 100);
+    await advance(clock, 1200, 100);
     await spin(4);
     expect(child.stdout.isPaused()).toBe(false);
   });
@@ -372,6 +372,20 @@ describe("ExtensionProcess: 標準エラー", () => {
     expect(log.dropped).toBe(52);
     expect(log.lines.at(-2)).toBe("a?b?c");
     expect(log.lines.at(-1)).toHaveLength(4096);
+  });
+
+  it("書字方向を変える文字（U+202A〜202E・U+2066〜2069）は ? に替わる", async () => {
+    const { proc, child } = setup({ group: null });
+    child.stderr.write("a\u202eb\u2066c\u2069d\u202ae\n");
+    await spin();
+    expect(proc.log().lines).toEqual(["a?b?c?d?e"]);
+  });
+
+  it("細切れ（1 バイトずつ）の標準出力は、片の数に最低の課金が掛かって pause される", async () => {
+    const { child } = setup();
+    for (let i = 0; i < 20_000; i++) child.stdout.write("a");
+    await spin(4);
+    expect(child.stdout.isPaused()).toBe(true);
   });
 
   it("改行の無い出力は、4 KiB ごとに 1 行にする", async () => {

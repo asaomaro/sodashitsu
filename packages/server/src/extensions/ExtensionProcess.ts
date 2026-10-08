@@ -122,7 +122,15 @@ const defaultRunFile: RunFile = (file, args, opts) => {
 };
 
 const noop = (): void => undefined;
+/** 標準エラーの記録で `?` に替える文字: 制御文字・DEL・書字方向を変える文字（端末で `sodactl ext log` を見る人の目を偽らない）。 */
+// eslint-disable-next-line no-control-regex
+const BAD_LOG_CHARS = /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g;
 const STDIO_CLOSE_WAIT_MS = 200;
+/**
+ * 1 つの片（`data` の 1 回）に掛ける最低の課金（バイト相当）。1 バイトずつ書き続ける拡張が、量の桶（バイト数だけを数える）に掛からずに、
+ * 片の数でメモリと CPU を使い切るのを防ぐ。ふつうの 1 行（数十バイト以上の要求）や大きな 1 行は、実際の大きさで数えるので影響が小さい。
+ */
+export const EXTENSION_MIN_CHUNK_CHARGE = 1024;
 const LINE_RETRY_MS = Math.ceil(1000 / EXTENSION_REQUEST_RATE.perSec);
 
 interface OutItem {
@@ -282,7 +290,8 @@ export class ExtensionProcess {
     try {
       const now = this.clock.now();
       // 量は、片を受けた時点で数える（行の成立を待たない。改行の無い出力にも効く）。拡張ごとと、全部の合計の両方。
-      const wait = Math.max(this.bytesBucket.consume(now, chunk.length), this.totalBytes?.consume(now, chunk.length) ?? 0);
+      const charge = Math.max(chunk.length, EXTENSION_MIN_CHUNK_CHARGE);
+      const wait = Math.max(this.bytesBucket.consume(now, charge), this.totalBytes?.consume(now, charge) ?? 0);
       this.reader.push(chunk);
       if (wait > 0) {
         this.pauseReading();
@@ -476,7 +485,7 @@ export class ExtensionProcess {
       const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
       this.carry += this.decoder.write(buf);
       this.cutCarry();
-      const wait = this.stderrBucket.consume(this.clock.now(), buf.length);
+      const wait = this.stderrBucket.consume(this.clock.now(), Math.max(buf.length, EXTENSION_MIN_CHUNK_CHARGE));
       if (wait > 0 && !this.childExited && this.child !== null) {
         if (!this.stderrPaused) {
           this.stderrPaused = true;
@@ -524,7 +533,7 @@ export class ExtensionProcess {
 
   private pushLog(raw: string): void {
     // eslint-disable-next-line no-control-regex
-    let line = raw.replace(/[\u0000-\u001f\u007f]/g, "?");
+    let line = raw.replace(BAD_LOG_CHARS, "?");
     if (line.length > EXTENSION_LOG_LINE_MAX_BYTES) line = line.slice(0, EXTENSION_LOG_LINE_MAX_BYTES);
     this.ring.push(line);
     if (this.ring.length > EXTENSION_LOG_LINES_MAX) {
@@ -535,7 +544,7 @@ export class ExtensionProcess {
 
   log(): ExtensionLogResult {
     // 途中の行（改行がまだ無い）も、見えるようにする。
-    const lines = this.carry !== "" ? [...this.ring, this.carry.replace(/[\u0000-\u001f\u007f]/g, "?")] : [...this.ring]; // eslint-disable-line no-control-regex
+    const lines = this.carry !== "" ? [...this.ring, this.carry.replace(BAD_LOG_CHARS, "?")] : [...this.ring];
     return { lines, dropped: this.ringDropped };
   }
 

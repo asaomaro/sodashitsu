@@ -90,4 +90,13 @@ describe("LineReader", () => {
     r.push(Buffer.concat([Buffer.alloc(max + 1, 0x61), b("\n")]));
     expect(drain(r).map((i) => i.kind)).toEqual(["too_long"]);
   });
+  it("細切れの片（1 バイトずつ）が何百万個来ても、持つ片の数は一定で、行は正しく取れる", () => {
+    const r = new LineReader();
+    for (let i = 0; i < 100_000; i++) r.push(b("a"));
+    expect((r as unknown as { tail: Buffer[] }).tail.length).toBeLessThanOrEqual(65);
+    expect(r.heldBytes()).toBe(100_000);
+    r.push(b("\n"));
+    const it = r.next();
+    expect(it).toMatchObject({ kind: "line", bytes: 100_000 });
+  });
 });

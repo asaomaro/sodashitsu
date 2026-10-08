@@ -11,6 +11,8 @@ export type LineItem = { kind: "line"; text: string; bytes: number } | { kind: "
 
 type Segment = { kind: "buf"; buf: Buffer; pos: number } | { kind: "mark"; item: LineItem };
 
+/** 行の途中の片の数の上限（超えたら 1 つにまとめる）。 */
+const TAIL_PARTS_MAX = 64;
 const NL = 0x0a;
 const CR = 0x0d;
 
@@ -66,6 +68,8 @@ export class LineReader {
   private addTail(c: Buffer): void {
     this.tail.push(c);
     this.tailLen += c.length;
+    // 細切れの片が何百万個もたまらないように、一定数を超えたら 1 つにまとめる（上限の扱いは変えない）。
+    if (this.tail.length > TAIL_PARTS_MAX) this.tail = [Buffer.concat(this.tail)];
     if (this.tailLen > this.maxBytes) {
       this.segments.push({ kind: "mark", item: { kind: "too_long", bytes: this.tailLen } });
       this.tail = [];

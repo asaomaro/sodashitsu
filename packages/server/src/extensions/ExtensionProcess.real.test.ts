@@ -131,4 +131,46 @@ describe.skipIf(process.platform === "win32")("ExtensionProcess（実際の子�
     await p.settled;
     await p.stop("stopped");
   });
+
+  it("細切れの出力（1 バイトずつ・改行なし）を流し続ける拡張でも、メモリが増え続けず、CPU を使い切らない（標準出力・標準エラー）", async () => {
+    for (const fd of [1, 2]) {
+      const p = make(`exec node -e 'const fs=require("fs");for(;;)try{fs.writeSync(${fd},"a")}catch(e){}'`);
+      p.start();
+      await new Promise((r) => setTimeout(r, 400));
+      const rss0 = process.memoryUsage().rss;
+      const cpu0 = process.cpuUsage();
+      const t0 = Date.now();
+      await new Promise((r) => setTimeout(r, 2500));
+      const cpu = process.cpuUsage(cpu0);
+      const grew = process.memoryUsage().rss - rss0;
+      const cores = (cpu.user + cpu.system) / 1000 / (Date.now() - t0);
+      children.forEach((c) => c.pid !== undefined && live.push(c.pid));
+      await p.stop("stopped");
+      // 直す前は、RSS が 1 秒に 100 MiB ほど増え、1 コアを使い続けた（標準エラーは 0.5 コア・+60 MiB）。上限は、負荷のばらつきに余裕を持たせた値。
+      expect(grew / 1048576, `fd ${fd} rss`).toBeLessThan(120);
+      expect(cores, `fd ${fd} cpu`).toBeLessThan(0.6);
+    }
+  }, 20_000);
+
+  it("正当な拡張は、最低の課金で待たされない: 2 MiB の 1 行・ふつうの頻度の短い行（100 行）が、すぐ処理される", async () => {
+    const got: number[] = [];
+    const p = new ExtensionProcess(
+      { key: "user:t", id: "t", scope: "user", root: null, command: `exec node -e '
+const big = JSON.stringify({ method: "m", params: { content: "x".repeat(2 * 1024 * 1024) } });
+process.stdout.write(big + "\\n");
+let i = 0; const t = setInterval(() => { process.stdout.write(JSON.stringify({ method: "n", id: ++i }) + "\\n"); if (i >= 100) clearInterval(t); }, 5);
+setTimeout(() => {}, 20000);'`, cwd: dir, runId: "run-1" },
+      { PATH: process.env["PATH"] ?? "" },
+      { onRequest: (r) => got.push(r.method === "m" ? -1 : (r.id as number)) },
+      { spawn: spawnRecording, logger: new MemoryLogger() },
+    );
+    p.start();
+    const t0 = Date.now();
+    await until(() => got.length >= 101, 5000);
+    expect(got[0]).toBe(-1);
+    expect(got.length).toBe(101);
+    expect(Date.now() - t0).toBeLessThan(4000);
+    children.forEach((c) => c.pid !== undefined && live.push(c.pid));
+    await p.stop("stopped");
+  }, 15_000);
 });
