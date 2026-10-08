@@ -188,7 +188,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T1, T7
       AC: AC5, AC7, AC8, AC9, AC25, AC34
       点検: あり
-- [ ] T9: 無効の記録と、鍵の関数: `ExtensionStateStore`（design「無効の記録」。`<stateDir>/extension-state.json`。`load(): { ok: true; disabled } | { ok: false; problem }`・`setDisabled(key, disabled, known)`）と、`approval.ts` の `entryDigest(root, entry)`（**design「鍵と、承認の記録」の入力の形そのまま**: `{ v, root, id, command, description, enabled, allow, onUnresponsive, cwd }` の順。PR3 が、同じ関数を、根つきで使う）・`instanceKey(scope, root, id)`（プロジェクトは、根のハッシュの 64 文字の全体）。
+- [x] T9: 無効の記録と、鍵の関数: `ExtensionStateStore`（design「無効の記録」。`<stateDir>/extension-state.json`。`load(): { ok: true; disabled } | { ok: false; problem }`・`setDisabled(key, disabled, known)`）と、`approval.ts` の `entryDigest(root, entry)`（**design「鍵と、承認の記録」の入力の形そのまま**: `{ v, root, id, command, description, enabled, allow, onUnresponsive, cwd }` の順。PR3 が、同じ関数を、根つきで使う）・`instanceKey(scope, root, id)`（プロジェクトは、根のハッシュの 64 文字の全体）。
       単体テスト: `ExtensionStateStore` — 無いファイル → 空で `ok`／壊れた JSON・知らない項目 → `ok: false`／`setDisabled` は、壊れたファイル・無いファイルを作り直す／**読めない（偽の `open` が `EACCES`・時間切れ）ときは、書かずに誤り**／`known` に無い `key` を捨てる／256 件を超えると誤り／0600。
       `entryDigest` — 項目ごとに 1 文字変えると変わる表（`id`・`command`・`description`・`enabled`・`allow`・`onUnresponsive`・`cwd`）・根が違うと変わる・`allow` の並びと、省いた項目（既定）では変わらない。`instanceKey` — 2 つの根で、同じ id の `key` が違う
       対象: `packages/server/src/extensions/ExtensionStateStore.ts`（新規）、`approval.ts`（新規）、それぞれの `*.test.ts`、`packages/server/src/persist/atomicFile.ts` `writeFileAtomic` / 根拠: research X5、design「無効の記録」「鍵と、承認の記録」、脅威 S18
