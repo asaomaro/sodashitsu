@@ -16,3 +16,6 @@ events:
   - { ts: 2026-10-08T16:08:53Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T5, mode: delegated } }
   - { ts: 2026-10-08T16:14:51Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T6, mode: delegated } }
   - { ts: 2026-10-08T16:17:59Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T7, mode: delegated } }
+  - { ts: 2026-10-08T23:13:21Z, phase: test, event: smoke, metrics: { result: fail, exit_code: 1, commands: 10, failed_index: 1 } }
+  - { ts: 2026-10-08T23:15:03Z, phase: test, event: smoke, metrics: { result: fail, exit_code: 1, commands: 10, failed_index: 1 } }
+  - { ts: 2026-10-08T23:16:43Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
