@@ -11,6 +11,11 @@ import {
   DISPLAY_TITLE_MAX,
   checkDisplayAction,
   checkDisplaySet,
+  DISPLAY_DOCKS,
+  DISPLAY_EDGES,
+  DISPLAY_RENDER_FEATURES_MAX,
+  isDisplayDock,
+  isDisplayEdge,
   displayLimits,
   parseDisplayLine,
   checkDisplaySend,
@@ -32,6 +37,38 @@ const reason = (raw: unknown): string => {
   if (r.ok) throw new Error("expected a rejection");
   return r.reason;
 };
+
+describe("checkDisplaySet: 配置の指定（dock・edge・collapsed）", () => {
+  it("定数の値", () => {
+    expect([...DISPLAY_DOCKS]).toEqual(["right", "left", "top", "bottom", "float"]);
+    expect([...DISPLAY_EDGES]).toEqual(["top", "bottom"]);
+    expect(isDisplayDock("float")).toBe(true);
+    expect(isDisplayDock("middle")).toBe(false);
+    expect(isDisplayDock(1)).toBe(false);
+    expect(isDisplayEdge("bottom")).toBe(true);
+    expect(isDisplayEdge("left")).toBe(false);
+  });
+  it("dock は panel だけ・edge は band だけ。知らない値と型違いは拒否", () => {
+    expect(checkDisplaySet({ ...base, dock: "bottom" })).toEqual({ ok: true, value: { ...base, dock: "bottom" } });
+    expect(reason({ ...base, kind: "band", dock: "bottom" })).toMatch(/dock/);
+    expect(checkDisplaySet({ ...base, kind: "band", edge: "bottom" })).toEqual({ ok: true, value: { ...base, kind: "band", edge: "bottom" } });
+    expect(reason({ ...base, edge: "bottom" })).toMatch(/edge/);
+    expect(reason({ ...base, dock: "middle" })).toMatch(/dock/);
+    expect(reason({ ...base, dock: 1 })).toMatch(/dock/);
+    expect(reason({ ...base, kind: "band", edge: "left" })).toMatch(/edge/);
+  });
+  it("collapsed は boolean。false は載せない", () => {
+    expect(checkDisplaySet({ ...base, collapsed: true })).toEqual({ ok: true, value: { ...base, collapsed: true } });
+    expect(checkDisplaySet({ ...base, collapsed: false })).toEqual({ ok: true, value: base });
+    expect(reason({ ...base, collapsed: "yes" })).toMatch(/collapsed/);
+    expect(checkDisplaySet({ ...base, kind: "band", collapsed: true }).ok).toBe(true);
+  });
+  it("readDisplayInfo は 3 項目つきの値を通す（知らない値も落とさない）", () => {
+    const info = { id: "i", paneId: "p", name: "n", kind: "panel", format: "text", title: "t", size: 320, rev: 1, bytes: 1, updatedAt: "x", dock: "bottom", collapsed: true };
+    expect(readDisplayInfo(info)).toMatchObject({ dock: "bottom", collapsed: true });
+    expect(readDisplayInfo({ ...info, dock: "future" })).toMatchObject({ dock: "future" });
+  });
+});
 
 describe("checkDisplaySet", () => {
   it("最小の形が通り、知らない項目は落ちる", () => {
@@ -203,7 +240,9 @@ describe("定数と limits", () => {
     expect([...DISPLAY_FEATURES]).toEqual(
       expect.arrayContaining(["panel", "band", "format:text", "format:markdown", "format:html", "format:script-html", "actions", "send"]),
     );
-    expect([...DISPLAY_RENDER_FEATURES]).toEqual(["panel", "band", "actions", "script-html"]);
+    expect([...DISPLAY_FEATURES]).toContain("layout");
+    expect([...DISPLAY_RENDER_FEATURES]).toEqual(["panel", "band", "actions", "script-html", "collapse", "dock", "float"]);
+    expect(DISPLAY_RENDER_FEATURES.length).toBeLessThanOrEqual(DISPLAY_RENDER_FEATURES_MAX);
   });
   it("send・取られた回数・冷却の定数", () => {
     expect(DISPLAY_SEND_MAX_BYTES).toBe(64 * 1024);

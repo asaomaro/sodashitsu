@@ -116,6 +116,9 @@ describe("表示の面の受け口の操作（20261007-soda-extensions）", () =
     const set = { name: "x", kind: "panel", format: "text", content: "c" };
     expect(m.PaneDisplaySetParams.safeParse(set).success).toBe(true);
     expect(m.PaneDisplaySetParams.safeParse({ ...set, paneId: "B" }).success).toBe(false);
+    // 配置の指定 3 項目は通り、ほかの項目は strict のまま断る
+    expect(m.PaneDisplaySetParams.safeParse({ ...set, dock: "bottom", edge: "top", collapsed: true }).success).toBe(true);
+    expect(m.PaneDisplaySetParams.safeParse({ ...set, x: 1 }).success).toBe(false);
     expect(m.PaneDisplayCloseParams.safeParse({ name: "x" }).success).toBe(true);
     expect(m.PaneDisplayCloseParams.safeParse({ name: "x", paneId: "B" }).success).toBe(false);
     expect(m.PaneDisplayCloseParams.safeParse({ all: true, paneId: "B" }).success).toBe(false);

@@ -15,6 +15,10 @@ export const DISPLAY_STATIC_FORMATS = ["text", "markdown", "html"] as const;
 export const DISPLAY_SCRIPT_FORMAT = "script-html" as const;
 /** 出せる形式。 */
 export const DISPLAY_FORMATS = [...DISPLAY_STATIC_FORMATS, DISPLAY_SCRIPT_FORMAT] as const;
+/** パネルの置き場所の指定（`--dock`）。 */
+export const DISPLAY_DOCKS = ["right", "left", "top", "bottom", "float"] as const;
+/** 帯の場所の指定（`--edge`）。 */
+export const DISPLAY_EDGES = ["top", "bottom"] as const;
 export const DISPLAY_NAME_RE = /^[A-Za-z0-9_-]{1,32}$/;
 /** 題の長さの上限（文字＝コードポイント）。制御文字は不可。 */
 export const DISPLAY_TITLE_MAX = 80;
@@ -67,9 +71,9 @@ export const DISPLAY_WAIT_MAX_MS = 60_000;
 export const DISPLAY_WAIT_DEFAULT_MS = 30_000;
 export const DISPLAY_WAIT_NAMES_MAX = 8;
 /** sodactl が名乗る機能（`--features` の `sodactl`）。 */
-export const DISPLAY_FEATURES = ["panel", "band", "format:text", "format:markdown", "format:html", "format:script-html", "actions", "send"] as const;
+export const DISPLAY_FEATURES = ["panel", "band", "format:text", "format:markdown", "format:html", "format:script-html", "actions", "send", "layout"] as const;
 /** 画面が `display.subscribe` で名乗れる種類。 */
-export const DISPLAY_RENDER_FEATURES = ["panel", "band", "actions", "script-html"] as const;
+export const DISPLAY_RENDER_FEATURES = ["panel", "band", "actions", "script-html", "collapse", "dock", "float"] as const;
 /** `display.subscribe` の `features` の個数の上限。 */
 export const DISPLAY_RENDER_FEATURES_MAX = 8;
 /** stdout の行の決まりの版（`display.ready` の `v`）。この決まりそのものを変えるときだけ上げる。 */
@@ -84,6 +88,17 @@ export const DISPLAY_OLD_REQUEST_LINE_BYTES = 1024 * 1024;
 
 export type DisplayKind = (typeof DISPLAY_KINDS)[number];
 export type DisplayFormat = (typeof DISPLAY_FORMATS)[number];
+export type DisplayDock = (typeof DISPLAY_DOCKS)[number];
+export type DisplayEdge = (typeof DISPLAY_EDGES)[number];
+/** 読み手の側は、後の版が足す値を受けても落ちない（知らない値は「指定なし」として扱う）。 */
+export type DisplayDockValue = DisplayDock | (string & {});
+export type DisplayEdgeValue = DisplayEdge | (string & {});
+export function isDisplayDock(v: unknown): v is DisplayDock {
+  return typeof v === "string" && (DISPLAY_DOCKS as readonly string[]).includes(v);
+}
+export function isDisplayEdge(v: unknown): v is DisplayEdge {
+  return typeof v === "string" && (DISPLAY_EDGES as readonly string[]).includes(v);
+}
 /**
  * 読み手の側（サーバ → 画面・sodactl が受け取る値）の型は、後の版が足す値・項目を受けても落ちないようにする:
  * 未知の `format` は文字列として通し、表示する側が「出せない」と扱う。書き手の側（`display.set` の要求）は `DisplayFormat` の厳しい検査のまま。
@@ -108,6 +123,12 @@ export interface DisplayInfo {
   bytes: number;
   /** ISO 8601。 */
   updatedAt: string;
+  /** プログラムの指定（初めの値）。panel のときだけ。無ければ「指定なし」。知らない値は読み手が「指定なし」にする。 */
+  dock?: DisplayDockValue;
+  /** プログラムの指定。band のときだけ。 */
+  edge?: DisplayEdgeValue;
+  /** 「たたんで始める」の指定（true のときだけ載る）。 */
+  collapsed?: boolean;
 }
 /** `display.get` の 1 片。`base64` は、中身（UTF-8）の `offset` からの `DISPLAY_GET_CHUNK_BYTES` 以下のバイト列。`totalBytes` は中身全体のバイト数（`DisplayInfo.bytes` と同じ値。`DisplayInfo.size` の px とは別物）。 */
 export interface DisplayChunk {
@@ -133,6 +154,10 @@ export interface DisplayRenderers {
   actions: number;
   /** スクリプトが動く形式（`script-html`）を出せると名乗った画面の数。 */
   scriptHtml: number;
+  /** たたみ・置き場所・浮いた窓を出せると名乗った画面の数。 */
+  collapse: number;
+  dock: number;
+  float: number;
   /** 後の版が足す種類（読み手は知らない項目を無視する）。 */
   [kind: string]: number;
 }
@@ -180,6 +205,10 @@ export interface DisplaySetBody {
   title?: string;
   size?: number;
   ttlMs?: number;
+  dock?: DisplayDock;
+  edge?: DisplayEdge;
+  /** true のときだけ載る。 */
+  collapsed?: boolean;
 }
 export interface DisplaySetResult {
   display: DisplayInfo;
@@ -287,7 +316,7 @@ function isOneOf<T extends string>(list: readonly T[], v: unknown): v is T {
  */
 export function checkDisplaySet(raw: unknown): DisplayCheck<DisplaySetBody> {
   if (!isRecord(raw)) return { ok: false, reason: "display must be an object" };
-  const { name, kind, format, content, title, size, ttlMs } = raw;
+  const { name, kind, format, content, title, size, ttlMs, dock, edge, collapsed } = raw;
   if (typeof name !== "string" || !DISPLAY_NAME_RE.test(name)) return { ok: false, reason: "name must be 1-32 characters of A-Z a-z 0-9 _ -" };
   if (!isOneOf(DISPLAY_KINDS, kind)) return { ok: false, reason: `kind must be one of: ${DISPLAY_KINDS.join(", ")}` };
   if (!isOneOf(DISPLAY_FORMATS, format)) return { ok: false, reason: `format must be one of: ${DISPLAY_FORMATS.join(", ")}` };
@@ -315,6 +344,20 @@ export function checkDisplaySet(raw: unknown): DisplayCheck<DisplaySetBody> {
       return { ok: false, reason: `ttlMs must be an integer from ${DISPLAY_TTL_MIN_MS} to ${DISPLAY_TTL_MAX_MS}` };
     }
     value.ttlMs = ttlMs;
+  }
+  if (dock !== undefined) {
+    if (kind !== "panel") return { ok: false, reason: "dock applies to panel displays only" };
+    if (!isDisplayDock(dock)) return { ok: false, reason: `dock must be one of: ${DISPLAY_DOCKS.join(", ")}` };
+    value.dock = dock;
+  }
+  if (edge !== undefined) {
+    if (kind !== "band") return { ok: false, reason: "edge applies to band displays only" };
+    if (!isDisplayEdge(edge)) return { ok: false, reason: `edge must be one of: ${DISPLAY_EDGES.join(", ")}` };
+    value.edge = edge;
+  }
+  if (collapsed !== undefined) {
+    if (typeof collapsed !== "boolean") return { ok: false, reason: "collapsed must be a boolean" };
+    if (collapsed) value.collapsed = true;
   }
   return { ok: true, value };
 }
