@@ -69,6 +69,25 @@ function isGone(pid: number): boolean {
   }
 }
 
+/**
+ * 失敗した場合の後始末: 拡張（プロセスのグループの先頭）のグループごと止める。記録した pid へ直に SIGKILL を送らない（pid の再利用で別のプロセスを殺す窓を避ける）。
+ * 先頭がまだ居るなら、コマンドラインに自分の一時ディレクトリが入っているものだけ。先頭が居ないとき、グループが残っていれば（POSIX: 残りがいる間、その番号は再利用されない）それは自分のもの。
+ */
+function killOurGroup(leaderPid: number, dir: string): void {
+  if (!isGone(leaderPid)) {
+    try {
+      if (!readFileSync(`/proc/${leaderPid}/cmdline`, "utf8").includes(dir)) return;
+    } catch {
+      return;
+    }
+  }
+  try {
+    process.kill(-leaderPid, "SIGKILL");
+  } catch {
+    // グループが無い（もう居ない）
+  }
+}
+
 /** 拡張の起動の記録（1 行 = `<拡張の pid> <孫の pid>`）。 */
 function extStarts(file: string): { ext: number; grand: number }[] {
   if (!existsSync(file)) return [];
@@ -285,7 +304,7 @@ process.stdin.resume();
     shellPid = Number(/SHELL-PID-(\d+)/.exec(c1.screen(paneId))?.[1]);
     log(`started: pid ${first.child.pid}, pane ${paneId}, marker shown`);
     const ext1 = await until("extension started", () => (extStarts(extMarks).length >= 1 ? extStarts(extMarks)[0] : undefined), 15_000);
-    extPidsSeen.push(ext1.ext, ext1.grand);
+    extPidsSeen.push(ext1.ext);
     if (isGone(ext1.ext) || isGone(ext1.grand)) throw new Error(`the extension or its child is not alive: ${JSON.stringify(ext1)}`);
 
     // 3. 止める（AC1）
@@ -352,7 +371,7 @@ process.stdin.resume();
     log("restarted: same pane, previous screen restored ok");
     // 起動し直すと、拡張は新しい pid で動く。止めると、また消える。
     const ext2 = await until("extension restarted", () => (extStarts(extMarks).length >= 2 ? extStarts(extMarks)[1] : undefined), 15_000);
-    extPidsSeen.push(ext2.ext, ext2.grand);
+    extPidsSeen.push(ext2.ext);
     if (ext2.ext === ext1.ext || ext2.grand === ext1.grand) throw new Error(`the extension was not restarted with new pids: ${JSON.stringify({ ext1, ext2 })}`);
     await stopChild(second);
     if (!isGone(ext2.ext) || !isGone(ext2.grand)) throw new Error(`the restarted extension or its child outlived the server: ${JSON.stringify(ext2)}`);
@@ -370,15 +389,7 @@ process.stdin.resume();
       }
     }
     // 拡張と孫を、残さない（失敗した場合の後始末）。
-    for (const pid of extPidsSeen) {
-      if (!isGone(pid)) {
-        try {
-          process.kill(pid, "SIGKILL");
-        } catch {
-          // 既に終わっている。
-        }
-      }
-    }
+    for (const leader of extPidsSeen) killOurGroup(leader, extDir);
     await rm(stateDir, { recursive: true, force: true });
     await rm(extDir, { recursive: true, force: true });
   }

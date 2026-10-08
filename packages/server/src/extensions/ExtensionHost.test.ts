@@ -142,6 +142,30 @@ describe("ExtensionHost: 起動と読み直し（T9-2）", () => {
     expect(h.spawnCalls).toHaveLength(0);
   });
 
+  it("stop() の直後に start() で再開し、古い startOne が読み込みの途中にいても、spawn は 1 回だけ（古い世代の startOne が、新しい世代の後から子を起動しない）", async () => {
+    let opens = 0;
+    let release: () => void = () => undefined;
+    const gateP = new Promise<void>((r) => (release = r));
+    h = await makeHost({
+      open: async (p, f) => {
+        opens += 1;
+        if (opens === 2) await gateP; // 古い startOne の読み直し
+        return fsOpen(p, f);
+      },
+    });
+    await h.writeConfig([ext("a")]);
+    const first = h.host.start();
+    await h.until(() => opens >= 2);
+    await h.run(h.host.stop());
+    const second = h.host.start(); // 新しい世代。chain では古い仕事の後ろ
+    release();
+    await Promise.all([first, second]);
+    await sleep(30);
+    expect(h.spawnCalls).toHaveLength(1);
+    expect(infoOf(h, "a")!.state).toBe("running");
+    expect(h.children.filter((c) => !c.exited)).toHaveLength(1);
+  });
+
   it("stop() は chain が詰まっていても（偽の open が返らない）すぐ返る", async () => {
     h = await makeHost({ open: () => new Promise(() => undefined) });
     await h.writeConfig([ext("a")]);
@@ -570,5 +594,89 @@ describe("ExtensionHost: pane の一覧と、出来事の渡し方（T9-4）", (
     h.clock.advance(200);
     expect(h.displays.list("p2").displays).toHaveLength(0);
     await h.until(() => c.lines().some((l) => l["type"] === "display.closed" && l["reason"] === "out_of_scope"));
+  });
+});
+
+describe("ExtensionHost: 設定・無効の記録が読めないとき（時間切れ）は現状維持。拒否は止める", () => {
+  function gatedOpen() {
+    const g = { on: false, release: () => undefined as void };
+    const gateP = new Promise<void>((r) => (g.release = r));
+    const open = async (p: string, f: number) => {
+      if (g.on) await gateP;
+      return fsOpen(p, f);
+    };
+    return { g, open };
+  }
+
+  it("時間切れでは、動いている拡張が止まらない（runId が同じ）。一覧に待っている旨の problems が出る。読めるようになれば戻る", async () => {
+    const { g, open } = gatedOpen();
+    h = await makeHost({ open });
+    await h.writeConfig([ext("a"), ext("b")]);
+    await h.host.start();
+    const runA = infoOf(h, "a")!.runId;
+    g.on = true;
+    await h.run(h.host.reload());
+    expect(infoOf(h, "a")).toMatchObject({ state: "running", runId: runA });
+    expect(infoOf(h, "b")!.state).toBe("running");
+    expect(h.children.every((c) => !c.exited)).toBe(true);
+    expect(h.host.list().problems.some((p) => p.scope === "user" && p.problem.includes("時間内"))).toBe(true);
+    g.on = false;
+    g.release();
+    await h.drive(6000);
+    expect(h.host.list().problems).toEqual([]);
+    expect(infoOf(h, "a")!.runId).toBe(runA);
+  });
+
+  it("時間切れの間、落ちた拡張は起動し直されず「waiting」になる。読めるようになったら起動し直される", async () => {
+    const { g, open } = gatedOpen();
+    h = await makeHost({ open });
+    await h.writeConfig([ext("a")]);
+    await h.host.start();
+    h.children[0]!.exit(1);
+    await h.until(() => infoOf(h!, "a")?.state === "backoff", 20);
+    g.on = true;
+    await h.drive(4000);
+    expect(infoOf(h, "a")!.state).toBe("waiting");
+    expect(h.spawnCalls).toHaveLength(1);
+    g.on = false;
+    g.release();
+    await h.drive(7000);
+    await h.until(() => h!.spawnCalls.length === 2);
+    expect(infoOf(h, "a")!.state).toBe("running");
+  });
+
+  it("無効の記録の読み込みが時間切れでも、動いている拡張は止まらない", async () => {
+    let blockState = false;
+    let release: () => void = () => undefined;
+    const gateP = new Promise<void>((r) => (release = r));
+    h = await makeHost({
+      stateOpen: async (p, f) => {
+        if (blockState) await gateP;
+        return fsOpen(p, f);
+      },
+    });
+    await h.writeConfig([ext("a")]);
+    await h.host.start();
+    blockState = true;
+    await h.run(h.host.reload());
+    expect(infoOf(h, "a")!.state).toBe("running");
+    expect(h.host.list().problems.some((p) => p.scope === "state")).toBe(true);
+    release();
+    blockState = false;
+  });
+
+  it("拒否（規則の外）は、いままでどおり止める。時間切れの後でも", async () => {
+    const { g, open } = gatedOpen();
+    h = await makeHost({ open });
+    await h.writeConfig([ext("a")]);
+    await h.host.start();
+    g.on = true;
+    await h.run(h.host.reload());
+    g.on = false;
+    g.release();
+    await h.writeConfig([ext("a"), ext("BAD")]);
+    await h.drive(6000);
+    expect(h.host.list().extensions).toEqual([]);
+    expect(h.children[0]!.exited).toBe(true);
   });
 });

@@ -30,7 +30,7 @@ import type { SessionService } from "../session/SessionService.js";
 import { entryDigest, instanceKey } from "./approval.js";
 import { createExtensionApi, type ApiExtension } from "./ExtensionApi.js";
 import { ExtensionProcess, DebtBucket, type ExtExit, type ExtSpawn, type KillGroup, type RunFile } from "./ExtensionProcess.js";
-import { ExtensionStateStore } from "./ExtensionStateStore.js";
+import { ExtensionStateStore, type ExtensionStateLoad, type StateFileDeps } from "./ExtensionStateStore.js";
 import { buildExtensionEnv } from "./extensionLaunch.js";
 import { loadUserExtensionsFile, type ExtensionEntry, type ExtensionFileDeps, type ExtensionFileLoad } from "./extensionConfig.js";
 
@@ -57,6 +57,8 @@ export interface ExtensionHostOptions {
     killGroup?: KillGroup;
     runFile?: RunFile;
     file?: Partial<ExtensionFileDeps>;
+    /** 無効の記録の読み書きの差し替え（テストだけ）。 */
+    stateFile?: Partial<StateFileDeps>;
     platform?: NodeJS.Platform;
     /** テストだけが変える（実時間の待ちを短くする）。本番は定数のまま。 */
     timings?: Partial<{ backoffMinMs: number; backoffMaxMs: number; stableMs: number; approvalsPollMs: number; scopeReviewMs: number }>;
@@ -89,7 +91,7 @@ interface Run {
   lastPanes: string;
 }
 
-type StatusState = "running" | "backoff" | "failed" | "exited" | "over_limit";
+type StatusState = "running" | "backoff" | "failed" | "exited" | "over_limit" | "waiting";
 interface Status {
   state: StatusState;
   failures: number;
@@ -177,7 +179,7 @@ export class ExtensionHost {
     };
     this.runningMax = opts.deps?.limits?.runningMax ?? EXTENSIONS_RUNNING_MAX;
     this.userConfigPath = join(opts.stateDir, EXTENSIONS_FILE_NAME);
-    this.stateStore = new ExtensionStateStore(opts.stateDir);
+    this.stateStore = new ExtensionStateStore(opts.stateDir, opts.deps?.stateFile);
     this.statePath = join(opts.stateDir, "extension-state.json");
     // 利用者の拡張は、pane が実在すれば範囲の中（プロジェクトの拡張の範囲は PR3）。
     this.inScopeFn = opts.deps?.inScope ?? ((_ext, paneId) => this.opts.session.hasPane(paneId));
@@ -472,19 +474,39 @@ export class ExtensionHost {
     // 1. 利用者の設定。
     const loaded = await this.readTimed("user-config", () => loadUserExtensionsFile(this.userConfigPath, this.opts.deps?.file));
     if (aborted()) return;
-    let file: ExtensionFileLoad;
+    // 「読めたが、規則の外・壊れている」（拒否）は、そのファイルの拡張を 1 つも動かさない（止める）。
+    // 「時間切れ・一時の読み込みの失敗」は現状維持: 動いているものは止めず、新しく起動する・起動し直すことだけを見送る（下の `transient`）。
+    let transient = false;
+    let file: ExtensionFileLoad = { entries: [], problem: null };
     if (loaded.ok) {
       file = loaded.value;
+      if (file.problem !== null) problems.push({ scope: "user", path: this.userConfigPath, problem: file.problem });
     } else {
-      file = { entries: [], problem: `${EXTENSIONS_FILE_NAME}: 読み込みが時間内に終わりませんでした（あとで読み直します）` };
+      transient = true;
+      problems.push({ scope: "user", path: this.userConfigPath, problem: `${EXTENSIONS_FILE_NAME}: 読み込みが時間内に終わりませんでした。動いている拡張はそのままで、新しい起動は見送ります（あとで読み直します）` });
     }
-    if (file.problem !== null) problems.push({ scope: "user", path: this.userConfigPath, problem: file.problem });
     // 2. （PR3）プロジェクトの根と設定。// PR3（T22）
 
     // 3. 無効の記録。
     const stateRead = await this.readTimed("state", () => this.stateStore.load());
     if (aborted()) return;
-    const state = stateRead.ok ? stateRead.value : ({ ok: false, problem: "extension-state.json: 読み込みが時間内に終わりませんでした" } as const);
+    const state: ExtensionStateLoad = stateRead.ok ? stateRead.value : { ok: true, disabled: new Set() };
+    if (!stateRead.ok) {
+      transient = true;
+      problems.push({ scope: "state", path: this.statePath, problem: "extension-state.json: 読み込みが時間内に終わりませんでした。動いている拡張はそのままで、新しい起動は見送ります（あとで読み直します）" });
+    }
+    if (transient) {
+      // 現状維持: 前の desired・動いているものはそのまま。起動を待っているものは「待っている」にする。
+      this.problems = problems;
+      for (const d of this.desired.values()) {
+        if (d.decision !== "eligible" || this.runs.has(d.key)) continue;
+        const st = this.status.get(d.key);
+        if (!st || (st.state === "backoff" && st.timer === undefined) || st.state === "over_limit") this.setStatus(d.key, d, { state: "waiting" });
+      }
+      this.afterPass();
+      this.emitChanged();
+      return;
+    }
     if (!state.ok) {
       problems.push({ scope: "state", path: this.statePath, problem: `${state.problem}。設定画面で入切を 1 つ変えると、作り直します（ほかの拡張は、有効に戻ります）` });
     }
@@ -566,7 +588,13 @@ export class ExtensionHost {
     // 3. 設定を読み直し、digest を比べる。
     const reread = await this.readTimed("user-config", () => loadUserExtensionsFile(this.userConfigPath, this.opts.deps?.file));
     if (this.stopped || this.epoch !== epoch) return;
-    const entry = reread.ok && reread.value.problem === null ? reread.value.entries.find((e) => e.id === d.entry.id) : undefined;
+    if (!reread.ok) {
+      // 読めない（時間切れ・一時の失敗）: 読めなければ起動しない。「待っている」にして、読み直しを予約する。
+      this.setStatus(key, d, { state: "waiting" });
+      this.emitChanged();
+      return;
+    }
+    const entry = reread.value.problem === null ? reread.value.entries.find((e) => e.id === d.entry.id) : undefined;
     if (!entry || entryDigest("", entry) !== d.digest) {
       this.scheduleReconcile(); // 次の番で、停止・読み直しに落ち着く
       return;
@@ -574,7 +602,12 @@ export class ExtensionHost {
     // 5. 無効の記録を読み直す。
     const st = await this.readTimed("state", () => this.stateStore.load());
     if (this.stopped || this.epoch !== epoch) return;
-    if (!st.ok || !st.value.ok || st.value.disabled.has(key)) {
+    if (!st.ok) {
+      this.setStatus(key, d, { state: "waiting" });
+      this.emitChanged();
+      return;
+    }
+    if (!st.value.ok || st.value.disabled.has(key)) {
       this.scheduleReconcile();
       return;
     }

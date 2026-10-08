@@ -42,6 +42,7 @@ export async function makeHost(
     timings?: NonNullable<NonNullable<ExtensionHostOptions["deps"]>["timings"]>;
     limits?: NonNullable<NonNullable<ExtensionHostOptions["deps"]>["limits"]>;
     open?: (path: string, flags: number) => Promise<import("node:fs/promises").FileHandle>;
+    stateOpen?: (path: string, flags: number) => Promise<import("node:fs/promises").FileHandle>;
     inScope?: NonNullable<ExtensionHostOptions["deps"]>["inScope"];
     isScreenKind?: (id: string) => boolean;
     groupDiesOn?: "SIGTERM" | "SIGKILL" | "never";
@@ -102,6 +103,7 @@ export async function makeHost(
       },
       killGroup: groups.kill,
       file: { open: o.open ?? ((p, f) => fsOpen(p, f)) },
+      ...(o.stateOpen ? { stateFile: { open: o.stateOpen } } : {}),
       ...(o.timings ? { timings: o.timings } : {}),
       ...(o.limits ? { limits: o.limits } : {}),
       ...(o.inScope ? { inScope: o.inScope } : {}),

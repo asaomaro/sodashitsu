@@ -629,7 +629,7 @@ sodactl ext reload                     # list と同じ形（設定を読み直�
 sodactl ext restart <id|key>           # {"status":"ok","key":"user:hello"}
 ```
 
-- `extensions[]` の各項目: `key`（`user:<id>`）・`id`・`scope`・`state`（`running`・`backoff`・`failed`・`exited`・`disabled`・`over_limit`）・`failures`・`lastExit`・`displays`（出している面の数）など。**コマンドの文字列は出ない**。
+- `extensions[]` の各項目: `key`（`user:<id>`）・`id`・`scope`・`state`（`running`・`backoff`・`failed`・`exited`・`disabled`・`over_limit`・`waiting`〔設定を読めないので起動を見送っている〕）・`failures`・`lastExit`・`displays`（出している面の数）など。**コマンドの文字列は出ない**。
 - `<id|key>` は、`key` の完全一致 → `id` が 1 つに決まるもの。同じ `id` が 2 つ以上あるときは使い方の誤り（終了コード 2。候補の `key` を並べる）。無ければ `not_found`（終了コード 1）。
 - 古いサーバ（拡張を知らない）では `{"status":"unsupported","reason":"このサーバは拡張に対応していません"}`（終了コード 0）。
 - 承認・取り消し・有効と無効の切り替えのコマンドは**無い**。

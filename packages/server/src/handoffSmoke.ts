@@ -75,6 +75,25 @@ function isGone(pid: number): boolean {
   }
 }
 
+/**
+ * 失敗した場合の後始末: 拡張（プロセスのグループの先頭）のグループごと止める。記録した pid へ直に SIGKILL を送らない（pid の再利用で別のプロセスを殺す窓を避ける）。
+ * 先頭がまだ居るなら、コマンドラインに自分の一時ディレクトリが入っているものだけ。先頭が居ないとき、グループが残っていれば（POSIX: 残りがいる間、その番号は再利用されない）それは自分のもの。
+ */
+function killOurGroup(leaderPid: number, dir: string): void {
+  if (!isGone(leaderPid)) {
+    try {
+      if (!readFileSync(`/proc/${leaderPid}/cmdline`, "utf8").includes(dir)) return;
+    } catch {
+      return;
+    }
+  }
+  try {
+    process.kill(-leaderPid, "SIGKILL");
+  } catch {
+    // グループが無い（もう居ない）
+  }
+}
+
 /** 拡張の起動の記録（1 行 = `<拡張の pid> <孫の pid>`）。 */
 function extStarts(file: string): { ext: number; grand: number }[] {
   if (!existsSync(file)) return [];
@@ -332,7 +351,7 @@ process.stdin.resume();
 
     // 3c. 拡張が動いている（記録が 1 行）。
     const extBefore = await until("extension started before the handoff", () => (extStarts(extMarks).length >= 1 ? extStarts(extMarks)[0] : undefined), 15_000);
-    extPidsSeen.push(extBefore.ext, extBefore.grand);
+    extPidsSeen.push(extBefore.ext);
     if (!isAlive(extBefore.ext) || !isAlive(extBefore.grand)) throw new Error(`the extension or its child is not alive before the handoff: ${JSON.stringify(extBefore)}`);
     log(`extension running before the handoff: pid ${extBefore.ext}, child ${extBefore.grand}`);
 
@@ -410,7 +429,7 @@ process.stdin.resume();
 
     // 5c. 拡張（AC14・u2）: 前の拡張と孫は消えていて、新しい pid で動いている。
     const extAfter = await until("extension restarted after the handoff", () => (extStarts(extMarks).length >= 2 ? extStarts(extMarks)[1] : undefined), 15_000);
-    extPidsSeen.push(extAfter.ext, extAfter.grand);
+    extPidsSeen.push(extAfter.ext);
     await until("the previous extension and its child are gone", () => (isGone(extBefore.ext) && isGone(extBefore.grand) ? true : undefined), 10_000);
     if (extAfter.ext === extBefore.ext || extAfter.grand === extBefore.grand) throw new Error(`the extension was not restarted with new pids: ${JSON.stringify({ extBefore, extAfter })}`);
     if (isGone(extAfter.ext) || isGone(extAfter.grand)) throw new Error(`the new extension or its child is not alive: ${JSON.stringify(extAfter)}`);
@@ -507,15 +526,7 @@ process.stdin.resume();
       }
     }
     // 拡張と孫を、残さない（失敗した場合の後始末。生きていれば止める）。
-    for (const pid of extPidsSeen) {
-      if (!isGone(pid)) {
-        try {
-          process.kill(pid, "SIGKILL");
-        } catch {
-          // 既に終わっている。
-        }
-      }
-    }
+    for (const leader of extPidsSeen) killOurGroup(leader, extDir);
     await rm(stateDir, { recursive: true, force: true });
     await rm(homeDir, { recursive: true, force: true });
     await rm(extDir, { recursive: true, force: true });

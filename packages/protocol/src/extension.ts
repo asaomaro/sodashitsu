@@ -85,7 +85,8 @@ export type ExtensionRunState =
   | "disabled" // 無効（設定の enabled: false か、画面で切った）
   | "pending" // 承認待ち（プロジェクトだけ）
   | "denied" // 承認しない（プロジェクトだけ）
-  | "over_limit"; // 同時に動かす合計の上限のため、動かしていない
+  | "over_limit" // 同時に動かす合計の上限のため、動かしていない
+  | "waiting"; // 設定か無効の記録を読めない（時間切れ・一時の失敗）ので、起動を見送っている。読めれば起動する
 
 export type ExtensionExitReason = "exited" | "crashed" | "spawn_failed" | "bad_lines" | "not_reading" | "stopped";
 

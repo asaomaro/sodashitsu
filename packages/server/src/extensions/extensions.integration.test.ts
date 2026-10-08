@@ -153,7 +153,9 @@ rl.on("close", () => process.exit(0));
   }
   const lines = (log: string): Record<string, unknown>[] => (existsSync(log) ? readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>) : []);
   const notes = (log: string) => lines(log + ".notes");
-  const pidOf = (log: string): number => {
+  // pid のファイルは、拡張が起動して書くまで無い（負荷で遅れる）。上限つきで待つ。
+  const pidOf = async (log: string): Promise<number> => {
+    await vi.waitFor(() => { if (!existsSync(log + ".pid") || readFileSync(log + ".pid", "utf8").trim() === "") throw new Error("no pid file"); }, { timeout: 10_000, interval: 30 });
     const pid = Number(readFileSync(log + ".pid", "utf8"));
     pids.add(pid);
     return pid;
@@ -190,7 +192,7 @@ rl.on("close", () => process.exit(0));
     const s = await startServer([{ id: "env", command: e.command, description: "d" }]);
     await s.waitState("env", "running");
     await vi.waitFor(() => { if (!existsSync(e.log + ".env")) throw new Error("no env"); });
-    pidOf(e.log);
+    await pidOf(e.log);
     const dump = JSON.parse(readFileSync(e.log + ".env", "utf8")) as { env: Record<string, string>; cwd: string };
     expect(dump.env["SODA_EXTENSION_ID"]).toBe("env");
     expect(dump.env["SODA_EXTENSION_SCOPE"]).toBe("user");
@@ -214,8 +216,8 @@ rl.on("close", () => process.exit(0));
     await s.waitState("b", "running");
     await waitFile(a.log);
     await waitFile(b.log);
-    const pa = pidOf(a.log);
-    const pb = pidOf(b.log);
+    const pa = await pidOf(a.log);
+    const pb = await pidOf(b.log);
     const runA = (await s.info("a"))!.runId;
     // 足す・変えない
     const admin = await s.open("external");
@@ -231,14 +233,14 @@ rl.on("close", () => process.exit(0));
     await vi.waitFor(async () => { const i = await s.info("a"); if (i?.state !== "running" || i.runId === runA) throw new Error("not restarted"); }, { timeout: 8000, interval: 30 });
     expect(await s.info("b")).toBeUndefined();
     // 規則の外に書き換える
-    const pc = pidOf(c.log);
+    const pc = await pidOf(c.log);
     await writeFile(join(stateDir, "extensions.json"), JSON.stringify({ extensions: [{ id: "BAD", command: "x" }] }), { mode: 0o600 });
     const res = await admin.request<ExtensionListResult>("extension.reload", {});
     expect(res.extensions).toEqual([]);
     expect(res.problems).toHaveLength(1);
     expect(res.problems[0]!.problem).toMatch(/^extensions\.json: /);
     await waitDead(pc);
-    pidOf(a.log);
+    await pidOf(a.log);
   });
 
   it("(3) display.set が台帳に載り、pane.sock の display.list に見え、結果が /ws の display.set と同じ項目を持つ。面への display.action が拡張に行で届く（AC5）。(4) pane の増減で ext.panes が届く（AC6）。(5) 知らない操作は unsupported で、id なしには返事が来ない（AC7）", async () => {
@@ -255,7 +257,7 @@ rl.on("close", () => process.exit(0));
     );
     const s = await startServer([{ id: "basic", command: e.command }]);
     await waitFile(e.log);
-    pidOf(e.log);
+    await pidOf(e.log);
     await vi.waitFor(() => { if (!lines(e.log).some((l) => l["type"] === "ext.result" && l["id"] === "f1")) throw new Error("no f1"); });
     const results = new Map(lines(e.log).filter((l) => l["type"] === "ext.result").map((l) => [l["id"], l]));
     const set = results.get("s1") as { ok: boolean; result: { display: DisplayInfo; renderers: unknown } };
@@ -304,7 +306,7 @@ rl.on("close", () => process.exit(0));
     );
     const s = await startServer([{ id: "own", command: e.command }]);
     await waitFile(e.log);
-    const pid = pidOf(e.log);
+    const pid = await pidOf(e.log);
     await vi.waitFor(() => { if (!lines(e.log).some((l) => l["id"] === "set1")) throw new Error("no set1"); });
     expect(okResult<{ display: unknown }>(await paneCall(s.sockPath, PANE_OP_DISPLAY_SET, s.paneA, sockFace("theirs"))).display).toBeDefined();
     await vi.waitFor(() => { if (!lines(e.log).some((l) => l["id"] === "setTheirs")) throw new Error("no setTheirs"); }, { timeout: 8000 });
@@ -324,7 +326,7 @@ rl.on("close", () => process.exit(0));
     // 拡張の再起動後（新しい起動）も、pane.sock の面は残る
     const after = okResult<{ displays: DisplayInfo[] }>(await paneCall(s.sockPath, PANE_OP_DISPLAY_LIST, s.paneA, {}));
     expect(after.displays.map((d) => d.name)).toContain("theirs");
-    pidOf(e.log);
+    await pidOf(e.log);
   });
 
   it("(8) 落ち続ける拡張は 5 回で failed になる。そのあいだ、サーバは応答し続ける", async () => {
@@ -350,7 +352,7 @@ rl.on("close", () => process.exit(0));
     await waitFile(a.log);
     await waitFile(b.log);
     await vi.waitFor(() => { if (!existsSync(a.log + ".grand") || !existsSync(b.log + ".grand")) throw new Error("no grand"); });
-    const pa = pidOf(a.log);
+    const pa = await pidOf(a.log);
     const ga = Number(readFileSync(a.log + ".grand", "utf8"));
     pids.add(ga);
     const gb = Number(readFileSync(b.log + ".grand", "utf8"));
@@ -371,7 +373,7 @@ rl.on("close", () => process.exit(0));
     const e = await script("noisy", `process.stderr.write("MARKER-ERR-123\\n");`, "--arg=CMD-SECRET-456");
     const s = await startServer([{ id: "noisy", command: e.command }]);
     await s.waitState("noisy", "running");
-    pidOf(e.log);
+    await pidOf(e.log);
     const ws = await s.open("external");
     await vi.waitFor(async () => {
       const r = await ws.request<{ lines: string[] }>("extension.log", { key: "user:noisy" });
@@ -388,7 +390,7 @@ rl.on("close", () => process.exit(0));
     const e = await script("once", `appendFileSync(LOG + ".starts", "x");`);
     const s = await startServer([{ id: "once", command: e.command }]);
     await s.waitState("once", "running");
-    pidOf(e.log);
+    await pidOf(e.log);
     await expect(composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] }, { attempts: 1 })).rejects.toBeDefined();
     await new Promise((r) => setTimeout(r, 300));
     expect(readFileSync(e.log + ".starts", "utf8")).toBe("x");
@@ -404,7 +406,7 @@ rl.on("close", () => process.exit(0));
     );
     const s = await startServer([{ id: "four", command: e.command }]);
     await waitFile(e.log);
-    pidOf(e.log);
+    await pidOf(e.log);
     await vi.waitFor(() => { if (lines(e.log).filter((l) => l["type"] === "ext.result").length < 2) throw new Error("no 2"); });
     okResult(await paneCall(s.sockPath, PANE_OP_DISPLAY_SET, s.paneA, sockFace("p1")));
     okResult(await paneCall(s.sockPath, PANE_OP_DISPLAY_SET, s.paneA, sockFace("p2")));
@@ -423,7 +425,7 @@ rl.on("close", () => process.exit(0));
     expect(lines(big.log).find((l) => l["id"] === "after")).toMatchObject({ ok: true });
     expect((await s.info("big"))!.state).toBe("running");
     // （止められる途中の拡張が ext.error の行を読み切るかは決まっていないので、行そのものは見ない。止めた理由が bad_lines であることで足りる）
-    pidOf(big.log);
+    await pidOf(big.log);
     await vi.waitFor(() => { if (!existsSync(bad.log + ".pid")) throw new Error("x"); });
     pids.add(Number(readFileSync(bad.log + ".pid", "utf8")));
   });
@@ -442,8 +444,8 @@ setInterval(() => { const f = LOG + ".cmds"; if (!existsSync(f) || !pane) return
     const s = await startServer([{ id: "plain", command: plain.command }, { id: "allowed", command: allowed.command, allow: ["script-html"] }]);
     await waitFile(plain.log);
     await waitFile(allowed.log);
-    pidOf(plain.log);
-    pidOf(allowed.log);
+    await pidOf(plain.log);
+    await pidOf(allowed.log);
     const cmd = (log: string, ...c: unknown[]) => appendFileSync(log + ".cmds", JSON.stringify(c) + "\n");
     const answer = async (log: string, id: string) => { await vi.waitFor(() => { if (!lines(log).some((l) => l["id"] === id)) throw new Error(`no ${id}`); }); return lines(log).find((l) => l["id"] === id) as { ok: boolean; error?: { code: string }; result?: unknown }; };
     const SCRIPT = { name: "g", kind: "panel", format: "script-html", content: "<script>1</script>" };
@@ -506,7 +508,7 @@ setInterval(() => { const f = LOG + ".cmds"; if (!existsSync(f) || !pane) return
     const e = await script("t10", `// t10`);
     const s = await startServer([{ id: "t10", command: e.command }]);
     await s.waitState("t10", "running");
-    pidOf(e.log);
+    await pidOf(e.log);
     const ws = await s.open("external");
     const screen = await s.open("desktop");
     expect((await ws.request<ExtensionListResult>("extension.list", {})).extensions).toHaveLength(1);
@@ -524,7 +526,7 @@ setInterval(() => { const f = LOG + ".cmds"; if (!existsSync(f) || !pane) return
     const changed = ws.events.filter((x) => x.event === "extension.changed");
     expect(changed.length).toBeGreaterThan(0);
     expect(changed.every((x) => Object.keys(x.data).length === 0)).toBe(true);
-    pidOf(e.log);
+    await pidOf(e.log);
   });
 
   it("T10: 設定の読み込みが止まっていても listen() が返る。start() の直後に close() しても、拡張の子が残らない", async () => {
@@ -538,7 +540,7 @@ setInterval(() => { const f = LOG + ".cmds"; if (!existsSync(f) || !pane) return
     const s = await startServer([{ id: "slow", command: e.command }]);
     await s.server.close();
     if (existsSync(e.log + ".pid")) {
-      const pid = pidOf(e.log);
+      const pid = await pidOf(e.log);
       await waitDead(pid);
     }
   });

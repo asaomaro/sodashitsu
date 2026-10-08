@@ -16,3 +16,4 @@ lines.on("line", (line) => {
   // 知らない type の行は、無視する（後の版で増える）
 });
 lines.on("close", () => process.exit(0)); // 標準入力が閉じたら終わる（決まり）
+process.on("SIGTERM", () => process.exit(0)); // 止めるとき、soda は標準入力を閉じるのと同時に SIGTERM も送る（2 秒後に SIGKILL）。後始末はここでも
