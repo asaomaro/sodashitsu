@@ -153,7 +153,7 @@
       依存: T7
       AC: AC12, AC14, AC16, AC17
 
-- [ ] T9: ブラウザ版: 落とせない行の見せ方と、知らせ。design 第 2 部「ブラウザ版」のとおり。`PaneFrame.vue`・`view.ts`・`TabBar.vue` は変えない。
+- [x] T9: ブラウザ版: 落とせない行の見せ方と、知らせ。design 第 2 部「ブラウザ版」のとおり。`PaneFrame.vue`・`view.ts`・`TabBar.vue` は変えない。
       - `Sidebar.vue`: `view.paneDrag` がある間だけ、ドラッグ元の pane の workspace を求め、workspace を持つ行ごとに `paneMoveBlock(移動元, row.workspace, { lenient: true })` を `computed` で持つ（移動元がストアに無ければ、どの行も断らない）。断る行に `sidebar-row-pane-drop-disabled`（新しい CSS: `opacity: 0.45`）。ポインタが上にある行（`view.paneDrag.overWorkspaceId` が一致）は、断らないなら今までどおり `sidebar-row-pane-drop-target`、断るなら `sidebar-row-drop-invalid`（`sidebar-row-pane-drop-target` は付けない）。workspace の並べ替えの「落とせない行」の今の条件は残す。
       - `ActionDispatcher.movePaneToNewTab`: 送る前に `paneMoveBlock(…, { lenient: true })`（移動元・移動先がストアに無ければ確認を飛ばす）。断るなら `view.toast(paneMoveBlockMessage(block))` で終わり。応答が `!r.ok && r.reason` ならトースト。`movePaneToTab`: 応答の `reason` だけトースト。
       単体テスト:

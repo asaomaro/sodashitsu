@@ -2012,6 +2012,85 @@ describe("Sidebar — pane D&D のドロップ先（サイドバーの workspace
     const wrapper = mountSidebar(makeConnection());
     expect(wrapper.get(".sidebar-spaces .sidebar-row").classes()).not.toContain("sidebar-row-pane-drop-target");
   });
+
+  // 20261008-web-tab-dnd（別の worktree の行を、ドラッグが始まった時点で薄くする。T9）。
+  describe("落とせない行（別の worktree）", () => {
+    const g = (worktreeKey: string | undefined, repoKey = "/r/.git") => ({
+      branch: "b",
+      ahead: 0,
+      behind: 0,
+      repoKey,
+      isLinkedWorktree: false,
+      ...(worktreeKey === undefined ? {} : { worktreeKey }),
+    });
+    /** w1（移動元。p9 がある）・w1b（同じ worktree）・w2（別の worktree）・w3（別のリポジトリ）・u1（管理外・同じ場所）・u2（管理外・違う場所）。 */
+    function setupRows() {
+      const session = useSessionStore(pinia);
+      session.workspaceUpserted(makeWorkspace("w1", { label: "w1", cwd: "/r", git: g("/r/.git") }));
+      session.workspaceUpserted(makeWorkspace("w1b", { label: "w1b", cwd: "/r", git: g("/r/.git") }));
+      session.workspaceUpserted(makeWorkspace("w2", { label: "w2", cwd: "/r-wt", git: { ...g("/r/.git/worktrees/wt"), isLinkedWorktree: true } }));
+      session.workspaceUpserted(makeWorkspace("w3", { label: "w3", cwd: "/s", git: g("/s/.git", "/s/.git") }));
+      session.workspaceUpserted(makeWorkspace("u2", { label: "u2", cwd: "/elsewhere", git: null }));
+      session.tabUpserted({ id: "t1", workspaceId: "w1", label: "1", layout: { type: "pane", paneId: "p9" }, focusedPaneId: "p9", zoomedPaneId: null, sizeOwnerClientId: null });
+      session.paneUpserted(makePane("p9", "t1"));
+      const wrapper = mountSidebar(makeConnection());
+      const rowOf = (id: string) => wrapper.get(`.sidebar-spaces .sidebar-row[data-drop-workspace-id="${id}"]`);
+      return { wrapper, rowOf, view: useViewStore(pinia) };
+    }
+
+    it("ドラッグが始まると、別の worktree・別のリポジトリ・場所の違う管理外の行が薄くなり、同じ worktree の行・自分の行は薄くならない。終わると消える", async () => {
+      const { wrapper, rowOf, view } = setupRows();
+      view.startPaneDrag("p9");
+      await wrapper.vm.$nextTick();
+      for (const id of ["w2", "w3", "u2"]) expect(rowOf(id).classes(), id).toContain("sidebar-row-pane-drop-disabled");
+      for (const id of ["w1", "w1b"]) expect(rowOf(id).classes(), id).not.toContain("sidebar-row-pane-drop-disabled");
+      view.endPaneDrag();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.findAll(".sidebar-row-pane-drop-disabled")).toHaveLength(0);
+    });
+
+    it("グループの見出しの行には付かない", async () => {
+      const { wrapper, view } = setupRows();
+      const session = useSessionStore(pinia);
+      session.workspaceUpserted(makeWorkspace("w4", { label: "w4", cwd: "/t", groupId: "g1" }));
+      session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
+      view.startPaneDrag("p9");
+      await wrapper.vm.$nextTick();
+      const headers = wrapper.findAll(".sidebar-spaces .sidebar-row").filter((r) => r.attributes("data-drop-workspace-id") === undefined);
+      expect(headers.length).toBeGreaterThan(0);
+      for (const h of headers) expect(h.classes()).not.toContain("sidebar-row-pane-drop-disabled");
+    });
+
+    it("上に来た行: 断る行は sidebar-row-drop-invalid（pane-drop-target は付かない）、断らない行は逆", async () => {
+      const { wrapper, rowOf, view } = setupRows();
+      view.startPaneDrag("p9");
+      view.setPaneDragOverWorkspace("w2");
+      await wrapper.vm.$nextTick();
+      expect(rowOf("w2").classes()).toContain("sidebar-row-drop-invalid");
+      expect(rowOf("w2").classes()).not.toContain("sidebar-row-pane-drop-target");
+      view.setPaneDragOverWorkspace("w1b");
+      await wrapper.vm.$nextTick();
+      expect(rowOf("w1b").classes()).toContain("sidebar-row-pane-drop-target");
+      expect(rowOf("w1b").classes()).not.toContain("sidebar-row-drop-invalid");
+      expect(rowOf("w2").classes()).not.toContain("sidebar-row-drop-invalid");
+      view.setPaneDragOverWorkspace("w1"); // 自分の workspace（新しい tab へ切り出す）は落とせる
+      await wrapper.vm.$nextTick();
+      expect(rowOf("w1").classes()).toContain("sidebar-row-pane-drop-target");
+    });
+
+    it("worktreeKey の無い git の workspace（古いサーバ）には、どのクラスも付かない（今までどおり落とせる）", async () => {
+      const { wrapper, rowOf, view } = setupRows();
+      const session = useSessionStore(pinia);
+      session.workspaceUpserted(makeWorkspace("old", { label: "old", cwd: "/old", git: g(undefined) }));
+      view.startPaneDrag("p9");
+      view.setPaneDragOverWorkspace("old");
+      await wrapper.vm.$nextTick();
+      const classes = rowOf("old").classes();
+      expect(classes).not.toContain("sidebar-row-pane-drop-disabled");
+      expect(classes).not.toContain("sidebar-row-drop-invalid");
+      expect(classes).toContain("sidebar-row-pane-drop-target");
+    });
+  });
 });
 
 /** 20260926-named-session-ui（AC2・AC17・AC-I1・AC-I3）。 */

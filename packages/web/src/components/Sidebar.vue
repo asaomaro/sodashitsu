@@ -6,7 +6,7 @@ import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { type SectionBox, clampRatio, ratioFromOffset, ratioPercent, stepRatio } from "../sidebar/sectionSizing.js";
 import { useSessionStore } from "../store/session.js";
 import { useSeenStore, aggregate, displayStateFor, STATE_PRIORITY } from "../store/seen.js";
-import { orderedAgentPaneIds } from "@sodashitsu/client-core";
+import { orderedAgentPaneIds, paneMoveBlock } from "@sodashitsu/client-core";
 import { type DropAnchor, type ItemRow, dropBefore, nextAnchorOf, sameItemTarget, groupIdOfNavigateKey, isUngroupedNavigateKey, navigateKeyOfUngrouped, hiddenWorktreeCount, visibleGroupMembers } from "@sodashitsu/client-core";
 import { currentSidebarTree } from "../store/sidebarTree.js";
 import NotificationBell from "./NotificationBell.vue";
@@ -276,6 +276,24 @@ const spaces = computed<SpaceRow[]>(() => {
     row.items.forEach((item, i) => pushItem(item, 1, row.group.id, row.group.id, row.group.collapsed, i, nextAnchorOf(row.items, i, anchorOfItem)));
   }
   return out;
+});
+
+/**
+ * pane の名前をドラッグしている間、落とせない workspace の id（20261008-web-tab-dnd。移動元と同じ worktree でない行）。
+ * ドラッグ元がストアに無ければ空（どの行も断らない）。古いサーバの workspace（git はあるが worktreeKey が無い）は断らない（lenient）。
+ */
+const paneDropBlockedIds = computed<ReadonlySet<string>>(() => {
+  const drag = view.paneDrag;
+  if (!drag) return new Set();
+  const pane = session.panes.get(drag.sourcePaneId);
+  const tab = pane ? session.tabs.get(pane.tabId) : undefined;
+  const source = tab ? session.workspaces.get(tab.workspaceId) : undefined;
+  if (!source) return new Set();
+  const blocked = new Set<string>();
+  for (const ws of session.workspaces.values()) {
+    if (paneMoveBlock(source, ws, { lenient: true }) !== null) blocked.add(ws.id);
+  }
+  return blocked;
 });
 
 /** 全体のメニューが開いているか（`PaneFrame` の枠のボタンと同じく `aria-expanded` で伝える）。 */
@@ -840,8 +858,9 @@ watch(
                 'sidebar-row-tree': row.kind === 'worktreeChild',
                 'sidebar-row-tree-last': row.treeLast,
                 'sidebar-row-drop-target': view.workspaceDrag?.overRowKey === row.key && !view.workspaceDrag.overInvalid,
-                'sidebar-row-drop-invalid': view.workspaceDrag?.overRowKey === row.key && view.workspaceDrag.overInvalid,
-                'sidebar-row-pane-drop-target': !!row.workspace && view.paneDrag?.overWorkspaceId === row.workspace.id,
+                'sidebar-row-drop-invalid': (view.workspaceDrag?.overRowKey === row.key && view.workspaceDrag.overInvalid) || (!!row.workspace && view.paneDrag?.overWorkspaceId === row.workspace.id && paneDropBlockedIds.has(row.workspace.id)),
+                'sidebar-row-pane-drop-target': !!row.workspace && view.paneDrag?.overWorkspaceId === row.workspace.id && !paneDropBlockedIds.has(row.workspace.id),
+                'sidebar-row-pane-drop-disabled': !!row.workspace && paneDropBlockedIds.has(row.workspace.id),
               }"
               :data-workspace-row-key="row.key"
               :data-drop-workspace-id="row.workspace?.id"
@@ -1182,6 +1201,10 @@ watch(
 .sidebar-row.sidebar-row-pane-drop-target {
   outline: 2px dashed var(--soda-accent, #8be9fd);
   outline-offset: -2px;
+}
+/* pane を D&D している間、移せない workspace の行（20261008-web-tab-dnd。別の worktree）。ドラッグ中だけ薄くする。 */
+.sidebar-row.sidebar-row-pane-drop-disabled {
+  opacity: 0.7; /* MUTED_TEXT_ALPHA。これより薄いと theme/uiTokens.test.ts が落ちる（文字を薄めて読めなくしない決まり）。decisions D17 */
 }
 .sidebar-row-line1 {
   display: flex;
