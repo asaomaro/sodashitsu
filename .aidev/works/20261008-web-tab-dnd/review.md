@@ -36,4 +36,32 @@ must 0・should 1・nit 3。判断は「直してから（軽い修正 1 件）�
 
 ## PR2: pane の移動の制限（T6〜T12）
 
-（実装中。PR2 のレビューの後に追記する）
+タスクごとの独立点検（T6・T7・T8）と、PR2 の全体の点検を、1 回のレビューにまとめた。レビューの側で、`SessionModel.test.ts`・`SessionService.test.ts`・`surface/methods/index.test.ts`（417 件）と `paneMoveScope.test.ts`（14 件）を流して通ることを確かめた。
+
+### 1 回目（824d335...a9af896）
+
+must 0・should 2・nit 2。判断は「マージしてよい」。
+
+| 重さ | 指摘 | 対応 |
+|---|---|---|
+| should | ドラッグ中、落とせない行（薄さ 0.7）と落とせる行が見分けにくい。落とせない行にポインタを乗せると点線の枠が出て、落とせるように見える | 直した（b4f9a47。落とせる行に弱い強調〔左の縁の線と淡い背景〕。落とせない行の上では枠を出さない。decisions D19） |
+| should | 断ったときの知らせが薄く写っている | 撮り直して確かめた（フェードの途中だった。通常の明るさで出ている） |
+| nit | `normalizeCwd` が Windows の区切りの末尾を落とさない | 直した（b4f9a47） |
+| nit | 判定が入らないままの workspace は、理由の文言が「別の worktree」になる | 直さない（D12） |
+
+問題なしと確かめた点: pane の `tabId` を書き換えるのは `moveToTab`・`moveToNewTab` の 2 か所だけ（分割・置き換え・tab の移動・workspace の操作・復元は、別の workspace へ動かさない）／断るときは、ハンドラと `SessionModel` の二重で、状態・イベント・保存のどれにも触れない／`sodactl`・エージェントの連携・グラフは `pane.move_*` を呼ばない／既存のテスト 9 件の直しは、期待を変えず、意図を保っている。
+
+変異の確かめ（レビューの側。worktree の写しで実施）: サーバのハンドラの事前確認と `SessionModel` の確認を全部外すと、E2E (5)（直接の RPC でも断られ、イベントが届かない）が落ちた。`SessionModel` の確認の 2 行だけを外すと、単体テスト 14 件が落ちる（実装の側）。
+
+b4f9a47 は、見た目（`Sidebar.vue` のクラスと CSS）と `normalizeCwd` の小さな差分で、監督のセッションがスクリーンショット（明るい・暗い。落とせる行・落とせない行・ポインタを乗せた場合）と差分を見て確かめた（別のコンテキストの再レビューは掛けていない）。
+
+### 確かめたこと
+
+- `pnpm build`・`pnpm typecheck`: 成功
+- `pnpm test`（main を取り込んだ後。b4f9a47）: 8597 件中 8594 件通過。失敗 3 件は `tui.integration.test.ts`（worktree のパスが長いと main でも落ちる）
+- E2E（b4f9a47。`--workers=1`）: `pane-move-scope`・`tab-dnd`・`workspace-groups`・`sidebar-sections` の 63 件すべて通過（実装の側）。`pane-move-scope` の 8 件は、監督のセッションも単独で流して通過
+- `aidev smoke`（b4f9a47）: pass（10 本）
+
+### 確かめていないこと
+
+- 端末版の実機（単体テストだけ）。Firefox・Safari。
