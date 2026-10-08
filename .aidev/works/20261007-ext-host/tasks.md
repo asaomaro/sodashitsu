@@ -157,7 +157,7 @@ PR1 の `cross` は、「拡張のコマンドの `spawn` が 1 か所である�
       依存: T1, T4, T5
       AC: AC12, AC13, AC15, AC36
       点検: あり
-- [ ] T7: 表示の面の台帳に、持ち主を足す（design「表示の面への追加」の、型と、決まりの表。札 `tag` は、呼ぶ側が決める文字列——拡張は、起動 1 回ごとに別の札を使う）: `DisplayInfo.source?`・`DisplaySource`（protocol。**`readDisplayInfo` は、変えない**〔同じオブジェクトを返すので、`source` は通る。形の検査を、ここに足さない〕）、`Entry.owner?`、
+- [x] T7: 表示の面の台帳に、持ち主を足す（design「表示の面への追加」の、型と、決まりの表。札 `tag` は、呼ぶ側が決める文字列——拡張は、起動 1 回ごとに別の札を使う）: `DisplayInfo.source?`・`DisplaySource`（protocol。**`readDisplayInfo` は、変えない**〔同じオブジェクトを返すので、`source` は通る。形の検査を、ここに足さない〕）、`Entry.owner?`、
       `set(…, opts?)`・`close(…, opts?)`・`list(…, opts?)`・**`send(…, opts?)`**・`ownerOf`・`countOwned`・`bytesOwned`・`ownedPanes`・`closeOwned`・`onOwnedEvent`。
       札つきの面の出来事（`display.action`〔`source` つき〕・`display.closed`）は、pane の列に入れず、受け手へ（`seq` なし）。`onPaneClosed` で、札つきの面ごとに、受け手へ `display.closed`（`pane_closed`）。受け手の例外は、包んでログ。
       **`send` の持ち主の検査は、ここで必ず入れる**: 面の札と `opts.owner` が違えば `display_closed`（札なしの呼び出し〔`/ws`・`pane.sock`〕が、札つきの面を指す場合を含む）。検査の場所は、設定の検査（`display_script_disabled`）の後・面の有無の検査と同じ所（面が無いのと、同じ答えにする）。

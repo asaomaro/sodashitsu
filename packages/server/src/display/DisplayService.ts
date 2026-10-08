@@ -30,8 +30,10 @@ import {
   type DisplayInfo,
   type DisplayReportProblem,
   type DisplayRenderers,
+  type DisplaySource,
   type DisplaySetResult,
   type DisplayWaitResult,
+  type ExtDisplayEvent,
   type ServerEvent,
 } from "@sodashitsu/protocol";
 import type { Disposable, EventBus } from "../bus/EventBus.js";
@@ -77,7 +79,20 @@ export interface DisplayServiceOptions {
   logger?: Pick<Logger, "info" | "warn">;
 }
 
+/**
+ * 面の持ち主（拡張。20261007-ext-host）。`tag` は呼ぶ側が決める文字列（拡張は起動 1 回ごとに別の札: `ext:<key>:<runId>`）。`source` は面の見出しに載る。
+ * 札を付けない呼び出し（`/ws`・`pane.sock`）の動きは、今までと同じ。
+ */
+export interface DisplayOwner {
+  tag: string;
+  source: DisplaySource;
+}
+/** 札つきの面の出来事（pane の列には入れず、受け手へ。`seq` なし）。閉じた理由に `pane_closed` を含む。 */
+export type DisplayOwnedEvent = ExtDisplayEvent;
+
 interface Entry {
+  /** 札つきの面（拡張が出したもの）。 */
+  owner?: DisplayOwner;
   info: DisplayInfo;
   /** 中身（UTF-8）。 */
   content: Buffer;
@@ -134,6 +149,8 @@ export class DisplayService {
   private waiterTotal = 0;
   private totalBytes = 0;
   private readonly busSub: Disposable;
+  /** 札つきの面の出来事の受け手。 */
+  private readonly ownedListeners = new Set<(tag: string, ev: DisplayOwnedEvent) => void>();
   private disposed = false;
 
   constructor(private readonly opts: DisplayServiceOptions) {
@@ -154,7 +171,7 @@ export class DisplayService {
   // --- プログラム側（sodactl）------------------------------------------------------------------
 
   /** 面を出す・更新する。投げる: `invalid_display`・`not_found`（pane が無い）・`display_busy`（頻度）・`display_limit`（数・合計）。 */
-  set(paneId: string, body: unknown): DisplaySetResult {
+  set(paneId: string, body: unknown, opts?: { owner?: DisplayOwner }): DisplaySetResult {
     if (this.disposed) throw new RpcError("display_closed", "the server is shutting down");
     const checked = checkDisplaySet(body);
     if (!checked.ok) throw new RpcError("invalid_display", checked.reason);
@@ -185,6 +202,14 @@ export class DisplayService {
 
     const panes = this.byPane.get(paneId);
     const existing = panes?.get(b.name);
+    // 札つきの set が、札の無い面・別の札の面の名前に当たった（設定・冷却の検査の後・数の検査の前）。面は変えず、桶は戻す。
+    if (opts?.owner !== undefined && existing !== undefined && existing.owner?.tag !== opts.owner.tag) {
+      countBucket.refund();
+      bytesBucket.refund(content.length);
+      throw new RpcError("invalid_display", "その名前は、ほかのプログラムが使っています");
+    }
+    // 札なしの set が札つきの面に当たった: 「閉じて、新しい面を作る」（持ち主が替わる置き換えは、同じ面の更新にしない）。
+    const replaceOwner = existing !== undefined && existing.owner !== undefined && opts?.owner === undefined;
     // 数の上限は、置き換えなら変えた後の種類で見る。
     if (existing === undefined || existing.info.kind !== b.kind) {
       let same = 0;
@@ -197,21 +222,26 @@ export class DisplayService {
       refundAndThrow("the total size of displays on this server is over the limit");
     }
 
+    const kept = replaceOwner ? undefined : existing;
     const info: DisplayInfo = {
-      id: existing?.info.id ?? this.newId(),
+      id: kept?.info.id ?? this.newId(),
       paneId,
       name: b.name,
       kind: b.kind,
       format: b.format,
       title: b.title ?? b.name,
       size: b.size ?? DISPLAY_SIZE[b.kind].default,
-      rev: (existing?.info.rev ?? 0) + 1,
+      rev: (kept?.info.rev ?? 0) + 1,
       bytes: content.length,
       updatedAt: new Date(now).toISOString(),
+      ...(opts?.owner !== undefined ? { source: opts.owner.source } : {}),
     };
-    let entry = existing;
+    // 検査は全部通った。ここで付け替える（古い面を外してから、新しい面を**新規の枝**で足す。置き換えの枝は通さない: 合計を二重に引かない）。
+    // 配るのは、付け替えの後（途中で受け手・bus の購読者を呼ばない）。
+    if (replaceOwner) this.detach(existing);
+    let entry = kept;
     if (entry === undefined) {
-      entry = { info, content, ttl: undefined };
+      entry = { ...(opts?.owner !== undefined ? { owner: opts.owner } : {}), info, content, ttl: undefined };
       let m = this.byPane.get(paneId);
       if (m === undefined) this.byPane.set(paneId, (m = new Map()));
       m.set(b.name, entry);
@@ -232,24 +262,32 @@ export class DisplayService {
       }, b.ttlMs);
     }
     this.opts.logger?.info("display set", { paneId, name: b.name, kind: b.kind, format: b.format, bytes: content.length, rev: info.rev });
+    if (replaceOwner) this.notifyRemoved(existing, "closed");
     this.publish({ event: "display.updated", data: { display: { ...info } } });
     return { display: { ...info }, renderers: this.renderers(), epoch: this.epoch, next: this.queues.get(paneId)?.seq ?? 0 };
   }
 
   /** 面を閉じる。無い名前は何もせず `closed: []`。pane が無ければ `not_found`。 */
-  close(paneId: string, sel: { name?: string | undefined; all?: boolean | undefined }, reason: DisplayClosedReason = "closed"): { closed: string[] } {
+  close(
+    paneId: string,
+    sel: { name?: string | undefined; all?: boolean | undefined },
+    reason: DisplayClosedReason = "closed",
+    opts?: { owner?: string },
+  ): { closed: string[] } {
     this.requirePane(paneId);
     const panes = this.byPane.get(paneId);
     if (panes === undefined) return { closed: [] };
-    const targets = sel.all === true ? [...panes.values()] : sel.name !== undefined && panes.has(sel.name) ? [panes.get(sel.name)!] : [];
+    let targets = sel.all === true ? [...panes.values()] : sel.name !== undefined && panes.has(sel.name) ? [panes.get(sel.name)!] : [];
+    // 札つきの呼び出しは、その札の面だけが対象（ほかは、無いものとして扱う）。
+    if (opts?.owner !== undefined) targets = targets.filter((e) => e.owner?.tag === opts.owner);
     return { closed: targets.map((e) => this.remove(e, reason)) };
   }
 
   /** その pane の面の見出し（出た順）。 */
-  list(paneId: string): { displays: DisplayInfo[]; seq: number; epoch: string } {
+  list(paneId: string, opts?: { owner?: string }): { displays: DisplayInfo[]; seq: number; epoch: string } {
     this.requirePane(paneId);
     return {
-      displays: [...(this.byPane.get(paneId)?.values() ?? [])].map((e) => ({ ...e.info })),
+      displays: [...(this.byPane.get(paneId)?.values() ?? [])].filter((e) => opts?.owner === undefined || e.owner?.tag === opts.owner).map((e) => ({ ...e.info })),
       seq: this.queues.get(paneId)?.seq ?? 0,
       epoch: this.epoch,
     };
@@ -305,11 +343,12 @@ export class DisplayService {
    * 投げる: `not_found`（pane が無い）・`display_closed`（その面が無い）・`invalid_params`（`script-html` でない・64 KiB 超）・`display_busy`（頻度）。
    * `delivered` は、`script-html` を出せると名乗った画面の数（0 でも成功）。
    */
-  send(paneId: string, p: { name: string; data: unknown }): { delivered: number } {
+  send(paneId: string, p: { name: string; data: unknown }, opts?: { owner?: string }): { delivered: number } {
     this.requirePane(paneId);
     if (!this.scriptEnabled()) throw scriptDisabledError();
     const entry = this.byPane.get(paneId)?.get(p.name);
-    if (entry === undefined) throw new RpcError("display_closed", `no display named ${p.name} on this pane`);
+    // 面の札と呼び出しの札が違えば、面が無いのと同じ答え（札なしの呼び出しが札つきの面を指す場合を含む）。
+    if (entry === undefined || entry.owner?.tag !== opts?.owner) throw new RpcError("display_closed", `no display named ${p.name} on this pane`);
     if (entry.info.format !== DISPLAY_SCRIPT_FORMAT) throw new RpcError("invalid_params", "only a script-html display can receive data");
     const checked = checkDisplaySend(p.data);
     if (!checked.ok) throw new RpcError("invalid_params", checked.reason);
@@ -318,6 +357,50 @@ export class DisplayService {
     }
     this.publish({ event: "display.message", data: { id: entry.info.id, data: p.data } });
     return { delivered: this.renderers().scriptHtml };
+  }
+
+  // --- 持ち主（札。20261007-ext-host）-------------------------------------------------------------
+
+  /** 面の札。面が無い・持ち主が無いなら undefined。 */
+  ownerOf(paneId: string, name: string): string | undefined {
+    return this.byPane.get(paneId)?.get(name)?.owner?.tag;
+  }
+  /** その札の面の数。 */
+  countOwned(tag: string): number {
+    let n = 0;
+    for (const e of this.byId.values()) if (e.owner?.tag === tag) n++;
+    return n;
+  }
+  /** その札の面の、中身のバイト数の合計。 */
+  bytesOwned(tag: string): number {
+    let n = 0;
+    for (const e of this.byId.values()) if (e.owner?.tag === tag) n += e.content.length;
+    return n;
+  }
+  /** その札の面を持つ pane。 */
+  ownedPanes(tag: string): string[] {
+    const out = new Set<string>();
+    for (const e of this.byId.values()) if (e.owner?.tag === tag) out.add(e.info.paneId);
+    return [...out];
+  }
+  /**
+   * その札の面を全部（`sel.paneId` があればその pane の分だけ）閉じる（理由 `closed`）。`display.removed` を bus に配る。
+   * **受け手には知らせない**（呼んだ側が、必要なら自分で知らせる）。閉じた面を返す。
+   */
+  closeOwned(tag: string, sel?: { paneId?: string }): { paneId: string; name: string }[] {
+    const out: { paneId: string; name: string }[] = [];
+    for (const e of [...this.byId.values()]) {
+      if (e.owner?.tag !== tag) continue;
+      if (sel?.paneId !== undefined && e.info.paneId !== sel.paneId) continue;
+      out.push({ paneId: e.info.paneId, name: e.info.name });
+      this.remove(e, "closed", true);
+    }
+    return out;
+  }
+  /** 札つきの面の出来事（`display.action`・`display.closed`）の受け手を足す。 */
+  onOwnedEvent(fn: (tag: string, ev: DisplayOwnedEvent) => void): Disposable {
+    this.ownedListeners.add(fn);
+    return { dispose: () => void this.ownedListeners.delete(fn) };
   }
 
   features(): DisplayFeatures {
@@ -379,7 +462,7 @@ export class DisplayService {
       // 面の形式から決める（枠は偽れない）。
       source: entry.info.format === DISPLAY_SCRIPT_FORMAT ? "script" : "static",
     };
-    this.pushEvent(entry.info.paneId, ev);
+    this.deliver(entry, ev);
   }
 
   /** 利用者が面を閉じる（`id` の 1 つか、`paneId` の pane の全部）。名乗っていない接続は `display_closed`。無い id は成功（`closed: []`）。 */
@@ -479,6 +562,7 @@ export class DisplayService {
     this.byId.clear();
     this.queues.clear();
     this.subscribers.clear();
+    this.ownedListeners.clear();
     this.totalBytes = 0;
   }
 
@@ -602,9 +686,17 @@ export class DisplayService {
    * 面を台帳から外す（1 回だけ）: 合計を戻し、その pane の列に `display.closed`（理由つき）を足し、`display.removed` を配る。外した面の名前を返す。
    * `paneClosed` のときは列を足さない（pane ごと列を捨てる）。
    */
-  private remove(entry: Entry, reason: DisplayClosedReason | "pane_closed"): string {
-    const { id, paneId, name } = entry.info;
+  private remove(entry: Entry, reason: DisplayClosedReason | "pane_closed", quietOwner = false): string {
+    const { id, name } = entry.info;
     if (this.byId.get(id) !== entry) return name;
+    this.detach(entry);
+    this.notifyRemoved(entry, reason, quietOwner);
+    return name;
+  }
+
+  /** 台帳から外す（`byId`・`byPane`・合計・ttl）。配らない。`remove` と、持ち主が替わる置き換えが使う。 */
+  private detach(entry: Entry): void {
+    const { id, paneId, name } = entry.info;
     if (entry.ttl !== undefined) this.clock.clearTimeout(entry.ttl);
     entry.ttl = undefined;
     this.byId.delete(id);
@@ -612,12 +704,45 @@ export class DisplayService {
     panes?.delete(name);
     if (panes?.size === 0) this.byPane.delete(paneId);
     this.totalBytes -= entry.content.length;
+  }
+
+  /** 外した面の知らせ: ログ・（pane の列か、持ち主）への `display.closed`・bus への `display.removed`。 */
+  private notifyRemoved(entry: Entry, reason: DisplayClosedReason | "pane_closed", quietOwner = false): void {
+    const { id, paneId, name } = entry.info;
     this.opts.logger?.info("display closed", { paneId, name, reason });
-    if (reason !== "pane_closed") {
-      this.pushEvent(paneId, { type: "display.closed", paneId, name, reason, at: new Date(this.clock.now()).toISOString() });
+    const at = new Date(this.clock.now()).toISOString();
+    if (entry.owner !== undefined) {
+      // 札つきの面の「閉じた」は、pane の列に入れず、持ち主へ（pane が閉じたときの `pane_closed` も）。
+      if (!quietOwner) this.emitOwned(entry.owner.tag, { type: "display.closed", paneId, name, reason, at });
+    } else if (reason !== "pane_closed") {
+      this.pushEvent(paneId, { type: "display.closed", paneId, name, reason, at });
     }
     this.publish({ event: "display.removed", data: { id, paneId, name, reason } });
-    return name;
+  }
+
+  /** 面の出来事の行き先: 札つきなら持ち主の受け手、無ければ pane の列。 */
+  private deliver(entry: Entry, ev: EventBody): void {
+    if (entry.owner === undefined) {
+      this.pushEvent(entry.info.paneId, ev);
+      return;
+    }
+    if (ev.type === "display.action") {
+      const { type, paneId, name, rev, action, data, at, source } = ev;
+      this.emitOwned(entry.owner.tag, { type, paneId, name, rev, action, ...(data !== undefined ? { data } : {}), at, ...(source !== undefined ? { source } : {}) });
+    } else {
+      this.emitOwned(entry.owner.tag, { type: "display.closed", paneId: ev.paneId, name: ev.name, reason: String(ev.reason), at: ev.at });
+    }
+  }
+
+  /** 受け手へ（同期）。受け手の例外は、台帳の処理へ伝えない。 */
+  private emitOwned(tag: string, ev: DisplayOwnedEvent): void {
+    for (const fn of [...this.ownedListeners]) {
+      try {
+        fn(tag, ev);
+      } catch (err) {
+        this.opts.logger?.warn("display: owned event listener failed", { error: String(err instanceof Error ? err.message : err) });
+      }
+    }
   }
 
   private onPaneClosed(paneId: string): void {

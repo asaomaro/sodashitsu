@@ -90,6 +90,13 @@ export type DisplayFormat = (typeof DISPLAY_FORMATS)[number];
  */
 export type DisplayFormatValue = DisplayFormat | (string & {});
 
+/** 面の出どころ（拡張が出した面に、サーバが付ける。pane のプログラムの面には無い）。 */
+export interface DisplaySource {
+  type: "extension";
+  id: string;
+  scope: "user" | "project";
+}
+
 /** 面の見出し（中身は含まない）。 */
 export interface DisplayInfo {
   /** UUID。同じ pane・同じ名前で出ている間は変わらない。閉じて出し直すと変わる。 */
@@ -108,6 +115,8 @@ export interface DisplayInfo {
   bytes: number;
   /** ISO 8601。 */
   updatedAt: string;
+  /** 拡張が出した面だけ（サーバが付ける。`set` の引数には書けない）。読み手は形を確かめてから使う（`displayLabel`）。 */
+  source?: DisplaySource;
 }
 /** `display.get` の 1 片。`base64` は、中身（UTF-8）の `offset` からの `DISPLAY_GET_CHUNK_BYTES` 以下のバイト列。`totalBytes` は中身全体のバイト数（`DisplayInfo.bytes` と同じ値。`DisplayInfo.size` の px とは別物）。 */
 export interface DisplayChunk {

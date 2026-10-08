@@ -229,3 +229,16 @@ describe("readDisplayInfo（読み手の側はゆるく読む）", () => {
     expect(readDisplayInfo("x")).toBeNull();
   });
 });
+
+describe("readDisplayInfo: source（20261007-ext-host）", () => {
+  const base = { id: "d1", paneId: "p1", name: "a", kind: "panel", format: "text", title: "a", size: 320, rev: 1, bytes: 1, updatedAt: "2026-10-08T00:00:00.000Z" };
+  it("source つきの面をそのまま通す", () => {
+    const source = { type: "extension", id: "hello", scope: "user" };
+    expect(readDisplayInfo({ ...base, source })).toEqual({ ...base, source });
+  });
+  it("形の合わない source も落とさずに通す（読み手はゆるい。形を確かめるのは displayLabel）", () => {
+    for (const source of ["ext-a", { type: "extension" }, null, 1, { type: "extension", id: "<b>", scope: "x" }]) {
+      expect(readDisplayInfo({ ...base, source })).toEqual({ ...base, source });
+    }
+  });
+});
