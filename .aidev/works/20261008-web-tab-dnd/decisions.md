@@ -1,0 +1,94 @@
+# 判断の記録
+
+## D1: light のまま進める（触るファイルは 3 を超える）
+
+依頼が `--light` の指定。製品コードは 2 ファイル（`TabBar.vue` と、新しい純関数のファイル）で、共有モジュール・protocol・サーバ・外部依存には触らない。単体テスト 2・E2E 1・docs 3 を足すと、触るファイルは 8 前後になり、`lightMaxFiles`（既定 3）を超える（deliver の `aidev verify` が WARN を出す。終了コードは変わらない）。research は任意工程として起こさず、確かめたことは design「依拠する既存の事実」に書いた。実装で想定外のファイル（サーバ・protocol・`view.ts`・`PaneFrame.vue` など）に触ることになったら、`aidev escalate` で full に上げる。
+
+## D2: 既存の `tab.move` を、動かす数だけ送る（`tab.move_to` は足さない）【利用者に確認】
+
+- 端末版が同じ方式（`packages/tui/src/input/mouse.ts` の `dropTab`）で、すでに使われている。サーバ・protocol を変えずに済み、古いサーバとの組み合わせを考えなくてよい。
+- 弱点 1（途中の状態が見える）: 動かす数だけ `workspace.updated` が配られ、ほかの画面では tab が 1 つずつ動いて見えることがある（tab の数だけなので、数回・数ミリ秒）。
+- 弱点 2（競合）: 送っている最中に、ほかの画面が同じ workspace の tab を閉じる・動かすと、狙いと違う位置に止まる。`tab.move` は端で反対の端へ回るので、最悪は反対の端に行く。壊れはしない（順が違うだけで、もう一度ドラッグすれば直る）。
+- 1 回で目的の位置へ動かす RPC（`tab.move_to {tabId, beforeTabId}`）を足せば両方が消えるが、protocol・サーバ・古いサーバへの落とし方・両方の画面の直しが要る。古いサーバのための落とし先は結局この繰り返しなので、後から足しても、この作業のコードは無駄にならない。**後の作業の候補**にする。
+
+## D3: 落とし先は「入る位置の線」で見せる【利用者に確認】
+
+サイドバーの workspace の並べ替えは、落とした行の枠を強調する（行の上に落とすと、その行の位置に入る）。tab は、`split-dnd.md` の F9・AC8（利用者の指摘を受けた要件）に合わせて、tab と tab の間の線にする。ポインタが tab の左半分にあればその前、右半分にあればその後ろ。サイドバーを線に変えるのは、D&D の表現の作業の範囲。
+
+## D4: 確定すると、つかんだ tab を選ぶ【利用者に確認】
+
+サイドバーの workspace のドラッグ（落とした後、つかんだ workspace を選ぶ）・端末版（押した時点でその tab へ切り替わる）・一般のブラウザの tab と同じ。取り消しでは選ばない。選ばれていない tab を、表示を変えずに並べ替えたい、という使い方はできない（キーの `move_tab_*` も、選ばれている tab しか動かせない）。
+
+## D5: タッチではドラッグを始めない。モバイルは対象外【利用者に確認】
+
+モバイルの 1 列の画面（`MobileShell.vue`）は tab バーを持たず、workspace と tab はピッカーで選ぶので、並べ替える場所が無い。幅の広いタッチ端末（タブレット）ではデスクトップの画面が出るが、tab の列は横スクロール（`overflow-x: auto`）で、指のドラッグはスクロールに使われる。そこへ並べ替えを重ねると、スクロールと取り合いになる（長押しで始める、などの別の決まりが要る）。`pointerType === "touch"` では始めない。マウスとペンは対象。
+
+## D6: ポインタに付いて動く像・掴める形のカーソルは入れない
+
+`split-dnd.md` の F7・F8 の像は、workspace・pane・tab に共通の表現として作るもの。tab だけ先に入れると、ほかと見た目がずれる。この作業は、つかんだ tab を薄くする（0.4）・入る位置の線・ドラッグ中のカーソル（grabbing）まで。乗せたときのカーソルは今の pointer のまま。
+
+## D7: ドラッグ中のキーは全部止める
+
+`useResizeDrag.ts`（`20261004-ui-interaction-polish` の D2 で実測）と同じく、window の keydown を capture で受け、`preventDefault` と `stopPropagation` の両方で止める。pane の名前・workspace の行のドラッグは `Esc` を見るだけで止めていない（そちらは直さない）。
+
+## D8: ドラッグ中のホイールは今のまま
+
+tab バー上のホイールは tab を切り替える（`TabBar.vue` の `onWheel`）。ドラッグ中も同じに働く（選ばれている tab が変わるだけで、ドラッグは続く）。止める理由が無いので、分岐を足さない。
+
+## D9: 範囲の追加で full に上げた（2026-10-08）
+
+利用者から「pane を別の workspace へ移すのを制限する」が足された。protocol・client-core・サーバに触るので light の条件を外れ、`aidev escalate` で full に上げた（D1 は tab の D&D だけだった時点の判断）。省いていた節（ユーザーストーリー・非機能要件・未確定事項）を足した。research は工程としては起こさず、確かめたことを design の頭に書いた。PR は「tab の D&D」と「pane の移動の制限」の 2 つに分ける。
+
+制限の単位は、はじめ「同じリポジトリ（`repoKey`）」で書き、同じ日の利用者の決定で「同じ worktree（`worktreeKey`）」に書き直した。理由（利用者の決定）: workspace がどの worktree として一覧に出るかは、最初の tab の先頭の pane のフォルダだけで決まる。同じリポジトリでも別の worktree の workspace へ pane を移すと、一覧の行（ブランチ名など）と中身がずれる。「1 つの worktree を 1 つのまとまりとして扱う」ために、混ざる移動そのものを断る。
+
+## D10: 「同じ worktree」は `Workspace.git.worktreeKey` が同じこと。workspace で判定する（利用者の決定）
+
+- 鍵は、worktree グループの代表を決めるのと同じ `worktreeKey`（`packages/protocol/src/model.ts` `GitInfo`。`git rev-parse --git-dir` の絶対パス）。代表かどうか（`Workspace.representative`）・`repoKey`・利用者が作るグループ（`groupId`）は見ない。
+- 判定は移動元と移動先の workspace で行う。pane 自身のフォルダは見ない。pane の中の `cd` は制限しない（docs に 1 行）。
+- 同じ workspace の中の移動は、判定を通さない（今までどおり）。
+
+## D11: git の判定が無い workspace どうしは、開いた場所（`Workspace.cwd`）が同じときだけ移せる【利用者に確認】
+
+- 管理外のフォルダには worktree が無いので、「同じフォルダを開いた workspace どうし」を同じまとまりとして扱う。比べるのは、配られている `Workspace.cwd`（開いた場所。文字列の一致）。サーバだけが知る「いまの場所」（先頭の pane のフォルダ。`SessionService.identityCwdOf`）は使わない——画面が同じ判定をできなくなるため。
+- 片方だけ判定がある（`worktreeKey` あり と `git: null`）ときは断る。
+- 比べ方は文字列の一致（末尾の `/` だけ落とす）。`cwd` は、渡されたものがそのまま入り、実パスにはしない（`packages/server/src/session/SessionService.ts:335`、`packages/server/src/session/newCwd.ts:96`）。リンク経由などの別の書き方の同じフォルダは、別の場所として断られる（git の workspace は `worktreeKey` で比べるので、この弱さは管理外・判定前だけ）。
+- **利用者に見てほしい 2 つの例**（一覧の行の名前は「いまの場所」に付いていくが、比べるのは「開いた場所」で、開いた場所は画面に出ない）: ① 同じ管理外のフォルダで開いた 2 つの workspace が、それぞれ別の管理外のフォルダへ `cd` した → 行の名前は違うが、移せる。② 別々の管理外のフォルダで開いた 2 つが、同じ管理外のフォルダへ `cd` した → 行は同じに見えるが、断る。「いまの場所」で比べる案は、サーバだけが知る値なので、画面が同じ判定をするには配る項目を足す必要がある。
+- 退けた案: 管理外どうしは全部通す（まとまりの外どうし、という見方）。「同じ worktree と確かめられるときだけ移せる」に合わない。管理外は全部断る、も考えたが、同じフォルダを 2 つ開いて pane を寄せ直す使い方まで塞ぐ理由が無い。
+
+## D12: 判定がまだ入っていない workspace は、D11 と同じ扱い（「判定済み」の印は持たない）【利用者に確認】
+
+- `Workspace.git` の `null` は「管理外」と「まだ判定していない」の両方を表す（`SessionModel` は `git: null` で作る）。どちらも「同じ worktree と確かめられない」ので、同じ決まり（開いた場所が同じなら移せる・違えば断る）にする。開いた場所が同じなら、判定が入っても同じ worktree になるはずなので、通して困らない。
+- これで、サーバに「判定済み」の集合を持つ必要が無くなり、**サーバと画面が同じ情報（`git.worktreeKey` と `cwd`）で同じ結果を出す**。理由の種類も 1 つ（`different_worktree`）で済む。
+- 作った直後（片方だけ判定が入っている間・場所の違う同じ worktree の workspace どうしで判定が入る前）は、判定が入るまで断られる。判定は workspace ができるとすぐ走る（`GitInfoPoller`）ので、短い間だけ。文言は同じ「移せません」（少し待てば移せる。docs に 1 行）。
+- 入れなかった案（試し直しを要らなくする）: ハンドラが、断る理由が「片方に判定が無い」のときだけ、その workspace の判定を 1 回待ってから決め直す（`workspace.create` のハンドラは判定を待たずに応答する。`packages/server/src/surface/methods/workspace.ts:21`）。スクリプトが待たなくて済むが、ハンドラが非同期になり、判定の仕組みに依存する。必要になったら後から足せる。
+- 例外（食い違い）: 先頭の pane が `cd` で別の場所へ行った workspace は、`cwd`（開いた場所）と判定（いまの場所）がずれる。判定がある間は `worktreeKey` だけで決めるので、ずれは結果に出ない。判定が無い（管理外へ `cd` した）ときは開いた場所で比べる。
+
+## D13: 断るときは、今ある `ok: false` に `reason` を足す（RPC のエラーにしない）【利用者に確認】
+
+`pane.move_to_tab`・`pane.move_to_new_tab` は、何も起きなかったときに `{ok: false}` を返す作りで、ブラウザ版・端末版は `ok` が false なら何もしない（`ActionDispatcher.movePaneToTab`・`TuiDispatcher.movePaneToTab`）。ここに `reason?: "different_worktree"` を足すだけにすると、古い画面は今までどおり黙って何もしない。RPC のエラー（新しい code）にすると、古い読み手の扱いを 1 つずつ確かめる必要がある。`sodactl` には pane を移すコマンドが無い（`packages/cli/src/commands/pane.ts`）ので、CLI の文言・終了コードは足さない。文言は、画面が `reason` から出す。
+
+## D14: 落とせない先の見せ方（落とせる相手が少ない前提で）【利用者に確認】
+
+- この制限で、サイドバーの workspace の行は、ほとんどが落とせない相手になる（落とせるのは、同じフォルダを開いた別の workspace と、自分の workspace〔新しい tab へ切り出す〕だけ）。行の上に来てから落とせないと分かるのでは遅いので、**ドラッグが始まった時点で、落とせない行を全部薄くする**（ブラウザ版。新しいクラス `sidebar-row-pane-drop-disabled`＝不透明度を下げる）。落とせる行が 1 つも無ければ、自分の行だけが残って見える。
+- 落とせない行の上では、既存の「落とせない行」の見た目（`sidebar-row-drop-invalid`＝点線の枠。pane の名前の要素がポインタを捕捉しているので、行の `not-allowed` のカーソルは出ない見込み。カーソルは要件に入れない）。落とせる先の破線は出さない。離すと、送らずにトースト「別の worktree の workspace へは移せません（同じフォルダを開いた workspace へだけ移せます）」。理由と、どこへなら移せるかを 1 文で伝える。
+- 端末版: workspace の行・tab の落とし先の強調は、もともと描いていない（`packages/tui/src/app/TuiApp.ts:1276`〜`1283` が描くのは pane の上の矩形だけ）。今のままにし、離したときにトースト（同じ文言）で知らせる。落とせる行の強調・落とせない行を薄くするのを端末版に足すのは、範囲の追加なので入れない（後の作業の候補）。
+- tab バーの tab は、ブラウザ版も端末版も、表示中の workspace の tab しか並ばない（`TabBar.vue` の `tabs`、`packages/tui/src/render/chrome/tabBar.ts:171`）。pane を tab へ落とす操作は必ず同じ workspace の中で、断られない。tab バーには手を入れない。
+- 落とせる相手が畳んだグループの中にあって見えないときは、落とせない（今もある制約。docs に 1 行）。
+- 退けた案: 落とせない行を、ドラッグ中は落とし先の判定から外す（上に来ても何も出さない）。なぜ落とせないのかが伝わらない。サイドバーへの落とし込みそのものをやめる（自分の workspace の新しい tab へ切り出す入口が無くなる）。
+- 画面は、`worktreeKey` を配らない古いサーバの workspace（`git` はあるが `worktreeKey` が無い）を、自分では断らない（薄くもしない）。古いサーバは断らないので、今までどおり通る。
+
+## D15: 独立点検（別のコンテキスト。2 回）で決めたこと
+
+- 1 回目（tab の D&D。16 件: must 3・should 8・nit 5）: E2E の案の直し（画面の幅は 768px 以上・`routeRecordingWebSocket` の下では端末への入力を観測できない・tab バーの位置の先例は無い）、`lostpointercapture` での取り消し、入る位置の x を列の見えている範囲へ丸める、クリックの抑止を根の capture の `click` に移す（「＋」も守る）、旗をタッチの `pointerdown` でも下ろす、ダイアログでの取り消しではフォーカスを戻さない。
+- 2 回目（pane の移動の制限。19 件: must 3・should 9・nit 7）: E2E の案の直し（JSON のイベントは `watchReceivedEvents` で別のテストに・判定の待ちはサイドバーの行に `branch` を出して待つ）、端末版には workspace の行の強調がもともと無い（`blocked` と `TuiApp.ts` の直しを外した）、端末版の tab バーも表示中の workspace だけ・中継は中身を解釈しない（どちらも確定）、`cwd` の比べ方（末尾の `/`）、直す既存のテストの一覧、AC14・AC17 の例外の明記。
+- aidev の `doccheck` は、light の間は使えず（1 回目の時点）、full に上げた後に件数を記録した。点検は文書の中の一貫性だけでなく、コードとの照らし合わせまで頼んだ（依頼の指定）。
+
+## D16: 実装中に設計から外れた点（PR1）
+
+- つかんだ tab の薄さは `opacity: 0.4`（design「見た目」）ではなく **`0.7`**（`MUTED_TEXT_ALPHA`）にした。`theme/uiTokens.test.ts` の「部品の CSS の透明度」の検査が、`:disabled` などの例外を除く全部品の `opacity` を 0.7 以上に求めていて、0.4 だと落ちる（文字を薄めて読めなくしない決まり）。例外を足す（テストを緩める）のではなく、決まりに合わせた。薄さだけでなく、`cursor: grabbing` と入る位置の線でも、つかんでいることは分かる。E2E・単体テストは薄さの値を見ていない（クラスだけ）。
+- 自動スクロール（T3）の本体は、T2 と同じファイル `TabBar.vue` の中で一緒に書いた（`edgeScrollDelta` を使う rAF の繰り返しと CSS）。コミットは T2（本体と CSS ごと）と T3（単体テスト）に分けた。
+
+## D17: 独立レビュー（PR1）への対応
+
+- 旗 `suppressClick` は、根の `pointerdown` の capture でどの pointerdown でも下ろす（click は必ず自分の pointerdown の後に来るので、ドラッグを離したときの click だけが旗の影響を受ける）。`pointercancel`・`lostpointercapture` の取り消しでも下ろす（その後に click は来ない）。`Esc`・`watch` での取り消しは、離したときの click を捨てるため旗を残す。
+- ペン（`pointerType: "pen"`）で横になぞると、ブラウザのパンが `pointercancel` を出してドラッグが取り消される（仕様の範囲内）。直さない。`docs/verification.md` に「ペンは未確認」と書いた。

@@ -1,0 +1,10 @@
+schema: 11
+slug: web-tab-dnd
+current: tasks
+approved: [requirements, design, tasks]
+mode: autonomous
+profile: full
+humanGates: []
+maxSendBacks: 3
+dependsOn: []
+harnessRev: unknown
