@@ -33,7 +33,7 @@
       AC: AC1, AC7
 - [ ] T8: PR1b の確かめ。PR1a の道具で、`origin/main` との差が 0（クラシック）。モダンを選んでも、まだ差が 0（どの部品も読まないので）。`pnpm build`・`typecheck`・`pnpm test`。
       依存: T5, T6, T7
-      AC: AC2
+      AC: AC2, AC9
 
 ## PR1c: 角の置き換え
 
