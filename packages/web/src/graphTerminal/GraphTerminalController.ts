@@ -152,6 +152,11 @@ export class GraphTerminalController {
     this.resizer.schedule();
   }
 
+  /** `prefix+a`（窓にフォーカスがあるとき。X1）: グラフの面へフォーカスを戻す。窓は開いたまま。 */
+  focusGraphSurface(): void {
+    document.querySelector<HTMLElement>("[data-graph-view]")?.focus({ preventScroll: true });
+  }
+
   /** 窓の端末へフォーカスを置く。 */
   focusTerminal(paneId: string): void {
     const entry = this.opts.registry.get(paneId);

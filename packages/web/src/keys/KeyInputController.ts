@@ -92,6 +92,7 @@ export class KeyInputController {
   private pendingModifier: PendingModifier | null = null;
   private pendingModifierLocked = false;
   private domKeyFilter: ((decision: KeyDecision) => boolean) | null = null;
+  private terminalKeyFilter: ((paneId: string, decision: KeyDecision) => boolean) | null = null;
 
   constructor(
     private readonly router: KeyRouter,
@@ -144,6 +145,14 @@ export class KeyInputController {
    */
   setDomKeyFilter(filter: ((decision: KeyDecision) => boolean) | null): void {
     this.domKeyFilter = filter;
+  }
+
+  /**
+   * 端末の道（`attachCustomKeyEventHandler`）の決定を絞る（グラフの上の端末の窓。`graphTerminalKeys.ts`。20261008-graph-first の X2）。`false` を返した決定は何もせず食う
+   * （端末へも送らない）。`paneId` は、そのキーを受けた端末の pane。`setDomKeyFilter` は xterm の textarea にフォーカスがある間は働かないので、窓の端末のための別の絞り。`null` で解除。
+   */
+  setTerminalKeyFilter(filter: ((paneId: string, decision: KeyDecision) => boolean) | null): void {
+    this.terminalKeyFilter = filter;
   }
 
   /** 端末以外（サイドバー等）にフォーカスがあるときの keydown。`true` なら既定の動作のままでよい。 */
@@ -261,6 +270,11 @@ export class KeyInputController {
         this.connection.sendInput(paneId, bytes);
         return false;
       }
+    }
+    if (this.terminalKeyFilter && !this.terminalKeyFilter(paneId, decision)) {
+      // ルーターは action を返す時点で mode を進めている（enterMode copy/resize/navigate）。食った操作の mode に居残らない。
+      if (decision.kind === "action" && decision.action.type === "enterMode") this.router.setMode("terminal");
+      return false;
     }
     return this.dispatch(decision, paneId);
   }

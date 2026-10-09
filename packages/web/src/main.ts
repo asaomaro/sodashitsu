@@ -19,6 +19,7 @@ import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
 import { PrefsSync } from "./actions/PrefsSync.js";
 import { isAllowedOnGraphScreen } from "./keys/graphScreenKeys.js";
+import { isAllowedInTerminalWindow } from "./keys/graphTerminalKeys.js";
 import { mobileViewportQuery, trackMediaQuery } from "./mobile/detect.js";
 import { MachineSummaryClient } from "@sodashitsu/client-core";
 import { LOCAL_MACHINE_ID, wsUrlFor } from "@sodashitsu/client-core";
@@ -497,6 +498,15 @@ watch(mobileViewport, (mobile) => machineWiring.onMobileChanged(mobile));
 watch(() => view.graphVisible, (open) => machineWiring.onGraphOpenChanged(open));
 // デスクトップのグラフの画面が出ている間は、グラフの面の外にフォーカスがあるときの prefix の 2 打目を、グラフの画面で意味のあるものだけに絞る（見えない基本画面を変えない。D52）。
 keys.setDomKeyFilter((decision) => view.screen === "base" || isAllowedOnGraphScreen(decision));
+// グラフの上の端末の窓にフォーカスがある間（端末の道）は、見えない基本画面の構成を変える操作と、選んでいる pane を動かす操作を食う（X2）。`prefix+a` は「グラフの面へ戻る」に読み替える（X1）。
+keys.setTerminalKeyFilter((paneId, decision) => {
+  if (!terminalHost.heldByWindow(paneId)) return true;
+  if (decision.kind === "action" && decision.action.type === "openGraph") {
+    graphTerminal.focusGraphSurface();
+    return false;
+  }
+  return isAllowedInTerminalWindow(decision);
+});
 keys.bind({ action: actionDispatcher, focus: actionDispatcher, mode: { onModeChange: (m) => view.onModeChange(m) }, imagePaste: imagePaster });
 
 // Windows のホストなら ConPTY 向けのオプションを足す（design「エージェントの argv[0]」隣接。H-cfg 相当）。

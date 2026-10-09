@@ -243,6 +243,65 @@ function attachAndCapture(controller: KeyInputController, term: Terminal, paneId
   return { handler, disposable };
 }
 
+describe("KeyInputController — 端末の道の絞り（グラフの上の端末の窓。X2）", () => {
+  let term: Terminal;
+  beforeEach(() => {
+    term = new Terminal({ cols: 40, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+  });
+  afterEach(() => {
+    term.dispose();
+  });
+  const ctrlB = () => ev({ key: "b", ctrlKey: true });
+
+  it("false を返した決定は、何もせず食う（action を実行しない・端末へ届かせない・preventDefault する）。pane の id を渡す", () => {
+    const router = new KeyRouter(DEFAULT_KEYMAP, realClock());
+    const controller = new KeyInputController(router, makeFakeConnection());
+    const action = makeFakeAction();
+    controller.bind({ action, focus: makeFakeFocus("p1"), mode: makeFakeModeSink() });
+    const seen: string[] = [];
+    controller.setTerminalKeyFilter((paneId, d) => {
+      seen.push(`${paneId}:${d.kind}`);
+      return d.kind !== "action";
+    });
+    const { handler } = attachAndCapture(controller, term, "pw");
+    handler(ctrlB() as unknown as KeyboardEvent);
+    const v = ev({ key: "v" });
+    expect(handler(v as unknown as KeyboardEvent)).toBe(false);
+    expect(v.preventDefault).toHaveBeenCalled();
+    expect(action.runs).toEqual([]);
+    expect(seen).toContain("pw:action");
+  });
+
+  it("食った enterMode は、モードを端末に戻す（copy/resize のモードに居残らない）", () => {
+    const router = new KeyRouter(DEFAULT_KEYMAP, realClock());
+    const controller = new KeyInputController(router, makeFakeConnection());
+    controller.bind({ action: makeFakeAction(), focus: makeFakeFocus("p1"), mode: makeFakeModeSink() });
+    controller.setTerminalKeyFilter((_p, d) => !(d.kind === "action" && d.action.type === "enterMode"));
+    const { handler } = attachAndCapture(controller, term, "pw");
+    handler(ctrlB() as unknown as KeyboardEvent);
+    handler(ev({ key: "[" }) as unknown as KeyboardEvent); // copy モードへ入る操作
+    expect(router.mode).toBe("terminal");
+  });
+
+  it("通した決定（prefix の二度押し）は、その端末の pane へ届く。解除すると絞らない", () => {
+    const router = new KeyRouter(DEFAULT_KEYMAP, realClock());
+    const connection = makeFakeConnection();
+    const controller = new KeyInputController(router, connection);
+    const action = makeFakeAction();
+    controller.bind({ action, focus: makeFakeFocus("other"), mode: makeFakeModeSink() });
+    controller.setTerminalKeyFilter(() => true);
+    const { handler } = attachAndCapture(controller, term, "pw");
+    handler(ctrlB() as unknown as KeyboardEvent);
+    handler(ctrlB() as unknown as KeyboardEvent);
+    expect(connection.sent).toEqual([["pw", "\x02"]]);
+    controller.setTerminalKeyFilter(null);
+    handler(ctrlB() as unknown as KeyboardEvent);
+    handler(ev({ key: "v" }) as unknown as KeyboardEvent);
+    expect(action.runs).toEqual([{ type: "split", dir: "right" }]);
+  });
+});
+
 describe("KeyInputController — attach（実物の xterm.js）", () => {
   let term: Terminal;
   beforeEach(() => {

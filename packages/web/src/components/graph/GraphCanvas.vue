@@ -578,7 +578,7 @@ function onNodePointerdown(ev: PointerEvent, key: string): void {
       graph.setDragPosition(key, null);
     },
     // 動かさずに離した（押しただけ）: 端末の窓を開く。
-    onClick: () => openNodeWindow(key),
+    onClick: () => openNodeWindow(key, true),
   });
 }
 
@@ -1368,16 +1368,14 @@ function closeSubagents(): void {
  * ノードを押した・`Enter`（20261008-graph-first の W8・PR2a）: **グラフの上に、その pane の端末が窓として開く**（基本画面へは移らない）。基本画面へは窓の［基本画面で開く］と、ノードの［pane へ］から。
  * 別のマシンの pane・繋がっていない pane・1 列の画面は、今までどおり（`gotoNode`）。
  */
-function openNodeWindow(key: string): void {
-  if (!terminalWindow || isMobile.value || panel.value) {
-    gotoNode(key);
-    return;
-  }
+function openNodeWindow(key: string, fromClick = false): void {
+  // 押しただけのとき、窓にできないノードは選ぶだけ（今までどおり。移るのは `Enter` と［pane へ］）。
+  const fallback = (): void => {
+    if (!fromClick) gotoNode(key);
+  };
+  if (!terminalWindow || isMobile.value || panel.value) return fallback();
   const info = graph.nodeInfo(key as NodeKey);
-  if (info.machine !== machines.selectedId || info.exists !== true || !info.location) {
-    gotoNode(key);
-    return;
-  }
+  if (info.machine !== machines.selectedId || info.exists !== true || !info.location) return fallback();
   void terminalWindow.open(info.paneId);
 }
 /** 窓を開いているノードか（目印を付ける）。 */
