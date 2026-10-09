@@ -1171,3 +1171,28 @@ test("(13) 押す直前に配置が動いたら、［操作する］の押しを
   await expect(wy).toHaveAttribute("data-display-engaged", "1");
   await expect(rp).toHaveAttribute("data-display-engaged", "0");
 });
+
+test("(14) 面が 1 つ消えて 1 つ現れる（close → set。同じ場所）と、すぐの［操作する］の押しは受けない。出して 600ms 後に押せば、押した面が操作中になる（再レビュー R1）", async ({ page, appServer }) => {
+  test.setTimeout(120_000);
+  await enableScript(appServer);
+  const { paneId } = await openDisplayBrowser(page, appServer);
+  await setScriptOk(appServer, paneId, "pa", BENIGN, { extra: ["--dock", "right", "--size", "420"] });
+  const pa = page.locator(`[data-display-root="${(await idsOf(appServer, paneId))["pa"]}"]`);
+  await expect(pa.locator("[data-display-engage]")).toBeVisible();
+  await page.waitForTimeout(1500);
+  const c = centerOf(await boxOf(pa.locator("[data-display-engage]")));
+  await ok(await runDisplay(appServer, paneId, ["close", "pa"]));
+  await setScriptOk(appServer, paneId, "pb", BENIGN, { extra: ["--dock", "right", "--size", "420"] });
+  const pbId = (await idsOf(appServer, paneId))["pb"]!;
+  const pb = page.locator(`[data-display-root="${pbId}"]`);
+  await expect(pb.locator("[data-display-engage]")).toBeVisible();
+  expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("[data-display-root]")?.getAttribute("data-display-root"), c), "押そうとした点に pb の［操作する］が来ている（再現の前提）").toBe(pbId);
+  await page.mouse.click(c.x, c.y);
+  await page.waitForTimeout(300);
+  await expect(pb).toHaveAttribute("data-display-engaged", "0");
+  await expect(page.locator(".toast", { hasText: "もう一度押してください" })).toBeVisible();
+  // 600ms 後に押せば効く（面が 1 つだけでも）
+  await page.waitForTimeout(700);
+  await page.mouse.click(c.x, c.y);
+  await expect(pb).toHaveAttribute("data-display-engaged", "1");
+});

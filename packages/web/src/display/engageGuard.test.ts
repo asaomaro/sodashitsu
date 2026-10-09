@@ -1,14 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENGAGE_SETTLE_MS, installEngageGuard } from "./engageGuard.js";
 
+type R = { x: number; y: number; w: number; h: number };
 let t = 1000;
 let off: (() => void) | null = null;
 const blocked: (string | null)[] = [];
 const clicks: string[] = [];
-const rects = new Map<Element, { x: number; y: number; w: number; h: number }>();
-let covered = new Set<Element>();
+const rects = new Map<Element, R>();
+/** ボタンの上に乗って、点を覆うもの（窓など）。 */
+let covers: R[] = [];
 
-function face(id: string, r: { x: number; y: number; w: number; h: number }): HTMLButtonElement {
+const inside = (r: R, x: number, y: number): boolean => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+
+function face(id: string, r: R): HTMLButtonElement {
   const root = document.createElement("div");
   root.setAttribute("data-display-root", id);
   const b = document.createElement("button");
@@ -31,11 +35,19 @@ function press(el: Element, type: string): Event {
   return e;
 }
 const fullPress = (el: Element): void => {
-  press(el, "pointerdown");
-  press(el, "mousedown");
-  press(el, "pointerup");
-  press(el, "mouseup");
-  press(el, "click");
+  for (const ty of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) press(el, ty);
+};
+/** 見回りを 1 回進める。 */
+const tick = (): void => {
+  t += 60;
+  vi.advanceTimersByTime(60);
+};
+/** 500ms より長く、何も動かない状態にする。 */
+const settle = (): void => {
+  tick();
+  t += ENGAGE_SETTLE_MS + 20;
+  tick();
+  t += ENGAGE_SETTLE_MS + 20;
 };
 
 beforeEach(() => {
@@ -43,9 +55,11 @@ beforeEach(() => {
   t = 1000;
   blocked.length = 0;
   clicks.length = 0;
-  covered = new Set();
-  document.elementFromPoint = (): Element | null => {
-    for (const b of document.querySelectorAll("[data-display-engage]")) if (!covered.has(b)) return b;
+  covers = [];
+  rects.clear();
+  document.elementFromPoint = (x: number, y: number): Element | null => {
+    if (covers.some((c) => inside(c, x, y))) return document.body;
+    for (const [b, r] of rects) if (b.isConnected && inside(r, x, y)) return b;
     return document.body;
   };
   off = installEngageGuard({ onBlocked: (id) => blocked.push(id), now: () => t });
@@ -56,78 +70,119 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("installEngageGuard（［操作する］は、直前に箱が動いていたら押しを受けない）", () => {
-  it("動いていないボタンは、遅れずに効く（面が 1 つだけでも、2 つでも）", () => {
+describe("installEngageGuard（［操作する］は、画面のどれかの箱が直前に動いていたら、すべての押しを受けない）", () => {
+  it("動いていないボタンは、遅れずに効く。面が 1 つだけでも、出て 500ms 後なら効く", () => {
     const a = face("a", { x: 10, y: 10, w: 60, h: 24 });
-    fullPress(a); // 初めて見るボタンで、ほかに［操作する］が無い
-    expect(clicks).toEqual(["a"]);
-    const b = face("b", { x: 200, y: 10, w: 60, h: 24 }); // 2 つ目が現れた
-    vi.advanceTimersByTime(60);
-    t += ENGAGE_SETTLE_MS + 10; // b が現れてから 500ms 待つ
-    fullPress(a);
-    fullPress(b);
-    expect(clicks).toEqual(["a", "a", "b"]);
-    expect(blocked).toEqual([]);
-  });
-  it("直前の 500ms に箱が動いたボタンは、押しを受けない。強調の通知が 1 回。500ms 待てば効く", () => {
-    const a = face("a", { x: 10, y: 10, w: 60, h: 24 });
-    face("b", { x: 200, y: 10, w: 60, h: 24 });
-    t += 1000;
-    vi.advanceTimersByTime(60);
-    rects.set(a, { x: 150, y: 10, w: 60, h: 24 }); // 右のパネルが出て、窓が動いた
-    t += 100;
-    fullPress(a);
+    tick();
+    fullPress(a); // 出た直後（見回りが見たばかり）は受けない
     expect(clicks).toEqual([]);
-    expect(blocked).toEqual(["a"]);
-    t += ENGAGE_SETTLE_MS + 10;
+    settle();
     fullPress(a);
     expect(clicks).toEqual(["a"]);
-  });
-  it("別の部品の下から出てきたボタン（覆われていたのが見えるようになった）も、受けない", () => {
-    const a = face("a", { x: 10, y: 10, w: 60, h: 24 });
-    face("b", { x: 200, y: 10, w: 60, h: 24 });
-    covered.add(a);
-    t += 1000;
-    vi.advanceTimersByTime(60);
-    covered.delete(a);
-    t += 60;
-    vi.advanceTimersByTime(60);
-    t += 60;
     fullPress(a);
-    expect(clicks).toEqual([]);
-    expect(blocked).toEqual(["a"]);
+    expect(clicks).toEqual(["a", "a"]);
   });
-  it("ほかの［操作する］がある中で新しく現れたボタンは、500ms は受けない。1 つだけのときは受ける", () => {
-    face("a", { x: 10, y: 10, w: 60, h: 24 });
-    t += 1000;
-    const n = face("n", { x: 10, y: 10, w: 60, h: 24 });
+  it("見回りが一度も見ていないボタンへの押しは、必ず『現れた』として受けない（面が 1 つだけでも）", () => {
+    settle();
+    const n = face("n", { x: 10, y: 10, w: 60, h: 24 }); // 見回りの前に押される
     fullPress(n);
     expect(clicks).toEqual([]);
     expect(blocked).toEqual(["n"]);
   });
-  it("押し始めを止めたら、長押しで 500ms を過ぎても、その押しの click は受けない", () => {
+  it("R1: 面が 1 つ消えて 1 つ現れる（close → set。同じ場所）と、すぐの押しは受けない。500ms 後は受ける", () => {
+    const a = face("pa", { x: 100, y: 10, w: 60, h: 24 });
+    settle();
+    fullPress(a);
+    expect(clicks).toEqual(["pa"]);
+    a.parentElement!.remove();
+    rects.delete(a);
+    const b = face("pb", { x: 100, y: 10, w: 60, h: 24 });
+    tick();
+    fullPress(b);
+    expect(clicks).toEqual(["pa"]);
+    expect(blocked.length).toBeGreaterThan(0);
+    settle();
+    fullPress(b);
+    expect(clicks).toEqual(["pa", "pb"]);
+  });
+  it("要素は同じでも、面の id が替わったら、動いたと見なす", () => {
+    const a = face("a", { x: 10, y: 10, w: 60, h: 24 });
+    settle();
+    a.parentElement!.setAttribute("data-display-root", "other");
+    tick();
+    fullPress(a);
+    expect(clicks).toEqual([]);
+  });
+  it("R2: ほかのボタン（窓の中）だけが動いて、押すボタンの箱は動かない（中心は覆われたまま・端だけが出る）と、押しを受けない", () => {
+    const target = face("T", { x: 300, y: 10, w: 200, h: 24 });
+    const n = face("N", { x: 450, y: 10, w: 60, h: 24 });
+    covers = [{ x: 20, y: 0, w: 480, h: 60 }]; // 窓 W が T を覆う（N は W の中）
+    rects.set(n, { x: 450, y: 10, w: 40, h: 24 });
+    settle();
+    // W と N が左へ動く。T の箱は動かず、中心は覆われたまま、右の端だけが出る
+    covers = [{ x: 20, y: 0, w: 400, h: 60 }];
+    rects.set(n, { x: 370, y: 10, w: 40, h: 24 });
+    tick();
+    press(target, "pointerdown"); // 端（x=490）を押した
+    press(target, "click");
+    expect(clicks).toEqual([]);
+    expect(blocked.length).toBeGreaterThan(0);
+    settle();
+    fullPress(target);
+    expect(clicks).toEqual(["T"]);
+  });
+  it("覆われた（見えなくなった）直後も受けない", () => {
+    const a = face("a", { x: 10, y: 10, w: 60, h: 24 });
+    settle();
+    covers = [{ x: 0, y: 0, w: 100, h: 100 }];
+    tick();
+    covers = [];
+    fullPress(a); // 覆いが外れた直後（見え方が変わった）
+    expect(clicks).toEqual([]);
+  });
+  it("直前の 500ms に箱が動いたボタンは、押しを受けない。強調の通知が 1 回。500ms 待てば効く", () => {
     const a = face("a", { x: 10, y: 10, w: 60, h: 24 });
     face("b", { x: 200, y: 10, w: 60, h: 24 });
-    t += 1000;
-    vi.advanceTimersByTime(60);
+    settle();
+    rects.set(a, { x: 150, y: 10, w: 60, h: 24 });
+    t += 100;
+    fullPress(a);
+    expect(clicks).toEqual([]);
+    expect(blocked).toEqual(["a"]);
+    settle();
+    fullPress(a);
+    expect(clicks).toEqual(["a"]);
+  });
+  it("R3: 押し始めを止めて、click が出ないまま 2 秒たつと、後のキーボードの押し（click だけ）は受ける。押し始めを止めたときにも知らせる", () => {
+    const a = face("a", { x: 10, y: 10, w: 60, h: 24 });
+    settle();
+    rects.set(a, { x: 11, y: 10, w: 60, h: 24 });
+    press(a, "pointerdown");
+    expect(blocked).toEqual(["a"]); // 押し始めを止めたときに知らせる
+    // 外で離した（click が出ない）→ しばらくして
+    t += 3000;
+    tick();
+    settle();
+    press(a, "click"); // キーボードの Enter
+    expect(clicks).toEqual(["a"]);
+  });
+  it("押し始めを止めた長押しは、500ms を過ぎても、その押しの click を受けない。知らせは 1 回だけ", () => {
+    const a = face("a", { x: 10, y: 10, w: 60, h: 24 });
+    settle();
     rects.set(a, { x: 11, y: 10, w: 60, h: 24 });
     press(a, "pointerdown");
     t += 900;
     press(a, "pointerup");
     press(a, "click");
     expect(clicks).toEqual([]);
+    expect(blocked).toEqual(["a"]);
   });
-  it("本物でない押し（isTrusted でない）は、止めない", () => {
+  it("本物でない押し（isTrusted でない）は、止めない。ボタンでない場所の押しには触れない", () => {
     const a = face("a", { x: 10, y: 10, w: 60, h: 24 });
-    face("b", { x: 200, y: 10, w: 60, h: 24 });
-    rects.set(a, { x: 99, y: 10, w: 60, h: 24 });
     a.click();
     expect(clicks).toEqual(["a"]);
-  });
-  it("ボタンでない場所の押しには触れない", () => {
     const div = document.createElement("div");
     document.body.append(div);
-    const e = press(div, "click");
-    expect(e.defaultPrevented).toBe(false);
+    expect(press(div, "click").defaultPrevented).toBe(false);
   });
 });
