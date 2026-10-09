@@ -2,6 +2,8 @@
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ActionDispatcherKey, TerminalRegistryKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
+import { useGraphStore } from "../store/graph.js";
+import { useGraphSpacesStore } from "../store/graphSpaces.js";
 import { useSessionStore } from "../store/session.js";
 import { itemGroupIdOf } from "../store/sidebarTree.js";
 import { useViewStore } from "../store/view.js";
@@ -25,6 +27,8 @@ interface MenuItem {
 const session = useSessionStore();
 const view = useViewStore();
 const displays = useDisplayStore();
+const graphStore = useGraphStore();
+const graphSpaces = useGraphSpacesStore();
 const actions = inject(ActionDispatcherKey);
 if (!actions) throw new Error("ContextMenu: ActionDispatcherKey が provide されていません");
 const displayController = inject(DisplayControllerKey, null);
@@ -195,6 +199,14 @@ const items = computed<MenuItem[]>(() => {
           ]
         : []),
       { label: "グループを削除", run: () => actions.deleteGroupById(target.groupId) },
+    ];
+  }
+  if (target.kind === "graphMore") {
+    const paused = graphStore.graph?.paused === true;
+    return [
+      { label: paused ? "全体を再開" : "全体を一時停止", run: () => graphSpaces.requestCommand("pause") },
+      { label: "履歴", run: () => graphSpaces.requestCommand("history") },
+      { label: "別のマシンの pane を載せる", run: () => graphSpaces.requestCommand("checklist") },
     ];
   }
   if (target.kind === "ungrouped") {

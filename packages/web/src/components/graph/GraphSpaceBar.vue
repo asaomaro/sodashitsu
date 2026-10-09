@@ -49,6 +49,7 @@ const emit = defineEmits<{ select: [id: string] }>();
   align-items: baseline;
   gap: 6px;
   max-width: 16em;
+  min-height: var(--soda-shape-control-h, 0);
   padding: 2px 10px;
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius-l, 6px);

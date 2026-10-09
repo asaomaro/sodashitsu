@@ -13,6 +13,8 @@ import type { GraphLink, GraphOp, NodeKey } from "@sodashitsu/protocol";
 import {
   clampZoom,
   displayFrames,
+  nodePositions,
+  tidySpace,
   edgeGeometry,
   fitGraphView,
   GRAPH_GRID,
@@ -1156,7 +1158,8 @@ async function toggleLinkPaused(id: string): Promise<void> {
 
 const checklistOpen = ref(false);
 function toolbarButton(cls: string): HTMLElement | null {
-  return dialogEl.value?.querySelector<HTMLElement>(`.${cls}`) ?? null;
+  // デスクトップの画面のツールバーには個別のボタンが無い（「そのほか」のメニューから開く）ので、戻り先は「そのほか」のボタン。
+  return dialogEl.value?.querySelector<HTMLElement>(`.${cls}`) ?? dialogEl.value?.querySelector<HTMLElement>(".graph-more") ?? null;
 }
 /** 選び直し・チェックリスト・パネルは互いに排他（開くときに他を閉じる。パネルに変更があれば確認。レビュー R4）。 */
 function openChecklist(): void {
@@ -1856,6 +1859,128 @@ function stepSpace(delta: -1 | 1): void {
   onSpaceSelect(next);
 }
 
+// --- ツールバー（デスクトップの画面。PR1e T17b）------------------------------------------------------------------------
+/** 「そのほか」のメニュー（ContextMenu を使う。キー・読み上げ・フォーカスの戻りは、その部品のもの）。 */
+function openMoreMenu(ev: MouseEvent | KeyboardEvent): void {
+  const el = (ev.currentTarget as HTMLElement | null) ?? toolbarButton("graph-more");
+  const r = el?.getBoundingClientRect();
+  view.openContextMenu({ kind: "graphMore" }, { x: r?.left ?? 0, y: (r?.bottom ?? 0) + 2 });
+}
+watch(
+  () => spaces.command?.seq,
+  () => {
+    const c = spaces.command;
+    if (c === null || props.kind !== "screen" || !props.active) return;
+    if (c.name === "pause") void toggleGraphPaused();
+    else if (c.name === "history") toggleHistory();
+    else guardPanel(() => openChecklist());
+  },
+);
+/** 「線を結ぶ」: 選んでいるノードから接続モードに入る（ノードを選んでいなければ、案内だけ）。 */
+function startConnectFromSelection(): void {
+  if (isMobile.value) return;
+  const s = selection.value;
+  if (s?.kind === "node" && shownNodes.value.some((n) => n.key === s.key)) {
+    startConnectMode(s.key);
+    return;
+  }
+  liveMessage.value = "線を結ぶ元のノードを選んでから押してください。";
+  view.toast("線を結ぶ元のノードを選んでから押してください（ノードのハンドルをドラッグしても結べます）。");
+}
+const connectDisabledHint = computed(() => (selection.value?.kind === "node" ? "選んでいるノードから、結ぶ先を選びます（c）" : "先にノードを選んでください"));
+
+// --- 並びを整える（PR1e T17c。AC-L3）----------------------------------------------------------------------------------
+/** 1 回の `graph.update` で送れる操作の数（`GRAPH_OPS_MAX`）。 */
+const TIDY_OPS_MAX = 1024;
+/** 直前の「並べ直し」を戻すための記憶（別の更新が入るまで）。 */
+let tidyUndo: { toastId: number; rev: number; before: { key: NodeKey; x: number; y: number }[] } | null = null;
+function dropTidyUndo(): void {
+  if (tidyUndo) view.dismissToast(tidyUndo.toastId);
+  tidyUndo = null;
+}
+// 別の更新（自分の別の操作・ほかのブラウザ・sodactl）が入ったら、「元に戻す」は消す（その位置へ戻すと、あとの変更を踏む）。
+watch(
+  () => graph.graph?.rev,
+  (rev) => {
+    if (tidyUndo !== null && rev !== tidyUndo.rev) dropTidyUndo();
+  },
+);
+onBeforeUnmount(dropTidyUndo);
+
+function requestTidy(): void {
+  if (isMobile.value || props.kind !== "screen") return;
+  const st = spaces.structure;
+  if (st === null || !graph.graph) {
+    view.toast("この画面では、並べ直せません（手元のセッションを見ているときだけ）。");
+    return;
+  }
+  const moves = tidySpace(st, nodePositions(graph.nodes), spaces.currentId);
+  if (moves === null) {
+    view.toast("並べ直せませんでした（座標の範囲に収まりません）。");
+    return;
+  }
+  if (moves.size === 0) {
+    view.toast("この空間には、並べ直すノードがありません。");
+    return;
+  }
+  if (moves.size > TIDY_OPS_MAX) {
+    view.toast(`ノードが多すぎて、一度には並べ直せません（${moves.size} 個。上限 ${TIDY_OPS_MAX} 個）。`);
+    return;
+  }
+  confirmState.value = {
+    message: `この空間の ${moves.size} 個のノードの位置を、並べ直します。`,
+    detail: "囲いを詰めて、重ならないように並べ直します。線は変わりません。並べ直した直後なら、元に戻せます。",
+    confirmLabel: "並べ直す",
+    cancelLabel: "やめる",
+    onConfirm: () => void runTidy(),
+    onCancel: () => toolbarButton("graph-tidy")?.focus(),
+  };
+}
+async function runTidy(): Promise<void> {
+  // 確認を出している間にグラフが変わったかもしれないので、送る直前に計算し直す。
+  const st = spaces.structure;
+  if (st === null) return;
+  const moves = tidySpace(st, nodePositions(graph.nodes), spaces.currentId);
+  if (moves === null || moves.size === 0 || moves.size > TIDY_OPS_MAX) {
+    view.toast("並べ直せませんでした。もう一度試してください。");
+    return;
+  }
+  let before: { key: NodeKey; x: number; y: number }[] = [];
+  const r = await graph.update((g): GraphOp[] | null => {
+    const now = new Map(g.nodes.map((n) => [n.key, n]));
+    before = [...moves.keys()].flatMap((k) => (now.has(k) ? [{ key: k, x: now.get(k)!.x, y: now.get(k)!.y }] : []));
+    const ops = [...moves].flatMap(([key, p]) => (now.has(key) ? [{ op: "move_node" as const, key, x: p.x, y: p.y }] : []));
+    return ops.length === 0 ? null : ops;
+  });
+  if (!r.ok) {
+    view.toast(`並べ直せませんでした（${r.message}）`);
+    return;
+  }
+  dropTidyUndo();
+  const rev = r.graph.rev;
+  const id = view.toast("並べ直しました。", {
+    kind: "sticky",
+    actions: [{ label: "元に戻す", run: () => void undoTidy() }],
+  });
+  tidyUndo = { toastId: id, rev, before };
+  liveMessage.value = "並べ直しました。";
+  void nextTick(fitAll);
+}
+async function undoTidy(): Promise<void> {
+  const u = tidyUndo;
+  if (u === null) return;
+  tidyUndo = null;
+  view.dismissToast(u.toastId);
+  const r = await graph.update((g): GraphOp[] | typeof GRAPH_UNCHANGED | { conflict: string } => {
+    // 別の更新が入っていたら戻さない（あとの変更を踏まない）。
+    if (g.rev !== u.rev) return { conflict: "別の変更が入ったので、元に戻せません。" };
+    const ops = u.before.filter((b) => g.nodes.some((n) => n.key === b.key)).map((b) => ({ op: "move_node" as const, key: b.key, x: b.x, y: b.y }));
+    return ops.length === 0 ? GRAPH_UNCHANGED : ops;
+  });
+  if (!r.ok) view.toast(r.reason === "conflict" ? r.message : `元に戻せませんでした（${r.message}）`);
+  else liveMessage.value = "元に戻しました。";
+}
+
 // --- tab のタグ・強調（20261008-graph-first の T11d）-------------------------------------------------------------------
 /** ノードの右上のタグ（tab が 1 つだけの workspace では出さない）。 */
 function tabLabelOf(key: string): string | null {
@@ -2060,9 +2185,50 @@ function chipAria(e: EdgeView): string {
     @keydown="onKeydown"
   >
     <template v-if="props.active">
-      <header class="graph-toolbar">
+      <header class="graph-toolbar" :class="{ 'graph-toolbar-screen': kind === 'screen' }">
+        <template v-if="kind === 'screen'">
+          <!-- デスクトップの画面（PR1e T17b）: よく使う操作を前に。「＋ pane」「＋ workspace」は PR3 でここへ（左端の置き場所）。題と「×」は出さない（戻るのは、サイドバーの上の切り替え・prefix+a・Esc） -->
+          <button
+            type="button"
+            class="graph-tool graph-connect"
+            :disabled="!graph.graph"
+            :title="connectDisabledHint"
+            @click="startConnectFromSelection"
+          >
+            線を結ぶ
+          </button>
+          <button type="button" class="graph-tool graph-tidy" :disabled="!graph.graph" title="この空間の囲いとノードを詰めて並べ直します（確認します）" @click="requestTidy">
+            並びを整える
+          </button>
+          <button
+            type="button"
+            class="graph-tool graph-more"
+            aria-haspopup="menu"
+            :aria-expanded="view.contextMenu?.target.kind === 'graphMore'"
+            :disabled="!graph.graph"
+            @click="openMoreMenu"
+          >
+            そのほか ▾
+          </button>
+          <span v-if="graph.graph?.paused" class="graph-paused-badge" role="status">⏸ 一時停止中</span>
+          <button v-if="graph.graph?.paused" type="button" class="graph-tool graph-resume" @click="toggleGraphPaused">再開</button>
+          <span
+            v-if="graph.hiddenLocalPaneCount > 0"
+            class="graph-hidden-panes"
+            role="status"
+            data-testid="graph-hidden-panes"
+          >
+            上限のため、出ていない pane が {{ graph.hiddenLocalPaneCount }} 個あります
+          </span>
+          <span class="graph-toolbar-spacer"></span>
+          <GraphFind ref="findRef" :items="findItems" @choose="onFindChoose" @leave="leaveFrameLayer" />
+          <button type="button" class="graph-tool graph-zoom-out" aria-label="縮小" title="縮小（-）" @click="zoomBy(1 / 1.2)">−</button>
+          <span class="graph-zoom" aria-live="off">{{ zoomPercent }}</span>
+          <button type="button" class="graph-tool graph-zoom-in" aria-label="拡大" title="拡大（+）" @click="zoomBy(1.2)">＋</button>
+          <button type="button" class="graph-tool graph-fit" title="全体を表示（1）" @click="fitAll">全体を表示</button>
+        </template>
+        <template v-else>
         <h2 class="graph-title">連携（グラフ）</h2>
-        <GraphFind v-if="!isMobile" ref="findRef" :items="findItems" @choose="onFindChoose" @leave="leaveFrameLayer" />
         <span v-if="graph.graph?.paused" class="graph-paused-badge">⏸ 全体が一時停止中</span>
         <button
           type="button"
@@ -2125,6 +2291,7 @@ function chipAria(e: EdgeView): string {
         <button type="button" class="graph-close" aria-label="閉じる" @click="view.closeGraph()">
           ×
         </button>
+        </template>
       </header>
       <GraphSpaceBar
         v-if="spaces.showBar"
@@ -2367,7 +2534,7 @@ function chipAria(e: EdgeView): string {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 6px var(--soda-shape-pad-x, 12px);
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
 .graph-title {
@@ -2377,6 +2544,7 @@ function chipAria(e: EdgeView): string {
   font-weight: normal;
 }
 .graph-tool {
+  min-height: var(--soda-shape-control-h, 0);
   padding: 2px 8px;
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius);
@@ -2509,6 +2677,14 @@ function chipAria(e: EdgeView): string {
 .graph-paused-badge {
   color: var(--soda-warn-fg, #ffb86c);
   font-size: 12px;
+}
+.graph-toolbar-screen .graph-paused-badge {
+  padding: 1px 8px;
+  border: 1px solid var(--soda-warn-fg, #ffb86c);
+  border-radius: 10px;
+}
+.graph-toolbar-spacer {
+  flex: 1;
 }
 .graph-connecting {
   stroke: var(--soda-state-working, #f1fa8c);
