@@ -47,7 +47,7 @@ const view = useViewStore();
   color: var(--soda-fg, #f8f8f2);
   background: none;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 3px;
+  border-radius: var(--soda-shape-radius-s);
   padding: 0.2em 0.3em;
   cursor: pointer;
   white-space: nowrap;

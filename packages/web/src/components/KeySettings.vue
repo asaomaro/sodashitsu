@@ -845,7 +845,7 @@ watch(
   color: inherit;
   background: var(--soda-menu-bg, #282a36);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.15em 0.5em;
   min-height: 1.75rem;
   flex: 1 1 12em;
@@ -868,7 +868,7 @@ watch(
 }
 .keys-details {
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
 }
 .keys-summary {
   display: flex;
@@ -911,7 +911,7 @@ watch(
   font-family: monospace;
   background: var(--soda-subtle-bg, rgba(255, 255, 255, 0.06));
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 3px;
+  border-radius: var(--soda-shape-radius-s);
   padding: 0 0.4em;
 }
 .keys-add {
@@ -924,7 +924,7 @@ watch(
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.15em 0.7em;
   min-height: 1.75rem;
   cursor: pointer;
@@ -935,7 +935,7 @@ watch(
   color: inherit;
   background: var(--soda-menu-active-bg, #44475a);
   border: 2px dashed var(--soda-accent, #6070a1);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.3em 0.7em;
   min-height: 1.75rem;
   margin-top: 0.4em;
@@ -957,7 +957,7 @@ watch(
   color: inherit;
   background: var(--soda-menu-bg, #282a36);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.15em 0.4em;
   min-height: 1.75rem;
 }
@@ -978,7 +978,7 @@ watch(
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.4em 0.6em;
   margin-top: 0.6em;
   cursor: pointer;
@@ -989,7 +989,7 @@ watch(
   min-width: 2em;
   text-align: center;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 3px;
+  border-radius: var(--soda-shape-radius-s);
   padding: 0 0.2em;
 }
 .settings-switch[aria-checked="true"] .settings-mark {

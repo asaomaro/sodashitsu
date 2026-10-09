@@ -364,7 +364,7 @@ onBeforeUnmount(() => removeToast());
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 6px;
+  border-radius: var(--soda-shape-radius-l);
   overscroll-behavior: contain;
 }
 .ext-approval-dialog::backdrop {
@@ -402,7 +402,7 @@ onBeforeUnmount(() => removeToast());
   overflow-wrap: anywhere;
   background: var(--soda-bg, #1e1f29);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   font-family: var(--soda-mono, ui-monospace, monospace);
   font-size: 0.9em;
 }
@@ -410,7 +410,7 @@ onBeforeUnmount(() => removeToast());
   margin: 0.7em 0;
   padding: 0.5em 0.7em;
   border: 1px solid var(--soda-warn-fg, #ffb86c);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
 }
 .ext-approval-box p {
   margin: 0.25em 0;
@@ -426,7 +426,7 @@ onBeforeUnmount(() => removeToast());
   margin: 0.4em 0;
   padding: 0.3em 0.6em;
   border: 1px solid var(--soda-error-fg, #ff5555);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
 }
 .ext-approval-diff {
   margin: 0.3em 0;
@@ -448,7 +448,7 @@ onBeforeUnmount(() => removeToast());
   background: var(--soda-bg, #1e1f29);
   color: inherit;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   cursor: pointer;
 }
 .ext-approval-btn:focus-visible {

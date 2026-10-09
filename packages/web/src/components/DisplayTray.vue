@@ -175,7 +175,7 @@ function onKeydown(ev: KeyboardEvent): void {
   color: var(--soda-fg, #f8f8f2);
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   cursor: pointer;
 }
 .display-tray-btn:hover:not(:disabled) {

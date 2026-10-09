@@ -1741,7 +1741,7 @@ function chipAria(e: EdgeView): string {
 .graph-tool {
   padding: 2px 8px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   font-size: 12px;
@@ -1850,7 +1850,7 @@ function chipAria(e: EdgeView): string {
   margin: 0;
   padding: 4px 12px;
   border: 1px solid var(--soda-state-working, #f1fa8c);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   background: var(--soda-menu-bg, #282a36);
   font-size: 12px;
   pointer-events: none;

@@ -940,7 +940,7 @@ watch(
 }
 .sr-line {
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.4em;
   display: flex;
   flex-direction: column;
@@ -1002,7 +1002,7 @@ watch(
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.15em 0.7em;
   min-height: 1.75rem;
   cursor: pointer;

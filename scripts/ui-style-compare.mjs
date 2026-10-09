@@ -2,9 +2,10 @@
 /**
  * 画面の見た目を、変更の前後で画素まで比べる（20261008-ui-style の T2。使い方は `docs/verification.md`）。
  *
- *   node scripts/ui-style-compare.mjs [<比べる元のコミット>] [--style classic|modern] [--out <dir>] [--keep]
+ *   node scripts/ui-style-compare.mjs [<比べる元のコミット>] [--style classic|modern] [--out <dir>] [--keep] [--strict]
  *   node scripts/ui-style-compare.mjs --selftest        # 比べる関数そのものの自己テスト（git・ビルドは使わない）
  *
+ * 描画の揺れ: 1 枚の中の差が、すべて「各色の成分の差が 1 以下」の画素で、かつ 16 画素以下なら、差ありにせず「揺れ」として別に数える（`--strict` で、揺れも差あり）。
  * 終了コード: 0 = 全部差 0 ／ 1 = 差あり・枚数が期待と違う ／ 2 = 道具の失敗（引数・ビルド・撮影・例外。差の有無は分からない）。
  * 1. 元のコミット（既定 `origin/main`）を `git worktree` で一時の場所へ出し、`pnpm install --frozen-lockfile`・`pnpm build` する。
  * 2. 元のコミットで `packages/e2e/src/specs/ui-style-shots.spec.ts`（いまの作業フォルダのものを写して使う）を流して画像を撮る（様式は、いつも classic）。
@@ -25,6 +26,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SPEC = "packages/e2e/src/specs/ui-style-shots.spec.ts";
 
 const EXPECTED_SHOTS = 32; // 暗い・明るい各 16 枚（spec が画面を増やしたら、ここも直す）
+const JITTER_MAX_COMPONENT = 1; // 揺れとみなす、色の成分の差の上限
+const JITTER_MAX_PIXELS = 16; // 揺れとみなす、差の画素の数の上限
 const SIGNAL_CODES = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 };
 
 class ToolError extends Error {}
@@ -80,6 +83,7 @@ function compareInPage(page, a64, b64) {
     const octx = out.getContext("2d");
     const img = octx.createImageData(A.w, A.h);
     let diff = 0;
+    let maxComp = 0; // 差のある画素の、色の成分（R・G・B・A）の差の最大
     for (let i = 0; i < A.data.length; i += 4) {
       const same = A.data[i] === B.data[i] && A.data[i + 1] === B.data[i + 1] && A.data[i + 2] === B.data[i + 2] && A.data[i + 3] === B.data[i + 3];
       if (same) {
@@ -87,6 +91,7 @@ function compareInPage(page, a64, b64) {
         img.data[i + 3] = 255;
       } else {
         diff++;
+        for (let k = 0; k < 4; k++) maxComp = Math.max(maxComp, Math.abs(A.data[i + k] - B.data[i + k]));
         img.data[i] = 255;
         img.data[i + 1] = 0;
         img.data[i + 2] = 0;
@@ -99,14 +104,14 @@ function compareInPage(page, a64, b64) {
     const buf = new Uint8Array(await blob.arrayBuffer());
     let s = "";
     for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-    return { diff, png: btoa(s) };
+    return { diff, maxComp, png: btoa(s) };
   }, [a64, b64]);
 }
 
 const namesOf = (d) => readdirSync(d).filter((f) => f.endsWith(".png")).sort();
 
 /** 2 つのフォルダの画像を、名前ごとに比べる。片方にしか無い画像・読めない画像・大きさ違いも、差あり（`diff !== 0`）として返す。 */
-async function compareDirs(page, baseDir, headDir, diffDir) {
+async function compareDirs(page, baseDir, headDir, diffDir, strict = false) {
   const baseNames = namesOf(baseDir);
   const headNames = namesOf(headDir);
   const all = [...new Set([...baseNames, ...headNames])].sort();
@@ -118,7 +123,9 @@ async function compareDirs(page, baseDir, headDir, diffDir) {
     }
     const r = await compareInPage(page, readFileSync(join(baseDir, name)).toString("base64"), readFileSync(join(headDir, name)).toString("base64"));
     if (r.png) writeFileSync(join(diffDir, name), Buffer.from(r.png, "base64"));
-    results.push({ name, ...r });
+    // 描画の揺れ: 差が「各成分の差 1 以下」の画素だけで、かつ 16 画素以下なら、差ありにせず「揺れ」として別に数える（`--strict` なら差あり）。
+    const jitter = !strict && r.diff > 0 && r.maxComp <= JITTER_MAX_COMPONENT && r.diff <= JITTER_MAX_PIXELS;
+    results.push({ name, ...r, ...(jitter ? { jitter: true, diff: 0, jitterPixels: r.diff } : {}) });
   }
   return { results, baseCount: baseNames.length, headCount: headNames.length };
 }
@@ -128,42 +135,49 @@ async function selftest() {
   const dir = mkdtempSync(join(tmpdir(), "ui-style-selftest-"));
   const { browser, page } = await openComparer();
   try {
-    const png = (w, h, tweak) =>
+    // n 画素（1 行目の左から）の赤の成分を delta だけ上げた画像。n = 0 なら、元の画像。
+    const png = (w, h, n = 0, delta = 0) =>
       page.evaluate(
-        async ([w, h, tweak]) => {
+        async ([w, h, n, delta]) => {
           const c = new OffscreenCanvas(w, h);
           const ctx = c.getContext("2d");
           ctx.fillStyle = "rgb(30,40,50)";
           ctx.fillRect(0, 0, w, h);
           ctx.fillStyle = "rgb(200,100,50)";
           ctx.fillRect(1, 1, 3, 3);
-          if (tweak) {
-            ctx.fillStyle = "rgb(31,40,50)"; // 1 画素だけ、赤を 1 つ上げる
-            ctx.fillRect(w - 1, h - 1, 1, 1);
+          for (let i = 0; i < n; i++) {
+            ctx.fillStyle = `rgb(${30 + delta},40,50)`;
+            ctx.fillRect(6 + i, h - 1, 1, 1);
           }
           const buf = new Uint8Array(await (await c.convertToBlob({ type: "image/png" })).arrayBuffer());
           let s = "";
           for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000));
           return btoa(s);
         },
-        [w, h, tweak],
+        [w, h, n, delta],
       );
     const put = (d, name, b64) => writeFileSync(join(d, name), Buffer.from(b64, "base64"));
     const a = join(dir, "a");
     const b = join(dir, "b");
     const d = join(dir, "d");
     for (const x of [a, b, d]) mkdirSync(x);
-    put(a, "same.png", await png(20, 10, false));
-    put(b, "same.png", await png(20, 10, false));
-    put(a, "onepixel.png", await png(20, 10, false));
-    put(b, "onepixel.png", await png(20, 10, true));
-    put(a, "size.png", await png(20, 10, false));
-    put(b, "size.png", await png(21, 10, false));
-    put(a, "onlybase.png", await png(20, 10, false));
-    put(b, "onlyhead.png", await png(20, 10, false));
-    put(a, "broken.png", await png(20, 10, false));
+    put(a, "same.png", await png(40, 10));
+    put(b, "same.png", await png(40, 10));
+    put(a, "onepixel.png", await png(40, 10));
+    put(b, "onepixel.png", await png(40, 10, 1, 40));
+    put(a, "size.png", await png(40, 10));
+    put(b, "size.png", await png(41, 10));
+    put(a, "onlybase.png", await png(40, 10));
+    put(b, "onlyhead.png", await png(40, 10));
+    put(a, "broken.png", await png(40, 10));
     writeFileSync(join(b, "broken.png"), "これは PNG ではない");
+    // 描画の揺れの境目（成分の差 1・2、画素の数 16・17）。
+    for (const [name, n, delta] of [["j-1px-d1", 1, 1], ["j-16px-d1", 16, 1], ["j-17px-d1", 17, 1], ["j-1px-d2", 1, 2], ["j-16px-d2", 16, 2]]) {
+      put(a, `${name}.png`, await png(40, 10));
+      put(b, `${name}.png`, await png(40, 10, n, delta));
+    }
     const { results } = await compareDirs(page, a, b, d);
+    const strictByName = Object.fromEntries((await compareDirs(page, a, b, d, true)).results.map((r) => [r.name, r]));
     const by = Object.fromEntries(results.map((r) => [r.name, r]));
     const checks = [
       ["同じ画像は差 0", by["same.png"].diff === 0],
@@ -172,7 +186,13 @@ async function selftest() {
       ["元にしか無い画像は差あり", by["onlybase.png"].diff === -1 && by["onlybase.png"].missing === "いまに無い"],
       ["いまにしか無い画像は差あり", by["onlyhead.png"].diff === -1 && by["onlyhead.png"].missing === "元に無い"],
       ["読めない画像は差あり（落ちずに、理由が付く）", by["broken.png"].diff === -1 && typeof by["broken.png"].unreadable === "string"],
-      ["差 0 でない画像は、全部で 5 枚", results.filter((r) => r.diff !== 0).length === 5],
+      ["成分の差 1・1 画素は、揺れ（差 0 として数え、揺れとして印が付く）", by["j-1px-d1.png"].diff === 0 && by["j-1px-d1.png"].jitter === true],
+      ["成分の差 1・16 画素は、揺れ（上限ちょうど）", by["j-16px-d1.png"].diff === 0 && by["j-16px-d1.png"].jitter === true && by["j-16px-d1.png"].jitterPixels === 16],
+      ["成分の差 1・17 画素は、差あり", by["j-17px-d1.png"].diff === 17 && !by["j-17px-d1.png"].jitter],
+      ["成分の差 2・1 画素は、差あり", by["j-1px-d2.png"].diff === 1 && !by["j-1px-d2.png"].jitter],
+      ["成分の差 2・16 画素は、差あり", by["j-16px-d2.png"].diff === 16 && !by["j-16px-d2.png"].jitter],
+      ["--strict では、揺れも差あり", strictByName["j-1px-d1.png"].diff === 1 && strictByName["j-16px-d1.png"].diff === 16 && !strictByName["j-1px-d1.png"].jitter],
+      ["差 0 でない画像は、全部で 8 枚（揺れは数えない）", results.filter((r) => r.diff !== 0).length === 8],
     ];
     let failed = 0;
     for (const [label, ok] of checks) {
@@ -221,12 +241,14 @@ async function main() {
   let baseRef = "origin/main";
   let style = "classic";
   let outDir = null;
+  let strict = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--selftest") return selftest();
     if (a === "--style") style = args[++i];
     else if (a === "--out") outDir = resolve(args[++i] ?? "");
     else if (a === "--keep") keep = true;
+    else if (a === "--strict") strict = true;
     else if (a.startsWith("--")) throw toolError(`知らない引数: ${a}`);
     else baseRef = a;
   }
@@ -270,7 +292,7 @@ async function main() {
   const { browser, page } = await openComparer();
   let report;
   try {
-    report = await compareDirs(page, baseShots, headShots, diffShots);
+    report = await compareDirs(page, baseShots, headShots, diffShots, strict);
   } finally {
     await browser.close();
   }
@@ -280,7 +302,9 @@ async function main() {
   for (const r of bad) console.log(`  差あり: ${r.name} — ${r.missing ?? r.size ?? (r.unreadable ? `読めない（${r.unreadable}）` : `${r.diff} 画素`)}${r.diff > 0 ? `（差の画像: ${join(diffShots, r.name)}）` : ""}`);
   const countOk = baseCount === EXPECTED_SHOTS && headCount === EXPECTED_SHOTS;
   if (!countOk) console.log(`  枚数が期待（${EXPECTED_SHOTS}）と違う: 元 ${baseCount}・いま ${headCount}（spec が画面を増減したなら EXPECTED_SHOTS を直す）`);
+  const jitters = results.filter((r) => r.jitter);
   console.log(`差のある画像: ${bad.length} 枚 / ${results.length} 枚`);
+  console.log(`揺れ（各成分の差 ${JITTER_MAX_COMPONENT} 以下・${JITTER_MAX_PIXELS} 画素以下。差ありにしない）: ${jitters.length} 枚${jitters.length ? ` — ${jitters.map((r) => `${r.name}（${r.jitterPixels} 画素）`).join("・")}` : ""}${strict ? "（--strict: 揺れも差あり）" : ""}`);
   console.log(`かかった時間: 元を撮る ${secBase} 秒・いまを撮る ${secHead} 秒・全体 ${Math.round((Date.now() - t0) / 1000)} 秒`);
   console.log(`画像の場所: ${outDir}（base・head・diff）`);
   return bad.length === 0 && countOk ? 0 : 1;
