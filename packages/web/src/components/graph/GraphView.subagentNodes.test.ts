@@ -105,7 +105,7 @@ async function open(
   );
   view.openGraph();
   await flush();
-  return { wrapper, view, session, store, fake, registry };
+  return { wrapper, view, session, store, fake, registry, conn };
 }
 const rows = (w: ReturnType<typeof mount>) => w.findAll("button[data-subagent-id]");
 const info = (items: unknown[], count = items.length) =>
@@ -160,7 +160,9 @@ describe("小さなサブエージェントのノード（層の単体）", () =
     const more = w.get("[data-subagent-more]");
     expect(more.text()).toBe("ほか 6 件"); // 見えない 3 件 + 配られない 3 件
     await more.trigger("click");
-    expect(w.emitted("open")).toEqual([["local:p1"]]);
+    expect(w.emitted("open")).toEqual([["local:p1", null]]);
+    await rows(w)[0]!.trigger("click");
+    expect(w.emitted("open")![1]).toEqual(["local:p1", "s0"]);
     w.unmount();
   });
 
@@ -234,7 +236,7 @@ describe("小さなサブエージェントのノード（層の単体）", () =
 });
 
 describe("グラフの画面の中の小さなサブエージェントのノード", () => {
-  it("親のノードの `d` で最初の小さなノードへ、Esc で親へ戻る。押すと一覧のパネルが開く。親のノードの数・保存には触れない", async () => {
+  it("親のノードの `d` で最初の小さなノードへ、Esc で親へ戻る。押すと記録を読む窓が開く（一覧のパネルではない）。親のノードの数・保存には触れない", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     const { wrapper, fake } = await open({ p1: subs(3) });
     await tick(2500);
@@ -249,9 +251,87 @@ describe("グラフの画面の中の小さなサブエージェントのノー�
     expect(document.activeElement).toBe(node.element);
     await rows(wrapper)[0]!.trigger("click");
     await flush();
-    expect(wrapper.find(".subagent-panel").exists()).toBe(true);
+    expect(wrapper.find("[data-subagent-transcript]").exists()).toBe(true);
+    expect(wrapper.find(".subagent-panel").exists()).toBe(false);
     // 描くだけ: サーバのグラフを書き換える操作を出さない。
     expect(fake.calls.filter((c) => c.method.startsWith("graph.update"))).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it("窓は、pane の id とサブエージェントの id だけを送って読む。入れ替わりの Esc・× で閉じ、親のノードへフォーカスが戻る。別の小さなノードを押すと入れ替わる（同時に 1 つ）", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    const { wrapper, conn } = await open({ p1: subs(2) });
+    await tick(2500);
+    await tick(5);
+    await rows(wrapper)[0]!.trigger("click");
+    await flush();
+    const calls = (conn.request.mock.calls as unknown as [string, Record<string, unknown>][]).filter((c) => c[0] === "agent.subagent_transcript");
+    expect(calls[0]![1]).toEqual({ paneId: "p1", agentId: "s0" });
+    expect(wrapper.get("[data-subagent-transcript]").attributes("data-agent-id")).toBe("s0");
+    await rows(wrapper)[1]!.trigger("click");
+    await flush();
+    expect(wrapper.findAll("[data-subagent-transcript]")).toHaveLength(1);
+    expect(wrapper.get("[data-subagent-transcript]").attributes("data-agent-id")).toBe("s1");
+    wrapper.get("[data-subagent-transcript]").element.dispatchEvent(key("Escape"));
+    await flush();
+    expect(wrapper.find("[data-subagent-transcript]").exists()).toBe(false);
+    expect(wrapper.find("[data-graph-view]").exists()).toBe(true); // グラフの画面は閉じない
+    expect(document.activeElement?.getAttribute("data-node-key")).toBe("local:p1");
+    wrapper.unmount();
+  });
+
+  it("「ほか n 件」は今までの一覧のパネル。親の pane のエージェントが居なくなれば、窓は閉じる（サブエージェントが終わっただけでは閉じない）", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    const { wrapper, session } = await open({ p1: subs(9) });
+    await tick(2500);
+    await tick(5);
+    await wrapper.get("[data-subagent-more]").trigger("click");
+    await flush();
+    expect(wrapper.find(".subagent-panel").exists()).toBe(true);
+    expect(wrapper.find("[data-subagent-transcript]").exists()).toBe(false);
+    wrapper.get(".subagent-panel").element.dispatchEvent(key("Escape"));
+    await flush();
+    await rows(wrapper)[0]!.trigger("click");
+    await flush();
+    expect(wrapper.find("[data-subagent-transcript]").exists()).toBe(true);
+    session.panes.set("p1", paneOf("p1", "t1", { label: "impl", agent: agentOf("working", { subagents: subs(8) }) })); // 1 つ終わった
+    await flush();
+    expect(wrapper.find("[data-subagent-transcript]").exists()).toBe(true);
+    session.panes.set("p1", paneOf("p1", "t1", { label: "impl", agent: agentOf("working", { instanceId: "other", subagents: subs(8) }) })); // 別のエージェントに入れ替わった
+    await flush();
+    expect(wrapper.find("[data-subagent-transcript]").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("別のマシンのノードの小さなノードを押しても、窓は開かず、「別のマシンの記録は、まだ読めません」と出す", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
+    const RM = "b".repeat(32);
+    const { wrapper, conn } = await open({ nodes: ["local:p1", `${RM}:p7`] });
+    const machines = (await import("../../store/machines.js")).useMachinesStore(pinia);
+    machines.setMachines([{ id: RM, label: "box", state: "online", message: null }]);
+    machines.applySummarySnapshot(RM, {
+      protocol: 1,
+      serverVersion: "t",
+      host: { os: "linux", windowsBuild: null, hostname: "h" },
+      workspaces: [{ id: "w9", label: "infra", tabIds: ["t9"] } as never],
+      tabs: [{ id: "t9", workspaceId: "w9" } as never],
+      panes: [paneOf("p7", "t9", { label: "remote", agent: agentOf("working", { subagents: subs(2) }) })],
+      groups: [],
+      focus: null,
+      limits: { scrollbackLines: 5000 },
+    });
+    await flush();
+    await tick(2500);
+    await tick(5);
+    const remoteRows = wrapper.findAll(`button[data-subagent-parent="${RM}:p7"]`);
+    expect(remoteRows.length).toBeGreaterThan(0); // 小さなノードは出す
+    await remoteRows[0]!.trigger("click");
+    await flush();
+    expect(wrapper.find("[data-subagent-transcript]").exists()).toBe(false);
+    expect(wrapper.get("[data-subagent-note]").text()).toBe("別のマシンの記録は、まだ読めません");
+    expect((conn.request.mock.calls as unknown as [string][]).some((c) => c[0] === "agent.subagent_transcript")).toBe(false);
+    await tick(4500);
+    expect(wrapper.find("[data-subagent-note]").exists()).toBe(false);
     wrapper.unmount();
   });
 
