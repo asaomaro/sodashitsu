@@ -29,10 +29,19 @@ export type MenuTarget =
   | { kind: "graphNode"; key: string }
   /** グラフの囲いの見出しの右クリック（pane を足す・workspace を閉じる。PR3 T14e）。 */
   | { kind: "graphFrame"; workspaceId: string }
+  /** サイドバーの「新規」のボタン（モダンの配置。workspace・pane・グループのどれを足すかを選ぶ。20261008-ui-style PR4）。 */
+  | { kind: "new" }
   | { kind: "global" };
 
+/** メニューを開く位置。`flipUp` は、点の**上**に開く（最下部のボタンから開くとき。モダンの配置。20261008-ui-style PR4）。 */
+export interface MenuAt {
+  x: number;
+  y: number;
+  flipUp?: boolean;
+}
+
 export interface UiPort {
-  openContextMenu(target: MenuTarget, at: { x: number; y: number }): void;
+  openContextMenu(target: MenuTarget, at: MenuAt): void;
   toast(message: string): void;
 }
 

@@ -42,7 +42,7 @@ import { loadSidebarRows } from "@sodashitsu/client-core";
 import { loadThemePrefs } from "@sodashitsu/client-core";
 import { clientErrorMessage, errorCodeOf } from "@sodashitsu/client-core";
 import { depthFirstPaneIds, neighborPaneId } from "@sodashitsu/client-core";
-import type { MenuTarget, UiPort } from "../term/MouseBridge.js";
+import type { MenuAt, MenuTarget, UiPort } from "../term/MouseBridge.js";
 import { readClipboard, writeClipboard } from "../term/clipboard.js";
 import type { TerminalRegistry } from "../term/TerminalRegistry.js";
 
@@ -111,7 +111,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   // --- UiPort --------------------------------------------------------------
 
-  openContextMenu(target: MenuTarget, at: { x: number; y: number }): void {
+  openContextMenu(target: MenuTarget, at: MenuAt): void {
     this.view.openContextMenu(target, at);
   }
 
@@ -1164,6 +1164,14 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       return;
     }
     void this.conn.request("pane.close", { paneId }).catch(() => undefined);
+  }
+
+  /**
+   * pane の枠の［閉じる］ボタン（モダンの様式。20261008-ui-style PR4 の AC21）。**busy でなくても必ず確認する**（誤って押すおそれがあるため）。
+   * 確認のダイアログは `closePaneById` と同じもの（`confirmClose`）。キー（`prefix+x`）の経路〔`closePane`〕は変えない。
+   */
+  closePaneWithConfirm(paneId: string): void {
+    this.view.openDialogWithContext({ kind: "confirmClose", targets: [{ type: "pane", id: paneId }] });
   }
 
   private closeTab(): void {

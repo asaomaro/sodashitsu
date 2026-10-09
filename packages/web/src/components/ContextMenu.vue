@@ -11,6 +11,7 @@ import { itemGroupIdOf } from "../store/sidebarTree.js";
 import { useViewStore } from "../store/view.js";
 import { dismissWithFocus, headFocusTarget, openDisplayMenu, trayFocusTarget, withDisplayChange } from "../display/displayOps.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
+import { useUiStyle } from "../composables/useUiStyle.js";
 
 /**
  * 右クリックのメニュー（M3。APG の Menu。D56 の訂正 10）。`view.contextMenu` が開閉を持つ
@@ -31,6 +32,7 @@ const view = useViewStore();
 const displays = useDisplayStore();
 const graphStore = useGraphStore();
 const graphSpaces = useGraphSpacesStore();
+const { modernLayout } = useUiStyle();
 const actions = inject(ActionDispatcherKey);
 if (!actions) throw new Error("ContextMenu: ActionDispatcherKey が provide されていません");
 const displayController = inject(DisplayControllerKey, null);
@@ -207,7 +209,8 @@ const items = computed<MenuItem[]>(() => {
         : hasOtherGroup
           ? [{ label: "グループへ追加…", run: () => actions.openGroupPicker(target.workspaceId) }]
           : []),
-      { label: "新しいグループを作る…", run: () => actions.createGroupForWorkspace(target.workspaceId) },
+      // モダンの配置では、グループは「新規」のメニューから作る（20261008-ui-style AC16）。
+      ...(modernLayout.value ? [] : [{ label: "新しいグループを作る…", run: () => actions.createGroupForWorkspace(target.workspaceId) }]),
     ];
   }
   if (target.kind === "group") {
@@ -266,6 +269,16 @@ const items = computed<MenuItem[]>(() => {
         ]
       : [];
   }
+  if (target.kind === "new") {
+    // サイドバーの「新規」（モダンの配置。20261008-ui-style AC15）。どれも今ある操作を呼ぶだけ（新しい操作は作らない）。
+    const workspaceId = view.workspaceId;
+    return [
+      { label: "workspace", run: () => actions.run({ type: "newWorkspace" }) },
+      // 基本画面の「分割」の既定（`split_vertical`＝右へ）と同じ。グラフの画面では、見えない基本画面を変えるので出さない。
+      ...(view.screen === "base" ? [{ label: "pane", run: () => actions.run({ type: "split", dir: "right" }) }] : []),
+      ...(workspaceId ? [{ label: "グループ…", run: () => actions.createGroupForWorkspace(workspaceId) }] : []),
+    ];
+  }
   // global：どこにも属さない全体の操作。**「設定」は入れる**（20260920-agent-notifications で通知の設定として足し、
   // 20260921-herdr-settings-gaps で通知・表示・端末の設定全体に広げた）。herdr の `reload config` / `what's new` は
   // 引き続き入れない。
@@ -276,8 +289,8 @@ const items = computed<MenuItem[]>(() => {
   return [
     { label: "キー割り当て", run: () => actions.run({ type: "help" }) },
     { label: "移動", run: () => actions.run({ type: "goto" }) },
-    // 連携のグラフ画面（20260927-agent-graph の design「入口」。キーの open_graph と同じ操作）。
-    { label: "連携（グラフ）", run: () => actions.run({ type: "openGraph" }) },
+    // 連携のグラフ画面（20260927-agent-graph の design「入口」。キーの open_graph と同じ操作）。モダンの配置では、サイドバーの上の切り替えとキーで足りるので出さない（AC12）。
+    ...(modernLayout.value ? [] : [{ label: "連携（グラフ）", run: () => actions.run({ type: "openGraph" }) }]),
     { label: "設定", run: () => actions.run({ type: "settings" }) },
     { label: "切り離し", run: () => actions.run({ type: "detach" }) },
   ];
@@ -351,7 +364,9 @@ function clampIntoViewport(): void {
   const r = el.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return;
   const dx = Math.min(0, window.innerWidth - 4 - (menu.at.x + r.width));
-  const dy = Math.min(0, window.innerHeight - 4 - (menu.at.y + r.height));
+  // `flipUp`（最下部のボタンから開く）は、点の上に開く（下へ開くと、ボタンに重なる）。上に収まらなければ、今までの「はみ出す分だけずらす」。
+  const up = menu.at.flipUp === true && menu.at.y - r.height >= 4 ? -r.height : null;
+  const dy = up ?? Math.min(0, window.innerHeight - 4 - (menu.at.y + r.height));
   shift.value = { x: Math.max(dx, -menu.at.x), y: Math.max(dy, -menu.at.y) };
 }
 watch(
