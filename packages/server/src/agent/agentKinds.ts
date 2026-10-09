@@ -29,8 +29,9 @@ export function createAgentKindsLister(opts: AgentKindsOptions = {}): () => Prom
   const platform = opts.platform ?? process.platform;
   const now = opts.now ?? Date.now;
   let cached: { at: number; value: AgentKindsResult } | null = null;
-  return async () => {
-    if (cached !== null && now() - cached.at < CACHE_MS) return cached.value;
+  /** 検索の途中の約束。終わる前に来た呼び出しは、同じものを待つ（連打で同じ検索を重ねない）。 */
+  let inflight: Promise<AgentKindsResult> | null = null;
+  const scan = async (): Promise<AgentKindsResult> => {
     const dirs = (env["PATH"] ?? "").split(delimiter).filter((d) => d !== "");
     // 種類ごと・ディレクトリごとに並べて確かめる（WSL の `PATH` には Windows 側の `/mnt/c/…` が数十個あり、1 つずつ確かめると数秒かかる）。
     const kinds: AgentKindsResult["kinds"] = await Promise.all(
@@ -45,5 +46,12 @@ export function createAgentKindsLister(opts: AgentKindsOptions = {}): () => Prom
     const value = { kinds };
     cached = { at: now(), value };
     return value;
+  };
+  return () => {
+    if (cached !== null && now() - cached.at < CACHE_MS) return Promise.resolve(cached.value);
+    inflight ??= scan().finally(() => {
+      inflight = null;
+    });
+    return inflight;
   };
 }

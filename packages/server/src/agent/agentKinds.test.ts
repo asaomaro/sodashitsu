@@ -46,4 +46,21 @@ describe("agent.kinds の一覧", () => {
     t += 6000;
     expect((await list()).kinds.find((k) => k.kind === "claude")!.available).toBe(false);
   });
+
+  it("終わる前に何度呼んでも、検索は 1 回（同じ約束を待つ）。終わった後は 5 秒覚える", async () => {
+    const d = await binDir({ claude: 0o755 });
+    let scans = 0;
+    const env = {
+      get PATH(): string {
+        scans++; // 検索のたびに 1 回だけ読む
+        return d;
+      },
+    } as unknown as NodeJS.ProcessEnv;
+    const list = createAgentKindsLister({ env, platform: "linux" });
+    const rs = await Promise.all(Array.from({ length: 10 }, () => list()));
+    expect(scans).toBe(1);
+    expect(new Set(rs).size).toBe(1); // 同じ結果
+    await list();
+    expect(scans).toBe(1); // 覚えている
+  });
 });

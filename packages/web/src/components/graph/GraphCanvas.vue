@@ -1986,6 +1986,20 @@ function openAddForm(workspaceId: string, trigger: HTMLElement | null): void {
     .then((r) => (addKinds.value = r.kinds))
     .catch(() => (addKinds.value = []));
 }
+/** フォームが開いている間、フォームの外（ツールバー・サイドバー・キャンバス・画面の外。どこでも）を押すと閉じる（AC-A1）。足している間は閉じない。 */
+function onAddFormOutsidePointerdown(ev: PointerEvent): void {
+  const t = ev.target as Element | null;
+  if (t?.closest?.("[data-graph-add-form]")) return;
+  closeAddForm();
+}
+watch(
+  () => addForm.value !== null,
+  (open) => {
+    if (open) document.addEventListener("pointerdown", onAddFormOutsidePointerdown, true);
+    else document.removeEventListener("pointerdown", onAddFormOutsidePointerdown, true);
+  },
+);
+onBeforeUnmount(() => document.removeEventListener("pointerdown", onAddFormOutsidePointerdown, true));
 function closeAddForm(): void {
   const f = addForm.value;
   if (f === null || f.busyText !== null) return;
@@ -2066,29 +2080,19 @@ async function submitAddForm(s: AddFormSubmit): Promise<void> {
   }
 }
 
-/** 「＋ workspace」で作った workspace を、いま見ている空間がグループなら、そのグループへ入れる（サーバの決まりは「グループなし」）。 */
-const NEW_WS_WINDOW_MS = 60_000;
-let newWsWatch: { until: number; known: Set<string>; groupId: string } | null = null;
-function watchNewWorkspace(): void {
+/**
+ * 「＋ workspace」で作った workspace を、いま見ている空間がグループなら、そのグループへ入れる（サーバの決まりは「グループなし」）。
+ * **入れるのは、この操作が作った workspace だけ**（`workspace.create` の応答の id。ほかのブラウザ・`sodactl` が同じ時間に作ったものは動かさない）。
+ * 空間は、押した時点のもの（作っている間に見ている空間を替えても、押した空間へ入れる）。
+ */
+function createWorkspaceHere(): void {
   const id = spaces.currentId;
-  if (!id.startsWith("g:")) return;
-  newWsWatch = { until: Date.now() + NEW_WS_WINDOW_MS, known: new Set(session.workspaces.keys()), groupId: id.slice(2) };
+  const groupId = id.startsWith("g:") ? id.slice(2) : null;
+  actions?.newWorkspaceThen((workspaceId) => {
+    if (groupId === null) return;
+    void conn?.request("group.add_member", { groupId, workspaceId }).catch(() => undefined);
+  });
 }
-watch(
-  () => session.workspaces.size,
-  () => {
-    const w = newWsWatch;
-    if (w === null) return;
-    if (Date.now() > w.until) {
-      newWsWatch = null;
-      return;
-    }
-    const fresh = [...session.workspaces.keys()].filter((k) => !w.known.has(k));
-    if (fresh.length === 0) return;
-    newWsWatch = null;
-    for (const workspaceId of fresh) void conn?.request("group.add_member", { groupId: w.groupId, workspaceId }).catch(() => undefined);
-  },
-);
 /** ツールバーの「＋ workspace ▾」。 */
 function openAddWorkspaceMenu(ev: MouseEvent | KeyboardEvent): void {
   const el = (ev.currentTarget as HTMLElement | null) ?? toolbarButton("graph-add-workspace");
@@ -2127,10 +2131,8 @@ watch(
         openAddForm(c.arg, null);
       }
     } else if (c.name === "newWorkspace") {
-      watchNewWorkspace();
-      actions?.run({ type: "newWorkspace" });
-    }
-    else guardPanel(() => openChecklist());
+      createWorkspaceHere();
+    } else guardPanel(() => openChecklist());
   },
 );
 /** 「線を結ぶ」: 選んでいるノードから接続モードに入る（ノードを選んでいなければ、案内だけ）。 */

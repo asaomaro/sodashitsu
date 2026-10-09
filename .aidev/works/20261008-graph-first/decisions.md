@@ -255,6 +255,11 @@ D63 の値の選び方（乱数 300 通り〔(a)〕・20 通り〔(b)〕。土�
 - **ツールバー**: 「＋ pane」「＋ workspace ▾」を左端に。PR1e の期待の並びを直した（`graph-spaces.spec.ts`「ツールバー」の `toHaveText` の並びに 2 つ足した）。
 - **メニュー**: `MenuTarget` に `graphAdd`・`graphNode`・`graphFrame` を追加。「閉じる」は、グラフの線があれば busy でなくても確認を出す（`closeFromGraph`）。線が無ければ基本画面と同じ道（`closePaneById`）。
 - **確認ダイアログ**: 消える線の本数は、閉じる対象（pane・tab・workspace）に含まれる手元の pane の鍵に触れる線の数。0 本なら要素ごと出ない（基本画面は 1 画素も変わらない）。
-- **窓を開く**は `openNodeWindow(key, true)`（既存）だけ。PR2b で `open(paneId, opts?)` になっても、第 1 引数は同じ。
+- **窓を開く**は `openNodeWindow(key, true)`（既存）だけ。PR2b の取り込み後は `GraphTerminalController.open(paneId, opts?)` で、ここは第 1 引数（`info.paneId`）だけを渡す（そのまま合う）。
 - **分割できないときの断りの E2E は書いていない**: サーバが `pane.split` を断る状況（`spawn_failed`）を、E2E で安定して作れない。理由の文言は `addPane.test.ts`（`spawn_failed`・元の pane が無い・ノードが出ない・名前の書式・`agent_name_taken`・`agent_pane_busy` のやり直し）で確かめた。
 
+### D90: PR3 レビューの直し（2026-10-10）
+- **指摘 1（直した）**: 「＋ workspace」の後 60 秒の間に増えた workspace を全部グループへ入れていた（ほかのブラウザ・`sodactl` が作ったものも動く）。`ActionDispatcher.newWorkspaceThen(onCreated)` を足し、`workspace.create` の応答の id だけを `group.add_member` で入れる（押した時点の空間のグループ）。推測の仕組み（`newWsWatch`・60 秒）は消した。E2E「「＋ workspace」で作った workspace だけが、表示中のグループへ入る。同じ時間にほかの接続が作った workspace は入らない」。単体 `ActionDispatcher.test.ts`。**否定の対照**: 「ほかの workspace を入れる」形にすると、E2E が落ちる。
+- **指摘 2（直した）**: 「外を押す」でフォームが閉じるのはキャンバスの上だけだった（`onOutside` は呼び手の無い死んだ関数）。フォームが開いている間だけ `document` の `pointerdown`（捕捉）を付け、フォームの外ならどこでも閉じる（足している間は閉じない）。`onOutside` は消した。E2E「フォームの外を押すと、どこを押しても閉じる（ツールバー・サイドバー・キャンバス）」。**否定の対照**: 付ける行を外すと E2E が落ちる。
+- **指摘 3（直した）**: `agent.kinds` の検索が終わる前の呼び出しが、それぞれ全件の検索を始めていた。進行中の約束を共有する（`agentKinds.ts`）。単体「終わる前に何度呼んでも、検索は 1 回」。**否定の対照**: 共有をやめると落ちる。
+- **記録（レビューが見られなかったこと。直さない）**: ① 足したときの PTY の大きさ（同じ tab のほかの pane が縮む。グラフの間の `client.view`・サイズ権限）: 基本画面の分割と同じサーバの処理（`pane.split`）で、グラフ側は何も足していない。E2E は見ていない。② 窓が 3 つで、すべて留めてあるときに足す: 試していない（窓を開くのは既存の入口だけなので、PR2b の窓の決まりに従う。足した pane のノードは出る）。③ 分割できないときの文言: 単体だけ（D89）。④ モバイル: 読んだだけ（`isMobile` でフォームと「＋」を出さない）。

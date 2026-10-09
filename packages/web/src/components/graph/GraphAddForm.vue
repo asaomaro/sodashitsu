@@ -88,10 +88,6 @@ function onKeydown(ev: KeyboardEvent): void {
   ev.stopPropagation();
 }
 onMounted(() => void nextTick(() => root.value?.querySelector<HTMLElement>("input[type=radio]:checked")?.focus({ preventScroll: true })));
-function onOutside(ev: PointerEvent): void {
-  if (props.busyText === null && root.value && !root.value.contains(ev.target as Node)) emit("cancel");
-}
-defineExpose({ onOutside });
 </script>
 
 <template>

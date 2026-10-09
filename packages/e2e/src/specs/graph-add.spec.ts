@@ -129,6 +129,28 @@ test.describe("pane を足す（囲いの「＋」）", () => {
     expect(sent().filter((m) => m.method === "pane.split")).toHaveLength(0);
   });
 
+  test("フォームの外を押すと、どこを押しても閉じる（ツールバー・サイドバー・キャンバス）。足している間でない限り。PR3 レビューの直し", async ({ page, appServer }) => {
+    const { ws0, sent } = await boot(page, appServer);
+    await openGraph(page);
+    const add = frameAdd(page, ws0.id);
+    for (const where of ["toolbar", "sidebar", "canvas"] as const) {
+      await add.click();
+      await expect(form(page)).toBeVisible();
+      if (where === "toolbar") await graphView(page).locator(".graph-toolbar .graph-fit").first().click();
+      else if (where === "sidebar") await page.locator(".sidebar-row").first().click();
+      else {
+        const cv = (await graphView(page).locator(".graph-canvas").boundingBox())!;
+        await page.mouse.click(cv.x + cv.width - 20, cv.y + 10);
+      }
+      await expect(form(page), `${where} を押す`).toHaveCount(0);
+    }
+    // フォームの中を押しても閉じない。
+    await add.click();
+    await page.locator("[data-graph-add-form] h3, [data-graph-add-form] legend, [data-graph-add-form]").first().click({ position: { x: 4, y: 4 } });
+    await expect(form(page)).toBeVisible();
+    expect(sent().filter((m) => m.method === "pane.split")).toHaveLength(0);
+  });
+
   test("エージェントを足す: 送るのは種類の id と名前だけ（args は空）。ノードにエージェントの種類が出て、次に足すときは監督の線を結べる", async ({ page, appServer }) => {
     const { client, ws0, sent } = await boot(page, appServer);
     await openGraph(page);
@@ -211,6 +233,31 @@ test.describe("workspace を足す・閉じる", () => {
     await page.locator("dialog.confirm-dialog").getByRole("button", { name: "閉じる" }).click();
     await closed;
     await expect(graphView(page).locator(`[data-frame-id="${newWs}"]`)).toHaveCount(0);
+  });
+
+  test("「＋ workspace」で作った workspace だけが、表示中のグループへ入る。同じ時間にほかの接続が作った workspace は入らない（PR3 レビューの直し）", async ({ page, appServer }) => {
+    const client = await appServer.openClient();
+    const ws0 = client.helloSnapshot()!.workspaces[0]!;
+    const grp = await client.request("group.create", { label: "開発", workspaceId: ws0.id });
+    await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+    await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+    await openGraph(page);
+    const mine = client.waitForEvent("workspace.created");
+    await graphView(page).locator(".graph-add-workspace").click();
+    await page.getByRole("menuitem", { name: "新しい workspace" }).click();
+    // ほかの接続（sodactl 相当）が、同じ時間に別の workspace を作る。
+    const other = await client.request("workspace.create", {});
+    const created = await mine;
+    await expect.poll(async () => {
+      const snap = (await appServer.openClient()).helloSnapshot()!;
+      return snap.workspaces.find((w) => w.id === created.data.workspace.id)?.groupId ?? null;
+    }, { timeout: 10_000 }).toBe(grp.group.id);
+    // ほかの接続が作ったほうは、グループに入らない（少し待っても）。
+    await page.waitForTimeout(1500);
+    const snap = (await appServer.openClient()).helloSnapshot()!;
+    const otherId = other.workspace.id;
+    expect(otherId).not.toBe(created.data.workspace.id);
+    expect(snap.workspaces.find((w) => w.id === otherId)?.groupId ?? null).toBeNull();
   });
 
   test("ツールバーの「＋ pane」: 選んでいる workspace に、同じフォームで足せる", async ({ page, appServer }) => {
