@@ -977,14 +977,14 @@ test.describe("性能（T11h。design 追補 01 の D18）", () => {
     await page.addStyleTag({ content: ".graph-chip { pointer-events: none !important; }" });
     const pick = await page.evaluate(() => {
       const canvas = document.querySelector(".graph-canvas")!.getBoundingClientRect();
-      for (const el of document.querySelectorAll<HTMLElement>('[data-node-key^="local:perf-p"]')) {
+      for (const el of [...document.querySelectorAll<HTMLElement>('[data-node-key^="local:perf-p"]')]) {
         const r = el.getBoundingClientRect();
         for (const [fx, fy] of [[0.3, 0.5], [0.5, 0.5], [0.7, 0.5]] as const) {
           const x = r.x + r.width * fx;
           const y = r.y + r.height * fy;
           if (x < canvas.x + 20 || x > canvas.right - 120 || y < canvas.y + 20 || y > canvas.bottom - 60) continue;
           const hit = document.elementFromPoint(x, y);
-          if (hit?.closest("[data-node-key]") === el && !hit.closest("button")) return { key: el.getAttribute("data-node-key")!, x, y };
+          if (hit && hit.closest("[data-node-key]") === el && !hit.closest("button")) return { key: el.getAttribute("data-node-key")!, x, y };
         }
       }
       return null;
