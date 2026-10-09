@@ -124,9 +124,26 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
       expect(await savedHas(stateDir, id)).toBe(true); // 直す前: 保存から消えていた
       const again = await boot(stateDir);
       await vi.waitFor(async () => expect((await resumeLines(id)).length).toBe(before + 1), { timeout: 15_000 });
-            await again.close();
+      await again.close();
     });
   }
+
+  // 猶予（10 秒）の長さを守る: 先に終わってから、猶予より短い間（3 秒。監視の周期より十分長い）待っても、参照は残る。猶予を 0 にすると、この間に捨てられて落ちる。
+  it("(a'') エージェントが先に終わって 3 秒後に止めても、参照は残り、次の起動で再開される（猶予の長さ）", async () => {
+    const stateDir = await mkdtemp(join(dir, "state-"));
+    const id = "conv-grace";
+    const { server, paneId } = await bootWithAgent(stateDir, id);
+    const before = (await resumeLines(id)).length;
+    killAgent("KILL");
+    await vi.waitFor(() => expect(agentOf(server, paneId)).toBeNull(), { timeout: 15_000, interval: 50 });
+    await sleep(3_000);
+    expect(server.session.getPane(paneId)?.agentSession?.sessionId).toBe(id);
+    await server.close();
+    expect(await savedHas(stateDir, id)).toBe(true);
+    const again = await boot(stateDir);
+    await vi.waitFor(async () => expect((await resumeLines(id)).length).toBe(before + 1), { timeout: 15_000 });
+    await again.close();
+  });
 
   it("(a') 止まる処理に入った後に、先に終わったエージェントがあっても、参照は捨てない（AC2）", async () => {
     const stateDir = await mkdtemp(join(dir, "state-"));
