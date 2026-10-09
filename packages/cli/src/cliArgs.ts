@@ -1,8 +1,7 @@
 import {
   AGENT_START_KINDS,
   ENTITY_ID_RE,
-  GRAPH_HISTORY_PER_LINK,
-  GRAPH_LINKS_MAX,
+  GRAPH_HISTORY_RESPONSE_MAX,
   LINK_LIMIT_MAX,
   LINK_LIMIT_MIN,
   LINK_LINES_MAX,
@@ -1178,7 +1177,7 @@ function parseGraph(sub: string | undefined, rest: readonly string[], env: NodeJ
     return done(parsed, {
       kind: "history",
       linkId: linkId === undefined ? undefined : parseLinkId(linkId),
-      limit: limit === undefined ? undefined : parseIntRange(limit, "--limit", 1, GRAPH_HISTORY_PER_LINK * GRAPH_LINKS_MAX),
+      limit: limit === undefined ? undefined : parseIntRange(limit, "--limit", 1, GRAPH_HISTORY_RESPONSE_MAX),
     });
   }
   if (sub === "link") return parseGraphLink(rest[0], rest.slice(1), BASE, done);

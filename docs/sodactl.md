@@ -57,9 +57,9 @@ sodactl graph node rm <pane> [--json]
 sodactl graph node rekey <pane> <newPane> [--json]
 sodactl graph history [<linkId>] [--limit <N>] [--json]
 sodactl ask [--timeout <ms>] < spec.json    # pane の中のプログラムの質問のフォームを、その pane を見ているブラウザの画面に出す（下の「質問のフォーム」）
-sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] [--dock right|left|top|bottom|float] [--edge top|bottom] [--collapsed] (--text <text> | --markdown-file <path> | --html-file <path> | --script-html-file <path> | [--format text|markdown|html|script-html] < stdin) [--wait [--timeout <ms>]]   # この pane を見ているブラウザの画面に、パネル（端末の右）か帯（端末の上）を出す（`docs/display.md`）。`script-html` は中身のスクリプトが枠の中で動く形式（信頼できない中身には使わない）
+sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] [--dock right|left|top|bottom|float] [--edge top|bottom] [--collapsed] (--text <text> | --markdown-file <path> | --html-file <path> | --script-html-file <path> | [--format text|markdown|html|script-html] < stdin) [--wait [--timeout <ms>]]   # この pane を見ているブラウザの画面に、パネル（端末の右・左・上・下）か帯（端末の上か下）を出す（`docs/display.md`）。`script-html` は中身のスクリプトが枠の中で動く形式（信頼できない中身には使わない）
 sodactl display send <name> (--json <JSON> | < stdin)   # スクリプトが動く面（`script-html`）へデータを送る（64 KiB まで・保存されない。結果は {"status":"ok","delivered":n}）
-#   --dock（パネルだけ）・--edge（帯だけ）・--collapsed は「初めの置き方」の指定（利用者が一度でも動かしたら、利用者の状態が勝つ。画面が出せない置き場所は右になる）。違う種類に付けると使い方の誤り（終了コード 2）。
+#   --dock（パネルだけ）・--edge（帯だけ）・--collapsed は「初めの置き方」の指定（利用者が一度でも動かしたら、利用者の状態が勝つ。画面が出せない置き場所〔`float`〕は、設定の置き場所〔無ければ右〕になる）。違う種類に付けると使い方の誤り（終了コード 2）。
 #   `layout` を知らない古いサーバ（--features の server.features に無い）へは 3 項目を外して送り、結果に "ignored": ["dock", …]・標準エラーに 1 行（終了コード 0）。`docs/display.md`「たたむ・置き場所・帯の行のボタン」
 sodactl display close (<name> | --all) / list / wait [<name>] / events [<name>...] / --features   # 面の閉じる・一覧・操作を待つ・続けて受け取る・機能確認（pane の中ではログイン不要）
 sodactl ext list|reload / log <id|key> / restart <id|key>   # 拡張（設定に登録して soda が起動するプログラム）の状態・ログ・読み直し・起動し直し（下の「拡張（`ext`）」）
@@ -645,10 +645,10 @@ sodactl ext restart <id|key>           # {"status":"ok","key":"user:hello"}
 sodactl graph show
 # graph: running (rev 4)
 #
-# node          key                                            status
-# 3f2a9c10      local:3f2a9c10-1111-4111-8111-aaaaaaaaaaaa      ok
-# 9d000000      local:9d000000-2222-4222-8222-bbbbbbbbbbbb      ok
-# box:5b7e01c4  0123…:5b7e01c4-3333-4333-8333-cccccccccccc      -
+# node          key                                            status  space  workspace
+# 3f2a9c10      local:3f2a9c10-1111-4111-8111-aaaaaaaaaaaa      ok      work   api
+# 9d000000      local:9d000000-2222-4222-8222-bbbbbbbbbbbb      ok      work   api
+# box:5b7e01c4  0123…:5b7e01c4-3333-4333-8333-cccccccccccc      -       -      -
 #
 # link      kind       from          to            count  state   settings
 # 6a41f0d2  trigger    3f2a9c10      9d000000      2/10   active  on=done output=80 busy=wait prompt="レビューして {output}"
@@ -668,7 +668,8 @@ sodactl graph history "$l" --limit 5
   （`machine.list`）、ノードの鍵には id を使う（名前は変えられるため）。同じ名前が 2 台なら `machine_ambiguous`、無ければ `machine_not_found`。
   登録から外したマシンのノードを外す（`node rm`）・選び直す前のノード（`node rekey` の 1 つ目）を指すときだけ、一覧に無い 32 桁の id もそのまま受ける
   （載せる・結ぶ端では `machine_not_found`。打ち間違いで動かない線を作らない）。
-- `link add` は、端の pane がグラフに載っていなければ一緒に載せる（画面の「pane を載せる」と同じ置き方）。載せる・結ぶ pane が手元に無ければ `not_found`
+- 手元の pane のノードは、サーバが全部の pane に足している（`docs/agent-graph.md`「ノード（すべての pane が載る）」）。`node add` は手元の pane では「すでにある」で成功する（何も送らない）。
+  `link add` は、端が別のマシンの pane でグラフに載っていなければ一緒に載せる（そのマシンの囲いの空いた升に、手元の囲いと重ならないよう置く）。載せる・結ぶ pane が手元に無ければ `not_found`
   （別のマシンの pane は確かめない。実行のときに `target_absent`）。
 - 線の設定の項目と既定値は画面と同じ（トリガ: `--on done`・既定の文面・`--output 80`・`--when-busy wait`。承認の代理: `--mode notify`・`--lines 40`。
   上限 `--limit 10`）。線の種類に合わない項目（監督の線に `--prompt` 等）は使い方の誤り（終了コード 2）。`link set` は書いた項目だけを変える。
@@ -676,14 +677,18 @@ sodactl graph history "$l" --limit 5
 - 監督・承認の代理の線は `<from>` が配下、`<to>` が監督役。
 - `<linkId>`（`link set|rm|pause|resume`・`history`）も、線の ID（UUID）か先頭の部分（4 文字以上で一意）。表の `link`・`node`・`from`・`to` は先頭 8 文字の短い呼び名で、そのまま指定に使える（完全な ID は `key` の列・`--json`）。
   曖昧な部分は `id_ambiguous`（候補が出る）、当たらなければ `not_found`。
-- `node rm` はそのノードの線も消す。`node rekey` は pane の無いノード（画面で無効と出る、別のマシンの pane が閉じたもの。`graph show` の `status` は `-` なので完全な id で指す。手元の閉じた pane のノードは自動で外れる）を同じマシンの別の pane に付け替える（線はそのまま。別のマシンの pane へは
-  `invalid_params`）。
+- `node rm` はそのノードの線も消す。**開いている手元の pane のノードは外せない**（`node_required`。終了コード 1。pane を閉じるとノードも消える）。閉じた pane のノード・別のマシンのノードは外せる。
+  `node rekey` は pane の無いノード（画面で無効と出る、別のマシンの pane が閉じたもの。`graph show` の `status` は `-` なので完全な id で指す）を同じマシンの別の pane に付け替える（線はそのまま。別のマシンの pane へは
+  `invalid_params`）。**手元のノードは選び直せない**（`node_required`）。
 - 変更は、送る前に画面と同じ規則（client-core の検証）で確かめ、落ちれば送らずに `invalid_params`（メッセージに `supervisor_taken` 等の理由）。
 - 変更は取り出した rev を添えて送る。その間に画面などが変えていれば（`rev_conflict`）、**取り直して操作を組み立て直し、1 回だけ送り直す**。2 回目も衝突したら
   `rev_conflict` で終了コード 1。
 - 知らない線は `not_found`（終了コード 1）。
 - 表のセルの制御文字（C0・C1・双方向の上書き等）は `\uXXXX` の形に逃がして出す（履歴の文面などで端末の表示を偽装させない）。`--json` はそのまま。
-- `--json` の形: `show` と変更は `{"graph": …}`、`link add` は `{"link": …, "graph": …}`、`history` は `{"runs": […]}`（新しい順）。
+- `--json` の形: 変更は `{"graph": …}`、`link add` は `{"link": …, "graph": …}`、`history` は `{"runs": […]}`（新しい順）。
+  `show` は `{"graph": …, "spaces": […]}`: `graph.nodes` の各ノードに `workspaceId`・`tabId`（手元の開いている pane の場所。別のマシンの pane・閉じた pane は `null`）が足され、
+  `spaces` はグループごとの `{"id": グループの id, "name": 名前, "workspaces": [workspace の id…]}`（サイドバーの順。最後に「グループなし」が `id`・`name` を `null` で入る）。
+  今ある項目は変わらない（足しただけ）。囲いの四角は出さない。表には `space`（グループの名前。「グループなし」は `-`）と `workspace` の列が出る。
 - 表の `status`: `ok`（手元の pane がある）・`closed`（手元の pane が無い）・`-`（別のマシン。ここからは確かめない）。
   `state`: `active`・`paused`（利用者が止めた）・`paused(limit)`（上限で止まった）。
 - 履歴はサーバのメモリだけ（線ごとに直近 50 件。再起動で消える）。

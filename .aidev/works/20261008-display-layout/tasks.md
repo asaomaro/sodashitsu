@@ -198,35 +198,35 @@
 
 ### PR-B: パネルの上下左右と D&D
 
-- [ ] T13: 割り付けの 4 つの側と、落とせる場所の関数: `resolvePaneDisplays` に、手順 3（縦。上・下）と、手順 4 の左を足す（両側の縮め方〔同じ大きさなら、上・左を先に縮める〕・自動でたたむ順・`TERMINAL_MIN_ROWS`）。上下の高さの望む値は、`sideSizes` → 選んでいる面の `size`（`decisions.md` D8）。`display/dockDrag.ts` に `dockZoneAt(rect, x, y, opts)`（純粋。箱の外は `null`・0.22・いちばん近い縁・中央は `opts.float` が真のときだけ `float`）。
+- [x] T13: 割り付けの 4 つの側と、落とせる場所の関数: `resolvePaneDisplays` に、手順 3（縦。上・下）と、手順 4 の左を足す（両側の縮め方〔同じ大きさなら、上・左を先に縮める〕・自動でたたむ順・`TERMINAL_MIN_ROWS`）。上下の高さの望む値は、`sideSizes` → 選んでいる面の `size`（`decisions.md` D8）。`display/dockDrag.ts` に `dockZoneAt(rect, x, y, opts)`（純粋。箱の外は `null`・0.22・いちばん近い縁・中央は `opts.float` が真のときだけ `float`）。
       単体テスト（4 つの側が同時・片方だけ・40 列と 10 行のちょうど・合計が超えるときの縮め方の各段・上が先にたたまれる・左が先にたたまれる・トレイの行のやり直し・`dockZoneAt` の境界）。**PR-A のテスト（右だけ）が、変更なしで通る**
       対象: `packages/web/src/display/paneDisplayLayout.ts`・`.test.ts`、`packages/web/src/display/dockDrag.ts`（新規）・`.test.ts`（新規） / 根拠: design「割り付け」の決まり 3・4、「D&D」
       依存: T6
       AC: AC11, AC12, AC13, AC15
       点検: あり
-- [ ] T14: 部品の側: `PanePanel.vue` を `side`（right・left・top・bottom）で描き分ける（境の線・つまみの縁・上下は横に長い見出し）。`PaneFrame.vue` に、上・左・下の `PanePanel` を置く（design「部品」の木の位置。**4 つは、テンプレートの別の位置の `v-if`**。1 つの `v-for` にしない）。置き場所を変える操作は、`setFaceDock(info, dock)`（`collapsed: false` と `names` も書く＝移った先で、開いて出る）。枠の `:key` は `placedFrameKey(active, "dock:" + side)`。タブは側ごと（`activeBySide`）。
+- [x] T14: 部品の側: `PanePanel.vue` を `side`（right・left・top・bottom）で描き分ける（境の線・つまみの縁・上下は横に長い見出し）。`PaneFrame.vue` に、上・左・下の `PanePanel` を置く（design「部品」の木の位置。**4 つは、テンプレートの別の位置の `v-if`**。1 つの `v-for` にしない）。置き場所を変える操作は、`setFaceDock(info, dock)`（`collapsed: false` と `names` も書く＝移った先で、開いて出る）。枠の `:key` は `placedFrameKey(active, "dock:" + side)`。タブは側ごと（`activeBySide`）。
       `DISPLAY_DOCK_CAPS` を `["right","left","top","bottom"]` に。`setFaceDock` で移った面が、移った先で選ばれる。`withDisplayChange` を通す（フォーカスの行き先は、design の表）。単体テスト（4 つの側の属性・鍵・置き場所を変えると前の側から消える）
       対象: `packages/web/src/components/PanePanel.vue`・`PaneFrame.vue`・各 `.test.ts`、`packages/web/src/display/displayPrefs.ts`（`DISPLAY_DOCK_CAPS`）・`.test.ts`、`packages/web/src/store/display.ts` / 根拠: design「部品」「置き場所の変更」「PR3 の守りとの関係」G1・G2
       依存: T13, T7
       AC: AC11, AC12, AC21, AC22, AC24, AC25
       点検: あり
-- [ ] T15: 各側のつまみ: `useResizeDrag` を側ごとに（左右は `x`・上下は `y`）。ドラッグの間は案内の線だけ（`emit("guide", { side, px } | null)`。`PaneFrame` の `.pane-frame-guide` を、本体の直下へ移し、本体の箱を基準に、縦と横の両方を置く。design「つまみ」）・離したとき `setSideSize` を 1 回・`Esc`・ダブルクリックで `clearSideSize`。キー（端末の側へ向く矢印で広く）。
+- [x] T15: 各側のつまみ: `useResizeDrag` を側ごとに（左右は `x`・上下は `y`）。ドラッグの間は案内の線だけ（`emit("guide", { side, px } | null)`。`PaneFrame` の `.pane-frame-guide` を、本体の直下へ移し、本体の箱を基準に、縦と横の両方を置く。design「つまみ」）・離したとき `setSideSize` を 1 回・`Esc`・ダブルクリックで `clearSideSize`。キー（端末の側へ向く矢印で広く）。
       `role="separator"`・`aria-orientation`・値。ダイアログが開いたら `finish()`（`view.modalOpen` の watch）。**右の側の `data-pane-panel-resize`・`data-pane-frame-guide`・`aria-label`「パネルの幅」・見える位置は、今のまま**（`display-resize.spec.ts:56-81,111-113` が見ている）。単体テスト
       対象: `packages/web/src/components/PanePanel.vue:47-93`・`PaneFrame.vue:345`・`:544-553`（案内の線）・各 `.test.ts` / 根拠: design「つまみ」、research F19
       依存: T14
       AC: AC14, AC-I2
-- [ ] T16: D&D: `display/dockDrag.ts` に、つかむ・動かす・離す・取り消すの処理（`[data-display-grip]` の `pointerdown`・6px・捕捉・`store.dockDrag`・`Esc` を capture で止める・`pointercancel`・`lostpointercapture`・`view.modalOpen`・部品が外れた）。`DisplayDropZones.vue`（5 つの場所と文言・いまの場所の強調・「ここにあります」・`pointer-events: none`・`z-index: 30`）。
+- [x] T16: D&D: `display/dockDrag.ts` に、つかむ・動かす・離す・取り消すの処理（`[data-display-grip]` の `pointerdown`・6px・捕捉・`store.dockDrag`・`Esc` を capture で止める・`pointercancel`・`lostpointercapture`・`view.modalOpen`・部品が外れた）。`DisplayDropZones.vue`（5 つの場所と文言・いまの場所の強調・「ここにあります」・`pointer-events: none`・`z-index: 30`）。
       ドラッグの間 `<html>` に `soda-display-dragging`（枠に `pointer-events: none`）。`.pane-frame-zone` に `z-index: 30`。離したら `withDisplayChange` で `setFaceDock`。PR-B では中央は「ここには置けません」（何も変わらない）。
       単体テスト（6px 未満は何もしない・各場所で離す・取り消しの 5 通り・ボタンの上からは始まらない・ドラッグ中のキーが外へ流れない・`view.paneDrag` が立たない）
       対象: `packages/web/src/display/dockDrag.ts`・`.test.ts`、`packages/web/src/components/DisplayDropZones.vue`（新規）・`.test.ts`（新規）、`DisplayPanelHead.vue`、`PaneFrame.vue:439-446`（`.pane-frame-zone`）、`packages/web/src/store/display.ts`（`dockDrag`）、`packages/web/src/styles/`（`soda-display-dragging` の規則。`resizeHandle.css` と同じ置き方） / 根拠: design「D&D」、research F18
       依存: T14
       AC: AC15, AC-I2, AC-I5
       点検: あり
-- [ ] T17: メニュー・設定・名乗り（PR-B）: 面のメニューに「右に置く／左に置く／上に置く／下に置く」（今と違う側だけ）。設定の画面に「表示のパネルの既定の置き場所」（右／左／上／下）。`DISPLAY_SUBSCRIBE_FEATURES` に `dock`。`focusDisplay` が、どの側のパネルにも移れる。単体テスト
+- [x] T17: メニュー・設定・名乗り（PR-B）: 面のメニューに「右に置く／左に置く／上に置く／下に置く」（今と違う側だけ）。設定の画面に「表示のパネルの既定の置き場所」（右／左／上／下）。`DISPLAY_SUBSCRIBE_FEATURES` に `dock`。`focusDisplay` が、どの側のパネルにも移れる。単体テスト
       対象: `packages/web/src/components/ContextMenu.vue`・`SettingsDialog.vue`・`packages/web/src/display/DisplayController.ts:28`・`DisplayController.test.ts:52`・`actions/ActionDispatcher.ts`・各テスト / 根拠: design「メニュー」「設定」「画面の名乗り」
       依存: T14, T8
       AC: AC12, AC16, AC8, AC-I3
-- [ ] T18: E2E（PR-B）`display-layout-dock.spec.ts`:
+- [x] T18: E2E（PR-B）`display-layout-dock.spec.ts`:
       (1) メニューで 右 → 下 → 左 → 上 → 右 と移す。そのたびに、箱の並び（上の帯 → 上のパネル → 左｜端末｜右 → 下のパネル → 下の帯）・上下のパネルの幅＝本体の幅・`client.view` が 1 回で、列数と行数が端末の箱に合う・端末の箱がはみ出さない。
       (2) 右と下に同時に置く・同じ側に 2 枚でタブ。再読み込みの後も同じ。別の pane で同じ名前の面を出すと、最後に決めた置き場所から始まる（たたみは引き継がない）。
       (3) pane を狭める・低くする（分割・ウィンドウの大きさ）: 端末が 40 列・10 行を下回らない。両側の合計が超えると縮む。それでも入らないと、上（左）が先にトレイの押せないボタンになる。広げると戻る。記憶は変わらない（再読み込みで確かめる）。
@@ -243,11 +243,11 @@
       対象: `packages/e2e/src/specs/display-layout-dock.spec.ts`（新規）、`packages/e2e/src/support/displayLayout.ts` / 根拠: 規約 `e2e-observe-browser`
       依存: T15, T16, T17
       AC: AC7, AC10, AC11, AC12, AC13, AC14, AC15, AC16, AC21, AC22, AC24, AC25, AC-I2, AC-I3, AC-I5
-- [ ] T19: 文書（PR-B）: `docs/display.md`（置き場所・並びの図・タブ・最小と自動のたたみ・各側のつまみ・D&D とメニュー・設定）・「置き場所を変えると、移った先で開いて出る」・`docs/sodactl.md`（`--dock` の 4 つの値が効く）・`docs/verification.md`
+- [x] T19: 文書（PR-B）: `docs/display.md`（置き場所・並びの図・タブ・最小と自動のたたみ・各側のつまみ・D&D とメニュー・設定）・「置き場所を変えると、移った先で開いて出る」・`docs/sodactl.md`（`--dock` の 4 つの値が効く）・`docs/verification.md`
       対象: 上のファイル
       依存: T18
       AC: AC27
-- [ ] T20: 負の対照（PR-B。test 工程）: (a) 4 つの側の `PanePanel` を、1 つの入れ物・1 つの `v-for`（鍵は側）にして、配列の順を替える版か、面を持つ `DisplayFrame` を 1 つの `v-for`（鍵は面の id）で並べて、置き場所で順を替える版 → T18 (6) の「ほかの面の枠は、同じ要素のまま」か「`load` が 1」が落ちる（「作業順序」の 1）。
+- [x] T20: 負の対照（PR-B。test 工程）: (a) 4 つの側の `PanePanel` を、1 つの入れ物・1 つの `v-for`（鍵は側）にして、配列の順を替える版か、面を持つ `DisplayFrame` を 1 つの `v-for`（鍵は面の id）で並べて、置き場所で順を替える版 → T18 (6) の「ほかの面の枠は、同じ要素のまま」か「`load` が 1」が落ちる（「作業順序」の 1）。
       (b) 最小の丸め（`TERMINAL_MIN_ROWS`・`TERMINAL_MIN_COLS`）を外す版 → T18 (3) が落ちる。(c) `installKeepFocusRelease` を呼ばない版 → T18 (6) の「操作中に、つかむ場所・各側のつまみ・［⋮］を押しても、`focus_steal` を送らない」が落ちる（`withDisplayChange` の手順 2 は、マウスでは `installKeepFocusRelease` が先に働くので、E2E では落とせない。単体で見る）。生の出力を `test-result.md` に
       対象: `.aidev/works/20261008-display-layout/test-result.md`
       依存: T18

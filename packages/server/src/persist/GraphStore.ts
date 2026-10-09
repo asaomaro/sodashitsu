@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { GraphSchema, type Graph, type GraphOp } from "@sodashitsu/protocol";
+import { GRAPH_CELL_WIDTH } from "@sodashitsu/client-core";
+import { GRAPH_COORD_MAX, GraphSchema, type Graph, type GraphOp } from "@sodashitsu/protocol";
 import {
   applyGraphOps,
   emptyGraph,
@@ -7,7 +8,8 @@ import {
   type GraphDraftState,
   type GraphIssue,
 } from "@sodashitsu/client-core";
-import { readFileWithBackup, writeFileAtomic } from "./atomicFile.js";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { PRE_MIGRATION_PREFIX, readFileWithBackup, writeFileAtomic } from "./atomicFile.js";
 
 /**
  * 連携のグラフ（20260927-agent-graph の design「server」・research F4.1）。session ごとに 1 枚を状態ディレクトリの `graph.json`（0600・原子的な書き込み）に置く。
@@ -15,8 +17,16 @@ import { readFileWithBackup, writeFileAtomic } from "./atomicFile.js";
  */
 export const GRAPH_FILE_NAME = "graph.json";
 
+/**
+ * 保存の `schema`（20261008-graph-first D15）。1 = 以前の版（手元のノード 64 まで・pane を選んで載せる）、2 = 手元のすべての pane のノードを持つ。
+ * 古い版は `schema: 1` しか読まない——2 のファイルは、壊れたファイルとして `graph-backups/` へ退避して空のグラフで起動する（今の作りのまま）。
+ * 移行の間（`migrationPending`）の保存は 1 のまま書き、`completeMigration` で 2 にする（途中で落ちても、元の形のファイルが残る）。
+ */
+export const GRAPH_SCHEMA = 2;
+const GRAPH_SCHEMA_V1 = 1;
+
 interface GraphFileData {
-  schema: 1;
+  schema: 1 | 2;
   rev: number;
   graph: Omit<Graph, "rev">;
   savedAt: string;
@@ -57,19 +67,74 @@ export class GraphStoreClosedError extends Error {
   }
 }
 
-function parseGraphFile(raw: string): GraphDraftState {
+interface ParsedGraphFile {
+  state: GraphDraftState;
+  schema: 1 | 2;
+  raw: string;
+}
+
+const clampCoord = (v: unknown): unknown =>
+  typeof v === "number" && Number.isFinite(v)
+    ? Math.max(-GRAPH_COORD_MAX, Math.min(GRAPH_COORD_MAX, v))
+    : v;
+
+/**
+ * ノードの座標を範囲の中へ寄せる（配列でなければそのまま。形の検査は `GraphSchema` に任せる）。寄せた結果、別のノードと同じ座標に重なるときは、
+ * 内側へ 1 升（`GRAPH_CELL_WIDTH`）ずつずらす（ノードが見えなくならないように。線は変えない）。
+ */
+function clampNodes(nodes: unknown): unknown {
+  if (!Array.isArray(nodes)) return nodes;
+  const taken = new Set<string>();
+  for (const n of nodes) {
+    if (typeof n !== "object" || n === null) continue;
+    const { x, y } = n as Record<string, unknown>;
+    if (
+      typeof x === "number" &&
+      typeof y === "number" &&
+      clampCoord(x) === x &&
+      clampCoord(y) === y
+    )
+      taken.add(`${x},${y}`);
+  }
+  return nodes.map((n: unknown) => {
+    if (typeof n !== "object" || n === null) return n;
+    const r = n as Record<string, unknown>;
+    const x = clampCoord(r["x"]);
+    const y = clampCoord(r["y"]);
+    if (typeof x !== "number" || typeof y !== "number" || (x === r["x"] && y === r["y"]))
+      return { ...r, x, y };
+    // 寄せたノード: 同じ座標が既にあれば、内側へ 1 升ずつずらす（x が範囲の端なら x を、y だけが端なら y を）。
+    let nx = x;
+    let ny = y;
+    const moveX = x !== r["x"];
+    for (let i = 0; i < 8192 && taken.has(`${nx},${ny}`); i++) {
+      if (moveX) nx -= Math.sign(nx) * GRAPH_CELL_WIDTH;
+      else ny -= Math.sign(ny) * GRAPH_CELL_WIDTH;
+    }
+    taken.add(`${nx},${ny}`);
+    return { ...r, x: nx, y: ny };
+  });
+}
+
+function parseGraphFile(raw: string): ParsedGraphFile {
   const v: unknown = JSON.parse(raw);
   if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("not an object");
   const r = v as Record<string, unknown>;
-  if (r["schema"] !== 1) throw new Error("unknown schema");
+  const schema = r["schema"];
+  if (schema !== GRAPH_SCHEMA_V1 && schema !== GRAPH_SCHEMA) throw new Error("unknown schema");
   const inner = r["graph"];
   if (typeof inner !== "object" || inner === null || Array.isArray(inner))
     throw new Error("bad graph");
   // zod は無い省略可能な項目を作らない（`stale: undefined` にならない）ので、`exactOptionalPropertyTypes` の型へそのまま渡せる。
-  const graph = GraphSchema.parse({ ...inner, rev: r["rev"] }) as Graph;
+  // 座標が範囲の外でも「壊れたファイル」にしない（線を失わせない）。範囲の中へ寄せて読む。
+  const graph = GraphSchema.parse({
+    ...inner,
+    nodes: clampNodes((inner as Record<string, unknown>)["nodes"]),
+    rev: r["rev"],
+  }) as Graph;
   // 意味の検証にも落ちるなら壊れているとみなす（手で書き換えたファイル等。起動は止めない）。
   if (validateGraph(graph).length > 0) throw new Error("invalid graph");
-  return { graph };
+  return { state: { graph }, schema, raw };
 }
 
 export class GraphStore {
@@ -80,6 +145,8 @@ export class GraphStore {
   private queue: Promise<unknown> = Promise.resolve();
   private readonly listeners = new Set<(graph: Graph, byClientId: string | null) => void>();
   private closed = false;
+  /** 以前の版（`schema: 1`）のファイルを読み込み、まだ `schema: 2` で保存していない。 */
+  private pendingMigration = false;
 
   constructor(
     stateDir: string,
@@ -92,15 +159,45 @@ export class GraphStore {
     this.backupsDir = join(stateDir, "graph-backups");
   }
 
-  /** 読み込む（状態ディレクトリのロックを取った後に 1 回）。無ければ空（rev 0）。壊れていれば退避して空から始める。読めない（権限等）は投げる。 */
+  /**
+   * 以前の版（`schema: 1`）のファイルを読み込んだ後、`schema: 2` で保存し終えるまで true（20261008-graph-first の移行）。この間の保存は `schema: 1` の
+   * まま書く。呼び出し側（起動）が、維持（`reconcileGraph` と詰め直し）を済ませてから `completeMigration()` を呼ぶ。
+   */
+  get migrationPending(): boolean {
+    return this.pendingMigration;
+  }
+
+  /**
+   * 読み込む（状態ディレクトリのロックを取った後に 1 回）。無ければ空（rev 0）。壊れていれば退避して空から始める。読めない（権限等）は投げる。
+   * `schema: 1` のファイルは、**読めたら、移行の前に必ず**元のファイルの控えを `graph-backups/` に書く（既存の退避の仕組み）。
+   */
   async load(): Promise<"ok" | "missing" | { corrupt: string }> {
+    this.pendingMigration = false;
     const result = await readFileWithBackup(this.filePath, this.backupsDir, parseGraphFile);
     if (result.kind === "ok") {
-      this.state = result.data;
+      this.state = result.data.state;
+      if (result.data.schema === GRAPH_SCHEMA_V1) {
+        await this.backupBeforeMigration(result.data.raw);
+        this.pendingMigration = true;
+      }
       return "ok";
     }
     this.state = { graph: emptyGraph() };
     return result.kind === "missing" ? "missing" : { corrupt: result.backupPath };
+  }
+
+  /**
+   * 移行の前の元のファイルの控え。`graph-backups/pre-migration-<時刻>.json`——最新 3 件の入れ替えの対象にしない別の名前で、消さずに残す。
+   * 同じ中身の控えが既にあれば書かない（移行が失敗し続ける起動をくり返しても増えない）。
+   */
+  private async backupBeforeMigration(raw: string): Promise<void> {
+    await mkdir(this.backupsDir, { recursive: true });
+    for (const name of await readdir(this.backupsDir)) {
+      if (!name.startsWith(PRE_MIGRATION_PREFIX)) continue;
+      if ((await readFile(join(this.backupsDir, name), "utf8").catch(() => null)) === raw) return;
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    await writeFile(join(this.backupsDir, `${PRE_MIGRATION_PREFIX}${stamp}.json`), raw, "utf8");
   }
 
   get(): Graph {
@@ -182,6 +279,22 @@ export class GraphStore {
     return result;
   }
 
+  /**
+   * 移行を終える: 今の状態を `schema: 2` で保存し直す（rev は進めない。変えた内容は、移行の間の保存〔`schema: 1` のまま〕で済んでいる）。
+   * 移行中でなければ何もしない。書けなかったら投げる（`schema: 1` のファイルが残るので、次の起動でもう一度移行する）。
+   */
+  async completeMigration(): Promise<void> {
+    if (!this.pendingMigration) return;
+    if (this.closed) throw new GraphStoreClosedError();
+    const run = async (): Promise<void> => {
+      await this.writeFile(this.state.graph, GRAPH_SCHEMA);
+      this.pendingMigration = false;
+    };
+    const result = this.queue.then(run, run);
+    this.queue = result.catch(() => undefined);
+    await result;
+  }
+
   /** 待ち行列の書き込みが終わるのを待つ（handoff・終了の前）。 */
   async flush(): Promise<void> {
     await this.queue;
@@ -200,6 +313,22 @@ export class GraphStore {
   onChange(fn: (graph: Graph, byClientId: string | null) => void): { dispose(): void } {
     this.listeners.add(fn);
     return { dispose: () => this.listeners.delete(fn) };
+  }
+
+  private async writeFile(full: Graph, schema: 1 | 2): Promise<void> {
+    // 読み込みと同じ検査（保存の形）を通してから書く——読めないファイルを書かない（座標の範囲など）。
+    const check = GraphSchema.safeParse(full);
+    if (!check.success) {
+      throw new GraphInvalidError([
+        {
+          code: "unwritable",
+          message: `the graph does not fit the saved format: ${check.error.issues[0]?.path.join(".") ?? ""}`,
+        },
+      ]);
+    }
+    const { rev, ...graph } = full;
+    const data: GraphFileData = { schema, rev, graph, savedAt: new Date().toISOString() };
+    await writeFileAtomic(this.filePath, `${JSON.stringify(data, null, 2)}\n`);
   }
 
   private findLink(s: GraphDraftState, linkId: string): Graph["links"][number] {
@@ -226,14 +355,7 @@ export class GraphStore {
       const next: GraphDraftState = {
         graph: { ...changed.graph, rev: this.state.graph.rev + (opts.bumpRev ? 1 : 0) },
       };
-      const { rev, ...graph } = next.graph;
-      const data: GraphFileData = {
-        schema: 1,
-        rev,
-        graph,
-        savedAt: new Date().toISOString(),
-      };
-      await writeFileAtomic(this.filePath, `${JSON.stringify(data, null, 2)}\n`);
+      await this.writeFile(next.graph, this.pendingMigration ? GRAPH_SCHEMA_V1 : GRAPH_SCHEMA);
       this.state = next;
       // 保存は済んでいる。知らせる先が投げても失敗にしない（保存したのに失敗と答え、同じ変更を送り直させない）。
       for (const fn of [...this.listeners]) {

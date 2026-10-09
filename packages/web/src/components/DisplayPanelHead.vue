@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { DisplayInfo } from "@sodashitsu/protocol";
-import { computed, inject } from "vue";
+import { computed, inject, onBeforeUnmount, watch } from "vue";
 import { displayLabel } from "../display/displayLabel.js";
-import { dismissWithFocus, menuPositionBelow, openDisplayMenu, trayFocusTarget, withDisplayChange } from "../display/displayOps.js";
+import { createDockDrag, type DockZone } from "../display/dockDrag.js";
+import { dismissWithFocus, headFocusTarget, menuPositionBelow, openDisplayMenu, trayFocusTarget, withDisplayChange } from "../display/displayOps.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useViewStore } from "../store/view.js";
@@ -20,6 +21,45 @@ const controller = inject(DisplayControllerKey, null);
 const host = inject(DisplayHostKey, undefined);
 
 const label = computed(() => displayLabel(props.info));
+
+/**
+ * 見出しのつかむ場所（`[data-display-grip]`）の D&D。離した場所が今の置き場所と同じなら何もしない。置き場所を変える操作は `withDisplayChange` を通す（フォーカスを `body` に落とさない）。
+ * 枠は動かさず、置き場所の鍵が替わって作り直す。`view.paneDrag`（pane の名前の D&D）は立てない。
+ */
+const dockDrag = createDockDrag({
+  // 見出しは、タブを替えても同じ部品なので、面の id・pane は読むたびに取る。
+  get id() {
+    return props.info.id;
+  },
+  get paneId() {
+    return props.info.paneId;
+  },
+  box: () => document.querySelector(`[data-pane-id="${CSS.escape(props.info.paneId)}"] .pane-frame-body-displays`)?.getBoundingClientRect() ?? null,
+  float: () => false, // 浮いた窓は PR-C
+  setState: (st) => store.setDockDrag(st),
+  drop: (zone: DockZone) => {
+    if (zone === "float" || zone === store.effectiveOf(props.info).dock) return;
+    void withDisplayChange(
+      props.info,
+      () => store.setFaceDock(props.info, zone),
+      () => headFocusTarget(props.info.id),
+      host,
+    );
+  },
+  modalOpen: () => view.modalOpen,
+});
+watch(
+  () => view.modalOpen,
+  (open) => {
+    if (open) dockDrag.cancel();
+  },
+);
+// つかんでいる面が閉じられて、同じ側の別の面の見出しになった（部品は使い回される）ら、その場で取り消す（別の面を動かさない。`createDockDrag` も、動かす・離すときに面の違いを見て取り消す）。
+watch(
+  () => props.info.id,
+  () => dockDrag.cancel(),
+);
+onBeforeUnmount(() => dockDrag.cancel());
 
 function onFold(): void {
   void withDisplayChange(
@@ -52,7 +92,18 @@ function onKeydown(ev: KeyboardEvent): void {
 
 <template>
   <div class="display-head pane-panel-head" data-display-chrome data-display-head @keydown="onKeydown">
-    <div class="display-head-grip" data-display-grip data-display-keepfocus data-pane-panel-label @mousedown.prevent>
+    <div
+      class="display-head-grip"
+      data-display-grip
+      data-display-keepfocus
+      data-pane-panel-label
+      @mousedown.prevent
+      @pointerdown="dockDrag.onPointerDown"
+      @pointermove="dockDrag.onPointerMove"
+      @pointerup="dockDrag.onPointerUp"
+      @pointercancel="dockDrag.onPointerCancel"
+      @lostpointercapture="dockDrag.onPointerCancel"
+    >
       <DisplayScriptMark :info="info" part="mark" /><span class="display-head-label">{{ label }}</span>
     </div>
     <div class="display-head-actions">
@@ -92,6 +143,7 @@ function onKeydown(ev: KeyboardEvent): void {
 <style scoped>
 .display-head {
   flex: none;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -108,6 +160,7 @@ function onKeydown(ev: KeyboardEvent): void {
   align-items: center;
   font-weight: bold;
   cursor: grab;
+  touch-action: none;
 }
 .display-head-label {
   min-width: 0;
@@ -116,9 +169,13 @@ function onKeydown(ev: KeyboardEvent): void {
   text-overflow: ellipsis;
 }
 .display-head-actions {
-  flex: none;
+  /* 縮められる（親の幅に収まらなければ、ボタンの並びが折り返す）。縮まないと、操作中の［操作を終える］が加わったとき、パネルの箱の外へはみ出す。 */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 2px;
   margin-left: auto;
 }

@@ -230,12 +230,12 @@ sodactl graph pause --json                                         # 全部の�
 sodactl graph history "$l" --json | jq '.runs[:5]'
 ```
 
-- 端は pane ID（先頭の部分でも）・エージェントの名前・`<マシンの名前>:<pane の完全な ID>`（別のマシンの pane。部分・名前は不可）。載っていない pane は線と一緒にグラフへ載る（`sodactl graph node add` で先に載せてもよい）。
+- 端は pane ID（先頭の部分でも）・エージェントの名前・`<マシンの名前>:<pane の完全な ID>`（別のマシンの pane。部分・名前は不可）。手元の pane のノードは、サーバが全部の pane に足している。別のマシンの pane は、載っていなければ線と一緒にグラフへ載る（`sodactl graph node add` で先に載せてもよい）。
   ノードの鍵は `local:<pane の UUID>`・`<マシンの id>:<pane の UUID>` の形で JSON に出る（表の `node`・`from`・`to` は先頭 8 文字の短い呼び名）。
 - 線ごとに実行回数の上限（`--limit`。既定 10、1〜100）があり、達するとその線は止まる（`paused: "limit"`）。**上限で止まった線・利用者が止めた線を自分で再開しない**。
 - 往復する線（A→B と B→A）は上限まで回り続ける。作るときは上限を小さくする。
 - 変えられなかったときの `rev_conflict` は、取り直して 1 回送り直した後も他で変わり続けたということ。`sodactl graph show` で今の形を見てから決める。
-- 閉じた pane のノードは、手元の pane なら閉じたときに自動で外れる（線も消える）。別のマシンの pane が閉じたノード（画面では無効と出る。`graph show` の `status` は `-`）は残るので、
+- 閉じた pane のノードは、手元の pane なら閉じたときに自動で外れる（線も消える）。開いている手元の pane のノードは外せず・選び直せない（`node_required`）。別のマシンの pane が閉じたノード（画面では無効と出る。`graph show` の `status` は `-`）は残るので、
   `sodactl graph node rekey <pane> <新しい pane>` で同じマシンの pane に選び直すか、`sodactl graph node rm <pane>` で外す（外すとその線も消える。閉じた pane は完全な ID で指す）。
 - `sodactl graph link set <線>` で設定を変え、`sodactl graph link rm <線>` で消す。
 - 文面が `--` で始まるときは `--prompt=<文面>` の形で渡す（離して書くと値の無いオプションとして断られる）。

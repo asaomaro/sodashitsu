@@ -3,7 +3,7 @@ import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
 import { runDisplay } from "../support/display.js";
 import { frameLoc, openDisplayBrowser, writeTmp } from "../support/displayBrowser.js";
-import { activeTagName, boxOf, centerHitsSelf, clickBlankAppSpace, frameHandle, intersects, trayButton, trayButtons } from "../support/displayLayout.js";
+import { activeTagName, bodyHits, boxOf, centerHitsSelf, clickBlankAppSpace, frameHandle, frameLoads, idsOf, intersects, menuItem, openFaceMenu, set, stealReports, takeFrameLog, termFocused, trackBodyHits, trayButton, trayButtons, watchFrames } from "../support/displayLayout.js";
 import { enableScript, ok, setScriptOk } from "../support/displayScript.js";
 import { focusTerminal, prefixKey } from "../support/keys.js";
 
@@ -11,8 +11,6 @@ import { focusTerminal, prefixKey } from "../support/keys.js";
  * 表示の面の状態の記憶と既定・帯のたたみと上下・帯の行のボタン（20261008-display-layout の PR-A）。合否はブラウザの側の観測で見る
  * （DOM・箱・`elementFromPoint`・`document.activeElement`・ブラウザが送った `client.view`・`display.*`）。
  */
-const set = (appServer: AppServer, paneId: string, name: string, kind: "panel" | "band", extra: string[] = [], text = name) =>
-  runDisplay(appServer, paneId, ["set", name, "--kind", kind, "--text", text, ...extra]).then(ok);
 const reload = async (page: Page): Promise<void> => {
   await page.reload();
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
@@ -20,17 +18,6 @@ const reload = async (page: Page): Promise<void> => {
 const panelCount = (page: Page) => page.locator("[data-pane-panel]");
 const stored = (page: Page): Promise<{ faces: Record<string, unknown>; names: Record<string, unknown> }> =>
   page.evaluate(() => (JSON.parse(localStorage.getItem("soda.prefs.v1") ?? "{}") as { displayLayout?: never }).displayLayout ?? { faces: {}, names: {} });
-/** 面の名前 → 面の id（`data-display-root` は id）。 */
-const idsOf = async (appServer: AppServer, paneId: string): Promise<Record<string, string>> => {
-  const r = await ok(await runDisplay(appServer, paneId, ["list"]));
-  return Object.fromEntries((r.json as { displays: { id: string; name: string }[] }).displays.map((d) => [d.name, d.id]));
-};
-const openFaceMenu = async (page: Page, appServer: AppServer, paneId: string, name: string): Promise<void> => {
-  const id = (await idsOf(appServer, paneId))[name]!;
-  await page.locator(`[data-display-root="${id}"] [data-display-menu-button]`).click();
-  await expect(page.getByRole("menu")).toBeVisible();
-};
-const menuItem = (page: Page, label: string) => page.getByRole("menuitem", { name: label, exact: true });
 
 test("(1) たたみの記憶: 再読み込みしても保たれる。別の localStorage は既定のまま。面を閉じて同じ名前で出し直しても同じ状態", async ({ page, appServer, browser }) => {
   const { paneId } = await openDisplayBrowser(page, appServer);
@@ -166,17 +153,18 @@ test("(4) トレイ: 帯の行の中・帯の枠と箱が交わらない・ボ�
   expect(await centerHitsSelf(close)).toBe(true);
 });
 
-test("(5) --collapsed・--edge は記憶の無い面に効く。--dock bottom は list に載るが PR-A の画面では右に出る。操作した後は指定を変えても変わらない。帯を下へ移しただけの後、--collapsed つきの set でたたまれない。「プログラムの指定に戻す」で戻る", async ({ page, appServer }) => {
+test("(5) --collapsed・--edge は記憶の無い面に効く。--dock bottom は list に載り、下に出る（PR-B から。PR-A では右に出た）。操作した後は指定を変えても変わらない。帯を下へ移しただけの後、--collapsed つきの set でたたまれない。「プログラムの指定に戻す」で戻る", async ({ page, appServer }) => {
   const { paneId } = await openDisplayBrowser(page, appServer);
   await set(appServer, paneId, "c", "panel", ["--collapsed"]);
   await expect(trayButton(page, "c")).toBeVisible();
   await set(appServer, paneId, "d", "panel", ["--dock", "bottom"]);
   const list = await ok(await runDisplay(appServer, paneId, ["list"]));
   expect((list.json as { displays: { name: string; dock?: string }[] }).displays.find((x) => x.name === "d")?.dock).toBe("bottom");
-  await expect(page.locator('[data-pane-panel][data-display-dock="right"]')).toHaveCount(1); // 落ちずに右に出る
-  // 利用者が開く → 指定を変えた set でも変わらない
+  await expect(page.locator('[data-pane-panel][data-display-dock="bottom"]')).toHaveCount(1); // 指定どおり下に出る
+  // 利用者が開く → 右に出る（下の d とは別の側なので、タブにならない）。指定を変えた set でも変わらない
   await trayButton(page, "c").click();
-  await expect(page.locator("[data-pane-panel-tab]")).toHaveCount(2);
+  await expect(page.locator('[data-pane-panel][data-display-dock="right"]')).toHaveCount(1);
+  await expect(page.locator("[data-pane-panel]")).toHaveCount(2);
   await set(appServer, paneId, "c", "panel", ["--collapsed", "--size", "300"]);
   await expect(trayButtons(page)).toHaveCount(0);
   // 帯を下へ移しただけの後、--collapsed つきの set をしても、たたまれない
@@ -193,43 +181,6 @@ test("(5) --collapsed・--edge は記憶の無い面に効く。--dock bottom �
   await menuItem(page, "プログラムの指定に戻す").click();
   await expect(trayButton(page, "bb")).toBeVisible();
 });
-
-/**
- * 枠（iframe）の出入りを記録する。Chromium は、iframe を DOM の中で動かすと（同じ要素のまま）`load` が 1 増える（`isConnected` は常に真）ので、
- * 動かしたことは `data-display-loads` の比較と、この記録（`removedNodes`・`addedNodes`）でしか見つからない。記録の `id` は面の id。
- */
-const watchFrames = (page: Page): Promise<void> =>
-  page.evaluate(() => {
-    const w = window as unknown as { __frameLog: { kind: string; id: string }[] };
-    w.__frameLog = [];
-    const ids = new WeakMap<Element, string>();
-    const idOf = (f: Element): string => {
-      let v = ids.get(f);
-      if (!v) {
-        v = f.closest("[data-display-root]")?.getAttribute("data-display-root") ?? "?";
-        ids.set(f, v);
-      }
-      return v;
-    };
-    const frames = (n: Node): Element[] => (n instanceof Element ? (n.matches("iframe[data-display-frame]") ? [n] : Array.from(n.querySelectorAll("iframe[data-display-frame]"))) : []);
-    document.querySelectorAll("iframe[data-display-frame]").forEach(idOf);
-    new MutationObserver((ms) => {
-      for (const m of ms) {
-        for (const n of Array.from(m.removedNodes)) for (const f of frames(n)) w.__frameLog.push({ kind: "removed", id: idOf(f) });
-        for (const n of Array.from(m.addedNodes)) for (const f of frames(n)) w.__frameLog.push({ kind: "added", id: idOf(f) });
-      }
-    }).observe(document, { childList: true, subtree: true });
-  });
-/** 記録を取り出して空にする（面の id の重複を除く）。 */
-const takeFrameLog = async (page: Page): Promise<string[]> => {
-  await page.waitForTimeout(150);
-  const log = await page.evaluate(() => {
-    const w = window as unknown as { __frameLog: { kind: string; id: string }[] };
-    return w.__frameLog.splice(0);
-  });
-  return [...new Set(log.map((l) => l.id))];
-};
-const frameLoads = (page: Page): Promise<string[]> => page.locator("iframe[data-display-frame]").evaluateAll((els) => els.map((e) => e.getAttribute("data-display-loads") ?? ""));
 
 test("(6) load と枠の要素: 変えた面の枠は別の要素・変えていない面の枠は同じ要素のまま。どの後も data-display-loads が 1 で、面が残り、navigated を送らない。script-html でも同じ", async ({ page, appServer }) => {
   await enableScript(appServer);
@@ -338,20 +289,6 @@ test(`(6b-${kind}) 帯 2 本（上限）とパネル 1 枚で、上下の移動�
 // --- (7) フォーカス --------------------------------------------------------------------------------------------------------
 
 const BENIGN = `<!doctype html><body><p>benign</p><script>setInterval(function(){}, 1000);</script></body>`;
-const stealReports = (sent: { reports(): { problem: string }[] }): number => sent.reports().filter((r) => r.problem === "focus_steal").length;
-const termFocused = (page: Page): Promise<boolean> => page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea") === true);
-/**
- * `activeElement` が `body` になった回数を数え始める（25ms ごとの標本。`focusout` の瞬間も数えるのは `transient` が真のとき）。
- * フォーカスのある要素が DOM から消える瞬間は、ブラウザが一瞬 `body` にする（描き直しの後の備えが同じ周期のうちに端末へ移すので、利用者には見えない）ので、消える操作では標本だけで数える。
- */
-const trackBodyHits = (page: Page, transient = true): Promise<void> =>
-  page.evaluate((withFocusout) => {
-    const w = window as unknown as { __bodyHits: number };
-    w.__bodyHits = 0;
-    if (withFocusout) document.addEventListener("focusout", (e) => { if ((e as FocusEvent).relatedTarget === null && document.activeElement === document.body) w.__bodyHits++; }, true);
-    setInterval(() => { if (document.activeElement === document.body) w.__bodyHits++; }, 25);
-  }, transient);
-const bodyHits = (page: Page): Promise<number> => page.evaluate(() => (window as unknown as { __bodyHits: number }).__bodyHits);
 
 test("(7)(a)(b)(d) マウスで押しても activeElement は端末のまま（body にならない）。メニューを開いたまま見出しのつかむ場所を押すと端末。キーだけでたためる。静的な枠の中をクリックしてからメニューでたたむと端末", async ({ page, appServer }) => {
   const { paneId, sent } = await openDisplayBrowser(page, appServer);

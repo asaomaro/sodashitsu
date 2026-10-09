@@ -138,8 +138,8 @@ describe("設定画面", () => {
     expect(h.patches()[1]).toEqual({ shellCwdTracking: true });
   });
 
-  // 20261008-display-layout：表示の面の配置の設定 2 つは、端末の節の末尾に「ブラウザ版だけ」の注記つきで出る。
-  it("端末の節に表示の面の配置の設定 2 つが出て（パネルの既定の置き場所は PR-B から）、既定の値を示し、変えると共有の設定へ送る", async () => {
+  // 20261008-display-layout：表示の面の配置の設定 3 つは、端末の節の末尾に「ブラウザ版だけ」の注記つきで出る。
+  it("端末の節に表示の面の配置の設定 3 つが出て（パネルの既定の置き場所は、右・左・上・下）、既定の値を示し、変えると共有の設定へ送る", async () => {
     const h = await open();
     await h.section(3);
     for (let i = 0; i < 4; i++) h.io.type(DOWN); // scrollback・新しく開く場所・パス・シェルの場所の次
@@ -147,7 +147,8 @@ describe("設定画面", () => {
     expect(t).toContain("表示のパネルの初めの状態");
     expect(t).toContain("ブラウザの画面の設定です");
     expect(h.app.prefs.displayPanelInitial).toBe("open");
-    expect(t).not.toContain("表示のパネルの既定の置き場所");
+    expect(t).toContain("表示のパネルの既定の置き場所");
+    expect(h.app.prefs.displayPanelDock).toBe("right");
     expect(h.app.prefs.displayBandEdge).toBe("top");
     h.io.type(ENTER + DOWN + ENTER); // たたむ
     expect(h.patches()).toEqual([{ displayPanelInitial: "collapsed" }]);
@@ -160,6 +161,25 @@ describe("設定画面", () => {
     for (let i = 0; i < 12; i++) h.io.type(DOWN);
     h.io.type(ENTER + DOWN + DOWN + ENTER); // 256 色
     expect(h.app.prefs.colorMode).toBe("256");
+    expect(h.patches()).toEqual([]);
+  });
+
+  it("背景を透過する（この端末だけ）は tui-state で、共有の設定へは送らず、切り替えると画面を描き直す（AC1・AC4）", async () => {
+    const h = await open();
+    await h.section(6);
+    for (let i = 0; i < 14; i++) h.io.type(DOWN);
+    const screen = await h.text();
+    expect(screen).toContain("背景を透過する（この端末だけ）");
+    expect(h.app.prefs.transparentBg).toBe(false);
+    const mark = h.io.output().length;
+    h.io.type(ENTER); // 入
+    await vi.waitFor(() => expect(h.app.prefs.transparentBg).toBe(true));
+    await vi.waitFor(() => expect(h.io.output().slice(mark)).toContain("\x1b[2J")); // 全体を描き直す
+    expect(h.patches()).toEqual([]);
+    const mid = h.io.output().length;
+    h.io.type(ENTER); // 切
+    await vi.waitFor(() => expect(h.app.prefs.transparentBg).toBe(false));
+    await vi.waitFor(() => expect(h.io.output().slice(mid)).toContain("\x1b[2J"));
     expect(h.patches()).toEqual([]);
   });
 

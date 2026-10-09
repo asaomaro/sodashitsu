@@ -4,10 +4,12 @@ import { ActionDispatcherKey, DisplayHostKey, TerminalRegistryKey } from "../inj
 import { isScriptFormat } from "../display/framePage.js";
 import { resolvePaneDisplays, type LayoutResult } from "../display/paneDisplayLayout.js";
 import { NO_NEIGHBORS, resolvePaneChrome, type PaneSide, type PaneSides } from "../layout/paneChrome.js";
+import type { Side as PaneSide2 } from "../display/paneDisplayLayout.js";
 import { paneNameOf } from "@sodashitsu/client-core";
 import { getCellSize } from "../term/measure.js";
 import { useDisplayStore } from "../store/display.js";
 import { useSessionStore } from "../store/session.js";
+import DisplayDropZones from "./DisplayDropZones.vue";
 import PaneBands from "./PaneBands.vue";
 import PanePanel from "./PanePanel.vue";
 import { useSettingsStore } from "../store/settings.js";
@@ -62,8 +64,8 @@ const displayEngaged = computed(() => {
   return !!displays && id != null && displays.infos.get(id)?.paneId === props.paneId;
 });
 const bodyEl = ref<HTMLElement | null>(null);
-/** パネルの幅のつまみをドラッグしている間の、案内の線の位置（パネルの幅 px。無ければ null）。 */
-const guideWidth = ref<number | null>(null);
+/** つまみをドラッグしている間の、案内の線（側と、その側のいま指している大きさ px）。無ければ null。 */
+const guide = ref<{ side: PaneSide2; px: number } | null>(null);
 const bodySize = ref({ w: 0, h: 0 });
 let bodyObserver: ResizeObserver | null = null;
 onMounted(() => {
@@ -103,8 +105,15 @@ const layout = computed<LayoutResult | null>(() => {
       if (d.kind === "band") bands.push({ id: d.id, seq, size: d.size, edge: f.edge ?? "top", collapsed: f.collapsed, script: isScriptFormat(d.format) && displays.scriptCapable && settings?.displayScriptEnabled === true });
       else panels.push({ id: d.id, seq, size: d.size, dock: f.dock ?? "right", collapsed: f.collapsed });
     });
-    const right = displays.sideSizeOf(props.paneId, "right");
-    const activeRight = displays.activeBySide.get(`${props.paneId}|right`);
+    const sides = ["right", "left", "top", "bottom"] as const;
+    const active: Partial<Record<(typeof sides)[number], string>> = {};
+    const sideSizes: Partial<Record<(typeof sides)[number], number>> = {};
+    for (const side of sides) {
+      const a = displays.activeBySide.get(`${props.paneId}|${side}`);
+      if (a) active[side] = a;
+      const size = displays.sideSizeOf(props.paneId, side);
+      if (size !== undefined) sideSizes[side] = size;
+    }
     return resolvePaneDisplays({
       paneW: bodySize.value.w,
       paneH: bodySize.value.h,
@@ -112,8 +121,8 @@ const layout = computed<LayoutResult | null>(() => {
       cellH: cellSize.value.height,
       bands,
       panels,
-      active: activeRight ? { right: activeRight } : {},
-      sideSizes: right !== undefined ? { right } : {},
+      active,
+      sideSizes,
       floatRects: {},
       trayEdgeDefault: settings?.displayBandEdge ?? "top",
     });
@@ -130,7 +139,31 @@ const showEdge = (edge: "top" | "bottom"): boolean => {
   const here = edge === "top" ? l.bands.top : l.bands.bottom;
   return here.length > 0 || (l.tray.edge === edge && (l.tray.row === "own" || l.bands.more.length > 0));
 };
-const rightDock = computed(() => layout.value?.docks.right ?? null);
+const docks = computed(() => layout.value?.docks ?? null);
+/** この pane の面を D&D している間の、落とせる場所の表示（`DisplayDropZones`）。いまの置き場所は、つかんでいる面の側。 */
+const dropZones = computed(() => {
+  const d = displays?.dockDrag;
+  if (!d || d.paneId !== props.paneId) return null;
+  const cur = displays.infos.get(d.id);
+  return { zone: d.zone, current: cur ? (displays.effectiveOf(cur).dock ?? null) : null };
+});
+
+/**
+ * つまみのドラッグの間の案内の線の位置（本体の箱を基準。`.pane-frame-guide`）。左右の側は、端末の領域の高さに沿った縦線（`left`/`right` が側の縁から `px`）、
+ * 上下の側は、本体の幅いっぱいの横線（`top`/`bottom` が、その側の外にある帯の行の分と `px`）。右だけのときの見える位置は、今までと同じ。
+ */
+const guideStyle = computed(() => {
+  const g = guide.value;
+  const l = layout.value;
+  if (!g || !l) return null;
+  const t = l.terminal;
+  const topRows = t.y - (l.docks.top?.size ?? 0);
+  const bottomRows = bodySize.value.h - (t.y + t.h) - (l.docks.bottom?.size ?? 0);
+  if (g.side === "right") return { right: `${g.px}px`, top: `${t.y}px`, height: `${t.h}px`, width: "3px", marginRight: "-1.5px" };
+  if (g.side === "left") return { left: `${g.px}px`, top: `${t.y}px`, height: `${t.h}px`, width: "3px", marginLeft: "-1.5px" };
+  if (g.side === "top") return { top: `${topRows + g.px}px`, left: "0px", right: "0px", height: "3px", marginTop: "-1.5px" };
+  return { bottom: `${bottomRows + g.px}px`, left: "0px", right: "0px", height: "3px", marginBottom: "-1.5px" };
+});
 
 // --- 割り付けが変わったときの備えと、結果の写し --------------------------------------------------------------------------------
 // フォーカスのあった部品（見出し・トレイ・つまみ）が、自動のたたみ・プログラムの close・指定の変更で消えても、フォーカスを `body` に落とさない。
@@ -416,14 +449,19 @@ function onKeydown(ev: KeyboardEvent): void {
     <!-- 表示の面（パネル・帯）の有無で `<slot />` の位置を変えない（葉を作り直さない）: `enabled` のときは常に row > main の中に置く。 -->
     <div v-if="enabled" ref="bodyEl" class="pane-frame-body pane-frame-body-displays">
       <PaneBands v-if="layout && showEdge('top')" edge="top" :pane-id="paneId" :layout="layout" />
+      <!-- 4 つの側は、別の位置の `v-if`（1 つの `v-for` にしない。枠〔iframe〕を DOM の中で動かさないため）。 -->
+      <PanePanel v-if="layout && docks?.top" side="top" :pane-id="paneId" :dock="docks.top" @guide="guide = $event" />
       <div class="pane-frame-row">
+        <PanePanel v-if="layout && docks?.left" side="left" :pane-id="paneId" :dock="docks.left" @guide="guide = $event" />
         <div class="pane-frame-center">
           <div class="pane-frame-main" :class="{ 'pane-frame-main-dimmed': displayEngaged }" data-pane-frame-main><slot /></div>
         </div>
-        <PanePanel v-if="layout && rightDock" side="right" :pane-id="paneId" :dock="rightDock" @guide="guideWidth = $event" />
-        <div v-if="guideWidth !== null" class="pane-frame-guide" :style="{ right: `${guideWidth}px` }" aria-hidden="true" data-pane-frame-guide></div>
+        <PanePanel v-if="layout && docks?.right" side="right" :pane-id="paneId" :dock="docks.right" @guide="guide = $event" />
       </div>
+      <PanePanel v-if="layout && docks?.bottom" side="bottom" :pane-id="paneId" :dock="docks.bottom" @guide="guide = $event" />
       <PaneBands v-if="layout && showEdge('bottom')" edge="bottom" :pane-id="paneId" :layout="layout" />
+      <DisplayDropZones v-if="dropZones" :zone="dropZones.zone" :current="dropZones.current" :float="false" />
+      <div v-if="guideStyle" class="pane-frame-guide" :style="guideStyle" aria-hidden="true" data-pane-frame-guide></div>
     </div>
     <div v-else class="pane-frame-body">
       <slot />
@@ -629,13 +667,9 @@ function onKeydown(ev: KeyboardEvent): void {
   min-height: 0;
   position: relative;
 }
-/* パネルの幅のつまみをドラッグしている間の案内の線（幅は離すまで変えない）。 */
+/* つまみをドラッグしている間の案内の線（幅は離すまで変えない）。位置と太さは `guideStyle`（本体の直下に、本体の箱を基準に置く）。 */
 .pane-frame-guide {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  margin-right: -1.5px;
   background: var(--soda-resize-line, #f8f8f2);
   pointer-events: none;
   z-index: 25;

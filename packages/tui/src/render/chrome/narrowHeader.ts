@@ -23,7 +23,7 @@ const SWITCH_LABEL = " switch ";
  */
 export function paintNarrowHeader(grid: Grid, rect: Rect, ctx: ChromeContext): NarrowHeaderHits {
   const { theme, model } = ctx;
-  const bg = theme.ui("--soda-menu-bg");
+  const bg = theme.ground("--soda-menu-bg");
   const fg = theme.ui("--soda-fg");
   grid.fill(rect, fg, bg);
   const end = rect.x + rect.w;

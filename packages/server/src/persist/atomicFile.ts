@@ -51,7 +51,10 @@ export async function readFileWithBackup<T>(
   }
 }
 
-async function backupCorruptFile(filePath: string, backupsDir: string, raw: string): Promise<string> {
+/** 移行の前の控えのファイル名の先頭。`pruneOldBackups`（最新 3 件を残す）の対象にしない。 */
+export const PRE_MIGRATION_PREFIX = "pre-migration-";
+
+export async function backupCorruptFile(filePath: string, backupsDir: string, raw: string): Promise<string> {
   await mkdir(backupsDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const backupPath = join(backupsDir, `${stamp}.json`);
@@ -61,7 +64,8 @@ async function backupCorruptFile(filePath: string, backupsDir: string, raw: stri
 }
 
 async function pruneOldBackups(backupsDir: string, keep: number): Promise<void> {
-  const entries = (await readdir(backupsDir)).sort(); // ISO 風のファイル名なので辞書順 = 時系列
+  // 移行の前の控え（`pre-migration-` で始まる名前）は入れ替えの対象にしない（失敗した起動をくり返しても、元のファイルの控えを消さない）。
+  const entries = (await readdir(backupsDir)).filter((n) => !n.startsWith(PRE_MIGRATION_PREFIX)).sort(); // ISO 風のファイル名なので辞書順 = 時系列
   const toRemove = entries.slice(0, Math.max(0, entries.length - keep));
   await Promise.all(toRemove.map((name) => rm(join(backupsDir, name)).catch(() => undefined)));
 }

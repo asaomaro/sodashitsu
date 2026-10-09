@@ -480,6 +480,22 @@ describe("SessionService — tabs and panes", () => {
       expect(persist.touchCount).toBe(1);
     });
 
+    it("別の workspace の tab へ移したとき、連携のグラフの維持が拾うできごと（pane.updated・layout.updated）が出る（20261008-graph-first T5）", async () => {
+      const { pane: p1 } = await service.createWorkspace("/home/u", "api");
+      const { pane: p2 } = await service.splitPane(p1.id, "right", undefined);
+      const { tab: other } = await service.createWorkspace("/home/u", "web");
+      const events: string[] = [];
+      bus.subscribe((e) => events.push(e.event));
+
+      expect(service.moveToTab(p2.id, other.id)).toBe(true);
+
+      // GraphMaintainer が購読する構造のできごと（pane.updated・layout.updated）が、別の workspace への移動でも出る。
+      expect(events).toContain("pane.updated");
+      expect(events).toContain("layout.updated");
+      const moved = service.snapshot().panes.find((p) => p.id === p2.id)!;
+      expect(service.getTab(moved.tabId)?.workspaceId).toBe(other.workspaceId);
+    });
+
     it("移動元 tab がその1枚だけの pane を失って空になるとき: workspace が生き残れば tab.closed → workspace.updated を publish する", async () => {
       const { tab: t1 } = await service.createWorkspace("/home/u", "api");
       const { tab: t2, pane: p2 } = await service.createTab(t1.workspaceId, undefined);

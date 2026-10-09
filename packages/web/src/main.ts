@@ -5,6 +5,7 @@ import type { ITerminalOptions } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 // 境目（サイドバーの幅・pane の間・spaces と agents）の見た目。動きは composables/useResizeDrag.ts（20261004-ui-interaction-polish）。
 import "./styles/resizeHandle.css";
+import "./styles/displayDrag.css";
 import { createPinia } from "pinia";
 import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";

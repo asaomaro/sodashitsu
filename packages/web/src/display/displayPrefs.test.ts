@@ -143,7 +143,8 @@ describe("effectiveDock（記憶 ＞ 同じ名前 ＞ 指定 ＞ 設定。caps �
     expect(effectiveDock(i, { ...nm, faces: { [faceKey(i)]: { dock: "float", collapsed: false } } }, set, ALL)).toBe("float"); // 面の記憶 ＞ 同じ名前
   });
   it("caps に無い値は飛ばして次を見る。どれも出せなければ right", () => {
-    expect(effectiveDock(i, emptyLayout(), { dock: "right" }, DISPLAY_DOCK_CAPS)).toBe("right");
+    expect(DISPLAY_DOCK_CAPS).toEqual(["right", "left", "top", "bottom"]); // PR-B: 4 つの側（浮いた窓は PR-C）
+    expect(effectiveDock(i, emptyLayout(), { dock: "right" }, ["right"])).toBe("right");
     expect(effectiveDock(i, emptyLayout(), { dock: "top" }, ["top", "right"])).toBe("top");
     expect(effectiveDock(i, nm, { dock: "float" }, ["right"])).toBe("right");
     expect(effectiveDock(i, emptyLayout(), { dock: "float" }, ["top"])).toBe("right");

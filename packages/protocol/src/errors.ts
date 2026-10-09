@@ -80,6 +80,9 @@ export type ErrorCode =
   | "server_stop_unsupported"
   // 連携のグラフ（20260927-agent-graph）。`graph.update` の `baseRev` が今の rev と違う（他のブラウザ・sodactl が先に変えた）。最新を取り直して作り直す。
   | "rev_conflict"
+  // 連携のグラフの検査（20261008-graph-first）。`graph.update` の方式の層が断る（保存の読み込みには使わない）。
+  | "node_required" // 開いている手元の pane のノードを外す・選び直す（手元のすべての pane のノードはサーバが持つ）
+  | "frame_overlap" // その更新が、workspace・worktree グループの囲いの重なりを新しく作る・広げる
   // 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）。
   | "invalid_ask_spec" // 定義の誤り・上限の超過
   | "ask_busy" // 同じ pane に待っている質問がある
@@ -89,7 +92,9 @@ export type ErrorCode =
   | "display_limit" // 数・合計の上限（pane のパネル 4・帯 2、サーバ全体 64・32 MiB）
   | "display_script_disabled" // スクリプトが動く表示（script-html）が、設定で無効（既定）
   | "display_busy" // 頻度の上限（set の回数・量）・待ちの上限（pane 4・全体 32）
-  | "display_closed"; // その面はもう無い。`display.subscribe` していない接続からの get・action・dismiss・report も同じ
+  | "display_closed" // その面はもう無い。`display.subscribe` していない接続からの get・action・dismiss・report も同じ
+  // 拡張の承認（20261007-ext-host PR3）。
+  | "extension_stale"; // 承認しようとした登録の鍵が、いまの登録と違う（承認の画面を開いている間に、設定ファイルが変わった）
 
 export interface ProtocolError {
   code: ErrorCode;
