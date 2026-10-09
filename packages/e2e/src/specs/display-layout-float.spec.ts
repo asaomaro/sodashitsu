@@ -544,7 +544,16 @@ test("(5b) 操作中の窓が覆われない: 先に窓 B を利用者として�
   // A を操作中にする
   await wa.locator("[data-display-engage]").click();
   await expect(wa).toHaveAttribute("data-display-engaged", "1");
-  // プログラムが B を set し直す → B が A に重なる位置に出る（A の後ろ）
+  // プログラムが B を set し直す → B が A に重なる位置に出る（A の後ろ）。**出た瞬間から**、A の z-index が最前面でなければならない
+  // （後から、A の操作中の通知で前へ出し直されても、その前の一瞬に見出しが覆われるのは、利用者に見える不具合）: DOM が変わるたびに、窓の z-index を記録する。
+  await page.evaluate(() => {
+    const w = window as unknown as { __zlog: { id: string; z: number }[][] };
+    w.__zlog = [];
+    const snap = (): void => {
+      w.__zlog.push(Array.from(document.querySelectorAll<HTMLElement>("[data-display-float]")).map((e) => ({ id: e.getAttribute("data-display-root") ?? "", z: Number(e.style.zIndex) })));
+    };
+    new MutationObserver(snap).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
+  });
   await set(appServer, paneId, "wb", "panel", ["--dock", "float"], "B2");
   const wb2 = floatWin(page, (await idsOf(appServer, paneId))["wb"]!);
   await expect(wb2).toBeVisible();
@@ -553,6 +562,13 @@ test("(5b) 操作中の窓が覆われない: 先に窓 B を利用者として�
     const loc = wa.locator(sel).first();
     await expect(loc, sel).toBeVisible();
     expect(await centerHitsSelf(loc), `A の ${sel} の中心が A 自身（B に覆われない）`).toBe(true);
+  }
+  const zlog = await page.evaluate(() => (window as unknown as { __zlog: { id: string; z: number }[][] }).__zlog);
+  expect(zlog.some((snap) => snap.length === 2), "B が出た後の記録がある").toBe(true);
+  for (const snap of zlog) {
+    const a = snap.find((e) => e.id === ids["wa"]);
+    const others = snap.filter((e) => e.id !== ids["wa"]);
+    if (a && others.length > 0) expect(a.z, `B が出た瞬間から A が最前面（${JSON.stringify(snap)}）`).toBeGreaterThan(Math.max(...others.map((e) => e.z)));
   }
   // B の題（覆い）を押す → B が上になり、A の操作は終わる。focus_steal は送られない
   const zA = await wa.evaluate((e) => Number(getComputedStyle(e).zIndex));
