@@ -34,6 +34,8 @@ const emit = defineEmits<{
   add: [workspaceId: string, trigger: HTMLElement];
   /** 見出しの右クリック（pane を足す・workspace を閉じる。PR3 T14e）。 */
   headContextmenu: [ev: MouseEvent, workspaceId: string];
+  /** worktree グループの外側の囲いの見出しの右クリック（別のグループへ移す。PR4 T15b。`workspaceId` は中の workspace のどれか）。 */
+  groupContextmenu: [ev: MouseEvent, workspaceId: string];
   /** タグから `Esc`: ノードへ戻る。 */
   leave: [];
 }>();
@@ -148,7 +150,10 @@ function subtitle(info: FrameInfo): string {
         role="group"
         :aria-label="`${r.info.title}${r.info.kind === 'worktree' ? '（worktree グループ）' : ''}`"
         @pointerdown="!readOnly && !r.frame.placeholder && emit('headingPointerdown', $event, r.frame.id)"
-        @contextmenu="!readOnly && !r.frame.placeholder && r.info.kind === 'workspace' && ($event.preventDefault(), emit('headContextmenu', $event, r.info.id))"
+        @contextmenu="
+          !readOnly && !r.frame.placeholder && r.info.kind === 'workspace' && ($event.preventDefault(), emit('headContextmenu', $event, r.info.id));
+          !readOnly && !r.frame.placeholder && r.info.kind === 'worktree' && r.info.memberIds[0] !== undefined && ($event.preventDefault(), emit('groupContextmenu', $event, r.info.memberIds[0]));
+        "
       >
         <span class="graph-frame-title" :title="r.info.title">{{ r.info.title }}</span>
         <span class="graph-frame-sub" :title="subtitle(r.info)">{{ subtitle(r.info) }}</span>

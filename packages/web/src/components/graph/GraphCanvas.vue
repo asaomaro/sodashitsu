@@ -23,6 +23,8 @@ import {
   graphNodeAt,
   graphNodeRect,
   isLocalNodeKey,
+  groupIdOfNavigateKey,
+  isUngroupedNavigateKey,
   LOCAL_MACHINE_ID,
   addMissingNodeOps,
   buildNewCwd,
@@ -756,7 +758,11 @@ function onFrameHeadingPointerdown(ev: PointerEvent, frameId: string): void {
   };
   const clear = (): void => {
     for (const k of start.keys()) graph.setDragPosition(k, null);
+    setGroupDropMark(null);
+    frameDrop.value = null;
   };
+  // グループへ移せる囲い: 最上位の workspace・worktree グループ（worktree グループの中の workspace だけを移す操作は無い）。
+  const itemWorkspaceId = info.parentId === null && info.kind !== "machine" ? (info.kind === "workspace" ? info.id : (info.memberIds[0] ?? null)) : null;
   drag.start(ev, target, {
     threshold: 4,
     onStart: () => {
@@ -765,9 +771,26 @@ function onFrameHeadingPointerdown(ev: PointerEvent, frameId: string): void {
     onMove: (e, dx, dy) => {
       const d = delta(e, dx, dy);
       for (const [k, p] of start) graph.setDragPosition(k, { x: p.x + d.x, y: p.y + d.y });
+      // 空間の見出し・サイドバーのグループの行の上なら、離すとそのグループへ移る（位置の変更ではなく所属の移動）。
+      const t = itemWorkspaceId === null ? null : groupTargetUnder(e, info.spaceId);
+      frameDrop.value = t === null ? null : { spaceId: t.spaceId, groupId: t.groupId, label: t.label };
+      setGroupDropMark(t?.el ?? null);
     },
     onEnd: (e, dx, dy) => {
       frameDrag.value = null;
+      const drop = frameDrop.value;
+      if (drop !== null && itemWorkspaceId !== null) {
+        // 所属の移動: 位置は元のまま（グラフの座標は全体で 1 枚。空間は表示の絞り込み）。成功したら、移った先の空間を見せる。
+        clear();
+        void actions?.moveItemToGroup(itemWorkspaceId, drop.groupId).then((ok) => {
+          if (!ok) return;
+          if (spaces.spaces.some((x) => x.id === drop.spaceId)) switchSpace(drop.spaceId);
+          spaces.requestReveal({ kind: "workspace", workspaceId: itemWorkspaceId });
+          spaces.flash(frameId);
+          liveMessage.value = `${info.title} を「${drop.label}」へ移しました。`;
+        });
+        return;
+      }
       const d = delta(e, dx, dy);
       if (d.x === 0 && d.y === 0) {
         clear();
@@ -781,6 +804,42 @@ function onFrameHeadingPointerdown(ev: PointerEvent, frameId: string): void {
       clear();
     },
   });
+}
+/** 囲いの見出しをつかんでいる間の、移し先のグループ（空間の見出し・サイドバーのグループの行の上）。 */
+const frameDrop = ref<{ spaceId: string; groupId: string | null; label: string } | null>(null);
+let groupDropMarked: HTMLElement | null = null;
+/** 移し先の要素に印（輪郭）を付ける・外す。別の部品の要素なので、スタイルは直接付ける。 */
+function setGroupDropMark(el: HTMLElement | null): void {
+  if (groupDropMarked === el) return;
+  if (groupDropMarked) groupDropMarked.style.outline = "";
+  groupDropMarked = el;
+  if (el) el.style.outline = "2px solid var(--soda-accent, #6070a1)";
+}
+/** 指の下の移し先のグループ。`ownSpaceId` の空間（いまのグループ）は移し先にしない。 */
+function groupTargetUnder(ev: PointerEvent, ownSpaceId: string): { spaceId: string; groupId: string | null; label: string; el: HTMLElement } | null {
+  for (const raw of document.elementsFromPoint?.(ev.clientX, ev.clientY) ?? []) {
+    const el = raw as HTMLElement;
+    const bar = el.closest?.<HTMLElement>("[data-space-id]");
+    if (bar?.dataset["spaceId"]) {
+      const id = bar.dataset["spaceId"];
+      if (id === ownSpaceId || !spaces.spaces.some((x) => x.id === id)) return null;
+      return { spaceId: id, groupId: id.startsWith("g:") ? id.slice(2) : null, label: spaces.spaces.find((x) => x.id === id)?.label ?? id, el: bar };
+    }
+    const row = el.closest?.<HTMLElement>("[data-workspace-row-key]");
+    const key = row?.dataset["workspaceRowKey"] ?? null;
+    if (row && key !== null) {
+      const gid = groupIdOfNavigateKey(key);
+      if (gid !== null) {
+        if (`g:${gid}` === ownSpaceId) return null;
+        return { spaceId: `g:${gid}`, groupId: gid, label: session.groups.get(gid)?.label ?? "グループ", el: row };
+      }
+      if (isUngroupedNavigateKey(key)) {
+        if (ownSpaceId === "u") return null;
+        return { spaceId: "u", groupId: null, label: "グループなし", el: row };
+      }
+    }
+  }
+  return null;
 }
 // 囲いの構成が変わった（pane が増えた・workspace が閉じた）ら、動かしているのを取りやめる。
 watch(
@@ -2271,6 +2330,11 @@ function onFrameContextmenu(ev: MouseEvent, workspaceId: string): void {
   view.openContextMenu({ kind: "graphFrame", workspaceId }, { x: ev.clientX, y: ev.clientY });
 }
 
+function onGroupFrameContextmenu(ev: MouseEvent, workspaceId: string): void {
+  if (isMobile.value || props.kind !== "screen") return;
+  view.openContextMenu({ kind: "graphGroupFrame", workspaceId }, { x: ev.clientX, y: ev.clientY });
+}
+
 // --- ツールバー（デスクトップの画面。PR1e T17b）------------------------------------------------------------------------
 /** 「そのほか」のメニュー（ContextMenu を使う。キー・読み上げ・フォーカスの戻りは、その部品のもの）。 */
 function openMoreMenu(ev: MouseEvent | KeyboardEvent): void {
@@ -2756,6 +2820,7 @@ function chipAria(e: EdgeView): string {
               @tag="spaces.toggleEmphasis"
               @add="openAddForm"
               @head-contextmenu="onFrameContextmenu"
+              @group-contextmenu="onGroupFrameContextmenu"
             />
             <svg class="graph-edges" width="1" height="1" aria-hidden="true">
               <GraphEdge
@@ -2916,6 +2981,7 @@ function chipAria(e: EdgeView): string {
             @toggle="toggleMinimap"
           />
           <p v-if="nodeDrag?.hint" class="graph-drag-hint" role="status" data-graph-drag-hint :data-drag-kind="nodeDrag.dropFrame ? 'move' : 'blocked'">{{ nodeDrag.hint }}</p>
+          <p v-else-if="frameDrop" class="graph-drag-hint" role="status" data-graph-drag-hint data-drag-kind="move">「{{ frameDrop.label }}」へ移します（離すと移動・Esc で取りやめ）</p>
           <p v-if="graph.graph && graph.nodes.length === 0" class="graph-empty">
             表示する pane がありません。
           </p>

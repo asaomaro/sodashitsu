@@ -712,6 +712,28 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     void this.addItemToGroupLegacy(groupId, ctx.workspaceId).catch(failed);
   }
 
+  /**
+   * 項目（workspace・worktree グループはひとかたまり）を、別のグループへ入れる・「グループなし」へ出す（`groupId` が null）。
+   * グラフの画面（20261008-graph-first PR4 T15b）から呼ぶ。サイドバーの「グループへ追加…」「グループから外す」と同じ方式で、結果を返す
+   * （失敗したときは、トーストを出して false）。
+   */
+  async moveItemToGroup(workspaceId: string, groupId: string | null): Promise<boolean> {
+    try {
+      if (groupId === null) {
+        if (this.session.hasServerLayout) await this.conn.request("group.remove_member", { workspaceId });
+        else for (const id of this.itemWorkspaceIds(workspaceId)) await this.conn.request("group.remove_member", { workspaceId: id });
+      } else if (this.session.hasServerLayout) {
+        await this.conn.request("group.add_member", { groupId, workspaceId });
+      } else {
+        await this.addItemToGroupLegacy(groupId, workspaceId);
+      }
+      return true;
+    } catch {
+      this.view.toast(groupId === null ? "グループから外せませんでした" : "グループへ追加できませんでした");
+      return false;
+    }
+  }
+
   /** 「グループから外す」（項目がグループに入っているときだけ `ContextMenu` が出す）。古いサーバは項目の workspace 全部に順に送る。 */
   removeWorkspaceFromGroup(workspaceId: string): void {
     if (this.session.hasServerLayout) {

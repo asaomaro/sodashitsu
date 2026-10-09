@@ -298,9 +298,26 @@ const items = computed<MenuItem[]>(() => {
     return out;
   }
   if (target.kind === "graphFrame") {
+    const info = graphSpaces.infoMap.get(target.workspaceId);
+    const inWorktreeGroup = info?.parentId != null; // worktree グループの中の workspace だけを移す操作は出さない
+    const groupId = itemGroupIdOf(session, target.workspaceId);
     return [
       { label: "pane を足す", run: () => graphSpaces.requestCommand("addPane", target.workspaceId) },
+      ...(inWorktreeGroup
+        ? []
+        : [
+            { label: "別のグループへ移す…", run: () => actions.openGroupPicker(target.workspaceId) },
+            ...(groupId !== null ? [{ label: "グループから外す", run: () => void actions.moveItemToGroup(target.workspaceId, null) }] : []),
+          ]),
       { label: "workspace を閉じる", run: () => closeFromGraph({ type: "workspace", id: target.workspaceId }) },
+    ];
+  }
+  if (target.kind === "graphGroupFrame") {
+    // worktree グループの外側の囲いの見出し（PR4 T15b）。ひとかたまりで動く（中の workspace だけを移す操作は出さない）。
+    const groupId = itemGroupIdOf(session, target.workspaceId);
+    return [
+      { label: "別のグループへ移す…", run: () => actions.openGroupPicker(target.workspaceId) },
+      ...(groupId !== null ? [{ label: "グループから外す", run: () => void actions.moveItemToGroup(target.workspaceId, null) }] : []),
     ];
   }
   if (target.kind === "ungrouped") {

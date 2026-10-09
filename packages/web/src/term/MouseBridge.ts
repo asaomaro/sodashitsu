@@ -29,6 +29,8 @@ export type MenuTarget =
   | { kind: "graphNode"; key: string }
   /** グラフのノードのメニューの「別の workspace へ移す…」の行き先の一覧（落とせない先は理由つきで薄く。PR4 T15c）。 */
   | { kind: "graphMoveTo"; key: string }
+  /** グラフの worktree グループの外側の囲いの見出しの右クリック（別のグループへ移す。`workspaceId` は中の workspace のどれか。PR4 T15b）。 */
+  | { kind: "graphGroupFrame"; workspaceId: string }
   /** グラフの囲いの見出しの右クリック（pane を足す・workspace を閉じる。PR3 T14e）。 */
   | { kind: "graphFrame"; workspaceId: string }
   /** サイドバーの「新規」のボタン（モダンの配置。workspace・pane・グループのどれを足すかを選ぶ。20261008-ui-style PR4）。 */
