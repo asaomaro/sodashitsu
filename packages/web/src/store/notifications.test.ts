@@ -177,8 +177,10 @@ describe("useNotificationsStore — 環境の可否", () => {
 });
 
 // 応答せずに閉じた知らせの履歴（20261005-notify-bell。AC6・AC7）。規則そのものは `client-core/notify/history.test.ts`——ここは保存・scope・件数。
+// 履歴の項目の時刻は固定にする（Date.now() だと、同じ項目を 2 回作る間にミリ秒をまたいで「変わった」と判定され、負荷で揺れる）
+const T0 = Date.now(); // 7 日の期限で落ちないよう、読み込み時の現在にそろえ、以後は動かさない
 function hist(n: number, o: Partial<HistoryEntry> = {}): HistoryEntry {
-  return { key: `blocked:a${n}:1`, kind: "blocked", paneId: `p${n}`, instanceId: `a${n}`, seq: 1, label: `L${n}`, at: Date.now(), reason: "dismissed", ...o };
+  return { key: `blocked:a${n}:1`, kind: "blocked", paneId: `p${n}`, instanceId: `a${n}`, seq: 1, label: `L${n}`, at: T0, reason: "dismissed", ...o };
 }
 
 describe("useNotificationsStore — 履歴", () => {
