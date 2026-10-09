@@ -356,7 +356,7 @@ function onViewKey(key: AskViewKey): void {
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 6px;
+  border-radius: var(--soda-shape-radius-l);
   overscroll-behavior: contain;
 }
 .ask-dialog[open] {

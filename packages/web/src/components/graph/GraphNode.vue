@@ -184,7 +184,7 @@ const ariaLabel = computed(() => {
   gap: 4px;
   padding: 6px 10px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 6px;
+  border-radius: var(--soda-shape-radius-l);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   font-size: 12px;
@@ -272,7 +272,7 @@ button.graph-node-subagents:hover {
   margin-left: 4px;
   padding: 0 6px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   background: var(--soda-subtle-bg, #343746);
   color: var(--soda-menu-fg, #f8f8f2);
   font-size: 11px;
@@ -284,7 +284,7 @@ button.graph-node-subagents:hover {
   bottom: 4px;
   padding: 0 6px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   background: var(--soda-subtle-bg, #343746);
   color: inherit;
   font-size: 11px;

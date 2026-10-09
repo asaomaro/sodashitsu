@@ -239,7 +239,7 @@ function stop(ev: Event): void {
   box-sizing: border-box;
   padding: 4px 8px 8px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   overflow: hidden;

@@ -1432,7 +1432,7 @@ function onNativeCancel(ev: Event): void {
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 6px;
+  border-radius: var(--soda-shape-radius-l);
 }
 .settings-dialog::backdrop {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
@@ -1476,7 +1476,7 @@ function onNativeCancel(ev: Event): void {
   background: transparent;
   border: 0;
   border-left: 3px solid transparent;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 var(--soda-shape-radius) var(--soda-shape-radius) 0;
   padding: 0.35em 0.7em;
   cursor: pointer;
 }
@@ -1531,7 +1531,7 @@ function onNativeCancel(ev: Event): void {
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.2em 0.8em;
   cursor: pointer;
 }
@@ -1557,7 +1557,7 @@ function onNativeCancel(ev: Event): void {
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.4em 0.6em;
   cursor: pointer;
   text-align: left;
@@ -1571,7 +1571,7 @@ function onNativeCancel(ev: Event): void {
   min-width: 2em;
   text-align: center;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 3px;
+  border-radius: var(--soda-shape-radius-s);
   padding: 0 0.2em;
 }
 .settings-switch[aria-checked="true"] .settings-mark {
@@ -1591,7 +1591,7 @@ function onNativeCancel(ev: Event): void {
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.2em 0.8em;
   cursor: pointer;
 }
@@ -1669,7 +1669,7 @@ function onNativeCancel(ev: Event): void {
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.15em 0.7em;
   min-height: 1.75rem;
   cursor: pointer;

@@ -299,7 +299,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.15em 0.7em;
   min-height: 1.75rem;
   cursor: pointer;
@@ -316,7 +316,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.15em 0.6em;
   min-height: 1.75rem;
   cursor: pointer;
@@ -331,7 +331,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
   min-width: 2em;
   text-align: center;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 3px;
+  border-radius: var(--soda-shape-radius-s);
   padding: 0 0.2em;
 }
 .settings-switch[aria-checked="true"] .settings-mark {
@@ -352,7 +352,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
 }
 .ext-row {
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.5em 0.7em;
 }
 .ext-head {
@@ -369,7 +369,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
   font-size: 0.8em;
   opacity: 0.75;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 3px;
+  border-radius: var(--soda-shape-radius-s);
   padding: 0 0.4em;
   overflow-wrap: anywhere;
 }
@@ -446,7 +446,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.4em 0.6em;
 }
 </style>

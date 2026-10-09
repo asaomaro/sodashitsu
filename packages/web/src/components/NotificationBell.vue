@@ -56,7 +56,7 @@ function open(): void {
   min-height: 2rem;
   min-width: 2rem;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.3em 0.6em;
 }
 .notify-bell-badge {

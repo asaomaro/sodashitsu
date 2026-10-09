@@ -172,7 +172,7 @@ onMounted(() => {
   min-height: 2rem;
   padding: 0.3em 0.8em;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   background: var(--soda-subtle-bg, #343746);
   color: inherit;
 }

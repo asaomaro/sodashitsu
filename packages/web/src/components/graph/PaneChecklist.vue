@@ -259,7 +259,7 @@ onMounted(() => {
   gap: 8px;
   padding: 12px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 6px;
+  border-radius: var(--soda-shape-radius-l);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   font-size: 13px;
@@ -277,7 +277,7 @@ onMounted(() => {
   margin: 0 0 8px;
   padding: 4px 8px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
 }
 .pane-checklist-row {
   display: flex;
@@ -301,7 +301,7 @@ onMounted(() => {
 .pane-checklist-actions button {
   padding: 3px 10px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   background: var(--soda-subtle-bg, #343746);
   color: inherit;
   cursor: pointer;

@@ -144,7 +144,7 @@ function onKeydown(ev: KeyboardEvent): void {
   border: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   min-width: 32em;
   padding: 1em;
 }
@@ -181,7 +181,7 @@ function onKeydown(ev: KeyboardEvent): void {
   flex: none;
   background: none;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   color: inherit;
   font-size: 0.85em;
   padding: 0.2em 0.6em;

@@ -128,7 +128,7 @@ const injectPrefix = (): void => {
   color: var(--soda-fg, #f8f8f2);
   background: var(--soda-menu-active-bg, #44475a);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   touch-action: manipulation;
 }
 .extra-keys-btn-active {
