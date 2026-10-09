@@ -21,7 +21,7 @@ import { getCellSize } from "../../term/measure.js";
 import { useTerminalSurface } from "../../term/useTerminalSurface.js";
 import StateIcon from "../StateIcon.vue";
 
-const props = defineProps<{ area: Area }>();
+const props = defineProps<{ area: Area; origin?: { x: number; y: number } }>();
 
 const store = useGraphTerminalsStore();
 const session = useSessionStore();
@@ -67,16 +67,41 @@ const minSize = computed<Area>(() => ({
   w: Math.ceil(GRAPH_TERMINAL_MIN_COLS * cell.value.width) + chrome.value.w,
   h: Math.ceil(GRAPH_TERMINAL_MIN_ROWS * cell.value.height) + chrome.value.h,
 }));
-/** 初めの大きさ: 80 桁 × 24 行ぶん（領域に収まる範囲で）。位置は右上。 */
+/**
+ * 初めの大きさ: 80 桁 × 24 行ぶん（領域に収まる範囲で）。位置は、押したノードの隣（領域に収まる側。右 → 左 → 下 → 上の順）。ノードが分からない・どこにも収まらないときは右上。
+ */
+const GAP = 16;
 function defaultRect(): Rect {
   const w = Math.ceil(80 * cell.value.width) + chrome.value.w;
   const h = Math.ceil(24 * cell.value.height) + chrome.value.h;
   const ww = Math.min(w, Math.max(minSize.value.w, props.area.w - 16));
   const hh = Math.min(h, Math.max(minSize.value.h, props.area.h - 16));
+  const a = store.anchor;
+  const o = props.origin;
+  if (a && o) {
+    const nx = a.x - o.x;
+    const ny = a.y - o.y;
+    const fitsX = (x: number): boolean => x >= 0 && x + ww <= props.area.w;
+    const fitsY = (y: number): boolean => y >= 0 && y + hh <= props.area.h;
+    const candidates: { x: number; y: number }[] = [
+      { x: nx + a.w + GAP, y: ny }, // 右
+      { x: nx - ww - GAP, y: ny }, // 左
+      { x: nx, y: ny + a.h + GAP }, // 下
+      { x: nx, y: ny - hh - GAP }, // 上
+    ];
+    for (const c of candidates) {
+      // ノードの縦（横）の位置は、収まるように寄せる。
+      const y = Math.min(Math.max(c.y, 0), props.area.h - hh);
+      const x = Math.min(Math.max(c.x, 0), props.area.w - ww);
+      const horizontal = c === candidates[0] || c === candidates[1];
+      if (horizontal ? fitsX(c.x) : fitsY(c.y)) return clampFloatRect({ x: horizontal ? c.x : x, y: horizontal ? y : c.y, w: ww, h: hh }, props.area, minSize.value);
+    }
+  }
   return clampFloatRect({ x: props.area.w - ww - 8, y: 8, w: ww, h: hh }, props.area, minSize.value);
 }
 const live = ref<Rect | null>(null);
 const rect = computed<Rect>(() => live.value ?? clampFloatRect(store.rect ?? defaultRect(), props.area, minSize.value));
+watch(rect, (r) => store.setShownRect(r), { immediate: true });
 const style = computed(() => ({
   left: `${rect.value.x}px`,
   top: `${rect.value.y}px`,
@@ -214,6 +239,7 @@ const sizeText = computed(() => (store.cols > 0 ? `${store.cols} × ${store.rows
       ref="bodyEl"
       class="gtw-body"
       @mousedown.capture="onMouseDownCapture"
+      @focusin="controller?.ensureSelected(paneId)"
       @dragenter="onDragEnter"
       @dragover="onDragOver"
       @dragleave="onDragLeave"

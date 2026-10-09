@@ -22,6 +22,10 @@ export const useGraphTerminalsStore = defineStore("graphTerminals", () => {
   const container = shallowRef<HTMLElement | null>(null);
   /** 窓の位置と大きさ（層の左上から、px）。ブラウザを開いている間だけ覚える（X11）。null は、まだ決めていない。 */
   const rect = ref<Rect | null>(null);
+  /** 押したノードの箱（画面の座標）。窓の最初の位置（ノードの隣）と、ノードから窓への線に使う。窓を動かすまでの間だけ使う。 */
+  const anchor = ref<Rect | null>(null);
+  /** いま出している窓の矩形（層の中の座標）。層が、ノードから窓への線を引くのに使う。 */
+  const shownRect = ref<Rect | null>(null);
   /** いまの端末の桁と行（窓の下の行に出す）。 */
   const cols = ref(0);
   const rows = ref(0);
@@ -37,6 +41,7 @@ export const useGraphTerminalsStore = defineStore("graphTerminals", () => {
     status.value = "opening";
     takenBy.value = null;
     failure.value = null;
+    shownRect.value = null;
   }
   function setStatus(s: GraphTerminalStatus, extra: { takenBy?: string | null; failure?: string | null } = {}): void {
     status.value = s;
@@ -50,9 +55,15 @@ export const useGraphTerminalsStore = defineStore("graphTerminals", () => {
   function setRect(r: Rect): void {
     rect.value = r;
   }
+  function setAnchor(r: Rect | null): void {
+    anchor.value = r;
+  }
+  function setShownRect(r: Rect | null): void {
+    shownRect.value = r;
+  }
   function setContainer(el: HTMLElement | null): void {
     container.value = el;
   }
 
-  return { paneId, status, takenBy, failure, container, rect, cols, rows, openFor, closeWindow, setStatus, setSize, setRect, setContainer };
+  return { paneId, status, takenBy, failure, container, rect, anchor, shownRect, setAnchor, setShownRect, cols, rows, openFor, closeWindow, setStatus, setSize, setRect, setContainer };
 });

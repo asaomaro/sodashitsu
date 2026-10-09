@@ -501,6 +501,7 @@ keys.setDomKeyFilter((decision) => view.screen === "base" || isAllowedOnGraphScr
 // グラフの上の端末の窓にフォーカスがある間（端末の道）は、見えない基本画面の構成を変える操作と、選んでいる pane を動かす操作を食う（X2）。`prefix+a` は「グラフの面へ戻る」に読み替える（X1）。
 keys.setTerminalKeyFilter((paneId, decision) => {
   if (!terminalHost.heldByWindow(paneId)) return true;
+  graphTerminal.ensureSelected(paneId); // 窓で打った操作は、窓に見えている pane に効く
   if (decision.kind === "action" && decision.action.type === "openGraph") {
     graphTerminal.focusGraphSurface();
     return false;

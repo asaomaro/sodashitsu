@@ -232,6 +232,16 @@ export class GraphTerminalController {
     });
   }
 
+  /**
+   * 窓の pane が「選んでいる pane」でなくなっていたら選び直す（窓の端末にフォーカスが入ったとき・キーを受けたとき。レビュー指摘 1）。窓を開いた後にサイドバーが別の pane を選ぶと、
+   * copy・スクロールバック・サブエージェントの一覧（どれも選んでいる pane が対象）が、窓に見えていない pane に効いてしまう。「窓で打った操作は、窓に見えている pane に効く」を保つ。
+   */
+  ensureSelected(paneId: string): void {
+    const { store, view } = this.opts;
+    if (store.paneId !== paneId || store.status !== "attached" || view.focusedPaneId === paneId) return;
+    this.select(paneId);
+  }
+
   /** サイドバーの行を押したのと同じに、その pane を選ぶ（X6。`GraphCanvas.selectLikeSidebar` の pane の場合と同じ）。 */
   private select(paneId: string): void {
     const { session, view, conn } = this.opts;

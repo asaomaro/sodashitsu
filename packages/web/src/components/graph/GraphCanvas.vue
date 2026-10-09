@@ -1391,6 +1391,8 @@ function openNodeWindow(key: string, fromClick = false): void {
   if (!terminalWindow || isMobile.value || panel.value) return fallback();
   const info = graph.nodeInfo(key as NodeKey);
   if (info.machine !== machines.selectedId || info.exists !== true || !info.location) return fallback();
+  const box = document.querySelector<HTMLElement>(`[data-graph-view] [data-node-key="${key}"]`)?.getBoundingClientRect();
+  terminalWindows.setAnchor(box ? { x: box.left, y: box.top, w: box.width, h: box.height } : null);
   void terminalWindow.open(info.paneId);
 }
 /** 窓を開いているノードか（目印を付ける）。 */
