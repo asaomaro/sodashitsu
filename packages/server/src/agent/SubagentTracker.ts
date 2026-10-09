@@ -224,7 +224,14 @@ export class SubagentTracker {
     }
     const type = r.agentType ?? pending?.agentType;
     // 入れ子: 起動した側（親）の id と深さ。親が一覧に居なければ（もう終わった等）、深さは 2 とする。
-    const parentId = pending?.parentAgentId !== undefined && pending.parentAgentId !== r.agentId ? pending.parentAgentId : undefined;
+    let parentId = pending?.parentAgentId !== undefined && pending.parentAgentId !== r.agentId ? pending.parentAgentId : undefined;
+    // 親の鎖をたどって自分に戻る（先に報告された子が、後から起動した自分を親にしている等）なら、親なしにする（輪を作らせない）。
+    for (let cur = parentId, hops = 0; cur !== undefined; cur = s.items.get(cur)?.parentId, hops++) {
+      if (cur === r.agentId || hops > DEPTH_MAX * 4) {
+        parentId = undefined;
+        break;
+      }
+    }
     const depth = parentId === undefined ? 1 : Math.min((s.items.get(parentId)?.depth ?? 1) + 1, DEPTH_MAX);
     // 上限で数えなくても、実行前の報告はこの起動のものとして使い切る（次の起動に付けない）。
     this.add(r.paneId, pane, s, {
