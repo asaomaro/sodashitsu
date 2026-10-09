@@ -61,6 +61,7 @@ import GraphSpaceBar from "./GraphSpaceBar.vue";
 import GraphNode from "./GraphNode.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import SubagentPanel from "./SubagentPanel.vue";
+import GraphSubagentLayer from "./GraphSubagentLayer.vue";
 import MobileGraphSheet from "./MobileGraphSheet.vue";
 import PaneChecklist from "./PaneChecklist.vue";
 import RekeyPicker from "./RekeyPicker.vue";
@@ -1370,6 +1371,8 @@ function openSubagents(key: string): void {
   if (isMobile.value || subagentCountOf(key) < 1) return;
   subagentsKey.value = key as NodeKey;
 }
+/** 親のノードの右下の小さなサブエージェントのノード（描くだけの層。20261008-graph-first PR6b）。`d` でそこへ入る。 */
+const subLayerRef = ref<InstanceType<typeof GraphSubagentLayer> | null>(null);
 /** 閉じる。そのノードがまだあれば、フォーカスをそのノードへ戻す。 */
 function closeSubagents(): void {
   const key = subagentsKey.value;
@@ -1569,6 +1572,9 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
     ev.preventDefault();
     ev.stopPropagation();
     openRekey(key);
+  } else if ((ev.key === "d" || ev.key === "D") && !isMobile.value && subLayerRef.value?.focusFirst(key)) {
+    ev.preventDefault();
+    ev.stopPropagation();
   } else if ((ev.key === "s" || ev.key === "S") && !isMobile.value && subagentCountOf(key) > 0) {
     ev.preventDefault();
     ev.stopPropagation();
@@ -2452,6 +2458,14 @@ function chipAria(e: EdgeView): string {
               @goto="gotoNode(n.key)"
               @rekey="openRekey(n.key)"
               @subagents="openSubagents(n.key)"
+            />
+            <GraphSubagentLayer
+              v-if="!isMobile"
+              ref="subLayerRef"
+              :nodes="shownNodes"
+              :infos="infos"
+              @open="openSubagents"
+              @leave="focusNode"
             />
             <GraphLinkMark
               v-for="m in marks"
