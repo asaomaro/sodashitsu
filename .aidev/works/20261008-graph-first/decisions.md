@@ -65,6 +65,9 @@
 | D78 | 並びを整える（PR1e T17c）: 純粋な関数 `tidySpace`（`client-core/src/graph/tidy.ts`）。囲いの並びは、今の位置の順の棚詰め（行の幅の目標は面積から）。置く場所は、元の左上 → ほかの空間の囲いの右 → 下の順に、重ならない場所。性質の試験（乱数 150 通り）: 囲いが重ならない・同じ座標が無い・20 の倍数・範囲の中・ほかの空間は動かない・`reconcileGraph` が空・冪等。元に戻すは、並べ直した rev のままのときだけ（別の更新が入れば、ボタンを消し、押しても戻さない） | AC-L3。座標は全体で 1 枚（D8）なので、ほかの空間の囲いを避ける | 保存の形・サーバは変えない |
 | D79 | 様式（PR1e T17d）: 囲いの見出しの高さは、置き場所の計算の定数（40px）なので**モダンでも 40px のまま**（依頼の「44px」からは違える）。tab のタグの高さは新しいトークン `--soda-shape-tag-h`（モダン 28px。クラシックは未定義＝今のまま）。ボタン・パネルのボタンの高さ・余白は `--soda-shape-control-h`・`--soda-shape-pad-x` | 囲いの余白の定数を変えると、保存済みの位置との関係が崩れる | `uiStyle.test.ts` に新しいトークンを足した |
 | D80 | サイドバーの「表示中」の札（AC-L5）: `Sidebar.vue` に、見出しの行の札と、判定の関数 1 つだけ。`view.screen === "graph"` のときだけ出る（基本画面は変わらない） | | E2E |
+| D81 | サイドバーの選んでいる行（PR1f）: クラシックの見た目を 1 画素も変えないため、**形のトークンだけ**で出し分ける。`margin-inline`（`--soda-shape-row-inset`。既定 0）・`border-radius`（`--soda-shape-row-radius`。既定 0）は**すべての行**に、枠は `box-shadow: inset 0 0 0 var(--soda-shape-row-current-ring, 0px) accent`（太さ 0 は何も描かない）、地は `background-color` はそのまま＋その上に accent を `--soda-shape-row-current-tint`（既定 0% ＝ 透明）で重ねる `background-image`。畳んだサイドバーは内側の余白を 0 に。新しい色の値は無い（`--soda-accent`・`color-mix`）。navigate の選択は fg の outline・D&D は別の枠・影のままで、重なっても読める | 比べる道具（クラシック）で、サイドバーのある 42 枚が差 0（グラフの 2 枚の差は点の格子）。最初に `color-mix(... 0%)` を `background` に直接使ったら、計算値の書式が `color(srgb …)` に変わったので、画素が同じでも、重ねる形（`background-image`）に改めた | 行の hover も同じ角・余白になる（モダンの行全体の調子） |
+| D82 | 面の点の格子（PR1f）: `.graph-canvas` の `background-image: radial-gradient`（色は `--soda-fg` の 22% を透明へ混ぜる）。大きさ = 20px × 倍率（8px 未満になるときは倍々）、位置 = パン量の剰余。インラインの style（`gridStyle`）で、パン・ズームに付いて動く | 案の絵 | 性能の E2E（200 ノード）は通る |
+| D83 | PR1e レビューの持ち越し: S1 単体（ほかの空間の囲いを避ける。`free()` を外すと落ちる）。S2 `runTidy` の計算を `graph.update` のコールバックの中（衝突のあとの最新の `g`）へ。単体 `GraphScreen.test.ts`。S3 `TIDY_OPS_MAX = GRAPH_OPS_MAX` | | |
 
 D63 の値の選び方（乱数 300 通り〔(a)〕・20 通り〔(b)〕。土台は寛容な設定＝旧に近い置き方で作り、候補の設定で 1 つ足す。数字は `graphLayout.test.ts` の試験と同じ形）:
 
