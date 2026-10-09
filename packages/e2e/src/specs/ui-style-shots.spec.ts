@@ -76,10 +76,19 @@ function shooter(page: Page, themeKey: ThemeKey, views?: { count: () => number }
   };
 }
 
+/**
+ * 様式が当たっていること（撮った画像が、頼んだ様式のものだと確かめる）。`<html data-ui-style>` が、頼んだ様式と同じ（属性が無いのはクラシック）。
+ * PR1a の時点では設定が無いので、classic のときだけ成り立つ（`UI_STYLE=modern` は、設定が入る PR1b から撮れる）。
+ */
+async function expectStyleApplied(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset["uiStyle"] ?? "classic"), { message: `UI_STYLE=${STYLE} が当たっていない` }).toBe(STYLE);
+}
+
 async function openApp(page: Page, appServer: AppServer): Promise<{ views: { count: () => number } }> {
   const views = await watchClientViews(page);
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+  await expectStyleApplied(page);
   return { views };
 }
 
@@ -97,9 +106,9 @@ for (const { key, theme } of THEMES) {
     await client.request("workspace.close", { workspaceId: initial.id });
     // 基本画面: pane 2 つ・tab 2 つ・サイドバーにグループ。
     await client.request("tab.rename", { tabId: ws.tabIds[0]!, label: "main" });
-    await client.request("tab.create", { workspaceId: ws.id, label: "second" });
+    const second = await client.request("tab.create", { workspaceId: ws.id, label: "second" });
     await client.request("tab.focus", { tabId: ws.tabIds[0]! });
-    await client.request("pane.split", { paneId, direction: "right" });
+    const split = await client.request("pane.split", { paneId, direction: "right" });
     const beta = await client.request("workspace.create", { cwd, label: "beta" });
     await client.request("group.create", { label: "team", workspaceId: beta.workspace.id });
     await client.request("workspace.focus", { workspaceId: ws.id });
@@ -149,7 +158,15 @@ for (const { key, theme } of THEMES) {
     await page.keyboard.press("Escape");
     await expect(page.locator("dialog[open]")).toHaveCount(0);
 
-    // グラフの画面。
+    // グラフの画面。ノードの初めの置き場所は pane の id（実行ごとに違う UUID）の順で決まるので、pane の作った順に、決まった場所へ置く。
+    const graph = await client.request("graph.get", {});
+    const order = [paneId, split.pane.id, second.pane.id, beta.pane.id].map((id) => `local:${id}` as const);
+    const known = new Set(graph.nodes.map((n: { key: string }) => n.key));
+    const keys = order.filter((k) => known.has(k));
+    // 1 つずつ動かすと、途中で重なって断られる——まず全部を遠くへ逃がし、そこから決まった場所へ置く。
+    await client.request("graph.update", { baseRev: graph.rev, ops: keys.map((key, i) => ({ op: "move_node" as const, key, x: 5000 + i * 600, y: 5000 })) });
+    const moved = await client.request("graph.get", {});
+    await client.request("graph.update", { baseRev: moved.rev, ops: keys.map((key, i) => ({ op: "move_node" as const, key, ...(i < 3 ? { x: 100 + (i % 2) * 600, y: 100 + Math.floor(i / 2) * 400 } : { x: 1600, y: 100 }) })) }); // 3 つ目まで alpha（同じ workspace の枠は 1 つ）・4 つ目は beta（枠が重ならない所）
     await prefixKey(page, "a");
     await expect(page.locator("dialog.graph-view")).toBeVisible();
     await expect(page.locator("dialog.graph-view [data-node-key]").first()).toBeVisible();
