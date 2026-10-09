@@ -23,6 +23,7 @@ import {
   graphNodeAt,
   graphNodeRect,
   isLocalNodeKey,
+  LOCAL_MACHINE_ID,
   addMissingNodeOps,
   buildNewCwd,
   chordOf,
@@ -54,6 +55,7 @@ import { useViewStore } from "../../store/view.js";
 import GraphAddForm, { type AddFormKind, type AddFormSubmit } from "./GraphAddForm.vue";
 import { AddPaneError, addPane, type AddPaneDeps } from "./addPane.js";
 import { moveToGroup } from "./moveToGroup.js";
+import { dropTargetFor, type DropTarget } from "./moveTarget.js";
 import GraphConfirm from "./GraphConfirm.vue";
 import GraphEdge from "./GraphEdge.vue";
 import GraphFind from "./GraphFind.vue";
@@ -573,21 +575,27 @@ function onNodePointerdown(ev: PointerEvent, key: string): void {
   };
   selection.value = { kind: "node", key };
   target.focus({ preventScroll: true });
+  const sig = spaces.structureSig;
   drag.start(ev, target, {
     threshold: 4,
     onMove: (e, dx, dy) => {
       const p = posOf(e, dx, dy);
       graph.setDragPosition(key, p);
-      nodeDrag.value = { key, blockedFrame: blockedFrameFor(key, p) };
+      nodeDrag.value = dragState(key, p, e, sig);
     },
     onEnd: (e, dx, dy) => {
       const p = posOf(e, dx, dy);
-      const blocked = blockedFrameFor(key, p);
+      const t = dropTargetOf(key, p, e);
       nodeDrag.value = null;
-      if (blocked !== null) {
-        // ほかの workspace の囲いの上には置けない（pane を別の workspace へ移すのは PR4）。元の位置へ戻す。
+      if (t.kind === "blocked") {
+        // 落とせない囲い（別の worktree・別のマシン）の上。元の位置へ戻す。理由は、つかんでいる間に出していたものと同じ。
         graph.setDragPosition(key, null);
-        view.toast("ほかの workspace の囲いの上には置けません。元の位置へ戻しました。");
+        view.toast(`${t.reason}。元の位置へ戻しました。`);
+        return;
+      }
+      if (t.kind === "move") {
+        // 別の workspace の囲い・tab のタグの上で離した: pane を移す（`pane.move_to_tab`）。成功したら、離した場所に近い空きへ置く。
+        void moveNodeTo(key, t, t.viaTag ? null : p);
         return;
       }
       if (p.x === x0 && p.y === y0) graph.setDragPosition(key, null);
@@ -602,25 +610,114 @@ function onNodePointerdown(ev: PointerEvent, key: string): void {
   });
 }
 
-/** ノードをドラッグしている間の状態（落とせない囲いの見た目）。 */
-const nodeDrag = ref<{ key: string; blockedFrame: string | null } | null>(null);
+/** ノードをドラッグしている間の状態（落とせない囲い・落とせる囲い・タグの見た目と、理由の案内）。 */
+interface NodeDragState {
+  key: string;
+  /** 落とせない囲いの id（その見た目）。 */
+  blockedFrame: string | null;
+  /** 離すと pane が移る先の囲い・tab のタグ。 */
+  dropFrame: string | null;
+  dropTag: { workspaceId: string; tabId: string } | null;
+  /** 理由・行き先の案内（読み上げ・画面）。 */
+  hint: string | null;
+  /** つかんだ時点の構成の指紋（変わったら取りやめる）。 */
+  sig: string;
+}
+const nodeDrag = ref<NodeDragState | null>(null);
+
+/** 指の下の tab のタグ（囲いの見出しの中）。 */
+function tagUnder(ev: PointerEvent): { workspaceId: string; tabId: string } | null {
+  for (const el of document.elementsFromPoint?.(ev.clientX, ev.clientY) ?? []) {
+    const tag = (el as HTMLElement).closest?.<HTMLElement>("[data-tab-tag]");
+    const frame = tag?.closest<HTMLElement>("[data-frame-id]");
+    const tabId = tag?.dataset["tabId"];
+    if (tag && frame?.dataset["frameId"] && tabId) return { workspaceId: frame.dataset["frameId"], tabId };
+  }
+  return null;
+}
+/** ノード `key` を `pos` に置いて、ポインタ `ev` で離したときの行き先（`moveTarget.ts`）。 */
+function dropTargetOf(key: string, pos: { x: number; y: number }, ev: PointerEvent): DropTarget {
+  // 動かすたびに呼ぶので、ノードの中身（`nodeInfo`）は作らず、鍵と今のセッションだけで見る（ノードのドラッグの毎回にはノードの中身を作り直さない）。
+  const paneId = isLocalNodeKey(key) ? key.slice("local:".length) : null;
+  const open = paneId !== null && machines.selectedId === LOCAL_MACHINE_ID && session.panes.has(paneId);
+  const paneTab = open && paneId !== null ? (session.panes.get(paneId)?.tabId ?? null) : null;
+  return dropTargetFor({
+    node: { local: open, workspaceId: spaces.memberOfNode.get(key), tabId: paneTab },
+    center: { x: pos.x + GRAPH_NODE_WIDTH / 2, y: pos.y + GRAPH_NODE_HEIGHT / 2 },
+    tag: tagUnder(ev),
+    frames: spaces.frames,
+    infos: spaces.infoMap,
+    workspaces: session.workspaces,
+  });
+}
+function dragState(key: string, pos: { x: number; y: number }, ev: PointerEvent, sig: string): NodeDragState {
+  const t = dropTargetOf(key, pos, ev);
+  if (t.kind === "blocked") return { key, blockedFrame: t.frameId, dropFrame: null, dropTag: null, hint: `${t.reason}（離すと元の位置へ戻ります）`, sig };
+  if (t.kind === "move") {
+    return {
+      key,
+      blockedFrame: null,
+      dropFrame: t.frameId,
+      dropTag: t.viaTag ? { workspaceId: t.workspaceId, tabId: t.tabId } : null,
+      hint: `「${t.label}」${t.viaTag ? "の tab" : ""}へ移します（離すと移動・Esc で取りやめ）`,
+      sig,
+    };
+  }
+  return { key, blockedFrame: null, dropFrame: null, dropTag: null, hint: null, sig };
+}
+
+/** ノードのメニューの「別の workspace へ移す…」（キーだけの道。PR4 T15c）。行き先は、メニューが選んだ workspace・tab。 */
+function moveNodeFromMenu(arg: string | undefined): void {
+  if (!arg || isMobile.value) return;
+  let a: { key: string; workspaceId: string; tabId: string };
+  try {
+    a = JSON.parse(arg) as typeof a;
+  } catch {
+    return;
+  }
+  const frameId = a.workspaceId;
+  const label = spaces.infoMap.get(frameId)?.title ?? frameId;
+  spaces.requestReveal({ kind: "workspace", workspaceId: frameId });
+  void moveNodeTo(a.key, { kind: "move", workspaceId: a.workspaceId, tabId: a.tabId, frameId, label, viaTag: true }, null);
+}
+/** 囲いの中の、ノードを置く最初の場所（見出しの下の左）。タグへ落としたとき・キーで移したときの、置き場所の元。 */
+function bodyPositionOf(frameId: string): { x: number; y: number } | null {
+  const f = spaces.frames.find((x) => x.id === frameId);
+  return f ? { x: snapToGrid(f.rect.x + 20), y: snapToGrid(f.rect.y + 60) } : null;
+}
+/** 条件が満たされるまで待つ（最大 `ms`）。 */
+async function waitUntil(cond: () => boolean, ms: number): Promise<boolean> {
+  const end = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > end) return false;
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  return true;
+}
 /**
- * ノード `key` を `pos` に置いたとき、ほかの workspace（や別のマシン）の囲いの上なら、その囲いの id。自分の workspace の囲い・自分の worktree グループの外側の囲いの上は落とせる。
- * 判定はノードの中心。内側の囲い（メンバー）を先に見る。
+ * pane を別の workspace の tab へ移す（PR4 T15a・T15c）。サーバの `pane.move_to_tab` の答えが正（断られたら、元へ戻してトースト）。
+ * 成功したら、サーバの構成が変わるのを待って、`dropPos`（無ければ囲いの中の最初の場所）に近い空きへ置く（`resolveDrop`）。線・端末の窓は pane の id のまま付いていく。
  */
-function blockedFrameFor(key: string, pos: { x: number; y: number }): string | null {
-  const own = spaces.memberOfNode.get(key);
-  if (own === undefined) return null;
-  const ownParent = spaces.infoMap.get(own)?.parentId ?? null;
-  const cx = pos.x + GRAPH_NODE_WIDTH / 2;
-  const cy = pos.y + GRAPH_NODE_HEIGHT / 2;
-  const hit = (f: { rect: GraphRect }): boolean =>
-    cx >= f.rect.x && cx <= f.rect.x + f.rect.w && cy >= f.rect.y && cy <= f.rect.y + f.rect.h;
-  const frames = spaces.frames.filter((f) => !f.placeholder);
-  const inner = frames.find((f) => f.kind !== "worktree" && f.id !== own && hit(f));
-  if (inner) return inner.id;
-  const outer = frames.find((f) => f.kind === "worktree" && f.id !== ownParent && hit(f));
-  return outer ? outer.id : null;
+async function moveNodeTo(key: string, t: Extract<DropTarget, { kind: "move" }>, dropPos: { x: number; y: number } | null): Promise<void> {
+  const info = graph.nodeInfo(key as NodeKey);
+  if (!actions || !info.local || info.exists !== true) {
+    graph.setDragPosition(key, null);
+    return;
+  }
+  const r = await actions.movePaneToTab(info.paneId, t.tabId, { follow: false });
+  if (r === null || !r.ok) {
+    graph.setDragPosition(key, null);
+    // 理由があるときは、`movePaneToTab` がトーストを出している。
+    if (r === null || !r.reason) view.toast("pane を移せませんでした。元の位置へ戻しました。");
+    return;
+  }
+  await waitUntil(() => spaces.memberOfNode.get(key) === t.workspaceId, 3000);
+  spaces.flash(t.frameId);
+  liveMessage.value = `${info.name} を ${t.label} へ移しました。`;
+  // 囲いが見えていない（別の空間）ときは、位置はサーバの置き場所（移ってきたノードの置き直し）に任せる。
+  const pos = dropPos ?? bodyPositionOf(t.frameId);
+  if (pos !== null) await graph.moveNodes([{ key, ...pos }]);
+  graph.setDragPosition(key, null);
 }
 
 // --- 囲いのドラッグ（見出しをつかんで、中のノードをまとめて平行移動。20261008-graph-first の T11f）------------------------
@@ -689,7 +786,7 @@ function onFrameHeadingPointerdown(ev: PointerEvent, frameId: string): void {
 watch(
   () => spaces.structureSig,
   (sig) => {
-    if (frameDrag.value !== null && frameDrag.value.sig !== sig) {
+    if ((frameDrag.value !== null && frameDrag.value.sig !== sig) || (nodeDrag.value !== null && nodeDrag.value.sig !== sig)) {
       drag.cancel();
       liveMessage.value = "囲いの構成が変わったので、移動を取りやめました。";
     }
@@ -2195,6 +2292,8 @@ watch(
       }
     } else if (c.name === "newWorkspace") {
       createWorkspaceHere();
+    } else if (c.name === "moveNode") {
+      moveNodeFromMenu(c.arg);
     } else guardPanel(() => openChecklist());
   },
 );
@@ -2648,6 +2747,8 @@ function chipAria(e: EdgeView): string {
               :flash-id="spaces.flashId"
               :emphasis="spaces.emphasis"
               :blocked-id="nodeDrag?.blockedFrame ?? null"
+              :drop-id="nodeDrag?.dropFrame ?? null"
+              :drop-tag="nodeDrag?.dropTag ?? null"
               :dragging-id="frameDrag?.frameId ?? null"
               :read-only="isMobile"
               @heading-pointerdown="onFrameHeadingPointerdown"
@@ -2814,6 +2915,7 @@ function chipAria(e: EdgeView): string {
             @center="centerOn"
             @toggle="toggleMinimap"
           />
+          <p v-if="nodeDrag?.hint" class="graph-drag-hint" role="status" data-graph-drag-hint :data-drag-kind="nodeDrag.dropFrame ? 'move' : 'blocked'">{{ nodeDrag.hint }}</p>
           <p v-if="graph.graph && graph.nodes.length === 0" class="graph-empty">
             表示する pane がありません。
           </p>
@@ -3095,6 +3197,29 @@ function chipAria(e: EdgeView): string {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+/* ノードをつかんでいる間の、行き先・落とせない理由の案内（PR4）。 */
+.graph-drag-hint {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  z-index: 5;
+  margin: 0;
+  max-width: calc(100% - 32px);
+  padding: 4px 10px;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: var(--soda-shape-radius-m, 4px);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-fg, #f8f8f2);
+  font-size: 12px;
+  pointer-events: none;
+}
+.graph-drag-hint[data-drag-kind="blocked"] {
+  border-color: var(--soda-error-fg, #ff5555);
+}
+.graph-drag-hint[data-drag-kind="move"] {
+  border-color: var(--soda-accent, #6070a1);
 }
 .graph-empty {
   position: absolute;

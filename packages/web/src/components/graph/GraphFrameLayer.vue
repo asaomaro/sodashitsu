@@ -20,6 +20,10 @@ const props = defineProps<{
   blockedId: string | null;
   /** 動かしている囲い。 */
   draggingId: string | null;
+  /** ノードのドラッグ中、離すと pane が移る先の囲い（落とせる囲い。PR4）。 */
+  dropId?: string | null;
+  /** 同じく、tab のタグの上で離すときの、そのタグ。 */
+  dropTag?: { workspaceId: string; tabId: string } | null;
   /** 読み取りだけ（モバイル）。つかめず、タグも押せない。 */
   readOnly: boolean;
 }>();
@@ -124,6 +128,7 @@ function subtitle(info: FrameInfo): string {
           'graph-frame-selected': r.info.kind === 'workspace' && r.info.id === selectedWorkspaceId,
           'graph-frame-flash': flashId === r.frame.id,
           'graph-frame-blocked': blockedId === r.frame.id,
+          'graph-frame-drop': dropId === r.frame.id,
           'graph-frame-dragging': draggingId === r.frame.id,
           'graph-frame-placeholder': r.frame.placeholder,
           'graph-frame-movable': !readOnly && !r.frame.placeholder,
@@ -153,7 +158,7 @@ function subtitle(info: FrameInfo): string {
               v-if="!readOnly"
               type="button"
               class="graph-frame-tag"
-              :class="{ 'graph-frame-tag-active': t.active, 'graph-frame-tag-emphasized': t.emphasized }"
+              :class="{ 'graph-frame-tag-active': t.active, 'graph-frame-tag-emphasized': t.emphasized, 'graph-frame-tag-drop': dropTag?.workspaceId === r.info.id && dropTag.tabId === t.id }"
               :aria-pressed="t.emphasized"
               :aria-label="`tab ${t.label}${t.active ? '（選ばれている tab）' : ''}`"
               :title="t.label"
@@ -244,6 +249,16 @@ function subtitle(info: FrameInfo): string {
   border-color: var(--soda-error-fg, #ff5555);
   border-style: dotted;
   background: var(--soda-subtle-bg, rgba(255, 255, 255, 0.08));
+}
+.graph-frame-drop {
+  border-color: var(--soda-accent, #6070a1);
+  border-style: solid;
+  border-width: 3px;
+  background: color-mix(in srgb, var(--soda-accent, #6070a1) 14%, transparent);
+}
+.graph-frame-tag-drop {
+  outline: 2px solid var(--soda-accent, #6070a1);
+  outline-offset: 1px;
 }
 .graph-frame-dragging {
   border-color: var(--soda-accent, #6070a1);

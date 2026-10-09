@@ -71,7 +71,7 @@ export type GraphRevealTarget =
 export const GRAPH_ALL_SPACE = "all";
 
 /** グラフの画面へ頼む操作（メニューから。PR3 で「pane を足す」「workspace を足す」を追加）。 */
-export type GraphCommandName = "pause" | "history" | "checklist" | "addPane" | "newWorkspace";
+export type GraphCommandName = "pause" | "history" | "checklist" | "addPane" | "newWorkspace" | "moveNode";
 
 export const useGraphSpacesStore = defineStore("graphSpaces", () => {
   const graph = useGraphStore();

@@ -4,6 +4,7 @@ import { ActionDispatcherKey, TerminalHostKey, TerminalRegistryKey } from "../in
 import { useDisplayStore } from "../store/display.js";
 import { useGraphStore } from "../store/graph.js";
 import type { NodeKey } from "@sodashitsu/protocol";
+import { paneMoveBlock, paneMoveBlockMessage } from "@sodashitsu/client-core";
 import { linksTouching, paneIdsOfTargets } from "./graph/closeLinks.js";
 import { useGraphSpacesStore } from "../store/graphSpaces.js";
 import { useSessionStore } from "../store/session.js";
@@ -25,6 +26,14 @@ import { useUiStyle } from "../composables/useUiStyle.js";
 interface MenuItem {
   label: string;
   run: () => void;
+  /** 選べない理由（20261008-graph-first PR4）。あれば薄く出し、理由を添える。押すと、理由をトーストで出すだけ。 */
+  disabledReason?: string;
+}
+
+/** 移せない理由の文言（移せるなら null）。判定は D&D・サーバと同じ `paneMoveBlock`。 */
+function paneMoveBlockMessage2(source: Parameters<typeof paneMoveBlock>[0], target: Parameters<typeof paneMoveBlock>[1]): string | null {
+  const block = paneMoveBlock(source, target, { lenient: true });
+  return block === null ? null : paneMoveBlockMessage(block);
 }
 
 const session = useSessionStore();
@@ -251,7 +260,42 @@ const items = computed<MenuItem[]>(() => {
     // ノードの右クリック（PR3 T14e）。手元で、いま在る pane だけ閉じられる。線が残るときは、必ず確認する。
     const info = graphStore.nodeInfo(target.key as NodeKey);
     if (!info.local || info.exists !== true || !session.panes.has(info.paneId)) return [];
-    return [{ label: "pane を閉じる", run: () => closeFromGraph({ type: "pane", id: info.paneId }) }];
+    return [
+      { label: "pane を閉じる", run: () => closeFromGraph({ type: "pane", id: info.paneId }) },
+      { label: "別の workspace へ移す…", run: () => view.openContextMenu({ kind: "graphMoveTo", key: target.key }, menuAt) },
+    ];
+  }
+  if (target.kind === "graphMoveTo") {
+    // ノードのメニューの「別の workspace へ移す…」（PR4 T15c。キーだけの道）。落とせる先は選べ、落とせない先は理由つきで薄く出す（判定は D&D と同じ `paneMoveBlock`）。
+    const info = graphStore.nodeInfo(target.key as NodeKey);
+    const pane = info.local && info.exists === true ? session.panes.get(info.paneId) : undefined;
+    const sourceTab = pane ? session.tabs.get(pane.tabId) : undefined;
+    const source = sourceTab ? session.workspaces.get(sourceTab.workspaceId) : undefined;
+    if (!pane || !sourceTab || !source) return [];
+    const out: MenuItem[] = [];
+    const seen = new Map<string, number>();
+    const unique = (label: string): string => {
+      const n = (seen.get(label) ?? 0) + 1;
+      seen.set(label, n);
+      return n === 1 ? label : `${label} (${n})`;
+    };
+    for (const ws of session.workspaces.values()) {
+      const title = graphSpaces.infoMap.get(ws.id)?.title ?? ws.label;
+      const reason = ws.id === source.id ? null : paneMoveBlockMessage2(source, ws);
+      const tabs = graphSpaces.infoMap.get(ws.id)?.tabs ?? [];
+      const move = (tabId: string) => (): void => graphSpaces.requestCommand("moveNode", JSON.stringify({ key: target.key, workspaceId: ws.id, tabId }));
+      if (ws.id !== source.id) {
+        out.push({ label: unique(title), run: move(ws.activeTabId), ...(reason ? { disabledReason: reason } : {}) });
+      }
+      // tab が複数ある workspace は、tab も選べる（いまの tab は除く）。
+      if (tabs.length > 1) {
+        for (const t of tabs) {
+          if (t.id === sourceTab.id) continue;
+          out.push({ label: unique(`${title} › ${t.label}`), run: move(t.id), ...(reason ? { disabledReason: reason } : {}) });
+        }
+      }
+    }
+    return out;
   }
   if (target.kind === "graphFrame") {
     return [
@@ -302,6 +346,10 @@ function activate(index: number): void {
   menuAt = view.contextMenu?.at ?? menuAt;
   close();
   restoreFocus();
+  if (item.disabledReason) {
+    view.toast(item.disabledReason);
+    return;
+  }
   item.run();
 }
 
@@ -408,11 +456,13 @@ onBeforeUnmount(() => {
       v-for="(item, index) in items"
       :key="item.label"
       role="menuitem"
-      :class="{ 'context-menu-active': index === activeIndex }"
+      :class="{ 'context-menu-active': index === activeIndex, 'context-menu-disabled': item.disabledReason }"
+      :aria-disabled="item.disabledReason ? 'true' : undefined"
+      :title="item.disabledReason"
       @mouseenter="activeIndex = index"
       @click="activate(index)"
     >
-      {{ item.label }}
+      {{ item.label }}<span v-if="item.disabledReason" class="context-menu-reason">　— {{ item.disabledReason }}</span>
     </li>
   </ul>
 </template>
@@ -436,6 +486,12 @@ onBeforeUnmount(() => {
   min-height: var(--soda-shape-control-h, auto);
   box-sizing: border-box;
   cursor: pointer;
+}
+.context-menu-disabled {
+  opacity: 0.55;
+}
+.context-menu-reason {
+  font-size: 0.85em;
 }
 .context-menu-active {
   background: var(--soda-menu-active-bg, #44475a);

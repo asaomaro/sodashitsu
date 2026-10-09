@@ -640,7 +640,7 @@ test.describe("囲いのドラッグ・ノードのドラッグの寄せ（T11f�
     await page.mouse.up();
     await expect(node).not.toHaveClass(/graph-node-blocked/);
     await expect(frameOf(page, w.ws.get("wt-a-ws")!.id)).not.toHaveClass(/graph-frame-blocked/);
-    await expect(page.locator(".toast-list .toast").filter({ hasText: "ほかの workspace の囲いの上には置けません" })).toHaveCount(1);
+    await expect(page.locator(".toast-list .toast").filter({ hasText: "別の worktree の workspace へは移せません" })).toHaveCount(1);
     expect(updatesSent(w).length).toBe(sent0);
     expect(await serverPositions(w)).toEqual(before);
     // 自分の囲いの中・空いた所へは動かせる（落とせない印は出ない）
