@@ -174,3 +174,33 @@
 ## 後始末
 
 試しの会話（`forkA`・`forkB` の `~/.claude/projects/` の記録）は削除した。`~/.claude/settings.json`・既存の記録は触っていない。
+
+---
+
+## T0 の確かめ（2026-10-10。Claude Code 2.1.296。対話の実プロセスを tmux で動かした。haiku・短い会話・費用は合計 約 0.01 ドル）
+
+方法: 一時フォルダの git リポジトリで `claude --settings <記録用のフック> --model claude-haiku-5-5` を対話で起動し、`SessionStart` の stdin を記録した。記録用のフックは 2 本: `matcher: ""`（全部）と `matcher: "startup|resume"`（**Sodashitsu が導入するフックと同じ matcher**。`AgentIntegrationInstaller.ts:29`）。利用者の設定・既存の会話は書き換えていない（一時の会話の記録は削除した）。
+
+| 問い | 結果 |
+| :- | :- |
+| (1) 対話中の実セッションを、別の端末から fork できるか | **できる**【確認】。元（id `3e81…`）が対話で動いたまま、別の端末で `claude --resume 3e81… --fork-session` が起動し、新しい id（`593d…`）で、会話を覚えていた（「合言葉は?」→ `PINEAPPLE-42`）。元の画面・会話はそのまま |
+| (2) 初めてのフォルダで、信頼の確認が出るか | 新しい**普通のフォルダ**で起動すると、「このフォルダを信頼しますか」の確認が出る（`blocked` 相当の画面。Enter 待ち）【確認】。**元のリポジトリの worktree**（`git worktree add` で作った別フォルダ）で fork したときは、**確認は出なかった**（そのまま会話が開いた）【確認】。ただし元のフォルダが信頼済みだった場合だけの確認。A8（確認で止まったら、手が空くまで知らせを送らない）は、普通のフォルダ・信頼されていない元のときのために必要 |
+| (3) fork 直後の `idle` | 短い会話では、起動の 2 秒後には入力欄が出ていた。長い会話での読み込みの長さは、費用が大きいので測っていない【未確認】 |
+| (4) `/clear` の後の `SessionStart` | **新しい id で `source: "clear"` が来る**【確認】（`3e81…` → `3ab7…`） |
+| **フックの matcher** | **`source: "fork"` の `SessionStart` は、`startup|resume` の matcher に一致しない**【確認】。記録用の全部拾うフックには `fork`（新しい id）と `clear`（新しい id）が届き、Sodashitsu と同じ matcher のフックには、**どちらも届かなかった**（起動時の `startup` だけ届いた）。`compact` も同じ matcher では拾えない見込み【推測】 |
+
+### 設計の前提との食い違い（ここで止める）
+
+設計の前提（`design.md`「いまの作り」・`research.md` 1.2 の最後の行・要点 4・(2) の表）: **「fork した側の `pane.agentSession` は、フックの報告で、自動で正しくなる」**。実際は、いま導入されるフックの matcher（`startup|resume`）が `fork` を拾わないので、**fork した pane の `agentSession` は `null` のまま**になる。影響:
+
+- fork したエージェントを、さらに fork できない（AC1 の「孫の fork も」。メニューが「会話の id が分からない」で押せない）。
+- fork したエージェントは、サーバの再起動の復元で再開されない（`agentSession` が無いため）。
+- 既存の不具合の同種: `/clear` の後も新しい id が届かず、`agentSession` は**古い id のまま**（`/clear` 後に fork すると、**消した会話**を fork する。F3「別の会話を fork しうる」の危険に当たる）。
+
+### 直し方の案（判断をお願いしたい）
+
+1. matcher を `startup|resume|fork|clear|compact` に広げる（`MATCHER` 定数 1 つ。`AgentIntegrationInstaller.ts:29`）。導入済みのフックは「更新が必要」と表示され、利用者が設定画面で入れ直すと効く（利用者の `~/.claude/settings.json` は、利用者の操作でだけ変わる）。または matcher を空（全部）にする（`SessionStart` の source は `startup|resume|clear|compact|fork` の 5 種）。この変更は fork の作業の前提で、`/clear` の古い id の問題も同時に直る。
+2. 上を fork の作業に含めるか、先に別の作業として入れるか。含める場合、`AgentIntegrationInstaller` のテスト（`startup|resume` を期待しているもの）と、`docs` の更新が要る。
+3. 導入済みの利用者のフックが更新されるまでは、孫の fork と、fork 後の再開は使えない、と文書に書く。
+
+守りの表示（フックの導入が古いときの案内）は、既存の「更新が必要」の仕組みに乗る【推測。コードは未確認】。
