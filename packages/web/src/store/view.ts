@@ -6,7 +6,7 @@ import { loadAgentSort as loadAgentSortValue, loadCollapsedAutoGroups, loadWorks
 // 共有の設定の読み込みは client-core（web と端末版が同じ規則で読む。統合の review）。今までの import 先を保つため再び出す。
 export { loadCollapsedAutoGroups, loadWorkspaceSort };
 import type { ConnectionState } from "@sodashitsu/client-core";
-import type { MenuTarget } from "../term/MouseBridge.js";
+import type { MenuAt, MenuTarget } from "../term/MouseBridge.js";
 import type { Zone } from "../term/paneDragZone.js";
 import type { ScreenId } from "../screens/screens.js";
 
@@ -428,7 +428,7 @@ export const useViewStore = defineStore("view", () => {
    * 実際にメニューを開く。
    */
   const navigateMenuRequested = ref(false);
-  const contextMenu = ref<{ target: MenuTarget; at: { x: number; y: number } } | null>(null);
+  const contextMenu = ref<{ target: MenuTarget; at: MenuAt } | null>(null);
   /**
    * pane 名ラベルをドラッグして入れ替える操作の一時状態（20260923-pane-name-dnd-swap。design「1.」）。
    * 複数の `PaneFrame` インスタンスをまたいで共有する必要があるためここに置く（`contextMenu` と同じ流儀）。
@@ -670,7 +670,7 @@ export const useViewStore = defineStore("view", () => {
     navigateMenuRequested.value = false;
   }
 
-  function openContextMenu(target: MenuTarget, at: { x: number; y: number }): void {
+  function openContextMenu(target: MenuTarget, at: MenuAt): void {
     contextMenu.value = { target, at };
   }
 
