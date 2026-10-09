@@ -208,3 +208,16 @@ D63 の値の選び方（乱数 300 通り〔(a)〕・20 通り〔(b)〕。土�
 - **指摘 A（直した）**: ノードから窓への点線は、面の移動・拡大縮小・ノードのドラッグ・空間の切り替えでずれた。層が、窓を動かすまでの間、毎フレームノードの箱を読んで `anchor` に追従させる（窓の位置は開いたときのまま）。ノードが無い・層の外へ出たら線を消す（`anchor` を null）。
 - **記録 1**: 窓は小さな地図（右下）を覆うことがある（窓は動かせる。地図はたたむボタンで逃げられる）。
 - **記録 2**: 確認のダイアログ（`showModal()` の top layer）は窓より手前に出る。窓は層の `z-index: 5`（グラフの面の上）で、ダイアログと重なり順は競合しない。
+
+## PR3（グラフから pane・workspace を足す・閉じる。T14a〜T14f）
+
+### D84: T14a の調査（実装の前。2026-10-09）
+1. **pane を足す道**: サーバの `pane.split`（`paneId`・`direction`・`ratio?`・`newCwd?`）が、そのまま使える。pane の数・大きさの上限は、サーバに**無い**（`SessionService.splitPane` が断るのは、元の pane が無い〔`not_found`〕・シェルを起動できない〔`spawn_failed`〕だけ）。基本画面の「新しい pane」（`ActionDispatcher.splitPane`）の既定は、利用者がキーで向きを選ぶので、「広いほうの辺」の決まりは**グラフのフォームで新しく決める**: 分割する pane は、その workspace で選ばれている tab（`Workspace.activeTabId`）の、最後にフォーカスのあった pane（`Tab.focusedPaneId`）。向きは、その pane の桁と行から、**桁が行の 2 倍以上なら右へ、そうでなければ下へ**（文字は縦長なので、桁 : 行 = 2 : 1 が見かけの正方形）。場所（`newCwd`）は、基本画面と同じ設定（`buildNewCwd(settings.newCwdPolicy…)`。「引き継ぐ」の元は分割する pane）。分割できないとき（`not_found`・`spawn_failed`）は、理由を出してフォームを残す。
+2. **エージェントを起動する道**: **すでにある**——サーバの方式 `agent.start`（`AgentStartParams = { name, kind, paneId, args: string[], timeoutMs?, callerPaneId? }`。`AgentStarter.start`）。`sodactl agent start` もこれを呼ぶ。実行ファイルは**サーバの表**（`protocol/src/agentStart.ts` の `AGENT_START_EXECUTABLES`。22 種）から引き、表に無い `kind` は `unsupported_agent_kind` で断る。引数（`args`）は、制御文字を含まない文字列で、クォートして 1 行にする（長さの上限あり）。名前は `isValidAgentName`、起動できる pane は、エージェント・起動中・会話の再開待ちが無く、前面がシェルだけ（`agent_pane_busy`・`unsupported_agent_shell`）。
+   **接続の種類の検査は、無い**（`MethodContext` は `clientId`・`sameMachine` だけ。`agent.start` は、トークンで認証した `/ws` の接続なら、ブラウザ・`sodactl` を区別せず受ける）。**ここは広げない・足さない**: 既存の方式のまま（`args` を受ける今の形は変えない。変えると `sodactl agent start` が壊れる）。**グラフのフォームが送るものは、種類の id（表のキー）と名前だけ**（`args: []`・`timeoutMs` も送らない・実行ファイルの文字列は一切送らない）。ブラウザの開発者道具から、手で `args` を付けて送れることは、「ブラウザが pane に文字を打てる」と同じ前提（すでに受け入れている）。E2E で、フォームが送るフレームの中身（`args: []`・種類の id）と、表に無い種類・シェルの文字を含む種類が断られることを確かめる。
+3. **選べる種類の一覧**: いまは無い。**新しい読み取りだけの方式 `agent.kinds` を足す**（引数なし。結果は `{ kinds: { kind, label, available }[] }`。`available` = サーバのマシンの `PATH` に、その実行ファイルがある〔実行できる〕）。**実行ファイルの名前・パス・コマンドは返さない**（種類の id・表示名・有無だけ）。起動の入口は広がらない（読み取りだけ・`agent.start` の検査は同じ）。結果は、フォームを開くたびに取り直す（サーバ側は 5 秒だけ覚える）。
+4. **「監督の線」の向き**: 線は「配下（`from`）→ 監督役（`to`）」（`supervise`）。フォームを開いたときに**選んでいたノード**を監督役、新しい pane を配下にする（`add_link { kind: "supervise", from: 新しい pane, to: 選んでいたノード }`）。選んでいたノードが無い（か、新しい pane がエージェントでない）ときは、項目を出さない。新しい pane は配下になるので、`supervisor_taken` は起きない（新しい pane には線が無い）。
+5. **新しいシェルの準備**: 分割した直後のシェルは、前面のプロセスの確認が間に合わないことがある（`agent_pane_busy`・確かめられないものは空きとみなさない）。ブラウザは、`agent_pane_busy` のとき、**最大 8 回（300ms 間隔）**やり直す。ほかの失敗は、すぐ理由を出す。
+6. **足した後**: 新しい pane の id は `pane.split` の応答で分かる。ノードはサーバが足す（PR1a。少し遅れる）ので、**ノードが出るまで待ってから**（最大 5 秒）、選び、窓を開く入口（`GraphTerminalController.open`）を呼ぶだけ（窓の作りには触れない）。
+7. **workspace を足す**: `newWorkspace`（名前を聞かず、すぐ作る既定）・worktree を作る／開く（`newWorktree`・`openWorktree`）は、`ActionDispatcher` の既存の操作をそのまま呼ぶ。作った workspace は、サーバの決まりでは**「グループなし」**に入る（`group.add_member` を送らない限り）ので、表示中の空間がグループなら、作った直後（クリックから 60 秒以内に、この画面が初めて見た新しい workspace）に `group.add_member` で、そのグループへ移す。
+8. **閉じる**: 基本画面と同じ確認（`ConfirmDialog`。busy の警告も同じ）を使い、**グラフの線が消える本数**を足して出す（線が 0 本なら何も足さない＝基本画面は変わらない）。
