@@ -336,6 +336,16 @@ pnpm --filter @sodashitsu/e2e test` が通ることを基準とする（`package
         問題を、pane ごとに一意な会話IDで解決したはずの箇所）。
       - 会話を終えて（`exit`・Ctrl+D 等）プレーンなシェルに戻した pane は、再起動しても再開されない
         こと（design D9）。
+        **捨てる条件（20261009-agent-resume-lost）**：エージェントが居なくなった（画面の判定が見つけられなくなった）と見えても、
+        会話の参照はすぐには捨てない。**その pane のシェルが生きたまま、エージェントの居ない状態が 10 秒続いたら**捨てて、保存にも反映する
+        （ログに `agent session dropped`）。サーバが止まる処理に入った後・pane（シェルごと）が終わったときは捨てない。
+        システムの停止（WSL の再起動など）でエージェントのプロセスがサーバより先に終わっても、参照は残り、次の起動で再開される。
+        **限界**：エージェントを終了して**10 秒以内に**サーバを止めた場合は、参照が残るので次の起動で再開されることがある（受け入れる）。
+        判定が失敗した周期（高負荷での時間切れなど）は「居ない」と数えないので、判定が失敗し続けても、居るエージェントの参照は捨てない。
+      - 復元のたびに、pane ごとにログが 1 行出る：`agent resume command written`（種類と会話 id の先頭 8 文字）か、
+        `agent resume skipped`（`reason`: `no-session-ref`・`auto-resume-disabled`・`no-command-for-kind`・`invalid-session-id`）。
+        再開されなかった pane の理由は、ここで分かる。判定の失敗（`agent judgment failed`）は、同じ pane・同じ理由が続くときは
+        最初の 1 回と 60 秒ごとの件数つき（`repeated`）の 1 行にまとめる。
       - 設定の「エージェント連携」で解除すると、書き込んだフックのエントリだけが消え、
         手動で足した他の hook（あれば）が残ること。
 - [ ] エージェントの会話の再開・Claude Code・Codex 以外の7エージェント（20260923-other-agents-session-resume。6エージェント＋20261007-agent-hook-drift で Qoder CLI。

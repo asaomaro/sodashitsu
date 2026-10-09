@@ -32,6 +32,8 @@ const DETECTION_LINES = 60;
  *  はコールバックベースで reject 経路を持たない）がコールバックを一度も呼ばずに固まった場合の防御
  *  （review 指摘。should）。design の「状態反映2秒以内」の粒度に合わせた。 */
 const PROCESS_INSPECTOR_TIMEOUT_MS = 2000;
+/** 同じ pane・同じ理由の判定の失敗を、件数つきでまとめて出す間隔。 */
+const JUDGMENT_FAILURE_LOG_INTERVAL_MS = 60_000;
 
 interface PaneSchedule {
   lastJudgedAt: number;
@@ -59,6 +61,7 @@ export class AgentMonitor {
 
   private readonly trackers = new Map<PaneId, AgentTracker>();
   private readonly schedules = new Map<PaneId, PaneSchedule>();
+  private readonly failureLogs = new Map<PaneId, { error: string; lastLoggedAt: number; suppressed: number }>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private busSubscription: Disposable | null = null;
   /** 実行中の判定周期（`judge()` の `.catch().finally()` まで込みのチェーン）。`stop()` が排出しきってから
@@ -117,6 +120,9 @@ export class AgentMonitor {
     for (const paneId of this.schedules.keys()) {
       if (!paneIds.has(paneId)) this.schedules.delete(paneId);
     }
+    for (const paneId of this.failureLogs.keys()) {
+      if (!paneIds.has(paneId)) this.failureLogs.delete(paneId);
+    }
   }
 
   private maybeJudge(paneId: PaneId, now: number): void {
@@ -144,7 +150,7 @@ export class AgentMonitor {
     schedule.inFlight = true;
     const cycle: Promise<void> = this.judge(paneId, host, tracker)
       .catch((err: unknown) => {
-        this.logger.error("agent judgment failed", { paneId, error: String(err) });
+        this.logJudgmentFailure(paneId, String(err));
       })
       .finally(() => {
         schedule!.lastJudgedAt = this.clock.now();
@@ -152,6 +158,25 @@ export class AgentMonitor {
         this.inFlightJudgments.delete(cycle);
       });
     this.inFlightJudgments.add(cycle);
+  }
+
+  /**
+   * 判定の失敗のログ。同じ pane・同じ理由が続くときは、最初の 1 回だけ出し、その後は `JUDGMENT_FAILURE_LOG_INTERVAL_MS` ごとに
+   * 件数つきで 1 行にまとめる（負荷が高い間に 4 千件を超えて埋まった。20261009-agent-resume-lost の AC6）。判定そのものの動きは変えない。
+   */
+  private logJudgmentFailure(paneId: PaneId, error: string): void {
+    const now = this.clock.now();
+    const prev = this.failureLogs.get(paneId);
+    if (prev === undefined || prev.error !== error) {
+      this.failureLogs.set(paneId, { error, lastLoggedAt: now, suppressed: 0 });
+      this.logger.error("agent judgment failed", { paneId, error });
+      return;
+    }
+    prev.suppressed++;
+    if (now - prev.lastLoggedAt < JUDGMENT_FAILURE_LOG_INTERVAL_MS) return;
+    this.logger.error("agent judgment failed", { paneId, error, repeated: prev.suppressed });
+    prev.lastLoggedAt = now;
+    prev.suppressed = 0;
   }
 
   private trackerFor(paneId: PaneId): AgentTracker {
