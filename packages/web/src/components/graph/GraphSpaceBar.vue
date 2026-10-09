@@ -51,7 +51,7 @@ const emit = defineEmits<{ select: [id: string] }>();
   max-width: 16em;
   padding: 2px 10px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 12px;
+  border-radius: var(--soda-shape-radius-l, 6px);
   background: none;
   color: var(--soda-fg, #f8f8f2);
   font: inherit;

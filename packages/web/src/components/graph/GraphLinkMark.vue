@@ -6,12 +6,16 @@
  */
 defineProps<{
   linkId: string;
+  /** 見えているノードの鍵（印はそのノードの下に並ぶ）。 */
+  nodeKey: string;
   /** 相手の呼び名。 */
   otherName: string;
   /** 相手のいる空間の名前。 */
   otherSpace: string;
   /** 線の種類の名前。 */
   kindName: string;
+  /** 一時停止・上限・無効の印（線のチップと同じ語。無ければ空）。 */
+  status: string;
   /** 線の向き（見えているノードから見て、出る〔→〕か入る〔←〕か）。 */
   direction: "out" | "in";
   /** 世界の座標（左上）。 */
@@ -20,7 +24,34 @@ defineProps<{
   selected: boolean;
   readOnly: boolean;
 }>();
-const emit = defineEmits<{ go: []; settings: [] }>();
+const emit = defineEmits<{ go: []; settings: []; back: [] }>();
+
+/**
+ * キーボード: 印のボタンは `tabindex="-1"`（Tab の順を増やさない）。ノードで `m` を押すと、そのノードの最初の印へ入る。中は ← →（押す・設定）・↑ ↓（同じノードの前後の印）、`Esc` でノードへ戻る。
+ */
+function onKeydown(ev: KeyboardEvent): void {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
+  const el = ev.currentTarget as HTMLElement;
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    emit("back");
+    return;
+  }
+  const buttons = [...el.querySelectorAll<HTMLElement>("button")];
+  const i = buttons.indexOf(document.activeElement as HTMLElement);
+  let next: HTMLElement | undefined;
+  if (ev.key === "ArrowRight") next = buttons[Math.min(buttons.length - 1, i + 1)];
+  else if (ev.key === "ArrowLeft") next = buttons[Math.max(0, i - 1)];
+  else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    const sibs = [...(el.parentElement?.querySelectorAll<HTMLElement>(`[data-mark-node="${CSS.escape(el.dataset["markNode"] ?? "")}"]`) ?? [])];
+    const j = sibs.indexOf(el);
+    next = sibs[ev.key === "ArrowDown" ? Math.min(sibs.length - 1, j + 1) : Math.max(0, j - 1)]?.querySelector<HTMLElement>("button") ?? undefined;
+  } else return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  next?.focus({ preventScroll: true });
+}
 </script>
 
 <template>
@@ -29,29 +60,35 @@ const emit = defineEmits<{ go: []; settings: [] }>();
     :class="{ 'graph-mark-selected': selected }"
     :style="{ left: `${x}px`, top: `${y}px` }"
     :data-link-mark="linkId"
+    :data-mark-node="nodeKey"
     @pointerdown.stop
+    @keydown="onKeydown"
   >
     <button
       v-if="!readOnly"
       type="button"
       class="graph-mark-go"
-      :aria-label="`別の空間（${otherSpace}）の ${otherName} との線（${kindName}）。押すとそのノードへ移動`"
+      tabindex="-1"
+      :aria-label="`別の空間（${otherSpace}）の ${otherName} との線（${kindName}）${status ? `・${status}` : ''}。押すとそのノードへ移動`"
       :title="`${otherSpace}・${otherName}（${kindName}）`"
       @click="emit('go')"
     >
       <span class="graph-mark-arrow" aria-hidden="true">{{ direction === "out" ? "→" : "←" }}</span>
       <span class="graph-mark-name">{{ otherName }}</span>
       <span class="graph-mark-kind">{{ kindName }}</span>
+      <span v-if="status" class="graph-mark-status">{{ status }}</span>
     </button>
     <span v-else class="graph-mark-go graph-mark-static" :title="`${otherSpace}・${otherName}（${kindName}）`">
       <span class="graph-mark-arrow" aria-hidden="true">{{ direction === "out" ? "→" : "←" }}</span>
       <span class="graph-mark-name">{{ otherName }}</span>
       <span class="graph-mark-kind">{{ kindName }}</span>
+      <span v-if="status" class="graph-mark-status">{{ status }}</span>
     </span>
     <button
       v-if="!readOnly"
       type="button"
       class="graph-mark-settings"
+      tabindex="-1"
       :aria-label="`${otherName} との線（${kindName}）の設定を開く`"
       title="線の設定"
       @click="emit('settings')"
@@ -108,6 +145,10 @@ const emit = defineEmits<{ go: []; settings: [] }>();
 .graph-mark-kind {
   flex: none;
   opacity: 0.7;
+}
+.graph-mark-status {
+  flex: none;
+  color: var(--soda-warn-fg, #ffb86c);
 }
 .graph-mark-settings {
   flex: none;

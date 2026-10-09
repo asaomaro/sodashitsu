@@ -1,5 +1,6 @@
+import type { NodeKey } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import {
   clampZoom,
   deriveGraphSpaces,
@@ -198,6 +199,30 @@ export const useGraphSpacesStore = defineStore("graphSpaces", () => {
       flashId.value = null;
     }, GRAPH_FLASH_MS);
   }
+
+  // --- 囲いごと動いたことを知らせる ---------------------------------------------------
+  // 置き場所の計算が、pane を足した workspace を囲いごと動かすことがある（空きが無いとき）。ノードの位置がまとめて変わったこと（その囲いのもともとあった
+  // ノードが、全部同じ量だけ動いた）から導いて、その囲いを短く強調する。自分の操作（ドラッグ・矢印キーの移動）の結果は知らせない。
+  watch(
+    () => graph.graph?.nodes,
+    (next, prev) => {
+      if (!next || !prev) return;
+      if (graph.dragPositions.size > 0 || graph.pendingPositions.size > 0) return;
+      const before = new Map(prev.map((n) => [n.key, n]));
+      const after = new Map(next.map((n) => [n.key, n]));
+      for (const [memberId, keys] of memberNodes.value) {
+        const old = keys.filter((k) => before.has(k as NodeKey) && after.has(k as NodeKey));
+        if (old.length === 0) continue;
+        const d = (k: string) => ({ x: after.get(k as NodeKey)!.x - before.get(k as NodeKey)!.x, y: after.get(k as NodeKey)!.y - before.get(k as NodeKey)!.y });
+        const first = d(old[0]!);
+        if (first.x === 0 && first.y === 0) continue;
+        if (old.every((k) => d(k).x === first.x && d(k).y === first.y)) {
+          flash(memberId);
+          return;
+        }
+      }
+    },
+  );
 
   // --- サイドバー・印からの動かす先の依頼 ----------------------------------------------
   const revealSeq = ref(0);

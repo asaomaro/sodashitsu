@@ -117,6 +117,45 @@ describe("graphSpaces（空間の一覧・表示中の空間）", () => {
   });
 });
 
+describe("graphSpaces（囲いごと動いたことを知らせる）", () => {
+  const moved = (dx: number, dy: number, skip: string[] = []) =>
+    graphOf({
+      rev: 5,
+      nodes: [
+        { key: "local:p1" as NodeKey, x: 20 + (skip.includes("p1") ? 0 : dx), y: 60 + (skip.includes("p1") ? 0 : dy) },
+        { key: "local:p2" as NodeKey, x: 260 + dx, y: 60 + dy },
+        { key: "local:p3" as NodeKey, x: 1000, y: 60 },
+      ],
+    });
+
+  it("囲いのもともとのノードが全部同じ量だけ動いたら、その囲いを強調する（自分の操作が無いとき）", async () => {
+    seed();
+    applyGraph();
+    const s = useGraphSpacesStore();
+    useGraphStore().applyGraph(moved(0, 480), "event");
+    await Promise.resolve();
+    expect(s.flashId).toBe("w1");
+  });
+
+  it("自分の操作（ドラッグ中・送信中）の結果・一部だけが動いたとき・動いていないときは、強調しない", async () => {
+    seed();
+    applyGraph();
+    const g = useGraphStore();
+    const s = useGraphSpacesStore();
+    g.pendingPositions = new Map([["local:p1", { x: 20, y: 540 }]]);
+    g.applyGraph(moved(0, 480), "event");
+    await Promise.resolve();
+    expect(s.flashId).toBeNull();
+    g.pendingPositions = new Map();
+    g.applyGraph({ ...moved(0, 960, ["p1"]), rev: 6 }, "event"); // p1 だけ動かない＝まとめての移動ではない
+    await Promise.resolve();
+    expect(s.flashId).toBeNull();
+    g.applyGraph({ ...moved(0, 960, ["p1"]), rev: 7 }, "event"); // 何も動かない
+    await Promise.resolve();
+    expect(s.flashId).toBeNull();
+  });
+});
+
 describe("graphSpaces（囲い・強調・動かす依頼・表示の記憶）", () => {
   it("囲いは表示中の空間のものだけ。見出しの情報（名前・フォルダ・tab）が引ける", () => {
     seed();

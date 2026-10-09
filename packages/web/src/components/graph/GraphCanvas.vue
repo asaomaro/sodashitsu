@@ -64,6 +64,7 @@ import {
   LINK_KIND_NAME,
   linkChipText,
   linkDescription,
+  pauseMark,
   linkConfigOf,
   linkDraftOf,
   linkEditOp,
@@ -305,20 +306,26 @@ const edges = computed<EdgeView[]>(() => {
 /** 別の空間のノードとの線の印（見えているノードの縁。20261008-graph-first の T11g）。 */
 interface MarkView {
   link: GraphLink;
+  /** 見えているノードの鍵。 */
+  nodeKey: string;
   otherKey: string;
   otherName: string;
   otherSpace: string;
   direction: "out" | "in";
+  /** 一時停止・上限・無効（線のチップと同じ語）。無ければ空。 */
+  status: string;
   x: number;
   y: number;
 }
-const marks = computed<MarkView[]>(() => {
+/** 1 つのノードの印を並べて出す数。残りは「+N」（押すと一覧）。 */
+const MARKS_PER_NODE = 3;
+const allMarks = computed<MarkView[]>(() => {
   const out: MarkView[] = [];
-  const perNode = new Map<string, number>();
   const spaceLabel = (key: string): string => {
     const id = spaces.spaceOfNode.get(key);
     return spaces.spaces.find((s) => s.id === id)?.label ?? "別の空間";
   };
+  const perNode = new Map<string, number>();
   for (const link of graph.links) {
     const sa = spaces.isShown(link.from);
     const sb = spaces.isShown(link.to);
@@ -329,18 +336,61 @@ const marks = computed<MarkView[]>(() => {
     if (!r) continue;
     const i = perNode.get(mine) ?? 0;
     perNode.set(mine, i + 1);
+    const status = [
+      pauseMark(link, graph.graph?.paused === true),
+      nodeInvalid(link.from) || nodeInvalid(link.to) ? "⚠" : "",
+    ]
+      .filter((t) => t !== "")
+      .join(" ");
     out.push({
       link,
+      nodeKey: mine,
       otherKey: other,
       otherName: graph.nodeInfo(other as NodeKey).name,
       otherSpace: spaceLabel(other),
       direction: sa ? "out" : "in",
+      status,
       x: r.x + 12,
-      y: r.y + r.h + 2 + i * 20,
+      y: r.y + r.h + 2 + Math.min(i, MARKS_PER_NODE) * 20,
     });
   }
   return out;
 });
+/** 並べて出す印（1 つのノードにつき 3 本まで）。 */
+const marks = computed<MarkView[]>(() => {
+  const seen = new Map<string, number>();
+  return allMarks.value.filter((m) => {
+    const n = seen.get(m.nodeKey) ?? 0;
+    seen.set(m.nodeKey, n + 1);
+    return n < MARKS_PER_NODE;
+  });
+});
+/** 3 本を超えるノードの「+N」。 */
+const markMore = computed(() => {
+  const counts = new Map<string, number>();
+  for (const m of allMarks.value) counts.set(m.nodeKey, (counts.get(m.nodeKey) ?? 0) + 1);
+  const out: { nodeKey: string; n: number; x: number; y: number }[] = [];
+  for (const [key, c] of counts) {
+    if (c <= MARKS_PER_NODE) continue;
+    const r = rects.value.get(key);
+    if (r) out.push({ nodeKey: key, n: c - MARKS_PER_NODE, x: r.x + 12, y: r.y + r.h + 2 + MARKS_PER_NODE * 20 });
+  }
+  return out;
+});
+/** 「+N」を押して開いている、そのノードの印の一覧。 */
+const markListKey = ref<string | null>(null);
+const markList = computed(() => (markListKey.value === null ? [] : allMarks.value.filter((m) => m.nodeKey === markListKey.value)));
+function chooseFromMarkList(m: MarkView): void {
+  markListKey.value = null;
+  goToMark(m);
+}
+/** ノードで `m`: そのノードの最初の印へ入る（印のボタンは Tab の順に入れない）。 */
+function enterMarks(key: string): boolean {
+  const btn = dialogEl.value?.querySelector<HTMLElement>(`[data-mark-node="${CSS.escape(key)}"] button`);
+  if (!btn) return false;
+  btn.focus({ preventScroll: true });
+  return true;
+}
 const degree = computed(() => {
   const out = new Map<string, number>();
   const inn = new Map<string, number>();
@@ -1421,6 +1471,9 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
     ev.preventDefault();
     ev.stopPropagation();
     startConnectMode(key);
+  } else if ((ev.key === "m" || ev.key === "M") && enterMarks(key)) {
+    ev.preventDefault();
+    ev.stopPropagation();
   } else if ((ev.key === "r" || ev.key === "R") && canRekey(key)) {
     ev.preventDefault();
     ev.stopPropagation();
@@ -1989,13 +2042,47 @@ function chipAria(e: EdgeView): string {
               :other-space="m.otherSpace"
               :kind-name="LINK_KIND_NAME[m.link.kind]"
               :direction="m.direction"
+              :node-key="m.nodeKey"
+              :status="m.status"
               :x="m.x"
               :y="m.y"
               :selected="isLinkSelected(m.link.id)"
               :read-only="isMobile"
               @go="goToMark(m)"
               @settings="openMarkSettings(m)"
+              @back="focusNode(m.nodeKey)"
             />
+            <button
+              v-for="more in markMore"
+              :key="`more-${more.nodeKey}`"
+              type="button"
+              class="graph-mark-more"
+              tabindex="-1"
+              :style="{ left: `${more.x}px`, top: `${more.y}px` }"
+              :aria-label="`別の空間との線があと ${more.n} 本。押すと一覧`"
+              @pointerdown.stop
+              @click="markListKey = markListKey === more.nodeKey ? null : more.nodeKey"
+            >
+              +{{ more.n }}
+            </button>
+            <div
+              v-if="markList.length > 0"
+              class="graph-mark-list"
+              role="menu"
+              :style="{ left: `${markList[0]!.x}px`, top: `${markList[0]!.y + 4 * 20}px` }"
+              @pointerdown.stop
+            >
+              <button
+                v-for="m in markList"
+                :key="`list-${m.link.id}`"
+                type="button"
+                role="menuitem"
+                class="graph-mark-list-item"
+                @click="chooseFromMarkList(m)"
+              >
+                {{ m.direction === "out" ? "→" : "←" }} {{ m.otherName }}（{{ m.otherSpace }}・{{ LINK_KIND_NAME[m.link.kind] }}{{ m.status ? `・${m.status}` : "" }}）
+              </button>
+            </div>
             <button
               v-for="e in edges"
               :key="`chip-${e.link.id}`"
@@ -2195,6 +2282,41 @@ function chipAria(e: EdgeView): string {
 .graph-chip-selected {
   outline: 2px solid var(--soda-accent, #6070a1);
   outline-offset: 1px;
+}
+.graph-mark-more {
+  position: absolute;
+  height: 18px;
+  padding: 0 8px;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 9px;
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
+  font-size: 10px;
+  cursor: pointer;
+}
+.graph-mark-list {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: var(--soda-shape-radius, 4px);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
+  font-size: 11px;
+  z-index: 3;
+}
+.graph-mark-list-item {
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.graph-mark-list-item:hover {
+  background: var(--soda-menu-hover-bg, #343746);
 }
 .graph-chip-paused {
   color: var(--soda-warn-fg, #ffb86c);

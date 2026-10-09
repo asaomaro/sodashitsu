@@ -335,6 +335,59 @@ describe("placeNode（隣がいる長い増加。PR1a 再レビュー指摘 1）
     expect([...layoutOverlaps(st, pos).keys()]).toEqual([]);
   });
 
+  /** 乱数の構成を作って、pane を足す。`shift` があれば囲いごと動いた。 */
+  function addTo(
+    st: LayoutStructure,
+    pos: Map<string, GraphPoint>,
+    ws: { id: string; nodes: NodeKey[] },
+    key: NodeKey,
+  ): boolean {
+    const first = ws.nodes.length === 0;
+    ws.nodes.push(key);
+    const r = first ? placeFrame(st, pos, ws.id) : placeNode(st, pos, ws.id);
+    applyPlacement(st, pos, ws.id, key, r);
+    return r.shift !== null;
+  }
+
+  it("pane を 1 つ足しただけで、利用者が置いた workspace が囲いごと動く頻度は 10% 以下（2〜6 個の workspace・各 1〜6 pane に 1 つ足す 300 通り。PR1c レビュー指摘 1）", () => {
+    let moved = 0;
+    const total = 300;
+    for (let seed = 1; seed <= total; seed++) {
+      const rnd = rng(seed);
+      const n = 2 + Math.floor(rnd() * 5);
+      const wss = Array.from({ length: n }, (_, i) => ({ id: `w${i}`, nodes: [] as NodeKey[] }));
+      const st = structureOf(wss.map((w) => ({ id: w.id, kind: "workspace" as const, members: [w] })));
+      const pos = new Map<string, GraphPoint>();
+      let c = 0;
+      for (const w of wss)
+        for (let j = 0, m = 1 + Math.floor(rnd() * 6); j < m; j++) addTo(st, pos, w, k(`s${c++}`));
+      if (addTo(st, pos, wss[Math.floor(rnd() * n)]!, k(`s${c++}`))) moved++;
+      expect([...layoutOverlaps(st, pos).keys()], `seed ${seed}`).toEqual([]);
+    }
+    expect(moved / total, `${moved}/${total}`).toBeLessThanOrEqual(0.1);
+  });
+
+  it("4 つの workspace に交互に 30 個ずつ足しても、全体の広がりは幅が高さの 4 倍以内（20 通り。PR1c レビュー指摘 1）", () => {
+    let worst = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const rnd = rng(seed * 7);
+      const wss = Array.from({ length: 4 }, (_, i) => ({ id: `w${i}`, nodes: [] as NodeKey[] }));
+      const st = structureOf(wss.map((w) => ({ id: w.id, kind: "workspace" as const, members: [w] })));
+      const pos = new Map<string, GraphPoint>();
+      let c = 0;
+      for (let i = 0; i < 120; i++) {
+        const w = wss[Math.floor(rnd() * 4)]!;
+        if (w.nodes.length < 30) addTo(st, pos, w, k(`s${c++}`));
+      }
+      const fs = frames(st, pos).map((f) => f.rect);
+      const w = Math.max(...fs.map((r) => r.x + r.w)) - Math.min(...fs.map((r) => r.x));
+      const h = Math.max(...fs.map((r) => r.y + r.h)) - Math.min(...fs.map((r) => r.y));
+      worst = Math.max(worst, w / h);
+      expect([...layoutOverlaps(st, pos).keys()], `seed ${seed}`).toEqual([]);
+    }
+    expect(worst).toBeLessThanOrEqual(4);
+  });
+
   it("否定の対照: 出口の保証と実際の列数を外すと（頭打ちの列数の位置に置くと）既存のノードの真上になる", () => {
     // 頭打ちの列数（32）の位置 = 33 列目。32 列分、横一列に並んだ workspace の、33 列目より先を既存のノードがふさぐ状況を直接作る。
     const a = ws("a", 40);

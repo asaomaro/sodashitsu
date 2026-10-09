@@ -85,6 +85,8 @@ interface World {
   /** 名前 → 最初の pane の id。 */
   pane: Map<string, string>;
   repo: string;
+  /** グループ「開発」の id（groups が偽なら空）。 */
+  groupDev: string;
 }
 
 /**
@@ -113,8 +115,10 @@ async function boot(page: Page, appServer: AppServer, opts: { groups?: boolean }
   const second = await client.request("tab.create", { workspaceId: alpha.id, label: "second" });
   pane.set("alpha:second", second.pane.id);
   await client.request("workspace.close", { workspaceId: initialId });
+  let groupDev = "";
   if (groups) {
     const dev = await client.request("group.create", { label: "開発", workspaceId: main.id });
+    groupDev = dev.group.id;
     await client.request("group.add_member", { groupId: dev.group.id, workspaceId: alpha.id });
     await client.request("group.create", { label: "ドキュメント", workspaceId: beta.id });
   }
@@ -149,7 +153,7 @@ async function boot(page: Page, appServer: AppServer, opts: { groups?: boolean }
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
   await focusTerminal(page);
-  return { client, sent, ws, pane, repo };
+  return { client, sent, ws, pane, repo, groupDev };
 }
 
 /** 名前の workspace の最初の pane どうしを、トリガの線で結ぶ。 */
@@ -535,12 +539,15 @@ test.describe("囲いのドラッグ・ノードのドラッグの寄せ（T11f�
     expect(ds[0]!.x).toBeGreaterThan(0);
   });
 
-  test("ほかの囲いの上へ落とすと、重ならない最も近い位置へ寄る（離す前に寄せるので、サーバに断られない）", async ({ page, appServer }) => {
+  test("ほかの囲いの上へ落とすと、重ならない最も近い位置へ寄る（離す前に寄せるので、サーバに断られず、元へも戻らない）", async ({ page, appServer }) => {
     const w = await boot(page, appServer);
     await openGraph(page);
     await spaceBtn(page, /^開発/).click();
     const group = graphView(page).locator('[data-frame-kind="worktree"]');
     const gb = await box(group);
+    const keys = [`local:${w.pane.get("alpha")!}`, `local:${w.pane.get("alpha:second")!}`];
+    const before = await serverPositions(w);
+    const alphaBefore = await box(frameOf(page, w.ws.get("alpha")!.id));
     const g = await headingGrip(page, w.ws.get("alpha")!.id);
     const sent0 = updatesSent(w).length;
     await page.mouse.move(g.x, g.y);
@@ -549,14 +556,24 @@ test.describe("囲いのドラッグ・ノードのドラッグの寄せ（T11f�
     await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2, { steps: 8 }); // worktree グループの真ん中の上
     await page.mouse.up();
     await expect.poll(() => updatesSent(w).length).toBe(sent0 + 1);
-    // 重ならない（囲いの箱どうし）
+    // サーバの位置が動いた（断られて元の位置のままではない）。2 つのノードは相対の位置を保つ
+    await expect.poll(async () => (await serverPositions(w)).get(keys[0]!)).not.toEqual(before.get(keys[0]!));
+    const after = await serverPositions(w);
+    expect({ x: after.get(keys[1]!)!.x - after.get(keys[0]!)!.x, y: after.get(keys[1]!)!.y - after.get(keys[0]!)!.y }).toEqual({
+      x: before.get(keys[1]!)!.x - before.get(keys[0]!)!.x,
+      y: before.get(keys[1]!)!.y - before.get(keys[0]!)!.y,
+    });
+    // 囲いが、元の位置とは違う、寄せた先にある。ほかの囲い（worktree グループ）と重ならない
     await expect.poll(async () => {
       const a = await box(frameOf(page, w.ws.get("alpha")!.id));
-      const b = await box(group);
-      const apart = a.x + a.width <= b.x + 1 || b.x + b.width <= a.x + 1 || a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1;
-      return apart;
+      return Math.abs(a.x - alphaBefore.x) + Math.abs(a.y - alphaBefore.y) > 5;
     }).toBe(true);
-    await expect(page.locator(".toast-list .toast").filter({ hasText: "配置を保存できませんでした" })).toHaveCount(0); // 断られた知らせは出ない
+    const a = await box(frameOf(page, w.ws.get("alpha")!.id));
+    const b = await box(group);
+    expect(a.x + a.width <= b.x + 1 || b.x + b.width <= a.x + 1 || a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1).toBe(true);
+    // 応答の後にも、断られた知らせは出ない（寄せを外すと、断られて出る）
+    await page.waitForTimeout(1500);
+    await expect(page.locator(".toast-list .toast").filter({ hasText: "配置を保存できませんでした" })).toHaveCount(0);
   });
 
   test("Esc で取りやめると、元の位置のまま何も送らない。グラフの画面は開いたまま", async ({ page, appServer }) => {
@@ -585,6 +602,7 @@ test.describe("囲いのドラッグ・ノードのドラッグの寄せ（T11f�
     await openGraph(page);
     await spaceBtn(page, /^開発/).click();
     const fb = await box(frameOf(page, w.ws.get("alpha")!.id));
+    const before = await serverPositions(w);
     const g = await headingGrip(page, w.ws.get("alpha")!.id);
     const sent0 = updatesSent(w).length;
     await page.mouse.move(g.x, g.y);
@@ -596,7 +614,10 @@ test.describe("囲いのドラッグ・ノードのドラッグの寄せ（T11f�
     await page.mouse.move(g.x + 200, g.y + 100, { steps: 3 });
     await page.mouse.up();
     expect(updatesSent(w).length).toBe(sent0);
-    expect(fb.x).toBeGreaterThan(0);
+    // 元の位置へ戻っている（囲いの見た目・サーバの位置とも）
+    await expect.poll(async () => Math.round((await box(frameOf(page, w.ws.get("alpha")!.id))).x)).toBe(Math.round(fb.x));
+    const now = await serverPositions(w);
+    for (const [key, p] of before) expect(now.get(key), key).toEqual(p); // 増えた pane のノード以外は動いていない
   });
 
   test("ノードを、ほかの workspace の囲いの上へドラッグすると「落とせない」見た目になり、離すと元へ戻る（何も送らない）。空いた所へは動かせる", async ({ page, appServer }) => {
@@ -712,6 +733,120 @@ test.describe("別の空間のノードとの線の印（T11g）", () => {
   });
 });
 
+test.describe("キーボード（囲いのタグ・線の印。PR1c レビュー指摘 4）", () => {
+  /** 最後の空間のボタンから Tab を押して、最初のノードに着くまでの回数（実機で数える）。 */
+  async function tabsToNode(page: Page): Promise<number> {
+    await page.locator("[data-space-id]").last().focus();
+    for (let n = 1; n <= 30; n++) {
+      await page.keyboard.press("Tab");
+      const onNode = await page.evaluate(() => document.activeElement?.hasAttribute("data-node-key") ?? false);
+      if (onNode) return n;
+    }
+    return -1;
+  }
+
+  test("囲いが増えても、ノードに着くまでの Tab の回数は変わらない（囲いごとのタグ・線の印は Tab の順に入らない）。タグの中は矢印キーで移る", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await addTriggerLink(w, "alpha", "beta"); // 線の印も、Tab の順に入らない
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    await expect(graphView(page).locator("[data-link-mark]")).toHaveCount(1);
+    const before = await tabsToNode(page);
+    expect(before).toBeGreaterThan(0);
+    expect(before).toBeLessThanOrEqual(3); // 層の入口 1・ノード 1（余裕を見て 3）
+    // 囲い（tab が 2 つの workspace）を 4 つ足す
+    const dev = (await w.client.request("graph.get", {})).nodes.length;
+    expect(dev).toBeGreaterThan(0);
+    const added: Workspace[] = [];
+    for (let i = 0; i < 4; i++) {
+      const r = await w.client.request("workspace.create", { cwd: await makeDir(), label: `extra${i}` });
+      await w.client.request("tab.create", { workspaceId: r.workspace.id, label: "t2" });
+      await w.client.request("group.add_member", { groupId: w.groupDev, workspaceId: r.workspace.id });
+      added.push(r.workspace);
+    }
+    for (const a of added) await expect(frameOf(page, a.id)).toBeVisible({ timeout: 15_000 });
+    expect(await graphView(page).locator("[data-tab-tag]").count()).toBeGreaterThanOrEqual(10);
+    const after = await tabsToNode(page);
+    expect(after, `囲いを増やしても Tab の回数は同じ（前 ${before}・後 ${after}）`).toBe(before);
+    // 入口のタグに入って、矢印キーで移る（← → は同じ囲いのタグ・↓ は次の囲い）
+    const alphaTags = frameOf(page, w.ws.get("alpha")!.id).locator("[data-tab-tag]");
+    await alphaTags.first().focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(alphaTags.nth(1)).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(alphaTags.first()).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    const nextFrame = await page.evaluate(() => document.activeElement?.closest("[data-frame-id]")?.getAttribute("data-frame-id"));
+    expect(nextFrame).not.toBe(w.ws.get("alpha")!.id);
+    // Enter（クリック）で強調が入る
+    await page.keyboard.press("Enter");
+    await expect(graphView(page).locator('[data-tab-tag][aria-pressed="true"]')).toHaveCount(1);
+  });
+
+  test("ノードで m を押すと、そのノードの線の印へ入る。矢印・Esc で戻る", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await addTriggerLink(w, "alpha", "beta");
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    const node = nodeOf(page, w.pane.get("alpha")!);
+    await node.focus();
+    await page.keyboard.press("m");
+    await expect(graphView(page).locator("[data-link-mark] .graph-mark-go")).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(graphView(page).locator("[data-link-mark] .graph-mark-settings")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(node).toBeFocused();
+    expect(w.sent().length).toBeGreaterThan(0);
+  });
+});
+
+test.describe("別の空間との線の印の状態と数（PR1c レビュー指摘 6）", () => {
+  test("一時停止・上限・無効を、線のチップと同じ語で添える", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await addTriggerLink(w, "alpha", "beta");
+    const g = await w.client.request("graph.get", {});
+    const link = g.links[0]!;
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    const mark = graphView(page).locator("[data-link-mark]");
+    await expect(mark).toHaveCount(1);
+    await expect(mark.locator(".graph-mark-status")).toHaveCount(0);
+    await w.client.request("graph.pause", { linkId: link.id });
+    await expect(mark.locator(".graph-mark-status")).toHaveText("⏸");
+    await w.client.request("graph.resume", { linkId: link.id });
+    await expect(mark.locator(".graph-mark-status")).toHaveCount(0);
+    await w.client.request("graph.pause", {});
+    await expect(mark.locator(".graph-mark-status")).toHaveText("⏸ 全体");
+    await w.client.request("graph.resume", {});
+  });
+
+  test("1 つのノードの印は 3 本まで。残りは「+N」で、押すと一覧から選べる", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await addTriggerLink(w, "alpha", "beta");
+    await addTriggerLink(w, "alpha", "gamma");
+    await addTriggerLink(w, "beta", "alpha");
+    await addTriggerLink(w, "gamma", "alpha");
+    for (const to of ["beta"]) {
+      const g = await w.client.request("graph.get", {});
+      await w.client.request("graph.update", {
+        baseRev: g.rev,
+        ops: [{ op: "add_link", kind: "supervise", from: `local:${w.pane.get("alpha")!}`, to: `local:${w.pane.get(to)!}` }],
+      });
+    }
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    await expect(graphView(page).locator("[data-link-mark]")).toHaveCount(3);
+    const more = graphView(page).locator(".graph-mark-more");
+    await expect(more).toHaveText("+2");
+    await more.click();
+    const list = graphView(page).locator(".graph-mark-list");
+    await expect(list.locator("button")).toHaveCount(5);
+    await list.locator("button").first().click();
+    await expect(spaceBtn(page, /^ドキュメント|^グループなし/).filter({ has: page.locator("xpath=self::*[@aria-current='true']") })).toHaveCount(1);
+    await expect(list).toHaveCount(0);
+  });
+});
+
 test.describe("基本画面の変更への追従・複数のブラウザ", () => {
   test("基本画面で pane・workspace・グループを変えると、グラフ（空間の並び・囲い・ノード）が追従する", async ({ page, appServer }) => {
     const w = await boot(page, appServer);
@@ -779,7 +914,7 @@ test.describe("基本画面の変更への追従・複数のブラウザ", () =>
 });
 
 test.describe("性能（T11h。design 追補 01 の D18）", () => {
-  test("200 ノード・200 線の空間で、ノードを 60 回動かす間の描画の間隔: 中央値 20ms 以内（最悪は記録に出す。負荷で揺れるので失敗の条件にしない）", async ({ page, appServer }) => {
+  test("200 ノード・200 線の空間で、ノードを 60 回動かした直後の描画の間隔: 中央値 20ms 以内・100ms を超えた回数が 5% 以下（最悪の 1 回では落とさない）", async ({ page, appServer }) => {
     await boot(page, appServer);
     await openGraph(page);
     // 画面の中にだけ、200 の pane（10 workspace × 20）・200 本の線のグラフを足す（サーバには送らない。描画の時間を測る）。
@@ -819,65 +954,40 @@ test.describe("性能（T11h。design 追補 01 の D18）", () => {
     // 面の全体が見える（全体表示）ので、ノードは小さい。1 つをつかんで、60 回動かす。1 回ごとに 2 フレーム待つ。
     const target = graphView(page).locator('[data-node-key="local:perf-p0-0"]');
     const b = await box(target);
-    await page.evaluate(() => {
-      const w = window as unknown as { __frames: number[]; __stop: boolean };
-      w.__frames = [];
-      w.__stop = false;
-      const tick = (t: number): void => {
-        w.__frames.push(t);
-        if (!w.__stop) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    });
-    const nextFrames = () => page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+    // 動かした直後の 5 フレームだけを測る（動かしていない間の空きのフレームは数えない。描画が重くなれば、ここが伸びる）。
+    const after = () =>
+      page.evaluate(
+        () =>
+          new Promise<number[]>((resolve) => {
+            const ts: number[] = [];
+            const tick = (t: number): void => {
+              ts.push(t);
+              if (ts.length >= 5) resolve(ts);
+              else requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          }),
+      );
     await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
     await page.mouse.down();
-    await nextFrames();
-    const t0 = await page.evaluate(() => (window as unknown as { __frames: number[] }).__frames.length);
-    const micro = await page.evaluate(async () => {
-      const app = (document.querySelector("#app") as unknown as { __vue_app__: { config: { globalProperties: { $pinia: { _s: Map<string, any> } } } } }).__vue_app__;
-      const graph = app.config.globalProperties.$pinia._s.get("graph");
-      const raf = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
-      const times: number[] = [];
-      const js: number[] = [];
-      for (let i = 1; i <= 60; i++) {
-        const t0 = performance.now();
-        graph.setDragPosition("local:perf-p0-0", { x: 20000 + i * 10, y: 20000 + (i % 2 ? 10 : -10) * i });
-        await Promise.resolve();
-        await new Promise<void>((r) => setTimeout(r, 0));
-        js.push(performance.now() - t0);
-        await raf();
-        times.push(performance.now() - t0);
-      }
-      graph.setDragPosition("local:perf-p0-0", null);
-      times.sort((a, b) => a - b);
-      js.sort((a, b) => a - b);
-      return { median: times[30], jsMedian: js[30], jsWorst: js[59] }; // __micro
-    });
-    process.stdout.write(`[graph-micro] setDragPosition → 描画まで: 中央値 ${micro.median!.toFixed(1)}ms（JS の部分 中央値 ${micro.jsMedian!.toFixed(1)}ms・最悪 ${micro.jsWorst!.toFixed(1)}ms）\n`);
-    const moveMs: number[] = [];
+    await after();
+    const gaps: number[] = [];
     for (let i = 1; i <= 60; i++) {
-      const t = Date.now();
       await page.mouse.move(b.x + b.width / 2 + i * 2, b.y + b.height / 2 + (i % 2 === 0 ? i : -i), { steps: 1 });
-      await nextFrames();
-      moveMs.push(Date.now() - t);
+      const ts = await after();
+      for (let j = 1; j < ts.length; j++) gaps.push(ts[j]! - ts[j - 1]!);
     }
-    moveMs.sort((x, y) => x - y);
-    process.stdout.write(`[graph-perf] 1 回の移動（操作の送信から 2 フレーム後まで）: 中央値 ${moveMs[30]}ms・最悪 ${moveMs[59]}ms\n`);
-    const frames = await page.evaluate((from) => {
-      const w = window as unknown as { __frames: number[]; __stop: boolean };
-      w.__stop = true;
-      return w.__frames.slice(from);
-    }, t0);
     await page.keyboard.press("Escape"); // 取りやめ（サーバへは送らない）
     await page.mouse.up();
-    const gaps = frames.slice(1).map((t, i) => t - frames[i]!).sort((a, c) => a - c);
+    gaps.sort((x, y) => x - y);
     const median = gaps[Math.floor(gaps.length / 2)]!;
-    const worst = gaps.at(-1)!;
     const p95 = gaps[Math.floor(gaps.length * 0.95)]!;
-    process.stdout.write(`[graph-perf] 200 ノード・200 線: フレームの間隔 中央値 ${median.toFixed(1)}ms・95% ${p95.toFixed(1)}ms・最悪 ${worst.toFixed(1)}ms（${gaps.length} フレーム）\n`);
-    expect(gaps.length).toBeGreaterThanOrEqual(60);
+    const worst = gaps.at(-1)!;
+    const slow = gaps.filter((g) => g > 100).length;
+    process.stdout.write(`[graph-perf] 200 ノード・200 線・動かした直後の ${gaps.length} フレーム: 間隔 中央値 ${median.toFixed(1)}ms・95% ${p95.toFixed(1)}ms・最悪 ${worst.toFixed(1)}ms・100ms 超 ${slow} 回（${((100 * slow) / gaps.length).toFixed(1)}%）\n`);
+    expect(gaps.length).toBe(240);
     expect(median, `中央値 ${median}ms`).toBeLessThanOrEqual(20);
+    expect(slow / gaps.length, `100ms を超えた回数 ${slow}/${gaps.length}`).toBeLessThanOrEqual(0.05); // 最悪の 1 回では落とさず、遅い回が増えたら落とす
   });
 });
 

@@ -280,14 +280,17 @@ describe("寄せても明暗の向きは変わらない", () => {
  * 薄ければ検査が実態を守らない——部品の CSS を読んで確かめる。対象外は decisions D6 の 3 種（無効な部品・未対応の行・状態の丸）だけ。
  */
 describe("部品の CSS の透明度", () => {
-  const sources = import.meta.glob(["../components/*.vue", "../mobile/*.vue"], {
+  const sources = import.meta.glob(["../components/*.vue", "../components/graph/*.vue", "../mobile/*.vue"], {
     query: "?raw",
     import: "default",
     eager: true,
   }) as Record<string, string>;
   // `[aria-disabled="true"]` も無効な部品（Tab で辿れるよう `disabled` の代わりに使う。20260927-multi-host-machines の切れているマシンの行）。
   // `.pane-frame-main-dimmed`: 表示の枠に入力が届いている間、端末を薄くする（20261007-soda-extensions。0.55 は設計の指定。文字を読ませる薄め方ではなく、入力先が端末でないことを示す）。
-  const EXEMPT = [/:disabled/, /\[aria-disabled="true"\]/, /\.help-dialog-grayed/, /\.state-icon/, /\.pane-frame-main-dimmed/];
+  // `.graph-node-weak`: グラフで tab のタグを押したとき、同じ workspace のほかの tab のノードを「弱く」出す（20261008-graph-first の D59）。見る対象を絞る意図した薄め方で、
+  // もう一度タグを押せば戻る。読ませる文字の薄め方ではない（弱くしたノードの文字を読むなら強調を戻す）。
+  // `.graph-edge-paused`: グラフの線（文字を含まない SVG の線）の一時停止の見た目。文字（「⏸」など）は線のチップが持ち、チップは薄めない。
+  const EXEMPT = [/:disabled/, /\[aria-disabled="true"\]/, /\.help-dialog-grayed/, /\.state-icon/, /\.pane-frame-main-dimmed/, /\.graph-node-weak/, /\.graph-edge-paused/];
 
   it("無効な部品・未対応の行・状態の丸を除き、opacity は MUTED_TEXT_ALPHA 以上", () => {
     const found: string[] = [];

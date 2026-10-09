@@ -4,7 +4,7 @@
  * 見出し（高さ 40 の帯）だけが押せる——つかんで動かす（親が持つ）・tab のタグを押す。色は既存の `--soda-*` だけ。文字の幅は測らない（CSS の省略）。
  * workspace の囲い: 名前（太字）・フォルダとブランチ（小さな等幅）・tab のタグ。worktree グループ: 名前と「worktree グループ・N worktree」。
  */
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { DisplayFrame, FrameInfo } from "@sodashitsu/client-core";
 
 const props = defineProps<{
@@ -48,6 +48,45 @@ const rows = computed<Row[]>(() =>
     return [{ frame, info, tags, more: Math.max(0, info.tabs.length - TAGS_MAX) }];
   }),
 );
+
+/**
+ * キーボード: タグのボタンはすべて `tabindex="-1"` で、Tab で止まる所は、この層全体で 1 つだけ（`entry`。囲いが増えても、ノードへ着くまでの Tab の数は変わらない）。
+ * その中は矢印キーで移る（← →: 同じ囲いのタグ・↑ ↓: 前後の囲いの最初のタグ・Home/End: 同じ囲いの端）。
+ */
+const entry = ref<string | null>(null);
+const tagKey = (frameId: string, tabId: string): string => `${frameId}|${tabId}`;
+const firstTagKey = computed<string | null>(() => {
+  const r = rows.value.find((x) => x.tags.length > 0);
+  return r ? tagKey(r.info.id, r.tags[0]!.id) : null;
+});
+const entryKey = computed<string | null>(() => {
+  const k = entry.value;
+  if (k !== null && rows.value.some((r) => r.tags.some((t) => tagKey(r.info.id, t.id) === k))) return k;
+  return firstTagKey.value;
+});
+function onTagFocus(frameId: string, tabId: string): void {
+  entry.value = tagKey(frameId, tabId);
+}
+function onTagKeydown(ev: KeyboardEvent): void {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
+  const el = ev.currentTarget as HTMLElement;
+  const head = el.closest(".graph-frame-head");
+  const tags = [...(head?.querySelectorAll<HTMLElement>("[data-tab-tag]") ?? [])];
+  const i = tags.indexOf(el);
+  let next: HTMLElement | undefined;
+  if (ev.key === "ArrowRight") next = tags[Math.min(tags.length - 1, i + 1)];
+  else if (ev.key === "ArrowLeft") next = tags[Math.max(0, i - 1)];
+  else if (ev.key === "Home") next = tags[0];
+  else if (ev.key === "End") next = tags.at(-1);
+  else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    const heads = [...(el.closest(".graph-frames")?.querySelectorAll<HTMLElement>(".graph-frame-head") ?? [])].filter((h) => h.querySelector("[data-tab-tag]"));
+    const j = heads.indexOf(head as HTMLElement);
+    next = heads[ev.key === "ArrowDown" ? Math.min(heads.length - 1, j + 1) : Math.max(0, j - 1)]?.querySelector<HTMLElement>("[data-tab-tag]") ?? undefined;
+  } else return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  next?.focus({ preventScroll: true });
+}
 
 function subtitle(info: FrameInfo): string {
   if (info.kind === "worktree") return `worktree グループ・${info.worktreeCount ?? 0} worktree`;
@@ -99,9 +138,12 @@ function subtitle(info: FrameInfo): string {
               :aria-pressed="t.emphasized"
               :aria-label="`tab ${t.label}${t.active ? '（選ばれている tab）' : ''}`"
               :title="t.label"
+              :tabindex="entryKey === tagKey(r.info.id, t.id) ? 0 : -1"
               data-tab-tag
               :data-tab-id="t.id"
               @pointerdown.stop
+              @focus="onTagFocus(r.info.id, t.id)"
+              @keydown="onTagKeydown"
               @click.stop="emit('tag', r.info.id, t.id)"
             >
               {{ t.label }}
@@ -133,7 +175,7 @@ function subtitle(info: FrameInfo): string {
 .graph-frame {
   position: absolute;
   box-sizing: border-box;
-  border-radius: 12px;
+  border-radius: var(--soda-shape-radius-l, 6px);
   pointer-events: none;
 }
 .graph-frame-workspace,
@@ -143,11 +185,13 @@ function subtitle(info: FrameInfo): string {
 }
 .graph-frame-worktree {
   border: 2px solid var(--soda-menu-border, #44475a);
-  border-radius: 16px;
+  border-radius: var(--soda-shape-radius-l, 6px);
   background: transparent;
 }
+/* 仮の囲い: 文字は薄めず、枠と地だけを薄くする（opacity は子の文字にも掛かる） */
 .graph-frame-placeholder {
-  opacity: 0.6;
+  border-color: color-mix(in srgb, var(--soda-menu-border, #44475a) 55%, transparent);
+  background: color-mix(in srgb, var(--soda-subtle-bg, rgba(255, 255, 255, 0.08)) 55%, transparent);
 }
 .graph-frame-selected {
   border-color: var(--soda-accent, #6070a1);

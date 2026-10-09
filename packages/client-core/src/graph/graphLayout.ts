@@ -537,6 +537,17 @@ export function placeNode(
   return x === r.x ? r : { ...r, x };
 }
 
+/**
+ * 右へ伸ばしてよい限り: 幅（列数）が高さ（行数）の `RIGHT_GROW_RATIO` 倍まで、または 1 行なら `RIGHT_GROW_ROW_MAX` 升まで（ほぼ正方形の列数 `wrapCols` は常に許す）。
+ * これを超えるときは囲いごと動かす（横一列に伸び続けない）。数は、乱数の試験（`graphLayout.test.ts`）で、足しただけで囲いごと動く頻度（10% 以下）と、
+ * 全体の広がりの横長さ（幅が高さの 4 倍以内）を固定して決めた（decisions D63）。
+ */
+export const RIGHT_GROW_RATIO = 4;
+export const RIGHT_GROW_ROW_MAX = 8;
+function rightGrowAllowed(cols: number, rows: number, wrapCols: number): boolean {
+  return cols <= Math.max(wrapCols, rows * RIGHT_GROW_RATIO) || (rows <= 1 && cols <= RIGHT_GROW_ROW_MAX);
+}
+
 function placeNodeCore(
   structure: LayoutStructure,
   positions: NodePositions,
@@ -569,7 +580,7 @@ function placeNodeCore(
       const down = Math.max(0, j - rows + 1);
       const wrapPenalty = i >= Math.max(cols, wrapCols) ? 100 : 0;
       // 右へ伸ばすのは、ほぼ正方形（幅が高さの 2 倍まで）の間だけ。それを超えるなら、囲いごと動かして、広げられる場所へ（横一列に伸び続けない。PR1c T11h）。
-      if (wrapPenalty > 0 && i + 1 > Math.max(wrapCols, rows * 2)) continue;
+      if (wrapPenalty > 0 && !rightGrowAllowed(i + 1, rows, wrapCols)) continue;
       cells.push({ i, j, cost: right + down + wrapPenalty, down });
     }
   }
