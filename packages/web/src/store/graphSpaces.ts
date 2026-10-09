@@ -70,6 +70,9 @@ export type GraphRevealTarget =
 /** 接続が別のマシンを向いているときの、空間の無い 1 枚の面の id。 */
 export const GRAPH_ALL_SPACE = "all";
 
+/** グラフの画面へ頼む操作（メニューから。PR3 で「pane を足す」「workspace を足す」を追加）。 */
+export type GraphCommandName = "pause" | "history" | "checklist" | "addPane" | "newWorkspace";
+
 export const useGraphSpacesStore = defineStore("graphSpaces", () => {
   const graph = useGraphStore();
   const session = useSessionStore();
@@ -236,9 +239,9 @@ export const useGraphSpacesStore = defineStore("graphSpaces", () => {
 
   // --- ツールバーの「そのほか」メニュー（ContextMenu）からの命令 ----------------------------------
   /** メニューの項目が、グラフの画面（`GraphCanvas`）へ頼む命令。メニューは別の部品なので、store 越しに渡す。 */
-  const command = ref<{ seq: number; name: "pause" | "history" | "checklist" } | null>(null);
-  function requestCommand(name: "pause" | "history" | "checklist"): void {
-    command.value = { seq: (command.value?.seq ?? 0) + 1, name };
+  const command = ref<{ seq: number; name: GraphCommandName; arg?: string } | null>(null);
+  function requestCommand(name: GraphCommandName, arg?: string): void {
+    command.value = { seq: (command.value?.seq ?? 0) + 1, name, ...(arg !== undefined ? { arg } : {}) };
   }
 
   // --- 空間ごとの表示 ------------------------------------------------------------------

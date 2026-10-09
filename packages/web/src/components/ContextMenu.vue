@@ -3,6 +3,8 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } fr
 import { ActionDispatcherKey, TerminalHostKey, TerminalRegistryKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useGraphStore } from "../store/graph.js";
+import type { NodeKey } from "@sodashitsu/protocol";
+import { linksTouching, paneIdsOfTargets } from "./graph/closeLinks.js";
 import { useGraphSpacesStore } from "../store/graphSpaces.js";
 import { useSessionStore } from "../store/session.js";
 import { itemGroupIdOf } from "../store/sidebarTree.js";
@@ -118,6 +120,17 @@ function displayItems(id: string): MenuItem[] {
   return list;
 }
 
+/** グラフから閉じる: 線が消えるときは、busy でなくても確認を出す（基本画面と同じダイアログ）。無ければ、基本画面と同じ道。 */
+function closeFromGraph(t: { type: "pane" | "workspace"; id: string }): void {
+  if (!actions) return;
+  if (t.type === "workspace") {
+    actions.closeWorkspaceById(t.id);
+    return;
+  }
+  if (linksTouching(graphStore.links, paneIdsOfTargets([t], session)) > 0) view.openDialogWithContext({ kind: "confirmClose", targets: [t] });
+  else actions.closePaneById(t.id);
+}
+
 const items = computed<MenuItem[]>(() => {
   const target = view.contextMenu?.target;
   if (!target) return [];
@@ -216,6 +229,31 @@ const items = computed<MenuItem[]>(() => {
       { label: paused ? "全体を再開" : "全体を一時停止", run: () => graphSpaces.requestCommand("pause") },
       { label: "履歴", run: () => graphSpaces.requestCommand("history") },
       { label: "別のマシンの pane を載せる", run: () => graphSpaces.requestCommand("checklist") },
+    ];
+  }
+  if (target.kind === "graphAdd") {
+    // ツールバーの「＋ workspace」（PR3 T14e）。基本画面の操作を、そのまま呼ぶ。
+    const wid = view.workspaceId;
+    return [
+      { label: "新しい workspace", run: () => graphSpaces.requestCommand("newWorkspace") },
+      ...(wid
+        ? [
+            { label: "worktree を作る…", run: () => actions.newWorktree(wid) },
+            { label: "worktree を開く…", run: () => actions.openWorktree(wid) },
+          ]
+        : []),
+    ];
+  }
+  if (target.kind === "graphNode") {
+    // ノードの右クリック（PR3 T14e）。手元で、いま在る pane だけ閉じられる。線が残るときは、必ず確認する。
+    const info = graphStore.nodeInfo(target.key as NodeKey);
+    if (!info.local || info.exists !== true || !session.panes.has(info.paneId)) return [];
+    return [{ label: "pane を閉じる", run: () => closeFromGraph({ type: "pane", id: info.paneId }) }];
+  }
+  if (target.kind === "graphFrame") {
+    return [
+      { label: "pane を足す", run: () => graphSpaces.requestCommand("addPane", target.workspaceId) },
+      { label: "workspace を閉じる", run: () => closeFromGraph({ type: "workspace", id: target.workspaceId }) },
     ];
   }
   if (target.kind === "ungrouped") {

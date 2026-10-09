@@ -96,3 +96,35 @@ describe("GraphFrameLayer", () => {
     expect(ro.findAll("button")).toHaveLength(0); // 読み取りだけでは、タグも押せる部品にならない
   });
 });
+
+describe("GraphFrameLayer の「＋」（PR3 T14c）", () => {
+  it("workspace の囲いの見出しに出る（worktree グループ・仮の囲い・読み取りだけでは出ない）。押すと workspace の id と押したボタンを伝え、Tab の止まりは層で 1 つ", async () => {
+    const infos = new Map([["w1", info("w1", { tabs: [{ id: "t1", label: "one", active: true }] })], ["w2", info("w2")], ["r:x", info("r:x", { kind: "worktree" })], ["w3", info("w3")]]);
+    const frames = [frame("w1", "workspace"), frame("w2", "workspace"), frame("r:x", "worktree"), frame("w3", "workspace", true)];
+    const w = mount(GraphFrameLayer, { props: { ...base, frames, infos } });
+    expect(w.findAll("[data-frame-add]").map((b) => b.element.closest("[data-frame-id]")!.getAttribute("data-frame-id"))).toEqual(["w1", "w2"]);
+    const stops = w.findAll("[data-roving]").filter((b) => b.attributes("tabindex") === "0");
+    expect(stops).toHaveLength(1);
+    await w.get('[data-frame-id="w2"] [data-frame-add]').trigger("click");
+    expect(w.emitted("add")![0]![0]).toBe("w2");
+    expect(w.emitted("add")![0]![1]).toBeInstanceOf(HTMLElement);
+    const ro = mount(GraphFrameLayer, { props: { ...base, readOnly: true, frames, infos } });
+    expect(ro.find("[data-frame-add]").exists()).toBe(false);
+  });
+  it("矢印キーで、同じ囲いのタグと「＋」の間を移る。Esc で leave", async () => {
+    const infos = new Map([["w1", info("w1", { tabs: [{ id: "t1", label: "one", active: true }] })]]);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const w = mount(GraphFrameLayer, { props: { ...base, frames: [frame("w1", "workspace")], infos }, attachTo: host });
+    const tag = w.get("[data-tab-tag]");
+    (tag.element as HTMLElement).focus();
+    await tag.trigger("keydown", { key: "ArrowRight" });
+    expect(document.activeElement).toBe(w.get("[data-frame-add]").element);
+    await w.get("[data-frame-add]").trigger("keydown", { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(tag.element);
+    await w.get("[data-frame-add]").trigger("keydown", { key: "Escape" });
+    expect(w.emitted("leave")).toHaveLength(1);
+    w.unmount();
+    host.remove();
+  });
+});

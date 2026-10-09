@@ -23,6 +23,12 @@ export type MenuTarget =
   | { kind: "display"; id: string }
   /** グラフの画面のツールバーの「そのほか」（全体の一時停止・履歴・別のマシンの pane を載せる。20261008-graph-first の PR1e）。 */
   | { kind: "graphMore" }
+  /** グラフの画面のツールバーの「＋ workspace」（新しい workspace・worktree を作る・開く。PR3 T14e）。 */
+  | { kind: "graphAdd" }
+  /** グラフのノードの右クリック（閉じる。PR3 T14e）。 */
+  | { kind: "graphNode"; key: string }
+  /** グラフの囲いの見出しの右クリック（pane を足す・workspace を閉じる。PR3 T14e）。 */
+  | { kind: "graphFrame"; workspaceId: string }
   | { kind: "global" };
 
 export interface UiPort {

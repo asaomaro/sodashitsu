@@ -4,6 +4,8 @@ import { ActionDispatcherKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { type DialogContext, useViewStore } from "../store/view.js";
 import { repoMembers } from "@sodashitsu/client-core";
+import { useGraphStore } from "../store/graph.js";
+import { linksTouching, paneIdsOfTargets } from "./graph/closeLinks.js";
 
 /**
  * 閉じる確認ダイアログ（T23。design「ダイアログ」）。`view.dialogContext.kind === "confirmClose"` を扱う。
@@ -22,6 +24,7 @@ import { repoMembers } from "@sodashitsu/client-core";
  */
 const session = useSessionStore();
 const view = useViewStore();
+const graphStore = useGraphStore();
 const actions = inject(ActionDispatcherKey);
 if (!actions) throw new Error("ConfirmDialog: ActionDispatcherKey が provide されていません");
 
@@ -61,6 +64,13 @@ const message = computed(() => {
       : "この worktree には未コミットの変更が残っています。変更を破棄して削除しますか？";
   }
   return "";
+});
+
+/** 閉じると消えるグラフの線の本数（PR3 T14e。0 本なら何も出さない＝今までの確認と同じ）。 */
+const graphLinkCount = computed(() => {
+  const ctx = view.dialogContext;
+  if (ctx?.kind !== "confirmClose") return 0;
+  return linksTouching(graphStore.links, paneIdsOfTargets(ctx.targets, session));
 });
 
 /** 確定ボタンの文言。worktree の削除系だけ「削除」——「閉じる」のままだと破壊的な操作に見えない。 */
@@ -152,6 +162,7 @@ function onKeydown(ev: KeyboardEvent): void {
     @keydown="onKeydown"
   >
     <p class="confirm-dialog-message">{{ message }}</p>
+    <p v-if="graphLinkCount > 0" class="confirm-dialog-graph-links" data-testid="confirm-graph-links">グラフの線 {{ graphLinkCount }} 本も消えます。</p>
     <label v-if="linkedWorktrees.length > 0" class="confirm-dialog-linked-worktrees">
       <input v-model="closeLinkedWorktrees" type="checkbox" />
       束ねた worktree も一緒に閉じる（{{ linkedWorktrees.length }} 件）
@@ -178,6 +189,10 @@ function onKeydown(ev: KeyboardEvent): void {
 }
 .confirm-dialog-message {
   margin: 0 0 1em;
+}
+.confirm-dialog-graph-links {
+  margin: 0 0 1em;
+  font-size: 0.9em;
 }
 .confirm-dialog-linked-worktrees {
   display: flex;
