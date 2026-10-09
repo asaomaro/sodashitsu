@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DOCK_ZONE_EDGE_RATIO, dockZoneAt } from "./dockDrag.js";
+import { DOCK_ZONE_EDGE_RATIO, dockZoneAt, floatEdgeZoneAt } from "./dockDrag.js";
 
 const box = { left: 100, top: 50, width: 1000, height: 500 };
 
@@ -32,5 +32,25 @@ describe("dockZoneAt", () => {
     expect(dockZoneAt({ left: 0, top: 0, width: 100, height: 100 }, 5, 5, { float: false })).toBe("top");
     expect(dockZoneAt({ left: 0, top: 0, width: 0, height: 100 }, 0, 5, { float: true })).toBeNull();
     expect(dockZoneAt({ left: 0, top: 0, width: 100, height: Number.NaN }, 5, 5, { float: true })).toBeNull();
+  });
+});
+
+describe("floatEdgeZoneAt（浮いた窓を動かしているとき、縁から 16px 以内だけ側が落とせる場所）", () => {
+  it("縁から 16px 以内なら、いちばん近い縁の側。17px なら null", () => {
+    expect(floatEdgeZoneAt(box, 100 + 16, 300)).toBe("left");
+    expect(floatEdgeZoneAt(box, 100 + 17, 300)).toBeNull();
+    expect(floatEdgeZoneAt(box, 1100 - 16, 300)).toBe("right");
+    expect(floatEdgeZoneAt(box, 600, 50 + 16)).toBe("top");
+    expect(floatEdgeZoneAt(box, 600, 550 - 16)).toBe("bottom");
+    expect(floatEdgeZoneAt(box, 600, 300)).toBeNull(); // 中央は null（ドックに吸われない）
+  });
+  it("角は、近いほう（同じなら 上・下・左・右 の順）", () => {
+    expect(floatEdgeZoneAt(box, 105, 52)).toBe("top");
+    expect(floatEdgeZoneAt(box, 102, 60)).toBe("left");
+  });
+  it("箱の外・箱が潰れているときは null", () => {
+    expect(floatEdgeZoneAt(box, 99, 300)).toBeNull();
+    expect(floatEdgeZoneAt(box, 600, 551)).toBeNull();
+    expect(floatEdgeZoneAt({ ...box, width: 0 }, 100, 300)).toBeNull();
   });
 });

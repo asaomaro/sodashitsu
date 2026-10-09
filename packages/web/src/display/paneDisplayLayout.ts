@@ -1,12 +1,15 @@
 import type { DisplayDock, DisplayEdge } from "@sodashitsu/protocol";
 import { BANDS_MORE_ROW_PX, DEFAULT_CELL_WIDTH_PX, PANEL_MIN_PX, TERMINAL_MIN_COLS, visibleBands } from "./displayLayout.js";
+import { FLOAT_AREA_INSET_PX, FLOAT_CASCADE_PX, FLOAT_INSET_PX, FLOAT_MIN_H_PX, FLOAT_MIN_W_PX, clampFloatRect, defaultFloatRect, floatAreaOf, type Rect } from "./floatGeometry.js";
 
 /**
  * pane の表示の面（パネル・帯・トレイ）の割り付け（20261008-display-layout の design「割り付け」）。**純粋な関数 1 つ**で、部品はこの結果を描くだけ。
  * 入出力の形は最後の形（上下左右の側・浮いた窓も持つ）。PR-A の計算は、手順 1（帯）・2（トレイ。やり直しを含む）・4（横。右だけ）・5（端末の領域）。
- * 手順 3（縦）・6（浮いた窓）は、PR-B・PR-C で足す（それまでは該当の面が無いものとして空を返す）。
+ * 手順 3（縦）は PR-B、手順 6（浮いた窓）は PR-C で足した。
  */
 export { TERMINAL_MIN_COLS, PANEL_MIN_PX as DOCK_W_MIN_PX };
+export { FLOAT_AREA_INSET_PX, FLOAT_CASCADE_PX, FLOAT_INSET_PX, FLOAT_MIN_H_PX, FLOAT_MIN_W_PX };
+export type { Rect };
 export const TERMINAL_MIN_ROWS = 10;
 export const DOCK_H_MIN_PX = 96;
 /**
@@ -24,19 +27,8 @@ export const TRAY_ROW_PX = 24;
  */
 export const BAND_MIN_W_PX = 140;
 export const BAND_SCRIPT_MIN_W_PX = 320;
-export const FLOAT_MIN_W_PX = 240;
-export const FLOAT_MIN_H_PX = 120;
-export const FLOAT_AREA_INSET_PX = 4;
-export const FLOAT_INSET_PX = 8;
-export const FLOAT_CASCADE_PX = 24;
 
 export type Side = "right" | "left" | "top" | "bottom";
-export interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
 export interface LayoutInput {
   /** pane の本体の箱（px）と、端末のセル（取れなければ 9×18）。 */
   paneW: number;
@@ -76,6 +68,8 @@ export interface LayoutResult {
   docks: Record<Side, DockGroup | null>;
   /** 出す窓（出た順）。`rect` は窓の動ける領域（端末の領域の 4px 内側）の左上から。 */
   floats: { id: string; rect: Rect }[];
+  /** 窓の動ける領域の大きさ（端末の領域を各辺 4px 縮めた箱）。最小の窓が入らなければ null（窓は全部が自動でたたまれ、開く操作を受けない）。 */
+  floatArea: { w: number; h: number } | null;
   /** 自動でたたんだ面（記憶は変えない）。 */
   auto: string[];
   /** 端末の領域（本体の箱の左上から）。 */
@@ -93,6 +87,8 @@ interface Pass {
   auto: string[];
   docks: Record<Side, DockGroup | null>;
   terminal: Rect;
+  floats: { id: string; rect: Rect }[];
+  floatArea: { w: number; h: number } | null;
   hasUserButtons: boolean;
 }
 
@@ -174,7 +170,7 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
   const topH = rowOnEdge("top");
   const bottomH = rowOnEdge("bottom");
 
-  // 3・4. パネルの 4 つの側。置き場所が `float` の面は PR-C まで出さない（トレイのボタンになる）。
+  // 3・4. パネルの 4 つの側。置き場所が `float` の面はここでは場所を取らない（手順 6 で窓にする）。
   const planOf = (side: Side): SidePlan["group"] => {
     const ps = input.panels.filter((p) => p.dock === side && !p.collapsed).sort((a, b) => a.seq - b.seq);
     if (ps.length === 0) return null;
@@ -218,6 +214,26 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
     else place("right", plans.right, h.size.second, PANEL_MIN_PX, h.max);
   }
 
+  // 5. 端末の領域。
+  const leftW = docks.left?.size ?? 0;
+  const rightW = docks.right?.size ?? 0;
+  const topP = docks.top?.size ?? 0;
+  const bottomP = docks.bottom?.size ?? 0;
+  const terminal: Rect = { x: leftW, y: topH + topP, w: Math.max(0, paneW - leftW - rightW), h: Math.max(0, H - topP - bottomP) };
+
+  // 6. 浮いた窓: 窓の動ける領域は、端末の領域を各辺 4px 縮めた箱。最小の窓が入らなければ、窓は全部（閉じているものも）自動でたたむ＝開く操作を受けない。
+  //    入るなら、たたんでいない窓ごとに、記憶の矩形（無ければ初めの矩形）を領域の中へ丸める。
+  const floatArea = floatAreaOf(terminal);
+  const floatPanels = input.panels.filter((p) => p.dock === "float");
+  const floats: { id: string; rect: Rect }[] = [];
+  if (floatArea === null) auto.push(...floatPanels.map((p) => p.id));
+  else {
+    for (const p of floatPanels) {
+      if (p.collapsed) continue;
+      floats.push({ id: p.id, rect: clampFloatRect(input.floatRects[p.id] ?? defaultFloatRect(0, p.size, floatArea), floatArea) });
+    }
+  }
+
   // 2（続き）. トレイのボタン: たたんだパネル・浮いた窓の面の全部（開いていても）・たたんだ帯・自動でたたんだ面を、種類をまたいで seq の順に。
   const autoSet = new Set(auto);
   const tagged: { seq: number; b: TrayButton }[] = [];
@@ -229,14 +245,7 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
   for (const b of input.bands) if (b.collapsed || autoSet.has(b.id)) tagged.push({ seq: b.seq, b: { id: b.id, kind: "band", open: false, disabled: autoSet.has(b.id) && !b.collapsed } });
   tagged.sort((a, b) => a.seq - b.seq);
   const buttons = tagged.map((t) => t.b);
-
-  // 5. 端末の領域。
   const trayOwn = hostBandId === null && buttons.length > 0;
-  const leftW = docks.left?.size ?? 0;
-  const rightW = docks.right?.size ?? 0;
-  const topP = docks.top?.size ?? 0;
-  const bottomP = docks.bottom?.size ?? 0;
-  const terminal: Rect = { x: leftW, y: topH + topP, w: Math.max(0, paneW - leftW - rightW), h: Math.max(0, H - topP - bottomP) };
 
   return {
     bands: { top: top.map((b) => b.id), bottom: bottom.map((b) => b.id), more },
@@ -247,6 +256,8 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
     auto,
     docks,
     terminal,
+    floats,
+    floatArea,
     hasUserButtons: tagged.some((t) => !t.b.disabled),
   };
 }
@@ -261,7 +272,8 @@ export function resolvePaneDisplays(input: LayoutInput): LayoutResult {
     bands: p.bands,
     tray: { edge: p.trayEdge, row, hostBandId: p.hostBandId, buttons: p.buttons },
     docks: p.docks,
-    floats: [],
+    floats: p.floats,
+    floatArea: p.floatArea,
     auto: p.auto,
     terminal: p.terminal,
   };

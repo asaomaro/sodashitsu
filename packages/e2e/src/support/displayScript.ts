@@ -68,3 +68,9 @@ export const browserVersion = (page: Page): string => `${page.context().browser(
 export async function focusTerminal(page: Page): Promise<void> {
   await page.locator(".xterm-helper-textarea").first().focus();
 }
+
+/**
+ * スクリプトが動く面が出た（または動いた）直後の 500ms、その［操作する］の押しは受けられない（`engageGuard`。押そうとしたボタンの位置に別の面のボタンが入れ替わって来る攻めを防ぐ）。
+ * 出した直後に［操作する］を押す試験は、押す前にこれで待つ。
+ */
+export const settleEngage = (page: Page): Promise<void> => page.waitForTimeout(800);

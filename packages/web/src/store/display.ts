@@ -26,6 +26,7 @@ import {
   type LayoutSettings,
 } from "../display/displayPrefs.js";
 import type { DockDragState } from "../display/dockDrag.js";
+import { defaultFloatRect, insertFloat, raiseFloat as raiseOrder } from "../display/floatGeometry.js";
 import { useSettingsStore } from "./settings.js";
 import { readPrefs, writePrefs } from "./view.js";
 
@@ -100,8 +101,21 @@ export const useDisplayStore = defineStore("display", () => {
     if (cur && next && cur.id === next.id && cur.paneId === next.paneId && cur.zone === next.zone) return;
     dockDrag.value = next;
   }
-  /** 割り付けが変わるたびに 1 増える数（知らせの位置の測り直しの合図）。 */
+  /** 割り付けが変わるたびに 1 増える数（知らせの位置の測り直しの合図）。浮いた窓のドラッグ中にも増える。 */
   const layoutRev = ref(0);
+  function bumpLayoutRev(): void {
+    layoutRev.value++;
+  }
+  /** 浮いた窓の重なりの順（pane の id → 面の id の並び。末尾が最前面）。DOM の並びは変えず、`z-index` だけに使う。 */
+  const floatOrder = ref(new Map<string, string[]>());
+  /** キーで動かす／大きさを変える途中の窓（無ければ null）。 */
+  const floatKeyMode = ref<{ id: string; paneId: string; mode: "move" | "resize" } | null>(null);
+  function startFloatKeys(info: Pick<DisplayInfo, "id" | "paneId">, mode: "move" | "resize"): void {
+    floatKeyMode.value = { id: info.id, paneId: info.paneId, mode };
+  }
+  function endFloatKeys(id?: string): void {
+    if (floatKeyMode.value && (id === undefined || floatKeyMode.value.id === id)) floatKeyMode.value = null;
+  }
 
   const all = computed<DisplayInfo[]>(() => [...infos.value.values()]);
 
@@ -179,8 +193,52 @@ export const useDisplayStore = defineStore("display", () => {
     // 面が操作中になったら、その pane の「最後に操作した面」にする（`prefix+i` の行き先）。
     if (id !== null) {
       const info = infos.value.get(id);
-      if (info) setLastFace(info.paneId, id);
+      if (info) {
+        setLastFace(info.paneId, id);
+        // 重なりの決まり 1: 操作中の窓は、いつも最前面。
+        if (isOpenFloat(info)) raiseFloat(info.paneId, id);
+      }
     }
+  }
+  /** 開いている浮いた窓か（自動でたたまれた窓も含む。並びの管理だけに使う）。 */
+  function isOpenFloat(info: DisplayInfo): boolean {
+    if (info.kind !== "panel") return false;
+    const f = effectiveOf(info);
+    return f.dock === "float" && !f.collapsed;
+  }
+  /** 押した窓を最前面へ（決まり 2。操作中の id は見ない）。 */
+  function raiseFloat(paneId: string, id: string): void {
+    const cur = floatOrder.value.get(paneId) ?? [];
+    const next = raiseOrder(cur, id);
+    if (next.length === cur.length && next.every((x, i) => x === cur[i])) return;
+    const m = new Map(floatOrder.value);
+    m.set(paneId, next);
+    floatOrder.value = m;
+  }
+  /** 利用者の操作で開いた窓の id（次に並びへ入るとき、最前面へ。プログラムの出し直し・記憶から開いた窓は、最背面）。 */
+  const userOpenedFloats = new Set<string>();
+  /**
+   * 出ている窓の集まり `open` に、並びを合わせる。新しく出た窓は、**利用者の操作で開いた窓だけ**が最前面（操作中の窓があればその後ろ。決まり 3）に入り、
+   * プログラムの出し直し（`close` → `set`）・記憶から開いた窓は**最背面**に入る（利用者が前へ出した窓の上へ、プログラムが自分を置き直せない）。
+   * `keep` に入っている窓（開いているが、pane が小さくて自動でたたまれている窓）は、並びから外さない（広げ直したとき、利用者の順が戻る）。
+   */
+  function syncFloatOrder(paneId: string, open: readonly string[], keep: readonly string[] = open): void {
+    const cur = floatOrder.value.get(paneId) ?? [];
+    const engaged = focusedDisplayId.value !== null && infos.value.get(focusedDisplayId.value)?.paneId === paneId ? focusedDisplayId.value : null;
+    const keepSet = new Set([...keep, ...open]);
+    let next = cur.filter((id) => keepSet.has(id));
+    const fresh = open.filter((id) => !next.includes(id));
+    const back = fresh.filter((id) => !userOpenedFloats.has(id));
+    const front = fresh.filter((id) => userOpenedFloats.has(id));
+    for (const id of fresh) userOpenedFloats.delete(id);
+    next = [...back, ...next];
+    for (const id of front) next = insertFloat(next, id, engaged);
+    if (engaged !== null && open.includes(engaged)) next = raiseOrder(next, engaged);
+    if (next.length === cur.length && next.every((x, i) => x === cur[i])) return;
+    const m = new Map(floatOrder.value);
+    if (next.length === 0) m.delete(paneId);
+    else m.set(paneId, next);
+    floatOrder.value = m;
   }
 
   // --- 置き場所・たたみの記憶（20261008-display-layout）。書くのは利用者の操作（部品・メニュー・キー）だけ ------------------------------------------------
@@ -206,7 +264,26 @@ export const useDisplayStore = defineStore("display", () => {
    */
   function writeFace(info: DisplayInfo, patch: { dock?: DisplayDock; edge?: DisplayEdge; collapsed?: boolean; rect?: FaceRect }): void {
     const face: FacePref = composeFacePref(info, layoutPrefs.value, layoutSettings(), DISPLAY_DOCK_CAPS, patch);
+    // 窓を開く操作は、記憶に矩形が無ければ初めの矩形を一緒に書く（開いた窓は、いつも記憶に矩形を持つ。書いた後は、`set --size` の変更・ほかの窓の開閉で動かない）。
+    // 窓の動ける領域が分からない間（`floatArea` が null）は書かない（その間、窓を開く操作は受けない）。
+    if (face.dock === "float" && !face.collapsed && !face.rect) {
+      const area = layoutByPane.value.get(info.paneId)?.floatArea ?? null;
+      if (area) face.rect = defaultFloatRect(openFloatCount(info), info.size, area);
+    }
     saveLayout({ ...layoutPrefs.value, faces: putLast(layoutPrefs.value.faces, faceKey(info), face, FACE_PREFS_MAX) });
+  }
+  /** この pane で、いま開いている浮いた窓の数（自動でたたまれた窓と、`except` は数えない）。初めの矩形のずらしに使う。 */
+  function openFloatCount(except: DisplayInfo): number {
+    const auto = new Set(layoutByPane.value.get(except.paneId)?.auto ?? []);
+    return all.value.filter((d) => d.paneId === except.paneId && d.id !== except.id && isOpenFloat(d) && !auto.has(d.id)).length;
+  }
+  /** 浮いた窓を開く操作を受けられるか（窓の動ける領域が分かっている）。トレイのボタン・面の一覧・メニュー・`prefix+i`・D&D の中央が見る。 */
+  function canOpenFloat(paneId: string): boolean {
+    return layoutByPane.value.get(paneId)?.floatArea != null;
+  }
+  /** 記憶の矩形（無ければ undefined）。 */
+  function faceRectOf(info: DisplayInfo): FaceRect | undefined {
+    return layoutPrefs.value.faces[faceKey(info)]?.rect;
   }
   function writeName(info: DisplayInfo, entry: { dock?: DisplayDock; edge?: DisplayEdge }): void {
     saveLayout({ ...layoutPrefs.value, names: putLast(layoutPrefs.value.names, nameKey(info), entry, NAME_PREFS_MAX) });
@@ -226,6 +303,7 @@ export const useDisplayStore = defineStore("display", () => {
   }
   /** たたむ／開く。開いたら「最後に操作した面」にする。 */
   function setFaceCollapsed(info: DisplayInfo, on: boolean): void {
+    if (!on && info.kind === "panel") userOpenedFloats.add(info.id); // 利用者が開いた窓は最前面（窓でなければ使われない）
     writeFace(info, { collapsed: on });
     if (!on) {
       setLastFace(info.paneId, info.id);
@@ -236,6 +314,7 @@ export const useDisplayStore = defineStore("display", () => {
   }
   /** パネルの置き場所を変える。移った先で開く（`collapsed: false`）。同じ名前の面も、この置き場所を引き継ぐ。 */
   function setFaceDock(info: DisplayInfo, dock: DisplayDock, rect?: FaceRect): void {
+    if (dock === "float") userOpenedFloats.add(info.id);
     writeFace(info, { dock, collapsed: false, ...(rect ? { rect } : {}) });
     writeName(info, { dock });
     setLastFace(info.paneId, info.id);
@@ -311,6 +390,10 @@ export const useDisplayStore = defineStore("display", () => {
     if ([...lastFace.value].some(([, id]) => !infos.value.has(id))) {
       lastFace.value = new Map([...lastFace.value].filter(([, id]) => infos.value.has(id)));
     }
+    if ([...floatOrder.value.values()].some((ids) => ids.some((id) => !infos.value.has(id)))) {
+      floatOrder.value = new Map([...floatOrder.value].map(([p, ids]) => [p, ids.filter((id) => infos.value.has(id))] as [string, string[]]).filter(([, ids]) => ids.length > 0));
+    }
+    if (floatKeyMode.value && !infos.value.has(floatKeyMode.value.id)) floatKeyMode.value = null;
   }
 
   /** 切断・マシンの切り替えで空にする。 */
@@ -321,6 +404,8 @@ export const useDisplayStore = defineStore("display", () => {
     activeBySide.value = new Map();
     lastFace.value = new Map();
     layoutByPane.value = new Map();
+    floatOrder.value = new Map();
+    floatKeyMode.value = null;
     // フォーカスの印は下ろさない（枠の部品が外れるときに自分で下ろして端末へ戻す。ここで下ろすと戻せない）。
     contentFailed.value = new Set();
   }
@@ -343,6 +428,15 @@ export const useDisplayStore = defineStore("display", () => {
     lastFace,
     layoutByPane,
     layoutRev,
+    bumpLayoutRev,
+    floatOrder,
+    floatKeyMode,
+    startFloatKeys,
+    endFloatKeys,
+    raiseFloat,
+    syncFloatOrder,
+    canOpenFloat,
+    faceRectOf,
     dockDrag,
     setDockDrag,
     effectiveOf,

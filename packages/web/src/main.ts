@@ -12,6 +12,7 @@ import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
 import { installKeepFocusRelease } from "./display/displayOps.js";
+import { installEngageGuard } from "./display/engageGuard.js";
 import { ActionDispatcherKey, AskControllerKey, ConnectionKey, ExtensionControllerKey, DisplayControllerKey, DisplayHostKey, type DisplayHost, DeviceKindKey, FileTransferKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
 import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
@@ -586,6 +587,15 @@ app.provide(DisplayHostKey, displayHost);
 actionDispatcher.setDisplayHost(displayHost);
 // 押してもフォーカスを取らない部品・覆いを押したとき、操作中の枠から端末へフォーカスを移す（`DisplayFrame` の『枠の外を押した』より先に走る。モバイルでは働かない）。
 installKeepFocusRelease(displayHost, () => useDisplayStore(pinia).sheetAvailable);
+// ［操作する］は、押す直前の 500ms に箱が動いた・現れた・別の部品の下から出てきたときは、押しを受けない（外側から止める。守りのファイルは変えない）。強調して、もう一度押してもらう。
+installEngageGuard({
+  onBlocked: (id) => {
+    const d = useDisplayStore(pinia);
+    if (id) d.nudgeEngage(id, 1500);
+    view.toast("画面の配置が動いたので、［操作する］を受けませんでした。もう一度押してください（続くときは、その表示を［×］で閉じられます）");
+  },
+  isMobileSheet: () => useDisplayStore(pinia).sheetAvailable,
+});
 app.provide(FileTransferKey, fileTransfer);
 app.provide(ViewSyncKey, viewSync);
 app.provide(DeviceKindKey, kind);

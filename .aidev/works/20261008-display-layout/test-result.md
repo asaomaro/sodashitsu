@@ -67,3 +67,40 @@
 ### 補足
 - 帯・パネルの 1 pane の上限は、帯 2 本（`display_limit`）。E2E の面の数はそれに収めた。
 - スクリーンショット: `/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/display-layout-b/`。
+
+
+## PR-C（T21〜T27。浮いた窓。2026-10-09）
+
+実行は worktree `agent-abd91f990c85c37b8`（ブランチ `feature/display-layout-c`。main `d26bb6d` から）。E2E は `env -u DISPLAY -u WAYLAND_DISPLAY`・`--workers=1`。
+
+### 全体
+- `pnpm build`・`pnpm typecheck`: 通る。`pnpm test`: 486 ファイル・9541 件すべて通る（失敗 0）。
+- E2E（`--workers=1`）:
+  - `display-layout-float`（新規）: 22 件通る。
+  - 既存の display 系（`display-layout-dock`・`display-layout-state`・`display-flows`・`display-isolation`・`display-mobile`・`display-resize`・`display-script-app`・`-engage`・`-focus`・`-isolation`・`-measure`・`-mobile`・`-nav`・`-review`・`-setting`・`display-script`）: 156 件通る・1 件スキップ（元から）。
+  - PR3 のフォーカスの E2E 3 本は、ほかの spec と一緒に流さず 1 本ずつ: `display-script-noreturn` 24 件・`display-script-drop` 24 件・`display-script-noreturn-mobile` 2 件、すべて通る。
+  - 見出しの最小の幅を直した後に流し直し（`display-layout-dock`・`display-layout-state`・`display-script-engage`・`display-script-review`）: 71 件通る。
+
+### U3・U4（iframe の上の `elementFromPoint`・ポインタの捕捉）の実測
+窓の移動・大きさの変更（ポインタを窓の外へ大きく動かしても追う）・D&D（中央へ落とす）は、`useResizeDrag`／`createDockDrag` のポインタの捕捉と、`<html>` のクラス（`soda-resizing`・`soda-display-dragging`）で枠の `pointer-events` を切る作りで、枠（iframe）の上でも `pointermove`・`pointerup` を取りこぼさなかった。透明な覆いを足す必要は無かった。
+
+### 負の対照（T27）
+どれも、対策を外して `vite build` → 単体・E2E を流し → 戻して `git diff` が空であることを確認（生の出力は `<scratchpad>/neg/{a..i}.out`）。
+- (a) `clampFloatRect` を通さない版 → 単体 `floatGeometry` が 10 件落ちる。E2E `(2)` が「左上: 窓の箱が端末の箱の中」で落ちる（Expected true / Received false）。
+- (b) 窓の層を `position: fixed`（画面全体）にした版 → E2E `(3)` が「左上: 帯の行の印 の点が窓の中の要素でない」で落ちる（Expected false / Received true）。
+- (c) 重なりを `v-for` の配列の並べ替えで替える版 → 単体 `PaneFrame.test` が `expected [ 'b', 'a' ] to deeply equal [ 'a', 'b' ]` で落ちる。E2E `(5)` は、最初の窓の問い合わせの時点でタイムアウトした（並べ替えで枠が動いて `load` が増え、面が「移動した」と数えられて閉じる＝窓が消えた。「枠の要素が同じ」「`load` が 1」の項目より前に落ちた。PR-B の負の対照 (a) と同じ形）。
+- (d) 窓を開くときに枠へ `focus()` する版 → E2E `(4)` が「窓の出現で端末のフォーカスが動かない」で落ちる（Expected true / Received false）。
+- (e) `insertFloat` が新しい窓をいつも最前面に入れる版 → 単体 2 件が落ちる（`expected [ 'a', 'b', 'n' ] to deeply equal [ 'a', 'n', 'b' ]`）。**最初の E2E `(5b)` は通ってしまった**（後から `setFocused` が操作中の窓を前へ出し直すので、結果の z-index では見分けられない）→ 窓の `z-index` を DOM が変わるたびに記録して「出た瞬間から A が最前面」を見る形に強めた。強めた `(5b)` は「B が出た瞬間から A が最前面」で落ちる（Expected > 21 / Received 20）。
+- (f) 開いている窓のボタンをトレイから外す版 → 単体 3 件が落ちる。E2E `(1b)` が `aria-pressed` で落ちる（開いている窓のボタンが無い）。
+- (g) `effectiveCollapsed` から「置き場所が浮いた窓ならたたむ」を外す版 → 単体 2 件が落ちる。E2E `(1)` が「閉じて始まる」で落ちる（`aria-pressed` Expected false / Received true）。
+- (h) 窓を開く操作が記憶に `rect` を書かない版 → 単体 2 件が落ちる。E2E `(2c)` が「--size を変えても動かない」で落ちる。
+- (i)（実装中に見つけた不具合の負の対照）見出しのつかむ場所の最小の幅を `4em` に戻す版 → E2E `(7)` が「操作中: [data-display-script-mark] と [data-display-end] が重ならない」で落ちる。最小の窓（240px）で、印「スクリプト」が［操作を終える］に隠れていた（スクリーンショットで見つけた）。
+
+### 設計から外れた点・補足
+- `decisions.md` D25 に記載（D&D の中央の矩形・面に依らない部品・縁のつかむ場所・キーのモードの終わり方 ほか）。
+- 窓の見出しの印がボタンに隠れる不具合（上の (i)）を直した（`DisplayPanelHead.vue`。つかむ場所の最小の幅を、印が入る 5.6em に。ドックのパネルでも、足りなければボタンの並びが次の行へ折れる）。
+- E2E で、本体の箱の縁から 16px 以内で窓を離すとドックへ置かれる（設計どおり）ので、窓を隅へ寄せる確かめでは、縁から離れた点で離している。
+- `xterm.js` 6 は `.xterm-viewport` の `scrollTop` を使わないので、ホイールの確かめは、スクロールバーのつまみの位置（`style.top`）で見る。
+
+### スクリーンショット
+`<scratchpad>/display-layout-c/`（`dracula-*`・`catppuccin-latte-*`: 1 窓が 2 枚と右のパネル・2 最小の窓で操作中・3 キーで動かすモード・4 D&D の中央・5 窓が 3 枚）。`<scratchpad>` は `/tmp/claude-1000/-workspaces-sodashitsu--claude-worktrees-agent-abd91f990c85c37b8/3d938499-872a-4ab8-9297-feead72f5a42/scratchpad`。
