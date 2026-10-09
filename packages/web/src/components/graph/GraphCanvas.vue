@@ -1399,9 +1399,13 @@ function openNodeWindow(key: string, fromClick = false): void {
   terminalWindows.setAnchor(box ? { x: box.left, y: box.top, w: box.width, h: box.height } : null);
   void terminalWindow.open(info.paneId);
 }
+/** 留めた窓を開いているノードか（目印を付ける）。 */
+function isWindowPinned(key: string): boolean {
+  return terminalWindows.windows.some((w) => w.pinned && key.endsWith(`:${w.paneId}`));
+}
 /** 窓を開いているノードか（目印を付ける）。 */
 function isWindowNode(key: string): boolean {
-  return terminalWindows.paneId !== null && key.endsWith(`:${terminalWindows.paneId}`);
+  return terminalWindows.windows.some((w) => key.endsWith(`:${w.paneId}`));
 }
 
 /** グラフ画面を閉じて、そのマシンのその pane へ移る（閉じた後の焦点はその pane。画面を閉じたときの戻り先を上書きする）。 */
@@ -2616,7 +2620,7 @@ function chipAria(e: EdgeView): string {
               :x="n.x"
               :y="n.y"
               :selected="isNodeSelected(n.key)"
-              :class="{ 'graph-node-window': isWindowNode(n.key) }"
+              :class="{ 'graph-node-window': isWindowNode(n.key), 'graph-node-window-pinned': isWindowPinned(n.key) }"
               :tabbable="tabEntryKey === n.key"
               :rekeyable="canRekey(n.key)"
               :read-only="isMobile"
@@ -2805,6 +2809,10 @@ function chipAria(e: EdgeView): string {
 .graph-node.graph-node-window {
   outline: 2px solid var(--soda-accent, #6070a1);
   outline-offset: 1px;
+}
+.graph-node.graph-node-window-pinned {
+  outline-style: double;
+  outline-width: 4px;
 }
 .graph-view {
   /* 入れ物（`GraphDialog`・`GraphScreen`）いっぱいに広げる。 */
