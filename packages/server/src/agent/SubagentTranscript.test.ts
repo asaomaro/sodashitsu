@@ -197,6 +197,40 @@ describe("resolveTranscriptFile / readTranscriptWindow / SubagentTranscriptReade
       expect((await readTranscriptWindow(f, 0)).entries).toHaveLength(2);
     });
 
+    it("S2': 枠（200 件）の境目にかかった行は、その行の頭で止める。後ろの件が欠けず、重複もしない", async () => {
+      const f = fileOf("edge");
+      const res = (id: string) => ({ type: "tool_result", tool_use_id: id, content: id });
+      let body = "";
+      for (let i = 0; i < 199; i++) body += asst([{ type: "text", text: `n${i}` }]);
+      body += user([0, 1, 2, 3, 4].map((i) => res(`R${i}`)));
+      body += asst([{ type: "text", text: "AFTER" }]);
+      await writeFile(f, body);
+      const texts = (r: { entries: { kind: string }[] }) => r.entries.map((e) => (e as { text?: string }).text);
+      const r1 = await readTranscriptWindow(f, 0);
+      expect(r1.entries).toHaveLength(199); // 5 件の行は入らないので、その行の前で止まる
+      expect(r1.clipped).toBeUndefined();
+      const r2 = await readTranscriptWindow(f, r1.offset);
+      expect(texts(r2)).toEqual(["R0", "R1", "R2", "R3", "R4", "AFTER"]);
+      const all = [...texts(r1), ...texts(r2)];
+      expect(new Set(all).size).toBe(all.length); // 重複なし
+      expect(all).toHaveLength(199 + 6);
+    });
+
+    it("S2': 1 行だけで枠を超えるときに限り、200 件に切って clipped を立てる（位置は行の次へ）", async () => {
+      const f = fileOf("fat2");
+      const parts = Array.from({ length: 3500 }, (_, i) => ({ type: "tool_result", tool_use_id: `t${i}`, content: "x" }));
+      await writeFile(f, user(parts) + asst([{ type: "text", text: "次" }]));
+      const r = await readTranscriptWindow(f, 0);
+      expect(r.entries).toHaveLength(TRANSCRIPT_ENTRIES_MAX);
+      expect(r.clipped).toBe(true);
+      expect((await readTranscriptWindow(f, r.offset)).entries.map((e) => e.kind)).toEqual(["say"]);
+      // 否定の対照: ちょうど 200 件の行は切らず、印も立たない
+      await writeFile(f, user(parts.slice(0, 200)));
+      const exact = await readTranscriptWindow(f, 0);
+      expect(exact.entries).toHaveLength(200);
+      expect(exact.clipped).toBeUndefined();
+    });
+
     it("N1: 根の外の場所は、有っても無くても同じ答え。根の下でまだ無いものだけが missing", async () => {
       const exists = join(base, "ex");
       await mkdir(join(exists, SESSION, "subagents"), { recursive: true });

@@ -186,6 +186,8 @@ export function entriesOfLine(o: unknown): SubagentTranscriptEntry[] {
 }
 
 interface ParsedLines {
+  /** 1 行だけで枠（`limit`）を超えたので、切った（続きの読みで、省いた分は戻らない）。 */
+  clipped: boolean;
   entries: SubagentTranscriptEntry[];
   /** 最後に読み切った行の終わり（buffer の先頭からの位置）。 */
   consumed: number;
@@ -193,21 +195,30 @@ interface ParsedLines {
 
 /**
  * buffer の中の、改行で終わった行を順に解く。途中まで書かれた最後の行（改行が無い）は読まない。大きすぎる行・壊れた行は飛ばす。
- * `limit` 件に達したらそこで止める（`consumed` はその行の終わり）。
+ * 枠（`limit` 件）に収まらない行は、**その行の頭で止める**（すでに 1 件以上あるとき。`consumed` はその行の前＝次の読みはその行から始まる。後ろの件が欠けない）。
+ * その 1 行だけで枠を超えるときに限り、枠まで切って読んだことにし（`clipped`）、位置は行の次へ進める。
  */
 function parseLines(buf: Buffer, limit: number): ParsedLines {
   const entries: SubagentTranscriptEntry[] = [];
   let pos = 0;
   let consumed = 0;
+  let clipped = false;
   while (pos < buf.length && entries.length < limit) {
     const nl = buf.indexOf(0x0a, pos);
     if (nl === -1) break; // 途中まで書かれた行は、次に読む
     const len = nl - pos;
     if (len > 0 && len <= LINE_MAX_BYTES) {
       try {
-        // 1 行から取り出す件数にも上限（残りの枠で切る。切った行は、行の終わりまで読んだことにする＝位置は行の次へ進む）。
-        const room = Math.min(limit - entries.length, TRANSCRIPT_ENTRIES_MAX);
-        entries.push(...entriesOfLine(JSON.parse(buf.toString("utf8", pos, nl))).slice(0, room));
+        const es = entriesOfLine(JSON.parse(buf.toString("utf8", pos, nl)));
+        const room = limit - entries.length;
+        if (es.length > room) {
+          if (entries.length > 0) break; // 枠の境目にかかった行は、その行の頭で止める（次の読みがその行から始まる）
+          clipped = es.length > TRANSCRIPT_ENTRIES_MAX;
+          es.length = Math.min(es.length, TRANSCRIPT_ENTRIES_MAX);
+        } else if (es.length > TRANSCRIPT_ENTRIES_MAX) {
+          es.length = TRANSCRIPT_ENTRIES_MAX; // 最初の読み（末尾から）。1 行の上限だけ掛ける
+        }
+        entries.push(...es);
       } catch {
         // 壊れた行は飛ばす
       }
@@ -215,7 +226,7 @@ function parseLines(buf: Buffer, limit: number): ParsedLines {
     pos = nl + 1;
     consumed = pos;
   }
-  return { entries, consumed };
+  return { entries, consumed, clipped };
 }
 
 async function readRange(fd: Awaited<ReturnType<typeof open>>, start: number, length: number): Promise<Buffer> {
@@ -244,10 +255,10 @@ export async function readTranscriptWindow(file: string, offset: number | undefi
       if (offset === size) return { status: "ok", entries: [], offset, reset: false, omittedBefore: false };
       const length = Math.min(size - offset, TRANSCRIPT_READ_MAX_BYTES);
       const buf = await readRange(fd, offset, length);
-      const { entries, consumed } = parseLines(buf, TRANSCRIPT_ENTRIES_MAX);
+      const { entries, consumed, clipped } = parseLines(buf, TRANSCRIPT_ENTRIES_MAX);
       // 改行が 1 つも無いまま 1 MiB に達した（途方もなく長い 1 行）ときは、読み飛ばして先へ進む（止まり続けない）。
       const advance = consumed === 0 && buf.length >= TRANSCRIPT_READ_MAX_BYTES ? buf.length : consumed;
-      return { status: "ok", entries, offset: offset + advance, reset: false, omittedBefore: false };
+      return { status: "ok", entries, offset: offset + advance, reset: false, omittedBefore: false, ...(clipped ? { clipped: true } : {}) };
     }
     // 最初（か、位置が合わなくなったとき）: 末尾から最大 1 MiB。
     const start = Math.max(0, size - TRANSCRIPT_READ_MAX_BYTES);

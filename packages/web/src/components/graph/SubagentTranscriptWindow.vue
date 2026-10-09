@@ -39,6 +39,8 @@ const rows = ref<Row[]>([]);
 let seq = 0;
 let offset: number | undefined;
 const omittedBefore = ref(false);
+/** 1 行が長すぎて、一部を省いた（一度でもあれば出す）。 */
+const clipped = ref(false);
 const running = ref(true);
 type Status = "loading" | "ok" | "pending" | "unreadable" | "gone" | "error";
 const status = ref<Status>("loading");
@@ -53,8 +55,10 @@ function apply(r: AgentSubagentTranscriptResult): void {
   if (r.reset) {
     rows.value = [];
     omittedBefore.value = false;
+    clipped.value = false;
   }
   if (r.omittedBefore) omittedBefore.value = true;
+  if (r.clipped) clipped.value = true;
   running.value = r.running;
   offset = r.offset;
   if (r.status === "ok") {
@@ -213,6 +217,7 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
     </header>
     <div ref="scroller" class="sat-body" role="log" aria-live="off" tabindex="0" aria-label="記録">
       <p v-if="omittedBefore" class="sat-note">長いので、先頭のほうを省いています</p>
+      <p v-if="clipped" class="sat-note" data-subagent-transcript-clipped>一部を省いています</p>
       <template v-for="r in rows" :key="r.n">
         <div v-if="r.e.kind === 'prompt'" class="sat-row sat-prompt" data-kind="prompt">
           <span class="sat-tag">指示</span>

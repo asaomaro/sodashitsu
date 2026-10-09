@@ -132,6 +132,22 @@ describe("記録を読むだけの窓", () => {
     wrapper.unmount();
   });
 
+  it("clipped（1 行が長すぎて切った）の印で「一部を省いています」を出す。印が無ければ出さない。reset で消える", async () => {
+    let r: Partial<AgentSubagentTranscriptResult> = {};
+    const { wrapper } = open(() => res(r));
+    await flush();
+    expect(wrapper.find("[data-subagent-transcript-clipped]").exists()).toBe(false);
+    r = { clipped: true, entries: [{ kind: "say", text: "あ" }] };
+    await vi.advanceTimersByTimeAsync(1500);
+    await flush();
+    expect(wrapper.get("[data-subagent-transcript-clipped]").text()).toBe("一部を省いています");
+    r = { reset: true };
+    await vi.advanceTimersByTimeAsync(1500);
+    await flush();
+    expect(wrapper.find("[data-subagent-transcript-clipped]").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it("not_found（居なくなった）で読むのを止め、今までの表示は残して理由を出す", async () => {
     let fail = false;
     const { wrapper, calls } = open(() => (fail ? rpcError("not_found") : res({ entries: [{ kind: "say", text: "残る" }] })));

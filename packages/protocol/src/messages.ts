@@ -978,6 +978,8 @@ export interface AgentSubagentTranscriptResult {
   reset: boolean;
   /** 長いので、先頭のほうを省いた。 */
   omittedBefore: boolean;
+  /** 1 行だけで 1 回の枠（200 件）を超えたので、その行は枠まで切った（省いた分は出ない）。省略時は切っていない。 */
+  clipped?: boolean;
   /** そのサブエージェントを、エージェントがいま動かしていると報告しているか（終わった後も、窓を閉じるまでは読める）。 */
   running: boolean;
 }
