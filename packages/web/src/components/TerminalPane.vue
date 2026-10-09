@@ -34,6 +34,8 @@ const seen = useSeenStore();
 const pane = computed(() => session.panes.get(props.paneId));
 const failed = computed(() => pane.value?.status === "failed");
 const hasSizeAuthority = computed(() => (pane.value ? session.hasSizeAuthority(pane.value.tabId) : false));
+/** 別のクライアント（別のブラウザのグラフの上の窓など）が直結していて、pane の大きさをそのクライアントが決めている（20261008-graph-first の B3・X7）。権限が無いときと同じ見せ方にする。 */
+const attachedElsewhere = computed(() => session.isAttachedElsewhere(props.paneId));
 
 const mountPoint = ref<HTMLElement | null>(null);
 let entry: TermEntry | null = null;
@@ -89,7 +91,7 @@ const { dragDepth, onMouseDownCapture, onDragEnter, onDragOver, onDragLeave, onD
 <template>
   <div
     class="terminal-pane"
-    :class="{ 'terminal-pane-scaled': !hasSizeAuthority, 'terminal-pane-drop-target': dragDepth > 0 }"
+    :class="{ 'terminal-pane-scaled': !hasSizeAuthority || attachedElsewhere, 'terminal-pane-drop-target': dragDepth > 0 }"
     @mousedown.capture="onMouseDownCapture"
     @dragenter="onDragEnter"
     @dragover="onDragOver"

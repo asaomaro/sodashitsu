@@ -33,12 +33,26 @@ async function setup(page: Page, appServer: AppServer) {
   await subs.waitFor(1);
   await expect(page.locator(".xterm-helper-textarea")).toHaveCount(2);
   await page.locator(".xterm-helper-textarea").first().focus();
+  // このブラウザが tab のサイズ権限を取る（テスト自身のクライアントの分割が先に取っているため。入力は権限を取る操作）。
+  await page.keyboard.press("Enter");
+  await expect.poll(() => views.latest()?.visible.length).toBe(2);
+  const v = views.latest()!.visible;
+  await expect.poll(() => client.paneSize(p1)).toMatchObject({ cols: v.find((x) => x.paneId === p1)!.cols, rows: v.find((x) => x.paneId === p1)!.rows });
   return { client, p1, p2, input, frames, views };
 }
 
 async function openGraph(page: Page) {
   await prefixKey(page, "a");
   await expect(graphView(page)).toBeVisible();
+}
+
+/** 窓を、グラフの左下へ寄せる（見出しのつかむ場所を動かす。ノードを押すのを窓が邪魔しない）。 */
+async function moveWindowAside(page: Page) {
+  const g = (await page.locator("[data-graph-terminal-grip]").boundingBox())!;
+  await page.mouse.move(g.x + 20, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(g.x - 2000, g.y + 2000, { steps: 8 });
+  await page.mouse.up();
 }
 
 /** ノードの本体を押す（動かさずに離す＝窓を開く）。 */
@@ -61,4 +75,225 @@ test("ノードを押すと、グラフの上に端末の窓が開く（基本�
   await page.keyboard.press("Enter");
   await expect.poll(() => input().filter((i) => i.paneId === p1).map((i) => i.text).join("")).toContain("echo from-window-1");
   await expect.poll(() => frames.output(0, p1)).toContain("from-window-1");
+});
+
+/** ブラウザが測った基本画面の pane の大きさ（`client.view`）。 */
+const baseSizeOf = (views: { latest: () => { visible: { paneId: string; cols: number; rows: number }[] } | null }, paneId: string) => {
+  const v = views.latest()?.visible.find((x) => x.paneId === paneId);
+  return v ? { cols: v.cols, rows: v.rows } : undefined;
+};
+const footerSize = async (page: Page) => {
+  const t = (await page.locator("[data-graph-terminal-size]").innerText()).trim();
+  const m = /^(\d+) × (\d+)$/.exec(t);
+  return m ? { cols: Number(m[1]), rows: Number(m[2]) } : null;
+};
+
+test("窓の大きさで桁と行が変わる。角をつかんで大きさを変えると追従し、閉じると、開く前の大きさへ戻る。開いていない pane の大きさは動かない", async ({ page, appServer }) => {
+  const { client, p1, p2, views } = await setup(page, appServer);
+  await expect.poll(() => baseSizeOf(views, p1) !== undefined && baseSizeOf(views, p2) !== undefined).toBe(true);
+  const before1 = { ...baseSizeOf(views, p1)! };
+  const before2 = { ...baseSizeOf(views, p2)! };
+  await expect.poll(() => client.paneSize(p1)).toMatchObject({ cols: before1.cols, rows: before1.rows });
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect(win(page)).toBeVisible();
+  await expect.poll(async () => (await footerSize(page)) !== null).toBe(true);
+  // 窓の中の大きさが pane の桁と行になる（サーバの PTY）
+  await expect.poll(async () => JSON.stringify(client.paneSize(p1))).toBe(JSON.stringify(await footerSize(page)));
+  const opened = (await footerSize(page))!;
+  expect(opened.cols).toBeGreaterThanOrEqual(40);
+  expect(opened.rows).toBeGreaterThanOrEqual(10);
+  // 開いていない pane の大きさは変わらない
+  expect(client.paneSize(p2)).toMatchObject(before2);
+  // 角をつかんで小さくする（左上へ）
+  const corner = (await page.locator("[data-graph-terminal-corner]").boundingBox())!;
+  await page.mouse.move(corner.x + 6, corner.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(corner.x - 160, corner.y - 100, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await footerSize(page))!.cols).toBeLessThan(opened.cols);
+  await expect.poll(async () => JSON.stringify(client.paneSize(p1))).toBe(JSON.stringify(await footerSize(page)));
+  const small = (await footerSize(page))!;
+  expect(small.cols).toBeGreaterThanOrEqual(40);
+  expect(small.rows).toBeGreaterThanOrEqual(10);
+  // 最小（40×10）より小さくはならない
+  const c2 = (await page.locator("[data-graph-terminal-corner]").boundingBox())!;
+  await page.mouse.move(c2.x + 6, c2.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(c2.x - 800, c2.y - 800, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => JSON.stringify(await footerSize(page))).toBe(JSON.stringify({ cols: 40, rows: 10 }));
+  await expect.poll(() => client.paneSize(p1)).toMatchObject({ cols: 40, rows: 10 });
+  // 閉じると、開く前の大きさへ戻る
+  await page.locator("[data-graph-terminal-close]").click();
+  await expect(win(page)).toHaveCount(0);
+  await expect.poll(() => client.paneSize(p1)).toMatchObject(before1);
+  expect(client.paneSize(p2)).toMatchObject(before2);
+});
+
+test("窓の中で Esc を打っても、グラフの画面は閉じず、pane に届く。prefix の二度押しも pane に届く", async ({ page, appServer }) => {
+  const { p1, input } = await setup(page, appServer);
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect.poll(() => activeInWindow(page)).toBe(true);
+  const n0 = input().length;
+  await page.keyboard.press("Escape");
+  await expect.poll(() => input().slice(n0).filter((i) => i.paneId === p1).map((i) => i.text).join("")).toContain("\x1b");
+  await expect(graphView(page)).toBeVisible();
+  await expect(win(page)).toBeVisible();
+  const n1 = input().length;
+  await page.keyboard.press("Control+b");
+  await page.keyboard.press("Control+b");
+  await expect.poll(() => input().slice(n1).filter((i) => i.paneId === p1).map((i) => i.text).join("")).toContain("\x02");
+  await expect(graphView(page)).toBeVisible();
+});
+
+test("窓にフォーカスがあるとき、prefix+a はグラフの面へ戻る（窓は開いたまま）。グラフの面で prefix+a は基本画面へ", async ({ page, appServer }) => {
+  const { p1 } = await setup(page, appServer);
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect.poll(() => activeInWindow(page)).toBe(true);
+  await prefixKey(page, "a");
+  await expect.poll(() => page.evaluate(() => document.activeElement?.hasAttribute("data-graph-view") === true)).toBe(true);
+  await expect(win(page)).toBeVisible();
+  await expect(graphView(page)).toBeVisible();
+  // 面にフォーカスがあるときの prefix+a は今までどおり（基本画面へ切り替える）。窓は閉じる。
+  await prefixKey(page, "a");
+  await expect(graphView(page)).toBeHidden();
+  await expect(win(page)).toHaveCount(0);
+});
+
+test("窓にフォーカスがあるとき、構成を変える prefix の操作は通らず、pane にも届かない（見えない基本画面を変えない）", async ({ page, appServer }) => {
+  const { client, p1, input } = await setup(page, appServer);
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect.poll(() => activeInWindow(page)).toBe(true);
+  const created = client.lastEvent("pane.created");
+  const layout = client.lastEvent("layout.updated");
+  const wsCreated = client.lastEvent("workspace.created");
+  const tabCreated = client.lastEvent("tab.created");
+  const n0 = input().length;
+  // 分割・新しい tab・新しい workspace・pane を閉じる・zoom・goto（選んでいる pane を動かす）・次の pane
+  for (const k of ["v", "-", "c", "Shift+N", "x", "z", "g", "Tab", "o"]) {
+    await prefixKey(page, k);
+    await page.waitForTimeout(60);
+  }
+  await page.waitForTimeout(400);
+  expect(client.lastEvent("pane.created")).toBe(created);
+  expect(client.lastEvent("layout.updated")).toBe(layout);
+  expect(client.lastEvent("workspace.created")).toBe(wsCreated);
+  expect(client.lastEvent("tab.created")).toBe(tabCreated);
+  expect(input().slice(n0).filter((i) => i.paneId === p1).map((i) => i.text).join("")).not.toMatch(/[vxzgo\-c]/);
+  await expect(win(page)).toBeVisible();
+  await expect(graphView(page)).toBeVisible();
+  // 食ったあとも、窓の端末は打てる
+  await page.keyboard.type("ok");
+  await expect.poll(() => input().slice(n0).filter((i) => i.paneId === p1).map((i) => i.text).join("")).toContain("ok");
+});
+
+test("別のノードを押すと、窓の中身がその pane に替わる（前の pane は開く前の大きさへ戻り、直結をやめる）", async ({ page, appServer }) => {
+  const { client, p1, p2, views } = await setup(page, appServer);
+  await expect.poll(() => baseSizeOf(views, p1) !== undefined && baseSizeOf(views, p2) !== undefined).toBe(true);
+  const before1 = { ...baseSizeOf(views, p1)! };
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect(win(page)).toHaveAttribute("data-pane-id", p1);
+  await expect.poll(async () => JSON.stringify(client.paneSize(p1))).toBe(JSON.stringify(await footerSize(page)));
+  await expect(node(page, p1)).toHaveClass(/graph-node-window/);
+  await moveWindowAside(page);
+  await pressNode(page, p2);
+  await expect(win(page)).toHaveAttribute("data-pane-id", p2);
+  await expect(win(page)).toHaveCount(1);
+  await expect(node(page, p2)).toHaveClass(/graph-node-window/);
+  await expect(node(page, p1)).not.toHaveClass(/graph-node-window/);
+  await expect.poll(() => client.paneSize(p1)).toMatchObject(before1);
+  await expect.poll(async () => JSON.stringify(client.paneSize(p2))).toBe(JSON.stringify(await footerSize(page)));
+  await expect.poll(() => activeInWindow(page)).toBe(true);
+  // p1 を直結できる（前の直結は終わっている）
+  const other = await appServer.openClient();
+  await other.request("pane.attach", { paneId: p1, cols: 70, rows: 20 });
+  other.close();
+});
+
+test("別のクライアントが直結している pane は、窓に W2 の表示が出る。［引き取って開く］で窓に出る。開いた後に奪われると W2 の表示に替わる", async ({ page, appServer }) => {
+  const { client, p1 } = await setup(page, appServer);
+  const other = await appServer.openClient();
+  await other.request("pane.attach", { paneId: p1, cols: 60, rows: 20 });
+  await expect.poll(() => client.paneSize(p1)).toMatchObject({ cols: 60, rows: 20 });
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect(page.locator("[data-graph-terminal-taken]")).toBeVisible();
+  await expect(win(page)).toHaveAttribute("data-status", "taken");
+  expect(client.paneSize(p1)).toMatchObject({ cols: 60, rows: 20 }); // 黙って引き取らない
+  await page.locator("[data-graph-terminal-takeover]").click();
+  await expect(win(page)).toHaveAttribute("data-status", "attached");
+  await expect.poll(async () => JSON.stringify(client.paneSize(p1))).toBe(JSON.stringify(await footerSize(page)));
+  await expect(other.request("pane.attach_resize", { paneId: p1, cols: 50, rows: 15 })).rejects.toThrow(/not_attached/);
+  // 開いた後に奪われる
+  await other.request("pane.attach", { paneId: p1, cols: 61, rows: 21, takeover: true });
+  await expect(win(page)).toHaveAttribute("data-status", "taken");
+  await expect(page.locator("[data-graph-terminal-taken]")).toBeVisible();
+  await expect.poll(() => client.paneSize(p1)).toMatchObject({ cols: 61, rows: 21 });
+  other.close();
+});
+
+test("20 回開いて閉じても、基本画面の端末の中身と大きさは最初と同じ。フォーカスは、閉じるたびにノードへ戻り、body に残らない", async ({ page, appServer }) => {
+  const { client, p1, views } = await setup(page, appServer);
+  await page.keyboard.type("echo marker-base-1");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  await expect.poll(() => baseSizeOf(views, p1) !== undefined).toBe(true);
+  const before = { ...baseSizeOf(views, p1)! };
+  await openGraph(page);
+  for (let i = 0; i < 20; i++) {
+    await pressNode(page, p1);
+    await expect(win(page)).toHaveAttribute("data-status", "attached");
+    await expect.poll(() => activeInWindow(page)).toBe(true);
+    await page.locator("[data-graph-terminal-close]").click();
+    await expect(win(page)).toHaveCount(0);
+    expect(await activeIsBody(page)).toBe(false);
+    await expect(graphView(page).locator("[data-node-key]:focus")).toHaveCount(1);
+  }
+  await expect.poll(() => client.paneSize(p1)).toMatchObject(before);
+  // 基本画面へ戻ると、同じ要素・同じ中身（印の入った行が残っている）
+  await prefixKey(page, "a");
+  await expect(graphView(page)).toBeHidden();
+  await expect.poll(() => page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea") === true)).toBe(true);
+  await expect(page.locator(".terminal-pane-mount > *")).toHaveCount(2);
+});
+
+/**
+ * スクリプトが動く面（`focusDrop` の見回りが回る）が載っている画面で、窓の開閉（端末の要素の移動）が「フォーカスの脱落」として数えられない（T13a の確認。X8・B4）。
+ * 見回りの内部の数（`restoredAt`）は非公開で読めないので、代わりに次を観測する: ①ページに 4ms ごとの見張りを入れ、`activeElement` が `body` だった回数 ②スクリプトの枠が止められていない
+ * （遮断器が働かない）③知らせ（トースト「繰り返し外しています」）が出ない。
+ */
+test("スクリプトの面が載っている画面で、窓の開閉を 20 回くり返しても、フォーカスは body に落ちず、見回りの遮断器も知らせも働かない", async ({ page, appServer }) => {
+  await enableScript(appServer);
+  const { p1 } = await setup(page, appServer);
+  await setScriptOk(appServer, p1, "g", "<!doctype html><body><p>quiet panel</p></body>");
+  const frame = page.locator("[data-pane-panel] iframe[data-display-script]");
+  await expect(frame).toHaveCount(1);
+  await page.evaluate(() => {
+    const w = window as unknown as { __bodySamples: number };
+    w.__bodySamples = 0;
+    setInterval(() => {
+      if (document.activeElement === document.body) w.__bodySamples++;
+    }, 4);
+  });
+  await openGraph(page);
+  await page.waitForTimeout(200);
+  const baseline = await page.evaluate(() => (window as unknown as { __bodySamples: number }).__bodySamples);
+  for (let i = 0; i < 20; i++) {
+    await pressNode(page, p1);
+    await expect(win(page)).toHaveAttribute("data-status", "attached");
+    await expect.poll(() => activeInWindow(page)).toBe(true);
+    await page.locator("[data-graph-terminal-close]").click();
+    await expect(win(page)).toHaveCount(0);
+  }
+  await page.waitForTimeout(300);
+  const samples = await page.evaluate(() => (window as unknown as { __bodySamples: number }).__bodySamples);
+  expect(samples - baseline, "窓の開閉の間に body がフォーカスを持った回数").toBe(0);
+  expect(await activeIsBody(page)).toBe(false);
+  await expect(frame).toHaveCount(1); // 遮断器が働いて枠が止められていない
+  await expect(page.getByText(/繰り返し外しています/)).toHaveCount(0);
 });
