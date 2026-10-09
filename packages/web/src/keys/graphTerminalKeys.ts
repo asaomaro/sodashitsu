@@ -5,7 +5,7 @@ import type { Action, KeyDecision } from "@sodashitsu/client-core";
  * 窓の下には、見えない基本画面がある。**そこの pane・tab・分割・workspace の構成を変える操作と、選んでいる pane を別の pane へ動かす操作は食う**
  * （何もしない・端末にも届かない）。窓の pane は、窓を開いたときに「選んでいる pane」になっている（X6）ので、その pane を対象にする操作（コピー・スクロールバックを開く・
  * サブエージェントの一覧）は通す。`Action` の型を `never` で網羅する switch で書く——操作を足したときに、ここを決め忘れない（型エラーになる）。
- * 一覧と理由は decisions.md の D56。
+ * 一覧と理由は decisions.md の D75。
  */
 export function isAllowedInTerminalWindow(decision: KeyDecision): boolean {
   switch (decision.kind) {
