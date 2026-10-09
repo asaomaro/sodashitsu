@@ -1,7 +1,7 @@
 schema: 11
 slug: ui-style
-current: requirements
-approved: []
+current: tasks
+approved: [requirements, design, tasks]
 mode: autonomous
 profile: full
 humanGates: []
