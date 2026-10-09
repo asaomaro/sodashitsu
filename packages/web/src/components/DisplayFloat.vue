@@ -328,7 +328,7 @@ onBeforeUnmount(() => {
   background: var(--soda-bg, #1e1f29); /* 不透明（後ろの端末が透けない） */
   color: var(--soda-fg, #f8f8f2);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   box-shadow: 0 4px 16px rgb(0 0 0 / 45%);
 }
 .display-float:focus {
@@ -381,7 +381,7 @@ onBeforeUnmount(() => {
   inset: 0;
   box-sizing: border-box;
   border: 2px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   pointer-events: none;
   z-index: 1;
 }

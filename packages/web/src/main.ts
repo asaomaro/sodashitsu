@@ -592,7 +592,7 @@ installEngageGuard({
   onBlocked: (id) => {
     const d = useDisplayStore(pinia);
     if (id) d.nudgeEngage(id, 1500);
-    view.toast("画面の配置が動いたので、［操作する］を受けませんでした。もう一度押してください");
+    view.toast("画面の配置が動いたので、［操作する］を受けませんでした。もう一度押してください（続くときは、その表示を［×］で閉じられます）");
   },
   isMobileSheet: () => useDisplayStore(pinia).sheetAvailable,
 });
