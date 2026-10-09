@@ -570,6 +570,7 @@ test.describe("囲いのドラッグ・ノードのドラッグの寄せ（T11f�
     await page.mouse.move(g.x, g.y);
     await page.mouse.down();
     await page.mouse.move(g.x + 150, g.y + 100, { steps: 6 });
+    await expect(frameOf(page, w.ws.get("alpha")!.id)).toHaveClass(/graph-frame-dragging/); // 背景のパンではなく、囲いのドラッグ
     expect((await box(frameOf(page, w.ws.get("alpha")!.id))).x).toBeGreaterThan(fb.x + 100);
     await page.keyboard.press("Escape");
     await page.mouse.up();
