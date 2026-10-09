@@ -336,6 +336,9 @@ test("分割した 2 つ目の pane も、prefix のキーで選んでから、t
   await expect(edges.nth(0)).toHaveAttribute("tabindex", "-1");
   await expect(page.locator(".xterm-helper-textarea").nth(0)).toHaveAttribute("tabindex", "-1"); // 選ばれていない p1 の端末も
 
+  // 直前のクリックのポインタが、開くメニューの上に残っていると、`mouseenter` で選ばれる項目が動く（シェルのプロンプトの長さ＝cwd のパスの長さで
+  // 端末の入力欄の位置が変わり、残る位置が変わる）。キーボードだけの試験なので、ポインタは画面の隅へ退けておく。
+  await page.mouse.move(2, 2);
   // Enter で p2 のメニューを開き、キーボードだけで「右クリックを pane に送る」を選ぶ——p2 に効く。
   await page.keyboard.press("Enter");
   const menu = page.locator(".context-menu");
