@@ -39,13 +39,18 @@ describe("uiStyle.css（20261008-ui-style の角のトークン）", () => {
       "--soda-shape-row-radius": "var(--soda-shape-radius)",
       "--soda-shape-row-current-ring": "1px",
       "--soda-shape-row-current-tint": "22%",
+      "--soda-shape-section-font": "0.95em",
+      "--soda-shape-section-inner": "1em",
+      "--soda-shape-section-opacity": "0.9",
+      "--soda-shape-name-h": "28px",
+      "--soda-shape-name-top": "6px",
       "--soda-shape-tag-h": "28px",
       "--soda-shape-pad": "20px",
       "--soda-shape-menu-radius": "var(--soda-shape-radius)",
       "--soda-shape-menu-pad-y": "6px",
       "--soda-shape-shadow": "0 8px 24px color-mix(in srgb, black 22%, transparent), 0 1px 3px color-mix(in srgb, black 18%, transparent)",
     });
-    for (const k of ["--soda-shape-pad", "--soda-shape-menu-radius", "--soda-shape-menu-pad-y", "--soda-shape-shadow", "--soda-shape-pane-radius", "--soda-shape-pane-radius-per-gap", "--soda-shape-row-h", "--soda-shape-control-h", "--soda-shape-pad-x", "--soda-shape-tag-h", "--soda-shape-row-inset", "--soda-shape-row-radius", "--soda-shape-row-current-ring", "--soda-shape-row-current-tint"]) expect(Object.keys(get(":root")), k).not.toContain(k);
+    for (const k of ["--soda-shape-pad", "--soda-shape-menu-radius", "--soda-shape-menu-pad-y", "--soda-shape-shadow", "--soda-shape-pane-radius", "--soda-shape-pane-radius-per-gap", "--soda-shape-row-h", "--soda-shape-control-h", "--soda-shape-pad-x", "--soda-shape-tag-h", "--soda-shape-row-inset", "--soda-shape-row-radius", "--soda-shape-row-current-ring", "--soda-shape-row-current-tint", "--soda-shape-name-h", "--soda-shape-name-top", "--soda-shape-section-font", "--soda-shape-section-inner", "--soda-shape-section-opacity"]) expect(Object.keys(get(":root")), k).not.toContain(k);
   });
 
   it("モダンだけが属性の規則。クラシックの規則は属性に依らない（:root だけ）。ほかの規則は無い", () => {
@@ -72,8 +77,9 @@ describe("uiStyle.css（20261008-ui-style の角のトークン）", () => {
     for (const m of all) expect(Number(/(\d+)%/.exec(m)![1])).toBeLessThanOrEqual(30);
   });
 
-  it("文字（font）を変える宣言が無い", () => {
-    expect(css).not.toMatch(/font(-family|-size|-weight)?\s*:/);
+  it("文字（font）を変える宣言が無い（font-family は様式で変えない。区画の見出しの大きさのトークン `--soda-shape-section-font` は、名前に font を含む変数で、宣言ではない）", () => {
+    expect(css).not.toMatch(/(?<![-\w])font(-family|-size|-weight)?\s*:/);
+    expect(css).not.toMatch(/font-family/);
   });
 
   it("守りの部品のクラス名・部品のクラスの規則が出ない（外から部品を選ばない）", () => {

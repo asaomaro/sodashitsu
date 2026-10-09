@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { AgentInfo, ItemTarget, Workspace } from "@sodashitsu/protocol";
-import { ActionDispatcherKey, ConnectionKey } from "../injection.js";
+import { ActionDispatcherKey, ConnectionKey, TerminalRegistryKey } from "../injection.js";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { type SectionBox, clampRatio, ratioFromOffset, ratioPercent, stepRatio } from "../sidebar/sectionSizing.js";
 import { useSessionStore } from "../store/session.js";
@@ -19,6 +19,7 @@ import MachineHeader from "./MachineHeader.vue";
 import MachineRows from "./MachineRows.vue";
 import ScreenSwitcher from "./ScreenSwitcher.vue";
 import { useGraphSpacesStore } from "../store/graphSpaces.js";
+import { useUiStyle } from "../composables/useUiStyle.js";
 import { useMachinesStore } from "../store/machines.js";
 import { watchDragInterrupt } from "../store/dragInterrupt.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
@@ -41,6 +42,8 @@ const settings = useSettingsStore();
 const actions = inject(ActionDispatcherKey);
 const machines = useMachinesStore();
 const graphSpaces = useGraphSpacesStore();
+/** モダンの配置か（20261008-ui-style PR4）。最下部のボタンの並び・たたむ印の置き場所・spaces の区画の下のボタンの有無が替わる。 */
+const { modernLayout } = useUiStyle();
 
 /**
  * マシンのまとまり（20260927-multi-host-machines の design「サイドバー」）。有効なマシンが無ければ、選んでいる（＝ローカルの）1 つだけで見出しを
@@ -58,6 +61,7 @@ watch(
   },
 );
 const conn = inject(ConnectionKey);
+const registry = inject(TerminalRegistryKey, undefined);
 
 const el = ref<HTMLElement | null>(null);
 
@@ -304,6 +308,9 @@ const paneDropScope = computed<{ blocked: ReadonlySet<string>; allowed: Readonly
 const paneDropBlockedIds = computed(() => paneDropScope.value.blocked);
 const paneDropAllowedIds = computed(() => paneDropScope.value.allowed);
 
+/** 「新規」のメニュー（モダンの配置）が開いているか。 */
+const newMenuOpen = computed(() => view.contextMenu?.target.kind === "new");
+
 /** 全体のメニューが開いているか（`PaneFrame` の枠のボタンと同じく `aria-expanded` で伝える）。 */
 const globalMenuOpen = computed(() => view.contextMenu?.target.kind === "global");
 
@@ -494,8 +501,43 @@ function onNewWorkspace(): void {
 /** 全体のメニューを、押したボタンの位置に開く（`ContextMenu` が中身と操作を引き受ける）。 */
 function onOpenGlobalMenu(ev: MouseEvent): void {
   const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-  actions?.openContextMenu({ kind: "global" }, { x: rect.left, y: rect.top });
+  // モダンの配置では最下部のボタンなので、メニューはボタンの上に開く（下へ開くとボタンに重なる）。
+  actions?.openContextMenu({ kind: "global" }, { x: rect.left, y: modernLayout.value ? rect.top - 4 : rect.top, ...(modernLayout.value ? { flipUp: true } : {}) });
 }
+
+/** 「新規」のメニュー（モダンの配置。workspace・pane・グループ）を、押したボタンの位置に開く。中身は `ContextMenu`。 */
+function onOpenNewMenu(ev: MouseEvent): void {
+  const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+  actions?.openContextMenu({ kind: "new" }, { x: rect.left, y: rect.top - 4, flipUp: true });
+}
+
+/**
+ * 様式を切り替えたとき、消える部品にフォーカスがあれば、対応する新しい部品へ移す（20261008-ui-style AC18。無ければ、端末〔基本画面〕）。
+ * 対応: たたむ・広げる ↔ 境の線の印／新規・メニュー ↔ 最下部の同じ名前のボタン。描画の前に、押している部品を調べ、描いた後に移す。
+ */
+function sidebarRoleOf(target: Element | null): "collapse" | "new" | "menu" | null {
+  if (!(target instanceof HTMLElement) || !el.value?.contains(target)) return null;
+  if (target.matches(".sidebar-collapse-btn, .sidebar-edge-toggle")) return "collapse";
+  const act = target.dataset.sidebarAct;
+  if (act === "new" || act === "menu") return act;
+  if (target.closest(".sidebar-section-footer")) return target.matches(".sidebar-btn-right") ? "menu" : "new";
+  return null;
+}
+watch(
+  modernLayout,
+  () => {
+    const role = sidebarRoleOf(document.activeElement);
+    if (role === null) return;
+    void nextTick(() => {
+      const next = el.value?.querySelector<HTMLElement>(
+        role === "collapse" ? ".sidebar-collapse-btn, .sidebar-edge-toggle" : modernLayout.value ? `[data-sidebar-act="${role}"]` : `.sidebar-section-footer .sidebar-btn${role === "menu" ? ".sidebar-btn-right" : ":not(.sidebar-btn-right)"}`,
+      );
+      if (next) next.focus();
+      else if (view.focusedPaneId) registry?.focus(view.focusedPaneId);
+    });
+  },
+  { flush: "pre" },
+);
 
 // --- workspace 行の D&D（20260923-workspace-grouping。`PaneFrame.vue` の名前ラベルの D&D と同じ形）---
 
@@ -951,7 +993,7 @@ watchDragInterrupt(view, () => {
       </template>
       </div>
 
-      <div v-if="!view.sidebarCollapsed" class="sidebar-section-footer">
+      <div v-if="!view.sidebarCollapsed && !modernLayout" class="sidebar-section-footer">
         <button type="button" class="sidebar-btn" @click="onNewWorkspace" @keydown="onButtonKeydown">＋ 新規</button>
         <button
           type="button"
@@ -1040,10 +1082,20 @@ watchDragInterrupt(view, () => {
     </section>
     </div>
 
-    <div class="sidebar-footer">
+    <div class="sidebar-footer" :class="{ 'sidebar-footer-modern': modernLayout }">
+      <!-- モダンの配置（20261008-ui-style AC14・AC15）: 「新規」と「メニュー」を、通知のベルと並べて最下部に置く（spaces の区画の中の同じボタンは出さない）。畳んだサイドバーでは縦に並ぶ（印だけ。読み上げの名前は保つ）。 -->
+      <template v-if="modernLayout">
+        <button type="button" class="sidebar-btn sidebar-footer-new" data-sidebar-act="new" aria-label="新規" title="新規" aria-haspopup="menu" :aria-expanded="newMenuOpen ? 'true' : 'false'" @click="onOpenNewMenu" @keydown="onButtonKeydown">
+          {{ view.sidebarCollapsed ? "＋" : "＋ 新規" }}
+        </button>
+        <button type="button" class="sidebar-btn sidebar-footer-menu" data-sidebar-act="menu" aria-label="メニュー" title="メニュー" aria-haspopup="menu" :aria-expanded="globalMenuOpen ? 'true' : 'false'" @click="onOpenGlobalMenu" @keydown="onButtonKeydown">
+          {{ view.sidebarCollapsed ? "⋯" : "メニュー" }}
+        </button>
+      </template>
       <!-- 通知のベル（20261005-notify-bell）。畳んでも見える帯なので、先送りした件数のバッヂがいつでも見える。 -->
       <NotificationBell variant="sidebar" />
       <button
+        v-if="!modernLayout"
         type="button"
         class="sidebar-btn sidebar-collapse-btn"
         :aria-expanded="!view.sidebarCollapsed"
@@ -1054,6 +1106,20 @@ watchDragInterrupt(view, () => {
         {{ view.sidebarCollapsed ? "»" : "«" }}
       </button>
     </div>
+
+    <!-- モダンの配置（AC13）: たたむ・広げるの印を、サイドバーと主な領域の境の線の、縦の中央に置く（小さな丸＋矢印。押せる当たりは 24px）。幅のつまみ（下）の上にあり、この上では幅のドラッグは始まらない。 -->
+    <button
+      v-if="modernLayout"
+      type="button"
+      class="sidebar-edge-toggle"
+      :aria-expanded="!view.sidebarCollapsed"
+      :aria-label="view.sidebarCollapsed ? 'サイドバーを開く' : 'サイドバーを畳む'"
+      :title="view.sidebarCollapsed ? 'サイドバーを開く' : 'サイドバーを畳む'"
+      @click="actions?.run({ type: 'toggleSidebar' })"
+      @keydown="onButtonKeydown"
+    >
+      <span class="sidebar-edge-toggle-mark" aria-hidden="true">{{ view.sidebarCollapsed ? "›" : "‹" }}</span>
+    </button>
 
     <div
       class="sidebar-divider resize-handle resize-handle-x"
@@ -1455,9 +1521,10 @@ watchDragInterrupt(view, () => {
   margin-top: auto;
   justify-content: flex-end;
 }
+/* 区画の見出し（spaces・agents）の文字。クラシックでは変数が無く、今の値（0.85em・0.75）。モダンは、workspace の行に近い大きさ・薄すぎない色（`uiStyle.css`）。 */
 .sidebar-section-title {
-  font-size: 0.85em;
-  opacity: 0.75;
+  font-size: var(--soda-shape-section-inner, 0.85em);
+  opacity: var(--soda-shape-section-opacity, 0.75);
 }
 /* 見出しのボタン（押すと畳む・開く）。印・題・（畳んでいるとき）件数と状態を並べる。並び順のボタンは兄弟の要素。 */
 .sidebar-section-toggle {
@@ -1467,13 +1534,13 @@ watchDragInterrupt(view, () => {
   padding-left: 0;
 }
 .sidebar-section-mark {
-  font-size: 0.85em;
-  opacity: 0.75;
+  font-size: var(--soda-shape-section-inner, 0.85em);
+  opacity: var(--soda-shape-section-opacity, 0.75);
   width: 1em;
 }
 .sidebar-section-count {
-  font-size: 0.85em;
-  opacity: 0.75;
+  font-size: var(--soda-shape-section-inner, 0.85em);
+  opacity: var(--soda-shape-section-opacity, 0.75);
 }
 
 .sidebar-btn {
@@ -1494,6 +1561,14 @@ watchDragInterrupt(view, () => {
 .sidebar-btn-right,
 .sidebar-sort-btn {
   margin-left: auto;
+}
+/* 見出しのボタンの文字（`.sidebar-btn` の 0.85em より詳細度を上げて勝たせる）。クラシックは同じ 0.85em。 */
+.sidebar-btn.sidebar-section-toggle {
+  font-size: var(--soda-shape-section-font, 0.85em);
+}
+/* 並び順の表示（「開いた順」「グループ順」）。見出しの題と同じ大きさ（クラシックは `.sidebar-btn` と同じ 0.85em）。 */
+.sidebar-sort-btn {
+  font-size: var(--soda-shape-section-font, 0.85em);
 }
 .sidebar-session {
   flex: none;
@@ -1520,6 +1595,62 @@ watchDragInterrupt(view, () => {
   flex-direction: column;
   align-items: center;
   padding-inline: 0.2em;
+}
+/* モダンの配置（20261008-ui-style AC14）: 最下部は［新規］［メニュー］を左、ベルを右（`.sidebar-footer` の既定は右寄せ）。 */
+.sidebar-footer-modern {
+  justify-content: flex-start;
+}
+.sidebar-footer-modern .notify-bell {
+  margin-left: auto;
+}
+/* 畳んだ幅は縦に積み、中央に寄せる（下の `.sidebar-collapsed .sidebar-footer`）。ベルの `margin-left: auto` は横並びのときだけ。 */
+.sidebar-collapsed .sidebar-footer-modern .notify-bell {
+  margin-left: 0;
+}
+/* モダンの配置（AC13）: 境の線の縦の中央の、たたむ・広げるの印。当たりは 24px の正方形、見た目は小さな丸。幅のつまみ（`.sidebar-divider`・z-index 3）より上。 */
+.sidebar-edge-toggle {
+  position: absolute;
+  top: 50%;
+  /* 中心を nav の右の罫線の上に置く（外へ 12px・内へ 12px）。 */
+  right: -12px;
+  z-index: 4;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--soda-fg, #f8f8f2);
+  cursor: pointer;
+}
+.sidebar-edge-toggle-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 50%;
+  background: var(--soda-menu-bg, #282a36);
+  font-size: 15px;
+  line-height: 1;
+}
+.sidebar-edge-toggle:hover .sidebar-edge-toggle-mark {
+  background: var(--soda-menu-hover-bg, #343746);
+}
+/* 畳んだサイドバーは `overflow-x: hidden` で外へはみ出せない。印は nav の内側の右端に、同じ縦の中央で置く。 */
+.sidebar-collapsed .sidebar-edge-toggle {
+  right: 0;
+  /* 畳んだ幅（48px）では、行の印（左から約 13〜29px）に重ならないよう、当たりを右の 18px に絞る（広い幅では 24px）。 */
+  width: 18px;
+}
+.sidebar-collapsed .sidebar-edge-toggle-mark {
+  width: 16px;
+  height: 16px;
 }
 .sidebar-divider {
   position: absolute;

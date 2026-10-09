@@ -23,10 +23,19 @@ export type MenuTarget =
   | { kind: "display"; id: string }
   /** グラフの画面のツールバーの「そのほか」（全体の一時停止・履歴・別のマシンの pane を載せる。20261008-graph-first の PR1e）。 */
   | { kind: "graphMore" }
+  /** サイドバーの「新規」のボタン（モダンの配置。workspace・pane・グループのどれを足すかを選ぶ。20261008-ui-style PR4）。 */
+  | { kind: "new" }
   | { kind: "global" };
 
+/** メニューを開く位置。`flipUp` は、点の**上**に開く（最下部のボタンから開くとき。モダンの配置。20261008-ui-style PR4）。 */
+export interface MenuAt {
+  x: number;
+  y: number;
+  flipUp?: boolean;
+}
+
 export interface UiPort {
-  openContextMenu(target: MenuTarget, at: { x: number; y: number }): void;
+  openContextMenu(target: MenuTarget, at: MenuAt): void;
   toast(message: string): void;
 }
 
