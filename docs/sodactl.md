@@ -481,8 +481,10 @@ pane の中で検出されたコーディングエージェント（Claude Code�
 サブエージェントは pane を持たないので、`agent` の一覧には出ない。値は 2 通り（項目の有無は揺れない）:
 
 - `null` … **分からない**（フック連携を導入していない・Claude Code 以外・サーバが古い・報告をまだ受けていない）。
-- `{"count": 2, "items": [{"id": "…", "type": "Explore", "description": "調べる", "background": true, "startedAt": 1700000000000}, …]}` … 報告を受けている。0 件なら `{"count": 0, "items": []}`。
+- `{"count": 2, "items": [{"id": "…", "type": "Explore", "description": "調べる", "background": true, "startedAt": 1700000000000, "parentId": null, "depth": 1}, …]}` … 報告を受けている。0 件なら `{"count": 0, "items": []}`。
   `items` は起動した順で最大 64 件、`count` は実際の数（64 を超えれば `items` より大きい）。各項目の `type`・`description`・`background` は分からなければ `null`、`startedAt` はサーバが起動（または作業の終わりの報告での突き合わせ）を知った時刻（epoch ms）。
+  各項目には `parentId`（入れ子のとき、起動した側のサブエージェントの id。メインが起動したもの・分からないものは `null`）と `depth`（メインが起動したもの = 1。分からなければ `null`）も付く（20261008-graph-first PR6）。今までの項目は変わらない。記録のファイルの場所と `hasTranscript` は出さない。
+  サブエージェントの記録を読む RPC（`agent.subagent_transcript`。グラフの「記録を読むだけの窓」が使う）には、`sodactl` のコマンドは無い。ログイン済みの接続（`external` を含む）からは、`agent read` と同じ扱いで呼べるが、ログイン不要の受け口（`pane.sock`）には載せていない。仕組みと安全の作りは `docs/agent-graph.md`「サブエージェントの記録を読むだけの窓」。
   `description` はエージェントが書いた短い説明で、そのまま文字として扱う（画面でも HTML としては出さない）。
 
 `agent wait` の `--until` や待ちの判定は、`subagents` の変化では動かない（状態の変化だけで動く）。「作業中」の中身（並行で何件動いているか）を知りたいときに読む。

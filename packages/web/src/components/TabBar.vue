@@ -7,6 +7,7 @@ import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import { watchDragInterrupt } from "../store/dragInterrupt.js";
 import { formatDatetime, type TabBarRightEntry } from "@sodashitsu/client-core";
+import { useUiStyle } from "../composables/useUiStyle.js";
 
 /**
  * tab の一覧（design「サイドバー」隣接の tab バー。D56 の訂正 9・10）。状態の印は出さない、拡大中は「Z」だけ。
@@ -27,6 +28,8 @@ const settings = useSettingsStore();
 const actions = inject(ActionDispatcherKey);
 const conn = inject(ConnectionKey);
 const registry = inject(TerminalRegistryKey, undefined);
+/** モダンの配置では、tab が 1 つだけのときも tab バー（と「＋」）を出す（20261008-ui-style AC17）。 */
+const { modernLayout } = useUiStyle();
 
 const tabs = computed(() => {
   const ws = view.workspaceId ? session.workspaces.get(view.workspaceId) : undefined;
@@ -37,7 +40,7 @@ const tabs = computed(() => {
 const root = ref<HTMLElement | null>(null);
 const tabsEl = ref<HTMLElement | null>(null);
 /** tab バーが見えているか（`v-if` と同じ条件をここにも持つ）。 */
-const visible = computed(() => tabs.value.length !== 1);
+const visible = computed(() => modernLayout.value || tabs.value.length !== 1);
 
 /**
  * tab バーの中にフォーカスがあるまま非表示になるとき（自動非表示。AC-I6）、選ばれている pane の
@@ -344,7 +347,7 @@ function onWheel(ev: WheelEvent): void {
 
 <template>
   <div
-    v-if="tabs.length !== 1"
+    v-if="visible"
     ref="root"
     class="tab-bar"
     :class="[`tab-bar-${settings.tabBarPosition}`, { 'tab-bar-dragging': tabDrag }]"

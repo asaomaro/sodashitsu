@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { connect as netConnect } from "node:net";
 import { tmpdir } from "node:os";
@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import type { AgentInfo } from "@sodashitsu/protocol";
-import { agentReportSocketPathFor } from "./config.js";
+import { agentReportSocketPathFor, paneSocketPathFor } from "./config.js";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 import type { ComposedServer } from "./composeServer.js";
 
@@ -522,8 +522,160 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       await afterMarker(server, stateDir, paneId);
       // Bash の説明が実行前の報告として送られていれば、合図の起動に付いてしまう。
       expect(subsOf(server, paneId)?.items).toEqual([
-        { id: "marker", type: "Explore", startedAt: expect.any(Number) },
+        { id: "marker", type: "Explore", depth: 1, startedAt: expect.any(Number) },
       ]);
+    });
+
+    // 20261008-graph-first PR6a: 入れ子の親子と、記録の材料（実物のスクリプト → 実 socket → 配られる一覧）。
+    it("入れ子の親・深さ・hasTranscript が一覧に載る。記録の場所そのものは、配る一覧のどこにも載らない", async () => {
+      const { server, stateDir, paneId } = await bootWithAgent();
+      const tp = "/home/u/.claude/projects/-w/sess-1.jsonl";
+      await hook(stateDir, paneId, { ...pre("外側"), transcript_path: tp });
+      await hook(stateDir, paneId, { ...start("outer1"), transcript_path: tp });
+      await hook(stateDir, paneId, { ...pre("内側"), agent_id: "outer1", transcript_path: tp });
+      await hook(stateDir, paneId, { ...start("inner1"), transcript_path: tp });
+      await vi.waitFor(() =>
+        expect(subsOf(server, paneId)?.items.map((i) => i.id)).toEqual(["outer1", "inner1"]),
+      );
+      const items = subsOf(server, paneId)!.items;
+      expect(items[0]).toMatchObject({ id: "outer1", description: "外側", depth: 1, hasTranscript: true });
+      expect(items[1]).toMatchObject({ id: "inner1", description: "内側", parentId: "outer1", depth: 2, hasTranscript: true });
+      expect(JSON.stringify(server.session.snapshot())).not.toContain(".claude/projects");
+    });
+
+    it("古いフックの報告（親・場所の項目が無い）でも数えられる（hasTranscript なし）", async () => {
+      const { server, stateDir, paneId } = await bootWithAgent();
+      await hook(stateDir, paneId, start("legacy"));
+      await vi.waitFor(() =>
+        expect(subsOf(server, paneId)?.items).toEqual([
+          { id: "legacy", type: "Explore", depth: 1, startedAt: expect.any(Number) },
+        ]),
+      );
+    });
+
+    // 20261008-graph-first PR6c: サブエージェントの記録を読む口（`agent.subagent_transcript`）の安全（AC-U5）。実物のスクリプト → 実 socket → 実 WS。
+    describe("記録を読む口の安全（agent.subagent_transcript）", () => {
+      const SESS = "sess-1";
+      /** HOME はこの試験の一時のフォルダ（`beforeAll`）。Claude Code の記録の置き場所 = `$HOME/.claude/projects`。 */
+      const projectsRoot = () => join(dir, ".claude", "projects");
+      const line = (type: string, content: unknown) => JSON.stringify({ type, message: { content } }) + "\n";
+
+      async function transcriptFor(id: string, projectsBase = projectsRoot()): Promise<{ parent: string; file: string }> {
+        const proj = join(projectsBase, "-work-proj");
+        await mkdir(join(proj, SESS, "subagents"), { recursive: true });
+        const file = join(proj, SESS, "subagents", `agent-${id}.jsonl`);
+        await writeFile(file, line("user", "調べて") + line("assistant", [{ type: "text", text: "見ます" }]));
+        return { parent: join(proj, `${SESS}.jsonl`), file };
+      }
+      const read = (c: Client, paneId: string, agentId: unknown, offset?: number) =>
+        c.request("agent.subagent_transcript", { paneId, agentId, ...(offset !== undefined ? { offset } : {}) });
+      /** 報告された（偽でもよい）親の記録の場所つきで、サブエージェントを始める。 */
+      const startWith = async (stateDir: string, paneId: string, id: string, transcriptPath: string) => {
+        await hook(stateDir, paneId, { ...start(id), transcript_path: transcriptPath });
+        await vi.waitFor(() => expect(subsOf(boot0.server, paneId)?.items.map((i) => i.id)).toContain(id));
+      };
+      let boot0: Awaited<ReturnType<typeof bootWithAgent>>;
+
+      it("報告されたサブエージェントの記録を、整形して返す。場所は、受け取りも返しもしない", async () => {
+        boot0 = await bootWithAgent();
+        const { server, stateDir, paneId, clients } = boot0;
+        const { parent } = await transcriptFor("ok1");
+        await startWith(stateDir, paneId, "ok1", parent);
+        const r = await read(clients[0]!, paneId, "ok1");
+        expect(r.error).toBeUndefined();
+        expect(r.result).toMatchObject({ status: "ok", running: true, entries: [{ kind: "prompt", text: "調べて" }, { kind: "say", text: "見ます" }] });
+        expect(JSON.stringify(r.result)).not.toContain(dir);
+        expect(JSON.stringify(subsOf(server, paneId))).not.toContain(".claude/projects");
+        // 続き
+        const next = (r.result as { offset: number }).offset;
+        expect(((await read(clients[0]!, paneId, "ok1", next)).result as { entries: unknown[] }).entries).toEqual([]);
+      });
+
+      it("ブラウザから、ほかのファイルを読ませようとしても断られる（id に ../・絶対のパス・長い文字列・別の pane・居ない id）", async () => {
+        boot0 = await bootWithAgent();
+        const { stateDir, paneId, clients } = boot0;
+        const { parent } = await transcriptFor("ok2");
+        await startWith(stateDir, paneId, "ok2", parent);
+        const secret = join(dir, "secret.jsonl");
+        await writeFile(secret, line("user", "TOPSECRET"));
+        const bad: unknown[] = ["../ok2", "../../../secret", secret, "a/b", "ok2/../ok2", "x".repeat(129), "x".repeat(5000), "nobody", "", 5, null, { a: 1 }];
+        for (const id of bad) {
+          const r = await read(clients[0]!, paneId, id);
+          expect(r.result, JSON.stringify(id)).toBeUndefined();
+          expect(["not_found", "invalid_params"]).toContain(r.error?.code);
+        }
+        // 別の pane の id・居ない pane
+        const other = await clients[0]!.request("pane.split", { paneId, direction: "right" });
+        const otherPane = ((other.result as { pane: { id: string } }).pane).id;
+        expect((await read(clients[0]!, otherPane, "ok2")).error?.code).toBe("not_found");
+        expect((await read(clients[0]!, "nopane", "ok2")).error?.code).toBe("not_found");
+        // 位置の不正
+        expect((await clients[0]!.request("agent.subagent_transcript", { paneId, agentId: "ok2", offset: -1 })).error?.code).toBe("invalid_params");
+        expect((await clients[0]!.request("agent.subagent_transcript", { paneId, agentId: "ok2", path: secret })).result).toBeDefined(); // 知らない項目は読まれない（場所としては使われない）
+      });
+
+      it("偽のフックの報告で、親の記録の場所を ~/.claude/projects の外へ向けても、読めない（中身が返らない）", async () => {
+        boot0 = await bootWithAgent();
+        const { stateDir, paneId, clients } = boot0;
+        const outside = join(dir, "outside-projects");
+        const { parent } = await transcriptFor("ev1", outside);
+        await startWith(stateDir, paneId, "ev1", parent);
+        const r = await read(clients[0]!, paneId, "ev1");
+        expect(r.result).toMatchObject({ status: "unreadable", entries: [] });
+        expect(JSON.stringify(r)).not.toContain("調べて");
+        expect(JSON.stringify(r)).not.toContain(outside);
+        // `..` で根の外へ
+        await hook(stateDir, paneId, { ...start("ev2"), transcript_path: join(projectsRoot(), "-work-proj", "..", "..", "..", "outside-projects", "-work-proj", `${SESS}.jsonl`) });
+        await vi.waitFor(() => expect(subsOf(boot0.server, paneId)?.items.map((i) => i.id)).toContain("ev2"));
+        expect((await read(clients[0]!, paneId, "ev2")).result).toMatchObject({ status: "unreadable", entries: [] });
+        // 親の記録の名前がセッションの id と違う・相対の場所
+        for (const [id, path] of [["ev3", join(projectsRoot(), "-work-proj", "other.jsonl")], ["ev4", "relative/x.jsonl"]] as const) {
+          await hook(stateDir, paneId, { ...start(id), transcript_path: path });
+          await vi.waitFor(() => expect(subsOf(boot0.server, paneId)?.items.map((i) => i.id)).toContain(id));
+          expect((await read(clients[0]!, paneId, id)).result).toMatchObject({ status: "unreadable", entries: [] });
+        }
+      });
+
+      it("リンクで外へ出ても読めない（フォルダのリンク・ファイルのリンク）", async () => {
+        boot0 = await bootWithAgent();
+        const { stateDir, paneId, clients } = boot0;
+        const secretDir = join(dir, "secret-dir");
+        await mkdir(secretDir, { recursive: true });
+        await writeFile(join(secretDir, "agent-ln1.jsonl"), line("user", "TOPSECRET"));
+        const proj = join(projectsRoot(), "-link-proj");
+        await mkdir(join(proj, SESS), { recursive: true });
+        await symlink(secretDir, join(proj, SESS, "subagents")); // フォルダがリンクで外へ
+        await startWith(stateDir, paneId, "ln1", join(proj, `${SESS}.jsonl`));
+        const r1 = await read(clients[0]!, paneId, "ln1");
+        expect(r1.result).toMatchObject({ status: "unreadable", entries: [] });
+        expect(JSON.stringify(r1)).not.toContain("TOPSECRET");
+        // ファイルがリンクで外へ
+        const proj2 = join(projectsRoot(), "-link-proj2");
+        await mkdir(join(proj2, SESS, "subagents"), { recursive: true });
+        await symlink(join(secretDir, "agent-ln1.jsonl"), join(proj2, SESS, "subagents", "agent-ln2.jsonl"));
+        await startWith(stateDir, paneId, "ln2", join(proj2, `${SESS}.jsonl`));
+        const r2 = await read(clients[0]!, paneId, "ln2");
+        expect(r2.result).toMatchObject({ status: "unreadable", entries: [] });
+        expect(JSON.stringify(r2)).not.toContain("TOPSECRET");
+      });
+
+      it("ログイン不要の受け口（pane.sock）からは呼べない。サーバのログに記録の中身を出さない", async () => {
+        boot0 = await bootWithAgent();
+        const { server, stateDir, paneId, clients } = boot0;
+        const { parent } = await transcriptFor("ps1");
+        await startWith(stateDir, paneId, "ps1", parent);
+        await read(clients[0]!, paneId, "ps1");
+        const sockPath = paneSocketPathFor(stateDir)!;
+        const answer = await new Promise<string>((resolve, reject) => {
+          const c = netConnect(sockPath, () => c.write(`${JSON.stringify({ v: 1, op: "agent.subagent_transcript", paneId, params: { agentId: "ps1" } })}\n`));
+          let out = "";
+          c.on("data", (d) => (out += d));
+          c.on("close", () => resolve(out));
+          c.on("error", reject);
+        });
+        expect(JSON.parse(answer)).toMatchObject({ ok: false, error: { code: "unknown_op" } });
+        void server;
+      });
     });
   },
 );

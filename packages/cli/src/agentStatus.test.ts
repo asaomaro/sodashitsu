@@ -227,8 +227,8 @@ describe("subagents", () => {
     expect(view.subagents).toEqual({
       count: 2,
       items: [
-        { id: "a1", type: "Explore", description: "調べる", background: true, startedAt: 5 },
-        { id: "a2", type: null, description: null, background: null, startedAt: 6 },
+        { id: "a1", type: "Explore", description: "調べる", background: true, startedAt: 5, parentId: null, depth: null },
+        { id: "a2", type: null, description: null, background: null, startedAt: 6, parentId: null, depth: null },
       ],
     });
     expect(Object.keys(view.subagents!.items[1]!)).toEqual([
@@ -237,7 +237,19 @@ describe("subagents", () => {
       "description",
       "background",
       "startedAt",
+      "parentId",
+      "depth",
     ]);
+  });
+
+  it("入れ子: 親の id と深さを写す。記録の有無（hasTranscript）は出力に載せない", () => {
+    const view = toAgentView(
+      loc,
+      agent({ subagents: { count: 1, items: [{ id: "b1", startedAt: 7, parentId: "a1", depth: 2, hasTranscript: true }] } }),
+    );
+    expect(view.subagents?.items[0]).toEqual({
+      id: "b1", type: null, description: null, background: null, startedAt: 7, parentId: "a1", depth: 2,
+    });
   });
 
   it("background: false は false のまま（null にしない）。count は items より大きくてもそのまま", () => {

@@ -61,6 +61,8 @@ import GraphSpaceBar from "./GraphSpaceBar.vue";
 import GraphNode from "./GraphNode.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import SubagentPanel from "./SubagentPanel.vue";
+import GraphSubagentLayer from "./GraphSubagentLayer.vue";
+import SubagentTranscriptWindow from "./SubagentTranscriptWindow.vue";
 import MobileGraphSheet from "./MobileGraphSheet.vue";
 import PaneChecklist from "./PaneChecklist.vue";
 import RekeyPicker from "./RekeyPicker.vue";
@@ -1370,6 +1372,61 @@ function openSubagents(key: string): void {
   if (isMobile.value || subagentCountOf(key) < 1) return;
   subagentsKey.value = key as NodeKey;
 }
+/** 親のノードの右下の小さなサブエージェントのノード（描くだけの層。20261008-graph-first PR6b）。`d` でそこへ入る。 */
+const subLayerRef = ref<InstanceType<typeof GraphSubagentLayer> | null>(null);
+// --- サブエージェントの記録を読むだけの窓（20261008-graph-first PR6c）--------------------------------------------------------
+
+/** 開いている記録の窓（同時に 1 つ。端末の窓の 3 つには数えない）。別の小さなノードを押すと入れ替わる。 */
+const transcript = ref<{ parentKey: NodeKey; paneId: string; agentId: string; title: string; parentName: string; instanceId: string | null } | null>(null);
+/** 開けなかった理由の一言（別のマシンのノードなど）。数秒で消える。 */
+const transcriptNote = ref("");
+let transcriptNoteTimer: ReturnType<typeof setTimeout> | undefined;
+function showTranscriptNote(text: string): void {
+  transcriptNote.value = text;
+  if (transcriptNoteTimer !== undefined) clearTimeout(transcriptNoteTimer);
+  transcriptNoteTimer = setTimeout(() => (transcriptNote.value = ""), 4000);
+}
+onBeforeUnmount(() => {
+  if (transcriptNoteTimer !== undefined) clearTimeout(transcriptNoteTimer);
+});
+/**
+ * 小さなサブエージェントのノードが押された（`agentId` が null は「ほか n 件」＝一覧のパネル）。画面の接続が向いているマシンの pane だけ開く
+ * （別のマシンの記録は、サーバがそのマシンのディスクから読むので、まだ読めない）。読み取りだけのモバイルでは開かない。
+ */
+function openSubagentItem(parentKey: string, agentId: string | null): void {
+  if (agentId === null) {
+    openSubagents(parentKey);
+    return;
+  }
+  if (isMobile.value) return;
+  const info = graph.nodeInfo(parentKey as NodeKey);
+  if (info.exists !== true) return;
+  if (info.machine !== machines.selectedId) {
+    showTranscriptNote("別のマシンの記録は、まだ読めません");
+    return;
+  }
+  const item = info.agent?.subagents?.items.find((i) => i.id === agentId);
+  const title = [item?.type ?? "サブエージェント", item?.description].filter((x): x is string => !!x).join(" ");
+  transcript.value = { parentKey: parentKey as NodeKey, paneId: info.paneId, agentId, title, parentName: info.name, instanceId: info.agent?.instanceId ?? null };
+}
+function closeTranscript(): void {
+  const t = transcript.value;
+  transcript.value = null;
+  if (t && graph.nodes.some((n) => n.key === t.parentKey)) focusNode(t.parentKey);
+}
+// 親のノードが外れた・親の pane のエージェントが入れ替わった（居なくなった）ら、窓を閉じる。サブエージェントが終わっただけでは閉じない。
+watch(
+  () => {
+    const t = transcript.value;
+    if (!t) return null;
+    const i = infos.value.get(t.parentKey);
+    return i && i.exists === true ? (i.agent?.instanceId ?? null) : null;
+  },
+  (now) => {
+    const t = transcript.value;
+    if (t && now !== t.instanceId) transcript.value = null;
+  },
+);
 /** 閉じる。そのノードがまだあれば、フォーカスをそのノードへ戻す。 */
 function closeSubagents(): void {
   const key = subagentsKey.value;
@@ -1569,6 +1626,9 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
     ev.preventDefault();
     ev.stopPropagation();
     openRekey(key);
+  } else if ((ev.key === "d" || ev.key === "D") && !isMobile.value && subLayerRef.value?.focusFirst(key)) {
+    ev.preventDefault();
+    ev.stopPropagation();
   } else if ((ev.key === "s" || ev.key === "S") && !isMobile.value && subagentCountOf(key) > 0) {
     ev.preventDefault();
     ev.stopPropagation();
@@ -1695,6 +1755,8 @@ watch(
       rekeyKey.value = null;
       history.value = null;
       subagentsKey.value = null;
+      transcript.value = null;
+      transcriptNote.value = "";
       liveMessage.value = "";
       // ダイアログを閉じるのは入れ物（`GraphDialog`）。ここでは、焦点を端末へ戻す。
       // `closeGraph` は焦点の pane を同じ値に戻すだけで（デスクトップは動かしもしない）、`TerminalPane` の watch が動かない——端末へ明示的に戻す（`CommandPopup` と同じ）。
@@ -2222,6 +2284,10 @@ function escape(): void {
     closeRekey();
     return;
   }
+  if (transcript.value) {
+    closeTranscript();
+    return;
+  }
   if (subagentsKey.value) {
     closeSubagents();
     return;
@@ -2453,6 +2519,14 @@ function chipAria(e: EdgeView): string {
               @rekey="openRekey(n.key)"
               @subagents="openSubagents(n.key)"
             />
+            <GraphSubagentLayer
+              v-if="!isMobile"
+              ref="subLayerRef"
+              :nodes="shownNodes"
+              :infos="infos"
+              @open="openSubagentItem"
+              @leave="focusNode"
+            />
             <GraphLinkMark
               v-for="m in marks"
               :key="`mark-${m.link.id}`"
@@ -2550,6 +2624,16 @@ function chipAria(e: EdgeView): string {
           <p v-else-if="!graph.graph" class="graph-empty">
             {{ graph.loadError ?? "読み込んでいます…" }}
           </p>
+          <SubagentTranscriptWindow
+            v-if="transcript && !isMobile"
+            :key="`${transcript.paneId}\n${transcript.agentId}`"
+            :pane-id="transcript.paneId"
+            :agent-id="transcript.agentId"
+            :parent-name="transcript.parentName"
+            :title="transcript.title"
+            @close="closeTranscript"
+          />
+          <p v-if="transcriptNote" class="graph-connect-banner" role="status" data-subagent-note>{{ transcriptNote }}</p>
           <p v-if="connectFrom" class="graph-connect-banner">
             線の先のノードを選んでください（Tab・矢印で移動、Enter で決定、Esc で取り消し）
           </p>
