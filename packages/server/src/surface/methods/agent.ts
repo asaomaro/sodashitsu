@@ -2,6 +2,7 @@ import {
   AgentPromptParams,
   AgentRenameParams,
   AgentSendKeysParams,
+  AgentKindsParams,
   AgentStartParams,
   RpcError,
 } from "@sodashitsu/protocol";
@@ -13,6 +14,7 @@ import {
   pastePayload,
   type KeySpec,
 } from "../../agent/agentInput.js";
+import { createAgentKindsLister } from "../../agent/agentKinds.js";
 import type { TerminalHost } from "../../terminal/TerminalHost.js";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
@@ -134,6 +136,9 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
   // 空いているシェル pane でエージェントを起動する（20260926-agent-start）。打ち込んだ時点で返す。
   const starter = deps.agentStarter;
   if (starter) {
+    // 起動できる種類の一覧（20261008-graph-first の PR3。読み取りだけ。実行ファイルの名前は返さない）。
+    const listKinds = createAgentKindsLister();
+    surface.register("agent.kinds", { schema: AgentKindsParams, handler: () => listKinds() });
     surface.register("agent.start", {
       schema: AgentStartParams,
       // 起動したエージェントが操作したクライアントの大きさで始まるよう、打ち込む前に記録する。agent.prompt と同じく、

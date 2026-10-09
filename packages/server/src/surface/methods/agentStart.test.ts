@@ -87,3 +87,26 @@ describe("agent.start", () => {
     });
   });
 });
+
+describe("agent.kinds（20261008-graph-first の PR3）", () => {
+  it("読み取りだけ: 引数なしで一覧を返す。実行ファイルの名前は含まない。agent.start の検査は変わらない（表に無い種類・シェルの文字を含む種類は、AgentStarter が断る）", async () => {
+    const start = vi.fn(async () => {
+      throw new RpcError("unsupported_agent_kind", "unsupported interactive agent kind x");
+    });
+    const { surface } = setupSurface({ start });
+    const r = await surface.invoke({ clientId: "c1", sink: {} as never }, "agent.kinds", {});
+    expect(r.ok).toBe(true);
+    const kinds = (r as { ok: true; result: { kinds: { kind: string }[] } }).result.kinds;
+    expect(kinds.length).toBeGreaterThan(10);
+    expect(JSON.stringify(kinds)).not.toContain("cursor-agent");
+    const bad = await surface.invoke({ clientId: "c1", sink: {} as never }, "agent.kinds", { extra: 1 });
+    expect(bad.ok).toBe(true); // 余計な引数は無視する（zod の既定）
+  });
+});
+
+function setupSurface(agentStarter: Pick<AgentStarter, "start">) {
+  const deps = { session: {}, terminals: { get: () => undefined }, sizeAuthority: { noteInteraction: vi.fn() }, agentStarter } as unknown as MethodDeps;
+  const surface = new ControlSurface(new MemoryLogger());
+  registerAgentMethods(surface, deps);
+  return { surface };
+}

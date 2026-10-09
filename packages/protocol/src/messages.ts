@@ -957,6 +957,15 @@ export const AgentStartParams = z.object({
   timeoutMs: z.number().int().optional(),
 });
 export type AgentStartParams = z.infer<typeof AgentStartParams>;
+/**
+ * 起動できるエージェントの種類の一覧（20261008-graph-first の PR3。グラフの「足す」フォームの選択肢）。読み取りだけ。**実行ファイルの名前・パス・コマンドは返さない**
+ * （種類の id・表示名・サーバのマシンの `PATH` で実行ファイルが見つかるかだけ）。起動は `agent.start`（検査は変えない）。
+ */
+export const AgentKindsParams = z.object({});
+export type AgentKindsParams = z.infer<typeof AgentKindsParams>;
+export interface AgentKindsResult {
+  kinds: { kind: string; label: string; available: boolean }[];
+}
 export interface AgentStartResult {
   paneId: string;
   name: string;
@@ -1135,6 +1144,7 @@ export const METHOD_SCHEMAS = {
   "agent.send_keys": AgentSendKeysParams,
   "agent.rename": AgentRenameParams,
   "agent.start": AgentStartParams,
+  "agent.kinds": AgentKindsParams,
   "server.sessions": ServerSessionsParams,
   "machine.list": MachineListParams,
   "command.list": CommandListParams,
@@ -1252,6 +1262,7 @@ export interface MethodResultMap {
   "agent.send_keys": Record<string, never>;
   "agent.rename": AgentRenameResult;
   "agent.start": AgentStartResult;
+  "agent.kinds": AgentKindsResult;
   "server.sessions": ServerSessionsResult;
   "machine.list": MachineListResult;
   "command.list": CommandListResult;

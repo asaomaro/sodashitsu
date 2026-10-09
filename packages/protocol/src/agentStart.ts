@@ -29,6 +29,24 @@ export const AGENT_START_EXECUTABLES: Readonly<Record<string, string>> = Object.
   muse: "muse",
 });
 
+/**
+ * 表示の名前（グラフのフォームの選択肢。`agent.kinds`）。無い種類は、種類の id をそのまま出す。**実行ファイルの名前は含めない**（表示だけ）。
+ */
+export const AGENT_START_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  claude: "Claude Code",
+  codex: "Codex",
+  gemini: "Gemini CLI",
+  cursor: "Cursor Agent",
+  copilot: "GitHub Copilot CLI",
+  opencode: "opencode",
+  droid: "Droid",
+  qwen: "Qwen Code",
+});
+
+export function agentStartLabel(kind: string): string {
+  return Object.hasOwn(AGENT_START_LABELS, kind) ? AGENT_START_LABELS[kind]! : kind;
+}
+
 export const AGENT_START_KINDS: readonly string[] = Object.freeze(
   Object.keys(AGENT_START_EXECUTABLES),
 );
