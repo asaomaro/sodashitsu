@@ -3,7 +3,7 @@ import type { GraphOp, NewCwd, NodeKey, Pane, Tab, Workspace } from "@sodashitsu
 import { isValidAgentName } from "@sodashitsu/protocol";
 
 /**
- * グラフから pane を足す進行（20261008-graph-first の PR3 T14c・T14d。decisions D84）。窓を開く・ノードを選ぶ・フォームの表示は、呼ぶ側（`GraphCanvas`）。
+ * グラフから pane を足す進行（20261008-graph-first の PR3 T14c・T14d。decisions D88・D89）。窓を開く・ノードを選ぶ・フォームの表示は、呼ぶ側（`GraphCanvas`）。
  *
  * 1. 分割する pane: その workspace で選ばれている tab の、最後にフォーカスのあった pane。向きは、桁が行の 2 倍以上なら右・そうでなければ下。
  * 2. `pane.split`（場所は基本画面と同じ設定）→ 新しい pane の id。
@@ -136,7 +136,7 @@ export async function addPane(deps: AddPaneDeps, input: AddPaneInput, hooks: Add
     let started = false;
     for (let i = 0; i <= BUSY_RETRIES; i++) {
       try {
-        // 送るのは、種類の id・名前・pane の id と、空の args だけ（任意のコマンドの文字列は送らない。decisions D84）。
+        // 送るのは、種類の id・名前・pane の id と、空の args だけ（任意のコマンドの文字列は送らない。decisions D88）。
         await deps.conn.request("agent.start", { name, kind: input.kind, paneId, args: [] });
         started = true;
         break;

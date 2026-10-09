@@ -53,6 +53,7 @@ import { useSettingsStore } from "../../store/settings.js";
 import { useViewStore } from "../../store/view.js";
 import GraphAddForm, { type AddFormKind, type AddFormSubmit } from "./GraphAddForm.vue";
 import { AddPaneError, addPane, type AddPaneDeps } from "./addPane.js";
+import { moveToGroup } from "./moveToGroup.js";
 import GraphConfirm from "./GraphConfirm.vue";
 import GraphEdge from "./GraphEdge.vue";
 import GraphFind from "./GraphFind.vue";
@@ -1951,7 +1952,7 @@ function stepSpace(delta: -1 | 1): void {
   onSpaceSelect(next);
 }
 
-// --- pane・workspace を足す（20261008-graph-first の PR3 T14c〜T14e。decisions D84）-------------------------------------
+// --- pane・workspace を足す（20261008-graph-first の PR3 T14c〜T14e。decisions D88・D89）-------------------------------------
 // 足す流れは `addPane.ts`（単体試験あり）。ここは、フォームの開閉・位置・足した後の「選ぶ・窓を開く」だけ。窓を開くのは既存の入口（`openNodeWindow`）。
 
 interface AddFormState {
@@ -2090,7 +2091,7 @@ function createWorkspaceHere(): void {
   const groupId = id.startsWith("g:") ? id.slice(2) : null;
   actions?.newWorkspaceThen((workspaceId) => {
     if (groupId === null) return;
-    void conn?.request("group.add_member", { groupId, workspaceId }).catch(() => undefined);
+    if (conn) void moveToGroup((m, p) => conn!.request(m, p), (t) => view.toast(t), groupId, workspaceId);
   });
 }
 /** ツールバーの「＋ workspace ▾」。 */

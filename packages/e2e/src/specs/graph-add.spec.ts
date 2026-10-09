@@ -273,7 +273,7 @@ test.describe("workspace を足す・閉じる", () => {
   });
 });
 
-test.describe("安全: ブラウザから任意のコマンドを起動させる口を広げない（D84）", () => {
+test.describe("安全: ブラウザから任意のコマンドを起動させる口を広げない（D88）", () => {
   test("agent.kinds は表示名と有無だけを返す（実行ファイルの名前・パスは返さない）。表に無い kind・シェルの文字を含む kind は agent.start が断る", async ({ appServer }) => {
     const client = await appServer.openClient();
     const k = await client.request("agent.kinds", {});

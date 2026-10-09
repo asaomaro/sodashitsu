@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * グラフから pane を足すフォーム（20261008-graph-first の PR3 T14c）。囲いの「＋」・ツールバーの「＋ pane」から開く。面の上の層（モーダルではない）で、囲いの下に置く。
- * 送るもの（`submit`）は**種類の id と名前と「監督の線を結ぶか」だけ**——任意のコマンドの文字列を入れる欄は無い（D84。サーバへは `kind` と `name` だけが `agent.start` で送られる）。
+ * 送るもの（`submit`）は**種類の id と名前と「監督の線を結ぶか」だけ**——任意のコマンドの文字列を入れる欄は無い（D88。サーバへは `kind` と `name` だけが `agent.start` で送られる）。
  * キー: Esc・［取りやめ］・外を押す、で閉じる（呼び出した「＋」へフォーカスを戻すのは親）。ここのキーは外（グラフのキー・prefix）へ渡さない。
  */
 import { computed, nextTick, onMounted, ref, watch } from "vue";
