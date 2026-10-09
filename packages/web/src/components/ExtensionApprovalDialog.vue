@@ -356,6 +356,7 @@ onBeforeUnmount(() => removeToast());
 
 <style scoped>
 .ext-approval-dialog {
+  box-shadow: var(--soda-shape-shadow, none);
   box-sizing: border-box;
   width: min(720px, calc(100% - 16px));
   max-height: calc(100% - 16px);
@@ -371,7 +372,7 @@ onBeforeUnmount(() => removeToast());
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
 .ext-approval-body {
-  padding: 0.8em 1em 1em;
+  padding: 0.8em var(--soda-shape-pad, 1em) var(--soda-shape-pad, 1em);
 }
 .ext-approval-title {
   margin: 0 0 0.5em;
@@ -445,6 +446,7 @@ onBeforeUnmount(() => removeToast());
 }
 .ext-approval-btn {
   padding: 0.4em 1em;
+  min-height: var(--soda-shape-control-h, auto);
   background: var(--soda-bg, #1e1f29);
   color: inherit;
   border: 1px solid var(--soda-menu-border, #44475a);

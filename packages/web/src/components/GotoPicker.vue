@@ -326,13 +326,14 @@ const onDialogKeydown = (ev: KeyboardEvent): void => {
    （T26）で、無条件の `display: flex` が UA の既定（閉じていれば `display: none`）を上書きし、
    閉じていても描画されてクリックを奪う不具合を発見した）。 */
 .goto-picker {
+  box-shadow: var(--soda-shape-shadow, none);
   border: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   border-radius: var(--soda-shape-radius);
   width: min(36em, 90vw);
   max-height: 70vh;
-  padding: 1em;
+  padding: var(--soda-shape-pad, 1em);
 }
 .goto-picker[open] {
   display: flex;

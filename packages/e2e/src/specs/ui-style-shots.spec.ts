@@ -186,6 +186,38 @@ for (const { key, theme } of THEMES) {
     await page.waitForTimeout(800);
     await shot("display");
 
+    // 表示の面のメニュー（面の見出しの［⋮］）。
+    await page.locator("[data-display-menu-button]").first().click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await shot("display-menu");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+
+    // サイドバーの行（workspace）の右クリックのメニュー。
+    await page.locator("[data-workspace-row-key]").filter({ hasText: "beta" }).first().click({ button: "right" });
+    await expect(page.getByRole("menu")).toBeVisible();
+    await shot("context-menu-row");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+
+    // トースト（設定の読み直し。自動で消える種類）と、通知の一覧（ベル）。
+    await page.mouse.move(900, 500); // ポインタを、行の上から外す（ホバーの途中の描画が混ざらないように）
+    await prefixKey(page, "R");
+    await expect(page.locator(".toast")).toContainText("設定を読み直しました");
+    await shot("toast-reload", { keepToast: true });
+    await prefixKey(page, "O");
+    await expect(page.locator("dialog[open]")).toHaveCount(1);
+    await shot("notification-history");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("dialog[open]")).toHaveCount(0);
+
+    // 畳んだサイドバー。
+    await page.locator(".sidebar-collapse-btn").click();
+    await expect(page.locator(".sidebar-collapsed")).toHaveCount(1);
+    await shot("sidebar-collapsed");
+    await page.locator(".sidebar-collapse-btn").click();
+    await expect(page.locator(".sidebar-collapsed")).toHaveCount(0);
+
     client.close();
   });
 
@@ -220,6 +252,10 @@ async function mobile(browser: Browser, appServer: AppServer, theme: ThemeName, 
   const { views } = await openApp(page, appServer);
   const { shot } = shooter(page, key, views);
   await shot("mobile");
+  // モバイルのダイアログ（設定）。
+  await page.locator(".mobile-shell-settings-btn").click();
+  await expect(page.locator("dialog[open]")).toHaveCount(1);
+  await shot("mobile-settings");
   client.close();
   await ctx.close();
 }

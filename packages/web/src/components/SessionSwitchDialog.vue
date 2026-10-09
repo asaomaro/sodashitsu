@@ -186,13 +186,14 @@ function onKeydown(ev: KeyboardEvent): void {
 
 <style scoped>
 .session-switch-dialog {
+  box-shadow: var(--soda-shape-shadow, none);
   border: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   border-radius: var(--soda-shape-radius);
   min-width: 24em;
   max-width: min(40em, 90vw);
-  padding: 1em;
+  padding: var(--soda-shape-pad, 1em);
 }
 .session-switch-dialog::backdrop {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
@@ -246,5 +247,10 @@ function onKeydown(ev: KeyboardEvent): void {
 .session-switch-dialog-status {
   font-size: 0.85em;
   opacity: 0.75;
+}
+/* 押せる部品の高さ（20261008-ui-style。クラシックでは変数が無く、何もしない） */
+.session-switch-dialog button,
+.session-switch-dialog input:not([type="checkbox"]):not([type="radio"]) {
+  min-height: var(--soda-shape-control-h, auto);
 }
 </style>

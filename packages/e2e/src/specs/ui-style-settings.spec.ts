@@ -179,3 +179,45 @@ test("様式の切り替え（すき間が変わる）で、client.view が落�
   expect(await widths()).toEqual(classicWidths);
   client.close();
 });
+
+test("モダン: pane の枠の表示 × 隙間の全組み合わせで、辺ごとの余白が、設定どおり（隣と接する辺は隙間・外周の辺は枠）。太さ「細い」では、pane の角の丸みが、すき間に合わせて抑えられる", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  const paneId = client.helloSnapshot()!.panes[0]!.id;
+  await client.request("pane.split", { paneId, direction: "right" });
+  await client.request("prefs.set", { patch: { uiStyle: "modern", paneFrameThickness: "default" } });
+  await open(page, appServer);
+  await expect.poll(() => uiStyleAttr(page)).toBe("modern");
+  await expect(page.locator(".pane-frame-enabled")).toHaveCount(2);
+  const pads = () =>
+    page.locator(".pane-frame").evaluateAll((els) =>
+      els.map((e) => {
+        const c = getComputedStyle(e);
+        const r = e.getBoundingClientRect();
+        return { x: r.x, t: parseFloat(c.paddingTop), r: parseFloat(c.paddingRight), b: parseFloat(c.paddingBottom), l: parseFloat(c.paddingLeft) };
+      }).sort((a, b) => a.x - b.x),
+    );
+  const G = 8; // モダンの既定の太さ（`PANE_FRAME_THICKNESS_PX_BY_STYLE.modern.default`）
+  for (const borders of ["always", "auto", "off"] as const)
+    for (const gaps of [true, false]) {
+      await client.request("prefs.set", { patch: { paneBorders: borders, paneGaps: gaps } });
+      const framed = borders !== "off"; // 2 つの pane があるので、auto も枠あり
+      const want = [
+        { t: framed ? G : 0, r: gaps ? G : 0, b: framed ? G : 0, l: framed ? G : 0 }, // 左の pane: 右が隣
+        { t: framed ? G : 0, r: framed ? G : 0, b: framed ? G : 0, l: gaps ? G : 0 }, // 右の pane: 左が隣
+      ];
+      await expect
+        .poll(async () => (await pads()).map(({ t, r, b, l }) => ({ t, r, b, l })), { message: `${borders}/gaps=${gaps}` })
+        .toEqual(want);
+    }
+  // 細い（すき間 4px）: 角の丸みは、すき間の 1.5 倍（6px）まで。既定（8px）は 12px、太い（12px）は上限の 12px。
+  await client.request("prefs.set", { patch: { paneBorders: "always", paneGaps: true } });
+  const radius = () => page.locator(".pane-frame-edge").first().evaluate((e) => parseFloat(getComputedStyle(e).borderTopLeftRadius));
+  for (const [thickness, px] of [["thin", 6], ["default", 12], ["thick", 12]] as const) {
+    await client.request("prefs.set", { patch: { paneFrameThickness: thickness } });
+    await expect.poll(radius, { message: thickness }).toBe(px);
+  }
+  // クラシックでは、角は 0（今のまま）。
+  await client.request("prefs.set", { patch: { uiStyle: "classic" } });
+  await expect.poll(radius).toBe(0);
+  client.close();
+});

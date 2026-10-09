@@ -1415,6 +1415,7 @@ function onNativeCancel(ev: Event): void {
 
 <style scoped>
 .settings-dialog {
+  box-shadow: var(--soda-shape-shadow, none);
   /* 狭い画面（幅 320〜385px の携帯）でもはみ出さない。以前の `min-width: 22em` は content-box で、枠と padding を含めて 386px になっていた。
      背が高くなった（いまは 6 節）ので、画面の高さも越えないようにして中をスクロールさせる（`overflow` は UA の `dialog:modal` の既定が auto）。
      **`100vh` ではなく `100%`**（モーダルの `<dialog>` の包含ブロックは見えている領域）——iOS Safari の `100vh` はツールバーを畳んだときの
@@ -1527,7 +1528,7 @@ function onNativeCancel(ev: Event): void {
 }
 .settings-close {
   flex: none;
-  min-height: 2rem;
+  min-height: var(--soda-shape-control-h, 2rem);
   font: inherit;
   color: inherit;
   background: transparent;
@@ -1560,6 +1561,7 @@ function onNativeCancel(ev: Event): void {
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius);
   padding: 0.4em 0.6em;
+  min-height: var(--soda-shape-control-h, auto);
   cursor: pointer;
   text-align: left;
 }
@@ -1587,7 +1589,7 @@ function onNativeCancel(ev: Event): void {
   margin: 1em 0 0;
 }
 .settings-reopen-button {
-  min-height: 2rem;
+  min-height: var(--soda-shape-control-h, 2rem);
   font: inherit;
   color: inherit;
   background: transparent;
@@ -1633,7 +1635,7 @@ function onNativeCancel(ev: Event): void {
   align-items: center;
   gap: 0.5em;
   /* 押せる大きさ（WCAG 2.5.8 の最小 24px）。押し間違えると隣の値がその場で保存されるので、携帯では特に要る。 */
-  min-height: 1.75rem;
+  min-height: var(--soda-shape-control-h, 1.75rem);
   cursor: pointer;
 }
 .settings-theme {
@@ -1655,7 +1657,7 @@ function onNativeCancel(ev: Event): void {
 /* 見た目は UA の既定のまま（入力欄と同じ。color-scheme で明暗に合う）。押せる大きさは WCAG 2.5.8 の 24px 以上。 */
 .settings-select {
   font: inherit;
-  min-height: 1.75rem;
+  min-height: var(--soda-shape-control-h, 1.75rem);
   max-width: 100%;
 }
 .settings-hint {
@@ -1672,7 +1674,7 @@ function onNativeCancel(ev: Event): void {
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius);
   padding: 0.15em 0.7em;
-  min-height: 1.75rem;
+  min-height: var(--soda-shape-control-h, 1.75rem);
   cursor: pointer;
 }
 .settings-btn:disabled {
@@ -1773,7 +1775,7 @@ function onNativeCancel(ev: Event): void {
   font: inherit;
   font-family: monospace;
   padding: 0.15em 0.4em;
-  min-height: 1.75rem;
+  min-height: var(--soda-shape-control-h, 1.75rem);
 }
 .theme-override-confirm {
   display: flex;

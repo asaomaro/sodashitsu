@@ -180,13 +180,14 @@ function cancelClear(): void {
 
 <style scoped>
 .nh-dialog {
+  box-shadow: var(--soda-shape-shadow, none);
   border: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   border-radius: var(--soda-shape-radius);
   width: min(36em, calc(100vw - 2em));
   max-height: 80vh;
-  padding: 1em;
+  padding: var(--soda-shape-pad, 1em);
   box-sizing: border-box;
 }
 .nh-dialog[open] {
@@ -237,7 +238,7 @@ button:disabled {
   gap: 0.6em;
   text-align: left;
   padding: 0.4em 0.6em;
-  min-height: 2rem;
+  min-height: var(--soda-shape-control-h, 2rem);
 }
 .nh-kind {
   flex: none;
@@ -282,7 +283,7 @@ button:disabled {
   margin-top: 0.8em;
 }
 .nh-actions button {
-  min-height: 2rem;
+  min-height: var(--soda-shape-control-h, 2rem);
   padding: 0.2em 0.8em;
 }
 .nh-confirm-text {

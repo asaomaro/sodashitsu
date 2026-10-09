@@ -199,10 +199,12 @@ function dismiss(id: number): void {
   }
 }
 .toast {
+  box-shadow: var(--soda-shape-shadow, none);
   display: flex;
   align-items: center;
   gap: 0.6em;
-  padding: 0.4em 1em;
+  padding: 0.4em var(--soda-shape-pad-x, 1em);
+  min-height: var(--soda-shape-control-h, auto);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
   border: 1px solid var(--soda-menu-border, #44475a);
