@@ -50,67 +50,74 @@ onMounted(() => {
 });
 onBeforeUnmount(() => observer?.disconnect());
 watch(
-  () => store.paneId,
+  () => store.windows.length,
   () => void Promise.resolve().then(measure),
 );
 
-const shown = computed(() => store.paneId !== null);
+const windows = computed(() => store.windows);
+const style = computed(() => (box.value ? { left: `${box.value.left}px`, top: `${box.value.top}px`, width: `${box.value.width}px`, height: `${box.value.height}px`, right: "auto", bottom: "auto" } : {}));
 
 /**
- * 線の端を、ノードの今の位置に追従させる（面の移動・拡大縮小・ノードのドラッグ・空間の切り替え）。窓が出ていて、まだ動かしていない間だけ、毎フレーム、ノードの箱を読む。
- * ノードが無い（別の空間・外された）・層の外に出たときは、線を出さない（`anchor` を null にする）。窓の位置そのものは、開いたときに決めたまま動かさない。
+ * 線の端を、ノードの今の位置に追従させる（面の移動・拡大縮小・ノードのドラッグ・空間の切り替え）。動かしていない窓（`rect` が null で、覚えた位置も無い）が 1 つでもある間、毎フレーム、
+ * その窓のノードの箱を読む。ノードが無い（別の空間・外された）・層の外へ出たときは、その窓の線を出さない（`anchor` を null にする）。窓の位置そのものは、開いたときのまま。
  */
 let raf: number | null = null;
+const wantsLink = (w: (typeof store.windows)[number]): boolean => w.rect === null && store.memory.geometry[w.paneId] === undefined && w.anchor !== null;
 function follow(): void {
   raf = null;
-  const id = store.paneId;
-  if (id === null || store.rect !== null || !store.anchor) return;
-  const el = document.querySelector<HTMLElement>(`[data-graph-view] [data-node-key$=":${id}"]`);
   const lay = layerEl.value?.getBoundingClientRect();
-  const r = el?.getBoundingClientRect();
-  const inside = r && lay && r.right > lay.left && r.left < lay.right && r.bottom > lay.top && r.top < lay.bottom;
-  const next = inside && r ? { x: r.left, y: r.top, w: r.width, h: r.height } : null;
-  const a = store.anchor;
-  if (!next) {
-    store.setAnchor(null);
-    return;
+  let again = false;
+  for (const w of store.windows) {
+    if (!wantsLink(w)) continue;
+    const el = document.querySelector<HTMLElement>(`[data-graph-view] [data-node-key$=":${w.paneId}"]`);
+    const r = el?.getBoundingClientRect();
+    const inside = r && lay && r.right > lay.left && r.left < lay.right && r.bottom > lay.top && r.top < lay.bottom;
+    if (!inside || !r) {
+      store.setAnchorOf(w.paneId, null);
+      continue;
+    }
+    const a = w.anchor!;
+    if (r.left !== a.x || r.top !== a.y || r.width !== a.w || r.height !== a.h) store.setAnchorOf(w.paneId, { x: r.left, y: r.top, w: r.width, h: r.height });
+    again = true;
   }
-  if (next.x !== a.x || next.y !== a.y || next.w !== a.w || next.h !== a.h) store.setAnchor(next);
-  raf = requestAnimationFrame(follow);
+  if (again) raf = requestAnimationFrame(follow);
 }
 watch(
-  () => [store.paneId, store.rect === null, store.anchor === null] as const,
-  ([id, unmoved, noAnchor]) => {
-    if (id !== null && unmoved && !noAnchor && raf === null) raf = requestAnimationFrame(follow);
+  () => store.windows.map((w) => `${w.paneId}:${wantsLink(w) ? 1 : 0}`).join(","),
+  () => {
+    if (raf === null && store.windows.some(wantsLink)) raf = requestAnimationFrame(follow);
   },
   { immediate: true },
 );
 onBeforeUnmount(() => {
   if (raf !== null) cancelAnimationFrame(raf);
 });
-const style = computed(() => (box.value ? { left: `${box.value.left}px`, top: `${box.value.top}px`, width: `${box.value.width}px`, height: `${box.value.height}px`, right: "auto", bottom: "auto" } : {}));
 
 /** ノードから窓への線（窓を最初の位置のまま置いている間だけ）。ノードの中心から、窓の矩形のいちばん近い点まで。層の座標。 */
-const link = computed(() => {
-  const a = store.anchor;
-  const r = store.shownRect;
-  if (!a || !r || store.rect !== null || store.paneId === null) return null;
-  const cx = a.x + a.w / 2 - origin.value.x;
-  const cy = a.y + a.h / 2 - origin.value.y;
-  const tx = Math.min(Math.max(cx, r.x), r.x + r.w);
-  const ty = Math.min(Math.max(cy, r.y), r.y + r.h);
-  if (cx === tx && cy === ty) return null; // ノードが窓の下にある
-  return { x1: cx, y1: cy, x2: tx, y2: ty };
+const links = computed(() => {
+  const out: { key: number; x1: number; y1: number; x2: number; y2: number }[] = [];
+  for (const w of store.windows) {
+    const a = w.anchor;
+    const r = w.shownRect;
+    if (!a || !r || !wantsLink(w)) continue;
+    const cx = a.x + a.w / 2 - origin.value.x;
+    const cy = a.y + a.h / 2 - origin.value.y;
+    const tx = Math.min(Math.max(cx, r.x), r.x + r.w);
+    const ty = Math.min(Math.max(cy, r.y), r.y + r.h);
+    if (cx === tx && cy === ty) continue; // ノードが窓の下にある
+    out.push({ key: w.key, x1: cx, y1: cy, x2: tx, y2: ty });
+  }
+  return out;
 });
 </script>
 
 
 <template>
   <div ref="layerEl" class="gtl" data-graph-terminal-layer :style="style">
-    <svg v-if="link" class="gtl-link" data-graph-terminal-link aria-hidden="true">
-      <line :x1="link.x1" :y1="link.y1" :x2="link.x2" :y2="link.y2" />
+    <svg v-if="links.length > 0" class="gtl-link" data-graph-terminal-link aria-hidden="true">
+      <line v-for="l in links" :key="l.key" :x1="l.x1" :y1="l.y1" :x2="l.x2" :y2="l.y2" />
     </svg>
-    <GraphTerminalWindow v-if="shown" :area="area" :origin="origin" />
+    <GraphTerminalWindow v-for="w in windows" :key="w.key" :win="w" :area="area" :origin="origin" />
   </div>
 </template>
 
