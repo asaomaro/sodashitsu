@@ -539,6 +539,9 @@ function onKeydown(ev: KeyboardEvent): void {
   position: absolute;
   inset: 0;
   cursor: context-menu;
+  /* 画面の様式（20261008-ui-style）。モダンだけが値を定義する（クラシックは未定義＝角なし。画素が変わらない）。枠（選択の強調・薄い枠・ドロップ候補）の角。
+   * 端末の箱（余白の内側）は切らない——枠は余白の外側にあり、端末の角は丸みの内側に収まる。 */
+  border-radius: var(--soda-shape-pane-radius, 0);
 }
 /* 強調はホバーではなく選択で起きる（20260920-ui-selection-visuals の AC4・AC5）。
  * `inset: 0` の絶対配置なので border は内側に収まり、余白（`padStyle`）の大きさは変わらない

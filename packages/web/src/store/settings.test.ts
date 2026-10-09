@@ -9,6 +9,8 @@ import {
   loadPaneGaps,
   loadPaneOuterBorders,
   PANE_FRAME_THICKNESS_PX,
+  PANE_FRAME_THICKNESS_PX_BY_STYLE,
+  paneGapPxFor,
   useSettingsStore,
 } from "./settings.js";
 import { DEFAULT_LAYOUTS } from "@sodashitsu/client-core";
@@ -897,5 +899,17 @@ describe("uiStyle（画面の様式。20261008-ui-style）", () => {
     writePrefs({ uiStyle: "classic" });
     window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
     expect(store.uiStyle).toBe("classic");
+  });
+});
+
+describe("様式ごとの pane の太さの表（20261008-ui-style の D7）", () => {
+  it("クラシックは、今の表そのもの（回帰なし）。モダンは 3 段が単調に増え、どの段もクラシックより広い", () => {
+    expect(PANE_FRAME_THICKNESS_PX_BY_STYLE.classic).toEqual({ thin: 2, default: 4, thick: 6 });
+    const m = PANE_FRAME_THICKNESS_PX_BY_STYLE.modern;
+    expect(m.thin).toBeLessThan(m.default);
+    expect(m.default).toBeLessThan(m.thick);
+    for (const t of ["thin", "default", "thick"] as const) expect(m[t]).toBeGreaterThan(PANE_FRAME_THICKNESS_PX_BY_STYLE.classic[t]);
+    expect(paneGapPxFor("modern", "default")).toBe(m.default);
+    expect(paneGapPxFor("classic", "thin")).toBe(2);
   });
 });

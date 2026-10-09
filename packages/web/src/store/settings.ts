@@ -112,6 +112,18 @@ export const PANE_FRAME_THICKNESS_PX: Record<PaneFrameThickness, number> = {
   default: 4,
   thick: 6,
 };
+/**
+ * 様式ごとの、pane の枠・隙間の太さの表（20261008-ui-style の D7）。**クラシックは今の値のまま**（上の `PANE_FRAME_THICKNESS_PX`）。モダンの値は仮置き
+ * （利用者が、絵を見て決める。**数値を変えるのは、ここだけ**）。配る所は `App.vue` の 1 か所（`--soda-pane-gap`）。
+ */
+export const PANE_FRAME_THICKNESS_PX_BY_STYLE: Record<UiStyle, Record<PaneFrameThickness, number>> = {
+  classic: PANE_FRAME_THICKNESS_PX,
+  modern: { thin: 4, default: 8, thick: 12 },
+};
+/** いま当てる太さ（px）。 */
+export function paneGapPxFor(style: UiStyle, thickness: PaneFrameThickness): number {
+  return PANE_FRAME_THICKNESS_PX_BY_STYLE[style][thickness];
+}
 // `PANE_FRAME_THICKNESS_PX` から導く（許容値の一覧をここで別に持たない。増減しても1箇所で揃う）。
 const PANE_FRAME_THICKNESSES = Object.keys(PANE_FRAME_THICKNESS_PX) as PaneFrameThickness[];
 

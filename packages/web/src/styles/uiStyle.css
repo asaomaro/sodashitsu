@@ -15,8 +15,16 @@
   --soda-shape-radius-l: 6px;
 }
 
+/*
+ * モダンの数値は、ここ 1 か所（と、pane の隙間の太さの表〔`store/settings.ts` の `PANE_FRAME_THICKNESS_PX_BY_STYLE`〕）に集める。仮置き。
+ * 角以外のトークン（高さ・余白・pane の枠の角）は、**クラシックでは定義しない**。部品の側が `var(--名前, 今の値)` の形で読むので、未定義＝今の値のまま。
+ */
 :root[data-ui-style="modern"] {
   --soda-shape-radius-s: 6px;
   --soda-shape-radius: 8px;
   --soda-shape-radius-l: 12px;
+  --soda-shape-pane-radius: var(--soda-shape-radius-l);
+  --soda-shape-row-h: 36px;
+  --soda-shape-control-h: 32px;
+  --soda-shape-pad-x: 12px;
 }
