@@ -49,7 +49,10 @@ import { useSettingsStore } from "../../store/settings.js";
 import { useViewStore } from "../../store/view.js";
 import GraphConfirm from "./GraphConfirm.vue";
 import GraphEdge from "./GraphEdge.vue";
+import GraphFind from "./GraphFind.vue";
 import GraphFrameLayer from "./GraphFrameLayer.vue";
+import GraphMinimap from "./GraphMinimap.vue";
+import type { FindItem } from "./findCandidates.js";
 import GraphLinkMark from "./GraphLinkMark.vue";
 import GraphSpaceBar from "./GraphSpaceBar.vue";
 import GraphNode from "./GraphNode.vue";
@@ -1754,6 +1757,105 @@ function openMarkSettings(m: { link: GraphLink }): void {
   onChipClick(m.link.id);
 }
 
+// --- 小さな地図（PR1d T12a）-----------------------------------------------------------------------------------------
+const MINIMAP_KEY = "soda.graphMinimap.v1";
+const minimapCollapsed = ref(((): boolean => {
+  try {
+    return localStorage.getItem(MINIMAP_KEY) === "collapsed";
+  } catch {
+    return false;
+  }
+})());
+function toggleMinimap(): void {
+  minimapCollapsed.value = !minimapCollapsed.value;
+  try {
+    localStorage.setItem(MINIMAP_KEY, minimapCollapsed.value ? "collapsed" : "open");
+  } catch {
+    // 覚えられなくても動く
+  }
+}
+/** いま見えている範囲（世界の座標）。 */
+const visibleWorld = computed<GraphRect>(() => {
+  const size = canvasSizeRef.value;
+  const v = viewport.value;
+  return { x: -v.panX / v.zoom, y: -v.panY / v.zoom, w: size.w / v.zoom, h: size.h / v.zoom };
+});
+/** 面の大きさ（描き直しの印。ResizeObserver で追う）。 */
+const canvasSizeRef = ref({ w: 800, h: 600 });
+let canvasObserver: ResizeObserver | null = null;
+onMounted(() => {
+  const el = canvasEl.value;
+  canvasSizeRef.value = canvasSize();
+  if (el && typeof ResizeObserver === "function") {
+    canvasObserver = new ResizeObserver(() => (canvasSizeRef.value = canvasSize()));
+    canvasObserver.observe(el);
+  }
+});
+watch(canvasEl, (el, old) => {
+  if (old) canvasObserver?.unobserve(old);
+  if (el) {
+    canvasSizeRef.value = canvasSize();
+    canvasObserver?.observe(el);
+  }
+});
+onBeforeUnmount(() => canvasObserver?.disconnect());
+/** 地図を押した・ドラッグした: その点が面の中央に来る。 */
+function centerOn(point: { x: number; y: number }): void {
+  cancelViewportAnimation();
+  const size = canvasSize();
+  const zoom = viewport.value.zoom;
+  viewport.value = { zoom, panX: size.w / 2 - point.x * zoom, panY: size.h / 2 - point.y * zoom };
+}
+
+// --- 探す（PR1d T12b）--------------------------------------------------------------------------------------------
+const findRef = ref<InstanceType<typeof GraphFind> | null>(null);
+/** 空間をまたぐ候補（pane・workspace）。名前・エージェント・tab の名前で探せる。 */
+const findItems = computed<FindItem[]>(() => {
+  const out: FindItem[] = [];
+  const spaceName = (id: string | undefined): string => spaces.spaces.find((x) => x.id === id)?.label ?? "";
+  for (const n of graph.nodes) {
+    const info = infos.value.get(n.key);
+    if (!info) continue;
+    const loc = info.location;
+    const ws = loc ? session.workspaces.get(loc.workspaceId) : undefined;
+    const tab = loc ? session.tabs.get(loc.tabId) : undefined;
+    const a = info.agent;
+    const where = [spaceName(spaces.spaceOfNode.get(n.key)), ws?.label ?? info.machineLabel, ...(ws && ws.tabIds.length > 1 && tab ? [`tab ${tab.label}`] : [])]
+      .filter((t) => t !== "")
+      .join(" · ");
+    out.push({
+      kind: "pane",
+      target: n.key,
+      label: info.name,
+      sub: a ? `${where} · ${a.name && a.name !== a.label ? a.name : a.label}` : where,
+      haystack: [info.name, a?.name ?? "", a?.label ?? "", a?.kind ?? "", ws?.label ?? "", tab?.label ?? ""],
+    });
+  }
+  for (const sp of spaces.spaces) {
+    for (const id of sp.workspaceIds) {
+      const ws = session.workspaces.get(id);
+      if (ws) out.push({ kind: "workspace", target: id, label: ws.label, sub: sp.label, haystack: [ws.label] });
+    }
+  }
+  return out;
+});
+function onFindChoose(item: FindItem): void {
+  dialogEl.value?.focus({ preventScroll: true });
+  if (item.kind === "pane") spaces.requestReveal({ kind: "node", key: item.target });
+  else spaces.requestReveal({ kind: "workspace", workspaceId: item.target });
+}
+function focusFind(): void {
+  findRef.value?.focus();
+}
+/** 空間を 1 つ隣へ（`[` `]`。端で止まる）。 */
+function stepSpace(delta: -1 | 1): void {
+  const ids = spaces.spaces.map((x) => x.id);
+  const i = ids.indexOf(spaces.currentId);
+  const next = ids[i + delta];
+  if (i < 0 || next === undefined) return;
+  onSpaceSelect(next);
+}
+
 // --- tab のタグ・強調（20261008-graph-first の T11d）-------------------------------------------------------------------
 /** ノードの右上のタグ（tab が 1 つだけの workspace では出さない）。 */
 function tabLabelOf(key: string): string | null {
@@ -1866,6 +1968,23 @@ function onKeydown(ev: KeyboardEvent): void {
       ev.preventDefault();
       zoomReset();
       return;
+    case "[":
+    case "]":
+      if (isMobile.value) return;
+      ev.preventDefault();
+      stepSpace(ev.key === "[" ? -1 : 1);
+      return;
+    case "/":
+      if (isMobile.value) return;
+      ev.preventDefault();
+      focusFind();
+      return;
+    case "n":
+    case "N":
+      if (isMobile.value) return;
+      ev.preventDefault();
+      toggleMinimap();
+      return;
   }
 }
 
@@ -1943,6 +2062,7 @@ function chipAria(e: EdgeView): string {
     <template v-if="props.active">
       <header class="graph-toolbar">
         <h2 class="graph-title">連携（グラフ）</h2>
+        <GraphFind v-if="!isMobile" ref="findRef" :items="findItems" @choose="onFindChoose" @leave="leaveFrameLayer" />
         <span v-if="graph.graph?.paused" class="graph-paused-badge">⏸ 全体が一時停止中</span>
         <button
           type="button"
@@ -2153,6 +2273,16 @@ function chipAria(e: EdgeView): string {
               {{ chipLabel(e) }}
             </button>
           </div>
+          <GraphMinimap
+            v-if="!isMobile"
+            :frames="spaces.frames"
+            :nodes="spaces.frames.length === 0 ? shownNodes.map((n) => graphNodeRect(n)) : []"
+            :view="visibleWorld"
+            :selected-id="view.workspaceId"
+            :collapsed="minimapCollapsed"
+            @center="centerOn"
+            @toggle="toggleMinimap"
+          />
           <p v-if="graph.graph && graph.nodes.length === 0" class="graph-empty">
             表示する pane がありません。
           </p>
