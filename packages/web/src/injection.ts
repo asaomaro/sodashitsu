@@ -5,6 +5,8 @@ import type { KeyInputController } from "./keys/KeyInputController.js";
 import type { NotificationController } from "./notify/NotificationController.js";
 import type { ConnectionPort, DeviceKind } from "@sodashitsu/client-core";
 import type { TerminalRegistry } from "./term/TerminalRegistry.js";
+import type { TerminalHost } from "./term/terminalHost.js";
+import type { GraphTerminalController } from "./graphTerminal/GraphTerminalController.js";
 import type { FileTransfer } from "./term/FileTransfer.js";
 import type { ViewSync } from "./term/ViewSync.js";
 import type { AskController } from "./ask/AskController.js";
@@ -66,3 +68,7 @@ export const FloatGripKey: InjectionKey<FloatGrip> = Symbol("floatGrip");
 export const DisplayControllerKey: InjectionKey<DisplayController> = Symbol("displayController");
 /** 端末のファイルのリンクとドロップ。`TerminalPane` がドロップを渡す。無ければドロップを受けない（テスト等）。 */
 export const FileTransferKey: InjectionKey<FileTransfer> = Symbol("fileTransfer");
+/** 端末の要素の置き場所の係（20261008-graph-first の X4）。基本画面の `TerminalPane` とグラフの上の窓が使う。無ければ（単体テスト）、`TerminalPane` は自分だけの係を使う。 */
+export const TerminalHostKey: InjectionKey<TerminalHost> = Symbol("terminalHost");
+/** グラフの上の端末の窓（20261008-graph-first の PR2a）の進行の係。グラフの画面（ノードを押す）・窓の部品・`main.ts` の閉じる道が使う。無ければ（単体テスト）窓は開かない。 */
+export const GraphTerminalControllerKey: InjectionKey<GraphTerminalController> = Symbol("graphTerminalController");
