@@ -687,16 +687,61 @@ describe("DefaultSizeAuthority — pane への直結（所有者と大きさの�
     expect(attachEvents(ctx.published).at(-1)).toEqual({ paneId: pane.id, clientId: null });
   });
 
-  it("tab の権限者がいなければ、直結が終わっても大きさは直結のまま（AC10）", async () => {
+  it("tab の権限者がいなければ、直結が終わると直結の前の大きさへ戻る（X5）", async () => {
     const ctx = makeAttachContext();
     const { pane } = await ctx.session.createWorkspace("/home/u", "api");
+    const before = { cols: ctx.session.getPane(pane.id)!.cols, rows: ctx.session.getPane(pane.id)!.rows };
     const cli = ctx.clients.register("external");
     ctx.authority.attach(cli, pane.id, 131, 43, false); // 既定の大きさ（120×40）と違う値にする
+    expect(ctx.session.getPane(pane.id)).toMatchObject({ cols: 131, rows: 43 });
 
     ctx.authority.detach(cli, pane.id);
 
     expect(ctx.authority.attachOwner(pane.id)).toBeNull();
-    expect(ctx.session.getPane(pane.id)).toMatchObject({ cols: 131, rows: 43 });
+    expect(ctx.session.getPane(pane.id)).toMatchObject(before);
+  });
+
+  it("権限者が別の tab を見ているときも、直結の前の大きさへ戻る（X5）", async () => {
+    const ctx = makeAttachContext();
+    const { tab, pane } = await withDesktopOwner(ctx);
+    const { tab: tab2, pane: pane2 } = await ctx.session.createWorkspace("/home/u", "other");
+    const desktop = ctx.session.getTab(tab.id)!.sizeOwnerClientId!;
+    const cli = ctx.clients.register("external");
+    ctx.authority.attach(cli, pane.id, 120, 40, false);
+    // 権限者の view が別の tab へ動く（pane の tab の権限は残る）。
+    ctx.clients.setView(desktop, { workspaceId: tab2.workspaceId, tabId: tab2.id, visible: [{ paneId: pane2.id, cols: 90, rows: 25 }] });
+
+    ctx.authority.detach(cli, pane.id);
+
+    expect(ctx.session.getPane(pane.id)).toMatchObject({ cols: 100, rows: 30 });
+  });
+
+  it("引き取られても、直結の前の大きさは最初のものを持ち越す。最後の所有者が抜けると、その大きさへ戻る（X5）", async () => {
+    const ctx = makeAttachContext();
+    const { tab, pane, desktop } = await withDesktopOwner(ctx);
+    ctx.session.getTab(tab.id); // 権限者は desktop
+    const first = ctx.clients.register("external");
+    const second = ctx.clients.register("external");
+    // 権限者が見ていない状態にする（別の tab の view）。
+    const { tab: tab2, pane: pane2 } = await ctx.session.createWorkspace("/home/u", "other");
+    ctx.clients.setView(desktop, { workspaceId: tab2.workspaceId, tabId: tab2.id, visible: [{ paneId: pane2.id, cols: 90, rows: 25 }] });
+    ctx.authority.attach(first, pane.id, 120, 40, false);
+    ctx.authority.attach(second, pane.id, 80, 24, true);
+
+    ctx.authority.detach(first, pane.id); // 前の所有者の detach は何もしない
+    expect(ctx.session.getPane(pane.id)).toMatchObject({ cols: 80, rows: 24 });
+    ctx.authority.detach(second, pane.id);
+
+    expect(ctx.session.getPane(pane.id)).toMatchObject({ cols: 100, rows: 30 });
+  });
+
+  it("権限者がその tab を見ていて pane が見えているなら、今までどおり権限者の大きさへ戻る（X5）", async () => {
+    const ctx = makeAttachContext();
+    const { pane } = await withDesktopOwner(ctx);
+    const cli = ctx.clients.register("external");
+    ctx.authority.attach(cli, pane.id, 60, 20, false);
+    ctx.authority.detach(cli, pane.id);
+    expect(ctx.session.getPane(pane.id)).toMatchObject({ cols: 100, rows: 30 });
   });
 
   it("権限者の接続と直結の所有者が同時にいなくなっても、移譲先（別のデスクトップ）の大きさへ戻る（移譲の後に解放する）", async () => {
@@ -715,7 +760,7 @@ describe("DefaultSizeAuthority — pane への直結（所有者と大きさの�
     expect(ctx.session.getPane(pane.id)).toMatchObject({ cols: 77, rows: 22 });
   });
 
-  it("tab の権限者自身が直結の所有者でもあり移譲先がいなければ、切断で自分の view の大きさへは戻さない（移譲してから解放する順序）", async () => {
+  it("tab の権限者自身が直結の所有者でもあり移譲先がいなければ、権限者を移譲してから解放する（権限者がいなければ直結の前の大きさへ戻る）", async () => {
     const ctx = makeAttachContext();
     const { tab, pane, desktop } = await withDesktopOwner(ctx);
     ctx.authority.attach(desktop, pane.id, 120, 40, false);
@@ -724,7 +769,8 @@ describe("DefaultSizeAuthority — pane への直結（所有者と大きさの�
 
     expect(ctx.session.getTab(tab.id)?.sizeOwnerClientId).toBeNull();
     expect(ctx.authority.attachOwner(pane.id)).toBeNull();
-    expect(ctx.session.getPane(pane.id)).toMatchObject({ cols: 120, rows: 40 });
+    // 権限者がいないので、直結の前の大きさ（desktop の view の 100×30）へ戻る（X5）。
+    expect(ctx.session.getPane(pane.id)).toMatchObject({ cols: 100, rows: 30 });
   });
 
   it("直結していないクライアントの onClientGone は直結に触れない", async () => {
