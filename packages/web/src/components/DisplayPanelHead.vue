@@ -176,7 +176,8 @@ function onKeydown(ev: KeyboardEvent): void {
 /* 印とラベルの入れ物（つかむ場所）。印は縮まず、ラベルだけが省略される。 */
 .display-head-grip {
   flex: 1 1 0;
-  min-width: 4em;
+  /* 印「スクリプト」（縮まない）が全部入る幅。これより狭ければ、ボタンの並びが次の行へ折れる（印がボタンに隠れない）。 */
+  min-width: 7.5em;
   display: flex;
   align-items: center;
   font-weight: bold;

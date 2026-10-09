@@ -749,6 +749,9 @@ test("(7) 固定の部品: 最小の窓（240×120px）で、印「スクリプ�
   expect(Math.round(mb.height)).toBe(MIN_H);
   const check = async (label: string, parts: string[]): Promise<void> => {
     const pb = await boxOf(wa);
+    // 固定の部品どうしが重ならない（印がボタンに隠れない）
+    const boxes = await Promise.all(parts.map(async (sel) => ({ sel, b: await boxOf(wa.locator(sel).first()) })));
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) expect(intersects(boxes[i]!.b, boxes[j]!.b), `${label}: ${boxes[i]!.sel} と ${boxes[j]!.sel} が重ならない`).toBe(false);
     for (const sel of parts) {
       const loc = wa.locator(sel).first();
       await expect(loc, `${label} ${sel}`).toBeVisible();
@@ -1029,4 +1032,41 @@ test("(5c) 窓をつかんで動かしている途中で、その面が閉じら
   await page.waitForTimeout(300);
   const afterEsc = await boxOf(wa2);
   for (const k of ["x", "y"] as const) expect(Math.abs(afterEsc[k] - again[k]), `Esc 後 ${k}`).toBeLessThanOrEqual(1);
+});
+
+test("(5d) workspace を切り替えて戻っても、同じ pane に覚えた位置で出る。pane を閉じると窓もトレイのボタンも消える", async ({ page, appServer }) => {
+  test.setTimeout(120_000);
+  const { paneId, client } = await openDisplayBrowser(page, appServer);
+  const win = await openWindow(page, appServer, paneId, "wa");
+  const ws0 = client.helloSnapshot()!.workspaces[0]!;
+  const term0 = await terminalBox(page);
+  const g = await boxOf(gripOf(win));
+  await dragFrom(page, { x: g.x + 12, y: g.y + g.height / 2 }, { x: g.x - 90, y: g.y + 70 }, 6);
+  const rel = async (l: Locator): Promise<{ x: number; y: number }> => {
+    const b = await boxOf(l);
+    const t = await terminalBox(page);
+    return { x: Math.round(b.x - t.x), y: Math.round(b.y - t.y) };
+  };
+  const before = await rel(win);
+  void term0;
+  // 別の workspace へ → 窓は無い（ほかの pane の面ではない）→ 戻ると、覚えた位置に出る
+  const c = await appServer.openClient();
+  await c.request("workspace.create", { cwd: process.cwd(), label: "wsB" });
+  await page.locator(".sidebar-spaces .sidebar-row", { hasText: "wsB" }).click();
+  await expect(floatWins(page)).toHaveCount(0);
+  await page.locator(".sidebar-spaces .sidebar-row", { hasText: ws0.label }).first().click();
+  const back = floatWin(page, (await idsOf(appServer, paneId))["wa"]!);
+  await expect(back).toBeVisible();
+  const after = await rel(back);
+  expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+  // pane を閉じると、窓もトレイのボタンも消える（ほかの pane は残す）
+  const split = await c.request("pane.split", { paneId, direction: "right" });
+  await expect(page.locator(`[data-pane-id="${paneId}"] [data-display-float]`)).toHaveCount(1);
+  await c.request("pane.close", { paneId });
+  await expect(page.locator(`[data-pane-id="${paneId}"]`)).toHaveCount(0);
+  await expect(floatWins(page)).toHaveCount(0);
+  await expect(trayButton(page, "wa")).toHaveCount(0);
+  await expect(page.locator(`[data-pane-id="${split.pane.id}"]`)).toHaveCount(1);
+  c.close();
 });
