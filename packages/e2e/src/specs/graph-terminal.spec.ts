@@ -469,3 +469,40 @@ test("窓の端末の右クリックのメニューは、その pane への操�
   const labels = await items.allInnerTexts();
   expect(labels.map((l) => l.trim()).sort()).toEqual(["右クリックを pane に送る", "貼り付け"].sort());
 });
+
+test("面を動かす・拡大縮小しても、ノードから窓への線の端は、ノードの縁に付いてくる（ノードが外へ出たら線は消える）", async ({ page, appServer }) => {
+  const { p1 } = await setup(page, appServer);
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect(win(page)).toHaveAttribute("data-status", "attached");
+  const line = page.locator("[data-graph-terminal-link] line");
+  await expect(line).toHaveCount(1);
+  const endNearNode = async (): Promise<boolean> => {
+    const nb = await node(page, p1).boundingBox();
+    const lb = await page.evaluate(() => {
+      const l = document.querySelector("[data-graph-terminal-link] line");
+      const svg = document.querySelector("[data-graph-terminal-link]")!.getBoundingClientRect();
+      return l ? { x: svg.left + Number(l.getAttribute("x1")), y: svg.top + Number(l.getAttribute("y1")) } : null;
+    });
+    if (!nb || !lb) return false;
+    // 線の一端は、ノードの中心（箱の中）
+    return lb.x >= nb.x - 1 && lb.x <= nb.x + nb.width + 1 && lb.y >= nb.y - 1 && lb.y <= nb.y + nb.height + 1;
+  };
+  expect(await endNearNode()).toBe(true);
+  // 拡大縮小（ボタン）→ ノードの位置が変わる
+  await page.locator(".graph-zoom-in").click();
+  await page.locator(".graph-zoom-in").click();
+  await expect.poll(endNearNode).toBe(true);
+  // 面をドラッグして動かす（何も無い所）
+  await page.mouse.move(300, 120);
+  await page.mouse.down();
+  await page.mouse.move(380, 160, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => (await page.locator("[data-graph-terminal-link] line").count()) === 0 || (await endNearNode())).toBe(true);
+  // ノードを層の外へ出すほど動かすと、線は消える
+  await page.mouse.move(300, 120);
+  await page.mouse.down();
+  await page.mouse.move(-600, 120, { steps: 10 });
+  await page.mouse.up();
+  await expect(page.locator("[data-graph-terminal-link]")).toHaveCount(0);
+});

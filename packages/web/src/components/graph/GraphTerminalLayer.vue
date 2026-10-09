@@ -55,6 +55,39 @@ watch(
 );
 
 const shown = computed(() => store.paneId !== null);
+
+/**
+ * 線の端を、ノードの今の位置に追従させる（面の移動・拡大縮小・ノードのドラッグ・空間の切り替え）。窓が出ていて、まだ動かしていない間だけ、毎フレーム、ノードの箱を読む。
+ * ノードが無い（別の空間・外された）・層の外に出たときは、線を出さない（`anchor` を null にする）。窓の位置そのものは、開いたときに決めたまま動かさない。
+ */
+let raf: number | null = null;
+function follow(): void {
+  raf = null;
+  const id = store.paneId;
+  if (id === null || store.rect !== null || !store.anchor) return;
+  const el = document.querySelector<HTMLElement>(`[data-graph-view] [data-node-key$=":${id}"]`);
+  const lay = layerEl.value?.getBoundingClientRect();
+  const r = el?.getBoundingClientRect();
+  const inside = r && lay && r.right > lay.left && r.left < lay.right && r.bottom > lay.top && r.top < lay.bottom;
+  const next = inside && r ? { x: r.left, y: r.top, w: r.width, h: r.height } : null;
+  const a = store.anchor;
+  if (!next) {
+    store.setAnchor(null);
+    return;
+  }
+  if (next.x !== a.x || next.y !== a.y || next.w !== a.w || next.h !== a.h) store.setAnchor(next);
+  raf = requestAnimationFrame(follow);
+}
+watch(
+  () => [store.paneId, store.rect === null, store.anchor === null] as const,
+  ([id, unmoved, noAnchor]) => {
+    if (id !== null && unmoved && !noAnchor && raf === null) raf = requestAnimationFrame(follow);
+  },
+  { immediate: true },
+);
+onBeforeUnmount(() => {
+  if (raf !== null) cancelAnimationFrame(raf);
+});
 const style = computed(() => (box.value ? { left: `${box.value.left}px`, top: `${box.value.top}px`, width: `${box.value.width}px`, height: `${box.value.height}px`, right: "auto", bottom: "auto" } : {}));
 
 /** ノードから窓への線（窓を最初の位置のまま置いている間だけ）。ノードの中心から、窓の矩形のいちばん近い点まで。層の座標。 */
