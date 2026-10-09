@@ -8,6 +8,7 @@ export { loadCollapsedAutoGroups, loadWorkspaceSort };
 import type { ConnectionState } from "@sodashitsu/client-core";
 import type { MenuTarget } from "../term/MouseBridge.js";
 import type { Zone } from "../term/paneDragZone.js";
+import type { ScreenId } from "../screens/screens.js";
 
 const STORAGE_KEY = "soda.view.v1";
 
@@ -348,12 +349,24 @@ export const useViewStore = defineStore("view", () => {
   /** ダイアログを開く前にフォーカスしていた pane（AC-I4「閉じたら開く前の pane に戻す」）。 */
   const preDialogFocusPaneId = ref<string | null>(null);
   /**
-   * 連携のグラフ画面（20260927-agent-graph の design D-6・research F7.2）。**ダイアログの 1 枠（`openDialog`）とは別の状態**——グラフ画面の中から
-   * 確認のダイアログを開いても、グラフ画面の文脈が消えない。マシンの切り替えでは閉じない（グラフは手元のサーバのもの）。
+   * いま主な領域に出ている画面（20261008-graph-first の AC-S6。画面の一覧は `screens/screens.ts`）。**デスクトップだけ**——モバイル（1 列）の画面は、画面を持たず
+   * 今までどおり重ねるダイアログを使う（`graphDialogOpen`。D13）。ダイアログの 1 枠（`openDialog`）とは別の状態——グラフの画面の中から確認のダイアログを開いても、
+   * 画面の文脈が消えない。マシンの切り替えでは変えない（グラフは手元のサーバのもの）。
    */
-  const graphOpen = ref(false);
+  const screen = ref<ScreenId>("base");
+  /** 1 列（モバイル）の画面か。`main.ts` が窓の幅に合わせて書く（`setMobileViewport`）。 */
+  const mobileViewport = ref(false);
+  /** 1 列の画面で、連携のグラフを重ねるダイアログとして開いている（20260927-agent-graph の design D-6・research F7.2）。デスクトップでは使わない。 */
+  const graphDialogOpen = ref(false);
+  /** グラフが見えている（デスクトップの画面か、1 列の重ねるダイアログ）。 */
+  const graphVisible = computed(() => screen.value === "graph" || graphDialogOpen.value);
   /** グラフ画面を開く前にフォーカスしていた pane（閉じたら戻す。AC-I4）。 */
   const preGraphFocusPaneId = ref<string | null>(null);
+  /** サイドバーの行（workspace・agent）を押すたびに進む。選びが変わらない押下も知らせる（グラフの画面が面へフォーカスを戻す。`GraphCanvas`）。 */
+  const sidebarPickSeq = ref(0);
+  function notifySidebarPick(): void {
+    sidebarPickSeq.value++;
+  }
   /**
    * 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）が出ている。**ダイアログの 1 枠（`openDialog`）とは別の状態**——サーバから届く質問は、開いている設定・確認を潰さずに
    * 重ねて出す。書くのは `AskDialog.vue` だけ（開閉に合わせる）。
@@ -397,9 +410,15 @@ export const useViewStore = defineStore("view", () => {
     preExtensionApprovalFocusPaneId.value = paneId;
   }
   /**
-   * ダイアログ・グラフ画面・質問のフォームのどれかが開いている（キーを端末へ送らない dialog モード・window の keydown の抑止・ドラッグの取り消しの判定。research-web §1.5）。
+   * ダイアログ（1 枠・1 列のグラフ・質問のフォーム・拡張の承認）のどれかが開いている。**デスクトップのグラフの画面は入れない**（それは画面であって、ダイアログではない。D12）。
+   * ドラッグの取り消し・焦点の戻し先の差し替え・フォーカスの備えの判定に使う（research-web §1.5）。
    */
-  const modalOpen = computed(() => openDialog.value !== null || graphOpen.value || askOpen.value || extensionApprovalOpen.value);
+  const modalOpen = computed(() => openDialog.value !== null || graphDialogOpen.value || askOpen.value || extensionApprovalOpen.value);
+  /**
+   * キーを端末・サイドバーの navigate へ流さない（`KeyRouter` の dialog モード・`window` の `keydown` の抑止）。**デスクトップのグラフの画面は入れない**——基本画面の pane が
+   * `inert` なのでキーは pane に届かず、グラフの面にフォーカスがある間だけグラフのキーが働く。サイドバーは今までどおり使える（D12）。
+   */
+  const keysCaptured = computed(() => openDialog.value !== null || graphDialogOpen.value || askOpen.value || extensionApprovalOpen.value);
   /** navigate モード中に選択中の行（workspace の id、グループの見出しなら `group:<id>`。`↑/↓` で動かす。Enter で確定）。 */
   const navigateSelection = ref<string | null>(null);
   /**
@@ -588,19 +607,50 @@ export const useViewStore = defineStore("view", () => {
     preDialogFocusPaneId.value = null;
   }
 
-  /** グラフ画面を開く（開く前の焦点を覚える。既に開いていれば何もしない）。 */
-  function openGraph(): void {
-    if (graphOpen.value) return;
-    preGraphFocusPaneId.value = focusedPaneId.value;
-    graphOpen.value = true;
+  /** 画面を切り替える（デスクトップ）。1 列の画面では画面を持たない（基本画面のまま）。 */
+  function setScreen(id: ScreenId): void {
+    if (mobileViewport.value && id !== "base") return;
+    screen.value = id;
   }
 
-  /** グラフ画面を閉じる。開く前の pane へ焦点を戻す（AC-I4）。 */
+  /**
+   * グラフを開く。デスクトップでは `screen` を `graph` にする。1 列の画面では今までどおり重ねるダイアログ（D13）。開く前の焦点を覚える（グラフのノードの最初の選択と、
+   * 1 列の画面で閉じたときの戻し先に使う）。既に開いていれば何もしない。
+   */
+  function openGraph(): void {
+    if (graphVisible.value) return;
+    preGraphFocusPaneId.value = focusedPaneId.value;
+    if (mobileViewport.value) graphDialogOpen.value = true;
+    else screen.value = "graph";
+  }
+
+  /**
+   * グラフを閉じる。デスクトップでは基本画面へ切り替える（焦点の pane はそのまま——画面のあいだにサイドバーで選び直した pane を、戻した後も保つ。AC-S3）。
+   * 1 列の画面では、開く前の pane へ焦点を戻す（AC-I4）。
+   */
   function closeGraph(): void {
-    if (!graphOpen.value) return;
-    graphOpen.value = false;
+    if (!graphVisible.value) return;
+    if (screen.value === "graph") {
+      screen.value = "base";
+      preGraphFocusPaneId.value = null;
+      return;
+    }
+    graphDialogOpen.value = false;
     if (preGraphFocusPaneId.value) focusedPaneId.value = preGraphFocusPaneId.value;
     preGraphFocusPaneId.value = null;
+  }
+
+  /**
+   * 窓の幅が 1 列の画面になった・戻った（`main.ts` が書く）。1 列になったら画面を基本画面へ戻す（1 列の画面は画面を持たない。D13）。デスクトップに戻ったときに
+   * 重ねるダイアログが開いていたら閉じる（グラフの画面として開き直しはしない）。
+   */
+  function setMobileViewport(mobile: boolean): void {
+    if (mobileViewport.value === mobile) return;
+    mobileViewport.value = mobile;
+    if (mobile) {
+      screen.value = "base";
+      preGraphFocusPaneId.value = null;
+    } else if (graphDialogOpen.value) closeGraph();
   }
 
   /** グラフ画面を開いている間の焦点の移し直し（`retargetPreDialogFocus` と同じ理由。焦点を直接変えると端末がグラフ画面からフォーカスを奪う）。 */
@@ -798,9 +848,15 @@ export const useViewStore = defineStore("view", () => {
     mode,
     openDialog,
     dialogContext,
-    graphOpen,
+    screen,
+    mobileViewport,
+    graphDialogOpen,
+    graphVisible,
     preGraphFocusPaneId,
+    sidebarPickSeq,
+    notifySidebarPick,
     modalOpen,
+    keysCaptured,
     askOpen,
     extensionApprovalOpen,
     preExtensionApprovalFocusPaneId,
@@ -842,6 +898,8 @@ export const useViewStore = defineStore("view", () => {
     openDialogWithContext,
     closeDialog,
     retargetPreDialogFocus,
+    setScreen,
+    setMobileViewport,
     openGraph,
     closeGraph,
     retargetPreGraphFocus,

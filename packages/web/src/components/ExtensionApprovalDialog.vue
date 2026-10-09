@@ -127,7 +127,7 @@ function closeDialog(): void {
 
 /** フォーカスの戻し先: ほかのモーダルが開いていればその中（開く前の要素）、そうでなく pane が表示中ならその pane の端末、どちらでもなければ開く前の要素。 */
 function restoreFocus(paneId: string | null, back: Element | null): void {
-  const otherModal = view.openDialog !== null || view.graphOpen || view.askOpen;
+  const otherModal = view.openDialog !== null || view.graphDialogOpen || view.askOpen;
   if (!otherModal && paneId !== null && registry) {
     const done = focusPaneIfShown(
       {
@@ -174,7 +174,7 @@ watch(
 );
 
 // ほかのモーダル（質問のフォーム・設定・確認）が開いた・閉じた: 待ちをやり直し、閉じたときは、閉じたモーダル自身のフォーカスの戻しの後に、［承認しない］へ置き直す。
-const otherModal = computed(() => view.openDialog !== null || view.graphOpen || view.askOpen);
+const otherModal = computed(() => view.openDialog !== null || view.graphDialogOpen || view.askOpen);
 watch(otherModal, (now) => {
   if (!open.value) return;
   startDelay();

@@ -276,9 +276,11 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       case "stopServer":
         this.view.openDialogWithContext({ kind: "confirmStopServer", ...this.stopTarget() });
         return;
-      // 20260927-agent-graph。グラフ画面はダイアログの 1 枠とは別の状態（`view.graphOpen`）。閉じるのは画面自身（今は Esc・閉じるボタン。開いたのと同じキーで閉じるのは 03-web-graph の GraphView で足す）。
+      // 20260927-agent-graph。グラフはダイアログの 1 枠とは別の状態。デスクトップでは基本画面とグラフの画面の入れ替え（サイドバーにフォーカスがあるときも同じ。20261008-graph-first）、
+      // 1 列の画面では重ねるダイアログを開く（閉じるのはダイアログ自身。Esc・閉じるボタン・同じキー）。
       case "openGraph":
-        this.view.openGraph();
+        if (this.view.screen === "graph") this.view.closeGraph();
+        else this.view.openGraph();
         return;
       case "displayMenu":
         this.displayMenu();

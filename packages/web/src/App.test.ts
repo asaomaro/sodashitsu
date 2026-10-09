@@ -370,12 +370,22 @@ describe("App — グラフ画面を開いている間のトースト・再接�
     return true;
   };
 
+  // 1 列の画面（重ねるダイアログ）。デスクトップのグラフは画面で、top layer ではない（下の describe）。
+  let mediaSpy: ReturnType<typeof vi.spyOn> | null = null;
+  beforeEach(() => {
+    mediaSpy = vi
+      .spyOn(window, "matchMedia")
+      .mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() } as unknown as MediaQueryList);
+    useViewStore(pinia).setMobileViewport(true);
+  });
+  afterEach(() => mediaSpy?.mockRestore());
+
   it("トーストと再接続の表示はグラフ画面の dialog の中に出て、inert ではない。閉じたら元の場所へ戻る", async () => {
     const view = useViewStore(pinia);
     const wrapper = mount(App, { ...makeProvide(makeConnection()), attachTo: document.body });
     view.openGraph();
     await flushTicks(wrapper);
-    const dialog = document.querySelector("dialog.graph-view")!;
+    const dialog = document.querySelector("dialog.graph-dialog")!;
     expect((dialog as HTMLDialogElement).open).toBe(true);
     view.toast("完了しました");
     view.onConnectionState("reconnecting");
@@ -400,11 +410,77 @@ describe("App — グラフ画面を開いている間のトースト・再接�
     await flushTicks(wrapper);
     view.onAuthRequired();
     await flushTicks(wrapper);
-    expect(document.querySelector("dialog.graph-view")).toBeNull();
+    expect(document.querySelector("dialog.graph-dialog")).toBeNull();
     view.onConnectionState("open");
     await flushTicks(wrapper);
-    expect(view.graphOpen).toBe(true);
-    expect((document.querySelector("dialog.graph-view") as HTMLDialogElement).open).toBe(true);
+    expect(view.graphVisible).toBe(true);
+    expect((document.querySelector("dialog.graph-dialog") as HTMLDialogElement).open).toBe(true);
+    wrapper.unmount();
+  });
+});
+
+// 20261008-graph-first（PR1b）：デスクトップのグラフは主な領域の画面。基本画面は、大きさを保ったまま見えなくする（D11）。
+describe("App — 画面の並び（デスクトップ）", () => {
+  const flushTicks = async (w: { vm: { $nextTick(): Promise<void> } }) => {
+    for (let i = 0; i < 4; i++) await w.vm.$nextTick();
+  };
+  function setupTab() {
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", ["t1"]));
+    session.tabUpserted(makeTab("t1", "w1", "p1"));
+    session.paneUpserted({ id: "p1", tabId: "t1", label: null, cwd: "/", shell: "/bin/bash", cols: 80, rows: 24, status: "running", failure: null, busy: false, title: "", rightClick: "herdr", agent: null, agentSession: null });
+    view.setView("w1", "t1");
+    return view;
+  }
+
+  it("画面の一覧から作った 2 つの画面が主な領域にあり、はじめは基本画面だけが見えている（もう一方は inert・visibility: hidden）", async () => {
+    setupTab();
+    const wrapper = mount(App, { ...makeProvide(makeConnection()), attachTo: document.body });
+    await flushTicks(wrapper);
+    const base = wrapper.get('[data-screen="base"]');
+    const graph = wrapper.get('[data-screen="graph"]');
+    expect(base.attributes("inert")).toBeUndefined();
+    expect(base.classes()).not.toContain("app-screen-hidden");
+    expect(graph.attributes("inert")).toBeDefined();
+    expect(graph.classes()).toContain("app-screen-hidden");
+    expect(wrapper.findAll(".screen-switcher-btn").map((b) => b.text())).toEqual(["基本画面", "グラフ"]);
+    wrapper.unmount();
+  });
+
+  it("グラフの画面に切り替えても、基本画面は描かれたまま（v-if・display: none で隠さない）で、inert と visibility: hidden で見えなくなる。サイドバーは残る", async () => {
+    const view = setupTab();
+    const wrapper = mount(App, { ...makeProvide(makeConnection()), attachTo: document.body });
+    await flushTicks(wrapper);
+    expect(wrapper.find(".xterm").exists()).toBe(true);
+    view.openGraph();
+    await flushTicks(wrapper);
+    const base = wrapper.get('[data-screen="base"]');
+    expect(base.attributes("inert")).toBeDefined();
+    expect(base.classes()).toContain("app-screen-hidden");
+    expect((base.element as HTMLElement).style.display).toBe(""); // display: none（v-show）を使わない
+    expect(wrapper.find(".xterm").exists()).toBe(true); // pane は描かれたまま
+    expect(wrapper.get('[data-screen="graph"]').attributes("inert")).toBeUndefined();
+    expect(wrapper.find(".graph-toolbar").exists()).toBe(true);
+    expect(wrapper.find(".sidebar").exists()).toBe(true);
+    expect(document.querySelector("dialog.graph-dialog")).toBeNull(); // デスクトップでは dialog を使わない
+    // 切り替えの部品で戻れる
+    await wrapper.get('[data-screen-id="base"]').trigger("click");
+    await flushTicks(wrapper);
+    expect(view.screen).toBe("base");
+    expect(wrapper.get('[data-screen="base"]').attributes("inert")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("デスクトップのグラフの画面は top layer ではないので、トーストと再接続の表示は元の場所のまま", async () => {
+    const view = setupTab();
+    const wrapper = mount(App, { ...makeProvide(makeConnection()), attachTo: document.body });
+    view.openGraph();
+    await flushTicks(wrapper);
+    view.toast("完了しました");
+    await flushTicks(wrapper);
+    expect(document.querySelector("dialog")?.contains(document.querySelector(".toast-list"))).not.toBe(true);
+    expect(document.querySelector(".toast-list")).not.toBeNull();
     wrapper.unmount();
   });
 });

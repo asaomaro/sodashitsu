@@ -114,7 +114,7 @@ export class StoreAdapter implements StorePort {
     if (next.focusedPaneId === focused) return;
     if (dialogOpen) {
       if (view.openDialog !== null) view.retargetPreDialogFocus(next.focusedPaneId);
-      if (view.graphOpen) view.retargetPreGraphFocus(next.focusedPaneId);
+      if (view.graphDialogOpen) view.retargetPreGraphFocus(next.focusedPaneId);
       if (view.askOpen) view.retargetPreAskFocus(next.focusedPaneId); // 質問のフォーム（20261002-sodactl-ask）も同じ
       if (view.extensionApprovalOpen) view.retargetPreExtensionApprovalFocus(next.focusedPaneId); // 拡張の承認のダイアログ（20261007-ext-host）も同じ
     } else view.focusPane(next.focusedPaneId);

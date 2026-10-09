@@ -312,7 +312,7 @@ describe("MobileShell — 連携（グラフ）への入口", () => {
     const btn = wrapper.get(".mobile-shell-graph-btn");
     expect(btn.text()).toBe("連携");
     await btn.trigger("click");
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     wrapper.unmount();
   });
 });

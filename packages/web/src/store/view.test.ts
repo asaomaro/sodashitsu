@@ -287,46 +287,137 @@ describe("useViewStore — モード・ダイアログ・接続状態", () => {
     expect(store.focusedPaneId).toBe("p1"); // 開く前の pane に戻る
   });
 
-  // 20260927-agent-graph（design D-6・research F7.2）：グラフ画面はダイアログの 1 枠とは別の状態。
-  it("openGraph / closeGraph: 開く前の focus を覚えて戻す。二度開いても戻り先は最初のまま", () => {
-    const store = useViewStore(pinia);
-    store.focusPane("p1");
-    expect(store.modalOpen).toBe(false);
-    store.openGraph();
-    expect(store.graphOpen).toBe(true);
-    expect(store.modalOpen).toBe(true);
-    expect(store.openDialog).toBeNull(); // ダイアログの枠は使わない
-    store.focusPane("p2");
-    store.openGraph();
-    expect(store.preGraphFocusPaneId).toBe("p1");
-    store.closeGraph();
-    expect(store.graphOpen).toBe(false);
-    expect(store.focusedPaneId).toBe("p1");
-    expect(store.modalOpen).toBe(false);
+  // 20260927-agent-graph（design D-6・research F7.2）：グラフはダイアログの 1 枠とは別の状態。
+  // 20261008-graph-first（PR1b）：デスクトップは画面（`screen`）、1 列（モバイル）は重ねるダイアログ（`graphDialogOpen`）。
+  describe("グラフ: デスクトップの画面（screen）", () => {
+    it("openGraph / closeGraph は screen を graph / base にする。ダイアログではないので modalOpen・keysCaptured に入らない（D12）", () => {
+      const store = useViewStore(pinia);
+      store.focusPane("p1");
+      expect(store.screen).toBe("base");
+      store.openGraph();
+      expect(store.screen).toBe("graph");
+      expect(store.graphVisible).toBe(true);
+      expect(store.graphDialogOpen).toBe(false);
+      expect(store.modalOpen).toBe(false);
+      expect(store.keysCaptured).toBe(false);
+      expect(store.openDialog).toBeNull(); // ダイアログの枠は使わない
+      store.closeGraph();
+      expect(store.screen).toBe("base");
+      expect(store.graphVisible).toBe(false);
+    });
+
+    it("グラフの間に選び直した pane は、基本画面へ戻っても保たれる（AC-S3。開く前の pane へは戻さない）", () => {
+      const store = useViewStore(pinia);
+      store.focusPane("p1");
+      store.openGraph();
+      expect(store.preGraphFocusPaneId).toBe("p1"); // ノードの最初の選択に使う
+      store.focusPane("p2"); // サイドバーで選んだ
+      store.closeGraph();
+      expect(store.focusedPaneId).toBe("p2");
+      expect(store.preGraphFocusPaneId).toBeNull();
+    });
+
+    it("setScreen: 画面の一覧にある id へ切り替える。1 列の画面では基本画面のまま", () => {
+      const store = useViewStore(pinia);
+      store.setScreen("graph");
+      expect(store.screen).toBe("graph");
+      store.setScreen("base");
+      expect(store.screen).toBe("base");
+      store.setMobileViewport(true);
+      store.setScreen("graph");
+      expect(store.screen).toBe("base");
+    });
+
+    it("窓が 1 列の画面になったら基本画面へ戻る。デスクトップに戻っても、グラフの画面は開き直さない（D13）", () => {
+      const store = useViewStore(pinia);
+      store.openGraph();
+      store.setMobileViewport(true);
+      expect(store.screen).toBe("base");
+      expect(store.graphVisible).toBe(false);
+      store.setMobileViewport(false);
+      expect(store.screen).toBe("base");
+    });
+
+    it("グラフの画面の中からダイアログを開いて閉じても、画面は graph のまま。ダイアログの間は modalOpen・keysCaptured が真", () => {
+      const store = useViewStore(pinia);
+      store.focusPane("p1");
+      store.openGraph();
+      store.openDialogWithContext({ kind: "help" });
+      expect(store.screen).toBe("graph");
+      expect(store.modalOpen).toBe(true);
+      expect(store.keysCaptured).toBe(true);
+      store.closeDialog();
+      expect(store.screen).toBe("graph");
+      expect(store.modalOpen).toBe(false);
+      expect(store.keysCaptured).toBe(false);
+    });
+
+    it("マシンの切り替えでは画面を変えない（手元のもの）", () => {
+      const store = useViewStore(pinia);
+      store.focusPane("p1");
+      store.openGraph();
+      store.resetForMachineSwitch();
+      expect(store.screen).toBe("graph");
+      expect(store.preGraphFocusPaneId).toBeNull();
+    });
   });
 
-  it("グラフ画面の中からダイアログを開いて閉じても、グラフ画面は開いたまま（modalOpen も真のまま）", () => {
-    const store = useViewStore(pinia);
-    store.focusPane("p1");
-    store.openGraph();
-    store.openDialogWithContext({ kind: "help" });
-    expect(store.graphOpen).toBe(true);
-    store.closeDialog();
-    expect(store.graphOpen).toBe(true);
-    expect(store.modalOpen).toBe(true);
-    store.closeGraph();
-    expect(store.focusedPaneId).toBe("p1");
-  });
+  describe("グラフ: 1 列（モバイル）の重ねるダイアログ", () => {
+    it("openGraph / closeGraph: 開く前の focus を覚えて戻す。二度開いても戻り先は最初のまま。screen は変えない", () => {
+      const store = useViewStore(pinia);
+      store.setMobileViewport(true);
+      store.focusPane("p1");
+      expect(store.modalOpen).toBe(false);
+      store.openGraph();
+      expect(store.graphDialogOpen).toBe(true);
+      expect(store.graphVisible).toBe(true);
+      expect(store.screen).toBe("base");
+      expect(store.modalOpen).toBe(true);
+      expect(store.keysCaptured).toBe(true);
+      expect(store.openDialog).toBeNull(); // ダイアログの枠は使わない
+      store.focusPane("p2");
+      store.openGraph();
+      expect(store.preGraphFocusPaneId).toBe("p1");
+      store.closeGraph();
+      expect(store.graphDialogOpen).toBe(false);
+      expect(store.focusedPaneId).toBe("p1");
+      expect(store.modalOpen).toBe(false);
+    });
 
-  it("マシンの切り替えではグラフ画面を閉じない（手元のもの）。戻り先の pane の id だけ捨てる", () => {
-    const store = useViewStore(pinia);
-    store.focusPane("p1");
-    store.openGraph();
-    store.resetForMachineSwitch();
-    expect(store.graphOpen).toBe(true);
-    expect(store.preGraphFocusPaneId).toBeNull();
-    store.closeGraph();
-    expect(store.focusedPaneId).toBeNull(); // 前のマシンの p1 へは戻さない
+    it("グラフの中からダイアログを開いて閉じても、グラフは開いたまま（modalOpen も真のまま）", () => {
+      const store = useViewStore(pinia);
+      store.setMobileViewport(true);
+      store.focusPane("p1");
+      store.openGraph();
+      store.openDialogWithContext({ kind: "help" });
+      expect(store.graphDialogOpen).toBe(true);
+      store.closeDialog();
+      expect(store.graphDialogOpen).toBe(true);
+      expect(store.modalOpen).toBe(true);
+      store.closeGraph();
+      expect(store.focusedPaneId).toBe("p1");
+    });
+
+    it("マシンの切り替えではグラフを閉じない（手元のもの）。戻り先の pane の id だけ捨てる", () => {
+      const store = useViewStore(pinia);
+      store.setMobileViewport(true);
+      store.focusPane("p1");
+      store.openGraph();
+      store.resetForMachineSwitch();
+      expect(store.graphDialogOpen).toBe(true);
+      expect(store.preGraphFocusPaneId).toBeNull();
+      store.closeGraph();
+      expect(store.focusedPaneId).toBeNull(); // 前のマシンの p1 へは戻さない
+    });
+
+    it("デスクトップの幅に戻ったとき、開いていた重ねるダイアログは閉じる", () => {
+      const store = useViewStore(pinia);
+      store.setMobileViewport(true);
+      store.openGraph();
+      store.setMobileViewport(false);
+      expect(store.graphDialogOpen).toBe(false);
+      expect(store.screen).toBe("base");
+    });
   });
 
   it("onConnectionState: 'open' になると authRequired を解除する", () => {
