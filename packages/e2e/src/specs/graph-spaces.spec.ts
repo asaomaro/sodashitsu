@@ -532,7 +532,7 @@ test.describe("囲いのドラッグ・ノードのドラッグの寄せ（T11f�
     const ds = keys.map((k) => ({ x: after.get(k)!.x - before.get(k)!.x, y: after.get(k)!.y - before.get(k)!.y }));
     expect(ds[1]).toEqual(ds[0]);
     expect(ds[2]).toEqual(ds[0]);
-    expect(ds[0].x).toBeGreaterThan(0);
+    expect(ds[0]!.x).toBeGreaterThan(0);
   });
 
   test("ほかの囲いの上へ落とすと、重ならない最も近い位置へ寄る（離す前に寄せるので、サーバに断られない）", async ({ page, appServer }) => {
