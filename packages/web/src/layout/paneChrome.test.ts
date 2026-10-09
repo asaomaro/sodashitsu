@@ -96,3 +96,25 @@ describe("resolvePaneChrome — 描画モードと隙間の組み合わせ", () 
     expect(resolvePaneChrome("off", true, true, ALL).padded).toEqual(ALL);
   });
 });
+
+// 20261008-ui-style T12a: 4 つの設定（枠の表示・隙間・外周の枠・太さ）は、様式に依らず、今と同じ意味で効く。
+// `resolvePaneChrome` は様式を引数に持たない（太さは CSS 変数 `--soda-pane-gap` が決める）ので、すべての組み合わせで、様式の違いが入り込まないことを確かめる。
+describe("resolvePaneChrome は、様式に依らない（すべての組み合わせ）", () => {
+  it("設定の全組み合わせで、枠の有無・辺ごとの余白が、設定だけで決まる", () => {
+    const sidesList: PaneSides[] = [
+      NO_NEIGHBORS,
+      { top: false, right: true, bottom: false, left: false },
+      { top: true, right: false, bottom: true, left: true },
+    ];
+    for (const borders of ["always", "auto", "off"] as const)
+      for (const gaps of [true, false])
+        for (const multi of [true, false])
+          for (const n of sidesList) {
+            const c = resolvePaneChrome(borders, gaps, multi, n);
+            const framed = borders === "always" || (borders === "auto" && multi);
+            expect(c.framed).toBe(framed);
+            for (const side of ["top", "right", "bottom", "left"] as const)
+              expect(c.padded[side], `${borders}/${gaps}/${multi}/${side}`).toBe(n[side] ? gaps : framed);
+          }
+  });
+});
