@@ -204,3 +204,10 @@
 3. 導入済みの利用者のフックが更新されるまでは、孫の fork と、fork 後の再開は使えない、と文書に書く。
 
 守りの表示（フックの導入が古いときの案内）は、既存の「更新が必要」の仕組みに乗る【推測。コードは未確認】。
+
+## T5 の通しの確かめ（2026-10-10。Claude Code 2.1.296。実物の `soda` サーバ〔一時の状態ディレクトリ〕・`sodactl`・haiku）
+
+- 同じフォルダの fork（`sodactl agent fork src`）: 約 6.6 秒で完了。新しい pane は会話を覚えていた（「合言葉は?」→ `PINEAPPLE-42`）。元は止まらず。グラフに注記が付いた。
+- 新しい worktree の fork（`--worktree fork/e2e`）: 約 7 秒。worktree・workspace ができ、最初の知らせが届き（`sent`）、新しいエージェントは「作業フォルダを切り替えた。元のフォルダは変更しない」と答えた。信頼の確認は出なかった（リポジトリが信頼済み）。元のリポジトリは変わらない（`git status` clean）。
+- **環境の落とし穴**: 親の Claude Code の環境変数（`CLAUDE_CODE_CHILD_SESSION` など）を引き継いだ pane では、「Transcript saving is off」で会話が保存されず、fork が `No conversation found` で失敗する。一度目の通しがこれで失敗し、**検出された直後に claude が終わるとき `done` を返していた不具合**（手が空く前に居なくなったときは `failed` にすべき）が見つかったので直した。
+- fork 側の pane にはフックが載らない（`--settings` で足した記録用のフックは元の起動にだけ付いた）ので、fork 側の `agentSession` は `null` のままだった。フックを設定に入れた環境では、matcher に `fork` を含めたので報告される（偽の `claude` の結合試験・インストーラの試験で確認）。

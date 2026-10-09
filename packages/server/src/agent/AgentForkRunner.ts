@@ -399,7 +399,8 @@ export class AgentForkRunner {
           noteStatus = "skipped";
           noteReason = "エージェントが入れ替わった（終了した）ため、送っていません";
         }
-        emit("done");
+        // 手が空く前に終わった（検出された直後に claude が終了した）。起動の失敗として、画面の末尾から理由を拾う。
+        emit("failed", { code: "fork_failed", message: this.launchFailureReason(newPaneId) });
         return;
       }
       // 手が空いたように見えても、読み込みの途中かもしれない。少し置いて、まだ空いているか見直す。

@@ -71,6 +71,7 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl agent send-keys <target> <key>... [--url <URL>] [--token <TOKEN>]",
   "sodactl agent rename <target> <name>|--clear [--url <URL>] [--token <TOKEN>]",
   "sodactl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [--url <URL>] [--token <TOKEN>] [-- <args>...]",
+  "sodactl agent fork <target> [--worktree <branch>] [--no-note] [--no-wait] [--timeout <ms>] [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl graph show [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl graph link add <from> <to> [--kind trigger|supervise|approval] [--on done|blocked] [--prompt <text>] [--output <N>|--no-output] [--when-busy wait|skip] [--mode notify|delegate] [--lines <N>] [--limit <N>] [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl graph link set <linkId> [--on done|blocked] [--prompt <text>] [--output <N>|--no-output] [--when-busy wait|skip] [--mode notify|delegate] [--lines <N>] [--limit <N>] [--json] [--url <URL>] [--token <TOKEN>]",
@@ -327,6 +328,8 @@ export type Command =
       timeoutMs: number | undefined;
       args: string[];
     }
+  /** 20261009-agent-fork。`worktree` が無ければ同じフォルダ。`wait` は最後まで待つ（既定）。 */
+  | { kind: "agent-fork"; opts: GlobalOpts; paneId: string; worktree: string | undefined; note: boolean; wait: boolean; timeoutMs: number | undefined; json: boolean }
   // 20260927-agent-graph の 05。`json` は表でなく JSON で出す。
   | { kind: "graph"; opts: GlobalOpts; json: boolean; action: GraphAction };
 
@@ -1039,7 +1042,38 @@ function parseAgent(sub: string | undefined, rest: readonly string[], env: NodeJ
     return { kind: "agent-rename", opts: globalOptsFrom(values, env), paneId, name };
   }
   if (sub === "start") return parseAgentStart(rest, env);
+  if (sub === "fork") return parseAgentFork(rest, env);
   throw new CliUsageError(`unknown subcommand: sodactl agent ${sub ?? ""}`.trimEnd(), USAGE);
+}
+
+const AGENT_FORK_USAGE =
+  "sodactl agent fork <target> [--worktree <branch>] [--no-note] [--no-wait] [--timeout <ms>] [--json] [--url <URL>] [--token <TOKEN>]";
+
+/**
+ * 20261009-agent-fork。会話を引き継いだエージェントを、同じフォルダの新しい pane（`--worktree` なし）か、新しい worktree（新しいブランチ）に起こす。
+ * **会話の id・起動するコマンドは受け取らない**（サーバが pane の記録から引く）。既定は最後まで待つ（`--no-wait` で応答だけ）。
+ */
+function parseAgentFork(rest: readonly string[], env: NodeJS.ProcessEnv): Command {
+  const { positionals, values, bools } = parseFlags(rest, { values: ["--url", "--token", "--worktree", "--timeout"], bools: ["--no-note", "--no-wait", "--json"] });
+  const paneId = requirePositional(positionals, 0, "target", AGENT_FORK_USAGE);
+  rejectExtra(positionals, 1, AGENT_FORK_USAGE);
+  const worktree = values.get("--worktree");
+  if (worktree !== undefined && worktree === "") throw new CliUsageError("empty value for --worktree", "--worktree にはブランチ名を指定してください。");
+  if (bools.has("--no-note") && worktree === undefined) throw new CliUsageError("--no-note needs --worktree", "--no-note は --worktree と一緒に使います（同じフォルダの fork は、最初の知らせを送りません）。");
+  const timeoutRaw = values.get("--timeout");
+  if (timeoutRaw !== undefined && !/^[0-9]+$/.test(timeoutRaw)) {
+    throw new CliUsageError(`invalid value for --timeout: ${timeoutRaw}`, "--timeout には整数（ms）を指定してください。");
+  }
+  return {
+    kind: "agent-fork",
+    opts: globalOptsFrom(values, env),
+    paneId,
+    worktree,
+    note: !bools.has("--no-note"),
+    wait: !bools.has("--no-wait"),
+    timeoutMs: timeoutRaw === undefined ? undefined : Number(timeoutRaw),
+    json: bools.has("--json"),
+  };
 }
 
 const AGENT_START_USAGE =

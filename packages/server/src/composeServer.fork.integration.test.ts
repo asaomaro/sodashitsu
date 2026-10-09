@@ -30,6 +30,8 @@ const resumeId = args[args.indexOf("--resume") + 1];
 const pane = process.env.SODA_PANE_ID;
 if (fork && existsSync(DIR + "/no-conversation")) {
   console.log("No conversation found with session ID: " + resumeId);
+  // 検出された後に終わる版（本物の claude は、検出の周期より前に終わることも、後に終わることもある）。
+  if (existsSync(DIR + "/die-soon")) await new Promise((r) => setTimeout(r, 2500));
   process.exit(1);
 }
 const sessionId = fork ? randomUUID() : (process.env.FAKE_SESSION_ID || randomUUID());
@@ -81,7 +83,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
   });
   afterEach(async () => {
     for (const fn of cleanups.splice(0).reverse()) await fn();
-    for (const f of ["no-conversation", "block-main", "block-fork", "launches.log"]) await rm(join(dir, f), { force: true });
+    for (const f of ["no-conversation", "die-soon", "block-main", "block-fork", "launches.log"]) await rm(join(dir, f), { force: true });
   });
   afterAll(async () => {
     for (const [k, v] of Object.entries(savedEnv)) {
@@ -264,6 +266,17 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     expect(r.error?.message).toContain("新しい pane は閉じました");
     await vi.waitFor(() => expect(server.session.snapshot().panes.length).toBe(panesBefore - 1), { timeout: 10_000, interval: 50 }); // 元の pane と新しい pane の両方が無い
     expect((await launches()).filter((l) => l.args.includes("--fork-session"))).toHaveLength(0);
+  });
+
+  it("検出された直後に claude が終わった（会話が見つからない）: done ではなく failed で、理由が出る。pane は閉じない", async () => {
+    const { server, client, paneId } = await bootWithAgent();
+    await writeFile(join(dir, "no-conversation"), "");
+    await writeFile(join(dir, "die-soon"), "");
+    const result = await ok<{ paneId: string }>(client.request("agent.fork", { paneId, target: { kind: "same" } }));
+    await vi.waitFor(() => expect(stages(client, result.paneId).some((s) => s === "failed" || s === "done")).toBe(true), { timeout: 60_000 });
+    expect(stages(client, result.paneId)).not.toContain("done");
+    expect(progressOf(client, result.paneId).find((p) => p.stage === "failed")!.message).toContain("会話の記録が見つかりません");
+    expect(server.session.getPane(result.paneId)).toBeDefined();
   });
 
   it("起動したのに会話が見つからない（CLAUDE_CONFIG_DIR 違い・古い版など）: 検知されず、理由が進み具合に出る。pane は閉じない", async () => {

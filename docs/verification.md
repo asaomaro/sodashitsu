@@ -1701,3 +1701,12 @@ pnpm --filter @sodashitsu/e2e exec playwright test performance agent-detection -
 decisions.md D63）ので、確かめる対象ではない（copy モードでは、`ctrl+b` 以外は押しても何も起きず、`ctrl+b` は
 copy モードの中でも prefix になる）。M7・M11 のマウス報告は「Linux（CI・手元）」の
 手元の項目で、IME の候補窓の見た目も同じ所で確かめる。
+
+## エージェントの fork（20261009-agent-fork）の実機での確認
+
+偽の `claude` の結合試験（`composeServer.fork.integration.test.ts`）では確かめられない、本物の Claude Code での手順。**利用者の設定・導入済みのフックには触らない**ため、`--settings` で記録用のフックだけを足し、サーバは一時の状態ディレクトリ・`worktreeDir` で起こす（`CLAUDE*` の環境変数は外す。外さないと「Transcript saving is off」で記録が残らず fork できない）。
+
+- [ ] 元のエージェントを `claude --settings <SessionStart の matcher が startup|resume|fork|clear|compact のフック> --model claude-haiku-5-5` で起動し、短い会話をする。`pane.agentSession` に会話の id が入る。
+- [ ] `sodactl agent fork <名前>`: 同じフォルダの新しい pane に、会話を覚えたエージェントが起動する（応答に合言葉が出る）。元のエージェントは止まらない。（2026-10-10 実機で確認: 約 6.6 秒。）
+- [ ] `sodactl agent fork <名前> --worktree fork/e2e`: 新しい worktree と workspace ができ、最初の知らせが届き（`noteStatus: sent`）、新しいエージェントが「作業フォルダを切り替えた」と答える。元のフォルダは変わらない。（同日確認: 約 7 秒。リポジトリが信頼済みなら worktree の信頼の確認は出なかった。）
+- [ ] 古い Claude Code（`--fork-session` を知らない版）・記録が無い id: `failed` で理由が出て、pane は閉じない（偽の `claude` の試験で確認。実機は未確認）。

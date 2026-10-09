@@ -47,6 +47,7 @@ sodactl agent prompt <target> <text> [--wait] [--until working|blocked|idle|done
 sodactl agent send-keys <target> <key>...
 sodactl agent rename <target> <name>|--clear
 sodactl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [-- <args>...]
+sodactl agent fork <target> [--worktree <branch>] [--no-note] [--no-wait] [--timeout <ms>] [--json]   # 会話を引き継いだエージェントを起こす（docs/agent-fork.md）
 sodactl graph show [--json]                 # 連携のグラフ（下の「連携のグラフ」）。graph のコマンドは既定が表、--json で JSON
 sodactl graph link add <from> <to> [--kind trigger|supervise|approval] [--on done|blocked] [--prompt <text>] [--output <N>|--no-output] [--when-busy wait|skip] [--mode notify|delegate] [--lines <N>] [--limit <N>] [--json]
 sodactl graph link set <linkId> [--on …] [--prompt …] [--output <N>|--no-output] [--when-busy …] [--mode …] [--lines <N>] [--limit <N>] [--json]
@@ -598,6 +599,12 @@ pane の中で検出されたコーディングエージェント（Claude Code�
     `agent_start_failed`。`--timeout`（既定 30000。3000 より大きく 300000 以下。範囲外は `invalid_agent_timeout`、0 以上の整数でなければ使用誤り）を
     過ぎた → `timeout`（検出されて名前が付いていれば、名前は付いたまま）。
 - 他の code: `unsupported_agent_kind`（サーバ）・`agent_pane_not_found`・`agent_start_input_failed`（端末に書けなかった）。
+
+### 会話を引き継いで起こす（`agent fork`）
+
+`sodactl agent fork <target> [--worktree <ブランチ>] [--no-note] [--no-wait] [--timeout <ms>] [--json]` は、動いている **Claude Code** のエージェントを、ここまでの会話を引き継いだ別のエージェントとして、同じフォルダの新しい pane（`--worktree` なし）か、新しい worktree と workspace（`--worktree <ブランチ>`）に起こします。元のエージェントは止まりません。
+**会話の id・起動するコマンドは送れません**（サーバが pane の記録から引きます。余計な項目は断られます）。既定で最後まで待ち（`--no-wait` で、起動のコマンドを打ち込んだところで返す）、結果は新しい pane の id・名前・worktree のパス・最初の知らせの状態（`noteStatus`）です。
+使える条件・引き継がれないもの（権限のモード・追加フォルダ）・最初の知らせ・失敗したとき・フックの更新が要ること・限界は **`docs/agent-fork.md`**。code: `fork_unavailable`・`fork_branch_exists`・`fork_shell_not_ready`・`fork_in_progress`・`fork_failed`（ほか worktree の作成の code〔`worktree_*`・`not_a_git_repository`〕）。`<target>` の解決は他の `agent` のコマンドと同じ。
 
 ```bash
 pane=$(sodactl pane split 3f2a9c10 --direction right | jq -r .pane.id)
