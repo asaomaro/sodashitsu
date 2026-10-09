@@ -49,6 +49,7 @@ const view = useViewStore();
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius-s);
   padding: 0.2em 0.3em;
+  min-height: var(--soda-shape-control-h, auto);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;

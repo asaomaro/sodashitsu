@@ -123,3 +123,14 @@
 | `components/graph/GraphCanvas.vue:1813` | `10px` | 置き換えない | 固有の値（`GraphView.vue` の `10px` が、グラフの主な領域の画面化で移ったもの） |
 
 `origin/main` を取り込み直して、`git grep` で、対象（`4px`・`3px`・`6px`・片側の形）が残っていないことを確かめた（守りのファイルを除く）。
+
+## PR2（pane のすき間と基本画面の枠組み）の決定
+
+| # | 事項 | 決定 |
+| :- | :- | :- |
+| P1 | 太さの表 | `PANE_FRAME_THICKNESS_PX_BY_STYLE`（`store/settings.ts`）。クラシックは今の表、モダンは 4・8・12px（仮置き）。`App.vue` の 1 か所（`--soda-pane-gap`）で配る。`resolvePaneChrome`（4 つの設定の意味）は様式を引数に持たない |
+| P2 | pane の枠の角（T12b） | 枠（`.pane-frame-edge`。余白の外側）にだけ `border-radius: var(--soda-shape-pane-radius, 0)`。端末の箱は切らない（端末の角は、丸みの内側に収まる）。表示の面の枠も切らない |
+| P3 | 高さ・余白（T12c） | `min-height: var(--soda-shape-row-h/-control-h, auto)`・`padding-inline: var(--soda-shape-pad-x, <今の値>)`。クラシックは未定義で、値は今のまま。行は `justify-content: center`（クラシックでは余りが無いので見た目は同じ）。対象: サイドバーの行・フッター・セッションの行・小ボタン・tab・「＋」・tab バーの右端・画面の切り替え |
+| P3a | 変えなかったもの | pane の名前の行（枠線の legend。上の余白は `1.2em` で配置の計算に入る）・表示の面の見出し・帯・トレイ（`DisplayPanelHead`・`PaneBands`・`DisplayTray`。px の高さが、表示の面の配置の計算〔最小の高さ 96px など〕と結び付いている）。モダンでは、これらはクラシックの高さのまま。PR3 以降で、配置の計算とあわせて扱うか、利用者の判断を待つ |
+| P4 | E2E をモダンで流したときの失敗 | `appearance-settings` の太さの項（クラシックの 4・6・2px を直に確かめる）は、モダンでは値が違って落ちる＝想定どおり。`sidebar-sections` の 2 件・`display-layout-state` の `(7)(c)` は、**クラシックでも・`origin/main` でも落ちる**（環境・負荷） |
+| P5 | 絵の端末の文字 | 左が欠けて見えるのは、クラシックでも同じ（headless の端末の入れ物が pane より大きい既知の挙動。E1）。様式の差ではない |

@@ -150,3 +150,27 @@ describe("createDockDrag", () => {
     expect(drops).toEqual([]);
   });
 });
+
+describe("createDockDrag — 中央（浮いた窓。PR-C）", () => {
+  it("float が真のとき、中央で離すと 'float' で落とし、離した位置を渡す。偽なら落とせない", () => {
+    const at: { x: number; y: number }[] = [];
+    const h = createDockDrag({ id: "f1", paneId: "p1", box: () => box, float: () => true, setState: (s) => states.push(s), drop: (z, p) => (drops.push(z), at.push(p)) });
+    h.onPointerDown(ev("pointerdown", 400, 300));
+    h.onPointerMove(ev("pointermove", 520, 310));
+    expect(states.at(-1)).toEqual({ id: "f1", paneId: "p1", zone: "float" });
+    h.onPointerUp(ev("pointerup", 520, 310));
+    expect(drops).toEqual(["float"]);
+    expect(at).toEqual([{ x: 520, y: 310 }]);
+    expect(html()).toBe(false);
+    h.cancel();
+  });
+  it("Esc で取り消すと、落とさない（窓にならない）", () => {
+    const h = createDockDrag({ id: "f1", paneId: "p1", box: () => box, float: () => true, setState: (s) => states.push(s), drop: (z) => drops.push(z) });
+    h.onPointerDown(ev("pointerdown", 400, 300));
+    h.onPointerMove(ev("pointermove", 520, 310));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    h.onPointerUp(ev("pointerup", 520, 310));
+    expect(drops).toEqual([]);
+    expect(html()).toBe(false);
+  });
+});

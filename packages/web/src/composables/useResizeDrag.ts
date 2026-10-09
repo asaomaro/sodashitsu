@@ -6,8 +6,11 @@ import { getCurrentInstance, onBeforeUnmount, ref, type Ref } from "vue";
  * 左ボタンだけで始める・フォーカスを移さない・描画ごとに 1 回にまとめる・`Esc` で取り消す・ダブルクリックで既定へ・
  * 動かさずに離したら確定しない・ドラッグ中のキーを端末へ通さない・`<html>` のクラスの付け外し、まで。
  */
+/** ドラッグ中のカーソルの種類（`<html>` のクラス `soda-resizing-<axis>`）。x・y は境目、move は窓の移動、nwse・nesw は窓の角。 */
+export type ResizeDragAxis = "x" | "y" | "move" | "nwse" | "nesw";
 export interface ResizeDragOptions<T> {
-  axis: "x" | "y";
+  /** 始める時点（`begin` の後）に決まる値でもよい（窓の 8 つのつかむ場所が、1 つの `useResizeDrag` を共有する）。 */
+  axis: ResizeDragAxis | (() => ResizeDragAxis);
   /** ドラッグを始められるか（畳んでいる間は false、など）。 */
   enabled?: () => boolean;
   /** 始めた時点の値を返す（`Esc` で戻すため）。 */
@@ -62,13 +65,13 @@ export function useResizeDrag<T>(o: ResizeDragOptions<T>): ResizeDrag {
   }
 
   function attach(): void {
-    root().classList.add("soda-resizing", `soda-resizing-${o.axis}`);
+    root().classList.add("soda-resizing", `soda-resizing-${typeof o.axis === "function" ? o.axis() : o.axis}`);
     window.addEventListener("keydown", onKeydown, true);
   }
 
   function detach(): void {
     dragging.value = false; // 先に下ろす（releasePointerCapture が lostpointercapture を同期で起こしても、二重に確定しない）
-    root().classList.remove("soda-resizing", "soda-resizing-x", "soda-resizing-y");
+    root().classList.remove("soda-resizing", "soda-resizing-x", "soda-resizing-y", "soda-resizing-move", "soda-resizing-nwse", "soda-resizing-nesw");
     window.removeEventListener("keydown", onKeydown, true);
     if (raf !== null) {
       cancelAnimationFrame(raf);

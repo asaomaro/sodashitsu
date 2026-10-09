@@ -68,10 +68,12 @@ test.describe("(7) 操作を始める・操作中", () => {
     };
 
     // 入口 1: ポインタで［操作する］を押す
+    await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
     await engageBtn(page).click();
     await checkClean("ボタン");
     await esc();
-    // 入口 2: ［操作する］に Tab で届いて Enter（keyup は親が受けてから始まる）
+    // 入口 2: ［操作する］に Tab で届いて Enter（keyup は親が受けてから始まる）。操作を終えて［操作する］が出直した直後の 500ms は、押しを受けない（engageGuard）
+    await page.waitForTimeout(800);
     await engageBtn(page).focus();
     await page.keyboard.press("Enter");
     await checkClean("Enter");
@@ -97,6 +99,7 @@ test.describe("(7) 操作を始める・操作中", () => {
     await setScriptOk(appServer, paneId, "g", PAGE);
     await expect(scriptFrameLoc(page).locator("#i")).toBeAttached();
     const f = await scriptFrame(page);
+    await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
     await engageBtn(page).click();
     await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "1");
     await steal(f); // 操作中に呼ばれた focus() は数えない
@@ -116,6 +119,7 @@ test.describe("(7) 操作を始める・操作中", () => {
     await setScriptOk(appServer, paneId, "g", PAGE);
     await expect(scriptFrameLoc(page).locator("#i")).toBeAttached();
     const f = await scriptFrame(page);
+    await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
     await engageBtn(page).click();
     await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "1");
     await clickBlankAppSpace(page); // サイドバーの空き
@@ -217,6 +221,7 @@ test.describe("(5) フォーカスの番（pane ごとにサーバが数える�
     await focusTerminal(page);
     await steal(f);
     await waitReports(sent, 2);
+    await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
     await engageBtn(page).click();
     await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "1");
     await page.keyboard.press("Escape");
@@ -305,6 +310,7 @@ test.describe("(5) フォーカスの番（pane ごとにサーバが数える�
     const { paneId, sent, input } = await openScriptBrowser(page, appServer);
     await setScriptOk(appServer, paneId, "g", PAGE.replace("</script>", "window.addEventListener('blur', function () { document.getElementById('i').focus(); });</script>"));
     await expect(scriptFrameLoc(page).locator("#i")).toBeAttached();
+    await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
     await engageBtn(page).click();
     await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "1");
     // 端末を押して操作を終える

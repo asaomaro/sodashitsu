@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BANDS_MORE_ROW_PX, panelWidth, visibleBands } from "./displayLayout.js";
+import { defaultFloatRect } from "./floatGeometry.js";
 import { PANEL_TB_MIN_W_PX, DOCK_H_MIN_PX, BAND_MIN_W_PX, BAND_SCRIPT_MIN_W_PX, TRAY_ROW_PX, resolvePaneDisplays, type LayoutInput } from "./paneDisplayLayout.js";
 
 const input = (over: Partial<LayoutInput> = {}): LayoutInput => ({
@@ -286,5 +287,71 @@ describe("resolvePaneDisplays — 4 つの側", () => {
     expect(narrow.docks.top).toBeNull();
     expect(narrow.docks.bottom).toBeNull();
     expect(narrow.tray.buttons.filter((b) => b.disabled).map((b) => b.id).sort()).toEqual(["b", "r", "t"]);
+  });
+});
+
+describe("resolvePaneDisplays — 浮いた窓（手順 6）", () => {
+  const win = (id: string, seq: number, over: Partial<LayoutInput["panels"][number]> = {}) => panel(id, seq, { dock: "float", size: 320, ...over });
+
+  it("たたんでいない窓は floats に入り、記憶の矩形を領域の中へ丸める。領域は端末の領域を各辺 4px 縮めた箱", () => {
+    const r = resolvePaneDisplays(input({ panels: [win("a", 1)], floatRects: { a: { x: 9999, y: -5, w: 300, h: 9999 } } }));
+    // 窓が 1 つあるので専用のトレイの行（24px）が出る（開いていても）
+    expect(r.terminal).toEqual({ x: 0, y: TRAY_ROW_PX, w: 1000, h: 600 - TRAY_ROW_PX });
+    expect(r.floatArea).toEqual({ w: 992, h: 600 - TRAY_ROW_PX - 8 });
+    expect(r.floats).toEqual([{ id: "a", rect: { x: 692, y: 0, w: 300, h: 600 - TRAY_ROW_PX - 8 } }]);
+    expect(r.auto).toEqual([]);
+  });
+  it("矩形が渡されない窓は、初めの矩形 defaultFloatRect(0, size, area)", () => {
+    const r = resolvePaneDisplays(input({ panels: [win("a", 1, { size: 400 })] }));
+    const area = r.floatArea!;
+    expect(r.floats[0]!.rect).toEqual(defaultFloatRect(0, 400, area));
+  });
+  it("たたんだ窓は floats に入らない（ボタンだけ）。窓は端末の幅も取らない", () => {
+    const r = resolvePaneDisplays(input({ panels: [win("a", 1, { collapsed: true })] }));
+    expect(r.floats).toEqual([]);
+    expect(r.terminal.w).toBe(1000);
+    expect(r.tray.buttons).toEqual([{ id: "a", kind: "float", open: false, disabled: false }]);
+  });
+  it("開いている窓もトレイのボタンに入り、open が立つ。窓の開閉で、トレイの行の有無・端末の箱が変わらない", () => {
+    const open = resolvePaneDisplays(input({ panels: [win("a", 1)] }));
+    const closed = resolvePaneDisplays(input({ panels: [win("a", 1, { collapsed: true })] }));
+    expect(open.tray.buttons).toEqual([{ id: "a", kind: "float", open: true, disabled: false }]);
+    expect(open.tray.row).toBe("own");
+    expect(closed.tray.row).toBe("own");
+    expect(open.terminal).toEqual(closed.terminal);
+    const withBand = (collapsed: boolean) => resolvePaneDisplays(input({ bands: [band("b", 1)], panels: [win("a", 2, { collapsed })] }));
+    expect(withBand(false).terminal).toEqual(withBand(true).terminal);
+    expect(withBand(false).tray.row).toBe("band");
+  });
+  it("ボタンは種類をまたいで seq の順に並ぶ", () => {
+    const r = resolvePaneDisplays(input({ bands: [band("b", 3, { collapsed: true })], panels: [win("a", 1), panel("p", 2, { collapsed: true })] }));
+    expect(r.tray.buttons.map((b) => [b.id, b.kind])).toEqual([["a", "float"], ["p", "panel"], ["b", "band"]]);
+  });
+  it("窓の動ける領域が最小より小さければ、窓は全部（閉じているものも）自動でたたまれ、ボタンは押せない", () => {
+    const r = resolvePaneDisplays(input({ paneW: 240, paneH: 300, panels: [win("a", 1), win("c", 2, { collapsed: true })] }));
+    expect(r.floatArea).toBeNull();
+    expect(r.floats).toEqual([]);
+    expect(r.auto).toEqual(["a", "c"]);
+    expect(r.tray.buttons).toEqual([
+      { id: "a", kind: "float", open: false, disabled: true },
+      { id: "c", kind: "float", open: false, disabled: true },
+    ]);
+  });
+  it("ちょうど最小の領域（248×128 の端末の領域）では窓が出る", () => {
+    // トレイの行 24px + 端末の領域の高さ 128 → paneH 152。領域は 392×120（最小の窓 240×120 がちょうど入る）。1px 低いと入らない
+    const r = resolvePaneDisplays(input({ paneW: 400, paneH: 24 + 128, panels: [win("a", 1)] }));
+    expect(r.floatArea).toEqual({ w: 392, h: 120 });
+    expect(r.floats).toHaveLength(1);
+    const tooLow = resolvePaneDisplays(input({ paneW: 400, paneH: 24 + 127, panels: [win("a", 1)] }));
+    expect(tooLow.floatArea).toBeNull();
+  });
+  it("ドックのパネルが場所を取ると、窓の領域はその分小さくなる（窓は右のパネルにも重ならない）", () => {
+    const withDock = resolvePaneDisplays(input({ panels: [win("a", 1), panel("p", 2)] }));
+    expect(withDock.floatArea!.w).toBe(1000 - 320 - 8);
+    expect(withDock.floats[0]!.rect.x + withDock.floats[0]!.rect.w).toBeLessThanOrEqual(withDock.floatArea!.w);
+  });
+  it("窓の面が 2 つあれば、出た順に floats へ", () => {
+    const r = resolvePaneDisplays(input({ panels: [win("a", 1), win("b", 2)] }));
+    expect(r.floats.map((f) => f.id)).toEqual(["a", "b"]);
   });
 });

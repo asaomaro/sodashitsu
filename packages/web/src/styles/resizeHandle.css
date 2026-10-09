@@ -78,6 +78,18 @@ html.soda-resizing-y,
 html.soda-resizing-y * {
   cursor: row-resize !important;
 }
+html.soda-resizing-move,
+html.soda-resizing-move * {
+  cursor: grabbing !important;
+}
+html.soda-resizing-nwse,
+html.soda-resizing-nwse * {
+  cursor: nwse-resize !important;
+}
+html.soda-resizing-nesw,
+html.soda-resizing-nesw * {
+  cursor: nesw-resize !important;
+}
 html.soda-resizing * {
   user-select: none !important;
 }

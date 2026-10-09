@@ -539,6 +539,7 @@ const DISPLAY_PANEL_DOCK = [
   { value: "left", label: "左" },
   { value: "top", label: "上" },
   { value: "bottom", label: "下" },
+  { value: "float", label: "浮いた窓" },
 ] as const;
 const DISPLAY_BAND_EDGE = [
   { value: "top", label: "上" },

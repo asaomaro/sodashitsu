@@ -7,12 +7,14 @@ import type { DockZone } from "../display/dockDrag.js";
  * 5 つの場所（上・下・左・右・中央）と文言を出し、ポインタのある場所だけ強調（実線と色）、ほかは点線。いまの置き場所は「ここにあります」。
  * 中央（浮いた窓）は `float` が真のときだけ落とせる（PR-B では「ここには置けません」）。pane の D&D の表示（`.pane-frame-zone`。縁 30%・中央が赤）とは文言と色が別。
  */
-const props = defineProps<{ zone: DockZone | null; current: DockZone | null; float: boolean }>();
+const props = defineProps<{ zone: DockZone | null; current: DockZone | null; float: boolean; /** 浮いた窓を動かしている最中（縁へ寄せて離すと、その側へ置かれる）。 */ release?: boolean }>();
+const SIDE_NAME: Record<string, string> = { top: "上", bottom: "下", left: "左", right: "右" };
 
 const LABEL: Record<DockZone, string> = { top: "上に置く", bottom: "下に置く", left: "左に置く", right: "右に置く", float: "浮いた窓にする" };
 const ZONES: DockZone[] = ["top", "left", "float", "right", "bottom"];
 
 const text = (z: DockZone): string => {
+  if (props.release && props.zone === z && z !== "float") return `離すと、ここ（${SIDE_NAME[z]}）に置く`;
   if (z === "float" && !props.float) return "ここには置けません";
   if (props.current === z) return `${LABEL[z]}（ここにあります）`;
   return LABEL[z];

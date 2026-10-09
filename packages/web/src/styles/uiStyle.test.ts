@@ -25,7 +25,17 @@ describe("uiStyle.css（20261008-ui-style の角のトークン）", () => {
           .flatMap((r) => [...r.body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()] as const)),
       );
     expect(get(":root")).toEqual({ "--soda-shape-radius-s": "3px", "--soda-shape-radius": "4px", "--soda-shape-radius-l": "6px" });
-    expect(get(':root[data-ui-style="modern"]')).toEqual({ "--soda-shape-radius-s": "6px", "--soda-shape-radius": "8px", "--soda-shape-radius-l": "12px" });
+    // モダンは、角に加えて、高さ・余白・pane の枠の角を定義する（PR2。仮置き）。クラシックは、これらを**定義しない**（部品の側のフォールバックが、今の値）。
+    expect(get(':root[data-ui-style="modern"]')).toEqual({
+      "--soda-shape-radius-s": "6px",
+      "--soda-shape-radius": "8px",
+      "--soda-shape-radius-l": "12px",
+      "--soda-shape-pane-radius": "var(--soda-shape-radius-l)",
+      "--soda-shape-row-h": "36px",
+      "--soda-shape-control-h": "32px",
+      "--soda-shape-pad-x": "12px",
+    });
+    for (const k of ["--soda-shape-pane-radius", "--soda-shape-row-h", "--soda-shape-control-h", "--soda-shape-pad-x"]) expect(Object.keys(get(":root")), k).not.toContain(k);
   });
 
   it("モダンだけが属性の規則。クラシックの規則は属性に依らない（:root だけ）。ほかの規則は無い", () => {

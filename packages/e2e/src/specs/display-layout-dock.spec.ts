@@ -285,7 +285,7 @@ test("(5) D&D: 見出しをつかんで各場所へ。落とせる場所の文�
     await expect(page.locator("[data-display-drop-zones]")).toBeVisible();
     await expect(page.locator(`[data-display-drop-zone="${side}"][data-active="1"]`)).toHaveText(new RegExp(`${LABEL[side]}に置く`));
     await expect(page.locator(`[data-display-drop-zone="${current}"]`)).toContainText("ここにあります");
-    await expect(page.locator('[data-display-drop-zone="float"]')).toHaveText("ここには置けません");
+    await expect(page.locator('[data-display-drop-zone="float"]')).toHaveText("浮いた窓にする"); // PR-C: 中央は浮いた窓（落とせる）
     await expect(page.locator(".pane-frame-zone")).toHaveCount(0);
     await page.keyboard.press("a");
     await page.mouse.up();
@@ -294,9 +294,14 @@ test("(5) D&D: 見出しをつかんで各場所へ。落とせる場所の文�
     current = side;
   }
   expect(await page.evaluate(() => (window as unknown as { __keys: number }).__keys), "ドラッグ中のキーは流れない").toBe(0);
-  // 中央に落とす → 変わらない（PR-B）
+  // 中央に落とす → 浮いた窓になる（PR-C。窓の動きは display-layout-float.spec.ts）。ここでは右へ戻して続ける
   await drag([body.x + body.width / 2, body.y + body.height / 2]);
+  await expect(dock(page, "right")).toHaveCount(0);
+  await expect(page.locator("[data-display-float]")).toHaveCount(1);
+  await page.locator("[data-display-float] [data-display-menu-button]").click();
+  await menuItem(page, "右に置く").click();
   await expect(dock(page, "right")).toHaveCount(1);
+  await expect(page.locator("[data-display-float]")).toHaveCount(0);
   // Esc → 変わらない
   const g = await boxOf(grip());
   await page.mouse.move(g.x + 10, g.y + g.height / 2);
@@ -382,6 +387,7 @@ test(`(6-${kind}) load と枠の要素: 右 2 枚・下 1 枚・帯 1 本（scri
   if (kind !== "script-html") return;
   // 移した後も覆いがあり、［操作する］で始まり、冷却に入っていない（直後の set が通る）
   await expect(page.locator("[data-display-dock=\"top\"] [data-display-cover]")).toHaveCount(1);
+  await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
   await page.locator('[data-display-dock="top"] [data-display-engage]').click();
   await expect(page.locator('[data-display-dock="top"][data-display-engaged="1"]')).toHaveCount(1);
   await setScriptOk(appServer, paneId, "bt", script("bt2"), { kind: "panel", extra: ["--dock", "bottom"] });
@@ -409,6 +415,7 @@ test("(6c) 操作中の script-html のパネルで、見出しのつかむ場�
     ] as const) {
       for (let i = 0; i < (side === "right" ? 5 : 2); i++) {
         await expect(engage).toBeVisible();
+        await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
         await engage.click();
         await expect(panel).toHaveAttribute("data-display-engaged", "1");
         await run();
@@ -685,6 +692,7 @@ test("(7b) 操作中（［操作を終える］が出ている間）も、最小
     const min = side === "left" || side === "right" ? 160 : 96;
     await expect.poll(async () => Math.round(side === "left" || side === "right" ? (await boxOf(panel)).width : (await boxOf(panel)).height), `${label}: 最小`).toBe(min);
     // 操作中にする（［操作する］ → ［操作を終える］）
+    await page.waitForTimeout(600); // ［操作する］は、箱が動いた直後の 500ms は押しを受けない（engageGuard）
     await panel.locator("[data-display-engage]").click();
     await expect(panel).toHaveAttribute("data-display-engaged", "1");
     const end = panel.locator("[data-display-end]");
