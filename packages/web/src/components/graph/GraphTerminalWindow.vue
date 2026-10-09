@@ -81,21 +81,20 @@ function defaultRect(): Rect {
   if (a && o) {
     const nx = a.x - o.x;
     const ny = a.y - o.y;
-    const fitsX = (x: number): boolean => x >= 0 && x + ww <= props.area.w;
-    const fitsY = (y: number): boolean => y >= 0 && y + hh <= props.area.h;
-    const candidates: { x: number; y: number }[] = [
-      { x: nx + a.w + GAP, y: ny }, // 右
-      { x: nx - ww - GAP, y: ny }, // 左
-      { x: nx, y: ny + a.h + GAP }, // 下
-      { x: nx, y: ny - hh - GAP }, // 上
+    const min = minSize.value;
+    const clampY = (y: number, hh2: number): number => Math.min(Math.max(y, 0), props.area.h - hh2);
+    const clampX = (x: number, ww2: number): number => Math.min(Math.max(x, 0), props.area.w - ww2);
+    // 辺ごとの、置ける最大の大きさ（右・左は幅が、下・上は高さが、ノードで削られる）。全体が収まる辺を先に、無ければ最小より大きく取れる辺を縮めて。
+    const sides: { fit: { w: number; h: number }; place: (w2: number, h2: number) => Rect }[] = [
+      { fit: { w: props.area.w - (nx + a.w + GAP), h: hh }, place: (w2, h2) => ({ x: nx + a.w + GAP, y: clampY(ny, h2), w: w2, h: h2 }) },
+      { fit: { w: nx - GAP, h: hh }, place: (w2, h2) => ({ x: nx - GAP - w2, y: clampY(ny, h2), w: w2, h: h2 }) },
+      { fit: { w: ww, h: props.area.h - (ny + a.h + GAP) }, place: (w2, h2) => ({ x: clampX(nx, w2), y: ny + a.h + GAP, w: w2, h: h2 }) },
+      { fit: { w: ww, h: ny - GAP }, place: (w2, h2) => ({ x: clampX(nx, w2), y: ny - GAP - h2, w: w2, h: h2 }) },
     ];
-    for (const c of candidates) {
-      // ノードの縦（横）の位置は、収まるように寄せる。
-      const y = Math.min(Math.max(c.y, 0), props.area.h - hh);
-      const x = Math.min(Math.max(c.x, 0), props.area.w - ww);
-      const horizontal = c === candidates[0] || c === candidates[1];
-      if (horizontal ? fitsX(c.x) : fitsY(c.y)) return clampFloatRect({ x: horizontal ? c.x : x, y: horizontal ? y : c.y, w: ww, h: hh }, props.area, minSize.value);
-    }
+    const full = sides.find((sd) => sd.fit.w >= ww && sd.fit.h >= hh);
+    if (full) return clampFloatRect(full.place(ww, hh), props.area, min);
+    const shrunk = sides.find((sd) => sd.fit.w >= min.w && sd.fit.h >= min.h);
+    if (shrunk) return clampFloatRect(shrunk.place(Math.min(ww, Math.floor(shrunk.fit.w)), Math.min(hh, Math.floor(shrunk.fit.h))), props.area, min);
   }
   return clampFloatRect({ x: props.area.w - ww - 8, y: 8, w: ww, h: hh }, props.area, minSize.value);
 }

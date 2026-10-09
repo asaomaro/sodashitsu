@@ -416,3 +416,56 @@ test("接続が切れて再接続すると、窓の pane を購読し直し、�
   await expect.poll(() => rec.frames.output(1, p1) + rec.frames.snapshots(1, p1).join("")).toContain(marker);
   await expect.poll(async () => JSON.stringify(client.paneSize(p1))).toBe(JSON.stringify(await footerSize(page)));
 });
+
+// --- PR2a レビューの直し（指摘 1・2・4）-------------------------------------------------------------------------------------
+
+test("窓を開いた後にサイドバーが別の pane を選んでも、窓の端末で打った操作（copy モード）は、窓に見えている pane に効く", async ({ page, appServer, context }) => {
+  await grantClipboard(context, appServer.origin);
+  const { client, p1 } = await setup(page, appServer);
+  const two = await client.request("workspace.create", { cwd: "/tmp", label: "wsTwoZ" });
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect.poll(() => activeInWindow(page)).toBe(true);
+  await page.keyboard.type("echo marker-in-p1-window");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  client.sendInput(two.pane.id, "echo marker-in-other-pane\r");
+  await page.waitForTimeout(500);
+  // サイドバーで別の workspace（別の pane）を選ぶ。窓は p1 のまま。
+  await page.locator(".sidebar").getByText("wsTwoZ").first().click();
+  await page.waitForTimeout(300);
+  // 窓の端末へフォーカスを戻す（キーボードだけの経路。クリックは使わない）
+  await winTextarea(page).focus();
+  const text = await readLineContaining(page, "marker-in-p1-window");
+  expect(text).toContain("marker-in-p1-window");
+});
+
+test("窓の最初の位置は、押したノードの隣（ノードもツールバーも覆わない）。ノードから窓へ線が引かれ、窓を動かすと消える", async ({ page, appServer }) => {
+  const { p1 } = await setup(page, appServer);
+  await openGraph(page);
+  const nb = (await node(page, p1).boundingBox())!;
+  await pressNode(page, p1);
+  await expect(win(page)).toHaveAttribute("data-status", "attached");
+  const wb = (await win(page).boundingBox())!;
+  const tb = (await page.locator(".graph-toolbar").boundingBox())!;
+  const overlaps = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  expect(overlaps(wb, nb), "窓がノードを覆わない").toBe(false);
+  expect(overlaps(wb, tb), "窓がツールバーを覆わない").toBe(false);
+  await expect(page.locator("[data-graph-terminal-link]")).toBeVisible();
+  await moveWindowAside(page);
+  await expect(page.locator("[data-graph-terminal-link]")).toHaveCount(0);
+});
+
+test("窓の端末の右クリックのメニューは、その pane への操作（貼り付け・右クリックの送り先）だけ。分割・閉じる・拡大表示は出ない", async ({ page, appServer }) => {
+  const { p1 } = await setup(page, appServer);
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect.poll(() => activeInWindow(page)).toBe(true);
+  const b = (await page.locator("[data-graph-terminal-mount]").boundingBox())!;
+  await page.mouse.click(b.x + 100, b.y + 100, { button: "right" });
+  const items = page.locator(".context-menu [role=menuitem]");
+  await expect(items.first()).toBeVisible();
+  const labels = await items.allInnerTexts();
+  expect(labels.map((l) => l.trim()).sort()).toEqual(["右クリックを pane に送る", "貼り付け"].sort());
+});

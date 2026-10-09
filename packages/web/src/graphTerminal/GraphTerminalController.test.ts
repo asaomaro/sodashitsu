@@ -261,4 +261,19 @@ describe("GraphTerminalController", () => {
     }
     expect(k.registry.get("p1")).toBe(entry);
   });
+
+  it("窓の pane が選ばれていなければ、attached のとき選び直す（開く途中・別の pane・既に選ばれているときは何もしない）", async () => {
+    await k.controller.open("p1");
+    k.requests.length = 0;
+    k.controller.ensureSelected("p1");
+    expect(k.requests).toEqual([]); // 選ばれている
+    k.view.setView("w2", "t2");
+    k.view.focusPane("p2");
+    k.controller.ensureSelected("p2"); // 窓の pane ではない
+    expect(k.requests).toEqual([]);
+    k.controller.ensureSelected("p1");
+    expect(k.view.focusedPaneId).toBe("p1");
+    expect(k.view.workspaceId).toBe("w1");
+    expect(methods(k)).toContain("pane.focus");
+  });
 });
