@@ -278,7 +278,27 @@ describe("StoreAdapter", () => {
     expect(view.focusedPaneId).toBe("p1"); // 閉じたら、残りの pane へ戻る
   });
 
-  it("グラフ画面（20260927-agent-graph）を開いている間も同じく、焦点は動かさず閉じたときの戻り先だけを差し替える", () => {
+  it("1 列の画面の重ねるグラフ（20260927-agent-graph）を開いている間も同じく、焦点は動かさず閉じたときの戻り先だけを差し替える", () => {
+    const { adapter } = makeAdapter();
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    session.workspaceUpserted({ ...makeWorkspace("w1"), tabIds: ["t1"], activeTabId: "t1" });
+    session.tabUpserted({ ...makeTab("t1", "w1"), layout: { type: "split", id: "s1", dir: "right", ratio: 0.5, a: { type: "pane", paneId: "p1" }, b: { type: "pane", paneId: "p2" } }, focusedPaneId: "p2" });
+    session.paneUpserted(makePane("p1", "t1"));
+    session.paneUpserted(makePane("p2", "t1"));
+    view.setView("w1", "t1");
+    view.focusPane("p2");
+    view.setMobileViewport(true);
+    view.openGraph();
+
+    adapter.applyEvent({ event: "pane.closed", data: { paneId: "p2" } });
+    expect(view.focusedPaneId).toBe("p2"); // グラフ画面を開いている間は焦点を動かさない
+    expect(view.preGraphFocusPaneId).toBe("p1");
+    view.closeGraph();
+    expect(view.focusedPaneId).toBe("p1"); // 閉じたら、残りの pane へ戻る
+  });
+
+  it("デスクトップのグラフの画面（20261008-graph-first）はダイアログではない。焦点の pane は直接移し、基本画面へ戻っても保たれる", () => {
     const { adapter } = makeAdapter();
     const session = useSessionStore(pinia);
     const view = useViewStore(pinia);
@@ -291,10 +311,9 @@ describe("StoreAdapter", () => {
     view.openGraph();
 
     adapter.applyEvent({ event: "pane.closed", data: { paneId: "p2" } });
-    expect(view.focusedPaneId).toBe("p2"); // グラフ画面を開いている間は焦点を動かさない
-    expect(view.preGraphFocusPaneId).toBe("p1");
+    expect(view.focusedPaneId).toBe("p1"); // 基本画面の pane は inert なので、焦点を直接移してよい（戻したときにそのまま使える）
     view.closeGraph();
-    expect(view.focusedPaneId).toBe("p1"); // 閉じたら、残りの pane へ戻る
+    expect(view.focusedPaneId).toBe("p1");
   });
 
   it("extension.changed はコールバックへ渡す（中身なし。画面が extension.list で取り直す）", () => {

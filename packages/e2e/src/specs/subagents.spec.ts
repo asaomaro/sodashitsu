@@ -288,7 +288,7 @@ test("短い説明に HTML を書いても動かない（文字として出る�
 
 // --- 連携のグラフ（T21）---
 
-const graphView = (page: Page) => page.locator("dialog.graph-view");
+const graphView = (page: Page) => page.locator(".graph-view");
 const panel = (page: Page) => graphView(page).locator(".subagent-panel");
 const graphNode = (page: Page, paneId: string) =>
   graphView(page).locator(`[data-node-key="local:${paneId}"]`);

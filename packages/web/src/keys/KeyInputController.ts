@@ -91,6 +91,7 @@ export class KeyInputController {
   private imagePaste: ImagePastePort | null = null;
   private pendingModifier: PendingModifier | null = null;
   private pendingModifierLocked = false;
+  private domKeyFilter: ((decision: KeyDecision) => boolean) | null = null;
 
   constructor(
     private readonly router: KeyRouter,
@@ -138,6 +139,13 @@ export class KeyInputController {
     return { dispose: () => term.attachCustomKeyEventHandler(() => true) };
   }
 
+  /**
+   * `handleDomKey` の決定を絞る（デスクトップのグラフの画面。`graphScreenKeys.ts`）。`false` を返した決定は何もせず食う（端末へも送らない）。`null` で解除。
+   */
+  setDomKeyFilter(filter: ((decision: KeyDecision) => boolean) | null): void {
+    this.domKeyFilter = filter;
+  }
+
   /** 端末以外（サイドバー等）にフォーカスがあるときの keydown。`true` なら既定の動作のままでよい。 */
   handleDomKey(ev: KeyboardEventLike): boolean {
     if (isManualPasteShortcut(ev)) return true; // 端末にフォーカスが無ければ貼り付け先が無い
@@ -148,6 +156,11 @@ export class KeyInputController {
     const decision = this.router.handle(this.applyPendingModifier(k));
     // prefix の後のキーに割り当てた場合は、他の prefix の操作と同じく 2 打目を食う（入力欄へ文字として入れない）。貼り付け先の端末が無いので何もしない。
     if (isPasteImage(decision)) return false;
+    if (this.domKeyFilter && !this.domKeyFilter(decision)) {
+      // ルーターは action を返す時点で mode を進めている（enterMode copy/resize）。食った操作の mode に居残らない。
+      if (decision.kind === "action" && decision.action.type === "enterMode") this.router.setMode("terminal");
+      return false;
+    }
     return this.dispatch(decision, null);
   }
 
