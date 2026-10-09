@@ -1037,6 +1037,9 @@ test.describe("探す（PR1d T12b）", () => {
     await expect(graphView(page)).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.activeElement?.classList.contains("graph-find-input") ?? true)).toBe(false);
     await expect.poll(() => page.evaluate(() => document.activeElement?.closest(".graph-view") !== null)).toBe(true);
+    // フォーカスは、入口のノード・そのノードが選ばれたまま（根の Esc の処理が二重に走って、選択を外し・根へ戻すことが無い。入力の stopPropagation が要る理由）
+    await expect.poll(() => page.evaluate(() => document.activeElement?.hasAttribute("data-node-key") ?? false)).toBe(true);
+    await expect(graphView(page).locator(".graph-node-selected")).toHaveCount(1);
     expect(w.ws.size).toBeGreaterThan(0);
   });
 
@@ -1054,6 +1057,112 @@ test.describe("探す（PR1d T12b）", () => {
     expect(await page.locator(".graph-zoom").textContent()).toBe(zoom0); // 1 + - 0 で変わらない
     await expect(graphView(page).locator(".graph-connect-banner")).toHaveCount(0); // c で接続モードに入らない
     expect(w.sent().slice(sent0).filter((m) => m.method.startsWith("graph.") || m.method === "pane.focus")).toEqual([]);
+  });
+});
+
+test.describe("PR1d レビューの直し", () => {
+  test("M1: 地図の端でドラッグして揺らしても、面が空にならず、囲いまでの距離が増え続けない", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    const group = graphView(page).locator('[data-frame-kind="worktree"]');
+    const canvas = await box(page.locator(".graph-canvas"));
+    const dist = async () => {
+      const b = await box(group);
+      return Math.hypot(b.x + b.width / 2 - (canvas.x + canvas.width / 2), b.y + b.height / 2 - (canvas.y + canvas.height / 2));
+    };
+    const m = await box(minimapSvg(page));
+    await page.mouse.move(m.x + 3, m.y + 3); // 左上の端
+    await page.mouse.down();
+    const ds: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      await page.mouse.move(m.x + 1 + (i % 2), m.y + 1 + (i % 2), { steps: 2 });
+      await page.waitForTimeout(40);
+      ds.push(await dist());
+    }
+    await page.mouse.up();
+    // 暴走すると 3000 → 10000 px と増え続ける。収まっていれば、1 画面分の中
+    expect(Math.max(...ds), `距離 ${ds.map(Math.round)}`).toBeLessThan(Math.max(canvas.width, canvas.height) * 2);
+    expect(ds.at(-1)!, `最後が最初より大きく離れない ${ds.map(Math.round)}`).toBeLessThan(ds[0]! + 300);
+    expect(w.ws.size).toBeGreaterThan(0);
+  });
+
+  test("S1: 探して決めると、サイドバーの行と同じに、サーバの選んでいる workspace・pane も替わり、地図の選んでいる囲いも動く", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    const sent0 = w.sent().length;
+    await findInput(page).fill("beta");
+    await graphView(page).locator('.graph-find-item[data-find-kind="workspace"]').click();
+    await expect(spaceBtn(page, /^ドキュメント/)).toHaveAttribute("aria-current", "true");
+    const focusCalls = () => w.sent().slice(sent0).filter((m) => m.method === "workspace.focus" || m.method === "pane.focus");
+    await expect.poll(() => focusCalls().length).toBeGreaterThan(0);
+    expect(JSON.stringify(focusCalls())).toContain(w.ws.get("beta")!.id);
+    await expect(minimapSvg(page).locator(".graph-minimap-frame-selected")).toHaveAttribute("data-minimap-frame", w.ws.get("beta")!.id);
+    await expect(rowOf(page, "beta")).toHaveClass(/sidebar-row-current/);
+    // pane を探して決めても、同じ（pane.focus）
+    await findInput(page).fill("alpha");
+    await graphView(page).locator('.graph-find-item[data-find-kind="workspace"]').first().click();
+    await expect(minimapSvg(page).locator(".graph-minimap-frame-selected")).toHaveAttribute("data-minimap-frame", w.ws.get("alpha")!.id);
+  });
+
+  test("S2: 候補の一覧で、↑ ↓ で選んだ行が見える範囲の外へ出たら、スクロールして見せる", async ({ page, appServer }) => {
+    await boot(page, appServer);
+    await openGraph(page);
+    await findInput(page).fill("a");
+    const list = graphView(page).locator(".graph-find-list");
+    await expect(list.locator(".graph-find-item")).not.toHaveCount(0);
+    const n = await list.locator(".graph-find-item").count();
+    expect(n).toBeGreaterThan(10);
+    for (let i = 0; i < n - 1; i++) await page.keyboard.press("ArrowDown");
+    const inView = async () => {
+      const lb = await box(list);
+      const ab = await box(list.locator(".graph-find-item-active"));
+      return ab.y >= lb.y - 1 && ab.y + ab.height <= lb.y + lb.height + 1;
+    };
+    await expect.poll(inView).toBe(true);
+    for (let i = 0; i < n - 1; i++) await page.keyboard.press("ArrowUp");
+    await expect.poll(inView).toBe(true);
+  });
+
+  test("S3: 確認のダイアログ・接続の途中・横のパネルが出ている間は、[ ] と n が働かない", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await addTriggerLink(w, "main-ws", "wt-a-ws");
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    const stays = async () => {
+      await page.keyboard.press("]");
+      await page.keyboard.press("n");
+      await page.waitForTimeout(200);
+      await expect(spaceBtn(page, /^開発/)).toHaveAttribute("aria-current", "true"); // 空間が替わらない
+      await expect(minimapSvg(page)).toBeVisible(); // 地図をたたまない
+    };
+    // 確認
+    await graphView(page).locator("[data-link-chip]").first().focus();
+    await page.keyboard.press("Delete");
+    await expect(graphView(page).locator(".graph-confirm")).toBeVisible();
+    await stays();
+    await page.keyboard.press("Escape");
+    await expect(graphView(page).locator(".graph-confirm")).toHaveCount(0);
+    // 接続の途中（c）。フォーカスはノードにある
+    const node = nodeOf(page, w.pane.get("alpha")!);
+    await node.focus();
+    await page.keyboard.press("c");
+    await expect(graphView(page).locator(".graph-connect-banner")).toBeVisible();
+    await stays();
+    await page.keyboard.press("Escape");
+    await expect(graphView(page).locator(".graph-connect-banner")).toHaveCount(0);
+    // 横のパネル（線の設定）。フォーカスはパネルの外（チップ）に戻して押す
+    await graphView(page).locator("[data-link-chip]").first().click();
+    await expect(graphView(page).locator(".link-panel")).toBeVisible();
+    await graphView(page).locator(".link-panel").getByRole("button").first().focus();
+    await stays();
+    await page.keyboard.press("Escape");
+    // どれも無ければ働く
+    await expect(graphView(page).locator(".link-panel")).toHaveCount(0);
+    await node.focus();
+    await page.keyboard.press("]");
+    await expect(spaceBtn(page, /^ドキュメント/)).toHaveAttribute("aria-current", "true");
   });
 });
 
