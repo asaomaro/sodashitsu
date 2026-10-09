@@ -3,7 +3,7 @@
  * 探す（20261008-graph-first の PR1d T12b。ツールバーの入力）。候補は `findCandidates`（空間をまたぐ。20 件まで）。上下のキーで選び、Enter で決める。`Esc` で閉じて、面へフォーカスを戻す（`leave`）。
  * **入力にフォーカスがある間、グラフのキーは働かない**（文字として入る）: keydown を、ここで止める。IME の変換中の Enter・矢印では決めない・動かない。
  */
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { findCandidates, type FindItem } from "./findCandidates.js";
 
 const props = defineProps<{ items: readonly FindItem[] }>();
@@ -16,6 +16,10 @@ const inputEl = ref<HTMLInputElement | null>(null);
 const results = computed(() => findCandidates(props.items, query.value));
 watch(results, () => {
   active.value = 0;
+});
+// ↑ ↓ で選んだ行が、一覧の見える範囲の外へ出たら、スクロールして見せる（PR1d レビュー S2）。
+watch(active, () => {
+  void nextTick(() => document.getElementById(`graph-find-opt-${active.value}`)?.scrollIntoView?.({ block: "nearest" }));
 });
 
 function focus(): void {
@@ -31,7 +35,8 @@ function choose(item: FindItem | undefined): void {
   emit("choose", item);
 }
 function onKeydown(ev: KeyboardEvent): void {
-  // グラフのキーへ渡さない（文字として入る）。Esc だけは自分で扱う。
+  // 渡さない（要る。消さない）: 根の Esc の処理（`escape()`）が、ここの Esc（面へ戻る）のあとに二重に走って、選んでいるノードを外してしまうのを防ぐ。文字はグラフのキーにならず入力に入る
+  // （根の `isTextField` の守りもあるが、Esc はその手前で処理されるので、ここで止める）。`main.ts` の window のキー処理へも渡さない。
   ev.stopPropagation();
   if (ev.isComposing || ev.keyCode === 229) return;
   if (ev.key === "Escape") {
@@ -62,7 +67,7 @@ function onKeydown(ev: KeyboardEvent): void {
       role="combobox"
       aria-label="探す（pane・エージェント・workspace・tab の名前）"
       aria-autocomplete="list"
-      aria-controls="graph-find-list"
+      :aria-controls="open && results.length > 0 ? 'graph-find-list' : undefined"
       :aria-expanded="open && results.length > 0"
       :aria-activedescendant="open && results.length > 0 ? `graph-find-opt-${active}` : undefined"
       placeholder="探す（/）"
@@ -74,7 +79,7 @@ function onKeydown(ev: KeyboardEvent): void {
       @keydown="onKeydown"
       @keyup.stop
     />
-    <ul v-if="open && results.length > 0" id="graph-find-list" class="graph-find-list" role="listbox" @pointerdown.prevent>
+    <ul v-if="open && results.length > 0" id="graph-find-list" class="graph-find-list" role="listbox" aria-label="探す候補" @pointerdown.prevent>
       <li
         v-for="(r, i) in results"
         :id="`graph-find-opt-${i}`"
@@ -92,7 +97,8 @@ function onKeydown(ev: KeyboardEvent): void {
         <span class="graph-find-sub">{{ r.sub }}</span>
       </li>
     </ul>
-    <p v-else-if="open && query.trim() !== ''" class="graph-find-none" role="status">見つかりません</p>
+    <p v-else-if="open && query.trim() !== ''" class="graph-find-none">見つかりません</p>
+    <span class="graph-find-status" role="status" aria-live="polite">{{ open && query.trim() !== "" ? (results.length === 0 ? "見つかりません" : `${results.length} 件`) : "" }}</span>
   </div>
 </template>
 
@@ -133,6 +139,13 @@ function onKeydown(ev: KeyboardEvent): void {
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   font-size: 12px;
+}
+.graph-find-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 .graph-find-none {
   padding: 6px 10px;

@@ -1751,6 +1751,7 @@ watch(
 
 /** 別の空間のノードとの線の印から: 相手のノードへ（相手の空間へ切り替える）。 */
 function goToMark(m: { otherKey: string }): void {
+  selectLikeSidebar({ kind: "node", key: m.otherKey });
   spaces.requestReveal({ kind: "node", key: m.otherKey });
 }
 function openMarkSettings(m: { link: GraphLink }): void {
@@ -1839,10 +1840,54 @@ const findItems = computed<FindItem[]>(() => {
   }
   return out;
 });
+/**
+ * 探して決めた・線の印を押した、とき: **サイドバーの行を押したのと同じ**に、自分の選んでいる workspace・tab・pane を替え、サーバの「選んでいる workspace・pane」も替える
+ * （`workspace.focus`・`pane.focus`。基本画面へ戻ったときその pane にいる。地図の「選んでいる囲い」・サイドバーの選択の見た目も動く）。画面の接続が向いているマシンの pane・workspace だけ
+ * （別のマシンの pane は、手元のセッションに無いので、動かすだけ）。
+ */
+function selectLikeSidebar(target: { kind: "node"; key: string } | { kind: "workspace"; workspaceId: string }): void {
+  if (target.kind === "workspace") {
+    const ws = session.workspaces.get(target.workspaceId);
+    if (!ws) return;
+    const tab = session.tabs.get(ws.activeTabId);
+    view.setView(ws.id, ws.activeTabId);
+    if (tab) view.focusPane(tab.focusedPaneId);
+    void conn?.request("workspace.focus", { workspaceId: ws.id }).catch(() => undefined);
+    return;
+  }
+  const info = graph.nodeInfo(target.key as NodeKey);
+  const loc = info.location;
+  if (!loc || info.machine !== machines.selectedId || info.exists !== true) return;
+  view.setView(loc.workspaceId, loc.tabId);
+  view.focusPane(info.paneId);
+  void conn?.request("pane.focus", { paneId: info.paneId }).catch(() => undefined);
+}
 function onFindChoose(item: FindItem): void {
   dialogEl.value?.focus({ preventScroll: true });
-  if (item.kind === "pane") spaces.requestReveal({ kind: "node", key: item.target });
-  else spaces.requestReveal({ kind: "workspace", workspaceId: item.target });
+  if (item.kind === "pane") {
+    if (!spaces.spaceOfNode.has(item.target)) {
+      view.toast(`${item.label} は、この画面では動かせません（空間に載っていない pane です）。`);
+      return;
+    }
+    selectLikeSidebar({ kind: "node", key: item.target });
+    spaces.requestReveal({ kind: "node", key: item.target });
+  } else {
+    selectLikeSidebar({ kind: "workspace", workspaceId: item.target });
+    spaces.requestReveal({ kind: "workspace", workspaceId: item.target });
+  }
+}
+/** 確認・接続の途中・横のパネル・チェックリスト・選び直しが出ている間（グラフの画面全体に対してモーダルな状態）。 */
+function modalBusy(): boolean {
+  return (
+    confirmState.value !== null ||
+    connectFrom.value !== null ||
+    sheet.value !== null ||
+    panel.value !== null ||
+    history.value !== null ||
+    subagentsKey.value !== null ||
+    checklistOpen.value ||
+    rekeyKey.value !== null
+  );
 }
 function focusFind(): void {
   findRef.value?.focus();
@@ -1970,7 +2015,7 @@ function onKeydown(ev: KeyboardEvent): void {
       return;
     case "[":
     case "]":
-      if (isMobile.value) return;
+      if (isMobile.value || modalBusy()) return;
       ev.preventDefault();
       stepSpace(ev.key === "[" ? -1 : 1);
       return;
@@ -1981,7 +2026,7 @@ function onKeydown(ev: KeyboardEvent): void {
       return;
     case "n":
     case "N":
-      if (isMobile.value) return;
+      if (isMobile.value || modalBusy()) return;
       ev.preventDefault();
       toggleMinimap();
       return;

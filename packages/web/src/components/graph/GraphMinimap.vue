@@ -27,8 +27,14 @@ const W = 176;
 const H = 112;
 const PAD = 6;
 
+interface Bounds {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 /** 地図に収める範囲（囲い・ノード・いま見えている範囲の外接）。 */
-const bounds = computed(() => {
+const rawBounds = computed<Bounds>(() => {
   const rs = [...props.frames.map((f) => f.rect), ...props.nodes, props.view];
   const x0 = Math.min(...rs.map((r) => r.x));
   const y0 = Math.min(...rs.map((r) => r.y));
@@ -36,6 +42,12 @@ const bounds = computed(() => {
   const y1 = Math.max(...rs.map((r) => r.y + r.h));
   return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
 });
+/**
+ * **ドラッグの間は、範囲を押した時点の値に固定する**。固定しないと、押した点を中央に動かすたびに「見えている範囲」が外へ出て範囲が広がり、同じ画面の位置がさらに外の世界の点に
+ * 写って、動かすたびに枠が際限なく飛んでいく（PR1d レビュー M1）。
+ */
+const latched = ref<Bounds | null>(null);
+const bounds = computed<Bounds>(() => latched.value ?? rawBounds.value);
 const scale = computed(() => Math.min((W - PAD * 2) / bounds.value.w, (H - PAD * 2) / bounds.value.h));
 const offset = computed(() => ({
   x: (W - bounds.value.w * scale.value) / 2,
@@ -57,27 +69,40 @@ function pointFor(ev: PointerEvent): { x: number; y: number } {
   const r = svgEl.value!.getBoundingClientRect();
   const sx = ((ev.clientX - r.left) / r.width) * W;
   const sy = ((ev.clientY - r.top) / r.height) * H;
+  const b = bounds.value;
+  const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+  // 押した点は、地図の範囲の中に収める（地図の外へはみ出して押しても、範囲の外へは動かない）
   return {
-    x: (sx - offset.value.x) / scale.value + bounds.value.x,
-    y: (sy - offset.value.y) / scale.value + bounds.value.y,
+    x: clamp((sx - offset.value.x) / scale.value + b.x, b.x, b.x + b.w),
+    y: clamp((sy - offset.value.y) / scale.value + b.y, b.y, b.y + b.h),
   };
 }
 function onDown(ev: PointerEvent): void {
   if (ev.button !== 0) return;
   ev.stopPropagation();
   ev.preventDefault();
+  latched.value = rawBounds.value;
   dragging = true;
   svgEl.value?.setPointerCapture?.(ev.pointerId);
   emit("center", pointFor(ev));
 }
+function end(): void {
+  dragging = false;
+  latched.value = null;
+}
 function onMove(ev: PointerEvent): void {
   if (!dragging) return;
+  if ((ev.buttons & 1) === 0) {
+    // 離したのを取りこぼした（ウィンドウの外で離した等）: ボタンを押していない動きでは動かさない
+    end();
+    return;
+  }
   ev.stopPropagation();
   emit("center", pointFor(ev));
 }
 function onUp(ev: PointerEvent): void {
   if (!dragging) return;
-  dragging = false;
+  end();
   ev.stopPropagation();
   svgEl.value?.releasePointerCapture?.(ev.pointerId);
 }
@@ -108,6 +133,7 @@ function onUp(ev: PointerEvent): void {
       @pointermove="onMove"
       @pointerup="onUp"
       @pointercancel="onUp"
+      @lostpointercapture="end"
     >
       <rect
         v-for="f in frameBoxes"
