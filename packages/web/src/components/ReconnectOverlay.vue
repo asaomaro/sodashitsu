@@ -85,6 +85,7 @@ const retry = (): void => {
 }
 /* 理由と「再試行」の枠（D107）。枠だけがポインタを受ける（背後の端末の scrollback は読める・選べる）。 */
 .reconnect-overlay-panel {
+  box-shadow: var(--soda-shape-shadow, none);
   display: flex;
   flex-direction: column;
   gap: 0.6em;

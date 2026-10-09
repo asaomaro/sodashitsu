@@ -1083,6 +1083,8 @@ watchDragInterrupt(view, () => {
   border-right: 1px solid var(--soda-menu-border, #44475a);
 }
 .sidebar-collapsed {
+  /* 畳んだサイドバー（3em）の左右の余白は、様式に依らず、クラシックの値のまま（モダンの 12px にすると、内側の幅が 2px 変わる。20261008-ui-style PR2 の S2）。 */
+  --soda-shape-pad-x: 0.8em;
   width: 3em !important;
   /* 畳んだ状態は今の構造に戻す: nav 全体が 1 つのスクロール。`overflow-y` を指定すると `overflow-x` も `auto` に計算されるので、横は明示して止める（AC3）。 */
   overflow-y: auto;

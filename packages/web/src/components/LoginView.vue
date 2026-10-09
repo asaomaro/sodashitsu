@@ -187,6 +187,10 @@ function onSubmit(): void {
 .login-view-label input {
   font: inherit;
   padding: 0.4em 0.6em;
+  min-height: var(--soda-shape-control-h, auto);
+}
+.login-view-form button {
+  min-height: var(--soda-shape-control-h, auto);
 }
 .login-view-status {
   margin: 0;

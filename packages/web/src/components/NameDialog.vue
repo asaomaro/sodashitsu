@@ -135,6 +135,7 @@ function onNativeCancel(ev: Event): void {
 
 <style scoped>
 .name-dialog {
+  box-shadow: var(--soda-shape-shadow, none);
   border: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
@@ -142,7 +143,7 @@ function onNativeCancel(ev: Event): void {
   min-width: 20em;
   /* workspace の名前変更の手掛かり（1 行の文）がダイアログを横に広げすぎないよう、上限を置いて折り返させる（20260921-workspace-auto-label）。 */
   max-width: min(30em, calc(100% - 16px));
-  padding: 1em;
+  padding: var(--soda-shape-pad, 1em);
 }
 .name-dialog::backdrop {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
@@ -166,5 +167,10 @@ function onNativeCancel(ev: Event): void {
   justify-content: flex-end;
   gap: 0.5em;
   margin-top: 1em;
+}
+/* 押せる部品の高さ（20261008-ui-style。クラシックでは変数が無く、何もしない） */
+.name-dialog button,
+.name-dialog input:not([type="checkbox"]):not([type="radio"]) {
+  min-height: var(--soda-shape-control-h, auto);
 }
 </style>
