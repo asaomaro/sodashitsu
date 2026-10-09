@@ -1,6 +1,7 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
+import { focusTerminal, prefixKey } from "../support/keys.js";
 
 /**
  * 画面の様式（20261008-ui-style。`data-ui-style`）の E2E。**判定は、ブラウザの側（`<html>` の属性・設定の画面の部品）で行う**（条項 e2e-observe-browser）。
@@ -56,4 +57,46 @@ test("控えが壊れていても、アプリは classic で起動する（属�
   await open(page, appServer);
   expect(await firstUiStyle(page)).toBeNull();
   await expect.poll(() => uiStyleAttr(page)).toBe("classic");
+});
+
+test("設定の画面のラジオ「画面の様式」: 選ぶと再読み込みなしで data-ui-style が変わり、同じ利用者の別のブラウザにも反映される。再読み込みしても残る", async ({ page, appServer, browser }) => {
+  await open(page, appServer);
+  // 別のブラウザ（別の context）。
+  const otherCtx = await browser.newContext();
+  const other = await otherCtx.newPage();
+  await open(other, appServer);
+  await expect.poll(() => uiStyleAttr(page)).toBe("classic");
+  await expect.poll(() => uiStyleAttr(other)).toBe("classic");
+
+  await focusTerminal(page);
+  await prefixKey(page, "s");
+  const dialog = page.locator("dialog.settings-dialog");
+  await expect(dialog).toHaveAttribute("open", "");
+  await dialog.locator("nav.settings-menu button", { hasText: "表示" }).click();
+  const radio = (value: string) => dialog.locator(`input[type="radio"][name="settings-ui-style"][value="${value}"]`);
+  await expect(radio("classic")).toBeChecked();
+  await expect(dialog.locator('fieldset:has(input[name="settings-ui-style"]) legend')).toHaveText("画面の様式");
+
+  await radio("modern").check();
+  await expect.poll(() => uiStyleAttr(page), "再読み込みなしで変わる").toBe("modern");
+  await expect.poll(() => uiStyleAttr(other), "別のブラウザにも反映される").toBe("modern");
+  // 設定の画面を開いたままでも、ラジオの選びは保たれる。
+  await expect(radio("modern")).toBeChecked();
+
+  // 再読み込みしても残る（最初の描画の時点で modern）。
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("soda.themeBoot.v1") ?? "null")?.uiStyle ?? null)).toBe("modern");
+  await page.reload();
+  await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+  expect(await uiStyleAttr(page)).toBe("modern");
+
+  // クラシックへ戻す（別のブラウザ側の画面から）→ こちらにも反映。
+  await focusTerminal(other);
+  await prefixKey(other, "s");
+  const dialogOther = other.locator("dialog.settings-dialog");
+  await expect(dialogOther).toHaveAttribute("open", "");
+  await dialogOther.locator("nav.settings-menu button", { hasText: "表示" }).click();
+  await dialogOther.locator('input[type="radio"][name="settings-ui-style"][value="classic"]').check();
+  await expect.poll(() => uiStyleAttr(other)).toBe("classic");
+  await expect.poll(() => uiStyleAttr(page)).toBe("classic");
+  await otherCtx.close();
 });

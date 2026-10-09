@@ -8,7 +8,7 @@ import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useNotificationsStore } from "../store/notifications.js";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore, type NewCwdPolicy, type PaneFrameThickness } from "../store/settings.js";
-import { DISPLAY_STATES, stateGlyph, stateLabel } from "@sodashitsu/client-core";
+import { DISPLAY_STATES, stateGlyph, stateLabel, type UiStyle } from "@sodashitsu/client-core";
 import { useViewStore } from "../store/view.js";
 import { effectiveScrollback, scrollbackChoices, type ScrollbackPref } from "../term/scrollback.js";
 import type { FileLocality } from "../term/FileTransfer.js";
@@ -206,6 +206,16 @@ const paneBordersChoices: readonly { value: PaneBorders; label: string }[] = [
 
 function choosePaneBorders(v: PaneBorders): void {
   settings.setPaneBorders(v);
+}
+
+/** 画面の様式（20261008-ui-style。クラシック＝いまの見た目・モダン＝丸い角）。選んだ時点で反映・保存（確定ボタン無し。再読み込みも要らない）。 */
+const uiStyleChoices: readonly { value: UiStyle; label: string }[] = [
+  { value: "classic", label: "クラシック" },
+  { value: "modern", label: "モダン" },
+];
+
+function chooseUiStyle(v: UiStyle): void {
+  settings.setUiStyle(v);
 }
 
 function togglePaneGaps(): void {
@@ -1086,6 +1096,21 @@ function onNativeCancel(ev: Event): void {
                 :value="c.value"
                 :checked="settings.paneFrameThickness === c.value"
                 @change="choosePaneFrameThickness(c.value)"
+              />
+              <span>{{ c.label }}</span>
+            </label>
+          </fieldset>
+        </li>
+        <li class="settings-row">
+          <fieldset class="settings-fieldset">
+            <legend class="settings-legend">画面の様式</legend>
+            <label v-for="c in uiStyleChoices" :key="c.value" class="settings-radio">
+              <input
+                type="radio"
+                name="settings-ui-style"
+                :value="c.value"
+                :checked="settings.uiStyle === c.value"
+                @change="chooseUiStyle(c.value)"
               />
               <span>{{ c.label }}</span>
             </label>
