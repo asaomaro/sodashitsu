@@ -98,6 +98,18 @@ const commandEntries = computed<HelpEntry[]>(() =>
     .filter((e) => e.keys !== ""),
 );
 
+/**
+ * グラフの画面（デスクトップ。20261008-graph-first）のキー。グラフの面にフォーカスがある間だけ働く（prefix の割り当てではないので固定の表記。`docs/agent-graph.md`「キー（グラフ画面）」と同じ）。
+ */
+const GRAPH_SCREEN_ENTRIES: HelpEntry[] = [
+  { keys: "[ / ]", label: "空間を前・次へ（端で止まる）" },
+  { keys: "/", label: "探す（pane・エージェント・workspace・tab の名前。↑ ↓ で選び Enter で移る・Esc で面へ戻る）" },
+  { keys: "n", label: "小さな地図をたたむ・開く" },
+  { keys: "1 / + / - / 0", label: "全体表示・ズーム（1 全体・+ -・0 で 100%）" },
+  { keys: "Tab / 矢印", label: "ノードの間を移る / 選んだノードを動かす" },
+  { keys: "m", label: "ノード: 別の空間との線の印へ（矢印で移り、Esc で戻る）" },
+];
+
 // herdr の keybind_help_groups() の群分けに合わせる（D76）。先頭に prefix 自身の行（herdr の「prefix mode」の行と同じ）。
 const helpGroups = computed<HelpGroup[]>(() => [
   {
@@ -110,6 +122,7 @@ const helpGroups = computed<HelpGroup[]>(() => [
   { name: "移動", entries: navigateEntries.value },
   { name: "workspace / tab", entries: actionEntries("workspace / tab") },
   { name: "pane", entries: actionEntries("pane") },
+  { name: "グラフの画面", entries: GRAPH_SCREEN_ENTRIES },
   // 独自コマンド（20260927-custom-command-keys。herdr の custom 群）。割り当てのあるものだけ、名前（説明か id）とキーで。無ければ群ごと出さない。
   ...(commandEntries.value.length > 0 ? [{ name: COMMAND_GROUP, entries: commandEntries.value }] : []),
 ]);

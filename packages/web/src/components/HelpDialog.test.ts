@@ -27,12 +27,12 @@ async function open(view: ReturnType<typeof useViewStore>, wrapper: ReturnType<t
 }
 
 describe("HelpDialog — 表示", () => {
-  it("4 つの群（全体・移動・workspace / tab・pane）を出す。独自コマンドが無ければその群は出ない", async () => {
+  it("5 つの群（全体・移動・workspace / tab・pane・グラフの画面）を出す。独自コマンドが無ければその群は出ない", async () => {
     const view = useViewStore(pinia);
     const wrapper = mountDialog();
     await open(view, wrapper);
     const names = wrapper.findAll(".help-dialog-group-name").map((el) => el.text());
-    expect(names).toEqual(["全体", "移動", "workspace / tab", "pane"]);
+    expect(names).toEqual(["全体", "移動", "workspace / tab", "pane", "グラフの画面"]);
   });
 
   it("独自コマンドは、割り当てのあるものだけを群「独自コマンド」に名前（説明か id）とキーで出す（20260927-custom-command-keys の AC14）", async () => {
@@ -51,7 +51,7 @@ describe("HelpDialog — 表示", () => {
     settings.setKeyBindings("command:build", ["ctrl+alt+b", "prefix+alt+b"]);
     const wrapper = mountDialog();
     await open(view, wrapper);
-    expect(wrapper.findAll(".help-dialog-group-name").map((el) => el.text())).toEqual(["全体", "移動", "workspace / tab", "pane", "独自コマンド"]);
+    expect(wrapper.findAll(".help-dialog-group-name").map((el) => el.text())).toEqual(["全体", "移動", "workspace / tab", "pane", "グラフの画面", "独自コマンド"]);
     const label = (keys: string) => wrapper.findAll("dt").find((dt) => dt.text() === keys)?.element.nextElementSibling?.textContent;
     expect(label("prefix+alt+g")).toBe("lazygit を開く");
     expect(label("ctrl+alt+b / prefix+alt+b")).toBe("build"); // 割り当てた順
