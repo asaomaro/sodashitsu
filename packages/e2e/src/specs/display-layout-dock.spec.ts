@@ -285,7 +285,7 @@ test("(5) D&D: 見出しをつかんで各場所へ。落とせる場所の文�
     await expect(page.locator("[data-display-drop-zones]")).toBeVisible();
     await expect(page.locator(`[data-display-drop-zone="${side}"][data-active="1"]`)).toHaveText(new RegExp(`${LABEL[side]}に置く`));
     await expect(page.locator(`[data-display-drop-zone="${current}"]`)).toContainText("ここにあります");
-    await expect(page.locator('[data-display-drop-zone="float"]')).toHaveText("ここには置けません");
+    await expect(page.locator('[data-display-drop-zone="float"]')).toHaveText("浮いた窓にする"); // PR-C: 中央は浮いた窓（落とせる）
     await expect(page.locator(".pane-frame-zone")).toHaveCount(0);
     await page.keyboard.press("a");
     await page.mouse.up();
@@ -294,9 +294,14 @@ test("(5) D&D: 見出しをつかんで各場所へ。落とせる場所の文�
     current = side;
   }
   expect(await page.evaluate(() => (window as unknown as { __keys: number }).__keys), "ドラッグ中のキーは流れない").toBe(0);
-  // 中央に落とす → 変わらない（PR-B）
+  // 中央に落とす → 浮いた窓になる（PR-C。窓の動きは display-layout-float.spec.ts）。ここでは右へ戻して続ける
   await drag([body.x + body.width / 2, body.y + body.height / 2]);
+  await expect(dock(page, "right")).toHaveCount(0);
+  await expect(page.locator("[data-display-float]")).toHaveCount(1);
+  await page.locator("[data-display-float] [data-display-menu-button]").click();
+  await menuItem(page, "右に置く").click();
   await expect(dock(page, "right")).toHaveCount(1);
+  await expect(page.locator("[data-display-float]")).toHaveCount(0);
   // Esc → 変わらない
   const g = await boxOf(grip());
   await page.mouse.move(g.x + 10, g.y + g.height / 2);

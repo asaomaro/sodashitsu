@@ -4,7 +4,7 @@ import { computed, inject, onBeforeUnmount, watch } from "vue";
 import { displayLabel } from "../display/displayLabel.js";
 import { createDockDrag, type DockZone } from "../display/dockDrag.js";
 import { dismissWithFocus, headFocusTarget, menuPositionBelow, openDisplayMenu, trayFocusTarget, withDisplayChange } from "../display/displayOps.js";
-import { clampFloatRect, defaultFloatRect, FLOAT_AREA_INSET_PX } from "../display/floatGeometry.js";
+import { defaultFloatRect, FLOAT_AREA_INSET_PX } from "../display/floatGeometry.js";
 import { DisplayControllerKey, DisplayHostKey, FloatGripKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useViewStore } from "../store/view.js";
@@ -49,7 +49,9 @@ const dockDrag = createDockDrag({
       const center = document.querySelector(`[data-pane-id="${CSS.escape(props.info.paneId)}"] .pane-frame-center`)?.getBoundingClientRect();
       if (!area || !center) return;
       const base = defaultFloatRect(0, props.info.size, area);
-      const rect = clampFloatRect({ ...base, x: at.x - center.left - FLOAT_AREA_INSET_PX, y: at.y - center.top - FLOAT_AREA_INSET_PX }, area);
+      // 位置は、離した場所（負にはしない）。いまの領域はドックが場所を取っているので、ここでは領域へ丸めない（丸めると、ドックが外れて広がった領域の右寄りに置けない）。
+      // 移した後の割り付けが、広がった領域の中へ丸めて描く（記憶の矩形は、そのまま）。
+      const rect = { ...base, x: Math.max(0, Math.round(at.x - center.left - FLOAT_AREA_INSET_PX)), y: Math.max(0, Math.round(at.y - center.top - FLOAT_AREA_INSET_PX)) };
       void withDisplayChange(
         props.info,
         () => store.setFaceDock(props.info, "float", rect),

@@ -277,11 +277,11 @@
       依存: T22
       AC: AC18, AC-I2, AC-I3, AC-I4, AC-I5
       点検: あり
-- [ ] T24: D&D の中央と、窓のつかみ: `dockZoneAt` の `float` を有効に（中央で離すと `setFaceDock(info, "float", 離した位置の矩形)`。1 回の呼び出し。窓の動ける領域が無ければ「ここには置けません」）。浮いた窓の見出しをつかむと、その場で動き（`moveFloatRect`）、本体の箱の縁から 16px 以内でだけ側が強調される。離すと、側なら `setFaceDock(info, 側)`・そうでなければ `setFaceRect`。`Esc` で、始める前の矩形へ。単体テスト
+- [x] T24: D&D の中央と、窓のつかみ: `dockZoneAt` の `float` を有効に（中央で離すと `setFaceDock(info, "float", 離した位置の矩形)`。1 回の呼び出し。窓の動ける領域が無ければ「ここには置けません」）。浮いた窓の見出しをつかむと、その場で動き（`moveFloatRect`）、本体の箱の縁から 16px 以内でだけ側が強調される。離すと、側なら `setFaceDock(info, 側)`・そうでなければ `setFaceRect`。`Esc` で、始める前の矩形へ。単体テスト
       対象: `packages/web/src/display/dockDrag.ts`・`.test.ts`、`components/DisplayDropZones.vue`、`DisplayFloat.vue` / 根拠: design「D&D」
       依存: T22, T16
       AC: AC15, AC17, AC18, AC-I2
-- [ ] T25: E2E（PR-C）`display-layout-float.spec.ts`:
+- [x] T25: E2E（PR-C）`display-layout-float.spec.ts`:
       (1) メニュー・D&D の中央で、窓になって開く。**`--dock float`・設定で浮いた窓になった、記憶の無い面は、閉じて始まる**（トレイの ❐ のボタンだけ・窓の要素が無い）→ ボタンを押すと開く。窓を開く・［たたむ］で閉じる・トレイの ❐ で開く・動かす・大きさを変える・前へ出す、のどれでも、ブラウザが `client.view` を送らない（ドックから移したときと、その pane で最初にトレイの行が出るときの 1 回を除く）。**帯が 1 本も無い pane で、窓を開く・閉じるを 3 回繰り返しても、`client.view` を送らず、トレイの行が出たまま**（開いている窓のボタンは `aria-pressed="true"`）。
       (2) 窓を、4 隅と 4 辺の外へ大きく動かす・大きくする → 窓の箱が、いつも端末の箱（`[data-pane-frame-main]`）の中。240×120px より小さくならない。pane を狭めた後も中。領域が最小より小さいと、トレイの押せないボタン。再読み込みの後、同じ位置と大きさ。移動の途中の `Esc` で戻る。
       まだ動かしていない窓（`--dock float` で出て、ボタンで開いた）は、プログラムが `--size` を変えて `set` し直しても・ほかの窓を開閉しても、箱が動かない。**その窓は、再読み込みの後も・`close` → 同じ名前で、別の `--size` で `set` し直した後も、同じ箱で開いて出て、ほかの面も残っている**。
@@ -301,7 +301,7 @@
       対象: `packages/e2e/src/specs/display-layout-float.spec.ts`（新規）、`packages/e2e/src/support/displayLayout.ts` / 根拠: 規約 `e2e-observe-browser`
       依存: T23, T24
       AC: AC10, AC17, AC18, AC19, AC20, AC21, AC22, AC23, AC24, AC25, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
-- [ ] T26: 文書（PR-C）: `docs/display.md`（浮いた窓: 出し方・動かし方・キーボード・端末の領域の中だけ・重なり〔操作中の窓が最前面〕・覚え方・「記憶の無い浮いた窓は、閉じて始まる」・限界〔窓は pane の中だけ・小さい pane では出せない・置き場所の変更でスクリプトの状態は消える・**利用者が開いたままにした窓は、同じ名前で出し直すと、利用者が決めた位置に開いて出る（プログラムが時機を選べる）**・遮断器で止めた面は、移す・たたんで開く・プログラムの出し直しで、また動く〕）・`docs/sodactl.md`（`--dock float`・`renderers.float`）・`docs/verification.md`
+- [x] T26: 文書（PR-C）: `docs/display.md`（浮いた窓: 出し方・動かし方・キーボード・端末の領域の中だけ・重なり〔操作中の窓が最前面〕・覚え方・「記憶の無い浮いた窓は、閉じて始まる」・限界〔窓は pane の中だけ・小さい pane では出せない・置き場所の変更でスクリプトの状態は消える・**利用者が開いたままにした窓は、同じ名前で出し直すと、利用者が決めた位置に開いて出る（プログラムが時機を選べる）**・遮断器で止めた面は、移す・たたんで開く・プログラムの出し直しで、また動く〕）・`docs/sodactl.md`（`--dock float`・`renderers.float`）・`docs/verification.md`
       対象: 上のファイル
       依存: T25
       AC: AC27

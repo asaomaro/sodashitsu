@@ -229,10 +229,19 @@ function onFocusOut(ev: FocusEvent): void {
   if (keyMode.value === null || finishing) return;
   const to = ev.relatedTarget;
   if (to instanceof Node && rootEl.value?.contains(to)) return;
-  // 窓の外へフォーカスが出た（またはウィンドウが外れた）: 確定する。フォーカスは動かさない。
-  void nextTick(() => {
-    if (keyMode.value !== null && !finishing && !rootEl.value?.contains(document.activeElement) && document.hasFocus()) endKeys(true, false);
-  });
+  const outside = (): boolean => keyMode.value !== null && !finishing && !rootEl.value?.contains(document.activeElement) && document.hasFocus();
+  // 窓の外の部品（端末など）へ利用者がフォーカスを移した: 確定する。フォーカスは動かさない。
+  if (to instanceof Element && !to.matches("iframe[data-display-frame]")) {
+    void nextTick(() => {
+      if (outside()) endKeys(true, false);
+    });
+    return;
+  }
+  // 表示の枠（iframe）がフォーカスを取った・どこにも移らなかった（body に落ちた）: 利用者が外へ出したのではない。PR3 の見回りが元の場所へ戻す（窓の根は覚えた元の場所）ので、
+  // 少し置いて、戻っていなければ（利用者が余白を押した等）確定する。
+  setTimeout(() => {
+    if (outside() && !document.activeElement?.matches?.("iframe[data-display-frame]")) endKeys(true, false);
+  }, 200);
 }
 onBeforeUnmount(() => {
   // 窓が消えるとき、キーのモードの途中なら（フォーカスは窓の根にある。窓の外へ出ていれば、もう確定している）、端末へ移す（`body` に落とさない）。
