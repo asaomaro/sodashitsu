@@ -781,6 +781,10 @@ test.describe("キーボード（囲いのタグ・線の印。PR1c レビュー
     // Enter（クリック）で強調が入る
     await page.keyboard.press("Enter");
     await expect(graphView(page).locator('[data-tab-tag][aria-pressed="true"]')).toHaveCount(1);
+    // Esc で、囲いの層からノードへ戻る（グラフの画面は閉じない）
+    await page.keyboard.press("Escape");
+    await expect.poll(() => page.evaluate(() => document.activeElement?.hasAttribute("data-node-key") ?? false)).toBe(true);
+    await expect(graphView(page)).toBeVisible();
   });
 
   test("ノードで m を押すと、そのノードの線の印へ入る。矢印・Esc で戻る", async ({ page, appServer }) => {
@@ -838,6 +842,19 @@ test.describe("別の空間との線の印の状態と数（PR1c レビュー指
     await expect(graphView(page).locator("[data-link-mark]")).toHaveCount(3);
     const more = graphView(page).locator(".graph-mark-more");
     await expect(more).toHaveText("+2");
+    // キーボードだけで: ノードで m → ↓ で 3 本目の次の「+N」→ Enter で一覧（最初の項目）→ ↓ → Esc で「+N」へ戻る
+    await nodeOf(page, w.pane.get("alpha")!).focus();
+    await page.keyboard.press("m");
+    await expect(graphView(page).locator("[data-link-mark] .graph-mark-go").first()).toBeFocused();
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowDown");
+    await expect(more).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(graphView(page).locator(".graph-mark-list-item").first()).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(graphView(page).locator(".graph-mark-list-item").nth(1)).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(graphView(page).locator(".graph-mark-list")).toHaveCount(0);
+    await expect(more).toBeFocused();
     await more.click();
     const list = graphView(page).locator(".graph-mark-list");
     await expect(list.locator("button")).toHaveCount(5);
@@ -913,6 +930,9 @@ test.describe("基本画面の変更への追従・複数のブラウザ", () =>
   });
 });
 
+/** 移動のハンドラの前から 2 フレーム後までの中央値の上限。負荷の無い機械で 3 回流して決めた値（decisions D64）。 */
+const PERF_MEDIAN_MAX_MS = 25;
+
 test.describe("性能（T11h。design 追補 01 の D18）", () => {
   test("200 ノード・200 線の空間で、ノードを 60 回動かした直後の描画の間隔: 中央値 20ms 以内・100ms を超えた回数が 5% 以下（最悪の 1 回では落とさない）", async ({ page, appServer }) => {
     await boot(page, appServer);
@@ -952,42 +972,80 @@ test.describe("性能（T11h。design 追補 01 の D18）", () => {
     await expect(graphView(page).locator("[data-node-key]")).toHaveCount(200);
     await expect(graphView(page).locator("[data-link-chip]")).toHaveCount(200);
     // 面の全体が見える（全体表示）ので、ノードは小さい。1 つをつかんで、60 回動かす。1 回ごとに 2 フレーム待つ。
-    const target = graphView(page).locator('[data-node-key="local:perf-p0-0"]');
+    // 線のチップ（200 個）が上に重なってノードをつかめないので、チップだけポインタを通す設定にする（描画の重さは変えない）。
+    // 200 ノードは最小の倍率（25%）でも画面に収まらないので、画面の中で、ノードの本体が当たる点のあるノードを 1 つ選ぶ。
+    await page.addStyleTag({ content: ".graph-chip { pointer-events: none !important; }" });
+    const pick = await page.evaluate(() => {
+      const canvas = document.querySelector(".graph-canvas")!.getBoundingClientRect();
+      for (const el of document.querySelectorAll<HTMLElement>('[data-node-key^="local:perf-p"]')) {
+        const r = el.getBoundingClientRect();
+        for (const [fx, fy] of [[0.3, 0.5], [0.5, 0.5], [0.7, 0.5]] as const) {
+          const x = r.x + r.width * fx;
+          const y = r.y + r.height * fy;
+          if (x < canvas.x + 20 || x > canvas.right - 120 || y < canvas.y + 20 || y > canvas.bottom - 60) continue;
+          const hit = document.elementFromPoint(x, y);
+          if (hit?.closest("[data-node-key]") === el && !hit.closest("button")) return { key: el.getAttribute("data-node-key")!, x, y };
+        }
+      }
+      return null;
+    });
+    expect(pick, "つかめるノード").not.toBeNull();
+    const target = graphView(page).locator(`[data-node-key="${pick!.key}"]`);
     const b = await box(target);
-    // 動かした直後の 5 フレームだけを測る（動かしていない間の空きのフレームは数えない。描画が重くなれば、ここが伸びる）。
-    const after = () =>
-      page.evaluate(
-        () =>
-          new Promise<number[]>((resolve) => {
-            const ts: number[] = [];
-            const tick = (t: number): void => {
-              ts.push(t);
-              if (ts.length >= 5) resolve(ts);
-              else requestAnimationFrame(tick);
-            };
-            requestAnimationFrame(tick);
-          }),
+    const grip = { x: pick!.x, y: pick!.y };
+    // 測る区間は、ポインタの移動のハンドラの**前**から始める（`page.mouse.move` が返るときには、ハンドラも Vue の描画の更新も終わっていて、そこからでは重い描画が入らない）。
+    // ページの側で `pointermove` を capture で聞き、その時刻から、次の 2 フレーム後（`requestAnimationFrame` の 2 段目）までの長さを集める。
+    // あわせて、動かしている間の長いタスク（50ms 超。`longtask`）の数と最長も取る。
+    await page.evaluate(() => {
+      const w = window as unknown as { __moves: number[]; __long: number[] };
+      w.__moves = [];
+      w.__long = [];
+      window.addEventListener(
+        "pointermove",
+        () => {
+          const t0 = performance.now();
+          requestAnimationFrame(() => requestAnimationFrame(() => w.__moves.push(performance.now() - t0)));
+        },
+        true,
       );
-    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) w.__long.push(e.duration);
+      }).observe({ type: "longtask", buffered: false });
+    });
+    await page.mouse.move(grip.x, grip.y);
     await page.mouse.down();
-    await after();
-    const gaps: number[] = [];
+    await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+    await page.evaluate(() => {
+      const w = window as unknown as { __moves: number[]; __long: number[] };
+      w.__moves.length = 0;
+      w.__long.length = 0;
+    });
     for (let i = 1; i <= 60; i++) {
-      await page.mouse.move(b.x + b.width / 2 + i * 2, b.y + b.height / 2 + (i % 2 === 0 ? i : -i), { steps: 1 });
-      const ts = await after();
-      for (let j = 1; j < ts.length; j++) gaps.push(ts[j]! - ts[j - 1]!);
+      await page.mouse.move(grip.x + i * 2, grip.y + (i % 2 === 0 ? i : -i), { steps: 1 });
+      await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))); // 次の移動の前に、描画を終わらせる
     }
+    // 本当にノードを動かしている（つかめていない空振りの測定にしない）
+    const moved = await box(target);
+    expect(Math.abs(moved.x - b.x) + Math.abs(moved.y - b.y), "ノードが動いている").toBeGreaterThan(20);
+    await expect(target).toHaveClass(/graph-node-selected/);
+    const { moves, long } = await page.evaluate(() => {
+      const w = window as unknown as { __moves: number[]; __long: number[] };
+      return { moves: [...w.__moves], long: [...w.__long] };
+    });
     await page.keyboard.press("Escape"); // 取りやめ（サーバへは送らない）
     await page.mouse.up();
-    gaps.sort((x, y) => x - y);
-    const median = gaps[Math.floor(gaps.length / 2)]!;
-    const p95 = gaps[Math.floor(gaps.length * 0.95)]!;
-    const worst = gaps.at(-1)!;
-    const slow = gaps.filter((g) => g > 100).length;
-    process.stdout.write(`[graph-perf] 200 ノード・200 線・動かした直後の ${gaps.length} フレーム: 間隔 中央値 ${median.toFixed(1)}ms・95% ${p95.toFixed(1)}ms・最悪 ${worst.toFixed(1)}ms・100ms 超 ${slow} 回（${((100 * slow) / gaps.length).toFixed(1)}%）\n`);
-    expect(gaps.length).toBe(240);
-    expect(median, `中央値 ${median}ms`).toBeLessThanOrEqual(20);
-    expect(slow / gaps.length, `100ms を超えた回数 ${slow}/${gaps.length}`).toBeLessThanOrEqual(0.05); // 最悪の 1 回では落とさず、遅い回が増えたら落とす
+    const sorted = [...moves].sort((x, y) => x - y);
+    const median = sorted[Math.floor(sorted.length / 2)]!;
+    const p95 = sorted[Math.floor(sorted.length * 0.95)]!;
+    const worst = sorted.at(-1)!;
+    const slow = sorted.filter((g) => g > 100).length;
+    const longMax = long.length === 0 ? 0 : Math.max(...long);
+    process.stdout.write(
+      `[graph-perf] 200 ノード・200 線・60 回の移動（ハンドラの前から 2 フレーム後まで）: 中央値 ${median.toFixed(1)}ms・95% ${p95.toFixed(1)}ms・最悪 ${worst.toFixed(1)}ms・100ms 超 ${slow} 回（${((100 * slow) / sorted.length).toFixed(1)}%）・長いタスク ${long.length} 個（最長 ${longMax.toFixed(0)}ms）\n`,
+    );
+    expect(sorted.length).toBe(60);
+    expect(median, `中央値 ${median}ms`).toBeLessThanOrEqual(PERF_MEDIAN_MAX_MS);
+    expect(slow / sorted.length, `100ms を超えた回数 ${slow}/${sorted.length}`).toBeLessThanOrEqual(0.05); // 最悪の 1 回では落とさず、遅い回が増えたら落とす
   });
 });
 

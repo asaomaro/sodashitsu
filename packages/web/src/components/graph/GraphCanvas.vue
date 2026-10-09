@@ -384,6 +384,49 @@ function chooseFromMarkList(m: MarkView): void {
   markListKey.value = null;
   goToMark(m);
 }
+/** 「+N」: ↑ で最後の印へ・Enter/↓ で一覧を開いて最初の項目へ。 */
+function onMoreKeydown(ev: KeyboardEvent, nodeKey: string): void {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
+  if (ev.key === "ArrowUp") {
+    const last = [...(dialogEl.value?.querySelectorAll<HTMLElement>(`[data-mark-node="${CSS.escape(nodeKey)}"]`) ?? [])].at(-1);
+    ev.preventDefault();
+    ev.stopPropagation();
+    last?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+  } else if (ev.key === "ArrowDown" || ev.key === "Enter" || ev.key === " ") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    markListKey.value = nodeKey;
+    void nextTick(() => dialogEl.value?.querySelector<HTMLElement>(".graph-mark-list-item")?.focus({ preventScroll: true }));
+  } else if (ev.key === "Escape") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    focusNode(nodeKey);
+  }
+}
+/** 一覧: ↑ ↓ で項目を移り、`Esc` で閉じて「+N」へ戻る。 */
+function onMarkListKeydown(ev: KeyboardEvent): void {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
+  const items = [...(dialogEl.value?.querySelectorAll<HTMLElement>(".graph-mark-list-item") ?? [])];
+  const i = items.indexOf(document.activeElement as HTMLElement);
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    items[ev.key === "ArrowDown" ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1)]?.focus({ preventScroll: true });
+  } else if (ev.key === "Escape") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const key = markListKey.value;
+    markListKey.value = null;
+    void nextTick(() => dialogEl.value?.querySelector<HTMLElement>(`[data-mark-more="${CSS.escape(key ?? "")}"]`)?.focus({ preventScroll: true }));
+  }
+}
+/** 囲いのタグから `Esc`: 選んでいるノード（無ければ入口のノード）へ戻る。 */
+function leaveFrameLayer(): void {
+  const s = selection.value;
+  const key = s?.kind === "node" && shownNodes.value.some((n) => n.key === s.key) ? s.key : tabEntryKey.value;
+  if (key) focusNode(key);
+  else dialogEl.value?.focus({ preventScroll: true });
+}
 /** ノードで `m`: そのノードの最初の印へ入る（印のボタンは Tab の順に入れない）。 */
 function enterMarks(key: string): boolean {
   const btn = dialogEl.value?.querySelector<HTMLElement>(`[data-mark-node="${CSS.escape(key)}"] button`);
@@ -1982,6 +2025,7 @@ function chipAria(e: EdgeView): string {
               :dragging-id="frameDrag?.frameId ?? null"
               :read-only="isMobile"
               @heading-pointerdown="onFrameHeadingPointerdown"
+              @leave="leaveFrameLayer"
               @tag="spaces.toggleEmphasis"
             />
             <svg class="graph-edges" width="1" height="1" aria-hidden="true">
@@ -2058,6 +2102,8 @@ function chipAria(e: EdgeView): string {
               type="button"
               class="graph-mark-more"
               tabindex="-1"
+              :data-mark-more="more.nodeKey"
+              @keydown="onMoreKeydown($event, more.nodeKey)"
               :style="{ left: `${more.x}px`, top: `${more.y}px` }"
               :aria-label="`別の空間との線があと ${more.n} 本。押すと一覧`"
               @pointerdown.stop
@@ -2069,6 +2115,7 @@ function chipAria(e: EdgeView): string {
               v-if="markList.length > 0"
               class="graph-mark-list"
               role="menu"
+              @keydown="onMarkListKeydown"
               :style="{ left: `${markList[0]!.x}px`, top: `${markList[0]!.y + 4 * 20}px` }"
               @pointerdown.stop
             >

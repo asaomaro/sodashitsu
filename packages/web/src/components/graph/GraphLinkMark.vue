@@ -46,7 +46,10 @@ function onKeydown(ev: KeyboardEvent): void {
   else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
     const sibs = [...(el.parentElement?.querySelectorAll<HTMLElement>(`[data-mark-node="${CSS.escape(el.dataset["markNode"] ?? "")}"]`) ?? [])];
     const j = sibs.indexOf(el);
-    next = sibs[ev.key === "ArrowDown" ? Math.min(sibs.length - 1, j + 1) : Math.max(0, j - 1)]?.querySelector<HTMLElement>("button") ?? undefined;
+    if (ev.key === "ArrowDown" && j === sibs.length - 1) {
+      // 最後の印の次は、同じノードの「+N」（あれば）
+      next = el.parentElement?.querySelector<HTMLElement>(`[data-mark-more="${CSS.escape(el.dataset["markNode"] ?? "")}"]`) ?? undefined;
+    } else next = sibs[ev.key === "ArrowDown" ? Math.min(sibs.length - 1, j + 1) : Math.max(0, j - 1)]?.querySelector<HTMLElement>("button") ?? undefined;
   } else return;
   ev.preventDefault();
   ev.stopPropagation();

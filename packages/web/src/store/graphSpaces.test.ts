@@ -118,39 +118,59 @@ describe("graphSpaces（空間の一覧・表示中の空間）", () => {
 });
 
 describe("graphSpaces（囲いごと動いたことを知らせる）", () => {
-  const moved = (dx: number, dy: number, skip: string[] = []) =>
+  /** w1 の p1・p2 が (dx, dy) だけ動く。`withNew` なら、w1 に pane p4 のノードが足されている（置き場所の計算による移動）。 */
+  const moved = (dx: number, dy: number, o: { withNew?: boolean; skip?: string[]; rev?: number } = {}) =>
     graphOf({
-      rev: 5,
+      rev: o.rev ?? 5,
       nodes: [
-        { key: "local:p1" as NodeKey, x: 20 + (skip.includes("p1") ? 0 : dx), y: 60 + (skip.includes("p1") ? 0 : dy) },
+        { key: "local:p1" as NodeKey, x: 20 + (o.skip?.includes("p1") ? 0 : dx), y: 60 + (o.skip?.includes("p1") ? 0 : dy) },
         { key: "local:p2" as NodeKey, x: 260 + dx, y: 60 + dy },
         { key: "local:p3" as NodeKey, x: 1000, y: 60 },
+        ...(o.withNew ? [{ key: "local:p4" as NodeKey, x: 500 + dx, y: 60 + dy }] : []),
       ],
     });
+  const addP4 = (): void => {
+    useSessionStore().panes.set("p4", paneOf("p4", "t1"));
+  };
 
-  it("囲いのもともとのノードが全部同じ量だけ動いたら、その囲いを強調する（自分の操作が無いとき）", async () => {
+  it("囲いのもともとのノードが全部同じ量だけ動き、その囲いにノードが増えたら、その囲いを強調する（自分の操作が無いとき）", async () => {
     seed();
     applyGraph();
+    addP4();
     const s = useGraphSpacesStore();
-    useGraphStore().applyGraph(moved(0, 480), "event");
+    useGraphStore().applyGraph(moved(0, 480, { withNew: true }), "event");
     await Promise.resolve();
     expect(s.flashId).toBe("w1");
   });
 
-  it("自分の操作（ドラッグ中・送信中）の結果・一部だけが動いたとき・動いていないときは、強調しない", async () => {
+  it("ノードが増えていない移動（他の人の囲いのドラッグ・1 ノードだけの workspace の移動）は、強調しない", async () => {
     seed();
     applyGraph();
+    const s = useGraphSpacesStore();
+    useGraphStore().applyGraph(moved(0, 480), "event"); // 増えていない（他の人が囲いをドラッグした）
+    await Promise.resolve();
+    expect(s.flashId).toBeNull();
+    const g = useGraphStore();
+    g.applyGraph(
+      graphOf({ rev: 6, nodes: [{ key: "local:p1" as NodeKey, x: 20, y: 60 }, { key: "local:p2" as NodeKey, x: 260, y: 60 }, { key: "local:p3" as NodeKey, x: 1100, y: 300 }] }),
+      "event",
+    ); // 1 ノードだけの workspace（w2）の移動
+    await Promise.resolve();
+    expect(s.flashId).toBeNull();
+  });
+
+  it("自分の操作（ドラッグ中・送信中）の結果・一部だけが動いたとき・動いていないときも、強調しない", async () => {
+    seed();
+    applyGraph();
+    addP4();
     const g = useGraphStore();
     const s = useGraphSpacesStore();
     g.pendingPositions = new Map([["local:p1", { x: 20, y: 540 }]]);
-    g.applyGraph(moved(0, 480), "event");
+    g.applyGraph(moved(0, 480, { withNew: true }), "event");
     await Promise.resolve();
     expect(s.flashId).toBeNull();
     g.pendingPositions = new Map();
-    g.applyGraph({ ...moved(0, 960, ["p1"]), rev: 6 }, "event"); // p1 だけ動かない＝まとめての移動ではない
-    await Promise.resolve();
-    expect(s.flashId).toBeNull();
-    g.applyGraph({ ...moved(0, 960, ["p1"]), rev: 7 }, "event"); // 何も動かない
+    g.applyGraph(moved(0, 960, { withNew: true, skip: ["p1"], rev: 6 }), "event"); // p1 だけ動かない＝まとめての移動ではない
     await Promise.resolve();
     expect(s.flashId).toBeNull();
   });

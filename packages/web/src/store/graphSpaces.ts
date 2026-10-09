@@ -213,6 +213,8 @@ export const useGraphSpacesStore = defineStore("graphSpaces", () => {
       for (const [memberId, keys] of memberNodes.value) {
         const old = keys.filter((k) => before.has(k as NodeKey) && after.has(k as NodeKey));
         if (old.length === 0) continue;
+        // pane（ノード）が増えた囲いだけ。増えていない移動（他の人の囲いのドラッグ・1 ノードだけの workspace の移動）は、置き場所の計算による移動ではない
+        if (!keys.some((k) => after.has(k as NodeKey) && !before.has(k as NodeKey))) continue;
         const d = (k: string) => ({ x: after.get(k as NodeKey)!.x - before.get(k as NodeKey)!.x, y: after.get(k as NodeKey)!.y - before.get(k as NodeKey)!.y });
         const first = d(old[0]!);
         if (first.x === 0 && first.y === 0) continue;

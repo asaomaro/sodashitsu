@@ -26,6 +26,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   headingPointerdown: [ev: PointerEvent, frameId: string];
   tag: [workspaceId: string, tabId: string];
+  /** タグから `Esc`: ノードへ戻る。 */
+  leave: [];
 }>();
 
 /** タグを並べる数の上限（収まらない分は「+N」）。 */
@@ -69,6 +71,12 @@ function onTagFocus(frameId: string, tabId: string): void {
 }
 function onTagKeydown(ev: KeyboardEvent): void {
   if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    emit("leave");
+    return;
+  }
   const el = ev.currentTarget as HTMLElement;
   const head = el.closest(".graph-frame-head");
   const tags = [...(head?.querySelectorAll<HTMLElement>("[data-tab-tag]") ?? [])];
