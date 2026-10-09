@@ -71,6 +71,7 @@ function agent(patch: Partial<AgentInfo> = {}): AgentInfo {
 describe("SessionService — hasPendingResume", () => {
   let now: number;
   let service: SessionService;
+  let logger: MemoryLogger;
 
   beforeEach(async () => {
     now = 1_000_000;
@@ -84,7 +85,7 @@ describe("SessionService — hasPendingResume", () => {
       scrollbackLines: 1000,
       spawnGraceMs: 0,
       defaultCwd: "/home/u",
-      logger: new MemoryLogger(),
+      logger: (logger = new MemoryLogger()),
       clock: { now: () => now },
     });
     const pane = (
@@ -148,5 +149,65 @@ describe("SessionService — hasPendingResume", () => {
   it("エージェントが検出されたら false", () => {
     service.updatePaneRuntime("p1", { agent: agent({ instanceId: "a9" }) });
     expect(service.hasPendingResume("p1")).toBe(false);
+  });
+
+  // --- 20261009-agent-resume-lost ---
+
+  it("AC5: 復元で pane ごとに 1 行ログが出る（打ち込んだ pane は種類と会話 id の先頭 8 文字だけ。打ち込まなかった pane は理由）", () => {
+    const written = logger.lines.find((l) => l.msg === "agent resume command written");
+    expect(written?.fields).toEqual({ paneId: "p1", kind: "claude", session: "abc" });
+    const skipped = logger.lines.find((l) => l.msg === "agent resume skipped");
+    expect(skipped?.fields).toEqual({ paneId: "p2", reason: "no-session-ref" });
+  });
+
+  describe("会話の参照を捨てる猶予", () => {
+    const report = () => service.reportAgentSession("p1", "claude", "conv-1");
+    const refOf = () => service.getPane("p1")?.agentSession ?? null;
+
+    it("エージェントが居なくなっても猶予（10 秒）の間は参照を残し、シェルが生きたまま過ぎたら捨てて 1 行ログに残す", () => {
+      service.updatePaneRuntime("p1", { agent: agent() });
+      report();
+      service.updatePaneRuntime("p1", { agent: null });
+      expect(refOf()?.sessionId).toBe("conv-1");
+      now += 9_999;
+      service.updatePaneRuntime("p1", { busy: false });
+      expect(refOf()?.sessionId).toBe("conv-1");
+      now += 1;
+      service.updatePaneRuntime("p1", { busy: false });
+      expect(refOf()).toBeNull();
+      expect(logger.lines.filter((l) => l.msg.startsWith("agent session dropped"))).toHaveLength(1);
+    });
+
+    it("猶予の間にエージェントが戻れば、参照は捨てない", () => {
+      service.updatePaneRuntime("p1", { agent: agent() });
+      report();
+      service.updatePaneRuntime("p1", { agent: null });
+      now += 5_000;
+      service.updatePaneRuntime("p1", { agent: agent({ instanceId: "a2" }) });
+      now += 60_000;
+      service.updatePaneRuntime("p1", { busy: false });
+      expect(refOf()?.sessionId).toBe("conv-1");
+    });
+
+    it("新しい報告が来たら、前のエージェントの猶予は打ち切る（新しい参照は捨てない）", () => {
+      service.updatePaneRuntime("p1", { agent: agent() });
+      report();
+      service.updatePaneRuntime("p1", { agent: null });
+      now += 5_000;
+      service.reportAgentSession("p1", "claude", "conv-2");
+      now += 60_000;
+      service.updatePaneRuntime("p1", { busy: false });
+      expect(refOf()?.sessionId).toBe("conv-2");
+    });
+
+    it("止まる処理に入った後は、猶予を過ぎても、居なくなっても、捨てない", () => {
+      service.updatePaneRuntime("p1", { agent: agent() });
+      report();
+      service.updatePaneRuntime("p1", { agent: null });
+      service.beginShutdown();
+      now += 60_000;
+      service.updatePaneRuntime("p1", { busy: false });
+      expect(refOf()?.sessionId).toBe("conv-1");
+    });
   });
 });

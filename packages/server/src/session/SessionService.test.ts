@@ -2197,19 +2197,30 @@ describe("SessionService — workspace の自動の名前", () => {
       expect(persist.touchCount).toBe(0);
     });
 
-    it("画面判定でエージェントが消えたら（非 null → null）、会話参照も一緒に消す（design D9）", async () => {
-      const { service, persist } = setup();
-      const { pane } = await service.createWorkspace("/r", "w1");
-      service.reportAgentSession(pane.id, "claude", "abc-123");
-      service.updatePaneRuntime(pane.id, {
-        agent: { instanceId: "a1", kind: "claude", label: "Claude Code", state: "working", completionSeq: 0, serverSeenSeq: 0, verified: true, since: 1 },
-      });
-      persist.touchCount = 0;
+    it("画面判定でエージェントが消えても（非 null → null）、猶予（10 秒）の間は会話参照を残し、シェルが生きたまま過ぎたら消す（design D9。20261009-agent-resume-lost で猶予つきに）", async () => {
+      const spy = vi.spyOn(performance, "now");
+      let t = 1_000;
+      spy.mockImplementation(() => t);
+      try {
+        const { service, persist } = setup();
+        const { pane } = await service.createWorkspace("/r", "w1");
+        service.reportAgentSession(pane.id, "claude", "abc-123");
+        service.updatePaneRuntime(pane.id, {
+          agent: { instanceId: "a1", kind: "claude", label: "Claude Code", state: "working", completionSeq: 0, serverSeenSeq: 0, verified: true, since: 1 },
+        });
+        persist.touchCount = 0;
 
-      service.updatePaneRuntime(pane.id, { agent: null });
+        service.updatePaneRuntime(pane.id, { agent: null });
+        expect(service.getPane(pane.id)?.agentSession?.sessionId).toBe("abc-123");
+        expect(persist.touchCount).toBe(0);
 
-      expect(service.getPane(pane.id)?.agentSession).toBeNull();
-      expect(persist.touchCount, "会話参照の消滅も保存契機にする（design D8）").toBe(1);
+        t += 10_000;
+        service.updatePaneRuntime(pane.id, { busy: false });
+        expect(service.getPane(pane.id)?.agentSession).toBeNull();
+        expect(persist.touchCount, "会話参照の消滅も保存契機にする（design D8）").toBe(1);
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it("agent の kind・state が変わるだけでは会話参照を消さない", async () => {

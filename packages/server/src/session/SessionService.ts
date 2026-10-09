@@ -141,6 +141,13 @@ export interface SessionServiceOptions {
 /** 復元で打ち込んだ会話の再開コマンドを「まだ起動中」とみなす時間（`agent start` の既定の締め切りと同じ）。 */
 const RESUME_PENDING_MS = 30_000;
 
+/**
+ * エージェントが居なくなった（画面の判定が非 null → null）後、その pane のシェルが生きたまま、エージェントの居ない状態が
+ * この時間続いたら、会話の参照を捨てる（20261009-agent-resume-lost。D9 の「すぐ捨てる」を猶予つきに変えた）。
+ * システムの停止でエージェントのプロセスがサーバより先に終わっても、サーバが止まる処理に入る前にこの時間は過ぎない。
+ */
+const AGENT_GONE_GRACE_MS = 10_000;
+
 export class SessionService {
   private readonly model: SessionModel;
   private readonly terminals: TerminalManager;
@@ -193,6 +200,10 @@ export class SessionService {
   private nextAgentLaunchToken = 1;
   /** 復元で会話の再開コマンドを打ち込んだ時刻（まだエージェントが検出されていない pane だけ。20260926-agent-start の cross 点検）。 */
   private readonly resumeWrittenAt = new Map<PaneId, number>();
+  /** エージェントが居なくなったと見えた時刻（`clock`。会話の参照を捨てる猶予の起点。20261009-agent-resume-lost）。 */
+  private readonly agentGoneAt = new Map<PaneId, number>();
+  /** サーバが止まる処理に入った後は、会話の参照を捨てない（止まる途中で先に終わった PTY・エージェントの巻き添えにしない）。 */
+  private shuttingDown = false;
 
   constructor(opts: SessionServiceOptions) {
     this.model = opts.model;
@@ -539,6 +550,7 @@ export class SessionService {
    */
   private publishPaneClosed(paneId: PaneId, successorPaneId: PaneId | undefined): void {
     this.resumeWrittenAt.delete(paneId); // 20260926-agent-start の review ラウンド 1（閉じた pane の記録を残さない）
+    this.agentGoneAt.delete(paneId);
     this.commandPanes.delete(paneId); // 20260927-custom-command-keys
     const editor = this.scrollbackEditors.get(paneId);
     if (editor) {
@@ -1146,10 +1158,27 @@ export class SessionService {
       patch = { ...patch, agent: { ...patch.agent, subagents: pane.agent.subagents } };
     }
     const agentChanged = patch.agent !== undefined && !sameAgent(pane.agent, patch.agent);
-    // 画面判定でエージェントが消えたら（非 null → null）、報告されていた会話参照も一緒に捨てる
-    // （20260923-agent-session-resume design D9）。エージェントを終了して別の作業をしている pane が、
-    // 次のサーバ再起動で勝手に古い会話を再開してしまう事故を防ぐ。
-    const clearsAgentSession = patch.agent === null && pane.agent !== null && pane.agentSession !== null;
+    // 画面判定でエージェントが消えたら（非 null → null）、報告されていた会話参照も捨てる（20260923-agent-session-resume design D9）。
+    // エージェントを終了して別の作業をしている pane が、次のサーバ再起動で勝手に古い会話を再開してしまう事故を防ぐため。
+    // ただし**すぐには捨てない**（20261009-agent-resume-lost）。システムの停止ではエージェントのプロセスがサーバより先に終わることがあり、
+    // その巻き添えで参照が消えて、次の起動で再開されなかった。居なくなった時刻を覚え、シェルが生きたまま `AGENT_GONE_GRACE_MS`
+    // エージェントの居ない状態が続いたときに捨てる（下）。止まる処理に入った後は捨てない。
+    if (patch.agent) this.agentGoneAt.delete(paneId);
+    if (patch.agent === null && pane.agent !== null && pane.agentSession !== null && !this.shuttingDown && !this.agentGoneAt.has(paneId)) {
+      this.agentGoneAt.set(paneId, this.clock.now());
+    }
+    const goneAt = this.agentGoneAt.get(paneId);
+    const clearsAgentSession =
+      goneAt !== undefined &&
+      !this.shuttingDown &&
+      patch.agent === undefined &&
+      pane.agent === null &&
+      pane.agentSession !== null &&
+      this.clock.now() - goneAt >= AGENT_GONE_GRACE_MS;
+    if (goneAt !== undefined && (pane.agentSession === null || clearsAgentSession)) this.agentGoneAt.delete(paneId);
+    if (clearsAgentSession) {
+      this.logger.info("agent session dropped (agent gone, shell alive)", { paneId, graceMs: AGENT_GONE_GRACE_MS, kind: pane.agentSession?.kind });
+    }
     const fullPatch = clearsAgentSession ? { ...patch, agentSession: null } : patch;
     const updated = this.model.updatePaneRuntime(paneId, fullPatch);
     if (agentChanged) {
@@ -1295,6 +1324,7 @@ export class SessionService {
     if (!pane) return;
     // `reportedAt` は壁時計の epoch ms（protocol の doc comment）。`this.clock` は復元の期限計測用の
     // 単調時計（`monotonicNow`）なので、ここでは使わない（`AgentInfo.since` と同じ `Date.now()` に揃える）。
+    this.agentGoneAt.delete(paneId); // 新しい報告は、居なくなった前のエージェントの参照ではない（捨てる猶予を打ち切る）
     this.model.setAgentSession(paneId, { kind, sessionId, reportedAt: Date.now() });
     this.persist.touch();
   }
@@ -1530,10 +1560,20 @@ export class SessionService {
    * 重複排除はしない（design D11）。
    */
   private maybeResumeAgentSession(paneId: PaneId, agentSession: { kind: string; sessionId: string } | undefined): void {
-    const command = this.resumeCommandForRestore(agentSession);
-    if (command === null) return;
-    this.terminals.get(paneId)?.write(`${command}\r`);
+    const decision = this.resumeDecision(agentSession);
+    if (decision.command === null) {
+      this.logger.info("agent resume skipped", { paneId, reason: decision.reason });
+      return;
+    }
+    this.terminals.get(paneId)?.write(`${decision.command}\r`);
     this.resumeWrittenAt.set(paneId, this.clock.now());
+    // 会話の id は先頭 8 文字だけ（ログに全体を残さない）。
+    this.logger.info("agent resume command written", { paneId, kind: agentSession?.kind, session: agentSession?.sessionId.slice(0, 8) });
+  }
+
+  /** サーバが止まる処理に入ったことを知らせる（以後、エージェントが居ないと見えても会話の参照を捨てない。20261009-agent-resume-lost）。 */
+  beginShutdown(): void {
+    this.shuttingDown = true;
   }
 
   /** 会話の再開コマンドを打ち込んでから `RESUME_PENDING_MS` の間で、まだエージェントが検出されていないか（`agent start` はその pane に打ち込まない）。 */
@@ -1545,11 +1585,19 @@ export class SessionService {
     return false;
   }
 
-  /** 復元でこの pane の会話を再開するなら、その再開のコマンド。しないなら null（保存した会話参照・自動再開の設定・対応するコマンドが揃うときだけ）。 */
+  /** 復元でこの pane の会話を再開するなら、その再開のコマンド。しないなら null と理由（保存した会話参照・自動再開の設定・対応するコマンドが揃うときだけ）。 */
+  private resumeDecision(
+    agentSession: { kind: string; sessionId: string } | undefined,
+  ): { command: string; reason?: undefined } | { command: null; reason: "no-session-ref" | "auto-resume-disabled" | "no-command-for-kind" | "invalid-session-id" } {
+    if (!agentSession) return { command: null, reason: "no-session-ref" };
+    if (!this.getAutoResumeEnabled()) return { command: null, reason: "auto-resume-disabled" };
+    const command = resumeCommandFor(agentSession.kind, agentSession.sessionId);
+    if (command) return { command };
+    return { command: null, reason: resumeCommandFor(agentSession.kind, "x") === undefined ? "no-command-for-kind" : "invalid-session-id" };
+  }
+
   private resumeCommandForRestore(agentSession: { kind: string; sessionId: string } | undefined): string | null {
-    if (!agentSession) return null;
-    if (!this.getAutoResumeEnabled()) return null;
-    return resumeCommandFor(agentSession.kind, agentSession.sessionId) || null;
+    return this.resumeDecision(agentSession).command;
   }
 
   // --- helpers ------------------------------------------------------------

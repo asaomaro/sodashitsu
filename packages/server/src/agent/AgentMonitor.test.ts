@@ -335,6 +335,20 @@ describe("AgentMonitor", () => {
     expect(processInspector.calls.filter((pid) => pid === host.pid).length).toBe(0);
   });
 
+  it("判定の失敗が同じ pane・同じ理由で続くときは、最初の 1 回と、60 秒ごとの件数つきの 1 行だけをログに出す（20261009-agent-resume-lost の AC6）", async () => {
+    const { processInspector, session, monitor, monitorLogger } = makeHarness();
+    await session.createWorkspace("/home/u", "api");
+    processInspector.hangs = true; // 毎回 2 秒の時間切れ → 約 3 秒に 1 回の失敗
+    vi.useFakeTimers();
+    monitor.start();
+    await advance(130_000, 100);
+    const failures = monitorLogger.lines.filter((l) => l.msg === "agent judgment failed");
+    expect(failures.length).toBeGreaterThanOrEqual(2);
+    expect(failures.length).toBeLessThanOrEqual(4); // まとめなければ 40 件あまり
+    expect(failures[0]!.fields).not.toHaveProperty("repeated");
+    expect(failures[1]!.fields?.["repeated"]).toBeGreaterThan(5);
+  });
+
   it("foregroundJob が固まっても、上限（2秒）で諦めてその pane の判定を再開する（review 指摘。should）", async () => {
     const { terminals, processInspector, session, monitor, monitorLogger } = makeHarness();
     const { pane } = await session.createWorkspace("/home/u", "api");
