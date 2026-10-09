@@ -85,7 +85,10 @@ function displayItems(id: string): MenuItem[] {
   const focusToHead = (): HTMLElement | null => headFocusTarget(d.id);
   const focusToTray = (): HTMLElement | null => trayFocusTarget(d.id);
   const list: MenuItem[] = [];
-  if (f.collapsed) list.push({ label: "開く", run: () => void withDisplayChange(d, () => displays.setFaceCollapsed(d, false), focusToHead, displayHost) });
+  // 浮いた窓は、窓の動ける領域が分かっている間だけ開く操作を受ける（無ければ「開く」を出さない）。
+  if (f.collapsed && f.dock === "float" && !displays.canOpenFloat(d.paneId)) {
+    // 開けない（pane が小さい）
+  } else if (f.collapsed) list.push({ label: "開く", run: () => void withDisplayChange(d, () => displays.setFaceCollapsed(d, false), focusToHead, displayHost) });
   else list.push({ label: "たたむ", run: () => void withDisplayChange(d, () => displays.setFaceCollapsed(d, true), focusToTray, displayHost) });
   if (d.kind === "band") {
     if (f.edge !== "top") list.push({ label: "上に置く", run: () => void withDisplayChange(d, () => displays.setFaceEdge(d, "top"), focusToHead, displayHost) });
@@ -95,6 +98,14 @@ function displayItems(id: string): MenuItem[] {
     // 今と違う側だけ。移った先で開いて出る（`setFaceDock` が `collapsed: false` も書く）。枠は作り直し。
     for (const side of ["right", "left", "top", "bottom"] as const) {
       if (f.dock !== side) list.push({ label: `${DOCK_LABEL[side]}に置く`, run: () => void withDisplayChange(d, () => displays.setFaceDock(d, side), focusToHead, displayHost) });
+    }
+    // 浮いた窓にする: 窓の動ける領域があるときだけ。矩形は渡さない（`writeFace` が、記憶に矩形が無いときだけ初めの矩形を書く＝前の位置を上書きしない）。
+    if (f.dock !== "float" && displays.canOpenFloat(d.paneId)) {
+      list.push({ label: "浮いた窓にする", run: () => void withDisplayChange(d, () => displays.setFaceDock(d, "float"), focusToHead, displayHost) });
+    }
+    if (f.dock === "float" && !f.collapsed) {
+      list.push({ label: "キーで動かす", run: () => displays.startFloatKeys(d, "move") });
+      list.push({ label: "キーで大きさを変える", run: () => displays.startFloatKeys(d, "resize") });
     }
   }
   if (displays.hasPref(d)) list.push({ label: "プログラムの指定に戻す", run: () => void withDisplayChange(d, () => displays.resetFace(d), focusToHead, displayHost) });

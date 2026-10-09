@@ -499,6 +499,7 @@ test("(7)(e) 操作中の script-html のパネルで、フォーカスを取ら
   const engage = page.locator(`[data-display-root="${ids["sp"]}"] [data-display-engage]`);
   const reengage = async (): Promise<void> => {
     await expect(engage).toBeVisible();
+    await page.waitForTimeout(600); // ［操作する］は、箱が動いた直後の 500ms は押しを受けない（engageGuard）
     await engage.click();
     await expect(page.locator(`[data-pane-panel][data-display-engaged="1"]`)).toHaveCount(1);
   };

@@ -854,6 +854,69 @@ describe("PaneFrame — 表示の面（パネル・帯。20261007-soda-extension
     expect(wrapper.find("[data-display-drop-zones]").exists()).toBe(false);
   });
 
+  it("浮いた窓: 記憶の無い窓は閉じて始まる（トレイのボタンだけ・窓の層も無い）。開くと端末の領域の中の層に窓が出て、葉の箱を変えない。層は .pane-frame-main の兄弟", async () => {
+    const d = useDisplayStore(pinia);
+    const a = disp("a", "panel", { dock: "float" });
+    d.upsert(a);
+    const { wrapper } = mountFrame();
+    await settle(wrapper);
+    expect(wrapper.find("[data-pane-frame-floats]").exists()).toBe(false);
+    expect(wrapper.find("[data-display-float]").exists()).toBe(false);
+    const btn = wrapper.get('[data-display-tray-button][data-display-id="a"]');
+    expect(btn.attributes("aria-pressed")).toBe("false");
+    // 窓の動ける領域が分かっている（割り付けが書いた）ので、開く操作を受ける。記憶に矩形が書かれる（開いた窓はいつも記憶に矩形を持つ）
+    expect(d.canOpenFloat("p1")).toBe(true);
+    d.setFaceCollapsed(a as never, false);
+    await settle(wrapper);
+    const layer = wrapper.get("[data-pane-frame-floats]");
+    expect(layer.element.parentElement).toBe(wrapper.get(".pane-frame-center").element);
+    expect(layer.element.previousElementSibling).toBe(wrapper.get(".pane-frame-main").element);
+    expect(layer.findAll("[data-display-float]")).toHaveLength(1);
+    expect(d.faceRectOf(a as never)).toBeDefined();
+    // 窓は開いていてもトレイに残る（押された見た目）。トレイの行（端末の箱）は変わらない
+    expect(wrapper.get('[data-display-tray-button][data-display-id="a"]').attributes("aria-pressed")).toBe("true");
+  });
+
+  it("浮いた窓: 重ねの順を変えても（押す・操作中）、窓の DOM の順と枠の要素は変わらない。窓の矩形は領域の中", async () => {
+    const d = useDisplayStore(pinia);
+    const a = disp("a", "panel", { dock: "float" });
+    const b = disp("b", "panel", { dock: "float" });
+    d.upsert(a);
+    d.upsert(b);
+    const { wrapper } = mountFrame();
+    await settle(wrapper);
+    d.setFaceDock(a as never, "float", { x: 9999, y: 9999, w: 9999, h: 9999 }); // 領域より大きい矩形は、領域の中へ丸められる
+    d.setFaceDock(b as never, "float", { x: 10, y: 10, w: 300, h: 200 });
+    await settle(wrapper);
+    const order = (): (string | undefined)[] => wrapper.findAll("[data-display-float]").map((e) => e.attributes("data-display-root"));
+    expect(order()).toEqual(["a", "b"]);
+    const aEl = wrapper.get('[data-display-root="a"][data-display-float]').element as HTMLElement;
+    const zOf = (id: string): number => Number((wrapper.get(`[data-display-float][data-display-root="${id}"]`).element as HTMLElement).style.zIndex);
+    expect(zOf("b")).toBeGreaterThan(zOf("a"));
+    expect(parseInt(aEl.style.left, 10) + parseInt(aEl.style.width, 10)).toBeLessThanOrEqual(1000);
+    expect(parseInt(aEl.style.top, 10) + parseInt(aEl.style.height, 10)).toBeLessThanOrEqual(600);
+    d.raiseFloat("p1", "a");
+    await settle(wrapper);
+    expect(order()).toEqual(["a", "b"]); // 並べ替えない
+    expect(wrapper.get('[data-display-float][data-display-root="a"]').element).toBe(aEl); // 同じ要素のまま
+    expect(zOf("a")).toBeGreaterThan(zOf("b"));
+  });
+
+  it("浮いた窓: 窓の動ける領域が最小より小さい pane では、窓は出ず、トレイのボタンは押せない。開く操作を受けない", async () => {
+    box = { width: 240, height: 300 };
+    const d = useDisplayStore(pinia);
+    const a = disp("a", "panel", { dock: "float" });
+    d.upsert(a);
+    const { wrapper } = mountFrame();
+    await settle(wrapper);
+    expect(d.canOpenFloat("p1")).toBe(false);
+    expect(wrapper.find("[data-display-float]").exists()).toBe(false);
+    expect(wrapper.get('[data-display-tray-button][data-display-id="a"]').attributes("disabled")).toBeDefined();
+    d.setFaceCollapsed(a as never, false);
+    await settle(wrapper);
+    expect(wrapper.find("[data-display-float]").exists()).toBe(false); // 開く記憶があっても、領域が無ければ出ない（自動でたたむ）
+  });
+
   it("本体の箱が 0×0 の間は、面の部品を 1 つも載せない（測れたら載せる）", async () => {
     box = { width: 0, height: 0 };
     const d = useDisplayStore(pinia);

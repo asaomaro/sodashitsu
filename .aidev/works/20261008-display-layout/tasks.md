@@ -255,13 +255,13 @@
 
 ### PR-C: 浮いた窓
 
-- [ ] T21: 窓の矩形と重なりの関数、割り付けの手順 6: `display/floatGeometry.ts`（`clampFloatRect`・`defaultFloatRect`・`moveFloatRect`・`resizeFloatRect`・`FloatHandle`・`raiseFloat`・`insertFloat`。純粋）。`resolvePaneDisplays` に手順 6（窓の動ける領域＝端末の領域の 4px 内側・それが最小より小さければ自動でたたむ・渡された矩形を丸める）と、トレイの `kind: "float"`（**開いている窓もボタンに入れ、`open` を立てる**）。
+- [x] T21: 窓の矩形と重なりの関数、割り付けの手順 6: `display/floatGeometry.ts`（`clampFloatRect`・`defaultFloatRect`・`moveFloatRect`・`resizeFloatRect`・`FloatHandle`・`raiseFloat`・`insertFloat`。純粋）。`resolvePaneDisplays` に手順 6（窓の動ける領域＝端末の領域の 4px 内側・それが最小より小さければ自動でたたむ・渡された矩形を丸める）と、トレイの `kind: "float"`（**開いている窓もボタンに入れ、`open` を立てる**）。
       単体テスト（領域より大きい・負の位置・最小・8 つのつかむ場所で動かない側の縁が動かない・領域が縮んだ後・`NaN` と無限大を受けても有限の矩形を返す・ずらしが領域を出ない・**重なりの決まり 1〜3**〔操作中になった窓は最前面へ・押した窓は末尾へ（操作中の id を見ない）・新しく開いた窓は、操作中の窓があればその後ろ〕・矩形が渡されない窓は `defaultFloatRect(0, …)`・窓の開閉で、トレイの行の有無が変わらない）
       対象: `packages/web/src/display/floatGeometry.ts`（新規）・`.test.ts`（新規）、`packages/web/src/display/paneDisplayLayout.ts`・`.test.ts` / 根拠: design「割り付け」の決まり 6、「浮いた窓の矩形」「浮いた窓」の重なり
       依存: T13
       AC: AC17, AC18, AC19, AC20, AC22
       点検: あり
-- [ ] T22: 窓と層: `DisplayFloat.vue`（`DisplayPanelHead`・題・操作中の文言・枠〔`:key="placedFrameKey(info, 'float')"`〕・操作中の縁・`role="dialog"`・`aria-label`・`data-display-float`・`data-display-root`・不透明な背景）。`PaneFrame.vue` に窓の層 `div.pane-frame-floats`（`.pane-frame-center` の中・`.pane-frame-main` の兄弟・`position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 20; isolation: isolate`。窓は `pointer-events: auto`）。
+- [x] T22: 窓と層: `DisplayFloat.vue`（`DisplayPanelHead`・題・操作中の文言・枠〔`:key="placedFrameKey(info, 'float')"`〕・操作中の縁・`role="dialog"`・`aria-label`・`data-display-float`・`data-display-root`・不透明な背景）。`PaneFrame.vue` に窓の層 `div.pane-frame-floats`（`.pane-frame-center` の中・`.pane-frame-main` の兄弟・`position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 20; isolation: isolate`。窓は `pointer-events: auto`）。
       窓の根に `tabindex` を付けない（キーのモードの間だけ。T23）。枠（`DisplayFrame`）以外の部分（題・操作中の文言・縁）は `@mousedown.prevent`・`data-display-keepfocus`。
       **`v-for` は出た順・`:key` は面の id。重なりは `z-index: 20 + floatOrder の位置`**（`floatOrder` は pane ごと。更新は `raiseFloat`・`insertFloat`: 窓の `pointerdown` の capture・`focusedDisplayId` の変化・窓が開いた）。**窓を開く操作（トレイのボタン・メニュー・`prefix+i`・D&D）は、記憶に `rect` が無ければ、初めの矩形（`defaultFloatRect`。領域は `store.layoutByPane` の `floatArea`。`null` なら書かない）を、記憶の `rect` に書く**（`writeFace` の中。保存しない別の置き場は持たない）。書いた後は、`set --size` の変更・ほかの窓の開閉で動かない。
       **記憶の無い浮いた窓は、閉じて始まる**（T5 の `effectiveCollapsed`）。
@@ -271,17 +271,17 @@
       依存: T21, T14, T8, T17
       AC: AC8, AC17, AC19, AC20, AC21, AC22, AC24, AC25, AC-I1, AC-I4
       点検: あり
-- [ ] T23: 移動・大きさ・キーボード: 縁と角の 8 つのつかむ場所（`data-display-keepfocus`。`useResizeDrag` と同じ決まりで、その場でスタイルを変え、`store.layoutRev++`、離したとき `setFaceRect`。`Esc` で戻す・ダイアログで確定）。面のメニューの「キーで動かす」「キーで大きさを変える」（`floatKeyMode`。窓の根に `tabindex="-1"` を付けてフォーカス〔終えるときは、**先にフォーカスを移してから** `tabindex` を外す＝`body` に落とさない〕・矢印 16px・`Shift` 64px・`Enter`・`Esc`・フォーカスが出たら確定・`aria-live` の案内・キーを外へ流さない・**終えたら、始める前の場所へフォーカスを戻す**）。
+- [x] T23: 移動・大きさ・キーボード: 縁と角の 8 つのつかむ場所（`data-display-keepfocus`。`useResizeDrag` と同じ決まりで、その場でスタイルを変え、`store.layoutRev++`、離したとき `setFaceRect`。`Esc` で戻す・ダイアログで確定）。面のメニューの「キーで動かす」「キーで大きさを変える」（`floatKeyMode`。窓の根に `tabindex="-1"` を付けてフォーカス〔終えるときは、**先にフォーカスを移してから** `tabindex` を外す＝`body` に落とさない〕・矢印 16px・`Shift` 64px・`Enter`・`Esc`・フォーカスが出たら確定・`aria-live` の案内・キーを外へ流さない・**終えたら、始める前の場所へフォーカスを戻す**）。
       見出しのボタンの上の `Esc` で、窓を閉じずに端末へ。窓の上のホイールが、端末のスクロールバックを動かさない。単体テスト
       対象: `packages/web/src/components/DisplayFloat.vue`・`.test.ts`、`ContextMenu.vue`・`ContextMenu.test.ts`、`store/display.ts`（`floatKeyMode`） / 根拠: design「浮いた窓」「キー」
       依存: T22
       AC: AC18, AC-I2, AC-I3, AC-I4, AC-I5
       点検: あり
-- [ ] T24: D&D の中央と、窓のつかみ: `dockZoneAt` の `float` を有効に（中央で離すと `setFaceDock(info, "float", 離した位置の矩形)`。1 回の呼び出し。窓の動ける領域が無ければ「ここには置けません」）。浮いた窓の見出しをつかむと、その場で動き（`moveFloatRect`）、本体の箱の縁から 16px 以内でだけ側が強調される。離すと、側なら `setFaceDock(info, 側)`・そうでなければ `setFaceRect`。`Esc` で、始める前の矩形へ。単体テスト
+- [x] T24: D&D の中央と、窓のつかみ: `dockZoneAt` の `float` を有効に（中央で離すと `setFaceDock(info, "float", 離した位置の矩形)`。1 回の呼び出し。窓の動ける領域が無ければ「ここには置けません」）。浮いた窓の見出しをつかむと、その場で動き（`moveFloatRect`）、本体の箱の縁から 16px 以内でだけ側が強調される。離すと、側なら `setFaceDock(info, 側)`・そうでなければ `setFaceRect`。`Esc` で、始める前の矩形へ。単体テスト
       対象: `packages/web/src/display/dockDrag.ts`・`.test.ts`、`components/DisplayDropZones.vue`、`DisplayFloat.vue` / 根拠: design「D&D」
       依存: T22, T16
       AC: AC15, AC17, AC18, AC-I2
-- [ ] T25: E2E（PR-C）`display-layout-float.spec.ts`:
+- [x] T25: E2E（PR-C）`display-layout-float.spec.ts`:
       (1) メニュー・D&D の中央で、窓になって開く。**`--dock float`・設定で浮いた窓になった、記憶の無い面は、閉じて始まる**（トレイの ❐ のボタンだけ・窓の要素が無い）→ ボタンを押すと開く。窓を開く・［たたむ］で閉じる・トレイの ❐ で開く・動かす・大きさを変える・前へ出す、のどれでも、ブラウザが `client.view` を送らない（ドックから移したときと、その pane で最初にトレイの行が出るときの 1 回を除く）。**帯が 1 本も無い pane で、窓を開く・閉じるを 3 回繰り返しても、`client.view` を送らず、トレイの行が出たまま**（開いている窓のボタンは `aria-pressed="true"`）。
       (2) 窓を、4 隅と 4 辺の外へ大きく動かす・大きくする → 窓の箱が、いつも端末の箱（`[data-pane-frame-main]`）の中。240×120px より小さくならない。pane を狭めた後も中。領域が最小より小さいと、トレイの押せないボタン。再読み込みの後、同じ位置と大きさ。移動の途中の `Esc` で戻る。
       まだ動かしていない窓（`--dock float` で出て、ボタンで開いた）は、プログラムが `--size` を変えて `set` し直しても・ほかの窓を開閉しても、箱が動かない。**その窓は、再読み込みの後も・`close` → 同じ名前で、別の `--size` で `set` し直した後も、同じ箱で開いて出て、ほかの面も残っている**。
@@ -301,11 +301,11 @@
       対象: `packages/e2e/src/specs/display-layout-float.spec.ts`（新規）、`packages/e2e/src/support/displayLayout.ts` / 根拠: 規約 `e2e-observe-browser`
       依存: T23, T24
       AC: AC10, AC17, AC18, AC19, AC20, AC21, AC22, AC23, AC24, AC25, AC-I1, AC-I2, AC-I3, AC-I4, AC-I5
-- [ ] T26: 文書（PR-C）: `docs/display.md`（浮いた窓: 出し方・動かし方・キーボード・端末の領域の中だけ・重なり〔操作中の窓が最前面〕・覚え方・「記憶の無い浮いた窓は、閉じて始まる」・限界〔窓は pane の中だけ・小さい pane では出せない・置き場所の変更でスクリプトの状態は消える・**利用者が開いたままにした窓は、同じ名前で出し直すと、利用者が決めた位置に開いて出る（プログラムが時機を選べる）**・遮断器で止めた面は、移す・たたんで開く・プログラムの出し直しで、また動く〕）・`docs/sodactl.md`（`--dock float`・`renderers.float`）・`docs/verification.md`
+- [x] T26: 文書（PR-C）: `docs/display.md`（浮いた窓: 出し方・動かし方・キーボード・端末の領域の中だけ・重なり〔操作中の窓が最前面〕・覚え方・「記憶の無い浮いた窓は、閉じて始まる」・限界〔窓は pane の中だけ・小さい pane では出せない・置き場所の変更でスクリプトの状態は消える・**利用者が開いたままにした窓は、同じ名前で出し直すと、利用者が決めた位置に開いて出る（プログラムが時機を選べる）**・遮断器で止めた面は、移す・たたんで開く・プログラムの出し直しで、また動く〕）・`docs/sodactl.md`（`--dock float`・`renderers.float`）・`docs/verification.md`
       対象: 上のファイル
       依存: T25
       AC: AC27
-- [ ] T27: 負の対照（PR-C。test 工程）: (a) `clampFloatRect` を通さない版 → T25 (2) が落ちる。(b) 窓の層を `PaneFrame` の外（`body` への `Teleport`・`position: fixed`）に置く版 → T25 (3) が落ちる。(c) 重なりを、`v-for` の配列の並べ替えで替える版 → T25 (5) の「枠の要素が同じ」か「`load` が 1」が落ちる（「作業順序」の 1）。
+- [x] T27: 負の対照（PR-C。test 工程）: (a) `clampFloatRect` を通さない版 → T25 (2) が落ちる。(b) 窓の層を `PaneFrame` の外（`body` への `Teleport`・`position: fixed`）に置く版 → T25 (3) が落ちる。(c) 重なりを、`v-for` の配列の並べ替えで替える版 → T25 (5) の「枠の要素が同じ」か「`load` が 1」が落ちる（「作業順序」の 1）。
       (d) 窓を開くときに枠へ `focus()` する版 → T25 (4) が落ちる。(e) `insertFloat` が、新しい窓をいつも最前面に入れる版 → T25 (5) の「操作中の窓の見出しが覆われない」が落ちる。(f) 開いている窓のボタンをトレイから外す版 → T25 (1) の「帯の無い pane で `client.view` を送らない」が落ちる。(g) `effectiveCollapsed` から「置き場所が浮いた窓なら、たたむ」を外す版 → T25 (1) の「閉じて始まる（窓の要素が無い）」が落ちる。(h) 窓を開く操作が、記憶に `rect` を書かない版 → T25 (2) の「別の `--size` で `set` し直した後も、同じ箱」が落ちる。生の出力を `test-result.md` に
       対象: `.aidev/works/20261008-display-layout/test-result.md`
       依存: T25

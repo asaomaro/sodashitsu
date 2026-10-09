@@ -211,4 +211,135 @@ describe("面の記憶（置き場所・たたみ。20261008-display-layout）",
     s.setDockDrag(null);
     expect(s.dockDrag).toBeNull();
   });
+
+  describe("浮いた窓（20261008-display-layout PR-C）", () => {
+    const win = (id: string, over: Partial<DisplayInfo> = {}): DisplayInfo => info(id, { dock: "float", ...over });
+    it("窓を開く操作は、記憶に矩形が無ければ初めの矩形を一緒に書く。書いた後は set の --size の変更・ほかの窓の開閉で動かない", () => {
+      const s = useDisplayStore();
+      const a = win("a", { size: 400 });
+      s.upsert(a);
+      s.setLayoutSnapshot("p1", { auto: [], floatArea: { w: 800, h: 500 } });
+      expect(s.effectiveOf(a).collapsed).toBe(true); // 記憶の無い浮いた窓は、閉じて始まる
+      s.setFaceCollapsed(a, false);
+      const r = s.faceRectOf(a)!;
+      expect(r).toEqual({ x: 800 - 400 - 8, y: 8, w: 400, h: 300 });
+      s.upsert(win("a", { size: 700 })); // プログラムが --size を変えて set し直しても
+      s.setFaceCollapsed(a, true);
+      s.setFaceCollapsed(a, false);
+      expect(s.faceRectOf(a)).toEqual(r);
+    });
+    it("開いている窓の数だけ、初めの矩形は 24px ずつ左下へずれる（自動でたたまれた窓は数えない）", () => {
+      const s = useDisplayStore();
+      const a = win("a");
+      const b = win("b");
+      s.upsert(a);
+      s.upsert(b);
+      s.setLayoutSnapshot("p1", { auto: [], floatArea: { w: 800, h: 500 } });
+      s.setFaceCollapsed(a, false);
+      s.setFaceCollapsed(b, false);
+      expect(s.faceRectOf(b)!.x).toBe(s.faceRectOf(a)!.x - 24);
+      expect(s.faceRectOf(b)!.y).toBe(s.faceRectOf(a)!.y + 24);
+    });
+    it("窓の動ける領域が無い間（floatArea が null）は、開く操作を受けない（canOpenFloat が偽）。矩形も書かない", () => {
+      const s = useDisplayStore();
+      const a = win("a");
+      s.upsert(a);
+      expect(s.canOpenFloat("p1")).toBe(false);
+      s.setLayoutSnapshot("p1", { auto: [], floatArea: null });
+      expect(s.canOpenFloat("p1")).toBe(false);
+      s.setFaceCollapsed(a, false);
+      expect(s.faceRectOf(a)).toBeUndefined();
+      s.setLayoutSnapshot("p1", { auto: [], floatArea: { w: 300, h: 200 } });
+      expect(s.canOpenFloat("p1")).toBe(true);
+    });
+    it("ドックから浮かせる setFaceDock(float, rect) は、開いて・渡した矩形で。メニュー（rect なし）は、前の位置を上書きしない", () => {
+      const s = useDisplayStore();
+      const a = info("a");
+      s.upsert(a);
+      s.setLayoutSnapshot("p1", { auto: [], floatArea: { w: 800, h: 500 } });
+      s.setFaceDock(a, "float", { x: 10, y: 20, w: 300, h: 200 });
+      expect(s.effectiveOf(a)).toMatchObject({ dock: "float", collapsed: false });
+      expect(s.faceRectOf(a)).toEqual({ x: 10, y: 20, w: 300, h: 200 });
+      s.setFaceDock(a, "right");
+      expect(s.faceRectOf(a)).toEqual({ x: 10, y: 20, w: 300, h: 200 }); // 矩形は消さない
+      s.setFaceDock(a, "float"); // メニューの「浮いた窓にする」
+      expect(s.faceRectOf(a)).toEqual({ x: 10, y: 20, w: 300, h: 200 });
+    });
+    it("重なりの順: 窓が開くと並びに入り、閉じると外れる。押した窓は末尾へ。操作中の窓は最前面で、新しい窓はその後ろ", () => {
+      const s = useDisplayStore();
+      s.upsert(win("a"));
+      s.upsert(win("b"));
+      s.syncFloatOrder("p1", ["a", "b"]);
+      expect(s.floatOrder.get("p1")).toEqual(["a", "b"]);
+      s.raiseFloat("p1", "a");
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a"]);
+      s.syncFloatOrder("p1", ["b"]);
+      expect(s.floatOrder.get("p1")).toEqual(["b"]);
+      s.syncFloatOrder("p1", []);
+      expect(s.floatOrder.has("p1")).toBe(false);
+      // 操作中の窓の後ろに新しい窓が入る
+      s.upsert(win("c"));
+      s.syncFloatOrder("p1", ["a"]);
+      s.setFocused("a");
+      s.syncFloatOrder("p1", ["a", "c"]);
+      expect(s.floatOrder.get("p1")).toEqual(["c", "a"]);
+    });
+    it("面が操作中になった窓（開いている窓）は、最前面へ。たたんでいる窓・ドックの面は並びに入れない", () => {
+      const s = useDisplayStore();
+      const a = win("a");
+      const b = win("b");
+      s.upsert(a);
+      s.upsert(b);
+      s.setLayoutSnapshot("p1", { auto: [], floatArea: { w: 800, h: 500 } });
+      s.setFaceCollapsed(a, false);
+      s.setFaceCollapsed(b, false);
+      s.syncFloatOrder("p1", ["a", "b"]);
+      s.setFocused("a");
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a"]);
+      s.upsert(info("d"));
+      s.setFocused("d");
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a"]);
+    });
+    it("プログラムの出し直し・記憶から開いた窓は最背面。利用者の操作で開いた窓だけが最前面", () => {
+      const s = useDisplayStore();
+      const a = win("a");
+      s.upsert(a);
+      s.upsert(win("b"));
+      s.upsert(win("c"));
+      s.setLayoutSnapshot("p1", { auto: [], floatArea: { w: 800, h: 500 } });
+      s.syncFloatOrder("p1", ["a", "b"]);
+      s.raiseFloat("p1", "a"); // 利用者が a を前へ出した: [b, a]
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a"]);
+      s.syncFloatOrder("p1", ["a"]); // b を close
+      s.syncFloatOrder("p1", ["a", "b"]); // プログラムが b を出し直した（利用者の操作ではない）
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a"]); // b は最背面。a の上へ来ない
+      s.setFaceCollapsed(win("c"), false); // 利用者が c を開いた
+      s.syncFloatOrder("p1", ["b", "a", "c"]);
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a", "c"]);
+    });
+    it("pane が小さくて窓が自動でたたまれている間（keep）も、並びを捨てない", () => {
+      const s = useDisplayStore();
+      s.upsert(win("a"));
+      s.upsert(win("b"));
+      s.syncFloatOrder("p1", ["a", "b"]);
+      s.raiseFloat("p1", "a");
+      s.syncFloatOrder("p1", [], ["a", "b"]); // 領域が最小より小さく、窓が出ていない
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a"]);
+      s.syncFloatOrder("p1", ["a", "b"], ["a", "b"]); // 広がった
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a"]);
+      s.syncFloatOrder("p1", [], []); // 本当に閉じた
+      expect(s.floatOrder.has("p1")).toBe(false);
+    });
+    it("キーのモード: 始める・終える。面が消えたら下ろす", () => {
+      const s = useDisplayStore();
+      const a = win("a");
+      s.upsert(a);
+      s.startFloatKeys(a, "resize");
+      expect(s.floatKeyMode).toEqual({ id: "a", paneId: "p1", mode: "resize" });
+      s.endFloatKeys("zzz");
+      expect(s.floatKeyMode).not.toBeNull();
+      s.remove("a");
+      expect(s.floatKeyMode).toBeNull();
+    });
+  });
 });

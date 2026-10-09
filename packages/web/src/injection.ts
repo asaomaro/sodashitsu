@@ -52,6 +52,16 @@ export interface DisplayHost {
   prefixKey(): { key: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean };
 }
 export const DisplayHostKey: InjectionKey<DisplayHost> = Symbol("displayHost");
+/**
+ * 浮いた窓の見出しのつかむ場所（`[data-display-grip]`）の動き。窓（`DisplayFloat`）が提供すると、見出しの D&D（ドックの側へ置く）の代わりに、窓をその場で動かす。
+ * ドックのパネルの見出しは提供されないので、今までどおり D&D。
+ */
+export interface FloatGrip {
+  onPointerDown(ev: PointerEvent): void;
+  onPointerMove(ev: PointerEvent): void;
+  onPointerEnd(ev: PointerEvent): void;
+}
+export const FloatGripKey: InjectionKey<FloatGrip> = Symbol("floatGrip");
 /** 表示の面（`sodactl display`。20261007-soda-extensions）の通信の係。`DisplayFrame` が操作・知らせを送る。 */
 export const DisplayControllerKey: InjectionKey<DisplayController> = Symbol("displayController");
 /** 端末のファイルのリンクとドロップ。`TerminalPane` がドロップを渡す。無ければドロップを受けない（テスト等）。 */

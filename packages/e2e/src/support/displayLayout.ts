@@ -132,3 +132,32 @@ export const trackBodyHits = (page: Page, transient = true): Promise<void> =>
     setInterval(() => { if (document.activeElement === document.body) w.__bodyHits++; }, 25);
   }, transient);
 export const bodyHits = (page: Page): Promise<number> => page.evaluate(() => (window as unknown as { __bodyHits: number }).__bodyHits);
+
+// --- 浮いた窓（20261008-display-layout PR-C） -------------------------------------------------------------------------------------------
+/** 浮いた窓の要素（根）。面の名前や id で絞らないときは全部。 */
+export const floatWins = (page: Page): Locator => page.locator("[data-display-float]");
+export const floatWin = (page: Page, faceId: string): Locator => page.locator(`[data-display-float][data-display-root="${faceId}"]`);
+/** 窓の枠（iframe）。 */
+export const floatFrames = (page: Page): Locator => page.locator("[data-display-float] iframe[data-display-frame]");
+/** 端末の領域の箱（窓が動けるのは、この箱の中だけ）。 */
+export const terminalBox = (page: Page): Promise<Box> => boxOf(page.locator("[data-pane-frame-main]").first());
+export const insideBox = (inner: Box, outer: Box, tol = 1): boolean =>
+  inner.x >= outer.x - tol && inner.y >= outer.y - tol && inner.x + inner.width <= outer.x + outer.width + tol && inner.y + inner.height <= outer.y + outer.height + tol;
+/** 窓のボタン（トレイの ❐）で開く。 */
+export async function openFloatByTray(page: Page, name: string): Promise<void> {
+  await trayButton(page, name).click();
+  await expect(trayButton(page, name)).toHaveAttribute("aria-pressed", "true");
+}
+/** 窓の中の点を、マウスでつかんで動かす（`steps` 回に分けて）。 */
+export async function dragFrom(page: Page, from: { x: number; y: number }, to: { x: number; y: number }, steps = 6): Promise<void> {
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps });
+  await page.mouse.up();
+}
+/** 箱の中心。 */
+export const centerOf = (b: Box): { x: number; y: number } => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+/** 窓の縁・角のつかむ場所の箱。 */
+export const handleOf = (win: Locator, h: string): Locator => win.locator(`[data-display-float-handle="${h}"]`);
+/** 窓の見出しのつかむ場所（ボタンでない側）。 */
+export const gripOf = (win: Locator): Locator => win.locator("[data-display-grip]");

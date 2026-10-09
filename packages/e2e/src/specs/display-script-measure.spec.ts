@@ -122,6 +122,7 @@ window.__probeAll = probeAll;
   await setScriptOk(appServer, paneId, "g", wrap(`document.body.insertAdjacentHTML('beforeend', '<textarea id=ta>copy-me</textarea><button id=b>click</button>'); ${ACTIONS} probeAll('before');`, 2500));
   await result(page).catch(() => undefined);
   const f = await scriptFrame(page);
+  await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
   await engageBtn(page).click();
   await scriptFrameLoc(page).locator("#b").click();
   await f.evaluate(() => (window as unknown as { __probeAll(t: string): void }).__probeAll("after-click"));
@@ -251,6 +252,7 @@ document.getElementById('go').addEventListener('click', function () { for (var i
       seen.add(`${el?.tagName ?? ""}${el?.hasAttribute?.("data-display-script") ? "[script]" : el?.hasAttribute?.("data-display-frame") ? "[static]" : ""}`);
     }, 5);
   });
+  await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
   await engageBtn(page).click();
   await scriptFrameLoc(page).locator("#go").click(); // 本物のクリック（ユーザー操作）の中で、兄弟へ focus()
   await page.waitForTimeout(1500);

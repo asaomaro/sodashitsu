@@ -2,6 +2,7 @@
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ActionDispatcherKey, DisplayHostKey, TerminalRegistryKey } from "../injection.js";
 import { isScriptFormat } from "../display/framePage.js";
+import { floatZ } from "../display/floatGeometry.js";
 import { resolvePaneDisplays, type LayoutResult } from "../display/paneDisplayLayout.js";
 import { NO_NEIGHBORS, resolvePaneChrome, type PaneSide, type PaneSides } from "../layout/paneChrome.js";
 import type { Side as PaneSide2 } from "../display/paneDisplayLayout.js";
@@ -10,6 +11,7 @@ import { getCellSize } from "../term/measure.js";
 import { useDisplayStore } from "../store/display.js";
 import { useSessionStore } from "../store/session.js";
 import DisplayDropZones from "./DisplayDropZones.vue";
+import DisplayFloat from "./DisplayFloat.vue";
 import PaneBands from "./PaneBands.vue";
 import PanePanel from "./PanePanel.vue";
 import { useSettingsStore } from "../store/settings.js";
@@ -101,10 +103,15 @@ const layout = computed<LayoutResult | null>(() => {
     if (all.length === 0) return null;
     const bands: Parameters<typeof resolvePaneDisplays>[0]["bands"] = [];
     const panels: Parameters<typeof resolvePaneDisplays>[0]["panels"] = [];
+    const floatRects: Parameters<typeof resolvePaneDisplays>[0]["floatRects"] = {};
     all.forEach((d, seq) => {
       const f = displays.effectiveOf(d);
       if (d.kind === "band") bands.push({ id: d.id, seq, size: d.size, edge: f.edge ?? "top", collapsed: f.collapsed, script: isScriptFormat(d.format) && displays.scriptCapable && settings?.displayScriptEnabled === true });
-      else panels.push({ id: d.id, seq, size: d.size, dock: f.dock ?? "right", collapsed: f.collapsed });
+      else {
+        panels.push({ id: d.id, seq, size: d.size, dock: f.dock ?? "right", collapsed: f.collapsed });
+        const rect = displays.faceRectOf(d); // 記憶の矩形（窓を開く操作が書く）。無ければ割り付けが初めの矩形を使う
+        if (rect) floatRects[d.id] = rect;
+      }
     });
     const sides = ["right", "left", "top", "bottom"] as const;
     const active: Partial<Record<(typeof sides)[number], string>> = {};
@@ -124,7 +131,7 @@ const layout = computed<LayoutResult | null>(() => {
       panels,
       active,
       sideSizes,
-      floatRects: {},
+      floatRects,
       trayEdgeDefault: settings?.displayBandEdge ?? "top",
     });
   } catch (e) {
@@ -133,7 +140,7 @@ const layout = computed<LayoutResult | null>(() => {
   }
 });
 /** 固定の部品の位置が変わる割り付け（帯の上下・たたみ・トレイの行・「ほか N 件」）の署名。 */
-const placementOf = (l: LayoutResult): string => JSON.stringify([l.bands, l.tray.edge, l.tray.row, l.tray.hostBandId, l.tray.buttons.length]);
+const placementOf = (l: LayoutResult): string => JSON.stringify([l.bands, l.tray.edge, l.tray.row, l.tray.hostBandId, l.tray.buttons.length, l.floats]);
 const showEdge = (edge: "top" | "bottom"): boolean => {
   const l = layout.value;
   if (!l) return false;
@@ -146,8 +153,23 @@ const dropZones = computed(() => {
   const d = displays?.dockDrag;
   if (!d || d.paneId !== props.paneId) return null;
   const cur = displays.infos.get(d.id);
-  return { zone: d.zone, current: cur ? (displays.effectiveOf(cur).dock ?? null) : null };
+  // 浮いた窓をその場で動かしている間は、縁に寄せたときだけ落とせる場所を出す。
+  if (d.floatMove && d.zone === null) return null;
+  return { zone: d.zone, current: cur ? (displays.effectiveOf(cur).dock ?? null) : null, release: d.floatMove === true };
 });
+/** 中央（浮いた窓）を落とせる場所にするか（窓の動ける領域が分かっている間だけ）。 */
+const floatDroppable = computed(() => !!displays?.canOpenFloat(props.paneId));
+/** 浮いた窓の層: 出す窓（出た順）と `z-index`（重なりの順。`v-for` の並びは変えない）。 */
+const floats = computed(() => layout.value?.floats ?? []);
+const floatArea = computed(() => layout.value?.floatArea ?? null);
+const floatZOf = (id: string): number => floatZ(displays?.floatOrder.get(props.paneId) ?? [], id);
+/** 開いている窓（pane が小さくて自動でたたまれている窓も）。並びの記憶を捨てないために使う。 */
+const openFloatIds = computed(() => (displays?.all ?? []).filter((d) => d.paneId === props.paneId && d.kind === "panel").filter((d) => { const f = displays!.effectiveOf(d); return f.dock === "float" && !f.collapsed; }).map((d) => d.id));
+watch(
+  () => [floats.value.map((f) => f.id).join(","), openFloatIds.value.join(",")],
+  () => displays?.syncFloatOrder(props.paneId, floats.value.map((f) => f.id), openFloatIds.value),
+  { immediate: true },
+);
 
 /**
  * つまみのドラッグの間の案内の線の位置（本体の箱を基準。`.pane-frame-guide`）。左右の側は、端末の領域の高さに沿った縦線（`left`/`right` が側の縁から `px`）、
@@ -183,7 +205,7 @@ watch(
   layout,
   (l) => {
     if (displays) {
-      displays.setLayoutSnapshot(props.paneId, l ? { auto: l.auto, floatArea: null, placement: placementOf(l) } : null);
+      displays.setLayoutSnapshot(props.paneId, l ? { auto: l.auto, floatArea: l.floatArea, placement: placementOf(l) } : null);
     }
     const a = document.activeElement;
     if (focusWasInChrome && (a === null || a === document.body || !a.isConnected) && !view?.modalOpen && (view?.screen ?? "base") === "base") displayHost?.focusTerminal(props.paneId);
@@ -453,12 +475,19 @@ function onKeydown(ev: KeyboardEvent): void {
         <PanePanel v-if="layout && docks?.left" side="left" :pane-id="paneId" :dock="docks.left" @guide="guide = $event" />
         <div class="pane-frame-center">
           <div class="pane-frame-main" :class="{ 'pane-frame-main-dimmed': displayEngaged }" data-pane-frame-main><slot /></div>
+          <!-- 浮いた窓の層（端末の領域の箱の中だけ。`.pane-frame-main` の兄弟なので、操作中に端末を薄くする `opacity` が窓に掛からない）。
+               `v-for` は出た順のまま（並べ替えない＝枠〔iframe〕を動かさない）。重なりは `z-index`。 -->
+          <div v-if="layout && floats.length > 0 && floatArea" class="pane-frame-floats" data-pane-frame-floats>
+            <template v-for="f in floats" :key="f.id">
+              <DisplayFloat v-if="displays?.infos.get(f.id)" :info="displays.infos.get(f.id)!" :rect="f.rect" :area="floatArea" :z="floatZOf(f.id)" />
+            </template>
+          </div>
         </div>
         <PanePanel v-if="layout && docks?.right" side="right" :pane-id="paneId" :dock="docks.right" @guide="guide = $event" />
       </div>
       <PanePanel v-if="layout && docks?.bottom" side="bottom" :pane-id="paneId" :dock="docks.bottom" @guide="guide = $event" />
       <PaneBands v-if="layout && showEdge('bottom')" edge="bottom" :pane-id="paneId" :layout="layout" />
-      <DisplayDropZones v-if="dropZones" :zone="dropZones.zone" :current="dropZones.current" :float="false" />
+      <DisplayDropZones v-if="dropZones" :zone="dropZones.zone" :current="dropZones.current" :float="floatDroppable" :release="dropZones.release" />
       <div v-if="guideStyle" class="pane-frame-guide" :style="guideStyle" aria-hidden="true" data-pane-frame-guide></div>
     </div>
     <div v-else class="pane-frame-body">
@@ -674,6 +703,18 @@ function onKeydown(ev: KeyboardEvent): void {
   background: var(--soda-resize-line, #f8f8f2);
   pointer-events: none;
   z-index: 25;
+}
+/*
+ * 浮いた窓の層（20261008-display-layout）。端末の領域の箱いっぱい（窓は、この箱の中だけ。外へ出ない）。窓のないところは、ポインタを端末へ通す（窓が `pointer-events: auto`）。
+ * `z-index: 20` は、メニュー 1000・知らせ 950・pane を落とす場所の表示 30 より下。`isolation: isolate` で、中の窓の `z-index`（重なりの順）は外と比べられない。
+ */
+.pane-frame-floats {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 20;
+  isolation: isolate;
 }
 /* 枠（表示）に入力が届いている間は、端末を薄くする（カーソルも薄くなる）。 */
 .pane-frame-main-dimmed {
