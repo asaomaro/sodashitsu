@@ -37,13 +37,13 @@
 
 ## PR1c: 角の置き換え
 
-- [ ] T9: 置き換える行の一覧を作る（`decisions.md` に表で残す）。`border-radius` の全部の行（約 94）を、「`4px` → `--soda-shape-radius`」「`3px` → `-s`」「`6px` → `-l`」「置き換えない（`2px`・`999px`・`50%`・片側だけの丸・`em`・`9px`・`7px`・`10px`・守りのファイルの中）」に仕分ける。片側だけの丸（`4px 4px 0 0` など）は、`var(--soda-shape-radius) var(--soda-shape-radius) 0 0` にしてよいか、1 つずつ決める。
+- [x] T9: 置き換える行の一覧を作る（`decisions.md` に表で残す）。`border-radius` の全部の行（約 94）を、「`4px` → `--soda-shape-radius`」「`3px` → `-s`」「`6px` → `-l`」「置き換えない（`2px`・`999px`・`50%`・片側だけの丸・`em`・`9px`・`7px`・`10px`・守りのファイルの中）」に仕分ける。片側だけの丸（`4px 4px 0 0` など）は、`var(--soda-shape-radius) var(--soda-shape-radius) 0 0` にしてよいか、1 つずつ決める。
       依存: T8
       AC: AC3
-- [ ] T10: 置き換える（機械的）。守りのファイル（`DisplayFrame.vue`・`DisplayScriptMark.vue`・`focusDrop.ts` ほか・`packages/web/public/display-view/*`・`MobileShell.vue`）と、`third_party/` は、変えない。
+- [x] T10: 置き換える（機械的）。守りのファイル（`DisplayFrame.vue`・`DisplayScriptMark.vue`・`focusDrop.ts` ほか・`packages/web/public/display-view/*`・`MobileShell.vue`）と、`third_party/` は、変えない。
       依存: T9
       AC: AC3
-- [ ] T11: PR1c の確かめ。PR1a の道具で、`origin/main` との差が 0（クラシック）。モダンで全画面を撮り、角だけが変わっていることを、目で見る（撮った画像の場所を、結果に書く。**利用者に見せる絵になる**）。モダンで、基本の経路の E2E（分割・tab・設定・表示の面）と、PR3 のフォーカスの E2E 3 本（1 本ずつ単独）を流す（design 追補 01 D13）。固定の部品（印「スクリプト」ほか）が、モダンでも切れない。`pnpm test`。
+- [x] T11: PR1c の確かめ。PR1a の道具で、`origin/main` との差が 0（クラシック）。モダンで全画面を撮り、角だけが変わっていることを、目で見る（撮った画像の場所を、結果に書く。**利用者に見せる絵になる**）。モダンで、基本の経路の E2E（分割・tab・設定・表示の面）と、PR3 のフォーカスの E2E 3 本（1 本ずつ単独）を流す（design 追補 01 D13）。固定の部品（印「スクリプト」ほか）が、モダンでも切れない。`pnpm test`。
       依存: T10
       AC: AC2, AC3, AC5
 
