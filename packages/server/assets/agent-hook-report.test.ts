@@ -217,6 +217,35 @@ describe("agent-hook-report.cjs", () => {
       expect(JSON.stringify(result)).not.toContain("秘密の指示");
     });
 
+    it("入れ子の親の id（PreToolUse の agent_id）と親の記録の場所（transcript_path）を載せる。メインが呼ぶとき（agent_id 無し）は親の項目が無い", async () => {
+      const tp = "/home/u/.claude/projects/-w/s1.jsonl";
+      expect(
+        await runHook(
+          "claude",
+          JSON.stringify({ ...base, hook_event_name: "PreToolUse", tool_name: "Agent", agent_id: "outer1", transcript_path: tp, tool_input: {} }),
+        ),
+      ).toEqual({ ...common, type: "subagent_pending", parentAgentId: "outer1", transcriptPath: tp });
+      expect(
+        await runHook(
+          "claude",
+          JSON.stringify({ ...base, hook_event_name: "PreToolUse", tool_name: "Agent", transcript_path: tp, tool_input: {} }),
+        ),
+      ).toEqual({ ...common, type: "subagent_pending", transcriptPath: tp });
+    });
+
+    it("SubagentStart に transcript_path を載せる。長すぎる（1024 文字超）・文字列でない場所は送らない（切らない）。last_assistant_message・agent_transcript_path は送らない", async () => {
+      const tp = "/home/u/.claude/projects/-w/s1.jsonl";
+      const start = { ...base, hook_event_name: "SubagentStart", agent_id: "a1" };
+      expect(await runHook("claude", JSON.stringify({ ...start, transcript_path: tp, agent_transcript_path: "/x/y.jsonl", last_assistant_message: "秘密" }))).toEqual({
+        ...common,
+        type: "subagent_start",
+        agentId: "a1",
+        transcriptPath: tp,
+      });
+      expect(await runHook("claude", JSON.stringify({ ...start, transcript_path: "/" + "x".repeat(1024) }))).toEqual({ ...common, type: "subagent_start", agentId: "a1" });
+      expect(await runHook("claude", JSON.stringify({ ...start, transcript_path: 5 }))).toEqual({ ...common, type: "subagent_start", agentId: "a1" });
+    });
+
     it("PreToolUse は tool_name が Agent・Task のときだけ。Task も受け、ほか（Bash・TaskCreate）は何も送らない", async () => {
       const task = await runHook(
         "claude",

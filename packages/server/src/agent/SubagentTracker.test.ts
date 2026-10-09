@@ -92,8 +92,8 @@ describe("SubagentTracker（数える部分）", () => {
     expect(tracker.current("p1")).toEqual({
       count: 2,
       items: [
-        { id: "a1", startedAt: 1_000_000 },
-        { id: "a2", type: "Plan", startedAt: 1_000_005 },
+        { id: "a1", depth: 1, startedAt: 1_000_000 },
+        { id: "a2", type: "Plan", depth: 1, startedAt: 1_000_005 },
       ],
     });
     rep({ type: "subagent_stop", agentId: "a1" });
@@ -106,7 +106,7 @@ describe("SubagentTracker（数える部分）", () => {
     rep({ type: "subagent_start", agentId: "a1" });
     expect(tracker.current("p1")).toEqual({
       count: 1,
-      items: [{ id: "a1", startedAt: 1_000_000 }],
+      items: [{ id: "a1", depth: 1, startedAt: 1_000_000 }],
     });
   });
 
@@ -130,6 +130,7 @@ describe("SubagentTracker（数える部分）", () => {
         type: "Explore",
         description: "調べる",
         background: true,
+        depth: 1,
         startedAt: 1_000_000,
       });
     });
@@ -327,6 +328,7 @@ describe("SubagentTracker（数える部分）", () => {
       rep({ type: "subagent_start", agentId: "next" });
       expect(tracker.current("p1")?.items.find((i) => i.id === "next")).toEqual({
         id: "next",
+        depth: 1,
         startedAt: 1_000_000,
       });
     });
@@ -678,6 +680,110 @@ describe("SubagentTracker（数える部分）", () => {
       detect("p1", null);
       advance(1000);
       expect(published).toEqual([]);
+    });
+  });
+  // 20261008-graph-first PR6a: 入れ子（親の id・深さ）と、記録を読む材料。
+  describe("入れ子と記録の材料", () => {
+    const TP = "/home/u/.claude/projects/-w/s1.jsonl";
+
+    it("メインが起動したものは深さ 1・親なし。内側の実行前の報告（parentAgentId）で、次の起動に親と深さ 2 が付く", () => {
+      rep({ type: "subagent_pending", transcriptPath: TP });
+      rep({ type: "subagent_start", agentId: "outer", transcriptPath: TP });
+      rep({ type: "subagent_pending", parentAgentId: "outer", transcriptPath: TP });
+      rep({ type: "subagent_start", agentId: "inner", transcriptPath: TP });
+      const items = tracker.current("p1")!.items;
+      expect(items.map((i) => [i.id, i.parentId, i.depth])).toEqual([
+        ["outer", undefined, 1],
+        ["inner", "outer", 2],
+      ]);
+    });
+
+    it("孫は深さ 3。親がもう居ない（終わった）ときは、親の id は残し、深さは 2", () => {
+      rep({ type: "subagent_start", agentId: "a" });
+      rep({ type: "subagent_pending", parentAgentId: "a" });
+      rep({ type: "subagent_start", agentId: "b" });
+      rep({ type: "subagent_pending", parentAgentId: "b" });
+      rep({ type: "subagent_start", agentId: "c" });
+      expect(tracker.current("p1")!.items.map((i) => i.depth)).toEqual([1, 2, 3]);
+      rep({ type: "subagent_pending", parentAgentId: "gone" });
+      rep({ type: "subagent_start", agentId: "d" });
+      expect(tracker.current("p1")!.items[3]).toMatchObject({ id: "d", parentId: "gone", depth: 2 });
+    });
+
+    it("並行の起動: 親が違う実行前の報告は、起動の順に 1 件ずつ対になる（最新の 1 件だけ持つ作りのまま）", () => {
+      rep({ type: "subagent_pending", parentAgentId: "p-a" });
+      rep({ type: "subagent_start", agentId: "x1" });
+      rep({ type: "subagent_pending" });
+      rep({ type: "subagent_start", agentId: "x2" });
+      const items = tracker.current("p1")!.items;
+      expect(items[0]?.parentId).toBe("p-a");
+      expect(items[1]?.parentId).toBeUndefined();
+      expect(items[1]?.depth).toBe(1);
+    });
+
+    it("自分自身を親にした報告は、親なしにする（ループを作らない）", () => {
+      rep({ type: "subagent_pending", parentAgentId: "self" });
+      rep({ type: "subagent_start", agentId: "self" });
+      expect(tracker.current("p1")!.items[0]).toMatchObject({ id: "self", depth: 1 });
+      expect(tracker.current("p1")!.items[0]?.parentId).toBeUndefined();
+    });
+
+    it("古い報告（親・場所の項目が無い）でも今までどおり数える。hasTranscript は付かない", () => {
+      rep({ type: "subagent_pending", description: "d" });
+      rep({ type: "subagent_start", agentId: "a1" });
+      const item = tracker.current("p1")!.items[0]!;
+      expect(item).toEqual({ id: "a1", description: "d", startedAt: 1_000_000, depth: 1 });
+      expect(tracker.transcriptSource("p1", "a1")).toBeUndefined();
+    });
+
+    it("記録の場所を受けたセッションの、安全な id のサブエージェントにだけ hasTranscript が付き、場所そのものは一覧に載らない", () => {
+      rep({ type: "subagent_start", agentId: "a1", transcriptPath: TP });
+      rep({ type: "subagent_start", agentId: "../evil", transcriptPath: TP });
+      const items = tracker.current("p1")!.items;
+      expect(items[0]?.hasTranscript).toBe(true);
+      expect(items[1]?.hasTranscript).toBeUndefined();
+      expect(JSON.stringify(tracker.current("p1"))).not.toContain(".claude/projects");
+    });
+
+    it("transcriptSource: 報告されている id だけ。別の pane・居ない id・終わった id・安全でない id は undefined", () => {
+      rep({ type: "subagent_start", agentId: "a1", transcriptPath: TP });
+      expect(tracker.transcriptSource("p1", "a1")).toEqual({ sessionId: "s1", parentTranscriptPath: TP });
+      expect(tracker.transcriptSource("p2", "a1")).toBeUndefined();
+      expect(tracker.transcriptSource("p1", "nope")).toBeUndefined();
+      expect(tracker.transcriptSource("p1", "../a1")).toBeUndefined();
+      expect(tracker.transcriptSource("p1", "a".repeat(129))).toBeUndefined();
+      rep({ type: "subagent_stop", agentId: "a1" });
+      expect(tracker.transcriptSource("p1", "a1")).toBeUndefined();
+    });
+
+    it("SubagentStop が早く来て、作業の終わりの一覧とずれても、親・深さは壊れない（残っているものは保つ）", () => {
+      rep({ type: "subagent_start", agentId: "outer", transcriptPath: TP });
+      rep({ type: "subagent_pending", parentAgentId: "outer" });
+      rep({ type: "subagent_start", agentId: "inner" });
+      rep({ type: "subagent_stop", agentId: "inner" }); // 早く来た終了
+      rep({ type: "agent_stop", running: [{ id: "outer" }, { id: "inner" }], truncated: false });
+      const items = tracker.current("p1")!.items;
+      expect(items.map((i) => i.id)).toEqual(["outer"]);
+      expect(items[0]).toMatchObject({ depth: 1, hasTranscript: true });
+    });
+
+    it("作業の終わりの一覧だけで足されたものは、親・深さが分からない（項目なし）", () => {
+      rep({ type: "subagent_start", agentId: "x", transcriptPath: TP });
+      rep({ type: "agent_stop", running: [{ id: "x" }, { id: "bg" }], truncated: false });
+      const bg = tracker.current("p1")!.items.find((i) => i.id === "bg")!;
+      expect(bg.parentId).toBeUndefined();
+      expect(bg.depth).toBeUndefined();
+      expect(bg.hasTranscript).toBe(true);
+    });
+
+    it("深さは 16 で止まる。上限（256 件）は今までどおり", () => {
+      let parent: string | undefined;
+      for (let n = 0; n < 20; n++) {
+        if (parent) rep({ type: "subagent_pending", parentAgentId: parent });
+        rep({ type: "subagent_start", agentId: `n${n}` });
+        parent = `n${n}`;
+      }
+      expect(Math.max(...tracker.current("p1")!.items.map((i) => i.depth ?? 0))).toBe(16);
     });
   });
 });

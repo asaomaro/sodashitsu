@@ -90,6 +90,22 @@ describe("AgentReportSocket", () => {
       ]);
     });
 
+    it("親の id（128 文字まで）と記録の場所（1024 文字まで・NUL なし）を通す。超えるものは項目ごと捨てる（切らない）", async () => {
+      const tp = "/home/u/.claude/projects/-w/s1.jsonl";
+      expect(await deliver({ ...base, type: "subagent_pending", parentAgentId: "outer", transcriptPath: tp })).toEqual([
+        { type: "subagent_pending", ...base, parentAgentId: "outer", transcriptPath: tp },
+      ]);
+      expect(await deliver({ ...base, type: "subagent_pending", parentAgentId: "x".repeat(129), transcriptPath: "/" + "x".repeat(1024) })).toEqual([
+        { type: "subagent_pending", ...base },
+      ]);
+      expect(await deliver({ ...base, type: "subagent_start", agentId: "a1", transcriptPath: "/a\u0000b" })).toEqual([
+        { type: "subagent_start", ...base, agentId: "a1" },
+      ]);
+      expect(await deliver({ ...base, type: "subagent_start", agentId: "a1", transcriptPath: tp })).toEqual([
+        { type: "subagent_start", ...base, agentId: "a1", transcriptPath: tp },
+      ]);
+    });
+
     it("subagent_start・subagent_stop・session_end・agent_stop", async () => {
       const reports: AgentReport[] = [];
       socket = await startAgentReportSocket(socketPath, (r) => reports.push(r), logger);

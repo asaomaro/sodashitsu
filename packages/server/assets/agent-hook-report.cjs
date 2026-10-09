@@ -13,7 +13,7 @@
  * Claude Code では、サブエージェントの表示（20261004-subagent-display）のために `PreToolUse`（Agent）・`SubagentStart`・
  * `SubagentStop`・`Stop`・`SessionEnd` からも呼ばれる。フックの入力の `hook_event_name` で報告の種類（`type`）を分け、
  * 同じ 1 行の電文に項目を足して送る（`type` の無い電文は今までどおりセッション ID の報告）。`prompt`・`last_assistant_message`
- * は読まない・送らない。上限（説明 200・種類 64・ID 128・`running` 64 件）はここでも掛ける（受け口でも掛ける）。
+ * は読まない・送らない（`transcript_path`〔親の記録の場所。ファイルの中身ではない〕と、入れ子の親の id〔`agent_id`〕は送る。20261008-graph-first PR6）。上限（説明 200・種類 64・ID 128・`running` 64 件）はここでも掛ける（受け口でも掛ける）。
  *
  * **stdout には何も書かない**——`SessionStart` の stdout は Claude Code の会話コンテキストへ
  * そのまま追加されうる（research.md F4.4）。診断が要るときは stderr にだけ書く。
@@ -39,12 +39,22 @@ const MAX_DESCRIPTION = 200;
 const MAX_AGENT_TYPE = 64;
 const MAX_ID = 128;
 const MAX_RUNNING = 64;
+const MAX_PATH = 1024;
 
 /** 文字（コードポイント）単位で切る。空・文字列でないものは undefined。 */
 function cut(value, max) {
   if (typeof value !== "string" || value === "") return undefined;
   const chars = Array.from(value);
   return chars.length > max ? chars.slice(0, max).join("") : value;
+}
+
+/**
+ * ファイルの場所は、切らない（切った別の場所にならない）。空・文字列でない・`MAX_PATH` 文字を超える・NUL を含むものは undefined。
+ * 親の記録の場所（`transcript_path`）を、サーバが記録の場所を組み立てる材料として送る。中身は読まない。
+ */
+function pathOf(value) {
+  if (typeof value !== "string" || value === "" || value.includes("\0")) return undefined;
+  return Array.from(value).length > MAX_PATH ? undefined : value;
 }
 
 /** 値が undefined の項目を除く（電文に載せない）。 */
@@ -69,11 +79,19 @@ function typedFields(payload) {
         description: cut(input.description, MAX_DESCRIPTION),
         agentType: cut(input.subagent_type, MAX_AGENT_TYPE),
         background: typeof input.run_in_background === "boolean" ? input.run_in_background : undefined,
+        // 親のサブエージェントの id（サブエージェントの中から呼ぶときだけ入力にある。メインが呼ぶときは無い）。入れ子の親子を結ぶ。
+        parentAgentId: cut(payload.agent_id, MAX_ID + 1),
+        transcriptPath: pathOf(payload.transcript_path),
       });
     case "SubagentStart": {
       const agentId = cut(payload.agent_id, MAX_ID + 1);
       if (!agentId) return null;
-      return compact({ type: "subagent_start", agentId, agentType: cut(payload.agent_type, MAX_AGENT_TYPE) });
+      return compact({
+        type: "subagent_start",
+        agentId,
+        agentType: cut(payload.agent_type, MAX_AGENT_TYPE),
+        transcriptPath: pathOf(payload.transcript_path),
+      });
     }
     case "SubagentStop": {
       const agentId = cut(payload.agent_id, MAX_ID + 1);

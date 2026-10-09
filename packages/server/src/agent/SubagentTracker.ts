@@ -46,14 +46,26 @@ interface Pending {
   description?: string;
   agentType?: string;
   background?: boolean;
+  /** 入れ子のとき、起動した側のサブエージェントの id。 */
+  parentAgentId?: string;
   at: number;
 }
+
+/** 記録を読む材料にしてよい id の形（フックの入力のとおり。ファイル名の一部になるので、狭く取る）。 */
+const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
+/** 深さの上限（親の鎖が長く続いても、数字が膨らまない）。 */
+const DEPTH_MAX = 16;
 
 interface SessionState {
   /** ID → 1 件。起動した順（Map の挿入順）。 */
   items: Map<string, SubagentInfo>;
   /** 対応づけを待つ実行前の報告（最新の 1 件）。 */
   pending?: Pending;
+  /**
+   * 親（メイン）の記録の場所（フックの報告の `transcript_path`。最後に受けたもの）。サブエージェントの記録の場所を組み立てる材料で、**ブラウザへ配らない**。
+   * 報告は pane の中のプログラムも送れるので、信頼しない——読む前に、実体のパスが Claude Code の記録の置き場所の下にあることを確かめる（PR6c）。
+   */
+  transcriptPath?: string;
   /** 最近終了の報告を受けた ID → 受けた時刻。 */
   stopped: Map<string, number>;
 }
@@ -120,7 +132,9 @@ export class SubagentTracker {
     switch (r.type) {
       case "subagent_pending": {
         const s = this.sessionOf(pane, r.sessionId);
+        if (r.transcriptPath !== undefined) s.transcriptPath = r.transcriptPath;
         s.pending = {
+          ...(r.parentAgentId !== undefined ? { parentAgentId: r.parentAgentId } : {}),
           ...(r.description !== undefined ? { description: r.description } : {}),
           ...(r.agentType !== undefined ? { agentType: r.agentType } : {}),
           ...(r.background !== undefined ? { background: r.background } : {}),
@@ -168,13 +182,31 @@ export class SubagentTracker {
     const pane = this.panes.get(paneId);
     if (!pane?.seen) return undefined;
     const all: SubagentInfo[] = [];
-    for (const s of pane.sessions.values()) all.push(...s.items.values());
+    for (const [sessionId, s] of pane.sessions) {
+      const sessionReadable = s.transcriptPath !== undefined && SAFE_ID.test(sessionId);
+      for (const i of s.items.values())
+        all.push(sessionReadable && SAFE_ID.test(i.id) ? { ...i, hasTranscript: true } : i);
+    }
     all.sort((a, b) => a.startedAt - b.startedAt); // 安定ソート。同じ時刻なら受けた順
     return { count: all.length, items: all.slice(0, SUBAGENTS_ITEMS_MAX).map((i) => ({ ...i })) };
   }
 
+  /**
+   * いま報告されているサブエージェントの、記録を読む材料。pane・id が合うものだけ（居ない id・別の pane・終わったものは undefined）。
+   * 場所の組み立て（と、その場所が安全かの確認）は呼び出し側（PR6c）。ここはブラウザへ配らない材料を渡すだけ。
+   */
+  transcriptSource(paneId: string, agentId: string): { sessionId: string; parentTranscriptPath: string } | undefined {
+    const pane = this.panes.get(paneId);
+    if (!pane || this.closed || !SAFE_ID.test(agentId)) return undefined;
+    for (const [sessionId, s] of pane.sessions)
+      if (s.items.has(agentId) && s.transcriptPath !== undefined && SAFE_ID.test(sessionId))
+        return { sessionId, parentTranscriptPath: s.transcriptPath };
+    return undefined;
+  }
+
   private start(r: Extract<Report, { type: "subagent_start" }>, pane: PaneState): void {
     const s = this.sessionOf(pane, r.sessionId);
+    if (r.transcriptPath !== undefined) s.transcriptPath = r.transcriptPath;
     // 終了の報告のほうが先に届いた ID は、数えない（終了の報告は並行に走るので、起動より先に着くことがある）。
     if (s.items.has(r.agentId) || s.stopped.has(r.agentId)) return;
     const now = this.deps.now();
@@ -191,9 +223,14 @@ export class SubagentTracker {
       }
     }
     const type = r.agentType ?? pending?.agentType;
+    // 入れ子: 起動した側（親）の id と深さ。親が一覧に居なければ（もう終わった等）、深さは 2 とする。
+    const parentId = pending?.parentAgentId !== undefined && pending.parentAgentId !== r.agentId ? pending.parentAgentId : undefined;
+    const depth = parentId === undefined ? 1 : Math.min((s.items.get(parentId)?.depth ?? 1) + 1, DEPTH_MAX);
     // 上限で数えなくても、実行前の報告はこの起動のものとして使い切る（次の起動に付けない）。
     this.add(r.paneId, pane, s, {
       id: r.agentId,
+      ...(parentId !== undefined ? { parentId } : {}),
+      depth,
       ...(type !== undefined ? { type } : {}),
       ...(pending?.description !== undefined ? { description: pending.description } : {}),
       ...(pending?.background !== undefined ? { background: pending.background } : {}),
@@ -345,7 +382,10 @@ function sameSubagents(a: Subagents | undefined, b: Subagents | undefined): bool
       x.type === y.type &&
       x.description === y.description &&
       x.background === y.background &&
-      x.startedAt === y.startedAt
+      x.startedAt === y.startedAt &&
+      x.parentId === y.parentId &&
+      x.depth === y.depth &&
+      x.hasTranscript === y.hasTranscript
     );
   });
 }
