@@ -4,11 +4,14 @@
 
 ## PR1: サーバと `sodactl`
 
-- [ ] T0: 実物での確かめ（スパイク。**最初に行う**。製品のコードは、まだ変えない）。実際の Claude Code（この開発機の版）で、短い会話を使って: (1) **対話中の、実際のセッション**を、別の端末から `claude --resume <id> --fork-session` で fork できるか (2) 初めてのフォルダ（新しい worktree）で fork したとき、信頼などの確認が出るか・出たときの画面の判定（`blocked` か）(3) fork した直後に、`idle` と判定されるのは、会話の読み込みが終わった後か（長めの会話で）(4) `/clear` の後、`SessionStart`（`source: clear`）で、会話の id が替わるか・Sodashitsu のフック（`matcher`）は、それを拾うか。結果を `research.md` に追記する。**結果が、設計（追補 01 の A8 ほか）と食い違うときは、止めて報告する。** 費用は最小に（3〜4 回の実行）。利用者の設定・既存の会話は、書き換えない。
+- [x] T0: 実物での確かめ（スパイク。**最初に行う**。製品のコードは、まだ変えない）。実際の Claude Code（この開発機の版）で、短い会話を使って: (1) **対話中の、実際のセッション**を、別の端末から `claude --resume <id> --fork-session` で fork できるか (2) 初めてのフォルダ（新しい worktree）で fork したとき、信頼などの確認が出るか・出たときの画面の判定（`blocked` か）(3) fork した直後に、`idle` と判定されるのは、会話の読み込みが終わった後か（長めの会話で）(4) `/clear` の後、`SessionStart`（`source: clear`）で、会話の id が替わるか・Sodashitsu のフック（`matcher`）は、それを拾うか。結果を `research.md` に追記する。**結果が、設計（追補 01 の A8 ほか）と食い違うときは、止めて報告する。** 費用は最小に（3〜4 回の実行）。利用者の設定・既存の会話は、書き換えない。
       依存: なし
       AC: AC2, AC3
-- [ ] T1: サーバの待ちの関数と、`agent.fork_preview`。エージェントの検知・手が空くのを待つ関数（サーバの中のできごとを聞く。上限つき）。作ったばかりの pane が、入力を受けられるのを待つ関数（追補 01 A2）。`agent.fork_preview`（読み取りだけ: fork できるか・理由・コミットしていない変更の数〔`git status --porcelain`。上限 2 秒〕・作成先・ブランチ名が既にあるか）。`pane.sock` から呼べないこと。単体テスト。
+- [x] T0b: フックの matcher を `startup|resume|fork|clear|compact` に（決定 B1〜B6。`decisions.md`）。インストーラのテスト・結合テスト・`docs/verification.md`。導入済みの人は「更新が必要」になる。
       依存: T0
+      AC: AC1（孫の fork）
+- [ ] T1: サーバの待ちの関数と、`agent.fork_preview`。エージェントの検知・手が空くのを待つ関数（サーバの中のできごとを聞く。上限つき）。作ったばかりの pane が、入力を受けられるのを待つ関数（追補 01 A2）。`agent.fork_preview`（読み取りだけ: fork できるか・理由・コミットしていない変更の数〔`git status --porcelain`。上限 2 秒〕・作成先・ブランチ名が既にあるか）。`pane.sock` から呼べないこと。単体テスト。
+      依存: T0b
       AC: AC1, AC3, AC7
 - [ ] T2: `agent.fork` の、同じフォルダ（**独立点検あり**）。`AgentForkRunner`（追補 01 A1）。元の pane の確かめ・会話の id を、サーバが引く（UUID の形だけ。A7）・`split`（A9）・入力を受けられるのを待つ（A2）・起動（固定の表と、既存の引用の関数。`--resume <id> --fork-session`）・進み具合のできごと。`.strict()` の入力（A4。`sessionId`・`argv`・`args` を付けると、断られる）。偽の `claude`（引数を記録して、フックの報告を真似るスクリプト）での結合テスト（起動の引数が、期待どおり・元の pane は、そのまま・同じ pane を 2 回続けて fork・元の pane が、途中で閉じた）。
       依存: T1

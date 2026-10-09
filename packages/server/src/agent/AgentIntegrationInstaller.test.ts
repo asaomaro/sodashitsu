@@ -286,6 +286,27 @@ describe("FsAgentIntegrationInstaller — Claude Code のフックの追加と�
     }
   });
 
+  it("claude の SessionStart の matcher は fork・clear・compact も拾う。matcher だけ古い導入済みは「更新が必要」になり、［更新］で matcher だけ直る（20261009-agent-fork T0b）", async () => {
+    const installer = makeInstaller();
+    await installer.install("claude");
+    const fresh = await readSettings();
+    expect(fresh.hooks.SessionStart[0].matcher).toBe("startup|resume|fork|clear|compact");
+    // 空の matcher にはしない（知らない source を黙って拾わない）。
+    expect(fresh.hooks.SessionStart[0].matcher).not.toBe("");
+    // matcher だけ古い（ほかは最新）: 利用者のほかの SessionStart のフックは保つ。
+    const mine = { matcher: "compact", hooks: [{ type: "command", command: "echo mine" }] };
+    fresh.hooks.SessionStart[0].matcher = "startup|resume";
+    fresh.hooks.SessionStart.push(mine);
+    await writeFile(settingsPath, JSON.stringify(fresh));
+    expect(await installer.status("claude")).toMatchObject({ installed: true, needsUpdate: true });
+    expect(await installer.install("claude")).toEqual({ ok: true, message: null });
+    expect(await installer.status("claude")).toMatchObject({ installed: true, needsUpdate: false });
+    const after = await readSettings();
+    expect(after.hooks.SessionStart).toHaveLength(2);
+    expect(after.hooks.SessionStart[0].matcher).toBe("startup|resume|fork|clear|compact");
+    expect(after.hooks.SessionStart[1]).toEqual(mine);
+  });
+
   it("旧版の導入済み → needsUpdate が true → install で更新される（スクリプトを写し直し、足りない分だけ足す）", async () => {
     await installOldVersion();
     const installer = makeInstaller();
