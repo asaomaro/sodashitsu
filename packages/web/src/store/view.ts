@@ -362,6 +362,11 @@ export const useViewStore = defineStore("view", () => {
   const graphVisible = computed(() => screen.value === "graph" || graphDialogOpen.value);
   /** グラフ画面を開く前にフォーカスしていた pane（閉じたら戻す。AC-I4）。 */
   const preGraphFocusPaneId = ref<string | null>(null);
+  /** サイドバーの行（workspace・agent）を押すたびに進む。選びが変わらない押下も知らせる（グラフの画面が面へフォーカスを戻す。`GraphCanvas`）。 */
+  const sidebarPickSeq = ref(0);
+  function notifySidebarPick(): void {
+    sidebarPickSeq.value++;
+  }
   /**
    * 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）が出ている。**ダイアログの 1 枠（`openDialog`）とは別の状態**——サーバから届く質問は、開いている設定・確認を潰さずに
    * 重ねて出す。書くのは `AskDialog.vue` だけ（開閉に合わせる）。
@@ -848,6 +853,8 @@ export const useViewStore = defineStore("view", () => {
     graphDialogOpen,
     graphVisible,
     preGraphFocusPaneId,
+    sidebarPickSeq,
+    notifySidebarPick,
     modalOpen,
     keysCaptured,
     askOpen,

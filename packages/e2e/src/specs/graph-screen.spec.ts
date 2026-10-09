@@ -231,6 +231,8 @@ async function watchAllClientViews(page: Page): Promise<{ count: () => number }>
 }
 
 const baseScreen = (page: Page) => page.locator('[data-screen="base"]');
+/** サイドバーの中でフォーカスできるボタン（workspace の行は tabindex を持たない）。 */
+const sidebarButton = (page: Page) => page.locator(".sidebar button.sidebar-btn").first();
 const switcherBtn = (page: Page, id: "base" | "graph") => page.locator(`[data-screen-id="${id}"]`);
 const paneBoxes = (page: Page) => page.locator(".pane-frame").evaluateAll((els) => els.map((e) => {
   const r = e.getBoundingClientRect();
@@ -388,6 +390,124 @@ test("スクリプトの面を載せた状態で、切り替え・サイドバ�
 });
 
 // 画面の見た目の確認用（結果に載せるスクリーンショット）。`GRAPH_SHOTS_DIR` を渡したときだけ撮る。
+/** 画面の store（pinia）の `view.toast` を呼ぶ（トーストを出す手段。利用者の操作では出しにくい）。 */
+async function toastFromStore(page: Page, message: string): Promise<void> {
+  await page.evaluate((m) => {
+    const pinia = (document.querySelector("#app") as unknown as { __vue_app__: { config: { globalProperties: { $pinia: { _s: Map<string, { toast(msg: string): void }> } } } } }).__vue_app__.config.globalProperties.$pinia;
+    pinia._s.get("view")!.toast(m);
+  }, message);
+}
+
+test("デスクトップで起動して窓を狭めた後に 1 列のグラフを開いても、例外にならず、トーストは dialog の中に出る（レビュー指摘 1）", async ({ page, appServer }) => {
+  await setup(page, appServer);
+  const errors: string[] = []; // 読み込みが済んでから（最初の認証前の 401 を数えない）
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("console", (m) => {
+    if (m.type() === "error") errors.push(m.text());
+  });
+  await page.setViewportSize({ width: 700, height: 800 });
+  await expect(page.locator(".mobile-shell")).toBeVisible();
+  await page.locator(".mobile-shell-graph-btn").click();
+  const dlg = page.locator("dialog#soda-graph-dialog");
+  await expect(dlg).toHaveAttribute("open", "");
+  await toastFromStore(page, "TOASTMSG");
+  // トーストは top layer の dialog の中（外だと隠れて inert）
+  await expect(dlg.locator(".toast-list")).toContainText("TOASTMSG");
+  expect(await page.locator(".toast-list").count()).toBe(1);
+  expect(errors, "console / pageerror にエラーが出ていない").toEqual([]);
+});
+
+test("たたんだサイドバーでも、画面の切り替えのボタンは潰れず、文字が読める高さがある（レビュー指摘 2）", async ({ page, appServer }) => {
+  await setup(page, appServer);
+  await prefixKey(page, "b"); // サイドバーをたたむ
+  await expect(page.locator(".sidebar-collapsed")).toBeVisible();
+  for (const id of ["base", "graph"] as const) {
+    const box = await switcherBtn(page, id).boundingBox();
+    expect(box?.height ?? 0, `${id} のボタンの高さ`).toBeGreaterThan(14);
+  }
+});
+
+test("グラフの画面の間、グラフの面の外（body・サイドバー）の prefix のキーは、見えない基本画面を変えない。画面の切り替えと設定は働く（レビュー指摘 3）", async ({ page, appServer }) => {
+  const { input } = await setup(page, appServer);
+  await openByKey(page);
+  const tabs = page.locator(".tab-bar-item");
+  const panes = page.locator(".xterm-helper-textarea");
+  const tabCount = await tabs.count();
+  await expect(panes).toHaveCount(2);
+  const toBody = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  const toSidebar = async () => {
+    await sidebarButton(page).focus();
+    await expect.poll(() => page.evaluate(() => document.activeElement?.closest(".sidebar") != null)).toBe(true);
+  };
+  for (const place of [toBody, toSidebar]) {
+    await place();
+    const before = input().length;
+    for (const k of ["c", "x", "v", "-", "z"]) {
+      await prefixKey(page, k);
+      await page.waitForTimeout(150);
+      await expect(page.locator("dialog[open]"), `prefix+${k} で何も開かない`).toHaveCount(0);
+      await expect(tabs).toHaveCount(tabCount);
+      await expect(panes).toHaveCount(2);
+    }
+    await page.keyboard.press("Control+b"); // prefix の二度押し（端末へ prefix の列を送る操作）
+    await page.keyboard.press("Control+b");
+    await page.waitForTimeout(150);
+    expect(input().length, "端末へ何も届かない").toBe(before);
+    await expect(graphView(page)).toBeVisible();
+  }
+  // 働くもの: 設定（prefix+s）・画面の切り替え（prefix+a）
+  await toBody();
+  await prefixKey(page, "s");
+  await expect(page.locator("dialog[open]")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("dialog[open]")).toHaveCount(0);
+  await toBody();
+  await prefixKey(page, "a");
+  await expect(graphView(page)).toBeHidden();
+  // 基本画面に戻れば、同じキーは効く（絞りは画面の間だけ）
+  await focusTerminal(page);
+  await prefixKey(page, "x");
+  await expect(panes).toHaveCount(1);
+});
+
+test("グラフの画面で、サイドバーの行を押した・navigate で選んだ後は、フォーカスがグラフの面へ戻り、Esc が効く（レビュー指摘 4）", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  await client.request("workspace.create", { cwd: process.cwd(), label: "wsB" });
+  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+  const rows = page.locator(".sidebar-spaces .sidebar-row");
+  await expect(rows).toHaveCount(2);
+  await focusTerminal(page);
+  const inGraph = () => page.evaluate(() => document.activeElement?.closest(".graph-view") != null);
+  const escToBase = async () => {
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(graphView(page)).toBeHidden();
+  };
+  // 行を押す
+  await openByKey(page);
+  await rows.filter({ hasText: "wsB" }).click();
+  await expect(rows.filter({ hasText: "wsB" })).toHaveClass(/sidebar-row-current/);
+  await expect.poll(inGraph).toBe(true);
+  await escToBase();
+  // 選んでいない行を押す
+  await openByKey(page);
+  await rows.filter({ hasNotText: "wsB" }).click();
+  await expect(rows.filter({ hasNotText: "wsB" })).toHaveClass(/sidebar-row-current/);
+  await expect.poll(inGraph).toBe(true);
+  await escToBase();
+  // navigate（prefix+w → 移動 → Enter）
+  await openByKey(page);
+  await expect(graphView(page).locator("[data-node-key]:focus")).toHaveCount(1); // 開いた直後のフォーカスが落ち着いてから
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()); // body から（ボタンは Enter を自分で扱う）
+  await prefixKey(page, "w");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(400);
+  await expect.poll(inGraph).toBe(true);
+  await escToBase();
+});
+
 test("スクリーンショット: グラフの画面にサイドバーが出ている（暗い・明るい）", async ({ browser, appServer }) => {
   const dir = process.env["GRAPH_SHOTS_DIR"];
   test.skip(dir === undefined, "GRAPH_SHOTS_DIR を渡したときだけ撮る");

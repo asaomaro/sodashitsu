@@ -1249,6 +1249,31 @@ function focusInitial(): void {
   else dialogEl.value?.focus();
 }
 
+// デスクトップのグラフの画面で、サイドバーの行を押した・navigate で選んだ後、フォーカスをグラフの面へ戻す（`Esc` が効くように。PR1b のレビュー指摘 4）。
+// サイドバーで選んだとき（いま選んでいる行を押した場合を含む。`sidebarPickSeq`）と navigate の選びが終わったときだけ。フォーカスが `body` かサイドバーにあるときだけ動かす
+// （ダイアログ・設定・入力欄にあるときは動かさない）。同じ作業の中で行うので `body` に落ちない（D45）。
+function refocusSurface(onlyBody = false): void {
+  const root = dialogEl.value;
+  // navigate 中は動かさない（グラフの面が矢印キーを食い、行の選びが止まる）
+  if (!root || !props.active || view.modalOpen || view.navigateSelection) return;
+  const a = document.activeElement;
+  if (root.contains(a)) return;
+  if (a && a !== document.body && (onlyBody || !a.closest(".sidebar"))) return;
+  const sel = selection.value;
+  if (sel?.kind === "link") focusLink(sel.id);
+  else if (sel?.kind === "node" && graph.nodes.some((n) => n.key === sel.key)) focusNode(sel.key);
+  else root.focus({ preventScroll: true });
+}
+watch(
+  () => [view.workspaceId, view.focusedPaneId, view.navigateSelection, view.sidebarPickSeq] as const,
+  () => {
+      if (props.kind !== "screen" || !props.active) return;
+    void nextTick(() => refocusSurface());
+    // 押した行が作り直される（サーバの更新で一覧が描き直される）と、その後で `body` に落ちる——落ちた後にもう一度（`body` に落ちているときだけ。利用者が自分でサイドバーへ移したフォーカスは動かさない）。
+    window.setTimeout(() => refocusSurface(true), 150);
+  },
+);
+
 watch(
   () => props.active,
   (open) => {

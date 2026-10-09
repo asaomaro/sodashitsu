@@ -97,7 +97,7 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
     <PrefixIndicator />
     <!-- 1 列の画面の重ねるグラフ（`showModal()` の top layer）を開いている間は、トーストと再接続の表示をその dialog の中へ出す——外に置くと top layer の下に隠れ、
          inert で押せない（20260927-agent-graph の decisions D4）。`defer` は同じ描画の中で後から mount される行き先を待つため。 -->
-    <Teleport :to="view.askOpen ? '#soda-ask-dialog' : '#soda-graph-dialog'" :disabled="!(view.graphDialogOpen || view.askOpen)" defer>
+    <Teleport :key="isMobile ? 'mobile' : 'desktop'" :to="view.askOpen ? '#soda-ask-dialog' : '#soda-graph-dialog'" :disabled="!(view.graphDialogOpen || view.askOpen)" defer>
       <Toast />
       <ReconnectOverlay />
     </Teleport>

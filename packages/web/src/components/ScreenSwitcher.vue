@@ -54,6 +54,10 @@ const view = useViewStore();
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.screen-switcher-collapsed .screen-switcher-btn {
+  /* 縦並びでは `flex: 1 1 0` の基準が高さ 0 になり、ボタンが枠だけの細い線になる */
+  flex: none;
+}
 .screen-switcher-btn:hover {
   background: var(--soda-menu-hover-bg, #343746);
 }

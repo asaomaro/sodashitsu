@@ -371,12 +371,14 @@ function focusWorkspace(workspaceId: string): void {
   view.setView(workspaceId, ws.activeTabId);
   if (tab) view.focusPane(tab.focusedPaneId);
   void conn?.request("workspace.focus", { workspaceId }).catch(() => undefined);
+  view.notifySidebarPick();
 }
 
 function focusPane(paneId: string, tabId: string, workspaceId: string): void {
   view.setView(workspaceId, tabId);
   view.focusPane(paneId);
   void conn?.request("pane.focus", { paneId }).catch(() => undefined);
+  view.notifySidebarPick();
 }
 
 /** グループのヘッダー行（グループ）は `group` メニュー、それ以外（workspace を持つ行）は
