@@ -1,4 +1,5 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { connect as netConnect } from "node:net";
 import { tmpdir } from "node:os";
@@ -256,5 +257,133 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     const failed = progressOf(client, result.paneId).find((p) => p.stage === "failed")!;
     expect(failed.message).toContain("会話の記録が見つかりません");
     expect(server.session.getPane(result.paneId)).toBeDefined(); // 利用者が画面で理由を見られるよう、閉じない
+  });
+
+  // --- T3: 新しい worktree と、最初の知らせ -------------------------------------------------------------------------------------------
+
+  /** 一時の git リポジトリ（コミットが 1 つ）。 */
+  async function makeRepo(name = "repo"): Promise<string> {
+    const repo = join(await mkdtemp(join(dir, "r-")), name);
+    await mkdir(repo, { recursive: true });
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "ignore", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@e", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@e" } });
+    git("init", "-b", "main");
+    git("commit", "-q", "--allow-empty", "-m", "init");
+    return realpath(repo);
+  }
+  /** そのリポジトリの中で始まる workspace の pane で、元のエージェントを起動する。 */
+  async function bootInRepo(repo: string) {
+    const b = await boot();
+    const ws = await ok<{ workspace: { id: string }; pane: { id: string } }>(b.client.request("workspace.create", { cwd: repo, label: "src" }));
+    const paneId = ws.pane.id;
+    await shellReady(b.server, paneId);
+    b.server.terminals.get(paneId)!.write(`FAKE_SESSION_ID=${A} claude\r`);
+    await vi.waitFor(() => expect(sessionOf(b.server, paneId)).toBe(A), { timeout: 15_000, interval: 50 });
+    await vi.waitFor(() => expect(agentOf(b.server, paneId)).not.toBeNull(), { timeout: 15_000, interval: 50 });
+    return { ...b, paneId, workspaceId: ws.workspace.id };
+  }
+  const branchesOf = (repo: string): string => execFileSync("git", ["branch", "--list"], { cwd: repo }).toString();
+  const worktreeCount = (repo: string): number => execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repo }).toString().split("\n").filter((l) => l.startsWith("worktree ")).length;
+  interface ForkResult { paneId: string; workspaceId: string; target: string; worktreePath?: string; noteStatus: string; noteReason?: string; name: string; annotated: boolean }
+
+  it("新しい worktree で fork する: 新しいブランチの worktree と workspace ができ、そこで起動し、手が空いたら最初の知らせが届く。元のフォルダは変わらない（AC3）", async () => {
+    const repo = await makeRepo();
+    const { server, client, paneId } = await bootInRepo(repo);
+    const workspaces = server.session.snapshot().workspaces.length;
+    const result = await ok<ForkResult>(client.request("agent.fork", { paneId, target: { kind: "worktree", branch: "fork/try-a" } }));
+    expect(result).toMatchObject({ target: "worktree", noteStatus: "pending" });
+    const wt = result.worktreePath!;
+    expect(wt).toBe(await realpath(join(dir, "worktrees", "repo", "fork-try-a")));
+    expect(server.session.snapshot().workspaces).toHaveLength(workspaces + 1);
+    expect(server.session.getWorkspace(result.workspaceId)?.cwd).toBe(wt);
+    expect(branchesOf(repo)).toContain("fork/try-a");
+    expect(worktreeCount(repo)).toBe(2);
+    await vi.waitFor(async () => expect((await launches()).filter((l) => l.args.includes("--fork-session"))).toHaveLength(1), { timeout: 20_000 });
+    const launched = (await launches()).at(-1)!;
+    expect(launched.args).toEqual(["--resume", A, "--fork-session"]);
+    expect(await realpath(launched.cwd)).toBe(wt); // 新しい worktree で起動した
+    expect(launched.pane).toBe(result.paneId);
+    // 最初の知らせ: 手が空いてから届く（作業フォルダと元のフォルダ。元のフォルダを変更しないよう伝える）。
+    await vi.waitFor(() => expect(progressOf(client, result.paneId).some((p) => p.stage === "note" && p.noteStatus === "sent")).toBe(true), { timeout: 30_000 });
+    const input = await readFile(join(dir, `input-${result.paneId}`), "utf8");
+    expect(input).toContain("このセッションは、fork されました");
+    expect(input).toContain(`\`${wt}\``);
+    expect(input).toContain(`\`${repo}\``);
+    expect(input).toContain("変更しないでください");
+    expect(input).toContain("\r"); // 送信された（Enter）
+    // 元の pane: そのまま（入力されていない）。
+    expect(existsSync(join(dir, `input-${paneId}`))).toBe(false);
+    expect(stages(client, result.paneId)).toEqual(expect.arrayContaining(["pane_created", "launched", "detected", "ready", "note", "done"]));
+  });
+
+  it("最初の知らせを送らない選択（note: false）: 送らない。noteStatus は off", async () => {
+    const repo = await makeRepo();
+    const { server, client, paneId } = await bootInRepo(repo);
+    const result = await ok<ForkResult>(client.request("agent.fork", { paneId, target: { kind: "worktree", branch: "fork/no-note" }, note: false }));
+    expect(result.noteStatus).toBe("off");
+    await vi.waitFor(() => expect(stages(client, result.paneId)).toContain("done"), { timeout: 30_000 });
+    expect(existsSync(join(dir, `input-${result.paneId}`))).toBe(false);
+    expect(server.session.getPane(result.paneId)).toBeDefined();
+  });
+
+  it("確認で止まっている間（blocked）は知らせを送らず、答えて手が空いた後に送る（A8）", async () => {
+    const repo = await makeRepo();
+    const { server, client, paneId } = await bootInRepo(repo);
+    await writeFile(join(dir, "block-fork"), "");
+    const result = await ok<ForkResult>(client.request("agent.fork", { paneId, target: { kind: "worktree", branch: "fork/blocked" } }));
+    await vi.waitFor(() => expect(agentOf(server, result.paneId)?.state).toBe("blocked"), { timeout: 30_000, interval: 50 });
+    await vi.waitFor(() => expect(progressOf(client, result.paneId).some((p) => p.stage === "note" && p.noteStatus === "pending" && p.noteReason?.includes("確認を待っています"))).toBe(true), { timeout: 10_000 });
+    await sleep(1500);
+    expect(existsSync(join(dir, `input-${result.paneId}`))).toBe(false); // まだ送っていない
+    await rm(join(dir, "block-fork")); // 利用者が確認に答えた
+    await vi.waitFor(() => expect(progressOf(client, result.paneId).some((p) => p.stage === "note" && p.noteStatus === "sent")).toBe(true), { timeout: 30_000 });
+    expect(await readFile(join(dir, `input-${result.paneId}`), "utf8")).toContain("fork されました");
+  });
+
+  it("ブランチ名が既にあれば断り（fork_branch_exists）、何も作らない（A6）", async () => {
+    const repo = await makeRepo();
+    execFileSync("git", ["branch", "taken"], { cwd: repo });
+    const { server, client, paneId } = await bootInRepo(repo);
+    const workspaces = server.session.snapshot().workspaces.length;
+    const r = await client.request("agent.fork", { paneId, target: { kind: "worktree", branch: "taken" } });
+    expect(r.error?.code).toBe("fork_branch_exists");
+    expect(server.session.snapshot().workspaces).toHaveLength(workspaces);
+    expect(worktreeCount(repo)).toBe(1);
+    expect((await launches()).filter((l) => l.args.includes("--fork-session"))).toHaveLength(0);
+  });
+
+  it("git のリポジトリでない pane では worktree の fork は断り（not_a_git_repository）、何も作らない。同じフォルダの fork はできる", async () => {
+    const plain = await realpath(await mkdtemp(join(dir, "plain-")));
+    const { server, client, paneId } = await bootInRepo(plain);
+    const panes = server.session.snapshot().panes.length;
+    const r = await client.request("agent.fork", { paneId, target: { kind: "worktree", branch: "x" } });
+    expect(r.error?.code).toBe("not_a_git_repository");
+    expect(server.session.snapshot().panes).toHaveLength(panes);
+    const same = await client.request("agent.fork", { paneId, target: { kind: "same" } });
+    expect(same.error).toBeUndefined();
+  });
+
+  it("起動で失敗しても、作った worktree と workspace は消さずに残し、何が残ったかを知らせる。最初の知らせは送らない（AC7・A11）", async () => {
+    const repo = await makeRepo();
+    const { server, client, paneId } = await bootInRepo(repo);
+    await writeFile(join(dir, "no-conversation"), "");
+    const result = await ok<ForkResult>(client.request("agent.fork", { paneId, target: { kind: "worktree", branch: "fork/fails" } }));
+    await vi.waitFor(() => expect(stages(client, result.paneId)).toContain("failed"), { timeout: 60_000 });
+    const failed = progressOf(client, result.paneId).find((p) => p.stage === "failed")!;
+    expect(failed.created).toMatchObject({ worktreePath: result.worktreePath, workspaceId: result.workspaceId, paneId: result.paneId });
+    expect(failed.noteStatus).toBe("skipped");
+    expect(worktreeCount(repo)).toBe(2); // 残っている
+    expect(server.session.getWorkspace(result.workspaceId)).toBeDefined();
+    expect(existsSync(join(dir, `input-${result.paneId}`))).toBe(false);
+  });
+
+  it("パスに改行などの制御文字があるときは、最初の知らせを送らない（skipped・理由つき）。fork 自体は行う（S3・A8）", async () => {
+    const repo = await makeRepo("re\npo");
+    const { server, client, paneId } = await bootInRepo(repo);
+    const result = await ok<ForkResult>(client.request("agent.fork", { paneId, target: { kind: "worktree", branch: "fork/ctl" } }));
+    expect(result.noteStatus).toBe("skipped");
+    expect(result.noteReason).toContain("制御文字");
+    await vi.waitFor(() => expect(stages(client, result.paneId)).toContain("done"), { timeout: 30_000 });
+    expect(existsSync(join(dir, `input-${result.paneId}`))).toBe(false);
+    expect(server.session.getPane(result.paneId)).toBeDefined();
   });
 });
