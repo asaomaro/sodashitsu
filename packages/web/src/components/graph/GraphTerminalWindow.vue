@@ -7,7 +7,7 @@
  * - 下の行: 「キーは、この pane に届く」・グラフへ戻るキー（X1）・桁 × 行。
  * 色は既存の `--soda-*` だけ。角・影・高さは画面の様式のトークン（`var(--x, 今の値)`）。
  */
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useResizeDrag } from "../../composables/useResizeDrag.js";
 import {
   clampFloatRect,
@@ -72,10 +72,23 @@ function measureChrome(): void {
   const h = root.offsetHeight - body.clientHeight;
   if (w >= 0 && h >= 0 && (w !== chrome.value.w || h !== chrome.value.h)) chrome.value = { w, h };
 }
-const cell = computed(() => {
+/**
+ * 端末の 1 文字の大きさ（px）。端末（`registry` の要素）は、窓が出てから作られることがある（基本画面にまだ出たことのない pane）。`registry` は非リアクティブなので、
+ * `computed` にすると、最初に読んだ既定の値（9×18）のまま固まり、窓の大きさ → 桁・行の計算（記憶に書く桁・行）が狂う。
+ * そこで `ref` に持ち、端末ができたとき・本体の大きさが変わったとき・窓の pane が替わったときに測り直す（`measureCell`）。
+ */
+const cell = ref({ width: 9, height: 18 });
+function measureCell(): void {
   const entry = registry?.get(paneId.value);
-  return entry ? getCellSize(entry.term) : { width: 9, height: 18 };
-});
+  const next = entry ? getCellSize(entry.term) : { width: 9, height: 18 };
+  if (next.width > 0 && next.height > 0 && (next.width !== cell.value.width || next.height !== cell.value.height)) cell.value = { width: next.width, height: next.height };
+}
+measureCell();
+// 窓の pane が替わった・直結できた（端末ができた）後にも測り直す。
+watch(
+  () => [paneId.value, props.win.status],
+  () => void nextTick(measureCell),
+);
 const sizeOf = (cols: number, rows: number): { w: number; h: number } => ({ w: Math.ceil(cols * cell.value.width) + chrome.value.w, h: Math.ceil(rows * cell.value.height) + chrome.value.h });
 /** 最小の大きさ（40 桁 × 10 行の端末が入る窓）。X12。 */
 const minSize = computed<Area>(() => sizeOf(GRAPH_TERMINAL_MIN_COLS, GRAPH_TERMINAL_MIN_ROWS));
@@ -217,9 +230,12 @@ let observer: ResizeObserver | null = null;
 onMounted(() => {
   store.setContainer(props.win.key, mountEl.value);
   measureChrome();
+  measureCell();
+  void nextTick(measureCell); // 端末は、この後（`useTerminalSurface` の取り付け）で作られることがある
   if (typeof ResizeObserver !== "undefined" && bodyEl.value) {
     observer = new ResizeObserver(() => {
       measureChrome();
+      measureCell();
       controller?.noteBodyResized(paneId.value);
     });
     observer.observe(bodyEl.value);

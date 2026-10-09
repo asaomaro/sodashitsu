@@ -340,3 +340,34 @@ test("スクリプトの面を載せた画面で、3 つの窓の開閉をくり
   await expect(frame).toHaveCount(1);
   await expect(page.getByText(/繰り返し外しています/)).toHaveCount(0);
 });
+
+test("基本画面に出たことのない pane（別の workspace）の窓を縮めて、閉じて、開き直すと、同じ桁・行で開く（文字の大きさが分かる前の既定の値で、桁・行を覚えない）", async ({ page, appServer }) => {
+  const { client } = await setup(page, appServer);
+  const other = await client.request("workspace.create", { cwd: process.cwd(), label: "wsOther" });
+  const pB = other.pane.id;
+  await openGraph(page);
+  await expect(node(page, pB)).toBeVisible();
+  await openByKey(page, pB);
+  await expect(win(page, pB)).toHaveAttribute("data-status", "attached");
+  const grip = win(page, pB).locator("[data-graph-terminal-grip]");
+  await grip.focus();
+  for (let i = 0; i < 3; i++) await page.keyboard.press("Alt+Shift+ArrowLeft"); // 縮める
+  await page.waitForTimeout(600); // 桁と行への反映（間引き）を待つ
+  const size = (await win(page, pB).locator("[data-graph-terminal-size]").innerText()).trim();
+  const before = (await win(page, pB).boundingBox())!;
+  // 記憶に書いた桁・行は、窓に出ている桁・行と同じ（既定の 9×18 で計算した値ではない）
+  const stored = await page.evaluate((id) => {
+    const raw = JSON.parse(localStorage.getItem("soda.graphTerminalWindows.v1") ?? "{}") as { geometry?: Record<string, { cols: number; rows: number }> };
+    const g = raw.geometry?.[id];
+    return g ? `${g.cols} × ${g.rows}` : "";
+  }, pB);
+  expect(stored).toBe(size);
+  await win(page, pB).locator("[data-graph-terminal-close]").click();
+  await expect(anyWin(page)).toHaveCount(0);
+  await openByKey(page, pB);
+  await expect(win(page, pB)).toHaveAttribute("data-status", "attached");
+  await expect.poll(async () => (await win(page, pB).locator("[data-graph-terminal-size]").innerText()).trim()).toBe(size);
+  const after = (await win(page, pB).boundingBox())!;
+  expect(Math.abs(after.width - before.width)).toBeLessThanOrEqual(12);
+  expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(12);
+});
