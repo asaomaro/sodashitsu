@@ -196,6 +196,7 @@ test("位置と大きさを覚える: 窓を動かして閉じ、同じ pane を
   await grip.focus();
   for (let i = 0; i < 3; i++) await page.keyboard.press("Shift+ArrowLeft");
   await page.keyboard.press("Alt+Shift+ArrowLeft");
+  await page.waitForTimeout(500); // 大きさの変化が、桁と行に反映される（間引き）のを待つ
   const moved = (await win(page, p1).boundingBox())!;
   const size = (await win(page, p1).locator("[data-graph-terminal-size]").innerText()).trim();
   await win(page, p1).locator("[data-graph-terminal-close]").click();
