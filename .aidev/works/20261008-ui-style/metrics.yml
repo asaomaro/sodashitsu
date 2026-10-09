@@ -10,3 +10,4 @@ events:
   - { ts: 2026-10-09T02:18:06Z, phase: tasks, event: approved, metrics: { doc_check_rounds: 1, doc_check_findings: 0, doc_check_mode: same_session, ac_total: 11, ac_covered: 10, tasks_no_ac: 0, tasks_ac_none: 0 } }
   - { ts: 2026-10-09T02:43:53Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T4, mode: delegated } }
   - { ts: 2026-10-09T02:43:53Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T5, mode: delegated } }
+  - { ts: 2026-10-09T04:18:21Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
