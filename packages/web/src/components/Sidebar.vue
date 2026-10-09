@@ -1521,9 +1521,10 @@ watchDragInterrupt(view, () => {
   margin-top: auto;
   justify-content: flex-end;
 }
+/* 区画の見出し（spaces・agents）の文字。クラシックでは変数が無く、今の値（0.85em・0.75）。モダンは、workspace の行に近い大きさ・薄すぎない色（`uiStyle.css`）。 */
 .sidebar-section-title {
-  font-size: 0.85em;
-  opacity: 0.75;
+  font-size: var(--soda-shape-section-inner, 0.85em);
+  opacity: var(--soda-shape-section-opacity, 0.75);
 }
 /* 見出しのボタン（押すと畳む・開く）。印・題・（畳んでいるとき）件数と状態を並べる。並び順のボタンは兄弟の要素。 */
 .sidebar-section-toggle {
@@ -1533,13 +1534,13 @@ watchDragInterrupt(view, () => {
   padding-left: 0;
 }
 .sidebar-section-mark {
-  font-size: 0.85em;
-  opacity: 0.75;
+  font-size: var(--soda-shape-section-inner, 0.85em);
+  opacity: var(--soda-shape-section-opacity, 0.75);
   width: 1em;
 }
 .sidebar-section-count {
-  font-size: 0.85em;
-  opacity: 0.75;
+  font-size: var(--soda-shape-section-inner, 0.85em);
+  opacity: var(--soda-shape-section-opacity, 0.75);
 }
 
 .sidebar-btn {
@@ -1560,6 +1561,14 @@ watchDragInterrupt(view, () => {
 .sidebar-btn-right,
 .sidebar-sort-btn {
   margin-left: auto;
+}
+/* 見出しのボタンの文字（`.sidebar-btn` の 0.85em より詳細度を上げて勝たせる）。クラシックは同じ 0.85em。 */
+.sidebar-btn.sidebar-section-toggle {
+  font-size: var(--soda-shape-section-font, 0.85em);
+}
+/* 並び順の表示（「開いた順」「グループ順」）。見出しの題と同じ大きさ（クラシックは `.sidebar-btn` と同じ 0.85em）。 */
+.sidebar-sort-btn {
+  font-size: var(--soda-shape-section-font, 0.85em);
 }
 .sidebar-session {
   flex: none;

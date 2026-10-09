@@ -95,3 +95,47 @@ for (const { key, theme } of THEMES)
       await page.keyboard.press("Escape");
       client.close();
     });
+
+/**
+ * pane の操作ボタン（モダンだけ。AC19〜AC22）の絵。名前は `<様式>-<テーマ>-<番号>-actions-<場面>.png`。
+ * 場面: 1 ふつう（名前の行の右端）・2 最大化している間（同じ場所が「元に戻す」）・3 小さな pane（分割を隠す）・4 名前の行が無い設定（右上の隅。ポインタが載っている pane）。
+ * クラシックは、同じ場面を撮る（ボタンは出ない）。
+ */
+for (const { key, theme } of THEMES)
+  for (const style of ["classic", "modern"] as const)
+    test(`actions-${style}-${key}`, async ({ page, appServer }) => {
+      await mkdir(OUT!, { recursive: true });
+      const prefix = `${style}-${key}`;
+      const client = await appServer.openClient();
+      const p1 = client.helloSnapshot()!.panes[0]!.id;
+      await client.request("pane.rename", { paneId: p1, label: "alpha" });
+      const split = await client.request("pane.split", { paneId: p1, direction: "right" });
+      await client.request("pane.rename", { paneId: split.pane.id, label: "beta" });
+      await client.request("prefs.set", { patch: { theme, themeAuto: false, uiStyle: style, paneAgentNameVisible: true } });
+      await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+      await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+      await expect.poll(() => page.evaluate(() => document.documentElement.dataset["uiStyle"])).toBe(style);
+      await expect(page.locator(".xterm-helper-textarea")).toHaveCount(2);
+      await page.mouse.move(700, 700);
+      await shot(page, `${prefix}-7-actions-1-normal`);
+      // 2: 最大化している間。
+      await client.request("pane.zoom", { paneId: split.pane.id, mode: "toggle" });
+      await expect(page.locator("[data-pane-frame-main]")).toHaveCount(1);
+      await shot(page, `${prefix}-7-actions-2-zoomed`);
+      await client.request("pane.zoom", { paneId: split.pane.id, mode: "toggle" });
+      await expect(page.locator("[data-pane-frame-main]")).toHaveCount(2);
+      // 3: 小さな pane（さらに分割して、狭くする）。
+      await client.request("pane.split", { paneId: p1, direction: "right" });
+      await client.request("pane.split", { paneId: p1, direction: "right" });
+      await expect(page.locator("[data-pane-frame-main]")).toHaveCount(4);
+      await page.mouse.move(700, 700);
+      await shot(page, `${prefix}-7-actions-3-small`);
+      // 4: 名前の行が無い設定（右上の隅。ポインタを載せた pane に出る）。
+      await client.request("prefs.set", { patch: { paneAgentNameVisible: false } });
+      await expect(page.locator(".pane-frame-name")).toHaveCount(0);
+      const box = (await page.locator(".pane-frame-center").last().boundingBox())!;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForTimeout(300);
+      await shot(page, `${prefix}-7-actions-4-corner`);
+      client.close();
+    });

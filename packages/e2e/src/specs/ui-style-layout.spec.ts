@@ -324,3 +324,48 @@ test("モダン: 境の印・［新規］が、キー操作と同じ結果にな
   await expect(page.locator(".name-dialog")).toBeHidden();
   client.close();
 });
+
+test("サイドバーの区画の見出し（spaces・agents）と並び順の文字: モダンは行の 0.9 倍以上で薄すぎない。クラシックは今のまま（0.85 倍・0.75）。畳む・区画の高さのつまみは働く", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  await open(page, appServer);
+  const metrics = () =>
+    page.evaluate(() => {
+      const px = (sel: string) => {
+        const e = document.querySelector(sel)!;
+        const c = getComputedStyle(e);
+        return { size: parseFloat(c.fontSize), opacity: Number(c.opacity) };
+      };
+      return { row: px(".sidebar-spaces .sidebar-row .sidebar-label"), title: px(".sidebar-spaces .sidebar-section-title"), sort: px(".sidebar-spaces .sidebar-sort-btn"), mark: px(".sidebar-spaces .sidebar-section-mark") };
+    });
+  const c = await metrics();
+  expect(c.title.size / c.row.size).toBeCloseTo(0.7225, 2); // ボタン 0.85 の中の 0.85
+  expect(c.sort.size / c.row.size).toBeCloseTo(0.85, 2);
+  expect(c.title.opacity).toBeCloseTo(0.75, 2);
+  await setStyle(page, client, "modern");
+  const m = await metrics();
+  expect(m.title.size / m.row.size, "見出し").toBeGreaterThanOrEqual(0.9);
+  expect(m.sort.size / m.row.size, "並び順").toBeGreaterThanOrEqual(0.9);
+  expect(m.title.size, "クラシックより大きい").toBeGreaterThan(c.title.size);
+  expect(m.title.opacity, "文字の濃さを、今より下げない").toBeGreaterThanOrEqual(c.title.opacity);
+  expect(m.mark.opacity).toBeGreaterThanOrEqual(c.mark.opacity);
+  // 見出しの行は、押せる高さの中に収まる（はみ出さない）。畳む・広げるが働き、畳んだサイドバーでも崩れない。
+  const head = (await page.locator(".sidebar-spaces .sidebar-section-header").boundingBox())!;
+  const title = (await page.locator(".sidebar-spaces .sidebar-section-title").boundingBox())!;
+  expect(title.y).toBeGreaterThanOrEqual(head.y);
+  expect(title.y + title.height).toBeLessThanOrEqual(head.y + head.height + 0.5);
+  await page.locator(".sidebar-spaces .sidebar-section-toggle").click();
+  await expect(page.locator(".sidebar-spaces.sidebar-section-folded")).toHaveCount(1);
+  await page.locator(".sidebar-spaces .sidebar-section-toggle").click();
+  await expect(page.locator(".sidebar-spaces.sidebar-section-folded")).toHaveCount(0);
+  const div = (await page.locator(".sidebar-section-divider").boundingBox())!;
+  const h0 = (await page.locator(".sidebar-spaces").boundingBox())!.height;
+  await page.mouse.move(div.x + 40, div.y + 0.5);
+  await page.mouse.down();
+  await page.mouse.move(div.x + 40, div.y + 80, { steps: 4 });
+  await page.mouse.up();
+  expect((await page.locator(".sidebar-spaces").boundingBox())!.height, "区画の高さのつまみが働く").toBeGreaterThan(h0 + 40);
+  await page.locator(".sidebar-edge-toggle").click();
+  await expect(page.locator(".sidebar-collapsed")).toHaveCount(1);
+  expect(await page.locator(".sidebar").evaluate((e) => e.scrollWidth <= e.clientWidth + 1), "畳んだサイドバーは横にはみ出さない").toBe(true);
+  client.close();
+});

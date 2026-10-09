@@ -1166,6 +1166,14 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     void this.conn.request("pane.close", { paneId }).catch(() => undefined);
   }
 
+  /**
+   * pane の枠の［閉じる］ボタン（モダンの様式。20261008-ui-style PR4 の AC21）。**busy でなくても必ず確認する**（誤って押すおそれがあるため）。
+   * 確認のダイアログは `closePaneById` と同じもの（`confirmClose`）。キー（`prefix+x`）の経路〔`closePane`〕は変えない。
+   */
+  closePaneWithConfirm(paneId: string): void {
+    this.view.openDialogWithContext({ kind: "confirmClose", targets: [{ type: "pane", id: paneId }] });
+  }
+
   private closeTab(): void {
     const tabId = this.view.tabId;
     if (tabId) this.closeTabById(tabId);

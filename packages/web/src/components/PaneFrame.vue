@@ -12,9 +12,11 @@ import { useDisplayStore } from "../store/display.js";
 import { useSessionStore } from "../store/session.js";
 import DisplayDropZones from "./DisplayDropZones.vue";
 import DisplayFloat from "./DisplayFloat.vue";
+import PaneActions from "./PaneActions.vue";
 import PaneBands from "./PaneBands.vue";
 import PanePanel from "./PanePanel.vue";
 import { useSettingsStore } from "../store/settings.js";
+import { useUiStyle } from "../composables/useUiStyle.js";
 import { useViewStore } from "../store/view.js";
 import { watchDragInterrupt } from "../store/dragInterrupt.js";
 import { zoneAt, type Zone } from "../term/paneDragZone.js";
@@ -57,6 +59,8 @@ const session = props.enabled ? useSessionStore() : null;
 const view = props.enabled ? useViewStore() : null;
 const settings = props.enabled ? useSettingsStore() : null;
 const edge = ref<HTMLElement | null>(null);
+/** モダンの様式か（pane の枠の操作ボタン。20261008-ui-style PR4）。`enabled` でないとき（モバイル・単体テスト）は、ストアに触れない。 */
+const modern = props.enabled ? useUiStyle().isModern : null;
 
 // --- 表示の面（パネル・帯。20261007-soda-extensions）。`enabled` のときだけ（モバイル・単体テストはストアに触れない）。---------------------------
 const displays = props.enabled ? useDisplayStore() : null;
@@ -249,16 +253,21 @@ const reserveNameSpace = computed(() => !!(props.enabled && settings?.paneAgentN
 const showBorder = computed(() => !!(reserveNameSpace.value && paneName.value));
 
 const PANE_GAP = "var(--soda-pane-gap, 4px)";
+/** 名前の行の高さ。クラシックは、今までの値の文字列のまま（インラインの style も変えない）。モダンは、トークン（操作ボタンが並ぶ高さ）。 */
+const nameRowH = computed(() => (modern?.value ? "var(--soda-shape-name-h, 1.2em)" : "1.2em"));
 /** 辺ごとの余白。値そのもの（px）は `App.vue` が `settings.paneFrameThickness` から配る CSS 変数。 */
 const padStyle = computed(() => {
   const c = chrome.value;
   if (!c) return undefined;
   const side = (s: PaneSide): string => (c.padded[s] ? PANE_GAP : "0px");
   return {
-    paddingTop: reserveNameSpace.value ? (c.padded.top ? `calc(${PANE_GAP} + 1.2em)` : "1.2em") : side("top"),
+    // 名前の行の高さ。クラシックは 1.2em（`--soda-shape-name-h` は未定義）。モダンは、操作ボタンが並ぶ高さ。
+    paddingTop: reserveNameSpace.value ? (c.padded.top ? `calc(${PANE_GAP} + ${nameRowH.value})` : nameRowH.value) : side("top"),
     paddingRight: side("right"),
     paddingBottom: side("bottom"),
     paddingLeft: side("left"),
+    // 名前の行の右端に操作ボタンが並ぶとき（モダン）だけ、名前の最大の幅から引く分。クラシックでは付けない。
+    ...(actionsWidthPx.value > 0 ? { "--soda-pane-actions-w": `${actionsWidthPx.value}px` } : {}),
   };
 });
 /** 今このpaneがドラッグのドロップ候補になっているか（別の PaneFrame インスタンスがドラッグ元）。 */
@@ -273,6 +282,50 @@ const isDropTarget = computed(() => {
 const overZone = computed<Zone | null>(() => (isDropTarget.value ? (view?.paneDrag?.overZone ?? null) : null));
 /** 自分がドラッグ元か（ドラッグ中は自分の名前を薄くする等の見た目に使う）。 */
 const isDragSource = computed(() => view?.paneDrag?.sourcePaneId === props.paneId);
+
+// --- 操作ボタン（モダンの様式だけ。20261008-ui-style PR4 の AC19〜AC22）-----------------------------------------------------------------
+// ［右へ分割］［下へ分割］［最大化／元に戻す］［閉じる］。今ある操作（分割・拡大表示〔zoom〕・閉じる）を呼ぶだけ。名前の行があるときはその右端、無いときは
+// 端末の領域の右上の隅に、ポインタが載っている間・pane が選ばれている間だけ重ねる。ボタンは Tab の順に入れない（`tabindex="-1"`。キーは今のキーで足りる）。
+/** 押せる大きさ（px）・ボタンの間・閉じるの前の余分な間・右端の余白。`uiStyle.css` のトークンではなく、並べ方の計算に要る値（見た目は CSS が同じ値を使う）。 */
+const BTN = 24;
+const BTN_GAP = 2;
+const CLOSE_GAP = 6;
+const ACTIONS_PAD = 6;
+/** 名前が残したい最小の幅（これより狭くなるなら、分割の 2 つを先に隠す）。 */
+const NAME_MIN_PX = 48;
+/** 名前の箱の左右の余白（0.6em・0.4em×2）が、最大の幅の外に足されるぶんの余裕（px）。名前がボタンに重ならないようにする。 */
+const NAME_BOX_SLACK = 8;
+const showPaneButtons = computed(() => !!props.enabled && modern?.value === true);
+/** 名前の行（確保した上の余白）の右端に出すか。そうでなければ、右上の隅に重ねる。 */
+const buttonsInRow = computed(() => reserveNameSpace.value);
+const widthFor = (n: number): number => n * BTN + (n - 1) * BTN_GAP + CLOSE_GAP + ACTIONS_PAD;
+/** pane が小さくて入りきらないとき、分割の 2 つを先に隠す（最大化と閉じるは残す）。箱の幅が分からない間（0）は、全部出す。 */
+const showSplitButtons = computed(() => {
+  const w = bodySize.value.w;
+  if (w <= 0) return true;
+  return w >= widthFor(4) + (buttonsInRow.value && paneName.value ? NAME_MIN_PX : 0) + 12;
+});
+/** 極端に狭い pane（最大化と閉じるだけで、名前の入る幅が残らない）では、名前を出さない（ボタンに重なって押せなくなるため）。名前の行にボタンが並ぶときだけ。 */
+const nameFits = computed(() => {
+  if (!(showPaneButtons.value && buttonsInRow.value)) return true;
+  const w = bodySize.value.w;
+  return w <= 0 || w >= widthFor(2) + NAME_BOX_SLACK + 24;
+});
+/** 名前の行のとき、名前の最大の幅から引く、ボタンの分（px）。 */
+const actionsWidthPx = computed(() => (showPaneButtons.value && buttonsInRow.value ? widthFor(showSplitButtons.value ? 4 : 2) + NAME_BOX_SLACK : 0));
+const zoomed = computed(() => {
+  const tabId = session?.panes.get(props.paneId)?.tabId;
+  return tabId !== undefined && session?.tabs.get(tabId)?.zoomedPaneId === props.paneId;
+});
+/** 押した pane を選び、端末へフォーカスを戻してから、操作を実行する（閉じる確認のダイアログは、この pane を選んだ状態で開く）。 */
+function paneAction(run: () => void): void {
+  view?.focusPane(props.paneId);
+  registry?.focus(props.paneId);
+  run();
+}
+const onSplit = (dir: "right" | "down"): void => paneAction(() => actions?.splitPane(props.paneId, dir));
+const onZoom = (): void => paneAction(() => actions?.zoomPane(props.paneId));
+const onClosePane = (): void => paneAction(() => actions?.closePaneWithConfirm(props.paneId));
 
 const DRAG_THRESHOLD_PX = 6;
 let dragStart: { x: number; y: number; pointerId: number } | null = null;
@@ -482,6 +535,18 @@ function onKeydown(ev: KeyboardEvent): void {
               <DisplayFloat v-if="displays?.infos.get(f.id)" :info="displays.infos.get(f.id)!" :rect="f.rect" :area="floatArea" :z="floatZOf(f.id)" />
             </template>
           </div>
+          <!-- 操作ボタン（モダンだけ。名前の行が無いときは、端末の領域の右上の隅に重ねる。浮いた窓の層より下） -->
+          <PaneActions
+            v-if="showPaneButtons && !buttonsInRow"
+            variant="corner"
+            :show-split="showSplitButtons"
+            :zoomed="zoomed"
+            :selected="selected"
+            :pane-label="paneLabel"
+            @split="onSplit"
+            @zoom="onZoom"
+            @close="onClosePane"
+          />
         </div>
         <PanePanel v-if="layout && docks?.right" side="right" :pane-id="paneId" :dock="docks.right" @guide="guide = $event" />
       </div>
@@ -501,7 +566,7 @@ function onKeydown(ev: KeyboardEvent): void {
          後のものが上に来るため、`.pane-frame-edge` の中に置くと端末の不透明な内容の下に隠れて
          見えなくなる（taskcheck が実際のスクリーンショットで発見。review.md 参照）。 -->
     <span
-      v-if="showBorder"
+      v-if="showBorder && nameFits"
       class="pane-frame-name"
       :class="{ 'pane-frame-name-current': selected, 'pane-frame-name-dragging': isDragSource }"
       aria-hidden="true"
@@ -513,6 +578,18 @@ function onKeydown(ev: KeyboardEvent): void {
       @contextmenu="onContextMenu"
       >{{ paneName }}</span
     >
+    <!-- 操作ボタン（モダンだけ）。名前の行があるときは、その右端（名前の後ろ。`.pane-frame-name` と同じ理由で端末より後ろに置く）。 -->
+    <PaneActions
+      v-if="showPaneButtons && buttonsInRow"
+      variant="row"
+      :show-split="showSplitButtons"
+      :zoomed="zoomed"
+      :selected="selected"
+      :pane-label="paneLabel"
+      @split="onSplit"
+      @zoom="onZoom"
+      @close="onClosePane"
+    />
   </div>
 </template>
 
@@ -641,9 +718,10 @@ function onKeydown(ev: KeyboardEvent): void {
   position: absolute;
   /* `.pane-frame` の外へはみ出させない（`padStyle` が名前の分として確保した上の余白の中に収める。
    * tab バーが無く画面の一番上に pane が接しているときでも切れない）。 */
-  top: 0.15em;
+  top: var(--soda-shape-name-top, 0.15em);
   left: 0.6em;
-  max-width: calc(100% - 1.2em);
+  /* 右端に操作ボタンが並ぶとき（モダン）は、その分を引く。名前は、足りなければ省略記号で切れる。 */
+  max-width: calc(100% - 1.2em - var(--soda-pane-actions-w, 0px));
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -716,6 +794,11 @@ function onKeydown(ev: KeyboardEvent): void {
   pointer-events: none;
   z-index: 20;
   isolation: isolate;
+}
+/* 操作ボタン（モダン。隅に重ねる版）は、この pane の端末の領域にポインタが載っている間だけ出す（選ばれている間・フォーカスは `PaneActions` の側）。 */
+.pane-frame-center:hover > .pane-actions-corner {
+  opacity: 1;
+  pointer-events: auto;
 }
 /* 枠（表示）に入力が届いている間は、端末を薄くする（カーソルも薄くなる）。 */
 .pane-frame-main-dimmed {
