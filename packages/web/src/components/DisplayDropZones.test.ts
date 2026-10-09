@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import DisplayDropZones from "./DisplayDropZones.vue";
 
-const mountIt = (props: { zone: "top" | "bottom" | "left" | "right" | "float" | null; current: "top" | "bottom" | "left" | "right" | "float" | null; float: boolean }) => mount(DisplayDropZones, { props });
+const mountIt = (props: { zone: "top" | "bottom" | "left" | "right" | "float" | null; current: "top" | "bottom" | "left" | "right" | "float" | null; float: boolean; release?: boolean }) => mount(DisplayDropZones, { props });
 const zone = (w: ReturnType<typeof mountIt>, z: string) => w.get(`[data-display-drop-zone="${z}"]`);
 
 describe("DisplayDropZones", () => {
@@ -23,6 +23,11 @@ describe("DisplayDropZones", () => {
     const w = mountIt({ zone: "left", current: "right", float: false });
     expect(w.findAll('[data-active="1"]').map((e) => e.attributes("data-display-drop-zone"))).toEqual(["left"]);
     expect(zone(w, "right").text()).toBe("右に置く（ここにあります）");
+    expect(zone(w, "left").text()).toBe("左に置く");
+  });
+  it("浮いた窓を動かしている間（release）は、強調している側に「離すと、ここ（右）に置く」", () => {
+    const w = mountIt({ zone: "right", current: "float", float: true, release: true });
+    expect(zone(w, "right").text()).toBe("離すと、ここ（右）に置く");
     expect(zone(w, "left").text()).toBe("左に置く");
   });
 });

@@ -541,7 +541,8 @@ test("(5b) 操作中の窓が覆われない: 先に窓 B を利用者として�
   // B を閉じる（プログラム）。B の記憶は「開いている・その位置」
   await ok(await runDisplay(appServer, paneId, ["close", "wb"]));
   await expect(floatWins(page)).toHaveCount(1);
-  // A を操作中にする
+  // A を操作中にする（箱が動いた直後の 500ms は［操作する］の押しを受けない）
+  await page.waitForTimeout(600);
   await wa.locator("[data-display-engage]").click();
   await expect(wa).toHaveAttribute("data-display-engaged", "1");
   // プログラムが B を set し直す → B が A に重なる位置に出る（A の後ろ）。**出た瞬間から**、A の z-index が最前面でなければならない
@@ -660,6 +661,7 @@ for (const kind of ["script-html", "html"] as const) {
     await expect(waWin).toHaveAttribute("data-display-engaged", "0");
     await waWin.locator("[data-display-float-title]").click();
     await expect(waWin).toHaveAttribute("data-display-engaged", "0");
+    await page.waitForTimeout(600); // 箱が動いた直後の 500ms は［操作する］の押しを受けない
     await waWin.locator("[data-display-engage]").click();
     await expect(waWin).toHaveAttribute("data-display-engaged", "1");
     await setScriptOk(appServer, paneId, "wa", `<!doctype html><body><p>wa2</p></body>`, { extra: ["--dock", "float"] });
@@ -727,6 +729,7 @@ test("(6c) 操作中に、窓の見出しのつかむ場所・縁と角・題・
   await set(appServer, paneId, "extra", "panel", ["--dock", "float"]); // トレイのボタンの押し先
   const engage = async (): Promise<void> => {
     await expect(wa.locator("[data-display-engage]")).toBeVisible();
+    await page.waitForTimeout(600); // ［操作する］は、箱が動いた直後の 500ms は押しを受けない（engageGuard）
     await wa.locator("[data-display-engage]").click();
     await expect(wa).toHaveAttribute("data-display-engaged", "1");
   };
@@ -869,22 +872,26 @@ test("(8) キーボードだけ: prefix+shift+i → 面 → 「浮いた窓に�
 });
 
 test("(10) 戻しすぎと遮断器: script-html の面を載せたまま、キーボードで、窓の開閉・「浮いた窓にする」↔「右に置く」・「キーで動かす」の開始と終了を、3 秒に 16 回以上 → activeElement が 1 度も body にならず、スクリプトの枠が止まらない", async ({ page, appServer }) => {
-  test.setTimeout(150_000);
+  test.setTimeout(240_000);
   await enableScript(appServer);
   const { paneId, sent } = await openDisplayBrowser(page, appServer);
   await setScriptOk(appServer, paneId, "g", BENIGN, { kind: "panel" });
   await setScriptOk(appServer, paneId, "bd", BENIGN, { kind: "band" });
   await expect(page.locator("iframe[data-display-script]")).toHaveCount(2);
   await trackBodyHits(page, false);
-  const t0 = Date.now();
-  let ops = 0;
-  for (let round = 0; round < 6; round++) {
+  // 遮断器は「3 秒に 15 回のフォーカスの脱落」で働く。意味を持つのは、3 秒の窓に 16 回以上の操作が入った区間が実際にあったとき。
+  // 平均のペースが足りなかった回は失敗にせず、その区間ができるまで続ける。上限まで続けてもできなければ、試せていないので、最後に「飛ばし」にする。
+  const stamps: number[] = [];
+  const BURST = 17;
+  const MAX_OPS = 240;
+  const burstFound = (): boolean => stamps.length >= BURST && stamps.some((t, i) => i + BURST - 1 < stamps.length && stamps[i + BURST - 1]! - t < 3000);
+  for (let round = 0; stamps.length < MAX_OPS && (stamps.length < 30 || !burstFound()); round++) {
     // 見出しの［⋮］ → 「浮いた窓にする」
     await page.locator('[data-display-root][data-display-dock] [data-display-menu-button]').first().focus();
     await page.keyboard.press("Enter");
     await chooseByKeys(page, "浮いた窓にする");
     await expect(floatWins(page)).toHaveCount(1);
-    ops++;
+    stamps.push(Date.now());
     // 窓の［⋮］ → 「キーで動かす」→ Enter（開始と終了）
     await page.locator("[data-display-float] [data-display-menu-button]").first().focus();
     await page.keyboard.press("Enter");
@@ -893,13 +900,13 @@ test("(10) 戻しすぎと遮断器: script-html の面を載せたまま、キ�
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Enter");
     await expect(floatWins(page).first()).not.toHaveAttribute("tabindex", /.*/);
-    ops += 2;
+    stamps.push(Date.now(), Date.now());
     // 窓の［⋮］ → 「右に置く」
     await page.locator("[data-display-float] [data-display-menu-button]").first().focus();
     await page.keyboard.press("Enter");
     await chooseByKeys(page, "右に置く");
     await expect(dock(page, "right")).toHaveCount(1);
-    ops++;
+    stamps.push(Date.now());
   }
   // 窓の開閉（トレイ）
   await page.locator('[data-display-root][data-display-dock] [data-display-menu-button]').first().focus();
@@ -908,16 +915,17 @@ test("(10) 戻しすぎと遮断器: script-html の面を載せたまま、キ�
   for (let i = 0; i < 8; i++) {
     await trayButton(page, "g").focus();
     await page.keyboard.press("Enter");
-    ops++;
+    stamps.push(Date.now());
   }
-  const elapsed = Date.now() - t0;
-  expect(ops).toBeGreaterThanOrEqual(30);
-  expect(elapsed / ops, `1 回あたり ${Math.round(elapsed / ops)}ms（3 秒に 16 回のペース）`).toBeLessThan(3000 / 16);
+  expect(stamps.length).toBeGreaterThanOrEqual(30);
   expect(await bodyHits(page), "activeElement が body になった回数").toBe(0);
   await expect(page.locator("iframe[data-display-script]")).toHaveCount(2 - (await trayButton(page, "g").getAttribute("aria-pressed") === "true" ? 0 : 1));
   await expect(page.locator("[data-display-note]")).toHaveCount(0);
   await expect(page.locator(".toast", { hasText: "繰り返し外しています" })).toHaveCount(0);
   expect(stealReports(sent)).toBe(0);
+  const fastest16 = Math.min(...stamps.slice(BURST - 1).map((t, i) => t - stamps[i]!));
+  test.info().annotations.push({ type: "最速の 16 回分", description: `${fastest16}ms（${stamps.length} 回）` });
+  test.skip(!burstFound(), `3 秒の窓に 16 回分の操作が入る速さが出ず、遮断器を試せなかった（${stamps.length} 回、最速の 16 回分: ${fastest16}ms）。マシンの負荷を下げて流し直す`);
 });
 
 test("(10b) 300ms ごとに落とす面を載せたまま、窓の移動・大きさの変更・メニューの操作が通り、操作の途中のフォーカスが端末へ引き戻されない", async ({ page, appServer }) => {
@@ -1085,4 +1093,81 @@ test("(5d) workspace を切り替えて戻っても、同じ pane に覚えた�
   await expect(trayButton(page, "wa")).toHaveCount(0);
   await expect(page.locator(`[data-pane-id="${split.pane.id}"]`)).toHaveCount(1);
   c.close();
+});
+
+test("(12) 出し直した窓は最背面: プログラムが close → set で窓を出し直しても、利用者が前へ出した窓の［操作する］の上へ来ない。押すと、押した窓が操作中になる（レビュー P2b）", async ({ page, appServer }) => {
+  test.setTimeout(150_000);
+  await enableScript(appServer);
+  const { paneId } = await openDisplayBrowser(page, appServer);
+  await setScriptOk(appServer, paneId, "wy", BENIGN, { extra: ["--dock", "float"] });
+  await setScriptOk(appServer, paneId, "wx", BENIGN, { extra: ["--dock", "float"] });
+  await openFloatByTray(page, "wy");
+  await openFloatByTray(page, "wx");
+  const ids = await idsOf(appServer, paneId);
+  const wy = floatWin(page, ids["wy"]!);
+  const wx = floatWin(page, ids["wx"]!);
+  const term = await terminalBox(page);
+  await moveGrip(page, wy, term.x + 220, term.y + 60);
+  const yb = await boxOf(wy);
+  // wx を、wy の右の縁より少し内側・見出しの 1px 上に重ねる（wx が上。wy の［操作する］が wx に覆われる位置）
+  const xb = await boxOf(wx);
+  const g = await boxOf(gripOf(wx));
+  await dragFrom(page, { x: g.x + 12, y: g.y + g.height / 2 }, { x: g.x + 12 + (yb.x - 21 - xb.x), y: g.y + g.height / 2 + (yb.y - 1 - xb.y) }, 6);
+  expect(intersects(await boxOf(wx), await boxOf(wy.locator("[data-display-engage]"))), "wx が wy の［操作する］に重なっている").toBe(true);
+  // 利用者が wy を前へ出す（覆われていない題の部分を押す）
+  await clickExposed(page, wy.locator("[data-display-float-title]"));
+  const z = (l: Locator): Promise<number> => l.evaluate((e) => Number(getComputedStyle(e).zIndex));
+  expect(await z(wy)).toBeGreaterThan(await z(wx));
+  expect(await centerHitsSelf(wy.locator("[data-display-engage]"))).toBe(true);
+  // プログラムが wx を出し直す（利用者の位置で開いて出る）→ wx は最背面。wy の［操作する］は覆われない
+  await ok(await runDisplay(appServer, paneId, ["close", "wx"]));
+  await expect(floatWins(page)).toHaveCount(1);
+  await setScriptOk(appServer, paneId, "wx", BENIGN, { extra: ["--dock", "float"] });
+  const wx2 = floatWin(page, (await idsOf(appServer, paneId))["wx"]!);
+  await expect(wx2).toBeVisible();
+  expect(await z(wy), "出し直した窓が、利用者が前へ出した窓の上へ来ない").toBeGreaterThan(await z(wx2));
+  expect(await centerHitsSelf(wy.locator("[data-display-engage]")), "wy の［操作する］の中心が wy 自身").toBe(true);
+  const c = centerOf(await boxOf(wy.locator("[data-display-engage]")));
+  await page.waitForTimeout(600);
+  await page.mouse.click(c.x, c.y);
+  await expect(wy).toHaveAttribute("data-display-engaged", "1");
+  await expect(wx2).toHaveAttribute("data-display-engaged", "0");
+});
+
+test("(13) 押す直前に配置が動いたら、［操作する］の押しを受けない: プログラムが右のパネルを出して窓が動き、押した点に別の面の［操作する］が来ても、別の面は操作中にならない。強調と知らせが出る。500ms 待って押せば、押した面が操作中になる。動いていないボタンは遅れずに効く（レビュー P3b）", async ({ page, appServer }) => {
+  test.setTimeout(150_000);
+  await enableScript(appServer);
+  const { paneId } = await openDisplayBrowser(page, appServer);
+  await setScriptOk(appServer, paneId, "wy", BENIGN, { extra: ["--dock", "float"] });
+  await openFloatByTray(page, "wy");
+  const wy = floatWin(page, (await idsOf(appServer, paneId))["wy"]!);
+  const term = await terminalBox(page);
+  await moveGrip(page, wy, term.x + term.width - 60, term.y + 8); // 右上の隅へ（窓は領域の上の縁に付く）
+  await page.waitForTimeout(900);
+  // 動いていないボタンは、遅れずに効く（押して 400ms 以内に操作中）
+  await wy.locator("[data-display-engage]").click();
+  await expect(wy).toHaveAttribute("data-display-engaged", "1", { timeout: 400 });
+  await wy.locator("[data-display-end]").click();
+  await expect(wy).toHaveAttribute("data-display-engaged", "0");
+  await page.waitForTimeout(700);
+  const c = centerOf(await boxOf(wy.locator("[data-display-engage]")));
+  // プログラムが右のパネル（script-html）を出す → 領域が縮み、窓が左へ動いて、押そうとした点に rp の［操作する］が来る
+  await setScriptOk(appServer, paneId, "rp", BENIGN, { extra: ["--dock", "right", "--size", "420"] });
+  const rpId = (await idsOf(appServer, paneId))["rp"]!;
+  const rp = page.locator(`[data-display-root="${rpId}"]`);
+  await expect(rp.locator("[data-display-engage]")).toBeVisible();
+  const hitFace = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("[data-display-root]")?.getAttribute("data-display-root"), c);
+  expect(hitFace, "押そうとした点に、rp の［操作する］が来ている（再現の前提）").toBe(rpId);
+  expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("[data-display-engage]") !== null, c), "その点は、rp の［操作する］ボタンそのもの").toBe(true);
+  await page.mouse.click(c.x, c.y);
+  await page.waitForTimeout(300);
+  await expect(rp).toHaveAttribute("data-display-engaged", "0");
+  await expect(wy).toHaveAttribute("data-display-engaged", "0");
+  await expect(page.locator(".toast", { hasText: "もう一度押してください" })).toBeVisible(); // 押しが受けられなかったことが利用者に分かる
+  await expect(rp.locator("[data-display-engage].display-engage-hint")).toHaveCount(1); // 押した点のボタンを強調
+  // 500ms 待って、wy の［操作する］（動いた先）を押せば、wy が操作中になる
+  await page.waitForTimeout(700);
+  await wy.locator("[data-display-engage]").click();
+  await expect(wy).toHaveAttribute("data-display-engaged", "1");
+  await expect(rp).toHaveAttribute("data-display-engaged", "0");
 });

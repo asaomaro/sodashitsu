@@ -690,6 +690,7 @@ test("(7b) 操作中（［操作を終える］が出ている間）も、最小
     const min = side === "left" || side === "right" ? 160 : 96;
     await expect.poll(async () => Math.round(side === "left" || side === "right" ? (await boxOf(panel)).width : (await boxOf(panel)).height), `${label}: 最小`).toBe(min);
     // 操作中にする（［操作する］ → ［操作を終える］）
+    await page.waitForTimeout(600); // ［操作する］は、箱が動いた直後の 500ms は押しを受けない（engageGuard）
     await panel.locator("[data-display-engage]").click();
     await expect(panel).toHaveAttribute("data-display-engaged", "1");
     const end = panel.locator("[data-display-end]");

@@ -26,7 +26,7 @@ import {
   type LayoutSettings,
 } from "../display/displayPrefs.js";
 import type { DockDragState } from "../display/dockDrag.js";
-import { defaultFloatRect, raiseFloat as raiseOrder, reconcileFloatOrder } from "../display/floatGeometry.js";
+import { defaultFloatRect, insertFloat, raiseFloat as raiseOrder } from "../display/floatGeometry.js";
 import { useSettingsStore } from "./settings.js";
 import { readPrefs, writePrefs } from "./view.js";
 
@@ -215,11 +215,25 @@ export const useDisplayStore = defineStore("display", () => {
     m.set(paneId, next);
     floatOrder.value = m;
   }
-  /** 出ている窓の集まりに、並びを合わせる（閉じた窓を外し、新しい窓を操作中の窓の 1 つ後ろへ。決まり 1・3）。 */
-  function syncFloatOrder(paneId: string, open: readonly string[]): void {
+  /** 利用者の操作で開いた窓の id（次に並びへ入るとき、最前面へ。プログラムの出し直し・記憶から開いた窓は、最背面）。 */
+  const userOpenedFloats = new Set<string>();
+  /**
+   * 出ている窓の集まり `open` に、並びを合わせる。新しく出た窓は、**利用者の操作で開いた窓だけ**が最前面（操作中の窓があればその後ろ。決まり 3）に入り、
+   * プログラムの出し直し（`close` → `set`）・記憶から開いた窓は**最背面**に入る（利用者が前へ出した窓の上へ、プログラムが自分を置き直せない）。
+   * `keep` に入っている窓（開いているが、pane が小さくて自動でたたまれている窓）は、並びから外さない（広げ直したとき、利用者の順が戻る）。
+   */
+  function syncFloatOrder(paneId: string, open: readonly string[], keep: readonly string[] = open): void {
     const cur = floatOrder.value.get(paneId) ?? [];
     const engaged = focusedDisplayId.value !== null && infos.value.get(focusedDisplayId.value)?.paneId === paneId ? focusedDisplayId.value : null;
-    const next = reconcileFloatOrder(cur, open, engaged);
+    const keepSet = new Set([...keep, ...open]);
+    let next = cur.filter((id) => keepSet.has(id));
+    const fresh = open.filter((id) => !next.includes(id));
+    const back = fresh.filter((id) => !userOpenedFloats.has(id));
+    const front = fresh.filter((id) => userOpenedFloats.has(id));
+    for (const id of fresh) userOpenedFloats.delete(id);
+    next = [...back, ...next];
+    for (const id of front) next = insertFloat(next, id, engaged);
+    if (engaged !== null && open.includes(engaged)) next = raiseOrder(next, engaged);
     if (next.length === cur.length && next.every((x, i) => x === cur[i])) return;
     const m = new Map(floatOrder.value);
     if (next.length === 0) m.delete(paneId);
@@ -289,6 +303,7 @@ export const useDisplayStore = defineStore("display", () => {
   }
   /** たたむ／開く。開いたら「最後に操作した面」にする。 */
   function setFaceCollapsed(info: DisplayInfo, on: boolean): void {
+    if (!on && info.kind === "panel") userOpenedFloats.add(info.id); // 利用者が開いた窓は最前面（窓でなければ使われない）
     writeFace(info, { collapsed: on });
     if (!on) {
       setLastFace(info.paneId, info.id);
@@ -299,6 +314,7 @@ export const useDisplayStore = defineStore("display", () => {
   }
   /** パネルの置き場所を変える。移った先で開く（`collapsed: false`）。同じ名前の面も、この置き場所を引き継ぐ。 */
   function setFaceDock(info: DisplayInfo, dock: DisplayDock, rect?: FaceRect): void {
+    if (dock === "float") userOpenedFloats.add(info.id);
     writeFace(info, { dock, collapsed: false, ...(rect ? { rect } : {}) });
     writeName(info, { dock });
     setLastFace(info.paneId, info.id);

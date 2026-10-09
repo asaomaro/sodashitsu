@@ -154,7 +154,7 @@ const dropZones = computed(() => {
   const cur = displays.infos.get(d.id);
   // 浮いた窓をその場で動かしている間は、縁に寄せたときだけ落とせる場所を出す。
   if (d.floatMove && d.zone === null) return null;
-  return { zone: d.zone, current: cur ? (displays.effectiveOf(cur).dock ?? null) : null };
+  return { zone: d.zone, current: cur ? (displays.effectiveOf(cur).dock ?? null) : null, release: d.floatMove === true };
 });
 /** 中央（浮いた窓）を落とせる場所にするか（窓の動ける領域が分かっている間だけ）。 */
 const floatDroppable = computed(() => !!displays?.canOpenFloat(props.paneId));
@@ -162,9 +162,11 @@ const floatDroppable = computed(() => !!displays?.canOpenFloat(props.paneId));
 const floats = computed(() => layout.value?.floats ?? []);
 const floatArea = computed(() => layout.value?.floatArea ?? null);
 const floatZOf = (id: string): number => floatZ(displays?.floatOrder.get(props.paneId) ?? [], id);
+/** 開いている窓（pane が小さくて自動でたたまれている窓も）。並びの記憶を捨てないために使う。 */
+const openFloatIds = computed(() => (displays?.all ?? []).filter((d) => d.paneId === props.paneId && d.kind === "panel").filter((d) => { const f = displays!.effectiveOf(d); return f.dock === "float" && !f.collapsed; }).map((d) => d.id));
 watch(
-  () => floats.value.map((f) => f.id).join(","),
-  () => displays?.syncFloatOrder(props.paneId, floats.value.map((f) => f.id)),
+  () => [floats.value.map((f) => f.id).join(","), openFloatIds.value.join(",")],
+  () => displays?.syncFloatOrder(props.paneId, floats.value.map((f) => f.id), openFloatIds.value),
   { immediate: true },
 );
 
@@ -487,7 +489,7 @@ function onKeydown(ev: KeyboardEvent): void {
       </div>
       <PanePanel v-if="layout && docks?.bottom" side="bottom" :pane-id="paneId" :dock="docks.bottom" @guide="guide = $event" />
       <PaneBands v-if="layout && showEdge('bottom')" edge="bottom" :pane-id="paneId" :layout="layout" />
-      <DisplayDropZones v-if="dropZones" :zone="dropZones.zone" :current="dropZones.current" :float="floatDroppable" />
+      <DisplayDropZones v-if="dropZones" :zone="dropZones.zone" :current="dropZones.current" :float="floatDroppable" :release="dropZones.release" />
       <div v-if="guideStyle" class="pane-frame-guide" :style="guideStyle" aria-hidden="true" data-pane-frame-guide></div>
     </div>
     <div v-else class="pane-frame-body">

@@ -300,6 +300,36 @@ describe("面の記憶（置き場所・たたみ。20261008-display-layout）",
       s.setFocused("d");
       expect(s.floatOrder.get("p1")).toEqual(["b", "a"]);
     });
+    it("プログラムの出し直し・記憶から開いた窓は最背面。利用者の操作で開いた窓だけが最前面", () => {
+      const s = useDisplayStore();
+      const a = win("a");
+      s.upsert(a);
+      s.upsert(win("b"));
+      s.upsert(win("c"));
+      s.setLayoutSnapshot("p1", { auto: [], floatArea: { w: 800, h: 500 } });
+      s.syncFloatOrder("p1", ["a", "b"]);
+      s.raiseFloat("p1", "a"); // 利用者が a を前へ出した: [b, a]
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a"]);
+      s.syncFloatOrder("p1", ["a"]); // b を close
+      s.syncFloatOrder("p1", ["a", "b"]); // プログラムが b を出し直した（利用者の操作ではない）
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a"]); // b は最背面。a の上へ来ない
+      s.setFaceCollapsed(win("c"), false); // 利用者が c を開いた
+      s.syncFloatOrder("p1", ["b", "a", "c"]);
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a", "c"]);
+    });
+    it("pane が小さくて窓が自動でたたまれている間（keep）も、並びを捨てない", () => {
+      const s = useDisplayStore();
+      s.upsert(win("a"));
+      s.upsert(win("b"));
+      s.syncFloatOrder("p1", ["a", "b"]);
+      s.raiseFloat("p1", "a");
+      s.syncFloatOrder("p1", [], ["a", "b"]); // 領域が最小より小さく、窓が出ていない
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a"]);
+      s.syncFloatOrder("p1", ["a", "b"], ["a", "b"]); // 広がった
+      expect(s.floatOrder.get("p1")).toEqual(["b", "a"]);
+      s.syncFloatOrder("p1", [], []); // 本当に閉じた
+      expect(s.floatOrder.has("p1")).toBe(false);
+    });
     it("キーのモード: 始める・終える。面が消えたら下ろす", () => {
       const s = useDisplayStore();
       const a = win("a");
