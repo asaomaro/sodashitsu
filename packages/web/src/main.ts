@@ -520,20 +520,22 @@ watch(
   },
 );
 
-// 端末の窓の閉じる道（20261008-graph-first の W11・X10。どの道でも `graphTerminal.close` を通して、直結を残さない）。
-// ・基本画面へ切り替わった（キー・×・［基本画面で開く］・モバイルの幅になった）: 描き直しの後（`post`）に、要素を基本画面へ戻してから、その端末にフォーカスを置く。
+// 端末の窓の閉じる道（20261008-graph-first の W11・X10。どの道でも `graphTerminal.close`／`closeAll` を通して、**どの窓の**直結も残さない）。
+// ・基本画面へ切り替わった（キー・×・［基本画面で開く］・モバイルの幅になった）: 描き直しの後（`post`）に、要素を基本画面へ戻してから、その端末にフォーカスを置く。留めた窓は、グラフの画面へ戻ったとき開き直す。
+// ・グラフの画面へ戻った・開いた: 留めた窓を開き直す（選ばない・フォーカスを動かさない）。
 watch(
   () => view.screen,
   (screen) => {
-    if (screen !== "graph") graphTerminal.close("base");
+    if (screen !== "graph") graphTerminal.closeAll("base");
+    else void graphTerminal.reopenPinned();
   },
   { flush: "post" },
 );
-// ・pane が閉じた（別のマシンの画面に替わって pane の一覧が空になった場合も）。グラフの画面が見えていれば、フォーカスはそのノードへ。
+// ・pane が閉じた（別のマシンの画面に替わって pane の一覧が空になった場合も）。グラフの画面が見えていれば、フォーカスはグラフの面へ。
 watch(
-  () => (graphTerminals.paneId !== null && !session.panes.has(graphTerminals.paneId) ? graphTerminals.paneId : null),
+  () => graphTerminals.windows.filter((w) => !session.panes.has(w.paneId)).map((w) => w.paneId),
   (gone) => {
-    if (gone !== null) graphTerminal.close(view.screen === "graph" ? "node" : "base");
+    for (const id of gone) graphTerminal.close(id, view.screen === "graph" ? "node" : "base");
   },
   { flush: "post" },
 );

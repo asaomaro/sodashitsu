@@ -66,8 +66,11 @@ export class TerminalHost {
   attachToWindow(paneId: string, container: HTMLElement): TermEntry {
     const entry = this.opts.registry.acquire(paneId, "window");
     this.windows.set(paneId, container);
-    container.appendChild(entry.element);
-    this.repaint(entry);
+    // 既に窓の中にあるとき（再接続の後の直結し直し）は動かさない（`appendChild` は、同じ親の中でも要素を付け直し、フォーカスを `body` に落とす）。
+    if (entry.element.parentElement !== container) {
+      container.appendChild(entry.element);
+      this.repaint(entry);
+    }
     return entry;
   }
 
