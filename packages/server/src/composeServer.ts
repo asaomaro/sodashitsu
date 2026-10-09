@@ -322,7 +322,7 @@ export async function composeServer(
   });
   machines.onChanged((list) => bus.publish({ event: "machine.changed", data: { machines: list } }));
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
-  const agentFork = new AgentForkRunner({ session, worktrees }); // 20261009-agent-fork
+  const agentFork = new AgentForkRunner({ session, worktrees, terminals, starter: agentStarter, bus, logger }); // 20261009-agent-fork
   // 独自コマンド（20260927-custom-command-keys）。状態ディレクトリ（名前付き session ではその session のもの）の commands.json。起動時に 1 度読む
   // （まだ `/ws` を受け付けていないので `command.updated` を受け取る接続は無い）。読み直しは `command.reload`。
   const commands = new CommandService({ filePath: join(options.stateDir, COMMANDS_FILE_NAME), session, terminals, bus, clients, logger });
@@ -843,6 +843,7 @@ export async function composeServer(
         if (!sessionLoaded) persist.cancel();
         graphEngine.stop();
         lineage.close();
+        agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();
         subagents.close();
@@ -877,6 +878,7 @@ export async function composeServer(
         // machine_unavailable として履歴に残してしまう。止める＝待ちは履歴に残さず取り消し、送っている途中の結果も書かない）。graph.close の前。
         graphEngine.stop();
         lineage.close();
+        agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();
         subagents.close();

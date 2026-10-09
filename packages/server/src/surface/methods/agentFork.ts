@@ -1,4 +1,4 @@
-import { AgentForkPreviewParams } from "@sodashitsu/protocol";
+import { AgentForkParams, AgentForkPreviewParams } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
@@ -13,5 +13,17 @@ export function registerAgentForkMethods(surface: ControlSurface, deps: MethodDe
   surface.register("agent.fork_preview", {
     schema: AgentForkPreviewParams,
     handler: (_ctx, params) => runner.preview(params),
+  });
+  // 手順の前半（確かめ・行き先を作る・シェルが入力を受けられるのを待つ・起動の打ち込み）を行い、新しい pane の id を返す。
+  // 検知・最初の知らせは裏で続き、進み具合は `agent.fork_progress` で配る。
+  surface.register("agent.fork", {
+    schema: AgentForkParams,
+    handler: async (ctx, params) => {
+      deps.clients.touch(ctx.clientId); // 色の問い合わせの答え（pane を作る操作も操作）
+      return runner.fork(params, {
+        // 起動する前に、操作したクライアントの大きさで始まるよう記録する（`agent.start`・`pane.split` と同じ）。`lineage` は呼ばない（A3・S8: fork に自動の線は付けない）。
+        onPaneCreated: (paneId) => deps.sizeAuthority.noteInteraction(ctx.clientId, paneId),
+      });
+    },
   });
 }
