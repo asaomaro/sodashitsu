@@ -305,7 +305,7 @@
       対象: 上のファイル
       依存: T25
       AC: AC27
-- [ ] T27: 負の対照（PR-C。test 工程）: (a) `clampFloatRect` を通さない版 → T25 (2) が落ちる。(b) 窓の層を `PaneFrame` の外（`body` への `Teleport`・`position: fixed`）に置く版 → T25 (3) が落ちる。(c) 重なりを、`v-for` の配列の並べ替えで替える版 → T25 (5) の「枠の要素が同じ」か「`load` が 1」が落ちる（「作業順序」の 1）。
+- [x] T27: 負の対照（PR-C。test 工程）: (a) `clampFloatRect` を通さない版 → T25 (2) が落ちる。(b) 窓の層を `PaneFrame` の外（`body` への `Teleport`・`position: fixed`）に置く版 → T25 (3) が落ちる。(c) 重なりを、`v-for` の配列の並べ替えで替える版 → T25 (5) の「枠の要素が同じ」か「`load` が 1」が落ちる（「作業順序」の 1）。
       (d) 窓を開くときに枠へ `focus()` する版 → T25 (4) が落ちる。(e) `insertFloat` が、新しい窓をいつも最前面に入れる版 → T25 (5) の「操作中の窓の見出しが覆われない」が落ちる。(f) 開いている窓のボタンをトレイから外す版 → T25 (1) の「帯の無い pane で `client.view` を送らない」が落ちる。(g) `effectiveCollapsed` から「置き場所が浮いた窓なら、たたむ」を外す版 → T25 (1) の「閉じて始まる（窓の要素が無い）」が落ちる。(h) 窓を開く操作が、記憶に `rect` を書かない版 → T25 (2) の「別の `--size` で `set` し直した後も、同じ箱」が落ちる。生の出力を `test-result.md` に
       対象: `.aidev/works/20261008-display-layout/test-result.md`
       依存: T25
