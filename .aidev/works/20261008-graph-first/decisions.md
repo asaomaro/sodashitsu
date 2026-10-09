@@ -221,3 +221,14 @@ D63 の値の選び方（乱数 300 通り〔(a)〕・20 通り〔(b)〕。土�
 6. **足した後**: 新しい pane の id は `pane.split` の応答で分かる。ノードはサーバが足す（PR1a。少し遅れる）ので、**ノードが出るまで待ってから**（最大 5 秒）、選び、窓を開く入口（`GraphTerminalController.open`）を呼ぶだけ（窓の作りには触れない）。
 7. **workspace を足す**: `newWorkspace`（名前を聞かず、すぐ作る既定）・worktree を作る／開く（`newWorktree`・`openWorktree`）は、`ActionDispatcher` の既存の操作をそのまま呼ぶ。作った workspace は、サーバの決まりでは**「グループなし」**に入る（`group.add_member` を送らない限り）ので、表示中の空間がグループなら、作った直後（クリックから 60 秒以内に、この画面が初めて見た新しい workspace）に `group.add_member` で、そのグループへ移す。
 8. **閉じる**: 基本画面と同じ確認（`ConfirmDialog`。busy の警告も同じ）を使い、**グラフの線が消える本数**を足して出す（線が 0 本なら何も足さない＝基本画面は変わらない）。
+
+### D85: PR3 の実装（T14b〜T14f。2026-10-09）
+- **サーバ**: 読み取りだけの `agent.kinds`（`createAgentKindsLister`。PATH を走査して実行権があるかを見る・5 秒キャッシュ・Windows は全部「見つからない」）。`agent.start` は変えていない（`sodactl agent start` の互換）。`agentStarter` があるサーバにだけ登録。
+- **web の進行は `addPane.ts`**（依存を渡す形で単体試験）。送る `agent.start` の項目は `name`・`kind`・`paneId`・`args: []` の 4 つに固定（試験で項目名を固定。`args` に何か足すと落ちる＝否定の対照を確認）。
+- **フォーム**は `GraphCanvas` の `.graph-canvas` の中（世界の層の外）に置く。位置は囲いの下の左で、キャンバスの中へ寄せる。**仮の枠は作らず**、フォームの中に「pane を足しています…／エージェントを起動しています…」を出す（足している間はフォームが残り、位置が囲いに隠れない。仮の枠を新ノードの場所に出すには、置き場所をクライアントで先に計算する必要があり、PR1a の「位置はサーバが決める」と二重になるため）。
+- **ツールバー**: 「＋ pane」「＋ workspace ▾」を左端に。PR1e の期待の並びを直した（`graph-spaces.spec.ts`「ツールバー」の `toHaveText` の並びに 2 つ足した）。
+- **メニュー**: `MenuTarget` に `graphAdd`・`graphNode`・`graphFrame` を追加。「閉じる」は、グラフの線があれば busy でなくても確認を出す（`closeFromGraph`）。線が無ければ基本画面と同じ道（`closePaneById`）。
+- **確認ダイアログ**: 消える線の本数は、閉じる対象（pane・tab・workspace）に含まれる手元の pane の鍵に触れる線の数。0 本なら要素ごと出ない（基本画面は 1 画素も変わらない）。
+- **窓を開く**は `openNodeWindow(key, true)`（既存）だけ。PR2b で `open(paneId, opts?)` になっても、第 1 引数は同じ。
+- **分割できないときの断りの E2E は書いていない**: サーバが `pane.split` を断る状況（`spawn_failed`）を、E2E で安定して作れない。理由の文言は `addPane.test.ts`（`spawn_failed`・元の pane が無い・ノードが出ない・名前の書式・`agent_name_taken`・`agent_pane_busy` のやり直し）で確かめた。
+

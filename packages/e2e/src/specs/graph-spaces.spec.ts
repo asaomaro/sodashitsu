@@ -1317,11 +1317,11 @@ test.describe("見た目を案に寄せる（PR1e）", () => {
     expect(tagH).toBe(28);
   });
 
-  test("ツールバー: 左に「線を結ぶ」「並びを整える」「そのほか」、右に探す・拡大縮小・「全体を表示」。題と「×」は無い。「そのほか」のメニューに、一時停止・履歴・別のマシンの pane を載せる", async ({ page, appServer }) => {
+  test("ツールバー: 左に「＋ pane」「＋ workspace」「線を結ぶ」「並びを整える」「そのほか」、右に探す・拡大縮小・「全体を表示」。題と「×」は無い。「そのほか」のメニューに、一時停止・履歴・別のマシンの pane を載せる", async ({ page, appServer }) => {
     await boot(page, appServer);
     await openGraph(page);
     const bar = graphView(page).locator(".graph-toolbar");
-    await expect(bar.locator(":scope > .graph-tool")).toHaveText(["線を結ぶ", "並びを整える", "そのほか ▾", "−", "＋", "全体を表示"]);
+    await expect(bar.locator(":scope > .graph-tool")).toHaveText(["＋ pane", "＋ workspace ▾", "線を結ぶ", "並びを整える", "そのほか ▾", "−", "＋", "全体を表示"]);
     await expect(graphView(page).locator(".graph-close, .graph-title")).toHaveCount(0);
     // 左のボタンは探すより左・右のものは右
     const more = await box(bar.locator(".graph-more"));

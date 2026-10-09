@@ -176,7 +176,7 @@ defineExpose({ onOutside });
   opacity: 0.75;
 }
 .graph-add-na {
-  opacity: 0.6;
+  font-style: italic;
 }
 .graph-add-other {
   display: flex;

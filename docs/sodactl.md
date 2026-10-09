@@ -565,6 +565,8 @@ pane の中で検出されたコーディングエージェント（Claude Code�
 
 ### エージェントを起動する（`agent start`）
 
+（グラフの画面の「＋」のフォームも同じ方式 `agent.start` を使う。送るのは `kind`・`name`・`paneId` と空の `args` だけ。選べる種類の一覧は読み取りだけの方式 `agent.kinds`〔表示名と見つかったかだけを返す〕。`docs/agent-graph.md`「グラフから pane・workspace を足す・閉じる」）
+
 `sodactl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [-- <args>...]` は、**前面がシェル自身だけの pane**
 （プロンプトで待っているシェル）に `KIND` のエージェントを起動し、`<name>` を付け、入力を受け付けられる状態（`idle`）になるまで待ってから
 `agent get` と同じ形で出す。pane は作らない（先に `pane split` 等で用意する）。

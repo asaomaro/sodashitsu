@@ -101,7 +101,7 @@ describe("addPane", () => {
     expect(n).toBe(3);
     const taken = Object.assign(new Error("x"), { code: "agent_name_taken" });
     const s2 = setup({}, { "agent.start": () => { throw taken; } });
-    const err = await addPane(s2.deps, { workspaceId: "w1", kind: "claude", name: "a", supervisorKey: null }).catch((e: unknown) => e as AddPaneError);
+    const err = await addPane(s2.deps, { workspaceId: "w1", kind: "claude", name: "a", supervisorKey: null }).catch((e: unknown) => e as AddPaneError) as AddPaneError;
     expect(err).toBeInstanceOf(AddPaneError);
     expect(err.message).toContain("その名前は別のエージェントが使っています");
     expect(err.paneId).toBe("pNew");
@@ -120,7 +120,7 @@ describe("addPane", () => {
     const spawn = setup({}, { "pane.split": () => { throw Object.assign(new Error("x"), { code: "spawn_failed" }); } });
     await expect(addPane(spawn.deps, { workspaceId: "w1", kind: "shell", name: "", supervisorKey: null })).rejects.toThrow("シェルを起動できませんでした");
     const late = setup({ hasNode: () => false });
-    const err = await addPane(late.deps, { workspaceId: "w1", kind: "shell", name: "", supervisorKey: null }).catch((e: unknown) => e as AddPaneError);
+    const err = await addPane(late.deps, { workspaceId: "w1", kind: "shell", name: "", supervisorKey: null }).catch((e: unknown) => e as AddPaneError) as AddPaneError;
     expect(err.message).toContain("ノードがまだ出ません");
     expect(err.paneId).toBe("pNew");
   });
