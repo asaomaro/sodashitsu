@@ -5,7 +5,7 @@ import ConfirmDialog from "./components/ConfirmDialog.vue";
 import ContextMenu from "./components/ContextMenu.vue";
 import DetachedView from "./components/DetachedView.vue";
 import GotoPicker from "./components/GotoPicker.vue";
-import GraphView from "./components/graph/GraphView.vue";
+import GraphDialog from "./components/graph/GraphDialog.vue";
 import GroupPickerDialog from "./components/GroupPickerDialog.vue";
 import HelpDialog from "./components/HelpDialog.vue";
 import LoginView from "./components/LoginView.vue";
@@ -14,21 +14,18 @@ import NotificationHistoryDialog from "./components/NotificationHistoryDialog.vu
 import OnboardingDialog from "./components/OnboardingDialog.vue";
 import SessionSwitchDialog from "./components/SessionSwitchDialog.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
-import PaneLayout from "./components/PaneLayout.vue";
 import PrefixIndicator from "./components/PrefixIndicator.vue";
 import ReconnectOverlay from "./components/ReconnectOverlay.vue";
 import Sidebar from "./components/Sidebar.vue";
 import SubagentListDialog from "./components/SubagentListDialog.vue";
-import TabBar from "./components/TabBar.vue";
-import TerminalPane from "./components/TerminalPane.vue";
 import Toast from "./components/Toast.vue";
 import AskDialog from "./components/AskDialog.vue";
 import ExtensionApprovalDialog from "./components/ExtensionApprovalDialog.vue";
 import WorktreeCreateDialog from "./components/WorktreeCreateDialog.vue";
 import WorktreeOpenDialog from "./components/WorktreeOpenDialog.vue";
 import { isMobileViewport } from "./mobile/detect.js";
+import { SCREENS } from "./screens/screens.js";
 import MobileShell from "./mobile/MobileShell.vue";
-import { useSessionStore } from "./store/session.js";
 import { PANE_FRAME_THICKNESS_PX, useSettingsStore } from "./store/settings.js";
 import { useViewStore } from "./store/view.js";
 
@@ -40,11 +37,9 @@ import { useViewStore } from "./store/view.js";
  * 部品の配線（circular port の bind を含む）は `main.ts`（composition root）の責務——ここはテンプレートの
  * 切り替えと、現在の tab のレイアウト木を `PaneLayout` へ渡すだけ。
  */
-const session = useSessionStore();
 const view = useViewStore();
 const settings = useSettingsStore();
 
-const currentTab = computed(() => (view.tabId ? session.tabs.get(view.tabId) : undefined));
 const isMobile = isMobileViewport();
 
 /**
@@ -65,24 +60,18 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
     <MobileShell v-if="isMobile" />
     <template v-else>
       <Sidebar />
+      <!-- 主な領域。画面の一覧（`screens/screens.ts`）から作った画面を重ねて置き、見えているのは `view.screen` の 1 つだけ。見えない画面は、**大きさを保ったまま** `visibility: hidden` と
+           `inert` で見えなくするだけ（`display: none`・`v-show`・`v-if` は使わない。基本画面の pane の箱が 0×0 になると、`client.view` が 1×1 を申告して全部の PTY が縮む。D11） -->
       <div class="app-main">
-        <TabBar />
-        <div class="app-panes" :class="{ 'app-panes-outer-borders': settings.paneOuterBorders }">
-          <!-- 窓の大きさ・サイドバーの幅や折りたたみの変化に client.view を追従させる（D107）。pane ごとに枠を描く（右クリックで
-               常にメニューを開く縁。D110）。どちらもモバイルの MobileShell には付けない -->
-          <PaneLayout
-            v-if="currentTab && view.workspaceId"
-            :workspace-id="view.workspaceId"
-            :tab-id="currentTab.id"
-            :layout="currentTab.layout"
-            :zoomed-pane-id="currentTab.zoomedPaneId"
-            follow-resize
-            pane-frames
-          >
-            <template #pane="{ paneId }">
-              <TerminalPane :pane-id="paneId" />
-            </template>
-          </PaneLayout>
+        <div
+          v-for="def in SCREENS"
+          :key="def.id"
+          class="app-screen"
+          :class="{ 'app-screen-hidden': view.screen !== def.id }"
+          :data-screen="def.id"
+          :inert="view.screen !== def.id"
+        >
+          <component :is="def.component" />
         </div>
       </div>
     </template>
@@ -99,16 +88,16 @@ const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameTh
     <HelpDialog />
     <OnboardingDialog />
     <GotoPicker />
-    <GraphView />
+    <GraphDialog v-if="isMobile" />
     <CommandPopup />
     <!-- 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）。ほかのダイアログとは別の枠で、後から開くので上に重なる。 -->
     <AskDialog />
     <!-- プロジェクトの拡張の承認（20261007-ext-host PR3）と、承認待ちの知らせ。別の枠（`showModal()`）。サーバのイベントでは開かず、利用者が［確認する］を押したときだけ開く。 -->
     <ExtensionApprovalDialog />
     <PrefixIndicator />
-    <!-- グラフ画面（`showModal()` の top layer）を開いている間は、トーストと再接続の表示をその dialog の中へ出す——外に置くと top layer の下に隠れ、
+    <!-- 1 列の画面の重ねるグラフ（`showModal()` の top layer）を開いている間は、トーストと再接続の表示をその dialog の中へ出す——外に置くと top layer の下に隠れ、
          inert で押せない（20260927-agent-graph の decisions D4）。`defer` は同じ描画の中で後から mount される行き先を待つため。 -->
-    <Teleport :to="view.askOpen ? '#soda-ask-dialog' : '#soda-graph-dialog'" :disabled="!(view.graphOpen || view.askOpen)" defer>
+    <Teleport :key="isMobile ? 'mobile' : 'desktop'" :to="view.askOpen ? '#soda-ask-dialog' : '#soda-graph-dialog'" :disabled="!(view.graphDialogOpen || view.askOpen)" defer>
       <Toast />
       <ReconnectOverlay />
     </Teleport>
@@ -163,9 +152,17 @@ body {
 }
 .app-main {
   flex: 1;
-  display: flex;
-  flex-direction: column;
+  position: relative;
   min-width: 0;
+}
+/* 画面は重ねて置く（どれも主な領域いっぱい）。見えない画面は大きさを保つ（D11） */
+.app-screen {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+}
+.app-screen-hidden {
+  visibility: hidden;
 }
 .app-panes {
   flex: 1;

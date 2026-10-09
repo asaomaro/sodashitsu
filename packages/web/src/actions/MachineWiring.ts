@@ -45,7 +45,7 @@ export interface MachineWiringDeps {
   onLocalGraphEvent?: (e: GraphChangedEvent | GraphFiredEvent) => void;
   /** ローカルの軽い接続の hello が通った（グラフを取り直す）。省略可。 */
   onLocalOpened?: () => void;
-  /** 連携のグラフ画面を開いているか（リアクティブ。1 列の画面でも開いている間はマシンの一覧と軽い接続を保つ）。省略なら常に閉じている。 */
+  /** 連携のグラフが見えているか（リアクティブ。デスクトップのグラフの画面か、1 列の重ねるダイアログ。1 列の画面でも見えている間はマシンの一覧と軽い接続を保つ）。省略なら常に閉じている。 */
   graphOpen?: Ref<boolean>;
 }
 

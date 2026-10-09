@@ -3,6 +3,7 @@ import { inject, ref, watch } from "vue";
 import { ConnectionKey } from "../injection.js";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { useViewStore } from "../store/view.js";
+import { watchDragInterrupt } from "../store/dragInterrupt.js";
 
 /**
  * pane の境界（M2。architecture「マウス操作」・APG の Window Splitter）。Pointer Events でドラッグし、
@@ -101,12 +102,7 @@ const drag = useResizeDrag<DragStart>({
   },
 });
 // ダイアログ（`sodactl ask` 等）が開いたら、その時点でドラッグを終える（AC-I5。Sidebar の 2 か所の境目と同じ）。
-watch(
-  () => view.modalOpen,
-  (open) => {
-    if (open) drag.finish();
-  },
-);
+watchDragInterrupt(view, () => drag.finish());
 
 watch(
   () => props.ratio,

@@ -16,6 +16,7 @@ import PaneBands from "./PaneBands.vue";
 import PanePanel from "./PanePanel.vue";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
+import { watchDragInterrupt } from "../store/dragInterrupt.js";
 import { zoneAt, type Zone } from "../term/paneDragZone.js";
 
 /**
@@ -207,7 +208,7 @@ watch(
       displays.setLayoutSnapshot(props.paneId, l ? { auto: l.auto, floatArea: l.floatArea, placement: placementOf(l) } : null);
     }
     const a = document.activeElement;
-    if (focusWasInChrome && (a === null || a === document.body || !a.isConnected) && !view?.modalOpen) displayHost?.focusTerminal(props.paneId);
+    if (focusWasInChrome && (a === null || a === document.body || !a.isConnected) && !view?.modalOpen && (view?.screen ?? "base") === "base") displayHost?.focusTerminal(props.paneId);
     focusWasInChrome = false;
   },
   { flush: "post" },
@@ -384,12 +385,9 @@ function onNamePointerCancel(ev: PointerEvent): void {
  * のか・捕捉先へ `pointerup`/`pointercancel` が届き続けるのかは確かめた出所が無い。分からない挙動に
  * 頼らない（cross-cutting 独立点検で発見。review.md 参照）。
  */
-watch(
-  () => view?.modalOpen === true, // グラフ画面（20260927-agent-graph）も同じ
-  (open) => {
-    if (open && isDragSource.value) cancelDrag();
-  },
-);
+watchDragInterrupt(view, () => {
+  if (isDragSource.value) cancelDrag();
+});
 
 onBeforeUnmount(() => {
   // ドラッグ中にこの pane 自身が消えた（別クライアントの close 等）ら、リスナーの残留・宙に浮いた

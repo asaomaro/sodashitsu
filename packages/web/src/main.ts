@@ -17,6 +17,7 @@ import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
 import { PrefsSync } from "./actions/PrefsSync.js";
+import { isAllowedOnGraphScreen } from "./keys/graphScreenKeys.js";
 import { mobileViewportQuery, trackMediaQuery } from "./mobile/detect.js";
 import { MachineSummaryClient } from "@sodashitsu/client-core";
 import { LOCAL_MACHINE_ID, wsUrlFor } from "@sodashitsu/client-core";
@@ -462,14 +463,18 @@ const machineWiring = new MachineWiring({
   mobileViewport,
   onLocalGraphEvent: (e) => graph.applyEvent(e),
   onLocalOpened: () => void graph.load(),
-  graphOpen: toRef(view, "graphOpen"),
+  graphOpen: toRef(view, "graphVisible"),
 });
 machineWiringBox.current = machineWiring;
-watch([() => machines.selectedId, () => machines.machines.map((m) => m.id).join("\n"), mobileViewport, () => view.graphOpen], () => machineWiring.reconcileSummaryClients());
+watch([() => machines.selectedId, () => machines.machines.map((m) => m.id).join("\n"), mobileViewport, () => view.graphVisible], () => machineWiring.reconcileSummaryClients());
+// 窓の幅が 1 列の画面かを、画面の状態（`view.screen`・1 列のグラフのダイアログ）へ伝える。1 列になったら基本画面へ戻る（D13）。
+watch(mobileViewport, (mobile) => view.setMobileViewport(mobile), { immediate: true });
 // 1 列の画面になったらローカルへ戻り一覧を空にする（サイドバーにマシンの見出しが無く戻れなくなるため）。広げたら一覧を読み直す。
 watch(mobileViewport, (mobile) => machineWiring.onMobileChanged(mobile));
 // 1 列の画面でも連携のグラフ画面を開いている間は、別のマシンのノードの状態を出すため一覧と軽い接続を保つ（統合レビュー R1）。
-watch(() => view.graphOpen, (open) => machineWiring.onGraphOpenChanged(open));
+watch(() => view.graphVisible, (open) => machineWiring.onGraphOpenChanged(open));
+// デスクトップのグラフの画面が出ている間は、グラフの面の外にフォーカスがあるときの prefix の 2 打目を、グラフの画面で意味のあるものだけに絞る（見えない基本画面を変えない。D52）。
+keys.setDomKeyFilter((decision) => view.screen === "base" || isAllowedOnGraphScreen(decision));
 keys.bind({ action: actionDispatcher, focus: actionDispatcher, mode: { onModeChange: (m) => view.onModeChange(m) }, imagePaste: imagePaster });
 
 // Windows のホストなら ConPTY 向けのオプションを足す（design「エージェントの argv[0]」隣接。H-cfg 相当）。
@@ -495,8 +500,8 @@ watch(
 // （`KeyRouter.handle` は mode:"dialog" のとき常に consume を返すのみ）。
 // 連携のグラフ画面（20260927-agent-graph）もダイアログの 1 枠とは別の状態で同じく扱う（`view.modalOpen`。research-web §1.5）。
 watch(
-  () => view.modalOpen,
-  (open) => keys.setMode(open ? "dialog" : "terminal"),
+  () => view.keysCaptured,
+  (captured) => keys.setMode(captured ? "dialog" : "terminal"),
 );
 
 // 端末以外（サイドバー・tab バー等）にフォーカスがあるときの keydown（design「フォーカスの抜け道」）。
@@ -506,7 +511,7 @@ watch(
 // Ctrl+B を押す」が「prefix に入る→直後に \x02 が送られて抜ける」という壊れた動きになる）。
 // ダイアログが開いている間も同様にここでは何もしない（ダイアログ自身が処理する。上の watch 参照）。
 window.addEventListener("keydown", (ev) => {
-  if (view.modalOpen) return;
+  if (view.keysCaptured) return;
   if (document.activeElement?.classList.contains("xterm-helper-textarea")) return;
   const passThrough = keys.handleDomKey(ev);
   if (!passThrough) ev.preventDefault();
