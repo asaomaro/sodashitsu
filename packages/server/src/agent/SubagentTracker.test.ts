@@ -728,6 +728,21 @@ describe("SubagentTracker（数える部分）", () => {
       expect(tracker.current("p1")!.items[0]?.parentId).toBeUndefined();
     });
 
+    it("親の鎖をたどって自分に戻るなら、親なしにする（輪を作らせない）", () => {
+      // c が「まだ居ない x」を親として先に起動し、その後 x が c を親として起動した
+      rep({ type: "subagent_pending", parentAgentId: "x" });
+      rep({ type: "subagent_start", agentId: "c" });
+      rep({ type: "subagent_pending", parentAgentId: "c" });
+      rep({ type: "subagent_start", agentId: "x" });
+      const x = tracker.current("p1")!.items.find((i) => i.id === "x")!;
+      expect(x.parentId).toBeUndefined();
+      expect(x.depth).toBe(1);
+      // 否定の対照: 輪にならない親はそのまま付く
+      rep({ type: "subagent_pending", parentAgentId: "x" });
+      rep({ type: "subagent_start", agentId: "y" });
+      expect(tracker.current("p1")!.items.find((i) => i.id === "y")).toMatchObject({ parentId: "x", depth: 2 });
+    });
+
     it("古い報告（親・場所の項目が無い）でも今までどおり数える。hasTranscript は付かない", () => {
       rep({ type: "subagent_pending", description: "d" });
       rep({ type: "subagent_start", agentId: "a1" });
