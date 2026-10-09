@@ -28,6 +28,7 @@
   --soda-shape-row-h: 36px;
   --soda-shape-control-h: 32px;
   --soda-shape-pad-x: 12px;
+  --soda-shape-tag-h: 28px; /* グラフの囲いの見出しの tab のタグの高さ（見出しの帯は、置き場所の計算の定数 40px のまま） */
   --soda-shape-pad: 20px; /* ダイアログの内側の余白 */
   --soda-shape-menu-radius: var(--soda-shape-radius); /* メニューの角（行の背景が角に出ないよう、小さめ） */
   --soda-shape-menu-pad-y: 6px; /* メニューの上下の余白 */

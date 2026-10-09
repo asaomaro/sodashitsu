@@ -73,6 +73,10 @@ export interface GraphNodeInfo {
   exists: boolean | null;
   /** pane のある workspace・tab（分かれば）。 */
   location: { workspaceId: string; tabId: string } | null;
+  /** 付けた pane の名前（無ければ null）。 */
+  label: string | null;
+  /** pane のいまの場所（フォルダ。画面の接続が向いているマシンの pane だけ。分からなければ null）。 */
+  cwd: string | null;
 }
 
 export type GraphUpdateResult =
@@ -400,6 +404,8 @@ export const useGraphStore = defineStore("graph", () => {
           // 切れている・切り替えの途中（session が空）は「分からない」（無効と出さない。g04 点検）
           exists: connected ? false : null,
           location: null,
+          label: null,
+          cwd: null,
         };
       const agent = pane.agent;
       const workspaceId = session.tabs.get(pane.tabId)?.workspaceId;
@@ -413,6 +419,8 @@ export const useGraphStore = defineStore("graph", () => {
             : null,
         exists: connected ? true : null,
         location: workspaceId ? { workspaceId, tabId: pane.tabId } : null,
+        label: pane.label || null,
+        cwd: pane.cwd || null,
       };
     }
     // ほかのマシン（手元を含む）は軽い接続の要約から（呼び名の材料も要約に持つ。04）。
@@ -426,6 +434,8 @@ export const useGraphStore = defineStore("graph", () => {
         state: null,
         exists: connected ? false : null,
         location: null,
+        label: null,
+        cwd: null,
       };
     }
     const agent = entry.agent;
@@ -444,6 +454,8 @@ export const useGraphStore = defineStore("graph", () => {
           : null,
       exists: connected ? true : null,
       location: workspaceId ? { workspaceId, tabId: entry.tabId } : null,
+      label: entry.label || null,
+      cwd: null,
     };
   }
 

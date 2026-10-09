@@ -201,10 +201,10 @@ function subtitle(info: FrameInfo): string {
   border-color: color-mix(in srgb, var(--soda-menu-border, #44475a) 55%, transparent);
   background: color-mix(in srgb, var(--soda-subtle-bg, rgba(255, 255, 255, 0.08)) 55%, transparent);
 }
+/* 選んでいる workspace: 枠は accent の実線 2px・外側に同じ色の薄い輪（PR1e AC-L5） */
 .graph-frame-selected {
-  border-color: var(--soda-accent, #6070a1);
-  border-style: solid;
-  box-shadow: 0 0 0 4px var(--soda-subtle-bg, rgba(255, 255, 255, 0.08));
+  border: 2px solid var(--soda-accent, #6070a1);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--soda-accent, #6070a1) 28%, transparent);
 }
 .graph-frame-flash {
   border-color: var(--soda-accent, #6070a1);
@@ -268,6 +268,7 @@ function subtitle(info: FrameInfo): string {
   flex: 0 1 auto;
   min-width: 0;
   max-width: 7em;
+  height: var(--soda-shape-tag-h, auto);
   padding: 1px 8px;
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 10px;

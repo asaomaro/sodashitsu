@@ -257,7 +257,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
+  padding: var(--soda-shape-pad-x, 12px);
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius-l);
   background: var(--soda-menu-bg, #282a36);
@@ -300,6 +300,7 @@ onMounted(() => {
 }
 .pane-checklist-actions button {
   padding: 3px 10px;
+  min-height: var(--soda-shape-control-h, 0);
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius);
   background: var(--soda-subtle-bg, #343746);

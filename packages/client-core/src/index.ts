@@ -34,6 +34,7 @@ export * from "./graph/message.js";
 export * from "./graph/nodeKey.js";
 export * from "./graph/reconcile.js";
 export * from "./graph/spaces.js";
+export * from "./graph/tidy.js";
 export * from "./graph/structure.js";
 export * from "./graph/ops.js";
 export * from "./graph/validate.js";

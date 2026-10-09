@@ -206,8 +206,10 @@ describe("GraphView（ノードと線。03 T2）", () => {
     expect(nodes.map((n) => n.attributes("data-node-key"))).toEqual(["local:p1", "local:p2"]);
     const n1 = nodes[0]!;
     expect(n1.find(".graph-node-name").text()).toBe("impl");
-    expect(n1.find(".graph-node-machine").text()).toBe("ローカル");
+    expect(n1.find(".graph-node-machine").exists()).toBe(false); // 手元の pane は「ローカル」を出さない（PR1e AC-L1）。読み上げのラベルには残る
+    expect(n1.attributes("aria-label")).toContain("ローカル");
     expect(n1.find(".graph-node-agent-name").text()).toBe("Claude Code");
+    expect(n1.find(".graph-node-state-text").text()).toBe("作業中");
     expect(n1.find("[data-state]").attributes("data-state")).toBe("working");
     expect(n1.attributes("role")).toBe("group");
     expect(n1.attributes("aria-roledescription")).toBe("ノード");

@@ -57,6 +57,7 @@ const graphView = (page: Page) => page.locator(".graph-view");
 const spaceBtn = (page: Page, label: string | RegExp) => page.locator("[data-space-id]").filter({ hasText: label });
 const frameOf = (page: Page, id: string) => graphView(page).locator(`[data-frame-id="${id}"]`);
 const nodeOf = (page: Page, paneId: string) => graphView(page).locator(`[data-node-key="local:${paneId}"]`);
+const switcherBtnBase = (page: Page) => page.locator('[data-screen-id="base"]');
 const rowOf = (page: Page, label: string) =>
   page.locator(".sidebar-row").filter({ has: page.locator(".sidebar-label", { hasText: new RegExp(`^${label}$`) }) });
 
@@ -1224,6 +1225,275 @@ test.describe("キー（PR1d T12c）", () => {
   });
 });
 
+/** ノードの中身が 200×80 に収まっている（子の箱がノードの外へはみ出さない）。 */
+async function nodeFits(page: Page, paneId: string): Promise<boolean> {
+  return nodeOf(page, paneId).evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return Array.from(el.querySelectorAll<HTMLElement>(".graph-node-head, .graph-node-sub, .graph-node-warn")).every((c) => {
+      const b = c.getBoundingClientRect();
+      return b.left >= r.left - 1 && b.right <= r.right + 1 && b.top >= r.top - 1 && b.bottom <= r.bottom + 1;
+    });
+  });
+}
+const nodeSize = async (page: Page, paneId: string) => {
+  const b = await box(nodeOf(page, paneId));
+  const z = await page.evaluate(() => {
+    const world = document.querySelector<HTMLElement>(".graph-world");
+    const m = /scale\(([\d.]+)\)/.exec(world?.style.transform ?? "");
+    return m ? Number(m[1]) : 1;
+  });
+  return { w: Math.round(b.width / z), h: Math.round(b.height / z) };
+};
+
+test.describe("見た目を案に寄せる（PR1e）", () => {
+  test("ノードの中身: 状態の印と名前（1 行目）・種類と状態の語（2 行目）・シェルは四角と「シェル」。承認待ちは枠の色。手元の pane に「ローカル」と pane の題は出ない。200×80 に収まる", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    for (const name of ["alpha", "beta", "gamma"]) await w.client.request("pane.subscribe", { paneId: w.pane.get(name)!, scrollbackLines: 4000 });
+    const a1 = await launchFakeAgent(page, w.client, w.pane.get("alpha")!, { via: "client" });
+    const a2 = await launchFakeAgent(page, w.client, w.pane.get("beta")!, { via: "client" });
+    const a3 = await launchFakeAgent(page, w.client, w.pane.get("gamma")!, { via: "client" });
+    await a1.work();
+    await a2.block();
+    await a3.work();
+    await a3.idle();
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    const alpha = nodeOf(page, w.pane.get("alpha")!);
+    await expect(alpha.locator(".graph-node-state")).toHaveAttribute("data-state", "working");
+    await expect(alpha.locator(".graph-node-agent-name")).toHaveText("Claude Code");
+    await expect(alpha.locator(".graph-node-state-text")).toHaveText("作業中");
+    await expect(alpha.locator(".graph-node-machine")).toHaveCount(0); // 「ローカル」は出ない
+    await expect(alpha.locator(".graph-node-name")).not.toContainText("@"); // pane の題（user@host: …）は出ない
+    await expect(alpha).not.toHaveClass(/graph-node-approval/);
+    // シェル（エージェントの居ない pane）: 丸でなく四角・「シェル ・ 場所」
+    const shell = nodeOf(page, w.pane.get("main-ws")!);
+    await expect(shell.locator(".graph-node-shell")).toHaveCount(1);
+    await expect(shell.locator(".graph-node-state")).toHaveCount(0);
+    await expect(shell.locator(".graph-node-agent-name")).toHaveText("シェル");
+    // 承認待ち（beta。ドキュメントの空間）
+    await spaceBtn(page, /^ドキュメント/).click();
+    const beta = nodeOf(page, w.pane.get("beta")!);
+    await expect(beta.locator(".graph-node-state-text")).toHaveText("入力待ち");
+    await expect(beta).toHaveClass(/graph-node-approval/);
+    expect(await beta.evaluate((el) => getComputedStyle(el).borderTopColor)).toBe(await page.evaluate(() => {
+      const probe = document.createElement("i");
+      probe.style.color = "var(--soda-state-blocked)";
+      document.body.appendChild(probe);
+      const c = getComputedStyle(probe).color;
+      probe.remove();
+      return c;
+    }));
+    // 完了／待機中（gamma。グループなし）
+    await spaceBtn(page, /^グループなし/).click();
+    await expect(nodeOf(page, w.pane.get("gamma")!).locator(".graph-node-state-text")).toHaveText(/^(完了|待機中)$/);
+    // 大きさ 200×80・中身が収まる
+    for (const [sp, name] of [[/^開発/, "alpha"], [/^ドキュメント/, "beta"], [/^グループなし/, "gamma"]] as const) {
+      await spaceBtn(page, sp).click();
+      expect(await nodeSize(page, w.pane.get(name)!)).toEqual({ w: 200, h: 80 });
+      expect(await nodeFits(page, w.pane.get(name)!), `${name} の中身`).toBe(true);
+    }
+    // 読み上げのラベルは、呼び名・マシン・エージェント・状態を保つ
+    await spaceBtn(page, /^開発/).click();
+    const label = (await alpha.getAttribute("aria-label")) ?? "";
+    expect(label).toContain("ローカル");
+    expect(label).toContain("Claude Code");
+    expect(label).toContain("作業中");
+  });
+
+  test("モダンの様式でも、ノードの中身は 200×80 に収まり、ツールバーのボタンの高さは様式のトークン", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await w.client.request("prefs.set", { patch: { uiStyle: "modern" } });
+    await expect.poll(() => page.evaluate(() => document.documentElement.getAttribute("data-ui-style"))).toBe("modern");
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    expect(await nodeSize(page, w.pane.get("alpha")!)).toEqual({ w: 200, h: 80 });
+    expect(await nodeFits(page, w.pane.get("alpha")!)).toBe(true);
+    expect(await nodeFits(page, w.pane.get("alpha:second")!)).toBe(true);
+    const h = await page.evaluate(() => Math.round(document.querySelector<HTMLElement>(".graph-toolbar .graph-tool")!.getBoundingClientRect().height));
+    expect(h).toBe(32); // --soda-shape-control-h（モダン）
+    const radius = await frameOf(page, w.ws.get("alpha")!.id).evaluate((el) => getComputedStyle(el).borderTopLeftRadius);
+    expect(radius).toBe("12px");
+    const tagH = await frameOf(page, w.ws.get("alpha")!.id).locator("[data-tab-tag]").first().evaluate((el) => Math.round(el.getBoundingClientRect().height / (el.closest(".graph-world") ? Number(/scale\(([\d.]+)\)/.exec((el.closest(".graph-world") as HTMLElement).style.transform)?.[1] ?? 1) : 1)));
+    expect(tagH).toBe(28);
+  });
+
+  test("ツールバー: 左に「線を結ぶ」「並びを整える」「そのほか」、右に探す・拡大縮小・「全体を表示」。題と「×」は無い。「そのほか」のメニューに、一時停止・履歴・別のマシンの pane を載せる", async ({ page, appServer }) => {
+    await boot(page, appServer);
+    await openGraph(page);
+    const bar = graphView(page).locator(".graph-toolbar");
+    await expect(bar.locator(":scope > .graph-tool")).toHaveText(["線を結ぶ", "並びを整える", "そのほか ▾", "−", "＋", "全体を表示"]);
+    await expect(graphView(page).locator(".graph-close, .graph-title")).toHaveCount(0);
+    // 左のボタンは探すより左・右のものは右
+    const more = await box(bar.locator(".graph-more"));
+    const find = await box(bar.locator(".graph-find-input"));
+    const fit = await box(bar.locator(".graph-fit"));
+    expect(more.x).toBeLessThan(find.x);
+    expect(find.x).toBeLessThan(fit.x);
+    // 「そのほか」: メニュー（ContextMenu）。Esc で閉じて、ボタンへフォーカスが戻る
+    await bar.locator(".graph-more").click();
+    const menu = page.locator(".context-menu");
+    await expect(menu.locator("[role=menuitem]")).toHaveText(["全体を一時停止", "履歴", "別のマシンの pane を載せる"]);
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(bar.locator(".graph-more")).toBeFocused();
+    // 履歴
+    await bar.locator(".graph-more").click();
+    await menu.getByRole("menuitem", { name: "履歴" }).click();
+    await expect(graphView(page).locator(".history-panel")).toBeVisible();
+    // 載せるチェックリスト（閉じるとボタンへ戻る）
+    await bar.locator(".graph-more").click();
+    await menu.getByRole("menuitem", { name: "別のマシンの pane を載せる" }).click();
+    await expect(graphView(page).locator(".pane-checklist")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(graphView(page).locator(".pane-checklist")).toHaveCount(0);
+    await expect(bar.locator(".graph-more")).toBeFocused();
+    // 一時停止: 札と［再開］が出る。再開で消える
+    await bar.locator(".graph-more").click();
+    await menu.getByRole("menuitem", { name: "全体を一時停止" }).click();
+    await expect(bar.locator(".graph-paused-badge")).toContainText("一時停止中");
+    await expect(bar.locator(".graph-resume")).toHaveText("再開");
+    await bar.locator(".graph-resume").click();
+    await expect(bar.locator(".graph-paused-badge")).toHaveCount(0);
+  });
+
+  test("「線を結ぶ」: ノードを選んでいれば、そこから接続モード。選んでいなければ案内だけ", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    await page.locator(".graph-canvas").click({ position: { x: 600, y: 300 } }); // 何も無い所: 選択を外す
+    await graphView(page).locator(".graph-connect").click();
+    await expect(graphView(page).locator(".graph-connect-banner")).toHaveCount(0);
+    await expect(page.locator(".toast-list .toast").filter({ hasText: "ノードを選んでから" })).toHaveCount(1);
+    await nodeOf(page, w.pane.get("alpha")!).focus();
+    await graphView(page).locator(".graph-connect").click();
+    await expect(graphView(page).locator(".graph-connect-banner")).toBeVisible();
+  });
+
+  test("選んでいる workspace の囲い: 枠は accent の実線 2px・外側に薄い輪。サイドバー: 表示中の空間のグループの見出しに「表示中」の札（グラフの画面の間だけ）", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await rowOf(page, "alpha").click();
+    await expect(page.locator("[data-space-badge]")).toHaveCount(0); // 基本画面には出ない
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    const sel = frameOf(page, w.ws.get("alpha")!.id);
+    await expect(sel).toHaveClass(/graph-frame-selected/);
+    const st = await sel.evaluate((el) => {
+      const c = getComputedStyle(el);
+      return { w: c.borderTopWidth, style: c.borderTopStyle, shadow: c.boxShadow };
+    });
+    expect(st.w).toBe("2px");
+    expect(st.style).toBe("solid");
+    expect(st.shadow).toMatch(/0px 0px 0px 5px/);
+    // 札: 開発の見出しに 1 つだけ。空間を替えると動く
+    await expect(page.locator("[data-space-badge]")).toHaveCount(1);
+    await expect(rowOf(page, "開発").locator("[data-space-badge]")).toHaveText("表示中");
+    await spaceBtn(page, /^ドキュメント/).click();
+    await expect(rowOf(page, "ドキュメント").locator("[data-space-badge]")).toHaveText("表示中");
+    await expect(rowOf(page, "開発").locator("[data-space-badge]")).toHaveCount(0);
+    await spaceBtn(page, /^グループなし/).click();
+    await expect(rowOf(page, "グループなし").locator("[data-space-badge]")).toHaveText("表示中");
+    await switcherBtnBase(page).click();
+    await expect(page.locator("[data-space-badge]")).toHaveCount(0);
+  });
+});
+
+test.describe("並びを整える（PR1e T17c）", () => {
+  const tidyBtn = (page: Page) => graphView(page).locator(".graph-tidy");
+  /** 開発の空間のノード（鍵）。 */
+  const devKeys = (w: World) => ["alpha", "alpha:second", "main-ws", "wt-a-ws", "wt-b-ws"].map((n) => `local:${w.pane.get(n)!}`);
+
+  test("押すと確認（N 個）が出る。やめれば何も送らない。並べ直すと 1 回の graph.update（move_node の列）で、囲いは重ならず、ほかの空間は動かず、線は変わらない", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await addTriggerLink(w, "alpha", "main-ws");
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    const before = await serverPositions(w);
+    const linksBefore = (await w.client.request("graph.get", {})).links;
+    const sent0 = updatesSent(w).length;
+    await tidyBtn(page).click();
+    const confirm = graphView(page).locator(".graph-confirm");
+    await expect(confirm).toContainText("この空間の 5 個のノードの位置を、並べ直します");
+    await confirm.getByRole("button", { name: "やめる" }).click();
+    await expect(confirm).toHaveCount(0);
+    expect(updatesSent(w).length).toBe(sent0); // 勝手に走らない
+    expect(await serverPositions(w)).toEqual(before);
+    await tidyBtn(page).click();
+    await confirm.getByRole("button", { name: "並べ直す" }).click();
+    await expect.poll(() => updatesSent(w).length).toBe(sent0 + 1);
+    const ops = (updatesSent(w).at(-1)!.params as { ops: { op: string }[] }).ops;
+    expect(ops).toHaveLength(5);
+    expect(ops.every((o) => o.op === "move_node")).toBe(true);
+    const after = await serverPositions(w);
+    for (const [k, p] of before) if (!devKeys(w).includes(k)) expect(after.get(k), `他の空間 ${k}`).toEqual(p);
+    expect(devKeys(w).some((k) => after.get(k)!.x !== before.get(k)!.x || after.get(k)!.y !== before.get(k)!.y)).toBe(true);
+    // 囲いの箱どうしが重ならない（入れ子の関係〔worktree グループとその中〕は除く）
+    await expect.poll(async () => {
+      const rects = await graphView(page).locator("[data-frame-id]").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as { x: number; y: number; width: number; height: number }));
+      const contains = (a: (typeof rects)[number], b: (typeof rects)[number]) => a.x <= b.x + 1 && a.y <= b.y + 1 && a.x + a.width >= b.x + b.width - 1 && a.y + a.height >= b.y + b.height - 1;
+      let bad = 0;
+      for (let i = 0; i < rects.length; i++)
+        for (let j = i + 1; j < rects.length; j++) {
+          const a = rects[i]!;
+          const b = rects[j]!;
+          if (contains(a, b) || contains(b, a)) continue;
+          if (a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height) bad++;
+        }
+      return bad;
+    }).toBe(0);
+    expect((await w.client.request("graph.get", {})).links).toEqual(linksBefore);
+    await expect(page.locator(".toast-list .toast").filter({ hasText: "並べ直しました" })).toHaveCount(1);
+  });
+
+  test("並べ直した直後は［元に戻す］で、前の位置へ（1 回の graph.update）。別の更新が入ったら、ボタンは消える", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    const before = await serverPositions(w);
+    await tidyBtn(page).click();
+    await graphView(page).locator(".graph-confirm").getByRole("button", { name: "並べ直す" }).click();
+    const toast = page.locator(".toast-list .toast").filter({ hasText: "並べ直しました" });
+    await expect(toast).toHaveCount(1);
+    const sent0 = updatesSent(w).length;
+    await toast.locator(".toast-action").click();
+    await expect.poll(() => updatesSent(w).length).toBe(sent0 + 1);
+    await expect.poll(async () => JSON.stringify([...(await serverPositions(w))].sort())).toBe(JSON.stringify([...before].sort()));
+    await expect(toast).toHaveCount(0);
+    // もう一度並べ直し → 別の更新（ほかから）が入ると、ボタンが消える
+    await tidyBtn(page).click();
+    await graphView(page).locator(".graph-confirm").getByRole("button", { name: "並べ直す" }).click();
+    await expect(toast).toHaveCount(1);
+    const g = await w.client.request("graph.get", {});
+    const k = `local:${w.pane.get("gamma")!}` as const;
+    await w.client.request("graph.update", { baseRev: g.rev, ops: [{ op: "move_node", key: k, x: g.nodes.find((n) => n.key === k)!.x + 40, y: g.nodes.find((n) => n.key === k)!.y }] });
+    await expect(toast).toHaveCount(0);
+  });
+
+  test("別のブラウザにも反映される。モバイル（1 列）には「並びを整える」は出ない", async ({ browser, page, appServer }) => {
+    const w = await boot(page, appServer);
+    await openGraph(page);
+    await spaceBtn(page, /^開発/).click();
+    const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const p2 = await ctx2.newPage();
+    await p2.goto(`${appServer.origin}/#token=${appServer.token}`);
+    await p2.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+    await p2.keyboard.press("Control+b");
+    await p2.keyboard.press("a");
+    await spaceBtn(p2, /^開発/).click();
+    const key = devKeys(w)[2]!;
+    const before = (await serverPositions(w)).get(key)!;
+    await tidyBtn(page).click();
+    await graphView(page).locator(".graph-confirm").getByRole("button", { name: "並べ直す" }).click();
+    await expect.poll(async () => (await serverPositions(w)).get(key)).not.toEqual(before);
+    const after = (await serverPositions(w)).get(key)!;
+    expect(after).toBeTruthy();
+    await expect(nodeOf(p2, w.pane.get("main-ws")!)).toBeVisible();
+    await ctx2.close();
+    await page.setViewportSize({ width: 600, height: 800 });
+    await page.locator(".mobile-shell-graph-btn").click();
+    await expect(page.locator("dialog#soda-graph-dialog .graph-tidy")).toHaveCount(0);
+  });
+});
+
 test.describe("基本画面の変更への追従・複数のブラウザ", () => {
   test("基本画面で pane・workspace・グループを変えると、グラフ（空間の並び・囲い・ノード）が追従する", async ({ page, appServer }) => {
     const w = await boot(page, appServer);
@@ -1455,6 +1725,45 @@ test("スクリーンショット（PR1d）: 小さな地図と探す（暗い�
     await expect(graphView(p).locator(".graph-find-list")).toBeVisible();
     await p.waitForTimeout(500);
     await p.screenshot({ path: `${dir}/graph-find-${style}-${scheme}.png` });
+    await context.close();
+  }
+});
+
+test("スクリーンショット（PR1e）: 案に寄せたグラフ（クラシック・モダン × 暗い・明るい）", async ({ browser, page, appServer }) => {
+  const dir = process.env["GRAPH_SHOTS_DIR"];
+  test.skip(dir === undefined, "GRAPH_SHOTS_DIR を渡したときだけ撮る");
+  const w = await boot(page, appServer);
+  for (const name of ["alpha", "alpha:second", "main-ws", "wt-a-ws"]) await w.client.request("pane.subscribe", { paneId: w.pane.get(name)!, scrollbackLines: 4000 });
+  // エージェント: 作業中・承認待ち・完了（3 つ）。残りはシェル
+  const a1 = await launchFakeAgent(page, w.client, w.pane.get("alpha")!, { via: "client" });
+  const a2 = await launchFakeAgent(page, w.client, w.pane.get("main-ws")!, { via: "client" });
+  const a3 = await launchFakeAgent(page, w.client, w.pane.get("wt-a-ws")!, { via: "client" });
+  await a1.work();
+  await a2.block();
+  await a3.work();
+  await a3.idle();
+  // 線 2 本（きっかけ・監督）
+  await addTriggerLink(w, "alpha", "main-ws");
+  const g = await w.client.request("graph.get", {});
+  await w.client.request("graph.update", {
+    baseRev: g.rev,
+    ops: [{ op: "add_link", kind: "supervise", from: `local:${w.pane.get("wt-a-ws")!}`, to: `local:${w.pane.get("wt-b-ws")!}` }],
+  });
+  for (const [scheme, style] of [["dark", "classic"], ["light", "classic"], ["dark", "modern"], ["light", "modern"]] as const) {
+    await w.client.request("prefs.set", { patch: { theme: scheme === "light" ? "catppuccin-latte" : "dracula", uiStyle: style } });
+    const context = await browser.newContext({ colorScheme: scheme, viewport: { width: 1440, height: 800 } });
+    const p = await context.newPage();
+    await p.goto(`${appServer.origin}/#token=${appServer.token}`);
+    await p.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+    await p.keyboard.press("Control+b");
+    await p.keyboard.press("a");
+    await expect(graphView(p)).toBeVisible();
+    await spaceBtn(p, /^開発/).click();
+    await expect(graphView(p).locator("[data-node-key]").first()).toBeVisible();
+    await p.evaluate(() => document.querySelectorAll<HTMLElement>(".toast-list .toast").forEach((t) => t.click()));
+    await graphView(p).locator("[data-node-key]").first().click({ position: { x: 100, y: 25 } }); // 1 つ選ぶ
+    await p.waitForTimeout(600);
+    await p.screenshot({ path: `${dir}/graph-pr1e-${style}-${scheme}.png` });
     await context.close();
   }
 });

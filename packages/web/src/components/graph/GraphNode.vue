@@ -9,6 +9,7 @@ import { computed } from "vue";
 import { GRAPH_NODE_HEIGHT, GRAPH_NODE_WIDTH, stateLabel } from "@sodashitsu/client-core";
 import type { GraphNodeInfo } from "../../store/graph.js";
 import StateIcon from "../StateIcon.vue";
+import { nodeText } from "./nodeText.js";
 
 const props = defineProps<{
   info: GraphNodeInfo;
@@ -46,6 +47,9 @@ const emit = defineEmits<{
 }>();
 
 const invalid = computed(() => props.info.exists === false);
+const text = computed(() => nodeText(props.info));
+/** 承認待ち（枠・2 行目の色でも分かる。色だけに頼らず、状態の語も出す）。 */
+const approval = computed(() => !invalid.value && props.info.state === "blocked");
 
 const agentLine = computed(() => {
   const a = props.info.agent;
@@ -80,6 +84,7 @@ const ariaLabel = computed(() => {
     :class="{
       'graph-node-selected': selected,
       'graph-node-invalid': invalid,
+      'graph-node-approval': approval,
       'graph-node-source': connectSource,
       'graph-node-drop': dropTarget,
       'graph-node-weak': tabEmphasis === 'weak',
@@ -99,15 +104,22 @@ const ariaLabel = computed(() => {
     }"
     @pointerdown="emit('bodyPointerdown', $event)"
   >
-    <span v-if="tabLabel" class="graph-node-tab" :title="`tab: ${tabLabel}`" data-node-tab>{{ tabLabel }}</span>
     <div class="graph-node-head">
-      <span class="graph-node-name">{{ info.name }}</span>
-      <span class="graph-node-machine">{{ info.machineLabel }}</span>
+      <StateIcon v-if="info.agent" class="graph-node-state" :state="info.state" />
+      <span v-else class="graph-node-shell" aria-hidden="true"></span>
+      <span class="graph-node-name" :title="text.name">{{ text.name }}</span>
+      <span v-if="tabLabel" class="graph-node-tab" :title="`tab: ${tabLabel}`" data-node-tab>{{ tabLabel }}</span>
     </div>
-    <div class="graph-node-agent">
-      <StateIcon class="graph-node-state" :state="info.state" />
-      <span class="graph-node-agent-name">{{ agentLine }}</span>
-      <!-- サブエージェントの件数（20261004-subagent-display）。エージェントの行の右。ノードの大きさは変えない。読み取りだけ（モバイル）では数だけで押せない。 -->
+    <div class="graph-node-sub">
+      <span v-if="text.machine" class="graph-node-machine" :title="text.machine">{{ text.machine }}</span>
+      <span class="graph-node-agent-name">{{ text.kind }}</span>
+      <template v-if="text.state"
+        ><span class="graph-node-dot" aria-hidden="true">・</span><span class="graph-node-state-text">{{ text.state }}</span></template
+      >
+      <template v-else-if="text.place"
+        ><span class="graph-node-dot" aria-hidden="true">・</span><span class="graph-node-place" :title="info.cwd ?? undefined">{{ text.place }}</span></template
+      >
+      <!-- サブエージェントの件数（20261004-subagent-display）。2 行目の右。ノードの大きさは変えない。読み取りだけ（モバイル）では数だけで押せない。 -->
       <template v-if="subagentCount > 0">
         <span
           v-if="readOnly"
@@ -115,12 +127,7 @@ const ariaLabel = computed(() => {
           :aria-label="`サブエージェント ${subagentCount} 件`"
         >
           <svg class="graph-node-subagents-icon" viewBox="0 0 12 12" aria-hidden="true">
-            <path
-              d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-            />
+            <path d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.4" />
           </svg>
           <span aria-hidden="true">{{ subagentCount }}</span>
         </span>
@@ -135,12 +142,7 @@ const ariaLabel = computed(() => {
           @click.stop="emit('subagents')"
         >
           <svg class="graph-node-subagents-icon" viewBox="0 0 12 12" aria-hidden="true">
-            <path
-              d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-            />
+            <path d="M2 1v6a2 2 0 0 0 2 2h5M7 6l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.4" />
           </svg>
           <span aria-hidden="true">{{ subagentCount }}</span>
         </button>
@@ -162,6 +164,7 @@ const ariaLabel = computed(() => {
       </button>
     </div>
     <div v-else-if="info.exists === null" class="graph-node-warn">未接続</div>
+    <!-- pane へ移る入口は小さく、選んでいる（か、フォーカス・ホバーがある）ときだけ右下に出す（PR2 で、ノードを押すと端末の窓が開く）。 -->
     <button
       v-if="!readOnly && !invalid"
       type="button"
@@ -192,7 +195,8 @@ const ariaLabel = computed(() => {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  justify-content: center;
+  gap: 3px;
   padding: 6px 10px;
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius-l);
@@ -209,16 +213,14 @@ const ariaLabel = computed(() => {
   border-color: var(--soda-accent, #6070a1);
   box-shadow: 0 0 0 2px var(--soda-accent, #6070a1);
 }
-/* 右上の tab のタグ（枠に半分かかる丸い小さなタグ）。 */
+/* 1 行目の右の tab のタグ（小さな丸い札）。 */
 .graph-node-tab {
-  position: absolute;
-  top: -9px;
-  right: 8px;
-  max-width: 7em;
+  flex: none;
+  max-width: 6em;
   padding: 0 8px;
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: 10px;
-  background: var(--soda-menu-bg, #282a36);
+  background: var(--soda-subtle-bg, #343746);
   color: var(--soda-menu-fg, #f8f8f2);
   font-size: 10px;
   line-height: 16px;
@@ -252,7 +254,7 @@ const ariaLabel = computed(() => {
 }
 .graph-node-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   min-width: 0;
 }
@@ -262,23 +264,57 @@ const ariaLabel = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
   font-weight: bold;
 }
-.graph-node-machine {
+/* エージェントの居ない pane（シェル）の印: 丸ではなく、小さな灰色の四角 */
+.graph-node-shell {
   flex: none;
-  opacity: 0.7;
-  font-size: 11px;
+  width: 0.6em;
+  height: 0.6em;
+  margin: 0 0.2em;
+  border-radius: 1px;
+  background: var(--soda-state-idle, #8a9ad0);
+  opacity: 0.8;
 }
-.graph-node-agent {
+.graph-node-sub {
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--soda-menu-fg, #f8f8f2) 78%, transparent);
+  white-space: nowrap;
 }
-.graph-node-agent-name {
+.graph-node-machine {
+  flex: none;
+  max-width: 6em;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--soda-subtle-bg, #343746);
+  font-size: 11px;
+}
+.graph-node-agent-name,
+.graph-node-place {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.graph-node-state-text {
+  flex: none;
+}
+.graph-node-dot {
+  flex: none;
+  opacity: 0.7;
+}
+/* 承認待ち: 枠と 2 行目の色でも分かる（状態の語は、そのまま出す） */
+.graph-node-approval {
+  border-color: var(--soda-state-blocked, #ff6e6e);
+}
+.graph-node-approval .graph-node-sub {
+  color: var(--soda-state-blocked, #ff6e6e);
 }
 .graph-node-subagents {
   display: inline-flex;
@@ -321,8 +357,9 @@ button.graph-node-subagents:hover {
 }
 .graph-node-goto {
   position: absolute;
-  right: 18px;
-  bottom: 4px;
+  right: 12px;
+  bottom: 3px;
+  display: none;
   padding: 0 6px;
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius);
@@ -330,6 +367,11 @@ button.graph-node-subagents:hover {
   color: inherit;
   font-size: 11px;
   cursor: pointer;
+}
+.graph-node-selected .graph-node-goto,
+.graph-node:hover .graph-node-goto,
+.graph-node:focus-within .graph-node-goto {
+  display: block;
 }
 .graph-node-handle {
   position: absolute;

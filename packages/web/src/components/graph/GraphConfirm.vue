@@ -101,6 +101,7 @@ function onKeydown(ev: KeyboardEvent): void {
 }
 .graph-confirm-actions button {
   padding: 4px 12px;
+  min-height: var(--soda-shape-control-h, 0);
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius);
   background: var(--soda-subtle-bg, #343746);

@@ -447,6 +447,12 @@ function toggleLabel(row: SpaceRow): string {
 
 /** グループの頭の折りたたみアイコン。グループはサーバに永続化（RPC）、worktree グループは
  *  共有の設定（`view.toggleAutoGroupCollapsed`。20260923-workspace-grouping）。 */
+/** グラフで表示中の空間の、グループの見出しの行か（グラフの画面の間の札）。手動のグループは `g:<id>`・「グループなし」は `u`。 */
+function isShownSpaceHead(row: SpaceRow): boolean {
+  const id = row.groupKind === "manual" && row.groupTargetId ? `g:${row.groupTargetId}` : row.groupKind === "ungrouped" ? "u" : null;
+  return id !== null && graphSpaces.currentId === id;
+}
+
 function onToggleCollapse(row: SpaceRow): void {
   // 「グループなし」の折りたたみは共有の設定（`ungroupedCollapsed`）。
   if (row.groupKind === "ungrouped") {
@@ -915,6 +921,13 @@ watchDragInterrupt(view, () => {
                   <StateIcon v-if="row.workspace" class="sidebar-state-icon" :state="row.state" />
                   <span v-if="!view.sidebarCollapsed" class="sidebar-label" :class="{ 'sidebar-group-label': !row.workspace }">{{ row.workspace ? row.workspace.label : row.groupLabel }}</span>
                   <span v-if="!view.sidebarCollapsed && !row.workspace" class="sidebar-group-rule" aria-hidden="true" />
+                  <!-- グラフの画面の間だけ、グラフで表示中の空間のグループの見出しに札（20261008-graph-first の PR1e。AC-L5） -->
+                  <span
+                    v-if="!view.sidebarCollapsed && !row.workspace && view.screen === 'graph' && isShownSpaceHead(row)"
+                    class="sidebar-space-badge"
+                    data-space-badge
+                    >表示中</span
+                  >
                   <span v-if="!view.sidebarCollapsed && row.count !== null" class="sidebar-group-count" :aria-label="`${row.count} 件`">{{ row.count }}</span>
                 </template>
                 <!-- 値はテキストの差し込み（{{ }}）だけで描く（外から報告された独自トークンを HTML にしない）。style は検証済みの色と固定の値だけ。 -->
@@ -1317,6 +1330,15 @@ watchDragInterrupt(view, () => {
   min-width: 0.5em;
   height: 0;
   border-top: 1px solid var(--soda-menu-border, #44475a);
+}
+.sidebar-space-badge {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--soda-shape-radius-s, 3px);
+  background: var(--soda-accent, #6070a1);
+  color: var(--soda-accent-fg, #f8f8f2);
+  font-size: 10px;
+  line-height: 15px;
 }
 .sidebar-group-count {
   flex: none;

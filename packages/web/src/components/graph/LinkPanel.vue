@@ -457,7 +457,7 @@ defineExpose({ requestClose, focusFirstField, showConflict });
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
+  padding: var(--soda-shape-pad-x, 12px);
   overflow-y: auto;
   border-left: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
@@ -529,6 +529,7 @@ defineExpose({ requestClose, focusFirstField, showConflict });
 }
 .link-panel button {
   padding: 3px 10px;
+  min-height: var(--soda-shape-control-h, 0);
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius);
   background: var(--soda-subtle-bg, #343746);

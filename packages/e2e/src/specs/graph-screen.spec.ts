@@ -59,7 +59,7 @@ async function closeByEsc(page: Page) {
   await expect(graphView(page)).toBeHidden();
 }
 
-test("開く（prefix+a）: ノードが 2 つ出る。Esc・×・prefix+a のどれでも閉じる。閉じたら開く前の端末にフォーカスが戻る", async ({ page, appServer }) => {
+test("開く（prefix+a）: ノードが 2 つ出る。Esc・切り替えの「基本画面」・prefix+a のどれでも閉じる（デスクトップに「×」と題は無い）。閉じたら開く前の端末にフォーカスが戻る", async ({ page, appServer }) => {
   const { p1, p2 } = await setup(page, appServer);
   await openByKey(page);
   await expect(node(page, p1)).toBeVisible();
@@ -67,9 +67,11 @@ test("開く（prefix+a）: ノードが 2 つ出る。Esc・×・prefix+a の�
   // Esc
   await closeByEsc(page);
   await expect.poll(() => activeIsTerminal(page)).toBe(true);
-  // ×
+  // デスクトップの画面に、「×」と題「連携（グラフ）」は出さない（PR1e AC-L2。モバイルの重ねるダイアログでは残す: 下の「窓を狭めて…」の試験）。切り替えの「基本画面」で戻る
   await openByKey(page);
-  await graphView(page).locator(".graph-close").click();
+  await expect(graphView(page).locator(".graph-close")).toHaveCount(0);
+  await expect(graphView(page).locator(".graph-title")).toHaveCount(0);
+  await switcherBtn(page, "base").click();
   await expect(graphView(page)).toBeHidden();
   await expect.poll(() => activeIsTerminal(page)).toBe(true);
   // もう一度 prefix+a
