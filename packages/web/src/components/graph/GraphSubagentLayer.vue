@@ -259,6 +259,7 @@ function onKeydown(ev: KeyboardEvent, parentKey: string): void {
           :data-subagent-parent="c.parentKey"
           :data-subagent-id="r.id"
           :aria-label="r.aria"
+          :title="r.aria"
           :style="{ left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${ROW_H}px`, zIndex: r.z }"
           @pointerdown.stop
           @keydown="onKeydown($event, c.parentKey)"

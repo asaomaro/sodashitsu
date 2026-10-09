@@ -137,6 +137,7 @@ describe("小さなサブエージェントのノード（層の単体）", () =
     expect(r[0]!.attributes("style")).toContain("left: 320px");
     expect(r[0]!.attributes("style")).toContain("top: 106px");
     expect(r[0]!.attributes("tabindex")).toBe("-1");
+    expect(r[0]!.attributes("title")).toBe(r[0]!.attributes("aria-label")); // 切れた種類・説明を、ホバーで読める
     w.unmount();
   });
 
