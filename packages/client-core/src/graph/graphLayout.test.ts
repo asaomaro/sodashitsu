@@ -311,6 +311,30 @@ describe("placeNode（隣がいる長い増加。PR1a 再レビュー指摘 1）
     expect([...layoutOverlaps(st, pos).keys()]).toEqual([]);
   });
 
+  it("隣に囲まれた workspace は、横一列に伸び続けない: 80 個足しても、囲いの縦横の比がほぼ正方形（20261008-graph-first PR1c T11h）", () => {
+    const a = ws("a", 0);
+    const b = ws("b", 3);
+    const c = ws("c", 3);
+    const st = structureOf([
+      { id: "a", kind: "workspace", members: [a] },
+      { id: "b", kind: "workspace", members: [b] },
+      { id: "c", kind: "workspace", members: [c] },
+    ]);
+    const pos = new Map<string, GraphPoint>();
+    b.nodes.forEach((key, i) => pos.set(key, { x: 300 + i * 240, y: 60 }));
+    c.nodes.forEach((key, i) => pos.set(key, { x: 60 + i * 240, y: 400 }));
+    for (let i = 0; i < 80; i++) {
+      const key = k(`a${i}`);
+      a.nodes.push(key);
+      const r = i === 0 ? placeFrame(st, pos, "a") : placeNode(st, pos, "a");
+      applyPlacement(st, pos, "a", key, r);
+    }
+    const f = frames(st, pos).find((x) => x.id === "a")!.rect;
+    const ratio = Math.max(f.w, f.h) / Math.min(f.w, f.h);
+    expect(ratio, `囲い ${f.w}×${f.h}`).toBeLessThan(2.5);
+    expect([...layoutOverlaps(st, pos).keys()]).toEqual([]);
+  });
+
   it("否定の対照: 出口の保証と実際の列数を外すと（頭打ちの列数の位置に置くと）既存のノードの真上になる", () => {
     // 頭打ちの列数（32）の位置 = 33 列目。32 列分、横一列に並んだ workspace の、33 列目より先を既存のノードがふさぐ状況を直接作る。
     const a = ws("a", 40);

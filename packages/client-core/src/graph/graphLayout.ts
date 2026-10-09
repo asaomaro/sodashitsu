@@ -451,15 +451,16 @@ function relocate(
   top: LayoutTop,
   memberId: string,
   memberPoints: readonly GraphPoint[],
-): { shift: GraphPoint; scope: "member" | "top" } {
+): { shift: GraphPoint; scope: "member" | "top"; exact: boolean } {
   const t = findTranslation(ctx, top, new Map([[memberId, memberPoints]]));
-  if (t.exact || top.kind !== "worktree") return { shift: snapPoint(t), scope: "member" };
+  if (t.exact || top.kind !== "worktree") return { shift: snapPoint(t), scope: "member", exact: t.exact };
   const all = new Map<string, readonly GraphPoint[]>();
   for (const m of top.members) {
     const pts = m.id === memberId ? memberPoints : (ctx.points.get(m.id) ?? []);
     if (pts.length > 0) all.set(m.id, pts);
   }
-  return { shift: snapPoint(findTranslation(ctx, top, all)), scope: "top" };
+  const t2 = findTranslation(ctx, top, all);
+  return { shift: snapPoint(t2), scope: "top", exact: t2.exact };
 }
 
 function placeFirst(ctx: Ctx, top: LayoutTop, memberId: string): PlaceNodeResult {
@@ -567,6 +568,8 @@ function placeNodeCore(
       const right = Math.max(0, i - cols + 1);
       const down = Math.max(0, j - rows + 1);
       const wrapPenalty = i >= Math.max(cols, wrapCols) ? 100 : 0;
+      // 右へ伸ばすのは、ほぼ正方形（幅が高さの 2 倍まで）の間だけ。それを超えるなら、囲いごと動かして、広げられる場所へ（横一列に伸び続けない。PR1c T11h）。
+      if (wrapPenalty > 0 && i + 1 > Math.max(wrapCols, rows * 2)) continue;
       cells.push({ i, j, cost: right + down + wrapPenalty, down });
     }
   }
@@ -610,13 +613,37 @@ function placeNodeCore(
     }
   }
 
-  // 詰んだ: 囲いごと動かす。新しいノードは、いまの外接の右隣（広げる最小）に置いたものとして、全体の置き場所を探す。
-  // 升の走査は `CELL_SCAN_MAX` で頭打ちにしているので、ここでは頭打ちにしていない実際の列数を使う（頭打ちの列数だと、既存のノードの真上になる）。
-  // そのうえで、その升が空いていることを確かめ、ふさがっていれば空くまで右へずらす——どの経路でも、既存のノードと重ねて置かない。
+  // 詰んだ: 囲いごと動かす。新しいノードは、ほぼ正方形の並び（`wrapCols` 列）の、行の順で最初の空いた升に置いたものとして、全体の置き場所を探す
+  // （いつも右隣に置くと、隣に囲まれた workspace が横一列に伸び続ける。20261008-graph-first の PR1c T11h）。すでに `wrapCols` より広いなら、その幅の下の行へ。
+  // 升の走査は `CELL_SCAN_MAX` で頭打ちにしているので、ここでは頭打ちにしていない実際の列数を使う。升は実際のノードと重ならないものだけを選ぶ——
+  // どの経路でも、既存のノードと重ねて置かない。
   const realCols = Math.max(1, Math.ceil((maxX - ox) / GRAPH_CELL_WIDTH));
-  const rel: GraphPoint = { x: ox + realCols * GRAPH_CELL_WIDTH, y: oy };
+  const targetCols = Math.max(wrapCols, realCols);
+  let rel: GraphPoint | null = null;
+  for (let j = 0; rel === null && j <= pts.length + 1; j++) {
+    for (let i = 0; i < targetCols; i++) {
+      const p: GraphPoint = { x: ox + i * GRAPH_CELL_WIDTH, y: oy + j * GRAPH_CELL_HEIGHT };
+      if (free(p, 0)) {
+        rel = p;
+        break;
+      }
+    }
+  }
+  rel ??= { x: ox + targetCols * GRAPH_CELL_WIDTH, y: oy };
   for (let guard = 0; guard < 10_000 && !free(rel, 0); guard++) rel.x += GRAPH_CELL_WIDTH;
-  const r = relocate(ctx, top, memberId, [...pts, rel]);
+  // 動かす先は、これから増える分の余白も含めて探す（動かした先で下・右に空きが無いと、また右へしか伸びられず、横一列に戻る）。
+  // 今のノードの数の 2 倍が、ほぼ正方形に収まる分を、仮のノードとして足す（動かす先を決めるときだけ。実際の位置は変えない）。倍々なので、動かす回数は少ない。
+  const reserveN = Math.max(4, (pts.length + 1) * 2);
+  const reserveCols = Math.max(Math.min(targetCols, CELL_SCAN_MAX), Math.ceil(Math.sqrt(reserveN)));
+  const reserve: GraphPoint[] = [];
+  for (let n = 0; n < reserveN; n++)
+    reserve.push({
+      x: ox + (n % reserveCols) * GRAPH_CELL_WIDTH,
+      y: oy + Math.floor(n / reserveCols) * GRAPH_CELL_HEIGHT,
+    });
+  // 余白つきで置ける場所が無ければ（見つからないと、重なる場所に落ちる）、余白なしで探す。
+  let r = relocate(ctx, top, memberId, [...pts, rel, ...reserve]);
+  if (!r.exact) r = relocate(ctx, top, memberId, [...pts, rel]);
   return { x: rel.x + r.shift.x, y: rel.y + r.shift.y, shift: r.shift, scope: r.scope };
 }
 
