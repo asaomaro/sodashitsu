@@ -5,7 +5,7 @@
  *
  * - 親（Claude Code のエージェントが動いている pane のノード）の右下から、縦に並べる。入れ子は字下げと、子へ伸びる枝。1 つの親につき 6 個まで、残りは「ほか n 件」の 1 枚（押すと一覧のパネル）。
  * - 現れて 2 秒たつまでは出さない。終わったものは 1 秒かけて消える（`prefers-reduced-motion` では動かさず、すぐ消える）。出入りの台帳は `subagentTree.ts`。
- * - 見るだけ: 動かせない・線を結べない・保存されない。押す・`Enter` は一覧のパネルを開く（PR6c で、記録を読む窓に替わる）。
+ * - 見るだけ: 動かせない・線を結べない・保存されない。押す・`Enter` は、そのサブエージェントの記録を読む窓を開く（「ほか n 件」は一覧のパネル）。
  * - キーボード: 親のノードで `d` → 最初の小さなノードへ（`focusFirst`）。↑ ↓ で移り、`Esc`・← で親のノードへ戻る。Tab の順には入れない（tabindex=-1）。
  * - 表示は文字だけ（説明はエージェントが書いた文。HTML として出さない）。色は `--soda-*`、角は様式のトークン。
  * 読み取りだけのモバイルの画面には置かない（件数だけ。呼び出し側が出さない）。
@@ -29,8 +29,8 @@ const props = defineProps<{
   infos: ReadonlyMap<string, GraphNodeInfo>;
 }>();
 const emit = defineEmits<{
-  /** 小さなノード・「ほか n 件」が押された（親のノードの鍵）。 */
-  open: [parentKey: string];
+  /** 小さなノード（そのサブエージェントの id）・「ほか n 件」（`null`）が押された（親のノードの鍵）。 */
+  open: [parentKey: string, agentId: string | null];
   /** `Esc`・← で、親のノードへ戻る。 */
   leave: [parentKey: string];
 }>();
@@ -262,7 +262,7 @@ function onKeydown(ev: KeyboardEvent, parentKey: string): void {
           :style="{ left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${ROW_H}px`, zIndex: r.z }"
           @pointerdown.stop
           @keydown="onKeydown($event, c.parentKey)"
-          @click.stop="emit('open', c.parentKey)"
+          @click.stop="emit('open', c.parentKey, r.id)"
         >
           <span class="graph-subagent-type">{{ r.label }}</span>
           <span v-if="r.desc" class="graph-subagent-desc">{{ r.desc }}</span>
@@ -280,7 +280,7 @@ function onKeydown(ev: KeyboardEvent, parentKey: string): void {
           :style="{ left: `${c.more.left}px`, top: `${c.more.top}px`, width: `${ROW_W}px`, height: `${ROW_H}px` }"
           @pointerdown.stop
           @keydown="onKeydown($event, c.parentKey)"
-          @click.stop="emit('open', c.parentKey)"
+          @click.stop="emit('open', c.parentKey, null)"
         >
           ほか {{ c.more.n }} 件
         </button>

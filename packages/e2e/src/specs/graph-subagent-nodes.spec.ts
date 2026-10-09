@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -76,6 +76,30 @@ const graphView = (page: Page) => page.locator(".graph-view");
 const graphNode = (page: Page, paneId: string) => graphView(page).locator(`[data-node-key="local:${paneId}"]`);
 const smallRows = (page: Page) => graphView(page).locator("button[data-subagent-id]");
 const SHOTS = process.env["SUBAGENT_SHOTS_DIR"];
+const transcriptWin = (page: Page) => graphView(page).locator("[data-subagent-transcript]");
+const jl = (type: string, content: unknown) => `${JSON.stringify({ type, timestamp: "2026-10-09T01:02:03.000Z", message: { content } })}\n`;
+
+/** Claude Code の記録の置き場所（`CLAUDE_CONFIG_DIR/projects`）を一時のフォルダへ向ける（実物の `~/.claude` に何も書かない）。 */
+async function withConfigDir<T>(body: (cfg: string) => Promise<T>): Promise<T> {
+  const cfg = await mkdtemp(join(tmpdir(), "soda-e2e-claudecfg-"));
+  const saved = process.env["CLAUDE_CONFIG_DIR"];
+  process.env["CLAUDE_CONFIG_DIR"] = cfg;
+  try {
+    return await body(cfg);
+  } finally {
+    if (saved === undefined) delete process.env["CLAUDE_CONFIG_DIR"];
+    else process.env["CLAUDE_CONFIG_DIR"] = saved;
+    await rm(cfg, { recursive: true, force: true });
+  }
+}
+/** 記録（親の `<session>.jsonl` の隣の `<session>/subagents/agent-<id>.jsonl`）を作る。返すのは、フックが報告する親の記録の場所と、サブエージェントの記録のファイル。 */
+async function makeTranscript(cfg: string, id: string, lines: string): Promise<{ parent: string; file: string }> {
+  const proj = join(cfg, "projects", "-work-proj");
+  await mkdir(join(proj, SESSION, "subagents"), { recursive: true });
+  const file = join(proj, SESSION, "subagents", `agent-${id}.jsonl`);
+  await writeFile(file, lines);
+  return { parent: join(proj, `${SESSION}.jsonl`), file };
+}
 
 async function openGraph(page: Page, paneId: string): Promise<void> {
   await prefixKey(page, "a");
@@ -145,7 +169,82 @@ test("小さなノードを押すと一覧のパネルが開く。キー: 親の
   await expect(graphNode(page, paneId)).toBeFocused();
   await expect(graphView(page)).toBeVisible(); // 画面は閉じない
   await smallRows(page).first().click();
-  await expect(graphView(page).locator(".subagent-panel")).toBeVisible();
+  await expect(transcriptWin(page)).toBeVisible(); // 押すと、記録を読むだけの窓（報告に記録の場所が無いので、読めない旨を出す）
+  await expect(graphView(page).locator(".subagent-panel")).toHaveCount(0);
+});
+
+test("記録を読むだけの窓: 指示・発言・道具・結果が出て、書き足されると下に足される。終わっても読め、× で閉じる。入力はできない（AC-U4）", async ({ page, appServer }) => {
+  test.setTimeout(90_000);
+  await withConfigDir(async (cfg) => {
+    const { paneId } = await startFakeClaude(page, appServer);
+    const { parent, file } = await makeTranscript(
+      cfg,
+      "tr1",
+      jl("user", "ログを調べて") + jl("assistant", [{ type: "text", text: "見てみます" }, { type: "tool_use", name: "Bash", input: { command: "grep -r error /var/log", description: "ログを探す" } }]) + jl("user", [{ type: "tool_result", tool_use_id: "t1", content: "3 件見つかりました\n/var/log/a.log" }]),
+    );
+    await openGraph(page, paneId);
+    await report(appServer, paneId, { type: "subagent_pending", description: "ログを調べる", agentType: "Explore" });
+    await startSub(appServer, paneId, "tr1", { agentType: "Explore", transcriptPath: parent });
+    await expect(smallRows(page)).toHaveCount(1, { timeout: 6000 });
+    const sentToPane: string[] = [];
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Network.enable");
+    cdp.on("Network.webSocketFrameSent", (e) => sentToPane.push(e.response.payloadData));
+    await smallRows(page).first().click();
+    const win = transcriptWin(page);
+    await expect(win).toBeVisible();
+    await expect(win.locator('[data-kind="prompt"]')).toContainText("ログを調べて");
+    await expect(win.locator('[data-kind="say"]')).toContainText("見てみます");
+    await expect(win.locator('[data-kind="tool"]')).toContainText("Bash");
+    await expect(win.locator('details[data-kind="result"]')).toContainText("3 件見つかりました");
+    await expect(win.locator('details[data-kind="result"]')).not.toHaveAttribute("open", "");
+    await expect(win).toContainText("読むだけ。サブエージェントには、入力できません");
+    await expect(win.locator("input, textarea, [contenteditable]")).toHaveCount(0);
+    await expect(win.locator("[data-subagent-transcript-state]")).toHaveText("実行中");
+    // 書き足されると、下に足される（1.5 秒ごとに続きを読む）。
+    await appendFile(file, jl("assistant", [{ type: "text", text: "<b>2 件目の発言</b>" }]));
+    await expect(win.locator('[data-kind="say"]').nth(1)).toContainText("<b>2 件目の発言</b>", { timeout: 6000 }); // 文字として出る
+    await expect(win.locator(".sat-body b")).toHaveCount(0);
+    // サブエージェントが終わっても、窓を閉じるまで読める。
+    await stopSub(appServer, paneId, "tr1");
+    await expect(smallRows(page)).toHaveCount(0, { timeout: 6000 });
+    await expect(win.locator("[data-subagent-transcript-state]")).toHaveText("終了", { timeout: 6000 });
+    await appendFile(file, jl("assistant", [{ type: "text", text: "終わった後の発言" }]));
+    await expect(win).toContainText("終わった後の発言", { timeout: 6000 });
+    // 窓の中のキーは、pane へもグラフへも届かない。
+    await win.locator(".sat-body").focus();
+    await page.keyboard.type("abc");
+    await page.waitForTimeout(300);
+    expect(sentToPane.filter((f) => f.includes('"abc"') || f.includes('"input"'))).toEqual([]);
+    // Esc で閉じる（グラフの画面は閉じない）。
+    await win.focus();
+    await page.keyboard.press("Escape");
+    await expect(win).toHaveCount(0);
+    await expect(graphView(page)).toBeVisible();
+  });
+});
+
+test("偽の報告で記録の場所を根の外へ向けても、窓には中身が出ない（読めない旨だけ）。別の pane・居ない id も読めない（AC-U5）", async ({ page, appServer }) => {
+  test.setTimeout(90_000);
+  await withConfigDir(async (cfg) => {
+    const { paneId } = await startFakeClaude(page, appServer);
+    const outside = await mkdtemp(join(tmpdir(), "soda-e2e-outside-"));
+    try {
+      const { parent } = await makeTranscript(outside, "ev1", jl("user", "TOPSECRET-FILE-CONTENT"));
+      await openGraph(page, paneId);
+      await startSub(appServer, paneId, "ev1", { agentType: "Explore", transcriptPath: parent });
+      await expect(smallRows(page)).toHaveCount(1, { timeout: 6000 });
+      await smallRows(page).first().click();
+      const win = transcriptWin(page);
+      await expect(win).toBeVisible();
+      await expect(win.locator("[data-subagent-transcript-note]")).toContainText("置き場所の外", { timeout: 6000 });
+      await expect(page.locator("body")).not.toContainText("TOPSECRET-FILE-CONTENT");
+      await expect(win).not.toContainText(outside);
+      void cfg;
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
 });
 
 test("60 個の出入りをくり返しても、画面が固まらない（描画のフレームの間隔）", async ({ page, appServer }) => {
@@ -193,7 +292,7 @@ if (SHOTS !== undefined) {
   test.describe("絵（判定しない）", () => {
     test.use({ viewport: { width: 1500, height: 800 } });
     for (const { key, theme } of THEMES)
-      for (const style of ["classic", "modern"] as const)
+      for (const style of ["classic", "modern"] as const) {
         test(`絵 ${style}-${key}`, async ({ page, appServer }) => {
           test.setTimeout(90_000);
           await mkdir(SHOTS, { recursive: true });
@@ -214,5 +313,31 @@ if (SHOTS !== undefined) {
           await page.waitForTimeout(600);
           await page.screenshot({ path: join(SHOTS, `pr6b-${style}-${key}.png`), animations: "disabled", caret: "hide" });
         });
+        test(`絵 6c ${style}-${key}`, async ({ page, appServer }) => {
+          test.setTimeout(90_000);
+          await mkdir(SHOTS, { recursive: true });
+          const c = await appServer.openClient();
+          await c.request("prefs.set", { patch: { theme, themeAuto: false, uiStyle: style } });
+          const { paneId } = await startFakeClaude(page, appServer);
+          await openGraph(page, paneId);
+          await withConfigDir(async (cfg) => {
+            const { parent } = await makeTranscript(
+              cfg,
+              "t0",
+              jl("user", "テストが落ちる理由を調べて、直す方針を提案してください。") +
+                jl("assistant", [{ type: "text", text: "まず失敗しているテストを確認します。" }, { type: "tool_use", name: "Bash", input: { command: "pnpm test --reporter=dot", description: "テストを流す" } }]) +
+                jl("user", [{ type: "tool_result", tool_use_id: "a", content: "FAIL src/foo.test.ts\n  expected 2 to be 3" }]) +
+                jl("assistant", [{ type: "text", text: "foo.test.ts の期待値が古いようです。ソースを読みます。" }, { type: "tool_use", name: "Read", input: { file_path: "/work/src/foo.ts" } }]),
+            );
+            await pending(appServer, paneId, "テストを直す", "general-purpose", false);
+            await startSub(appServer, paneId, "t0", { agentType: "general-purpose", transcriptPath: parent });
+            await page.locator('button[data-subagent-id="t0"]').click({ timeout: 8000 });
+            await expect(transcriptWin(page).locator('[data-kind="tool"]').nth(1)).toBeVisible({ timeout: 6000 });
+            await page.evaluate(() => document.fonts.ready.then(() => undefined));
+            await page.waitForTimeout(600);
+            await page.screenshot({ path: join(SHOTS, `pr6c-${style}-${key}.png`), animations: "disabled", caret: "hide" });
+          });
+        });
+      }
   });
 }
