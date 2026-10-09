@@ -1,28 +1,31 @@
 # タスク: エージェントの fork
 
-`design.md` の PR の分け方に従う。★ = タスクごとの独立点検。実際の Claude Code を起動する確かめは、費用がかかるので、**結合テストは、偽の `claude`（引数を記録して、フックの報告を真似るスクリプト）で行い、実物での確かめは、最後に 1〜2 回**（短い会話で）。
+`design.md`（**末尾の追補 01 が優先**）と、点検の全文 `doccheck.md` に従う。★ = タスクごとの独立点検。
 
 ## PR1: サーバと `sodactl`
 
-- [ ] T1: `agent.fork_preview`（読み取りだけ）。fork できるか・理由・コミットしていない変更の数（`git status --porcelain`。上限 2 秒）・作成先。接続の種類の検査。単体テスト。
+- [ ] T0: 実物での確かめ（スパイク。**最初に行う**。製品のコードは、まだ変えない）。実際の Claude Code（この開発機の版）で、短い会話を使って: (1) **対話中の、実際のセッション**を、別の端末から `claude --resume <id> --fork-session` で fork できるか (2) 初めてのフォルダ（新しい worktree）で fork したとき、信頼などの確認が出るか・出たときの画面の判定（`blocked` か）(3) fork した直後に、`idle` と判定されるのは、会話の読み込みが終わった後か（長めの会話で）(4) `/clear` の後、`SessionStart`（`source: clear`）で、会話の id が替わるか・Sodashitsu のフック（`matcher`）は、それを拾うか。結果を `research.md` に追記する。**結果が、設計（追補 01 の A8 ほか）と食い違うときは、止めて報告する。** 費用は最小に（3〜4 回の実行）。利用者の設定・既存の会話は、書き換えない。
       依存: なし
-      AC: AC1, AC3
-- [ ] T2: `agent.fork` の、同じフォルダ（**独立点検あり**）。元の pane の確かめ・会話の id を、サーバが引く（UUID の形だけ）・`split`・起動（`agent.start` の中の処理に、`--resume <id> --fork-session`。固定の表と、既存の引用の関数）・検知を待つ。ブラウザ・`sodactl` から、会話の id やコマンドの文字列を、差し込めないこと（方式の入力に、余計な項目を足しても、断られる）。偽の `claude` での結合テスト（起動の引数が、期待どおり・元の pane は、そのまま）。
+      AC: AC2, AC3
+- [ ] T1: サーバの待ちの関数と、`agent.fork_preview`。エージェントの検知・手が空くのを待つ関数（サーバの中のできごとを聞く。上限つき）。作ったばかりの pane が、入力を受けられるのを待つ関数（追補 01 A2）。`agent.fork_preview`（読み取りだけ: fork できるか・理由・コミットしていない変更の数〔`git status --porcelain`。上限 2 秒〕・作成先・ブランチ名が既にあるか）。`pane.sock` から呼べないこと。単体テスト。
+      依存: T0
+      AC: AC1, AC3, AC7
+- [ ] T2: `agent.fork` の、同じフォルダ（**独立点検あり**）。`AgentForkRunner`（追補 01 A1）。元の pane の確かめ・会話の id を、サーバが引く（UUID の形だけ。A7）・`split`（A9）・入力を受けられるのを待つ（A2）・起動（固定の表と、既存の引用の関数。`--resume <id> --fork-session`）・進み具合のできごと。`.strict()` の入力（A4。`sessionId`・`argv`・`args` を付けると、断られる）。偽の `claude`（引数を記録して、フックの報告を真似るスクリプト）での結合テスト（起動の引数が、期待どおり・元の pane は、そのまま・同じ pane を 2 回続けて fork・元の pane が、途中で閉じた）。
       依存: T1
       AC: AC2, AC5, AC7
-- [ ] T3: `agent.fork` の、新しい worktree と、最初の知らせ（**独立点検あり**）。`worktree.create` → `workspace.create` → 起動 → 手が空くのを待って、知らせを送る（上限 60 秒。切れたら送らない）。手順ごとの失敗（ブランチ名の重複・起動の失敗・待ちの時間切れ）で、何が残るかを、結果に返す。結合テスト。
+- [ ] T3: `agent.fork` の、新しい worktree と、最初の知らせ（**独立点検あり**）。ブランチ名が既にあれば断る（A6）→ `worktree.create` → `workspace.create`（A10）→ 起動 → 最初の知らせ（A8: 送る予定として持ち、手が空いたら送る。上限 10 分。`noteStatus`）。手順ごとの失敗で、何が残るか（A11）。パスに制御文字があるときは、送らない。結合テスト。
       依存: T2
       AC: AC3, AC7
-- [ ] T4: グラフの注記（**独立点検あり**）。`GraphNode.forkedFrom`・内部の更新 `set_node_note`（利用者の `graph.update` からは断る）・`reconcileGraph` の掃除・`AgentLineage` が、fork に自動の線を付けない。**古い `GraphSchema`（この変更の前の版）で、`forkedFrom` のあるファイルが、読める**ことのテスト（退避されない）。`sodactl graph show --json`。
+- [ ] T4: グラフの注記（**独立点検あり**）。`GraphNode.forkedFrom`（省ける項目）。サーバの内部の更新で書く（`GraphOp` は足さない。A12）。`GraphPaneCleanup` の掃除と、`rekey_node` の付け替え（A5）。**この変更の前の `GraphSchema`・`validateGraph` で、`forkedFrom` のあるファイルが、読める**（退避されない）ことのテスト。`sodactl graph show --json`。
       依存: T2
       AC: AC4
-- [ ] T5: `sodactl agent fork`・文書（`docs/agent-fork.md`・`docs/sodactl.md`・`docs/agent-graph.md`・`AGENTS.md`）。実物の Claude Code での確かめ（1〜2 回。対話中の実際のセッションを fork できるか——`research.md` の残りの問い）。`pnpm build`・`typecheck`・`pnpm test`。
+- [ ] T5: `sodactl agent fork`（既定で、最後まで待つ。`--no-wait`・`--worktree`・`--no-note`・`--json`）・文書（`docs/agent-fork.md`・`docs/sodactl.md`・`docs/agent-graph.md`・`AGENTS.md`）。実物の Claude Code で、通しの確かめ（同じフォルダと、新しい worktree を、1 回ずつ）。`pnpm build`・`typecheck`・`pnpm test`（負荷が低いときに）・起動確認。
       依存: T3, T4
       AC: AC6, AC8
 
 ## PR2: 画面
 
-- [ ] T6: メニューの項目と、ダイアログ（`AgentForkDialog.vue`）。pane の右クリックのメニュー・グラフのノードのメニュー。fork できないときの、押せない項目と理由。ダイアログ（行き先・ブランチ名・作成先・注意・最初の知らせ）。E2E（偽の `claude` で）。
+- [ ] T6: メニューの項目と、ダイアログ（`AgentForkDialog.vue`）。pane の右クリックのメニュー・グラフのノードのメニュー。fork できないときの、押せない項目と理由。ダイアログ（行き先・ブランチ名〔既にあれば、確定を押せない〕・作成先・注意・最初の知らせ）。進み具合と、「最初の知らせを、まだ送っていません」の表示。E2E（偽の `claude` で）。
       依存: T5
       AC: AC1, AC2, AC3
 - [ ] T7: グラフの「fork」の線（見るだけ）。別の空間のときの印。E2E・絵。クラシックの基本画面が、メニューの項目のほかは、変わらないこと（比べる道具）。
