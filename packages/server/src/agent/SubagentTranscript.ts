@@ -71,7 +71,9 @@ export async function resolveTranscriptFile(
   try {
     realDir = await realpath(dir);
   } catch (err) {
-    return { ok: false, reason: isNotFound(err) ? "missing" : "unreadable" };
+    // 存在しない場所は、字面が根の下のときだけ「まだ無い」。根の外の場所は、有っても無くても同じ答え（outside）にする（存在の確認に使わせない）。
+    const lexical = roots.some((r) => dir.startsWith(r + sep));
+    return { ok: false, reason: isNotFound(err) && lexical ? "missing" : isNotFound(err) ? "outside" : "unreadable" };
   }
   const realRoots: string[] = [];
   for (const r of roots) {
@@ -90,7 +92,7 @@ export async function resolveTranscriptFile(
   const file = join(realDir, `agent-${agentId}.jsonl`);
   try {
     const st = await lstat(file);
-    if (st.isSymbolicLink() || !st.isFile()) return { ok: false, reason: "unreadable" };
+    if (st.isSymbolicLink() || !st.isFile() || st.nlink !== 1) return { ok: false, reason: "unreadable" };
   } catch (err) {
     return { ok: false, reason: isNotFound(err) ? "missing" : "unreadable" };
   }
@@ -203,7 +205,9 @@ function parseLines(buf: Buffer, limit: number): ParsedLines {
     const len = nl - pos;
     if (len > 0 && len <= LINE_MAX_BYTES) {
       try {
-        entries.push(...entriesOfLine(JSON.parse(buf.toString("utf8", pos, nl))));
+        // 1 行から取り出す件数にも上限（残りの枠で切る。切った行は、行の終わりまで読んだことにする＝位置は行の次へ進む）。
+        const room = Math.min(limit - entries.length, TRANSCRIPT_ENTRIES_MAX);
+        entries.push(...entriesOfLine(JSON.parse(buf.toString("utf8", pos, nl))).slice(0, room));
       } catch {
         // 壊れた行は飛ばす
       }
@@ -227,10 +231,12 @@ async function readRange(fd: Awaited<ReturnType<typeof open>>, start: number, le
 
 /** 読んだ結果（ファイルを開いて、位置から抜粋を返す）。 */
 export async function readTranscriptWindow(file: string, offset: number | undefined): Promise<Omit<AgentSubagentTranscriptResult, "running">> {
-  const fd = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  // O_NONBLOCK: 開く間にすり替えられた FIFO で、書き手を待って固まらない（開いた後に `isFile()` で断る）。
+  const fd = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
   try {
     const st = await fd.stat();
-    if (!st.isFile()) return { status: "unreadable", reason: "記録のファイルを読めません", entries: [], offset: 0, reset: false, omittedBefore: false };
+    // ハードリンク（nlink > 1）は断る（Claude Code の記録は通常 1 つのリンクしか持たない。根の外のファイルを根の中へ繋いで読ませない）。
+    if (!st.isFile() || st.nlink !== 1) return { status: "unreadable", reason: "記録のファイルを読めません", entries: [], offset: 0, reset: false, omittedBefore: false };
     const size = st.size;
     const reset = offset !== undefined && offset > size;
     if (offset !== undefined && !reset) {

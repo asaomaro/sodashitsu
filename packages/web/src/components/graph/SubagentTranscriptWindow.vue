@@ -114,7 +114,9 @@ function stop(): void {
 }
 
 // --- 位置（窓を、親の箱の右上に置く。見出しをつかんで動かす。大きさは縁の CSS の resize）----------------------------------------
-const pos = ref({ x: 16, y: 16 });
+/** 最初の上の位置（右上の「キー一覧」の表示と重ならないよう、少し下げる）。 */
+const TOP = 56;
+const pos = ref({ x: 16, y: TOP });
 let drag: { px: number; py: number; x: number; y: number } | null = null;
 function boxOfParent(): { w: number; h: number } {
   const p = root.value?.parentElement;
@@ -152,7 +154,7 @@ function onKeydown(ev: KeyboardEvent): void {
 
 onMounted(() => {
   const b = boxOfParent();
-  if (b.w > 0) pos.value = clampPos(b.w - W - 16, 16);
+  if (b.w > 0) pos.value = clampPos(b.w - W - 16, TOP);
   void poll();
   timer = setInterval(() => void poll(), POLL_MS);
   void nextTick(() => root.value?.focus({ preventScroll: true }));

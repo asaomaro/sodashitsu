@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile, appendFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { link, mkdir, mkdtemp, rm, symlink, writeFile, appendFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -152,6 +153,59 @@ describe("resolveTranscriptFile / readTranscriptWindow / SubagentTranscriptReade
       expect(defaultTranscriptRoots({ CLAUDE_CONFIG_DIR: "/cfg" }, "/home/u")).toEqual(["/home/u/.claude/projects", "/cfg/projects"]);
       expect(defaultTranscriptRoots({ CLAUDE_CONFIG_DIR: "relative" }, "/home/u")).toEqual(["/home/u/.claude/projects"]);
       expect(defaultTranscriptRoots({}, "/home/u")).toEqual(["/home/u/.claude/projects"]);
+    });
+  });
+
+  describe("レビューの直し（PR6c の S1・S2・S3・N1）", () => {
+    it("S1: ハードリンク（nlink > 1）は、根の外のファイルへ繋いであっても読まない", async () => {
+      const outside = join(base, "outside.jsonl");
+      await writeFile(outside, user("OUTSIDE-SECRET"));
+      await link(outside, fileOf("h1"));
+      expect(await resolveTranscriptFile(parent, SESSION, "h1", [root])).toEqual({ ok: false, reason: "unreadable" });
+      // 開いた後の確認（解決を通らずに渡されても断る）
+      expect(await readTranscriptWindow(fileOf("h1"), undefined)).toMatchObject({ status: "unreadable", entries: [] });
+      // 否定の対照: 1 つしかリンクの無いファイルは読める
+      await writeFile(fileOf("h2"), user("ok"));
+      expect((await resolveTranscriptFile(parent, SESSION, "h2", [root])).ok).toBe(true);
+      expect((await readTranscriptWindow(fileOf("h2"), undefined)).entries).toHaveLength(1);
+    });
+
+    it("S3: FIFO は、開いて固まらず、断る", async () => {
+      const f = fileOf("fifo");
+      execFileSync("mkfifo", [f]);
+      expect(await resolveTranscriptFile(parent, SESSION, "fifo", [root])).toEqual({ ok: false, reason: "unreadable" });
+      // 解決の後にすり替えられた想定で、直接渡す。O_NONBLOCK が無ければ、書き手を待って返らない。
+      const r = await Promise.race([readTranscriptWindow(f, undefined), new Promise<"hung">((res) => setTimeout(() => res("hung"), 1500))]);
+      expect(r).not.toBe("hung");
+      expect(r).toMatchObject({ status: "unreadable", entries: [] });
+    });
+
+    it("S2: 1 行に多数の件数があっても、1 回に返すのは 200 件まで（続きでも最初でも）。切った行は読んだことにして先へ進む", async () => {
+      const f = fileOf("fat");
+      const parts = Array.from({ length: 3500 }, (_, i) => ({ type: "tool_result", tool_use_id: `t${i}`, content: "x" }));
+      await writeFile(f, user(parts) + asst([{ type: "text", text: "次の行" }]));
+      const forward = await readTranscriptWindow(f, 0);
+      expect(forward.entries.length).toBeLessThanOrEqual(TRANSCRIPT_ENTRIES_MAX);
+      expect(forward.entries).toHaveLength(TRANSCRIPT_ENTRIES_MAX);
+      // 位置は、その行の次（次の読みで同じ行を読み直さない）
+      const next = await readTranscriptWindow(f, forward.offset);
+      expect(next.entries.map((e) => e.kind)).toEqual(["say"]);
+      const first = await readTranscriptWindow(f, undefined);
+      expect(first.entries.length).toBeLessThanOrEqual(TRANSCRIPT_ENTRIES_MAX);
+      // 否定の対照: 件数の少ない行は切らない
+      await writeFile(f, user([{ type: "tool_result", content: "a" }, { type: "tool_result", content: "b" }]));
+      expect((await readTranscriptWindow(f, 0)).entries).toHaveLength(2);
+    });
+
+    it("N1: 根の外の場所は、有っても無くても同じ答え。根の下でまだ無いものだけが missing", async () => {
+      const exists = join(base, "ex");
+      await mkdir(join(exists, SESSION, "subagents"), { recursive: true });
+      const a = await resolveTranscriptFile(join(exists, `${SESSION}.jsonl`), SESSION, "a1", [root]);
+      const b = await resolveTranscriptFile(join(base, "nope", `${SESSION}.jsonl`), SESSION, "a1", [root]);
+      expect(a).toEqual({ ok: false, reason: "outside" });
+      expect(b).toEqual(a);
+      // 否定の対照: 根の下の、まだ無いフォルダは「まだ無い」
+      expect(await resolveTranscriptFile(join(root, "-new-proj", `${SESSION}.jsonl`), SESSION, "a1", [root])).toEqual({ ok: false, reason: "missing" });
     });
   });
 
