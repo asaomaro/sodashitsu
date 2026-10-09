@@ -98,7 +98,9 @@ for (const { key, theme } of THEMES) {
     const client = await appServer.openClient();
     const initial = client.helloSnapshot()!.workspaces[0]!;
     // 作業フォルダ（git の枝・変更の数が出る）に頼らないよう、git の外の決まった場所に workspace を作る。
-    const cwd = await mkdtemp(join(tmpdir(), "soda-ui-style-"));
+    // 名前は固定にする（グラフのノードに、フォルダの名前が出る。乱数の名前だと、撮るたびに文字が変わって、比較が揺れる）。
+    const cwd = join(tmpdir(), "soda-ui-style-shots-cwd");
+    await mkdir(cwd, { recursive: true });
     dirs.push(cwd);
     const created = await client.request("workspace.create", { cwd, label: "alpha" });
     const ws = created.workspace;
@@ -212,11 +214,28 @@ for (const { key, theme } of THEMES) {
     await expect(page.locator("dialog[open]")).toHaveCount(0);
 
     // 畳んだサイドバー。
-    await page.locator(".sidebar-collapse-btn").click();
+    // たたむ・広げるの印は、クラシックは最下部の［«］、モダンは境の線の上の印（20261008-ui-style PR4）。
+    const collapseBtn = page.locator(".sidebar-collapse-btn, .sidebar-edge-toggle").first();
+    await collapseBtn.click();
     await expect(page.locator(".sidebar-collapsed")).toHaveCount(1);
+    await page.mouse.move(900, 500);
     await shot("sidebar-collapsed");
-    await page.locator(".sidebar-collapse-btn").click();
+    await collapseBtn.click();
     await expect(page.locator(".sidebar-collapsed")).toHaveCount(0);
+    await page.mouse.move(900, 500);
+
+    // 「新規」のメニュー（モダン）。クラシックは、spaces の区画の中の［メニュー］（モダンの新しい配置の画面を足した。元の側にも同じ spec を使うので、クラシックは同じ画面が撮れる）。
+    await page.locator(STYLE === "modern" ? '[data-sidebar-act="new"]' : ".sidebar-section-footer .sidebar-btn-right").click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await shot("sidebar-new-menu");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+
+    // tab が 1 つ（モダンは tab バーと「＋」が出る。クラシックは隠す）。
+    await client.request("tab.close", { tabId: second.tab.id });
+    await expect(page.locator(".tab-bar-item")).toHaveCount(STYLE === "modern" ? 1 : 0);
+    await page.mouse.move(900, 500);
+    await shot("single-tab");
 
     client.close();
   });

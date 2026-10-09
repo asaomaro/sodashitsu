@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SPEC = "packages/e2e/src/specs/ui-style-shots.spec.ts";
 
-const EXPECTED_SHOTS = 44; // 暗い・明るい各 22 枚（spec が画面を増やしたら、ここも直す）
+const EXPECTED_SHOTS = 48; // 暗い・明るい各 24 枚（spec が画面を増やしたら、ここも直す）
 const JITTER_MAX_COMPONENT = 1; // 揺れとみなす、色の成分の差の上限
 const JITTER_MAX_PIXELS = 16; // 揺れとみなす、差の画素の数の上限
 const SIGNAL_CODES = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 };

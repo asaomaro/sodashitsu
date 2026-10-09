@@ -33,6 +33,11 @@
   --soda-shape-row-radius: var(--soda-shape-radius);
   --soda-shape-row-current-ring: 1px; /* 選んでいる行の枠の太さ */
   --soda-shape-row-current-tint: 22%; /* 選んでいる行の地に混ぜる accent の割合 */
+  --soda-shape-section-font: 0.95em; /* サイドバーの区画の見出しのボタンと、その右の並び順のボタンの文字の大きさ（クラシックは 0.85em。workspace の行は 1em）。目安: 行の 0.9 倍以上 */
+  --soda-shape-section-inner: 1em; /* 見出しのボタンの中の題・印・件数の、ボタンに対する大きさ（クラシックは 0.85em＝ボタンの 0.85em の中でさらに小さい。実効は行の 0.72 倍） */
+  --soda-shape-section-opacity: 0.9; /* 見出しの題・印・件数の濃さ（クラシックは 0.75）。文字と地の色の比を、今より下げない */
+  --soda-shape-name-h: 28px; /* pane の名前の行の高さ（右端に操作ボタン〔24px〕が並ぶので、クラシックの 1.2em より高い） */
+  --soda-shape-name-top: 6px; /* 名前の行の中で、名前の文字の上の位置 */
   --soda-shape-tag-h: 28px; /* グラフの囲いの見出しの tab のタグの高さ（見出しの帯は、置き場所の計算の定数 40px のまま） */
   --soda-shape-pad: 20px; /* ダイアログの内側の余白 */
   --soda-shape-menu-radius: var(--soda-shape-radius); /* メニューの角（行の背景が角に出ないよう、小さめ） */
