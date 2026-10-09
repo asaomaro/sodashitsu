@@ -7,13 +7,13 @@
 
 ## PR1a: 比べる道具（製品のコードは変えない）
 
-- [ ] T1: 画面を撮る E2E `packages/e2e/src/specs/ui-style-shots.spec.ts`。環境変数 `UI_STYLE_SHOTS_DIR` を渡したときだけ動く（ふだんの E2E では飛ばす）。撮る画面（暗い・明るいテーマ）: 基本画面（pane 2 つ・tab 2 つ・サイドバーにグループ）・設定のダイアログの各節・右クリックのメニュー・確認のダイアログ・ヘルプ・グラフの画面・表示の面（パネル〔4 つの側〕と帯）・ログインの画面・モバイルの 1 列の画面。撮るときの決まり（design 追補 01 D12）: トーストが消えるのを待つ・端末（`.xterm`）は `mask` で隠す・`animations: "disabled"`・`caret: "hide"`・`document.fonts.ready` と `client.view` の落ち着きを待つ。様式を選べる（`UI_STYLE=classic|modern`。PR1a の時点では、`modern` は設定が無いので classic と同じ）。
+- [x] T1: 画面を撮る E2E `packages/e2e/src/specs/ui-style-shots.spec.ts`。環境変数 `UI_STYLE_SHOTS_DIR` を渡したときだけ動く（ふだんの E2E では飛ばす）。撮る画面（暗い・明るいテーマ）: 基本画面（pane 2 つ・tab 2 つ・サイドバーにグループ）・設定のダイアログの各節・右クリックのメニュー・確認のダイアログ・ヘルプ・グラフの画面・表示の面（パネル〔4 つの側〕と帯）・ログインの画面・モバイルの 1 列の画面。撮るときの決まり（design 追補 01 D12）: トーストが消えるのを待つ・端末（`.xterm`）は `mask` で隠す・`animations: "disabled"`・`caret: "hide"`・`document.fonts.ready` と `client.view` の落ち着きを待つ。様式を選べる（`UI_STYLE=classic|modern`。PR1a の時点では、`modern` は設定が無いので classic と同じ）。
       依存: なし
       AC: AC2
-- [ ] T2: 比べるスクリプト `scripts/ui-style-compare.mjs`。引数は、比べる元のコミット（既定 `origin/main`）。元のコミットを `git worktree` で一時の場所に出し、`pnpm install --frozen-lockfile`・`pnpm build` して T1 を流す → いまの作業フォルダで T1 を流す → 画像を 1 枚ずつ、画素で比べる（`pngjs`・`pixelmatch` が E2E の依存にあれば使う。無ければ、Playwright の比較の関数）。差のある画像の名前・差の画素の数・差の画像の場所を出し、1 枚でも差があれば終了コード 1。一時の worktree は、最後に片づける。**同じコミットどうし（`HEAD` と `HEAD`）で、全部の画像が差 0 になること**を確かめ、結果に書く。差が出る画面があれば、撮り方を直す（隠す・待つ）。
+- [x] T2: 比べるスクリプト `scripts/ui-style-compare.mjs`。引数は、比べる元のコミット（既定 `origin/main`）。元のコミットを `git worktree` で一時の場所に出し、`pnpm install --frozen-lockfile`・`pnpm build` して T1 を流す → いまの作業フォルダで T1 を流す → 画像を 1 枚ずつ、画素で比べる（`pngjs`・`pixelmatch` が E2E の依存にあれば使う。無ければ、Playwright の比較の関数）。差のある画像の名前・差の画素の数・差の画像の場所を出し、1 枚でも差があれば終了コード 1。一時の worktree は、最後に片づける。**同じコミットどうし（`HEAD` と `HEAD`）で、全部の画像が差 0 になること**を確かめ、結果に書く。差が出る画面があれば、撮り方を直す（隠す・待つ）。
       依存: T1
       AC: AC2
-- [ ] T3: 道具の使い方を `docs/verification.md` に書く（何を比べるか・同じ機械の上の前後の比較であること・時間）。
+- [x] T3: 道具の使い方を `docs/verification.md` に書く（何を比べるか・同じ機械の上の前後の比較であること・時間）。
       依存: T2
       AC: AC11
 

@@ -1037,6 +1037,24 @@ pnpm --filter @sodashitsu/e2e exec playwright test src/specs/resize-handles.spec
 - [ ] OS の「動きを減らす」: 入れると、線の出入りが一瞬になる（Chromium の emulation は自動のテストで確認済み。実際の OS の設定で）。
 - [ ] 端末版: 使っている端末で、spaces の見出し・agents の区切りの行の `▾`／`▸` が 1 桁に見え、桁がずれない。見出しの行の押下と、区切りの行の「動かさずに離す」「動かして離す」が意図どおりに分かれる。
 
+### 開発者向け：画面の見た目を、変更の前後で画素まで比べる（20261008-ui-style・`scripts/ui-style-compare.mjs`）
+
+見た目を変えない変更（部品の `<style>` の数値の置き換えなど）で、**画面が 1 画素も変わっていないこと**を確かめる道具。
+
+```sh
+node scripts/ui-style-compare.mjs                       # 元は origin/main。いまの作業フォルダと比べる
+node scripts/ui-style-compare.mjs <コミット>             # 元を指定する（HEAD どうしで、道具そのものの確かめもできる）
+node scripts/ui-style-compare.mjs --style modern        # いまの作業フォルダを modern の様式で撮る（元は、いつも classic）
+node scripts/ui-style-compare.mjs --out <dir> --keep    # 画像の置き場所を指定・元の作業フォルダを残す
+```
+
+- **何を比べるか**: `packages/e2e/src/specs/ui-style-shots.spec.ts` が撮る画面（暗い・明るいテーマで 16 枚ずつ、計 32 枚）: 起動のヒントのトースト・基本画面（pane 2 つ・tab 2 つ・サイドバーにグループ）・右クリックのメニュー・設定のダイアログの各節（7 枚）・ヘルプ・確認のダイアログ・グラフの画面・表示の面（パネル 4 つの側と帯 2 つ）・ログインの画面・モバイルの 1 列の画面。画像は 1 枚ずつ、画素で比べる。**許す差は 0 画素**。差のある画像の名前・差の画素の数・差の画像（赤い画素）の場所を出し、1 枚でも差があれば終了コード 1。
+- **同じ機械の上の、変更の前後の比較**: 元のコミットを `git worktree` で一時の場所へ出し、`pnpm install --frozen-lockfile`・`pnpm build` して、いまの作業フォルダと**同じ機械で**撮る。文字の描画は機械で違うので、基準の画像をリポジトリに入れたり、別の機械の画像と比べたりしない。一時の作業フォルダは、終わると片づける。
+- **撮り方の決まり**（揺れないように）: 端末（`.xterm`）の文字は描かない（`visibility: hidden`）・トーストが消えるのを待つ・`animations: "disabled"`・`caret: "hide"`・`document.fonts.ready` と `client.view` の落ち着きを待つ・workspace の場所は git の外の一時のフォルダ（作業フォルダの枝名・変更の数が、サイドバーに出ないように）・サーバの一時のフォルダ名が出る場所（拡張の設定の置き場所）は隠す。
+- **spec だけを流す**: `UI_STYLE_SHOTS_DIR=<dir> UI_STYLE=classic|modern` を渡すと、`packages/e2e` で `env -u DISPLAY -u WAYLAND_DISPLAY pnpm exec playwright test ui-style-shots --workers=1` が画像を撮る（渡さないふだんの E2E では飛ばす）。
+- **時間**: 全体でおよそ 2 分（元の install・build に十数秒、撮影が元・いまの各 45 秒ほど）。メモリが少ない環境では、ほかの E2E と同時に流さない。
+- **差が出たら**: 撮り方（待ち・隠し）を疑う前に、まず変更の側を疑う。撮り方を直すのは、同じコミットどうし（`HEAD` と `HEAD`）で差が出たときだけ。
+
 ### 任意：Tailscale・リバースプロキシ（使う構成だけ）
 
 どちらもこの検証環境では実機で確かめていない（`docs/tls-setup.md` の手順は公式の docs に合わせて書いた）。使うなら、最後に
