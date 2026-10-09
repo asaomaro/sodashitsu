@@ -168,11 +168,11 @@ for (const { key, theme } of THEMES) {
     const moved = await client.request("graph.get", {});
     await client.request("graph.update", { baseRev: moved.rev, ops: keys.map((key, i) => ({ op: "move_node" as const, key, ...(i < 3 ? { x: 100 + (i % 2) * 600, y: 100 + Math.floor(i / 2) * 400 } : { x: 1600, y: 100 }) })) }); // 3 つ目まで alpha（同じ workspace の枠は 1 つ）・4 つ目は beta（枠が重ならない所）
     await prefixKey(page, "a");
-    await expect(page.locator("dialog.graph-view")).toBeVisible();
-    await expect(page.locator("dialog.graph-view [data-node-key]").first()).toBeVisible();
+    await expect(page.locator(".graph-view")).toBeVisible();
+    await expect(page.locator(".graph-view [data-node-key]").first()).toBeVisible();
     await shot("graph");
     await prefixKey(page, "a");
-    await expect(page.locator("dialog.graph-view")).toBeHidden();
+    await expect(page.locator(".graph-view")).toBeHidden();
 
     // 表示の面: パネル（4 つの側）と帯。
     for (const side of ["right", "left", "top", "bottom"]) await set(appServer, paneId, `panel-${side}`, "panel", ["--dock", side, "--size", "160", "--title", `パネル ${side}`], `パネル（${side}）`);

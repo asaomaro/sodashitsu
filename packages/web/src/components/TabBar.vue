@@ -5,6 +5,7 @@ import { ActionDispatcherKey, ConnectionKey, TerminalRegistryKey } from "../inje
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
+import { watchDragInterrupt } from "../store/dragInterrupt.js";
 import { formatDatetime, type TabBarRightEntry } from "@sodashitsu/client-core";
 
 /**
@@ -302,12 +303,7 @@ watch(
   () => view.workspaceId,
   () => cancelTabDrag(),
 );
-watch(
-  () => view.modalOpen,
-  (open) => {
-    if (open) cancelTabDrag(false);
-  },
-);
+watchDragInterrupt(view, () => cancelTabDrag(false));
 onUnmounted(() => {
   endTabDrag();
   clearTimeout(suppressTimer);
@@ -393,7 +389,7 @@ function onWheel(ev: WheelEvent): void {
 
 <style scoped>
 /* 05-e2e-docs T3 の E2E で発見：この component にも `<style>` が一度も存在しなかった（PaneLayout.vue・
- * Splitter.vue と同様。D92）。`.app-main`（App.vue）が `flex-direction:column` なので、ここは
+ * Splitter.vue と同様。D92）。`.base-screen`（screens/BaseScreen.vue）が `flex-direction:column` なので、ここは
  * 横並びの帯として `flex:none` で高さだけ確保する。 */
 .tab-bar {
   flex: none;

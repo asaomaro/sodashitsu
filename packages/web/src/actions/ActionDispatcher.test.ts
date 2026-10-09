@@ -3161,7 +3161,7 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     view.focusPane("p1");
     const { dispatcher } = makeDispatcher(conn);
     dispatcher.run({ type: "openGraph" });
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     expect(view.preGraphFocusPaneId).toBe("p1");
     expect(view.dialogContext).toBeNull();
     expect(conn.requests).toEqual([]);

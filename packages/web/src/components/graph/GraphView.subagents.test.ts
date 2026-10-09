@@ -9,7 +9,7 @@ import { useGraphStore } from "../../store/graph.js";
 import { useMachinesStore } from "../../store/machines.js";
 import { useSessionStore } from "../../store/session.js";
 import { useViewStore } from "../../store/view.js";
-import GraphView from "./GraphView.vue";
+import GraphView from "./GraphDialog.vue"; // 1 列の画面の入れ物（デスクトップの画面は GraphScreen.test.ts）
 import { agentOf, fakeGraphPort, graphOf, paneOf } from "./graphTestKit.js";
 
 // 20261004-subagent-display。グラフのノードの件数のボタンと、グラフの中の一覧（SubagentPanel）。
@@ -65,6 +65,7 @@ async function open(
     },
   });
   const view = useViewStore(pinia);
+  view.setMobileViewport(true); // 重ねるダイアログ（1 列の画面）
   const session = useSessionStore(pinia);
   session.tabs.set("t1", { id: "t1", workspaceId: "w1" } as never);
   session.panes.set(
@@ -153,7 +154,7 @@ describe("グラフのノードの件数のボタン", () => {
     );
     expect(wrapper.find(".graph-connect-banner").exists()).toBe(false);
     expect(fake.calls).toEqual([]); // move_node・add_link を送らない
-    expect(view.graphOpen).toBe(true); // pane へ移ってグラフを閉じない
+    expect(view.graphVisible).toBe(true); // pane へ移ってグラフを閉じない
     expect(registry.focus).not.toHaveBeenCalled();
     wrapper.unmount();
   });
@@ -210,7 +211,7 @@ describe("グラフの中の一覧（SubagentPanel）", () => {
     wrapper.get(".subagent-panel").element.dispatchEvent(key("Escape"));
     await flush();
     expect(wrapper.find(".subagent-panel").exists()).toBe(false);
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     expect(document.activeElement).toBe(n1);
     // 画面全体の Esc でも、パネルが先に閉じる
     n1.dispatchEvent(key("s"));
@@ -218,7 +219,7 @@ describe("グラフの中の一覧（SubagentPanel）", () => {
     wrapper.get(".graph-view").element.dispatchEvent(key("Escape"));
     await flush();
     expect(wrapper.find(".subagent-panel").exists()).toBe(false);
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     wrapper.unmount();
   });
 

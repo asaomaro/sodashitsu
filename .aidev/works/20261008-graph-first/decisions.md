@@ -29,8 +29,49 @@
 | D42 | `placeNode` の出口の保証（再レビュー指摘 1） | 候補が尽きたときの置き場所は、頭打ちにしていない実際の列数で決め、空くまで右へずらす。さらに `placeNode` の出口で、同じ workspace の既存のノード（囲いごと動かすなら動かした後の位置）と重なるなら、空くまで右へ 1 升ずつずらす | 升の走査の頭打ち（D37）が、隣に囲まれて横に伸びた workspace で、ノードを別のノードの真上に置く退行を作っていた |
 | D43 | 移行の控えの試験 | 4 件以上の `pre-migration-` の控えを作ってから退避を足し、除外の条件を外すと落ちる形にした | 前の試験は条件を外しても通っていた |
 | D44 | 読み込みで寄せたノードの重なり | 寄せた結果が別のノードと同じ座標なら、内側へ 1 升ずつずらす。寄せていないノードは動かさない。線は変えない | 旧版でしか作られない形だが、ノードが見えなくなるのを避ける |
+| D45 | T10d の確認: フォーカスの見回り（`focusDrop.ts`）を外側の口で止める必要は無い。**止める口は足さず、守りのファイルは変えない** | 見回りは `activeElement` が `body` のときしか戻さない（`restoreFromBody`）。画面を切り替えるときに、**同じ作業の中**で、グラフの面（切り替えた先）か端末（戻した先）へフォーカスを置けば、`body` に落ちる時間が無い（`GraphCanvas` の `nextTick` の中。Vue の描画の後・次のタスクの前）。`focusout`（`relatedTarget` なし）が起きても、見るのは `setTimeout(0)` の後で、そのときは別の要素がフォーカスを持っている | 止める口が無いまま実装を進めると、基本画面が `inert` の間に見回りが端末へ戻し続け、3 秒に 15 回で面が止まる、と恐れていた。実測（E2E: 開閉 10 回・切り替え + サイドバー + ask を 6 回）で、知らせ（5 回）も遮断も出ない |
+| D46 | 画面は主な領域に**重ねて置く**（`position: absolute; inset: 0`）。見えない画面は `visibility: hidden` と `inert`。画面の一覧に部品（`component`）を持たせ、`App.vue` は一覧から `v-for` で描く | 基本画面を `v-if`・`v-show`・`display: none` にすると、pane の箱が 0×0 になる（D11）。重ねて置けば、どの画面も大きさを保つ。基本画面の中身（tab バーと pane）は `BaseScreen.vue` へ移しただけ | 負の対照: 隠し方を `display: none` に変えると、E2E「切り替えても client.view が送られない」が落ちることを確かめた |
+| D47 | デスクトップで `closeGraph` は、焦点の pane を「開く前の pane」へ戻さない（1 列のダイアログは今までどおり戻す）。`preGraphFocusPaneId` は、デスクトップではノードの最初の選択にだけ使う（開くときに覚え、閉じるときに捨てる） | AC-S3「行き来しても選んでいる workspace・tab・pane は保たれる」。サイドバーが操作できる画面なので、グラフの間に選び直した pane を、戻した後も保ちたい（開く前の pane へ戻すと上書きする）。基本画面の pane は `inert` で `term.focus()` が効かないので、焦点を直接動かしてよい | 追補 01 の表は「持ち続ける」と書いたが、サイドバーでの選び直しを踏まないため、デスクトップでは持たない。`StoreAdapter`・`NotificationController` の差し替えは、1 列のダイアログ（`graphDialogOpen`）のときだけ |
+| D48 | `keysCaptured` と `modalOpen` を別の computed にした。いまの中身は同じ集合（1 枠のダイアログ・1 列のグラフ・質問・拡張の承認）で、デスクトップのグラフの画面はどちらにも入らない | 追補 01 の表のとおり、使う側の意味を分ける（キーの抑止／ダイアログの有無）。違う集合が要るようになったら、ここだけ直す | 仕分けは 9 か所（キーの dialog モード 2・ドラッグの取り消し 4・焦点の戻し先 2・PaneFrame のフォーカスの備え・AskDialog） |
+| D49 | 通知の pane へ移るとき（`NotificationController.#focusEntry`。`prefix+o`・通知のクリック・履歴）、デスクトップのグラフの画面が出ていれば基本画面へ戻す | 基本画面の pane は `inert` で、移っても見えない・フォーカスも受けられない（利用者から見ると何も起きない）。追補 01 に無い | 範囲外かもしれないが、1 行で、押しても何も起きないのを避ける |
+| D50 | デスクトップのグラフの画面では、prefix の次のキーのうち `open_graph`（基本画面へ戻る）に加えて、設定を開く（`settings`）を通す。ほかは今までどおり食う | 追補 01 の表「prefix のキー（画面の切り替え・設定を開く）は働く」 | サイドバーにフォーカスがあるときは、ふつうの prefix のキーがすべて働く（グラフの面の外なので） |
+| D51 | 1 列の `GraphDialog` の `showModal()` は、post の watcher（`flush: "post"`）で行う | 入れ物と中身（`GraphCanvas`）を分けたので、開く順序（dialog を開く → ノードへフォーカス）を保つ。中身のフォーカスは `nextTick`（post の後） | |
+| D52 | デスクトップのグラフの画面が出ている間、グラフの面の外（`body`・サイドバー）にフォーカスがあるときの prefix の 2 打目を、下の表の「通す」ものだけに絞る。絞られたキーは何もしない（端末にも届かない）。実装は `keys/graphScreenKeys.ts`（`isAllowedOnGraphScreen`）と `KeyInputController.setDomKeyFilter`（`main.ts` が `view.screen === "base" \|\| …` で渡す）。食った `enterMode` はルーターのモードを `terminal` に戻す | レビュー指摘 3: D12 の「prefix のキーは働く」は 2 つ（画面の切り替え・設定）だけのつもりが、実際は全部が見えない基本画面に効いた（tab ができる・確認なしで pane が閉じる） | グラフの面にフォーカスがある間は `GraphCanvas` が自分で絞る（D50）ので、この絞りは面の外だけ。基本画面では絞らない |
+| D53 | 1 列の `Toast`/`ReconnectOverlay` の `Teleport` に `:key="isMobile ? 'mobile' : 'desktop'"` を付けた | レビュー指摘 1: デスクトップで起動すると `#soda-graph-dialog` が無く、`Teleport` が行き先 `null` を覚えたまま、窓を狭めて `GraphDialog` が現れても取り直さず、開いた時に `insertBefore` が例外になった。幅が変わったら `Teleport` を作り直す（`defer` で、同じ描画の後に行き先を探す）。`GraphDialog` を常に描く案は、デスクトップに使わない `GraphCanvas` が 1 つ増えるので採らなかった | E2E: 窓を狭めた後に開き、トーストが `#soda-graph-dialog` の中に出る・console にエラーが無い（`:key` を外すと落ちることを確認） |
+| D54 | たたんだサイドバーの切り替えのボタンは `flex: none` | レビュー指摘 2: 縦並びで `flex: 1 1 0` の基準が高さ 0 になり、高さ 7px の線になった | E2E 1 本（高さ > 14px。CSS を戻すと落ちる） |
+| D55 | デスクトップのグラフの画面で、サイドバーの行（workspace・agent）を押した・navigate で選び終えたとき、フォーカスをグラフの面（選択中のノード）へ戻す。`GraphCanvas.vue` の `refocusSurface`。トリガーは `view.sidebarPickSeq`（行を押すたびに進む。選びが変わらない押下も拾う）・`workspaceId`・`focusedPaneId`・`navigateSelection`。navigate 中は動かさない（グラフの面が矢印キーを食うため）。フォーカスが `body` かサイドバーにあるときだけ動かし、150ms 後にもう一度（押した行が作り直されて `body` に落ちる場合。このときは `body` のときだけ） | レビュー指摘 4: `Esc` が効かなくなる | 守りのファイルには触れない。同じ作業の中（`nextTick`）で動かすので脱落は数えられない（PR3 の 3 本の E2E で確認） |
+
+
+### D52: グラフの画面の間に通す prefix の 2 打目（操作の定義 `Action` を全部見て決めた）
+
+| 操作 | 通す／食う | 理由 |
+| :- | :- | :- |
+| `openGraph` | 通す | 画面の切り替え |
+| `settings`・`help`・`goto` | 通す | 画面に依らないダイアログ（`goto` は選び直すだけで構造は変えない） |
+| `toggleSidebar`・`toggleSidebarSection` | 通す | サイドバーの操作 |
+| `enterMode navigate`・`exitMode`・`navigate`（`paneDir` 以外） | 通す | サイドバーの行を選ぶ操作。`paneDir`（見えない基本画面の pane 間の移動）は食う |
+| `nextNotification`・`openNotificationHistory` | 通す | 通知（D49: 移る先があれば基本画面へ戻る） |
+| `workspaceDelta`・`workspaceIndex` | 通す | サイドバーの行を選ぶのと同じ（選びを変えるだけ） |
+| `detach`・`stopServer`（確認つき）・`reloadConfig` | 通す | 画面全体・サーバの操作 |
+| `split`・`closePane`・`zoom`・`swap`・`swapWithFocused`・`cyclePane`・`focusDir`・`lastPane`・`renamePane` | 食う | 基本画面の pane を変える／見えない pane へ向かう |
+| `newTab`・`closeTab`・`tabDelta`・`tabIndex`・`renameTab`・`moveTab` | 食う | 基本画面の tab |
+| `newWorkspace`・`closeWorkspace`・`renameWorkspace`・`moveWorkspace`・`newWorktree`・`openWorktree`・`removeWorktree` | 食う | workspace を作る・消す（確認なしのものがある）。サイドバーのメニューや［＋ 新規］からは行える |
+| `enterMode copy`・`enterMode resize`・`copy`・`resizeBy` | 食う | 見えない pane の操作 |
+| `agentDelta`・`focusAgentIndex` | 食う | 移る先の pane が見えない（通知は D49 で基本画面へ戻すが、ここは範囲外） |
+| `editScrollback`・`runCommand`・`displayMenu`・`focusDisplay`・`showSubagents` | 食う | 焦点の pane に対する操作 |
+| `pasteImage` | （`handleDomKey` が先に扱う。何もしない） | |
+| 通常のキー（`pass`）・割り当ての無いキー（`consume`） | そのまま | 入力欄などの通常の操作を妨げない |
+| prefix の二度押し（`send`） | 食う | 見えない端末へ prefix の列を送る操作 |
 
 ## 見つけた穴・残る課題
+
+### PR1b（画面の並び）
+
+- **穴（直した）**: 追補 01 の「開く前の pane を持ち続ける」だと、グラフの画面の間にサイドバーで選び直した pane が、基本画面へ戻ったときに上書きされる（D47）。デスクトップでは焦点の pane を直接動かし、戻すときに上書きしない。
+- **穴（直した）**: 通知の pane へ移ると、グラフの画面のままで何も見えない（D49）。
+- **残る課題**: グラフの画面の間も、基本画面の pane は「描かれている」ので、`registry.isVisible` は真のまま。完了の既読が、グラフの画面を見ている間に進む（重ねる dialog の時代と同じ。変えていない）。
+- **残る課題**: `restoreFromDrop`（変えられない）は、戻し先の記憶が基本画面の端末のとき、`inert` で `focus()` が効かず何もしない（数えない）。グラフの画面で余白を押して `body` に落ちると、戻らない（グラフの面かサイドバーの要素を覚えていればそちらへ戻る）。
+- **残る課題**: スクリプトの面を［操作する］で操作中のまま画面を切り替えると、枠のフォーカスは `inert` で外れ、操作中の印は枠ごとの番が終える（E2E の対象外）。
 
 - **穴（直した）**: `GraphMaintainer` が、更新を待つ間に増えた pane の構成を「確認済み」の指紋にしてしまい、次の確認が飛ばされて、その pane のノードが足されないままになる競合があった（全体の試験の負荷の下で見つかった）。指紋は、確認した構成と、直した後の rev で作る。回帰テスト `GraphMaintainer.test.ts`（修正前のコードでは落ちることを確認済み）。
 - **穴（直した）**: `graphStructureFrom` が、`layout` の無い tab（配信の途中）で投げた。`layout` が無い・一部の pane が `layout` に無いときは、pane の並びで補う。
@@ -40,3 +81,10 @@
   - `sodactl graph show --json` の `spaces` は、グループの id が `g:` を除いた値（`Workspace.groupId` と同じ）。「グループなし」は `id: null`。
   - 一時的な pane かどうかは、`sodactl` からは分からない（`graph node add` の置き場所の計算では、ノードの無い pane として数える）。害は無い（一時的な pane のノードは足されないだけ）。
   - E2E: `subagents.spec.ts` を、ノードが最初からある前提に直した。ほかの E2E は、グラフの画面を開く・ノードを載せる操作を使っていない。
+
+### PR1b レビューの記録（指摘 5〜7。直さない）
+
+- **指摘 5**: 表示の面のつまみ（パネルの幅）のドラッグは、画面を切り替えても取り消されない（`watchDragInterrupt` の対象外。元からダイアログでも取り消されなかった）。ドラッグ中のキーは分割のつまみが取るので、切り替えは実際には起きにくい。害は無い（隠れたまま動かし続け、離すと幅が確定する）ので、直さない。
+- **指摘 6**: `keysCaptured` と `modalOpen` はいまの集合が同じ（D48 のとおり）。片方にだけ足して、もう片方を直し忘れる芽はある。D49（通知で基本画面へ戻す）には E2E が無く単体 1 本のみ（外すかどうかは範囲の判断）。`ExtensionApprovalDialog` のデスクトップのグラフの画面での戻し先は未確認（害は無い見込み）。
+- **指摘 7**: レビューの確認用スペックで、原因の分からない待ちが 2 回あった（再現せず。確認用のスペック側と見られる）。アプリの問題なら「グラフの画面・サイドバーにフォーカス・`prefix+x` の後」。D52 でこの状態の `prefix+x` は食うようになったので、同じ手順では起きない。
+- 指摘 4 の補足（D55 の限界）: サイドバーの［＋新規］などのボタンにフォーカスがあるとき、`Enter` はボタン自身が扱う（navigate の `Enter` も届かない）。基本画面でも同じ既存の動きで、直していない。

@@ -17,7 +17,9 @@ import { type ResolvedLine, resolveAgentLines, resolveSpaceLines, tokenStyleAttr
 import StateIcon from "./StateIcon.vue";
 import MachineHeader from "./MachineHeader.vue";
 import MachineRows from "./MachineRows.vue";
+import ScreenSwitcher from "./ScreenSwitcher.vue";
 import { useMachinesStore } from "../store/machines.js";
+import { watchDragInterrupt } from "../store/dragInterrupt.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 
 /**
@@ -369,12 +371,14 @@ function focusWorkspace(workspaceId: string): void {
   view.setView(workspaceId, ws.activeTabId);
   if (tab) view.focusPane(tab.focusedPaneId);
   void conn?.request("workspace.focus", { workspaceId }).catch(() => undefined);
+  view.notifySidebarPick();
 }
 
 function focusPane(paneId: string, tabId: string, workspaceId: string): void {
   view.setView(workspaceId, tabId);
   view.focusPane(paneId);
   void conn?.request("pane.focus", { paneId }).catch(() => undefined);
+  view.notifySidebarPick();
 }
 
 /** グループのヘッダー行（グループ）は `group` メニュー、それ以外（workspace を持つ行）は
@@ -798,16 +802,11 @@ function onSectionDividerKeydown(ev: KeyboardEvent): void {
  * ポインタの捕捉が外れるのか・捕捉先へ `pointerup` が届き続けるのかは確かめた出所が無い。分からない挙動に頼らない。
  * workspace の D&D も同じ理由で同じタイミングに取り消す（20260923-workspace-grouping）。
  */
-watch(
-  () => view.modalOpen, // グラフ画面（20260927-agent-graph）も同じ
-  (open) => {
-    if (open) {
-      widthDrag.finish();
-      sectionDrag.finish();
-      if (view.workspaceDrag) cancelWorkspaceDrag();
-    }
-  },
-);
+watchDragInterrupt(view, () => {
+  widthDrag.finish();
+  sectionDrag.finish();
+  if (view.workspaceDrag) cancelWorkspaceDrag();
+});
 </script>
 
 <template>
@@ -826,6 +825,8 @@ watch(
         <template v-else>session: {{ sessionLabel }} ⇄</template>
       </button>
     </div>
+    <!-- 画面の切り替え（基本画面・グラフ。20261008-graph-first）。session の下・workspace の一覧の上 -->
+    <ScreenSwitcher />
     <div ref="sectionsEl" class="sidebar-sections" :class="{ 'sidebar-sections-split': showSectionDivider }">
     <section
       ref="spacesEl"

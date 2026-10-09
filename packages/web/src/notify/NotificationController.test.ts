@@ -1042,13 +1042,14 @@ describe("NotificationController — 他の仕組みとの噛み合わせ", () =
     await queueOne(h);
     const view = useViewStore(pinia);
     view.focusPane("p-other");
+    view.setMobileViewport(true); // 重ねるダイアログ（1 列の画面）。デスクトップのグラフの画面は、焦点を直接動かす
     view.openGraph(); // 開く前の焦点は p-other
 
     h.c.focusNext();
 
     expect(view.tabId, "表示する tab は移る").toBe("t1");
     expect(view.focusedPaneId, "焦点は直接動かさない（グラフ画面からフォーカスを奪わない）").toBe("p-other");
-    expect(view.graphOpen).toBe(true);
+    expect(view.graphVisible).toBe(true);
     view.closeGraph();
     expect(view.focusedPaneId, "閉じたら知らせの pane へ戻る").toBe("p1");
   });
@@ -1060,6 +1061,21 @@ describe("NotificationController — 他の仕組みとの噛み合わせ", () =
     const view = useViewStore(pinia);
     h.c.focusNext();
     expect(view.focusedPaneId).toBe("p1");
+  });
+
+  it("デスクトップのグラフの画面が出ているときは、知らせの pane へ移ると基本画面へ戻す（基本画面の pane は inert で、フォーカスを受けられない）", async () => {
+    vi.useFakeTimers();
+    const h = makeController();
+    await queueOne(h);
+    const view = useViewStore(pinia);
+    view.focusPane("p-other");
+    view.openGraph();
+    expect(view.screen).toBe("graph");
+
+    h.c.focusNext();
+
+    expect(view.focusedPaneId).toBe("p1");
+    expect(view.screen).toBe("base");
   });
 
   // **`pane.closed` は接続中にしか届かない**。切断中に閉じられた pane はスナップショットから
