@@ -21,8 +21,8 @@ export interface AgentReportSocket {
 /** 受け口が解釈した報告。`session` は `type` の無い電文（今までのセッション ID の報告）。 */
 export type AgentReport =
   | { type: "session"; paneId: string; kind: string; sessionId: string }
-  | { type: "subagent_pending"; paneId: string; kind: string; sessionId: string; description?: string; agentType?: string; background?: boolean }
-  | { type: "subagent_start"; paneId: string; kind: string; sessionId: string; agentId: string; agentType?: string }
+  | { type: "subagent_pending"; paneId: string; kind: string; sessionId: string; description?: string; agentType?: string; background?: boolean; parentAgentId?: string; transcriptPath?: string }
+  | { type: "subagent_start"; paneId: string; kind: string; sessionId: string; agentId: string; agentType?: string; transcriptPath?: string }
   | { type: "subagent_stop"; paneId: string; kind: string; sessionId: string; agentId: string }
   | {
       type: "agent_stop";
@@ -41,6 +41,7 @@ const MAX_DESCRIPTION = 200;
 const MAX_AGENT_TYPE = 64;
 const MAX_ID = 128;
 const MAX_RUNNING = 64;
+const MAX_PATH = 1024;
 
 export async function startAgentReportSocket(path: string, onReport: AgentReportHandler, logger: Logger): Promise<AgentReportSocket> {
   const server = createServer((sock) => {
@@ -139,6 +140,11 @@ function idOf(v: unknown): string | undefined {
   return typeof v === "string" && v !== "" && Array.from(v).length <= MAX_ID ? v : undefined;
 }
 
+/** 場所は切らない（切ると別の場所になる）。空・長すぎる・NUL を含むものは undefined。中身が安全かは、使う側（読む前）が確かめる。 */
+function pathOf(v: unknown): string | undefined {
+  return typeof v === "string" && v !== "" && !v.includes("\0") && Array.from(v).length <= MAX_PATH ? v : undefined;
+}
+
 function parseReport(v: unknown): AgentReport | undefined {
   if (typeof v !== "object" || v === null) return undefined;
   const o = v as Record<string, unknown>;
@@ -149,9 +155,13 @@ function parseReport(v: unknown): AgentReport | undefined {
     case "subagent_pending": {
       const description = cut(o.description, MAX_DESCRIPTION);
       const agentType = cut(o.agentType, MAX_AGENT_TYPE);
+      const parentAgentId = idOf(o.parentAgentId);
+      const transcriptPath = pathOf(o.transcriptPath);
       return {
         type: "subagent_pending",
         ...base,
+        ...(parentAgentId !== undefined ? { parentAgentId } : {}),
+        ...(transcriptPath !== undefined ? { transcriptPath } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(agentType !== undefined ? { agentType } : {}),
         ...(typeof o.background === "boolean" ? { background: o.background } : {}),
@@ -161,7 +171,14 @@ function parseReport(v: unknown): AgentReport | undefined {
       const agentId = idOf(o.agentId);
       if (agentId === undefined) return undefined;
       const agentType = cut(o.agentType, MAX_AGENT_TYPE);
-      return { type: "subagent_start", ...base, agentId, ...(agentType !== undefined ? { agentType } : {}) };
+      const transcriptPath = pathOf(o.transcriptPath);
+      return {
+        type: "subagent_start",
+        ...base,
+        agentId,
+        ...(agentType !== undefined ? { agentType } : {}),
+        ...(transcriptPath !== undefined ? { transcriptPath } : {}),
+      };
     }
     case "subagent_stop": {
       const agentId = idOf(o.agentId);

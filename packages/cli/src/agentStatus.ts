@@ -45,6 +45,10 @@ export interface SubagentView {
   description: string | null;
   background: boolean | null;
   startedAt: number;
+  /** 入れ子のとき、起動した側のサブエージェントの id。メインが起動したもの・分からないものは null（20261008-graph-first PR6）。 */
+  parentId: string | null;
+  /** 深さ（メインが起動したもの = 1）。分からなければ null。 */
+  depth: number | null;
 }
 
 export interface AgentView {
@@ -80,6 +84,8 @@ export function subagentsViewOf(subagents: AgentInfo["subagents"]): AgentView["s
       description: s.description ?? null,
       background: s.background ?? null,
       startedAt: s.startedAt,
+      parentId: s.parentId ?? null,
+      depth: s.depth ?? null,
     })),
   };
 }

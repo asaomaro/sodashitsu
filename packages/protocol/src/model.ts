@@ -135,6 +135,15 @@ export interface SubagentInfo {
   background?: boolean;
   /** サーバが起動（または突き合わせ）の報告を受けた時刻（epoch ms）。 */
   startedAt: number;
+  /** 入れ子のとき、これを起動したサブエージェントの id（メインのエージェントが起動したものは項目なし）。 */
+  parentId?: string;
+  /** 深さ（メインが起動したもの = 1、その子 = 2…）。分からなければ項目なし。 */
+  depth?: number;
+  /**
+   * 記録を読む材料がある（true のときだけ付く）。**記録のファイルの場所そのものは、サーバの外へ出さない**——
+   * 読む側（20261008-graph-first PR6c）は、pane の id とサブエージェントの id だけを送り、場所はサーバが組み立てる。
+   */
+  hasTranscript?: boolean;
 }
 
 export interface AgentInfo {

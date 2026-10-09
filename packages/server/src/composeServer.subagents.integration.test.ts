@@ -522,8 +522,35 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       await afterMarker(server, stateDir, paneId);
       // Bash の説明が実行前の報告として送られていれば、合図の起動に付いてしまう。
       expect(subsOf(server, paneId)?.items).toEqual([
-        { id: "marker", type: "Explore", startedAt: expect.any(Number) },
+        { id: "marker", type: "Explore", depth: 1, startedAt: expect.any(Number) },
       ]);
+    });
+
+    // 20261008-graph-first PR6a: 入れ子の親子と、記録の材料（実物のスクリプト → 実 socket → 配られる一覧）。
+    it("入れ子の親・深さ・hasTranscript が一覧に載る。記録の場所そのものは、配る一覧のどこにも載らない", async () => {
+      const { server, stateDir, paneId } = await bootWithAgent();
+      const tp = "/home/u/.claude/projects/-w/sess-1.jsonl";
+      await hook(stateDir, paneId, { ...pre("外側"), transcript_path: tp });
+      await hook(stateDir, paneId, { ...start("outer1"), transcript_path: tp });
+      await hook(stateDir, paneId, { ...pre("内側"), agent_id: "outer1", transcript_path: tp });
+      await hook(stateDir, paneId, { ...start("inner1"), transcript_path: tp });
+      await vi.waitFor(() =>
+        expect(subsOf(server, paneId)?.items.map((i) => i.id)).toEqual(["outer1", "inner1"]),
+      );
+      const items = subsOf(server, paneId)!.items;
+      expect(items[0]).toMatchObject({ id: "outer1", description: "外側", depth: 1, hasTranscript: true });
+      expect(items[1]).toMatchObject({ id: "inner1", description: "内側", parentId: "outer1", depth: 2, hasTranscript: true });
+      expect(JSON.stringify(server.session.snapshot())).not.toContain(".claude/projects");
+    });
+
+    it("古いフックの報告（親・場所の項目が無い）でも数えられる（hasTranscript なし）", async () => {
+      const { server, stateDir, paneId } = await bootWithAgent();
+      await hook(stateDir, paneId, start("legacy"));
+      await vi.waitFor(() =>
+        expect(subsOf(server, paneId)?.items).toEqual([
+          { id: "legacy", type: "Explore", depth: 1, startedAt: expect.any(Number) },
+        ]),
+      );
     });
   },
 );
