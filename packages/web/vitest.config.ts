@@ -8,6 +8,8 @@ export default defineConfig({
   ],
   test: {
     environment: "happy-dom",
+    // 既定では、CSS は空に置き換わる（`?raw` の中身も空）。様式のトークンの CSS（`src/styles/uiStyle.css`）は、中身を読んで検査する（`uiStyle.test.ts`）。
+    css: { include: [/uiStyle\.css/] },
     include: ["src/**/*.test.ts"],
     // 設定画面の試験（`SettingsDialog.test.ts`）は 1 件ごとに約 21MB を残し（pinia ごとの settings の store が window の `storage` の listener を外さない等）、
     // 2026-09-28 時点で 93 件・約 2GB と worker の既定のヒープの上限に張り付いていた。操作が 1 つ増えた（20260927-agent-graph の open_graph）ところで

@@ -1,0 +1,22 @@
+/*
+ * 画面の様式（20261008-ui-style）の、形のトークン。`<html data-ui-style="classic|modern">`（`ThemeController` が当てる。起動のときは `public/theme-boot.js`）。
+ *
+ * - `:root` の値が、クラシック（いまの数値）。**属性が無いときも、属性が classic のときも、これが効く**（クラシックの規則は属性の有無によらず効く）。
+ * - モダンは、`:root[data-ui-style="modern"]` だけが上書きする。
+ * - 部品の `border-radius` が、このトークンを読む（PR1c）。この PR1b の時点では、どの部品も、まだ読まない。
+ * - 数値は仮置き（利用者が、画面を見て決める）。
+ *
+ * **色（色を表す値・名前）と文字は、様式で変えない**。守りの部品（表示の面の枠・印「スクリプト」・モバイルの骨組みほか）のクラス名も、ここに書かない
+ * （`uiStyle.test.ts` が確かめる）。
+ */
+:root {
+  --soda-shape-radius-s: 3px;
+  --soda-shape-radius: 4px;
+  --soda-shape-radius-l: 6px;
+}
+
+:root[data-ui-style="modern"] {
+  --soda-shape-radius-s: 6px;
+  --soda-shape-radius: 8px;
+  --soda-shape-radius-l: 12px;
+}
