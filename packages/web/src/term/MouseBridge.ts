@@ -21,6 +21,8 @@ export type MenuTarget =
   | { kind: "displays"; paneId: string }
   /** 表示の面 1 つのメニュー（開く／たたむ・帯の上下・指定に戻す・閉じる）。 */
   | { kind: "display"; id: string }
+  /** グラフの画面のツールバーの「そのほか」（全体の一時停止・履歴・別のマシンの pane を載せる。20261008-graph-first の PR1e）。 */
+  | { kind: "graphMore" }
   | { kind: "global" };
 
 export interface UiPort {

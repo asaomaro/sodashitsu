@@ -234,6 +234,13 @@ export const useGraphSpacesStore = defineStore("graphSpaces", () => {
     revealSeq.value++;
   }
 
+  // --- ツールバーの「そのほか」メニュー（ContextMenu）からの命令 ----------------------------------
+  /** メニューの項目が、グラフの画面（`GraphCanvas`）へ頼む命令。メニューは別の部品なので、store 越しに渡す。 */
+  const command = ref<{ seq: number; name: "pause" | "history" | "checklist" } | null>(null);
+  function requestCommand(name: "pause" | "history" | "checklist"): void {
+    command.value = { seq: (command.value?.seq ?? 0) + 1, name };
+  }
+
   // --- 空間ごとの表示 ------------------------------------------------------------------
   function loadViewport(spaceId: string): GraphViewport | null {
     const m = readJson(VIEWPORTS_KEY);
@@ -277,6 +284,8 @@ export const useGraphSpacesStore = defineStore("graphSpaces", () => {
     revealSeq,
     revealTarget,
     requestReveal,
+    command,
+    requestCommand,
     loadViewport,
     saveViewport,
   };

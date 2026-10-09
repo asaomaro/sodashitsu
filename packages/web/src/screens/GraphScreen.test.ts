@@ -68,14 +68,44 @@ describe("GraphScreen", () => {
     wrapper.unmount();
   });
 
-  it("閉じるボタンで基本画面へ。Esc 以外のキーでは閉じない", async () => {
+  it("題と「×」は出さない（戻るのは、切り替えの部品・prefix+a・Esc）。Esc 以外のキーでは閉じない（PR1e AC-L2）", async () => {
     const { wrapper, view } = mountScreen();
     view.setScreen("graph");
     await flush();
     await wrapper.find(".graph-view").trigger("keydown", { key: "a" });
     expect(view.screen).toBe("graph");
-    await wrapper.find(".graph-close").trigger("click");
+    expect(wrapper.find(".graph-close").exists()).toBe(false);
+    expect(wrapper.find(".graph-title").exists()).toBe(false);
+    await wrapper.find(".graph-view").trigger("keydown", { key: "Escape" });
     expect(view.screen).toBe("base");
+    wrapper.unmount();
+  });
+
+  it("ツールバー: 左に「線を結ぶ」「並びを整える」「そのほか」、右に探す・拡大縮小・「全体を表示」。個別の一時停止・履歴・載せるボタンは無い（そのほかのメニューへ）", async () => {
+    const { wrapper, view } = mountScreen();
+    view.setScreen("graph");
+    await flush();
+    const labels = wrapper.findAll(".graph-toolbar > .graph-tool").map((b) => b.text());
+    expect(labels).toEqual(["線を結ぶ", "並びを整える", "そのほか ▾", "−", "＋", "全体を表示"]);
+    expect(wrapper.find(".graph-find-input").exists()).toBe(true);
+    for (const cls of [".graph-pause-all", ".graph-history", ".graph-add-panes"]) expect(wrapper.find(cls).exists(), cls).toBe(false);
+    expect(wrapper.find(".graph-paused-badge").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("「そのほか」は ContextMenu（graphMore）を開く。一時停止の間は、ツールバーに札と［再開］が出る", async () => {
+    const { wrapper, view } = mountScreen();
+    view.setScreen("graph");
+    await flush();
+    const graph = (await import("../store/graph.js")).useGraphStore(pinia);
+    graph.applyGraph({ rev: 1, paused: false, nodes: [], links: [] }, "fresh");
+    await flush();
+    await wrapper.find(".graph-more").trigger("click");
+    expect(view.contextMenu?.target).toEqual({ kind: "graphMore" });
+    graph.applyGraph({ rev: 2, paused: true, nodes: [], links: [] }, "event");
+    await flush();
+    expect(wrapper.find(".graph-paused-badge").text()).toContain("一時停止中");
+    expect(wrapper.find(".graph-resume").text()).toBe("再開");
     wrapper.unmount();
   });
 
