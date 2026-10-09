@@ -515,3 +515,18 @@ describe("ConfirmDialog — サーバの停止・キーからの worktree の削
     expect(view.dialogContext).toBeNull();
   });
 });
+
+describe("ConfirmDialog — グラフの線（PR3 T14e）", () => {
+  it("閉じると消える線があるときだけ「グラフの線 N 本も消えます」。0 本なら何も足さない", async () => {
+    const { useGraphStore } = await import("../store/graph.js");
+    const g = useGraphStore(pinia);
+    const view = useViewStore(pinia);
+    const wrapper = mountDialog(makeActions());
+    view.openDialogWithContext({ kind: "confirmClose", targets: [{ type: "pane", id: "p1" }] });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find("[data-testid=confirm-graph-links]").exists()).toBe(false);
+    g.graph = { rev: 1, paused: false, nodes: [], links: [{ id: "l1", kind: "supervise", from: "local:p1", to: "local:p2", limit: 0 }, { id: "l2", kind: "supervise", from: "local:p3", to: "local:p4", limit: 0 }] } as never;
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get("[data-testid=confirm-graph-links]").text()).toBe("グラフの線 1 本も消えます。");
+  });
+});

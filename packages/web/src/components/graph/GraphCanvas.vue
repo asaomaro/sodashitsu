@@ -24,6 +24,7 @@ import {
   graphNodeRect,
   isLocalNodeKey,
   addMissingNodeOps,
+  buildNewCwd,
   chordOf,
   keyInputOf,
   parallelOffsets,
@@ -50,6 +51,9 @@ import { useMachinesStore } from "../../store/machines.js";
 import { useSessionStore } from "../../store/session.js";
 import { useSettingsStore } from "../../store/settings.js";
 import { useViewStore } from "../../store/view.js";
+import GraphAddForm, { type AddFormKind, type AddFormSubmit } from "./GraphAddForm.vue";
+import { AddPaneError, addPane, type AddPaneDeps } from "./addPane.js";
+import { moveToGroup } from "./moveToGroup.js";
 import GraphConfirm from "./GraphConfirm.vue";
 import GraphEdge from "./GraphEdge.vue";
 import GraphFind from "./GraphFind.vue";
@@ -694,6 +698,7 @@ watch(
 
 function onCanvasPointerdown(ev: PointerEvent): void {
   cancelViewportAnimation();
+  if (addForm.value) closeAddForm();
   if (ev.button !== 0 && ev.pointerType === "mouse") return;
   if (confirmState.value) return;
   if (checklistOpen.value) {
@@ -1993,7 +1998,8 @@ function modalBusy(): boolean {
     history.value !== null ||
     subagentsKey.value !== null ||
     checklistOpen.value ||
-    rekeyKey.value !== null
+    rekeyKey.value !== null ||
+    addForm.value !== null
   );
 }
 function focusFind(): void {
@@ -2006,6 +2012,166 @@ function stepSpace(delta: -1 | 1): void {
   const next = ids[i + delta];
   if (i < 0 || next === undefined) return;
   onSpaceSelect(next);
+}
+
+// --- pane・workspace を足す（20261008-graph-first の PR3 T14c〜T14e。decisions D88・D89）-------------------------------------
+// 足す流れは `addPane.ts`（単体試験あり）。ここは、フォームの開閉・位置・足した後の「選ぶ・窓を開く」だけ。窓を開くのは既存の入口（`openNodeWindow`）。
+
+interface AddFormState {
+  workspaceId: string;
+  /** 開いた「＋」（閉じたらフォーカスを戻す）。 */
+  trigger: HTMLElement | null;
+  /** 監督役にできる、選んでいるノード（エージェントのノード）。 */
+  supervisorKey: string | null;
+  busyText: string | null;
+  error: string | null;
+  /** 前の試みで足せた pane（やり直しは、そこへ起動するだけ）。 */
+  createdPaneId: string | null;
+}
+const addForm = ref<AddFormState | null>(null);
+const addKinds = ref<AddFormKind[] | null>(null);
+
+function openAddForm(workspaceId: string, trigger: HTMLElement | null): void {
+  if (isMobile.value || !conn || addForm.value?.busyText) return;
+  const s = selection.value;
+  const info = s?.kind === "node" ? graph.nodeInfo(s.key as NodeKey) : null;
+  addForm.value = {
+    workspaceId,
+    trigger,
+    supervisorKey: info !== null && info.agent !== null && info.exists === true ? info.key : null,
+    busyText: null,
+    error: null,
+    createdPaneId: null,
+  };
+  addKinds.value = null;
+  void conn
+    .request("agent.kinds", {})
+    .then((r) => (addKinds.value = r.kinds))
+    .catch(() => (addKinds.value = []));
+}
+/** フォームが開いている間、フォームの外（ツールバー・サイドバー・キャンバス・画面の外。どこでも）を押すと閉じる（AC-A1）。足している間は閉じない。 */
+function onAddFormOutsidePointerdown(ev: PointerEvent): void {
+  const t = ev.target as Element | null;
+  if (t?.closest?.("[data-graph-add-form]")) return;
+  closeAddForm();
+}
+watch(
+  () => addForm.value !== null,
+  (open) => {
+    if (open) document.addEventListener("pointerdown", onAddFormOutsidePointerdown, true);
+    else document.removeEventListener("pointerdown", onAddFormOutsidePointerdown, true);
+  },
+);
+onBeforeUnmount(() => document.removeEventListener("pointerdown", onAddFormOutsidePointerdown, true));
+function closeAddForm(): void {
+  const f = addForm.value;
+  if (f === null || f.busyText !== null) return;
+  addForm.value = null;
+  void nextTick(() => (f.trigger?.isConnected ? f.trigger : dialogEl.value)?.focus({ preventScroll: true }));
+}
+/** 「＋ pane」（ツールバー）: 選んでいる workspace に足す。その workspace の空間へ切り替えて見せる。 */
+function openAddFormForSelection(ev?: Event): void {
+  const wid = view.workspaceId;
+  if (!wid) {
+    view.toast("足す先の workspace がありません。");
+    return;
+  }
+  spaces.requestReveal({ kind: "workspace", workspaceId: wid });
+  openAddForm(wid, (ev?.currentTarget as HTMLElement | null) ?? null);
+}
+const addFormSupervisorName = computed(() => {
+  const k = addForm.value?.supervisorKey;
+  return k ? graph.nodeInfo(k as NodeKey).name : null;
+});
+const addFormWorkspaceTitle = computed(() => {
+  const id = addForm.value?.workspaceId;
+  return (id && session.workspaces.get(id)?.label) || "workspace";
+});
+/** フォームの位置: 囲いの下の左（キャンバスの左上からの px）。キャンバスの中に収める。 */
+const addFormPos = computed(() => {
+  const f = addForm.value;
+  const frame = f ? spaces.frames.find((x) => x.id === f.workspaceId) : undefined;
+  const z = viewport.value.zoom;
+  const W = 280;
+  const H = 300;
+  let x = frame ? frame.rect.x * z + viewport.value.panX : 16;
+  let y = frame ? (frame.rect.y + frame.rect.h) * z + viewport.value.panY + 6 : 16;
+  const cw = canvasEl.value?.clientWidth ?? 0;
+  const ch = canvasEl.value?.clientHeight ?? 0;
+  if (cw > 0) x = Math.max(8, Math.min(x, cw - W - 8));
+  if (ch > 0) y = Math.max(8, Math.min(y, ch - H - 8));
+  return { x, y };
+});
+function addPaneDeps(): AddPaneDeps {
+  return {
+    conn: conn as unknown as AddPaneDeps["conn"],
+    workspaces: session.workspaces,
+    tabs: session.tabs,
+    panes: session.panes,
+    newCwdFor: (id) => buildNewCwd(settings.newCwdPolicy, settings.newCwdPath, id),
+    hasNode: (k) => graph.nodes.some((n) => n.key === k),
+    updateGraph: async (build) => {
+      const r = await graph.update(() => build());
+      return r.ok ? { ok: true } : { ok: false, message: r.message };
+    },
+    agentNames: () => new Set(graph.nodes.map((n) => graph.nodeInfo(n.key).name)),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  };
+}
+async function submitAddForm(s: AddFormSubmit): Promise<void> {
+  const f = addForm.value;
+  if (f === null || f.busyText !== null || !conn) return;
+  f.error = null;
+  f.busyText = "pane を足しています…";
+  try {
+    const r = await addPane(
+      addPaneDeps(),
+      { workspaceId: f.workspaceId, kind: s.kind, name: s.name, supervisorKey: s.supervise ? f.supervisorKey : null, existingPaneId: f.createdPaneId },
+      { onStep: (t) => (f.busyText = t), onPane: (id) => (f.createdPaneId = id) },
+    );
+    addForm.value = null;
+    // 足した後（T14d）: ノードを選んで見せ、端末の窓を開く（既存の入口）。
+    spaces.requestReveal({ kind: "node", key: r.key });
+    await nextTick();
+    openNodeWindow(r.key, true);
+  } catch (err) {
+    f.busyText = null;
+    if (err instanceof AddPaneError) {
+      f.error = err.message;
+      if (err.paneId !== null) f.createdPaneId = err.paneId;
+    } else f.error = err instanceof Error ? err.message : "足せませんでした。";
+  }
+}
+
+/**
+ * 「＋ workspace」で作った workspace を、いま見ている空間がグループなら、そのグループへ入れる（サーバの決まりは「グループなし」）。
+ * **入れるのは、この操作が作った workspace だけ**（`workspace.create` の応答の id。ほかのブラウザ・`sodactl` が同じ時間に作ったものは動かさない）。
+ * 空間は、押した時点のもの（作っている間に見ている空間を替えても、押した空間へ入れる）。
+ */
+function createWorkspaceHere(): void {
+  const id = spaces.currentId;
+  const groupId = id.startsWith("g:") ? id.slice(2) : null;
+  actions?.newWorkspaceThen((workspaceId) => {
+    if (groupId === null) return;
+    if (conn) void moveToGroup((m, p) => conn!.request(m, p), (t) => view.toast(t), groupId, workspaceId);
+  });
+}
+/** ツールバーの「＋ workspace ▾」。 */
+function openAddWorkspaceMenu(ev: MouseEvent | KeyboardEvent): void {
+  const el = (ev.currentTarget as HTMLElement | null) ?? toolbarButton("graph-add-workspace");
+  const r = el?.getBoundingClientRect();
+  view.openContextMenu({ kind: "graphAdd" }, { x: r?.left ?? 0, y: (r?.bottom ?? 0) + 2 });
+}
+/** ノード・囲いの見出しの右クリックのメニュー。 */
+function onNodeContextmenu(ev: MouseEvent, key: string): void {
+  if (isMobile.value || props.kind !== "screen") return;
+  ev.preventDefault();
+  selection.value = { kind: "node", key };
+  view.openContextMenu({ kind: "graphNode", key }, { x: ev.clientX, y: ev.clientY });
+}
+function onFrameContextmenu(ev: MouseEvent, workspaceId: string): void {
+  if (isMobile.value || props.kind !== "screen") return;
+  view.openContextMenu({ kind: "graphFrame", workspaceId }, { x: ev.clientX, y: ev.clientY });
 }
 
 // --- ツールバー（デスクトップの画面。PR1e T17b）------------------------------------------------------------------------
@@ -2022,7 +2188,14 @@ watch(
     if (c === null || props.kind !== "screen" || !props.active) return;
     if (c.name === "pause") void toggleGraphPaused();
     else if (c.name === "history") toggleHistory();
-    else guardPanel(() => openChecklist());
+    else if (c.name === "addPane") {
+      if (c.arg) {
+        spaces.requestReveal({ kind: "workspace", workspaceId: c.arg });
+        openAddForm(c.arg, null);
+      }
+    } else if (c.name === "newWorkspace") {
+      createWorkspaceHere();
+    } else guardPanel(() => openChecklist());
   },
 );
 /** 「線を結ぶ」: 選んでいるノードから接続モードに入る（ノードを選んでいなければ、案内だけ）。 */
@@ -2341,6 +2514,18 @@ function chipAria(e: EdgeView): string {
       <header class="graph-toolbar" :class="{ 'graph-toolbar-screen': kind === 'screen' }">
         <template v-if="kind === 'screen'">
           <!-- デスクトップの画面（PR1e T17b）: よく使う操作を前に。「＋ pane」「＋ workspace」は PR3 でここへ（左端の置き場所）。題と「×」は出さない（戻るのは、サイドバーの上の切り替え・prefix+a・Esc） -->
+          <button type="button" class="graph-tool graph-add-pane" :disabled="!graph.graph || !view.workspaceId" title="選んでいる workspace に pane を足す" @click="openAddFormForSelection">
+            ＋ pane
+          </button>
+          <button
+            type="button"
+            class="graph-tool graph-add-workspace"
+            aria-haspopup="menu"
+            :aria-expanded="view.contextMenu?.target.kind === 'graphAdd'"
+            @click="openAddWorkspaceMenu"
+          >
+            ＋ workspace ▾
+          </button>
           <button
             type="button"
             class="graph-tool graph-connect"
@@ -2455,6 +2640,7 @@ function chipAria(e: EdgeView): string {
       <div class="graph-body">
         <div ref="canvasEl" class="graph-canvas" :style="gridStyle" @pointerdown="onCanvasPointerdown">
           <div class="graph-world" :style="worldStyle">
+            <!-- 世界の層の外（フォームは拡大縮小しない）は、下の GraphAddForm -->
             <GraphFrameLayer
               :frames="spaces.frames"
               :infos="spaces.infoMap"
@@ -2467,6 +2653,8 @@ function chipAria(e: EdgeView): string {
               @heading-pointerdown="onFrameHeadingPointerdown"
               @leave="leaveFrameLayer"
               @tag="spaces.toggleEmphasis"
+              @add="openAddForm"
+              @head-contextmenu="onFrameContextmenu"
             />
             <svg class="graph-edges" width="1" height="1" aria-hidden="true">
               <GraphEdge
@@ -2513,6 +2701,7 @@ function chipAria(e: EdgeView): string {
               :in-count="degree.inn.get(n.key) ?? 0"
               @focus="onNodeFocus(n.key)"
               @keydown="onNodeKeydown($event, n.key)"
+              @contextmenu="onNodeContextmenu($event, n.key)"
               @body-pointerdown="onNodePointerdown($event, n.key)"
               @handle-pointerdown="onHandlePointerdown($event, n.key)"
               @goto="gotoNode(n.key)"
@@ -2602,6 +2791,19 @@ function chipAria(e: EdgeView): string {
               {{ chipLabel(e) }}
             </button>
           </div>
+          <GraphAddForm
+            v-if="addForm && !isMobile"
+            :workspace-title="addFormWorkspaceTitle"
+            :kinds="addKinds"
+            :supervisor-name="addFormSupervisorName"
+            :busy-text="addForm.busyText"
+            :error="addForm.error"
+            :retrying="addForm.createdPaneId !== null"
+            :x="addFormPos.x"
+            :y="addFormPos.y"
+            @submit="submitAddForm"
+            @cancel="closeAddForm"
+          />
           <GraphMinimap
             v-if="!isMobile"
             :frames="spaces.frames"

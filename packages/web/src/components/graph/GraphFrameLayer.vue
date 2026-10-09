@@ -26,6 +26,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   headingPointerdown: [ev: PointerEvent, frameId: string];
   tag: [workspaceId: string, tabId: string];
+  /** 見出し右の「＋」: この workspace に pane を足すフォームを開く（PR3 T14c）。 */
+  add: [workspaceId: string, trigger: HTMLElement];
+  /** 見出しの右クリック（pane を足す・workspace を閉じる。PR3 T14e）。 */
+  headContextmenu: [ev: MouseEvent, workspaceId: string];
   /** タグから `Esc`: ノードへ戻る。 */
   leave: [];
 }>();
@@ -58,16 +62,22 @@ const rows = computed<Row[]>(() =>
 const entry = ref<string | null>(null);
 const tagKey = (frameId: string, tabId: string): string => `${frameId}|${tabId}`;
 const firstTagKey = computed<string | null>(() => {
-  const r = rows.value.find((x) => x.tags.length > 0);
+  const r = rows.value.find((x) => x.tags.length > 0 && !props.readOnly);
   return r ? tagKey(r.info.id, r.tags[0]!.id) : null;
 });
+/** 「＋」ボタン（workspace の囲いの見出し。タグと同じく、この層の Tab の止まりは 1 つ）。 */
+const addKey = (frameId: string): string => `${frameId}|+`;
+const canAdd = (r: Row): boolean => !props.readOnly && !r.frame.placeholder && r.info.kind === "workspace";
 const entryKey = computed<string | null>(() => {
   const k = entry.value;
-  if (k !== null && rows.value.some((r) => r.tags.some((t) => tagKey(r.info.id, t.id) === k))) return k;
-  return firstTagKey.value;
+  if (k !== null && rows.value.some((r) => r.tags.some((t) => tagKey(r.info.id, t.id) === k) || (canAdd(r) && addKey(r.info.id) === k))) return k;
+  return firstTagKey.value ?? (rows.value.find(canAdd) ? addKey(rows.value.find(canAdd)!.info.id) : null);
 });
 function onTagFocus(frameId: string, tabId: string): void {
   entry.value = tagKey(frameId, tabId);
+}
+function onAddFocus(frameId: string): void {
+  entry.value = addKey(frameId);
 }
 function onTagKeydown(ev: KeyboardEvent): void {
   if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
@@ -79,7 +89,7 @@ function onTagKeydown(ev: KeyboardEvent): void {
   }
   const el = ev.currentTarget as HTMLElement;
   const head = el.closest(".graph-frame-head");
-  const tags = [...(head?.querySelectorAll<HTMLElement>("[data-tab-tag]") ?? [])];
+  const tags = [...(head?.querySelectorAll<HTMLElement>("[data-roving]") ?? [])];
   const i = tags.indexOf(el);
   let next: HTMLElement | undefined;
   if (ev.key === "ArrowRight") next = tags[Math.min(tags.length - 1, i + 1)];
@@ -87,9 +97,9 @@ function onTagKeydown(ev: KeyboardEvent): void {
   else if (ev.key === "Home") next = tags[0];
   else if (ev.key === "End") next = tags.at(-1);
   else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
-    const heads = [...(el.closest(".graph-frames")?.querySelectorAll<HTMLElement>(".graph-frame-head") ?? [])].filter((h) => h.querySelector("[data-tab-tag]"));
+    const heads = [...(el.closest(".graph-frames")?.querySelectorAll<HTMLElement>(".graph-frame-head") ?? [])].filter((h) => h.querySelector("[data-roving]"));
     const j = heads.indexOf(head as HTMLElement);
-    next = heads[ev.key === "ArrowDown" ? Math.min(heads.length - 1, j + 1) : Math.max(0, j - 1)]?.querySelector<HTMLElement>("[data-tab-tag]") ?? undefined;
+    next = heads[ev.key === "ArrowDown" ? Math.min(heads.length - 1, j + 1) : Math.max(0, j - 1)]?.querySelector<HTMLElement>("[data-roving]") ?? undefined;
   } else return;
   ev.preventDefault();
   ev.stopPropagation();
@@ -133,6 +143,7 @@ function subtitle(info: FrameInfo): string {
         role="group"
         :aria-label="`${r.info.title}${r.info.kind === 'worktree' ? '（worktree グループ）' : ''}`"
         @pointerdown="!readOnly && !r.frame.placeholder && emit('headingPointerdown', $event, r.frame.id)"
+        @contextmenu="!readOnly && !r.frame.placeholder && r.info.kind === 'workspace' && ($event.preventDefault(), emit('headContextmenu', $event, r.info.id))"
       >
         <span class="graph-frame-title" :title="r.info.title">{{ r.info.title }}</span>
         <span class="graph-frame-sub" :title="subtitle(r.info)">{{ subtitle(r.info) }}</span>
@@ -148,6 +159,7 @@ function subtitle(info: FrameInfo): string {
               :title="t.label"
               :tabindex="entryKey === tagKey(r.info.id, t.id) ? 0 : -1"
               data-tab-tag
+              data-roving
               :data-tab-id="t.id"
               @pointerdown.stop
               @focus="onTagFocus(r.info.id, t.id)"
@@ -166,6 +178,22 @@ function subtitle(info: FrameInfo): string {
           </template>
           <span v-if="r.more > 0" class="graph-frame-more">+{{ r.more }}</span>
         </span>
+        <button
+          v-if="canAdd(r)"
+          type="button"
+          class="graph-frame-add"
+          :aria-label="`${r.info.title} に pane を足す`"
+          title="pane を足す"
+          :tabindex="entryKey === addKey(r.info.id) ? 0 : -1"
+          data-frame-add
+          data-roving
+          @pointerdown.stop
+          @focus="onAddFocus(r.info.id)"
+          @keydown="onTagKeydown"
+          @click.stop="emit('add', r.info.id, $event.currentTarget as HTMLElement)"
+        >
+          ＋
+        </button>
       </div>
     </div>
   </div>
@@ -293,6 +321,24 @@ span.graph-frame-tag {
 .graph-frame-tag-emphasized {
   outline: 2px solid var(--soda-state-working, #f1fa8c);
   outline-offset: 1px;
+}
+.graph-frame-add {
+  flex: none;
+  margin-left: auto;
+  min-width: var(--soda-shape-tag-h, 1.6em);
+  height: var(--soda-shape-tag-h, auto);
+  padding: 1px 8px;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.graph-frame-add:hover {
+  background: var(--soda-subtle-bg, rgba(255, 255, 255, 0.08));
 }
 .graph-frame-more {
   flex: none;

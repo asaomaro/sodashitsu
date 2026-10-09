@@ -367,6 +367,21 @@ describe("ActionDispatcher — newWorkspace（名前を尋ねず直接作る。h
     expect(view.tabId).toBe("t9");
     expect(view.focusedPaneId).toBe("p9");
   });
+
+  it("newWorkspaceThen（グラフの「＋ workspace」。PR3）: 作った workspace の id だけを渡す。作れなかったときは呼ばない", async () => {
+    const conn = makeConnection();
+    conn.resolveWith["workspace.create"] = { workspace: { id: "w9" }, tab: { id: "t9" }, pane: { id: "p9" } };
+    const made: string[] = [];
+    makeDispatcher(conn).dispatcher.newWorkspaceThen((id) => made.push(id));
+    await flush();
+    expect(made).toEqual(["w9"]);
+    const conn2 = makeConnection();
+    conn2.rejectWith["workspace.create"] = "boom";
+    const made2: string[] = [];
+    makeDispatcher(conn2).dispatcher.newWorkspaceThen((id) => made2.push(id));
+    await flush();
+    expect(made2).toEqual([]);
+  });
 });
 
 describe("ActionDispatcher — 閉じる前の確認（D23。busy な pane を含むときだけ・workspace は常に）", () => {
