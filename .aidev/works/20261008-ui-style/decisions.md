@@ -114,3 +114,12 @@
 | `components/graph/LinkPanel.vue:533` | `4px` | 置き換える | `var(--soda-shape-radius)` |
 | `components/CommandPopup.vue:242` | `4px` | 置き換える | `var(--soda-shape-radius)` |
 | `components/SubagentList.vue:53` | `3px` | 置き換える | `var(--soda-shape-radius-s)` |
+
+## T9 の追補（PR1c の後に main から入ったファイル）
+
+| ファイル:行 | 値 | 扱い | 置き換え後／理由 |
+| :- | :- | :- | :- |
+| `components/ScreenSwitcher.vue:50` | `3px` | 置き換える | `var(--soda-shape-radius-s)`（PR1c の開始後に main から入ったファイル。レビュー N1） |
+| `components/graph/GraphCanvas.vue:1813` | `10px` | 置き換えない | 固有の値（`GraphView.vue` の `10px` が、グラフの主な領域の画面化で移ったもの） |
+
+`origin/main` を取り込み直して、`git grep` で、対象（`4px`・`3px`・`6px`・片側の形）が残っていないことを確かめた（守りのファイルを除く）。
