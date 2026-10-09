@@ -201,6 +201,7 @@ for (const { key, theme } of THEMES) {
     await expect(page.getByRole("menu")).toHaveCount(0);
 
     // トースト（設定の読み直し。自動で消える種類）と、通知の一覧（ベル）。
+    await page.mouse.move(900, 500); // ポインタを、行の上から外す（ホバーの途中の描画が混ざらないように）
     await prefixKey(page, "R");
     await expect(page.locator(".toast")).toContainText("設定を読み直しました");
     await shot("toast-reload", { keepToast: true });
