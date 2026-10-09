@@ -22,6 +22,7 @@ import { FILE_CHUNK_BASE64_MAX, FILE_NAME_INPUT_MAX, FILE_PATH_MAX, FILE_RESOLVE
 import type { ExtensionListResult, ExtensionLogResult } from "./extension.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 import { GraphGetParams, GraphHistoryParams, GraphPauseParams, GraphResumeParams, GraphUpdateParams, type Graph, type GraphHistoryResult } from "./graph.js";
+import type { ForkCreated, ForkNoteStatus, ForkUnavailableReason } from "./agentFork.js";
 import { CELL_LIMIT_MESSAGE, terminalDimension, VIEW_VISIBLE_PANES_MAX, withinCellLimit } from "./terminalLimits.js";
 
 /**
@@ -965,6 +966,83 @@ export interface AgentStartResult {
   argv: string[];
 }
 
+// --- エージェントの fork（20261009-agent-fork） -----------------------------------------------------------------
+
+/**
+ * 行き先。`same`＝同じフォルダの新しい pane、`worktree`＝新しい worktree（新しいブランチ）と workspace。
+ * **`.strict()`**: 会話の id・コマンド・引数など、知らない項目は**断る**（黙って捨てない。AC5）。
+ */
+export const AgentForkTarget = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("same") }).strict(),
+  z.object({ kind: z.literal("worktree"), branch: z.string().min(1) }).strict(),
+]);
+export type AgentForkTarget = z.infer<typeof AgentForkTarget>;
+export const AgentForkParams = z
+  .object({
+    paneId,
+    target: AgentForkTarget,
+    /** worktree のときの、最初の知らせ（元のフォルダを書き換えないように）を送るか。既定は送る。 */
+    note: z.boolean().optional(),
+  })
+  .strict();
+export type AgentForkParams = z.infer<typeof AgentForkParams>;
+export interface AgentForkResult {
+  /** 新しい pane。 */
+  paneId: string;
+  workspaceId: string;
+  /** 新しいエージェントの名前（`<元の名前>-fork` の連番。`agent start` の名前）。 */
+  name: string;
+  target: "same" | "worktree";
+  /** 作った worktree のパス（worktree のとき）。 */
+  worktreePath?: string;
+  /** 最初の知らせの、この時点の状態（`pending` は手が空いたら送る予定。進み具合は `agent.fork_progress`）。 */
+  noteStatus: ForkNoteStatus;
+  /** `noteStatus` が `skipped` のときの理由。 */
+  noteReason?: string;
+  /** グラフに fork の注記を書けたか。 */
+  annotated: boolean;
+}
+
+/** 確定の前の画面のための読み取り（何も作らない・何も打ち込まない）。 */
+export const AgentForkPreviewParams = z.object({ paneId, branch: z.string().optional() }).strict();
+export type AgentForkPreviewParams = z.infer<typeof AgentForkPreviewParams>;
+export interface AgentForkPreviewResult {
+  /** 同じフォルダの fork ができるか。 */
+  available: boolean;
+  reason?: ForkUnavailableReason;
+  /** 元の会話の id の先頭 8 文字（取り違えに気づけるように）。 */
+  sessionHead?: string;
+  /** worktree の fork ができるか（git リポジトリの中の pane か）。できないとき `worktreeReason`。 */
+  worktreeAvailable: boolean;
+  worktreeReason?: "not_a_git_repository" | "worktree_failed";
+  /** 元のフォルダ（リポジトリの根。新しい worktree は、ここから切る）。 */
+  sourceDir: string | null;
+  /** 新しい worktree の作成先（`branch` を渡したとき）。 */
+  targetPath: string | null;
+  /** 候補のブランチ名。 */
+  suggestedBranch: string | null;
+  /** `branch` が既にあるか（あれば fork は断る）。`branch` を渡さなければ null。 */
+  branchExists: boolean | null;
+  /** まだコミットしていない変更の数（`git status --porcelain` の行数。数えられなければ null）。 */
+  dirtyCount: number | null;
+  /** 最初の知らせに入れるパスが、送れない形（制御文字・長さ）か。true なら知らせは送れない。 */
+  noteUnsafe: boolean;
+}
+
+/** fork の進み具合の知らせ（`agent.fork_progress`）の中身。 */
+export interface AgentForkProgress {
+  /** 元の pane。 */
+  sourcePaneId: string;
+  /** 新しい pane（できる前の失敗では無い）。 */
+  paneId?: string;
+  stage: "pane_created" | "launched" | "detected" | "ready" | "note" | "done" | "failed";
+  noteStatus?: ForkNoteStatus;
+  noteReason?: string;
+  code?: string;
+  message?: string;
+  created?: ForkCreated;
+}
+
 // --- 独自コマンド（20260927-custom-command-keys。herdr の `[[keys.command]]`） -----------------------------
 
 /** 一覧（コマンドの文字列を含まない）。 */
@@ -1135,6 +1213,8 @@ export const METHOD_SCHEMAS = {
   "agent.send_keys": AgentSendKeysParams,
   "agent.rename": AgentRenameParams,
   "agent.start": AgentStartParams,
+  "agent.fork": AgentForkParams,
+  "agent.fork_preview": AgentForkPreviewParams,
   "server.sessions": ServerSessionsParams,
   "machine.list": MachineListParams,
   "command.list": CommandListParams,
@@ -1252,6 +1332,8 @@ export interface MethodResultMap {
   "agent.send_keys": Record<string, never>;
   "agent.rename": AgentRenameResult;
   "agent.start": AgentStartResult;
+  "agent.fork": AgentForkResult;
+  "agent.fork_preview": AgentForkPreviewResult;
   "server.sessions": ServerSessionsResult;
   "machine.list": MachineListResult;
   "command.list": CommandListResult;

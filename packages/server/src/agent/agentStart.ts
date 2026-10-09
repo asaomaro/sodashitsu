@@ -82,6 +82,8 @@ export function buildStartLine(executable: string, args: readonly string[]): str
 }
 
 /** 書き込みの部分（`START_INTERRUPT_DELAY_MS` ずつ空けて順に書く）。 */
-export function startInput(line: string, bracketedPaste: boolean): string[] {
-  return [INTERRUPT, `${LINE_CLEAR}${pastePayload(line, bracketedPaste)}\r`];
+export function startInput(line: string, bracketedPaste: boolean, skipInterrupt = false): string[] {
+  const body = `${LINE_CLEAR}${pastePayload(line, bracketedPaste)}\r`;
+  // 作ったばかりの pane（fork。打ちかけが無い）は、先頭の Ctrl-C を送らない: シェルが入力を受けられる前だと、Ctrl-C が打鍵ごと捨てることがある（20261009-agent-fork の A2）。
+  return skipInterrupt ? [body] : [INTERRUPT, body];
 }

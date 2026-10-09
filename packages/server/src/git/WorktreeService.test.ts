@@ -1,4 +1,4 @@
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Workspace } from "@sodashitsu/protocol";
 import { RpcError } from "@sodashitsu/protocol";
@@ -50,6 +50,38 @@ describe("DefaultWorktreeService（本物の git を使う。既存の GitInfoPo
   function make(cwd: string | null = repo): DefaultWorktreeService {
     return new DefaultWorktreeService(sessionWith(cwd), git, new MemoryLogger(), root, () => 0);
   }
+
+  it("inspectForFork：リポジトリの根・作成先・既存のブランチ・コミットしていない変更の数（20261009-agent-fork）", async () => {
+    await mkdir(join(repo, "sub"), { recursive: true });
+    await writeFile(join(repo, "sub", "a.txt"), "x");
+    await writeFile(join(repo, "b.txt"), "y");
+    const out = await make().inspectForFork(join(repo, "sub"), "feature/x"); // サブフォルダからでも根を返す
+    expect(out.repoRoot).toBe(await realpath(repo));
+    expect(out.dirtyCount).toBe(2); // 未追跡の 2 つ（sub/ は 1 行にまとまる）
+    expect(out.branchExists).toBe(false);
+    expect(out.targetPath).toBe(`${root}/${out.repoName}/feature-x`);
+    await runGit(repo, ["branch", "feature/y"]);
+    expect((await make().inspectForFork(repo, "feature/y")).branchExists).toBe(true);
+    const noBranch = await make().inspectForFork(repo);
+    expect(noBranch).toMatchObject({ branchExists: null, targetPath: null });
+  });
+
+  it("inspectForFork：git のリポジトリでなければ not_a_git_repository", async () => {
+    const plain = await makeTempDir("soda-worktree-plain-");
+    await expect(make().inspectForFork(plain)).rejects.toMatchObject({ code: "not_a_git_repository" });
+  });
+
+  it("create に fromDir を渡すと、workspace の場所ではなく、そのリポジトリの HEAD から切る", async () => {
+    const other = await makeTempDir("soda-worktree-other-");
+    await runGit(other, ["init", "-b", "main"]);
+    await runGit(other, ["config", "user.email", "t@example.com"]);
+    await runGit(other, ["config", "user.name", "t"]);
+    await runGit(other, ["commit", "-q", "--allow-empty", "-m", "other-init"]);
+    const created = await make(repo).create("w1", "from-other", other); // workspace は repo にあるが、元は other
+    const list = await make(other).list("w1");
+    expect(list.entries.map((e) => e.branch)).toContain("from-other");
+    expect(created.path).toContain("from-other");
+  });
 
   it("list：リポジトリ名と候補のブランチ名を返し、自分自身を一覧に載せる", async () => {
     const out = await make().list("w1");
