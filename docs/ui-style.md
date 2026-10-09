@@ -16,6 +16,7 @@
 | ダイアログの内側の余白・メニューの角と上下の余白 | 20px・角 8px・上下 6px | `--soda-shape-pad`・`--soda-shape-menu-radius`・`--soda-shape-menu-pad-y` |
 | 重なる部品の中の押せる部品（ボタン・入力・メニューの行・設定のスイッチとラジオ・トースト）の高さ | 32px 以上・メニュー・トーストの左右の余白 12px | `--soda-shape-control-h`・`--soda-shape-pad-x` |
 | サイドバーの行・tab・「＋」・画面の切り替え・サイドバーの下のボタン | 行 36px・押せる部品 32px 以上・左右の余白 12px | `uiStyle.css` の `--soda-shape-row-h`・`-control-h`・`-pad-x` |
+| サイドバーの、選んでいる workspace の行 | 角の丸い枠（accent・1px）・accent を薄く混ぜた地・左右に 6px の内側の余白（クラシックは今の行いっぱいの塗り） | `--soda-shape-row-inset`・`-row-radius`・`-row-current-ring`・`-row-current-tint`（モダンだけ。部品の側が `var(--x, 今の値)`） |
 
 - 数値は、**`uiStyle.css` の 1 か所と、太さの表の 1 か所**に集めてある（後から変えやすい）。クラシックでは、高さ・余白・pane の枠の角のトークンを**定義しない**（部品の側が `var(--名前, 今の値)` の形で読むので、未定義＝今の値）。
 - **いまある 4 つの設定（pane の枠の表示・隙間・隙間の太さ・外周の枠）は、モダンでも、今と同じ意味で効く**（太さの値だけが、様式の表で替わる）。

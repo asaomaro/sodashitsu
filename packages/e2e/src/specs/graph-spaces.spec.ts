@@ -1397,6 +1397,117 @@ test.describe("見た目を案に寄せる（PR1e）", () => {
   });
 });
 
+test.describe("サイドバーの選んでいる行・面の点の格子（PR1f）", () => {
+  const rowStyle = (row: Locator) =>
+    row.evaluate((el) => {
+      const c = getComputedStyle(el);
+      return { shadow: c.boxShadow, radius: c.borderTopLeftRadius, margin: c.marginLeft, bg: c.backgroundColor, tint: c.backgroundImage, outline: c.outlineStyle };
+    });
+  /** 色を、描画後の `rgb(...)` にそろえる（変数の値のまま比べない）。 */
+  const resolveColor = (page: Page, css: string) =>
+    page.evaluate((v) => {
+      const probe = document.createElement("i");
+      probe.style.backgroundColor = v;
+      document.body.appendChild(probe);
+      const c = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return c;
+    }, css);
+
+  test("クラシック: 選んでいる行は今までの見せ方（行いっぱいの塗り・枠なし・角なし・余白なし）。基本画面でもグラフの画面でも同じ", async ({ page, appServer }) => {
+    const w = await boot(page, appServer);
+    await rowOf(page, "beta").click();
+    const base = await rowStyle(rowOf(page, "beta"));
+    expect(base.radius).toBe("0px");
+    expect(base.margin).toBe("0px");
+    expect(base.shadow).toMatch(/ 0px 0px 0px 0px inset|none/); // 太さ 0 の枠（何も描かれない）
+    expect(base.bg).toBe(await resolveColor(page, "var(--soda-menu-active-bg)"));
+    expect(base.tint).toMatch(/\/ 0\)|transparent|rgba\(\d+, \d+, \d+, 0\)/); // 重ねる色は 0%（透明）＝何も変わらない
+    await openGraph(page);
+    expect(await rowStyle(rowOf(page, "beta"))).toEqual(base);
+    expect(w.ws.size).toBeGreaterThan(0);
+  });
+
+  test("モダン: 選んでいる行は、accent の 1px の枠・角はトークン・左右に内側の余白・地は accent を薄く混ぜた色。選んでいない行・navigate の選択・畳んだサイドバーと見分けが付く", async ({ page, appServer }) => {
+    await boot(page, appServer);
+    await page.evaluate(() => { void 0; });
+    const client = await appServer.openClient();
+    await client.request("prefs.set", { patch: { uiStyle: "modern" } });
+    await expect.poll(() => page.evaluate(() => document.documentElement.getAttribute("data-ui-style"))).toBe("modern");
+    await rowOf(page, "beta").click();
+    const accent = await resolveColor(page, "var(--soda-accent)");
+    const cur = await rowStyle(rowOf(page, "beta"));
+    expect(cur.shadow).toContain(accent);
+    expect(cur.shadow).toMatch(/0px 0px 0px 1px inset/);
+    expect(cur.radius).toBe("8px"); // --soda-shape-radius（モダン）
+    expect(cur.margin).toBe("6px");
+    expect(cur.bg).toBe(await resolveColor(page, "var(--soda-menu-active-bg)"));
+    expect(cur.tint).toContain("linear-gradient"); // その上に、accent を薄く重ねる（地は accent を薄く混ぜた色）
+    expect(cur.tint).toContain("22"); // 22%（--soda-shape-row-current-tint）
+    // 選んでいない行: 枠が無い（太さ 0）・角と余白は同じ（ホバーも同じ形）
+    const other = await rowStyle(rowOf(page, "gamma"));
+    expect(other.shadow).not.toMatch(/0px 0px 0px 1px inset/);
+    expect(other.radius).toBe("8px");
+    // navigate の選択（prefix+w。fg の 1px の outline）は、別の見え方で重なっても読める
+    await focusTerminal(page);
+    await prefixKey(page, "w");
+    const sel = page.locator(".sidebar-row-selected");
+    await expect(sel).toHaveCount(1);
+    expect((await rowStyle(sel)).outline).toBe("solid");
+    await page.keyboard.press("Escape");
+    // グラフの画面でも同じ
+    await openGraph(page);
+    const g = await rowStyle(rowOf(page, "beta"));
+    expect(g.shadow).toContain(accent);
+    // 畳んだサイドバー: 内側の余白は無く、枠・角は破綻しない
+    await page.locator(".sidebar-collapse-btn").click();
+    await expect(page.locator(".sidebar-collapsed")).toBeVisible();
+    const collapsed = await rowStyle(page.locator(".sidebar-collapsed .sidebar-row-current").first());
+    expect(collapsed.margin).toBe("0px");
+    const box1 = await box(page.locator(".sidebar-collapsed .sidebar-row-current").first());
+    const nav = await box(page.locator(".sidebar"));
+    expect(box1.x).toBeGreaterThanOrEqual(nav.x - 1);
+    expect(box1.x + box1.width).toBeLessThanOrEqual(nav.x + nav.width + 1);
+  });
+
+  for (const style of ["classic", "modern"] as const) {
+    test(`${style}: 面の地に、20px 間隔の薄い点の格子。面の移動・拡大縮小に付いて動く`, async ({ page, appServer }) => {
+      await boot(page, appServer);
+      if (style === "modern") {
+        const client = await appServer.openClient();
+        await client.request("prefs.set", { patch: { uiStyle: "modern" } });
+        await expect.poll(() => page.evaluate(() => document.documentElement.getAttribute("data-ui-style"))).toBe("modern");
+      }
+      await openGraph(page);
+      await spaceBtn(page, /^開発/).click();
+      const grid = () =>
+        page.locator(".graph-canvas").evaluate((el) => {
+          const c = getComputedStyle(el);
+          return { image: c.backgroundImage, size: c.backgroundSize, pos: c.backgroundPosition };
+        });
+      const g0 = await grid();
+      expect(g0.image).toContain("radial-gradient");
+      const zoom = async () => Number(((await page.locator(".graph-zoom").textContent()) ?? "100").replace("%", "")) / 100;
+      const cell0 = parseFloat(g0.size);
+      expect(cell0).toBeCloseTo(20 * (await zoom()), 0); // 20px × 倍率（8px を下回るときは倍々）
+      // 拡大すると、間隔が広がる
+      await page.locator(".graph-zoom-in").click();
+      await page.locator(".graph-zoom-in").click();
+      const g1 = await grid();
+      expect(parseFloat(g1.size)).toBeGreaterThan(cell0);
+      // 面をドラッグして動かすと、位置が動く
+      const c = await box(page.locator(".graph-canvas"));
+      await page.mouse.move(c.x + 400, c.y + 400);
+      await page.mouse.down();
+      await page.mouse.move(c.x + 437, c.y + 421, { steps: 4 });
+      await page.mouse.up();
+      const g2 = await grid();
+      expect(g2.pos).not.toBe(g1.pos);
+      expect(g2.size).toBe(g1.size);
+    });
+  }
+});
+
 test.describe("並びを整える（PR1e T17c）", () => {
   const tidyBtn = (page: Page) => graphView(page).locator(".graph-tidy");
   /** 開発の空間のノード（鍵）。 */
@@ -1764,6 +1875,32 @@ test("スクリーンショット（PR1e）: 案に寄せたグラフ（クラ�
     await graphView(p).locator("[data-node-key]").first().click({ position: { x: 100, y: 25 } }); // 1 つ選ぶ
     await p.waitForTimeout(600);
     await p.screenshot({ path: `${dir}/graph-pr1e-${style}-${scheme}.png` });
+    await context.close();
+  }
+});
+
+test("スクリーンショット（PR1f）: 基本画面とグラフの画面（クラシック・モダン × 暗い・明るい）", async ({ browser, page, appServer }) => {
+  const dir = process.env["GRAPH_SHOTS_DIR"];
+  test.skip(dir === undefined, "GRAPH_SHOTS_DIR を渡したときだけ撮る");
+  const w = await boot(page, appServer);
+  await addTriggerLink(w, "alpha", "main-ws");
+  for (const [scheme, style] of [["dark", "classic"], ["light", "classic"], ["dark", "modern"], ["light", "modern"]] as const) {
+    await w.client.request("prefs.set", { patch: { theme: scheme === "light" ? "catppuccin-latte" : "dracula", uiStyle: style } });
+    const context = await browser.newContext({ colorScheme: scheme, viewport: { width: 1440, height: 800 } });
+    const p = await context.newPage();
+    await p.goto(`${appServer.origin}/#token=${appServer.token}`);
+    await p.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+    await rowOf(p, "alpha").click();
+    await p.evaluate(() => document.querySelectorAll<HTMLElement>(".toast-list .toast").forEach((t) => t.click()));
+    await p.waitForTimeout(500);
+    await p.screenshot({ path: `${dir}/base-${style}-${scheme}.png` });
+    await p.keyboard.press("Control+b");
+    await p.keyboard.press("a");
+    await expect(graphView(p)).toBeVisible();
+    await spaceBtn(p, /^開発/).click();
+    await expect(graphView(p).locator("[data-node-key]").first()).toBeVisible();
+    await p.waitForTimeout(600);
+    await p.screenshot({ path: `${dir}/graph-${style}-${scheme}.png` });
     await context.close();
   }
 });

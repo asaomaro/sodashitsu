@@ -35,13 +35,17 @@ describe("uiStyle.css（20261008-ui-style の角のトークン）", () => {
       "--soda-shape-row-h": "36px",
       "--soda-shape-control-h": "32px",
       "--soda-shape-pad-x": "12px",
+      "--soda-shape-row-inset": "6px",
+      "--soda-shape-row-radius": "var(--soda-shape-radius)",
+      "--soda-shape-row-current-ring": "1px",
+      "--soda-shape-row-current-tint": "22%",
       "--soda-shape-tag-h": "28px",
       "--soda-shape-pad": "20px",
       "--soda-shape-menu-radius": "var(--soda-shape-radius)",
       "--soda-shape-menu-pad-y": "6px",
       "--soda-shape-shadow": "0 8px 24px color-mix(in srgb, black 22%, transparent), 0 1px 3px color-mix(in srgb, black 18%, transparent)",
     });
-    for (const k of ["--soda-shape-pad", "--soda-shape-menu-radius", "--soda-shape-menu-pad-y", "--soda-shape-shadow", "--soda-shape-pane-radius", "--soda-shape-pane-radius-per-gap", "--soda-shape-row-h", "--soda-shape-control-h", "--soda-shape-pad-x", "--soda-shape-tag-h"]) expect(Object.keys(get(":root")), k).not.toContain(k);
+    for (const k of ["--soda-shape-pad", "--soda-shape-menu-radius", "--soda-shape-menu-pad-y", "--soda-shape-shadow", "--soda-shape-pane-radius", "--soda-shape-pane-radius-per-gap", "--soda-shape-row-h", "--soda-shape-control-h", "--soda-shape-pad-x", "--soda-shape-tag-h", "--soda-shape-row-inset", "--soda-shape-row-radius", "--soda-shape-row-current-ring", "--soda-shape-row-current-tint"]) expect(Object.keys(get(":root")), k).not.toContain(k);
   });
 
   it("モダンだけが属性の規則。クラシックの規則は属性に依らない（:root だけ）。ほかの規則は無い", () => {
