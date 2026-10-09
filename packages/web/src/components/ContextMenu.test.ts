@@ -621,6 +621,46 @@ describe("ContextMenu — 表示の面（20261008-display-layout）", () => {
     expect(labels(w)).toEqual(["たたむ", "右に置く", "上に置く", "下に置く", "プログラムの指定に戻す", "この表示を閉じる"]);
   });
 
+  it("面のメニュー（パネル）: 窓の動ける領域があるときだけ「浮いた窓にする」が出る。選ぶと開いて出て、記憶に矩形が書かれる。窓になった面には「キーで動かす」「キーで大きさを変える」が出る", async () => {
+    const d = useDisplayStore(pinia);
+    const view = useViewStore(pinia);
+    const a = face("a");
+    d.upsert(a);
+    view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
+    expect(labels(mountMenu(makeActions()))).not.toContain("浮いた窓にする"); // 領域が分からない間は出さない
+    document.body.innerHTML = "";
+    d.setLayoutSnapshot("p1", { auto: [], floatArea: { w: 800, h: 500 } });
+    view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
+    let w = mountMenu(makeActions());
+    expect(labels(w)).toContain("浮いた窓にする");
+    await w.findAll("li").find((li) => li.text() === "浮いた窓にする")!.trigger("click");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(d.effectiveOf(a)).toMatchObject({ dock: "float", collapsed: false });
+    expect(d.faceRectOf(a)).toBeDefined();
+    expect(d.layoutPrefs.names["panel|a"]).toEqual({ dock: "float" });
+    document.body.innerHTML = "";
+    view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
+    w = mountMenu(makeActions());
+    expect(labels(w)).toEqual(["たたむ", "右に置く", "左に置く", "上に置く", "下に置く", "キーで動かす", "キーで大きさを変える", "プログラムの指定に戻す", "この表示を閉じる"]);
+    await w.findAll("li").find((li) => li.text() === "キーで動かす")!.trigger("click");
+    await Promise.resolve();
+    expect(d.floatKeyMode).toEqual({ id: "a", paneId: "p1", mode: "move" });
+  });
+
+  it("面のメニュー（パネル）: たたんだ窓は、窓の動ける領域が無い間は「開く」を出さない", () => {
+    const d = useDisplayStore(pinia);
+    const view = useViewStore(pinia);
+    const a = face("a", { dock: "float" });
+    d.upsert(a);
+    view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
+    expect(labels(mountMenu(makeActions()))).not.toContain("開く");
+    document.body.innerHTML = "";
+    d.setLayoutSnapshot("p1", { auto: [], floatArea: { w: 800, h: 500 } });
+    view.openContextMenu({ kind: "display", id: "a" }, { x: 0, y: 0 });
+    expect(labels(mountMenu(makeActions()))).toContain("開く");
+  });
+
   it("面のメニュー（帯）: 今と違う側だけ「上に置く／下に置く」。選ぶと移った先で開き、同じ名前の記憶にも書く。指定に戻すで消える", async () => {
     const d = useDisplayStore(pinia);
     const view = useViewStore(pinia);

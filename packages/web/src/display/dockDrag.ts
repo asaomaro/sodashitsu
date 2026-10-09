@@ -35,6 +35,24 @@ export function dockZoneAt(box: ZoneBox, x: number, y: number, opts: { float: bo
   return opts.float ? "float" : null;
 }
 
+/** 浮いた窓をつかんで動かしているとき、本体の箱の縁から、この距離（px）以内に入ったときだけ、その側が落とせる場所になる（窓を縁へ寄せるだけで、ドックに吸われないように）。 */
+export const FLOAT_EDGE_DROP_PX = 16;
+
+/** 浮いた窓を動かしているポインタが、本体の箱の縁から `px` 以内なら、いちばん近い縁の側。箱の外・縁から遠いときは null。 */
+export function floatEdgeZoneAt(box: ZoneBox, x: number, y: number, px: number = FLOAT_EDGE_DROP_PX): DockSide | null {
+  if (!(box.width > 0) || !(box.height > 0)) return null;
+  if (x < box.left || x > box.left + box.width || y < box.top || y > box.top + box.height) return null;
+  const dist: [DockSide, number][] = [
+    ["top", y - box.top],
+    ["bottom", box.top + box.height - y],
+    ["left", x - box.left],
+    ["right", box.left + box.width - x],
+  ];
+  let best = dist[0]!;
+  for (const d of dist) if (d[1] < best[1]) best = d;
+  return best[1] <= px ? best[0] : null;
+}
+
 // --- つかむ・動かす・離す・取り消す --------------------------------------------------------------------------------------------------
 
 /** この距離（px）動くまでは、ただの押下（何もしない）。 */
@@ -47,6 +65,8 @@ export interface DockDragState {
   paneId: string;
   /** いまポインタのある場所（箱の外・落とせない場所は null）。 */
   zone: DockZone | null;
+  /** 浮いた窓をその場で動かしているとき真（落とせる場所の表示は、縁に寄せたときだけ出す）。 */
+  floatMove?: boolean;
 }
 
 export interface DockDragOptions {
@@ -58,8 +78,8 @@ export interface DockDragOptions {
   float(): boolean;
   /** 状態をストアへ（`null` で終わり）。 */
   setState(s: DockDragState | null): void;
-  /** 離した。`zone` は落とせる場所（今の置き場所と同じかどうかは呼ぶ側が決める）。 */
-  drop(zone: DockZone): void;
+  /** 離した。`zone` は落とせる場所（今の置き場所と同じかどうかは呼ぶ側が決める）。`at` は離した位置（画面の座標。中央＝浮いた窓のとき、窓の左上にする）。 */
+  drop(zone: DockZone, at: { x: number; y: number }): void;
   /** modal のダイアログが開いているか（開いたらドラッグを取り消す）。 */
   modalOpen?(): boolean;
 }
@@ -164,7 +184,7 @@ export function createDockDrag(o: DockDragOptions, win: Window = window): DockDr
       const wasActive = active;
       const at = wasActive && !swapped() ? zoneAt(ev.clientX, ev.clientY) : null;
       end();
-      if (wasActive && at !== null) o.drop(at);
+      if (wasActive && at !== null) o.drop(at, { x: ev.clientX, y: ev.clientY });
     },
     onPointerCancel(ev) {
       if (!start || ev.pointerId !== start.pointerId) return;

@@ -4,7 +4,8 @@ import { computed, inject, onBeforeUnmount, watch } from "vue";
 import { displayLabel } from "../display/displayLabel.js";
 import { createDockDrag, type DockZone } from "../display/dockDrag.js";
 import { dismissWithFocus, headFocusTarget, menuPositionBelow, openDisplayMenu, trayFocusTarget, withDisplayChange } from "../display/displayOps.js";
-import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
+import { clampFloatRect, defaultFloatRect, FLOAT_AREA_INSET_PX } from "../display/floatGeometry.js";
+import { DisplayControllerKey, DisplayHostKey, FloatGripKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useViewStore } from "../store/view.js";
 import DisplayScriptMark from "./DisplayScriptMark.vue";
@@ -19,6 +20,8 @@ const store = useDisplayStore();
 const view = useViewStore();
 const controller = inject(DisplayControllerKey, null);
 const host = inject(DisplayHostKey, undefined);
+/** 浮いた窓の中では、つかむ場所は D&D ではなく、窓をその場で動かす（`DisplayFloat` が提供する）。 */
+const floatGrip = inject(FloatGripKey, null);
 
 const label = computed(() => displayLabel(props.info));
 
@@ -35,10 +38,26 @@ const dockDrag = createDockDrag({
     return props.info.paneId;
   },
   box: () => document.querySelector(`[data-pane-id="${CSS.escape(props.info.paneId)}"] .pane-frame-body-displays`)?.getBoundingClientRect() ?? null,
-  float: () => false, // 浮いた窓は PR-C
+  // 中央（浮いた窓）は、窓の動ける領域が分かっている間だけ落とせる（無ければ「ここには置けません」）。
+  float: () => store.canOpenFloat(props.info.paneId),
   setState: (st) => store.setDockDrag(st),
-  drop: (zone: DockZone) => {
-    if (zone === "float" || zone === store.effectiveOf(props.info).dock) return;
+  drop: (zone: DockZone, at) => {
+    if (zone === store.effectiveOf(props.info).dock) return;
+    if (zone === "float") {
+      // 離した位置を左上にした矩形（窓の動ける領域へ丸める）。大きさは初めの矩形と同じ。1 回の呼び出しで、置き場所・開く・矩形を書く。
+      const area = store.layoutByPane.get(props.info.paneId)?.floatArea;
+      const center = document.querySelector(`[data-pane-id="${CSS.escape(props.info.paneId)}"] .pane-frame-center`)?.getBoundingClientRect();
+      if (!area || !center) return;
+      const base = defaultFloatRect(0, props.info.size, area);
+      const rect = clampFloatRect({ ...base, x: at.x - center.left - FLOAT_AREA_INSET_PX, y: at.y - center.top - FLOAT_AREA_INSET_PX }, area);
+      void withDisplayChange(
+        props.info,
+        () => store.setFaceDock(props.info, "float", rect),
+        () => headFocusTarget(props.info.id),
+        host,
+      );
+      return;
+    }
     void withDisplayChange(
       props.info,
       () => store.setFaceDock(props.info, zone),
@@ -98,11 +117,11 @@ function onKeydown(ev: KeyboardEvent): void {
       data-display-keepfocus
       data-pane-panel-label
       @mousedown.prevent
-      @pointerdown="dockDrag.onPointerDown"
-      @pointermove="dockDrag.onPointerMove"
-      @pointerup="dockDrag.onPointerUp"
-      @pointercancel="dockDrag.onPointerCancel"
-      @lostpointercapture="dockDrag.onPointerCancel"
+      @pointerdown="floatGrip ? floatGrip.onPointerDown($event) : dockDrag.onPointerDown($event)"
+      @pointermove="floatGrip ? floatGrip.onPointerMove($event) : dockDrag.onPointerMove($event)"
+      @pointerup="floatGrip ? floatGrip.onPointerEnd($event) : dockDrag.onPointerUp($event)"
+      @pointercancel="floatGrip ? floatGrip.onPointerEnd($event) : dockDrag.onPointerCancel($event)"
+      @lostpointercapture="floatGrip ? floatGrip.onPointerEnd($event) : dockDrag.onPointerCancel($event)"
     >
       <DisplayScriptMark :info="info" part="mark" /><span class="display-head-label">{{ label }}</span>
     </div>

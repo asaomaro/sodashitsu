@@ -261,7 +261,7 @@
       依存: T13
       AC: AC17, AC18, AC19, AC20, AC22
       点検: あり
-- [ ] T22: 窓と層: `DisplayFloat.vue`（`DisplayPanelHead`・題・操作中の文言・枠〔`:key="placedFrameKey(info, 'float')"`〕・操作中の縁・`role="dialog"`・`aria-label`・`data-display-float`・`data-display-root`・不透明な背景）。`PaneFrame.vue` に窓の層 `div.pane-frame-floats`（`.pane-frame-center` の中・`.pane-frame-main` の兄弟・`position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 20; isolation: isolate`。窓は `pointer-events: auto`）。
+- [x] T22: 窓と層: `DisplayFloat.vue`（`DisplayPanelHead`・題・操作中の文言・枠〔`:key="placedFrameKey(info, 'float')"`〕・操作中の縁・`role="dialog"`・`aria-label`・`data-display-float`・`data-display-root`・不透明な背景）。`PaneFrame.vue` に窓の層 `div.pane-frame-floats`（`.pane-frame-center` の中・`.pane-frame-main` の兄弟・`position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 20; isolation: isolate`。窓は `pointer-events: auto`）。
       窓の根に `tabindex` を付けない（キーのモードの間だけ。T23）。枠（`DisplayFrame`）以外の部分（題・操作中の文言・縁）は `@mousedown.prevent`・`data-display-keepfocus`。
       **`v-for` は出た順・`:key` は面の id。重なりは `z-index: 20 + floatOrder の位置`**（`floatOrder` は pane ごと。更新は `raiseFloat`・`insertFloat`: 窓の `pointerdown` の capture・`focusedDisplayId` の変化・窓が開いた）。**窓を開く操作（トレイのボタン・メニュー・`prefix+i`・D&D）は、記憶に `rect` が無ければ、初めの矩形（`defaultFloatRect`。領域は `store.layoutByPane` の `floatArea`。`null` なら書かない）を、記憶の `rect` に書く**（`writeFace` の中。保存しない別の置き場は持たない）。書いた後は、`set --size` の変更・ほかの窓の開閉で動かない。
       **記憶の無い浮いた窓は、閉じて始まる**（T5 の `effectiveCollapsed`）。
@@ -271,7 +271,7 @@
       依存: T21, T14, T8, T17
       AC: AC8, AC17, AC19, AC20, AC21, AC22, AC24, AC25, AC-I1, AC-I4
       点検: あり
-- [ ] T23: 移動・大きさ・キーボード: 縁と角の 8 つのつかむ場所（`data-display-keepfocus`。`useResizeDrag` と同じ決まりで、その場でスタイルを変え、`store.layoutRev++`、離したとき `setFaceRect`。`Esc` で戻す・ダイアログで確定）。面のメニューの「キーで動かす」「キーで大きさを変える」（`floatKeyMode`。窓の根に `tabindex="-1"` を付けてフォーカス〔終えるときは、**先にフォーカスを移してから** `tabindex` を外す＝`body` に落とさない〕・矢印 16px・`Shift` 64px・`Enter`・`Esc`・フォーカスが出たら確定・`aria-live` の案内・キーを外へ流さない・**終えたら、始める前の場所へフォーカスを戻す**）。
+- [x] T23: 移動・大きさ・キーボード: 縁と角の 8 つのつかむ場所（`data-display-keepfocus`。`useResizeDrag` と同じ決まりで、その場でスタイルを変え、`store.layoutRev++`、離したとき `setFaceRect`。`Esc` で戻す・ダイアログで確定）。面のメニューの「キーで動かす」「キーで大きさを変える」（`floatKeyMode`。窓の根に `tabindex="-1"` を付けてフォーカス〔終えるときは、**先にフォーカスを移してから** `tabindex` を外す＝`body` に落とさない〕・矢印 16px・`Shift` 64px・`Enter`・`Esc`・フォーカスが出たら確定・`aria-live` の案内・キーを外へ流さない・**終えたら、始める前の場所へフォーカスを戻す**）。
       見出しのボタンの上の `Esc` で、窓を閉じずに端末へ。窓の上のホイールが、端末のスクロールバックを動かさない。単体テスト
       対象: `packages/web/src/components/DisplayFloat.vue`・`.test.ts`、`ContextMenu.vue`・`ContextMenu.test.ts`、`store/display.ts`（`floatKeyMode`） / 根拠: design「浮いた窓」「キー」
       依存: T22

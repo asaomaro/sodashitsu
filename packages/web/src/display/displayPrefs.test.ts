@@ -1,4 +1,4 @@
-import { DISPLAY_DOCKS, type DisplayInfo } from "@sodashitsu/protocol";
+import { DISPLAY_DOCKS, type DisplayDock, type DisplayInfo } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import {
   DISPLAY_DOCK_CAPS,
@@ -143,7 +143,7 @@ describe("effectiveDock（記憶 ＞ 同じ名前 ＞ 指定 ＞ 設定。caps �
     expect(effectiveDock(i, { ...nm, faces: { [faceKey(i)]: { dock: "float", collapsed: false } } }, set, ALL)).toBe("float"); // 面の記憶 ＞ 同じ名前
   });
   it("caps に無い値は飛ばして次を見る。どれも出せなければ right", () => {
-    expect(DISPLAY_DOCK_CAPS).toEqual(["right", "left", "top", "bottom"]); // PR-B: 4 つの側（浮いた窓は PR-C）
+    expect(DISPLAY_DOCK_CAPS).toEqual(["right", "left", "top", "bottom", "float"]); // PR-C: 4 つの側と浮いた窓
     expect(effectiveDock(i, emptyLayout(), { dock: "right" }, ["right"])).toBe("right");
     expect(effectiveDock(i, emptyLayout(), { dock: "top" }, ["top", "right"])).toBe("top");
     expect(effectiveDock(i, nm, { dock: "float" }, ["right"])).toBe("right");
@@ -196,7 +196,8 @@ describe("hasFacePref", () => {
 });
 
 describe("composeFacePref（記憶に書く全項目）", () => {
-  const caps = DISPLAY_DOCK_CAPS;
+  // 浮いた窓を出せない画面（PR-B の画面）の caps。浮いた窓を出せる画面は ALL。
+  const caps: readonly DisplayDock[] = ["right", "left", "top", "bottom"];
   it("変えた項目に、導出した値を重ねて全項目を書く: --dock bottom の面をたたんでも、記憶の dock は bottom", () => {
     const i = info({ dock: "bottom" });
     expect(composeFacePref(i, emptyLayout(), S, caps, { collapsed: true })).toEqual({ dock: "bottom", collapsed: true });
