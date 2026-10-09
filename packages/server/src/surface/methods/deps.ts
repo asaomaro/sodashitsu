@@ -6,6 +6,7 @@ import type { SizeAuthority } from "../../clients/SizeAuthority.js";
 import type { TerminalManager } from "../../terminal/TerminalManager.js";
 import type { AgentIntegrationService } from "../../agent/AgentIntegrationService.js";
 import type { AgentStarter } from "../../agent/AgentStarter.js";
+import type { SubagentTranscriptReader } from "../../agent/SubagentTranscript.js";
 import type { MetadataService } from "../../metadata/MetadataService.js";
 import type { MachineStatus, ServerSessionEntry } from "@sodashitsu/protocol";
 import type { CommandService } from "../../commands/CommandService.js";
@@ -36,6 +37,8 @@ export interface MethodDeps {
   gitPoller: GitInfoPoller;
   /** `agent.start`（20260926-agent-start）。無ければ `agent.start` を登録しない（decisions.md D7）。 */
   agentStarter?: AgentStarter;
+  /** サブエージェントの記録を読む（20261008-graph-first の PR6c）。無ければ `agent.subagent_transcript` を登録しない。 */
+  subagentTranscripts?: Pick<SubagentTranscriptReader, "read">;
   /** `server.sessions`（20260926-named-session-ui）。無ければ空の一覧を返す。 */
   serverSessions?: () => Promise<ServerSessionEntry[]>;
   /** `machine.list`（20260927-multi-host-machines）。無ければ空の一覧を返す。 */

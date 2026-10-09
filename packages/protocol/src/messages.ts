@@ -944,6 +944,47 @@ export interface AgentRenameResult {
 }
 
 /**
+ * サブエージェントの記録を、読むだけで追う（20261008-graph-first の PR6c。グラフの「記録を読むだけの窓」）。
+ * **ブラウザが送るのは pane の id とサブエージェントの id と続きの位置だけ**（ファイルの場所は受け取らない。サーバが、フックの報告から決まった形に組み立てて、
+ * Claude Code の記録の置き場所の下にあることを確かめて読む）。`offset` を省くと末尾から読み（先頭の指示も添える）、前回の `offset` を渡すとその続きを返す。
+ */
+export const AgentSubagentTranscriptParams = z.object({
+  paneId,
+  /** サブエージェントの id（Claude Code の `agent_id`）。形（英数・`_`・`-`、128 文字まで）はサーバが確かめる。 */
+  agentId: z.string().min(1).max(128),
+  /** 前回の結果の `offset`。省略で最初から（末尾の抜粋）。 */
+  offset: z.number().int().nonnegative().optional(),
+});
+export type AgentSubagentTranscriptParams = z.infer<typeof AgentSubagentTranscriptParams>;
+/** 記録の 1 件（整形して、文字の長さを切ってある。中身は文字として出す——HTML ではない）。 */
+export type SubagentTranscriptEntry =
+  /** サブエージェントへの指示（最初の 1 件）・追加の指示。 */
+  | { kind: "prompt"; text: string; truncated?: boolean; at?: string }
+  /** 発言。 */
+  | { kind: "say"; text: string; truncated?: boolean; at?: string }
+  /** 使った道具の 1 行（道具の名前と、説明・コマンド・ファイル名などの先頭）。 */
+  | { kind: "tool"; name: string; text: string; at?: string }
+  /** 道具の結果の先頭。 */
+  | { kind: "result"; text: string; truncated?: boolean; error?: boolean; at?: string };
+export interface AgentSubagentTranscriptResult {
+  /** `ok`: 読めた。`pending`: 記録のファイルがまだ無い（始まったばかり）。`unreadable`: 読めない（理由は `reason`）。 */
+  status: "ok" | "pending" | "unreadable";
+  /** 読めないときの理由（サーバが決めた固定の文。ファイルの場所・中身は含めない）。 */
+  reason?: string;
+  entries: SubagentTranscriptEntry[];
+  /** 次に渡す続きの位置。 */
+  offset: number;
+  /** 続きの位置が合わなくなった（ファイルが小さくなった等）ので、最初から読み直した。画面は今までの表示を捨てる。 */
+  reset: boolean;
+  /** 長いので、先頭のほうを省いた。 */
+  omittedBefore: boolean;
+  /** 1 行だけで 1 回の枠（200 件）を超えたので、その行は枠まで切った（省いた分は出ない）。省略時は切っていない。 */
+  clipped?: boolean;
+  /** そのサブエージェントを、エージェントがいま動かしていると報告しているか（終わった後も、窓を閉じるまでは読める）。 */
+  running: boolean;
+}
+
+/**
  * 空いているシェル pane でエージェントを起動する（20260926-agent-start。herdr の agent.start）。名前の書式・kind・引数・timeout の範囲は
  * スキーマでは弾かない（サーバが herdr と同じ code で返す）。打ち込んだ時点で応答し、起動完了は呼び出し側がイベントで待つ。
  */
@@ -1145,6 +1186,7 @@ export const METHOD_SCHEMAS = {
   "agent.rename": AgentRenameParams,
   "agent.start": AgentStartParams,
   "agent.kinds": AgentKindsParams,
+  "agent.subagent_transcript": AgentSubagentTranscriptParams,
   "server.sessions": ServerSessionsParams,
   "machine.list": MachineListParams,
   "command.list": CommandListParams,
@@ -1263,6 +1305,7 @@ export interface MethodResultMap {
   "agent.rename": AgentRenameResult;
   "agent.start": AgentStartResult;
   "agent.kinds": AgentKindsResult;
+  "agent.subagent_transcript": AgentSubagentTranscriptResult;
   "server.sessions": ServerSessionsResult;
   "machine.list": MachineListResult;
   "command.list": CommandListResult;

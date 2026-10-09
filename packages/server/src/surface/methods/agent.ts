@@ -1,5 +1,6 @@
 import {
   AgentPromptParams,
+  AgentSubagentTranscriptParams,
   AgentRenameParams,
   AgentSendKeysParams,
   AgentKindsParams,
@@ -132,6 +133,16 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
       agent: deps.session.renameAgent(params.paneId, params.instanceId, params.name),
     }),
   });
+
+  // サブエージェントの記録を、読むだけで追う（20261008-graph-first の PR6c）。ログイン済みの `/ws` の方式だけ（`pane.sock` には載せない）。
+  // 読み方・安全の作りは `agent/SubagentTranscript.ts`。`sodactl`（external）からも、`agent read` と同じ扱いで呼べる（認証を通った接続は、pane の出力もファイルも読める）。
+  const transcripts = deps.subagentTranscripts;
+  if (transcripts) {
+    surface.register("agent.subagent_transcript", {
+      schema: AgentSubagentTranscriptParams,
+      handler: (_ctx, params) => transcripts.read(params.paneId, params.agentId, params.offset),
+    });
+  }
 
   // 空いているシェル pane でエージェントを起動する（20260926-agent-start）。打ち込んだ時点で返す。
   const starter = deps.agentStarter;
