@@ -49,3 +49,21 @@
   - N1: `isTrusted` の確認を外す → 単体 1 件が落ちる。
 - U1 の実測: iframe を DOM で動かすと同じ要素のまま `load` が 1 増える（decisions D23）。
 - スクリーンショット: `/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/display-layout-a/fix-*.png`。
+
+## PR-B（T13〜T20。パネルの上下左右と D&D。2026-10-09）
+
+実行は worktree `agent-abd91f990c85c37b8`（ブランチ `feature/display-layout-b`。main `833dc18` から）。E2E は `env -u DISPLAY -u WAYLAND_DISPLAY`（この環境で DISPLAY・WAYLAND_DISPLAY が設定されたままだと、Chromium が画面のフレームを描かず E2E が止まる。アプリの不具合ではない）をつけて流した。
+
+### 全体
+- `pnpm build`・`pnpm typecheck`: 通る。`pnpm test`: 9202 件通り・失敗 0。
+- E2E（`--workers=1`）: display 系 16 本＋`tab-dnd`＋`pane-move-scope`＋`settings-menu` の 200 件通り・1 件スキップ・失敗 0。`display-script-noreturn` 24 件・`display-script-drop` 24 件・`display-script-noreturn-mobile` 2 件は単独で全部通る。新しい `display-layout-dock` は 17 件。
+
+### 負の対照（T20。外して `vite build` → E2E → 戻して `git diff` が空）
+- (a) 割り付けが変わるたびに、面の枠の入れ物を DOM で動かす版 → `(6-script-html)`・`(6-html)` が落ちる。**実際に落ちたのは「枠の要素が同じ」「`load` が 1」より前の、面の数の確認**: 動かした枠が `load` を増やし、アプリの「移動した（navigated）」の守りが面を閉じるため（D23 の実測のとおり）。出力: `Expected: 4 / Received: 0`（`iframe[data-display-frame]` の数）。1 つの `v-for` にした版そのものは、PR-A で同じ理由で枠の確認の前に落ちたので、作っていない。
+- (b) 端末の最小（`TERMINAL_MIN_COLS`・`TERMINAL_MIN_ROWS`）を引かない版 → `(3) 横` が `1280: 列数 Expected: >= 40 / Received: 27`、`(3) 縦` が `800: 行数 Expected: >= 10 / Received: 5` で落ちる。
+- (c) `installKeepFocusRelease` を呼ばない版 → `(6c)` が `right:grip#0 Expected: 0 / Received: 1`（`focus_steal`）で落ちる。
+- 生の出力: `/tmp/claude-1000/-workspaces-sodashitsu--claude-worktrees-agent-abd91f990c85c37b8/ab9fdce8-c23f-440a-b067-4eb494833d52/scratchpad/neg/{a,b,c}.out`（作業用）。
+
+### 補足
+- 帯・パネルの 1 pane の上限は、帯 2 本（`display_limit`）。E2E の面の数はそれに収めた。
+- スクリーンショット: `/tmp/claude-1000/-workspaces-sodashitsu/957621e5-6a11-4044-ad8d-c86e30053090/scratchpad/display-layout-b/`。

@@ -57,9 +57,9 @@ sodactl graph node rm <pane> [--json]
 sodactl graph node rekey <pane> <newPane> [--json]
 sodactl graph history [<linkId>] [--limit <N>] [--json]
 sodactl ask [--timeout <ms>] < spec.json    # pane の中のプログラムの質問のフォームを、その pane を見ているブラウザの画面に出す（下の「質問のフォーム」）
-sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] [--dock right|left|top|bottom|float] [--edge top|bottom] [--collapsed] (--text <text> | --markdown-file <path> | --html-file <path> | --script-html-file <path> | [--format text|markdown|html|script-html] < stdin) [--wait [--timeout <ms>]]   # この pane を見ているブラウザの画面に、パネル（端末の右）か帯（端末の上）を出す（`docs/display.md`）。`script-html` は中身のスクリプトが枠の中で動く形式（信頼できない中身には使わない）
+sodactl display set <name> --kind panel|band [--title <text>] [--size <px>] [--ttl-ms <ms>] [--dock right|left|top|bottom|float] [--edge top|bottom] [--collapsed] (--text <text> | --markdown-file <path> | --html-file <path> | --script-html-file <path> | [--format text|markdown|html|script-html] < stdin) [--wait [--timeout <ms>]]   # この pane を見ているブラウザの画面に、パネル（端末の右・左・上・下）か帯（端末の上か下）を出す（`docs/display.md`）。`script-html` は中身のスクリプトが枠の中で動く形式（信頼できない中身には使わない）
 sodactl display send <name> (--json <JSON> | < stdin)   # スクリプトが動く面（`script-html`）へデータを送る（64 KiB まで・保存されない。結果は {"status":"ok","delivered":n}）
-#   --dock（パネルだけ）・--edge（帯だけ）・--collapsed は「初めの置き方」の指定（利用者が一度でも動かしたら、利用者の状態が勝つ。画面が出せない置き場所は右になる）。違う種類に付けると使い方の誤り（終了コード 2）。
+#   --dock（パネルだけ）・--edge（帯だけ）・--collapsed は「初めの置き方」の指定（利用者が一度でも動かしたら、利用者の状態が勝つ。画面が出せない置き場所〔`float`〕は、設定の置き場所〔無ければ右〕になる）。違う種類に付けると使い方の誤り（終了コード 2）。
 #   `layout` を知らない古いサーバ（--features の server.features に無い）へは 3 項目を外して送り、結果に "ignored": ["dock", …]・標準エラーに 1 行（終了コード 0）。`docs/display.md`「たたむ・置き場所・帯の行のボタン」
 sodactl display close (<name> | --all) / list / wait [<name>] / events [<name>...] / --features   # 面の閉じる・一覧・操作を待つ・続けて受け取る・機能確認（pane の中ではログイン不要）
 sodactl ext list|reload / log <id|key> / restart <id|key>   # 拡張（設定に登録して soda が起動するプログラム）の状態・ログ・読み直し・起動し直し（下の「拡張（`ext`）」）
