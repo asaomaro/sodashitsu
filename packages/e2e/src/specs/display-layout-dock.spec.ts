@@ -387,6 +387,7 @@ test(`(6-${kind}) load と枠の要素: 右 2 枚・下 1 枚・帯 1 本（scri
   if (kind !== "script-html") return;
   // 移した後も覆いがあり、［操作する］で始まり、冷却に入っていない（直後の set が通る）
   await expect(page.locator("[data-display-dock=\"top\"] [data-display-cover]")).toHaveCount(1);
+  await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
   await page.locator('[data-display-dock="top"] [data-display-engage]').click();
   await expect(page.locator('[data-display-dock="top"][data-display-engaged="1"]')).toHaveCount(1);
   await setScriptOk(appServer, paneId, "bt", script("bt2"), { kind: "panel", extra: ["--dock", "bottom"] });
@@ -414,6 +415,7 @@ test("(6c) 操作中の script-html のパネルで、見出しのつかむ場�
     ] as const) {
       for (let i = 0; i < (side === "right" ? 5 : 2); i++) {
         await expect(engage).toBeVisible();
+        await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
         await engage.click();
         await expect(panel).toHaveAttribute("data-display-engaged", "1");
         await run();

@@ -29,6 +29,7 @@ document.getElementById('b').addEventListener('click', function () { document.ti
   const w = await runDisplay(appServer, paneId, ["wait", "g"]);
   await page.locator("[data-pane-panel] [data-display-cover]").click({ force: true });
   expect(await (await scriptFrame(page)).evaluate(() => document.title)).not.toMatch(/^r:/);
+  await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
   await engageBtn(page).click();
   await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "1");
   await scriptFrameLoc(page).locator("#b").click();

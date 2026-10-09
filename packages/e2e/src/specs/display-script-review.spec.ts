@@ -320,6 +320,7 @@ setInterval(function () { soda.action('tick'); }, 300);
     await setScriptOk(appServer, paneId, "g", HOSTILE);
     await expect(scriptFrameLoc(page).locator("#i")).toBeAttached();
     const f = await scriptFrame(page);
+    await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
     await engageBtn(page).click();
     await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "1");
     await expect(page.locator("[data-pane-panel] [data-display-end]")).toBeVisible();
@@ -328,6 +329,7 @@ setInterval(function () { soda.action('tick'); }, 300);
     await page.keyboard.press("Escape");
     await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "0");
     // (b) ［操作を終える］で戻れる
+    await page.waitForTimeout(800); // ［操作する］は、出た・動いた直後の 500ms は押しを受けない（engageGuard）
     await engageBtn(page).click();
     await expect(page.locator("[data-pane-panel]")).toHaveAttribute("data-display-engaged", "1");
     await page.locator("[data-pane-panel] [data-display-end]").click();
