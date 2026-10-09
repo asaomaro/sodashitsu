@@ -415,7 +415,9 @@ function onWheel(ev: WheelEvent): void {
  * 帯が高くなって PTY の行が減る（AC14）。 */
 .tab-bar-new {
   flex: none;
-  padding: 0.5em 0.8em;
+  padding: 0.5em var(--soda-shape-pad-x, 0.8em);
+  /* 画面の様式（20261008-ui-style）。クラシックでは変数が無く、今の値（auto＝何もしない）。 */
+  min-height: var(--soda-shape-control-h, auto);
   font: inherit;
   color: var(--soda-fg, #f8f8f2);
   background: none;
@@ -435,7 +437,8 @@ function onWheel(ev: WheelEvent): void {
   display: flex;
   align-items: center;
   gap: 0.4em;
-  padding: 0.5em 1em;
+  padding: 0.5em var(--soda-shape-pad-x, 1em);
+  min-height: var(--soda-shape-control-h, auto);
   font: inherit;
   color: var(--soda-fg, #f8f8f2);
   background: none;
@@ -474,7 +477,7 @@ function onWheel(ev: WheelEvent): void {
 /* 右端の帯（20260922-tabbar-pane-appearance。PR #12 から取り込み）。タブの列・＋ の後、右端に寄せる。 */
 .tab-bar-right {
   flex: 1 1 auto;
-  padding: 0 0.8em;
+  padding: 0 var(--soda-shape-pad-x, 0.8em);
   overflow: hidden;
   text-align: right;
   white-space: nowrap;

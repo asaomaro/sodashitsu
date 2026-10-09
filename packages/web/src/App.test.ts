@@ -233,6 +233,37 @@ describe("App — pane の枠・隙間の太さの CSS 変数（AC9）", () => {
   });
 });
 
+// 20261008-ui-style T12a（D7）。様式ごとの太さの表を、`App.vue` の 1 か所で配る。
+describe("App — 様式ごとの pane の隙間の太さ（20261008-ui-style）", () => {
+  const gap = (w: ReturnType<typeof mount>) => w.get(".app-shell").attributes("style");
+  it("クラシックは、今の値のまま（細い 2・既定 4・太い 6）。モダンは、4・8・12（仮置き）", async () => {
+    const settings = useSettingsStore(pinia);
+    const wrapper = mount(App, makeProvide(makeConnection()));
+    const expected = { classic: { thin: 2, default: 4, thick: 6 }, modern: { thin: 4, default: 8, thick: 12 } } as const;
+    for (const style of ["classic", "modern"] as const) {
+      for (const t of ["thin", "default", "thick"] as const) {
+        settings.setUiStyle(style);
+        settings.setPaneFrameThickness(t);
+        await wrapper.vm.$nextTick();
+        expect(gap(wrapper), `${style}/${t}`).toContain(`--soda-pane-gap: ${expected[style][t]}px`);
+      }
+    }
+  });
+
+  it("様式を切り替えると、再読み込みなしで、太さの設定はそのまま、値だけが替わる", async () => {
+    const settings = useSettingsStore(pinia);
+    const wrapper = mount(App, makeProvide(makeConnection()));
+    settings.setPaneFrameThickness("thick");
+    settings.setUiStyle("modern");
+    await wrapper.vm.$nextTick();
+    expect(gap(wrapper)).toContain("--soda-pane-gap: 12px");
+    expect(settings.paneFrameThickness).toBe("thick");
+    settings.setUiStyle("classic");
+    await wrapper.vm.$nextTick();
+    expect(gap(wrapper)).toContain("--soda-pane-gap: 6px");
+  });
+});
+
 // 20260922-tabbar-pane-appearance（PR #12 から取り込み）。
 describe("App — pane 領域の外周の枠", () => {
   it("既定では `.app-panes-outer-borders` が付かず、`settings.paneOuterBorders` を有効にすると付く", async () => {

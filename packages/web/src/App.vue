@@ -26,7 +26,7 @@ import WorktreeOpenDialog from "./components/WorktreeOpenDialog.vue";
 import { isMobileViewport } from "./mobile/detect.js";
 import { SCREENS } from "./screens/screens.js";
 import MobileShell from "./mobile/MobileShell.vue";
-import { PANE_FRAME_THICKNESS_PX, useSettingsStore } from "./store/settings.js";
+import { paneGapPxFor, useSettingsStore } from "./store/settings.js";
 import { useViewStore } from "./store/view.js";
 
 /**
@@ -50,7 +50,7 @@ const isMobile = isMobileViewport();
  * こちらは初回描画のちらつき防止が不要なので、`documentElement.style` への命令的な設定ではなく
  * Vue の `:style` 束縛で足りる）。
  */
-const paneGapPx = computed(() => `${PANE_FRAME_THICKNESS_PX[settings.paneFrameThickness]}px`);
+const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.paneFrameThickness)}px`);
 </script>
 
 <template>

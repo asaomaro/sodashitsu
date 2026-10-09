@@ -1152,7 +1152,10 @@ watchDragInterrupt(view, () => {
   display: flex;
   flex-direction: column;
   gap: 0.2em;
-  padding: 0.4em 0.8em;
+  padding: 0.4em var(--soda-shape-pad-x, 0.8em);
+  /* 画面の様式（20261008-ui-style）。クラシックでは変数が無く、今の値（高さは中身のまま。余りが無いので中央寄せも見た目に出ない）。 */
+  min-height: var(--soda-shape-row-h, auto);
+  justify-content: center;
   cursor: pointer;
   touch-action: none; /* D&D のポインタ操作をブラウザのスクロール・ズームに奪われないため（20260923-workspace-grouping）。 */
   /* 行の文字列（`.sidebar-label`）が D&D の掴み手を兼ねる——`PaneFrame.vue` の `.pane-frame-name` と
@@ -1161,11 +1164,11 @@ watchDragInterrupt(view, () => {
 }
 /* グループのメンバー・子行のインデント（20260923-workspace-grouping。herdr と同じ並び）。 */
 .sidebar-row-indent {
-  padding-left: calc(0.8em + 1.2em);
+  padding-left: calc(var(--soda-shape-pad-x, 0.8em) + 1.2em);
 }
 /* 入れ子の worktree グループの子（グループ → worktree グループ → 子。字下げ 2）。 */
 .sidebar-row.sidebar-row-depth-2 {
-  padding-left: calc(0.8em + 2.4em);
+  padding-left: calc(var(--soda-shape-pad-x, 0.8em) + 2.4em);
 }
 /* 畳んだサイドバー（3em）：印が増えた行（折りたたみ・種類・状態）は折り返して切らない。 */
 .sidebar-collapsed .sidebar-row-line1 {
@@ -1174,7 +1177,7 @@ watchDragInterrupt(view, () => {
 }
 /* 字下げは 1 段まで（畳んだ幅に収まらないので、2 段目は 1 段目と同じ）。 */
 .sidebar-collapsed .sidebar-row.sidebar-row-depth-2 {
-  padding-left: calc(0.8em + 1.2em);
+  padding-left: calc(var(--soda-shape-pad-x, 0.8em) + 1.2em);
 }
 /* 3 つの状態を別の表し方に分ける（20260920-ui-selection-visuals の AC2）。以前は hover と
  * navigate の選択が同じ宣言で、しかもタブのアクティブと同じ色だったので見分けが付かなかった。
@@ -1393,8 +1396,9 @@ watchDragInterrupt(view, () => {
   align-items: center;
   gap: 0.4em;
   flex: none;
-  padding: 0.2em 0.8em;
-  padding-right: calc(0.8em + 4px);
+  padding: 0.2em var(--soda-shape-pad-x, 0.8em);
+  padding-right: calc(var(--soda-shape-pad-x, 0.8em) + 4px);
+  min-height: var(--soda-shape-control-h, auto);
 }
 .sidebar-section-header {
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
@@ -1432,6 +1436,7 @@ watchDragInterrupt(view, () => {
   background: none;
   border: none;
   padding: 0.2em 0.4em;
+  min-height: var(--soda-shape-control-h, auto);
   border-radius: 2px;
   cursor: pointer;
   white-space: nowrap;
@@ -1445,9 +1450,10 @@ watchDragInterrupt(view, () => {
 }
 .sidebar-session {
   flex: none;
-  padding: 0.2em 0.8em;
+  padding: 0.2em var(--soda-shape-pad-x, 0.8em);
+  min-height: var(--soda-shape-control-h, auto);
   /* 右端のつまみ（.sidebar-divider）の分を空ける（.sidebar-section-header と同じ）。 */
-  padding-right: calc(0.8em + 4px);
+  padding-right: calc(var(--soda-shape-pad-x, 0.8em) + 4px);
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
 /* 畳んだ幅（3em）では左右の余白を詰めて ⇄ が … に切れないようにする。 */
