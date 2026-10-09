@@ -59,8 +59,8 @@ const session = props.enabled ? useSessionStore() : null;
 const view = props.enabled ? useViewStore() : null;
 const settings = props.enabled ? useSettingsStore() : null;
 const edge = ref<HTMLElement | null>(null);
-/** モダンの様式か（pane の枠の操作ボタン。20261008-ui-style PR4）。`enabled` でないとき（モバイル・単体テスト）は、ストアに触れない。 */
-const modern = props.enabled ? useUiStyle().isModern : null;
+/** モダンの**配置**か（pane の枠の操作ボタン。20261008-ui-style PR4）。1 列の画面では様式の配置を使わない（`useUiStyle` の `modernLayout`）。`enabled` でないとき（モバイル・単体テスト）は、ストアに触れない。 */
+const modern = props.enabled ? useUiStyle().modernLayout : null;
 
 // --- 表示の面（パネル・帯。20261007-soda-extensions）。`enabled` のときだけ（モバイル・単体テストはストアに触れない）。---------------------------
 const displays = props.enabled ? useDisplayStore() : null;
@@ -798,7 +798,7 @@ function onKeydown(ev: KeyboardEvent): void {
 /* 操作ボタン（モダン。隅に重ねる版）は、この pane の端末の領域にポインタが載っている間だけ出す（選ばれている間・フォーカスは `PaneActions` の側）。 */
 .pane-frame-center:hover > .pane-actions-corner {
   opacity: 1;
-  pointer-events: auto;
+  --pane-actions-events: auto;
 }
 /* 枠（表示）に入力が届いている間は、端末を薄くする（カーソルも薄くなる）。 */
 .pane-frame-main-dimmed {

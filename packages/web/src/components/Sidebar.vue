@@ -1645,6 +1645,12 @@ watchDragInterrupt(view, () => {
 /* 畳んだサイドバーは `overflow-x: hidden` で外へはみ出せない。印は nav の内側の右端に、同じ縦の中央で置く。 */
 .sidebar-collapsed .sidebar-edge-toggle {
   right: 0;
+  /* 畳んだ幅（48px）では、行の印（左から約 13〜29px）に重ならないよう、当たりを右の 18px に絞る（広い幅では 24px）。 */
+  width: 18px;
+}
+.sidebar-collapsed .sidebar-edge-toggle-mark {
+  width: 16px;
+  height: 16px;
 }
 .sidebar-divider {
   position: absolute;

@@ -369,3 +369,30 @@ test("サイドバーの区画の見出し（spaces・agents）と並び順の�
   expect(await page.locator(".sidebar").evaluate((e) => e.scrollWidth <= e.clientWidth + 1), "畳んだサイドバーは横にはみ出さない").toBe(true);
   client.close();
 });
+
+test("畳んだサイドバー: 境の印（縦の中央）は、行の印〔状態の印〕に重ならない（行が縦の中央に並ぶ幅で、実寸の矩形を比べる）", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  for (let i = 0; i < 14; i++) await client.request("workspace.create", { cwd: process.cwd(), label: `w${i}` });
+  await client.request("prefs.set", { patch: { uiStyle: "modern" } });
+  await open(page, appServer);
+  await expect.poll(() => uiStyleAttr(page)).toBe("modern");
+  await page.locator(".sidebar-edge-toggle").click();
+  await expect(page.locator(".sidebar")).toHaveClass(/sidebar-collapsed/);
+  await expect.poll(() => sidebarWidth(page)).toBeLessThan(60);
+  const r = await page.evaluate(() => {
+    const t = document.querySelector(".sidebar-edge-toggle")!.getBoundingClientRect();
+    const hit = Array.from(document.querySelectorAll(".sidebar .sidebar-state-icon")).filter((e) => {
+      const b = e.getBoundingClientRect();
+      return b.width > 0 && b.left < t.right && b.right > t.left && b.top < t.bottom && b.bottom > t.top;
+    }).length;
+    const rowsAtCenter = Array.from(document.querySelectorAll(".sidebar .sidebar-state-icon")).filter((e) => {
+      const b = e.getBoundingClientRect();
+      return b.top < t.bottom && b.bottom > t.top;
+    }).length;
+    return { hit, rowsAtCenter, width: t.width };
+  });
+  expect(r.rowsAtCenter, "縦の中央に行の印がある（検査が空振りしていない）").toBeGreaterThan(0);
+  expect(r.hit).toBe(0);
+  expect(r.width).toBeGreaterThanOrEqual(16);
+  client.close();
+});

@@ -65,17 +65,22 @@ function keepFocus(ev: MouseEvent): void {
   top: 4px;
   right: 6px;
   opacity: 0;
+  /* 箱そのものは何も受けない。覆う範囲はボタンの大きさだけ（帯にしない。地もボタンの下だけ）。押せるのは、見えている間のボタンだけ（`--pane-actions-events`）。 */
   pointer-events: none;
-  padding: 2px;
-  border-radius: var(--soda-shape-radius);
-  background: color-mix(in srgb, var(--soda-menu-bg, #282a36) 88%, transparent);
-  border: 1px solid color-mix(in srgb, var(--soda-menu-border, #44475a) 80%, transparent);
+}
+.pane-actions-corner .pane-actions-btn {
+  pointer-events: var(--pane-actions-events, none);
+  background: var(--soda-menu-bg, #282a36);
+  box-shadow: inset 0 0 0 1px var(--soda-menu-border, #44475a);
+}
+.pane-actions-corner .pane-actions-btn:hover {
+  background: var(--soda-menu-hover-bg, #343746);
 }
 /* ポインタが載っている間（`.pane-frame-center:hover`）の規則は、親の `PaneFrame.vue` に置く（子の根の要素は、親の scoped の規則を受ける）。 */
 .pane-actions-corner.pane-actions-selected,
 .pane-actions-corner:focus-within {
   opacity: 1;
-  pointer-events: auto;
+  --pane-actions-events: auto;
 }
 .pane-actions-btn {
   flex: none;

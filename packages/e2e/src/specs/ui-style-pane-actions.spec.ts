@@ -202,3 +202,60 @@ test("名前の D&D・右クリックのメニューと取り違えない: ボ�
   await page.keyboard.press("Escape");
   client.close();
 });
+
+test("名前の行が無い設定: 隅のボタンが覆うのは、ボタンの大きさだけ（帯にしない）。ボタンの間・ボタンの外では、端末が押せる", async ({ page, appServer }) => {
+  const client = await setup(appServer, page, { uiStyle: "modern", paneAgentNameVisible: false }, { splits: 1 });
+  const frame = page.locator(".pane-frame-center").nth(0);
+  const fb = (await frame.boundingBox())!;
+  await page.mouse.move(fb.x + fb.width / 2, fb.y + fb.height / 2);
+  const g = actionsOf(page, 0);
+  await expect.poll(() => g.evaluate((e) => Number(getComputedStyle(e).opacity))).toBe(1);
+  const boxes = await g.locator("button").evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect().toJSON() as { x: number; y: number; width: number; height: number; right: number; bottom: number }));
+  // 箱そのものに地も縁も余白も無い。高さはボタン 1 つ分（24px）で、帯にならない。
+  const gb = (await g.boundingBox())!;
+  expect(gb.height).toBeLessThanOrEqual(24.5);
+  expect(await g.evaluate((e) => { const s = getComputedStyle(e); return [s.backgroundColor, s.borderTopWidth, s.paddingTop]; })).toEqual(["rgba(0, 0, 0, 0)", "0px", "0px"]);
+  // 箱は何も受けない。ボタンの間（隙間）では、押下は端末へ届く。
+  const gapX = (boxes[0]!.right + boxes[1]!.x) / 2;
+  const gapY = boxes[0]!.y + boxes[0]!.height / 2;
+  expect(await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.closest("[data-pane-actions]") === null, [gapX, gapY])).toBe(true);
+  // ボタンの上は、ボタン。
+  expect(await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.closest("[data-pane-action]") !== null, [boxes[0]!.x + 12, gapY])).toBe(true);
+  // ポインタが外へ出ると、押せなくなる。
+  await page.mouse.move(2, 2);
+  await expect.poll(() => g.evaluate((e) => Number(getComputedStyle(e).opacity))).toBe(0);
+  expect(await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.closest("[data-pane-action]") === null, [boxes[0]!.x + 12, gapY])).toBe(true);
+  client.close();
+});
+
+/** 最大化している間に分割のボタンを押す（キー〔prefix+v〕と同じ結果になること）。どちらの経路でも、見える結果を返す。 */
+async function splitWhileZoomed(page: Page, appServer: AppServer, how: "button" | "key") {
+  const client = await setup(appServer, page, MODERN_NAMED, { name: "alpha", splits: 1 });
+  await btn(page, "zoom").click();
+  await expect.poll(() => paneCount(page)).toBe(1);
+  await expect(btn(page, "zoom")).toHaveAttribute("aria-label", "元に戻す");
+  await focusInTerminal(page);
+  const created = client.waitForEvent("pane.created");
+  if (how === "button") await btn(page, "split-right").click();
+  else {
+    await page.keyboard.press("Control+b");
+    await page.keyboard.press("v");
+  }
+  await created;
+  await expect.poll(() => page.locator("[data-pane-frame-main]").count()).toBeGreaterThanOrEqual(1);
+  await page.waitForTimeout(500);
+  const result = { panes: await paneCount(page), zoomLabel: await btn(page, "zoom").getAttribute("aria-label"), terminals: await page.locator(".xterm-helper-textarea").count() };
+  client.close();
+  return result;
+}
+
+/** 最大化中に分割した結果（どちらの経路でも同じ）。新しい pane が増え、最大化は解けて、2 つの pane が並ぶ。 */
+const SPLIT_WHILE_ZOOMED = { panes: 3, zoomLabel: "最大化", terminals: 3 } as const;
+
+test("最大化している間に［右へ分割］を押すと、キーと同じ結果になる（ボタン）", async ({ page, appServer }) => {
+  expect(await splitWhileZoomed(page, appServer, "button")).toEqual(SPLIT_WHILE_ZOOMED);
+});
+
+test("最大化している間に prefix+v で分割した結果（ボタンと同じであることの対照）", async ({ page, appServer }) => {
+  expect(await splitWhileZoomed(page, appServer, "key")).toEqual(SPLIT_WHILE_ZOOMED);
+});
