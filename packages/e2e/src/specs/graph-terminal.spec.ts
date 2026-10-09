@@ -3,8 +3,8 @@ import type { AppServer } from "../support/appServer.js";
 import { watchAskSubscriptions } from "../support/ask.js";
 import { enableScript, setScriptOk } from "../support/displayScript.js";
 import { expect, test } from "../support/fixtures.js";
-import { watchReceivedFrames, watchSentInput } from "../support/frames.js";
-import { prefixKey } from "../support/keys.js";
+import { routeRecordingWebSocket, watchReceivedFrames, watchSentInput } from "../support/frames.js";
+import { grantClipboard, prefixKey } from "../support/keys.js";
 import { watchClientViews } from "../support/panes.js";
 
 /**
@@ -296,4 +296,123 @@ test("スクリプトの面が載っている画面で、窓の開閉を 20 回�
   expect(await activeIsBody(page)).toBe(false);
   await expect(frame).toHaveCount(1); // 遮断器が働いて枠が止められていない
   await expect(page.getByText(/繰り返し外しています/)).toHaveCount(0);
+});
+
+/** 他のクライアントが、その pane に（takeover 無しで）直結できる＝窓の直結が残っていない。 */
+async function expectFree(appServer: AppServer, paneId: string) {
+  const other = await appServer.openClient();
+  await expect(other.request("pane.attach", { paneId, cols: 33, rows: 11 })).resolves.toBeDefined();
+  await other.request("pane.detach", { paneId });
+  other.close();
+}
+
+/** 端末の見えている中身から 1 行を読む（canvas なので、copy モードで検索・選択して、クリップボードへ）。基本画面の端末にフォーカスがある状態で呼ぶ。 */
+async function readLineContaining(page: Page, text: string): Promise<string> {
+  await prefixKey(page, "[");
+  await page.keyboard.press("?");
+  await page.keyboard.type(text);
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(300);
+  await page.keyboard.press("V");
+  await page.keyboard.press("y");
+  await page.waitForTimeout(200);
+  return page.evaluate(() => navigator.clipboard.readText());
+}
+
+test("［基本画面で開く］: 基本画面へ切り替わり、窓の端末の要素が戻って、窓で打った中身が見える。大きさは開く前に戻り、フォーカスはその端末にある", async ({ page, appServer, context }) => {
+  await grantClipboard(context, appServer.origin);
+  const { client, p1, views, input } = await setup(page, appServer);
+  const before = { ...baseSizeOf(views, p1)! };
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect.poll(() => activeInWindow(page)).toBe(true);
+  await page.keyboard.type("echo marker-in-window-2");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  await page.locator("[data-graph-terminal-open-base]").click();
+  await expect(graphView(page)).toBeHidden();
+  await expect(win(page)).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea") === true && document.activeElement.closest(".terminal-pane-mount") !== null)).toBe(true);
+  await expect.poll(() => client.paneSize(p1)).toMatchObject(before);
+  await expect(page.locator(".terminal-pane-mount > *")).toHaveCount(2);
+  // 窓で打った中身が、基本画面の同じ端末に見える
+  expect(await readLineContaining(page, "marker-in-window-2")).toContain("marker-in-window-2");
+  await page.keyboard.press("Escape");
+  const n0 = input().length;
+  await page.keyboard.type("zz");
+  await expect.poll(() => input().slice(n0).filter((i) => i.paneId === p1).map((i) => i.text).join("")).toContain("zz");
+});
+
+test("開いている pane が閉じられたら、窓は閉じる（グラフの画面は開いたまま。フォーカスは body に残らない）", async ({ page, appServer }) => {
+  const { client, p2 } = await setup(page, appServer);
+  await openGraph(page);
+  await pressNode(page, p2);
+  await expect(win(page)).toHaveAttribute("data-pane-id", p2);
+  await client.request("pane.close", { paneId: p2 });
+  await expect(win(page)).toHaveCount(0);
+  await expect(graphView(page)).toBeVisible();
+  await page.waitForTimeout(300); // ノードが消えた後も、フォーカスは body に落ちない
+  expect(await activeIsBody(page)).toBe(false);
+});
+
+test("1 列の画面（モバイルの幅）になったら窓は閉じ、直結は残らない。再読み込みでも、ブラウザを閉じても、直結は残らない", async ({ page, appServer }) => {
+  const { p1 } = await setup(page, appServer);
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect(win(page)).toHaveAttribute("data-status", "attached");
+  await page.setViewportSize({ width: 560, height: 800 });
+  await expect(win(page)).toHaveCount(0);
+  await expectFree(appServer, p1);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  // 再読み込み: 開き直して、そのまま読み込み直す
+  await expect(page.locator(".xterm-helper-textarea").first()).toBeAttached();
+  await page.reload();
+  await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect(win(page)).toHaveAttribute("data-status", "attached");
+  await page.reload();
+  await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+  await expectFree(appServer, p1);
+  // ブラウザを閉じる
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect(win(page)).toHaveAttribute("data-status", "attached");
+  await page.close();
+  await expect.poll(async () => {
+    const other = await appServer.openClient();
+    try {
+      await other.request("pane.attach", { paneId: p1, cols: 30, rows: 10 });
+      return "free";
+    } catch {
+      return "held";
+    } finally {
+      other.close();
+    }
+  }).toBe("free");
+});
+
+test("接続が切れて再接続すると、窓の pane を購読し直し、直結し直す。出力が窓に届き、窓の大きさが pane の大きさになる", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  const p1 = client.helloSnapshot()!.panes[0]!.id;
+  const rec = await routeRecordingWebSocket(page);
+  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+  await page.locator(".xterm-helper-textarea").first().focus();
+  await page.keyboard.press("Enter");
+  await openGraph(page);
+  await pressNode(page, p1);
+  await expect(win(page)).toHaveAttribute("data-status", "attached");
+  await expect.poll(async () => JSON.stringify(client.paneSize(p1))).toBe(JSON.stringify(await footerSize(page)));
+  await rec.drop(0);
+  await expect.poll(() => rec.sent(1).map((r) => r.method).includes("pane.attach")).toBe(true);
+  const methods = rec.sent(1).map((r) => r.method);
+  expect(methods.indexOf("pane.subscribe")).toBeGreaterThanOrEqual(0);
+  expect(methods.indexOf("pane.subscribe")).toBeLessThan(methods.indexOf("pane.attach"));
+  await expect(win(page)).toHaveAttribute("data-status", "attached");
+  const marker = `after-reconnect-${Date.now()}`;
+  await page.keyboard.type(`echo ${marker}`);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => rec.frames.output(1, p1) + rec.frames.snapshots(1, p1).join("")).toContain(marker);
+  await expect.poll(async () => JSON.stringify(client.paneSize(p1))).toBe(JSON.stringify(await footerSize(page)));
 });

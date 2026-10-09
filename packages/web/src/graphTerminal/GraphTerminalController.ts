@@ -287,7 +287,8 @@ export class GraphTerminalController {
   /** グラフのノード（無ければグラフの面）へフォーカスを置く。 */
   private focusNode(paneId: string): void {
     const view = document.querySelector<HTMLElement>("[data-graph-view]");
-    const node = view?.querySelector<HTMLElement>(`[data-node-key$=":${paneId}"]`);
+    // pane が閉じて閉じる場合、ノードもまもなく消える（フォーカスを持ったまま消えると `body` に落ちる）ので、グラフの面へ。
+    const node = this.opts.session.panes.has(paneId) ? view?.querySelector<HTMLElement>(`[data-node-key$=":${paneId}"]`) : null;
     (node ?? view)?.focus({ preventScroll: true });
   }
 }
