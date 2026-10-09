@@ -158,3 +158,53 @@ D63 の値の選び方（乱数 300 通り〔(a)〕・20 通り〔(b)〕。土�
 - **S3**: `[` `]` `n` は、確認・接続の途中・横のパネル・チェックリスト・選び直しが出ている間は働かない（`modalBusy`）。確認のボタンの上の keydown は確認の部品が止めるので、確認だけでは差が出ず、E2E は接続の途中・パネルでも確かめる。
 - **(4)** 探す入力の `stopPropagation` は要る（消さない）。外すと、根の Esc の処理が二重に走って、Esc のあとの選択が外れ・フォーカスが根へ戻る。E2E に「Esc のあと、フォーカスは入口のノード・選択されたまま」を足し、外すと落ちることを確かめた。
 - **N2**: `aria-controls` は一覧が開いているときだけ・listbox に `aria-label`・件数の読み上げ（`role="status"` を常に置いて中身だけ替える）。N3・N4: 文書に書いた（地図のキー・IME・修飾なしの prefix）。N6: 地図が右下でノードに重なるのは、たたむボタンで逃げられるので許容。
+
+### PR2a（グラフの上の端末の窓。窓は 1 つ。T13a〜T13h）
+
+### D75: 端末の窓にフォーカスがあるとき通す操作（X2。`Action` を全部見て決めた。`keys/graphTerminalKeys.ts`）
+端末の道（`attachCustomKeyEventHandler`）にだけ掛ける別の絞り（`KeyInputController.setTerminalKeyFilter`）。窓に載っている pane（`terminalHost.heldByWindow`）のときだけ。食った `enterMode` はモードを端末へ戻す。`Action` の型を `never` で網羅する switch で書く（操作を足したとき、ここを決め忘れると型エラーになる）。窓の pane は、窓を開いたときに選んでいる pane（X6）なので、「選んでいる pane を対象にする操作」は窓の pane に効く。
+
+| 区分 | 操作 | 窓にフォーカスがあるとき |
+| :- | :- | :- |
+| 入力 | 通常の入力（`pass`）・`consume`・`send`（prefix の二度押し） | 通す（`send` は、端末の道では窓の pane へ届く） |
+| その pane への操作 | `copy`・`enterMode` copy・`exitMode`・`pasteImage`・`editScrollback`・`showSubagents` | 通す |
+| 全体 | `help`・`settings`・`toggleSidebar`・`toggleSidebarSection`・`reloadConfig`・`detach`・`stopServer`・`openNotificationHistory` | 通す |
+| 構成を変える | `split`・`closePane`・`swap`・`swapWithFocused`・`zoom`・`renamePane`・`resizeBy`・`enterMode` resize・`newTab`・`closeTab`・`renameTab`・`moveTab`・`newWorkspace`・`closeWorkspace`・`renameWorkspace`・`moveWorkspace`・`newWorktree`・`openWorktree`・`removeWorktree` | 食う（見えない基本画面を変えない） |
+| 選んでいる pane を動かす | `focusDir`・`cyclePane`・`lastPane`・`agentDelta`・`focusAgentIndex`・`tabDelta`・`tabIndex`・`goto`・`nextNotification`・`workspaceIndex`・`workspaceDelta`・`enterMode` navigate・`navigate` | 食う（窓の pane と選択がずれ、あとの `copy` などが別の pane に効くのを防ぐ） |
+| 基本画面の中のもの | `displayMenu`・`focusDisplay`（窓に表示の面は出さない。W9）・`runCommand`（独自コマンドの popup） | 食う |
+| 画面の切り替え | `openGraph`（`prefix+a`） | **読み替える**（X1）: グラフの面へフォーカスを戻す（窓は開いたまま）。`main.ts` で絞りの前に処理する |
+
+- 右クリックのメニュー（マウス）は、この絞りの外。窓の端末で右クリックすると、基本画面と同じ pane のメニューが開き、そこから分割・閉じる等も選べる（利用者が明示的に選ぶ操作。キーの絞りの対象外）。限界として記録する。
+
+### D76: 要素の移動は「フォーカスの脱落」として数えられない（T13a の最初の確認。守りのファイルは変えない）
+- 方法: スクリプトの面を 1 つ載せた画面で、窓を開いて閉じるのを 20 回くり返し（`graph-terminal.spec.ts`）、①ページに 4ms ごとの見張りを入れて `document.activeElement === document.body` だった回数 ②スクリプトの枠が止められていない（遮断器が働かない）③知らせ（トースト）が出ない、を観測した。見回りの数（`restoredAt`）は非公開で読めない。
+- 結果: 見張りは 0 回・枠は残る・知らせは出ない。**守りのファイル（`focusDrop.ts` ほか）を変えずに通る**。条件は「要素を動かした同じ作業の中でフォーカスを付け直す」こと: 窓へ移すとき（`attachToWindow` の直後に `term.focus()`）、窓から戻すとき（先にフォーカスを窓の枠かノードへ移し、それから要素を動かす。基本画面へ切り替わるときは、要素を戻した後に基本画面の端末へ）。見回りは `setTimeout`/`setInterval` で見るので、同じ作業の中の移動は `body` を見せない。
+- 負の対照: 閉じるときのノードへのフォーカス移しを外すと、見張りが 352 回になって落ちる。
+
+### D77: 実装の構成（PR2a）
+- `term/terminalHost.ts`: 端末の要素の置き場所の係。基本画面の `TerminalPane`（`mountBase`/`unmountBase`）と窓（`attachToWindow`/`detachFromWindow`）。窓が持っている間は `TerminalPane` は要素を付けない・外さない。窓の側の購読は `ensureSubscribed`（`takePendingSubscriptions([paneId])` → `pane.subscribe`。購読は端末の実体が生きている間は外さない。X4）。
+- `TerminalRegistry.acquire/release` は持ち主（"base"・"window"）を数える。どちらかが持っていれば `visible`（LRU に捨てられない・既読の判定で「見えている」）。
+- `term/useTerminalSurface.ts`: 基本画面の `TerminalPane` と窓の本体の共通の振る舞い（クリックで `view.focusPane`・ファイルのドロップ・tabIndex）。リンク・右クリック・検索・コピーのモードは、端末に付く部品（`MouseBridge`・`CopyTarget`）なので、要素がどこにあっても同じに働く。引き継がないもの: 表示の面・pane の枠・権限が無いときの縮小。
+- `graphTerminal/GraphTerminalController.ts`: 窓の進行（開く・替える・閉じる・W2・引き取り・再接続・間引いた `pane.attach_resize`）。閉じる道（`main.ts` の watch）は、画面が基本画面になった（`flush: post`。要素を戻してから基本画面の端末にフォーカス）・pane が消えた・マシンの切り替え（サーバへ何も送らない）。窓を閉じる操作は全部 `close` を通る（直結を残さない）。
+- `store/session.ts`: `attachOwners`（`pane.attach_changed`。`client.hello` のたびに空に戻す）。別のクライアントが直結している pane の `TerminalPane` は、権限が無いときと同じ見せ方（`terminal-pane-scaled`）にする。
+- フォーカスの報告（DECSET 1004）は、窓に直結している pane では送る（`hasSizeAuthority` に「自分が直結している pane」を足した。B5）。
+
+### D78: 設計と違えた点・見つけた穴（PR2a）
+- 窓の最初の位置は、押したノードの隣ではなく、層の右上（80×24 ぶん）。ノードを覆うときは窓を動かす（見出しをつかむ）。位置と大きさは、ブラウザを開いている間だけ覚える（X11）。
+- 窓で開き直したとき（同じ pane を押したとき）は、attach し直さず、窓の端末にフォーカスを置くだけ。
+- B3 の「別のブラウザが見ていても壊れない」: `terminal-pane-scaled` は縮小ではなく中央寄せ（はみ出しは切る）。縮小して全体を見せる仕組みは無く、サイズ権限が無いブラウザも同じ。AC-T4 は「別のブラウザは窓の大きさのまま端末を出し（はみ出しは切る）、入力は届く」に読み替える。
+- テスト自身のクライアントが分割・pane の操作をすると、先に tab のサイズ権限を取る。E2E は、ブラウザが権限を取る（入力する）のを待ってから PTY の大きさを比べる。
+- `graph-node-goto`（［pane へ］）は、基本画面へ移るボタンのまま（PR1e の `GraphNode.vue` と衝突しないよう触らない）。名前を「基本画面で開く」に替えるのは、PR1e の後でよい。
+
+### D79: PR2a レビューの直し（指摘 1〜6）
+- **指摘 1（直した）**: 窓を開いた後にサイドバーが別の pane を選ぶと、窓の端末で打った copy・スクロールバック・サブエージェントの一覧が、見えていない別の pane に効いた。窓の端末が `focusin` を受けたとき、と、端末の道でキーを受けたとき（`setTerminalKeyFilter` の頭）に、窓の pane が選ばれていなければ選び直す（`GraphTerminalController.ensureSelected`。開く途中〔`attached` でない間〕は何もしない＝X6 の順を保つ）。D75 の前提「窓の pane は選んでいる pane」を保つ。
+- **指摘 2（直した）**: 層の箱を `.graph-body`（ツールバーと空間の見出しの下）に合わせ、窓の最初の位置を押したノードの隣（右 → 左 → 下 → 上の順で、収まる側。無ければ右上）にした。窓を動かすまで、ノードから窓へ短い点線を引く。D78 ①は、この直しで置き換わる。
+- **指摘 3（直した）**: 文書の「選択はそのまま」を「選択は解ける」に（窓の大きさへ端末が変わると xterm が選択を解く。要素の移動のせいではなく避けられない）。
+- **指摘 4（直した）**: 窓の端末の右クリックのメニューは、貼り付けと右クリックの送り先だけ（`ContextMenu` が `terminalHost.heldByWindow` のとき絞る）。D75 の「限界」は無くなった。サイドバーの workspace・tab の右クリックは、PR1b 以来グラフの画面の間も使える（変えない）。
+- **指摘 5（記録）**: 別のブラウザの基本画面で、窓に直結した pane が中央寄せで左右が切れる。サイズ権限が無いブラウザの今の見せ方と同じ。直すなら `justify-content: safe center`（その見え方も変わるので PR2a では直さない）。`terminal-pane-scaled` のコメントの「縮小」は古い（実際は中央寄せだけ）。
+- **指摘 6（記録）**: 実機で流していないもの: IME の変換中（ルーターは `composing` を `pass` にするので、絞りは通す側にしか効かない）・モバイルの追加キー（`injectKey`・`injectPrefix` は端末の道の絞りを通らない。窓はデスクトップだけ）・マシンの切り替え（単体のみ）・実機の `sodactl pane attach`・ネットワークを抜く切断。
+
+### D80: PR2a 再レビューの直しと記録
+- **指摘 A（直した）**: ノードから窓への点線は、面の移動・拡大縮小・ノードのドラッグ・空間の切り替えでずれた。層が、窓を動かすまでの間、毎フレームノードの箱を読んで `anchor` に追従させる（窓の位置は開いたときのまま）。ノードが無い・層の外へ出たら線を消す（`anchor` を null）。
+- **記録 1**: 窓は小さな地図（右下）を覆うことがある（窓は動かせる。地図はたたむボタンで逃げられる）。
+- **記録 2**: 確認のダイアログ（`showModal()` の top layer）は窓より手前に出る。窓は層の `z-index: 5`（グラフの面の上）で、ダイアログと重なり順は競合しない。

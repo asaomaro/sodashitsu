@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { ActionDispatcherKey, TerminalRegistryKey } from "../injection.js";
+import { ActionDispatcherKey, TerminalHostKey, TerminalRegistryKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useGraphStore } from "../store/graph.js";
 import { useGraphSpacesStore } from "../store/graphSpaces.js";
@@ -35,6 +35,7 @@ const displayController = inject(DisplayControllerKey, null);
 const displayHost = inject(DisplayHostKey, undefined);
 /** 戻す先が無いときに、選ばれている pane の端末へフォーカスする（無ければ何もしない）。 */
 const registry = inject(TerminalRegistryKey, undefined);
+const terminalHost = inject(TerminalHostKey, undefined);
 
 const menuEl = ref<HTMLElement | null>(null);
 const activeIndex = ref(0);
@@ -122,6 +123,14 @@ const items = computed<MenuItem[]>(() => {
   if (!target) return [];
   if (target.kind === "pane") {
     const pane = session.panes.get(target.paneId);
+    // グラフの上の端末の窓の中では、その pane への操作だけ（貼り付け・右クリックの送り先）。分割・閉じる・拡大表示・名前・入れ替えは、窓の下の見えない基本画面を変えるので出さない
+    // （20261008-graph-first PR2a のレビュー指摘 4。キーの絞り〔D75〕と同じ線）。
+    if (terminalHost?.heldByWindow(target.paneId)) {
+      return [
+        { label: pane?.rightClick === "pane" ? "herdr のメニューを使う" : "右クリックを pane に送る", run: () => actions.setRightClickTarget(target.paneId, pane?.rightClick === "pane" ? "herdr" : "pane") },
+        { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
+      ];
+    }
     const list: MenuItem[] = [
       { label: "名前の変更", run: () => actions.renamePaneById(target.paneId) },
       ...(pane?.label ? [{ label: "名前の消去", run: () => actions.clearPaneName(target.paneId) }] : []),

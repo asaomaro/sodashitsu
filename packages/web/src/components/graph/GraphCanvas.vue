@@ -36,7 +36,8 @@ import {
   type GraphRect,
   type GraphViewport,
 } from "@sodashitsu/client-core";
-import { ActionDispatcherKey, ConnectionKey, MachineSwitcherKey, TerminalRegistryKey } from "../../injection.js";
+import { ActionDispatcherKey, ConnectionKey, GraphTerminalControllerKey, MachineSwitcherKey, TerminalRegistryKey } from "../../injection.js";
+import { useGraphTerminalsStore } from "../../store/graphTerminals.js";
 import { isMobileViewport } from "../../mobile/detect.js";
 import {
   GRAPH_UNCHANGED,
@@ -94,6 +95,8 @@ const registry = inject(TerminalRegistryKey, null);
 const conn = inject(ConnectionKey, null);
 const actions = inject(ActionDispatcherKey, null);
 const switcher = inject(MachineSwitcherKey, null);
+const terminalWindow = inject(GraphTerminalControllerKey, null);
+const terminalWindows = useGraphTerminalsStore();
 const isMobile = isMobileViewport();
 /** 根の要素（入れ物の中の `div`）。フォーカスを受け、キーを受ける。 */
 const dialogEl = ref<HTMLElement | null>(null);
@@ -588,6 +591,8 @@ function onNodePointerdown(ev: PointerEvent, key: string): void {
       nodeDrag.value = null;
       graph.setDragPosition(key, null);
     },
+    // 動かさずに離した（押しただけ）: 端末の窓を開く。
+    onClick: () => openNodeWindow(key, true),
   });
 }
 
@@ -1374,6 +1379,27 @@ function closeSubagents(): void {
 
 // --- ノードから pane へ（AC2・AC-I4）----------------------------------------------------------------------------------
 
+/**
+ * ノードを押した・`Enter`（20261008-graph-first の W8・PR2a）: **グラフの上に、その pane の端末が窓として開く**（基本画面へは移らない）。基本画面へは窓の［基本画面で開く］と、ノードの［pane へ］から。
+ * 別のマシンの pane・繋がっていない pane・1 列の画面は、今までどおり（`gotoNode`）。
+ */
+function openNodeWindow(key: string, fromClick = false): void {
+  // 押しただけのとき、窓にできないノードは選ぶだけ（今までどおり。移るのは `Enter` と［pane へ］）。
+  const fallback = (): void => {
+    if (!fromClick) gotoNode(key);
+  };
+  if (!terminalWindow || isMobile.value || panel.value) return fallback();
+  const info = graph.nodeInfo(key as NodeKey);
+  if (info.machine !== machines.selectedId || info.exists !== true || !info.location) return fallback();
+  const box = document.querySelector<HTMLElement>(`[data-graph-view] [data-node-key="${key}"]`)?.getBoundingClientRect();
+  terminalWindows.setAnchor(box ? { x: box.left, y: box.top, w: box.width, h: box.height } : null);
+  void terminalWindow.open(info.paneId);
+}
+/** 窓を開いているノードか（目印を付ける）。 */
+function isWindowNode(key: string): boolean {
+  return terminalWindows.paneId !== null && key.endsWith(`:${terminalWindows.paneId}`);
+}
+
 /** グラフ画面を閉じて、そのマシンのその pane へ移る（閉じた後の焦点はその pane。画面を閉じたときの戻り先を上書きする）。 */
 function gotoNode(key: string): void {
   if (panel.value) {
@@ -1546,7 +1572,7 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
   } else if (ev.key === "Enter") {
     ev.preventDefault();
     ev.stopPropagation();
-    gotoNode(key);
+    openNodeWindow(key);
   } else if ((ev.key === "Delete" || ev.key === "Backspace") && !isMobile.value) {
     ev.preventDefault();
     ev.stopPropagation();
@@ -2405,6 +2431,7 @@ function chipAria(e: EdgeView): string {
               :x="n.x"
               :y="n.y"
               :selected="isNodeSelected(n.key)"
+              :class="{ 'graph-node-window': isWindowNode(n.key) }"
               :tabbable="tabEntryKey === n.key"
               :rekeyable="canRekey(n.key)"
               :read-only="isMobile"
@@ -2575,6 +2602,11 @@ function chipAria(e: EdgeView): string {
 </template>
 
 <style scoped>
+/* 端末の窓を開いているノードの目印（親のスコープでも子の根に効く）。色は既存のトークンだけ。 */
+.graph-node.graph-node-window {
+  outline: 2px solid var(--soda-accent, #6070a1);
+  outline-offset: 1px;
+}
 .graph-view {
   /* 入れ物（`GraphDialog`・`GraphScreen`）いっぱいに広げる。 */
   width: 100%;

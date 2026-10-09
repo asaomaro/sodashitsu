@@ -169,4 +169,13 @@ describe("GraphScreen", () => {
     expect(view.screen).toBe("base");
     wrapper.unmount();
   });
+
+  it("端末の窓の層は GraphCanvas の兄弟（.graph-view の外）に置く。窓の中の Esc・prefix をグラフの根の keydown が食わないため（X3）", async () => {
+    const { wrapper, view } = mountScreen();
+    view.setScreen("graph");
+    await flush();
+    expect(wrapper.find("[data-graph-terminal-layer]").exists()).toBe(true);
+    expect(wrapper.find(".graph-view [data-graph-terminal-layer]").exists()).toBe(false);
+    wrapper.unmount();
+  });
 });

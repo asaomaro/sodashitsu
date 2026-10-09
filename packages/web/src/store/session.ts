@@ -36,6 +36,11 @@ export const useSessionStore = defineStore("session", () => {
    * session の入口を出すかを決める。hello のたびと一覧を開くたびに取り直す（失敗したら前の値のまま）。
    */
   const namedSessionCount = ref(0);
+  /**
+   * pane への直結の所有者（`pane.attach_changed`。pane → clientId。20261008-graph-first の X7）。直結が終われば消える。サーバの直結は接続ごとに外れるので、
+   * `client.hello` のたび（`applySnapshot`）に空に戻す——今の接続の間に起きた変化だけを持つ（それ以前のものは、`pane.attach` の `pane_attached` で知る）。
+   */
+  const attachOwners = ref(new Map<string, string>());
 
   function setNamedSessionCount(n: number): void {
     namedSessionCount.value = n;
@@ -53,6 +58,7 @@ export const useSessionStore = defineStore("session", () => {
     layout.value = s.layout ?? null;
     focus.value = s.focus;
     limits.value = s.limits;
+    attachOwners.value = new Map();
   }
 
   /**
@@ -68,6 +74,17 @@ export const useSessionStore = defineStore("session", () => {
     focus.value = null;
     clientId.value = null;
     namedSessionCount.value = 0;
+    attachOwners.value = new Map();
+  }
+
+  function paneAttachChanged(paneId: string, owner: string | null): void {
+    if (owner === null) attachOwners.value.delete(paneId);
+    else attachOwners.value.set(paneId, owner);
+  }
+  /** その pane に、このブラウザ以外のクライアントが直結しているか（`pane.attach_changed` で知った範囲）。 */
+  function isAttachedElsewhere(paneId: string): boolean {
+    const owner = attachOwners.value.get(paneId);
+    return owner !== undefined && owner !== clientId.value;
   }
 
   /** このクライアントがその tab のサイズ権限を持っているか（design「サイズ権限」）。 */
@@ -153,6 +170,9 @@ export const useSessionStore = defineStore("session", () => {
     focus,
     limits,
     namedSessionCount,
+    attachOwners,
+    paneAttachChanged,
+    isAttachedElsewhere,
     setNamedSessionCount,
     applySnapshot,
     clear,

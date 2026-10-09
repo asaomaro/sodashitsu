@@ -81,6 +81,11 @@ export class TerminalRegistry implements TerminalSinkPort {
   private readonly keyDisposables = new Map<string, { dispose(): void }>();
   private readonly visible = new Set<string>();
   /**
+   * 端末を使っている者（pane → 持ち主の名前）。**基本画面の `TerminalPane`（"base"）とグラフの上の窓（"window"）の 2 者**が数えられる
+   * （20261008-graph-first の X4）。どちらかが持っている間は `visible` に入り、LRU に捨てられない。
+   */
+  private readonly claims = new Map<string, Set<string>>();
+  /**
    * 今の接続でまだ購読していない pane（D107）。作ったとき（`acquire`）と、接続が替わったとき（`markAllUnsubscribed`）に入れ、
    * 表示したとき（`ViewSync.commit` が `takePendingSubscriptions` で取り出す）に `pane.subscribe` を送る。
    */
@@ -101,7 +106,11 @@ export class TerminalRegistry implements TerminalSinkPort {
     return this.entries.get(paneId);
   }
 
-  acquire(paneId: string): TermEntry {
+  /** `holder` は持ち主（既定は基本画面の `TerminalPane`。グラフの上の窓は "window"）。同じ持ち主の二重の `acquire` は 1 回と数える。 */
+  acquire(paneId: string, holder: string = "base"): TermEntry {
+    const claim = this.claims.get(paneId) ?? new Set<string>();
+    claim.add(holder);
+    this.claims.set(paneId, claim);
     const existing = this.entries.get(paneId);
     if (existing) {
       existing.lastUsed = this.now();
@@ -116,7 +125,12 @@ export class TerminalRegistry implements TerminalSinkPort {
     return entry;
   }
 
-  release(paneId: string): void {
+  /** 持ち主が手放す。ほかの持ち主が残っている間は `visible` のまま（LRU に捨てられない）。 */
+  release(paneId: string, holder: string = "base"): void {
+    const claim = this.claims.get(paneId);
+    claim?.delete(holder);
+    if (claim && claim.size > 0) return;
+    this.claims.delete(paneId);
     this.visible.delete(paneId);
   }
 
@@ -130,8 +144,8 @@ export class TerminalRegistry implements TerminalSinkPort {
 
   /**
    * その pane が**いま画面に出ているか**（20260920-agent-notifications の AC3）。
-   * `visible` は `TerminalPane.vue` の `onMounted`／`onBeforeUnmount` だけが出し入れするので、
-   * 「`TerminalPane` が DOM にマウントされている」と同義。zoom 中は 1 つ、モバイルは常に 1 つ、
+   * `visible` は `TerminalPane.vue` の `onMounted`／`onBeforeUnmount` と、グラフの上の窓（`terminalHost`）だけが出し入れするので、
+   * 「`TerminalPane` か窓が DOM にマウントされている」と同義。zoom 中は 1 つ、モバイルは常に 1 つ、
    * 切り離し・ログイン待ちでは `app-shell` ごと unmount されるので空になる——**どれも正しく出る**。
    *
    * **`visible` は Vue の reactive ではない**ので `watch` できない。知らせる直前に pull で読むこと。
@@ -334,6 +348,7 @@ export class TerminalRegistry implements TerminalSinkPort {
     if (!entry) return;
     this.entries.delete(paneId);
     this.visible.delete(paneId);
+    this.claims.delete(paneId);
     this.unsubscribed.delete(paneId);
     this.keyDisposables.get(paneId)?.dispose();
     this.keyDisposables.delete(paneId);

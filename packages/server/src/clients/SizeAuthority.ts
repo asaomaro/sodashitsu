@@ -23,7 +23,7 @@ import type { ClientRecord, ClientRegistry } from "./ClientRegistry.js";
  *   その tab を見ている資格のある別のクライアントは、操作すれば権限を取れる。D106 の作業で確認）。
  * - **pane への直結**（20260926-pane-direct-connect。herdr の terminal attach）：pane ごとに高々 1 クライアントが直結の所有者になり、
  *   直結中はその pane の大きさを所有者が決める（`applyOwnerSize` はその pane を飛ばす＝大きさの鍵）。種別は問わない（`sodactl` は external）。
- *   所有者が抜けたら（`detach`・切断）、その tab の権限者の大きさへ戻す（権限者がいなければそのまま）。所有者が変わるたびに
+ *   所有者が抜けたら（`detach`・切断）、その tab を見ている権限者がいればその大きさへ、いなければ**直結の前の大きさへ**戻す（X5）。所有者が変わるたびに
  *   `pane.attach_changed` を発行する。所有者は安全の境界ではない（INPUT は今までどおり誰でも書ける）。
  */
 export interface SizeAuthority {
@@ -59,6 +59,11 @@ function canDecideSize(client: ClientRecord): boolean {
 export class DefaultSizeAuthority implements SizeAuthority {
   /** 直結の所有者（pane → clientId）。 */
   private readonly attachments = new Map<PaneId, string>();
+  /**
+   * 直結の前の大きさ（pane → 桁と行。20261008-graph-first の X5）。最初の直結のときに覚え、引き取られても持ち越し、直結が終わったときに消す。
+   * 抜けたとき、その tab を見ている権限者がいなければ、この大きさへ戻す。
+   */
+  private readonly beforeAttach = new Map<PaneId, { cols: number; rows: number }>();
 
   constructor(
     private readonly clients: ClientRegistry,
@@ -141,6 +146,10 @@ export class DefaultSizeAuthority implements SizeAuthority {
         `pane ${paneId} already has an attached client; retry with --takeover`,
       );
     }
+    if (current === undefined) {
+      const pane = this.session.getPane(paneId);
+      if (pane) this.beforeAttach.set(paneId, { cols: pane.cols, rows: pane.rows });
+    }
     this.attachments.set(paneId, clientId);
     this.session.resizePane(paneId, cols, rows);
     if (current !== clientId)
@@ -162,13 +171,24 @@ export class DefaultSizeAuthority implements SizeAuthority {
     return this.attachments.get(paneId) ?? null;
   }
 
-  /** 直結を終え、tab の権限者の大きさへ戻す（権限者がいない・pane がもう無いなら大きさはそのまま）。 */
+  /**
+   * 直結を終える。その tab を見ている権限者（`client.view` の tab が pane の tab で、この pane が見えている）がいれば、その大きさへ戻す。
+   * いなければ（権限者がいない・別の tab を見ている・この pane が見えていない）、直結の前の大きさへ戻す（X5）。pane がもう無ければ何もしない。
+   */
   private releaseAttachment(paneId: PaneId): void {
     this.attachments.delete(paneId);
+    const before = this.beforeAttach.get(paneId);
+    this.beforeAttach.delete(paneId);
     this.events?.publish({ event: "pane.attach_changed", data: { paneId, clientId: null } });
     const pane = this.session.getPane(paneId);
-    const owner = pane ? this.session.getTab(pane.tabId)?.sizeOwnerClientId : null;
-    if (pane && owner) this.applyOwnerSize(owner, pane.tabId);
+    if (!pane) return;
+    const ownerId = this.session.getTab(pane.tabId)?.sizeOwnerClientId;
+    const view = ownerId ? this.clients.get(ownerId)?.view : undefined;
+    if (ownerId && view?.tabId === pane.tabId && view.visible.some((v) => v.paneId === paneId)) {
+      this.applyOwnerSize(ownerId, pane.tabId);
+    } else if (before) {
+      this.session.resizePane(paneId, before.cols, before.rows);
+    }
   }
 
   /** 資格が無ければ、持っている権限をすべて手放す（同じ tab を見ている資格のあるクライアントへ移すか、無しにしてサイズを保つ）。 */

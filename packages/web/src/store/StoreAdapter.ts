@@ -30,6 +30,8 @@ export interface StoreAdapterOptions {
   onSnapshotApplied?: (panes: { paneId: string; agent: AgentInfo | null }[], first: boolean) => void;
   /** pane が閉じた。**`pane.exited` とは別のイベント**（待ち行列と判定済みの掃除に要る）。省略可。 */
   onPaneClosed?: (paneId: string) => void;
+  /** pane の直結の所有者が変わった（`pane.attach_changed`。20261008-graph-first の X7）。`clientId` は所有者で、直結が終われば null。グラフの上の窓が、奪われたことを知るのに使う。省略可。 */
+  onPaneAttachChanged?: (paneId: string, clientId: string | null) => void;
   /** 公式フック連携の導入状態・自動再開設定が変わった（20260923-agent-session-resume）。省略可。 */
   onAgentIntegrationChanged?: (status: AgentIntegrationStatusResult) => void;
   /**
@@ -172,6 +174,10 @@ export class StoreAdapter implements StorePort {
       }
       case "pane.size_changed":
         session.paneSizeChanged(e.data.paneId, e.data.cols, e.data.rows);
+        return;
+      case "pane.attach_changed":
+        session.paneAttachChanged(e.data.paneId, e.data.clientId);
+        this.opts.onPaneAttachChanged?.(e.data.paneId, e.data.clientId);
         return;
       case "session.focus_changed":
         session.sessionFocusChanged(e.data.focus);

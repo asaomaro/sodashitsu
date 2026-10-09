@@ -108,6 +108,8 @@ const GRAPH_SCREEN_ENTRIES: HelpEntry[] = [
   { keys: "1 / + / - / 0", label: "全体表示・ズーム（1 全体・+ -・0 で 100%）" },
   { keys: "Tab / 矢印", label: "ノードの間を移る / 選んだノードを動かす" },
   { keys: "m", label: "ノード: 別の空間との線の印へ（矢印で移り、Esc で戻る）" },
+  { keys: "ノードを押す / Enter", label: "グラフの上に、その pane の端末の窓を開く（窓の中のキーは、その pane に届く。Esc も）" },
+  { keys: `${settings.keymap.hintFor("open_graph" as never) ?? "prefix a"}（窓の中で）`, label: "グラフの面へ戻る（窓は開いたまま。窓の外では基本画面へ切り替える）" },
 ];
 
 // herdr の keybind_help_groups() の群分けに合わせる（D76）。先頭に prefix 自身の行（herdr の「prefix mode」の行と同じ）。

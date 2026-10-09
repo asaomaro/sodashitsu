@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { FileTransferKey, TerminalRegistryKey } from "../injection.js";
-import { acceptsDrop, readDropPayload } from "../term/FileTransfer.js";
+import { FileTransferKey, TerminalHostKey, TerminalRegistryKey } from "../injection.js";
 import type { TermEntry } from "../term/TerminalRegistry.js";
+import { TerminalHost, type BaseMount } from "../term/terminalHost.js";
+import { syncTerminalTabStop, useTerminalSurface } from "../term/useTerminalSurface.js";
 import { shouldMarkSeen, useSeenStore } from "../store/seen.js";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
@@ -11,11 +12,17 @@ import { useViewStore } from "../store/view.js";
  * `TerminalRegistry.acquire` で xterm.js の要素を借りて差し込む（architecture「4. tab の切替」）。
  * サイズ権限が無ければ `terminal-pane-scaled`（縦横比を保って縮小。CSS 側で対応。design「サイズ権限」）。
  * `status:'failed'`（design「再起動後の復元」）の pane は xterm.js を作らず、理由だけを表示する。
+ *
+ * 端末の要素をどこに載せるかは `terminalHost` が決める（20261008-graph-first の X4）。グラフの上の窓がその pane の要素を持っている間は、
+ * この部品は要素を持たない（付けない・外さない）。窓が返すと、`terminalHost` がここの `mountPoint` へ戻す。
+ * フォーカス・ドロップは、窓の本体と同じ `term/useTerminalSurface.ts` を使う（X9）。
  */
 const props = defineProps<{ paneId: string }>();
 
 const registry = inject(TerminalRegistryKey);
 if (!registry) throw new Error("TerminalPane: TerminalRegistryKey が provide されていません");
+/** 端末の要素の置き場所の係。提供されない環境（単体テスト）では、この部品だけの係を使う（窓は無い）。 */
+const host = inject(TerminalHostKey, undefined) ?? new TerminalHost({ registry, getScrollbackLines: () => 1000 });
 
 /** ファイルのドロップの係（無ければドロップを受けない）。 */
 const fileTransfer = inject(FileTransferKey, undefined);
@@ -27,9 +34,12 @@ const seen = useSeenStore();
 const pane = computed(() => session.panes.get(props.paneId));
 const failed = computed(() => pane.value?.status === "failed");
 const hasSizeAuthority = computed(() => (pane.value ? session.hasSizeAuthority(pane.value.tabId) : false));
+/** 別のクライアント（別のブラウザのグラフの上の窓など）が直結していて、pane の大きさをそのクライアントが決めている（20261008-graph-first の B3・X7）。権限が無いときと同じ見せ方にする。 */
+const attachedElsewhere = computed(() => session.isAttachedElsewhere(props.paneId));
 
 const mountPoint = ref<HTMLElement | null>(null);
 let entry: TermEntry | null = null;
+let base: BaseMount | null = null;
 
 /**
  * 端末の入力欄（xterm.js の textarea）を Tab で止まる場所にするのは、選ばれている pane だけ（roving tabindex。D110・独立点検 #2）。
@@ -38,14 +48,13 @@ let entry: TermEntry | null = null;
  * クリック・`term.focus()` でのフォーカスは今までどおり。xterm.js は作るときに 0 を付けるだけなので、上書きしてよい。
  */
 function syncTabStop(): void {
-  const textarea = entry?.term.textarea;
-  if (textarea) textarea.tabIndex = view.focusedPaneId === props.paneId ? 0 : -1;
+  syncTerminalTabStop(entry?.term.textarea, view.focusedPaneId === props.paneId);
 }
 
 onMounted(() => {
-  if (failed.value) return;
-  entry = registry.acquire(props.paneId);
-  mountPoint.value?.appendChild(entry.element);
+  if (failed.value || !mountPoint.value) return;
+  base = { mount: mountPoint.value, syncTabStop };
+  entry = host.mountBase(props.paneId, base);
   syncTabStop();
   if (view.focusedPaneId === props.paneId) entry.term.focus();
   // 20260925-seen-semantics-fix（design「振る舞いの詳細」手順3）：この pane が今まさに表示
@@ -57,10 +66,10 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  if (!entry) return;
-  entry.element.remove();
-  registry.release(props.paneId);
+  if (!entry || !base) return;
+  host.unmountBase(props.paneId, base);
   entry = null;
+  base = null;
 });
 
 watch(
@@ -71,47 +80,18 @@ watch(
   },
 );
 
-/** M1：pane へのクリックは、アプリがマウス報告を求めていてもフォーカスの移動を先に行う。
- *  capture フェーズで受けることで、xterm.js 自身のマウス処理（bubble フェーズ）より先に走らせる。 */
-function onMouseDownCapture(): void {
-  view.focusPane(props.paneId);
-}
-
-/**
- * ファイル（と文字）のドロップ。ブラウザの既定の動作（そのファイルを開く・ダウンロードする）を止め、ふつうの端末と同じくパスを pane へ貼る
- * （`FileTransfer.drop`：同じマシンで元のパスが分かればそのパス、そうでなければサーバへ送って置いた先のパス）。
- * `dragenter`/`dragleave` は子の要素をまたぐたびに対で起きるので、数えて重なりの表示を保つ。
- */
-const dragDepth = ref(0);
-function canDrop(ev: DragEvent): boolean {
-  return fileTransfer !== undefined && !failed.value && acceptsDrop(ev.dataTransfer);
-}
-function onDragEnter(ev: DragEvent): void {
-  if (!canDrop(ev)) return;
-  ev.preventDefault();
-  dragDepth.value++;
-}
-function onDragOver(ev: DragEvent): void {
-  if (!canDrop(ev)) return;
-  ev.preventDefault();
-  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "copy";
-}
-function onDragLeave(): void {
-  dragDepth.value = Math.max(0, dragDepth.value - 1);
-}
-function onDrop(ev: DragEvent): void {
-  dragDepth.value = 0;
-  if (!canDrop(ev) || !ev.dataTransfer) return;
-  ev.preventDefault();
-  view.focusPane(props.paneId);
-  fileTransfer?.drop(props.paneId, readDropPayload(ev.dataTransfer));
-}
+const surface = useTerminalSurface(
+  () => props.paneId,
+  () => fileTransfer,
+  () => failed.value,
+);
+const { dragDepth, onMouseDownCapture, onDragEnter, onDragOver, onDragLeave, onDrop } = surface;
 </script>
 
 <template>
   <div
     class="terminal-pane"
-    :class="{ 'terminal-pane-scaled': !hasSizeAuthority, 'terminal-pane-drop-target': dragDepth > 0 }"
+    :class="{ 'terminal-pane-scaled': !hasSizeAuthority || attachedElsewhere, 'terminal-pane-drop-target': dragDepth > 0 }"
     @mousedown.capture="onMouseDownCapture"
     @dragenter="onDragEnter"
     @dragover="onDragOver"

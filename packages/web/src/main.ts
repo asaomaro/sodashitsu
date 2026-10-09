@@ -13,12 +13,13 @@ import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
 import { installKeepFocusRelease } from "./display/displayOps.js";
 import { installEngageGuard } from "./display/engageGuard.js";
-import { ActionDispatcherKey, AskControllerKey, ConnectionKey, ExtensionControllerKey, DisplayControllerKey, DisplayHostKey, type DisplayHost, DeviceKindKey, FileTransferKey, KeyInputControllerKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import { ActionDispatcherKey, AskControllerKey, ConnectionKey, ExtensionControllerKey, DisplayControllerKey, DisplayHostKey, type DisplayHost, DeviceKindKey, FileTransferKey, GraphTerminalControllerKey, KeyInputControllerKey, TerminalHostKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
 import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
 import { PrefsSync } from "./actions/PrefsSync.js";
 import { isAllowedOnGraphScreen } from "./keys/graphScreenKeys.js";
+import { isAllowedInTerminalWindow } from "./keys/graphTerminalKeys.js";
 import { mobileViewportQuery, trackMediaQuery } from "./mobile/detect.js";
 import { MachineSummaryClient } from "@sodashitsu/client-core";
 import { LOCAL_MACHINE_ID, wsUrlFor } from "@sodashitsu/client-core";
@@ -62,6 +63,9 @@ import { useAgentIntegrationsStore } from "./store/agentIntegrations.js";
 import { isMacPlatform, MouseBridge } from "./term/MouseBridge.js";
 import { RendererPool } from "./term/RendererPool.js";
 import { TerminalRegistry } from "./term/TerminalRegistry.js";
+import { TerminalHost } from "./term/terminalHost.js";
+import { GraphTerminalController } from "./graphTerminal/GraphTerminalController.js";
+import { useGraphTerminalsStore } from "./store/graphTerminals.js";
 import { effectiveScrollback } from "./term/scrollback.js";
 import { toXtermTheme } from "./term/theme.js";
 import { ThemeController } from "./theme/ThemeController.js";
@@ -106,6 +110,8 @@ const wsUrl = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${wind
 // 本物の `TerminalRegistry` へ委譲する（箱自体は作った時点で確定するので `registry` を素の `let` にせず
 // 済む——呼び出しは実際に pane を購読した後＝配線が終わった後にしか起きない）。
 const registryBox: { current?: TerminalRegistry } = {};
+/** グラフの上の端末の窓（20261008-graph-first の PR2a）。`registry` の後に作るので、既存の箱と同じ流儀で繋ぐ。 */
+const graphTerminalBox: { current?: GraphTerminalController } = {};
 /** マシンの切り替え（20260927-multi-host-machines）。`Connection.onOpened` の配線より後に作るので、既存の箱と同じ流儀で繋ぐ。 */
 const machineSwitcherBox: { current?: MachineSwitcher } = {};
 const machineWiringBox: { current?: MachineWiring } = {};
@@ -129,6 +135,8 @@ const storeAdapter = new StoreAdapter({
   onOriginRejectSuspected: (suspected) => view.setOriginRejectSuspected(suspected && machines.selectedId === LOCAL_MACHINE_ID),
   // 通知（20260920-agent-notifications）。**`notifications` はこの後で作る**ので、遅延で参照する。
   onAgentChanged: (paneId, prev, next) => notificationsBox.current?.onAgentChanged(paneId, prev, next),
+  // 窓の pane の直結を、別のクライアントが奪った（20261008-graph-first の X7）。窓は W2 の表示に替わる。
+  onPaneAttachChanged: (paneId, clientId) => graphTerminalBox.current?.onAttachChanged(paneId, clientId),
   onSnapshotApplied: (panes, first) => notificationsBox.current?.onSnapshotApplied(panes, first),
   onPaneClosed: (paneId) => notificationsBox.current?.onPaneClosed(paneId),
   onAgentIntegrationChanged: (status) => useAgentIntegrationsStore(pinia).setStatus(status),
@@ -269,6 +277,8 @@ const registry = new TerminalRegistry({
       },
     }),
   hasSizeAuthority: (paneId) => {
+    // 窓に直結している pane は、直結の所有者もその pane の大きさの権限者（フォーカスの報告を送ってよい。20261008-graph-first の B5）。
+    if (graphTerminalBox.current?.ownsAttachment(paneId)) return true;
     const pane = session.panes.get(paneId);
     return pane ? session.hasSizeAuthority(pane.tabId) : false;
   },
@@ -279,6 +289,15 @@ const registry = new TerminalRegistry({
   onImagePaste: (paneId, blob) => imagePaster.pasteBlob(paneId, blob),
 });
 registryBox.current = registry;
+
+/**
+ * 端末の要素の置き場所（基本画面の `TerminalPane` か、グラフの上の窓か。20261008-graph-first の X4）と、窓の進行。
+ * 窓は、基本画面に載っていない pane（別の tab）でも、`terminalHost` 越しに購読する（`ViewSync` は基本画面に出ている pane だけ購読する）。
+ */
+const terminalHost = new TerminalHost({ registry, conn: inputGate, getScrollbackLines });
+const graphTerminals = useGraphTerminalsStore(pinia);
+const graphTerminal = new GraphTerminalController({ conn: inputGate, host: terminalHost, registry, store: graphTerminals, session, view });
+graphTerminalBox.current = graphTerminal;
 
 /**
  * テーマ（20260921-theme-settings の design D5）。**ここで当てる**——`app.mount` より前、接続より前。`public/theme-boot.js` が控えから
@@ -321,6 +340,8 @@ const viewSync = new ViewSync({ conn, registry, getScrollbackLines });
 // 新しい接続の `client.hello` が通るたび（初回・自動の再接続・503 等からの再試行・再ログイン・「再接続」ボタン）に、表示と
 // 購読を張り直す（D107）。サーバは接続ごとに新しい clientId を振り、前の接続の購読・表示・fit を引き継がない。
 connection.onOpened(() => viewSync.onConnectionOpened());
+// 窓が出ていれば、購読と直結をし直す（サーバは接続ごとに新しい clientId を振り、前の接続の直結を外す。20261008-graph-first の X4・X7）。`viewSync` の後（端末を「未購読」に戻してから）。
+connection.onOpened(() => void graphTerminal.onReconnected());
 // サーバは接続ごとに新しい clientId を振り、前の接続のテーマを持たない（色の問い合わせの答えに使う。20260921-theme-settings の design D6）。
 // 起動の直後の `start()` は接続より前で送れないので、接続の直後に今のテーマを届ける経路はここだけ（接続中の変化は `apply` が送る）。
 connection.onOpened(() => themeController.resend());
@@ -432,6 +453,7 @@ const machineSwitcher = new MachineSwitcher({
     askController.resetForMachineSwitch(); // 前のマシンの質問を捨てる（pane の id が重なる）。次の接続の ask.subscribe が取り直す
     fileTransfer.resetForMachineSwitch(); // ファイルのドロップ・ダウンロードも同じ
     extensionController.resetForMachineSwitch(); // 前のマシンの拡張の一覧を捨てる。次の接続の extension.list が取り直す
+    graphTerminal.resetForMachineSwitch(); // 前のマシンの pane を窓に残さない（pane の id が重なる）
     displayController.resetForMachineSwitch(); // 前のマシンの表示の面を捨てる（pane の id が重なる）。次の接続の display.subscribe が取り直す
   },
   nextTick: () => nextTick(),
@@ -476,6 +498,16 @@ watch(mobileViewport, (mobile) => machineWiring.onMobileChanged(mobile));
 watch(() => view.graphVisible, (open) => machineWiring.onGraphOpenChanged(open));
 // デスクトップのグラフの画面が出ている間は、グラフの面の外にフォーカスがあるときの prefix の 2 打目を、グラフの画面で意味のあるものだけに絞る（見えない基本画面を変えない。D52）。
 keys.setDomKeyFilter((decision) => view.screen === "base" || isAllowedOnGraphScreen(decision));
+// グラフの上の端末の窓にフォーカスがある間（端末の道）は、見えない基本画面の構成を変える操作と、選んでいる pane を動かす操作を食う（X2）。`prefix+a` は「グラフの面へ戻る」に読み替える（X1）。
+keys.setTerminalKeyFilter((paneId, decision) => {
+  if (!terminalHost.heldByWindow(paneId)) return true;
+  graphTerminal.ensureSelected(paneId); // 窓で打った操作は、窓に見えている pane に効く
+  if (decision.kind === "action" && decision.action.type === "openGraph") {
+    graphTerminal.focusGraphSurface();
+    return false;
+  }
+  return isAllowedInTerminalWindow(decision);
+});
 keys.bind({ action: actionDispatcher, focus: actionDispatcher, mode: { onModeChange: (m) => view.onModeChange(m) }, imagePaste: imagePaster });
 
 // Windows のホストなら ConPTY 向けのオプションを足す（design「エージェントの argv[0]」隣接。H-cfg 相当）。
@@ -486,6 +518,24 @@ watch(
     // マシンを切り替えて Windows でないホストになったら外す（ホストはマシンごと。20260927-multi-host-machines）。
     else if (host) delete terminalOptions.windowsPty;
   },
+);
+
+// 端末の窓の閉じる道（20261008-graph-first の W11・X10。どの道でも `graphTerminal.close` を通して、直結を残さない）。
+// ・基本画面へ切り替わった（キー・×・［基本画面で開く］・モバイルの幅になった）: 描き直しの後（`post`）に、要素を基本画面へ戻してから、その端末にフォーカスを置く。
+watch(
+  () => view.screen,
+  (screen) => {
+    if (screen !== "graph") graphTerminal.close("base");
+  },
+  { flush: "post" },
+);
+// ・pane が閉じた（別のマシンの画面に替わって pane の一覧が空になった場合も）。グラフの画面が見えていれば、フォーカスはそのノードへ。
+watch(
+  () => (graphTerminals.paneId !== null && !session.panes.has(graphTerminals.paneId) ? graphTerminals.paneId : null),
+  (gone) => {
+    if (gone !== null) graphTerminal.close(view.screen === "graph" ? "node" : "base");
+  },
+  { flush: "post" },
 );
 
 // 接続が `open` でない間は端末への入力を止める（D95。打った文字を表示もせずに捨てない。止めていることは
@@ -556,6 +606,8 @@ app.provide(ConnectionKey, conn);
 app.provide(ActionDispatcherKey, actionDispatcher);
 app.provide(MachineSwitcherKey, machineSwitcher);
 app.provide(TerminalRegistryKey, registry);
+app.provide(TerminalHostKey, terminalHost);
+app.provide(GraphTerminalControllerKey, graphTerminal);
 app.provide(AskControllerKey, askController);
 app.provide(ExtensionControllerKey, extensionController);
 app.provide(DisplayControllerKey, displayController);
