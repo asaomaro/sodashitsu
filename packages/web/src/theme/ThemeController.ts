@@ -2,7 +2,7 @@ import { TERMINAL_PALETTES, type TerminalPalette, type ThemeName } from "@sodash
 import { watch, type WatchStopHandle } from "vue";
 import type { useSettingsStore } from "../store/settings.js";
 import { readPrefs } from "../store/view.js";
-import { lightDarkOf, loadThemePrefs } from "@sodashitsu/client-core";
+import { lightDarkOf, loadThemePrefs, loadUiStyle, type UiStyle } from "@sodashitsu/client-core";
 import { loadThemeOverrides, mergeVars, type ThemeOverrideLayer, type ThemeOverrides } from "./themeOverrides.js";
 import { CSS_VARS, uiTokens, type UiTokens } from "@sodashitsu/client-core";
 
@@ -23,6 +23,8 @@ export interface BootCache {
   fixed: BootVars;
   light: BootVars;
   dark: BootVars;
+  /** 画面の様式（20261008-ui-style）。`theme-boot.js` は `"modern"` のときだけ `data-ui-style` を当てる（無い・ほかの値はクラシック＝何もしない）。 */
+  uiStyle: UiStyle;
 }
 
 export interface ThemeControllerOptions {
@@ -43,7 +45,8 @@ export interface ThemeControllerOptions {
  * テーマを当てる部品（20260921-theme-settings の design D5・「振る舞いの詳細」）。
  * - 当てる（`apply`）：CSS 変数・color-scheme・`data-theme` を root へ、配色を全端末へ、名前をサーバへ。直前と同じ名前なら省く。
  * - OS の明暗を追う：`media` の change → `settings.systemDark` → `settings.effectiveTheme` が変われば当てる（AC5）。
- * - 起動用の控え（`writeBoot`）：**4 つの設定が変わったときと `start()` のときだけ**書く（OS の明暗が変わっただけでは中身が変わらない）。
+ * - 画面の様式（20261008-ui-style）：`settings.uiStyle` を `root.dataset.uiStyle` へ当てる（`applyUiStyle`。`start()` と変化のとき）。控えにも書く。
+ * - 起動用の控え（`writeBoot`）：**5 つの設定が変わったときと `start()` のときだけ**書く（OS の明暗が変わっただけでは中身が変わらない）。
  *   中身は保存された設定（`soda.prefs.v1`）から作る。
  */
 export class ThemeController {
@@ -61,6 +64,7 @@ export class ThemeController {
     settings.systemDark = media ? media.matches : true;
     this.applied = null; // 1 回目は省略しない（start の前に apply が呼ばれていても・stop の後に start し直しても）
     this.apply(settings.effectiveTheme);
+    this.applyUiStyle();
     this.writeBoot();
     if (media) {
       const onChange = (ev: MediaQueryListEvent): void => {
@@ -84,6 +88,14 @@ export class ThemeController {
       ],
       () => this.writeBoot(),
     );
+    // 画面の様式：再読み込みなしで `data-ui-style` を替え、控えも書く（次の起動の最初の描画で当たるように）。
+    const stopUiStyle: WatchStopHandle = watch(
+      () => settings.uiStyle,
+      () => {
+        this.applyUiStyle();
+        this.writeBoot();
+      },
+    );
     // 20260922-theme-custom-overrides：色の上書きが変わったら、画面へは `applyOverrides()`（`apply()` の早期 return を
     // 経由しない別経路。テーマ名は変わっていないため）で、控えへは `writeBoot()` で反映する。`themeOverrides` は
     // setter がイミュータブルに丸ごと差し替える（`keyPrefs` と同じ）ので、深い watch は要らない。
@@ -94,7 +106,7 @@ export class ThemeController {
         this.writeBoot();
       },
     );
-    this.stops.push(stopApply, stopBoot, stopOverrides);
+    this.stops.push(stopApply, stopBoot, stopUiStyle, stopOverrides);
   }
 
   /** 聞くのをやめる（テスト用）。 */
@@ -126,6 +138,11 @@ export class ThemeController {
     this.opts.sendTheme(name);
   }
 
+  /** 画面の様式を root の `data-ui-style` へ当てる（`classic`・`modern`。属性が無いときもクラシックとして動く）。 */
+  applyUiStyle(): void {
+    this.opts.root.dataset["uiStyle"] = this.opts.settings.uiStyle;
+  }
+
   /**
    * 色の上書きだけが変わったときに再適用する（20260922-theme-custom-overrides）。`apply()` の「直前と同じ名前なら省く」
    * 最適化はテーマ名の変化を追うためのもので、上書きの変化はこの経路で反映する（`applied` は書き換えない・端末の色や
@@ -153,6 +170,7 @@ export class ThemeController {
       fixed: bootVars(saved.theme, overrides),
       light: bootVars(ld.light, overrides),
       dark: bootVars(ld.dark, overrides),
+      uiStyle: loadUiStyle(prefs["uiStyle"]),
     };
     try {
       storage?.setItem(BOOT_KEY, JSON.stringify(cache));

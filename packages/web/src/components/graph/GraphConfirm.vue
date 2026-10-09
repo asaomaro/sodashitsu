@@ -82,7 +82,7 @@ function onKeydown(ev: KeyboardEvent): void {
   max-width: min(420px, calc(100% - 32px));
   padding: 16px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 6px;
+  border-radius: var(--soda-shape-radius-l);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
 }
@@ -102,7 +102,7 @@ function onKeydown(ev: KeyboardEvent): void {
 .graph-confirm-actions button {
   padding: 4px 12px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   background: var(--soda-subtle-bg, #343746);
   color: inherit;
   cursor: pointer;

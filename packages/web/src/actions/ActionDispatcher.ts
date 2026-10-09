@@ -32,6 +32,7 @@ import {
   loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
+  loadUiStyle,
   useSettingsStore,
 } from "../store/settings.js";
 import { loadAgentSort, loadSidebarCollapsed, loadSidebarSectionRatio, loadSidebarSectionsCollapsed, loadSidebarWidth, loadWorkspaceSort, readPrefs, useViewStore } from "../store/view.js";
@@ -1617,6 +1618,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     // 20260926-pane-frame-auto-mode 分。
     this.settings.paneBorders = loadPaneBorders(raw["paneBorders"]);
     this.settings.paneGaps = loadPaneGaps(raw["paneGaps"]);
+    this.settings.uiStyle = loadUiStyle(raw["uiStyle"]); // 20261008-ui-style
     // 20260927-sidebar-row-tokens 分。
     this.settings.sidebarRows = loadSidebarRows(raw["sidebarRows"]);
     // `view.ts` 側も同じ raw を渡す（`loadSidebarWidth`/`loadSidebarCollapsed`/`loadWorkspaceSort`

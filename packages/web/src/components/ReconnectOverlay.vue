@@ -92,7 +92,7 @@ const retry = (): void => {
   padding: 1em 1.2em;
   background: var(--soda-menu-bg, #282a36);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 6px;
+  border-radius: var(--soda-shape-radius-l);
   pointer-events: auto;
 }
 .reconnect-overlay-panel p {
@@ -107,7 +107,7 @@ const retry = (): void => {
 .reconnect-overlay-command {
   background: var(--soda-subtle-bg, rgba(255, 255, 255, 0.08));
   padding: 0.3em 0.5em;
-  border-radius: 3px;
+  border-radius: var(--soda-shape-radius-s);
   overflow-wrap: anywhere;
   user-select: all;
 }

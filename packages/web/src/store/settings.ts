@@ -58,9 +58,11 @@ import {
   loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
+  loadUiStyle,
   type DisplayPanelInitial,
   type NewCwdPolicy,
   type PaneBorders,
+  type UiStyle,
 } from "@sodashitsu/client-core";
 import { readPrefs, writePrefs } from "./view.js";
 import { loadFileLocality, type FileLocality } from "../term/FileTransfer.js";
@@ -79,6 +81,7 @@ export {
   loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
+  loadUiStyle,
   type NewCwdPolicy,
 };
 
@@ -154,6 +157,11 @@ export const useSettingsStore = defineStore("settings", () => {
   /** pane の枠の描画モード・隙間（`PaneFrame.vue` が読む。20260926-pane-frame-auto-mode）。 */
   const paneBorders = ref<PaneBorders>(loadPaneBorders(initial["paneBorders"]));
   const paneGaps = ref(loadPaneGaps(initial["paneGaps"]));
+  /**
+   * 画面の様式（20261008-ui-style。`classic`・`modern`）。`ThemeController` が `document.documentElement.dataset.uiStyle` へ当てる。
+   * 共有の設定（`theme` と同じ道）。端末版は読まない。
+   */
+  const uiStyle = ref<UiStyle>(loadUiStyle(initial["uiStyle"]));
   /** このブラウザの scrollback の設定。使う行数は `term/scrollback.ts` の `effectiveScrollback` が決める。 */
   const scrollback = ref<ScrollbackPref>(loadScrollbackPref(initial["scrollback"]));
   /** このブラウザをサーバと同じマシンとして扱うか（端末のファイルのリンク・ドロップ。`FileTransfer` が読む）。ブラウザごと（サーバと共有しない）。 */
@@ -290,6 +298,13 @@ export const useSettingsStore = defineStore("settings", () => {
   function setPaneOuterBorders(v: boolean): void {
     paneOuterBorders.value = v;
     writePrefs({ paneOuterBorders: v });
+  }
+
+  /** 反映と保存を同時に行う。**値は、いつも書く**（`classic` のときも消さない。「既定へ戻す」の入口は作らない）。 */
+  function setUiStyle(v: UiStyle): void {
+    const normalized = loadUiStyle(v);
+    uiStyle.value = normalized;
+    writePrefs({ uiStyle: normalized });
   }
 
   /** 反映と保存を同時に行う。 */
@@ -493,6 +508,8 @@ export const useSettingsStore = defineStore("settings", () => {
     if (nextBorders !== paneBorders.value) paneBorders.value = nextBorders;
     const nextGaps = loadPaneGaps(prefs["paneGaps"]);
     if (nextGaps !== paneGaps.value) paneGaps.value = nextGaps;
+    const nextUiStyle = loadUiStyle(prefs["uiStyle"]);
+    if (nextUiStyle !== uiStyle.value) uiStyle.value = nextUiStyle;
     const nextInitial = loadDisplayPanelInitial(prefs["displayPanelInitial"]);
     if (nextInitial !== displayPanelInitial.value) displayPanelInitial.value = nextInitial;
     const nextDock = loadDisplayPanelDock(prefs["displayPanelDock"]);
@@ -583,6 +600,7 @@ export const useSettingsStore = defineStore("settings", () => {
     paneOuterBorders,
     paneBorders,
     paneGaps,
+    uiStyle,
     scrollback,
     fileLocality,
     setFileLocality,
@@ -626,6 +644,7 @@ export const useSettingsStore = defineStore("settings", () => {
     setPaneOuterBorders,
     setPaneBorders,
     setPaneGaps,
+    setUiStyle,
     setScrollback,
     setNewCwdPolicy,
     setNewCwdPath,

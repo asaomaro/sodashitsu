@@ -105,7 +105,7 @@ function onKeydown(ev: KeyboardEvent): void {
 .subagent-panel button {
   padding: 2px 8px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   background: var(--soda-subtle-bg, #343746);
   color: inherit;
   cursor: pointer;

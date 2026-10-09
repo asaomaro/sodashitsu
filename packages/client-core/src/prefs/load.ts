@@ -39,6 +39,16 @@ export function loadPaneAgentNameVisible(raw: unknown): boolean {
   return typeof raw === "boolean" ? raw : false;
 }
 
+/**
+ * 画面の様式（20261008-ui-style）。`classic` はいまの見た目、`modern` は丸い角・ゆとりのある余白・影（色と文字は変えない）。
+ * **`"classic"` と `"modern"` 以外（無い・壊れた値・知らない値）は `classic`**（保存値は書き換えない）。
+ */
+export type UiStyle = "classic" | "modern";
+export const UI_STYLES: readonly UiStyle[] = ["classic", "modern"];
+export function loadUiStyle(raw: unknown): UiStyle {
+  return raw === "modern" ? "modern" : "classic";
+}
+
 /** 通知の設定（`notify`。20260920-agent-notifications）。値ごとに既定へ落とす。 */
 export function loadNotifyPrefs(raw: unknown): NotifyPrefs {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...DEFAULT_NOTIFY_PREFS };

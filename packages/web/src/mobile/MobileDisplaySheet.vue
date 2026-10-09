@@ -135,7 +135,7 @@ function dismissActive(): void {
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
 }
 .mobile-display-tabs {
   flex: none;
@@ -153,7 +153,7 @@ function dismissActive(): void {
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
   border-bottom: none;
-  border-radius: 4px 4px 0 0;
+  border-radius: var(--soda-shape-radius) var(--soda-shape-radius) 0 0;
   white-space: nowrap;
 }
 .mobile-display-tab[aria-selected="true"] {

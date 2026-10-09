@@ -342,7 +342,7 @@ function onNativeCancel(ev: Event): void {
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 6px;
+  border-radius: var(--soda-shape-radius-l);
 }
 .onboarding-dialog::backdrop {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
@@ -370,7 +370,7 @@ function onNativeCancel(ev: Event): void {
 .onboarding-fieldset {
   margin: 0 0 0.8em;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.4em 0.8em 0.6em;
 }
 .onboarding-choice {
@@ -413,7 +413,7 @@ function onNativeCancel(ev: Event): void {
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.2em 0.8em;
   cursor: pointer;
 }

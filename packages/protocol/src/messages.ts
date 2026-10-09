@@ -772,6 +772,8 @@ export interface SharedPrefs {
   themeDark?: ThemeName | null;
   /** 色の上書き（web の `serializeThemeOverrides` の形）。 */
   themeOverrides?: Record<string, unknown>;
+  /** 画面の様式（20261008-ui-style。web だけが使う。端末版は読まず、知らない項目として保つ）。知らない値・無い値は `classic`。 */
+  uiStyle?: "classic" | "modern";
   statusSymbols?: boolean;
   keyboardLockInFullscreen?: boolean;
   paneFrameThickness?: "thin" | "default" | "thick";

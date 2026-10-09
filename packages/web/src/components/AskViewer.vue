@@ -187,7 +187,7 @@ function onTabKey(ev: KeyboardEvent): void {
   padding: 0.25em 0.8em;
   border: 1px solid var(--soda-menu-border, #44475a);
   border-bottom: none;
-  border-radius: 4px 4px 0 0;
+  border-radius: var(--soda-shape-radius) var(--soda-shape-radius) 0 0;
   background: transparent;
   color: var(--soda-fg, #f8f8f2);
   cursor: pointer;
