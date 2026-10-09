@@ -348,6 +348,7 @@ function onViewKey(key: AskViewKey): void {
 
 <style scoped>
 .ask-dialog {
+  box-shadow: var(--soda-shape-shadow, none);
   box-sizing: border-box;
   /* 目次が出ているとき（`applyWidth`）は、その幅の分だけ広げる。画面の幅 − 16px は超えない。 */
   width: min(calc(720px + var(--ask-index-width, 0px)), calc(100% - 16px));

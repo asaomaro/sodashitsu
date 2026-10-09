@@ -119,12 +119,13 @@ function onNativeCancel(ev: Event): void {
 
 <style scoped>
 .subagent-dialog {
+  box-shadow: var(--soda-shape-shadow, none);
   border: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   border-radius: var(--soda-shape-radius);
   width: min(32em, calc(100vw - 2em));
-  padding: 1em;
+  padding: var(--soda-shape-pad, 1em);
 }
 .subagent-dialog::backdrop {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));

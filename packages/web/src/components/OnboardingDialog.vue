@@ -333,12 +333,13 @@ function onNativeCancel(ev: Event): void {
 
 <style scoped>
 .onboarding-dialog {
+  box-shadow: var(--soda-shape-shadow, none);
   /* 寸法は設定画面（`SettingsDialog.vue` の `.settings-dialog`）と同じ——狭い画面でもはみ出さず、背が高ければ中をスクロールする。 */
   box-sizing: border-box;
   min-width: min(22em, calc(100% - 16px));
   max-width: min(34em, calc(100% - 16px));
   max-height: calc(100% - 16px);
-  padding: 1em;
+  padding: var(--soda-shape-pad, 1em);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
   border: 1px solid var(--soda-menu-border, #44475a);

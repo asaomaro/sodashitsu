@@ -233,6 +233,7 @@ function stop(ev: Event): void {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
 .command-popup {
+  box-shadow: var(--soda-shape-shadow, none);
   position: fixed;
   display: flex;
   flex-direction: column;

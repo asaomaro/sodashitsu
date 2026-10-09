@@ -269,13 +269,14 @@ const onDialogKeydown = (ev: KeyboardEvent): void => {
    （実機の Chromium を使う smoke（T26）で発見。単体テストは happy-dom で `<dialog>` の描画規則を
    再現しないため見つからなかった）。 */
 .help-dialog {
+  box-shadow: var(--soda-shape-shadow, none);
   border: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   border-radius: var(--soda-shape-radius);
   width: min(40em, 90vw);
   max-height: 80vh;
-  padding: 1em;
+  padding: var(--soda-shape-pad, 1em);
 }
 .help-dialog[open] {
   display: flex;

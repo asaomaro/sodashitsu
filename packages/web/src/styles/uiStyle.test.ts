@@ -35,19 +35,36 @@ describe("uiStyle.css（20261008-ui-style の角のトークン）", () => {
       "--soda-shape-row-h": "36px",
       "--soda-shape-control-h": "32px",
       "--soda-shape-pad-x": "12px",
+      "--soda-shape-pad": "20px",
+      "--soda-shape-menu-radius": "var(--soda-shape-radius)",
+      "--soda-shape-menu-pad-y": "6px",
+      "--soda-shape-shadow": "0 8px 24px color-mix(in srgb, black 22%, transparent), 0 1px 3px color-mix(in srgb, black 18%, transparent)",
     });
-    for (const k of ["--soda-shape-pane-radius", "--soda-shape-pane-radius-per-gap", "--soda-shape-row-h", "--soda-shape-control-h", "--soda-shape-pad-x"]) expect(Object.keys(get(":root")), k).not.toContain(k);
+    for (const k of ["--soda-shape-pad", "--soda-shape-menu-radius", "--soda-shape-menu-pad-y", "--soda-shape-shadow", "--soda-shape-pane-radius", "--soda-shape-pane-radius-per-gap", "--soda-shape-row-h", "--soda-shape-control-h", "--soda-shape-pad-x"]) expect(Object.keys(get(":root")), k).not.toContain(k);
   });
 
   it("モダンだけが属性の規則。クラシックの規則は属性に依らない（:root だけ）。ほかの規則は無い", () => {
     expect(rules().map((r) => r.selector).sort()).toEqual([':root', ':root[data-ui-style="modern"]'].sort());
   });
 
-  it("色の値（# ・rgb(・rgba(・hsl(・color-mix(・色の名前）が出ない（コメントも含めて）", () => {
-    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    expect(css).not.toMatch(/\b(rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color-mix|color)\s*\(/i);
-    for (const name of COLOR_NAMES) expect(css.toLowerCase(), name).not.toMatch(new RegExp(`(^|[^a-z-])${name}([^a-z-]|$)`));
-    expect(css).not.toMatch(/(^|[^-\w])(color|background|border-color|fill|stroke|box-shadow|outline)\s*:/);
+  // 影だけは、黒を透かした `color-mix(in srgb, black N%, transparent)` の形に限って許す（D11。新しい色の値は足さない）。
+  const SHADOW_MIX = /color-mix\(in srgb, black \d{1,3}%, transparent\)/g;
+  const cssNoShadowMix = css.replace(SHADOW_MIX, "");
+
+  it("色の値（# ・rgb(・rgba(・hsl(・color-mix(・色の名前）が出ない（コメントも含めて）。例外は、影の `color-mix(in srgb, black N%, transparent)` だけ", () => {
+    expect(cssNoShadowMix).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(cssNoShadowMix).not.toMatch(/\b(rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color-mix|color)\s*\(/i);
+    for (const name of COLOR_NAMES) expect(cssNoShadowMix.toLowerCase(), name).not.toMatch(new RegExp(`(^|[^a-z-])${name}([^a-z-]|$)`));
+    expect(cssNoShadowMix).not.toMatch(/(^|[^-\w])(color|background|border-color|fill|stroke|box-shadow|outline)\s*:/);
+  });
+
+  it("例外の `color-mix` は、影のトークンの中だけ・モダンだけ。濃さは 30% 以下（明るいテーマでも濃すぎない）", () => {
+    const modern = rules().find((r) => r.selector === ':root[data-ui-style="modern"]')!.body;
+    const shadow = /--soda-shape-shadow\s*:([^;]+);/.exec(modern)![1]!;
+    const all = css.match(SHADOW_MIX) ?? [];
+    expect(all.length).toBeGreaterThan(0);
+    expect(shadow.match(SHADOW_MIX)?.length).toBe(all.length); // 全部、影の中
+    for (const m of all) expect(Number(/(\d+)%/.exec(m)![1])).toBeLessThanOrEqual(30);
   });
 
   it("文字（font）を変える宣言が無い", () => {
