@@ -31,11 +31,12 @@ describe("uiStyle.css（20261008-ui-style の角のトークン）", () => {
       "--soda-shape-radius": "8px",
       "--soda-shape-radius-l": "12px",
       "--soda-shape-pane-radius": "var(--soda-shape-radius-l)",
+      "--soda-shape-pane-radius-per-gap": "1.5",
       "--soda-shape-row-h": "36px",
       "--soda-shape-control-h": "32px",
       "--soda-shape-pad-x": "12px",
     });
-    for (const k of ["--soda-shape-pane-radius", "--soda-shape-row-h", "--soda-shape-control-h", "--soda-shape-pad-x"]) expect(Object.keys(get(":root")), k).not.toContain(k);
+    for (const k of ["--soda-shape-pane-radius", "--soda-shape-pane-radius-per-gap", "--soda-shape-row-h", "--soda-shape-control-h", "--soda-shape-pad-x"]) expect(Object.keys(get(":root")), k).not.toContain(k);
   });
 
   it("モダンだけが属性の規則。クラシックの規則は属性に依らない（:root だけ）。ほかの規則は無い", () => {

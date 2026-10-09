@@ -24,6 +24,7 @@
   --soda-shape-radius: 8px;
   --soda-shape-radius-l: 12px;
   --soda-shape-pane-radius: var(--soda-shape-radius-l);
+  --soda-shape-pane-radius-per-gap: 1.5; /* pane の角は、すき間の何倍までか（すき間が細いとき、端末の角に重ならない） */
   --soda-shape-row-h: 36px;
   --soda-shape-control-h: 32px;
   --soda-shape-pad-x: 12px;
