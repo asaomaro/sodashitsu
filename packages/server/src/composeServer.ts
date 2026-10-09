@@ -872,6 +872,8 @@ export async function composeServer(
       try {
         // 止まり始めた印（以後の止める指示は「既に止まる途中」、引き継ぎの指示は断る。20260927-session-stop）。受け付け済みの引き継ぎの
         // 最中（Ctrl+C 等のシグナル）なら、それが終わる（元に戻す）まで待つ——以前は最初に制御の socket を閉じ、その接続の終わりを待つことで同じ順序になっていた。
+        // 以後、エージェントが居ないと見えても会話の参照を捨てない（20261009-agent-resume-lost）。`beginClosing` は引き継ぎの終わりを待つので、その前に（同期で）入る。
+        session.beginShutdown();
         await control.beginClosing();
         // マシンへの ssh を閉じる（リモートの `soda serve` と pane は動いたまま。AC5）。中継の接続には、ssh を閉じる前に手元の停止（1001）で閉じる
         // （手元の `/ws` と同じ code にそろえる。ブラウザ・sodactl はどちらも繋ぎ直しの扱いで、今は code で分けていない）。
