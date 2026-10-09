@@ -2,6 +2,8 @@
 import type { DisplayInfo } from "@sodashitsu/protocol";
 import { computed, inject, onBeforeUnmount, watch } from "vue";
 import { displayLabel } from "../display/displayLabel.js";
+import { isScriptFormat } from "../display/framePage.js";
+import { useSettingsStore } from "../store/settings.js";
 import { createDockDrag, type DockZone } from "../display/dockDrag.js";
 import { dismissWithFocus, headFocusTarget, menuPositionBelow, openDisplayMenu, trayFocusTarget, withDisplayChange } from "../display/displayOps.js";
 import { defaultFloatRect, FLOAT_AREA_INSET_PX } from "../display/floatGeometry.js";
@@ -24,6 +26,9 @@ const host = inject(DisplayHostKey, undefined);
 const floatGrip = inject(FloatGripKey, null);
 
 const label = computed(() => displayLabel(props.info));
+const settings = useSettingsStore();
+/** 印「スクリプト」が出る面か（`DisplayScriptMark` と同じ条件）。出るときだけ、つかむ場所の最小の幅を、印が入る幅にする（印の無い面の見出しは、今までの折れ方のまま）。 */
+const hasMark = computed(() => isScriptFormat(props.info.format) && store.scriptCapable && settings.displayScriptEnabled);
 
 /**
  * 見出しのつかむ場所（`[data-display-grip]`）の D&D。離した場所が今の置き場所と同じなら何もしない。置き場所を変える操作は `withDisplayChange` を通す（フォーカスを `body` に落とさない）。
@@ -115,6 +120,7 @@ function onKeydown(ev: KeyboardEvent): void {
   <div class="display-head pane-panel-head" data-display-chrome data-display-head @keydown="onKeydown">
     <div
       class="display-head-grip"
+      :class="{ 'display-head-grip-mark': hasMark }"
       data-display-grip
       data-display-keepfocus
       data-pane-panel-label
@@ -176,13 +182,16 @@ function onKeydown(ev: KeyboardEvent): void {
 /* 印とラベルの入れ物（つかむ場所）。印は縮まず、ラベルだけが省略される。 */
 .display-head-grip {
   flex: 1 1 0;
-  /* 印「スクリプト」（縮まない。約 5.2em）が全部入る幅。これより狭ければ、ボタンの並びが次の行へ折れる（印がボタンに隠れない）。 */
-  min-width: 5.6em;
+  min-width: 4em;
   display: flex;
   align-items: center;
   font-weight: bold;
   cursor: grab;
   touch-action: none;
+}
+/* 印「スクリプト」（縮まない。約 5.2em）が全部入る幅。これより狭ければ、ボタンの並びが次の行へ折れる（印がボタンに隠れない）。 */
+.display-head-grip-mark {
+  min-width: 5.6em;
 }
 .display-head-label {
   min-width: 0;
